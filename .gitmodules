@@ -1,0 +1,3 @@
+[submodule "lib/cmt"]
+	path = lib/cmt
+	url = https://github.com/recp/cmt.git
