@@ -1,3 +1,6 @@
 [submodule "lib/cmt"]
 	path = lib/cmt
 	url = https://github.com/recp/cmt.git
+[submodule "lib/cglm"]
+	path = lib/cglm
+	url = https://github.com/recp/cglm.git
