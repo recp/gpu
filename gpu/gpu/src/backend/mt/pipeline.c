@@ -33,10 +33,10 @@ gpu_renderstate_create(GPUDevice   * __restrict device,
                        GPUPipeline * __restrict pipeline) {
   GPUPipeline      *rederPipline;
   MtRenderPipeline *mtRederPipline;
-  
+
   mtRederPipline = mtRenderStateCreate(device->priv, pipeline->priv);
   rederPipline   = calloc(1, sizeof(*rederPipline));
-  
+
   rederPipline->priv = mtRederPipline;
 
   return NULL;
@@ -44,9 +44,9 @@ gpu_renderstate_create(GPUDevice   * __restrict device,
 
 GPU_EXPORT
 void
-gpu_func_set(GPUPipeline *pipline,
-             GPUFunction *func,
-             GPUFuncType  functype) {
+gpu_function_set(GPUPipeline    *pipline,
+                 GPUFunction    *func,
+                 GPUFunctionType functype) {
   mtSetFunc(pipline->priv, func->priv, (MtFuncType)functype);
 }
 

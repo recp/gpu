@@ -46,6 +46,6 @@ typedef struct GPUViewport {
 typedef enum GPUFuncType {
   GPU_FUNC_VERT = 1,
   GPU_FUNC_FRAG = 2
-} GPUFuncType;
+} GPUFunctionType;
 
 #endif /* gpu_common_h */

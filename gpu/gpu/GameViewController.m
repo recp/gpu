@@ -35,8 +35,8 @@
   vertFunc    = gpu_func_create(library, "vertexShader");
   fragFunc    = gpu_func_create(library, "fragmentShader");
 
-  gpu_func_set(pipeline, vertFunc, GPU_FUNC_VERT);
-  gpu_func_set(pipeline, fragFunc, GPU_FUNC_FRAG);
+  gpu_function_set(pipeline, vertFunc, GPU_FUNC_VERT);
+  gpu_function_set(pipeline, fragFunc, GPU_FUNC_FRAG);
 
   renderState = gpu_renderstate_create(device, pipeline);
 
