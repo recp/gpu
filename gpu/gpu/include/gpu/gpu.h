@@ -15,5 +15,6 @@
 #include "pipeline.h"
 #include "renderer.h"
 #include "library.h"
+#include "vertex.h"
 
 #endif /* gpu_h */

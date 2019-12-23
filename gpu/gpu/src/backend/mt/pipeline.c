@@ -44,9 +44,8 @@ gpu_renderstate_create(GPUDevice   * __restrict device,
 
 GPU_EXPORT
 void
-gpu_function_set(GPUPipeline    *pipline,
-                 GPUFunction    *func,
-                 GPUFunctionType functype) {
+gpu_function(GPUPipeline    * __restrict pipline,
+             GPUFunction    * __restrict func,
+             GPUFunctionType             functype) {
   mtSetFunc(pipline->priv, func->priv, (MtFuncType)functype);
 }
-

@@ -7,12 +7,14 @@
 //
 
 #import <MetalKit/MetalKit.h>
+#include <cglm/cglm.h>
+#include <cglm/applesimd.h>
 
 // Our platform independent renderer class.   Implements the MTKViewDelegate protocol which
 //   allows it to accept per-frame update and drawable resize callbacks.
 @interface Renderer : NSObject <MTKViewDelegate>
 
 -(nonnull instancetype)initWithMetalKitView:(nonnull MTKView *)view;
-
+- (void) setProj: (matrix_float4x4) proj;
 @end
 

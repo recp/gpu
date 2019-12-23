@@ -17,7 +17,7 @@ typedef struct GPURenderer {
 
 //@class MTKView;
 
-GPURenderer*
-gpu_renderer_mtkview(struct MTKView *mtkview);
+//GPURenderer*
+//gpu_renderer_mtkview(struct MTKView *mtkview);
 
 #endif /* gpu_renderer_h */

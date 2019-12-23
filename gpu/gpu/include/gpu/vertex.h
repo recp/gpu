@@ -9,32 +9,86 @@
 #define gpu_vertex_desc_h
 
 #include "common.h"
+#include "pipeline.h"
 
 typedef enum GPUVertexFormat {
-  GPUVertexFormatUnknown = 0,
+  GPUUnknown = 0,
   
-  GPUVertexFormatFloat   = 1,
-  GPUVertexFormatFloat2  = 2,
-  GPUVertexFormatFloat3  = 3,
-  GPUVertexFormatFloat4  = 4,
+  GPUUChar2 = 1,
+  GPUUChar3 = 2,
+  GPUUChar4 = 3,
   
-  GPUVertexFormatInt     = 5,
-  GPUVertexFormatInt2    = 6,
-  GPUVertexFormatInt3    = 7,
-  GPUVertexFormatInt4    = 8,
+  GPUChar2 = 4,
+  GPUChar3 = 5,
+  GPUChar4 = 6,
   
-  GPUVertexFormatUInt    = 9,
-  GPUVertexFormatUInt2   = 10,
-  GPUVertexFormatUInt3   = 11,
-  GPUVertexFormatUInt4   = 12
-};
+  GPUUChar2Normalized = 7,
+  GPUUChar3Normalized = 8,
+  GPUUChar4Normalized = 9,
+  
+  GPUChar2Normalized = 10,
+  GPUChar3Normalized = 11,
+  GPUChar4Normalized = 12,
+  
+  GPUUShort2 = 13,
+  GPUUShort3 = 14,
+  GPUUShort4 = 15,
+  
+  GPUShort2 = 16,
+  GPUShort3 = 17,
+  GPUShort4 = 18,
+  
+  GPUUShort2Normalized = 19,
+  GPUUShort3Normalized = 20,
+  GPUUShort4Normalized = 21,
+  
+  GPUShort2Normalized = 22,
+  GPUShort3Normalized = 23,
+  GPUShort4Normalized = 24,
+  
+  GPUHalf2 = 25,
+  GPUHalf3 = 26,
+  GPUHalf4 = 27,
+  
+  GPUFloat  = 28,
+  GPUFloat2 = 29,
+  GPUFloat3 = 30,
+  GPUFloat4 = 31,
+  
+  GPUInt  = 32,
+  GPUInt2 = 33,
+  GPUInt3 = 34,
+  GPUInt4 = 35,
+  
+  GPUUInt  = 36,
+  GPUUInt2 = 37,
+  GPUUInt3 = 38,
+  GPUUInt4 = 39,
+  
+  GPUInt1010102Normalized  = 40,
+  GPUUInt1010102Normalized = 41,
+  
+  GPUUChar4Normalized_BGRA = 42,
+
+  GPUUChar           = 45,
+  GPUChar            = 46,
+  GPUUCharNormalized = 47,
+  GPUCharNormalized  = 48,
+  
+  GPUUShort           = 49,
+  GPUShort            = 50,
+  GPUUShortNormalized = 51,
+  GPUShortNormalized  = 52,
+  
+  GPUVertexFormatHalf = 53
+} GPUVertexFormat;
 
 typedef enum GPUVertexStepFunction {
-  GPUVertexStepFunctionConstant             = 0,
-  GPUVertexStepFunctionPerVertex            = 1,
-  GPUVertexStepFunctionPerInstance          = 2,
-  GPUVertexStepFunctionPerPatch             = 3,
-  GPUVertexStepFunctionPerPatchControlPoint = 4,
+  GPUConstant             = 0,
+  GPUPerVertex            = 1,
+  GPUPerInstance          = 2,
+  GPUPerPatch             = 3,
+  GPUPerPatchControlPoint = 4,
 } GPUVertexStepFunction;
 
 typedef struct GPUVertexAttribute {
@@ -52,8 +106,34 @@ typedef struct GPUVertexBufferLayout {
 } GPUVertexBufferLayout;
 
 typedef struct GPUVertexDescriptor {
+  void                  *priv;
   GPUVertexAttribute    *attributes;
   GPUVertexBufferLayout *layouts;
 } GPUVertexDescriptor;
+
+GPU_EXPORT
+GPUVertexDescriptor*
+gpu_vertex_new(void);
+
+GPU_EXPORT
+void
+gpu_attrib(GPUVertexDescriptor * __restrict vertex,
+           uint32_t                         attribIndex,
+           GPUVertexFormat                  format,
+           uint32_t                         offset,
+           uint32_t                         bufferIndex);
+
+GPU_EXPORT
+void
+gpu_layout(GPUVertexDescriptor * __restrict vertex,
+           uint32_t                         layoutIndex,
+           uint32_t                         stride,
+           uint32_t                         stepRate,
+           GPUVertexStepFunction            stepFunction);
+
+GPU_EXPORT
+void
+gpu_vertex(GPUPipeline         * __restrict pipeline,
+           GPUVertexDescriptor * __restrict vert);
 
 #endif /* gpu_vertex_desc_h */

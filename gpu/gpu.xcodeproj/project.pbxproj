@@ -29,6 +29,7 @@
 		1E911E35223E47C800CD8880 /* GLKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E911E34223E47C800CD8880 /* GLKit.framework */; };
 		5665B2BD23715FF30038371E /* library.c in Sources */ = {isa = PBXBuildFile; fileRef = 5665B2BC23715FF30038371E /* library.c */; };
 		567F88AD226A15A3005E046C /* renderer.m in Sources */ = {isa = PBXBuildFile; fileRef = 567F88AC226A15A3005E046C /* renderer.m */; };
+		5681E2FC23AE13BD00476198 /* vertex.c in Sources */ = {isa = PBXBuildFile; fileRef = 5681E2FB23AE13BD00476198 /* vertex.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -45,13 +46,6 @@
 			proxyType = 1;
 			remoteGlobalIDString = 1E8A7646223D29A9001681FF;
 			remoteInfo = gpu;
-		};
-		5665B233237147B80038371E /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 5665B22F237147B80038371E /* cmt.xcodeproj */;
-			proxyType = 2;
-			remoteGlobalIDString = 56CA97F3226999B800D9DBDA;
-			remoteInfo = cmt;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -105,11 +99,12 @@
 		1E911E30223E47B900CD8880 /* MetalPerformanceShaders.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalPerformanceShaders.framework; path = System/Library/Frameworks/MetalPerformanceShaders.framework; sourceTree = SDKROOT; };
 		1E911E32223E47BF00CD8880 /* OpenGL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGL.framework; path = System/Library/Frameworks/OpenGL.framework; sourceTree = SDKROOT; };
 		1E911E34223E47C800CD8880 /* GLKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GLKit.framework; path = System/Library/Frameworks/GLKit.framework; sourceTree = SDKROOT; };
-		5665B22F237147B80038371E /* cmt.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = cmt.xcodeproj; path = ../../cmt/cmt.xcodeproj; sourceTree = "<group>"; };
+		566119D12373155F00DD3DF3 /* vertex.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = vertex.h; sourceTree = "<group>"; };
 		5665B2BC23715FF30038371E /* library.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = library.c; sourceTree = "<group>"; };
 		5665B2BE237160690038371E /* library.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = library.h; sourceTree = "<group>"; };
 		567F88AA226A14A1005E046C /* renderer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = renderer.h; sourceTree = "<group>"; };
 		567F88AC226A15A3005E046C /* renderer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = renderer.m; sourceTree = "<group>"; };
+		5681E2FB23AE13BD00476198 /* vertex.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = vertex.c; sourceTree = "<group>"; };
 		56CA982C2269E2F200D9DBDA /* pixelformat.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pixelformat.h; sourceTree = "<group>"; };
 		56CA982D2269E39100D9DBDA /* pipeline.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pipeline.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -148,7 +143,6 @@
 		1E8A763E223D29A9001681FF = {
 			isa = PBXGroup;
 			children = (
-				5665B22F237147B80038371E /* cmt.xcodeproj */,
 				1E8A7649223D29A9001681FF /* gpu */,
 				1E8A7666223D29AB001681FF /* gpuTests */,
 				1E8A7671223D29AB001681FF /* gpuUITests */,
@@ -219,8 +213,8 @@
 		1E8A7685223D2B64001681FF /* backend */ = {
 			isa = PBXGroup;
 			children = (
-				5665B2BB23714B510038371E /* dx */,
 				1E8A7687223D2B73001681FF /* mt */,
+				5665B2BB23714B510038371E /* dx */,
 				1E8A7686223D2B6C001681FF /* gl */,
 			);
 			path = backend;
@@ -242,6 +236,7 @@
 				1E8A76D1223D349A001681FF /* pipeline.c */,
 				1E8A76D5223D5149001681FF /* device.c */,
 				5665B2BC23715FF30038371E /* library.c */,
+				5681E2FB23AE13BD00476198 /* vertex.c */,
 			);
 			path = mt;
 			sourceTree = "<group>";
@@ -264,6 +259,7 @@
 				56CA982D2269E39100D9DBDA /* pipeline.h */,
 				567F88AA226A14A1005E046C /* renderer.h */,
 				5665B2BE237160690038371E /* library.h */,
+				566119D12373155F00DD3DF3 /* vertex.h */,
 			);
 			path = gpu;
 			sourceTree = "<group>";
@@ -288,14 +284,6 @@
 				1E8A76CE223D3056001681FF /* libcmt.dylib */,
 			);
 			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		5665B230237147B80038371E /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				5665B234237147B80038371E /* libcmt.dylib */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 		5665B2BB23714B510038371E /* dx */ = {
@@ -400,12 +388,6 @@
 			mainGroup = 1E8A763E223D29A9001681FF;
 			productRefGroup = 1E8A7648223D29A9001681FF /* Products */;
 			projectDirPath = "";
-			projectReferences = (
-				{
-					ProductGroup = 5665B230237147B80038371E /* Products */;
-					ProjectRef = 5665B22F237147B80038371E /* cmt.xcodeproj */;
-				},
-			);
 			projectRoot = "";
 			targets = (
 				1E8A7646223D29A9001681FF /* gpu */,
@@ -414,16 +396,6 @@
 			);
 		};
 /* End PBXProject section */
-
-/* Begin PBXReferenceProxy section */
-		5665B234237147B80038371E /* libcmt.dylib */ = {
-			isa = PBXReferenceProxy;
-			fileType = "compiled.mach-o.dylib";
-			path = libcmt.dylib;
-			remoteRef = 5665B233237147B80038371E /* PBXContainerItemProxy */;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
-/* End PBXReferenceProxy section */
 
 /* Begin PBXResourcesBuildPhase section */
 		1E8A7645223D29A9001681FF /* Resources */ = {
@@ -463,6 +435,7 @@
 				1E8A7654223D29A9001681FF /* Shaders.metal in Sources */,
 				567F88AD226A15A3005E046C /* renderer.m in Sources */,
 				1E8A764F223D29A9001681FF /* Renderer.m in Sources */,
+				5681E2FC23AE13BD00476198 /* vertex.c in Sources */,
 				1E8A76CC223D2FEB001681FF /* MTLView.m in Sources */,
 				1E8A7683223D2A06001681FF /* pipeline.c in Sources */,
 				1E8A7652223D29A9001681FF /* GameViewController.m in Sources */,
@@ -633,12 +606,16 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = 43HMQY7T5T;
-				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/../lib/cmt/include";
+				HEADER_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/../lib/cglm/include",
+					/Users/aurorabilisim/Projects/recp/cmt/cmt/include,
+				);
 				INFOPLIST_FILE = gpu/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MTL_HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/../lib/cglm/include /usr/local/include /usr/include";
 				PRODUCT_BUNDLE_IDENTIFIER = co.recp.gpu;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				USER_HEADER_SEARCH_PATHS = "";
@@ -654,12 +631,16 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = 43HMQY7T5T;
-				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/../lib/cmt/include";
+				HEADER_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/../lib/cglm/include",
+					/Users/aurorabilisim/Projects/recp/cmt/cmt/include,
+				);
 				INFOPLIST_FILE = gpu/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MTL_HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/../lib/cglm/include /usr/local/include /usr/include";
 				PRODUCT_BUNDLE_IDENTIFIER = co.recp.gpu;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				USER_HEADER_SEARCH_PATHS = "";

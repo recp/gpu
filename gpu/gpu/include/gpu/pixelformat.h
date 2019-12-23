@@ -18,26 +18,26 @@ typedef enum GPUPixelFormat {
   GPUPixelFormatR8Snorm                = 12,
   GPUPixelFormatR8Uint                 = 13,
   GPUPixelFormatR8Sint                 = 14,
-  
+
   /* Normal 16 bit formats */
   GPUPixelFormatR16Unorm               = 20,
   GPUPixelFormatR16Snorm               = 22,
   GPUPixelFormatR16Uint                = 23,
   GPUPixelFormatR16Sint                = 24,
   GPUPixelFormatR16Float               = 25,
-  
+
   GPUPixelFormatRG8Unorm               = 30,
   GPUPixelFormatRG8Unorm_sRGB          = 31,
   GPUPixelFormatRG8Snorm               = 32,
   GPUPixelFormatRG8Uint                = 33,
   GPUPixelFormatRG8Sint                = 34,
-  
+
   /* Packed 16 bit formats */
   GPUPixelFormatB5G6R5Unorm            = 40,
   GPUPixelFormatA1BGR5Unorm            = 41,
   GPUPixelFormatABGR4Unorm             = 42,
   GPUPixelFormatBGR5A1Unorm            = 43,
-  
+
   /* Normal 32 bit formats */
   GPUPixelFormatR32Uint                = 53,
   GPUPixelFormatR32Sint                = 54,
@@ -55,7 +55,7 @@ typedef enum GPUPixelFormat {
   GPUPixelFormatBGRX8Unorm             = 75,
   GPUPixelFormatBGRA8Unorm             = 80,
   GPUPixelFormatBGRA8Unorm_sRGB        = 81,
-  
+
   /* Packed 32 bit formats */
   GPUPixelFormatRGB10A2Unorm           = 90,
   GPUPixelFormatRGB10A2Uint            = 91,
@@ -64,9 +64,9 @@ typedef enum GPUPixelFormat {
   GPUPixelFormatBGR10A2Unorm           = 94,
   GPUPixelFormatBGR10_XR               = 554,
   GPUPixelFormatBGR10_XR_sRGB          = 555,
-  
+
   /* Normal 64 bit formats */
-  
+
   GPUPixelFormatRG32Uint               = 103,
   GPUPixelFormatRG32Sint               = 104,
   GPUPixelFormatRG32Float              = 105,
@@ -77,15 +77,15 @@ typedef enum GPUPixelFormat {
   GPUPixelFormatRGBA16Float            = 115,
   GPUPixelFormatBGRA10_XR              = 552,
   GPUPixelFormatBGRA10_XR_sRGB         = 553,
-  
+
   /* Normal 128 bit formats */
-  
+
   GPUPixelFormatRGBA32Uint             = 123,
   GPUPixelFormatRGBA32Sint             = 124,
   GPUPixelFormatRGBA32Float            = 125,
-  
+
   /* Compressed formats. */
-  
+
   /* S3TC/DXT */
   GPUPixelFormatBC1_RGBA               = 130,
   GPUPixelFormatBC1_RGBA_sRGB          = 131,
@@ -93,19 +93,19 @@ typedef enum GPUPixelFormat {
   GPUPixelFormatBC2_RGBA_sRGB          = 133,
   GPUPixelFormatBC3_RGBA               = 134,
   GPUPixelFormatBC3_RGBA_sRGB          = 135,
-  
+
   /* RGTC */
   GPUPixelFormatBC4_RUnorm             = 140,
   GPUPixelFormatBC4_RSnorm             = 141,
   GPUPixelFormatBC5_RGUnorm            = 142,
   GPUPixelFormatBC5_RGSnorm            = 143,
-  
+
   /* BPTC */
   GPUPixelFormatBC6H_RGBFloat          = 150,
   GPUPixelFormatBC6H_RGBUfloat         = 151,
   GPUPixelFormatBC7_RGBAUnorm          = 152,
   GPUPixelFormatBC7_RGBAUnorm_sRGB     = 153,
-  
+
   /* PVRTC */
   GPUPixelFormatPVRTC_RGB_2BPP         = 160,
   GPUPixelFormatPVRTC_RGB_2BPP_sRGB    = 161,
@@ -115,7 +115,7 @@ typedef enum GPUPixelFormat {
   GPUPixelFormatPVRTC_RGBA_2BPP_sRGB   = 165,
   GPUPixelFormatPVRTC_RGBA_4BPP        = 166,
   GPUPixelFormatPVRTC_RGBA_4BPP_sRGB   = 167,
-  
+
   /* ETC2 */
   GPUPixelFormatEAC_R11Unorm           = 170,
   GPUPixelFormatEAC_R11Snorm           = 172,
@@ -123,12 +123,12 @@ typedef enum GPUPixelFormat {
   GPUPixelFormatEAC_RG11Snorm          = 176,
   GPUPixelFormatEAC_RGBA8              = 178,
   GPUPixelFormatEAC_RGBA8_sRGB         = 179,
-  
+
   GPUPixelFormatETC2_RGB8              = 180,
   GPUPixelFormatETC2_RGB8_sRGB         = 181,
   GPUPixelFormatETC2_RGB8A1            = 182,
   GPUPixelFormatETC2_RGB8A1_sRGB       = 183,
-  
+
   /* ASTC */
   GPUPixelFormatASTC_4x4_sRGB          = 186,
   GPUPixelFormatASTC_5x4_sRGB          = 187,
@@ -144,7 +144,7 @@ typedef enum GPUPixelFormat {
   GPUPixelFormatASTC_10x10_sRGB        = 198,
   GPUPixelFormatASTC_12x10_sRGB        = 199,
   GPUPixelFormatASTC_12x12_sRGB        = 200,
-  
+
   GPUPixelFormatASTC_4x4_LDR           = 204,
   GPUPixelFormatASTC_5x4_LDR           = 205,
   GPUPixelFormatASTC_5x5_LDR           = 206,
@@ -161,14 +161,14 @@ typedef enum GPUPixelFormat {
   GPUPixelFormatASTC_12x12_LDR         = 218,
   GPUPixelFormatGBGR422                = 240,
   GPUPixelFormatBGRG422                = 241,
-  
+
   /* Depth */
   GPUPixelFormatDepth16Unorm           = 250,
   GPUPixelFormatDepth32Float           = 252,
-  
+
   /* Stencil */
   GPUPixelFormatStencil8               = 253,
-  
+
   /* Depth Stencil */
   GPUPixelFormatDepth24Unorm_Stencil8  = 255,
   GPUPixelFormatDepth32Float_Stencil8  = 260,

@@ -14,6 +14,9 @@
 // Include header shared between C code here, which executes Metal API commands, and .metal files
 #import "ShaderTypes.h"
 
+#include <cglm/cglm.h>
+#include "include/gpu/gpu.h"
+
 static const NSUInteger kMaxBuffersInFlight = 3;
 
 static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
@@ -41,6 +44,10 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
     float _rotation;
 
     MTKMesh *_mesh;
+}
+
+- (void) setProj: (matrix_float4x4) proj {
+  _projectionMatrix = proj;
 }
 
 -(nonnull instancetype)initWithMetalKitView:(nonnull MTKView *)view;
@@ -83,21 +90,20 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
     _mtlVertexDescriptor.layouts[BufferIndexMeshGenerics].stepRate = 1;
     _mtlVertexDescriptor.layouts[BufferIndexMeshGenerics].stepFunction = MTLVertexStepFunctionPerVertex;
 
-    id<MTLLibrary> defaultLibrary = [_device newDefaultLibrary];
+    id<MTLLibrary> defaultLibrary     = [_device newDefaultLibrary];
 
-    id <MTLFunction> vertexFunction = [defaultLibrary newFunctionWithName:@"vertexShader"];
-
+    id <MTLFunction> vertexFunction   = [defaultLibrary newFunctionWithName:@"vertexShader"];
     id <MTLFunction> fragmentFunction = [defaultLibrary newFunctionWithName:@"fragmentShader"];
 
-    MTLRenderPipelineDescriptor *pipelineStateDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
-    pipelineStateDescriptor.label = @"MyPipeline";
-    pipelineStateDescriptor.sampleCount = view.sampleCount;
-    pipelineStateDescriptor.vertexFunction = vertexFunction;
-    pipelineStateDescriptor.fragmentFunction = fragmentFunction;
-    pipelineStateDescriptor.vertexDescriptor = _mtlVertexDescriptor;
+    MTLRenderPipelineDescriptor *pipelineStateDescriptor    = [[MTLRenderPipelineDescriptor alloc] init];
+    pipelineStateDescriptor.label                           = @"MyPipeline";
+    pipelineStateDescriptor.sampleCount                     = view.sampleCount;
+    pipelineStateDescriptor.vertexFunction                  = vertexFunction;
+    pipelineStateDescriptor.fragmentFunction                = fragmentFunction;
+    pipelineStateDescriptor.vertexDescriptor                = _mtlVertexDescriptor;
     pipelineStateDescriptor.colorAttachments[0].pixelFormat = view.colorPixelFormat;
-    pipelineStateDescriptor.depthAttachmentPixelFormat = view.depthStencilPixelFormat;
-    pipelineStateDescriptor.stencilAttachmentPixelFormat = view.depthStencilPixelFormat;
+    pipelineStateDescriptor.depthAttachmentPixelFormat      = view.depthStencilPixelFormat;
+    pipelineStateDescriptor.stencilAttachmentPixelFormat    = view.depthStencilPixelFormat;
 
     NSError *error = NULL;
     _pipelineState = [_device newRenderPipelineStateWithDescriptor:pipelineStateDescriptor error:&error];
@@ -108,7 +114,7 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
 
     MTLDepthStencilDescriptor *depthStateDesc = [[MTLDepthStencilDescriptor alloc] init];
     depthStateDesc.depthCompareFunction = MTLCompareFunctionLess;
-    depthStateDesc.depthWriteEnabled = YES;
+    depthStateDesc.depthWriteEnabled    = YES;
     _depthState = [_device newDepthStencilStateWithDescriptor:depthStateDesc];
 
     NSUInteger uniformBufferSize = kAlignedUniformsSize * kMaxBuffersInFlight;
@@ -187,17 +193,24 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
 - (void)_updateGameState
 {
     /// Update any game state before encoding renderint commands to our drawable
+  
+  Uniforms * uniforms = (Uniforms*)_uniformBufferAddress;
+  
+  uniforms->projectionMatrix = _projectionMatrix;
+  
+  mat4 trans, rot;
+  
+  glm_translate_make(rot, (vec3){0.0, 0.0, -8.0});
+  glm_rotate(rot, _rotation, (vec3){1, 1, 0});
 
-    Uniforms * uniforms = (Uniforms*)_uniformBufferAddress;
+//  glm_rotate_atm(rot, (vec3){0.0, 0.0, -8.0}, _rotation, (vec3){1, 1, 0});
+  uniforms->modelViewMatrix = glm_mat4_applesimd(rot);
 
-    uniforms->projectionMatrix = _projectionMatrix;
-
-    vector_float3 rotationAxis = {1, 1, 0};
-    matrix_float4x4 modelMatrix = matrix4x4_rotation(_rotation, rotationAxis);
-    matrix_float4x4 viewMatrix = matrix4x4_translation(0.0, 0.0, -8.0);
-
-    uniforms->modelViewMatrix = matrix_multiply(viewMatrix, modelMatrix);
-
+//    vector_float3 rotationAxis = {1, 1, 0};
+//    matrix_float4x4 modelMatrix = matrix4x4_rotation(_rotation, rotationAxis);
+//    matrix_float4x4 viewMatrix = matrix4x4_translation(0.0, 0.0, -8.0);
+//
+//    uniforms->modelViewMatrix = matrix_multiply(viewMatrix, modelMatrix);
     _rotation += .01;
 }
 
@@ -280,54 +293,65 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
     [commandBuffer commit];
 }
 
+
+
 - (void)mtkView:(nonnull MTKView *)view drawableSizeWillChange:(CGSize)size
 {
     /// Respond to drawable size or orientation changes here
 
-    float aspect = size.width / (float)size.height;
-    _projectionMatrix = matrix_perspective_right_hand(65.0f * (M_PI / 180.0f), aspect, 0.1f, 100.0f);
+//    float aspect = size.width / (float)size.height;
+//    _projectionMatrix = matrix_perspective_right_hand(65.0f * (M_PI / 180.0f), aspect, 0.1f, 100.0f);
+  
+  float aspect = size.width / (float)size.height;
+  
+  mat4 proj;
+  
+  
+  glm_perspective(glm_rad(65.0f), aspect, 0.1f, 100.0f, proj);
+  
+  _projectionMatrix = glm_mat4_applesimd(proj);
 }
 
 #pragma mark Matrix Math Utilities
 
-matrix_float4x4 matrix4x4_translation(float tx, float ty, float tz)
-{
-    return (matrix_float4x4) {{
-        { 1,   0,  0,  0 },
-        { 0,   1,  0,  0 },
-        { 0,   0,  1,  0 },
-        { tx, ty, tz,  1 }
-    }};
-}
+//matrix_float4x4 matrix4x4_translation(float tx, float ty, float tz)
+//{
+//    return (matrix_float4x4) {{
+//        { 1,   0,  0,  0 },
+//        { 0,   1,  0,  0 },
+//        { 0,   0,  1,  0 },
+//        { tx, ty, tz,  1 }
+//    }};
+//}
+//
+//static matrix_float4x4 matrix4x4_rotation(float radians, vector_float3 axis)
+//{
+//    axis = vector_normalize(axis);
+//    float ct = cosf(radians);
+//    float st = sinf(radians);
+//    float ci = 1 - ct;
+//    float x = axis.x, y = axis.y, z = axis.z;
+//
+//    return (matrix_float4x4) {{
+//        { ct + x * x * ci,     y * x * ci + z * st, z * x * ci - y * st, 0},
+//        { x * y * ci - z * st,     ct + y * y * ci, z * y * ci + x * st, 0},
+//        { x * z * ci + y * st, y * z * ci - x * st,     ct + z * z * ci, 0},
+//        {                   0,                   0,                   0, 1}
+//    }};
+//}
 
-static matrix_float4x4 matrix4x4_rotation(float radians, vector_float3 axis)
-{
-    axis = vector_normalize(axis);
-    float ct = cosf(radians);
-    float st = sinf(radians);
-    float ci = 1 - ct;
-    float x = axis.x, y = axis.y, z = axis.z;
-
-    return (matrix_float4x4) {{
-        { ct + x * x * ci,     y * x * ci + z * st, z * x * ci - y * st, 0},
-        { x * y * ci - z * st,     ct + y * y * ci, z * y * ci + x * st, 0},
-        { x * z * ci + y * st, y * z * ci - x * st,     ct + z * z * ci, 0},
-        {                   0,                   0,                   0, 1}
-    }};
-}
-
-matrix_float4x4 matrix_perspective_right_hand(float fovyRadians, float aspect, float nearZ, float farZ)
-{
-    float ys = 1 / tanf(fovyRadians * 0.5);
-    float xs = ys / aspect;
-    float zs = farZ / (nearZ - farZ);
-
-    return (matrix_float4x4) {{
-        { xs,   0,          0,  0 },
-        {  0,  ys,          0,  0 },
-        {  0,   0,         zs, -1 },
-        {  0,   0, nearZ * zs,  0 }
-    }};
-}
+//matrix_float4x4 matrix_perspective_right_hand(float fovyRadians, float aspect, float nearZ, float farZ)
+//{
+//    float ys = 1 / tanf(fovyRadians * 0.5);
+//    float xs = ys / aspect;
+//    float zs = farZ / (nearZ - farZ);
+//
+//    return (matrix_float4x4) {{
+//        { xs,   0,          0,  0 },
+//        {  0,  ys,          0,  0 },
+//        {  0,   0,         zs, -1 },
+//        {  0,   0, nearZ * zs,  0 }
+//    }};
+//}
 
 @end
