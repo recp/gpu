@@ -42,8 +42,8 @@
   pipeline    = gpu_pipeline_create(GPUPixelFormatBGRA8Unorm_sRGB);
   library     = gpu_library_default(device);
 
-  vertFunc    = gpu_func_create(library, "vertexShader");
-  fragFunc    = gpu_func_create(library, "fragmentShader");
+  vertFunc    = gpu_function_new(library, "vertexShader");
+  fragFunc    = gpu_function_new(library, "fragmentShader");
   vert        = gpu_vertex_new();
   
   gpu_function(pipeline, vertFunc, GPU_FUNC_VERT);

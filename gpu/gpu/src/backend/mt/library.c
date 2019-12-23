@@ -25,7 +25,7 @@ gpu_library_default(GPUDevice *device) {
 
 GPU_EXPORT
 GPUFunction*
-gpu_func_create(GPULibrary *lib, const char *name) {
+gpu_function_new(GPULibrary *lib, const char *name) {
   GPUFunction *func;
   MtFunction  *mtFunc;
 
