@@ -15,6 +15,6 @@ typedef struct GPUDevice {
 } GPUDevice;
 
 GPUDevice*
-gpu_device_create(void);
+gpu_device_new(void);
 
 #endif /* gpu_device_h */

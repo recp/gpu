@@ -9,7 +9,7 @@
 #include <cmt/cmt.h>
 
 GPUDevice*
-gpu_device_create(void) {
+gpu_device_new(void) {
   GPUDevice *device;
   MtDevice  *mtDevice;
   

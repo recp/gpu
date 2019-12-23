@@ -38,8 +38,8 @@
 {
   [super viewDidLoad];
   
-  device      = gpu_device_create();
-  pipeline    = gpu_pipeline_create(GPUPixelFormatBGRA8Unorm_sRGB);
+  device      = gpu_device_new();
+  pipeline    = gpu_pipeline_new(GPUPixelFormatBGRA8Unorm_sRGB);
   library     = gpu_library_default(device);
 
   vertFunc    = gpu_function_new(library, "vertexShader");
@@ -57,7 +57,7 @@
   
   gpu_vertex(pipeline, vert);
 
-  renderState = gpu_renderstate_create(device, pipeline);
+  renderState = gpu_renderstate_new(device, pipeline);
   
 //  renderer = gpu_renderer_mtkview((MTKView *)self.view);
   
