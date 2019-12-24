@@ -34,17 +34,18 @@
   GPUVertexDescriptor *vert;
 }
 
-- (void)viewDidLoad
-{
+- (void)viewDidLoad {
   [super viewDidLoad];
-  
-  device      = gpu_device_new();
-  pipeline    = gpu_pipeline_new(GPUPixelFormatBGRA8Unorm_sRGB);
-  library     = gpu_library_default(device);
 
-  vertFunc    = gpu_function_new(library, "vertexShader");
-  fragFunc    = gpu_function_new(library, "fragmentShader");
-  vert        = gpu_vertex_new();
+  _view    = (MTKView *)self.view;
+
+  device   = gpu_device_new();
+  pipeline = gpu_pipeline_new(GPUPixelFormatBGRA8Unorm_sRGB);
+  library  = gpu_library_default(device);
+
+  vertFunc = gpu_function_new(library, "vertexShader");
+  fragFunc = gpu_function_new(library, "fragmentShader");
+  vert     = gpu_vertex_new();
   
   gpu_function(pipeline, vertFunc, GPU_FUNC_VERT);
   gpu_function(pipeline, fragFunc, GPU_FUNC_FRAG);
@@ -58,10 +59,14 @@
   gpu_vertex(pipeline, vert);
 
   renderState = gpu_renderstate_new(device, pipeline);
-  
+
+  gpu_color_format(pipeline, 0, (GPUPixelFormat)_view.colorPixelFormat);
+  gpu_depth_format(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
+  gpu_stencil_format(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
+  gpu_samplecount(pipeline, (uint32_t)_view.sampleCount);
+
 //  renderer = gpu_renderer_mtkview((MTKView *)self.view);
-  
-  _view = (MTKView *)self.view;
+
 //   _view.device = MTLCreateSystemDefaultDevice();
   
   _view.device = device->priv;

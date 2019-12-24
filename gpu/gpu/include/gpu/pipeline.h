@@ -35,4 +35,25 @@ gpu_function(GPUPipeline * __restrict pipline,
              GPUFunction * __restrict func,
              GPUFunctionType          functype);
 
+GPU_EXPORT
+void
+gpu_color_format(GPUPipeline * __restrict pipline,
+                 uint32_t                 index,
+                 GPUPixelFormat           pixelFormat);
+
+GPU_EXPORT
+void
+gpu_depth_format(GPUPipeline * __restrict pipline,
+                 GPUPixelFormat           pixelFormat);
+
+GPU_EXPORT
+void
+gpu_stencil_format(GPUPipeline * __restrict pipline,
+                   GPUPixelFormat           pixelFormat);
+
+GPU_EXPORT
+void
+gpu_samplecount(GPUPipeline * __restrict pipline,
+                uint32_t                 sampleCount);
+
 #endif /* gpu_pipeline_h */

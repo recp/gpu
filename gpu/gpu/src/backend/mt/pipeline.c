@@ -49,3 +49,32 @@ gpu_function(GPUPipeline    * __restrict pipline,
              GPUFunctionType             functype) {
   mtSetFunc(pipline->priv, func->priv, (MtFuncType)functype);
 }
+
+GPU_EXPORT
+void
+gpu_color_format(GPUPipeline * __restrict pipline,
+                 uint32_t                 index,
+                 GPUPixelFormat           pixelFormat) {
+  mtColorPixelFormat(pipline->priv, index, (MtPixelFormat)pixelFormat);
+}
+
+GPU_EXPORT
+void
+gpu_depth_format(GPUPipeline * __restrict pipline,
+                 GPUPixelFormat           pixelFormat) {
+  mtDepthPixelFormat(pipline->priv, (MtPixelFormat)pixelFormat);
+}
+
+GPU_EXPORT
+void
+gpu_stencil_format(GPUPipeline * __restrict pipline,
+                   GPUPixelFormat           pixelFormat) {
+  mtStencilPixelFormat(pipline->priv, (MtPixelFormat)pixelFormat);
+}
+
+GPU_EXPORT
+void
+gpu_samplecount(GPUPipeline * __restrict pipline,
+                uint32_t                 sampleCount) {
+  mtSampleCount(pipline->priv, sampleCount);
+}

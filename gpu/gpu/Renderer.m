@@ -91,7 +91,6 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
     _mtlVertexDescriptor.layouts[BufferIndexMeshGenerics].stepFunction = MTLVertexStepFunctionPerVertex;
 
     id<MTLLibrary> defaultLibrary     = [_device newDefaultLibrary];
-
     id <MTLFunction> vertexFunction   = [defaultLibrary newFunctionWithName:@"vertexShader"];
     id <MTLFunction> fragmentFunction = [defaultLibrary newFunctionWithName:@"fragmentShader"];
 
@@ -162,7 +161,7 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
     MTKTextureLoader* textureLoader = [[MTKTextureLoader alloc] initWithDevice:_device];
 
     NSDictionary *textureLoaderOptions =
-    @{
+     @{
       MTKTextureLoaderOptionTextureUsage       : @(MTLTextureUsageShaderRead),
       MTKTextureLoaderOptionTextureStorageMode : @(MTLStorageModePrivate)
       };
@@ -183,10 +182,8 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
 {
     /// Update the state of our uniform buffers before rendering
 
-    _uniformBufferIndex = (_uniformBufferIndex + 1) % kMaxBuffersInFlight;
-
-    _uniformBufferOffset = kAlignedUniformsSize * _uniformBufferIndex;
-
+    _uniformBufferIndex   = (_uniformBufferIndex + 1) % kMaxBuffersInFlight;
+    _uniformBufferOffset  = kAlignedUniformsSize * _uniformBufferIndex;
     _uniformBufferAddress = ((uint8_t*)_dynamicUniformBuffer.contents) + _uniformBufferOffset;
 }
 
@@ -198,7 +195,7 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
   
   uniforms->projectionMatrix = _projectionMatrix;
   
-  mat4 trans, rot;
+  mat4 rot;
   
   glm_translate_make(rot, (vec3){0.0, 0.0, -8.0});
   glm_rotate(rot, _rotation, (vec3){1, 1, 0});
