@@ -28,6 +28,7 @@
 		1E911E33223E47BF00CD8880 /* OpenGL.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E911E32223E47BF00CD8880 /* OpenGL.framework */; };
 		1E911E35223E47C800CD8880 /* GLKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E911E34223E47C800CD8880 /* GLKit.framework */; };
 		5665B2BD23715FF30038371E /* library.c in Sources */ = {isa = PBXBuildFile; fileRef = 5665B2BC23715FF30038371E /* library.c */; };
+		566EB49F23B35A52001F9041 /* depthstencil.c in Sources */ = {isa = PBXBuildFile; fileRef = 566EB49E23B35A52001F9041 /* depthstencil.c */; };
 		567F88AD226A15A3005E046C /* renderer.m in Sources */ = {isa = PBXBuildFile; fileRef = 567F88AC226A15A3005E046C /* renderer.m */; };
 		5681E2FC23AE13BD00476198 /* vertex.c in Sources */ = {isa = PBXBuildFile; fileRef = 5681E2FB23AE13BD00476198 /* vertex.c */; };
 /* End PBXBuildFile section */
@@ -102,6 +103,8 @@
 		566119D12373155F00DD3DF3 /* vertex.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = vertex.h; sourceTree = "<group>"; };
 		5665B2BC23715FF30038371E /* library.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = library.c; sourceTree = "<group>"; };
 		5665B2BE237160690038371E /* library.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = library.h; sourceTree = "<group>"; };
+		566EB49D23B35A07001F9041 /* depthstencil.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = depthstencil.h; sourceTree = "<group>"; };
+		566EB49E23B35A52001F9041 /* depthstencil.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = depthstencil.c; sourceTree = "<group>"; };
 		567F88AA226A14A1005E046C /* renderer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = renderer.h; sourceTree = "<group>"; };
 		567F88AC226A15A3005E046C /* renderer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = renderer.m; sourceTree = "<group>"; };
 		5681E2FB23AE13BD00476198 /* vertex.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = vertex.c; sourceTree = "<group>"; };
@@ -237,6 +240,7 @@
 				1E8A76D5223D5149001681FF /* device.c */,
 				5665B2BC23715FF30038371E /* library.c */,
 				5681E2FB23AE13BD00476198 /* vertex.c */,
+				566EB49E23B35A52001F9041 /* depthstencil.c */,
 			);
 			path = mt;
 			sourceTree = "<group>";
@@ -260,6 +264,7 @@
 				567F88AA226A14A1005E046C /* renderer.h */,
 				5665B2BE237160690038371E /* library.h */,
 				566119D12373155F00DD3DF3 /* vertex.h */,
+				566EB49D23B35A07001F9041 /* depthstencil.h */,
 			);
 			path = gpu;
 			sourceTree = "<group>";
@@ -434,6 +439,7 @@
 				1E8A76D2223D349A001681FF /* pipeline.c in Sources */,
 				1E8A7654223D29A9001681FF /* Shaders.metal in Sources */,
 				567F88AD226A15A3005E046C /* renderer.m in Sources */,
+				566EB49F23B35A52001F9041 /* depthstencil.c in Sources */,
 				1E8A764F223D29A9001681FF /* Renderer.m in Sources */,
 				5681E2FC23AE13BD00476198 /* vertex.c in Sources */,
 				1E8A76CC223D2FEB001681FF /* MTLView.m in Sources */,

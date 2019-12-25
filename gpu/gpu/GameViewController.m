@@ -32,6 +32,7 @@
   GPUFunction         *vertFunc;
   GPUFunction         *fragFunc;
   GPUVertexDescriptor *vert;
+  GPUDepthStencil     *depthStencil;
 }
 
 - (void)viewDidLoad {
@@ -64,6 +65,8 @@
   gpu_depth_format(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
   gpu_stencil_format(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
   gpu_samplecount(pipeline, (uint32_t)_view.sampleCount);
+
+  depthStencil = gpu_depthstencil_new();
 
 //  renderer = gpu_renderer_mtkview((MTKView *)self.view);
 

@@ -16,5 +16,6 @@
 #include "renderer.h"
 #include "library.h"
 #include "vertex.h"
+#include "depthstencil.h"
 
 #endif /* gpu_h */
