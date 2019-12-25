@@ -66,7 +66,7 @@
   gpu_stencil_format(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
   gpu_samplecount(pipeline, (uint32_t)_view.sampleCount);
 
-  depthStencil = gpu_depthstencil_new();
+  depthStencil = gpu_depthstencil_new(GPUCompareFunctionLess, true);
 
 //  renderer = gpu_renderer_mtkview((MTKView *)self.view);
 

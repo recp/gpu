@@ -14,11 +14,12 @@
 
 GPU_EXPORT
 GPUDepthStencil*
-gpu_depthstencil_new() {
+gpu_depthstencil_new(GPUCompareFunction depthCompareFunc,
+                     bool               depthWriteEnabled) {
   GPUDepthStencil *ds;
   MtDepthStencil  *mds;
   
-  mds = mtDepthStencil();
+  mds = mtDepthStencil(depthCompareFunc, depthWriteEnabled);
   ds  = calloc(1, sizeof(*ds));
 
   ds->priv = mds;
