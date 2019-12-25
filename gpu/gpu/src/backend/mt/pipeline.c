@@ -18,12 +18,12 @@ GPUPipeline*
 gpu_pipeline_new(GPUPixelFormat pixelFormat) {
   GPUPipeline  *pipeline;
   MtRenderDesc *renderDesc;
-
+  
   renderDesc = mtRenderPipelineCreate((MtPixelFormat)pixelFormat);
   pipeline   = calloc(1, sizeof(*pipeline));
-
+  
   pipeline->priv = renderDesc;
-
+  
   return pipeline;
 }
 
@@ -33,12 +33,12 @@ gpu_renderstate_new(GPUDevice   * __restrict device,
                     GPUPipeline * __restrict pipeline) {
   GPUPipeline      *rederPipline;
   MtRenderPipeline *mtRederPipline;
-
+  
   mtRederPipline = mtRenderStateCreate(device->priv, pipeline->priv);
   rederPipline   = calloc(1, sizeof(*rederPipline));
-
+  
   rederPipline->priv = mtRederPipline;
-
+  
   return NULL;
 }
 
@@ -52,29 +52,29 @@ gpu_function(GPUPipeline    * __restrict pipline,
 
 GPU_EXPORT
 void
-gpu_color_format(GPUPipeline * __restrict pipline,
-                 uint32_t                 index,
-                 GPUPixelFormat           pixelFormat) {
+gpu_colorfm(GPUPipeline * __restrict pipline,
+            uint32_t                 index,
+            GPUPixelFormat           pixelFormat) {
   mtColorPixelFormat(pipline->priv, index, (MtPixelFormat)pixelFormat);
 }
 
 GPU_EXPORT
 void
-gpu_depth_format(GPUPipeline * __restrict pipline,
-                 GPUPixelFormat           pixelFormat) {
+gpu_depthfm(GPUPipeline * __restrict pipline,
+            GPUPixelFormat           pixelFormat) {
   mtDepthPixelFormat(pipline->priv, (MtPixelFormat)pixelFormat);
 }
 
 GPU_EXPORT
 void
-gpu_stencil_format(GPUPipeline * __restrict pipline,
-                   GPUPixelFormat           pixelFormat) {
+gpu_stencfm(GPUPipeline * __restrict pipline,
+            GPUPixelFormat           pixelFormat) {
   mtStencilPixelFormat(pipline->priv, (MtPixelFormat)pixelFormat);
 }
 
 GPU_EXPORT
 void
-gpu_samplecount(GPUPipeline * __restrict pipline,
-                uint32_t                 sampleCount) {
+gpu_samplco(GPUPipeline * __restrict pipline,
+            uint32_t                 sampleCount) {
   mtSampleCount(pipline->priv, sampleCount);
 }

@@ -106,8 +106,7 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
 
     NSError *error = NULL;
     _pipelineState = [_device newRenderPipelineStateWithDescriptor:pipelineStateDescriptor error:&error];
-    if (!_pipelineState)
-    {
+    if (!_pipelineState) {
         NSLog(@"Failed to created pipeline state, error %@", error);
     }
   
@@ -118,8 +117,7 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
 
     NSUInteger uniformBufferSize = kAlignedUniformsSize * kMaxBuffersInFlight;
 
-    _dynamicUniformBuffer = [_device newBufferWithLength:uniformBufferSize
-                                                 options:MTLResourceStorageModeShared];
+    _dynamicUniformBuffer = [_device newBufferWithLength:uniformBufferSize options:MTLResourceStorageModeShared];
 
     _dynamicUniformBuffer.label = @"UniformBuffer";
 

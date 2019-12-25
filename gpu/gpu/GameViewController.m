@@ -47,29 +47,29 @@
   vertFunc = gpu_function_new(library, "vertexShader");
   fragFunc = gpu_function_new(library, "fragmentShader");
   vert     = gpu_vertex_new();
-  
-  gpu_function(pipeline, vertFunc, GPU_FUNC_VERT);
-  gpu_function(pipeline, fragFunc, GPU_FUNC_FRAG);
-  
+
   gpu_attrib(vert, VertexAttributePosition, GPUFloat3, 0, BufferIndexMeshPositions);
   gpu_attrib(vert, VertexAttributeTexcoord, GPUFloat2, 0, BufferIndexMeshGenerics);
   
   gpu_layout(vert, BufferIndexMeshPositions, 12, 1, GPUPerVertex);
   gpu_layout(vert, BufferIndexMeshGenerics,  8,  1, GPUPerVertex);
   
+  gpu_function(pipeline, vertFunc, GPU_FUNC_VERT);
+  gpu_function(pipeline, fragFunc, GPU_FUNC_FRAG);
   gpu_vertex(pipeline, vert);
+  
 
+  gpu_colorfm(pipeline, 0, (GPUPixelFormat)_view.colorPixelFormat);
+  gpu_depthfm(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
+  gpu_stencfm(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
+  gpu_samplco(pipeline, (uint32_t)_view.sampleCount);
+  
+  
   renderState = gpu_renderstate_new(device, pipeline);
-
-  gpu_color_format(pipeline, 0, (GPUPixelFormat)_view.colorPixelFormat);
-  gpu_depth_format(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
-  gpu_stencil_format(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
-  gpu_samplecount(pipeline, (uint32_t)_view.sampleCount);
-
+  
   depthStencil = gpu_depthstencil_new(GPUCompareFunctionLess, true);
 
 //  renderer = gpu_renderer_mtkview((MTKView *)self.view);
-
 //   _view.device = MTLCreateSystemDefaultDevice();
   
   _view.device = device->priv;
@@ -83,13 +83,6 @@
   [_renderer mtkView:_view drawableSizeWillChange:_view.bounds.size];
   // _view.delegate = _renderer;
   _view.delegate = self;
-  
-  simd_float4x4 f1;
-  mat4          f2;
-  
-  simd_float4x4 f3 = glm_mat4_applesimd(f2);
-  
-
 }
 
 - (void)drawInMTKView:(nonnull MTKView *)view
