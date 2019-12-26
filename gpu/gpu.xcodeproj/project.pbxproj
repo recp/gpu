@@ -31,6 +31,7 @@
 		566EB49F23B35A52001F9041 /* depthstencil.c in Sources */ = {isa = PBXBuildFile; fileRef = 566EB49E23B35A52001F9041 /* depthstencil.c */; };
 		567F88AD226A15A3005E046C /* renderer.m in Sources */ = {isa = PBXBuildFile; fileRef = 567F88AC226A15A3005E046C /* renderer.m */; };
 		5681E2FC23AE13BD00476198 /* vertex.c in Sources */ = {isa = PBXBuildFile; fileRef = 5681E2FB23AE13BD00476198 /* vertex.c */; };
+		56DC22D723B49B8E00814D23 /* cmdqueue.c in Sources */ = {isa = PBXBuildFile; fileRef = 56DC22D623B49B8E00814D23 /* cmdqueue.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -110,6 +111,8 @@
 		5681E2FB23AE13BD00476198 /* vertex.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = vertex.c; sourceTree = "<group>"; };
 		56CA982C2269E2F200D9DBDA /* pixelformat.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pixelformat.h; sourceTree = "<group>"; };
 		56CA982D2269E39100D9DBDA /* pipeline.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pipeline.h; sourceTree = "<group>"; };
+		56DC22D523B49B8E00814D23 /* cmdqueue.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = cmdqueue.h; sourceTree = "<group>"; };
+		56DC22D623B49B8E00814D23 /* cmdqueue.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = cmdqueue.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -241,6 +244,7 @@
 				5665B2BC23715FF30038371E /* library.c */,
 				5681E2FB23AE13BD00476198 /* vertex.c */,
 				566EB49E23B35A52001F9041 /* depthstencil.c */,
+				56DC22D623B49B8E00814D23 /* cmdqueue.c */,
 			);
 			path = mt;
 			sourceTree = "<group>";
@@ -265,6 +269,7 @@
 				5665B2BE237160690038371E /* library.h */,
 				566119D12373155F00DD3DF3 /* vertex.h */,
 				566EB49D23B35A07001F9041 /* depthstencil.h */,
+				56DC22D523B49B8E00814D23 /* cmdqueue.h */,
 			);
 			path = gpu;
 			sourceTree = "<group>";
@@ -439,6 +444,7 @@
 				1E8A76D2223D349A001681FF /* pipeline.c in Sources */,
 				1E8A7654223D29A9001681FF /* Shaders.metal in Sources */,
 				567F88AD226A15A3005E046C /* renderer.m in Sources */,
+				56DC22D723B49B8E00814D23 /* cmdqueue.c in Sources */,
 				566EB49F23B35A52001F9041 /* depthstencil.c in Sources */,
 				1E8A764F223D29A9001681FF /* Renderer.m in Sources */,
 				5681E2FC23AE13BD00476198 /* vertex.c in Sources */,

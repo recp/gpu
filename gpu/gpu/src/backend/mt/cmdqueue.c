@@ -12,17 +12,17 @@
 #include "../../../include/gpu/depthstencil.h"
 #include <cmt/cmt.h>
 
+#include "cmdqueue.h"
+
 GPU_EXPORT
-GPUDepthStencil*
-gpu_depthstencil_new(GPUCompareFunction depthCompareFunc,
-                     bool               depthWriteEnabled) {
-  GPUDepthStencil *ds;
-  MtDepthStencil  *mds;
+GPUCommandQueue*
+gpu_cmdqueue_new(GPUDevice * __restrict device) {
+  GPUCommandQueue *cq;
+  MtCommandQueue  *mcq;
   
-  mds = mtDepthStencil((MtCompareFunction)depthCompareFunc, depthWriteEnabled);
-  ds  = calloc(1, sizeof(*ds));
-
-  ds->priv = mds;
-
-  return ds;
+  mcq      = mtCommandQueueCreate(device->priv);
+  cq       = calloc(1, sizeof(*cq));
+  cq->priv = mcq;
+  
+  return cq;
 }

@@ -58,12 +58,11 @@
   gpu_function(pipeline, fragFunc, GPU_FUNC_FRAG);
   gpu_vertex(pipeline, vert);
   
-
   gpu_colorfm(pipeline, 0, (GPUPixelFormat)_view.colorPixelFormat);
   gpu_depthfm(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
   gpu_stencfm(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
   gpu_samplco(pipeline, (uint32_t)_view.sampleCount);
-  
+
   
   renderState = gpu_renderstate_new(device, pipeline);
   
