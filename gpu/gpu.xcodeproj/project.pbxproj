@@ -113,6 +113,7 @@
 		56CA982D2269E39100D9DBDA /* pipeline.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pipeline.h; sourceTree = "<group>"; };
 		56DC22D523B49B8E00814D23 /* cmdqueue.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = cmdqueue.h; sourceTree = "<group>"; };
 		56DC22D623B49B8E00814D23 /* cmdqueue.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = cmdqueue.c; sourceTree = "<group>"; };
+		56DC22DA23B53C9800814D23 /* pass.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pass.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -260,8 +261,8 @@
 		1E8A7689223D2B81001681FF /* gpu */ = {
 			isa = PBXGroup;
 			children = (
-				1E8A768A223D2BA1001681FF /* common.h */,
 				1E8A768B223D2BAC001681FF /* gpu.h */,
+				1E8A768A223D2BA1001681FF /* common.h */,
 				1E8A76D4223D4FCE001681FF /* device.h */,
 				56CA982C2269E2F200D9DBDA /* pixelformat.h */,
 				56CA982D2269E39100D9DBDA /* pipeline.h */,
@@ -270,6 +271,7 @@
 				566119D12373155F00DD3DF3 /* vertex.h */,
 				566EB49D23B35A07001F9041 /* depthstencil.h */,
 				56DC22D523B49B8E00814D23 /* cmdqueue.h */,
+				56DC22DA23B53C9800814D23 /* pass.h */,
 			);
 			path = gpu;
 			sourceTree = "<group>";

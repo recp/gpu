@@ -63,10 +63,19 @@
   gpu_stencfm(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
   gpu_samplco(pipeline, (uint32_t)_view.sampleCount);
 
-  
   renderState = gpu_renderstate_new(device, pipeline);
   
   depthStencil = gpu_depthstencil_new(GPUCompareFunctionLess, true);
+  
+  gpu_pass_begin();
+
+  gpu_pass_end();
+  
+//  gpu_pass_begin();
+//
+//  gpu_pass_end();
+  gpu_commit();
+  
 
 //  renderer = gpu_renderer_mtkview((MTKView *)self.view);
 //   _view.device = MTLCreateSystemDefaultDevice();

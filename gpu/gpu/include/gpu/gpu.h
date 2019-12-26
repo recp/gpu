@@ -17,5 +17,6 @@
 #include "library.h"
 #include "vertex.h"
 #include "depthstencil.h"
+#include "pass.h"
 
 #endif /* gpu_h */
