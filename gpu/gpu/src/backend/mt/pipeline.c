@@ -18,12 +18,12 @@ GPUPipeline*
 gpu_pipeline_new(GPUPixelFormat pixelFormat) {
   GPUPipeline  *pipeline;
   MtRenderDesc *renderDesc;
-  
+
   renderDesc = mtRenderPipelineCreate((MtPixelFormat)pixelFormat);
   pipeline   = calloc(1, sizeof(*pipeline));
-  
+
   pipeline->priv = renderDesc;
-  
+
   return pipeline;
 }
 
@@ -33,12 +33,12 @@ gpu_renderstate_new(GPUDevice   * __restrict device,
                     GPUPipeline * __restrict pipeline) {
   GPUPipeline      *rederPipline;
   MtRenderPipeline *mtRederPipline;
-  
+
   mtRederPipline = mtRenderStateCreate(device->priv, pipeline->priv);
   rederPipline   = calloc(1, sizeof(*rederPipline));
-  
+
   rederPipline->priv = mtRederPipline;
-  
+
   return NULL;
 }
 

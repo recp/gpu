@@ -11,7 +11,9 @@
 #include "common.h"
 
 #define gpu_pass_begin() /* */
-#define gpu_pass_end() /* */
-#define gpu_commit() /* */
+#define gpu_pass_finish() /* */
+
+#define gpu_begin() /* */
+#define gpu_finish() /* */
 
 #endif /* gpu_pass_h */

@@ -18,5 +18,7 @@
 #include "vertex.h"
 #include "depthstencil.h"
 #include "pass.h"
+#include "cmdqueue.h"
+#include "buffer.h"
 
 #endif /* gpu_h */
