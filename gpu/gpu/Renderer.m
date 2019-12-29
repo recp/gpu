@@ -222,7 +222,6 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
      }];
 
     [self _updateDynamicBufferState];
-
     [self _updateGameState];
 
     /// Delay getting the currentRenderPassDescriptor until we absolutely need it to avoid

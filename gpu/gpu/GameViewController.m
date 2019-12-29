@@ -98,8 +98,9 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (void)drawInMTKView:(nonnull MTKView *)view {
-  cb = gpu_cmdbuf_new(commandQueue);
-  gpu_cmdbuf_oncomplete(cb, NULL, cmdOnComplete);
+  cb = gpu_cmdbuf_new(commandQueue,  NULL, cmdOnComplete);
+  
+  gpu_commit(cb);
 }
 
 - (void)mtkView:(nonnull MTKView *)view drawableSizeWillChange:(CGSize)size

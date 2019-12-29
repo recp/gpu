@@ -39,13 +39,18 @@ gpu_cmdqueue_new(GPUDevice * __restrict device) {
 
 GPU_EXPORT
 GPUCommandBuffer*
-gpu_cmdbuf_new(GPUCommandQueue * __restrict cmdb) {
+gpu_cmdbuf_new(GPUCommandQueue  * __restrict cmdb,
+               void             * __restrict sender,
+               GPUCommandBufferOnCompleteFn  oncomplete) {
   GPUCommandBuffer *cb;
   MtCommandBuffer  *mcb;
   
   mcb      = mtCommandBufferCreate(cmdb);
   cb       = calloc(1, sizeof(*cb));
   cb->priv = mcb;
+  
+  if (oncomplete)
+    gpu_cmdbuf_oncomplete(cb, sender, oncomplete);
   
   return cb;
 }
@@ -71,4 +76,10 @@ gpu_cmdoncomplete(void * __restrict sender, MtCommandBuffer *cmdb) {
   
   cb = sender;
   cb->onComplete(cb->sender, cb->param);
+}
+
+GPU_EXPORT
+void
+gpu_commit(GPUCommandBuffer * __restrict cmdb) {
+  mtCommit(cmdb->priv);
 }

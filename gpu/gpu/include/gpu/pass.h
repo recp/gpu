@@ -10,10 +10,25 @@
 
 #include "common.h"
 
+typedef struct GPURenderPassDesc {
+  void *priv;
+} GPURenderPassDesc;
+
+GPU_EXPORT
+GPURenderPassDesc*
+gpu_pass_new(void);
+
 #define gpu_pass_begin() /* */
 #define gpu_pass_finish() /* */
 
 #define gpu_begin() /* */
 #define gpu_finish() /* */
+
+
+//GPU_INLINE
+//GPURenderPassDesc*
+//gpu_metal_pass(MTLRenderPassDescriptor * __restrict mpass) {
+//  
+//}
 
 #endif /* gpu_pass_h */

@@ -30,6 +30,7 @@
 		5665B2BD23715FF30038371E /* library.c in Sources */ = {isa = PBXBuildFile; fileRef = 5665B2BC23715FF30038371E /* library.c */; };
 		566EB49F23B35A52001F9041 /* depthstencil.c in Sources */ = {isa = PBXBuildFile; fileRef = 566EB49E23B35A52001F9041 /* depthstencil.c */; };
 		5681E2FC23AE13BD00476198 /* vertex.c in Sources */ = {isa = PBXBuildFile; fileRef = 5681E2FB23AE13BD00476198 /* vertex.c */; };
+		56A3E79223B91E54004DC63F /* pass.c in Sources */ = {isa = PBXBuildFile; fileRef = 56A3E79123B91E54004DC63F /* pass.c */; };
 		56DC22D723B49B8E00814D23 /* cmdqueue.c in Sources */ = {isa = PBXBuildFile; fileRef = 56DC22D623B49B8E00814D23 /* cmdqueue.c */; };
 		56DC238523B668A700814D23 /* buffer.c in Sources */ = {isa = PBXBuildFile; fileRef = 56DC238423B668A600814D23 /* buffer.c */; };
 /* End PBXBuildFile section */
@@ -108,6 +109,7 @@
 		566EB49E23B35A52001F9041 /* depthstencil.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = depthstencil.c; sourceTree = "<group>"; };
 		567F88AA226A14A1005E046C /* renderer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = renderer.h; sourceTree = "<group>"; };
 		5681E2FB23AE13BD00476198 /* vertex.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = vertex.c; sourceTree = "<group>"; };
+		56A3E79123B91E54004DC63F /* pass.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = pass.c; sourceTree = "<group>"; };
 		56CA982C2269E2F200D9DBDA /* pixelformat.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pixelformat.h; sourceTree = "<group>"; };
 		56CA982D2269E39100D9DBDA /* pipeline.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pipeline.h; sourceTree = "<group>"; };
 		56DC22D523B49B8E00814D23 /* cmdqueue.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = cmdqueue.h; sourceTree = "<group>"; };
@@ -248,6 +250,7 @@
 				566EB49E23B35A52001F9041 /* depthstencil.c */,
 				56DC22D623B49B8E00814D23 /* cmdqueue.c */,
 				56DC238423B668A600814D23 /* buffer.c */,
+				56A3E79123B91E54004DC63F /* pass.c */,
 			);
 			path = mt;
 			sourceTree = "<group>";
@@ -454,6 +457,7 @@
 				1E8A764F223D29A9001681FF /* Renderer.m in Sources */,
 				5681E2FC23AE13BD00476198 /* vertex.c in Sources */,
 				1E8A76CC223D2FEB001681FF /* MTLView.m in Sources */,
+				56A3E79223B91E54004DC63F /* pass.c in Sources */,
 				1E8A7683223D2A06001681FF /* pipeline.c in Sources */,
 				1E8A7652223D29A9001681FF /* GameViewController.m in Sources */,
 				56DC238523B668A700814D23 /* buffer.c in Sources */,
