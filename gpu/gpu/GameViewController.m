@@ -14,15 +14,24 @@
 // Include header shared between C code here, which executes Metal API commands, and .metal files
 #import "ShaderTypes.h"
 
+static const NSUInteger kMaxBuffersInFlight = 3;
+static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
+static const NSUInteger uniformBufferSize = kAlignedUniformsSize * kMaxBuffersInFlight;
+
 @interface GameViewController()  <MTKViewDelegate>
 
 @end
 
 
+void
+cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
+  
+}
+
 @implementation GameViewController
 {
-  MTKView  *_view;
-  Renderer *_renderer;
+  MTKView             *_view;
+  Renderer            *_renderer;
   
   GPURenderer         *renderer;
   GPUDevice           *device;
@@ -33,6 +42,9 @@
   GPUFunction         *fragFunc;
   GPUVertexDescriptor *vert;
   GPUDepthStencil     *depthStencil;
+  GPUBuffer           *dynamicUniformBuffer;
+  GPUCommandQueue     *commandQueue;
+  GPUCommandBuffer    *cb;
 }
 
 - (void)viewDidLoad {
@@ -63,19 +75,11 @@
   gpu_stencfm(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
   gpu_samplco(pipeline, (uint32_t)_view.sampleCount);
 
-  renderState = gpu_renderstate_new(device, pipeline);
-  
-  depthStencil = gpu_depthstencil_new(GPUCompareFunctionLess, true);
-  
-  gpu_pass_begin();
+  renderState          = gpu_renderstate_new(device, pipeline);
+  depthStencil         = gpu_depthstencil_new(GPUCompareFunctionLess, true);
 
-  gpu_pass_end();
-  
-//  gpu_pass_begin();
-//
-//  gpu_pass_end();
-  gpu_commit();
-  
+  dynamicUniformBuffer = gpu_buffer_new(device, uniformBufferSize, GPUResourceStorageModeShared);
+  commandQueue         = gpu_cmdqueue_new(device);
 
 //  renderer = gpu_renderer_mtkview((MTKView *)self.view);
 //   _view.device = MTLCreateSystemDefaultDevice();
@@ -93,9 +97,9 @@
   _view.delegate = self;
 }
 
-- (void)drawInMTKView:(nonnull MTKView *)view
-{
-    [_renderer drawInMTKView:view];
+- (void)drawInMTKView:(nonnull MTKView *)view {
+  cb = gpu_cmdbuf_new(commandQueue);
+  gpu_cmdbuf_oncomplete(cb, NULL, cmdOnComplete);
 }
 
 - (void)mtkView:(nonnull MTKView *)view drawableSizeWillChange:(CGSize)size

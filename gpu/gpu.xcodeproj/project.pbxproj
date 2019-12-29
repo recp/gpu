@@ -29,9 +29,9 @@
 		1E911E35223E47C800CD8880 /* GLKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E911E34223E47C800CD8880 /* GLKit.framework */; };
 		5665B2BD23715FF30038371E /* library.c in Sources */ = {isa = PBXBuildFile; fileRef = 5665B2BC23715FF30038371E /* library.c */; };
 		566EB49F23B35A52001F9041 /* depthstencil.c in Sources */ = {isa = PBXBuildFile; fileRef = 566EB49E23B35A52001F9041 /* depthstencil.c */; };
-		567F88AD226A15A3005E046C /* renderer.m in Sources */ = {isa = PBXBuildFile; fileRef = 567F88AC226A15A3005E046C /* renderer.m */; };
 		5681E2FC23AE13BD00476198 /* vertex.c in Sources */ = {isa = PBXBuildFile; fileRef = 5681E2FB23AE13BD00476198 /* vertex.c */; };
 		56DC22D723B49B8E00814D23 /* cmdqueue.c in Sources */ = {isa = PBXBuildFile; fileRef = 56DC22D623B49B8E00814D23 /* cmdqueue.c */; };
+		56DC238523B668A700814D23 /* buffer.c in Sources */ = {isa = PBXBuildFile; fileRef = 56DC238423B668A600814D23 /* buffer.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -107,13 +107,15 @@
 		566EB49D23B35A07001F9041 /* depthstencil.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = depthstencil.h; sourceTree = "<group>"; };
 		566EB49E23B35A52001F9041 /* depthstencil.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = depthstencil.c; sourceTree = "<group>"; };
 		567F88AA226A14A1005E046C /* renderer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = renderer.h; sourceTree = "<group>"; };
-		567F88AC226A15A3005E046C /* renderer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = renderer.m; sourceTree = "<group>"; };
 		5681E2FB23AE13BD00476198 /* vertex.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = vertex.c; sourceTree = "<group>"; };
 		56CA982C2269E2F200D9DBDA /* pixelformat.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pixelformat.h; sourceTree = "<group>"; };
 		56CA982D2269E39100D9DBDA /* pipeline.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pipeline.h; sourceTree = "<group>"; };
 		56DC22D523B49B8E00814D23 /* cmdqueue.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = cmdqueue.h; sourceTree = "<group>"; };
 		56DC22D623B49B8E00814D23 /* cmdqueue.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = cmdqueue.c; sourceTree = "<group>"; };
 		56DC22DA23B53C9800814D23 /* pass.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pass.h; sourceTree = "<group>"; };
+		56DC238323B6687D00814D23 /* buffer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = buffer.h; sourceTree = "<group>"; };
+		56DC238423B668A600814D23 /* buffer.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = buffer.c; sourceTree = "<group>"; };
+		56DC238823B66FBC00814D23 /* resource.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = resource.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -239,13 +241,13 @@
 		1E8A7687223D2B73001681FF /* mt */ = {
 			isa = PBXGroup;
 			children = (
-				567F88AC226A15A3005E046C /* renderer.m */,
 				1E8A76D1223D349A001681FF /* pipeline.c */,
 				1E8A76D5223D5149001681FF /* device.c */,
 				5665B2BC23715FF30038371E /* library.c */,
 				5681E2FB23AE13BD00476198 /* vertex.c */,
 				566EB49E23B35A52001F9041 /* depthstencil.c */,
 				56DC22D623B49B8E00814D23 /* cmdqueue.c */,
+				56DC238423B668A600814D23 /* buffer.c */,
 			);
 			path = mt;
 			sourceTree = "<group>";
@@ -272,6 +274,8 @@
 				566EB49D23B35A07001F9041 /* depthstencil.h */,
 				56DC22D523B49B8E00814D23 /* cmdqueue.h */,
 				56DC22DA23B53C9800814D23 /* pass.h */,
+				56DC238323B6687D00814D23 /* buffer.h */,
+				56DC238823B66FBC00814D23 /* resource.h */,
 			);
 			path = gpu;
 			sourceTree = "<group>";
@@ -445,7 +449,6 @@
 				5665B2BD23715FF30038371E /* library.c in Sources */,
 				1E8A76D2223D349A001681FF /* pipeline.c in Sources */,
 				1E8A7654223D29A9001681FF /* Shaders.metal in Sources */,
-				567F88AD226A15A3005E046C /* renderer.m in Sources */,
 				56DC22D723B49B8E00814D23 /* cmdqueue.c in Sources */,
 				566EB49F23B35A52001F9041 /* depthstencil.c in Sources */,
 				1E8A764F223D29A9001681FF /* Renderer.m in Sources */,
@@ -453,6 +456,7 @@
 				1E8A76CC223D2FEB001681FF /* MTLView.m in Sources */,
 				1E8A7683223D2A06001681FF /* pipeline.c in Sources */,
 				1E8A7652223D29A9001681FF /* GameViewController.m in Sources */,
+				56DC238523B668A700814D23 /* buffer.c in Sources */,
 				1E8A764C223D29A9001681FF /* AppDelegate.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

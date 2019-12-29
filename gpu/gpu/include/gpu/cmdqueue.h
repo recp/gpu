@@ -18,7 +18,8 @@ typedef struct GPUCommandBuffer {
   void *priv;
 } GPUCommandBuffer;
 
-typedef void (*GPUCommandBufferOnCompleteFn)(GPUCommandBuffer *cmdb);
+typedef void (*GPUCommandBufferOnCompleteFn)(void            *__restrict sender,
+                                             GPUCommandBuffer*__restrict cmdb);
 
 GPU_EXPORT
 GPUCommandQueue*
@@ -26,11 +27,12 @@ gpu_cmdqueue_new(GPUDevice * __restrict device);
 
 GPU_EXPORT
 GPUCommandBuffer*
-gpu_cmdbuff_new(GPUCommandQueue * __restrict cmdq);
+gpu_cmdbuf_new(GPUCommandQueue * __restrict cmdb);
 
 GPU_EXPORT
 void
-gpu_cmdbuff_oncomplete(GPUCommandQueue * __restrict cmdb,
-                       GPUCommandBufferOnCompleteFn oncomplete);
+gpu_cmdbuf_oncomplete(GPUCommandBuffer * __restrict cmdb,
+                      void             * __restrict sender,
+                      GPUCommandBufferOnCompleteFn  oncomplete);
 
 #endif /* gpu_cmdqueue_h */
