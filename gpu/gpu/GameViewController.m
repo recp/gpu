@@ -105,6 +105,13 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
     GPURenderCommandEncoder *rce;
 
     rce = gpuRenderCommandEncoder(cb, pass);
+    
+    gpuFrontFace(rce, GPUWindingCounterClockwise);
+    gpuCullMode(rce, GPUCullModeBack);
+    gpuSetRenderPipeline(rce, pipeline);
+    gpuSetDepthStencil(rce, depthStencil);
+    
+    
   }
 
   gpuCommit(cb);

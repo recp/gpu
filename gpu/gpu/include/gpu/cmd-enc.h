@@ -83,4 +83,8 @@ GPU_EXPORT
 void
 gpuSetDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencil *ds);
 
+GPU_EXPORT
+void
+gpuViewport(GPURenderCommandEncoder *enc, GPUViewport *viewport);
+
 #endif /* gpu_cmd_enc_h */
