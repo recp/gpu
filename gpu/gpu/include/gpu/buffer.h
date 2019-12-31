@@ -10,6 +10,7 @@
 
 #include "common.h"
 #include "resource.h"
+#include "cmdqueue.h"
 
 typedef struct GPUBuffer {
   void *priv;
@@ -20,5 +21,9 @@ GPUBuffer*
 gpuBufferNew(GPUDevice * __restrict device,
              size_t                 len,
              GPUResourceOptions     options);
+
+GPU_EXPORT
+void
+gpuPresent(GPUCommandBuffer *cmdb, void *drawable);
 
 #endif /* gpu_buffer_h */

@@ -12,6 +12,7 @@
 #include "pass.h"
 #include "pipeline.h"
 #include "depthstencil.h"
+#include "buffer.h"
 
 typedef struct GPURenderCommandEncoder GPURenderCommandEncoder;
 
@@ -86,5 +87,37 @@ gpuSetDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencil *ds);
 GPU_EXPORT
 void
 gpuViewport(GPURenderCommandEncoder *enc, GPUViewport *viewport);
+
+GPU_EXPORT
+void
+gpuVertexBytes(GPURenderCommandEncoder *enc,
+               void                    *bytes,
+               size_t                   legth,
+               uint32_t                 atIndex);
+
+GPU_EXPORT
+void
+gpuVertexBuffer(GPURenderCommandEncoder *rce,
+                GPUBuffer               *buf,
+                size_t                   off,
+                uint32_t                 index);
+
+GPU_EXPORT
+void
+gpuFragmentBuffer(GPURenderCommandEncoder *rce,
+                  GPUBuffer               *buf,
+                  size_t                   off,
+                  uint32_t                 index);
+
+GPU_EXPORT
+void
+gpuDrawPrimitives(GPURenderCommandEncoder *rce,
+                  GPUPrimitiveType         type,
+                  size_t                   start,
+                  size_t                   count);
+
+GPU_EXPORT
+void
+gpuEndEncoding(GPURenderCommandEncoder *rce);
 
 #endif /* gpu_cmd_enc_h */

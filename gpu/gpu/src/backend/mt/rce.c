@@ -93,4 +93,6 @@ gpuDrawPrimitives(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
-gpuEndEncoding(GPURenderCommandEncoder *enc);
+gpuEndEncoding(GPURenderCommandEncoder *rce) {
+  mtEndEncoding(rce);
+}

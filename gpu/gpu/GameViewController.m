@@ -46,6 +46,9 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUCommandQueue     *commandQueue;
   GPUCommandBuffer    *cb;
   GPURenderPassDesc   *pass;
+
+  uint32_t             _uniformBufferOffset;
+  uint8_t              _uniformBufferIndex;
 }
 
 - (void)viewDidLoad {
@@ -111,7 +114,21 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
     gpuSetRenderPipeline(rce, pipeline);
     gpuSetDepthStencil(rce, depthStencil);
     
+    gpuVertexBuffer(rce, dynamicUniformBuffer, _uniformBufferOffset, BufferIndexUniforms);
+    gpuFragmentBuffer(rce, dynamicUniformBuffer, _uniformBufferOffset, BufferIndexUniforms);
     
+//    for (NSUInteger bufferIndex = 0; bufferIndex < _mesh.vertexBuffers.count; bufferIndex++) {
+//      MTKMeshBuffer *vertexBuffer = _mesh.vertexBuffers[bufferIndex];
+//      if((NSNull*)vertexBuffer != [NSNull null])
+//      {
+//        [renderEncoder setVertexBuffer:vertexBuffer.buffer
+//                                offset:vertexBuffer.offset
+//                               atIndex:bufferIndex];
+//      }
+//    }
+    
+    gpuEndEncoding(rce);
+    gpuPresent(cb, view.currentDrawable);
   }
 
   gpuCommit(cb);

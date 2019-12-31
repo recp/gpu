@@ -11,6 +11,7 @@
 #include "../../../include/gpu/pipeline.h"
 #include "../../../include/gpu/depthstencil.h"
 #include "../../../include/gpu/buffer.h"
+#include "../../../include/gpu/cmdqueue.h"
 #include <cmt/cmt.h>
 
 GPU_EXPORT
@@ -26,4 +27,10 @@ gpuBufferNew(GPUDevice * __restrict device,
   cq->priv = mcq;
 
   return cq;
+}
+
+GPU_EXPORT
+void
+gpuPresent(GPUCommandBuffer *cmdb, void *drawable) {
+  mtPresent(cmdb->priv, drawable);
 }
