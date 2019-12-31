@@ -11,35 +11,30 @@
 
 GPU_EXPORT
 GPURenderCommandEncoder*
-gpuRenderCommandEncoder(GPUCommandBuffer  *cmdb,
-                        GPURenderPassDesc *passDesc) {
-  return mtRenderCommandEncoder(cmdb, passDesc);
+gpuRenderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
+  return mtRenderCommandEncoder(cmdb, pass);
 }
 
 GPU_EXPORT
 void
-gpuFrontFace(GPUCommandBuffer *cmdb,
-             GPUWinding        winding) {
-
+gpuFrontFace(GPURenderCommandEncoder *rce, GPUWinding winding) {
+  mtFrontFace(rce, (MtWinding)winding);
 }
 
 GPU_EXPORT
 void
-gpuCullMode(GPUCommandBuffer *cmdb,
-            GPUCullMode       mode) {
-  
+gpuCullMode(GPURenderCommandEncoder *rce, GPUCullMode mode) {
+  mtCullMode(rce, (MtCullMode)mode);
 }
 
 GPU_EXPORT
 void
-gpuSetRenderPipeline(GPUCommandBuffer *cmdb,
-                     GPUPipeline      *rs) {
-  
+gpuSetRenderPipeline(GPURenderCommandEncoder *rce, GPUPipeline *pipline) {
+  mtSetRenderState(rce, pipline);
 }
 
 GPU_EXPORT
 void
-gpuSetDepthStencil(GPUCommandBuffer *cmdb,
-                   GPUDepthStencil  *ds) {
-  
+gpuSetDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencil *ds) {
+  mtSetDepthStencil(rce, ds->priv);
 }

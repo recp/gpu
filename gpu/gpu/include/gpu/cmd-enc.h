@@ -65,27 +65,22 @@ typedef enum GPURenderStages {
 
 GPU_EXPORT
 GPURenderCommandEncoder*
-gpuRenderCommandEncoder(GPUCommandBuffer  * __restrict cmdb,
-                        GPURenderPassDesc * __restrict passDesc);
+gpuRenderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass);
 
 GPU_EXPORT
 void
-gpuFrontFace(GPUCommandBuffer *cmdb,
-             GPUWinding        winding);
+gpuFrontFace(GPURenderCommandEncoder *rce, GPUWinding winding);
 
 GPU_EXPORT
 void
-gpuCullMode(GPUCommandBuffer *cmdb,
-            GPUCullMode       mode);
+gpuCullMode(GPURenderCommandEncoder *rce, GPUCullMode mode);
 
 GPU_EXPORT
 void
-gpuSetRenderPipeline(GPUCommandBuffer *cmdb,
-                     GPUPipeline      *rs);
+gpuSetRenderPipeline(GPURenderCommandEncoder *rce, GPUPipeline *pipline);
 
 GPU_EXPORT
 void
-gpuSetDepthStencil(GPUCommandBuffer *cmdb,
-                   GPUDepthStencil  *ds);
+gpuSetDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencil *ds);
 
 #endif /* gpu_cmd_enc_h */
