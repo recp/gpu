@@ -21,10 +21,10 @@ typedef struct GPUFunction {
 
 GPU_EXPORT
 GPULibrary*
-gpu_library_default(GPUDevice *device);
+gpuDefaultLibrary(GPUDevice *device);
 
 GPU_EXPORT
 GPUFunction*
-gpu_function_new(GPULibrary *lib, const char *name);
+gpuFunctionNew(GPULibrary *lib, const char *name);
 
 #endif /* gpu_library_h */

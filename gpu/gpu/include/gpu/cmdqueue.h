@@ -9,6 +9,7 @@
 #define gpu_cmdqueue_h
 
 #include "common.h"
+#include "device.h"
 
 typedef struct GPUCommandQueue {
   void *priv;
@@ -23,22 +24,22 @@ typedef void (*GPUCommandBufferOnCompleteFn)(void            *__restrict sender,
 
 GPU_EXPORT
 GPUCommandQueue*
-gpu_cmdqueue_new(GPUDevice * __restrict device);
+gpuCmdQueNew(GPUDevice * __restrict device);
 
 GPU_EXPORT
 GPUCommandBuffer*
-gpu_cmdbuf_new(GPUCommandQueue  * __restrict cmdb,
-               void             * __restrict sender,
-               GPUCommandBufferOnCompleteFn  oncomplete);
+gpuCmdBufNew(GPUCommandQueue  * __restrict cmdb,
+             void             * __restrict sender,
+             GPUCommandBufferOnCompleteFn  oncomplete);
 
 GPU_EXPORT
 void
-gpu_cmdbuf_oncomplete(GPUCommandBuffer * __restrict cmdb,
-                      void             * __restrict sender,
-                      GPUCommandBufferOnCompleteFn  oncomplete);
+gpuCmdBufOnComplete(GPUCommandBuffer * __restrict cmdb,
+                    void             * __restrict sender,
+                    GPUCommandBufferOnCompleteFn  oncomplete);
 
 GPU_EXPORT
 void
-gpu_commit(GPUCommandBuffer * __restrict cmdb);
+gpuCommit(GPUCommandBuffer * __restrict cmdb);
 
 #endif /* gpu_cmdqueue_h */

@@ -10,25 +10,24 @@
 
 #include "common.h"
 
-typedef struct GPURenderPassDesc {
-  void *priv;
-} GPURenderPassDesc;
-
-GPU_EXPORT
-GPURenderPassDesc*
-gpu_pass_new(void);
-
 #define gpu_pass_begin() /* */
 #define gpu_pass_finish() /* */
 
 #define gpu_begin() /* */
 #define gpu_finish() /* */
 
+typedef struct GPURenderPassDesc GPURenderPassDesc;
 
-//GPU_INLINE
-//GPURenderPassDesc*
-//gpu_metal_pass(MTLRenderPassDescriptor * __restrict mpass) {
-//  
-//}
+GPU_EXPORT
+GPURenderPassDesc*
+gpuPassNew(void);
 
+#if defined(__APPLE__) && defined(__OBJC__)
+@class MTKView;
+GPU_INLINE
+GPURenderPassDesc*
+gpuPassFromMTKView(MTKView * __restrict view) {
+  return (void *)view.currentRenderPassDescriptor;
+}
+#endif
 #endif /* gpu_pass_h */

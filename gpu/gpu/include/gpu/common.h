@@ -39,13 +39,4 @@
 
 #define GPU_FLG(FLAGS, FLAG) ((FLAGS & FLAG) == FLAG)
 
-typedef struct GPUViewport {
-  double originX, originY, width, height, znear, zfar;
-} GPUViewport;
-
-typedef enum GPUFuncType {
-  GPU_FUNC_VERT = 1,
-  GPU_FUNC_FRAG = 2
-} GPUFunctionType;
-
 #endif /* gpu_common_h */

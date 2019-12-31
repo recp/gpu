@@ -20,5 +20,7 @@
 #include "pass.h"
 #include "cmdqueue.h"
 #include "buffer.h"
+#include "resource.h"
+#include "cmd-enc.h"
 
 #endif /* gpu_h */

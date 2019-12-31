@@ -161,15 +161,14 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
       MTKTextureLoaderOptionTextureStorageMode : @(MTLStorageModePrivate)
       };
 
-    _colorMap = [textureLoader newTextureWithName:@"ColorMap"
-                                      scaleFactor:1.0
-                                           bundle:nil
-                                          options:textureLoaderOptions
-                                            error:&error];
+    _colorMap = [textureLoader newTextureWithName: @"ColorMap"
+                                      scaleFactor: 1.0
+                                           bundle: nil
+                                          options: textureLoaderOptions
+                                            error: &error];
 
-    if(!_colorMap || error)
-    {
-        NSLog(@"Error creating texture %@", error.localizedDescription);
+    if (!_colorMap || error) {
+      NSLog(@"Error creating texture %@", error.localizedDescription);
     }
 }
 

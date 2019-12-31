@@ -113,27 +113,27 @@ typedef struct GPUVertexDescriptor {
 
 GPU_EXPORT
 GPUVertexDescriptor*
-gpu_vertex_new(void);
+gpuVertexDescNew(void);
 
 GPU_EXPORT
 void
-gpu_attrib(GPUVertexDescriptor * __restrict vertex,
-           uint32_t                         attribIndex,
-           GPUVertexFormat                  format,
-           uint32_t                         offset,
-           uint32_t                         bufferIndex);
+gpuAttrib(GPUVertexDescriptor * __restrict vertex,
+          uint32_t                         attribIndex,
+          GPUVertexFormat                  format,
+          uint32_t                         offset,
+          uint32_t                         bufferIndex);
 
 GPU_EXPORT
 void
-gpu_layout(GPUVertexDescriptor * __restrict vertex,
-           uint32_t                         layoutIndex,
-           uint32_t                         stride,
-           uint32_t                         stepRate,
-           GPUVertexStepFunction            stepFunction);
+gpuLayout(GPUVertexDescriptor * __restrict vertex,
+          uint32_t                         layoutIndex,
+          uint32_t                         stride,
+          uint32_t                         stepRate,
+          GPUVertexStepFunction            stepFunction);
 
 GPU_EXPORT
 void
-gpu_vertex(GPUPipeline         * __restrict pipeline,
-           GPUVertexDescriptor * __restrict vert);
+gpuVertexDesc(GPUPipeline         * __restrict pipeline,
+              GPUVertexDescriptor * __restrict vert);
 
 #endif /* gpu_vertex_desc_h */

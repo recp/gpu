@@ -17,7 +17,6 @@
 		1E8A7668223D29AB001681FF /* gpuTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 1E8A7667223D29AB001681FF /* gpuTests.m */; };
 		1E8A7673223D29AB001681FF /* gpuUITests.m in Sources */ = {isa = PBXBuildFile; fileRef = 1E8A7672223D29AB001681FF /* gpuUITests.m */; };
 		1E8A7683223D2A06001681FF /* pipeline.c in Sources */ = {isa = PBXBuildFile; fileRef = 1E8A7682223D2A06001681FF /* pipeline.c */; };
-		1E8A76CC223D2FEB001681FF /* MTLView.m in Sources */ = {isa = PBXBuildFile; fileRef = 1E8A76CB223D2FEB001681FF /* MTLView.m */; };
 		1E8A76CF223D3056001681FF /* libcmt.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E8A76CE223D3056001681FF /* libcmt.dylib */; };
 		1E8A76D2223D349A001681FF /* pipeline.c in Sources */ = {isa = PBXBuildFile; fileRef = 1E8A76D1223D349A001681FF /* pipeline.c */; };
 		1E8A76D6223D5149001681FF /* device.c in Sources */ = {isa = PBXBuildFile; fileRef = 1E8A76D5223D5149001681FF /* device.c */; };
@@ -31,6 +30,7 @@
 		566EB49F23B35A52001F9041 /* depthstencil.c in Sources */ = {isa = PBXBuildFile; fileRef = 566EB49E23B35A52001F9041 /* depthstencil.c */; };
 		5681E2FC23AE13BD00476198 /* vertex.c in Sources */ = {isa = PBXBuildFile; fileRef = 5681E2FB23AE13BD00476198 /* vertex.c */; };
 		56A3E79223B91E54004DC63F /* pass.c in Sources */ = {isa = PBXBuildFile; fileRef = 56A3E79123B91E54004DC63F /* pass.c */; };
+		56A3E79823B945AA004DC63F /* rce.c in Sources */ = {isa = PBXBuildFile; fileRef = 56A3E79723B945AA004DC63F /* rce.c */; };
 		56DC22D723B49B8E00814D23 /* cmdqueue.c in Sources */ = {isa = PBXBuildFile; fileRef = 56DC22D623B49B8E00814D23 /* cmdqueue.c */; };
 		56DC238523B668A700814D23 /* buffer.c in Sources */ = {isa = PBXBuildFile; fileRef = 56DC238423B668A600814D23 /* buffer.c */; };
 /* End PBXBuildFile section */
@@ -91,8 +91,6 @@
 		1E8A7682223D2A06001681FF /* pipeline.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = pipeline.c; sourceTree = "<group>"; };
 		1E8A768A223D2BA1001681FF /* common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = common.h; sourceTree = "<group>"; };
 		1E8A768B223D2BAC001681FF /* gpu.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = gpu.h; sourceTree = "<group>"; };
-		1E8A76CA223D2FEB001681FF /* MTLView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MTLView.h; sourceTree = "<group>"; };
-		1E8A76CB223D2FEB001681FF /* MTLView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MTLView.m; sourceTree = "<group>"; };
 		1E8A76CE223D3056001681FF /* libcmt.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; path = libcmt.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
 		1E8A76D1223D349A001681FF /* pipeline.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = pipeline.c; sourceTree = "<group>"; };
 		1E8A76D4223D4FCE001681FF /* device.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = device.h; sourceTree = "<group>"; };
@@ -110,6 +108,8 @@
 		567F88AA226A14A1005E046C /* renderer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = renderer.h; sourceTree = "<group>"; };
 		5681E2FB23AE13BD00476198 /* vertex.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = vertex.c; sourceTree = "<group>"; };
 		56A3E79123B91E54004DC63F /* pass.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = pass.c; sourceTree = "<group>"; };
+		56A3E79623B94515004DC63F /* cmd-enc.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "cmd-enc.h"; sourceTree = "<group>"; };
+		56A3E79723B945AA004DC63F /* rce.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rce.c; sourceTree = "<group>"; };
 		56CA982C2269E2F200D9DBDA /* pixelformat.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pixelformat.h; sourceTree = "<group>"; };
 		56CA982D2269E39100D9DBDA /* pipeline.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pipeline.h; sourceTree = "<group>"; };
 		56DC22D523B49B8E00814D23 /* cmdqueue.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = cmdqueue.h; sourceTree = "<group>"; };
@@ -215,7 +215,7 @@
 		1E8A7680223D29F1001681FF /* src */ = {
 			isa = PBXGroup;
 			children = (
-				1E8A76C9223D2F13001681FF /* cocoa */,
+				56A3E79923B94A83004DC63F /* shader */,
 				1E8A7685223D2B64001681FF /* backend */,
 			);
 			path = src;
@@ -251,6 +251,7 @@
 				56DC22D623B49B8E00814D23 /* cmdqueue.c */,
 				56DC238423B668A600814D23 /* buffer.c */,
 				56A3E79123B91E54004DC63F /* pass.c */,
+				56A3E79723B945AA004DC63F /* rce.c */,
 			);
 			path = mt;
 			sourceTree = "<group>";
@@ -279,17 +280,9 @@
 				56DC22DA23B53C9800814D23 /* pass.h */,
 				56DC238323B6687D00814D23 /* buffer.h */,
 				56DC238823B66FBC00814D23 /* resource.h */,
+				56A3E79623B94515004DC63F /* cmd-enc.h */,
 			);
 			path = gpu;
-			sourceTree = "<group>";
-		};
-		1E8A76C9223D2F13001681FF /* cocoa */ = {
-			isa = PBXGroup;
-			children = (
-				1E8A76CA223D2FEB001681FF /* MTLView.h */,
-				1E8A76CB223D2FEB001681FF /* MTLView.m */,
-			);
-			path = cocoa;
 			sourceTree = "<group>";
 		};
 		1E8A76CD223D3056001681FF /* Frameworks */ = {
@@ -310,6 +303,13 @@
 			children = (
 			);
 			path = dx;
+			sourceTree = "<group>";
+		};
+		56A3E79923B94A83004DC63F /* shader */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = shader;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -447,6 +447,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				56A3E79823B945AA004DC63F /* rce.c in Sources */,
 				1E8A76D6223D5149001681FF /* device.c in Sources */,
 				1E8A765D223D29AB001681FF /* main.m in Sources */,
 				5665B2BD23715FF30038371E /* library.c in Sources */,
@@ -456,7 +457,6 @@
 				566EB49F23B35A52001F9041 /* depthstencil.c in Sources */,
 				1E8A764F223D29A9001681FF /* Renderer.m in Sources */,
 				5681E2FC23AE13BD00476198 /* vertex.c in Sources */,
-				1E8A76CC223D2FEB001681FF /* MTLView.m in Sources */,
 				56A3E79223B91E54004DC63F /* pass.c in Sources */,
 				1E8A7683223D2A06001681FF /* pipeline.c in Sources */,
 				1E8A7652223D29A9001681FF /* GameViewController.m in Sources */,

@@ -45,6 +45,7 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUBuffer           *dynamicUniformBuffer;
   GPUCommandQueue     *commandQueue;
   GPUCommandBuffer    *cb;
+  GPURenderPassDesc   *pass;
 }
 
 - (void)viewDidLoad {
@@ -52,34 +53,34 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   _view    = (MTKView *)self.view;
 
-  device   = gpu_device_new();
-  pipeline = gpu_pipeline_new(GPUPixelFormatBGRA8Unorm_sRGB);
-  library  = gpu_library_default(device);
+  device   = gpuDeviceNew();
+  pipeline = gpuPipelineNew(GPUPixelFormatBGRA8Unorm_sRGB);
+  library  = gpuDefaultLibrary(device);
 
-  vertFunc = gpu_function_new(library, "vertexShader");
-  fragFunc = gpu_function_new(library, "fragmentShader");
-  vert     = gpu_vertex_new();
-
-  gpu_attrib(vert, VertexAttributePosition, GPUFloat3, 0, BufferIndexMeshPositions);
-  gpu_attrib(vert, VertexAttributeTexcoord, GPUFloat2, 0, BufferIndexMeshGenerics);
+  vertFunc = gpuFunctionNew(library, "vertexShader");
+  fragFunc = gpuFunctionNew(library, "fragmentShader");
+  vert     = gpuVertexDescNew();
   
-  gpu_layout(vert, BufferIndexMeshPositions, 12, 1, GPUPerVertex);
-  gpu_layout(vert, BufferIndexMeshGenerics,  8,  1, GPUPerVertex);
+  gpuAttrib(vert, VertexAttributePosition, GPUFloat3, 0, BufferIndexMeshPositions);
+  gpuAttrib(vert, VertexAttributeTexcoord, GPUFloat2, 0, BufferIndexMeshGenerics);
   
-  gpu_function(pipeline, vertFunc, GPU_FUNC_VERT);
-  gpu_function(pipeline, fragFunc, GPU_FUNC_FRAG);
-  gpu_vertex(pipeline, vert);
+  gpuLayout(vert, BufferIndexMeshPositions, 12, 1, GPUPerVertex);
+  gpuLayout(vert, BufferIndexMeshGenerics,  8,  1, GPUPerVertex);
   
-  gpu_colorfm(pipeline, 0, (GPUPixelFormat)_view.colorPixelFormat);
-  gpu_depthfm(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
-  gpu_stencfm(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
-  gpu_samplco(pipeline, (uint32_t)_view.sampleCount);
+  gpuFunction(pipeline, vertFunc, GPU_FUNCTION_VERT);
+  gpuFunction(pipeline, fragFunc, GPU_FUNCTION_FRAG);
+  gpuVertexDesc(pipeline, vert);
+  
+  gpuColorFormat(pipeline, 0, (GPUPixelFormat)_view.colorPixelFormat);
+  gpuDepthFormat(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
+  gpuStencilFormat(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
+  gpuSampleCount(pipeline, (uint32_t)_view.sampleCount);
 
-  renderState          = gpu_renderstate_new(device, pipeline);
-  depthStencil         = gpu_depthstencil_new(GPUCompareFunctionLess, true);
+  renderState          = gpuRenderStateNew(device, pipeline);
+  depthStencil         = gpuDepthStencilNew(GPUCompareFunctionLess, true);
 
-  dynamicUniformBuffer = gpu_buffer_new(device, uniformBufferSize, GPUResourceStorageModeShared);
-  commandQueue         = gpu_cmdqueue_new(device);
+  dynamicUniformBuffer = gpuBufferNew(device, uniformBufferSize, GPUResourceStorageModeShared);
+  commandQueue         = gpuCmdQueNew(device);
 
 //  renderer = gpu_renderer_mtkview((MTKView *)self.view);
 //   _view.device = MTLCreateSystemDefaultDevice();
@@ -98,13 +99,18 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (void)drawInMTKView:(nonnull MTKView *)view {
-  cb = gpu_cmdbuf_new(commandQueue,  NULL, cmdOnComplete);
+  cb = gpuCmdBufNew(commandQueue,  NULL, cmdOnComplete);
   
-  gpu_commit(cb);
+  if ((pass = gpuPassFromMTKView(view))) {
+    GPURenderCommandEncoder *rce;
+
+    rce = gpuRenderCommandEncoder(cb, pass);
+  }
+
+  gpuCommit(cb);
 }
 
-- (void)mtkView:(nonnull MTKView *)view drawableSizeWillChange:(CGSize)size
-{
+- (void)mtkView:(nonnull MTKView *)view drawableSizeWillChange:(CGSize)size {
 // [_renderer mtkView:_view drawableSizeWillChange:_view.bounds.size];
   
   float aspect = size.width / (float)size.height;

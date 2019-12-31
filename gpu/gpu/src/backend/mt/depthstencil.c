@@ -14,7 +14,7 @@
 
 GPU_EXPORT
 GPUDepthStencil*
-gpu_depthstencil_new(GPUCompareFunction depthCompareFunc,
+gpuDepthStencilNew(GPUCompareFunction depthCompareFunc,
                      bool               depthWriteEnabled) {
   GPUDepthStencil *ds;
   MtDepthStencil  *mds;
