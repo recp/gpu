@@ -70,7 +70,7 @@ gpuVertexBuffer(GPURenderCommandEncoder *rce,
                 GPUBuffer               *buf,
                 size_t                   off,
                 uint32_t                 index) {
-  mtVertexBuffer(rce, buf->priv, off, index);
+  mtVertexBuffer(rce, buf, off, index);
 }
 
 GPU_EXPORT
@@ -79,7 +79,7 @@ gpuFragmentBuffer(GPURenderCommandEncoder *rce,
                   GPUBuffer               *buf,
                   size_t                   off,
                   uint32_t                 index) {
-  mtFragmentBuffer(rce, buf->priv, off, index);
+  mtFragmentBuffer(rce, buf, off, index);
 }
 
 GPU_EXPORT

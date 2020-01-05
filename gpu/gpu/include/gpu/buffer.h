@@ -12,9 +12,7 @@
 #include "resource.h"
 #include "cmdqueue.h"
 
-typedef struct GPUBuffer {
-  void *priv;
-} GPUBuffer;
+typedef struct GPUBuffer GPUBuffer;
 
 GPU_EXPORT
 GPUBuffer*
