@@ -22,5 +22,6 @@
 #include "buffer.h"
 #include "resource.h"
 #include "cmd-enc.h"
+#include "stage-io.h"
 
 #endif /* gpu_h */

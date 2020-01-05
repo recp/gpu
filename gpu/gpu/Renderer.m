@@ -42,8 +42,6 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
     matrix_float4x4 _projectionMatrix;
 
     float _rotation;
-
-    MTKMesh *_mesh;
 }
 
 - (void) setProj: (matrix_float4x4) proj {
@@ -147,9 +145,9 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
 
     mdlMesh.vertexDescriptor = mdlVertexDescriptor;
 
-    _mesh = [[MTKMesh alloc] initWithMesh:mdlMesh device:_device error:&error];
+    self.mesh = [[MTKMesh alloc] initWithMesh:mdlMesh device:_device error:&error];
 
-    if(!_mesh || error) {
+    if(!self.mesh || error) {
         NSLog(@"Error creating MetalKit mesh %@", error.localizedDescription);
     }
 
@@ -250,9 +248,9 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
                                   offset:_uniformBufferOffset
                                  atIndex:BufferIndexUniforms];
 
-        for (NSUInteger bufferIndex = 0; bufferIndex < _mesh.vertexBuffers.count; bufferIndex++)
+        for (NSUInteger bufferIndex = 0; bufferIndex < self.mesh.vertexBuffers.count; bufferIndex++)
         {
-            MTKMeshBuffer *vertexBuffer = _mesh.vertexBuffers[bufferIndex];
+            MTKMeshBuffer *vertexBuffer = self.mesh.vertexBuffers[bufferIndex];
             if((NSNull*)vertexBuffer != [NSNull null])
             {
                 [renderEncoder setVertexBuffer:vertexBuffer.buffer
@@ -264,7 +262,7 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
         [renderEncoder setFragmentTexture:_colorMap
                                   atIndex:TextureIndexColor];
 
-        for(MTKSubmesh *submesh in _mesh.submeshes)
+        for(MTKSubmesh *submesh in self.mesh.submeshes)
         {
             [renderEncoder drawIndexedPrimitives:submesh.primitiveType
                                       indexCount:submesh.indexCount

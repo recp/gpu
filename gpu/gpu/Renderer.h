@@ -7,6 +7,7 @@
 //
 
 #import <MetalKit/MetalKit.h>
+#import <ModelIO/ModelIO.h>
 #include <cglm/cglm.h>
 #include <cglm/applesimd.h>
 
@@ -16,5 +17,8 @@
 
 -(nonnull instancetype)initWithMetalKitView:(nonnull MTKView *)view;
 - (void) setProj: (matrix_float4x4) proj;
+
+@property (nonatomic, strong) MTKMesh *mesh;
+
 @end
 

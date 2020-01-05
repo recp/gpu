@@ -13,6 +13,7 @@
 #include "pipeline.h"
 #include "depthstencil.h"
 #include "buffer.h"
+#include "stage-io.h"
 
 typedef struct GPURenderCommandEncoder GPURenderCommandEncoder;
 
@@ -115,6 +116,15 @@ gpuDrawPrimitives(GPURenderCommandEncoder *rce,
                   GPUPrimitiveType         type,
                   size_t                   start,
                   size_t                   count);
+
+GPU_EXPORT
+void
+gpuDrawIndexedPrims(GPURenderCommandEncoder *rce,
+                    GPUPrimitiveType         type,
+                    uint32_t                 indexCount,
+                    GPUIndexType             indexType,
+                    GPUBuffer               *indexBuffer,
+                    uint32_t                 indexBufferOffset);
 
 GPU_EXPORT
 void

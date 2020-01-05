@@ -98,7 +98,7 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
   _renderer = [[Renderer alloc] initWithMetalKitView:_view];
   [_renderer mtkView:_view drawableSizeWillChange:_view.bounds.size];
   // _view.delegate = _renderer;
-  _view.delegate = self;
+  _view.delegate = _renderer;
 }
 
 - (void)drawInMTKView:(nonnull MTKView *)view {
@@ -108,7 +108,7 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
     GPURenderCommandEncoder *rce;
 
     rce = gpuRenderCommandEncoder(cb, pass);
-    
+
     gpuFrontFace(rce, GPUWindingCounterClockwise);
     gpuCullMode(rce, GPUCullModeBack);
     gpuSetRenderPipeline(rce, pipeline);
@@ -117,6 +117,42 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
     gpuVertexBuffer(rce, dynamicUniformBuffer, _uniformBufferOffset, BufferIndexUniforms);
     gpuFragmentBuffer(rce, dynamicUniformBuffer, _uniformBufferOffset, BufferIndexUniforms);
     
+    
+    for (NSUInteger bufferIndex = 0; bufferIndex < _renderer.mesh.vertexBuffers.count; bufferIndex++) {
+      MTKMeshBuffer *vertexBuffer = _renderer.mesh.vertexBuffers[bufferIndex];
+      if ((NSNull*)vertexBuffer != [NSNull null]) {
+        gpuVertexBuffer(rce,
+                        (GPUBuffer *)vertexBuffer.buffer,
+                        vertexBuffer.offset,
+                        (uint32_t)bufferIndex);
+      }
+    }
+    
+    //        [renderEncoder setFragmentTexture:_colorMap
+    //                                       atIndex:TextureIndexColor];
+
+    for(MTKSubmesh *submesh in _renderer.mesh.submeshes) {
+      gpuDrawIndexedPrims(rce,
+                          (GPUPrimitiveType)submesh.primitiveType,
+                          (uint32_t)submesh.indexCount,
+                          (GPUIndexType)submesh.indexType,
+                          (GPUBuffer *)submesh.indexBuffer.buffer,
+                          (uint32_t)submesh.indexBuffer.offset);
+    }
+    
+//
+//    [renderEncoder setFragmentTexture:_colorMap
+//                              atIndex:TextureIndexColor];
+//
+//    for(MTKSubmesh *submesh in self.mesh.submeshes)
+//    {
+//        [renderEncoder drawIndexedPrimitives:submesh.primitiveType
+//                                  indexCount:submesh.indexCount
+//                                   indexType:submesh.indexType
+//                                 indexBuffer:submesh.indexBuffer.buffer
+//                           indexBufferOffset:submesh.indexBuffer.offset];
+//    }
+//
 //    for (NSUInteger bufferIndex = 0; bufferIndex < _mesh.vertexBuffers.count; bufferIndex++) {
 //      MTKMeshBuffer *vertexBuffer = _mesh.vertexBuffers[bufferIndex];
 //      if((NSNull*)vertexBuffer != [NSNull null])

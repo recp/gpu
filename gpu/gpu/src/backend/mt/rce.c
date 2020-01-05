@@ -8,6 +8,7 @@
 #include "../../../include/gpu/cmdqueue.h"
 #include "../../../include/gpu/cmd-enc.h"
 #include "../../../include/gpu/buffer.h"
+#include "../../../include/gpu/stage-io.h"
 #include <cmt/cmt.h>
 
 GPU_EXPORT
@@ -84,11 +85,24 @@ gpuFragmentBuffer(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
-gpuDrawPrimitives(GPURenderCommandEncoder *rce,
-                  GPUPrimitiveType         type,
-                  size_t                   start,
-                  size_t                   count) {
-  mtDrawPrimitives(rce, (MtPrimitiveType)type, start, count);
+gpuDraw(GPURenderCommandEncoder *rce, GPUDrawArgs *args) {
+ 
+}
+
+GPU_EXPORT
+void
+gpuDrawIndexedPrims(GPURenderCommandEncoder *rce,
+                    GPUPrimitiveType         type,
+                    uint32_t                 indexCount,
+                    GPUIndexType             indexType,
+                    GPUBuffer               *indexBuffer,
+                    uint32_t                 indexBufferOffset) {
+  mtDrawIndexedPrims(rce,
+                     (MtPrimitiveType)type,
+                     indexCount,
+                     (MtIndexType)indexType,
+                     indexBuffer,
+                     indexBufferOffset);
 }
 
 GPU_EXPORT

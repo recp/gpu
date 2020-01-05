@@ -5,8 +5,8 @@
 * Full license can be found in the LICENSE file
 */
 
-#ifndef depthstencil_h
-#define depthstencil_h
+#ifndef gpu_depthstencil_h
+#define gpu_depthstencil_h
 
 #include "common.h"
 #include "pipeline.h"
@@ -40,6 +40,6 @@ typedef struct GPUDepthStencil {
 GPU_EXPORT
 GPUDepthStencil*
 gpuDepthStencilNew(GPUCompareFunction depthCompareFunc,
-                     bool               depthWriteEnabled);
+                   bool               depthWriteEnabled);
 
-#endif /* depthstencil_h */
+#endif /* gpu_depthstencil_h */
