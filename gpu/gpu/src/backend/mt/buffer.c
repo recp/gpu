@@ -19,14 +19,11 @@ GPUBuffer*
 gpuBufferNew(GPUDevice * __restrict device,
              size_t                 len,
              GPUResourceOptions     options) {
-  GPUBuffer       *cq;
   MtCommandBuffer *mcq;
 
-  mcq      = mtBufferCreate(device, len, (MtResourceOptions)options);
-  cq       = calloc(1, sizeof(*cq));
-  cq->priv = mcq;
+  mcq = mtBufferCreate(device->priv, len, (MtResourceOptions)options);
 
-  return cq;
+  return mcq;
 }
 
 GPU_EXPORT
