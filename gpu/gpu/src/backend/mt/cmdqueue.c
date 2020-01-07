@@ -68,6 +68,12 @@ gpuCmdBufOnComplete(GPUCommandBuffer * __restrict cmdb,
   mtCommandBufferOnComplete(cmdb->priv, &cb, gpu_cmdoncomplete);
 }
 
+GPU_EXPORT
+void
+gpuCommit(GPUCommandBuffer * __restrict cmdb) {
+  mtCommit(cmdb->priv);
+}
+
 static
 _gpu_hide
 void
@@ -76,10 +82,4 @@ gpu_cmdoncomplete(void * __restrict sender, MtCommandBuffer *cmdb) {
   
   cb = sender;
   cb->onComplete(cb->sender, cb->param);
-}
-
-GPU_EXPORT
-void
-gpuCommit(GPUCommandBuffer * __restrict cmdb) {
-  mtCommit(cmdb->priv);
 }
