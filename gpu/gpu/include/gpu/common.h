@@ -18,7 +18,7 @@
 #  else
 #    define GPU_EXPORT __declspec(dllimport)
 #  endif
-#  define _gpu_hide
+#  define GPU_HIDE
 #  define GPU_INLINE __forceinline
 #  define likely(x)   x
 #  define unlikely(x) x
@@ -26,7 +26,7 @@
 #else
 #  define GPU_EXPORT   __attribute__((visibility("default")))
 #  define GPU_INLINE inline __attribute((always_inline))
-#  define _gpu_hide    __attribute__((visibility("hidden")))
+#  define GPU_HIDE    __attribute__((visibility("hidden")))
 #  define likely(x)    __builtin_expect(!!(x), 1)
 #  define unlikely(x)  __builtin_expect(!!(x), 0)
 #  define GPU_NONNULL  __attribute__((nonnull))

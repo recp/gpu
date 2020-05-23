@@ -20,7 +20,7 @@ typedef struct GPUCallback {
 } GPUCallback;
 
 static
-_gpu_hide
+GPU_HIDE
 void
 gpu_cmdoncomplete(void * __restrict sender, MtCommandBuffer *cmdb);
 
@@ -75,7 +75,7 @@ gpuCommit(GPUCommandBuffer * __restrict cmdb) {
 }
 
 static
-_gpu_hide
+GPU_HIDE
 void
 gpu_cmdoncomplete(void * __restrict sender, MtCommandBuffer *cmdb) {
   GPUCallback *cb;
