@@ -69,11 +69,11 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
   
   gpuLayout(vert, BufferIndexMeshPositions, 12, 1, GPUPerVertex);
   gpuLayout(vert, BufferIndexMeshGenerics,  8,  1, GPUPerVertex);
-  
+
   gpuFunction(pipeline, vertFunc, GPU_FUNCTION_VERT);
   gpuFunction(pipeline, fragFunc, GPU_FUNCTION_FRAG);
   gpuVertexDesc(pipeline, vert);
-  
+
   gpuColorFormat(pipeline, 0, (GPUPixelFormat)_view.colorPixelFormat);
   gpuDepthFormat(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
   gpuStencilFormat(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
@@ -139,30 +139,7 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
                           (GPUBuffer *)submesh.indexBuffer.buffer,
                           (uint32_t)submesh.indexBuffer.offset);
     }
-    
-//
-//    [renderEncoder setFragmentTexture:_colorMap
-//                              atIndex:TextureIndexColor];
-//
-//    for(MTKSubmesh *submesh in self.mesh.submeshes)
-//    {
-//        [renderEncoder drawIndexedPrimitives:submesh.primitiveType
-//                                  indexCount:submesh.indexCount
-//                                   indexType:submesh.indexType
-//                                 indexBuffer:submesh.indexBuffer.buffer
-//                           indexBufferOffset:submesh.indexBuffer.offset];
-//    }
-//
-//    for (NSUInteger bufferIndex = 0; bufferIndex < _mesh.vertexBuffers.count; bufferIndex++) {
-//      MTKMeshBuffer *vertexBuffer = _mesh.vertexBuffers[bufferIndex];
-//      if((NSNull*)vertexBuffer != [NSNull null])
-//      {
-//        [renderEncoder setVertexBuffer:vertexBuffer.buffer
-//                                offset:vertexBuffer.offset
-//                               atIndex:bufferIndex];
-//      }
-//    }
-    
+
     gpuEndEncoding(rce);
     gpuPresent(cb, view.currentDrawable);
   }

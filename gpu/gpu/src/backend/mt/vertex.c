@@ -36,10 +36,10 @@ gpuVertexDescNew() {
 GPU_EXPORT
 void
 gpuAttrib(GPUVertexDescriptor * __restrict vert,
-           uint32_t                         attribIndex,
-           GPUVertexFormat                  format,
-           uint32_t                         offset,
-           uint32_t                         bufferIndex) {
+          uint32_t                         attribIndex,
+          GPUVertexFormat                  format,
+          uint32_t                         offset,
+          uint32_t                         bufferIndex) {
   mtVertexAttrib(vert->priv,
                  attribIndex,
                  (MtVertexFormat)format,
@@ -50,10 +50,10 @@ gpuAttrib(GPUVertexDescriptor * __restrict vert,
 GPU_EXPORT
 void
 gpuLayout(GPUVertexDescriptor * __restrict vert,
-           uint32_t                         layoutIndex,
-           uint32_t                         stride,
-           uint32_t                         stepRate,
-           GPUVertexStepFunction            stepFunction) {
+          uint32_t                         layoutIndex,
+          uint32_t                         stride,
+          uint32_t                         stepRate,
+          GPUVertexStepFunction            stepFunction) {
   mtVertexLayout(vert->priv, layoutIndex,
                  stride,
                  stepRate,
@@ -63,6 +63,6 @@ gpuLayout(GPUVertexDescriptor * __restrict vert,
 GPU_EXPORT
 void
 gpuVertexDesc(GPUPipeline         * __restrict pipeline,
-           GPUVertexDescriptor * __restrict vert) {
+              GPUVertexDescriptor * __restrict vert) {
   mtSetVertexDesc(pipeline->priv, vert->priv);
 }
