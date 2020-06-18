@@ -25,7 +25,7 @@
 
 GPU_EXPORT
 GPUBuffer*
-gpuBufferNew(GPUDevice * __restrict device,
+gpuNewBuffer(GPUDevice * __restrict device,
              size_t                 len,
              GPUResourceOptions     options) {
   MtCommandBuffer *mcq;

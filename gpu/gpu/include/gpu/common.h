@@ -34,8 +34,8 @@
 #  define GPU_NONNULL
 #else
 #  define GPU_EXPORT   __attribute__((visibility("default")))
-#  define GPU_INLINE inline __attribute((always_inline))
-#  define GPU_HIDE    __attribute__((visibility("hidden")))
+#  define GPU_INLINE   inline __attribute((always_inline))
+#  define GPU_HIDE     __attribute__((visibility("hidden")))
 #  define likely(x)    __builtin_expect(!!(x), 1)
 #  define unlikely(x)  __builtin_expect(!!(x), 0)
 #  define GPU_NONNULL  __attribute__((nonnull))

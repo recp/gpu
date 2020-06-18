@@ -36,11 +36,11 @@ typedef enum GPUFunctionType {
 
 GPU_EXPORT
 GPUPipeline*
-gpuPipelineNew(GPUPixelFormat pixelFormat);
+gpuNewPipeline(GPUPixelFormat pixelFormat);
 
 GPU_EXPORT
 GPURenderState*
-gpuRenderStateNew(GPUDevice   * __restrict device,
+gpuNewRenderState(GPUDevice   * __restrict device,
                   GPUPipeline * __restrict pipeline);
 
 GPU_EXPORT

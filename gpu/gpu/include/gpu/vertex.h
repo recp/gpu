@@ -122,7 +122,7 @@ typedef struct GPUVertexDescriptor {
 
 GPU_EXPORT
 GPUVertexDescriptor*
-gpuVertexDescNew(void);
+gpuNewVertexDesc(void);
 
 GPU_EXPORT
 void

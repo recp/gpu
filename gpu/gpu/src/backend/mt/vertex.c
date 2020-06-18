@@ -22,7 +22,7 @@
 
 GPU_EXPORT
 GPUVertexDescriptor*
-gpuVertexDescNew() {
+gpuNewVertexDesc() {
   GPUVertexDescriptor *vdec;
   MtVertexDescriptor  *mtvdesc;
 

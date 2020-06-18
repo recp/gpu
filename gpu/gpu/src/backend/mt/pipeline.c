@@ -24,7 +24,7 @@
 
 GPU_EXPORT
 GPUPipeline*
-gpuPipelineNew(GPUPixelFormat pixelFormat) {
+gpuNewPipeline(GPUPixelFormat pixelFormat) {
   GPUPipeline  *pipeline;
   MtRenderDesc *renderDesc;
   
@@ -38,7 +38,7 @@ gpuPipelineNew(GPUPixelFormat pixelFormat) {
 
 GPU_EXPORT
 GPURenderState*
-gpuRenderStateNew(GPUDevice   * __restrict device,
+gpuNewRenderState(GPUDevice   * __restrict device,
                   GPUPipeline * __restrict pipeline) {
   GPUPipeline      *rederPipline;
   MtRenderPipeline *mtRederPipline;

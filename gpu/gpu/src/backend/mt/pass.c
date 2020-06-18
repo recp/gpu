@@ -19,6 +19,6 @@
 
 GPU_EXPORT
 GPURenderPassDesc*
-gpuPassNew() {
+gpuNewPass() {
   return mtPassCreate();;
 }

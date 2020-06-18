@@ -35,7 +35,7 @@ gpu_cmdoncomplete(void * __restrict sender, MtCommandBuffer *cmdb);
 
 GPU_EXPORT
 GPUCommandQueue*
-gpuCmdQueNew(GPUDevice * __restrict device) {
+gpuNewCmdQue(GPUDevice * __restrict device) {
   GPUCommandQueue *cq;
   MtCommandQueue  *mcq;
   
@@ -48,7 +48,7 @@ gpuCmdQueNew(GPUDevice * __restrict device) {
 
 GPU_EXPORT
 GPUCommandBuffer*
-gpuCmdBufNew(GPUCommandQueue  * __restrict cmdb,
+gpuNewCmdBuf(GPUCommandQueue  * __restrict cmdb,
              void             * __restrict sender,
              GPUCommandBufferOnCompleteFn  oncomplete) {
   GPUCommandBuffer *cb;

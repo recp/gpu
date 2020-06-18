@@ -92,11 +92,11 @@ gpuFragmentBuffer(GPURenderCommandEncoder *rce,
   mtFragmentBuffer(rce, buf, off, index);
 }
 
-GPU_EXPORT
-void
-gpuDraw(GPURenderCommandEncoder *rce, GPUDrawArgs *args) {
- 
-}
+//GPU_EXPORT
+//void
+//gpuDraw(GPURenderCommandEncoder *rce, GPUDrawArgs *args) {
+// 
+//}
 
 GPU_EXPORT
 void

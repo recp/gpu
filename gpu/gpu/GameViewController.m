@@ -56,17 +56,17 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   _view    = (MTKView *)self.view;
 
-  device   = gpuDeviceNew();
-  pipeline = gpuPipelineNew(GPUPixelFormatBGRA8Unorm_sRGB);
+  device   = gpuNewDevice();
+  pipeline = gpuNewPipeline(GPUPixelFormatBGRA8Unorm_sRGB);
   library  = gpuDefaultLibrary(device);
 
-  vertFunc = gpuFunctionNew(library, "vertexShader");
-  fragFunc = gpuFunctionNew(library, "fragmentShader");
-  vert     = gpuVertexDescNew();
-  
-  gpuAttrib(vert, VertexAttributePosition, GPUFloat3, 0, BufferIndexMeshPositions);
-  gpuAttrib(vert, VertexAttributeTexcoord, GPUFloat2, 0, BufferIndexMeshGenerics);
-  
+  vertFunc = gpuNewFunction(library, "vertexShader");
+  fragFunc = gpuNewFunction(library, "fragmentShader");
+  vert     = gpuNewVertexDesc();
+
+  gpuAttrib(vert, AttributePosition, GPUFloat3, 0, BufferIndexMeshPositions);
+  gpuAttrib(vert, AttributeTexcoord, GPUFloat2, 0, BufferIndexMeshGenerics);
+
   gpuLayout(vert, BufferIndexMeshPositions, 12, 1, GPUPerVertex);
   gpuLayout(vert, BufferIndexMeshGenerics,  8,  1, GPUPerVertex);
 
@@ -79,11 +79,11 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
   gpuStencilFormat(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
   gpuSampleCount(pipeline, (uint32_t)_view.sampleCount);
 
-  renderState          = gpuRenderStateNew(device, pipeline);
-  depthStencil         = gpuDepthStencilNew(GPUCompareFunctionLess, true);
+  renderState          = gpuNewRenderState(device, pipeline);
+  depthStencil         = gpuNewDepthStencil(GPUCompareFunctionLess, true);
 
-  dynamicUniformBuffer = gpuBufferNew(device, uniformBufferSize, GPUResourceStorageModeShared);
-  commandQueue         = gpuCmdQueNew(device);
+  dynamicUniformBuffer = gpuNewBuffer(device, uniformBufferSize, GPUResourceStorageModeShared);
+  commandQueue         = gpuNewCmdQue(device);
 
 //  renderer = gpu_renderer_mtkview((MTKView *)self.view);
 //   _view.device = MTLCreateSystemDefaultDevice();
@@ -102,7 +102,7 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (void)drawInMTKView:(nonnull MTKView *)view {
-  cb = gpuCmdBufNew(commandQueue,  NULL, cmdOnComplete);
+  cb = gpuNewCmdBuf(commandQueue,  NULL, cmdOnComplete);
   
   if ((pass = gpuPassFromMTKView(view))) {
     GPURenderCommandEncoder *rce;
@@ -116,7 +116,6 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
     
     gpuVertexBuffer(rce, dynamicUniformBuffer, _uniformBufferOffset, BufferIndexUniforms);
     gpuFragmentBuffer(rce, dynamicUniformBuffer, _uniformBufferOffset, BufferIndexUniforms);
-    
     
     for (NSUInteger bufferIndex = 0; bufferIndex < _renderer.mesh.vertexBuffers.count; bufferIndex++) {
       MTKMeshBuffer *vertexBuffer = _renderer.mesh.vertexBuffers[bufferIndex];

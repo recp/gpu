@@ -14,23 +14,8 @@
  * limitations under the License.
  */
 
-#include "../../../include/gpu/device.h"
-#include <cmt/cmt.h>
+#ifndef gpu_hardware_h
+#define gpu_hardware_h
 
-GPUDevice*
-gpuNewDevice(void) {
-  GPUDevice *device;
-  MtDevice  *mtDevice;
-  
-  mtDevice = mtCreateDevice();
-  device   = calloc(1, sizeof(*device));
 
-  device->priv = mtDevice;
-
-  return device;
-}
-
-void
-gpu_device_release(GPUDevice * __restrict device) {
-  
-}
+#endif /* gpu_hardware_h */

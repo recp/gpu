@@ -48,7 +48,7 @@ typedef struct GPUDepthStencil {
 
 GPU_EXPORT
 GPUDepthStencil*
-gpuDepthStencilNew(GPUCompareFunction depthCompareFunc,
+gpuNewDepthStencil(GPUCompareFunction depthCompareFunc,
                    bool               depthWriteEnabled);
 
 #endif /* gpu_depthstencil_h */

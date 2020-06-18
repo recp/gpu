@@ -29,7 +29,7 @@ typedef struct GPURenderPassDesc GPURenderPassDesc;
 
 GPU_EXPORT
 GPURenderPassDesc*
-gpuPassNew(void);
+gpuNewPass(void);
 
 #if defined(__APPLE__) && defined(__OBJC__)
 @class MTKView;
