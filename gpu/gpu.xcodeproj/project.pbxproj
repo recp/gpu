@@ -100,6 +100,7 @@
 		1E911E30223E47B900CD8880 /* MetalPerformanceShaders.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalPerformanceShaders.framework; path = System/Library/Frameworks/MetalPerformanceShaders.framework; sourceTree = SDKROOT; };
 		1E911E32223E47BF00CD8880 /* OpenGL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGL.framework; path = System/Library/Frameworks/OpenGL.framework; sourceTree = SDKROOT; };
 		1E911E34223E47C800CD8880 /* GLKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GLKit.framework; path = System/Library/Frameworks/GLKit.framework; sourceTree = SDKROOT; };
+		560F29A12479D58D00A3DBD4 /* gpu-hardware.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "gpu-hardware.h"; sourceTree = "<group>"; };
 		566119D12373155F00DD3DF3 /* vertex.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = vertex.h; sourceTree = "<group>"; };
 		5665B2BC23715FF30038371E /* library.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = library.c; sourceTree = "<group>"; };
 		5665B2BE237160690038371E /* library.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = library.h; sourceTree = "<group>"; };
@@ -281,6 +282,7 @@
 				56DC238323B6687D00814D23 /* buffer.h */,
 				56DC238823B66FBC00814D23 /* resource.h */,
 				56A3E79623B94515004DC63F /* cmd-enc.h */,
+				560F29A12479D58D00A3DBD4 /* gpu-hardware.h */,
 			);
 			path = gpu;
 			sourceTree = "<group>";
