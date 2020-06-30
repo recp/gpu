@@ -21,13 +21,13 @@
 #include "pixelformat.h"
 #include "library.h"
 
-typedef struct GPUPipeline {
+typedef struct GPURenderPipeline {
   void *priv;
-} GPUPipeline;
+} GPURenderPipeline;
 
-typedef struct GPURenderState {
+typedef struct GPURenderPipelineState {
   void *priv;
-} GPURenderState;
+} GPURenderPipelineState;
 
 typedef enum GPUFunctionType {
   GPU_FUNCTION_VERT = 1,
@@ -35,39 +35,39 @@ typedef enum GPUFunctionType {
 } GPUFunctionType;
 
 GPU_EXPORT
-GPUPipeline*
+GPURenderPipeline*
 gpuNewPipeline(GPUPixelFormat pixelFormat);
 
 GPU_EXPORT
-GPURenderState*
+GPURenderPipelineState*
 gpuNewRenderState(GPUDevice   * __restrict device,
-                  GPUPipeline * __restrict pipeline);
+                  GPURenderPipeline * __restrict pipeline);
 
 GPU_EXPORT
 void
-gpuFunction(GPUPipeline * __restrict pipline,
+gpuFunction(GPURenderPipeline * __restrict pipline,
             GPUFunction * __restrict func,
             GPUFunctionType          functype);
 
 GPU_EXPORT
 void
-gpuColorFormat(GPUPipeline * __restrict pipline,
+gpuColorFormat(GPURenderPipeline * __restrict pipline,
                uint32_t                 index,
                GPUPixelFormat           pixelFormat);
 
 GPU_EXPORT
 void
-gpuDepthFormat(GPUPipeline * __restrict pipline,
+gpuDepthFormat(GPURenderPipeline * __restrict pipline,
                GPUPixelFormat           pixelFormat);
 
 GPU_EXPORT
 void
-gpuStencilFormat(GPUPipeline * __restrict pipline,
+gpuStencilFormat(GPURenderPipeline * __restrict pipline,
                  GPUPixelFormat           pixelFormat);
 
 GPU_EXPORT
 void
-gpuSampleCount(GPUPipeline * __restrict pipline,
+gpuSampleCount(GPURenderPipeline * __restrict pipline,
                uint32_t                 sampleCount);
 
 #endif /* gpu_pipeline_h */

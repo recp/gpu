@@ -46,6 +46,10 @@ typedef struct GPUDepthStencil {
   void *priv;
 } GPUDepthStencil;
 
+typedef struct GPUDepthStencilState {
+  void *priv;
+} GPUDepthStencilState;
+
 GPU_EXPORT
 GPUDepthStencil*
 gpuNewDepthStencil(GPUCompareFunction depthCompareFunc,

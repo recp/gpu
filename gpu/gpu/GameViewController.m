@@ -30,25 +30,26 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
 
 @implementation GameViewController
 {
-  MTKView             *_view;
-  Renderer            *_renderer;
-  
-  GPURenderer         *renderer;
-  GPUDevice           *device;
-  GPUPipeline         *pipeline;
-  GPURenderState      *renderState;
-  GPULibrary          *library;
-  GPUFunction         *vertFunc;
-  GPUFunction         *fragFunc;
-  GPUVertexDescriptor *vert;
-  GPUDepthStencil     *depthStencil;
-  GPUBuffer           *dynamicUniformBuffer;
-  GPUCommandQueue     *commandQueue;
-  GPUCommandBuffer    *cb;
-  GPURenderPassDesc   *pass;
-
-  uint32_t             _uniformBufferOffset;
-  uint8_t              _uniformBufferIndex;
+  MTKView                *_view;
+  Renderer               *_renderer;
+     
+  GPURenderer            *renderer;
+  GPUDevice              *device;
+  GPURenderPipeline      *pipeline;
+  GPURenderPipelineState *renderState;
+  GPULibrary             *library;
+  GPUFunction            *vertFunc;
+  GPUFunction            *fragFunc;
+  GPUVertexDescriptor    *vert;
+  GPUDepthStencil        *depthStencil;
+  GPUDepthStencilState   *depthState;
+  GPUBuffer              *dynamicUniformBuffer;
+  GPUCommandQueue        *commandQueue;
+  GPUCommandBuffer       *cb;
+  GPURenderPassDesc      *pass;
+   
+  uint32_t                _uniformBufferOffset;
+  uint8_t                 _uniformBufferIndex;
 }
 
 - (void)viewDidLoad {
@@ -56,6 +57,10 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   _view    = (MTKView *)self.view;
 
+  _view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+  _view.colorPixelFormat = MTLPixelFormatBGRA8Unorm_sRGB;
+  _view.sampleCount = 1;
+  
   device   = gpuNewDevice();
   pipeline = gpuNewPipeline(GPUPixelFormatBGRA8Unorm_sRGB);
   library  = gpuDefaultLibrary(device);
@@ -82,9 +87,12 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
   renderState          = gpuNewRenderState(device, pipeline);
   depthStencil         = gpuNewDepthStencil(GPUCompareFunctionLess, true);
 
+  depthState
   dynamicUniformBuffer = gpuNewBuffer(device, uniformBufferSize, GPUResourceStorageModeShared);
   commandQueue         = gpuNewCmdQue(device);
 
+
+  
 //  renderer = gpu_renderer_mtkview((MTKView *)self.view);
 //   _view.device = MTLCreateSystemDefaultDevice();
   
@@ -98,7 +106,7 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
   _renderer = [[Renderer alloc] initWithMetalKitView:_view];
   [_renderer mtkView:_view drawableSizeWillChange:_view.bounds.size];
   // _view.delegate = _renderer;
-  _view.delegate = _renderer;
+  _view.delegate = self;
 }
 
 - (void)drawInMTKView:(nonnull MTKView *)view {
@@ -111,12 +119,12 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
 
     gpuFrontFace(rce, GPUWindingCounterClockwise);
     gpuCullMode(rce, GPUCullModeBack);
-    gpuSetRenderPipeline(rce, pipeline);
+    gpuSetRenderPipelineState(rce, renderState);
     gpuSetDepthStencil(rce, depthStencil);
-    
+
     gpuVertexBuffer(rce, dynamicUniformBuffer, _uniformBufferOffset, BufferIndexUniforms);
     gpuFragmentBuffer(rce, dynamicUniformBuffer, _uniformBufferOffset, BufferIndexUniforms);
-    
+
     for (NSUInteger bufferIndex = 0; bufferIndex < _renderer.mesh.vertexBuffers.count; bufferIndex++) {
       MTKMeshBuffer *vertexBuffer = _renderer.mesh.vertexBuffers[bufferIndex];
       if ((NSNull*)vertexBuffer != [NSNull null]) {
@@ -126,7 +134,7 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
                         (uint32_t)bufferIndex);
       }
     }
-    
+
     //        [renderEncoder setFragmentTexture:_colorMap
     //                                       atIndex:TextureIndexColor];
 
