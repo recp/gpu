@@ -23,7 +23,7 @@
 GPU_EXPORT
 GPURenderCommandEncoder*
 gpuRenderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
-  return mtRenderCommandEncoder(cmdb, pass);
+  return mtRenderCommandEncoder(cmdb->priv, pass);
 }
 
 GPU_EXPORT
@@ -40,8 +40,8 @@ gpuCullMode(GPURenderCommandEncoder *rce, GPUCullMode mode) {
 
 GPU_EXPORT
 void
-gpuSetRenderPipeline(GPURenderCommandEncoder *rce, GPUPipeline *pipline) {
-  mtSetRenderState(rce, pipline);
+gpuSetRenderPipelineState(GPURenderCommandEncoder *rce, GPURenderPipelineState *piplineState) {
+  mtSetRenderState(rce, piplineState->priv);
 }
 
 GPU_EXPORT

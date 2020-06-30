@@ -27,6 +27,7 @@
 		1E911E33223E47BF00CD8880 /* OpenGL.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E911E32223E47BF00CD8880 /* OpenGL.framework */; };
 		1E911E35223E47C800CD8880 /* GLKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E911E34223E47C800CD8880 /* GLKit.framework */; };
 		5665B2BD23715FF30038371E /* library.c in Sources */ = {isa = PBXBuildFile; fileRef = 5665B2BC23715FF30038371E /* library.c */; };
+		56679A8C24A7C3B900CF656C /* device.c in Sources */ = {isa = PBXBuildFile; fileRef = 56679A8B24A7C3B900CF656C /* device.c */; };
 		566EB49F23B35A52001F9041 /* depthstencil.c in Sources */ = {isa = PBXBuildFile; fileRef = 566EB49E23B35A52001F9041 /* depthstencil.c */; };
 		5681E2FC23AE13BD00476198 /* vertex.c in Sources */ = {isa = PBXBuildFile; fileRef = 5681E2FB23AE13BD00476198 /* vertex.c */; };
 		56A3E79223B91E54004DC63F /* pass.c in Sources */ = {isa = PBXBuildFile; fileRef = 56A3E79123B91E54004DC63F /* pass.c */; };
@@ -104,6 +105,8 @@
 		566119D12373155F00DD3DF3 /* vertex.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = vertex.h; sourceTree = "<group>"; };
 		5665B2BC23715FF30038371E /* library.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = library.c; sourceTree = "<group>"; };
 		5665B2BE237160690038371E /* library.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = library.h; sourceTree = "<group>"; };
+		56679A8A24A7C3B900CF656C /* device.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = device.h; sourceTree = "<group>"; };
+		56679A8B24A7C3B900CF656C /* device.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = device.c; sourceTree = "<group>"; };
 		566EB49D23B35A07001F9041 /* depthstencil.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = depthstencil.h; sourceTree = "<group>"; };
 		566EB49E23B35A52001F9041 /* depthstencil.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = depthstencil.c; sourceTree = "<group>"; };
 		567F88AA226A14A1005E046C /* renderer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = renderer.h; sourceTree = "<group>"; };
@@ -225,23 +228,25 @@
 		1E8A7685223D2B64001681FF /* backend */ = {
 			isa = PBXGroup;
 			children = (
-				1E8A7687223D2B73001681FF /* mt */,
-				5665B2BB23714B510038371E /* dx */,
-				1E8A7686223D2B6C001681FF /* gl */,
+				1E8A7687223D2B73001681FF /* metal */,
+				1E8A7686223D2B6C001681FF /* opengl */,
+				5665B2BB23714B510038371E /* directx */,
 			);
 			path = backend;
 			sourceTree = "<group>";
 		};
-		1E8A7686223D2B6C001681FF /* gl */ = {
+		1E8A7686223D2B6C001681FF /* opengl */ = {
 			isa = PBXGroup;
 			children = (
 				1E8A7681223D2A06001681FF /* pipeline.h */,
 				1E8A7682223D2A06001681FF /* pipeline.c */,
+				56679A8A24A7C3B900CF656C /* device.h */,
+				56679A8B24A7C3B900CF656C /* device.c */,
 			);
-			path = gl;
+			path = opengl;
 			sourceTree = "<group>";
 		};
-		1E8A7687223D2B73001681FF /* mt */ = {
+		1E8A7687223D2B73001681FF /* metal */ = {
 			isa = PBXGroup;
 			children = (
 				1E8A76D1223D349A001681FF /* pipeline.c */,
@@ -254,7 +259,7 @@
 				56A3E79123B91E54004DC63F /* pass.c */,
 				56A3E79723B945AA004DC63F /* rce.c */,
 			);
-			path = mt;
+			path = metal;
 			sourceTree = "<group>";
 		};
 		1E8A7688223D2B7D001681FF /* include */ = {
@@ -300,11 +305,11 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		5665B2BB23714B510038371E /* dx */ = {
+		5665B2BB23714B510038371E /* directx */ = {
 			isa = PBXGroup;
 			children = (
 			);
-			path = dx;
+			path = directx;
 			sourceTree = "<group>";
 		};
 		56A3E79923B94A83004DC63F /* shader */ = {
@@ -458,6 +463,7 @@
 				56DC22D723B49B8E00814D23 /* cmdqueue.c in Sources */,
 				566EB49F23B35A52001F9041 /* depthstencil.c in Sources */,
 				1E8A764F223D29A9001681FF /* Renderer.m in Sources */,
+				56679A8C24A7C3B900CF656C /* device.c in Sources */,
 				5681E2FC23AE13BD00476198 /* vertex.c in Sources */,
 				56A3E79223B91E54004DC63F /* pass.c in Sources */,
 				1E8A7683223D2A06001681FF /* pipeline.c in Sources */,

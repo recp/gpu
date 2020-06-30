@@ -15,22 +15,14 @@
  */
 
 #include "../../../include/gpu/device.h"
-#include <cmt/cmt.h>
+#include "device.h"
 
 GPUDevice*
-gpuNewDevice(void) {
+gpuOpenGLNewDevice(void) {
   GPUDevice *device;
-  MtDevice  *mtDevice;
   
-  mtDevice = mtCreateDevice();
-  device   = calloc(1, sizeof(*device));
-
-  device->priv = mtDevice;
+  device       = calloc(1, sizeof(*device));
+  device->priv = NULL;
 
   return device;
-}
-
-void
-gpu_device_release(GPUDevice * __restrict device) {
-  
 }

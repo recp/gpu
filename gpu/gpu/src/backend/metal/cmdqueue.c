@@ -54,7 +54,7 @@ gpuNewCmdBuf(GPUCommandQueue  * __restrict cmdb,
   GPUCommandBuffer *cb;
   MtCommandBuffer  *mcb;
   
-  mcb      = mtCommandBufferCreate(cmdb);
+  mcb      = mtCommandBufferCreate(cmdb->priv);
   cb       = calloc(1, sizeof(*cb));
   cb->priv = mcb;
   

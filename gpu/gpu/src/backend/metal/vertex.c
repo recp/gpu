@@ -62,7 +62,7 @@ gpuLayout(GPUVertexDescriptor * __restrict vert,
 
 GPU_EXPORT
 void
-gpuVertexDesc(GPUPipeline         * __restrict pipeline,
+gpuVertexDesc(GPURenderPipeline         * __restrict pipeline,
               GPUVertexDescriptor * __restrict vert) {
   mtSetVertexDesc(pipeline->priv, vert->priv);
 }

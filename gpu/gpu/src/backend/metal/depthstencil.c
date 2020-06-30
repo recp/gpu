@@ -35,3 +35,18 @@ gpuNewDepthStencil(GPUCompareFunction depthCompareFunc,
 
   return ds;
 }
+
+GPU_EXPORT
+GPUDepthStencilState*
+gpuNewDepthStencilState(GPUDevice       * __restrict device,
+                        GPUDepthStencil * __restrict depthStencil) {
+  GPURenderPipelineState *rederPipline;
+  MtRenderPipeline       *mtRederPipline;
+  
+  mtRederPipline = mtRenderStateCreate(device->priv, depthStencil->priv);
+  rederPipline   = calloc(1, sizeof(*rederPipline));
+  
+  rederPipline->priv = mtRederPipline;
+  
+  return rederPipline;
+}

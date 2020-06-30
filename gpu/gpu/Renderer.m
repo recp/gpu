@@ -72,13 +72,13 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
 
     _mtlVertexDescriptor = [[MTLVertexDescriptor alloc] init];
 
-    _mtlVertexDescriptor.attributes[VertexAttributePosition].format = MTLVertexFormatFloat3;
-    _mtlVertexDescriptor.attributes[VertexAttributePosition].offset = 0;
-    _mtlVertexDescriptor.attributes[VertexAttributePosition].bufferIndex = BufferIndexMeshPositions;
+    _mtlVertexDescriptor.attributes[AttributePosition].format = MTLVertexFormatFloat3;
+    _mtlVertexDescriptor.attributes[AttributePosition].offset = 0;
+    _mtlVertexDescriptor.attributes[AttributePosition].bufferIndex = BufferIndexMeshPositions;
 
-    _mtlVertexDescriptor.attributes[VertexAttributeTexcoord].format = MTLVertexFormatFloat2;
-    _mtlVertexDescriptor.attributes[VertexAttributeTexcoord].offset = 0;
-    _mtlVertexDescriptor.attributes[VertexAttributeTexcoord].bufferIndex = BufferIndexMeshGenerics;
+    _mtlVertexDescriptor.attributes[AttributeTexcoord].format = MTLVertexFormatFloat2;
+    _mtlVertexDescriptor.attributes[AttributeTexcoord].offset = 0;
+    _mtlVertexDescriptor.attributes[AttributeTexcoord].bufferIndex = BufferIndexMeshGenerics;
 
     _mtlVertexDescriptor.layouts[BufferIndexMeshPositions].stride = 12;
     _mtlVertexDescriptor.layouts[BufferIndexMeshPositions].stepRate = 1;
@@ -140,8 +140,8 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
     MDLVertexDescriptor *mdlVertexDescriptor =
     MTKModelIOVertexDescriptorFromMetal(_mtlVertexDescriptor);
 
-    mdlVertexDescriptor.attributes[VertexAttributePosition].name  = MDLVertexAttributePosition;
-    mdlVertexDescriptor.attributes[VertexAttributeTexcoord].name  = MDLVertexAttributeTextureCoordinate;
+    mdlVertexDescriptor.attributes[AttributePosition].name  = MDLVertexAttributePosition;
+    mdlVertexDescriptor.attributes[AttributeTexcoord].name  = MDLVertexAttributeTextureCoordinate;
 
     mdlMesh.vertexDescriptor = mdlVertexDescriptor;
 

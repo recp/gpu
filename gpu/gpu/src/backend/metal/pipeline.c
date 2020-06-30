@@ -23,9 +23,9 @@
 #include <cmt/cmt.h>
 
 GPU_EXPORT
-GPUPipeline*
+GPURenderPipeline*
 gpuNewPipeline(GPUPixelFormat pixelFormat) {
-  GPUPipeline  *pipeline;
+  GPURenderPipeline  *pipeline;
   MtRenderDesc *renderDesc;
   
   renderDesc = mtRenderPipelineCreate((MtPixelFormat)pixelFormat);
@@ -37,23 +37,23 @@ gpuNewPipeline(GPUPixelFormat pixelFormat) {
 }
 
 GPU_EXPORT
-GPURenderState*
-gpuNewRenderState(GPUDevice   * __restrict device,
-                  GPUPipeline * __restrict pipeline) {
-  GPUPipeline      *rederPipline;
-  MtRenderPipeline *mtRederPipline;
+GPURenderPipelineState*
+gpuNewRenderState(GPUDevice         * __restrict device,
+                  GPURenderPipeline * __restrict pipeline) {
+  GPURenderPipelineState *rederPipline;
+  MtRenderPipeline       *mtRederPipline;
   
   mtRederPipline = mtRenderStateCreate(device->priv, pipeline->priv);
   rederPipline   = calloc(1, sizeof(*rederPipline));
   
   rederPipline->priv = mtRederPipline;
   
-  return NULL;
+  return rederPipline;
 }
 
 GPU_EXPORT
 void
-gpuFunction(GPUPipeline    * __restrict pipline,
+gpuFunction(GPURenderPipeline    * __restrict pipline,
             GPUFunction    * __restrict func,
             GPUFunctionType             functype) {
   mtSetFunc(pipline->priv, func->priv, (MtFuncType)functype);
@@ -61,7 +61,7 @@ gpuFunction(GPUPipeline    * __restrict pipline,
 
 GPU_EXPORT
 void
-gpuColorFormat(GPUPipeline * __restrict pipline,
+gpuColorFormat(GPURenderPipeline * __restrict pipline,
                uint32_t                 index,
                GPUPixelFormat           pixelFormat) {
   mtColorPixelFormat(pipline->priv, index, (MtPixelFormat)pixelFormat);
@@ -69,21 +69,21 @@ gpuColorFormat(GPUPipeline * __restrict pipline,
 
 GPU_EXPORT
 void
-gpuDepthFormat(GPUPipeline * __restrict pipline,
+gpuDepthFormat(GPURenderPipeline * __restrict pipline,
                GPUPixelFormat           pixelFormat) {
   mtDepthPixelFormat(pipline->priv, (MtPixelFormat)pixelFormat);
 }
 
 GPU_EXPORT
 void
-gpuStencilFormat(GPUPipeline * __restrict pipline,
+gpuStencilFormat(GPURenderPipeline * __restrict pipline,
                  GPUPixelFormat           pixelFormat) {
   mtStencilPixelFormat(pipline->priv, (MtPixelFormat)pixelFormat);
 }
 
 GPU_EXPORT
 void
-gpuSampleCount(GPUPipeline * __restrict pipline,
+gpuSampleCount(GPURenderPipeline * __restrict pipline,
                uint32_t                 sampleCount) {
   mtSampleCount(pipline->priv, sampleCount);
 }
