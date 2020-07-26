@@ -69,12 +69,15 @@ void
 gpuCmdBufOnComplete(GPUCommandBuffer * __restrict cmdb,
                     void             * __restrict sender,
                     GPUCommandBufferOnCompleteFn  oncomplete) {
-  GPUCallback cb;
-  cb.sender     = sender;
-  cb.param      = cmdb;
-  cb.onComplete = oncomplete;
+  GPUCallback *cb;
   
-  mtCommandBufferOnComplete(cmdb->priv, &cb, gpu_cmdoncomplete);
+  /* TODO: provide release when needed */
+  cb             = calloc(1, sizeof(*cb));
+  cb->sender     = sender;
+  cb->param      = cmdb;
+  cb->onComplete = oncomplete;
+  
+  mtCommandBufferOnComplete(cmdb->priv, cb, gpu_cmdoncomplete);
 }
 
 GPU_EXPORT
@@ -91,4 +94,6 @@ gpu_cmdoncomplete(void * __restrict sender, MtCommandBuffer *cmdb) {
   
   cb = sender;
   cb->onComplete(cb->sender, cb->param);
+
+  free(cb);
 }
