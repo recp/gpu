@@ -40,13 +40,13 @@ GPU_EXPORT
 GPUDepthStencilState*
 gpuNewDepthStencilState(GPUDevice       * __restrict device,
                         GPUDepthStencil * __restrict depthStencil) {
-  GPUDepthStencilState *depthDtencilState;
+  GPUDepthStencilState *depthStencilState;
   MtRenderPipeline     *mtDepthStencilState;
   
-  mtDepthStencilState = mtNewDepthStencilState(device, depthStencil->priv);
-  depthDtencilState   = calloc(1, sizeof(*mtDepthStencilState));
+  mtDepthStencilState = mtNewDepthStencilState(device->priv, depthStencil->priv);
+  depthStencilState   = calloc(1, sizeof(*depthStencilState));
   
-  depthDtencilState->priv = mtDepthStencilState;
+  depthStencilState->priv = mtDepthStencilState;
   
-  return depthDtencilState;
+  return depthStencilState;
 }

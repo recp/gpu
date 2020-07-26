@@ -42,7 +42,7 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUFunction            *fragFunc;
   GPUVertexDescriptor    *vert;
   GPUDepthStencil        *depthStencil;
-  GPUDepthStencilState   *depthState;
+  GPUDepthStencilState   *depthStencilState;
   GPUBuffer              *dynamicUniformBuffer;
   GPUCommandQueue        *commandQueue;
   GPUCommandBuffer       *cb;
@@ -86,6 +86,7 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   renderState          = gpuNewRenderState(device, pipeline);
   depthStencil         = gpuNewDepthStencil(GPUCompareFunctionLess, true);
+  depthStencilState    = gpuNewDepthStencilState(device, depthStencil);
 
   dynamicUniformBuffer = gpuNewBuffer(device, uniformBufferSize, GPUResourceStorageModeShared);
   commandQueue         = gpuNewCmdQue(device);
@@ -119,7 +120,7 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
     gpuFrontFace(rce, GPUWindingCounterClockwise);
     gpuCullMode(rce, GPUCullModeBack);
     gpuSetRenderPipelineState(rce, renderState);
-    gpuSetDepthStencil(rce, depthStencil);
+    gpuSetDepthStencil(rce, depthStencilState);
 
     gpuVertexBuffer(rce, dynamicUniformBuffer, _uniformBufferOffset, BufferIndexUniforms);
     gpuFragmentBuffer(rce, dynamicUniformBuffer, _uniformBufferOffset, BufferIndexUniforms);
