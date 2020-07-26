@@ -30,7 +30,7 @@ gpuNewBuffer(GPUDevice * __restrict device,
              GPUResourceOptions     options) {
   MtCommandBuffer *mcq;
 
-  mcq = mtBufferCreate(device->priv, len, (MtResourceOptions)options);
+  mcq = mtDeviceNewBufferWithLength(device->priv, len, (MtResourceOptions)options);
 
   return mcq;
 }
@@ -38,5 +38,5 @@ gpuNewBuffer(GPUDevice * __restrict device,
 GPU_EXPORT
 void
 gpuPresent(GPUCommandBuffer *cmdb, void *drawable) {
-  mtPresent(cmdb->priv, drawable);
+  mtCommandBufferPresentDrawable(cmdb->priv, drawable);
 }

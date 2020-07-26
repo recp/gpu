@@ -14,24 +14,10 @@
  * limitations under the License.
  */
 
-#include "../../../include/gpu/device.h"
-#include <cmt/cmt.h>
+#ifndef src_common_h
+#define src_common_h
 
-GPUDevice*
-// gpu_metal_newDevice(void) {
-gpuCreateSystemDefaultDevice(void) {
-  GPUDevice *device;
-  MtDevice  *mtDevice;
+#include <stdlib.h>
+#include <string.h>
 
-  mtDevice = mtCreateSystemDefaultDevice();
-  device   = calloc(1, sizeof(*device));
-
-  device->priv = mtDevice;
-
-  return device;
-}
-
-void
-gpu_device_release(GPUDevice * __restrict device) {
-  
-}
+#endif /* src_common_h */

@@ -61,7 +61,7 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
   _view.colorPixelFormat = MTLPixelFormatBGRA8Unorm_sRGB;
   _view.sampleCount = 1;
   
-  device   = gpuNewDevice();
+  device   = gpuCreateSystemDefaultDevice();
   pipeline = gpuNewPipeline(GPUPixelFormatBGRA8Unorm_sRGB);
   library  = gpuDefaultLibrary(device);
 
@@ -87,7 +87,6 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
   renderState          = gpuNewRenderState(device, pipeline);
   depthStencil         = gpuNewDepthStencil(GPUCompareFunctionLess, true);
 
-  depthState
   dynamicUniformBuffer = gpuNewBuffer(device, uniformBufferSize, GPUResourceStorageModeShared);
   commandQueue         = gpuNewCmdQue(device);
 

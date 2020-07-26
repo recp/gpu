@@ -39,7 +39,7 @@ gpuNewCmdQue(GPUDevice * __restrict device) {
   GPUCommandQueue *cq;
   MtCommandQueue  *mcq;
   
-  mcq      = mtCommandQueueCreate(device->priv);
+  mcq      = mtNewCommandQueue(device->priv);
   cq       = calloc(1, sizeof(*cq));
   cq->priv = mcq;
   
@@ -54,7 +54,7 @@ gpuNewCmdBuf(GPUCommandQueue  * __restrict cmdb,
   GPUCommandBuffer *cb;
   MtCommandBuffer  *mcb;
   
-  mcb      = mtCommandBufferCreate(cmdb->priv);
+  mcb      = mtNewCommandBuffer(cmdb->priv);
   cb       = calloc(1, sizeof(*cb));
   cb->priv = mcb;
   
@@ -80,7 +80,7 @@ gpuCmdBufOnComplete(GPUCommandBuffer * __restrict cmdb,
 GPU_EXPORT
 void
 gpuCommit(GPUCommandBuffer * __restrict cmdb) {
-  mtCommit(cmdb->priv);
+  mtCommandBufferCommit(cmdb->priv);
 }
 
 static

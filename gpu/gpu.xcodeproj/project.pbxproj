@@ -111,6 +111,9 @@
 		566EB49E23B35A52001F9041 /* depthstencil.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = depthstencil.c; sourceTree = "<group>"; };
 		567F88AA226A14A1005E046C /* renderer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = renderer.h; sourceTree = "<group>"; };
 		5681E2FB23AE13BD00476198 /* vertex.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = vertex.c; sourceTree = "<group>"; };
+		569A2A5A24CD6904000C567B /* common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = common.h; sourceTree = "<group>"; };
+		569A2A5B24CD6928000C567B /* common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = common.h; sourceTree = "<group>"; };
+		569A2A5C24CD6960000C567B /* common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = common.h; sourceTree = "<group>"; };
 		56A3E79123B91E54004DC63F /* pass.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = pass.c; sourceTree = "<group>"; };
 		56A3E79623B94515004DC63F /* cmd-enc.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "cmd-enc.h"; sourceTree = "<group>"; };
 		56A3E79723B945AA004DC63F /* rce.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rce.c; sourceTree = "<group>"; };
@@ -221,6 +224,7 @@
 			children = (
 				56A3E79923B94A83004DC63F /* shader */,
 				1E8A7685223D2B64001681FF /* backend */,
+				569A2A5A24CD6904000C567B /* common.h */,
 			);
 			path = src;
 			sourceTree = "<group>";
@@ -231,6 +235,7 @@
 				1E8A7687223D2B73001681FF /* metal */,
 				1E8A7686223D2B6C001681FF /* opengl */,
 				5665B2BB23714B510038371E /* directx */,
+				569A2A5B24CD6928000C567B /* common.h */,
 			);
 			path = backend;
 			sourceTree = "<group>";
@@ -242,6 +247,7 @@
 				1E8A7682223D2A06001681FF /* pipeline.c */,
 				56679A8A24A7C3B900CF656C /* device.h */,
 				56679A8B24A7C3B900CF656C /* device.c */,
+				569A2A5C24CD6960000C567B /* common.h */,
 			);
 			path = opengl;
 			sourceTree = "<group>";
@@ -382,7 +388,7 @@
 		1E8A763F223D29A9001681FF /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 1100;
+				LastUpgradeCheck = 1200;
 				ORGANIZATIONNAME = "Recep Aslantas";
 				TargetAttributes = {
 					1E8A7646223D29A9001681FF = {
@@ -542,6 +548,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
@@ -601,6 +608,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;

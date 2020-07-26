@@ -23,7 +23,7 @@
 GPU_EXPORT
 GPURenderCommandEncoder*
 gpuRenderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
-  return mtRenderCommandEncoder(cmdb->priv, pass);
+  return mtNewRenderCommandEncoder(cmdb->priv, pass);
 }
 
 GPU_EXPORT
@@ -117,5 +117,5 @@ gpuDrawIndexedPrims(GPURenderCommandEncoder *rce,
 GPU_EXPORT
 void
 gpuEndEncoding(GPURenderCommandEncoder *rce) {
-  mtEndEncoding(rce);
+  mtCommandEncoderEndEncoding(rce);
 }

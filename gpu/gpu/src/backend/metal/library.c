@@ -24,7 +24,7 @@ gpuDefaultLibrary(GPUDevice *device) {
   GPULibrary *library;
   MtLibrary  *mtLibrary;
 
-  mtLibrary = mtDefaultLibrary(device->priv);
+  mtLibrary = mtNewDefaultLibrary(device->priv);
   library   = calloc(1, sizeof(*library));
 
   library->priv = mtLibrary;
@@ -38,7 +38,7 @@ gpuNewFunction(GPULibrary *lib, const char *name) {
   GPUFunction *func;
   MtFunction  *mtFunc;
 
-  mtFunc = mtCreateFunc(lib->priv, name);
+  mtFunc = mtNewFunctionWithName(lib->priv, name);
   func   = calloc(1, sizeof(*func));
 
   func->priv = mtFunc;

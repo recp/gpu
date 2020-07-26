@@ -55,4 +55,9 @@ GPUDepthStencil*
 gpuNewDepthStencil(GPUCompareFunction depthCompareFunc,
                    bool               depthWriteEnabled);
 
+GPU_EXPORT
+GPUDepthStencilState*
+gpuNewDepthStencilState(GPUDevice       * __restrict device,
+                        GPUDepthStencil * __restrict depthStencil);
+
 #endif /* gpu_depthstencil_h */

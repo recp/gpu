@@ -26,9 +26,9 @@ GPUDepthStencil*
 gpuNewDepthStencil(GPUCompareFunction depthCompareFunc,
                    bool               depthWriteEnabled) {
   GPUDepthStencil *ds;
-  MtDepthStencil  *mds;
+  MtDepthStencilDescriptor *mds;
   
-  mds = mtDepthStencil((MtCompareFunction)depthCompareFunc, depthWriteEnabled);
+  mds = mtDepthStencilDesc((MtCompareFunction)depthCompareFunc, depthWriteEnabled);
   ds  = calloc(1, sizeof(*ds));
 
   ds->priv = mds;
@@ -40,13 +40,13 @@ GPU_EXPORT
 GPUDepthStencilState*
 gpuNewDepthStencilState(GPUDevice       * __restrict device,
                         GPUDepthStencil * __restrict depthStencil) {
-  GPURenderPipelineState *rederPipline;
-  MtRenderPipeline       *mtRederPipline;
+  GPUDepthStencilState *depthDtencilState;
+  MtRenderPipeline     *mtDepthStencilState;
   
-  mtRederPipline = mtRenderStateCreate(device->priv, depthStencil->priv);
-  rederPipline   = calloc(1, sizeof(*rederPipline));
+  mtDepthStencilState = mtNewDepthStencilState(device, depthStencil->priv);
+  depthDtencilState   = calloc(1, sizeof(*mtDepthStencilState));
   
-  rederPipline->priv = mtRederPipline;
+  depthDtencilState->priv = mtDepthStencilState;
   
-  return rederPipline;
+  return depthDtencilState;
 }

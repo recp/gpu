@@ -25,10 +25,10 @@
 GPU_EXPORT
 GPURenderPipeline*
 gpuNewPipeline(GPUPixelFormat pixelFormat) {
-  GPURenderPipeline  *pipeline;
-  MtRenderDesc *renderDesc;
-  
-  renderDesc = mtRenderPipelineCreate((MtPixelFormat)pixelFormat);
+  GPURenderPipeline *pipeline;
+  MtRenderDesc      *renderDesc;
+
+  renderDesc = mtNewRenderPipeline((MtPixelFormat)pixelFormat);
   pipeline   = calloc(1, sizeof(*pipeline));
   
   pipeline->priv = renderDesc;
@@ -43,7 +43,7 @@ gpuNewRenderState(GPUDevice         * __restrict device,
   GPURenderPipelineState *rederPipline;
   MtRenderPipeline       *mtRederPipline;
   
-  mtRederPipline = mtRenderStateCreate(device->priv, pipeline->priv);
+  mtRederPipline = mtNewRenderState(device->priv, pipeline->priv, NULL);
   rederPipline   = calloc(1, sizeof(*rederPipline));
   
   rederPipline->priv = mtRederPipline;

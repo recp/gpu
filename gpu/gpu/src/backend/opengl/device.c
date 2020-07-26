@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "common.h"
 #include "../../../include/gpu/device.h"
 #include "device.h"
 
