@@ -36,6 +36,18 @@ gpuNewBuffer(GPUDevice * __restrict device,
 }
 
 GPU_EXPORT
+size_t
+gpuBufferLength(GPUBuffer * __restrict buff) {
+  return mtBufferLength(buff);
+}
+
+GPU_EXPORT
+GPUBuffer*
+gpuBufferContents(GPUBuffer * __restrict buff) {
+  return mtBufferContents(buff);
+}
+
+GPU_EXPORT
 void
 gpuPresent(GPUCommandBuffer *cmdb, void *drawable) {
   mtCommandBufferPresentDrawable(cmdb->priv, drawable);

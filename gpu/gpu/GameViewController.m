@@ -48,8 +48,15 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUCommandBuffer       *cb;
   GPURenderPassDesc      *pass;
    
+  matrix_float4x4         _projectionMatrix;
+  float                   _rotation;
+  
+  id <MTLBuffer>          _dynamicUniformBuffer;
   uint32_t                _uniformBufferOffset;
   uint8_t                 _uniformBufferIndex;
+  void*                   _uniformBufferAddress;
+  
+  GPUTexture *_colorMap;
 }
 
 - (void)viewDidLoad {
@@ -90,11 +97,24 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   dynamicUniformBuffer = gpuNewBuffer(device, uniformBufferSize, GPUResourceStorageModeShared);
   commandQueue         = gpuNewCmdQue(device);
-
-
   
 //  renderer = gpu_renderer_mtkview((MTKView *)self.view);
 //   _view.device = MTLCreateSystemDefaultDevice();
+  
+  MTKTextureLoader* textureLoader = [[MTKTextureLoader alloc] initWithDevice: device->priv];
+
+  NSDictionary *textureLoaderOptions =
+   @{
+    MTKTextureLoaderOptionTextureUsage       : @(MTLTextureUsageShaderRead),
+    MTKTextureLoaderOptionTextureStorageMode : @(MTLStorageModePrivate)
+    };
+
+  NSError *error;
+  _colorMap = [textureLoader newTextureWithName: @"ColorMap"
+                                    scaleFactor: 1.0
+                                         bundle: nil
+                                        options: textureLoaderOptions
+                                          error: &error];
   
   _view.device = device->priv;
   if(!_view.device) {
@@ -105,12 +125,46 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
   
   _renderer = [[Renderer alloc] initWithMetalKitView:_view];
   [_renderer mtkView:_view drawableSizeWillChange:_view.bounds.size];
-  // _view.delegate = _renderer;
-  _view.delegate = self;
+  [self mtkView:_view drawableSizeWillChange:_view.bounds.size];
+   _view.delegate = _renderer;
+//  _view.delegate = self;
+}
+
+- (void)_updateDynamicBufferState {
+  /// Update the state of our uniform buffers before rendering
+  
+  _uniformBufferIndex   = (_uniformBufferIndex + 1) % kMaxBuffersInFlight;
+  _uniformBufferOffset  = kAlignedUniformsSize * _uniformBufferIndex;
+  _uniformBufferAddress = ((uint8_t*)gpuBufferContents(dynamicUniformBuffer)) + _uniformBufferOffset;
+}
+
+- (void)_updateGameState {
+  /// Update any game state before encoding renderint commands to our drawable
+  Uniforms * uniforms = (Uniforms*)_uniformBufferAddress;
+  
+  uniforms->projectionMatrix = _projectionMatrix;
+  
+  mat4 rot;
+  
+  glm_translate_make(rot, (vec3){0.0, 0.0, -8.0});
+  glm_rotate(rot, _rotation, (vec3){1, 1, 0});
+
+//  glm_rotate_atm(rot, (vec3){0.0, 0.0, -8.0}, _rotation, (vec3){1, 1, 0});
+  uniforms->modelViewMatrix = glm_mat4_applesimd(rot);
+
+//    vector_float3 rotationAxis = {1, 1, 0};
+//    matrix_float4x4 modelMatrix = matrix4x4_rotation(_rotation, rotationAxis);
+//    matrix_float4x4 viewMatrix = matrix4x4_translation(0.0, 0.0, -8.0);
+//
+//    uniforms->modelViewMatrix = matrix_multiply(viewMatrix, modelMatrix);
+    _rotation += .01;
 }
 
 - (void)drawInMTKView:(nonnull MTKView *)view {
   cb = gpuNewCmdBuf(commandQueue,  NULL, cmdOnComplete);
+  
+  [self _updateDynamicBufferState];
+  [self _updateGameState];
   
   if ((pass = gpuPassFromMTKView(view))) {
     GPURenderCommandEncoder *rce;
@@ -134,9 +188,11 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
                         (uint32_t)bufferIndex);
       }
     }
+    
+    gpuRCESetTexture(rce, _colorMap, TextureIndexColor);
 
-    //        [renderEncoder setFragmentTexture:_colorMap
-    //                                       atIndex:TextureIndexColor];
+//    [renderEncoder setFragmentTexture:_colorMap
+//                              atIndex:TextureIndexColor];
 
     for(MTKSubmesh *submesh in _renderer.mesh.submeshes) {
       gpuDrawIndexedPrims(rce,
@@ -163,7 +219,7 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
   
   glm_perspective(glm_rad(65.0f), aspect, 0.1f, 100.0f, proj);
   
-  [_renderer setProj: glm_mat4_applesimd(proj)];
+  _projectionMatrix = glm_mat4_applesimd(proj);
 }
 
 @end

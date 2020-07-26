@@ -207,7 +207,7 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
 {
     /// Per frame updates here
 
-    dispatch_semaphore_wait(_inFlightSemaphore, DISPATCH_TIME_FOREVER);
+//    dispatch_semaphore_wait(_inFlightSemaphore, DISPATCH_TIME_FOREVER);
 
     id <MTLCommandBuffer> commandBuffer = [_commandQueue commandBuffer];
     commandBuffer.label = @"MyCommand";
@@ -215,7 +215,7 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
     __block dispatch_semaphore_t block_sema = _inFlightSemaphore;
     [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> buffer)
      {
-         dispatch_semaphore_signal(block_sema);
+//         dispatch_semaphore_signal(block_sema);
      }];
 
     [self _updateDynamicBufferState];
@@ -271,7 +271,7 @@ static const size_t kAlignedUniformsSize = (sizeof(Uniforms) & ~0xFF) + 0x100;
                                indexBufferOffset:submesh.indexBuffer.offset];
         }
 
-        [renderEncoder popDebugGroup];
+//        [renderEncoder popDebugGroup];
 
         [renderEncoder endEncoding];
 

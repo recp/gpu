@@ -30,6 +30,14 @@ gpuNewBuffer(GPUDevice * __restrict device,
              GPUResourceOptions     options);
 
 GPU_EXPORT
+size_t
+gpuBufferLength(GPUBuffer * __restrict buff);
+
+GPU_EXPORT
+GPUBuffer*
+gpuBufferContents(GPUBuffer * __restrict buff);
+
+GPU_EXPORT
 void
 gpuPresent(GPUCommandBuffer *cmdb, void *drawable);
 

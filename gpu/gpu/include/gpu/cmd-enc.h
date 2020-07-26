@@ -23,6 +23,7 @@
 #include "depthstencil.h"
 #include "buffer.h"
 #include "stage-io.h"
+#include "texture.h"
 
 typedef struct GPURenderCommandEncoder GPURenderCommandEncoder;
 
@@ -119,6 +120,12 @@ gpuFragmentBuffer(GPURenderCommandEncoder *rce,
                   GPUBuffer               *buf,
                   size_t                   off,
                   uint32_t                 index);
+
+GPU_EXPORT
+void
+gpuRCESetTexture(GPURenderCommandEncoder *rce,
+                 GPUTexture               *tex,
+                 uint32_t                 index);
 
 GPU_EXPORT
 void

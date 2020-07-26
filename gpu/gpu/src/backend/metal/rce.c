@@ -92,6 +92,14 @@ gpuFragmentBuffer(GPURenderCommandEncoder *rce,
   mtFragmentBuffer(rce, buf, off, index);
 }
 
+GPU_EXPORT
+void
+gpuRCESetTexture(GPURenderCommandEncoder *rce,
+                 GPUTexture               *tex,
+                 uint32_t                 index) {
+  mtRenderCommandEncoderSetTextureAtIndex(rce, tex, index);
+}
+
 //GPU_EXPORT
 //void
 //gpuDraw(GPURenderCommandEncoder *rce, GPUDrawArgs *args) {

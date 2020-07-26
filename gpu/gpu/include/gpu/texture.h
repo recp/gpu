@@ -14,24 +14,9 @@
  * limitations under the License.
  */
 
-#ifndef gpu_h
-#define gpu_h
+#ifndef gpu_texture_h
+#define gpu_texture_h
 
-#include "common.h"
+typedef struct GPUTexture GPUTexture;
 
-#include "pixelformat.h"
-#include "device.h"
-#include "pipeline.h"
-#include "renderer.h"
-#include "library.h"
-#include "vertex.h"
-#include "depthstencil.h"
-#include "pass.h"
-#include "cmdqueue.h"
-#include "buffer.h"
-#include "resource.h"
-#include "cmd-enc.h"
-#include "stage-io.h"
-#include "texture.h"
-
-#endif /* gpu_h */
+#endif /* gpu_texture_h */

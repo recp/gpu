@@ -114,6 +114,7 @@
 		569A2A5A24CD6904000C567B /* common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = common.h; sourceTree = "<group>"; };
 		569A2A5B24CD6928000C567B /* common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = common.h; sourceTree = "<group>"; };
 		569A2A5C24CD6960000C567B /* common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = common.h; sourceTree = "<group>"; };
+		569A2A6024CDD06A000C567B /* texture.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = texture.h; sourceTree = "<group>"; };
 		56A3E79123B91E54004DC63F /* pass.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = pass.c; sourceTree = "<group>"; };
 		56A3E79623B94515004DC63F /* cmd-enc.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "cmd-enc.h"; sourceTree = "<group>"; };
 		56A3E79723B945AA004DC63F /* rce.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rce.c; sourceTree = "<group>"; };
@@ -279,6 +280,9 @@
 		1E8A7689223D2B81001681FF /* gpu */ = {
 			isa = PBXGroup;
 			children = (
+				569A2A5F24CDCC70000C567B /* gpgpu */,
+				569A2A5E24CDCC6A000C567B /* compute */,
+				569A2A5D24CDCC65000C567B /* render */,
 				1E8A768B223D2BAC001681FF /* gpu.h */,
 				1E8A768A223D2BA1001681FF /* common.h */,
 				1E8A76D4223D4FCE001681FF /* device.h */,
@@ -294,6 +298,7 @@
 				56DC238823B66FBC00814D23 /* resource.h */,
 				56A3E79623B94515004DC63F /* cmd-enc.h */,
 				560F29A12479D58D00A3DBD4 /* gpu-hardware.h */,
+				569A2A6024CDD06A000C567B /* texture.h */,
 			);
 			path = gpu;
 			sourceTree = "<group>";
@@ -316,6 +321,27 @@
 			children = (
 			);
 			path = directx;
+			sourceTree = "<group>";
+		};
+		569A2A5D24CDCC65000C567B /* render */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = render;
+			sourceTree = "<group>";
+		};
+		569A2A5E24CDCC6A000C567B /* compute */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = compute;
+			sourceTree = "<group>";
+		};
+		569A2A5F24CDCC70000C567B /* gpgpu */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = gpgpu;
 			sourceTree = "<group>";
 		};
 		56A3E79923B94A83004DC63F /* shader */ = {
