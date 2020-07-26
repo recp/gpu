@@ -10,6 +10,7 @@
 #import "Renderer.h"
 #include "include/gpu/gpu.h"
 #include <cglm/cglm.h>
+#include <cglm/struct.h>
 
 // Include header shared between C code here, which executes Metal API commands, and .metal files
 #import "ShaderTypes.h"
@@ -22,10 +23,10 @@ static const NSUInteger uniformBufferSize = kAlignedUniformsSize * kMaxBuffersIn
 
 @end
 
-
 void
 cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
-  
+  dispatch_semaphore_t block_sema = sender;
+  dispatch_semaphore_signal(block_sema);
 }
 
 @implementation GameViewController
@@ -48,25 +49,28 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUCommandBuffer       *cb;
   GPURenderPassDesc      *pass;
    
-  matrix_float4x4         _projectionMatrix;
+  dispatch_semaphore_t    _inFlightSemaphore;
   float                   _rotation;
-  
   id <MTLBuffer>          _dynamicUniformBuffer;
   uint32_t                _uniformBufferOffset;
   uint8_t                 _uniformBufferIndex;
   void*                   _uniformBufferAddress;
   
+  
+  Uniforms   *uniforms;
   GPUTexture *_colorMap;
 }
 
 - (void)viewDidLoad {
   [super viewDidLoad];
 
-  _view    = (MTKView *)self.view;
+  _view = (MTKView *)self.view;
 
   _view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
   _view.colorPixelFormat = MTLPixelFormatBGRA8Unorm_sRGB;
   _view.sampleCount = 1;
+  
+  _inFlightSemaphore = dispatch_semaphore_create(kMaxBuffersInFlight);
   
   device   = gpuCreateSystemDefaultDevice();
   pipeline = gpuNewPipeline(GPUPixelFormatBGRA8Unorm_sRGB);
@@ -136,32 +140,26 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
   _uniformBufferIndex   = (_uniformBufferIndex + 1) % kMaxBuffersInFlight;
   _uniformBufferOffset  = kAlignedUniformsSize * _uniformBufferIndex;
   _uniformBufferAddress = ((uint8_t*)gpuBufferContents(dynamicUniformBuffer)) + _uniformBufferOffset;
+  
+  uniforms = (Uniforms*)_uniformBufferAddress;
 }
 
 - (void)_updateGameState {
-  /// Update any game state before encoding renderint commands to our drawable
-  Uniforms * uniforms = (Uniforms*)_uniformBufferAddress;
-  
-  uniforms->projectionMatrix = _projectionMatrix;
-  
   mat4 rot;
   
   glm_translate_make(rot, (vec3){0.0, 0.0, -8.0});
   glm_rotate(rot, _rotation, (vec3){1, 1, 0});
-
-//  glm_rotate_atm(rot, (vec3){0.0, 0.0, -8.0}, _rotation, (vec3){1, 1, 0});
+  
   uniforms->modelViewMatrix = glm_mat4_applesimd(rot);
-
-//    vector_float3 rotationAxis = {1, 1, 0};
-//    matrix_float4x4 modelMatrix = matrix4x4_rotation(_rotation, rotationAxis);
-//    matrix_float4x4 viewMatrix = matrix4x4_translation(0.0, 0.0, -8.0);
-//
-//    uniforms->modelViewMatrix = matrix_multiply(viewMatrix, modelMatrix);
-    _rotation += .01;
+  
+  _rotation += .01;
 }
 
 - (void)drawInMTKView:(nonnull MTKView *)view {
-  cb = gpuNewCmdBuf(commandQueue,  NULL, cmdOnComplete);
+  dispatch_semaphore_wait(_inFlightSemaphore, DISPATCH_TIME_FOREVER);
+  
+  __block dispatch_semaphore_t block_sema = _inFlightSemaphore;
+  cb = gpuNewCmdBuf(commandQueue,  block_sema, cmdOnComplete);
   
   [self _updateDynamicBufferState];
   [self _updateGameState];
@@ -191,9 +189,6 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
     
     gpuRCESetTexture(rce, _colorMap, TextureIndexColor);
 
-//    [renderEncoder setFragmentTexture:_colorMap
-//                              atIndex:TextureIndexColor];
-
     for(MTKSubmesh *submesh in _renderer.mesh.submeshes) {
       gpuDrawIndexedPrims(rce,
                           (GPUPrimitiveType)submesh.primitiveType,
@@ -211,15 +206,18 @@ cmdOnComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (void)mtkView:(nonnull MTKView *)view drawableSizeWillChange:(CGSize)size {
-// [_renderer mtkView:_view drawableSizeWillChange:_view.bounds.size];
-  
-  float aspect = size.width / (float)size.height;
-  
   mat4 proj;
+
+  if (!uniforms)
+    return;
   
-  glm_perspective(glm_rad(65.0f), aspect, 0.1f, 100.0f, proj);
+  glm_perspective(glm_rad(65.0f),
+                  size.width / size.height,
+                  0.1f,
+                  100.0f,
+                  proj);
   
-  _projectionMatrix = glm_mat4_applesimd(proj);
+  uniforms->projectionMatrix = glm_mat4_applesimd(proj);
 }
 
 @end
