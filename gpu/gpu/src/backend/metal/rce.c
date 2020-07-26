@@ -46,7 +46,7 @@ gpuSetRenderPipelineState(GPURenderCommandEncoder *rce, GPURenderPipelineState *
 
 GPU_EXPORT
 void
-gpuSetDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencil *ds) {
+gpuSetDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilState *ds) {
   mtSetDepthStencil(rce, ds->priv);
 }
 
