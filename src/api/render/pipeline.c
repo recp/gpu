@@ -85,7 +85,7 @@ gpuStencilFormat(GPURenderPipeline * __restrict pipline,
 
   if (!(api = gpuActiveGPUApi()))
     return;
-  
+
   api->render.stencilFormat(pipline, pixelFormat);
 }
 

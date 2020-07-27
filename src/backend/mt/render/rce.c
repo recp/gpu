@@ -14,45 +14,41 @@
  * limitations under the License.
  */
 
-#include "../../../include/gpu/cmdqueue.h"
-#include "../../../include/gpu/cmd-enc.h"
-#include "../../../include/gpu/buffer.h"
-#include "../../../include/gpu/stage-io.h"
-#include <cmt/cmt.h>
+#include "rce.h"
 
 GPU_EXPORT
 GPURenderCommandEncoder*
-gpuRenderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
+mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   return mtNewRenderCommandEncoder(cmdb->priv, pass);
 }
 
 GPU_EXPORT
 void
-gpuFrontFace(GPURenderCommandEncoder *rce, GPUWinding winding) {
+mt_frontFace(GPURenderCommandEncoder *rce, GPUWinding winding) {
   mtFrontFace(rce, (MtWinding)winding);
 }
 
 GPU_EXPORT
 void
-gpuCullMode(GPURenderCommandEncoder *rce, GPUCullMode mode) {
+mt_cullMode(GPURenderCommandEncoder *rce, GPUCullMode mode) {
   mtCullMode(rce, (MtCullMode)mode);
 }
 
 GPU_EXPORT
 void
-gpuSetRenderPipelineState(GPURenderCommandEncoder *rce, GPURenderPipelineState *piplineState) {
+mt_setRenderPipelineState(GPURenderCommandEncoder *rce, GPURenderPipelineState *piplineState) {
   mtSetRenderState(rce, piplineState->priv);
 }
 
 GPU_EXPORT
 void
-gpuSetDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilState *ds) {
+mt_setDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilState *ds) {
   mtSetDepthStencil(rce, ds->priv);
 }
 
 GPU_EXPORT
 void
-gpuViewport(GPURenderCommandEncoder *enc, GPUViewport *viewport) {
+mt_viewport(GPURenderCommandEncoder *enc, GPUViewport *viewport) {
   MtViewport vp;
   
   vp.originX = viewport->originX;
@@ -67,7 +63,7 @@ gpuViewport(GPURenderCommandEncoder *enc, GPUViewport *viewport) {
 
 GPU_EXPORT
 void
-gpuVertexBytes(GPURenderCommandEncoder *enc,
+mt_vertexBytes(GPURenderCommandEncoder *enc,
                void                    *bytes,
                size_t                   legth,
                uint32_t                 atIndex) {
@@ -76,7 +72,7 @@ gpuVertexBytes(GPURenderCommandEncoder *enc,
 
 GPU_EXPORT
 void
-gpuVertexBuffer(GPURenderCommandEncoder *rce,
+mt_vertexBuffer(GPURenderCommandEncoder *rce,
                 GPUBuffer               *buf,
                 size_t                   off,
                 uint32_t                 index) {
@@ -85,7 +81,7 @@ gpuVertexBuffer(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
-gpuFragmentBuffer(GPURenderCommandEncoder *rce,
+mt_fragmentBuffer(GPURenderCommandEncoder *rce,
                   GPUBuffer               *buf,
                   size_t                   off,
                   uint32_t                 index) {
@@ -94,21 +90,15 @@ gpuFragmentBuffer(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
-gpuRCESetTexture(GPURenderCommandEncoder *rce,
-                 GPUTexture               *tex,
-                 uint32_t                 index) {
-  mtRenderCommandEncoderSetTextureAtIndex(rce, tex, index);
+mt_rceSetFragmentTexture(GPURenderCommandEncoder *rce,
+                         GPUTexture               *tex,
+                         uint32_t                 index) {
+  mtRenderCommandEncoderSetFragmentTextureAtIndex(rce, tex, index);
 }
-
-//GPU_EXPORT
-//void
-//gpuDraw(GPURenderCommandEncoder *rce, GPUDrawArgs *args) {
-// 
-//}
 
 GPU_EXPORT
 void
-gpuDrawIndexedPrims(GPURenderCommandEncoder *rce,
+mt_drawIndexedPrims(GPURenderCommandEncoder *rce,
                     GPUPrimitiveType         type,
                     uint32_t                 indexCount,
                     GPUIndexType             indexType,
@@ -124,6 +114,23 @@ gpuDrawIndexedPrims(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
-gpuEndEncoding(GPURenderCommandEncoder *rce) {
+mt_endEncoding(GPURenderCommandEncoder *rce) {
   mtCommandEncoderEndEncoding(rce);
+}
+
+GPU_HIDE
+void
+mt_initRCE(GPUApiRCE *api) {
+  api->renderCommandEncoder   = mt_renderCommandEncoder;
+  api->frontFace              = mt_frontFace;
+  api->cullMode               = mt_cullMode;
+  api->setRenderPipelineState = mt_setRenderPipelineState;
+  api->setDepthStencil        = mt_setDepthStencil;
+  api->viewport               = mt_viewport;
+  api->vertexBytes            = mt_vertexBytes;
+  api->vertexBuffer           = mt_vertexBuffer;
+  api->fragmentBuffer         = mt_fragmentBuffer;
+  api->setFragmentTexture     = mt_rceSetFragmentTexture;
+  api->drawIndexedPrims       = mt_drawIndexedPrims;
+  api->endEncoding            = mt_endEncoding;
 }

@@ -14,29 +14,13 @@
  * limitations under the License.
  */
 
-#ifndef gpu_gpudef_h
-#define gpu_gpudef_h
+#ifndef metal_render_rce_h
+#define metal_render_rce_h
 
 #include "../common.h"
-#include "../gpu.h"
-#include "device.h"
-#include "render-pipeline.h"
-#include "rce.h"
 
-typedef struct GPUApi {
-  GPUBackend   backend;
-  bool         initialized;
-  GPUApiDevice device;
-  GPUApiRender render;
-  GPUApiRCE    rce;
-} GPUApi;
-
-GPU_EXPORT
+GPU_HIDE
 void
-gpuRegisterCustomGPUApi(GPUApi * __restrict gpuApi);
+mt_initRCE(GPUApiRCE *api);
 
-GPU_EXPORT
-GPUApi*
-gpuActiveGPUApi(void);
-
-#endif /* gpu_gpudef_h */
+#endif /* metal_render_rce_h */
