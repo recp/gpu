@@ -18,7 +18,7 @@
 #include "../../include/gpu/gpu.h"
 #include "../../include/gpu/api/gpudef.h"
 
-#include "metal/api.h"
+#include "mt/api.h"
 
 typedef struct GPUApiList {
   struct GPUApiList *next;
