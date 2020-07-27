@@ -36,7 +36,11 @@ gpuNewPass(void);
 GPU_INLINE
 GPURenderPassDesc*
 gpuPassFromMTKView(MTKView * __restrict view) {
-  return (void *)view.currentRenderPassDescriptor;
+#if __has_feature(objc_arc)
+  return (__bridge void *)view.currentRenderPassDescriptor;
+#else
+  return view.currentRenderPassDescriptor;
+#endif
 }
 #endif
 #endif /* gpu_pass_h */
