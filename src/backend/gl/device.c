@@ -15,15 +15,21 @@
  */
 
 #include "common.h"
-#include "../../../include/gpu/device.h"
 #include "device.h"
+#include <cmt/cmt.h>
 
+GPU_HIDE
 GPUDevice*
-gpuOpenGLNewDevice(void) {
+gl_createSystemDefaultDevice(void) {
   GPUDevice *device;
-  
-  device       = calloc(1, sizeof(*device));
-  device->priv = NULL;
+
+  device = calloc(1, sizeof(*device));
 
   return device;
+}
+
+GPU_HIDE
+void
+gl_initDevice(GPUApiDevice *apiDevice) {
+  apiDevice->createSystemDefaultDevice = gl_createSystemDefaultDevice;
 }

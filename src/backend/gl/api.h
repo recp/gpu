@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
-#ifndef gl_device_h
-#define gl_device_h
+#ifndef opengl_api_h
+#define opengl_api_h
+
+#include "../common.h"
 
 GPU_HIDE
-void
-gl_initDevice(GPUApiDevice *apiDevice);
+GPUApi*
+backend_gl(void);
 
-#endif /* gl_device_h */
+#endif /* opengl_api_h */

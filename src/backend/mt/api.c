@@ -24,7 +24,7 @@ GPUApi mt = {
 
 GPU_HIDE
 GPUApi*
-metal(void) {
+backend_metal(void) {
   if (!mt.initialized) {
     mt_initDevice(&mt.device);
     mt.initialized = true;

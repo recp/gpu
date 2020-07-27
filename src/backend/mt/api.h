@@ -21,6 +21,6 @@
 
 GPU_HIDE
 GPUApi*
-metal(void);
+backend_metal(void);
 
 #endif /* metal_api_h */

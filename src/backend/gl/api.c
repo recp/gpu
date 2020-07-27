@@ -14,11 +14,20 @@
  * limitations under the License.
  */
 
-#ifndef gl_device_h
-#define gl_device_h
+#include "api.h"
+#include "device.h"
+
+GPUApi gl = {
+  .initialized = false,
+  .backend     = GPU_BACKEND_OPENGL,
+};
 
 GPU_HIDE
-void
-gl_initDevice(GPUApiDevice *apiDevice);
-
-#endif /* gl_device_h */
+GPUApi*
+backend_gl(void) {
+  if (!gl.initialized) {
+    gl_initDevice(&gl.device);
+    gl.initialized = true;
+  }
+  return &gl;
+}

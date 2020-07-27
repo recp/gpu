@@ -18,7 +18,11 @@
 #include "../../include/gpu/gpu.h"
 #include "../../include/gpu/api/gpudef.h"
 
-#include "mt/api.h"
+#ifdef __APPLE__
+#  include "mt/api.h"
+#endif
+
+#include "gl/api.h"
 
 typedef struct GPUApiList {
   struct GPUApiList *next;
@@ -42,14 +46,25 @@ gpuRegisterCustomGPUApi(GPUApi * __restrict gpuApi) {
 GPU_EXPORT
 void
 gpuSwitchGPUApi(GPUBackend backend) {
-  
+  switch (backend) {
+    case GPU_BACKEND_METAL:
+#ifdef __APPLE__
+      gpu__api = backend_metal();
+#endif
+      break;
+    case GPU_BACKEND_OPENGL:
+      gpu__api = backend_gl();
+      break;
+    default:
+      break;
+  }
 }
 
 GPU_EXPORT
 void
 gpuSwitchGPUApiAuto() {
 #ifdef __APPLE__
-  gpu__api = metal();
+  gpu__api = backend_metal();
 #endif
 }
 
