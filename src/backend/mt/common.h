@@ -18,5 +18,6 @@
 #define metal_common_h
 
 #include "../common.h"
+#include <cmt/cmt.h>
 
 #endif /* metal_common_h */

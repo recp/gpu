@@ -20,6 +20,7 @@ GPU_EXPORT
 GPUDevice*
 gpuCreateSystemDefaultDevice() {
   GPUApi *api;
+
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 

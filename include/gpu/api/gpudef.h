@@ -20,11 +20,13 @@
 #include "../common.h"
 #include "../gpu.h"
 #include "device.h"
+#include "render-pipeline.h"
 
 typedef struct GPUApi {
   GPUBackend   backend;
   bool         initialized;
   GPUApiDevice device;
+  GPUApiRender render;
 } GPUApi;
 
 GPU_EXPORT

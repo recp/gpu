@@ -46,14 +46,14 @@ gpuNewRenderState(GPUDevice   * __restrict device,
 GPU_EXPORT
 void
 gpuFunction(GPURenderPipeline * __restrict pipline,
-            GPUFunction * __restrict func,
-            GPUFunctionType          functype);
+            GPUFunction       * __restrict func,
+            GPUFunctionType                functype);
 
 GPU_EXPORT
 void
 gpuColorFormat(GPURenderPipeline * __restrict pipline,
-               uint32_t                 index,
-               GPUPixelFormat           pixelFormat);
+               uint32_t                       index,
+               GPUPixelFormat                 pixelFormat);
 
 GPU_EXPORT
 void

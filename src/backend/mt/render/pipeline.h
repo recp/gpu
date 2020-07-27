@@ -14,33 +14,13 @@
  * limitations under the License.
  */
 
-#ifndef gpu_pass_h
-#define gpu_pass_h
+#ifndef metal_render_pipeline_h
+#define metal_render_pipeline_h
 
-#include "common.h"
+#include "../common.h"
 
-#define gpu_pass_begin() /* */
-#define gpu_pass_finish() /* */
+GPU_HIDE
+void
+mt_initRenderPipeline(GPUApiRender *api);
 
-#define gpu_begin() /* */
-#define gpu_finish() /* */
-
-typedef struct GPURenderPassDesc GPURenderPassDesc;
-
-GPU_EXPORT
-GPURenderPassDesc*
-gpuNewPass(void);
-
-#if defined(__APPLE__) && defined(__OBJC__)
-@class MTKView;
-GPU_INLINE
-GPURenderPassDesc*
-gpuPassFromMTKView(MTKView * __restrict view) {
-#if __has_feature(objc_arc)
-  return (__bridge void *)view.currentRenderPassDescriptor;
-#else
-  return (void *)view.currentRenderPassDescriptor;
-#endif
-}
-#endif
-#endif /* gpu_pass_h */
+#endif /* metal_render_pipeline_h */

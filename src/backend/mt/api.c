@@ -16,6 +16,7 @@
 
 #include "api.h"
 #include "device.h"
+#include "render/pipeline.h"
 
 GPUApi mt = {
   .initialized = false,
@@ -27,6 +28,8 @@ GPUApi*
 backend_metal(void) {
   if (!mt.initialized) {
     mt_initDevice(&mt.device);
+    mt_initRenderPipeline(&mt.render);
+
     mt.initialized = true;
   }
   return &mt;

@@ -17,6 +17,8 @@
 #ifndef metal_device_h
 #define metal_device_h
 
+#include "common.h"
+
 GPU_HIDE
 void
 mt_initDevice(GPUApiDevice *apiDevice);

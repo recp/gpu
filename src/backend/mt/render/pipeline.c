@@ -14,17 +14,11 @@
  * limitations under the License.
  */
 
-#include "../../../include/gpu/device.h"
-#include "../../../include/gpu/pipeline.h"
-#include "../../../include/gpu/pixelformat.h"
-#include "../../../include/gpu/library.h"
-#include "../../../include/gpu/gpu.h"
-#include <stdio.h>
-#include <cmt/cmt.h>
+#include "pipeline.h"
 
-GPU_EXPORT
+GPU_HIDE
 GPURenderPipeline*
-gpuNewPipeline(GPUPixelFormat pixelFormat) {
+mt_newPipeline(GPUPixelFormat pixelFormat) {
   GPURenderPipeline *pipeline;
   MtRenderDesc      *renderDesc;
 
@@ -36,9 +30,9 @@ gpuNewPipeline(GPUPixelFormat pixelFormat) {
   return pipeline;
 }
 
-GPU_EXPORT
+GPU_HIDE
 GPURenderPipelineState*
-gpuNewRenderState(GPUDevice         * __restrict device,
+mt_newRenderState(GPUDevice         * __restrict device,
                   GPURenderPipeline * __restrict pipeline) {
   GPURenderPipelineState *rederPipline;
   MtRenderPipeline       *mtRederPipline;
@@ -51,39 +45,51 @@ gpuNewRenderState(GPUDevice         * __restrict device,
   return rederPipline;
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
-gpuFunction(GPURenderPipeline    * __restrict pipline,
-            GPUFunction    * __restrict func,
-            GPUFunctionType             functype) {
+mt_setFunction(GPURenderPipeline    * __restrict pipline,
+               GPUFunction    * __restrict func,
+               GPUFunctionType             functype) {
   mtSetFunc(pipline->priv, func->priv, (MtFuncType)functype);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
-gpuColorFormat(GPURenderPipeline * __restrict pipline,
+mt_colorFormat(GPURenderPipeline * __restrict pipline,
                uint32_t                 index,
                GPUPixelFormat           pixelFormat) {
   mtColorPixelFormat(pipline->priv, index, (MtPixelFormat)pixelFormat);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
-gpuDepthFormat(GPURenderPipeline * __restrict pipline,
+mt_depthFormat(GPURenderPipeline * __restrict pipline,
                GPUPixelFormat           pixelFormat) {
   mtDepthPixelFormat(pipline->priv, (MtPixelFormat)pixelFormat);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
-gpuStencilFormat(GPURenderPipeline * __restrict pipline,
+mt_stencilFormat(GPURenderPipeline * __restrict pipline,
                  GPUPixelFormat           pixelFormat) {
   mtStencilPixelFormat(pipline->priv, (MtPixelFormat)pixelFormat);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
-gpuSampleCount(GPURenderPipeline * __restrict pipline,
+mt_sampleCount(GPURenderPipeline * __restrict pipline,
                uint32_t                 sampleCount) {
   mtSampleCount(pipline->priv, sampleCount);
+}
+
+GPU_HIDE
+void
+mt_initRenderPipeline(GPUApiRender *api) {
+  api->newPipeline    = mt_newPipeline;
+  api->newRenderState = mt_newRenderState;
+  api->setFunction    = mt_setFunction;
+  api->colorFormat    = mt_colorFormat;
+  api->depthFormat    = mt_depthFormat;
+  api->stencilFormat  = mt_stencilFormat;
+  api->sampleCount    = mt_sampleCount;
 }
