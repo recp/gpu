@@ -14,10 +14,14 @@
  * limitations under the License.
  */
 
-#ifndef backend_common_h
-#define backend_common_h
-
 #include "../common.h"
-#include "../../include/gpu/api/gpudef.h"
 
-#endif /* backend_common_h */
+GPU_EXPORT
+GPUDevice*
+gpuCreateSystemDefaultDevice() {
+  GPUApi *api;
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
+
+  return api->device.createSystemDefaultDevice();
+}

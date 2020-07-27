@@ -14,10 +14,25 @@
  * limitations under the License.
  */
 
-#ifndef backend_common_h
-#define backend_common_h
+#ifndef gpu_gpudef_h
+#define gpu_gpudef_h
 
 #include "../common.h"
-#include "../../include/gpu/api/gpudef.h"
+#include "../gpu.h"
+#include "device.h"
 
-#endif /* backend_common_h */
+typedef struct GPUApi {
+  GPUBackend   backend;
+  bool         initialized;
+  GPUApiDevice device;
+} GPUApi;
+
+GPU_EXPORT
+void
+gpuRegisterCustomGPUApi(GPUApi * __restrict gpuApi);
+
+GPU_EXPORT
+GPUApi*
+gpuActiveGPUApi(void);
+
+#endif /* gpu_gpudef_h */

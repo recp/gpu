@@ -14,10 +14,14 @@
  * limitations under the License.
  */
 
-#ifndef backend_common_h
-#define backend_common_h
+#ifndef gpu_gpudef_device_h
+#define gpu_gpudef_device_h
 
 #include "../common.h"
-#include "../../include/gpu/api/gpudef.h"
+#include "../gpu.h"
 
-#endif /* backend_common_h */
+typedef struct GPUApiDevice {
+  GPUDevice* (*createSystemDefaultDevice)(void);
+} GPUApiDevice;
+
+#endif /* gpu_gpudef_device_h */

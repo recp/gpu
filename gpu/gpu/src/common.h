@@ -17,7 +17,20 @@
 #ifndef src_common_h
 #define src_common_h
 
+#ifdef __GNUC__
+#  define GPU_DESTRUCTOR  __attribute__((destructor))
+#  define GPU_CONSTRUCTOR __attribute__((constructor))
+#else
+#  define GPU_DESTRUCTOR
+#  define GPU_CONSTRUCTOR
+#endif
+
+#define GPU__UNUSED(X) (void)X
+
 #include <stdlib.h>
 #include <string.h>
+
+#include "../include/gpu/gpu.h"
+#include "../include/gpu/api/gpudef.h"
 
 #endif /* src_common_h */

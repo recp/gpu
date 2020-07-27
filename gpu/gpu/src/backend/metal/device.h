@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-#ifndef backend_common_h
-#define backend_common_h
+#ifndef metal_device_h
+#define metal_device_h
 
-#include "../common.h"
-#include "../../include/gpu/api/gpudef.h"
+GPU_HIDE
+void
+mt_initDevice(GPUApiDevice *apiDevice);
 
-#endif /* backend_common_h */
+#endif /* metal_device_h */

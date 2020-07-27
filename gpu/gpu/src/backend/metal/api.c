@@ -14,10 +14,20 @@
  * limitations under the License.
  */
 
-#ifndef backend_common_h
-#define backend_common_h
+#include "api.h"
+#include "device.h"
 
-#include "../common.h"
-#include "../../include/gpu/api/gpudef.h"
+GPUApi mt = {
+  .initialized = false,
+  .backend     = GPU_BACKEND_METAL,
+};
 
-#endif /* backend_common_h */
+GPU_HIDE
+GPUApi*
+metal(void) {
+  if (!mt.initialized) {
+    mt_initDevice(&mt.device);
+    mt.initialized = true;
+  }
+  return &mt;
+}

@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-#include "../../../include/gpu/device.h"
+#include "common.h"
+#include "device.h"
 #include <cmt/cmt.h>
 
+GPU_HIDE
 GPUDevice*
-// gpu_metal_newDevice(void) {
-gpuCreateSystemDefaultDevice(void) {
+mt_createSystemDefaultDevice(void) {
   GPUDevice *device;
   MtDevice  *mtDevice;
 
@@ -31,7 +32,8 @@ gpuCreateSystemDefaultDevice(void) {
   return device;
 }
 
+GPU_HIDE
 void
-gpu_device_release(GPUDevice * __restrict device) {
-  
+mt_initDevice(GPUApiDevice *apiDevice) {
+  apiDevice->createSystemDefaultDevice = mt_createSystemDefaultDevice;
 }

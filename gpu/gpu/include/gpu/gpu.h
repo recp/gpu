@@ -34,4 +34,24 @@
 #include "stage-io.h"
 #include "texture.h"
 
+typedef enum GPUBackend {
+  GPU_BACKEND_NULL    = 0,
+  GPU_BACKEND_METAL   = 1,
+  GPU_BACKEND_VULKAN  = 2,
+  GPU_BACKEND_DIRECTX = 3,
+  GPU_BACKEND_OPENGL  = 4
+} GPUBackend;
+
+GPU_EXPORT
+void
+gpuSwitchGPUApi(GPUBackend backend);
+
+GPU_EXPORT
+void
+gpuSwitchGPUApiAuto(void);
+
+GPU_EXPORT
+GPUBackend
+gpuActiveGPUBackend(void);
+
 #endif /* gpu_h */

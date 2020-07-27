@@ -14,10 +14,16 @@
  * limitations under the License.
  */
 
-#ifndef backend_common_h
-#define backend_common_h
+#include "common.h"
 
-#include "../common.h"
-#include "../../include/gpu/api/gpudef.h"
+void
+GPU_CONSTRUCTOR
+gpu__init(void) {
+  gpuSwitchGPUApiAuto();
+}
 
-#endif /* backend_common_h */
+void
+GPU_DESTRUCTOR
+gpu__cleanup(void) {
+  
+}
