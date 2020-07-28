@@ -18,11 +18,7 @@
 #include "../../include/gpu/gpu.h"
 #include "../../include/gpu/api/gpudef.h"
 
-#ifdef __APPLE__
-#  include "mt/api.h"
-#endif
-
-#include "gl/api.h"
+#include "backends.h"
 
 typedef struct GPUApiList {
   struct GPUApiList *next;

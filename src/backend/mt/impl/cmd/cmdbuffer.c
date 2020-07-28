@@ -14,13 +14,17 @@
  * limitations under the License.
  */
 
-#ifndef metal_api_h
-#define metal_api_h
+#include "../../common.h"
 
-#include "../common.h"
+GPU_EXPORT
+void
+gpuPresent(GPUCommandBuffer *cmdb, void *drawable) {
+  mtCommandBufferPresentDrawable(cmdb->priv, drawable);
+}
 
 GPU_HIDE
-GPUApi*
-backend_metal(void);
+void
+mt_initCmdBuff(GPUApiDevice *apiDevice) {
 
-#endif /* metal_api_h */
+//  apiDevice->createSystemDefaultDevice = mt_createSystemDefaultDevice;
+}

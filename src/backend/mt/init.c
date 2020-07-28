@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include "api.h"
-#include "apis.h"
+#include "common.h"
+#include "impl.h"
 
 GPUApi mt = {
   .initialized = false,

@@ -14,16 +14,19 @@
  * limitations under the License.
  */
 
-#include "../common.h"
+#ifndef backend_backends_h
+#define backend_backends_h
 
-GPU_EXPORT
-void
-gpuPresent(GPUCommandBuffer *cmdb, void *drawable) {
-  mtCommandBufferPresentDrawable(cmdb->priv, drawable);
-}
+#include "common.h"
+
+#ifdef __APPLE__
+GPU_HIDE
+GPUApi*
+backend_metal(void);
+#endif
 
 GPU_HIDE
-void
-mt_initCmdBuff(GPUApiDevice *apiDevice) {
-  apiDevice->createSystemDefaultDevice = mt_createSystemDefaultDevice;
-}
+GPUApi*
+backend_gl(void);
+
+#endif /* backend_backends_h */
