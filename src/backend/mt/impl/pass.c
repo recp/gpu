@@ -16,8 +16,14 @@
 
 #include "../common.h"
 
-GPU_EXPORT
+GPU_HIDE
 GPURenderPassDesc*
-gpuNewPass() {
+mt_newPass() {
   return mtNewPass();
+}
+
+GPU_HIDE
+void
+mt_initPass(GPUApiPass *api) {
+  api->newPass = mt_newPass;
 }

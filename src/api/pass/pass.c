@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-#ifndef mt_apis_h
-#define mt_apis_h
+#include "../../common.h"
 
-GPU_HIDE void mt_initDevice(GPUApiDevice *apiDevice);
-GPU_HIDE void mt_initRenderPipeline(GPUApiRender *api);
-GPU_HIDE void mt_initRCE(GPUApiRCE *api);
-GPU_HIDE void mt_initCmdBuff(GPUApiCommandBuffer *api);
-GPU_HIDE void mt_initCmdQue(GPUApiCommandQueue *api);
-GPU_HIDE void mt_initBuff(GPUApiBuffer *api);
-GPU_HIDE void mt_initPass(GPUApiPass *api);
+GPU_EXPORT
+GPURenderPassDesc*
+gpuNewPass() {
+  GPUApi *api;
 
-#endif /* mt_apis_h */
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
+
+  return api->pass.newPass();
+}

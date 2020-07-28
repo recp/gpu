@@ -14,37 +14,14 @@
  * limitations under the License.
  */
 
-#ifndef gpu_gpudef_h
-#define gpu_gpudef_h
+#ifndef gpu_gpudef_pass_h
+#define gpu_gpudef_pass_h
 
 #include "../common.h"
 #include "../gpu.h"
-#include "device.h"
-#include "render-pipeline.h"
-#include "rce.h"
-#include "buffer.h"
-#include "commandbuffer.h"
-#include "commandqueue.h"
-#include "pass.h"
 
-typedef struct GPUApi {
-  GPUBackend          backend;
-  bool                initialized;
-  GPUApiDevice        device;
-  GPUApiRender        render;
-  GPUApiRCE           rce;
-  GPUApiBuffer        buf;
-  GPUApiCommandBuffer cmdbuf;
-  GPUApiCommandQueue  cmdque;
-  GPUApiPass          pass;
-} GPUApi;
+typedef struct GPUApiPass {
+  GPURenderPassDesc* (*newPass)(void);
+} GPUApiPass;
 
-GPU_EXPORT
-void
-gpuRegisterCustomGPUApi(GPUApi * __restrict gpuApi);
-
-GPU_EXPORT
-GPUApi*
-gpuActiveGPUApi(void);
-
-#endif /* gpu_gpudef_h */
+#endif /* gpu_gpudef_pass_h */
