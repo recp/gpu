@@ -16,34 +16,37 @@
 
 #include "../common.h"
 
-GPU_HIDE
+GPU_EXPORT
 GPUBuffer*
-mt_newBuffer(GPUDevice * __restrict device,
+gpuNewBuffer(GPUDevice * __restrict device,
              size_t                 len,
              GPUResourceOptions     options) {
-  MtCommandBuffer *mcq;
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
   
-  mcq = mtDeviceNewBufferWithLength(device->priv, len, (MtResourceOptions)options);
-  
-  return mcq;
+  return api->buf.newBuffer(device, len, options);
 }
 
-GPU_HIDE
+GPU_EXPORT
 size_t
-mt_bufferLength(GPUBuffer * __restrict buff) {
-  return mtBufferLength(buff);
+gpuBufferLength(GPUBuffer * __restrict buff) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return 0;
+  
+  return api->buf.length(buff);
 }
 
-GPU_HIDE
+GPU_EXPORT
 GPUBuffer*
-mt_bufferContents(GPUBuffer * __restrict buff) {
-  return mtBufferContents(buff);
-}
+gpuBufferContents(GPUBuffer * __restrict buff) {
+  GPUApi *api;
 
-GPU_HIDE
-void
-mt_initBuff(GPUApiBuffer *api) {
-  api->newBuffer = mt_newBuffer;
-  api->length    = mt_bufferLength;
-  api->contents  = mt_bufferContents;
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
+  
+  return api->buf.contents(buff);
 }

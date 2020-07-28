@@ -16,37 +16,37 @@
 
 #include "../../common.h"
 
-GPU_EXPORT
+GPU_HIDE
 GPURenderCommandEncoder*
 mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   return mtNewRenderCommandEncoder(cmdb->priv, pass);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
 mt_frontFace(GPURenderCommandEncoder *rce, GPUWinding winding) {
   mtFrontFace(rce, (MtWinding)winding);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
 mt_cullMode(GPURenderCommandEncoder *rce, GPUCullMode mode) {
   mtCullMode(rce, (MtCullMode)mode);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
 mt_setRenderPipelineState(GPURenderCommandEncoder *rce, GPURenderPipelineState *piplineState) {
   mtSetRenderState(rce, piplineState->priv);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
 mt_setDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilState *ds) {
   mtSetDepthStencil(rce, ds->priv);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
 mt_viewport(GPURenderCommandEncoder *enc, GPUViewport *viewport) {
   MtViewport vp;
@@ -61,7 +61,7 @@ mt_viewport(GPURenderCommandEncoder *enc, GPUViewport *viewport) {
   mtViewport(enc, &vp);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
 mt_vertexBytes(GPURenderCommandEncoder *enc,
                void                    *bytes,
@@ -70,7 +70,7 @@ mt_vertexBytes(GPURenderCommandEncoder *enc,
   mtVertexBytes(enc, bytes, legth, atIndex);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
 mt_vertexBuffer(GPURenderCommandEncoder *rce,
                 GPUBuffer               *buf,
@@ -79,7 +79,7 @@ mt_vertexBuffer(GPURenderCommandEncoder *rce,
   mtVertexBuffer(rce, buf, off, index);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
 mt_fragmentBuffer(GPURenderCommandEncoder *rce,
                   GPUBuffer               *buf,
@@ -88,7 +88,7 @@ mt_fragmentBuffer(GPURenderCommandEncoder *rce,
   mtFragmentBuffer(rce, buf, off, index);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
 mt_rceSetFragmentTexture(GPURenderCommandEncoder *rce,
                          GPUTexture               *tex,
@@ -96,7 +96,7 @@ mt_rceSetFragmentTexture(GPURenderCommandEncoder *rce,
   mtRenderCommandEncoderSetFragmentTextureAtIndex(rce, tex, index);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
 mt_drawIndexedPrims(GPURenderCommandEncoder *rce,
                     GPUPrimitiveType         type,
@@ -112,7 +112,7 @@ mt_drawIndexedPrims(GPURenderCommandEncoder *rce,
                      indexBufferOffset);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
 mt_endEncoding(GPURenderCommandEncoder *rce) {
   mtCommandEncoderEndEncoding(rce);

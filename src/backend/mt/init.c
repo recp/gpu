@@ -31,6 +31,7 @@ backend_metal(void) {
     mt_initRCE(&mt.rce);
     mt_initCmdBuff(&mt.cmdbuf);
     mt_initCmdQue(&mt.cmdque);
+    mt_initBuff(&mt.buf);
     
     mt.initialized = true;
   }

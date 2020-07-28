@@ -16,7 +16,7 @@
 
 #include "../../common.h"
 
-GPU_EXPORT
+GPU_HIDE
 void
 mt_cmdBufDrawable(GPUCommandBuffer *cmdb, void *drawable) {
   mtCommandBufferPresentDrawable(cmdb->priv, drawable);
