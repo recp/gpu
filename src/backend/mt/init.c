@@ -29,6 +29,7 @@ backend_metal(void) {
     mt_initDevice(&mt.device);
     mt_initRenderPipeline(&mt.render);
     mt_initRCE(&mt.rce);
+    mt_initCmdBuff(&mt.cmdbuff);
     mt.initialized = true;
   }
   return &mt;

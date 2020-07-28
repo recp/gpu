@@ -19,12 +19,10 @@
 GPU_EXPORT
 void
 gpuPresent(GPUCommandBuffer *cmdb, void *drawable) {
-  mtCommandBufferPresentDrawable(cmdb->priv, drawable);
-}
+  GPUApi *api;
 
-GPU_HIDE
-void
-mt_initCmdBuff(GPUApiDevice *apiDevice) {
+  if (!(api = gpuActiveGPUApi()))
+    return;
 
-//  apiDevice->createSystemDefaultDevice = mt_createSystemDefaultDevice;
+  return api->cmdbuff.presentDrawable(cmdb, drawable);
 }

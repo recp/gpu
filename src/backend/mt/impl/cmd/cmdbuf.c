@@ -14,12 +14,16 @@
  * limitations under the License.
  */
 
-#ifndef mt_apis_h
-#define mt_apis_h
+#include "../../common.h"
 
-GPU_HIDE void mt_initDevice(GPUApiDevice *apiDevice);
-GPU_HIDE void mt_initRenderPipeline(GPUApiRender *api);
-GPU_HIDE void mt_initRCE(GPUApiRCE *api);
-GPU_HIDE void mt_initCmdBuff(GPUApiCommandBuffer *api);
+GPU_EXPORT
+void
+mt_cmdBufDrawable(GPUCommandBuffer *cmdb, void *drawable) {
+  mtCommandBufferPresentDrawable(cmdb->priv, drawable);
+}
 
-#endif /* mt_apis_h */
+GPU_HIDE
+void
+mt_initCmdBuff(GPUApiCommandBuffer *api) {
+  api->presentDrawable = mt_cmdBufDrawable;
+}
