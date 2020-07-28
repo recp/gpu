@@ -22,7 +22,6 @@
 #include "pixelformat.h"
 #include "device.h"
 #include "pipeline.h"
-#include "renderer.h"
 #include "library.h"
 #include "vertex.h"
 #include "depthstencil.h"
