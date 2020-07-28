@@ -14,26 +14,14 @@
  * limitations under the License.
  */
 
-#include "common.h"
-#include "device.h"
-#include <cmt/cmt.h>
+#ifndef gpu_gpudef_cmdbuff_h
+#define gpu_gpudef_cmdbuff_h
 
-GPU_HIDE
-GPUDevice*
-mt_createSystemDefaultDevice(void) {
-  GPUDevice *device;
-  MtDevice  *mtDevice;
+#include "../common.h"
+#include "../gpu.h"
 
-  mtDevice = mtCreateSystemDefaultDevice();
-  device   = calloc(1, sizeof(*device));
+typedef struct GPUApiCommandBuffer {
+  void (*presentDrawable)(GPUCommandBuffer *cmdb, void *drawable);
+} GPUApiCommandBuffer;
 
-  device->priv = mtDevice;
-
-  return device;
-}
-
-GPU_HIDE
-void
-mt_initDevice(GPUApiDevice *apiDevice) {
-  apiDevice->createSystemDefaultDevice = mt_createSystemDefaultDevice;
-}
+#endif /* gpu_gpudef_cmdbuff_h */

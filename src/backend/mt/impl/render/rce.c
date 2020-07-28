@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "rce.h"
+#include "../common.h"
 
 GPU_EXPORT
 GPURenderCommandEncoder*

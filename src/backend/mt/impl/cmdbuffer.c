@@ -14,33 +14,16 @@
  * limitations under the License.
  */
 
-#ifndef gpu_gpudef_h
-#define gpu_gpudef_h
-
 #include "../common.h"
-#include "../gpu.h"
-#include "device.h"
-#include "render-pipeline.h"
-#include "rce.h"
-#include "buffer.h"
-#include "commandbuffer.h"
-
-typedef struct GPUApi {
-  GPUBackend          backend;
-  bool                initialized;
-  GPUApiDevice        device;
-  GPUApiRender        render;
-  GPUApiRCE           rce;
-  GPUApiBuffer        buff;
-  GPUApiCommandBuffer cmdbuff;
-} GPUApi;
 
 GPU_EXPORT
 void
-gpuRegisterCustomGPUApi(GPUApi * __restrict gpuApi);
+gpuPresent(GPUCommandBuffer *cmdb, void *drawable) {
+  mtCommandBufferPresentDrawable(cmdb->priv, drawable);
+}
 
-GPU_EXPORT
-GPUApi*
-gpuActiveGPUApi(void);
-
-#endif /* gpu_gpudef_h */
+GPU_HIDE
+void
+mt_initCmdBuff(GPUApiDevice *apiDevice) {
+  apiDevice->createSystemDefaultDevice = mt_createSystemDefaultDevice;
+}

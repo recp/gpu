@@ -14,13 +14,10 @@
  * limitations under the License.
  */
 
-#ifndef metal_device_h
-#define metal_device_h
+#include "../common.h"
 
-#include "common.h"
-
-GPU_HIDE
-void
-mt_initDevice(GPUApiDevice *apiDevice);
-
-#endif /* metal_device_h */
+GPU_EXPORT
+GPURenderPassDesc*
+gpuNewPass() {
+  return mtNewPass();
+}

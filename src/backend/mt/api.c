@@ -15,9 +15,7 @@
  */
 
 #include "api.h"
-#include "device.h"
-#include "render/pipeline.h"
-#include "render/rce.h"
+#include "apis.h"
 
 GPUApi mt = {
   .initialized = false,

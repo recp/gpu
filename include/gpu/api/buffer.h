@@ -14,11 +14,22 @@
  * limitations under the License.
  */
 
-#include "../../../include/gpu/pass.h"
-#include <cmt/cmt.h>
+#ifndef gpu_gpudef_buff_h
+#define gpu_gpudef_buff_h
 
-GPU_EXPORT
-GPURenderPassDesc*
-gpuNewPass() {
-  return mtNewPass();
-}
+#include "../common.h"
+#include "../gpu.h"
+
+typedef struct GPUApiBuffer {
+  GPUBuffer*
+  (*newBuffer)(GPUDevice * __restrict device,
+               size_t                 len,
+               GPUResourceOptions     options);
+  size_t
+  (*length)(GPUBuffer * __restrict buff);
+  
+  GPUBuffer*
+  (*contents)(GPUBuffer * __restrict buff);
+} GPUApiBuffer;
+
+#endif /* gpu_gpudef_buff_h */

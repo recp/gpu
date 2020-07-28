@@ -14,14 +14,7 @@
  * limitations under the License.
  */
 
-#include "../../../include/gpu/device.h"
-#include "../../../include/gpu/library.h"
-#include "../../../include/gpu/vertex.h"
-#include "../../../include/gpu/pipeline.h"
-#include "../../../include/gpu/depthstencil.h"
-#include "../../../include/gpu/buffer.h"
-#include "../../../include/gpu/cmdqueue.h"
-#include <cmt/cmt.h>
+#include "../common.h"
 
 GPU_EXPORT
 GPUBuffer*
@@ -45,10 +38,4 @@ GPU_EXPORT
 GPUBuffer*
 gpuBufferContents(GPUBuffer * __restrict buff) {
   return mtBufferContents(buff);
-}
-
-GPU_EXPORT
-void
-gpuPresent(GPUCommandBuffer *cmdb, void *drawable) {
-  mtCommandBufferPresentDrawable(cmdb->priv, drawable);
 }

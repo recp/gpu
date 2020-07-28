@@ -14,13 +14,32 @@
  * limitations under the License.
  */
 
-#ifndef metal_render_pipeline_h
-#define metal_render_pipeline_h
-
 #include "../common.h"
 
-GPU_HIDE
-void
-mt_initRenderPipeline(GPUApiRender *api);
+GPU_EXPORT
+GPULibrary*
+gpuDefaultLibrary(GPUDevice *device) {
+  GPULibrary *library;
+  MtLibrary  *mtLibrary;
 
-#endif /* metal_render_pipeline_h */
+  mtLibrary = mtNewDefaultLibrary(device->priv);
+  library   = calloc(1, sizeof(*library));
+
+  library->priv = mtLibrary;
+
+  return library;
+}
+
+GPU_EXPORT
+GPUFunction*
+gpuNewFunction(GPULibrary *lib, const char *name) {
+  GPUFunction *func;
+  MtFunction  *mtFunc;
+
+  mtFunc = mtNewFunctionWithName(lib->priv, name);
+  func   = calloc(1, sizeof(*func));
+
+  func->priv = mtFunc;
+
+  return func;
+}

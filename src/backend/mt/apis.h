@@ -14,34 +14,19 @@
  * limitations under the License.
  */
 
-#include "../../../include/gpu/device.h"
-#include "../../../include/gpu/library.h"
-#include <cmt/cmt.h>
+#ifndef mt_apis_h
+#define mt_apis_h
 
-GPU_EXPORT
-GPULibrary*
-gpuDefaultLibrary(GPUDevice *device) {
-  GPULibrary *library;
-  MtLibrary  *mtLibrary;
+GPU_HIDE
+void
+mt_initDevice(GPUApiDevice *apiDevice);
 
-  mtLibrary = mtNewDefaultLibrary(device->priv);
-  library   = calloc(1, sizeof(*library));
+GPU_HIDE
+void
+mt_initRenderPipeline(GPUApiRender *api);
 
-  library->priv = mtLibrary;
+GPU_HIDE
+void
+mt_initRCE(GPUApiRCE *api);
 
-  return library;
-}
-
-GPU_EXPORT
-GPUFunction*
-gpuNewFunction(GPULibrary *lib, const char *name) {
-  GPUFunction *func;
-  MtFunction  *mtFunc;
-
-  mtFunc = mtNewFunctionWithName(lib->priv, name);
-  func   = calloc(1, sizeof(*func));
-
-  func->priv = mtFunc;
-
-  return func;
-}
+#endif /* mt_apis_h */

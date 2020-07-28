@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "pipeline.h"
+#include "../common.h"
 
 GPU_HIDE
 GPURenderPipeline*

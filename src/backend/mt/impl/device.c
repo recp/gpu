@@ -14,13 +14,24 @@
  * limitations under the License.
  */
 
-#ifndef metal_render_rce_h
-#define metal_render_rce_h
-
 #include "../common.h"
 
 GPU_HIDE
-void
-mt_initRCE(GPUApiRCE *api);
+GPUDevice*
+mt_createSystemDefaultDevice(void) {
+  GPUDevice *device;
+  MtDevice  *mtDevice;
 
-#endif /* metal_render_rce_h */
+  mtDevice = mtCreateSystemDefaultDevice();
+  device   = calloc(1, sizeof(*device));
+
+  device->priv = mtDevice;
+
+  return device;
+}
+
+GPU_HIDE
+void
+mt_initDevice(GPUApiDevice *apiDevice) {
+  apiDevice->createSystemDefaultDevice = mt_createSystemDefaultDevice;
+}
