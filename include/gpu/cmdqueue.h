@@ -33,19 +33,19 @@ typedef void (*GPUCommandBufferOnCompleteFn)(void            *__restrict sender,
 
 GPU_EXPORT
 GPUCommandQueue*
-gpuNewCmdQue(GPUDevice * __restrict device);
+gpuNewCommandQueue(GPUDevice * __restrict device);
 
 GPU_EXPORT
 GPUCommandBuffer*
-gpuNewCmdBuf(GPUCommandQueue  * __restrict cmdb,
-             void             * __restrict sender,
-             GPUCommandBufferOnCompleteFn  oncomplete);
+gpuNewCommandBuffer(GPUCommandQueue  * __restrict cmdb,
+                    void             * __restrict sender,
+                    GPUCommandBufferOnCompleteFn  oncomplete);
 
 GPU_EXPORT
 void
-gpuCmdBufOnComplete(GPUCommandBuffer * __restrict cmdb,
-                    void             * __restrict sender,
-                    GPUCommandBufferOnCompleteFn  oncomplete);
+gpuCommandBufferOnComplete(GPUCommandBuffer * __restrict cmdb,
+                           void             * __restrict sender,
+                           GPUCommandBufferOnCompleteFn  oncomplete);
 
 GPU_EXPORT
 void
