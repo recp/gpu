@@ -41,9 +41,9 @@ gpuNewRenderState(GPUDevice         * __restrict device,
 
 GPU_EXPORT
 void
-gpuFunction(GPURenderPipeline * __restrict pipline,
-            GPUFunction       * __restrict func,
-            GPUFunctionType                functype) {
+gpuSetFunction(GPURenderPipeline * __restrict pipline,
+               GPUFunction       * __restrict func,
+               GPUFunctionType                functype) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
