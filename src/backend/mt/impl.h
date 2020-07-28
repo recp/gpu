@@ -21,5 +21,6 @@ GPU_HIDE void mt_initDevice(GPUApiDevice *apiDevice);
 GPU_HIDE void mt_initRenderPipeline(GPUApiRender *api);
 GPU_HIDE void mt_initRCE(GPUApiRCE *api);
 GPU_HIDE void mt_initCmdBuff(GPUApiCommandBuffer *api);
+GPU_HIDE void mt_initCmdQue(GPUApiCommandQueue *api);
 
 #endif /* mt_apis_h */

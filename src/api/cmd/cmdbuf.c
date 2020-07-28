@@ -24,5 +24,5 @@ gpuPresent(GPUCommandBuffer *cmdb, void *drawable) {
   if (!(api = gpuActiveGPUApi()))
     return;
 
-  return api->cmdbuff.presentDrawable(cmdb, drawable);
+  return api->cmdbuf.presentDrawable(cmdb, drawable);
 }

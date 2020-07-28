@@ -29,7 +29,7 @@ gpu_cmdoncomplete(void * __restrict sender, MtCommandBuffer *cmdb);
 
 GPU_EXPORT
 GPUCommandQueue*
-gpuNewCommandQueue(GPUDevice * __restrict device) {
+mt_newCommandQueue(GPUDevice * __restrict device) {
   GPUCommandQueue *cq;
   MtCommandQueue  *mcq;
   
@@ -42,7 +42,7 @@ gpuNewCommandQueue(GPUDevice * __restrict device) {
 
 GPU_EXPORT
 GPUCommandBuffer*
-gpuNewCommandBuffer(GPUCommandQueue  * __restrict cmdb,
+mt_newCommandBuffer(GPUCommandQueue  * __restrict cmdb,
                     void             * __restrict sender,
                     GPUCommandBufferOnCompleteFn  oncomplete) {
   GPUCommandBuffer *cb;
@@ -60,9 +60,9 @@ gpuNewCommandBuffer(GPUCommandQueue  * __restrict cmdb,
 
 GPU_EXPORT
 void
-gpuCommandBufferOnComplete(GPUCommandBuffer * __restrict cmdb,
-                           void             * __restrict sender,
-                           GPUCommandBufferOnCompleteFn  oncomplete) {
+mt_ccmdbufOnComplete(GPUCommandBuffer * __restrict cmdb,
+                     void             * __restrict sender,
+                     GPUCommandBufferOnCompleteFn  oncomplete) {
   GPUCallback *cb;
   
   /* TODO: provide release when needed */
@@ -76,7 +76,7 @@ gpuCommandBufferOnComplete(GPUCommandBuffer * __restrict cmdb,
 
 GPU_EXPORT
 void
-gpuCommit(GPUCommandBuffer * __restrict cmdb) {
+mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
   mtCommandBufferCommit(cmdb->priv);
 }
 
@@ -90,4 +90,13 @@ gpu_cmdoncomplete(void * __restrict sender, MtCommandBuffer *cmdb) {
   cb->onComplete(cb->sender, cb->param);
 
   free(cb);
+}
+
+GPU_HIDE
+void
+mt_initCmdQue(GPUApiCommandQueue *api) {
+  api->newCommandQueue         = mt_newCommandQueue;
+  api->newCommandBuffer        = mt_newCommandBuffer;
+  api->commandBufferOnComplete = mt_ccmdbufOnComplete;
+  api->commit                  = mt_cmdbufCommit;
 }

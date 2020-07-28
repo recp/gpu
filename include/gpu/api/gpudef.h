@@ -24,6 +24,7 @@
 #include "rce.h"
 #include "buffer.h"
 #include "commandbuffer.h"
+#include "commandqueue.h"
 
 typedef struct GPUApi {
   GPUBackend          backend;
@@ -31,8 +32,9 @@ typedef struct GPUApi {
   GPUApiDevice        device;
   GPUApiRender        render;
   GPUApiRCE           rce;
-  GPUApiBuffer        buff;
-  GPUApiCommandBuffer cmdbuff;
+  GPUApiBuffer        buf;
+  GPUApiCommandBuffer cmdbuf;
+  GPUApiCommandQueue  cmdque;
 } GPUApi;
 
 GPU_EXPORT
