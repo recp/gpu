@@ -123,7 +123,7 @@ gpuFragmentBuffer(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
-gpuRCESetTexture(GPURenderCommandEncoder *rce,
+gpuSetFragmentTexture(GPURenderCommandEncoder *rce,
                  GPUTexture               *tex,
                  uint32_t                 index);
 

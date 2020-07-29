@@ -126,9 +126,9 @@ gpuFragmentBuffer(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
-gpuRCESetTexture(GPURenderCommandEncoder *rce,
-                 GPUTexture               *tex,
-                 uint32_t                 index) {
+gpuSetFragmentTexture(GPURenderCommandEncoder *rce,
+                      GPUTexture               *tex,
+                      uint32_t                 index) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
