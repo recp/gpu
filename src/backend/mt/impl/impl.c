@@ -14,30 +14,13 @@
  * limitations under the License.
  */
 
-#include "common.h"
-#include "impl.h"
-#include "impl/impl.c"
-
-GPUApi mt = {
-  .initialized = false,
-  .backend     = GPU_BACKEND_METAL,
-};
-
-GPU_HIDE
-GPUApi*
-backend_metal(void) {
-  if (!mt.initialized) {
-    mt_initDevice(&mt.device);
-    mt_initRenderPipeline(&mt.render);
-    mt_initRCE(&mt.rce);
-    mt_initCmdBuff(&mt.cmdbuf);
-    mt_initCmdQue(&mt.cmdque);
-    mt_initBuff(&mt.buf);
-    mt_initDepthStencil(&mt.depthStencil);
-    mt_initVertex(&mt.vertex);
-    mt_initLibrary(&mt.library);
-
-    mt.initialized = true;
-  }
-  return &mt;
-}
+#include "cmd/cmdbuf.c"
+#include "cmd/cmdque.c"
+#include "render/pipeline.c"
+#include "render/rce.c"
+#include "device.c"
+#include "buffer.c"
+#include "pass.c"
+#include "depthstencil.c"
+#include "vertex.c"
+#include "library.c"
