@@ -26,6 +26,7 @@
 #include "commandbuffer.h"
 #include "commandqueue.h"
 #include "pass.h"
+#include "depthstencil.h"
 
 typedef struct GPUApi {
   GPUBackend          backend;
@@ -37,6 +38,7 @@ typedef struct GPUApi {
   GPUApiCommandBuffer cmdbuf;
   GPUApiCommandQueue  cmdque;
   GPUApiPass          pass;
+  GPUApiDepthStencil  depthStencil;
 } GPUApi;
 
 GPU_EXPORT

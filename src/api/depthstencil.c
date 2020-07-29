@@ -18,37 +18,24 @@
 
 GPU_EXPORT
 GPUDepthStencil*
-mt_newDepthStencil(GPUCompareFunction depthCompareFunc,
+gpuNewDepthStencil(GPUCompareFunction depthCompareFunc,
                    bool               depthWriteEnabled) {
-  GPUDepthStencil *ds;
-  MtDepthStencilDescriptor *mds;
-  
-  mds = mtDepthStencilDesc((MtCompareFunction)depthCompareFunc, depthWriteEnabled);
-  ds  = calloc(1, sizeof(*ds));
+  GPUApi *api;
 
-  ds->priv = mds;
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
 
-  return ds;
+  return api->depthStencil.newDepthStencil(depthCompareFunc, depthWriteEnabled);
 }
 
 GPU_EXPORT
 GPUDepthStencilState*
-mt_newDepthStencilState(GPUDevice       * __restrict device,
+gpuNewDepthStencilState(GPUDevice       * __restrict device,
                         GPUDepthStencil * __restrict depthStencil) {
-  GPUDepthStencilState *depthStencilState;
-  MtRenderPipeline     *mtDepthStencilState;
-  
-  mtDepthStencilState = mtNewDepthStencilState(device->priv, depthStencil->priv);
-  depthStencilState   = calloc(1, sizeof(*depthStencilState));
-  
-  depthStencilState->priv = mtDepthStencilState;
-  
-  return depthStencilState;
-}
+  GPUApi *api;
 
-GPU_HIDE
-void
-mt_initDepthStencil(GPUApiDepthStencil *api) {
-  api->newDepthStencil      = mt_newDepthStencil;
-  api->newDepthStencilState = mt_newDepthStencilState;
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
+  
+  return api->depthStencil.newDepthStencilState(device, depthStencil);
 }

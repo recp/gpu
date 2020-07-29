@@ -32,7 +32,8 @@ backend_metal(void) {
     mt_initCmdBuff(&mt.cmdbuf);
     mt_initCmdQue(&mt.cmdque);
     mt_initBuff(&mt.buf);
-    
+    mt_initDepthStencil(&mt.depthStencil);
+
     mt.initialized = true;
   }
   return &mt;
