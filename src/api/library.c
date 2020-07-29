@@ -18,7 +18,7 @@
 
 GPU_EXPORT
 GPULibrary*
-gpuDefaultLibrary(GPUDevice *device) {
+GPUDefaultLibrary(GPUDevice *device) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
@@ -29,7 +29,7 @@ gpuDefaultLibrary(GPUDevice *device) {
 
 GPU_EXPORT
 GPUFunction*
-gpuNewFunction(GPULibrary *lib, const char *name) {
+GPUNewFunction(GPULibrary *lib, const char *name) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))

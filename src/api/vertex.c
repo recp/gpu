@@ -18,7 +18,7 @@
 
 GPU_EXPORT
 GPUVertexDescriptor*
-gpuNewVertexDesc() {
+GPUNewVertexDesc() {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
@@ -29,7 +29,7 @@ gpuNewVertexDesc() {
 
 GPU_EXPORT
 void
-gpuAttrib(GPUVertexDescriptor * __restrict vert,
+GPUAttrib(GPUVertexDescriptor * __restrict vert,
           uint32_t                         attribIndex,
           GPUVertexFormat                  format,
           uint32_t                         offset,
@@ -44,7 +44,7 @@ gpuAttrib(GPUVertexDescriptor * __restrict vert,
 
 GPU_EXPORT
 void
-gpuLayout(GPUVertexDescriptor * __restrict vert,
+GPULayout(GPUVertexDescriptor * __restrict vert,
           uint32_t                         layoutIndex,
           uint32_t                         stride,
           uint32_t                         stepRate,
@@ -59,7 +59,7 @@ gpuLayout(GPUVertexDescriptor * __restrict vert,
 
 GPU_EXPORT
 void
-gpuVertexDesc(GPURenderPipeline   * __restrict pipeline,
+GPUVertexDesc(GPURenderPipeline   * __restrict pipeline,
               GPUVertexDescriptor * __restrict vert) {
   GPUApi *api;
 

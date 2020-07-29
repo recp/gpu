@@ -18,7 +18,7 @@
 
 GPU_EXPORT
 void
-gpuPresent(GPUCommandBuffer *cmdb, void *drawable) {
+GPUPresent(GPUCommandBuffer *cmdb, void *drawable) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))

@@ -77,24 +77,24 @@ typedef enum GPURenderStages {
 
 GPU_EXPORT
 GPURenderCommandEncoder*
-gpuRenderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass);
+GPUNewRenderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass);
 
 GPU_EXPORT
 void
-gpuFrontFace(GPURenderCommandEncoder *rce, GPUWinding winding);
+GPUSetFrontFace(GPURenderCommandEncoder *rce, GPUWinding winding);
 
 GPU_EXPORT
 void
-gpuCullMode(GPURenderCommandEncoder *rce, GPUCullMode mode);
+GPUSetCullMode(GPURenderCommandEncoder *rce, GPUCullMode mode);
 
 GPU_EXPORT
 void
-gpuSetRenderPipelineState(GPURenderCommandEncoder *rce,
+GPUSetRenderPipelineState(GPURenderCommandEncoder *rce,
                           GPURenderPipelineState  *piplineState);
 
 GPU_EXPORT
 void
-gpuSetDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilState *ds);
+GPUSetDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilState *ds);
 
 GPU_EXPORT
 void
@@ -109,21 +109,21 @@ gpuVertexBytes(GPURenderCommandEncoder *enc,
 
 GPU_EXPORT
 void
-gpuVertexBuffer(GPURenderCommandEncoder *rce,
+GPUSetVertexBuffer(GPURenderCommandEncoder *rce,
                 GPUBuffer               *buf,
                 size_t                   off,
                 uint32_t                 index);
 
 GPU_EXPORT
 void
-gpuFragmentBuffer(GPURenderCommandEncoder *rce,
+GPUSetFragmentBuffer(GPURenderCommandEncoder *rce,
                   GPUBuffer               *buf,
                   size_t                   off,
                   uint32_t                 index);
 
 GPU_EXPORT
 void
-gpuSetFragmentTexture(GPURenderCommandEncoder *rce,
+GPUSetFragmentTexture(GPURenderCommandEncoder *rce,
                       GPUTexture               *tex,
                       uint32_t                 index);
 
@@ -136,7 +136,7 @@ gpuDrawPrimitives(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
-gpuDrawIndexed(GPURenderCommandEncoder *rce,
+GPUDrawIndexed(GPURenderCommandEncoder *rce,
                     GPUPrimitiveType         type,
                     uint32_t                 indexCount,
                     GPUIndexType             indexType,
@@ -145,6 +145,6 @@ gpuDrawIndexed(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
-gpuEndEncoding(GPURenderCommandEncoder *rce);
+GPUEndEncoding(GPURenderCommandEncoder *rce);
 
 #endif /* gpu_cmd_enc_h */

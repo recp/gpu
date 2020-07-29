@@ -52,12 +52,12 @@ typedef struct GPUDepthStencilState {
 
 GPU_EXPORT
 GPUDepthStencil*
-gpuNewDepthStencil(GPUCompareFunction depthCompareFunc,
+GPUNewDepthStencil(GPUCompareFunction depthCompareFunc,
                    bool               depthWriteEnabled);
 
 GPU_EXPORT
 GPUDepthStencilState*
-gpuNewDepthStencilState(GPUDevice       * __restrict device,
+GPUNewDepthStencilState(GPUDevice       * __restrict device,
                         GPUDepthStencil * __restrict depthStencil);
 
 #endif /* gpu_depthstencil_h */

@@ -18,7 +18,7 @@
 
 GPU_EXPORT
 GPUCommandQueue*
-gpuNewCommandQueue(GPUDevice * __restrict device) {
+GPUNewCommandQueue(GPUDevice * __restrict device) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
@@ -29,7 +29,7 @@ gpuNewCommandQueue(GPUDevice * __restrict device) {
 
 GPU_EXPORT
 GPUCommandBuffer*
-gpuNewCommandBuffer(GPUCommandQueue  * __restrict cmdb,
+GPUNewCommandBuffer(GPUCommandQueue  * __restrict cmdb,
                     void             * __restrict sender,
                     GPUCommandBufferOnCompleteFn  oncomplete) {
   GPUApi *api;
@@ -55,7 +55,7 @@ gpuCommandBufferOnComplete(GPUCommandBuffer * __restrict cmdb,
 
 GPU_EXPORT
 void
-gpuCommit(GPUCommandBuffer * __restrict cmdb) {
+GPUCommit(GPUCommandBuffer * __restrict cmdb) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))

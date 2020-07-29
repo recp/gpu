@@ -25,7 +25,7 @@ typedef struct GPUBuffer GPUBuffer;
 
 GPU_EXPORT
 GPUBuffer*
-gpuNewBuffer(GPUDevice * __restrict device,
+GPUNewBuffer(GPUDevice * __restrict device,
              size_t                 len,
              GPUResourceOptions     options);
 
@@ -39,6 +39,6 @@ gpuBufferContents(GPUBuffer * __restrict buff);
 
 GPU_EXPORT
 void
-gpuPresent(GPUCommandBuffer *cmdb, void *drawable);
+GPUPresent(GPUCommandBuffer *cmdb, void *drawable);
 
 #endif /* gpu_buffer_h */

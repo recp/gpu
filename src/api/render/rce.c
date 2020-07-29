@@ -18,7 +18,7 @@
 
 GPU_EXPORT
 GPURenderCommandEncoder*
-gpuRenderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
+GPUNewRenderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
@@ -29,7 +29,7 @@ gpuRenderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
 
 GPU_EXPORT
 void
-gpuFrontFace(GPURenderCommandEncoder *rce, GPUWinding winding) {
+GPUSetFrontFace(GPURenderCommandEncoder *rce, GPUWinding winding) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
@@ -40,7 +40,7 @@ gpuFrontFace(GPURenderCommandEncoder *rce, GPUWinding winding) {
 
 GPU_EXPORT
 void
-gpuCullMode(GPURenderCommandEncoder *rce, GPUCullMode mode) {
+GPUSetCullMode(GPURenderCommandEncoder *rce, GPUCullMode mode) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
@@ -51,7 +51,7 @@ gpuCullMode(GPURenderCommandEncoder *rce, GPUCullMode mode) {
 
 GPU_EXPORT
 void
-gpuSetRenderPipelineState(GPURenderCommandEncoder *rce, GPURenderPipelineState *piplineState) {
+GPUSetRenderPipelineState(GPURenderCommandEncoder *rce, GPURenderPipelineState *piplineState) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
@@ -62,7 +62,7 @@ gpuSetRenderPipelineState(GPURenderCommandEncoder *rce, GPURenderPipelineState *
 
 GPU_EXPORT
 void
-gpuSetDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilState *ds) {
+GPUSetDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilState *ds) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
@@ -98,7 +98,7 @@ gpuVertexBytes(GPURenderCommandEncoder *enc,
 
 GPU_EXPORT
 void
-gpuVertexBuffer(GPURenderCommandEncoder *rce,
+GPUSetVertexBuffer(GPURenderCommandEncoder *rce,
                 GPUBuffer               *buf,
                 size_t                   off,
                 uint32_t                 index) {
@@ -112,7 +112,7 @@ gpuVertexBuffer(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
-gpuFragmentBuffer(GPURenderCommandEncoder *rce,
+GPUSetFragmentBuffer(GPURenderCommandEncoder *rce,
                   GPUBuffer               *buf,
                   size_t                   off,
                   uint32_t                 index) {
@@ -126,7 +126,7 @@ gpuFragmentBuffer(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
-gpuSetFragmentTexture(GPURenderCommandEncoder *rce,
+GPUSetFragmentTexture(GPURenderCommandEncoder *rce,
                       GPUTexture               *tex,
                       uint32_t                 index) {
   GPUApi *api;
@@ -139,7 +139,7 @@ gpuSetFragmentTexture(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
-gpuDrawIndexed(GPURenderCommandEncoder *rce,
+GPUDrawIndexed(GPURenderCommandEncoder *rce,
                GPUPrimitiveType         type,
                uint32_t                 indexCount,
                GPUIndexType             indexType,
@@ -160,7 +160,7 @@ gpuDrawIndexed(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
-gpuEndEncoding(GPURenderCommandEncoder *rce) {
+GPUEndEncoding(GPURenderCommandEncoder *rce) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))

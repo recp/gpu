@@ -18,7 +18,7 @@
 
 GPU_EXPORT
 GPURenderPipeline*
-gpuNewPipeline(GPUPixelFormat pixelFormat) {
+GPUNewPipeline(GPUPixelFormat pixelFormat) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
@@ -29,7 +29,7 @@ gpuNewPipeline(GPUPixelFormat pixelFormat) {
 
 GPU_EXPORT
 GPURenderPipelineState*
-gpuNewRenderState(GPUDevice         * __restrict device,
+GPUNewRenderState(GPUDevice         * __restrict device,
                   GPURenderPipeline * __restrict pipeline) {
   GPUApi *api;
 
@@ -41,7 +41,7 @@ gpuNewRenderState(GPUDevice         * __restrict device,
 
 GPU_EXPORT
 void
-gpuSetFunction(GPURenderPipeline * __restrict pipline,
+GPUSetFunction(GPURenderPipeline * __restrict pipline,
                GPUFunction       * __restrict func,
                GPUFunctionType                functype) {
   GPUApi *api;
@@ -54,7 +54,7 @@ gpuSetFunction(GPURenderPipeline * __restrict pipline,
 
 GPU_EXPORT
 void
-gpuColorFormat(GPURenderPipeline * __restrict pipline,
+GPUColorFormat(GPURenderPipeline * __restrict pipline,
                uint32_t                       index,
                GPUPixelFormat                 pixelFormat) {
   GPUApi *api;
@@ -67,7 +67,7 @@ gpuColorFormat(GPURenderPipeline * __restrict pipline,
 
 GPU_EXPORT
 void
-gpuDepthFormat(GPURenderPipeline * __restrict pipline,
+GPUDepthFormat(GPURenderPipeline * __restrict pipline,
                GPUPixelFormat                 pixelFormat) {
   GPUApi *api;
 
@@ -79,7 +79,7 @@ gpuDepthFormat(GPURenderPipeline * __restrict pipline,
 
 GPU_EXPORT
 void
-gpuStencilFormat(GPURenderPipeline * __restrict pipline,
+GPUStencilFormat(GPURenderPipeline * __restrict pipline,
                  GPUPixelFormat                pixelFormat) {
   GPUApi *api;
 
@@ -91,7 +91,7 @@ gpuStencilFormat(GPURenderPipeline * __restrict pipline,
 
 GPU_EXPORT
 void
-gpuSampleCount(GPURenderPipeline * __restrict pipline,
+GPUSampleCount(GPURenderPipeline * __restrict pipline,
                uint32_t                       sampleCount) {
   GPUApi *api;
 

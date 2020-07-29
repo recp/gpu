@@ -18,7 +18,7 @@
 
 GPU_EXPORT
 GPUBuffer*
-gpuNewBuffer(GPUDevice * __restrict device,
+GPUNewBuffer(GPUDevice * __restrict device,
              size_t                 len,
              GPUResourceOptions     options) {
   GPUApi *api;

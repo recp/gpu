@@ -43,7 +43,7 @@ typedef enum GPUBackend {
 
 GPU_EXPORT
 void
-gpuSwitchGPUApi(GPUBackend backend);
+GPUSwitchGPUApi(GPUBackend backend);
 
 GPU_EXPORT
 void

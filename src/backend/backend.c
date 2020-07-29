@@ -41,7 +41,7 @@ gpuRegisterCustomGPUApi(GPUApi * __restrict gpuApi) {
 
 GPU_EXPORT
 void
-gpuSwitchGPUApi(GPUBackend backend) {
+GPUSwitchGPUApi(GPUBackend backend) {
   switch (backend) {
     case GPU_BACKEND_METAL:
 #ifdef __APPLE__
