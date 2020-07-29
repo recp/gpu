@@ -25,5 +25,6 @@ GPU_HIDE void mt_initCmdQue(GPUApiCommandQueue *api);
 GPU_HIDE void mt_initBuff(GPUApiBuffer *api);
 GPU_HIDE void mt_initPass(GPUApiPass *api);
 GPU_HIDE void mt_initDepthStencil(GPUApiDepthStencil *api);
+GPU_HIDE void mt_initVertex(GPUApiVertex *api);
 
 #endif /* mt_apis_h */

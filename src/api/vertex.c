@@ -18,56 +18,53 @@
 
 GPU_EXPORT
 GPUVertexDescriptor*
-mt_newVertexDesc() {
-  GPUVertexDescriptor *vdec;
-  MtVertexDescriptor  *mtvdesc;
+gpuNewVertexDesc() {
+  GPUApi *api;
 
-  mtvdesc    = mtVertexDescNew();
-  vdec       = calloc(1, sizeof(*vdec));
-  vdec->priv = mtvdesc;
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
 
-  return vdec;
+  return api->vertex.newVertexDesc();
 }
 
 GPU_EXPORT
 void
-mt_attrib(GPUVertexDescriptor * __restrict vert,
+gpuAttrib(GPUVertexDescriptor * __restrict vert,
           uint32_t                         attribIndex,
           GPUVertexFormat                  format,
           uint32_t                         offset,
           uint32_t                         bufferIndex) {
-  mtVertexAttrib(vert->priv,
-                 attribIndex,
-                 (MtVertexFormat)format,
-                 offset,
-                 bufferIndex);
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return;
+  
+  api->vertex.attrib(vert, attribIndex, format, offset, bufferIndex);
 }
 
 GPU_EXPORT
 void
-mt_layout(GPUVertexDescriptor * __restrict vert,
+gpuLayout(GPUVertexDescriptor * __restrict vert,
           uint32_t                         layoutIndex,
           uint32_t                         stride,
           uint32_t                         stepRate,
           GPUVertexStepFunction            stepFunction) {
-  mtVertexLayout(vert->priv, layoutIndex,
-                 stride,
-                 stepRate,
-                 (MtVertexStepFunction)stepFunction);
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return;
+  
+  api->vertex.layout(vert, layoutIndex, stride, stepRate, stepFunction);
 }
 
 GPU_EXPORT
 void
-mt_vertexDesc(GPURenderPipeline         * __restrict pipeline,
+gpuVertexDesc(GPURenderPipeline   * __restrict pipeline,
               GPUVertexDescriptor * __restrict vert) {
-  mtSetVertexDesc(pipeline->priv, vert->priv);
-}
+  GPUApi *api;
 
-GPU_HIDE
-void
-mt_initVertex(GPUApiVertex *api) {
-  api->newVertexDesc = mt_newVertexDesc;
-  api->attrib        = mt_attrib;
-  api->layout        = mt_layout;
-  api->vertexDesc    = mt_vertexDesc;
+  if (!(api = gpuActiveGPUApi()))
+    return;
+  
+  api->vertex.vertexDesc(pipeline, vert);
 }

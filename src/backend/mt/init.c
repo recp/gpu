@@ -33,6 +33,7 @@ backend_metal(void) {
     mt_initCmdQue(&mt.cmdque);
     mt_initBuff(&mt.buf);
     mt_initDepthStencil(&mt.depthStencil);
+    mt_initVertex(&mt.vertex);
 
     mt.initialized = true;
   }
