@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 
-#ifndef mt_apis_h
-#define mt_apis_h
+#ifndef gpu_gpudef_library_h
+#define gpu_gpudef_library_h
 
-GPU_HIDE void mt_initDevice(GPUApiDevice *apiDevice);
-GPU_HIDE void mt_initRenderPipeline(GPUApiRender *api);
-GPU_HIDE void mt_initRCE(GPUApiRCE *api);
-GPU_HIDE void mt_initCmdBuff(GPUApiCommandBuffer *api);
-GPU_HIDE void mt_initCmdQue(GPUApiCommandQueue *api);
-GPU_HIDE void mt_initBuff(GPUApiBuffer *api);
-GPU_HIDE void mt_initPass(GPUApiPass *api);
-GPU_HIDE void mt_initDepthStencil(GPUApiDepthStencil *api);
-GPU_HIDE void mt_initVertex(GPUApiVertex *api);
-GPU_HIDE void mt_initLibrary(GPUApiLibrary *api);
+#include "../common.h"
+#include "../gpu.h"
 
-#endif /* mt_apis_h */
+typedef struct GPUApiLibrary {
+  GPULibrary*
+  (*defaultLibrary)(GPUDevice *device);
+
+  GPUFunction*
+  (*newFunction)(GPULibrary *lib, const char *name);
+} GPUApiLibrary;
+
+#endif /* gpu_gpudef_library_h */

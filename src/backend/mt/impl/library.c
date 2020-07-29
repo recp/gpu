@@ -18,7 +18,7 @@
 
 GPU_EXPORT
 GPULibrary*
-gpuDefaultLibrary(GPUDevice *device) {
+mt_defaultLibrary(GPUDevice *device) {
   GPULibrary *library;
   MtLibrary  *mtLibrary;
 
@@ -32,7 +32,7 @@ gpuDefaultLibrary(GPUDevice *device) {
 
 GPU_EXPORT
 GPUFunction*
-gpuNewFunction(GPULibrary *lib, const char *name) {
+mt_newFunction(GPULibrary *lib, const char *name) {
   GPUFunction *func;
   MtFunction  *mtFunc;
 
@@ -42,4 +42,11 @@ gpuNewFunction(GPULibrary *lib, const char *name) {
   func->priv = mtFunc;
 
   return func;
+}
+
+GPU_HIDE
+void
+mt_initLibrary(GPUApiLibrary *api) {
+  api->defaultLibrary = mt_defaultLibrary;
+  api->newFunction    = mt_newFunction;
 }

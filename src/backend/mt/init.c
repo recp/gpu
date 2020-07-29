@@ -34,6 +34,7 @@ backend_metal(void) {
     mt_initBuff(&mt.buf);
     mt_initDepthStencil(&mt.depthStencil);
     mt_initVertex(&mt.vertex);
+    mt_initLibrary(&mt.library);
 
     mt.initialized = true;
   }

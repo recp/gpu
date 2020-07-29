@@ -28,6 +28,7 @@
 #include "pass.h"
 #include "depthstencil.h"
 #include "vertex.h"
+#include "library.h"
 
 typedef struct GPUApi {
   GPUBackend          backend;
@@ -41,6 +42,7 @@ typedef struct GPUApi {
   GPUApiPass          pass;
   GPUApiDepthStencil  depthStencil;
   GPUApiVertex        vertex;
+  GPUApiLibrary       library;
 } GPUApi;
 
 GPU_EXPORT
