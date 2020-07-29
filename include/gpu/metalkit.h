@@ -34,6 +34,13 @@ GPUDrawIndexedMTKSubMesh(GPURenderCommandEncoder *rce,
 
 GPU_INLINE
 void
+GPUDrawIndexedMTKMesh(GPURenderCommandEncoder *rce, MTKMesh *mesh) {
+  for(MTKSubmesh *submesh in mesh.submeshes)
+    GPUDrawIndexedMTKSubMesh(rce, submesh);
+}
+
+GPU_INLINE
+void
 GPUSetVertexBuffersFromMTKMeshBuffers(GPURenderCommandEncoder  *rce,
                                       NSArray<MTKMeshBuffer *> *buffers) {
   MTKMeshBuffer *buffer;
@@ -43,6 +50,13 @@ GPUSetVertexBuffersFromMTKMeshBuffers(GPURenderCommandEncoder  *rce,
       GPUSetVertexBuffer(rce, (GPUBuffer *)buffer.buffer, buffer.offset, i);
   }
 }
-#endif
 
+GPU_INLINE
+void
+GPULoadAndDrawMTKMesh(GPURenderCommandEncoder *rce, MTKMesh *mesh) {
+  GPUSetVertexBuffersFromMTKMeshBuffers(rce, mesh.vertexBuffers);
+  GPUDrawIndexedMTKMesh(rce, mesh);
+}
+
+#endif
 #endif /* gpu_metalkit_helpers_h */
