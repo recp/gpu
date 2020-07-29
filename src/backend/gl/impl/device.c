@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-#include "common.h"
-#include "device.h"
-#include <cmt/cmt.h>
+#include "../common.h"
 
 GPU_HIDE
 GPUDevice*
@@ -24,6 +22,10 @@ gl_createSystemDefaultDevice(void) {
   GPUDevice *device;
 
   device = calloc(1, sizeof(*device));
+  
+#ifdef __APPLE__
+  device->priv = CGLGetCurrentContext();
+#endif
 
   return device;
 }

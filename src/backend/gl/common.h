@@ -17,6 +17,10 @@
 #ifndef gl_common_h
 #define gl_common_h
 
-#include "../../common.h"
+#include "../common.h"
+
+#ifdef __APPLE__
+#  include <OpenGL/OpenGL.h>
+#endif
 
 #endif /* gl_common_h */

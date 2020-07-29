@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include "api.h"
-#include "device.h"
+#include "common.h"
+#include "impl.h"
 
 GPUApi gl = {
   .initialized = false,
@@ -27,6 +27,7 @@ GPUApi*
 backend_gl(void) {
   if (!gl.initialized) {
     gl_initDevice(&gl.device);
+
     gl.initialized = true;
   }
   return &gl;

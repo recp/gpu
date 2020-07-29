@@ -14,11 +14,20 @@
  * limitations under the License.
  */
 
-#ifndef gl_device_h
-#define gl_device_h
+#ifndef gl_impl_h
+#define gl_impl_h
 
-GPU_HIDE
-void
-gl_initDevice(GPUApiDevice *apiDevice);
+#include "../common.h"
 
-#endif /* gl_device_h */
+GPU_HIDE void gl_initDevice(GPUApiDevice *apiDevice);
+GPU_HIDE void gl_initRenderPipeline(GPUApiRender *api);
+GPU_HIDE void gl_initRCE(GPUApiRCE *api);
+GPU_HIDE void gl_initCmdBuff(GPUApiCommandBuffer *api);
+GPU_HIDE void gl_initCmdQue(GPUApiCommandQueue *api);
+GPU_HIDE void gl_initBuff(GPUApiBuffer *api);
+GPU_HIDE void gl_initPass(GPUApiPass *api);
+GPU_HIDE void gl_initDepthStencil(GPUApiDepthStencil *api);
+GPU_HIDE void gl_initVertex(GPUApiVertex *api);
+GPU_HIDE void gl_initLibrary(GPUApiLibrary *api);
+
+#endif /* gl_impl_h */

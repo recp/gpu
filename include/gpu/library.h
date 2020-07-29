@@ -19,6 +19,7 @@
 
 #include "common.h"
 #include "pixelformat.h"
+#include "device.h"
 
 typedef struct GPULibrary {
   void *priv;
