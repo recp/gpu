@@ -51,7 +51,7 @@ GPUSetCullMode(GPURenderCommandEncoder *rce, GPUCullMode mode) {
 
 GPU_EXPORT
 void
-GPUSetRenderPipelineState(GPURenderCommandEncoder *rce, GPURenderPipelineState *piplineState) {
+GPUSetRenderState(GPURenderCommandEncoder *rce, GPURenderPipelineState *piplineState) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))

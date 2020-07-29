@@ -89,7 +89,7 @@ GPUSetCullMode(GPURenderCommandEncoder *rce, GPUCullMode mode);
 
 GPU_EXPORT
 void
-GPUSetRenderPipelineState(GPURenderCommandEncoder *rce,
+GPUSetRenderState(GPURenderCommandEncoder *rce,
                           GPURenderPipelineState  *piplineState);
 
 GPU_EXPORT

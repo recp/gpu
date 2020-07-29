@@ -142,7 +142,7 @@ GPULayout(GPUVertexDescriptor * __restrict vertex,
 
 GPU_EXPORT
 void
-GPUVertexDesc(GPURenderPipeline   * __restrict pipeline,
+GPUSetVertexDesc(GPURenderPipeline   * __restrict pipeline,
               GPUVertexDescriptor * __restrict vert);
 
 #endif /* gpu_vertex_desc_h */
