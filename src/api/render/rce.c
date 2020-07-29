@@ -139,12 +139,12 @@ gpuSetFragmentTexture(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
-gpuDrawIndexedPrims(GPURenderCommandEncoder *rce,
-                    GPUPrimitiveType         type,
-                    uint32_t                 indexCount,
-                    GPUIndexType             indexType,
-                    GPUBuffer               *indexBuffer,
-                    uint32_t                 indexBufferOffset) {
+gpuDrawIndexed(GPURenderCommandEncoder *rce,
+               GPUPrimitiveType         type,
+               uint32_t                 indexCount,
+               GPUIndexType             indexType,
+               GPUBuffer               *indexBuffer,
+               uint32_t                 indexBufferOffset) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))

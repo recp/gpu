@@ -124,8 +124,8 @@ gpuFragmentBuffer(GPURenderCommandEncoder *rce,
 GPU_EXPORT
 void
 gpuSetFragmentTexture(GPURenderCommandEncoder *rce,
-                 GPUTexture               *tex,
-                 uint32_t                 index);
+                      GPUTexture               *tex,
+                      uint32_t                 index);
 
 GPU_EXPORT
 void
@@ -136,7 +136,7 @@ gpuDrawPrimitives(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
-gpuDrawIndexedPrims(GPURenderCommandEncoder *rce,
+gpuDrawIndexed(GPURenderCommandEncoder *rce,
                     GPUPrimitiveType         type,
                     uint32_t                 indexCount,
                     GPUIndexType             indexType,
