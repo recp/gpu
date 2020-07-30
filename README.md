@@ -24,7 +24,7 @@ This section and others will be documented in detail later...
 
 ## Naming Conventions
 
-**TODO:** `GPUSetFrontFace()` vs `gpuSetFrontFace()`
+**TODO:** `GPUSetFrontFace()` vs `gpuSetFrontFace()` vs `gpu_set_frontface()`
 
 ## Design Sample
 
