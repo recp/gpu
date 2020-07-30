@@ -22,7 +22,7 @@
 
 typedef struct GPUApiRender {
   GPURenderPipeline*
-  (*newPipeline)(GPUPixelFormat pixelFormat);
+  (*newRenderPipeline)(GPUPixelFormat pixelFormat);
   
   GPURenderPipelineState*
   (*newRenderState)(GPUDevice         * __restrict device,

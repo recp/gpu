@@ -18,13 +18,13 @@
 
 GPU_EXPORT
 GPURenderPipeline*
-GPUNewPipeline(GPUPixelFormat pixelFormat) {
+GPUNewRenderPipeline(GPUPixelFormat pixelFormat) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->render.newPipeline(pixelFormat);
+  return api->render.newRenderPipeline(pixelFormat);
 }
 
 GPU_EXPORT

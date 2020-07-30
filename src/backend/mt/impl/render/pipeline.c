@@ -18,7 +18,7 @@
 
 GPU_HIDE
 GPURenderPipeline*
-mt_newPipeline(GPUPixelFormat pixelFormat) {
+mt_newRenderPipeline(GPUPixelFormat pixelFormat) {
   GPURenderPipeline *pipeline;
   MtRenderDesc      *renderDesc;
 
@@ -85,11 +85,11 @@ mt_sampleCount(GPURenderPipeline * __restrict pipline,
 GPU_HIDE
 void
 mt_initRenderPipeline(GPUApiRender *api) {
-  api->newPipeline    = mt_newPipeline;
-  api->newRenderState = mt_newRenderState;
-  api->setFunction    = mt_setFunction;
-  api->colorFormat    = mt_colorFormat;
-  api->depthFormat    = mt_depthFormat;
-  api->stencilFormat  = mt_stencilFormat;
-  api->sampleCount    = mt_sampleCount;
+  api->newRenderPipeline = mt_newRenderPipeline;
+  api->newRenderState    = mt_newRenderState;
+  api->setFunction       = mt_setFunction;
+  api->colorFormat       = mt_colorFormat;
+  api->depthFormat       = mt_depthFormat;
+  api->stencilFormat     = mt_stencilFormat;
+  api->sampleCount       = mt_sampleCount;
 }

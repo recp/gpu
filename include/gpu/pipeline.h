@@ -36,7 +36,7 @@ typedef enum GPUFunctionType {
 
 GPU_EXPORT
 GPURenderPipeline*
-GPUNewPipeline(GPUPixelFormat pixelFormat);
+GPUNewRenderPipeline(GPUPixelFormat pixelFormat);
 
 GPU_EXPORT
 GPURenderPipelineState*
