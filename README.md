@@ -22,6 +22,10 @@ Switching between GPU APIs will be easy: `GPUSwitchGPUApi(GPU_BACKEND_METAL);` o
 
 This section and others will be documented in detail later...
 
+## Naming Conventions
+
+**TODO:** `GPUSetFrontFace()` vs `gpuSetFrontFace()` vs `gpu_set_frontface()`, [feedbacks](https://github.com/recp/gpu/issues/1)
+
 ## Design Sample
 
 I have translated Xcode's Game template project's renderer codes into GPU library (This may be obsoleted by time):
