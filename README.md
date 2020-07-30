@@ -24,7 +24,7 @@ This section and others will be documented in detail later...
 
 ## Naming Conventions
 
-**TODO:** `GPUSetFrontFace()` vs `gpuSetFrontFace()` vs `gpu_set_frontface()`
+**TODO:** `GPUSetFrontFace()` vs `gpuSetFrontFace()` vs `gpu_set_frontface()`, [feedbacks](https://github.com/recp/gpu/issues/1)
 
 ## Design Sample
 
