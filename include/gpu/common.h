@@ -21,8 +21,10 @@
 #include <stdint.h>
 #include <errno.h>
 
-#if defined(_WIN32)
-#  ifdef _gpu_dll
+#if defined(_MSC_VER)
+#  ifdef GPU_STATIC
+#    define GPU_EXPORT
+#  elif defined(GPU_EXPORTS)
 #    define GPU_EXPORT __declspec(dllexport)
 #  else
 #    define GPU_EXPORT __declspec(dllimport)
