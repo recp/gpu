@@ -21,7 +21,7 @@
 #include "../gpu.h"
 
 typedef struct GPUApiVertex {
-  GPUVertexDescriptor* (*newVertexDesc)();
+  GPUVertexDescriptor* (*newVertexDesc)(void);
   
   void
   (*attrib)(GPUVertexDescriptor * __restrict vert,

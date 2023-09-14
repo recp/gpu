@@ -16,8 +16,8 @@
 
 #ifndef gpu_metalkit_helpers_h
 #define gpu_metalkit_helpers_h
-
 #if defined(__APPLE__) && defined(__OBJC__)
+
 #import <MetalKit/MetalKit.h>
 
 GPU_INLINE

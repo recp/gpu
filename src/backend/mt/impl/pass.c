@@ -18,7 +18,7 @@
 
 GPU_HIDE
 GPURenderPassDesc*
-mt_newPass() {
+mt_newPass(void) {
   return mtNewPass();
 }
 

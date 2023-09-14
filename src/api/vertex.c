@@ -18,7 +18,7 @@
 
 GPU_EXPORT
 GPUVertexDescriptor*
-GPUNewVertexDesc() {
+GPUNewVertexDesc(void) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))

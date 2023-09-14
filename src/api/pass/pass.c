@@ -18,7 +18,7 @@
 
 GPU_EXPORT
 GPURenderPassDesc*
-gpuNewPass() {
+gpuNewPass(void) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))

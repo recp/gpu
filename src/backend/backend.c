@@ -58,7 +58,7 @@ GPUSwitchGPUApi(GPUBackend backend) {
 
 GPU_EXPORT
 void
-gpuSwitchGPUApiAuto() {
+gpuSwitchGPUApiAuto(void) {
 #ifdef __APPLE__
   gpu__api = backend_metal();
 #endif
@@ -66,7 +66,7 @@ gpuSwitchGPUApiAuto() {
 
 GPU_EXPORT
 GPUBackend
-gpuActiveGPUBackend() {
+gpuActiveGPUBackend(void) {
   return gpu__api ? gpu__api->backend : GPU_BACKEND_NULL;
 }
 
