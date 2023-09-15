@@ -17,6 +17,17 @@
 #include "../common.h"
 
 GPU_EXPORT
+USLibrary*
+GPUDefaultShaderLibrary(GPUDevice *device) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
+
+  return NULL;
+}
+
+GPU_EXPORT
 GPULibrary*
 GPUDefaultLibrary(GPUDevice *device) {
   GPUApi *api;

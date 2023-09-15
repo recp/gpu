@@ -14,22 +14,11 @@
  * limitations under the License.
  */
 
-#include "common.h"
-#include "impl.h"
+#include "../../common.h"
 
-GPUApi gl = {
-  .initialized = false,
-  .backend     = GPU_BACKEND_OPENGL,
-};
-
-GPU_HIDE
-GPUApi*
-backend_gl(void) {
-  if (!gl.initialized) {
-    gl_initDevice(&gl.device);
-    gl_initRenderPipeline(&gl.render);
-    
-    gl.initialized = true;
-  }
-  return &gl;
+GPU_EXPORT
+GPULibrary*
+GPULibrarySync(GPUDevice * __restrict device,
+               USLibrary * __restrict library) {
+  return NULL;
 }

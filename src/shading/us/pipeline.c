@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
-#include "common.h"
-#include "pipeline.h"
+#include "../../common.h"
 
+GPU_EXPORT
+void
+GPUSetShaderPipelineForRendering(GPURenderPipeline *pipeline, void *s) {
+  
+}

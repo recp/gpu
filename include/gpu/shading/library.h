@@ -14,22 +14,18 @@
  * limitations under the License.
  */
 
-#include "common.h"
-#include "impl.h"
+#ifndef gpu_shading_library_h
+#define gpu_shading_library_h
 
-GPUApi gl = {
-  .initialized = false,
-  .backend     = GPU_BACKEND_OPENGL,
-};
+#include "../common.h"
+#include "../device.h"
+#include <us/us.h>
 
-GPU_HIDE
-GPUApi*
-backend_gl(void) {
-  if (!gl.initialized) {
-    gl_initDevice(&gl.device);
-    gl_initRenderPipeline(&gl.render);
-    
-    gl.initialized = true;
-  }
-  return &gl;
-}
+typedef struct GPULibrary GPULibrary;
+
+GPU_EXPORT
+GPULibrary*
+GPULibrarySync(GPUDevice * __restrict device,
+               USLibrary * __restrict library);
+
+#endif /* gpu_shading_library_h */

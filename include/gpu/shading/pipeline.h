@@ -14,22 +14,11 @@
  * limitations under the License.
  */
 
-#include "common.h"
-#include "impl.h"
+#ifndef gpu_shading_pipeline_h
+#define gpu_shading_pipeline_h
 
-GPUApi gl = {
-  .initialized = false,
-  .backend     = GPU_BACKEND_OPENGL,
-};
+GPU_EXPORT
+void
+GPUSetShaderPipelineForRendering(GPURenderPipeline *pipeline, void *s);
 
-GPU_HIDE
-GPUApi*
-backend_gl(void) {
-  if (!gl.initialized) {
-    gl_initDevice(&gl.device);
-    gl_initRenderPipeline(&gl.render);
-    
-    gl.initialized = true;
-  }
-  return &gl;
-}
+#endif /* gpu_shading_pipeline_h */
