@@ -40,7 +40,7 @@ GPUDefaultLibrary(GPUDevice *device) {
 
 GPU_EXPORT
 GPUFunction*
-GPUNewFunction(GPULibrary *lib, const char *name) {
+GPUShaderFunction(GPULibrary *lib, const char *name) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
