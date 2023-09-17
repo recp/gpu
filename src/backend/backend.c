@@ -49,7 +49,7 @@ GPUSwitchGPUApi(GPUBackend backend) {
 #endif
       break;
     case GPU_BACKEND_OPENGL:
-      gpu__api = backend_gl();
+//      gpu__api = backend_gl();
       break;
     default:
       break;

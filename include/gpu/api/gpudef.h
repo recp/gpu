@@ -46,6 +46,7 @@ typedef struct GPUApi {
   GPUApiDepthStencil  depthStencil;
   GPUApiVertex        vertex;
   GPUApiLibrary       library;
+  void               *reserved;
 } GPUApi;
 
 GPU_EXPORT

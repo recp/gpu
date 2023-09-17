@@ -16,9 +16,9 @@
 
 #include "../../common.h"
 
-GPU_EXPORT
-GPULibrary*
-GPULibrarySync(GPUDevice * __restrict device,
-               USLibrary * __restrict library) {
-  return NULL;
-}
+//GPU_EXPORT
+//GPULibrary*
+//GPULibrarySync(GPUDevice * __restrict device,
+//               USLibrary * __restrict library) {
+//  return NULL;
+//}

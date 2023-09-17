@@ -19,4 +19,14 @@
 
 #include "../../common.h"
 
+#include <dxgi1_4.h>
+#include <d3d12.h>
+
+typedef struct GPU__DX12 {
+  ID3D12Device  *d3dDevice;
+  IDXGIFactory4 *dxgiFactory;
+  IDXGIAdapter1 *adapter;
+} GPU__DX12;
+
 #endif /* dx12_common_h */
+

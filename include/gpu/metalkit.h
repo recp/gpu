@@ -59,6 +59,15 @@ void
 GPULoadAndDrawMTKMesh(GPURenderCommandEncoder *rce, MTKMesh *mesh) {
   GPUSetVertexBuffersFromMTKMeshBuffers(rce, mesh.vertexBuffers);
   GPUDrawIndexedMTKMesh(rce, mesh);
+  
+  
+  //  GPUSetVertexBuffersFromMTKMeshBuffers()
+  //  GPU_SetVertexBuffersFromMTKMeshBuffers()
+  //  gpuSetVertexBuffersFromMTKMeshBuffers()
+  //  gpu_setVertexBuffersFromMTKMeshBuffers()
+  //  gpuSetVertexBuffersFromMTKMeshBuffers()
+  //  gpu_set_vertexbuffers_from_mtkmeshbuffers()
+  //  gpu_mtk_meshbuffer_set_vertexbuffers()
 }
 #ifdef __cplusplus
 }

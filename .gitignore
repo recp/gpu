@@ -58,3 +58,5 @@ win/.vs/
 win/gpu/
 win/gpu/x64/
 win/gpu/src/
+win/x64/
+win/packages/
