@@ -17,6 +17,8 @@
 #ifndef gpu_shading_library_h
 #define gpu_shading_library_h
 #ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "../common.h"
 #include "../device.h"
