@@ -30,6 +30,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(_WIN32) || defined(WIN32)
+#  define WIN32_LEAN_AND_MEAN 
+#  include <SDKDDKVer.h>
+#  include <windows.h>
+#endif
+
 #include "../include/gpu/gpu.h"
 #include "../include/gpu/api/gpudef.h"
 
