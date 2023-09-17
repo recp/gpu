@@ -16,4 +16,7 @@ typedef enum GPUIndexType {
   GPUIndexTypeUInt32 = 1
 } GPUIndexType;
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_stageio_desc_h */

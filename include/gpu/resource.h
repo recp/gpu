@@ -54,4 +54,7 @@ typedef enum GPUResourceOptions {
   GPUResourceHazardTrackingModeTracked   = GPUHazardTrackingModeTracked   << 8
 } GPUResourceOptions;
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_resource_h */
