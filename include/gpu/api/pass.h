@@ -16,6 +16,9 @@
 
 #ifndef gpu_gpudef_pass_h
 #define gpu_gpudef_pass_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "../common.h"
 #include "../gpu.h"
@@ -24,4 +27,7 @@ typedef struct GPUApiPass {
   GPURenderPassDesc* (*newPass)(void);
 } GPUApiPass;
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_gpudef_pass_h */

@@ -16,6 +16,9 @@
 
 #ifndef gpu_pass_h
 #define gpu_pass_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "common.h"
 
@@ -41,6 +44,10 @@ GPUPassFromMTKView(MTKView * __restrict view) {
 #else
   return (void *)view.currentRenderPassDescriptor;
 #endif
+}
+#endif
+
+#ifdef __cplusplus
 }
 #endif
 #endif /* gpu_pass_h */

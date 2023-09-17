@@ -16,6 +16,9 @@
 
 #ifndef gpu_cmd_enc_h
 #define gpu_cmd_enc_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "common.h"
 #include "pass.h"
@@ -90,7 +93,7 @@ GPUSetCullMode(GPURenderCommandEncoder *rce, GPUCullMode mode);
 GPU_EXPORT
 void
 GPUSetRenderState(GPURenderCommandEncoder *rce,
-                          GPURenderPipelineState  *piplineState);
+                  GPURenderPipelineState  *piplineState);
 
 GPU_EXPORT
 void
@@ -110,16 +113,16 @@ gpuVertexBytes(GPURenderCommandEncoder *enc,
 GPU_EXPORT
 void
 GPUSetVertexBuffer(GPURenderCommandEncoder *rce,
-                GPUBuffer               *buf,
-                size_t                   off,
-                uint32_t                 index);
+                   GPUBuffer               *buf,
+                   size_t                   off,
+                   uint32_t                 index);
 
 GPU_EXPORT
 void
 GPUSetFragmentBuffer(GPURenderCommandEncoder *rce,
-                  GPUBuffer               *buf,
-                  size_t                   off,
-                  uint32_t                 index);
+                     GPUBuffer               *buf,
+                     size_t                   off,
+                     uint32_t                 index);
 
 GPU_EXPORT
 void
@@ -137,14 +140,17 @@ gpuDrawPrimitives(GPURenderCommandEncoder *rce,
 GPU_EXPORT
 void
 GPUDrawIndexed(GPURenderCommandEncoder *rce,
-                    GPUPrimitiveType         type,
-                    uint32_t                 indexCount,
-                    GPUIndexType             indexType,
-                    GPUBuffer               *indexBuffer,
-                    uint32_t                 indexBufferOffset);
+               GPUPrimitiveType         type,
+               uint32_t                 indexCount,
+               GPUIndexType             indexType,
+               GPUBuffer               *indexBuffer,
+               uint32_t                 indexBufferOffset);
 
 GPU_EXPORT
 void
 GPUEndEncoding(GPURenderCommandEncoder *rce);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_cmd_enc_h */

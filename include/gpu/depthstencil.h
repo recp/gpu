@@ -16,6 +16,9 @@
 
 #ifndef gpu_depthstencil_h
 #define gpu_depthstencil_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "common.h"
 #include "pipeline.h"
@@ -60,4 +63,7 @@ GPUDepthStencilState*
 GPUNewDepthStencilState(GPUDevice       * __restrict device,
                         GPUDepthStencil * __restrict depthStencil);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_depthstencil_h */

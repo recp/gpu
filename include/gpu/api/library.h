@@ -16,6 +16,9 @@
 
 #ifndef gpu_gpudef_library_h
 #define gpu_gpudef_library_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "../common.h"
 #include "../gpu.h"
@@ -23,9 +26,12 @@
 typedef struct GPUApiLibrary {
   GPULibrary*
   (*defaultLibrary)(GPUDevice *device);
-
+  
   GPUFunction*
   (*newFunction)(GPULibrary *lib, const char *name);
 } GPUApiLibrary;
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_gpudef_library_h */

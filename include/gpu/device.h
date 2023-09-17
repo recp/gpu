@@ -16,6 +16,9 @@
 
 #ifndef gpu_device_h
 #define gpu_device_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "common.h"
 
@@ -26,4 +29,7 @@ typedef struct GPUDevice {
 GPUDevice*
 GPUCreateSystemDefaultDevice(void);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_device_h */

@@ -16,6 +16,9 @@
 
 #ifndef gpu_buffer_h
 #define gpu_buffer_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "common.h"
 #include "resource.h"
@@ -41,4 +44,7 @@ GPU_EXPORT
 void
 GPUPresent(GPUCommandBuffer *cmdb, void *drawable);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_buffer_h */

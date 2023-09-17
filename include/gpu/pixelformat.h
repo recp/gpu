@@ -16,12 +16,15 @@
 
 #ifndef gpu_pixelformat_h
 #define gpu_pixelformat_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "common.h"
 
 typedef enum GPUPixelFormat {
   GPUPixelFormatInvalid                = 0,
-  
+
   /* Normal 8 bit formats */
   GPUPixelFormatA8Unorm                = 1,
   GPUPixelFormatR8Unorm                = 10,
@@ -187,4 +190,7 @@ typedef enum GPUPixelFormat {
   GPUPixelFormatX24_Stencil8           = 262
 } GPUPixelFormat;
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_pixelformat_h */

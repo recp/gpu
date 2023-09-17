@@ -16,6 +16,9 @@
 
 #ifndef gpu_gpudef_device_h
 #define gpu_gpudef_device_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "../common.h"
 #include "../gpu.h"
@@ -24,4 +27,7 @@ typedef struct GPUApiDevice {
   GPUDevice* (*createSystemDefaultDevice)(void);
 } GPUApiDevice;
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_gpudef_device_h */

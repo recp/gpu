@@ -16,9 +16,15 @@
 
 #ifndef gpu_shading_pipeline_h
 #define gpu_shading_pipeline_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 GPU_EXPORT
 void
 GPUSetShaderPipelineForRendering(GPURenderPipeline *pipeline, void *s);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_shading_pipeline_h */

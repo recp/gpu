@@ -16,6 +16,9 @@
 
 #ifndef gpu_gpudef_cmdbuff_h
 #define gpu_gpudef_cmdbuff_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "../common.h"
 #include "../gpu.h"
@@ -24,4 +27,7 @@ typedef struct GPUApiCommandBuffer {
   void (*presentDrawable)(GPUCommandBuffer *cmdb, void *drawable);
 } GPUApiCommandBuffer;
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_gpudef_cmdbuff_h */

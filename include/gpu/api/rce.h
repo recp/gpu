@@ -16,6 +16,9 @@
 
 #ifndef gpu_api_rce_h
 #define gpu_api_rce_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "../common.h"
 #include "../gpu.h"
@@ -60,8 +63,8 @@ typedef struct GPUApiRCE {
   
   void
   (*setFragmentTexture)(GPURenderCommandEncoder *rce,
-                   GPUTexture               *tex,
-                   uint32_t                 index);
+                        GPUTexture               *tex,
+                        uint32_t                 index);
   void
   (*drawIndexedPrims)(GPURenderCommandEncoder *rce,
                       GPUPrimitiveType         type,
@@ -73,4 +76,7 @@ typedef struct GPUApiRCE {
   (*endEncoding)(GPURenderCommandEncoder *rce);
 } GPUApiRCE;
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_api_rce_h */

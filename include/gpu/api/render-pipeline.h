@@ -16,6 +16,9 @@
 
 #ifndef gpu_api_renderpipeline_h
 #define gpu_api_renderpipeline_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "../common.h"
 #include "../gpu.h"
@@ -52,4 +55,7 @@ typedef struct GPUApiRender {
   
 } GPUApiRender;
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_api_renderpipeline_h */

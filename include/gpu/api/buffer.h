@@ -16,6 +16,9 @@
 
 #ifndef gpu_gpudef_buff_h
 #define gpu_gpudef_buff_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "../common.h"
 #include "../gpu.h"
@@ -32,4 +35,7 @@ typedef struct GPUApiBuffer {
   (*contents)(GPUBuffer * __restrict buff);
 } GPUApiBuffer;
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_gpudef_buff_h */

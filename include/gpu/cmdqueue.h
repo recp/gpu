@@ -16,6 +16,9 @@
 
 #ifndef gpu_cmdqueue_h
 #define gpu_cmdqueue_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "common.h"
 #include "device.h"
@@ -51,4 +54,7 @@ GPU_EXPORT
 void
 GPUCommit(GPUCommandBuffer * __restrict cmdb);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_cmdqueue_h */

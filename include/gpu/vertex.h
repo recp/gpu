@@ -16,6 +16,9 @@
 
 #ifndef gpu_vertex_desc_h
 #define gpu_vertex_desc_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "common.h"
 #include "pipeline.h"
@@ -78,7 +81,7 @@ typedef enum GPUVertexFormat {
   GPUUInt1010102Normalized = 41,
   
   GPUUChar4Normalized_BGRA = 42,
-
+  
   GPUUChar           = 45,
   GPUChar            = 46,
   GPUUCharNormalized = 47,
@@ -143,6 +146,9 @@ GPULayout(GPUVertexDescriptor * __restrict vertex,
 GPU_EXPORT
 void
 GPUSetVertexDesc(GPURenderPipeline   * __restrict pipeline,
-              GPUVertexDescriptor * __restrict vert);
+                 GPUVertexDescriptor * __restrict vert);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_vertex_desc_h */

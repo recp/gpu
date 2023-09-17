@@ -16,6 +16,9 @@
 
 #ifndef gpu_gpudef_vertex_h
 #define gpu_gpudef_vertex_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "../common.h"
 #include "../gpu.h"
@@ -36,10 +39,13 @@ typedef struct GPUApiVertex {
             uint32_t                         stride,
             uint32_t                         stepRate,
             GPUVertexStepFunction            stepFunction);
-
+  
   void
   (*vertexDesc)(GPURenderPipeline   * __restrict pipeline,
                 GPUVertexDescriptor * __restrict vert);
 } GPUApiVertex;
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_gpudef_vertex_h */

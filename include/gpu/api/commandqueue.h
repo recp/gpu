@@ -16,6 +16,9 @@
 
 #ifndef gpu_gpudef_cmdque_h
 #define gpu_gpudef_cmdque_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "../common.h"
 #include "../gpu.h"
@@ -38,4 +41,7 @@ typedef struct GPUApiCommandQueue {
   (*commit)(GPUCommandBuffer * __restrict cmdb);
 } GPUApiCommandQueue;
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_gpudef_cmdque_h */

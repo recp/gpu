@@ -16,6 +16,7 @@
 
 #ifndef gpu_shading_library_h
 #define gpu_shading_library_h
+#ifdef __cplusplus
 
 #include "../common.h"
 #include "../device.h"
@@ -23,9 +24,12 @@
 
 typedef struct GPULibrary GPULibrary;
 
-GPU_EXPORT
-GPULibrary*
-GPULibrarySync(GPUDevice * __restrict device,
-               USLibrary * __restrict library);
+//GPU_EXPORT
+//GPULibrary*
+//GPULibrarySync(GPUDevice * __restrict device,
+//               USLibrary * __restrict library);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_shading_library_h */

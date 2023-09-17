@@ -16,6 +16,9 @@
 
 #ifndef gpu_common_h
 #define gpu_common_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -50,4 +53,7 @@
 
 #define GPU_FLG(FLAGS, FLAG) ((FLAGS & FLAG) == FLAG)
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_common_h */

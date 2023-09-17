@@ -16,6 +16,9 @@
 
 #ifndef gpu_pipeline_h
 #define gpu_pipeline_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "common.h"
 #include "pixelformat.h"
@@ -70,4 +73,7 @@ void
 GPUSampleCount(GPURenderPipeline * __restrict pipline,
                uint32_t                 sampleCount);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_pipeline_h */

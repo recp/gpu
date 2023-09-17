@@ -16,7 +16,13 @@
 
 #ifndef gpu_texture_h
 #define gpu_texture_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct GPUTexture GPUTexture;
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_texture_h */

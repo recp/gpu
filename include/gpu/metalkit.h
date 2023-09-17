@@ -17,6 +17,9 @@
 #ifndef gpu_metalkit_helpers_h
 #define gpu_metalkit_helpers_h
 #if defined(__APPLE__) && defined(__OBJC__)
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #import <MetalKit/MetalKit.h>
 
@@ -57,6 +60,8 @@ GPULoadAndDrawMTKMesh(GPURenderCommandEncoder *rce, MTKMesh *mesh) {
   GPUSetVertexBuffersFromMTKMeshBuffers(rce, mesh.vertexBuffers);
   GPUDrawIndexedMTKMesh(rce, mesh);
 }
-
+#ifdef __cplusplus
+}
+#endif
 #endif
 #endif /* gpu_metalkit_helpers_h */
