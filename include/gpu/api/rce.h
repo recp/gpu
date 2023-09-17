@@ -30,7 +30,6 @@ typedef struct GPUApiRCE {
   void
   (*cullMode)(GPURenderCommandEncoder *rce, GPUCullMode mode);
   
-  GPU_EXPORT
   void
   (*setRenderPipelineState)(GPURenderCommandEncoder *rce,
                             GPURenderPipelineState  *piplineState);
