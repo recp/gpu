@@ -54,3 +54,7 @@ dkms.conf
 # Project files
 *.xcodeproj
 *.xcworkspace
+win/.vs/
+win/gpu/
+win/gpu/x64/
+win/gpu/src/
