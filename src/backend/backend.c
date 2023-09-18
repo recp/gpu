@@ -61,6 +61,8 @@ void
 gpuSwitchGPUApiAuto(void) {
 #ifdef __APPLE__
   gpu__api = backend_metal();
+#elif defined(_WIN32) || defined(WIN32)
+  gpu__api = backend_dx12(); /* check DX version support */
 #endif
 }
 

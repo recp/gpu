@@ -25,7 +25,6 @@ GPUApi dx12 = {
 GPU_HIDE
 GPUApi*
 backend_dx12(void) {
-  // TODO: init 
-
+  // TODO: init
   return &dx12;
 }

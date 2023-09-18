@@ -16,6 +16,9 @@
 
 #include "../common.h"
 
+void GPU_CONSTRUCTOR gpu__init(void);
+void GPU_DESTRUCTOR  gpu__cleanup(void);
+
 BOOL 
 APIENTRY 
 DllMain(HMODULE hModule,
@@ -25,10 +28,13 @@ DllMain(HMODULE hModule,
   switch (ul_reason_for_call)
   {
   case DLL_PROCESS_ATTACH:
+    gpu__init();
+    break;
   case DLL_THREAD_ATTACH:
   case DLL_THREAD_DETACH:
   case DLL_PROCESS_DETACH:
-      break;
+    gpu__cleanup();
+    break;
   }
   return TRUE;
 }

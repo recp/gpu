@@ -25,6 +25,12 @@ GPUApi*
 backend_metal(void);
 #endif
 
+#if defined(_WIN32) || defined(WIN32)
+GPU_HIDE
+GPUApi*
+backend_dx12(void);
+#endif
+
 GPU_HIDE
 GPUApi*
 backend_gl(void);

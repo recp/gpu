@@ -61,12 +61,13 @@ GetHardwareAdapter(IDXGIFactory4* dxgiFactory, IDXGIAdapter1** ppAdapter) {
   }
 }
 
+GPU_EXPORT
 void
-dx12__CreateDevice() {
-  ID3D12Device   *m_d3dDevice;
-  IDXGIFactory4  *m_dxgiFactory;
-  IDXGIAdapter1  *adapter;
+dx12__CreateDevice(GPUApi * __restrict api) {
+  GPU__DX12      *dx12api;
   HRESULT         hr;
+
+  dx12api = api->reserved;
 
 #if defined(_DEBUG)
   // If the project is in a debug build, enable debugging via SDK Layers.
@@ -80,32 +81,32 @@ dx12__CreateDevice() {
   }
 #endif
 
-  hr = CreateDXGIFactory1(&IID_IDXGIFactory1, (void**)&m_dxgiFactory);
+  hr = CreateDXGIFactory1(&IID_IDXGIFactory1, (void**)&dx12api->dxgiFactory);
   ThrowIfFailed(hr);
 
-  GetHardwareAdapter(m_dxgiFactory, &adapter);
+  GetHardwareAdapter(dx12api->dxgiFactory, &dx12api->adapter);
 
   // Create the Direct3D 12 API device object
-  hr = D3D12CreateDevice((IUnknown*)adapter,
+  hr = D3D12CreateDevice((IUnknown*)dx12api->adapter,
                          D3D_FEATURE_LEVEL_11_0,
                          &IID_ID3D12Device,
-                         (void**)&m_d3dDevice);
+                         (void**)&dx12api->d3dDevice);
 
-  if (adapter) {
-    adapter->lpVtbl->Release(adapter);
+  if (dx12api->adapter) {
+    dx12api->adapter->lpVtbl->Release(dx12api->adapter);
   }
 
 #if defined(_DEBUG)
   if (FAILED(hr)) {
     IDXGIAdapter* warpAdapter;
-    hr = m_dxgiFactory->lpVtbl->EnumWarpAdapter(m_dxgiFactory, &IID_IDXGIAdapter, (void**)&warpAdapter);
+    hr = dx12api->dxgiFactory->lpVtbl->EnumWarpAdapter(dx12api->dxgiFactory, &IID_IDXGIAdapter, (void**)&warpAdapter);
 
     ThrowIfFailed(hr);
 
     hr = D3D12CreateDevice((IUnknown*)warpAdapter,
                            D3D_FEATURE_LEVEL_11_0,
                            &IID_ID3D12Device,
-                           (void**)&m_d3dDevice);
+                           (void**)&dx12api->d3dDevice);
 
     if (warpAdapter) {
       warpAdapter->lpVtbl->Release(warpAdapter);
