@@ -26,5 +26,18 @@ GPU_HIDE
 GPUApi*
 backend_dx12(void) {
   // TODO: init
+  if (!dx12.initialized) {
+    // dx12_initDevice(&mt.device);
+    // dx12_initRenderPipeline(&mt.render);
+    // dx12_initRCE(&mt.rce);
+    // dx12_initCmdBuff(&mt.cmdbuf);
+    dx12_initCmdQue(&dx12.cmdque);
+    // dx12_initBuff(&mt.buf);
+    // dx12_initDepthStencil(&mt.depthStencil);
+    // dx12_initVertex(&mt.vertex);
+    // dx12_initLibrary(&mt.library);
+
+    dx12.initialized = true;
+  }
   return &dx12;
 }
