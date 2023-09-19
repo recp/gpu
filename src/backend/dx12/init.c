@@ -27,15 +27,15 @@ GPUApi*
 backend_dx12(void) {
   // TODO: init
   if (!dx12.initialized) {
-    // dx12_initDevice(&mt.device);
-    // dx12_initRenderPipeline(&mt.render);
-    // dx12_initRCE(&mt.rce);
-    // dx12_initCmdBuff(&mt.cmdbuf);
+    dx12_initDevice(&dx12.device);
+    // dx12_initRenderPipeline(&dx12.render);
+    // dx12_initRCE(&dx12.rce);
+    // dx12_initCmdBuff(&dx12.cmdbuf);
     dx12_initCmdQue(&dx12.cmdque);
-    // dx12_initBuff(&mt.buf);
-    // dx12_initDepthStencil(&mt.depthStencil);
-    // dx12_initVertex(&mt.vertex);
-    // dx12_initLibrary(&mt.library);
+    // dx12_initBuff(&dx12.buf);
+    // dx12_initDepthStencil(&dx12.depthStencil);
+    // dx12_initVertex(&dx12.vertex);
+    // dx12_initLibrary(&dx12.library);
 
     dx12.initialized = true;
   }

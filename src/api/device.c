@@ -24,5 +24,5 @@ GPUCreateSystemDefaultDevice(void) {
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->device.createSystemDefaultDevice();
+  return api->device.createSystemDefaultDevice(api);
 }

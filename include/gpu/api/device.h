@@ -23,8 +23,10 @@ extern "C" {
 #include "../common.h"
 #include "../gpu.h"
 
+struct GPUApi;
+
 typedef struct GPUApiDevice {
-  GPUDevice* (*createSystemDefaultDevice)(void);
+  GPUDevice* (*createSystemDefaultDevice)(struct GPUApi*);
 } GPUApiDevice;
 
 #ifdef __cplusplus

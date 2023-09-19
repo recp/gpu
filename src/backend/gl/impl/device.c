@@ -18,7 +18,7 @@
 
 GPU_HIDE
 GPUDevice*
-gl_createSystemDefaultDevice(void) {
+gl_createSystemDefaultDevice(GPUApi *api) {
   GPUDevice *device;
 
   device = calloc(1, sizeof(*device));

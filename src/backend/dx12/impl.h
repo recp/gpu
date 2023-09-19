@@ -17,7 +17,7 @@
 #ifndef dx12_apis_h
 #define dx12_apis_h
 
-// GPU_HIDE void dx12_initDevice(GPUApiDevice* apiDevice);
+GPU_HIDE void dx12_initDevice(GPUApiDevice* apiDevice);
 // GPU_HIDE void dx12_initRenderPipeline(GPUApiRender* api);
 // GPU_HIDE void dx12_initRCE(GPUApiRCE* api);
 // GPU_HIDE void dx12_initCmdBuff(GPUApiCommandBuffer* api);
