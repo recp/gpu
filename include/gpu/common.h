@@ -18,6 +18,9 @@
 #define gpu_common_h
 #ifdef __cplusplus
 extern "C" {
+#  define GPU_EXTERN extern "C"
+#else
+#  define GPU_EXTERN extern
 #endif
 
 #include <stdbool.h>
