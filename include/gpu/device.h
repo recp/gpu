@@ -26,6 +26,7 @@ typedef struct GPUDevice {
   void *priv;
 } GPUDevice;
 
+GPU_EXPORT
 GPUDevice*
 GPUCreateSystemDefaultDevice(void);
 
