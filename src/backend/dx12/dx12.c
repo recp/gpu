@@ -16,22 +16,9 @@
 
 #include "common.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-
-
-inline void ThrowIfFailed(HRESULT hr)
-{
-  if (FAILED(hr))
-  {
-    // Print an error message and exit.
-    fprintf(stderr, "An error occurred: 0x%08lx\n", hr);
-    exit(EXIT_FAILURE);
-  }
-}
-
+GPU_HIDE
 void
-GetHardwareAdapter(IDXGIFactory4* dxgiFactory, IDXGIAdapter1** ppAdapter) {
+dx12__getHardwareAdapter(IDXGIFactory4* dxgiFactory, IDXGIAdapter1** ppAdapter) {
   IDXGIAdapter1* adapter = NULL;
   *ppAdapter = NULL;
 
@@ -41,22 +28,22 @@ GetHardwareAdapter(IDXGIFactory4* dxgiFactory, IDXGIAdapter1** ppAdapter) {
     adapter->lpVtbl->GetDesc1(adapter, &desc);
 
     if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
-      // Don't select the Basic Render Driver adapter.
-      adapter->lpVtbl->Release(adapter);  // Release the current adapter before moving to next
+      /* Don't select the Basic Render Driver adapter.*/
+      adapter->lpVtbl->Release(adapter);  /* Release the current adapter before moving to next */
       adapterIndex++;
       continue;
     }
 
-    // Check to see if the adapter supports Direct3D 12, but don't create the
-    // actual device yet.
+    /* Check to see if the adapter supports Direct3D 12, but don't create the
+       actual device yet.*/
     if (SUCCEEDED(D3D12CreateDevice((IUnknown*)adapter,
                                     D3D_FEATURE_LEVEL_11_0, 
                                     &IID_ID3D12Device, NULL))) {
-      *ppAdapter = adapter; // Transfer ownership to caller
+      *ppAdapter = adapter; /* Transfer ownership to caller */
       return;
     }
 
-    adapter->lpVtbl->Release(adapter); // Release the current adapter before moving to next
+    adapter->lpVtbl->Release(adapter); /* Release the current adapter before moving to next */
     adapterIndex++;
   }
 }
@@ -70,7 +57,7 @@ dx12__CreateDevice(GPUApi * __restrict api) {
   dx12api = api->reserved;
 
 #if defined(_DEBUG)
-  // If the project is in a debug build, enable debugging via SDK Layers.
+  /* If the project is in a debug build, enable debugging via SDK Layers.*/
   {
     ID3D12Debug* debugController;
     if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug, 
@@ -84,9 +71,9 @@ dx12__CreateDevice(GPUApi * __restrict api) {
   hr = CreateDXGIFactory1(&IID_IDXGIFactory1, (void**)&dx12api->dxgiFactory);
   ThrowIfFailed(hr);
 
-  GetHardwareAdapter(dx12api->dxgiFactory, &dx12api->adapter);
+  dx12__getHardwareAdapter(dx12api->dxgiFactory, &dx12api->adapter);
 
-  // Create the Direct3D 12 API device object
+  /* Create the Direct3D 12 API device object */
   hr = D3D12CreateDevice((IUnknown*)dx12api->adapter,
                          D3D_FEATURE_LEVEL_11_0,
                          &IID_ID3D12Device,

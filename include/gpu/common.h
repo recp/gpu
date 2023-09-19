@@ -18,14 +18,13 @@
 #define gpu_common_h
 #ifdef __cplusplus
 extern "C" {
-#  define GPU_EXTERN extern "C"
-#else
-#  define GPU_EXTERN extern
+#define GPU_EXTERN extern "C"
 #endif
 
 #include <stdbool.h>
 #include <stdint.h>
 #include <errno.h>
+#include <stdlib.h>
 
 #if defined(_MSC_VER)
 #  ifdef GPU_STATIC

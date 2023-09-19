@@ -28,5 +28,15 @@ typedef struct GPU__DX12 {
   IDXGIAdapter1 *adapter;
 } GPU__DX12;
 
+GPU_INLINE
+void
+ThrowIfFailed(HRESULT hr) {
+  if (FAILED(hr)) {
+    /* Print an error message and exit. */
+    fprintf(stderr, "An error occurred: 0x%08lx\n", hr);
+    exit(EXIT_FAILURE);
+  }
+}
+
 #endif /* dx12_common_h */
 
