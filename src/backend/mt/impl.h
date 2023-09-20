@@ -23,9 +23,11 @@ GPU_HIDE void mt_initRCE(GPUApiRCE *api);
 GPU_HIDE void mt_initCmdBuff(GPUApiCommandBuffer *api);
 GPU_HIDE void mt_initCmdQue(GPUApiCommandQueue *api);
 GPU_HIDE void mt_initBuff(GPUApiBuffer *api);
-GPU_HIDE void mt_initPass(GPUApiPass *api);
+GPU_HIDE void mt_initRenderPass(GPUApiRenderPass *api);
 GPU_HIDE void mt_initDepthStencil(GPUApiDepthStencil *api);
 GPU_HIDE void mt_initVertex(GPUApiVertex *api);
 GPU_HIDE void mt_initLibrary(GPUApiLibrary *api);
+GPU_HIDE void mt_initSwapChain(GPUApiSwapChain *api);
+GPU_HIDE void mt_initFrame(GPUApiFrame *api);
 
 #endif /* mt_apis_h */

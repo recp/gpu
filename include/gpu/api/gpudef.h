@@ -32,6 +32,8 @@ extern "C" {
 #include "depthstencil.h"
 #include "vertex.h"
 #include "library.h"
+#include "swapchain.h"
+#include "frame.h"
 
 typedef struct GPUApi {
   GPUBackend          backend;
@@ -42,10 +44,12 @@ typedef struct GPUApi {
   GPUApiBuffer        buf;
   GPUApiCommandBuffer cmdbuf;
   GPUApiCommandQueue  cmdque;
-  GPUApiPass          pass;
+  GPUApiRenderPass    renderPass;
   GPUApiDepthStencil  depthStencil;
   GPUApiVertex        vertex;
   GPUApiLibrary       library;
+  GPUApiSwapChain     swapchain;
+  GPUApiFrame         frame;
   void               *reserved;
 } GPUApi;
 

@@ -14,15 +14,34 @@
  * limitations under the License.
  */
 
-#include "../../common.h"
+#include "../common.h"
 
 GPU_EXPORT
-GPURenderPassDesc*
-gpuNewPass(void) {
+GPUFrame*
+GPUBeginFrame(GPUSwapChain* swapchain) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->pass.newPass();
+  return api->frame.beginFrame(swapchain);
+}
+
+GPU_EXPORT
+void
+GPUEndFrame(GPUFrame* frame) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return;
+
+  return api->frame.endFrame(frame);
+}
+
+GPU_EXPORT
+void
+GPUFinishFrame(GPUCommandBuffer * __restrict cmdb, GPUFrame * __restrict frame) {
+  GPUPresent(cmdb, frame);
+  GPUCommit(cmdb);
+  GPUEndFrame(frame);
 }

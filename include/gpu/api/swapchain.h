@@ -14,15 +14,22 @@
  * limitations under the License.
  */
 
-#include "../../common.h"
+#ifndef gpu_gpudef_swapchain_h
+#define gpu_gpudef_swapchain_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-GPU_EXPORT
-void
-GPUPresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  GPUApi *api;
+#include "../common.h"
+#include "../gpu.h"
 
-  if (!(api = gpuActiveGPUApi()))
-    return;
+typedef struct GPUApiSwapChain {
+  GPUSwapChain* (*createSwapChain)(GPUDevice* device, float backingScaleFactor);
+  void (*attachToLayer)(GPUSwapChain* swapChain, void* targetLayer, bool autoResize);
+  void (*attachToView)(GPUSwapChain* swapChain, void *viewHandle, bool autoResize, bool replace);
+} GPUApiSwapChain;
 
-  return api->cmdbuf.presentDrawable(cmdb, frame);
+#ifdef __cplusplus
 }
+#endif
+#endif /* gpu_gpudef_swapchain_h */

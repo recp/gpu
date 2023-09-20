@@ -37,6 +37,8 @@ extern "C" {
 #include "texture.h"
 #include "shading/library.h"
 #include "shading/pipeline.h"
+#include "swapchain.h"
+#include "frame.h"
 
 typedef enum GPUBackend {
   GPU_BACKEND_NULL    = 0,

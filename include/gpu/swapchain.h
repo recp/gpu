@@ -14,38 +14,34 @@
  * limitations under the License.
  */
 
-#ifndef gpu_buffer_h
-#define gpu_buffer_h
+#ifndef gpu_swapchain_h
+#define gpu_swapchain_h
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "common.h"
-#include "resource.h"
-#include "cmdqueue.h"
-
-typedef struct GPUBuffer GPUBuffer;
-typedef struct GPUFrame  GPUFrame;
-
-GPU_EXPORT
-GPUBuffer*
-GPUNewBuffer(GPUDevice * __restrict device,
-             size_t                 len,
-             GPUResourceOptions     options);
+typedef struct GPUSwapChain {
+  void *_priv;
+  void *target; /* draw target */
+  float backingScaleFactor;
+} GPUSwapChain;
 
 GPU_EXPORT
-size_t
-gpuBufferLength(GPUBuffer * __restrict buff);
-
-GPU_EXPORT
-GPUBuffer*
-gpuBufferContents(GPUBuffer * __restrict buff);
+GPUSwapChain*
+GPUCreateSwapChain(GPUDevice* device, float backingScaleFactor);
 
 GPU_EXPORT
 void
-GPUPresent(GPUCommandBuffer *cmdb, struct GPUFrame *frame);
+GPUSwapChainAttachToLayer(GPUSwapChain* swapChain, void* targetLayer, bool autoResize);
+
+GPU_EXPORT
+void
+GPUSwapChainAttachToView(GPUSwapChain  *swapChain,
+                         void          *viewHandle,
+                         bool           autoResize,
+                         bool           replace);
 
 #ifdef __cplusplus
 }
 #endif
-#endif /* gpu_buffer_h */
+#endif /* gpu_swapchain_h */

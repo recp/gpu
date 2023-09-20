@@ -24,7 +24,7 @@ extern "C" {
 #include "../gpu.h"
 
 typedef struct GPUApiCommandBuffer {
-  void (*presentDrawable)(GPUCommandBuffer *cmdb, void *drawable);
+  void (*presentDrawable)(GPUCommandBuffer *cmdb, GPUFrame *frame);
 } GPUApiCommandBuffer;
 
 #ifdef __cplusplus

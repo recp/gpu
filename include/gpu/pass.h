@@ -21,6 +21,8 @@ extern "C" {
 #endif
 
 #include "common.h"
+#include "swapchain.h"
+#include "frame.h"
 
 #define gpu_pass_begin() /* */
 #define gpu_pass_finish() /* */
@@ -28,24 +30,34 @@ extern "C" {
 #define gpu_begin() /* */
 #define gpu_finish() /* */
 
-typedef struct GPURenderPassDesc GPURenderPassDesc;
+typedef struct GPURenderPassDesc {
+  void *_priv;
+} GPURenderPassDesc;
 
 GPU_EXPORT
 GPURenderPassDesc*
 gpuNewPass(void);
 
-#if defined(__APPLE__) && defined(__OBJC__)
-@class MTKView;
-GPU_INLINE
+GPU_EXPORT
 GPURenderPassDesc*
-GPUPassFromMTKView(MTKView * __restrict view) {
-#if __has_feature(objc_arc)
-  return (__bridge void *)view.currentRenderPassDescriptor;
-#else
-  return (void *)view.currentRenderPassDescriptor;
-#endif
-}
-#endif
+GPUBeginRenderPass(GPUTexture *target);
+
+GPU_EXPORT
+void
+GPUEndRenderPass(GPURenderPassDesc *pass);
+
+//#if defined(__APPLE__) && defined(__OBJC__)
+//@class MTKView;
+//GPU_INLINE
+//GPURenderPassDesc*
+//GPUPassFromMTKView(MTKView * __restrict view) {
+//#if __has_feature(objc_arc)
+//  return (__bridge void *)view.currentRenderPassDescriptor;
+//#else
+//  return (void *)view.currentRenderPassDescriptor;
+//#endif
+//}
+//#endif
 
 #ifdef __cplusplus
 }

@@ -19,7 +19,7 @@
 GPU_HIDE
 GPURenderCommandEncoder*
 mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
-  return mtNewRenderCommandEncoder(cmdb->priv, pass);
+  return [(id<MTLCommandBuffer>)cmdb->priv renderCommandEncoderWithDescriptor: pass->_priv];
 }
 
 GPU_HIDE

@@ -45,6 +45,12 @@ typedef enum GPUStencilOperation {
   GPUStencilOperationDecrementWrap  = 7
 } GPUStencilOperation;
 
+typedef enum GPUDepthStencilFormat {
+  GPU_DEPTH_STENCIL_NONE,
+  GPU_DEPTH32FLOAT_STENCIL8,
+  // ... other formats
+} GPUDepthStencilFormat;
+
 typedef struct GPUDepthStencil {
   void *priv;
 } GPUDepthStencil;

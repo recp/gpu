@@ -20,4 +20,28 @@
 #include "../common.h"
 #include <cmt/cmt.h>
 
+#if defined(__APPLE__) && defined(__OBJC__)
+#import <Metal/Metal.h>
+#import <QuartzCore/CAMetalLayer.h>
+
+typedef CALayer GPUViewLayer;
+
+#if TARGET_OS_IOS
+#import <UIKit/UIKit.h>
+typedef UIView GPUViewHandle;
+#elif TARGET_OS_MAC
+#import <AppKit/AppKit.h>
+typedef NSView GPUViewHandle;
+#else
+#error "Unsupported platform"
+#endif
+
+@class GPUSwapChainObjc;
+
+typedef struct GPUSwapChainMetal {
+  CAMetalLayer *layer;
+  void         *objc;
+} GPUSwapChainMetal;
+#endif
+
 #endif /* metal_common_h */

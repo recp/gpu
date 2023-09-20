@@ -14,15 +14,35 @@
  * limitations under the License.
  */
 
-#include "../../common.h"
+#ifndef gpu_frame_h
+#define gpu_frame_h
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include "texture.h"
+#include "buffer.h"
+
+typedef struct GPUFrame {
+  void       *_priv;
+  GPUTexture *target;
+  void       *drawable;
+  // Other members...
+} GPUFrame;
+
+GPU_EXPORT
+GPUFrame*
+GPUBeginFrame(GPUSwapChain* swapchain);
 
 GPU_EXPORT
 void
-GPUPresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  GPUApi *api;
+GPUEndFrame(GPUFrame* frame);
 
-  if (!(api = gpuActiveGPUApi()))
-    return;
+GPU_EXPORT
+void
+GPUFinishFrame(GPUCommandBuffer * __restrict cmdb, GPUFrame * __restrict frame);
 
-  return api->cmdbuf.presentDrawable(cmdb, frame);
+#ifdef __cplusplus
 }
+#endif
+#endif /* gpu_frame_h */

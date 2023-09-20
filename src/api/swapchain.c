@@ -14,15 +14,37 @@
  * limitations under the License.
  */
 
-#include "../../common.h"
+#include "../common.h"
+
+GPU_EXPORT
+GPUSwapChain*
+GPUCreateSwapChain(GPUDevice* device, float backingScaleFactor) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
+
+  return api->swapchain.createSwapChain(device, backingScaleFactor);
+}
 
 GPU_EXPORT
 void
-GPUPresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
+GPUSwapChainAttachToLayer(GPUSwapChain* swapChain, void* targetLayer, bool autoResize) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
     return;
 
-  return api->cmdbuf.presentDrawable(cmdb, frame);
+  return api->swapchain.attachToLayer(swapChain, targetLayer, autoResize);
+}
+
+GPU_EXPORT
+void
+GPUSwapChainAttachToView(GPUSwapChain* swapChain, void *viewHandle, bool autoResize, bool replace) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return;
+
+  return api->swapchain.attachToView(swapChain, viewHandle, autoResize, replace);
 }

@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-#include "cmd/cmdbuf.c"
-#include "cmd/cmdque.c"
-#include "render/pipeline.c"
-#include "render/rce.c"
-#include "device.c"
-#include "buffer.c"
-#include "pass.c"
-#include "depthstencil.c"
-#include "vertex.c"
-#include "library.c"
+//#include "cmd/cmdbuf.c"
+//#include "cmd/cmdque.c"
+//#include "render/pipeline.c"
+//#include "render/rce.c"
+//#include "device.c"
+//#include "buffer.c"
+//#include "renderpass.m"
+//#include "depthstencil.c"
+//#include "vertex.c"
+//#include "library.c"

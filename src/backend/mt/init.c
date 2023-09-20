@@ -36,6 +36,9 @@ backend_metal(void) {
     mt_initDepthStencil(&mt.depthStencil);
     mt_initVertex(&mt.vertex);
     mt_initLibrary(&mt.library);
+    mt_initRenderPass(&mt.renderPass);
+    mt_initSwapChain(&mt.swapchain);
+    mt_initFrame(&mt.frame);
 
     mt.initialized = true;
   }

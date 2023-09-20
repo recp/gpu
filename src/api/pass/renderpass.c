@@ -14,16 +14,37 @@
  * limitations under the License.
  */
 
-#include "../common.h"
+#include "../../common.h"
 
-GPU_HIDE
+GPU_EXPORT
 GPURenderPassDesc*
-mt_newPass(void) {
-  return mtNewPass();
+gpuNewPass(void) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
+
+  return api->renderPass.newPass();
 }
 
-GPU_HIDE
+GPU_EXPORT
+GPURenderPassDesc*
+GPUBeginRenderPass(GPUTexture *target) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
+
+  return api->renderPass.beginRenderPass(target);
+}
+
+GPU_EXPORT
 void
-mt_initPass(GPUApiPass *api) {
-  api->newPass = mt_newPass;
+GPUEndRenderPass(GPURenderPassDesc *pass) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return;
+
+  return api->renderPass.endRenderPass(pass);
 }
