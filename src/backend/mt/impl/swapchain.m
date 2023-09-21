@@ -56,7 +56,7 @@ mt_createSwapChain(GPUDevice* device, float backingScaleFactor) {
   swapChainMtl                        = calloc(1, sizeof(*swapChainMtl));
   swapChainMtl->layer                 = [CAMetalLayer layer];
   swapChainMtl->layer.device          = device->priv;
-  swapChainMtl->layer.pixelFormat     = MTLPixelFormatRGBA8Unorm;
+//  swapChainMtl->layer.pixelFormat     = MTLPixelFormatBGRA8Unorm;
   swapChainMtl->layer.opaque          = YES;
   swapChainMtl->layer.contentsScale   = backingScaleFactor;
   swapChainMtl->layer.contentsGravity = kCAGravityResizeAspectFill;
