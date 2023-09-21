@@ -19,19 +19,20 @@
 #define FrameCount 2
 
 typedef struct GPUSwapChainDX12 {
-  IDXGISwapChain3* swapChain;
-  ID3D12DescriptorHeap* rtvHeap;
-  ID3D12DescriptorHeap* srvHeap;
-  ID3D12Resource* renderTargets[FrameCount];
-  // ... other members as needed
+  IDXGISwapChain3      *swapChain;
+  ID3D12DescriptorHeap *rtvHeap;
+  ID3D12DescriptorHeap *srvHeap;
+  ID3D12Resource       *renderTargets[FrameCount];
 } GPUSwapChainDX12;
 
-GPUSwapChainDX12* 
-dx12_createSwapChain(GPUApi* api, ID3D12CommandQueue* commandQueue, HWND hwnd, UINT width, UINT height) {
+GPUSwapChain*
+dx12_createSwapChain(GPUApi *api, ID3D12Device *d3dDevice, UINT width, UINT height) {
+  GPUSwapChain         *swapChain;
+  GPU__DX12            *dx12api;
   IDXGIFactory4        *dxgiFactory;
   IDXGISwapChain1      *swapChain1;
-  GPU__DX12            *dx12api;
   IDXGISwapChain3      *swapChain3;
+  GPUSwapChainDX12     *swapChainDX12;
   HRESULT               hr;
   DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {0};
   UINT                  frameIndex;
@@ -46,26 +47,20 @@ dx12_createSwapChain(GPUApi* api, ID3D12CommandQueue* commandQueue, HWND hwnd, U
 
   dx12api     = api->reserved;
   dxgiFactory = dx12api->dxgiFactory;
-  hr          = dxgiFactory->lpVtbl->CreateSwapChainForHwnd(dxgiFactory, commandQueue, hwnd, &swapChainDesc, NULL, NULL, &swapChain1);
-  ThrowIfFailed(hr);
-
-  hr          = dxgiFactory->lpVtbl->MakeWindowAssociation(dxgiFactory, hwnd, DXGI_MWA_NO_ALT_ENTER);
+  hr          = dxgiFactory->lpVtbl->CreateSwapChain(dxgiFactory, d3dDevice, &swapChainDesc, &swapChain1);
   ThrowIfFailed(hr);
 
   hr          = swapChain1->lpVtbl->QueryInterface(swapChain1, &IID_IDXGISwapChain3, (void**)&swapChain3);
-  swapChain1->lpVtbl->Release(swapChain1);  // We don't need swapChain1 anymore.
+  swapChain1->lpVtbl->Release(swapChain1);
   ThrowIfFailed(hr);
 
   frameIndex  = swapChain3->lpVtbl->GetCurrentBackBufferIndex(swapChain3);
 
-  // Allocate GPUSwapChainDX12 and fill its members...
-  GPUSwapChainDX12* swapChain = malloc(sizeof(GPUSwapChainDX12));
-  if (!swapChain) {
-    // Handle allocation failure
-    return NULL;
-  }
-  swapChain->swapChain = swapChain3;
-  // ... 
+  swapChainDX12            = calloc(1, sizeof(GPUSwapChainDX12));
+  swapChainDX12->swapChain = swapChain3;
+  
+  swapChain                = calloc(1, sizeof(*swapChain));
+  swapChain->_priv         = swapChainDX12;
 
   return swapChain;
 }
