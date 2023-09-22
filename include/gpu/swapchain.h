@@ -20,15 +20,45 @@
 extern "C" {
 #endif
 
+struct GPUCommandQueue;
+
 typedef struct GPUSwapChain {
   void *_priv;
   void *target; /* draw target */
   float backingScaleFactor;
 } GPUSwapChain;
 
+
+typedef enum GPUWindowType {
+  GPU_WINDOW_TYPE_HWND,
+  GPU_WINDOW_TYPE_COREWINDOW,
+  GPU_WINDOW_TYPE_COCOA,
+} GPUWindowType;
+
+typedef struct GPUWindowHandle {
+  GPUWindowType type;
+  void         *ptr;
+} GPUWindowHandle;
+
 GPU_EXPORT
 GPUSwapChain*
-GPUCreateSwapChain(GPUDevice* device, float backingScaleFactor);
+GPUCreateSwapChainForView(GPUDevice              * __restrict device,
+                          struct GPUCommandQueue * __restrict cmdQue,
+                          void                   * __restrict viewHandle,
+                          GPUWindowType                       viewHandleType,
+                          float                               backingScaleFactor,
+                          float                               width,
+                          float                               height,
+                          bool                                autoResize);
+
+GPU_EXPORT
+GPUSwapChain*
+GPUCreateSwapChainForLayer(GPUDevice              * __restrict device,
+                           struct GPUCommandQueue * __restrict cmdQue,
+                           float                               backingScaleFactor,
+                           float                               width,
+                           float                               height,
+                           bool                                autoResize);
 
 GPU_EXPORT
 void

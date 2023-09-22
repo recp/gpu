@@ -18,13 +18,36 @@
 
 GPU_EXPORT
 GPUSwapChain*
-GPUCreateSwapChain(GPUDevice* device, float backingScaleFactor) {
+GPUCreateSwapChainForView(GPUDevice              * __restrict device,
+                          struct GPUCommandQueue * __restrict cmdQue,
+                          void                   * __restrict viewHandle,
+                          GPUWindowType                       viewHandleType,
+                          float                               backingScaleFactor,
+                          float                               width,
+                          float                               height,
+                          bool                                autoResize) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->swapchain.createSwapChain(device, backingScaleFactor);
+  return api->swapchain.createSwapChainForView(api, device, cmdQue, viewHandle, viewHandleType, backingScaleFactor, width, height, autoResize);
+}
+
+GPU_EXPORT
+GPUSwapChain*
+GPUCreateSwapChainForLayer(GPUDevice              * __restrict device,
+                           struct GPUCommandQueue * __restrict cmdQue,
+                           float                               backingScaleFactor,
+                           float                               width,
+                           float                               height,
+                           bool                                autoResize) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
+
+  return api->swapchain.createSwapChainForLayer(api, device, cmdQue, backingScaleFactor, width, height, autoResize);
 }
 
 GPU_EXPORT

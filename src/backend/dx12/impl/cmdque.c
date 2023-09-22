@@ -31,7 +31,7 @@ dx12_newCommandQueue(GPUDevice* __restrict device) {
   d3dDevice = (ID3D12Device*)device->priv;
   hr        = d3dDevice->lpVtbl->CreateCommandQueue(d3dDevice, &queueDesc, &IID_ID3D12CommandQueue, (void**)&commandQueue);
 
-  ThrowIfFailed(hr);
+  dxThrowIfFailed(hr);
 
   cq        = (GPUCommandQueue*)calloc(1, sizeof(*cq));
   cq->priv  = commandQueue;

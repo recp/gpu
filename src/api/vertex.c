@@ -60,7 +60,7 @@ GPULayout(GPUVertexDescriptor * __restrict vert,
 GPU_EXPORT
 void
 GPUSetVertexDesc(GPURenderPipeline   * __restrict pipeline,
-              GPUVertexDescriptor * __restrict vert) {
+                 GPUVertexDescriptor * __restrict vert) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))

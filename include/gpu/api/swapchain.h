@@ -23,8 +23,29 @@ extern "C" {
 #include "../common.h"
 #include "../gpu.h"
 
+struct GPUApi;
+
 typedef struct GPUApiSwapChain {
-  GPUSwapChain* (*createSwapChain)(GPUDevice* device, float backingScaleFactor);
+  GPUSwapChain*
+  (*createSwapChainForView)(struct GPUApi          * __restrict api,
+                            struct GPUDevice       * __restrict device,
+                            struct GPUCommandQueue * __restrict cmdQue,
+                            void                   * __restrict viewHandle,
+                            GPUWindowType                       viewHandleType,
+                            float                               backingScaleFactor,
+                            float                               width,
+                            float                               height,
+                            bool                                autoResize);
+
+  GPUSwapChain*
+  (*createSwapChainForLayer)(struct GPUApi          * __restrict api,
+                             struct GPUDevice       * __restrict device,
+                             struct GPUCommandQueue * __restrict cmdQue,
+                             float                               backingScaleFactor,
+                             float                               width,
+                             float                               height,
+                             bool                                autoResize);
+
   void (*attachToLayer)(GPUSwapChain* swapChain, void* targetLayer, bool autoResize);
   void (*attachToView)(GPUSwapChain* swapChain, void *viewHandle, bool autoResize, bool replace);
 } GPUApiSwapChain;

@@ -69,7 +69,7 @@ dx12__createDevice(ID3D12Device** p_d3dDevice, IDXGIFactory4** p_dxgiFactory, ID
 #endif
 
   hr = CreateDXGIFactory1(&IID_IDXGIFactory1, (void**)&dxgiFactory);
-  ThrowIfFailed(hr);
+  dxThrowIfFailed(hr);
 
   dx12__getHardwareAdapter(dxgiFactory, &adapter);
 
@@ -88,7 +88,7 @@ dx12__createDevice(ID3D12Device** p_d3dDevice, IDXGIFactory4** p_dxgiFactory, ID
     IDXGIAdapter* warpAdapter;
     hr = dxgiFactory->lpVtbl->EnumWarpAdapter(dxgiFactory, &IID_IDXGIAdapter, (void**)&warpAdapter);
 
-    ThrowIfFailed(hr);
+    dxThrowIfFailed(hr);
 
     hr = D3D12CreateDevice((IUnknown*)warpAdapter,
       D3D_FEATURE_LEVEL_11_0,
@@ -100,7 +100,7 @@ dx12__createDevice(ID3D12Device** p_d3dDevice, IDXGIFactory4** p_dxgiFactory, ID
     }
 #endif
 
-    ThrowIfFailed(hr);
+    dxThrowIfFailed(hr);
   }
 
   *p_d3dDevice   = d3dDevice;
