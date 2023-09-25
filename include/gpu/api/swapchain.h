@@ -33,8 +33,8 @@ typedef struct GPUApiSwapChain {
                             void                   * __restrict viewHandle,
                             GPUWindowType                       viewHandleType,
                             float                               backingScaleFactor,
-                            float                               width,
-                            float                               height,
+                            uint32_t                            width,
+                            uint32_t                            height,
                             bool                                autoResize);
 
   GPUSwapChain*
@@ -42,8 +42,8 @@ typedef struct GPUApiSwapChain {
                              struct GPUDevice       * __restrict device,
                              struct GPUCommandQueue * __restrict cmdQue,
                              float                               backingScaleFactor,
-                             float                               width,
-                             float                               height,
+                             uint32_t                            width,
+                             uint32_t                            height,
                              bool                                autoResize);
 
   void (*attachToLayer)(GPUSwapChain* swapChain, void* targetLayer, bool autoResize);

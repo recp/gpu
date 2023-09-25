@@ -46,5 +46,5 @@ GPUEndRenderPass(GPURenderPassDesc *pass) {
   if (!(api = gpuActiveGPUApi()))
     return;
 
-  return api->renderPass.endRenderPass(pass);
+  api->renderPass.endRenderPass(pass);
 }

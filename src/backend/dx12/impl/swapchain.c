@@ -21,7 +21,6 @@
 typedef struct GPUSwapChainDX12 {
   IDXGISwapChain3      *swapChain;
   ID3D12DescriptorHeap *rtvHeap;
-  ID3D12DescriptorHeap *srvHeap;
   ID3D12Resource       *renderTargets[FrameCount];
   UINT                  frameIndex;
 } GPUSwapChainDX12;
@@ -33,20 +32,24 @@ dx12_createSwapChainForView(GPUApi          * __restrict api,
                             void            * __restrict viewHandle,
                             GPUWindowType                viewHandleType,
                             float                        backingScaleFactor,
-                            float                        width,
-                            float                        height,
+                            uint32_t                     width,
+                            uint32_t                     height,
                             bool                         autoResize) {
-  GPUSwapChain         *swapChain;
-  ID3D12Device         *d3dDevice;
-  ID3D12CommandQueue   *cmdQueDX12;
-  GPU__DX12            *dx12api;
-  IDXGIFactory4        *dxgiFactory;
-  IDXGISwapChain1      *swapChain1;
-  IDXGISwapChain3      *swapChain3;
-  GPUSwapChainDX12     *swapChainDX12;
-  HRESULT               hr;
-  DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {0};
-  UINT                  frameIndex;
+  GPUSwapChain               *swapChain;
+  ID3D12Device               *d3dDevice;
+  ID3D12CommandQueue         *cmdQueDX12;
+  GPU__DX12                  *dx12api;
+  IDXGIFactory4              *dxgiFactory;
+  IDXGISwapChain1            *swapChain1;
+  IDXGISwapChain3            *swapChain3;
+  ID3D12DescriptorHeap       *rtvHeap;
+  GPUSwapChainDX12           *swapChainDX12;
+  HRESULT                     hr;
+  DXGI_SWAP_CHAIN_DESC1       swapChainDesc = {0};
+  D3D12_DESCRIPTOR_HEAP_DESC  rtvHeapDesc   = {0};
+  D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle, *p_rtvHandle;
+  UINT                        i, frameIndex;
+  SIZE_T                      rtvDescriptorSize;
 
   swapChainDesc.BufferCount      = FrameCount;
   swapChainDesc.Width            = width;
@@ -56,17 +59,18 @@ dx12_createSwapChainForView(GPUApi          * __restrict api,
   swapChainDesc.SwapEffect       = DXGI_SWAP_EFFECT_FLIP_DISCARD;
   swapChainDesc.SampleDesc.Count = 1;
 
+  d3dDevice   = device->priv;
   dx12api     = api->reserved;
   cmdQueDX12  = cmdQue->priv;
   dxgiFactory = dx12api->dxgiFactory;
 
   switch (viewHandleType) {
   case GPU_WINDOW_TYPE_COREWINDOW:
-    hr = dxgiFactory->lpVtbl->CreateSwapChainForCoreWindow(dxgiFactory, cmdQueDX12, viewHandle, &swapChainDesc, NULL, &swapChain1);
+    hr = dxgiFactory->lpVtbl->CreateSwapChainForCoreWindow(dxgiFactory, (IUnknown *)cmdQueDX12, viewHandle, &swapChainDesc, NULL, &swapChain1);
     dxThrowIfFailed(hr);
     break;
   case GPU_WINDOW_TYPE_HWND:
-    hr = dxgiFactory->lpVtbl->CreateSwapChainForHwnd(dxgiFactory, cmdQueDX12, viewHandle, &swapChainDesc, NULL, NULL, &swapChain1);
+    hr = dxgiFactory->lpVtbl->CreateSwapChainForHwnd(dxgiFactory, (IUnknown *)cmdQueDX12, viewHandle, &swapChainDesc, NULL, NULL, &swapChain1);
     dxThrowIfFailed(hr);
 
     hr = dxgiFactory->lpVtbl->MakeWindowAssociation(dxgiFactory, viewHandle, DXGI_MWA_NO_ALT_ENTER);
@@ -81,16 +85,54 @@ dx12_createSwapChainForView(GPUApi          * __restrict api,
   swapChain1->lpVtbl->Release(swapChain1);
   dxThrowIfFailed(hr);
 
-  frameIndex = swapChain3->lpVtbl->GetCurrentBackBufferIndex(swapChain3);
+  swapChainDX12 = calloc(1, sizeof(*swapChainDX12));
+  frameIndex    = swapChain3->lpVtbl->GetCurrentBackBufferIndex(swapChain3);
 
-  swapChainDX12             = calloc(1, sizeof(GPUSwapChainDX12));
+  // Create Descriptor Heap for Render Target Views
+  rtvHeapDesc.NumDescriptors = FrameCount;
+  rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+  hr = d3dDevice->lpVtbl->CreateDescriptorHeap(d3dDevice, &rtvHeapDesc, &IID_ID3D12DescriptorHeap, (void **)&rtvHeap);
+  if (FAILED(hr)) {
+    goto err;
+  }
+
+  // Create Render Target Views for each back buffer
+  p_rtvHandle       = rtvHeap->lpVtbl->GetCPUDescriptorHandleForHeapStart(rtvHeap, &rtvHandle);
+  rtvDescriptorSize = d3dDevice->lpVtbl->GetDescriptorHandleIncrementSize(d3dDevice, D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+  for (i = 0; i < FrameCount; i++) {
+    hr = swapChain3->lpVtbl->GetBuffer(swapChain3, i, &IID_ID3D12Resource, (void **)&swapChainDX12->renderTargets[i]);
+    if (FAILED(hr)) {
+      goto err;
+    }
+    d3dDevice->lpVtbl->CreateRenderTargetView(d3dDevice, swapChainDX12->renderTargets[i], NULL, rtvHandle);
+    rtvHandle.ptr += rtvDescriptorSize;
+  }
+
   swapChainDX12->swapChain  = swapChain3;
   swapChainDX12->frameIndex = frameIndex;
-  
+  swapChainDX12->rtvHeap    = rtvHeap;
+
   swapChain                 = calloc(1, sizeof(*swapChain));
   swapChain->_priv          = swapChainDX12;
 
   return swapChain;
+err:
+  if (swapChainDX12) {
+    for (UINT i = 0; i < FrameCount; i++) {
+      if (swapChainDX12->renderTargets[i]) {
+        swapChainDX12->renderTargets[i]->lpVtbl->Release(swapChainDX12->renderTargets[i]);
+      }
+    }
+    if (swapChainDX12->rtvHeap) {
+      swapChainDX12->rtvHeap->lpVtbl->Release(swapChainDX12->rtvHeap);
+    }
+    if (swapChainDX12->swapChain) {
+      swapChainDX12->swapChain->lpVtbl->Release(swapChainDX12->swapChain);
+    }
+    free(swapChainDX12);
+  }
+  return NULL;
 }
 
 GPU_HIDE

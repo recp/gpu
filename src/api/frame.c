@@ -35,7 +35,7 @@ GPUEndFrame(GPUFrame* frame) {
   if (!(api = gpuActiveGPUApi()))
     return;
 
-  return api->frame.endFrame(frame);
+  api->frame.endFrame(frame);
 }
 
 GPU_EXPORT

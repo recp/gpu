@@ -14,15 +14,19 @@
  * limitations under the License.
  */
 
-#include "../../common.h"
+#ifndef gpu_featuresupport_h
+#define gpu_featuresupport_h
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include "common.h"
 
 GPU_EXPORT
-void
-GPUPresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  GPUApi *api;
+bool
+GPUCheckSupport(uint32_t feature);
 
-  if (!(api = gpuActiveGPUApi()))
-    return;
-
-  api->cmdbuf.presentDrawable(cmdb, frame);
+#ifdef __cplusplus
 }
+#endif
+#endif /* gpu_featuresupport_h */

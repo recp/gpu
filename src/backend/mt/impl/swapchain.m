@@ -114,8 +114,8 @@ mt_createSwapChainForView(struct GPUApi          * __restrict api,
                           void                   * __restrict viewHandle,
                           GPUWindowType                       viewHandleType,
                           float                               backingScaleFactor,
-                          float                               width,
-                          float                               height,
+                          uint32_t                            width,
+                          uint32_t                            height,
                           bool                                autoResize) {
   GPUSwapChain      *swapChain;
   GPUSwapChainMetal *swapChainMtl;
@@ -148,8 +148,8 @@ mt_createSwapChainForLayer(struct GPUApi          * __restrict api,
                            struct GPUDevice       * __restrict device,
                            struct GPUCommandQueue * __restrict cmdQue,
                            float                               backingScaleFactor,
-                           float                               width,
-                           float                               height,
+                           uint32_t                            width,
+                           uint32_t                            height,
                            bool                                autoResize) {
   GPUSwapChain      *swapChain;
   GPUSwapChainMetal *swapChainMtl;
@@ -206,7 +206,6 @@ mt_createSwapChain(GPUApi          * __restrict api,
 
   return swapChain;
 }
-
 
 GPU_HIDE
 void

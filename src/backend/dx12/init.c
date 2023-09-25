@@ -15,6 +15,7 @@
  */
 
 #include "common.h"
+#include "impl.h"
 
 GPUApi dx12 = {
   .initialized = false,

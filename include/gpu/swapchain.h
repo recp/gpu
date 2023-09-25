@@ -47,8 +47,8 @@ GPUCreateSwapChainForView(GPUDevice              * __restrict device,
                           void                   * __restrict viewHandle,
                           GPUWindowType                       viewHandleType,
                           float                               backingScaleFactor,
-                          float                               width,
-                          float                               height,
+                          uint32_t                            width,
+                          uint32_t                            height,
                           bool                                autoResize);
 
 GPU_EXPORT
@@ -56,8 +56,8 @@ GPUSwapChain*
 GPUCreateSwapChainForLayer(GPUDevice              * __restrict device,
                            struct GPUCommandQueue * __restrict cmdQue,
                            float                               backingScaleFactor,
-                           float                               width,
-                           float                               height,
+                           uint32_t                            width,
+                           uint32_t                            height,
                            bool                                autoResize);
 
 GPU_EXPORT

@@ -23,8 +23,8 @@ GPUCreateSwapChainForView(GPUDevice              * __restrict device,
                           void                   * __restrict viewHandle,
                           GPUWindowType                       viewHandleType,
                           float                               backingScaleFactor,
-                          float                               width,
-                          float                               height,
+                          uint32_t                            width,
+                          uint32_t                            height,
                           bool                                autoResize) {
   GPUApi *api;
 
@@ -39,8 +39,8 @@ GPUSwapChain*
 GPUCreateSwapChainForLayer(GPUDevice              * __restrict device,
                            struct GPUCommandQueue * __restrict cmdQue,
                            float                               backingScaleFactor,
-                           float                               width,
-                           float                               height,
+                           uint32_t                            width,
+                           uint32_t                            height,
                            bool                                autoResize) {
   GPUApi *api;
 
@@ -58,7 +58,7 @@ GPUSwapChainAttachToLayer(GPUSwapChain* swapChain, void* targetLayer, bool autoR
   if (!(api = gpuActiveGPUApi()))
     return;
 
-  return api->swapchain.attachToLayer(swapChain, targetLayer, autoResize);
+  api->swapchain.attachToLayer(swapChain, targetLayer, autoResize);
 }
 
 GPU_EXPORT
@@ -69,5 +69,5 @@ GPUSwapChainAttachToView(GPUSwapChain* swapChain, void *viewHandle, bool autoRes
   if (!(api = gpuActiveGPUApi()))
     return;
 
-  return api->swapchain.attachToView(swapChain, viewHandle, autoResize, replace);
+  api->swapchain.attachToView(swapChain, viewHandle, autoResize, replace);
 }
