@@ -23,6 +23,7 @@ typedef struct GPUSwapChainDX12 {
   ID3D12DescriptorHeap *rtvHeap;
   ID3D12Resource       *renderTargets[FrameCount];
   UINT                  frameIndex;
+  UINT                  rtvDescriptorSize;
 } GPUSwapChainDX12;
 
 GPUSwapChain*
@@ -109,12 +110,13 @@ dx12_createSwapChainForView(GPUApi          * __restrict api,
     rtvHandle.ptr += rtvDescriptorSize;
   }
 
-  swapChainDX12->swapChain  = swapChain3;
-  swapChainDX12->frameIndex = frameIndex;
-  swapChainDX12->rtvHeap    = rtvHeap;
+  swapChainDX12->swapChain         = swapChain3;
+  swapChainDX12->frameIndex        = frameIndex;
+  swapChainDX12->rtvHeap           = rtvHeap;
+  swapChainDX12->rtvDescriptorSize = rtvDescriptorSize;
 
-  swapChain                 = calloc(1, sizeof(*swapChain));
-  swapChain->_priv          = swapChainDX12;
+  swapChain        = calloc(1, sizeof(*swapChain));
+  swapChain->_priv = swapChainDX12;
 
   return swapChain;
 err:
