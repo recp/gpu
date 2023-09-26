@@ -19,11 +19,14 @@
 #define FrameCount 2
 
 typedef struct GPUSwapChainDX12 {
-  IDXGISwapChain3      *swapChain;
-  ID3D12DescriptorHeap *rtvHeap;
-  ID3D12Resource       *renderTargets[FrameCount];
-  UINT                  frameIndex;
-  UINT                  rtvDescriptorSize;
+  IDXGISwapChain3        *swapChain;
+  ID3D12DescriptorHeap   *rtvHeap;
+  ID3D12Resource         *renderTargets[FrameCount];
+  ID3D12CommandAllocator *commandAllocators[FrameCount];
+  GPUFrame                frames[FrameCount];
+
+  UINT                    frameIndex;
+  UINT                    rtvDescriptorSize;
 } GPUSwapChainDX12;
 
 GPUSwapChain*
@@ -108,6 +111,16 @@ dx12_createSwapChainForView(GPUApi          * __restrict api,
     }
     d3dDevice->lpVtbl->CreateRenderTargetView(d3dDevice, swapChainDX12->renderTargets[i], NULL, rtvHandle);
     rtvHandle.ptr += rtvDescriptorSize;
+  }
+
+  for (i = 0; i < FrameCount; i++) {
+    hr = d3dDevice->lpVtbl->CreateCommandAllocator(d3dDevice, 
+                                                   D3D12_COMMAND_LIST_TYPE_DIRECT, 
+                                                   &IID_ID3D12CommandAllocator, 
+                                                   (void **)&(swapChainDX12->commandAllocators[i]));
+    if (FAILED(hr)) {
+      goto err;
+    }
   }
 
   swapChainDX12->swapChain         = swapChain3;
