@@ -56,10 +56,11 @@ extern "C" {
 #define GPU_FLG(FLAGS, FLAG) ((FLAGS & FLAG) == FLAG)
 
 #if defined(__APPLE__) && defined(__OBJC__)
+#  include <TargetConditionals.h>
 #  if TARGET_OS_IOS || TARGET_OS_TV
-#    define GPUScreenScale [UIScreen mainScreen].scale
+#    define GPUScreenScale(view) [UIScreen mainScreen].scale
 #  elif TARGET_OS_MAC
-#    define GPUScreenScale self.view.window ? self.view.window.backingScaleFactor : [NSScreen   mainScreen].backingScaleFactor
+#    define GPUScreenScale(view) view.window ? view.window.backingScaleFactor : [NSScreen mainScreen].backingScaleFactor
 #  endif
 #endif
 

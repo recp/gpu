@@ -20,6 +20,8 @@
 extern "C" {
 #endif
 
+#include "common.h"
+
 struct GPUCommandQueue;
 
 typedef struct GPUSwapChain {
@@ -70,6 +72,46 @@ GPUSwapChainAttachToView(GPUSwapChain  *swapChain,
                          void          *viewHandle,
                          bool           autoResize,
                          bool           replace);
+
+#if defined(__APPLE__) && defined(__OBJC__)
+#if TARGET_OS_MAC
+#import <AppKit/AppKit.h>
+
+GPU_INLINE
+GPUSwapChain*
+GPUCreateSwapChainForNSView(GPUDevice              * __restrict device,
+                            struct GPUCommandQueue * __restrict cmdQue,
+                            NSView                 * __restrict view,
+                            bool                                autoResize) {
+  return GPUCreateSwapChainForView(device,
+                                   cmdQue,
+                                   view,
+                                   GPU_WINDOW_TYPE_COCOA,
+                                   GPUScreenScale(view),
+                                   view.frame.size.width,
+                                   view.frame.size.height,
+                                   autoResize);
+}
+#elif TARGET_OS_IOS || TARGET_OS_TV
+#import <UIKit/UIKit.h>
+
+GPU_INLINE
+GPUSwapChain*
+GPUCreateSwapChainForUIView(GPUDevice              * __restrict device,
+                            struct GPUCommandQueue * __restrict cmdQue,
+                            UIView                 * __restrict view,
+                            bool                                autoResize) {
+  return GPUCreateSwapChainForView(device,
+                                   cmdQue,
+                                   view,
+                                   GPU_WINDOW_TYPE_COCOA,
+                                   GPUScreenScale(view),
+                                   view.frame.size.width,
+                                   view.frame.size.height,
+                                   autoResize);
+}
+#endif
+#endif
 
 #ifdef __cplusplus
 }

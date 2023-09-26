@@ -37,6 +37,7 @@
 #  include <windows.h>
 #endif
 
+#include "../include/gpu/common.h"
 #include "../include/gpu/gpu.h"
 #include "../include/gpu/api/gpudef.h"
 
