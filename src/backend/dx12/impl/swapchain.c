@@ -134,20 +134,28 @@ dx12_createSwapChainForView(GPUApi          * __restrict api,
   return swapChain;
 err:
   if (swapChainDX12) {
-    for (UINT i = 0; i < FrameCount; i++) {
+    for (i = 0; i < FrameCount; i++) {
       if (swapChainDX12->renderTargets[i]) {
         swapChainDX12->renderTargets[i]->lpVtbl->Release(swapChainDX12->renderTargets[i]);
       }
+
+      if (swapChainDX12->commandAllocators[i]) {
+        swapChainDX12->commandAllocators[i]->lpVtbl->Release(swapChainDX12->commandAllocators[i]);
+      }
     }
+
     if (swapChainDX12->rtvHeap) {
       swapChainDX12->rtvHeap->lpVtbl->Release(swapChainDX12->rtvHeap);
     }
+
     if (swapChainDX12->swapChain) {
       swapChainDX12->swapChain->lpVtbl->Release(swapChainDX12->swapChain);
     }
+
     free(swapChainDX12);
   }
   return NULL;
+
 }
 
 GPU_HIDE
