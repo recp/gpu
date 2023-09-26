@@ -18,7 +18,8 @@
 
 GPU_HIDE
 GPUFrame*
-mt_beginFrame(GPUSwapChain* swapChain) {
+mt_beginFrame(GPUApi       *__restrict api,
+              GPUSwapChain *__restrict swapChain) {
   GPUFrame           *frame;
   GPUSwapChainMetal  *swapChainMtl;
   id<CAMetalDrawable> drawable;
@@ -44,7 +45,8 @@ mt_beginFrame(GPUSwapChain* swapChain) {
 
 GPU_HIDE
 void
-mt_endFrame(GPUFrame* frame) {
+mt_endFrame(GPUApi   *__restrict api,
+            GPUFrame *__restrict frame) {
 
 }
 

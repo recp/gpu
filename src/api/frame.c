@@ -24,7 +24,7 @@ GPUBeginFrame(GPUSwapChain* swapchain) {
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->frame.beginFrame(swapchain);
+  return api->frame.beginFrame(api, swapchain);
 }
 
 GPU_EXPORT
@@ -35,7 +35,7 @@ GPUEndFrame(GPUFrame* frame) {
   if (!(api = gpuActiveGPUApi()))
     return;
 
-  api->frame.endFrame(frame);
+  api->frame.endFrame(api, frame);
 }
 
 GPU_EXPORT

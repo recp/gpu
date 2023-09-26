@@ -28,5 +28,6 @@ GPU_HIDE void dx12_initCmdQue(GPUApiCommandQueue* api);
 // GPU_HIDE void dx12_initVertex(GPUApiVertex* api);
 // GPU_HIDE void dx12_initLibrary(GPUApiLibrary* api);
 GPU_HIDE void dx12_initSwapChain(GPUApiSwapChain* apiSwapChain);
+GPU_HIDE void dx12_initFrame(GPUApiFrame *apiFrame);
 
 #endif /* dx12_apis_h */
