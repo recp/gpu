@@ -22,6 +22,8 @@
 #include <dxgi1_4.h>
 #include <d3d12.h>
 
+#define DXCHECK(D) hr = D; if (FAILED(hr)) { goto err; }
+
 #define FrameCount 2
 
 typedef struct GPUFrameDX12 {

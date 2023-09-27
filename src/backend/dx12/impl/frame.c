@@ -35,10 +35,7 @@ dx12_beginFrame(GPUApi       *__restrict api,
   frame            = &swapChainDX12->frames[frameIndex];
   commandAllocator = frame->commandAllocator;
 
-  hr = commandAllocator->lpVtbl->Reset(commandAllocator);
-  if (FAILED(hr)) {
-    goto err;
-  }
+  DXCHECK(commandAllocator->lpVtbl->Reset(commandAllocator));
 
   return frame;
 

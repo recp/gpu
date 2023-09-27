@@ -44,6 +44,7 @@ dx12_createSwapChainForView(GPUApi          * __restrict api,
   UINT                        i, frameIndex;
   SIZE_T                      rtvDescriptorSize;
 
+  swapChainDX12                  = NULL;
   swapChainDesc.BufferCount      = FrameCount;
   swapChainDesc.Width            = width;
   swapChainDesc.Height           = height;
@@ -59,15 +60,11 @@ dx12_createSwapChainForView(GPUApi          * __restrict api,
 
   switch (viewHandleType) {
   case GPU_WINDOW_TYPE_COREWINDOW:
-    hr = dxgiFactory->lpVtbl->CreateSwapChainForCoreWindow(dxgiFactory, (IUnknown *)cmdQueDX12, viewHandle, &swapChainDesc, NULL, &swapChain1);
-    dxThrowIfFailed(hr);
+    DXCHECK(dxgiFactory->lpVtbl->CreateSwapChainForCoreWindow(dxgiFactory, (IUnknown *)cmdQueDX12, viewHandle, &swapChainDesc, NULL, &swapChain1));
     break;
   case GPU_WINDOW_TYPE_HWND:
-    hr = dxgiFactory->lpVtbl->CreateSwapChainForHwnd(dxgiFactory, (IUnknown *)cmdQueDX12, viewHandle, &swapChainDesc, NULL, NULL, &swapChain1);
-    dxThrowIfFailed(hr);
-
-    hr = dxgiFactory->lpVtbl->MakeWindowAssociation(dxgiFactory, viewHandle, DXGI_MWA_NO_ALT_ENTER);
-    dxThrowIfFailed(hr);
+    DXCHECK(dxgiFactory->lpVtbl->CreateSwapChainForHwnd(dxgiFactory, (IUnknown *)cmdQueDX12, viewHandle, &swapChainDesc, NULL, NULL, &swapChain1));
+    DXCHECK(dxgiFactory->lpVtbl->MakeWindowAssociation(dxgiFactory, viewHandle, DXGI_MWA_NO_ALT_ENTER));
     break;
   default:
     /* TODO: ? */
@@ -76,18 +73,15 @@ dx12_createSwapChainForView(GPUApi          * __restrict api,
 
   hr = swapChain1->lpVtbl->QueryInterface(swapChain1, &IID_IDXGISwapChain3, (void**)&swapChain3);
   swapChain1->lpVtbl->Release(swapChain1);
-  dxThrowIfFailed(hr);
+
 
   swapChainDX12 = calloc(1, sizeof(*swapChainDX12));
   frameIndex    = swapChain3->lpVtbl->GetCurrentBackBufferIndex(swapChain3);
 
   // Create Descriptor Heap for Render Target Views
   rtvHeapDesc.NumDescriptors = FrameCount;
-  rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-  hr = d3dDevice->lpVtbl->CreateDescriptorHeap(d3dDevice, &rtvHeapDesc, &IID_ID3D12DescriptorHeap, (void **)&rtvHeap);
-  if (FAILED(hr)) {
-    goto err;
-  }
+  rtvHeapDesc.Type           = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+  DXCHECK(d3dDevice->lpVtbl->CreateDescriptorHeap(d3dDevice, &rtvHeapDesc, &IID_ID3D12DescriptorHeap, (void **)&rtvHeap));
 
   // Create Render Target Views for each back buffer
   p_rtvHandle       = rtvHeap->lpVtbl->GetCPUDescriptorHandleForHeapStart(rtvHeap, &rtvHandle);
@@ -95,22 +89,15 @@ dx12_createSwapChainForView(GPUApi          * __restrict api,
 
   for (i = 0; i < FrameCount; i++) {
     frame = &swapChainDX12->frames[i];
-    hr    = swapChain3->lpVtbl->GetBuffer(swapChain3, i, &IID_ID3D12Resource, (void **)&frame->renderTarget);
-
-    if (FAILED(hr)) {
-      goto err;
-    }
+    DXCHECK(swapChain3->lpVtbl->GetBuffer(swapChain3, i, &IID_ID3D12Resource, (void **)&frame->renderTarget));
 
     d3dDevice->lpVtbl->CreateRenderTargetView(d3dDevice, frame->renderTarget, NULL, rtvHandle);
     rtvHandle.ptr += rtvDescriptorSize;
 
-    hr = d3dDevice->lpVtbl->CreateCommandAllocator(d3dDevice,
-                                                   D3D12_COMMAND_LIST_TYPE_DIRECT,
-                                                   &IID_ID3D12CommandAllocator,
-                                                   (void **)&(frame->commandAllocator));
-    if (FAILED(hr)) {
-      goto err;
-    }
+    DXCHECK(d3dDevice->lpVtbl->CreateCommandAllocator(d3dDevice,
+                                                      D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                      &IID_ID3D12CommandAllocator,
+                                                      (void **)&(frame->commandAllocator)));
   }
 
   swapChainDX12->swapChain         = swapChain3;
@@ -145,6 +132,8 @@ err:
 
     free(swapChainDX12);
   }
+
+  dxThrowIfFailed(hr);
   return NULL;
 }
 
