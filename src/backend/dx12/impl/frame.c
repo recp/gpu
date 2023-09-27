@@ -16,14 +16,33 @@
 
 #include "../common.h"
 
-typedef struct GPUFrameDX12 {
-  IDXGISwapChain3 *swapChain;
-} GPUFrameDX12;
-
 GPU_HIDE
 GPUFrame*
 dx12_beginFrame(GPUApi       *__restrict api,
                 GPUSwapChain *__restrict swapChain) {
+  ID3D12Device           *d3dDevice;
+  GPU__DX12              *dx12api;
+  GPUFrameDX12           *frameDX12;
+  GPUSwapChainDX12       *swapChainDX12;
+  ID3D12CommandAllocator *commandAllocator;
+  GPUFrameDX12           *frame;
+  HRESULT                 hr;
+  UINT                    i, frameIndex;
+  SIZE_T                  rtvDescriptorSize;
+
+  swapChainDX12    = swapChain->_priv;
+  frameIndex       = swapChainDX12->frameIndex;
+  frame            = &swapChainDX12->frames[frameIndex];
+  commandAllocator = frame->commandAllocator;
+
+  hr = commandAllocator->lpVtbl->Reset(commandAllocator);
+  if (FAILED(hr)) {
+    goto err;
+  }
+
+  return frame;
+
+err:
   return NULL;
 }
 

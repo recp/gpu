@@ -22,6 +22,23 @@
 #include <dxgi1_4.h>
 #include <d3d12.h>
 
+#define FrameCount 2
+
+typedef struct GPUFrameDX12 {
+  IDXGISwapChain3        *swapChain;
+  ID3D12Resource         *renderTarget;
+  ID3D12CommandAllocator *commandAllocator;
+} GPUFrameDX12;
+
+typedef struct GPUSwapChainDX12 {
+  IDXGISwapChain3        *swapChain;
+  ID3D12DescriptorHeap   *rtvHeap;
+  GPUFrameDX12            frames[FrameCount];
+
+  UINT                    frameIndex;
+  UINT                    rtvDescriptorSize;
+} GPUSwapChainDX12;
+
 typedef struct GPU__DX12 {
   ID3D12Device  *d3dDevice;
   IDXGIFactory4 *dxgiFactory;

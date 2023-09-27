@@ -16,19 +16,7 @@
 
 #include "../common.h"
 
-#define FrameCount 2
-
-typedef struct GPUSwapChainDX12 {
-  IDXGISwapChain3        *swapChain;
-  ID3D12DescriptorHeap   *rtvHeap;
-  ID3D12Resource         *renderTargets[FrameCount];
-  ID3D12CommandAllocator *commandAllocators[FrameCount];
-  GPUFrame                frames[FrameCount];
-
-  UINT                    frameIndex;
-  UINT                    rtvDescriptorSize;
-} GPUSwapChainDX12;
-
+GPU_HIDE
 GPUSwapChain*
 dx12_createSwapChainForView(GPUApi          * __restrict api,
                             GPUDevice       * __restrict device,
@@ -48,6 +36,7 @@ dx12_createSwapChainForView(GPUApi          * __restrict api,
   IDXGISwapChain3            *swapChain3;
   ID3D12DescriptorHeap       *rtvHeap;
   GPUSwapChainDX12           *swapChainDX12;
+  GPUFrameDX12               *frame;
   HRESULT                     hr;
   DXGI_SWAP_CHAIN_DESC1       swapChainDesc = {0};
   D3D12_DESCRIPTOR_HEAP_DESC  rtvHeapDesc   = {0};
@@ -105,19 +94,20 @@ dx12_createSwapChainForView(GPUApi          * __restrict api,
   rtvDescriptorSize = d3dDevice->lpVtbl->GetDescriptorHandleIncrementSize(d3dDevice, D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
   for (i = 0; i < FrameCount; i++) {
-    hr = swapChain3->lpVtbl->GetBuffer(swapChain3, i, &IID_ID3D12Resource, (void **)&swapChainDX12->renderTargets[i]);
+    frame = &swapChainDX12->frames[i];
+    hr    = swapChain3->lpVtbl->GetBuffer(swapChain3, i, &IID_ID3D12Resource, (void **)&frame->renderTarget);
+
     if (FAILED(hr)) {
       goto err;
     }
-    d3dDevice->lpVtbl->CreateRenderTargetView(d3dDevice, swapChainDX12->renderTargets[i], NULL, rtvHandle);
-    rtvHandle.ptr += rtvDescriptorSize;
-  }
 
-  for (i = 0; i < FrameCount; i++) {
-    hr = d3dDevice->lpVtbl->CreateCommandAllocator(d3dDevice, 
-                                                   D3D12_COMMAND_LIST_TYPE_DIRECT, 
-                                                   &IID_ID3D12CommandAllocator, 
-                                                   (void **)&(swapChainDX12->commandAllocators[i]));
+    d3dDevice->lpVtbl->CreateRenderTargetView(d3dDevice, frame->renderTarget, NULL, rtvHandle);
+    rtvHandle.ptr += rtvDescriptorSize;
+
+    hr = d3dDevice->lpVtbl->CreateCommandAllocator(d3dDevice,
+                                                   D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                   &IID_ID3D12CommandAllocator,
+                                                   (void **)&(frame->commandAllocator));
     if (FAILED(hr)) {
       goto err;
     }
@@ -135,12 +125,13 @@ dx12_createSwapChainForView(GPUApi          * __restrict api,
 err:
   if (swapChainDX12) {
     for (i = 0; i < FrameCount; i++) {
-      if (swapChainDX12->renderTargets[i]) {
-        swapChainDX12->renderTargets[i]->lpVtbl->Release(swapChainDX12->renderTargets[i]);
+      frame = &swapChainDX12->frames[i];
+      if (frame->renderTarget) {
+        frame->renderTarget->lpVtbl->Release(frame->renderTarget);
       }
 
-      if (swapChainDX12->commandAllocators[i]) {
-        swapChainDX12->commandAllocators[i]->lpVtbl->Release(swapChainDX12->commandAllocators[i]);
+      if (frame->commandAllocator) {
+        frame->commandAllocator->lpVtbl->Release(frame->commandAllocator);
       }
     }
 
@@ -155,7 +146,6 @@ err:
     free(swapChainDX12);
   }
   return NULL;
-
 }
 
 GPU_HIDE
