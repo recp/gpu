@@ -39,6 +39,7 @@ backend_dx12(void) {
     // dx12_initLibrary(&dx12.library);
     dx12_initSwapChain(&dx12.swapchain);
     dx12_initFrame(&dx12.frame);
+    dx12_initDescriptor(&dx12.descriptor);
 
     dx12.initialized = true;
   }

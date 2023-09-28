@@ -40,6 +40,7 @@ extern "C" {
 #include "swapchain.h"
 #include "frame.h"
 #include "feature.h"
+#include "descriptor.h"
 
 typedef enum GPUBackend {
   GPU_BACKEND_NULL    = 0,

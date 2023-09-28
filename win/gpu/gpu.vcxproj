@@ -208,6 +208,7 @@
     <ClInclude Include="..\..\include\gpu\api\commandbuffer.h" />
     <ClInclude Include="..\..\include\gpu\api\commandqueue.h" />
     <ClInclude Include="..\..\include\gpu\api\depthstencil.h" />
+    <ClInclude Include="..\..\include\gpu\api\descriptor.h" />
     <ClInclude Include="..\..\include\gpu\api\device.h" />
     <ClInclude Include="..\..\include\gpu\api\frame.h" />
     <ClInclude Include="..\..\include\gpu\api\gpudef.h" />
@@ -222,7 +223,9 @@
     <ClInclude Include="..\..\include\gpu\cmdqueue.h" />
     <ClInclude Include="..\..\include\gpu\common.h" />
     <ClInclude Include="..\..\include\gpu\depthstencil.h" />
+    <ClInclude Include="..\..\include\gpu\descriptor.h" />
     <ClInclude Include="..\..\include\gpu\device.h" />
+    <ClInclude Include="..\..\include\gpu\feature.h" />
     <ClInclude Include="..\..\include\gpu\frame.h" />
     <ClInclude Include="..\..\include\gpu\gpu.h" />
     <ClInclude Include="..\..\include\gpu\library.h" />
@@ -246,6 +249,7 @@
     <ClCompile Include="..\..\src\api\cmd\cmdbuf.c" />
     <ClCompile Include="..\..\src\api\cmd\cmdque.c" />
     <ClCompile Include="..\..\src\api\depthstencil.c" />
+    <ClCompile Include="..\..\src\api\descr\descriptor.c" />
     <ClCompile Include="..\..\src\api\device.c" />
     <ClCompile Include="..\..\src\api\frame.c" />
     <ClCompile Include="..\..\src\api\library.c" />
@@ -256,7 +260,7 @@
     <ClCompile Include="..\..\src\api\vertex.c" />
     <ClCompile Include="..\..\src\backend\backend.c" />
     <ClCompile Include="..\..\src\backend\dx12\impl\cmdque.c" />
-    <ClCompile Include="..\..\src\backend\dx12\impl\descpool.c" />
+    <ClCompile Include="..\..\src\backend\dx12\impl\descr\descpool.c" />
     <ClCompile Include="..\..\src\backend\dx12\impl\device.c" />
     <ClCompile Include="..\..\src\backend\dx12\impl\frame.c" />
     <ClCompile Include="..\..\src\backend\dx12\impl\renderpass.c" />

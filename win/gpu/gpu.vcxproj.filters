@@ -49,6 +49,12 @@
     <Filter Include="src\backend\pass">
       <UniqueIdentifier>{e31022e6-905c-4a23-8932-6a2b3cf33d36}</UniqueIdentifier>
     </Filter>
+    <Filter Include="src\backend\dx12\impl\descr">
+      <UniqueIdentifier>{0159b949-a893-4e05-8753-7bb9b42916d6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\api\descr">
+      <UniqueIdentifier>{50d36c26-425a-419d-b74d-d8f6c5682290}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\include\gpu\buffer.h">
@@ -159,6 +165,15 @@
     <ClInclude Include="..\..\include\gpu\swapchain.h">
       <Filter>include\gpu</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\include\gpu\api\descriptor.h">
+      <Filter>include\gpu\api</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\descriptor.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\feature.h">
+      <Filter>include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\win\dllmain.c">
@@ -224,8 +239,11 @@
     <ClCompile Include="..\..\src\backend\dx12\impl\renderpass.c">
       <Filter>src\backend\dx12\impl</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\backend\dx12\impl\descpool.c">
-      <Filter>src\backend\dx12\impl</Filter>
+    <ClCompile Include="..\..\src\backend\dx12\impl\descr\descpool.c">
+      <Filter>src\backend\dx12\impl\descr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\api\descr\descriptor.c">
+      <Filter>src\api\descr</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
