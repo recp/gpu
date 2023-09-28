@@ -7,13 +7,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "gpu", "gpu\gpu.vcxproj", "{
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{F835E86D-38E3-4894-9081-78FF4D07C2C0}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "gpu-preview", "C:\Users\recp\source\repos\gpu-preview\gpu-preview\gpu-preview.vcxproj", "{1A028FED-49D9-4292-8242-4C6ACFEF508E}"
-	ProjectSection(ProjectDependencies) = postProject
-		{9F67E52D-FDF4-42DD-8E40-55D44E073074} = {9F67E52D-FDF4-42DD-8E40-55D44E073074}
-	EndProjectSection
-EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "D3D12HelloTexture", "C:\Users\recp\Desktop\D3D12HelloWorld\src\HelloTexture\D3D12HelloTexture.vcxproj", "{16B13BB4-D82D-4AC1-8B40-C6BCCC99954B}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|ARM = Debug|ARM
