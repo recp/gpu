@@ -1,0 +1,234 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="src">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="include">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="include\gpu">
+      <UniqueIdentifier>{ff86c80f-4554-45a8-81d3-d88ce790e7b6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="include\gpu\api">
+      <UniqueIdentifier>{8c24fecb-08ee-40ea-938e-b9c80751059f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\win">
+      <UniqueIdentifier>{b349b3fb-19a2-456e-b760-9315eff8141e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\backend">
+      <UniqueIdentifier>{e6692b78-d01c-4727-a881-78e7ea3c5139}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\backend\dx12">
+      <UniqueIdentifier>{f1e5abb2-2838-4845-814b-f23cf1040329}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\api">
+      <UniqueIdentifier>{4462b3b6-55bf-4c0b-9797-972466fe7ccc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\api\cmd">
+      <UniqueIdentifier>{29867970-d785-44a0-984d-d50547d63883}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\api\pass">
+      <UniqueIdentifier>{59a21495-85d5-41bb-87a8-77099b6b9bcf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\api\render">
+      <UniqueIdentifier>{4f91428b-3529-441e-a2dc-10cbbc4ae122}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\backend\dx12\impl">
+      <UniqueIdentifier>{f2d7249d-c50b-4ccb-bdad-2b522dc9be14}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\backend\cmd">
+      <UniqueIdentifier>{ec418016-ef36-4355-9904-72fe833028ef}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\backend\pass">
+      <UniqueIdentifier>{e31022e6-905c-4a23-8932-6a2b3cf33d36}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\include\gpu\buffer.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\cmd-enc.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\cmdqueue.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\common.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\depthstencil.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\device.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\gpu.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\library.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\metalkit.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\pass.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\pipeline.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\pixelformat.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\resource.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\stage-io.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\texture.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\vertex.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\api\buffer.h">
+      <Filter>include\gpu\api</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\api\commandbuffer.h">
+      <Filter>include\gpu\api</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\api\commandqueue.h">
+      <Filter>include\gpu\api</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\api\depthstencil.h">
+      <Filter>include\gpu\api</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\api\device.h">
+      <Filter>include\gpu\api</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\api\gpudef.h">
+      <Filter>include\gpu\api</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\api\library.h">
+      <Filter>include\gpu\api</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\api\pass.h">
+      <Filter>include\gpu\api</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\api\rce.h">
+      <Filter>include\gpu\api</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\api\render-pipeline.h">
+      <Filter>include\gpu\api</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\api\vertex.h">
+      <Filter>include\gpu\api</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\backend\dx12\common.h">
+      <Filter>src\backend\dx12</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\common.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\backend\backends.h">
+      <Filter>src\backend</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\backend\common.h">
+      <Filter>src\backend</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\backend\dx12\impl.h">
+      <Filter>src\backend\dx12</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\api\frame.h">
+      <Filter>include\gpu\api</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\api\swapchain.h">
+      <Filter>include\gpu\api</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\frame.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\swapchain.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\src\win\dllmain.c">
+      <Filter>src\win</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\init.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend\backend.c">
+      <Filter>src\backend</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend\dx12\init.c">
+      <Filter>src\backend\dx12</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\api\buffer.c">
+      <Filter>src\api</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\api\depthstencil.c">
+      <Filter>src\api</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\api\device.c">
+      <Filter>src\api</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\api\library.c">
+      <Filter>src\api</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\api\vertex.c">
+      <Filter>src\api</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\api\cmd\cmdbuf.c">
+      <Filter>src\api\cmd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\api\cmd\cmdque.c">
+      <Filter>src\api\cmd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\api\render\pipeline.c">
+      <Filter>src\api\render</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\api\render\rce.c">
+      <Filter>src\api\render</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend\dx12\impl\cmdque.c">
+      <Filter>src\backend\dx12\impl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend\dx12\impl\device.c">
+      <Filter>src\backend\dx12\impl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend\dx12\impl\swapchain.c">
+      <Filter>src\backend\dx12\impl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\api\pass\renderpass.c">
+      <Filter>src\api\pass</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\api\swapchain.c">
+      <Filter>src\api</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\api\frame.c">
+      <Filter>src\api</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend\dx12\impl\frame.c">
+      <Filter>src\backend\dx12\impl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend\dx12\impl\renderpass.c">
+      <Filter>src\backend\dx12\impl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend\dx12\impl\descpool.c">
+      <Filter>src\backend\dx12\impl</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+</Project>
