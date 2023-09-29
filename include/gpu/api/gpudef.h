@@ -35,6 +35,7 @@ extern "C" {
 #include "swapchain.h"
 #include "frame.h"
 #include "descriptor.h"
+#include "sampler.h"
 
 typedef struct GPUApi {
   GPUBackend          backend;
@@ -52,6 +53,7 @@ typedef struct GPUApi {
   GPUApiSwapChain     swapchain;
   GPUApiFrame         frame;
   GPUApiDescriptor    descriptor;
+  GPUApiSampler       sampler;
   void               *reserved;
 } GPUApi;
 
