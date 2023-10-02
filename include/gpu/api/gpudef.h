@@ -36,6 +36,7 @@ extern "C" {
 #include "frame.h"
 #include "descriptor.h"
 #include "sampler.h"
+#include "instance.h"
 
 typedef struct GPUApi {
   GPUBackend          backend;
@@ -54,6 +55,7 @@ typedef struct GPUApi {
   GPUApiFrame         frame;
   GPUApiDescriptor    descriptor;
   GPUApiSampler       sampler;
+  GPUApiInstance      instance;
   void               *reserved;
 } GPUApi;
 

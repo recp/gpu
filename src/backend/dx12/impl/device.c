@@ -19,10 +19,13 @@
 GPU_HIDE
 void
 dx12__getHardwareAdapter(IDXGIFactory4* dxgiFactory, IDXGIAdapter1** ppAdapter) {
-  IDXGIAdapter1* adapter = NULL;
-  *ppAdapter = NULL;
+  IDXGIAdapter1 *adapter;
+  UINT           adapterIndex;
 
-  UINT adapterIndex = 0;
+  adapter      = NULL;
+  *ppAdapter   = NULL;
+  adapterIndex = 0;
+
   while (dxgiFactory->lpVtbl->EnumAdapters1(dxgiFactory, adapterIndex, &adapter) != DXGI_ERROR_NOT_FOUND) {
     DXGI_ADAPTER_DESC1 desc;
     adapter->lpVtbl->GetDesc1(adapter, &desc);
@@ -37,8 +40,8 @@ dx12__getHardwareAdapter(IDXGIFactory4* dxgiFactory, IDXGIAdapter1** ppAdapter) 
     /* Check to see if the adapter supports Direct3D 12, but don't create the
        actual device yet.*/
     if (SUCCEEDED(D3D12CreateDevice((IUnknown*)adapter,
-      D3D_FEATURE_LEVEL_11_0,
-      &IID_ID3D12Device, NULL))) {
+                                    D3D_FEATURE_LEVEL_11_0,
+                                    &IID_ID3D12Device, NULL))) {
       *ppAdapter = adapter; /* Transfer ownership to caller */
       return;
     }
@@ -54,30 +57,38 @@ dx12__createDevice(ID3D12Device** p_d3dDevice, IDXGIFactory4** p_dxgiFactory, ID
   ID3D12Device  *d3dDevice;
   IDXGIFactory4 *dxgiFactory;
   IDXGIAdapter1 *adapter;
+  UINT           dxgiFactoryFlags;
   HRESULT        hr;
 
+  dxgiFactoryFlags = 0;
+
 #if defined(_DEBUG)
-  /* If the project is in a debug build, enable debugging via SDK Layers.*/
+  /* Enable the debug layer (requires the Graphics Tools "optional feature").
+     NOTE: Enabling the debug layer after device creation will invalidate the active device.
+   */
   {
     ID3D12Debug* debugController;
     if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug,
       (void**)&debugController))) {
       debugController->lpVtbl->EnableDebugLayer(debugController);
       debugController->lpVtbl->Release(debugController);
+
+      /* Enable additional debug layers. */
+      dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
     }
   }
 #endif
 
-  hr = CreateDXGIFactory1(&IID_IDXGIFactory1, (void**)&dxgiFactory);
+  hr = CreateDXGIFactory2(dxgiFactoryFlags, &IID_IDXGIFactory1, (void**)&dxgiFactory);
   dxThrowIfFailed(hr);
 
   dx12__getHardwareAdapter(dxgiFactory, &adapter);
 
   /* Create the Direct3D 12 API device object */
   hr = D3D12CreateDevice((IUnknown*)adapter,
-    D3D_FEATURE_LEVEL_11_0,
-    &IID_ID3D12Device,
-    (void**)&d3dDevice);
+                         D3D_FEATURE_LEVEL_11_0,
+                         &IID_ID3D12Device,
+                         (void**)&d3dDevice);
 
   if (adapter) {
     adapter->lpVtbl->Release(adapter);
@@ -91,9 +102,9 @@ dx12__createDevice(ID3D12Device** p_d3dDevice, IDXGIFactory4** p_dxgiFactory, ID
     dxThrowIfFailed(hr);
 
     hr = D3D12CreateDevice((IUnknown*)warpAdapter,
-      D3D_FEATURE_LEVEL_11_0,
-      &IID_ID3D12Device,
-      (void**)&d3dDevice);
+                           D3D_FEATURE_LEVEL_11_0,
+                           &IID_ID3D12Device,
+                           (void**)&d3dDevice);
 
     if (warpAdapter) {
       warpAdapter->lpVtbl->Release(warpAdapter);
@@ -112,7 +123,7 @@ dx12__createDevice(ID3D12Device** p_d3dDevice, IDXGIFactory4** p_dxgiFactory, ID
 
 GPU_HIDE
 GPUDevice*
-dx12_createSystemDefaultDevice(GPUApi *api) {
+dx12_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
   GPUDevice     *device;
   ID3D12Device  *d3dDevice;
   IDXGIFactory4 *dxgiFactory;

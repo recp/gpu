@@ -168,11 +168,23 @@
     <ClInclude Include="..\..\include\gpu\api\descriptor.h">
       <Filter>include\gpu\api</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\include\gpu\api\sampler.h">
+      <Filter>include\gpu\api</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\sampler.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\include\gpu\descriptor.h">
-      <Filter>include</Filter>
+      <Filter>include\gpu</Filter>
     </ClInclude>
     <ClInclude Include="..\..\include\gpu\feature.h">
-      <Filter>include</Filter>
+      <Filter>include\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\api\instance.h">
+      <Filter>include\gpu\api</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\gpu\instance.h">
+      <Filter>include\gpu</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -244,6 +256,18 @@
     </ClCompile>
     <ClCompile Include="..\..\src\api\descr\descriptor.c">
       <Filter>src\api\descr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\api\sampler.c">
+      <Filter>src\api</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend\dx12\impl\sampler.c">
+      <Filter>src\backend\dx12\impl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\api\instance.c">
+      <Filter>src\api</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend\dx12\impl\instance.c">
+      <Filter>src\backend\dx12\impl</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

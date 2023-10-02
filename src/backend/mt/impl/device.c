@@ -18,7 +18,7 @@
 
 GPU_HIDE
 GPUDevice*
-mt_createSystemDefaultDevice(GPUApi *api) {
+mt_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
   GPUDevice *device;
   MtDevice  *mtDevice;
 

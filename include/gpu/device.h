@@ -21,6 +21,7 @@ extern "C" {
 #endif
 
 #include "common.h"
+#include "instance.h"
 
 typedef struct GPUDevice {
   void *priv;
@@ -28,7 +29,7 @@ typedef struct GPUDevice {
 
 GPU_EXPORT
 GPUDevice*
-GPUCreateSystemDefaultDevice(void);
+GPUCreateSystemDefaultDevice(GPUInstance *inst);
 
 #ifdef __cplusplus
 }

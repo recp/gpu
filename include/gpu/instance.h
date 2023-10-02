@@ -14,15 +14,23 @@
  * limitations under the License.
  */
 
-#include "../common.h"
+#ifndef gpu_instance_h
+#define gpu_instance_h
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include "common.h"
+
+typedef struct GPUInstance {
+  void *_priv;
+} GPUInstance;
 
 GPU_EXPORT
-GPUDevice*
-GPUCreateSystemDefaultDevice(GPUInstance *inst) {
-  GPUApi *api;
+GPUInstance*
+GPUCreateInstance(void * __restrict unused);
 
-  if (!(api = gpuActiveGPUApi()))
-    return NULL;
-
-  return api->device.createSystemDefaultDevice(api, inst);
+#ifdef __cplusplus
 }
+#endif
+#endif /* gpu_instance_h */

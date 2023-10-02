@@ -17,12 +17,12 @@
 #include "../common.h"
 
 GPU_EXPORT
-GPUDevice*
-GPUCreateSystemDefaultDevice(GPUInstance *inst) {
+GPUInstance*
+GPUCreateInstance(void * __restrict unused) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->device.createSystemDefaultDevice(api, inst);
+  return api->instance.createInstance(api, unused);
 }

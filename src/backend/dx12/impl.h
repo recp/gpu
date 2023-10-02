@@ -31,5 +31,6 @@ GPU_HIDE void dx12_initSwapChain(GPUApiSwapChain* apiSwapChain);
 GPU_HIDE void dx12_initFrame(GPUApiFrame *apiFrame);
 GPU_HIDE void dx12_initDescriptor(GPUApiDescriptor *apiDescriptor);
 GPU_HIDE void dx12_initSampler(GPUApiSampler *apiSampler);
+GPU_HIDE void dx12_initInstance(GPUApiInstance *apiInstance);
 
 #endif /* dx12_apis_h */
