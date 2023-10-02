@@ -4,6 +4,14 @@ This is cross platform GPU library based on Apple's Metal API.
 Library is written in C language and it provides and will provide C API.
 Since this is C API, language bindings can be written for any language.
 
+## Platforms ( In Progress )
+
+- [ ] Metal
+- [ ] DirectX 12
+- [ ] Vulkan
+- [ ] WebGPU
+- [ ] ...
+
 ## Status (In Progress)
 
 I'll announce after first release is ready.
