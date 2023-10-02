@@ -34,9 +34,9 @@ This section and others will be documented in detail later...
 
 **TODO:** `GPUSetFrontFace()` vs `gpuSetFrontFace()` vs `gpu_set_frontface()`, [feedbacks](https://github.com/recp/gpu/issues/1)
 
-## Design Sample
+## Samples
 
-I have translated Xcode's Game template project's renderer codes into GPU library (This may be obsoleted by time):
+Coming Soon.
 
 #### - (void)viewDidLoad
 ```C
@@ -47,8 +47,8 @@ I have translated Xcode's Game template project's renderer codes into GPU librar
   pipeline = GPUNewPipeline(GPUPixelFormatBGRA8Unorm_sRGB);
   library  = GPUDefaultLibrary(device);
 
-  vertFunc = GPUNewFunction(library, "vertexShader");
-  fragFunc = GPUNewFunction(library, "fragmentShader");
+  vertFunc = GPUShaderFunction(library, "vertexShader");
+  fragFunc = GPUShaderFunction(library, "fragmentShader");
   vert     = GPUNewVertexDesc();
 
   GPUAttrib(vert, VertexAttributePosition, GPUFloat3, 0, BufferIndexMeshPositions);
