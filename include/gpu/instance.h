@@ -22,13 +22,34 @@ extern "C" {
 
 #include "common.h"
 
+typedef enum GPUFeatures {
+  GPU_FEATURE_NONE = 0,
+  GPU_FEATURE_SURFACE,
+  GPU_FEATURE_SWAPCHAIN,
+  GPU_FEATURE_DEFAULT = GPU_FEATURE_SURFACE | GPU_FEATURE_SWAPCHAIN
+} GPUFeatures;
+
+typedef struct GPUInitParams {
+  GPUFeatures requiredFeatures;    /* DEFAULT */
+  GPUFeatures optionalFeatures;    /* NONE    */
+  bool        validation;          /* false, Vulkan validation layers */
+  bool        validation_usebreak; /* false   */
+} GPUInitParams;
+
 typedef struct GPUInstance {
-  void *_priv;
+  void          *_priv;
+  GPUInitParams *initParams; /* read-only */
+  uint32_t       validationError;
 } GPUInstance;
 
+/*!
+ * @brief creates GPU instance by specified params, features, options if possible
+ *
+ * @param[in]  params init params, NULL to default.
+ */
 GPU_EXPORT
 GPUInstance*
-GPUCreateInstance(void * __restrict unused);
+GPUCreateInstance(GPUInitParams * __restrict params);
 
 #ifdef __cplusplus
 }

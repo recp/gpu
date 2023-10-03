@@ -18,7 +18,7 @@
 
 GPU_HIDE
 GPUInstance*
-mt_createInstance(GPUApi * __restrict api, void * __restrict unused) {
+mt_createInstance(GPUApi * __restrict api, GPUInitParams * __restrict params) {
   GPUInstance *inst;
 
   return NULL;

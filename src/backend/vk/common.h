@@ -19,12 +19,16 @@
 
 #include "../../common.h"
 #include <stdarg.h>
+#include <assert.h>
+#include <inttypes.h>
 
 #ifdef ANDROID
 #  include "vulkan_wrapper.h"
 #else
 #  include <vulkan/vulkan.h>
 #endif
+
+#include "object_type_string_helper.h"
 
 #define APP_SHORT_NAME "libgpu"
 #define APP_LONG_NAME  "libgpu"

@@ -26,7 +26,7 @@ extern "C" {
 struct GPUApi;
 
 typedef struct GPUApiInstance {
-  GPUInstance *(*createInstance)(struct GPUApi *__restrict api, void * __restrict unused);
+  GPUInstance *(*createInstance)(struct GPUApi * __restrict api, GPUInitParams * __restrict params);
 } GPUApiInstance;
 
 #ifdef __cplusplus

@@ -18,11 +18,11 @@
 
 GPU_EXPORT
 GPUInstance*
-GPUCreateInstance(void * __restrict unused) {
+GPUCreateInstance(GPUInitParams * __restrict params) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->instance.createInstance(api, unused);
+  return api->instance.createInstance(api, params);
 }

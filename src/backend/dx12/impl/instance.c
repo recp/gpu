@@ -18,7 +18,8 @@
 
 GPU_HIDE
 GPUInstance *
-dx12_createInstance(struct GPUApi *__restrict api, void *__restrict unused) {
+dx12_createInstance(struct GPUApi * __restrict api, 
+                    GPUInitParams * __restrict params) {
   GPUInstance *inst;
   inst = calloc(1, sizeof(*inst));
   return inst;
