@@ -14,29 +14,18 @@
  * limitations under the License.
  */
 
-#ifndef backend_backends_h
-#define backend_backends_h
-
-#include "common.h"
-
-#ifdef __APPLE__
-GPU_HIDE
-GPUApi*
-backend_metal(void);
-#endif
-
-#if defined(_WIN32) || defined(WIN32)
-GPU_HIDE
-GPUApi*
-backend_dx12(void);
-#endif
+#include "../common.h"
 
 GPU_HIDE
-GPUApi*
-backend_gl(void);
+GPUInstance*
+mt_createInstance(GPUApi * __restrict api, void * __restrict unused) {
+  GPUInstance *inst;
+
+  return NULL;
+}
 
 GPU_HIDE
-GPUApi*
-backend_vk(void);
-
-#endif /* backend_backends_h */
+void
+mt_initInstance(GPUApiInstance *api) {
+  api->createInstance = mt_createInstance;
+}

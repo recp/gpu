@@ -16,32 +16,25 @@
 
 #include "common.h"
 #include "impl.h"
-#include "impl/impl.c"
 
-GPUApi mt = {
+GPUApi vk = {
   .initialized = false,
-  .backend     = GPU_BACKEND_METAL,
+  .backend     = GPU_BACKEND_VULKAN
 };
 
 GPU_HIDE
 GPUApi*
-backend_metal(void) {
-  if (!mt.initialized) {
-    mt_initDevice(&mt.device);
-    mt_initRenderPipeline(&mt.render);
-    mt_initRCE(&mt.rce);
-    mt_initCmdBuff(&mt.cmdbuf);
-    mt_initCmdQue(&mt.cmdque);
-    mt_initBuff(&mt.buf);
-    mt_initDepthStencil(&mt.depthStencil);
-    mt_initVertex(&mt.vertex);
-    mt_initLibrary(&mt.library);
-    mt_initRenderPass(&mt.renderPass);
-    mt_initSwapChain(&mt.swapchain);
-    mt_initFrame(&mt.frame);
-    mt_initInstance(&mt.instance);
+backend_vk(void) {
+  // TODO: init
+  if (!vk.initialized) {
+    vk_initInstance(&vk.instance);
+//    vk_initDevice(&dxvk12.device);
+//    vk_initCmdQue(&vk.cmdque);
+//    vk_initSwapChain(&vk.swapchain);
+//    vk_initFrame(&vk.frame);
+//    vk_initDescriptor(&vk.descriptor);
 
-    mt.initialized = true;
+    vk.initialized = true;
   }
-  return &mt;
+  return &vk;
 }

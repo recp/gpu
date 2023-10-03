@@ -48,6 +48,9 @@ GPUSwitchGPUApi(GPUBackend backend) {
       gpu__api = backend_metal();
 #endif
       break;
+    case GPU_BACKEND_VULKAN:
+      gpu__api = backend_vk();
+      break;
     case GPU_BACKEND_OPENGL:
 //      gpu__api = backend_gl();
       break;

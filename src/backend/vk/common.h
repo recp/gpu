@@ -18,5 +18,66 @@
 #define vk_common_h
 
 #include "../../common.h"
+#include <stdarg.h>
+
+#ifdef ANDROID
+#  include "vulkan_wrapper.h"
+#else
+#  include <vulkan/vulkan.h>
+#endif
+
+#define APP_SHORT_NAME "libgpu"
+#define APP_LONG_NAME  "libgpu"
+
+#ifdef _WIN32
+bool in_callback = false;
+#define ERR_EXIT(err_msg, err_class)                                             \
+    do {                                                                         \
+        if (!demo->suppress_popups) MessageBox(NULL, err_msg, err_class, MB_OK); \
+        exit(1);                                                                 \
+    } while (0)
+void DbgMsg(char *fmt, ...) {
+    va_list va;
+    va_start(va, fmt);
+    vprintf(fmt, va);
+    va_end(va);
+    fflush(stdout);
+}
+
+#elif defined __ANDROID__
+#include <android/log.h>
+#define ERR_EXIT(err_msg, err_class)                                           \
+    do {                                                                       \
+        ((void)__android_log_print(ANDROID_LOG_INFO, "Vulkan Cube", err_msg)); \
+        exit(1);                                                               \
+    } while (0)
+#ifdef VARARGS_WORKS_ON_ANDROID
+void DbgMsg(const char *fmt, ...) {
+    va_list va;
+    va_start(va, fmt);
+    __android_log_print(ANDROID_LOG_INFO, "Vulkan Cube", fmt, va);
+    va_end(va);
+}
+#else  // VARARGS_WORKS_ON_ANDROID
+#define DbgMsg(fmt, ...)                                                                  \
+    do {                                                                                  \
+        ((void)__android_log_print(ANDROID_LOG_INFO, "Vulkan Cube", fmt, ##__VA_ARGS__)); \
+    } while (0)
+#endif  // VARARGS_WORKS_ON_ANDROID
+#else
+#define ERR_EXIT(err_msg, err_class) \
+    do {                             \
+        printf("%s\n", err_msg);     \
+        fflush(stdout);              \
+        exit(1);                     \
+    } while (0)
+GPU_INLINE void DbgMsg(char *fmt, ...) {
+    va_list va;
+    va_start(va, fmt);
+    vprintf(fmt, va);
+    va_end(va);
+    fflush(stdout);
+}
+#endif
 
 #endif /* vk_common_h */

@@ -14,29 +14,15 @@
  * limitations under the License.
  */
 
-#ifndef backend_backends_h
-#define backend_backends_h
+#ifndef vk_apis_h
+#define vk_apis_h
 
-#include "common.h"
+GPU_HIDE void vk_initInstance(GPUApiInstance *apiInstance);
+GPU_HIDE void vk_initDevice(GPUApiDevice* apiDevice);
+GPU_HIDE void vk_initCmdQue(GPUApiCommandQueue* api);
+GPU_HIDE void vk_initSwapChain(GPUApiSwapChain* apiSwapChain);
+GPU_HIDE void vk_initFrame(GPUApiFrame *apiFrame);
+GPU_HIDE void vk_initDescriptor(GPUApiDescriptor *apiDescriptor);
+GPU_HIDE void vk_initSampler(GPUApiSampler *apiSampler);
 
-#ifdef __APPLE__
-GPU_HIDE
-GPUApi*
-backend_metal(void);
-#endif
-
-#if defined(_WIN32) || defined(WIN32)
-GPU_HIDE
-GPUApi*
-backend_dx12(void);
-#endif
-
-GPU_HIDE
-GPUApi*
-backend_gl(void);
-
-GPU_HIDE
-GPUApi*
-backend_vk(void);
-
-#endif /* backend_backends_h */
+#endif /* vk_apis_h */

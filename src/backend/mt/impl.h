@@ -29,5 +29,6 @@ GPU_HIDE void mt_initVertex(GPUApiVertex *api);
 GPU_HIDE void mt_initLibrary(GPUApiLibrary *api);
 GPU_HIDE void mt_initSwapChain(GPUApiSwapChain *api);
 GPU_HIDE void mt_initFrame(GPUApiFrame *api);
+GPU_HIDE void mt_initInstance(GPUApiInstance *api);
 
 #endif /* mt_apis_h */
