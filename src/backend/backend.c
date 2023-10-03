@@ -49,7 +49,14 @@ GPUSwitchGPUApi(GPUBackend backend) {
 #endif
       break;
     case GPU_BACKEND_VULKAN:
+#ifdef GPU_BACKEND_VULKAN
       gpu__api = backend_vk();
+#endif
+      break;
+    case GPU_BACKEND_DIRECTX12:
+#if defined(_WIN32) || defined(WIN32)
+      gpu__api = backend_dx12(); /* check DX version support */
+#endif
       break;
     case GPU_BACKEND_OPENGL:
 //      gpu__api = backend_gl();
