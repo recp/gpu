@@ -110,16 +110,22 @@ GPU_INLINE void DbgMsg(char *fmt, ...) {
 #endif
 
 typedef struct GPUInstanceVk {
+  char       *extensionNames[64];
+  char       *enabledLayers[64];
   VkInstance inst;
   bool       invalid_gpu_selection;
   int32_t    gpu_number;
+  uint32_t   nEnabledExtensions;
+  uint32_t   nEnabledLayers;
 } GPUInstanceVk;
 
 typedef struct GPUPhysicalDeviceVk {
+  char                      *extensionNames[64];
+  VkQueueFamilyProperties   *queueFamilyProps;
   VkPhysicalDevice           phyDevice;
   uint32_t                   queueFamilyCount;
+  uint32_t                   nEnabledExtensions;
   VkPhysicalDeviceProperties props;
-  VkQueueFamilyProperties   *queueFamilyProps;
   VkPhysicalDeviceFeatures   physDevFeatures;
 } GPUPhysicalDeviceVk;
 

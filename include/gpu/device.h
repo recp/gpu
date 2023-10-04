@@ -29,6 +29,9 @@ typedef struct GPUDevice {
 
 typedef struct GPUPhysicalDevice {
   void *priv;
+  bool  supportsSwapchain;
+  bool  supportsDisplayTiming;
+  bool  supportsIncrementalPresent;
 } GPUPhysicalDevice;
 
 GPU_EXPORT

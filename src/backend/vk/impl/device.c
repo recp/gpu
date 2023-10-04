@@ -95,15 +95,22 @@ vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
   VkPhysicalDeviceProperties phyDeviceProps;
   VkInstance                 instRaw;
   VkResult                   err;
-  uint32_t                   gpuCount;
+  uint32_t                   i, gpuCount, nPhyDeviceExtensions;
+  VkBool32                   swapchainExtFound;
   int                        gpu_number;
+  bool                       incrementalPresentEnabled, displayTimingEnabled;
 
-  gpu_number      = -1;
-  instVk          = inst->_priv;
-  instRaw         = instVk->inst;
-  phyDevice       = calloc(1, sizeof(*phyDevice));
-  phyDeviceVk     = calloc(1, sizeof(*phyDeviceVk));
-  phyDevice->priv = phyDeviceVk;
+  gpu_number                = -1;
+  nPhyDeviceExtensions      = 0;
+  swapchainExtFound         = 0;
+  instVk                    = inst->_priv;
+  instRaw                   = instVk->inst;
+  phyDevice                 = calloc(1, sizeof(*phyDevice));
+  phyDeviceVk               = calloc(1, sizeof(*phyDeviceVk));
+  phyDevice->priv           = phyDeviceVk;
+
+  incrementalPresentEnabled = (inst->initParams->optionalFeatures & GPU_FEATURE_INCREMENTAL_PRESENT) != 0;
+  displayTimingEnabled      = (inst->initParams->optionalFeatures & GPU_FEATURE_DISPLAY_TIMING)      != 0;
 
   gpuCount = 0;
   err      = vkEnumeratePhysicalDevices(instRaw, &gpuCount, NULL);
@@ -172,6 +179,77 @@ vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
 #endif
   free(phyDevices);
 
+  /* Look for device extensions */
+  memset(instVk->extensionNames, 0, sizeof(*instVk->extensionNames));
+
+  err = vkEnumerateDeviceExtensionProperties(phyDeviceVk->phyDevice, 
+                                             NULL, 
+                                             &nPhyDeviceExtensions,
+                                             NULL);
+  assert(!err);
+
+  if (nPhyDeviceExtensions > 0) {
+    VkExtensionProperties *device_extensions;
+    device_extensions = malloc(sizeof(*device_extensions) * nPhyDeviceExtensions);
+    err               = vkEnumerateDeviceExtensionProperties(phyDeviceVk->phyDevice,
+                                                             NULL,
+                                                             &nPhyDeviceExtensions,
+                                                             device_extensions);
+    assert(!err);
+
+    for (i = 0; i < nPhyDeviceExtensions; i++) {
+      if (!strcmp(VK_KHR_SWAPCHAIN_EXTENSION_NAME, 
+                  device_extensions[i].extensionName)) {
+        swapchainExtFound = 1;
+        instVk->extensionNames[instVk->nEnabledExtensions++] 
+            = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+      }
+
+      if (!strcmp("VK_KHR_portability_subset", 
+                  device_extensions[i].extensionName)) {
+        instVk->extensionNames[instVk->nEnabledExtensions++] 
+            = "VK_KHR_portability_subset";
+      }
+      assert(instVk->nEnabledExtensions < 64);
+    }
+
+    if (incrementalPresentEnabled) {
+      // Even though the user "enabled" the extension via the command
+      // line, we must make sure that it's enumerated for use with the
+      // device.  Therefore, disable it here, and re-enable it again if
+      // enumerated.
+      incrementalPresentEnabled = false;
+      for (i = 0; i < nPhyDeviceExtensions; i++) {
+        if (!strcmp(VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME, 
+                    device_extensions[i].extensionName)) {
+          instVk->extensionNames[instVk->nEnabledExtensions++] 
+              = VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME;
+          incrementalPresentEnabled = true;
+        }
+        assert(instVk->nEnabledExtensions < 64);
+      }
+    }
+
+    if (displayTimingEnabled) {
+      // Even though the user "enabled" the extension via the command
+      // line, we must make sure that it's enumerated for use with the
+      // device.  Therefore, disable it here, and re-enable it again if
+      // enumerated.
+      displayTimingEnabled = false;
+      for (i = 0; i < nPhyDeviceExtensions; i++) {
+        if (!strcmp(VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME, 
+                    device_extensions[i].extensionName)) {
+          instVk->extensionNames[instVk->nEnabledExtensions++] 
+              = VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME;
+          displayTimingEnabled = true;
+        }
+        assert(instVk->nEnabledExtensions < 64);
+      }
+    }
+
+    free(device_extensions);
+  }
+
   vkGetPhysicalDeviceProperties(phyDeviceVk->phyDevice, &phyDeviceVk->props);
 
   /* Call with NULL data to get count */
@@ -180,8 +258,9 @@ vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
                                            NULL);
   assert(phyDeviceVk->queueFamilyCount >= 1);
 
-  phyDeviceVk->queueFamilyProps = malloc(phyDeviceVk->queueFamilyCount * sizeof(*phyDeviceVk->queueFamilyProps));
-  vkGetPhysicalDeviceQueueFamilyProperties(phyDeviceVk->phyDevice, 
+  phyDeviceVk->queueFamilyProps = malloc(phyDeviceVk->queueFamilyCount 
+                                         * sizeof(*phyDeviceVk->queueFamilyProps));
+  vkGetPhysicalDeviceQueueFamilyProperties(phyDeviceVk->phyDevice,
                                            &phyDeviceVk->queueFamilyCount,
                                            phyDeviceVk->queueFamilyProps);
 
@@ -189,6 +268,10 @@ vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
   //  If app has specific feature requirements it should check supported
   //  features based on this query
   vkGetPhysicalDeviceFeatures(phyDeviceVk->phyDevice, &phyDeviceVk->physDevFeatures);
+
+  phyDevice->supportsSwapchain          = swapchainExtFound;
+  phyDevice->supportsDisplayTiming      = displayTimingEnabled;
+  phyDevice->supportsIncrementalPresent = incrementalPresentEnabled;
 
   return phyDevice;
 }
