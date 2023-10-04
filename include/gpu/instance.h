@@ -26,12 +26,16 @@ typedef enum GPUFeatures {
   GPU_FEATURE_NONE = 0,
   GPU_FEATURE_SURFACE,
   GPU_FEATURE_SWAPCHAIN,
-  GPU_FEATURE_DEFAULT = GPU_FEATURE_SURFACE | GPU_FEATURE_SWAPCHAIN
+  GPU_FEATURE_DISPLAY_TIMING,
+  GPU_FEATURE_INCREMENTAL_PRESENT,
+
+  GPU_FEATURE_REQUIRED_DEFAULT = GPU_FEATURE_SURFACE | GPU_FEATURE_SWAPCHAIN,
+  GPU_FEATURE_OPTIONAL_DEFAULT = GPU_FEATURE_DISPLAY_TIMING | GPU_FEATURE_INCREMENTAL_PRESENT
 } GPUFeatures;
 
 typedef struct GPUInitParams {
-  GPUFeatures requiredFeatures;    /* DEFAULT */
-  GPUFeatures optionalFeatures;    /* NONE    */
+  GPUFeatures requiredFeatures;    /* REQUIRED_DEFAULT */
+  GPUFeatures optionalFeatures;    /* OPTIONAL_DEFAULT    */
   bool        validation;          /* false, Vulkan validation layers */
   bool        validation_usebreak; /* false   */
 } GPUInitParams;
