@@ -248,7 +248,7 @@ vk_createInstance(GPUApi * __restrict api, GPUInitParams * __restrict params) {
                        | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
                        | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
       .pfnUserCallback = vk__debug_messengercb,
-      .pUserData       = inst
+      .pUserData       = &inst
     };
   }
 

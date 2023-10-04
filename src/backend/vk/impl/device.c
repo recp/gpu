@@ -17,6 +17,60 @@
 #include "../common.h"
 
 GPU_HIDE
+char const *
+vk__devicetype_string(const VkPhysicalDeviceType type) {
+  switch (type) {
+    case VK_PHYSICAL_DEVICE_TYPE_OTHER:
+      return "Other";
+    case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+      return "IntegratedGpu";
+    case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+      return "DiscreteGpu";
+    case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+      return "VirtualGpu";
+    case VK_PHYSICAL_DEVICE_TYPE_CPU:
+      return "Cpu";
+    default:
+      return "Unknown";
+  }
+}
+
+#if defined(VK_USE_PLATFORM_DISPLAY_KHR)
+int 
+vk__find_display_gpu(int               gpu_number,
+                     uint32_t          gpu_count,
+                     VkPhysicalDevice *physical_devices) {
+  uint32_t               i, display_count;
+  VkResult U_ASSERT_ONLY result;
+  int                    gpu_return;
+
+  display_count = 0;
+  gpu_return    = gpu_number;
+
+  if (gpu_number >= 0) {
+    result = vkGetPhysicalDeviceDisplayPropertiesKHR(physical_devices[gpu_number],
+                                                     &display_count,
+                                                     NULL);
+    assert(!result);
+  } else {
+    for (i = 0; i < gpu_count; i++) {
+      result = vkGetPhysicalDeviceDisplayPropertiesKHR(physical_devices[i], 
+                                                       &display_count,
+                                                       NULL);
+      assert(!result);
+
+      if (display_count) {
+        gpu_return = i;
+        break;
+      }
+    }
+  }
+
+  return display_count > 0 ? gpu_return : -1;
+}
+#endif
+
+GPU_HIDE
 GPUDevice*
 vk_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
   GPUDevice     *device;
@@ -31,32 +85,92 @@ GPU_HIDE
 GPUPhysicalDevice*
 vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
                                  GPUInstance * __restrict inst) {
-  GPUInstanceVk     *instVk;
-  GPUPhysicalDevice *device;
-  VkInstance        instRaw;
-  VkPhysicalDevice  *phyDevices;
-  VkResult           err;
-  uint32_t           gpu_count;
+  GPUInstanceVk             *instVk;
+  GPUPhysicalDevice         *phyDevice;
+  GPUPhysicalDeviceVk       *phyDeviceVk;
+  VkPhysicalDevice          *phyDevices;
+  VkPhysicalDeviceProperties phyDeviceProps;
+  VkInstance                 instRaw;
+  VkResult                   err;
+  uint32_t                   gpuCount;
+  int                        gpu_number;
 
-  instVk       = inst->_priv;
-  instRaw      = instVk->inst;
-  device       = calloc(1, sizeof(*device));
-  device->priv = NULL;
+  gpu_number      = -1;
+  instVk          = inst->_priv;
+  instRaw         = instVk->inst;
+  phyDevice       = calloc(1, sizeof(*phyDevice));
+  phyDeviceVk     = calloc(1, sizeof(*phyDeviceVk));
+  phyDevice->priv = phyDeviceVk;
 
-  gpu_count = 0;
-  err       = vkEnumeratePhysicalDevices(instRaw, &gpu_count, NULL);
+  gpuCount = 0;
+  err      = vkEnumeratePhysicalDevices(instRaw, &gpuCount, NULL);
   assert(!err);
 
-  if (gpu_count <= 0) {
+  if (gpuCount <= 0) {
     ERR_EXIT("vkEnumeratePhysicalDevices reported zero accessible devices.\n\n",
              "vkEnumeratePhysicalDevices Failure");
   }
 
-  phyDevices = malloc(sizeof(VkPhysicalDevice) * gpu_count);
-  err        = vkEnumeratePhysicalDevices(instRaw, &gpu_count, phyDevices);
+  phyDevices = malloc(sizeof(VkPhysicalDevice) * gpuCount);
+  err        = vkEnumeratePhysicalDevices(instRaw, &gpuCount, phyDevices);
   assert(!err);
 
-  return device;
+
+#if defined(VK_USE_PLATFORM_DISPLAY_KHR)
+  gpu_number = vk__find_display_gpu(gpu_number, gpu_count, physical_devices);
+  if (gpu_number < 0) {
+    ERR_EXIT("Cannot find any display!\n", "vk__find_display_gpu failure");
+  }
+#else
+  /* Try to auto select most suitable device */
+  if (gpu_number == -1) {
+    uint32_t             countDeviceType[VK_PHYSICAL_DEVICE_TYPE_CPU + 1], i;
+    VkPhysicalDeviceType searchForDeviceType;
+
+    memset(countDeviceType, 0, sizeof(countDeviceType));
+    searchForDeviceType = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+
+    for (i = 0; i < gpuCount; i++) {
+      vkGetPhysicalDeviceProperties(phyDevices[i], &phyDeviceProps);
+      assert(phyDeviceProps.deviceType <= VK_PHYSICAL_DEVICE_TYPE_CPU);
+      countDeviceType[phyDeviceProps.deviceType]++;
+    }
+
+    if (countDeviceType[VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU]) {
+      searchForDeviceType = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+    } else if (countDeviceType[VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU]) {
+      searchForDeviceType = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
+    } else if (countDeviceType[VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU]) {
+      searchForDeviceType = VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU;
+    } else if (countDeviceType[VK_PHYSICAL_DEVICE_TYPE_CPU]) {
+      searchForDeviceType = VK_PHYSICAL_DEVICE_TYPE_CPU;
+    } else if (countDeviceType[VK_PHYSICAL_DEVICE_TYPE_OTHER]) {
+      searchForDeviceType = VK_PHYSICAL_DEVICE_TYPE_OTHER;
+    }
+
+    for (i = 0; i < gpuCount; i++) {
+      vkGetPhysicalDeviceProperties(phyDevices[i], &phyDeviceProps);
+      if (phyDeviceProps.deviceType == searchForDeviceType) {
+        gpu_number = i;
+        break;
+      }
+    }
+  }
+#endif
+
+  phyDeviceVk->phyDevice = phyDevices[gpu_number];
+#if DEBUG
+  {
+    vkGetPhysicalDeviceProperties(phyDeviceVk->phyDevice, &phyDeviceProps);
+    fprintf(stderr, "Selected GPU %d: %s, type: %s\n",
+            gpu_number,
+            phyDeviceProps.deviceName,
+            vk__devicetype_string(phyDeviceProps.deviceType));
+  }
+#endif
+  free(phyDevices);
+
+  return phyDevice;
 }
 
 GPU_HIDE

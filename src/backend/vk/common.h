@@ -46,6 +46,18 @@
 #define APP_SHORT_NAME "libgpu"
 #define APP_LONG_NAME  "libgpu"
 
+#if defined(NDEBUG) && defined(__GNUC__)
+#  define U_ASSERT_ONLY __attribute__((unused))
+#else
+#  define U_ASSERT_ONLY
+#endif
+
+#if defined(__GNUC__)
+#  define UNUSED __attribute__((unused))
+#else
+#  define UNUSED
+#endif
+
 #ifdef _WIN32
 bool in_callback = false;
 #define ERR_EXIT(err_msg, err_class)                                             \
@@ -102,5 +114,9 @@ typedef struct GPUInstanceVk {
   bool       invalid_gpu_selection;
   int32_t    gpu_number;
 } GPUInstanceVk;
+
+typedef struct GPUPhysicalDeviceVk {
+  VkPhysicalDevice phyDevice;
+} GPUPhysicalDeviceVk;
 
 #endif /* vk_common_h */
