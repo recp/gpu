@@ -21,8 +21,8 @@
  * Return 1 (true) if all layer names specified in check_names
  * can be found in given layer properties.
  */
-static 
-VkBool32
+GPU_HIDE
+static VkBool32
 vk__checkLayers(uint32_t           check_count,
                 char             **check_names,
                 uint32_t           layer_count,

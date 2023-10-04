@@ -17,7 +17,7 @@
 #include "../common.h"
 
 GPU_HIDE
-char const *
+static char const *
 vk__devicetype_string(const VkPhysicalDeviceType type) {
   switch (type) {
     case VK_PHYSICAL_DEVICE_TYPE_OTHER:
@@ -36,7 +36,8 @@ vk__devicetype_string(const VkPhysicalDeviceType type) {
 }
 
 #if defined(VK_USE_PLATFORM_DISPLAY_KHR)
-int 
+GPU_HIDE
+static int
 vk__find_display_gpu(int               gpu_number,
                      uint32_t          gpu_count,
                      VkPhysicalDevice *physical_devices) {
@@ -78,6 +79,8 @@ vk_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
   device       = calloc(1, sizeof(*device));
   device->priv = NULL;
 
+  /* TODO: select-phy device auto */
+  
   return device;
 }
 
@@ -114,7 +117,6 @@ vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
   phyDevices = malloc(sizeof(VkPhysicalDevice) * gpuCount);
   err        = vkEnumeratePhysicalDevices(instRaw, &gpuCount, phyDevices);
   assert(!err);
-
 
 #if defined(VK_USE_PLATFORM_DISPLAY_KHR)
   gpu_number = vk__find_display_gpu(gpu_number, gpu_count, physical_devices);
