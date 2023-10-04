@@ -27,11 +27,21 @@ typedef struct GPUDevice {
   void *priv;
 } GPUDevice;
 
+typedef struct GPUPhysicalDevice {
+  void *priv;
+} GPUPhysicalDevice;
+
 GPU_EXPORT
 GPUDevice*
 GPUCreateSystemDefaultDevice(GPUInstance *inst);
+
+GPU_EXPORT
+GPUPhysicalDevice*
+GPUGetAvailablePhysicalDevicesBy(GPUInstance *inst);
 
 #ifdef __cplusplus
 }
 #endif
 #endif /* gpu_device_h */
+
+

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 Recep Aslantas
+ * Copyright (C) 2023 Recep Aslantas
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,27 +14,9 @@
  * limitations under the License.
  */
 
-#include "common.h"
-#include "impl.h"
+#ifndef vk_impl_display_h
+#define vk_impl_display_h
 
-GPUApi vk = {
-  .initialized = false,
-  .backend     = GPU_BACKEND_VULKAN
-};
+#include "../common.h"
 
-GPU_HIDE
-GPUApi*
-backend_vk(void) {
-  // TODO: init
-  if (!vk.initialized) {
-    vk_initInstance(&vk.instance);
-    vk_initDevice(&vk.device);
-//    vk_initCmdQue(&vk.cmdque);
-//    vk_initSwapChain(&vk.swapchain);
-//    vk_initFrame(&vk.frame);
-//    vk_initDescriptor(&vk.descriptor);
-
-    vk.initialized = true;
-  }
-  return &vk;
-}
+#endif /* vk_impl_display_h */

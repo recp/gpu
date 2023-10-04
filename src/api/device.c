@@ -26,3 +26,14 @@ GPUCreateSystemDefaultDevice(GPUInstance *inst) {
 
   return api->device.createSystemDefaultDevice(api, inst);
 }
+
+GPU_EXPORT
+GPUPhysicalDevice*
+GPUGetAvailablePhysicalDevicesBy(GPUInstance *inst) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
+
+  return api->device.getAvailablePhysicalDevicesBy(api, inst);
+}

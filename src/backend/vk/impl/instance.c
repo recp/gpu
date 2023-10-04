@@ -58,13 +58,14 @@ GPUInitParams gpu__defaultInitParams = {
 GPU_HIDE
 GPUInstance*
 vk_createInstance(GPUApi * __restrict api, GPUInitParams * __restrict params) {
-  GPUInstance           *inst;
+  GPUInstance           *gpuInst;
+  GPUInstanceVk         *gpuInstVk;
   char                  *extensionNames[64];
   char                  *enabledLayers[64];
   char                  *validationLayers[] = {"VK_LAYER_KHRONOS_validation"};
   VkExtensionProperties *instanceExtensions;
   VkLayerProperties     *instanceLayers;
-  VkInstance             vkinst;
+  VkInstance             inst;
   VkResult               err;
   uint32_t               i, nEnabledExtensions, nEnabledLayers;
   uint32_t               nInstanceExtensions, nInstanceLayers;
@@ -86,7 +87,9 @@ vk_createInstance(GPUApi * __restrict api, GPUInitParams * __restrict params) {
   nEnabledExtensions      = 0;
   nEnabledLayers          = 0;
 
-  inst        = calloc(1, sizeof(*inst));
+  gpuInst        = calloc(1, sizeof(*gpuInst));
+  gpuInstVk      = calloc(1, sizeof(*gpuInstVk));
+  gpuInst->_priv = gpuInstVk;
 
   /* Look for validation layers */
   if (validate) {
@@ -249,7 +252,7 @@ vk_createInstance(GPUApi * __restrict api, GPUInitParams * __restrict params) {
     };
   }
 
-  err = vkCreateInstance(&instCI, NULL, &vkinst);
+  err = vkCreateInstance(&instCI, NULL, &inst);
   if (err == VK_ERROR_INCOMPATIBLE_DRIVER) {
     ERR_EXIT("Cannot find a compatible Vulkan installable client driver (ICD).\n\n"
              "Please look at the Getting Started guide for additional information.\n",
@@ -265,9 +268,9 @@ vk_createInstance(GPUApi * __restrict api, GPUInitParams * __restrict params) {
              "vkCreateInstance Failure");
   }
 
-  inst->_priv = vkinst;
+  gpuInstVk->inst = inst;
 
-  return inst;
+  return gpuInst;
 }
 
 GPU_HIDE

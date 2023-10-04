@@ -14,27 +14,6 @@
  * limitations under the License.
  */
 
-#include "common.h"
-#include "impl.h"
+#include "display.h"
 
-GPUApi vk = {
-  .initialized = false,
-  .backend     = GPU_BACKEND_VULKAN
-};
 
-GPU_HIDE
-GPUApi*
-backend_vk(void) {
-  // TODO: init
-  if (!vk.initialized) {
-    vk_initInstance(&vk.instance);
-    vk_initDevice(&vk.device);
-//    vk_initCmdQue(&vk.cmdque);
-//    vk_initSwapChain(&vk.swapchain);
-//    vk_initFrame(&vk.frame);
-//    vk_initDescriptor(&vk.descriptor);
-
-    vk.initialized = true;
-  }
-  return &vk;
-}

@@ -97,4 +97,10 @@ GPU_INLINE void DbgMsg(char *fmt, ...) {
 }
 #endif
 
+typedef struct GPUInstanceVk {
+  VkInstance inst;
+  bool       invalid_gpu_selection;
+  int32_t    gpu_number;
+} GPUInstanceVk;
+
 #endif /* vk_common_h */
