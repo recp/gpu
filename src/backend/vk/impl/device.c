@@ -80,7 +80,7 @@ vk_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
   device->priv = NULL;
 
   /* TODO: select-phy device auto */
-  
+
   return device;
 }
 
@@ -171,6 +171,24 @@ vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
   }
 #endif
   free(phyDevices);
+
+  vkGetPhysicalDeviceProperties(phyDeviceVk->phyDevice, &phyDeviceVk->props);
+
+  /* Call with NULL data to get count */
+  vkGetPhysicalDeviceQueueFamilyProperties(phyDeviceVk->phyDevice, 
+                                           &phyDeviceVk->queueFamilyCount,
+                                           NULL);
+  assert(phyDeviceVk->queueFamilyCount >= 1);
+
+  phyDeviceVk->queueFamilyProps = malloc(phyDeviceVk->queueFamilyCount * sizeof(*phyDeviceVk->queueFamilyProps));
+  vkGetPhysicalDeviceQueueFamilyProperties(phyDeviceVk->phyDevice, 
+                                           &phyDeviceVk->queueFamilyCount,
+                                           phyDeviceVk->queueFamilyProps);
+
+  // Query fine-grained feature support for this device.
+  //  If app has specific feature requirements it should check supported
+  //  features based on this query
+  vkGetPhysicalDeviceFeatures(phyDeviceVk->phyDevice, &phyDeviceVk->physDevFeatures);
 
   return phyDevice;
 }

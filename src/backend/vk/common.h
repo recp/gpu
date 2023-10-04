@@ -116,7 +116,11 @@ typedef struct GPUInstanceVk {
 } GPUInstanceVk;
 
 typedef struct GPUPhysicalDeviceVk {
-  VkPhysicalDevice phyDevice;
+  VkPhysicalDevice           phyDevice;
+  uint32_t                   queueFamilyCount;
+  VkPhysicalDeviceProperties props;
+  VkQueueFamilyProperties   *queueFamilyProps;
+  VkPhysicalDeviceFeatures   physDevFeatures;
 } GPUPhysicalDeviceVk;
 
 #endif /* vk_common_h */
