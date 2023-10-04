@@ -49,8 +49,8 @@ vk__checkLayers(uint32_t           check_count,
 }
 
 GPUInitParams gpu__defaultInitParams = {
-  .requiredFeatures    = GPU_FEATURE_DEFAULT,
-  .optionalFeatures    = 0,
+  .requiredFeatures    = GPU_FEATURE_REQUIRED_DEFAULT,
+  .optionalFeatures    = GPU_FEATURE_OPTIONAL_DEFAULT,
   .validation          = false,
   .validation_usebreak = false
 };
