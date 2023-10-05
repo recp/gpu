@@ -33,7 +33,7 @@ void
 gpuRegisterCustomGPUApi(GPUApi * __restrict gpuApi) {
   GPUApiList *item;
   
-  item = calloc(1, sizeof(*item));
+  item       = calloc(1, sizeof(*item));
   item->api  = gpuApi;
   item->next = gpu__apis;
   gpu__apis  = item;
@@ -49,9 +49,13 @@ GPUSwitchGPUApi(GPUBackend backend) {
 #endif
       break;
     case GPU_BACKEND_VULKAN:
-#ifdef GPU_BACKEND_VULKAN
+//#ifdef GPU_BACKEND_VULKAN
+
+#ifndef _WIN32
       gpu__api = backend_vk();
-#endif
+#endif // !_WIN32
+
+//#endif
       break;
     case GPU_BACKEND_DIRECTX12:
 #if defined(_WIN32) || defined(WIN32)
