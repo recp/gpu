@@ -94,13 +94,14 @@ vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
   VkPhysicalDevice          *phyDevices;
   VkPhysicalDeviceProperties phyDeviceProps;
   VkInstance                 instRaw;
+  GPUFeatures                gpuFeatures;
   VkResult                   err;
   uint32_t                   i, gpuCount, nPhyDeviceExtensions;
   VkBool32                   swapchainExtFound;
-  int                        gpu_number;
+  int                        gpuIndex;
   bool                       incrementalPresentEnabled, displayTimingEnabled;
 
-  gpu_number                = -1;
+  gpuIndex                  = -1;
   nPhyDeviceExtensions      = 0;
   swapchainExtFound         = 0;
   instVk                    = inst->_priv;
@@ -109,8 +110,9 @@ vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
   phyDeviceVk               = calloc(1, sizeof(*phyDeviceVk));
   phyDevice->priv           = phyDeviceVk;
 
-  incrementalPresentEnabled = (inst->initParams->optionalFeatures & GPU_FEATURE_INCREMENTAL_PRESENT) != 0;
-  displayTimingEnabled      = (inst->initParams->optionalFeatures & GPU_FEATURE_DISPLAY_TIMING)      != 0;
+  gpuFeatures               = inst->initParams->optionalFeatures | inst->initParams->requiredFeatures;
+  incrementalPresentEnabled = (gpuFeatures & GPU_FEATURE_INCREMENTAL_PRESENT);
+  displayTimingEnabled      = (gpuFeatures & GPU_FEATURE_DISPLAY_TIMING);
 
   gpuCount = 0;
   err      = vkEnumeratePhysicalDevices(instRaw, &gpuCount, NULL);
@@ -132,7 +134,7 @@ vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
   }
 #else
   /* Try to auto select most suitable device */
-  if (gpu_number == -1) {
+  if (gpuIndex == -1) {
     uint32_t             countDeviceType[VK_PHYSICAL_DEVICE_TYPE_CPU + 1], i;
     VkPhysicalDeviceType searchForDeviceType;
 
@@ -160,19 +162,19 @@ vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
     for (i = 0; i < gpuCount; i++) {
       vkGetPhysicalDeviceProperties(phyDevices[i], &phyDeviceProps);
       if (phyDeviceProps.deviceType == searchForDeviceType) {
-        gpu_number = i;
+        gpuIndex = i;
         break;
       }
     }
   }
 #endif
 
-  phyDeviceVk->phyDevice = phyDevices[gpu_number];
+  phyDeviceVk->phyDevice = phyDevices[gpuIndex];
 #if DEBUG
   {
     vkGetPhysicalDeviceProperties(phyDeviceVk->phyDevice, &phyDeviceProps);
     fprintf(stderr, "Selected GPU %d: %s, type: %s\n",
-            gpu_number,
+            gpuIndex,
             phyDeviceProps.deviceName,
             vk__devicetype_string(phyDeviceProps.deviceType));
   }
