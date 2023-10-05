@@ -29,7 +29,10 @@ dx12_newCommandQueue(GPUDevice* __restrict device) {
   queueDesc.Type  = D3D12_COMMAND_LIST_TYPE_DIRECT;
 
   d3dDevice = (ID3D12Device*)device->priv;
-  hr        = d3dDevice->lpVtbl->CreateCommandQueue(d3dDevice, &queueDesc, &IID_ID3D12CommandQueue, (void**)&commandQueue);
+  hr        = d3dDevice->lpVtbl->CreateCommandQueue(d3dDevice, 
+                                                    &queueDesc, 
+                                                    &IID_ID3D12CommandQueue,
+                                                    (void**)&commandQueue);
 
   dxThrowIfFailed(hr);
 

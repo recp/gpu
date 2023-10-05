@@ -38,7 +38,10 @@ dx12_createDescriptorPool(GPUApi    * __restrict api,
   srvHeapDesc.NumDescriptors = 1;
   srvHeapDesc.Type           = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
   srvHeapDesc.Flags          = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-  DXCHECK(d3dDevice->lpVtbl->CreateDescriptorHeap(d3dDevice, &srvHeapDesc, &IID_ID3D12DescriptorHeap, (void **)&descHeap));
+  DXCHECK(d3dDevice->lpVtbl->CreateDescriptorHeap(d3dDevice, 
+                                                  &srvHeapDesc, 
+                                                  &IID_ID3D12DescriptorHeap, 
+                                                  (void **)&descHeap));
 
   descPoolDX12 = calloc(1, sizeof(*descPoolDX12));
   descPoolDX12->descHeap = descHeap;

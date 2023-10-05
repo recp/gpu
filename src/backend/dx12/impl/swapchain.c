@@ -60,10 +60,21 @@ dx12_createSwapChainForView(GPUApi          * __restrict api,
 
   switch (viewHandleType) {
   case GPU_WINDOW_TYPE_COREWINDOW:
-    DXCHECK(dxgiFactory->lpVtbl->CreateSwapChainForCoreWindow(dxgiFactory, (IUnknown *)cmdQueDX12, viewHandle, &swapChainDesc, NULL, &swapChain1));
+    DXCHECK(dxgiFactory->lpVtbl->CreateSwapChainForCoreWindow(dxgiFactory, 
+                                                              (IUnknown *)cmdQueDX12, 
+                                                              viewHandle, 
+                                                              &swapChainDesc, 
+                                                              NULL, 
+                                                              &swapChain1));
     break;
   case GPU_WINDOW_TYPE_HWND:
-    DXCHECK(dxgiFactory->lpVtbl->CreateSwapChainForHwnd(dxgiFactory, (IUnknown *)cmdQueDX12, viewHandle, &swapChainDesc, NULL, NULL, &swapChain1));
+    DXCHECK(dxgiFactory->lpVtbl->CreateSwapChainForHwnd(dxgiFactory, 
+                                                        (IUnknown *)cmdQueDX12, 
+                                                        viewHandle, 
+                                                        &swapChainDesc, 
+                                                        NULL, 
+                                                        NULL, 
+                                                        &swapChain1));
     DXCHECK(dxgiFactory->lpVtbl->MakeWindowAssociation(dxgiFactory, viewHandle, DXGI_MWA_NO_ALT_ENTER));
     break;
   default:

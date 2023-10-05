@@ -53,7 +53,9 @@ dx12__getHardwareAdapter(IDXGIFactory4* dxgiFactory, IDXGIAdapter1** ppAdapter) 
 
 GPU_EXPORT
 HRESULT
-dx12__createDevice(ID3D12Device** p_d3dDevice, IDXGIFactory4** p_dxgiFactory, IDXGIAdapter1** p_adapter) {
+dx12__createDevice(ID3D12Device** p_d3dDevice, 
+                   IDXGIFactory4** p_dxgiFactory, 
+                   IDXGIAdapter1** p_adapter) {
   ID3D12Device  *d3dDevice;
   IDXGIFactory4 *dxgiFactory;
   IDXGIAdapter1 *adapter;
@@ -79,7 +81,9 @@ dx12__createDevice(ID3D12Device** p_d3dDevice, IDXGIFactory4** p_dxgiFactory, ID
   }
 #endif
 
-  hr = CreateDXGIFactory2(dxgiFactoryFlags, &IID_IDXGIFactory1, (void**)&dxgiFactory);
+  hr = CreateDXGIFactory2(dxgiFactoryFlags, 
+                          &IID_IDXGIFactory1, 
+                          (void**)&dxgiFactory);
   dxThrowIfFailed(hr);
 
   dx12__getHardwareAdapter(dxgiFactory, &adapter);
@@ -97,7 +101,9 @@ dx12__createDevice(ID3D12Device** p_d3dDevice, IDXGIFactory4** p_dxgiFactory, ID
 #if defined(_DEBUG)
   if (FAILED(hr)) {
     IDXGIAdapter* warpAdapter;
-    hr = dxgiFactory->lpVtbl->EnumWarpAdapter(dxgiFactory, &IID_IDXGIAdapter, (void**)&warpAdapter);
+    hr = dxgiFactory->lpVtbl->EnumWarpAdapter(dxgiFactory, 
+                                              &IID_IDXGIAdapter, 
+                                              (void**)&warpAdapter);
 
     dxThrowIfFailed(hr);
 
