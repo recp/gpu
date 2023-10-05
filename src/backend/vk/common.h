@@ -109,14 +109,51 @@ GPU_INLINE void DbgMsg(char *fmt, ...) {
 }
 #endif
 
+#define GET_INSTANCE_PROC_ADDR(gpuInstVk, entrypoint)                         \
+  gpuInstVk->fp##entrypoint = (PFN_vk##entrypoint)                            \
+      vkGetInstanceProcAddr(gpuInstVk->inst, "vk" #entrypoint);               \
+
+static PFN_vkGetDeviceProcAddr g_gdpa = NULL;
+
+#define GET_DEVICE_PROC_ADDR(dev, entrypoint)                                                                    \
+    {                                                                                                            \
+        if (!g_gdpa) g_gdpa = (PFN_vkGetDeviceProcAddr)vkGetInstanceProcAddr(demo->inst, "vkGetDeviceProcAddr"); \
+        demo->fp##entrypoint = (PFN_vk##entrypoint)g_gdpa(dev, "vk" #entrypoint);                                \
+        if (demo->fp##entrypoint == NULL) {                                                                      \
+            ERR_EXIT("vkGetDeviceProcAddr failed to find vk" #entrypoint, "vkGetDeviceProcAddr Failure");        \
+        }                                                                                                        \
+    }
+
 typedef struct GPUInstanceVk {
   char       *extensionNames[64];
   char       *enabledLayers[64];
-  VkInstance inst;
-  bool       invalid_gpu_selection;
-  int32_t    gpu_number;
-  uint32_t   nEnabledExtensions;
-  uint32_t   nEnabledLayers;
+  VkInstance  inst;
+  bool        invalid_gpu_selection;
+  int32_t     gpu_number;
+  uint32_t    nEnabledExtensions;
+  uint32_t    nEnabledLayers;
+
+  PFN_vkGetPhysicalDeviceSurfaceSupportKHR      fpGetPhysicalDeviceSurfaceSupportKHR;
+  PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR fpGetPhysicalDeviceSurfaceCapabilitiesKHR;
+  PFN_vkGetPhysicalDeviceSurfaceFormatsKHR      fpGetPhysicalDeviceSurfaceFormatsKHR;
+  PFN_vkGetPhysicalDeviceSurfacePresentModesKHR fpGetPhysicalDeviceSurfacePresentModesKHR;
+  PFN_vkCreateSwapchainKHR                      fpCreateSwapchainKHR;
+  PFN_vkDestroySwapchainKHR                     fpDestroySwapchainKHR;
+  PFN_vkGetSwapchainImagesKHR                   fpGetSwapchainImagesKHR;
+  PFN_vkAcquireNextImageKHR                     fpAcquireNextImageKHR;
+  PFN_vkQueuePresentKHR                         fpQueuePresentKHR;
+  PFN_vkGetRefreshCycleDurationGOOGLE           fpGetRefreshCycleDurationGOOGLE;
+  PFN_vkGetPastPresentationTimingGOOGLE         fpGetPastPresentationTimingGOOGLE;
+
+  /* DEBUG helpers */
+  PFN_vkCreateDebugUtilsMessengerEXT            CreateDebugUtilsMessengerEXT;
+  PFN_vkDestroyDebugUtilsMessengerEXT           DestroyDebugUtilsMessengerEXT;
+  PFN_vkSubmitDebugUtilsMessageEXT              SubmitDebugUtilsMessageEXT;
+  PFN_vkCmdBeginDebugUtilsLabelEXT              CmdBeginDebugUtilsLabelEXT;
+  PFN_vkCmdEndDebugUtilsLabelEXT                CmdEndDebugUtilsLabelEXT;
+  PFN_vkCmdInsertDebugUtilsLabelEXT             CmdInsertDebugUtilsLabelEXT;
+  PFN_vkSetDebugUtilsObjectNameEXT              SetDebugUtilsObjectNameEXT;
+  VkDebugUtilsMessengerEXT                      dbg_messenger;
 } GPUInstanceVk;
 
 typedef struct GPUPhysicalDeviceVk {

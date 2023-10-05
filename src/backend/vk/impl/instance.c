@@ -200,7 +200,8 @@ vk_createInstance(GPUApi * __restrict api, GPUInitParams * __restrict params) {
   }
 
   if (!surfaceExtFound) {
-    ERR_EXIT("vkEnumerateInstanceExtensionProperties failed to find the " VK_KHR_SURFACE_EXTENSION_NAME
+    ERR_EXIT("vkEnumerateInstanceExtensionProperties failed to find the " 
+             VK_KHR_SURFACE_EXTENSION_NAME
              " extension.\n\n",
              "vkCreateInstance Failure");
   }
@@ -265,6 +266,58 @@ vk_createInstance(GPUApi * __restrict api, GPUInitParams * __restrict params) {
              "Please look at the Getting Started guide for additional information.\n",
              "vkCreateInstance Failure");
   }
+  
+  if (params->validation) {
+    // Setup VK_EXT_debug_utils function pointers always (we use them for
+    // debug labels and names).
+    gpuInstVk->CreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)
+        vkGetInstanceProcAddr(gpuInstVk->inst, "vkCreateDebugUtilsMessengerEXT");
+    gpuInstVk->DestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)
+        vkGetInstanceProcAddr(gpuInstVk->inst, "vkDestroyDebugUtilsMessengerEXT");
+    gpuInstVk->SubmitDebugUtilsMessageEXT = (PFN_vkSubmitDebugUtilsMessageEXT)
+        vkGetInstanceProcAddr(gpuInstVk->inst, "vkSubmitDebugUtilsMessageEXT");
+    gpuInstVk->CmdBeginDebugUtilsLabelEXT = (PFN_vkCmdBeginDebugUtilsLabelEXT)
+        vkGetInstanceProcAddr(gpuInstVk->inst, "vkCmdBeginDebugUtilsLabelEXT");
+    gpuInstVk->CmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)
+        vkGetInstanceProcAddr(gpuInstVk->inst, "vkCmdEndDebugUtilsLabelEXT");
+    gpuInstVk->CmdInsertDebugUtilsLabelEXT = (PFN_vkCmdInsertDebugUtilsLabelEXT)
+        vkGetInstanceProcAddr(gpuInstVk->inst, "vkCmdInsertDebugUtilsLabelEXT");
+    gpuInstVk->SetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)
+        vkGetInstanceProcAddr(gpuInstVk->inst, "vkSetDebugUtilsObjectNameEXT");
+
+    if (gpuInstVk->CreateDebugUtilsMessengerEXT == NULL
+        || gpuInstVk->DestroyDebugUtilsMessengerEXT == NULL
+        || gpuInstVk->SubmitDebugUtilsMessageEXT == NULL
+        || gpuInstVk->CmdBeginDebugUtilsLabelEXT == NULL
+        || gpuInstVk->CmdEndDebugUtilsLabelEXT == NULL
+        || gpuInstVk->CmdInsertDebugUtilsLabelEXT == NULL
+        || gpuInstVk->SetDebugUtilsObjectNameEXT == NULL) {
+      ERR_EXIT("GetProcAddr: Failed to init VK_EXT_debug_utils\n", "GetProcAddr: Failure");
+    }
+
+    err = gpuInstVk->CreateDebugUtilsMessengerEXT(gpuInstVk->inst, 
+                                                  instCI.pNext,
+                                                  NULL,
+                                                  &gpuInstVk->dbg_messenger);
+    switch (err) {
+      case VK_SUCCESS:
+        break;
+      case VK_ERROR_OUT_OF_HOST_MEMORY:
+        ERR_EXIT("CreateDebugUtilsMessengerEXT: out of host memory\n", 
+                 "CreateDebugUtilsMessengerEXT Failure");
+        break;
+      default:
+        ERR_EXIT("CreateDebugUtilsMessengerEXT: unknown failure\n", 
+                 "CreateDebugUtilsMessengerEXT Failure");
+        break;
+    }
+  }
+
+  GET_INSTANCE_PROC_ADDR(gpuInstVk, GetPhysicalDeviceSurfaceSupportKHR);
+  GET_INSTANCE_PROC_ADDR(gpuInstVk, GetPhysicalDeviceSurfaceCapabilitiesKHR);
+  GET_INSTANCE_PROC_ADDR(gpuInstVk, GetPhysicalDeviceSurfaceFormatsKHR);
+  GET_INSTANCE_PROC_ADDR(gpuInstVk, GetPhysicalDeviceSurfacePresentModesKHR);
+  GET_INSTANCE_PROC_ADDR(gpuInstVk, GetSwapchainImagesKHR);
 
   if (!gpuInst->initParams) {
     gpuInst->initParams = params;
