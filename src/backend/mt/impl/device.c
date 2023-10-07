@@ -31,7 +31,23 @@ mt_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
 }
 
 GPU_HIDE
+GPUPhysicalDevice*
+mt_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
+                                 GPUInstance * __restrict inst) {
+  GPUPhysicalDevice *phyDevice;
+
+  phyDevice = calloc(1, sizeof(*phyDevice));
+  phyDevice->separatePresentQueue       = 1;
+  phyDevice->supportsDisplayTiming      = 1;
+  phyDevice->supportsIncrementalPresent = 1;
+  phyDevice->supportsSwapchain          = 1;
+
+  return phyDevice;
+}
+
+GPU_HIDE
 void
 mt_initDevice(GPUApiDevice *apiDevice) {
-  apiDevice->createSystemDefaultDevice = mt_createSystemDefaultDevice;
+  apiDevice->createSystemDefaultDevice     = mt_createSystemDefaultDevice;
+  apiDevice->getAvailablePhysicalDevicesBy = mt_getAvailablePhysicalDevicesBy;
 }

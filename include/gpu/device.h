@@ -28,10 +28,12 @@ typedef struct GPUDevice {
 } GPUDevice;
 
 typedef struct GPUPhysicalDevice {
-  void *priv;
-  bool  supportsSwapchain;
-  bool  supportsDisplayTiming;
-  bool  supportsIncrementalPresent;
+  struct GPUPhysicalDevice *next;
+  void                     *priv;
+  bool                      supportsSwapchain;
+  bool                      supportsDisplayTiming;
+  bool                      supportsIncrementalPresent;
+  bool                      separatePresentQueue;
 } GPUPhysicalDevice;
 
 GPU_EXPORT

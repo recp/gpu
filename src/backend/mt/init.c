@@ -40,6 +40,7 @@ backend_metal(void) {
     mt_initSwapChain(&mt.swapchain);
     mt_initFrame(&mt.frame);
     mt_initInstance(&mt.instance);
+    mt_initSurface(&mt.surface);
 
     mt.initialized = true;
   }
