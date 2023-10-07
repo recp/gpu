@@ -14,16 +14,18 @@
  * limitations under the License.
  */
 
-#ifndef vk_apis_h
-#define vk_apis_h
+#include "../common.h"
 
-GPU_HIDE void vk_initInstance(GPUApiInstance *apiInstance);
-GPU_HIDE void vk_initDevice(GPUApiDevice* apiDevice);
-GPU_HIDE void vk_initCmdQue(GPUApiCommandQueue* api);
-GPU_HIDE void vk_initSwapChain(GPUApiSwapChain* apiSwapChain);
-GPU_HIDE void vk_initFrame(GPUApiFrame *apiFrame);
-GPU_HIDE void vk_initDescriptor(GPUApiDescriptor *apiDescriptor);
-GPU_HIDE void vk_initSampler(GPUApiSampler *apiSampler);
-GPU_HIDE void vk_initSurface(GPUApiSurface * apiDevice);
+GPU_EXPORT
+GPUSurface*
+GPUCreateSurface(GPUInstance * __restrict inst,
+                 void        * __restrict nativeHandle,
+                 GPUSurfaceType           type,
+                 float                    scale) {
+  GPUApi *api;
 
-#endif /* vk_apis_h */
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
+
+  return api->surface.createSurface(api, inst, nativeHandle, type, scale);
+}

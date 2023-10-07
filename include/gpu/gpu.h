@@ -43,6 +43,7 @@ extern "C" {
 #include "descriptor.h"
 #include "sampler.h"
 #include "instance.h"
+#include "surface.h"
 
 typedef enum GPUBackend {
   GPU_BACKEND_NULL      = 0,
