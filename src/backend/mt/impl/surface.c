@@ -17,11 +17,12 @@
 #include "../common.h"
 
 GPUSurface*
-mt_createSurface(struct GPUApi      * __restrict api,
-                 struct GPUInstance * __restrict inst,
-                 void               * __restrict nativeHandle,
-                 GPUSurfaceType                  type,
-                 float                           scale) {
+mt_createSurface(GPUApi            * __restrict api,
+                 GPUInstance       * __restrict inst,
+                 GPUPhysicalDevice * __restrict phyDevice,
+                 void              * __restrict nativeHandle,
+                 GPUSurfaceType                 type,
+                 float                          scale) {
   GPUSurface *surface;
 
   return NULL;

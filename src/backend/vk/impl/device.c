@@ -279,6 +279,103 @@ vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
 }
 
 GPU_HIDE
+GPUDevice*
+vk_createDevice(GPUApi            * __restrict api,
+                GPUInstance       * __restrict inst,
+                GPUPhysicalDevice * __restrict phyDevice,
+                GPUCommandQueueCreateInfo      queueCI[],
+                uint32_t                       nQueueCI) {
+  GPUDevice              *device;
+  GPUDeviceVk            *deviceVk;
+  GPUPhysicalDeviceVk    *phyDeviceVk;
+  GPUInstanceVk          *instVk;
+  VkResult U_ASSERT_ONLY  err;
+  float                   queue_priorities[1] = {0.0};
+  VkDeviceQueueCreateInfo queues[nQueueCI];
+  uint32_t                i;
+
+//  vk_createDevice(api, inst, phyDevice, (GPUCommandQueueCreateInfo[]){
+//    [0] = {
+//      .flags = GPU_QUEUE_GRAPHICS_BIT,
+//      .count = 0
+//    }
+//  }, 2);
+
+  phyDeviceVk                = phyDevice->priv;
+  instVk                     = inst->_priv;
+  deviceVk                   = calloc(1, sizeof(*deviceVk));
+
+  // Search for a graphics and a present queue in the array of queue
+  // families, try to find one that supports both
+  uint32_t graphicsQueueFamilyIndex = UINT32_MAX;
+  uint32_t presentQueueFamilyIndex  = UINT32_MAX;
+
+  for (i = 0; i < phyDeviceVk->queueFamilyCount; i++) {
+    if ((phyDeviceVk->queueFamilyProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0) {
+      if (graphicsQueueFamilyIndex == UINT32_MAX) {
+        graphicsQueueFamilyIndex = i;
+      }
+
+//      if (supportsPresent[i] == VK_TRUE) {
+//        graphicsQueueFamilyIndex = i;
+//        presentQueueFamilyIndex  = i;
+//        break;
+//      }
+    }
+  }
+
+//  if (presentQueueFamilyIndex == UINT32_MAX) {
+//    // If didn't find a queue that supports both graphics and present, then
+//    // find a separate present queue.
+//    for (uint32_t i = 0; i < phyDeviceVk->queueFamilyCount; ++i) {
+//      if (supportsPresent[i] == VK_TRUE) {
+//        presentQueueFamilyIndex = i;
+//        break;
+//      }
+//    }
+//  }
+
+//  queues[0].sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+//  queues[0].pNext            = NULL;
+//  queues[0].queueFamilyIndex = demo->graphics_queue_family_index;
+//  queues[0].queueCount       = 1;
+//  queues[0].pQueuePriorities = queue_priorities;
+//  queues[0].flags            = 0;
+//
+//  VkDeviceCreateInfo createInfoCI = {
+//    .sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+//    .pNext                   = NULL,
+//    .queueCreateInfoCount    = 1,
+//    .pQueueCreateInfos       = queues,
+//    .enabledLayerCount       = 0,
+//    .ppEnabledLayerNames     = NULL,
+//    .enabledExtensionCount   = instVk->nEnabledExtensions,
+//    .ppEnabledExtensionNames = (const char *const *)instVk->extensionNames,
+//    .pEnabledFeatures        = NULL,  // If specific features are required, pass them in here
+//  };
+//
+//  if (demo->separate_present_queue) {
+//    queues[1].sType                   = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+//    queues[1].pNext                   = NULL;
+//    queues[1].queueFamilyIndex        = demo->present_queue_family_index;
+//    queues[1].queueCount              = 1;
+//    queues[1].pQueuePriorities        = queue_priorities;
+//    queues[1].flags                   = 0;
+//    createInfoCI.queueCreateInfoCount = 2;
+//  }
+//
+//  err = vkCreateDevice(phyDeviceVk->phyDevice, &createInfoCI, NULL, &deviceVk->device);
+//  assert(!err);
+//
+//  device       = calloc(1, sizeof(*device));
+//  device->priv = NULL;
+//
+//  /* TODO: select-phy device auto */
+
+  return device;
+}
+
+GPU_HIDE
 void
 vk_initDevice(GPUApiDevice* apiDevice) {
   apiDevice->createSystemDefaultDevice     = vk_createSystemDefaultDevice;

@@ -34,9 +34,10 @@ typedef struct GPUSurface {
 
 GPU_EXPORT
 GPUSurface*
-GPUCreateSurface(GPUInstance * __restrict inst,
-                 void        * __restrict nativeHandle,
-                 GPUSurfaceType           type,
-                 float                    scale);
+GPUCreateSurface(GPUInstance       * __restrict inst,
+                 GPUPhysicalDevice * __restrict phyDevice,
+                 void              * __restrict nativeHandle,
+                 GPUSurfaceType                 type,
+                 float                          scale);
 
 #endif /* gpu_surface */

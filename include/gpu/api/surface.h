@@ -26,11 +26,12 @@ extern "C" {
 struct GPUApi;
 
 typedef struct GPUApiSurface {
-  GPUSurface *(*createSurface)(struct GPUApi      * __restrict api,
-                               struct GPUInstance * __restrict inst,
-                               void               * __restrict nativeHandle,
-                               GPUSurfaceType                  type,
-                               float                           scale);
+  GPUSurface *(*createSurface)(struct GPUApi            * __restrict api,
+                               struct GPUInstance       * __restrict inst,
+                               struct GPUPhysicalDevice * __restrict phyDevice,
+                               void                     * __restrict nativeHandle,
+                               GPUSurfaceType                        type,
+                               float                                 scale);
 } GPUApiSurface;
 
 #ifdef __cplusplus
