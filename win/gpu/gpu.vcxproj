@@ -218,6 +218,7 @@
     <ClInclude Include="..\..\include\gpu\api\rce.h" />
     <ClInclude Include="..\..\include\gpu\api\render-pipeline.h" />
     <ClInclude Include="..\..\include\gpu\api\sampler.h" />
+    <ClInclude Include="..\..\include\gpu\api\surface.h" />
     <ClInclude Include="..\..\include\gpu\api\swapchain.h" />
     <ClInclude Include="..\..\include\gpu\api\vertex.h" />
     <ClInclude Include="..\..\include\gpu\buffer.h" />
@@ -239,6 +240,7 @@
     <ClInclude Include="..\..\include\gpu\resource.h" />
     <ClInclude Include="..\..\include\gpu\sampler.h" />
     <ClInclude Include="..\..\include\gpu\stage-io.h" />
+    <ClInclude Include="..\..\include\gpu\surface.h" />
     <ClInclude Include="..\..\include\gpu\swapchain.h" />
     <ClInclude Include="..\..\include\gpu\texture.h" />
     <ClInclude Include="..\..\include\gpu\vertex.h" />
@@ -262,6 +264,7 @@
     <ClCompile Include="..\..\src\api\render\pipeline.c" />
     <ClCompile Include="..\..\src\api\render\rce.c" />
     <ClCompile Include="..\..\src\api\sampler.c" />
+    <ClCompile Include="..\..\src\api\surface.c" />
     <ClCompile Include="..\..\src\api\swapchain.c" />
     <ClCompile Include="..\..\src\api\vertex.c" />
     <ClCompile Include="..\..\src\backend\backend.c" />
@@ -272,6 +275,7 @@
     <ClCompile Include="..\..\src\backend\dx12\impl\instance.c" />
     <ClCompile Include="..\..\src\backend\dx12\impl\renderpass.c" />
     <ClCompile Include="..\..\src\backend\dx12\impl\sampler.c" />
+    <ClCompile Include="..\..\src\backend\dx12\impl\surface.c" />
     <ClCompile Include="..\..\src\backend\dx12\impl\swapchain.c" />
     <ClCompile Include="..\..\src\backend\dx12\init.c" />
     <ClCompile Include="..\..\src\init.c" />
