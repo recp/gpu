@@ -198,6 +198,9 @@
     <ClInclude Include="..\..\include\gpu\surface.h">
       <Filter>include\gpu</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\include\gpu\geometric.h">
+      <Filter>include\gpu</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\win\dllmain.c">

@@ -27,6 +27,14 @@ struct GPUApi;
 
 typedef struct GPUApiSwapChain {
   GPUSwapChain*
+  (*createSwapChain)(struct GPUApi          * __restrict api,
+                     struct GPUDevice       * __restrict device,
+                     struct GPUCommandQueue * __restrict cmdQue,
+                     struct GPUSurface      * __restrict surface,
+                     GPUExtent2D                         size,
+                     bool                                autoResize);
+
+  GPUSwapChain*
   (*createSwapChainForView)(struct GPUApi          * __restrict api,
                             struct GPUDevice       * __restrict device,
                             struct GPUCommandQueue * __restrict cmdQue,

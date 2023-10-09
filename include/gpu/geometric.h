@@ -49,4 +49,7 @@ typedef struct GPURect2D {
   GPUExtent2D extent;
 } GPURect2D;
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_geometry_h */

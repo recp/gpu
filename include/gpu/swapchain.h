@@ -21,15 +21,16 @@ extern "C" {
 #endif
 
 #include "common.h"
+#include "geometric.h"
 
 struct GPUCommandQueue;
+struct GPUSurface;
 
 typedef struct GPUSwapChain {
   void *_priv;
   void *target; /* draw target */
   float backingScaleFactor;
 } GPUSwapChain;
-
 
 typedef enum GPUWindowType {
   GPU_WINDOW_TYPE_HWND,
@@ -41,6 +42,14 @@ typedef struct GPUWindowHandle {
   GPUWindowType type;
   void         *ptr;
 } GPUWindowHandle;
+
+GPU_EXPORT
+GPUSwapChain*
+GPUCreateSwapChain(GPUDevice              * __restrict device,
+                   struct GPUCommandQueue * __restrict cmdQue,
+                   struct GPUSurface      * __restrict surface,
+                   GPUExtent2D                         size,
+                   bool                                autoResize);
 
 GPU_EXPORT
 GPUSwapChain*

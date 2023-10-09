@@ -21,7 +21,7 @@ extern "C" {
 #endif
 
 #include "common.h"
-#include "geometry.h"
+#include "geometric.h"
 
 #include "pixelformat.h"
 #include "device.h"

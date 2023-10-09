@@ -25,7 +25,12 @@ mt_createSurface(GPUApi            * __restrict api,
                  float                          scale) {
   GPUSurface *surface;
 
-  return NULL;
+  surface        = calloc(1, sizeof(*surface));
+  surface->_priv = nativeHandle;
+  surface->type  = type;
+  surface->scale = scale;
+
+  return surface;
 }
 
 GPU_HIDE

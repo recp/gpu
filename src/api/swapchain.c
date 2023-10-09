@@ -18,6 +18,21 @@
 
 GPU_EXPORT
 GPUSwapChain*
+GPUCreateSwapChain(GPUDevice              * __restrict device,
+                   struct GPUCommandQueue * __restrict cmdQue,
+                   struct GPUSurface      * __restrict surface,
+                   GPUExtent2D                         size,
+                   bool                                autoResize) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
+
+  return api->swapchain.createSwapChain(api, device, cmdQue, surface, size, autoResize);
+}
+
+GPU_EXPORT
+GPUSwapChain*
 GPUCreateSwapChainForView(GPUDevice              * __restrict device,
                           struct GPUCommandQueue * __restrict cmdQue,
                           void                   * __restrict viewHandle,

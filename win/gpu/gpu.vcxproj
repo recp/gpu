@@ -230,6 +230,7 @@
     <ClInclude Include="..\..\include\gpu\device.h" />
     <ClInclude Include="..\..\include\gpu\feature.h" />
     <ClInclude Include="..\..\include\gpu\frame.h" />
+    <ClInclude Include="..\..\include\gpu\geometric.h" />
     <ClInclude Include="..\..\include\gpu\gpu.h" />
     <ClInclude Include="..\..\include\gpu\instance.h" />
     <ClInclude Include="..\..\include\gpu\library.h" />
