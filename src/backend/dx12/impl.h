@@ -32,5 +32,6 @@ GPU_HIDE void dx12_initFrame(GPUApiFrame *apiFrame);
 GPU_HIDE void dx12_initDescriptor(GPUApiDescriptor *apiDescriptor);
 GPU_HIDE void dx12_initSampler(GPUApiSampler *apiSampler);
 GPU_HIDE void dx12_initInstance(GPUApiInstance *apiInstance);
+GPU_HIDE void dx12_initSurface(GPUApiSurface *apiDevice);
 
 #endif /* dx12_apis_h */

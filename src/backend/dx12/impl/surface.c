@@ -15,3 +15,21 @@
  */
 
 #include "../common.h"
+
+GPUSurface *
+dx12_createSurface(GPUApi            * __restrict api,
+                   GPUInstance       * __restrict inst,
+                   GPUPhysicalDevice * __restrict phyDevice,
+                   void              * __restrict nativeHandle,
+                   GPUSurfaceType                 type,
+                   float                          scale) {
+  GPUSurface *surface;
+
+  return NULL;
+}
+
+GPU_HIDE
+void
+dx12_initSurface(GPUApiSurface *apiDevice) {
+  apiDevice->createSurface = dx12_createSurface;
+}
