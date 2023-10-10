@@ -26,6 +26,11 @@
 
 #define FrameCount 2
 
+typedef struct GPUInstanceDX12 {
+  IDXGIFactory4 *dxgiFactory;
+  UINT           dxgiFactoryFlags;
+} GPUInstanceDX12;
+
 typedef struct GPUFrameDX12 {
   IDXGISwapChain3        *swapChain;
   ID3D12Resource         *renderTarget;

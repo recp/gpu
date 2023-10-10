@@ -53,38 +53,12 @@ dx12__getHardwareAdapter(IDXGIFactory4* dxgiFactory, IDXGIAdapter1** ppAdapter) 
 
 GPU_EXPORT
 HRESULT
-dx12__createDevice(ID3D12Device** p_d3dDevice, 
-                   IDXGIFactory4** p_dxgiFactory, 
-                   IDXGIAdapter1** p_adapter) {
+dx12__createDevice(IDXGIFactory4 *  dxgiFactory,
+                   ID3D12Device  ** p_d3dDevice, 
+                   IDXGIAdapter1 ** p_adapter) {
   ID3D12Device  *d3dDevice;
-  IDXGIFactory4 *dxgiFactory;
   IDXGIAdapter1 *adapter;
-  UINT           dxgiFactoryFlags;
   HRESULT        hr;
-
-  dxgiFactoryFlags = 0;
-
-#if defined(_DEBUG)
-  /* Enable the debug layer (requires the Graphics Tools "optional feature").
-     NOTE: Enabling the debug layer after device creation will invalidate the active device.
-   */
-  {
-    ID3D12Debug* debugController;
-    if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug,
-      (void**)&debugController))) {
-      debugController->lpVtbl->EnableDebugLayer(debugController);
-      debugController->lpVtbl->Release(debugController);
-
-      /* Enable additional debug layers. */
-      dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
-    }
-  }
-#endif
-
-  hr = CreateDXGIFactory2(dxgiFactoryFlags, 
-                          &IID_IDXGIFactory1, 
-                          (void**)&dxgiFactory);
-  dxThrowIfFailed(hr);
 
   dx12__getHardwareAdapter(dxgiFactory, &adapter);
 
@@ -120,9 +94,8 @@ dx12__createDevice(ID3D12Device** p_d3dDevice,
     dxThrowIfFailed(hr);
   }
 
-  *p_d3dDevice   = d3dDevice;
-  *p_dxgiFactory = dxgiFactory;
-  *p_adapter     = adapter;
+  *p_d3dDevice = d3dDevice;
+  *p_adapter   = adapter;
 
   return hr;
 }
@@ -133,12 +106,19 @@ dx12_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
                                    GPUInstance * __restrict inst,
                                    uint32_t                 maxNumberOfItems) {
   GPUPhysicalDevice *phyDevice;
+  IDXGIFactory4     *factory;
 
   phyDevice = calloc(1, sizeof(*phyDevice));
   phyDevice->separatePresentQueue       = 1;
   phyDevice->supportsDisplayTiming      = 1;
   phyDevice->supportsIncrementalPresent = 1;
   phyDevice->supportsSwapchain          = 1;
+  
+  //HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&factory));
+  //if (FAILED(hr)) {
+  //  // Handle error
+  //  return NULL;
+  //}
 
   return phyDevice;
 }
@@ -146,20 +126,22 @@ dx12_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
 GPU_HIDE
 GPUDevice*
 dx12_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
-  GPUDevice     *device;
-  ID3D12Device  *d3dDevice;
-  IDXGIFactory4 *dxgiFactory;
-  IDXGIAdapter1 *adapter;
-  GPU__DX12     *dx12api;
-  HRESULT        hr;
+  GPUInstanceDX12 *instDX12;
+  GPUDevice       *device;
+  ID3D12Device    *d3dDevice;
+  IDXGIFactory4   *dxgiFactory;
+  IDXGIAdapter1   *adapter;
+  GPU__DX12       *dx12api;
+  HRESULT          hr;
 
   dx12api      = api->reserved;
 
+  instDX12     = inst->_priv;
   d3dDevice    = NULL;
   dxgiFactory  = NULL;
   adapter      = NULL;
 
-  hr           = dx12__createDevice(&d3dDevice, &dxgiFactory, &adapter);
+  hr           = dx12__createDevice(instDX12->dxgiFactory, &d3dDevice, &adapter);
 
   device       = calloc(1, sizeof(*device));
   device->priv = d3dDevice;

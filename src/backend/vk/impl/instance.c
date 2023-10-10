@@ -17,6 +17,8 @@
 #include "../common.h"
 #include "debug.h"
 
+extern GPUInitParams gpu__defaultInitParams;
+
 /*
  * Return 1 (true) if all layer names specified in check_names
  * can be found in given layer properties.
@@ -47,13 +49,6 @@ vk__checkLayers(uint32_t           check_count,
 
   return 1;
 }
-
-GPUInitParams gpu__defaultInitParams = {
-  .requiredFeatures    = GPU_FEATURE_REQUIRED_DEFAULT,
-  .optionalFeatures    = GPU_FEATURE_OPTIONAL_DEFAULT,
-  .validation          = false,
-  .validation_usebreak = false
-};
 
 GPU_HIDE
 GPUInstance*

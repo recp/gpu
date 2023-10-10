@@ -28,6 +28,13 @@ typedef struct GPUApiList {
 static GPUApi     *gpu__api     = NULL;
 static GPUApiList *gpu__apis    = NULL;
 
+GPUInitParams gpu__defaultInitParams = {
+  .requiredFeatures    = GPU_FEATURE_REQUIRED_DEFAULT,
+  .optionalFeatures    = GPU_FEATURE_OPTIONAL_DEFAULT,
+  .validation          = false,
+  .validation_usebreak = false
+};
+
 GPU_EXPORT
 void
 gpuRegisterCustomGPUApi(GPUApi * __restrict gpuApi) {
