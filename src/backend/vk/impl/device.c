@@ -87,7 +87,8 @@ vk_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
 GPU_HIDE
 GPUPhysicalDevice*
 vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
-                                 GPUInstance * __restrict inst) {
+                                 GPUInstance * __restrict inst,
+                                 uint32_t                 maxNumberOfItems) {
   GPUInstanceVk             *instVk;
   GPUPhysicalDevice         *phyDevice;
   GPUPhysicalDeviceVk       *phyDeviceVk;

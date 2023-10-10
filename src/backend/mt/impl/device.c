@@ -33,7 +33,8 @@ mt_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
 GPU_HIDE
 GPUPhysicalDevice*
 mt_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
-                                 GPUInstance * __restrict inst) {
+                                 GPUInstance * __restrict inst,
+                                 uint32_t                 maxNumberOfItems) {
   GPUPhysicalDevice *phyDevice;
 
   phyDevice = calloc(1, sizeof(*phyDevice));

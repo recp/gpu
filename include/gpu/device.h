@@ -42,7 +42,7 @@ GPUCreateSystemDefaultDevice(GPUInstance *inst);
 
 GPU_EXPORT
 GPUPhysicalDevice*
-GPUGetAvailablePhysicalDevicesBy(GPUInstance *inst);
+GPUGetAvailablePhysicalDevicesBy(GPUInstance *inst, uint32_t maxNumberOfItems);
 
 #ifdef __cplusplus
 }

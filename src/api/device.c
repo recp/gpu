@@ -29,11 +29,11 @@ GPUCreateSystemDefaultDevice(GPUInstance *inst) {
 
 GPU_EXPORT
 GPUPhysicalDevice*
-GPUGetAvailablePhysicalDevicesBy(GPUInstance *inst) {
+GPUGetAvailablePhysicalDevicesBy(GPUInstance *inst, uint32_t maxNumberOfItems) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->device.getAvailablePhysicalDevicesBy(api, inst);
+  return api->device.getAvailablePhysicalDevicesBy(api, inst, maxNumberOfItems);
 }

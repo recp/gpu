@@ -130,7 +130,8 @@ dx12__createDevice(ID3D12Device** p_d3dDevice,
 GPU_HIDE
 GPUPhysicalDevice *
 dx12_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
-                                   GPUInstance * __restrict inst) {
+                                   GPUInstance * __restrict inst,
+                                   uint32_t                 maxNumberOfItems) {
   GPUPhysicalDevice *phyDevice;
 
   phyDevice = calloc(1, sizeof(*phyDevice));
@@ -175,5 +176,5 @@ GPU_HIDE
 void
 dx12_initDevice(GPUApiDevice* apiDevice) {
   apiDevice->getAvailablePhysicalDevicesBy = dx12_getAvailablePhysicalDevicesBy;
-  apiDevice->createSystemDefaultDevice     = dx12_createSystemDefaultDevice;
+  apiDevice->createSystemDefaultDevice = dx12_createSystemDefaultDevice;
 }
