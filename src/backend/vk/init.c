@@ -29,6 +29,8 @@ backend_vk(void) {
   if (!vk.initialized) {
     vk_initInstance(&vk.instance);
     vk_initDevice(&vk.device);
+    vk_initSurface(&vk.surface);
+
 //    vk_initCmdQue(&vk.cmdque);
 //    vk_initSwapChain(&vk.swapchain);
 //    vk_initFrame(&vk.frame);
