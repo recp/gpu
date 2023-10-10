@@ -17,146 +17,184 @@
 #include "../common.h"
 
 GPU_HIDE
-void
-dx12__getHardwareAdapter(IDXGIFactory4* dxgiFactory, IDXGIAdapter1** ppAdapter) {
-  IDXGIAdapter1 *adapter;
-  UINT           adapterIndex;
-
-  adapter      = NULL;
-  *ppAdapter   = NULL;
-  adapterIndex = 0;
-
-  while (dxgiFactory->lpVtbl->EnumAdapters1(dxgiFactory, adapterIndex, &adapter) != DXGI_ERROR_NOT_FOUND) {
-    DXGI_ADAPTER_DESC1 desc;
-    adapter->lpVtbl->GetDesc1(adapter, &desc);
-
-    if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
-      /* Don't select the Basic Render Driver adapter.*/
-      adapter->lpVtbl->Release(adapter);  /* Release the current adapter before moving to next */
-      adapterIndex++;
-      continue;
-    }
-
-    /* Check to see if the adapter supports Direct3D 12, but don't create the
-       actual device yet.*/
-    if (SUCCEEDED(D3D12CreateDevice((IUnknown*)adapter,
-                                    D3D_FEATURE_LEVEL_11_0,
-                                    &IID_ID3D12Device, NULL))) {
-      *ppAdapter = adapter; /* Transfer ownership to caller */
-      return;
-    }
-
-    adapter->lpVtbl->Release(adapter); /* Release the current adapter before moving to next */
-    adapterIndex++;
-  }
-}
-
-GPU_EXPORT
-HRESULT
-dx12__createDevice(IDXGIFactory4 *  dxgiFactory,
-                   ID3D12Device  ** p_d3dDevice, 
-                   IDXGIAdapter1 ** p_adapter) {
-  ID3D12Device  *d3dDevice;
-  IDXGIAdapter1 *adapter;
-  HRESULT        hr;
-
-  dx12__getHardwareAdapter(dxgiFactory, &adapter);
-
-  /* Create the Direct3D 12 API device object */
-  hr = D3D12CreateDevice((IUnknown*)adapter,
-                         D3D_FEATURE_LEVEL_11_0,
-                         &IID_ID3D12Device,
-                         (void**)&d3dDevice);
-
-  if (adapter) {
-    adapter->lpVtbl->Release(adapter);
-  }
-
-#if defined(_DEBUG)
-  if (FAILED(hr)) {
-    IDXGIAdapter* warpAdapter;
-    hr = dxgiFactory->lpVtbl->EnumWarpAdapter(dxgiFactory, 
-                                              &IID_IDXGIAdapter, 
-                                              (void**)&warpAdapter);
-
-    dxThrowIfFailed(hr);
-
-    hr = D3D12CreateDevice((IUnknown*)warpAdapter,
-                           D3D_FEATURE_LEVEL_11_0,
-                           &IID_ID3D12Device,
-                           (void**)&d3dDevice);
-
-    if (warpAdapter) {
-      warpAdapter->lpVtbl->Release(warpAdapter);
-    }
-#endif
-
-    dxThrowIfFailed(hr);
-  }
-
-  *p_d3dDevice = d3dDevice;
-  *p_adapter   = adapter;
-
-  return hr;
-}
-
-GPU_HIDE
 GPUPhysicalDevice *
 dx12_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
                                    GPUInstance * __restrict inst,
                                    uint32_t                 maxNumberOfItems) {
-  GPUPhysicalDevice *phyDevice;
-  IDXGIFactory4     *factory;
+  GPUPhysicalDeviceDX12 *phyDeviceDX12;
+  GPUInstanceDX12       *instDX12;
+  IDXGIFactory4         *dxgiFactory;
+  GPUPhysicalDevice     *firstDevice, *lastDevice, *item;
+  IDXGIAdapter1         *dxgiAdapter;
+  IDXGIAdapter          *warpAdapter;
+  DXGI_ADAPTER_DESC1     desc;
+  UINT                   adapterIndex, i;
+  HRESULT                hr;
+  HRESULT              (*EnumAdapters1)(IDXGIFactory4*, UINT, IDXGIAdapter1**);
 
-  phyDevice = calloc(1, sizeof(*phyDevice));
-  phyDevice->separatePresentQueue       = 1;
-  phyDevice->supportsDisplayTiming      = 1;
-  phyDevice->supportsIncrementalPresent = 1;
-  phyDevice->supportsSwapchain          = 1;
-  
-  //HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&factory));
-  //if (FAILED(hr)) {
-  //  // Handle error
-  //  return NULL;
-  //}
+  firstDevice   = lastDevice = NULL;
+  adapterIndex  = i = 0;
+  instDX12      = inst->_priv;
+  dxgiFactory   = instDX12->dxgiFactory;
+  EnumAdapters1 = dxgiFactory->lpVtbl->EnumAdapters1;
 
-  return phyDevice;
+  /* loop until we either enumerate all devices or hit the maximum count. */ 
+  while (i < maxNumberOfItems
+         && SUCCEEDED(EnumAdapters1(dxgiFactory, adapterIndex, &dxgiAdapter))) {
+    if (dxgiAdapter) {
+      dxgiAdapter->lpVtbl->GetDesc1(dxgiAdapter, &desc);
+
+      if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
+        /* Don't select the Basic Render Driver adapter.*/
+        /* Release the current adapter before moving to next */
+        dxgiAdapter->lpVtbl->Release(dxgiAdapter);
+        goto nxt;
+      }
+
+      /* Check to see if the adapter supports Direct3D 12, but don't create the
+         actual device yet.*/
+      if (FAILED(D3D12CreateDevice((IUnknown *)dxgiAdapter,
+                                   D3D_FEATURE_LEVEL_11_0,
+                                   &IID_ID3D12Device, NULL))) {
+        dxgiAdapter->lpVtbl->Release(dxgiAdapter);
+        goto nxt;
+      }
+
+      item          = calloc(1, sizeof(*item));
+      phyDeviceDX12 = calloc(1, sizeof(*phyDeviceDX12));
+
+      phyDeviceDX12->dxgiAdapter       = dxgiAdapter;
+      item->priv                       = phyDeviceDX12;
+      item->inst                       = inst;
+      item->separatePresentQueue       = 1; /* builtin */
+      item->supportsDisplayTiming      = 1; /* TODO: not builtin, implement later */
+      item->supportsIncrementalPresent = 1; /* TODO: not builtin, implement later */
+      item->supportsSwapchain          = 1; /* builtin */
+
+      /* add to linked list of devices */
+      if (lastDevice) { lastDevice->next = item; } 
+      else            { firstDevice      = item; }
+      lastDevice = item;
+
+      /* move on to the next adapter. */
+      /* dxgiAdapter->lpVtbl->Release(dxgiAdapter); */
+      dxgiAdapter = NULL;
+      i++;
+    }
+  nxt:
+    adapterIndex++;
+  }
+
+  /* use WARP if there is no Phy Device */
+  if (!firstDevice) {
+    DXCHECK(dxgiFactory->lpVtbl->EnumWarpAdapter(dxgiFactory, 
+                                                 &IID_IDXGIAdapter, 
+                                                 (void **)&warpAdapter));
+     item          = calloc(1, sizeof(*item));
+     phyDeviceDX12 = calloc(1, sizeof(*phyDeviceDX12));
+
+     phyDeviceDX12->dxgiAdapter       = (IUnknown *)warpAdapter;
+     phyDeviceDX12->isWarp            = true;
+     item->priv                       = phyDeviceDX12;
+     item->inst                       = inst;
+     item->separatePresentQueue       = 1; /* builtin */
+     item->supportsDisplayTiming      = 1; /* TODO: not builtin, implement later */
+     item->supportsIncrementalPresent = 1; /* TODO: not builtin, implement later */
+     item->supportsSwapchain          = 1; /* builtin */
+
+     firstDevice = item;
+  }
+
+  return firstDevice;
+err:
+  dxThrowIfFailed(hr);
+  return NULL;
 }
 
 GPU_HIDE
 GPUDevice*
 dx12_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
-  GPUInstanceDX12 *instDX12;
-  GPUDevice       *device;
-  ID3D12Device    *d3dDevice;
-  IDXGIFactory4   *dxgiFactory;
-  IDXGIAdapter1   *adapter;
-  GPU__DX12       *dx12api;
-  HRESULT          hr;
+  GPUInstanceDX12       *instDX12;
+  GPUPhysicalDevice     *phyDevice;
+  GPUPhysicalDeviceDX12 *phyDeviceDX12;
+  GPUDevice             *device;
+  ID3D12Device          *d3dDevice;
+  GPU__DX12             *dx12api;
+  HRESULT                hr;
 
-  dx12api      = api->reserved;
+  if (!(phyDevice = GPUGetFirstPhysicalDevice(inst))
+    || !(phyDeviceDX12 = phyDevice->priv)) {
+    goto err;
+  }
 
-  instDX12     = inst->_priv;
-  d3dDevice    = NULL;
-  dxgiFactory  = NULL;
-  adapter      = NULL;
+  dx12api   = api->reserved;
+  instDX12  = inst->_priv;
+  d3dDevice = NULL;
 
-  hr           = dx12__createDevice(instDX12->dxgiFactory, &d3dDevice, &adapter);
+  DXCHECK(D3D12CreateDevice(phyDeviceDX12->dxgiAdapter,
+                            D3D_FEATURE_LEVEL_11_0,
+                            &IID_ID3D12Device,
+                            (void **)&d3dDevice));
 
-  device       = calloc(1, sizeof(*device));
-  device->priv = d3dDevice;
+  device            = calloc(1, sizeof(*device));
+  device->inst      = inst;
+  device->priv      = d3dDevice;
+  device->phyDevice = phyDevice;
 
+  // TODO: remove
   dx12api              = api->reserved;
-  dx12api->adapter     = adapter;
+  dx12api->adapter     = phyDeviceDX12->dxgiAdapter;
   dx12api->d3dDevice   = d3dDevice;
-  dx12api->dxgiFactory = dxgiFactory;
+  dx12api->dxgiFactory = instDX12->dxgiFactory;
 
   return device;
+
+err:
+  dxThrowIfFailed(hr);
+
+  return NULL;
+}
+
+GPU_HIDE
+GPUDevice *
+dx12_createDevice(GPUPhysicalDevice *phyDevice) {
+  GPUInstance           *inst;
+  GPUInstanceDX12       *instDX12;
+  GPUPhysicalDeviceDX12 *phyDeviceDX12;
+  GPUDevice             *device;
+  ID3D12Device          *d3dDevice;
+  GPU__DX12             *dx12api;
+  HRESULT                hr;
+
+  if (!(inst = phyDevice->inst)
+    || !(phyDeviceDX12 = phyDevice->priv)) {
+    goto err;
+  }
+
+  instDX12  = inst->_priv;
+  d3dDevice = NULL;
+
+  DXCHECK(D3D12CreateDevice(phyDeviceDX12->dxgiAdapter,
+                            D3D_FEATURE_LEVEL_11_0,
+                            &IID_ID3D12Device,
+                            (void **)&d3dDevice));
+                    
+  device            = calloc(1, sizeof(*device));
+  device->inst      = inst;
+  device->priv      = d3dDevice;
+  device->phyDevice = phyDevice;
+
+  return device;
+err:
+  dxThrowIfFailed(hr);
+
+  return NULL;
 }
 
 GPU_HIDE
 void
 dx12_initDevice(GPUApiDevice* apiDevice) {
   apiDevice->getAvailablePhysicalDevicesBy = dx12_getAvailablePhysicalDevicesBy;
-  apiDevice->createSystemDefaultDevice = dx12_createSystemDefaultDevice;
+  apiDevice->createSystemDefaultDevice     = dx12_createSystemDefaultDevice;
+  apiDevice->createDevice                  = dx12_createDevice;
 }

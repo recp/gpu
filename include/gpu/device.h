@@ -23,12 +23,9 @@ extern "C" {
 #include "common.h"
 #include "instance.h"
 
-typedef struct GPUDevice {
-  void *priv;
-} GPUDevice;
-
 typedef struct GPUPhysicalDevice {
   struct GPUPhysicalDevice *next;
+  GPUInstance              *inst;
   void                     *priv;
   bool                      supportsSwapchain;
   bool                      supportsDisplayTiming;
@@ -36,13 +33,29 @@ typedef struct GPUPhysicalDevice {
   bool                      separatePresentQueue;
 } GPUPhysicalDevice;
 
-GPU_EXPORT
-GPUDevice*
-GPUCreateSystemDefaultDevice(GPUInstance *inst);
+typedef struct GPUDevice {
+  GPUInstance       *inst;
+  GPUPhysicalDevice *phyDevice;
+  void              *priv;
+} GPUDevice;
 
 GPU_EXPORT
 GPUPhysicalDevice*
 GPUGetAvailablePhysicalDevicesBy(GPUInstance *inst, uint32_t maxNumberOfItems);
+
+GPU_INLINE
+GPUPhysicalDevice *
+GPUGetFirstPhysicalDevice(GPUInstance *inst) {
+  return GPUGetAvailablePhysicalDevicesBy(inst, 1);
+}
+
+GPU_EXPORT
+GPUDevice *
+GPUCreateDevice(GPUPhysicalDevice *phyDevice);
+
+GPU_EXPORT
+GPUDevice *
+GPUCreateSystemDefaultDevice(GPUInstance *inst);
 
 #ifdef __cplusplus
 }

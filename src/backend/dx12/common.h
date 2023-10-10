@@ -26,6 +26,12 @@
 
 #define FrameCount 2
 
+typedef struct GPUPhysicalDeviceDX12 {
+  /* IDXGIAdapter1*dxgiAdapter; */
+  IUnknown *dxgiAdapter;
+  bool      isWarp;
+} GPUPhysicalDeviceDX12;
+
 typedef struct GPUInstanceDX12 {
   IDXGIFactory4 *dxgiFactory;
   UINT           dxgiFactoryFlags;
