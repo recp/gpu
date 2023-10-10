@@ -49,6 +49,12 @@ typedef struct GPURect2D {
   GPUExtent2D extent;
 } GPURect2D;
 
+#ifdef __APPLE__
+#  define GPUExtent2DFromCGSize(size) (GPUExtent2D){size.width, size.height}
+#  define GPUExtent2DFromCGRect(rect) (GPUExtent2D){rect.size.width, rect.size.height}
+#  define GPUExtent2DFromCocoaView(view) (GPUExtent2D){view.frame.size.width, view.frame.size.height}
+#endif
+
 #ifdef __cplusplus
 }
 #endif
