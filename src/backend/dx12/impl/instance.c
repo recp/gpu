@@ -37,8 +37,7 @@ dx12_createInstance(struct GPUApi * __restrict api,
    */
   {
     ID3D12Debug *debugController;
-    if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug,
-      (void **)&debugController))) {
+    if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug, (void **)&debugController))) {
       debugController->lpVtbl->EnableDebugLayer(debugController);
       debugController->lpVtbl->Release(debugController);
 

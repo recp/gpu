@@ -90,7 +90,7 @@ mt_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
 GPU_HIDE
 void
 mt_initDevice(GPUApiDevice *apiDevice) {
-  apiDevice->createSystemDefaultDevice     = mt_createSystemDefaultDevice;
-  apiDevice->createDevice                  = mt_createDevice;
   apiDevice->getAvailablePhysicalDevicesBy = mt_getAvailablePhysicalDevicesBy;
+  apiDevice->createDevice                  = mt_createDevice;
+  apiDevice->createSystemDefaultDevice     = mt_createSystemDefaultDevice;
 }

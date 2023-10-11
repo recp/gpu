@@ -72,19 +72,6 @@ vk__find_display_gpu(int               gpu_number,
 #endif
 
 GPU_HIDE
-GPUDevice*
-vk_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
-  GPUDevice     *device;
-
-  device       = calloc(1, sizeof(*device));
-  device->priv = NULL;
-
-  /* TODO: select-phy device auto */
-
-  return device;
-}
-
-GPU_HIDE
 GPUPhysicalDevice*
 vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
                                  GPUInstance * __restrict inst,
@@ -281,8 +268,7 @@ vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
 
 GPU_HIDE
 GPUDevice*
-vk_createDevice(GPUApi            * __restrict api,
-                GPUInstance       * __restrict inst,
+vk_createDevice(GPUInstance       * __restrict inst,
                 GPUPhysicalDevice * __restrict phyDevice,
                 GPUCommandQueueCreateInfo      queueCI[],
                 uint32_t                       nQueueCI) {
@@ -377,8 +363,22 @@ vk_createDevice(GPUApi            * __restrict api,
 }
 
 GPU_HIDE
+GPUDevice*
+vk_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
+  GPUDevice     *device;
+
+  device       = calloc(1, sizeof(*device));
+  device->priv = NULL;
+
+  /* TODO: select-phy device auto */
+
+  return device;
+}
+
+GPU_HIDE
 void
 vk_initDevice(GPUApiDevice* apiDevice) {
-  apiDevice->createSystemDefaultDevice     = vk_createSystemDefaultDevice;
   apiDevice->getAvailablePhysicalDevicesBy = vk_getAvailablePhysicalDevicesBy;
+  apiDevice->createDevice                  = vk_createDevice;
+  apiDevice->createSystemDefaultDevice     = vk_createSystemDefaultDevice;
 }

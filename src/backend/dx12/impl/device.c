@@ -195,6 +195,6 @@ GPU_HIDE
 void
 dx12_initDevice(GPUApiDevice* apiDevice) {
   apiDevice->getAvailablePhysicalDevicesBy = dx12_getAvailablePhysicalDevicesBy;
-  apiDevice->createSystemDefaultDevice     = dx12_createSystemDefaultDevice;
   apiDevice->createDevice                  = dx12_createDevice;
+  apiDevice->createSystemDefaultDevice     = dx12_createSystemDefaultDevice;
 }
