@@ -26,7 +26,11 @@ extern "C" {
 typedef struct GPUApiCommandQueue {
   GPUCommandQueue*
   (*newCommandQueue)(GPUDevice * __restrict device);
-  
+
+  GPUCommandQueue*
+  (*getCommandQueue)(struct GPUDevice * __restrict device,
+                     GPUQueueFlagBits              bits);
+
   GPUCommandBuffer*
   (*newCommandBuffer)(GPUCommandQueue  * __restrict cmdb,
                       void             * __restrict sender,

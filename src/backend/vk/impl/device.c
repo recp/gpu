@@ -441,9 +441,8 @@ vk_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
   /* TODO: */
   return vk_createDevice(phyDevice, (GPUCommandQueueCreateInfo[]){
     [0] = {
-      .count         = 1,
-      .flags         = GPU_QUEUE_GRAPHICS_BIT | GPU_QUEUE_COMPUTE_BIT,
-      .optionalFlags = GPU_QUEUE_COMPUTE_BIT
+      .count = 1,
+      .flags = GPU_QUEUE_GRAPHICS_BIT | GPU_QUEUE_COMPUTE_BIT,
     },
     [1] = {
       .count = 1,

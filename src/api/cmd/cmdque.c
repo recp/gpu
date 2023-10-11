@@ -18,6 +18,17 @@
 
 GPU_EXPORT
 GPUCommandQueue*
+GPUGetCommandQueue(GPUDevice * __restrict device, GPUQueueFlagBits bits) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
+
+  return api->cmdque.getCommandQueue(device, bits);
+}
+
+GPU_EXPORT
+GPUCommandQueue*
 GPUNewCommandQueue(GPUDevice * __restrict device) {
   GPUApi *api;
 
