@@ -23,6 +23,24 @@ extern "C" {
 #include "common.h"
 #include "device.h"
 
+typedef enum GPUQueueFlagBits {
+  GPU_QUEUE_GRAPHICS_BIT         = 0x00000001,
+  GPU_QUEUE_COMPUTE_BIT          = 0x00000002,
+  GPU_QUEUE_TRANSFER_BIT         = 0x00000004,
+  GPU_QUEUE_SPARSE_BINDING_BIT   = 0x00000008,
+  GPU_QUEUE_PROTECTED_BIT        = 0x00000010,
+
+  /* TODO: */
+  GPU_QUEUE_VIDEO_DECODE_BIT_KHR = 0x00000020,
+  GPU_QUEUE_VIDEO_ENCODE_BIT_KHR = 0x00000040,
+  GPU_QUEUE_OPTICAL_FLOW_BIT_NV  = 0x00000100,
+} GPUQueueFlagBits;
+
+typedef struct GPUCommandQueueCreateInfo {
+  GPUQueueFlagBits flags;
+  uint32_t         count;
+} GPUCommandQueueCreateInfo;
+
 typedef struct GPUCommandQueue {
   void *priv;
 } GPUCommandQueue;
