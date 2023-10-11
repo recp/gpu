@@ -434,14 +434,26 @@ err:
 GPU_HIDE
 GPUDevice*
 vk_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
-  GPUDevice     *device;
+  GPUPhysicalDevice *phyDevice;
 
-  device       = calloc(1, sizeof(*device));
-  device->priv = NULL;
+  phyDevice = GPUGetFirstPhysicalDevice(inst);
 
-  /* TODO: select-phy device auto */
-
-  return device;
+  /* TODO: */
+  return vk_createDevice(phyDevice, (GPUCommandQueueCreateInfo[]){
+    [0] = {
+      .count         = 1,
+      .flags         = GPU_QUEUE_GRAPHICS_BIT | GPU_QUEUE_COMPUTE_BIT,
+      .optionalFlags = GPU_QUEUE_COMPUTE_BIT
+    },
+    [1] = {
+      .count = 1,
+      .flags = GPU_QUEUE_GRAPHICS_BIT
+    },
+    [2] = {
+      .count = 1,
+      .flags = GPU_QUEUE_COMPUTE_BIT
+    }
+  }, 3);
 }
 
 GPU_HIDE

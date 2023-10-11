@@ -39,6 +39,7 @@ typedef enum GPUQueueFlagBits {
 
 typedef struct GPUCommandQueueCreateInfo {
   GPUQueueFlagBits flags;
+  GPUQueueFlagBits optionalFlags;
   uint32_t         count;
 } GPUCommandQueueCreateInfo;
 
