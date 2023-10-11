@@ -21,7 +21,8 @@ extern "C" {
 #endif
 
 #include "common.h"
-#include "device.h"
+
+struct GPUDevice;
 
 typedef enum GPUQueueFlagBits {
   GPU_QUEUE_GRAPHICS_BIT         = 0x00000001,
@@ -54,7 +55,21 @@ typedef void (*GPUCommandBufferOnCompleteFn)(void            *__restrict sender,
 
 GPU_EXPORT
 GPUCommandQueue*
-GPUNewCommandQueue(GPUDevice * __restrict device);
+GPUNewCommandQueue(struct GPUDevice * __restrict device);
+
+/*!
+ * @brief get command queue created created with logical device creation.
+ *
+ * @param[in]  device init params, NULL to default.
+ * @param[in]  bits   command queue type bits
+ */
+GPU_EXPORT
+GPUCommandQueue*
+GPUGetCommandQueue(struct GPUDevice * __restrict device, GPUQueueFlagBits bits);
+
+GPU_EXPORT
+GPUQueueFlagBits
+GPUGetAvailQueueBits(struct GPUDevice * __restrict device);
 
 GPU_EXPORT
 GPUCommandBuffer*

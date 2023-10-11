@@ -51,7 +51,9 @@ mt_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
 
 GPU_HIDE
 GPUDevice *
-mt_createDevice(GPUPhysicalDevice *phyDevice) {
+mt_createDevice(GPUPhysicalDevice        *phyDevice,
+                GPUCommandQueueCreateInfo queCI[],
+                uint32_t                  nQueCI) {
   GPUDevice *device;
   device  = calloc(1, sizeof(*device));
 

@@ -40,11 +40,13 @@ GPUGetAvailablePhysicalDevicesBy(GPUInstance *inst, uint32_t maxNumberOfItems) {
 
 GPU_EXPORT
 GPUDevice *
-GPUCreateDevice(GPUPhysicalDevice *phyDevice) {
+GPUCreateDevice(GPUPhysicalDevice        *phyDevice,
+                GPUCommandQueueCreateInfo queCI[],
+                uint32_t                  nQueCI) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->device.createDevice(phyDevice);
+  return api->device.createDevice(phyDevice, queCI, nQueCI);
 }

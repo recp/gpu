@@ -267,99 +267,168 @@ vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
 }
 
 GPU_HIDE
+static
+uint32_t
+vk__findQueueFamily(GPUPhysicalDevice *phyDevice, GPUQueueFlagBits flags) {
+  GPUPhysicalDeviceVk     *phyDeviceVk;
+  VkQueueFamilyProperties *queueFamilies;
+  VkQueueFlagBits          vkFlags;
+  uint32_t                 queueFamilyCount, i, index;
+
+  index            = UINT32_MAX;
+  vkFlags          = 0;
+  queueFamilyCount = 0;
+  phyDeviceVk      = phyDevice->priv;
+
+  vkGetPhysicalDeviceQueueFamilyProperties(phyDeviceVk->phyDevice,
+                                           &queueFamilyCount,
+                                           NULL);
+
+  if (queueFamilyCount == 0
+      || !(queueFamilies = malloc(queueFamilyCount * sizeof(queueFamilies)))) {
+    return UINT32_MAX;
+  }
+
+  vkGetPhysicalDeviceQueueFamilyProperties(phyDeviceVk->phyDevice, 
+                                           &queueFamilyCount,
+                                           queueFamilies);
+
+  if (flags & GPU_QUEUE_GRAPHICS_BIT)         vkFlags |= VK_QUEUE_GRAPHICS_BIT;
+  if (flags & GPU_QUEUE_COMPUTE_BIT)          vkFlags |= VK_QUEUE_COMPUTE_BIT;
+  if (flags & GPU_QUEUE_TRANSFER_BIT)         vkFlags |= VK_QUEUE_TRANSFER_BIT;
+  if (flags & GPU_QUEUE_SPARSE_BINDING_BIT)   vkFlags |= VK_QUEUE_SPARSE_BINDING_BIT;
+  if (flags & GPU_QUEUE_PROTECTED_BIT)        vkFlags |= VK_QUEUE_PROTECTED_BIT;
+  if (flags & GPU_QUEUE_VIDEO_DECODE_BIT_KHR) vkFlags |= VK_QUEUE_VIDEO_DECODE_BIT_KHR;
+  if (flags & GPU_QUEUE_VIDEO_ENCODE_BIT_KHR) vkFlags |= VK_QUEUE_VIDEO_ENCODE_BIT_KHR;
+  if (flags & GPU_QUEUE_OPTICAL_FLOW_BIT_NV)  vkFlags |= VK_QUEUE_OPTICAL_FLOW_BIT_NV;
+
+  for (i = 0; i < queueFamilyCount; i++) {
+    if ((queueFamilies[i].queueFlags & vkFlags) == vkFlags) {
+      index = i;
+      break;
+    }
+  }
+
+  free(queueFamilies);
+
+  return index;
+}
+
+GPU_HIDE
+GPUCommandQueue*
+vk__createCmdQueue(GPUDeviceVk             * __restrict deviceVk,
+                   VkDeviceQueueCreateInfo * __restrict ci) {
+  GPUCommandQueue   *que;
+  GPUCommandQueueVk *queVk;
+
+  queVk           = calloc(1, sizeof(*que));
+  que             = calloc(1, sizeof(*que));
+  que->priv       = queVk;
+  queVk->createCI = ci;
+
+  vkGetDeviceQueue(deviceVk->device, ci->queueFamilyIndex, 0, &queVk->queRaw);
+
+  return que;
+}
+
+GPU_HIDE
 GPUDevice*
-vk_createDevice(GPUInstance       * __restrict inst,
-                GPUPhysicalDevice * __restrict phyDevice,
-                GPUCommandQueueCreateInfo      queueCI[],
-                uint32_t                       nQueueCI) {
+vk_createDevice(GPUPhysicalDevice * __restrict phyDevice,
+                GPUCommandQueueCreateInfo      queCI[],
+                uint32_t                       nQueCI) {
+  GPUInstance            *inst;
   GPUDevice              *device;
   GPUDeviceVk            *deviceVk;
   GPUPhysicalDeviceVk    *phyDeviceVk;
   GPUInstanceVk          *instVk;
+  GPUCommandQueue        **createdQueues;
+  float                  *queuePriorities;
   VkResult U_ASSERT_ONLY  err;
-  float                   queue_priorities[1] = {0.0};
-  VkDeviceQueueCreateInfo queues[nQueueCI];
-  uint32_t                i;
+  VkDeviceQueueCreateInfo queues[nQueCI];
+  VkDeviceCreateInfo      deviceCI = {0};
+  GPUQueueFlagBits        queueFamilies;
+  uint32_t                i, queueFamilyIndex, nQueues, maxQueCount;
 
-//  vk_createDevice(api, inst, phyDevice, (GPUCommandQueueCreateInfo[]){
-//    [0] = {
-//      .flags = GPU_QUEUE_GRAPHICS_BIT,
-//      .count = 0
-//    }
-//  }, 2);
+  queueFamilyIndex = UINT32_MAX;
+  nQueues          = 0;
+  maxQueCount      = 0;
+  queueFamilies    = 0;
+  inst             = phyDevice->inst;
+  phyDeviceVk      = phyDevice->priv;
+  instVk           = inst->_priv;
+  deviceVk         = calloc(1, sizeof(*deviceVk));
+  device           = calloc(1, sizeof(*device));
 
-  phyDeviceVk                = phyDevice->priv;
-  instVk                     = inst->_priv;
-  deviceVk                   = calloc(1, sizeof(*deviceVk));
-
-  // Search for a graphics and a present queue in the array of queue
-  // families, try to find one that supports both
-  uint32_t graphicsQueueFamilyIndex = UINT32_MAX;
-  uint32_t presentQueueFamilyIndex  = UINT32_MAX;
-
-  for (i = 0; i < phyDeviceVk->queueFamilyCount; i++) {
-    if ((phyDeviceVk->queueFamilyProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0) {
-      if (graphicsQueueFamilyIndex == UINT32_MAX) {
-        graphicsQueueFamilyIndex = i;
-      }
-
-//      if (supportsPresent[i] == VK_TRUE) {
-//        graphicsQueueFamilyIndex = i;
-//        presentQueueFamilyIndex  = i;
-//        break;
-//      }
+  for (i = 0; i < nQueCI; i++) {
+    if (queCI[i].count > maxQueCount) {
+      maxQueCount = queCI[i].count;
     }
   }
 
-//  if (presentQueueFamilyIndex == UINT32_MAX) {
-//    // If didn't find a queue that supports both graphics and present, then
-//    // find a separate present queue.
-//    for (uint32_t i = 0; i < phyDeviceVk->queueFamilyCount; ++i) {
-//      if (supportsPresent[i] == VK_TRUE) {
-//        presentQueueFamilyIndex = i;
-//        break;
-//      }
-//    }
-//  }
+  queuePriorities = alloca(maxQueCount);
+  for (i = 0; i < maxQueCount; i++) {
+    queuePriorities[i] = 1.0f; /* default queue priority */
+  }
 
-//  queues[0].sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-//  queues[0].pNext            = NULL;
-//  queues[0].queueFamilyIndex = demo->graphics_queue_family_index;
-//  queues[0].queueCount       = 1;
-//  queues[0].pQueuePriorities = queue_priorities;
-//  queues[0].flags            = 0;
-//
-//  VkDeviceCreateInfo createInfoCI = {
-//    .sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-//    .pNext                   = NULL,
-//    .queueCreateInfoCount    = 1,
-//    .pQueueCreateInfos       = queues,
-//    .enabledLayerCount       = 0,
-//    .ppEnabledLayerNames     = NULL,
-//    .enabledExtensionCount   = instVk->nEnabledExtensions,
-//    .ppEnabledExtensionNames = (const char *const *)instVk->extensionNames,
-//    .pEnabledFeatures        = NULL,  // If specific features are required, pass them in here
-//  };
-//
-//  if (demo->separate_present_queue) {
-//    queues[1].sType                   = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-//    queues[1].pNext                   = NULL;
-//    queues[1].queueFamilyIndex        = demo->present_queue_family_index;
-//    queues[1].queueCount              = 1;
-//    queues[1].pQueuePriorities        = queue_priorities;
-//    queues[1].flags                   = 0;
-//    createInfoCI.queueCreateInfoCount = 2;
-//  }
-//
-//  err = vkCreateDevice(phyDeviceVk->phyDevice, &createInfoCI, NULL, &deviceVk->device);
-//  assert(!err);
-//
-//  device       = calloc(1, sizeof(*device));
-//  device->priv = NULL;
-//
-//  /* TODO: select-phy device auto */
+  for (i = 0; i < nQueCI; i++) {
+    queueFamilyIndex = vk__findQueueFamily(phyDevice, queCI[i].flags);
+    if(queueFamilyIndex == UINT32_MAX) {
+      /* handle the error: The requested queue capabilities
+         are not supported by this physical device. */
+      continue;
+    }
+
+    queueFamilies                 |= queCI[i].flags;
+
+    queues[nQueues].sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queues[nQueues].pNext            = NULL;
+    queues[nQueues].flags            = 0;
+    queues[nQueues].queueFamilyIndex = queueFamilyIndex;
+    queues[nQueues].queueCount       = queCI[i].count;
+    queues[nQueues].pQueuePriorities = queuePriorities;
+
+    nQueues++;
+  }
+
+  createdQueues = calloc(nQueues, sizeof(*createdQueues));
+  for (i = 0; i < nQueues; i++) {
+    createdQueues[i] = vk__createCmdQueue(deviceVk, &queues[i]);
+  }
+
+  /* If specific features are required, pass them in here: pEnabledFeatures */
+  deviceCI.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  deviceCI.queueCreateInfoCount    = nQueues;
+  deviceCI.pQueueCreateInfos       = queues;
+  deviceCI.enabledExtensionCount   = instVk->nEnabledExtensions;
+  deviceCI.ppEnabledExtensionNames = (void *)instVk->extensionNames;
+
+  err = vkCreateDevice(phyDeviceVk->phyDevice, &deviceCI, NULL, &deviceVk->device);
+  if(!err) {
+#if DEBUG
+    fprintf(stderr, "vkCreateDevice failed: %d\n", err);
+#endif
+    goto err;
+  }
+
+  device->priv             = deviceVk;
+  device->inst             = inst;
+  device->phyDevice        = phyDevice;
+  device->queueFamilies    = queueFamilies;
+
+  deviceVk->createCI       = queCI;
+  deviceVk->nCreateCI      = nQueCI;
+  deviceVk->nCreatedQueues = nQueues;
+  deviceVk->createdQueues  = createdQueues;
+
+  /* set device->availableQueues by created available queues */
 
   return device;
+err:
+
+  if (deviceVk) { free(deviceVk); }
+  if (device)   { free(device); }
+
+  return NULL;
 }
 
 GPU_HIDE

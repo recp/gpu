@@ -115,14 +115,14 @@ GPU_INLINE void DbgMsg(char *fmt, ...) {
 
 static PFN_vkGetDeviceProcAddr g_gdpa = NULL;
 
-#define GET_DEVICE_PROC_ADDR(dev, entrypoint)                                                                    \
-    {                                                                                                            \
-        if (!g_gdpa) g_gdpa = (PFN_vkGetDeviceProcAddr)vkGetInstanceProcAddr(demo->inst, "vkGetDeviceProcAddr"); \
-        demo->fp##entrypoint = (PFN_vk##entrypoint)g_gdpa(dev, "vk" #entrypoint);                                \
-        if (demo->fp##entrypoint == NULL) {                                                                      \
-            ERR_EXIT("vkGetDeviceProcAddr failed to find vk" #entrypoint, "vkGetDeviceProcAddr Failure");        \
-        }                                                                                                        \
-    }
+#define GET_DEVICE_PROC_ADDR(dev, entrypoint)                                                                  \
+  {                                                                                                            \
+      if (!g_gdpa) g_gdpa = (PFN_vkGetDeviceProcAddr)vkGetInstanceProcAddr(demo->inst, "vkGetDeviceProcAddr"); \
+      demo->fp##entrypoint = (PFN_vk##entrypoint)g_gdpa(dev, "vk" #entrypoint);                                \
+      if (demo->fp##entrypoint == NULL) {                                                                      \
+          ERR_EXIT("vkGetDeviceProcAddr failed to find vk" #entrypoint, "vkGetDeviceProcAddr Failure");        \
+      }                                                                                                        \
+  }
 
 typedef struct GPUInstanceVk {
   char       *extensionNames[64];
@@ -169,8 +169,15 @@ typedef struct GPUPhysicalDeviceVk {
 typedef struct GPUDeviceVk {
   VkDevice                   device;
   GPUCommandQueueCreateInfo *createCI;
-  GPUCommandQueue           *createdQueues;
+  GPUCommandQueue           **createdQueues;
+  uint32_t                   nCreatedQueues;
+  uint32_t                   nCreateCI;
 } GPUDeviceVk;
+
+typedef struct GPUCommandQueueVk {
+  VkQueue                  queRaw;
+  VkDeviceQueueCreateInfo *createCI;
+} GPUCommandQueueVk;
 
 typedef struct GPUSurfaceVk {
   VkSurfaceKHR surface;

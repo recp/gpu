@@ -29,7 +29,9 @@ struct GPUInstance;
 typedef struct GPUApiDevice {
   GPUDevice* (*createSystemDefaultDevice)(struct GPUApi*, GPUInstance * __restrict inst);
   GPUPhysicalDevice* (*getAvailablePhysicalDevicesBy)(struct GPUApi *, GPUInstance * __restrict inst, uint32_t maxNumberOfItems);
-  GPUDevice* (*createDevice)(GPUPhysicalDevice *phyDevice);
+  GPUDevice* (*createDevice)(GPUPhysicalDevice * __restrict phyDevice,
+                             GPUCommandQueueCreateInfo      queCI[],
+                             uint32_t                       nQueCI);
 } GPUApiDevice;
 
 #ifdef __cplusplus

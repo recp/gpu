@@ -22,6 +22,7 @@ extern "C" {
 
 #include "common.h"
 #include "instance.h"
+#include "cmdqueue.h"
 
 typedef struct GPUPhysicalDevice {
   struct GPUPhysicalDevice *next;
@@ -37,6 +38,7 @@ typedef struct GPUDevice {
   GPUInstance       *inst;
   GPUPhysicalDevice *phyDevice;
   void              *priv;
+  GPUQueueFlagBits   queueFamilies;
 } GPUDevice;
 
 GPU_EXPORT
@@ -49,9 +51,13 @@ GPUGetFirstPhysicalDevice(GPUInstance *inst) {
   return GPUGetAvailablePhysicalDevicesBy(inst, 1);
 }
 
+#define GPUDefaultQueuesParam NULL, 0
+
 GPU_EXPORT
 GPUDevice *
-GPUCreateDevice(GPUPhysicalDevice *phyDevice);
+GPUCreateDevice(GPUPhysicalDevice        *phyDevice,
+                GPUCommandQueueCreateInfo queCI[],
+                uint32_t                  nQueCI);
 
 GPU_EXPORT
 GPUDevice *
