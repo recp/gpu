@@ -90,19 +90,19 @@ dx12_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
     DXCHECK(dxgiFactory->lpVtbl->EnumWarpAdapter(dxgiFactory, 
                                                  &IID_IDXGIAdapter, 
                                                  (void **)&warpAdapter));
-     item          = calloc(1, sizeof(*item));
-     phyDeviceDX12 = calloc(1, sizeof(*phyDeviceDX12));
+    item          = calloc(1, sizeof(*item));
+    phyDeviceDX12 = calloc(1, sizeof(*phyDeviceDX12));
 
-     phyDeviceDX12->dxgiAdapter       = (IUnknown *)warpAdapter;
-     phyDeviceDX12->isWarp            = true;
-     item->priv                       = phyDeviceDX12;
-     item->inst                       = inst;
-     item->separatePresentQueue       = 1; /* builtin */
-     item->supportsDisplayTiming      = 1; /* TODO: not builtin, implement later */
-     item->supportsIncrementalPresent = 1; /* TODO: not builtin, implement later */
-     item->supportsSwapchain          = 1; /* builtin */
+    phyDeviceDX12->dxgiAdapter       = (IUnknown *)warpAdapter;
+    phyDeviceDX12->isWarp            = true;
+    item->priv                       = phyDeviceDX12;
+    item->inst                       = inst;
+    item->separatePresentQueue       = 1; /* builtin */
+    item->supportsDisplayTiming      = 1; /* TODO: not builtin, implement later */
+    item->supportsIncrementalPresent = 1; /* TODO: not builtin, implement later */
+    item->supportsSwapchain          = 1; /* builtin */
 
-     firstDevice = item;
+    firstDevice = item;
   }
 
   return firstDevice;
