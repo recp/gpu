@@ -315,7 +315,7 @@ vk__findQueueFamily(GPUPhysicalDevice *phyDevice, GPUQueueFlagBits flags) {
 }
 
 GPU_HIDE
-GPUCommandQueue*
+static GPUCommandQueue*
 vk__createCmdQueue(GPUDeviceVk             * __restrict deviceVk,
                    VkDeviceQueueCreateInfo * __restrict ci) {
   GPUCommandQueue   *que;
