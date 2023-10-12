@@ -16,7 +16,7 @@
 
 #include "../common.h"
 
-GPU_EXPORT
+GPU_HIDE
 GPUCommandQueue*
 vk_getCommandQueue(GPUDevice *device, GPUQueueFlagBits bits) {
   GPUCommandQueue   *queue;
@@ -46,7 +46,7 @@ vk_getCommandQueue(GPUDevice *device, GPUQueueFlagBits bits) {
   return fallbackQueue;
 }
 
-GPU_EXPORT
+GPU_HIDE
 GPUCommandQueue*
 vk_newCommandQueue(GPUDevice * __restrict device) {
   return vk_getCommandQueue(
