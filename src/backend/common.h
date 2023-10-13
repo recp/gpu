@@ -20,4 +20,19 @@
 #include "../common.h"
 #include "../../include/gpu/api/gpudef.h"
 
+#define GPUBackendTypeSuffix Vk
+#define CONCAT_IMPL(a, b) a ## b
+#define CONCAT(a, b) CONCAT_IMPL(a, b)
+
+/*#define GPUCalloc(X) calloc(1, sizeof(X) + sizeof(CONCAT(X, GPUBackendTypeSuffix))) */
+
+#define GPUCalloc(X) ({                                                       \
+  X*     x;                                                                   \
+  size_t s;                                                                   \
+  s        = sizeof(CONCAT(X, GPUBackendTypeSuffix));                         \
+  x        = calloc(1, sizeof(X) + s);                                        \
+  x->_priv = (void*)((char*)x + sizeof(X));                                   \
+  x;                                                                          \
+})
+
 #endif /* backend_common_h */
