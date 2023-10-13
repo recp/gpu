@@ -44,11 +44,11 @@ typedef struct GPUCommandQueueCreateInfo {
 } GPUCommandQueueCreateInfo;
 
 typedef struct GPUCommandQueue {
-  void *priv;
+  void *_priv;
 } GPUCommandQueue;
 
 typedef struct GPUCommandBuffer {
-  void *priv;
+  void *_priv;
 } GPUCommandBuffer;
 
 typedef void (*GPUCommandBufferOnCompleteFn)(void            *__restrict sender,

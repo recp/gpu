@@ -33,9 +33,9 @@ mt_newCommandQueue(GPUDevice * __restrict device) {
   GPUCommandQueue *cq;
   MtCommandQueue  *mcq;
   
-  mcq      = mtNewCommandQueue(device->priv);
+  mcq      = mtNewCommandQueue(device->_priv);
   cq       = calloc(1, sizeof(*cq));
-  cq->priv = mcq;
+  cq->_priv = mcq;
   
   return cq;
 }
@@ -48,9 +48,9 @@ mt_newCommandBuffer(GPUCommandQueue  * __restrict cmdb,
   GPUCommandBuffer *cb;
   MtCommandBuffer  *mcb;
   
-  mcb      = mtNewCommandBuffer(cmdb->priv);
+  mcb      = mtNewCommandBuffer(cmdb->_priv);
   cb       = calloc(1, sizeof(*cb));
-  cb->priv = mcb;
+  cb->_priv = mcb;
   
   if (oncomplete)
     gpuCommandBufferOnComplete(cb, sender, oncomplete);
@@ -71,13 +71,13 @@ mt_ccmdbufOnComplete(GPUCommandBuffer * __restrict cmdb,
   cb->param      = cmdb;
   cb->onComplete = oncomplete;
   
-  mtCommandBufferOnComplete(cmdb->priv, cb, gpu_cmdoncomplete);
+  mtCommandBufferOnComplete(cmdb->_priv, cb, gpu_cmdoncomplete);
 }
 
 GPU_HIDE
 void
 mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
-  mtCommandBufferCommit(cmdb->priv);
+  mtCommandBufferCommit(cmdb->_priv);
 }
 
 static

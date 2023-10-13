@@ -27,7 +27,7 @@ extern "C" {
 typedef struct GPUPhysicalDevice {
   struct GPUPhysicalDevice *next;
   GPUInstance              *inst;
-  void                     *priv;
+  void                     *_priv;
   bool                      supportsSwapchain;
   bool                      supportsDisplayTiming;
   bool                      supportsIncrementalPresent;
@@ -37,7 +37,7 @@ typedef struct GPUPhysicalDevice {
 typedef struct GPUDevice {
   GPUInstance       *inst;
   GPUPhysicalDevice *phyDevice;
-  void              *priv;
+  void              *_priv;
   GPUQueueFlagBits   queueFamilies;
 } GPUDevice;
 

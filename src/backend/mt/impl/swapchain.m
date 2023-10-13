@@ -123,7 +123,7 @@ mt_createSwapChain(GPUApi          * __restrict api,
   swapChainMtl                        = calloc(1, sizeof(*swapChainMtl));
   swapChainMtl->layer                 = [CAMetalLayer layer];
   swapChainMtl->layer.bounds          = CGRectMake(0, 0, size.width, size.height);
-  swapChainMtl->layer.device          = device->priv;
+  swapChainMtl->layer.device          = device->_priv;
   //  swapChainMtl->layer.pixelFormat     = MTLPixelFormatBGRA8Unorm;
   swapChainMtl->layer.opaque          = YES;
   swapChainMtl->layer.contentsScale   = surface->scale;
@@ -160,7 +160,7 @@ mt_createSwapChainForView(struct GPUApi          * __restrict api,
   swapChainMtl                        = calloc(1, sizeof(*swapChainMtl));
   swapChainMtl->layer                 = [CAMetalLayer layer];
   swapChainMtl->layer.bounds          = CGRectMake(0, 0, width, height);
-  swapChainMtl->layer.device          = device->priv;
+  swapChainMtl->layer.device          = device->_priv;
   //  swapChainMtl->layer.pixelFormat     = MTLPixelFormatBGRA8Unorm;
   swapChainMtl->layer.opaque          = YES;
   swapChainMtl->layer.contentsScale   = backingScaleFactor;
@@ -195,7 +195,7 @@ mt_createSwapChainForLayer(struct GPUApi          * __restrict api,
   swapChainMtl                        = calloc(1, sizeof(*swapChainMtl));
   swapChainMtl->layer                 = [CAMetalLayer layer];
   swapChainMtl->layer.bounds          = CGRectMake(0, 0, width, height);
-  swapChainMtl->layer.device          = device->priv;
+  swapChainMtl->layer.device          = device->_priv;
   //  swapChainMtl->layer.pixelFormat     = MTLPixelFormatBGRA8Unorm;
   swapChainMtl->layer.opaque          = YES;
   swapChainMtl->layer.contentsScale   = backingScaleFactor;
@@ -227,7 +227,7 @@ mt_createSwapChainForLayer(struct GPUApi          * __restrict api,
 //  swapChainMtl                        = calloc(1, sizeof(*swapChainMtl));
 //  swapChainMtl->layer                 = [CAMetalLayer layer];
 //  swapChainMtl->layer.bounds          = CGRectMake(0, 0, width, height);
-//  swapChainMtl->layer.device          = device->priv;
+//  swapChainMtl->layer.device          = device->_priv;
 ////  swapChainMtl->layer.pixelFormat     = MTLPixelFormatBGRA8Unorm;
 //  swapChainMtl->layer.opaque          = YES;
 //  swapChainMtl->layer.contentsScale   = backingScaleFactor;

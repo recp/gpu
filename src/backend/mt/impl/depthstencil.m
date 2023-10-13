@@ -26,7 +26,7 @@ mt_newDepthStencil(GPUCompareFunction depthCompareFunc,
   mds = mtDepthStencilDesc((MtCompareFunction)depthCompareFunc, depthWriteEnabled);
   ds  = calloc(1, sizeof(*ds));
 
-  ds->priv = mds;
+  ds->_priv = mds;
 
   return ds;
 }
@@ -38,10 +38,10 @@ mt_newDepthStencilState(GPUDevice       * __restrict device,
   GPUDepthStencilState *depthStencilState;
   MtRenderPipeline     *mtDepthStencilState;
   
-  mtDepthStencilState = mtNewDepthStencilState(device->priv, depthStencil->priv);
+  mtDepthStencilState = mtNewDepthStencilState(device->_priv, depthStencil->_priv);
   depthStencilState   = calloc(1, sizeof(*depthStencilState));
   
-  depthStencilState->priv = mtDepthStencilState;
+  depthStencilState->_priv = mtDepthStencilState;
   
   return depthStencilState;
 }
@@ -76,7 +76,7 @@ GPUNewTextureWith(GPUDevice * __restrict device, GPUTextureDesc * __restrict des
   MTLTextureDescriptor *texdesc;
   id<MTLDevice>         mtlDevice;
 
-  mtlDevice = device->priv;
+  mtlDevice = device->_priv;
 
   texdesc             = [MTLTextureDescriptor new];
   texdesc.pixelFormat = desc->format;

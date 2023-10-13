@@ -24,7 +24,7 @@ gl_createSystemDefaultDevice(GPUApi *api) {
   device = calloc(1, sizeof(*device));
   
 #ifdef __APPLE__
-  device->priv = CGLGetCurrentContext();
+  device->_priv = CGLGetCurrentContext();
 #endif
 
   return device;

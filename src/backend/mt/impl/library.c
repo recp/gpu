@@ -22,10 +22,10 @@ mt_defaultLibrary(GPUDevice *device) {
   GPULibrary *library;
   MtLibrary  *mtLibrary;
 
-  mtLibrary = mtNewDefaultLibrary(device->priv);
+  mtLibrary = mtNewDefaultLibrary(device->_priv);
   library   = calloc(1, sizeof(*library));
 
-  library->priv = mtLibrary;
+  library->_priv = mtLibrary;
 
   return library;
 }
@@ -36,10 +36,10 @@ mt_newFunction(GPULibrary *lib, const char *name) {
   GPUFunction *func;
   MtFunction  *mtFunc;
 
-  mtFunc = mtNewFunctionWithName(lib->priv, name);
+  mtFunc = mtNewFunctionWithName(lib->_priv, name);
   func   = calloc(1, sizeof(*func));
 
-  func->priv = mtFunc;
+  func->_priv = mtFunc;
 
   return func;
 }

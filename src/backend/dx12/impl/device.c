@@ -64,7 +64,7 @@ dx12_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
       phyDeviceDX12 = calloc(1, sizeof(*phyDeviceDX12));
 
       phyDeviceDX12->dxgiAdapter       = dxgiAdapter;
-      item->priv                       = phyDeviceDX12;
+      item->_priv                      = phyDeviceDX12;
       item->inst                       = inst;
       item->separatePresentQueue       = 1; /* builtin */
       item->supportsDisplayTiming      = 1; /* TODO: not builtin, implement later */
@@ -95,7 +95,7 @@ dx12_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
 
     phyDeviceDX12->dxgiAdapter       = (IUnknown *)warpAdapter;
     phyDeviceDX12->isWarp            = true;
-    item->priv                       = phyDeviceDX12;
+    item->_priv                      = phyDeviceDX12;
     item->inst                       = inst;
     item->separatePresentQueue       = 1; /* builtin */
     item->supportsDisplayTiming      = 1; /* TODO: not builtin, implement later */
@@ -123,7 +123,7 @@ dx12_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
   HRESULT                hr;
 
   if (!(phyDevice = GPUGetFirstPhysicalDevice(inst))
-    || !(phyDeviceDX12 = phyDevice->priv)) {
+    || !(phyDeviceDX12 = phyDevice->_priv)) {
     goto err;
   }
 
@@ -138,7 +138,7 @@ dx12_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
 
   device            = calloc(1, sizeof(*device));
   device->inst      = inst;
-  device->priv      = d3dDevice;
+  device->_priv     = d3dDevice;
   device->phyDevice = phyDevice;
 
   // TODO: remove
@@ -167,7 +167,7 @@ dx12_createDevice(GPUPhysicalDevice *phyDevice) {
   HRESULT                hr;
 
   if (!(inst = phyDevice->inst)
-    || !(phyDeviceDX12 = phyDevice->priv)) {
+    || !(phyDeviceDX12 = phyDevice->_priv)) {
     goto err;
   }
 
@@ -181,7 +181,7 @@ dx12_createDevice(GPUPhysicalDevice *phyDevice) {
                     
   device            = calloc(1, sizeof(*device));
   device->inst      = inst;
-  device->priv      = d3dDevice;
+  device->_priv     = d3dDevice;
   device->phyDevice = phyDevice;
 
   return device;

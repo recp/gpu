@@ -26,11 +26,11 @@ extern "C" {
 //#include <us/us.h>
 
 typedef struct GPULibrary {
-  void *priv;
+  void *_priv;
 } GPULibrary;
 
 typedef struct GPUFunction {
-  void *priv;
+  void *_priv;
 } GPUFunction;
 
 GPU_EXPORT

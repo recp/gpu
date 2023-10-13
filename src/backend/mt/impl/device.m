@@ -36,7 +36,7 @@ mt_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
     item->supportsIncrementalPresent = 1; /* TODO: */
     item->supportsSwapchain          = 1;
     item->inst                       = inst;
-    item->priv                       = device;
+    item->_priv                      = device;
 
     /* add to linked list of devices */
     if (lastDevice) { lastDevice->next = item; }
@@ -57,7 +57,7 @@ mt_createDevice(GPUPhysicalDevice        *phyDevice,
   GPUDevice *device;
   device  = calloc(1, sizeof(*device));
 
-  device->priv      = phyDevice->priv;
+  device->_priv     = phyDevice->_priv;
   device->inst      = phyDevice->inst;
   device->phyDevice = phyDevice;
 
@@ -81,8 +81,8 @@ mt_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
   phyDevice->supportsSwapchain          = 1;
   phyDevice->inst                       = inst;
 
-  phyDevice->priv   = mtlDevice;
-  device->priv      = mtlDevice;
+  phyDevice->_priv  = mtlDevice;
+  device->_priv     = mtlDevice;
   device->inst      = inst;
   device->phyDevice = phyDevice;
 

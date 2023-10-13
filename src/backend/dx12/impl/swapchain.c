@@ -54,8 +54,8 @@ dx12_createSwapChain(GPUApi          * __restrict api,
   swapChainDesc.SwapEffect       = DXGI_SWAP_EFFECT_FLIP_DISCARD;
   swapChainDesc.SampleDesc.Count = 1;
 
-  d3dDevice   = device->priv;
-  cmdQueDX12  = cmdQue->priv;
+  d3dDevice   = device->_priv;
+  cmdQueDX12  = cmdQue->_priv;
   dxgiFactory = instDX12->dxgiFactory;
 
   switch (surface->type) {

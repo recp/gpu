@@ -25,7 +25,7 @@ mt_newRenderPipeline(GPUPixelFormat pixelFormat) {
   renderDesc = mtNewRenderPipeline((MtPixelFormat)pixelFormat);
   pipeline   = calloc(1, sizeof(*pipeline));
   
-  pipeline->priv = renderDesc;
+  pipeline->_priv = renderDesc;
   
   return pipeline;
 }
@@ -37,10 +37,10 @@ mt_newRenderState(GPUDevice         * __restrict device,
   GPURenderPipelineState *rederPipline;
   MtRenderPipeline       *mtRederPipline;
   
-  mtRederPipline = mtNewRenderState(device->priv, pipeline->priv, NULL);
+  mtRederPipline = mtNewRenderState(device->_priv, pipeline->_priv, NULL);
   rederPipline   = calloc(1, sizeof(*rederPipline));
   
-  rederPipline->priv = mtRederPipline;
+  rederPipline->_priv = mtRederPipline;
   
   return rederPipline;
 }
@@ -50,7 +50,7 @@ void
 mt_setFunction(GPURenderPipeline    * __restrict pipline,
                GPUFunction    * __restrict func,
                GPUFunctionType             functype) {
-  mtSetFunc(pipline->priv, func->priv, (MtFuncType)functype);
+  mtSetFunc(pipline->_priv, func->_priv, (MtFuncType)functype);
 }
 
 GPU_HIDE
@@ -58,28 +58,28 @@ void
 mt_colorFormat(GPURenderPipeline * __restrict pipline,
                uint32_t                 index,
                GPUPixelFormat           pixelFormat) {
-  mtColorPixelFormat(pipline->priv, index, (MtPixelFormat)pixelFormat);
+  mtColorPixelFormat(pipline->_priv, index, (MtPixelFormat)pixelFormat);
 }
 
 GPU_HIDE
 void
 mt_depthFormat(GPURenderPipeline * __restrict pipline,
                GPUPixelFormat           pixelFormat) {
-  mtDepthPixelFormat(pipline->priv, (MtPixelFormat)pixelFormat);
+  mtDepthPixelFormat(pipline->_priv, (MtPixelFormat)pixelFormat);
 }
 
 GPU_HIDE
 void
 mt_stencilFormat(GPURenderPipeline * __restrict pipline,
                  GPUPixelFormat           pixelFormat) {
-  mtStencilPixelFormat(pipline->priv, (MtPixelFormat)pixelFormat);
+  mtStencilPixelFormat(pipline->_priv, (MtPixelFormat)pixelFormat);
 }
 
 GPU_HIDE
 void
 mt_sampleCount(GPURenderPipeline * __restrict pipline,
                uint32_t                 sampleCount) {
-  mtSampleCount(pipline->priv, sampleCount);
+  mtSampleCount(pipline->_priv, sampleCount);
 }
 
 GPU_HIDE

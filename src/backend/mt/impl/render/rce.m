@@ -19,7 +19,7 @@
 GPU_HIDE
 GPURenderCommandEncoder*
 mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
-  return [(id<MTLCommandBuffer>)cmdb->priv renderCommandEncoderWithDescriptor: pass->_priv];
+  return [(id<MTLCommandBuffer>)cmdb->_priv renderCommandEncoderWithDescriptor: pass->_priv];
 }
 
 GPU_HIDE
@@ -37,13 +37,13 @@ mt_cullMode(GPURenderCommandEncoder *rce, GPUCullMode mode) {
 GPU_HIDE
 void
 mt_setRenderPipelineState(GPURenderCommandEncoder *rce, GPURenderPipelineState *piplineState) {
-  mtSetRenderState(rce, piplineState->priv);
+  mtSetRenderState(rce, piplineState->_priv);
 }
 
 GPU_HIDE
 void
 mt_setDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilState *ds) {
-  mtSetDepthStencil(rce, ds->priv);
+  mtSetDepthStencil(rce, ds->_priv);
 }
 
 GPU_HIDE

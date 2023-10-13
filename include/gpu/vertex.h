@@ -118,7 +118,7 @@ typedef struct GPUVertexBufferLayout {
 } GPUVertexBufferLayout;
 
 typedef struct GPUVertexDescriptor {
-  void                  *priv;
+  void                  *_priv;
   GPUVertexAttribute    *attributes;
   GPUVertexBufferLayout *layouts;
 } GPUVertexDescriptor;

@@ -96,7 +96,7 @@ vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
   instRaw                   = instVk->inst;
   phyDevice                 = calloc(1, sizeof(*phyDevice));
   phyDeviceVk               = calloc(1, sizeof(*phyDeviceVk));
-  phyDevice->priv           = phyDeviceVk;
+  phyDevice->_priv           = phyDeviceVk;
 
   gpuFeatures               = inst->initParams->optionalFeatures | inst->initParams->requiredFeatures;
   incrementalPresentEnabled = (gpuFeatures & GPU_FEATURE_INCREMENTAL_PRESENT);
@@ -284,7 +284,7 @@ vk__findQueueFamily(GPUPhysicalDevice *phyDevice, GPUQueueFlagBits flags) {
   index        = UINT32_MAX;
   vkFlags      = 0;
   nQueFamilies = 0;
-  phyDeviceVk  = phyDevice->priv;
+  phyDeviceVk  = phyDevice->_priv;
 
   vkGetPhysicalDeviceQueueFamilyProperties(phyDeviceVk->phyDevice,
                                            &nQueFamilies,
@@ -329,7 +329,7 @@ vk__createCmdQueue(GPUDeviceVk             * __restrict deviceVk,
 
   queVk           = calloc(1, sizeof(*que));
   que             = calloc(1, sizeof(*que));
-  que->priv       = queVk;
+  que->_priv      = queVk;
   queVk->createCI = ci;
 
   vkGetDeviceQueue(deviceVk->device, ci->queueFamilyIndex, 0, &queVk->queRaw);
@@ -360,7 +360,7 @@ vk_createDevice(GPUPhysicalDevice * __restrict phyDevice,
   maxQueCount      = 0;
   queueFamilies    = 0;
   inst             = phyDevice->inst;
-  phyDeviceVk      = phyDevice->priv;
+  phyDeviceVk      = phyDevice->_priv;
   instVk           = inst->_priv;
   deviceVk         = calloc(1, sizeof(*deviceVk));
   device           = calloc(1, sizeof(*device));
@@ -416,7 +416,7 @@ vk_createDevice(GPUPhysicalDevice * __restrict phyDevice,
     goto err;
   }
 
-  device->priv             = deviceVk;
+  device->_priv             = deviceVk;
   device->inst             = inst;
   device->phyDevice        = phyDevice;
   device->queueFamilies    = queueFamilies;

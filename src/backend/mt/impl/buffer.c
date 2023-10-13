@@ -23,7 +23,7 @@ mt_newBuffer(GPUDevice * __restrict device,
              GPUResourceOptions     options) {
   MtCommandBuffer *mcq;
   
-  mcq = mtDeviceNewBufferWithLength(device->priv, len, (MtResourceOptions)options);
+  mcq = mtDeviceNewBufferWithLength(device->_priv, len, (MtResourceOptions)options);
   
   return mcq;
 }

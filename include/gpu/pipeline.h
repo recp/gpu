@@ -25,11 +25,11 @@ extern "C" {
 #include "library.h"
 
 typedef struct GPURenderPipeline {
-  void *priv;
+  void *_priv;
 } GPURenderPipeline;
 
 typedef struct GPURenderPipelineState {
-  void *priv;
+  void *_priv;
 } GPURenderPipelineState;
 
 typedef enum GPUFunctionType {

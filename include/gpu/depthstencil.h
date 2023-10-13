@@ -52,11 +52,11 @@ typedef enum GPUDepthStencilFormat {
 } GPUDepthStencilFormat;
 
 typedef struct GPUDepthStencil {
-  void *priv;
+  void *_priv;
 } GPUDepthStencil;
 
 typedef struct GPUDepthStencilState {
-  void *priv;
+  void *_priv;
 } GPUDepthStencilState;
 
 GPU_EXPORT

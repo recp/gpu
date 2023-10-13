@@ -25,12 +25,12 @@ vk_getCommandQueue(GPUDevice *device, GPUQueueFlagBits bits) {
   GPUCommandQueue   *fallbackQueue;
   uint32_t           i;
 
-  deviceVk      = device->priv;
+  deviceVk      = device->_priv;
   fallbackQueue = NULL;
 
   for (i = 0; i < deviceVk->nCreatedQueues; i++) {
     queue   = deviceVk->createdQueues[i];
-    queueVk = queue->priv;
+    queueVk = queue->_priv;
 
     /* check if this queue matches the desired flags. */
     if (queueVk->createCI->flags & bits) {

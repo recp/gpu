@@ -32,7 +32,7 @@ dx12_createDescriptorPool(GPUApi    * __restrict api,
   GPUDescriptorPool         *descPool;
   HRESULT                    hr;
 
-  d3dDevice = device->priv;
+  d3dDevice = device->_priv;
   dx12api   = api->reserved;
 
   srvHeapDesc.NumDescriptors = 1;

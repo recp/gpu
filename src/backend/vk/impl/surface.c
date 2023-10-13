@@ -181,7 +181,7 @@ vk_createSurface(GPUApi            * __restrict api,
   VkResult U_ASSERT_ONLY err;
 
   instVk            = inst->_priv;
-  phyDeviceVk       = phyDevice->priv;
+  phyDeviceVk       = phyDevice->_priv;
   gpuSurface        = calloc(1, sizeof(*gpuSurface));
   gpuSurface->type  = type;
   gpuSurface->scale = scale;
