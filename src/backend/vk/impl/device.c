@@ -267,31 +267,37 @@ vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
 }
 
 GPU_HIDE
+GPUPhysicalDevice*
+vk_autoSelectPhysicalDevice(GPUInstance * __restrict inst) {
+  return NULL;
+}
+
+GPU_HIDE
 static
 uint32_t
 vk__findQueueFamily(GPUPhysicalDevice *phyDevice, GPUQueueFlagBits flags) {
   GPUPhysicalDeviceVk     *phyDeviceVk;
-  VkQueueFamilyProperties *queueFamilies;
+  VkQueueFamilyProperties *queFamilies;
   VkQueueFlagBits          vkFlags;
-  uint32_t                 queueFamilyCount, i, index;
+  uint32_t                 nQueFamilies, i, index;
 
-  index            = UINT32_MAX;
-  vkFlags          = 0;
-  queueFamilyCount = 0;
-  phyDeviceVk      = phyDevice->priv;
+  index        = UINT32_MAX;
+  vkFlags      = 0;
+  nQueFamilies = 0;
+  phyDeviceVk  = phyDevice->priv;
 
   vkGetPhysicalDeviceQueueFamilyProperties(phyDeviceVk->phyDevice,
-                                           &queueFamilyCount,
+                                           &nQueFamilies,
                                            NULL);
 
-  if (queueFamilyCount == 0
-      || !(queueFamilies = malloc(queueFamilyCount * sizeof(queueFamilies)))) {
+  if (nQueFamilies == 0
+      || !(queFamilies = malloc(nQueFamilies * sizeof(queFamilies)))) {
     return UINT32_MAX;
   }
 
   vkGetPhysicalDeviceQueueFamilyProperties(phyDeviceVk->phyDevice, 
-                                           &queueFamilyCount,
-                                           queueFamilies);
+                                           &nQueFamilies,
+                                           queFamilies);
 
   if (flags & GPU_QUEUE_GRAPHICS_BIT)         vkFlags |= VK_QUEUE_GRAPHICS_BIT;
   if (flags & GPU_QUEUE_COMPUTE_BIT)          vkFlags |= VK_QUEUE_COMPUTE_BIT;
@@ -302,14 +308,14 @@ vk__findQueueFamily(GPUPhysicalDevice *phyDevice, GPUQueueFlagBits flags) {
   if (flags & GPU_QUEUE_VIDEO_ENCODE_BIT_KHR) vkFlags |= VK_QUEUE_VIDEO_ENCODE_BIT_KHR;
   if (flags & GPU_QUEUE_OPTICAL_FLOW_BIT_NV)  vkFlags |= VK_QUEUE_OPTICAL_FLOW_BIT_NV;
 
-  for (i = 0; i < queueFamilyCount; i++) {
-    if ((queueFamilies[i].queueFlags & vkFlags) == vkFlags) {
+  for (i = 0; i < nQueFamilies; i++) {
+    if ((queFamilies[i].queueFlags & vkFlags) == vkFlags) {
       index = i;
       break;
     }
   }
 
-  free(queueFamilies);
+  free(queFamilies);
 
   return index;
 }
