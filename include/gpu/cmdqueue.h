@@ -44,7 +44,8 @@ typedef struct GPUCommandQueueCreateInfo {
 } GPUCommandQueueCreateInfo;
 
 typedef struct GPUCommandQueue {
-  void *_priv;
+  void           *_priv;
+  GPUQueueFlagBits bits;
 } GPUCommandQueue;
 
 typedef struct GPUCommandBuffer {

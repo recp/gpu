@@ -75,6 +75,11 @@ mt_getAutoSelectedPhysicalDevice(GPUInstance * __restrict inst) {
   return phyDevice;
 }
 
+extern
+GPU_HIDE
+GPUCommandQueue*
+mt_newCommandQueue(GPUDevice * __restrict device);
+
 GPU_HIDE
 GPUDevice *
 mt_createDevice(GPUPhysicalDevice        *phyDevice,
@@ -82,19 +87,25 @@ mt_createDevice(GPUPhysicalDevice        *phyDevice,
                 uint32_t                  nQueCI) {
   GPUDevice   *device;
   GPUDeviceMT *deviceMT;
+  uint32_t     i;
 
   device                   = calloc(1, sizeof(*device));
   deviceMT                 = calloc(1, sizeof(*deviceMT));
 
   deviceMT->device         = phyDevice->_priv;
   deviceMT->nCreatedQueues = nQueCI;
-  deviceMT->createdQueues  = calloc(nQueCI, sizeof(void*));
+
+  if (nQueCI) {
+    deviceMT->createdQueues = calloc(nQueCI, sizeof(void*));
+  }
 
   device->_priv            = deviceMT;
   device->inst             = phyDevice->inst;
   device->phyDevice        = phyDevice;
 
-  /* TODO: queCI is ignored for metal for now. */
+  for (i = 0; i < nQueCI; i++) {
+    deviceMT->createdQueues[i] = mt_newCommandQueue(device);
+  }
 
   return device;
 }
