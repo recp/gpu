@@ -49,6 +49,33 @@ mt_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
   return firstDevice;
 }
 
+GPU_EXPORT
+GPUPhysicalDevice*
+mt_autoSelectPhysicalDeviceIn(GPUInstance       * __restrict inst,
+                              GPUPhysicalDevice * __restrict deviceList) {
+  /* TODO: implement this later */
+  return deviceList;
+}
+
+GPU_HIDE
+GPUPhysicalDevice*
+mt_getAutoSelectedPhysicalDevice(GPUInstance * __restrict inst) {
+  GPUPhysicalDevice *phyDevice;
+  id<MTLDevice>      mtlDevice;
+
+  mtlDevice = MTLCreateSystemDefaultDevice();
+  phyDevice = calloc(1, sizeof(*phyDevice));
+
+  phyDevice->separatePresentQueue       = 1;
+  phyDevice->supportsDisplayTiming      = 1;
+  phyDevice->supportsIncrementalPresent = 1; /* TODO: */
+  phyDevice->supportsSwapchain          = 1;
+  phyDevice->inst                       = inst;
+  phyDevice->_priv                      = mtlDevice;
+
+  return phyDevice;
+}
+
 GPU_HIDE
 GPUDevice *
 mt_createDevice(GPUPhysicalDevice        *phyDevice,
@@ -61,6 +88,8 @@ mt_createDevice(GPUPhysicalDevice        *phyDevice,
   device->inst      = phyDevice->inst;
   device->phyDevice = phyDevice;
 
+  /* TODO: queCI is ignored for metal for now. */
+
   return device;
 }
 
@@ -69,20 +98,12 @@ GPUDevice*
 mt_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
   GPUPhysicalDevice *phyDevice;
   GPUDevice         *device;
-  id<MTLDevice>      mtlDevice;
 
-  mtlDevice = MTLCreateSystemDefaultDevice();
-  phyDevice = calloc(1, sizeof(*phyDevice));
-  device    = calloc(1, sizeof(*device));
+  /* TODO: keep global reference of phyDevice for mem management */
+  phyDevice         = mt_getAutoSelectedPhysicalDevice(inst);
+  device            = calloc(1, sizeof(*device));
 
-  phyDevice->separatePresentQueue       = 1;
-  phyDevice->supportsDisplayTiming      = 1;
-  phyDevice->supportsIncrementalPresent = 1; /* TODO: */
-  phyDevice->supportsSwapchain          = 1;
-  phyDevice->inst                       = inst;
-
-  phyDevice->_priv  = mtlDevice;
-  device->_priv     = mtlDevice;
+  device->_priv     = phyDevice->_priv;
   device->inst      = inst;
   device->phyDevice = phyDevice;
 
@@ -93,6 +114,8 @@ GPU_HIDE
 void
 mt_initDevice(GPUApiDevice *apiDevice) {
   apiDevice->getAvailablePhysicalDevicesBy = mt_getAvailablePhysicalDevicesBy;
+  apiDevice->autoSelectPhysicalDeviceIn    = mt_autoSelectPhysicalDeviceIn;
+  apiDevice->getAutoSelectedPhysicalDevice = mt_getAutoSelectedPhysicalDevice;
   apiDevice->createDevice                  = mt_createDevice;
   apiDevice->createSystemDefaultDevice     = mt_createSystemDefaultDevice;
 }
