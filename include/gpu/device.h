@@ -45,6 +45,15 @@ GPU_EXPORT
 GPUPhysicalDevice*
 GPUGetAvailablePhysicalDevicesBy(GPUInstance *inst, uint32_t maxNumberOfItems);
 
+GPU_EXPORT
+GPUPhysicalDevice*
+GPUGetAutoSelectedPhysicalDevice(GPUInstance *inst);
+
+GPU_EXPORT
+GPUPhysicalDevice*
+GPUAutoSelectPhysicalDeviceBetween(GPUInstance       * __restrict inst,
+                                   GPUPhysicalDevice * __restrict deviceList);
+
 GPU_INLINE
 GPUPhysicalDevice *
 GPUGetFirstPhysicalDevice(GPUInstance *inst) {

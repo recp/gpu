@@ -160,10 +160,12 @@ typedef struct GPUPhysicalDeviceVk {
   char                      *extensionNames[64];
   VkQueueFamilyProperties   *queueFamilyProps;
   VkPhysicalDevice           phyDevice;
-  uint32_t                   queueFamilyCount;
+  uint32_t                   nQueFamilies;
   uint32_t                   nEnabledExtensions;
   VkPhysicalDeviceProperties props;
-  VkPhysicalDeviceFeatures   physDevFeatures;
+  VkPhysicalDeviceFeatures   features;
+  uint32_t                   nDisplayProperties;
+  VkDisplayPropertiesKHR     displayProps;
 } GPUPhysicalDeviceVk;
 
 typedef struct GPUDeviceVk {

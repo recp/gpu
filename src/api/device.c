@@ -39,6 +39,29 @@ GPUGetAvailablePhysicalDevicesBy(GPUInstance *inst, uint32_t maxNumberOfItems) {
 }
 
 GPU_EXPORT
+GPUPhysicalDevice*
+GPUGetAutoSelectedPhysicalDevice(GPUInstance *inst) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
+
+  return api->device.getAutoSelectedPhysicalDevice(inst);
+}
+
+GPU_EXPORT
+GPUPhysicalDevice*
+GPUAutoSelectPhysicalDeviceIn(GPUInstance       * __restrict inst,
+                              GPUPhysicalDevice * __restrict deviceList) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
+
+  return api->device.autoSelectPhysicalDeviceIn(inst, deviceList);
+}
+
+GPU_EXPORT
 GPUDevice *
 GPUCreateDevice(GPUPhysicalDevice        *phyDevice,
                 GPUCommandQueueCreateInfo queCI[],

@@ -73,37 +73,202 @@ vk__find_display_gpu(int               gpu_number,
 
 GPU_HIDE
 GPUPhysicalDevice*
+vk__newPhyDeviceFrom(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
+  GPUPhysicalDevice     *item;
+  GPUPhysicalDeviceVk   *itemVk;
+  VkExtensionProperties *extensions;
+  GPUFeatures            gpuFeatures;
+  VkResult               err;
+  uint32_t               i, nExtensions;
+  VkBool32               swapchainExtFound;
+  bool                   incrementalPresentEnabled, displayTimingEnabled;
+
+  gpuFeatures               = inst->initParams->optionalFeatures | inst->initParams->requiredFeatures;
+  nExtensions               = swapchainExtFound = 0;
+
+  incrementalPresentEnabled = (gpuFeatures & GPU_FEATURE_INCREMENTAL_PRESENT);
+  displayTimingEnabled      = (gpuFeatures & GPU_FEATURE_DISPLAY_TIMING);
+
+  item                      = calloc(1, sizeof(*item));
+  itemVk                    = calloc(1, sizeof(*itemVk));
+  itemVk->phyDevice         = raw;
+  item->_priv               = itemVk;
+  item->inst                = inst;
+
+  vkGetPhysicalDeviceProperties(raw, &itemVk->props);
+
+  /* Call with NULL data to get count */
+  vkGetPhysicalDeviceQueueFamilyProperties(itemVk->phyDevice, &itemVk->nQueFamilies, NULL);
+  assert(itemVk->nQueFamilies >= 1);
+
+  itemVk->queueFamilyProps = malloc(itemVk->nQueFamilies * sizeof(*itemVk->queueFamilyProps));
+  vkGetPhysicalDeviceQueueFamilyProperties(itemVk->phyDevice,
+                                           &itemVk->nQueFamilies,
+                                           itemVk->queueFamilyProps);
+  vkGetPhysicalDeviceFeatures(itemVk->phyDevice, &itemVk->features);
+
+  /* Look for device extensions */
+  err = vkEnumerateDeviceExtensionProperties(itemVk->phyDevice, NULL, 
+                                             &nExtensions, NULL);
+  assert(!err);
+
+#if defined(VK_USE_PLATFORM_DISPLAY_KHR)
+  err = vkGetPhysicalDeviceDisplayPropertiesKHR(itemVk->phyDevice,
+                                                &itemVk->nDisplayProperties,
+                                                NULL);
+#endif
+
+#define VK__ADD_EXT_IF(X, R)                                                  \
+    if (!strcmp(X, extensions[i].extensionName)) {                            \
+      itemVk->extensionNames[itemVk->nEnabledExtensions++] = X;               \
+      R;                                                                      \
+    }                                                                         \
+    assert(itemVk->nEnabledExtensions < 64);
+
+  if (nExtensions > 0) {
+    extensions = malloc(sizeof(*extensions) * nExtensions);
+    err        = vkEnumerateDeviceExtensionProperties(itemVk->phyDevice, NULL,
+                                                      &nExtensions, extensions);
+    assert(!err);
+
+    for (i = 0; i < nExtensions; i++) {
+      VK__ADD_EXT_IF(VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+                     item->supportsSwapchain = true);
+
+      VK__ADD_EXT_IF("VK_KHR_portability_subset", (void)NULL);
+
+      if (incrementalPresentEnabled) {
+        VK__ADD_EXT_IF(VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME,
+                       item->supportsIncrementalPresent = true);
+      }
+
+      if (displayTimingEnabled) {
+        VK__ADD_EXT_IF(VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME,
+                       item->supportsDisplayTiming = true);
+      }
+    }
+    free(extensions);
+  }
+
+#undef VK__ADD_EXT_IF
+
+  return item;
+}
+
+GPU_HIDE
+GPUPhysicalDevice*
 vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
                                  GPUInstance * __restrict inst,
                                  uint32_t                 maxNumberOfItems) {
+  GPUInstanceVk             *instVk;
+  GPUPhysicalDevice         *firstDevice, *lastDevice, *item;
+  VkPhysicalDevice          *phyDevices;
+  VkInstance                 instRaw;
+  VkResult                   err;
+  uint32_t                   i, gpuCount;
+
+  firstDevice = lastDevice = NULL;
+  instVk      = inst->_priv;
+  instRaw     = instVk->inst;
+
+  gpuCount    = 0;
+  err         = vkEnumeratePhysicalDevices(instRaw, &gpuCount, NULL);
+  assert(!err);
+
+  if (gpuCount <= 0) {
+    ERR_EXIT("vkEnumeratePhysicalDevices reported zero accessible devices.\n\n",
+             "vkEnumeratePhysicalDevices Failure");
+  }
+
+  phyDevices = malloc(sizeof(VkPhysicalDevice) * gpuCount);
+  err        = vkEnumeratePhysicalDevices(instRaw, &gpuCount, phyDevices);
+  assert(!err);
+
+  for (i = 0; i < gpuCount && i < maxNumberOfItems; i++) {
+    item = vk__newPhyDeviceFrom(inst, phyDevices[i]);
+
+    /* add to linked list of devices */
+    if (lastDevice) { lastDevice->next = item; }
+    else            { firstDevice      = item; }
+    lastDevice = item;
+  }
+
+  return firstDevice;
+}
+
+GPU_EXPORT
+GPUPhysicalDevice*
+vk_autoSelectPhysicalDeviceIn(GPUInstance       * __restrict inst,
+                              GPUPhysicalDevice * __restrict deviceList) {
+  GPUPhysicalDevice   *item;
+  GPUPhysicalDeviceVk *itemVk;
+  GPUPhysicalDevice   *devicesByType[VK_PHYSICAL_DEVICE_TYPE_CPU + 1] = {0};
+  uint32_t             i;
+
+  item   = deviceList;
+  itemVk = NULL;
+
+  while (item) {
+    itemVk = item->_priv;
+#if defined(VK_USE_PLATFORM_DISPLAY_KHR)
+    if (itemVk->nDisplayProperties) { goto ok; }
+#else
+    if (!devicesByType[itemVk->props.deviceType]) {
+      devicesByType[itemVk->props.deviceType] = item;
+    }
+#endif
+    item = item->next;
+  }
+
+#ifndef VK_USE_PLATFORM_DISPLAY_KHR
+  GPUPhysicalDevice *priorityList[] = {
+    devicesByType[VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU],
+    devicesByType[VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU],
+    devicesByType[VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU],
+    devicesByType[VK_PHYSICAL_DEVICE_TYPE_CPU],
+    devicesByType[VK_PHYSICAL_DEVICE_TYPE_OTHER]
+  };
+
+  for (i = 0; i < GPU_ARRAY_LEN(priorityList) && !(item = priorityList[i]); ++i);
+#endif
+
+ok:
+  if (!item) { goto err; }
+
+#if DEBUG
+  fprintf(stderr, "Selected GPU: %s, type: %s\n",
+          itemVk->props.deviceName,
+          vk__devicetype_string(itemVk->props.deviceType));
+#endif
+
+  return item;
+
+err:
+  return NULL;
+}
+
+GPU_HIDE
+GPUPhysicalDevice*
+vk_getAutoSelectedPhysicalDevice(GPUInstance * __restrict inst) {
   GPUInstanceVk             *instVk;
   GPUPhysicalDevice         *phyDevice;
   GPUPhysicalDeviceVk       *phyDeviceVk;
   VkPhysicalDevice          *phyDevices;
   VkPhysicalDeviceProperties phyDeviceProps;
   VkInstance                 instRaw;
-  GPUFeatures                gpuFeatures;
   VkResult                   err;
-  uint32_t                   i, gpuCount, nPhyDeviceExtensions;
-  VkBool32                   swapchainExtFound;
+  uint32_t                   gpuCount;
   int                        gpuIndex;
-  bool                       incrementalPresentEnabled, displayTimingEnabled;
 
-  gpuIndex                  = -1;
-  nPhyDeviceExtensions      = 0;
-  swapchainExtFound         = 0;
-  instVk                    = inst->_priv;
-  instRaw                   = instVk->inst;
-  phyDevice                 = calloc(1, sizeof(*phyDevice));
-  phyDeviceVk               = calloc(1, sizeof(*phyDeviceVk));
-  phyDevice->_priv           = phyDeviceVk;
+  gpuIndex         = -1;
+  instVk           = inst->_priv;
+  instRaw          = instVk->inst;
+  phyDevice        = calloc(1, sizeof(*phyDevice));
+  phyDeviceVk      = calloc(1, sizeof(*phyDeviceVk));
+  phyDevice->_priv = phyDeviceVk;
 
-  gpuFeatures               = inst->initParams->optionalFeatures | inst->initParams->requiredFeatures;
-  incrementalPresentEnabled = (gpuFeatures & GPU_FEATURE_INCREMENTAL_PRESENT);
-  displayTimingEnabled      = (gpuFeatures & GPU_FEATURE_DISPLAY_TIMING);
-
-  gpuCount = 0;
-  err      = vkEnumeratePhysicalDevices(instRaw, &gpuCount, NULL);
+  gpuCount         = 0;
+  err              = vkEnumeratePhysicalDevices(instRaw, &gpuCount, NULL);
   assert(!err);
 
   if (gpuCount <= 0) {
@@ -116,8 +281,8 @@ vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
   assert(!err);
 
 #if defined(VK_USE_PLATFORM_DISPLAY_KHR)
-  gpu_number = vk__find_display_gpu(gpu_number, gpu_count, physical_devices);
-  if (gpu_number < 0) {
+  gpuIndex = vk__find_display_gpu(gpu_number, gpu_count, physical_devices);
+  if (gpuIndex < 0) {
     ERR_EXIT("Cannot find any display!\n", "vk__find_display_gpu failure");
   }
 #else
@@ -157,119 +322,19 @@ vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
   }
 #endif
 
-  phyDeviceVk->phyDevice = phyDevices[gpuIndex];
+  phyDevice   = vk__newPhyDeviceFrom(inst, phyDevices[gpuIndex]);
+  phyDeviceVk = phyDevice->_priv;
+
 #if DEBUG
-  {
-    vkGetPhysicalDeviceProperties(phyDeviceVk->phyDevice, &phyDeviceProps);
-    fprintf(stderr, "Selected GPU %d: %s, type: %s\n",
-            gpuIndex,
-            phyDeviceProps.deviceName,
-            vk__devicetype_string(phyDeviceProps.deviceType));
-  }
+  fprintf(stderr, "Selected GPU %d: %s, type: %s\n",
+          gpuIndex,
+          phyDeviceProps.deviceName,
+          vk__devicetype_string(phyDeviceVk->props.deviceType));
 #endif
+
   free(phyDevices);
 
-  /* Look for device extensions */
-  memset(instVk->extensionNames, 0, sizeof(*instVk->extensionNames));
-
-  err = vkEnumerateDeviceExtensionProperties(phyDeviceVk->phyDevice, 
-                                             NULL, 
-                                             &nPhyDeviceExtensions,
-                                             NULL);
-  assert(!err);
-
-  if (nPhyDeviceExtensions > 0) {
-    VkExtensionProperties *device_extensions;
-    device_extensions = malloc(sizeof(*device_extensions) * nPhyDeviceExtensions);
-    err               = vkEnumerateDeviceExtensionProperties(phyDeviceVk->phyDevice,
-                                                             NULL,
-                                                             &nPhyDeviceExtensions,
-                                                             device_extensions);
-    assert(!err);
-
-    for (i = 0; i < nPhyDeviceExtensions; i++) {
-      if (!strcmp(VK_KHR_SWAPCHAIN_EXTENSION_NAME, 
-                  device_extensions[i].extensionName)) {
-        swapchainExtFound = 1;
-        instVk->extensionNames[instVk->nEnabledExtensions++] 
-            = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
-      }
-
-      if (!strcmp("VK_KHR_portability_subset", 
-                  device_extensions[i].extensionName)) {
-        instVk->extensionNames[instVk->nEnabledExtensions++] 
-            = "VK_KHR_portability_subset";
-      }
-      assert(instVk->nEnabledExtensions < 64);
-    }
-
-    if (incrementalPresentEnabled) {
-      // Even though the user "enabled" the extension via the command
-      // line, we must make sure that it's enumerated for use with the
-      // device.  Therefore, disable it here, and re-enable it again if
-      // enumerated.
-      incrementalPresentEnabled = false;
-      for (i = 0; i < nPhyDeviceExtensions; i++) {
-        if (!strcmp(VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME, 
-                    device_extensions[i].extensionName)) {
-          instVk->extensionNames[instVk->nEnabledExtensions++] 
-              = VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME;
-          incrementalPresentEnabled = true;
-        }
-        assert(instVk->nEnabledExtensions < 64);
-      }
-    }
-
-    if (displayTimingEnabled) {
-      // Even though the user "enabled" the extension via the command
-      // line, we must make sure that it's enumerated for use with the
-      // device.  Therefore, disable it here, and re-enable it again if
-      // enumerated.
-      displayTimingEnabled = false;
-      for (i = 0; i < nPhyDeviceExtensions; i++) {
-        if (!strcmp(VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME, 
-                    device_extensions[i].extensionName)) {
-          instVk->extensionNames[instVk->nEnabledExtensions++] 
-              = VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME;
-          displayTimingEnabled = true;
-        }
-        assert(instVk->nEnabledExtensions < 64);
-      }
-    }
-
-    free(device_extensions);
-  }
-
-  vkGetPhysicalDeviceProperties(phyDeviceVk->phyDevice, &phyDeviceVk->props);
-
-  /* Call with NULL data to get count */
-  vkGetPhysicalDeviceQueueFamilyProperties(phyDeviceVk->phyDevice, 
-                                           &phyDeviceVk->queueFamilyCount,
-                                           NULL);
-  assert(phyDeviceVk->queueFamilyCount >= 1);
-
-  phyDeviceVk->queueFamilyProps = malloc(phyDeviceVk->queueFamilyCount 
-                                         * sizeof(*phyDeviceVk->queueFamilyProps));
-  vkGetPhysicalDeviceQueueFamilyProperties(phyDeviceVk->phyDevice,
-                                           &phyDeviceVk->queueFamilyCount,
-                                           phyDeviceVk->queueFamilyProps);
-
-  // Query fine-grained feature support for this device.
-  //  If app has specific feature requirements it should check supported
-  //  features based on this query
-  vkGetPhysicalDeviceFeatures(phyDeviceVk->phyDevice, &phyDeviceVk->physDevFeatures);
-
-  phyDevice->supportsSwapchain          = swapchainExtFound;
-  phyDevice->supportsDisplayTiming      = displayTimingEnabled;
-  phyDevice->supportsIncrementalPresent = incrementalPresentEnabled;
-
   return phyDevice;
-}
-
-GPU_HIDE
-GPUPhysicalDevice*
-vk_autoSelectPhysicalDevice(GPUInstance * __restrict inst) {
-  return NULL;
 }
 
 GPU_HIDE
@@ -442,7 +507,7 @@ GPUDevice*
 vk_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
   GPUPhysicalDevice *phyDevice;
 
-  phyDevice = GPUGetFirstPhysicalDevice(inst);
+  phyDevice = vk_getAutoSelectedPhysicalDevice(inst);
 
   /* TODO: */
   return vk_createDevice(phyDevice, (GPUCommandQueueCreateInfo[]){
@@ -465,6 +530,8 @@ GPU_HIDE
 void
 vk_initDevice(GPUApiDevice* apiDevice) {
   apiDevice->getAvailablePhysicalDevicesBy = vk_getAvailablePhysicalDevicesBy;
+  apiDevice->getAutoSelectedPhysicalDevice = vk_getAutoSelectedPhysicalDevice;
+  apiDevice->autoSelectPhysicalDeviceIn    = vk_autoSelectPhysicalDeviceIn;
   apiDevice->createDevice                  = vk_createDevice;
-  apiDevice->createSystemDefaultDevice     = vk_createSystemDefaultDevice;
+  apiDevice->createSystemDefaultDevice      = vk_createSystemDefaultDevice;
 }
