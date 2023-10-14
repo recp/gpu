@@ -35,4 +35,14 @@
   x;                                                                          \
 })
 
+#define GPU__API()                                                            \
+  ({                                                                          \
+    GPUApi *api;                                                              \
+                                                                              \
+    if (!(api = gpuActiveGPUApi()))                                           \
+      return NULL;                                                            \
+                                                                              \
+    api;                                                                      \
+  })                                                                          \
+
 #endif /* backend_common_h */
