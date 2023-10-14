@@ -30,14 +30,28 @@ gpu_cmdoncomplete(void * __restrict sender, MtCommandBuffer *cmdb);
 GPU_HIDE
 GPUCommandQueue*
 mt_newCommandQueue(GPUDevice * __restrict device) {
-  GPUCommandQueue *cq;
-  MtCommandQueue  *mcq;
-  
-  mcq      = mtNewCommandQueue(device->_priv);
-  cq       = calloc(1, sizeof(*cq));
-  cq->_priv = mcq;
-  
-  return cq;
+  GPUDeviceMT        *deviceMT;
+  GPUCommandQueue    *que;
+  id<MTLCommandQueue> queMT;
+
+  deviceMT   = device->_priv;
+  queMT      = [deviceMT->device newCommandQueue];
+  que        = calloc(1, sizeof(*que));
+  que->_priv = queMT;
+
+  return que;
+}
+
+GPU_HIDE
+GPUCommandQueue*
+mt_getCommandQueue(GPUDevice * __restrict device,
+                   GPUQueueFlagBits       bits) {
+  GPUCommandQueue *que;
+  GPUDeviceMT     *deviceMT;
+
+  deviceMT = device->_priv;
+
+  return que;
 }
 
 GPU_HIDE
@@ -96,6 +110,7 @@ GPU_HIDE
 void
 mt_initCmdQue(GPUApiCommandQueue *api) {
   api->newCommandQueue         = mt_newCommandQueue;
+  api->getCommandQueue         = mt_getCommandQueue;
   api->newCommandBuffer        = mt_newCommandBuffer;
   api->commandBufferOnComplete = mt_ccmdbufOnComplete;
   api->commit                  = mt_cmdbufCommit;

@@ -115,15 +115,17 @@ mt_createSwapChain(GPUApi          * __restrict api,
                    GPUSurface      * __restrict surface,
                    GPUExtent2D                  size,
                    bool                         autoResize) {
+  GPUDeviceMT       *deviceMT;
   GPUSwapChain      *swapChain;
   GPUSwapChainMetal *swapChainMtl;
   GPUSwapChainObjc  *objc;
 
+  deviceMT                            = device->_priv;
   swapChain                           = calloc(1, sizeof(*swapChain));
   swapChainMtl                        = calloc(1, sizeof(*swapChainMtl));
   swapChainMtl->layer                 = [CAMetalLayer layer];
   swapChainMtl->layer.bounds          = CGRectMake(0, 0, size.width, size.height);
-  swapChainMtl->layer.device          = device->_priv;
+  swapChainMtl->layer.device          = deviceMT->device;
   //  swapChainMtl->layer.pixelFormat     = MTLPixelFormatBGRA8Unorm;
   swapChainMtl->layer.opaque          = YES;
   swapChainMtl->layer.contentsScale   = surface->scale;
@@ -152,15 +154,17 @@ mt_createSwapChainForView(struct GPUApi          * __restrict api,
                           uint32_t                            width,
                           uint32_t                            height,
                           bool                                autoResize) {
+  GPUDeviceMT       *deviceMT;
   GPUSwapChain      *swapChain;
   GPUSwapChainMetal *swapChainMtl;
   GPUSwapChainObjc  *objc;
 
+  deviceMT                            = device->_priv;
   swapChain                           = calloc(1, sizeof(*swapChain));
   swapChainMtl                        = calloc(1, sizeof(*swapChainMtl));
   swapChainMtl->layer                 = [CAMetalLayer layer];
   swapChainMtl->layer.bounds          = CGRectMake(0, 0, width, height);
-  swapChainMtl->layer.device          = device->_priv;
+  swapChainMtl->layer.device          = deviceMT->device;
   //  swapChainMtl->layer.pixelFormat     = MTLPixelFormatBGRA8Unorm;
   swapChainMtl->layer.opaque          = YES;
   swapChainMtl->layer.contentsScale   = backingScaleFactor;
@@ -187,15 +191,17 @@ mt_createSwapChainForLayer(struct GPUApi          * __restrict api,
                            uint32_t                            width,
                            uint32_t                            height,
                            bool                                autoResize) {
+  GPUDeviceMT       *deviceMT;
   GPUSwapChain      *swapChain;
   GPUSwapChainMetal *swapChainMtl;
   GPUSwapChainObjc  *objc;
 
+  deviceMT                            = device->_priv;
   swapChain                           = calloc(1, sizeof(*swapChain));
   swapChainMtl                        = calloc(1, sizeof(*swapChainMtl));
   swapChainMtl->layer                 = [CAMetalLayer layer];
   swapChainMtl->layer.bounds          = CGRectMake(0, 0, width, height);
-  swapChainMtl->layer.device          = device->_priv;
+  swapChainMtl->layer.device          = deviceMT->device;
   //  swapChainMtl->layer.pixelFormat     = MTLPixelFormatBGRA8Unorm;
   swapChainMtl->layer.opaque          = YES;
   swapChainMtl->layer.contentsScale   = backingScaleFactor;

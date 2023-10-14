@@ -34,10 +34,12 @@ GPU_HIDE
 GPURenderPipelineState*
 mt_newRenderState(GPUDevice         * __restrict device,
                   GPURenderPipeline * __restrict pipeline) {
+  GPUDeviceMT            *deviceMT;
   GPURenderPipelineState *rederPipline;
   MtRenderPipeline       *mtRederPipline;
   
-  mtRederPipline = mtNewRenderState(device->_priv, pipeline->_priv, NULL);
+  deviceMT       = device->_priv;
+  mtRederPipline = mtNewRenderState(deviceMT->device, pipeline->_priv, NULL);
   rederPipline   = calloc(1, sizeof(*rederPipline));
   
   rederPipline->_priv = mtRederPipline;
@@ -47,9 +49,9 @@ mt_newRenderState(GPUDevice         * __restrict device,
 
 GPU_HIDE
 void
-mt_setFunction(GPURenderPipeline    * __restrict pipline,
-               GPUFunction    * __restrict func,
-               GPUFunctionType             functype) {
+mt_setFunction(GPURenderPipeline * __restrict pipline,
+               GPUFunction       * __restrict func,
+               GPUFunctionType                functype) {
   mtSetFunc(pipline->_priv, func->_priv, (MtFuncType)functype);
 }
 

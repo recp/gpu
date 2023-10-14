@@ -19,10 +19,12 @@
 GPU_EXPORT
 GPULibrary*
 mt_defaultLibrary(GPUDevice *device) {
-  GPULibrary *library;
-  MtLibrary  *mtLibrary;
+  GPUDeviceMT *deviceMT;
+  GPULibrary  *library;
+  MtLibrary   *mtLibrary;
 
-  mtLibrary = mtNewDefaultLibrary(device->_priv);
+  deviceMT  = device->_priv;
+  mtLibrary = mtNewDefaultLibrary(deviceMT->device);
   library   = calloc(1, sizeof(*library));
 
   library->_priv = mtLibrary;

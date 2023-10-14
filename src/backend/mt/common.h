@@ -42,6 +42,12 @@ typedef struct GPUSwapChainMetal {
   CAMetalLayer *layer;
   void         *objc;
 } GPUSwapChainMetal;
-#endif
 
+typedef struct GPUDeviceMT {
+  id<MTLDevice>     device;
+  GPUCommandQueue **createdQueues;
+  uint32_t          nCreatedQueues;
+} GPUDeviceMT;
+
+#endif
 #endif /* metal_common_h */

@@ -80,12 +80,19 @@ GPUDevice *
 mt_createDevice(GPUPhysicalDevice        *phyDevice,
                 GPUCommandQueueCreateInfo queCI[],
                 uint32_t                  nQueCI) {
-  GPUDevice *device;
-  device  = calloc(1, sizeof(*device));
+  GPUDevice   *device;
+  GPUDeviceMT *deviceMT;
 
-  device->_priv     = phyDevice->_priv;
-  device->inst      = phyDevice->inst;
-  device->phyDevice = phyDevice;
+  device                   = calloc(1, sizeof(*device));
+  deviceMT                 = calloc(1, sizeof(*deviceMT));
+
+  deviceMT->device         = phyDevice->_priv;
+  deviceMT->nCreatedQueues = nQueCI;
+  deviceMT->createdQueues  = calloc(nQueCI, sizeof(void*));
+
+  device->_priv            = deviceMT;
+  device->inst             = phyDevice->inst;
+  device->phyDevice        = phyDevice;
 
   /* TODO: queCI is ignored for metal for now. */
 
@@ -94,19 +101,15 @@ mt_createDevice(GPUPhysicalDevice        *phyDevice,
 
 GPU_HIDE
 GPUDevice*
-mt_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
+mt_createSystemDefaultDevice(GPUInstance * __restrict inst) {
   GPUPhysicalDevice *phyDevice;
-  GPUDevice         *device;
 
   /* TODO: keep global reference of phyDevice for mem management */
-  phyDevice         = mt_getAutoSelectedPhysicalDevice(inst);
-  device            = calloc(1, sizeof(*device));
+  if (!(phyDevice = mt_getAutoSelectedPhysicalDevice(inst))) {
+    return NULL;
+  }
 
-  device->_priv     = phyDevice->_priv;
-  device->inst      = inst;
-  device->phyDevice = phyDevice;
-
-  return device;
+  return mt_createDevice(phyDevice, NULL, 0);
 }
 
 GPU_HIDE

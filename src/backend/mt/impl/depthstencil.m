@@ -35,10 +35,12 @@ GPU_EXPORT
 GPUDepthStencilState*
 mt_newDepthStencilState(GPUDevice       * __restrict device,
                         GPUDepthStencil * __restrict depthStencil) {
+  GPUDeviceMT          *deviceMT;
   GPUDepthStencilState *depthStencilState;
   MtRenderPipeline     *mtDepthStencilState;
   
-  mtDepthStencilState = mtNewDepthStencilState(device->_priv, depthStencil->_priv);
+  deviceMT            = device->_priv;
+  mtDepthStencilState = mtNewDepthStencilState(deviceMT->device, depthStencil->_priv);
   depthStencilState   = calloc(1, sizeof(*depthStencilState));
   
   depthStencilState->_priv = mtDepthStencilState;
@@ -73,10 +75,12 @@ GPUMakeTextureDesc(uint32_t width, uint32_t height, GPUPixelFormat format) {
 GPU_EXPORT
 GPUTexture*
 GPUNewTextureWith(GPUDevice * __restrict device, GPUTextureDesc * __restrict desc) {
+  GPUDeviceMT          *deviceMT;
   MTLTextureDescriptor *texdesc;
   id<MTLDevice>         mtlDevice;
 
-  mtlDevice = device->_priv;
+  deviceMT  = device->_priv;
+  mtlDevice = deviceMT->device;
 
   texdesc             = [MTLTextureDescriptor new];
   texdesc.pixelFormat = desc->format;
