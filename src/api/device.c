@@ -35,7 +35,7 @@ GPUGetAvailablePhysicalDevicesBy(GPUInstance *inst, uint32_t maxNumberOfItems) {
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->device.getAvailablePhysicalDevicesBy(api, inst, maxNumberOfItems);
+  return api->device.getAvailablePhysicalDevicesBy(inst, maxNumberOfItems);
 }
 
 GPU_EXPORT

@@ -28,8 +28,9 @@
 
 typedef struct GPUPhysicalDeviceDX12 {
   /* IDXGIAdapter1*dxgiAdapter; */
-  IUnknown *dxgiAdapter;
-  bool      isWarp;
+  IUnknown          *dxgiAdapter;
+  DXGI_ADAPTER_DESC1 desc1;
+  bool               isWarp;
 } GPUPhysicalDeviceDX12;
 
 typedef struct GPUInstanceDX12 {
