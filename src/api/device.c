@@ -24,7 +24,7 @@ GPUCreateSystemDefaultDevice(GPUInstance *inst) {
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->device.createSystemDefaultDevice(api, inst);
+  return api->device.createSystemDefaultDevice(inst);
 }
 
 GPU_EXPORT

@@ -157,8 +157,7 @@ vk__newPhyDeviceFrom(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 
 GPU_HIDE
 GPUPhysicalDevice*
-vk_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
-                                 GPUInstance * __restrict inst,
+vk_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
                                  uint32_t                 maxNumberOfItems) {
   GPUInstanceVk             *instVk;
   GPUPhysicalDevice         *firstDevice, *lastDevice, *item;
@@ -504,7 +503,7 @@ err:
 
 GPU_HIDE
 GPUDevice*
-vk_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
+vk_createSystemDefaultDevice(GPUInstance * __restrict inst) {
   GPUPhysicalDevice *phyDevice;
 
   phyDevice = vk_getAutoSelectedPhysicalDevice(inst);
@@ -533,5 +532,5 @@ vk_initDevice(GPUApiDevice* apiDevice) {
   apiDevice->getAutoSelectedPhysicalDevice = vk_getAutoSelectedPhysicalDevice;
   apiDevice->autoSelectPhysicalDeviceIn    = vk_autoSelectPhysicalDeviceIn;
   apiDevice->createDevice                  = vk_createDevice;
-  apiDevice->createSystemDefaultDevice      = vk_createSystemDefaultDevice;
+  apiDevice->createSystemDefaultDevice     = vk_createSystemDefaultDevice;
 }

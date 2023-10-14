@@ -18,8 +18,7 @@
 
 GPU_HIDE
 GPUPhysicalDevice *
-mt_getAvailablePhysicalDevicesBy(GPUApi      * __restrict api,
-                                 GPUInstance * __restrict inst,
+mt_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
                                  uint32_t                 maxNumberOfItems) {
   NSArray<id<MTLDevice>> *devices;
   GPUPhysicalDevice      *firstDevice, *lastDevice, *item;

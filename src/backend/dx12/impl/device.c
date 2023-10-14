@@ -180,21 +180,19 @@ dx12_getAutoSelectedPhysicalDevice(GPUInstance *__restrict inst) {
 
 GPU_HIDE
 GPUDevice*
-dx12_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
+dx12_createSystemDefaultDevice(GPUInstance * __restrict inst) {
   GPUInstanceDX12       *instDX12;
   GPUPhysicalDevice     *phyDevice;
   GPUPhysicalDeviceDX12 *phyDeviceDX12;
   GPUDevice             *device;
   ID3D12Device          *d3dDevice;
-  GPU__DX12             *dx12api;
   HRESULT                hr;
 
   if (!(phyDevice = dx12_getAutoSelectedPhysicalDevice(inst))
-    || !(phyDeviceDX12 = phyDevice->_priv)) {
+      || !(phyDeviceDX12 = phyDevice->_priv)) {
     goto err;
   }
 
-  dx12api   = api->reserved;
   instDX12  = inst->_priv;
   d3dDevice = NULL;
 
@@ -207,12 +205,6 @@ dx12_createSystemDefaultDevice(GPUApi *api, GPUInstance * __restrict inst) {
   device->inst      = inst;
   device->_priv     = d3dDevice;
   device->phyDevice = phyDevice;
-
-  // TODO: remove
-  dx12api              = api->reserved;
-  dx12api->adapter     = phyDeviceDX12->dxgiAdapter;
-  dx12api->d3dDevice   = d3dDevice;
-  dx12api->dxgiFactory = instDX12->dxgiFactory;
 
   return device;
 
