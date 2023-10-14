@@ -51,8 +51,8 @@ GPUGetAutoSelectedPhysicalDevice(GPUInstance *inst);
 
 GPU_EXPORT
 GPUPhysicalDevice*
-GPUAutoSelectPhysicalDeviceBetween(GPUInstance       * __restrict inst,
-                                   GPUPhysicalDevice * __restrict deviceList);
+GPUAutoSelectPhysicalDeviceIn(GPUInstance       * __restrict inst,
+                              GPUPhysicalDevice * __restrict deviceList);
 
 GPU_INLINE
 GPUPhysicalDevice *
