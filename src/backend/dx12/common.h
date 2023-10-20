@@ -17,7 +17,7 @@
 #ifndef dx12_common_h
 #define dx12_common_h
 
-#include "../../common.h"
+#include "../common.h"
 
 #include <dxgi1_4.h>
 #include <d3d12.h>

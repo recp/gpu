@@ -17,7 +17,7 @@
 #ifndef vk_common_h
 #define vk_common_h
 
-#include "../../common.h"
+#include "../common.h"
 #include <stdarg.h>
 #include <assert.h>
 #include <inttypes.h>
