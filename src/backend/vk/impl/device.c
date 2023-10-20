@@ -406,11 +406,9 @@ GPUDevice*
 vk_createDevice(GPUPhysicalDevice * __restrict phyDevice,
                 GPUCommandQueueCreateInfo      queCI[],
                 uint32_t                       nQueCI) {
-  GPUInstance            *inst;
   GPUDevice              *device;
   GPUDeviceVk            *deviceVk;
   GPUPhysicalDeviceVk    *phyDeviceVk;
-  GPUInstanceVk          *instVk;
   GPUCommandQueue        **createdQueues;
   float                  *queuePriorities;
   VkResult U_ASSERT_ONLY  err;
@@ -425,9 +423,7 @@ vk_createDevice(GPUPhysicalDevice * __restrict phyDevice,
   nQueues          = 0;
   maxQueCount      = 0;
   queueFamilies    = 0;
-  inst             = phyDevice->inst;
   phyDeviceVk      = phyDevice->_priv;
-  instVk           = inst->_priv;
   deviceVk         = calloc(1, sizeof(*deviceVk));
   device           = calloc(1, sizeof(*device));
 
@@ -466,11 +462,11 @@ vk_createDevice(GPUPhysicalDevice * __restrict phyDevice,
   deviceCI.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceCI.queueCreateInfoCount    = nQueues;
   deviceCI.pQueueCreateInfos       = queues;
-  deviceCI.enabledExtensionCount   = instVk->nEnabledExtensions;
-  deviceCI.ppEnabledExtensionNames = (void *)instVk->extensionNames;
+  deviceCI.enabledExtensionCount   = phyDeviceVk->nEnabledExtensions;
+  deviceCI.ppEnabledExtensionNames = (void *)phyDeviceVk->extensionNames;
 
   err = vkCreateDevice(phyDeviceVk->phyDevice, &deviceCI, NULL, &deviceVk->device);
-  if(!err) {
+  if(err) {
 #if DEBUG
     fprintf(stderr, "vkCreateDevice failed: %d\n", err);
 #endif
@@ -482,8 +478,8 @@ vk_createDevice(GPUPhysicalDevice * __restrict phyDevice,
     createdQueues[i] = vk__createCmdQueue(deviceVk, &queues[i]);
   }
 
-  device->_priv             = deviceVk;
-  device->inst             = inst;
+  device->_priv            = deviceVk;
+  device->inst             = phyDevice->inst;
   device->phyDevice        = phyDevice;
   device->queueFamilies    = queueFamilies;
 
