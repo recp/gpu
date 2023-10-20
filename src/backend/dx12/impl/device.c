@@ -179,44 +179,10 @@ dx12_getAutoSelectedPhysicalDevice(GPUInstance *__restrict inst) {
 }
 
 GPU_HIDE
-GPUDevice*
-dx12_createSystemDefaultDevice(GPUInstance * __restrict inst) {
-  GPUInstanceDX12       *instDX12;
-  GPUPhysicalDevice     *phyDevice;
-  GPUPhysicalDeviceDX12 *phyDeviceDX12;
-  GPUDevice             *device;
-  ID3D12Device          *d3dDevice;
-  HRESULT                hr;
-
-  if (!(phyDevice = dx12_getAutoSelectedPhysicalDevice(inst))
-      || !(phyDeviceDX12 = phyDevice->_priv)) {
-    goto err;
-  }
-
-  instDX12  = inst->_priv;
-  d3dDevice = NULL;
-
-  DXCHECK(D3D12CreateDevice(phyDeviceDX12->dxgiAdapter,
-                            D3D_FEATURE_LEVEL_11_0,
-                            &IID_ID3D12Device,
-                            (void **)&d3dDevice));
-
-  device            = calloc(1, sizeof(*device));
-  device->inst      = inst;
-  device->_priv     = d3dDevice;
-  device->phyDevice = phyDevice;
-
-  return device;
-
-err:
-  dxThrowIfFailed(hr);
-
-  return NULL;
-}
-
-GPU_HIDE
 GPUDevice *
-dx12_createDevice(GPUPhysicalDevice *phyDevice) {
+dx12_createDevice(GPUPhysicalDevice * __restrict phyDevice,
+                  GPUCommandQueueCreateInfo      queCI[],
+                  uint32_t                       nQueCI) {
   GPUInstance           *inst;
   GPUInstanceDX12       *instDX12;
   GPUPhysicalDeviceDX12 *phyDeviceDX12;
@@ -229,6 +195,8 @@ dx12_createDevice(GPUPhysicalDevice *phyDevice) {
     || !(phyDeviceDX12 = phyDevice->_priv)) {
     goto err;
   }
+
+  GPU__DEFINE_DEFAULT_QUEUES_IF_NEEDED(nQueCI, queCI);
 
   instDX12  = inst->_priv;
   d3dDevice = NULL;
@@ -247,6 +215,21 @@ dx12_createDevice(GPUPhysicalDevice *phyDevice) {
 err:
   dxThrowIfFailed(hr);
 
+  return NULL;
+}
+
+GPU_HIDE
+GPUDevice*
+dx12_createSystemDefaultDevice(GPUInstance * __restrict inst) {
+  GPUPhysicalDevice *phyDevice;
+
+  if (!(phyDevice = dx12_getAutoSelectedPhysicalDevice(inst))) {
+    goto err;
+  }
+
+  return dx12_createDevice(phyDevice, NULL, 0);
+
+err:
   return NULL;
 }
 

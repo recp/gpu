@@ -419,6 +419,8 @@ vk_createDevice(GPUPhysicalDevice * __restrict phyDevice,
   GPUQueueFlagBits        queueFamilies;
   uint32_t                i, queueFamilyIndex, nQueues, maxQueCount;
 
+  GPU__DEFINE_DEFAULT_QUEUES_IF_NEEDED(nQueCI, queCI);
+
   queueFamilyIndex = UINT32_MAX;
   nQueues          = 0;
   maxQueCount      = 0;
@@ -460,11 +462,6 @@ vk_createDevice(GPUPhysicalDevice * __restrict phyDevice,
     nQueues++;
   }
 
-  createdQueues = calloc(nQueues, sizeof(*createdQueues));
-  for (i = 0; i < nQueues; i++) {
-    createdQueues[i] = vk__createCmdQueue(deviceVk, &queues[i]);
-  }
-
   /* If specific features are required, pass them in here: pEnabledFeatures */
   deviceCI.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceCI.queueCreateInfoCount    = nQueues;
@@ -478,6 +475,11 @@ vk_createDevice(GPUPhysicalDevice * __restrict phyDevice,
     fprintf(stderr, "vkCreateDevice failed: %d\n", err);
 #endif
     goto err;
+  }
+
+  createdQueues = calloc(nQueues, sizeof(*createdQueues));
+  for (i = 0; i < nQueues; i++) {
+    createdQueues[i] = vk__createCmdQueue(deviceVk, &queues[i]);
   }
 
   device->_priv             = deviceVk;

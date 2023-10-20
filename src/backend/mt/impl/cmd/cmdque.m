@@ -51,6 +51,9 @@ mt_getCommandQueue(GPUDevice * __restrict device,
 
   deviceMT = device->_priv;
 
+  /* TODO: select wisely */
+  que      = deviceMT->createdQueues[0];
+
   return que;
 }
 

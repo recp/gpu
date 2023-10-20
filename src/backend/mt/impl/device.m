@@ -89,6 +89,8 @@ mt_createDevice(GPUPhysicalDevice        *phyDevice,
   GPUDeviceMT *deviceMT;
   uint32_t     i;
 
+  GPU__DEFINE_DEFAULT_QUEUES_IF_NEEDED(nQueCI, queCI)
+
   device                   = calloc(1, sizeof(*device));
   deviceMT                 = calloc(1, sizeof(*deviceMT));
 
