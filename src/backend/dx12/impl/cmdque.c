@@ -19,16 +19,18 @@
 GPU_HIDE
 GPUCommandQueue*
 dx12_newCommandQueue(GPUDevice* __restrict device) {
+  GPUDeviceDX12           *deviceDX12;
   GPUCommandQueue         *cq;
   ID3D12Device            *d3dDevice;
   ID3D12CommandQueue      *commandQueue;
-  D3D12_COMMAND_QUEUE_DESC queueDesc = { 0 };
+  D3D12_COMMAND_QUEUE_DESC queueDesc = {0};
   HRESULT                  hr;
 
+  deviceDX12      = device->_priv;
   queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
   queueDesc.Type  = D3D12_COMMAND_LIST_TYPE_DIRECT;
 
-  d3dDevice = (ID3D12Device*)device->_priv;
+  d3dDevice = deviceDX12->d3dDevice;
   hr        = d3dDevice->lpVtbl->CreateCommandQueue(d3dDevice, 
                                                     &queueDesc, 
                                                     &IID_ID3D12CommandQueue,
@@ -43,9 +45,26 @@ dx12_newCommandQueue(GPUDevice* __restrict device) {
 }
 
 GPU_HIDE
+GPUCommandQueue*
+dx12_getCommandQueue(GPUDevice *__restrict device,
+                     GPUQueueFlagBits      bits) {
+  GPUCommandQueue *que;
+  GPUDeviceDX12   *deviceDX12;
+
+  deviceDX12 = device->_priv;
+
+  /* TODO: select wisely */
+  que = deviceDX12->createdQueues[0];
+
+  return que;
+}
+
+GPU_HIDE
 void
 dx12_initCmdQue(GPUApiCommandQueue* api) {
   api->newCommandQueue = dx12_newCommandQueue;
+  api->getCommandQueue = dx12_getCommandQueue;
+
   // api->newCommandBuffer        = mt_newCommandBuffer;
   // api->commandBufferOnComplete = mt_ccmdbufOnComplete;
   // api->commit                  = mt_cmdbufCommit;

@@ -33,6 +33,12 @@ typedef struct GPUPhysicalDeviceDX12 {
   bool               isWarp;
 } GPUPhysicalDeviceDX12;
 
+typedef struct GPUDeviceDX12 {
+  ID3D12Device     *d3dDevice;
+  GPUCommandQueue **createdQueues;
+  uint32_t          nCreatedQueues;
+} GPUDeviceDX12;
+
 typedef struct GPUInstanceDX12 {
   IDXGIFactory4 *dxgiFactory;
   UINT           dxgiFactoryFlags;

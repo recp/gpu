@@ -17,6 +17,10 @@
 #include "../common.h"
 
 GPU_HIDE
+GPUCommandQueue *
+dx12_newCommandQueue(GPUDevice *__restrict device);
+
+GPU_HIDE
 GPUPhysicalDevice *
 dx12_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
                                    uint32_t                 maxNumberOfItems) {
@@ -187,9 +191,12 @@ dx12_createDevice(GPUPhysicalDevice * __restrict phyDevice,
   GPUInstanceDX12       *instDX12;
   GPUPhysicalDeviceDX12 *phyDeviceDX12;
   GPUDevice             *device;
-  ID3D12Device          *d3dDevice;
+  GPUDeviceDX12         *deviceDX12;
   GPU__DX12             *dx12api;
   HRESULT                hr;
+  uint32_t               i;
+
+  deviceDX12 = NULL;
 
   if (!(inst = phyDevice->inst)
     || !(phyDeviceDX12 = phyDevice->_priv)) {
@@ -198,22 +205,35 @@ dx12_createDevice(GPUPhysicalDevice * __restrict phyDevice,
 
   GPU__DEFINE_DEFAULT_QUEUES_IF_NEEDED(nQueCI, queCI);
 
-  instDX12  = inst->_priv;
-  d3dDevice = NULL;
+  instDX12   = inst->_priv;
+  deviceDX12 = calloc(1, sizeof(*deviceDX12));
 
   DXCHECK(D3D12CreateDevice(phyDeviceDX12->dxgiAdapter,
                             D3D_FEATURE_LEVEL_11_0,
                             &IID_ID3D12Device,
-                            (void **)&d3dDevice));
-                    
+                            (void **)&deviceDX12->d3dDevice));
+
+  GPU__DEFINE_DEFAULT_QUEUES_IF_NEEDED(nQueCI, queCI)
+
   device            = calloc(1, sizeof(*device));
   device->inst      = inst;
-  device->_priv     = d3dDevice;
+  device->_priv     = deviceDX12;
   device->phyDevice = phyDevice;
+
+  if (nQueCI) {
+    deviceDX12->nCreatedQueues = nQueCI;
+    deviceDX12->createdQueues  = calloc(nQueCI, sizeof(void *));
+
+    for (i = 0; i < nQueCI; i++) {
+      deviceDX12->createdQueues[i] = dx12_newCommandQueue(device);
+    }
+  }
 
   return device;
 err:
   dxThrowIfFailed(hr);
+
+  if (deviceDX12) { free(deviceDX12); }
 
   return NULL;
 }

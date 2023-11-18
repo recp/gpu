@@ -25,6 +25,7 @@ GPUDescriptorPool*
 dx12_createDescriptorPool(GPUApi    * __restrict api,
                           GPUDevice *__restrict device) {
   D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {0};
+  GPUDeviceDX12             *deviceDX12;
   ID3D12Device              *d3dDevice;
   GPU__DX12                 *dx12api;
   ID3D12DescriptorHeap      *descHeap;
@@ -32,8 +33,9 @@ dx12_createDescriptorPool(GPUApi    * __restrict api,
   GPUDescriptorPool         *descPool;
   HRESULT                    hr;
 
-  d3dDevice = device->_priv;
-  dx12api   = api->reserved;
+  deviceDX12 = device->_priv;
+  d3dDevice  = deviceDX12->d3dDevice;
+  dx12api    = api->reserved;
 
   srvHeapDesc.NumDescriptors = 1;
   srvHeapDesc.Type           = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;

@@ -26,6 +26,7 @@ dx12_createSwapChain(GPUApi          * __restrict api,
                      bool                         autoResize) {
   GPUInstance                *inst;
   GPUInstanceDX12            *instDX12;
+  GPUDeviceDX12              *deviceDX12;
   GPUSwapChain               *swapChain;
   ID3D12Device               *d3dDevice;
   ID3D12CommandQueue         *cmdQueDX12;
@@ -42,8 +43,9 @@ dx12_createSwapChain(GPUApi          * __restrict api,
   UINT                        i, frameIndex;
   SIZE_T                      rtvDescriptorSize;
 
-  inst     = device->inst;
-  instDX12 = inst->_priv;
+  inst       = device->inst;
+  deviceDX12 = device->_priv;
+  instDX12   = inst->_priv;
 
   swapChainDX12                  = NULL;
   swapChainDesc.BufferCount      = FrameCount;
@@ -54,7 +56,7 @@ dx12_createSwapChain(GPUApi          * __restrict api,
   swapChainDesc.SwapEffect       = DXGI_SWAP_EFFECT_FLIP_DISCARD;
   swapChainDesc.SampleDesc.Count = 1;
 
-  d3dDevice   = device->_priv;
+  d3dDevice   = deviceDX12->d3dDevice;
   cmdQueDX12  = cmdQue->_priv;
   dxgiFactory = instDX12->dxgiFactory;
 
