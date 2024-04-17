@@ -29,25 +29,25 @@
                       change:   (NSDictionary *)change
                       context:  (void *)context {
   if ([keyPath isEqualToString:@"bounds"]) {
-    // Here, adjust the frame of the CAMetalLayer to match the parent layer.
-    CGRect newFrame = [change[NSKeyValueChangeNewKey] CGRectValue];
-    swapChainMtl->layer.frame = newFrame;
-
-
-    CGSize drawableSize = CGSizeMake(newFrame.size.width * backingScaleFactor, 
+    CGRect newFrame     = [change[NSKeyValueChangeNewKey] CGRectValue];
+    CGSize drawableSize = CGSizeMake(newFrame.size.width  * backingScaleFactor,
                                      newFrame.size.height * backingScaleFactor);
+
+    swapChainMtl->layer.frame        = newFrame;
     swapChainMtl->layer.drawableSize = drawableSize;
   }
 }
 - (void)dealloc {
   [super dealloc];
-  [swapChainMtl->layer removeObserver: self forKeyPath:@"frame"];
+  [swapChainMtl->layer removeObserver: self forKeyPath: @"frame"];
 }
 @end
 
 GPU_EXPORT
 void
-mt_swapChainAttachToLayer(GPUSwapChain* swapChain, void* targetLayer, bool autoResize) {
+mt_swapChainAttachToLayer(GPUSwapChain * __restrict swapChain,
+                          void         * __restrict targetLayer,
+                          bool                      autoResize) {
   GPUSwapChainMetal *swapChainMtl;
   GPUViewLayer      *_targetLayer;
 
@@ -69,7 +69,10 @@ mt_swapChainAttachToLayer(GPUSwapChain* swapChain, void* targetLayer, bool autoR
 
 GPU_EXPORT
 void
-mt_swapChainAttachToView(GPUSwapChain* swapChain, void *viewHandle, bool autoResize, bool replace) {
+mt_swapChainAttachToView(GPUSwapChain * __restrict swapChain,
+                         void         * __restrict viewHandle,
+                         bool                      autoResize, 
+                         bool                      replace) {
   GPUSwapChainMetal *swapChainMtl;
   GPUViewHandle     *_viewHandle;
 
@@ -93,7 +96,7 @@ mt_swapChainAttachToView(GPUSwapChain* swapChain, void *viewHandle, bool autoRes
     [_viewHandle.layer addSublayer:swapChainMtl->layer];
   }
 #else
-#error "Unsupported platform"
+#  error "Unsupported platform"
 #endif
 
   // Set the frame for the CAMetalLayer
