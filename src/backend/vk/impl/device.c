@@ -234,7 +234,7 @@ vk_autoSelectPhysicalDeviceIn(GPUInstance       * __restrict inst,
 ok:
   if (!item) { goto err; }
 
-#if DEBUG
+#ifdef DEBUG
   fprintf(stderr, "Selected GPU: %s, type: %s\n",
           itemVk->props.deviceName,
           vk__devicetype_string(itemVk->props.deviceType));
@@ -324,7 +324,7 @@ vk_getAutoSelectedPhysicalDevice(GPUInstance * __restrict inst) {
   phyDevice   = vk__newPhyDeviceFrom(inst, phyDevices[gpuIndex]);
   phyDeviceVk = phyDevice->_priv;
 
-#if DEBUG
+#ifdef DEBUG
   fprintf(stderr, "Selected GPU %d: %s, type: %s\n",
           gpuIndex,
           phyDeviceProps.deviceName,
@@ -467,7 +467,7 @@ vk_createDevice(GPUPhysicalDevice * __restrict phyDevice,
 
   err = vkCreateDevice(phyDeviceVk->phyDevice, &deviceCI, NULL, &deviceVk->device);
   if(err) {
-#if DEBUG
+#ifdef DEBUG
     fprintf(stderr, "vkCreateDevice failed: %d\n", err);
 #endif
     goto err;

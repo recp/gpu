@@ -158,7 +158,7 @@ dx12_autoSelectPhysicalDeviceIn(GPUInstance       * __restrict inst,
 
   if (!item) { goto err; }
 
-#if DEBUG
+#ifdef DEBUG
   desc = &((GPUPhysicalDeviceDX12 *)item->_priv)->desc1; /* Directly access stored description */
   fprintf(stderr, "Selected GPU: %S, type: %d\n", desc->Description, desc->VendorId);
 #endif
