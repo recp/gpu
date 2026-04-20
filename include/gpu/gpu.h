@@ -50,6 +50,7 @@ extern "C" {
 #include "frame.h"
 #include "feature.h"
 #include "descriptor.h"
+#include "bindgroup.h"
 #include "sampler.h"
 #include "instance.h"
 #include "surface.h"

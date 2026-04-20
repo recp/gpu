@@ -11,6 +11,10 @@ struct VSOut {
   float4 color;
 };
 
+struct FragmentUniforms {
+  float4 tint;
+};
+
 vertex VSOut tri_vs(VSIn in [[stage_in]]) {
   VSOut out;
   out.position = float4(in.position, 0.0, 1.0);
@@ -18,6 +22,7 @@ vertex VSOut tri_vs(VSIn in [[stage_in]]) {
   return out;
 }
 
-fragment float4 tri_fs(VSOut in [[stage_in]]) {
-  return in.color;
+fragment float4 tri_fs(VSOut in [[stage_in]],
+                       constant FragmentUniforms& uniforms [[buffer(0)]]) {
+  return in.color * uniforms.tint;
 }

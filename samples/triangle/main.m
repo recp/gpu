@@ -1,5 +1,7 @@
 #import <AppKit/AppKit.h>
+#include <math.h>
 #import <mach-o/dyld.h>
+#import <QuartzCore/QuartzCore.h>
 
 #import "../../include/gpu/gpu.h"
 
@@ -7,6 +9,10 @@ typedef struct TriangleVertex {
   float position[2];
   float color[4];
 } TriangleVertex;
+
+typedef struct FragmentUniforms {
+  float tint[4];
+} FragmentUniforms;
 
 static const TriangleVertex kTriangleVertices[] = {
   { {  0.0f,  0.65f }, { 1.0f, 0.2f, 0.2f, 1.0f } },
@@ -31,6 +37,11 @@ static const TriangleVertex kTriangleVertices[] = {
   GPURenderPipeline *_pipeline;
   GPURenderPipelineState *_renderState;
   GPUBuffer *_vertexBuffer;
+  GPUBuffer *_fragmentUniformBuffer;
+  GPUBindGroupLayout *_fragmentLayout;
+  GPUBindGroup *_fragmentGroup;
+  NSTimer *_timer;
+  NSTimeInterval _animationStart;
 }
 @end
 
@@ -49,7 +60,7 @@ static const TriangleVertex kTriangleVertices[] = {
     return NO;
   }
 
-  _window.title = @"GPU + USL Hello Triangle";
+  _window.title = @"GPU + USL Hello Triangle Tint";
   _window.delegate = self;
 
   _view = [[NSView alloc] initWithFrame:frame];
@@ -70,6 +81,8 @@ static const TriangleVertex kTriangleVertices[] = {
   NSString *shaderPath;
   NSString *executablePath;
   NSString *sampleDir;
+  GPUBindGroupLayoutEntry layoutEntry;
+  GPUBindGroupEntry groupEntry;
   GPUShaderLibraryCreateInfo shaderInfo;
   GPUExtent2D size;
 
@@ -184,7 +197,47 @@ static const TriangleVertex kTriangleVertices[] = {
          kTriangleVertices,
          sizeof(kTriangleVertices));
 
+  _fragmentUniformBuffer = GPUNewBuffer(_device,
+                                        sizeof(FragmentUniforms),
+                                        GPUResourceStorageModeShared);
+  if (!_fragmentUniformBuffer) {
+    NSLog(@"GPU: failed to create fragment uniform buffer");
+    return NO;
+  }
+
+  layoutEntry.stage = GPUBindStageFragment;
+  layoutEntry.kind = GPUBindKindBuffer;
+  layoutEntry.binding = 0;
+  if (GPUCreateBindGroupLayout(&layoutEntry, 1, &_fragmentLayout) != 0) {
+    NSLog(@"GPU: failed to create fragment bind layout");
+    return NO;
+  }
+
+  groupEntry.binding = 0;
+  groupEntry.buffer = _fragmentUniformBuffer;
+  groupEntry.offset = 0;
+  if (GPUCreateBindGroup(_fragmentLayout, &groupEntry, 1, &_fragmentGroup) != 0) {
+    NSLog(@"GPU: failed to create fragment bind group");
+    return NO;
+  }
+
   return YES;
+}
+
+- (void)updateFragmentUniforms {
+  FragmentUniforms *uniforms;
+  float time;
+
+  uniforms = (FragmentUniforms *)gpuBufferContents(_fragmentUniformBuffer);
+  if (!uniforms) {
+    return;
+  }
+
+  time = (float)(CACurrentMediaTime() - _animationStart);
+  uniforms->tint[0] = 0.6f + 0.4f * sinf(time * 1.1f);
+  uniforms->tint[1] = 0.6f + 0.4f * sinf(time * 1.7f + 2.1f);
+  uniforms->tint[2] = 0.6f + 0.4f * sinf(time * 1.3f + 4.2f);
+  uniforms->tint[3] = 1.0f;
 }
 
 - (void)renderFrame {
@@ -216,13 +269,21 @@ static const TriangleVertex kTriangleVertices[] = {
     return;
   }
 
+  [self updateFragmentUniforms];
+
   GPUSetFrontFace(encoder, GPUWindingCounterClockwise);
   GPUSetCullMode(encoder, GPUCullModeNone);
   GPUSetRenderState(encoder, _renderState);
   GPUSetVertexBuffer(encoder, _vertexBuffer, 0, 0);
+  GPUBindRenderGroup(encoder, _fragmentGroup);
   gpuDrawPrimitives(encoder, GPUPrimitiveTypeTriangle, 0, 3);
   GPUEndEncoding(encoder);
   GPUFinishFrame(cmdb, frame);
+}
+
+- (void)tick:(NSTimer *)timer {
+  (void)timer;
+  [self renderFrame];
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
@@ -238,6 +299,14 @@ static const TriangleVertex kTriangleVertices[] = {
     return;
   }
 
+  _animationStart = CACurrentMediaTime();
+  _timer = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
+                                   target:self
+                                 selector:@selector(tick:)
+                                 userInfo:nil
+                                  repeats:YES];
+  [[NSRunLoop mainRunLoop] addTimer:_timer forMode:NSRunLoopCommonModes];
+
   [self renderFrame];
 }
 
@@ -249,6 +318,12 @@ static const TriangleVertex kTriangleVertices[] = {
 - (void)windowDidResize:(NSNotification *)notification {
   (void)notification;
   [self renderFrame];
+}
+
+- (void)windowWillClose:(NSNotification *)notification {
+  (void)notification;
+  [_timer invalidate];
+  _timer = nil;
 }
 
 @end
