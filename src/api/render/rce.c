@@ -139,6 +139,22 @@ GPUSetFragmentTexture(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
+gpuDrawPrimitives(GPURenderCommandEncoder *rce,
+                  GPUPrimitiveType         type,
+                  size_t                   start,
+                  size_t                   count) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return;
+
+  if (api->rce.drawPrimitives) {
+    api->rce.drawPrimitives(rce, type, start, count);
+  }
+}
+
+GPU_EXPORT
+void
 GPUDrawIndexed(GPURenderCommandEncoder *rce,
                GPUPrimitiveType         type,
                uint32_t                 indexCount,

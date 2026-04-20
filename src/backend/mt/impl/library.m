@@ -21,10 +21,10 @@ GPULibrary*
 mt_defaultLibrary(GPUDevice *device) {
   GPUDeviceMT *deviceMT;
   GPULibrary  *library;
-  MtLibrary   *mtLibrary;
+  id<MTLLibrary> mtLibrary;
 
   deviceMT  = device->_priv;
-  mtLibrary = mtNewDefaultLibrary(deviceMT->device);
+  mtLibrary = [deviceMT->device newDefaultLibrary];
   library   = calloc(1, sizeof(*library));
 
   library->_priv = mtLibrary;
@@ -32,13 +32,48 @@ mt_defaultLibrary(GPUDevice *device) {
   return library;
 }
 
+GPU_HIDE
+GPULibrary*
+mt_newLibraryWithSource(GPUDevice *device,
+                        const char *source,
+                        uint64_t sourceSize) {
+  GPUDeviceMT *deviceMT;
+  GPULibrary  *library;
+  id<MTLLibrary> mtLibrary;
+  NSError     *error;
+  NSString    *nsSource;
+  MTLCompileOptions *options;
+
+  deviceMT  = device->_priv;
+  error     = nil;
+  nsSource  = [[NSString alloc] initWithBytes:source
+                                       length:(NSUInteger)sourceSize
+                                     encoding:NSUTF8StringEncoding];
+  options   = [MTLCompileOptions new];
+  mtLibrary = [deviceMT->device newLibraryWithSource:nsSource options:options error:&error];
+  if (!mtLibrary) {
+    if (error) {
+      NSLog(@"GPU mt_newLibraryWithSource failed: %@", error);
+    }
+    return NULL;
+  }
+
+  library = calloc(1, sizeof(*library));
+  if (!library) {
+    return NULL;
+  }
+
+  library->_priv = mtLibrary;
+  return library;
+}
+
 GPU_EXPORT
 GPUFunction*
 mt_newFunction(GPULibrary *lib, const char *name) {
   GPUFunction *func;
-  MtFunction  *mtFunc;
+  id<MTLFunction> mtFunc;
 
-  mtFunc = mtNewFunctionWithName(lib->_priv, name);
+  mtFunc = [(id<MTLLibrary>)lib->_priv newFunctionWithName:[NSString stringWithUTF8String:name]];
   func   = calloc(1, sizeof(*func));
 
   func->_priv = mtFunc;
@@ -48,7 +83,23 @@ mt_newFunction(GPULibrary *lib, const char *name) {
 
 GPU_HIDE
 void
+mt_destroyLibrary(GPULibrary *lib) {
+  if (!lib) {
+    return;
+  }
+
+  if (lib->_priv) {
+    [(id)lib->_priv release];
+  }
+
+  free(lib);
+}
+
+GPU_HIDE
+void
 mt_initLibrary(GPUApiLibrary *api) {
-  api->defaultLibrary = mt_defaultLibrary;
-  api->newFunction    = mt_newFunction;
+  api->defaultLibrary      = mt_defaultLibrary;
+  api->newLibraryWithSource = mt_newLibraryWithSource;
+  api->newFunction         = mt_newFunction;
+  api->destroyLibrary      = mt_destroyLibrary;
 }

@@ -20,6 +20,14 @@
 extern "C" {
 #endif
 
+/* LEGACY / CONVENIENCE SURFACE:
+ * This umbrella currently exposes the older unreleased API shape.
+ * The canonical implementation direction is the API described in
+ * docs/API_V1_PROPOSAL.md.
+ * Keep this layer as migration/convenience only; new core work should not
+ * depend on it. Some parts may return later as final convenience helpers.
+ */
+
 #include "common.h"
 #include "geometric.h"
 

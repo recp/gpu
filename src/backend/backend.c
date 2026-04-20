@@ -20,6 +20,13 @@
 
 #include "backends.h"
 
+/* LEGACY / CONVENIENCE RUNTIME MODEL:
+ * This file owns the older process-global active backend switch.
+ * The canonical core direction is instance/device-scoped backend ownership.
+ * Do not build new core v1 work on this path. A simplified convenience layer
+ * may still exist in final form above the canonical core.
+ */
+
 typedef struct GPUApiList {
   struct GPUApiList *next;
   GPUApi            *api;
@@ -56,13 +63,9 @@ GPUSwitchGPUApi(GPUBackend backend) {
 #endif
       break;
     case GPU_BACKEND_VULKAN:
-//#ifdef GPU_BACKEND_VULKAN
-
-#ifndef _WIN32
+#if defined(GPU_ENABLE_VULKAN) && !defined(_WIN32)
       gpu__api = backend_vk();
-#endif // !_WIN32
-
-//#endif
+#endif
       break;
     case GPU_BACKEND_DIRECTX12:
 #if defined(_WIN32) || defined(WIN32)

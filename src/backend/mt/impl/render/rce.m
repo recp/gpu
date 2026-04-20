@@ -25,31 +25,31 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
 GPU_HIDE
 void
 mt_frontFace(GPURenderCommandEncoder *rce, GPUWinding winding) {
-  mtFrontFace(rce, (MtWinding)winding);
+  [(id<MTLRenderCommandEncoder>)rce setFrontFacingWinding:(MTLWinding)winding];
 }
 
 GPU_HIDE
 void
 mt_cullMode(GPURenderCommandEncoder *rce, GPUCullMode mode) {
-  mtCullMode(rce, (MtCullMode)mode);
+  [(id<MTLRenderCommandEncoder>)rce setCullMode:(MTLCullMode)mode];
 }
 
 GPU_HIDE
 void
 mt_setRenderPipelineState(GPURenderCommandEncoder *rce, GPURenderPipelineState *piplineState) {
-  mtSetRenderState(rce, piplineState->_priv);
+  [(id<MTLRenderCommandEncoder>)rce setRenderPipelineState:(id<MTLRenderPipelineState>)piplineState->_priv];
 }
 
 GPU_HIDE
 void
 mt_setDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilState *ds) {
-  mtSetDepthStencil(rce, ds->_priv);
+  [(id<MTLRenderCommandEncoder>)rce setDepthStencilState:(id<MTLDepthStencilState>)ds->_priv];
 }
 
 GPU_HIDE
 void
 mt_viewport(GPURenderCommandEncoder *enc, GPUViewport *viewport) {
-  MtViewport vp;
+  MTLViewport vp;
   
   vp.originX = viewport->originX;
   vp.originY = viewport->originY;
@@ -58,7 +58,7 @@ mt_viewport(GPURenderCommandEncoder *enc, GPUViewport *viewport) {
   vp.znear   = viewport->znear;
   vp.zfar    = viewport->zfar;
 
-  mtViewport(enc, &vp);
+  [(id<MTLRenderCommandEncoder>)enc setViewport:vp];
 }
 
 GPU_HIDE
@@ -67,7 +67,7 @@ mt_vertexBytes(GPURenderCommandEncoder *enc,
                void                    *bytes,
                size_t                   legth,
                uint32_t                 atIndex) {
-  mtVertexBytes(enc, bytes, legth, atIndex);
+  [(id<MTLRenderCommandEncoder>)enc setVertexBytes:bytes length:legth atIndex:atIndex];
 }
 
 GPU_HIDE
@@ -76,7 +76,7 @@ mt_vertexBuffer(GPURenderCommandEncoder *rce,
                 GPUBuffer               *buf,
                 size_t                   off,
                 uint32_t                 index) {
-  mtVertexBuffer(rce, buf, off, index);
+  [(id<MTLRenderCommandEncoder>)rce setVertexBuffer:(id<MTLBuffer>)buf offset:off atIndex:index];
 }
 
 GPU_HIDE
@@ -85,7 +85,7 @@ mt_fragmentBuffer(GPURenderCommandEncoder *rce,
                   GPUBuffer               *buf,
                   size_t                   off,
                   uint32_t                 index) {
-  mtFragmentBuffer(rce, buf, off, index);
+  [(id<MTLRenderCommandEncoder>)rce setFragmentBuffer:(id<MTLBuffer>)buf offset:off atIndex:index];
 }
 
 GPU_HIDE
@@ -93,7 +93,18 @@ void
 mt_rceSetFragmentTexture(GPURenderCommandEncoder *rce,
                          GPUTexture               *tex,
                          uint32_t                 index) {
-  mtRenderCommandEncoderSetFragmentTextureAtIndex(rce, tex, index);
+  [(id<MTLRenderCommandEncoder>)rce setFragmentTexture:(id<MTLTexture>)tex atIndex:index];
+}
+
+GPU_HIDE
+void
+mt_drawPrimitives(GPURenderCommandEncoder *rce,
+                  GPUPrimitiveType         type,
+                  size_t                   start,
+                  size_t                   count) {
+  [(id<MTLRenderCommandEncoder>)rce drawPrimitives:(MTLPrimitiveType)type
+                                       vertexStart:start
+                                       vertexCount:count];
 }
 
 GPU_HIDE
@@ -104,18 +115,17 @@ mt_drawIndexedPrims(GPURenderCommandEncoder *rce,
                     GPUIndexType             indexType,
                     GPUBuffer               *indexBuffer,
                     uint32_t                 indexBufferOffset) {
-  mtDrawIndexedPrims(rce,
-                     (MtPrimitiveType)type,
-                     indexCount,
-                     (MtIndexType)indexType,
-                     indexBuffer,
-                     indexBufferOffset);
+  [(id<MTLRenderCommandEncoder>)rce drawIndexedPrimitives:(MTLPrimitiveType)type
+                                               indexCount:indexCount
+                                                indexType:(MTLIndexType)indexType
+                                              indexBuffer:(id<MTLBuffer>)indexBuffer
+                                        indexBufferOffset:indexBufferOffset];
 }
 
 GPU_HIDE
 void
 mt_endEncoding(GPURenderCommandEncoder *rce) {
-  mtCommandEncoderEndEncoding(rce);
+  [(id<MTLRenderCommandEncoder>)rce endEncoding];
 }
 
 GPU_HIDE
@@ -131,6 +141,7 @@ mt_initRCE(GPUApiRCE *api) {
   api->vertexBuffer           = mt_vertexBuffer;
   api->fragmentBuffer         = mt_fragmentBuffer;
   api->setFragmentTexture     = mt_rceSetFragmentTexture;
+  api->drawPrimitives         = mt_drawPrimitives;
   api->drawIndexedPrims       = mt_drawIndexedPrims;
   api->endEncoding            = mt_endEncoding;
 }

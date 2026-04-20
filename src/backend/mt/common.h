@@ -18,10 +18,10 @@
 #define metal_common_h
 
 #include "../common.h"
-#include <cmt/cmt.h>
 
 #if defined(__APPLE__) && defined(__OBJC__)
 #import <Metal/Metal.h>
+#import <MetalKit/MetalKit.h>
 #import <QuartzCore/CAMetalLayer.h>
 
 typedef CALayer GPUViewLayer;

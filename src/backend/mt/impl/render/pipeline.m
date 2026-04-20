@@ -20,9 +20,10 @@ GPU_HIDE
 GPURenderPipeline*
 mt_newRenderPipeline(GPUPixelFormat pixelFormat) {
   GPURenderPipeline *pipeline;
-  MtRenderDesc      *renderDesc;
+  MTLRenderPipelineDescriptor *renderDesc;
 
-  renderDesc = mtNewRenderPipeline((MtPixelFormat)pixelFormat);
+  renderDesc = [MTLRenderPipelineDescriptor new];
+  renderDesc.colorAttachments[0].pixelFormat = (MTLPixelFormat)pixelFormat;
   pipeline   = calloc(1, sizeof(*pipeline));
   
   pipeline->_priv = renderDesc;
@@ -36,10 +37,17 @@ mt_newRenderState(GPUDevice         * __restrict device,
                   GPURenderPipeline * __restrict pipeline) {
   GPUDeviceMT            *deviceMT;
   GPURenderPipelineState *rederPipline;
-  MtRenderPipeline       *mtRederPipline;
+  id<MTLRenderPipelineState> mtRederPipline;
+  NSError *error;
   
   deviceMT       = device->_priv;
-  mtRederPipline = mtNewRenderState(deviceMT->device, pipeline->_priv, NULL);
+  error = nil;
+  mtRederPipline = [deviceMT->device newRenderPipelineStateWithDescriptor:(MTLRenderPipelineDescriptor *)pipeline->_priv
+                                                                    error:&error];
+  if (!mtRederPipline) {
+    NSLog(@"Failed to create render pipeline state: %@", error);
+    return NULL;
+  }
   rederPipline   = calloc(1, sizeof(*rederPipline));
   
   rederPipline->_priv = mtRederPipline;
@@ -52,7 +60,16 @@ void
 mt_setFunction(GPURenderPipeline * __restrict pipline,
                GPUFunction       * __restrict func,
                GPUFunctionType                functype) {
-  mtSetFunc(pipline->_priv, func->_priv, (MtFuncType)functype);
+  MTLRenderPipelineDescriptor *desc;
+  desc = pipline->_priv;
+  switch (functype) {
+    case GPU_FUNCTION_VERT:
+      desc.vertexFunction = (id<MTLFunction>)func->_priv;
+      break;
+    case GPU_FUNCTION_FRAG:
+      desc.fragmentFunction = (id<MTLFunction>)func->_priv;
+      break;
+  }
 }
 
 GPU_HIDE
@@ -60,28 +77,28 @@ void
 mt_colorFormat(GPURenderPipeline * __restrict pipline,
                uint32_t                 index,
                GPUPixelFormat           pixelFormat) {
-  mtColorPixelFormat(pipline->_priv, index, (MtPixelFormat)pixelFormat);
+  ((MTLRenderPipelineDescriptor *)pipline->_priv).colorAttachments[index].pixelFormat = (MTLPixelFormat)pixelFormat;
 }
 
 GPU_HIDE
 void
 mt_depthFormat(GPURenderPipeline * __restrict pipline,
                GPUPixelFormat           pixelFormat) {
-  mtDepthPixelFormat(pipline->_priv, (MtPixelFormat)pixelFormat);
+  ((MTLRenderPipelineDescriptor *)pipline->_priv).depthAttachmentPixelFormat = (MTLPixelFormat)pixelFormat;
 }
 
 GPU_HIDE
 void
 mt_stencilFormat(GPURenderPipeline * __restrict pipline,
                  GPUPixelFormat           pixelFormat) {
-  mtStencilPixelFormat(pipline->_priv, (MtPixelFormat)pixelFormat);
+  ((MTLRenderPipelineDescriptor *)pipline->_priv).stencilAttachmentPixelFormat = (MTLPixelFormat)pixelFormat;
 }
 
 GPU_HIDE
 void
 mt_sampleCount(GPURenderPipeline * __restrict pipline,
                uint32_t                 sampleCount) {
-  mtSampleCount(pipline->_priv, sampleCount);
+  ((MTLRenderPipelineDescriptor *)pipline->_priv).sampleCount = sampleCount;
 }
 
 GPU_HIDE

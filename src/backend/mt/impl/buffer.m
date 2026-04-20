@@ -21,25 +21,25 @@ GPUBuffer*
 mt_newBuffer(GPUDevice * __restrict device,
              size_t                 len,
              GPUResourceOptions     options) {
-  GPUDeviceMT     *deviceMT;
-  MtCommandBuffer *mcq;
+  GPUDeviceMT *deviceMT;
+  MTLResourceOptions mtOptions;
   
   deviceMT = device->_priv;
-  mcq      = mtDeviceNewBufferWithLength(deviceMT->device, len, (MtResourceOptions)options);
+  mtOptions = (MTLResourceOptions)options;
 
-  return mcq;
+  return (GPUBuffer *)[deviceMT->device newBufferWithLength:len options:mtOptions];
 }
 
 GPU_HIDE
 size_t
 mt_bufferLength(GPUBuffer * __restrict buff) {
-  return mtBufferLength(buff);
+  return [(id<MTLBuffer>)buff length];
 }
 
 GPU_HIDE
 GPUBuffer*
 mt_bufferContents(GPUBuffer * __restrict buff) {
-  return mtBufferContents(buff);
+  return (GPUBuffer *)[(id<MTLBuffer>)buff contents];
 }
 
 GPU_HIDE

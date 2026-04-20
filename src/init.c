@@ -16,6 +16,13 @@
 
 #include "common.h"
 
+/* LEGACY / CONVENIENCE BOOTSTRAP:
+ * Automatic global backend selection belongs to the older convenience path.
+ * The canonical core direction is explicit instance/device creation.
+ * A simplified bootstrap helper may still exist in final form, but it should
+ * be layered on top of the canonical core instead of replacing it.
+ */
+
 void
 GPU_CONSTRUCTOR
 gpu__init(void) {

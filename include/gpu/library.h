@@ -29,9 +29,23 @@ typedef struct GPULibrary {
   void *_priv;
 } GPULibrary;
 
+typedef GPULibrary GPUShaderLibrary;
+
 typedef struct GPUFunction {
   void *_priv;
 } GPUFunction;
+
+typedef enum GPUShaderSourceKind {
+  GPU_SHADER_SOURCE_MSL_TEXT = 0
+} GPUShaderSourceKind;
+
+typedef struct GPUShaderLibraryCreateInfo {
+  const char* label;
+  GPUShaderSourceKind sourceKind;
+  const void* sourceData;
+  uint64_t sourceSize;
+  const char* sourcePathHint;
+} GPUShaderLibraryCreateInfo;
 
 GPU_EXPORT
 GPULibrary*
@@ -40,6 +54,16 @@ GPUDefaultLibrary(GPUDevice *device);
 GPU_EXPORT
 GPUFunction*
 GPUShaderFunction(GPULibrary *lib, const char *name);
+
+GPU_EXPORT
+int
+GPUCreateShaderLibrary(GPUDevice *device,
+                       const GPUShaderLibraryCreateInfo *info,
+                       GPUShaderLibrary **outLibrary);
+
+GPU_EXPORT
+void
+GPUDestroyShaderLibrary(GPUShaderLibrary *library);
 
 #ifdef __cplusplus
 }

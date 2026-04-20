@@ -65,6 +65,12 @@ typedef struct GPUApiRCE {
   (*setFragmentTexture)(GPURenderCommandEncoder *rce,
                         GPUTexture               *tex,
                         uint32_t                 index);
+
+  void
+  (*drawPrimitives)(GPURenderCommandEncoder *rce,
+                    GPUPrimitiveType         type,
+                    size_t                   start,
+                    size_t                   count);
   void
   (*drawIndexedPrims)(GPURenderCommandEncoder *rce,
                       GPUPrimitiveType         type,

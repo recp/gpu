@@ -35,8 +35,10 @@ GPU_HIDE
 GPUApi*
 backend_gl(void);
 
+#if defined(GPU_ENABLE_VULKAN)
 GPU_HIDE
 GPUApi*
 backend_vk(void);
+#endif
 
 #endif /* backend_backends_h */

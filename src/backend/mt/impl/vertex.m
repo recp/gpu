@@ -20,9 +20,9 @@ GPU_EXPORT
 GPUVertexDescriptor*
 mt_newVertexDesc(void) {
   GPUVertexDescriptor *vdec;
-  MtVertexDescriptor  *mtvdesc;
+  MTLVertexDescriptor *mtvdesc;
 
-  mtvdesc    = mtVertexDescNew();
+  mtvdesc    = [MTLVertexDescriptor new];
   vdec       = calloc(1, sizeof(*vdec));
   vdec->_priv = mtvdesc;
 
@@ -36,11 +36,11 @@ mt_attrib(GPUVertexDescriptor * __restrict vert,
           GPUVertexFormat                  format,
           uint32_t                         offset,
           uint32_t                         bufferIndex) {
-  mtVertexAttrib(vert->_priv,
-                 attribIndex,
-                 (MtVertexFormat)format,
-                 offset,
-                 bufferIndex);
+  MTLVertexDescriptor *desc;
+  desc = vert->_priv;
+  desc.attributes[attribIndex].format = (MTLVertexFormat)format;
+  desc.attributes[attribIndex].offset = offset;
+  desc.attributes[attribIndex].bufferIndex = bufferIndex;
 }
 
 GPU_EXPORT
@@ -50,17 +50,18 @@ mt_layout(GPUVertexDescriptor * __restrict vert,
           uint32_t                         stride,
           uint32_t                         stepRate,
           GPUVertexStepFunction            stepFunction) {
-  mtVertexLayout(vert->_priv, layoutIndex,
-                 stride,
-                 stepRate,
-                 (MtVertexStepFunction)stepFunction);
+  MTLVertexDescriptor *desc;
+  desc = vert->_priv;
+  desc.layouts[layoutIndex].stride = stride;
+  desc.layouts[layoutIndex].stepRate = stepRate;
+  desc.layouts[layoutIndex].stepFunction = (MTLVertexStepFunction)stepFunction;
 }
 
 GPU_EXPORT
 void
 mt_vertexDesc(GPURenderPipeline         * __restrict pipeline,
               GPUVertexDescriptor * __restrict vert) {
-  mtSetVertexDesc(pipeline->_priv, vert->_priv);
+  ((MTLRenderPipelineDescriptor *)pipeline->_priv).vertexDescriptor = vert->_priv;
 }
 
 GPU_HIDE

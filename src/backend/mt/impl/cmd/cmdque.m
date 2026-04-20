@@ -25,7 +25,7 @@ typedef struct GPUCallback {
 static
 GPU_HIDE
 void
-gpu_cmdoncomplete(void * __restrict sender, MtCommandBuffer *cmdb);
+gpu_cmdoncomplete(void * __restrict sender, void *cmdb);
 
 GPU_HIDE
 GPUCommandQueue*
@@ -63,9 +63,9 @@ mt_newCommandBuffer(GPUCommandQueue  * __restrict cmdb,
                     void             * __restrict sender,
                     GPUCommandBufferOnCompleteFn  oncomplete) {
   GPUCommandBuffer *cb;
-  MtCommandBuffer  *mcb;
+  id<MTLCommandBuffer> mcb;
   
-  mcb      = mtNewCommandBuffer(cmdb->_priv);
+  mcb       = [(id<MTLCommandQueue>)cmdb->_priv commandBuffer];
   cb       = calloc(1, sizeof(*cb));
   cb->_priv = mcb;
   
@@ -88,20 +88,23 @@ mt_ccmdbufOnComplete(GPUCommandBuffer * __restrict cmdb,
   cb->param      = cmdb;
   cb->onComplete = oncomplete;
   
-  mtCommandBufferOnComplete(cmdb->_priv, cb, gpu_cmdoncomplete);
+  [(id<MTLCommandBuffer>)cmdb->_priv addCompletedHandler:^(id<MTLCommandBuffer> _Nonnull buffer) {
+    gpu_cmdoncomplete(cb, (__bridge void *)buffer);
+  }];
 }
 
 GPU_HIDE
 void
 mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
-  mtCommandBufferCommit(cmdb->_priv);
+  [(id<MTLCommandBuffer>)cmdb->_priv commit];
 }
 
 static
 GPU_HIDE
 void
-gpu_cmdoncomplete(void * __restrict sender, MtCommandBuffer *cmdb) {
+gpu_cmdoncomplete(void * __restrict sender, void *cmdb) {
   GPUCallback *cb;
+  GPU__UNUSED(cmdb);
   
   cb = sender;
   cb->onComplete(cb->sender, cb->param);

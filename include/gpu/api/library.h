@@ -27,8 +27,16 @@ typedef struct GPUApiLibrary {
   GPULibrary*
   (*defaultLibrary)(GPUDevice *device);
   
+  GPULibrary*
+  (*newLibraryWithSource)(GPUDevice *device,
+                          const char *source,
+                          uint64_t sourceSize);
+
   GPUFunction*
   (*newFunction)(GPULibrary *lib, const char *name);
+
+  void
+  (*destroyLibrary)(GPULibrary *lib);
 } GPUApiLibrary;
 
 #ifdef __cplusplus

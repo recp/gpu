@@ -19,7 +19,7 @@
 GPU_HIDE
 void
 mt_cmdBufDrawable(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  mtCommandBufferPresentDrawable(cmdb->_priv, frame->drawable);
+  [(id<MTLCommandBuffer>)cmdb->_priv presentDrawable:(id<CAMetalDrawable>)frame->drawable];
 }
 
 GPU_HIDE

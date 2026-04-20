@@ -79,5 +79,3 @@ GPUCreateSystemDefaultDevice(GPUInstance *inst);
 }
 #endif
 #endif /* gpu_device_h */
-
-

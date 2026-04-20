@@ -19,7 +19,10 @@
 GPU_HIDE
 GPURenderPassDesc*
 mt_newPass(void) {
-  return mtNewPass();
+  GPURenderPassDesc *renderPass;
+  renderPass = calloc(1, sizeof(*renderPass));
+  renderPass->_priv = [MTLRenderPassDescriptor renderPassDescriptor];
+  return renderPass;
 }
 
 GPU_HIDE
@@ -48,7 +51,7 @@ mt_beginRenderPass(GPUTexture *target) {
 GPU_HIDE
 void
 mt_endRenderPass(GPURenderPassDesc *pass) {
-
+  (void)pass;
 }
 
 GPU_HIDE
