@@ -44,6 +44,10 @@ typedef struct GPUInstanceDX12 {
   UINT           dxgiFactoryFlags;
 } GPUInstanceDX12;
 
+typedef struct GPUSamplerDX12 {
+  bool                    isStaticSampler;
+} GPUSamplerDX12;
+
 typedef struct GPUFrameDX12 {
   IDXGISwapChain3        *swapChain;
   ID3D12Resource         *renderTarget;

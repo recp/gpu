@@ -18,11 +18,11 @@
 
 GPU_EXPORT
 GPUSampler*
-GPUCreateSampler(GPUDevice *__restrict device) {
+GPUCreateSampler(GPUDevice *__restrict device, bool staticIfSupported) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->sampler.createSampler(api);
+  return api->sampler.createSampler(api, staticIfSupported);
 }

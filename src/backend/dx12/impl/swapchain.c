@@ -15,6 +15,87 @@
  */
 
 #include "../common.h"
+//
+//HRESULT createSwapChain(ID3D12Device* device, IDXGISwapChain3** swapChain, HWND hwnd, UINT width, UINT height, UINT bufferCount) {
+//    HRESULT hr;
+//
+//    // Create DXGI factory
+//    IDXGIFactory4* dxgiFactory;
+//    hr = CreateDXGIFactory2(0, &IID_IDXGIFactory4, (void**)&dxgiFactory);
+//    if (FAILED(hr)) {
+//        return hr;
+//    }
+//
+//    // Create swap chain description
+//    DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
+//    swapChainDesc.Width = width;
+//    swapChainDesc.Height = height;
+//    swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+//    swapChainDesc.Stereo = FALSE;
+//    swapChainDesc.SampleDesc.Count = 1;
+//    swapChainDesc.SampleDesc.Quality = 0;
+//    swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+//    swapChainDesc.BufferCount = bufferCount;
+//    swapChainDesc.Scaling = DXGI_SCALING_STRETCH;
+//    swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+//    swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
+//    swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+//
+//    // Create swap chain
+//    switch (surfaceType) {
+//        case GPU_SURFACE_WINDOWS_CORE_WINDOW:
+//            hr = dxgiFactory->CreateSwapChainForCoreWindow((IUnknown*)commandQueue, hwnd, &swapChainDesc, NULL, swapChain);
+//            break;
+//        case GPU_SURFACE_WINDOWS_HWND:
+//            hr = dxgiFactory->CreateSwapChainForHwnd((IUnknown*)commandQueue, hwnd, &swapChainDesc, NULL, NULL, swapChain);
+//            dxgiFactory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
+//            break;
+//        default:
+//            // TODO: Handle other surface types
+//            return E_FAIL;
+//    }
+//
+//    // Release DXGI factory
+//    dxgiFactory->Release();
+//
+//    // Query IDXGISwapChain3 interface
+//    IDXGISwapChain1* swapChain1;
+//    hr = (*swapChain)->QueryInterface(&IID_IDXGISwapChain1, (void**)&swapChain1);
+//    if (FAILED(hr)) {
+//        return hr;
+//    }
+//    hr = swapChain1->QueryInterface(&IID_IDXGISwapChain3, (void**)swapChain);
+//    swapChain1->Release();
+//    if (FAILED(hr)) {
+//        return hr;
+//    }
+//
+//    // Create descriptor heap for render target views
+//    D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
+//    rtvHeapDesc.NumDescriptors = bufferCount;
+//    rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+//    rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+//    ID3D12DescriptorHeap* rtvHeap;
+//    hr = device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap));
+//    if (FAILED(hr)) {
+//        return hr;
+//    }
+//
+//    // Create render target views for each back buffer
+//    CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(rtvHeap->GetCPUDescriptorHandleForHeapStart());
+//    UINT rtvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+//    for (UINT i = 0; i < bufferCount; i++) {
+//        ID3D12Resource* backBuffer;
+//        hr = (*swapChain)->GetBuffer(i, IID_PPV_ARGS(&backBuffer));
+//        if (FAILED(hr)) {
+//            return hr;
+//        }
+//        device->CreateRenderTargetView(backBuffer, NULL, rtvHandle);
+//        rtvHandle.Offset(1, rtvDescriptorSize);
+//    }
+//
+//    return S_OK;
+//}
 
 GPU_HIDE
 GPUSwapChain*

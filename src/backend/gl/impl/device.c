@@ -16,22 +16,22 @@
 
 #include "../common.h"
 
-GPU_HIDE
-GPUDevice*
-gl_createSystemDefaultDevice(GPUApi *api) {
-  GPUDevice *device;
-
-  device = calloc(1, sizeof(*device));
-  
-#ifdef __APPLE__
-  device->_priv = CGLGetCurrentContext();
-#endif
-
-  return device;
-}
+// GPU_HIDE
+// GPUDevice*
+// gl_createSystemDefaultDevice(GPUInstance * __restrict api) {
+//   GPUDevice *device;
+//
+//   device = calloc(1, sizeof(*device));
+//
+// #ifdef __APPLE__
+//   device->_priv = CGLGetCurrentContext();
+// #endif
+//
+//   return device;
+// }
 
 GPU_HIDE
 void
 gl_initDevice(GPUApiDevice *apiDevice) {
-  apiDevice->createSystemDefaultDevice = gl_createSystemDefaultDevice;
+  // apiDevice->createSystemDefaultDevice = gl_createSystemDefaultDevice;
 }

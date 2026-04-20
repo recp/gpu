@@ -27,8 +27,8 @@ typedef struct GPUSampler {
 } GPUSampler;
 
 GPU_EXPORT
-GPUSampler*
-GPUCreateSampler(GPUDevice *__restrict device);
+GPUSampler *
+GPUCreateSampler(GPUDevice * __restrict device, bool staticIfSupported);
 
 #ifdef __cplusplus
 }
