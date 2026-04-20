@@ -1,0 +1,17 @@
+pub struct VSIn {
+  position: float4 #attribute(0)
+}
+
+pub struct FragmentUniforms {
+  tint: float4
+}
+
+vert quad_vs(v: VSIn #stage_in) -> float4 {
+  return v.position
+}
+
+frag quad_fs(colorTex: texture2d<half> #texture(0),
+             colorSampler: sampler #sampler(0),
+             uniforms: FragmentUniforms #buffer(0)) -> float4 {
+  return float4(colorTex.sample(colorSampler, float2(0.5, 0.5))) * uniforms.tint
+}

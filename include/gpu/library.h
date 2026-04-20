@@ -62,6 +62,13 @@ GPUCreateShaderLibrary(GPUDevice *device,
                        GPUShaderLibrary **outLibrary);
 
 GPU_EXPORT
+int
+GPUCreateShaderLibraryFromUSLBytecode(GPUDevice *device,
+                                      const void *bytecodeData,
+                                      uint64_t bytecodeSize,
+                                      GPUShaderLibrary **outLibrary);
+
+GPU_EXPORT
 void
 GPUDestroyShaderLibrary(GPUShaderLibrary *library);
 

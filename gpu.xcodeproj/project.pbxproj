@@ -958,6 +958,17 @@
 					"\"/Users/recp/Library/Developer/VulkanSDK/latest/macOS/include\"",
 				);
 				INSTALL_PATH = "@rpath";
+				LIBRARY_SEARCH_PATHS = (
+					/Users/recp/Projects/recp/UniversalShading/us/build/us,
+					/Users/recp/Projects/recp/UniversalShading/us/build/us/deps/ds,
+				);
+				LD_RUNPATH_SEARCH_PATHS = (
+					/Users/recp/Projects/recp/UniversalShading/us/build/us,
+					/Users/recp/Projects/recp/UniversalShading/us/build/us/deps/ds,
+				);
+				OTHER_LDFLAGS = (
+					"-lus",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 			};
@@ -981,6 +992,17 @@
 					"\"/Users/recp/Library/Developer/VulkanSDK/latest/macOS/include\"",
 				);
 				INSTALL_PATH = "@rpath";
+				LIBRARY_SEARCH_PATHS = (
+					/Users/recp/Projects/recp/UniversalShading/us/build/us,
+					/Users/recp/Projects/recp/UniversalShading/us/build/us/deps/ds,
+				);
+				LD_RUNPATH_SEARCH_PATHS = (
+					/Users/recp/Projects/recp/UniversalShading/us/build/us,
+					/Users/recp/Projects/recp/UniversalShading/us/build/us/deps/ds,
+				);
+				OTHER_LDFLAGS = (
+					"-lus",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 			};

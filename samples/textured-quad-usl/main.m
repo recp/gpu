@@ -1,26 +1,32 @@
 #import <AppKit/AppKit.h>
 #include <math.h>
 #import <mach-o/dyld.h>
+#import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
 
 #import "../../include/gpu/gpu.h"
 
-typedef struct TriangleVertex {
-  float position[2];
-  float color[4];
-} TriangleVertex;
+typedef struct QuadVertex {
+  float position[4];
+} QuadVertex;
 
 typedef struct FragmentUniforms {
   float tint[4];
 } FragmentUniforms;
 
-static const TriangleVertex kTriangleVertices[] = {
-  { {  0.0f,  0.65f }, { 1.0f, 0.2f, 0.2f, 1.0f } },
-  { { -0.7f, -0.65f }, { 0.2f, 1.0f, 0.2f, 1.0f } },
-  { {  0.7f, -0.65f }, { 0.2f, 0.4f, 1.0f, 1.0f } },
+static const QuadVertex kQuadVertices[] = {
+  { { -0.8f, -0.8f, 0.0f, 1.0f } },
+  { {  0.8f, -0.8f, 0.0f, 1.0f } },
+  { { -0.8f,  0.8f, 0.0f, 1.0f } },
+  { {  0.8f,  0.8f, 0.0f, 1.0f } },
 };
 
-@interface TriangleApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
+static const uint8_t kCheckerPixels[] = {
+  255,   0,   0, 255,    0, 255,   0, 255,
+    0,   0, 255, 255,  255, 255, 255, 255,
+};
+
+@interface TexturedQuadApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
 @private
   NSWindow *_window;
   NSView *_view;
@@ -38,6 +44,8 @@ static const TriangleVertex kTriangleVertices[] = {
   GPURenderPipelineState *_renderState;
   GPUBuffer *_vertexBuffer;
   GPUBuffer *_fragmentUniformBuffer;
+  GPUTexture *_texture;
+  GPUSampler *_sampler;
   GPUBindGroupLayout *_fragmentLayout;
   GPUBindGroup *_fragmentGroup;
   NSTimer *_timer;
@@ -45,7 +53,7 @@ static const TriangleVertex kTriangleVertices[] = {
 }
 @end
 
-@implementation TriangleApp
+@implementation TexturedQuadApp
 
 - (BOOL)setupWindow {
   NSRect frame = NSMakeRect(0, 0, 960, 640);
@@ -60,7 +68,7 @@ static const TriangleVertex kTriangleVertices[] = {
     return NO;
   }
 
-  _window.title = @"GPU + USL Hello Triangle Tint";
+  _window.title = @"GPU USL Textured Quad";
   _window.delegate = self;
 
   _view = [[NSView alloc] initWithFrame:frame];
@@ -76,14 +84,65 @@ static const TriangleVertex kTriangleVertices[] = {
   return YES;
 }
 
-- (BOOL)setupGPU {
-  NSString *shaderText;
-  NSString *shaderPath;
+- (NSString *)sampleDir {
   NSString *executablePath;
+  uint32_t sizeBytes = 0;
+  _NSGetExecutablePath(NULL, &sizeBytes);
+  char *buffer = malloc(sizeBytes);
+  if (!buffer) {
+    return nil;
+  }
+  if (_NSGetExecutablePath(buffer, &sizeBytes) != 0) {
+    free(buffer);
+    return nil;
+  }
+  executablePath = [[NSFileManager defaultManager]
+                    stringWithFileSystemRepresentation:buffer
+                    length:strlen(buffer)];
+  free(buffer);
+  return [executablePath stringByDeletingLastPathComponent];
+}
+
+- (BOOL)setupTexture {
+  GPUTextureDesc desc = {0};
+  id<MTLTexture> texture;
+  MTLRegion region;
+
+  desc.width = 2;
+  desc.height = 2;
+  desc.depth = 1;
+  desc.mipmapLevelCount = 1;
+  desc.format = GPUPixelFormatRGBA8Unorm;
+  desc.storageMode = GPUStorageModeManaged;
+  desc.usage = GPUTextureUsageShaderRead;
+
+  _texture = GPUNewTextureWith(_device, &desc);
+  if (!_texture) {
+    NSLog(@"GPU: failed to create texture");
+    return NO;
+  }
+
+  texture = (__bridge id<MTLTexture>)_texture;
+  region = MTLRegionMake2D(0, 0, 2, 2);
+  [texture replaceRegion:region mipmapLevel:0 withBytes:kCheckerPixels bytesPerRow:8];
+
+  _sampler = GPUCreateSampler(_device, false);
+  if (!_sampler) {
+    NSLog(@"GPU: failed to create sampler");
+    return NO;
+  }
+
+  return YES;
+}
+
+- (BOOL)setupGPU {
+  NSString *bytecodePath;
   NSString *sampleDir;
-  GPUBindGroupLayoutEntry layoutEntry;
-  GPUBindGroupEntry groupEntry;
-  GPUShaderLibraryCreateInfo shaderInfo;
+  NSData   *bytecodeData;
+  const GPUBindGroupLayoutEntry *layoutEntries;
+  GPUBindGroupEntry groupEntries[3] = {0};
+  uint32_t groupCount = 0;
+  uint32_t layoutCount;
   GPUExtent2D size;
 
   GPUSwitchGPUApi(GPU_BACKEND_METAL);
@@ -124,54 +183,36 @@ static const TriangleVertex kTriangleVertices[] = {
     return NO;
   }
 
-  {
-    uint32_t sizeBytes = 0;
-    _NSGetExecutablePath(NULL, &sizeBytes);
-    char *buffer = malloc(sizeBytes);
-    if (!buffer) {
-      return NO;
-    }
-    if (_NSGetExecutablePath(buffer, &sizeBytes) != 0) {
-      free(buffer);
-      return NO;
-    }
-    executablePath = [[NSFileManager defaultManager]
-                      stringWithFileSystemRepresentation:buffer
-                      length:strlen(buffer)];
-    free(buffer);
-  }
-
-  sampleDir = [executablePath stringByDeletingLastPathComponent];
-  shaderPath = [sampleDir stringByAppendingPathComponent:@"triangle.usl.metal"];
-  shaderText = [NSString stringWithContentsOfFile:shaderPath
-                                         encoding:NSUTF8StringEncoding
-                                            error:nil];
-  if (!shaderText) {
-    NSLog(@"GPU: failed to load shader source at %@", shaderPath);
+  sampleDir = [self sampleDir];
+  if (!sampleDir) {
     return NO;
   }
 
-  shaderInfo.label = "triangle.usl.metal";
-  shaderInfo.sourceKind = GPU_SHADER_SOURCE_MSL_TEXT;
-  shaderInfo.sourceData = shaderText.UTF8String;
-  shaderInfo.sourceSize = (uint64_t)[shaderText lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
-  shaderInfo.sourcePathHint = shaderPath.UTF8String;
-  if (GPUCreateShaderLibrary(_device, &shaderInfo, (GPUShaderLibrary **)&_library) != 0) {
+  bytecodePath = [sampleDir stringByAppendingPathComponent:@"textured_quad.us"];
+  bytecodeData = [NSData dataWithContentsOfFile:bytecodePath];
+  if (!bytecodeData) {
+    NSLog(@"GPU: failed to load USL bytecode at %@", bytecodePath);
+    return NO;
+  }
+
+  if (GPUCreateShaderLibraryFromUSLBytecode(_device,
+                                            bytecodeData.bytes,
+                                            (uint64_t)bytecodeData.length,
+                                            (GPUShaderLibrary **)&_library) != 0) {
     NSLog(@"GPU: failed to create shader library");
     return NO;
   }
 
-  _vertFunc = GPUShaderFunction(_library, "tri_vs");
-  _fragFunc = GPUShaderFunction(_library, "tri_fs");
+  _vertFunc = GPUShaderFunction(_library, "quad_vs");
+  _fragFunc = GPUShaderFunction(_library, "quad_fs");
   if (!_vertFunc || !_fragFunc) {
     NSLog(@"GPU: failed to lookup shader entry points");
     return NO;
   }
 
   _vertexDesc = GPUNewVertexDesc();
-  GPUAttrib(_vertexDesc, 0, GPUFloat2, offsetof(TriangleVertex, position), 0);
-  GPUAttrib(_vertexDesc, 1, GPUFloat4, offsetof(TriangleVertex, color), 0);
-  GPULayout(_vertexDesc, 0, sizeof(TriangleVertex), 1, GPUPerVertex);
+  GPUAttrib(_vertexDesc, 0, GPUFloat4, offsetof(QuadVertex, position), 0);
+  GPULayout(_vertexDesc, 0, sizeof(QuadVertex), 1, GPUPerVertex);
 
   _pipeline = GPUNewRenderPipeline(GPUPixelFormatBGRA8Unorm_sRGB);
   GPUSetFunction(_pipeline, _vertFunc, GPU_FUNCTION_VERT);
@@ -186,7 +227,7 @@ static const TriangleVertex kTriangleVertices[] = {
   }
 
   _vertexBuffer = GPUNewBuffer(_device,
-                               sizeof(kTriangleVertices),
+                               sizeof(kQuadVertices),
                                GPUResourceStorageModeShared);
   if (!_vertexBuffer) {
     NSLog(@"GPU: failed to create vertex buffer");
@@ -194,8 +235,8 @@ static const TriangleVertex kTriangleVertices[] = {
   }
 
   memcpy((void *)gpuBufferContents(_vertexBuffer),
-         kTriangleVertices,
-         sizeof(kTriangleVertices));
+         kQuadVertices,
+         sizeof(kQuadVertices));
 
   _fragmentUniformBuffer = GPUNewBuffer(_device,
                                         sizeof(FragmentUniforms),
@@ -205,18 +246,44 @@ static const TriangleVertex kTriangleVertices[] = {
     return NO;
   }
 
-  layoutEntry.stage = GPUBindStageFragment;
-  layoutEntry.kind = GPUBindKindBuffer;
-  layoutEntry.binding = 0;
-  if (GPUCreateBindGroupLayout(&layoutEntry, 1, &_fragmentLayout) != 0) {
+  if (![self setupTexture]) {
+    return NO;
+  }
+
+  if (GPUCreateBindGroupLayoutFromUSLBytecode(bytecodeData.bytes,
+                                              (uint64_t)bytecodeData.length,
+                                              "quad_fs",
+                                              &_fragmentLayout) != 0) {
     NSLog(@"GPU: failed to create fragment bind layout");
     return NO;
   }
 
-  groupEntry.binding = 0;
-  groupEntry.buffer = _fragmentUniformBuffer;
-  groupEntry.offset = 0;
-  if (GPUCreateBindGroup(_fragmentLayout, &groupEntry, 1, &_fragmentGroup) != 0) {
+  layoutEntries = GPUGetBindGroupLayoutEntries(_fragmentLayout, &layoutCount);
+  if (!layoutEntries || layoutCount != 3) {
+    NSLog(@"GPU: unexpected bind layout extracted from USL bytecode");
+    return NO;
+  }
+
+  for (uint32_t i = 0; i < layoutCount; i++) {
+    groupEntries[groupCount].binding = layoutEntries[i].binding;
+    groupEntries[groupCount].kind = layoutEntries[i].kind;
+    switch (layoutEntries[i].kind) {
+      case GPUBindKindTexture:
+        groupEntries[groupCount].texture = _texture;
+        break;
+      case GPUBindKindSampler:
+        groupEntries[groupCount].sampler = _sampler;
+        break;
+      case GPUBindKindBuffer:
+        groupEntries[groupCount].buffer = _fragmentUniformBuffer;
+        break;
+      default:
+        break;
+    }
+    groupCount++;
+  }
+
+  if (GPUCreateBindGroup(_fragmentLayout, groupEntries, groupCount, &_fragmentGroup) != 0) {
     NSLog(@"GPU: failed to create fragment bind group");
     return NO;
   }
@@ -234,9 +301,9 @@ static const TriangleVertex kTriangleVertices[] = {
   }
 
   time = (float)(CACurrentMediaTime() - _animationStart);
-  uniforms->tint[0] = 0.6f + 0.4f * sinf(time * 1.1f);
-  uniforms->tint[1] = 0.6f + 0.4f * sinf(time * 1.7f + 2.1f);
-  uniforms->tint[2] = 0.6f + 0.4f * sinf(time * 1.3f + 4.2f);
+  uniforms->tint[0] = 0.75f + 0.25f * sinf(time * 1.1f);
+  uniforms->tint[1] = 0.75f + 0.25f * sinf(time * 1.5f + 1.0f);
+  uniforms->tint[2] = 0.75f + 0.25f * sinf(time * 1.9f + 2.0f);
   uniforms->tint[3] = 1.0f;
 }
 
@@ -276,7 +343,7 @@ static const TriangleVertex kTriangleVertices[] = {
   GPUSetRenderState(encoder, _renderState);
   GPUSetVertexBuffer(encoder, _vertexBuffer, 0, 0);
   GPUBindRenderGroup(encoder, _fragmentGroup);
-  gpuDrawPrimitives(encoder, GPUPrimitiveTypeTriangle, 0, 3);
+  gpuDrawPrimitives(encoder, GPUPrimitiveTypeTriangleStrip, 0, 4);
   GPUEndEncoding(encoder);
   GPUFinishFrame(cmdb, frame);
 }
@@ -330,13 +397,13 @@ static const TriangleVertex kTriangleVertices[] = {
 
 int main(int argc, const char * argv[]) {
   @autoreleasepool {
-    TriangleApp *delegate;
+    TexturedQuadApp *delegate;
 
     (void)argc;
     (void)argv;
 
     [NSApplication sharedApplication];
-    delegate = [TriangleApp new];
+    delegate = [TexturedQuadApp new];
     [NSApp setDelegate:delegate];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     [NSApp run];

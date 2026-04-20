@@ -82,6 +82,34 @@ mt_newFunction(GPULibrary *lib, const char *name) {
 }
 
 GPU_HIDE
+GPUSampler *
+mt_createSampler(GPUApi * __restrict api,
+                 GPUDevice * __restrict device,
+                 bool staticIfSupported) {
+  GPUDeviceMT *deviceMT;
+  MTLSamplerDescriptor *desc;
+  id<MTLSamplerState> state;
+
+  (void)api;
+  (void)staticIfSupported;
+
+  if (!device) {
+    return NULL;
+  }
+
+  deviceMT = device->_priv;
+  desc = [MTLSamplerDescriptor new];
+  desc.minFilter = MTLSamplerMinMagFilterLinear;
+  desc.magFilter = MTLSamplerMinMagFilterLinear;
+  desc.mipFilter = MTLSamplerMipFilterLinear;
+  desc.sAddressMode = MTLSamplerAddressModeClampToEdge;
+  desc.tAddressMode = MTLSamplerAddressModeClampToEdge;
+  desc.rAddressMode = MTLSamplerAddressModeClampToEdge;
+  state = [deviceMT->device newSamplerStateWithDescriptor:desc];
+  return (GPUSampler *)state;
+}
+
+GPU_HIDE
 void
 mt_destroyLibrary(GPULibrary *lib) {
   if (!lib) {
@@ -102,4 +130,10 @@ mt_initLibrary(GPUApiLibrary *api) {
   api->newLibraryWithSource = mt_newLibraryWithSource;
   api->newFunction         = mt_newFunction;
   api->destroyLibrary      = mt_destroyLibrary;
+}
+
+GPU_HIDE
+void
+mt_initSampler(GPUApiSampler *api) {
+  api->createSampler = mt_createSampler;
 }

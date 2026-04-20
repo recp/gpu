@@ -24,6 +24,8 @@ extern "C" {
 #include "buffer.h"
 #include "cmd-enc.h"
 #include "library.h"
+#include "sampler.h"
+#include "texture.h"
 
 typedef struct GPUBindGroupLayout {
   void *_priv;
@@ -39,7 +41,9 @@ typedef enum GPUBindStage {
 } GPUBindStage;
 
 typedef enum GPUBindKind {
-  GPUBindKindBuffer = 0
+  GPUBindKindBuffer = 0,
+  GPUBindKindTexture = 1,
+  GPUBindKindSampler = 2
 } GPUBindKind;
 
 typedef struct GPUBindGroupLayoutEntry {
@@ -50,7 +54,10 @@ typedef struct GPUBindGroupLayoutEntry {
 
 typedef struct GPUBindGroupEntry {
   uint32_t binding;
+  GPUBindKind kind;
   GPUBuffer *buffer;
+  GPUTexture *texture;
+  GPUSampler *sampler;
   size_t offset;
 } GPUBindGroupEntry;
 
@@ -59,6 +66,17 @@ int
 GPUCreateBindGroupLayout(const GPUBindGroupLayoutEntry *entries,
                          uint32_t count,
                          GPUBindGroupLayout **outLayout);
+
+GPU_EXPORT
+int
+GPUCreateBindGroupLayoutFromUSLBytecode(const void *bytecodeData,
+                                        uint64_t bytecodeSize,
+                                        const char *entryPointName,
+                                        GPUBindGroupLayout **outLayout);
+
+GPU_EXPORT
+const GPUBindGroupLayoutEntry *
+GPUGetBindGroupLayoutEntries(GPUBindGroupLayout *layout, uint32_t *outCount);
 
 GPU_EXPORT
 void

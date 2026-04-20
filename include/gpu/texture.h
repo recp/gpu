@@ -46,6 +46,18 @@ typedef struct GPUTextureDesc {
 
 typedef struct GPUTexture GPUTexture;
 
+GPU_EXPORT
+GPUTexture*
+GPUNewTextureWith(GPUDevice * __restrict device,
+                  GPUTextureDesc * __restrict desc);
+
+GPU_EXPORT
+GPUTexture*
+GPUNewTexture(GPUDevice * __restrict device,
+              uint32_t width,
+              uint32_t height,
+              GPUPixelFormat format);
+
 #ifdef __cplusplus
 }
 #endif

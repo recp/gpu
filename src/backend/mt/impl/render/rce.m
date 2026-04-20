@@ -98,6 +98,15 @@ mt_rceSetFragmentTexture(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
+mt_rceSetFragmentSampler(GPURenderCommandEncoder *rce,
+                         GPUSampler              *sampler,
+                         uint32_t                 index) {
+  [(id<MTLRenderCommandEncoder>)rce setFragmentSamplerState:(id<MTLSamplerState>)sampler
+                                                    atIndex:index];
+}
+
+GPU_HIDE
+void
 mt_drawPrimitives(GPURenderCommandEncoder *rce,
                   GPUPrimitiveType         type,
                   size_t                   start,
@@ -141,6 +150,7 @@ mt_initRCE(GPUApiRCE *api) {
   api->vertexBuffer           = mt_vertexBuffer;
   api->fragmentBuffer         = mt_fragmentBuffer;
   api->setFragmentTexture     = mt_rceSetFragmentTexture;
+  api->setFragmentSampler     = mt_rceSetFragmentSampler;
   api->drawPrimitives         = mt_drawPrimitives;
   api->drawIndexedPrims       = mt_drawIndexedPrims;
   api->endEncoding            = mt_endEncoding;

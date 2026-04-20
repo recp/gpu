@@ -27,6 +27,7 @@ extern "C" {
 #include "buffer.h"
 #include "stage-io.h"
 #include "texture.h"
+#include "sampler.h"
 
 typedef struct GPURenderCommandEncoder GPURenderCommandEncoder;
 
@@ -128,6 +129,12 @@ GPU_EXPORT
 void
 GPUSetFragmentTexture(GPURenderCommandEncoder *rce,
                       GPUTexture               *tex,
+                      uint32_t                 index);
+
+GPU_EXPORT
+void
+GPUSetFragmentSampler(GPURenderCommandEncoder *rce,
+                      GPUSampler              *sampler,
                       uint32_t                 index);
 
 GPU_EXPORT

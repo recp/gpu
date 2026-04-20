@@ -139,6 +139,21 @@ GPUSetFragmentTexture(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
+GPUSetFragmentSampler(GPURenderCommandEncoder *rce,
+                      GPUSampler              *sampler,
+                      uint32_t                 index) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return;
+
+  if (api->rce.setFragmentSampler) {
+    api->rce.setFragmentSampler(rce, sampler, index);
+  }
+}
+
+GPU_EXPORT
+void
 gpuDrawPrimitives(GPURenderCommandEncoder *rce,
                   GPUPrimitiveType         type,
                   size_t                   start,

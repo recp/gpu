@@ -128,5 +128,5 @@ dx12_createSampler(GPUApi    * __restrict api,
 GPU_HIDE
 void
 dx12_initSampler(GPUApiSampler* apiSampler) {
-  apiSampler->createSampler = dx12_createStaticSampler;
+  apiSampler->createSampler = dx12_createSampler;
 }

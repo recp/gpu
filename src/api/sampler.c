@@ -21,8 +21,12 @@ GPUSampler*
 GPUCreateSampler(GPUDevice *__restrict device, bool staticIfSupported) {
   GPUApi *api;
 
+  if (!device) {
+    return NULL;
+  }
+
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->sampler.createSampler(api, staticIfSupported);
+  return api->sampler.createSampler ? api->sampler.createSampler(api, device, staticIfSupported) : NULL;
 }

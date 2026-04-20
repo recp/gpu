@@ -67,6 +67,11 @@ typedef struct GPUApiRCE {
                         uint32_t                 index);
 
   void
+  (*setFragmentSampler)(GPURenderCommandEncoder *rce,
+                        GPUSampler              *sampler,
+                        uint32_t                 index);
+
+  void
   (*drawPrimitives)(GPURenderCommandEncoder *rce,
                     GPUPrimitiveType         type,
                     size_t                   start,

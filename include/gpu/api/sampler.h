@@ -26,7 +26,9 @@ extern "C" {
 struct GPUApi;
 
 typedef struct GPUApiSampler {
-  GPUSampler *(*createSampler)(struct GPUApi *__restrict api, bool staticIfSupported);
+  GPUSampler *(*createSampler)(struct GPUApi *__restrict api,
+                               GPUDevice *__restrict device,
+                               bool staticIfSupported);
 } GPUApiSampler;
 
 #ifdef __cplusplus
