@@ -30,3 +30,28 @@ GPUCreateSampler(GPUDevice *__restrict device, bool staticIfSupported) {
 
   return api->sampler.createSampler ? api->sampler.createSampler(api, device, staticIfSupported) : NULL;
 }
+
+GPU_EXPORT
+GPUSampler *
+GPUCreateSamplerFromUSLStaticSampler(GPUDevice *__restrict device,
+                                     const GPUUSLStaticSamplerDesc *desc,
+                                     bool staticIfSupported) {
+  GPUApi *api;
+
+  if (!device || !GPUUSLStaticSamplerDescIsValid(desc)) {
+    return NULL;
+  }
+
+  if (!(api = gpuActiveGPUApi())) {
+    return NULL;
+  }
+
+  if (api->sampler.createSamplerFromUSLStaticSampler) {
+    return api->sampler.createSamplerFromUSLStaticSampler(api,
+                                                          device,
+                                                          desc,
+                                                          staticIfSupported);
+  }
+
+  return api->sampler.createSampler ? api->sampler.createSampler(api, device, staticIfSupported) : NULL;
+}

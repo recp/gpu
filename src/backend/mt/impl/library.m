@@ -82,10 +82,69 @@ mt_newFunction(GPULibrary *lib, const char *name) {
 }
 
 GPU_HIDE
+MTLSamplerMinMagFilter
+mt_uslSamplerFilter(uint32_t filter) {
+  return filter == GPUUSLSamplerFilterNearest ?
+    MTLSamplerMinMagFilterNearest :
+    MTLSamplerMinMagFilterLinear;
+}
+
+GPU_HIDE
+MTLSamplerMipFilter
+mt_uslSamplerMipFilter(uint32_t filter) {
+  return filter == GPUUSLSamplerFilterNearest ?
+    MTLSamplerMipFilterNearest :
+    MTLSamplerMipFilterLinear;
+}
+
+GPU_HIDE
+MTLSamplerAddressMode
+mt_uslSamplerAddressMode(uint32_t mode) {
+  switch (mode) {
+    case GPUUSLSamplerAddressRepeat:
+      return MTLSamplerAddressModeRepeat;
+    case GPUUSLSamplerAddressMirroredRepeat:
+      return MTLSamplerAddressModeMirrorRepeat;
+    case GPUUSLSamplerAddressClampToZero:
+      return MTLSamplerAddressModeClampToZero;
+    case GPUUSLSamplerAddressClampToBorder:
+      return MTLSamplerAddressModeClampToBorderColor;
+    case GPUUSLSamplerAddressClampToEdge:
+    default:
+      return MTLSamplerAddressModeClampToEdge;
+  }
+}
+
+GPU_HIDE
+MTLCompareFunction
+mt_uslSamplerCompareFunction(uint32_t func) {
+  switch (func) {
+    case GPUUSLSamplerCompareLess:
+      return MTLCompareFunctionLess;
+    case GPUUSLSamplerCompareEqual:
+      return MTLCompareFunctionEqual;
+    case GPUUSLSamplerCompareLessEqual:
+      return MTLCompareFunctionLessEqual;
+    case GPUUSLSamplerCompareGreater:
+      return MTLCompareFunctionGreater;
+    case GPUUSLSamplerCompareNotEqual:
+      return MTLCompareFunctionNotEqual;
+    case GPUUSLSamplerCompareGreaterEqual:
+      return MTLCompareFunctionGreaterEqual;
+    case GPUUSLSamplerCompareAlways:
+      return MTLCompareFunctionAlways;
+    case GPUUSLSamplerCompareNever:
+    default:
+      return MTLCompareFunctionNever;
+  }
+}
+
+GPU_HIDE
 GPUSampler *
-mt_createSampler(GPUApi * __restrict api,
-                 GPUDevice * __restrict device,
-                 bool staticIfSupported) {
+mt_createSamplerFromUSLStaticSampler(GPUApi * __restrict api,
+                                     GPUDevice * __restrict device,
+                                     const GPUUSLStaticSamplerDesc *uslDesc,
+                                     bool staticIfSupported) {
   GPUDeviceMT *deviceMT;
   MTLSamplerDescriptor *desc;
   id<MTLSamplerState> state;
@@ -99,14 +158,38 @@ mt_createSampler(GPUApi * __restrict api,
 
   deviceMT = device->_priv;
   desc = [MTLSamplerDescriptor new];
-  desc.minFilter = MTLSamplerMinMagFilterLinear;
-  desc.magFilter = MTLSamplerMinMagFilterLinear;
-  desc.mipFilter = MTLSamplerMipFilterLinear;
-  desc.sAddressMode = MTLSamplerAddressModeClampToEdge;
-  desc.tAddressMode = MTLSamplerAddressModeClampToEdge;
-  desc.rAddressMode = MTLSamplerAddressModeClampToEdge;
+  if (uslDesc) {
+    desc.minFilter = mt_uslSamplerFilter(uslDesc->minFilter);
+    desc.magFilter = mt_uslSamplerFilter(uslDesc->magFilter);
+    desc.mipFilter = mt_uslSamplerMipFilter(uslDesc->mipFilter);
+    desc.sAddressMode = mt_uslSamplerAddressMode(uslDesc->addressMode);
+    desc.tAddressMode = mt_uslSamplerAddressMode(uslDesc->addressMode);
+    desc.rAddressMode = mt_uslSamplerAddressMode(uslDesc->addressMode);
+    desc.normalizedCoordinates = uslDesc->coordSpace == GPUUSLSamplerCoordNormalized;
+    desc.compareFunction = uslDesc->hasCompare ?
+      mt_uslSamplerCompareFunction(uslDesc->compareFunc) :
+      MTLCompareFunctionNever;
+    if (uslDesc->maxAnisotropy > 0) {
+      desc.maxAnisotropy = uslDesc->maxAnisotropy > 16u ? 16u : uslDesc->maxAnisotropy;
+    }
+  } else {
+    desc.minFilter = MTLSamplerMinMagFilterLinear;
+    desc.magFilter = MTLSamplerMinMagFilterLinear;
+    desc.mipFilter = MTLSamplerMipFilterLinear;
+    desc.sAddressMode = MTLSamplerAddressModeClampToEdge;
+    desc.tAddressMode = MTLSamplerAddressModeClampToEdge;
+    desc.rAddressMode = MTLSamplerAddressModeClampToEdge;
+  }
   state = [deviceMT->device newSamplerStateWithDescriptor:desc];
   return (GPUSampler *)state;
+}
+
+GPU_HIDE
+GPUSampler *
+mt_createSampler(GPUApi * __restrict api,
+                 GPUDevice * __restrict device,
+                 bool staticIfSupported) {
+  return mt_createSamplerFromUSLStaticSampler(api, device, NULL, staticIfSupported);
 }
 
 GPU_HIDE
@@ -136,4 +219,5 @@ GPU_HIDE
 void
 mt_initSampler(GPUApiSampler *api) {
   api->createSampler = mt_createSampler;
+  api->createSamplerFromUSLStaticSampler = mt_createSamplerFromUSLStaticSampler;
 }

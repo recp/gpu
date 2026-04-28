@@ -20,6 +20,11 @@
 extern "C" {
 #endif
 
+#include "common.h"
+#include "pixelformat.h"
+
+typedef struct GPUDevice GPUDevice;
+
 typedef enum GPUTextureUsage {
   GPUTextureUsageUnknown         = 0x0000,
   GPUTextureUsageShaderRead      = 0x0001,

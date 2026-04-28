@@ -66,9 +66,10 @@ gpu_getEmbeddedMetalFromUSLBytecode(const void *bytecodeData,
     return 0;
   }
 
-  if ((uint64_t)footer.records_offset +
-      (uint64_t)footer.record_count * sizeof(GPUUSLEmbeddedBlobRecord) >
-      bytecodeSize - sizeof(GPUUSLEmbeddedBlobFooter)) {
+  if (footer.records_offset > bytecodeSize - sizeof(GPUUSLEmbeddedBlobFooter) ||
+      footer.record_count >
+        (bytecodeSize - sizeof(GPUUSLEmbeddedBlobFooter) - footer.records_offset) /
+          sizeof(GPUUSLEmbeddedBlobRecord)) {
     return 0;
   }
 
@@ -83,7 +84,8 @@ gpu_getEmbeddedMetalFromUSLBytecode(const void *bytecodeData,
       continue;
     }
 
-    if ((uint64_t)offset + (uint64_t)size > bytecodeSize - sizeof(GPUUSLEmbeddedBlobFooter)) {
+    if (offset > bytecodeSize - sizeof(GPUUSLEmbeddedBlobFooter) ||
+        size > bytecodeSize - sizeof(GPUUSLEmbeddedBlobFooter) - offset) {
       return 0;
     }
 

@@ -42,6 +42,24 @@ GPUInitParams gpu__defaultInitParams = {
   .validation_usebreak = false
 };
 
+static GPUApi*
+gpu__selectDefaultBackend(void) {
+#ifdef __APPLE__
+  return backend_metal();
+#elif defined(_WIN32) || defined(WIN32)
+  return backend_dx12();
+#else
+  return NULL;
+#endif
+}
+
+static void
+gpu__ensureActiveBackend(void) {
+  if (!gpu__api) {
+    gpu__api = gpu__selectDefaultBackend();
+  }
+}
+
 GPU_EXPORT
 void
 gpuRegisterCustomGPUApi(GPUApi * __restrict gpuApi) {
@@ -54,50 +72,8 @@ gpuRegisterCustomGPUApi(GPUApi * __restrict gpuApi) {
 }
 
 GPU_EXPORT
-void
-GPUSwitchGPUApi(GPUBackend backend) {
-  switch (backend) {
-    case GPU_BACKEND_METAL:
-#ifdef __APPLE__
-      gpu__api = backend_metal();
-#endif
-      break;
-    case GPU_BACKEND_VULKAN:
-#if defined(GPU_ENABLE_VULKAN) && !defined(_WIN32)
-      gpu__api = backend_vk();
-#endif
-      break;
-    case GPU_BACKEND_DIRECTX12:
-#if defined(_WIN32) || defined(WIN32)
-      gpu__api = backend_dx12(); /* check DX version support */
-#endif
-      break;
-    case GPU_BACKEND_OPENGL:
-//      gpu__api = backend_gl();
-      break;
-    default:
-      break;
-  }
-}
-
-GPU_EXPORT
-void
-gpuSwitchGPUApiAuto(void) {
-#ifdef __APPLE__
-  gpu__api = backend_metal();
-#elif defined(_WIN32) || defined(WIN32)
-  gpu__api = backend_dx12(); /* check DX version support */
-#endif
-}
-
-GPU_EXPORT
-GPUBackend
-gpuActiveGPUBackend(void) {
-  return gpu__api ? gpu__api->backend : GPU_BACKEND_NULL;
-}
-
-GPU_EXPORT
 GPUApi*
 gpuActiveGPUApi(void) {
+  gpu__ensureActiveBackend();
   return gpu__api;
 }

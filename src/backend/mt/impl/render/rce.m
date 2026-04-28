@@ -81,6 +81,23 @@ mt_vertexBuffer(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
+mt_rceSetVertexTexture(GPURenderCommandEncoder *rce,
+                       GPUTexture              *tex,
+                       uint32_t                 index) {
+  [(id<MTLRenderCommandEncoder>)rce setVertexTexture:(id<MTLTexture>)tex atIndex:index];
+}
+
+GPU_HIDE
+void
+mt_rceSetVertexSampler(GPURenderCommandEncoder *rce,
+                       GPUSampler              *sampler,
+                       uint32_t                 index) {
+  [(id<MTLRenderCommandEncoder>)rce setVertexSamplerState:(id<MTLSamplerState>)sampler
+                                                  atIndex:index];
+}
+
+GPU_HIDE
+void
 mt_fragmentBuffer(GPURenderCommandEncoder *rce,
                   GPUBuffer               *buf,
                   size_t                   off,
@@ -148,6 +165,8 @@ mt_initRCE(GPUApiRCE *api) {
   api->viewport               = mt_viewport;
   api->vertexBytes            = mt_vertexBytes;
   api->vertexBuffer           = mt_vertexBuffer;
+  api->setVertexTexture       = mt_rceSetVertexTexture;
+  api->setVertexSampler       = mt_rceSetVertexSampler;
   api->fragmentBuffer         = mt_fragmentBuffer;
   api->setFragmentTexture     = mt_rceSetFragmentTexture;
   api->setFragmentSampler     = mt_rceSetFragmentSampler;

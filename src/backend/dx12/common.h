@@ -69,6 +69,13 @@ typedef struct GPU__DX12 {
   IDXGIAdapter1 *adapter;
 } GPU__DX12;
 
+GPU_HIDE
+int
+dx12_fillStaticSamplerDescFromUSL(const GPUUSLStaticSamplerDesc *uslDesc,
+                                  uint32_t shaderRegister,
+                                  D3D12_SHADER_VISIBILITY visibility,
+                                  D3D12_STATIC_SAMPLER_DESC *outDesc);
+
 GPU_INLINE
 void
 dxThrowIfFailed(HRESULT hr) {
@@ -80,4 +87,3 @@ dxThrowIfFailed(HRESULT hr) {
 }
 
 #endif /* dx12_common_h */
-

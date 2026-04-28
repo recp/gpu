@@ -24,6 +24,7 @@ extern "C" {
 #include "geometric.h"
 
 struct GPUCommandQueue;
+typedef struct GPUDevice GPUDevice;
 struct GPUSurface;
 
 typedef struct GPUSwapChain {

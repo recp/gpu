@@ -23,6 +23,8 @@ extern "C" {
 #include "texture.h"
 #include "buffer.h"
 
+typedef struct GPUSwapChain GPUSwapChain;
+
 typedef struct GPUFrame {
   void       *_priv;
   GPUTexture *target;

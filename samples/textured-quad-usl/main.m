@@ -145,8 +145,6 @@ static const uint8_t kCheckerPixels[] = {
   uint32_t layoutCount;
   GPUExtent2D size;
 
-  GPUSwitchGPUApi(GPU_BACKEND_METAL);
-
   _physicalDevice = GPUGetAutoSelectedPhysicalDevice(NULL);
   if (!_physicalDevice) {
     NSLog(@"GPU: failed to get physical device");
@@ -159,7 +157,7 @@ static const uint8_t kCheckerPixels[] = {
     return NO;
   }
 
-  _queue = GPUGetCommandQueue(_device, GPU_QUEUE_GRAPHICS_BIT);
+  _queue = GPUGetQueue(_device, GPU_QUEUE_GRAPHICS, 0);
   if (!_queue) {
     NSLog(@"GPU: failed to get command queue");
     return NO;
@@ -266,6 +264,7 @@ static const uint8_t kCheckerPixels[] = {
 
   for (uint32_t i = 0; i < layoutCount; i++) {
     groupEntries[groupCount].binding = layoutEntries[i].binding;
+    groupEntries[groupCount].stage = layoutEntries[i].stage;
     groupEntries[groupCount].kind = layoutEntries[i].kind;
     switch (layoutEntries[i].kind) {
       case GPUBindKindTexture:
@@ -310,6 +309,7 @@ static const uint8_t kCheckerPixels[] = {
 - (void)renderFrame {
   GPUFrame *frame;
   GPUCommandBuffer *cmdb;
+  GPUQueueSubmitInfo submitInfo;
   GPURenderPassDesc *pass;
   GPURenderCommandEncoder *encoder;
 
@@ -318,8 +318,7 @@ static const uint8_t kCheckerPixels[] = {
     return;
   }
 
-  cmdb = GPUNewCommandBuffer(_queue, NULL, NULL);
-  if (!cmdb) {
+  if (GPUAcquireCommandBuffer(_queue, "main-frame", &cmdb) != GPU_OK || !cmdb) {
     GPUEndFrame(frame);
     return;
   }
@@ -345,7 +344,11 @@ static const uint8_t kCheckerPixels[] = {
   GPUBindRenderGroup(encoder, _fragmentGroup);
   gpuDrawPrimitives(encoder, GPUPrimitiveTypeTriangleStrip, 0, 4);
   GPUEndEncoding(encoder);
-  GPUFinishFrame(cmdb, frame);
+  GPUPresent(cmdb, frame);
+  submitInfo.commandBufferCount = 1;
+  submitInfo.ppCommandBuffers = (GPUCommandBuffer * const[]){ cmdb };
+  GPUQueueSubmit(_queue, &submitInfo);
+  GPUEndFrame(frame);
 }
 
 - (void)tick:(NSTimer *)timer {

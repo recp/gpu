@@ -24,9 +24,11 @@ Since GPU library will be cross platform, this will also make shading language c
 
 ## Design (TODO)
 
-GPU library provides `GPUApi` structure and headers. In theory any GPU API e.g. Metal, Vulkan, DirectX, OpenGL... could be bind this GPU library. 
+GPU library provides `GPUApi` structure and headers. In theory any GPU API e.g. Metal, Vulkan, DirectX, OpenGL... could be bind this GPU library.
 
-Switching between GPU APIs will be easy: `GPUSwitchGPUApi(GPU_BACKEND_METAL);` or auto select `GPUSwitchGPUApiAuto()`.
+~~Switching between GPU APIs will be easy: `GPUSwitchGPUApi(GPU_BACKEND_METAL);` or auto select `GPUSwitchGPUApiAuto()`.~~
+
+  > Backend selection should happen through instance/device creation and convenience helpers, not a mutable global runtime switch.
 
 This section and others will be documented in detail later...
 
@@ -40,8 +42,6 @@ Coming Soon.
 
 #### - (void)viewDidLoad
 ```C
-
-  GPUSwitchGPUApi(GPU_BACKEND_METAL);
 
   device   = GPUCreateSystemDefaultDevice();
   pipeline = GPUNewPipeline(GPUPixelFormatBGRA8Unorm_sRGB);

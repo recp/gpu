@@ -21,11 +21,11 @@ extern "C" {
 #endif
 
 #include "common.h"
-#include "buffer.h"
-#include "cmd-enc.h"
-#include "library.h"
-#include "sampler.h"
-#include "texture.h"
+
+typedef struct GPUBuffer GPUBuffer;
+typedef struct GPURenderCommandEncoder GPURenderCommandEncoder;
+typedef struct GPUSampler GPUSampler;
+typedef struct GPUTexture GPUTexture;
 
 typedef struct GPUBindGroupLayout {
   void *_priv;
@@ -37,7 +37,8 @@ typedef struct GPUBindGroup {
 
 typedef enum GPUBindStage {
   GPUBindStageVertex = 1,
-  GPUBindStageFragment = 2
+  GPUBindStageFragment = 2,
+  GPUBindStageCompute = 3
 } GPUBindStage;
 
 typedef enum GPUBindKind {
@@ -53,6 +54,7 @@ typedef struct GPUBindGroupLayoutEntry {
 } GPUBindGroupLayoutEntry;
 
 typedef struct GPUBindGroupEntry {
+  GPUBindStage stage;
   uint32_t binding;
   GPUBindKind kind;
   GPUBuffer *buffer;

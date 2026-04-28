@@ -54,6 +54,16 @@ typedef struct GPUApiRCE {
                   GPUBuffer               *buf,
                   size_t                   off,
                   uint32_t                 index);
+
+  void
+  (*setVertexTexture)(GPURenderCommandEncoder *rce,
+                      GPUTexture              *tex,
+                      uint32_t                 index);
+
+  void
+  (*setVertexSampler)(GPURenderCommandEncoder *rce,
+                      GPUSampler              *sampler,
+                      uint32_t                 index);
   
   void
   (*fragmentBuffer)(GPURenderCommandEncoder *rce,

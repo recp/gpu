@@ -120,6 +120,18 @@ GPUSetVertexBuffer(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
+GPUSetVertexTexture(GPURenderCommandEncoder *rce,
+                    GPUTexture              *tex,
+                    uint32_t                 index);
+
+GPU_EXPORT
+void
+GPUSetVertexSampler(GPURenderCommandEncoder *rce,
+                    GPUSampler              *sampler,
+                    uint32_t                 index);
+
+GPU_EXPORT
+void
 GPUSetFragmentBuffer(GPURenderCommandEncoder *rce,
                      GPUBuffer               *buf,
                      size_t                   off,

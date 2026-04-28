@@ -25,6 +25,7 @@ extern "C" {
 #include "cmdqueue.h"
 
 typedef struct GPUBuffer GPUBuffer;
+typedef struct GPUDevice GPUDevice;
 typedef struct GPUFrame  GPUFrame;
 
 GPU_EXPORT

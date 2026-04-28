@@ -19,11 +19,24 @@
 GPU_EXPORT
 GPUCommandQueue*
 GPUGetCommandQueue(GPUDevice * __restrict device, GPUQueueFlagBits bits) {
+  return GPUGetQueue(device, bits, 0);
+}
+
+GPU_EXPORT
+GPUCommandQueue*
+GPUGetQueue(GPUDevice * __restrict device,
+            GPUQueueFlagBits       bits,
+            uint32_t               index) {
   GPUApi *api;
 
+  /* Canonical path: queue capability bits + ordinal.
+   * Today only index 0 is guaranteed across backends.
+   */
+  if (index != 0) {
+    return NULL;
+  }
   if (!(api = gpuActiveGPUApi()))
     return NULL;
-
   return api->cmdque.getCommandQueue(device, bits);
 }
 
@@ -52,6 +65,21 @@ GPUNewCommandBuffer(GPUCommandQueue  * __restrict cmdb,
 }
 
 GPU_EXPORT
+GPUResult
+GPUAcquireCommandBuffer(GPUCommandQueue   * __restrict cmdq,
+                        const char        * __restrict label,
+                        GPUCommandBuffer ** __restrict outCmdb) {
+  (void)label;
+
+  if (!cmdq || !outCmdb) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outCmdb = GPUNewCommandBuffer(cmdq, NULL, NULL);
+  return *outCmdb ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+}
+
+GPU_EXPORT
 void
 gpuCommandBufferOnComplete(GPUCommandBuffer * __restrict cmdb,
                            void             * __restrict sender,
@@ -73,4 +101,30 @@ GPUCommit(GPUCommandBuffer * __restrict cmdb) {
     return;
   
   api->cmdque.commit(cmdb);
+}
+
+GPU_EXPORT
+GPUResult
+GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
+               const GPUQueueSubmitInfo * __restrict info) {
+  GPUApi *api;
+
+  (void)cmdq;
+
+  if (!info || info->commandBufferCount == 0 || !info->ppCommandBuffers) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (!(api = gpuActiveGPUApi()))
+    return GPU_ERROR_BACKEND_FAILURE;
+
+  for (uint32_t i = 0; i < info->commandBufferCount; i++) {
+    GPUCommandBuffer *cmdb = info->ppCommandBuffers[i];
+    if (!cmdb) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    api->cmdque.commit(cmdb);
+  }
+
+  return GPU_OK;
 }

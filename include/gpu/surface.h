@@ -19,6 +19,9 @@
 
 #include "common.h"
 
+typedef struct GPUInstance GPUInstance;
+typedef struct GPUPhysicalDevice GPUPhysicalDevice;
+
 typedef enum GPUSurfaceType {
   GPU_SURFACE_WINDOWS_HWND,
   GPU_SURFACE_WINDOWS_COREWINDOW,

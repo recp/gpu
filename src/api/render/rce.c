@@ -112,6 +112,36 @@ GPUSetVertexBuffer(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
+GPUSetVertexTexture(GPURenderCommandEncoder *rce,
+                    GPUTexture              *tex,
+                    uint32_t                 index) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return;
+
+  if (api->rce.setVertexTexture) {
+    api->rce.setVertexTexture(rce, tex, index);
+  }
+}
+
+GPU_EXPORT
+void
+GPUSetVertexSampler(GPURenderCommandEncoder *rce,
+                    GPUSampler              *sampler,
+                    uint32_t                 index) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return;
+
+  if (api->rce.setVertexSampler) {
+    api->rce.setVertexSampler(rce, sampler, index);
+  }
+}
+
+GPU_EXPORT
+void
 GPUSetFragmentBuffer(GPURenderCommandEncoder *rce,
                   GPUBuffer               *buf,
                   size_t                   off,

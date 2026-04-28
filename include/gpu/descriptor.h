@@ -22,6 +22,8 @@ extern "C" {
 
 #include "common.h"
 
+typedef struct GPUDevice GPUDevice;
+
 typedef struct GPUDescriptorPool {
   void *_priv;
 } GPUDescriptorPool;

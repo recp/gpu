@@ -85,8 +85,6 @@ static const TriangleVertex kTriangleVertices[] = {
   uint32_t layoutCount;
   GPUExtent2D size;
 
-  GPUSwitchGPUApi(GPU_BACKEND_METAL);
-
   _physicalDevice = GPUGetAutoSelectedPhysicalDevice(NULL);
   if (!_physicalDevice) {
     NSLog(@"GPU: failed to get physical device");
@@ -99,7 +97,7 @@ static const TriangleVertex kTriangleVertices[] = {
     return NO;
   }
 
-  _queue = GPUGetCommandQueue(_device, GPU_QUEUE_GRAPHICS_BIT);
+  _queue = GPUGetQueue(_device, GPU_QUEUE_GRAPHICS, 0);
   if (!_queue) {
     NSLog(@"GPU: failed to get command queue");
     return NO;
@@ -216,6 +214,7 @@ static const TriangleVertex kTriangleVertices[] = {
   }
 
   groupEntry.binding = layoutEntries[0].binding;
+  groupEntry.stage = layoutEntries[0].stage;
   groupEntry.kind = layoutEntries[0].kind;
   groupEntry.buffer = _fragmentUniformBuffer;
   groupEntry.offset = 0;
@@ -246,6 +245,7 @@ static const TriangleVertex kTriangleVertices[] = {
 - (void)renderFrame {
   GPUFrame *frame;
   GPUCommandBuffer *cmdb;
+  GPUQueueSubmitInfo submitInfo;
   GPURenderPassDesc *pass;
   GPURenderCommandEncoder *encoder;
 
@@ -254,8 +254,7 @@ static const TriangleVertex kTriangleVertices[] = {
     return;
   }
 
-  cmdb = GPUNewCommandBuffer(_queue, NULL, NULL);
-  if (!cmdb) {
+  if (GPUAcquireCommandBuffer(_queue, "main-frame", &cmdb) != GPU_OK || !cmdb) {
     GPUEndFrame(frame);
     return;
   }
@@ -281,7 +280,11 @@ static const TriangleVertex kTriangleVertices[] = {
   GPUBindRenderGroup(encoder, _fragmentGroup);
   gpuDrawPrimitives(encoder, GPUPrimitiveTypeTriangle, 0, 3);
   GPUEndEncoding(encoder);
-  GPUFinishFrame(cmdb, frame);
+  GPUPresent(cmdb, frame);
+  submitInfo.commandBufferCount = 1;
+  submitInfo.ppCommandBuffers = (GPUCommandBuffer * const[]){ cmdb };
+  GPUQueueSubmit(_queue, &submitInfo);
+  GPUEndFrame(frame);
 }
 
 - (void)tick:(NSTimer *)timer {

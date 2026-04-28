@@ -26,7 +26,6 @@
 void
 GPU_CONSTRUCTOR
 gpu__init(void) {
-  gpuSwitchGPUApiAuto();
 }
 
 void

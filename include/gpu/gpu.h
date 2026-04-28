@@ -51,6 +51,7 @@ extern "C" {
 #include "feature.h"
 #include "descriptor.h"
 #include "bindgroup.h"
+#include "usl.h"
 #include "sampler.h"
 #include "instance.h"
 #include "surface.h"
@@ -62,18 +63,6 @@ typedef enum GPUBackend {
   GPU_BACKEND_DIRECTX12 = 3,
   GPU_BACKEND_OPENGL    = 4
 } GPUBackend;
-
-GPU_EXPORT
-void
-GPUSwitchGPUApi(GPUBackend backend);
-
-GPU_EXPORT
-void
-gpuSwitchGPUApiAuto(void);
-
-GPU_EXPORT
-GPUBackend
-gpuActiveGPUBackend(void);
 
 /* TODO: */
 GPU_EXPORT

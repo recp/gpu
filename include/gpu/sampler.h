@@ -21,6 +21,9 @@ extern "C" {
 #endif
 
 #include "common.h"
+#include "usl.h"
+
+typedef struct GPUDevice GPUDevice;
 
 typedef struct GPUSampler {
   void *_priv;
@@ -29,6 +32,12 @@ typedef struct GPUSampler {
 GPU_EXPORT
 GPUSampler *
 GPUCreateSampler(GPUDevice * __restrict device, bool staticIfSupported);
+
+GPU_EXPORT
+GPUSampler *
+GPUCreateSamplerFromUSLStaticSampler(GPUDevice * __restrict device,
+                                     const GPUUSLStaticSamplerDesc *desc,
+                                     bool staticIfSupported);
 
 #ifdef __cplusplus
 }
