@@ -488,16 +488,15 @@ gpu_createShaderLibraryFromUSLBytecodeImpl(GPUDevice *device,
     int rc;
 
     if (useSelectedEntries) {
-      generated = usl_compile_backend_entries_from_bytecode_for_target_spec(
-                    bytecodeData,
-                    (size_t)bytecodeSize,
-                    &target,
-                    entryPointNames,
-                    entryPointCount);
+      generated = us_compile_target_entries(bytecodeData,
+                                            (size_t)bytecodeSize,
+                                            &target,
+                                            entryPointNames,
+                                            entryPointCount);
     } else {
-      generated = usl_compile_backend_from_bytecode_for_target_spec(bytecodeData,
-                                                                    (size_t)bytecodeSize,
-                                                                    &target);
+      generated = us_compile_target(bytecodeData,
+                                    (size_t)bytecodeSize,
+                                    &target);
     }
     if (!generated) {
       return -4;
