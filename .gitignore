@@ -54,19 +54,16 @@ dkms.conf
 # Project files
 *.xcodeproj
 *.xcworkspace
-samples/triangle-manual/hello-triangle-manual
-samples/triangle-usl/hello-triangle-usl
-samples/triangle-usl/triangle.us
-samples/triangle-usl/triangle.usl.metal
-samples/triangle-usl/triangle.usl.logs
-samples/textured-quad-usl/hello-textured-quad-usl
-samples/textured-quad-usl/textured_quad.us
-samples/textured-quad-usl/textured_quad.usl.metal
-samples/textured-quad-usl/textured_quad.usl.logs
-samples/usl-reflection-check/reflection.us
-samples/usl-reflection-check/reflection.usl.metal
-samples/usl-reflection-check/reflection.usl.logs
+
+# Sample build outputs
+samples/**/hello-*
+samples/**/*.us
+samples/**/*.usl.metal
+samples/**/*.usl.logs
+samples/**/.build.lock/
 samples/usl-reflection-check/usl-reflection-check
+!samples/triangle-manual/triangle.usl.metal
+
 win/.vs/
 win/gpu/
 win/gpu/x64/
