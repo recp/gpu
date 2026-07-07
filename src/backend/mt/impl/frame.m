@@ -27,18 +27,14 @@ mt_beginFrame(GPUApi       *__restrict api,
   swapChainMtl = swapChain->_priv;
   drawable     = [swapChainMtl->layer nextDrawable];
   if (!drawable) {
-    // Handle error, e.g. skip this frame
     return NULL;
   }
 
+  [drawable retain];
   frame           = calloc(1, sizeof(*frame));
   frame->_priv    = drawable;
-  frame->target   = drawable.texture; // wrap with GPUTexture later.
+  frame->target   = (GPUTexture *)drawable.texture;
   frame->drawable = drawable;
-
-  // Here, you might set up your MTLRenderPassDescriptor using the drawable's texture.
-  // Then create a command buffer and render command encoder and proceed with rendering.
-  // ...
 
   return frame;
 }
@@ -47,7 +43,13 @@ GPU_HIDE
 void
 mt_endFrame(GPUApi   *__restrict api,
             GPUFrame *__restrict frame) {
+  (void)api;
 
+  if (!frame)
+    return;
+
+  [(id<CAMetalDrawable>)frame->drawable release];
+  free(frame);
 }
 
 GPU_HIDE

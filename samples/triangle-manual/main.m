@@ -81,6 +81,7 @@ static const TriangleVertex kTriangleVertices[] = {
   NSString *shaderPath;
   NSString *executablePath;
   NSString *sampleDir;
+
   GPUBindGroupLayoutEntry layoutEntry;
   GPUBindGroupEntry groupEntry;
   GPUShaderLibraryCreateInfo shaderInfo;

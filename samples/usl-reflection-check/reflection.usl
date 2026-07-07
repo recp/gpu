@@ -1,0 +1,19 @@
+pub struct VSIn {
+  position: float2 #attribute(0)
+  uv: float2 #attribute(1)
+}
+
+pub struct FragmentUniforms {
+  tint: float4
+}
+
+vert reflect_vs(v: VSIn #stage_in) -> float4 {
+  return float4(v.position, 0.0, 1.0)
+}
+
+@require(explicit_gradient_sampling)
+frag reflect_fs(colorTex: texture2d<half> #texture(0),
+                uniforms: FragmentUniforms #buffer(0)) -> float4 {
+  let repeatSampler = sampler(.linear, .linear, .linear, .repeat)
+  return float4(colorTex.sample(repeatSampler, float2(0.5, 0.5))) * uniforms.tint
+}

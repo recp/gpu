@@ -1,5 +1,6 @@
 #import <AppKit/AppKit.h>
 #include <math.h>
+#include <string.h>
 #import <mach-o/dyld.h>
 #import <QuartzCore/QuartzCore.h>
 
@@ -80,7 +81,10 @@ static const TriangleVertex kTriangleVertices[] = {
   NSString *executablePath;
   NSString *sampleDir;
   NSData   *bytecodeData;
+  GPUShaderLibraryUSLInfo uslInfo;
+  GPUBindGroupLayoutUSLInfo layoutInfo;
   const GPUBindGroupLayoutEntry *layoutEntries;
+  const char *shaderEntries[] = { "tri_vs", "tri_fs" };
   GPUBindGroupEntry groupEntry;
   uint32_t layoutCount;
   GPUExtent2D size;
@@ -146,11 +150,29 @@ static const TriangleVertex kTriangleVertices[] = {
     return NO;
   }
 
-  if (GPUCreateShaderLibraryFromUSLBytecode(_device,
-                                            bytecodeData.bytes,
-                                            (uint64_t)bytecodeData.length,
-                                            (GPUShaderLibrary **)&_library) != 0) {
+  if (GPUCreateShaderLibraryFromUSLBytecodeForEntries(_device,
+                                                      bytecodeData.bytes,
+                                                      (uint64_t)bytecodeData.length,
+                                                      shaderEntries,
+                                                      2u,
+                                                      (GPUShaderLibrary **)&_library) != 0) {
     NSLog(@"GPU: failed to create shader library");
+    return NO;
+  }
+
+  if (GPUGetShaderLibraryUSLInfo(_library, &uslInfo) != 0 ||
+      uslInfo.abiVersion != GPU_SHADER_LIBRARY_USL_INFO_VERSION ||
+      uslInfo.bytecodeSize != (uint64_t)bytecodeData.length ||
+      uslInfo.bytecodeContentHash == 0 ||
+      uslInfo.targetAtomCount == 0 ||
+      uslInfo.targetAtomHash == 0 ||
+      uslInfo.backendContentHash == 0 ||
+      uslInfo.selectedEntryCount != 2u ||
+      uslInfo.entryTargetInfoVersion == 0 ||
+      uslInfo.targetSupported != 1 ||
+      uslInfo.targetSupportStatus != 1 ||
+      uslInfo.selectedEntryHash == 0) {
+    NSLog(@"GPU: failed to read USL shader-library cache identity");
     return NO;
   }
 
@@ -207,6 +229,25 @@ static const TriangleVertex kTriangleVertices[] = {
 
   layoutEntries = GPUGetBindGroupLayoutEntries(_fragmentLayout, &layoutCount);
   if (!layoutEntries || layoutCount != 1 ||
+      GPUGetBindGroupLayoutUSLInfo(_fragmentLayout, &layoutInfo) != 0 ||
+      layoutInfo.abiVersion != GPU_BIND_GROUP_LAYOUT_USL_INFO_VERSION ||
+      layoutInfo.stage != GPUBindStageFragment ||
+      strcmp(layoutInfo.entryPointName, "tri_fs") != 0 ||
+      layoutInfo.resourceBindingCount != 1 ||
+      layoutInfo.capabilityRequirementCount != 0 ||
+      layoutInfo.capabilityRequirementTotalCount != 0 ||
+      layoutInfo.capabilityRequirementFlags != 0 ||
+      layoutInfo.capabilityRequirementHash != 0 ||
+      layoutInfo.entryTargetInfoVersion == 0 ||
+      layoutInfo.targetBackend == 0 ||
+      layoutInfo.targetSupported != 1 ||
+      layoutInfo.targetSupportStatus != 1 ||
+      layoutInfo.targetAtomCount == 0 ||
+      layoutInfo.targetAtomTotalCount < layoutInfo.targetAtomCount ||
+      layoutInfo.targetInfoFlags != 0 ||
+      layoutInfo.targetAtomHash == 0 ||
+      layoutInfo.bytecodeSize != (uint64_t)bytecodeData.length ||
+      layoutInfo.bytecodeContentHash != uslInfo.bytecodeContentHash ||
       layoutEntries[0].stage != GPUBindStageFragment ||
       layoutEntries[0].kind != GPUBindKindBuffer) {
     NSLog(@"GPU: unexpected bind layout extracted from USL bytecode");

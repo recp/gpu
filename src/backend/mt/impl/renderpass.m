@@ -30,10 +30,9 @@ GPURenderPassDesc*
 mt_beginRenderPass(GPUTexture *target) {
   GPURenderPassDesc       *renderPass;
   MTLRenderPassDescriptor *rpd;
-  id<CAMetalDrawable>      drawable;
   id<MTLTexture>           texture;
 
-  texture  = target;
+  texture  = (id<MTLTexture>)target;
 
   rpd = [MTLRenderPassDescriptor renderPassDescriptor];
   rpd.colorAttachments[0].texture     = texture;

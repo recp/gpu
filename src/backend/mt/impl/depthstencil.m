@@ -85,13 +85,13 @@ GPUNewTextureWith(GPUDevice * __restrict device, GPUTextureDesc * __restrict des
   mtlDevice = deviceMT->device;
 
   texdesc             = [MTLTextureDescriptor new];
-  texdesc.pixelFormat = desc->format;
+  texdesc.pixelFormat = (MTLPixelFormat)desc->format;
   texdesc.width       = desc->width;
   texdesc.height      = desc->height;
   texdesc.storageMode = desc->storageMode;
-  texdesc.usage       = desc->usage;
+  texdesc.usage       = (MTLTextureUsage)desc->usage;
 
-  return [mtlDevice newTextureWithDescriptor: texdesc];
+  return (GPUTexture *)[mtlDevice newTextureWithDescriptor:texdesc];
 }
 
 GPU_EXPORT

@@ -21,7 +21,7 @@ extern "C" {
 #endif
 
 #include "texture.h"
-#include "buffer.h"
+#include "cmdqueue.h"
 
 typedef struct GPUSwapChain GPUSwapChain;
 
@@ -29,7 +29,6 @@ typedef struct GPUFrame {
   void       *_priv;
   GPUTexture *target;
   void       *drawable;
-  // Other members...
 } GPUFrame;
 
 GPU_EXPORT
@@ -39,6 +38,10 @@ GPUBeginFrame(GPUSwapChain* swapchain);
 GPU_EXPORT
 void
 GPUEndFrame(GPUFrame* frame);
+
+GPU_EXPORT
+void
+GPUPresent(GPUCommandBuffer *cmdb, GPUFrame *frame);
 
 GPU_EXPORT
 void

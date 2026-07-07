@@ -88,6 +88,25 @@ typedef struct GPUUSLEntryReflection {
   GPUUSLResourceBindingDesc *resourceBindings;
   uint32_t staticSamplerCount;
   GPUUSLStaticSamplerDesc *staticSamplers;
+  uint32_t capabilityRequirementCount;
+  uint32_t capabilityRequirementTotalCount;
+  uint32_t capabilityRequirementFlags;
+  uint32_t reserved0;
+  uint32_t runtimeInfoVersion;
+  uint32_t bytecodeVersion;
+  uint64_t bytecodeSize;
+  uint64_t bytecodeDataSize;
+  uint64_t bytecodeContentHash;
+  uint64_t capabilityRequirementHash;
+  uint32_t entryTargetInfoVersion;
+  uint32_t targetBackend;
+  uint32_t targetSupported;
+  uint32_t targetSupportStatus;
+  uint32_t targetAtomCount;
+  uint32_t targetAtomTotalCount;
+  uint32_t targetInfoFlags;
+  uint32_t reserved1;
+  uint64_t targetAtomHash;
 } GPUUSLEntryReflection;
 
 GPU_EXPORT

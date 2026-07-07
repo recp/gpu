@@ -22,11 +22,9 @@ extern "C" {
 
 #include "common.h"
 #include "resource.h"
-#include "cmdqueue.h"
 
 typedef struct GPUBuffer GPUBuffer;
 typedef struct GPUDevice GPUDevice;
-typedef struct GPUFrame  GPUFrame;
 
 GPU_EXPORT
 GPUBuffer*
@@ -41,10 +39,6 @@ gpuBufferLength(GPUBuffer * __restrict buff);
 GPU_EXPORT
 GPUBuffer*
 gpuBufferContents(GPUBuffer * __restrict buff);
-
-GPU_EXPORT
-void
-GPUPresent(GPUCommandBuffer *cmdb, struct GPUFrame *frame);
 
 #ifdef __cplusplus
 }
