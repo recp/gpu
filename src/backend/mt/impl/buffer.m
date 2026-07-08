@@ -88,9 +88,43 @@ mt_writeBuffer(GPUCommandQueue * __restrict queue,
 }
 
 GPU_HIDE
+GPUResult
+mt_readBuffer(GPUCommandQueue * __restrict queue,
+              GPUBuffer       * __restrict buff,
+              uint64_t                     srcOffset,
+              void           * __restrict outData,
+              uint64_t                     sizeBytes) {
+  id<MTLBuffer> buffer;
+  const uint8_t *contents;
+
+  (void)queue;
+
+  if (!buff || !outData || sizeBytes == 0) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  buffer = (id<MTLBuffer>)buff;
+  if (srcOffset > [buffer length] || sizeBytes > [buffer length] - srcOffset) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (sizeBytes > SIZE_MAX) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  contents = (const uint8_t *)[buffer contents];
+  if (!contents) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  memcpy(outData, contents + srcOffset, (size_t)sizeBytes);
+  return GPU_OK;
+}
+
+GPU_HIDE
 void
 mt_initBuff(GPUApiBuffer *api) {
   api->create  = mt_createBuffer;
   api->destroy = mt_destroyBuffer;
   api->write   = mt_writeBuffer;
+  api->read    = mt_readBuffer;
 }

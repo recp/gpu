@@ -82,3 +82,26 @@ GPUQueueWriteBuffer(GPUCommandQueue * __restrict queue,
 
   return api->buf.write(queue, buff, dstOffset, data, sizeBytes);
 }
+
+GPU_EXPORT
+GPUResult
+GPUQueueReadBuffer(GPUCommandQueue * __restrict queue,
+                   GPUBuffer       * __restrict buff,
+                   uint64_t                     srcOffset,
+                   void           * __restrict outData,
+                   uint64_t                     sizeBytes) {
+  GPUApi *api;
+
+  if (!queue || !buff || !outData || sizeBytes == 0) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (!(api = gpuActiveGPUApi())) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  if (!api->buf.read) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  return api->buf.read(queue, buff, srcOffset, outData, sizeBytes);
+}

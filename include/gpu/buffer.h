@@ -62,6 +62,14 @@ GPUQueueWriteBuffer(GPUCommandQueue * __restrict queue,
                     const void      * __restrict data,
                     uint64_t                     sizeBytes);
 
+GPU_EXPORT
+GPUResult
+GPUQueueReadBuffer(GPUCommandQueue * __restrict queue,
+                   GPUBuffer       * __restrict buff,
+                   uint64_t                     srcOffset,
+                   void           * __restrict outData,
+                   uint64_t                     sizeBytes);
+
 #ifdef __cplusplus
 }
 #endif

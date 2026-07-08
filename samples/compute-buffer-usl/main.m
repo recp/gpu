@@ -1,6 +1,9 @@
 #import <AppKit/AppKit.h>
 #include <stddef.h>
+#include <math.h>
+#include <stdlib.h>
 #include <string.h>
+#import <dispatch/dispatch.h>
 #import <mach-o/dyld.h>
 
 #import "../../include/gpu/gpu.h"
@@ -27,8 +30,28 @@ typedef struct GeneratedVertex {
   GPUBuffer *_vertexBuffer;
   GPUBindGroup *_bindGroup;
   NSTimer *_timer;
+  NSInteger _exitAfterFrames;
+  NSInteger _submittedFrames;
+  NSInteger _completedFrames;
+  BOOL _validationFailed;
+  BOOL _terminating;
 }
+- (void)frameCompleted;
+- (BOOL)validationFailed;
 @end
+
+static const GeneratedVertex kExpectedVertices[] = {
+  { { -0.6f, -0.6f, 0.0f, 1.0f }, { 1.0f, 0.2f, 0.1f, 1.0f } },
+  { {  0.6f, -0.6f, 0.0f, 1.0f }, { 0.1f, 1.0f, 0.3f, 1.0f } },
+  { {  0.0f,  0.6f, 0.0f, 1.0f }, { 0.2f, 0.4f, 1.0f, 1.0f } },
+};
+
+static void
+ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
+  (void)cmdb;
+  ComputeBufferUSLApp *app = (__bridge ComputeBufferUSLApp *)sender;
+  [app frameCompleted];
+}
 
 @implementation ComputeBufferUSLApp
 
@@ -223,7 +246,7 @@ typedef struct GeneratedVertex {
                .structSize = sizeof(GPUBufferCreateInfo) },
     .label = "compute-buffer-usl-vertices",
     .sizeBytes = sizeof(GeneratedVertex) * 3u,
-    .usage = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_STORAGE
+    .usage = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_SRC
   };
   if (GPUCreateBuffer(_device, &vertexBufferInfo, &_vertexBuffer) != GPU_OK) {
     NSLog(@"GPU: failed to create vertex/storage buffer");
@@ -263,6 +286,10 @@ typedef struct GeneratedVertex {
   GPUBufferBinding vertexBuffer = {0};
   GPUResult submitResult = GPU_OK;
 
+  if (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) {
+    return;
+  }
+
   frame = GPUBeginFrame(_swapchain);
   if (!frame) {
     return;
@@ -270,6 +297,11 @@ typedef struct GeneratedVertex {
 
   if (GPUAcquireCommandBuffer(_queue, "compute-buffer-frame", &cmdb) != GPU_OK || !cmdb) {
     goto cleanup;
+  }
+  if (_exitAfterFrames > 0) {
+    GPUSetCommandBufferCompletionHandler(cmdb,
+                                         (__bridge void *)self,
+                                         ComputeBufferFrameComplete);
   }
 
   compute = GPUBeginComputePass(cmdb, "compute-buffer-usl-fill");
@@ -308,6 +340,7 @@ typedef struct GeneratedVertex {
   GPUEndRenderPass(render);
   render = NULL;
 
+  _submittedFrames++;
   submitResult = GPUFinishFrame(_queue, cmdb, frame);
   frame = NULL;
   if (submitResult != GPU_OK) {
@@ -322,6 +355,58 @@ cleanup:
     GPUEndRenderPass(render);
   }
   GPUEndFrame(frame);
+}
+
+- (BOOL)verifyReadback {
+  GeneratedVertex vertices[3];
+  GPUResult result;
+
+  memset(vertices, 0, sizeof(vertices));
+  result = GPUQueueReadBuffer(_queue,
+                              _vertexBuffer,
+                              0,
+                              vertices,
+                              sizeof(vertices));
+  if (result != GPU_OK) {
+    NSLog(@"GPUQueueReadBuffer failed: %d", result);
+    return NO;
+  }
+
+  for (NSUInteger i = 0; i < 3; i++) {
+    for (NSUInteger j = 0; j < 4; j++) {
+      if (fabsf(vertices[i].position[j] - kExpectedVertices[i].position[j]) > 0.0001f ||
+          fabsf(vertices[i].color[j] - kExpectedVertices[i].color[j]) > 0.0001f) {
+        NSLog(@"GPU readback mismatch at vertex %lu component %lu",
+              (unsigned long)i,
+              (unsigned long)j);
+        return NO;
+      }
+    }
+  }
+
+  return YES;
+}
+
+- (void)frameCompleted {
+  _completedFrames++;
+  if (_exitAfterFrames <= 0 || _terminating) {
+    return;
+  }
+
+  if (![self verifyReadback]) {
+    _validationFailed = YES;
+  }
+
+  if (_completedFrames >= _exitAfterFrames) {
+    _terminating = YES;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [NSApp terminate:nil];
+    });
+  }
+}
+
+- (BOOL)validationFailed {
+  return _validationFailed;
 }
 
 - (void)tick:(NSTimer *)timer {
@@ -382,6 +467,11 @@ cleanup:
     return;
   }
 
+  const char *exitAfterFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
+  if (exitAfterFrames && exitAfterFrames[0] != '\0') {
+    _exitAfterFrames = strtol(exitAfterFrames, NULL, 10);
+  }
+
   _timer = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
                                    target:self
                                  selector:@selector(tick:)
@@ -428,6 +518,6 @@ main(int argc, const char *argv[]) {
     ComputeBufferUSLApp *delegate = [[ComputeBufferUSLApp alloc] init];
     app.delegate = delegate;
     [app run];
+    return [delegate validationFailed] ? 1 : 0;
   }
-  return 0;
 }

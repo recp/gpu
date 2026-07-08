@@ -49,6 +49,9 @@ run_step "compute-buffer-usl sidecar" \
 run_step "compute-buffer-usl generated no-sidecar" \
   run_sample compute-buffer-usl env GPU_DERIVED_DATA="$DERIVED_DATA" GPU_USL_NO_SIDECAR=1 ./build.sh
 
+run_step "compute-buffer-usl readback" \
+  run_sample compute-buffer-usl env GPU_DERIVED_DATA="$DERIVED_DATA" GPU_SAMPLE_EXIT_AFTER_FRAMES=1 GPU_USL_NO_SIDECAR=1 ./hello-compute-buffer-usl
+
 run_step "compute-buffer-usl embedded no-sidecar" \
   run_sample compute-buffer-usl env GPU_DERIVED_DATA="$DERIVED_DATA" GPU_USL_EMBED_METAL=1 GPU_USL_NO_SIDECAR=1 ./build.sh
 
