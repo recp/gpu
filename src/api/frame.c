@@ -28,6 +28,12 @@ GPUBeginFrame(GPUSwapChain* swapchain) {
 }
 
 GPU_EXPORT
+GPUTexture*
+GPUFrameGetTarget(GPUFrame *frame) {
+  return frame ? frame->target : NULL;
+}
+
+GPU_EXPORT
 void
 GPUEndFrame(GPUFrame* frame) {
   GPUApi *api;

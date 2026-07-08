@@ -35,6 +35,11 @@ GPU_EXPORT
 GPUFrame*
 GPUBeginFrame(GPUSwapChain* swapchain);
 
+/* Returns the acquired render target for this frame. */
+GPU_EXPORT
+GPUTexture*
+GPUFrameGetTarget(GPUFrame *frame);
+
 GPU_EXPORT
 void
 GPUEndFrame(GPUFrame* frame);

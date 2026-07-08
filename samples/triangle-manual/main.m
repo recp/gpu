@@ -258,7 +258,7 @@ static const TriangleVertex kTriangleVertices[] = {
     goto cleanup;
   }
 
-  pass = GPUBeginRenderPass(frame->target);
+  pass = GPUBeginRenderPass(GPUFrameGetTarget(frame));
   if (!pass) {
     goto cleanup;
   }
