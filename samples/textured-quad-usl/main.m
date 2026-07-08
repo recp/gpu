@@ -371,6 +371,7 @@ static const uint8_t kCheckerPixels[] = {
   GPUFrame *frame = NULL;
   GPUCommandBuffer *cmdb = NULL;
   GPUQueueSubmitInfo submitInfo = {0};
+  GPUResult submitResult = GPU_OK;
   GPURenderPassDesc *pass = NULL;
   GPURenderCommandEncoder *encoder = NULL;
 
@@ -405,7 +406,10 @@ static const uint8_t kCheckerPixels[] = {
   GPUSchedulePresent(cmdb, frame);
   submitInfo.commandBufferCount = 1;
   submitInfo.ppCommandBuffers = (GPUCommandBuffer * const[]){ cmdb };
-  GPUQueueSubmit(_queue, &submitInfo);
+  submitResult = GPUQueueSubmit(_queue, &submitInfo);
+  if (submitResult != GPU_OK) {
+    NSLog(@"GPUQueueSubmit failed: %d", submitResult);
+  }
 
 cleanup:
   GPUDestroyRenderPass(pass);
