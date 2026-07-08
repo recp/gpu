@@ -97,6 +97,22 @@ GPUBindVertexBuffers(GPURenderPassEncoder     *pass,
 
 GPU_EXPORT
 void
+GPUSetViewport(GPURenderPassEncoder *pass, const GPUViewport *viewport);
+
+GPU_EXPORT
+void
+GPUSetScissor(GPURenderPassEncoder *pass, const GPUScissorRect *scissor);
+
+GPU_EXPORT
+void
+GPUSetBlendConstant(GPURenderPassEncoder *pass, const float rgba[4]);
+
+GPU_EXPORT
+void
+GPUSetStencilReference(GPURenderPassEncoder *pass, uint32_t reference);
+
+GPU_EXPORT
+void
 GPUSetVertexTexture(GPURenderCommandEncoder *rce,
                     GPUTextureView          *view,
                     uint32_t                 index);
@@ -142,6 +158,28 @@ GPUDrawIndexed(GPURenderCommandEncoder *rce,
                GPUIndexType             indexType,
                GPUBuffer               *indexBuffer,
                uint32_t                 indexBufferOffset);
+
+typedef uint64_t GPUDynamicStateMask;
+enum {
+  GPU_DYNAMIC_STATE_VIEWPORT_BIT          = 1ull << 0,
+  GPU_DYNAMIC_STATE_SCISSOR_BIT           = 1ull << 1,
+  GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT    = 1ull << 2,
+  GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT = 1ull << 3
+};
+
+typedef struct GPUDynamicStateApplyInfo {
+  GPUChainedStruct    chain;
+  GPUDynamicStateMask mask;
+  GPUViewport         viewport;
+  GPUScissorRect      scissor;
+  float               blendConstant[4];
+  uint32_t            stencilReference;
+} GPUDynamicStateApplyInfo;
+
+GPU_EXPORT
+void
+GPUApplyDynamicState(GPURenderPassEncoder *pass,
+                     const GPUDynamicStateApplyInfo *info);
 
 #ifdef __cplusplus
 }

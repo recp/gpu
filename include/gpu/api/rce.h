@@ -41,7 +41,16 @@ typedef struct GPUApiRCE {
   (*setDepthStencil)(GPURenderCommandEncoder *rce, GPUDepthStencilPipelineState *ds);
   
   void
-  (*viewport)(GPURenderCommandEncoder *enc, GPUViewport *viewport);
+  (*viewport)(GPURenderCommandEncoder *enc, const GPUViewport *viewport);
+
+  void
+  (*scissor)(GPURenderCommandEncoder *enc, const GPUScissorRect *scissor);
+
+  void
+  (*blendConstant)(GPURenderCommandEncoder *enc, const float rgba[4]);
+
+  void
+  (*stencilReference)(GPURenderCommandEncoder *enc, uint32_t reference);
   
   void
   (*vertexBytes)(GPURenderCommandEncoder *enc,

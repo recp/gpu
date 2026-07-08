@@ -79,6 +79,58 @@ GPUBindVertexBuffers(GPURenderPassEncoder   *pass,
 
 GPU_EXPORT
 void
+GPUSetViewport(GPURenderPassEncoder *pass, const GPUViewport *viewport) {
+  GPUApi *api;
+
+  if (!pass || !viewport)
+    return;
+  if (!(api = gpuActiveGPUApi()) || !api->rce.viewport)
+    return;
+
+  api->rce.viewport(pass, viewport);
+}
+
+GPU_EXPORT
+void
+GPUSetScissor(GPURenderPassEncoder *pass, const GPUScissorRect *scissor) {
+  GPUApi *api;
+
+  if (!pass || !scissor)
+    return;
+  if (!(api = gpuActiveGPUApi()) || !api->rce.scissor)
+    return;
+
+  api->rce.scissor(pass, scissor);
+}
+
+GPU_EXPORT
+void
+GPUSetBlendConstant(GPURenderPassEncoder *pass, const float rgba[4]) {
+  GPUApi *api;
+
+  if (!pass || !rgba)
+    return;
+  if (!(api = gpuActiveGPUApi()) || !api->rce.blendConstant)
+    return;
+
+  api->rce.blendConstant(pass, rgba);
+}
+
+GPU_EXPORT
+void
+GPUSetStencilReference(GPURenderPassEncoder *pass, uint32_t reference) {
+  GPUApi *api;
+
+  if (!pass)
+    return;
+  if (!(api = gpuActiveGPUApi()) || !api->rce.stencilReference)
+    return;
+
+  api->rce.stencilReference(pass, reference);
+}
+
+GPU_EXPORT
+void
 GPUSetVertexTexture(GPURenderCommandEncoder *rce,
                     GPUTextureView          *view,
                     uint32_t                 index) {
@@ -191,4 +243,21 @@ GPUDrawIndexed(GPURenderCommandEncoder *rce,
                             indexType,
                             indexBuffer,
                             indexBufferOffset);
+}
+
+GPU_EXPORT
+void
+GPUApplyDynamicState(GPURenderPassEncoder *pass,
+                     const GPUDynamicStateApplyInfo *info) {
+  if (!pass || !info)
+    return;
+
+  if (info->mask & GPU_DYNAMIC_STATE_VIEWPORT_BIT)
+    GPUSetViewport(pass, &info->viewport);
+  if (info->mask & GPU_DYNAMIC_STATE_SCISSOR_BIT)
+    GPUSetScissor(pass, &info->scissor);
+  if (info->mask & GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT)
+    GPUSetBlendConstant(pass, info->blendConstant);
+  if (info->mask & GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT)
+    GPUSetStencilReference(pass, info->stencilReference);
 }

@@ -52,7 +52,7 @@ mt_setDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilPipelineState *d
 
 GPU_HIDE
 void
-mt_viewport(GPURenderCommandEncoder *enc, GPUViewport *viewport) {
+mt_viewport(GPURenderCommandEncoder *enc, const GPUViewport *viewport) {
   MTLViewport vp;
   
   vp.originX = viewport->originX;
@@ -63,6 +63,34 @@ mt_viewport(GPURenderCommandEncoder *enc, GPUViewport *viewport) {
   vp.zfar    = viewport->zfar;
 
   [(id<MTLRenderCommandEncoder>)enc setViewport:vp];
+}
+
+GPU_HIDE
+void
+mt_scissor(GPURenderCommandEncoder *enc, const GPUScissorRect *scissor) {
+  MTLScissorRect rect;
+
+  rect.x      = scissor->x;
+  rect.y      = scissor->y;
+  rect.width  = scissor->width;
+  rect.height = scissor->height;
+
+  [(id<MTLRenderCommandEncoder>)enc setScissorRect:rect];
+}
+
+GPU_HIDE
+void
+mt_blendConstant(GPURenderCommandEncoder *enc, const float rgba[4]) {
+  [(id<MTLRenderCommandEncoder>)enc setBlendColorRed:rgba[0]
+                                               green:rgba[1]
+                                                blue:rgba[2]
+                                               alpha:rgba[3]];
+}
+
+GPU_HIDE
+void
+mt_stencilReference(GPURenderCommandEncoder *enc, uint32_t reference) {
+  [(id<MTLRenderCommandEncoder>)enc setStencilReferenceValue:reference];
 }
 
 GPU_HIDE
@@ -169,6 +197,9 @@ mt_initRCE(GPUApiRCE *api) {
   api->setRenderPipelineState = mt_setRenderPipelineState;
   api->setDepthStencil        = mt_setDepthStencil;
   api->viewport               = mt_viewport;
+  api->scissor                = mt_scissor;
+  api->blendConstant          = mt_blendConstant;
+  api->stencilReference       = mt_stencilReference;
   api->vertexBytes            = mt_vertexBytes;
   api->vertexBuffer           = mt_vertexBuffer;
   api->setVertexTexture       = mt_rceSetVertexTexture;
