@@ -51,6 +51,7 @@ mt_newRenderState(GPUDevice         * __restrict device,
   rederPipline   = calloc(1, sizeof(*rederPipline));
   
   rederPipline->_priv = mtRederPipline;
+  pipeline->_state = mtRederPipline;
   
   return rederPipline;
 }

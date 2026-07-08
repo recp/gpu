@@ -83,9 +83,18 @@ typedef enum GPURenderStages {
   GPURenderStageFragment = 1
 } GPURenderStages;
 
+typedef struct GPUBufferBinding {
+  GPUBuffer *buffer;
+  size_t     offset;
+} GPUBufferBinding;
+
 GPU_EXPORT
 GPURenderCommandEncoder*
 GPUNewRenderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass);
+
+GPU_EXPORT
+void
+GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline);
 
 GPU_EXPORT
 void
@@ -124,6 +133,13 @@ GPUSetVertexBuffer(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
+GPUBindVertexBuffers(GPURenderPassEncoder     *pass,
+                     uint32_t                  firstSlot,
+                     uint32_t                  count,
+                     const GPUBufferBinding   *bindings);
+
+GPU_EXPORT
+void
 GPUSetVertexTexture(GPURenderCommandEncoder *rce,
                     GPUTexture              *tex,
                     uint32_t                 index);
@@ -159,6 +175,14 @@ gpuDrawPrimitives(GPURenderCommandEncoder *rce,
                   GPUPrimitiveType         type,
                   size_t                   start,
                   size_t                   count);
+
+GPU_EXPORT
+void
+GPUDraw(GPURenderPassEncoder *pass,
+        uint32_t              vertexCount,
+        uint32_t              instanceCount,
+        uint32_t              firstVertex,
+        uint32_t              firstInstance);
 
 GPU_EXPORT
 void

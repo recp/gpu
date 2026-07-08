@@ -248,6 +248,7 @@ static const TriangleVertex kTriangleVertices[] = {
   GPURenderPassEncoder *encoder = NULL;
   GPURenderPassColorAttachment color = {0};
   GPURenderPassCreateInfo rp = {0};
+  GPUBufferBinding vertexBuffer = {0};
 
   frame = GPUBeginFrame(_swapchain);
   if (!frame) {
@@ -277,12 +278,15 @@ static const TriangleVertex kTriangleVertices[] = {
 
   [self updateFragmentUniforms];
 
+  vertexBuffer.buffer = _vertexBuffer;
+  vertexBuffer.offset = 0;
+
   GPUSetFrontFace(encoder, GPUWindingCounterClockwise);
   GPUSetCullMode(encoder, GPUCullModeNone);
-  GPUSetRenderState(encoder, _renderState);
-  GPUSetVertexBuffer(encoder, _vertexBuffer, 0, 0);
+  GPUBindRenderPipeline(encoder, _pipeline);
+  GPUBindVertexBuffers(encoder, 0, 1, &vertexBuffer);
   GPUBindRenderGroup(encoder, _fragmentGroup);
-  gpuDrawPrimitives(encoder, GPUPrimitiveTypeTriangle, 0, 3);
+  GPUDraw(encoder, 3, 1, 0, 0);
   GPUEndRenderPass(encoder);
   submitResult = GPUFinishFrame(_queue, cmdb, frame);
   frame = NULL;

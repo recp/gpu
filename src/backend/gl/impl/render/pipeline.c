@@ -33,6 +33,9 @@ gl_newRenderState(GPUDevice         * __restrict device,
   GPURenderPipelineState *rederPipline;
   
   rederPipline   = calloc(1, sizeof(*rederPipline));
+  if (pipeline) {
+    pipeline->_state = rederPipline->_priv;
+  }
   
   
   return rederPipline;

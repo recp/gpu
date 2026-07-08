@@ -62,6 +62,23 @@ GPUSetRenderState(GPURenderCommandEncoder *rce, GPURenderPipelineState *piplineS
 
 GPU_EXPORT
 void
+GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
+  GPURenderPipelineState state;
+  GPUApi *api;
+
+  if (!pass || !pipeline || !pipeline->_state)
+    return;
+  if (!(api = gpuActiveGPUApi()))
+    return;
+  if (!api->rce.setRenderPipelineState)
+    return;
+
+  state._priv = pipeline->_state;
+  api->rce.setRenderPipelineState(pass, &state);
+}
+
+GPU_EXPORT
+void
 GPUSetDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilState *ds) {
   GPUApi *api;
 
@@ -108,6 +125,32 @@ GPUSetVertexBuffer(GPURenderCommandEncoder *rce,
     return;
   
   api->rce.vertexBuffer(rce, buf, off, index);
+}
+
+GPU_EXPORT
+void
+GPUBindVertexBuffers(GPURenderPassEncoder   *pass,
+                     uint32_t                firstSlot,
+                     uint32_t                count,
+                     const GPUBufferBinding *bindings) {
+  GPUApi *api;
+  uint32_t i;
+
+  if (!pass || !bindings)
+    return;
+  if (!(api = gpuActiveGPUApi()))
+    return;
+  if (!api->rce.vertexBuffer)
+    return;
+
+  for (i = 0; i < count; i++) {
+    if (bindings[i].buffer) {
+      api->rce.vertexBuffer(pass,
+                            bindings[i].buffer,
+                            bindings[i].offset,
+                            firstSlot + i);
+    }
+  }
 }
 
 GPU_EXPORT
@@ -195,6 +238,23 @@ gpuDrawPrimitives(GPURenderCommandEncoder *rce,
 
   if (api->rce.drawPrimitives) {
     api->rce.drawPrimitives(rce, type, start, count);
+  }
+}
+
+GPU_EXPORT
+void
+GPUDraw(GPURenderPassEncoder *pass,
+        uint32_t              vertexCount,
+        uint32_t              instanceCount,
+        uint32_t              firstVertex,
+        uint32_t              firstInstance) {
+  uint32_t i;
+
+  if (!pass || vertexCount == 0 || instanceCount == 0 || firstInstance != 0)
+    return;
+
+  for (i = 0; i < instanceCount; i++) {
+    gpuDrawPrimitives(pass, GPUPrimitiveTypeTriangle, firstVertex, vertexCount);
   }
 }
 

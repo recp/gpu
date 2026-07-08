@@ -26,6 +26,7 @@ extern "C" {
 
 typedef struct GPURenderPipeline {
   void *_priv;
+  void *_state;
 } GPURenderPipeline;
 
 typedef struct GPURenderPipelineState {
