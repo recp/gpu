@@ -708,6 +708,14 @@ check_fence_create_validation(GPUDevice *device) {
   GPUFenceCreateInfo fenceInfo = {0};
   GPUFence *fence;
 
+  if (GPUWaitFence(NULL, 0) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUIsFenceSignaled(NULL)) {
+    fprintf(stderr, "null fence query behaved unexpectedly\n");
+    return 0;
+  }
+  GPUResetFence(NULL);
+  GPUDestroyFence(NULL);
+
   fenceInfo.chain.sType = GPU_STRUCTURE_TYPE_FENCE_CREATE_INFO;
   fenceInfo.chain.structSize = sizeof(fenceInfo);
 
@@ -745,6 +753,20 @@ check_fence_create_validation(GPUDevice *device) {
       GPUIsFenceSignaled(fence) ||
       GPUWaitFence(fence, 0) != GPU_ERROR_TIMEOUT) {
     fprintf(stderr, "fence create default state failed\n");
+    GPUDestroyFence(fence);
+    return 0;
+  }
+  GPUDestroyFence(fence);
+
+  fenceInfo.chain.sType = GPU_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  fenceInfo.chain.structSize = sizeof(fenceInfo);
+  fenceInfo.signaled = true;
+  fence = NULL;
+  if (GPUCreateFence(device, &fenceInfo, &fence) != GPU_OK ||
+      !fence ||
+      !GPUIsFenceSignaled(fence) ||
+      GPUWaitFence(fence, 0) != GPU_OK) {
+    fprintf(stderr, "fence create signaled state failed\n");
     GPUDestroyFence(fence);
     return 0;
   }
