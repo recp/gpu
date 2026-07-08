@@ -58,17 +58,22 @@ typedef struct GPUCommandQueue {
   GPUQueueFlagBits bits;
 } GPUCommandQueue;
 
-typedef struct GPUCommandBuffer {
+typedef struct GPUCommandBuffer GPUCommandBuffer;
+
+typedef void (*GPUCommandBufferOnCompleteFn)(void            *__restrict sender,
+                                             GPUCommandBuffer*__restrict cmdb);
+
+struct GPUCommandBuffer {
   void *_priv;
-} GPUCommandBuffer;
+  void *_onCompleteSender;
+  GPUCommandBufferOnCompleteFn _onComplete;
+  bool  _submitted;
+};
 
 typedef struct GPUQueueSubmitInfo {
   uint32_t commandBufferCount;
   GPUCommandBuffer * const *ppCommandBuffers;
 } GPUQueueSubmitInfo;
-
-typedef void (*GPUCommandBufferOnCompleteFn)(void            *__restrict sender,
-                                             GPUCommandBuffer*__restrict cmdb);
 
 GPU_EXPORT
 GPUCommandQueue*
