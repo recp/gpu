@@ -35,6 +35,28 @@ gpu_primitiveTypeFromTopology(GPUPrimitiveTopology topology) {
   }
 }
 
+static bool
+gpu_validIndexType(GPUIndexType indexType) {
+  return indexType == GPUIndexTypeUInt16 ||
+         indexType == GPUIndexTypeUInt32;
+}
+
+static bool
+gpu_validDynamicStateApplyInfo(const GPUDynamicStateApplyInfo *info) {
+  if (!info) {
+    return false;
+  }
+  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+      info->chain.sType != GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO) {
+    return false;
+  }
+  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
+    return false;
+  }
+
+  return true;
+}
+
 GPU_EXPORT
 void
 GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
@@ -84,6 +106,8 @@ GPUBindVertexBuffers(GPURenderPassEncoder   *pass,
 
   if (!pass || !bindings)
     return;
+  if (count == 0 || firstSlot > UINT32_MAX - (count - 1u))
+    return;
   if (!(api = gpuActiveGPUApi()))
     return;
   if (!api->rce.vertexBuffer)
@@ -106,6 +130,8 @@ GPUBindIndexBuffer(GPURenderPassEncoder *pass,
                    uint64_t              offset,
                    GPUIndexType          indexType) {
   if (!pass || !indexBuffer)
+    return;
+  if (!gpu_validIndexType(indexType))
     return;
 
   pass->_indexBuffer       = indexBuffer;
@@ -297,7 +323,7 @@ GPU_EXPORT
 void
 GPUApplyDynamicState(GPURenderPassEncoder *pass,
                      const GPUDynamicStateApplyInfo *info) {
-  if (!pass || !info)
+  if (!pass || !gpu_validDynamicStateApplyInfo(info))
     return;
 
   if (info->mask & GPU_DYNAMIC_STATE_VIEWPORT_BIT)

@@ -15,6 +15,7 @@
  */
 
 #include <gpu/bindgroup.h>
+#include <gpu/api/rce.h>
 #include <gpu/gpu.h>
 #include <gpu/usl.h>
 
@@ -801,6 +802,48 @@ check_render_pass_validation(void) {
 }
 
 static int
+check_render_encoder_validation(void) {
+  GPURenderPassEncoder pass = {0};
+  GPUBuffer *fakeBuffer = (GPUBuffer *)(uintptr_t)1u;
+  GPUBufferBinding binding = {0};
+  GPUDynamicStateApplyInfo dynamicState = {0};
+
+  GPUBindRenderPipeline(NULL, NULL);
+  GPUBindVertexBuffers(NULL, 0u, 0u, NULL);
+  GPUBindIndexBuffer(NULL, fakeBuffer, 0u, GPUIndexTypeUInt16);
+  GPUDraw(NULL, 1u, 1u, 0u, 0u);
+  GPUDrawIndexed(NULL, 1u, 1u, 0u, 0, 0u);
+  GPUApplyDynamicState(NULL, &dynamicState);
+  GPUApplyDynamicState(&pass, NULL);
+
+  binding.buffer = fakeBuffer;
+  GPUBindVertexBuffers(&pass, UINT32_MAX, 2u, &binding);
+  GPUBindIndexBuffer(&pass, fakeBuffer, 0u, (GPUIndexType)99);
+  if (pass._hasIndexBuffer) {
+    fprintf(stderr, "render encoder accepted invalid index type\n");
+    return 0;
+  }
+
+  GPUBindIndexBuffer(&pass, fakeBuffer, 0u, GPUIndexTypeUInt16);
+  if (!pass._hasIndexBuffer ||
+      pass._indexBuffer != fakeBuffer ||
+      pass._indexType != GPUIndexTypeUInt16) {
+    fprintf(stderr, "render encoder rejected valid index binding\n");
+    return 0;
+  }
+
+  dynamicState.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  dynamicState.chain.structSize = sizeof(dynamicState);
+  GPUApplyDynamicState(&pass, &dynamicState);
+
+  dynamicState.chain.sType = GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO;
+  dynamicState.chain.structSize = (uint32_t)(sizeof(dynamicState) - 1u);
+  GPUApplyDynamicState(&pass, &dynamicState);
+
+  return 1;
+}
+
+static int
 check_swapchain_validation(GPUDevice *device) {
   GPUSurface *fakeSurface;
   GPUSwapchain *swapchain;
@@ -1004,6 +1047,9 @@ check_selected_shader_library(const void *bytecode,
     return 0;
   }
   if (!check_render_pass_validation()) {
+    return 0;
+  }
+  if (!check_render_encoder_validation()) {
     return 0;
   }
 
