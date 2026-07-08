@@ -117,6 +117,16 @@ GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
   if (!cmdq || !info || info->commandBufferCount == 0 || !info->ppCommandBuffers) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+      info->chain.sType != GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->fence) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
 
   if (!(api = gpuActiveGPUApi()))
     return GPU_ERROR_BACKEND_FAILURE;
