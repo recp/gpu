@@ -34,6 +34,9 @@ GPUGetQueue(GPUDevice * __restrict device,
   }
   if (!(api = gpuActiveGPUApi()))
     return NULL;
+  if (!api->cmdque.getCommandQueue)
+    return NULL;
+
   return api->cmdque.getCommandQueue(device, bits, index);
 }
 
@@ -42,7 +45,11 @@ GPUCommandQueue*
 GPUNewCommandQueue(GPUDevice * __restrict device) {
   GPUApi *api;
 
+  if (!device)
+    return NULL;
   if (!(api = gpuActiveGPUApi()))
+    return NULL;
+  if (!api->cmdque.newCommandQueue)
     return NULL;
   
   return api->cmdque.newCommandQueue(device);
@@ -55,7 +62,11 @@ GPUNewCommandBuffer(GPUCommandQueue  * __restrict cmdb,
                     GPUCommandBufferOnCompleteFn  oncomplete) {
   GPUApi *api;
 
+  if (!cmdb)
+    return NULL;
   if (!(api = gpuActiveGPUApi()))
+    return NULL;
+  if (!api->cmdque.newCommandBuffer)
     return NULL;
   
   return api->cmdque.newCommandBuffer(cmdb, sender, oncomplete);
@@ -68,7 +79,12 @@ GPUAcquireCommandBuffer(GPUCommandQueue   * __restrict cmdq,
                         GPUCommandBuffer ** __restrict outCmdb) {
   (void)label;
 
-  if (!cmdq || !outCmdb) {
+  if (!outCmdb) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outCmdb = NULL;
+  if (!cmdq) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -83,7 +99,11 @@ gpuCommandBufferOnComplete(GPUCommandBuffer * __restrict cmdb,
                            GPUCommandBufferOnCompleteFn  oncomplete) {
   GPUApi *api;
 
+  if (!cmdb)
+    return;
   if (!(api = gpuActiveGPUApi()))
+    return;
+  if (!api->cmdque.commandBufferOnComplete)
     return;
   
   api->cmdque.commandBufferOnComplete(cmdb, sender, oncomplete);
@@ -94,7 +114,11 @@ void
 GPUCommit(GPUCommandBuffer * __restrict cmdb) {
   GPUApi *api;
 
+  if (!cmdb)
+    return;
   if (!(api = gpuActiveGPUApi()))
+    return;
+  if (!api->cmdque.commit)
     return;
   
   api->cmdque.commit(cmdb);
@@ -106,13 +130,13 @@ GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
                const GPUQueueSubmitInfo * __restrict info) {
   GPUApi *api;
 
-  (void)cmdq;
-
-  if (!info || info->commandBufferCount == 0 || !info->ppCommandBuffers) {
+  if (!cmdq || !info || info->commandBufferCount == 0 || !info->ppCommandBuffers) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   if (!(api = gpuActiveGPUApi()))
+    return GPU_ERROR_BACKEND_FAILURE;
+  if (!api->cmdque.commit)
     return GPU_ERROR_BACKEND_FAILURE;
 
   for (uint32_t i = 0; i < info->commandBufferCount; i++) {
