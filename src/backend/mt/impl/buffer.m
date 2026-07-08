@@ -15,31 +15,33 @@
  */
 
 #include "../common.h"
+#include <string.h>
 
 GPU_HIDE
-GPUBuffer*
-mt_newBuffer(GPUDevice * __restrict device,
-             size_t                 len,
-             GPUResourceOptions     options) {
+GPUResult
+mt_createBuffer(GPUDevice                 * __restrict device,
+                const GPUBufferCreateInfo * __restrict info,
+                GPUBuffer                ** __restrict outBuffer) {
   GPUDeviceMT *deviceMT;
-  MTLResourceOptions mtOptions;
+  id<MTLBuffer> buffer;
   
+  if (!device || !info || !outBuffer || info->sizeBytes == 0) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
   deviceMT = device->_priv;
-  mtOptions = (MTLResourceOptions)options;
+  if (info->sizeBytes > NSUIntegerMax) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
 
-  return (GPUBuffer *)[deviceMT->device newBufferWithLength:len options:mtOptions];
-}
+  buffer = [deviceMT->device newBufferWithLength:(NSUInteger)info->sizeBytes
+                                         options:MTLResourceStorageModeShared];
+  if (!buffer) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
 
-GPU_HIDE
-size_t
-mt_bufferLength(GPUBuffer * __restrict buff) {
-  return [(id<MTLBuffer>)buff length];
-}
-
-GPU_HIDE
-GPUBuffer*
-mt_bufferContents(GPUBuffer * __restrict buff) {
-  return (GPUBuffer *)[(id<MTLBuffer>)buff contents];
+  *outBuffer = (GPUBuffer *)buffer;
+  return GPU_OK;
 }
 
 GPU_HIDE
@@ -53,10 +55,42 @@ mt_destroyBuffer(GPUBuffer * __restrict buff) {
 }
 
 GPU_HIDE
+GPUResult
+mt_writeBuffer(GPUCommandQueue * __restrict queue,
+               GPUBuffer       * __restrict buff,
+               uint64_t                     dstOffset,
+               const void      * __restrict data,
+               uint64_t                     sizeBytes) {
+  id<MTLBuffer> buffer;
+  uint8_t *contents;
+
+  (void)queue;
+
+  if (!buff || !data || sizeBytes == 0) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  buffer = (id<MTLBuffer>)buff;
+  if (dstOffset > [buffer length] || sizeBytes > [buffer length] - dstOffset) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (sizeBytes > SIZE_MAX) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  contents = (uint8_t *)[buffer contents];
+  if (!contents) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  memcpy(contents + dstOffset, data, (size_t)sizeBytes);
+  return GPU_OK;
+}
+
+GPU_HIDE
 void
 mt_initBuff(GPUApiBuffer *api) {
-  api->newBuffer = mt_newBuffer;
-  api->destroy   = mt_destroyBuffer;
-  api->length    = mt_bufferLength;
-  api->contents  = mt_bufferContents;
+  api->create  = mt_createBuffer;
+  api->destroy = mt_destroyBuffer;
+  api->write   = mt_writeBuffer;
 }

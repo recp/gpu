@@ -279,22 +279,35 @@ static const uint8_t kCheckerPixels[] = {
     return NO;
   }
 
-  _vertexBuffer = GPUNewBuffer(_device,
-                               sizeof(kQuadVertices),
-                               GPUResourceStorageModeShared);
-  if (!_vertexBuffer) {
+  GPUBufferCreateInfo vertexBufferInfo = {
+    .chain = { .sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+               .structSize = sizeof(GPUBufferCreateInfo) },
+    .label = "textured-quad-usl-vertices",
+    .sizeBytes = sizeof(kQuadVertices),
+    .usage = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST
+  };
+  if (GPUCreateBuffer(_device, &vertexBufferInfo, &_vertexBuffer) != GPU_OK) {
     NSLog(@"GPU: failed to create vertex buffer");
     return NO;
   }
 
-  memcpy((void *)gpuBufferContents(_vertexBuffer),
-         kQuadVertices,
-         sizeof(kQuadVertices));
+  if (GPUQueueWriteBuffer(_queue,
+                          _vertexBuffer,
+                          0,
+                          kQuadVertices,
+                          sizeof(kQuadVertices)) != GPU_OK) {
+    NSLog(@"GPU: failed to upload vertex buffer");
+    return NO;
+  }
 
-  _fragmentUniformBuffer = GPUNewBuffer(_device,
-                                        sizeof(FragmentUniforms),
-                                        GPUResourceStorageModeShared);
-  if (!_fragmentUniformBuffer) {
+  GPUBufferCreateInfo uniformBufferInfo = {
+    .chain = { .sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+               .structSize = sizeof(GPUBufferCreateInfo) },
+    .label = "textured-quad-usl-fragment-uniforms",
+    .sizeBytes = sizeof(FragmentUniforms),
+    .usage = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST
+  };
+  if (GPUCreateBuffer(_device, &uniformBufferInfo, &_fragmentUniformBuffer) != GPU_OK) {
     NSLog(@"GPU: failed to create fragment uniform buffer");
     return NO;
   }
@@ -329,19 +342,19 @@ static const uint8_t kCheckerPixels[] = {
 }
 
 - (void)updateFragmentUniforms {
-  FragmentUniforms *uniforms;
+  FragmentUniforms uniforms;
   float time;
 
-  uniforms = (FragmentUniforms *)gpuBufferContents(_fragmentUniformBuffer);
-  if (!uniforms) {
-    return;
-  }
-
   time = (float)(CACurrentMediaTime() - _animationStart);
-  uniforms->tint[0] = 0.75f + 0.25f * sinf(time * 1.1f);
-  uniforms->tint[1] = 0.75f + 0.25f * sinf(time * 1.5f + 1.0f);
-  uniforms->tint[2] = 0.75f + 0.25f * sinf(time * 1.9f + 2.0f);
-  uniforms->tint[3] = 1.0f;
+  uniforms.tint[0] = 0.75f + 0.25f * sinf(time * 1.1f);
+  uniforms.tint[1] = 0.75f + 0.25f * sinf(time * 1.5f + 1.0f);
+  uniforms.tint[2] = 0.75f + 0.25f * sinf(time * 1.9f + 2.0f);
+  uniforms.tint[3] = 1.0f;
+  GPUQueueWriteBuffer(_queue,
+                      _fragmentUniformBuffer,
+                      0,
+                      &uniforms,
+                      sizeof(uniforms));
 }
 
 - (void)renderFrame {

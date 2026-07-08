@@ -21,28 +21,46 @@ extern "C" {
 #endif
 
 #include "common.h"
-#include "resource.h"
+#include "cmdqueue.h"
 
 typedef struct GPUBuffer GPUBuffer;
 typedef struct GPUDevice GPUDevice;
 
+typedef uint32_t GPUBufferUsageFlags;
+enum {
+  GPU_BUFFER_USAGE_VERTEX    = 1u << 0,
+  GPU_BUFFER_USAGE_INDEX     = 1u << 1,
+  GPU_BUFFER_USAGE_UNIFORM   = 1u << 2,
+  GPU_BUFFER_USAGE_STORAGE   = 1u << 3,
+  GPU_BUFFER_USAGE_COPY_SRC  = 1u << 4,
+  GPU_BUFFER_USAGE_COPY_DST  = 1u << 5,
+  GPU_BUFFER_USAGE_INDIRECT  = 1u << 6
+};
+
+typedef struct GPUBufferCreateInfo {
+  GPUChainedStruct chain;
+  const char       *label;
+  uint64_t          sizeBytes;
+  GPUBufferUsageFlags usage;
+} GPUBufferCreateInfo;
+
 GPU_EXPORT
-GPUBuffer*
-GPUNewBuffer(GPUDevice * __restrict device,
-             size_t                 len,
-             GPUResourceOptions     options);
+GPUResult
+GPUCreateBuffer(GPUDevice                 * __restrict device,
+                const GPUBufferCreateInfo * __restrict info,
+                GPUBuffer                ** __restrict outBuffer);
 
 GPU_EXPORT
 void
 GPUDestroyBuffer(GPUBuffer * __restrict buff);
 
 GPU_EXPORT
-size_t
-gpuBufferLength(GPUBuffer * __restrict buff);
-
-GPU_EXPORT
-GPUBuffer*
-gpuBufferContents(GPUBuffer * __restrict buff);
+GPUResult
+GPUQueueWriteBuffer(GPUCommandQueue * __restrict queue,
+                    GPUBuffer       * __restrict buff,
+                    uint64_t                     dstOffset,
+                    const void      * __restrict data,
+                    uint64_t                     sizeBytes);
 
 #ifdef __cplusplus
 }

@@ -17,16 +17,29 @@
 #include "../common.h"
 
 GPU_EXPORT
-GPUBuffer*
-GPUNewBuffer(GPUDevice * __restrict device,
-             size_t                 len,
-             GPUResourceOptions     options) {
+GPUResult
+GPUCreateBuffer(GPUDevice                 * __restrict device,
+                const GPUBufferCreateInfo * __restrict info,
+                GPUBuffer                ** __restrict outBuffer) {
   GPUApi *api;
 
-  if (!(api = gpuActiveGPUApi()))
-    return NULL;
+  if (!outBuffer) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outBuffer = NULL;
+
+  if (!device || !info || info->sizeBytes == 0) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (!(api = gpuActiveGPUApi())) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  if (!api->buf.create) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
   
-  return api->buf.newBuffer(device, len, options);
+  return api->buf.create(device, info, outBuffer);
 }
 
 GPU_EXPORT
@@ -48,23 +61,24 @@ GPUDestroyBuffer(GPUBuffer * __restrict buff) {
 }
 
 GPU_EXPORT
-size_t
-gpuBufferLength(GPUBuffer * __restrict buff) {
+GPUResult
+GPUQueueWriteBuffer(GPUCommandQueue * __restrict queue,
+                    GPUBuffer       * __restrict buff,
+                    uint64_t                     dstOffset,
+                    const void      * __restrict data,
+                    uint64_t                     sizeBytes) {
   GPUApi *api;
 
-  if (!(api = gpuActiveGPUApi()))
-    return 0;
-  
-  return api->buf.length(buff);
-}
+  if (!queue || !buff || !data || sizeBytes == 0) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
 
-GPU_EXPORT
-GPUBuffer*
-gpuBufferContents(GPUBuffer * __restrict buff) {
-  GPUApi *api;
+  if (!(api = gpuActiveGPUApi())) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  if (!api->buf.write) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
 
-  if (!(api = gpuActiveGPUApi()))
-    return NULL;
-  
-  return api->buf.contents(buff);
+  return api->buf.write(queue, buff, dstOffset, data, sizeBytes);
 }

@@ -24,19 +24,20 @@ extern "C" {
 #include "../gpu.h"
 
 typedef struct GPUApiBuffer {
-  GPUBuffer*
-  (*newBuffer)(GPUDevice * __restrict device,
-               size_t                 len,
-               GPUResourceOptions     options);
+  GPUResult
+  (*create)(GPUDevice                 * __restrict device,
+            const GPUBufferCreateInfo * __restrict info,
+            GPUBuffer                ** __restrict outBuffer);
 
   void
   (*destroy)(GPUBuffer * __restrict buff);
 
-  size_t
-  (*length)(GPUBuffer * __restrict buff);
-  
-  GPUBuffer*
-  (*contents)(GPUBuffer * __restrict buff);
+  GPUResult
+  (*write)(GPUCommandQueue * __restrict queue,
+           GPUBuffer       * __restrict buff,
+           uint64_t                     dstOffset,
+           const void      * __restrict data,
+           uint64_t                     sizeBytes);
 } GPUApiBuffer;
 
 #ifdef __cplusplus
