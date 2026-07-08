@@ -897,6 +897,71 @@ gpu_bindGroupEntryHasResource(const GPUBindGroupLayoutEntry *layoutEntry,
   }
 }
 
+static int
+gpu_bindGroupEntryResourceKind(const GPUBindGroupEntry *entry,
+                               GPUBindKind *outKind) {
+  GPUBindKind kind;
+  uint32_t resourceCount;
+
+  if (!entry || !outKind) {
+    return 0;
+  }
+
+  kind = GPUBindKindBuffer;
+  resourceCount = 0;
+  if (entry->buffer.buffer) {
+    kind = GPUBindKindBuffer;
+    resourceCount++;
+  }
+  if (entry->textureView) {
+    kind = GPUBindKindTexture;
+    resourceCount++;
+  }
+  if (entry->sampler) {
+    kind = GPUBindKindSampler;
+    resourceCount++;
+  }
+
+  if (resourceCount != 1) {
+    return 0;
+  }
+
+  *outKind = kind;
+  return 1;
+}
+
+static int
+gpu_bindGroupEntryMatchesLayout(const GPUBindGroupLayoutEntry *layoutEntry,
+                                const GPUBindGroupEntry *entry) {
+  GPUBindKind resourceKind;
+
+  if (!layoutEntry || !entry ||
+      entry->binding != layoutEntry->binding ||
+      !gpu_bindGroupEntryResourceKind(entry, &resourceKind) ||
+      resourceKind != layoutEntry->kind) {
+    return 0;
+  }
+
+  if (layoutEntry->immutableSampler &&
+      layoutEntry->kind == GPUBindKindSampler) {
+    return 0;
+  }
+  if (entry->stage != 0 &&
+      entry->stage != layoutEntry->stage) {
+    return 0;
+  }
+  if (entry->kind != 0 &&
+      entry->kind != layoutEntry->kind) {
+    return 0;
+  }
+  if (layoutEntry->kind == GPUBindKindBuffer &&
+      entry->bindingType != layoutEntry->bindingType) {
+    return 0;
+  }
+
+  return gpu_bindGroupEntryHasResource(layoutEntry, entry);
+}
+
 static const GPUBindGroupEntry *
 gpu_findBindGroupEntry(const GPUBindGroupEntry *entries,
                        uint32_t count,
@@ -908,27 +973,72 @@ gpu_findBindGroupEntry(const GPUBindGroupEntry *entries,
   }
 
   for (i = 0; i < count; i++) {
-    if (entries[i].binding != layoutEntry->binding) {
-      continue;
+    if (gpu_bindGroupEntryMatchesLayout(layoutEntry, &entries[i])) {
+      return &entries[i];
     }
-
-    if (!gpu_bindGroupEntryHasResource(layoutEntry, &entries[i])) {
-      continue;
-    }
-
-    if (entries[i].stage != 0 &&
-        entries[i].stage != layoutEntry->stage) {
-      continue;
-    }
-    if (entries[i].kind != 0 &&
-        entries[i].kind != layoutEntry->kind) {
-      continue;
-    }
-
-    return &entries[i];
   }
 
   return NULL;
+}
+
+static int
+gpu_bindGroupLayoutEntryNeedsBinding(const GPUBindGroupLayoutEntry *entry) {
+  if (!entry) {
+    return 0;
+  }
+
+  return !(entry->immutableSampler && entry->kind == GPUBindKindSampler);
+}
+
+static GPUResult
+gpu_validateBindGroupEntries(const GPUBindGroupLayoutPriv *layoutPriv,
+                             const GPUBindGroupEntry *entries,
+                             uint32_t count) {
+  uint8_t *matched;
+
+  if (!layoutPriv || (!entries && count > 0)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  matched = NULL;
+  if (layoutPriv->count > 0) {
+    matched = calloc(layoutPriv->count, sizeof(*matched));
+    if (!matched) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+
+  for (uint32_t i = 0; i < count; i++) {
+    uint32_t matchCount;
+    uint32_t matchIndex;
+
+    matchCount = 0;
+    matchIndex = UINT32_MAX;
+    for (uint32_t j = 0; j < layoutPriv->count; j++) {
+      if (!gpu_bindGroupEntryMatchesLayout(&layoutPriv->entries[j], &entries[i])) {
+        continue;
+      }
+      matchCount++;
+      matchIndex = j;
+    }
+
+    if (matchCount != 1 || matched[matchIndex]) {
+      free(matched);
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    matched[matchIndex] = 1u;
+  }
+
+  for (uint32_t i = 0; i < layoutPriv->count; i++) {
+    if (gpu_bindGroupLayoutEntryNeedsBinding(&layoutPriv->entries[i]) &&
+        !matched[i]) {
+      free(matched);
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+  }
+
+  free(matched);
+  return GPU_OK;
 }
 
 GPU_EXPORT
@@ -1682,6 +1792,14 @@ GPUCreateBindGroup(GPUDevice *device,
   layoutPriv = gpu_layoutPriv(layout);
   if (!layoutPriv) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  {
+    GPUResult validationResult;
+
+    validationResult = gpu_validateBindGroupEntries(layoutPriv, entries, count);
+    if (validationResult != GPU_OK) {
+      return validationResult;
+    }
   }
 
   group = calloc(1, sizeof(*group));
