@@ -8,7 +8,7 @@ pub struct VSOut {
   uv: float2
 }
 
-kern(1, 1, 1) fill_image(outputImage: texture2d<float, write> #texture(0), gid: uint3 #global_id) {
+kern(8, 8, 1) fill_image(outputImage: texture2d<float, write> #texture(0), gid: uint3 #global_id) {
   outputImage.write(float4(float(gid.x) / 255.0, float(gid.y) / 255.0, 0.75, 1.0), gid.xy)
 }
 

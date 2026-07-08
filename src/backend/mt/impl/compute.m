@@ -91,7 +91,10 @@ mt_newComputeState(GPUDevice *device, GPUComputePipeline *pipeline) {
   }
 
   state->_priv = mtState;
-  pipeline->_state = mtState;
+  state->workgroupSize[0] = 1u;
+  state->workgroupSize[1] = 1u;
+  state->workgroupSize[2] = 1u;
+  pipeline->_state = state;
   return state;
 }
 
@@ -106,7 +109,11 @@ mt_destroyComputePipeline(GPUComputePipeline *pipeline) {
 
   desc = pipeline->_priv;
   if (pipeline->_state) {
-    [(id<MTLComputePipelineState>)pipeline->_state release];
+    GPUComputePipelineState *state = pipeline->_state;
+    if (state->_priv) {
+      [(id<MTLComputePipelineState>)state->_priv release];
+    }
+    free(state);
   }
   free(desc);
   free(pipeline);
@@ -137,6 +144,9 @@ mt_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
   }
 
   enc->_priv = (__bridge void *)native;
+  enc->_workgroupSize[0] = 1u;
+  enc->_workgroupSize[1] = 1u;
+  enc->_workgroupSize[2] = 1u;
   return enc;
 }
 
@@ -149,6 +159,9 @@ mt_setComputePipelineState(GPUComputePassEncoder *enc,
   }
 
   [mt_nativeCCE(enc) setComputePipelineState:(id<MTLComputePipelineState>)state->_priv];
+  enc->_workgroupSize[0] = state->workgroupSize[0] ? state->workgroupSize[0] : 1u;
+  enc->_workgroupSize[1] = state->workgroupSize[1] ? state->workgroupSize[1] : 1u;
+  enc->_workgroupSize[2] = state->workgroupSize[2] ? state->workgroupSize[2] : 1u;
 }
 
 GPU_HIDE
@@ -190,7 +203,9 @@ mt_dispatch(GPUComputePassEncoder *enc,
   MTLSize threads;
 
   groups = MTLSizeMake(x, y, z);
-  threads = MTLSizeMake(1, 1, 1);
+  threads = MTLSizeMake(enc->_workgroupSize[0] ? enc->_workgroupSize[0] : 1u,
+                        enc->_workgroupSize[1] ? enc->_workgroupSize[1] : 1u,
+                        enc->_workgroupSize[2] ? enc->_workgroupSize[2] : 1u);
   [mt_nativeCCE(enc) dispatchThreadgroups:groups
                     threadsPerThreadgroup:threads];
 }
@@ -202,7 +217,9 @@ mt_dispatchIndirect(GPUComputePassEncoder *enc,
                     uint64_t               argsOffset) {
   [mt_nativeCCE(enc) dispatchThreadgroupsWithIndirectBuffer:(id<MTLBuffer>)argsBuffer
                                                indirectBufferOffset:(NSUInteger)argsOffset
-                                             threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
+                                             threadsPerThreadgroup:MTLSizeMake(enc->_workgroupSize[0] ? enc->_workgroupSize[0] : 1u,
+                                                                               enc->_workgroupSize[1] ? enc->_workgroupSize[1] : 1u,
+                                                                               enc->_workgroupSize[2] ? enc->_workgroupSize[2] : 1u)];
 }
 
 GPU_HIDE

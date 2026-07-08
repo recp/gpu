@@ -75,6 +75,7 @@ typedef struct GPULibrary {
   void *_priv;
   GPUShaderLibraryUSLInfo _uslInfo;
   GPUShaderReflection _reflection;
+  void *_entryInfo;
 } GPULibrary;
 
 typedef GPULibrary GPUShaderLibrary;

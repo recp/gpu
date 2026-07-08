@@ -21,6 +21,7 @@
 
 struct GPUComputePipelineState {
   void *_priv;
+  uint32_t workgroupSize[3];
 };
 
 GPU_HIDE

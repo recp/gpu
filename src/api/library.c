@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "library_internal.h"
 #include "usl_target.h"
 
 #define GPU_USL_BYTECODE_VERSION 2u
@@ -143,6 +144,33 @@ gpu_dupText(const char *text) {
   return copy;
 }
 
+typedef struct GPUShaderEntryInfo {
+  char *name;
+  uint32_t stage;
+  uint32_t workgroupSize[3];
+} GPUShaderEntryInfo;
+
+typedef struct GPUShaderEntryInfoList {
+  uint32_t count;
+  GPUShaderEntryInfo entries[];
+} GPUShaderEntryInfoList;
+
+static void
+gpu_clearShaderEntryInfo(GPUShaderLibrary *library) {
+  GPUShaderEntryInfoList *list;
+
+  if (!library || !library->_entryInfo) {
+    return;
+  }
+
+  list = library->_entryInfo;
+  for (uint32_t i = 0; i < list->count; i++) {
+    free(list->entries[i].name);
+  }
+  free(list);
+  library->_entryInfo = NULL;
+}
+
 static void
 gpu_clearShaderReflection(GPUShaderReflection *reflection) {
   GPUShaderResourceReflection *resources;
@@ -208,6 +236,118 @@ gpu_shaderVisibilityFromUSLStage(uint32_t stage, GPUShaderStageFlags *outVisibil
     default:
       return 0;
   }
+}
+
+static int
+gpu_setShaderLibraryEntryInfo(GPUShaderLibrary *library,
+                              const USReflection *usReflection,
+                              const char * const *entryPointNames,
+                              uint32_t entryPointCount) {
+  const USLBytecodeRuntimeInfo *runtimeInfo;
+  GPUShaderEntryInfoList *list;
+  uint32_t count;
+
+  if (!library || !usReflection ||
+      usReflection->abi_version != US_REFLECTION_VERSION) {
+    return 0;
+  }
+
+  runtimeInfo = &usReflection->runtime;
+  if (!gpu_uslRuntimeInfoIsUsable(runtimeInfo)) {
+    return 0;
+  }
+
+  gpu_clearShaderEntryInfo(library);
+  count = 0u;
+  for (uint32_t i = 0; i < runtimeInfo->entry_point_count; i++) {
+    const USLRuntimeEntryPoint *entry = &runtimeInfo->entry_points[i];
+    if (gpu_uslEntrySelected(entry->name, entryPointNames, entryPointCount)) {
+      count++;
+    }
+  }
+  if (count == 0u) {
+    return 1;
+  }
+  if (count > (SIZE_MAX - sizeof(*list)) / sizeof(list->entries[0])) {
+    return 0;
+  }
+
+  list = calloc(1, sizeof(*list) + (size_t)count * sizeof(list->entries[0]));
+  if (!list) {
+    return 0;
+  }
+
+  list->count = count;
+  count = 0u;
+  for (uint32_t i = 0; i < runtimeInfo->entry_point_count; i++) {
+    const USLRuntimeEntryPoint *entry = &runtimeInfo->entry_points[i];
+    GPUShaderStageFlags stage;
+    GPUShaderEntryInfo *dst;
+
+    if (!gpu_uslEntrySelected(entry->name, entryPointNames, entryPointCount)) {
+      continue;
+    }
+    if (!gpu_shaderVisibilityFromUSLStage(entry->stage, &stage)) {
+      for (uint32_t j = 0; j < count; j++) {
+        free(list->entries[j].name);
+      }
+      free(list);
+      return 0;
+    }
+
+    dst = &list->entries[count++];
+    dst->name = gpu_dupText(entry->name);
+    if (!dst->name) {
+      for (uint32_t j = 0; j < count; j++) {
+        free(list->entries[j].name);
+      }
+      free(list);
+      return 0;
+    }
+
+    dst->stage = stage;
+    dst->workgroupSize[0] = entry->workgroup_size[0] ? entry->workgroup_size[0] : 1u;
+    dst->workgroupSize[1] = entry->workgroup_size[1] ? entry->workgroup_size[1] : 1u;
+    dst->workgroupSize[2] = entry->workgroup_size[2] ? entry->workgroup_size[2] : 1u;
+  }
+
+  library->_entryInfo = list;
+  return 1;
+}
+
+GPU_HIDE
+int
+gpuGetShaderLibraryComputeWorkgroupSize(const GPUShaderLibrary *library,
+                                        const char *entryPoint,
+                                        uint32_t outSize[3]) {
+  const GPUShaderEntryInfoList *list;
+
+  if (outSize) {
+    outSize[0] = 1u;
+    outSize[1] = 1u;
+    outSize[2] = 1u;
+  }
+  if (!library || !entryPoint || !outSize || !library->_entryInfo) {
+    return 0;
+  }
+
+  list = library->_entryInfo;
+  for (uint32_t i = 0; i < list->count; i++) {
+    const GPUShaderEntryInfo *entry = &list->entries[i];
+
+    if (entry->stage != GPU_SHADER_STAGE_COMPUTE_BIT ||
+        !entry->name ||
+        strcmp(entry->name, entryPoint) != 0) {
+      continue;
+    }
+
+    outSize[0] = entry->workgroupSize[0] ? entry->workgroupSize[0] : 1u;
+    outSize[1] = entry->workgroupSize[1] ? entry->workgroupSize[1] : 1u;
+    outSize[2] = entry->workgroupSize[2] ? entry->workgroupSize[2] : 1u;
+    return 1;
+  }
+
+  return 0;
 }
 
 static int
@@ -629,7 +769,11 @@ gpu_createShaderLibraryFromUSLBytecodeImpl(GPUDevice *device,
     if (!gpu_setShaderLibraryReflection(*outLibrary,
                                          &compileOutput.reflection,
                                          entryPointNames,
-                                         entryPointCount)) {
+                                         entryPointCount) ||
+        !gpu_setShaderLibraryEntryInfo(*outLibrary,
+                                       &compileOutput.reflection,
+                                       entryPointNames,
+                                       entryPointCount)) {
       GPUDestroyShaderLibrary(*outLibrary);
       *outLibrary = NULL;
       us_free_compile_output(&compileOutput);
@@ -780,6 +924,7 @@ GPUDestroyShaderLibrary(GPUShaderLibrary *library) {
     return;
 
   gpu_clearShaderReflection(&library->_reflection);
+  gpu_clearShaderEntryInfo(library);
   if (!(api = gpuActiveGPUApi()))
     return;
 

@@ -12,6 +12,7 @@ typedef struct QuadVertex {
 } QuadVertex;
 
 static const uint32_t kTextureSize = 256;
+static const uint32_t kWorkgroupSize = 8;
 
 static const QuadVertex kQuadVertices[] = {
   { { -0.8f, -0.8f, 0.0f, 1.0f }, { 0.0f, 1.0f } },
@@ -361,7 +362,10 @@ static const QuadVertex kQuadVertices[] = {
   }
   GPUBindComputePipeline(compute, _computePipeline);
   GPUBindComputeGroup(compute, 0, _bindGroup, 0, NULL);
-  GPUDispatch(compute, kTextureSize, kTextureSize, 1);
+  GPUDispatch(compute,
+              (kTextureSize + kWorkgroupSize - 1u) / kWorkgroupSize,
+              (kTextureSize + kWorkgroupSize - 1u) / kWorkgroupSize,
+              1);
   GPUEndComputePass(compute);
   compute = NULL;
 

@@ -17,6 +17,7 @@
 #include "../common.h"
 #include "compute_internal.h"
 #include "descr/descriptor_internal.h"
+#include "library_internal.h"
 
 static GPUComputePipelineState *
 gpuCompileComputePipelineState(GPUDevice *device, GPUComputePipeline *pipeline) {
@@ -75,7 +76,13 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  free(state);
+  if (!gpuGetShaderLibraryComputeWorkgroupSize(info->library,
+                                               info->entryPoint,
+                                               state->workgroupSize)) {
+    state->workgroupSize[0] = 1u;
+    state->workgroupSize[1] = 1u;
+    state->workgroupSize[2] = 1u;
+  }
   *outPipeline = pipeline;
   return GPU_OK;
 }
@@ -116,7 +123,7 @@ GPU_EXPORT
 void
 GPUBindComputePipeline(GPUComputePassEncoder *pass,
                        GPUComputePipeline    *pipeline) {
-  GPUComputePipelineState state;
+  GPUComputePipelineState *state;
   GPUApi *api;
 
   if (!pass || !pipeline || !pipeline->_state) {
@@ -126,8 +133,8 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
     return;
   }
 
-  state._priv = pipeline->_state;
-  api->compute.setComputePipelineState(pass, &state);
+  state = pipeline->_state;
+  api->compute.setComputePipelineState(pass, state);
 }
 
 GPU_HIDE

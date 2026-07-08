@@ -27,6 +27,7 @@ typedef struct GPUComputePipelineState GPUComputePipelineState;
 
 struct GPUComputePassEncoder {
   void *_priv;
+  uint32_t _workgroupSize[3];
 };
 
 typedef struct GPUApiCompute {
