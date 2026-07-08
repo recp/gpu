@@ -31,7 +31,6 @@ static const TriangleVertex kTriangleVertices[] = {
   GPUSurface *_surface;
   GPUSwapChain *_swapchain;
   GPULibrary *_library;
-  GPUVertexDescriptor *_vertexDesc;
   GPURenderPipeline *_pipeline;
   GPUBuffer *_vertexBuffer;
   GPUBuffer *_fragmentUniformBuffer;
@@ -157,21 +156,52 @@ static const TriangleVertex kTriangleVertices[] = {
     return NO;
   }
 
-  _vertexDesc = GPUNewVertexDesc();
-  GPUAttrib(_vertexDesc, 0, GPUFloat2, offsetof(TriangleVertex, position), 0);
-  GPUAttrib(_vertexDesc, 1, GPUFloat4, offsetof(TriangleVertex, color), 0);
-  GPULayout(_vertexDesc, 0, sizeof(TriangleVertex), 1, GPUPerVertex);
+  GPUVertexAttribute vertexAttrs[] = {
+    { .shaderLocation = 0, .format = GPU_VERTEX_FORMAT_FLOAT2, .offset = offsetof(TriangleVertex, position) },
+    { .shaderLocation = 1, .format = GPU_VERTEX_FORMAT_FLOAT4, .offset = offsetof(TriangleVertex, color) }
+  };
+  GPUVertexBufferLayout vertexBuffers[] = {
+    {
+      .strideBytes = sizeof(TriangleVertex),
+      .stepMode = GPU_VERTEX_STEP_MODE_VERTEX,
+      .attributeCount = 2,
+      .pAttributes = vertexAttrs
+    }
+  };
+  GPUColorTargetState colorTargets[] = {
+    {
+      .format = GPU_FORMAT_BGRA8_UNORM_SRGB,
+      .blend = {
+        .enabled = false,
+        .writeMask = GPU_COLOR_WRITE_ALL
+      }
+    }
+  };
+  GPUMultisampleState multisample = {
+    .sampleCount = 1,
+    .sampleMask = 0xffffffffu,
+    .alphaToCoverageEnable = false
+  };
 
   GPURenderPipelineCreateInfo pipelineInfo = {
+    .chain = { .sType = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO,
+               .structSize = sizeof(GPURenderPipelineCreateInfo) },
     .label = "triangle-manual-pipeline",
     .library = (GPUShaderLibrary *)_library,
     .vertexEntry = "tri_vs",
     .fragmentEntry = "tri_fs",
-    .vertexDesc = _vertexDesc,
-    .colorFormat = GPUPixelFormatBGRA8Unorm_sRGB,
-    .depthFormat = GPUPixelFormatInvalid,
-    .stencilFormat = GPUPixelFormatInvalid,
-    .sampleCount = 1
+    .vertex = {
+      .bufferLayoutCount = 1,
+      .pBufferLayouts = vertexBuffers
+    },
+    .colorTargetCount = 1,
+    .pColorTargets = colorTargets,
+    .depthStencilFormat = GPU_FORMAT_UNDEFINED,
+    .pDepthStencilState = NULL,
+    .primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+    .cullMode = GPU_CULL_MODE_NONE,
+    .frontFace = GPU_FRONT_FACE_CCW,
+    .multisample = multisample
   };
   if (GPUCreateRenderPipeline(_device, &pipelineInfo, &_pipeline) != GPU_OK) {
     NSLog(@"GPU: failed to create render pipeline");

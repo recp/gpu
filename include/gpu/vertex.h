@@ -21,7 +21,8 @@ extern "C" {
 #endif
 
 #include "common.h"
-#include "pipeline.h"
+
+typedef struct GPURenderPipeline GPURenderPipeline;
 
 typedef enum GPUVertexFormat {
   GPUUnknown = 0,
@@ -95,6 +96,24 @@ typedef enum GPUVertexFormat {
   GPUVertexFormatHalf = 53
 } GPUVertexFormat;
 
+#define GPU_VERTEX_FORMAT_FLOAT   GPUFloat
+#define GPU_VERTEX_FORMAT_FLOAT2  GPUFloat2
+#define GPU_VERTEX_FORMAT_FLOAT3  GPUFloat3
+#define GPU_VERTEX_FORMAT_FLOAT4  GPUFloat4
+#define GPU_VERTEX_FORMAT_UINT    GPUUInt
+#define GPU_VERTEX_FORMAT_UINT2   GPUUInt2
+#define GPU_VERTEX_FORMAT_UINT3   GPUUInt3
+#define GPU_VERTEX_FORMAT_UINT4   GPUUInt4
+#define GPU_VERTEX_FORMAT_INT     GPUInt
+#define GPU_VERTEX_FORMAT_INT2    GPUInt2
+#define GPU_VERTEX_FORMAT_INT3    GPUInt3
+#define GPU_VERTEX_FORMAT_INT4    GPUInt4
+
+typedef enum GPUVertexStepMode {
+  GPU_VERTEX_STEP_MODE_VERTEX   = 0,
+  GPU_VERTEX_STEP_MODE_INSTANCE = 1
+} GPUVertexStepMode;
+
 typedef enum GPUVertexStepFunction {
   GPUConstant             = 0,
   GPUPerVertex            = 1,
@@ -104,23 +123,25 @@ typedef enum GPUVertexStepFunction {
 } GPUVertexStepFunction;
 
 typedef struct GPUVertexAttribute {
-  struct GPUVertexAttribute *next;
-  GPUVertexFormat            format;
-  uint32_t                   offset;
-  uint32_t                   bufferIndex;
+  uint32_t        shaderLocation;
+  GPUVertexFormat format;
+  uint32_t        offset;
 } GPUVertexAttribute;
 
 typedef struct GPUVertexBufferLayout {
-  struct GPUVertexBufferLayout *next;
-  uint32_t                      stride;
-  uint32_t                      stepRate;
-  GPUVertexStepFunction         stepFunction;
+  uint32_t                  strideBytes;
+  GPUVertexStepMode         stepMode;
+  uint32_t                  attributeCount;
+  const GPUVertexAttribute *pAttributes;
 } GPUVertexBufferLayout;
+
+typedef struct GPUVertexState {
+  uint32_t                     bufferLayoutCount;
+  const GPUVertexBufferLayout *pBufferLayouts;
+} GPUVertexState;
 
 typedef struct GPUVertexDescriptor {
   void                  *_priv;
-  GPUVertexAttribute    *attributes;
-  GPUVertexBufferLayout *layouts;
 } GPUVertexDescriptor;
 
 GPU_EXPORT

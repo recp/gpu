@@ -28,7 +28,7 @@ typedef struct GPUApiDepthStencil {
   (*newDepthStencil)(GPUCompareFunction depthCompareFunc,
                      bool               depthWriteEnabled);
   
-  GPUDepthStencilState*
+  GPUDepthStencilPipelineState*
   (*newDepthStencilState)(GPUDevice       * __restrict device,
                           GPUDepthStencil * __restrict depthStencil);
 } GPUApiDepthStencil;

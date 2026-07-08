@@ -29,7 +29,7 @@ GPUNewDepthStencil(GPUCompareFunction depthCompareFunc,
 }
 
 GPU_EXPORT
-GPUDepthStencilState*
+GPUDepthStencilPipelineState*
 GPUNewDepthStencilState(GPUDevice       * __restrict device,
                         GPUDepthStencil * __restrict depthStencil) {
   GPUApi *api;

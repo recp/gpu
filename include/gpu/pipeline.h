@@ -24,33 +24,123 @@ extern "C" {
 #include "pixelformat.h"
 #include "library.h"
 #include "cmdqueue.h"
+#include "vertex.h"
+#include "depthstencil.h"
 
-typedef struct GPUVertexDescriptor GPUVertexDescriptor;
-
-typedef struct GPURenderPipeline {
-  void *_priv;
-  void *_state;
-} GPURenderPipeline;
-
-typedef struct GPURenderPipelineState {
-  void *_priv;
-} GPURenderPipelineState;
+typedef struct GPUPipelineLayout GPUPipelineLayout;
+typedef struct GPUPipelineCache GPUPipelineCache;
+typedef struct GPUDevice GPUDevice;
 
 typedef enum GPUFunctionType {
   GPU_FUNCTION_VERT = 1,
   GPU_FUNCTION_FRAG = 2
 } GPUFunctionType;
 
+typedef enum GPUPrimitiveTopology {
+  GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST = 0,
+  GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP = 1,
+  GPU_PRIMITIVE_TOPOLOGY_LINE_LIST = 2,
+  GPU_PRIMITIVE_TOPOLOGY_LINE_STRIP = 3,
+  GPU_PRIMITIVE_TOPOLOGY_POINT_LIST = 4
+} GPUPrimitiveTopology;
+
+typedef enum GPUCullMode {
+  GPU_CULL_MODE_NONE = 0,
+  GPU_CULL_MODE_FRONT = 1,
+  GPU_CULL_MODE_BACK = 2
+} GPUCullMode;
+
+typedef enum GPUFrontFace {
+  GPU_FRONT_FACE_CCW = 0,
+  GPU_FRONT_FACE_CW = 1
+} GPUFrontFace;
+
+typedef GPUFrontFace GPUWinding;
+
+#define GPUCullModeNone                 GPU_CULL_MODE_NONE
+#define GPUCullModeFront                GPU_CULL_MODE_FRONT
+#define GPUCullModeBack                 GPU_CULL_MODE_BACK
+#define GPUWindingCounterClockwise      GPU_FRONT_FACE_CCW
+#define GPUWindingClockwise             GPU_FRONT_FACE_CW
+
+typedef enum GPUBlendFactor {
+  GPU_BLEND_FACTOR_ZERO = 0,
+  GPU_BLEND_FACTOR_ONE = 1,
+  GPU_BLEND_FACTOR_SRC_ALPHA = 2,
+  GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA = 3
+} GPUBlendFactor;
+
+typedef enum GPUBlendOp {
+  GPU_BLEND_OP_ADD = 0,
+  GPU_BLEND_OP_SUBTRACT = 1,
+  GPU_BLEND_OP_REVERSE_SUBTRACT = 2,
+  GPU_BLEND_OP_MIN = 3,
+  GPU_BLEND_OP_MAX = 4
+} GPUBlendOp;
+
+typedef uint32_t GPUColorWriteMaskFlags;
+enum {
+  GPU_COLOR_WRITE_R = 1u << 0,
+  GPU_COLOR_WRITE_G = 1u << 1,
+  GPU_COLOR_WRITE_B = 1u << 2,
+  GPU_COLOR_WRITE_A = 1u << 3,
+  GPU_COLOR_WRITE_ALL = GPU_COLOR_WRITE_R | GPU_COLOR_WRITE_G |
+                        GPU_COLOR_WRITE_B | GPU_COLOR_WRITE_A
+};
+
+typedef struct GPUBlendComponent {
+  GPUBlendFactor srcFactor;
+  GPUBlendFactor dstFactor;
+  GPUBlendOp     op;
+} GPUBlendComponent;
+
+typedef struct GPUBlendState {
+  bool                   enabled;
+  GPUBlendComponent      color;
+  GPUBlendComponent      alpha;
+  GPUColorWriteMaskFlags writeMask;
+} GPUBlendState;
+
+typedef struct GPUColorTargetState {
+  GPUFormat     format;
+  GPUBlendState blend;
+} GPUColorTargetState;
+
+typedef struct GPUMultisampleState {
+  uint32_t sampleCount;
+  uint32_t sampleMask;
+  bool     alphaToCoverageEnable;
+} GPUMultisampleState;
+
+typedef struct GPURenderPipeline {
+  void                 *_priv;
+  void                 *_state;
+  GPUPrimitiveTopology  _primitiveTopology;
+  GPUCullMode           _cullMode;
+  GPUFrontFace          _frontFace;
+} GPURenderPipeline;
+
+typedef struct GPURenderPipelineState {
+  void *_priv;
+} GPURenderPipelineState;
+
 typedef struct GPURenderPipelineCreateInfo {
-  const char          *label;
-  GPUShaderLibrary   *library;
-  const char          *vertexEntry;
-  const char          *fragmentEntry;
-  GPUVertexDescriptor *vertexDesc;
-  GPUPixelFormat       colorFormat;
-  GPUPixelFormat       depthFormat;
-  GPUPixelFormat       stencilFormat;
-  uint32_t             sampleCount;
+  GPUChainedStruct             chain;
+  const char                  *label;
+  GPUPipelineLayout           *layout;
+  GPUPipelineCache            *cache;
+  GPUShaderLibrary            *library;
+  const char                  *vertexEntry;
+  const char                  *fragmentEntry;
+  GPUVertexState               vertex;
+  uint32_t                     colorTargetCount;
+  const GPUColorTargetState   *pColorTargets;
+  GPUFormat                    depthStencilFormat;
+  const GPUDepthStencilState  *pDepthStencilState;
+  GPUPrimitiveTopology         primitiveTopology;
+  GPUCullMode                  cullMode;
+  GPUFrontFace                 frontFace;
+  GPUMultisampleState          multisample;
 } GPURenderPipelineCreateInfo;
 
 GPU_EXPORT

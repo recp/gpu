@@ -25,7 +25,11 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
 GPU_HIDE
 void
 mt_frontFace(GPURenderCommandEncoder *rce, GPUWinding winding) {
-  [(id<MTLRenderCommandEncoder>)rce setFrontFacingWinding:(MTLWinding)winding];
+  MTLWinding mtWinding;
+
+  mtWinding = winding == GPU_FRONT_FACE_CW ?
+    MTLWindingClockwise : MTLWindingCounterClockwise;
+  [(id<MTLRenderCommandEncoder>)rce setFrontFacingWinding:mtWinding];
 }
 
 GPU_HIDE
@@ -42,7 +46,7 @@ mt_setRenderPipelineState(GPURenderCommandEncoder *rce, GPURenderPipelineState *
 
 GPU_HIDE
 void
-mt_setDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilState *ds) {
+mt_setDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilPipelineState *ds) {
   [(id<MTLRenderCommandEncoder>)rce setDepthStencilState:(id<MTLDepthStencilState>)ds->_priv];
 }
 

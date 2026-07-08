@@ -16,6 +16,89 @@
 
 #include "../../common.h"
 
+static bool
+gpu_blendStateIsDefault(const GPUBlendState *blend) {
+  return !blend->enabled &&
+         (blend->writeMask == 0 || blend->writeMask == GPU_COLOR_WRITE_ALL);
+}
+
+static bool
+gpu_depthStencilStateIsDefault(const GPUDepthStencilState *state) {
+  return !state ||
+         (!state->depthTestEnable &&
+          !state->depthWriteEnable &&
+          !state->stencilTestEnable &&
+          state->stencilReadMask == 0 &&
+          state->stencilWriteMask == 0);
+}
+
+static GPUVertexStepFunction
+gpu_vertexStepFunction(GPUVertexStepMode mode) {
+  switch (mode) {
+    case GPU_VERTEX_STEP_MODE_INSTANCE:
+      return GPUPerInstance;
+    case GPU_VERTEX_STEP_MODE_VERTEX:
+    default:
+      return GPUPerVertex;
+  }
+}
+
+static GPUVertexDescriptor *
+gpu_createVertexDescriptorFromState(const GPUVertexState *state) {
+  GPUVertexDescriptor *desc;
+  uint32_t i, j;
+
+  if (state->bufferLayoutCount == 0)
+    return NULL;
+  if (!state->pBufferLayouts)
+    return NULL;
+
+  desc = GPUNewVertexDesc();
+  if (!desc)
+    return NULL;
+
+  for (i = 0; i < state->bufferLayoutCount; i++) {
+    const GPUVertexBufferLayout *layout = &state->pBufferLayouts[i];
+
+    if (layout->attributeCount > 0 && !layout->pAttributes)
+      return NULL;
+
+    GPULayout(desc, i, layout->strideBytes, 1, gpu_vertexStepFunction(layout->stepMode));
+    for (j = 0; j < layout->attributeCount; j++) {
+      const GPUVertexAttribute *attr = &layout->pAttributes[j];
+
+      GPUAttrib(desc, attr->shaderLocation, attr->format, attr->offset, i);
+    }
+  }
+
+  return desc;
+}
+
+static bool
+gpu_pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info) {
+  uint32_t i;
+
+  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+      info->chain.sType != GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO) {
+    return false;
+  }
+  if (info->primitiveTopology != GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+    return false;
+  if (info->multisample.alphaToCoverageEnable)
+    return false;
+  if (info->multisample.sampleMask != 0 &&
+      info->multisample.sampleMask != 0xffffffffu)
+    return false;
+  if (!gpu_depthStencilStateIsDefault(info->pDepthStencilState))
+    return false;
+  for (i = 0; i < info->colorTargetCount; i++) {
+    if (!gpu_blendStateIsDefault(&info->pColorTargets[i].blend))
+      return false;
+  }
+
+  return true;
+}
+
 GPU_EXPORT
 GPUResult
 GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
@@ -23,8 +106,12 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
                         GPURenderPipeline                ** __restrict outPipeline) {
   GPURenderPipelineState *state;
   GPURenderPipeline      *pipeline;
+  GPUVertexDescriptor    *vertexDesc;
   GPUFunction            *vertexFunc;
   GPUFunction            *fragmentFunc;
+  GPUFormat               colorFormat;
+  uint32_t                i;
+  uint32_t                sampleCount;
 
   if (!outPipeline)
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -33,29 +120,42 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
 
   if (!device || !info || !info->library || !info->vertexEntry || !info->fragmentEntry)
     return GPU_ERROR_INVALID_ARGUMENT;
+  if (info->colorTargetCount == 0 || !info->pColorTargets)
+    return GPU_ERROR_INVALID_ARGUMENT;
+  if (!gpu_pipelineInfoIsSupported(info))
+    return GPU_ERROR_INVALID_ARGUMENT;
 
   vertexFunc = GPUShaderFunction(info->library, info->vertexEntry);
   fragmentFunc = GPUShaderFunction(info->library, info->fragmentEntry);
   if (!vertexFunc || !fragmentFunc)
     return GPU_ERROR_INVALID_ARGUMENT;
 
-  pipeline = GPUNewRenderPipeline(info->colorFormat);
+  colorFormat = info->pColorTargets[0].format;
+  pipeline = GPUNewRenderPipeline(colorFormat);
   if (!pipeline)
     return GPU_ERROR_BACKEND_FAILURE;
 
   GPUSetFunction(pipeline, vertexFunc, GPU_FUNCTION_VERT);
   GPUSetFunction(pipeline, fragmentFunc, GPU_FUNCTION_FRAG);
 
-  if (info->vertexDesc)
-    GPUSetVertexDesc(pipeline, info->vertexDesc);
-  if (info->colorFormat != GPUPixelFormatInvalid)
-    GPUColorFormat(pipeline, 0, info->colorFormat);
-  if (info->depthFormat != GPUPixelFormatInvalid)
-    GPUDepthFormat(pipeline, info->depthFormat);
-  if (info->stencilFormat != GPUPixelFormatInvalid)
-    GPUStencilFormat(pipeline, info->stencilFormat);
-  if (info->sampleCount > 0)
-    GPUSampleCount(pipeline, info->sampleCount);
+  vertexDesc = gpu_createVertexDescriptorFromState(&info->vertex);
+  if (info->vertex.bufferLayoutCount > 0 && !vertexDesc) {
+    GPUDestroyRenderPipeline(pipeline);
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (vertexDesc)
+    GPUSetVertexDesc(pipeline, vertexDesc);
+
+  for (i = 0; i < info->colorTargetCount; i++)
+    GPUColorFormat(pipeline, i, info->pColorTargets[i].format);
+
+  if (info->depthStencilFormat != GPU_FORMAT_UNDEFINED) {
+    GPUDepthFormat(pipeline, info->depthStencilFormat);
+    GPUStencilFormat(pipeline, info->depthStencilFormat);
+  }
+
+  sampleCount = info->multisample.sampleCount > 0 ? info->multisample.sampleCount : 1;
+  GPUSampleCount(pipeline, sampleCount);
 
   state = GPUNewRenderState(device, pipeline);
   if (!state) {
@@ -64,6 +164,9 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   }
 
   free(state);
+  pipeline->_primitiveTopology = info->primitiveTopology;
+  pipeline->_cullMode = info->cullMode;
+  pipeline->_frontFace = info->frontFace;
   *outPipeline = pipeline;
   return GPU_OK;
 }

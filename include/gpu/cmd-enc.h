@@ -57,17 +57,6 @@ typedef struct GPUViewport {
   double originX, originY, width, height, znear, zfar;
 } GPUViewport;
 
-typedef enum GPUCullMode {
-  GPUCullModeNone  = 0,
-  GPUCullModeFront = 1,
-  GPUCullModeBack  = 2
-} GPUCullMode;
-
-typedef enum GPUWinding {
-  GPUWindingClockwise        = 0,
-  GPUWindingCounterClockwise = 1
-} GPUWinding;
-
 typedef enum GPUDepthClipMode {
   GPUDepthClipModeClip  = 0,
   GPUDepthClipModeClamp = 1
@@ -111,7 +100,7 @@ GPUSetRenderState(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
-GPUSetDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilState *ds);
+GPUSetDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilPipelineState *ds);
 
 GPU_EXPORT
 void

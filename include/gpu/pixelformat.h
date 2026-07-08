@@ -190,6 +190,20 @@ typedef enum GPUPixelFormat {
   GPUPixelFormatX24_Stencil8           = 262
 } GPUPixelFormat;
 
+typedef GPUPixelFormat GPUFormat;
+
+#define GPU_FORMAT_UNDEFINED                 GPUPixelFormatInvalid
+#define GPU_FORMAT_RGBA8_UNORM               GPUPixelFormatRGBA8Unorm
+#define GPU_FORMAT_RGBA8_UNORM_SRGB          GPUPixelFormatRGBA8Unorm_sRGB
+#define GPU_FORMAT_BGRA8_UNORM               GPUPixelFormatBGRA8Unorm
+#define GPU_FORMAT_BGRA8_UNORM_SRGB          GPUPixelFormatBGRA8Unorm_sRGB
+#define GPU_FORMAT_RGBA16_FLOAT              GPUPixelFormatRGBA16Float
+#define GPU_FORMAT_RGBA32_FLOAT              GPUPixelFormatRGBA32Float
+#define GPU_FORMAT_RG11B10_UFLOAT            GPUPixelFormatRG11B10Float
+#define GPU_FORMAT_DEPTH24_UNORM_STENCIL8    GPUPixelFormatDepth24Unorm_Stencil8
+#define GPU_FORMAT_DEPTH32_FLOAT             GPUPixelFormatDepth32Float
+#define GPU_FORMAT_DEPTH32_FLOAT_STENCIL8    GPUPixelFormatDepth32Float_Stencil8
+
 #ifdef __cplusplus
 }
 #endif

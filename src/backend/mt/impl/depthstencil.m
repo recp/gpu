@@ -34,11 +34,11 @@ mt_newDepthStencil(GPUCompareFunction depthCompareFunc,
 }
 
 GPU_EXPORT
-GPUDepthStencilState*
+GPUDepthStencilPipelineState*
 mt_newDepthStencilState(GPUDevice       * __restrict device,
                         GPUDepthStencil * __restrict depthStencil) {
   GPUDeviceMT          *deviceMT;
-  GPUDepthStencilState *depthStencilState;
+  GPUDepthStencilPipelineState *depthStencilState;
   id<MTLDepthStencilState> mtDepthStencilState;
   
   deviceMT            = device->_priv;

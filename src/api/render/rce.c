@@ -75,11 +75,15 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
 
   state._priv = pipeline->_state;
   api->rce.setRenderPipelineState(pass, &state);
+  if (api->rce.cullMode)
+    api->rce.cullMode(pass, pipeline->_cullMode);
+  if (api->rce.frontFace)
+    api->rce.frontFace(pass, pipeline->_frontFace);
 }
 
 GPU_EXPORT
 void
-GPUSetDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilState *ds) {
+GPUSetDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilPipelineState *ds) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
