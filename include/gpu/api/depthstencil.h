@@ -21,16 +21,9 @@ extern "C" {
 #endif
 
 #include "../common.h"
-#include "../gpu.h"
 
 typedef struct GPUApiDepthStencil {
-  GPUDepthStencil*
-  (*newDepthStencil)(GPUCompareFunction depthCompareFunc,
-                     bool               depthWriteEnabled);
-  
-  GPUDepthStencilPipelineState*
-  (*newDepthStencilState)(GPUDevice       * __restrict device,
-                          GPUDepthStencil * __restrict depthStencil);
+  void *reserved;
 } GPUApiDepthStencil;
 
 #ifdef __cplusplus

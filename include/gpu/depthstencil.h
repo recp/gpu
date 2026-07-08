@@ -22,40 +22,6 @@ extern "C" {
 
 #include "common.h"
 
-typedef struct GPUDevice GPUDevice;
-
-typedef enum GPUCompareFunction {
-  GPUCompareFunctionNever        = 0,
-  GPUCompareFunctionLess         = 1,
-  GPUCompareFunctionEqual        = 2,
-  GPUCompareFunctionLessEqual    = 3,
-  GPUCompareFunctionGreater      = 4,
-  GPUCompareFunctionNotEqual     = 5,
-  GPUCompareFunctionGreaterEqual = 6,
-  GPUCompareFunctionAlways       = 7
-} GPUCompareFunction;
-
-typedef enum GPUStencilOperation {
-  GPUStencilOperationKeep           = 0,
-  GPUStencilOperationZero           = 1,
-  GPUStencilOperationReplace        = 2,
-  GPUStencilOperationIncrementClamp = 3,
-  GPUStencilOperationDecrementClamp = 4,
-  GPUStencilOperationInvert         = 5,
-  GPUStencilOperationIncrementWrap  = 6,
-  GPUStencilOperationDecrementWrap  = 7
-} GPUStencilOperation;
-
-typedef enum GPUDepthStencilFormat {
-  GPU_DEPTH_STENCIL_NONE,
-  GPU_DEPTH32FLOAT_STENCIL8,
-  // ... other formats
-} GPUDepthStencilFormat;
-
-typedef struct GPUDepthStencil {
-  void *_priv;
-} GPUDepthStencil;
-
 typedef enum GPUCompareOp {
   GPU_COMPARE_NEVER = 0,
   GPU_COMPARE_LESS = 1,
@@ -95,20 +61,6 @@ typedef struct GPUDepthStencilState {
   uint32_t            stencilReadMask;
   uint32_t            stencilWriteMask;
 } GPUDepthStencilState;
-
-typedef struct GPUDepthStencilPipelineState {
-  void *_priv;
-} GPUDepthStencilPipelineState;
-
-GPU_EXPORT
-GPUDepthStencil*
-GPUNewDepthStencil(GPUCompareFunction depthCompareFunc,
-                   bool               depthWriteEnabled);
-
-GPU_EXPORT
-GPUDepthStencilPipelineState*
-GPUNewDepthStencilState(GPUDevice       * __restrict device,
-                        GPUDepthStencil * __restrict depthStencil);
 
 #ifdef __cplusplus
 }

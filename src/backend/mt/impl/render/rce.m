@@ -67,12 +67,6 @@ mt_setRenderPipelineState(GPURenderCommandEncoder *rce, GPURenderPipelineState *
 
 GPU_HIDE
 void
-mt_setDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilPipelineState *ds) {
-  [mt_nativeRCE(rce) setDepthStencilState:(id<MTLDepthStencilState>)ds->_priv];
-}
-
-GPU_HIDE
-void
 mt_viewport(GPURenderCommandEncoder *enc, const GPUViewport *viewport) {
   MTLViewport vp;
   
@@ -230,7 +224,6 @@ mt_initRCE(GPUApiRCE *api) {
   api->frontFace              = mt_frontFace;
   api->cullMode               = mt_cullMode;
   api->setRenderPipelineState = mt_setRenderPipelineState;
-  api->setDepthStencil        = mt_setDepthStencil;
   api->viewport               = mt_viewport;
   api->scissor                = mt_scissor;
   api->blendConstant          = mt_blendConstant;

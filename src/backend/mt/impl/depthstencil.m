@@ -16,40 +16,6 @@
 
 #include "../common.h"
 
-GPU_EXPORT
-GPUDepthStencil*
-mt_newDepthStencil(GPUCompareFunction depthCompareFunc,
-                   bool               depthWriteEnabled) {
-  GPUDepthStencil *ds;
-  MTLDepthStencilDescriptor *mds;
-  
-  mds = [MTLDepthStencilDescriptor new];
-  mds.depthCompareFunction = (MTLCompareFunction)depthCompareFunc;
-  mds.depthWriteEnabled = depthWriteEnabled;
-  ds  = calloc(1, sizeof(*ds));
-
-  ds->_priv = mds;
-
-  return ds;
-}
-
-GPU_EXPORT
-GPUDepthStencilPipelineState*
-mt_newDepthStencilState(GPUDevice       * __restrict device,
-                        GPUDepthStencil * __restrict depthStencil) {
-  GPUDeviceMT          *deviceMT;
-  GPUDepthStencilPipelineState *depthStencilState;
-  id<MTLDepthStencilState> mtDepthStencilState;
-  
-  deviceMT            = device->_priv;
-  mtDepthStencilState = [deviceMT->device newDepthStencilStateWithDescriptor:(MTLDepthStencilDescriptor *)depthStencil->_priv];
-  depthStencilState   = calloc(1, sizeof(*depthStencilState));
-  
-  depthStencilState->_priv = mtDepthStencilState;
-  
-  return depthStencilState;
-}
-
 GPU_INLINE
 MTLTextureUsage
 mt_textureUsage(GPUTextureUsageFlags usage) {
@@ -289,28 +255,10 @@ mt_writeTexture(GPUCommandQueue             * __restrict queue,
   return GPU_OK;
 }
 
-GPU_EXPORT
-void
-GPUSetDepthStencilPixelFormat(GPUSwapChain* swapChain, GPUDepthStencilFormat format) {
-  // Implement logic to set the desired depth-stencil pixel format.
-  // Create or recreate the depth-stencil texture as needed.
-
-//  MTLTextureDescriptor *depthTextureDescriptor = [[MTLTextureDescriptor alloc] init];
-//  depthTextureDescriptor.pixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-//  depthTextureDescriptor.width  = drawableSize.width;
-//  depthTextureDescriptor.height = drawableSize.height;
-//  depthTextureDescriptor.storageMode = MTLStorageModePrivate;
-//  depthTextureDescriptor.usage = MTLTextureUsageRenderTarget;
-//
-//  id<MTLTexture> depthTexture = [device newTextureWithDescriptor:depthTextureDescriptor];
-
-}
-
 GPU_HIDE
 void
 mt_initDepthStencil(GPUApiDepthStencil *api) {
-  api->newDepthStencil      = mt_newDepthStencil;
-  api->newDepthStencilState = mt_newDepthStencilState;
+  api->reserved = NULL;
 }
 
 GPU_HIDE

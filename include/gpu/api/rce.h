@@ -49,9 +49,6 @@ typedef struct GPUApiRCE {
                             GPURenderPipelineState  *piplineState);
   
   void
-  (*setDepthStencil)(GPURenderCommandEncoder *rce, GPUDepthStencilPipelineState *ds);
-  
-  void
   (*viewport)(GPURenderCommandEncoder *enc, const GPUViewport *viewport);
 
   void

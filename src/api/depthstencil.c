@@ -15,27 +15,3 @@
  */
 
 #include "../common.h"
-
-GPU_EXPORT
-GPUDepthStencil*
-GPUNewDepthStencil(GPUCompareFunction depthCompareFunc,
-                   bool               depthWriteEnabled) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return NULL;
-
-  return api->depthStencil.newDepthStencil(depthCompareFunc, depthWriteEnabled);
-}
-
-GPU_EXPORT
-GPUDepthStencilPipelineState*
-GPUNewDepthStencilState(GPUDevice       * __restrict device,
-                        GPUDepthStencil * __restrict depthStencil) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return NULL;
-  
-  return api->depthStencil.newDepthStencilState(device, depthStencil);
-}
