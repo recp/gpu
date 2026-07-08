@@ -82,6 +82,29 @@ gpu_bindStageIsValid(GPUBindStage stage);
 static int
 gpu_bindKindIsValid(GPUBindKind kind);
 
+static int
+gpu_samplerDescIsValid(const GPUSamplerDesc *desc) {
+  if (!desc) {
+    return 0;
+  }
+
+  return (desc->minFilter == GPU_FILTER_NEAREST ||
+          desc->minFilter == GPU_FILTER_LINEAR) &&
+         (desc->magFilter == GPU_FILTER_NEAREST ||
+          desc->magFilter == GPU_FILTER_LINEAR) &&
+         (desc->mipFilter == GPU_MIP_FILTER_NEAREST ||
+          desc->mipFilter == GPU_MIP_FILTER_LINEAR) &&
+         (desc->addressU == GPU_ADDRESS_MODE_REPEAT ||
+          desc->addressU == GPU_ADDRESS_MODE_MIRRORED_REPEAT ||
+          desc->addressU == GPU_ADDRESS_MODE_CLAMP_TO_EDGE) &&
+         (desc->addressV == GPU_ADDRESS_MODE_REPEAT ||
+          desc->addressV == GPU_ADDRESS_MODE_MIRRORED_REPEAT ||
+          desc->addressV == GPU_ADDRESS_MODE_CLAMP_TO_EDGE) &&
+         (desc->addressW == GPU_ADDRESS_MODE_REPEAT ||
+          desc->addressW == GPU_ADDRESS_MODE_MIRRORED_REPEAT ||
+          desc->addressW == GPU_ADDRESS_MODE_CLAMP_TO_EDGE);
+}
+
 static void
 gpu_copyText(char *dst, size_t dstSize, const char *src) {
   if (!dst || dstSize == 0) {
@@ -495,6 +518,10 @@ gpu_validateLayoutEntries(const GPUBindGroupLayoutEntry *entries,
     if (!gpu_normalizeLayoutEntry(&entries[i], &entry) ||
         !gpu_bindStageIsValid(entry.stage) ||
         !gpu_bindKindIsValid(entry.kind) ||
+        (entry.hasDynamicOffset && entry.kind != GPUBindKindBuffer) ||
+        (entry.immutableSampler &&
+         (entry.kind != GPUBindKindSampler ||
+          !gpu_samplerDescIsValid(&entry.immutableSamplerDesc))) ||
         gpu_layoutEntryDuplicateExists(entries,
                                        i,
                                        entry.stage,
@@ -1065,6 +1092,9 @@ GPUCreateBindGroupLayout(GPUDevice *device,
       info->chain.sType != GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
 
   entries = info->pEntries;
   count = info->entryCount;
@@ -1416,6 +1446,9 @@ GPUCreatePipelineLayout(GPUDevice *device,
   }
   if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
       info->chain.sType != GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (info->bindGroupLayoutCount > 0 && !info->ppBindGroupLayouts) {
@@ -1779,6 +1812,9 @@ GPUCreateBindGroup(GPUDevice *device,
   }
   if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
       info->chain.sType != GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 

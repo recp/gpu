@@ -204,6 +204,16 @@ check_bind_group_validation(GPUDevice *device, GPUBindGroupLayout *layout) {
   }
   GPUDestroyBindGroup(group);
 
+  info.chain.structSize = (uint32_t)(sizeof(info) - 1u);
+  group = (GPUBindGroup *)(uintptr_t)1u;
+  if (GPUCreateBindGroup(device, &info, &group) != GPU_ERROR_INVALID_ARGUMENT ||
+      group != NULL) {
+    fprintf(stderr, "bind group accepted short structSize\n");
+    GPUDestroyBindGroup(group);
+    return 0;
+  }
+  info.chain.structSize = sizeof(info);
+
   memset(missingEntries, 0, sizeof(missingEntries));
   memcpy(missingEntries, validEntries, sizeof(missingEntries));
   info.label = "reflection-missing-set0";
@@ -269,6 +279,223 @@ check_bind_group_validation(GPUDevice *device, GPUBindGroupLayout *layout) {
     return 0;
   }
 
+  return 1;
+}
+
+static GPUSamplerDesc
+valid_sampler_desc(void) {
+  GPUSamplerDesc desc;
+
+  memset(&desc, 0, sizeof(desc));
+  desc.minFilter = GPU_FILTER_LINEAR;
+  desc.magFilter = GPU_FILTER_LINEAR;
+  desc.mipFilter = GPU_MIP_FILTER_LINEAR;
+  desc.addressU = GPU_ADDRESS_MODE_REPEAT;
+  desc.addressV = GPU_ADDRESS_MODE_REPEAT;
+  desc.addressW = GPU_ADDRESS_MODE_REPEAT;
+  return desc;
+}
+
+static int
+check_sampler_validation(GPUDevice *device) {
+  GPUSamplerCreateInfo info;
+  GPUSampler *sampler;
+
+  memset(&info, 0, sizeof(info));
+  info.chain.sType = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.label = "reflection-sampler";
+  info.desc = valid_sampler_desc();
+
+  sampler = (GPUSampler *)(uintptr_t)1u;
+  if (GPUCreateSampler(NULL, &info, false, &sampler) != GPU_ERROR_INVALID_ARGUMENT ||
+      sampler != NULL) {
+    fprintf(stderr, "sampler create accepted null device\n");
+    GPUDestroySampler(sampler);
+    return 0;
+  }
+  if (GPUCreateSampler(device, &info, false, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "sampler create accepted null output\n");
+    return 0;
+  }
+
+  info.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  sampler = (GPUSampler *)(uintptr_t)1u;
+  if (GPUCreateSampler(device, &info, false, &sampler) != GPU_ERROR_INVALID_ARGUMENT ||
+      sampler != NULL) {
+    fprintf(stderr, "sampler create accepted wrong sType\n");
+    GPUDestroySampler(sampler);
+    return 0;
+  }
+
+  info.chain.sType = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  info.chain.structSize = (uint32_t)(sizeof(info) - 1u);
+  sampler = (GPUSampler *)(uintptr_t)1u;
+  if (GPUCreateSampler(device, &info, false, &sampler) != GPU_ERROR_INVALID_ARGUMENT ||
+      sampler != NULL) {
+    fprintf(stderr, "sampler create accepted short structSize\n");
+    GPUDestroySampler(sampler);
+    return 0;
+  }
+
+  info.chain.structSize = sizeof(info);
+  info.desc.minFilter = (GPUFilter)99;
+  sampler = (GPUSampler *)(uintptr_t)1u;
+  if (GPUCreateSampler(device, &info, false, &sampler) != GPU_ERROR_INVALID_ARGUMENT ||
+      sampler != NULL) {
+    fprintf(stderr, "sampler create accepted invalid min filter\n");
+    GPUDestroySampler(sampler);
+    return 0;
+  }
+
+  info.desc = valid_sampler_desc();
+  info.desc.addressV = (GPUAddressMode)99;
+  sampler = (GPUSampler *)(uintptr_t)1u;
+  if (GPUCreateSampler(device, &info, false, &sampler) != GPU_ERROR_INVALID_ARGUMENT ||
+      sampler != NULL) {
+    fprintf(stderr, "sampler create accepted invalid address mode\n");
+    GPUDestroySampler(sampler);
+    return 0;
+  }
+
+  info.desc = valid_sampler_desc();
+  sampler = NULL;
+  if (GPUCreateSampler(device, &info, false, &sampler) != GPU_OK || !sampler) {
+    fprintf(stderr, "sampler create rejected valid dynamic sampler\n");
+    GPUDestroySampler(sampler);
+    return 0;
+  }
+  GPUDestroySampler(sampler);
+
+  sampler = NULL;
+  if (GPUCreateSampler(device, &info, true, &sampler) != GPU_OK || !sampler) {
+    fprintf(stderr, "sampler create rejected valid static-if-supported sampler\n");
+    GPUDestroySampler(sampler);
+    return 0;
+  }
+  GPUDestroySampler(sampler);
+
+  return 1;
+}
+
+static int
+check_bind_group_layout_validation(GPUDevice *device) {
+  unsigned char fakeSamplerStorage;
+  GPUBindGroupLayoutEntry entry;
+  GPUBindGroupLayoutCreateInfo layoutInfo;
+  GPUBindGroupLayout *layout;
+  GPUBindGroupEntry runtimeSamplerEntry;
+  GPUBindGroupCreateInfo groupInfo;
+  GPUBindGroup *group;
+  GPUPipelineLayoutCreateInfo pipelineInfo;
+  GPUBindGroupLayout *layouts[1];
+  GPUPipelineLayout *pipelineLayout;
+
+  memset(&entry, 0, sizeof(entry));
+  entry.binding = 0u;
+  entry.bindingType = GPU_BINDING_SAMPLER;
+  entry.visibility = GPU_SHADER_STAGE_FRAGMENT_BIT;
+  entry.arrayCount = 1u;
+  entry.immutableSampler = true;
+  entry.immutableSamplerDesc = valid_sampler_desc();
+
+  memset(&layoutInfo, 0, sizeof(layoutInfo));
+  layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  layoutInfo.label = "immutable-sampler-layout";
+  layoutInfo.entryCount = 1u;
+  layoutInfo.pEntries = &entry;
+
+  layout = (GPUBindGroupLayout *)(uintptr_t)1u;
+  layoutInfo.chain.structSize = (uint32_t)(sizeof(layoutInfo) - 1u);
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT ||
+      layout != NULL) {
+    fprintf(stderr, "bind group layout accepted short structSize\n");
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  entry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  layout = (GPUBindGroupLayout *)(uintptr_t)1u;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT ||
+      layout != NULL) {
+    fprintf(stderr, "bind group layout accepted immutable non-sampler\n");
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  entry.bindingType = GPU_BINDING_SAMPLER;
+  entry.immutableSamplerDesc.mipFilter = (GPUMipFilter)99;
+  layout = (GPUBindGroupLayout *)(uintptr_t)1u;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT ||
+      layout != NULL) {
+    fprintf(stderr, "bind group layout accepted invalid immutable sampler desc\n");
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  entry.immutableSamplerDesc = valid_sampler_desc();
+  layout = NULL;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK || !layout) {
+    fprintf(stderr, "bind group layout rejected valid immutable sampler\n");
+    return 0;
+  }
+
+  memset(&groupInfo, 0, sizeof(groupInfo));
+  groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.label = "immutable-sampler-group";
+  groupInfo.layout = layout;
+
+  group = NULL;
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
+    fprintf(stderr, "bind group rejected omitted immutable sampler binding\n");
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+  GPUDestroyBindGroup(group);
+
+  memset(&runtimeSamplerEntry, 0, sizeof(runtimeSamplerEntry));
+  runtimeSamplerEntry.binding = 0u;
+  runtimeSamplerEntry.sampler = (GPUSampler *)(void *)&fakeSamplerStorage;
+  groupInfo.entryCount = 1u;
+  groupInfo.pEntries = &runtimeSamplerEntry;
+  group = (GPUBindGroup *)(uintptr_t)1u;
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT ||
+      group != NULL) {
+    fprintf(stderr, "bind group accepted runtime immutable sampler binding\n");
+    GPUDestroyBindGroup(group);
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  layouts[0] = layout;
+  memset(&pipelineInfo, 0, sizeof(pipelineInfo));
+  pipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize = (uint32_t)(sizeof(pipelineInfo) - 1u);
+  pipelineInfo.bindGroupLayoutCount = 1u;
+  pipelineInfo.ppBindGroupLayouts = layouts;
+  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_ERROR_INVALID_ARGUMENT ||
+      pipelineLayout != NULL) {
+    fprintf(stderr, "pipeline layout accepted short structSize\n");
+    GPUDestroyPipelineLayout(pipelineLayout);
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
+  pipelineLayout = NULL;
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_OK ||
+      !pipelineLayout) {
+    fprintf(stderr, "pipeline layout rejected valid bind group layout\n");
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  GPUDestroyPipelineLayout(pipelineLayout);
+  GPUDestroyBindGroupLayout(layout);
   return 1;
 }
 
@@ -1612,6 +1839,12 @@ check_selected_shader_library(const void *bytecode,
     return 0;
   }
   if (!check_queue_selection(device)) {
+    return 0;
+  }
+  if (!check_sampler_validation(device)) {
+    return 0;
+  }
+  if (!check_bind_group_layout_validation(device)) {
     return 0;
   }
   if (!check_resource_validation(device)) {
