@@ -37,6 +37,8 @@ typedef struct GPUApiDevice {
                              GPUCommandQueueCreateInfo      queCI[],
                              uint32_t                       nQueCI);
 
+  void (*destroyDevice)(GPUDevice * __restrict device);
+
   GPUPhysicalDevice* (*getAutoSelectedPhysicalDevice)(GPUInstance *inst);
 
   GPUPhysicalDevice*

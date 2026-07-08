@@ -56,6 +56,7 @@ typedef struct GPUApiSwapChain {
 
   void (*attachToLayer)(GPUSwapChain* swapChain, void* targetLayer, bool autoResize);
   void (*attachToView)(GPUSwapChain* swapChain, void *viewHandle, bool autoResize, bool replace);
+  void (*destroySwapChain)(GPUSwapChain *swapChain);
 } GPUApiSwapChain;
 
 #ifdef __cplusplus

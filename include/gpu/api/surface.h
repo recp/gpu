@@ -32,6 +32,8 @@ typedef struct GPUApiSurface {
                                void                     * __restrict nativeHandle,
                                GPUSurfaceType                        type,
                                float                                 scale);
+
+  void (*destroySurface)(GPUSurface * __restrict surface);
 } GPUApiSurface;
 
 #ifdef __cplusplus

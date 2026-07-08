@@ -73,3 +73,21 @@ GPUCreateDevice(GPUPhysicalDevice        *phyDevice,
 
   return api->device.createDevice(phyDevice, queCI, nQueCI);
 }
+
+GPU_EXPORT
+void
+GPUDestroyDevice(GPUDevice * __restrict device) {
+  GPUApi *api;
+
+  if (!device) {
+    return;
+  }
+
+  if (!(api = gpuActiveGPUApi())) {
+    return;
+  }
+
+  if (api->device.destroyDevice) {
+    api->device.destroyDevice(device);
+  }
+}

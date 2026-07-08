@@ -67,6 +67,30 @@ GPUCreateSwapChainForLayer(GPUDevice              * __restrict device,
 
 GPU_EXPORT
 void
+GPUDestroySwapChain(GPUSwapChain * __restrict swapChain) {
+  GPUApi *api;
+
+  if (!swapChain) {
+    return;
+  }
+
+  if (!(api = gpuActiveGPUApi())) {
+    return;
+  }
+
+  if (api->swapchain.destroySwapChain) {
+    api->swapchain.destroySwapChain(swapChain);
+  }
+}
+
+GPU_EXPORT
+void
+GPUDestroySwapchain(GPUSwapChain * __restrict swapChain) {
+  GPUDestroySwapChain(swapChain);
+}
+
+GPU_EXPORT
+void
 GPUSwapChainAttachToLayer(GPUSwapChain* swapChain, void* targetLayer, bool autoResize) {
   GPUApi *api;
 

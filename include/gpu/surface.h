@@ -43,4 +43,8 @@ GPUCreateSurface(GPUInstance       * __restrict inst,
                  GPUSurfaceType                 type,
                  float                          scale);
 
+GPU_EXPORT
+void
+GPUDestroySurface(GPUSurface * __restrict surface);
+
 #endif /* gpu_surface */

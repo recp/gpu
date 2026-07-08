@@ -81,6 +81,10 @@ GPUCommandQueue*
 mt_newCommandQueue(GPUDevice * __restrict device);
 
 GPU_HIDE
+void
+mt_destroyCommandQueue(GPUCommandQueue * __restrict queue);
+
+GPU_HIDE
 GPUDevice *
 mt_createDevice(GPUPhysicalDevice        *phyDevice,
                 GPUCommandQueueCreateInfo queCI[],
@@ -130,10 +134,34 @@ mt_createSystemDefaultDevice(GPUInstance * __restrict inst) {
 
 GPU_HIDE
 void
+mt_destroyDevice(GPUDevice * __restrict device) {
+  GPUDeviceMT *deviceMT;
+
+  if (!device) {
+    return;
+  }
+
+  deviceMT = device->_priv;
+  if (deviceMT) {
+    if (deviceMT->createdQueues) {
+      for (uint32_t i = 0; i < deviceMT->nCreatedQueues; i++) {
+        mt_destroyCommandQueue(deviceMT->createdQueues[i]);
+      }
+      free(deviceMT->createdQueues);
+    }
+    free(deviceMT);
+  }
+
+  free(device);
+}
+
+GPU_HIDE
+void
 mt_initDevice(GPUApiDevice *apiDevice) {
   apiDevice->getAvailablePhysicalDevicesBy = mt_getAvailablePhysicalDevicesBy;
   apiDevice->autoSelectPhysicalDeviceIn    = mt_autoSelectPhysicalDeviceIn;
   apiDevice->getAutoSelectedPhysicalDevice = mt_getAutoSelectedPhysicalDevice;
   apiDevice->createDevice                  = mt_createDevice;
   apiDevice->createSystemDefaultDevice     = mt_createSystemDefaultDevice;
+  apiDevice->destroyDevice                 = mt_destroyDevice;
 }

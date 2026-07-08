@@ -43,6 +43,19 @@ mt_newCommandQueue(GPUDevice * __restrict device) {
 }
 
 GPU_HIDE
+void
+mt_destroyCommandQueue(GPUCommandQueue * __restrict queue) {
+  if (!queue) {
+    return;
+  }
+
+  if (queue->_priv) {
+    [(id<MTLCommandQueue>)queue->_priv release];
+  }
+  free(queue);
+}
+
+GPU_HIDE
 GPUCommandQueue*
 mt_getCommandQueue(GPUDevice * __restrict device,
                    GPUQueueFlagBits       bits,

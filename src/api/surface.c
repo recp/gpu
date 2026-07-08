@@ -30,3 +30,21 @@ GPUCreateSurface(GPUInstance       * __restrict inst,
 
   return api->surface.createSurface(api, inst, phyDevice, nativeHandle, type, scale);
 }
+
+GPU_EXPORT
+void
+GPUDestroySurface(GPUSurface * __restrict surface) {
+  GPUApi *api;
+
+  if (!surface) {
+    return;
+  }
+
+  if (!(api = gpuActiveGPUApi())) {
+    return;
+  }
+
+  if (api->surface.destroySurface) {
+    api->surface.destroySurface(surface);
+  }
+}

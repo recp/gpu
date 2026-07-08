@@ -20,10 +20,34 @@
 @public
   GPUSwapChainMetal *swapChainMtl;
   float              backingScaleFactor;
+  id                 observedObject;
+  NSString          *observedKeyPath;
 }
+- (void)gpuObserveObject:(id)object keyPath:(NSString *)keyPath;
+- (void)gpuStopObserving;
 @end
 
 @implementation GPUSwapChainObjc
+- (void)gpuObserveObject:(id)object keyPath:(NSString *)keyPath {
+  [self gpuStopObserving];
+  observedObject  = [object retain];
+  observedKeyPath = [keyPath copy];
+  [observedObject addObserver:self
+                   forKeyPath:observedKeyPath
+                      options:NSKeyValueObservingOptionNew
+                      context:NULL];
+}
+
+- (void)gpuStopObserving {
+  if (observedObject && observedKeyPath) {
+    [observedObject removeObserver:self forKeyPath:observedKeyPath];
+    [observedObject release];
+    [observedKeyPath release];
+    observedObject  = nil;
+    observedKeyPath = nil;
+  }
+}
+
 - (void)observeValueForKeyPath: (NSString *)keyPath
                       ofObject: (id)object
                       change:   (NSDictionary *)change
@@ -38,8 +62,8 @@
   }
 }
 - (void)dealloc {
+  [self gpuStopObserving];
   [super dealloc];
-  [swapChainMtl->layer removeObserver: self forKeyPath: @"frame"];
 }
 @end
 
@@ -60,10 +84,8 @@ mt_swapChainAttachToLayer(GPUSwapChain * __restrict swapChain,
   [_targetLayer addSublayer: swapChainMtl->layer];
 
   if (autoResize) {
-    [_targetLayer addObserver: swapChainMtl->objc
-                   forKeyPath: @"bounds"
-                      options: NSKeyValueObservingOptionNew
-                      context: NULL];
+    [(GPUSwapChainObjc *)swapChainMtl->objc gpuObserveObject:_targetLayer
+                                                     keyPath:@"bounds"];
   }
 }
 
@@ -103,10 +125,8 @@ mt_swapChainAttachToView(GPUSwapChain * __restrict swapChain,
   swapChainMtl->layer.frame = _viewHandle.bounds;
 
   if (autoResize) {
-    [_viewHandle.layer addObserver: swapChainMtl->objc
-                        forKeyPath: @"bounds"
-                           options: NSKeyValueObservingOptionNew
-                           context: NULL];
+    [(GPUSwapChainObjc *)swapChainMtl->objc gpuObserveObject:_viewHandle.layer
+                                                     keyPath:@"bounds"];
   }
 }
 
@@ -126,7 +146,7 @@ mt_createSwapChain(GPUApi          * __restrict api,
   deviceMT                            = device->_priv;
   swapChain                           = calloc(1, sizeof(*swapChain));
   swapChainMtl                        = calloc(1, sizeof(*swapChainMtl));
-  swapChainMtl->layer                 = [CAMetalLayer layer];
+  swapChainMtl->layer                 = [[CAMetalLayer alloc] init];
   swapChainMtl->layer.bounds          = CGRectMake(0, 0, size.width, size.height);
   swapChainMtl->layer.device          = deviceMT->device;
   //  swapChainMtl->layer.pixelFormat     = MTLPixelFormatBGRA8Unorm;
@@ -165,7 +185,7 @@ mt_createSwapChainForView(struct GPUApi          * __restrict api,
   deviceMT                            = device->_priv;
   swapChain                           = calloc(1, sizeof(*swapChain));
   swapChainMtl                        = calloc(1, sizeof(*swapChainMtl));
-  swapChainMtl->layer                 = [CAMetalLayer layer];
+  swapChainMtl->layer                 = [[CAMetalLayer alloc] init];
   swapChainMtl->layer.bounds          = CGRectMake(0, 0, width, height);
   swapChainMtl->layer.device          = deviceMT->device;
   //  swapChainMtl->layer.pixelFormat     = MTLPixelFormatBGRA8Unorm;
@@ -202,7 +222,7 @@ mt_createSwapChainForLayer(struct GPUApi          * __restrict api,
   deviceMT                            = device->_priv;
   swapChain                           = calloc(1, sizeof(*swapChain));
   swapChainMtl                        = calloc(1, sizeof(*swapChainMtl));
-  swapChainMtl->layer                 = [CAMetalLayer layer];
+  swapChainMtl->layer                 = [[CAMetalLayer alloc] init];
   swapChainMtl->layer.bounds          = CGRectMake(0, 0, width, height);
   swapChainMtl->layer.device          = deviceMT->device;
   //  swapChainMtl->layer.pixelFormat     = MTLPixelFormatBGRA8Unorm;
@@ -254,10 +274,36 @@ mt_createSwapChainForLayer(struct GPUApi          * __restrict api,
 
 GPU_HIDE
 void
+mt_destroySwapChain(GPUSwapChain * __restrict swapChain) {
+  GPUSwapChainMetal *swapChainMtl;
+
+  if (!swapChain) {
+    return;
+  }
+
+  swapChainMtl = swapChain->_priv;
+  if (swapChainMtl) {
+    if (swapChainMtl->objc) {
+      [(GPUSwapChainObjc *)swapChainMtl->objc gpuStopObserving];
+      [(id)swapChainMtl->objc release];
+    }
+    if (swapChainMtl->layer) {
+      [swapChainMtl->layer removeFromSuperlayer];
+      [swapChainMtl->layer release];
+    }
+    free(swapChainMtl);
+  }
+
+  free(swapChain);
+}
+
+GPU_HIDE
+void
 mt_initSwapChain(GPUApiSwapChain *api) {
   api->createSwapChain         = mt_createSwapChain;
   api->createSwapChainForView  = mt_createSwapChainForView;
   api->createSwapChainForLayer = mt_createSwapChainForLayer;
   api->attachToLayer           = mt_swapChainAttachToLayer;
   api->attachToView            = mt_swapChainAttachToView;
+  api->destroySwapChain        = mt_destroySwapChain;
 }

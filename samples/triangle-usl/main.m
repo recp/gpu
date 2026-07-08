@@ -373,6 +373,19 @@ cleanup:
     GPUDestroyShaderLibrary((GPUShaderLibrary *)_library);
     _library = NULL;
   }
+  if (_swapchain) {
+    GPUDestroySwapChain(_swapchain);
+    _swapchain = NULL;
+  }
+  if (_surface) {
+    GPUDestroySurface(_surface);
+    _surface = NULL;
+  }
+  if (_device) {
+    GPUDestroyDevice(_device);
+    _device = NULL;
+    _queue = NULL;
+  }
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {

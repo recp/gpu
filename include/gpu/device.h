@@ -75,6 +75,10 @@ GPU_EXPORT
 GPUDevice *
 GPUCreateSystemDefaultDevice(GPUInstance *inst);
 
+GPU_EXPORT
+void
+GPUDestroyDevice(GPUDevice * __restrict device);
+
 #ifdef __cplusplus
 }
 #endif

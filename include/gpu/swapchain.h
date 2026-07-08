@@ -74,6 +74,14 @@ GPUCreateSwapChainForLayer(GPUDevice              * __restrict device,
 
 GPU_EXPORT
 void
+GPUDestroySwapChain(GPUSwapChain * __restrict swapChain);
+
+GPU_EXPORT
+void
+GPUDestroySwapchain(GPUSwapChain * __restrict swapChain);
+
+GPU_EXPORT
+void
 GPUSwapChainAttachToLayer(GPUSwapChain* swapChain, void* targetLayer, bool autoResize);
 
 GPU_EXPORT

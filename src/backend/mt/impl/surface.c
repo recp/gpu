@@ -35,6 +35,13 @@ mt_createSurface(GPUApi            * __restrict api,
 
 GPU_HIDE
 void
+mt_destroySurface(GPUSurface * __restrict surface) {
+  free(surface);
+}
+
+GPU_HIDE
+void
 mt_initSurface(GPUApiSurface * apiDevice) {
   apiDevice->createSurface = mt_createSurface;
+  apiDevice->destroySurface = mt_destroySurface;
 }
