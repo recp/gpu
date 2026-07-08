@@ -232,8 +232,16 @@ GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
     return GPU_ERROR_BACKEND_FAILURE;
 
   for (uint32_t i = 0; i < info->commandBufferCount; i++) {
-    if (!info->ppCommandBuffers[i]) {
+    GPUCommandBuffer *cmdb;
+
+    cmdb = info->ppCommandBuffers[i];
+    if (!cmdb || cmdb->_submitted) {
       return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    for (uint32_t j = 0; j < i; j++) {
+      if (info->ppCommandBuffers[j] == cmdb) {
+        return GPU_ERROR_INVALID_ARGUMENT;
+      }
     }
   }
 

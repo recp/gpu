@@ -969,6 +969,7 @@ check_queue_submit_fence(GPUDevice *device) {
   GPUCommandQueue *queue;
   GPUCommandBuffer *cmdb;
   GPUCommandBuffer *buffers[1];
+  GPUCommandBuffer *duplicateBuffers[2];
   GPUFence *fence;
   GPUFenceCreateInfo fenceInfo = {0};
   GPUQueueSubmitInfo submitInfo = {0};
@@ -1004,6 +1005,20 @@ check_queue_submit_fence(GPUDevice *device) {
   }
 
   if (ok) {
+    duplicateBuffers[0] = cmdb;
+    duplicateBuffers[1] = cmdb;
+    submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+    submitInfo.chain.structSize = sizeof(submitInfo);
+    submitInfo.commandBufferCount = 2u;
+    submitInfo.ppCommandBuffers = duplicateBuffers;
+    if (GPUQueueSubmit(queue, &submitInfo) != GPU_ERROR_INVALID_ARGUMENT) {
+      fprintf(stderr, "queue submit accepted duplicate command buffer\n");
+      ok = 0;
+    }
+  }
+
+  if (ok) {
+    memset(&submitInfo, 0, sizeof(submitInfo));
     buffers[0] = cmdb;
     submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
     submitInfo.chain.structSize = sizeof(submitInfo);
