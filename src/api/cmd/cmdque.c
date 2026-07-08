@@ -29,15 +29,12 @@ GPUGetQueue(GPUDevice * __restrict device,
             uint32_t               index) {
   GPUApi *api;
 
-  /* Canonical path: queue capability bits + ordinal.
-   * Today only index 0 is guaranteed across backends.
-   */
-  if (index != 0) {
+  if (!device || bits == 0) {
     return NULL;
   }
   if (!(api = gpuActiveGPUApi()))
     return NULL;
-  return api->cmdque.getCommandQueue(device, bits);
+  return api->cmdque.getCommandQueue(device, bits, index);
 }
 
 GPU_EXPORT

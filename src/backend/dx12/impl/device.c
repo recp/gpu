@@ -226,6 +226,9 @@ dx12_createDevice(GPUPhysicalDevice * __restrict phyDevice,
 
     for (i = 0; i < nQueCI; i++) {
       deviceDX12->createdQueues[i] = dx12_newCommandQueue(device);
+      if (deviceDX12->createdQueues[i]) {
+        deviceDX12->createdQueues[i]->bits = queCI[i].flags;
+      }
     }
   }
 

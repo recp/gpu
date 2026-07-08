@@ -107,6 +107,9 @@ mt_createDevice(GPUPhysicalDevice        *phyDevice,
 
   for (i = 0; i < nQueCI; i++) {
     deviceMT->createdQueues[i] = mt_newCommandQueue(device);
+    if (deviceMT->createdQueues[i]) {
+      deviceMT->createdQueues[i]->bits = queCI[i].flags;
+    }
   }
 
   return device;

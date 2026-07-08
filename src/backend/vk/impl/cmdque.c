@@ -18,32 +18,27 @@
 
 GPU_HIDE
 GPUCommandQueue*
-vk_getCommandQueue(GPUDevice *device, GPUQueueFlagBits bits) {
+vk_getCommandQueue(GPUDevice *device, GPUQueueFlagBits bits, uint32_t index) {
   GPUCommandQueue   *queue;
-  GPUCommandQueueVk *queueVk;
   GPUDeviceVk       *deviceVk;
-  GPUCommandQueue   *fallbackQueue;
+  uint32_t           matchIndex;
   uint32_t           i;
 
   deviceVk      = device->_priv;
-  fallbackQueue = NULL;
+  matchIndex    = 0;
 
   for (i = 0; i < deviceVk->nCreatedQueues; i++) {
-    queue   = deviceVk->createdQueues[i];
-    queueVk = queue->_priv;
+    queue = deviceVk->createdQueues[i];
 
-    /* check if this queue matches the desired flags. */
-    if (queueVk->createCI->flags & bits) {
-      return queue;
-    }
-
-    /* if it's a graphics queue, keep it as a fallback. */
-    if (queueVk->createCI->flags & GPU_QUEUE_GRAPHICS_BIT) {
-      fallbackQueue = queue;
+    if (queue && (queue->bits & bits) == bits) {
+      if (matchIndex == index) {
+        return queue;
+      }
+      matchIndex++;
     }
   }
 
-  return fallbackQueue;
+  return NULL;
 }
 
 GPU_HIDE
@@ -51,7 +46,8 @@ GPUCommandQueue*
 vk_newCommandQueue(GPUDevice * __restrict device) {
   return vk_getCommandQueue(
     device,
-    GPU_QUEUE_GRAPHICS_BIT | GPU_QUEUE_COMPUTE_BIT
+    GPU_QUEUE_GRAPHICS_BIT | GPU_QUEUE_COMPUTE_BIT,
+    0
   );
 }
 

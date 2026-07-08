@@ -45,16 +45,27 @@ mt_newCommandQueue(GPUDevice * __restrict device) {
 GPU_HIDE
 GPUCommandQueue*
 mt_getCommandQueue(GPUDevice * __restrict device,
-                   GPUQueueFlagBits       bits) {
+                   GPUQueueFlagBits       bits,
+                   uint32_t               index) {
   GPUCommandQueue *que;
   GPUDeviceMT     *deviceMT;
+  uint32_t          matchIndex;
+  uint32_t          i;
 
   deviceMT = device->_priv;
+  matchIndex = 0;
 
-  /* TODO: select wisely */
-  que      = deviceMT->createdQueues[0];
+  for (i = 0; i < deviceMT->nCreatedQueues; i++) {
+    que = deviceMT->createdQueues[i];
+    if (que && (que->bits & bits) == bits) {
+      if (matchIndex == index) {
+        return que;
+      }
+      matchIndex++;
+    }
+  }
 
-  return que;
+  return NULL;
 }
 
 GPU_HIDE

@@ -387,13 +387,15 @@ vk__findQueueFamily(GPUPhysicalDevice *phyDevice, GPUQueueFlagBits flags) {
 GPU_HIDE
 static GPUCommandQueue*
 vk__createCmdQueue(GPUDeviceVk             * __restrict deviceVk,
-                   VkDeviceQueueCreateInfo * __restrict ci) {
+                   VkDeviceQueueCreateInfo * __restrict ci,
+                   GPUQueueFlagBits                     bits) {
   GPUCommandQueue   *que;
   GPUCommandQueueVk *queVk;
 
   queVk           = calloc(1, sizeof(*que));
   que             = calloc(1, sizeof(*que));
   que->_priv      = queVk;
+  que->bits       = bits;
   queVk->createCI = ci;
 
   vkGetDeviceQueue(deviceVk->device, ci->queueFamilyIndex, 0, &queVk->queRaw);
@@ -475,7 +477,7 @@ vk_createDevice(GPUPhysicalDevice * __restrict phyDevice,
 
   createdQueues = calloc(nQueues, sizeof(*createdQueues));
   for (i = 0; i < nQueues; i++) {
-    createdQueues[i] = vk__createCmdQueue(deviceVk, &queues[i]);
+    createdQueues[i] = vk__createCmdQueue(deviceVk, &queues[i], queCI[i].flags);
   }
 
   device->_priv            = deviceVk;

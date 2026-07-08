@@ -29,7 +29,8 @@ typedef struct GPUApiCommandQueue {
 
   GPUCommandQueue*
   (*getCommandQueue)(struct GPUDevice * __restrict device,
-                     GPUQueueFlagBits              bits);
+                     GPUQueueFlagBits              bits,
+                     uint32_t                      index);
 
   GPUCommandBuffer*
   (*newCommandBuffer)(GPUCommandQueue  * __restrict cmdb,

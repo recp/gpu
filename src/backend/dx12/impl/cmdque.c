@@ -47,16 +47,27 @@ dx12_newCommandQueue(GPUDevice* __restrict device) {
 GPU_HIDE
 GPUCommandQueue*
 dx12_getCommandQueue(GPUDevice *__restrict device,
-                     GPUQueueFlagBits      bits) {
+                     GPUQueueFlagBits      bits,
+                     uint32_t              index) {
   GPUCommandQueue *que;
   GPUDeviceDX12   *deviceDX12;
+  uint32_t          matchIndex;
+  uint32_t          i;
 
   deviceDX12 = device->_priv;
+  matchIndex = 0;
 
-  /* TODO: select wisely */
-  que = deviceDX12->createdQueues[0];
+  for (i = 0; i < deviceDX12->nCreatedQueues; i++) {
+    que = deviceDX12->createdQueues[i];
+    if (que && (que->bits & bits) == bits) {
+      if (matchIndex == index) {
+        return que;
+      }
+      matchIndex++;
+    }
+  }
 
-  return que;
+  return NULL;
 }
 
 GPU_HIDE
