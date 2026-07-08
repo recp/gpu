@@ -34,6 +34,7 @@ extern "C" {
 #include "buffer.h"
 #include "resource.h"
 #include "cmd-enc.h"
+#include "compute.h"
 #include "stage-io.h"
 #include "texture.h"
 #include "swapchain.h"

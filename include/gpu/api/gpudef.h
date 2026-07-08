@@ -25,6 +25,7 @@ extern "C" {
 #include "device.h"
 #include "render-pipeline.h"
 #include "rce.h"
+#include "compute.h"
 #include "buffer.h"
 #include "texture.h"
 #include "commandbuffer.h"
@@ -46,6 +47,7 @@ typedef struct GPUApi {
   GPUApiDevice        device;
   GPUApiRender        render;
   GPUApiRCE           rce;
+  GPUApiCompute       compute;
   GPUApiBuffer        buf;
   GPUApiTexture       texture;
   GPUApiCommandBuffer cmdbuf;

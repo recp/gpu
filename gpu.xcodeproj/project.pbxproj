@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1EC0DE262AD1000000000000 /* compute.h in Headers */ = {isa = PBXBuildFile; fileRef = 1EC0DE202AD1000000000000 /* compute.h */; };
+		1EC0DE272AD1000000000000 /* compute.h in Headers */ = {isa = PBXBuildFile; fileRef = 1EC0DE212AD1000000000000 /* compute.h */; };
+		1EC0DE242AD1000000000000 /* compute.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0DE222AD1000000000000 /* compute.c */; };
+		1EC0DE252AD1000000000000 /* compute.m in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0DE232AD1000000000000 /* compute.m */; };
 		1E12EBF82ADAB480007653D6 /* cmdque.m in Sources */ = {isa = PBXBuildFile; fileRef = 56CDC98024CEE9210021A8A2 /* cmdque.m */; };
 		1E1C3DDE2C862CEC004753CB /* object_type_string_helper.h in Headers */ = {isa = PBXBuildFile; fileRef = 1E1C3DDD2C862CEC004753CB /* object_type_string_helper.h */; };
 		1E2049612AC622EB00B94648 /* descriptor.c in Sources */ = {isa = PBXBuildFile; fileRef = 1E2049602AC622EB00B94648 /* descriptor.c */; };
@@ -100,6 +104,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		1EC0DE202AD1000000000000 /* compute.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = compute.h; sourceTree = "<group>"; };
+		1EC0DE212AD1000000000000 /* compute.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = compute.h; sourceTree = "<group>"; };
+		1EC0DE222AD1000000000000 /* compute.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = compute.c; sourceTree = "<group>"; };
+		1EC0DE232AD1000000000000 /* compute.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = compute.m; sourceTree = "<group>"; };
 		1E1C3DDD2C862CEC004753CB /* object_type_string_helper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = object_type_string_helper.h; sourceTree = "<group>"; };
 		1E1C3DDF2C862D37004753CB /* MoltenVK.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = MoltenVK.xcframework; path = "/Users/recp/Projects/recp/vk-preview/Cube/../../Package/Latest/MoltenVK/dynamic/MoltenVK.xcframework"; sourceTree = "<absolute>"; };
 		1E2049602AC622EB00B94648 /* descriptor.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = descriptor.c; sourceTree = "<group>"; };
@@ -370,6 +378,7 @@
 				56CDC98624CEE9210021A8A2 /* device.m */,
 				56CDC97B24CEE9210021A8A2 /* buffer.m */,
 				56CDC97E24CEE9210021A8A2 /* renderpass.m */,
+				1EC0DE232AD1000000000000 /* compute.m */,
 				56CDC98124CEE9210021A8A2 /* depthstencil.m */,
 				56CDC98324CEE9210021A8A2 /* vertex.m */,
 				56CDC98524CEE9210021A8A2 /* library.m */,
@@ -488,6 +497,7 @@
 				56CDC9F524CF1BDE0021A8A2 /* render */,
 				56CDC99324CEE9210021A8A2 /* device.c */,
 				5655261124D08FE300901F5B /* buffer.c */,
+				1EC0DE222AD1000000000000 /* compute.c */,
 				1EC0DE102AD0000000000000 /* texture.c */,
 				56CEEC9324D1848A00865FF3 /* vertex.c */,
 				56CEEC9524D185C200865FF3 /* library.c */,
@@ -533,6 +543,7 @@
 				56CDC9A824CEE9210021A8A2 /* texture.h */,
 				56CDC9A924CEE9210021A8A2 /* stage-io.h */,
 				56CDC9AA24CEE9210021A8A2 /* cmd-enc.h */,
+				1EC0DE202AD1000000000000 /* compute.h */,
 				56CDC9AB24CEE9210021A8A2 /* depthstencil.h */,
 				56CDC9AD24CEE9210021A8A2 /* pixelformat.h */,
 				564F311624D21BF20044EEED /* metalkit.h */,
@@ -583,6 +594,7 @@
 				5655260124D0803200901F5B /* commandbuffer.h */,
 				5655261024D08DCB00901F5B /* commandqueue.h */,
 				5655261324D0917100901F5B /* pass.h */,
+				1EC0DE212AD1000000000000 /* compute.h */,
 				56CEEC8E24D181FB00865FF3 /* depthstencil.h */,
 				56CEEC8F24D182C600865FF3 /* vertex.h */,
 				56CEEC9024D182F800865FF3 /* library.h */,
@@ -665,6 +677,7 @@
 				56CDC9CC24CEE9210021A8A2 /* common.h in Headers */,
 				56CDC9D224CEE9210021A8A2 /* pipeline.h in Headers */,
 				56CDC9D524CEE9210021A8A2 /* cmd-enc.h in Headers */,
+				1EC0DE262AD1000000000000 /* compute.h in Headers */,
 				56CDC9CD24CEE9210021A8A2 /* pass.h in Headers */,
 				56CDC9C724CEE9210021A8A2 /* device.h in Headers */,
 				56CDC9CA24CEE9210021A8A2 /* buffer.h in Headers */,
@@ -682,6 +695,7 @@
 				56CDC9C624CEE9210021A8A2 /* vertex.h in Headers */,
 				56CDC9D424CEE9210021A8A2 /* stage-io.h in Headers */,
 				56CDC9D124CEE9210021A8A2 /* gpudef.h in Headers */,
+				1EC0DE272AD1000000000000 /* compute.h in Headers */,
 				56CDC9BD24CEE9210021A8A2 /* common.h in Headers */,
 				1E7584332ACD4F380022960F /* display.h in Headers */,
 				1E1C3DDE2C862CEC004753CB /* object_type_string_helper.h in Headers */,
@@ -751,6 +765,7 @@
 				1EA98C3C2ABAD72B00E1B576 /* frame.c in Sources */,
 				1E12EBF82ADAB480007653D6 /* cmdque.m in Sources */,
 				56690ADE24CF5EC600EBB935 /* rce.c in Sources */,
+				1EC0DE242AD1000000000000 /* compute.c in Sources */,
 				56CDC9EC24CEF6120021A8A2 /* api.c in Sources */,
 				56CDC9F724CF1BF00021A8A2 /* pipeline.c in Sources */,
 				5655261224D08FE300901F5B /* buffer.c in Sources */,
@@ -766,6 +781,7 @@
 				1EA98C342ABAD64000E1B576 /* pipeline.m in Sources */,
 				1EB809D22AD1D80E006A1FCB /* surface.c in Sources */,
 				1EA98C2E2ABAD64000E1B576 /* rce.m in Sources */,
+				1EC0DE252AD1000000000000 /* compute.m in Sources */,
 				56CDC9EE24CEF6120021A8A2 /* pipeline.c in Sources */,
 				5655261624D091EC00901F5B /* renderpass.c in Sources */,
 				1E7A589E2ACC334B00AB25B5 /* instance.c in Sources */,

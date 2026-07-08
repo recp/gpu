@@ -30,6 +30,7 @@ backend_metal(void) {
     mt_initDevice(&mt.device);
     mt_initRenderPipeline(&mt.render);
     mt_initRCE(&mt.rce);
+    mt_initCompute(&mt.compute);
     mt_initCmdBuff(&mt.cmdbuf);
     mt_initCmdQue(&mt.cmdque);
     mt_initBuff(&mt.buf);

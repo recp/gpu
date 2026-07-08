@@ -16,6 +16,7 @@
 
 #include "../../common.h"
 #include "../render/rce_internal.h"
+#include "descriptor_internal.h"
 #include "../usl_target.h"
 
 #define GPU_USL_BYTECODE_VERSION 2u
@@ -1783,4 +1784,45 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
       }
     }
   }
+}
+
+GPU_HIDE
+int
+gpuForEachBindGroupBinding(GPUBindGroup *group,
+                           GPUBindGroupBindingFn fn,
+                           void *ctx) {
+  GPUBindGroupPriv *priv;
+  GPUBindGroupLayoutPriv *layout;
+
+  if (!group || !fn) {
+    return 0;
+  }
+
+  priv = gpu_groupPriv(group);
+  layout = gpu_layoutPriv(priv ? priv->layout : NULL);
+  if (!priv || !layout || priv->count < layout->count) {
+    return 0;
+  }
+
+  for (uint32_t i = 0; i < layout->count; i++) {
+    const GPUBindGroupLayoutEntry *layoutEntry;
+    const GPUBindGroupBindingPriv *binding;
+    GPUBindGroupBindingView view;
+
+    layoutEntry = &layout->entries[i];
+    binding = &priv->bindings[i];
+    memset(&view, 0, sizeof(view));
+    view.stage = binding->stage;
+    view.kind = binding->kind;
+    view.binding = binding->binding;
+    view.buffer = binding->buffer;
+    view.textureView = binding->textureView;
+    view.sampler = binding->sampler;
+    view.offset = binding->offset;
+    view.size = binding->size;
+    view.visibility = layoutEntry->visibility;
+    fn(ctx, &view);
+  }
+
+  return 1;
 }
