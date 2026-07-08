@@ -16,6 +16,23 @@
 
 #include "../../common.h"
 
+static GPUPrimitiveType
+gpu_primitiveTypeFromTopology(GPUPrimitiveTopology topology) {
+  switch (topology) {
+    case GPU_PRIMITIVE_TOPOLOGY_POINT_LIST:
+      return GPUPrimitiveTypePoint;
+    case GPU_PRIMITIVE_TOPOLOGY_LINE_LIST:
+      return GPUPrimitiveTypeLine;
+    case GPU_PRIMITIVE_TOPOLOGY_LINE_STRIP:
+      return GPUPrimitiveTypeLineStrip;
+    case GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP:
+      return GPUPrimitiveTypeTriangleStrip;
+    case GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST:
+    default:
+      return GPUPrimitiveTypeTriangle;
+  }
+}
+
 GPU_EXPORT
 void
 GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
@@ -31,6 +48,7 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
 
   state._priv = pipeline->_state;
   api->rce.setRenderPipelineState(pass, &state);
+  pass->_primitiveType = gpu_primitiveTypeFromTopology(pipeline->_primitiveTopology);
   if (api->rce.cullMode)
     api->rce.cullMode(pass, pipeline->_cullMode);
   if (api->rce.frontFace)
@@ -75,6 +93,21 @@ GPUBindVertexBuffers(GPURenderPassEncoder   *pass,
                             firstSlot + i);
     }
   }
+}
+
+GPU_EXPORT
+void
+GPUBindIndexBuffer(GPURenderPassEncoder *pass,
+                   GPUBuffer            *indexBuffer,
+                   uint64_t              offset,
+                   GPUIndexType          indexType) {
+  if (!pass || !indexBuffer)
+    return;
+
+  pass->_indexBuffer       = indexBuffer;
+  pass->_indexBufferOffset = offset;
+  pass->_indexType         = indexType;
+  pass->_hasIndexBuffer    = true;
 }
 
 GPU_EXPORT
@@ -209,40 +242,41 @@ GPUDraw(GPURenderPassEncoder *pass,
         uint32_t              firstVertex,
         uint32_t              firstInstance) {
   GPUApi *api;
-  uint32_t i;
 
-  if (!pass || vertexCount == 0 || instanceCount == 0 || firstInstance != 0)
+  if (!pass || vertexCount == 0 || instanceCount == 0)
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.drawPrimitives)
     return;
 
-  for (i = 0; i < instanceCount; i++) {
-    api->rce.drawPrimitives(pass,
-                            GPUPrimitiveTypeTriangle,
-                            firstVertex,
-                            vertexCount);
-  }
+  api->rce.drawPrimitives(pass,
+                          pass->_primitiveType,
+                          firstVertex,
+                          vertexCount,
+                          instanceCount,
+                          firstInstance);
 }
 
 GPU_EXPORT
 void
-GPUDrawIndexed(GPURenderCommandEncoder *rce,
-               GPUPrimitiveType         type,
-               uint32_t                 indexCount,
-               GPUIndexType             indexType,
-               GPUBuffer               *indexBuffer,
-               uint32_t                 indexBufferOffset) {
+GPUDrawIndexed(GPURenderPassEncoder *pass,
+               uint32_t              indexCount,
+               uint32_t              instanceCount,
+               uint32_t              firstIndex,
+               int32_t               vertexOffset,
+               uint32_t              firstInstance) {
   GPUApi *api;
 
-  if (!(api = gpuActiveGPUApi()))
+  if (!pass || indexCount == 0 || instanceCount == 0 || !pass->_hasIndexBuffer)
+    return;
+  if (!(api = gpuActiveGPUApi()) || !api->rce.drawIndexedPrims)
     return;
   
-  api->rce.drawIndexedPrims(rce,
-                            type,
+  api->rce.drawIndexedPrims(pass,
                             indexCount,
-                            indexType,
-                            indexBuffer,
-                            indexBufferOffset);
+                            instanceCount,
+                            firstIndex,
+                            vertexOffset,
+                            firstInstance);
 }
 
 GPU_EXPORT

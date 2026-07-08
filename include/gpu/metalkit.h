@@ -27,12 +27,16 @@ GPU_INLINE
 void
 GPUDrawIndexedMTKSubMesh(GPURenderCommandEncoder *rce,
                          MTKSubmesh              *submesh) {
+  GPUBindIndexBuffer(rce,
+                     (GPUBuffer *)submesh.indexBuffer.buffer,
+                     (uint64_t)submesh.indexBuffer.offset,
+                     (GPUIndexType)submesh.indexType);
   GPUDrawIndexed(rce,
-                 (GPUPrimitiveType)submesh.primitiveType,
                  (uint32_t)submesh.indexCount,
-                 (GPUIndexType)submesh.indexType,
-                 (GPUBuffer *)submesh.indexBuffer.buffer,
-                 (uint32_t)submesh.indexBuffer.offset);
+                 1,
+                 0,
+                 0,
+                 0);
 }
 
 GPU_INLINE

@@ -23,6 +23,15 @@ extern "C" {
 #include "../common.h"
 #include "../gpu.h"
 
+struct GPURenderCommandEncoder {
+  void             *_priv;
+  GPUPrimitiveType  _primitiveType;
+  GPUBuffer        *_indexBuffer;
+  uint64_t          _indexBufferOffset;
+  GPUIndexType      _indexType;
+  bool              _hasIndexBuffer;
+};
+
 typedef struct GPUApiRCE {
   GPURenderCommandEncoder*
   (*renderCommandEncoder)(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass);
@@ -94,14 +103,17 @@ typedef struct GPUApiRCE {
   (*drawPrimitives)(GPURenderCommandEncoder *rce,
                     GPUPrimitiveType         type,
                     size_t                   start,
-                    size_t                   count);
+                    size_t                   count,
+                    uint32_t                 instanceCount,
+                    uint32_t                 firstInstance);
+
   void
   (*drawIndexedPrims)(GPURenderCommandEncoder *rce,
-                      GPUPrimitiveType         type,
                       uint32_t                 indexCount,
-                      GPUIndexType             indexType,
-                      GPUBuffer               *indexBuffer,
-                      uint32_t                 indexBufferOffset);
+                      uint32_t                 instanceCount,
+                      uint32_t                 firstIndex,
+                      int32_t                  vertexOffset,
+                      uint32_t                 firstInstance);
   void
   (*endEncoding)(GPURenderCommandEncoder *rce);
 } GPUApiRCE;

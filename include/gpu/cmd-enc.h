@@ -97,6 +97,13 @@ GPUBindVertexBuffers(GPURenderPassEncoder     *pass,
 
 GPU_EXPORT
 void
+GPUBindIndexBuffer(GPURenderPassEncoder *pass,
+                   GPUBuffer            *indexBuffer,
+                   uint64_t              offset,
+                   GPUIndexType          indexType);
+
+GPU_EXPORT
+void
 GPUSetViewport(GPURenderPassEncoder *pass, const GPUViewport *viewport);
 
 GPU_EXPORT
@@ -152,12 +159,12 @@ GPUDraw(GPURenderPassEncoder *pass,
 
 GPU_EXPORT
 void
-GPUDrawIndexed(GPURenderCommandEncoder *rce,
-               GPUPrimitiveType         type,
-               uint32_t                 indexCount,
-               GPUIndexType             indexType,
-               GPUBuffer               *indexBuffer,
-               uint32_t                 indexBufferOffset);
+GPUDrawIndexed(GPURenderPassEncoder *pass,
+               uint32_t              indexCount,
+               uint32_t              instanceCount,
+               uint32_t              firstIndex,
+               int32_t               vertexOffset,
+               uint32_t              firstInstance);
 
 typedef uint64_t GPUDynamicStateMask;
 enum {
