@@ -137,7 +137,7 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
   GPUComputePipelineState *state;
   GPUApi *api;
 
-  if (!pass || !pipeline || !pipeline->_state) {
+  if (!pass || pass->_ended || !pipeline || !pipeline->_state) {
     return;
   }
   if (!(api = gpuActiveGPUApi()) || !api->compute.setComputePipelineState) {
@@ -146,6 +146,7 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
 
   state = pipeline->_state;
   api->compute.setComputePipelineState(pass, state);
+  pass->_hasPipeline = true;
 }
 
 GPU_HIDE
@@ -156,7 +157,7 @@ gpuSetComputeBuffer(GPUComputePassEncoder *pass,
                     uint32_t               index) {
   GPUApi *api;
 
-  if (!pass || !buf) {
+  if (!pass || pass->_ended || !buf) {
     return;
   }
   if (!(api = gpuActiveGPUApi()) || !api->compute.buffer) {
@@ -173,7 +174,7 @@ gpuSetComputeTexture(GPUComputePassEncoder *pass,
                      uint32_t               index) {
   GPUApi *api;
 
-  if (!pass || !view) {
+  if (!pass || pass->_ended || !view) {
     return;
   }
   if (!(api = gpuActiveGPUApi()) || !api->compute.texture) {
@@ -190,7 +191,7 @@ gpuSetComputeSampler(GPUComputePassEncoder *pass,
                      uint32_t               index) {
   GPUApi *api;
 
-  if (!pass || !sampler) {
+  if (!pass || pass->_ended || !sampler) {
     return;
   }
   if (!(api = gpuActiveGPUApi()) || !api->compute.sampler) {
@@ -241,7 +242,8 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
 
   (void)pDynamicOffsets;
 
-  if (!pass || setIndex != 0 || dynamicOffsetCount != 0 || !bindGroup) {
+  if (!pass || pass->_ended ||
+      setIndex != 0 || dynamicOffsetCount != 0 || !bindGroup) {
     return;
   }
 
@@ -257,7 +259,8 @@ GPUDispatch(GPUComputePassEncoder *pass,
             uint32_t               z) {
   GPUApi *api;
 
-  if (!pass || x == 0 || y == 0 || z == 0) {
+  if (!pass || pass->_ended || !pass->_hasPipeline ||
+      x == 0 || y == 0 || z == 0) {
     return;
   }
   if (!(api = gpuActiveGPUApi()) || !api->compute.dispatch) {
@@ -274,7 +277,7 @@ GPUDispatchIndirect(GPUComputePassEncoder *pass,
                     uint64_t              argsOffset) {
   GPUApi *api;
 
-  if (!pass || !argsBuffer) {
+  if (!pass || pass->_ended || !pass->_hasPipeline || !argsBuffer) {
     return;
   }
   if (!(api = gpuActiveGPUApi()) || !api->compute.dispatchIndirect) {
@@ -289,12 +292,13 @@ void
 GPUEndComputePass(GPUComputePassEncoder *pass) {
   GPUApi *api;
 
-  if (!pass) {
+  if (!pass || pass->_ended) {
     return;
   }
   if (!(api = gpuActiveGPUApi()) || !api->compute.endEncoding) {
     return;
   }
 
+  pass->_ended = true;
   api->compute.endEncoding(pass);
 }

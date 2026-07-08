@@ -1096,12 +1096,20 @@ check_compute_pass_validation(void) {
   GPUBindComputeGroup(&fakePass, 1u, NULL, 0u, NULL);
   GPUBindComputeGroup(&fakePass, 0u, NULL, 1u, &dynamicOffset);
   GPUDispatch(NULL, 1u, 1u, 1u);
+  GPUDispatch(&fakePass, 1u, 1u, 1u);
   GPUDispatch(&fakePass, 0u, 1u, 1u);
   GPUDispatch(&fakePass, 1u, 0u, 1u);
   GPUDispatch(&fakePass, 1u, 1u, 0u);
   GPUDispatchIndirect(NULL, fakeBuffer, 0u);
   GPUDispatchIndirect(&fakePass, NULL, 0u);
   GPUEndComputePass(NULL);
+
+  fakePass._ended = true;
+  GPUBindComputePipeline(&fakePass, &fakePipeline);
+  GPUBindComputeGroup(&fakePass, 0u, NULL, 0u, NULL);
+  GPUDispatch(&fakePass, 1u, 1u, 1u);
+  GPUDispatchIndirect(&fakePass, fakeBuffer, 0u);
+  GPUEndComputePass(&fakePass);
 
   return 1;
 }
