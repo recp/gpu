@@ -54,9 +54,12 @@ GPU_EXPORT
 void
 GPUPresent(GPUCommandBuffer *cmdb, GPUFrame *frame);
 
+/* Schedules, submits, and ends a frame with one command buffer. */
 GPU_EXPORT
-void
-GPUFinishFrame(GPUCommandBuffer * __restrict cmdb, GPUFrame * __restrict frame);
+GPUResult
+GPUFinishFrame(GPUCommandQueue  * __restrict cmdq,
+               GPUCommandBuffer * __restrict cmdb,
+               GPUFrame         * __restrict frame);
 
 #ifdef __cplusplus
 }

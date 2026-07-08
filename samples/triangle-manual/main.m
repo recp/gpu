@@ -244,7 +244,6 @@ static const TriangleVertex kTriangleVertices[] = {
 - (void)renderFrame {
   GPUFrame *frame = NULL;
   GPUCommandBuffer *cmdb = NULL;
-  GPUQueueSubmitInfo submitInfo = {0};
   GPUResult submitResult = GPU_OK;
   GPURenderPassDesc *pass = NULL;
   GPURenderCommandEncoder *encoder = NULL;
@@ -277,12 +276,10 @@ static const TriangleVertex kTriangleVertices[] = {
   GPUBindRenderGroup(encoder, _fragmentGroup);
   gpuDrawPrimitives(encoder, GPUPrimitiveTypeTriangle, 0, 3);
   GPUEndEncoding(encoder);
-  GPUSchedulePresent(cmdb, frame);
-  submitInfo.commandBufferCount = 1;
-  submitInfo.ppCommandBuffers = (GPUCommandBuffer * const[]){ cmdb };
-  submitResult = GPUQueueSubmit(_queue, &submitInfo);
+  submitResult = GPUFinishFrame(_queue, cmdb, frame);
+  frame = NULL;
   if (submitResult != GPU_OK) {
-    NSLog(@"GPUQueueSubmit failed: %d", submitResult);
+    NSLog(@"GPUFinishFrame failed: %d", submitResult);
   }
 
 cleanup:

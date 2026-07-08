@@ -53,12 +53,24 @@ GPUEndFrame(GPUFrame* frame) {
 }
 
 GPU_EXPORT
-void
-GPUFinishFrame(GPUCommandBuffer * __restrict cmdb, GPUFrame * __restrict frame) {
-  if (!cmdb || !frame)
-    return;
+GPUResult
+GPUFinishFrame(GPUCommandQueue  * __restrict cmdq,
+               GPUCommandBuffer * __restrict cmdb,
+               GPUFrame         * __restrict frame) {
+  GPUCommandBuffer *buffers[1];
+  GPUQueueSubmitInfo submitInfo = {0};
+  GPUResult result;
+
+  if (!cmdq || !cmdb || !frame)
+    return GPU_ERROR_INVALID_ARGUMENT;
 
   GPUSchedulePresent(cmdb, frame);
-  GPUCommit(cmdb);
+
+  buffers[0] = cmdb;
+  submitInfo.commandBufferCount = 1;
+  submitInfo.ppCommandBuffers = buffers;
+  result = GPUQueueSubmit(cmdq, &submitInfo);
+
   GPUEndFrame(frame);
+  return result;
 }
