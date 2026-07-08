@@ -52,6 +52,17 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
       info->chain.sType != GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  {
+    GPUShaderStageFlags stage;
+
+    if (gpuGetShaderLibraryEntryStage(info->library, info->entryPoint, &stage) &&
+        stage != GPU_SHADER_STAGE_COMPUTE_BIT) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+  }
 
   if (!(api = gpuActiveGPUApi()) ||
       !api->compute.newComputePipeline ||

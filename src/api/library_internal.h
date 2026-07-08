@@ -25,4 +25,10 @@ gpuGetShaderLibraryComputeWorkgroupSize(const GPUShaderLibrary *library,
                                         const char *entryPoint,
                                         uint32_t outSize[3]);
 
+GPU_HIDE
+int
+gpuGetShaderLibraryEntryStage(const GPUShaderLibrary *library,
+                              const char *entryPoint,
+                              GPUShaderStageFlags *outStage);
+
 #endif /* gpu_library_internal_h */

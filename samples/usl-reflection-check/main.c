@@ -844,6 +844,157 @@ check_render_encoder_validation(void) {
 }
 
 static int
+check_pipeline_create_validation(GPUDevice *device, GPUShaderLibrary *library) {
+  GPUColorTargetState colorTargets[9] = {0};
+  GPUVertexAttribute attr = {0};
+  GPUVertexBufferLayout vertexLayout = {0};
+  GPURenderPipelineCreateInfo renderInfo = {0};
+  GPUComputePipelineCreateInfo computeInfo = {0};
+  GPURenderPipeline *renderPipeline;
+  GPUComputePipeline *computePipeline;
+
+  colorTargets[0].format = GPU_FORMAT_BGRA8_UNORM;
+
+  renderPipeline = (GPURenderPipeline *)(uintptr_t)1u;
+  if (GPUCreateRenderPipeline(NULL, &renderInfo, &renderPipeline) != GPU_ERROR_INVALID_ARGUMENT ||
+      renderPipeline != NULL) {
+    fprintf(stderr, "render pipeline create accepted null device\n");
+    return 0;
+  }
+  if (GPUCreateRenderPipeline(device, &renderInfo, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "render pipeline create accepted null output\n");
+    return 0;
+  }
+
+  renderInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  renderInfo.chain.structSize = sizeof(renderInfo);
+  renderInfo.library = library;
+  renderInfo.vertexEntry = "reflect_vs";
+  renderInfo.fragmentEntry = "reflect_fs";
+  renderInfo.colorTargetCount = 1u;
+  renderInfo.pColorTargets = colorTargets;
+  renderPipeline = (GPURenderPipeline *)(uintptr_t)1u;
+  if (GPUCreateRenderPipeline(device, &renderInfo, &renderPipeline) != GPU_ERROR_INVALID_ARGUMENT ||
+      renderPipeline != NULL) {
+    fprintf(stderr, "render pipeline create accepted wrong sType\n");
+    return 0;
+  }
+
+  renderInfo.chain.sType = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  renderInfo.chain.structSize = (uint32_t)(sizeof(renderInfo) - 1u);
+  renderPipeline = (GPURenderPipeline *)(uintptr_t)1u;
+  if (GPUCreateRenderPipeline(device, &renderInfo, &renderPipeline) != GPU_ERROR_INVALID_ARGUMENT ||
+      renderPipeline != NULL) {
+    fprintf(stderr, "render pipeline create accepted short structSize\n");
+    return 0;
+  }
+
+  renderInfo.chain.structSize = sizeof(renderInfo);
+  renderInfo.library = NULL;
+  renderPipeline = (GPURenderPipeline *)(uintptr_t)1u;
+  if (GPUCreateRenderPipeline(device, &renderInfo, &renderPipeline) != GPU_ERROR_INVALID_ARGUMENT ||
+      renderPipeline != NULL) {
+    fprintf(stderr, "render pipeline create accepted null library\n");
+    return 0;
+  }
+
+  renderInfo.library = library;
+  renderInfo.colorTargetCount = 0u;
+  renderPipeline = (GPURenderPipeline *)(uintptr_t)1u;
+  if (GPUCreateRenderPipeline(device, &renderInfo, &renderPipeline) != GPU_ERROR_INVALID_ARGUMENT ||
+      renderPipeline != NULL) {
+    fprintf(stderr, "render pipeline create accepted no color target\n");
+    return 0;
+  }
+
+  renderInfo.colorTargetCount = (uint32_t)GPU_ARRAY_LEN(colorTargets);
+  renderPipeline = (GPURenderPipeline *)(uintptr_t)1u;
+  if (GPUCreateRenderPipeline(device, &renderInfo, &renderPipeline) != GPU_ERROR_INVALID_ARGUMENT ||
+      renderPipeline != NULL) {
+    fprintf(stderr, "render pipeline create accepted too many color targets\n");
+    return 0;
+  }
+
+  renderInfo.colorTargetCount = 1u;
+  colorTargets[0].format = GPU_FORMAT_UNDEFINED;
+  renderPipeline = (GPURenderPipeline *)(uintptr_t)1u;
+  if (GPUCreateRenderPipeline(device, &renderInfo, &renderPipeline) != GPU_ERROR_INVALID_ARGUMENT ||
+      renderPipeline != NULL) {
+    fprintf(stderr, "render pipeline create accepted undefined color format\n");
+    return 0;
+  }
+
+  colorTargets[0].format = GPU_FORMAT_BGRA8_UNORM;
+  attr.shaderLocation = 0u;
+  attr.format = GPUUnknown;
+  attr.offset = 0u;
+  vertexLayout.strideBytes = 8u;
+  vertexLayout.stepMode = GPU_VERTEX_STEP_MODE_VERTEX;
+  vertexLayout.attributeCount = 1u;
+  vertexLayout.pAttributes = &attr;
+  renderInfo.vertex.bufferLayoutCount = 1u;
+  renderInfo.vertex.pBufferLayouts = &vertexLayout;
+  renderPipeline = (GPURenderPipeline *)(uintptr_t)1u;
+  if (GPUCreateRenderPipeline(device, &renderInfo, &renderPipeline) != GPU_ERROR_INVALID_ARGUMENT ||
+      renderPipeline != NULL) {
+    fprintf(stderr, "render pipeline create accepted invalid vertex format\n");
+    return 0;
+  }
+
+  renderInfo.vertex.bufferLayoutCount = 0u;
+  renderInfo.vertex.pBufferLayouts = NULL;
+  renderInfo.vertexEntry = "reflect_fs";
+  renderInfo.fragmentEntry = "reflect_vs";
+  renderPipeline = (GPURenderPipeline *)(uintptr_t)1u;
+  if (GPUCreateRenderPipeline(device, &renderInfo, &renderPipeline) != GPU_ERROR_INVALID_ARGUMENT ||
+      renderPipeline != NULL) {
+    fprintf(stderr, "render pipeline create accepted entry stage mismatch\n");
+    return 0;
+  }
+
+  computePipeline = (GPUComputePipeline *)(uintptr_t)1u;
+  if (GPUCreateComputePipeline(NULL, &computeInfo, &computePipeline) != GPU_ERROR_INVALID_ARGUMENT ||
+      computePipeline != NULL) {
+    fprintf(stderr, "compute pipeline create accepted null device\n");
+    return 0;
+  }
+  if (GPUCreateComputePipeline(device, &computeInfo, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "compute pipeline create accepted null output\n");
+    return 0;
+  }
+
+  computeInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  computeInfo.chain.structSize = sizeof(computeInfo);
+  computeInfo.library = library;
+  computeInfo.entryPoint = "reflect_vs";
+  computePipeline = (GPUComputePipeline *)(uintptr_t)1u;
+  if (GPUCreateComputePipeline(device, &computeInfo, &computePipeline) != GPU_ERROR_INVALID_ARGUMENT ||
+      computePipeline != NULL) {
+    fprintf(stderr, "compute pipeline create accepted wrong sType\n");
+    return 0;
+  }
+
+  computeInfo.chain.sType = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  computeInfo.chain.structSize = (uint32_t)(sizeof(computeInfo) - 1u);
+  computePipeline = (GPUComputePipeline *)(uintptr_t)1u;
+  if (GPUCreateComputePipeline(device, &computeInfo, &computePipeline) != GPU_ERROR_INVALID_ARGUMENT ||
+      computePipeline != NULL) {
+    fprintf(stderr, "compute pipeline create accepted short structSize\n");
+    return 0;
+  }
+
+  computeInfo.chain.structSize = sizeof(computeInfo);
+  computePipeline = (GPUComputePipeline *)(uintptr_t)1u;
+  if (GPUCreateComputePipeline(device, &computeInfo, &computePipeline) != GPU_ERROR_INVALID_ARGUMENT ||
+      computePipeline != NULL) {
+    fprintf(stderr, "compute pipeline create accepted non-compute entry\n");
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
 check_swapchain_validation(GPUDevice *device) {
   GPUSurface *fakeSurface;
   GPUSwapchain *swapchain;
@@ -1157,6 +1308,9 @@ check_selected_shader_library(const void *bytecode,
                                                  &reflectedLayoutCount,
                                                  reflectedLayouts) == GPU_ERROR_INSUFFICIENT_CAPACITY &&
          reflectedLayoutCount == 1u;
+  }
+  if (ok) {
+    ok = check_pipeline_create_validation(device, library);
   }
   if (ok) {
     ok = GPUCreateBindGroupLayoutsFromReflection(device,

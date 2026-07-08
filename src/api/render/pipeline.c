@@ -16,7 +16,10 @@
 
 #include "../../common.h"
 #include "pipeline_internal.h"
+#include "../library_internal.h"
 #include "../vertex_internal.h"
+
+#define GPU_RENDER_PIPELINE_MAX_COLOR_TARGETS 8u
 
 static bool
 gpu_blendStateIsDefault(const GPUBlendState *blend) {
@@ -32,6 +35,48 @@ gpu_depthStencilStateIsDefault(const GPUDepthStencilState *state) {
           !state->stencilTestEnable &&
           state->stencilReadMask == 0 &&
           state->stencilWriteMask == 0);
+}
+
+static bool
+gpu_vertexFormatIsValid(GPUVertexFormat format) {
+  return format != GPUUnknown && format <= GPUVertexFormatHalf;
+}
+
+static bool
+gpu_vertexStepModeIsValid(GPUVertexStepMode mode) {
+  return mode == GPU_VERTEX_STEP_MODE_VERTEX ||
+         mode == GPU_VERTEX_STEP_MODE_INSTANCE;
+}
+
+static bool
+gpu_vertexStateIsValid(const GPUVertexState *state) {
+  if (!state) {
+    return false;
+  }
+  if (state->bufferLayoutCount == 0) {
+    return true;
+  }
+  if (!state->pBufferLayouts) {
+    return false;
+  }
+
+  for (uint32_t i = 0; i < state->bufferLayoutCount; i++) {
+    const GPUVertexBufferLayout *layout = &state->pBufferLayouts[i];
+
+    if (!gpu_vertexStepModeIsValid(layout->stepMode)) {
+      return false;
+    }
+    if (layout->attributeCount > 0 && !layout->pAttributes) {
+      return false;
+    }
+    for (uint32_t j = 0; j < layout->attributeCount; j++) {
+      if (!gpu_vertexFormatIsValid(layout->pAttributes[j].format)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
 }
 
 static GPUVertexStepFunction
@@ -81,6 +126,44 @@ gpu_createVertexDescriptorFromState(const GPUVertexState *state) {
 }
 
 static bool
+gpu_primitiveTopologyIsValid(GPUPrimitiveTopology topology) {
+  return topology == GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST ||
+         topology == GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP ||
+         topology == GPU_PRIMITIVE_TOPOLOGY_LINE_LIST ||
+         topology == GPU_PRIMITIVE_TOPOLOGY_LINE_STRIP ||
+         topology == GPU_PRIMITIVE_TOPOLOGY_POINT_LIST;
+}
+
+static bool
+gpu_cullModeIsValid(GPUCullMode mode) {
+  return mode == GPU_CULL_MODE_NONE ||
+         mode == GPU_CULL_MODE_FRONT ||
+         mode == GPU_CULL_MODE_BACK;
+}
+
+static bool
+gpu_frontFaceIsValid(GPUFrontFace face) {
+  return face == GPU_FRONT_FACE_CCW ||
+         face == GPU_FRONT_FACE_CW;
+}
+
+static bool
+gpu_renderPipelineEntriesMatchStages(const GPURenderPipelineCreateInfo *info) {
+  GPUShaderStageFlags stage;
+
+  if (gpuGetShaderLibraryEntryStage(info->library, info->vertexEntry, &stage) &&
+      stage != GPU_SHADER_STAGE_VERTEX_BIT) {
+    return false;
+  }
+  if (gpuGetShaderLibraryEntryStage(info->library, info->fragmentEntry, &stage) &&
+      stage != GPU_SHADER_STAGE_FRAGMENT_BIT) {
+    return false;
+  }
+
+  return true;
+}
+
+static bool
 gpu_pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info) {
   uint32_t i;
 
@@ -88,6 +171,20 @@ gpu_pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info) {
       info->chain.sType != GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO) {
     return false;
   }
+  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info))
+    return false;
+  if (info->colorTargetCount == 0 ||
+      info->colorTargetCount > GPU_RENDER_PIPELINE_MAX_COLOR_TARGETS ||
+      !info->pColorTargets)
+    return false;
+  if (!gpu_vertexStateIsValid(&info->vertex))
+    return false;
+  if (!gpu_primitiveTopologyIsValid(info->primitiveTopology) ||
+      !gpu_cullModeIsValid(info->cullMode) ||
+      !gpu_frontFaceIsValid(info->frontFace))
+    return false;
+  if (!gpu_renderPipelineEntriesMatchStages(info))
+    return false;
   if (info->primitiveTopology != GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
     return false;
   if (info->multisample.alphaToCoverageEnable)
@@ -98,6 +195,8 @@ gpu_pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info) {
   if (!gpu_depthStencilStateIsDefault(info->pDepthStencilState))
     return false;
   for (i = 0; i < info->colorTargetCount; i++) {
+    if (info->pColorTargets[i].format == GPU_FORMAT_UNDEFINED)
+      return false;
     if (!gpu_blendStateIsDefault(&info->pColorTargets[i].blend))
       return false;
   }
@@ -125,8 +224,6 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   *outPipeline = NULL;
 
   if (!device || !info || !info->library || !info->vertexEntry || !info->fragmentEntry)
-    return GPU_ERROR_INVALID_ARGUMENT;
-  if (info->colorTargetCount == 0 || !info->pColorTargets)
     return GPU_ERROR_INVALID_ARGUMENT;
   if (!gpu_pipelineInfoIsSupported(info))
     return GPU_ERROR_INVALID_ARGUMENT;

@@ -268,7 +268,7 @@ gpu_setShaderLibraryEntryInfo(GPUShaderLibrary *library,
   if (count == 0u) {
     return 1;
   }
-  if (count > (SIZE_MAX - sizeof(*list)) / sizeof(list->entries[0])) {
+  if ((size_t)count > (SIZE_MAX - sizeof(*list)) / sizeof(list->entries[0])) {
     return 0;
   }
 
@@ -344,6 +344,35 @@ gpuGetShaderLibraryComputeWorkgroupSize(const GPUShaderLibrary *library,
     outSize[0] = entry->workgroupSize[0] ? entry->workgroupSize[0] : 1u;
     outSize[1] = entry->workgroupSize[1] ? entry->workgroupSize[1] : 1u;
     outSize[2] = entry->workgroupSize[2] ? entry->workgroupSize[2] : 1u;
+    return 1;
+  }
+
+  return 0;
+}
+
+GPU_HIDE
+int
+gpuGetShaderLibraryEntryStage(const GPUShaderLibrary *library,
+                              const char *entryPoint,
+                              GPUShaderStageFlags *outStage) {
+  const GPUShaderEntryInfoList *list;
+
+  if (outStage) {
+    *outStage = 0u;
+  }
+  if (!library || !entryPoint || !outStage || !library->_entryInfo) {
+    return 0;
+  }
+
+  list = library->_entryInfo;
+  for (uint32_t i = 0; i < list->count; i++) {
+    const GPUShaderEntryInfo *entry = &list->entries[i];
+
+    if (!entry->name || strcmp(entry->name, entryPoint) != 0) {
+      continue;
+    }
+
+    *outStage = entry->stage;
     return 1;
   }
 
