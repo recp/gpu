@@ -76,10 +76,6 @@ typedef struct GPUQueueSubmitInfo {
   GPUCommandBuffer * const *ppCommandBuffers;
 } GPUQueueSubmitInfo;
 
-GPU_EXPORT
-GPUCommandQueue*
-GPUNewCommandQueue(struct GPUDevice * __restrict device);
-
 /*!
  * @brief get command queue created created with logical device creation.
  *
@@ -103,12 +99,6 @@ GPUGetQueue(struct GPUDevice * __restrict device,
 GPU_EXPORT
 GPUQueueFlagBits
 GPUGetAvailQueueBits(struct GPUDevice * __restrict device);
-
-GPU_EXPORT
-GPUCommandBuffer*
-GPUNewCommandBuffer(GPUCommandQueue  * __restrict cmdb,
-                    void             * __restrict sender,
-                    GPUCommandBufferCompletionFn  oncomplete);
 
 GPU_EXPORT
 GPUResult

@@ -16,6 +16,22 @@
 
 #include "../../common.h"
 
+static GPUCommandBuffer*
+gpu_newCommandBuffer(GPUCommandQueue  * __restrict cmdq,
+                     void             * __restrict sender,
+                     GPUCommandBufferCompletionFn  oncomplete) {
+  GPUApi *api;
+
+  if (!cmdq)
+    return NULL;
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
+  if (!api->cmdque.newCommandBuffer)
+    return NULL;
+
+  return api->cmdque.newCommandBuffer(cmdq, sender, oncomplete);
+}
+
 GPU_EXPORT
 GPUCommandQueue*
 GPUGetCommandQueue(GPUDevice * __restrict device, GPUQueueFlagBits bits) {
@@ -41,38 +57,6 @@ GPUGetQueue(GPUDevice * __restrict device,
 }
 
 GPU_EXPORT
-GPUCommandQueue*
-GPUNewCommandQueue(GPUDevice * __restrict device) {
-  GPUApi *api;
-
-  if (!device)
-    return NULL;
-  if (!(api = gpuActiveGPUApi()))
-    return NULL;
-  if (!api->cmdque.newCommandQueue)
-    return NULL;
-  
-  return api->cmdque.newCommandQueue(device);
-}
-
-GPU_EXPORT
-GPUCommandBuffer*
-GPUNewCommandBuffer(GPUCommandQueue  * __restrict cmdb,
-                    void             * __restrict sender,
-                    GPUCommandBufferCompletionFn  oncomplete) {
-  GPUApi *api;
-
-  if (!cmdb)
-    return NULL;
-  if (!(api = gpuActiveGPUApi()))
-    return NULL;
-  if (!api->cmdque.newCommandBuffer)
-    return NULL;
-  
-  return api->cmdque.newCommandBuffer(cmdb, sender, oncomplete);
-}
-
-GPU_EXPORT
 GPUResult
 GPUAcquireCommandBuffer(GPUCommandQueue   * __restrict cmdq,
                         const char        * __restrict label,
@@ -88,7 +72,7 @@ GPUAcquireCommandBuffer(GPUCommandQueue   * __restrict cmdq,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  *outCmdb = GPUNewCommandBuffer(cmdq, NULL, NULL);
+  *outCmdb = gpu_newCommandBuffer(cmdq, NULL, NULL);
   return *outCmdb ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
 }
 
