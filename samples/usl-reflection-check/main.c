@@ -704,6 +704,35 @@ static int
 check_queue_submit_fence(GPUDevice *device);
 
 static int
+check_queue_selection(GPUDevice *device) {
+  GPUCommandQueue *graphics0;
+  GPUCommandQueue *compute0;
+
+  if (!device) {
+    return 0;
+  }
+
+  graphics0 = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0);
+  compute0 = GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0);
+  if (!graphics0 || !compute0) {
+    fprintf(stderr, "default device missing index-0 queues\n");
+    return 0;
+  }
+  if (GPUGetCommandQueue(device, GPU_QUEUE_GRAPHICS) != graphics0) {
+    fprintf(stderr, "GPUGetCommandQueue is not the index-0 graphics alias\n");
+    return 0;
+  }
+  if (GPUGetQueue(device, GPU_QUEUE_GRAPHICS, UINT32_MAX) ||
+      GPUGetQueue(device, GPU_QUEUE_COMPUTE, UINT32_MAX) ||
+      GPUGetQueue(device, 0, 0)) {
+    fprintf(stderr, "queue lookup accepted invalid request\n");
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
 check_selected_shader_library(const void *bytecode,
                               uint64_t bytecodeSize,
                               uint32_t expectedSourceKind) {
@@ -738,6 +767,9 @@ check_selected_shader_library(const void *bytecode,
        (GPU_QUEUE_GRAPHICS_BIT | GPU_QUEUE_COMPUTE_BIT)) !=
       (GPU_QUEUE_GRAPHICS_BIT | GPU_QUEUE_COMPUTE_BIT)) {
     fprintf(stderr, "default device missing expected queue bits\n");
+    return 0;
+  }
+  if (!check_queue_selection(device)) {
     return 0;
   }
 
