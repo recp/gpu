@@ -40,11 +40,8 @@ static const uint8_t kCheckerPixels[] = {
   GPUSurface *_surface;
   GPUSwapChain *_swapchain;
   GPULibrary *_library;
-  GPUFunction *_vertFunc;
-  GPUFunction *_fragFunc;
   GPUVertexDescriptor *_vertexDesc;
   GPURenderPipeline *_pipeline;
-  GPURenderPipelineState *_renderState;
   GPUBuffer *_vertexBuffer;
   GPUBuffer *_fragmentUniformBuffer;
   GPUTexture *_texture;
@@ -228,26 +225,23 @@ static const uint8_t kCheckerPixels[] = {
     return NO;
   }
 
-  _vertFunc = GPUShaderFunction(_library, "quad_vs");
-  _fragFunc = GPUShaderFunction(_library, "quad_fs");
-  if (!_vertFunc || !_fragFunc) {
-    NSLog(@"GPU: failed to lookup shader entry points");
-    return NO;
-  }
-
   _vertexDesc = GPUNewVertexDesc();
   GPUAttrib(_vertexDesc, 0, GPUFloat4, offsetof(QuadVertex, position), 0);
   GPULayout(_vertexDesc, 0, sizeof(QuadVertex), 1, GPUPerVertex);
 
-  _pipeline = GPUNewRenderPipeline(GPUPixelFormatBGRA8Unorm_sRGB);
-  GPUSetFunction(_pipeline, _vertFunc, GPU_FUNCTION_VERT);
-  GPUSetFunction(_pipeline, _fragFunc, GPU_FUNCTION_FRAG);
-  GPUSetVertexDesc(_pipeline, _vertexDesc);
-  GPUColorFormat(_pipeline, 0, GPUPixelFormatBGRA8Unorm_sRGB);
-
-  _renderState = GPUNewRenderState(_device, _pipeline);
-  if (!_renderState) {
-    NSLog(@"GPU: failed to create render state");
+  GPURenderPipelineCreateInfo pipelineInfo = {
+    .label = "textured-quad-usl-pipeline",
+    .library = (GPUShaderLibrary *)_library,
+    .vertexEntry = "quad_vs",
+    .fragmentEntry = "quad_fs",
+    .vertexDesc = _vertexDesc,
+    .colorFormat = GPUPixelFormatBGRA8Unorm_sRGB,
+    .depthFormat = GPUPixelFormatInvalid,
+    .stencilFormat = GPUPixelFormatInvalid,
+    .sampleCount = 1
+  };
+  if (GPUCreateRenderPipeline(_device, &pipelineInfo, &_pipeline) != GPU_OK) {
+    NSLog(@"GPU: failed to create render pipeline");
     return NO;
   }
 

@@ -17,6 +17,64 @@
 #include "../../common.h"
 
 GPU_EXPORT
+GPUResult
+GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
+                        const GPURenderPipelineCreateInfo * __restrict info,
+                        GPURenderPipeline                ** __restrict outPipeline) {
+  GPURenderPipelineState *state;
+  GPURenderPipeline      *pipeline;
+  GPUFunction            *vertexFunc;
+  GPUFunction            *fragmentFunc;
+
+  if (!outPipeline)
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  *outPipeline = NULL;
+
+  if (!device || !info || !info->library || !info->vertexEntry || !info->fragmentEntry)
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  vertexFunc = GPUShaderFunction(info->library, info->vertexEntry);
+  fragmentFunc = GPUShaderFunction(info->library, info->fragmentEntry);
+  if (!vertexFunc || !fragmentFunc)
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  pipeline = GPUNewRenderPipeline(info->colorFormat);
+  if (!pipeline)
+    return GPU_ERROR_BACKEND_FAILURE;
+
+  GPUSetFunction(pipeline, vertexFunc, GPU_FUNCTION_VERT);
+  GPUSetFunction(pipeline, fragmentFunc, GPU_FUNCTION_FRAG);
+
+  if (info->vertexDesc)
+    GPUSetVertexDesc(pipeline, info->vertexDesc);
+  if (info->colorFormat != GPUPixelFormatInvalid)
+    GPUColorFormat(pipeline, 0, info->colorFormat);
+  if (info->depthFormat != GPUPixelFormatInvalid)
+    GPUDepthFormat(pipeline, info->depthFormat);
+  if (info->stencilFormat != GPUPixelFormatInvalid)
+    GPUStencilFormat(pipeline, info->stencilFormat);
+  if (info->sampleCount > 0)
+    GPUSampleCount(pipeline, info->sampleCount);
+
+  state = GPUNewRenderState(device, pipeline);
+  if (!state) {
+    GPUDestroyRenderPipeline(pipeline);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  free(state);
+  *outPipeline = pipeline;
+  return GPU_OK;
+}
+
+GPU_EXPORT
+void
+GPUDestroyRenderPipeline(GPURenderPipeline *pipeline) {
+  free(pipeline);
+}
+
+GPU_EXPORT
 GPURenderPipeline*
 GPUNewRenderPipeline(GPUPixelFormat pixelFormat) {
   GPUApi *api;

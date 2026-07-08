@@ -23,6 +23,9 @@ extern "C" {
 #include "common.h"
 #include "pixelformat.h"
 #include "library.h"
+#include "cmdqueue.h"
+
+typedef struct GPUVertexDescriptor GPUVertexDescriptor;
 
 typedef struct GPURenderPipeline {
   void *_priv;
@@ -37,6 +40,28 @@ typedef enum GPUFunctionType {
   GPU_FUNCTION_VERT = 1,
   GPU_FUNCTION_FRAG = 2
 } GPUFunctionType;
+
+typedef struct GPURenderPipelineCreateInfo {
+  const char          *label;
+  GPUShaderLibrary   *library;
+  const char          *vertexEntry;
+  const char          *fragmentEntry;
+  GPUVertexDescriptor *vertexDesc;
+  GPUPixelFormat       colorFormat;
+  GPUPixelFormat       depthFormat;
+  GPUPixelFormat       stencilFormat;
+  uint32_t             sampleCount;
+} GPURenderPipelineCreateInfo;
+
+GPU_EXPORT
+GPUResult
+GPUCreateRenderPipeline(GPUDevice                          * __restrict device,
+                        const GPURenderPipelineCreateInfo  * __restrict info,
+                        GPURenderPipeline                 ** __restrict outPipeline);
+
+GPU_EXPORT
+void
+GPUDestroyRenderPipeline(GPURenderPipeline *pipeline);
 
 GPU_EXPORT
 GPURenderPipeline*
