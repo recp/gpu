@@ -2095,6 +2095,8 @@ check_selected_shader_library(const void *bytecode,
 static int
 check_queue_submit_fence(GPUDevice *device) {
   GPUCommandQueue *queue;
+  GPUCommandBuffer submittedCmdb = {0};
+  GPUFrame fakeFrame = {0};
   GPUCommandBuffer *cmdb;
   GPUCommandBuffer *buffers[1];
   GPUCommandBuffer *nullBuffers[1];
@@ -2127,6 +2129,13 @@ check_queue_submit_fence(GPUDevice *device) {
   GPUResetFence(fence);
   ok = ok && !GPUIsFenceSignaled(fence);
   ok = ok && GPUWaitFence(fence, 0) == GPU_ERROR_TIMEOUT;
+
+  submittedCmdb._submitted = true;
+  submittedCmdb._priv = (void *)(uintptr_t)0xdeadbeefu;
+  fakeFrame.drawable = (void *)(uintptr_t)0xdeadbeefu;
+  GPUSchedulePresent(&submittedCmdb, &fakeFrame);
+  GPUPresent(&submittedCmdb, &fakeFrame);
+
   ok = ok && GPUQueueSubmit(queue, NULL) == GPU_ERROR_INVALID_ARGUMENT;
   ok = ok && GPUQueueSubmit(NULL, &submitInfo) == GPU_ERROR_INVALID_ARGUMENT;
   ok = ok && GPUQueueSubmit(queue, &submitInfo) == GPU_ERROR_INVALID_ARGUMENT;
