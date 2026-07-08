@@ -123,6 +123,22 @@ GPUCreateShaderLibrary(GPUDevice *device,
                        GPUShaderLibrary **outLibrary);
 
 GPU_EXPORT
+GPUResult
+GPUCreateShaderLibraryFromUSL(GPUDevice *device,
+                              const void *artifactData,
+                              uint64_t artifactSize,
+                              GPUShaderLibrary **outLibrary);
+
+GPU_EXPORT
+GPUResult
+GPUCreateShaderLibraryFromUSLEntries(GPUDevice *device,
+                                     const void *artifactData,
+                                     uint64_t artifactSize,
+                                     const char * const *entryPointNames,
+                                     uint32_t entryPointCount,
+                                     GPUShaderLibrary **outLibrary);
+
+GPU_EXPORT
 int
 GPUCreateShaderLibraryFromUSLBytecode(GPUDevice *device,
                                       const void *bytecodeData,

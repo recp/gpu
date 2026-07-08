@@ -78,7 +78,6 @@ static const TriangleVertex kTriangleVertices[] = {
   NSString *executablePath;
   NSString *sampleDir;
   NSData   *bytecodeData;
-  GPUShaderLibraryCreateInfo shaderInfo = {0};
   GPUShaderLibraryUSLInfo uslInfo;
   const GPUBindGroupLayoutEntry *layoutEntries;
   GPUBindGroupLayout *reflectionLayouts[1] = { NULL };
@@ -146,17 +145,10 @@ static const TriangleVertex kTriangleVertices[] = {
     return NO;
   }
 
-  shaderInfo.chain.sType = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
-  shaderInfo.chain.structSize = sizeof(shaderInfo);
-  shaderInfo.label = "triangle.us";
-  shaderInfo.sourceKind = GPU_SHADER_SOURCE_USL_BYTECODE;
-  shaderInfo.sourceData = bytecodeData.bytes;
-  shaderInfo.sourceSize = (uint64_t)bytecodeData.length;
-  shaderInfo.sourcePathHint = bytecodePath.UTF8String;
-  shaderInfo.generateReflection = true;
-  if (GPUCreateShaderLibrary(_device,
-                             &shaderInfo,
-                             (GPUShaderLibrary **)&_library) != GPU_OK) {
+  if (GPUCreateShaderLibraryFromUSL(_device,
+                                    bytecodeData.bytes,
+                                    (uint64_t)bytecodeData.length,
+                                    (GPUShaderLibrary **)&_library) != GPU_OK) {
     NSLog(@"GPU: failed to create shader library");
     return NO;
   }

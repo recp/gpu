@@ -353,12 +353,12 @@ check_selected_shader_library(const void *bytecode,
   }
 
   library = NULL;
-  if (GPUCreateShaderLibraryFromUSLBytecodeForEntries(device,
-                                                      bytecode,
-                                                      bytecodeSize,
-                                                      entries,
-                                                      0u,
-                                                      &library) == 0 ||
+  if (GPUCreateShaderLibraryFromUSLEntries(device,
+                                           bytecode,
+                                           bytecodeSize,
+                                           entries,
+                                           0u,
+                                           &library) == GPU_OK ||
       library != NULL) {
     fprintf(stderr, "selected-entry shader library accepted empty entry list\n");
     if (library) {
@@ -368,12 +368,12 @@ check_selected_shader_library(const void *bytecode,
   }
 
   library = NULL;
-  if (GPUCreateShaderLibraryFromUSLBytecodeForEntries(device,
-                                                      bytecode,
-                                                      bytecodeSize,
-                                                      emptyNameEntries,
-                                                      2u,
-                                                      &library) == 0 ||
+  if (GPUCreateShaderLibraryFromUSLEntries(device,
+                                           bytecode,
+                                           bytecodeSize,
+                                           emptyNameEntries,
+                                           2u,
+                                           &library) == GPU_OK ||
       library != NULL) {
     fprintf(stderr, "selected-entry shader library accepted empty entry name\n");
     if (library) {
@@ -383,12 +383,12 @@ check_selected_shader_library(const void *bytecode,
   }
 
   library = NULL;
-  if (GPUCreateShaderLibraryFromUSLBytecodeForEntries(device,
-                                                      bytecode,
-                                                      bytecodeSize,
-                                                      missingEntries,
-                                                      2u,
-                                                      &library) == 0 ||
+  if (GPUCreateShaderLibraryFromUSLEntries(device,
+                                           bytecode,
+                                           bytecodeSize,
+                                           missingEntries,
+                                           2u,
+                                           &library) == GPU_OK ||
       library != NULL) {
     fprintf(stderr, "selected-entry shader library accepted missing entry\n");
     if (library) {
@@ -398,12 +398,12 @@ check_selected_shader_library(const void *bytecode,
   }
 
   library = NULL;
-  if (GPUCreateShaderLibraryFromUSLBytecodeForEntries(device,
-                                                      bytecode,
-                                                      bytecodeSize,
-                                                      entries,
-                                                      2u,
-                                                      &library) != 0 ||
+  if (GPUCreateShaderLibraryFromUSLEntries(device,
+                                           bytecode,
+                                           bytecodeSize,
+                                           entries,
+                                           2u,
+                                           &library) != GPU_OK ||
       !library) {
     fprintf(stderr, "failed to create selected-entry shader library\n");
     return 0;

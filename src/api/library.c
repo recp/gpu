@@ -659,6 +659,47 @@ gpu_createShaderLibraryFromUSLBytecodeImpl(GPUDevice *device,
 }
 
 GPU_EXPORT
+GPUResult
+GPUCreateShaderLibraryFromUSL(GPUDevice *device,
+                              const void *artifactData,
+                              uint64_t artifactSize,
+                              GPUShaderLibrary **outLibrary) {
+  return gpu_createShaderLibraryFromUSLBytecodeImpl(device,
+                                                    artifactData,
+                                                    artifactSize,
+                                                    NULL,
+                                                    0u,
+                                                    outLibrary) == 0
+    ? GPU_OK
+    : GPU_ERROR_BACKEND_FAILURE;
+}
+
+GPU_EXPORT
+GPUResult
+GPUCreateShaderLibraryFromUSLEntries(GPUDevice *device,
+                                     const void *artifactData,
+                                     uint64_t artifactSize,
+                                     const char * const *entryPointNames,
+                                     uint32_t entryPointCount,
+                                     GPUShaderLibrary **outLibrary) {
+  if (!entryPointNames || entryPointCount == 0u) {
+    if (outLibrary) {
+      *outLibrary = NULL;
+    }
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  return gpu_createShaderLibraryFromUSLBytecodeImpl(device,
+                                                    artifactData,
+                                                    artifactSize,
+                                                    entryPointNames,
+                                                    entryPointCount,
+                                                    outLibrary) == 0
+    ? GPU_OK
+    : GPU_ERROR_BACKEND_FAILURE;
+}
+
+GPU_EXPORT
 int
 GPUCreateShaderLibraryFromUSLBytecode(GPUDevice *device,
                                       const void *bytecodeData,
