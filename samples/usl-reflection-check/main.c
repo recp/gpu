@@ -16,6 +16,7 @@
 
 #include <gpu/bindgroup.h>
 #include <gpu/api/compute.h>
+#include <gpu/api/pass.h>
 #include <gpu/api/rce.h>
 #include <gpu/gpu.h>
 #include <gpu/usl.h>
@@ -1656,6 +1657,7 @@ static int
 check_copy_pass_validation(GPUDevice *device) {
   GPUCommandQueue *queue;
   GPUCommandBuffer fakeCmdb = {0};
+  GPUCopyPassEncoder endedPass = {0};
   GPUCommandBuffer *cmdb;
   GPUCommandBuffer *buffers[1];
   GPUQueueSubmitInfo submitInfo = {0};
@@ -1736,6 +1738,13 @@ check_copy_pass_validation(GPUDevice *device) {
     fprintf(stderr, "copy test texture setup failed\n");
     goto cleanup;
   }
+
+  endedPass._ended = true;
+  GPUCopyBufferToBuffer(&endedPass, sourceBuffer, bufferCopy, &bufferRegion);
+  GPUCopyBufferToTexture(&endedPass, sourceBuffer, textureA, &bufferTextureRegion);
+  GPUCopyTextureToBuffer(&endedPass, textureB, textureReadback, &bufferTextureRegion);
+  GPUCopyTextureToTexture(&endedPass, textureA, textureB, &textureRegion);
+  GPUEndCopyPass(&endedPass);
 
   ok = GPUAcquireCommandBuffer(queue, "reflection-copy-pass", &cmdb) == GPU_OK && cmdb;
   if (!ok) {
