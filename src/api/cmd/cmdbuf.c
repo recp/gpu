@@ -21,7 +21,7 @@ void
 GPUSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   GPUApi *api;
 
-  if (!cmdb || cmdb->_submitted || !frame) {
+  if (!cmdb || cmdb->_submitted || !frame || !frame->drawable) {
     return;
   }
 

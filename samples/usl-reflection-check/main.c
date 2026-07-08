@@ -2096,9 +2096,11 @@ static int
 check_queue_submit_fence(GPUDevice *device) {
   GPUCommandQueue *queue;
   GPUCommandBuffer submittedCmdb = {0};
+  GPUCommandBuffer noDrawableCmdb = {0};
   GPUCommandBuffer foreignCmdb = {0};
   GPUCommandQueue foreignQueue = {0};
   GPUFrame fakeFrame = {0};
+  GPUFrame noDrawableFrame = {0};
   GPUCommandBuffer *cmdb;
   GPUCommandBuffer *buffers[1];
   GPUCommandBuffer *nullBuffers[1];
@@ -2138,9 +2140,14 @@ check_queue_submit_fence(GPUDevice *device) {
   GPUSchedulePresent(&submittedCmdb, &fakeFrame);
   GPUPresent(&submittedCmdb, &fakeFrame);
 
+  noDrawableCmdb._priv = (void *)(uintptr_t)0xdeadbeefu;
+  GPUSchedulePresent(&noDrawableCmdb, &noDrawableFrame);
+  GPUPresent(&noDrawableCmdb, &noDrawableFrame);
+
   ok = ok && GPUQueueSubmit(queue, NULL) == GPU_ERROR_INVALID_ARGUMENT;
   ok = ok && GPUQueueSubmit(NULL, &submitInfo) == GPU_ERROR_INVALID_ARGUMENT;
   ok = ok && GPUQueueSubmit(queue, &submitInfo) == GPU_ERROR_INVALID_ARGUMENT;
+  ok = ok && GPUFinishFrame(NULL, NULL, NULL) == GPU_ERROR_INVALID_ARGUMENT;
 
   cmdb = NULL;
   if (ok &&
