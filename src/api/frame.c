@@ -21,7 +21,11 @@ GPUFrame*
 GPUBeginFrame(GPUSwapChain* swapchain) {
   GPUApi *api;
 
+  if (!swapchain)
+    return NULL;
   if (!(api = gpuActiveGPUApi()))
+    return NULL;
+  if (!api->frame.beginFrame)
     return NULL;
 
   return api->frame.beginFrame(api, swapchain);
@@ -38,7 +42,11 @@ void
 GPUEndFrame(GPUFrame* frame) {
   GPUApi *api;
 
+  if (!frame)
+    return;
   if (!(api = gpuActiveGPUApi()))
+    return;
+  if (!api->frame.endFrame)
     return;
 
   api->frame.endFrame(api, frame);
@@ -47,6 +55,9 @@ GPUEndFrame(GPUFrame* frame) {
 GPU_EXPORT
 void
 GPUFinishFrame(GPUCommandBuffer * __restrict cmdb, GPUFrame * __restrict frame) {
+  if (!cmdb || !frame)
+    return;
+
   GPUSchedulePresent(cmdb, frame);
   GPUCommit(cmdb);
   GPUEndFrame(frame);

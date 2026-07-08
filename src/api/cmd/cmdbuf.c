@@ -27,6 +27,8 @@ GPUSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
 
   if (!(api = gpuActiveGPUApi()))
     return;
+  if (!api->cmdbuf.presentDrawable)
+    return;
 
   api->cmdbuf.presentDrawable(cmdb, frame);
 }
