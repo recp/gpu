@@ -77,7 +77,6 @@ static const TriangleVertex kTriangleVertices[] = {
   NSString *executablePath;
   NSString *sampleDir;
   NSData   *bytecodeData;
-  GPUShaderLibraryUSLInfo uslInfo;
 
   _physicalDevice = GPUGetAutoSelectedPhysicalDevice(NULL);
   if (!_physicalDevice) {
@@ -146,20 +145,6 @@ static const TriangleVertex kTriangleVertices[] = {
                                     (uint64_t)bytecodeData.length,
                                     (GPUShaderLibrary **)&_library) != GPU_OK) {
     NSLog(@"GPU: failed to create shader library");
-    return NO;
-  }
-
-  if (GPUGetShaderLibraryUSLInfo(_library, &uslInfo) != 0 ||
-      uslInfo.abiVersion != GPU_SHADER_LIBRARY_USL_INFO_VERSION ||
-      uslInfo.bytecodeSize != (uint64_t)bytecodeData.length ||
-      uslInfo.bytecodeContentHash == 0 ||
-      uslInfo.targetAtomCount == 0 ||
-      uslInfo.targetAtomHash == 0 ||
-      uslInfo.backendContentHash == 0 ||
-      uslInfo.selectedEntryCount != 0u ||
-      uslInfo.targetSupported != 1 ||
-      uslInfo.targetSupportStatus != 1) {
-    NSLog(@"GPU: failed to read USL shader-library cache identity");
     return NO;
   }
 

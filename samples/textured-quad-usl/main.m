@@ -182,7 +182,6 @@ static const uint8_t kCheckerPixels[] = {
   NSString *bytecodePath;
   NSString *sampleDir;
   NSData   *bytecodeData;
-  GPUShaderLibraryUSLInfo uslInfo;
   GPUBindGroupEntry groupEntries[3] = {0};
 
   _physicalDevice = GPUGetAutoSelectedPhysicalDevice(NULL);
@@ -242,32 +241,12 @@ static const uint8_t kCheckerPixels[] = {
     return NO;
   }
 
-  if (GPUGetShaderLibraryUSLInfo(_library, &uslInfo) != 0 ||
-      uslInfo.abiVersion != GPU_SHADER_LIBRARY_USL_INFO_VERSION ||
-      uslInfo.bytecodeSize != (uint64_t)bytecodeData.length ||
-      uslInfo.bytecodeContentHash == 0 ||
-      uslInfo.targetAtomCount == 0 ||
-      uslInfo.targetAtomHash == 0 ||
-      uslInfo.backendContentHash == 0 ||
-      uslInfo.selectedEntryCount != 0u ||
-      uslInfo.targetSupported != 1 ||
-      uslInfo.targetSupportStatus != 1) {
-    NSLog(@"GPU: failed to read USL shader-library cache identity");
-    return NO;
-  }
-
   if (GPUCreateShaderLayout(_device, _library, &_shaderLayout) != GPU_OK ||
       !_shaderLayout ||
       _shaderLayout->bindGroupLayoutCount != 1 ||
       !_shaderLayout->bindGroupLayouts[0] ||
       !_shaderLayout->pipelineLayout) {
     NSLog(@"GPU: failed to create shader layout");
-    return NO;
-  }
-
-  if (GPUGetShaderLibraryUSLInfo(_library, &uslInfo) != 0 ||
-      uslInfo.bytecodeSize != (uint64_t)bytecodeData.length) {
-    NSLog(@"GPU: unexpected USL shader-library info");
     return NO;
   }
 
