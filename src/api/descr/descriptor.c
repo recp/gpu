@@ -1527,6 +1527,93 @@ GPUCreatePipelineLayoutFromReflection(GPUDevice *device,
 
 GPU_EXPORT
 GPUResult
+GPUCreateShaderLayout(GPUDevice *device,
+                      const GPUShaderLibrary *library,
+                      GPUShaderLayout **outLayout) {
+  GPUShaderLayout *layout;
+  uint32_t layoutCount;
+  GPUResult rc;
+
+  if (!outLayout) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outLayout = NULL;
+  if (!library) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  layout = calloc(1, sizeof(*layout));
+  if (!layout) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  layoutCount = 0u;
+  rc = GPUCreateBindGroupLayoutsFromReflection(device, library, &layoutCount, NULL);
+  if (rc != GPU_OK) {
+    free(layout);
+    return rc;
+  }
+
+  if (layoutCount > 0u) {
+    if ((size_t)layoutCount > SIZE_MAX / sizeof(*layout->bindGroupLayouts)) {
+      free(layout);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+
+    layout->bindGroupLayouts = calloc(layoutCount, sizeof(*layout->bindGroupLayouts));
+    if (!layout->bindGroupLayouts) {
+      free(layout);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+
+    rc = GPUCreateBindGroupLayoutsFromReflection(device,
+                                                 library,
+                                                 &layoutCount,
+                                                 layout->bindGroupLayouts);
+    if (rc != GPU_OK) {
+      GPUDestroyShaderLayout(layout);
+      return rc;
+    }
+  }
+
+  layout->bindGroupLayoutCount = layoutCount;
+  rc = GPUCreatePipelineLayoutFromReflection(device,
+                                             library,
+                                             layout->bindGroupLayoutCount,
+                                             layout->bindGroupLayouts,
+                                             &layout->pipelineLayout);
+  if (rc != GPU_OK) {
+    GPUDestroyShaderLayout(layout);
+    return rc;
+  }
+
+  *outLayout = layout;
+  return GPU_OK;
+}
+
+GPU_EXPORT
+void
+GPUDestroyShaderLayout(GPUShaderLayout *layout) {
+  if (!layout) {
+    return;
+  }
+
+  if (layout->pipelineLayout) {
+    GPUDestroyPipelineLayout(layout->pipelineLayout);
+  }
+  if (layout->bindGroupLayouts) {
+    for (uint32_t i = 0; i < layout->bindGroupLayoutCount; i++) {
+      GPUDestroyBindGroupLayout(layout->bindGroupLayouts[i]);
+    }
+  }
+
+  free(layout->bindGroupLayouts);
+  free(layout);
+}
+
+GPU_EXPORT
+GPUResult
 GPUCreateBindGroup(GPUDevice *device,
                    const GPUBindGroupCreateInfo *info,
                    GPUBindGroup **outGroup) {

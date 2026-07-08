@@ -331,6 +331,7 @@ check_selected_shader_library(const void *bytecode,
   GPUShaderLibraryUSLInfo info;
   GPUShaderReflection shaderReflection;
   GPUBindGroupLayout *reflectedLayouts[1] = { NULL };
+  GPUShaderLayout *shaderLayout;
   GPUPipelineLayout *pipelineLayout;
   GPUPhysicalDevice *physicalDevice;
   GPUShaderLibrary *library;
@@ -412,6 +413,7 @@ check_selected_shader_library(const void *bytecode,
   vertexFunc = GPUShaderFunction(library, "reflect_vs");
   fragmentFunc = GPUShaderFunction(library, "reflect_fs");
   memset(&shaderReflection, 0, sizeof(shaderReflection));
+  shaderLayout = NULL;
   reflectedLayoutCount = 0u;
   pipelineLayout = NULL;
 
@@ -511,7 +513,13 @@ check_selected_shader_library(const void *bytecode,
          info.backendContentHash != 0u &&
          info.selectedEntryCount == 0u &&
          GPUGetShaderReflection(library, &shaderReflection) == GPU_OK &&
-         shaderReflection.resourceCount == 2u;
+         shaderReflection.resourceCount == 2u &&
+         GPUCreateShaderLayout(device, library, &shaderLayout) == GPU_OK &&
+         shaderLayout != NULL &&
+         shaderLayout->bindGroupLayoutCount == 1u &&
+         shaderLayout->bindGroupLayouts[0] != NULL &&
+         shaderLayout->pipelineLayout != NULL;
+    GPUDestroyShaderLayout(shaderLayout);
     GPUFreeShaderReflection(&shaderReflection);
     GPUDestroyShaderLibrary(library);
 

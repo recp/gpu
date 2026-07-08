@@ -40,13 +40,12 @@ static const uint8_t kCheckerPixels[] = {
   GPUSurface *_surface;
   GPUSwapChain *_swapchain;
   GPULibrary *_library;
+  GPUShaderLayout *_shaderLayout;
   GPURenderPipeline *_pipeline;
   GPUBuffer *_vertexBuffer;
   GPUBuffer *_fragmentUniformBuffer;
   GPUTexture *_texture;
   GPUSampler *_sampler;
-  GPUBindGroupLayout *_fragmentLayout;
-  GPUPipelineLayout *_pipelineLayout;
   GPUBindGroup *_fragmentGroup;
   NSTimer *_timer;
   NSTimeInterval _animationStart;
@@ -142,7 +141,6 @@ static const uint8_t kCheckerPixels[] = {
   GPUShaderLibraryUSLInfo uslInfo;
   const GPUBindGroupLayoutEntry *layoutEntries;
   GPUBindGroupEntry groupEntries[3] = {0};
-  GPUBindGroupLayout *reflectionLayouts[1] = { NULL };
   uint32_t groupCount = 0;
   uint32_t layoutCount;
   uint32_t textureCount = 0;
@@ -220,40 +218,21 @@ static const uint8_t kCheckerPixels[] = {
     return NO;
   }
 
-  layoutCount = 0;
-  if (GPUCreateBindGroupLayoutsFromReflection(_device,
-                                              _library,
-                                              &layoutCount,
-                                              NULL) != GPU_OK ||
-      layoutCount != 1) {
-    NSLog(@"GPU: failed to query reflected bind layouts");
+  if (GPUCreateShaderLayout(_device, _library, &_shaderLayout) != GPU_OK ||
+      !_shaderLayout ||
+      _shaderLayout->bindGroupLayoutCount != 1 ||
+      !_shaderLayout->bindGroupLayouts[0] ||
+      !_shaderLayout->pipelineLayout) {
+    NSLog(@"GPU: failed to create shader layout");
     return NO;
   }
-  if (GPUCreateBindGroupLayoutsFromReflection(_device,
-                                              _library,
-                                              &layoutCount,
-                                              reflectionLayouts) != GPU_OK ||
-      layoutCount != 1 ||
-      !reflectionLayouts[0]) {
-    NSLog(@"GPU: failed to create reflected bind layouts");
-    return NO;
-  }
-  _fragmentLayout = reflectionLayouts[0];
 
-  layoutEntries = GPUGetBindGroupLayoutEntries(_fragmentLayout, &layoutCount);
+  layoutEntries = GPUGetBindGroupLayoutEntries(_shaderLayout->bindGroupLayouts[0],
+                                               &layoutCount);
   if (!layoutEntries || layoutCount != 3 ||
       GPUGetShaderLibraryUSLInfo(_library, &uslInfo) != 0 ||
       uslInfo.bytecodeSize != (uint64_t)bytecodeData.length) {
     NSLog(@"GPU: unexpected bind layout extracted from shader reflection");
-    return NO;
-  }
-
-  if (GPUCreatePipelineLayoutFromReflection(_device,
-                                            _library,
-                                            1,
-                                            reflectionLayouts,
-                                            &_pipelineLayout) != GPU_OK) {
-    NSLog(@"GPU: failed to create reflected pipeline layout");
     return NO;
   }
 
@@ -287,7 +266,7 @@ static const uint8_t kCheckerPixels[] = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO,
                .structSize = sizeof(GPURenderPipelineCreateInfo) },
     .label = "textured-quad-usl-pipeline",
-    .layout = _pipelineLayout,
+    .layout = _shaderLayout->pipelineLayout,
     .library = (GPUShaderLibrary *)_library,
     .vertexEntry = "quad_vs",
     .fragmentEntry = "quad_fs",
@@ -375,7 +354,7 @@ static const uint8_t kCheckerPixels[] = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
                .structSize = sizeof(GPUBindGroupCreateInfo) },
     .label = "textured-quad-usl-set0",
-    .layout = _fragmentLayout,
+    .layout = _shaderLayout->bindGroupLayouts[0],
     .entryCount = groupCount,
     .pEntries = groupEntries
   };

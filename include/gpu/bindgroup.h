@@ -135,6 +135,12 @@ typedef struct GPUPipelineLayout {
   void *_priv;
 } GPUPipelineLayout;
 
+typedef struct GPUShaderLayout {
+  GPUPipelineLayout *pipelineLayout;
+  uint32_t bindGroupLayoutCount;
+  GPUBindGroupLayout **bindGroupLayouts;
+} GPUShaderLayout;
+
 typedef struct GPUPipelineLayoutCreateInfo {
   GPUChainedStruct chain;
   const char *label;
@@ -200,6 +206,16 @@ GPUCreatePipelineLayoutFromReflection(GPUDevice *device,
                                       uint32_t bindGroupLayoutCount,
                                       GPUBindGroupLayout * const *ppLayouts,
                                       GPUPipelineLayout **outLayout);
+
+GPU_EXPORT
+GPUResult
+GPUCreateShaderLayout(GPUDevice *device,
+                      const GPUShaderLibrary *library,
+                      GPUShaderLayout **outLayout);
+
+GPU_EXPORT
+void
+GPUDestroyShaderLayout(GPUShaderLayout *layout);
 
 GPU_EXPORT
 void
