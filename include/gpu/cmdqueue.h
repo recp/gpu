@@ -97,10 +97,6 @@ GPUGetQueue(struct GPUDevice * __restrict device,
             uint32_t                      index);
 
 GPU_EXPORT
-GPUQueueFlagBits
-GPUGetAvailQueueBits(struct GPUDevice * __restrict device);
-
-GPU_EXPORT
 GPUResult
 GPUAcquireCommandBuffer(GPUCommandQueue   * __restrict cmdq,
                         const char        * __restrict label,
