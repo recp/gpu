@@ -40,7 +40,6 @@
 		1EB809D72AD1DF04006A1FCB /* surface.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EB809D62AD1DF04006A1FCB /* surface.c */; };
 		1EBBC1C32AC71D0D002B0E9D /* sampler.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EBBC1C22AC71D0D002B0E9D /* sampler.c */; };
 		1EC0DE112AD0000000000000 /* texture.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0DE102AD0000000000000 /* texture.c */; };
-		5622C0EC24E9C92C005FAE29 /* library.c in Sources */ = {isa = PBXBuildFile; fileRef = 5622C0EB24E9C92C005FAE29 /* library.c */; };
 		565525ED24D040D800901F5B /* common.h in Headers */ = {isa = PBXBuildFile; fileRef = 565525EC24D040D800901F5B /* common.h */; };
 		565525EF24D040E600901F5B /* common.h in Headers */ = {isa = PBXBuildFile; fileRef = 565525EE24D040E600901F5B /* common.h */; };
 		565525F124D040F200901F5B /* common.h in Headers */ = {isa = PBXBuildFile; fileRef = 565525F024D040F200901F5B /* common.h */; };
@@ -54,7 +53,6 @@
 		5655261224D08FE300901F5B /* buffer.c in Sources */ = {isa = PBXBuildFile; fileRef = 5655261124D08FE300901F5B /* buffer.c */; };
 		5655261624D091EC00901F5B /* renderpass.c in Sources */ = {isa = PBXBuildFile; fileRef = 5655261524D091EC00901F5B /* renderpass.c */; };
 		56690ADE24CF5EC600EBB935 /* rce.c in Sources */ = {isa = PBXBuildFile; fileRef = 56690ADD24CF5EC600EBB935 /* rce.c */; };
-		5677F73225209A1E00915A62 /* pipeline.c in Sources */ = {isa = PBXBuildFile; fileRef = 5677F73125209A1E00915A62 /* pipeline.c */; };
 		56CDC9AF24CEE9210021A8A2 /* init.c in Sources */ = {isa = PBXBuildFile; fileRef = 56CDC97824CEE9210021A8A2 /* init.c */; };
 		56CDC9B924CEE9210021A8A2 /* common.h in Headers */ = {isa = PBXBuildFile; fileRef = 56CDC98424CEE9210021A8A2 /* common.h */; };
 		56CDC9BD24CEE9210021A8A2 /* common.h in Headers */ = {isa = PBXBuildFile; fileRef = 56CDC98824CEE9210021A8A2 /* common.h */; };
@@ -84,7 +82,6 @@
 		56CDC9F024CEF6120021A8A2 /* common.h in Headers */ = {isa = PBXBuildFile; fileRef = 56CDC9E924CEF6120021A8A2 /* common.h */; };
 		56CDC9F124CEF6120021A8A2 /* device.c in Sources */ = {isa = PBXBuildFile; fileRef = 56CDC9EA24CEF6120021A8A2 /* device.c */; };
 		56CDC9F724CF1BF00021A8A2 /* pipeline.c in Sources */ = {isa = PBXBuildFile; fileRef = 56CDC9F624CF1BF00021A8A2 /* pipeline.c */; };
-		56CEEC9224D1836D00865FF3 /* depthstencil.c in Sources */ = {isa = PBXBuildFile; fileRef = 56CEEC9124D1836D00865FF3 /* depthstencil.c */; };
 		56CEEC9424D1848A00865FF3 /* vertex.c in Sources */ = {isa = PBXBuildFile; fileRef = 56CEEC9324D1848A00865FF3 /* vertex.c */; };
 		56CEEC9724D1873B00865FF3 /* init.c in Sources */ = {isa = PBXBuildFile; fileRef = 56CDC97C24CEE9210021A8A2 /* init.c */; };
 /* End PBXBuildFile section */
@@ -105,7 +102,6 @@
 /* Begin PBXFileReference section */
 		1E1C3DDD2C862CEC004753CB /* object_type_string_helper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = object_type_string_helper.h; sourceTree = "<group>"; };
 		1E1C3DDF2C862D37004753CB /* MoltenVK.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = MoltenVK.xcframework; path = "/Users/recp/Projects/recp/vk-preview/Cube/../../Package/Latest/MoltenVK/dynamic/MoltenVK.xcframework"; sourceTree = "<absolute>"; };
-		1E20495E2AC6228400B94648 /* descriptor.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = descriptor.h; sourceTree = "<group>"; };
 		1E2049602AC622EB00B94648 /* descriptor.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = descriptor.c; sourceTree = "<group>"; };
 		1E2049622AC6231F00B94648 /* descriptor.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = descriptor.h; sourceTree = "<group>"; };
 		1E2049642AC623C200B94648 /* descpool.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = descpool.c; sourceTree = "<group>"; };
@@ -156,8 +152,6 @@
 		1EE0F91E2AB9D05800BE8B48 /* init.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = init.c; sourceTree = "<group>"; };
 		1EE0F9202AB9D05800BE8B48 /* impl.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = impl.h; sourceTree = "<group>"; };
 		5622C0E524E9C089005FAE29 /* libusl.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; path = libusl.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
-		5622C0E824E9C2BF005FAE29 /* library.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = library.h; sourceTree = "<group>"; };
-		5622C0EB24E9C92C005FAE29 /* library.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = library.c; sourceTree = "<group>"; };
 		564F310724D19F560044EEED /* impl.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = impl.c; sourceTree = "<group>"; };
 		564F311624D21BF20044EEED /* metalkit.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = metalkit.h; sourceTree = "<group>"; };
 		565525EC24D040D800901F5B /* common.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = common.h; sourceTree = "<group>"; };
@@ -182,8 +176,6 @@
 		5655261524D091EC00901F5B /* renderpass.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = renderpass.c; sourceTree = "<group>"; };
 		56690ADC24CF45C800EBB935 /* rce.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = rce.h; sourceTree = "<group>"; };
 		56690ADD24CF5EC600EBB935 /* rce.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rce.c; sourceTree = "<group>"; };
-		5677F73125209A1E00915A62 /* pipeline.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = pipeline.c; sourceTree = "<group>"; };
-		5677F73325209AB500915A62 /* pipeline.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pipeline.h; sourceTree = "<group>"; };
 		56CDC96A24CEE7560021A8A2 /* libgpu.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = libgpu.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
 		56CDC97824CEE9210021A8A2 /* init.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = init.c; sourceTree = "<group>"; };
 		56CDC97B24CEE9210021A8A2 /* buffer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = buffer.m; sourceTree = "<group>"; };
@@ -229,7 +221,6 @@
 		56CEEC8E24D181FB00865FF3 /* depthstencil.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = depthstencil.h; sourceTree = "<group>"; };
 		56CEEC8F24D182C600865FF3 /* vertex.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = vertex.h; sourceTree = "<group>"; };
 		56CEEC9024D182F800865FF3 /* library.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = library.h; sourceTree = "<group>"; };
-		56CEEC9124D1836D00865FF3 /* depthstencil.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = depthstencil.c; sourceTree = "<group>"; };
 		56CEEC9324D1848A00865FF3 /* vertex.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = vertex.c; sourceTree = "<group>"; };
 		56CEEC9524D185C200865FF3 /* library.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = library.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -292,38 +283,12 @@
 			path = impl;
 			sourceTree = "<group>";
 		};
-		5622C0E924E9C916005FAE29 /* shading */ = {
-			isa = PBXGroup;
-			children = (
-				5622C0EA24E9C91B005FAE29 /* us */,
-			);
-			path = shading;
-			sourceTree = "<group>";
-		};
-		5622C0EA24E9C91B005FAE29 /* us */ = {
-			isa = PBXGroup;
-			children = (
-				5622C0EB24E9C92C005FAE29 /* library.c */,
-				5677F73125209A1E00915A62 /* pipeline.c */,
-			);
-			path = us;
-			sourceTree = "<group>";
-		};
 		564F310624D19DC00044EEED /* render */ = {
 			isa = PBXGroup;
 			children = (
 				56CDC9E724CEF6120021A8A2 /* pipeline.c */,
 			);
 			path = render;
-			sourceTree = "<group>";
-		};
-		564F311524D1CDC30044EEED /* shading */ = {
-			isa = PBXGroup;
-			children = (
-				5622C0E824E9C2BF005FAE29 /* library.h */,
-				5677F73325209AB500915A62 /* pipeline.h */,
-			);
-			path = shading;
 			sourceTree = "<group>";
 		};
 		565525E624D03FFF00901F5B /* vk */ = {
@@ -466,7 +431,6 @@
 		56CDC97724CEE9210021A8A2 /* src */ = {
 			isa = PBXGroup;
 			children = (
-				5622C0E924E9C916005FAE29 /* shading */,
 				56CDC99224CEE9210021A8A2 /* api */,
 				56CDC97924CEE9210021A8A2 /* backend */,
 				56CDC97824CEE9210021A8A2 /* init.c */,
@@ -525,7 +489,6 @@
 				56CDC99324CEE9210021A8A2 /* device.c */,
 				5655261124D08FE300901F5B /* buffer.c */,
 				1EC0DE102AD0000000000000 /* texture.c */,
-				56CEEC9124D1836D00865FF3 /* depthstencil.c */,
 				56CEEC9324D1848A00865FF3 /* vertex.c */,
 				56CEEC9524D185C200865FF3 /* library.c */,
 				1EA98C1F2ABA002400E1B576 /* swapchain.c */,
@@ -575,7 +538,6 @@
 				564F311624D21BF20044EEED /* metalkit.h */,
 				1EA98C222ABA465100E1B576 /* frame.h */,
 				1E77F9202AC076E6005B98C3 /* feature.h */,
-				1E20495E2AC6228400B94648 /* descriptor.h */,
 				1EBBC1C12AC71C03002B0E9D /* sampler.h */,
 				1E5D43CE2AD469AE00744FB0 /* geometric.h */,
 			);
@@ -786,7 +748,6 @@
 			files = (
 				56CDC9AF24CEE9210021A8A2 /* init.c in Sources */,
 				1EA98C312ABAD64000E1B576 /* swapchain.m in Sources */,
-				5622C0EC24E9C92C005FAE29 /* library.c in Sources */,
 				1EA98C3C2ABAD72B00E1B576 /* frame.c in Sources */,
 				1E12EBF82ADAB480007653D6 /* cmdque.m in Sources */,
 				56690ADE24CF5EC600EBB935 /* rce.c in Sources */,
@@ -805,7 +766,6 @@
 				1EA98C342ABAD64000E1B576 /* pipeline.m in Sources */,
 				1EB809D22AD1D80E006A1FCB /* surface.c in Sources */,
 				1EA98C2E2ABAD64000E1B576 /* rce.m in Sources */,
-				56CEEC9224D1836D00865FF3 /* depthstencil.c in Sources */,
 				56CDC9EE24CEF6120021A8A2 /* pipeline.c in Sources */,
 				5655261624D091EC00901F5B /* renderpass.c in Sources */,
 				1E7A589E2ACC334B00AB25B5 /* instance.c in Sources */,
@@ -821,7 +781,6 @@
 				56CEEC9424D1848A00865FF3 /* vertex.c in Sources */,
 				1EA98C332ABAD64000E1B576 /* vertex.m in Sources */,
 				1EA98C382ABAD64000E1B576 /* depthstencil.m in Sources */,
-				5677F73225209A1E00915A62 /* pipeline.c in Sources */,
 				56CDC9C524CEE9210021A8A2 /* device.c in Sources */,
 				5655260D24D08CCC00901F5B /* cmdbuf.c in Sources */,
 				1E2049612AC622EB00B94648 /* descriptor.c in Sources */,
