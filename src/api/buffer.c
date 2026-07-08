@@ -31,6 +31,16 @@ GPUCreateBuffer(GPUDevice                 * __restrict device,
   if (!device || !info || info->sizeBytes == 0) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+      info->chain.sType != GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->usage == 0) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
 
   if (!(api = gpuActiveGPUApi())) {
     return GPU_ERROR_BACKEND_FAILURE;

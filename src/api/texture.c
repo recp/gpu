@@ -16,6 +16,31 @@
 
 #include "../common.h"
 
+static bool
+gpuIsTextureDimensionValid(GPUTextureDimension dimension) {
+  return dimension == GPU_TEXTURE_DIMENSION_1D ||
+         dimension == GPU_TEXTURE_DIMENSION_2D ||
+         dimension == GPU_TEXTURE_DIMENSION_3D;
+}
+
+static bool
+gpuIsTextureViewTypeValid(GPUTextureViewType viewType) {
+  return viewType == GPU_TEXTURE_VIEW_1D ||
+         viewType == GPU_TEXTURE_VIEW_2D ||
+         viewType == GPU_TEXTURE_VIEW_2D_ARRAY ||
+         viewType == GPU_TEXTURE_VIEW_CUBE ||
+         viewType == GPU_TEXTURE_VIEW_CUBE_ARRAY ||
+         viewType == GPU_TEXTURE_VIEW_3D;
+}
+
+static uint32_t
+gpuMipExtent(uint32_t extent, uint32_t mipLevel) {
+  uint32_t mipExtent;
+
+  mipExtent = extent >> mipLevel;
+  return mipExtent > 0 ? mipExtent : 1u;
+}
+
 GPU_EXPORT
 GPUResult
 GPUCreateTexture(GPUDevice                  * __restrict device,
@@ -33,6 +58,16 @@ GPUCreateTexture(GPUDevice                  * __restrict device,
       info->width == 0 ||
       info->height == 0 ||
       info->depthOrLayers == 0) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+      info->chain.sType != GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!gpuIsTextureDimensionValid(info->dimension) || info->usage == 0) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -77,6 +112,20 @@ GPUCreateTextureView(GPUTexture                     * __restrict texture,
       info->arrayLayerCount == 0) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+      info->chain.sType != GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!gpuIsTextureViewTypeValid(info->viewType) ||
+      info->baseMipLevel >= texture->mipLevelCount ||
+      info->mipLevelCount > texture->mipLevelCount - info->baseMipLevel ||
+      info->baseArrayLayer >= texture->depthOrLayers ||
+      info->arrayLayerCount > texture->depthOrLayers - info->baseArrayLayer) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
 
   if (!(api = gpuActiveGPUApi()) || !api->texture.createView) {
     return GPU_ERROR_BACKEND_FAILURE;
@@ -117,6 +166,17 @@ GPUQueueWriteTexture(GPUCommandQueue             * __restrict queue,
       region->layerCount == 0 ||
       region->bytesPerRow == 0 ||
       sizeBytes == 0) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (region->mipLevel >= texture->mipLevelCount ||
+      region->width > gpuMipExtent(texture->width, region->mipLevel) ||
+      region->height > gpuMipExtent(texture->height, region->mipLevel) ||
+      region->depth > gpuMipExtent(texture->depthOrLayers, region->mipLevel) ||
+      region->baseArrayLayer >= texture->depthOrLayers ||
+      region->layerCount > texture->depthOrLayers - region->baseArrayLayer) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (region->rowsPerImage != 0 && region->rowsPerImage < region->height) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
