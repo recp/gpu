@@ -35,6 +35,7 @@ static const TriangleVertex kTriangleVertices[] = {
   GPUBuffer *_vertexBuffer;
   GPUBuffer *_fragmentUniformBuffer;
   GPUBindGroupLayout *_fragmentLayout;
+  GPUPipelineLayout *_pipelineLayout;
   GPUBindGroup *_fragmentGroup;
   NSTimer *_timer;
   NSTimeInterval _animationStart;
@@ -78,8 +79,6 @@ static const TriangleVertex kTriangleVertices[] = {
   NSString *executablePath;
   NSString *sampleDir;
 
-  GPUBindGroupLayoutEntry layoutEntry;
-  GPUBindGroupEntry groupEntry;
   GPUShaderLibraryCreateInfo shaderInfo;
   GPUExtent2D size;
 
@@ -156,6 +155,42 @@ static const TriangleVertex kTriangleVertices[] = {
     return NO;
   }
 
+  GPUBindGroupLayoutEntry set0Entries[] = {
+    {
+      .binding = 0,
+      .bindingType = GPU_BINDING_UNIFORM_BUFFER,
+      .visibility = GPU_SHADER_STAGE_FRAGMENT_BIT,
+      .arrayCount = 1,
+      .hasDynamicOffset = false
+    }
+  };
+  GPUBindGroupLayoutCreateInfo set0LayoutInfo = {
+    .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO,
+               .structSize = sizeof(GPUBindGroupLayoutCreateInfo) },
+    .label = "triangle-manual-set0-layout",
+    .entryCount = 1,
+    .pEntries = set0Entries
+  };
+  if (GPUCreateBindGroupLayout(_device, &set0LayoutInfo, &_fragmentLayout) != GPU_OK) {
+    NSLog(@"GPU: failed to create fragment bind layout");
+    return NO;
+  }
+
+  GPUBindGroupLayout *layouts[] = { _fragmentLayout };
+  GPUPipelineLayoutCreateInfo pipelineLayoutInfo = {
+    .chain = { .sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+               .structSize = sizeof(GPUPipelineLayoutCreateInfo) },
+    .label = "triangle-manual-pipeline-layout",
+    .bindGroupLayoutCount = 1,
+    .ppBindGroupLayouts = layouts,
+    .pushConstantSizeBytes = 0,
+    .pushConstantStages = 0
+  };
+  if (GPUCreatePipelineLayout(_device, &pipelineLayoutInfo, &_pipelineLayout) != GPU_OK) {
+    NSLog(@"GPU: failed to create pipeline layout");
+    return NO;
+  }
+
   GPUVertexAttribute vertexAttrs[] = {
     { .shaderLocation = 0, .format = GPU_VERTEX_FORMAT_FLOAT2, .offset = offsetof(TriangleVertex, position) },
     { .shaderLocation = 1, .format = GPU_VERTEX_FORMAT_FLOAT4, .offset = offsetof(TriangleVertex, color) }
@@ -187,6 +222,7 @@ static const TriangleVertex kTriangleVertices[] = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO,
                .structSize = sizeof(GPURenderPipelineCreateInfo) },
     .label = "triangle-manual-pipeline",
+    .layout = _pipelineLayout,
     .library = (GPUShaderLibrary *)_library,
     .vertexEntry = "tri_vs",
     .fragmentEntry = "tri_fs",
@@ -228,20 +264,26 @@ static const TriangleVertex kTriangleVertices[] = {
     return NO;
   }
 
-  layoutEntry.stage = GPUBindStageFragment;
-  layoutEntry.kind = GPUBindKindBuffer;
-  layoutEntry.binding = 0;
-  if (GPUCreateBindGroupLayout(&layoutEntry, 1, &_fragmentLayout) != 0) {
-    NSLog(@"GPU: failed to create fragment bind layout");
-    return NO;
-  }
-
-  groupEntry.binding = 0;
-  groupEntry.stage = GPUBindStageFragment;
-  groupEntry.kind = GPUBindKindBuffer;
-  groupEntry.buffer = _fragmentUniformBuffer;
-  groupEntry.offset = 0;
-  if (GPUCreateBindGroup(_fragmentLayout, &groupEntry, 1, &_fragmentGroup) != 0) {
+  GPUBindGroupEntry set0Bindings[] = {
+    {
+      .binding = 0,
+      .bindingType = GPU_BINDING_UNIFORM_BUFFER,
+      .buffer = {
+        .buffer = _fragmentUniformBuffer,
+        .offset = 0,
+        .size = sizeof(FragmentUniforms)
+      }
+    }
+  };
+  GPUBindGroupCreateInfo set0Info = {
+    .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
+               .structSize = sizeof(GPUBindGroupCreateInfo) },
+    .label = "triangle-manual-set0",
+    .layout = _fragmentLayout,
+    .entryCount = 1,
+    .pEntries = set0Bindings
+  };
+  if (GPUCreateBindGroup(_device, &set0Info, &_fragmentGroup) != GPU_OK) {
     NSLog(@"GPU: failed to create fragment bind group");
     return NO;
   }
@@ -309,7 +351,7 @@ static const TriangleVertex kTriangleVertices[] = {
   GPUSetCullMode(encoder, GPUCullModeNone);
   GPUBindRenderPipeline(encoder, _pipeline);
   GPUBindVertexBuffers(encoder, 0, 1, &vertexBuffer);
-  GPUBindRenderGroup(encoder, _fragmentGroup);
+  GPUBindRenderGroup(encoder, 0, _fragmentGroup, 0, NULL);
   GPUDraw(encoder, 3, 1, 0, 0);
   GPUEndRenderPass(encoder);
   submitResult = GPUFinishFrame(_queue, cmdb, frame);

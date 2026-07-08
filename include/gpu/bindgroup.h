@@ -21,17 +21,32 @@ extern "C" {
 #endif
 
 #include "common.h"
+#include "cmdqueue.h"
+#include "sampler.h"
+#include "texture.h"
 
 typedef struct GPUBuffer GPUBuffer;
-typedef struct GPURenderCommandEncoder GPURenderCommandEncoder;
+typedef struct GPUDevice GPUDevice;
 typedef struct GPUSampler GPUSampler;
-typedef struct GPUTexture GPUTexture;
+
+#ifndef GPU_RENDER_ENCODER_TYPES_DEFINED
+#define GPU_RENDER_ENCODER_TYPES_DEFINED
+typedef struct GPURenderCommandEncoder GPURenderCommandEncoder;
+typedef GPURenderCommandEncoder GPURenderPassEncoder;
+#endif
 
 typedef enum GPUBindStage {
   GPUBindStageVertex = 1,
   GPUBindStageFragment = 2,
   GPUBindStageCompute = 3
 } GPUBindStage;
+
+typedef uint32_t GPUShaderStageFlags;
+enum {
+  GPU_SHADER_STAGE_VERTEX_BIT   = 1u << 0,
+  GPU_SHADER_STAGE_FRAGMENT_BIT = 1u << 1,
+  GPU_SHADER_STAGE_COMPUTE_BIT  = 1u << 2
+};
 
 #define GPU_BIND_GROUP_LAYOUT_USL_INFO_VERSION 3u
 #define GPU_BIND_GROUP_LAYOUT_USL_ENTRY_NAME_MAX 128u
@@ -77,26 +92,76 @@ typedef enum GPUBindKind {
   GPUBindKindSampler = 2
 } GPUBindKind;
 
+typedef enum GPUBindingType {
+  GPU_BINDING_UNIFORM_BUFFER = 0,
+  GPU_BINDING_STORAGE_BUFFER = 1,
+  GPU_BINDING_SAMPLED_TEXTURE = 2,
+  GPU_BINDING_STORAGE_TEXTURE = 3,
+  GPU_BINDING_SAMPLER = 4
+} GPUBindingType;
+
 typedef struct GPUBindGroupLayoutEntry {
+  uint32_t binding;
+  GPUBindingType bindingType;
+  GPUShaderStageFlags visibility;
+  uint32_t arrayCount;
+  bool hasDynamicOffset;
+  bool immutableSampler;
+  GPUSamplerDesc immutableSamplerDesc;
+
   GPUBindStage stage;
   GPUBindKind kind;
-  uint32_t binding;
 } GPUBindGroupLayoutEntry;
 
+typedef struct GPUBindGroupLayoutCreateInfo {
+  GPUChainedStruct chain;
+  const char *label;
+  uint32_t entryCount;
+  const GPUBindGroupLayoutEntry *pEntries;
+} GPUBindGroupLayoutCreateInfo;
+
 typedef struct GPUBindGroupEntry {
-  GPUBindStage stage;
   uint32_t binding;
-  GPUBindKind kind;
-  GPUBuffer *buffer;
-  GPUTexture *texture;
+  GPUBindingType bindingType;
+
+  struct {
+    GPUBuffer *buffer;
+    uint64_t offset;
+    uint64_t size;
+  } buffer;
+
+  GPUTextureView *textureView;
   GPUSampler *sampler;
-  size_t offset;
+
+  GPUBindStage stage;
+  GPUBindKind kind;
 } GPUBindGroupEntry;
 
+typedef struct GPUBindGroupCreateInfo {
+  GPUChainedStruct chain;
+  const char *label;
+  GPUBindGroupLayout *layout;
+  uint32_t entryCount;
+  const GPUBindGroupEntry *pEntries;
+} GPUBindGroupCreateInfo;
+
+typedef struct GPUPipelineLayout {
+  void *_priv;
+} GPUPipelineLayout;
+
+typedef struct GPUPipelineLayoutCreateInfo {
+  GPUChainedStruct chain;
+  const char *label;
+  uint32_t bindGroupLayoutCount;
+  GPUBindGroupLayout * const *ppBindGroupLayouts;
+  uint32_t pushConstantSizeBytes;
+  GPUShaderStageFlags pushConstantStages;
+} GPUPipelineLayoutCreateInfo;
+
 GPU_EXPORT
-int
-GPUCreateBindGroupLayout(const GPUBindGroupLayoutEntry *entries,
-                         uint32_t count,
+GPUResult
+GPUCreateBindGroupLayout(GPUDevice *device,
+                         const GPUBindGroupLayoutCreateInfo *info,
                          GPUBindGroupLayout **outLayout);
 
 GPU_EXPORT
@@ -120,10 +185,9 @@ void
 GPUDestroyBindGroupLayout(GPUBindGroupLayout *layout);
 
 GPU_EXPORT
-int
-GPUCreateBindGroup(GPUBindGroupLayout *layout,
-                   const GPUBindGroupEntry *entries,
-                   uint32_t count,
+GPUResult
+GPUCreateBindGroup(GPUDevice *device,
+                   const GPUBindGroupCreateInfo *info,
                    GPUBindGroup **outGroup);
 
 GPU_EXPORT
@@ -131,8 +195,22 @@ void
 GPUDestroyBindGroup(GPUBindGroup *group);
 
 GPU_EXPORT
+GPUResult
+GPUCreatePipelineLayout(GPUDevice *device,
+                        const GPUPipelineLayoutCreateInfo *info,
+                        GPUPipelineLayout **outLayout);
+
+GPU_EXPORT
 void
-GPUBindRenderGroup(GPURenderCommandEncoder *rce, GPUBindGroup *group);
+GPUDestroyPipelineLayout(GPUPipelineLayout *layout);
+
+GPU_EXPORT
+void
+GPUBindRenderGroup(GPURenderPassEncoder *pass,
+                   uint32_t setIndex,
+                   GPUBindGroup *group,
+                   uint32_t dynamicOffsetCount,
+                   const uint32_t *pDynamicOffsets);
 
 #ifdef __cplusplus
 }

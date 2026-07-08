@@ -46,6 +46,7 @@ static const uint8_t kCheckerPixels[] = {
   GPUTexture *_texture;
   GPUSampler *_sampler;
   GPUBindGroupLayout *_fragmentLayout;
+  GPUPipelineLayout *_pipelineLayout;
   GPUBindGroup *_fragmentGroup;
   NSTimer *_timer;
   NSTimeInterval _animationStart;
@@ -224,6 +225,54 @@ static const uint8_t kCheckerPixels[] = {
     return NO;
   }
 
+  if (GPUCreateBindGroupLayoutFromUSLBytecode(bytecodeData.bytes,
+                                              (uint64_t)bytecodeData.length,
+                                              "quad_fs",
+                                              &_fragmentLayout) != 0) {
+    NSLog(@"GPU: failed to create fragment bind layout");
+    return NO;
+  }
+
+  layoutEntries = GPUGetBindGroupLayoutEntries(_fragmentLayout, &layoutCount);
+  if (!layoutEntries || layoutCount != 3 ||
+      GPUGetBindGroupLayoutUSLInfo(_fragmentLayout, &layoutInfo) != 0 ||
+      layoutInfo.abiVersion != GPU_BIND_GROUP_LAYOUT_USL_INFO_VERSION ||
+      layoutInfo.stage != GPUBindStageFragment ||
+      strcmp(layoutInfo.entryPointName, "quad_fs") != 0 ||
+      layoutInfo.resourceBindingCount != 3 ||
+      layoutInfo.capabilityRequirementCount != 0 ||
+      layoutInfo.capabilityRequirementTotalCount != 0 ||
+      layoutInfo.capabilityRequirementFlags != 0 ||
+      layoutInfo.capabilityRequirementHash != 0 ||
+      layoutInfo.entryTargetInfoVersion == 0 ||
+      layoutInfo.targetBackend == 0 ||
+      layoutInfo.targetSupported != 1 ||
+      layoutInfo.targetSupportStatus != 1 ||
+      layoutInfo.targetAtomCount == 0 ||
+      layoutInfo.targetAtomTotalCount < layoutInfo.targetAtomCount ||
+      layoutInfo.targetInfoFlags != 0 ||
+      layoutInfo.targetAtomHash == 0 ||
+      layoutInfo.bytecodeSize != (uint64_t)bytecodeData.length ||
+      layoutInfo.bytecodeContentHash != uslInfo.bytecodeContentHash) {
+    NSLog(@"GPU: unexpected bind layout extracted from USL bytecode");
+    return NO;
+  }
+
+  GPUBindGroupLayout *layouts[] = { _fragmentLayout };
+  GPUPipelineLayoutCreateInfo pipelineLayoutInfo = {
+    .chain = { .sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+               .structSize = sizeof(GPUPipelineLayoutCreateInfo) },
+    .label = "textured-quad-usl-pipeline-layout",
+    .bindGroupLayoutCount = 1,
+    .ppBindGroupLayouts = layouts,
+    .pushConstantSizeBytes = 0,
+    .pushConstantStages = 0
+  };
+  if (GPUCreatePipelineLayout(_device, &pipelineLayoutInfo, &_pipelineLayout) != GPU_OK) {
+    NSLog(@"GPU: failed to create pipeline layout");
+    return NO;
+  }
+
   GPUVertexAttribute vertexAttrs[] = {
     { .shaderLocation = 0, .format = GPU_VERTEX_FORMAT_FLOAT4, .offset = offsetof(QuadVertex, position) }
   };
@@ -254,6 +303,7 @@ static const uint8_t kCheckerPixels[] = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO,
                .structSize = sizeof(GPURenderPipelineCreateInfo) },
     .label = "textured-quad-usl-pipeline",
+    .layout = _pipelineLayout,
     .library = (GPUShaderLibrary *)_library,
     .vertexEntry = "quad_vs",
     .fragmentEntry = "quad_fs",
@@ -299,52 +349,18 @@ static const uint8_t kCheckerPixels[] = {
     return NO;
   }
 
-  if (GPUCreateBindGroupLayoutFromUSLBytecode(bytecodeData.bytes,
-                                              (uint64_t)bytecodeData.length,
-                                              "quad_fs",
-                                              &_fragmentLayout) != 0) {
-    NSLog(@"GPU: failed to create fragment bind layout");
-    return NO;
-  }
-
-  layoutEntries = GPUGetBindGroupLayoutEntries(_fragmentLayout, &layoutCount);
-  if (!layoutEntries || layoutCount != 3 ||
-      GPUGetBindGroupLayoutUSLInfo(_fragmentLayout, &layoutInfo) != 0 ||
-      layoutInfo.abiVersion != GPU_BIND_GROUP_LAYOUT_USL_INFO_VERSION ||
-      layoutInfo.stage != GPUBindStageFragment ||
-      strcmp(layoutInfo.entryPointName, "quad_fs") != 0 ||
-      layoutInfo.resourceBindingCount != 3 ||
-      layoutInfo.capabilityRequirementCount != 0 ||
-      layoutInfo.capabilityRequirementTotalCount != 0 ||
-      layoutInfo.capabilityRequirementFlags != 0 ||
-      layoutInfo.capabilityRequirementHash != 0 ||
-      layoutInfo.entryTargetInfoVersion == 0 ||
-      layoutInfo.targetBackend == 0 ||
-      layoutInfo.targetSupported != 1 ||
-      layoutInfo.targetSupportStatus != 1 ||
-      layoutInfo.targetAtomCount == 0 ||
-      layoutInfo.targetAtomTotalCount < layoutInfo.targetAtomCount ||
-      layoutInfo.targetInfoFlags != 0 ||
-      layoutInfo.targetAtomHash == 0 ||
-      layoutInfo.bytecodeSize != (uint64_t)bytecodeData.length ||
-      layoutInfo.bytecodeContentHash != uslInfo.bytecodeContentHash) {
-    NSLog(@"GPU: unexpected bind layout extracted from USL bytecode");
-    return NO;
-  }
-
   for (uint32_t i = 0; i < layoutCount; i++) {
-    if (layoutEntries[i].stage != GPUBindStageFragment) {
+    if (layoutEntries[i].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
       NSLog(@"GPU: unexpected bind layout stage extracted from USL bytecode");
       return NO;
     }
 
     groupEntries[groupCount].binding = layoutEntries[i].binding;
-    groupEntries[groupCount].stage = layoutEntries[i].stage;
-    groupEntries[groupCount].kind = layoutEntries[i].kind;
+    groupEntries[groupCount].bindingType = layoutEntries[i].bindingType;
     switch (layoutEntries[i].kind) {
       case GPUBindKindTexture:
         textureCount++;
-        groupEntries[groupCount].texture = _texture;
+        groupEntries[groupCount].textureView = (GPUTextureView *)_texture;
         break;
       case GPUBindKindSampler:
         samplerCount++;
@@ -352,7 +368,9 @@ static const uint8_t kCheckerPixels[] = {
         break;
       case GPUBindKindBuffer:
         bufferCount++;
-        groupEntries[groupCount].buffer = _fragmentUniformBuffer;
+        groupEntries[groupCount].buffer.buffer = _fragmentUniformBuffer;
+        groupEntries[groupCount].buffer.offset = 0;
+        groupEntries[groupCount].buffer.size = sizeof(FragmentUniforms);
         break;
       default:
         NSLog(@"GPU: unexpected bind kind extracted from USL bytecode");
@@ -369,7 +387,15 @@ static const uint8_t kCheckerPixels[] = {
     return NO;
   }
 
-  if (GPUCreateBindGroup(_fragmentLayout, groupEntries, groupCount, &_fragmentGroup) != 0) {
+  GPUBindGroupCreateInfo set0Info = {
+    .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
+               .structSize = sizeof(GPUBindGroupCreateInfo) },
+    .label = "textured-quad-usl-set0",
+    .layout = _fragmentLayout,
+    .entryCount = groupCount,
+    .pEntries = groupEntries
+  };
+  if (GPUCreateBindGroup(_device, &set0Info, &_fragmentGroup) != GPU_OK) {
     NSLog(@"GPU: failed to create fragment bind group");
     return NO;
   }
@@ -437,7 +463,7 @@ static const uint8_t kCheckerPixels[] = {
   GPUSetCullMode(encoder, GPUCullModeNone);
   GPUBindRenderPipeline(encoder, _pipeline);
   GPUBindVertexBuffers(encoder, 0, 1, &vertexBuffer);
-  GPUBindRenderGroup(encoder, _fragmentGroup);
+  GPUBindRenderGroup(encoder, 0, _fragmentGroup, 0, NULL);
   GPUDraw(encoder, 6, 1, 0, 0);
   GPUEndRenderPass(encoder);
   submitResult = GPUFinishFrame(_queue, cmdb, frame);

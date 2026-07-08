@@ -29,6 +29,31 @@ typedef struct GPUSampler {
   void *_priv;
 } GPUSampler;
 
+typedef enum GPUFilter {
+  GPU_FILTER_NEAREST = 0,
+  GPU_FILTER_LINEAR = 1
+} GPUFilter;
+
+typedef enum GPUMipFilter {
+  GPU_MIP_FILTER_NEAREST = 0,
+  GPU_MIP_FILTER_LINEAR = 1
+} GPUMipFilter;
+
+typedef enum GPUAddressMode {
+  GPU_ADDRESS_MODE_REPEAT = 0,
+  GPU_ADDRESS_MODE_MIRRORED_REPEAT = 1,
+  GPU_ADDRESS_MODE_CLAMP_TO_EDGE = 2
+} GPUAddressMode;
+
+typedef struct GPUSamplerDesc {
+  GPUFilter     minFilter;
+  GPUFilter     magFilter;
+  GPUMipFilter  mipFilter;
+  GPUAddressMode addressU;
+  GPUAddressMode addressV;
+  GPUAddressMode addressW;
+} GPUSamplerDesc;
+
 GPU_EXPORT
 GPUSampler *
 GPUCreateSampler(GPUDevice * __restrict device, bool staticIfSupported);
