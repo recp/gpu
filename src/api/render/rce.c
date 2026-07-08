@@ -63,7 +63,7 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
   GPURenderPipelineState state;
   GPUApi *api;
 
-  if (!pass || !pipeline || !pipeline->_state)
+  if (!pass || pass->_ended || !pipeline || !pipeline->_state)
     return;
   if (!(api = gpuActiveGPUApi()))
     return;
@@ -72,6 +72,7 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
 
   state._priv = pipeline->_state;
   api->rce.setRenderPipelineState(pass, &state);
+  pass->_hasPipeline = true;
   pass->_primitiveType = gpu_primitiveTypeFromTopology(pipeline->_primitiveTopology);
   if (api->rce.cullMode)
     api->rce.cullMode(pass, pipeline->_cullMode);
@@ -87,7 +88,7 @@ gpuSetRenderVertexBuffer(GPURenderPassEncoder *pass,
                          uint32_t              index) {
   GPUApi *api;
 
-  if (!pass || !buf)
+  if (!pass || pass->_ended || !buf)
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.vertexBuffer)
     return;
@@ -104,7 +105,7 @@ GPUBindVertexBuffers(GPURenderPassEncoder   *pass,
   GPUApi *api;
   uint32_t i;
 
-  if (!pass || !bindings)
+  if (!pass || pass->_ended || !bindings)
     return;
   if (count == 0 || firstSlot > UINT32_MAX - (count - 1u))
     return;
@@ -129,7 +130,7 @@ GPUBindIndexBuffer(GPURenderPassEncoder *pass,
                    GPUBuffer            *indexBuffer,
                    uint64_t              offset,
                    GPUIndexType          indexType) {
-  if (!pass || !indexBuffer)
+  if (!pass || pass->_ended || !indexBuffer)
     return;
   if (!gpu_validIndexType(indexType))
     return;
@@ -145,7 +146,7 @@ void
 GPUSetViewport(GPURenderPassEncoder *pass, const GPUViewport *viewport) {
   GPUApi *api;
 
-  if (!pass || !viewport)
+  if (!pass || pass->_ended || !viewport)
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.viewport)
     return;
@@ -158,7 +159,7 @@ void
 GPUSetScissor(GPURenderPassEncoder *pass, const GPUScissorRect *scissor) {
   GPUApi *api;
 
-  if (!pass || !scissor)
+  if (!pass || pass->_ended || !scissor)
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.scissor)
     return;
@@ -171,7 +172,7 @@ void
 GPUSetBlendConstant(GPURenderPassEncoder *pass, const float rgba[4]) {
   GPUApi *api;
 
-  if (!pass || !rgba)
+  if (!pass || pass->_ended || !rgba)
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.blendConstant)
     return;
@@ -184,7 +185,7 @@ void
 GPUSetStencilReference(GPURenderPassEncoder *pass, uint32_t reference) {
   GPUApi *api;
 
-  if (!pass)
+  if (!pass || pass->_ended)
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.stencilReference)
     return;
@@ -199,7 +200,7 @@ gpuSetRenderVertexTexture(GPURenderPassEncoder *pass,
                           uint32_t              index) {
   GPUApi *api;
 
-  if (!pass || !view)
+  if (!pass || pass->_ended || !view)
     return;
   if (!(api = gpuActiveGPUApi()))
     return;
@@ -216,7 +217,7 @@ gpuSetRenderVertexSampler(GPURenderPassEncoder *pass,
                           uint32_t              index) {
   GPUApi *api;
 
-  if (!pass || !sampler)
+  if (!pass || pass->_ended || !sampler)
     return;
   if (!(api = gpuActiveGPUApi()))
     return;
@@ -234,7 +235,7 @@ gpuSetRenderFragmentBuffer(GPURenderPassEncoder *pass,
                            uint32_t              index) {
   GPUApi *api;
 
-  if (!pass || !buf)
+  if (!pass || pass->_ended || !buf)
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.fragmentBuffer)
     return;
@@ -249,7 +250,7 @@ gpuSetRenderFragmentTexture(GPURenderPassEncoder *pass,
                             uint32_t              index) {
   GPUApi *api;
 
-  if (!pass || !view)
+  if (!pass || pass->_ended || !view)
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.setFragmentTexture)
     return;
@@ -264,7 +265,7 @@ gpuSetRenderFragmentSampler(GPURenderPassEncoder *pass,
                             uint32_t              index) {
   GPUApi *api;
 
-  if (!pass || !sampler)
+  if (!pass || pass->_ended || !sampler)
     return;
   if (!(api = gpuActiveGPUApi()))
     return;
@@ -283,7 +284,8 @@ GPUDraw(GPURenderPassEncoder *pass,
         uint32_t              firstInstance) {
   GPUApi *api;
 
-  if (!pass || vertexCount == 0 || instanceCount == 0)
+  if (!pass || pass->_ended || !pass->_hasPipeline ||
+      vertexCount == 0 || instanceCount == 0)
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.drawPrimitives)
     return;
@@ -306,7 +308,8 @@ GPUDrawIndexed(GPURenderPassEncoder *pass,
                uint32_t              firstInstance) {
   GPUApi *api;
 
-  if (!pass || indexCount == 0 || instanceCount == 0 || !pass->_hasIndexBuffer)
+  if (!pass || pass->_ended || !pass->_hasPipeline ||
+      indexCount == 0 || instanceCount == 0 || !pass->_hasIndexBuffer)
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.drawIndexedPrims)
     return;
@@ -323,7 +326,7 @@ GPU_EXPORT
 void
 GPUApplyDynamicState(GPURenderPassEncoder *pass,
                      const GPUDynamicStateApplyInfo *info) {
-  if (!pass || !gpu_validDynamicStateApplyInfo(info))
+  if (!pass || pass->_ended || !gpu_validDynamicStateApplyInfo(info))
     return;
 
   if (info->mask & GPU_DYNAMIC_STATE_VIEWPORT_BIT)

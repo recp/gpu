@@ -33,6 +33,8 @@ struct GPURenderCommandEncoder {
   uint64_t          _indexBufferOffset;
   GPUIndexType      _indexType;
   bool              _hasIndexBuffer;
+  bool              _hasPipeline;
+  bool              _ended;
 };
 
 typedef struct GPUApiRCE {

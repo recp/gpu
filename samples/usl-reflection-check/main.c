@@ -1032,6 +1032,7 @@ check_render_pass_validation(void) {
 static int
 check_render_encoder_validation(void) {
   GPURenderPassEncoder pass = {0};
+  GPURenderPassEncoder endedPass = {0};
   GPUBuffer *fakeBuffer = (GPUBuffer *)(uintptr_t)1u;
   GPUBufferBinding binding = {0};
   GPUDynamicStateApplyInfo dynamicState = {0};
@@ -1043,6 +1044,7 @@ check_render_encoder_validation(void) {
   GPUDrawIndexed(NULL, 1u, 1u, 0u, 0, 0u);
   GPUApplyDynamicState(NULL, &dynamicState);
   GPUApplyDynamicState(&pass, NULL);
+  GPUDraw(&pass, 1u, 1u, 0u, 0u);
 
   binding.buffer = fakeBuffer;
   GPUBindVertexBuffers(&pass, UINT32_MAX, 2u, &binding);
@@ -1067,6 +1069,19 @@ check_render_encoder_validation(void) {
   dynamicState.chain.sType = GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO;
   dynamicState.chain.structSize = (uint32_t)(sizeof(dynamicState) - 1u);
   GPUApplyDynamicState(&pass, &dynamicState);
+
+  endedPass._ended = true;
+  GPUBindIndexBuffer(&endedPass, fakeBuffer, 0u, GPUIndexTypeUInt16);
+  if (endedPass._hasIndexBuffer) {
+    fprintf(stderr, "render encoder accepted index binding after end\n");
+    return 0;
+  }
+  GPUBindVertexBuffers(&endedPass, 0u, 1u, &binding);
+  GPUSetViewport(&endedPass, &dynamicState.viewport);
+  GPUDraw(&endedPass, 1u, 1u, 0u, 0u);
+  GPUDrawIndexed(&endedPass, 1u, 1u, 0u, 0, 0u);
+  GPUApplyDynamicState(&endedPass, &dynamicState);
+  GPUEndRenderPass(&endedPass);
 
   return 1;
 }

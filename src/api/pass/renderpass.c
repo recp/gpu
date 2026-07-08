@@ -194,9 +194,10 @@ void
 GPUEndRenderPass(GPURenderPassEncoder *pass) {
   GPUApi *api;
 
-  if (!pass || !(api = gpuActiveGPUApi()) || !api->rce.endEncoding)
+  if (!pass || pass->_ended || !(api = gpuActiveGPUApi()) || !api->rce.endEncoding)
     return;
 
+  pass->_ended = true;
   api->rce.endEncoding(pass);
 }
 
