@@ -20,13 +20,6 @@
 
 #include "backends.h"
 
-/* LEGACY / CONVENIENCE RUNTIME MODEL:
- * This file owns the older process-global active backend switch.
- * The canonical core direction is instance/device-scoped backend ownership.
- * Do not build new core v1 work on this path. A simplified convenience layer
- * may still exist in final form above the canonical core.
- */
-
 typedef struct GPUApiList {
   struct GPUApiList *next;
   GPUApi            *api;
