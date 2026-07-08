@@ -1,0 +1,35 @@
+pub struct GeneratedVertex {
+  position: float4
+  color: float4
+}
+
+pub struct VSIn {
+  position: float4 #attribute(0)
+  color: float4 #attribute(1)
+}
+
+pub struct VSOut {
+  position: float4 #position
+  color: float4
+}
+
+kern(1, 1, 1) fill_vertices(inout vertices: GeneratedVertex[] #buffer(0),
+                            gid: uint3 #global_id) {
+  vertices[0].position = float4(-0.6, -0.6, 0.0, 1.0)
+  vertices[0].color = float4(1.0, 0.2, 0.1, 1.0)
+  vertices[1].position = float4(0.6, -0.6, 0.0, 1.0)
+  vertices[1].color = float4(0.1, 1.0, 0.3, 1.0)
+  vertices[2].position = float4(0.0, 0.6, 0.0, 1.0)
+  vertices[2].color = float4(0.2, 0.4, 1.0, 1.0)
+}
+
+vert tri_vs(v: VSIn #stage_in) -> VSOut {
+  var o: VSOut
+  o.position = v.position
+  o.color = v.color
+  return o
+}
+
+frag tri_fs(i: VSOut #stage_in) -> float4 {
+  return i.color
+}

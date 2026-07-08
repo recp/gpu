@@ -237,6 +237,7 @@ gpu_appendLayoutEntry(GPUBindGroupLayoutEntry **entries,
                       uint32_t *count,
                       GPUBindStage stage,
                       GPUBindKind kind,
+                      GPUBindingType bindingType,
                       uint32_t binding) {
   GPUBindGroupLayoutEntry *grown;
   size_t nextCount;
@@ -268,13 +269,40 @@ gpu_appendLayoutEntry(GPUBindGroupLayoutEntry **entries,
     stage == GPUBindStageVertex ? GPU_SHADER_STAGE_VERTEX_BIT :
     stage == GPUBindStageFragment ? GPU_SHADER_STAGE_FRAGMENT_BIT :
     GPU_SHADER_STAGE_COMPUTE_BIT;
-  grown[*count].bindingType =
-    kind == GPUBindKindTexture ? GPU_BINDING_SAMPLED_TEXTURE :
-    kind == GPUBindKindSampler ? GPU_BINDING_SAMPLER :
-    GPU_BINDING_UNIFORM_BUFFER;
+  grown[*count].bindingType = bindingType;
   grown[*count].arrayCount = 1;
   (*count)++;
   return 1;
+}
+
+static int
+gpu_bindingTypeFromUSLRuntimeResource(const USLRuntimeResource *resource,
+                                      GPUBindingType *outType) {
+  if (!resource || !outType) {
+    return 0;
+  }
+
+  switch (resource->kind) {
+    case USL_RUNTIME_RESOURCE_BUFFER:
+      *outType = resource->access != USL_RUNTIME_IMAGE_ACCESS_READ ||
+                 resource->type.kind == USL_RUNTIME_TYPE_ARRAY ?
+        GPU_BINDING_STORAGE_BUFFER :
+        GPU_BINDING_UNIFORM_BUFFER;
+      return 1;
+    case USL_RUNTIME_RESOURCE_TEXTURE:
+      *outType = GPU_BINDING_SAMPLED_TEXTURE;
+      return 1;
+    case USL_RUNTIME_RESOURCE_IMAGE:
+      *outType = resource->access == USL_RUNTIME_IMAGE_ACCESS_READ ?
+        GPU_BINDING_SAMPLED_TEXTURE :
+        GPU_BINDING_STORAGE_TEXTURE;
+      return 1;
+    case USL_RUNTIME_RESOURCE_SAMPLER:
+      *outType = GPU_BINDING_SAMPLER;
+      return 1;
+    default:
+      return 0;
+  }
 }
 
 static int
@@ -1040,13 +1068,23 @@ GPUBindGroupLayout **outLayout) {
     return -5;
   }
 
-  for (uint32_t i = 0; i < bindingCount; i++) {
+  for (uint32_t i = 0; i < runtimeInfo->resource_count; i++) {
+    const USLRuntimeResource *resource;
+    GPUBindingType bindingType;
+    GPUUSLResourceKind resourceKind;
     GPUBindKind bindKind;
     GPUBindStage bindStage;
 
-    bindStage = (GPUBindStage)bindings[i].stage;
-    if (!gpu_bindStageIsValid(bindStage) ||
-        !gpu_usl_bindKindFromResourceKind(bindings[i].kind, &bindKind)) {
+    resource = &runtimeInfo->resources[i];
+    if (!resource->used || strcmp(resource->entry, entryPointName) != 0) {
+      continue;
+    }
+
+    if (!gpu_usl_stageFromRuntimeStage(resource->stage, &bindStage) ||
+        !gpu_usl_resourceKindFromRuntimeKind(resource->kind, &resourceKind) ||
+        !gpu_usl_bindKindFromResourceKind(resourceKind, &bindKind) ||
+        !gpu_bindingTypeFromUSLRuntimeResource(resource, &bindingType) ||
+        resource->slot < 0) {
       gpu_usl_freeCompileOutput(compileOutput);
       free(bindings);
       free(entries);
@@ -1057,7 +1095,8 @@ GPUBindGroupLayout **outLayout) {
                                &entryCount,
                                bindStage,
                                bindKind,
-                               bindings[i].binding)) {
+                               bindingType,
+                               (uint32_t)resource->slot)) {
       gpu_usl_freeCompileOutput(compileOutput);
       free(bindings);
       free(entries);

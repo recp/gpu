@@ -43,6 +43,12 @@ run_step "compute-usl sidecar" \
 run_step "compute-usl embedded no-sidecar" \
   run_sample compute-usl env GPU_DERIVED_DATA="$DERIVED_DATA" GPU_USL_EMBED_METAL=1 GPU_USL_NO_SIDECAR=1 ./build.sh
 
+run_step "compute-buffer-usl sidecar" \
+  run_sample compute-buffer-usl env GPU_DERIVED_DATA="$DERIVED_DATA" ./build.sh
+
+run_step "compute-buffer-usl embedded no-sidecar" \
+  run_sample compute-buffer-usl env GPU_DERIVED_DATA="$DERIVED_DATA" GPU_USL_EMBED_METAL=1 GPU_USL_NO_SIDECAR=1 ./build.sh
+
 run_step "usl-reflection-check generated" \
   run_sample usl-reflection-check env GPU_DERIVED_DATA="$DERIVED_DATA" ./build.sh
 

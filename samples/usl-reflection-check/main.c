@@ -113,6 +113,29 @@ layout_has_entry(const GPUBindGroupLayoutEntry *entries,
 }
 
 static int
+layout_has_typed_entry(const GPUBindGroupLayoutEntry *entries,
+                       uint32_t count,
+                       GPUBindStage stage,
+                       GPUBindKind kind,
+                       GPUBindingType bindingType,
+                       uint32_t binding) {
+  if (!entries && count > 0) {
+    return 0;
+  }
+
+  for (uint32_t i = 0; i < count; i++) {
+    if (entries[i].stage == stage &&
+        entries[i].kind == kind &&
+        entries[i].bindingType == bindingType &&
+        entries[i].binding == binding) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+static int
 shader_reflection_has_resource(const GPUShaderReflection *reflection,
                                GPUBindingType bindingType,
                                GPUShaderStageFlags visibility,
@@ -416,6 +439,73 @@ check_compute_entry(const void *bytecode, uint64_t bytecodeSize) {
 }
 
 static int
+check_storage_compute_entry(const void *bytecode, uint64_t bytecodeSize) {
+  const GPUBindGroupLayoutEntry *layoutEntries;
+  GPUBindGroupLayoutUSLInfo layoutInfo;
+  GPUUSLEntryReflection *reflection;
+  GPUBindGroupLayout *layout;
+  uint32_t layoutCount;
+  int ok;
+
+  reflection = NULL;
+  if (GPUReflectUSLBytecodeEntry(bytecode,
+                                 bytecodeSize,
+                                 "reflect_storage_cs",
+                                 &reflection) != 0 ||
+      !reflection) {
+    fprintf(stderr, "failed to reflect storage compute entry\n");
+    return 0;
+  }
+
+  ok = reflection->stage == GPUUSLStageCompute &&
+       reflection->workgroupSize[0] == 1u &&
+       reflection->workgroupSize[1] == 1u &&
+       reflection->workgroupSize[2] == 1u &&
+       reflection->resourceBindingCount == 1u &&
+       reflection_has_binding(reflection,
+                              GPUUSLStageCompute,
+                              GPUUSLResourceKindBuffer,
+                              0u) &&
+       reflection->staticSamplerCount == 0u;
+  GPUFreeUSLEntryReflection(reflection);
+  if (!ok) {
+    fprintf(stderr, "unexpected storage compute reflection data\n");
+    return 0;
+  }
+
+  layout = NULL;
+  if (GPUCreateBindGroupLayoutFromUSLBytecode(bytecode,
+                                              bytecodeSize,
+                                              "reflect_storage_cs",
+                                              &layout) != 0 ||
+      !layout) {
+    fprintf(stderr, "failed to create storage compute bind layout\n");
+    return 0;
+  }
+
+  layoutEntries = GPUGetBindGroupLayoutEntries(layout, &layoutCount);
+  ok = layoutCount == 1u &&
+       GPUGetBindGroupLayoutUSLInfo(layout, &layoutInfo) == 0 &&
+       layoutInfo.abiVersion == GPU_BIND_GROUP_LAYOUT_USL_INFO_VERSION &&
+       layoutInfo.stage == GPUBindStageCompute &&
+       strcmp(layoutInfo.entryPointName, "reflect_storage_cs") == 0 &&
+       layoutInfo.resourceBindingCount == 1u &&
+       layout_has_typed_entry(layoutEntries,
+                              layoutCount,
+                              GPUBindStageCompute,
+                              GPUBindKindBuffer,
+                              GPU_BINDING_STORAGE_BUFFER,
+                              0u);
+  GPUDestroyBindGroupLayout(layout);
+  if (!ok) {
+    fprintf(stderr, "unexpected storage compute bind layout\n");
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
 check_selected_shader_library(const void *bytecode,
                               uint64_t bytecodeSize,
                               uint32_t expectedSourceKind) {
@@ -633,17 +723,21 @@ check_selected_shader_library(const void *bytecode,
 int
 main(int argc, char **argv) {
   uint32_t expectedSourceKind;
+  uint64_t storageBytecodeSize;
   uint64_t bytecodeSize;
+  void *storageBytecode;
   void *bytecode;
   int ok;
 
-  if (argc != 2 && argc != 3) {
-    fprintf(stderr, "usage: %s <reflection.us> [generated|embedded]\n", argv[0]);
+  if (argc < 2 || argc > 4) {
+    fprintf(stderr,
+            "usage: %s <reflection.us> [generated|embedded] [storage.us]\n",
+            argv[0]);
     return 2;
   }
 
   expectedSourceKind = GPUShaderLibraryUSLSourceGenerated;
-  if (argc == 3) {
+  if (argc >= 3) {
     if (strcmp(argv[2], "generated") == 0) {
       expectedSourceKind = GPUShaderLibraryUSLSourceGenerated;
     } else if (strcmp(argv[2], "embedded") == 0) {
@@ -660,12 +754,26 @@ main(int argc, char **argv) {
     return 2;
   }
 
+  storageBytecode = NULL;
+  storageBytecodeSize = 0u;
+  if (argc == 4) {
+    storageBytecode = read_file(argv[3], &storageBytecodeSize);
+    if (!storageBytecode) {
+      fprintf(stderr, "failed to read storage bytecode: %s\n", argv[3]);
+      free(bytecode);
+      return 2;
+    }
+  }
+
   ok = check_fragment_entry(bytecode, bytecodeSize) &&
        check_vertex_entry(bytecode, bytecodeSize) &&
        check_compute_entry(bytecode, bytecodeSize) &&
+       (!storageBytecode ||
+        check_storage_compute_entry(storageBytecode, storageBytecodeSize)) &&
        check_selected_shader_library(bytecode,
                                      bytecodeSize,
                                      expectedSourceKind);
+  free(storageBytecode);
   free(bytecode);
 
   if (!ok) {

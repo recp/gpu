@@ -1,0 +1,10 @@
+pub struct GeneratedVertex {
+  position: float4
+  color: float4
+}
+
+kern(1, 1, 1) reflect_storage_cs(inout vertices: GeneratedVertex[] #buffer(0),
+                                 gid: uint3 #global_id) {
+  vertices[gid.x].position = float4(0.0, 0.0, 0.0, 1.0)
+  vertices[gid.x].color = float4(1.0, 1.0, 1.0, 1.0)
+}

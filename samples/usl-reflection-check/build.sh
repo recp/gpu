@@ -24,7 +24,11 @@ if [[ ! -x "$USTEST" ]]; then
   exit 1
 fi
 
-rm -f "$SAMPLE_DIR/reflection.us" "$SAMPLE_DIR/reflection.usl.metal"
+rm -f \
+  "$SAMPLE_DIR/reflection.us" \
+  "$SAMPLE_DIR/reflection.usl.metal" \
+  "$SAMPLE_DIR/reflection_storage.us" \
+  "$SAMPLE_DIR/reflection_storage.usl.metal"
 
 ustest_cmd=("$USTEST" --shader "$SAMPLE_DIR/reflection.usl" --no-logs --no-sidecar)
 expected_source_kind="generated"
@@ -40,7 +44,23 @@ if [[ ! -f "$SAMPLE_DIR/reflection.us" ]]; then
   exit 1
 fi
 
+storage_cmd=("$USTEST" --shader "$SAMPLE_DIR/reflection_storage.usl" --no-logs --no-sidecar)
+if [[ "$EMBED_METAL" == "1" ]]; then
+  USL_EMBED_METAL_BLOB=1 "${storage_cmd[@]}" >/tmp/gpu-usl-reflection-storage-ustest.log 2>&1
+else
+  "${storage_cmd[@]}" >/tmp/gpu-usl-reflection-storage-ustest.log 2>&1
+fi
+
+if [[ ! -f "$SAMPLE_DIR/reflection_storage.us" ]]; then
+  echo "USL bytecode artifact was not generated: $SAMPLE_DIR/reflection_storage.us" >&2
+  exit 1
+fi
+
 if [[ -f "$SAMPLE_DIR/reflection.usl.metal" ]]; then
+  echo "USL Metal sidecar should not be generated in --no-sidecar mode" >&2
+  exit 1
+fi
+if [[ -f "$SAMPLE_DIR/reflection_storage.usl.metal" ]]; then
   echo "USL Metal sidecar should not be generated in --no-sidecar mode" >&2
   exit 1
 fi
@@ -69,4 +89,4 @@ xcrun --sdk macosx clang \
   -Wl,-rpath,"$US_DS_LIB_DIR" \
   -o "$OUT_BIN"
 
-"$OUT_BIN" "$SAMPLE_DIR/reflection.us" "$expected_source_kind"
+"$OUT_BIN" "$SAMPLE_DIR/reflection.us" "$expected_source_kind" "$SAMPLE_DIR/reflection_storage.us"
