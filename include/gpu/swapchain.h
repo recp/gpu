@@ -79,6 +79,13 @@ GPUCreateSwapchain(GPUDevice                        * __restrict device,
                    GPUSwapchain                    ** __restrict outSwapchain);
 
 GPU_EXPORT
+GPUSwapchain*
+GPUCreateSwapchainDefault(GPUDevice          * __restrict device,
+                          struct GPUSurface  * __restrict surface,
+                          uint32_t                        width,
+                          uint32_t                        height);
+
+GPU_EXPORT
 GPUSwapChain*
 GPUCreateSwapChainForView(GPUDevice              * __restrict device,
                           struct GPUCommandQueue * __restrict cmdQue,

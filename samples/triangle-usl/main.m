@@ -78,7 +78,6 @@ static const TriangleVertex kTriangleVertices[] = {
   NSString *sampleDir;
   NSData   *bytecodeData;
   GPUShaderLibraryUSLInfo uslInfo;
-  GPUSwapchainCreateInfo swapchainInfo = {0};
 
   _physicalDevice = GPUGetAutoSelectedPhysicalDevice(NULL);
   if (!_physicalDevice) {
@@ -108,18 +107,10 @@ static const TriangleVertex kTriangleVertices[] = {
     return NO;
   }
 
-  swapchainInfo.chain.sType = GPU_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO;
-  swapchainInfo.chain.structSize = sizeof(swapchainInfo);
-  swapchainInfo.label = "triangle-usl-swapchain";
-  swapchainInfo.surface = _surface;
-  swapchainInfo.width = (uint32_t)_view.bounds.size.width;
-  swapchainInfo.height = (uint32_t)_view.bounds.size.height;
-  swapchainInfo.format = GPU_FORMAT_BGRA8_UNORM;
-  swapchainInfo.imageCount = 3;
-  swapchainInfo.presentMode = GPU_PRESENT_MODE_FIFO;
-  if (GPUCreateSwapchain(_device, &swapchainInfo, &_swapchain) != GPU_OK) {
-    _swapchain = NULL;
-  }
+  _swapchain = GPUCreateSwapchainDefault(_device,
+                                         _surface,
+                                         (uint32_t)_view.bounds.size.width,
+                                         (uint32_t)_view.bounds.size.height);
   if (!_swapchain) {
     NSLog(@"GPU: failed to create swapchain");
     return NO;

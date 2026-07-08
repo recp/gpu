@@ -65,6 +65,30 @@ GPUCreateSwapchain(GPUDevice                    * __restrict device,
 }
 
 GPU_EXPORT
+GPUSwapchain*
+GPUCreateSwapchainDefault(GPUDevice         * __restrict device,
+                          struct GPUSurface * __restrict surface,
+                          uint32_t                       width,
+                          uint32_t                       height) {
+  GPUSwapchainCreateInfo info = {0};
+  GPUSwapchain          *swapchain;
+
+  info.chain.sType      = GPU_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.surface          = surface;
+  info.width            = width;
+  info.height           = height;
+  info.format           = GPU_FORMAT_BGRA8_UNORM;
+  info.imageCount       = 3;
+  info.presentMode      = GPU_PRESENT_MODE_FIFO;
+
+  if (GPUCreateSwapchain(device, &info, &swapchain) != GPU_OK)
+    return NULL;
+
+  return swapchain;
+}
+
+GPU_EXPORT
 GPUSwapChain*
 GPUCreateSwapChainForView(GPUDevice              * __restrict device,
                           struct GPUCommandQueue * __restrict cmdQue,
