@@ -15,6 +15,7 @@
  */
 
 #include "../../common.h"
+#include "../render/rce_internal.h"
 #include "../usl_target.h"
 
 #define GPU_USL_BYTECODE_VERSION 2u
@@ -1761,35 +1762,35 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
 
     if ((layoutEntry->visibility & GPU_SHADER_STAGE_VERTEX_BIT) != 0) {
       if (layoutEntry->kind == GPUBindKindBuffer && binding->buffer) {
-        GPUSetVertexBuffer(pass,
-                           binding->buffer,
-                           binding->offset,
-                           layoutEntry->binding);
+        gpuSetRenderVertexBuffer(pass,
+                                 binding->buffer,
+                                 binding->offset,
+                                 layoutEntry->binding);
       } else if (layoutEntry->kind == GPUBindKindTexture && binding->textureView) {
-        GPUSetVertexTexture(pass,
-                            binding->textureView,
-                            layoutEntry->binding);
+        gpuSetRenderVertexTexture(pass,
+                                  binding->textureView,
+                                  layoutEntry->binding);
       } else if (layoutEntry->kind == GPUBindKindSampler && binding->sampler) {
-        GPUSetVertexSampler(pass,
-                            binding->sampler,
-                            layoutEntry->binding);
+        gpuSetRenderVertexSampler(pass,
+                                  binding->sampler,
+                                  layoutEntry->binding);
       }
     }
 
     if ((layoutEntry->visibility & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0) {
       if (layoutEntry->kind == GPUBindKindBuffer && binding->buffer) {
-        GPUSetFragmentBuffer(pass,
-                             binding->buffer,
-                             binding->offset,
-                             layoutEntry->binding);
+        gpuSetRenderFragmentBuffer(pass,
+                                   binding->buffer,
+                                   binding->offset,
+                                   layoutEntry->binding);
       } else if (layoutEntry->kind == GPUBindKindTexture && binding->textureView) {
-        GPUSetFragmentTexture(pass,
-                              binding->textureView,
-                              layoutEntry->binding);
+        gpuSetRenderFragmentTexture(pass,
+                                    binding->textureView,
+                                    layoutEntry->binding);
       } else if (layoutEntry->kind == GPUBindKindSampler && binding->sampler) {
-        GPUSetFragmentSampler(pass,
-                              binding->sampler,
-                              layoutEntry->binding);
+        gpuSetRenderFragmentSampler(pass,
+                                    binding->sampler,
+                                    layoutEntry->binding);
       }
     }
   }

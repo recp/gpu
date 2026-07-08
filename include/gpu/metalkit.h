@@ -52,9 +52,15 @@ GPUSetVertexBuffersFromMTKMeshBuffers(GPURenderCommandEncoder  *rce,
                                       NSArray<MTKMeshBuffer *> *buffers) {
   MTKMeshBuffer *buffer;
   for (uint32_t i = 0; i < buffers.count; i++) {
+    GPUBufferBinding binding;
+
     buffer = buffers[i];
-    if ((NSNull*)buffer != [NSNull null])
-      GPUSetVertexBuffer(rce, (GPUBuffer *)buffer.buffer, buffer.offset, i);
+    if ((NSNull*)buffer == [NSNull null])
+      continue;
+
+    binding.buffer = (GPUBuffer *)buffer.buffer;
+    binding.offset = buffer.offset;
+    GPUBindVertexBuffers(rce, i, 1, &binding);
   }
 }
 
@@ -63,15 +69,6 @@ void
 GPULoadAndDrawMTKMesh(GPURenderCommandEncoder *rce, MTKMesh *mesh) {
   GPUSetVertexBuffersFromMTKMeshBuffers(rce, mesh.vertexBuffers);
   GPUDrawIndexedMTKMesh(rce, mesh);
-  
-  
-  //  GPUSetVertexBuffersFromMTKMeshBuffers()
-  //  GPU_SetVertexBuffersFromMTKMeshBuffers()
-  //  gpuSetVertexBuffersFromMTKMeshBuffers()
-  //  gpu_setVertexBuffersFromMTKMeshBuffers()
-  //  gpuSetVertexBuffersFromMTKMeshBuffers()
-  //  gpu_set_vertexbuffers_from_mtkmeshbuffers()
-  //  gpu_mtk_meshbuffer_set_vertexbuffers()
 }
 #ifdef __cplusplus
 }

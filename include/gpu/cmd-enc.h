@@ -83,13 +83,6 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline);
 
 GPU_EXPORT
 void
-GPUSetVertexBuffer(GPURenderCommandEncoder *rce,
-                   GPUBuffer               *buf,
-                   size_t                   off,
-                   uint32_t                 index);
-
-GPU_EXPORT
-void
 GPUBindVertexBuffers(GPURenderPassEncoder     *pass,
                      uint32_t                  firstSlot,
                      uint32_t                  count,
@@ -117,37 +110,6 @@ GPUSetBlendConstant(GPURenderPassEncoder *pass, const float rgba[4]);
 GPU_EXPORT
 void
 GPUSetStencilReference(GPURenderPassEncoder *pass, uint32_t reference);
-
-GPU_EXPORT
-void
-GPUSetVertexTexture(GPURenderCommandEncoder *rce,
-                    GPUTextureView          *view,
-                    uint32_t                 index);
-
-GPU_EXPORT
-void
-GPUSetVertexSampler(GPURenderCommandEncoder *rce,
-                    GPUSampler              *sampler,
-                    uint32_t                 index);
-
-GPU_EXPORT
-void
-GPUSetFragmentBuffer(GPURenderCommandEncoder *rce,
-                     GPUBuffer               *buf,
-                     size_t                   off,
-                     uint32_t                 index);
-
-GPU_EXPORT
-void
-GPUSetFragmentTexture(GPURenderCommandEncoder *rce,
-                      GPUTextureView           *view,
-                      uint32_t                 index);
-
-GPU_EXPORT
-void
-GPUSetFragmentSampler(GPURenderCommandEncoder *rce,
-                      GPUSampler              *sampler,
-                      uint32_t                 index);
 
 GPU_EXPORT
 void

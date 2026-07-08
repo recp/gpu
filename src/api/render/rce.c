@@ -15,6 +15,7 @@
  */
 
 #include "../../common.h"
+#include "rce_internal.h"
 
 static GPUPrimitiveType
 gpu_primitiveTypeFromTopology(GPUPrimitiveTopology topology) {
@@ -55,18 +56,20 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
     api->rce.frontFace(pass, pipeline->_frontFace);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
-GPUSetVertexBuffer(GPURenderCommandEncoder *rce,
-                GPUBuffer               *buf,
-                size_t                   off,
-                uint32_t                 index) {
+gpuSetRenderVertexBuffer(GPURenderPassEncoder *pass,
+                         GPUBuffer            *buf,
+                         size_t                off,
+                         uint32_t              index) {
   GPUApi *api;
 
-  if (!(api = gpuActiveGPUApi()))
+  if (!pass || !buf)
+    return;
+  if (!(api = gpuActiveGPUApi()) || !api->rce.vertexBuffer)
     return;
   
-  api->rce.vertexBuffer(rce, buf, off, index);
+  api->rce.vertexBuffer(pass, buf, off, index);
 }
 
 GPU_EXPORT
@@ -162,75 +165,85 @@ GPUSetStencilReference(GPURenderPassEncoder *pass, uint32_t reference) {
   api->rce.stencilReference(pass, reference);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
-GPUSetVertexTexture(GPURenderCommandEncoder *rce,
-                    GPUTextureView          *view,
-                    uint32_t                 index) {
+gpuSetRenderVertexTexture(GPURenderPassEncoder *pass,
+                          GPUTextureView       *view,
+                          uint32_t              index) {
   GPUApi *api;
 
+  if (!pass || !view)
+    return;
   if (!(api = gpuActiveGPUApi()))
     return;
 
   if (api->rce.setVertexTexture) {
-    api->rce.setVertexTexture(rce, view, index);
+    api->rce.setVertexTexture(pass, view, index);
   }
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
-GPUSetVertexSampler(GPURenderCommandEncoder *rce,
-                    GPUSampler              *sampler,
-                    uint32_t                 index) {
+gpuSetRenderVertexSampler(GPURenderPassEncoder *pass,
+                          GPUSampler           *sampler,
+                          uint32_t              index) {
   GPUApi *api;
 
+  if (!pass || !sampler)
+    return;
   if (!(api = gpuActiveGPUApi()))
     return;
 
   if (api->rce.setVertexSampler) {
-    api->rce.setVertexSampler(rce, sampler, index);
+    api->rce.setVertexSampler(pass, sampler, index);
   }
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
-GPUSetFragmentBuffer(GPURenderCommandEncoder *rce,
-                  GPUBuffer               *buf,
-                  size_t                   off,
-                  uint32_t                 index) {
+gpuSetRenderFragmentBuffer(GPURenderPassEncoder *pass,
+                           GPUBuffer            *buf,
+                           size_t                off,
+                           uint32_t              index) {
   GPUApi *api;
 
-  if (!(api = gpuActiveGPUApi()))
+  if (!pass || !buf)
+    return;
+  if (!(api = gpuActiveGPUApi()) || !api->rce.fragmentBuffer)
     return;
   
-  api->rce.fragmentBuffer(rce, buf, off, index);
+  api->rce.fragmentBuffer(pass, buf, off, index);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
-GPUSetFragmentTexture(GPURenderCommandEncoder *rce,
-                      GPUTextureView           *view,
-                      uint32_t                 index) {
+gpuSetRenderFragmentTexture(GPURenderPassEncoder *pass,
+                            GPUTextureView       *view,
+                            uint32_t              index) {
   GPUApi *api;
 
-  if (!(api = gpuActiveGPUApi()))
+  if (!pass || !view)
+    return;
+  if (!(api = gpuActiveGPUApi()) || !api->rce.setFragmentTexture)
     return;
   
-  api->rce.setFragmentTexture(rce, view, index);
+  api->rce.setFragmentTexture(pass, view, index);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
-GPUSetFragmentSampler(GPURenderCommandEncoder *rce,
-                      GPUSampler              *sampler,
-                      uint32_t                 index) {
+gpuSetRenderFragmentSampler(GPURenderPassEncoder *pass,
+                            GPUSampler           *sampler,
+                            uint32_t              index) {
   GPUApi *api;
 
+  if (!pass || !sampler)
+    return;
   if (!(api = gpuActiveGPUApi()))
     return;
 
   if (api->rce.setFragmentSampler) {
-    api->rce.setFragmentSampler(rce, sampler, index);
+    api->rce.setFragmentSampler(pass, sampler, index);
   }
 }
 
