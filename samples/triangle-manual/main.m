@@ -384,6 +384,7 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUBindRenderGroup(encoder, 0, _fragmentGroup, 0, NULL);
   GPUDraw(encoder, 3, 1, 0, 0);
   GPUEndRenderPass(encoder);
+  encoder = NULL;
   submitResult = GPUFinishFrame(_queue, cmdb, frame);
   frame = NULL;
   if (submitResult != GPU_OK) {
@@ -397,6 +398,9 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
 
 cleanup:
+  if (encoder) {
+    GPUEndRenderPass(encoder);
+  }
   GPUEndFrame(frame);
 }
 

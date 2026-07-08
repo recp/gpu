@@ -241,6 +241,7 @@ static const TriangleVertex kTriangleVertices[] = {
   GPUBindRenderGroup(encoder, 0, _fragmentGroup, 0, NULL);
   GPUDraw(encoder, 3, 1, 0, 0);
   GPUEndRenderPass(encoder);
+  encoder = NULL;
   submitResult = GPUFinishFrame(_queue, cmdb, frame);
   frame = NULL;
   if (submitResult != GPU_OK) {
@@ -248,6 +249,9 @@ static const TriangleVertex kTriangleVertices[] = {
   }
 
 cleanup:
+  if (encoder) {
+    GPUEndRenderPass(encoder);
+  }
   GPUEndFrame(frame);
 }
 
