@@ -1,9 +1,50 @@
 #include "test.h"
 
+static int
+run_queue(void *ctx) {
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_queue(testCtx->physicalDevice, testCtx->device);
+}
+
+static int
+run_sampler(void *ctx) {
+  return gpu_test_sampler(((GPUApiTestContext *)ctx)->device);
+}
+
+static int
+run_bindgroup(void *ctx) {
+  return gpu_test_bindgroup(((GPUApiTestContext *)ctx)->device);
+}
+
+static int
+run_resources(void *ctx) {
+  return gpu_test_resources(((GPUApiTestContext *)ctx)->device);
+}
+
+static int
+run_copy(void *ctx) {
+  return gpu_test_copy(((GPUApiTestContext *)ctx)->device);
+}
+
+static int
+run_render(void *ctx) {
+  (void)ctx;
+  return gpu_test_render();
+}
+
+static int
+run_compute(void *ctx) {
+  (void)ctx;
+  return gpu_test_compute();
+}
+
 int
 main(void) {
   GPUPhysicalDevice *physicalDevice;
   GPUDevice *device;
+  GPUApiTestContext ctx;
+  GPUApiTest tests[7];
   int ok;
 
   physicalDevice = GPUGetAutoSelectedPhysicalDevice(NULL);
@@ -18,13 +59,18 @@ main(void) {
     return 1;
   }
 
-  ok = gpu_test_queue(physicalDevice, device) &&
-       gpu_test_sampler(device) &&
-       gpu_test_bindgroup(device) &&
-       gpu_test_resources(device) &&
-       gpu_test_copy(device) &&
-       gpu_test_render() &&
-       gpu_test_compute();
+  ctx.physicalDevice = physicalDevice;
+  ctx.device = device;
+
+  tests[0] = (GPUApiTest){ "queue", run_queue, &ctx };
+  tests[1] = (GPUApiTest){ "sampler", run_sampler, &ctx };
+  tests[2] = (GPUApiTest){ "bindgroup", run_bindgroup, &ctx };
+  tests[3] = (GPUApiTest){ "resources", run_resources, &ctx };
+  tests[4] = (GPUApiTest){ "copy", run_copy, &ctx };
+  tests[5] = (GPUApiTest){ "render", run_render, &ctx };
+  tests[6] = (GPUApiTest){ "compute", run_compute, &ctx };
+
+  ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 
   GPUDestroyDevice(device);
   if (!ok) {
