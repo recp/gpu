@@ -701,6 +701,9 @@ check_storage_compute_entry(const void *bytecode, uint64_t bytecodeSize) {
 }
 
 static int
+check_queue_submit_fence(GPUDevice *device);
+
+static int
 check_selected_shader_library(const void *bytecode,
                               uint64_t bytecodeSize,
                               uint32_t expectedSourceKind) {
@@ -920,7 +923,64 @@ check_selected_shader_library(const void *bytecode,
     }
   }
 
-  return 1;
+  return check_queue_submit_fence(device);
+}
+
+static int
+check_queue_submit_fence(GPUDevice *device) {
+  GPUCommandQueue *queue;
+  GPUCommandBuffer *cmdb;
+  GPUCommandBuffer *buffers[1];
+  GPUFence *fence;
+  GPUFenceCreateInfo fenceInfo = {0};
+  GPUQueueSubmitInfo submitInfo = {0};
+  int ok;
+
+  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0);
+  if (!queue) {
+    fprintf(stderr, "failed to get graphics queue for fence test\n");
+    return 0;
+  }
+
+  fenceInfo.chain.sType = GPU_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  fenceInfo.chain.structSize = sizeof(fenceInfo);
+  fenceInfo.label = "reflection-submit-fence";
+  fenceInfo.signaled = true;
+  fence = NULL;
+  if (GPUCreateFence(device, &fenceInfo, &fence) != GPU_OK || !fence) {
+    fprintf(stderr, "failed to create fence\n");
+    return 0;
+  }
+
+  ok = GPUIsFenceSignaled(fence);
+  GPUResetFence(fence);
+  ok = ok && !GPUIsFenceSignaled(fence);
+
+  cmdb = NULL;
+  if (ok &&
+      (GPUAcquireCommandBuffer(queue, "reflection-fence-submit", &cmdb) != GPU_OK ||
+       !cmdb)) {
+    fprintf(stderr, "failed to acquire command buffer for fence test\n");
+    ok = 0;
+  }
+
+  if (ok) {
+    buffers[0] = cmdb;
+    submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+    submitInfo.chain.structSize = sizeof(submitInfo);
+    submitInfo.commandBufferCount = 1u;
+    submitInfo.ppCommandBuffers = buffers;
+    submitInfo.fence = fence;
+    if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
+        GPUWaitFence(fence, UINT64_MAX) != GPU_OK ||
+        !GPUIsFenceSignaled(fence)) {
+      fprintf(stderr, "queue submit fence did not signal\n");
+      ok = 0;
+    }
+  }
+
+  GPUDestroyFence(fence);
+  return ok;
 }
 
 int

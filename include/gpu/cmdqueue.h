@@ -23,7 +23,7 @@ extern "C" {
 #include "common.h"
 
 struct GPUDevice;
-struct GPUFence;
+typedef struct GPUFence GPUFence;
 
 typedef enum GPUResult {
   GPU_OK = 0,
@@ -78,8 +78,14 @@ typedef struct GPUQueueSubmitInfo {
   GPUChainedStruct chain;
   uint32_t commandBufferCount;
   GPUCommandBuffer * const *ppCommandBuffers;
-  struct GPUFence *fence; /* optional; signaled after submitted buffers complete */
+  GPUFence *fence; /* optional; signaled after submitted buffers complete */
 } GPUQueueSubmitInfo;
+
+typedef struct GPUFenceCreateInfo {
+  GPUChainedStruct chain;
+  const char      *label;
+  bool             signaled;
+} GPUFenceCreateInfo;
 
 /*!
  * @brief get command queue created created with logical device creation.
@@ -121,6 +127,28 @@ GPU_EXPORT
 GPUResult
 GPUQueueSubmit(GPUCommandQueue           * __restrict cmdq,
                const GPUQueueSubmitInfo  * __restrict info);
+
+GPU_EXPORT
+GPUResult
+GPUCreateFence(struct GPUDevice          * __restrict device,
+               const GPUFenceCreateInfo  * __restrict info,
+               GPUFence                 ** __restrict outFence);
+
+GPU_EXPORT
+void
+GPUDestroyFence(GPUFence * __restrict fence);
+
+GPU_EXPORT
+GPUResult
+GPUWaitFence(GPUFence * __restrict fence, uint64_t timeoutNs);
+
+GPU_EXPORT
+bool
+GPUIsFenceSignaled(GPUFence * __restrict fence);
+
+GPU_EXPORT
+void
+GPUResetFence(GPUFence * __restrict fence);
 
 #ifdef __cplusplus
 }

@@ -16,6 +16,105 @@
 
 #include "../../common.h"
 
+#if defined(_WIN32) || defined(WIN32)
+#else
+#  include <pthread.h>
+#  include <time.h>
+#endif
+
+struct GPUFence {
+#if defined(_WIN32) || defined(WIN32)
+  CRITICAL_SECTION lock;
+  CONDITION_VARIABLE cond;
+#else
+  pthread_mutex_t mutex;
+  pthread_cond_t  cond;
+#endif
+  bool signaled;
+};
+
+typedef struct GPUFenceSubmitCompletion {
+  GPUFence                    *fence;
+  void                        *sender;
+  GPUCommandBufferCompletionFn onComplete;
+} GPUFenceSubmitCompletion;
+
+static void
+gpu_signalFence(GPUFence *fence) {
+  if (!fence) {
+    return;
+  }
+
+#if defined(_WIN32) || defined(WIN32)
+  EnterCriticalSection(&fence->lock);
+  fence->signaled = true;
+  WakeAllConditionVariable(&fence->cond);
+  LeaveCriticalSection(&fence->lock);
+#else
+  pthread_mutex_lock(&fence->mutex);
+  fence->signaled = true;
+  pthread_cond_broadcast(&fence->cond);
+  pthread_mutex_unlock(&fence->mutex);
+#endif
+}
+
+static void
+gpu_resetFenceInternal(GPUFence *fence) {
+  if (!fence) {
+    return;
+  }
+
+#if defined(_WIN32) || defined(WIN32)
+  EnterCriticalSection(&fence->lock);
+  fence->signaled = false;
+  LeaveCriticalSection(&fence->lock);
+#else
+  pthread_mutex_lock(&fence->mutex);
+  fence->signaled = false;
+  pthread_mutex_unlock(&fence->mutex);
+#endif
+}
+
+static void
+gpu_submitFenceComplete(void *sender, GPUCommandBuffer *cmdb) {
+  GPUFenceSubmitCompletion *completion;
+  GPUCommandBufferCompletionFn onComplete;
+  void *userSender;
+
+  completion = sender;
+  if (!completion) {
+    return;
+  }
+
+  onComplete = completion->onComplete;
+  userSender = completion->sender;
+  gpu_signalFence(completion->fence);
+  free(completion);
+
+  if (onComplete) {
+    onComplete(userSender, cmdb);
+  }
+}
+
+#if !defined(_WIN32) && !defined(WIN32)
+static void
+gpu_timeoutFromNow(uint64_t timeoutNs, struct timespec *outTime) {
+  uint64_t sec;
+  uint64_t nsec;
+
+  clock_gettime(CLOCK_REALTIME, outTime);
+  sec = timeoutNs / 1000000000ull;
+  nsec = timeoutNs % 1000000000ull;
+
+  outTime->tv_sec += (time_t)sec;
+  outTime->tv_nsec += (long)nsec;
+  if (outTime->tv_nsec >= 1000000000l) {
+    outTime->tv_sec++;
+    outTime->tv_nsec -= 1000000000l;
+  }
+}
+#endif
+
 static GPUCommandBuffer*
 gpu_newCommandBuffer(GPUCommandQueue  * __restrict cmdq,
                      void             * __restrict sender,
@@ -113,6 +212,8 @@ GPUResult
 GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
                const GPUQueueSubmitInfo * __restrict info) {
   GPUApi *api;
+  GPUCommandBuffer *lastCmdb;
+  GPUFenceSubmitCompletion *completion;
 
   if (!cmdq || !info || info->commandBufferCount == 0 || !info->ppCommandBuffers) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -124,9 +225,6 @@ GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
   if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  if (info->fence) {
-    return GPU_ERROR_UNSUPPORTED;
-  }
 
   if (!(api = gpuActiveGPUApi()))
     return GPU_ERROR_BACKEND_FAILURE;
@@ -134,12 +232,174 @@ GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
     return GPU_ERROR_BACKEND_FAILURE;
 
   for (uint32_t i = 0; i < info->commandBufferCount; i++) {
-    GPUCommandBuffer *cmdb = info->ppCommandBuffers[i];
-    if (!cmdb) {
+    if (!info->ppCommandBuffers[i]) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
-    api->cmdque.commit(cmdb);
+  }
+
+  lastCmdb = info->ppCommandBuffers[info->commandBufferCount - 1u];
+  completion = NULL;
+  if (info->fence) {
+    if (!api->cmdque.commandBufferOnComplete) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+
+    completion = calloc(1, sizeof(*completion));
+    if (!completion) {
+      return GPU_ERROR_OUT_OF_MEMORY;
+    }
+
+    completion->fence = info->fence;
+    completion->sender = lastCmdb->_onCompleteSender;
+    completion->onComplete = lastCmdb->_onComplete;
+    gpu_resetFenceInternal(info->fence);
+    api->cmdque.commandBufferOnComplete(lastCmdb, completion, gpu_submitFenceComplete);
+  }
+
+  for (uint32_t i = 0; i < info->commandBufferCount; i++) {
+    api->cmdque.commit(info->ppCommandBuffers[i]);
   }
 
   return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUCreateFence(GPUDevice              * __restrict device,
+               const GPUFenceCreateInfo * __restrict info,
+               GPUFence              ** __restrict outFence) {
+  GPUFence *fence;
+
+  if (!device || !outFence) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info &&
+      info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+      info->chain.sType != GPU_STRUCTURE_TYPE_FENCE_CREATE_INFO) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info && info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outFence = NULL;
+  fence = calloc(1, sizeof(*fence));
+  if (!fence) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+#if defined(_WIN32) || defined(WIN32)
+  InitializeCriticalSection(&fence->lock);
+  InitializeConditionVariable(&fence->cond);
+#else
+  if (pthread_mutex_init(&fence->mutex, NULL) != 0) {
+    free(fence);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  if (pthread_cond_init(&fence->cond, NULL) != 0) {
+    pthread_mutex_destroy(&fence->mutex);
+    free(fence);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+#endif
+
+  fence->signaled = info ? info->signaled : false;
+  *outFence = fence;
+  return GPU_OK;
+}
+
+GPU_EXPORT
+void
+GPUDestroyFence(GPUFence * __restrict fence) {
+  if (!fence) {
+    return;
+  }
+
+#if defined(_WIN32) || defined(WIN32)
+  DeleteCriticalSection(&fence->lock);
+#else
+  pthread_cond_destroy(&fence->cond);
+  pthread_mutex_destroy(&fence->mutex);
+#endif
+  free(fence);
+}
+
+GPU_EXPORT
+GPUResult
+GPUWaitFence(GPUFence * __restrict fence, uint64_t timeoutNs) {
+  if (!fence) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+#if defined(_WIN32) || defined(WIN32)
+  DWORD timeoutMs;
+  BOOL ok;
+
+  timeoutMs = timeoutNs == UINT64_MAX
+                ? INFINITE
+                : (DWORD)((timeoutNs + 999999ull) / 1000000ull);
+  EnterCriticalSection(&fence->lock);
+  while (!fence->signaled) {
+    ok = SleepConditionVariableCS(&fence->cond, &fence->lock, timeoutMs);
+    if (!ok) {
+      LeaveCriticalSection(&fence->lock);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+  LeaveCriticalSection(&fence->lock);
+#else
+  struct timespec deadline;
+  int rc;
+
+  pthread_mutex_lock(&fence->mutex);
+  if (timeoutNs == UINT64_MAX) {
+    while (!fence->signaled) {
+      rc = pthread_cond_wait(&fence->cond, &fence->mutex);
+      if (rc != 0) {
+        pthread_mutex_unlock(&fence->mutex);
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+  } else {
+    gpu_timeoutFromNow(timeoutNs, &deadline);
+    while (!fence->signaled) {
+      rc = pthread_cond_timedwait(&fence->cond, &fence->mutex, &deadline);
+      if (rc != 0) {
+        pthread_mutex_unlock(&fence->mutex);
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+  }
+  pthread_mutex_unlock(&fence->mutex);
+#endif
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+bool
+GPUIsFenceSignaled(GPUFence * __restrict fence) {
+  bool signaled;
+
+  if (!fence) {
+    return false;
+  }
+
+#if defined(_WIN32) || defined(WIN32)
+  EnterCriticalSection(&fence->lock);
+  signaled = fence->signaled;
+  LeaveCriticalSection(&fence->lock);
+#else
+  pthread_mutex_lock(&fence->mutex);
+  signaled = fence->signaled;
+  pthread_mutex_unlock(&fence->mutex);
+#endif
+
+  return signaled;
+}
+
+GPU_EXPORT
+void
+GPUResetFence(GPUFence * __restrict fence) {
+  gpu_resetFenceInternal(fence);
 }
