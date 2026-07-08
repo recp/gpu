@@ -969,6 +969,7 @@ check_queue_submit_fence(GPUDevice *device) {
   GPUCommandQueue *queue;
   GPUCommandBuffer *cmdb;
   GPUCommandBuffer *buffers[1];
+  GPUCommandBuffer *nullBuffers[1];
   GPUCommandBuffer *duplicateBuffers[2];
   GPUFence *fence;
   GPUFenceCreateInfo fenceInfo = {0};
@@ -995,6 +996,9 @@ check_queue_submit_fence(GPUDevice *device) {
   GPUResetFence(fence);
   ok = ok && !GPUIsFenceSignaled(fence);
   ok = ok && GPUWaitFence(fence, 0) == GPU_ERROR_TIMEOUT;
+  ok = ok && GPUQueueSubmit(queue, NULL) == GPU_ERROR_INVALID_ARGUMENT;
+  ok = ok && GPUQueueSubmit(NULL, &submitInfo) == GPU_ERROR_INVALID_ARGUMENT;
+  ok = ok && GPUQueueSubmit(queue, &submitInfo) == GPU_ERROR_INVALID_ARGUMENT;
 
   cmdb = NULL;
   if (ok &&
@@ -1005,8 +1009,48 @@ check_queue_submit_fence(GPUDevice *device) {
   }
 
   if (ok) {
+    buffers[0] = cmdb;
+    nullBuffers[0] = NULL;
+
+    memset(&submitInfo, 0, sizeof(submitInfo));
+    submitInfo.chain.sType = GPU_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    submitInfo.chain.structSize = sizeof(submitInfo);
+    submitInfo.commandBufferCount = 1u;
+    submitInfo.ppCommandBuffers = buffers;
+    if (GPUQueueSubmit(queue, &submitInfo) != GPU_ERROR_INVALID_ARGUMENT) {
+      fprintf(stderr, "queue submit accepted wrong sType\n");
+      ok = 0;
+    }
+  }
+
+  if (ok) {
+    memset(&submitInfo, 0, sizeof(submitInfo));
+    submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+    submitInfo.chain.structSize = (uint32_t)(sizeof(submitInfo) - 1u);
+    submitInfo.commandBufferCount = 1u;
+    submitInfo.ppCommandBuffers = buffers;
+    if (GPUQueueSubmit(queue, &submitInfo) != GPU_ERROR_INVALID_ARGUMENT) {
+      fprintf(stderr, "queue submit accepted short structSize\n");
+      ok = 0;
+    }
+  }
+
+  if (ok) {
+    memset(&submitInfo, 0, sizeof(submitInfo));
+    submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+    submitInfo.chain.structSize = sizeof(submitInfo);
+    submitInfo.commandBufferCount = 1u;
+    submitInfo.ppCommandBuffers = nullBuffers;
+    if (GPUQueueSubmit(queue, &submitInfo) != GPU_ERROR_INVALID_ARGUMENT) {
+      fprintf(stderr, "queue submit accepted null command buffer\n");
+      ok = 0;
+    }
+  }
+
+  if (ok) {
     duplicateBuffers[0] = cmdb;
     duplicateBuffers[1] = cmdb;
+    memset(&submitInfo, 0, sizeof(submitInfo));
     submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
     submitInfo.chain.structSize = sizeof(submitInfo);
     submitInfo.commandBufferCount = 2u;
