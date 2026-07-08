@@ -15,9 +15,3 @@
  */
 
 #include "../../common.h"
-
-GPU_EXPORT
-void
-GPUSetShaderPipelineForRendering(GPURenderPipeline *pipeline, void *s) {
-  
-}

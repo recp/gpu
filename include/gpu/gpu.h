@@ -37,7 +37,6 @@ extern "C" {
 #include "stage-io.h"
 #include "texture.h"
 #include "shading/library.h"
-#include "shading/pipeline.h"
 #include "swapchain.h"
 #include "frame.h"
 #include "feature.h"
