@@ -139,10 +139,9 @@ static const uint8_t kCheckerPixels[] = {
   NSString *bytecodePath;
   NSString *sampleDir;
   NSData   *bytecodeData;
-  GPUShaderReflection shaderReflection;
+  GPUShaderLibraryCreateInfo shaderInfo = {0};
   GPUShaderLibraryUSLInfo uslInfo;
   const GPUBindGroupLayoutEntry *layoutEntries;
-  const char *shaderEntries[] = { "quad_vs", "quad_fs" };
   GPUBindGroupEntry groupEntries[3] = {0};
   GPUBindGroupLayout *reflectionLayouts[1] = { NULL };
   uint32_t groupCount = 0;
@@ -200,12 +199,17 @@ static const uint8_t kCheckerPixels[] = {
     return NO;
   }
 
-  if (GPUCreateShaderLibraryFromUSLBytecodeForEntries(_device,
-                                                      bytecodeData.bytes,
-                                                      (uint64_t)bytecodeData.length,
-                                                      shaderEntries,
-                                                      2u,
-                                                      (GPUShaderLibrary **)&_library) != 0) {
+  shaderInfo.chain.sType = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
+  shaderInfo.chain.structSize = sizeof(shaderInfo);
+  shaderInfo.label = "textured_quad.us";
+  shaderInfo.sourceKind = GPU_SHADER_SOURCE_USL_BYTECODE;
+  shaderInfo.sourceData = bytecodeData.bytes;
+  shaderInfo.sourceSize = (uint64_t)bytecodeData.length;
+  shaderInfo.sourcePathHint = bytecodePath.UTF8String;
+  shaderInfo.generateReflection = true;
+  if (GPUCreateShaderLibrary(_device,
+                             &shaderInfo,
+                             (GPUShaderLibrary **)&_library) != GPU_OK) {
     NSLog(@"GPU: failed to create shader library");
     return NO;
   }
@@ -217,24 +221,12 @@ static const uint8_t kCheckerPixels[] = {
       uslInfo.targetAtomCount == 0 ||
       uslInfo.targetAtomHash == 0 ||
       uslInfo.backendContentHash == 0 ||
-      uslInfo.selectedEntryCount != 2u ||
-      uslInfo.entryTargetInfoVersion == 0 ||
+      uslInfo.selectedEntryCount != 0u ||
       uslInfo.targetSupported != 1 ||
-      uslInfo.targetSupportStatus != 1 ||
-      uslInfo.selectedEntryHash == 0) {
+      uslInfo.targetSupportStatus != 1) {
     NSLog(@"GPU: failed to read USL shader-library cache identity");
     return NO;
   }
-
-  memset(&shaderReflection, 0, sizeof(shaderReflection));
-  if (GPUGetShaderReflection(_library, &shaderReflection) != GPU_OK ||
-      shaderReflection.resourceCount != 3 ||
-      !shaderReflection.pResources) {
-    GPUFreeShaderReflection(&shaderReflection);
-    NSLog(@"GPU: unexpected shader reflection");
-    return NO;
-  }
-  GPUFreeShaderReflection(&shaderReflection);
 
   layoutCount = 0;
   if (GPUCreateBindGroupLayoutsFromReflection(_device,

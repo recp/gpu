@@ -79,7 +79,7 @@ static const TriangleVertex kTriangleVertices[] = {
   NSString *executablePath;
   NSString *sampleDir;
 
-  GPUShaderLibraryCreateInfo shaderInfo;
+  GPUShaderLibraryCreateInfo shaderInfo = {0};
   GPUExtent2D size;
 
   _physicalDevice = GPUGetAutoSelectedPhysicalDevice(NULL);
@@ -146,6 +146,8 @@ static const TriangleVertex kTriangleVertices[] = {
   }
 
   shaderInfo.label = "triangle.usl.metal";
+  shaderInfo.chain.sType = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
+  shaderInfo.chain.structSize = sizeof(shaderInfo);
   shaderInfo.sourceKind = GPU_SHADER_SOURCE_MSL_TEXT;
   shaderInfo.sourceData = shaderText.UTF8String;
   shaderInfo.sourceSize = (uint64_t)[shaderText lengthOfBytesUsingEncoding:NSUTF8StringEncoding];

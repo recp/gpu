@@ -84,15 +84,28 @@ typedef struct GPUFunction {
 } GPUFunction;
 
 typedef enum GPUShaderSourceKind {
-  GPU_SHADER_SOURCE_MSL_TEXT = 0
+  GPU_SHADER_SOURCE_USL_TEXT = 0,
+  GPU_SHADER_SOURCE_USL_BYTECODE = 1,
+  GPU_SHADER_SOURCE_MSL_TEXT = 2,
+  GPU_SHADER_SOURCE_SPIRV_BINARY = 3
 } GPUShaderSourceKind;
 
+typedef struct GPUShaderDefine {
+  const char *name;
+  const char *value;
+} GPUShaderDefine;
+
 typedef struct GPUShaderLibraryCreateInfo {
-  const char* label;
+  GPUChainedStruct chain;
+  const char *label;
   GPUShaderSourceKind sourceKind;
-  const void* sourceData;
+  const void *sourceData;
   uint64_t sourceSize;
-  const char* sourcePathHint;
+  const char *sourcePathHint;
+  uint32_t defineCount;
+  const GPUShaderDefine *pDefines;
+  bool generateReflection;
+  bool enableDiskCache;
 } GPUShaderLibraryCreateInfo;
 
 GPU_EXPORT
@@ -104,7 +117,7 @@ GPUFunction*
 GPUShaderFunction(GPULibrary *lib, const char *name);
 
 GPU_EXPORT
-int
+GPUResult
 GPUCreateShaderLibrary(GPUDevice *device,
                        const GPUShaderLibraryCreateInfo *info,
                        GPUShaderLibrary **outLibrary);

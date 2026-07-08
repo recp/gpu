@@ -484,6 +484,43 @@ check_selected_shader_library(const void *bytecode,
     return 0;
   }
 
+  {
+    GPUShaderLibraryCreateInfo createInfo = {0};
+
+    createInfo.chain.sType = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
+    createInfo.chain.structSize = sizeof(createInfo);
+    createInfo.label = "reflection.us";
+    createInfo.sourceKind = GPU_SHADER_SOURCE_USL_BYTECODE;
+    createInfo.sourceData = bytecode;
+    createInfo.sourceSize = bytecodeSize;
+    createInfo.generateReflection = true;
+
+    library = NULL;
+    if (GPUCreateShaderLibrary(device, &createInfo, &library) != GPU_OK ||
+        !library) {
+      fprintf(stderr, "failed to create canonical shader library\n");
+      return 0;
+    }
+
+    memset(&shaderReflection, 0, sizeof(shaderReflection));
+    ok = GPUGetShaderLibraryUSLInfo(library, &info) == 0 &&
+         info.abiVersion == GPU_SHADER_LIBRARY_USL_INFO_VERSION &&
+         info.sourceKind == expectedSourceKind &&
+         info.bytecodeSize == bytecodeSize &&
+         info.bytecodeContentHash != 0u &&
+         info.backendContentHash != 0u &&
+         info.selectedEntryCount == 0u &&
+         GPUGetShaderReflection(library, &shaderReflection) == GPU_OK &&
+         shaderReflection.resourceCount == 2u;
+    GPUFreeShaderReflection(&shaderReflection);
+    GPUDestroyShaderLibrary(library);
+
+    if (!ok) {
+      fprintf(stderr, "unexpected canonical shader library data\n");
+      return 0;
+    }
+  }
+
   return 1;
 }
 
