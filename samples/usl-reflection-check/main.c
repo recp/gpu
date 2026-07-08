@@ -159,6 +159,118 @@ shader_reflection_has_resource(const GPUShaderReflection *reflection,
 }
 
 static int
+check_bind_group_validation(GPUDevice *device, GPUBindGroupLayout *layout) {
+  unsigned char fakeBufferStorage;
+  unsigned char fakeSamplerStorage;
+  unsigned char fakeTextureStorage;
+  GPUBuffer *fakeBuffer;
+  GPUSampler *fakeSampler;
+  GPUTextureView *fakeTexture;
+  GPUBindGroupEntry validEntries[2];
+  GPUBindGroupEntry missingEntries[1];
+  GPUBindGroupEntry extraEntries[3];
+  GPUBindGroupEntry duplicateEntries[3];
+  GPUBindGroupEntry wrongTypeEntries[2];
+  GPUBindGroupEntry ambiguousEntries[2];
+  GPUBindGroupCreateInfo info;
+  GPUBindGroup *group;
+
+  fakeBuffer = (GPUBuffer *)(void *)&fakeBufferStorage;
+  fakeSampler = (GPUSampler *)(void *)&fakeSamplerStorage;
+  fakeTexture = (GPUTextureView *)(void *)&fakeTextureStorage;
+
+  memset(validEntries, 0, sizeof(validEntries));
+  validEntries[0].binding = 0u;
+  validEntries[0].textureView = fakeTexture;
+  validEntries[1].binding = 0u;
+  validEntries[1].bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  validEntries[1].buffer.buffer = fakeBuffer;
+  validEntries[1].buffer.size = 16u;
+
+  memset(&info, 0, sizeof(info));
+  info.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.label = "reflection-valid-set0";
+  info.layout = layout;
+  info.entryCount = 2u;
+  info.pEntries = validEntries;
+
+  group = NULL;
+  if (GPUCreateBindGroup(device, &info, &group) != GPU_OK || !group) {
+    fprintf(stderr, "valid reflected bind group was rejected\n");
+    return 0;
+  }
+  GPUDestroyBindGroup(group);
+
+  memset(missingEntries, 0, sizeof(missingEntries));
+  memcpy(missingEntries, validEntries, sizeof(missingEntries));
+  info.label = "reflection-missing-set0";
+  info.entryCount = 1u;
+  info.pEntries = missingEntries;
+  group = NULL;
+  if (GPUCreateBindGroup(device, &info, &group) == GPU_OK || group) {
+    fprintf(stderr, "bind group accepted missing reflected entry\n");
+    GPUDestroyBindGroup(group);
+    return 0;
+  }
+
+  memset(extraEntries, 0, sizeof(extraEntries));
+  memcpy(extraEntries, validEntries, sizeof(validEntries));
+  extraEntries[2].binding = 1u;
+  extraEntries[2].sampler = fakeSampler;
+  info.label = "reflection-extra-set0";
+  info.entryCount = 3u;
+  info.pEntries = extraEntries;
+  group = NULL;
+  if (GPUCreateBindGroup(device, &info, &group) == GPU_OK || group) {
+    fprintf(stderr, "bind group accepted extra reflected entry\n");
+    GPUDestroyBindGroup(group);
+    return 0;
+  }
+
+  memset(duplicateEntries, 0, sizeof(duplicateEntries));
+  memcpy(duplicateEntries, validEntries, sizeof(validEntries));
+  duplicateEntries[2] = validEntries[0];
+  info.label = "reflection-duplicate-set0";
+  info.entryCount = 3u;
+  info.pEntries = duplicateEntries;
+  group = NULL;
+  if (GPUCreateBindGroup(device, &info, &group) == GPU_OK || group) {
+    fprintf(stderr, "bind group accepted duplicate reflected entry\n");
+    GPUDestroyBindGroup(group);
+    return 0;
+  }
+
+  memset(wrongTypeEntries, 0, sizeof(wrongTypeEntries));
+  memcpy(wrongTypeEntries, validEntries, sizeof(wrongTypeEntries));
+  wrongTypeEntries[1].bindingType = GPU_BINDING_STORAGE_BUFFER;
+  info.label = "reflection-wrong-type-set0";
+  info.entryCount = 2u;
+  info.pEntries = wrongTypeEntries;
+  group = NULL;
+  if (GPUCreateBindGroup(device, &info, &group) == GPU_OK || group) {
+    fprintf(stderr, "bind group accepted wrong buffer binding type\n");
+    GPUDestroyBindGroup(group);
+    return 0;
+  }
+
+  memset(ambiguousEntries, 0, sizeof(ambiguousEntries));
+  memcpy(ambiguousEntries, validEntries, sizeof(ambiguousEntries));
+  ambiguousEntries[0].sampler = fakeSampler;
+  info.label = "reflection-ambiguous-set0";
+  info.entryCount = 2u;
+  info.pEntries = ambiguousEntries;
+  group = NULL;
+  if (GPUCreateBindGroup(device, &info, &group) == GPU_OK || group) {
+    fprintf(stderr, "bind group accepted ambiguous reflected entry\n");
+    GPUDestroyBindGroup(group);
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
 check_fragment_entry(const void *bytecode, uint64_t bytecodeSize) {
   const GPUBindGroupLayoutEntry *layoutEntries;
   GPUBindGroupLayoutUSLInfo layoutInfo;
@@ -649,6 +761,7 @@ check_selected_shader_library(const void *bytecode,
                                                  reflectedLayouts) == GPU_OK &&
          reflectedLayoutCount == 1u &&
          reflectedLayouts[0] != NULL &&
+         check_bind_group_validation(device, reflectedLayouts[0]) &&
          GPUCreatePipelineLayoutFromReflection(device,
                                                library,
                                                reflectedLayoutCount,
