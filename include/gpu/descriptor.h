@@ -22,16 +22,6 @@ extern "C" {
 
 #include "common.h"
 
-typedef struct GPUDevice GPUDevice;
-
-typedef struct GPUDescriptorPool {
-  void *_priv;
-} GPUDescriptorPool;
-
-GPU_EXPORT
-GPUDescriptorPool*
-GPUCreateDescriptorPool(GPUDevice *__restrict device);
-
 #ifdef __cplusplus
 }
 #endif

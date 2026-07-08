@@ -903,17 +903,6 @@ gpu_findBindGroupEntry(const GPUBindGroupEntry *entries,
 }
 
 GPU_EXPORT
-GPUDescriptorPool*
-GPUCreateDescriptorPool(GPUDevice *__restrict device) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return NULL;
-
-  return api->descriptor.createDescriptorPool(api, device);
-}
-
-GPU_EXPORT
 GPUResult
 GPUCreateBindGroupLayout(GPUDevice *device,
                          const GPUBindGroupLayoutCreateInfo *info,

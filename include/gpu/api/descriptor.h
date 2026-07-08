@@ -21,12 +21,8 @@ extern "C" {
 #endif
 
 #include "../common.h"
-#include "../gpu.h"
-
-struct GPUApi;
-
 typedef struct GPUApiDescriptor {
-  GPUDescriptorPool *(*createDescriptorPool)(struct GPUApi *__restrict api, GPUDevice *__restrict device);
+  void *reserved;
 } GPUApiDescriptor;
 
 #ifdef __cplusplus

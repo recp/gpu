@@ -55,23 +55,6 @@ typedef enum GPUBackend {
   GPU_BACKEND_OPENGL    = 4
 } GPUBackend;
 
-/* TODO: */
-GPU_EXPORT
-int32_t
-GPURetainCountOf(void * resource);
-
-GPU_EXPORT
-void
-GPURetain(void * resource);
-
-GPU_EXPORT
-void
-GPURelease(void * resource);
-
-GPU_EXPORT
-void
-GPUFree(void * mem);
-
 #ifdef __cplusplus
 }
 #endif
