@@ -38,6 +38,12 @@ GPUFrameGetTarget(GPUFrame *frame) {
 }
 
 GPU_EXPORT
+GPUTextureView*
+GPUFrameGetTargetView(GPUFrame *frame) {
+  return frame ? (GPUTextureView *)frame->target : NULL;
+}
+
+GPU_EXPORT
 void
 GPUEndFrame(GPUFrame* frame) {
   GPUApi *api;

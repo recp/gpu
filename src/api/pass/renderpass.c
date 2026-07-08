@@ -28,25 +28,36 @@ gpuNewPass(void) {
 }
 
 GPU_EXPORT
-GPURenderPassDesc*
-GPUBeginRenderPass(GPUTexture *target) {
-  GPUApi *api;
+GPURenderPassEncoder*
+GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) {
+  GPURenderPassDesc    *desc;
+  GPURenderPassEncoder *encoder;
+  GPUApi               *api;
 
   if (!(api = gpuActiveGPUApi()))
     return NULL;
+  if (!cmdb || !info || !api->renderPass.beginRenderPass || !api->rce.renderCommandEncoder)
+    return NULL;
 
-  return api->renderPass.beginRenderPass(target);
+  desc = api->renderPass.beginRenderPass(info);
+  if (!desc)
+    return NULL;
+
+  encoder = api->rce.renderCommandEncoder(cmdb, desc);
+  GPUDestroyRenderPass(desc);
+
+  return encoder;
 }
 
 GPU_EXPORT
 void
-GPUEndRenderPass(GPURenderPassDesc *pass) {
+GPUEndRenderPass(GPURenderPassEncoder *pass) {
   GPUApi *api;
 
-  if (!pass || !(api = gpuActiveGPUApi()) || !api->renderPass.endRenderPass)
+  if (!pass || !(api = gpuActiveGPUApi()) || !api->rce.endEncoding)
     return;
 
-  api->renderPass.endRenderPass(pass);
+  api->rce.endEncoding(pass);
 }
 
 GPU_EXPORT

@@ -29,7 +29,11 @@ extern "C" {
 #include "texture.h"
 #include "sampler.h"
 
+#ifndef GPU_RENDER_ENCODER_TYPES_DEFINED
+#define GPU_RENDER_ENCODER_TYPES_DEFINED
 typedef struct GPURenderCommandEncoder GPURenderCommandEncoder;
+typedef GPURenderCommandEncoder GPURenderPassEncoder;
+#endif
 
 typedef enum GPUPrimitiveType {
   GPUPrimitiveTypePoint         = 0,

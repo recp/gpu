@@ -25,7 +25,7 @@ extern "C" {
 
 typedef struct GPUApiRenderPass {
   GPURenderPassDesc* (*newPass)        (void);
-  GPURenderPassDesc* (*beginRenderPass)(GPUTexture *target);
+  GPURenderPassDesc* (*beginRenderPass)(const GPURenderPassCreateInfo *info);
   void               (*endRenderPass)  (GPURenderPassDesc *pass);
   void               (*destroyRenderPass)(GPURenderPassDesc *pass);
 } GPUApiRenderPass;

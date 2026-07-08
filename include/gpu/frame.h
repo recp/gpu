@@ -41,6 +41,10 @@ GPUTexture*
 GPUFrameGetTarget(GPUFrame *frame);
 
 GPU_EXPORT
+GPUTextureView*
+GPUFrameGetTargetView(GPUFrame *frame);
+
+GPU_EXPORT
 void
 GPUEndFrame(GPUFrame* frame);
 

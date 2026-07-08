@@ -34,17 +34,65 @@ typedef struct GPURenderPassDesc {
   void *_priv;
 } GPURenderPassDesc;
 
+#ifndef GPU_RENDER_ENCODER_TYPES_DEFINED
+#define GPU_RENDER_ENCODER_TYPES_DEFINED
+typedef struct GPURenderCommandEncoder GPURenderCommandEncoder;
+typedef GPURenderCommandEncoder GPURenderPassEncoder;
+#endif
+
+typedef enum GPULoadOp {
+  GPU_LOAD_OP_LOAD      = 0,
+  GPU_LOAD_OP_CLEAR     = 1,
+  GPU_LOAD_OP_DONT_CARE = 2
+} GPULoadOp;
+
+typedef enum GPUStoreOp {
+  GPU_STORE_OP_STORE     = 0,
+  GPU_STORE_OP_DONT_CARE = 1
+} GPUStoreOp;
+
+typedef union GPUColorValue {
+  float    float32[4];
+  uint32_t uint32[4];
+  int32_t  int32[4];
+} GPUColorValue;
+
+typedef struct GPURenderPassColorAttachment {
+  GPUTextureView *view;
+  GPUTextureView *resolveView;
+  GPULoadOp       loadOp;
+  GPUStoreOp      storeOp;
+  GPUColorValue   clearColor;
+} GPURenderPassColorAttachment;
+
+typedef struct GPURenderPassDepthStencilAttachment {
+  GPUTextureView *view;
+  GPULoadOp       depthLoadOp;
+  GPUStoreOp      depthStoreOp;
+  GPULoadOp       stencilLoadOp;
+  GPUStoreOp      stencilStoreOp;
+  float           clearDepth;
+  uint32_t        clearStencil;
+} GPURenderPassDepthStencilAttachment;
+
+typedef struct GPURenderPassCreateInfo {
+  const char                                *label;
+  uint32_t                                   colorAttachmentCount;
+  const GPURenderPassColorAttachment        *pColorAttachments;
+  const GPURenderPassDepthStencilAttachment *pDepthStencilAttachment;
+} GPURenderPassCreateInfo;
+
 GPU_EXPORT
 GPURenderPassDesc*
 gpuNewPass(void);
 
 GPU_EXPORT
-GPURenderPassDesc*
-GPUBeginRenderPass(GPUTexture *target);
+GPURenderPassEncoder*
+GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info);
 
 GPU_EXPORT
 void
-GPUEndRenderPass(GPURenderPassDesc *pass);
+GPUEndRenderPass(GPURenderPassEncoder *pass);
 
 GPU_EXPORT
 void

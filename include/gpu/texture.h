@@ -50,6 +50,7 @@ typedef struct GPUTextureDesc {
 
 
 typedef struct GPUTexture GPUTexture;
+typedef GPUTexture GPUTextureView;
 
 GPU_EXPORT
 GPUTexture*

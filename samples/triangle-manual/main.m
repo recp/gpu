@@ -245,8 +245,9 @@ static const TriangleVertex kTriangleVertices[] = {
   GPUFrame *frame = NULL;
   GPUCommandBuffer *cmdb = NULL;
   GPUResult submitResult = GPU_OK;
-  GPURenderPassDesc *pass = NULL;
-  GPURenderCommandEncoder *encoder = NULL;
+  GPURenderPassEncoder *encoder = NULL;
+  GPURenderPassColorAttachment color = {0};
+  GPURenderPassCreateInfo rp = {0};
 
   frame = GPUBeginFrame(_swapchain);
   if (!frame) {
@@ -257,12 +258,19 @@ static const TriangleVertex kTriangleVertices[] = {
     goto cleanup;
   }
 
-  pass = GPUBeginRenderPass(GPUFrameGetTarget(frame));
-  if (!pass) {
-    goto cleanup;
-  }
+  color.view = GPUFrameGetTargetView(frame);
+  color.loadOp = GPU_LOAD_OP_CLEAR;
+  color.storeOp = GPU_STORE_OP_STORE;
+  color.clearColor.float32[0] = 0.0f;
+  color.clearColor.float32[1] = 0.0f;
+  color.clearColor.float32[2] = 0.0f;
+  color.clearColor.float32[3] = 1.0f;
 
-  encoder = GPUNewRenderCommandEncoder(cmdb, pass);
+  rp.label = "triangle-manual-pass";
+  rp.colorAttachmentCount = 1;
+  rp.pColorAttachments = &color;
+
+  encoder = GPUBeginRenderPass(cmdb, &rp);
   if (!encoder) {
     goto cleanup;
   }
@@ -275,7 +283,7 @@ static const TriangleVertex kTriangleVertices[] = {
   GPUSetVertexBuffer(encoder, _vertexBuffer, 0, 0);
   GPUBindRenderGroup(encoder, _fragmentGroup);
   gpuDrawPrimitives(encoder, GPUPrimitiveTypeTriangle, 0, 3);
-  GPUEndEncoding(encoder);
+  GPUEndRenderPass(encoder);
   submitResult = GPUFinishFrame(_queue, cmdb, frame);
   frame = NULL;
   if (submitResult != GPU_OK) {
@@ -283,7 +291,6 @@ static const TriangleVertex kTriangleVertices[] = {
   }
 
 cleanup:
-  GPUDestroyRenderPass(pass);
   GPUEndFrame(frame);
 }
 
