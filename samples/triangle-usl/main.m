@@ -78,8 +78,6 @@ static const TriangleVertex kTriangleVertices[] = {
   NSString *sampleDir;
   NSData   *bytecodeData;
   GPUShaderLibraryUSLInfo uslInfo;
-  const GPUBindGroupLayoutEntry *layoutEntries;
-  uint32_t layoutCount;
   GPUExtent2D size;
 
   _physicalDevice = GPUGetAutoSelectedPhysicalDevice(NULL);
@@ -174,16 +172,6 @@ static const TriangleVertex kTriangleVertices[] = {
     return NO;
   }
 
-  layoutEntries = GPUGetBindGroupLayoutEntries(_shaderLayout->bindGroupLayouts[0],
-                                               &layoutCount);
-  if (!layoutEntries || layoutCount != 1 ||
-      layoutEntries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      layoutEntries[0].bindingType != GPU_BINDING_UNIFORM_BUFFER ||
-      layoutEntries[0].kind != GPUBindKindBuffer) {
-    NSLog(@"GPU: unexpected bind layout extracted from shader reflection");
-    return NO;
-  }
-
   GPUVertexAttribute vertexAttrs[] = {
     { .shaderLocation = 0, .format = GPU_VERTEX_FORMAT_FLOAT2, .offset = offsetof(TriangleVertex, position) }
   };
@@ -258,8 +246,7 @@ static const TriangleVertex kTriangleVertices[] = {
 
   GPUBindGroupEntry set0Bindings[] = {
     {
-      .binding = layoutEntries[0].binding,
-      .bindingType = layoutEntries[0].bindingType,
+      .binding = 0,
       .buffer = {
         .buffer = _fragmentUniformBuffer,
         .offset = 0,

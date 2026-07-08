@@ -139,13 +139,7 @@ static const uint8_t kCheckerPixels[] = {
   NSString *sampleDir;
   NSData   *bytecodeData;
   GPUShaderLibraryUSLInfo uslInfo;
-  const GPUBindGroupLayoutEntry *layoutEntries;
   GPUBindGroupEntry groupEntries[3] = {0};
-  uint32_t groupCount = 0;
-  uint32_t layoutCount;
-  uint32_t textureCount = 0;
-  uint32_t samplerCount = 0;
-  uint32_t bufferCount = 0;
   GPUExtent2D size;
 
   _physicalDevice = GPUGetAutoSelectedPhysicalDevice(NULL);
@@ -227,12 +221,9 @@ static const uint8_t kCheckerPixels[] = {
     return NO;
   }
 
-  layoutEntries = GPUGetBindGroupLayoutEntries(_shaderLayout->bindGroupLayouts[0],
-                                               &layoutCount);
-  if (!layoutEntries || layoutCount != 3 ||
-      GPUGetShaderLibraryUSLInfo(_library, &uslInfo) != 0 ||
+  if (GPUGetShaderLibraryUSLInfo(_library, &uslInfo) != 0 ||
       uslInfo.bytecodeSize != (uint64_t)bytecodeData.length) {
-    NSLog(@"GPU: unexpected bind layout extracted from shader reflection");
+    NSLog(@"GPU: unexpected USL shader-library info");
     return NO;
   }
 
@@ -312,50 +303,21 @@ static const uint8_t kCheckerPixels[] = {
     return NO;
   }
 
-  for (uint32_t i = 0; i < layoutCount; i++) {
-    if (layoutEntries[i].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
-      NSLog(@"GPU: unexpected bind layout stage extracted from USL bytecode");
-      return NO;
-    }
-
-    groupEntries[groupCount].binding = layoutEntries[i].binding;
-    groupEntries[groupCount].bindingType = layoutEntries[i].bindingType;
-    switch (layoutEntries[i].kind) {
-      case GPUBindKindTexture:
-        textureCount++;
-        groupEntries[groupCount].textureView = (GPUTextureView *)_texture;
-        break;
-      case GPUBindKindSampler:
-        samplerCount++;
-        groupEntries[groupCount].sampler = _sampler;
-        break;
-      case GPUBindKindBuffer:
-        bufferCount++;
-        groupEntries[groupCount].buffer.buffer = _fragmentUniformBuffer;
-        groupEntries[groupCount].buffer.offset = 0;
-        groupEntries[groupCount].buffer.size = sizeof(FragmentUniforms);
-        break;
-      default:
-        NSLog(@"GPU: unexpected bind kind extracted from USL bytecode");
-        return NO;
-    }
-    groupCount++;
-  }
-
-  if (groupCount != layoutCount ||
-      textureCount != 1 ||
-      samplerCount != 1 ||
-      bufferCount != 1) {
-    NSLog(@"GPU: unexpected bind layout contents extracted from USL bytecode");
-    return NO;
-  }
+  groupEntries[0].binding = 0;
+  groupEntries[0].textureView = (GPUTextureView *)_texture;
+  groupEntries[1].binding = 0;
+  groupEntries[1].sampler = _sampler;
+  groupEntries[2].binding = 0;
+  groupEntries[2].buffer.buffer = _fragmentUniformBuffer;
+  groupEntries[2].buffer.offset = 0;
+  groupEntries[2].buffer.size = sizeof(FragmentUniforms);
 
   GPUBindGroupCreateInfo set0Info = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
                .structSize = sizeof(GPUBindGroupCreateInfo) },
     .label = "textured-quad-usl-set0",
     .layout = _shaderLayout->bindGroupLayouts[0],
-    .entryCount = groupCount,
+    .entryCount = 3,
     .pEntries = groupEntries
   };
   if (GPUCreateBindGroup(_device, &set0Info, &_fragmentGroup) != GPU_OK) {

@@ -843,38 +843,6 @@ gpu_usl_collectStaticSamplersFromRuntimeInfo(const USLBytecodeRuntimeInfo *runti
   return 1;
 }
 
-static const GPUBindGroupEntry *
-gpu_findBindGroupEntry(const GPUBindGroupEntry *entries,
-                       uint32_t count,
-                       const GPUBindGroupLayoutEntry *layoutEntry) {
-  uint32_t i;
-
-  if (!entries || !layoutEntry) {
-    return NULL;
-  }
-
-  for (i = 0; i < count; i++) {
-    GPUBindKind entryKind;
-
-    if (entries[i].binding != layoutEntry->binding) {
-      continue;
-    }
-    if (gpu_kindFromBindingType(entries[i].bindingType, &entryKind)) {
-      if (entryKind == layoutEntry->kind &&
-          entries[i].bindingType == layoutEntry->bindingType) {
-        return &entries[i];
-      }
-      continue;
-    }
-    if (entries[i].stage == layoutEntry->stage &&
-        entries[i].kind == layoutEntry->kind) {
-      return &entries[i];
-    }
-  }
-
-  return NULL;
-}
-
 static int
 gpu_bindGroupEntryHasResource(const GPUBindGroupLayoutEntry *layoutEntry,
                               const GPUBindGroupEntry *entry) {
@@ -897,6 +865,40 @@ gpu_bindGroupEntryHasResource(const GPUBindGroupLayoutEntry *layoutEntry,
     default:
       return 0;
   }
+}
+
+static const GPUBindGroupEntry *
+gpu_findBindGroupEntry(const GPUBindGroupEntry *entries,
+                       uint32_t count,
+                       const GPUBindGroupLayoutEntry *layoutEntry) {
+  uint32_t i;
+
+  if (!entries || !layoutEntry) {
+    return NULL;
+  }
+
+  for (i = 0; i < count; i++) {
+    if (entries[i].binding != layoutEntry->binding) {
+      continue;
+    }
+
+    if (!gpu_bindGroupEntryHasResource(layoutEntry, &entries[i])) {
+      continue;
+    }
+
+    if (entries[i].stage != 0 &&
+        entries[i].stage != layoutEntry->stage) {
+      continue;
+    }
+    if (entries[i].kind != 0 &&
+        entries[i].kind != layoutEntry->kind) {
+      continue;
+    }
+
+    return &entries[i];
+  }
+
+  return NULL;
 }
 
 GPU_EXPORT
