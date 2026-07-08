@@ -50,6 +50,14 @@ gpu_groupPriv(GPUBindGroup *group) {
   return group ? group->_priv : NULL;
 }
 
+static void
+gpu_usl_freeCompileOutput(USCompileOutput *output) {
+  if (output) {
+    us_free_compile_output(output);
+    free(output);
+  }
+}
+
 static int
 gpu_usl_stageFromRuntimeStage(uint32_t stage, GPUBindStage *outStage);
 
@@ -431,33 +439,64 @@ gpu_usl_findRuntimeEntry(const USLBytecodeRuntimeInfo *runtimeInfo,
 }
 
 static int
-gpu_usl_reflectEntryTargetInfo(const void *bytecodeData,
-                               uint64_t bytecodeSize,
-                               const char *entryPointName,
-                               USLBytecodeEntryTargetInfo *outInfo) {
+gpu_usl_compileReflectionForEntry(const void *bytecodeData,
+                                  uint64_t bytecodeSize,
+                                  const char *entryPointName,
+                                  USCompileOutput **outOutput) {
   USLTargetSpec target;
+  USCompileInput input;
+  USCompileOutput *output;
+  const char *entryNames[1];
+  const USLBytecodeEntryTargetInfo *entryInfo;
 
-  if (!bytecodeData || !entryPointName || !outInfo ||
+  if (!outOutput) {
+    return 0;
+  }
+  *outOutput = NULL;
+
+  if (!bytecodeData || bytecodeSize == 0u || !entryPointName ||
       !gpu_uslDefaultMetalTarget(&target)) {
     return 0;
   }
 
-  memset(outInfo, 0, sizeof(*outInfo));
-  if (usl_reflect_bytecode_entry_target_info_for_spec(bytecodeData,
-                                                      (size_t)bytecodeSize,
-                                                      entryPointName,
-                                                      &target,
-                                                      outInfo) != USLOk) {
+  output = calloc(1, sizeof(*output));
+  if (!output) {
     return 0;
   }
 
-  return outInfo->abi_version == USL_RUNTIME_ENTRY_TARGET_INFO_VERSION &&
-         outInfo->bytecode_version == GPU_USL_BYTECODE_VERSION &&
-         outInfo->bytecode_size == bytecodeSize &&
-         outInfo->backend == target.backend &&
-         outInfo->backend_id == (uint32_t)target.backend &&
-         outInfo->content_hash != 0u &&
-         strcmp(outInfo->entry_point, entryPointName) == 0;
+  entryNames[0] = entryPointName;
+  memset(&input, 0, sizeof(input));
+  input.abi_version = US_COMPILE_INPUT_VERSION;
+  input.flags = US_COMPILE_INPUT_FLAG_REFLECT_ONLY;
+  input.artifact = bytecodeData;
+  input.artifact_size = (size_t)bytecodeSize;
+  input.target = &target;
+  input.entry_point_names = entryNames;
+  input.entry_point_count = 1u;
+
+  if (us_compile(&input, output) != USLOk ||
+      output->abi_version != US_COMPILE_OUTPUT_VERSION ||
+      (output->flags & US_COMPILE_OUTPUT_FLAG_REFLECTION_ONLY) == 0u ||
+      output->reflection.entry_target_count != 1u ||
+      !gpu_usl_runtimeInfoIsUsable(&output->reflection.runtime)) {
+    gpu_usl_freeCompileOutput(output);
+    return 0;
+  }
+
+  entryInfo = &output->reflection.entry_targets[0];
+  if (entryInfo->abi_version != USL_RUNTIME_ENTRY_TARGET_INFO_VERSION ||
+      entryInfo->bytecode_version != GPU_USL_BYTECODE_VERSION ||
+      (uint64_t)entryInfo->bytecode_size != bytecodeSize ||
+      entryInfo->backend != target.backend ||
+      entryInfo->backend_id != (uint32_t)target.backend ||
+      entryInfo->content_hash == 0u ||
+      strcmp(entryInfo->entry_point, entryPointName) != 0) {
+    gpu_usl_freeCompileOutput(output);
+    return 0;
+  }
+
+  *outOutput = output;
+  return 1;
 }
 
 static int
@@ -739,10 +778,12 @@ int
 GPUCreateBindGroupLayoutFromUSLBytecode(const void *bytecodeData,
                                         uint64_t bytecodeSize,
                                         const char *entryPointName,
-                                        GPUBindGroupLayout **outLayout) {
+GPUBindGroupLayout **outLayout) {
+  USCompileOutput *compileOutput;
+  USReflection *usReflection;
   USLBytecodeRuntimeInfo *runtimeInfo;
   const USLRuntimeEntryPoint *entry;
-  USLBytecodeEntryTargetInfo targetInfo;
+  const USLBytecodeEntryTargetInfo *targetInfo;
   GPUBindGroupLayoutEntry *entries;
   GPUUSLResourceBindingDesc *bindings;
   GPUBindStage stage;
@@ -759,40 +800,29 @@ GPUCreateBindGroupLayoutFromUSLBytecode(const void *bytecodeData,
     return -1;
   }
 
-  runtimeInfo = calloc(1, sizeof(*runtimeInfo));
-  if (!runtimeInfo) {
-    return -2;
-  }
-
-  if (usl_reflect_bytecode_runtime_info(bytecodeData,
-                                        (size_t)bytecodeSize,
-                                        runtimeInfo) != USLOk ||
-      !gpu_usl_runtimeInfoIsUsable(runtimeInfo)) {
-    free(runtimeInfo);
+  if (!gpu_usl_compileReflectionForEntry(bytecodeData,
+                                         bytecodeSize,
+                                         entryPointName,
+                                         &compileOutput)) {
     return -3;
   }
+  usReflection = &compileOutput->reflection;
+  runtimeInfo = &usReflection->runtime;
+  targetInfo = &usReflection->entry_targets[0];
 
   entry = gpu_usl_findRuntimeEntry(runtimeInfo, entryPointName);
   if (!entry) {
-    free(runtimeInfo);
+    gpu_usl_freeCompileOutput(compileOutput);
     return -11;
   }
 
   if (!gpu_usl_stageFromRuntimeStage(entry->stage, &stage)) {
-    free(runtimeInfo);
+    gpu_usl_freeCompileOutput(compileOutput);
     return -4;
   }
 
-  if (!gpu_usl_reflectEntryTargetInfo(bytecodeData,
-                                      bytecodeSize,
-                                      entryPointName,
-                                      &targetInfo)) {
-    free(runtimeInfo);
-    return -12;
-  }
-
-  if (!targetInfo.supported) {
-    free(runtimeInfo);
+  if (!targetInfo->supported) {
+    gpu_usl_freeCompileOutput(compileOutput);
     return -13;
   }
 
@@ -805,7 +835,7 @@ GPUCreateBindGroupLayoutFromUSLBytecode(const void *bytecodeData,
                                                       entryPointName,
                                                       &bindings,
                                                       &bindingCount)) {
-    free(runtimeInfo);
+    gpu_usl_freeCompileOutput(compileOutput);
     free(bindings);
     free(entries);
     return -5;
@@ -818,7 +848,7 @@ GPUCreateBindGroupLayoutFromUSLBytecode(const void *bytecodeData,
     bindStage = (GPUBindStage)bindings[i].stage;
     if (!gpu_bindStageIsValid(bindStage) ||
         !gpu_usl_bindKindFromResourceKind(bindings[i].kind, &bindKind)) {
-      free(runtimeInfo);
+      gpu_usl_freeCompileOutput(compileOutput);
       free(bindings);
       free(entries);
       return -6;
@@ -829,7 +859,7 @@ GPUCreateBindGroupLayoutFromUSLBytecode(const void *bytecodeData,
                                bindStage,
                                bindKind,
                                bindings[i].binding)) {
-      free(runtimeInfo);
+      gpu_usl_freeCompileOutput(compileOutput);
       free(bindings);
       free(entries);
       return -10;
@@ -841,10 +871,10 @@ GPUCreateBindGroupLayoutFromUSLBytecode(const void *bytecodeData,
     gpu_setBindGroupLayoutUSLInfo(*outLayout,
                                   runtimeInfo,
                                   entry,
-                                  &targetInfo,
+                                  targetInfo,
                                   bindingCount);
   }
-  free(runtimeInfo);
+  gpu_usl_freeCompileOutput(compileOutput);
   free(bindings);
   free(entries);
   return rc;
@@ -856,9 +886,11 @@ GPUReflectUSLBytecodeEntry(const void *bytecodeData,
                            uint64_t bytecodeSize,
                            const char *entryPointName,
                            GPUUSLEntryReflection **outReflection) {
+  USCompileOutput *compileOutput;
+  USReflection *usReflection;
   USLBytecodeRuntimeInfo *runtimeInfo;
   const USLRuntimeEntryPoint *entry;
-  USLBytecodeEntryTargetInfo targetInfo;
+  const USLBytecodeEntryTargetInfo *targetInfo;
   GPUUSLEntryReflection *reflection;
   GPUBindStage stage;
 
@@ -871,41 +903,30 @@ GPUReflectUSLBytecodeEntry(const void *bytecodeData,
     return -1;
   }
 
-  runtimeInfo = calloc(1, sizeof(*runtimeInfo));
-  if (!runtimeInfo) {
-    return -2;
-  }
-
-  if (usl_reflect_bytecode_runtime_info(bytecodeData,
-                                        (size_t)bytecodeSize,
-                                        runtimeInfo) != USLOk ||
-      !gpu_usl_runtimeInfoIsUsable(runtimeInfo)) {
-    free(runtimeInfo);
+  if (!gpu_usl_compileReflectionForEntry(bytecodeData,
+                                         bytecodeSize,
+                                         entryPointName,
+                                         &compileOutput)) {
     return -3;
   }
+  usReflection = &compileOutput->reflection;
+  runtimeInfo = &usReflection->runtime;
+  targetInfo = &usReflection->entry_targets[0];
 
   entry = gpu_usl_findRuntimeEntry(runtimeInfo, entryPointName);
   if (!entry) {
-    free(runtimeInfo);
+    gpu_usl_freeCompileOutput(compileOutput);
     return -3;
   }
 
   if (!gpu_usl_stageFromRuntimeStage(entry->stage, &stage)) {
-    free(runtimeInfo);
+    gpu_usl_freeCompileOutput(compileOutput);
     return -4;
-  }
-
-  if (!gpu_usl_reflectEntryTargetInfo(bytecodeData,
-                                      bytecodeSize,
-                                      entryPointName,
-                                      &targetInfo)) {
-    free(runtimeInfo);
-    return -10;
   }
 
   reflection = calloc(1, sizeof(*reflection));
   if (!reflection) {
-    free(runtimeInfo);
+    gpu_usl_freeCompileOutput(compileOutput);
     return -5;
   }
 
@@ -921,14 +942,14 @@ GPUReflectUSLBytecodeEntry(const void *bytecodeData,
   reflection->capabilityRequirementFlags = entry->capability_requirement_flags;
   reflection->capabilityRequirementHash =
     gpu_hashUSLEntryCapabilityRequirements(runtimeInfo, entry);
-  reflection->entryTargetInfoVersion = targetInfo.abi_version;
-  reflection->targetBackend = (uint32_t)targetInfo.backend;
-  reflection->targetSupported = targetInfo.supported;
-  reflection->targetSupportStatus = targetInfo.status;
-  reflection->targetAtomCount = targetInfo.target_atom_count;
-  reflection->targetAtomTotalCount = targetInfo.target_atom_total_count;
-  reflection->targetInfoFlags = targetInfo.flags;
-  reflection->targetAtomHash = gpu_hashUSLEntryTargetAtoms(&targetInfo);
+  reflection->entryTargetInfoVersion = targetInfo->abi_version;
+  reflection->targetBackend = (uint32_t)targetInfo->backend;
+  reflection->targetSupported = targetInfo->supported;
+  reflection->targetSupportStatus = targetInfo->status;
+  reflection->targetAtomCount = targetInfo->target_atom_count;
+  reflection->targetAtomTotalCount = targetInfo->target_atom_total_count;
+  reflection->targetInfoFlags = targetInfo->flags;
+  reflection->targetAtomHash = gpu_hashUSLEntryTargetAtoms(targetInfo);
   if (stage == GPUBindStageCompute) {
     reflection->workgroupSize[0] = entry->workgroup_size[0];
     reflection->workgroupSize[1] = entry->workgroup_size[1];
@@ -939,7 +960,7 @@ GPUReflectUSLBytecodeEntry(const void *bytecodeData,
                                                       entryPointName,
                                                       &reflection->resourceBindings,
                                                       &reflection->resourceBindingCount)) {
-    free(runtimeInfo);
+    gpu_usl_freeCompileOutput(compileOutput);
     free(reflection);
     return -7;
   }
@@ -948,13 +969,13 @@ GPUReflectUSLBytecodeEntry(const void *bytecodeData,
                                                     entryPointName,
                                                     &reflection->staticSamplers,
                                                     &reflection->staticSamplerCount)) {
-    free(runtimeInfo);
+    gpu_usl_freeCompileOutput(compileOutput);
     free(reflection->resourceBindings);
     free(reflection);
     return -9;
   }
 
-  free(runtimeInfo);
+  gpu_usl_freeCompileOutput(compileOutput);
   *outReflection = reflection;
   return 0;
 }

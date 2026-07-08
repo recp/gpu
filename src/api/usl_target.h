@@ -99,18 +99,18 @@ gpu_uslDefaultMetalTarget(USLTargetSpec *outTarget) {
     uint32_t platformMajor = gpu_uslAppleRuntimePlatformMajor();
 
     if (platform != USL_TARGET_PLATFORM_NONE && platformMajor > 0) {
-      return usl_target_spec_init_platform(outTarget,
-                                           USL_BACKEND_METAL,
-                                           USL_TARGET_PROFILE_MSL_2_0,
-                                           platform,
-                                           platformMajor) == USLOk;
+      return us_target_platform(outTarget,
+                                USL_BACKEND_METAL,
+                                USL_TARGET_PROFILE_MSL_2_0,
+                                platform,
+                                platformMajor) == USLOk;
     }
   }
 #endif
 
-  return usl_target_spec_init(outTarget,
-                              USL_BACKEND_METAL,
-                              USL_TARGET_PROFILE_MSL_2_0) == USLOk;
+  return us_target_init(outTarget,
+                        USL_BACKEND_METAL,
+                        USL_TARGET_PROFILE_MSL_2_0) == USLOk;
 }
 
 #endif /* gpu_api_usl_target_h */

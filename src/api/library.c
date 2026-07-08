@@ -30,11 +30,6 @@ gpu_fnv1a64Append(uint64_t hash, const void *data, uint64_t size) {
 }
 
 static uint64_t
-gpu_fnv1a64(const void *data, uint64_t size) {
-  return gpu_fnv1a64Append(14695981039346656037ull, data, size);
-}
-
-static uint64_t
 gpu_fnv1a64AppendU32(uint64_t hash, uint32_t value) {
   uint8_t bytes[4];
 
@@ -125,165 +120,6 @@ gpu_hashUSLSelectedEntries(const char * const *entryPointNames,
   }
 
   return hash;
-}
-
-static int
-gpu_uslReflectSupportedTarget(const void *bytecodeData,
-                              uint64_t bytecodeSize,
-                              const USLTargetSpec *target,
-                              USLBytecodeTargetInfo *outInfo) {
-  if (!bytecodeData || !target || !outInfo) {
-    return 0;
-  }
-
-  memset(outInfo, 0, sizeof(*outInfo));
-  if (usl_reflect_bytecode_target_info_for_spec(bytecodeData,
-                                                (size_t)bytecodeSize,
-                                                target,
-                                                outInfo) != USLOk) {
-    return 0;
-  }
-
-  return outInfo->abi_version == USL_RUNTIME_TARGET_INFO_VERSION &&
-         outInfo->bytecode_size == bytecodeSize &&
-         outInfo->backend == target->backend &&
-         outInfo->backend_id == (uint32_t)target->backend &&
-         outInfo->status == USL_TARGET_SUPPORT_SUPPORTED &&
-         outInfo->supported == 1u &&
-         outInfo->content_hash != 0u;
-}
-
-static int
-gpu_uslReflectSupportedEntryTarget(const void *bytecodeData,
-                                   uint64_t bytecodeSize,
-                                   const char *entryPointName,
-                                   const USLTargetSpec *target,
-                                   USLBytecodeEntryTargetInfo *outInfo) {
-  if (!bytecodeData || !entryPointName || !target || !outInfo) {
-    return 0;
-  }
-
-  memset(outInfo, 0, sizeof(*outInfo));
-  if (usl_reflect_bytecode_entry_target_info_for_spec(bytecodeData,
-                                                      (size_t)bytecodeSize,
-                                                      entryPointName,
-                                                      target,
-                                                      outInfo) != USLOk) {
-    return 0;
-  }
-
-  return outInfo->abi_version == USL_RUNTIME_ENTRY_TARGET_INFO_VERSION &&
-         outInfo->bytecode_size == bytecodeSize &&
-         outInfo->backend == target->backend &&
-         outInfo->backend_id == (uint32_t)target->backend &&
-         outInfo->status == USL_TARGET_SUPPORT_SUPPORTED &&
-         outInfo->supported == 1u &&
-         outInfo->content_hash != 0u &&
-         strcmp(outInfo->entry_point, entryPointName) == 0;
-}
-
-static int
-gpu_uslReflectSupportedEntryTargets(const void *bytecodeData,
-                                    uint64_t bytecodeSize,
-                                    const USLTargetSpec *target,
-                                    const char * const *entryPointNames,
-                                    uint32_t entryPointCount,
-                                    USLBytecodeEntryTargetInfo *outFirstInfo) {
-  if (!bytecodeData || !target || !entryPointNames ||
-      entryPointCount == 0u || !outFirstInfo) {
-    return 0;
-  }
-
-  memset(outFirstInfo, 0, sizeof(*outFirstInfo));
-  for (uint32_t i = 0; i < entryPointCount; i++) {
-    USLBytecodeEntryTargetInfo entryInfo;
-
-    if (!entryPointNames[i] || entryPointNames[i][0] == '\0') {
-      return 0;
-    }
-
-    if (!gpu_uslReflectSupportedEntryTarget(bytecodeData,
-                                            bytecodeSize,
-                                            entryPointNames[i],
-                                            target,
-                                            &entryInfo)) {
-      return 0;
-    }
-
-    if (i == 0u) {
-      *outFirstInfo = entryInfo;
-    } else if (entryInfo.content_hash != outFirstInfo->content_hash ||
-               entryInfo.bytecode_size != outFirstInfo->bytecode_size ||
-               entryInfo.backend != outFirstInfo->backend ||
-               entryInfo.backend_id != outFirstInfo->backend_id ||
-               entryInfo.target_atom_count != outFirstInfo->target_atom_count ||
-               entryInfo.target_atom_total_count != outFirstInfo->target_atom_total_count ||
-               entryInfo.flags != outFirstInfo->flags ||
-               gpu_hashUSLEntryTargetAtoms(&entryInfo) !=
-                 gpu_hashUSLEntryTargetAtoms(outFirstInfo)) {
-      return 0;
-    }
-  }
-
-  return 1;
-}
-
-static int
-gpu_getEmbeddedMetalFromUSLBytecode(const void *bytecodeData,
-                                    uint64_t bytecodeSize,
-                                    uint64_t bytecodeContentHash,
-                                    const char **outMetal,
-                                    uint64_t *outMetalSize,
-                                    uint64_t *outMetalHash) {
-  USLBytecodeEmbeddedBlobInfo info;
-  const uint8_t *data = (const uint8_t *)bytecodeData;
-
-  if (outMetal) *outMetal = NULL;
-  if (outMetalSize) *outMetalSize = 0;
-  if (outMetalHash) *outMetalHash = 0;
-
-  if (!bytecodeData) {
-    return 0;
-  }
-
-  memset(&info, 0, sizeof(info));
-  if (usl_reflect_bytecode_embedded_blob_info(bytecodeData,
-                                              (size_t)bytecodeSize,
-                                              &info) != USLOk) {
-    return 0;
-  }
-
-  if (info.abi_version != USL_RUNTIME_EMBEDDED_BLOB_INFO_VERSION ||
-      info.bytecode_size != bytecodeSize ||
-      info.content_hash != bytecodeContentHash ||
-      info.flags != 0u) {
-    return 0;
-  }
-
-  for (uint32_t i = 0; i < info.blob_count; i++) {
-    const USLRuntimeEmbeddedBlob *blob = &info.blobs[i];
-    uint32_t offset = blob->data_offset;
-    uint32_t size = blob->data_size;
-
-    if (blob->backend != USL_BACKEND_METAL ||
-        blob->backend_id != (uint32_t)USL_BACKEND_METAL ||
-        blob->encoding != USL_RUNTIME_EMBEDDED_BLOB_ENCODING_TEXT ||
-        blob->valid_range != 1u ||
-        blob->content_hash == 0u) {
-      continue;
-    }
-
-    if (offset > bytecodeSize || size > bytecodeSize - offset) {
-      return 0;
-    }
-
-    if (outMetal) *outMetal = (const char *)(data + offset);
-    if (outMetalSize) *outMetalSize = size;
-    if (outMetalHash) *outMetalHash = blob->content_hash;
-    return 1;
-  }
-
-  return 0;
 }
 
 static void
@@ -426,18 +262,17 @@ gpu_createShaderLibraryFromUSLBytecodeImpl(GPUDevice *device,
   GPUShaderLibraryCreateInfo info = {0};
   GPUApi *api;
   USLTargetSpec target;
-  USLBytecodeTargetInfo targetInfo;
-  USLBytecodeEntryTargetInfo entryTargetInfo;
-  const char *metal = NULL;
-  uint64_t metalSize = 0;
-  uint64_t metalHash = 0;
+  USCompileInput compileInput;
+  USCompileOutput compileOutput;
   uint64_t selectedEntryHash = 0;
   int useSelectedEntries;
+  int rc;
 
   if (!device || !bytecodeData || !outLibrary) {
     return -1;
   }
   *outLibrary = NULL;
+  memset(&compileOutput, 0, sizeof(compileOutput));
 
   useSelectedEntries = entryPointCount > 0u;
   if (useSelectedEntries) {
@@ -458,99 +293,55 @@ gpu_createShaderLibraryFromUSLBytecodeImpl(GPUDevice *device,
     return -3;
   }
 
-  if (useSelectedEntries) {
-    if (!gpu_uslReflectSupportedEntryTargets(bytecodeData,
-                                             bytecodeSize,
-                                             &target,
-                                             entryPointNames,
-                                             entryPointCount,
-                                             &entryTargetInfo)) {
-      return -6;
-    }
-  } else {
-    if (!gpu_uslReflectSupportedTarget(bytecodeData,
-                                       bytecodeSize,
-                                       &target,
-                                       &targetInfo)) {
-      return -6;
-    }
+  memset(&compileInput, 0, sizeof(compileInput));
+  compileInput.abi_version = US_COMPILE_INPUT_VERSION;
+  compileInput.artifact = bytecodeData;
+  compileInput.artifact_size = (size_t)bytecodeSize;
+  compileInput.target = &target;
+  compileInput.entry_point_names = entryPointNames;
+  compileInput.entry_point_count = entryPointCount;
+  if (us_compile(&compileInput, &compileOutput) != USLOk ||
+      compileOutput.backend != USL_BACKEND_METAL ||
+      compileOutput.encoding != USL_RUNTIME_EMBEDDED_BLOB_ENCODING_TEXT ||
+      !compileOutput.backend_data ||
+      compileOutput.backend_size == 0) {
+    us_free_compile_output(&compileOutput);
+    return -4;
+  }
+  if ((useSelectedEntries && compileOutput.reflection.entry_target_count == 0u) ||
+      (!useSelectedEntries && !compileOutput.reflection.target_info_valid)) {
+    us_free_compile_output(&compileOutput);
+    return -6;
   }
 
-  if (!gpu_getEmbeddedMetalFromUSLBytecode(bytecodeData,
-                                           bytecodeSize,
-                                           useSelectedEntries
-                                             ? entryTargetInfo.content_hash
-                                             : targetInfo.content_hash,
-                                           &metal,
-                                           &metalSize,
-                                           &metalHash)) {
-    char *generated;
-    int rc;
-
-    if (useSelectedEntries) {
-      generated = us_compile_target_entries(bytecodeData,
-                                            (size_t)bytecodeSize,
-                                            &target,
-                                            entryPointNames,
-                                            entryPointCount);
-    } else {
-      generated = us_compile_target(bytecodeData,
-                                    (size_t)bytecodeSize,
-                                    &target);
-    }
-    if (!generated) {
-      return -4;
-    }
-    metal = generated;
-    metalSize = (uint64_t)strlen(generated);
-    metalHash = gpu_fnv1a64(metal, metalSize);
-
-    info.label = "compiled-usl-metal";
-    info.sourceKind = GPU_SHADER_SOURCE_MSL_TEXT;
-    info.sourceData = metal;
-    info.sourceSize = metalSize;
-    info.sourcePathHint = NULL;
-    rc = GPUCreateShaderLibrary(device, &info, outLibrary);
-    if (rc == 0 && outLibrary && *outLibrary) {
-      if (useSelectedEntries) {
-        gpu_setShaderLibraryUSLInfoForEntries(*outLibrary,
-                                              &entryTargetInfo,
-                                              GPUShaderLibraryUSLSourceGenerated,
-                                              metalHash,
-                                              entryPointCount,
-                                              selectedEntryHash);
-      } else {
-        gpu_setShaderLibraryUSLInfo(*outLibrary,
-                                    &targetInfo,
-                                    GPUShaderLibraryUSLSourceGenerated,
-                                    metalHash);
-      }
-    }
-    usl_free_backend_code(generated);
-    return rc;
-  }
-
-  info.label = "embedded-usl-metal";
+  info.label = (compileOutput.flags & US_COMPILE_OUTPUT_FLAG_EMBEDDED_BLOB) != 0u
+                 ? "embedded-usl-metal"
+                 : "compiled-usl-metal";
   info.sourceKind = GPU_SHADER_SOURCE_MSL_TEXT;
-  info.sourceData = metal;
-  info.sourceSize = metalSize;
+  info.sourceData = compileOutput.backend_data;
+  info.sourceSize = compileOutput.backend_size;
   info.sourcePathHint = NULL;
-  int rc = GPUCreateShaderLibrary(device, &info, outLibrary);
+  rc = GPUCreateShaderLibrary(device, &info, outLibrary);
   if (rc == 0 && outLibrary && *outLibrary) {
     if (useSelectedEntries) {
       gpu_setShaderLibraryUSLInfoForEntries(*outLibrary,
-                                            &entryTargetInfo,
-                                            GPUShaderLibraryUSLSourceEmbedded,
-                                            metalHash,
+                                            &compileOutput.reflection.entry_targets[0],
+                                            (compileOutput.flags & US_COMPILE_OUTPUT_FLAG_EMBEDDED_BLOB) != 0u
+                                              ? GPUShaderLibraryUSLSourceEmbedded
+                                              : GPUShaderLibraryUSLSourceGenerated,
+                                            compileOutput.backend_hash,
                                             entryPointCount,
                                             selectedEntryHash);
     } else {
       gpu_setShaderLibraryUSLInfo(*outLibrary,
-                                  &targetInfo,
-                                  GPUShaderLibraryUSLSourceEmbedded,
-                                  metalHash);
+                                  &compileOutput.reflection.target_info,
+                                  (compileOutput.flags & US_COMPILE_OUTPUT_FLAG_EMBEDDED_BLOB) != 0u
+                                    ? GPUShaderLibraryUSLSourceEmbedded
+                                    : GPUShaderLibraryUSLSourceGenerated,
+                                  compileOutput.backend_hash);
     }
   }
+  us_free_compile_output(&compileOutput);
   return rc;
 }
 

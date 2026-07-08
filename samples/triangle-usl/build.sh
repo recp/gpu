@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SAMPLE_DIR="$(cd "$(dirname "$0")" && pwd)"
-DERIVED_DATA="/tmp/gpu-dd"
+DERIVED_DATA="${GPU_DERIVED_DATA:-/tmp/gpu-dd}"
 LIB_DIR="$DERIVED_DATA/Build/Products/Debug"
 OUT_BIN="$SAMPLE_DIR/hello-triangle-usl"
 SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
