@@ -32,6 +32,39 @@ GPUCreateSwapChain(GPUDevice              * __restrict device,
 }
 
 GPU_EXPORT
+GPUResult
+GPUCreateSwapchain(GPUDevice                    * __restrict device,
+                   const GPUSwapchainCreateInfo * __restrict info,
+                   GPUSwapchain                ** __restrict outSwapchain) {
+  GPUCommandQueue *queue;
+  GPUExtent2D      size;
+
+  if (!outSwapchain)
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  *outSwapchain = NULL;
+
+  if (!device || !info || !info->surface || info->width == 0 || info->height == 0)
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0);
+  if (!queue)
+    return GPU_ERROR_BACKEND_FAILURE;
+
+  size.width      = info->width;
+  size.height     = info->height;
+  *outSwapchain = GPUCreateSwapChain(device,
+                                     queue,
+                                     info->surface,
+                                     size,
+                                     true);
+  if (!*outSwapchain)
+    return GPU_ERROR_BACKEND_FAILURE;
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
 GPUSwapChain*
 GPUCreateSwapChainForView(GPUDevice              * __restrict device,
                           struct GPUCommandQueue * __restrict cmdQue,
@@ -85,7 +118,7 @@ GPUDestroySwapChain(GPUSwapChain * __restrict swapChain) {
 
 GPU_EXPORT
 void
-GPUDestroySwapchain(GPUSwapChain * __restrict swapChain) {
+GPUDestroySwapchain(GPUSwapchain * __restrict swapChain) {
   GPUDestroySwapChain(swapChain);
 }
 

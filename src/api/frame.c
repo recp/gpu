@@ -18,7 +18,7 @@
 
 GPU_EXPORT
 GPUFrame*
-GPUBeginFrame(GPUSwapChain* swapchain) {
+GPUBeginFrame(GPUSwapchain* swapchain) {
   GPUApi *api;
 
   if (!swapchain)

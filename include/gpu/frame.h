@@ -24,6 +24,7 @@ extern "C" {
 #include "cmdqueue.h"
 
 typedef struct GPUSwapChain GPUSwapChain;
+typedef struct GPUSwapChain GPUSwapchain;
 
 typedef struct GPUFrame {
   void           *_priv;
@@ -34,7 +35,7 @@ typedef struct GPUFrame {
 
 GPU_EXPORT
 GPUFrame*
-GPUBeginFrame(GPUSwapChain* swapchain);
+GPUBeginFrame(GPUSwapchain* swapchain);
 
 /* Returns the acquired render target for this frame. */
 GPU_EXPORT

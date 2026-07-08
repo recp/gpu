@@ -22,8 +22,9 @@ extern "C" {
 
 #include "common.h"
 #include "geometric.h"
+#include "cmdqueue.h"
+#include "pixelformat.h"
 
-struct GPUCommandQueue;
 typedef struct GPUDevice GPUDevice;
 struct GPUSurface;
 
@@ -32,6 +33,25 @@ typedef struct GPUSwapChain {
   void *target; /* draw target */
   float backingScaleFactor;
 } GPUSwapChain;
+
+typedef GPUSwapChain GPUSwapchain;
+
+typedef enum GPUPresentMode {
+  GPU_PRESENT_MODE_FIFO = 0,
+  GPU_PRESENT_MODE_MAILBOX = 1,
+  GPU_PRESENT_MODE_IMMEDIATE = 2
+} GPUPresentMode;
+
+typedef struct GPUSwapchainCreateInfo {
+  GPUChainedStruct chain;
+  const char      *label;
+  struct GPUSurface *surface;
+  uint32_t         width;
+  uint32_t         height;
+  GPUFormat        format;
+  uint32_t         imageCount;
+  GPUPresentMode   presentMode;
+} GPUSwapchainCreateInfo;
 
 typedef enum GPUWindowType {
   GPU_WINDOW_TYPE_HWND,
@@ -51,6 +71,12 @@ GPUCreateSwapChain(GPUDevice              * __restrict device,
                    struct GPUSurface      * __restrict surface,
                    GPUExtent2D                         size,
                    bool                                autoResize);
+
+GPU_EXPORT
+GPUResult
+GPUCreateSwapchain(GPUDevice                        * __restrict device,
+                   const GPUSwapchainCreateInfo     * __restrict info,
+                   GPUSwapchain                    ** __restrict outSwapchain);
 
 GPU_EXPORT
 GPUSwapChain*
@@ -78,7 +104,7 @@ GPUDestroySwapChain(GPUSwapChain * __restrict swapChain);
 
 GPU_EXPORT
 void
-GPUDestroySwapchain(GPUSwapChain * __restrict swapChain);
+GPUDestroySwapchain(GPUSwapchain * __restrict swapChain);
 
 GPU_EXPORT
 void

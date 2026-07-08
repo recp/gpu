@@ -29,7 +29,7 @@ static const TriangleVertex kTriangleVertices[] = {
   GPUDevice *_device;
   GPUCommandQueue *_queue;
   GPUSurface *_surface;
-  GPUSwapChain *_swapchain;
+  GPUSwapchain *_swapchain;
   GPULibrary *_library;
   GPUShaderLayout *_shaderLayout;
   GPURenderPipeline *_pipeline;
@@ -78,7 +78,7 @@ static const TriangleVertex kTriangleVertices[] = {
   NSString *sampleDir;
   NSData   *bytecodeData;
   GPUShaderLibraryUSLInfo uslInfo;
-  GPUExtent2D size;
+  GPUSwapchainCreateInfo swapchainInfo = {0};
 
   _physicalDevice = GPUGetAutoSelectedPhysicalDevice(NULL);
   if (!_physicalDevice) {
@@ -108,9 +108,18 @@ static const TriangleVertex kTriangleVertices[] = {
     return NO;
   }
 
-  size.width = (uint32_t)_view.bounds.size.width;
-  size.height = (uint32_t)_view.bounds.size.height;
-  _swapchain = GPUCreateSwapChain(_device, _queue, _surface, size, true);
+  swapchainInfo.chain.sType = GPU_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO;
+  swapchainInfo.chain.structSize = sizeof(swapchainInfo);
+  swapchainInfo.label = "triangle-usl-swapchain";
+  swapchainInfo.surface = _surface;
+  swapchainInfo.width = (uint32_t)_view.bounds.size.width;
+  swapchainInfo.height = (uint32_t)_view.bounds.size.height;
+  swapchainInfo.format = GPU_FORMAT_BGRA8_UNORM;
+  swapchainInfo.imageCount = 3;
+  swapchainInfo.presentMode = GPU_PRESENT_MODE_FIFO;
+  if (GPUCreateSwapchain(_device, &swapchainInfo, &_swapchain) != GPU_OK) {
+    _swapchain = NULL;
+  }
   if (!_swapchain) {
     NSLog(@"GPU: failed to create swapchain");
     return NO;
@@ -385,7 +394,7 @@ cleanup:
     _library = NULL;
   }
   if (_swapchain) {
-    GPUDestroySwapChain(_swapchain);
+    GPUDestroySwapchain(_swapchain);
     _swapchain = NULL;
   }
   if (_surface) {
