@@ -70,6 +70,7 @@ typedef void (*GPUCommandBufferCompletionFn)(void            *__restrict sender,
 
 struct GPUCommandBuffer {
   void *_priv;
+  GPUCommandQueue *_queue;
   void *_onCompleteSender;
   GPUCommandBufferCompletionFn _onComplete;
   bool  _submitted;

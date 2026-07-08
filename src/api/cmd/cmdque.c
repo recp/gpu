@@ -120,6 +120,7 @@ gpu_newCommandBuffer(GPUCommandQueue  * __restrict cmdq,
                      void             * __restrict sender,
                      GPUCommandBufferCompletionFn  oncomplete) {
   GPUApi *api;
+  GPUCommandBuffer *cmdb;
 
   if (!cmdq)
     return NULL;
@@ -128,7 +129,12 @@ gpu_newCommandBuffer(GPUCommandQueue  * __restrict cmdq,
   if (!api->cmdque.newCommandBuffer)
     return NULL;
 
-  return api->cmdque.newCommandBuffer(cmdq, sender, oncomplete);
+  cmdb = api->cmdque.newCommandBuffer(cmdq, sender, oncomplete);
+  if (cmdb) {
+    cmdb->_queue = cmdq;
+  }
+
+  return cmdb;
 }
 
 GPU_EXPORT
@@ -235,7 +241,7 @@ GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
     GPUCommandBuffer *cmdb;
 
     cmdb = info->ppCommandBuffers[i];
-    if (!cmdb || cmdb->_submitted) {
+    if (!cmdb || cmdb->_submitted || cmdb->_queue != cmdq) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
     for (uint32_t j = 0; j < i; j++) {

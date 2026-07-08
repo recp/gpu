@@ -2096,6 +2096,8 @@ static int
 check_queue_submit_fence(GPUDevice *device) {
   GPUCommandQueue *queue;
   GPUCommandBuffer submittedCmdb = {0};
+  GPUCommandBuffer foreignCmdb = {0};
+  GPUCommandQueue foreignQueue = {0};
   GPUFrame fakeFrame = {0};
   GPUCommandBuffer *cmdb;
   GPUCommandBuffer *buffers[1];
@@ -2183,6 +2185,20 @@ check_queue_submit_fence(GPUDevice *device) {
     submitInfo.ppCommandBuffers = nullBuffers;
     if (GPUQueueSubmit(queue, &submitInfo) != GPU_ERROR_INVALID_ARGUMENT) {
       fprintf(stderr, "queue submit accepted null command buffer\n");
+      ok = 0;
+    }
+  }
+
+  if (ok) {
+    foreignCmdb._queue = &foreignQueue;
+    buffers[0] = &foreignCmdb;
+    memset(&submitInfo, 0, sizeof(submitInfo));
+    submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+    submitInfo.chain.structSize = sizeof(submitInfo);
+    submitInfo.commandBufferCount = 1u;
+    submitInfo.ppCommandBuffers = buffers;
+    if (GPUQueueSubmit(queue, &submitInfo) != GPU_ERROR_INVALID_ARGUMENT) {
+      fprintf(stderr, "queue submit accepted command buffer from another queue\n");
       ok = 0;
     }
   }
