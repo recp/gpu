@@ -1,10 +1,9 @@
 #import <AppKit/AppKit.h>
 #include <math.h>
-#include <string.h>
-#import <mach-o/dyld.h>
 #import <QuartzCore/QuartzCore.h>
 
 #import "../../include/gpu/gpu.h"
+#import "../common/SampleUSL.h"
 
 typedef struct QuadVertex {
   float position[4];
@@ -81,25 +80,6 @@ static const uint8_t kCheckerPixels[] = {
   [NSApp activateIgnoringOtherApps:YES];
 
   return YES;
-}
-
-- (NSString *)sampleDir {
-  NSString *executablePath;
-  uint32_t sizeBytes = 0;
-  _NSGetExecutablePath(NULL, &sizeBytes);
-  char *buffer = malloc(sizeBytes);
-  if (!buffer) {
-    return nil;
-  }
-  if (_NSGetExecutablePath(buffer, &sizeBytes) != 0) {
-    free(buffer);
-    return nil;
-  }
-  executablePath = [[NSFileManager defaultManager]
-                    stringWithFileSystemRepresentation:buffer
-                    length:strlen(buffer)];
-  free(buffer);
-  return [executablePath stringByDeletingLastPathComponent];
 }
 
 - (BOOL)setupTexture {
@@ -179,9 +159,6 @@ static const uint8_t kCheckerPixels[] = {
 }
 
 - (BOOL)setupGPU {
-  NSString *bytecodePath;
-  NSString *sampleDir;
-  NSData   *bytecodeData;
   GPUBindGroupEntry groupEntries[3] = {0};
 
   _physicalDevice = GPUGetAutoSelectedPhysicalDevice(NULL);
@@ -221,32 +198,11 @@ static const uint8_t kCheckerPixels[] = {
     return NO;
   }
 
-  sampleDir = [self sampleDir];
-  if (!sampleDir) {
-    return NO;
-  }
-
-  bytecodePath = [sampleDir stringByAppendingPathComponent:@"textured_quad.us"];
-  bytecodeData = [NSData dataWithContentsOfFile:bytecodePath];
-  if (!bytecodeData) {
-    NSLog(@"GPU: failed to load USL bytecode at %@", bytecodePath);
-    return NO;
-  }
-
-  if (GPUCreateShaderLibraryFromUSL(_device,
-                                    bytecodeData.bytes,
-                                    (uint64_t)bytecodeData.length,
-                                    (GPUShaderLibrary **)&_library) != GPU_OK) {
-    NSLog(@"GPU: failed to create shader library");
-    return NO;
-  }
-
-  if (GPUCreateShaderLayout(_device, _library, &_shaderLayout) != GPU_OK ||
-      !_shaderLayout ||
-      _shaderLayout->bindGroupLayoutCount != 1 ||
-      !_shaderLayout->bindGroupLayouts[0] ||
-      !_shaderLayout->pipelineLayout) {
-    NSLog(@"GPU: failed to create shader layout");
+  if (!GPUSampleLoadUSL(_device,
+                        @"textured_quad.us",
+                        1u,
+                        (GPUShaderLibrary **)&_library,
+                        &_shaderLayout)) {
     return NO;
   }
 
