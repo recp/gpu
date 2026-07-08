@@ -74,7 +74,15 @@ mt_newFunction(GPULibrary *lib, const char *name) {
   id<MTLFunction> mtFunc;
 
   mtFunc = [(id<MTLLibrary>)lib->_priv newFunctionWithName:[NSString stringWithUTF8String:name]];
+  if (!mtFunc) {
+    return NULL;
+  }
+
   func   = calloc(1, sizeof(*func));
+  if (!func) {
+    [mtFunc release];
+    return NULL;
+  }
 
   func->_priv = mtFunc;
 

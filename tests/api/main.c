@@ -34,8 +34,7 @@ run_render(void *ctx) {
 
 static int
 run_compute(void *ctx) {
-  (void)ctx;
-  return gpu_test_compute();
+  return gpu_test_compute(((GPUApiTestContext *)ctx)->device);
 }
 
 int
