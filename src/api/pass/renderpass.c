@@ -16,6 +16,67 @@
 
 #include "../../common.h"
 
+#define GPU_RENDER_PASS_MAX_COLOR_ATTACHMENTS 8u
+
+static bool
+gpu_validLoadOp(GPULoadOp op) {
+  return op == GPU_LOAD_OP_LOAD ||
+         op == GPU_LOAD_OP_CLEAR ||
+         op == GPU_LOAD_OP_DONT_CARE;
+}
+
+static bool
+gpu_validStoreOp(GPUStoreOp op) {
+  return op == GPU_STORE_OP_STORE ||
+         op == GPU_STORE_OP_DONT_CARE;
+}
+
+static bool
+gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info) {
+  const GPURenderPassDepthStencilAttachment *depthStencil;
+
+  if (!info) {
+    return false;
+  }
+  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+      info->chain.sType != GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO) {
+    return false;
+  }
+  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
+    return false;
+  }
+  if (info->colorAttachmentCount > GPU_RENDER_PASS_MAX_COLOR_ATTACHMENTS) {
+    return false;
+  }
+  if (info->colorAttachmentCount > 0 && !info->pColorAttachments) {
+    return false;
+  }
+
+  for (uint32_t i = 0; i < info->colorAttachmentCount; i++) {
+    const GPURenderPassColorAttachment *color;
+
+    color = &info->pColorAttachments[i];
+    if (!color->view ||
+        !gpu_validLoadOp(color->loadOp) ||
+        !gpu_validStoreOp(color->storeOp)) {
+      return false;
+    }
+  }
+
+  depthStencil = info->pDepthStencilAttachment;
+  if (depthStencil) {
+    if (!depthStencil->view ||
+        !gpu_validLoadOp(depthStencil->depthLoadOp) ||
+        !gpu_validStoreOp(depthStencil->depthStoreOp) ||
+        !gpu_validLoadOp(depthStencil->stencilLoadOp) ||
+        !gpu_validStoreOp(depthStencil->stencilStoreOp)) {
+      return false;
+    }
+  }
+
+  return info->colorAttachmentCount > 0 || depthStencil != NULL;
+}
+
 static void
 gpu_destroyRenderPass(GPURenderPassDesc *pass) {
   GPUApi *api;
@@ -40,9 +101,11 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
   GPURenderPassEncoder *encoder;
   GPUApi               *api;
 
+  if (!cmdb || cmdb->_submitted || !gpu_validRenderPassCreateInfo(info))
+    return NULL;
   if (!(api = gpuActiveGPUApi()))
     return NULL;
-  if (!cmdb || !info || !api->renderPass.beginRenderPass || !api->rce.renderCommandEncoder)
+  if (!api->renderPass.beginRenderPass || !api->rce.renderCommandEncoder)
     return NULL;
 
   desc = api->renderPass.beginRenderPass(info);
