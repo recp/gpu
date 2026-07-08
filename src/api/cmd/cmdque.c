@@ -278,7 +278,12 @@ GPUCreateFence(GPUDevice              * __restrict device,
                GPUFence              ** __restrict outFence) {
   GPUFence *fence;
 
-  if (!device || !outFence) {
+  if (!outFence) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outFence = NULL;
+
+  if (!device) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (info &&
@@ -290,7 +295,6 @@ GPUCreateFence(GPUDevice              * __restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  *outFence = NULL;
   fence = calloc(1, sizeof(*fence));
   if (!fence) {
     return GPU_ERROR_OUT_OF_MEMORY;

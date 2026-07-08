@@ -704,6 +704,56 @@ static int
 check_queue_submit_fence(GPUDevice *device);
 
 static int
+check_fence_create_validation(GPUDevice *device) {
+  GPUFenceCreateInfo fenceInfo = {0};
+  GPUFence *fence;
+
+  fenceInfo.chain.sType = GPU_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  fenceInfo.chain.structSize = sizeof(fenceInfo);
+
+  fence = (GPUFence *)(uintptr_t)1u;
+  if (GPUCreateFence(NULL, &fenceInfo, &fence) != GPU_ERROR_INVALID_ARGUMENT ||
+      fence != NULL) {
+    fprintf(stderr, "fence create accepted null device\n");
+    return 0;
+  }
+  if (GPUCreateFence(device, &fenceInfo, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "fence create accepted null output\n");
+    return 0;
+  }
+
+  fence = (GPUFence *)(uintptr_t)1u;
+  fenceInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  if (GPUCreateFence(device, &fenceInfo, &fence) != GPU_ERROR_INVALID_ARGUMENT ||
+      fence != NULL) {
+    fprintf(stderr, "fence create accepted wrong sType\n");
+    return 0;
+  }
+
+  fence = (GPUFence *)(uintptr_t)1u;
+  fenceInfo.chain.sType = GPU_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  fenceInfo.chain.structSize = (uint32_t)(sizeof(fenceInfo) - 1u);
+  if (GPUCreateFence(device, &fenceInfo, &fence) != GPU_ERROR_INVALID_ARGUMENT ||
+      fence != NULL) {
+    fprintf(stderr, "fence create accepted short structSize\n");
+    return 0;
+  }
+
+  fence = NULL;
+  if (GPUCreateFence(device, NULL, &fence) != GPU_OK ||
+      !fence ||
+      GPUIsFenceSignaled(fence) ||
+      GPUWaitFence(fence, 0) != GPU_ERROR_TIMEOUT) {
+    fprintf(stderr, "fence create default state failed\n");
+    GPUDestroyFence(fence);
+    return 0;
+  }
+  GPUDestroyFence(fence);
+
+  return 1;
+}
+
+static int
 check_queue_selection(GPUDevice *device) {
   GPUCommandQueue *graphics0;
   GPUCommandQueue *compute0;
@@ -979,6 +1029,9 @@ check_queue_submit_fence(GPUDevice *device) {
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0);
   if (!queue) {
     fprintf(stderr, "failed to get graphics queue for fence test\n");
+    return 0;
+  }
+  if (!check_fence_create_validation(device)) {
     return 0;
   }
 
