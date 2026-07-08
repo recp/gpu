@@ -17,6 +17,8 @@
 #include "../common.h"
 #include "usl_target.h"
 
+#define GPU_USL_BYTECODE_VERSION 2u
+
 static uint64_t
 gpu_fnv1a64Append(uint64_t hash, const void *data, uint64_t size) {
   const uint8_t *bytes = (const uint8_t *)data;
@@ -120,6 +122,262 @@ gpu_hashUSLSelectedEntries(const char * const *entryPointNames,
   }
 
   return hash;
+}
+
+static char *
+gpu_dupText(const char *text) {
+  char *copy;
+  size_t len;
+
+  if (!text) {
+    text = "";
+  }
+
+  len = strlen(text);
+  copy = malloc(len + 1u);
+  if (!copy) {
+    return NULL;
+  }
+
+  memcpy(copy, text, len + 1u);
+  return copy;
+}
+
+static void
+gpu_clearShaderReflection(GPUShaderReflection *reflection) {
+  GPUShaderResourceReflection *resources;
+
+  if (!reflection) {
+    return;
+  }
+
+  resources = (GPUShaderResourceReflection *)reflection->pResources;
+  if (resources) {
+    for (uint32_t i = 0; i < reflection->resourceCount; i++) {
+      free((char *)resources[i].name);
+    }
+    free(resources);
+  }
+
+  memset(reflection, 0, sizeof(*reflection));
+}
+
+static int
+gpu_uslRuntimeInfoIsUsable(const USLBytecodeRuntimeInfo *runtimeInfo) {
+  return runtimeInfo &&
+         runtimeInfo->abi_version == USL_RUNTIME_INFO_VERSION &&
+         runtimeInfo->bytecode_version == GPU_USL_BYTECODE_VERSION;
+}
+
+static int
+gpu_uslEntrySelected(const char *entry,
+                     const char * const *entryPointNames,
+                     uint32_t entryPointCount) {
+  if (!entry || entry[0] == '\0') {
+    return 0;
+  }
+  if (!entryPointNames || entryPointCount == 0u) {
+    return 1;
+  }
+
+  for (uint32_t i = 0; i < entryPointCount; i++) {
+    if (entryPointNames[i] && strcmp(entry, entryPointNames[i]) == 0) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+static int
+gpu_shaderVisibilityFromUSLStage(uint32_t stage, GPUShaderStageFlags *outVisibility) {
+  if (!outVisibility) {
+    return 0;
+  }
+
+  switch (stage) {
+    case USL_RUNTIME_STAGE_VERTEX:
+      *outVisibility = GPU_SHADER_STAGE_VERTEX_BIT;
+      return 1;
+    case USL_RUNTIME_STAGE_FRAGMENT:
+      *outVisibility = GPU_SHADER_STAGE_FRAGMENT_BIT;
+      return 1;
+    case USL_RUNTIME_STAGE_COMPUTE:
+      *outVisibility = GPU_SHADER_STAGE_COMPUTE_BIT;
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static int
+gpu_bindingTypeFromUSLResource(const USLRuntimeResource *resource,
+                               GPUBindingType *outType) {
+  if (!resource || !outType) {
+    return 0;
+  }
+
+  switch (resource->kind) {
+    case USL_RUNTIME_RESOURCE_BUFFER:
+      *outType = GPU_BINDING_UNIFORM_BUFFER;
+      return 1;
+    case USL_RUNTIME_RESOURCE_TEXTURE:
+      *outType = GPU_BINDING_SAMPLED_TEXTURE;
+      return 1;
+    case USL_RUNTIME_RESOURCE_IMAGE:
+      *outType = resource->access == USL_RUNTIME_IMAGE_ACCESS_READ ?
+        GPU_BINDING_SAMPLED_TEXTURE :
+        GPU_BINDING_STORAGE_TEXTURE;
+      return 1;
+    case USL_RUNTIME_RESOURCE_SAMPLER:
+      *outType = GPU_BINDING_SAMPLER;
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static int
+gpu_appendShaderResourceReflection(GPUShaderReflection *reflection,
+                                   const USLRuntimeResource *resource,
+                                   GPUBindingType bindingType,
+                                   GPUShaderStageFlags visibility) {
+  GPUShaderResourceReflection *resources;
+  GPUShaderResourceReflection *grown;
+  uint32_t binding;
+  uint32_t setIndex;
+  size_t nextCount;
+
+  if (!reflection || !resource || resource->slot < 0 || visibility == 0) {
+    return 0;
+  }
+
+  binding = (uint32_t)resource->slot;
+  setIndex = 0u;
+  resources = (GPUShaderResourceReflection *)reflection->pResources;
+
+  for (uint32_t i = 0; i < reflection->resourceCount; i++) {
+    if (resources[i].setIndex == setIndex &&
+        resources[i].binding == binding &&
+        resources[i].bindingType == bindingType) {
+      resources[i].visibility |= visibility;
+      return 1;
+    }
+  }
+
+  if (reflection->resourceCount == UINT32_MAX) {
+    return 0;
+  }
+
+  nextCount = (size_t)reflection->resourceCount + 1u;
+  if (nextCount > SIZE_MAX / sizeof(*resources)) {
+    return 0;
+  }
+
+  grown = realloc(resources, nextCount * sizeof(*resources));
+  if (!grown) {
+    return 0;
+  }
+
+  reflection->pResources = grown;
+  resources = grown;
+  memset(&resources[reflection->resourceCount], 0, sizeof(resources[0]));
+  resources[reflection->resourceCount].name = gpu_dupText(resource->param);
+  if (!resources[reflection->resourceCount].name) {
+    return 0;
+  }
+  resources[reflection->resourceCount].setIndex = setIndex;
+  resources[reflection->resourceCount].binding = binding;
+  resources[reflection->resourceCount].bindingType = bindingType;
+  resources[reflection->resourceCount].visibility = visibility;
+  resources[reflection->resourceCount].arrayCount = 1u;
+  reflection->resourceCount++;
+  return 1;
+}
+
+static int
+gpu_setShaderLibraryReflection(GPUShaderLibrary *library,
+                               const USReflection *usReflection,
+                               const char * const *entryPointNames,
+                               uint32_t entryPointCount) {
+  const USLBytecodeRuntimeInfo *runtimeInfo;
+
+  if (!library || !usReflection ||
+      usReflection->abi_version != US_REFLECTION_VERSION) {
+    return 0;
+  }
+
+  runtimeInfo = &usReflection->runtime;
+  if (!gpu_uslRuntimeInfoIsUsable(runtimeInfo) ||
+      (runtimeInfo->flags & USL_BYTECODE_RUNTIME_INFO_FLAG_RESOURCE_OVERFLOW) != 0u) {
+    return 0;
+  }
+
+  gpu_clearShaderReflection(&library->_reflection);
+  for (uint32_t i = 0; i < runtimeInfo->resource_count; i++) {
+    const USLRuntimeResource *resource = &runtimeInfo->resources[i];
+    GPUShaderStageFlags visibility;
+    GPUBindingType bindingType;
+
+    if (!resource->used ||
+        !gpu_uslEntrySelected(resource->entry, entryPointNames, entryPointCount)) {
+      continue;
+    }
+
+    if (!gpu_shaderVisibilityFromUSLStage(resource->stage, &visibility) ||
+        !gpu_bindingTypeFromUSLResource(resource, &bindingType) ||
+        !gpu_appendShaderResourceReflection(&library->_reflection,
+                                            resource,
+                                            bindingType,
+                                            visibility)) {
+      gpu_clearShaderReflection(&library->_reflection);
+      return 0;
+    }
+  }
+
+  return 1;
+}
+
+static GPUResult
+gpu_copyShaderReflection(const GPUShaderReflection *src,
+                         GPUShaderReflection *dst) {
+  const GPUShaderResourceReflection *srcResources;
+  GPUShaderResourceReflection *dstResources;
+
+  if (!src || !dst) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  memset(dst, 0, sizeof(*dst));
+  dst->pushConstantSizeBytes = src->pushConstantSizeBytes;
+  if (src->resourceCount == 0u) {
+    return GPU_OK;
+  }
+  if (!src->pResources ||
+      (size_t)src->resourceCount > SIZE_MAX / sizeof(*dstResources)) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  srcResources = src->pResources;
+  dstResources = calloc(src->resourceCount, sizeof(*dstResources));
+  if (!dstResources) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  for (uint32_t i = 0; i < src->resourceCount; i++) {
+    dstResources[i] = srcResources[i];
+    dstResources[i].name = gpu_dupText(srcResources[i].name);
+    if (!dstResources[i].name) {
+      dst->resourceCount = i + 1u;
+      dst->pResources = dstResources;
+      gpu_clearShaderReflection(dst);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+
+  dst->resourceCount = src->resourceCount;
+  dst->pResources = dstResources;
+  return GPU_OK;
 }
 
 static void
@@ -323,6 +581,16 @@ gpu_createShaderLibraryFromUSLBytecodeImpl(GPUDevice *device,
   info.sourcePathHint = NULL;
   rc = GPUCreateShaderLibrary(device, &info, outLibrary);
   if (rc == 0 && outLibrary && *outLibrary) {
+    if (!gpu_setShaderLibraryReflection(*outLibrary,
+                                         &compileOutput.reflection,
+                                         entryPointNames,
+                                         entryPointCount)) {
+      GPUDestroyShaderLibrary(*outLibrary);
+      *outLibrary = NULL;
+      us_free_compile_output(&compileOutput);
+      return -7;
+    }
+
     if (useSelectedEntries) {
       gpu_setShaderLibraryUSLInfoForEntries(*outLibrary,
                                             &compileOutput.reflection.entry_targets[0],
@@ -401,6 +669,23 @@ GPUGetShaderLibraryUSLInfo(GPUShaderLibrary *library,
 }
 
 GPU_EXPORT
+GPUResult
+GPUGetShaderReflection(const GPUShaderLibrary *library,
+                       GPUShaderReflection *outReflection) {
+  if (!library || !outReflection) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  return gpu_copyShaderReflection(&library->_reflection, outReflection);
+}
+
+GPU_EXPORT
+void
+GPUFreeShaderReflection(GPUShaderReflection *reflection) {
+  gpu_clearShaderReflection(reflection);
+}
+
+GPU_EXPORT
 void
 GPUDestroyShaderLibrary(GPUShaderLibrary *library) {
   GPUApi *api;
@@ -408,6 +693,7 @@ GPUDestroyShaderLibrary(GPUShaderLibrary *library) {
   if (!library)
     return;
 
+  gpu_clearShaderReflection(&library->_reflection);
   if (!(api = gpuActiveGPUApi()))
     return;
 

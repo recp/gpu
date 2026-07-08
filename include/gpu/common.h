@@ -90,6 +90,21 @@ typedef struct GPUChainedStruct {
   const void      *pNext;
 } GPUChainedStruct;
 
+typedef uint32_t GPUShaderStageFlags;
+enum {
+  GPU_SHADER_STAGE_VERTEX_BIT   = 1u << 0,
+  GPU_SHADER_STAGE_FRAGMENT_BIT = 1u << 1,
+  GPU_SHADER_STAGE_COMPUTE_BIT  = 1u << 2
+};
+
+typedef enum GPUBindingType {
+  GPU_BINDING_UNIFORM_BUFFER = 0,
+  GPU_BINDING_STORAGE_BUFFER = 1,
+  GPU_BINDING_SAMPLED_TEXTURE = 2,
+  GPU_BINDING_STORAGE_TEXTURE = 3,
+  GPU_BINDING_SAMPLER = 4
+} GPUBindingType;
+
 #if defined(__APPLE__) && defined(__OBJC__)
 #  include <TargetConditionals.h>
 #  if TARGET_OS_IOS || TARGET_OS_TV

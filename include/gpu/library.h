@@ -21,6 +21,7 @@ extern "C" {
 #endif
 
 #include "common.h"
+#include "cmdqueue.h"
 #include "pixelformat.h"
 #include "device.h"
 //#include <us/us.h>
@@ -54,9 +55,26 @@ typedef struct GPUShaderLibraryUSLInfo {
   uint64_t selectedEntryHash;
 } GPUShaderLibraryUSLInfo;
 
+typedef struct GPUShaderResourceReflection {
+  const char *name;
+  uint32_t setIndex;
+  uint32_t binding;
+  GPUBindingType bindingType;
+  GPUShaderStageFlags visibility;
+  uint32_t arrayCount;
+  bool hasDynamicOffset;
+} GPUShaderResourceReflection;
+
+typedef struct GPUShaderReflection {
+  uint32_t resourceCount;
+  const GPUShaderResourceReflection *pResources;
+  uint32_t pushConstantSizeBytes;
+} GPUShaderReflection;
+
 typedef struct GPULibrary {
   void *_priv;
   GPUShaderLibraryUSLInfo _uslInfo;
+  GPUShaderReflection _reflection;
 } GPULibrary;
 
 typedef GPULibrary GPUShaderLibrary;
@@ -112,6 +130,15 @@ GPU_EXPORT
 int
 GPUGetShaderLibraryUSLInfo(GPUShaderLibrary *library,
                            GPUShaderLibraryUSLInfo *outInfo);
+
+GPU_EXPORT
+GPUResult
+GPUGetShaderReflection(const GPUShaderLibrary *library,
+                       GPUShaderReflection *outReflection);
+
+GPU_EXPORT
+void
+GPUFreeShaderReflection(GPUShaderReflection *reflection);
 
 GPU_EXPORT
 void

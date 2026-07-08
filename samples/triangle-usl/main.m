@@ -78,10 +78,11 @@ static const TriangleVertex kTriangleVertices[] = {
   NSString *executablePath;
   NSString *sampleDir;
   NSData   *bytecodeData;
+  GPUShaderReflection shaderReflection;
   GPUShaderLibraryUSLInfo uslInfo;
-  GPUBindGroupLayoutUSLInfo layoutInfo;
   const GPUBindGroupLayoutEntry *layoutEntries;
   const char *shaderEntries[] = { "tri_vs", "tri_fs" };
+  GPUBindGroupLayout *reflectionLayouts[1] = { NULL };
   uint32_t layoutCount;
   GPUExtent2D size;
 
@@ -172,54 +173,55 @@ static const TriangleVertex kTriangleVertices[] = {
     return NO;
   }
 
-  if (GPUCreateBindGroupLayoutFromUSLBytecode(bytecodeData.bytes,
-                                              (uint64_t)bytecodeData.length,
-                                              "tri_fs",
-                                              &_fragmentLayout) != 0) {
-    NSLog(@"GPU: failed to create fragment bind layout");
+  memset(&shaderReflection, 0, sizeof(shaderReflection));
+  if (GPUGetShaderReflection(_library, &shaderReflection) != GPU_OK ||
+      shaderReflection.resourceCount != 1 ||
+      !shaderReflection.pResources ||
+      shaderReflection.pResources[0].setIndex != 0 ||
+      shaderReflection.pResources[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
+      shaderReflection.pResources[0].bindingType != GPU_BINDING_UNIFORM_BUFFER ||
+      shaderReflection.pResources[0].binding != 0) {
+    GPUFreeShaderReflection(&shaderReflection);
+    NSLog(@"GPU: unexpected shader reflection");
     return NO;
   }
+  GPUFreeShaderReflection(&shaderReflection);
+
+  layoutCount = 0;
+  if (GPUCreateBindGroupLayoutsFromReflection(_device,
+                                              _library,
+                                              &layoutCount,
+                                              NULL) != GPU_OK ||
+      layoutCount != 1) {
+    NSLog(@"GPU: failed to query reflected bind layouts");
+    return NO;
+  }
+  if (GPUCreateBindGroupLayoutsFromReflection(_device,
+                                              _library,
+                                              &layoutCount,
+                                              reflectionLayouts) != GPU_OK ||
+      layoutCount != 1 ||
+      !reflectionLayouts[0]) {
+    NSLog(@"GPU: failed to create reflected bind layouts");
+    return NO;
+  }
+  _fragmentLayout = reflectionLayouts[0];
 
   layoutEntries = GPUGetBindGroupLayoutEntries(_fragmentLayout, &layoutCount);
   if (!layoutEntries || layoutCount != 1 ||
-      GPUGetBindGroupLayoutUSLInfo(_fragmentLayout, &layoutInfo) != 0 ||
-      layoutInfo.abiVersion != GPU_BIND_GROUP_LAYOUT_USL_INFO_VERSION ||
-      layoutInfo.stage != GPUBindStageFragment ||
-      strcmp(layoutInfo.entryPointName, "tri_fs") != 0 ||
-      layoutInfo.resourceBindingCount != 1 ||
-      layoutInfo.capabilityRequirementCount != 0 ||
-      layoutInfo.capabilityRequirementTotalCount != 0 ||
-      layoutInfo.capabilityRequirementFlags != 0 ||
-      layoutInfo.capabilityRequirementHash != 0 ||
-      layoutInfo.entryTargetInfoVersion == 0 ||
-      layoutInfo.targetBackend == 0 ||
-      layoutInfo.targetSupported != 1 ||
-      layoutInfo.targetSupportStatus != 1 ||
-      layoutInfo.targetAtomCount == 0 ||
-      layoutInfo.targetAtomTotalCount < layoutInfo.targetAtomCount ||
-      layoutInfo.targetInfoFlags != 0 ||
-      layoutInfo.targetAtomHash == 0 ||
-      layoutInfo.bytecodeSize != (uint64_t)bytecodeData.length ||
-      layoutInfo.bytecodeContentHash != uslInfo.bytecodeContentHash ||
       layoutEntries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
       layoutEntries[0].bindingType != GPU_BINDING_UNIFORM_BUFFER ||
       layoutEntries[0].kind != GPUBindKindBuffer) {
-    NSLog(@"GPU: unexpected bind layout extracted from USL bytecode");
+    NSLog(@"GPU: unexpected bind layout extracted from shader reflection");
     return NO;
   }
 
-  GPUBindGroupLayout *layouts[] = { _fragmentLayout };
-  GPUPipelineLayoutCreateInfo pipelineLayoutInfo = {
-    .chain = { .sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-               .structSize = sizeof(GPUPipelineLayoutCreateInfo) },
-    .label = "triangle-usl-pipeline-layout",
-    .bindGroupLayoutCount = 1,
-    .ppBindGroupLayouts = layouts,
-    .pushConstantSizeBytes = 0,
-    .pushConstantStages = 0
-  };
-  if (GPUCreatePipelineLayout(_device, &pipelineLayoutInfo, &_pipelineLayout) != GPU_OK) {
-    NSLog(@"GPU: failed to create pipeline layout");
+  if (GPUCreatePipelineLayoutFromReflection(_device,
+                                            _library,
+                                            1,
+                                            reflectionLayouts,
+                                            &_pipelineLayout) != GPU_OK) {
+    NSLog(@"GPU: failed to create reflected pipeline layout");
     return NO;
   }
 

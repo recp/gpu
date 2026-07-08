@@ -281,19 +281,24 @@ gpu_stageFromVisibility(GPUShaderStageFlags visibility, GPUBindStage *outStage) 
     return 0;
   }
 
-  switch (visibility) {
-    case GPU_SHADER_STAGE_VERTEX_BIT:
-      *outStage = GPUBindStageVertex;
-      return 1;
-    case GPU_SHADER_STAGE_FRAGMENT_BIT:
-      *outStage = GPUBindStageFragment;
-      return 1;
-    case GPU_SHADER_STAGE_COMPUTE_BIT:
-      *outStage = GPUBindStageCompute;
-      return 1;
-    default:
-      return 0;
+  if (visibility == 0 ||
+      (visibility & ~(GPU_SHADER_STAGE_VERTEX_BIT |
+                      GPU_SHADER_STAGE_FRAGMENT_BIT |
+                      GPU_SHADER_STAGE_COMPUTE_BIT)) != 0) {
+    return 0;
   }
+
+  if ((visibility & GPU_SHADER_STAGE_VERTEX_BIT) != 0) {
+    *outStage = GPUBindStageVertex;
+    return 1;
+  }
+  if ((visibility & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0) {
+    *outStage = GPUBindStageFragment;
+    return 1;
+  }
+
+  *outStage = GPUBindStageCompute;
+  return 1;
 }
 
 static int
@@ -1336,6 +1341,190 @@ GPUDestroyPipelineLayout(GPUPipelineLayout *layout) {
   free(layout);
 }
 
+static uint32_t
+gpu_reflectionLayoutCount(const GPUShaderReflection *reflection) {
+  uint32_t maxSet;
+
+  if (!reflection || reflection->resourceCount == 0u || !reflection->pResources) {
+    return 0u;
+  }
+
+  maxSet = 0u;
+  for (uint32_t i = 0; i < reflection->resourceCount; i++) {
+    if (reflection->pResources[i].setIndex > maxSet) {
+      maxSet = reflection->pResources[i].setIndex;
+    }
+  }
+
+  return maxSet + 1u;
+}
+
+static uint32_t
+gpu_reflectionResourceCountForSet(const GPUShaderReflection *reflection,
+                                  uint32_t setIndex) {
+  uint32_t count;
+
+  if (!reflection || !reflection->pResources) {
+    return 0u;
+  }
+
+  count = 0u;
+  for (uint32_t i = 0; i < reflection->resourceCount; i++) {
+    if (reflection->pResources[i].setIndex == setIndex) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
+static GPUResult
+gpu_createLayoutForReflectionSet(GPUDevice *device,
+                                 const GPUShaderReflection *reflection,
+                                 uint32_t setIndex,
+                                 GPUBindGroupLayout **outLayout) {
+  GPUBindGroupLayoutCreateInfo info;
+  GPUBindGroupLayoutEntry *entries;
+  uint32_t entryCount;
+  uint32_t cursor;
+  GPUResult rc;
+
+  if (!outLayout) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outLayout = NULL;
+  entryCount = gpu_reflectionResourceCountForSet(reflection, setIndex);
+  entries = NULL;
+  if (entryCount > 0u) {
+    entries = calloc(entryCount, sizeof(*entries));
+    if (!entries) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+
+  cursor = 0u;
+  for (uint32_t i = 0; reflection && i < reflection->resourceCount; i++) {
+    const GPUShaderResourceReflection *resource;
+
+    resource = &reflection->pResources[i];
+    if (resource->setIndex != setIndex) {
+      continue;
+    }
+
+    entries[cursor].binding = resource->binding;
+    entries[cursor].bindingType = resource->bindingType;
+    entries[cursor].visibility = resource->visibility;
+    entries[cursor].arrayCount = resource->arrayCount ? resource->arrayCount : 1u;
+    entries[cursor].hasDynamicOffset = resource->hasDynamicOffset;
+    cursor++;
+  }
+
+  memset(&info, 0, sizeof(info));
+  info.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.entryCount = entryCount;
+  info.pEntries = entries;
+  rc = GPUCreateBindGroupLayout(device, &info, outLayout);
+  free(entries);
+  return rc;
+}
+
+GPU_EXPORT
+GPUResult
+GPUCreateBindGroupLayoutsFromReflection(GPUDevice *device,
+                                        const GPUShaderLibrary *library,
+                                        uint32_t *inoutLayoutCount,
+                                        GPUBindGroupLayout **outLayouts) {
+  GPUShaderReflection reflection;
+  uint32_t requiredCount;
+  GPUResult rc;
+
+  if (!library || !inoutLayoutCount) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  memset(&reflection, 0, sizeof(reflection));
+  rc = GPUGetShaderReflection(library, &reflection);
+  if (rc != GPU_OK) {
+    return rc;
+  }
+
+  requiredCount = gpu_reflectionLayoutCount(&reflection);
+  if (!outLayouts) {
+    *inoutLayoutCount = requiredCount;
+    GPUFreeShaderReflection(&reflection);
+    return GPU_OK;
+  }
+
+  if (*inoutLayoutCount < requiredCount) {
+    *inoutLayoutCount = requiredCount;
+    GPUFreeShaderReflection(&reflection);
+    return GPU_ERROR_INSUFFICIENT_CAPACITY;
+  }
+
+  for (uint32_t i = 0; i < requiredCount; i++) {
+    outLayouts[i] = NULL;
+  }
+
+  for (uint32_t i = 0; i < requiredCount; i++) {
+    rc = gpu_createLayoutForReflectionSet(device, &reflection, i, &outLayouts[i]);
+    if (rc != GPU_OK) {
+      for (uint32_t j = 0; j < i; j++) {
+        GPUDestroyBindGroupLayout(outLayouts[j]);
+        outLayouts[j] = NULL;
+      }
+      GPUFreeShaderReflection(&reflection);
+      return rc;
+    }
+  }
+
+  *inoutLayoutCount = requiredCount;
+  GPUFreeShaderReflection(&reflection);
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUCreatePipelineLayoutFromReflection(GPUDevice *device,
+                                      const GPUShaderLibrary *library,
+                                      uint32_t bindGroupLayoutCount,
+                                      GPUBindGroupLayout * const *ppLayouts,
+                                      GPUPipelineLayout **outLayout) {
+  GPUPipelineLayoutCreateInfo info;
+  GPUShaderReflection reflection;
+  uint32_t requiredCount;
+  GPUResult rc;
+
+  if (!library || !outLayout ||
+      (bindGroupLayoutCount > 0u && !ppLayouts)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  memset(&reflection, 0, sizeof(reflection));
+  rc = GPUGetShaderReflection(library, &reflection);
+  if (rc != GPU_OK) {
+    return rc;
+  }
+
+  requiredCount = gpu_reflectionLayoutCount(&reflection);
+  if (bindGroupLayoutCount < requiredCount) {
+    GPUFreeShaderReflection(&reflection);
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  memset(&info, 0, sizeof(info));
+  info.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.bindGroupLayoutCount = bindGroupLayoutCount;
+  info.ppBindGroupLayouts = ppLayouts;
+  info.pushConstantSizeBytes = reflection.pushConstantSizeBytes;
+  info.pushConstantStages = 0u;
+  rc = GPUCreatePipelineLayout(device, &info, outLayout);
+  GPUFreeShaderReflection(&reflection);
+  return rc;
+}
+
 GPU_EXPORT
 GPUResult
 GPUCreateBindGroup(GPUDevice *device,
@@ -1476,43 +1665,43 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
   }
 
   for (i = 0; i < layout->count; i++) {
+    const GPUBindGroupLayoutEntry *layoutEntry;
+
+    layoutEntry = &layout->entries[i];
     binding = &priv->bindings[i];
 
-    switch (layout->entries[i].stage) {
-      case GPUBindStageVertex:
-        if (layout->entries[i].kind == GPUBindKindBuffer && binding->buffer) {
-          GPUSetVertexBuffer(pass,
+    if ((layoutEntry->visibility & GPU_SHADER_STAGE_VERTEX_BIT) != 0) {
+      if (layoutEntry->kind == GPUBindKindBuffer && binding->buffer) {
+        GPUSetVertexBuffer(pass,
+                           binding->buffer,
+                           binding->offset,
+                           layoutEntry->binding);
+      } else if (layoutEntry->kind == GPUBindKindTexture && binding->textureView) {
+        GPUSetVertexTexture(pass,
+                            binding->textureView,
+                            layoutEntry->binding);
+      } else if (layoutEntry->kind == GPUBindKindSampler && binding->sampler) {
+        GPUSetVertexSampler(pass,
+                            binding->sampler,
+                            layoutEntry->binding);
+      }
+    }
+
+    if ((layoutEntry->visibility & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0) {
+      if (layoutEntry->kind == GPUBindKindBuffer && binding->buffer) {
+        GPUSetFragmentBuffer(pass,
                              binding->buffer,
                              binding->offset,
-                             layout->entries[i].binding);
-        } else if (layout->entries[i].kind == GPUBindKindTexture && binding->textureView) {
-          GPUSetVertexTexture(pass,
+                             layoutEntry->binding);
+      } else if (layoutEntry->kind == GPUBindKindTexture && binding->textureView) {
+        GPUSetFragmentTexture(pass,
                               binding->textureView,
-                              layout->entries[i].binding);
-        } else if (layout->entries[i].kind == GPUBindKindSampler && binding->sampler) {
-          GPUSetVertexSampler(pass,
+                              layoutEntry->binding);
+      } else if (layoutEntry->kind == GPUBindKindSampler && binding->sampler) {
+        GPUSetFragmentSampler(pass,
                               binding->sampler,
-                              layout->entries[i].binding);
-        }
-        break;
-      case GPUBindStageFragment:
-        if (layout->entries[i].kind == GPUBindKindBuffer && binding->buffer) {
-          GPUSetFragmentBuffer(pass,
-                               binding->buffer,
-                               binding->offset,
-                               layout->entries[i].binding);
-        } else if (layout->entries[i].kind == GPUBindKindTexture && binding->textureView) {
-          GPUSetFragmentTexture(pass,
-                                binding->textureView,
-                                layout->entries[i].binding);
-        } else if (layout->entries[i].kind == GPUBindKindSampler && binding->sampler) {
-          GPUSetFragmentSampler(pass,
-                                binding->sampler,
-                                layout->entries[i].binding);
-        }
-        break;
-      default:
-        break;
+                              layoutEntry->binding);
+      }
     }
   }
 }

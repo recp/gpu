@@ -27,7 +27,8 @@ struct GPUDevice;
 typedef enum GPUResult {
   GPU_OK                     = 0,
   GPU_ERROR_INVALID_ARGUMENT = -1,
-  GPU_ERROR_BACKEND_FAILURE  = -2
+  GPU_ERROR_BACKEND_FAILURE  = -2,
+  GPU_ERROR_INSUFFICIENT_CAPACITY = -3
 } GPUResult;
 
 typedef enum GPUQueueFlagBits {

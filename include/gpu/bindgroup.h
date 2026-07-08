@@ -27,6 +27,7 @@ extern "C" {
 
 typedef struct GPUBuffer GPUBuffer;
 typedef struct GPUDevice GPUDevice;
+typedef struct GPULibrary GPUShaderLibrary;
 typedef struct GPUSampler GPUSampler;
 
 #ifndef GPU_RENDER_ENCODER_TYPES_DEFINED
@@ -40,13 +41,6 @@ typedef enum GPUBindStage {
   GPUBindStageFragment = 2,
   GPUBindStageCompute = 3
 } GPUBindStage;
-
-typedef uint32_t GPUShaderStageFlags;
-enum {
-  GPU_SHADER_STAGE_VERTEX_BIT   = 1u << 0,
-  GPU_SHADER_STAGE_FRAGMENT_BIT = 1u << 1,
-  GPU_SHADER_STAGE_COMPUTE_BIT  = 1u << 2
-};
 
 #define GPU_BIND_GROUP_LAYOUT_USL_INFO_VERSION 3u
 #define GPU_BIND_GROUP_LAYOUT_USL_ENTRY_NAME_MAX 128u
@@ -91,14 +85,6 @@ typedef enum GPUBindKind {
   GPUBindKindTexture = 1,
   GPUBindKindSampler = 2
 } GPUBindKind;
-
-typedef enum GPUBindingType {
-  GPU_BINDING_UNIFORM_BUFFER = 0,
-  GPU_BINDING_STORAGE_BUFFER = 1,
-  GPU_BINDING_SAMPLED_TEXTURE = 2,
-  GPU_BINDING_STORAGE_TEXTURE = 3,
-  GPU_BINDING_SAMPLER = 4
-} GPUBindingType;
 
 typedef struct GPUBindGroupLayoutEntry {
   uint32_t binding;
@@ -199,6 +185,21 @@ GPUResult
 GPUCreatePipelineLayout(GPUDevice *device,
                         const GPUPipelineLayoutCreateInfo *info,
                         GPUPipelineLayout **outLayout);
+
+GPU_EXPORT
+GPUResult
+GPUCreateBindGroupLayoutsFromReflection(GPUDevice *device,
+                                        const GPUShaderLibrary *library,
+                                        uint32_t *inoutLayoutCount,
+                                        GPUBindGroupLayout **outLayouts);
+
+GPU_EXPORT
+GPUResult
+GPUCreatePipelineLayoutFromReflection(GPUDevice *device,
+                                      const GPUShaderLibrary *library,
+                                      uint32_t bindGroupLayoutCount,
+                                      GPUBindGroupLayout * const *ppLayouts,
+                                      GPUPipelineLayout **outLayout);
 
 GPU_EXPORT
 void

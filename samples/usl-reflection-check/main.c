@@ -113,6 +113,29 @@ layout_has_entry(const GPUBindGroupLayoutEntry *entries,
 }
 
 static int
+shader_reflection_has_resource(const GPUShaderReflection *reflection,
+                               GPUBindingType bindingType,
+                               GPUShaderStageFlags visibility,
+                               uint32_t binding) {
+  if (!reflection || (!reflection->pResources && reflection->resourceCount > 0u)) {
+    return 0;
+  }
+
+  for (uint32_t i = 0; i < reflection->resourceCount; i++) {
+    const GPUShaderResourceReflection *item = &reflection->pResources[i];
+    if (item->setIndex == 0u &&
+        item->binding == binding &&
+        item->bindingType == bindingType &&
+        item->visibility == visibility &&
+        item->arrayCount == 1u) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+static int
 check_fragment_entry(const void *bytecode, uint64_t bytecodeSize) {
   const GPUBindGroupLayoutEntry *layoutEntries;
   GPUBindGroupLayoutUSLInfo layoutInfo;
@@ -306,11 +329,15 @@ check_selected_shader_library(const void *bytecode,
   const char *emptyNameEntries[] = { "reflect_vs", "" };
   const char *missingEntries[] = { "reflect_vs", "missing_entry" };
   GPUShaderLibraryUSLInfo info;
+  GPUShaderReflection shaderReflection;
+  GPUBindGroupLayout *reflectedLayouts[1] = { NULL };
+  GPUPipelineLayout *pipelineLayout;
   GPUPhysicalDevice *physicalDevice;
   GPUShaderLibrary *library;
   GPUFunction *vertexFunc;
   GPUFunction *fragmentFunc;
   GPUDevice *device;
+  uint32_t reflectedLayoutCount;
   int ok;
 
   physicalDevice = GPUGetAutoSelectedPhysicalDevice(NULL);
@@ -384,6 +411,10 @@ check_selected_shader_library(const void *bytecode,
 
   vertexFunc = GPUShaderFunction(library, "reflect_vs");
   fragmentFunc = GPUShaderFunction(library, "reflect_fs");
+  memset(&shaderReflection, 0, sizeof(shaderReflection));
+  reflectedLayoutCount = 0u;
+  pipelineLayout = NULL;
+
   ok = GPUGetShaderLibraryUSLInfo(library, &info) == 0 &&
        info.abiVersion == GPU_SHADER_LIBRARY_USL_INFO_VERSION &&
        info.sourceKind == expectedSourceKind &&
@@ -401,7 +432,51 @@ check_selected_shader_library(const void *bytecode,
        info.targetSupportStatus == 1u &&
        info.selectedEntryHash != 0u &&
        vertexFunc != NULL &&
-       fragmentFunc != NULL;
+       fragmentFunc != NULL &&
+       GPUGetShaderReflection(library, &shaderReflection) == GPU_OK &&
+       shaderReflection.resourceCount == 2u &&
+       shader_reflection_has_resource(&shaderReflection,
+                                      GPU_BINDING_SAMPLED_TEXTURE,
+                                      GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                      0u) &&
+       shader_reflection_has_resource(&shaderReflection,
+                                      GPU_BINDING_UNIFORM_BUFFER,
+                                      GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                      0u) &&
+       GPUCreateBindGroupLayoutsFromReflection(device,
+                                               library,
+                                               &reflectedLayoutCount,
+                                               NULL) == GPU_OK &&
+       reflectedLayoutCount == 1u;
+  if (ok) {
+    reflectedLayoutCount = 0u;
+    ok = GPUCreateBindGroupLayoutsFromReflection(device,
+                                                 library,
+                                                 &reflectedLayoutCount,
+                                                 reflectedLayouts) == GPU_ERROR_INSUFFICIENT_CAPACITY &&
+         reflectedLayoutCount == 1u;
+  }
+  if (ok) {
+    ok = GPUCreateBindGroupLayoutsFromReflection(device,
+                                                 library,
+                                                 &reflectedLayoutCount,
+                                                 reflectedLayouts) == GPU_OK &&
+         reflectedLayoutCount == 1u &&
+         reflectedLayouts[0] != NULL &&
+         GPUCreatePipelineLayoutFromReflection(device,
+                                               library,
+                                               reflectedLayoutCount,
+                                               reflectedLayouts,
+                                               &pipelineLayout) == GPU_OK &&
+         pipelineLayout != NULL;
+  }
+  if (pipelineLayout) {
+    GPUDestroyPipelineLayout(pipelineLayout);
+  }
+  if (reflectedLayouts[0]) {
+    GPUDestroyBindGroupLayout(reflectedLayouts[0]);
+  }
+  GPUFreeShaderReflection(&shaderReflection);
   GPUDestroyShaderLibrary(library);
 
   if (!ok) {

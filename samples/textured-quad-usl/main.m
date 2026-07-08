@@ -139,11 +139,12 @@ static const uint8_t kCheckerPixels[] = {
   NSString *bytecodePath;
   NSString *sampleDir;
   NSData   *bytecodeData;
+  GPUShaderReflection shaderReflection;
   GPUShaderLibraryUSLInfo uslInfo;
-  GPUBindGroupLayoutUSLInfo layoutInfo;
   const GPUBindGroupLayoutEntry *layoutEntries;
   const char *shaderEntries[] = { "quad_vs", "quad_fs" };
   GPUBindGroupEntry groupEntries[3] = {0};
+  GPUBindGroupLayout *reflectionLayouts[1] = { NULL };
   uint32_t groupCount = 0;
   uint32_t layoutCount;
   uint32_t textureCount = 0;
@@ -225,51 +226,50 @@ static const uint8_t kCheckerPixels[] = {
     return NO;
   }
 
-  if (GPUCreateBindGroupLayoutFromUSLBytecode(bytecodeData.bytes,
-                                              (uint64_t)bytecodeData.length,
-                                              "quad_fs",
-                                              &_fragmentLayout) != 0) {
-    NSLog(@"GPU: failed to create fragment bind layout");
+  memset(&shaderReflection, 0, sizeof(shaderReflection));
+  if (GPUGetShaderReflection(_library, &shaderReflection) != GPU_OK ||
+      shaderReflection.resourceCount != 3 ||
+      !shaderReflection.pResources) {
+    GPUFreeShaderReflection(&shaderReflection);
+    NSLog(@"GPU: unexpected shader reflection");
     return NO;
   }
+  GPUFreeShaderReflection(&shaderReflection);
+
+  layoutCount = 0;
+  if (GPUCreateBindGroupLayoutsFromReflection(_device,
+                                              _library,
+                                              &layoutCount,
+                                              NULL) != GPU_OK ||
+      layoutCount != 1) {
+    NSLog(@"GPU: failed to query reflected bind layouts");
+    return NO;
+  }
+  if (GPUCreateBindGroupLayoutsFromReflection(_device,
+                                              _library,
+                                              &layoutCount,
+                                              reflectionLayouts) != GPU_OK ||
+      layoutCount != 1 ||
+      !reflectionLayouts[0]) {
+    NSLog(@"GPU: failed to create reflected bind layouts");
+    return NO;
+  }
+  _fragmentLayout = reflectionLayouts[0];
 
   layoutEntries = GPUGetBindGroupLayoutEntries(_fragmentLayout, &layoutCount);
   if (!layoutEntries || layoutCount != 3 ||
-      GPUGetBindGroupLayoutUSLInfo(_fragmentLayout, &layoutInfo) != 0 ||
-      layoutInfo.abiVersion != GPU_BIND_GROUP_LAYOUT_USL_INFO_VERSION ||
-      layoutInfo.stage != GPUBindStageFragment ||
-      strcmp(layoutInfo.entryPointName, "quad_fs") != 0 ||
-      layoutInfo.resourceBindingCount != 3 ||
-      layoutInfo.capabilityRequirementCount != 0 ||
-      layoutInfo.capabilityRequirementTotalCount != 0 ||
-      layoutInfo.capabilityRequirementFlags != 0 ||
-      layoutInfo.capabilityRequirementHash != 0 ||
-      layoutInfo.entryTargetInfoVersion == 0 ||
-      layoutInfo.targetBackend == 0 ||
-      layoutInfo.targetSupported != 1 ||
-      layoutInfo.targetSupportStatus != 1 ||
-      layoutInfo.targetAtomCount == 0 ||
-      layoutInfo.targetAtomTotalCount < layoutInfo.targetAtomCount ||
-      layoutInfo.targetInfoFlags != 0 ||
-      layoutInfo.targetAtomHash == 0 ||
-      layoutInfo.bytecodeSize != (uint64_t)bytecodeData.length ||
-      layoutInfo.bytecodeContentHash != uslInfo.bytecodeContentHash) {
-    NSLog(@"GPU: unexpected bind layout extracted from USL bytecode");
+      GPUGetShaderLibraryUSLInfo(_library, &uslInfo) != 0 ||
+      uslInfo.bytecodeSize != (uint64_t)bytecodeData.length) {
+    NSLog(@"GPU: unexpected bind layout extracted from shader reflection");
     return NO;
   }
 
-  GPUBindGroupLayout *layouts[] = { _fragmentLayout };
-  GPUPipelineLayoutCreateInfo pipelineLayoutInfo = {
-    .chain = { .sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-               .structSize = sizeof(GPUPipelineLayoutCreateInfo) },
-    .label = "textured-quad-usl-pipeline-layout",
-    .bindGroupLayoutCount = 1,
-    .ppBindGroupLayouts = layouts,
-    .pushConstantSizeBytes = 0,
-    .pushConstantStages = 0
-  };
-  if (GPUCreatePipelineLayout(_device, &pipelineLayoutInfo, &_pipelineLayout) != GPU_OK) {
-    NSLog(@"GPU: failed to create pipeline layout");
+  if (GPUCreatePipelineLayoutFromReflection(_device,
+                                            _library,
+                                            1,
+                                            reflectionLayouts,
+                                            &_pipelineLayout) != GPU_OK) {
+    NSLog(@"GPU: failed to create reflected pipeline layout");
     return NO;
   }
 
