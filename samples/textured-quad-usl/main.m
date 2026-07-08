@@ -368,11 +368,11 @@ static const uint8_t kCheckerPixels[] = {
 }
 
 - (void)renderFrame {
-  GPUFrame *frame;
-  GPUCommandBuffer *cmdb;
-  GPUQueueSubmitInfo submitInfo;
-  GPURenderPassDesc *pass;
-  GPURenderCommandEncoder *encoder;
+  GPUFrame *frame = NULL;
+  GPUCommandBuffer *cmdb = NULL;
+  GPUQueueSubmitInfo submitInfo = {0};
+  GPURenderPassDesc *pass = NULL;
+  GPURenderCommandEncoder *encoder = NULL;
 
   frame = GPUBeginFrame(_swapchain);
   if (!frame) {
@@ -380,20 +380,17 @@ static const uint8_t kCheckerPixels[] = {
   }
 
   if (GPUAcquireCommandBuffer(_queue, "main-frame", &cmdb) != GPU_OK || !cmdb) {
-    GPUEndFrame(frame);
-    return;
+    goto cleanup;
   }
 
   pass = GPUBeginRenderPass(frame->target);
   if (!pass) {
-    GPUEndFrame(frame);
-    return;
+    goto cleanup;
   }
 
   encoder = GPUNewRenderCommandEncoder(cmdb, pass);
   if (!encoder) {
-    GPUEndFrame(frame);
-    return;
+    goto cleanup;
   }
 
   [self updateFragmentUniforms];
@@ -409,6 +406,9 @@ static const uint8_t kCheckerPixels[] = {
   submitInfo.commandBufferCount = 1;
   submitInfo.ppCommandBuffers = (GPUCommandBuffer * const[]){ cmdb };
   GPUQueueSubmit(_queue, &submitInfo);
+
+cleanup:
+  GPUDestroyRenderPass(pass);
   GPUEndFrame(frame);
 }
 

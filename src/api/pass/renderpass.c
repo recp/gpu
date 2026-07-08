@@ -43,8 +43,26 @@ void
 GPUEndRenderPass(GPURenderPassDesc *pass) {
   GPUApi *api;
 
-  if (!(api = gpuActiveGPUApi()))
+  if (!pass || !(api = gpuActiveGPUApi()) || !api->renderPass.endRenderPass)
     return;
 
   api->renderPass.endRenderPass(pass);
+}
+
+GPU_EXPORT
+void
+GPUDestroyRenderPass(GPURenderPassDesc *pass) {
+  GPUApi *api;
+
+  if (!pass) {
+    return;
+  }
+
+  api = gpuActiveGPUApi();
+  if (api && api->renderPass.destroyRenderPass) {
+    api->renderPass.destroyRenderPass(pass);
+    return;
+  }
+
+  free(pass);
 }

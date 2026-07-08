@@ -55,8 +55,15 @@ mt_endRenderPass(GPURenderPassDesc *pass) {
 
 GPU_HIDE
 void
+mt_destroyRenderPass(GPURenderPassDesc *pass) {
+  free(pass);
+}
+
+GPU_HIDE
+void
 mt_initRenderPass(GPUApiRenderPass *api) {
-  api->newPass         = mt_newPass;
-  api->beginRenderPass = mt_beginRenderPass;
-  api->endRenderPass   = mt_endRenderPass;
+  api->newPass           = mt_newPass;
+  api->beginRenderPass   = mt_beginRenderPass;
+  api->endRenderPass     = mt_endRenderPass;
+  api->destroyRenderPass = mt_destroyRenderPass;
 }

@@ -46,6 +46,10 @@ GPU_EXPORT
 void
 GPUEndRenderPass(GPURenderPassDesc *pass);
 
+GPU_EXPORT
+void
+GPUDestroyRenderPass(GPURenderPassDesc *pass);
+
 //#if defined(__APPLE__) && defined(__OBJC__)
 //@class MTKView;
 //GPU_INLINE

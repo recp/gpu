@@ -27,6 +27,7 @@ typedef struct GPUApiRenderPass {
   GPURenderPassDesc* (*newPass)        (void);
   GPURenderPassDesc* (*beginRenderPass)(GPUTexture *target);
   void               (*endRenderPass)  (GPURenderPassDesc *pass);
+  void               (*destroyRenderPass)(GPURenderPassDesc *pass);
 } GPUApiRenderPass;
 
 #ifdef __cplusplus
