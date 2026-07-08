@@ -405,7 +405,7 @@ static const uint8_t kCheckerPixels[] = {
   GPUBindRenderGroup(encoder, _fragmentGroup);
   gpuDrawPrimitives(encoder, GPUPrimitiveTypeTriangleStrip, 0, 4);
   GPUEndEncoding(encoder);
-  GPUPresent(cmdb, frame);
+  GPUSchedulePresent(cmdb, frame);
   submitInfo.commandBufferCount = 1;
   submitInfo.ppCommandBuffers = (GPUCommandBuffer * const[]){ cmdb };
   GPUQueueSubmit(_queue, &submitInfo);

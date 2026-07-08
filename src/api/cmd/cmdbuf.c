@@ -18,11 +18,21 @@
 
 GPU_EXPORT
 void
-GPUPresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
+GPUSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   GPUApi *api;
+
+  if (!cmdb || !frame) {
+    return;
+  }
 
   if (!(api = gpuActiveGPUApi()))
     return;
 
   api->cmdbuf.presentDrawable(cmdb, frame);
+}
+
+GPU_EXPORT
+void
+GPUPresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
+  GPUSchedulePresent(cmdb, frame);
 }

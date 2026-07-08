@@ -279,7 +279,7 @@ static const TriangleVertex kTriangleVertices[] = {
   GPUBindRenderGroup(encoder, _fragmentGroup);
   gpuDrawPrimitives(encoder, GPUPrimitiveTypeTriangle, 0, 3);
   GPUEndEncoding(encoder);
-  GPUPresent(cmdb, frame);
+  GPUSchedulePresent(cmdb, frame);
   submitInfo.commandBufferCount = 1;
   submitInfo.ppCommandBuffers = (GPUCommandBuffer * const[]){ cmdb };
   GPUQueueSubmit(_queue, &submitInfo);

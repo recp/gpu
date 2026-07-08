@@ -39,6 +39,12 @@ GPU_EXPORT
 void
 GPUEndFrame(GPUFrame* frame);
 
+/* Schedules frame presentation on the command buffer. */
+GPU_EXPORT
+void
+GPUSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame);
+
+/* Convenience alias for GPUSchedulePresent(). */
 GPU_EXPORT
 void
 GPUPresent(GPUCommandBuffer *cmdb, GPUFrame *frame);

@@ -41,7 +41,7 @@ GPUEndFrame(GPUFrame* frame) {
 GPU_EXPORT
 void
 GPUFinishFrame(GPUCommandBuffer * __restrict cmdb, GPUFrame * __restrict frame) {
-  GPUPresent(cmdb, frame);
+  GPUSchedulePresent(cmdb, frame);
   GPUCommit(cmdb);
   GPUEndFrame(frame);
 }
