@@ -22,6 +22,13 @@ run_sample() {
   )
 }
 
+run_api_test() {
+  (
+    cd "$ROOT/tests/api"
+    "$@"
+  )
+}
+
 run_step "triangle-manual" \
   run_sample triangle-manual env GPU_DERIVED_DATA="$DERIVED_DATA" ./build.sh
 
@@ -54,6 +61,9 @@ run_step "compute-buffer-usl readback" \
 
 run_step "compute-buffer-usl embedded no-sidecar" \
   run_sample compute-buffer-usl env GPU_DERIVED_DATA="$DERIVED_DATA" GPU_USL_EMBED_METAL=1 GPU_USL_NO_SIDECAR=1 ./build.sh
+
+run_step "api validation" \
+  run_api_test env GPU_DERIVED_DATA="$DERIVED_DATA" ./build.sh
 
 run_step "usl-reflection-check generated" \
   run_sample usl-reflection-check env GPU_DERIVED_DATA="$DERIVED_DATA" ./build.sh
