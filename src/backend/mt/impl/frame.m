@@ -46,6 +46,7 @@ mt_beginFrame(GPUApi       *__restrict api,
 
   target->_priv = drawable.texture;
   target->format = (GPUFormat)drawable.texture.pixelFormat;
+  target->dimension = GPU_TEXTURE_DIMENSION_2D;
   target->width = (uint32_t)drawable.texture.width;
   target->height = (uint32_t)drawable.texture.height;
   target->depthOrLayers = 1;

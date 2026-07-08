@@ -54,6 +54,7 @@ typedef enum GPUTextureViewType {
 typedef struct GPUTexture {
   void *_priv;
   GPUFormat format;
+  GPUTextureDimension dimension;
   uint32_t width;
   uint32_t height;
   uint32_t depthOrLayers;

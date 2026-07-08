@@ -117,6 +117,7 @@ mt_createTexture(GPUDevice                  * __restrict device,
 
   texture->_priv = nativeTexture;
   texture->format = info->format;
+  texture->dimension = info->dimension;
   texture->width = info->width;
   texture->height = info->height;
   texture->depthOrLayers = info->depthOrLayers;

@@ -21,6 +21,7 @@ extern "C" {
 #endif
 
 #include "common.h"
+#include "buffer.h"
 #include "swapchain.h"
 #include "frame.h"
 
@@ -29,6 +30,8 @@ extern "C" {
 typedef struct GPURenderCommandEncoder GPURenderCommandEncoder;
 typedef GPURenderCommandEncoder GPURenderPassEncoder;
 #endif
+
+typedef struct GPUCopyPassEncoder GPUCopyPassEncoder;
 
 typedef enum GPULoadOp {
   GPU_LOAD_OP_LOAD      = 0,
@@ -80,6 +83,74 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info);
 GPU_EXPORT
 void
 GPUEndRenderPass(GPURenderPassEncoder *pass);
+
+typedef struct GPUBufferCopyRegion {
+  uint64_t srcOffset;
+  uint64_t dstOffset;
+  uint64_t sizeBytes;
+} GPUBufferCopyRegion;
+
+typedef struct GPUTextureLocation {
+  uint32_t x, y, z;
+  uint32_t mipLevel;
+  uint32_t baseArrayLayer;
+} GPUTextureLocation;
+
+typedef struct GPUTextureSubresourceRegion {
+  GPUTextureLocation texture;
+  uint32_t width, height, depth;
+  uint32_t layerCount;
+} GPUTextureSubresourceRegion;
+
+typedef struct GPUBufferTextureCopyRegion {
+  uint64_t bufferOffset;
+  uint32_t bytesPerRow;
+  uint32_t rowsPerImage;
+  GPUTextureSubresourceRegion texture;
+} GPUBufferTextureCopyRegion;
+
+typedef struct GPUTextureToTextureCopyRegion {
+  GPUTextureLocation src;
+  GPUTextureLocation dst;
+  uint32_t width, height, depth;
+  uint32_t layerCount;
+} GPUTextureToTextureCopyRegion;
+
+GPU_EXPORT
+GPUCopyPassEncoder*
+GPUBeginCopyPass(GPUCommandBuffer *cmdb, const char *label);
+
+GPU_EXPORT
+void
+GPUCopyBufferToBuffer(GPUCopyPassEncoder        *pass,
+                      GPUBuffer                 *src,
+                      GPUBuffer                 *dst,
+                      const GPUBufferCopyRegion *region);
+
+GPU_EXPORT
+void
+GPUCopyBufferToTexture(GPUCopyPassEncoder               *pass,
+                       GPUBuffer                        *src,
+                       GPUTexture                       *dst,
+                       const GPUBufferTextureCopyRegion *region);
+
+GPU_EXPORT
+void
+GPUCopyTextureToBuffer(GPUCopyPassEncoder               *pass,
+                       GPUTexture                       *src,
+                       GPUBuffer                        *dst,
+                       const GPUBufferTextureCopyRegion *region);
+
+GPU_EXPORT
+void
+GPUCopyTextureToTexture(GPUCopyPassEncoder                  *pass,
+                        GPUTexture                          *src,
+                        GPUTexture                          *dst,
+                        const GPUTextureToTextureCopyRegion *region);
+
+GPU_EXPORT
+void
+GPUEndCopyPass(GPUCopyPassEncoder *pass);
 
 #ifdef __cplusplus
 }

@@ -41,6 +41,51 @@ gpuMipExtent(uint32_t extent, uint32_t mipLevel) {
   return mipExtent > 0 ? mipExtent : 1u;
 }
 
+static bool
+gpuTextureRegionInRange(const GPUTexture *texture,
+                        uint32_t          mipLevel,
+                        uint32_t          x,
+                        uint32_t          y,
+                        uint32_t          z,
+                        uint32_t          width,
+                        uint32_t          height,
+                        uint32_t          depth,
+                        uint32_t          baseArrayLayer,
+                        uint32_t          layerCount) {
+  uint32_t mipWidth;
+  uint32_t mipHeight;
+  uint32_t mipDepth;
+
+  if (!texture ||
+      mipLevel >= texture->mipLevelCount ||
+      width == 0 ||
+      height == 0 ||
+      depth == 0 ||
+      layerCount == 0) {
+    return false;
+  }
+
+  mipWidth = gpuMipExtent(texture->width, mipLevel);
+  mipHeight = gpuMipExtent(texture->height, mipLevel);
+  if (x > mipWidth || width > mipWidth - x ||
+      y > mipHeight || height > mipHeight - y) {
+    return false;
+  }
+
+  if (texture->dimension == GPU_TEXTURE_DIMENSION_3D) {
+    mipDepth = gpuMipExtent(texture->depthOrLayers, mipLevel);
+    return baseArrayLayer == 0 &&
+           layerCount == 1 &&
+           z <= mipDepth &&
+           depth <= mipDepth - z;
+  }
+
+  return z == 0 &&
+         depth == 1 &&
+         baseArrayLayer < texture->depthOrLayers &&
+         layerCount <= texture->depthOrLayers - baseArrayLayer;
+}
+
 GPU_EXPORT
 GPUResult
 GPUCreateTexture(GPUDevice                  * __restrict device,
@@ -168,12 +213,16 @@ GPUQueueWriteTexture(GPUCommandQueue             * __restrict queue,
       sizeBytes == 0) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  if (region->mipLevel >= texture->mipLevelCount ||
-      region->width > gpuMipExtent(texture->width, region->mipLevel) ||
-      region->height > gpuMipExtent(texture->height, region->mipLevel) ||
-      region->depth > gpuMipExtent(texture->depthOrLayers, region->mipLevel) ||
-      region->baseArrayLayer >= texture->depthOrLayers ||
-      region->layerCount > texture->depthOrLayers - region->baseArrayLayer) {
+  if (!gpuTextureRegionInRange(texture,
+                               region->mipLevel,
+                               0u,
+                               0u,
+                               0u,
+                               region->width,
+                               region->height,
+                               region->depth,
+                               region->baseArrayLayer,
+                               region->layerCount)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (region->rowsPerImage != 0 && region->rowsPerImage < region->height) {

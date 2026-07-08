@@ -27,9 +27,32 @@ typedef struct GPURenderPassDesc {
   void *_priv;
 } GPURenderPassDesc;
 
+struct GPUCopyPassEncoder {
+  void *_priv;
+};
+
 typedef struct GPUApiRenderPass {
   GPURenderPassDesc* (*beginRenderPass)  (const GPURenderPassCreateInfo *info);
   void               (*destroyRenderPass)(GPURenderPassDesc *pass);
+
+  GPUCopyPassEncoder* (*beginCopyPass)(GPUCommandBuffer *cmdb, const char *label);
+  void (*copyBufferToBuffer)(GPUCopyPassEncoder        *pass,
+                             GPUBuffer                 *src,
+                             GPUBuffer                 *dst,
+                             const GPUBufferCopyRegion *region);
+  void (*copyBufferToTexture)(GPUCopyPassEncoder               *pass,
+                              GPUBuffer                        *src,
+                              GPUTexture                       *dst,
+                              const GPUBufferTextureCopyRegion *region);
+  void (*copyTextureToBuffer)(GPUCopyPassEncoder               *pass,
+                              GPUTexture                       *src,
+                              GPUBuffer                        *dst,
+                              const GPUBufferTextureCopyRegion *region);
+  void (*copyTextureToTexture)(GPUCopyPassEncoder                  *pass,
+                               GPUTexture                          *src,
+                               GPUTexture                          *dst,
+                               const GPUTextureToTextureCopyRegion *region);
+  void (*endCopyPass)(GPUCopyPassEncoder *pass);
 } GPUApiRenderPass;
 
 #ifdef __cplusplus
