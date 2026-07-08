@@ -16,6 +16,24 @@
 
 #include "../common.h"
 
+static bool
+gpu_validQueueCreateInfos(GPUCommandQueueCreateInfo queCI[], uint32_t nQueCI) {
+  if (!queCI) {
+    return nQueCI == 0;
+  }
+  if (nQueCI == 0) {
+    return false;
+  }
+
+  for (uint32_t i = 0; i < nQueCI; i++) {
+    if (queCI[i].flags == 0 || queCI[i].count == 0) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 GPU_EXPORT
 GPUDevice*
 GPUCreateSystemDefaultDevice(GPUInstance *inst) {
@@ -68,6 +86,9 @@ GPUCreateDevice(GPUPhysicalDevice        *phyDevice,
                 uint32_t                  nQueCI) {
   GPUApi *api;
 
+  if (!phyDevice || !gpu_validQueueCreateInfos(queCI, nQueCI)) {
+    return NULL;
+  }
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 

@@ -1442,6 +1442,54 @@ check_queue_selection(GPUDevice *device) {
 }
 
 static int
+check_device_queue_create_validation(GPUPhysicalDevice *physicalDevice) {
+  GPUCommandQueueCreateInfo queues[1] = {0};
+  GPUDevice *device;
+  int ok;
+
+  if (GPUCreateDevice(NULL, NULL, 0)) {
+    fprintf(stderr, "device create accepted null physical device\n");
+    return 0;
+  }
+
+  queues[0].flags = 0;
+  queues[0].count = 1;
+  if (GPUCreateDevice(physicalDevice, queues, 1)) {
+    fprintf(stderr, "device create accepted queue request with no flags\n");
+    return 0;
+  }
+
+  queues[0].flags = GPU_QUEUE_GRAPHICS;
+  queues[0].count = 0;
+  if (GPUCreateDevice(physicalDevice, queues, 1)) {
+    fprintf(stderr, "device create accepted zero queue count\n");
+    return 0;
+  }
+
+  queues[0].flags = GPU_QUEUE_GRAPHICS;
+  queues[0].count = 2;
+  device = GPUCreateDevice(physicalDevice, queues, 1);
+  if (!device) {
+    fprintf(stderr, "device create rejected explicit queue count\n");
+    return 0;
+  }
+
+  ok = (GPUGetAvailableQueueBits(device) & GPU_QUEUE_GRAPHICS) == GPU_QUEUE_GRAPHICS &&
+       GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0) &&
+       GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 1) &&
+       !GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 2) &&
+       !GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0) &&
+       GPUGetCommandQueue(device, GPU_QUEUE_GRAPHICS) ==
+         GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0);
+  if (!ok) {
+    fprintf(stderr, "explicit queue count lookup failed\n");
+  }
+
+  GPUDestroyDevice(device);
+  return ok;
+}
+
+static int
 check_resource_validation(GPUDevice *device) {
   GPUCommandQueue *queue;
   GPUBufferCreateInfo bufferInfo = {0};
@@ -1856,6 +1904,10 @@ check_selected_shader_library(const void *bytecode,
   physicalDevice = GPUGetAutoSelectedPhysicalDevice(NULL);
   if (!physicalDevice) {
     fprintf(stderr, "failed to get physical device\n");
+    return 0;
+  }
+
+  if (!check_device_queue_create_validation(physicalDevice)) {
     return 0;
   }
 

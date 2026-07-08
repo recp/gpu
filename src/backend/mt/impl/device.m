@@ -91,7 +91,7 @@ mt_createDevice(GPUPhysicalDevice        *phyDevice,
                 uint32_t                  nQueCI) {
   GPUDevice   *device;
   GPUDeviceMT *deviceMT;
-  uint32_t     i;
+  uint32_t     i, j, queueIndex, queueCount;
 
   GPU__DEFINE_DEFAULT_QUEUES_IF_NEEDED(nQueCI, queCI)
 
@@ -99,21 +99,29 @@ mt_createDevice(GPUPhysicalDevice        *phyDevice,
   deviceMT                 = calloc(1, sizeof(*deviceMT));
 
   deviceMT->device         = phyDevice->_priv;
-  deviceMT->nCreatedQueues = nQueCI;
+  queueCount               = 0;
+  for (i = 0; i < nQueCI; i++) {
+    queueCount += queCI[i].count;
+  }
+  deviceMT->nCreatedQueues = queueCount;
 
-  if (nQueCI) {
-    deviceMT->createdQueues = calloc(nQueCI, sizeof(void*));
+  if (queueCount) {
+    deviceMT->createdQueues = calloc(queueCount, sizeof(void*));
   }
 
   device->_priv            = deviceMT;
   device->inst             = phyDevice->inst;
   device->phyDevice        = phyDevice;
 
+  queueIndex = 0;
   for (i = 0; i < nQueCI; i++) {
-    deviceMT->createdQueues[i] = mt_newCommandQueue(device);
-    if (deviceMT->createdQueues[i]) {
-      deviceMT->createdQueues[i]->bits = queCI[i].flags;
-      device->queueFamilies |= queCI[i].flags;
+    for (j = 0; j < queCI[i].count; j++) {
+      deviceMT->createdQueues[queueIndex] = mt_newCommandQueue(device);
+      if (deviceMT->createdQueues[queueIndex]) {
+        deviceMT->createdQueues[queueIndex]->bits = queCI[i].flags;
+        device->queueFamilies |= queCI[i].flags;
+      }
+      queueIndex++;
     }
   }
 
