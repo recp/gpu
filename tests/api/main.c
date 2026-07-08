@@ -29,8 +29,7 @@ run_copy(void *ctx) {
 
 static int
 run_render(void *ctx) {
-  (void)ctx;
-  return gpu_test_render();
+  return gpu_test_render(((GPUApiTestContext *)ctx)->device);
 }
 
 static int

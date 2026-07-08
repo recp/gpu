@@ -42,7 +42,7 @@ int gpu_test_sampler(GPUDevice *device);
 int gpu_test_bindgroup(GPUDevice *device);
 int gpu_test_resources(GPUDevice *device);
 int gpu_test_copy(GPUDevice *device);
-int gpu_test_render(void);
+int gpu_test_render(GPUDevice *device);
 int gpu_test_compute(void);
 
 #endif /* gpu_tests_api_test_h */
