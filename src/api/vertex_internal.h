@@ -14,58 +14,38 @@
  * limitations under the License.
  */
 
+#ifndef gpu_vertex_internal_h
+#define gpu_vertex_internal_h
+
 #include "../common.h"
-#include "vertex_internal.h"
+
+struct GPUVertexDescriptor {
+  void *_priv;
+};
 
 GPU_HIDE
 GPUVertexDescriptor*
-gpuCreateVertexDesc(void) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return NULL;
-
-  return api->vertex.newVertexDesc();
-}
+gpuCreateVertexDesc(void);
 
 GPU_HIDE
 void
-gpuVertexDescAttrib(GPUVertexDescriptor * __restrict vert,
+gpuVertexDescAttrib(GPUVertexDescriptor * __restrict vertex,
                     uint32_t                         attribIndex,
                     GPUVertexFormat                  format,
                     uint32_t                         offset,
-                    uint32_t                         bufferIndex) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return;
-  
-  api->vertex.attrib(vert, attribIndex, format, offset, bufferIndex);
-}
+                    uint32_t                         bufferIndex);
 
 GPU_HIDE
 void
-gpuVertexDescLayout(GPUVertexDescriptor * __restrict vert,
+gpuVertexDescLayout(GPUVertexDescriptor * __restrict vertex,
                     uint32_t                         layoutIndex,
                     uint32_t                         stride,
                     uint32_t                         stepRate,
-                    GPUVertexStepFunction            stepFunction) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return;
-  
-  api->vertex.layout(vert, layoutIndex, stride, stepRate, stepFunction);
-}
+                    GPUVertexStepFunction            stepFunction);
 
 GPU_HIDE
 void
 gpuPipelineSetVertexDesc(GPURenderPipeline   * __restrict pipeline,
-                         GPUVertexDescriptor * __restrict vert) {
-  GPUApi *api;
+                         GPUVertexDescriptor * __restrict vert);
 
-  if (!(api = gpuActiveGPUApi()))
-    return;
-  
-  api->vertex.vertexDesc(pipeline, vert);
-}
+#endif /* gpu_vertex_internal_h */

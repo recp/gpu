@@ -140,35 +140,6 @@ typedef struct GPUVertexState {
   const GPUVertexBufferLayout *pBufferLayouts;
 } GPUVertexState;
 
-typedef struct GPUVertexDescriptor {
-  void                  *_priv;
-} GPUVertexDescriptor;
-
-GPU_EXPORT
-GPUVertexDescriptor*
-GPUNewVertexDesc(void);
-
-GPU_EXPORT
-void
-GPUAttrib(GPUVertexDescriptor * __restrict vertex,
-          uint32_t                         attribIndex,
-          GPUVertexFormat                  format,
-          uint32_t                         offset,
-          uint32_t                         bufferIndex);
-
-GPU_EXPORT
-void
-GPULayout(GPUVertexDescriptor * __restrict vertex,
-          uint32_t                         layoutIndex,
-          uint32_t                         stride,
-          uint32_t                         stepRate,
-          GPUVertexStepFunction            stepFunction);
-
-GPU_EXPORT
-void
-GPUSetVertexDesc(GPURenderPipeline   * __restrict pipeline,
-                 GPUVertexDescriptor * __restrict vert);
-
 #ifdef __cplusplus
 }
 #endif

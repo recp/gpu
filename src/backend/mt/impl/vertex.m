@@ -15,8 +15,9 @@
  */
 
 #include "../common.h"
+#include "../../../api/vertex_internal.h"
 
-GPU_EXPORT
+GPU_HIDE
 GPUVertexDescriptor*
 mt_newVertexDesc(void) {
   GPUVertexDescriptor *vdec;
@@ -29,7 +30,7 @@ mt_newVertexDesc(void) {
   return vdec;
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
 mt_attrib(GPUVertexDescriptor * __restrict vert,
           uint32_t                         attribIndex,
@@ -43,7 +44,7 @@ mt_attrib(GPUVertexDescriptor * __restrict vert,
   desc.attributes[attribIndex].bufferIndex = bufferIndex;
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
 mt_layout(GPUVertexDescriptor * __restrict vert,
           uint32_t                         layoutIndex,
@@ -57,7 +58,7 @@ mt_layout(GPUVertexDescriptor * __restrict vert,
   desc.layouts[layoutIndex].stepFunction = (MTLVertexStepFunction)stepFunction;
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
 mt_vertexDesc(GPURenderPipeline         * __restrict pipeline,
               GPUVertexDescriptor * __restrict vert) {

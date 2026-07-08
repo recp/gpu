@@ -23,6 +23,8 @@ extern "C" {
 #include "../common.h"
 #include "../gpu.h"
 
+typedef struct GPUVertexDescriptor GPUVertexDescriptor;
+
 typedef struct GPUApiVertex {
   GPUVertexDescriptor* (*newVertexDesc)(void);
   

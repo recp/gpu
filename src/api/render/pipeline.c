@@ -15,6 +15,7 @@
  */
 
 #include "../../common.h"
+#include "../vertex_internal.h"
 
 static bool
 gpu_blendStateIsDefault(const GPUBlendState *blend) {
@@ -53,7 +54,7 @@ gpu_createVertexDescriptorFromState(const GPUVertexState *state) {
   if (!state->pBufferLayouts)
     return NULL;
 
-  desc = GPUNewVertexDesc();
+  desc = gpuCreateVertexDesc();
   if (!desc)
     return NULL;
 
@@ -63,11 +64,15 @@ gpu_createVertexDescriptorFromState(const GPUVertexState *state) {
     if (layout->attributeCount > 0 && !layout->pAttributes)
       return NULL;
 
-    GPULayout(desc, i, layout->strideBytes, 1, gpu_vertexStepFunction(layout->stepMode));
+    gpuVertexDescLayout(desc,
+                        i,
+                        layout->strideBytes,
+                        1,
+                        gpu_vertexStepFunction(layout->stepMode));
     for (j = 0; j < layout->attributeCount; j++) {
       const GPUVertexAttribute *attr = &layout->pAttributes[j];
 
-      GPUAttrib(desc, attr->shaderLocation, attr->format, attr->offset, i);
+      gpuVertexDescAttrib(desc, attr->shaderLocation, attr->format, attr->offset, i);
     }
   }
 
@@ -144,7 +149,7 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (vertexDesc)
-    GPUSetVertexDesc(pipeline, vertexDesc);
+    gpuPipelineSetVertexDesc(pipeline, vertexDesc);
 
   for (i = 0; i < info->colorTargetCount; i++)
     GPUColorFormat(pipeline, i, info->pColorTargets[i].format);
