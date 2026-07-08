@@ -3,6 +3,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 #import "../../include/gpu/gpu.h"
+#import "../common/SampleApp.h"
 #import "../common/SampleUSL.h"
 
 typedef struct QuadVertex {
@@ -54,32 +55,10 @@ static const uint8_t kCheckerPixels[] = {
 @implementation TexturedQuadApp
 
 - (BOOL)setupWindow {
-  NSRect frame = NSMakeRect(0, 0, 960, 640);
-
-  _window = [[NSWindow alloc] initWithContentRect:frame
-                                        styleMask:(NSWindowStyleMaskTitled |
-                                                   NSWindowStyleMaskClosable |
-                                                   NSWindowStyleMaskResizable)
-                                          backing:NSBackingStoreBuffered
-                                            defer:NO];
-  if (!_window) {
-    return NO;
-  }
-
-  _window.title = @"GPU USL Textured Quad";
-  _window.delegate = self;
-
-  _view = [[NSView alloc] initWithFrame:frame];
-  if (!_view) {
-    return NO;
-  }
-
-  [_window setContentView:_view];
-  [_window center];
-  [_window makeKeyAndOrderFront:nil];
-  [NSApp activateIgnoringOtherApps:YES];
-
-  return YES;
+  return GPUSampleCreateWindow(@"GPU USL Textured Quad",
+                               self,
+                               &_window,
+                               &_view);
 }
 
 - (BOOL)setupTexture {
@@ -161,40 +140,13 @@ static const uint8_t kCheckerPixels[] = {
 - (BOOL)setupGPU {
   GPUBindGroupEntry groupEntries[3] = {0};
 
-  _physicalDevice = GPUGetAutoSelectedPhysicalDevice(NULL);
-  if (!_physicalDevice) {
-    NSLog(@"GPU: failed to get physical device");
-    return NO;
-  }
-
-  _device = GPUCreateDeviceWithDefaultQueues(_physicalDevice);
-  if (!_device) {
-    NSLog(@"GPU: failed to create device");
-    return NO;
-  }
-
-  _queue = GPUGetQueue(_device, GPU_QUEUE_GRAPHICS, 0);
-  if (!_queue) {
-    NSLog(@"GPU: failed to get command queue");
-    return NO;
-  }
-
-  _surface = GPUCreateSurface(NULL,
-                              _physicalDevice,
-                              (__bridge void *)_view,
-                              GPU_SURFACE_APPLE_NSVIEW,
-                              _window.backingScaleFactor ?: 1.0f);
-  if (!_surface) {
-    NSLog(@"GPU: failed to create surface");
-    return NO;
-  }
-
-  _swapchain = GPUCreateSwapchainDefault(_device,
-                                         _surface,
-                                         (uint32_t)_view.bounds.size.width,
-                                         (uint32_t)_view.bounds.size.height);
-  if (!_swapchain) {
-    NSLog(@"GPU: failed to create swapchain");
+  if (!GPUSampleCreateDefaultSurfaceGPU(_window,
+                                        _view,
+                                        &_physicalDevice,
+                                        &_device,
+                                        &_queue,
+                                        &_surface,
+                                        &_swapchain)) {
     return NO;
   }
 
