@@ -704,6 +704,65 @@ static int
 check_queue_submit_fence(GPUDevice *device);
 
 static int
+check_swapchain_validation(GPUDevice *device) {
+  GPUSurface *fakeSurface;
+  GPUSwapchain *swapchain;
+  GPUSwapchainCreateInfo info = {0};
+
+  fakeSurface = (GPUSurface *)(uintptr_t)1u;
+
+  swapchain = (GPUSwapchain *)(uintptr_t)1u;
+  if (GPUCreateSwapchain(NULL, &info, &swapchain) != GPU_ERROR_INVALID_ARGUMENT ||
+      swapchain != NULL) {
+    fprintf(stderr, "swapchain create accepted null device\n");
+    return 0;
+  }
+  if (GPUCreateSwapchain(device, &info, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "swapchain create accepted null output\n");
+    return 0;
+  }
+
+  info.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  info.chain.structSize = sizeof(info);
+  info.surface = fakeSurface;
+  info.width = 640u;
+  info.height = 480u;
+  swapchain = (GPUSwapchain *)(uintptr_t)1u;
+  if (GPUCreateSwapchain(device, &info, &swapchain) != GPU_ERROR_INVALID_ARGUMENT ||
+      swapchain != NULL) {
+    fprintf(stderr, "swapchain create accepted wrong sType\n");
+    return 0;
+  }
+
+  info.chain.sType = GPU_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO;
+  info.chain.structSize = (uint32_t)(sizeof(info) - 1u);
+  swapchain = (GPUSwapchain *)(uintptr_t)1u;
+  if (GPUCreateSwapchain(device, &info, &swapchain) != GPU_ERROR_INVALID_ARGUMENT ||
+      swapchain != NULL) {
+    fprintf(stderr, "swapchain create accepted short structSize\n");
+    return 0;
+  }
+
+  info.chain.structSize = sizeof(info);
+  info.width = 0u;
+  swapchain = (GPUSwapchain *)(uintptr_t)1u;
+  if (GPUCreateSwapchain(device, &info, &swapchain) != GPU_ERROR_INVALID_ARGUMENT ||
+      swapchain != NULL) {
+    fprintf(stderr, "swapchain create accepted zero width\n");
+    return 0;
+  }
+
+  if (GPUCreateSwapchainDefault(NULL, NULL, 1u, 1u) ||
+      GPUCreateSwapchainDefault(device, NULL, 1u, 1u) ||
+      GPUCreateSwapchainDefault(device, fakeSurface, 0u, 1u)) {
+    fprintf(stderr, "swapchain default accepted invalid input\n");
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
 check_fence_create_validation(GPUDevice *device) {
   GPUFenceCreateInfo fenceInfo = {0};
   GPUFence *fence;
@@ -842,6 +901,9 @@ check_selected_shader_library(const void *bytecode,
     return 0;
   }
   if (!check_queue_selection(device)) {
+    return 0;
+  }
+  if (!check_swapchain_validation(device)) {
     return 0;
   }
 

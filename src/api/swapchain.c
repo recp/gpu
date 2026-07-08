@@ -46,6 +46,11 @@ GPUCreateSwapchain(GPUDevice                    * __restrict device,
 
   if (!device || !info || !info->surface || info->width == 0 || info->height == 0)
     return GPU_ERROR_INVALID_ARGUMENT;
+  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+      info->chain.sType != GPU_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO)
+    return GPU_ERROR_INVALID_ARGUMENT;
+  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info))
+    return GPU_ERROR_INVALID_ARGUMENT;
 
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0);
   if (!queue)
