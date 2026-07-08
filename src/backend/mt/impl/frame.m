@@ -21,6 +21,8 @@ GPUFrame*
 mt_beginFrame(GPUApi       *__restrict api,
               GPUSwapChain *__restrict swapChain) {
   GPUFrame           *frame;
+  GPUTexture         *target;
+  GPUTextureView     *targetView;
   GPUSwapChainMetal  *swapChainMtl;
   id<CAMetalDrawable> drawable;
 
@@ -31,10 +33,34 @@ mt_beginFrame(GPUApi       *__restrict api,
   }
 
   [drawable retain];
-  frame           = calloc(1, sizeof(*frame));
-  frame->_priv    = drawable;
-  frame->target   = (GPUTexture *)drawable.texture;
-  frame->drawable = drawable;
+  frame = calloc(1, sizeof(*frame));
+  target = calloc(1, sizeof(*target));
+  targetView = calloc(1, sizeof(*targetView));
+  if (!frame || !target || !targetView) {
+    free(targetView);
+    free(target);
+    free(frame);
+    [drawable release];
+    return NULL;
+  }
+
+  target->_priv = drawable.texture;
+  target->format = (GPUFormat)drawable.texture.pixelFormat;
+  target->width = (uint32_t)drawable.texture.width;
+  target->height = (uint32_t)drawable.texture.height;
+  target->depthOrLayers = 1;
+  target->mipLevelCount = 1;
+  target->sampleCount = 1;
+  target->_ownsNative = false;
+
+  targetView->_priv = drawable.texture;
+  targetView->_texture = target;
+  targetView->_ownsNative = false;
+
+  frame->_priv      = drawable;
+  frame->target     = target;
+  frame->targetView = targetView;
+  frame->drawable   = drawable;
 
   return frame;
 }
@@ -48,6 +74,8 @@ mt_endFrame(GPUApi   *__restrict api,
   if (!frame)
     return;
 
+  free(frame->targetView);
+  free(frame->target);
   [(id<CAMetalDrawable>)frame->drawable release];
   free(frame);
 }

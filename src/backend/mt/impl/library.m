@@ -83,6 +83,36 @@ mt_newFunction(GPULibrary *lib, const char *name) {
 
 GPU_HIDE
 MTLSamplerMinMagFilter
+mt_samplerFilter(GPUFilter filter) {
+  return filter == GPU_FILTER_NEAREST ?
+    MTLSamplerMinMagFilterNearest :
+    MTLSamplerMinMagFilterLinear;
+}
+
+GPU_HIDE
+MTLSamplerMipFilter
+mt_samplerMipFilter(GPUMipFilter filter) {
+  return filter == GPU_MIP_FILTER_NEAREST ?
+    MTLSamplerMipFilterNearest :
+    MTLSamplerMipFilterLinear;
+}
+
+GPU_HIDE
+MTLSamplerAddressMode
+mt_samplerAddressMode(GPUAddressMode mode) {
+  switch (mode) {
+    case GPU_ADDRESS_MODE_REPEAT:
+      return MTLSamplerAddressModeRepeat;
+    case GPU_ADDRESS_MODE_MIRRORED_REPEAT:
+      return MTLSamplerAddressModeMirrorRepeat;
+    case GPU_ADDRESS_MODE_CLAMP_TO_EDGE:
+    default:
+      return MTLSamplerAddressModeClampToEdge;
+  }
+}
+
+GPU_HIDE
+MTLSamplerMinMagFilter
 mt_uslSamplerFilter(uint32_t filter) {
   return filter == GPUUSLSamplerFilterNearest ?
     MTLSamplerMinMagFilterNearest :
@@ -140,21 +170,24 @@ mt_uslSamplerCompareFunction(uint32_t func) {
 }
 
 GPU_HIDE
-GPUSampler *
+GPUResult
 mt_createSamplerFromUSLStaticSampler(GPUApi * __restrict api,
                                      GPUDevice * __restrict device,
                                      const GPUUSLStaticSamplerDesc *uslDesc,
-                                     bool staticIfSupported) {
+                                     bool staticIfSupported,
+                                     GPUSampler **outSampler) {
   GPUDeviceMT *deviceMT;
   MTLSamplerDescriptor *desc;
+  GPUSampler *sampler;
   id<MTLSamplerState> state;
 
   (void)api;
   (void)staticIfSupported;
 
-  if (!device) {
-    return NULL;
+  if (!device || !outSampler) {
+    return GPU_ERROR_INVALID_ARGUMENT;
   }
+  *outSampler = NULL;
 
   deviceMT = device->_priv;
   desc = [MTLSamplerDescriptor new];
@@ -181,15 +214,66 @@ mt_createSamplerFromUSLStaticSampler(GPUApi * __restrict api,
     desc.rAddressMode = MTLSamplerAddressModeClampToEdge;
   }
   state = [deviceMT->device newSamplerStateWithDescriptor:desc];
-  return (GPUSampler *)state;
+  [desc release];
+  if (!state) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  sampler = calloc(1, sizeof(*sampler));
+  if (!sampler) {
+    [state release];
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  sampler->_priv = state;
+  *outSampler = sampler;
+  return GPU_OK;
 }
 
 GPU_HIDE
-GPUSampler *
+GPUResult
 mt_createSampler(GPUApi * __restrict api,
                  GPUDevice * __restrict device,
-                 bool staticIfSupported) {
-  return mt_createSamplerFromUSLStaticSampler(api, device, NULL, staticIfSupported);
+                 const GPUSamplerCreateInfo *info,
+                 bool staticIfSupported,
+                 GPUSampler **outSampler) {
+  GPUDeviceMT *deviceMT;
+  MTLSamplerDescriptor *desc;
+  GPUSampler *sampler;
+  id<MTLSamplerState> state;
+
+  (void)api;
+  (void)staticIfSupported;
+
+  if (!device || !info || !outSampler) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outSampler = NULL;
+
+  deviceMT = device->_priv;
+  desc = [MTLSamplerDescriptor new];
+  desc.minFilter = mt_samplerFilter(info->desc.minFilter);
+  desc.magFilter = mt_samplerFilter(info->desc.magFilter);
+  desc.mipFilter = mt_samplerMipFilter(info->desc.mipFilter);
+  desc.sAddressMode = mt_samplerAddressMode(info->desc.addressU);
+  desc.tAddressMode = mt_samplerAddressMode(info->desc.addressV);
+  desc.rAddressMode = mt_samplerAddressMode(info->desc.addressW);
+
+  state = [deviceMT->device newSamplerStateWithDescriptor:desc];
+  [desc release];
+  if (!state) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  sampler = calloc(1, sizeof(*sampler));
+  if (!sampler) {
+    [state release];
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  sampler->_priv = state;
+  *outSampler = sampler;
+  return GPU_OK;
 }
 
 GPU_HIDE
@@ -199,7 +283,10 @@ mt_destroySampler(GPUSampler * __restrict sampler) {
     return;
   }
 
-  [(id<MTLSamplerState>)sampler release];
+  if (sampler->_priv) {
+    [(id<MTLSamplerState>)sampler->_priv release];
+  }
+  free(sampler);
 }
 
 GPU_HIDE

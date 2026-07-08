@@ -51,73 +51,243 @@ mt_newDepthStencilState(GPUDevice       * __restrict device,
 }
 
 GPU_INLINE
-GPUTextureDesc
-GPUDefaultTextureDesc(void) {
-  GPUTextureDesc desc;
-  desc.width            = 0;
-  desc.height           = 0;
-  desc.format           = GPUPixelFormatInvalid;
-  desc.mipmapLevelCount = 1;
-  desc.usage            = GPUTextureUsageUnknown;
-  desc.storageMode      = GPUStorageModePrivate;
-  return desc;
+MTLTextureUsage
+mt_textureUsage(GPUTextureUsageFlags usage) {
+  MTLTextureUsage mtUsage;
+
+  mtUsage = MTLTextureUsageUnknown;
+  if ((usage & GPU_TEXTURE_USAGE_SAMPLED) != 0) {
+    mtUsage |= MTLTextureUsageShaderRead;
+  }
+  if ((usage & GPU_TEXTURE_USAGE_STORAGE) != 0) {
+    mtUsage |= MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
+  }
+  if ((usage & (GPU_TEXTURE_USAGE_COLOR_TARGET | GPU_TEXTURE_USAGE_DEPTH_STENCIL)) != 0) {
+    mtUsage |= MTLTextureUsageRenderTarget;
+  }
+  return mtUsage;
 }
 
 GPU_INLINE
-GPUTextureDesc
-GPUMakeTextureDesc(uint32_t width, uint32_t height, GPUPixelFormat format) {
-  GPUTextureDesc desc;
-  desc        = GPUDefaultTextureDesc();
-  desc.width  = width;
-  desc.height = height;
-  desc.format = format;
-  return desc;
+MTLTextureType
+mt_textureType(GPUTextureDimension dimension, uint32_t depthOrLayers) {
+  switch (dimension) {
+    case GPU_TEXTURE_DIMENSION_1D:
+      return depthOrLayers > 1 ? MTLTextureType1DArray : MTLTextureType1D;
+    case GPU_TEXTURE_DIMENSION_3D:
+      return MTLTextureType3D;
+    case GPU_TEXTURE_DIMENSION_2D:
+    default:
+      return depthOrLayers > 1 ? MTLTextureType2DArray : MTLTextureType2D;
+  }
 }
 
-GPU_EXPORT
-GPUTexture*
-GPUNewTextureWith(GPUDevice * __restrict device, GPUTextureDesc * __restrict desc) {
+GPU_INLINE
+MTLTextureType
+mt_textureViewType(GPUTextureViewType viewType) {
+  switch (viewType) {
+    case GPU_TEXTURE_VIEW_1D:
+      return MTLTextureType1D;
+    case GPU_TEXTURE_VIEW_2D_ARRAY:
+      return MTLTextureType2DArray;
+    case GPU_TEXTURE_VIEW_CUBE:
+      return MTLTextureTypeCube;
+    case GPU_TEXTURE_VIEW_CUBE_ARRAY:
+      return MTLTextureTypeCubeArray;
+    case GPU_TEXTURE_VIEW_3D:
+      return MTLTextureType3D;
+    case GPU_TEXTURE_VIEW_2D:
+    default:
+      return MTLTextureType2D;
+  }
+}
+
+GPU_HIDE
+GPUResult
+mt_createTexture(GPUDevice                  * __restrict device,
+                 const GPUTextureCreateInfo * __restrict info,
+                 GPUTexture                ** __restrict outTexture) {
   GPUDeviceMT          *deviceMT;
-  MTLTextureDescriptor *texdesc;
-  id<MTLDevice>         mtlDevice;
+  MTLTextureDescriptor *desc;
+  id<MTLTexture>        nativeTexture;
+  GPUTexture           *texture;
 
-  deviceMT  = device->_priv;
-  mtlDevice = deviceMT->device;
+  if (!device || !info || !outTexture) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outTexture = NULL;
 
-  texdesc             = [MTLTextureDescriptor new];
-  texdesc.pixelFormat = (MTLPixelFormat)desc->format;
-  texdesc.width       = desc->width;
-  texdesc.height      = desc->height;
-  texdesc.storageMode = desc->storageMode;
-  texdesc.usage       = (MTLTextureUsage)desc->usage;
+  deviceMT = device->_priv;
+  desc = [MTLTextureDescriptor new];
+  desc.textureType = mt_textureType(info->dimension, info->depthOrLayers);
+  desc.pixelFormat = (MTLPixelFormat)info->format;
+  desc.width = info->width;
+  desc.height = info->height;
+  desc.depth = info->dimension == GPU_TEXTURE_DIMENSION_3D ? info->depthOrLayers : 1u;
+  desc.arrayLength = info->dimension == GPU_TEXTURE_DIMENSION_3D ? 1u : info->depthOrLayers;
+  desc.mipmapLevelCount = info->mipLevelCount ? info->mipLevelCount : 1u;
+  desc.sampleCount = info->sampleCount ? info->sampleCount : 1u;
+  desc.usage = mt_textureUsage(info->usage);
+  desc.storageMode = MTLStorageModePrivate;
+  if ((info->usage & GPU_TEXTURE_USAGE_COPY_DST) != 0) {
+#if TARGET_OS_OSX
+    desc.storageMode = MTLStorageModeManaged;
+#else
+    desc.storageMode = MTLStorageModeShared;
+#endif
+  }
 
-  return (GPUTexture *)[mtlDevice newTextureWithDescriptor:texdesc];
+  nativeTexture = [deviceMT->device newTextureWithDescriptor:desc];
+  [desc release];
+  if (!nativeTexture) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  texture = calloc(1, sizeof(*texture));
+  if (!texture) {
+    [nativeTexture release];
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  texture->_priv = nativeTexture;
+  texture->format = info->format;
+  texture->width = info->width;
+  texture->height = info->height;
+  texture->depthOrLayers = info->depthOrLayers;
+  texture->mipLevelCount = info->mipLevelCount ? info->mipLevelCount : 1u;
+  texture->sampleCount = info->sampleCount ? info->sampleCount : 1u;
+  texture->_ownsNative = true;
+
+  *outTexture = texture;
+  return GPU_OK;
 }
 
-GPU_EXPORT
-GPUTexture*
-GPUNewTexture(GPUDevice * __restrict device, uint32_t width, uint32_t height, GPUPixelFormat format) {
-  GPUTextureDesc desc;
-  desc = GPUMakeTextureDesc(width, height, format);
-  return GPUNewTextureWith(device, &desc);
-}
-
-GPU_EXPORT
+GPU_HIDE
 void
-GPUDestroyTexture(GPUTexture * __restrict texture) {
+mt_destroyTexture(GPUTexture * __restrict texture) {
   if (!texture) {
     return;
   }
 
-  [(id<MTLTexture>)texture release];
+  if (texture->_ownsNative && texture->_priv) {
+    [(id<MTLTexture>)texture->_priv release];
+  }
+  free(texture);
 }
 
-GPU_EXPORT
+GPU_HIDE
+GPUResult
+mt_createTextureView(GPUTexture                      * __restrict texture,
+                     const GPUTextureViewCreateInfo  * __restrict info,
+                     GPUTextureView                 ** __restrict outView) {
+  id<MTLTexture> nativeTexture;
+  id<MTLTexture> nativeView;
+  GPUTextureView *view;
+  NSRange levels;
+  NSRange slices;
+  bool fullView;
+
+  if (!texture || !texture->_priv || !info || !outView) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outView = NULL;
+
+  nativeTexture = (id<MTLTexture>)texture->_priv;
+  fullView = info->format == texture->format &&
+             info->baseMipLevel == 0 &&
+             info->mipLevelCount == texture->mipLevelCount &&
+             info->baseArrayLayer == 0 &&
+             info->arrayLayerCount == texture->depthOrLayers;
+  if (fullView) {
+    nativeView = nativeTexture;
+    [nativeView retain];
+  } else {
+    levels = NSMakeRange(info->baseMipLevel, info->mipLevelCount);
+    slices = NSMakeRange(info->baseArrayLayer, info->arrayLayerCount);
+    nativeView = [nativeTexture newTextureViewWithPixelFormat:(MTLPixelFormat)info->format
+                                                  textureType:mt_textureViewType(info->viewType)
+                                                       levels:levels
+                                                       slices:slices];
+  }
+  if (!nativeView) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  view = calloc(1, sizeof(*view));
+  if (!view) {
+    [nativeView release];
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  view->_priv = nativeView;
+  view->_texture = texture;
+  view->_ownsNative = true;
+  *outView = view;
+  return GPU_OK;
+}
+
+GPU_HIDE
 void
-GPUDestroyTextureView(GPUTextureView * __restrict view) {
-  GPUDestroyTexture((GPUTexture *)view);
+mt_destroyTextureView(GPUTextureView * __restrict view) {
+  if (!view) {
+    return;
+  }
+
+  if (view->_ownsNative && view->_priv) {
+    [(id<MTLTexture>)view->_priv release];
+  }
+  free(view);
 }
 
+GPU_HIDE
+GPUResult
+mt_writeTexture(GPUCommandQueue             * __restrict queue,
+                GPUTexture                  * __restrict texture,
+                const GPUTextureWriteRegion * __restrict region,
+                const void                  * __restrict data,
+                uint64_t                                 sizeBytes) {
+  id<MTLTexture> nativeTexture;
+  NSUInteger bytesPerImage;
+  NSUInteger requiredBytes;
+  MTLRegion mtRegion;
+  const uint8_t *bytes;
+
+  (void)queue;
+
+  if (!texture || !texture->_priv || !region || !data) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  bytesPerImage = (NSUInteger)region->bytesPerRow *
+                  (NSUInteger)(region->rowsPerImage ? region->rowsPerImage : region->height);
+  requiredBytes = bytesPerImage * (NSUInteger)region->layerCount;
+  if (sizeBytes < (uint64_t)requiredBytes) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  nativeTexture = (id<MTLTexture>)texture->_priv;
+  bytes = data;
+  if (nativeTexture.textureType == MTLTextureType3D) {
+    mtRegion = MTLRegionMake3D(0, 0, 0, region->width, region->height, region->depth);
+    [nativeTexture replaceRegion:mtRegion
+                      mipmapLevel:region->mipLevel
+                        withBytes:bytes
+                      bytesPerRow:region->bytesPerRow
+                    bytesPerImage:bytesPerImage];
+    return GPU_OK;
+  }
+
+  mtRegion = MTLRegionMake2D(0, 0, region->width, region->height);
+  for (uint32_t i = 0; i < region->layerCount; i++) {
+    [nativeTexture replaceRegion:mtRegion
+                      mipmapLevel:region->mipLevel
+                            slice:region->baseArrayLayer + i
+                        withBytes:bytes + ((NSUInteger)i * bytesPerImage)
+                      bytesPerRow:region->bytesPerRow
+                    bytesPerImage:bytesPerImage];
+  }
+  return GPU_OK;
+}
 
 GPU_EXPORT
 void
@@ -141,4 +311,14 @@ void
 mt_initDepthStencil(GPUApiDepthStencil *api) {
   api->newDepthStencil      = mt_newDepthStencil;
   api->newDepthStencilState = mt_newDepthStencilState;
+}
+
+GPU_HIDE
+void
+mt_initTexture(GPUApiTexture *api) {
+  api->create = mt_createTexture;
+  api->destroy = mt_destroyTexture;
+  api->createView = mt_createTextureView;
+  api->destroyView = mt_destroyTextureView;
+  api->write = mt_writeTexture;
 }

@@ -21,6 +21,7 @@ extern "C" {
 #endif
 
 #include "common.h"
+#include "cmdqueue.h"
 #include "usl.h"
 
 typedef struct GPUDevice GPUDevice;
@@ -46,23 +47,33 @@ typedef enum GPUAddressMode {
 } GPUAddressMode;
 
 typedef struct GPUSamplerDesc {
-  GPUFilter     minFilter;
-  GPUFilter     magFilter;
-  GPUMipFilter  mipFilter;
+  GPUFilter      minFilter;
+  GPUFilter      magFilter;
+  GPUMipFilter   mipFilter;
   GPUAddressMode addressU;
   GPUAddressMode addressV;
   GPUAddressMode addressW;
 } GPUSamplerDesc;
 
-GPU_EXPORT
-GPUSampler *
-GPUCreateSampler(GPUDevice * __restrict device, bool staticIfSupported);
+typedef struct GPUSamplerCreateInfo {
+  GPUChainedStruct chain;
+  const char      *label;
+  GPUSamplerDesc   desc;
+} GPUSamplerCreateInfo;
 
 GPU_EXPORT
-GPUSampler *
+GPUResult
+GPUCreateSampler(GPUDevice                  * __restrict device,
+                 const GPUSamplerCreateInfo * __restrict info,
+                 bool                                    staticIfSupported,
+                 GPUSampler                ** __restrict outSampler);
+
+GPU_EXPORT
+GPUResult
 GPUCreateSamplerFromUSLStaticSampler(GPUDevice * __restrict device,
                                      const GPUUSLStaticSamplerDesc *desc,
-                                     bool staticIfSupported);
+                                     bool staticIfSupported,
+                                     GPUSampler ** __restrict outSampler);
 
 GPU_EXPORT
 void

@@ -39,6 +39,7 @@
 		1EB809D52AD1D90F006A1FCB /* surface.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EB809D42AD1D90F006A1FCB /* surface.c */; };
 		1EB809D72AD1DF04006A1FCB /* surface.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EB809D62AD1DF04006A1FCB /* surface.c */; };
 		1EBBC1C32AC71D0D002B0E9D /* sampler.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EBBC1C22AC71D0D002B0E9D /* sampler.c */; };
+		1EC0DE112AD0000000000000 /* texture.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0DE102AD0000000000000 /* texture.c */; };
 		5622C0EC24E9C92C005FAE29 /* library.c in Sources */ = {isa = PBXBuildFile; fileRef = 5622C0EB24E9C92C005FAE29 /* library.c */; };
 		565525ED24D040D800901F5B /* common.h in Headers */ = {isa = PBXBuildFile; fileRef = 565525EC24D040D800901F5B /* common.h */; };
 		565525EF24D040E600901F5B /* common.h in Headers */ = {isa = PBXBuildFile; fileRef = 565525EE24D040E600901F5B /* common.h */; };
@@ -146,6 +147,7 @@
 		1EBBC1C22AC71D0D002B0E9D /* sampler.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = sampler.c; sourceTree = "<group>"; };
 		1EBBC1C42AC71DB2002B0E9D /* sampler.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = sampler.h; sourceTree = "<group>"; };
 		1EBBC1C52AC71E3E002B0E9D /* sampler.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = sampler.c; sourceTree = "<group>"; };
+		1EC0DE102AD0000000000000 /* texture.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = texture.c; sourceTree = "<group>"; };
 		1EBF771C2ACC8A83009F52D9 /* instance.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = instance.c; sourceTree = "<group>"; };
 		1EBF771D2ACC8A83009F52D9 /* renderpass.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = renderpass.c; sourceTree = "<group>"; };
 		1EBF771E2ACC8A83009F52D9 /* frame.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
@@ -522,6 +524,7 @@
 				56CDC9F524CF1BDE0021A8A2 /* render */,
 				56CDC99324CEE9210021A8A2 /* device.c */,
 				5655261124D08FE300901F5B /* buffer.c */,
+				1EC0DE102AD0000000000000 /* texture.c */,
 				56CEEC9124D1836D00865FF3 /* depthstencil.c */,
 				56CEEC9324D1848A00865FF3 /* vertex.c */,
 				56CEEC9524D185C200865FF3 /* library.c */,
@@ -790,6 +793,7 @@
 				56CDC9EC24CEF6120021A8A2 /* api.c in Sources */,
 				56CDC9F724CF1BF00021A8A2 /* pipeline.c in Sources */,
 				5655261224D08FE300901F5B /* buffer.c in Sources */,
+				1EC0DE112AD0000000000000 /* texture.c in Sources */,
 				56CDC9BE24CEE9210021A8A2 /* backend.c in Sources */,
 				1EA98C392ABAD6EC00E1B576 /* cmdbuf.m in Sources */,
 				1EA98C2F2ABAD64000E1B576 /* buffer.m in Sources */,

@@ -17,18 +17,28 @@
 #include "../common.h"
 
 GPU_EXPORT
-GPUSampler*
-GPUCreateSampler(GPUDevice *__restrict device, bool staticIfSupported) {
+GPUResult
+GPUCreateSampler(GPUDevice                  *__restrict device,
+                 const GPUSamplerCreateInfo *__restrict info,
+                 bool                                   staticIfSupported,
+                 GPUSampler               **__restrict outSampler) {
   GPUApi *api;
 
-  if (!device) {
-    return NULL;
+  if (!outSampler) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outSampler = NULL;
+
+  if (!device || !info) {
+    return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   if (!(api = gpuActiveGPUApi()))
-    return NULL;
+    return GPU_ERROR_BACKEND_FAILURE;
 
-  return api->sampler.createSampler ? api->sampler.createSampler(api, device, staticIfSupported) : NULL;
+  return api->sampler.createSampler ?
+    api->sampler.createSampler(api, device, info, staticIfSupported, outSampler) :
+    GPU_ERROR_BACKEND_FAILURE;
 }
 
 GPU_EXPORT
@@ -50,26 +60,33 @@ GPUDestroySampler(GPUSampler *__restrict sampler) {
 }
 
 GPU_EXPORT
-GPUSampler *
+GPUResult
 GPUCreateSamplerFromUSLStaticSampler(GPUDevice *__restrict device,
                                      const GPUUSLStaticSamplerDesc *desc,
-                                     bool staticIfSupported) {
+                                     bool staticIfSupported,
+                                     GPUSampler **__restrict outSampler) {
   GPUApi *api;
 
+  if (!outSampler) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outSampler = NULL;
+
   if (!device || !GPUUSLStaticSamplerDescIsValid(desc)) {
-    return NULL;
+    return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   if (!(api = gpuActiveGPUApi())) {
-    return NULL;
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
   if (api->sampler.createSamplerFromUSLStaticSampler) {
     return api->sampler.createSamplerFromUSLStaticSampler(api,
                                                           device,
                                                           desc,
-                                                          staticIfSupported);
+                                                          staticIfSupported,
+                                                          outSampler);
   }
 
-  return api->sampler.createSampler ? api->sampler.createSampler(api, device, staticIfSupported) : NULL;
+  return GPU_ERROR_BACKEND_FAILURE;
 }

@@ -44,8 +44,9 @@ mt_beginRenderPass(const GPURenderPassCreateInfo *info) {
     if (!color->view)
       return NULL;
 
-    rpd.colorAttachments[i].texture        = (id<MTLTexture>)color->view;
-    rpd.colorAttachments[i].resolveTexture = (id<MTLTexture>)color->resolveView;
+    rpd.colorAttachments[i].texture        = (id<MTLTexture>)color->view->_priv;
+    rpd.colorAttachments[i].resolveTexture = color->resolveView ?
+      (id<MTLTexture>)color->resolveView->_priv : nil;
 
     switch (color->loadOp) {
       case GPU_LOAD_OP_CLEAR:
@@ -78,8 +79,8 @@ mt_beginRenderPass(const GPURenderPassCreateInfo *info) {
 
   depthStencil = info->pDepthStencilAttachment;
   if (depthStencil && depthStencil->view) {
-    rpd.depthAttachment.texture   = (id<MTLTexture>)depthStencil->view;
-    rpd.stencilAttachment.texture = (id<MTLTexture>)depthStencil->view;
+    rpd.depthAttachment.texture   = (id<MTLTexture>)depthStencil->view->_priv;
+    rpd.stencilAttachment.texture = (id<MTLTexture>)depthStencil->view->_priv;
 
     switch (depthStencil->depthLoadOp) {
       case GPU_LOAD_OP_CLEAR:

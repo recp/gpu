@@ -40,7 +40,7 @@ GPUFrameGetTarget(GPUFrame *frame) {
 GPU_EXPORT
 GPUTextureView*
 GPUFrameGetTargetView(GPUFrame *frame) {
-  return frame ? (GPUTextureView *)frame->target : NULL;
+  return frame ? frame->targetView : NULL;
 }
 
 GPU_EXPORT

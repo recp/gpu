@@ -2,7 +2,6 @@
 #include <math.h>
 #include <string.h>
 #import <mach-o/dyld.h>
-#import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
 
 #import "../../include/gpu/gpu.h"
@@ -45,6 +44,7 @@ static const uint8_t kCheckerPixels[] = {
   GPUBuffer *_vertexBuffer;
   GPUBuffer *_fragmentUniformBuffer;
   GPUTexture *_texture;
+  GPUTextureView *_textureView;
   GPUSampler *_sampler;
   GPUBindGroup *_fragmentGroup;
   NSTimer *_timer;
@@ -103,30 +103,74 @@ static const uint8_t kCheckerPixels[] = {
 }
 
 - (BOOL)setupTexture {
-  GPUTextureDesc desc = {0};
-  id<MTLTexture> texture;
-  MTLRegion region;
+  GPUTextureCreateInfo textureInfo = {
+    .chain = { .sType = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO,
+               .structSize = sizeof(GPUTextureCreateInfo) },
+    .label = "checker-texture",
+    .dimension = GPU_TEXTURE_DIMENSION_2D,
+    .format = GPU_FORMAT_RGBA8_UNORM,
+    .width = 2,
+    .height = 2,
+    .depthOrLayers = 1,
+    .mipLevelCount = 1,
+    .sampleCount = 1,
+    .usage = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST
+  };
+  GPUTextureWriteRegion writeRegion = {
+    .width = 2,
+    .height = 2,
+    .depth = 1,
+    .mipLevel = 0,
+    .baseArrayLayer = 0,
+    .layerCount = 1,
+    .bytesPerRow = 8,
+    .rowsPerImage = 2
+  };
+  GPUTextureViewCreateInfo viewInfo = {
+    .chain = { .sType = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO,
+               .structSize = sizeof(GPUTextureViewCreateInfo) },
+    .label = "checker-texture-view",
+    .viewType = GPU_TEXTURE_VIEW_2D,
+    .format = GPU_FORMAT_RGBA8_UNORM,
+    .baseMipLevel = 0,
+    .mipLevelCount = 1,
+    .baseArrayLayer = 0,
+    .arrayLayerCount = 1
+  };
+  GPUSamplerCreateInfo samplerInfo = {
+    .chain = { .sType = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+               .structSize = sizeof(GPUSamplerCreateInfo) },
+    .label = "checker-sampler",
+    .desc = {
+      .minFilter = GPU_FILTER_LINEAR,
+      .magFilter = GPU_FILTER_LINEAR,
+      .mipFilter = GPU_MIP_FILTER_LINEAR,
+      .addressU = GPU_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressV = GPU_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressW = GPU_ADDRESS_MODE_CLAMP_TO_EDGE
+    }
+  };
 
-  desc.width = 2;
-  desc.height = 2;
-  desc.depth = 1;
-  desc.mipmapLevelCount = 1;
-  desc.format = GPUPixelFormatRGBA8Unorm;
-  desc.storageMode = GPUStorageModeManaged;
-  desc.usage = GPUTextureUsageShaderRead;
-
-  _texture = GPUNewTextureWith(_device, &desc);
-  if (!_texture) {
+  if (GPUCreateTexture(_device, &textureInfo, &_texture) != GPU_OK) {
     NSLog(@"GPU: failed to create texture");
     return NO;
   }
 
-  texture = (__bridge id<MTLTexture>)_texture;
-  region = MTLRegionMake2D(0, 0, 2, 2);
-  [texture replaceRegion:region mipmapLevel:0 withBytes:kCheckerPixels bytesPerRow:8];
+  if (GPUQueueWriteTexture(_queue,
+                           _texture,
+                           &writeRegion,
+                           kCheckerPixels,
+                           sizeof(kCheckerPixels)) != GPU_OK) {
+    NSLog(@"GPU: failed to upload texture");
+    return NO;
+  }
 
-  _sampler = GPUCreateSampler(_device, false);
-  if (!_sampler) {
+  if (GPUCreateTextureView(_texture, &viewInfo, &_textureView) != GPU_OK) {
+    NSLog(@"GPU: failed to create texture view");
+    return NO;
+  }
+
+  if (GPUCreateSampler(_device, &samplerInfo, false, &_sampler) != GPU_OK) {
     NSLog(@"GPU: failed to create sampler");
     return NO;
   }
@@ -317,7 +361,7 @@ static const uint8_t kCheckerPixels[] = {
   }
 
   groupEntries[0].binding = 0;
-  groupEntries[0].textureView = (GPUTextureView *)_texture;
+  groupEntries[0].textureView = _textureView;
   groupEntries[1].binding = 0;
   groupEntries[1].sampler = _sampler;
   groupEntries[2].binding = 0;
@@ -431,6 +475,10 @@ cleanup:
   if (_sampler) {
     GPUDestroySampler(_sampler);
     _sampler = NULL;
+  }
+  if (_textureView) {
+    GPUDestroyTextureView(_textureView);
+    _textureView = NULL;
   }
   if (_texture) {
     GPUDestroyTexture(_texture);

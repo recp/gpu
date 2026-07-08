@@ -21,56 +21,115 @@ extern "C" {
 #endif
 
 #include "common.h"
+#include "cmdqueue.h"
 #include "pixelformat.h"
 
 typedef struct GPUDevice GPUDevice;
 
-typedef enum GPUTextureUsage {
-  GPUTextureUsageUnknown         = 0x0000,
-  GPUTextureUsageShaderRead      = 0x0001,
-  GPUTextureUsageShaderWrite     = 0x0002,
-  GPUTextureUsageRenderTarget    = 0x0004,
-  GPUTextureUsagePixelFormatView = 0x0010,
-  GPUTextureUsageShaderAtomic    = 0x0020,
-} GPUTextureUsage;
+typedef uint32_t GPUTextureUsageFlags;
+enum {
+  GPU_TEXTURE_USAGE_SAMPLED       = 1u << 0,
+  GPU_TEXTURE_USAGE_STORAGE       = 1u << 1,
+  GPU_TEXTURE_USAGE_COLOR_TARGET  = 1u << 2,
+  GPU_TEXTURE_USAGE_DEPTH_STENCIL = 1u << 3,
+  GPU_TEXTURE_USAGE_COPY_SRC      = 1u << 4,
+  GPU_TEXTURE_USAGE_COPY_DST      = 1u << 5
+};
 
-typedef struct GPUTextureDesc {
-  GPUPixelFormat  format;
-  uint32_t        width;
-  uint32_t        height;
-  uint32_t        depth;            // 1
-  uint32_t        mipmapLevelCount; // 1
-  uint32_t        textureType;      // GPUTextureType2D
-  uint32_t        sampleCount;      // 1
-  uint32_t        storageMode;      // Default is MTLStorageModeManaged on macOS and MTLStorageModeShared on iOS
-  GPUTextureUsage usage;
-  // TODO: other properties to expose if nededed
-} GPUTextureDesc;
+typedef enum GPUTextureDimension {
+  GPU_TEXTURE_DIMENSION_1D = 0,
+  GPU_TEXTURE_DIMENSION_2D = 1,
+  GPU_TEXTURE_DIMENSION_3D = 2
+} GPUTextureDimension;
 
+typedef enum GPUTextureViewType {
+  GPU_TEXTURE_VIEW_1D = 0,
+  GPU_TEXTURE_VIEW_2D = 1,
+  GPU_TEXTURE_VIEW_2D_ARRAY = 2,
+  GPU_TEXTURE_VIEW_CUBE = 3,
+  GPU_TEXTURE_VIEW_CUBE_ARRAY = 4,
+  GPU_TEXTURE_VIEW_3D = 5
+} GPUTextureViewType;
 
+typedef struct GPUTexture {
+  void *_priv;
+  GPUFormat format;
+  uint32_t width;
+  uint32_t height;
+  uint32_t depthOrLayers;
+  uint32_t mipLevelCount;
+  uint32_t sampleCount;
+  bool _ownsNative;
+} GPUTexture;
 
-typedef struct GPUTexture GPUTexture;
-typedef GPUTexture GPUTextureView;
+typedef struct GPUTextureView {
+  void *_priv;
+  GPUTexture *_texture;
+  bool _ownsNative;
+} GPUTextureView;
+
+typedef struct GPUTextureCreateInfo {
+  GPUChainedStruct chain;
+  const char *label;
+  GPUTextureDimension dimension;
+  GPUFormat format;
+  uint32_t width;
+  uint32_t height;
+  uint32_t depthOrLayers;
+  uint32_t mipLevelCount;
+  uint32_t sampleCount;
+  GPUTextureUsageFlags usage;
+} GPUTextureCreateInfo;
+
+typedef struct GPUTextureViewCreateInfo {
+  GPUChainedStruct chain;
+  const char *label;
+  GPUTextureViewType viewType;
+  GPUFormat format;
+  uint32_t baseMipLevel;
+  uint32_t mipLevelCount;
+  uint32_t baseArrayLayer;
+  uint32_t arrayLayerCount;
+} GPUTextureViewCreateInfo;
+
+typedef struct GPUTextureWriteRegion {
+  uint32_t width;
+  uint32_t height;
+  uint32_t depth;
+  uint32_t mipLevel;
+  uint32_t baseArrayLayer;
+  uint32_t layerCount;
+  uint32_t bytesPerRow;
+  uint32_t rowsPerImage;
+} GPUTextureWriteRegion;
 
 GPU_EXPORT
-GPUTexture*
-GPUNewTextureWith(GPUDevice * __restrict device,
-                  GPUTextureDesc * __restrict desc);
-
-GPU_EXPORT
-GPUTexture*
-GPUNewTexture(GPUDevice * __restrict device,
-              uint32_t width,
-              uint32_t height,
-              GPUPixelFormat format);
+GPUResult
+GPUCreateTexture(GPUDevice                  * __restrict device,
+                 const GPUTextureCreateInfo * __restrict info,
+                 GPUTexture                ** __restrict outTexture);
 
 GPU_EXPORT
 void
 GPUDestroyTexture(GPUTexture * __restrict texture);
 
 GPU_EXPORT
+GPUResult
+GPUCreateTextureView(GPUTexture                      * __restrict texture,
+                     const GPUTextureViewCreateInfo  * __restrict info,
+                     GPUTextureView                 ** __restrict outView);
+
+GPU_EXPORT
 void
 GPUDestroyTextureView(GPUTextureView * __restrict view);
+
+GPU_EXPORT
+GPUResult
+GPUQueueWriteTexture(GPUCommandQueue              * __restrict queue,
+                     GPUTexture                   * __restrict texture,
+                     const GPUTextureWriteRegion  * __restrict region,
+                     const void                   * __restrict data,
+                     uint64_t                                  sizeBytes);
 
 #ifdef __cplusplus
 }

@@ -160,7 +160,7 @@ GPUBindVertexBuffers(GPURenderPassEncoder   *pass,
 GPU_EXPORT
 void
 GPUSetVertexTexture(GPURenderCommandEncoder *rce,
-                    GPUTexture              *tex,
+                    GPUTextureView          *view,
                     uint32_t                 index) {
   GPUApi *api;
 
@@ -168,7 +168,7 @@ GPUSetVertexTexture(GPURenderCommandEncoder *rce,
     return;
 
   if (api->rce.setVertexTexture) {
-    api->rce.setVertexTexture(rce, tex, index);
+    api->rce.setVertexTexture(rce, view, index);
   }
 }
 
@@ -204,14 +204,14 @@ GPUSetFragmentBuffer(GPURenderCommandEncoder *rce,
 GPU_EXPORT
 void
 GPUSetFragmentTexture(GPURenderCommandEncoder *rce,
-                      GPUTexture               *tex,
+                      GPUTextureView           *view,
                       uint32_t                 index) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
     return;
   
-  api->rce.setFragmentTexture(rce, tex, index);
+  api->rce.setFragmentTexture(rce, view, index);
 }
 
 GPU_EXPORT

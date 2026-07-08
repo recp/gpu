@@ -57,7 +57,7 @@ typedef struct GPUApiRCE {
 
   void
   (*setVertexTexture)(GPURenderCommandEncoder *rce,
-                      GPUTexture              *tex,
+                      GPUTextureView          *view,
                       uint32_t                 index);
 
   void
@@ -73,7 +73,7 @@ typedef struct GPUApiRCE {
   
   void
   (*setFragmentTexture)(GPURenderCommandEncoder *rce,
-                        GPUTexture               *tex,
+                        GPUTextureView           *view,
                         uint32_t                 index);
 
   void

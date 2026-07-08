@@ -130,7 +130,7 @@ GPUBindVertexBuffers(GPURenderPassEncoder     *pass,
 GPU_EXPORT
 void
 GPUSetVertexTexture(GPURenderCommandEncoder *rce,
-                    GPUTexture              *tex,
+                    GPUTextureView          *view,
                     uint32_t                 index);
 
 GPU_EXPORT
@@ -149,7 +149,7 @@ GPUSetFragmentBuffer(GPURenderCommandEncoder *rce,
 GPU_EXPORT
 void
 GPUSetFragmentTexture(GPURenderCommandEncoder *rce,
-                      GPUTexture               *tex,
+                      GPUTextureView           *view,
                       uint32_t                 index);
 
 GPU_EXPORT

@@ -26,6 +26,7 @@ extern "C" {
 #include "render-pipeline.h"
 #include "rce.h"
 #include "buffer.h"
+#include "texture.h"
 #include "commandbuffer.h"
 #include "commandqueue.h"
 #include "pass.h"
@@ -46,6 +47,7 @@ typedef struct GPUApi {
   GPUApiRender        render;
   GPUApiRCE           rce;
   GPUApiBuffer        buf;
+  GPUApiTexture       texture;
   GPUApiCommandBuffer cmdbuf;
   GPUApiCommandQueue  cmdque;
   GPUApiRenderPass    renderPass;

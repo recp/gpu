@@ -86,9 +86,10 @@ mt_vertexBuffer(GPURenderCommandEncoder *rce,
 GPU_HIDE
 void
 mt_rceSetVertexTexture(GPURenderCommandEncoder *rce,
-                       GPUTexture              *tex,
+                       GPUTextureView          *view,
                        uint32_t                 index) {
-  [(id<MTLRenderCommandEncoder>)rce setVertexTexture:(id<MTLTexture>)tex atIndex:index];
+  [(id<MTLRenderCommandEncoder>)rce setVertexTexture:view ? (id<MTLTexture>)view->_priv : nil
+                                             atIndex:index];
 }
 
 GPU_HIDE
@@ -96,7 +97,7 @@ void
 mt_rceSetVertexSampler(GPURenderCommandEncoder *rce,
                        GPUSampler              *sampler,
                        uint32_t                 index) {
-  [(id<MTLRenderCommandEncoder>)rce setVertexSamplerState:(id<MTLSamplerState>)sampler
+  [(id<MTLRenderCommandEncoder>)rce setVertexSamplerState:sampler ? (id<MTLSamplerState>)sampler->_priv : nil
                                                   atIndex:index];
 }
 
@@ -112,9 +113,10 @@ mt_fragmentBuffer(GPURenderCommandEncoder *rce,
 GPU_HIDE
 void
 mt_rceSetFragmentTexture(GPURenderCommandEncoder *rce,
-                         GPUTexture               *tex,
+                         GPUTextureView           *view,
                          uint32_t                 index) {
-  [(id<MTLRenderCommandEncoder>)rce setFragmentTexture:(id<MTLTexture>)tex atIndex:index];
+  [(id<MTLRenderCommandEncoder>)rce setFragmentTexture:view ? (id<MTLTexture>)view->_priv : nil
+                                               atIndex:index];
 }
 
 GPU_HIDE
@@ -122,7 +124,7 @@ void
 mt_rceSetFragmentSampler(GPURenderCommandEncoder *rce,
                          GPUSampler              *sampler,
                          uint32_t                 index) {
-  [(id<MTLRenderCommandEncoder>)rce setFragmentSamplerState:(id<MTLSamplerState>)sampler
+  [(id<MTLRenderCommandEncoder>)rce setFragmentSamplerState:sampler ? (id<MTLSamplerState>)sampler->_priv : nil
                                                     atIndex:index];
 }
 
