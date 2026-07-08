@@ -73,6 +73,8 @@ GPUFinishFrame(GPUCommandQueue  * __restrict cmdq,
   GPUSchedulePresent(cmdb, frame);
 
   buffers[0] = cmdb;
+  submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize = sizeof(submitInfo);
   submitInfo.commandBufferCount = 1;
   submitInfo.ppCommandBuffers = buffers;
   result = GPUQueueSubmit(cmdq, &submitInfo);

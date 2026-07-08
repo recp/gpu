@@ -23,6 +23,7 @@ extern "C" {
 #include "common.h"
 
 struct GPUDevice;
+struct GPUFence;
 
 typedef enum GPUResult {
   GPU_OK                     = 0,
@@ -72,8 +73,10 @@ struct GPUCommandBuffer {
 };
 
 typedef struct GPUQueueSubmitInfo {
+  GPUChainedStruct chain;
   uint32_t commandBufferCount;
   GPUCommandBuffer * const *ppCommandBuffers;
+  struct GPUFence *fence; /* optional; signaled after submitted buffers complete */
 } GPUQueueSubmitInfo;
 
 /*!
