@@ -322,6 +322,100 @@ check_vertex_entry(const void *bytecode, uint64_t bytecodeSize) {
 }
 
 static int
+check_compute_entry(const void *bytecode, uint64_t bytecodeSize) {
+  const GPUBindGroupLayoutEntry *layoutEntries;
+  GPUBindGroupLayoutUSLInfo layoutInfo;
+  GPUUSLEntryReflection *reflection;
+  GPUBindGroupLayout *layout;
+  uint32_t layoutCount;
+  int ok;
+
+  reflection = NULL;
+  if (GPUReflectUSLBytecodeEntry(bytecode,
+                                 bytecodeSize,
+                                 "reflect_cs",
+                                 &reflection) != 0 ||
+      !reflection) {
+    fprintf(stderr, "failed to reflect compute entry\n");
+    return 0;
+  }
+
+  ok = reflection->stage == GPUUSLStageCompute &&
+       reflection->workgroupSize[0] == 8u &&
+       reflection->workgroupSize[1] == 8u &&
+       reflection->workgroupSize[2] == 1u &&
+       reflection->resourceBindingCount == 1u &&
+       reflection->bytecodeSize == bytecodeSize &&
+       reflection->bytecodeContentHash != 0u &&
+       reflection->capabilityRequirementCount == 0u &&
+       reflection->capabilityRequirementTotalCount == 0u &&
+       reflection->capabilityRequirementFlags == 0u &&
+       reflection->capabilityRequirementHash == 0u &&
+       reflection->entryTargetInfoVersion != 0u &&
+       reflection->targetBackend != 0u &&
+       reflection->targetSupported == 1u &&
+       reflection->targetSupportStatus == 1u &&
+       reflection->targetAtomCount >= 1u &&
+       reflection->targetAtomTotalCount >= reflection->targetAtomCount &&
+       reflection->targetInfoFlags == 0u &&
+       reflection->targetAtomHash != 0u &&
+       reflection_has_binding(reflection,
+                              GPUUSLStageCompute,
+                              GPUUSLResourceKindTexture,
+                              0u) &&
+       reflection->staticSamplerCount == 0u;
+  GPUFreeUSLEntryReflection(reflection);
+  if (!ok) {
+    fprintf(stderr, "unexpected compute reflection data\n");
+    return 0;
+  }
+
+  layout = NULL;
+  if (GPUCreateBindGroupLayoutFromUSLBytecode(bytecode,
+                                              bytecodeSize,
+                                              "reflect_cs",
+                                              &layout) != 0 ||
+      !layout) {
+    fprintf(stderr, "failed to create compute bind layout\n");
+    return 0;
+  }
+
+  layoutEntries = GPUGetBindGroupLayoutEntries(layout, &layoutCount);
+  ok = layoutCount == 1u &&
+       GPUGetBindGroupLayoutUSLInfo(layout, &layoutInfo) == 0 &&
+       layoutInfo.abiVersion == GPU_BIND_GROUP_LAYOUT_USL_INFO_VERSION &&
+       layoutInfo.stage == GPUBindStageCompute &&
+       strcmp(layoutInfo.entryPointName, "reflect_cs") == 0 &&
+       layoutInfo.resourceBindingCount == 1u &&
+       layoutInfo.bytecodeSize == bytecodeSize &&
+       layoutInfo.bytecodeContentHash != 0u &&
+       layoutInfo.capabilityRequirementCount == 0u &&
+       layoutInfo.capabilityRequirementTotalCount == 0u &&
+       layoutInfo.capabilityRequirementFlags == 0u &&
+       layoutInfo.capabilityRequirementHash == 0u &&
+       layoutInfo.entryTargetInfoVersion != 0u &&
+       layoutInfo.targetBackend != 0u &&
+       layoutInfo.targetSupported == 1u &&
+       layoutInfo.targetSupportStatus == 1u &&
+       layoutInfo.targetAtomCount >= 1u &&
+       layoutInfo.targetAtomTotalCount >= layoutInfo.targetAtomCount &&
+       layoutInfo.targetInfoFlags == 0u &&
+       layoutInfo.targetAtomHash != 0u &&
+       layout_has_entry(layoutEntries,
+                        layoutCount,
+                        GPUBindStageCompute,
+                        GPUBindKindTexture,
+                        0u);
+  GPUDestroyBindGroupLayout(layout);
+  if (!ok) {
+    fprintf(stderr, "unexpected compute bind layout\n");
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
 check_selected_shader_library(const void *bytecode,
                               uint64_t bytecodeSize,
                               uint32_t expectedSourceKind) {
@@ -513,7 +607,11 @@ check_selected_shader_library(const void *bytecode,
          info.backendContentHash != 0u &&
          info.selectedEntryCount == 0u &&
          GPUGetShaderReflection(library, &shaderReflection) == GPU_OK &&
-         shaderReflection.resourceCount == 2u &&
+         shaderReflection.resourceCount == 3u &&
+         shader_reflection_has_resource(&shaderReflection,
+                                        GPU_BINDING_STORAGE_TEXTURE,
+                                        GPU_SHADER_STAGE_COMPUTE_BIT,
+                                        0u) &&
          GPUCreateShaderLayout(device, library, &shaderLayout) == GPU_OK &&
          shaderLayout != NULL &&
          shaderLayout->bindGroupLayoutCount == 1u &&
@@ -564,6 +662,7 @@ main(int argc, char **argv) {
 
   ok = check_fragment_entry(bytecode, bytecodeSize) &&
        check_vertex_entry(bytecode, bytecodeSize) &&
+       check_compute_entry(bytecode, bytecodeSize) &&
        check_selected_shader_library(bytecode,
                                      bytecodeSize,
                                      expectedSourceKind);

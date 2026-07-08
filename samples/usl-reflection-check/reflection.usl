@@ -17,3 +17,8 @@ frag reflect_fs(colorTex: texture2d<half> #texture(0),
   let repeatSampler = sampler(.linear, .linear, .linear, .repeat)
   return float4(colorTex.sample(repeatSampler, float2(0.5, 0.5))) * uniforms.tint
 }
+
+kern(8, 8, 1) reflect_cs(outputImage: texture2d<float, write> #texture(0),
+                         gid: uint3 #global_id) {
+  outputImage.write(float4(1.0, 0.0, 0.0, 1.0), gid.xy)
+}
