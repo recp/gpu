@@ -406,6 +406,25 @@ cleanup:
   [self renderFrame];
 }
 
+- (void)cleanupGPU {
+  if (_fragmentGroup) {
+    GPUDestroyBindGroup(_fragmentGroup);
+    _fragmentGroup = NULL;
+  }
+  if (_pipeline) {
+    GPUDestroyRenderPipeline(_pipeline);
+    _pipeline = NULL;
+  }
+  if (_shaderLayout) {
+    GPUDestroyShaderLayout(_shaderLayout);
+    _shaderLayout = NULL;
+  }
+  if (_library) {
+    GPUDestroyShaderLibrary((GPUShaderLibrary *)_library);
+    _library = NULL;
+  }
+}
+
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
   (void)notification;
 
@@ -430,6 +449,13 @@ cleanup:
   [self renderFrame];
 }
 
+- (void)applicationWillTerminate:(NSNotification *)notification {
+  (void)notification;
+  [_timer invalidate];
+  _timer = nil;
+  [self cleanupGPU];
+}
+
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
   (void)sender;
   return YES;
@@ -444,6 +470,7 @@ cleanup:
   (void)notification;
   [_timer invalidate];
   _timer = nil;
+  [self cleanupGPU];
 }
 
 @end
