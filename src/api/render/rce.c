@@ -15,6 +15,7 @@
  */
 
 #include "../../common.h"
+#include "pipeline_internal.h"
 #include "rce_internal.h"
 
 static GPUPrimitiveType

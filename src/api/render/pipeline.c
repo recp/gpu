@@ -15,6 +15,7 @@
  */
 
 #include "../../common.h"
+#include "pipeline_internal.h"
 #include "../vertex_internal.h"
 
 static bool
@@ -136,12 +137,12 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
 
   colorFormat = info->pColorTargets[0].format;
-  pipeline = GPUNewRenderPipeline(colorFormat);
+  pipeline = gpuCreateRenderPipelineDesc(colorFormat);
   if (!pipeline)
     return GPU_ERROR_BACKEND_FAILURE;
 
-  GPUSetFunction(pipeline, vertexFunc, GPU_FUNCTION_VERT);
-  GPUSetFunction(pipeline, fragmentFunc, GPU_FUNCTION_FRAG);
+  gpuPipelineSetFunction(pipeline, vertexFunc, GPU_FUNCTION_VERT);
+  gpuPipelineSetFunction(pipeline, fragmentFunc, GPU_FUNCTION_FRAG);
 
   vertexDesc = gpu_createVertexDescriptorFromState(&info->vertex);
   if (info->vertex.bufferLayoutCount > 0 && !vertexDesc) {
@@ -152,17 +153,17 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     gpuPipelineSetVertexDesc(pipeline, vertexDesc);
 
   for (i = 0; i < info->colorTargetCount; i++)
-    GPUColorFormat(pipeline, i, info->pColorTargets[i].format);
+    gpuPipelineSetColorFormat(pipeline, i, info->pColorTargets[i].format);
 
   if (info->depthStencilFormat != GPU_FORMAT_UNDEFINED) {
-    GPUDepthFormat(pipeline, info->depthStencilFormat);
-    GPUStencilFormat(pipeline, info->depthStencilFormat);
+    gpuPipelineSetDepthFormat(pipeline, info->depthStencilFormat);
+    gpuPipelineSetStencilFormat(pipeline, info->depthStencilFormat);
   }
 
   sampleCount = info->multisample.sampleCount > 0 ? info->multisample.sampleCount : 1;
-  GPUSampleCount(pipeline, sampleCount);
+  gpuPipelineSetSampleCount(pipeline, sampleCount);
 
-  state = GPUNewRenderState(device, pipeline);
+  state = gpuCompileRenderPipelineState(device, pipeline);
   if (!state) {
     GPUDestroyRenderPipeline(pipeline);
     return GPU_ERROR_BACKEND_FAILURE;
@@ -182,9 +183,9 @@ GPUDestroyRenderPipeline(GPURenderPipeline *pipeline) {
   free(pipeline);
 }
 
-GPU_EXPORT
+GPU_HIDE
 GPURenderPipeline*
-GPUNewRenderPipeline(GPUPixelFormat pixelFormat) {
+gpuCreateRenderPipelineDesc(GPUPixelFormat pixelFormat) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
@@ -193,10 +194,10 @@ GPUNewRenderPipeline(GPUPixelFormat pixelFormat) {
   return api->render.newRenderPipeline(pixelFormat);
 }
 
-GPU_EXPORT
+GPU_HIDE
 GPURenderPipelineState*
-GPUNewRenderState(GPUDevice         * __restrict device,
-                  GPURenderPipeline * __restrict pipeline) {
+gpuCompileRenderPipelineState(GPUDevice         * __restrict device,
+                              GPURenderPipeline * __restrict pipeline) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
@@ -205,11 +206,11 @@ GPUNewRenderState(GPUDevice         * __restrict device,
   return api->render.newRenderState(device, pipeline);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
-GPUSetFunction(GPURenderPipeline * __restrict pipline,
-               GPUFunction       * __restrict func,
-               GPUFunctionType                functype) {
+gpuPipelineSetFunction(GPURenderPipeline * __restrict pipline,
+                       GPUFunction       * __restrict func,
+                       GPUFunctionType                functype) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
@@ -218,11 +219,11 @@ GPUSetFunction(GPURenderPipeline * __restrict pipline,
   api->render.setFunction(pipline, func, functype);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
-GPUColorFormat(GPURenderPipeline * __restrict pipline,
-               uint32_t                       index,
-               GPUPixelFormat                 pixelFormat) {
+gpuPipelineSetColorFormat(GPURenderPipeline * __restrict pipline,
+                          uint32_t                       index,
+                          GPUPixelFormat                 pixelFormat) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
@@ -231,10 +232,10 @@ GPUColorFormat(GPURenderPipeline * __restrict pipline,
   api->render.colorFormat(pipline, index, pixelFormat);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
-GPUDepthFormat(GPURenderPipeline * __restrict pipline,
-               GPUPixelFormat                 pixelFormat) {
+gpuPipelineSetDepthFormat(GPURenderPipeline * __restrict pipline,
+                          GPUPixelFormat                 pixelFormat) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
@@ -243,10 +244,10 @@ GPUDepthFormat(GPURenderPipeline * __restrict pipline,
   api->render.depthFormat(pipline, pixelFormat);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
-GPUStencilFormat(GPURenderPipeline * __restrict pipline,
-                 GPUPixelFormat                pixelFormat) {
+gpuPipelineSetStencilFormat(GPURenderPipeline * __restrict pipline,
+                            GPUPixelFormat                pixelFormat) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))
@@ -255,10 +256,10 @@ GPUStencilFormat(GPURenderPipeline * __restrict pipline,
   api->render.stencilFormat(pipline, pixelFormat);
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
-GPUSampleCount(GPURenderPipeline * __restrict pipline,
-               uint32_t                       sampleCount) {
+gpuPipelineSetSampleCount(GPURenderPipeline * __restrict pipline,
+                          uint32_t                       sampleCount) {
   GPUApi *api;
 
   if (!(api = gpuActiveGPUApi()))

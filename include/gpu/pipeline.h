@@ -120,10 +120,6 @@ typedef struct GPURenderPipeline {
   GPUFrontFace          _frontFace;
 } GPURenderPipeline;
 
-typedef struct GPURenderPipelineState {
-  void *_priv;
-} GPURenderPipelineState;
-
 typedef struct GPURenderPipelineCreateInfo {
   GPUChainedStruct             chain;
   const char                  *label;
@@ -152,42 +148,6 @@ GPUCreateRenderPipeline(GPUDevice                          * __restrict device,
 GPU_EXPORT
 void
 GPUDestroyRenderPipeline(GPURenderPipeline *pipeline);
-
-GPU_EXPORT
-GPURenderPipeline*
-GPUNewRenderPipeline(GPUPixelFormat pixelFormat);
-
-GPU_EXPORT
-GPURenderPipelineState*
-GPUNewRenderState(GPUDevice   * __restrict device,
-                  GPURenderPipeline * __restrict pipeline);
-
-GPU_EXPORT
-void
-GPUSetFunction(GPURenderPipeline * __restrict pipline,
-               GPUFunction       * __restrict func,
-               GPUFunctionType                functype);
-
-GPU_EXPORT
-void
-GPUColorFormat(GPURenderPipeline * __restrict pipline,
-               uint32_t                       index,
-               GPUPixelFormat                 pixelFormat);
-
-GPU_EXPORT
-void
-GPUDepthFormat(GPURenderPipeline * __restrict pipline,
-               GPUPixelFormat           pixelFormat);
-
-GPU_EXPORT
-void
-GPUStencilFormat(GPURenderPipeline * __restrict pipline,
-                 GPUPixelFormat           pixelFormat);
-
-GPU_EXPORT
-void
-GPUSampleCount(GPURenderPipeline * __restrict pipline,
-               uint32_t                 sampleCount);
 
 #ifdef __cplusplus
 }

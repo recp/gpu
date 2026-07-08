@@ -15,6 +15,7 @@
  */
 
 #include "../../common.h"
+#include "../../../../api/render/pipeline_internal.h"
 
 GPU_HIDE
 GPURenderPipeline*

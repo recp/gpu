@@ -23,6 +23,8 @@ extern "C" {
 #include "../common.h"
 #include "../gpu.h"
 
+typedef struct GPURenderPipelineState GPURenderPipelineState;
+
 struct GPURenderCommandEncoder {
   void             *_priv;
   GPUPrimitiveType  _primitiveType;

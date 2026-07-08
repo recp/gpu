@@ -23,6 +23,8 @@ extern "C" {
 #include "../common.h"
 #include "../gpu.h"
 
+typedef struct GPURenderPipelineState GPURenderPipelineState;
+
 typedef struct GPUApiRender {
   GPURenderPipeline*
   (*newRenderPipeline)(GPUPixelFormat pixelFormat);
