@@ -59,7 +59,7 @@ GPU_EXPORT
 GPUCommandBuffer*
 GPUNewCommandBuffer(GPUCommandQueue  * __restrict cmdb,
                     void             * __restrict sender,
-                    GPUCommandBufferOnCompleteFn  oncomplete) {
+                    GPUCommandBufferCompletionFn  oncomplete) {
   GPUApi *api;
 
   if (!cmdb)
@@ -94,9 +94,9 @@ GPUAcquireCommandBuffer(GPUCommandQueue   * __restrict cmdq,
 
 GPU_EXPORT
 void
-gpuCommandBufferOnComplete(GPUCommandBuffer * __restrict cmdb,
-                           void             * __restrict sender,
-                           GPUCommandBufferOnCompleteFn  oncomplete) {
+GPUSetCommandBufferCompletionHandler(GPUCommandBuffer * __restrict cmdb,
+                                     void             * __restrict sender,
+                                     GPUCommandBufferCompletionFn  oncomplete) {
   GPUApi *api;
 
   if (!cmdb)

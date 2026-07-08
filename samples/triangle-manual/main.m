@@ -341,7 +341,7 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     goto cleanup;
   }
   if (_exitAfterFrames > 0) {
-    gpuCommandBufferOnComplete(cmdb, (__bridge void *)self, TriangleFrameComplete);
+    GPUSetCommandBufferCompletionHandler(cmdb, (__bridge void *)self, TriangleFrameComplete);
   }
 
   color.view = GPUFrameGetTargetView(frame);

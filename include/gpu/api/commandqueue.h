@@ -35,12 +35,12 @@ typedef struct GPUApiCommandQueue {
   GPUCommandBuffer*
   (*newCommandBuffer)(GPUCommandQueue  * __restrict cmdb,
                       void             * __restrict sender,
-                      GPUCommandBufferOnCompleteFn  oncomplete);
+                      GPUCommandBufferCompletionFn  oncomplete);
   
   void
   (*commandBufferOnComplete)(GPUCommandBuffer * __restrict cmdb,
                              void             * __restrict sender,
-                             GPUCommandBufferOnCompleteFn  oncomplete);
+                             GPUCommandBufferCompletionFn  oncomplete);
   
   void
   (*commit)(GPUCommandBuffer * __restrict cmdb);

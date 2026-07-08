@@ -25,7 +25,7 @@ GPU_HIDE
 void
 mt_ccmdbufOnComplete(GPUCommandBuffer * __restrict cmdb,
                      void             * __restrict sender,
-                     GPUCommandBufferOnCompleteFn  oncomplete);
+                     GPUCommandBufferCompletionFn  oncomplete);
 
 GPU_HIDE
 GPUCommandQueue*
@@ -85,7 +85,7 @@ GPU_HIDE
 GPUCommandBuffer*
 mt_newCommandBuffer(GPUCommandQueue  * __restrict cmdb,
                     void             * __restrict sender,
-                    GPUCommandBufferOnCompleteFn  oncomplete) {
+                    GPUCommandBufferCompletionFn  oncomplete) {
   GPUCommandBuffer *cb;
   id<MTLCommandBuffer> mcb;
   
@@ -103,7 +103,7 @@ GPU_HIDE
 void
 mt_ccmdbufOnComplete(GPUCommandBuffer * __restrict cmdb,
                      void             * __restrict sender,
-                     GPUCommandBufferOnCompleteFn  oncomplete) {
+                     GPUCommandBufferCompletionFn  oncomplete) {
   if (!cmdb || cmdb->_submitted) {
     return;
   }

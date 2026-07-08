@@ -61,13 +61,13 @@ typedef struct GPUCommandQueue {
 
 typedef struct GPUCommandBuffer GPUCommandBuffer;
 
-typedef void (*GPUCommandBufferOnCompleteFn)(void            *__restrict sender,
+typedef void (*GPUCommandBufferCompletionFn)(void            *__restrict sender,
                                              GPUCommandBuffer*__restrict cmdb);
 
 struct GPUCommandBuffer {
   void *_priv;
   void *_onCompleteSender;
-  GPUCommandBufferOnCompleteFn _onComplete;
+  GPUCommandBufferCompletionFn _onComplete;
   bool  _submitted;
 };
 
@@ -108,7 +108,7 @@ GPU_EXPORT
 GPUCommandBuffer*
 GPUNewCommandBuffer(GPUCommandQueue  * __restrict cmdb,
                     void             * __restrict sender,
-                    GPUCommandBufferOnCompleteFn  oncomplete);
+                    GPUCommandBufferCompletionFn  oncomplete);
 
 GPU_EXPORT
 GPUResult
@@ -118,9 +118,9 @@ GPUAcquireCommandBuffer(GPUCommandQueue   * __restrict cmdq,
 
 GPU_EXPORT
 void
-gpuCommandBufferOnComplete(GPUCommandBuffer * __restrict cmdb,
-                           void             * __restrict sender,
-                           GPUCommandBufferOnCompleteFn  oncomplete);
+GPUSetCommandBufferCompletionHandler(GPUCommandBuffer * __restrict cmdb,
+                                     void             * __restrict sender,
+                                     GPUCommandBufferCompletionFn  oncomplete);
 
 GPU_EXPORT
 void
