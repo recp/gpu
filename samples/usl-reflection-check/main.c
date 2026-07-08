@@ -955,6 +955,7 @@ check_queue_submit_fence(GPUDevice *device) {
   ok = GPUIsFenceSignaled(fence);
   GPUResetFence(fence);
   ok = ok && !GPUIsFenceSignaled(fence);
+  ok = ok && GPUWaitFence(fence, 0) == GPU_ERROR_TIMEOUT;
 
   cmdb = NULL;
   if (ok &&

@@ -342,7 +342,13 @@ GPUWaitFence(GPUFence * __restrict fence, uint64_t timeoutNs) {
   while (!fence->signaled) {
     ok = SleepConditionVariableCS(&fence->cond, &fence->lock, timeoutMs);
     if (!ok) {
+      DWORD error;
+
+      error = GetLastError();
       LeaveCriticalSection(&fence->lock);
+      if (error == ERROR_TIMEOUT) {
+        return GPU_ERROR_TIMEOUT;
+      }
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
@@ -366,6 +372,9 @@ GPUWaitFence(GPUFence * __restrict fence, uint64_t timeoutNs) {
       rc = pthread_cond_timedwait(&fence->cond, &fence->mutex, &deadline);
       if (rc != 0) {
         pthread_mutex_unlock(&fence->mutex);
+        if (rc == ETIMEDOUT) {
+          return GPU_ERROR_TIMEOUT;
+        }
         return GPU_ERROR_BACKEND_FAILURE;
       }
     }
