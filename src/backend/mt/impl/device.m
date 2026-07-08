@@ -113,6 +113,7 @@ mt_createDevice(GPUPhysicalDevice        *phyDevice,
     deviceMT->createdQueues[i] = mt_newCommandQueue(device);
     if (deviceMT->createdQueues[i]) {
       deviceMT->createdQueues[i]->bits = queCI[i].flags;
+      device->queueFamilies |= queCI[i].flags;
     }
   }
 

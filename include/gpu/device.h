@@ -75,6 +75,11 @@ GPU_EXPORT
 GPUDevice *
 GPUCreateSystemDefaultDevice(GPUInstance *inst);
 
+/*! Returns queue bits created and usable on this device. */
+GPU_EXPORT
+GPUQueueFlagBits
+GPUGetAvailableQueueBits(GPUDevice * __restrict device);
+
 GPU_EXPORT
 void
 GPUDestroyDevice(GPUDevice * __restrict device);

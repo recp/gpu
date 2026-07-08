@@ -75,6 +75,16 @@ GPUCreateDevice(GPUPhysicalDevice        *phyDevice,
 }
 
 GPU_EXPORT
+GPUQueueFlagBits
+GPUGetAvailableQueueBits(GPUDevice * __restrict device) {
+  if (!device) {
+    return 0;
+  }
+
+  return device->queueFamilies;
+}
+
+GPU_EXPORT
 void
 GPUDestroyDevice(GPUDevice * __restrict device) {
   GPUApi *api;

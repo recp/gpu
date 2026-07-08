@@ -734,6 +734,12 @@ check_selected_shader_library(const void *bytecode,
     fprintf(stderr, "failed to create device\n");
     return 0;
   }
+  if ((GPUGetAvailableQueueBits(device) &
+       (GPU_QUEUE_GRAPHICS_BIT | GPU_QUEUE_COMPUTE_BIT)) !=
+      (GPU_QUEUE_GRAPHICS_BIT | GPU_QUEUE_COMPUTE_BIT)) {
+    fprintf(stderr, "default device missing expected queue bits\n");
+    return 0;
+  }
 
   library = NULL;
   if (GPUCreateShaderLibraryFromUSLEntries(device,
