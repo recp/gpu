@@ -120,7 +120,7 @@ GPUComputePassEncoder*
 GPUBeginComputePass(GPUCommandBuffer *cmdb, const char *label) {
   GPUApi *api;
 
-  if (!cmdb) {
+  if (!cmdb || cmdb->_submitted) {
     return NULL;
   }
   if (!(api = gpuActiveGPUApi()) || !api->compute.computeCommandEncoder) {

@@ -15,6 +15,7 @@
  */
 
 #include <gpu/bindgroup.h>
+#include <gpu/api/compute.h>
 #include <gpu/api/rce.h>
 #include <gpu/gpu.h>
 #include <gpu/usl.h>
@@ -844,6 +845,41 @@ check_render_encoder_validation(void) {
 }
 
 static int
+check_compute_pass_validation(void) {
+  GPUCommandBuffer fakeCmdb = {0};
+  GPUComputePassEncoder fakePass = {0};
+  GPUComputePipeline fakePipeline = {0};
+  GPUBuffer *fakeBuffer = (GPUBuffer *)(uintptr_t)1u;
+  uint32_t dynamicOffset = 0u;
+
+  if (GPUBeginComputePass(NULL, "null")) {
+    fprintf(stderr, "compute pass accepted null command buffer\n");
+    return 0;
+  }
+
+  fakeCmdb._submitted = true;
+  if (GPUBeginComputePass(&fakeCmdb, "submitted")) {
+    fprintf(stderr, "compute pass accepted submitted command buffer\n");
+    return 0;
+  }
+
+  GPUBindComputePipeline(NULL, NULL);
+  GPUBindComputePipeline(&fakePass, &fakePipeline);
+  GPUBindComputeGroup(NULL, 0u, NULL, 0u, NULL);
+  GPUBindComputeGroup(&fakePass, 1u, NULL, 0u, NULL);
+  GPUBindComputeGroup(&fakePass, 0u, NULL, 1u, &dynamicOffset);
+  GPUDispatch(NULL, 1u, 1u, 1u);
+  GPUDispatch(&fakePass, 0u, 1u, 1u);
+  GPUDispatch(&fakePass, 1u, 0u, 1u);
+  GPUDispatch(&fakePass, 1u, 1u, 0u);
+  GPUDispatchIndirect(NULL, fakeBuffer, 0u);
+  GPUDispatchIndirect(&fakePass, NULL, 0u);
+  GPUEndComputePass(NULL);
+
+  return 1;
+}
+
+static int
 check_pipeline_create_validation(GPUDevice *device, GPUShaderLibrary *library) {
   GPUColorTargetState colorTargets[9] = {0};
   GPUVertexAttribute attr = {0};
@@ -1201,6 +1237,9 @@ check_selected_shader_library(const void *bytecode,
     return 0;
   }
   if (!check_render_encoder_validation()) {
+    return 0;
+  }
+  if (!check_compute_pass_validation()) {
     return 0;
   }
 
