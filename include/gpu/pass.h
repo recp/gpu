@@ -24,16 +24,6 @@ extern "C" {
 #include "swapchain.h"
 #include "frame.h"
 
-#define gpu_pass_begin() /* */
-#define gpu_pass_finish() /* */
-
-#define gpu_begin() /* */
-#define gpu_finish() /* */
-
-typedef struct GPURenderPassDesc {
-  void *_priv;
-} GPURenderPassDesc;
-
 #ifndef GPU_RENDER_ENCODER_TYPES_DEFINED
 #define GPU_RENDER_ENCODER_TYPES_DEFINED
 typedef struct GPURenderCommandEncoder GPURenderCommandEncoder;
@@ -76,6 +66,7 @@ typedef struct GPURenderPassDepthStencilAttachment {
 } GPURenderPassDepthStencilAttachment;
 
 typedef struct GPURenderPassCreateInfo {
+  GPUChainedStruct                         chain;
   const char                                *label;
   uint32_t                                   colorAttachmentCount;
   const GPURenderPassColorAttachment        *pColorAttachments;
@@ -89,19 +80,6 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info);
 GPU_EXPORT
 void
 GPUEndRenderPass(GPURenderPassEncoder *pass);
-
-//#if defined(__APPLE__) && defined(__OBJC__)
-//@class MTKView;
-//GPU_INLINE
-//GPURenderPassDesc*
-//GPUPassFromMTKView(MTKView * __restrict view) {
-//#if __has_feature(objc_arc)
-//  return (__bridge void *)view.currentRenderPassDescriptor;
-//#else
-//  return (void *)view.currentRenderPassDescriptor;
-//#endif
-//}
-//#endif
 
 #ifdef __cplusplus
 }

@@ -24,6 +24,7 @@ extern "C" {
 #include "../gpu.h"
 
 typedef struct GPURenderPipelineState GPURenderPipelineState;
+typedef struct GPURenderPassDesc GPURenderPassDesc;
 
 struct GPURenderCommandEncoder {
   void             *_priv;

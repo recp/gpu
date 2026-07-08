@@ -23,10 +23,12 @@ extern "C" {
 #include "../common.h"
 #include "../gpu.h"
 
+typedef struct GPURenderPassDesc {
+  void *_priv;
+} GPURenderPassDesc;
+
 typedef struct GPUApiRenderPass {
-  GPURenderPassDesc* (*newPass)        (void);
-  GPURenderPassDesc* (*beginRenderPass)(const GPURenderPassCreateInfo *info);
-  void               (*endRenderPass)  (GPURenderPassDesc *pass);
+  GPURenderPassDesc* (*beginRenderPass)  (const GPURenderPassCreateInfo *info);
   void               (*destroyRenderPass)(GPURenderPassDesc *pass);
 } GPUApiRenderPass;
 

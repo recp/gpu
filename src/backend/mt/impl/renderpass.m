@@ -18,15 +18,6 @@
 
 GPU_HIDE
 GPURenderPassDesc*
-mt_newPass(void) {
-  GPURenderPassDesc *renderPass;
-  renderPass = calloc(1, sizeof(*renderPass));
-  renderPass->_priv = [MTLRenderPassDescriptor renderPassDescriptor];
-  return renderPass;
-}
-
-GPU_HIDE
-GPURenderPassDesc*
 mt_beginRenderPass(const GPURenderPassCreateInfo *info) {
   const GPURenderPassColorAttachment        *color;
   const GPURenderPassDepthStencilAttachment *depthStencil;
@@ -142,12 +133,6 @@ mt_beginRenderPass(const GPURenderPassCreateInfo *info) {
 
 GPU_HIDE
 void
-mt_endRenderPass(GPURenderPassDesc *pass) {
-  (void)pass;
-}
-
-GPU_HIDE
-void
 mt_destroyRenderPass(GPURenderPassDesc *pass) {
   free(pass);
 }
@@ -155,8 +140,6 @@ mt_destroyRenderPass(GPURenderPassDesc *pass) {
 GPU_HIDE
 void
 mt_initRenderPass(GPUApiRenderPass *api) {
-  api->newPass           = mt_newPass;
   api->beginRenderPass   = mt_beginRenderPass;
-  api->endRenderPass     = mt_endRenderPass;
   api->destroyRenderPass = mt_destroyRenderPass;
 }
