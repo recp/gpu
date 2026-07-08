@@ -17,50 +17,6 @@
 #include "../../common.h"
 
 GPU_EXPORT
-GPURenderCommandEncoder*
-GPUNewRenderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return NULL;
-  
-  return api->rce.renderCommandEncoder(cmdb, pass);
-}
-
-GPU_EXPORT
-void
-GPUSetFrontFace(GPURenderCommandEncoder *rce, GPUWinding winding) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return;
-  
-  api->rce.frontFace(rce, winding);
-}
-
-GPU_EXPORT
-void
-GPUSetCullMode(GPURenderCommandEncoder *rce, GPUCullMode mode) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return;
-  
-  api->rce.cullMode(rce, mode);
-}
-
-GPU_EXPORT
-void
-GPUSetRenderState(GPURenderCommandEncoder *rce, GPURenderPipelineState *piplineState) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return;
-  
-  api->rce.setRenderPipelineState(rce, piplineState);
-}
-
-GPU_EXPORT
 void
 GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
   GPURenderPipelineState state;
@@ -79,42 +35,6 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
     api->rce.cullMode(pass, pipeline->_cullMode);
   if (api->rce.frontFace)
     api->rce.frontFace(pass, pipeline->_frontFace);
-}
-
-GPU_EXPORT
-void
-GPUSetDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilPipelineState *ds) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return;
-  
-  api->rce.setDepthStencil(rce, ds);
-}
-
-GPU_EXPORT
-void
-gpuViewport(GPURenderCommandEncoder *enc, GPUViewport *viewport) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return;
-  
-  api->rce.viewport(enc, viewport);
-}
-
-GPU_EXPORT
-void
-gpuVertexBytes(GPURenderCommandEncoder *enc,
-               void                    *bytes,
-               size_t                   legth,
-               uint32_t                 atIndex) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return;
-  
-  api->rce.vertexBytes(enc, bytes, legth, atIndex);
 }
 
 GPU_EXPORT
@@ -231,34 +151,24 @@ GPUSetFragmentSampler(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
-gpuDrawPrimitives(GPURenderCommandEncoder *rce,
-                  GPUPrimitiveType         type,
-                  size_t                   start,
-                  size_t                   count) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return;
-
-  if (api->rce.drawPrimitives) {
-    api->rce.drawPrimitives(rce, type, start, count);
-  }
-}
-
-GPU_EXPORT
-void
 GPUDraw(GPURenderPassEncoder *pass,
         uint32_t              vertexCount,
         uint32_t              instanceCount,
         uint32_t              firstVertex,
         uint32_t              firstInstance) {
+  GPUApi *api;
   uint32_t i;
 
   if (!pass || vertexCount == 0 || instanceCount == 0 || firstInstance != 0)
     return;
+  if (!(api = gpuActiveGPUApi()) || !api->rce.drawPrimitives)
+    return;
 
   for (i = 0; i < instanceCount; i++) {
-    gpuDrawPrimitives(pass, GPUPrimitiveTypeTriangle, firstVertex, vertexCount);
+    api->rce.drawPrimitives(pass,
+                            GPUPrimitiveTypeTriangle,
+                            firstVertex,
+                            vertexCount);
   }
 }
 
@@ -281,15 +191,4 @@ GPUDrawIndexed(GPURenderCommandEncoder *rce,
                             indexType,
                             indexBuffer,
                             indexBufferOffset);
-}
-
-GPU_EXPORT
-void
-GPUEndEncoding(GPURenderCommandEncoder *rce) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return;
-  
-  api->rce.endEncoding(rce);
 }

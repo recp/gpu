@@ -83,20 +83,12 @@ typedef struct GPURenderPassCreateInfo {
 } GPURenderPassCreateInfo;
 
 GPU_EXPORT
-GPURenderPassDesc*
-gpuNewPass(void);
-
-GPU_EXPORT
 GPURenderPassEncoder*
 GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info);
 
 GPU_EXPORT
 void
 GPUEndRenderPass(GPURenderPassEncoder *pass);
-
-GPU_EXPORT
-void
-GPUDestroyRenderPass(GPURenderPassDesc *pass);
 
 //#if defined(__APPLE__) && defined(__OBJC__)
 //@class MTKView;

@@ -16,15 +16,21 @@
 
 #include "../../common.h"
 
-GPU_EXPORT
-GPURenderPassDesc*
-gpuNewPass(void) {
+static void
+gpu_destroyRenderPass(GPURenderPassDesc *pass) {
   GPUApi *api;
 
-  if (!(api = gpuActiveGPUApi()))
-    return NULL;
+  if (!pass) {
+    return;
+  }
 
-  return api->renderPass.newPass();
+  api = gpuActiveGPUApi();
+  if (api && api->renderPass.destroyRenderPass) {
+    api->renderPass.destroyRenderPass(pass);
+    return;
+  }
+
+  free(pass);
 }
 
 GPU_EXPORT
@@ -44,7 +50,7 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
     return NULL;
 
   encoder = api->rce.renderCommandEncoder(cmdb, desc);
-  GPUDestroyRenderPass(desc);
+  gpu_destroyRenderPass(desc);
 
   return encoder;
 }
@@ -58,22 +64,4 @@ GPUEndRenderPass(GPURenderPassEncoder *pass) {
     return;
 
   api->rce.endEncoding(pass);
-}
-
-GPU_EXPORT
-void
-GPUDestroyRenderPass(GPURenderPassDesc *pass) {
-  GPUApi *api;
-
-  if (!pass) {
-    return;
-  }
-
-  api = gpuActiveGPUApi();
-  if (api && api->renderPass.destroyRenderPass) {
-    api->renderPass.destroyRenderPass(pass);
-    return;
-  }
-
-  free(pass);
 }

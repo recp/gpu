@@ -78,40 +78,8 @@ typedef struct GPUBufferBinding {
 } GPUBufferBinding;
 
 GPU_EXPORT
-GPURenderCommandEncoder*
-GPUNewRenderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass);
-
-GPU_EXPORT
 void
 GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline);
-
-GPU_EXPORT
-void
-GPUSetFrontFace(GPURenderCommandEncoder *rce, GPUWinding winding);
-
-GPU_EXPORT
-void
-GPUSetCullMode(GPURenderCommandEncoder *rce, GPUCullMode mode);
-
-GPU_EXPORT
-void
-GPUSetRenderState(GPURenderCommandEncoder *rce,
-                  GPURenderPipelineState  *piplineState);
-
-GPU_EXPORT
-void
-GPUSetDepthStencil(GPURenderCommandEncoder *rce, GPUDepthStencilPipelineState *ds);
-
-GPU_EXPORT
-void
-gpuViewport(GPURenderCommandEncoder *enc, GPUViewport *viewport);
-
-GPU_EXPORT
-void
-gpuVertexBytes(GPURenderCommandEncoder *enc,
-               void                    *bytes,
-               size_t                   legth,
-               uint32_t                 atIndex);
 
 GPU_EXPORT
 void
@@ -160,13 +128,6 @@ GPUSetFragmentSampler(GPURenderCommandEncoder *rce,
 
 GPU_EXPORT
 void
-gpuDrawPrimitives(GPURenderCommandEncoder *rce,
-                  GPUPrimitiveType         type,
-                  size_t                   start,
-                  size_t                   count);
-
-GPU_EXPORT
-void
 GPUDraw(GPURenderPassEncoder *pass,
         uint32_t              vertexCount,
         uint32_t              instanceCount,
@@ -181,10 +142,6 @@ GPUDrawIndexed(GPURenderCommandEncoder *rce,
                GPUIndexType             indexType,
                GPUBuffer               *indexBuffer,
                uint32_t                 indexBufferOffset);
-
-GPU_EXPORT
-void
-GPUEndEncoding(GPURenderCommandEncoder *rce);
 
 #ifdef __cplusplus
 }

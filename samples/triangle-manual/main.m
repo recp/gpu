@@ -379,8 +379,6 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   vertexBuffer.buffer = _vertexBuffer;
   vertexBuffer.offset = 0;
 
-  GPUSetFrontFace(encoder, GPUWindingCounterClockwise);
-  GPUSetCullMode(encoder, GPUCullModeNone);
   GPUBindRenderPipeline(encoder, _pipeline);
   GPUBindVertexBuffers(encoder, 0, 1, &vertexBuffer);
   GPUBindRenderGroup(encoder, 0, _fragmentGroup, 0, NULL);
