@@ -415,6 +415,22 @@ cleanup:
     GPUDestroyRenderPipeline(_pipeline);
     _pipeline = NULL;
   }
+  if (_sampler) {
+    GPUDestroySampler(_sampler);
+    _sampler = NULL;
+  }
+  if (_texture) {
+    GPUDestroyTexture(_texture);
+    _texture = NULL;
+  }
+  if (_fragmentUniformBuffer) {
+    GPUDestroyBuffer(_fragmentUniformBuffer);
+    _fragmentUniformBuffer = NULL;
+  }
+  if (_vertexBuffer) {
+    GPUDestroyBuffer(_vertexBuffer);
+    _vertexBuffer = NULL;
+  }
   if (_shaderLayout) {
     GPUDestroyShaderLayout(_shaderLayout);
     _shaderLayout = NULL;

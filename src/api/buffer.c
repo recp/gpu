@@ -30,6 +30,24 @@ GPUNewBuffer(GPUDevice * __restrict device,
 }
 
 GPU_EXPORT
+void
+GPUDestroyBuffer(GPUBuffer * __restrict buff) {
+  GPUApi *api;
+
+  if (!buff) {
+    return;
+  }
+
+  if (!(api = gpuActiveGPUApi())) {
+    return;
+  }
+
+  if (api->buf.destroy) {
+    api->buf.destroy(buff);
+  }
+}
+
+GPU_EXPORT
 size_t
 gpuBufferLength(GPUBuffer * __restrict buff) {
   GPUApi *api;

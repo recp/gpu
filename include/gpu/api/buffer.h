@@ -28,6 +28,10 @@ typedef struct GPUApiBuffer {
   (*newBuffer)(GPUDevice * __restrict device,
                size_t                 len,
                GPUResourceOptions     options);
+
+  void
+  (*destroy)(GPUBuffer * __restrict buff);
+
   size_t
   (*length)(GPUBuffer * __restrict buff);
   

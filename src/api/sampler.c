@@ -32,6 +32,24 @@ GPUCreateSampler(GPUDevice *__restrict device, bool staticIfSupported) {
 }
 
 GPU_EXPORT
+void
+GPUDestroySampler(GPUSampler *__restrict sampler) {
+  GPUApi *api;
+
+  if (!sampler) {
+    return;
+  }
+
+  if (!(api = gpuActiveGPUApi())) {
+    return;
+  }
+
+  if (api->sampler.destroySampler) {
+    api->sampler.destroySampler(sampler);
+  }
+}
+
+GPU_EXPORT
 GPUSampler *
 GPUCreateSamplerFromUSLStaticSampler(GPUDevice *__restrict device,
                                      const GPUUSLStaticSamplerDesc *desc,

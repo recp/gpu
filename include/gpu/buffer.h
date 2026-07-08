@@ -33,6 +33,10 @@ GPUNewBuffer(GPUDevice * __restrict device,
              GPUResourceOptions     options);
 
 GPU_EXPORT
+void
+GPUDestroyBuffer(GPUBuffer * __restrict buff);
+
+GPU_EXPORT
 size_t
 gpuBufferLength(GPUBuffer * __restrict buff);
 

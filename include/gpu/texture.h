@@ -64,6 +64,14 @@ GPUNewTexture(GPUDevice * __restrict device,
               uint32_t height,
               GPUPixelFormat format);
 
+GPU_EXPORT
+void
+GPUDestroyTexture(GPUTexture * __restrict texture);
+
+GPU_EXPORT
+void
+GPUDestroyTextureView(GPUTextureView * __restrict view);
+
 #ifdef __cplusplus
 }
 #endif

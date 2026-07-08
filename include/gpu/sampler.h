@@ -64,6 +64,10 @@ GPUCreateSamplerFromUSLStaticSampler(GPUDevice * __restrict device,
                                      const GPUUSLStaticSamplerDesc *desc,
                                      bool staticIfSupported);
 
+GPU_EXPORT
+void
+GPUDestroySampler(GPUSampler * __restrict sampler);
+
 #ifdef __cplusplus
 }
 #endif

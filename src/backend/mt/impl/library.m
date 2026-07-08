@@ -194,6 +194,16 @@ mt_createSampler(GPUApi * __restrict api,
 
 GPU_HIDE
 void
+mt_destroySampler(GPUSampler * __restrict sampler) {
+  if (!sampler) {
+    return;
+  }
+
+  [(id<MTLSamplerState>)sampler release];
+}
+
+GPU_HIDE
+void
 mt_destroyLibrary(GPULibrary *lib) {
   if (!lib) {
     return;
@@ -220,4 +230,5 @@ void
 mt_initSampler(GPUApiSampler *api) {
   api->createSampler = mt_createSampler;
   api->createSamplerFromUSLStaticSampler = mt_createSamplerFromUSLStaticSampler;
+  api->destroySampler = mt_destroySampler;
 }

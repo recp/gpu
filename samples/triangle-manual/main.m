@@ -380,6 +380,14 @@ cleanup:
     GPUDestroyRenderPipeline(_pipeline);
     _pipeline = NULL;
   }
+  if (_fragmentUniformBuffer) {
+    GPUDestroyBuffer(_fragmentUniformBuffer);
+    _fragmentUniformBuffer = NULL;
+  }
+  if (_vertexBuffer) {
+    GPUDestroyBuffer(_vertexBuffer);
+    _vertexBuffer = NULL;
+  }
   if (_pipelineLayout) {
     GPUDestroyPipelineLayout(_pipelineLayout);
     _pipelineLayout = NULL;

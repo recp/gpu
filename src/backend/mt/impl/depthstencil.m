@@ -102,6 +102,22 @@ GPUNewTexture(GPUDevice * __restrict device, uint32_t width, uint32_t height, GP
   return GPUNewTextureWith(device, &desc);
 }
 
+GPU_EXPORT
+void
+GPUDestroyTexture(GPUTexture * __restrict texture) {
+  if (!texture) {
+    return;
+  }
+
+  [(id<MTLTexture>)texture release];
+}
+
+GPU_EXPORT
+void
+GPUDestroyTextureView(GPUTextureView * __restrict view) {
+  GPUDestroyTexture((GPUTexture *)view);
+}
+
 
 GPU_EXPORT
 void

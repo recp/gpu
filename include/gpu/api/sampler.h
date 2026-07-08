@@ -29,10 +29,13 @@ typedef struct GPUApiSampler {
   GPUSampler *(*createSampler)(struct GPUApi *__restrict api,
                                GPUDevice *__restrict device,
                                bool staticIfSupported);
+
   GPUSampler *(*createSamplerFromUSLStaticSampler)(struct GPUApi *__restrict api,
                                                    GPUDevice *__restrict device,
                                                    const GPUUSLStaticSamplerDesc *desc,
                                                    bool staticIfSupported);
+
+  void (*destroySampler)(GPUSampler *__restrict sampler);
 } GPUApiSampler;
 
 #ifdef __cplusplus

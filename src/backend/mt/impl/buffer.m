@@ -44,8 +44,19 @@ mt_bufferContents(GPUBuffer * __restrict buff) {
 
 GPU_HIDE
 void
+mt_destroyBuffer(GPUBuffer * __restrict buff) {
+  if (!buff) {
+    return;
+  }
+
+  [(id<MTLBuffer>)buff release];
+}
+
+GPU_HIDE
+void
 mt_initBuff(GPUApiBuffer *api) {
   api->newBuffer = mt_newBuffer;
+  api->destroy   = mt_destroyBuffer;
   api->length    = mt_bufferLength;
   api->contents  = mt_bufferContents;
 }
