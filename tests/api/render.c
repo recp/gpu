@@ -204,6 +204,12 @@ check_render_pipeline_validation(GPUDevice *device) {
     GPUDestroyShaderLibrary(library);
     return 0;
   }
+  if (!expect_render_pipeline_error(device,
+                                    NULL,
+                                    "render pipeline create accepted null info")) {
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
 
   info.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   if (!expect_render_pipeline_error(device,
@@ -232,6 +238,42 @@ check_render_pipeline_validation(GPUDevice *device) {
   }
 
   info.library = library;
+  info.vertexEntry = NULL;
+  if (!expect_render_pipeline_error(device,
+                                    &info,
+                                    "render pipeline create accepted null vertex entry")) {
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+
+  info.vertexEntry = "api_vs";
+  info.fragmentEntry = NULL;
+  if (!expect_render_pipeline_error(device,
+                                    &info,
+                                    "render pipeline create accepted null fragment entry")) {
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+
+  info.fragmentEntry = "api_fs";
+  info.vertexEntry = "missing_vs";
+  if (!expect_render_pipeline_error(device,
+                                    &info,
+                                    "render pipeline create accepted missing vertex entry")) {
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+
+  info.vertexEntry = "api_vs";
+  info.fragmentEntry = "missing_fs";
+  if (!expect_render_pipeline_error(device,
+                                    &info,
+                                    "render pipeline create accepted missing fragment entry")) {
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+
+  info.fragmentEntry = "api_fs";
   info.colorTargetCount = 0u;
   if (!expect_render_pipeline_error(device,
                                     &info,
@@ -249,6 +291,15 @@ check_render_pipeline_validation(GPUDevice *device) {
   }
 
   info.colorTargetCount = 1u;
+  info.pColorTargets = NULL;
+  if (!expect_render_pipeline_error(device,
+                                    &info,
+                                    "render pipeline create accepted null color targets")) {
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+
+  info.pColorTargets = colorTargets;
   colorTargets[0].format = GPU_FORMAT_UNDEFINED;
   if (!expect_render_pipeline_error(device,
                                     &info,
@@ -258,6 +309,24 @@ check_render_pipeline_validation(GPUDevice *device) {
   }
 
   colorTargets[0].format = GPU_FORMAT_BGRA8_UNORM;
+  info.vertex.pBufferLayouts = NULL;
+  if (!expect_render_pipeline_error(device,
+                                    &info,
+                                    "render pipeline create accepted null vertex layouts")) {
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+
+  info.vertex.pBufferLayouts = &vertexLayout;
+  vertexLayout.pAttributes = NULL;
+  if (!expect_render_pipeline_error(device,
+                                    &info,
+                                    "render pipeline create accepted null vertex attributes")) {
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+
+  vertexLayout.pAttributes = &attr;
   attr.format = GPUUnknown;
   if (!expect_render_pipeline_error(device,
                                     &info,
