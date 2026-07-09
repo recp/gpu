@@ -17,17 +17,18 @@
 #include "../common.h"
 #include "swapchain_internal.h"
 
-GPU_EXPORT
-GPUSwapChain*
-GPUCreateSwapChain(GPUDevice              * __restrict device,
-                   struct GPUCommandQueue * __restrict cmdQue,
-                   struct GPUSurface      * __restrict surface,
-                   GPUExtent2D                         size,
-                   bool                                autoResize) {
+static GPUSwapChain*
+gpuCreateSwapchainInternal(GPUDevice              * __restrict device,
+                           struct GPUCommandQueue * __restrict cmdQue,
+                           struct GPUSurface      * __restrict surface,
+                           GPUExtent2D                         size,
+                           bool                                autoResize) {
   GPUApi       *api;
   GPUSwapChain *swapChain;
 
   if (!(api = gpuActiveGPUApi()))
+    return NULL;
+  if (!api->swapchain.createSwapChain)
     return NULL;
 
   swapChain = api->swapchain.createSwapChain(api,
@@ -71,11 +72,11 @@ GPUCreateSwapchain(GPUDevice                    * __restrict device,
 
   size.width      = info->width;
   size.height     = info->height;
-  *outSwapchain = GPUCreateSwapChain(device,
-                                     queue,
-                                     info->surface,
-                                     size,
-                                     true);
+  *outSwapchain = gpuCreateSwapchainInternal(device,
+                                             queue,
+                                             info->surface,
+                                             size,
+                                             true);
   if (!*outSwapchain)
     return GPU_ERROR_BACKEND_FAILURE;
 
@@ -107,70 +108,8 @@ GPUCreateSwapchainDefault(GPUDevice         * __restrict device,
 }
 
 GPU_EXPORT
-GPUSwapChain*
-GPUCreateSwapChainForView(GPUDevice              * __restrict device,
-                          struct GPUCommandQueue * __restrict cmdQue,
-                          void                   * __restrict viewHandle,
-                          GPUWindowType                       viewHandleType,
-                          float                               backingScaleFactor,
-                          uint32_t                            width,
-                          uint32_t                            height,
-                          bool                                autoResize) {
-  GPUApi       *api;
-  GPUSwapChain *swapChain;
-
-  if (!(api = gpuActiveGPUApi()))
-    return NULL;
-
-  swapChain = api->swapchain.createSwapChainForView(api,
-                                                    device,
-                                                    cmdQue,
-                                                    viewHandle,
-                                                    viewHandleType,
-                                                    backingScaleFactor,
-                                                    width,
-                                                    height,
-                                                    autoResize);
-  if (swapChain) {
-    swapChain->width  = width;
-    swapChain->height = height;
-  }
-
-  return swapChain;
-}
-
-GPU_EXPORT
-GPUSwapChain*
-GPUCreateSwapChainForLayer(GPUDevice              * __restrict device,
-                           struct GPUCommandQueue * __restrict cmdQue,
-                           float                               backingScaleFactor,
-                           uint32_t                            width,
-                           uint32_t                            height,
-                           bool                                autoResize) {
-  GPUApi       *api;
-  GPUSwapChain *swapChain;
-
-  if (!(api = gpuActiveGPUApi()))
-    return NULL;
-
-  swapChain = api->swapchain.createSwapChainForLayer(api,
-                                                     device,
-                                                     cmdQue,
-                                                     backingScaleFactor,
-                                                     width,
-                                                     height,
-                                                     autoResize);
-  if (swapChain) {
-    swapChain->width  = width;
-    swapChain->height = height;
-  }
-
-  return swapChain;
-}
-
-GPU_EXPORT
 void
-GPUDestroySwapChain(GPUSwapChain * __restrict swapChain) {
+GPUDestroySwapchain(GPUSwapchain * __restrict swapChain) {
   GPUApi *api;
 
   if (!swapChain) {
@@ -184,12 +123,6 @@ GPUDestroySwapChain(GPUSwapChain * __restrict swapChain) {
   if (api->swapchain.destroySwapChain) {
     api->swapchain.destroySwapChain(swapChain);
   }
-}
-
-GPU_EXPORT
-void
-GPUDestroySwapchain(GPUSwapchain * __restrict swapChain) {
-  GPUDestroySwapChain(swapChain);
 }
 
 GPU_EXPORT
@@ -219,26 +152,4 @@ GPUResizeSwapchain(GPUSwapchain * __restrict swapChain,
   }
 
   return result;
-}
-
-GPU_EXPORT
-void
-GPUSwapChainAttachToLayer(GPUSwapChain* swapChain, void* targetLayer, bool autoResize) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return;
-
-  api->swapchain.attachToLayer(swapChain, targetLayer, autoResize);
-}
-
-GPU_EXPORT
-void
-GPUSwapChainAttachToView(GPUSwapChain* swapChain, void *viewHandle, bool autoResize, bool replace) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return;
-
-  api->swapchain.attachToView(swapChain, viewHandle, autoResize, replace);
 }

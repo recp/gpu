@@ -21,8 +21,6 @@ extern "C" {
 #endif
 
 #include "common.h"
-#include "geometric.h"
-#include "cmdqueue.h"
 #include "pixelformat.h"
 
 typedef struct GPUDevice GPUDevice;
@@ -49,25 +47,6 @@ typedef struct GPUSwapchainCreateInfo {
   GPUPresentMode   presentMode;
 } GPUSwapchainCreateInfo;
 
-typedef enum GPUWindowType {
-  GPU_WINDOW_TYPE_HWND,
-  GPU_WINDOW_TYPE_COREWINDOW,
-  GPU_WINDOW_TYPE_COCOA,
-} GPUWindowType;
-
-typedef struct GPUWindowHandle {
-  GPUWindowType type;
-  void         *ptr;
-} GPUWindowHandle;
-
-GPU_EXPORT
-GPUSwapChain*
-GPUCreateSwapChain(GPUDevice              * __restrict device,
-                   struct GPUCommandQueue * __restrict cmdQue,
-                   struct GPUSurface      * __restrict surface,
-                   GPUExtent2D                         size,
-                   bool                                autoResize);
-
 GPU_EXPORT
 GPUResult
 GPUCreateSwapchain(GPUDevice                        * __restrict device,
@@ -82,30 +61,6 @@ GPUCreateSwapchainDefault(GPUDevice          * __restrict device,
                           uint32_t                        height);
 
 GPU_EXPORT
-GPUSwapChain*
-GPUCreateSwapChainForView(GPUDevice              * __restrict device,
-                          struct GPUCommandQueue * __restrict cmdQue,
-                          void                   * __restrict viewHandle,
-                          GPUWindowType                       viewHandleType,
-                          float                               backingScaleFactor,
-                          uint32_t                            width,
-                          uint32_t                            height,
-                          bool                                autoResize);
-
-GPU_EXPORT
-GPUSwapChain*
-GPUCreateSwapChainForLayer(GPUDevice              * __restrict device,
-                           struct GPUCommandQueue * __restrict cmdQue,
-                           float                               backingScaleFactor,
-                           uint32_t                            width,
-                           uint32_t                            height,
-                           bool                                autoResize);
-
-GPU_EXPORT
-void
-GPUDestroySwapChain(GPUSwapChain * __restrict swapChain);
-
-GPU_EXPORT
 void
 GPUDestroySwapchain(GPUSwapchain * __restrict swapChain);
 
@@ -114,57 +69,6 @@ GPUResult
 GPUResizeSwapchain(GPUSwapchain * __restrict swapChain,
                    uint32_t                  width,
                    uint32_t                  height);
-
-GPU_EXPORT
-void
-GPUSwapChainAttachToLayer(GPUSwapChain* swapChain, void* targetLayer, bool autoResize);
-
-GPU_EXPORT
-void
-GPUSwapChainAttachToView(GPUSwapChain  *swapChain,
-                         void          *viewHandle,
-                         bool           autoResize,
-                         bool           replace);
-
-#if defined(__APPLE__) && defined(__OBJC__)
-#if TARGET_OS_MAC
-#import <AppKit/AppKit.h>
-
-GPU_INLINE
-GPUSwapChain*
-GPUCreateSwapChainForNSView(GPUDevice              * __restrict device,
-                            struct GPUCommandQueue * __restrict cmdQue,
-                            NSView                 * __restrict view,
-                            bool                                autoResize) {
-  return GPUCreateSwapChainForView(device,
-                                   cmdQue,
-                                   (__bridge void *)view,
-                                   GPU_WINDOW_TYPE_COCOA,
-                                   GPUScreenScale(view),
-                                   view.frame.size.width,
-                                   view.frame.size.height,
-                                   autoResize);
-}
-#elif TARGET_OS_IOS || TARGET_OS_TV
-#import <UIKit/UIKit.h>
-
-GPU_INLINE
-GPUSwapChain*
-GPUCreateSwapChainForUIView(GPUDevice              * __restrict device,
-                            struct GPUCommandQueue * __restrict cmdQue,
-                            UIView                 * __restrict view,
-                            bool                                autoResize) {
-  return GPUCreateSwapChainForView(device,
-                                   cmdQue,
-                                   (__bridge void *)view,
-                                   GPU_WINDOW_TYPE_COCOA,
-                                   GPUScreenScale(view),
-                                   view.frame.size.width,
-                                   view.frame.size.height,
-                                   autoResize);
-}
-#endif
-#endif
 
 #ifdef __cplusplus
 }
