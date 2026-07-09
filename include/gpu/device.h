@@ -24,17 +24,8 @@ extern "C" {
 #include "instance.h"
 #include "cmdqueue.h"
 
-typedef struct GPUPhysicalDevice {
-  struct GPUPhysicalDevice *next;
-  GPUInstance              *inst;
-  void                     *_priv;
-  bool                      supportsSwapchain;
-  bool                      supportsDisplayTiming;
-  bool                      supportsIncrementalPresent;
-  bool                      separatePresentQueue;
-} GPUPhysicalDevice;
-
-typedef GPUPhysicalDevice GPUAdapter;
+typedef struct GPUAdapter GPUAdapter;
+typedef GPUAdapter GPUPhysicalDevice;
 
 typedef enum GPUAdapterType {
   GPU_ADAPTER_TYPE_UNKNOWN = 0,

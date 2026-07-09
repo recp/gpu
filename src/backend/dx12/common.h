@@ -18,6 +18,7 @@
 #define dx12_common_h
 
 #include "../common.h"
+#include "../../api/adapter_internal.h"
 #include "../../api/cmdqueue_internal.h"
 #include "../../api/device_internal.h"
 #include "../../api/frame_internal.h"

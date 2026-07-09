@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 Recep Aslantas
+ * Copyright (C) 2026 Recep Aslantas
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,19 @@
  * limitations under the License.
  */
 
-#ifndef gpu_device_internal_h
-#define gpu_device_internal_h
+#ifndef gpu_adapter_internal_h
+#define gpu_adapter_internal_h
 
-#include "adapter_internal.h"
 #include "../common.h"
 
-struct GPUDevice {
+struct GPUAdapter {
+  struct GPUAdapter *next;
   GPUInstance       *inst;
-  GPUPhysicalDevice *phyDevice;
   void              *_priv;
-  GPUQueueFlagBits   queueFamilies;
+  bool               supportsSwapchain;
+  bool               supportsDisplayTiming;
+  bool               supportsIncrementalPresent;
+  bool               separatePresentQueue;
 };
 
-#endif /* gpu_device_internal_h */
+#endif /* gpu_adapter_internal_h */
