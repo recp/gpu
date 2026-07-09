@@ -24,6 +24,11 @@ struct GPUComputePipelineState {
   uint32_t workgroupSize[3];
 };
 
+struct GPUComputePipeline {
+  void *_priv;
+  void *_state;
+};
+
 GPU_HIDE
 void
 gpuSetComputeBuffer(GPUComputePassEncoder *pass,

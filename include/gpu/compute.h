@@ -26,10 +26,7 @@ extern "C" {
 #include "bindgroup.h"
 #include "buffer.h"
 
-typedef struct GPUComputePipeline {
-  void *_priv;
-  void *_state;
-} GPUComputePipeline;
+typedef struct GPUComputePipeline GPUComputePipeline;
 
 typedef struct GPUComputePassEncoder GPUComputePassEncoder;
 

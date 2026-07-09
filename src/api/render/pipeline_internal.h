@@ -23,6 +23,14 @@ struct GPURenderPipelineState {
   void *_priv;
 };
 
+struct GPURenderPipeline {
+  void                 *_priv;
+  void                 *_state;
+  GPUPrimitiveTopology  _primitiveTopology;
+  GPUCullMode           _cullMode;
+  GPUFrontFace          _frontFace;
+};
+
 GPU_HIDE
 GPURenderPipeline*
 gpuCreateRenderPipelineDesc(GPUPixelFormat pixelFormat);

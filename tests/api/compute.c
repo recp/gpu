@@ -1,4 +1,5 @@
 #include "test.h"
+#include "../../src/api/compute_internal.h"
 
 static const char *kComputePipelineMSL =
   "#include <metal_stdlib>\n"

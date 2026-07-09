@@ -16,6 +16,7 @@
 
 #include "../common.h"
 #include "../../../api/vertex_internal.h"
+#include "../../../api/render/pipeline_internal.h"
 
 GPU_HIDE
 GPUVertexDescriptor*

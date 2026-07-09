@@ -112,13 +112,7 @@ typedef struct GPUMultisampleState {
   bool     alphaToCoverageEnable;
 } GPUMultisampleState;
 
-typedef struct GPURenderPipeline {
-  void                 *_priv;
-  void                 *_state;
-  GPUPrimitiveTopology  _primitiveTopology;
-  GPUCullMode           _cullMode;
-  GPUFrontFace          _frontFace;
-} GPURenderPipeline;
+typedef struct GPURenderPipeline GPURenderPipeline;
 
 typedef struct GPURenderPipelineCreateInfo {
   GPUChainedStruct             chain;
