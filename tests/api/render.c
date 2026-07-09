@@ -358,19 +358,23 @@ check_render_pipeline_validation(GPUDevice *device) {
 }
 
 static int
-check_render_readback(GPUDevice *device) {
+check_render_readback_case(GPUDevice *device, int indexed, int clipped) {
   static const float kFullscreenTriangle[] = {
     -1.0f, -1.0f,
      3.0f, -1.0f,
     -1.0f,  3.0f
   };
+  static const uint16_t kTriangleIndices[] = {0u, 1u, 2u};
   const uint32_t width = 4u;
   const uint32_t height = 4u;
   const uint64_t pixelBytes = (uint64_t)width * height * 4u;
+  const char *label = clipped ? "api-render-readback-indexed-dynamic"
+                              : "api-render-readback";
   GPUCommandQueue *queue;
   GPUShaderLibrary *library = NULL;
   GPURenderPipeline *pipeline = NULL;
   GPUBuffer *vertexBuffer = NULL;
+  GPUBuffer *indexBuffer = NULL;
   GPUBuffer *readbackBuffer = NULL;
   GPUTexture *target = NULL;
   GPUTextureView *targetView = NULL;
@@ -393,17 +397,18 @@ check_render_readback(GPUDevice *device) {
   GPUBarrierBatch barrierBatch = {0};
   GPUBufferTextureCopyRegion copyRegion = {0};
   GPUQueueSubmitInfo submitInfo = {0};
+  GPUDynamicStateApplyInfo dynamicState = {0};
   uint8_t pixels[4u * 4u * 4u] = {0};
   size_t centerOffset;
   int ok = 0;
 
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   if (!queue) {
-    fprintf(stderr, "failed to get graphics queue for render readback test\n");
+    fprintf(stderr, "failed to get graphics queue for %s test\n", label);
     return 0;
   }
   if (!create_render_test_library(device, &library)) {
-    fprintf(stderr, "failed to create render readback library\n");
+    fprintf(stderr, "failed to create %s library\n", label);
     goto cleanup;
   }
 
@@ -418,7 +423,7 @@ check_render_readback(GPUDevice *device) {
 
   pipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
   pipelineInfo.chain.structSize = sizeof(pipelineInfo);
-  pipelineInfo.label = "api-render-readback-pipeline";
+  pipelineInfo.label = label;
   pipelineInfo.library = library;
   pipelineInfo.vertexEntry = "api_vs";
   pipelineInfo.fragmentEntry = "api_fs";
@@ -432,13 +437,13 @@ check_render_readback(GPUDevice *device) {
   pipelineInfo.multisample.sampleCount = 1u;
   if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
       !pipeline) {
-    fprintf(stderr, "failed to create render readback pipeline\n");
+    fprintf(stderr, "failed to create %s pipeline\n", label);
     goto cleanup;
   }
 
   bufferInfo.chain.sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
-  bufferInfo.label = "api-render-readback-vertices";
+  bufferInfo.label = label;
   bufferInfo.sizeBytes = sizeof(kFullscreenTriangle);
   bufferInfo.usage = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST;
   if (GPUCreateBuffer(device, &bufferInfo, &vertexBuffer) != GPU_OK ||
@@ -448,22 +453,37 @@ check_render_readback(GPUDevice *device) {
                           0u,
                           kFullscreenTriangle,
                           sizeof(kFullscreenTriangle)) != GPU_OK) {
-    fprintf(stderr, "failed to create render readback vertex buffer\n");
+    fprintf(stderr, "failed to create %s vertex buffer\n", label);
     goto cleanup;
   }
 
-  bufferInfo.label = "api-render-readback-buffer";
+  if (indexed) {
+    bufferInfo.sizeBytes = sizeof(kTriangleIndices);
+    bufferInfo.usage = GPU_BUFFER_USAGE_INDEX | GPU_BUFFER_USAGE_COPY_DST;
+    if (GPUCreateBuffer(device, &bufferInfo, &indexBuffer) != GPU_OK ||
+        !indexBuffer ||
+        GPUQueueWriteBuffer(queue,
+                            indexBuffer,
+                            0u,
+                            kTriangleIndices,
+                            sizeof(kTriangleIndices)) != GPU_OK) {
+      fprintf(stderr, "failed to create %s index buffer\n", label);
+      goto cleanup;
+    }
+  }
+
+  bufferInfo.label = label;
   bufferInfo.sizeBytes = pixelBytes;
   bufferInfo.usage = GPU_BUFFER_USAGE_COPY_DST | GPU_BUFFER_USAGE_COPY_SRC;
   if (GPUCreateBuffer(device, &bufferInfo, &readbackBuffer) != GPU_OK ||
       !readbackBuffer) {
-    fprintf(stderr, "failed to create render readback buffer\n");
+    fprintf(stderr, "failed to create %s readback buffer\n", label);
     goto cleanup;
   }
 
   textureInfo.chain.sType = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
-  textureInfo.label = "api-render-readback-target";
+  textureInfo.label = label;
   textureInfo.dimension = GPU_TEXTURE_DIMENSION_2D;
   textureInfo.format = GPU_FORMAT_BGRA8_UNORM;
   textureInfo.width = width;
@@ -474,26 +494,26 @@ check_render_readback(GPUDevice *device) {
   textureInfo.usage = GPU_TEXTURE_USAGE_COLOR_TARGET |
                       GPU_TEXTURE_USAGE_COPY_SRC;
   if (GPUCreateTexture(device, &textureInfo, &target) != GPU_OK || !target) {
-    fprintf(stderr, "failed to create render readback target\n");
+    fprintf(stderr, "failed to create %s target\n", label);
     goto cleanup;
   }
 
   viewInfo.chain.sType = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
   viewInfo.chain.structSize = sizeof(viewInfo);
-  viewInfo.label = "api-render-readback-target-view";
+  viewInfo.label = label;
   viewInfo.viewType = GPU_TEXTURE_VIEW_2D;
   viewInfo.format = GPU_FORMAT_BGRA8_UNORM;
   viewInfo.mipLevelCount = 1u;
   viewInfo.arrayLayerCount = 1u;
   if (GPUCreateTextureView(target, &viewInfo, &targetView) != GPU_OK ||
       !targetView) {
-    fprintf(stderr, "failed to create render readback target view\n");
+    fprintf(stderr, "failed to create %s target view\n", label);
     goto cleanup;
   }
 
-  if (GPUAcquireCommandBuffer(queue, "api-render-readback", &cmdb) != GPU_OK ||
+  if (GPUAcquireCommandBuffer(queue, label, &cmdb) != GPU_OK ||
       !cmdb) {
-    fprintf(stderr, "failed to acquire render readback command buffer\n");
+    fprintf(stderr, "failed to acquire %s command buffer\n", label);
     goto cleanup;
   }
 
@@ -506,19 +526,41 @@ check_render_readback(GPUDevice *device) {
   color.clearColor.float32[3] = 1.0f;
   rp.chain.sType = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   rp.chain.structSize = sizeof(rp);
-  rp.label = "api-render-readback-pass";
+  rp.label = label;
   rp.colorAttachmentCount = 1u;
   rp.pColorAttachments = &color;
 
   renderPass = GPUBeginRenderPass(cmdb, &rp);
   if (!renderPass) {
-    fprintf(stderr, "failed to begin render readback pass\n");
+    fprintf(stderr, "failed to begin %s pass\n", label);
     goto cleanup;
   }
   vertexBinding.buffer = vertexBuffer;
   GPUBindRenderPipeline(renderPass, pipeline);
   GPUBindVertexBuffers(renderPass, 0u, 1u, &vertexBinding);
-  GPUDraw(renderPass, 3u, 1u, 0u, 0u);
+  if (clipped) {
+    dynamicState.chain.sType = GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO;
+    dynamicState.chain.structSize = sizeof(dynamicState);
+    dynamicState.mask = GPU_DYNAMIC_STATE_VIEWPORT_BIT |
+                        GPU_DYNAMIC_STATE_SCISSOR_BIT;
+    dynamicState.viewport.originX = 0.0;
+    dynamicState.viewport.originY = 0.0;
+    dynamicState.viewport.width = (double)width;
+    dynamicState.viewport.height = (double)height;
+    dynamicState.viewport.znear = 0.0;
+    dynamicState.viewport.zfar = 1.0;
+    dynamicState.scissor.x = 1u;
+    dynamicState.scissor.y = 1u;
+    dynamicState.scissor.width = 2u;
+    dynamicState.scissor.height = 2u;
+    GPUApplyDynamicState(renderPass, &dynamicState);
+  }
+  if (indexed) {
+    GPUBindIndexBuffer(renderPass, indexBuffer, 0u, GPUIndexTypeUInt16);
+    GPUDrawIndexed(renderPass, 3u, 1u, 0u, 0, 0u);
+  } else {
+    GPUDraw(renderPass, 3u, 1u, 0u, 0u);
+  }
   GPUEndRenderPass(renderPass);
   renderPass = NULL;
 
@@ -533,9 +575,9 @@ check_render_readback(GPUDevice *device) {
   barrierBatch.pTextureBarriers = &textureBarrier;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, "api-render-readback-copy");
+  copyPass = GPUBeginCopyPass(cmdb, label);
   if (!copyPass) {
-    fprintf(stderr, "failed to begin render readback copy pass\n");
+    fprintf(stderr, "failed to begin %s copy pass\n", label);
     goto cleanup;
   }
   copyRegion.bytesPerRow = width * 4u;
@@ -549,7 +591,7 @@ check_render_readback(GPUDevice *device) {
   copyPass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
-    fprintf(stderr, "failed to create render readback fence\n");
+    fprintf(stderr, "failed to create %s fence\n", label);
     goto cleanup;
   }
 
@@ -561,7 +603,7 @@ check_render_readback(GPUDevice *device) {
   submitInfo.fence = fence;
   if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
       GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
-    fprintf(stderr, "render readback submit failed\n");
+    fprintf(stderr, "%s submit failed\n", label);
     cmdb = NULL;
     goto cleanup;
   }
@@ -572,7 +614,20 @@ check_render_readback(GPUDevice *device) {
                          0u,
                          pixels,
                          sizeof(pixels)) != GPU_OK) {
-    fprintf(stderr, "render readback buffer read failed\n");
+    fprintf(stderr, "%s buffer read failed\n", label);
+    goto cleanup;
+  }
+
+  if (clipped &&
+      (pixels[0] > 2u || pixels[1] > 2u || pixels[2] > 2u ||
+       pixels[3] < 250u)) {
+    fprintf(stderr,
+            "%s scissor pixel mismatch: %u %u %u %u\n",
+            label,
+            (unsigned)pixels[0],
+            (unsigned)pixels[1],
+            (unsigned)pixels[2],
+            (unsigned)pixels[3]);
     goto cleanup;
   }
 
@@ -582,7 +637,8 @@ check_render_readback(GPUDevice *device) {
       pixels[centerOffset + 2u] < 250u ||
       pixels[centerOffset + 3u] < 250u) {
     fprintf(stderr,
-            "render readback draw pixel mismatch: %u %u %u %u\n",
+            "%s draw pixel mismatch: %u %u %u %u\n",
+            label,
             (unsigned)pixels[centerOffset + 0u],
             (unsigned)pixels[centerOffset + 1u],
             (unsigned)pixels[centerOffset + 2u],
@@ -603,10 +659,17 @@ cleanup:
   GPUDestroyTextureView(targetView);
   GPUDestroyTexture(target);
   GPUDestroyBuffer(readbackBuffer);
+  GPUDestroyBuffer(indexBuffer);
   GPUDestroyBuffer(vertexBuffer);
   GPUDestroyRenderPipeline(pipeline);
   GPUDestroyShaderLibrary(library);
   return ok;
+}
+
+static int
+check_render_readback(GPUDevice *device) {
+  return check_render_readback_case(device, 0, 0) &&
+         check_render_readback_case(device, 1, 1);
 }
 
 static int
