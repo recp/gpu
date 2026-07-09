@@ -1,6 +1,7 @@
 #include "test.h"
 #include "../../src/api/buffer_internal.h"
 #include "../../src/api/cmdqueue_internal.h"
+#include "../../src/api/texture_internal.h"
 
 static const char *kRenderPipelineMSL =
   "#include <metal_stdlib>\n"
@@ -358,10 +359,24 @@ check_render_pipeline_validation(GPUDevice *device) {
 static int
 check_render_pass_validation(void) {
   GPUCommandBuffer fakeCmdb = {0};
-  GPUTextureView *fakeView = (GPUTextureView *)(uintptr_t)1u;
+  GPUTexture fakeColorTarget = {0};
+  GPUTexture fakeDepthStencil = {0};
+  GPUTexture fakeSampledTexture = {0};
+  GPUTextureView fakeColorView = {0};
+  GPUTextureView fakeDepthStencilView = {0};
+  GPUTextureView fakeSampledView = {0};
+  GPUTextureView *fakeView;
   GPURenderPassColorAttachment colors[9] = {0};
   GPURenderPassDepthStencilAttachment depthStencil = {0};
   GPURenderPassCreateInfo rp = {0};
+
+  fakeColorTarget.usage = GPU_TEXTURE_USAGE_COLOR_TARGET;
+  fakeDepthStencil.usage = GPU_TEXTURE_USAGE_DEPTH_STENCIL;
+  fakeSampledTexture.usage = GPU_TEXTURE_USAGE_SAMPLED;
+  fakeColorView._texture = &fakeColorTarget;
+  fakeDepthStencilView._texture = &fakeDepthStencil;
+  fakeSampledView._texture = &fakeSampledTexture;
+  fakeView = &fakeColorView;
 
   if (GPUBeginRenderPass(NULL, &rp) ||
       GPUBeginRenderPass(&fakeCmdb, NULL)) {
@@ -413,6 +428,20 @@ check_render_pass_validation(void) {
   }
 
   colors[0].storeOp = GPU_STORE_OP_STORE;
+  colors[0].view = &fakeSampledView;
+  if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
+    fprintf(stderr, "render pass accepted color view without color target usage\n");
+    return 0;
+  }
+
+  colors[0].view = fakeView;
+  colors[0].resolveView = &fakeSampledView;
+  if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
+    fprintf(stderr, "render pass accepted resolve view without color target usage\n");
+    return 0;
+  }
+  colors[0].resolveView = NULL;
+
   rp.colorAttachmentCount = (uint32_t)GPU_ARRAY_LEN(colors);
   if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
     fprintf(stderr, "render pass accepted too many color attachments\n");
@@ -432,7 +461,7 @@ check_render_pass_validation(void) {
     return 0;
   }
 
-  depthStencil.view = fakeView;
+  depthStencil.view = &fakeDepthStencilView;
   depthStencil.depthLoadOp = (GPULoadOp)99;
   depthStencil.depthStoreOp = GPU_STORE_OP_STORE;
   depthStencil.stencilLoadOp = GPU_LOAD_OP_DONT_CARE;
@@ -443,6 +472,13 @@ check_render_pass_validation(void) {
   }
 
   depthStencil.depthLoadOp = GPU_LOAD_OP_CLEAR;
+  depthStencil.view = &fakeSampledView;
+  if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
+    fprintf(stderr, "render pass accepted depth-stencil view without depth-stencil usage\n");
+    return 0;
+  }
+
+  depthStencil.view = &fakeDepthStencilView;
   fakeCmdb._activeEncoder = true;
   if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
     fprintf(stderr, "render pass accepted command buffer with active encoder\n");

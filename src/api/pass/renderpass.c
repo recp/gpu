@@ -35,6 +35,14 @@ gpu_validStoreOp(GPUStoreOp op) {
 }
 
 static bool
+gpu_textureViewHasUsage(const GPUTextureView *view, GPUTextureUsageFlags usage) {
+  const GPUTexture *texture;
+
+  texture = view ? view->_texture : NULL;
+  return texture && (texture->usage & usage) == usage;
+}
+
+static bool
 gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info) {
   const GPURenderPassDepthStencilAttachment *depthStencil;
 
@@ -60,6 +68,9 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info) {
 
     color = &info->pColorAttachments[i];
     if (!color->view ||
+        !gpu_textureViewHasUsage(color->view, GPU_TEXTURE_USAGE_COLOR_TARGET) ||
+        (color->resolveView &&
+         !gpu_textureViewHasUsage(color->resolveView, GPU_TEXTURE_USAGE_COLOR_TARGET)) ||
         !gpu_validLoadOp(color->loadOp) ||
         !gpu_validStoreOp(color->storeOp)) {
       return false;
@@ -69,6 +80,7 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info) {
   depthStencil = info->pDepthStencilAttachment;
   if (depthStencil) {
     if (!depthStencil->view ||
+        !gpu_textureViewHasUsage(depthStencil->view, GPU_TEXTURE_USAGE_DEPTH_STENCIL) ||
         !gpu_validLoadOp(depthStencil->depthLoadOp) ||
         !gpu_validStoreOp(depthStencil->depthStoreOp) ||
         !gpu_validLoadOp(depthStencil->stencilLoadOp) ||
