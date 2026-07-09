@@ -25,6 +25,7 @@ struct GPUDevice {
   GPUPhysicalDevice *phyDevice;
   void              *_priv;
   GPUQueueFlagBits   queueFamilies;
+  uint64_t           enabledFeatureMask;
 };
 
 #endif /* gpu_device_internal_h */

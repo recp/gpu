@@ -5,12 +5,17 @@
 static int
 check_adapter_enumeration(void) {
   GPUAdapter *adapters[8] = {0};
+  GPUAdapterCapabilities caps;
+  GPUFormatCapabilities formatCaps;
   GPUAdapterProperties props;
   uint32_t adapterCount;
 
   if (GPUEnumerateAdapters(NULL, NULL, NULL) != GPU_ERROR_INVALID_ARGUMENT ||
       GPUGetAdapterProperties(NULL, &props) != GPU_ERROR_INVALID_ARGUMENT ||
       GPUGetAdapterProperties((GPUAdapter *)(uintptr_t)1u, NULL) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      GPUGetAdapterCapabilities(NULL, &caps) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUGetFormatCapabilities(NULL, GPU_FORMAT_RGBA8_UNORM, &formatCaps) !=
         GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "adapter validation accepted invalid input\n");
     return 0;
@@ -38,6 +43,40 @@ check_adapter_enumeration(void) {
       props.backend == GPU_BACKEND_NULL ||
       !props.name) {
     fprintf(stderr, "adapter properties query failed\n");
+    return 0;
+  }
+  memset(&caps, 0, sizeof(caps));
+  if (GPUGetAdapterCapabilities(adapters[0], &caps) != GPU_OK ||
+      !GPUIsFeatureSupported(adapters[0], GPU_FEATURE_COMPUTE) ||
+      GPUIsFeatureSupported(adapters[0], GPU_FEATURE_SHADER_F16) ||
+      caps.supported.featureCount == 0 ||
+      !caps.supported.pFeatures ||
+      caps.limits.maxBindGroups == 0 ||
+      caps.limits.minUniformBufferOffsetAlignment == 0) {
+    fprintf(stderr, "adapter capabilities query failed\n");
+    return 0;
+  }
+
+  memset(&formatCaps, 0, sizeof(formatCaps));
+  if (GPUGetFormatCapabilities(adapters[0],
+                               GPU_FORMAT_RGBA8_UNORM,
+                               &formatCaps) != GPU_OK ||
+      !formatCaps.sampled ||
+      !formatCaps.filterable ||
+      !formatCaps.colorAttachment ||
+      !formatCaps.blendable ||
+      formatCaps.depthStencil) {
+    fprintf(stderr, "RGBA8 format capabilities query failed\n");
+    return 0;
+  }
+  memset(&formatCaps, 0, sizeof(formatCaps));
+  if (GPUGetFormatCapabilities(adapters[0],
+                               GPU_FORMAT_DEPTH32_FLOAT,
+                               &formatCaps) != GPU_OK ||
+      !formatCaps.depthStencil ||
+      formatCaps.colorAttachment ||
+      formatCaps.sampled) {
+    fprintf(stderr, "depth format capabilities query failed\n");
     return 0;
   }
 
@@ -125,6 +164,7 @@ check_fence_create_validation(GPUDevice *device) {
 
 static int
 check_queue_selection(GPUDevice *device) {
+  GPUDeviceCapabilities caps;
   GPUCommandQueue *graphics0;
   GPUCommandQueue *compute0;
 
@@ -146,6 +186,19 @@ check_queue_selection(GPUDevice *device) {
       GPUGetQueue(device, GPU_QUEUE_COMPUTE, UINT32_MAX) ||
       GPUGetQueue(device, 0, 0)) {
     fprintf(stderr, "queue lookup accepted invalid request\n");
+    return 0;
+  }
+  memset(&caps, 0, sizeof(caps));
+  if (GPUGetDeviceCapabilities(NULL, &caps) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUGetDeviceCapabilities(device, NULL) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUGetDeviceCapabilities(device, &caps) != GPU_OK ||
+      !GPUIsFeatureEnabled(device, GPU_FEATURE_COMPUTE) ||
+      GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16) ||
+      caps.enabled.featureCount == 0 ||
+      !caps.enabled.pFeatures ||
+      caps.limits.maxBindGroups == 0 ||
+      caps.limits.maxComputeWorkgroupSizeX == 0) {
+    fprintf(stderr, "device capabilities query failed\n");
     return 0;
   }
 
@@ -216,6 +269,11 @@ check_device_queue_create_validation(GPUAdapter *adapter) {
     fprintf(stderr, "device create rejected required compute feature\n");
     return 0;
   }
+  if (!GPUIsFeatureEnabled(device, GPU_FEATURE_COMPUTE)) {
+    fprintf(stderr, "device create did not enable required compute feature\n");
+    GPUDestroyDevice(device);
+    return 0;
+  }
   GPUDestroyDevice(device);
 
   memset(&createInfo, 0, sizeof(createInfo));
@@ -251,6 +309,11 @@ check_device_queue_create_validation(GPUAdapter *adapter) {
   device = NULL;
   if (GPUCreateDevice(adapter, &createInfo, &device) != GPU_OK || !device) {
     fprintf(stderr, "device create rejected explicit queue count\n");
+    return 0;
+  }
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_COMPUTE)) {
+    fprintf(stderr, "device create enabled unrequested compute feature\n");
+    GPUDestroyDevice(device);
     return 0;
   }
 

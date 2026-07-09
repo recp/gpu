@@ -23,6 +23,7 @@ extern "C" {
 #include "common.h"
 #include "instance.h"
 #include "cmdqueue.h"
+#include "pixelformat.h"
 
 typedef struct GPUAdapter GPUAdapter;
 
@@ -79,6 +80,40 @@ typedef struct GPUDeviceCreateInfo {
   GPUDeviceQueueCreateInfo  queues;
 } GPUDeviceCreateInfo;
 
+typedef struct GPULimits {
+  uint32_t maxBindGroups;
+  uint32_t maxBindingsPerGroup;
+  uint32_t maxDynamicUniformBuffers;
+  uint32_t maxDynamicStorageBuffers;
+  uint64_t minUniformBufferOffsetAlignment;
+  uint64_t minStorageBufferOffsetAlignment;
+  uint32_t maxColorAttachments;
+  uint32_t maxComputeWorkgroupSizeX;
+  uint32_t maxComputeWorkgroupSizeY;
+  uint32_t maxComputeWorkgroupSizeZ;
+  uint32_t minSubgroupSize;
+  uint32_t maxSubgroupSize;
+} GPULimits;
+
+typedef struct GPUAdapterCapabilities {
+  GPUFeatureSet supported;
+  GPULimits     limits;
+} GPUAdapterCapabilities;
+
+typedef struct GPUDeviceCapabilities {
+  GPUFeatureSet enabled;
+  GPULimits     limits;
+} GPUDeviceCapabilities;
+
+typedef struct GPUFormatCapabilities {
+  bool sampled;
+  bool filterable;
+  bool storage;
+  bool colorAttachment;
+  bool blendable;
+  bool depthStencil;
+} GPUFormatCapabilities;
+
 GPU_EXPORT
 GPUResult
 GPUEnumerateAdapters(GPUInstance *inst,
@@ -89,6 +124,30 @@ GPU_EXPORT
 GPUResult
 GPUGetAdapterProperties(const GPUAdapter     *adapter,
                         GPUAdapterProperties *outProps);
+
+GPU_EXPORT
+GPUResult
+GPUGetAdapterCapabilities(const GPUAdapter       *adapter,
+                          GPUAdapterCapabilities *outCaps);
+
+GPU_EXPORT
+GPUResult
+GPUGetDeviceCapabilities(const GPUDevice       *device,
+                         GPUDeviceCapabilities *outCaps);
+
+GPU_EXPORT
+GPUResult
+GPUGetFormatCapabilities(const GPUAdapter      *adapter,
+                         GPUFormat              format,
+                         GPUFormatCapabilities *outCaps);
+
+GPU_EXPORT
+bool
+GPUIsFeatureSupported(const GPUAdapter *adapter, GPUFeature feature);
+
+GPU_EXPORT
+bool
+GPUIsFeatureEnabled(const GPUDevice *device, GPUFeature feature);
 
 GPU_EXPORT
 GPUResult

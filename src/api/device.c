@@ -76,6 +76,48 @@ gpu_supportedFeature(GPUFeature feature) {
   return feature == GPU_FEATURE_COMPUTE;
 }
 
+static uint64_t
+gpu_featureBit(GPUFeature feature) {
+  return 1ull << (uint32_t)feature;
+}
+
+static uint64_t
+gpu_collectEnabledFeatures(const GPUFeatureSet *set) {
+  uint64_t mask;
+
+  mask = 0;
+  if (!set || !gpu_validFeatureSet(set)) {
+    return 0;
+  }
+
+  for (uint32_t i = 0; i < set->featureCount; i++) {
+    if (gpu_knownFeature(set->pFeatures[i]) &&
+        gpu_supportedFeature(set->pFeatures[i])) {
+      mask |= gpu_featureBit(set->pFeatures[i]);
+    }
+  }
+
+  return mask;
+}
+
+static uint64_t
+gpu_defaultEnabledFeatureMask(void) {
+  return gpu_featureBit(GPU_FEATURE_COMPUTE);
+}
+
+static uint64_t
+gpu_enabledFeatureMaskForCreateInfo(const GPUDeviceCreateInfo *info) {
+  uint64_t mask;
+
+  if (!info) {
+    return gpu_defaultEnabledFeatureMask();
+  }
+
+  mask = gpu_collectEnabledFeatures(&info->required);
+  mask |= gpu_collectEnabledFeatures(&info->optional);
+  return mask;
+}
+
 static GPUResult
 gpu_validateFeatureSet(const GPUFeatureSet *set, bool required) {
   if (!gpu_validFeatureSet(set)) {
@@ -92,6 +134,116 @@ gpu_validateFeatureSet(const GPUFeatureSet *set, bool required) {
   }
 
   return GPU_OK;
+}
+
+static void
+gpu_fillDefaultLimits(GPULimits *limits) {
+  memset(limits, 0, sizeof(*limits));
+
+  limits->maxBindGroups = 4;
+  limits->maxBindingsPerGroup = 64;
+  limits->maxDynamicUniformBuffers = 8;
+  limits->maxDynamicStorageBuffers = 4;
+  limits->minUniformBufferOffsetAlignment = 256;
+  limits->minStorageBufferOffsetAlignment = 256;
+  limits->maxColorAttachments = 4;
+  limits->maxComputeWorkgroupSizeX = 1024;
+  limits->maxComputeWorkgroupSizeY = 1024;
+  limits->maxComputeWorkgroupSizeZ = 64;
+}
+
+static bool
+gpu_formatIsDepthStencil(GPUFormat format) {
+  switch (format) {
+    case GPU_FORMAT_DEPTH24_UNORM_STENCIL8:
+    case GPU_FORMAT_DEPTH32_FLOAT:
+    case GPU_FORMAT_DEPTH32_FLOAT_STENCIL8:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool
+gpu_formatIsInteger(GPUFormat format) {
+  switch (format) {
+    case GPUPixelFormatR8Uint:
+    case GPUPixelFormatR8Sint:
+    case GPUPixelFormatR16Uint:
+    case GPUPixelFormatR16Sint:
+    case GPUPixelFormatRG8Uint:
+    case GPUPixelFormatRG8Sint:
+    case GPUPixelFormatR32Uint:
+    case GPUPixelFormatR32Sint:
+    case GPUPixelFormatRG16Uint:
+    case GPUPixelFormatRG16Sint:
+    case GPUPixelFormatRGBA8Uint:
+    case GPUPixelFormatRGBA8Sint:
+    case GPUPixelFormatRGB10A2Uint:
+    case GPUPixelFormatRG32Uint:
+    case GPUPixelFormatRG32Sint:
+    case GPUPixelFormatRGBA16Uint:
+    case GPUPixelFormatRGBA16Sint:
+    case GPUPixelFormatRGBA32Uint:
+    case GPUPixelFormatRGBA32Sint:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool
+gpu_formatIsKnownColor(GPUFormat format) {
+  switch (format) {
+    case GPU_FORMAT_RGBA8_UNORM:
+    case GPU_FORMAT_RGBA8_UNORM_SRGB:
+    case GPU_FORMAT_BGRA8_UNORM:
+    case GPU_FORMAT_BGRA8_UNORM_SRGB:
+    case GPU_FORMAT_RGBA16_FLOAT:
+    case GPU_FORMAT_RGBA32_FLOAT:
+    case GPU_FORMAT_RG11B10_UFLOAT:
+    case GPUPixelFormatR8Unorm:
+    case GPUPixelFormatR8Unorm_sRGB:
+    case GPUPixelFormatR8Snorm:
+    case GPUPixelFormatR8Uint:
+    case GPUPixelFormatR8Sint:
+    case GPUPixelFormatR16Unorm:
+    case GPUPixelFormatR16Snorm:
+    case GPUPixelFormatR16Uint:
+    case GPUPixelFormatR16Sint:
+    case GPUPixelFormatR16Float:
+    case GPUPixelFormatRG8Unorm:
+    case GPUPixelFormatRG8Unorm_sRGB:
+    case GPUPixelFormatRG8Snorm:
+    case GPUPixelFormatRG8Uint:
+    case GPUPixelFormatRG8Sint:
+    case GPUPixelFormatR32Uint:
+    case GPUPixelFormatR32Sint:
+    case GPUPixelFormatR32Float:
+    case GPUPixelFormatRG16Unorm:
+    case GPUPixelFormatRG16Snorm:
+    case GPUPixelFormatRG16Uint:
+    case GPUPixelFormatRG16Sint:
+    case GPUPixelFormatRG16Float:
+    case GPUPixelFormatRGBA8Snorm:
+    case GPUPixelFormatRGBA8Uint:
+    case GPUPixelFormatRGBA8Sint:
+    case GPUPixelFormatBGRX8Unorm:
+    case GPUPixelFormatRGB10A2Unorm:
+    case GPUPixelFormatRGB10A2Uint:
+    case GPUPixelFormatRG32Uint:
+    case GPUPixelFormatRG32Sint:
+    case GPUPixelFormatRG32Float:
+    case GPUPixelFormatRGBA16Unorm:
+    case GPUPixelFormatRGBA16Snorm:
+    case GPUPixelFormatRGBA16Uint:
+    case GPUPixelFormatRGBA16Sint:
+    case GPUPixelFormatRGBA32Uint:
+    case GPUPixelFormatRGBA32Sint:
+      return true;
+    default:
+      return false;
+  }
 }
 
 static GPUResult
@@ -224,14 +376,119 @@ GPUGetAdapterProperties(const GPUAdapter     *adapter,
 }
 
 GPU_EXPORT
+GPUResult
+GPUGetAdapterCapabilities(const GPUAdapter       *adapter,
+                          GPUAdapterCapabilities *outCaps) {
+  static const GPUFeature supportedFeatures[] = {
+    GPU_FEATURE_COMPUTE
+  };
+
+  if (!adapter || !outCaps) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  memset(outCaps, 0, sizeof(*outCaps));
+  outCaps->supported.featureCount = (uint32_t)GPU_ARRAY_LEN(supportedFeatures);
+  outCaps->supported.pFeatures = supportedFeatures;
+  gpu_fillDefaultLimits(&outCaps->limits);
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUGetDeviceCapabilities(const GPUDevice       *device,
+                         GPUDeviceCapabilities *outCaps) {
+  static const GPUFeature enabledCompute[] = {
+    GPU_FEATURE_COMPUTE
+  };
+
+  if (!device || !outCaps) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  memset(outCaps, 0, sizeof(*outCaps));
+  if ((device->enabledFeatureMask & gpu_featureBit(GPU_FEATURE_COMPUTE)) != 0) {
+    outCaps->enabled.featureCount = (uint32_t)GPU_ARRAY_LEN(enabledCompute);
+    outCaps->enabled.pFeatures = enabledCompute;
+  }
+  gpu_fillDefaultLimits(&outCaps->limits);
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUGetFormatCapabilities(const GPUAdapter      *adapter,
+                         GPUFormat              format,
+                         GPUFormatCapabilities *outCaps) {
+  bool color;
+  bool integerFormat;
+
+  if (!adapter || !outCaps) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  memset(outCaps, 0, sizeof(*outCaps));
+  if (format == GPU_FORMAT_UNDEFINED) {
+    return GPU_OK;
+  }
+
+  if (gpu_formatIsDepthStencil(format)) {
+    outCaps->depthStencil = true;
+    return GPU_OK;
+  }
+
+  color = gpu_formatIsKnownColor(format);
+  if (!color) {
+    return GPU_OK;
+  }
+
+  integerFormat = gpu_formatIsInteger(format);
+  outCaps->sampled = true;
+  outCaps->filterable = !integerFormat;
+  outCaps->storage = !integerFormat;
+  outCaps->colorAttachment = true;
+  outCaps->blendable = !integerFormat;
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+bool
+GPUIsFeatureSupported(const GPUAdapter *adapter, GPUFeature feature) {
+  if (!adapter || !gpu_knownFeature(feature)) {
+    return false;
+  }
+
+  return gpu_supportedFeature(feature);
+}
+
+GPU_EXPORT
+bool
+GPUIsFeatureEnabled(const GPUDevice *device, GPUFeature feature) {
+  if (!device || !gpu_knownFeature(feature)) {
+    return false;
+  }
+
+  return (device->enabledFeatureMask & gpu_featureBit(feature)) != 0;
+}
+
+GPU_EXPORT
 GPUDevice*
 GPUCreateSystemDefaultDevice(GPUInstance *inst) {
   GPUApi *api;
+  GPUDevice *device;
 
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->device.createSystemDefaultDevice(inst);
+  device = api->device.createSystemDefaultDevice(inst);
+  if (device) {
+    device->enabledFeatureMask = gpu_defaultEnabledFeatureMask();
+  }
+
+  return device;
 }
 
 GPU_EXPORT
@@ -299,6 +556,7 @@ GPUCreateDevice(GPUAdapter                *adapter,
   if (!*outDevice) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
+  (*outDevice)->enabledFeatureMask = gpu_enabledFeatureMaskForCreateInfo(info);
 
   return GPU_OK;
 }
