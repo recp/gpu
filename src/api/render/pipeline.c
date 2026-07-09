@@ -248,6 +248,7 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   }
   if (vertexDesc)
     gpuPipelineSetVertexDesc(pipeline, vertexDesc);
+  gpuDestroyVertexDesc(vertexDesc);
 
   for (i = 0; i < info->colorTargetCount; i++)
     gpuPipelineSetColorFormat(pipeline, i, info->pColorTargets[i].format);
@@ -277,6 +278,16 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
 GPU_EXPORT
 void
 GPUDestroyRenderPipeline(GPURenderPipeline *pipeline) {
+  GPUApi *api;
+
+  if (!pipeline)
+    return;
+
+  if ((api = gpuActiveGPUApi()) && api->render.destroyRenderPipeline) {
+    api->render.destroyRenderPipeline(pipeline);
+    return;
+  }
+
   free(pipeline);
 }
 

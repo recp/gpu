@@ -33,6 +33,19 @@ mt_newVertexDesc(void) {
 
 GPU_HIDE
 void
+mt_destroyVertexDesc(GPUVertexDescriptor *vert) {
+  if (!vert) {
+    return;
+  }
+
+  if (vert->_priv) {
+    [(id)vert->_priv release];
+  }
+  free(vert);
+}
+
+GPU_HIDE
+void
 mt_attrib(GPUVertexDescriptor * __restrict vert,
           uint32_t                         attribIndex,
           GPUVertexFormat                  format,
@@ -69,8 +82,9 @@ mt_vertexDesc(GPURenderPipeline         * __restrict pipeline,
 GPU_HIDE
 void
 mt_initVertex(GPUApiVertex *api) {
-  api->newVertexDesc = mt_newVertexDesc;
-  api->attrib        = mt_attrib;
-  api->layout        = mt_layout;
-  api->vertexDesc    = mt_vertexDesc;
+  api->newVertexDesc     = mt_newVertexDesc;
+  api->destroyVertexDesc = mt_destroyVertexDesc;
+  api->attrib            = mt_attrib;
+  api->layout            = mt_layout;
+  api->vertexDesc        = mt_vertexDesc;
 }

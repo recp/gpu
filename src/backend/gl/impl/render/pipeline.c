@@ -44,6 +44,12 @@ gl_newRenderState(GPUDevice         * __restrict device,
 
 GPU_HIDE
 void
+gl_destroyPipeline(GPURenderPipeline *pipeline) {
+  free(pipeline);
+}
+
+GPU_HIDE
+void
 gl_setFunction(GPURenderPipeline * __restrict pipline,
                GPUFunction       * __restrict func,
                GPUFunctionType                functype) {
@@ -82,11 +88,12 @@ gl_sampleCount(GPURenderPipeline * __restrict pipline,
 GPU_HIDE
 void
 gl_initRenderPipeline(GPUApiRender *api) {
-  api->newRenderPipeline    = gl_newPipeline;
-  api->newRenderState = gl_newRenderState;
-  api->setFunction    = gl_setFunction;
-  api->colorFormat    = gl_colorFormat;
-  api->depthFormat    = gl_depthFormat;
-  api->stencilFormat  = gl_stencilFormat;
-  api->sampleCount    = gl_sampleCount;
+  api->newRenderPipeline     = gl_newPipeline;
+  api->newRenderState        = gl_newRenderState;
+  api->destroyRenderPipeline = gl_destroyPipeline;
+  api->setFunction           = gl_setFunction;
+  api->colorFormat           = gl_colorFormat;
+  api->depthFormat           = gl_depthFormat;
+  api->stencilFormat         = gl_stencilFormat;
+  api->sampleCount           = gl_sampleCount;
 }

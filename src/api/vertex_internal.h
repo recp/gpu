@@ -29,6 +29,10 @@ gpuCreateVertexDesc(void);
 
 GPU_HIDE
 void
+gpuDestroyVertexDesc(GPUVertexDescriptor *vert);
+
+GPU_HIDE
+void
 gpuVertexDescAttrib(GPUVertexDescriptor * __restrict vertex,
                     uint32_t                         attribIndex,
                     GPUVertexFormat                  format,

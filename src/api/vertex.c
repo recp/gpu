@@ -30,6 +30,22 @@ gpuCreateVertexDesc(void) {
 
 GPU_HIDE
 void
+gpuDestroyVertexDesc(GPUVertexDescriptor *vert) {
+  GPUApi *api;
+
+  if (!vert)
+    return;
+
+  if ((api = gpuActiveGPUApi()) && api->vertex.destroyVertexDesc) {
+    api->vertex.destroyVertexDesc(vert);
+    return;
+  }
+
+  free(vert);
+}
+
+GPU_HIDE
+void
 gpuVertexDescAttrib(GPUVertexDescriptor * __restrict vert,
                     uint32_t                         attribIndex,
                     GPUVertexFormat                  format,

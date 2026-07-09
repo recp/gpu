@@ -27,6 +27,8 @@ typedef struct GPUVertexDescriptor GPUVertexDescriptor;
 
 typedef struct GPUApiVertex {
   GPUVertexDescriptor* (*newVertexDesc)(void);
+
+  void (*destroyVertexDesc)(GPUVertexDescriptor *vert);
   
   void
   (*attrib)(GPUVertexDescriptor * __restrict vert,

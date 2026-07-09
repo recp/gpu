@@ -59,6 +59,22 @@ mt_newRenderState(GPUDevice         * __restrict device,
 
 GPU_HIDE
 void
+mt_destroyRenderPipeline(GPURenderPipeline *pipeline) {
+  if (!pipeline) {
+    return;
+  }
+
+  if (pipeline->_state) {
+    [(id<MTLRenderPipelineState>)pipeline->_state release];
+  }
+  if (pipeline->_priv) {
+    [(id)pipeline->_priv release];
+  }
+  free(pipeline);
+}
+
+GPU_HIDE
+void
 mt_setFunction(GPURenderPipeline * __restrict pipline,
                GPUFunction       * __restrict func,
                GPUFunctionType                functype) {
@@ -106,11 +122,12 @@ mt_sampleCount(GPURenderPipeline * __restrict pipline,
 GPU_HIDE
 void
 mt_initRenderPipeline(GPUApiRender *api) {
-  api->newRenderPipeline = mt_newRenderPipeline;
-  api->newRenderState    = mt_newRenderState;
-  api->setFunction       = mt_setFunction;
-  api->colorFormat       = mt_colorFormat;
-  api->depthFormat       = mt_depthFormat;
-  api->stencilFormat     = mt_stencilFormat;
-  api->sampleCount       = mt_sampleCount;
+  api->newRenderPipeline     = mt_newRenderPipeline;
+  api->newRenderState        = mt_newRenderState;
+  api->destroyRenderPipeline = mt_destroyRenderPipeline;
+  api->setFunction           = mt_setFunction;
+  api->colorFormat           = mt_colorFormat;
+  api->depthFormat           = mt_depthFormat;
+  api->stencilFormat         = mt_stencilFormat;
+  api->sampleCount           = mt_sampleCount;
 }

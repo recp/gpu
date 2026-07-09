@@ -630,8 +630,10 @@ GPUDestroyShaderLibrary(GPUShaderLibrary *library) {
 
   gpu_clearShaderReflection(&library->_reflection);
   gpu_clearShaderEntryInfo(library);
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpuActiveGPUApi())) {
+    free(library);
     return;
+  }
 
   if (api->library.destroyLibrary) {
     api->library.destroyLibrary(library);

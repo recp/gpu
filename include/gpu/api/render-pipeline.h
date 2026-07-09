@@ -32,6 +32,9 @@ typedef struct GPUApiRender {
   GPURenderPipelineState*
   (*newRenderState)(GPUDevice         * __restrict device,
                     GPURenderPipeline * __restrict pipeline);
+
+  void
+  (*destroyRenderPipeline)(GPURenderPipeline *pipeline);
   
   void
   (*setFunction)(GPURenderPipeline * __restrict pipline,
