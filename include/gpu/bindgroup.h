@@ -42,13 +42,9 @@ typedef enum GPUBindStage {
   GPUBindStageCompute = 3
 } GPUBindStage;
 
-typedef struct GPUBindGroupLayout {
-  void *_priv;
-} GPUBindGroupLayout;
+typedef struct GPUBindGroupLayout GPUBindGroupLayout;
 
-typedef struct GPUBindGroup {
-  void *_priv;
-} GPUBindGroup;
+typedef struct GPUBindGroup GPUBindGroup;
 
 typedef enum GPUBindKind {
   GPUBindKindBuffer = 0,
@@ -101,9 +97,7 @@ typedef struct GPUBindGroupCreateInfo {
   const GPUBindGroupEntry *pEntries;
 } GPUBindGroupCreateInfo;
 
-typedef struct GPUPipelineLayout {
-  void *_priv;
-} GPUPipelineLayout;
+typedef struct GPUPipelineLayout GPUPipelineLayout;
 
 typedef struct GPUShaderLayout {
   GPUPipelineLayout *pipelineLayout;

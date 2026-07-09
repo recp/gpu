@@ -19,6 +19,18 @@
 
 #include "../../common.h"
 
+struct GPUBindGroupLayout {
+  void *_priv;
+};
+
+struct GPUBindGroup {
+  void *_priv;
+};
+
+struct GPUPipelineLayout {
+  void *_priv;
+};
+
 typedef struct GPUBindGroupBindingView {
   GPUBindStage stage;
   GPUBindKind  kind;
