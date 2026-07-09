@@ -241,6 +241,30 @@ mt_drawIndexedPrims(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
+mt_drawPrimitivesIndirect(GPURenderCommandEncoder *rce,
+                          GPUPrimitiveType         type,
+                          GPUBuffer               *argsBuffer,
+                          uint64_t                 argsOffset) {
+  [mt_nativeRCE(rce) drawPrimitives:(MTLPrimitiveType)type
+                      indirectBuffer:(id<MTLBuffer>)argsBuffer
+                indirectBufferOffset:(NSUInteger)argsOffset];
+}
+
+GPU_HIDE
+void
+mt_drawIndexedPrimsIndirect(GPURenderCommandEncoder *rce,
+                            GPUBuffer               *argsBuffer,
+                            uint64_t                 argsOffset) {
+  [mt_nativeRCE(rce) drawIndexedPrimitives:(MTLPrimitiveType)rce->_primitiveType
+                                 indexType:(MTLIndexType)rce->_indexType
+                               indexBuffer:(id<MTLBuffer>)rce->_indexBuffer
+                         indexBufferOffset:(NSUInteger)rce->_indexBufferOffset
+                            indirectBuffer:(id<MTLBuffer>)argsBuffer
+                      indirectBufferOffset:(NSUInteger)argsOffset];
+}
+
+GPU_HIDE
+void
 mt_endEncoding(GPURenderCommandEncoder *rce) {
   [mt_nativeRCE(rce) endEncoding];
   free(rce);
@@ -267,5 +291,7 @@ mt_initRCE(GPUApiRCE *api) {
   api->setFragmentSampler     = mt_rceSetFragmentSampler;
   api->drawPrimitives         = mt_drawPrimitives;
   api->drawIndexedPrims       = mt_drawIndexedPrims;
+  api->drawPrimitivesIndirect = mt_drawPrimitivesIndirect;
+  api->drawIndexedPrimsIndirect = mt_drawIndexedPrimsIndirect;
   api->endEncoding            = mt_endEncoding;
 }

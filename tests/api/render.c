@@ -473,12 +473,17 @@ check_render_encoder_validation(void) {
   GPUBindIndexBuffer(NULL, fakeBuffer, 0u, GPUIndexTypeUInt16);
   GPUDraw(NULL, 1u, 1u, 0u, 0u);
   GPUDrawIndexed(NULL, 1u, 1u, 0u, 0, 0u);
+  GPUDrawIndirect(NULL, fakeBuffer, 0u);
+  GPUDrawIndexedIndirect(NULL, fakeBuffer, 0u);
   GPUApplyDynamicState(NULL, &dynamicState);
   GPUApplyDynamicState(&pass, NULL);
   GPUSetRenderPushConstants(NULL, 0u, sizeof(pushValue), &pushValue);
   GPUDraw(&pass, 1u, 1u, 0u, 0u);
+  GPUDrawIndirect(&pass, fakeBuffer, 0u);
 
   pass._hasPipeline = true;
+  GPUDrawIndirect(&pass, NULL, 0u);
+  GPUDrawIndexedIndirect(&pass, fakeBuffer, 0u);
   pass._pushConstantSizeBytes = sizeof(pushBefore);
   pass._pushConstantStages = GPU_SHADER_STAGE_VERTEX_BIT |
                              GPU_SHADER_STAGE_FRAGMENT_BIT;
@@ -510,6 +515,8 @@ check_render_encoder_validation(void) {
     fprintf(stderr, "render encoder rejected valid index binding\n");
     return 0;
   }
+  GPUDrawIndirect(&pass, fakeBuffer, 0u);
+  GPUDrawIndexedIndirect(&pass, fakeBuffer, 0u);
 
   dynamicState.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   dynamicState.chain.structSize = sizeof(dynamicState);
@@ -530,6 +537,8 @@ check_render_encoder_validation(void) {
   GPUSetRenderPushConstants(&endedPass, 0u, sizeof(pushValue), &pushValue);
   GPUDraw(&endedPass, 1u, 1u, 0u, 0u);
   GPUDrawIndexed(&endedPass, 1u, 1u, 0u, 0, 0u);
+  GPUDrawIndirect(&endedPass, fakeBuffer, 0u);
+  GPUDrawIndexedIndirect(&endedPass, fakeBuffer, 0u);
   GPUApplyDynamicState(&endedPass, &dynamicState);
   GPUEndRenderPass(&endedPass);
 

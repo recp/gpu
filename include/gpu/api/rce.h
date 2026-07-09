@@ -126,6 +126,18 @@ typedef struct GPUApiRCE {
                       uint32_t                 firstIndex,
                       int32_t                  vertexOffset,
                       uint32_t                 firstInstance);
+
+  void
+  (*drawPrimitivesIndirect)(GPURenderCommandEncoder *rce,
+                            GPUPrimitiveType         type,
+                            GPUBuffer               *argsBuffer,
+                            uint64_t                 argsOffset);
+
+  void
+  (*drawIndexedPrimsIndirect)(GPURenderCommandEncoder *rce,
+                              GPUBuffer               *argsBuffer,
+                              uint64_t                 argsOffset);
+
   void
   (*endEncoding)(GPURenderCommandEncoder *rce);
 } GPUApiRCE;

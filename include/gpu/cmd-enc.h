@@ -128,6 +128,18 @@ GPUDrawIndexed(GPURenderPassEncoder *pass,
                int32_t               vertexOffset,
                uint32_t              firstInstance);
 
+GPU_EXPORT
+void
+GPUDrawIndirect(GPURenderPassEncoder *pass,
+                GPUBuffer            *argsBuffer,
+                uint64_t              argsOffset);
+
+GPU_EXPORT
+void
+GPUDrawIndexedIndirect(GPURenderPassEncoder *pass,
+                       GPUBuffer            *argsBuffer,
+                       uint64_t              argsOffset);
+
 typedef uint64_t GPUDynamicStateMask;
 enum {
   GPU_DYNAMIC_STATE_VIEWPORT_BIT          = 1ull << 0,

@@ -379,6 +379,40 @@ GPUDrawIndexed(GPURenderPassEncoder *pass,
 
 GPU_EXPORT
 void
+GPUDrawIndirect(GPURenderPassEncoder *pass,
+                GPUBuffer            *argsBuffer,
+                uint64_t              argsOffset) {
+  GPUApi *api;
+
+  if (!pass || pass->_ended || !pass->_hasPipeline || !argsBuffer)
+    return;
+  if (!(api = gpuActiveGPUApi()) || !api->rce.drawPrimitivesIndirect)
+    return;
+
+  api->rce.drawPrimitivesIndirect(pass,
+                                  pass->_primitiveType,
+                                  argsBuffer,
+                                  argsOffset);
+}
+
+GPU_EXPORT
+void
+GPUDrawIndexedIndirect(GPURenderPassEncoder *pass,
+                       GPUBuffer            *argsBuffer,
+                       uint64_t              argsOffset) {
+  GPUApi *api;
+
+  if (!pass || pass->_ended || !pass->_hasPipeline ||
+      !pass->_hasIndexBuffer || !argsBuffer)
+    return;
+  if (!(api = gpuActiveGPUApi()) || !api->rce.drawIndexedPrimsIndirect)
+    return;
+
+  api->rce.drawIndexedPrimsIndirect(pass, argsBuffer, argsOffset);
+}
+
+GPU_EXPORT
+void
 GPUApplyDynamicState(GPURenderPassEncoder *pass,
                      const GPUDynamicStateApplyInfo *info) {
   if (!pass || pass->_ended || !gpu_validDynamicStateApplyInfo(info))
