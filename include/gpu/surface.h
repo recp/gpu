@@ -29,11 +29,7 @@ typedef enum GPUSurfaceType {
   GPU_SURFACE_APPLE_UIVIEW,
 } GPUSurfaceType;
 
-typedef struct GPUSurface {
-  void         * _priv;
-  GPUSurfaceType type;
-  float          scale;
-} GPUSurface;
+typedef struct GPUSurface GPUSurface;
 
 GPU_EXPORT
 GPUSurface*

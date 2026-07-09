@@ -20,6 +20,7 @@
 #include "../common.h"
 #include "../../api/library_internal.h"
 #include "../../api/sampler_internal.h"
+#include "../../api/surface_internal.h"
 #include "../../api/texture_internal.h"
 
 #if defined(__APPLE__) && defined(__OBJC__)
