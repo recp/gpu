@@ -202,16 +202,18 @@ GPUSetCommandBufferCompletionHandler(GPUCommandBuffer * __restrict cmdb,
 GPU_EXPORT
 void
 GPUCommit(GPUCommandBuffer * __restrict cmdb) {
-  GPUApi *api;
+  GPUCommandBuffer *buffers[1];
+  GPUQueueSubmitInfo submitInfo = {0};
 
-  if (!cmdb)
+  if (!cmdb || !cmdb->_queue || cmdb->_submitted)
     return;
-  if (!(api = gpuActiveGPUApi()))
-    return;
-  if (!api->cmdque.commit)
-    return;
-  
-  api->cmdque.commit(cmdb);
+
+  buffers[0] = cmdb;
+  submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 1;
+  submitInfo.ppCommandBuffers = buffers;
+  (void)GPUQueueSubmit(cmdb->_queue, &submitInfo);
 }
 
 GPU_EXPORT
@@ -269,6 +271,10 @@ GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
     completion->onComplete = lastCmdb->_onComplete;
     gpu_resetFenceInternal(info->fence);
     api->cmdque.commandBufferOnComplete(lastCmdb, completion, gpu_submitFenceComplete);
+  }
+
+  for (uint32_t i = 0; i < info->commandBufferCount; i++) {
+    info->ppCommandBuffers[i]->_submitted = true;
   }
 
   for (uint32_t i = 0; i < info->commandBufferCount; i++) {

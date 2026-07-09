@@ -117,12 +117,11 @@ void
 mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
   id<MTLCommandBuffer> mcb;
 
-  if (!cmdb || cmdb->_submitted) {
+  if (!cmdb) {
     return;
   }
 
   mcb = (id<MTLCommandBuffer>)cmdb->_priv;
-  cmdb->_submitted = true;
 
   [mcb addCompletedHandler:^(id<MTLCommandBuffer> _Nonnull buffer) {
     gpu_cmdoncomplete(cmdb, (__bridge void *)buffer);
