@@ -15,7 +15,7 @@ static const char *kComputeIndirectMSL =
   "using namespace metal;\n"
   "kernel void api_indirect_cs(device uint *out [[buffer(0)]],\n"
   "                            uint3 gid [[thread_position_in_grid]]) {\n"
-  "  out[gid.x] = gid.x + 1u;\n"
+  "  out[gid.x] += gid.x + 1u;\n"
   "}\n";
 
 static int
@@ -234,14 +234,22 @@ check_compute_pass_validation(void) {
 }
 
 static int
-check_compute_indirect_readback(GPUDevice *device) {
+check_compute_indirect_readback_case(GPUDevice *device, int multi) {
   typedef struct DispatchArgs {
     uint32_t x, y, z;
   } DispatchArgs;
 
   static const DispatchArgs kDispatchArgs = {4u, 1u, 1u};
+  static const DispatchArgs kMultiDispatchArgs[2] = {
+    {2u, 1u, 1u},
+    {4u, 1u, 1u}
+  };
   static const uint32_t kZeroWords[4] = {0u, 0u, 0u, 0u};
-  const uint32_t expectedWords[4] = {1u, 2u, 3u, 4u};
+  const uint32_t *expectedWords;
+  const uint32_t expectedSingle[4] = {1u, 2u, 3u, 4u};
+  const uint32_t expectedMulti[4] = {2u, 4u, 3u, 4u};
+  const char *label = multi ? "api-compute-multi-indirect"
+                            : "api-compute-indirect";
   GPUCommandQueue *queue;
   GPUShaderLibrary *library = NULL;
   GPUBindGroupLayout *bindGroupLayout = NULL;
@@ -268,13 +276,14 @@ check_compute_indirect_readback(GPUDevice *device) {
   uint32_t readWords[4] = {0u, 0u, 0u, 0u};
   int ok = 0;
 
+  expectedWords = multi ? expectedMulti : expectedSingle;
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   if (!queue) {
-    fprintf(stderr, "failed to get graphics queue for compute indirect test\n");
+    fprintf(stderr, "failed to get graphics queue for %s test\n", label);
     return 0;
   }
   if (!create_compute_indirect_library(device, &library)) {
-    fprintf(stderr, "failed to create compute indirect library\n");
+    fprintf(stderr, "failed to create %s library\n", label);
     goto cleanup;
   }
 
@@ -284,46 +293,46 @@ check_compute_indirect_readback(GPUDevice *device) {
   layoutEntry.arrayCount = 1u;
   layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
   layoutInfo.chain.structSize = sizeof(layoutInfo);
-  layoutInfo.label = "api-compute-indirect-bgl";
+  layoutInfo.label = label;
   layoutInfo.entryCount = 1u;
   layoutInfo.pEntries = &layoutEntry;
   if (GPUCreateBindGroupLayout(device,
                                &layoutInfo,
                                &bindGroupLayout) != GPU_OK ||
       !bindGroupLayout) {
-    fprintf(stderr, "failed to create compute indirect bind group layout\n");
+    fprintf(stderr, "failed to create %s bind group layout\n", label);
     goto cleanup;
   }
 
   layouts[0] = bindGroupLayout;
   pipelineLayoutInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   pipelineLayoutInfo.chain.structSize = sizeof(pipelineLayoutInfo);
-  pipelineLayoutInfo.label = "api-compute-indirect-layout";
+  pipelineLayoutInfo.label = label;
   pipelineLayoutInfo.bindGroupLayoutCount = 1u;
   pipelineLayoutInfo.ppBindGroupLayouts = layouts;
   if (GPUCreatePipelineLayout(device,
                               &pipelineLayoutInfo,
                               &pipelineLayout) != GPU_OK ||
       !pipelineLayout) {
-    fprintf(stderr, "failed to create compute indirect pipeline layout\n");
+    fprintf(stderr, "failed to create %s pipeline layout\n", label);
     goto cleanup;
   }
 
   pipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
   pipelineInfo.chain.structSize = sizeof(pipelineInfo);
-  pipelineInfo.label = "api-compute-indirect-pipeline";
+  pipelineInfo.label = label;
   pipelineInfo.layout = pipelineLayout;
   pipelineInfo.library = library;
   pipelineInfo.entryPoint = "api_indirect_cs";
   if (GPUCreateComputePipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
       !pipeline) {
-    fprintf(stderr, "failed to create compute indirect pipeline\n");
+    fprintf(stderr, "failed to create %s pipeline\n", label);
     goto cleanup;
   }
 
   bufferInfo.chain.sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
-  bufferInfo.label = "api-compute-indirect-output";
+  bufferInfo.label = label;
   bufferInfo.sizeBytes = sizeof(readWords);
   bufferInfo.usage = GPU_BUFFER_USAGE_STORAGE |
                      GPU_BUFFER_USAGE_COPY_SRC |
@@ -335,21 +344,23 @@ check_compute_indirect_readback(GPUDevice *device) {
                           0u,
                           kZeroWords,
                           sizeof(kZeroWords)) != GPU_OK) {
-    fprintf(stderr, "failed to create compute indirect output buffer\n");
+    fprintf(stderr, "failed to create %s output buffer\n", label);
     goto cleanup;
   }
 
-  bufferInfo.label = "api-compute-indirect-args";
-  bufferInfo.sizeBytes = sizeof(kDispatchArgs);
+  bufferInfo.label = label;
+  bufferInfo.sizeBytes = multi ? sizeof(kMultiDispatchArgs) :
+                                 sizeof(kDispatchArgs);
   bufferInfo.usage = GPU_BUFFER_USAGE_INDIRECT | GPU_BUFFER_USAGE_COPY_DST;
   if (GPUCreateBuffer(device, &bufferInfo, &argsBuffer) != GPU_OK ||
       !argsBuffer ||
       GPUQueueWriteBuffer(queue,
                           argsBuffer,
                           0u,
-                          &kDispatchArgs,
-                          sizeof(kDispatchArgs)) != GPU_OK) {
-    fprintf(stderr, "failed to create compute indirect args buffer\n");
+                          multi ? (const void *)kMultiDispatchArgs :
+                                  (const void *)&kDispatchArgs,
+                          bufferInfo.sizeBytes) != GPU_OK) {
+    fprintf(stderr, "failed to create %s args buffer\n", label);
     goto cleanup;
   }
 
@@ -360,30 +371,38 @@ check_compute_indirect_readback(GPUDevice *device) {
   groupEntry.buffer.size = sizeof(readWords);
   groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label = "api-compute-indirect-group";
+  groupInfo.label = label;
   groupInfo.layout = bindGroupLayout;
   groupInfo.entryCount = 1u;
   groupInfo.pEntries = &groupEntry;
   if (GPUCreateBindGroup(device, &groupInfo, &bindGroup) != GPU_OK ||
       !bindGroup) {
-    fprintf(stderr, "failed to create compute indirect bind group\n");
+    fprintf(stderr, "failed to create %s bind group\n", label);
     goto cleanup;
   }
 
-  if (GPUAcquireCommandBuffer(queue, "api-compute-indirect", &cmdb) != GPU_OK ||
+  if (GPUAcquireCommandBuffer(queue, label, &cmdb) != GPU_OK ||
       !cmdb) {
-    fprintf(stderr, "failed to acquire compute indirect command buffer\n");
+    fprintf(stderr, "failed to acquire %s command buffer\n", label);
     goto cleanup;
   }
 
-  computePass = GPUBeginComputePass(cmdb, "api-compute-indirect-pass");
+  computePass = GPUBeginComputePass(cmdb, label);
   if (!computePass) {
-    fprintf(stderr, "failed to begin compute indirect pass\n");
+    fprintf(stderr, "failed to begin %s pass\n", label);
     goto cleanup;
   }
   GPUBindComputePipeline(computePass, pipeline);
   GPUBindComputeGroup(computePass, 0u, bindGroup, 0u, NULL);
-  GPUDispatchIndirect(computePass, argsBuffer, 0u);
+  if (multi) {
+    GPUMultiDispatchIndirect(computePass,
+                             argsBuffer,
+                             0u,
+                             2u,
+                             (uint32_t)sizeof(DispatchArgs));
+  } else {
+    GPUDispatchIndirect(computePass, argsBuffer, 0u);
+  }
   GPUEndComputePass(computePass);
   computePass = NULL;
 
@@ -398,7 +417,7 @@ check_compute_indirect_readback(GPUDevice *device) {
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
-    fprintf(stderr, "failed to create compute indirect fence\n");
+    fprintf(stderr, "failed to create %s fence\n", label);
     goto cleanup;
   }
 
@@ -410,7 +429,7 @@ check_compute_indirect_readback(GPUDevice *device) {
   submitInfo.fence = fence;
   if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
       GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
-    fprintf(stderr, "compute indirect submit failed\n");
+    fprintf(stderr, "%s submit failed\n", label);
     cmdb = NULL;
     goto cleanup;
   }
@@ -423,7 +442,8 @@ check_compute_indirect_readback(GPUDevice *device) {
                          sizeof(readWords)) != GPU_OK ||
       memcmp(readWords, expectedWords, sizeof(readWords)) != 0) {
     fprintf(stderr,
-            "compute indirect readback mismatch: %u %u %u %u\n",
+            "%s readback mismatch: %u %u %u %u\n",
+            label,
             readWords[0],
             readWords[1],
             readWords[2],
@@ -446,6 +466,12 @@ cleanup:
   GPUDestroyBindGroupLayout(bindGroupLayout);
   GPUDestroyShaderLibrary(library);
   return ok;
+}
+
+static int
+check_compute_indirect_readback(GPUDevice *device) {
+  return check_compute_indirect_readback_case(device, 0) &&
+         check_compute_indirect_readback_case(device, 1);
 }
 
 int
