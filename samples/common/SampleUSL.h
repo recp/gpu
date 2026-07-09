@@ -59,10 +59,17 @@ GPUSampleLoadUSL(GPUDevice *device,
     return NO;
   }
 
-  if (GPUCreateShaderLibraryFromUSL(device,
-                                    artifactData.bytes,
-                                    (uint64_t)artifactData.length,
-                                    outLibrary) != GPU_OK) {
+  GPUShaderLibraryCreateInfo shaderInfo = {0};
+  shaderInfo.chain.sType = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
+  shaderInfo.chain.structSize = sizeof(shaderInfo);
+  shaderInfo.label = artifactName.UTF8String;
+  shaderInfo.sourceKind = GPU_SHADER_SOURCE_USL_BYTECODE;
+  shaderInfo.sourceData = artifactData.bytes;
+  shaderInfo.sourceSize = (uint64_t)artifactData.length;
+  shaderInfo.sourcePathHint = artifactPath.UTF8String;
+  shaderInfo.generateReflection = true;
+
+  if (GPUCreateShaderLibrary(device, &shaderInfo, outLibrary) != GPU_OK) {
     NSLog(@"GPU: failed to create shader library");
     return NO;
   }

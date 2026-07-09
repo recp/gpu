@@ -649,12 +649,12 @@ GPUShaderFunction(GPULibrary *lib, const char *name) {
 }
 
 static int
-gpu_createShaderLibraryFromUSLBytecodeImpl(GPUDevice *device,
-                                           const void *bytecodeData,
-                                           uint64_t bytecodeSize,
-                                           const char * const *entryPointNames,
-                                           uint32_t entryPointCount,
-                                           GPUShaderLibrary **outLibrary);
+gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
+                                   const void *bytecodeData,
+                                   uint64_t bytecodeSize,
+                                   const char * const *entryPointNames,
+                                   uint32_t entryPointCount,
+                                   GPUShaderLibrary **outLibrary);
 
 static GPUResult
 gpu_createShaderLibraryFromMSLText(GPUDevice *device,
@@ -710,12 +710,12 @@ GPUCreateShaderLibrary(GPUDevice *device,
     case GPU_SHADER_SOURCE_MSL_TEXT:
       return gpu_createShaderLibraryFromMSLText(device, info, outLibrary);
     case GPU_SHADER_SOURCE_USL_BYTECODE:
-      return gpu_createShaderLibraryFromUSLBytecodeImpl(device,
-                                                        info->sourceData,
-                                                        info->sourceSize,
-                                                        NULL,
-                                                        0u,
-                                                        outLibrary) == 0
+      return gpu_createShaderLibraryFromUSLImpl(device,
+                                                info->sourceData,
+                                                info->sourceSize,
+                                                NULL,
+                                                0u,
+                                                outLibrary) == 0
         ? GPU_OK
         : GPU_ERROR_BACKEND_FAILURE;
     case GPU_SHADER_SOURCE_USL_TEXT:
@@ -726,12 +726,12 @@ GPUCreateShaderLibrary(GPUDevice *device,
 }
 
 static int
-gpu_createShaderLibraryFromUSLBytecodeImpl(GPUDevice *device,
-                                           const void *bytecodeData,
-                                           uint64_t bytecodeSize,
-                                           const char * const *entryPointNames,
-                                           uint32_t entryPointCount,
-                                           GPUShaderLibrary **outLibrary) {
+gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
+                                   const void *bytecodeData,
+                                   uint64_t bytecodeSize,
+                                   const char * const *entryPointNames,
+                                   uint32_t entryPointCount,
+                                   GPUShaderLibrary **outLibrary) {
   GPUShaderLibraryCreateInfo info = {0};
   GPUApi *api;
   USLTargetSpec target;
@@ -840,12 +840,12 @@ GPUCreateShaderLibraryFromUSL(GPUDevice *device,
                               const void *artifactData,
                               uint64_t artifactSize,
                               GPUShaderLibrary **outLibrary) {
-  return gpu_createShaderLibraryFromUSLBytecodeImpl(device,
-                                                    artifactData,
-                                                    artifactSize,
-                                                    NULL,
-                                                    0u,
-                                                    outLibrary) == 0
+  return gpu_createShaderLibraryFromUSLImpl(device,
+                                            artifactData,
+                                            artifactSize,
+                                            NULL,
+                                            0u,
+                                            outLibrary) == 0
     ? GPU_OK
     : GPU_ERROR_BACKEND_FAILURE;
 }
@@ -865,52 +865,14 @@ GPUCreateShaderLibraryFromUSLEntries(GPUDevice *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  return gpu_createShaderLibraryFromUSLBytecodeImpl(device,
-                                                    artifactData,
-                                                    artifactSize,
-                                                    entryPointNames,
-                                                    entryPointCount,
-                                                    outLibrary) == 0
+  return gpu_createShaderLibraryFromUSLImpl(device,
+                                            artifactData,
+                                            artifactSize,
+                                            entryPointNames,
+                                            entryPointCount,
+                                            outLibrary) == 0
     ? GPU_OK
     : GPU_ERROR_BACKEND_FAILURE;
-}
-
-GPU_EXPORT
-int
-GPUCreateShaderLibraryFromUSLBytecode(GPUDevice *device,
-                                      const void *bytecodeData,
-                                      uint64_t bytecodeSize,
-                                      GPUShaderLibrary **outLibrary) {
-  return gpu_createShaderLibraryFromUSLBytecodeImpl(device,
-                                                    bytecodeData,
-                                                    bytecodeSize,
-                                                    NULL,
-                                                    0u,
-                                                    outLibrary);
-}
-
-GPU_EXPORT
-int
-GPUCreateShaderLibraryFromUSLBytecodeForEntries(
-                                      GPUDevice *device,
-                                      const void *bytecodeData,
-                                      uint64_t bytecodeSize,
-                                      const char * const *entryPointNames,
-                                      uint32_t entryPointCount,
-                                      GPUShaderLibrary **outLibrary) {
-  if (!entryPointNames || entryPointCount == 0u) {
-    if (outLibrary) {
-      *outLibrary = NULL;
-    }
-    return -1;
-  }
-
-  return gpu_createShaderLibraryFromUSLBytecodeImpl(device,
-                                                    bytecodeData,
-                                                    bytecodeSize,
-                                                    entryPointNames,
-                                                    entryPointCount,
-                                                    outLibrary);
 }
 
 GPU_EXPORT

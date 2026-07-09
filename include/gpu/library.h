@@ -141,23 +141,6 @@ GPUCreateShaderLibraryFromUSLEntries(GPUDevice *device,
 
 GPU_EXPORT
 int
-GPUCreateShaderLibraryFromUSLBytecode(GPUDevice *device,
-                                      const void *bytecodeData,
-                                      uint64_t bytecodeSize,
-                                      GPUShaderLibrary **outLibrary);
-
-GPU_EXPORT
-int
-GPUCreateShaderLibraryFromUSLBytecodeForEntries(
-                                      GPUDevice *device,
-                                      const void *bytecodeData,
-                                      uint64_t bytecodeSize,
-                                      const char * const *entryPointNames,
-                                      uint32_t entryPointCount,
-                                      GPUShaderLibrary **outLibrary);
-
-GPU_EXPORT
-int
 GPUGetShaderLibraryUSLInfo(GPUShaderLibrary *library,
                            GPUShaderLibraryUSLInfo *outInfo);
 
