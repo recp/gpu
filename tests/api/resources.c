@@ -121,6 +121,23 @@ check_resource_validation(GPUDevice *device) {
   textureInfo.sampleCount = 1u;
   textureInfo.usage = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
 
+  texture = (GPUTexture *)(uintptr_t)1u;
+  if (GPUCreateTexture(NULL, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT ||
+      texture != NULL) {
+    fprintf(stderr, "texture create accepted null device\n");
+    return 0;
+  }
+  texture = (GPUTexture *)(uintptr_t)1u;
+  if (GPUCreateTexture(device, NULL, &texture) != GPU_ERROR_INVALID_ARGUMENT ||
+      texture != NULL) {
+    fprintf(stderr, "texture create accepted null info\n");
+    return 0;
+  }
+  if (GPUCreateTexture(device, &textureInfo, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "texture create accepted null output\n");
+    return 0;
+  }
+
   textureInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   texture = (GPUTexture *)(uintptr_t)1u;
   if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT ||
@@ -148,6 +165,42 @@ check_resource_validation(GPUDevice *device) {
   }
 
   textureInfo.dimension = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format = GPU_FORMAT_UNDEFINED;
+  texture = (GPUTexture *)(uintptr_t)1u;
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT ||
+      texture != NULL) {
+    fprintf(stderr, "texture create accepted undefined format\n");
+    return 0;
+  }
+
+  textureInfo.format = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width = 0u;
+  texture = (GPUTexture *)(uintptr_t)1u;
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT ||
+      texture != NULL) {
+    fprintf(stderr, "texture create accepted zero width\n");
+    return 0;
+  }
+
+  textureInfo.width = 4u;
+  textureInfo.height = 0u;
+  texture = (GPUTexture *)(uintptr_t)1u;
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT ||
+      texture != NULL) {
+    fprintf(stderr, "texture create accepted zero height\n");
+    return 0;
+  }
+
+  textureInfo.height = 4u;
+  textureInfo.depthOrLayers = 0u;
+  texture = (GPUTexture *)(uintptr_t)1u;
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT ||
+      texture != NULL) {
+    fprintf(stderr, "texture create accepted zero depth/layers\n");
+    return 0;
+  }
+
+  textureInfo.depthOrLayers = 1u;
   textureInfo.usage = 0u;
   texture = (GPUTexture *)(uintptr_t)1u;
   if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT ||
@@ -189,6 +242,20 @@ check_resource_validation(GPUDevice *device) {
   region.layerCount = 1u;
   region.bytesPerRow = 4u * 4u;
   region.rowsPerImage = 4u;
+  if (GPUQueueWriteTexture(NULL, texture, &region, pixels, sizeof(pixels)) !=
+      GPU_ERROR_INVALID_ARGUMENT ||
+      GPUQueueWriteTexture(queue, NULL, &region, pixels, sizeof(pixels)) !=
+      GPU_ERROR_INVALID_ARGUMENT ||
+      GPUQueueWriteTexture(queue, texture, NULL, pixels, sizeof(pixels)) !=
+      GPU_ERROR_INVALID_ARGUMENT ||
+      GPUQueueWriteTexture(queue, texture, &region, NULL, sizeof(pixels)) !=
+      GPU_ERROR_INVALID_ARGUMENT ||
+      GPUQueueWriteTexture(queue, texture, &region, pixels, 0u) !=
+      GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "texture write accepted null or empty arguments\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
   if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) != GPU_OK) {
     fprintf(stderr, "texture write failed\n");
     GPUDestroyTexture(texture);
@@ -200,6 +267,51 @@ check_resource_validation(GPUDevice *device) {
     GPUDestroyTexture(texture);
     return 0;
   }
+
+  region.bytesPerRow = 0u;
+  if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) !=
+      GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "texture write accepted zero bytesPerRow\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+  region.bytesPerRow = 4u * 4u;
+
+  region.rowsPerImage = 3u;
+  if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) !=
+      GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "texture write accepted short rowsPerImage\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+  region.rowsPerImage = 4u;
+
+  region.width = 5u;
+  if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) !=
+      GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "texture write accepted out-of-range width\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+  region.width = 4u;
+
+  region.height = 5u;
+  if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) !=
+      GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "texture write accepted out-of-range height\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+  region.height = 4u;
+
+  region.depth = 0u;
+  if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) !=
+      GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "texture write accepted zero depth\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+  region.depth = 1u;
 
   textureInfo.usage = GPU_TEXTURE_USAGE_SAMPLED;
   if (GPUCreateTexture(device, &textureInfo, &textureNoCopyDst) != GPU_OK ||
@@ -240,6 +352,26 @@ check_resource_validation(GPUDevice *device) {
   viewInfo.mipLevelCount = 1u;
   viewInfo.arrayLayerCount = 1u;
 
+  view = (GPUTextureView *)(uintptr_t)1u;
+  if (GPUCreateTextureView(NULL, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT ||
+      view != NULL) {
+    fprintf(stderr, "texture view create accepted null texture\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+  view = (GPUTextureView *)(uintptr_t)1u;
+  if (GPUCreateTextureView(texture, NULL, &view) != GPU_ERROR_INVALID_ARGUMENT ||
+      view != NULL) {
+    fprintf(stderr, "texture view create accepted null info\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+  if (GPUCreateTextureView(texture, &viewInfo, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "texture view create accepted null output\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+
   viewInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   view = (GPUTextureView *)(uintptr_t)1u;
   if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT ||
@@ -260,6 +392,26 @@ check_resource_validation(GPUDevice *device) {
   }
 
   viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.viewType = (GPUTextureViewType)99;
+  view = (GPUTextureView *)(uintptr_t)1u;
+  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT ||
+      view != NULL) {
+    fprintf(stderr, "texture view create accepted invalid view type\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+
+  viewInfo.viewType = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format = GPU_FORMAT_UNDEFINED;
+  view = (GPUTextureView *)(uintptr_t)1u;
+  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT ||
+      view != NULL) {
+    fprintf(stderr, "texture view create accepted undefined format\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+
+  viewInfo.format = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.baseMipLevel = 1u;
   view = (GPUTextureView *)(uintptr_t)1u;
   if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT ||
@@ -270,6 +422,26 @@ check_resource_validation(GPUDevice *device) {
   }
 
   viewInfo.baseMipLevel = 0u;
+  viewInfo.baseArrayLayer = 1u;
+  view = (GPUTextureView *)(uintptr_t)1u;
+  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT ||
+      view != NULL) {
+    fprintf(stderr, "texture view create accepted invalid array range\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+
+  viewInfo.baseArrayLayer = 0u;
+  viewInfo.arrayLayerCount = 0u;
+  view = (GPUTextureView *)(uintptr_t)1u;
+  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT ||
+      view != NULL) {
+    fprintf(stderr, "texture view create accepted zero array layer count\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+
+  viewInfo.arrayLayerCount = 1u;
   view = NULL;
   if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK || !view) {
     fprintf(stderr, "texture view create failed\n");
