@@ -29,6 +29,19 @@ typedef enum GPUSurfaceType {
 
 typedef struct GPUSurface GPUSurface;
 
+typedef struct GPUSurfaceCreateInfo {
+  GPUChainedStruct chain;
+  const char      *label;
+} GPUSurfaceCreateInfo;
+
+typedef struct GPUNativeSurfaceCreateInfo {
+  GPUChainedStruct chain;
+  GPUAdapter      *adapter;
+  void            *nativeHandle;
+  GPUSurfaceType   type;
+  float            scale;
+} GPUNativeSurfaceCreateInfo;
+
 typedef struct GPUSurfaceCapabilities {
   uint32_t       minImageCount;
   uint32_t       maxImageCount;
@@ -37,12 +50,18 @@ typedef struct GPUSurfaceCapabilities {
 } GPUSurfaceCapabilities;
 
 GPU_EXPORT
+GPUResult
+GPUCreateSurface(GPUInstance                  * __restrict inst,
+                 const GPUSurfaceCreateInfo   * __restrict info,
+                 GPUSurface                  ** __restrict outSurface);
+
+GPU_EXPORT
 GPUSurface*
-GPUCreateSurface(GPUInstance       * __restrict inst,
-                 GPUAdapter        * __restrict adapter,
-                 void              * __restrict nativeHandle,
-                 GPUSurfaceType                 type,
-                 float                          scale);
+GPUCreateSurfaceFromNative(GPUInstance       * __restrict inst,
+                           GPUAdapter        * __restrict adapter,
+                           void              * __restrict nativeHandle,
+                           GPUSurfaceType                 type,
+                           float                          scale);
 
 GPU_EXPORT
 void

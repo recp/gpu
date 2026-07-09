@@ -98,11 +98,11 @@ GPUSampleCreateDefaultSurfaceGPU(NSWindow *window,
     return NO;
   }
 
-  surface = GPUCreateSurface(NULL,
-                             adapter,
-                             (__bridge void *)view,
-                             GPU_SURFACE_APPLE_NSVIEW,
-                             window.backingScaleFactor ?: 1.0f);
+  surface = GPUCreateSurfaceFromNative(NULL,
+                                       adapter,
+                                       (__bridge void *)view,
+                                       GPU_SURFACE_APPLE_NSVIEW,
+                                       window.backingScaleFactor ?: 1.0f);
   if (!surface) {
     NSLog(@"GPU: failed to create surface");
     return NO;

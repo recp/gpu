@@ -127,11 +127,11 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     return NO;
   }
 
-  _surface = GPUCreateSurface(NULL,
-                              _adapter,
-                              (__bridge void *)_view,
-                              GPU_SURFACE_APPLE_NSVIEW,
-                              _window.backingScaleFactor ?: 1.0f);
+  _surface = GPUCreateSurfaceFromNative(NULL,
+                                        _adapter,
+                                        (__bridge void *)_view,
+                                        GPU_SURFACE_APPLE_NSVIEW,
+                                        _window.backingScaleFactor ?: 1.0f);
   if (!_surface) {
     NSLog(@"GPU: failed to create surface");
     return NO;

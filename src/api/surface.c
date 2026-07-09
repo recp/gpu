@@ -32,28 +32,105 @@ gpuIsSurfaceTypeValid(GPUSurfaceType type) {
          type == GPU_SURFACE_APPLE_UIVIEW;
 }
 
-GPU_EXPORT
-GPUSurface*
-GPUCreateSurface(GPUInstance       * __restrict inst,
-                 GPUAdapter        * __restrict adapter,
-                 void              * __restrict nativeHandle,
-                 GPUSurfaceType                 type,
-                 float                          scale) {
-  GPUApi *api;
+static const GPUNativeSurfaceCreateInfo*
+gpuFindNativeSurfaceCreateInfo(const GPUSurfaceCreateInfo *info) {
+  const GPUChainedStruct *chain;
 
-  if (!adapter || !nativeHandle || !gpuIsSurfaceTypeValid(type) ||
-      !(scale > 0.0f)) {
-    return NULL;
+  chain = info ? (const GPUChainedStruct *)info->chain.pNext : NULL;
+  while (chain) {
+    if (chain->sType == GPU_STRUCTURE_TYPE_NATIVE_SURFACE_CREATE_INFO) {
+      return (const GPUNativeSurfaceCreateInfo *)chain;
+    }
+    chain = (const GPUChainedStruct *)chain->pNext;
   }
 
-  if (!(api = gpuActiveGPUApi()))
-    return NULL;
+  return NULL;
+}
+
+GPU_EXPORT
+GPUResult
+GPUCreateSurface(GPUInstance       * __restrict inst,
+                 const GPUSurfaceCreateInfo * __restrict info,
+                 GPUSurface ** __restrict outSurface) {
+  const GPUNativeSurfaceCreateInfo *nativeInfo;
+  GPUApi                           *api;
+
+  if (!outSurface) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outSurface = NULL;
+
+  if (!info) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+      info->chain.sType != GPU_STRUCTURE_TYPE_SURFACE_CREATE_INFO) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  nativeInfo = gpuFindNativeSurfaceCreateInfo(info);
+  if (!nativeInfo ||
+      (nativeInfo->chain.structSize != 0 &&
+       nativeInfo->chain.structSize < sizeof(*nativeInfo)) ||
+      !nativeInfo->adapter ||
+      !nativeInfo->nativeHandle ||
+      !gpuIsSurfaceTypeValid(nativeInfo->type) ||
+      !(nativeInfo->scale > 0.0f)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (!(api = gpuActiveGPUApi())) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
 
   if (!api->surface.createSurface) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  *outSurface = api->surface.createSurface(api,
+                                           inst,
+                                           nativeInfo->adapter,
+                                           nativeInfo->nativeHandle,
+                                           nativeInfo->type,
+                                           nativeInfo->scale);
+  if (!*outSurface) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUSurface*
+GPUCreateSurfaceFromNative(GPUInstance       * __restrict inst,
+                           GPUAdapter        * __restrict adapter,
+                           void              * __restrict nativeHandle,
+                           GPUSurfaceType                 type,
+                           float                          scale) {
+  GPUNativeSurfaceCreateInfo nativeInfo = {0};
+  GPUSurfaceCreateInfo       info = {0};
+  GPUSurface                *surface;
+
+  nativeInfo.chain.sType = GPU_STRUCTURE_TYPE_NATIVE_SURFACE_CREATE_INFO;
+  nativeInfo.chain.structSize = sizeof(nativeInfo);
+  nativeInfo.adapter = adapter;
+  nativeInfo.nativeHandle = nativeHandle;
+  nativeInfo.type = type;
+  nativeInfo.scale = scale;
+
+  info.chain.sType = GPU_STRUCTURE_TYPE_SURFACE_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.chain.pNext = &nativeInfo;
+
+  surface = NULL;
+  if (GPUCreateSurface(inst, &info, &surface) != GPU_OK) {
     return NULL;
   }
 
-  return api->surface.createSurface(api, inst, adapter, nativeHandle, type, scale);
+  return surface;
 }
 
 GPU_EXPORT

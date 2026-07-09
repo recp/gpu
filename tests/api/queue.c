@@ -7,7 +7,9 @@ check_adapter_enumeration(void) {
   GPUAdapter *adapters[8] = {0};
   GPUAdapterCapabilities caps;
   GPUFormatCapabilities formatCaps;
+  GPUNativeSurfaceCreateInfo nativeSurfaceInfo;
   GPUAdapterProperties props;
+  GPUSurfaceCreateInfo surfaceInfo;
   GPUSurface *fakeSurface;
   GPUSurfaceCapabilities surfaceCaps;
   uint32_t adapterCount;
@@ -108,27 +110,99 @@ check_adapter_enumeration(void) {
     fprintf(stderr, "surface capabilities missing BGRA8 format\n");
     return 0;
   }
-  if (GPUCreateSurface(NULL,
-                       NULL,
-                       (void *)(uintptr_t)1u,
-                       GPU_SURFACE_APPLE_NSVIEW,
-                       1.0f) ||
-      GPUCreateSurface(NULL,
-                       adapters[0],
-                       NULL,
-                       GPU_SURFACE_APPLE_NSVIEW,
-                       1.0f) ||
-      GPUCreateSurface(NULL,
-                       adapters[0],
-                       (void *)(uintptr_t)1u,
-                       (GPUSurfaceType)999u,
-                       1.0f) ||
-      GPUCreateSurface(NULL,
-                       adapters[0],
-                       (void *)(uintptr_t)1u,
-                       GPU_SURFACE_APPLE_NSVIEW,
-                       0.0f)) {
-    fprintf(stderr, "surface create accepted invalid input\n");
+  if (GPUCreateSurface(NULL, NULL, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "surface create accepted null args\n");
+    return 0;
+  }
+
+  memset(&surfaceInfo, 0, sizeof(surfaceInfo));
+  surfaceInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  if (GPUCreateSurface(NULL, &surfaceInfo, &fakeSurface) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      fakeSurface != NULL) {
+    fprintf(stderr, "surface create accepted wrong sType\n");
+    return 0;
+  }
+
+  memset(&surfaceInfo, 0, sizeof(surfaceInfo));
+  surfaceInfo.chain.sType = GPU_STRUCTURE_TYPE_SURFACE_CREATE_INFO;
+  surfaceInfo.chain.structSize = (uint32_t)(sizeof(surfaceInfo) - 1u);
+  fakeSurface = (GPUSurface *)(uintptr_t)1u;
+  if (GPUCreateSurface(NULL, &surfaceInfo, &fakeSurface) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      fakeSurface != NULL) {
+    fprintf(stderr, "surface create accepted short structSize\n");
+    return 0;
+  }
+
+  memset(&surfaceInfo, 0, sizeof(surfaceInfo));
+  surfaceInfo.chain.sType = GPU_STRUCTURE_TYPE_SURFACE_CREATE_INFO;
+  surfaceInfo.chain.structSize = sizeof(surfaceInfo);
+  fakeSurface = (GPUSurface *)(uintptr_t)1u;
+  if (GPUCreateSurface(NULL, &surfaceInfo, &fakeSurface) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      fakeSurface != NULL) {
+    fprintf(stderr, "surface create accepted missing native info\n");
+    return 0;
+  }
+
+  memset(&nativeSurfaceInfo, 0, sizeof(nativeSurfaceInfo));
+  nativeSurfaceInfo.chain.sType = GPU_STRUCTURE_TYPE_NATIVE_SURFACE_CREATE_INFO;
+  nativeSurfaceInfo.chain.structSize = sizeof(nativeSurfaceInfo);
+  nativeSurfaceInfo.adapter = adapters[0];
+  nativeSurfaceInfo.nativeHandle = (void *)(uintptr_t)1u;
+  nativeSurfaceInfo.type = GPU_SURFACE_APPLE_NSVIEW;
+  nativeSurfaceInfo.scale = 1.0f;
+  surfaceInfo.chain.pNext = &nativeSurfaceInfo;
+
+  nativeSurfaceInfo.adapter = NULL;
+  if (GPUCreateSurface(NULL, &surfaceInfo, &fakeSurface) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      GPUCreateSurfaceFromNative(NULL,
+                                 NULL,
+                                 (void *)(uintptr_t)1u,
+                                 GPU_SURFACE_APPLE_NSVIEW,
+                                 1.0f)) {
+    fprintf(stderr, "surface create accepted null adapter\n");
+    return 0;
+  }
+  nativeSurfaceInfo.adapter = adapters[0];
+
+  nativeSurfaceInfo.nativeHandle = NULL;
+  if (GPUCreateSurface(NULL, &surfaceInfo, &fakeSurface) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      GPUCreateSurfaceFromNative(NULL,
+                                 adapters[0],
+                                 NULL,
+                                 GPU_SURFACE_APPLE_NSVIEW,
+                                 1.0f)) {
+    fprintf(stderr, "surface create accepted null native handle\n");
+    return 0;
+  }
+  nativeSurfaceInfo.nativeHandle = (void *)(uintptr_t)1u;
+
+  nativeSurfaceInfo.type = (GPUSurfaceType)999u;
+  if (GPUCreateSurface(NULL, &surfaceInfo, &fakeSurface) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      GPUCreateSurfaceFromNative(NULL,
+                                 adapters[0],
+                                 (void *)(uintptr_t)1u,
+                                 (GPUSurfaceType)999u,
+                                 1.0f)) {
+    fprintf(stderr, "surface create accepted invalid type\n");
+    return 0;
+  }
+  nativeSurfaceInfo.type = GPU_SURFACE_APPLE_NSVIEW;
+
+  nativeSurfaceInfo.scale = 0.0f;
+  if (GPUCreateSurface(NULL, &surfaceInfo, &fakeSurface) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      GPUCreateSurfaceFromNative(NULL,
+                                 adapters[0],
+                                 (void *)(uintptr_t)1u,
+                                 GPU_SURFACE_APPLE_NSVIEW,
+                                 0.0f)) {
+    fprintf(stderr, "surface create accepted invalid scale\n");
     return 0;
   }
 
