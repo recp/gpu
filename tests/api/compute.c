@@ -133,6 +133,8 @@ check_compute_pass_validation(void) {
   GPUComputePipeline fakePipeline = {0};
   GPUBuffer *fakeBuffer = (GPUBuffer *)(uintptr_t)1u;
   uint32_t dynamicOffset = 0u;
+  uint32_t pushValue = 0x11223344u;
+  uint8_t pushBefore[16];
 
   if (GPUBeginComputePass(NULL, "null")) {
     fprintf(stderr, "compute pass accepted null command buffer\n");
@@ -157,6 +159,8 @@ check_compute_pass_validation(void) {
   GPUBindComputeGroup(NULL, 0u, NULL, 0u, NULL);
   GPUBindComputeGroup(&fakePass, 1u, NULL, 0u, NULL);
   GPUBindComputeGroup(&fakePass, 0u, NULL, 1u, &dynamicOffset);
+  GPUSetComputePushConstants(NULL, 0u, sizeof(pushValue), &pushValue);
+  GPUSetComputePushConstants(&fakePass, 0u, sizeof(pushValue), &pushValue);
   GPUDispatch(NULL, 1u, 1u, 1u);
   GPUDispatch(&fakePass, 1u, 1u, 1u);
   GPUDispatch(&fakePass, 0u, 1u, 1u);
@@ -166,9 +170,26 @@ check_compute_pass_validation(void) {
   GPUDispatchIndirect(&fakePass, NULL, 0u);
   GPUEndComputePass(NULL);
 
+  fakePass._hasPipeline = true;
+  fakePass._pushConstantSizeBytes = sizeof(pushBefore);
+  fakePass._pushConstantStages = GPU_SHADER_STAGE_COMPUTE_BIT;
+  GPUSetComputePushConstants(&fakePass, 4u, sizeof(pushValue), &pushValue);
+  if (memcmp(fakePass._pushConstants + 4u, &pushValue, sizeof(pushValue)) != 0) {
+    fprintf(stderr, "compute push constants did not update expected range\n");
+    return 0;
+  }
+
+  memcpy(pushBefore, fakePass._pushConstants, sizeof(pushBefore));
+  GPUSetComputePushConstants(&fakePass, 14u, sizeof(pushValue), &pushValue);
+  if (memcmp(fakePass._pushConstants, pushBefore, sizeof(pushBefore)) != 0) {
+    fprintf(stderr, "compute push constants accepted out-of-range update\n");
+    return 0;
+  }
+
   fakePass._ended = true;
   GPUBindComputePipeline(&fakePass, &fakePipeline);
   GPUBindComputeGroup(&fakePass, 0u, NULL, 0u, NULL);
+  GPUSetComputePushConstants(&fakePass, 0u, sizeof(pushValue), &pushValue);
   GPUDispatch(&fakePass, 1u, 1u, 1u);
   GPUDispatchIndirect(&fakePass, fakeBuffer, 0u);
   GPUEndComputePass(&fakePass);

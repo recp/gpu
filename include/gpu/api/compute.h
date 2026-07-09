@@ -31,6 +31,9 @@ struct GPUComputePassEncoder {
   uint32_t _workgroupSize[3];
   bool _hasPipeline;
   bool _ended;
+  uint32_t _pushConstantSizeBytes;
+  GPUShaderStageFlags _pushConstantStages;
+  uint8_t _pushConstants[4096];
 };
 
 typedef struct GPUApiCompute {
@@ -68,6 +71,11 @@ typedef struct GPUApiCompute {
   (*sampler)(GPUComputePassEncoder *enc,
              GPUSampler            *sampler,
              uint32_t               index);
+
+  void
+  (*pushConstants)(GPUComputePassEncoder *enc,
+                   const void            *data,
+                   uint32_t               sizeBytes);
 
   void
   (*dispatch)(GPUComputePassEncoder *enc,

@@ -27,6 +27,8 @@ struct GPUComputePipelineState {
 struct GPUComputePipeline {
   void *_priv;
   void *_state;
+  uint32_t _pushConstantSizeBytes;
+  GPUShaderStageFlags _pushConstantStages;
 };
 
 GPU_HIDE

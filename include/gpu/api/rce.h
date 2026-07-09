@@ -36,6 +36,9 @@ struct GPURenderCommandEncoder {
   bool              _hasIndexBuffer;
   bool              _hasPipeline;
   bool              _ended;
+  uint32_t          _pushConstantSizeBytes;
+  GPUShaderStageFlags _pushConstantStages;
+  uint8_t           _pushConstants[4096];
 };
 
 typedef struct GPUApiRCE {
@@ -63,6 +66,12 @@ typedef struct GPUApiRCE {
 
   void
   (*stencilReference)(GPURenderCommandEncoder *enc, uint32_t reference);
+
+  void
+  (*pushConstants)(GPURenderCommandEncoder *enc,
+                   GPUShaderStageFlags     stages,
+                   const void             *data,
+                   uint32_t                sizeBytes);
   
   void
   (*vertexBytes)(GPURenderCommandEncoder *enc,

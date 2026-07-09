@@ -68,6 +68,13 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
 
 GPU_EXPORT
 void
+GPUSetComputePushConstants(GPUComputePassEncoder *pass,
+                           uint32_t               offset,
+                           uint32_t               sizeBytes,
+                           const void            *data);
+
+GPU_EXPORT
+void
 GPUDispatch(GPUComputePassEncoder *pass,
             uint32_t               x,
             uint32_t               y,

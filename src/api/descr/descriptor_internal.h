@@ -52,4 +52,10 @@ gpuForEachBindGroupBinding(GPUBindGroup *group,
                            GPUBindGroupBindingFn fn,
                            void *ctx);
 
+GPU_HIDE
+void
+gpuGetPipelineLayoutPushConstants(GPUPipelineLayout *layout,
+                                  uint32_t *outSizeBytes,
+                                  GPUShaderStageFlags *outStages);
+
 #endif /* gpu_descriptor_internal_h */

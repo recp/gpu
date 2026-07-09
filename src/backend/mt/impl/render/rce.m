@@ -17,6 +17,10 @@
 #include "../../common.h"
 #include "../../../../api/render/pipeline_internal.h"
 
+enum {
+  MT_PUSH_CONSTANT_BUFFER_INDEX = 30u
+};
+
 static id<MTLRenderCommandEncoder>
 mt_nativeRCE(GPURenderCommandEncoder *rce) {
   return rce ? (__bridge id<MTLRenderCommandEncoder>)rce->_priv : nil;
@@ -106,6 +110,31 @@ GPU_HIDE
 void
 mt_stencilReference(GPURenderCommandEncoder *enc, uint32_t reference) {
   [mt_nativeRCE(enc) setStencilReferenceValue:reference];
+}
+
+GPU_HIDE
+void
+mt_renderPushConstants(GPURenderCommandEncoder *enc,
+                       GPUShaderStageFlags     stages,
+                       const void             *data,
+                       uint32_t                sizeBytes) {
+  id<MTLRenderCommandEncoder> native;
+
+  if (!data || sizeBytes == 0u) {
+    return;
+  }
+
+  native = mt_nativeRCE(enc);
+  if ((stages & GPU_SHADER_STAGE_VERTEX_BIT) != 0u) {
+    [native setVertexBytes:data
+                    length:(NSUInteger)sizeBytes
+                   atIndex:MT_PUSH_CONSTANT_BUFFER_INDEX];
+  }
+  if ((stages & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0u) {
+    [native setFragmentBytes:data
+                      length:(NSUInteger)sizeBytes
+                     atIndex:MT_PUSH_CONSTANT_BUFFER_INDEX];
+  }
 }
 
 GPU_HIDE
@@ -228,6 +257,7 @@ mt_initRCE(GPUApiRCE *api) {
   api->scissor                = mt_scissor;
   api->blendConstant          = mt_blendConstant;
   api->stencilReference       = mt_stencilReference;
+  api->pushConstants          = mt_renderPushConstants;
   api->vertexBytes            = mt_vertexBytes;
   api->vertexBuffer           = mt_vertexBuffer;
   api->setVertexTexture       = mt_rceSetVertexTexture;

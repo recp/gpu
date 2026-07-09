@@ -131,6 +131,42 @@ check_bind_group_layout_validation(GPUDevice *device) {
   }
 
   GPUDestroyPipelineLayout(pipelineLayout);
+
+  pipelineInfo.pushConstantSizeBytes = 16u;
+  pipelineInfo.pushConstantStages = 0u;
+  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) !=
+      GPU_ERROR_INVALID_ARGUMENT ||
+      pipelineLayout != NULL) {
+    fprintf(stderr, "pipeline layout accepted push constants without stages\n");
+    GPUDestroyPipelineLayout(pipelineLayout);
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  pipelineInfo.pushConstantSizeBytes = 4097u;
+  pipelineInfo.pushConstantStages = GPU_SHADER_STAGE_VERTEX_BIT;
+  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) !=
+      GPU_ERROR_INVALID_ARGUMENT ||
+      pipelineLayout != NULL) {
+    fprintf(stderr, "pipeline layout accepted oversized push constants\n");
+    GPUDestroyPipelineLayout(pipelineLayout);
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  pipelineInfo.pushConstantSizeBytes = 16u;
+  pipelineInfo.pushConstantStages = GPU_SHADER_STAGE_VERTEX_BIT;
+  pipelineLayout = NULL;
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_OK ||
+      !pipelineLayout) {
+    fprintf(stderr, "pipeline layout rejected valid push constants\n");
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  GPUDestroyPipelineLayout(pipelineLayout);
   GPUDestroyBindGroupLayout(layout);
   return 1;
 }

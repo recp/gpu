@@ -17,6 +17,10 @@
 #include "../common.h"
 #include "../../../api/compute_internal.h"
 
+enum {
+  MT_COMPUTE_PUSH_CONSTANT_BUFFER_INDEX = 30u
+};
+
 typedef struct MTComputePipelineDesc {
   id<MTLFunction> function;
 } MTComputePipelineDesc;
@@ -195,6 +199,20 @@ mt_computeSampler(GPUComputePassEncoder *enc,
 
 GPU_HIDE
 void
+mt_computePushConstants(GPUComputePassEncoder *enc,
+                        const void            *data,
+                        uint32_t               sizeBytes) {
+  if (!data || sizeBytes == 0u) {
+    return;
+  }
+
+  [mt_nativeCCE(enc) setBytes:data
+                       length:(NSUInteger)sizeBytes
+                      atIndex:MT_COMPUTE_PUSH_CONSTANT_BUFFER_INDEX];
+}
+
+GPU_HIDE
+void
 mt_dispatch(GPUComputePassEncoder *enc,
             uint32_t               x,
             uint32_t               y,
@@ -241,6 +259,7 @@ mt_initCompute(GPUApiCompute *api) {
   api->buffer = mt_computeBuffer;
   api->texture = mt_computeTexture;
   api->sampler = mt_computeSampler;
+  api->pushConstants = mt_computePushConstants;
   api->dispatch = mt_dispatch;
   api->dispatchIndirect = mt_dispatchIndirect;
   api->endEncoding = mt_endComputeEncoding;

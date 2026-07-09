@@ -20,6 +20,7 @@
 #include "../usl_target.h"
 
 #define GPU_USL_BYTECODE_VERSION 2u
+#define GPU_PUSH_CONSTANT_MAX_SIZE_BYTES 4096u
 
 typedef struct GPUBindGroupLayoutPriv {
   uint32_t count;
@@ -63,6 +64,22 @@ gpu_groupPriv(GPUBindGroup *group) {
 static GPUPipelineLayoutPriv *
 gpu_pipelineLayoutPriv(GPUPipelineLayout *layout) {
   return layout ? layout->_priv : NULL;
+}
+
+GPU_HIDE
+void
+gpuGetPipelineLayoutPushConstants(GPUPipelineLayout *layout,
+                                  uint32_t *outSizeBytes,
+                                  GPUShaderStageFlags *outStages) {
+  GPUPipelineLayoutPriv *priv;
+
+  priv = gpu_pipelineLayoutPriv(layout);
+  if (outSizeBytes) {
+    *outSizeBytes = priv ? priv->pushConstantSizeBytes : 0u;
+  }
+  if (outStages) {
+    *outStages = priv ? priv->pushConstantStages : 0u;
+  }
 }
 
 static int
@@ -626,6 +643,9 @@ GPUCreatePipelineLayout(GPUDevice *device,
   if (info->pushConstantSizeBytes > 0 && info->pushConstantStages == 0) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  if (info->pushConstantSizeBytes > GPU_PUSH_CONSTANT_MAX_SIZE_BYTES) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
 
   layout = calloc(1, sizeof(*layout));
   priv = calloc(1, sizeof(*priv));
@@ -863,7 +883,11 @@ GPUCreatePipelineLayoutFromReflection(GPUDevice *device,
   info.bindGroupLayoutCount = bindGroupLayoutCount;
   info.ppBindGroupLayouts = ppLayouts;
   info.pushConstantSizeBytes = reflection.pushConstantSizeBytes;
-  info.pushConstantStages = 0u;
+  info.pushConstantStages = reflection.pushConstantSizeBytes > 0u
+                               ? (GPU_SHADER_STAGE_VERTEX_BIT |
+                                  GPU_SHADER_STAGE_FRAGMENT_BIT |
+                                  GPU_SHADER_STAGE_COMPUTE_BIT)
+                               : 0u;
   rc = GPUCreatePipelineLayout(device, &info, outLayout);
   GPUFreeShaderReflection(&reflection);
   return rc;

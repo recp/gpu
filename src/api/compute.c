@@ -21,6 +21,21 @@
 #include "library_internal.h"
 #include "pipeline_cache_internal.h"
 
+static bool
+gpu_validPushConstantRange(uint32_t limit,
+                           uint32_t offset,
+                           uint32_t sizeBytes,
+                           const void *data) {
+  if (sizeBytes == 0u) {
+    return true;
+  }
+  if (!data || offset > limit) {
+    return false;
+  }
+
+  return sizeBytes <= limit - offset;
+}
+
 static GPUComputePipelineState *
 gpuCompileComputePipelineState(GPUDevice *device, GPUComputePipeline *pipeline) {
   GPUApi *api;
@@ -100,6 +115,9 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
     state->workgroupSize[2] = 1u;
   }
   gpuRecordPipelineCompile(device, info->cache);
+  gpuGetPipelineLayoutPushConstants(info->layout,
+                                    &pipeline->_pushConstantSizeBytes,
+                                    &pipeline->_pushConstantStages);
   *outPipeline = pipeline;
   return GPU_OK;
 }
@@ -162,6 +180,11 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
   state = pipeline->_state;
   api->compute.setComputePipelineState(pass, state);
   pass->_hasPipeline = true;
+  pass->_pushConstantSizeBytes = pipeline->_pushConstantSizeBytes;
+  pass->_pushConstantStages = pipeline->_pushConstantStages & GPU_SHADER_STAGE_COMPUTE_BIT;
+  if (pass->_pushConstantSizeBytes > 0u) {
+    memset(pass->_pushConstants, 0, pass->_pushConstantSizeBytes);
+  }
 }
 
 GPU_HIDE
@@ -264,6 +287,38 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
 
   ctx.pass = pass;
   gpuForEachBindGroupBinding(bindGroup, gpuBindComputeBinding, &ctx);
+}
+
+GPU_EXPORT
+void
+GPUSetComputePushConstants(GPUComputePassEncoder *pass,
+                           uint32_t               offset,
+                           uint32_t               sizeBytes,
+                           const void            *data) {
+  GPUApi *api;
+
+  if (!pass || pass->_ended || !pass->_hasPipeline ||
+      pass->_pushConstantSizeBytes == 0u ||
+      pass->_pushConstantStages == 0u) {
+    return;
+  }
+  if (!gpu_validPushConstantRange(pass->_pushConstantSizeBytes,
+                                  offset,
+                                  sizeBytes,
+                                  data)) {
+    return;
+  }
+  if (sizeBytes == 0u) {
+    return;
+  }
+  if (!(api = gpuActiveGPUApi()) || !api->compute.pushConstants) {
+    return;
+  }
+
+  memcpy(pass->_pushConstants + offset, data, sizeBytes);
+  api->compute.pushConstants(pass,
+                             pass->_pushConstants,
+                             pass->_pushConstantSizeBytes);
 }
 
 GPU_EXPORT

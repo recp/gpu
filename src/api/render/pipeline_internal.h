@@ -29,6 +29,8 @@ struct GPURenderPipeline {
   GPUPrimitiveTopology  _primitiveTopology;
   GPUCullMode           _cullMode;
   GPUFrontFace          _frontFace;
+  uint32_t              _pushConstantSizeBytes;
+  GPUShaderStageFlags   _pushConstantStages;
 };
 
 GPU_HIDE

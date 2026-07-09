@@ -16,6 +16,7 @@
 
 #include "../../common.h"
 #include "pipeline_internal.h"
+#include "../descr/descriptor_internal.h"
 #include "../library_internal.h"
 #include "../pipeline_cache_internal.h"
 #include "../vertex_internal.h"
@@ -275,6 +276,9 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   pipeline->_primitiveTopology = info->primitiveTopology;
   pipeline->_cullMode = info->cullMode;
   pipeline->_frontFace = info->frontFace;
+  gpuGetPipelineLayoutPushConstants(info->layout,
+                                    &pipeline->_pushConstantSizeBytes,
+                                    &pipeline->_pushConstantStages);
   *outPipeline = pipeline;
   return GPU_OK;
 }

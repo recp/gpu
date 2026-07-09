@@ -57,6 +57,21 @@ gpu_validDynamicStateApplyInfo(const GPUDynamicStateApplyInfo *info) {
   return true;
 }
 
+static bool
+gpu_validPushConstantRange(uint32_t limit,
+                           uint32_t offset,
+                           uint32_t sizeBytes,
+                           const void *data) {
+  if (sizeBytes == 0u) {
+    return true;
+  }
+  if (!data || offset > limit) {
+    return false;
+  }
+
+  return sizeBytes <= limit - offset;
+}
+
 GPU_EXPORT
 void
 GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
@@ -74,6 +89,13 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
   api->rce.setRenderPipelineState(pass, &state);
   pass->_hasPipeline = true;
   pass->_primitiveType = gpu_primitiveTypeFromTopology(pipeline->_primitiveTopology);
+  pass->_pushConstantSizeBytes = pipeline->_pushConstantSizeBytes;
+  pass->_pushConstantStages = pipeline->_pushConstantStages &
+                              (GPU_SHADER_STAGE_VERTEX_BIT |
+                               GPU_SHADER_STAGE_FRAGMENT_BIT);
+  if (pass->_pushConstantSizeBytes > 0u) {
+    memset(pass->_pushConstants, 0, pass->_pushConstantSizeBytes);
+  }
   if (api->rce.cullMode)
     api->rce.cullMode(pass, pipeline->_cullMode);
   if (api->rce.frontFace)
@@ -273,6 +295,39 @@ gpuSetRenderFragmentSampler(GPURenderPassEncoder *pass,
   if (api->rce.setFragmentSampler) {
     api->rce.setFragmentSampler(pass, sampler, index);
   }
+}
+
+GPU_EXPORT
+void
+GPUSetRenderPushConstants(GPURenderPassEncoder *pass,
+                          uint32_t              offset,
+                          uint32_t              sizeBytes,
+                          const void           *data) {
+  GPUApi *api;
+
+  if (!pass || pass->_ended || !pass->_hasPipeline ||
+      pass->_pushConstantSizeBytes == 0u ||
+      pass->_pushConstantStages == 0u) {
+    return;
+  }
+  if (!gpu_validPushConstantRange(pass->_pushConstantSizeBytes,
+                                  offset,
+                                  sizeBytes,
+                                  data)) {
+    return;
+  }
+  if (sizeBytes == 0u) {
+    return;
+  }
+  if (!(api = gpuActiveGPUApi()) || !api->rce.pushConstants) {
+    return;
+  }
+
+  memcpy(pass->_pushConstants + offset, data, sizeBytes);
+  api->rce.pushConstants(pass,
+                         pass->_pushConstantStages,
+                         pass->_pushConstants,
+                         pass->_pushConstantSizeBytes);
 }
 
 GPU_EXPORT

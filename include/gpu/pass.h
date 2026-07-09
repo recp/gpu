@@ -84,6 +84,13 @@ GPU_EXPORT
 void
 GPUEndRenderPass(GPURenderPassEncoder *pass);
 
+GPU_EXPORT
+void
+GPUSetRenderPushConstants(GPURenderPassEncoder *pass,
+                          uint32_t              offset,
+                          uint32_t              sizeBytes,
+                          const void           *data);
+
 typedef struct GPUBufferCopyRegion {
   uint64_t srcOffset;
   uint64_t dstOffset;

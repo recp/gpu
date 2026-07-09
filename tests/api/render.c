@@ -465,6 +465,8 @@ check_render_encoder_validation(void) {
   GPUBuffer *fakeBuffer = (GPUBuffer *)(uintptr_t)1u;
   GPUBufferBinding binding = {0};
   GPUDynamicStateApplyInfo dynamicState = {0};
+  uint32_t pushValue = 0xaabbccddu;
+  uint8_t pushBefore[16];
 
   GPUBindRenderPipeline(NULL, NULL);
   GPUBindVertexBuffers(NULL, 0u, 0u, NULL);
@@ -473,7 +475,25 @@ check_render_encoder_validation(void) {
   GPUDrawIndexed(NULL, 1u, 1u, 0u, 0, 0u);
   GPUApplyDynamicState(NULL, &dynamicState);
   GPUApplyDynamicState(&pass, NULL);
+  GPUSetRenderPushConstants(NULL, 0u, sizeof(pushValue), &pushValue);
   GPUDraw(&pass, 1u, 1u, 0u, 0u);
+
+  pass._hasPipeline = true;
+  pass._pushConstantSizeBytes = sizeof(pushBefore);
+  pass._pushConstantStages = GPU_SHADER_STAGE_VERTEX_BIT |
+                             GPU_SHADER_STAGE_FRAGMENT_BIT;
+  GPUSetRenderPushConstants(&pass, 4u, sizeof(pushValue), &pushValue);
+  if (memcmp(pass._pushConstants + 4u, &pushValue, sizeof(pushValue)) != 0) {
+    fprintf(stderr, "render push constants did not update expected range\n");
+    return 0;
+  }
+
+  memcpy(pushBefore, pass._pushConstants, sizeof(pushBefore));
+  GPUSetRenderPushConstants(&pass, 14u, sizeof(pushValue), &pushValue);
+  if (memcmp(pass._pushConstants, pushBefore, sizeof(pushBefore)) != 0) {
+    fprintf(stderr, "render push constants accepted out-of-range update\n");
+    return 0;
+  }
 
   binding.buffer = fakeBuffer;
   GPUBindVertexBuffers(&pass, UINT32_MAX, 2u, &binding);
@@ -507,6 +527,7 @@ check_render_encoder_validation(void) {
   }
   GPUBindVertexBuffers(&endedPass, 0u, 1u, &binding);
   GPUSetViewport(&endedPass, &dynamicState.viewport);
+  GPUSetRenderPushConstants(&endedPass, 0u, sizeof(pushValue), &pushValue);
   GPUDraw(&endedPass, 1u, 1u, 0u, 0u);
   GPUDrawIndexed(&endedPass, 1u, 1u, 0u, 0, 0u);
   GPUApplyDynamicState(&endedPass, &dynamicState);
