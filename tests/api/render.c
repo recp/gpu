@@ -360,10 +360,14 @@ static int
 check_render_pass_validation(void) {
   GPUCommandBuffer fakeCmdb = {0};
   GPUTexture fakeColorTarget = {0};
+  GPUTexture fakeColorTargetDepthFormat = {0};
   GPUTexture fakeDepthStencil = {0};
+  GPUTexture fakeDepthStencilColorFormat = {0};
   GPUTexture fakeSampledTexture = {0};
   GPUTextureView fakeColorView = {0};
+  GPUTextureView fakeColorDepthFormatView = {0};
   GPUTextureView fakeDepthStencilView = {0};
+  GPUTextureView fakeDepthStencilColorFormatView = {0};
   GPUTextureView fakeSampledView = {0};
   GPUTextureView *fakeView;
   GPURenderPassColorAttachment colors[9] = {0};
@@ -371,11 +375,25 @@ check_render_pass_validation(void) {
   GPURenderPassCreateInfo rp = {0};
 
   fakeColorTarget.usage = GPU_TEXTURE_USAGE_COLOR_TARGET;
+  fakeColorTarget.format = GPU_FORMAT_BGRA8_UNORM;
+  fakeColorTargetDepthFormat.usage = GPU_TEXTURE_USAGE_COLOR_TARGET;
+  fakeColorTargetDepthFormat.format = GPU_FORMAT_DEPTH32_FLOAT;
   fakeDepthStencil.usage = GPU_TEXTURE_USAGE_DEPTH_STENCIL;
+  fakeDepthStencil.format = GPU_FORMAT_DEPTH32_FLOAT;
+  fakeDepthStencilColorFormat.usage = GPU_TEXTURE_USAGE_DEPTH_STENCIL;
+  fakeDepthStencilColorFormat.format = GPU_FORMAT_BGRA8_UNORM;
   fakeSampledTexture.usage = GPU_TEXTURE_USAGE_SAMPLED;
+  fakeSampledTexture.format = GPU_FORMAT_BGRA8_UNORM;
   fakeColorView._texture = &fakeColorTarget;
+  fakeColorView.format = fakeColorTarget.format;
+  fakeColorDepthFormatView._texture = &fakeColorTargetDepthFormat;
+  fakeColorDepthFormatView.format = fakeColorTargetDepthFormat.format;
   fakeDepthStencilView._texture = &fakeDepthStencil;
+  fakeDepthStencilView.format = fakeDepthStencil.format;
+  fakeDepthStencilColorFormatView._texture = &fakeDepthStencilColorFormat;
+  fakeDepthStencilColorFormatView.format = fakeDepthStencilColorFormat.format;
   fakeSampledView._texture = &fakeSampledTexture;
+  fakeSampledView.format = fakeSampledTexture.format;
   fakeView = &fakeColorView;
 
   if (GPUBeginRenderPass(NULL, &rp) ||
@@ -434,10 +452,21 @@ check_render_pass_validation(void) {
     return 0;
   }
 
+  colors[0].view = &fakeColorDepthFormatView;
+  if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
+    fprintf(stderr, "render pass accepted color view with depth format\n");
+    return 0;
+  }
+
   colors[0].view = fakeView;
   colors[0].resolveView = &fakeSampledView;
   if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
     fprintf(stderr, "render pass accepted resolve view without color target usage\n");
+    return 0;
+  }
+  colors[0].resolveView = &fakeColorDepthFormatView;
+  if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
+    fprintf(stderr, "render pass accepted resolve view with depth format\n");
     return 0;
   }
   colors[0].resolveView = NULL;
@@ -475,6 +504,12 @@ check_render_pass_validation(void) {
   depthStencil.view = &fakeSampledView;
   if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
     fprintf(stderr, "render pass accepted depth-stencil view without depth-stencil usage\n");
+    return 0;
+  }
+
+  depthStencil.view = &fakeDepthStencilColorFormatView;
+  if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
+    fprintf(stderr, "render pass accepted depth-stencil view with color format\n");
     return 0;
   }
 
