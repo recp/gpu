@@ -1,5 +1,6 @@
 #include "test.h"
 #include "../../src/api/buffer_internal.h"
+#include "../../src/api/texture_internal.h"
 
 static void *
 read_file(const char *path, uint64_t *outSize) {
@@ -105,8 +106,10 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
                                           GPUShaderLayout *shaderLayout) {
   const GPUBindGroupLayoutEntry *entries;
   GPUBuffer fakeBufferStorage;
-  unsigned char fakeFragmentTextureStorage;
-  unsigned char fakeComputeTextureStorage;
+  GPUTexture fakeFragmentTextureStorage;
+  GPUTexture fakeComputeTextureStorage;
+  GPUTextureView fakeFragmentTextureView;
+  GPUTextureView fakeComputeTextureView;
   GPUBindGroupEntry groupEntries[3];
   GPUBindGroupCreateInfo groupInfo = {0};
   GPUBindGroup *group;
@@ -151,13 +154,21 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
 
   memset(groupEntries, 0, sizeof(groupEntries));
   memset(&fakeBufferStorage, 0, sizeof(fakeBufferStorage));
+  memset(&fakeFragmentTextureStorage, 0, sizeof(fakeFragmentTextureStorage));
+  memset(&fakeComputeTextureStorage, 0, sizeof(fakeComputeTextureStorage));
+  memset(&fakeFragmentTextureView, 0, sizeof(fakeFragmentTextureView));
+  memset(&fakeComputeTextureView, 0, sizeof(fakeComputeTextureView));
   fakeBufferStorage.sizeBytes = 16u;
   fakeBufferStorage.usage = GPU_BUFFER_USAGE_UNIFORM;
+  fakeFragmentTextureStorage.usage = GPU_TEXTURE_USAGE_SAMPLED;
+  fakeComputeTextureStorage.usage = GPU_TEXTURE_USAGE_STORAGE;
+  fakeFragmentTextureView._texture = &fakeFragmentTextureStorage;
+  fakeComputeTextureView._texture = &fakeComputeTextureStorage;
 
   groupEntries[0].binding = 0u;
   groupEntries[0].stage = GPUBindStageFragment;
   groupEntries[0].kind = GPUBindKindTexture;
-  groupEntries[0].textureView = (GPUTextureView *)(void *)&fakeFragmentTextureStorage;
+  groupEntries[0].textureView = &fakeFragmentTextureView;
 
   groupEntries[1].binding = 0u;
   groupEntries[1].bindingType = GPU_BINDING_UNIFORM_BUFFER;
@@ -169,7 +180,7 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
   groupEntries[2].binding = 0u;
   groupEntries[2].stage = GPUBindStageCompute;
   groupEntries[2].kind = GPUBindKindTexture;
-  groupEntries[2].textureView = (GPUTextureView *)(void *)&fakeComputeTextureStorage;
+  groupEntries[2].textureView = &fakeComputeTextureView;
 
   groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);

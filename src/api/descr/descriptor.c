@@ -17,6 +17,7 @@
 #include "../../common.h"
 #include "../buffer_internal.h"
 #include "../render/rce_internal.h"
+#include "../texture_internal.h"
 #include "descriptor_internal.h"
 #include "../usl_target.h"
 
@@ -450,6 +451,41 @@ gpu_bindGroupBufferRangeValid(const GPUBindGroupLayoutEntry *layoutEntry,
 }
 
 static int
+gpu_bindingTextureUsage(GPUBindingType bindingType, GPUTextureUsageFlags *outUsage) {
+  if (!outUsage) {
+    return 0;
+  }
+
+  switch (bindingType) {
+    case GPU_BINDING_SAMPLED_TEXTURE:
+      *outUsage = GPU_TEXTURE_USAGE_SAMPLED;
+      return 1;
+    case GPU_BINDING_STORAGE_TEXTURE:
+      *outUsage = GPU_TEXTURE_USAGE_STORAGE;
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static int
+gpu_bindGroupTextureViewValid(const GPUBindGroupLayoutEntry *layoutEntry,
+                              const GPUBindGroupEntry       *entry) {
+  GPUTextureUsageFlags usage;
+  GPUTexture *texture;
+
+  if (!layoutEntry || !entry || layoutEntry->kind != GPUBindKindTexture) {
+    return 1;
+  }
+  if (!gpu_bindingTextureUsage(layoutEntry->bindingType, &usage)) {
+    return 0;
+  }
+
+  texture = entry->textureView ? entry->textureView->_texture : NULL;
+  return texture && (texture->usage & usage) == usage;
+}
+
+static int
 gpu_bindGroupEntryMatchesLayout(const GPUBindGroupLayoutEntry *layoutEntry,
                                 const GPUBindGroupEntry *entry) {
   GPUBindKind resourceKind;
@@ -478,6 +514,9 @@ gpu_bindGroupEntryMatchesLayout(const GPUBindGroupLayoutEntry *layoutEntry,
     return 0;
   }
   if (!gpu_bindGroupBufferRangeValid(layoutEntry, entry)) {
+    return 0;
+  }
+  if (!gpu_bindGroupTextureViewValid(layoutEntry, entry)) {
     return 0;
   }
 

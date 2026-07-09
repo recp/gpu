@@ -1,4 +1,5 @@
 #include "test.h"
+#include "../../src/api/texture_internal.h"
 
 static GPUSamplerDesc
 valid_sampler_desc(void) {
@@ -22,11 +23,16 @@ check_bind_group_layout_validation(GPUDevice *device) {
   GPUBindGroupLayout *layout;
   GPUBindGroupEntry runtimeSamplerEntry;
   GPUBindGroupEntry bufferEntry;
+  GPUBindGroupEntry textureEntry;
   GPUBindGroupCreateInfo groupInfo;
   GPUBufferCreateInfo bufferInfo;
   GPUBindGroup *group;
   GPUBuffer *uniformBuffer;
   GPUBuffer *storageOnlyBuffer;
+  GPUTexture sampledTexture;
+  GPUTexture storageTexture;
+  GPUTextureView sampledView;
+  GPUTextureView storageView;
   GPUPipelineLayoutCreateInfo pipelineInfo;
   GPUBindGroupLayout *layouts[1];
   GPUPipelineLayout *pipelineLayout;
@@ -167,6 +173,54 @@ check_bind_group_layout_validation(GPUDevice *device) {
 
   GPUDestroyBuffer(storageOnlyBuffer);
   GPUDestroyBuffer(uniformBuffer);
+  GPUDestroyBindGroupLayout(layout);
+
+  entry.bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+  entry.hasDynamicOffset = false;
+  layout = NULL;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK || !layout) {
+    fprintf(stderr, "bind group layout rejected valid sampled texture entry\n");
+    return 0;
+  }
+
+  memset(&sampledTexture, 0, sizeof(sampledTexture));
+  memset(&storageTexture, 0, sizeof(storageTexture));
+  memset(&sampledView, 0, sizeof(sampledView));
+  memset(&storageView, 0, sizeof(storageView));
+  sampledTexture.usage = GPU_TEXTURE_USAGE_SAMPLED;
+  storageTexture.usage = GPU_TEXTURE_USAGE_STORAGE;
+  sampledView._texture = &sampledTexture;
+  storageView._texture = &storageTexture;
+
+  memset(&textureEntry, 0, sizeof(textureEntry));
+  textureEntry.binding = 0u;
+  textureEntry.textureView = &sampledView;
+
+  memset(&groupInfo, 0, sizeof(groupInfo));
+  groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.label = "sampled-texture-group";
+  groupInfo.layout = layout;
+  groupInfo.entryCount = 1u;
+  groupInfo.pEntries = &textureEntry;
+
+  group = NULL;
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
+    fprintf(stderr, "bind group rejected valid sampled texture view\n");
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+  GPUDestroyBindGroup(group);
+
+  textureEntry.textureView = &storageView;
+  group = (GPUBindGroup *)(uintptr_t)1u;
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT ||
+      group != NULL) {
+    fprintf(stderr, "bind group accepted texture view without sampled usage\n");
+    GPUDestroyBindGroup(group);
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
   GPUDestroyBindGroupLayout(layout);
 
   entry.bindingType = GPU_BINDING_SAMPLER;
