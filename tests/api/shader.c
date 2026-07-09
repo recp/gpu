@@ -142,6 +142,131 @@ check_compute_pipeline_workgroup_size(GPUDevice *device,
 }
 
 static int
+expect_reflected_compute_pipeline_error(GPUDevice *device,
+                                        const GPUComputePipelineCreateInfo *info,
+                                        const char *message) {
+  GPUComputePipeline *pipeline;
+
+  pipeline = (GPUComputePipeline *)(uintptr_t)1u;
+  if (GPUCreateComputePipeline(device, info, &pipeline) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      pipeline != NULL) {
+    fprintf(stderr, "%s\n", message);
+    GPUDestroyComputePipeline(pipeline);
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
+expect_reflected_render_pipeline_error(GPUDevice *device,
+                                       const GPURenderPipelineCreateInfo *info,
+                                       const char *message) {
+  GPURenderPipeline *pipeline;
+
+  pipeline = (GPURenderPipeline *)(uintptr_t)1u;
+  if (GPUCreateRenderPipeline(device, info, &pipeline) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      pipeline != NULL) {
+    fprintf(stderr, "%s\n", message);
+    GPUDestroyRenderPipeline(pipeline);
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
+check_reflected_pipeline_entry_stages(GPUDevice *device,
+                                      GPUShaderLibrary *library,
+                                      GPUPipelineLayout *layout) {
+  GPUComputePipelineCreateInfo computeInfo = {0};
+  GPURenderPipelineCreateInfo renderInfo = {0};
+  GPUColorTargetState colorTarget = {0};
+  GPUVertexAttribute attrs[2] = {{0}};
+  GPUVertexBufferLayout vertexLayout = {0};
+
+  computeInfo.chain.sType = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  computeInfo.chain.structSize = sizeof(computeInfo);
+  computeInfo.label = "api-reflection-compute-stage";
+  computeInfo.layout = layout;
+  computeInfo.library = library;
+
+  computeInfo.entryPoint = "reflect_vs";
+  if (!expect_reflected_compute_pipeline_error(
+        device,
+        &computeInfo,
+        "compute pipeline accepted reflected vertex entry")) {
+    return 0;
+  }
+
+  computeInfo.entryPoint = "reflect_fs";
+  if (!expect_reflected_compute_pipeline_error(
+        device,
+        &computeInfo,
+        "compute pipeline accepted reflected fragment entry")) {
+    return 0;
+  }
+
+  colorTarget.format = GPU_FORMAT_BGRA8_UNORM;
+  attrs[0].shaderLocation = 0u;
+  attrs[0].format = GPUFloat2;
+  attrs[0].offset = 0u;
+  attrs[1].shaderLocation = 1u;
+  attrs[1].format = GPUFloat2;
+  attrs[1].offset = 8u;
+  vertexLayout.strideBytes = 16u;
+  vertexLayout.stepMode = GPU_VERTEX_STEP_MODE_VERTEX;
+  vertexLayout.attributeCount = (uint32_t)GPU_ARRAY_LEN(attrs);
+  vertexLayout.pAttributes = attrs;
+
+  renderInfo.chain.sType = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  renderInfo.chain.structSize = sizeof(renderInfo);
+  renderInfo.label = "api-reflection-render-stage";
+  renderInfo.layout = layout;
+  renderInfo.library = library;
+  renderInfo.vertexEntry = "reflect_vs";
+  renderInfo.fragmentEntry = "reflect_fs";
+  renderInfo.vertex.bufferLayoutCount = 1u;
+  renderInfo.vertex.pBufferLayouts = &vertexLayout;
+  renderInfo.colorTargetCount = 1u;
+  renderInfo.pColorTargets = &colorTarget;
+  renderInfo.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  renderInfo.cullMode = GPU_CULL_MODE_NONE;
+  renderInfo.frontFace = GPU_FRONT_FACE_CCW;
+  renderInfo.multisample.sampleCount = 1u;
+
+  renderInfo.vertexEntry = "reflect_cs";
+  if (!expect_reflected_render_pipeline_error(
+        device,
+        &renderInfo,
+        "render pipeline accepted reflected compute vertex entry")) {
+    return 0;
+  }
+
+  renderInfo.vertexEntry = "reflect_vs";
+  renderInfo.fragmentEntry = "reflect_cs";
+  if (!expect_reflected_render_pipeline_error(
+        device,
+        &renderInfo,
+        "render pipeline accepted reflected compute fragment entry")) {
+    return 0;
+  }
+
+  renderInfo.vertexEntry = "reflect_fs";
+  renderInfo.fragmentEntry = "reflect_vs";
+  if (!expect_reflected_render_pipeline_error(
+        device,
+        &renderInfo,
+        "render pipeline accepted swapped reflected render entries")) {
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
 check_shader_layout_after_library_destroy(GPUDevice *device,
                                           GPUShaderLayout *shaderLayout) {
   const GPUBindGroupLayoutEntry *entries;
@@ -605,6 +730,9 @@ check_canonical_shader_library(GPUDevice *device,
                                              &reflectionPipelineLayout) == GPU_OK &&
        reflectionPipelineLayout != NULL &&
        check_compute_pipeline_workgroup_size(device,
+                                             library,
+                                             shaderLayout->pipelineLayout) &&
+       check_reflected_pipeline_entry_stages(device,
                                              library,
                                              shaderLayout->pipelineLayout);
 
