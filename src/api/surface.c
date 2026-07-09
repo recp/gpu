@@ -24,6 +24,14 @@ static const uint32_t GPU_SURFACE_DEFAULT_FORMATS[] = {
   GPU_FORMAT_RGBA16_FLOAT
 };
 
+static bool
+gpuIsSurfaceTypeValid(GPUSurfaceType type) {
+  return type == GPU_SURFACE_WINDOWS_HWND ||
+         type == GPU_SURFACE_WINDOWS_COREWINDOW ||
+         type == GPU_SURFACE_APPLE_NSVIEW ||
+         type == GPU_SURFACE_APPLE_UIVIEW;
+}
+
 GPU_EXPORT
 GPUSurface*
 GPUCreateSurface(GPUInstance       * __restrict inst,
@@ -33,8 +41,17 @@ GPUCreateSurface(GPUInstance       * __restrict inst,
                  float                          scale) {
   GPUApi *api;
 
+  if (!adapter || !nativeHandle || !gpuIsSurfaceTypeValid(type) ||
+      !(scale > 0.0f)) {
+    return NULL;
+  }
+
   if (!(api = gpuActiveGPUApi()))
     return NULL;
+
+  if (!api->surface.createSurface) {
+    return NULL;
+  }
 
   return api->surface.createSurface(api, inst, adapter, nativeHandle, type, scale);
 }

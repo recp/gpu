@@ -108,6 +108,29 @@ check_adapter_enumeration(void) {
     fprintf(stderr, "surface capabilities missing BGRA8 format\n");
     return 0;
   }
+  if (GPUCreateSurface(NULL,
+                       NULL,
+                       (void *)(uintptr_t)1u,
+                       GPU_SURFACE_APPLE_NSVIEW,
+                       1.0f) ||
+      GPUCreateSurface(NULL,
+                       adapters[0],
+                       NULL,
+                       GPU_SURFACE_APPLE_NSVIEW,
+                       1.0f) ||
+      GPUCreateSurface(NULL,
+                       adapters[0],
+                       (void *)(uintptr_t)1u,
+                       (GPUSurfaceType)999u,
+                       1.0f) ||
+      GPUCreateSurface(NULL,
+                       adapters[0],
+                       (void *)(uintptr_t)1u,
+                       GPU_SURFACE_APPLE_NSVIEW,
+                       0.0f)) {
+    fprintf(stderr, "surface create accepted invalid input\n");
+    return 0;
+  }
 
   adapterCount = 0;
   if (GPUEnumerateAdapters(NULL, &adapterCount, adapters) !=

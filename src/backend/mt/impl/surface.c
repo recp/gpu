@@ -26,6 +26,10 @@ mt_createSurface(GPUApi            * __restrict api,
   GPUSurface *surface;
 
   surface        = calloc(1, sizeof(*surface));
+  if (!surface) {
+    return NULL;
+  }
+
   surface->_priv = nativeHandle;
   surface->type  = type;
   surface->scale = scale;

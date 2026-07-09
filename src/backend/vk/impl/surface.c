@@ -180,12 +180,25 @@ vk_createSurface(GPUApi            * __restrict api,
   GPUSurfaceVk          *surface;
   VkResult U_ASSERT_ONLY err;
 
+  if (!inst || !phyDevice || !nativeHandle) {
+    return NULL;
+  }
+
   instVk            = inst->_priv;
   phyDeviceVk       = phyDevice->_priv;
   gpuSurface        = calloc(1, sizeof(*gpuSurface));
+  if (!gpuSurface) {
+    return NULL;
+  }
+
   gpuSurface->type  = type;
   gpuSurface->scale = scale;
   surface           = calloc(1, sizeof(*surface));
+  if (!surface) {
+    free(gpuSurface);
+    return NULL;
+  }
+
   surface->inst     = instVk->inst;
 
   /* TODO: what if a platform supports multiple */
