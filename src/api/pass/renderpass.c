@@ -308,6 +308,7 @@ GPUCopyBufferToTexture(GPUCopyPassEncoder               *pass,
       !src || !dst || !gpu_validBufferTextureCopy(region, dst) ||
       !gpu_bufferTextureCopyBytes(region, &copyBytes) ||
       !gpuBufferHasUsage(src, GPU_BUFFER_USAGE_COPY_SRC) ||
+      (dst->usage & GPU_TEXTURE_USAGE_COPY_DST) == 0 ||
       !gpuBufferRangeValid(src, region->bufferOffset, copyBytes)) {
     return;
   }
@@ -330,6 +331,7 @@ GPUCopyTextureToBuffer(GPUCopyPassEncoder               *pass,
   if (!pass || pass->_ended ||
       !src || !dst || !gpu_validBufferTextureCopy(region, src) ||
       !gpu_bufferTextureCopyBytes(region, &copyBytes) ||
+      (src->usage & GPU_TEXTURE_USAGE_COPY_SRC) == 0 ||
       !gpuBufferHasUsage(dst, GPU_BUFFER_USAGE_COPY_DST) ||
       !gpuBufferRangeValid(dst, region->bufferOffset, copyBytes)) {
     return;
@@ -353,6 +355,8 @@ GPUCopyTextureToTexture(GPUCopyPassEncoder                  *pass,
 
   if (!pass || pass->_ended || !src || !dst || !region ||
       src->dimension != dst->dimension ||
+      (src->usage & GPU_TEXTURE_USAGE_COPY_SRC) == 0 ||
+      (dst->usage & GPU_TEXTURE_USAGE_COPY_DST) == 0 ||
       region->width == 0 ||
       region->height == 0 ||
       region->depth == 0 ||

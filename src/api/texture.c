@@ -87,6 +87,40 @@ gpuTextureRegionInRange(const GPUTexture *texture,
          layerCount <= texture->depthOrLayers - baseArrayLayer;
 }
 
+static bool
+gpuTextureWriteSizeValid(const GPUTextureWriteRegion *region,
+                         uint64_t                     sizeBytes) {
+  uint64_t rowsPerImage;
+  uint64_t bytesPerImage;
+  uint64_t imageCount;
+  uint64_t requiredBytes;
+
+  if (!region || sizeBytes == 0u || region->bytesPerRow == 0u) {
+    return false;
+  }
+
+  rowsPerImage = region->rowsPerImage ? region->rowsPerImage : region->height;
+  if (rowsPerImage == 0u ||
+      region->bytesPerRow > UINT64_MAX / rowsPerImage) {
+    return false;
+  }
+
+  bytesPerImage = (uint64_t)region->bytesPerRow * rowsPerImage;
+  if (region->depth == 0u ||
+      region->layerCount == 0u ||
+      region->depth > UINT64_MAX / region->layerCount) {
+    return false;
+  }
+
+  imageCount = (uint64_t)region->depth * region->layerCount;
+  if (bytesPerImage > UINT64_MAX / imageCount) {
+    return false;
+  }
+
+  requiredBytes = bytesPerImage * imageCount;
+  return sizeBytes >= requiredBytes;
+}
+
 GPU_EXPORT
 GPUResult
 GPUCreateTexture(GPUDevice                  * __restrict device,
@@ -230,6 +264,7 @@ GPUQueueWriteTexture(GPUCommandQueue             * __restrict queue,
   GPUApi *api;
 
   if (!queue || !texture || !region || !data ||
+      (texture->usage & GPU_TEXTURE_USAGE_COPY_DST) == 0 ||
       region->width == 0 ||
       region->height == 0 ||
       region->depth == 0 ||
@@ -251,6 +286,9 @@ GPUQueueWriteTexture(GPUCommandQueue             * __restrict queue,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (region->rowsPerImage != 0 && region->rowsPerImage < region->height) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!gpuTextureWriteSizeValid(region, sizeBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 

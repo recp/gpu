@@ -10,6 +10,7 @@ check_resource_validation(GPUDevice *device) {
   GPUTextureWriteRegion region = {0};
   GPUBuffer *buffer;
   GPUTexture *texture;
+  GPUTexture *textureNoCopyDst;
   GPUTextureView *view;
   uint32_t writeWords[4] = { 1u, 2u, 3u, 4u };
   uint32_t readWords[4] = { 0u, 0u, 0u, 0u };
@@ -132,6 +133,7 @@ check_resource_validation(GPUDevice *device) {
 
   textureInfo.usage = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
   texture = NULL;
+  textureNoCopyDst = NULL;
   if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
     fprintf(stderr, "texture create failed\n");
     return 0;
@@ -167,6 +169,29 @@ check_resource_validation(GPUDevice *device) {
     GPUDestroyTexture(texture);
     return 0;
   }
+  if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels) - 1u) !=
+      GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "texture write accepted undersized data\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+
+  textureInfo.usage = GPU_TEXTURE_USAGE_SAMPLED;
+  if (GPUCreateTexture(device, &textureInfo, &textureNoCopyDst) != GPU_OK ||
+      !textureNoCopyDst) {
+    fprintf(stderr, "texture without copy dst setup failed\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+  if (GPUQueueWriteTexture(queue, textureNoCopyDst, &region, pixels, sizeof(pixels)) !=
+      GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "texture write accepted texture without copy dst usage\n");
+    GPUDestroyTexture(textureNoCopyDst);
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+  GPUDestroyTexture(textureNoCopyDst);
+  textureNoCopyDst = NULL;
 
   region.mipLevel = 1u;
   if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT) {

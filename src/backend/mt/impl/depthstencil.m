@@ -216,6 +216,7 @@ mt_writeTexture(GPUCommandQueue             * __restrict queue,
                 uint64_t                                 sizeBytes) {
   id<MTLTexture> nativeTexture;
   NSUInteger bytesPerImage;
+  NSUInteger imageCount;
   NSUInteger requiredBytes;
   MTLRegion mtRegion;
   const uint8_t *bytes;
@@ -228,7 +229,8 @@ mt_writeTexture(GPUCommandQueue             * __restrict queue,
 
   bytesPerImage = (NSUInteger)region->bytesPerRow *
                   (NSUInteger)(region->rowsPerImage ? region->rowsPerImage : region->height);
-  requiredBytes = bytesPerImage * (NSUInteger)region->layerCount;
+  imageCount = (NSUInteger)region->depth * (NSUInteger)region->layerCount;
+  requiredBytes = bytesPerImage * imageCount;
   if (sizeBytes < (uint64_t)requiredBytes) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
