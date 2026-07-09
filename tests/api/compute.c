@@ -71,6 +71,31 @@ expect_compute_pipeline_error(GPUDevice *device,
   return 1;
 }
 
+static uint32_t gComputeDispatchCalls;
+static uint32_t gComputeDispatchIndirectCalls;
+
+static void
+count_dispatch(GPUComputePassEncoder *enc,
+               uint32_t x,
+               uint32_t y,
+               uint32_t z) {
+  (void)enc;
+  (void)x;
+  (void)y;
+  (void)z;
+  gComputeDispatchCalls++;
+}
+
+static void
+count_dispatch_indirect(GPUComputePassEncoder *enc,
+                        GPUBuffer *argsBuffer,
+                        uint64_t argsOffset) {
+  (void)enc;
+  (void)argsBuffer;
+  (void)argsOffset;
+  gComputeDispatchIndirectCalls++;
+}
+
 static int
 check_compute_pipeline_validation(GPUDevice *device) {
   GPUShaderLibrary *library = NULL;
@@ -155,6 +180,110 @@ check_compute_pipeline_validation(GPUDevice *device) {
   GPUDestroyComputePipeline(pipeline);
   GPUDestroyShaderLibrary(library);
   return 1;
+}
+
+static int
+check_compute_dispatch_validation_calls(GPUDevice *device) {
+  GPUApi *api;
+  void (*oldDispatch)(GPUComputePassEncoder *, uint32_t, uint32_t, uint32_t);
+  void (*oldDispatchIndirect)(GPUComputePassEncoder *, GPUBuffer *, uint64_t);
+  GPUBindGroupLayoutEntry entry = {0};
+  GPUBindGroupLayoutCreateInfo layoutInfo = {0};
+  GPUBindGroupLayout *layout = NULL;
+  GPUBindGroupLayout *layouts[1];
+  GPUPipelineLayoutCreateInfo pipelineInfo = {0};
+  GPUPipelineLayout *pipelineLayout = NULL;
+  GPUComputePassEncoder pass = {0};
+  GPUBuffer indirectBuffer = {0};
+  GPUBuffer wrongUsageBuffer = {0};
+  int ok = 0;
+
+  api = gpuActiveGPUApi();
+  if (!api) {
+    fprintf(stderr, "compute dispatch validation could not get active api\n");
+    return 0;
+  }
+
+  entry.binding = 0u;
+  entry.bindingType = GPU_BINDING_STORAGE_BUFFER;
+  entry.visibility = GPU_SHADER_STAGE_COMPUTE_BIT;
+  entry.arrayCount = 1u;
+  layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  layoutInfo.label = "dispatch-validation-layout";
+  layoutInfo.entryCount = 1u;
+  layoutInfo.pEntries = &entry;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK || !layout) {
+    fprintf(stderr, "compute dispatch validation layout setup failed\n");
+    return 0;
+  }
+
+  layouts[0] = layout;
+  pipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
+  pipelineInfo.bindGroupLayoutCount = 1u;
+  pipelineInfo.ppBindGroupLayouts = layouts;
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_OK ||
+      !pipelineLayout) {
+    fprintf(stderr, "compute dispatch validation pipeline layout setup failed\n");
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  oldDispatch = api->compute.dispatch;
+  oldDispatchIndirect = api->compute.dispatchIndirect;
+  api->compute.dispatch = count_dispatch;
+  api->compute.dispatchIndirect = count_dispatch_indirect;
+  gComputeDispatchCalls = 0u;
+  gComputeDispatchIndirectCalls = 0u;
+
+  indirectBuffer.sizeBytes = 64u;
+  indirectBuffer.usage = GPU_BUFFER_USAGE_INDIRECT;
+  wrongUsageBuffer.sizeBytes = 64u;
+  wrongUsageBuffer.usage = GPU_BUFFER_USAGE_STORAGE;
+
+  pass._hasPipeline = true;
+  pass._pipelineLayout = pipelineLayout;
+
+  GPUDispatch(&pass, 1u, 1u, 1u);
+  GPUDispatchIndirect(&pass, &indirectBuffer, 0u);
+  if (gComputeDispatchCalls != 0u ||
+      gComputeDispatchIndirectCalls != 0u) {
+    fprintf(stderr, "compute dispatch validation called backend without required bind group\n");
+    goto cleanup;
+  }
+
+  pass._boundGroupLayouts[0] = layout;
+  GPUDispatch(&pass, 0u, 1u, 1u);
+  GPUDispatch(&pass, 1u, 0u, 1u);
+  GPUDispatch(&pass, 1u, 1u, 0u);
+  GPUDispatchIndirect(&pass, &wrongUsageBuffer, 0u);
+  GPUDispatchIndirect(&pass, &indirectBuffer, 60u);
+  GPUMultiDispatchIndirect(&pass, &indirectBuffer, UINT64_MAX, 2u, 12u);
+  GPUMultiDispatchIndirect(&pass, &indirectBuffer, 0u, 0u, 12u);
+  if (gComputeDispatchCalls != 0u ||
+      gComputeDispatchIndirectCalls != 0u) {
+    fprintf(stderr, "compute dispatch validation called backend for invalid dispatch\n");
+    goto cleanup;
+  }
+
+  GPUDispatch(&pass, 1u, 1u, 1u);
+  GPUDispatchIndirect(&pass, &indirectBuffer, 0u);
+  GPUMultiDispatchIndirect(&pass, &indirectBuffer, 0u, 2u, 12u);
+  if (gComputeDispatchCalls != 1u ||
+      gComputeDispatchIndirectCalls != 3u) {
+    fprintf(stderr, "compute dispatch validation rejected valid dispatch\n");
+    goto cleanup;
+  }
+
+  ok = 1;
+
+cleanup:
+  api->compute.dispatch = oldDispatch;
+  api->compute.dispatchIndirect = oldDispatchIndirect;
+  GPUDestroyPipelineLayout(pipelineLayout);
+  GPUDestroyBindGroupLayout(layout);
+  return ok;
 }
 
 static int
@@ -492,5 +621,6 @@ int
 gpu_test_compute(GPUDevice *device) {
   return check_compute_pass_validation() &&
          check_compute_pipeline_validation(device) &&
+         check_compute_dispatch_validation_calls(device) &&
          check_compute_readback(device);
 }

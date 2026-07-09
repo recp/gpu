@@ -46,6 +46,65 @@ expect_render_pipeline_error(GPUDevice *device,
   return 1;
 }
 
+static uint32_t gRenderDrawCalls;
+static uint32_t gRenderDrawIndexedCalls;
+static uint32_t gRenderDrawIndirectCalls;
+static uint32_t gRenderDrawIndexedIndirectCalls;
+
+static void
+count_draw_primitives(GPURenderCommandEncoder *rce,
+                      GPUPrimitiveType type,
+                      size_t start,
+                      size_t count,
+                      uint32_t instanceCount,
+                      uint32_t firstInstance) {
+  (void)rce;
+  (void)type;
+  (void)start;
+  (void)count;
+  (void)instanceCount;
+  (void)firstInstance;
+  gRenderDrawCalls++;
+}
+
+static void
+count_draw_indexed(GPURenderCommandEncoder *rce,
+                   uint32_t indexCount,
+                   uint32_t instanceCount,
+                   uint32_t firstIndex,
+                   int32_t vertexOffset,
+                   uint32_t firstInstance) {
+  (void)rce;
+  (void)indexCount;
+  (void)instanceCount;
+  (void)firstIndex;
+  (void)vertexOffset;
+  (void)firstInstance;
+  gRenderDrawIndexedCalls++;
+}
+
+static void
+count_draw_indirect(GPURenderCommandEncoder *rce,
+                    GPUPrimitiveType type,
+                    GPUBuffer *argsBuffer,
+                    uint64_t argsOffset) {
+  (void)rce;
+  (void)type;
+  (void)argsBuffer;
+  (void)argsOffset;
+  gRenderDrawIndirectCalls++;
+}
+
+static void
+count_draw_indexed_indirect(GPURenderCommandEncoder *rce,
+                            GPUBuffer *argsBuffer,
+                            uint64_t argsOffset) {
+  (void)rce;
+  (void)argsBuffer;
+  (void)argsOffset;
+  gRenderDrawIndexedIndirectCalls++;
+}
+
 static int
 check_pipeline_cache_validation(GPUDevice *device,
                                 GPURenderPipelineCreateInfo *info) {
@@ -1165,6 +1224,155 @@ check_render_pass_validation(void) {
 }
 
 static int
+check_render_draw_validation_calls(GPUDevice *device) {
+  GPUApi *api;
+  void (*oldDraw)(GPURenderCommandEncoder *,
+                  GPUPrimitiveType,
+                  size_t,
+                  size_t,
+                  uint32_t,
+                  uint32_t);
+  void (*oldDrawIndexed)(GPURenderCommandEncoder *,
+                         uint32_t,
+                         uint32_t,
+                         uint32_t,
+                         int32_t,
+                         uint32_t);
+  void (*oldDrawIndirect)(GPURenderCommandEncoder *,
+                          GPUPrimitiveType,
+                          GPUBuffer *,
+                          uint64_t);
+  void (*oldDrawIndexedIndirect)(GPURenderCommandEncoder *,
+                                 GPUBuffer *,
+                                 uint64_t);
+  GPUBindGroupLayoutEntry entry = {0};
+  GPUBindGroupLayoutCreateInfo layoutInfo = {0};
+  GPUBindGroupLayout *layout = NULL;
+  GPUBindGroupLayout *layouts[1];
+  GPUPipelineLayoutCreateInfo pipelineInfo = {0};
+  GPUPipelineLayout *pipelineLayout = NULL;
+  GPURenderPassEncoder pass = {0};
+  GPUBuffer indirectBuffer = {0};
+  GPUBuffer wrongUsageBuffer = {0};
+  int ok = 0;
+
+  api = gpuActiveGPUApi();
+  if (!api) {
+    fprintf(stderr, "render draw validation could not get active api\n");
+    return 0;
+  }
+
+  entry.binding = 0u;
+  entry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  entry.visibility = GPU_SHADER_STAGE_VERTEX_BIT | GPU_SHADER_STAGE_FRAGMENT_BIT;
+  entry.arrayCount = 1u;
+  layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  layoutInfo.label = "draw-validation-layout";
+  layoutInfo.entryCount = 1u;
+  layoutInfo.pEntries = &entry;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK || !layout) {
+    fprintf(stderr, "render draw validation layout setup failed\n");
+    return 0;
+  }
+
+  layouts[0] = layout;
+  pipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
+  pipelineInfo.bindGroupLayoutCount = 1u;
+  pipelineInfo.ppBindGroupLayouts = layouts;
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_OK ||
+      !pipelineLayout) {
+    fprintf(stderr, "render draw validation pipeline layout setup failed\n");
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  oldDraw = api->rce.drawPrimitives;
+  oldDrawIndexed = api->rce.drawIndexedPrims;
+  oldDrawIndirect = api->rce.drawPrimitivesIndirect;
+  oldDrawIndexedIndirect = api->rce.drawIndexedPrimsIndirect;
+  api->rce.drawPrimitives = count_draw_primitives;
+  api->rce.drawIndexedPrims = count_draw_indexed;
+  api->rce.drawPrimitivesIndirect = count_draw_indirect;
+  api->rce.drawIndexedPrimsIndirect = count_draw_indexed_indirect;
+
+  gRenderDrawCalls = 0u;
+  gRenderDrawIndexedCalls = 0u;
+  gRenderDrawIndirectCalls = 0u;
+  gRenderDrawIndexedIndirectCalls = 0u;
+
+  indirectBuffer.sizeBytes = 128u;
+  indirectBuffer.usage = GPU_BUFFER_USAGE_INDIRECT | GPU_BUFFER_USAGE_INDEX;
+  wrongUsageBuffer.sizeBytes = 128u;
+  wrongUsageBuffer.usage = GPU_BUFFER_USAGE_VERTEX;
+
+  pass._hasPipeline = true;
+  pass._pipelineLayout = pipelineLayout;
+  pass._primitiveType = GPUPrimitiveTypeTriangle;
+
+  GPUDraw(&pass, 3u, 1u, 0u, 0u);
+  GPUDrawIndexed(&pass, 3u, 1u, 0u, 0, 0u);
+  GPUDrawIndirect(&pass, &indirectBuffer, 0u);
+  GPUDrawIndexedIndirect(&pass, &indirectBuffer, 0u);
+  if (gRenderDrawCalls != 0u ||
+      gRenderDrawIndexedCalls != 0u ||
+      gRenderDrawIndirectCalls != 0u ||
+      gRenderDrawIndexedIndirectCalls != 0u) {
+    fprintf(stderr, "render draw validation called backend without required bind group\n");
+    goto cleanup;
+  }
+
+  pass._boundGroupLayouts[0] = layout;
+  GPUDraw(&pass, 0u, 1u, 0u, 0u);
+  GPUDraw(&pass, 3u, 0u, 0u, 0u);
+  GPUDrawIndirect(&pass, &wrongUsageBuffer, 0u);
+  GPUDrawIndirect(&pass, &indirectBuffer, 120u);
+  if (gRenderDrawCalls != 0u || gRenderDrawIndirectCalls != 0u) {
+    fprintf(stderr, "render draw validation called backend for invalid non-indexed draw\n");
+    goto cleanup;
+  }
+
+  GPUDraw(&pass, 3u, 1u, 0u, 0u);
+  GPUDrawIndirect(&pass, &indirectBuffer, 0u);
+  if (gRenderDrawCalls != 1u || gRenderDrawIndirectCalls != 1u) {
+    fprintf(stderr, "render draw validation rejected valid non-indexed draw\n");
+    goto cleanup;
+  }
+
+  GPUDrawIndexed(&pass, 0u, 1u, 0u, 0, 0u);
+  GPUDrawIndexed(&pass, 3u, 0u, 0u, 0, 0u);
+  GPUDrawIndexed(&pass, 128u, 1u, 0u, 0, 0u);
+  GPUDrawIndexedIndirect(&pass, &wrongUsageBuffer, 0u);
+  GPUDrawIndexedIndirect(&pass, &indirectBuffer, 120u);
+  if (gRenderDrawIndexedCalls != 0u ||
+      gRenderDrawIndexedIndirectCalls != 0u) {
+    fprintf(stderr, "render draw validation called backend for invalid indexed draw\n");
+    goto cleanup;
+  }
+
+  GPUBindIndexBuffer(&pass, &indirectBuffer, 0u, GPUIndexTypeUInt16);
+  GPUDrawIndexed(&pass, 3u, 1u, 0u, 0, 0u);
+  GPUDrawIndexedIndirect(&pass, &indirectBuffer, 0u);
+  if (gRenderDrawIndexedCalls != 1u ||
+      gRenderDrawIndexedIndirectCalls != 1u) {
+    fprintf(stderr, "render draw validation rejected valid indexed draw\n");
+    goto cleanup;
+  }
+
+  ok = 1;
+
+cleanup:
+  api->rce.drawPrimitives = oldDraw;
+  api->rce.drawIndexedPrims = oldDrawIndexed;
+  api->rce.drawPrimitivesIndirect = oldDrawIndirect;
+  api->rce.drawIndexedPrimsIndirect = oldDrawIndexedIndirect;
+  GPUDestroyPipelineLayout(pipelineLayout);
+  GPUDestroyBindGroupLayout(layout);
+  return ok;
+}
+
+static int
 check_render_encoder_validation(void) {
   GPURenderPassEncoder pass = {0};
   GPURenderPassEncoder endedPass = {0};
@@ -1318,5 +1526,6 @@ gpu_test_render(GPUDevice *device) {
   return check_render_pass_validation() &&
          check_render_encoder_validation() &&
          check_render_pipeline_validation(device) &&
+         check_render_draw_validation_calls(device) &&
          check_render_readback(device);
 }
