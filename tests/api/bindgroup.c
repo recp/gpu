@@ -181,6 +181,7 @@ check_bind_group_layout_validation(GPUDevice *device) {
   GPUBindGroupEntry runtimeSamplerEntry;
   GPUBindGroupEntry bufferEntry;
   GPUBindGroupEntry textureEntry;
+  GPUBindGroupEntry textureGroupEntries[2];
   GPUBindGroupCreateInfo groupInfo;
   GPUBufferCreateInfo bufferInfo;
   GPUBindGroup *group;
@@ -188,8 +189,12 @@ check_bind_group_layout_validation(GPUDevice *device) {
   GPUBuffer *storageOnlyBuffer;
   GPUTexture sampledTexture;
   GPUTexture storageTexture;
+  GPUTexture dualUseTexture;
   GPUTextureView sampledView;
   GPUTextureView storageView;
+  GPUTextureView dualUseView;
+  GPUBindGroupLayoutEntry textureLayoutEntries[2];
+  GPUBindGroupLayout *dualTextureLayout;
   GPUPipelineLayoutCreateInfo pipelineInfo;
   GPUBindGroupLayout *layouts[1];
   GPUPipelineLayout *pipelineLayout;
@@ -342,12 +347,16 @@ check_bind_group_layout_validation(GPUDevice *device) {
 
   memset(&sampledTexture, 0, sizeof(sampledTexture));
   memset(&storageTexture, 0, sizeof(storageTexture));
+  memset(&dualUseTexture, 0, sizeof(dualUseTexture));
   memset(&sampledView, 0, sizeof(sampledView));
   memset(&storageView, 0, sizeof(storageView));
+  memset(&dualUseView, 0, sizeof(dualUseView));
   sampledTexture.usage = GPU_TEXTURE_USAGE_SAMPLED;
   storageTexture.usage = GPU_TEXTURE_USAGE_STORAGE;
+  dualUseTexture.usage = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_STORAGE;
   sampledView._texture = &sampledTexture;
   storageView._texture = &storageTexture;
+  dualUseView._texture = &dualUseTexture;
 
   memset(&textureEntry, 0, sizeof(textureEntry));
   textureEntry.binding = 0u;
@@ -380,6 +389,58 @@ check_bind_group_layout_validation(GPUDevice *device) {
   }
   GPUDestroyBindGroupLayout(layout);
 
+  textureLayoutEntries[0] = entry;
+  textureLayoutEntries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+  textureLayoutEntries[1] = entry;
+  textureLayoutEntries[1].bindingType = GPU_BINDING_STORAGE_TEXTURE;
+  textureLayoutEntries[1].visibility = GPU_SHADER_STAGE_COMPUTE_BIT;
+  layoutInfo.entryCount = 2u;
+  layoutInfo.pEntries = textureLayoutEntries;
+  dualTextureLayout = NULL;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &dualTextureLayout) != GPU_OK ||
+      !dualTextureLayout) {
+    fprintf(stderr, "bind group layout rejected sampled/storage texture pair\n");
+    return 0;
+  }
+
+  textureEntry.textureView = &dualUseView;
+  memset(&groupInfo, 0, sizeof(groupInfo));
+  groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.label = "ambiguous-texture-group";
+  groupInfo.layout = dualTextureLayout;
+  groupInfo.entryCount = 1u;
+  groupInfo.pEntries = &textureEntry;
+  group = (GPUBindGroup *)(uintptr_t)1u;
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT ||
+      group != NULL) {
+    fprintf(stderr, "bind group accepted ambiguous texture binding type\n");
+    GPUDestroyBindGroup(group);
+    GPUDestroyBindGroupLayout(dualTextureLayout);
+    return 0;
+  }
+
+  memset(textureGroupEntries, 0, sizeof(textureGroupEntries));
+  textureGroupEntries[0].binding = 0u;
+  textureGroupEntries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+  textureGroupEntries[0].textureView = &dualUseView;
+  textureGroupEntries[1].binding = 0u;
+  textureGroupEntries[1].bindingType = GPU_BINDING_STORAGE_TEXTURE;
+  textureGroupEntries[1].textureView = &dualUseView;
+  groupInfo.label = "typed-texture-group";
+  groupInfo.entryCount = 2u;
+  groupInfo.pEntries = textureGroupEntries;
+  group = NULL;
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
+    fprintf(stderr, "bind group rejected explicit sampled/storage texture bindings\n");
+    GPUDestroyBindGroupLayout(dualTextureLayout);
+    return 0;
+  }
+  GPUDestroyBindGroup(group);
+  GPUDestroyBindGroupLayout(dualTextureLayout);
+
+  layoutInfo.entryCount = 1u;
+  layoutInfo.pEntries = &entry;
   entry.bindingType = GPU_BINDING_SAMPLER;
   entry.hasDynamicOffset = false;
   entry.immutableSampler = true;

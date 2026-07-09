@@ -621,6 +621,11 @@ gpu_bindGroupEntryMatchesLayout(const GPUBindGroupLayoutEntry *layoutEntry,
       entry->bindingType != layoutEntry->bindingType) {
     return 0;
   }
+  if (layoutEntry->kind == GPUBindKindTexture &&
+      entry->bindingType != 0 &&
+      entry->bindingType != layoutEntry->bindingType) {
+    return 0;
+  }
   if (!gpu_bindGroupBufferRangeValid(layoutEntry, entry)) {
     return 0;
   }
