@@ -248,7 +248,7 @@ check_shader_artifact(GPUDevice *device,
 
 int
 main(int argc, char **argv) {
-  GPUPhysicalDevice *physicalDevice;
+  GPUAdapter *adapter;
   uint64_t storageBytecodeSize;
   uint64_t bytecodeSize;
   GPUDevice *device;
@@ -280,15 +280,15 @@ main(int argc, char **argv) {
     }
   }
 
-  physicalDevice = GPUGetAutoSelectedPhysicalDevice(NULL);
-  if (!physicalDevice) {
-    fprintf(stderr, "failed to get physical device\n");
+  adapter = GPUGetAutoSelectedPhysicalDevice(NULL);
+  if (!adapter) {
+    fprintf(stderr, "failed to get adapter\n");
     free(storageBytecode);
     free(bytecode);
     return 1;
   }
 
-  device = GPUCreateDeviceWithDefaultQueues(physicalDevice);
+  device = GPUCreateDeviceWithDefaultQueues(adapter);
   if (!device) {
     fprintf(stderr, "failed to create device\n");
     free(storageBytecode);

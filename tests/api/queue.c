@@ -153,33 +153,33 @@ check_queue_selection(GPUDevice *device) {
 }
 
 static int
-check_device_queue_create_validation(GPUPhysicalDevice *physicalDevice) {
+check_device_queue_create_validation(GPUAdapter *adapter) {
   GPUCommandQueueCreateInfo queues[1] = {0};
   GPUDevice *device;
   int ok;
 
   if (GPUCreateDevice(NULL, NULL, 0)) {
-    fprintf(stderr, "device create accepted null physical device\n");
+    fprintf(stderr, "device create accepted null adapter\n");
     return 0;
   }
 
   queues[0].flags = 0;
   queues[0].count = 1;
-  if (GPUCreateDevice(physicalDevice, queues, 1)) {
+  if (GPUCreateDevice(adapter, queues, 1)) {
     fprintf(stderr, "device create accepted queue request with no flags\n");
     return 0;
   }
 
   queues[0].flags = GPU_QUEUE_GRAPHICS;
   queues[0].count = 0;
-  if (GPUCreateDevice(physicalDevice, queues, 1)) {
+  if (GPUCreateDevice(adapter, queues, 1)) {
     fprintf(stderr, "device create accepted zero queue count\n");
     return 0;
   }
 
   queues[0].flags = GPU_QUEUE_GRAPHICS;
   queues[0].count = 2;
-  device = GPUCreateDevice(physicalDevice, queues, 1);
+  device = GPUCreateDevice(adapter, queues, 1);
   if (!device) {
     fprintf(stderr, "device create rejected explicit queue count\n");
     return 0;
@@ -353,9 +353,9 @@ check_queue_submit_fence(GPUDevice *device) {
 }
 
 int
-gpu_test_queue(GPUPhysicalDevice *physicalDevice, GPUDevice *device) {
+gpu_test_queue(GPUAdapter *adapter, GPUDevice *device) {
   return check_adapter_enumeration() &&
-         check_device_queue_create_validation(physicalDevice) &&
+         check_device_queue_create_validation(adapter) &&
          check_queue_selection(device) &&
          check_queue_submit_fence(device);
 }

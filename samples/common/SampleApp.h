@@ -50,29 +50,29 @@ GPUSampleCreateWindow(NSString *title,
 static inline BOOL
 GPUSampleCreateDefaultSurfaceGPU(NSWindow *window,
                                  NSView *view,
-                                 GPUPhysicalDevice **outPhysicalDevice,
+                                 GPUAdapter **outAdapter,
                                  GPUDevice **outDevice,
                                  GPUCommandQueue **outQueue,
                                  GPUSurface **outSurface,
                                  GPUSwapchain **outSwapchain) {
-  GPUPhysicalDevice *physicalDevice;
+  GPUAdapter *adapter;
   GPUDevice *device;
   GPUCommandQueue *queue;
   GPUSurface *surface;
   GPUSwapchain *swapchain;
 
-  if (!window || !view || !outPhysicalDevice || !outDevice || !outQueue ||
+  if (!window || !view || !outAdapter || !outDevice || !outQueue ||
       !outSurface || !outSwapchain) {
     return NO;
   }
 
-  physicalDevice = GPUGetAutoSelectedPhysicalDevice(NULL);
-  if (!physicalDevice) {
-    NSLog(@"GPU: failed to get physical device");
+  adapter = GPUGetAutoSelectedPhysicalDevice(NULL);
+  if (!adapter) {
+    NSLog(@"GPU: failed to get adapter");
     return NO;
   }
 
-  device = GPUCreateDeviceWithDefaultQueues(physicalDevice);
+  device = GPUCreateDeviceWithDefaultQueues(adapter);
   if (!device) {
     NSLog(@"GPU: failed to create device");
     return NO;
@@ -85,7 +85,7 @@ GPUSampleCreateDefaultSurfaceGPU(NSWindow *window,
   }
 
   surface = GPUCreateSurface(NULL,
-                             physicalDevice,
+                             adapter,
                              (__bridge void *)view,
                              GPU_SURFACE_APPLE_NSVIEW,
                              window.backingScaleFactor ?: 1.0f);
@@ -103,7 +103,7 @@ GPUSampleCreateDefaultSurfaceGPU(NSWindow *window,
     return NO;
   }
 
-  *outPhysicalDevice = physicalDevice;
+  *outAdapter = adapter;
   *outDevice = device;
   *outQueue = queue;
   *outSurface = surface;

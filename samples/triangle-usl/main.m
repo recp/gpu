@@ -25,7 +25,7 @@ static const TriangleVertex kTriangleVertices[] = {
   NSWindow *_window;
   NSView *_view;
 
-  GPUPhysicalDevice *_physicalDevice;
+  GPUAdapter *_adapter;
   GPUDevice *_device;
   GPUCommandQueue *_queue;
   GPUSurface *_surface;
@@ -53,7 +53,7 @@ static const TriangleVertex kTriangleVertices[] = {
 - (BOOL)setupGPU {
   if (!GPUSampleCreateDefaultSurfaceGPU(_window,
                                         _view,
-                                        &_physicalDevice,
+                                        &_adapter,
                                         &_device,
                                         &_queue,
                                         &_surface,

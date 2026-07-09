@@ -27,7 +27,7 @@ static const TriangleVertex kTriangleVertices[] = {
   NSWindow *_window;
   NSView *_view;
 
-  GPUPhysicalDevice *_physicalDevice;
+  GPUAdapter *_adapter;
   GPUDevice *_device;
   GPUCommandQueue *_queue;
   GPUSurface *_surface;
@@ -95,13 +95,13 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   GPUShaderLibraryCreateInfo shaderInfo = {0};
 
-  _physicalDevice = GPUGetAutoSelectedPhysicalDevice(NULL);
-  if (!_physicalDevice) {
-    NSLog(@"GPU: failed to get physical device");
+  _adapter = GPUGetAutoSelectedPhysicalDevice(NULL);
+  if (!_adapter) {
+    NSLog(@"GPU: failed to get adapter");
     return NO;
   }
 
-  _device = GPUCreateDeviceWithDefaultQueues(_physicalDevice);
+  _device = GPUCreateDeviceWithDefaultQueues(_adapter);
   if (!_device) {
     NSLog(@"GPU: failed to create device");
     return NO;
@@ -114,7 +114,7 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
 
   _surface = GPUCreateSurface(NULL,
-                              _physicalDevice,
+                              _adapter,
                               (__bridge void *)_view,
                               GPU_SURFACE_APPLE_NSVIEW,
                               _window.backingScaleFactor ?: 1.0f);

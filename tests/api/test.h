@@ -23,7 +23,7 @@
 #include <string.h>
 
 typedef struct GPUApiTestContext {
-  GPUPhysicalDevice *physicalDevice;
+  GPUAdapter *adapter;
   GPUDevice         *device;
   const char        *uslBytecodePath;
 } GPUApiTestContext;
@@ -38,7 +38,7 @@ typedef struct GPUApiTest {
 
 int gpu_run_api_tests(const GPUApiTest *tests, uint32_t count);
 
-int gpu_test_queue(GPUPhysicalDevice *physicalDevice, GPUDevice *device);
+int gpu_test_queue(GPUAdapter *adapter, GPUDevice *device);
 int gpu_test_sampler(GPUDevice *device);
 int gpu_test_bindgroup(GPUDevice *device);
 int gpu_test_resources(GPUDevice *device);

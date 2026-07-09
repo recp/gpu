@@ -4,7 +4,7 @@ static int
 run_queue(void *ctx) {
   GPUApiTestContext *testCtx = ctx;
 
-  return gpu_test_queue(testCtx->physicalDevice, testCtx->device);
+  return gpu_test_queue(testCtx->adapter, testCtx->device);
 }
 
 static int
@@ -46,7 +46,7 @@ run_shader(void *ctx) {
 
 int
 main(int argc, char **argv) {
-  GPUPhysicalDevice *physicalDevice;
+  GPUAdapter *adapter;
   GPUDevice *device;
   GPUApiTestContext ctx;
   GPUApiTest tests[8];
@@ -57,19 +57,19 @@ main(int argc, char **argv) {
     return 2;
   }
 
-  physicalDevice = GPUGetAutoSelectedPhysicalDevice(NULL);
-  if (!physicalDevice) {
-    fprintf(stderr, "failed to get physical device\n");
+  adapter = GPUGetAutoSelectedPhysicalDevice(NULL);
+  if (!adapter) {
+    fprintf(stderr, "failed to get adapter\n");
     return 1;
   }
 
-  device = GPUCreateDeviceWithDefaultQueues(physicalDevice);
+  device = GPUCreateDeviceWithDefaultQueues(adapter);
   if (!device) {
     fprintf(stderr, "failed to create device\n");
     return 1;
   }
 
-  ctx.physicalDevice = physicalDevice;
+  ctx.adapter = adapter;
   ctx.device = device;
   ctx.uslBytecodePath = argv[1];
 
