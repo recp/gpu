@@ -2,6 +2,30 @@
 #include "../../src/api/texture_internal.h"
 
 static int
+check_destroy_null_handles(void) {
+  GPUDestroyInstance(NULL);
+  GPUDestroySurface(NULL);
+  GPUDestroyDevice(NULL);
+  GPUDestroySwapchain(NULL);
+  GPUDestroyFence(NULL);
+  GPUDestroySemaphore(NULL);
+  GPUDestroyBuffer(NULL);
+  GPUDestroyTexture(NULL);
+  GPUDestroyTextureView(NULL);
+  GPUDestroySampler(NULL);
+  GPUDestroyShaderLibrary(NULL);
+  GPUDestroyBindGroupLayout(NULL);
+  GPUDestroyBindGroup(NULL);
+  GPUDestroyShaderLayout(NULL);
+  GPUDestroyPipelineLayout(NULL);
+  GPUDestroyPipelineCache(NULL);
+  GPUDestroyRenderPipeline(NULL);
+  GPUDestroyComputePipeline(NULL);
+  GPUDestroyQuerySet(NULL);
+  return 1;
+}
+
+static int
 check_resource_validation(GPUDevice *device) {
   GPUCommandQueue *queue;
   GPUBufferCreateInfo bufferInfo = {0};
@@ -272,5 +296,6 @@ check_resource_validation(GPUDevice *device) {
 
 int
 gpu_test_resources(GPUDevice *device) {
-  return check_resource_validation(device);
+  return check_destroy_null_handles() &&
+         check_resource_validation(device);
 }
