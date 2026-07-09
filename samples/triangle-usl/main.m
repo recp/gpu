@@ -1,6 +1,8 @@
 #import <AppKit/AppKit.h>
+#import <dispatch/dispatch.h>
 #include <math.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #import <QuartzCore/QuartzCore.h>
 
@@ -41,8 +43,20 @@ static const TriangleVertex kTriangleVertices[] = {
   uint32_t _fragmentUniformOffset;
   NSTimer *_timer;
   NSTimeInterval _animationStart;
+  NSInteger _exitAfterFrames;
+  NSInteger _submittedFrames;
+  NSInteger _completedFrames;
+  BOOL _terminating;
 }
+- (void)frameCompleted;
 @end
+
+static void
+TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
+  (void)cmdb;
+  TriangleApp *app = (__bridge TriangleApp *)sender;
+  [app frameCompleted];
+}
 
 @implementation TriangleApp
 
@@ -259,6 +273,10 @@ static const TriangleVertex kTriangleVertices[] = {
   GPURenderPassCreateInfo rp = {0};
   GPUBufferBinding vertexBuffer = {0};
 
+  if (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) {
+    return;
+  }
+
   frame = GPUBeginFrame(_swapchain);
   if (!frame) {
     return;
@@ -266,6 +284,11 @@ static const TriangleVertex kTriangleVertices[] = {
 
   if (GPUAcquireCommandBuffer(_queue, "main-frame", &cmdb) != GPU_OK || !cmdb) {
     goto cleanup;
+  }
+  if (_exitAfterFrames > 0) {
+    GPUSetCommandBufferCompletionHandler(cmdb,
+                                         (__bridge void *)self,
+                                         TriangleUSLFrameComplete);
   }
 
   color.view = GPUFrameGetTargetView(frame);
@@ -302,6 +325,12 @@ static const TriangleVertex kTriangleVertices[] = {
   frame = NULL;
   if (submitResult != GPU_OK) {
     NSLog(@"GPUFinishFrame failed: %d", submitResult);
+  } else if (_exitAfterFrames > 0) {
+    _submittedFrames++;
+    if (_submittedFrames >= _exitAfterFrames) {
+      [_timer invalidate];
+      _timer = nil;
+    }
   }
 
 cleanup:
@@ -311,8 +340,25 @@ cleanup:
   GPUEndFrame(frame);
 }
 
+- (void)frameCompleted {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    self->_completedFrames++;
+    if (self->_exitAfterFrames > 0 &&
+        self->_completedFrames >= self->_exitAfterFrames &&
+        !self->_terminating) {
+      self->_terminating = YES;
+      [self->_timer invalidate];
+      self->_timer = nil;
+      [NSApp terminate:nil];
+    }
+  });
+}
+
 - (void)tick:(NSTimer *)timer {
   (void)timer;
+  if (_terminating) {
+    return;
+  }
   [self renderFrame];
 }
 
@@ -366,6 +412,14 @@ cleanup:
     return;
   }
 
+  const char *exitAfterFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
+  if (exitAfterFrames && exitAfterFrames[0] != '\0') {
+    _exitAfterFrames = strtol(exitAfterFrames, NULL, 10);
+    if (_exitAfterFrames < 1) {
+      _exitAfterFrames = 1;
+    }
+  }
+
   _animationStart = CACurrentMediaTime();
   _timer = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
                                    target:self
@@ -391,6 +445,9 @@ cleanup:
 
 - (void)windowDidResize:(NSNotification *)notification {
   (void)notification;
+  if (_terminating) {
+    return;
+  }
   [self renderFrame];
 }
 

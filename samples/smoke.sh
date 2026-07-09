@@ -63,17 +63,26 @@ run_api_test() {
 run_step "triangle-manual" \
   run_sample triangle-manual env GPU_DERIVED_DATA="$DERIVED_DATA" ./build.sh
 
+run_step "triangle-manual one-frame" \
+  run_sample triangle-manual env GPU_DERIVED_DATA="$DERIVED_DATA" GPU_SAMPLE_EXIT_AFTER_FRAMES=1 ./hello-triangle-manual
+
 run_step "triangle-usl sidecar" \
   run_sample triangle-usl env GPU_DERIVED_DATA="$DERIVED_DATA" ./build.sh
 
 run_step "triangle-usl embedded no-sidecar" \
   run_sample triangle-usl env GPU_DERIVED_DATA="$DERIVED_DATA" GPU_USL_EMBED_METAL=1 GPU_USL_NO_SIDECAR=1 ./build.sh
 
+run_step "triangle-usl one-frame" \
+  run_sample triangle-usl env GPU_DERIVED_DATA="$DERIVED_DATA" GPU_SAMPLE_EXIT_AFTER_FRAMES=1 GPU_USL_NO_SIDECAR=1 ./hello-triangle-usl
+
 run_step "textured-quad-usl sidecar" \
   run_sample textured-quad-usl env GPU_DERIVED_DATA="$DERIVED_DATA" ./build.sh
 
 run_step "textured-quad-usl embedded no-sidecar" \
   run_sample textured-quad-usl env GPU_DERIVED_DATA="$DERIVED_DATA" GPU_USL_EMBED_METAL=1 GPU_USL_NO_SIDECAR=1 ./build.sh
+
+run_step "textured-quad-usl one-frame" \
+  run_sample textured-quad-usl env GPU_DERIVED_DATA="$DERIVED_DATA" GPU_SAMPLE_EXIT_AFTER_FRAMES=1 GPU_USL_NO_SIDECAR=1 ./hello-textured-quad-usl
 
 run_step "compute-usl sidecar" \
   run_sample compute-usl env GPU_DERIVED_DATA="$DERIVED_DATA" ./build.sh
