@@ -24,38 +24,38 @@ extern "C" {
 #include "../gpu.h"
 
 typedef struct GPURenderPipelineState GPURenderPipelineState;
-typedef struct GPURenderPassDesc GPURenderPassDesc;
-typedef struct GPUPipelineLayout GPUPipelineLayout;
-typedef struct GPUBindGroupLayout GPUBindGroupLayout;
-typedef struct GPUBindGroup GPUBindGroup;
+typedef struct GPURenderPassDesc      GPURenderPassDesc;
+typedef struct GPUPipelineLayout      GPUPipelineLayout;
+typedef struct GPUBindGroupLayout     GPUBindGroupLayout;
+typedef struct GPUBindGroup           GPUBindGroup;
 
 enum {
   GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS = 8u
 };
 
 struct GPURenderCommandEncoder {
-  void             *_priv;
-  GPUCommandBuffer *_cmdb;
-  GPUPrimitiveType  _primitiveType;
-  GPUBuffer        *_indexBuffer;
-  uint64_t          _indexBufferOffset;
-  GPUIndexType      _indexType;
-  bool              _hasIndexBuffer;
-  bool              _hasPipeline;
-  bool              _ended;
-  GPUPipelineLayout *_pipelineLayout;
-  uint32_t          _requiredBindGroupMask;
-  GPUBindGroup     *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
+  void               *_priv;
+  GPUCommandBuffer   *_cmdb;
+  GPUBuffer          *_indexBuffer;
+  GPUPipelineLayout  *_pipelineLayout;
+  GPUBindGroup       *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUBindGroupLayout *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
-  uint32_t          _colorAttachmentCount;
-  GPUFormat         _colorAttachmentFormats[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
-  uint32_t          _colorAttachmentSampleCounts[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
-  bool              _colorAttachmentHasResolve[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
-  GPUFormat         _depthStencilFormat;
-  uint32_t          _depthStencilSampleCount;
-  uint32_t          _pushConstantSizeBytes;
+  uint64_t            _indexBufferOffset;
+  GPUPrimitiveType    _primitiveType;
+  GPUIndexType        _indexType;
+  uint32_t            _requiredBindGroupMask;
+  uint32_t            _colorAttachmentCount;
+  GPUFormat           _colorAttachmentFormats[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  uint32_t            _colorAttachmentSampleCounts[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  GPUFormat           _depthStencilFormat;
+  uint32_t            _depthStencilSampleCount;
+  uint32_t            _pushConstantSizeBytes;
   GPUShaderStageFlags _pushConstantStages;
-  uint8_t           _pushConstants[4096];
+  bool                _colorAttachmentHasResolve[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  bool                _hasIndexBuffer;
+  bool                _hasPipeline;
+  bool                _ended;
+  uint8_t             _pushConstants[4096];
 };
 
 typedef struct GPUApiRCE {

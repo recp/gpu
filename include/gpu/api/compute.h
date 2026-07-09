@@ -24,23 +24,23 @@ extern "C" {
 #include "../gpu.h"
 
 typedef struct GPUComputePipelineState GPUComputePipelineState;
-typedef struct GPUPipelineLayout GPUPipelineLayout;
-typedef struct GPUBindGroupLayout GPUBindGroupLayout;
-typedef struct GPUBindGroup GPUBindGroup;
+typedef struct GPUPipelineLayout       GPUPipelineLayout;
+typedef struct GPUBindGroupLayout      GPUBindGroupLayout;
+typedef struct GPUBindGroup            GPUBindGroup;
 
 struct GPUComputePassEncoder {
-  void *_priv;
-  GPUCommandBuffer *_cmdb;
-  uint32_t _workgroupSize[3];
-  bool _hasPipeline;
-  bool _ended;
-  GPUPipelineLayout *_pipelineLayout;
-  uint32_t _requiredBindGroupMask;
-  GPUBindGroup *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
-  GPUBindGroupLayout *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
-  uint32_t _pushConstantSizeBytes;
+  void                *_priv;
+  GPUCommandBuffer    *_cmdb;
+  GPUPipelineLayout   *_pipelineLayout;
+  GPUBindGroup        *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
+  GPUBindGroupLayout  *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
+  uint32_t             _workgroupSize[3];
+  uint32_t             _requiredBindGroupMask;
+  uint32_t             _pushConstantSizeBytes;
   GPUShaderStageFlags _pushConstantStages;
-  uint8_t _pushConstants[4096];
+  bool                 _hasPipeline;
+  bool                 _ended;
+  uint8_t              _pushConstants[4096];
 };
 
 typedef struct GPUApiCompute {

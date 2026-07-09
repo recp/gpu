@@ -20,16 +20,16 @@
 #include "../common.h"
 
 struct GPUComputePipelineState {
-  void *_priv;
+  void    *_priv;
   uint32_t workgroupSize[3];
 };
 
 struct GPUComputePipeline {
-  void *_priv;
-  void *_state;
-  GPUPipelineLayout *_layout;
-  uint32_t _requiredBindGroupMask;
-  uint32_t _pushConstantSizeBytes;
+  void                *_priv;
+  void                *_state;
+  GPUPipelineLayout   *_layout;
+  uint32_t             _requiredBindGroupMask;
+  uint32_t             _pushConstantSizeBytes;
   GPUShaderStageFlags _pushConstantStages;
 };
 
