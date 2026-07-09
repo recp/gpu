@@ -121,10 +121,21 @@ mt_readBuffer(GPUCommandQueue * __restrict queue,
 }
 
 GPU_HIDE
+void*
+mt_bufferContents(GPUBuffer * __restrict buff) {
+  if (!buff) {
+    return NULL;
+  }
+
+  return [(id<MTLBuffer>)buff contents];
+}
+
+GPU_HIDE
 void
 mt_initBuff(GPUApiBuffer *api) {
   api->create  = mt_createBuffer;
   api->destroy = mt_destroyBuffer;
   api->write   = mt_writeBuffer;
   api->read    = mt_readBuffer;
+  api->contents = mt_bufferContents;
 }

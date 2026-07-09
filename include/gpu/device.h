@@ -24,6 +24,7 @@ extern "C" {
 #include "instance.h"
 #include "cmdqueue.h"
 #include "pixelformat.h"
+#include "buffer.h"
 
 typedef struct GPUAdapter GPUAdapter;
 
@@ -123,6 +124,57 @@ typedef struct GPUCacheStats {
   uint64_t pipelineCompiles;
 } GPUCacheStats;
 
+typedef enum GPUValidationMode {
+  GPU_VALIDATION_OFF = 0,
+  GPU_VALIDATION_BASIC = 1,
+  GPU_VALIDATION_FULL = 2
+} GPUValidationMode;
+
+typedef struct GPURuntimeConfig {
+  GPUChainedStruct chain;
+  GPUValidationMode validationMode;
+  bool enableDebugMarkers;
+  bool enableVerboseLogs;
+  bool enableStats;
+} GPURuntimeConfig;
+
+typedef struct GPUTransientAllocatorConfig {
+  GPUChainedStruct chain;
+  uint64_t ringBytesPerFrame;
+  uint32_t framesInFlight;
+  uint64_t chunkBytes;
+  bool allowChunkFallback;
+} GPUTransientAllocatorConfig;
+
+typedef struct GPUTransientBufferSlice {
+  GPUBuffer *buffer;
+  uint64_t offset;
+  uint64_t sizeBytes;
+  void *cpuPtr;
+} GPUTransientBufferSlice;
+
+typedef struct GPUFrameStats {
+  double cpuEncodeMs;
+  double gpuFrameMs;
+  uint32_t drawCalls;
+  uint32_t requestedStateCalls;
+  uint32_t emittedStateCalls;
+  uint32_t requestedBindCalls;
+  uint32_t emittedBindCalls;
+  uint64_t hotPathAllocCount;
+  uint64_t hotPathAllocBytes;
+  uint64_t hotPathFreeCount;
+  uint64_t hotPathFreeBytes;
+} GPUFrameStats;
+
+typedef struct GPUAllocatorStats {
+  uint64_t ringCapacityBytes;
+  uint64_t ringUsedBytes;
+  uint64_t ringHighWaterBytes;
+  uint64_t ringWrapCount;
+  uint64_t uploadStallCount;
+} GPUAllocatorStats;
+
 GPU_EXPORT
 GPUResult
 GPUEnumerateAdapters(GPUInstance *inst,
@@ -153,6 +205,31 @@ GPUGetFormatCapabilities(const GPUAdapter      *adapter,
 GPU_EXPORT
 GPUResult
 GPUGetCacheStats(GPUDevice *device, GPUCacheStats *outStats);
+
+GPU_EXPORT
+GPUResult
+GPUConfigureRuntime(GPUDevice *device, const GPURuntimeConfig *config);
+
+GPU_EXPORT
+GPUResult
+GPUConfigureTransientAllocator(GPUDevice *device,
+                               const GPUTransientAllocatorConfig *config);
+
+GPU_EXPORT
+GPUResult
+GPUAllocateTransientBuffer(GPUDevice *device,
+                           GPUBufferUsageFlags usage,
+                           uint64_t sizeBytes,
+                           uint64_t alignment,
+                           GPUTransientBufferSlice *outSlice);
+
+GPU_EXPORT
+GPUResult
+GPUGetLastFrameStats(GPUDevice *device, GPUFrameStats *outStats);
+
+GPU_EXPORT
+GPUResult
+GPUGetAllocatorStats(GPUDevice *device, GPUAllocatorStats *outStats);
 
 GPU_EXPORT
 void

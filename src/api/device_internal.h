@@ -20,6 +20,13 @@
 #include "adapter_internal.h"
 #include "../common.h"
 
+typedef struct GPUTransientChunk {
+  GPUBuffer *buffer;
+  void *cpuPtr;
+  uint64_t sizeBytes;
+  struct GPUTransientChunk *next;
+} GPUTransientChunk;
+
 struct GPUDevice {
   GPUInstance       *inst;
   GPUPhysicalDevice *phyDevice;
@@ -27,6 +34,26 @@ struct GPUDevice {
   GPUQueueFlagBits   queueFamilies;
   uint64_t           enabledFeatureMask;
   GPUCacheStats      cacheStats;
+  GPURuntimeConfig   runtimeConfig;
+  GPUFrameStats      currentFrameStats;
+  GPUFrameStats      lastFrameStats;
+  GPUAllocatorStats  allocatorStats;
+  GPUTransientAllocatorConfig transientConfig;
+  GPUBuffer         *transientBuffer;
+  void              *transientCpuPtr;
+  uint64_t           transientFrameOffset;
+  uint32_t           transientFrameIndex;
+  bool               transientConfigured;
+  bool               transientFrameBegun;
+  GPUTransientChunk *transientChunks;
 };
+
+GPU_HIDE
+void
+gpuDeviceBeginFrame(GPUDevice *device);
+
+GPU_HIDE
+void
+gpuDeviceEndFrame(GPUDevice *device);
 
 #endif /* gpu_device_internal_h */

@@ -20,6 +20,7 @@
 #include "../common.h"
 
 struct GPUFrame {
+  GPUDevice      *device;
   void           *_priv;
   GPUTexture     *target;
   GPUTextureView *targetView;

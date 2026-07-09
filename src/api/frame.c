@@ -16,12 +16,15 @@
 
 #include "../common.h"
 #include "cmdqueue_internal.h"
+#include "device_internal.h"
 #include "frame_internal.h"
+#include "swapchain_internal.h"
 
 GPU_EXPORT
 GPUFrame*
 GPUBeginFrame(GPUSwapchain* swapchain) {
   GPUApi *api;
+  GPUFrame *frame;
 
   if (!swapchain)
     return NULL;
@@ -30,7 +33,13 @@ GPUBeginFrame(GPUSwapchain* swapchain) {
   if (!api->frame.beginFrame)
     return NULL;
 
-  return api->frame.beginFrame(api, swapchain);
+  frame = api->frame.beginFrame(api, swapchain);
+  if (frame) {
+    frame->device = swapchain->device;
+    gpuDeviceBeginFrame(frame->device);
+  }
+
+  return frame;
 }
 
 GPU_EXPORT
@@ -57,6 +66,7 @@ GPUEndFrame(GPUFrame* frame) {
   if (!api->frame.endFrame)
     return;
 
+  gpuDeviceEndFrame(frame->device);
   api->frame.endFrame(api, frame);
 }
 

@@ -20,6 +20,7 @@
 #include "../common.h"
 
 struct GPUSwapChain {
+  GPUDevice *device;
   void *_priv;
   void *target;
   float backingScaleFactor;

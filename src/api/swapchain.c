@@ -38,6 +38,7 @@ gpuCreateSwapchainInternal(GPUDevice              * __restrict device,
                                              size,
                                              autoResize);
   if (swapChain) {
+    swapChain->device = device;
     swapChain->width  = size.width;
     swapChain->height = size.height;
   }

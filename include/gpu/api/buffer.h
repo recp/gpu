@@ -45,6 +45,9 @@ typedef struct GPUApiBuffer {
           uint64_t                     srcOffset,
           void           * __restrict outData,
           uint64_t                     sizeBytes);
+
+  void*
+  (*contents)(GPUBuffer * __restrict buff);
 } GPUApiBuffer;
 
 #ifdef __cplusplus
