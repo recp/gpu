@@ -1,5 +1,6 @@
 #include "test.h"
 #include "../../src/api/buffer_internal.h"
+#include "../../src/api/compute_internal.h"
 #include "../../src/api/texture_internal.h"
 
 static void *
@@ -100,6 +101,44 @@ layout_has_typed_entry(const GPUBindGroupLayoutEntry *entries,
   }
 
   return 0;
+}
+
+static int
+check_compute_pipeline_workgroup_size(GPUDevice *device,
+                                      GPUShaderLibrary *library,
+                                      GPUPipelineLayout *layout) {
+  GPUComputePipelineCreateInfo info = {0};
+  GPUComputePipelineState *state;
+  GPUComputePipeline *pipeline;
+  int ok;
+
+  info.chain.sType = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.label = "api-reflection-compute-workgroup";
+  info.layout = layout;
+  info.library = library;
+  info.entryPoint = "reflect_cs";
+
+  pipeline = NULL;
+  if (GPUCreateComputePipeline(device, &info, &pipeline) != GPU_OK || !pipeline) {
+    fprintf(stderr, "failed to create workgroup reflection compute pipeline\n");
+    GPUDestroyComputePipeline(pipeline);
+    return 0;
+  }
+
+  state = pipeline->_state;
+  ok = state &&
+       state->workgroupSize[0] == 8u &&
+       state->workgroupSize[1] == 8u &&
+       state->workgroupSize[2] == 1u;
+  GPUDestroyComputePipeline(pipeline);
+
+  if (!ok) {
+    fprintf(stderr, "compute pipeline did not inherit reflected workgroup size\n");
+    return 0;
+  }
+
+  return 1;
 }
 
 static int
@@ -270,7 +309,10 @@ check_canonical_shader_library(GPUDevice *device,
                                       0u,
                                       0) &&
        GPUCreateShaderLayout(device, library, &shaderLayout) == GPU_OK &&
-       shaderLayout != NULL;
+       shaderLayout != NULL &&
+       check_compute_pipeline_workgroup_size(device,
+                                             library,
+                                             shaderLayout->pipelineLayout);
 
   GPUDestroyShaderLibrary(library);
   library = NULL;
