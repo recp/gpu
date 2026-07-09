@@ -131,15 +131,6 @@ GPUCreateShaderLibraryFromUSL(GPUDevice *device,
                               GPUShaderLibrary **outLibrary);
 
 GPU_EXPORT
-GPUResult
-GPUCreateShaderLibraryFromUSLEntries(GPUDevice *device,
-                                     const void *artifactData,
-                                     uint64_t artifactSize,
-                                     const char * const *entryPointNames,
-                                     uint32_t entryPointCount,
-                                     GPUShaderLibrary **outLibrary);
-
-GPU_EXPORT
 int
 GPUGetShaderLibraryUSLInfo(GPUShaderLibrary *library,
                            GPUShaderLibraryUSLInfo *outInfo);

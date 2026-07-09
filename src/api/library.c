@@ -851,31 +851,6 @@ GPUCreateShaderLibraryFromUSL(GPUDevice *device,
 }
 
 GPU_EXPORT
-GPUResult
-GPUCreateShaderLibraryFromUSLEntries(GPUDevice *device,
-                                     const void *artifactData,
-                                     uint64_t artifactSize,
-                                     const char * const *entryPointNames,
-                                     uint32_t entryPointCount,
-                                     GPUShaderLibrary **outLibrary) {
-  if (!entryPointNames || entryPointCount == 0u) {
-    if (outLibrary) {
-      *outLibrary = NULL;
-    }
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  return gpu_createShaderLibraryFromUSLImpl(device,
-                                            artifactData,
-                                            artifactSize,
-                                            entryPointNames,
-                                            entryPointCount,
-                                            outLibrary) == 0
-    ? GPU_OK
-    : GPU_ERROR_BACKEND_FAILURE;
-}
-
-GPU_EXPORT
 int
 GPUGetShaderLibraryUSLInfo(GPUShaderLibrary *library,
                            GPUShaderLibraryUSLInfo *outInfo) {
