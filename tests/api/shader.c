@@ -345,6 +345,140 @@ check_reflected_pipeline_entry_stages(GPUDevice *device,
 }
 
 static int
+check_reflected_dynamic_offset_validation(GPUDevice *device,
+                                          GPUShaderLibrary *library) {
+  GPUBindGroupLayout *layouts[2] = {0};
+  GPUBindGroupLayout *badLayouts[2] = {0};
+  GPUBindGroupLayoutEntry badSet1Entries[2] = {{0}};
+  GPUBindGroupLayoutCreateInfo layoutInfo = {0};
+  GPUPipelineLayoutCreateInfo pipelineInfo = {0};
+  GPUPipelineLayout *pipelineLayout = NULL;
+  GPURenderPipelineCreateInfo renderInfo = {0};
+  GPUComputePipelineCreateInfo computeInfo = {0};
+  GPUComputePipeline *computePipeline = NULL;
+  GPUColorTargetState colorTarget = {0};
+  GPUVertexAttribute attrs[2] = {{0}};
+  GPUVertexBufferLayout vertexLayout = {0};
+  uint32_t layoutCount;
+  int ok = 0;
+
+  layoutCount = (uint32_t)GPU_ARRAY_LEN(layouts);
+  if (GPUCreateBindGroupLayoutsFromReflection(device, library, &layoutCount, layouts) !=
+        GPU_OK ||
+      layoutCount != (uint32_t)GPU_ARRAY_LEN(layouts) ||
+      !layouts[0] ||
+      !layouts[1]) {
+    fprintf(stderr, "dynamic offset validation could not get reflection layouts\n");
+    goto cleanup;
+  }
+
+  badSet1Entries[0].binding = 0u;
+  badSet1Entries[0].bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  badSet1Entries[0].visibility = GPU_SHADER_STAGE_FRAGMENT_BIT;
+  badSet1Entries[0].arrayCount = 1u;
+  badSet1Entries[0].hasDynamicOffset = false;
+
+  badSet1Entries[1].binding = 0u;
+  badSet1Entries[1].bindingType = GPU_BINDING_STORAGE_TEXTURE;
+  badSet1Entries[1].visibility = GPU_SHADER_STAGE_COMPUTE_BIT;
+  badSet1Entries[1].arrayCount = 1u;
+
+  layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  layoutInfo.label = "api-reflection-bad-dynamic-offset-set1";
+  layoutInfo.entryCount = (uint32_t)GPU_ARRAY_LEN(badSet1Entries);
+  layoutInfo.pEntries = badSet1Entries;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &badLayouts[1]) != GPU_OK ||
+      !badLayouts[1]) {
+    fprintf(stderr, "dynamic offset validation could not create mismatch layout\n");
+    goto cleanup;
+  }
+  badLayouts[0] = layouts[0];
+
+  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
+  if (GPUCreatePipelineLayoutFromReflection(device,
+                                            library,
+                                            (uint32_t)GPU_ARRAY_LEN(badLayouts),
+                                            badLayouts,
+                                            &pipelineLayout) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      pipelineLayout != NULL) {
+    fprintf(stderr, "reflection pipeline layout accepted dynamic offset mismatch\n");
+    GPUDestroyPipelineLayout(pipelineLayout);
+    pipelineLayout = NULL;
+    goto cleanup;
+  }
+
+  pipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
+  pipelineInfo.label = "api-reflection-manual-dynamic-offset-mismatch";
+  pipelineInfo.bindGroupLayoutCount = (uint32_t)GPU_ARRAY_LEN(badLayouts);
+  pipelineInfo.ppBindGroupLayouts = badLayouts;
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_OK ||
+      !pipelineLayout) {
+    fprintf(stderr, "dynamic offset validation could not create manual mismatch layout\n");
+    goto cleanup;
+  }
+
+  colorTarget.format = GPU_FORMAT_BGRA8_UNORM;
+  attrs[0].shaderLocation = 0u;
+  attrs[0].format = GPUFloat2;
+  attrs[0].offset = 0u;
+  attrs[1].shaderLocation = 1u;
+  attrs[1].format = GPUFloat2;
+  attrs[1].offset = 8u;
+  vertexLayout.strideBytes = 16u;
+  vertexLayout.stepMode = GPU_VERTEX_STEP_MODE_VERTEX;
+  vertexLayout.attributeCount = (uint32_t)GPU_ARRAY_LEN(attrs);
+  vertexLayout.pAttributes = attrs;
+
+  renderInfo.chain.sType = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  renderInfo.chain.structSize = sizeof(renderInfo);
+  renderInfo.label = "api-reflection-render-dynamic-offset-mismatch";
+  renderInfo.layout = pipelineLayout;
+  renderInfo.library = library;
+  renderInfo.vertexEntry = "reflect_vs";
+  renderInfo.fragmentEntry = "reflect_fs";
+  renderInfo.vertex.bufferLayoutCount = 1u;
+  renderInfo.vertex.pBufferLayouts = &vertexLayout;
+  renderInfo.colorTargetCount = 1u;
+  renderInfo.pColorTargets = &colorTarget;
+  renderInfo.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  renderInfo.cullMode = GPU_CULL_MODE_NONE;
+  renderInfo.frontFace = GPU_FRONT_FACE_CCW;
+  renderInfo.multisample.sampleCount = 1u;
+  if (!expect_reflected_render_pipeline_error(
+        device,
+        &renderInfo,
+        "render pipeline accepted reflected dynamic offset mismatch")) {
+    goto cleanup;
+  }
+
+  computeInfo.chain.sType = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  computeInfo.chain.structSize = sizeof(computeInfo);
+  computeInfo.label = "api-reflection-compute-ignores-fragment-dynamic-offset";
+  computeInfo.layout = pipelineLayout;
+  computeInfo.library = library;
+  computeInfo.entryPoint = "reflect_cs";
+  if (GPUCreateComputePipeline(device, &computeInfo, &computePipeline) != GPU_OK ||
+      !computePipeline ||
+      computePipeline->_requiredBindGroupMask != 2u) {
+    fprintf(stderr, "compute pipeline rejected unrelated fragment dynamic offset mismatch\n");
+    goto cleanup;
+  }
+
+  ok = 1;
+
+cleanup:
+  GPUDestroyComputePipeline(computePipeline);
+  GPUDestroyPipelineLayout(pipelineLayout);
+  GPUDestroyBindGroupLayout(badLayouts[1]);
+  GPUDestroyBindGroupLayout(layouts[1]);
+  GPUDestroyBindGroupLayout(layouts[0]);
+  return ok;
+}
+
+static int
 check_shader_layout_after_library_destroy(GPUDevice *device,
                                           GPUShaderLayout *shaderLayout) {
   const GPUBindGroupLayoutEntry *entries;
@@ -812,7 +946,8 @@ check_canonical_shader_library(GPUDevice *device,
                                              shaderLayout->pipelineLayout) &&
        check_reflected_pipeline_entry_stages(device,
                                              library,
-                                             shaderLayout->pipelineLayout);
+                                             shaderLayout->pipelineLayout) &&
+       check_reflected_dynamic_offset_validation(device, library);
 
   GPUDestroyShaderLibrary(library);
   library = NULL;
