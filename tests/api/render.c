@@ -247,6 +247,8 @@ fail:
 static int
 check_render_pipeline_validation(GPUDevice *device) {
   GPUShaderLibrary *library = NULL;
+  GPUPipelineLayoutCreateInfo layoutInfo = {0};
+  GPUPipelineLayout *pipelineLayout = NULL;
   GPUColorTargetState colorTargets[9] = {0};
   GPUVertexAttribute attr = {0};
   GPUVertexBufferLayout vertexLayout = {0};
@@ -365,10 +367,29 @@ check_render_pipeline_validation(GPUDevice *device) {
   }
 
   info.fragmentEntry = "api_fs";
+  if (!expect_render_pipeline_error(device,
+                                    &info,
+                                    "render pipeline create accepted null layout")) {
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+
+  layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  layoutInfo.label = "api-render-empty-layout";
+  if (GPUCreatePipelineLayout(device, &layoutInfo, &pipelineLayout) != GPU_OK ||
+      !pipelineLayout) {
+    fprintf(stderr, "failed to create render validation pipeline layout\n");
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+  info.layout = pipelineLayout;
+
   info.colorTargetCount = 0u;
   if (!expect_render_pipeline_error(device,
                                     &info,
                                     "render pipeline create accepted no color targets")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
@@ -377,6 +398,7 @@ check_render_pipeline_validation(GPUDevice *device) {
   if (!expect_render_pipeline_error(device,
                                     &info,
                                     "render pipeline create accepted too many color targets")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
@@ -386,6 +408,7 @@ check_render_pipeline_validation(GPUDevice *device) {
   if (!expect_render_pipeline_error(device,
                                     &info,
                                     "render pipeline create accepted null color targets")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
@@ -395,6 +418,7 @@ check_render_pipeline_validation(GPUDevice *device) {
   if (!expect_render_pipeline_error(device,
                                     &info,
                                     "render pipeline create accepted undefined color format")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
@@ -404,6 +428,7 @@ check_render_pipeline_validation(GPUDevice *device) {
   if (!expect_render_pipeline_error(device,
                                     &info,
                                     "render pipeline create accepted null vertex layouts")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
@@ -413,6 +438,7 @@ check_render_pipeline_validation(GPUDevice *device) {
   if (!expect_render_pipeline_error(device,
                                     &info,
                                     "render pipeline create accepted null vertex attributes")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
@@ -422,6 +448,7 @@ check_render_pipeline_validation(GPUDevice *device) {
   if (!expect_render_pipeline_error(device,
                                     &info,
                                     "render pipeline create accepted invalid vertex format")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
@@ -431,6 +458,7 @@ check_render_pipeline_validation(GPUDevice *device) {
   if (!expect_render_pipeline_error(device,
                                     &info,
                                     "render pipeline create accepted invalid vertex step mode")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
@@ -440,6 +468,7 @@ check_render_pipeline_validation(GPUDevice *device) {
   if (!expect_render_pipeline_error(device,
                                     &info,
                                     "render pipeline create accepted invalid topology")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
@@ -448,6 +477,7 @@ check_render_pipeline_validation(GPUDevice *device) {
   if (!expect_render_pipeline_error(device,
                                     &info,
                                     "render pipeline create accepted unsupported topology")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
@@ -457,6 +487,7 @@ check_render_pipeline_validation(GPUDevice *device) {
   if (!expect_render_pipeline_error(device,
                                     &info,
                                     "render pipeline create accepted invalid cull mode")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
@@ -466,6 +497,7 @@ check_render_pipeline_validation(GPUDevice *device) {
   if (!expect_render_pipeline_error(device,
                                     &info,
                                     "render pipeline create accepted invalid front face")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
@@ -475,6 +507,7 @@ check_render_pipeline_validation(GPUDevice *device) {
   if (!expect_render_pipeline_error(device,
                                     &info,
                                     "render pipeline create accepted unsupported blend state")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
@@ -485,6 +518,7 @@ check_render_pipeline_validation(GPUDevice *device) {
   if (!expect_render_pipeline_error(device,
                                     &info,
                                     "render pipeline create accepted unsupported depth state")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
@@ -494,6 +528,7 @@ check_render_pipeline_validation(GPUDevice *device) {
   if (!expect_render_pipeline_error(device,
                                     &info,
                                     "render pipeline create accepted alpha-to-coverage")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
@@ -503,16 +538,19 @@ check_render_pipeline_validation(GPUDevice *device) {
   if (!expect_render_pipeline_error(device,
                                     &info,
                                     "render pipeline create accepted unsupported sample mask")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
 
   info.multisample.sampleMask = 0u;
   if (!check_pipeline_cache_validation(device, &info)) {
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
 
+  GPUDestroyPipelineLayout(pipelineLayout);
   GPUDestroyShaderLibrary(library);
   return 1;
 }
@@ -652,6 +690,7 @@ check_render_readback_case(GPUDevice *device,
   GPUBuffer *readbackBuffer = NULL;
   GPUTexture *target = NULL;
   GPUTextureView *targetView = NULL;
+  GPUPipelineLayout *pipelineLayout = NULL;
   GPUCommandBuffer *cmdb = NULL;
   GPUCommandBuffer *buffers[1];
   GPURenderPassEncoder *renderPass = NULL;
@@ -660,6 +699,7 @@ check_render_readback_case(GPUDevice *device,
   GPUColorTargetState colorTarget = {0};
   GPUVertexAttribute attr = {0};
   GPUVertexBufferLayout vertexLayout = {0};
+  GPUPipelineLayoutCreateInfo pipelineLayoutInfo = {0};
   GPURenderPipelineCreateInfo pipelineInfo = {0};
   GPUBufferCreateInfo bufferInfo = {0};
   GPUTextureCreateInfo textureInfo = {0};
@@ -695,9 +735,20 @@ check_render_readback_case(GPUDevice *device,
   vertexLayout.attributeCount = 1u;
   vertexLayout.pAttributes = &attr;
 
+  pipelineLayoutInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineLayoutInfo.chain.structSize = sizeof(pipelineLayoutInfo);
+  pipelineLayoutInfo.label = label;
+  if (GPUCreatePipelineLayout(device, &pipelineLayoutInfo, &pipelineLayout) !=
+        GPU_OK ||
+      !pipelineLayout) {
+    fprintf(stderr, "failed to create %s pipeline layout\n", label);
+    goto cleanup;
+  }
+
   pipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
   pipelineInfo.chain.structSize = sizeof(pipelineInfo);
   pipelineInfo.label = label;
+  pipelineInfo.layout = pipelineLayout;
   pipelineInfo.library = library;
   pipelineInfo.vertexEntry = "api_vs";
   pipelineInfo.fragmentEntry = "api_fs";
@@ -988,6 +1039,7 @@ cleanup:
   GPUDestroyBuffer(indexBuffer);
   GPUDestroyBuffer(vertexBuffer);
   GPUDestroyRenderPipeline(pipeline);
+  GPUDestroyPipelineLayout(pipelineLayout);
   GPUDestroyShaderLibrary(library);
   return ok;
 }

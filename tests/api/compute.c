@@ -99,6 +99,8 @@ count_dispatch_indirect(GPUComputePassEncoder *enc,
 static int
 check_compute_pipeline_validation(GPUDevice *device) {
   GPUShaderLibrary *library = NULL;
+  GPUPipelineLayoutCreateInfo layoutInfo = {0};
+  GPUPipelineLayout *pipelineLayout = NULL;
   GPUComputePipelineCreateInfo info = {0};
   GPUComputePipeline *pipeline;
 
@@ -170,14 +172,34 @@ check_compute_pipeline_validation(GPUDevice *device) {
   }
 
   info.entryPoint = "api_cs";
+  if (!expect_compute_pipeline_error(device,
+                                     &info,
+                                     "compute pipeline create accepted null layout")) {
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+
+  layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  layoutInfo.label = "api-compute-empty-layout";
+  if (GPUCreatePipelineLayout(device, &layoutInfo, &pipelineLayout) != GPU_OK ||
+      !pipelineLayout) {
+    fprintf(stderr, "failed to create compute validation pipeline layout\n");
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+
+  info.layout = pipelineLayout;
   pipeline = NULL;
   if (GPUCreateComputePipeline(device, &info, &pipeline) != GPU_OK || !pipeline) {
     fprintf(stderr, "compute pipeline create rejected valid pipeline\n");
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
 
   GPUDestroyComputePipeline(pipeline);
+  GPUDestroyPipelineLayout(pipelineLayout);
   GPUDestroyShaderLibrary(library);
   return 1;
 }

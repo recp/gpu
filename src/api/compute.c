@@ -93,7 +93,7 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
   }
 
   *outPipeline = NULL;
-  if (!device || !info || !info->library || !info->entryPoint) {
+  if (!device || !info || !info->layout || !info->library || !info->entryPoint) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (info->cache && info->cache->device != device) {

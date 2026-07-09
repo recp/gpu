@@ -225,7 +225,8 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
 
   *outPipeline = NULL;
 
-  if (!device || !info || !info->library || !info->vertexEntry || !info->fragmentEntry)
+  if (!device || !info || !info->layout || !info->library ||
+      !info->vertexEntry || !info->fragmentEntry)
     return GPU_ERROR_INVALID_ARGUMENT;
   if (info->cache && info->cache->device != device)
     return GPU_ERROR_INVALID_ARGUMENT;
