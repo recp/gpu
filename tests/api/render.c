@@ -361,7 +361,9 @@ typedef enum RenderReadbackDrawMode {
   RENDER_READBACK_DRAW,
   RENDER_READBACK_DRAW_INDEXED,
   RENDER_READBACK_DRAW_INDIRECT,
-  RENDER_READBACK_DRAW_INDEXED_INDIRECT
+  RENDER_READBACK_DRAW_INDEXED_INDIRECT,
+  RENDER_READBACK_DRAW_MULTI_INDIRECT,
+  RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT
 } RenderReadbackDrawMode;
 
 typedef struct RenderIndirectArgs {
@@ -389,10 +391,44 @@ render_readback_label(RenderReadbackDrawMode mode, int clipped) {
       return "api-render-readback-indirect";
     case RENDER_READBACK_DRAW_INDEXED_INDIRECT:
       return "api-render-readback-indexed-indirect";
+    case RENDER_READBACK_DRAW_MULTI_INDIRECT:
+      return "api-render-readback-multi-indirect";
+    case RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT:
+      return "api-render-readback-indexed-multi-indirect";
     case RENDER_READBACK_DRAW:
     default:
       return "api-render-readback";
   }
+}
+
+static int
+render_readback_pixel_is_red(const uint8_t *pixels,
+                             uint32_t width,
+                             uint32_t x,
+                             uint32_t y) {
+  size_t offset = ((size_t)y * width + x) * 4u;
+
+  return pixels[offset + 0u] <= 2u &&
+         pixels[offset + 1u] <= 2u &&
+         pixels[offset + 2u] >= 250u &&
+         pixels[offset + 3u] >= 250u;
+}
+
+static int
+render_readback_has_red_in_x_range(const uint8_t *pixels,
+                                   uint32_t width,
+                                   uint32_t height,
+                                   uint32_t minX,
+                                   uint32_t maxX) {
+  for (uint32_t y = 0u; y < height; y++) {
+    for (uint32_t x = minX; x < maxX; x++) {
+      if (render_readback_pixel_is_red(pixels, width, x, y)) {
+        return 1;
+      }
+    }
+  }
+
+  return 0;
 }
 
 static int
@@ -404,19 +440,49 @@ check_render_readback_case(GPUDevice *device,
      3.0f, -1.0f,
     -1.0f,  3.0f
   };
+  static const float kMultiTriangles[] = {
+    -1.0f, -1.0f,
+     0.0f, -1.0f,
+    -1.0f,  1.0f,
+     1.0f,  1.0f,
+     0.0f,  1.0f,
+     1.0f, -1.0f
+  };
   static const uint16_t kTriangleIndices[] = {0u, 1u, 2u};
+  static const uint16_t kMultiTriangleIndices[] = {0u, 1u, 2u, 3u, 4u, 5u};
   static const RenderIndirectArgs kIndirectArgs = {3u, 1u, 0u, 0u};
+  static const RenderIndirectArgs kMultiIndirectArgs[2] = {
+    {3u, 1u, 0u, 0u},
+    {3u, 1u, 3u, 0u}
+  };
   static const RenderIndexedIndirectArgs kIndexedIndirectArgs = {
     3u, 1u, 0u, 0, 0u
+  };
+  static const RenderIndexedIndirectArgs kMultiIndexedIndirectArgs[2] = {
+    {3u, 1u, 0u, 0, 0u},
+    {3u, 1u, 3u, 0, 0u}
   };
   const uint32_t width = 4u;
   const uint32_t height = 4u;
   const uint64_t pixelBytes = (uint64_t)width * height * 4u;
   const char *label = render_readback_label(mode, clipped);
   const int indexed = mode == RENDER_READBACK_DRAW_INDEXED ||
-                      mode == RENDER_READBACK_DRAW_INDEXED_INDIRECT;
+                      mode == RENDER_READBACK_DRAW_INDEXED_INDIRECT ||
+                      mode == RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT;
   const int indirect = mode == RENDER_READBACK_DRAW_INDIRECT ||
-                       mode == RENDER_READBACK_DRAW_INDEXED_INDIRECT;
+                       mode == RENDER_READBACK_DRAW_INDEXED_INDIRECT ||
+                       mode == RENDER_READBACK_DRAW_MULTI_INDIRECT ||
+                       mode == RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT;
+  const int multi = mode == RENDER_READBACK_DRAW_MULTI_INDIRECT ||
+                    mode == RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT;
+  const void *vertexData = multi ? (const void *)kMultiTriangles :
+                                  (const void *)kFullscreenTriangle;
+  const uint64_t vertexDataSize = multi ? sizeof(kMultiTriangles) :
+                                          sizeof(kFullscreenTriangle);
+  const void *indexData = multi ? (const void *)kMultiTriangleIndices :
+                                 (const void *)kTriangleIndices;
+  const uint64_t indexDataSize = multi ? sizeof(kMultiTriangleIndices) :
+                                         sizeof(kTriangleIndices);
   GPUCommandQueue *queue;
   GPUShaderLibrary *library = NULL;
   GPURenderPipeline *pipeline = NULL;
@@ -492,42 +558,51 @@ check_render_readback_case(GPUDevice *device,
   bufferInfo.chain.sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.label = label;
-  bufferInfo.sizeBytes = sizeof(kFullscreenTriangle);
+  bufferInfo.sizeBytes = vertexDataSize;
   bufferInfo.usage = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST;
   if (GPUCreateBuffer(device, &bufferInfo, &vertexBuffer) != GPU_OK ||
       !vertexBuffer ||
       GPUQueueWriteBuffer(queue,
                           vertexBuffer,
                           0u,
-                          kFullscreenTriangle,
-                          sizeof(kFullscreenTriangle)) != GPU_OK) {
+                          vertexData,
+                          vertexDataSize) != GPU_OK) {
     fprintf(stderr, "failed to create %s vertex buffer\n", label);
     goto cleanup;
   }
 
   if (indexed) {
-    bufferInfo.sizeBytes = sizeof(kTriangleIndices);
+    bufferInfo.sizeBytes = indexDataSize;
     bufferInfo.usage = GPU_BUFFER_USAGE_INDEX | GPU_BUFFER_USAGE_COPY_DST;
     if (GPUCreateBuffer(device, &bufferInfo, &indexBuffer) != GPU_OK ||
         !indexBuffer ||
         GPUQueueWriteBuffer(queue,
                             indexBuffer,
                             0u,
-                            kTriangleIndices,
-                            sizeof(kTriangleIndices)) != GPU_OK) {
+                            indexData,
+                            indexDataSize) != GPU_OK) {
       fprintf(stderr, "failed to create %s index buffer\n", label);
       goto cleanup;
     }
   }
 
   if (indirect) {
-    const void *argsData = mode == RENDER_READBACK_DRAW_INDIRECT ?
-                           (const void *)&kIndirectArgs :
-                           (const void *)&kIndexedIndirectArgs;
+    const void *argsData;
 
-    bufferInfo.sizeBytes = mode == RENDER_READBACK_DRAW_INDIRECT ?
-                           sizeof(kIndirectArgs) :
-                           sizeof(kIndexedIndirectArgs);
+    if (mode == RENDER_READBACK_DRAW_INDIRECT) {
+      argsData = &kIndirectArgs;
+      bufferInfo.sizeBytes = sizeof(kIndirectArgs);
+    } else if (mode == RENDER_READBACK_DRAW_MULTI_INDIRECT) {
+      argsData = kMultiIndirectArgs;
+      bufferInfo.sizeBytes = sizeof(kMultiIndirectArgs);
+    } else if (mode == RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT) {
+      argsData = kMultiIndexedIndirectArgs;
+      bufferInfo.sizeBytes = sizeof(kMultiIndexedIndirectArgs);
+    } else {
+      argsData = &kIndexedIndirectArgs;
+      bufferInfo.sizeBytes = sizeof(kIndexedIndirectArgs);
+    }
+
     bufferInfo.usage = GPU_BUFFER_USAGE_INDIRECT | GPU_BUFFER_USAGE_COPY_DST;
     if (GPUCreateBuffer(device, &bufferInfo, &argsBuffer) != GPU_OK ||
         !argsBuffer ||
@@ -632,6 +707,19 @@ check_render_readback_case(GPUDevice *device,
   } else if (mode == RENDER_READBACK_DRAW_INDEXED_INDIRECT) {
     GPUBindIndexBuffer(renderPass, indexBuffer, 0u, GPUIndexTypeUInt16);
     GPUDrawIndexedIndirect(renderPass, argsBuffer, 0u);
+  } else if (mode == RENDER_READBACK_DRAW_MULTI_INDIRECT) {
+    GPUMultiDrawIndirect(renderPass,
+                         argsBuffer,
+                         0u,
+                         2u,
+                         (uint32_t)sizeof(RenderIndirectArgs));
+  } else if (mode == RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT) {
+    GPUBindIndexBuffer(renderPass, indexBuffer, 0u, GPUIndexTypeUInt16);
+    GPUMultiDrawIndexedIndirect(renderPass,
+                                argsBuffer,
+                                0u,
+                                2u,
+                                (uint32_t)sizeof(RenderIndexedIndirectArgs));
   } else {
     GPUDraw(renderPass, 3u, 1u, 0u, 0u);
   }
@@ -705,11 +793,14 @@ check_render_readback_case(GPUDevice *device,
     goto cleanup;
   }
 
-  centerOffset = ((size_t)2u * width + 2u) * 4u;
-  if (pixels[centerOffset + 0u] > 2u ||
-      pixels[centerOffset + 1u] > 2u ||
-      pixels[centerOffset + 2u] < 250u ||
-      pixels[centerOffset + 3u] < 250u) {
+  if (multi) {
+    if (!render_readback_has_red_in_x_range(pixels, width, height, 0u, 2u) ||
+        !render_readback_has_red_in_x_range(pixels, width, height, 2u, 4u)) {
+      fprintf(stderr, "%s multi draw did not touch both target halves\n", label);
+      goto cleanup;
+    }
+  } else if (!render_readback_pixel_is_red(pixels, width, 2u, 2u)) {
+    centerOffset = ((size_t)2u * width + 2u) * 4u;
     fprintf(stderr,
             "%s draw pixel mismatch: %u %u %u %u\n",
             label,
@@ -748,6 +839,12 @@ check_render_readback(GPUDevice *device) {
          check_render_readback_case(device, RENDER_READBACK_DRAW_INDIRECT, 0) &&
          check_render_readback_case(device,
                                     RENDER_READBACK_DRAW_INDEXED_INDIRECT,
+                                    0) &&
+         check_render_readback_case(device,
+                                    RENDER_READBACK_DRAW_MULTI_INDIRECT,
+                                    0) &&
+         check_render_readback_case(device,
+                                    RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT,
                                     0);
 }
 
