@@ -36,6 +36,7 @@ typedef struct GeneratedVertex {
   NSInteger _completedFrames;
   BOOL _validationFailed;
   BOOL _terminating;
+  BOOL _skipComputeBind;
 }
 - (void)frameCompleted;
 - (BOOL)validationFailed;
@@ -46,6 +47,8 @@ static const GeneratedVertex kExpectedVertices[] = {
   { {  0.6f, -0.6f, 0.0f, 1.0f }, { 0.1f, 1.0f, 0.3f, 1.0f } },
   { {  0.0f,  0.6f, 0.0f, 1.0f }, { 0.2f, 0.4f, 1.0f, 1.0f } },
 };
+
+static volatile int gComputeBufferValidationFailed = 0;
 
 static void
 ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
@@ -223,7 +226,9 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     goto cleanup;
   }
   GPUBindComputePipeline(compute, _computePipeline);
-  GPUBindComputeGroup(compute, 1, _vertexBindGroup, 0, NULL);
+  if (!_skipComputeBind) {
+    GPUBindComputeGroup(compute, 1, _vertexBindGroup, 0, NULL);
+  }
   GPUDispatch(compute, 1, 1, 1);
   GPUEndComputePass(compute);
   compute = NULL;
@@ -310,6 +315,10 @@ cleanup:
 
   if (![self verifyReadback]) {
     _validationFailed = YES;
+    gComputeBufferValidationFailed = 1;
+    if (_exitAfterFrames > 0) {
+      exit(1);
+    }
   }
 
   if (_completedFrames >= _exitAfterFrames) {
@@ -321,7 +330,7 @@ cleanup:
 }
 
 - (BOOL)validationFailed {
-  return _validationFailed;
+  return _validationFailed || gComputeBufferValidationFailed != 0;
 }
 
 - (void)tick:(NSTimer *)timer {
@@ -386,6 +395,7 @@ cleanup:
   if (exitAfterFrames && exitAfterFrames[0] != '\0') {
     _exitAfterFrames = strtol(exitAfterFrames, NULL, 10);
   }
+  _skipComputeBind = getenv("GPU_SAMPLE_SKIP_COMPUTE_BIND") != NULL;
 
   _timer = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
                                    target:self

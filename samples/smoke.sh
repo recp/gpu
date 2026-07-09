@@ -12,6 +12,17 @@ run_step() {
   "$@"
 }
 
+run_expect_fail() {
+  local name="$1"
+  shift
+
+  echo "==> $name"
+  if "$@"; then
+    echo "expected failure but command succeeded: $name" >&2
+    return 1
+  fi
+}
+
 run_sample() {
   local name="$1"
   shift
@@ -58,6 +69,9 @@ run_step "compute-buffer-usl generated no-sidecar" \
 
 run_step "compute-buffer-usl readback" \
   run_sample compute-buffer-usl env GPU_DERIVED_DATA="$DERIVED_DATA" GPU_SAMPLE_EXIT_AFTER_FRAMES=1 GPU_USL_NO_SIDECAR=1 ./hello-compute-buffer-usl
+
+run_expect_fail "compute-buffer-usl missing set1 bind" \
+  run_sample compute-buffer-usl env GPU_DERIVED_DATA="$DERIVED_DATA" GPU_SAMPLE_EXIT_AFTER_FRAMES=1 GPU_SAMPLE_SKIP_COMPUTE_BIND=1 ./hello-compute-buffer-usl
 
 run_step "compute-buffer-usl embedded no-sidecar" \
   run_sample compute-buffer-usl env GPU_DERIVED_DATA="$DERIVED_DATA" GPU_USL_EMBED_METAL=1 GPU_USL_NO_SIDECAR=1 ./build.sh
