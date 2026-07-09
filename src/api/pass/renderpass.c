@@ -15,6 +15,7 @@
  */
 
 #include "../../common.h"
+#include "../buffer_internal.h"
 #include "../cmdqueue_internal.h"
 #include "../texture_internal.h"
 
@@ -150,6 +151,40 @@ gpu_validBufferTextureCopy(const GPUBufferTextureCopyRegion *region,
   return gpu_validTextureCopyRegion(&region->texture, texture);
 }
 
+static bool
+gpu_bufferTextureCopyBytes(const GPUBufferTextureCopyRegion *region,
+                           uint64_t                         *outBytes) {
+  uint64_t rowsPerImage;
+  uint64_t bytesPerImage;
+  uint64_t imageCount;
+
+  if (!region || !outBytes || region->bytesPerRow == 0u) {
+    return false;
+  }
+
+  rowsPerImage = region->rowsPerImage ?
+    region->rowsPerImage : region->texture.height;
+  if (rowsPerImage == 0u ||
+      region->bytesPerRow > UINT64_MAX / rowsPerImage) {
+    return false;
+  }
+
+  bytesPerImage = (uint64_t)region->bytesPerRow * rowsPerImage;
+  if (region->texture.depth == 0u ||
+      region->texture.layerCount == 0u ||
+      region->texture.depth > UINT64_MAX / region->texture.layerCount) {
+    return false;
+  }
+
+  imageCount = (uint64_t)region->texture.depth * region->texture.layerCount;
+  if (bytesPerImage > UINT64_MAX / imageCount) {
+    return false;
+  }
+
+  *outBytes = bytesPerImage * imageCount;
+  return true;
+}
+
 static void
 gpu_destroyRenderPass(GPURenderPassDesc *pass) {
   GPUApi *api;
@@ -246,7 +281,11 @@ GPUCopyBufferToBuffer(GPUCopyPassEncoder        *pass,
   GPUApi *api;
 
   if (!pass || pass->_ended ||
-      !src || !dst || !region || region->sizeBytes == 0) {
+      !src || !dst || !region || region->sizeBytes == 0 ||
+      !gpuBufferHasUsage(src, GPU_BUFFER_USAGE_COPY_SRC) ||
+      !gpuBufferHasUsage(dst, GPU_BUFFER_USAGE_COPY_DST) ||
+      !gpuBufferRangeValid(src, region->srcOffset, region->sizeBytes) ||
+      !gpuBufferRangeValid(dst, region->dstOffset, region->sizeBytes)) {
     return;
   }
   if (!(api = gpuActiveGPUApi()) || !api->renderPass.copyBufferToBuffer) {
@@ -263,9 +302,13 @@ GPUCopyBufferToTexture(GPUCopyPassEncoder               *pass,
                        GPUTexture                       *dst,
                        const GPUBufferTextureCopyRegion *region) {
   GPUApi *api;
+  uint64_t copyBytes;
 
   if (!pass || pass->_ended ||
-      !src || !dst || !gpu_validBufferTextureCopy(region, dst)) {
+      !src || !dst || !gpu_validBufferTextureCopy(region, dst) ||
+      !gpu_bufferTextureCopyBytes(region, &copyBytes) ||
+      !gpuBufferHasUsage(src, GPU_BUFFER_USAGE_COPY_SRC) ||
+      !gpuBufferRangeValid(src, region->bufferOffset, copyBytes)) {
     return;
   }
   if (!(api = gpuActiveGPUApi()) || !api->renderPass.copyBufferToTexture) {
@@ -282,9 +325,13 @@ GPUCopyTextureToBuffer(GPUCopyPassEncoder               *pass,
                        GPUBuffer                        *dst,
                        const GPUBufferTextureCopyRegion *region) {
   GPUApi *api;
+  uint64_t copyBytes;
 
   if (!pass || pass->_ended ||
-      !src || !dst || !gpu_validBufferTextureCopy(region, src)) {
+      !src || !dst || !gpu_validBufferTextureCopy(region, src) ||
+      !gpu_bufferTextureCopyBytes(region, &copyBytes) ||
+      !gpuBufferHasUsage(dst, GPU_BUFFER_USAGE_COPY_DST) ||
+      !gpuBufferRangeValid(dst, region->bufferOffset, copyBytes)) {
     return;
   }
   if (!(api = gpuActiveGPUApi()) || !api->renderPass.copyTextureToBuffer) {

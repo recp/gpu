@@ -24,6 +24,7 @@ mt_createBuffer(GPUDevice                 * __restrict device,
                 GPUBuffer                ** __restrict outBuffer) {
   GPUDeviceMT *deviceMT;
   id<MTLBuffer> buffer;
+  GPUBuffer *gpuBuffer;
   
   if (!device || !info || !outBuffer || info->sizeBytes == 0) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -40,7 +41,21 @@ mt_createBuffer(GPUDevice                 * __restrict device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  *outBuffer = (GPUBuffer *)buffer;
+  if (info->label && info->label[0] != '\0') {
+    buffer.label = [NSString stringWithUTF8String:info->label];
+  }
+
+  gpuBuffer = calloc(1, sizeof(*gpuBuffer));
+  if (!gpuBuffer) {
+    [buffer release];
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  gpuBuffer->_priv = buffer;
+  gpuBuffer->device = device;
+  gpuBuffer->sizeBytes = info->sizeBytes;
+  gpuBuffer->usage = info->usage;
+  *outBuffer = gpuBuffer;
   return GPU_OK;
 }
 
@@ -51,7 +66,10 @@ mt_destroyBuffer(GPUBuffer * __restrict buff) {
     return;
   }
 
-  [(id<MTLBuffer>)buff release];
+  if (buff->_priv) {
+    [(id<MTLBuffer>)buff->_priv release];
+  }
+  free(buff);
 }
 
 GPU_HIDE
@@ -70,7 +88,7 @@ mt_writeBuffer(GPUCommandQueue * __restrict queue,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  buffer = (id<MTLBuffer>)buff;
+  buffer = (id<MTLBuffer>)buff->_priv;
   if (dstOffset > [buffer length] || sizeBytes > [buffer length] - dstOffset) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -103,7 +121,7 @@ mt_readBuffer(GPUCommandQueue * __restrict queue,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  buffer = (id<MTLBuffer>)buff;
+  buffer = (id<MTLBuffer>)buff->_priv;
   if (srcOffset > [buffer length] || sizeBytes > [buffer length] - srcOffset) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -127,7 +145,7 @@ mt_bufferContents(GPUBuffer * __restrict buff) {
     return NULL;
   }
 
-  return [(id<MTLBuffer>)buff contents];
+  return [(id<MTLBuffer>)buff->_priv contents];
 }
 
 GPU_HIDE

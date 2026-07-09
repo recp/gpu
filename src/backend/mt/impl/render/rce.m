@@ -26,6 +26,11 @@ mt_nativeRCE(GPURenderCommandEncoder *rce) {
   return rce ? (__bridge id<MTLRenderCommandEncoder>)rce->_priv : nil;
 }
 
+static id<MTLBuffer>
+mt_nativeBuffer(GPUBuffer *buffer) {
+  return buffer ? (id<MTLBuffer>)buffer->_priv : nil;
+}
+
 GPU_HIDE
 GPURenderCommandEncoder*
 mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
@@ -155,7 +160,7 @@ mt_vertexBuffer(GPURenderCommandEncoder *rce,
                 GPUBuffer               *buf,
                 size_t                   off,
                 uint32_t                 index) {
-  [mt_nativeRCE(rce) setVertexBuffer:(id<MTLBuffer>)buf offset:off atIndex:index];
+  [mt_nativeRCE(rce) setVertexBuffer:mt_nativeBuffer(buf) offset:off atIndex:index];
 }
 
 GPU_HIDE
@@ -182,7 +187,7 @@ mt_fragmentBuffer(GPURenderCommandEncoder *rce,
                   GPUBuffer               *buf,
                   size_t                   off,
                   uint32_t                 index) {
-  [mt_nativeRCE(rce) setFragmentBuffer:(id<MTLBuffer>)buf offset:off atIndex:index];
+  [mt_nativeRCE(rce) setFragmentBuffer:mt_nativeBuffer(buf) offset:off atIndex:index];
 }
 
 GPU_HIDE
@@ -233,9 +238,9 @@ mt_drawIndexedPrims(GPURenderCommandEncoder *rce,
   indexBufferOffset = rce->_indexBufferOffset + (uint64_t)firstIndex * indexSize;
 
   [mt_nativeRCE(rce) drawIndexedPrimitives:(MTLPrimitiveType)rce->_primitiveType
-                                indexCount:indexCount
+                               indexCount:indexCount
                                  indexType:(MTLIndexType)rce->_indexType
-                               indexBuffer:(id<MTLBuffer>)rce->_indexBuffer
+                               indexBuffer:mt_nativeBuffer(rce->_indexBuffer)
                          indexBufferOffset:(NSUInteger)indexBufferOffset
                              instanceCount:instanceCount
                                 baseVertex:vertexOffset
@@ -249,7 +254,7 @@ mt_drawPrimitivesIndirect(GPURenderCommandEncoder *rce,
                           GPUBuffer               *argsBuffer,
                           uint64_t                 argsOffset) {
   [mt_nativeRCE(rce) drawPrimitives:(MTLPrimitiveType)type
-                      indirectBuffer:(id<MTLBuffer>)argsBuffer
+                      indirectBuffer:mt_nativeBuffer(argsBuffer)
                 indirectBufferOffset:(NSUInteger)argsOffset];
 }
 
@@ -260,9 +265,9 @@ mt_drawIndexedPrimsIndirect(GPURenderCommandEncoder *rce,
                             uint64_t                 argsOffset) {
   [mt_nativeRCE(rce) drawIndexedPrimitives:(MTLPrimitiveType)rce->_primitiveType
                                  indexType:(MTLIndexType)rce->_indexType
-                               indexBuffer:(id<MTLBuffer>)rce->_indexBuffer
+                               indexBuffer:mt_nativeBuffer(rce->_indexBuffer)
                          indexBufferOffset:(NSUInteger)rce->_indexBufferOffset
-                            indirectBuffer:(id<MTLBuffer>)argsBuffer
+                            indirectBuffer:mt_nativeBuffer(argsBuffer)
                       indirectBufferOffset:(NSUInteger)argsOffset];
 }
 

@@ -1,4 +1,5 @@
 #include "test.h"
+#include "../../src/api/buffer_internal.h"
 #include "../../src/api/cmdqueue_internal.h"
 
 static const char *kRenderPipelineMSL =
@@ -462,11 +463,17 @@ static int
 check_render_encoder_validation(void) {
   GPURenderPassEncoder pass = {0};
   GPURenderPassEncoder endedPass = {0};
-  GPUBuffer *fakeBuffer = (GPUBuffer *)(uintptr_t)1u;
+  GPUBuffer fakeBufferStorage = {0};
+  GPUBuffer *fakeBuffer = &fakeBufferStorage;
   GPUBufferBinding binding = {0};
   GPUDynamicStateApplyInfo dynamicState = {0};
   uint32_t pushValue = 0xaabbccddu;
   uint8_t pushBefore[16];
+
+  fakeBufferStorage.sizeBytes = 128u;
+  fakeBufferStorage.usage = GPU_BUFFER_USAGE_VERTEX |
+                            GPU_BUFFER_USAGE_INDEX |
+                            GPU_BUFFER_USAGE_INDIRECT;
 
   GPUBindRenderPipeline(NULL, NULL);
   GPUBindVertexBuffers(NULL, 0u, 0u, NULL);

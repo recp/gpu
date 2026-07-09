@@ -15,6 +15,7 @@
  */
 
 #include "../../common.h"
+#include "../buffer_internal.h"
 #include "pipeline_internal.h"
 #include "rce_internal.h"
 
@@ -86,6 +87,31 @@ gpu_validIndirectBatch(uint64_t argsOffset,
   return maxCommandIndex <= (UINT64_MAX - argsOffset) / strideBytes;
 }
 
+static bool
+gpu_validIndexRange(GPUBuffer *buffer,
+                    uint64_t   baseOffset,
+                    GPUIndexType indexType,
+                    uint32_t   firstIndex,
+                    uint32_t   indexCount) {
+  uint64_t indexSize;
+  uint64_t firstByte;
+  uint64_t byteCount;
+
+  indexSize = indexType == GPUIndexTypeUInt32 ? 4u : 2u;
+  if (firstIndex > UINT64_MAX / indexSize ||
+      indexCount > UINT64_MAX / indexSize) {
+    return false;
+  }
+
+  firstByte = (uint64_t)firstIndex * indexSize;
+  byteCount = (uint64_t)indexCount * indexSize;
+  if (baseOffset > UINT64_MAX - firstByte) {
+    return false;
+  }
+
+  return gpuBufferRangeValid(buffer, baseOffset + firstByte, byteCount);
+}
+
 GPU_EXPORT
 void
 GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
@@ -151,7 +177,9 @@ GPUBindVertexBuffers(GPURenderPassEncoder   *pass,
     return;
 
   for (i = 0; i < count; i++) {
-    if (bindings[i].buffer) {
+    if (bindings[i].buffer &&
+        gpuBufferHasUsage(bindings[i].buffer, GPU_BUFFER_USAGE_VERTEX) &&
+        gpuBufferOffsetValid(bindings[i].buffer, bindings[i].offset)) {
       api->rce.vertexBuffer(pass,
                             bindings[i].buffer,
                             bindings[i].offset,
@@ -169,6 +197,9 @@ GPUBindIndexBuffer(GPURenderPassEncoder *pass,
   if (!pass || pass->_ended || !indexBuffer)
     return;
   if (!gpu_validIndexType(indexType))
+    return;
+  if (!gpuBufferHasUsage(indexBuffer, GPU_BUFFER_USAGE_INDEX) ||
+      !gpuBufferOffsetValid(indexBuffer, offset))
     return;
 
   pass->_indexBuffer       = indexBuffer;
@@ -378,7 +409,12 @@ GPUDrawIndexed(GPURenderPassEncoder *pass,
   GPUApi *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline ||
-      indexCount == 0 || instanceCount == 0 || !pass->_hasIndexBuffer)
+      indexCount == 0 || instanceCount == 0 || !pass->_hasIndexBuffer ||
+      !gpu_validIndexRange(pass->_indexBuffer,
+                           pass->_indexBufferOffset,
+                           pass->_indexType,
+                           firstIndex,
+                           indexCount))
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.drawIndexedPrims)
     return;
@@ -398,7 +434,9 @@ GPUDrawIndirect(GPURenderPassEncoder *pass,
                 uint64_t              argsOffset) {
   GPUApi *api;
 
-  if (!pass || pass->_ended || !pass->_hasPipeline || !argsBuffer)
+  if (!pass || pass->_ended || !pass->_hasPipeline ||
+      !gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
+      !gpuBufferRangeValid(argsBuffer, argsOffset, 16u))
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.drawPrimitivesIndirect)
     return;
@@ -417,7 +455,9 @@ GPUDrawIndexedIndirect(GPURenderPassEncoder *pass,
   GPUApi *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline ||
-      !pass->_hasIndexBuffer || !argsBuffer)
+      !pass->_hasIndexBuffer ||
+      !gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
+      !gpuBufferRangeValid(argsBuffer, argsOffset, 20u))
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.drawIndexedPrimsIndirect)
     return;

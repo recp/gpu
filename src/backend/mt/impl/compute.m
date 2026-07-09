@@ -30,6 +30,11 @@ mt_nativeCCE(GPUComputePassEncoder *enc) {
   return enc ? (__bridge id<MTLComputeCommandEncoder>)enc->_priv : nil;
 }
 
+static id<MTLBuffer>
+mt_nativeBuffer(GPUBuffer *buffer) {
+  return buffer ? (id<MTLBuffer>)buffer->_priv : nil;
+}
+
 GPU_HIDE
 GPUComputePipeline*
 mt_newComputePipeline(void) {
@@ -174,7 +179,7 @@ mt_computeBuffer(GPUComputePassEncoder *enc,
                  GPUBuffer             *buf,
                  size_t                 off,
                  uint32_t               index) {
-  [mt_nativeCCE(enc) setBuffer:(id<MTLBuffer>)buf
+  [mt_nativeCCE(enc) setBuffer:mt_nativeBuffer(buf)
                         offset:(NSUInteger)off
                        atIndex:index];
 }
@@ -233,7 +238,7 @@ void
 mt_dispatchIndirect(GPUComputePassEncoder *enc,
                     GPUBuffer             *argsBuffer,
                     uint64_t               argsOffset) {
-  [mt_nativeCCE(enc) dispatchThreadgroupsWithIndirectBuffer:(id<MTLBuffer>)argsBuffer
+  [mt_nativeCCE(enc) dispatchThreadgroupsWithIndirectBuffer:mt_nativeBuffer(argsBuffer)
                                                indirectBufferOffset:(NSUInteger)argsOffset
                                              threadsPerThreadgroup:MTLSizeMake(enc->_workgroupSize[0] ? enc->_workgroupSize[0] : 1u,
                                                                                enc->_workgroupSize[1] ? enc->_workgroupSize[1] : 1u,

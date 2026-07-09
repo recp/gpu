@@ -1,4 +1,5 @@
 #include "test.h"
+#include "../../src/api/buffer_internal.h"
 #include "../../src/api/cmdqueue_internal.h"
 #include "../../src/api/compute_internal.h"
 
@@ -131,10 +132,14 @@ check_compute_pass_validation(void) {
   GPUCommandBuffer fakeCmdb = {0};
   GPUComputePassEncoder fakePass = {0};
   GPUComputePipeline fakePipeline = {0};
-  GPUBuffer *fakeBuffer = (GPUBuffer *)(uintptr_t)1u;
+  GPUBuffer fakeBufferStorage = {0};
+  GPUBuffer *fakeBuffer = &fakeBufferStorage;
   uint32_t dynamicOffset = 0u;
   uint32_t pushValue = 0x11223344u;
   uint8_t pushBefore[16];
+
+  fakeBufferStorage.sizeBytes = 128u;
+  fakeBufferStorage.usage = GPU_BUFFER_USAGE_INDIRECT;
 
   if (GPUBeginComputePass(NULL, "null")) {
     fprintf(stderr, "compute pass accepted null command buffer\n");

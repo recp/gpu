@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "buffer_internal.h"
 
 GPU_EXPORT
 GPUResult
@@ -79,7 +80,9 @@ GPUQueueWriteBuffer(GPUCommandQueue * __restrict queue,
                     uint64_t                     sizeBytes) {
   GPUApi *api;
 
-  if (!queue || !buff || !data || sizeBytes == 0) {
+  if (!queue || !buff || !data || sizeBytes == 0 ||
+      !gpuBufferHasUsage(buff, GPU_BUFFER_USAGE_COPY_DST) ||
+      !gpuBufferRangeValid(buff, dstOffset, sizeBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -102,7 +105,9 @@ GPUQueueReadBuffer(GPUCommandQueue * __restrict queue,
                    uint64_t                     sizeBytes) {
   GPUApi *api;
 
-  if (!queue || !buff || !outData || sizeBytes == 0) {
+  if (!queue || !buff || !outData || sizeBytes == 0 ||
+      !gpuBufferHasUsage(buff, GPU_BUFFER_USAGE_COPY_SRC) ||
+      !gpuBufferRangeValid(buff, srcOffset, sizeBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 

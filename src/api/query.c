@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "buffer_internal.h"
 #include "cmdqueue_internal.h"
 #include "query_internal.h"
 
@@ -187,6 +188,10 @@ GPUResolveQuerySet(GPUCommandBuffer *cmdb,
 
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder ||
       !set || !dstBuffer || set->type != GPU_QUERY_TIMESTAMP ||
+      !gpuBufferHasUsage(dstBuffer, GPU_BUFFER_USAGE_COPY_DST) ||
+      !gpuBufferRangeValid(dstBuffer,
+                           dstOffset,
+                           (uint64_t)queryCount * sizeof(uint64_t)) ||
       queryCount == 0u || firstQuery > set->count ||
       queryCount > set->count - firstQuery) {
     return;

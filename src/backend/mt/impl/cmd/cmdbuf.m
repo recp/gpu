@@ -174,7 +174,7 @@ mt_resolveQuerySet(GPUCommandBuffer *cmdb,
     return;
   }
 
-  dst = (id<MTLBuffer>)dstBuffer;
+  dst = (id<MTLBuffer>)dstBuffer->_priv;
   resolveBytes = (uint64_t)queryCount * sizeof(MTLCounterResultTimestamp);
   if (dstOffset > [dst length] || resolveBytes > [dst length] - dstOffset) {
     return;

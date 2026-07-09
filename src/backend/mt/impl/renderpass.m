@@ -143,6 +143,11 @@ mt_nativeCopyEncoder(GPUCopyPassEncoder *pass) {
   return pass ? (__bridge id<MTLBlitCommandEncoder>)pass->_priv : nil;
 }
 
+static id<MTLBuffer>
+mt_nativeBuffer(GPUBuffer *buffer) {
+  return buffer ? (id<MTLBuffer>)buffer->_priv : nil;
+}
+
 static bool
 mt_bufferCopyRangeValid(id<MTLBuffer> buffer, uint64_t offset, uint64_t size) {
   uint64_t length;
@@ -161,6 +166,7 @@ mt_bufferTextureRangeValid(id<MTLBuffer>                         buffer,
                            uint64_t                             *outBytesPerImage) {
   uint64_t rowsPerImage;
   uint64_t bytesPerImage;
+  uint64_t imageCount;
   uint64_t totalBytes;
 
   if (!buffer || !region || region->bytesPerRow == 0) {
@@ -175,11 +181,18 @@ mt_bufferTextureRangeValid(id<MTLBuffer>                         buffer,
   }
 
   bytesPerImage = (uint64_t)region->bytesPerRow * rowsPerImage;
-  if (bytesPerImage > UINT64_MAX / region->texture.layerCount) {
+  if (region->texture.depth == 0 ||
+      region->texture.layerCount == 0 ||
+      region->texture.depth > UINT64_MAX / region->texture.layerCount) {
     return false;
   }
 
-  totalBytes = bytesPerImage * region->texture.layerCount;
+  imageCount = (uint64_t)region->texture.depth * region->texture.layerCount;
+  if (bytesPerImage > UINT64_MAX / imageCount) {
+    return false;
+  }
+
+  totalBytes = bytesPerImage * imageCount;
   if (!mt_bufferCopyRangeValid(buffer, region->bufferOffset, totalBytes)) {
     return false;
   }
@@ -235,8 +248,8 @@ mt_copyBufferToBuffer(GPUCopyPassEncoder        *pass,
   id<MTLBuffer> srcBuffer;
   id<MTLBuffer> dstBuffer;
 
-  srcBuffer = (id<MTLBuffer>)src;
-  dstBuffer = (id<MTLBuffer>)dst;
+  srcBuffer = mt_nativeBuffer(src);
+  dstBuffer = mt_nativeBuffer(dst);
   if (!pass ||
       !region ||
       !mt_bufferCopyRangeValid(srcBuffer, region->srcOffset, region->sizeBytes) ||
@@ -263,7 +276,7 @@ mt_copyBufferToTexture(GPUCopyPassEncoder               *pass,
   uint64_t bytesPerImage;
   bool texture3D;
 
-  srcBuffer = (id<MTLBuffer>)src;
+  srcBuffer = mt_nativeBuffer(src);
   if (!pass ||
       !dst ||
       !dst->_priv ||
@@ -313,7 +326,7 @@ mt_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
   uint64_t bytesPerImage;
   bool texture3D;
 
-  dstBuffer = (id<MTLBuffer>)dst;
+  dstBuffer = mt_nativeBuffer(dst);
   if (!pass ||
       !src ||
       !src->_priv ||

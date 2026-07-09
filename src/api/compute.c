@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "buffer_internal.h"
 #include "cmdqueue_internal.h"
 #include "compute_internal.h"
 #include "descr/descriptor_internal.h"
@@ -363,7 +364,9 @@ GPUDispatchIndirect(GPUComputePassEncoder *pass,
                     uint64_t              argsOffset) {
   GPUApi *api;
 
-  if (!pass || pass->_ended || !pass->_hasPipeline || !argsBuffer) {
+  if (!pass || pass->_ended || !pass->_hasPipeline ||
+      !gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
+      !gpuBufferRangeValid(argsBuffer, argsOffset, 12u)) {
     return;
   }
   if (!(api = gpuActiveGPUApi()) || !api->compute.dispatchIndirect) {
