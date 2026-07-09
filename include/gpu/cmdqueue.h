@@ -24,6 +24,7 @@ extern "C" {
 
 struct GPUDevice;
 typedef struct GPUFence GPUFence;
+typedef struct GPUSemaphore GPUSemaphore;
 
 typedef enum GPUQueueFlagBits {
   GPU_QUEUE_GRAPHICS_BIT         = 0x00000001,
@@ -61,11 +62,39 @@ typedef struct GPUQueueSubmitInfo {
   GPUFence *fence; /* optional; signaled after submitted buffers complete */
 } GPUQueueSubmitInfo;
 
+typedef struct GPUQueueSemaphoreWait {
+  GPUSemaphore *semaphore;
+  uint64_t value;
+  GPUPipelineStageMask waitStages;
+} GPUQueueSemaphoreWait;
+
+typedef struct GPUQueueSemaphoreSignal {
+  GPUSemaphore *semaphore;
+  uint64_t value;
+} GPUQueueSemaphoreSignal;
+
+typedef struct GPUQueueSubmitExInfo {
+  GPUChainedStruct chain;
+  uint32_t commandBufferCount;
+  GPUCommandBuffer * const *ppCommandBuffers;
+  uint32_t waitCount;
+  const GPUQueueSemaphoreWait *pWaits;
+  uint32_t signalCount;
+  const GPUQueueSemaphoreSignal *pSignals;
+  GPUFence *fence;
+} GPUQueueSubmitExInfo;
+
 typedef struct GPUFenceCreateInfo {
   GPUChainedStruct chain;
   const char      *label;
   bool             signaled;
 } GPUFenceCreateInfo;
+
+typedef struct GPUSemaphoreCreateInfo {
+  GPUChainedStruct chain;
+  const char      *label;
+  uint64_t         initialValue;
+} GPUSemaphoreCreateInfo;
 
 /*!
  * @brief get command queue created created with logical device creation.
@@ -110,6 +139,11 @@ GPUQueueSubmit(GPUCommandQueue           * __restrict cmdq,
 
 GPU_EXPORT
 GPUResult
+GPUQueueSubmitEx(GPUCommandQueue             * __restrict cmdq,
+                 const GPUQueueSubmitExInfo  * __restrict info);
+
+GPU_EXPORT
+GPUResult
 GPUCreateFence(struct GPUDevice          * __restrict device,
                const GPUFenceCreateInfo  * __restrict info,
                GPUFence                 ** __restrict outFence);
@@ -129,6 +163,16 @@ GPUIsFenceSignaled(GPUFence * __restrict fence);
 GPU_EXPORT
 void
 GPUResetFence(GPUFence * __restrict fence);
+
+GPU_EXPORT
+GPUResult
+GPUCreateSemaphore(struct GPUDevice              * __restrict device,
+                   const GPUSemaphoreCreateInfo  * __restrict info,
+                   GPUSemaphore                 ** __restrict outSemaphore);
+
+GPU_EXPORT
+void
+GPUDestroySemaphore(GPUSemaphore * __restrict semaphore);
 
 #ifdef __cplusplus
 }

@@ -681,10 +681,135 @@ check_queue_submit_fence(GPUDevice *device) {
   return ok;
 }
 
+static int
+check_queue_submit_ex_semaphore(GPUDevice *device) {
+  GPUCommandQueue *queue;
+  GPUCommandBuffer *cmdb;
+  GPUCommandBuffer *buffers[1];
+  GPUFence *fence;
+  GPUFenceCreateInfo fenceInfo = {0};
+  GPUSemaphore *semaphore;
+  GPUSemaphoreCreateInfo semaphoreInfo = {0};
+  GPUQueueSemaphoreWait wait = {0};
+  GPUQueueSemaphoreSignal signal = {0};
+  GPUQueueSubmitExInfo submitInfo = {0};
+  int ok;
+
+  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0);
+  if (!queue) {
+    fprintf(stderr, "failed to get graphics queue for submit ex test\n");
+    return 0;
+  }
+
+  semaphoreInfo.chain.sType = GPU_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  semaphoreInfo.chain.structSize = sizeof(semaphoreInfo);
+  semaphore = (GPUSemaphore *)(uintptr_t)1u;
+  if (GPUCreateSemaphore(NULL, &semaphoreInfo, &semaphore) != GPU_ERROR_INVALID_ARGUMENT ||
+      semaphore != NULL) {
+    fprintf(stderr, "semaphore create accepted null device\n");
+    return 0;
+  }
+  semaphore = (GPUSemaphore *)(uintptr_t)1u;
+  if (GPUCreateSemaphore(device, &semaphoreInfo, &semaphore) != GPU_ERROR_INVALID_ARGUMENT ||
+      semaphore != NULL) {
+    fprintf(stderr, "semaphore create accepted wrong sType\n");
+    return 0;
+  }
+  semaphoreInfo.chain.sType = GPU_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+  semaphoreInfo.chain.structSize = (uint32_t)(sizeof(semaphoreInfo) - 1u);
+  semaphore = (GPUSemaphore *)(uintptr_t)1u;
+  if (GPUCreateSemaphore(device, &semaphoreInfo, &semaphore) != GPU_ERROR_INVALID_ARGUMENT ||
+      semaphore != NULL) {
+    fprintf(stderr, "semaphore create accepted short structSize\n");
+    return 0;
+  }
+  if (GPUCreateSemaphore(device, NULL, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "semaphore create accepted null output\n");
+    return 0;
+  }
+
+  memset(&semaphoreInfo, 0, sizeof(semaphoreInfo));
+  semaphoreInfo.chain.sType = GPU_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+  semaphoreInfo.chain.structSize = sizeof(semaphoreInfo);
+  semaphoreInfo.label = "submit-ex-semaphore";
+  semaphoreInfo.initialValue = 1u;
+  semaphore = NULL;
+  if (GPUCreateSemaphore(device, &semaphoreInfo, &semaphore) != GPU_OK || !semaphore) {
+    fprintf(stderr, "failed to create semaphore\n");
+    return 0;
+  }
+
+  fenceInfo.chain.sType = GPU_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  fenceInfo.chain.structSize = sizeof(fenceInfo);
+  fence = NULL;
+  if (GPUCreateFence(device, &fenceInfo, &fence) != GPU_OK || !fence) {
+    fprintf(stderr, "failed to create fence for submit ex\n");
+    GPUDestroySemaphore(semaphore);
+    return 0;
+  }
+
+  cmdb = NULL;
+  if (GPUAcquireCommandBuffer(queue, "submit-ex", &cmdb) != GPU_OK || !cmdb) {
+    fprintf(stderr, "failed to acquire command buffer for submit ex\n");
+    GPUDestroyFence(fence);
+    GPUDestroySemaphore(semaphore);
+    return 0;
+  }
+
+  buffers[0] = cmdb;
+  ok = GPUQueueSubmitEx(queue, NULL) == GPU_ERROR_INVALID_ARGUMENT;
+  ok = ok && GPUQueueSubmitEx(NULL, &submitInfo) == GPU_ERROR_INVALID_ARGUMENT;
+
+  submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.ppCommandBuffers = buffers;
+  ok = ok && GPUQueueSubmitEx(queue, &submitInfo) == GPU_ERROR_INVALID_ARGUMENT;
+
+  submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_EX_INFO;
+  submitInfo.chain.structSize = (uint32_t)(sizeof(submitInfo) - 1u);
+  ok = ok && GPUQueueSubmitEx(queue, &submitInfo) == GPU_ERROR_INVALID_ARGUMENT;
+
+  submitInfo.chain.structSize = sizeof(submitInfo);
+  submitInfo.waitCount = 1u;
+  submitInfo.pWaits = NULL;
+  ok = ok && GPUQueueSubmitEx(queue, &submitInfo) == GPU_ERROR_INVALID_ARGUMENT;
+
+  wait.semaphore = semaphore;
+  wait.value = 1u;
+  wait.waitStages = GPU_STAGE_TOP;
+  submitInfo.pWaits = &wait;
+  ok = ok && GPUQueueSubmitEx(queue, &submitInfo) == GPU_ERROR_UNSUPPORTED;
+
+  submitInfo.waitCount = 0u;
+  submitInfo.pWaits = NULL;
+  submitInfo.signalCount = 1u;
+  submitInfo.pSignals = NULL;
+  ok = ok && GPUQueueSubmitEx(queue, &submitInfo) == GPU_ERROR_INVALID_ARGUMENT;
+
+  signal.semaphore = semaphore;
+  signal.value = 2u;
+  submitInfo.pSignals = &signal;
+  ok = ok && GPUQueueSubmitEx(queue, &submitInfo) == GPU_ERROR_UNSUPPORTED;
+
+  submitInfo.signalCount = 0u;
+  submitInfo.pSignals = NULL;
+  submitInfo.fence = fence;
+  ok = ok &&
+       GPUQueueSubmitEx(queue, &submitInfo) == GPU_OK &&
+       GPUWaitFence(fence, UINT64_MAX) == GPU_OK &&
+       GPUIsFenceSignaled(fence);
+
+  GPUDestroyFence(fence);
+  GPUDestroySemaphore(semaphore);
+  return ok;
+}
+
 int
 gpu_test_queue(GPUAdapter *adapter, GPUDevice *device) {
   return check_adapter_enumeration() &&
          check_device_queue_create_validation(adapter) &&
          check_queue_selection(device) &&
-         check_queue_submit_fence(device);
+         check_queue_submit_fence(device) &&
+         check_queue_submit_ex_semaphore(device);
 }

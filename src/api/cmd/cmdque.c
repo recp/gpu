@@ -34,6 +34,10 @@ struct GPUFence {
   bool signaled;
 };
 
+struct GPUSemaphore {
+  uint64_t initialValue;
+};
+
 typedef struct GPUFenceSubmitCompletion {
   GPUFence                    *fence;
   void                        *sender;
@@ -286,6 +290,52 @@ GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
 
 GPU_EXPORT
 GPUResult
+GPUQueueSubmitEx(GPUCommandQueue            * __restrict cmdq,
+                 const GPUQueueSubmitExInfo * __restrict info) {
+  GPUQueueSubmitInfo baseInfo;
+
+  if (!cmdq || !info) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+      info->chain.sType != GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_EX_INFO) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if ((info->waitCount > 0u && !info->pWaits) ||
+      (info->signalCount > 0u && !info->pSignals)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  for (uint32_t i = 0; i < info->waitCount; i++) {
+    if (!info->pWaits[i].semaphore) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+  }
+  for (uint32_t i = 0; i < info->signalCount; i++) {
+    if (!info->pSignals[i].semaphore) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+  }
+
+  if (info->waitCount > 0u || info->signalCount > 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  memset(&baseInfo, 0, sizeof(baseInfo));
+  baseInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  baseInfo.chain.structSize = sizeof(baseInfo);
+  baseInfo.commandBufferCount = info->commandBufferCount;
+  baseInfo.ppCommandBuffers = info->ppCommandBuffers;
+  baseInfo.fence = info->fence;
+
+  return GPUQueueSubmit(cmdq, &baseInfo);
+}
+
+GPU_EXPORT
+GPUResult
 GPUCreateFence(GPUDevice              * __restrict device,
                const GPUFenceCreateInfo * __restrict info,
                GPUFence              ** __restrict outFence) {
@@ -436,4 +486,44 @@ GPU_EXPORT
 void
 GPUResetFence(GPUFence * __restrict fence) {
   gpu_resetFenceInternal(fence);
+}
+
+GPU_EXPORT
+GPUResult
+GPUCreateSemaphore(GPUDevice                 * __restrict device,
+                   const GPUSemaphoreCreateInfo * __restrict info,
+                   GPUSemaphore              ** __restrict outSemaphore) {
+  GPUSemaphore *semaphore;
+
+  if (!outSemaphore) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outSemaphore = NULL;
+
+  if (!device) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info &&
+      info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+      info->chain.sType != GPU_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info && info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  semaphore = calloc(1, sizeof(*semaphore));
+  if (!semaphore) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  semaphore->initialValue = info ? info->initialValue : 0u;
+  *outSemaphore = semaphore;
+  return GPU_OK;
+}
+
+GPU_EXPORT
+void
+GPUDestroySemaphore(GPUSemaphore * __restrict semaphore) {
+  free(semaphore);
 }

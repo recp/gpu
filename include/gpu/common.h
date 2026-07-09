@@ -118,6 +118,15 @@ enum {
   GPU_SHADER_STAGE_COMPUTE_BIT  = 1u << 2
 };
 
+typedef enum GPUPipelineStageMask {
+  GPU_STAGE_TOP      = 1u << 0,
+  GPU_STAGE_VERTEX   = 1u << 1,
+  GPU_STAGE_FRAGMENT = 1u << 2,
+  GPU_STAGE_COMPUTE  = 1u << 3,
+  GPU_STAGE_TRANSFER = 1u << 4,
+  GPU_STAGE_BOTTOM   = 1u << 5
+} GPUPipelineStageMask;
+
 typedef enum GPUBindingType {
   GPU_BINDING_UNIFORM_BUFFER = 0,
   GPU_BINDING_STORAGE_BUFFER = 1,
