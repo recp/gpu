@@ -358,6 +358,258 @@ check_render_pipeline_validation(GPUDevice *device) {
 }
 
 static int
+check_render_readback(GPUDevice *device) {
+  static const float kFullscreenTriangle[] = {
+    -1.0f, -1.0f,
+     3.0f, -1.0f,
+    -1.0f,  3.0f
+  };
+  const uint32_t width = 4u;
+  const uint32_t height = 4u;
+  const uint64_t pixelBytes = (uint64_t)width * height * 4u;
+  GPUCommandQueue *queue;
+  GPUShaderLibrary *library = NULL;
+  GPURenderPipeline *pipeline = NULL;
+  GPUBuffer *vertexBuffer = NULL;
+  GPUBuffer *readbackBuffer = NULL;
+  GPUTexture *target = NULL;
+  GPUTextureView *targetView = NULL;
+  GPUCommandBuffer *cmdb = NULL;
+  GPUCommandBuffer *buffers[1];
+  GPURenderPassEncoder *renderPass = NULL;
+  GPUCopyPassEncoder *copyPass = NULL;
+  GPUFence *fence = NULL;
+  GPUColorTargetState colorTarget = {0};
+  GPUVertexAttribute attr = {0};
+  GPUVertexBufferLayout vertexLayout = {0};
+  GPURenderPipelineCreateInfo pipelineInfo = {0};
+  GPUBufferCreateInfo bufferInfo = {0};
+  GPUTextureCreateInfo textureInfo = {0};
+  GPUTextureViewCreateInfo viewInfo = {0};
+  GPURenderPassColorAttachment color = {0};
+  GPURenderPassCreateInfo rp = {0};
+  GPUBufferBinding vertexBinding = {0};
+  GPUTextureBarrier textureBarrier = {0};
+  GPUBarrierBatch barrierBatch = {0};
+  GPUBufferTextureCopyRegion copyRegion = {0};
+  GPUQueueSubmitInfo submitInfo = {0};
+  uint8_t pixels[4u * 4u * 4u] = {0};
+  size_t centerOffset;
+  int ok = 0;
+
+  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  if (!queue) {
+    fprintf(stderr, "failed to get graphics queue for render readback test\n");
+    return 0;
+  }
+  if (!create_render_test_library(device, &library)) {
+    fprintf(stderr, "failed to create render readback library\n");
+    goto cleanup;
+  }
+
+  colorTarget.format = GPU_FORMAT_BGRA8_UNORM;
+  attr.shaderLocation = 0u;
+  attr.format = GPUFloat2;
+  attr.offset = 0u;
+  vertexLayout.strideBytes = 8u;
+  vertexLayout.stepMode = GPU_VERTEX_STEP_MODE_VERTEX;
+  vertexLayout.attributeCount = 1u;
+  vertexLayout.pAttributes = &attr;
+
+  pipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
+  pipelineInfo.label = "api-render-readback-pipeline";
+  pipelineInfo.library = library;
+  pipelineInfo.vertexEntry = "api_vs";
+  pipelineInfo.fragmentEntry = "api_fs";
+  pipelineInfo.vertex.bufferLayoutCount = 1u;
+  pipelineInfo.vertex.pBufferLayouts = &vertexLayout;
+  pipelineInfo.colorTargetCount = 1u;
+  pipelineInfo.pColorTargets = &colorTarget;
+  pipelineInfo.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  pipelineInfo.cullMode = GPU_CULL_MODE_NONE;
+  pipelineInfo.frontFace = GPU_FRONT_FACE_CCW;
+  pipelineInfo.multisample.sampleCount = 1u;
+  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
+      !pipeline) {
+    fprintf(stderr, "failed to create render readback pipeline\n");
+    goto cleanup;
+  }
+
+  bufferInfo.chain.sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label = "api-render-readback-vertices";
+  bufferInfo.sizeBytes = sizeof(kFullscreenTriangle);
+  bufferInfo.usage = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(device, &bufferInfo, &vertexBuffer) != GPU_OK ||
+      !vertexBuffer ||
+      GPUQueueWriteBuffer(queue,
+                          vertexBuffer,
+                          0u,
+                          kFullscreenTriangle,
+                          sizeof(kFullscreenTriangle)) != GPU_OK) {
+    fprintf(stderr, "failed to create render readback vertex buffer\n");
+    goto cleanup;
+  }
+
+  bufferInfo.label = "api-render-readback-buffer";
+  bufferInfo.sizeBytes = pixelBytes;
+  bufferInfo.usage = GPU_BUFFER_USAGE_COPY_DST | GPU_BUFFER_USAGE_COPY_SRC;
+  if (GPUCreateBuffer(device, &bufferInfo, &readbackBuffer) != GPU_OK ||
+      !readbackBuffer) {
+    fprintf(stderr, "failed to create render readback buffer\n");
+    goto cleanup;
+  }
+
+  textureInfo.chain.sType = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label = "api-render-readback-target";
+  textureInfo.dimension = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format = GPU_FORMAT_BGRA8_UNORM;
+  textureInfo.width = width;
+  textureInfo.height = height;
+  textureInfo.depthOrLayers = 1u;
+  textureInfo.mipLevelCount = 1u;
+  textureInfo.sampleCount = 1u;
+  textureInfo.usage = GPU_TEXTURE_USAGE_COLOR_TARGET |
+                      GPU_TEXTURE_USAGE_COPY_SRC;
+  if (GPUCreateTexture(device, &textureInfo, &target) != GPU_OK || !target) {
+    fprintf(stderr, "failed to create render readback target\n");
+    goto cleanup;
+  }
+
+  viewInfo.chain.sType = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.label = "api-render-readback-target-view";
+  viewInfo.viewType = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format = GPU_FORMAT_BGRA8_UNORM;
+  viewInfo.mipLevelCount = 1u;
+  viewInfo.arrayLayerCount = 1u;
+  if (GPUCreateTextureView(target, &viewInfo, &targetView) != GPU_OK ||
+      !targetView) {
+    fprintf(stderr, "failed to create render readback target view\n");
+    goto cleanup;
+  }
+
+  if (GPUAcquireCommandBuffer(queue, "api-render-readback", &cmdb) != GPU_OK ||
+      !cmdb) {
+    fprintf(stderr, "failed to acquire render readback command buffer\n");
+    goto cleanup;
+  }
+
+  color.view = targetView;
+  color.loadOp = GPU_LOAD_OP_CLEAR;
+  color.storeOp = GPU_STORE_OP_STORE;
+  color.clearColor.float32[0] = 0.0f;
+  color.clearColor.float32[1] = 0.0f;
+  color.clearColor.float32[2] = 0.0f;
+  color.clearColor.float32[3] = 1.0f;
+  rp.chain.sType = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  rp.chain.structSize = sizeof(rp);
+  rp.label = "api-render-readback-pass";
+  rp.colorAttachmentCount = 1u;
+  rp.pColorAttachments = &color;
+
+  renderPass = GPUBeginRenderPass(cmdb, &rp);
+  if (!renderPass) {
+    fprintf(stderr, "failed to begin render readback pass\n");
+    goto cleanup;
+  }
+  vertexBinding.buffer = vertexBuffer;
+  GPUBindRenderPipeline(renderPass, pipeline);
+  GPUBindVertexBuffers(renderPass, 0u, 1u, &vertexBinding);
+  GPUDraw(renderPass, 3u, 1u, 0u, 0u);
+  GPUEndRenderPass(renderPass);
+  renderPass = NULL;
+
+  textureBarrier.texture = target;
+  textureBarrier.srcAccess = GPU_ACCESS_COLOR_WRITE;
+  textureBarrier.dstAccess = GPU_ACCESS_TRANSFER_READ;
+  textureBarrier.mipCount = 1u;
+  textureBarrier.layerCount = 1u;
+  barrierBatch.srcStages = GPU_STAGE_FRAGMENT;
+  barrierBatch.dstStages = GPU_STAGE_TRANSFER;
+  barrierBatch.textureBarrierCount = 1u;
+  barrierBatch.pTextureBarriers = &textureBarrier;
+  GPUEncodeBarriers(cmdb, &barrierBatch);
+
+  copyPass = GPUBeginCopyPass(cmdb, "api-render-readback-copy");
+  if (!copyPass) {
+    fprintf(stderr, "failed to begin render readback copy pass\n");
+    goto cleanup;
+  }
+  copyRegion.bytesPerRow = width * 4u;
+  copyRegion.rowsPerImage = height;
+  copyRegion.texture.width = width;
+  copyRegion.texture.height = height;
+  copyRegion.texture.depth = 1u;
+  copyRegion.texture.layerCount = 1u;
+  GPUCopyTextureToBuffer(copyPass, target, readbackBuffer, &copyRegion);
+  GPUEndCopyPass(copyPass);
+  copyPass = NULL;
+
+  if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
+    fprintf(stderr, "failed to create render readback fence\n");
+    goto cleanup;
+  }
+
+  buffers[0] = cmdb;
+  submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.ppCommandBuffers = buffers;
+  submitInfo.fence = fence;
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
+      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+    fprintf(stderr, "render readback submit failed\n");
+    cmdb = NULL;
+    goto cleanup;
+  }
+  cmdb = NULL;
+
+  if (GPUQueueReadBuffer(queue,
+                         readbackBuffer,
+                         0u,
+                         pixels,
+                         sizeof(pixels)) != GPU_OK) {
+    fprintf(stderr, "render readback buffer read failed\n");
+    goto cleanup;
+  }
+
+  centerOffset = ((size_t)2u * width + 2u) * 4u;
+  if (pixels[centerOffset + 0u] > 2u ||
+      pixels[centerOffset + 1u] > 2u ||
+      pixels[centerOffset + 2u] < 250u ||
+      pixels[centerOffset + 3u] < 250u) {
+    fprintf(stderr,
+            "render readback draw pixel mismatch: %u %u %u %u\n",
+            (unsigned)pixels[centerOffset + 0u],
+            (unsigned)pixels[centerOffset + 1u],
+            (unsigned)pixels[centerOffset + 2u],
+            (unsigned)pixels[centerOffset + 3u]);
+    goto cleanup;
+  }
+
+  ok = 1;
+
+cleanup:
+  if (copyPass) {
+    GPUEndCopyPass(copyPass);
+  }
+  if (renderPass) {
+    GPUEndRenderPass(renderPass);
+  }
+  GPUDestroyFence(fence);
+  GPUDestroyTextureView(targetView);
+  GPUDestroyTexture(target);
+  GPUDestroyBuffer(readbackBuffer);
+  GPUDestroyBuffer(vertexBuffer);
+  GPUDestroyRenderPipeline(pipeline);
+  GPUDestroyShaderLibrary(library);
+  return ok;
+}
+
+static int
 check_render_pass_validation(void) {
   GPUCommandBuffer fakeCmdb = {0};
   GPUTexture fakeColorTarget = {0};
@@ -722,5 +974,6 @@ int
 gpu_test_render(GPUDevice *device) {
   return check_render_pass_validation() &&
          check_render_encoder_validation() &&
-         check_render_pipeline_validation(device);
+         check_render_pipeline_validation(device) &&
+         check_render_readback(device);
 }
