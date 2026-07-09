@@ -26,7 +26,8 @@ extern "C" {
 typedef struct GPUBarrierBatch GPUBarrierBatch;
 
 typedef struct GPURenderPassDesc {
-  void *_priv;
+  void       *_priv;
+  const char *label;
 } GPURenderPassDesc;
 
 struct GPUCopyPassEncoder {

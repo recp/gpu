@@ -35,6 +35,9 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   native = [(id<MTLCommandBuffer>)cmdb->_priv renderCommandEncoderWithDescriptor: pass->_priv];
   if (!native)
     return NULL;
+  if (pass->label && pass->label[0] != '\0') {
+    native.label = [NSString stringWithUTF8String:pass->label];
+  }
 
   enc = calloc(1, sizeof(*enc));
   if (!enc) {

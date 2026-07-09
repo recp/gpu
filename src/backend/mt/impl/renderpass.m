@@ -127,6 +127,7 @@ mt_beginRenderPass(const GPURenderPassCreateInfo *info) {
   if (!renderPass)
     return NULL;
   renderPass->_priv = rpd;
+  renderPass->label = info->label;
 
   return renderPass;
 }
