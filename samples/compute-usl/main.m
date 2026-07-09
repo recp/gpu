@@ -346,6 +346,8 @@ static const QuadVertex kQuadVertices[] = {
   GPUComputePassEncoder *compute = NULL;
   GPURenderPassEncoder *render = NULL;
   GPUResult submitResult = GPU_OK;
+  GPUTextureBarrier textureBarrier = {0};
+  GPUBarrierBatch barriers = {0};
   GPURenderPassColorAttachment color = {0};
   GPURenderPassCreateInfo rp = {0};
   GPUBufferBinding vertexBuffer = {0};
@@ -374,6 +376,20 @@ static const QuadVertex kQuadVertices[] = {
               1);
   GPUEndComputePass(compute);
   compute = NULL;
+
+  textureBarrier.texture = _texture;
+  textureBarrier.srcAccess = GPU_ACCESS_SHADER_WRITE;
+  textureBarrier.dstAccess = GPU_ACCESS_SHADER_READ;
+  textureBarrier.baseMip = 0;
+  textureBarrier.mipCount = 1;
+  textureBarrier.baseLayer = 0;
+  textureBarrier.layerCount = 1;
+
+  barriers.srcStages = GPU_STAGE_COMPUTE;
+  barriers.dstStages = GPU_STAGE_FRAGMENT;
+  barriers.textureBarrierCount = 1;
+  barriers.pTextureBarriers = &textureBarrier;
+  GPUEncodeBarriers(cmdb, &barriers);
 
   color.view = GPUFrameGetTargetView(frame);
   color.loadOp = GPU_LOAD_OP_CLEAR;
