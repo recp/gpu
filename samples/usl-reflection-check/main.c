@@ -233,22 +233,14 @@ check_shader_artifact(GPUDevice *device,
                       uint32_t expectedResourceCount,
                       uint32_t expectedLayoutCount,
                       int storageOnly) {
-  GPUShaderLibraryCreateInfo createInfo;
   GPUShaderReflection reflection;
   GPUShaderLibrary *library;
   int ok;
 
-  memset(&createInfo, 0, sizeof(createInfo));
-  createInfo.chain.sType = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
-  createInfo.chain.structSize = sizeof(createInfo);
-  createInfo.label = storageOnly ? "reflection-storage.us" : "reflection.us";
-  createInfo.sourceKind = GPU_SHADER_SOURCE_USL_BYTECODE;
-  createInfo.sourceData = bytecode;
-  createInfo.sourceSize = bytecodeSize;
-  createInfo.generateReflection = true;
-
   library = NULL;
-  if (GPUCreateShaderLibrary(device, &createInfo, &library) != GPU_OK || !library) {
+  if (GPUCreateShaderLibraryFromUSL(device, bytecode, bytecodeSize, &library) !=
+        GPU_OK ||
+      !library) {
     fprintf(stderr, "failed to create shader library\n");
     return 0;
   }

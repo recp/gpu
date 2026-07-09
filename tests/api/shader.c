@@ -482,6 +482,74 @@ check_canonical_shader_library(GPUDevice *device,
   return 1;
 }
 
+static int
+check_usl_shader_library_helper(GPUDevice *device,
+                                const void *bytecode,
+                                uint64_t bytecodeSize) {
+  GPUShaderLibrary *library;
+  GPUShaderReflection reflection;
+  GPUShaderLayout *shaderLayout;
+  int ok;
+
+  library = (GPUShaderLibrary *)(uintptr_t)1u;
+  if (GPUCreateShaderLibraryFromUSL(NULL, bytecode, bytecodeSize, &library) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      library != NULL) {
+    fprintf(stderr, "USL shader helper accepted null device\n");
+    return 0;
+  }
+
+  library = (GPUShaderLibrary *)(uintptr_t)1u;
+  if (GPUCreateShaderLibraryFromUSL(device, NULL, bytecodeSize, &library) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      library != NULL) {
+    fprintf(stderr, "USL shader helper accepted null bytecode\n");
+    return 0;
+  }
+
+  library = (GPUShaderLibrary *)(uintptr_t)1u;
+  if (GPUCreateShaderLibraryFromUSL(device, bytecode, 0u, &library) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      library != NULL) {
+    fprintf(stderr, "USL shader helper accepted empty bytecode\n");
+    return 0;
+  }
+
+  if (GPUCreateShaderLibraryFromUSL(device, bytecode, bytecodeSize, NULL) !=
+      GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "USL shader helper accepted null output\n");
+    return 0;
+  }
+
+  library = NULL;
+  if (GPUCreateShaderLibraryFromUSL(device, bytecode, bytecodeSize, &library) !=
+        GPU_OK ||
+      !library) {
+    fprintf(stderr, "USL shader helper failed to create library\n");
+    return 0;
+  }
+
+  memset(&reflection, 0, sizeof(reflection));
+  shaderLayout = NULL;
+  ok = GPUGetShaderReflection(library, &reflection) == GPU_OK &&
+       reflection.resourceCount == 3u &&
+       GPUCreateShaderLayout(device, library, &shaderLayout) == GPU_OK &&
+       shaderLayout != NULL &&
+       shaderLayout->bindGroupLayoutCount == 2u &&
+       shaderLayout->pipelineLayout != NULL;
+
+  GPUDestroyShaderLayout(shaderLayout);
+  GPUFreeShaderReflection(&reflection);
+  GPUDestroyShaderLibrary(library);
+
+  if (!ok) {
+    fprintf(stderr, "unexpected USL shader helper data\n");
+    return 0;
+  }
+
+  return 1;
+}
+
 int
 gpu_test_shader(GPUDevice *device, const char *bytecodePath) {
   uint64_t bytecodeSize;
@@ -496,7 +564,10 @@ gpu_test_shader(GPUDevice *device, const char *bytecodePath) {
 
   ok = check_canonical_shader_library(device,
                                       bytecode,
-                                      bytecodeSize);
+                                      bytecodeSize) &&
+       check_usl_shader_library_helper(device,
+                                       bytecode,
+                                       bytecodeSize);
 
   free(bytecode);
   return ok;

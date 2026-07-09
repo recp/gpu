@@ -745,6 +745,15 @@ GPUCreateShaderLibraryFromUSL(GPUDevice *device,
                               const void *artifactData,
                               uint64_t artifactSize,
                               GPUShaderLibrary **outLibrary) {
+  if (!outLibrary) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outLibrary = NULL;
+  if (!device || !artifactData || artifactSize == 0u) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
   return gpu_createShaderLibraryFromUSLImpl(device,
                                             artifactData,
                                             artifactSize,
