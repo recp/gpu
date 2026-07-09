@@ -154,33 +154,102 @@ check_queue_selection(GPUDevice *device) {
 
 static int
 check_device_queue_create_validation(GPUAdapter *adapter) {
-  GPUCommandQueueCreateInfo queues[1] = {0};
+  GPUDeviceCreateInfo createInfo = {0};
+  GPUFeature requiredFeature = GPU_FEATURE_SHADER_F16;
+  GPUQueueRequest request = {0};
   GPUDevice *device;
   int ok;
 
-  if (GPUCreateDevice(NULL, NULL, 0)) {
+  if (GPUCreateDevice(NULL, NULL, &device) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "device create accepted null adapter\n");
     return 0;
   }
+  if (GPUCreateDevice(adapter, NULL, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "device create accepted null output\n");
+    return 0;
+  }
 
-  queues[0].flags = 0;
-  queues[0].count = 1;
-  if (GPUCreateDevice(adapter, queues, 1)) {
+  device = (GPUDevice *)(uintptr_t)1u;
+  createInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  if (GPUCreateDevice(adapter, &createInfo, &device) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      device != NULL) {
+    fprintf(stderr, "device create accepted wrong sType\n");
+    return 0;
+  }
+
+  device = (GPUDevice *)(uintptr_t)1u;
+  createInfo.chain.sType = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  createInfo.chain.structSize = (uint32_t)(sizeof(createInfo) - 1u);
+  if (GPUCreateDevice(adapter, &createInfo, &device) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      device != NULL) {
+    fprintf(stderr, "device create accepted short structSize\n");
+    return 0;
+  }
+
+  memset(&createInfo, 0, sizeof(createInfo));
+  createInfo.chain.sType = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  createInfo.chain.structSize = sizeof(createInfo);
+  createInfo.optional.featureCount = 1;
+  device = (GPUDevice *)(uintptr_t)1u;
+  if (GPUCreateDevice(adapter, &createInfo, &device) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      device != NULL) {
+    fprintf(stderr, "device create accepted malformed optional feature set\n");
+    return 0;
+  }
+
+  createInfo.optional.featureCount = 0;
+  createInfo.required.featureCount = 1;
+  createInfo.required.pFeatures = &requiredFeature;
+  device = (GPUDevice *)(uintptr_t)1u;
+  if (GPUCreateDevice(adapter, &createInfo, &device) != GPU_ERROR_UNSUPPORTED ||
+      device != NULL) {
+    fprintf(stderr, "device create accepted unsupported required feature\n");
+    return 0;
+  }
+
+  requiredFeature = GPU_FEATURE_COMPUTE;
+  device = NULL;
+  if (GPUCreateDevice(adapter, &createInfo, &device) != GPU_OK || !device) {
+    fprintf(stderr, "device create rejected required compute feature\n");
+    return 0;
+  }
+  GPUDestroyDevice(device);
+
+  memset(&createInfo, 0, sizeof(createInfo));
+  createInfo.chain.sType = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  createInfo.chain.structSize = sizeof(createInfo);
+  createInfo.queues.chain.sType = GPU_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  createInfo.queues.chain.structSize = sizeof(createInfo.queues);
+  createInfo.queues.requestCount = 1;
+  createInfo.queues.pRequests = &request;
+
+  request.type = 0;
+  request.count = 1;
+  device = (GPUDevice *)(uintptr_t)1u;
+  if (GPUCreateDevice(adapter, &createInfo, &device) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      device != NULL) {
     fprintf(stderr, "device create accepted queue request with no flags\n");
     return 0;
   }
 
-  queues[0].flags = GPU_QUEUE_GRAPHICS;
-  queues[0].count = 0;
-  if (GPUCreateDevice(adapter, queues, 1)) {
+  request.type = GPU_QUEUE_GRAPHICS;
+  request.count = 0;
+  device = (GPUDevice *)(uintptr_t)1u;
+  if (GPUCreateDevice(adapter, &createInfo, &device) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      device != NULL) {
     fprintf(stderr, "device create accepted zero queue count\n");
     return 0;
   }
 
-  queues[0].flags = GPU_QUEUE_GRAPHICS;
-  queues[0].count = 2;
-  device = GPUCreateDevice(adapter, queues, 1);
-  if (!device) {
+  request.type = GPU_QUEUE_GRAPHICS;
+  request.count = 2;
+  device = NULL;
+  if (GPUCreateDevice(adapter, &createInfo, &device) != GPU_OK || !device) {
     fprintf(stderr, "device create rejected explicit queue count\n");
     return 0;
   }

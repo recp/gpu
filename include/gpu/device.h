@@ -41,6 +41,44 @@ typedef struct GPUAdapterProperties {
 
 typedef struct GPUDevice GPUDevice;
 
+typedef enum GPUFeature {
+  GPU_FEATURE_COMPUTE = 0,
+  GPU_FEATURE_TIMESTAMPS = 1,
+  GPU_FEATURE_PIPELINE_STATISTICS = 2,
+  GPU_FEATURE_INDIRECT_DRAW = 3,
+  GPU_FEATURE_MULTI_DRAW = 4,
+  GPU_FEATURE_SUBGROUPS = 5,
+  GPU_FEATURE_SHADER_F16 = 6,
+  GPU_FEATURE_DESCRIPTOR_INDEXING = 7,
+  GPU_FEATURE_MESH_SHADER = 8,
+  GPU_FEATURE_RAY_TRACING = 9,
+  GPU_FEATURE_VARIABLE_RATE_SHADING = 10
+} GPUFeature;
+
+typedef struct GPUFeatureSet {
+  uint32_t          featureCount;
+  const GPUFeature *pFeatures;
+} GPUFeatureSet;
+
+typedef struct GPUQueueRequest {
+  GPUQueueFlagBits type;
+  uint32_t         count;
+} GPUQueueRequest;
+
+typedef struct GPUDeviceQueueCreateInfo {
+  GPUChainedStruct      chain;
+  uint32_t              requestCount;
+  const GPUQueueRequest *pRequests;
+} GPUDeviceQueueCreateInfo;
+
+typedef struct GPUDeviceCreateInfo {
+  GPUChainedStruct          chain;
+  const char               *label;
+  GPUFeatureSet             required;
+  GPUFeatureSet             optional;
+  GPUDeviceQueueCreateInfo  queues;
+} GPUDeviceCreateInfo;
+
 GPU_EXPORT
 GPUResult
 GPUEnumerateAdapters(GPUInstance *inst,
@@ -52,16 +90,15 @@ GPUResult
 GPUGetAdapterProperties(const GPUAdapter     *adapter,
                         GPUAdapterProperties *outProps);
 
-#define GPUDefaultQueuesParam NULL, 0
+GPU_EXPORT
+GPUResult
+GPUCreateDevice(GPUAdapter               *adapter,
+                const GPUDeviceCreateInfo *info,
+                GPUDevice                **outDevice);
 
 GPU_EXPORT
 GPUDevice *
-GPUCreateDevice(GPUAdapter               *adapter,
-                GPUCommandQueueCreateInfo queCI[],
-                uint32_t                  nQueCI);
-
-#define GPUCreateDeviceWithDefaultQueues(adapter)                             \
-  GPUCreateDevice(adapter, NULL, 0)
+GPUCreateDeviceWithDefaultQueues(GPUAdapter *adapter);
 
 GPU_EXPORT
 GPUDevice *

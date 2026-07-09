@@ -35,7 +35,8 @@ gpu_backendName(GPUBackend backend) {
 }
 
 static bool
-gpu_validQueueCreateInfos(GPUCommandQueueCreateInfo queCI[], uint32_t nQueCI) {
+gpu_validQueueCreateInfos(const GPUCommandQueueCreateInfo queCI[],
+                          uint32_t                        nQueCI) {
   if (!queCI) {
     return nQueCI == 0;
   }
@@ -50,6 +51,107 @@ gpu_validQueueCreateInfos(GPUCommandQueueCreateInfo queCI[], uint32_t nQueCI) {
   }
 
   return true;
+}
+
+static bool
+gpu_validQueueRequestType(GPUQueueFlagBits type) {
+  return type == GPU_QUEUE_GRAPHICS ||
+         type == GPU_QUEUE_COMPUTE ||
+         type == GPU_QUEUE_TRANSFER;
+}
+
+static bool
+gpu_validFeatureSet(const GPUFeatureSet *set) {
+  return set->featureCount == 0 || set->pFeatures;
+}
+
+static bool
+gpu_knownFeature(GPUFeature feature) {
+  return feature >= GPU_FEATURE_COMPUTE &&
+         feature <= GPU_FEATURE_VARIABLE_RATE_SHADING;
+}
+
+static bool
+gpu_supportedFeature(GPUFeature feature) {
+  return feature == GPU_FEATURE_COMPUTE;
+}
+
+static GPUResult
+gpu_validateFeatureSet(const GPUFeatureSet *set, bool required) {
+  if (!gpu_validFeatureSet(set)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  for (uint32_t i = 0; i < set->featureCount; i++) {
+    if (!gpu_knownFeature(set->pFeatures[i])) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    if (required && !gpu_supportedFeature(set->pFeatures[i])) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+  }
+
+  return GPU_OK;
+}
+
+static GPUResult
+gpu_buildQueueCreateInfos(const GPUDeviceCreateInfo  *info,
+                          GPUCommandQueueCreateInfo  *stackInfos,
+                          uint32_t                    stackInfoCount,
+                          GPUCommandQueueCreateInfo **outInfos,
+                          uint32_t                   *outInfoCount) {
+  const GPUDeviceQueueCreateInfo *queueInfo;
+  GPUCommandQueueCreateInfo *infos;
+  uint32_t requestCount;
+
+  *outInfos = NULL;
+  *outInfoCount = 0;
+
+  if (!info) {
+    return GPU_OK;
+  }
+  if (info->queues.chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+      info->queues.chain.sType != GPU_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->queues.chain.structSize != 0 &&
+      info->queues.chain.structSize < sizeof(info->queues)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  queueInfo = &info->queues;
+  requestCount = queueInfo->requestCount;
+  if (requestCount == 0) {
+    return queueInfo->pRequests ? GPU_ERROR_INVALID_ARGUMENT : GPU_OK;
+  }
+  if (!queueInfo->pRequests) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  infos = stackInfos;
+  if (requestCount > stackInfoCount) {
+    infos = calloc(requestCount, sizeof(*infos));
+    if (!infos) {
+      return GPU_ERROR_OUT_OF_MEMORY;
+    }
+  }
+
+  for (uint32_t i = 0; i < requestCount; i++) {
+    if (!gpu_validQueueRequestType(queueInfo->pRequests[i].type) ||
+        queueInfo->pRequests[i].count == 0) {
+      if (infos != stackInfos) {
+        free(infos);
+      }
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+
+    infos[i].flags = queueInfo->pRequests[i].type;
+    infos[i].count = queueInfo->pRequests[i].count;
+  }
+
+  *outInfos = infos;
+  *outInfoCount = requestCount;
+  return GPU_OK;
 }
 
 static GPUAdapter*
@@ -133,19 +235,84 @@ GPUCreateSystemDefaultDevice(GPUInstance *inst) {
 }
 
 GPU_EXPORT
-GPUDevice *
-GPUCreateDevice(GPUAdapter               *adapter,
-                GPUCommandQueueCreateInfo queCI[],
-                uint32_t                  nQueCI) {
+GPUResult
+GPUCreateDevice(GPUAdapter                *adapter,
+                const GPUDeviceCreateInfo *info,
+                GPUDevice                **outDevice) {
+  GPUCommandQueueCreateInfo stackQueueInfos[8];
+  GPUCommandQueueCreateInfo *queueInfos;
+  uint32_t queueInfoCount;
+  GPUResult result;
+  GPUResult featureResult;
   GPUApi *api;
 
-  if (!adapter || !gpu_validQueueCreateInfos(queCI, nQueCI)) {
-    return NULL;
+  if (!outDevice) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outDevice = NULL;
+
+  if (!adapter) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info) {
+    if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+        info->chain.sType != GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    featureResult = gpu_validateFeatureSet(&info->required, true);
+    if (featureResult != GPU_OK) {
+      return featureResult;
+    }
+    featureResult = gpu_validateFeatureSet(&info->optional, false);
+    if (featureResult != GPU_OK) {
+      return featureResult;
+    }
   }
   if (!(api = gpuActiveGPUApi()))
-    return NULL;
+    return GPU_ERROR_BACKEND_FAILURE;
 
-  return api->device.createDevice(adapter, queCI, nQueCI);
+  queueInfos = NULL;
+  queueInfoCount = 0;
+  result = gpu_buildQueueCreateInfos(info,
+                                     stackQueueInfos,
+                                     (uint32_t)GPU_ARRAY_LEN(stackQueueInfos),
+                                     &queueInfos,
+                                     &queueInfoCount);
+  if (result != GPU_OK) {
+    return result;
+  }
+  if (!gpu_validQueueCreateInfos(queueInfos, queueInfoCount)) {
+    if (queueInfos != stackQueueInfos) {
+      free(queueInfos);
+    }
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outDevice = api->device.createDevice(adapter, queueInfos, queueInfoCount);
+  if (queueInfos != stackQueueInfos) {
+    free(queueInfos);
+  }
+  if (!*outDevice) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUDevice *
+GPUCreateDeviceWithDefaultQueues(GPUAdapter *adapter) {
+  GPUDevice *device;
+
+  if (GPUCreateDevice(adapter, NULL, &device) != GPU_OK) {
+    return NULL;
+  }
+
+  return device;
 }
 
 GPU_EXPORT
