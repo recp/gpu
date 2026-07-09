@@ -25,6 +25,10 @@ struct GPULibrary {
   void *_entryInfo;
 };
 
+struct GPUFunction {
+  void *_priv;
+};
+
 GPU_HIDE
 int
 gpuGetShaderLibraryComputeWorkgroupSize(const GPUShaderLibrary *library,

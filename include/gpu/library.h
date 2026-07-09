@@ -45,9 +45,7 @@ typedef struct GPUShaderReflection {
 typedef struct GPULibrary GPULibrary;
 typedef GPULibrary GPUShaderLibrary;
 
-typedef struct GPUFunction {
-  void *_priv;
-} GPUFunction;
+typedef struct GPUFunction GPUFunction;
 
 typedef enum GPUShaderSourceKind {
   GPU_SHADER_SOURCE_USL_TEXT = 0,
