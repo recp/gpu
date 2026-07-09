@@ -301,7 +301,7 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
   GPUBindComputeContext ctx;
 
   if (!pass || pass->_ended ||
-      setIndex != 0 || !bindGroup ||
+      !bindGroup ||
       setIndex >= GPU_ENCODER_MAX_BIND_GROUPS ||
       !gpuPipelineLayoutAcceptsBindGroup(pass->_pipelineLayout, setIndex, bindGroup)) {
     return;

@@ -21,16 +21,31 @@ check_pipeline_layout_bind_validation(GPUDevice *device,
                                       GPUBindGroupLayout *layout,
                                       GPUPipelineLayout *pipelineLayout) {
   GPUBindGroupCreateInfo groupInfo = {0};
+  GPUBindGroupLayoutCreateInfo secondLayoutInfo = {0};
   GPUPipelineLayoutCreateInfo otherPipelineInfo = {0};
+  GPUPipelineLayoutCreateInfo twoSetPipelineInfo = {0};
+  GPUBindGroupLayoutEntry secondEntry = {0};
   GPUBindGroupLayout *otherLayout = NULL;
   GPUBindGroupLayout *otherLayouts[1];
+  GPUBindGroupLayout *twoSetLayouts[2];
   GPUPipelineLayout *otherPipelineLayout = NULL;
+  GPUPipelineLayout *twoSetPipelineLayout = NULL;
   GPUBindGroup *group = NULL;
+  GPUBindGroup *secondGroup = NULL;
   GPURenderPassEncoder renderPass = {0};
   GPUComputePassEncoder computePass = {0};
   uint32_t dynamicOffset = 0u;
 
-  if (GPUCreateBindGroupLayout(device, layoutInfo, &otherLayout) != GPU_OK ||
+  secondLayoutInfo = *layoutInfo;
+  if (!layoutInfo || layoutInfo->entryCount != 1u || !layoutInfo->pEntries) {
+    fprintf(stderr, "bind compatibility setup needs one layout entry\n");
+    goto fail;
+  }
+  secondEntry = layoutInfo->pEntries[0];
+  secondEntry.binding++;
+  secondLayoutInfo.pEntries = &secondEntry;
+
+  if (GPUCreateBindGroupLayout(device, &secondLayoutInfo, &otherLayout) != GPU_OK ||
       !otherLayout) {
     fprintf(stderr, "bind compatibility setup failed to create second layout\n");
     goto fail;
@@ -49,11 +64,32 @@ check_pipeline_layout_bind_validation(GPUDevice *device,
     goto fail;
   }
 
+  twoSetLayouts[0] = layout;
+  twoSetLayouts[1] = otherLayout;
+  twoSetPipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  twoSetPipelineInfo.chain.structSize = sizeof(twoSetPipelineInfo);
+  twoSetPipelineInfo.bindGroupLayoutCount = 2u;
+  twoSetPipelineInfo.ppBindGroupLayouts = twoSetLayouts;
+  if (GPUCreatePipelineLayout(device,
+                              &twoSetPipelineInfo,
+                              &twoSetPipelineLayout) != GPU_OK ||
+      !twoSetPipelineLayout) {
+    fprintf(stderr, "bind compatibility setup failed to create two-set layout\n");
+    goto fail;
+  }
+
   groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.layout = layout;
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "bind compatibility setup failed to create group\n");
+    goto fail;
+  }
+
+  groupInfo.layout = otherLayout;
+  if (GPUCreateBindGroup(device, &groupInfo, &secondGroup) != GPU_OK ||
+      !secondGroup) {
+    fprintf(stderr, "bind compatibility setup failed to create second group\n");
     goto fail;
   }
 
@@ -76,6 +112,21 @@ check_pipeline_layout_bind_validation(GPUDevice *device,
     goto fail;
   }
 
+  memset(&renderPass, 0, sizeof(renderPass));
+  renderPass._pipelineLayout = twoSetPipelineLayout;
+  GPUBindRenderGroup(&renderPass, 1u, group, 0u, NULL);
+  if (renderPass._boundGroupLayouts[1]) {
+    fprintf(stderr, "render bind accepted set1 group with wrong layout\n");
+    goto fail;
+  }
+  GPUBindRenderGroup(&renderPass, 0u, group, 0u, NULL);
+  GPUBindRenderGroup(&renderPass, 1u, secondGroup, 0u, NULL);
+  if (renderPass._boundGroupLayouts[0] != layout ||
+      renderPass._boundGroupLayouts[1] != otherLayout) {
+    fprintf(stderr, "render bind rejected compatible multi-set layout\n");
+    goto fail;
+  }
+
   computePass._pipelineLayout = otherPipelineLayout;
   GPUBindComputeGroup(&computePass, 0u, group, 0u, NULL);
   if (computePass._boundGroupLayouts[0]) {
@@ -90,13 +141,32 @@ check_pipeline_layout_bind_validation(GPUDevice *device,
     goto fail;
   }
 
+  memset(&computePass, 0, sizeof(computePass));
+  computePass._pipelineLayout = twoSetPipelineLayout;
+  GPUBindComputeGroup(&computePass, 1u, group, 0u, NULL);
+  if (computePass._boundGroupLayouts[1]) {
+    fprintf(stderr, "compute bind accepted set1 group with wrong layout\n");
+    goto fail;
+  }
+  GPUBindComputeGroup(&computePass, 0u, group, 0u, NULL);
+  GPUBindComputeGroup(&computePass, 1u, secondGroup, 0u, NULL);
+  if (computePass._boundGroupLayouts[0] != layout ||
+      computePass._boundGroupLayouts[1] != otherLayout) {
+    fprintf(stderr, "compute bind rejected compatible multi-set layout\n");
+    goto fail;
+  }
+
+  GPUDestroyBindGroup(secondGroup);
   GPUDestroyBindGroup(group);
+  GPUDestroyPipelineLayout(twoSetPipelineLayout);
   GPUDestroyPipelineLayout(otherPipelineLayout);
   GPUDestroyBindGroupLayout(otherLayout);
   return 1;
 
 fail:
+  GPUDestroyBindGroup(secondGroup);
   GPUDestroyBindGroup(group);
+  GPUDestroyPipelineLayout(twoSetPipelineLayout);
   GPUDestroyPipelineLayout(otherPipelineLayout);
   GPUDestroyBindGroupLayout(otherLayout);
   return 0;

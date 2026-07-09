@@ -23,6 +23,7 @@ struct GPULibrary {
   void *_priv;
   GPUShaderReflection _reflection;
   void *_entryInfo;
+  void *_resourceBindings;
 };
 
 struct GPUFunction {
@@ -40,5 +41,11 @@ int
 gpuGetShaderLibraryEntryStage(const GPUShaderLibrary *library,
                               const char *entryPoint,
                               GPUShaderStageFlags *outStage);
+
+GPU_HIDE
+int
+gpuGetShaderResourceBackendBinding(const GPUShaderLibrary *library,
+                                   const GPUShaderResourceReflection *resource,
+                                   uint32_t *outBinding);
 
 #endif /* gpu_library_internal_h */

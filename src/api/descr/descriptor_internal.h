@@ -86,4 +86,10 @@ gpuPipelineLayoutIsBound(GPUPipelineLayout *pipelineLayout,
                          GPUBindGroupLayout * const *boundLayouts,
                          uint32_t boundLayoutCount);
 
+GPU_HIDE
+int
+gpuSetBindGroupLayoutBackendBindings(GPUBindGroupLayout *layout,
+                                     const uint32_t *backendBindings,
+                                     uint32_t count);
+
 #endif /* gpu_descriptor_internal_h */

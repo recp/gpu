@@ -50,6 +50,18 @@ typedef struct GPUShaderEntryInfoList {
   GPUShaderEntryInfo entries[];
 } GPUShaderEntryInfoList;
 
+typedef struct GPUShaderResourceBindingInfo {
+  uint32_t setIndex;
+  uint32_t binding;
+  GPUBindingType bindingType;
+  uint32_t backendBinding;
+} GPUShaderResourceBindingInfo;
+
+typedef struct GPUShaderResourceBindingInfoList {
+  uint32_t count;
+  GPUShaderResourceBindingInfo entries[];
+} GPUShaderResourceBindingInfoList;
+
 static void
 gpu_clearShaderEntryInfo(GPUShaderLibrary *library) {
   GPUShaderEntryInfoList *list;
@@ -64,6 +76,16 @@ gpu_clearShaderEntryInfo(GPUShaderLibrary *library) {
   }
   free(list);
   library->_entryInfo = NULL;
+}
+
+static void
+gpu_clearShaderResourceBindingInfo(GPUShaderLibrary *library) {
+  if (!library || !library->_resourceBindings) {
+    return;
+  }
+
+  free(library->_resourceBindings);
+  library->_resourceBindings = NULL;
 }
 
 static void
@@ -243,6 +265,36 @@ gpuGetShaderLibraryEntryStage(const GPUShaderLibrary *library,
   return 0;
 }
 
+GPU_HIDE
+int
+gpuGetShaderResourceBackendBinding(const GPUShaderLibrary *library,
+                                   const GPUShaderResourceReflection *resource,
+                                   uint32_t *outBinding) {
+  const GPUShaderResourceBindingInfoList *list;
+
+  if (!library || !resource || !outBinding) {
+    return 0;
+  }
+
+  list = library->_resourceBindings;
+  if (!list) {
+    return 0;
+  }
+
+  for (uint32_t i = 0; i < list->count; i++) {
+    const GPUShaderResourceBindingInfo *entry = &list->entries[i];
+
+    if (entry->setIndex == resource->setIndex &&
+        entry->binding == resource->binding &&
+        entry->bindingType == resource->bindingType) {
+      *outBinding = entry->backendBinding;
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
 static int
 gpu_bindingTypeFromUSLResource(const USLRuntimeResource *resource,
                                GPUBindingType *outType) {
@@ -274,22 +326,114 @@ gpu_bindingTypeFromUSLResource(const USLRuntimeResource *resource,
 }
 
 static int
-gpu_appendShaderResourceReflection(GPUShaderReflection *reflection,
-                                   const USLRuntimeResource *resource,
-                                   GPUBindingType bindingType,
-                                   GPUShaderStageFlags visibility) {
-  GPUShaderResourceReflection *resources;
-  GPUShaderResourceReflection *grown;
-  uint32_t binding;
-  uint32_t setIndex;
-  size_t nextCount;
-
-  if (!reflection || !resource || resource->slot < 0 || visibility == 0) {
+gpu_shaderPublicBindingFromUSLResource(const USLRuntimeResource *resource,
+                                       uint32_t *outSetIndex,
+                                       uint32_t *outBinding) {
+  if (!resource || !outSetIndex || !outBinding || resource->slot < 0) {
     return 0;
   }
 
-  binding = (uint32_t)resource->slot;
-  setIndex = 0u;
+  *outSetIndex = resource->spirv_set;
+  *outBinding = resource->spirv_binding >= 0
+                  ? (uint32_t)resource->spirv_binding
+                  : (uint32_t)resource->slot;
+  return 1;
+}
+
+static int
+gpu_shaderBackendBindingFromUSLResource(const USLRuntimeResource *resource,
+                                        uint32_t *outBinding) {
+  if (!resource || !outBinding || resource->slot < 0) {
+    return 0;
+  }
+
+  *outBinding = resource->metal_index >= 0
+                  ? (uint32_t)resource->metal_index
+                  : (uint32_t)resource->slot;
+  return 1;
+}
+
+static int
+gpu_appendShaderResourceBindingInfo(GPUShaderLibrary *library,
+                                    uint32_t setIndex,
+                                    uint32_t binding,
+                                    GPUBindingType bindingType,
+                                    uint32_t backendBinding) {
+  GPUShaderResourceBindingInfoList *list;
+  GPUShaderResourceBindingInfoList *grown;
+  size_t nextCount;
+
+  if (!library) {
+    return 0;
+  }
+
+  list = library->_resourceBindings;
+  for (uint32_t i = 0; list && i < list->count; i++) {
+    GPUShaderResourceBindingInfo *entry = &list->entries[i];
+
+    if (entry->setIndex == setIndex &&
+        entry->binding == binding &&
+        entry->bindingType == bindingType) {
+      return entry->backendBinding == backendBinding;
+    }
+  }
+
+  if (list && list->count == UINT32_MAX) {
+    return 0;
+  }
+
+  nextCount = list ? (size_t)list->count + 1u : 1u;
+  if (nextCount > (SIZE_MAX - sizeof(*list)) / sizeof(list->entries[0])) {
+    return 0;
+  }
+
+  grown = realloc(list, sizeof(*list) + nextCount * sizeof(list->entries[0]));
+  if (!grown) {
+    return 0;
+  }
+
+  if (!list) {
+    grown->count = 0u;
+  }
+  library->_resourceBindings = grown;
+  list = grown;
+  memset(&list->entries[list->count], 0, sizeof(list->entries[0]));
+  list->entries[list->count].setIndex = setIndex;
+  list->entries[list->count].binding = binding;
+  list->entries[list->count].bindingType = bindingType;
+  list->entries[list->count].backendBinding = backendBinding;
+  list->count++;
+  return 1;
+}
+
+static int
+gpu_appendShaderResourceReflection(GPUShaderLibrary *library,
+                                   const USLRuntimeResource *resource,
+                                   GPUBindingType bindingType,
+                                   GPUShaderStageFlags visibility) {
+  GPUShaderReflection *reflection;
+  GPUShaderResourceReflection *resources;
+  GPUShaderResourceReflection *grown;
+  uint32_t binding;
+  uint32_t backendBinding;
+  uint32_t setIndex;
+  size_t nextCount;
+
+  if (!library || !resource || visibility == 0) {
+    return 0;
+  }
+
+  if (!gpu_shaderPublicBindingFromUSLResource(resource, &setIndex, &binding) ||
+      !gpu_shaderBackendBindingFromUSLResource(resource, &backendBinding) ||
+      !gpu_appendShaderResourceBindingInfo(library,
+                                           setIndex,
+                                           binding,
+                                           bindingType,
+                                           backendBinding)) {
+    return 0;
+  }
+
+  reflection = &library->_reflection;
   resources = (GPUShaderResourceReflection *)reflection->pResources;
 
   for (uint32_t i = 0; i < reflection->resourceCount; i++) {
@@ -352,6 +496,7 @@ gpu_setShaderLibraryReflection(GPUShaderLibrary *library,
   }
 
   gpu_clearShaderReflection(&library->_reflection);
+  gpu_clearShaderResourceBindingInfo(library);
   for (uint32_t i = 0; i < runtimeInfo->resource_count; i++) {
     const USLRuntimeResource *resource = &runtimeInfo->resources[i];
     GPUShaderStageFlags visibility;
@@ -363,11 +508,12 @@ gpu_setShaderLibraryReflection(GPUShaderLibrary *library,
 
     if (!gpu_shaderVisibilityFromUSLStage(resource->stage, &visibility) ||
         !gpu_bindingTypeFromUSLResource(resource, &bindingType) ||
-        !gpu_appendShaderResourceReflection(&library->_reflection,
+        !gpu_appendShaderResourceReflection(library,
                                             resource,
                                             bindingType,
                                             visibility)) {
       gpu_clearShaderReflection(&library->_reflection);
+      gpu_clearShaderResourceBindingInfo(library);
       return 0;
     }
   }
@@ -634,6 +780,7 @@ GPUDestroyShaderLibrary(GPUShaderLibrary *library) {
 
   gpu_clearShaderReflection(&library->_reflection);
   gpu_clearShaderEntryInfo(library);
+  gpu_clearShaderResourceBindingInfo(library);
   if (!(api = gpuActiveGPUApi())) {
     free(library);
     return;
