@@ -306,9 +306,11 @@ cleanup:
     for (NSUInteger j = 0; j < 4; j++) {
       if (fabsf(vertices[i].position[j] - kExpectedVertices[i].position[j]) > 0.0001f ||
           fabsf(vertices[i].color[j] - kExpectedVertices[i].color[j]) > 0.0001f) {
-        NSLog(@"GPU readback mismatch at vertex %lu component %lu",
-              (unsigned long)i,
-              (unsigned long)j);
+        if (!_skipComputeBind) {
+          NSLog(@"GPU readback mismatch at vertex %lu component %lu",
+                (unsigned long)i,
+                (unsigned long)j);
+        }
         return NO;
       }
     }
