@@ -926,6 +926,7 @@ check_render_pass_validation(void) {
   GPUTexture fakeDepthStencil = {0};
   GPUTexture fakeDepthStencilColorFormat = {0};
   GPUTexture fakeResolveTarget = {0};
+  GPUTexture fakeResolveTargetRGBA = {0};
   GPUTexture fakeResolveTargetMSAA = {0};
   GPUTexture fakeSampledTexture = {0};
   GPUTextureView fakeColorView = {0};
@@ -934,6 +935,7 @@ check_render_pass_validation(void) {
   GPUTextureView fakeDepthStencilView = {0};
   GPUTextureView fakeDepthStencilColorFormatView = {0};
   GPUTextureView fakeResolveView = {0};
+  GPUTextureView fakeResolveRGBAView = {0};
   GPUTextureView fakeResolveMSAAView = {0};
   GPUTextureView fakeSampledView = {0};
   GPUTextureView *fakeView;
@@ -959,6 +961,9 @@ check_render_pass_validation(void) {
   fakeResolveTarget.usage = GPU_TEXTURE_USAGE_COLOR_TARGET;
   fakeResolveTarget.format = GPU_FORMAT_BGRA8_UNORM;
   fakeResolveTarget.sampleCount = 1u;
+  fakeResolveTargetRGBA.usage = GPU_TEXTURE_USAGE_COLOR_TARGET;
+  fakeResolveTargetRGBA.format = GPU_FORMAT_RGBA8_UNORM;
+  fakeResolveTargetRGBA.sampleCount = 1u;
   fakeResolveTargetMSAA.usage = GPU_TEXTURE_USAGE_COLOR_TARGET;
   fakeResolveTargetMSAA.format = GPU_FORMAT_BGRA8_UNORM;
   fakeResolveTargetMSAA.sampleCount = 4u;
@@ -977,6 +982,8 @@ check_render_pass_validation(void) {
   fakeDepthStencilColorFormatView.format = fakeDepthStencilColorFormat.format;
   fakeResolveView._texture = &fakeResolveTarget;
   fakeResolveView.format = fakeResolveTarget.format;
+  fakeResolveRGBAView._texture = &fakeResolveTargetRGBA;
+  fakeResolveRGBAView.format = fakeResolveTargetRGBA.format;
   fakeResolveMSAAView._texture = &fakeResolveTargetMSAA;
   fakeResolveMSAAView.format = fakeResolveTargetMSAA.format;
   fakeSampledView._texture = &fakeSampledTexture;
@@ -1056,6 +1063,13 @@ check_render_pass_validation(void) {
     fprintf(stderr, "render pass accepted resolve view with depth format\n");
     return 0;
   }
+  colors[0].view = &fakeColorMSAAView;
+  colors[0].resolveView = &fakeResolveRGBAView;
+  if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
+    fprintf(stderr, "render pass accepted resolve view with format mismatch\n");
+    return 0;
+  }
+  colors[0].view = fakeView;
   colors[0].resolveView = &fakeResolveView;
   if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
     fprintf(stderr, "render pass accepted resolve view for single-sample color\n");
@@ -1100,6 +1114,27 @@ check_render_pass_validation(void) {
   }
 
   depthStencil.depthLoadOp = GPU_LOAD_OP_CLEAR;
+  depthStencil.depthStoreOp = (GPUStoreOp)99;
+  if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
+    fprintf(stderr, "render pass accepted invalid depth store op\n");
+    return 0;
+  }
+
+  depthStencil.depthStoreOp = GPU_STORE_OP_STORE;
+  depthStencil.stencilLoadOp = (GPULoadOp)99;
+  if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
+    fprintf(stderr, "render pass accepted invalid stencil load op\n");
+    return 0;
+  }
+
+  depthStencil.stencilLoadOp = GPU_LOAD_OP_DONT_CARE;
+  depthStencil.stencilStoreOp = (GPUStoreOp)99;
+  if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
+    fprintf(stderr, "render pass accepted invalid stencil store op\n");
+    return 0;
+  }
+
+  depthStencil.stencilStoreOp = GPU_STORE_OP_DONT_CARE;
   depthStencil.view = &fakeSampledView;
   if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
     fprintf(stderr, "render pass accepted depth-stencil view without depth-stencil usage\n");
