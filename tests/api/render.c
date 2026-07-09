@@ -357,24 +357,72 @@ check_render_pipeline_validation(GPUDevice *device) {
   return 1;
 }
 
+typedef enum RenderReadbackDrawMode {
+  RENDER_READBACK_DRAW,
+  RENDER_READBACK_DRAW_INDEXED,
+  RENDER_READBACK_DRAW_INDIRECT,
+  RENDER_READBACK_DRAW_INDEXED_INDIRECT
+} RenderReadbackDrawMode;
+
+typedef struct RenderIndirectArgs {
+  uint32_t vertexCount;
+  uint32_t instanceCount;
+  uint32_t firstVertex;
+  uint32_t firstInstance;
+} RenderIndirectArgs;
+
+typedef struct RenderIndexedIndirectArgs {
+  uint32_t indexCount;
+  uint32_t instanceCount;
+  uint32_t firstIndex;
+  int32_t  vertexOffset;
+  uint32_t firstInstance;
+} RenderIndexedIndirectArgs;
+
+static const char *
+render_readback_label(RenderReadbackDrawMode mode, int clipped) {
+  switch (mode) {
+    case RENDER_READBACK_DRAW_INDEXED:
+      return clipped ? "api-render-readback-indexed-dynamic"
+                     : "api-render-readback-indexed";
+    case RENDER_READBACK_DRAW_INDIRECT:
+      return "api-render-readback-indirect";
+    case RENDER_READBACK_DRAW_INDEXED_INDIRECT:
+      return "api-render-readback-indexed-indirect";
+    case RENDER_READBACK_DRAW:
+    default:
+      return "api-render-readback";
+  }
+}
+
 static int
-check_render_readback_case(GPUDevice *device, int indexed, int clipped) {
+check_render_readback_case(GPUDevice *device,
+                           RenderReadbackDrawMode mode,
+                           int clipped) {
   static const float kFullscreenTriangle[] = {
     -1.0f, -1.0f,
      3.0f, -1.0f,
     -1.0f,  3.0f
   };
   static const uint16_t kTriangleIndices[] = {0u, 1u, 2u};
+  static const RenderIndirectArgs kIndirectArgs = {3u, 1u, 0u, 0u};
+  static const RenderIndexedIndirectArgs kIndexedIndirectArgs = {
+    3u, 1u, 0u, 0, 0u
+  };
   const uint32_t width = 4u;
   const uint32_t height = 4u;
   const uint64_t pixelBytes = (uint64_t)width * height * 4u;
-  const char *label = clipped ? "api-render-readback-indexed-dynamic"
-                              : "api-render-readback";
+  const char *label = render_readback_label(mode, clipped);
+  const int indexed = mode == RENDER_READBACK_DRAW_INDEXED ||
+                      mode == RENDER_READBACK_DRAW_INDEXED_INDIRECT;
+  const int indirect = mode == RENDER_READBACK_DRAW_INDIRECT ||
+                       mode == RENDER_READBACK_DRAW_INDEXED_INDIRECT;
   GPUCommandQueue *queue;
   GPUShaderLibrary *library = NULL;
   GPURenderPipeline *pipeline = NULL;
   GPUBuffer *vertexBuffer = NULL;
   GPUBuffer *indexBuffer = NULL;
+  GPUBuffer *argsBuffer = NULL;
   GPUBuffer *readbackBuffer = NULL;
   GPUTexture *target = NULL;
   GPUTextureView *targetView = NULL;
@@ -472,6 +520,27 @@ check_render_readback_case(GPUDevice *device, int indexed, int clipped) {
     }
   }
 
+  if (indirect) {
+    const void *argsData = mode == RENDER_READBACK_DRAW_INDIRECT ?
+                           (const void *)&kIndirectArgs :
+                           (const void *)&kIndexedIndirectArgs;
+
+    bufferInfo.sizeBytes = mode == RENDER_READBACK_DRAW_INDIRECT ?
+                           sizeof(kIndirectArgs) :
+                           sizeof(kIndexedIndirectArgs);
+    bufferInfo.usage = GPU_BUFFER_USAGE_INDIRECT | GPU_BUFFER_USAGE_COPY_DST;
+    if (GPUCreateBuffer(device, &bufferInfo, &argsBuffer) != GPU_OK ||
+        !argsBuffer ||
+        GPUQueueWriteBuffer(queue,
+                            argsBuffer,
+                            0u,
+                            argsData,
+                            bufferInfo.sizeBytes) != GPU_OK) {
+      fprintf(stderr, "failed to create %s args buffer\n", label);
+      goto cleanup;
+    }
+  }
+
   bufferInfo.label = label;
   bufferInfo.sizeBytes = pixelBytes;
   bufferInfo.usage = GPU_BUFFER_USAGE_COPY_DST | GPU_BUFFER_USAGE_COPY_SRC;
@@ -555,9 +624,14 @@ check_render_readback_case(GPUDevice *device, int indexed, int clipped) {
     dynamicState.scissor.height = 2u;
     GPUApplyDynamicState(renderPass, &dynamicState);
   }
-  if (indexed) {
+  if (mode == RENDER_READBACK_DRAW_INDEXED) {
     GPUBindIndexBuffer(renderPass, indexBuffer, 0u, GPUIndexTypeUInt16);
     GPUDrawIndexed(renderPass, 3u, 1u, 0u, 0, 0u);
+  } else if (mode == RENDER_READBACK_DRAW_INDIRECT) {
+    GPUDrawIndirect(renderPass, argsBuffer, 0u);
+  } else if (mode == RENDER_READBACK_DRAW_INDEXED_INDIRECT) {
+    GPUBindIndexBuffer(renderPass, indexBuffer, 0u, GPUIndexTypeUInt16);
+    GPUDrawIndexedIndirect(renderPass, argsBuffer, 0u);
   } else {
     GPUDraw(renderPass, 3u, 1u, 0u, 0u);
   }
@@ -659,6 +733,7 @@ cleanup:
   GPUDestroyTextureView(targetView);
   GPUDestroyTexture(target);
   GPUDestroyBuffer(readbackBuffer);
+  GPUDestroyBuffer(argsBuffer);
   GPUDestroyBuffer(indexBuffer);
   GPUDestroyBuffer(vertexBuffer);
   GPUDestroyRenderPipeline(pipeline);
@@ -668,8 +743,12 @@ cleanup:
 
 static int
 check_render_readback(GPUDevice *device) {
-  return check_render_readback_case(device, 0, 0) &&
-         check_render_readback_case(device, 1, 1);
+  return check_render_readback_case(device, RENDER_READBACK_DRAW, 0) &&
+         check_render_readback_case(device, RENDER_READBACK_DRAW_INDEXED, 1) &&
+         check_render_readback_case(device, RENDER_READBACK_DRAW_INDIRECT, 0) &&
+         check_render_readback_case(device,
+                                    RENDER_READBACK_DRAW_INDEXED_INDIRECT,
+                                    0);
 }
 
 static int
