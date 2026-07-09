@@ -23,8 +23,24 @@ extern "C" {
 #include "../common.h"
 #include "../gpu.h"
 
+typedef struct GPUQuerySet GPUQuerySet;
+typedef struct GPUQuerySetCreateInfo GPUQuerySetCreateInfo;
+
 typedef struct GPUApiCommandBuffer {
   void (*presentDrawable)(GPUCommandBuffer *cmdb, GPUFrame *frame);
+  GPUResult (*createQuerySet)(GPUDevice *device,
+                              const GPUQuerySetCreateInfo *info,
+                              GPUQuerySet *set);
+  void (*destroyQuerySet)(GPUQuerySet *set);
+  void (*writeTimestamp)(GPUCommandBuffer *cmdb,
+                         GPUQuerySet *set,
+                         uint32_t queryIndex);
+  void (*resolveQuerySet)(GPUCommandBuffer *cmdb,
+                          GPUQuerySet *set,
+                          uint32_t firstQuery,
+                          uint32_t queryCount,
+                          GPUBuffer *dstBuffer,
+                          uint64_t dstOffset);
 } GPUApiCommandBuffer;
 
 #ifdef __cplusplus

@@ -45,7 +45,7 @@ int gpu_test_resources(GPUDevice *device);
 int gpu_test_copy(GPUDevice *device);
 int gpu_test_render(GPUDevice *device);
 int gpu_test_compute(GPUDevice *device);
-int gpu_test_query(GPUDevice *device);
+int gpu_test_query(GPUAdapter *adapter, GPUDevice *device);
 int gpu_test_barrier(GPUDevice *device);
 int gpu_test_runtime(GPUDevice *device);
 int gpu_test_shader(GPUDevice *device, const char *bytecodePath);

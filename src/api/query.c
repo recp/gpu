@@ -15,12 +15,8 @@
  */
 
 #include "../common.h"
-
-struct GPUQuerySet {
-  GPUQueryType type;
-  uint32_t count;
-  uint32_t pipelineStatsMask;
-};
+#include "cmdqueue_internal.h"
+#include "query_internal.h"
 
 static bool
 gpu_validQueryType(GPUQueryType type) {
@@ -66,6 +62,10 @@ GPUResult
 GPUCreateQuerySet(GPUDevice                *device,
                   const GPUQuerySetCreateInfo *info,
                   GPUQuerySet             **outSet) {
+  GPUApi *api;
+  GPUQuerySet *set;
+  GPUResult result;
+
   if (!outSet) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -85,13 +85,42 @@ GPUCreateQuerySet(GPUDevice                *device,
       !GPUIsFeatureEnabled(device, GPU_FEATURE_PIPELINE_STATISTICS)) {
     return GPU_ERROR_UNSUPPORTED;
   }
+  if (!(api = gpuActiveGPUApi()) || !api->cmdbuf.createQuerySet) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
 
-  return GPU_ERROR_UNSUPPORTED;
+  set = calloc(1, sizeof(*set));
+  if (!set) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  set->device = device;
+  set->type = info->type;
+  set->count = info->count;
+  set->pipelineStatsMask = info->pipelineStatsMask;
+
+  result = api->cmdbuf.createQuerySet(device, info, set);
+  if (result != GPU_OK) {
+    free(set);
+    return result;
+  }
+
+  *outSet = set;
+  return GPU_OK;
 }
 
 GPU_EXPORT
 void
 GPUDestroyQuerySet(GPUQuerySet *set) {
+  GPUApi *api;
+
+  if (!set) {
+    return;
+  }
+
+  if ((api = gpuActiveGPUApi()) && api->cmdbuf.destroyQuerySet) {
+    api->cmdbuf.destroyQuerySet(set);
+  }
   free(set);
 }
 
@@ -100,9 +129,17 @@ void
 GPUWriteTimestamp(GPUCommandBuffer *cmdb,
                   GPUQuerySet      *set,
                   uint32_t          queryIndex) {
-  GPU__UNUSED(cmdb);
-  GPU__UNUSED(set);
-  GPU__UNUSED(queryIndex);
+  GPUApi *api;
+
+  if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder ||
+      !set || set->type != GPU_QUERY_TIMESTAMP || queryIndex >= set->count) {
+    return;
+  }
+  if (!(api = gpuActiveGPUApi()) || !api->cmdbuf.writeTimestamp) {
+    return;
+  }
+
+  api->cmdbuf.writeTimestamp(cmdb, set, queryIndex);
 }
 
 GPU_EXPORT
@@ -146,10 +183,22 @@ GPUResolveQuerySet(GPUCommandBuffer *cmdb,
                    uint32_t          queryCount,
                    GPUBuffer        *dstBuffer,
                    uint64_t          dstOffset) {
-  GPU__UNUSED(cmdb);
-  GPU__UNUSED(set);
-  GPU__UNUSED(firstQuery);
-  GPU__UNUSED(queryCount);
-  GPU__UNUSED(dstBuffer);
-  GPU__UNUSED(dstOffset);
+  GPUApi *api;
+
+  if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder ||
+      !set || !dstBuffer || set->type != GPU_QUERY_TIMESTAMP ||
+      queryCount == 0u || firstQuery > set->count ||
+      queryCount > set->count - firstQuery) {
+    return;
+  }
+  if (!(api = gpuActiveGPUApi()) || !api->cmdbuf.resolveQuerySet) {
+    return;
+  }
+
+  api->cmdbuf.resolveQuerySet(cmdb,
+                              set,
+                              firstQuery,
+                              queryCount,
+                              dstBuffer,
+                              dstOffset);
 }

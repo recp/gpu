@@ -24,6 +24,7 @@
 #include "../../api/frame_internal.h"
 #include "../../api/instance_internal.h"
 #include "../../api/library_internal.h"
+#include "../../api/query_internal.h"
 #include "../../api/sampler_internal.h"
 #include "../../api/surface_internal.h"
 #include "../../api/swapchain_internal.h"

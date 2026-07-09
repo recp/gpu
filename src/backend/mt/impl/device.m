@@ -96,6 +96,57 @@ mt_getAdapterProperties(const GPUAdapter     * __restrict adapter,
   return GPU_OK;
 }
 
+static bool
+mt_hasCounterSet(id<MTLDevice> device, MTLCommonCounterSet name) {
+  if (!device || !name) {
+    return false;
+  }
+
+  if (@available(macOS 10.15, iOS 14.0, *)) {
+    for (id<MTLCounterSet> counterSet in device.counterSets) {
+      if ([counterSet.name isEqualToString:name]) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+static bool
+mt_supportsBlitCounterSampling(id<MTLDevice> device) {
+  if (!device) {
+    return false;
+  }
+
+  if (@available(macOS 11.0, iOS 14.0, *)) {
+    return [device supportsCounterSampling:MTLCounterSamplingPointAtBlitBoundary];
+  }
+
+  return false;
+}
+
+GPU_HIDE
+bool
+mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
+  id<MTLDevice> device;
+
+  if (!adapter) {
+    return false;
+  }
+
+  switch (feature) {
+    case GPU_FEATURE_COMPUTE:
+      return true;
+    case GPU_FEATURE_TIMESTAMPS:
+      device = (id<MTLDevice>)adapter->_priv;
+      return mt_hasCounterSet(device, MTLCommonCounterSetTimestamp) &&
+             mt_supportsBlitCounterSampling(device);
+    default:
+      return false;
+  }
+}
+
 extern
 GPU_HIDE
 GPUCommandQueue*
@@ -190,6 +241,7 @@ void
 mt_initDevice(GPUApiDevice *apiDevice) {
   apiDevice->getAvailableAdapters      = mt_getAvailablePhysicalDevicesBy;
   apiDevice->getAdapterProperties      = mt_getAdapterProperties;
+  apiDevice->supportsFeature           = mt_supportsFeature;
   apiDevice->createDevice              = mt_createDevice;
   apiDevice->createSystemDefaultDevice = mt_createSystemDefaultDevice;
   apiDevice->destroyDevice             = mt_destroyDevice;

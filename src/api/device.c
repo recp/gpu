@@ -79,8 +79,22 @@ gpu_knownFeature(GPUFeature feature) {
 }
 
 static bool
-gpu_supportedFeature(GPUFeature feature) {
+gpu_builtinSupportedFeature(GPUFeature feature) {
   return feature == GPU_FEATURE_COMPUTE;
+}
+
+static bool
+gpu_adapterSupportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
+  GPUApi *api;
+
+  if (!gpu_knownFeature(feature)) {
+    return false;
+  }
+  if ((api = gpuActiveGPUApi()) && api->device.supportsFeature) {
+    return api->device.supportsFeature(adapter, feature);
+  }
+
+  return gpu_builtinSupportedFeature(feature);
 }
 
 static uint64_t
@@ -89,7 +103,7 @@ gpu_featureBit(GPUFeature feature) {
 }
 
 static uint64_t
-gpu_collectEnabledFeatures(const GPUFeatureSet *set) {
+gpu_collectEnabledFeatures(const GPUAdapter *adapter, const GPUFeatureSet *set) {
   uint64_t mask;
 
   mask = 0;
@@ -99,7 +113,7 @@ gpu_collectEnabledFeatures(const GPUFeatureSet *set) {
 
   for (uint32_t i = 0; i < set->featureCount; i++) {
     if (gpu_knownFeature(set->pFeatures[i]) &&
-        gpu_supportedFeature(set->pFeatures[i])) {
+        gpu_adapterSupportsFeature(adapter, set->pFeatures[i])) {
       mask |= gpu_featureBit(set->pFeatures[i]);
     }
   }
@@ -113,20 +127,23 @@ gpu_defaultEnabledFeatureMask(void) {
 }
 
 static uint64_t
-gpu_enabledFeatureMaskForCreateInfo(const GPUDeviceCreateInfo *info) {
+gpu_enabledFeatureMaskForCreateInfo(const GPUAdapter *adapter,
+                                    const GPUDeviceCreateInfo *info) {
   uint64_t mask;
 
   if (!info) {
     return gpu_defaultEnabledFeatureMask();
   }
 
-  mask = gpu_collectEnabledFeatures(&info->required);
-  mask |= gpu_collectEnabledFeatures(&info->optional);
+  mask = gpu_collectEnabledFeatures(adapter, &info->required);
+  mask |= gpu_collectEnabledFeatures(adapter, &info->optional);
   return mask;
 }
 
 static GPUResult
-gpu_validateFeatureSet(const GPUFeatureSet *set, bool required) {
+gpu_validateFeatureSet(const GPUAdapter *adapter,
+                       const GPUFeatureSet *set,
+                       bool required) {
   if (!gpu_validFeatureSet(set)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -135,7 +152,7 @@ gpu_validateFeatureSet(const GPUFeatureSet *set, bool required) {
     if (!gpu_knownFeature(set->pFeatures[i])) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
-    if (required && !gpu_supportedFeature(set->pFeatures[i])) {
+    if (required && !gpu_adapterSupportsFeature(adapter, set->pFeatures[i])) {
       return GPU_ERROR_UNSUPPORTED;
     }
   }
@@ -633,8 +650,12 @@ GPU_EXPORT
 GPUResult
 GPUGetAdapterCapabilities(const GPUAdapter       *adapter,
                           GPUAdapterCapabilities *outCaps) {
-  static const GPUFeature supportedFeatures[] = {
+  static const GPUFeature supportedCompute[] = {
     GPU_FEATURE_COMPUTE
+  };
+  static const GPUFeature supportedComputeTimestamp[] = {
+    GPU_FEATURE_COMPUTE,
+    GPU_FEATURE_TIMESTAMPS
   };
 
   if (!adapter || !outCaps) {
@@ -642,8 +663,13 @@ GPUGetAdapterCapabilities(const GPUAdapter       *adapter,
   }
 
   memset(outCaps, 0, sizeof(*outCaps));
-  outCaps->supported.featureCount = (uint32_t)GPU_ARRAY_LEN(supportedFeatures);
-  outCaps->supported.pFeatures = supportedFeatures;
+  if (gpu_adapterSupportsFeature(adapter, GPU_FEATURE_TIMESTAMPS)) {
+    outCaps->supported.featureCount = (uint32_t)GPU_ARRAY_LEN(supportedComputeTimestamp);
+    outCaps->supported.pFeatures = supportedComputeTimestamp;
+  } else {
+    outCaps->supported.featureCount = (uint32_t)GPU_ARRAY_LEN(supportedCompute);
+    outCaps->supported.pFeatures = supportedCompute;
+  }
   gpu_fillDefaultLimits(&outCaps->limits);
 
   return GPU_OK;
@@ -656,15 +682,32 @@ GPUGetDeviceCapabilities(const GPUDevice       *device,
   static const GPUFeature enabledCompute[] = {
     GPU_FEATURE_COMPUTE
   };
+  static const GPUFeature enabledTimestamp[] = {
+    GPU_FEATURE_TIMESTAMPS
+  };
+  static const GPUFeature enabledComputeTimestamp[] = {
+    GPU_FEATURE_COMPUTE,
+    GPU_FEATURE_TIMESTAMPS
+  };
+  bool computeEnabled;
+  bool timestampEnabled;
 
   if (!device || !outCaps) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   memset(outCaps, 0, sizeof(*outCaps));
-  if ((device->enabledFeatureMask & gpu_featureBit(GPU_FEATURE_COMPUTE)) != 0) {
+  computeEnabled = (device->enabledFeatureMask & gpu_featureBit(GPU_FEATURE_COMPUTE)) != 0;
+  timestampEnabled = (device->enabledFeatureMask & gpu_featureBit(GPU_FEATURE_TIMESTAMPS)) != 0;
+  if (computeEnabled && timestampEnabled) {
+    outCaps->enabled.featureCount = (uint32_t)GPU_ARRAY_LEN(enabledComputeTimestamp);
+    outCaps->enabled.pFeatures = enabledComputeTimestamp;
+  } else if (computeEnabled) {
     outCaps->enabled.featureCount = (uint32_t)GPU_ARRAY_LEN(enabledCompute);
     outCaps->enabled.pFeatures = enabledCompute;
+  } else if (timestampEnabled) {
+    outCaps->enabled.featureCount = (uint32_t)GPU_ARRAY_LEN(enabledTimestamp);
+    outCaps->enabled.pFeatures = enabledTimestamp;
   }
   gpu_fillDefaultLimits(&outCaps->limits);
 
@@ -897,7 +940,7 @@ GPUIsFeatureSupported(const GPUAdapter *adapter, GPUFeature feature) {
     return false;
   }
 
-  return gpu_supportedFeature(feature);
+  return gpu_adapterSupportsFeature(adapter, feature);
 }
 
 GPU_EXPORT
@@ -956,11 +999,11 @@ GPUCreateDevice(GPUAdapter                *adapter,
     if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
-    featureResult = gpu_validateFeatureSet(&info->required, true);
+    featureResult = gpu_validateFeatureSet(adapter, &info->required, true);
     if (featureResult != GPU_OK) {
       return featureResult;
     }
-    featureResult = gpu_validateFeatureSet(&info->optional, false);
+    featureResult = gpu_validateFeatureSet(adapter, &info->optional, false);
     if (featureResult != GPU_OK) {
       return featureResult;
     }
@@ -992,7 +1035,7 @@ GPUCreateDevice(GPUAdapter                *adapter,
   if (!*outDevice) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  (*outDevice)->enabledFeatureMask = gpu_enabledFeatureMaskForCreateInfo(info);
+  (*outDevice)->enabledFeatureMask = gpu_enabledFeatureMaskForCreateInfo(adapter, info);
 
   return GPU_OK;
 }

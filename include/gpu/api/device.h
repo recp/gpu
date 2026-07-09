@@ -37,6 +37,10 @@ typedef struct GPUApiDevice {
   (*getAdapterProperties)(const GPUAdapter     * __restrict adapter,
                           GPUAdapterProperties * __restrict outProps);
 
+  bool
+  (*supportsFeature)(const GPUAdapter * __restrict adapter,
+                     GPUFeature feature);
+
   GPUDevice* (*createDevice)(GPUAdapter        * __restrict adapter,
                              GPUCommandQueueCreateInfo      queCI[],
                              uint32_t                       nQueCI);
