@@ -30,6 +30,7 @@ typedef struct GPUTransientChunk {
 struct GPUDevice {
   GPUInstance       *inst;
   GPUPhysicalDevice *phyDevice;
+  GPUApi            *_api;
   void              *_priv;
   GPUQueueFlagBits   queueFamilies;
   uint64_t           enabledFeatureMask;
@@ -47,6 +48,11 @@ struct GPUDevice {
   bool               transientFrameBegun;
   GPUTransientChunk *transientChunks;
 };
+
+static inline GPUApi *
+gpuDeviceApi(const GPUDevice *device) {
+  return device ? device->_api : NULL;
+}
 
 GPU_HIDE
 void

@@ -976,6 +976,7 @@ GPUCreateSystemDefaultDevice(GPUInstance *inst) {
 
   device = api->device.createSystemDefaultDevice(inst);
   if (device) {
+    device->_api = api;
     device->enabledFeatureMask = gpu_defaultEnabledFeatureMask();
   }
 
@@ -1047,6 +1048,7 @@ GPUCreateDevice(GPUAdapter                *adapter,
   if (!*outDevice) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
+  (*outDevice)->_api = api;
   (*outDevice)->enabledFeatureMask = gpu_enabledFeatureMaskForCreateInfo(adapter, info);
 
   return GPU_OK;
@@ -1083,7 +1085,7 @@ GPUDestroyDevice(GPUDevice * __restrict device) {
     return;
   }
 
-  if (!(api = gpuActiveGPUApi())) {
+  if (!(api = gpuDeviceApi(device)) && !(api = gpuActiveGPUApi())) {
     return;
   }
 

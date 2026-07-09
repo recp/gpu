@@ -21,8 +21,51 @@ extern "C" {
 #endif
 
 #include "../common.h"
+
+struct GPUBindGroup;
+struct GPUBindGroupLayout;
+struct GPUComputePassEncoder;
+struct GPUDevice;
+struct GPUPipelineLayout;
+struct GPURenderCommandEncoder;
+
 typedef struct GPUApiDescriptor {
-  void *reserved;
+  GPUResult
+  (*createBindGroupLayout)(struct GPUDevice          *device,
+                           struct GPUBindGroupLayout *layout);
+
+  void
+  (*destroyBindGroupLayout)(struct GPUBindGroupLayout *layout);
+
+  GPUResult
+  (*createPipelineLayout)(struct GPUDevice         *device,
+                          struct GPUPipelineLayout *layout);
+
+  void
+  (*destroyPipelineLayout)(struct GPUPipelineLayout *layout);
+
+  GPUResult
+  (*createBindGroup)(struct GPUDevice    *device,
+                     struct GPUBindGroup *group);
+
+  void
+  (*destroyBindGroup)(struct GPUBindGroup *group);
+
+  bool
+  (*bindRenderGroup)(struct GPURenderCommandEncoder *pass,
+                     struct GPUPipelineLayout       *pipelineLayout,
+                     uint32_t                        groupIndex,
+                     struct GPUBindGroup            *group,
+                     uint32_t                        dynamicOffsetCount,
+                     const uint32_t                 *dynamicOffsets);
+
+  bool
+  (*bindComputeGroup)(struct GPUComputePassEncoder *pass,
+                      struct GPUPipelineLayout     *pipelineLayout,
+                      uint32_t                      groupIndex,
+                      struct GPUBindGroup          *group,
+                      uint32_t                      dynamicOffsetCount,
+                      const uint32_t               *dynamicOffsets);
 } GPUApiDescriptor;
 
 #ifdef __cplusplus

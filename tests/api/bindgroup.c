@@ -1,5 +1,181 @@
 #include "test.h"
+#include <gpu/api/gpudef.h>
 #include "../../src/api/texture_internal.h"
+
+typedef struct GPUDescriptorHookCounts {
+  uint32_t createLayout;
+  uint32_t destroyLayout;
+  uint32_t createPipeline;
+  uint32_t destroyPipeline;
+  uint32_t createGroup;
+  uint32_t destroyGroup;
+  uint32_t bindRender;
+  uint32_t bindCompute;
+} GPUDescriptorHookCounts;
+
+static GPUDescriptorHookCounts descriptorHookCounts;
+
+static GPUResult
+test_createBindGroupLayout(GPUDevice *device, GPUBindGroupLayout *layout) {
+  if (!device || !layout) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  descriptorHookCounts.createLayout++;
+  return GPU_OK;
+}
+
+static void
+test_destroyBindGroupLayout(GPUBindGroupLayout *layout) {
+  if (layout) {
+    descriptorHookCounts.destroyLayout++;
+  }
+}
+
+static GPUResult
+test_createPipelineLayout(GPUDevice *device, GPUPipelineLayout *layout) {
+  if (!device || !layout) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  descriptorHookCounts.createPipeline++;
+  return GPU_OK;
+}
+
+static void
+test_destroyPipelineLayout(GPUPipelineLayout *layout) {
+  if (layout) {
+    descriptorHookCounts.destroyPipeline++;
+  }
+}
+
+static GPUResult
+test_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
+  if (!device || !group) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  descriptorHookCounts.createGroup++;
+  return GPU_OK;
+}
+
+static void
+test_destroyBindGroup(GPUBindGroup *group) {
+  if (group) {
+    descriptorHookCounts.destroyGroup++;
+  }
+}
+
+static bool
+test_bindRenderGroup(GPURenderPassEncoder *pass,
+                     GPUPipelineLayout    *pipelineLayout,
+                     uint32_t              groupIndex,
+                     GPUBindGroup         *group,
+                     uint32_t              dynamicOffsetCount,
+                     const uint32_t       *dynamicOffsets) {
+  (void)dynamicOffsets;
+  if (!pass || !pipelineLayout || !group || groupIndex != 0u ||
+      dynamicOffsetCount != 0u) {
+    return false;
+  }
+  descriptorHookCounts.bindRender++;
+  return true;
+}
+
+static bool
+test_bindComputeGroup(GPUComputePassEncoder *pass,
+                      GPUPipelineLayout     *pipelineLayout,
+                      uint32_t               groupIndex,
+                      GPUBindGroup          *group,
+                      uint32_t               dynamicOffsetCount,
+                      const uint32_t        *dynamicOffsets) {
+  (void)dynamicOffsets;
+  if (!pass || !pipelineLayout || !group || groupIndex != 0u ||
+      dynamicOffsetCount != 0u) {
+    return false;
+  }
+  descriptorHookCounts.bindCompute++;
+  return true;
+}
+
+static int
+check_backend_descriptor_hooks(GPUDevice *device) {
+  GPUApiDescriptor hooks = {0};
+  GPUApiDescriptor saved;
+  GPUBindGroupLayoutCreateInfo layoutInfo = {0};
+  GPUPipelineLayoutCreateInfo pipelineInfo = {0};
+  GPUBindGroupCreateInfo groupInfo = {0};
+  GPUBindGroupLayout *layouts[1];
+  GPUBindGroupLayout *layout = NULL;
+  GPUPipelineLayout *pipelineLayout = NULL;
+  GPUBindGroup *group = NULL;
+  GPURenderPassEncoder renderPass = {0};
+  GPUComputePassEncoder computePass = {0};
+  GPUApi *api;
+  int ok;
+
+  api = gpuActiveGPUApi();
+  if (!api) {
+    return 0;
+  }
+
+  hooks.createBindGroupLayout = test_createBindGroupLayout;
+  hooks.destroyBindGroupLayout = test_destroyBindGroupLayout;
+  hooks.createPipelineLayout = test_createPipelineLayout;
+  hooks.destroyPipelineLayout = test_destroyPipelineLayout;
+  hooks.createBindGroup = test_createBindGroup;
+  hooks.destroyBindGroup = test_destroyBindGroup;
+  hooks.bindRenderGroup = test_bindRenderGroup;
+  hooks.bindComputeGroup = test_bindComputeGroup;
+
+  saved = api->descriptor;
+  api->descriptor = hooks;
+  memset(&descriptorHookCounts, 0, sizeof(descriptorHookCounts));
+
+  layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK || !layout) {
+    goto cleanup;
+  }
+
+  layouts[0] = layout;
+  pipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
+  pipelineInfo.bindGroupLayoutCount = 1u;
+  pipelineInfo.ppBindGroupLayouts = layouts;
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_OK ||
+      !pipelineLayout) {
+    goto cleanup;
+  }
+
+  groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.layout = layout;
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
+    goto cleanup;
+  }
+
+  renderPass._pipelineLayout = pipelineLayout;
+  computePass._pipelineLayout = pipelineLayout;
+  GPUBindRenderGroup(&renderPass, 0u, group, 0u, NULL);
+  GPUBindComputeGroup(&computePass, 0u, group, 0u, NULL);
+
+cleanup:
+  GPUDestroyBindGroup(group);
+  GPUDestroyPipelineLayout(pipelineLayout);
+  GPUDestroyBindGroupLayout(layout);
+  api->descriptor = saved;
+
+  ok = descriptorHookCounts.createLayout == 1u &&
+       descriptorHookCounts.destroyLayout == 1u &&
+       descriptorHookCounts.createPipeline == 1u &&
+       descriptorHookCounts.destroyPipeline == 1u &&
+       descriptorHookCounts.createGroup == 1u &&
+       descriptorHookCounts.destroyGroup == 1u &&
+       descriptorHookCounts.bindRender == 1u &&
+       descriptorHookCounts.bindCompute == 1u;
+  if (!ok) {
+    fprintf(stderr, "backend descriptor hooks were not routed consistently\n");
+  }
+  return ok;
+}
 
 static GPUSamplerDesc
 valid_sampler_desc(void) {
@@ -785,6 +961,7 @@ cleanup:
 
 int
 gpu_test_bindgroup(GPUDevice *device) {
-  return check_bind_group_layout_validation(device) &&
+  return check_backend_descriptor_hooks(device) &&
+         check_bind_group_layout_validation(device) &&
          check_dynamic_offset_bind_validation(device);
 }

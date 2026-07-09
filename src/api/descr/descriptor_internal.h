@@ -20,15 +20,21 @@
 #include "../../common.h"
 
 struct GPUBindGroupLayout {
-  void *_priv;
+  GPUDevice *_device;
+  void      *_native;
+  void      *_priv;
 };
 
 struct GPUBindGroup {
-  void *_priv;
+  GPUDevice *_device;
+  void      *_native;
+  void      *_priv;
 };
 
 struct GPUPipelineLayout {
-  void *_priv;
+  GPUDevice *_device;
+  void      *_native;
+  void      *_priv;
 };
 
 typedef struct GPUBindGroupBindingView {
@@ -73,8 +79,20 @@ GPUBindGroupLayout *
 gpuBindGroupGetLayout(GPUBindGroup *group);
 
 GPU_HIDE
+GPUDevice *
+gpuBindGroupGetDevice(GPUBindGroup *group);
+
+GPU_HIDE
 uint32_t
 gpuBindGroupDynamicOffsetCount(GPUBindGroup *group);
+
+GPU_HIDE
+int
+gpuValidateBindGroupDynamicOffsets(GPUPipelineLayout *pipelineLayout,
+                                   uint32_t groupIndex,
+                                   GPUBindGroup *group,
+                                   uint32_t dynamicOffsetCount,
+                                   const uint32_t *dynamicOffsets);
 
 GPU_HIDE
 int
