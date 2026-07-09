@@ -211,6 +211,8 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPURenderPassColorAttachment color = {0};
   GPURenderPassCreateInfo rp = {0};
   GPUBufferBinding vertexBuffer = {0};
+  GPUBufferBarrier vertexBarrier = {0};
+  GPUBarrierBatch barrierBatch = {0};
   GPUResult submitResult = GPU_OK;
 
   if (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) {
@@ -242,6 +244,16 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUDispatch(compute, 1, 1, 1);
   GPUEndComputePass(compute);
   compute = NULL;
+
+  vertexBarrier.buffer = _vertexBuffer;
+  vertexBarrier.srcAccess = GPU_ACCESS_SHADER_WRITE;
+  vertexBarrier.dstAccess = GPU_ACCESS_SHADER_READ;
+  vertexBarrier.sizeBytes = sizeof(GeneratedVertex) * 3u;
+  barrierBatch.srcStages = GPU_STAGE_COMPUTE;
+  barrierBatch.dstStages = GPU_STAGE_VERTEX;
+  barrierBatch.bufferBarrierCount = 1u;
+  barrierBatch.pBufferBarriers = &vertexBarrier;
+  GPUEncodeBarriers(cmdb, &barrierBatch);
 
   color.view = GPUFrameGetTargetView(frame);
   color.loadOp = GPU_LOAD_OP_CLEAR;
