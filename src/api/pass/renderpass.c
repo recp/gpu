@@ -42,6 +42,11 @@ gpu_textureViewHasUsage(const GPUTextureView *view, GPUTextureUsageFlags usage) 
   return texture && (texture->usage & usage) == usage;
 }
 
+static uint32_t
+gpu_textureViewSampleCount(const GPUTextureView *view) {
+  return view && view->_texture ? view->_texture->sampleCount : 0u;
+}
+
 static bool
 gpu_formatIsDepthStencil(GPUFormat format) {
   return format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
@@ -80,7 +85,9 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info) {
         (color->resolveView &&
          (!gpu_textureViewHasUsage(color->resolveView, GPU_TEXTURE_USAGE_COLOR_TARGET) ||
           gpu_formatIsDepthStencil(color->resolveView->format) ||
-          color->resolveView->format != color->view->format)) ||
+          color->resolveView->format != color->view->format ||
+          gpu_textureViewSampleCount(color->view) <= 1u ||
+          gpu_textureViewSampleCount(color->resolveView) != 1u)) ||
         !gpu_validLoadOp(color->loadOp) ||
         !gpu_validStoreOp(color->storeOp)) {
       return false;
@@ -101,6 +108,31 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info) {
   }
 
   return info->colorAttachmentCount > 0 || depthStencil != NULL;
+}
+
+static void
+gpu_setRenderPassEncoderInfo(GPURenderPassEncoder *encoder,
+                             const GPURenderPassCreateInfo *info) {
+  const GPURenderPassDepthStencilAttachment *depthStencil;
+
+  encoder->_colorAttachmentCount = info->colorAttachmentCount;
+  for (uint32_t i = 0; i < info->colorAttachmentCount; i++) {
+    const GPURenderPassColorAttachment *color;
+
+    color = &info->pColorAttachments[i];
+    encoder->_colorAttachmentFormats[i] = color->view->format;
+    encoder->_colorAttachmentSampleCounts[i] = gpu_textureViewSampleCount(color->view);
+    encoder->_colorAttachmentHasResolve[i] = color->resolveView != NULL;
+  }
+
+  depthStencil = info->pDepthStencilAttachment;
+  if (depthStencil) {
+    encoder->_depthStencilFormat = depthStencil->view->format;
+    encoder->_depthStencilSampleCount = gpu_textureViewSampleCount(depthStencil->view);
+  } else {
+    encoder->_depthStencilFormat = GPU_FORMAT_UNDEFINED;
+    encoder->_depthStencilSampleCount = 0u;
+  }
 }
 
 static uint32_t
@@ -247,6 +279,7 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
   gpu_destroyRenderPass(desc);
   if (encoder) {
     encoder->_cmdb = cmdb;
+    gpu_setRenderPassEncoderInfo(encoder, info);
     cmdb->_activeEncoder = true;
   }
 

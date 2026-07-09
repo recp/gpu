@@ -273,6 +273,11 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
 
   gpuRecordPipelineCompile(device, info->cache);
   free(state);
+  pipeline->_colorTargetCount = info->colorTargetCount;
+  for (i = 0; i < info->colorTargetCount; i++)
+    pipeline->_colorTargetFormats[i] = info->pColorTargets[i].format;
+  pipeline->_depthStencilFormat = info->depthStencilFormat;
+  pipeline->_sampleCount = sampleCount;
   pipeline->_primitiveTopology = info->primitiveTopology;
   pipeline->_cullMode = info->cullMode;
   pipeline->_frontFace = info->frontFace;

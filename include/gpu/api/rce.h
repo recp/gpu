@@ -26,6 +26,10 @@ extern "C" {
 typedef struct GPURenderPipelineState GPURenderPipelineState;
 typedef struct GPURenderPassDesc GPURenderPassDesc;
 
+enum {
+  GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS = 8u
+};
+
 struct GPURenderCommandEncoder {
   void             *_priv;
   GPUCommandBuffer *_cmdb;
@@ -36,6 +40,12 @@ struct GPURenderCommandEncoder {
   bool              _hasIndexBuffer;
   bool              _hasPipeline;
   bool              _ended;
+  uint32_t          _colorAttachmentCount;
+  GPUFormat         _colorAttachmentFormats[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  uint32_t          _colorAttachmentSampleCounts[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  bool              _colorAttachmentHasResolve[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  GPUFormat         _depthStencilFormat;
+  uint32_t          _depthStencilSampleCount;
   uint32_t          _pushConstantSizeBytes;
   GPUShaderStageFlags _pushConstantStages;
   uint8_t           _pushConstants[4096];

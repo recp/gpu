@@ -26,6 +26,10 @@ struct GPURenderPipelineState {
 struct GPURenderPipeline {
   void                 *_priv;
   void                 *_state;
+  uint32_t              _colorTargetCount;
+  GPUFormat             _colorTargetFormats[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  GPUFormat             _depthStencilFormat;
+  uint32_t              _sampleCount;
   GPUPrimitiveTopology  _primitiveTopology;
   GPUCullMode           _cullMode;
   GPUFrontFace          _frontFace;

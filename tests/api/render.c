@@ -1,6 +1,7 @@
 #include "test.h"
 #include "../../src/api/buffer_internal.h"
 #include "../../src/api/cmdqueue_internal.h"
+#include "../../src/api/render/pipeline_internal.h"
 #include "../../src/api/texture_internal.h"
 
 static const char *kRenderPipelineMSL =
@@ -361,13 +362,19 @@ check_render_pass_validation(void) {
   GPUCommandBuffer fakeCmdb = {0};
   GPUTexture fakeColorTarget = {0};
   GPUTexture fakeColorTargetDepthFormat = {0};
+  GPUTexture fakeColorTargetMSAA = {0};
   GPUTexture fakeDepthStencil = {0};
   GPUTexture fakeDepthStencilColorFormat = {0};
+  GPUTexture fakeResolveTarget = {0};
+  GPUTexture fakeResolveTargetMSAA = {0};
   GPUTexture fakeSampledTexture = {0};
   GPUTextureView fakeColorView = {0};
   GPUTextureView fakeColorDepthFormatView = {0};
+  GPUTextureView fakeColorMSAAView = {0};
   GPUTextureView fakeDepthStencilView = {0};
   GPUTextureView fakeDepthStencilColorFormatView = {0};
+  GPUTextureView fakeResolveView = {0};
+  GPUTextureView fakeResolveMSAAView = {0};
   GPUTextureView fakeSampledView = {0};
   GPUTextureView *fakeView;
   GPURenderPassColorAttachment colors[9] = {0};
@@ -376,22 +383,42 @@ check_render_pass_validation(void) {
 
   fakeColorTarget.usage = GPU_TEXTURE_USAGE_COLOR_TARGET;
   fakeColorTarget.format = GPU_FORMAT_BGRA8_UNORM;
+  fakeColorTarget.sampleCount = 1u;
   fakeColorTargetDepthFormat.usage = GPU_TEXTURE_USAGE_COLOR_TARGET;
   fakeColorTargetDepthFormat.format = GPU_FORMAT_DEPTH32_FLOAT;
+  fakeColorTargetDepthFormat.sampleCount = 1u;
+  fakeColorTargetMSAA.usage = GPU_TEXTURE_USAGE_COLOR_TARGET;
+  fakeColorTargetMSAA.format = GPU_FORMAT_BGRA8_UNORM;
+  fakeColorTargetMSAA.sampleCount = 4u;
   fakeDepthStencil.usage = GPU_TEXTURE_USAGE_DEPTH_STENCIL;
   fakeDepthStencil.format = GPU_FORMAT_DEPTH32_FLOAT;
+  fakeDepthStencil.sampleCount = 1u;
   fakeDepthStencilColorFormat.usage = GPU_TEXTURE_USAGE_DEPTH_STENCIL;
   fakeDepthStencilColorFormat.format = GPU_FORMAT_BGRA8_UNORM;
+  fakeDepthStencilColorFormat.sampleCount = 1u;
+  fakeResolveTarget.usage = GPU_TEXTURE_USAGE_COLOR_TARGET;
+  fakeResolveTarget.format = GPU_FORMAT_BGRA8_UNORM;
+  fakeResolveTarget.sampleCount = 1u;
+  fakeResolveTargetMSAA.usage = GPU_TEXTURE_USAGE_COLOR_TARGET;
+  fakeResolveTargetMSAA.format = GPU_FORMAT_BGRA8_UNORM;
+  fakeResolveTargetMSAA.sampleCount = 4u;
   fakeSampledTexture.usage = GPU_TEXTURE_USAGE_SAMPLED;
   fakeSampledTexture.format = GPU_FORMAT_BGRA8_UNORM;
+  fakeSampledTexture.sampleCount = 1u;
   fakeColorView._texture = &fakeColorTarget;
   fakeColorView.format = fakeColorTarget.format;
   fakeColorDepthFormatView._texture = &fakeColorTargetDepthFormat;
   fakeColorDepthFormatView.format = fakeColorTargetDepthFormat.format;
+  fakeColorMSAAView._texture = &fakeColorTargetMSAA;
+  fakeColorMSAAView.format = fakeColorTargetMSAA.format;
   fakeDepthStencilView._texture = &fakeDepthStencil;
   fakeDepthStencilView.format = fakeDepthStencil.format;
   fakeDepthStencilColorFormatView._texture = &fakeDepthStencilColorFormat;
   fakeDepthStencilColorFormatView.format = fakeDepthStencilColorFormat.format;
+  fakeResolveView._texture = &fakeResolveTarget;
+  fakeResolveView.format = fakeResolveTarget.format;
+  fakeResolveMSAAView._texture = &fakeResolveTargetMSAA;
+  fakeResolveMSAAView.format = fakeResolveTargetMSAA.format;
   fakeSampledView._texture = &fakeSampledTexture;
   fakeSampledView.format = fakeSampledTexture.format;
   fakeView = &fakeColorView;
@@ -469,6 +496,18 @@ check_render_pass_validation(void) {
     fprintf(stderr, "render pass accepted resolve view with depth format\n");
     return 0;
   }
+  colors[0].resolveView = &fakeResolveView;
+  if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
+    fprintf(stderr, "render pass accepted resolve view for single-sample color\n");
+    return 0;
+  }
+  colors[0].view = &fakeColorMSAAView;
+  colors[0].resolveView = &fakeResolveMSAAView;
+  if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
+    fprintf(stderr, "render pass accepted multisampled resolve target\n");
+    return 0;
+  }
+  colors[0].view = fakeView;
   colors[0].resolveView = NULL;
 
   rp.colorAttachmentCount = (uint32_t)GPU_ARRAY_LEN(colors);
@@ -534,6 +573,7 @@ static int
 check_render_encoder_validation(void) {
   GPURenderPassEncoder pass = {0};
   GPURenderPassEncoder endedPass = {0};
+  GPURenderPipeline fakePipeline = {0};
   GPUBuffer fakeBufferStorage = {0};
   GPUBuffer *fakeBuffer = &fakeBufferStorage;
   GPUBufferBinding binding = {0};
@@ -561,6 +601,49 @@ check_render_encoder_validation(void) {
   GPUDraw(&pass, 1u, 1u, 0u, 0u);
   GPUDrawIndirect(&pass, fakeBuffer, 0u);
   GPUMultiDrawIndirect(&pass, fakeBuffer, 0u, 2u, 16u);
+
+  fakePipeline._state = &fakePipeline;
+  fakePipeline._colorTargetCount = 1u;
+  fakePipeline._colorTargetFormats[0] = GPU_FORMAT_BGRA8_UNORM;
+  fakePipeline._sampleCount = 1u;
+  fakePipeline._depthStencilFormat = GPU_FORMAT_UNDEFINED;
+
+  pass._colorAttachmentCount = 1u;
+  pass._colorAttachmentFormats[0] = GPU_FORMAT_RGBA8_UNORM;
+  pass._colorAttachmentSampleCounts[0] = 1u;
+  pass._depthStencilFormat = GPU_FORMAT_UNDEFINED;
+  GPUBindRenderPipeline(&pass, &fakePipeline);
+  if (pass._hasPipeline) {
+    fprintf(stderr, "render encoder accepted pipeline with color format mismatch\n");
+    return 0;
+  }
+
+  pass._colorAttachmentFormats[0] = GPU_FORMAT_BGRA8_UNORM;
+  pass._colorAttachmentSampleCounts[0] = 4u;
+  GPUBindRenderPipeline(&pass, &fakePipeline);
+  if (pass._hasPipeline) {
+    fprintf(stderr, "render encoder accepted pipeline with sample count mismatch\n");
+    return 0;
+  }
+
+  pass._colorAttachmentSampleCounts[0] = 1u;
+  pass._depthStencilFormat = GPU_FORMAT_DEPTH32_FLOAT;
+  pass._depthStencilSampleCount = 1u;
+  GPUBindRenderPipeline(&pass, &fakePipeline);
+  if (pass._hasPipeline) {
+    fprintf(stderr, "render encoder accepted pipeline with depth format mismatch\n");
+    return 0;
+  }
+
+  pass._depthStencilFormat = GPU_FORMAT_UNDEFINED;
+  pass._depthStencilSampleCount = 0u;
+  pass._colorAttachmentHasResolve[0] = true;
+  GPUBindRenderPipeline(&pass, &fakePipeline);
+  if (pass._hasPipeline) {
+    fprintf(stderr, "render encoder accepted single-sample pipeline with resolve target\n");
+    return 0;
+  }
+  pass._colorAttachmentHasResolve[0] = false;
 
   pass._hasPipeline = true;
   GPUDrawIndirect(&pass, NULL, 0u);

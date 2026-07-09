@@ -74,6 +74,34 @@ gpu_validPushConstantRange(uint32_t limit,
 }
 
 static bool
+gpu_renderPipelineMatchesPass(const GPURenderPassEncoder *pass,
+                              const GPURenderPipeline *pipeline) {
+  if (pipeline->_colorTargetCount != pass->_colorAttachmentCount) {
+    return false;
+  }
+
+  for (uint32_t i = 0; i < pipeline->_colorTargetCount; i++) {
+    if (pipeline->_colorTargetFormats[i] != pass->_colorAttachmentFormats[i] ||
+        pipeline->_sampleCount != pass->_colorAttachmentSampleCounts[i]) {
+      return false;
+    }
+    if (pass->_colorAttachmentHasResolve[i] && pipeline->_sampleCount <= 1u) {
+      return false;
+    }
+  }
+
+  if (pipeline->_depthStencilFormat != pass->_depthStencilFormat) {
+    return false;
+  }
+  if (pass->_depthStencilFormat != GPU_FORMAT_UNDEFINED &&
+      pipeline->_sampleCount != pass->_depthStencilSampleCount) {
+    return false;
+  }
+
+  return true;
+}
+
+static bool
 gpu_validIndirectBatch(uint64_t argsOffset,
                        uint32_t commandCount,
                        uint32_t strideBytes) {
@@ -119,6 +147,8 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
   GPUApi *api;
 
   if (!pass || pass->_ended || !pipeline || !pipeline->_state)
+    return;
+  if (!gpu_renderPipelineMatchesPass(pass, pipeline))
     return;
   if (!(api = gpuActiveGPUApi()))
     return;
