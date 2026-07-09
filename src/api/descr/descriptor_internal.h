@@ -89,6 +89,12 @@ gpuPipelineLayoutIsStageBound(GPUPipelineLayout *pipelineLayout,
 
 GPU_HIDE
 int
+gpuPipelineLayoutMatchesShaderResources(GPUPipelineLayout *pipelineLayout,
+                                        const GPUShaderLibrary *library,
+                                        GPUShaderStageFlags stages);
+
+GPU_HIDE
+int
 gpuSetBindGroupLayoutBackendBindings(GPUBindGroupLayout *layout,
                                      const uint32_t *backendBindings,
                                      uint32_t count);

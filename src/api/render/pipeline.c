@@ -232,6 +232,11 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   if (!gpu_pipelineInfoIsSupported(info))
     return GPU_ERROR_INVALID_ARGUMENT;
+  if (!gpuPipelineLayoutMatchesShaderResources(info->layout,
+                                               info->library,
+                                               GPU_SHADER_STAGE_VERTEX_BIT |
+                                               GPU_SHADER_STAGE_FRAGMENT_BIT))
+    return GPU_ERROR_INVALID_ARGUMENT;
 
   vertexFunc = GPUShaderFunction(info->library, info->vertexEntry);
   fragmentFunc = GPUShaderFunction(info->library, info->fragmentEntry);

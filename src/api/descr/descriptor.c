@@ -20,7 +20,6 @@
 #include "../render/rce_internal.h"
 #include "../texture_internal.h"
 #include "descriptor_internal.h"
-#include "../usl_target.h"
 
 #define GPU_USL_BYTECODE_VERSION 2u
 #define GPU_PUSH_CONSTANT_MAX_SIZE_BYTES 4096u
@@ -1023,6 +1022,31 @@ gpu_reflectionResourceCountForSet(const GPUShaderReflection *reflection,
   return count;
 }
 
+static uint32_t
+gpu_reflectionLayoutCountForStages(const GPUShaderReflection *reflection,
+                                   GPUShaderStageFlags stages) {
+  uint32_t maxSet;
+  int hasResource;
+
+  if (!reflection || reflection->resourceCount == 0u || !reflection->pResources) {
+    return 0u;
+  }
+
+  maxSet = 0u;
+  hasResource = 0;
+  for (uint32_t i = 0; i < reflection->resourceCount; i++) {
+    if ((reflection->pResources[i].visibility & stages) == 0u) {
+      continue;
+    }
+    hasResource = 1;
+    if (reflection->pResources[i].setIndex > maxSet) {
+      maxSet = reflection->pResources[i].setIndex;
+    }
+  }
+
+  return hasResource ? maxSet + 1u : 0u;
+}
+
 static GPUResult
 gpu_createLayoutForReflectionSet(GPUDevice *device,
                                  const GPUShaderLibrary *library,
@@ -1108,6 +1132,39 @@ gpu_layoutMatchesReflectionResource(const GPUBindGroupLayoutEntry *entry,
 }
 
 static int
+gpu_layoutContainsStageReflectionResource(const GPUBindGroupLayoutPriv *priv,
+                                          const GPUShaderResourceReflection *resource,
+                                          GPUShaderStageFlags stages) {
+  uint32_t resourceArrayCount;
+  GPUShaderStageFlags requiredVisibility;
+
+  if (!priv || !resource) {
+    return 0;
+  }
+
+  requiredVisibility = resource->visibility & stages;
+  if (requiredVisibility == 0u) {
+    return 1;
+  }
+
+  resourceArrayCount = resource->arrayCount ? resource->arrayCount : 1u;
+  for (uint32_t i = 0u; i < priv->count; i++) {
+    const GPUBindGroupLayoutEntry *entry;
+
+    entry = &priv->entries[i];
+    if (entry->binding == resource->binding &&
+        entry->bindingType == resource->bindingType &&
+        (entry->visibility & requiredVisibility) == requiredVisibility &&
+        entry->arrayCount == resourceArrayCount &&
+        entry->hasDynamicOffset == resource->hasDynamicOffset) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+static int
 gpu_layoutMatchesReflectionSet(GPUBindGroupLayout *layout,
                                const GPUShaderReflection *reflection,
                                uint32_t setIndex) {
@@ -1157,6 +1214,70 @@ gpu_layoutMatchesReflectionSet(GPUBindGroupLayout *layout,
 
   free(matched);
   return 1;
+}
+
+static int
+gpu_pipelineLayoutMatchesShaderReflection(GPUPipelineLayout *pipelineLayout,
+                                          const GPUShaderReflection *reflection,
+                                          GPUShaderStageFlags stages) {
+  GPUPipelineLayoutPriv *pipelinePriv;
+  uint32_t requiredCount;
+
+  pipelinePriv = gpu_pipelineLayoutPriv(pipelineLayout);
+  if (!pipelinePriv) {
+    return 0;
+  }
+
+  requiredCount = gpu_reflectionLayoutCountForStages(reflection, stages);
+  if (pipelinePriv->bindGroupLayoutCount < requiredCount) {
+    return 0;
+  }
+
+  for (uint32_t i = 0u; reflection && i < reflection->resourceCount; i++) {
+    const GPUShaderResourceReflection *resource;
+    GPUBindGroupLayoutPriv *layoutPriv;
+
+    resource = &reflection->pResources[i];
+    if ((resource->visibility & stages) == 0u) {
+      continue;
+    }
+    if (resource->setIndex >= pipelinePriv->bindGroupLayoutCount) {
+      return 0;
+    }
+
+    layoutPriv = gpu_layoutPriv(pipelinePriv->bindGroupLayouts[resource->setIndex]);
+    if (!gpu_layoutContainsStageReflectionResource(layoutPriv, resource, stages)) {
+      return 0;
+    }
+  }
+
+  return 1;
+}
+
+GPU_HIDE
+int
+gpuPipelineLayoutMatchesShaderResources(GPUPipelineLayout *pipelineLayout,
+                                        const GPUShaderLibrary *library,
+                                        GPUShaderStageFlags stages) {
+  GPUShaderReflection reflection;
+  GPUResult rc;
+  int ok;
+
+  if (!pipelineLayout || !library) {
+    return 0;
+  }
+
+  memset(&reflection, 0, sizeof(reflection));
+  rc = GPUGetShaderReflection(library, &reflection);
+  if (rc != GPU_OK) {
+    return 0;
+  }
+
+  ok = gpu_pipelineLayoutMatchesShaderReflection(pipelineLayout,
+                                                 &reflection,
+                                                 stages);
+  GPUFreeShaderReflection(&reflection);
+  return ok;
 }
 
 GPU_EXPORT

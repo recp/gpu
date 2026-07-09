@@ -183,6 +183,8 @@ check_reflected_pipeline_entry_stages(GPUDevice *device,
                                       GPUPipelineLayout *layout) {
   GPUComputePipelineCreateInfo computeInfo = {0};
   GPURenderPipelineCreateInfo renderInfo = {0};
+  GPUPipelineLayoutCreateInfo emptyLayoutInfo = {0};
+  GPUPipelineLayout *emptyLayout = NULL;
   GPUColorTargetState colorTarget = {0};
   GPUVertexAttribute attrs[2] = {{0}};
   GPUVertexBufferLayout vertexLayout = {0};
@@ -237,11 +239,42 @@ check_reflected_pipeline_entry_stages(GPUDevice *device,
   renderInfo.frontFace = GPU_FRONT_FACE_CCW;
   renderInfo.multisample.sampleCount = 1u;
 
+  emptyLayoutInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  emptyLayoutInfo.chain.structSize = sizeof(emptyLayoutInfo);
+  emptyLayoutInfo.label = "api-reflection-empty-layout";
+  if (GPUCreatePipelineLayout(device, &emptyLayoutInfo, &emptyLayout) != GPU_OK ||
+      !emptyLayout) {
+    fprintf(stderr, "failed to create empty reflection pipeline layout\n");
+    return 0;
+  }
+
+  computeInfo.layout = emptyLayout;
+  computeInfo.entryPoint = "reflect_cs";
+  if (!expect_reflected_compute_pipeline_error(
+        device,
+        &computeInfo,
+        "compute pipeline accepted layout missing reflected resources")) {
+    GPUDestroyPipelineLayout(emptyLayout);
+    return 0;
+  }
+  computeInfo.layout = layout;
+
+  renderInfo.layout = emptyLayout;
+  if (!expect_reflected_render_pipeline_error(
+        device,
+        &renderInfo,
+        "render pipeline accepted layout missing reflected resources")) {
+    GPUDestroyPipelineLayout(emptyLayout);
+    return 0;
+  }
+  renderInfo.layout = layout;
+
   renderInfo.vertexEntry = "reflect_cs";
   if (!expect_reflected_render_pipeline_error(
         device,
         &renderInfo,
         "render pipeline accepted reflected compute vertex entry")) {
+    GPUDestroyPipelineLayout(emptyLayout);
     return 0;
   }
 
@@ -251,6 +284,7 @@ check_reflected_pipeline_entry_stages(GPUDevice *device,
         device,
         &renderInfo,
         "render pipeline accepted reflected compute fragment entry")) {
+    GPUDestroyPipelineLayout(emptyLayout);
     return 0;
   }
 
@@ -260,9 +294,11 @@ check_reflected_pipeline_entry_stages(GPUDevice *device,
         device,
         &renderInfo,
         "render pipeline accepted swapped reflected render entries")) {
+    GPUDestroyPipelineLayout(emptyLayout);
     return 0;
   }
 
+  GPUDestroyPipelineLayout(emptyLayout);
   return 1;
 }
 

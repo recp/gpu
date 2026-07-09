@@ -114,6 +114,11 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   }
+  if (!gpuPipelineLayoutMatchesShaderResources(info->layout,
+                                               info->library,
+                                               GPU_SHADER_STAGE_COMPUTE_BIT)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
 
   if (!(api = gpuActiveGPUApi()) ||
       !api->compute.newComputePipeline ||
