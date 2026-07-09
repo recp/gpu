@@ -71,6 +71,22 @@ vk__find_display_gpu(int               gpu_number,
 }
 #endif
 
+static GPUAdapterType
+vk_adapterType(VkPhysicalDeviceType type) {
+  switch (type) {
+    case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+      return GPU_ADAPTER_TYPE_INTEGRATED;
+    case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+      return GPU_ADAPTER_TYPE_DISCRETE;
+    case VK_PHYSICAL_DEVICE_TYPE_CPU:
+      return GPU_ADAPTER_TYPE_SOFTWARE;
+    case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+    case VK_PHYSICAL_DEVICE_TYPE_OTHER:
+    default:
+      return GPU_ADAPTER_TYPE_UNKNOWN;
+  }
+}
+
 GPU_HIDE
 GPUPhysicalDevice*
 vk__newPhyDeviceFrom(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
@@ -153,6 +169,25 @@ vk__newPhyDeviceFrom(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 #undef VK__ADD_EXT_IF
 
   return item;
+}
+
+GPU_HIDE
+GPUResult
+vk_getAdapterProperties(const GPUAdapter     * __restrict adapter,
+                        GPUAdapterProperties * __restrict outProps) {
+  GPUPhysicalDeviceVk *adapterVk;
+
+  if (!adapter || !outProps || !adapter->_priv) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  adapterVk = adapter->_priv;
+  memset(outProps, 0, sizeof(*outProps));
+  outProps->backend = GPU_BACKEND_VULKAN;
+  outProps->name = adapterVk->props.deviceName;
+  outProps->type = vk_adapterType(adapterVk->props.deviceType);
+
+  return GPU_OK;
 }
 
 GPU_HIDE
@@ -529,6 +564,7 @@ GPU_HIDE
 void
 vk_initDevice(GPUApiDevice* apiDevice) {
   apiDevice->getAvailablePhysicalDevicesBy = vk_getAvailablePhysicalDevicesBy;
+  apiDevice->getAdapterProperties          = vk_getAdapterProperties;
   apiDevice->getAutoSelectedPhysicalDevice = vk_getAutoSelectedPhysicalDevice;
   apiDevice->autoSelectPhysicalDeviceIn    = vk_autoSelectPhysicalDeviceIn;
   apiDevice->createDevice                  = vk_createDevice;

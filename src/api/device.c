@@ -98,6 +98,10 @@ GPUGetAdapterProperties(const GPUAdapter     *adapter,
 
   memset(outProps, 0, sizeof(*outProps));
   api = gpuActiveGPUApi();
+  if (api && api->device.getAdapterProperties) {
+    return api->device.getAdapterProperties(adapter, outProps);
+  }
+
   backend = api ? api->backend : GPU_BACKEND_NULL;
 
   outProps->backend = backend;

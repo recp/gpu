@@ -33,6 +33,10 @@ typedef struct GPUApiDevice {
   (*getAvailablePhysicalDevicesBy)(GPUInstance   * __restrict inst,
                                    uint32_t maxNumberOfItems);
 
+  GPUResult
+  (*getAdapterProperties)(const GPUAdapter     * __restrict adapter,
+                          GPUAdapterProperties * __restrict outProps);
+
   GPUDevice* (*createDevice)(GPUPhysicalDevice * __restrict phyDevice,
                              GPUCommandQueueCreateInfo      queCI[],
                              uint32_t                       nQueCI);

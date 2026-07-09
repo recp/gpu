@@ -75,6 +75,27 @@ mt_getAutoSelectedPhysicalDevice(GPUInstance * __restrict inst) {
   return phyDevice;
 }
 
+GPU_HIDE
+GPUResult
+mt_getAdapterProperties(const GPUAdapter     * __restrict adapter,
+                        GPUAdapterProperties * __restrict outProps) {
+  id<MTLDevice> device;
+
+  if (!adapter || !outProps || !adapter->_priv) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  device = (id<MTLDevice>)adapter->_priv;
+  memset(outProps, 0, sizeof(*outProps));
+  outProps->backend = GPU_BACKEND_METAL;
+  outProps->name = device.name.UTF8String;
+  outProps->type = device.isLowPower ?
+    GPU_ADAPTER_TYPE_INTEGRATED :
+    GPU_ADAPTER_TYPE_DISCRETE;
+
+  return GPU_OK;
+}
+
 extern
 GPU_HIDE
 GPUCommandQueue*
@@ -168,6 +189,7 @@ GPU_HIDE
 void
 mt_initDevice(GPUApiDevice *apiDevice) {
   apiDevice->getAvailablePhysicalDevicesBy = mt_getAvailablePhysicalDevicesBy;
+  apiDevice->getAdapterProperties          = mt_getAdapterProperties;
   apiDevice->autoSelectPhysicalDeviceIn    = mt_autoSelectPhysicalDeviceIn;
   apiDevice->getAutoSelectedPhysicalDevice = mt_getAutoSelectedPhysicalDevice;
   apiDevice->createDevice                  = mt_createDevice;

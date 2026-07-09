@@ -20,6 +20,44 @@ GPU_HIDE
 GPUCommandQueue *
 dx12_newCommandQueue(GPUDevice *__restrict device);
 
+static void
+dx12_fillAdapterName(GPUPhysicalDeviceDX12 *phyDeviceDX12) {
+  if (!phyDeviceDX12) {
+    return;
+  }
+
+  phyDeviceDX12->name[0] = '\0';
+  WideCharToMultiByte(CP_UTF8,
+                      0,
+                      phyDeviceDX12->desc1.Description,
+                      -1,
+                      phyDeviceDX12->name,
+                      (int)sizeof(phyDeviceDX12->name),
+                      NULL,
+                      NULL);
+}
+
+static GPUAdapterType
+dx12_adapterType(const GPUPhysicalDeviceDX12 *phyDeviceDX12) {
+  const DXGI_ADAPTER_DESC1 *desc;
+
+  if (!phyDeviceDX12) {
+    return GPU_ADAPTER_TYPE_UNKNOWN;
+  }
+  if (phyDeviceDX12->isWarp) {
+    return GPU_ADAPTER_TYPE_SOFTWARE;
+  }
+
+  desc = &phyDeviceDX12->desc1;
+  if (desc->Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
+    return GPU_ADAPTER_TYPE_SOFTWARE;
+  }
+  if (desc->DedicatedVideoMemory > 1024ull * 1024ull * 1024ull) {
+    return GPU_ADAPTER_TYPE_DISCRETE;
+  }
+  return GPU_ADAPTER_TYPE_INTEGRATED;
+}
+
 GPU_HIDE
 GPUPhysicalDevice *
 dx12_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
@@ -48,6 +86,7 @@ dx12_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
       phyDeviceDX12->dxgiAdapter = dxgiAdapter;
 
       dxgiAdapter->lpVtbl->GetDesc1(dxgiAdapter, &phyDeviceDX12->desc1);
+      dx12_fillAdapterName(phyDeviceDX12);
 
       if (phyDeviceDX12->desc1.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
         /* Don't select the Basic Render Driver adapter.*/
@@ -99,6 +138,7 @@ dx12_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
 
     phyDeviceDX12->dxgiAdapter       = (IUnknown *)warpAdapter;
     phyDeviceDX12->isWarp            = true;
+    snprintf(phyDeviceDX12->name, sizeof(phyDeviceDX12->name), "WARP");
     item->_priv                      = phyDeviceDX12;
     item->inst                       = inst;
     item->separatePresentQueue       = 1; /* builtin */
@@ -183,6 +223,27 @@ dx12_getAutoSelectedPhysicalDevice(GPUInstance *__restrict inst) {
 }
 
 GPU_HIDE
+GPUResult
+dx12_getAdapterProperties(const GPUAdapter     * __restrict adapter,
+                          GPUAdapterProperties * __restrict outProps) {
+  GPUPhysicalDeviceDX12 *phyDeviceDX12;
+
+  if (!adapter || !outProps || !adapter->_priv) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  phyDeviceDX12 = adapter->_priv;
+  memset(outProps, 0, sizeof(*outProps));
+  outProps->backend = GPU_BACKEND_DIRECTX12;
+  outProps->name = phyDeviceDX12->name[0] ?
+    phyDeviceDX12->name :
+    "Direct3D 12";
+  outProps->type = dx12_adapterType(phyDeviceDX12);
+
+  return GPU_OK;
+}
+
+GPU_HIDE
 GPUDevice *
 dx12_createDevice(GPUPhysicalDevice * __restrict phyDevice,
                   GPUCommandQueueCreateInfo      queCI[],
@@ -261,8 +322,9 @@ GPU_HIDE
 void
 dx12_initDevice(GPUApiDevice* apiDevice) {
   apiDevice->getAvailablePhysicalDevicesBy = dx12_getAvailablePhysicalDevicesBy;
+  apiDevice->getAdapterProperties          = dx12_getAdapterProperties;
   apiDevice->autoSelectPhysicalDeviceIn    = dx12_autoSelectPhysicalDeviceIn;
-  apiDevice->getAvailablePhysicalDevicesBy = dx12_getAvailablePhysicalDevicesBy;
+  apiDevice->getAutoSelectedPhysicalDevice = dx12_getAutoSelectedPhysicalDevice;
   apiDevice->createDevice                  = dx12_createDevice;
   apiDevice->createSystemDefaultDevice     = dx12_createSystemDefaultDevice;
 }
