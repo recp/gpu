@@ -247,11 +247,12 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUEndRenderPass(render);
   render = NULL;
 
-  _submittedFrames++;
   submitResult = GPUFinishFrame(_queue, cmdb, frame);
   frame = NULL;
   if (submitResult != GPU_OK) {
     NSLog(@"GPUFinishFrame failed: %d", submitResult);
+  } else {
+    _submittedFrames++;
   }
 
 cleanup:
