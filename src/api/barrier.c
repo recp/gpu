@@ -84,9 +84,16 @@ gpu_validBarrierBatch(const GPUBarrierBatch *barriers) {
 GPU_EXPORT
 void
 GPUEncodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
+  GPUApi *api;
+
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder ||
       !gpu_validBarrierBatch(barriers)) {
     return;
   }
 
+  if (!(api = gpuActiveGPUApi()) || !api->renderPass.encodeBarriers) {
+    return;
+  }
+
+  api->renderPass.encodeBarriers(cmdb, barriers);
 }

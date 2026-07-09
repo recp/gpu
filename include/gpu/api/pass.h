@@ -23,6 +23,8 @@ extern "C" {
 #include "../common.h"
 #include "../gpu.h"
 
+typedef struct GPUBarrierBatch GPUBarrierBatch;
+
 typedef struct GPURenderPassDesc {
   void *_priv;
 } GPURenderPassDesc;
@@ -55,6 +57,7 @@ typedef struct GPUApiRenderPass {
                                GPUTexture                          *dst,
                                const GPUTextureToTextureCopyRegion *region);
   void (*endCopyPass)(GPUCopyPassEncoder *pass);
+  void (*encodeBarriers)(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers);
 } GPUApiRenderPass;
 
 #ifdef __cplusplus

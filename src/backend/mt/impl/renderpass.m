@@ -408,6 +408,13 @@ mt_endCopyPass(GPUCopyPassEncoder *pass) {
 
 GPU_HIDE
 void
+mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
+  GPU__UNUSED(cmdb);
+  GPU__UNUSED(barriers);
+}
+
+GPU_HIDE
+void
 mt_initRenderPass(GPUApiRenderPass *api) {
   api->beginRenderPass   = mt_beginRenderPass;
   api->destroyRenderPass = mt_destroyRenderPass;
@@ -417,4 +424,5 @@ mt_initRenderPass(GPUApiRenderPass *api) {
   api->copyTextureToBuffer = mt_copyTextureToBuffer;
   api->copyTextureToTexture = mt_copyTextureToTexture;
   api->endCopyPass = mt_endCopyPass;
+  api->encodeBarriers = mt_encodeBarriers;
 }
