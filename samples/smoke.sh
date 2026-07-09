@@ -102,7 +102,7 @@ run_step "compute-buffer-usl generated no-sidecar" \
 run_step "compute-buffer-usl readback" \
   run_sample compute-buffer-usl env GPU_DERIVED_DATA="$DERIVED_DATA" GPU_SAMPLE_EXIT_AFTER_FRAMES=1 GPU_USL_NO_SIDECAR=1 ./hello-compute-buffer-usl
 
-run_expect_fail_with_output "compute-buffer-usl missing set1 bind" \
+run_expect_fail_with_output "compute-buffer-usl missing group 1 bind" \
   "GPU validation: GPUDispatch skipped: missing compute bind group" \
   run_sample compute-buffer-usl env GPU_DERIVED_DATA="$DERIVED_DATA" GPU_SAMPLE_EXIT_AFTER_FRAMES=1 GPU_SAMPLE_VERBOSE_VALIDATION=1 GPU_SAMPLE_SKIP_COMPUTE_BIND=1 ./hello-compute-buffer-usl
 

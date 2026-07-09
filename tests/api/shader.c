@@ -57,7 +57,7 @@ static int
 shader_reflection_has_resource(const GPUShaderReflection *reflection,
                                GPUBindingType bindingType,
                                GPUShaderStageFlags visibility,
-                               uint32_t setIndex,
+                               uint32_t groupIndex,
                                uint32_t binding,
                                int hasDynamicOffset) {
   if (!reflection || (!reflection->pResources && reflection->resourceCount > 0u)) {
@@ -66,7 +66,7 @@ shader_reflection_has_resource(const GPUShaderReflection *reflection,
 
   for (uint32_t i = 0; i < reflection->resourceCount; i++) {
     const GPUShaderResourceReflection *item = &reflection->pResources[i];
-    if (item->setIndex == setIndex &&
+    if (item->groupIndex == groupIndex &&
         item->binding == binding &&
         item->bindingType == bindingType &&
         item->visibility == visibility &&
@@ -349,7 +349,7 @@ check_reflected_dynamic_offset_validation(GPUDevice *device,
                                           GPUShaderLibrary *library) {
   GPUBindGroupLayout *layouts[2] = {0};
   GPUBindGroupLayout *badLayouts[2] = {0};
-  GPUBindGroupLayoutEntry badSet1Entries[2] = {{0}};
+  GPUBindGroupLayoutEntry badGroup1Entries[2] = {{0}};
   GPUBindGroupLayoutCreateInfo layoutInfo = {0};
   GPUPipelineLayoutCreateInfo pipelineInfo = {0};
   GPUPipelineLayout *pipelineLayout = NULL;
@@ -372,22 +372,22 @@ check_reflected_dynamic_offset_validation(GPUDevice *device,
     goto cleanup;
   }
 
-  badSet1Entries[0].binding = 0u;
-  badSet1Entries[0].bindingType = GPU_BINDING_UNIFORM_BUFFER;
-  badSet1Entries[0].visibility = GPU_SHADER_STAGE_FRAGMENT_BIT;
-  badSet1Entries[0].arrayCount = 1u;
-  badSet1Entries[0].hasDynamicOffset = false;
+  badGroup1Entries[0].binding = 0u;
+  badGroup1Entries[0].bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  badGroup1Entries[0].visibility = GPU_SHADER_STAGE_FRAGMENT_BIT;
+  badGroup1Entries[0].arrayCount = 1u;
+  badGroup1Entries[0].hasDynamicOffset = false;
 
-  badSet1Entries[1].binding = 0u;
-  badSet1Entries[1].bindingType = GPU_BINDING_STORAGE_TEXTURE;
-  badSet1Entries[1].visibility = GPU_SHADER_STAGE_COMPUTE_BIT;
-  badSet1Entries[1].arrayCount = 1u;
+  badGroup1Entries[1].binding = 1u;
+  badGroup1Entries[1].bindingType = GPU_BINDING_STORAGE_TEXTURE;
+  badGroup1Entries[1].visibility = GPU_SHADER_STAGE_COMPUTE_BIT;
+  badGroup1Entries[1].arrayCount = 1u;
 
   layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
   layoutInfo.chain.structSize = sizeof(layoutInfo);
-  layoutInfo.label = "api-reflection-bad-dynamic-offset-set1";
-  layoutInfo.entryCount = (uint32_t)GPU_ARRAY_LEN(badSet1Entries);
-  layoutInfo.pEntries = badSet1Entries;
+  layoutInfo.label = "api-reflection-bad-dynamic-offset-group1";
+  layoutInfo.entryCount = (uint32_t)GPU_ARRAY_LEN(badGroup1Entries);
+  layoutInfo.pEntries = badGroup1Entries;
   if (GPUCreateBindGroupLayout(device, &layoutInfo, &badLayouts[1]) != GPU_OK ||
       !badLayouts[1]) {
     fprintf(stderr, "dynamic offset validation could not create mismatch layout\n");
@@ -487,11 +487,11 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
   GPUTexture fakeComputeTextureStorage;
   GPUTextureView fakeFragmentTextureView;
   GPUTextureView fakeComputeTextureView;
-  GPUBindGroupEntry set0Entries[1];
-  GPUBindGroupEntry set1Entries[2];
+  GPUBindGroupEntry group0Entries[2];
+  GPUBindGroupEntry group1Entries[2];
   GPUBindGroupCreateInfo groupInfo = {0};
-  GPUBindGroup *set0Group;
-  GPUBindGroup *set1Group;
+  GPUBindGroup *group0Group;
+  GPUBindGroup *group1Group;
   uint32_t count;
   int ok;
 
@@ -505,13 +505,20 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
   }
 
   entries = GPUGetBindGroupLayoutEntries(shaderLayout->bindGroupLayouts[0], &count);
-  ok = count == 1u &&
+  ok = count == 2u &&
+       layout_has_typed_entry(entries,
+                              count,
+                              GPUBindStageFragment,
+                              GPUBindKindBuffer,
+                              GPU_BINDING_UNIFORM_BUFFER,
+                              0u,
+                              0) &&
        layout_has_typed_entry(entries,
                               count,
                               GPUBindStageFragment,
                               GPUBindKindTexture,
                               GPU_BINDING_SAMPLED_TEXTURE,
-                              0u,
+                              1u,
                               0);
   if (ok) {
     entries = GPUGetBindGroupLayoutEntries(shaderLayout->bindGroupLayouts[1], &count);
@@ -528,7 +535,7 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
                               GPUBindStageCompute,
                               GPUBindKindTexture,
                               GPU_BINDING_STORAGE_TEXTURE,
-                              0u,
+                              1u,
                               0);
   }
   if (!ok) {
@@ -536,8 +543,8 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
     return 0;
   }
 
-  memset(set0Entries, 0, sizeof(set0Entries));
-  memset(set1Entries, 0, sizeof(set1Entries));
+  memset(group0Entries, 0, sizeof(group0Entries));
+  memset(group1Entries, 0, sizeof(group1Entries));
   memset(&fakeBufferStorage, 0, sizeof(fakeBufferStorage));
   memset(&fakeFragmentTextureStorage, 0, sizeof(fakeFragmentTextureStorage));
   memset(&fakeComputeTextureStorage, 0, sizeof(fakeComputeTextureStorage));
@@ -550,52 +557,58 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
   fakeFragmentTextureView._texture = &fakeFragmentTextureStorage;
   fakeComputeTextureView._texture = &fakeComputeTextureStorage;
 
-  set0Entries[0].binding = 0u;
-  set0Entries[0].stage = GPUBindStageFragment;
-  set0Entries[0].kind = GPUBindKindTexture;
-  set0Entries[0].textureView = &fakeFragmentTextureView;
+  group0Entries[0].binding = 0u;
+  group0Entries[0].stage = GPUBindStageFragment;
+  group0Entries[0].kind = GPUBindKindBuffer;
+  group0Entries[0].buffer.buffer = &fakeBufferStorage;
+  group0Entries[0].buffer.size = 16u;
 
-  set1Entries[0].binding = 0u;
-  set1Entries[0].bindingType = GPU_BINDING_UNIFORM_BUFFER;
-  set1Entries[0].stage = GPUBindStageFragment;
-  set1Entries[0].kind = GPUBindKindBuffer;
-  set1Entries[0].buffer.buffer = &fakeBufferStorage;
-  set1Entries[0].buffer.size = 16u;
+  group0Entries[1].binding = 1u;
+  group0Entries[1].stage = GPUBindStageFragment;
+  group0Entries[1].kind = GPUBindKindTexture;
+  group0Entries[1].textureView = &fakeFragmentTextureView;
 
-  set1Entries[1].binding = 0u;
-  set1Entries[1].stage = GPUBindStageCompute;
-  set1Entries[1].kind = GPUBindKindTexture;
-  set1Entries[1].textureView = &fakeComputeTextureView;
+  group1Entries[0].binding = 0u;
+  group1Entries[0].bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  group1Entries[0].stage = GPUBindStageFragment;
+  group1Entries[0].kind = GPUBindKindBuffer;
+  group1Entries[0].buffer.buffer = &fakeBufferStorage;
+  group1Entries[0].buffer.size = 16u;
+
+  group1Entries[1].binding = 1u;
+  group1Entries[1].stage = GPUBindStageCompute;
+  group1Entries[1].kind = GPUBindKindTexture;
+  group1Entries[1].textureView = &fakeComputeTextureView;
 
   groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label = "api-shader-layout-lifetime-set0";
+  groupInfo.label = "api-shader-layout-lifetime-group0";
   groupInfo.layout = shaderLayout->bindGroupLayouts[0];
-  groupInfo.entryCount = (uint32_t)GPU_ARRAY_LEN(set0Entries);
-  groupInfo.pEntries = set0Entries;
+  groupInfo.entryCount = (uint32_t)GPU_ARRAY_LEN(group0Entries);
+  groupInfo.pEntries = group0Entries;
 
-  set0Group = NULL;
-  if (GPUCreateBindGroup(device, &groupInfo, &set0Group) != GPU_OK || !set0Group) {
-    fprintf(stderr, "shader layout set0 failed after library destroy\n");
-    GPUDestroyBindGroup(set0Group);
+  group0Group = NULL;
+  if (GPUCreateBindGroup(device, &groupInfo, &group0Group) != GPU_OK || !group0Group) {
+    fprintf(stderr, "shader layout group0 failed after library destroy\n");
+    GPUDestroyBindGroup(group0Group);
     return 0;
   }
 
-  groupInfo.label = "api-shader-layout-lifetime-set1";
+  groupInfo.label = "api-shader-layout-lifetime-group1";
   groupInfo.layout = shaderLayout->bindGroupLayouts[1];
-  groupInfo.entryCount = (uint32_t)GPU_ARRAY_LEN(set1Entries);
-  groupInfo.pEntries = set1Entries;
+  groupInfo.entryCount = (uint32_t)GPU_ARRAY_LEN(group1Entries);
+  groupInfo.pEntries = group1Entries;
 
-  set1Group = NULL;
-  if (GPUCreateBindGroup(device, &groupInfo, &set1Group) != GPU_OK || !set1Group) {
-    fprintf(stderr, "shader layout set1 failed after library destroy\n");
-    GPUDestroyBindGroup(set1Group);
-    GPUDestroyBindGroup(set0Group);
+  group1Group = NULL;
+  if (GPUCreateBindGroup(device, &groupInfo, &group1Group) != GPU_OK || !group1Group) {
+    fprintf(stderr, "shader layout group1 failed after library destroy\n");
+    GPUDestroyBindGroup(group1Group);
+    GPUDestroyBindGroup(group0Group);
     return 0;
   }
 
-  GPUDestroyBindGroup(set1Group);
-  GPUDestroyBindGroup(set0Group);
+  GPUDestroyBindGroup(group1Group);
+  GPUDestroyBindGroup(group0Group);
   return 1;
 }
 
@@ -609,13 +622,13 @@ check_reflection_objects_after_library_destroy(GPUDevice *device,
   GPUTexture fakeComputeTextureStorage;
   GPUTextureView fakeFragmentTextureView;
   GPUTextureView fakeComputeTextureView;
-  GPUBindGroupEntry set0Entries[1];
-  GPUBindGroupEntry set1Entries[2];
+  GPUBindGroupEntry group0Entries[2];
+  GPUBindGroupEntry group1Entries[2];
   GPUBindGroupCreateInfo groupInfo = {0};
   GPUPipelineLayoutCreateInfo pipelineInfo = {0};
   GPUPipelineLayout *pipelineLayout = NULL;
-  GPUBindGroup *set0Group = NULL;
-  GPUBindGroup *set1Group = NULL;
+  GPUBindGroup *group0Group = NULL;
+  GPUBindGroup *group1Group = NULL;
   uint32_t count;
   int ok = 0;
 
@@ -628,15 +641,22 @@ check_reflection_objects_after_library_destroy(GPUDevice *device,
   }
 
   entries = GPUGetBindGroupLayoutEntries(layouts[0], &count);
-  if (count != 1u ||
+  if (count != 2u ||
+      !layout_has_typed_entry(entries,
+                              count,
+                              GPUBindStageFragment,
+                              GPUBindKindBuffer,
+                              GPU_BINDING_UNIFORM_BUFFER,
+                              0u,
+                              0) ||
       !layout_has_typed_entry(entries,
                               count,
                               GPUBindStageFragment,
                               GPUBindKindTexture,
                               GPU_BINDING_SAMPLED_TEXTURE,
-                              0u,
+                              1u,
                               0)) {
-    fprintf(stderr, "reflection set0 layout changed after library destroy\n");
+    fprintf(stderr, "reflection group 0 layout changed after library destroy\n");
     return 0;
   }
 
@@ -654,9 +674,9 @@ check_reflection_objects_after_library_destroy(GPUDevice *device,
                               GPUBindStageCompute,
                               GPUBindKindTexture,
                               GPU_BINDING_STORAGE_TEXTURE,
-                              0u,
+                              1u,
                               0)) {
-    fprintf(stderr, "reflection set1 layout changed after library destroy\n");
+    fprintf(stderr, "reflection group 1 layout changed after library destroy\n");
     return 0;
   }
 
@@ -670,8 +690,8 @@ check_reflection_objects_after_library_destroy(GPUDevice *device,
     return 0;
   }
 
-  memset(set0Entries, 0, sizeof(set0Entries));
-  memset(set1Entries, 0, sizeof(set1Entries));
+  memset(group0Entries, 0, sizeof(group0Entries));
+  memset(group1Entries, 0, sizeof(group1Entries));
   memset(&fakeBufferStorage, 0, sizeof(fakeBufferStorage));
   memset(&fakeFragmentTextureStorage, 0, sizeof(fakeFragmentTextureStorage));
   memset(&fakeComputeTextureStorage, 0, sizeof(fakeComputeTextureStorage));
@@ -685,44 +705,49 @@ check_reflection_objects_after_library_destroy(GPUDevice *device,
   fakeFragmentTextureView._texture = &fakeFragmentTextureStorage;
   fakeComputeTextureView._texture = &fakeComputeTextureStorage;
 
-  set0Entries[0].binding = 0u;
-  set0Entries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
-  set0Entries[0].textureView = &fakeFragmentTextureView;
+  group0Entries[0].binding = 0u;
+  group0Entries[0].bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  group0Entries[0].buffer.buffer = &fakeBufferStorage;
+  group0Entries[0].buffer.size = 16u;
 
-  set1Entries[0].binding = 0u;
-  set1Entries[0].bindingType = GPU_BINDING_UNIFORM_BUFFER;
-  set1Entries[0].buffer.buffer = &fakeBufferStorage;
-  set1Entries[0].buffer.size = 16u;
+  group0Entries[1].binding = 1u;
+  group0Entries[1].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+  group0Entries[1].textureView = &fakeFragmentTextureView;
 
-  set1Entries[1].binding = 0u;
-  set1Entries[1].bindingType = GPU_BINDING_STORAGE_TEXTURE;
-  set1Entries[1].textureView = &fakeComputeTextureView;
+  group1Entries[0].binding = 0u;
+  group1Entries[0].bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  group1Entries[0].buffer.buffer = &fakeBufferStorage;
+  group1Entries[0].buffer.size = 16u;
+
+  group1Entries[1].binding = 1u;
+  group1Entries[1].bindingType = GPU_BINDING_STORAGE_TEXTURE;
+  group1Entries[1].textureView = &fakeComputeTextureView;
 
   groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label = "api-reflection-lifetime-set0";
+  groupInfo.label = "api-reflection-lifetime-group0";
   groupInfo.layout = layouts[0];
-  groupInfo.entryCount = (uint32_t)GPU_ARRAY_LEN(set0Entries);
-  groupInfo.pEntries = set0Entries;
-  if (GPUCreateBindGroup(device, &groupInfo, &set0Group) != GPU_OK || !set0Group) {
-    fprintf(stderr, "reflection set0 group failed after library destroy\n");
+  groupInfo.entryCount = (uint32_t)GPU_ARRAY_LEN(group0Entries);
+  groupInfo.pEntries = group0Entries;
+  if (GPUCreateBindGroup(device, &groupInfo, &group0Group) != GPU_OK || !group0Group) {
+    fprintf(stderr, "reflection group 0 failed after library destroy\n");
     goto cleanup;
   }
 
-  groupInfo.label = "api-reflection-lifetime-set1";
+  groupInfo.label = "api-reflection-lifetime-group1";
   groupInfo.layout = layouts[1];
-  groupInfo.entryCount = (uint32_t)GPU_ARRAY_LEN(set1Entries);
-  groupInfo.pEntries = set1Entries;
-  if (GPUCreateBindGroup(device, &groupInfo, &set1Group) != GPU_OK || !set1Group) {
-    fprintf(stderr, "reflection set1 group failed after library destroy\n");
+  groupInfo.entryCount = (uint32_t)GPU_ARRAY_LEN(group1Entries);
+  groupInfo.pEntries = group1Entries;
+  if (GPUCreateBindGroup(device, &groupInfo, &group1Group) != GPU_OK || !group1Group) {
+    fprintf(stderr, "reflection group 1 failed after library destroy\n");
     goto cleanup;
   }
 
   ok = 1;
 
 cleanup:
-  GPUDestroyBindGroup(set1Group);
-  GPUDestroyBindGroup(set0Group);
+  GPUDestroyBindGroup(group1Group);
+  GPUDestroyBindGroup(group0Group);
   GPUDestroyPipelineLayout(pipelineLayout);
   return ok;
 }
@@ -793,13 +818,20 @@ check_reflection_layout_api(GPUDevice *device, GPUShaderLibrary *library) {
   }
 
   entries = GPUGetBindGroupLayoutEntries(layouts[0], &count);
-  ok = count == 1u &&
+  ok = count == 2u &&
+       layout_has_typed_entry(entries,
+                              count,
+                              GPUBindStageFragment,
+                              GPUBindKindBuffer,
+                              GPU_BINDING_UNIFORM_BUFFER,
+                              0u,
+                              0) &&
        layout_has_typed_entry(entries,
                               count,
                               GPUBindStageFragment,
                               GPUBindKindTexture,
                               GPU_BINDING_SAMPLED_TEXTURE,
-                              0u,
+                              1u,
                               0);
   if (ok) {
     entries = GPUGetBindGroupLayoutEntries(layouts[1], &count);
@@ -816,11 +848,11 @@ check_reflection_layout_api(GPUDevice *device, GPUShaderLibrary *library) {
                                 GPUBindStageCompute,
                                 GPUBindKindTexture,
                                 GPU_BINDING_STORAGE_TEXTURE,
-                                0u,
+                                1u,
                                 0);
   }
   if (!ok) {
-    fprintf(stderr, "reflection layouts are not ordered by set index\n");
+    fprintf(stderr, "reflection layouts are not ordered by group index\n");
     goto cleanup;
   }
 
@@ -908,12 +940,18 @@ check_canonical_shader_library(GPUDevice *device,
   reflectionPipelineLayout = NULL;
   reflectionLayoutCount = (uint32_t)GPU_ARRAY_LEN(reflectionLayouts);
   ok = GPUGetShaderReflection(library, &reflection) == GPU_OK &&
-       reflection.resourceCount == 3u &&
+       reflection.resourceCount == 4u &&
+       shader_reflection_has_resource(&reflection,
+                                      GPU_BINDING_UNIFORM_BUFFER,
+                                      GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                      0u,
+                                      0u,
+                                      0) &&
        shader_reflection_has_resource(&reflection,
                                       GPU_BINDING_SAMPLED_TEXTURE,
                                       GPU_SHADER_STAGE_FRAGMENT_BIT,
                                       0u,
-                                      0u,
+                                      1u,
                                       0) &&
        shader_reflection_has_resource(&reflection,
                                       GPU_BINDING_UNIFORM_BUFFER,
@@ -925,7 +963,7 @@ check_canonical_shader_library(GPUDevice *device,
                                       GPU_BINDING_STORAGE_TEXTURE,
                                       GPU_SHADER_STAGE_COMPUTE_BIT,
                                       1u,
-                                      0u,
+                                      1u,
                                       0) &&
        check_reflection_layout_api(device, library) &&
        GPUCreateShaderLayout(device, library, &shaderLayout) == GPU_OK &&
@@ -1023,7 +1061,7 @@ check_usl_shader_library_helper(GPUDevice *device,
   memset(&reflection, 0, sizeof(reflection));
   shaderLayout = NULL;
   ok = GPUGetShaderReflection(library, &reflection) == GPU_OK &&
-       reflection.resourceCount == 3u &&
+       reflection.resourceCount == 4u &&
        GPUCreateShaderLayout(device, library, &shaderLayout) == GPU_OK &&
        shaderLayout != NULL &&
        shaderLayout->bindGroupLayoutCount == 2u &&

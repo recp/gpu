@@ -23,13 +23,13 @@ check_pipeline_layout_bind_validation(GPUDevice *device,
   GPUBindGroupCreateInfo groupInfo = {0};
   GPUBindGroupLayoutCreateInfo secondLayoutInfo = {0};
   GPUPipelineLayoutCreateInfo otherPipelineInfo = {0};
-  GPUPipelineLayoutCreateInfo twoSetPipelineInfo = {0};
+  GPUPipelineLayoutCreateInfo twoGroupPipelineInfo = {0};
   GPUBindGroupLayoutEntry secondEntry = {0};
   GPUBindGroupLayout *otherLayout = NULL;
   GPUBindGroupLayout *otherLayouts[1];
-  GPUBindGroupLayout *twoSetLayouts[2];
+  GPUBindGroupLayout *twoGroupLayouts[2];
   GPUPipelineLayout *otherPipelineLayout = NULL;
-  GPUPipelineLayout *twoSetPipelineLayout = NULL;
+  GPUPipelineLayout *twoGroupPipelineLayout = NULL;
   GPUBindGroup *group = NULL;
   GPUBindGroup *secondGroup = NULL;
   GPURenderPassEncoder renderPass = {0};
@@ -64,17 +64,17 @@ check_pipeline_layout_bind_validation(GPUDevice *device,
     goto fail;
   }
 
-  twoSetLayouts[0] = layout;
-  twoSetLayouts[1] = otherLayout;
-  twoSetPipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  twoSetPipelineInfo.chain.structSize = sizeof(twoSetPipelineInfo);
-  twoSetPipelineInfo.bindGroupLayoutCount = 2u;
-  twoSetPipelineInfo.ppBindGroupLayouts = twoSetLayouts;
+  twoGroupLayouts[0] = layout;
+  twoGroupLayouts[1] = otherLayout;
+  twoGroupPipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  twoGroupPipelineInfo.chain.structSize = sizeof(twoGroupPipelineInfo);
+  twoGroupPipelineInfo.bindGroupLayoutCount = 2u;
+  twoGroupPipelineInfo.ppBindGroupLayouts = twoGroupLayouts;
   if (GPUCreatePipelineLayout(device,
-                              &twoSetPipelineInfo,
-                              &twoSetPipelineLayout) != GPU_OK ||
-      !twoSetPipelineLayout) {
-    fprintf(stderr, "bind compatibility setup failed to create two-set layout\n");
+                              &twoGroupPipelineInfo,
+                              &twoGroupPipelineLayout) != GPU_OK ||
+      !twoGroupPipelineLayout) {
+    fprintf(stderr, "bind compatibility setup failed to create two-group layout\n");
     goto fail;
   }
 
@@ -113,17 +113,17 @@ check_pipeline_layout_bind_validation(GPUDevice *device,
   }
 
   memset(&renderPass, 0, sizeof(renderPass));
-  renderPass._pipelineLayout = twoSetPipelineLayout;
+  renderPass._pipelineLayout = twoGroupPipelineLayout;
   GPUBindRenderGroup(&renderPass, 1u, group, 0u, NULL);
   if (renderPass._boundGroupLayouts[1]) {
-    fprintf(stderr, "render bind accepted set1 group with wrong layout\n");
+    fprintf(stderr, "render bind accepted group 1 with wrong layout\n");
     goto fail;
   }
   GPUBindRenderGroup(&renderPass, 0u, group, 0u, NULL);
   GPUBindRenderGroup(&renderPass, 1u, secondGroup, 0u, NULL);
   if (renderPass._boundGroupLayouts[0] != layout ||
       renderPass._boundGroupLayouts[1] != otherLayout) {
-    fprintf(stderr, "render bind rejected compatible multi-set layout\n");
+    fprintf(stderr, "render bind rejected compatible multi-group layout\n");
     goto fail;
   }
 
@@ -142,23 +142,23 @@ check_pipeline_layout_bind_validation(GPUDevice *device,
   }
 
   memset(&computePass, 0, sizeof(computePass));
-  computePass._pipelineLayout = twoSetPipelineLayout;
+  computePass._pipelineLayout = twoGroupPipelineLayout;
   GPUBindComputeGroup(&computePass, 1u, group, 0u, NULL);
   if (computePass._boundGroupLayouts[1]) {
-    fprintf(stderr, "compute bind accepted set1 group with wrong layout\n");
+    fprintf(stderr, "compute bind accepted group 1 with wrong layout\n");
     goto fail;
   }
   GPUBindComputeGroup(&computePass, 0u, group, 0u, NULL);
   GPUBindComputeGroup(&computePass, 1u, secondGroup, 0u, NULL);
   if (computePass._boundGroupLayouts[0] != layout ||
       computePass._boundGroupLayouts[1] != otherLayout) {
-    fprintf(stderr, "compute bind rejected compatible multi-set layout\n");
+    fprintf(stderr, "compute bind rejected compatible multi-group layout\n");
     goto fail;
   }
 
   GPUDestroyBindGroup(secondGroup);
   GPUDestroyBindGroup(group);
-  GPUDestroyPipelineLayout(twoSetPipelineLayout);
+  GPUDestroyPipelineLayout(twoGroupPipelineLayout);
   GPUDestroyPipelineLayout(otherPipelineLayout);
   GPUDestroyBindGroupLayout(otherLayout);
   return 1;
@@ -166,7 +166,7 @@ check_pipeline_layout_bind_validation(GPUDevice *device,
 fail:
   GPUDestroyBindGroup(secondGroup);
   GPUDestroyBindGroup(group);
-  GPUDestroyPipelineLayout(twoSetPipelineLayout);
+  GPUDestroyPipelineLayout(twoGroupPipelineLayout);
   GPUDestroyPipelineLayout(otherPipelineLayout);
   GPUDestroyBindGroupLayout(otherLayout);
   return 0;
@@ -176,6 +176,7 @@ static int
 check_bind_group_layout_validation(GPUDevice *device) {
   unsigned char fakeSamplerStorage;
   GPUBindGroupLayoutEntry entry;
+  GPUBindGroupLayoutEntry duplicateEntries[2];
   GPUBindGroupLayoutCreateInfo layoutInfo;
   GPUBindGroupLayout *layout;
   GPUBindGroupEntry runtimeSamplerEntry;
@@ -272,6 +273,27 @@ check_bind_group_layout_validation(GPUDevice *device) {
 
   entry.immutableSampler = false;
   entry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  entry.hasDynamicOffset = false;
+  duplicateEntries[0] = entry;
+  duplicateEntries[0].binding = 3u;
+  duplicateEntries[0].visibility = GPU_SHADER_STAGE_VERTEX_BIT;
+  duplicateEntries[1] = entry;
+  duplicateEntries[1].binding = 3u;
+  duplicateEntries[1].bindingType = GPU_BINDING_SAMPLER;
+  duplicateEntries[1].visibility = GPU_SHADER_STAGE_FRAGMENT_BIT;
+  layoutInfo.entryCount = 2u;
+  layoutInfo.pEntries = duplicateEntries;
+  layout = (GPUBindGroupLayout *)(uintptr_t)1u;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT ||
+      layout != NULL) {
+    fprintf(stderr, "bind group layout accepted duplicate logical binding\n");
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  entry.hasDynamicOffset = true;
+  layoutInfo.entryCount = 1u;
+  layoutInfo.pEntries = &entry;
   layout = NULL;
   if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK || !layout) {
     fprintf(stderr, "bind group layout rejected valid dynamic buffer entry\n");
@@ -431,6 +453,7 @@ check_bind_group_layout_validation(GPUDevice *device) {
   textureLayoutEntries[0] = entry;
   textureLayoutEntries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
   textureLayoutEntries[1] = entry;
+  textureLayoutEntries[1].binding = 1u;
   textureLayoutEntries[1].bindingType = GPU_BINDING_STORAGE_TEXTURE;
   textureLayoutEntries[1].visibility = GPU_SHADER_STAGE_COMPUTE_BIT;
   layoutInfo.entryCount = 2u;
@@ -446,14 +469,14 @@ check_bind_group_layout_validation(GPUDevice *device) {
   memset(&groupInfo, 0, sizeof(groupInfo));
   groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label = "ambiguous-texture-group";
+  groupInfo.label = "incomplete-texture-group";
   groupInfo.layout = dualTextureLayout;
   groupInfo.entryCount = 1u;
   groupInfo.pEntries = &textureEntry;
   group = (GPUBindGroup *)(uintptr_t)1u;
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT ||
       group != NULL) {
-    fprintf(stderr, "bind group accepted ambiguous texture binding type\n");
+    fprintf(stderr, "bind group accepted missing storage texture binding\n");
     GPUDestroyBindGroup(group);
     GPUDestroyBindGroupLayout(dualTextureLayout);
     return 0;
@@ -463,7 +486,7 @@ check_bind_group_layout_validation(GPUDevice *device) {
   textureGroupEntries[0].binding = 0u;
   textureGroupEntries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
   textureGroupEntries[0].textureView = &dualUseView;
-  textureGroupEntries[1].binding = 0u;
+  textureGroupEntries[1].binding = 1u;
   textureGroupEntries[1].bindingType = GPU_BINDING_STORAGE_TEXTURE;
   textureGroupEntries[1].textureView = &dualUseView;
   groupInfo.label = "typed-texture-group";

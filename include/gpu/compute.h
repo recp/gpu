@@ -61,7 +61,7 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
 GPU_EXPORT
 void
 GPUBindComputeGroup(GPUComputePassEncoder *pass,
-                    uint32_t               setIndex,
+                    uint32_t               groupIndex,
                     GPUBindGroup          *bindGroup,
                     uint32_t               dynamicOffsetCount,
                     const uint32_t        *pDynamicOffsets);

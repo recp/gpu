@@ -185,7 +185,7 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     return NO;
   }
 
-  GPUBindGroupLayoutEntry set0Entries[] = {
+  GPUBindGroupLayoutEntry group0Entries[] = {
     {
       .binding = 0,
       .bindingType = GPU_BINDING_UNIFORM_BUFFER,
@@ -194,14 +194,14 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
       .hasDynamicOffset = false
     }
   };
-  GPUBindGroupLayoutCreateInfo set0LayoutInfo = {
+  GPUBindGroupLayoutCreateInfo group0LayoutInfo = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO,
                .structSize = sizeof(GPUBindGroupLayoutCreateInfo) },
-    .label = "triangle-manual-set0-layout",
+    .label = "triangle-manual-group0-layout",
     .entryCount = 1,
-    .pEntries = set0Entries
+    .pEntries = group0Entries
   };
-  if (GPUCreateBindGroupLayout(_device, &set0LayoutInfo, &_fragmentLayout) != GPU_OK) {
+  if (GPUCreateBindGroupLayout(_device, &group0LayoutInfo, &_fragmentLayout) != GPU_OK) {
     NSLog(@"GPU: failed to create fragment bind layout");
     return NO;
   }
@@ -307,7 +307,7 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     return NO;
   }
 
-  GPUBindGroupEntry set0Bindings[] = {
+  GPUBindGroupEntry group0Bindings[] = {
     {
       .binding = 0,
       .bindingType = GPU_BINDING_UNIFORM_BUFFER,
@@ -318,15 +318,15 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
       }
     }
   };
-  GPUBindGroupCreateInfo set0Info = {
+  GPUBindGroupCreateInfo group0Info = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
                .structSize = sizeof(GPUBindGroupCreateInfo) },
-    .label = "triangle-manual-set0",
+    .label = "triangle-manual-group0",
     .layout = _fragmentLayout,
     .entryCount = 1,
-    .pEntries = set0Bindings
+    .pEntries = group0Bindings
   };
-  if (GPUCreateBindGroup(_device, &set0Info, &_fragmentGroup) != GPU_OK) {
+  if (GPUCreateBindGroup(_device, &group0Info, &_fragmentGroup) != GPU_OK) {
     NSLog(@"GPU: failed to create fragment bind group");
     return NO;
   }

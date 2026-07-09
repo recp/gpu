@@ -325,7 +325,7 @@ gpuBindComputeBinding(void *ctx, const GPUBindGroupBindingView *binding) {
 GPU_EXPORT
 void
 GPUBindComputeGroup(GPUComputePassEncoder *pass,
-                    uint32_t               setIndex,
+                    uint32_t               groupIndex,
                     GPUBindGroup          *bindGroup,
                     uint32_t               dynamicOffsetCount,
                     const uint32_t        *pDynamicOffsets) {
@@ -333,24 +333,26 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
 
   if (!pass || pass->_ended ||
       !bindGroup ||
-      setIndex >= GPU_ENCODER_MAX_BIND_GROUPS ||
-      !gpuPipelineLayoutAcceptsBindGroup(pass->_pipelineLayout, setIndex, bindGroup)) {
+      groupIndex >= GPU_ENCODER_MAX_BIND_GROUPS ||
+      !gpuPipelineLayoutAcceptsBindGroup(pass->_pipelineLayout, groupIndex, bindGroup)) {
     return;
   }
   if (dynamicOffsetCount == 0u &&
-      pass->_boundGroups[setIndex] == bindGroup &&
+      pass->_boundGroups[groupIndex] == bindGroup &&
       gpuBindGroupDynamicOffsetCount(bindGroup) == 0u) {
     return;
   }
 
   ctx.pass = pass;
-  if (gpuForEachBindGroupBindingWithDynamicOffsets(bindGroup,
+  if (gpuForEachBindGroupBindingWithDynamicOffsets(pass->_pipelineLayout,
+                                                   groupIndex,
+                                                   bindGroup,
                                                    dynamicOffsetCount,
                                                    pDynamicOffsets,
                                                    gpuBindComputeBinding,
                                                    &ctx)) {
-    pass->_boundGroups[setIndex] = bindGroup;
-    pass->_boundGroupLayouts[setIndex] = gpuBindGroupGetLayout(bindGroup);
+    pass->_boundGroups[groupIndex] = bindGroup;
+    pass->_boundGroupLayouts[groupIndex] = gpuBindGroupGetLayout(bindGroup);
   }
 }
 

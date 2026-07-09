@@ -176,7 +176,7 @@ GPUDestroyPipelineLayout(GPUPipelineLayout *layout);
 GPU_EXPORT
 void
 GPUBindRenderGroup(GPURenderPassEncoder *pass,
-                   uint32_t setIndex,
+                   uint32_t groupIndex,
                    GPUBindGroup *group,
                    uint32_t dynamicOffsetCount,
                    const uint32_t *pDynamicOffsets);

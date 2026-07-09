@@ -176,7 +176,7 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   if (!_shaderLayout ||
       _shaderLayout->bindGroupLayoutCount < 2u ||
       !_shaderLayout->bindGroupLayouts[1]) {
-    NSLog(@"GPU: expected compute buffer shader layout set 1");
+    NSLog(@"GPU: expected compute buffer shader layout group 1");
     return NO;
   }
 
@@ -187,15 +187,15 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   groupEntry.buffer.offset = 0;
   groupEntry.buffer.size = vertexBufferInfo.sizeBytes;
 
-  GPUBindGroupCreateInfo set1Info = {
+  GPUBindGroupCreateInfo group1Info = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
                .structSize = sizeof(GPUBindGroupCreateInfo) },
-    .label = "compute-buffer-usl-set1",
+    .label = "compute-buffer-usl-group1",
     .layout = _shaderLayout->bindGroupLayouts[1],
     .entryCount = 1,
     .pEntries = &groupEntry
   };
-  if (GPUCreateBindGroup(_device, &set1Info, &_vertexBindGroup) != GPU_OK) {
+  if (GPUCreateBindGroup(_device, &group1Info, &_vertexBindGroup) != GPU_OK) {
     NSLog(@"GPU: failed to create bind group");
     return NO;
   }

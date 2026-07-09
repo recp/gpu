@@ -18,8 +18,6 @@
 #include "library_internal.h"
 #include "usl_target.h"
 
-#define GPU_USL_BYTECODE_VERSION 2u
-
 static char *
 gpu_dupText(const char *text) {
   char *copy;
@@ -51,7 +49,7 @@ typedef struct GPUShaderEntryInfoList {
 } GPUShaderEntryInfoList;
 
 typedef struct GPUShaderResourceBindingInfo {
-  uint32_t setIndex;
+  uint32_t groupIndex;
   uint32_t binding;
   GPUBindingType bindingType;
   uint32_t backendBinding;
@@ -154,8 +152,7 @@ gpu_copyShaderResourceReflection(const GPUShaderResourceReflection *src,
 static int
 gpu_uslRuntimeInfoIsUsable(const USLBytecodeRuntimeInfo *runtimeInfo) {
   return runtimeInfo &&
-         runtimeInfo->abi_version == USL_RUNTIME_INFO_VERSION &&
-         runtimeInfo->bytecode_version == GPU_USL_BYTECODE_VERSION;
+         runtimeInfo->abi_version == USL_RUNTIME_INFO_VERSION;
 }
 
 static int
@@ -395,7 +392,7 @@ gpuGetShaderResourceBackendBinding(const GPUShaderLibrary *library,
   for (uint32_t i = 0; i < list->count; i++) {
     const GPUShaderResourceBindingInfo *entry = &list->entries[i];
 
-    if (entry->setIndex == resource->setIndex &&
+    if (entry->groupIndex == resource->groupIndex &&
         entry->binding == resource->binding &&
         entry->bindingType == resource->bindingType) {
       *outBinding = entry->backendBinding;
@@ -438,35 +435,53 @@ gpu_bindingTypeFromUSLResource(const USLRuntimeResource *resource,
 
 static int
 gpu_shaderPublicBindingFromUSLResource(const USLRuntimeResource *resource,
-                                       uint32_t *outSetIndex,
+                                       uint32_t *outGroupIndex,
                                        uint32_t *outBinding) {
-  if (!resource || !outSetIndex || !outBinding || resource->slot < 0) {
+  if (!resource || !outGroupIndex || !outBinding || resource->binding < 0) {
     return 0;
   }
 
-  *outSetIndex = resource->spirv_set;
-  *outBinding = resource->spirv_binding >= 0
-                  ? (uint32_t)resource->spirv_binding
-                  : (uint32_t)resource->slot;
+  *outGroupIndex = resource->group;
+  *outBinding = (uint32_t)resource->binding;
   return 1;
 }
 
 static int
 gpu_shaderBackendBindingFromUSLResource(const USLRuntimeResource *resource,
                                         uint32_t *outBinding) {
-  if (!resource || !outBinding || resource->slot < 0) {
+  GPUApi *api;
+
+  if (!resource || !outBinding || resource->binding < 0) {
     return 0;
   }
 
-  *outBinding = resource->metal_index >= 0
-                  ? (uint32_t)resource->metal_index
-                  : (uint32_t)resource->slot;
+  api = gpuActiveGPUApi();
+  switch (api ? api->backend : GPU_BACKEND_NULL) {
+    case GPU_BACKEND_METAL:
+      *outBinding = resource->metal_index >= 0
+                      ? (uint32_t)resource->metal_index
+                      : (uint32_t)resource->binding;
+      break;
+    case GPU_BACKEND_VULKAN:
+      *outBinding = resource->spirv_binding >= 0
+                      ? (uint32_t)resource->spirv_binding
+                      : (uint32_t)resource->binding;
+      break;
+    case GPU_BACKEND_DX12:
+      *outBinding = resource->hlsl_index >= 0
+                      ? (uint32_t)resource->hlsl_index
+                      : (uint32_t)resource->binding;
+      break;
+    default:
+      *outBinding = (uint32_t)resource->binding;
+      break;
+  }
   return 1;
 }
 
 static int
 gpu_appendShaderResourceBindingInfo(GPUShaderLibrary *library,
-                                    uint32_t setIndex,
+                                    uint32_t groupIndex,
                                     uint32_t binding,
                                     GPUBindingType bindingType,
                                     uint32_t backendBinding) {
@@ -482,7 +497,7 @@ gpu_appendShaderResourceBindingInfo(GPUShaderLibrary *library,
   for (uint32_t i = 0; list && i < list->count; i++) {
     GPUShaderResourceBindingInfo *entry = &list->entries[i];
 
-    if (entry->setIndex == setIndex &&
+    if (entry->groupIndex == groupIndex &&
         entry->binding == binding &&
         entry->bindingType == bindingType) {
       return entry->backendBinding == backendBinding;
@@ -509,7 +524,7 @@ gpu_appendShaderResourceBindingInfo(GPUShaderLibrary *library,
   library->_resourceBindings = grown;
   list = grown;
   memset(&list->entries[list->count], 0, sizeof(list->entries[0]));
-  list->entries[list->count].setIndex = setIndex;
+  list->entries[list->count].groupIndex = groupIndex;
   list->entries[list->count].binding = binding;
   list->entries[list->count].bindingType = bindingType;
   list->entries[list->count].backendBinding = backendBinding;
@@ -522,7 +537,7 @@ gpu_appendShaderEntryResourceInfo(GPUShaderLibrary *library,
                                   const USLRuntimeResource *resource,
                                   GPUBindingType bindingType,
                                   GPUShaderStageFlags visibility,
-                                  uint32_t setIndex,
+                                  uint32_t groupIndex,
                                   uint32_t binding) {
   GPUShaderEntryResourceInfoList *list;
   GPUShaderEntryResourceInfoList *grown;
@@ -540,7 +555,7 @@ gpu_appendShaderEntryResourceInfo(GPUShaderLibrary *library,
 
     if (entry->entry &&
         strcmp(entry->entry, resource->entry) == 0 &&
-        entry->resource.setIndex == setIndex &&
+        entry->resource.groupIndex == groupIndex &&
         entry->resource.binding == binding &&
         entry->resource.bindingType == bindingType) {
       entry->resource.visibility |= visibility;
@@ -581,7 +596,7 @@ gpu_appendShaderEntryResourceInfo(GPUShaderLibrary *library,
     return 0;
   }
 
-  list->entries[list->count].resource.setIndex = setIndex;
+  list->entries[list->count].resource.groupIndex = groupIndex;
   list->entries[list->count].resource.binding = binding;
   list->entries[list->count].resource.bindingType = bindingType;
   list->entries[list->count].resource.visibility = visibility;
@@ -602,17 +617,17 @@ gpu_appendShaderResourceReflection(GPUShaderLibrary *library,
   GPUShaderResourceReflection *grown;
   uint32_t binding;
   uint32_t backendBinding;
-  uint32_t setIndex;
+  uint32_t groupIndex;
   size_t nextCount;
 
   if (!library || !resource || visibility == 0) {
     return 0;
   }
 
-  if (!gpu_shaderPublicBindingFromUSLResource(resource, &setIndex, &binding) ||
+  if (!gpu_shaderPublicBindingFromUSLResource(resource, &groupIndex, &binding) ||
       !gpu_shaderBackendBindingFromUSLResource(resource, &backendBinding) ||
       !gpu_appendShaderResourceBindingInfo(library,
-                                           setIndex,
+                                           groupIndex,
                                            binding,
                                            bindingType,
                                            backendBinding) ||
@@ -620,7 +635,7 @@ gpu_appendShaderResourceReflection(GPUShaderLibrary *library,
                                          resource,
                                          bindingType,
                                          visibility,
-                                         setIndex,
+                                         groupIndex,
                                          binding)) {
     return 0;
   }
@@ -629,7 +644,7 @@ gpu_appendShaderResourceReflection(GPUShaderLibrary *library,
   resources = (GPUShaderResourceReflection *)reflection->pResources;
 
   for (uint32_t i = 0; i < reflection->resourceCount; i++) {
-    if (resources[i].setIndex == setIndex &&
+    if (resources[i].groupIndex == groupIndex &&
         resources[i].binding == binding &&
         resources[i].bindingType == bindingType) {
       resources[i].visibility |= visibility;
@@ -660,7 +675,7 @@ gpu_appendShaderResourceReflection(GPUShaderLibrary *library,
   if (!resources[reflection->resourceCount].name) {
     return 0;
   }
-  resources[reflection->resourceCount].setIndex = setIndex;
+  resources[reflection->resourceCount].groupIndex = groupIndex;
   resources[reflection->resourceCount].binding = binding;
   resources[reflection->resourceCount].bindingType = bindingType;
   resources[reflection->resourceCount].visibility = visibility;

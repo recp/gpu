@@ -48,13 +48,9 @@ typedef void (*GPUBindGroupBindingFn)(void *ctx,
 
 GPU_HIDE
 int
-gpuForEachBindGroupBinding(GPUBindGroup *group,
-                           GPUBindGroupBindingFn fn,
-                           void *ctx);
-
-GPU_HIDE
-int
-gpuForEachBindGroupBindingWithDynamicOffsets(GPUBindGroup *group,
+gpuForEachBindGroupBindingWithDynamicOffsets(GPUPipelineLayout *pipelineLayout,
+                                             uint32_t groupIndex,
+                                             GPUBindGroup *group,
                                              uint32_t dynamicOffsetCount,
                                              const uint32_t *pDynamicOffsets,
                                              GPUBindGroupBindingFn fn,
@@ -69,7 +65,7 @@ gpuGetPipelineLayoutPushConstants(GPUPipelineLayout *layout,
 GPU_HIDE
 int
 gpuPipelineLayoutAcceptsBindGroup(GPUPipelineLayout *pipelineLayout,
-                                  uint32_t setIndex,
+                                  uint32_t groupIndex,
                                   GPUBindGroup *group);
 
 GPU_HIDE
@@ -87,14 +83,14 @@ gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout *pipelineLayout,
                                       const char * const *entryPoints,
                                       uint32_t entryPointCount,
                                       GPUShaderStageFlags fallbackStages,
-                                      uint32_t *outRequiredSetMask);
+                                      uint32_t *outRequiredGroupMask);
 
 GPU_HIDE
 int
 gpuPipelineLayoutMaskIsBound(GPUPipelineLayout *pipelineLayout,
                              GPUBindGroupLayout * const *boundLayouts,
                              uint32_t boundLayoutCount,
-                             uint32_t requiredSetMask);
+                             uint32_t requiredGroupMask);
 
 GPU_HIDE
 int

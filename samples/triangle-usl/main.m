@@ -211,7 +211,7 @@ TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
   _fragmentUniformBuffer = initialUniformSlice.buffer;
 
-  GPUBindGroupEntry set0Bindings[] = {
+  GPUBindGroupEntry group0Bindings[] = {
     {
       .binding = 0,
       .buffer = {
@@ -221,15 +221,15 @@ TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
       }
     }
   };
-  GPUBindGroupCreateInfo set0Info = {
+  GPUBindGroupCreateInfo group0Info = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
                .structSize = sizeof(GPUBindGroupCreateInfo) },
-    .label = "triangle-usl-set0",
+    .label = "triangle-usl-group0",
     .layout = _shaderLayout->bindGroupLayouts[0],
     .entryCount = 1,
-    .pEntries = set0Bindings
+    .pEntries = group0Bindings
   };
-  if (GPUCreateBindGroup(_device, &set0Info, &_fragmentGroup) != GPU_OK) {
+  if (GPUCreateBindGroup(_device, &group0Info, &_fragmentGroup) != GPU_OK) {
     NSLog(@"GPU: failed to create fragment bind group");
     return NO;
   }

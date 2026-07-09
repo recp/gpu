@@ -273,21 +273,21 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   groupEntries[0].binding = 0;
   groupEntries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
   groupEntries[0].textureView = _textureView;
-  groupEntries[1].binding = 0;
+  groupEntries[1].binding = 1;
   groupEntries[1].bindingType = GPU_BINDING_UNIFORM_BUFFER;
   groupEntries[1].buffer.buffer = _fragmentUniformBuffer;
   groupEntries[1].buffer.offset = 0;
   groupEntries[1].buffer.size = sizeof(FragmentUniforms);
 
-  GPUBindGroupCreateInfo set0Info = {
+  GPUBindGroupCreateInfo group0Info = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
                .structSize = sizeof(GPUBindGroupCreateInfo) },
-    .label = "textured-quad-usl-set0",
+    .label = "textured-quad-usl-group0",
     .layout = _shaderLayout->bindGroupLayouts[0],
     .entryCount = 2,
     .pEntries = groupEntries
   };
-  if (GPUCreateBindGroup(_device, &set0Info, &_fragmentGroup) != GPU_OK) {
+  if (GPUCreateBindGroup(_device, &group0Info, &_fragmentGroup) != GPU_OK) {
     NSLog(@"GPU: failed to create fragment bind group");
     return NO;
   }
@@ -296,15 +296,15 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   samplerEntry.binding = 0;
   samplerEntry.sampler = _sampler;
 
-  GPUBindGroupCreateInfo set1Info = {
+  GPUBindGroupCreateInfo group1Info = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
                .structSize = sizeof(GPUBindGroupCreateInfo) },
-    .label = "textured-quad-usl-set1",
+    .label = "textured-quad-usl-group1",
     .layout = _shaderLayout->bindGroupLayouts[1],
     .entryCount = 1,
     .pEntries = &samplerEntry
   };
-  if (GPUCreateBindGroup(_device, &set1Info, &_samplerGroup) != GPU_OK) {
+  if (GPUCreateBindGroup(_device, &group1Info, &_samplerGroup) != GPU_OK) {
     NSLog(@"GPU: failed to create sampler bind group");
     return NO;
   }

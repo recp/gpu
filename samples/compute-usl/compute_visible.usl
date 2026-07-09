@@ -13,7 +13,7 @@ pub struct ComputeParams {
 }
 
 kern(8, 8, 1) fill_image(outputImage: texture2d<float, write> #texture(0),
-                         params: ComputeParams #buffer(0) #dynamic_offset,
+                         params: ComputeParams #buffer(1) #dynamic_offset,
                          gid: uint3 #global_id) {
   let color = float4(float(gid.x) / 255.0, float(gid.y) / 255.0, 0.75, 1.0)
   outputImage.write(color * params.tint, gid.xy)
@@ -27,7 +27,7 @@ vert quad_vs(v: VSIn #stage_in) -> VSOut {
 }
 
 frag quad_fs(in: VSOut #stage_in,
-             colorTex: texture2d<float> #texture(0),
-             colorSampler: sampler #sampler(0)) -> float4 {
+             colorTex: texture2d<float> #texture(2),
+             colorSampler: sampler #sampler(0) #group(1)) -> float4 {
   return float4(colorTex.sample(colorSampler, in.uv))
 }

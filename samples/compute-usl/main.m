@@ -179,7 +179,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                                            &entryCount);
     for (uint32_t i = 0; entries && i < entryCount; i++) {
       if (entries[i].stage == GPUBindStageCompute &&
-          entries[i].binding == 0u &&
+          entries[i].binding == 1u &&
           entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER &&
           entries[i].hasDynamicOffset) {
         sawDynamicUniform = YES;
@@ -325,24 +325,24 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   groupEntries[0].binding = 0;
   groupEntries[0].bindingType = GPU_BINDING_STORAGE_TEXTURE;
   groupEntries[0].textureView = _textureView;
-  groupEntries[1].binding = 0;
+  groupEntries[1].binding = 2;
   groupEntries[1].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
   groupEntries[1].textureView = _textureView;
-  groupEntries[2].binding = 0;
+  groupEntries[2].binding = 1;
   groupEntries[2].bindingType = GPU_BINDING_UNIFORM_BUFFER;
   groupEntries[2].buffer.buffer = _computeParamsBuffer;
   groupEntries[2].buffer.offset = 0;
   groupEntries[2].buffer.size = sizeof(ComputeParams);
 
-  GPUBindGroupCreateInfo set0Info = {
+  GPUBindGroupCreateInfo group0Info = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
                .structSize = sizeof(GPUBindGroupCreateInfo) },
-    .label = "compute-usl-set0",
+    .label = "compute-usl-group0",
     .layout = _shaderLayout->bindGroupLayouts[0],
     .entryCount = 3,
     .pEntries = groupEntries
   };
-  if (GPUCreateBindGroup(_device, &set0Info, &_bindGroup) != GPU_OK) {
+  if (GPUCreateBindGroup(_device, &group0Info, &_bindGroup) != GPU_OK) {
     NSLog(@"GPU: failed to create bind group");
     return NO;
   }
@@ -351,15 +351,15 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   samplerEntry.binding = 0;
   samplerEntry.sampler = _sampler;
 
-  GPUBindGroupCreateInfo set1Info = {
+  GPUBindGroupCreateInfo group1Info = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
                .structSize = sizeof(GPUBindGroupCreateInfo) },
-    .label = "compute-usl-set1",
+    .label = "compute-usl-group1",
     .layout = _shaderLayout->bindGroupLayouts[1],
     .entryCount = 1,
     .pEntries = &samplerEntry
   };
-  if (GPUCreateBindGroup(_device, &set1Info, &_samplerBindGroup) != GPU_OK) {
+  if (GPUCreateBindGroup(_device, &group1Info, &_samplerBindGroup) != GPU_OK) {
     NSLog(@"GPU: failed to create sampler bind group");
     return NO;
   }

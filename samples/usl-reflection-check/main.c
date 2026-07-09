@@ -88,7 +88,7 @@ static int
 reflection_has_resource(const GPUShaderReflection *reflection,
                         GPUBindingType bindingType,
                         GPUShaderStageFlags visibility,
-                        uint32_t setIndex,
+                        uint32_t groupIndex,
                         uint32_t binding,
                         int hasDynamicOffset) {
   if (!reflection || (!reflection->pResources && reflection->resourceCount > 0u)) {
@@ -97,7 +97,7 @@ reflection_has_resource(const GPUShaderReflection *reflection,
 
   for (uint32_t i = 0; i < reflection->resourceCount; i++) {
     const GPUShaderResourceReflection *item = &reflection->pResources[i];
-    if (item->setIndex == setIndex &&
+    if (item->groupIndex == groupIndex &&
         item->binding == binding &&
         item->bindingType == bindingType &&
         item->visibility == visibility &&
@@ -177,28 +177,28 @@ check_layout_from_reflection(GPUDevice *device,
   }
 
   ok = 1;
-  for (uint32_t setIndex = 0; ok && setIndex < layoutCount; setIndex++) {
+  for (uint32_t groupIndex = 0; ok && groupIndex < layoutCount; groupIndex++) {
     const GPUBindGroupLayoutEntry *entries;
     uint32_t expectedEntryCount;
     uint32_t layoutEntryCount;
 
-    if (!layouts[setIndex]) {
+    if (!layouts[groupIndex]) {
       ok = 0;
       break;
     }
 
     expectedEntryCount = 0u;
     for (uint32_t i = 0; reflection && i < reflection->resourceCount; i++) {
-      if (reflection->pResources[i].setIndex == setIndex) {
+      if (reflection->pResources[i].groupIndex == groupIndex) {
         expectedEntryCount++;
       }
     }
 
-    entries = GPUGetBindGroupLayoutEntries(layouts[setIndex], &layoutEntryCount);
+    entries = GPUGetBindGroupLayoutEntries(layouts[groupIndex], &layoutEntryCount);
     ok = layoutEntryCount == expectedEntryCount;
     for (uint32_t i = 0; ok && reflection && i < reflection->resourceCount; i++) {
       const GPUShaderResourceReflection *resource = &reflection->pResources[i];
-      if (resource->setIndex != setIndex) {
+      if (resource->groupIndex != groupIndex) {
         continue;
       }
 
@@ -259,10 +259,16 @@ check_shader_artifact(GPUDevice *device,
                                  0);
   } else if (ok) {
     ok = reflection_has_resource(&reflection,
-                                 GPU_BINDING_SAMPLED_TEXTURE,
+                                 GPU_BINDING_UNIFORM_BUFFER,
                                  GPU_SHADER_STAGE_FRAGMENT_BIT,
                                  0u,
                                  0u,
+                                 0) &&
+         reflection_has_resource(&reflection,
+                                 GPU_BINDING_SAMPLED_TEXTURE,
+                                 GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                 0u,
+                                 1u,
                                  0) &&
          reflection_has_resource(&reflection,
                                  GPU_BINDING_UNIFORM_BUFFER,
@@ -274,7 +280,7 @@ check_shader_artifact(GPUDevice *device,
                                  GPU_BINDING_STORAGE_TEXTURE,
                                  GPU_SHADER_STAGE_COMPUTE_BIT,
                                  1u,
-                                 0u,
+                                 1u,
                                  0) &&
          GPUShaderFunction(library, "reflect_vs") != NULL &&
          GPUShaderFunction(library, "reflect_fs") != NULL &&
@@ -347,7 +353,7 @@ main(int argc, char **argv) {
     return 1;
   }
 
-  ok = check_shader_artifact(device, bytecode, bytecodeSize, 3u, 2u, 0) &&
+  ok = check_shader_artifact(device, bytecode, bytecodeSize, 4u, 2u, 0) &&
        (!storageBytecode ||
         check_shader_artifact(device,
                               storageBytecode,

@@ -28,7 +28,7 @@ extern "C" {
 
 typedef struct GPUShaderResourceReflection {
   const char *name;
-  uint32_t setIndex;
+  uint32_t groupIndex;
   uint32_t binding;
   GPUBindingType bindingType;
   GPUShaderStageFlags visibility;
