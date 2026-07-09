@@ -29,6 +29,13 @@ typedef enum GPUSurfaceType {
 
 typedef struct GPUSurface GPUSurface;
 
+typedef struct GPUSurfaceCapabilities {
+  uint32_t       minImageCount;
+  uint32_t       maxImageCount;
+  uint32_t       formatCount;
+  const uint32_t *pFormats;
+} GPUSurfaceCapabilities;
+
 GPU_EXPORT
 GPUSurface*
 GPUCreateSurface(GPUInstance       * __restrict inst,
@@ -40,5 +47,11 @@ GPUCreateSurface(GPUInstance       * __restrict inst,
 GPU_EXPORT
 void
 GPUDestroySurface(GPUSurface * __restrict surface);
+
+GPU_EXPORT
+GPUResult
+GPUGetSurfaceCapabilities(const GPUAdapter * __restrict adapter,
+                          const GPUSurface * __restrict surface,
+                          GPUSurfaceCapabilities * __restrict outCaps);
 
 #endif /* gpu_surface */

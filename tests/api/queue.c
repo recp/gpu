@@ -8,7 +8,10 @@ check_adapter_enumeration(void) {
   GPUAdapterCapabilities caps;
   GPUFormatCapabilities formatCaps;
   GPUAdapterProperties props;
+  GPUSurface *fakeSurface;
+  GPUSurfaceCapabilities surfaceCaps;
   uint32_t adapterCount;
+  bool hasBgra8;
 
   if (GPUEnumerateAdapters(NULL, NULL, NULL) != GPU_ERROR_INVALID_ARGUMENT ||
       GPUGetAdapterProperties(NULL, &props) != GPU_ERROR_INVALID_ARGUMENT ||
@@ -16,6 +19,8 @@ check_adapter_enumeration(void) {
         GPU_ERROR_INVALID_ARGUMENT ||
       GPUGetAdapterCapabilities(NULL, &caps) != GPU_ERROR_INVALID_ARGUMENT ||
       GPUGetFormatCapabilities(NULL, GPU_FORMAT_RGBA8_UNORM, &formatCaps) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      GPUGetSurfaceCapabilities(NULL, NULL, &surfaceCaps) !=
         GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "adapter validation accepted invalid input\n");
     return 0;
@@ -77,6 +82,30 @@ check_adapter_enumeration(void) {
       formatCaps.colorAttachment ||
       formatCaps.sampled) {
     fprintf(stderr, "depth format capabilities query failed\n");
+    return 0;
+  }
+  fakeSurface = (GPUSurface *)(uintptr_t)1u;
+  if (GPUGetSurfaceCapabilities(adapters[0], fakeSurface, NULL) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      GPUGetSurfaceCapabilities(adapters[0], NULL, &surfaceCaps) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      GPUGetSurfaceCapabilities(adapters[0], fakeSurface, &surfaceCaps) !=
+        GPU_OK ||
+      surfaceCaps.minImageCount == 0 ||
+      surfaceCaps.maxImageCount < surfaceCaps.minImageCount ||
+      surfaceCaps.formatCount == 0 ||
+      !surfaceCaps.pFormats) {
+    fprintf(stderr, "surface capabilities query failed\n");
+    return 0;
+  }
+  hasBgra8 = false;
+  for (uint32_t i = 0; i < surfaceCaps.formatCount; i++) {
+    if (surfaceCaps.pFormats[i] == GPU_FORMAT_BGRA8_UNORM) {
+      hasBgra8 = true;
+    }
+  }
+  if (!hasBgra8) {
+    fprintf(stderr, "surface capabilities missing BGRA8 format\n");
     return 0;
   }
 

@@ -16,6 +16,14 @@
 
 #include "../common.h"
 
+static const uint32_t GPU_SURFACE_DEFAULT_FORMATS[] = {
+  GPU_FORMAT_BGRA8_UNORM,
+  GPU_FORMAT_BGRA8_UNORM_SRGB,
+  GPU_FORMAT_RGBA8_UNORM,
+  GPU_FORMAT_RGBA8_UNORM_SRGB,
+  GPU_FORMAT_RGBA16_FLOAT
+};
+
 GPU_EXPORT
 GPUSurface*
 GPUCreateSurface(GPUInstance       * __restrict inst,
@@ -47,4 +55,22 @@ GPUDestroySurface(GPUSurface * __restrict surface) {
   if (api->surface.destroySurface) {
     api->surface.destroySurface(surface);
   }
+}
+
+GPU_EXPORT
+GPUResult
+GPUGetSurfaceCapabilities(const GPUAdapter * __restrict adapter,
+                          const GPUSurface * __restrict surface,
+                          GPUSurfaceCapabilities * __restrict outCaps) {
+  if (!adapter || !surface || !outCaps) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  memset(outCaps, 0, sizeof(*outCaps));
+  outCaps->minImageCount = 2;
+  outCaps->maxImageCount = 3;
+  outCaps->formatCount = (uint32_t)GPU_ARRAY_LEN(GPU_SURFACE_DEFAULT_FORMATS);
+  outCaps->pFormats = GPU_SURFACE_DEFAULT_FORMATS;
+
+  return GPU_OK;
 }
