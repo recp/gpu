@@ -19,8 +19,24 @@
 #include "cmdqueue_internal.h"
 #include "compute_internal.h"
 #include "descr/descriptor_internal.h"
+#include "device_internal.h"
 #include "library_internal.h"
 #include "pipeline_cache_internal.h"
+
+static GPUDevice *
+gpu_computePassDevice(const GPUComputePassEncoder *pass) {
+  if (!pass || !pass->_cmdb || !pass->_cmdb->_queue) {
+    return NULL;
+  }
+
+  return pass->_cmdb->_queue->_device;
+}
+
+static void
+gpu_computeValidationError(const GPUComputePassEncoder *pass,
+                           const char *message) {
+  gpuDeviceRecordValidationError(gpu_computePassDevice(pass), message);
+}
 
 static bool
 gpu_validPushConstantRange(uint32_t limit,
@@ -363,12 +379,22 @@ GPUDispatch(GPUComputePassEncoder *pass,
             uint32_t               z) {
   GPUApi *api;
 
-  if (!pass || pass->_ended || !pass->_hasPipeline ||
-      !gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
+  if (!pass || pass->_ended) {
+    return;
+  }
+  if (!pass->_hasPipeline) {
+    gpu_computeValidationError(pass, "GPUDispatch skipped: no compute pipeline bound");
+    return;
+  }
+  if (!gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
                                      pass->_boundGroupLayouts,
                                      GPU_ENCODER_MAX_BIND_GROUPS,
-                                     GPU_SHADER_STAGE_COMPUTE_BIT) ||
-      x == 0 || y == 0 || z == 0) {
+                                     GPU_SHADER_STAGE_COMPUTE_BIT)) {
+    gpu_computeValidationError(pass, "GPUDispatch skipped: missing compute bind group");
+    return;
+  }
+  if (x == 0 || y == 0 || z == 0) {
+    gpu_computeValidationError(pass, "GPUDispatch skipped: zero dispatch size");
     return;
   }
   if (!(api = gpuActiveGPUApi()) || !api->compute.dispatch) {
@@ -385,13 +411,23 @@ GPUDispatchIndirect(GPUComputePassEncoder *pass,
                     uint64_t              argsOffset) {
   GPUApi *api;
 
-  if (!pass || pass->_ended || !pass->_hasPipeline ||
-      !gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
+  if (!pass || pass->_ended) {
+    return;
+  }
+  if (!pass->_hasPipeline) {
+    gpu_computeValidationError(pass, "GPUDispatchIndirect skipped: no compute pipeline bound");
+    return;
+  }
+  if (!gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
                                      pass->_boundGroupLayouts,
                                      GPU_ENCODER_MAX_BIND_GROUPS,
-                                     GPU_SHADER_STAGE_COMPUTE_BIT) ||
-      !gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
+                                     GPU_SHADER_STAGE_COMPUTE_BIT)) {
+    gpu_computeValidationError(pass, "GPUDispatchIndirect skipped: missing compute bind group");
+    return;
+  }
+  if (!gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
       !gpuBufferRangeValid(argsBuffer, argsOffset, 12u)) {
+    gpu_computeValidationError(pass, "GPUDispatchIndirect skipped: invalid indirect buffer");
     return;
   }
   if (!(api = gpuActiveGPUApi()) || !api->compute.dispatchIndirect) {

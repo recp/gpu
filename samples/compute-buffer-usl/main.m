@@ -77,6 +77,16 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     return NO;
   }
 
+  if (getenv("GPU_SAMPLE_VERBOSE_VALIDATION")) {
+    GPURuntimeConfig runtimeConfig = {
+      .chain = { .sType = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG,
+                 .structSize = sizeof(GPURuntimeConfig) },
+      .validationMode = GPU_VALIDATION_BASIC,
+      .enableVerboseLogs = true
+    };
+    (void)GPUConfigureRuntime(_device, &runtimeConfig);
+  }
+
   if (!GPUSampleLoadUSL(_device,
                         @"compute_buffer.us",
                         2u,

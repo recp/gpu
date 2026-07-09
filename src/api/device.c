@@ -933,6 +933,18 @@ gpuDeviceEndFrame(GPUDevice *device) {
   device->lastFrameStats = device->currentFrameStats;
 }
 
+GPU_HIDE
+void
+gpuDeviceRecordValidationError(GPUDevice *device, const char *message) {
+  if (!device ||
+      device->runtimeConfig.validationMode == GPU_VALIDATION_OFF ||
+      !device->runtimeConfig.enableVerboseLogs) {
+    return;
+  }
+
+  fprintf(stderr, "GPU validation: %s\n", message ? message : "validation error");
+}
+
 GPU_EXPORT
 bool
 GPUIsFeatureSupported(const GPUAdapter *adapter, GPUFeature feature) {

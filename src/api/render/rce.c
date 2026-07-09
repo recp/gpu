@@ -16,9 +16,26 @@
 
 #include "../../common.h"
 #include "../buffer_internal.h"
+#include "../cmdqueue_internal.h"
 #include "../descr/descriptor_internal.h"
+#include "../device_internal.h"
 #include "pipeline_internal.h"
 #include "rce_internal.h"
+
+static GPUDevice *
+gpu_renderPassDevice(const GPURenderPassEncoder *pass) {
+  if (!pass || !pass->_cmdb || !pass->_cmdb->_queue) {
+    return NULL;
+  }
+
+  return pass->_cmdb->_queue->_device;
+}
+
+static void
+gpu_renderValidationError(const GPURenderPassEncoder *pass,
+                          const char *message) {
+  gpuDeviceRecordValidationError(gpu_renderPassDevice(pass), message);
+}
 
 static GPUPrimitiveType
 gpu_primitiveTypeFromTopology(GPUPrimitiveTopology topology) {
@@ -421,14 +438,24 @@ GPUDraw(GPURenderPassEncoder *pass,
         uint32_t              firstInstance) {
   GPUApi *api;
 
-  if (!pass || pass->_ended || !pass->_hasPipeline ||
-      !gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
+  if (!pass || pass->_ended)
+    return;
+  if (!pass->_hasPipeline) {
+    gpu_renderValidationError(pass, "GPUDraw skipped: no render pipeline bound");
+    return;
+  }
+  if (!gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
                                      pass->_boundGroupLayouts,
                                      GPU_ENCODER_MAX_BIND_GROUPS,
                                      GPU_SHADER_STAGE_VERTEX_BIT |
-                                     GPU_SHADER_STAGE_FRAGMENT_BIT) ||
-      vertexCount == 0 || instanceCount == 0)
+                                     GPU_SHADER_STAGE_FRAGMENT_BIT)) {
+    gpu_renderValidationError(pass, "GPUDraw skipped: missing render bind group");
     return;
+  }
+  if (vertexCount == 0 || instanceCount == 0) {
+    gpu_renderValidationError(pass, "GPUDraw skipped: zero draw count");
+    return;
+  }
   if (!(api = gpuActiveGPUApi()) || !api->rce.drawPrimitives)
     return;
 
@@ -450,19 +477,33 @@ GPUDrawIndexed(GPURenderPassEncoder *pass,
                uint32_t              firstInstance) {
   GPUApi *api;
 
-  if (!pass || pass->_ended || !pass->_hasPipeline ||
-      !gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
+  if (!pass || pass->_ended)
+    return;
+  if (!pass->_hasPipeline) {
+    gpu_renderValidationError(pass, "GPUDrawIndexed skipped: no render pipeline bound");
+    return;
+  }
+  if (!gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
                                      pass->_boundGroupLayouts,
                                      GPU_ENCODER_MAX_BIND_GROUPS,
                                      GPU_SHADER_STAGE_VERTEX_BIT |
-                                     GPU_SHADER_STAGE_FRAGMENT_BIT) ||
-      indexCount == 0 || instanceCount == 0 || !pass->_hasIndexBuffer ||
+                                     GPU_SHADER_STAGE_FRAGMENT_BIT)) {
+    gpu_renderValidationError(pass, "GPUDrawIndexed skipped: missing render bind group");
+    return;
+  }
+  if (indexCount == 0 || instanceCount == 0) {
+    gpu_renderValidationError(pass, "GPUDrawIndexed skipped: zero draw count");
+    return;
+  }
+  if (!pass->_hasIndexBuffer ||
       !gpu_validIndexRange(pass->_indexBuffer,
                            pass->_indexBufferOffset,
                            pass->_indexType,
                            firstIndex,
-                           indexCount))
+                           indexCount)) {
+    gpu_renderValidationError(pass, "GPUDrawIndexed skipped: invalid index buffer");
     return;
+  }
   if (!(api = gpuActiveGPUApi()) || !api->rce.drawIndexedPrims)
     return;
   
@@ -481,15 +522,25 @@ GPUDrawIndirect(GPURenderPassEncoder *pass,
                 uint64_t              argsOffset) {
   GPUApi *api;
 
-  if (!pass || pass->_ended || !pass->_hasPipeline ||
-      !gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
+  if (!pass || pass->_ended)
+    return;
+  if (!pass->_hasPipeline) {
+    gpu_renderValidationError(pass, "GPUDrawIndirect skipped: no render pipeline bound");
+    return;
+  }
+  if (!gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
                                      pass->_boundGroupLayouts,
                                      GPU_ENCODER_MAX_BIND_GROUPS,
                                      GPU_SHADER_STAGE_VERTEX_BIT |
-                                     GPU_SHADER_STAGE_FRAGMENT_BIT) ||
-      !gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
-      !gpuBufferRangeValid(argsBuffer, argsOffset, 16u))
+                                     GPU_SHADER_STAGE_FRAGMENT_BIT)) {
+    gpu_renderValidationError(pass, "GPUDrawIndirect skipped: missing render bind group");
     return;
+  }
+  if (!gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
+      !gpuBufferRangeValid(argsBuffer, argsOffset, 16u)) {
+    gpu_renderValidationError(pass, "GPUDrawIndirect skipped: invalid indirect buffer");
+    return;
+  }
   if (!(api = gpuActiveGPUApi()) || !api->rce.drawPrimitivesIndirect)
     return;
 
@@ -506,16 +557,26 @@ GPUDrawIndexedIndirect(GPURenderPassEncoder *pass,
                        uint64_t              argsOffset) {
   GPUApi *api;
 
-  if (!pass || pass->_ended || !pass->_hasPipeline ||
-      !gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
+  if (!pass || pass->_ended)
+    return;
+  if (!pass->_hasPipeline) {
+    gpu_renderValidationError(pass, "GPUDrawIndexedIndirect skipped: no render pipeline bound");
+    return;
+  }
+  if (!gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
                                      pass->_boundGroupLayouts,
                                      GPU_ENCODER_MAX_BIND_GROUPS,
                                      GPU_SHADER_STAGE_VERTEX_BIT |
-                                     GPU_SHADER_STAGE_FRAGMENT_BIT) ||
-      !pass->_hasIndexBuffer ||
-      !gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
-      !gpuBufferRangeValid(argsBuffer, argsOffset, 20u))
+                                     GPU_SHADER_STAGE_FRAGMENT_BIT)) {
+    gpu_renderValidationError(pass, "GPUDrawIndexedIndirect skipped: missing render bind group");
     return;
+  }
+  if (!pass->_hasIndexBuffer ||
+      !gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
+      !gpuBufferRangeValid(argsBuffer, argsOffset, 20u)) {
+    gpu_renderValidationError(pass, "GPUDrawIndexedIndirect skipped: invalid indirect/index buffer");
+    return;
+  }
   if (!(api = gpuActiveGPUApi()) || !api->rce.drawIndexedPrimsIndirect)
     return;
 

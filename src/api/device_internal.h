@@ -56,4 +56,8 @@ GPU_HIDE
 void
 gpuDeviceEndFrame(GPUDevice *device);
 
+GPU_HIDE
+void
+gpuDeviceRecordValidationError(GPUDevice *device, const char *message);
+
 #endif /* gpu_device_internal_h */
