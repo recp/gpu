@@ -1,16 +1,44 @@
 #include "test.h"
+#include <gpu/api/gpudef.h>
 #include "../../src/api/cmdqueue_internal.h"
 
+static GPUCommandBuffer       *gLastBarrierCmdb;
+static const GPUBarrierBatch *gLastBarrierBatch;
+static uint32_t               gBarrierForwardCount;
+
+static void
+count_barriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
+  gBarrierForwardCount++;
+  gLastBarrierCmdb = cmdb;
+  gLastBarrierBatch = barriers;
+}
+
 static int
-check_barrier_noops(GPUDevice *device) {
+check_barrier_forwarding(GPUDevice *device) {
+  GPUApi *api;
+  GPUBuffer *buffer = NULL;
+  GPUTexture *texture = NULL;
+  void (*savedEncodeBarriers)(GPUCommandBuffer *cmdb,
+                              const GPUBarrierBatch *barriers);
   GPUCommandBuffer fakeCmdb = {0};
   GPUBufferCreateInfo bufferInfo = {0};
   GPUTextureCreateInfo textureInfo = {0};
   GPUBufferBarrier bufferBarrier = {0};
   GPUTextureBarrier textureBarrier = {0};
   GPUBarrierBatch batch = {0};
-  GPUBuffer *buffer = NULL;
-  GPUTexture *texture = NULL;
+  int ok = 0;
+
+  api = gpuActiveGPUApi();
+  if (!api) {
+    fprintf(stderr, "barrier test active api missing\n");
+    return 0;
+  }
+
+  savedEncodeBarriers = api->renderPass.encodeBarriers;
+  api->renderPass.encodeBarriers = count_barriers;
+  gBarrierForwardCount = 0u;
+  gLastBarrierCmdb = NULL;
+  gLastBarrierBatch = NULL;
 
   bufferInfo.chain.sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
@@ -18,7 +46,7 @@ check_barrier_noops(GPUDevice *device) {
   bufferInfo.usage = GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
     fprintf(stderr, "barrier test buffer create failed\n");
-    return 0;
+    goto done;
   }
 
   textureInfo.chain.sType = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
@@ -33,8 +61,7 @@ check_barrier_noops(GPUDevice *device) {
   textureInfo.usage = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
   if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
     fprintf(stderr, "barrier test texture create failed\n");
-    GPUDestroyBuffer(buffer);
-    return 0;
+    goto done;
   }
 
   bufferBarrier.buffer = buffer;
@@ -77,13 +104,32 @@ check_barrier_noops(GPUDevice *device) {
   bufferBarrier.sizeBytes = 256u;
   textureBarrier.mipCount = 0u;
   GPUEncodeBarriers(&fakeCmdb, &batch);
+  textureBarrier.mipCount = 1u;
 
+  if (gBarrierForwardCount != 1u ||
+      gLastBarrierCmdb != &fakeCmdb ||
+      gLastBarrierBatch != &batch) {
+    fprintf(stderr, "barrier test callback count mismatch\n");
+    goto done;
+  }
+
+  api->renderPass.encodeBarriers = NULL;
+  GPUEncodeBarriers(&fakeCmdb, &batch);
+  if (gBarrierForwardCount != 1u) {
+    fprintf(stderr, "barrier test null backend callback should not forward\n");
+    goto done;
+  }
+
+  ok = 1;
+
+done:
+  api->renderPass.encodeBarriers = savedEncodeBarriers;
   GPUDestroyTexture(texture);
   GPUDestroyBuffer(buffer);
-  return 1;
+  return ok;
 }
 
 int
 gpu_test_barrier(GPUDevice *device) {
-  return check_barrier_noops(device);
+  return check_barrier_forwarding(device);
 }
