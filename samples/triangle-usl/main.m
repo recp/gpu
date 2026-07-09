@@ -1,5 +1,6 @@
 #import <AppKit/AppKit.h>
 #include <math.h>
+#include <string.h>
 #import <QuartzCore/QuartzCore.h>
 
 #import "../../include/gpu/gpu.h"
@@ -142,17 +143,31 @@ static const TriangleVertex kTriangleVertices[] = {
     return NO;
   }
 
-  GPUBufferCreateInfo uniformBufferInfo = {
-    .chain = { .sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-               .structSize = sizeof(GPUBufferCreateInfo) },
-    .label = "triangle-usl-fragment-uniforms",
-    .sizeBytes = sizeof(FragmentUniforms),
-    .usage = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST
+  GPUTransientAllocatorConfig transientInfo = {
+    .chain = { .sType = GPU_STRUCTURE_TYPE_TRANSIENT_ALLOCATOR_CONFIG,
+               .structSize = sizeof(GPUTransientAllocatorConfig) },
+    .ringBytesPerFrame = 256,
+    .framesInFlight = 1,
+    .chunkBytes = 256,
+    .allowChunkFallback = true
   };
-  if (GPUCreateBuffer(_device, &uniformBufferInfo, &_fragmentUniformBuffer) != GPU_OK) {
-    NSLog(@"GPU: failed to create fragment uniform buffer");
+  if (GPUConfigureTransientAllocator(_device, &transientInfo) != GPU_OK) {
+    NSLog(@"GPU: failed to configure transient uniforms");
     return NO;
   }
+
+  GPUTransientBufferSlice initialUniformSlice = {0};
+  if (GPUAllocateTransientBuffer(_device,
+                                 GPU_BUFFER_USAGE_UNIFORM,
+                                 sizeof(FragmentUniforms),
+                                 256,
+                                 &initialUniformSlice) != GPU_OK ||
+      !initialUniformSlice.buffer ||
+      initialUniformSlice.offset != 0) {
+    NSLog(@"GPU: failed to allocate transient uniform slice");
+    return NO;
+  }
+  _fragmentUniformBuffer = initialUniformSlice.buffer;
 
   GPUBindGroupEntry set0Bindings[] = {
     {
@@ -180,8 +195,9 @@ static const TriangleVertex kTriangleVertices[] = {
   return YES;
 }
 
-- (void)updateFragmentUniforms {
+- (BOOL)updateFragmentUniforms {
   FragmentUniforms uniforms;
+  GPUTransientBufferSlice slice = {0};
   float time;
 
   time = (float)(CACurrentMediaTime() - _animationStart);
@@ -189,11 +205,20 @@ static const TriangleVertex kTriangleVertices[] = {
   uniforms.tint[1] = 0.6f + 0.4f * sinf(time * 1.7f + 2.1f);
   uniforms.tint[2] = 0.6f + 0.4f * sinf(time * 1.3f + 4.2f);
   uniforms.tint[3] = 1.0f;
-  GPUQueueWriteBuffer(_queue,
-                      _fragmentUniformBuffer,
-                      0,
-                      &uniforms,
-                      sizeof(uniforms));
+  if (GPUAllocateTransientBuffer(_device,
+                                 GPU_BUFFER_USAGE_UNIFORM,
+                                 sizeof(uniforms),
+                                 256,
+                                 &slice) != GPU_OK ||
+      slice.buffer != _fragmentUniformBuffer ||
+      slice.offset != 0 ||
+      !slice.cpuPtr) {
+    NSLog(@"GPU: failed to allocate frame uniform slice");
+    return NO;
+  }
+
+  memcpy(slice.cpuPtr, &uniforms, sizeof(uniforms));
+  return YES;
 }
 
 - (void)renderFrame {
@@ -231,7 +256,9 @@ static const TriangleVertex kTriangleVertices[] = {
     goto cleanup;
   }
 
-  [self updateFragmentUniforms];
+  if (![self updateFragmentUniforms]) {
+    goto cleanup;
+  }
 
   vertexBuffer.buffer = _vertexBuffer;
   vertexBuffer.offset = 0;
@@ -269,10 +296,7 @@ cleanup:
     GPUDestroyRenderPipeline(_pipeline);
     _pipeline = NULL;
   }
-  if (_fragmentUniformBuffer) {
-    GPUDestroyBuffer(_fragmentUniformBuffer);
-    _fragmentUniformBuffer = NULL;
-  }
+  _fragmentUniformBuffer = NULL;
   if (_vertexBuffer) {
     GPUDestroyBuffer(_vertexBuffer);
     _vertexBuffer = NULL;
