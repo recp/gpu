@@ -26,9 +26,7 @@ extern "C" {
 
 typedef struct GPUDevice GPUDevice;
 
-typedef struct GPUSampler {
-  void *_priv;
-} GPUSampler;
+typedef struct GPUSampler GPUSampler;
 
 typedef enum GPUFilter {
   GPU_FILTER_NEAREST = 0,

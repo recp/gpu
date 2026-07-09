@@ -19,6 +19,7 @@
 
 #include "../common.h"
 #include "../../api/library_internal.h"
+#include "../../api/sampler_internal.h"
 
 #if defined(__APPLE__) && defined(__OBJC__)
 #import <Metal/Metal.h>
