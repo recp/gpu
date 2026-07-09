@@ -1284,6 +1284,9 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
       !gpuPipelineLayoutAcceptsBindGroup(pass->_pipelineLayout, setIndex, group)) {
     return;
   }
+  if (dynamicOffsetCount == 0u && pass->_boundGroups[setIndex] == group) {
+    return;
+  }
 
   ctx.pass = pass;
   if (gpuForEachBindGroupBindingWithDynamicOffsets(group,
@@ -1291,6 +1294,7 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
                                                    pDynamicOffsets,
                                                    gpuBindRenderBinding,
                                                    &ctx)) {
+    pass->_boundGroups[setIndex] = group;
     pass->_boundGroupLayouts[setIndex] = gpuBindGroupGetLayout(group);
   }
 }

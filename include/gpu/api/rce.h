@@ -27,6 +27,7 @@ typedef struct GPURenderPipelineState GPURenderPipelineState;
 typedef struct GPURenderPassDesc GPURenderPassDesc;
 typedef struct GPUPipelineLayout GPUPipelineLayout;
 typedef struct GPUBindGroupLayout GPUBindGroupLayout;
+typedef struct GPUBindGroup GPUBindGroup;
 
 enum {
   GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS = 8u
@@ -43,6 +44,7 @@ struct GPURenderCommandEncoder {
   bool              _hasPipeline;
   bool              _ended;
   GPUPipelineLayout *_pipelineLayout;
+  GPUBindGroup     *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUBindGroupLayout *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
   uint32_t          _colorAttachmentCount;
   GPUFormat         _colorAttachmentFormats[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];

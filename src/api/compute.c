@@ -193,6 +193,11 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
     return;
   }
 
+  if (pass->_pipelineLayout != pipeline->_layout) {
+    memset(pass->_boundGroups, 0, sizeof(pass->_boundGroups));
+    memset(pass->_boundGroupLayouts, 0, sizeof(pass->_boundGroupLayouts));
+  }
+
   state = pipeline->_state;
   api->compute.setComputePipelineState(pass, state);
   pass->_hasPipeline = true;
@@ -301,6 +306,9 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
       !gpuPipelineLayoutAcceptsBindGroup(pass->_pipelineLayout, setIndex, bindGroup)) {
     return;
   }
+  if (dynamicOffsetCount == 0u && pass->_boundGroups[setIndex] == bindGroup) {
+    return;
+  }
 
   ctx.pass = pass;
   if (gpuForEachBindGroupBindingWithDynamicOffsets(bindGroup,
@@ -308,6 +316,7 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
                                                    pDynamicOffsets,
                                                    gpuBindComputeBinding,
                                                    &ctx)) {
+    pass->_boundGroups[setIndex] = bindGroup;
     pass->_boundGroupLayouts[setIndex] = gpuBindGroupGetLayout(bindGroup);
   }
 }

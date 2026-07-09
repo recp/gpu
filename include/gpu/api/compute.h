@@ -26,6 +26,7 @@ extern "C" {
 typedef struct GPUComputePipelineState GPUComputePipelineState;
 typedef struct GPUPipelineLayout GPUPipelineLayout;
 typedef struct GPUBindGroupLayout GPUBindGroupLayout;
+typedef struct GPUBindGroup GPUBindGroup;
 
 struct GPUComputePassEncoder {
   void *_priv;
@@ -34,6 +35,7 @@ struct GPUComputePassEncoder {
   bool _hasPipeline;
   bool _ended;
   GPUPipelineLayout *_pipelineLayout;
+  GPUBindGroup *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUBindGroupLayout *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
   uint32_t _pushConstantSizeBytes;
   GPUShaderStageFlags _pushConstantStages;

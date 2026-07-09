@@ -155,6 +155,11 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
   if (!api->rce.setRenderPipelineState)
     return;
 
+  if (pass->_pipelineLayout != pipeline->_layout) {
+    memset(pass->_boundGroups, 0, sizeof(pass->_boundGroups));
+    memset(pass->_boundGroupLayouts, 0, sizeof(pass->_boundGroupLayouts));
+  }
+
   state._priv = pipeline->_state;
   api->rce.setRenderPipelineState(pass, &state);
   pass->_hasPipeline = true;
