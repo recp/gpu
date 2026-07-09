@@ -89,9 +89,11 @@ gpuPipelineLayoutIsStageBound(GPUPipelineLayout *pipelineLayout,
 
 GPU_HIDE
 int
-gpuPipelineLayoutMatchesShaderResources(GPUPipelineLayout *pipelineLayout,
-                                        const GPUShaderLibrary *library,
-                                        GPUShaderStageFlags stages);
+gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout *pipelineLayout,
+                                      const GPUShaderLibrary *library,
+                                      const char * const *entryPoints,
+                                      uint32_t entryPointCount,
+                                      GPUShaderStageFlags fallbackStages);
 
 GPU_HIDE
 int

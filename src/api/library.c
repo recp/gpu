@@ -62,6 +62,16 @@ typedef struct GPUShaderResourceBindingInfoList {
   GPUShaderResourceBindingInfo entries[];
 } GPUShaderResourceBindingInfoList;
 
+typedef struct GPUShaderEntryResourceInfo {
+  char *entry;
+  GPUShaderResourceReflection resource;
+} GPUShaderEntryResourceInfo;
+
+typedef struct GPUShaderEntryResourceInfoList {
+  uint32_t count;
+  GPUShaderEntryResourceInfo entries[];
+} GPUShaderEntryResourceInfoList;
+
 static void
 gpu_clearShaderEntryInfo(GPUShaderLibrary *library) {
   GPUShaderEntryInfoList *list;
@@ -76,6 +86,23 @@ gpu_clearShaderEntryInfo(GPUShaderLibrary *library) {
   }
   free(list);
   library->_entryInfo = NULL;
+}
+
+static void
+gpu_clearShaderEntryResourceInfo(GPUShaderLibrary *library) {
+  GPUShaderEntryResourceInfoList *list;
+
+  if (!library || !library->_entryResources) {
+    return;
+  }
+
+  list = library->_entryResources;
+  for (uint32_t i = 0; i < list->count; i++) {
+    free(list->entries[i].entry);
+    free((char *)list->entries[i].resource.name);
+  }
+  free(list);
+  library->_entryResources = NULL;
 }
 
 static void
@@ -105,6 +132,23 @@ gpu_clearShaderReflection(GPUShaderReflection *reflection) {
   }
 
   memset(reflection, 0, sizeof(*reflection));
+}
+
+static int
+gpu_copyShaderResourceReflection(const GPUShaderResourceReflection *src,
+                                 GPUShaderResourceReflection *dst) {
+  if (!src || !dst) {
+    return 0;
+  }
+
+  *dst = *src;
+  dst->name = gpu_dupText(src->name);
+  if (!dst->name) {
+    memset(dst, 0, sizeof(*dst));
+    return 0;
+  }
+
+  return 1;
 }
 
 static int
@@ -267,6 +311,73 @@ gpuGetShaderLibraryEntryStage(const GPUShaderLibrary *library,
 
 GPU_HIDE
 int
+gpuShaderLibraryHasEntryResourceInfo(const GPUShaderLibrary *library) {
+  return library && library->_entryResources;
+}
+
+GPU_HIDE
+GPUResult
+gpuGetShaderEntryReflection(const GPUShaderLibrary *library,
+                            const char *entryPoint,
+                            GPUShaderReflection *outReflection) {
+  const GPUShaderEntryResourceInfoList *list;
+  GPUShaderStageFlags stage;
+  uint32_t count;
+
+  if (!library || !entryPoint || !outReflection) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  memset(outReflection, 0, sizeof(*outReflection));
+  if (!gpuGetShaderLibraryEntryStage(library, entryPoint, &stage)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  list = library->_entryResources;
+  if (!list) {
+    return GPU_OK;
+  }
+
+  count = 0u;
+  for (uint32_t i = 0; i < list->count; i++) {
+    if (list->entries[i].entry &&
+        strcmp(list->entries[i].entry, entryPoint) == 0) {
+      count++;
+    }
+  }
+  if (count == 0u) {
+    return GPU_OK;
+  }
+  if ((size_t)count > SIZE_MAX / sizeof(GPUShaderResourceReflection)) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  outReflection->pResources = calloc(count, sizeof(GPUShaderResourceReflection));
+  if (!outReflection->pResources) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  for (uint32_t i = 0; i < list->count; i++) {
+    const GPUShaderEntryResourceInfo *entry;
+
+    entry = &list->entries[i];
+    if (!entry->entry || strcmp(entry->entry, entryPoint) != 0) {
+      continue;
+    }
+    if (!gpu_copyShaderResourceReflection(
+          &entry->resource,
+          (GPUShaderResourceReflection *)&outReflection->pResources[outReflection->resourceCount])) {
+      outReflection->resourceCount++;
+      gpu_clearShaderReflection(outReflection);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    outReflection->resourceCount++;
+  }
+
+  return GPU_OK;
+}
+
+GPU_HIDE
+int
 gpuGetShaderResourceBackendBinding(const GPUShaderLibrary *library,
                                    const GPUShaderResourceReflection *resource,
                                    uint32_t *outBinding) {
@@ -407,6 +518,81 @@ gpu_appendShaderResourceBindingInfo(GPUShaderLibrary *library,
 }
 
 static int
+gpu_appendShaderEntryResourceInfo(GPUShaderLibrary *library,
+                                  const USLRuntimeResource *resource,
+                                  GPUBindingType bindingType,
+                                  GPUShaderStageFlags visibility,
+                                  uint32_t setIndex,
+                                  uint32_t binding) {
+  GPUShaderEntryResourceInfoList *list;
+  GPUShaderEntryResourceInfoList *grown;
+  uint32_t resourceArrayCount;
+  size_t nextCount;
+
+  if (!library || !resource || !resource->entry[0] || visibility == 0u) {
+    return 0;
+  }
+
+  resourceArrayCount = 1u;
+  list = library->_entryResources;
+  for (uint32_t i = 0; list && i < list->count; i++) {
+    GPUShaderEntryResourceInfo *entry = &list->entries[i];
+
+    if (entry->entry &&
+        strcmp(entry->entry, resource->entry) == 0 &&
+        entry->resource.setIndex == setIndex &&
+        entry->resource.binding == binding &&
+        entry->resource.bindingType == bindingType) {
+      entry->resource.visibility |= visibility;
+      entry->resource.hasDynamicOffset = entry->resource.hasDynamicOffset ||
+                                         resource->dynamic_offset != 0u;
+      return 1;
+    }
+  }
+
+  if (list && list->count == UINT32_MAX) {
+    return 0;
+  }
+
+  nextCount = list ? (size_t)list->count + 1u : 1u;
+  if (nextCount > (SIZE_MAX - sizeof(*list)) / sizeof(list->entries[0])) {
+    return 0;
+  }
+
+  grown = realloc(list, sizeof(*list) + nextCount * sizeof(list->entries[0]));
+  if (!grown) {
+    return 0;
+  }
+
+  if (!list) {
+    grown->count = 0u;
+  }
+  library->_entryResources = grown;
+  list = grown;
+
+  memset(&list->entries[list->count], 0, sizeof(list->entries[0]));
+  list->entries[list->count].entry = gpu_dupText(resource->entry);
+  list->entries[list->count].resource.name = gpu_dupText(resource->param);
+  if (!list->entries[list->count].entry ||
+      !list->entries[list->count].resource.name) {
+    free(list->entries[list->count].entry);
+    free((char *)list->entries[list->count].resource.name);
+    memset(&list->entries[list->count], 0, sizeof(list->entries[0]));
+    return 0;
+  }
+
+  list->entries[list->count].resource.setIndex = setIndex;
+  list->entries[list->count].resource.binding = binding;
+  list->entries[list->count].resource.bindingType = bindingType;
+  list->entries[list->count].resource.visibility = visibility;
+  list->entries[list->count].resource.arrayCount = resourceArrayCount;
+  list->entries[list->count].resource.hasDynamicOffset =
+    resource->dynamic_offset != 0u;
+  list->count++;
+  return 1;
+}
+
+static int
 gpu_appendShaderResourceReflection(GPUShaderLibrary *library,
                                    const USLRuntimeResource *resource,
                                    GPUBindingType bindingType,
@@ -429,7 +615,13 @@ gpu_appendShaderResourceReflection(GPUShaderLibrary *library,
                                            setIndex,
                                            binding,
                                            bindingType,
-                                           backendBinding)) {
+                                           backendBinding) ||
+      !gpu_appendShaderEntryResourceInfo(library,
+                                         resource,
+                                         bindingType,
+                                         visibility,
+                                         setIndex,
+                                         binding)) {
     return 0;
   }
 
@@ -496,6 +688,7 @@ gpu_setShaderLibraryReflection(GPUShaderLibrary *library,
   }
 
   gpu_clearShaderReflection(&library->_reflection);
+  gpu_clearShaderEntryResourceInfo(library);
   gpu_clearShaderResourceBindingInfo(library);
   for (uint32_t i = 0; i < runtimeInfo->resource_count; i++) {
     const USLRuntimeResource *resource = &runtimeInfo->resources[i];
@@ -513,6 +706,7 @@ gpu_setShaderLibraryReflection(GPUShaderLibrary *library,
                                             bindingType,
                                             visibility)) {
       gpu_clearShaderReflection(&library->_reflection);
+      gpu_clearShaderEntryResourceInfo(library);
       gpu_clearShaderResourceBindingInfo(library);
       return 0;
     }
@@ -789,6 +983,7 @@ GPUDestroyShaderLibrary(GPUShaderLibrary *library) {
 
   gpu_clearShaderReflection(&library->_reflection);
   gpu_clearShaderEntryInfo(library);
+  gpu_clearShaderEntryResourceInfo(library);
   gpu_clearShaderResourceBindingInfo(library);
   if (!(api = gpuActiveGPUApi())) {
     free(library);

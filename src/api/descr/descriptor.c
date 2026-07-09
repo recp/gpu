@@ -1256,15 +1256,42 @@ gpu_pipelineLayoutMatchesShaderReflection(GPUPipelineLayout *pipelineLayout,
 
 GPU_HIDE
 int
-gpuPipelineLayoutMatchesShaderResources(GPUPipelineLayout *pipelineLayout,
-                                        const GPUShaderLibrary *library,
-                                        GPUShaderStageFlags stages) {
+gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout *pipelineLayout,
+                                      const GPUShaderLibrary *library,
+                                      const char * const *entryPoints,
+                                      uint32_t entryPointCount,
+                                      GPUShaderStageFlags fallbackStages) {
   GPUShaderReflection reflection;
   GPUResult rc;
   int ok;
 
-  if (!pipelineLayout || !library) {
+  if (!pipelineLayout || !library ||
+      (entryPointCount > 0u && !entryPoints)) {
     return 0;
+  }
+
+  if (gpuShaderLibraryHasEntryResourceInfo(library)) {
+    for (uint32_t i = 0u; i < entryPointCount; i++) {
+      if (!entryPoints[i]) {
+        return 0;
+      }
+
+      memset(&reflection, 0, sizeof(reflection));
+      rc = gpuGetShaderEntryReflection(library, entryPoints[i], &reflection);
+      if (rc != GPU_OK) {
+        return 0;
+      }
+
+      ok = gpu_pipelineLayoutMatchesShaderReflection(pipelineLayout,
+                                                     &reflection,
+                                                     fallbackStages);
+      GPUFreeShaderReflection(&reflection);
+      if (!ok) {
+        return 0;
+      }
+    }
+
+    return 1;
   }
 
   memset(&reflection, 0, sizeof(reflection));
@@ -1275,7 +1302,7 @@ gpuPipelineLayoutMatchesShaderResources(GPUPipelineLayout *pipelineLayout,
 
   ok = gpu_pipelineLayoutMatchesShaderReflection(pipelineLayout,
                                                  &reflection,
-                                                 stages);
+                                                 fallbackStages);
   GPUFreeShaderReflection(&reflection);
   return ok;
 }

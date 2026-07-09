@@ -184,6 +184,7 @@ check_reflected_pipeline_entry_stages(GPUDevice *device,
   GPUComputePipelineCreateInfo computeInfo = {0};
   GPURenderPipelineCreateInfo renderInfo = {0};
   GPUPipelineLayoutCreateInfo emptyLayoutInfo = {0};
+  GPURenderPipeline *pipeline = NULL;
   GPUPipelineLayout *emptyLayout = NULL;
   GPUColorTargetState colorTarget = {0};
   GPUVertexAttribute attrs[2] = {{0}};
@@ -268,6 +269,20 @@ check_reflected_pipeline_entry_stages(GPUDevice *device,
     return 0;
   }
   renderInfo.layout = layout;
+
+  renderInfo.layout = emptyLayout;
+  renderInfo.fragmentEntry = "reflect_plain_fs";
+  if (GPUCreateRenderPipeline(device, &renderInfo, &pipeline) != GPU_OK ||
+      !pipeline) {
+    fprintf(stderr, "render pipeline rejected no-resource entry with empty layout\n");
+    GPUDestroyRenderPipeline(pipeline);
+    GPUDestroyPipelineLayout(emptyLayout);
+    return 0;
+  }
+  GPUDestroyRenderPipeline(pipeline);
+  pipeline = NULL;
+  renderInfo.layout = layout;
+  renderInfo.fragmentEntry = "reflect_fs";
 
   renderInfo.vertexEntry = "reflect_cs";
   if (!expect_reflected_render_pipeline_error(

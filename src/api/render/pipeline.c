@@ -232,11 +232,17 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   if (!gpu_pipelineInfoIsSupported(info))
     return GPU_ERROR_INVALID_ARGUMENT;
-  if (!gpuPipelineLayoutMatchesShaderResources(info->layout,
+  {
+    const char *entries[] = {info->vertexEntry, info->fragmentEntry};
+
+    if (!gpuPipelineLayoutMatchesShaderEntries(info->layout,
                                                info->library,
+                                               entries,
+                                               (uint32_t)GPU_ARRAY_LEN(entries),
                                                GPU_SHADER_STAGE_VERTEX_BIT |
-                                               GPU_SHADER_STAGE_FRAGMENT_BIT))
-    return GPU_ERROR_INVALID_ARGUMENT;
+                                                 GPU_SHADER_STAGE_FRAGMENT_BIT))
+      return GPU_ERROR_INVALID_ARGUMENT;
+  }
 
   vertexFunc = GPUShaderFunction(info->library, info->vertexEntry);
   fragmentFunc = GPUShaderFunction(info->library, info->fragmentEntry);

@@ -114,10 +114,16 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   }
-  if (!gpuPipelineLayoutMatchesShaderResources(info->layout,
+  {
+    const char *entries[] = {info->entryPoint};
+
+    if (!gpuPipelineLayoutMatchesShaderEntries(info->layout,
                                                info->library,
+                                               entries,
+                                               (uint32_t)GPU_ARRAY_LEN(entries),
                                                GPU_SHADER_STAGE_COMPUTE_BIT)) {
-    return GPU_ERROR_INVALID_ARGUMENT;
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
   }
 
   if (!(api = gpuActiveGPUApi()) ||
