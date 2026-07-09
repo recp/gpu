@@ -122,6 +122,7 @@ gpu_timeoutFromNow(uint64_t timeoutNs, struct timespec *outTime) {
 
 static GPUCommandBuffer*
 gpu_newCommandBuffer(GPUCommandQueue  * __restrict cmdq,
+                     const char       * __restrict label,
                      void             * __restrict sender,
                      GPUCommandBufferCompletionFn  oncomplete) {
   GPUApi *api;
@@ -134,7 +135,7 @@ gpu_newCommandBuffer(GPUCommandQueue  * __restrict cmdq,
   if (!api->cmdque.newCommandBuffer)
     return NULL;
 
-  cmdb = api->cmdque.newCommandBuffer(cmdq, sender, oncomplete);
+  cmdb = api->cmdque.newCommandBuffer(cmdq, label, sender, oncomplete);
   if (cmdb) {
     cmdb->_queue = cmdq;
   }
@@ -171,8 +172,6 @@ GPUResult
 GPUAcquireCommandBuffer(GPUCommandQueue   * __restrict cmdq,
                         const char        * __restrict label,
                         GPUCommandBuffer ** __restrict outCmdb) {
-  (void)label;
-
   if (!outCmdb) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -182,7 +181,7 @@ GPUAcquireCommandBuffer(GPUCommandQueue   * __restrict cmdq,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  *outCmdb = gpu_newCommandBuffer(cmdq, NULL, NULL);
+  *outCmdb = gpu_newCommandBuffer(cmdq, label, NULL, NULL);
   return *outCmdb ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
 }
 

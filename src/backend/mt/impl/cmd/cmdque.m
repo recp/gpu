@@ -92,12 +92,16 @@ mt_getCommandQueue(GPUDevice * __restrict device,
 GPU_HIDE
 GPUCommandBuffer*
 mt_newCommandBuffer(GPUCommandQueue  * __restrict cmdb,
+                    const char       * __restrict label,
                     void             * __restrict sender,
                     GPUCommandBufferCompletionFn  oncomplete) {
   GPUCommandBuffer *cb;
   id<MTLCommandBuffer> mcb;
   
   mcb       = [(id<MTLCommandQueue>)cmdb->_priv commandBuffer];
+  if (label && label[0] != '\0') {
+    mcb.label = [NSString stringWithUTF8String:label];
+  }
   cb       = calloc(1, sizeof(*cb));
   cb->_priv = mcb;
   

@@ -34,6 +34,7 @@ typedef struct GPUApiCommandQueue {
 
   GPUCommandBuffer*
   (*newCommandBuffer)(GPUCommandQueue  * __restrict cmdb,
+                      const char       * __restrict label,
                       void             * __restrict sender,
                       GPUCommandBufferCompletionFn  oncomplete);
   
