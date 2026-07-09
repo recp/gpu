@@ -55,6 +55,14 @@ extern "C" {
 
 #define GPU_FLG(FLAGS, FLAG) ((FLAGS & FLAG) == FLAG)
 
+typedef enum GPUBackend {
+  GPU_BACKEND_NULL      = 0,
+  GPU_BACKEND_METAL     = 1,
+  GPU_BACKEND_VULKAN    = 2,
+  GPU_BACKEND_DIRECTX12 = 3,
+  GPU_BACKEND_OPENGL    = 4
+} GPUBackend;
+
 typedef enum GPUStructureType {
   GPU_STRUCTURE_TYPE_NONE = 0,
   GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,

@@ -34,7 +34,33 @@ typedef struct GPUPhysicalDevice {
   bool                      separatePresentQueue;
 } GPUPhysicalDevice;
 
+typedef GPUPhysicalDevice GPUAdapter;
+
+typedef enum GPUAdapterType {
+  GPU_ADAPTER_TYPE_UNKNOWN = 0,
+  GPU_ADAPTER_TYPE_INTEGRATED = 1,
+  GPU_ADAPTER_TYPE_DISCRETE = 2,
+  GPU_ADAPTER_TYPE_SOFTWARE = 3
+} GPUAdapterType;
+
+typedef struct GPUAdapterProperties {
+  const char    *name;
+  GPUBackend     backend;
+  GPUAdapterType type;
+} GPUAdapterProperties;
+
 typedef struct GPUDevice GPUDevice;
+
+GPU_EXPORT
+GPUResult
+GPUEnumerateAdapters(GPUInstance *inst,
+                     uint32_t    *inoutAdapterCount,
+                     GPUAdapter **outAdapters);
+
+GPU_EXPORT
+GPUResult
+GPUGetAdapterProperties(const GPUAdapter     *adapter,
+                        GPUAdapterProperties *outProps);
 
 GPU_EXPORT
 GPUPhysicalDevice*

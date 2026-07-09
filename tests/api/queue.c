@@ -3,6 +3,55 @@
 #include "../../src/api/frame_internal.h"
 
 static int
+check_adapter_enumeration(void) {
+  GPUAdapter *adapters[8] = {0};
+  GPUAdapterProperties props;
+  uint32_t adapterCount;
+
+  if (GPUEnumerateAdapters(NULL, NULL, NULL) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUGetAdapterProperties(NULL, &props) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUGetAdapterProperties((GPUAdapter *)(uintptr_t)1u, NULL) !=
+        GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "adapter validation accepted invalid input\n");
+    return 0;
+  }
+
+  adapterCount = 0;
+  if (GPUEnumerateAdapters(NULL, &adapterCount, NULL) != GPU_OK ||
+      adapterCount == 0) {
+    fprintf(stderr, "adapter count query failed\n");
+    return 0;
+  }
+
+  if (adapterCount > GPU_ARRAY_LEN(adapters)) {
+    adapterCount = (uint32_t)GPU_ARRAY_LEN(adapters);
+  }
+  if (GPUEnumerateAdapters(NULL, &adapterCount, adapters) != GPU_OK ||
+      adapterCount == 0 ||
+      !adapters[0]) {
+    fprintf(stderr, "adapter enumeration failed\n");
+    return 0;
+  }
+
+  memset(&props, 0, sizeof(props));
+  if (GPUGetAdapterProperties(adapters[0], &props) != GPU_OK ||
+      props.backend == GPU_BACKEND_NULL ||
+      !props.name) {
+    fprintf(stderr, "adapter properties query failed\n");
+    return 0;
+  }
+
+  adapterCount = 0;
+  if (GPUEnumerateAdapters(NULL, &adapterCount, adapters) !=
+      GPU_ERROR_INSUFFICIENT_CAPACITY) {
+    fprintf(stderr, "adapter enumeration accepted insufficient capacity\n");
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
 check_fence_create_validation(GPUDevice *device) {
   GPUFenceCreateInfo fenceInfo = {0};
   GPUFence *fence;
@@ -305,7 +354,8 @@ check_queue_submit_fence(GPUDevice *device) {
 
 int
 gpu_test_queue(GPUPhysicalDevice *physicalDevice, GPUDevice *device) {
-  return check_device_queue_create_validation(physicalDevice) &&
+  return check_adapter_enumeration() &&
+         check_device_queue_create_validation(physicalDevice) &&
          check_queue_selection(device) &&
          check_queue_submit_fence(device);
 }

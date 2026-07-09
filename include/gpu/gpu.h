@@ -46,14 +46,6 @@ extern "C" {
 #include "instance.h"
 #include "surface.h"
 
-typedef enum GPUBackend {
-  GPU_BACKEND_NULL      = 0,
-  GPU_BACKEND_METAL     = 1,
-  GPU_BACKEND_VULKAN    = 2,
-  GPU_BACKEND_DIRECTX12 = 3,
-  GPU_BACKEND_OPENGL    = 4
-} GPUBackend;
-
 #ifdef __cplusplus
 }
 #endif
