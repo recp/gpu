@@ -1090,6 +1090,75 @@ gpu_createLayoutForReflectionSet(GPUDevice *device,
   return rc;
 }
 
+static int
+gpu_layoutMatchesReflectionResource(const GPUBindGroupLayoutEntry *entry,
+                                    const GPUShaderResourceReflection *resource) {
+  uint32_t resourceArrayCount;
+
+  if (!entry || !resource) {
+    return 0;
+  }
+
+  resourceArrayCount = resource->arrayCount ? resource->arrayCount : 1u;
+  return entry->binding == resource->binding &&
+         entry->bindingType == resource->bindingType &&
+         entry->visibility == resource->visibility &&
+         entry->arrayCount == resourceArrayCount &&
+         entry->hasDynamicOffset == resource->hasDynamicOffset;
+}
+
+static int
+gpu_layoutMatchesReflectionSet(GPUBindGroupLayout *layout,
+                               const GPUShaderReflection *reflection,
+                               uint32_t setIndex) {
+  GPUBindGroupLayoutPriv *priv;
+  uint32_t expectedCount;
+  uint8_t *matched;
+
+  priv = gpu_layoutPriv(layout);
+  expectedCount = gpu_reflectionResourceCountForSet(reflection, setIndex);
+  if (!priv || priv->count != expectedCount) {
+    return 0;
+  }
+
+  if (expectedCount == 0u) {
+    return 1;
+  }
+
+  matched = calloc(expectedCount, sizeof(*matched));
+  if (!matched) {
+    return 0;
+  }
+
+  for (uint32_t i = 0u; i < reflection->resourceCount; i++) {
+    const GPUShaderResourceReflection *resource;
+    int found;
+
+    resource = &reflection->pResources[i];
+    if (resource->setIndex != setIndex) {
+      continue;
+    }
+
+    found = 0;
+    for (uint32_t j = 0u; j < priv->count; j++) {
+      if (!matched[j] &&
+          gpu_layoutMatchesReflectionResource(&priv->entries[j], resource)) {
+        matched[j] = 1u;
+        found = 1;
+        break;
+      }
+    }
+
+    if (!found) {
+      free(matched);
+      return 0;
+    }
+  }
+
+  free(matched);
+  return 1;
+}
+
 GPU_EXPORT
 GPUResult
 GPUCreateBindGroupLayoutsFromReflection(GPUDevice *device,
@@ -1156,8 +1225,11 @@ GPUCreatePipelineLayoutFromReflection(GPUDevice *device,
   uint32_t requiredCount;
   GPUResult rc;
 
-  if (!library || !outLayout ||
-      (bindGroupLayoutCount > 0u && !ppLayouts)) {
+  if (!outLayout) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outLayout = NULL;
+  if (!library || (bindGroupLayoutCount > 0u && !ppLayouts)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -1171,6 +1243,12 @@ GPUCreatePipelineLayoutFromReflection(GPUDevice *device,
   if (bindGroupLayoutCount < requiredCount) {
     GPUFreeShaderReflection(&reflection);
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  for (uint32_t i = 0u; i < requiredCount; i++) {
+    if (!gpu_layoutMatchesReflectionSet(ppLayouts[i], &reflection, i)) {
+      GPUFreeShaderReflection(&reflection);
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
   }
 
   memset(&info, 0, sizeof(info));

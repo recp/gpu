@@ -263,6 +263,155 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
 }
 
 static int
+check_reflection_layout_api(GPUDevice *device, GPUShaderLibrary *library) {
+  const GPUBindGroupLayoutEntry *entries;
+  GPUBindGroupLayout *layouts[2] = {0};
+  GPUBindGroupLayout *smallLayouts[1] = {0};
+  GPUBindGroupLayout *reversedLayouts[2] = {0};
+  GPUPipelineLayout *pipelineLayout;
+  uint32_t count;
+  int ok;
+
+  count = 0u;
+  if (GPUCreateBindGroupLayoutsFromReflection(device, NULL, &count, NULL) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      GPUCreateBindGroupLayoutsFromReflection(device, library, NULL, NULL) !=
+        GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "reflection layout accepted null input\n");
+    return 0;
+  }
+
+  if (GPUCreatePipelineLayoutFromReflection(device,
+                                            NULL,
+                                            0u,
+                                            NULL,
+                                            &pipelineLayout) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      GPUCreatePipelineLayoutFromReflection(device,
+                                            library,
+                                            0u,
+                                            NULL,
+                                            NULL) !=
+        GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "reflection pipeline layout accepted null input\n");
+    return 0;
+  }
+
+  count = 0u;
+  if (GPUCreateBindGroupLayoutsFromReflection(device, library, &count, NULL) !=
+        GPU_OK ||
+      count != 2u) {
+    fprintf(stderr, "reflection layout count query failed\n");
+    return 0;
+  }
+
+  count = 1u;
+  if (GPUCreateBindGroupLayoutsFromReflection(device,
+                                              library,
+                                              &count,
+                                              smallLayouts) !=
+        GPU_ERROR_INSUFFICIENT_CAPACITY ||
+      count != 2u) {
+    fprintf(stderr, "reflection layout capacity validation failed\n");
+    return 0;
+  }
+
+  count = (uint32_t)GPU_ARRAY_LEN(layouts);
+  if (GPUCreateBindGroupLayoutsFromReflection(device, library, &count, layouts) !=
+        GPU_OK ||
+      count != 2u ||
+      !layouts[0] ||
+      !layouts[1]) {
+    fprintf(stderr, "reflection layout fill failed\n");
+    ok = 0;
+    goto cleanup;
+  }
+
+  entries = GPUGetBindGroupLayoutEntries(layouts[0], &count);
+  ok = count == 1u &&
+       layout_has_typed_entry(entries,
+                              count,
+                              GPUBindStageFragment,
+                              GPUBindKindTexture,
+                              GPU_BINDING_SAMPLED_TEXTURE,
+                              0u,
+                              0);
+  if (ok) {
+    entries = GPUGetBindGroupLayoutEntries(layouts[1], &count);
+    ok = count == 2u &&
+         layout_has_typed_entry(entries,
+                                count,
+                                GPUBindStageFragment,
+                                GPUBindKindBuffer,
+                                GPU_BINDING_UNIFORM_BUFFER,
+                                0u,
+                                1) &&
+         layout_has_typed_entry(entries,
+                                count,
+                                GPUBindStageCompute,
+                                GPUBindKindTexture,
+                                GPU_BINDING_STORAGE_TEXTURE,
+                                0u,
+                                0);
+  }
+  if (!ok) {
+    fprintf(stderr, "reflection layouts are not ordered by set index\n");
+    goto cleanup;
+  }
+
+  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
+  if (GPUCreatePipelineLayoutFromReflection(device,
+                                            library,
+                                            1u,
+                                            layouts,
+                                            &pipelineLayout) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      pipelineLayout != NULL) {
+    fprintf(stderr, "reflection pipeline layout accepted too few layouts\n");
+    GPUDestroyPipelineLayout(pipelineLayout);
+    ok = 0;
+    goto cleanup;
+  }
+
+  pipelineLayout = NULL;
+  if (GPUCreatePipelineLayoutFromReflection(device,
+                                            library,
+                                            2u,
+                                            layouts,
+                                            &pipelineLayout) != GPU_OK ||
+      !pipelineLayout) {
+    fprintf(stderr, "reflection pipeline layout rejected ordered layouts\n");
+    ok = 0;
+    goto cleanup;
+  }
+  GPUDestroyPipelineLayout(pipelineLayout);
+  pipelineLayout = NULL;
+
+  reversedLayouts[0] = layouts[1];
+  reversedLayouts[1] = layouts[0];
+  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
+  if (GPUCreatePipelineLayoutFromReflection(device,
+                                            library,
+                                            2u,
+                                            reversedLayouts,
+                                            &pipelineLayout) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      pipelineLayout != NULL) {
+    fprintf(stderr, "reflection pipeline layout accepted reversed layouts\n");
+    GPUDestroyPipelineLayout(pipelineLayout);
+    ok = 0;
+    goto cleanup;
+  }
+
+  ok = 1;
+
+cleanup:
+  GPUDestroyBindGroupLayout(layouts[1]);
+  GPUDestroyBindGroupLayout(layouts[0]);
+  return ok;
+}
+
+static int
 check_canonical_shader_library(GPUDevice *device,
                                const void *bytecode,
                                uint64_t bytecodeSize) {
@@ -308,6 +457,7 @@ check_canonical_shader_library(GPUDevice *device,
                                       1u,
                                       0u,
                                       0) &&
+       check_reflection_layout_api(device, library) &&
        GPUCreateShaderLayout(device, library, &shaderLayout) == GPU_OK &&
        shaderLayout != NULL &&
        check_compute_pipeline_workgroup_size(device,
