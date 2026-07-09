@@ -73,6 +73,29 @@ err:
 
 GPU_HIDE
 void
+dx12_destroyInstance(struct GPUApi * __restrict api,
+                     GPUInstance * __restrict inst) {
+  GPUInstanceDX12 *instDX12;
+
+  GPU__UNUSED(api);
+
+  if (!inst) {
+    return;
+  }
+
+  instDX12 = inst->_priv;
+  if (instDX12) {
+    if (instDX12->dxgiFactory) {
+      instDX12->dxgiFactory->lpVtbl->Release(instDX12->dxgiFactory);
+    }
+    free(instDX12);
+  }
+  free(inst);
+}
+
+GPU_HIDE
+void
 dx12_initInstance(GPUApiInstance *apiInstance) {
   apiInstance->createInstance = dx12_createInstance;
+  apiInstance->destroyInstance = dx12_destroyInstance;
 }

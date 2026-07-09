@@ -36,6 +36,10 @@ GPUResult
 GPUCreateInstance(const GPUInstanceCreateInfo * __restrict info,
                   GPUInstance                ** __restrict outInstance);
 
+GPU_EXPORT
+void
+GPUDestroyInstance(GPUInstance *instance);
+
 #ifdef __cplusplus
 }
 #endif

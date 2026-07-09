@@ -329,6 +329,33 @@ vk_createInstance(GPUApi * __restrict api,
 
 GPU_HIDE
 void
+vk_destroyInstance(GPUApi * __restrict api, GPUInstance * __restrict inst) {
+  GPUInstanceVk *instVk;
+
+  GPU__UNUSED(api);
+
+  if (!inst) {
+    return;
+  }
+
+  instVk = inst->_priv;
+  if (instVk) {
+    if (instVk->DestroyDebugUtilsMessengerEXT && instVk->dbg_messenger) {
+      instVk->DestroyDebugUtilsMessengerEXT(instVk->inst,
+                                            instVk->dbg_messenger,
+                                            NULL);
+    }
+    if (instVk->inst) {
+      vkDestroyInstance(instVk->inst, NULL);
+    }
+    free(instVk);
+  }
+  free(inst);
+}
+
+GPU_HIDE
+void
 vk_initInstance(GPUApiInstance *api) {
   api->createInstance = vk_createInstance;
+  api->destroyInstance = vk_destroyInstance;
 }

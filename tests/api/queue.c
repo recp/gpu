@@ -10,6 +10,7 @@ check_adapter_enumeration(void) {
   GPUNativeSurfaceCreateInfo nativeSurfaceInfo;
   GPUAdapterProperties props;
   GPUInstance *fakeInstance;
+  GPUInstance *instance;
   GPUInstanceCreateInfo instanceInfo;
   GPUSurfaceCreateInfo surfaceInfo;
   GPUSurface *fakeSurface;
@@ -53,6 +54,13 @@ check_adapter_enumeration(void) {
     fprintf(stderr, "instance create accepted unsupported backend\n");
     return 0;
   }
+
+  instance = NULL;
+  if (GPUCreateInstance(NULL, &instance) != GPU_OK || !instance) {
+    fprintf(stderr, "instance create failed\n");
+    return 0;
+  }
+  GPUDestroyInstance(instance);
 
   if (GPUEnumerateAdapters(NULL, NULL, NULL) != GPU_ERROR_INVALID_ARGUMENT ||
       GPUGetAdapterProperties(NULL, &props) != GPU_ERROR_INVALID_ARGUMENT ||

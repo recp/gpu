@@ -38,6 +38,19 @@ mt_createInstance(GPUApi * __restrict api,
 
 GPU_HIDE
 void
+mt_destroyInstance(GPUApi * __restrict api, GPUInstance * __restrict inst) {
+  GPU__UNUSED(api);
+
+  if (!inst) {
+    return;
+  }
+  free(inst->_priv);
+  free(inst);
+}
+
+GPU_HIDE
+void
 mt_initInstance(GPUApiInstance *api) {
   api->createInstance = mt_createInstance;
+  api->destroyInstance = mt_destroyInstance;
 }

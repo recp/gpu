@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "instance_internal.h"
 
 GPU_EXPORT
 GPUResult
@@ -56,4 +57,23 @@ GPUCreateInstance(const GPUInstanceCreateInfo * __restrict info,
   gpuSetActiveGPUApi(api);
 
   return GPU_OK;
+}
+
+GPU_EXPORT
+void
+GPUDestroyInstance(GPUInstance *instance) {
+  GPUApi *api;
+
+  if (!instance) {
+    return;
+  }
+
+  api = gpuActiveGPUApi();
+  if (api && api->instance.destroyInstance) {
+    api->instance.destroyInstance(api, instance);
+    return;
+  }
+
+  free(instance->_priv);
+  free(instance);
 }
