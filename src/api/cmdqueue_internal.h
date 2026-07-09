@@ -14,29 +14,22 @@
  * limitations under the License.
  */
 
-#include "../../common.h"
-#include "../cmdqueue_internal.h"
-#include "../frame_internal.h"
+#ifndef gpu_cmdqueue_internal_h
+#define gpu_cmdqueue_internal_h
 
-GPU_EXPORT
-void
-GPUSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  GPUApi *api;
+#include "../common.h"
 
-  if (!cmdb || cmdb->_submitted || !frame || !frame->drawable) {
-    return;
-  }
+struct GPUCommandQueue {
+  void            *_priv;
+  GPUQueueFlagBits bits;
+};
 
-  if (!(api = gpuActiveGPUApi()))
-    return;
-  if (!api->cmdbuf.presentDrawable)
-    return;
+struct GPUCommandBuffer {
+  void                         *_priv;
+  GPUCommandQueue              *_queue;
+  void                         *_onCompleteSender;
+  GPUCommandBufferCompletionFn  _onComplete;
+  bool                          _submitted;
+};
 
-  api->cmdbuf.presentDrawable(cmdb, frame);
-}
-
-GPU_EXPORT
-void
-GPUPresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  GPUSchedulePresent(cmdb, frame);
-}
+#endif /* gpu_cmdqueue_internal_h */

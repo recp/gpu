@@ -1,4 +1,5 @@
 #include "test.h"
+#include "../../src/api/cmdqueue_internal.h"
 #include "../../src/api/frame_internal.h"
 
 static int

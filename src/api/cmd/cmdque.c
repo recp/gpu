@@ -15,6 +15,7 @@
  */
 
 #include "../../common.h"
+#include "../cmdqueue_internal.h"
 
 #if defined(_WIN32) || defined(WIN32)
 #else

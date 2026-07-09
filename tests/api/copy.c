@@ -1,4 +1,5 @@
 #include "test.h"
+#include "../../src/api/cmdqueue_internal.h"
 
 static int
 check_copy_pass_validation(GPUDevice *device) {

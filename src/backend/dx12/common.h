@@ -18,6 +18,7 @@
 #define dx12_common_h
 
 #include "../common.h"
+#include "../../api/cmdqueue_internal.h"
 #include "../../api/frame_internal.h"
 #include "../../api/surface_internal.h"
 #include "../../api/swapchain_internal.h"

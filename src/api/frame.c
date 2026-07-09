@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "cmdqueue_internal.h"
 #include "frame_internal.h"
 
 GPU_EXPORT

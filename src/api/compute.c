@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "cmdqueue_internal.h"
 #include "compute_internal.h"
 #include "descr/descriptor_internal.h"
 #include "library_internal.h"

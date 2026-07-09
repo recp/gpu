@@ -1,4 +1,5 @@
 #include "test.h"
+#include "../../src/api/cmdqueue_internal.h"
 
 static const char *kRenderPipelineMSL =
   "#include <metal_stdlib>\n"
