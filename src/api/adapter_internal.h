@@ -19,6 +19,8 @@
 
 #include "../common.h"
 
+typedef GPUAdapter GPUPhysicalDevice;
+
 struct GPUAdapter {
   struct GPUAdapter *next;
   GPUInstance       *inst;

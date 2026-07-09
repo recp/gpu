@@ -52,13 +52,23 @@ gpu_validQueueCreateInfos(GPUCommandQueueCreateInfo queCI[], uint32_t nQueCI) {
   return true;
 }
 
+static GPUAdapter*
+gpu_getAvailableAdapters(GPUInstance *inst, uint32_t maxNumberOfItems) {
+  GPUApi *api;
+
+  if (!(api = gpuActiveGPUApi()))
+    return NULL;
+
+  return api->device.getAvailablePhysicalDevicesBy(inst, maxNumberOfItems);
+}
+
 GPU_EXPORT
 GPUResult
 GPUEnumerateAdapters(GPUInstance *inst,
                      uint32_t    *inoutAdapterCount,
                      GPUAdapter **outAdapters) {
-  GPUPhysicalDevice *deviceList;
-  GPUPhysicalDevice *item;
+  GPUAdapter *deviceList;
+  GPUAdapter *item;
   uint32_t capacity;
   uint32_t count;
 
@@ -67,7 +77,7 @@ GPUEnumerateAdapters(GPUInstance *inst,
   }
 
   capacity = *inoutAdapterCount;
-  deviceList = GPUGetAvailablePhysicalDevicesBy(inst, UINT32_MAX);
+  deviceList = gpu_getAvailableAdapters(inst, UINT32_MAX);
   count = 0;
 
   for (item = deviceList; item; item = item->next) {
@@ -120,40 +130,6 @@ GPUCreateSystemDefaultDevice(GPUInstance *inst) {
     return NULL;
 
   return api->device.createSystemDefaultDevice(inst);
-}
-
-GPU_EXPORT
-GPUPhysicalDevice*
-GPUGetAvailablePhysicalDevicesBy(GPUInstance *inst, uint32_t maxNumberOfItems) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return NULL;
-
-  return api->device.getAvailablePhysicalDevicesBy(inst, maxNumberOfItems);
-}
-
-GPU_EXPORT
-GPUPhysicalDevice*
-GPUGetAutoSelectedPhysicalDevice(GPUInstance *inst) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return NULL;
-
-  return api->device.getAutoSelectedPhysicalDevice(inst);
-}
-
-GPU_EXPORT
-GPUPhysicalDevice*
-GPUAutoSelectPhysicalDeviceIn(GPUInstance       * __restrict inst,
-                              GPUPhysicalDevice * __restrict deviceList) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
-    return NULL;
-
-  return api->device.autoSelectPhysicalDeviceIn(inst, deviceList);
 }
 
 GPU_EXPORT
