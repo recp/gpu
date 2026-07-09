@@ -21,6 +21,7 @@
 
 struct GPUCommandQueue {
   void            *_priv;
+  GPUDevice       *_device;
   GPUQueueFlagBits bits;
 };
 

@@ -19,7 +19,14 @@
 static
 GPU_HIDE
 void
-gpu_cmdoncomplete(GPUCommandBuffer * __restrict cmdb, void *mtlCmdb);
+gpu_cmdoncomplete(GPUCommandBuffer * __restrict cmdb,
+                  id<MTLCommandBuffer>        mtlCmdb);
+
+static
+GPU_HIDE
+void
+mt_logCommandBufferError(GPUCommandBuffer * __restrict cmdb,
+                         id<MTLCommandBuffer>        mtlCmdb);
 
 GPU_HIDE
 void
@@ -38,6 +45,7 @@ mt_newCommandQueue(GPUDevice * __restrict device) {
   queMT      = [deviceMT->device newCommandQueue];
   que        = calloc(1, sizeof(*que));
   que->_priv = queMT;
+  que->_device = device;
 
   return que;
 }
@@ -124,7 +132,7 @@ mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
   mcb = (id<MTLCommandBuffer>)cmdb->_priv;
 
   [mcb addCompletedHandler:^(id<MTLCommandBuffer> _Nonnull buffer) {
-    gpu_cmdoncomplete(cmdb, (__bridge void *)buffer);
+    gpu_cmdoncomplete(cmdb, buffer);
   }];
   [mcb commit];
 }
@@ -132,12 +140,38 @@ mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
 static
 GPU_HIDE
 void
-gpu_cmdoncomplete(GPUCommandBuffer * __restrict cmdb, void *mtlCmdb) {
-  GPU__UNUSED(mtlCmdb);
+mt_logCommandBufferError(GPUCommandBuffer * __restrict cmdb,
+                         id<MTLCommandBuffer>        mtlCmdb) {
+  GPUCommandQueue *queue;
+  GPUDevice       *device;
 
+  if (!cmdb || !mtlCmdb || mtlCmdb.status != MTLCommandBufferStatusError) {
+    return;
+  }
+
+  queue = cmdb->_queue;
+  device = queue ? queue->_device : NULL;
+  if (!device || !device->runtimeConfig.enableVerboseLogs) {
+    return;
+  }
+
+  if (mtlCmdb.error) {
+    NSLog(@"GPU Metal command buffer failed: %@", mtlCmdb.error);
+  } else {
+    NSLog(@"GPU Metal command buffer failed");
+  }
+}
+
+static
+GPU_HIDE
+void
+gpu_cmdoncomplete(GPUCommandBuffer * __restrict cmdb,
+                  id<MTLCommandBuffer>        mtlCmdb) {
   if (!cmdb) {
     return;
   }
+
+  mt_logCommandBufferError(cmdb, mtlCmdb);
 
   if (cmdb->_onComplete) {
     cmdb->_onComplete(cmdb->_onCompleteSender, cmdb);
