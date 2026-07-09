@@ -51,23 +51,8 @@ typedef enum GPUTextureViewType {
   GPU_TEXTURE_VIEW_3D = 5
 } GPUTextureViewType;
 
-typedef struct GPUTexture {
-  void *_priv;
-  GPUFormat format;
-  GPUTextureDimension dimension;
-  uint32_t width;
-  uint32_t height;
-  uint32_t depthOrLayers;
-  uint32_t mipLevelCount;
-  uint32_t sampleCount;
-  bool _ownsNative;
-} GPUTexture;
-
-typedef struct GPUTextureView {
-  void *_priv;
-  GPUTexture *_texture;
-  bool _ownsNative;
-} GPUTextureView;
+typedef struct GPUTexture GPUTexture;
+typedef struct GPUTextureView GPUTextureView;
 
 typedef struct GPUTextureCreateInfo {
   GPUChainedStruct chain;

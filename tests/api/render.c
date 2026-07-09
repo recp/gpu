@@ -252,7 +252,7 @@ check_render_pipeline_validation(GPUDevice *device) {
 static int
 check_render_pass_validation(void) {
   GPUCommandBuffer fakeCmdb = {0};
-  GPUTextureView fakeView = {0};
+  GPUTextureView *fakeView = (GPUTextureView *)(uintptr_t)1u;
   GPURenderPassColorAttachment colors[9] = {0};
   GPURenderPassDepthStencilAttachment depthStencil = {0};
   GPURenderPassCreateInfo rp = {0};
@@ -291,7 +291,7 @@ check_render_pass_validation(void) {
     return 0;
   }
 
-  colors[0].view = &fakeView;
+  colors[0].view = fakeView;
   colors[0].loadOp = (GPULoadOp)99;
   colors[0].storeOp = GPU_STORE_OP_STORE;
   if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
@@ -326,7 +326,7 @@ check_render_pass_validation(void) {
     return 0;
   }
 
-  depthStencil.view = &fakeView;
+  depthStencil.view = fakeView;
   depthStencil.depthLoadOp = (GPULoadOp)99;
   depthStencil.depthStoreOp = GPU_STORE_OP_STORE;
   depthStencil.stencilLoadOp = GPU_LOAD_OP_DONT_CARE;

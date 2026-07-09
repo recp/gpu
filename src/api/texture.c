@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "texture_internal.h"
 
 static bool
 gpuIsTextureDimensionValid(GPUTextureDimension dimension) {

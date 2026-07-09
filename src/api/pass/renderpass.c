@@ -15,6 +15,7 @@
  */
 
 #include "../../common.h"
+#include "../texture_internal.h"
 
 #define GPU_RENDER_PASS_MAX_COLOR_ATTACHMENTS 8u
 
