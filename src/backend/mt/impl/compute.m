@@ -27,7 +27,10 @@ typedef struct MTComputePipelineDesc {
 
 static id<MTLComputeCommandEncoder>
 mt_nativeCCE(GPUComputePassEncoder *enc) {
-  return enc ? (__bridge id<MTLComputeCommandEncoder>)enc->_priv : nil;
+  MTComputeEncoder *native;
+
+  native = enc ? enc->_priv : NULL;
+  return native ? native->classic : nil;
 }
 
 static id<MTLBuffer>
@@ -132,13 +135,14 @@ GPU_HIDE
 GPUComputePassEncoder*
 mt_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
   id<MTLComputeCommandEncoder> native;
+  MTComputeEncoder *nativeState;
   GPUComputePassEncoder *enc;
 
   if (!cmdb) {
     return NULL;
   }
 
-  native = [(id<MTLCommandBuffer>)cmdb->_priv computeCommandEncoder];
+  native = [mt_classicCommandBuffer(cmdb) computeCommandEncoder];
   if (!native) {
     return NULL;
   }
@@ -147,12 +151,16 @@ mt_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
   }
 
   enc = calloc(1, sizeof(*enc));
-  if (!enc) {
+  nativeState = calloc(1, sizeof(*nativeState));
+  if (!enc || !nativeState) {
+    free(nativeState);
+    free(enc);
     [native endEncoding];
     return NULL;
   }
 
-  enc->_priv = (__bridge void *)native;
+  nativeState->classic = native;
+  enc->_priv = nativeState;
   enc->_workgroupSize[0] = 1u;
   enc->_workgroupSize[1] = 1u;
   enc->_workgroupSize[2] = 1u;
@@ -249,6 +257,7 @@ GPU_HIDE
 void
 mt_endComputeEncoding(GPUComputePassEncoder *enc) {
   [mt_nativeCCE(enc) endEncoding];
+  free(enc->_priv);
   free(enc);
 }
 

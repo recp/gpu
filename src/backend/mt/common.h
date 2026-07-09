@@ -61,5 +61,39 @@ typedef struct GPUDeviceMT {
   uint32_t          nCreatedQueues;
 } GPUDeviceMT;
 
+typedef struct MTCommandQueue {
+  id<MTLCommandQueue> classic;
+} MTCommandQueue;
+
+typedef struct MTCommandBuffer {
+  id<MTLCommandBuffer> classic;
+} MTCommandBuffer;
+
+typedef struct MTRenderEncoder {
+  id<MTLRenderCommandEncoder> classic;
+} MTRenderEncoder;
+
+typedef struct MTComputeEncoder {
+  id<MTLComputeCommandEncoder> classic;
+} MTComputeEncoder;
+
+static inline MTCommandQueue *
+mt_commandQueue(GPUCommandQueue *queue) {
+  return queue ? queue->_priv : NULL;
+}
+
+static inline MTCommandBuffer *
+mt_commandBuffer(GPUCommandBuffer *cmdb) {
+  return cmdb ? cmdb->_priv : NULL;
+}
+
+static inline id<MTLCommandBuffer>
+mt_classicCommandBuffer(GPUCommandBuffer *cmdb) {
+  MTCommandBuffer *native;
+
+  native = mt_commandBuffer(cmdb);
+  return native ? native->classic : nil;
+}
+
 #endif
 #endif /* metal_common_h */

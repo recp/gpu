@@ -221,7 +221,7 @@ mt_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
     return NULL;
   }
 
-  native = [(id<MTLCommandBuffer>)cmdb->_priv blitCommandEncoder];
+  native = [mt_classicCommandBuffer(cmdb) blitCommandEncoder];
   if (!native) {
     return NULL;
   }

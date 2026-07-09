@@ -19,7 +19,7 @@
 GPU_HIDE
 void
 mt_cmdBufDrawable(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  [(id<MTLCommandBuffer>)cmdb->_priv presentDrawable:(id<CAMetalDrawable>)frame->drawable];
+  [mt_classicCommandBuffer(cmdb) presentDrawable:(id<CAMetalDrawable>)frame->drawable];
 }
 
 static bool
@@ -142,7 +142,7 @@ mt_writeTimestamp(GPUCommandBuffer *cmdb, GPUQuerySet *set, uint32_t queryIndex)
     return;
   }
 
-  blit = [(id<MTLCommandBuffer>)cmdb->_priv blitCommandEncoder];
+  blit = [mt_classicCommandBuffer(cmdb) blitCommandEncoder];
   if (!blit) {
     return;
   }
@@ -180,7 +180,7 @@ mt_resolveQuerySet(GPUCommandBuffer *cmdb,
     return;
   }
 
-  blit = [(id<MTLCommandBuffer>)cmdb->_priv blitCommandEncoder];
+  blit = [mt_classicCommandBuffer(cmdb) blitCommandEncoder];
   if (!blit) {
     return;
   }

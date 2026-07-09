@@ -37,14 +37,27 @@ mt_ccmdbufOnComplete(GPUCommandBuffer * __restrict cmdb,
 GPU_HIDE
 GPUCommandQueue*
 mt_newCommandQueue(GPUDevice * __restrict device) {
-  GPUDeviceMT        *deviceMT;
-  GPUCommandQueue    *que;
-  id<MTLCommandQueue> queMT;
+  GPUDeviceMT     *deviceMT;
+  GPUCommandQueue *que;
+  MTCommandQueue  *native;
 
-  deviceMT   = device->_priv;
-  queMT      = [deviceMT->device newCommandQueue];
-  que        = calloc(1, sizeof(*que));
-  que->_priv = queMT;
+  deviceMT = device->_priv;
+  que = calloc(1, sizeof(*que));
+  native = calloc(1, sizeof(*native));
+  if (!que || !native) {
+    free(native);
+    free(que);
+    return NULL;
+  }
+
+  native->classic = [deviceMT->device newCommandQueue];
+  if (!native->classic) {
+    free(native);
+    free(que);
+    return NULL;
+  }
+
+  que->_priv = native;
   que->_device = device;
 
   return que;
@@ -58,7 +71,10 @@ mt_destroyCommandQueue(GPUCommandQueue * __restrict queue) {
   }
 
   if (queue->_priv) {
-    [(id<MTLCommandQueue>)queue->_priv release];
+    MTCommandQueue *native = mt_commandQueue(queue);
+
+    [native->classic release];
+    free(native);
   }
   free(queue);
 }
@@ -95,15 +111,33 @@ mt_newCommandBuffer(GPUCommandQueue  * __restrict cmdb,
                     const char       * __restrict label,
                     void             * __restrict sender,
                     GPUCommandBufferCompletionFn  oncomplete) {
+  MTCommandQueue  *queue;
   GPUCommandBuffer *cb;
-  id<MTLCommandBuffer> mcb;
-  
-  mcb       = [(id<MTLCommandQueue>)cmdb->_priv commandBuffer];
-  if (label && label[0] != '\0') {
-    mcb.label = [NSString stringWithUTF8String:label];
+  MTCommandBuffer *native;
+
+  queue = mt_commandQueue(cmdb);
+  if (!queue || !queue->classic) {
+    return NULL;
   }
-  cb       = calloc(1, sizeof(*cb));
-  cb->_priv = mcb;
+
+  cb = calloc(1, sizeof(*cb));
+  native = calloc(1, sizeof(*native));
+  if (!cb || !native) {
+    free(native);
+    free(cb);
+    return NULL;
+  }
+
+  native->classic = [queue->classic commandBuffer];
+  if (!native->classic) {
+    free(native);
+    free(cb);
+    return NULL;
+  }
+  if (label && label[0] != '\0') {
+    native->classic.label = [NSString stringWithUTF8String:label];
+  }
+  cb->_priv = native;
   
   if (oncomplete)
     mt_ccmdbufOnComplete(cb, sender, oncomplete);
@@ -133,7 +167,10 @@ mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
     return;
   }
 
-  mcb = (id<MTLCommandBuffer>)cmdb->_priv;
+  mcb = mt_classicCommandBuffer(cmdb);
+  if (!mcb) {
+    return;
+  }
 
   [mcb addCompletedHandler:^(id<MTLCommandBuffer> _Nonnull buffer) {
     gpu_cmdoncomplete(cmdb, buffer);
@@ -181,6 +218,7 @@ gpu_cmdoncomplete(GPUCommandBuffer * __restrict cmdb,
     cmdb->_onComplete(cmdb->_onCompleteSender, cmdb);
   }
 
+  free(cmdb->_priv);
   free(cmdb);
 }
 

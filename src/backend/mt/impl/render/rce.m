@@ -23,7 +23,10 @@ enum {
 
 static id<MTLRenderCommandEncoder>
 mt_nativeRCE(GPURenderCommandEncoder *rce) {
-  return rce ? (__bridge id<MTLRenderCommandEncoder>)rce->_priv : nil;
+  MTRenderEncoder *native;
+
+  native = rce ? rce->_priv : NULL;
+  return native ? native->classic : nil;
 }
 
 static id<MTLBuffer>
@@ -35,9 +38,10 @@ GPU_HIDE
 GPURenderCommandEncoder*
 mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   id<MTLRenderCommandEncoder> native;
+  MTRenderEncoder *nativeState;
   GPURenderCommandEncoder *enc;
 
-  native = [(id<MTLCommandBuffer>)cmdb->_priv renderCommandEncoderWithDescriptor: pass->_priv];
+  native = [mt_classicCommandBuffer(cmdb) renderCommandEncoderWithDescriptor:pass->_priv];
   if (!native)
     return NULL;
   if (pass->label && pass->label[0] != '\0') {
@@ -45,12 +49,16 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   }
 
   enc = calloc(1, sizeof(*enc));
-  if (!enc) {
+  nativeState = calloc(1, sizeof(*nativeState));
+  if (!enc || !nativeState) {
+    free(nativeState);
+    free(enc);
     [native endEncoding];
     return NULL;
   }
 
-  enc->_priv = (__bridge void *)native;
+  nativeState->classic = native;
+  enc->_priv = nativeState;
   enc->_primitiveType = GPUPrimitiveTypeTriangle;
   return enc;
 }
@@ -275,6 +283,7 @@ GPU_HIDE
 void
 mt_endEncoding(GPURenderCommandEncoder *rce) {
   [mt_nativeRCE(rce) endEncoding];
+  free(rce->_priv);
   free(rce);
 }
 
