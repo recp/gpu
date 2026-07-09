@@ -8,8 +8,15 @@ pub struct VSOut {
   uv: float2
 }
 
-kern(8, 8, 1) fill_image(outputImage: texture2d<float, write> #texture(0), gid: uint3 #global_id) {
-  outputImage.write(float4(float(gid.x) / 255.0, float(gid.y) / 255.0, 0.75, 1.0), gid.xy)
+pub struct ComputeParams {
+  tint: float4
+}
+
+kern(8, 8, 1) fill_image(outputImage: texture2d<float, write> #texture(0),
+                         params: ComputeParams #buffer(0) #dynamic_offset,
+                         gid: uint3 #global_id) {
+  let color = float4(float(gid.x) / 255.0, float(gid.y) / 255.0, 0.75, 1.0)
+  outputImage.write(color * params.tint, gid.xy)
 }
 
 vert quad_vs(v: VSIn #stage_in) -> VSOut {

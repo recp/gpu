@@ -1,5 +1,7 @@
 #import <AppKit/AppKit.h>
+#include <math.h>
 #include <stddef.h>
+#include <stdint.h>
 #import <QuartzCore/QuartzCore.h>
 
 #import "../../include/gpu/gpu.h"
@@ -10,6 +12,10 @@ typedef struct QuadVertex {
   float position[4];
   float uv[2];
 } QuadVertex;
+
+typedef struct ComputeParams {
+  float tint[4];
+} ComputeParams;
 
 static const uint32_t kTextureSize = 256;
 static const uint32_t kWorkgroupSize = 8;
@@ -38,11 +44,14 @@ static const QuadVertex kQuadVertices[] = {
   GPUComputePipeline *_computePipeline;
   GPURenderPipeline *_renderPipeline;
   GPUBuffer *_vertexBuffer;
+  GPUBuffer *_computeParamsBuffer;
   GPUTexture *_texture;
   GPUTextureView *_textureView;
   GPUSampler *_sampler;
   GPUBindGroup *_bindGroup;
+  uint32_t _computeParamsOffset;
   NSTimer *_timer;
+  NSTimeInterval _animationStart;
 }
 @end
 
@@ -113,7 +122,7 @@ static const QuadVertex kQuadVertices[] = {
 }
 
 - (BOOL)setupGPU {
-  GPUBindGroupEntry groupEntries[2] = {0};
+  GPUBindGroupEntry groupEntries[3] = {0};
 
   if (!GPUSampleCreateDefaultSurfaceGPU(_window,
                                         _view,
@@ -131,6 +140,34 @@ static const QuadVertex kQuadVertices[] = {
                         (GPUShaderLibrary **)&_library,
                         &_shaderLayout)) {
     return NO;
+  }
+  if (!_shaderLayout ||
+      _shaderLayout->bindGroupLayoutCount != 1u ||
+      !_shaderLayout->bindGroupLayouts ||
+      !_shaderLayout->bindGroupLayouts[0]) {
+    NSLog(@"GPU: unexpected compute shader layout");
+    return NO;
+  }
+  {
+    const GPUBindGroupLayoutEntry *entries;
+    uint32_t entryCount = 0u;
+    BOOL sawDynamicUniform = NO;
+
+    entries = GPUGetBindGroupLayoutEntries(_shaderLayout->bindGroupLayouts[0],
+                                           &entryCount);
+    for (uint32_t i = 0; entries && i < entryCount; i++) {
+      if (entries[i].stage == GPUBindStageCompute &&
+          entries[i].binding == 0u &&
+          entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER &&
+          entries[i].hasDynamicOffset) {
+        sawDynamicUniform = YES;
+        break;
+      }
+    }
+    if (!sawDynamicUniform) {
+      NSLog(@"GPU: compute uniform reflection is not dynamic-offset capable");
+      return NO;
+    }
   }
 
   GPUComputePipelineCreateInfo computeInfo = {
@@ -224,10 +261,40 @@ static const QuadVertex kQuadVertices[] = {
     return NO;
   }
 
+  GPUTransientAllocatorConfig transientInfo = {
+    .chain = { .sType = GPU_STRUCTURE_TYPE_TRANSIENT_ALLOCATOR_CONFIG,
+               .structSize = sizeof(GPUTransientAllocatorConfig) },
+    .ringBytesPerFrame = 256,
+    .framesInFlight = 3,
+    .chunkBytes = 256,
+    .allowChunkFallback = true
+  };
+  if (GPUConfigureTransientAllocator(_device, &transientInfo) != GPU_OK) {
+    NSLog(@"GPU: failed to configure compute transient uniforms");
+    return NO;
+  }
+
+  GPUTransientBufferSlice initialParamsSlice = {0};
+  if (GPUAllocateTransientBuffer(_device,
+                                 GPU_BUFFER_USAGE_UNIFORM,
+                                 sizeof(ComputeParams),
+                                 256,
+                                 &initialParamsSlice) != GPU_OK ||
+      !initialParamsSlice.buffer) {
+    NSLog(@"GPU: failed to allocate compute transient uniform slice");
+    return NO;
+  }
+  _computeParamsBuffer = initialParamsSlice.buffer;
+
   groupEntries[0].binding = 0;
   groupEntries[0].textureView = _textureView;
   groupEntries[1].binding = 0;
   groupEntries[1].sampler = _sampler;
+  groupEntries[2].binding = 0;
+  groupEntries[2].bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  groupEntries[2].buffer.buffer = _computeParamsBuffer;
+  groupEntries[2].buffer.offset = 0;
+  groupEntries[2].buffer.size = sizeof(ComputeParams);
 
   GPUBindGroupCreateInfo set0Info = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
@@ -242,6 +309,34 @@ static const QuadVertex kQuadVertices[] = {
     return NO;
   }
 
+  return YES;
+}
+
+- (BOOL)updateComputeParams {
+  ComputeParams params;
+  GPUTransientBufferSlice slice = {0};
+  float time;
+
+  time = (float)(CACurrentMediaTime() - _animationStart);
+  params.tint[0] = 0.75f + 0.25f * sinf(time * 1.2f);
+  params.tint[1] = 0.75f + 0.25f * sinf(time * 1.7f + 2.0f);
+  params.tint[2] = 0.75f + 0.25f * sinf(time * 1.4f + 4.0f);
+  params.tint[3] = 1.0f;
+
+  if (GPUAllocateTransientBuffer(_device,
+                                 GPU_BUFFER_USAGE_UNIFORM,
+                                 sizeof(params),
+                                 256,
+                                 &slice) != GPU_OK ||
+      slice.buffer != _computeParamsBuffer ||
+      !slice.cpuPtr ||
+      slice.offset > UINT32_MAX) {
+    NSLog(@"GPU: failed to allocate compute frame uniform slice");
+    return NO;
+  }
+
+  _computeParamsOffset = (uint32_t)slice.offset;
+  *(ComputeParams *)slice.cpuPtr = params;
   return YES;
 }
 
@@ -268,8 +363,11 @@ static const QuadVertex kQuadVertices[] = {
   if (!compute) {
     goto cleanup;
   }
+  if (![self updateComputeParams]) {
+    goto cleanup;
+  }
   GPUBindComputePipeline(compute, _computePipeline);
-  GPUBindComputeGroup(compute, 0, _bindGroup, 0, NULL);
+  GPUBindComputeGroup(compute, 0, _bindGroup, 1, &_computeParamsOffset);
   GPUDispatch(compute,
               (kTextureSize + kWorkgroupSize - 1u) / kWorkgroupSize,
               (kTextureSize + kWorkgroupSize - 1u) / kWorkgroupSize,
@@ -299,7 +397,7 @@ static const QuadVertex kQuadVertices[] = {
 
   GPUBindRenderPipeline(render, _renderPipeline);
   GPUBindVertexBuffers(render, 0, 1, &vertexBuffer);
-  GPUBindRenderGroup(render, 0, _bindGroup, 0, NULL);
+  GPUBindRenderGroup(render, 0, _bindGroup, 1, &_computeParamsOffset);
   GPUDraw(render, 6, 1, 0, 0);
   GPUEndRenderPass(render);
   render = NULL;
@@ -350,6 +448,7 @@ cleanup:
     GPUDestroyTexture(_texture);
     _texture = NULL;
   }
+  _computeParamsBuffer = NULL;
   if (_vertexBuffer) {
     GPUDestroyBuffer(_vertexBuffer);
     _vertexBuffer = NULL;
@@ -390,6 +489,7 @@ cleanup:
     return;
   }
 
+  _animationStart = CACurrentMediaTime();
   _timer = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
                                    target:self
                                  selector:@selector(tick:)
