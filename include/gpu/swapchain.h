@@ -28,11 +28,7 @@ extern "C" {
 typedef struct GPUDevice GPUDevice;
 struct GPUSurface;
 
-typedef struct GPUSwapChain {
-  void *_priv;
-  void *target; /* draw target */
-  float backingScaleFactor;
-} GPUSwapChain;
+typedef struct GPUSwapChain GPUSwapChain;
 
 typedef GPUSwapChain GPUSwapchain;
 

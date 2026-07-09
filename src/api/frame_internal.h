@@ -14,28 +14,16 @@
  * limitations under the License.
  */
 
-#include "../../common.h"
-#include "../frame_internal.h"
+#ifndef gpu_frame_internal_h
+#define gpu_frame_internal_h
 
-GPU_EXPORT
-void
-GPUSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  GPUApi *api;
+#include "../common.h"
 
-  if (!cmdb || cmdb->_submitted || !frame || !frame->drawable) {
-    return;
-  }
+struct GPUFrame {
+  void           *_priv;
+  GPUTexture     *target;
+  GPUTextureView *targetView;
+  void           *drawable;
+};
 
-  if (!(api = gpuActiveGPUApi()))
-    return;
-  if (!api->cmdbuf.presentDrawable)
-    return;
-
-  api->cmdbuf.presentDrawable(cmdb, frame);
-}
-
-GPU_EXPORT
-void
-GPUPresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  GPUSchedulePresent(cmdb, frame);
-}
+#endif /* gpu_frame_internal_h */

@@ -1,4 +1,5 @@
 #include "test.h"
+#include "../../src/api/frame_internal.h"
 
 static int
 check_fence_create_validation(GPUDevice *device) {

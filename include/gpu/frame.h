@@ -26,12 +26,7 @@ extern "C" {
 typedef struct GPUSwapChain GPUSwapChain;
 typedef struct GPUSwapChain GPUSwapchain;
 
-typedef struct GPUFrame {
-  void           *_priv;
-  GPUTexture     *target;
-  GPUTextureView *targetView;
-  void           *drawable;
-} GPUFrame;
+typedef struct GPUFrame GPUFrame;
 
 GPU_EXPORT
 GPUFrame*

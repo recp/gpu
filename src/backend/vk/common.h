@@ -18,7 +18,9 @@
 #define vk_common_h
 
 #include "../common.h"
+#include "../../api/frame_internal.h"
 #include "../../api/surface_internal.h"
+#include "../../api/swapchain_internal.h"
 #include <stdarg.h>
 #include <assert.h>
 #include <inttypes.h>

@@ -14,28 +14,15 @@
  * limitations under the License.
  */
 
-#include "../../common.h"
-#include "../frame_internal.h"
+#ifndef gpu_swapchain_internal_h
+#define gpu_swapchain_internal_h
 
-GPU_EXPORT
-void
-GPUSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  GPUApi *api;
+#include "../common.h"
 
-  if (!cmdb || cmdb->_submitted || !frame || !frame->drawable) {
-    return;
-  }
+struct GPUSwapChain {
+  void *_priv;
+  void *target;
+  float backingScaleFactor;
+};
 
-  if (!(api = gpuActiveGPUApi()))
-    return;
-  if (!api->cmdbuf.presentDrawable)
-    return;
-
-  api->cmdbuf.presentDrawable(cmdb, frame);
-}
-
-GPU_EXPORT
-void
-GPUPresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  GPUSchedulePresent(cmdb, frame);
-}
+#endif /* gpu_swapchain_internal_h */

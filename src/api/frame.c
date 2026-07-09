@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "frame_internal.h"
 
 GPU_EXPORT
 GPUFrame*
