@@ -50,6 +50,10 @@ static uint32_t gRenderDrawCalls;
 static uint32_t gRenderDrawIndexedCalls;
 static uint32_t gRenderDrawIndirectCalls;
 static uint32_t gRenderDrawIndexedIndirectCalls;
+static uint32_t gRenderViewportCalls;
+static uint32_t gRenderScissorCalls;
+static uint32_t gRenderBlendCalls;
+static uint32_t gRenderStencilCalls;
 
 static void
 count_draw_primitives(GPURenderCommandEncoder *rce,
@@ -103,6 +107,34 @@ count_draw_indexed_indirect(GPURenderCommandEncoder *rce,
   (void)argsBuffer;
   (void)argsOffset;
   gRenderDrawIndexedIndirectCalls++;
+}
+
+static void
+count_viewport(GPURenderCommandEncoder *rce, const GPUViewport *viewport) {
+  (void)rce;
+  (void)viewport;
+  gRenderViewportCalls++;
+}
+
+static void
+count_scissor(GPURenderCommandEncoder *rce, const GPUScissorRect *scissor) {
+  (void)rce;
+  (void)scissor;
+  gRenderScissorCalls++;
+}
+
+static void
+count_blend_constant(GPURenderCommandEncoder *rce, const float rgba[4]) {
+  (void)rce;
+  (void)rgba;
+  gRenderBlendCalls++;
+}
+
+static void
+count_stencil_reference(GPURenderCommandEncoder *rce, uint32_t reference) {
+  (void)rce;
+  (void)reference;
+  gRenderStencilCalls++;
 }
 
 static int
@@ -1373,6 +1405,100 @@ cleanup:
 }
 
 static int
+check_dynamic_state_validation_calls(void) {
+  GPUApi *api;
+  void (*oldViewport)(GPURenderCommandEncoder *, const GPUViewport *);
+  void (*oldScissor)(GPURenderCommandEncoder *, const GPUScissorRect *);
+  void (*oldBlend)(GPURenderCommandEncoder *, const float[4]);
+  void (*oldStencil)(GPURenderCommandEncoder *, uint32_t);
+  GPURenderPassEncoder pass = {0};
+  GPURenderPassEncoder endedPass = {0};
+  GPUDynamicStateApplyInfo info = {0};
+  int ok = 0;
+
+  api = gpuActiveGPUApi();
+  if (!api) {
+    fprintf(stderr, "dynamic state validation could not get active api\n");
+    return 0;
+  }
+
+  oldViewport = api->rce.viewport;
+  oldScissor = api->rce.scissor;
+  oldBlend = api->rce.blendConstant;
+  oldStencil = api->rce.stencilReference;
+  api->rce.viewport = count_viewport;
+  api->rce.scissor = count_scissor;
+  api->rce.blendConstant = count_blend_constant;
+  api->rce.stencilReference = count_stencil_reference;
+
+  gRenderViewportCalls = 0u;
+  gRenderScissorCalls = 0u;
+  gRenderBlendCalls = 0u;
+  gRenderStencilCalls = 0u;
+
+  GPUApplyDynamicState(NULL, &info);
+  GPUApplyDynamicState(&pass, NULL);
+
+  info.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  info.chain.structSize = sizeof(info);
+  info.mask = GPU_DYNAMIC_STATE_VIEWPORT_BIT |
+              GPU_DYNAMIC_STATE_SCISSOR_BIT |
+              GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT |
+              GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
+  GPUApplyDynamicState(&pass, &info);
+
+  info.chain.sType = GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO;
+  info.chain.structSize = (uint32_t)(sizeof(info) - 1u);
+  GPUApplyDynamicState(&pass, &info);
+
+  endedPass._ended = true;
+  info.chain.structSize = sizeof(info);
+  GPUApplyDynamicState(&endedPass, &info);
+
+  if (gRenderViewportCalls != 0u ||
+      gRenderScissorCalls != 0u ||
+      gRenderBlendCalls != 0u ||
+      gRenderStencilCalls != 0u) {
+    fprintf(stderr, "dynamic state validation called backend for invalid input\n");
+    goto cleanup;
+  }
+
+  info.chain.sType = GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO;
+  info.chain.structSize = sizeof(info);
+  info.mask = 0u;
+  GPUApplyDynamicState(&pass, &info);
+  if (gRenderViewportCalls != 0u ||
+      gRenderScissorCalls != 0u ||
+      gRenderBlendCalls != 0u ||
+      gRenderStencilCalls != 0u) {
+    fprintf(stderr, "dynamic state validation called backend for empty mask\n");
+    goto cleanup;
+  }
+
+  info.mask = GPU_DYNAMIC_STATE_VIEWPORT_BIT |
+              GPU_DYNAMIC_STATE_SCISSOR_BIT |
+              GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT |
+              GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
+  GPUApplyDynamicState(&pass, &info);
+  if (gRenderViewportCalls != 1u ||
+      gRenderScissorCalls != 1u ||
+      gRenderBlendCalls != 1u ||
+      gRenderStencilCalls != 1u) {
+    fprintf(stderr, "dynamic state validation did not apply selected state\n");
+    goto cleanup;
+  }
+
+  ok = 1;
+
+cleanup:
+  api->rce.viewport = oldViewport;
+  api->rce.scissor = oldScissor;
+  api->rce.blendConstant = oldBlend;
+  api->rce.stencilReference = oldStencil;
+  return ok;
+}
+
+static int
 check_render_encoder_validation(void) {
   GPURenderPassEncoder pass = {0};
   GPURenderPassEncoder endedPass = {0};
@@ -1527,5 +1653,6 @@ gpu_test_render(GPUDevice *device) {
          check_render_encoder_validation() &&
          check_render_pipeline_validation(device) &&
          check_render_draw_validation_calls(device) &&
+         check_dynamic_state_validation_calls() &&
          check_render_readback(device);
 }
