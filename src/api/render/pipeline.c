@@ -273,6 +273,7 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
 
   gpuRecordPipelineCompile(device, info->cache);
   free(state);
+  pipeline->_layout = info->layout;
   pipeline->_colorTargetCount = info->colorTargetCount;
   for (i = 0; i < info->colorTargetCount; i++)
     pipeline->_colorTargetFormats[i] = info->pColorTargets[i].format;

@@ -24,6 +24,8 @@ extern "C" {
 #include "../gpu.h"
 
 typedef struct GPUComputePipelineState GPUComputePipelineState;
+typedef struct GPUPipelineLayout GPUPipelineLayout;
+typedef struct GPUBindGroupLayout GPUBindGroupLayout;
 
 struct GPUComputePassEncoder {
   void *_priv;
@@ -31,6 +33,8 @@ struct GPUComputePassEncoder {
   uint32_t _workgroupSize[3];
   bool _hasPipeline;
   bool _ended;
+  GPUPipelineLayout *_pipelineLayout;
+  GPUBindGroupLayout *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
   uint32_t _pushConstantSizeBytes;
   GPUShaderStageFlags _pushConstantStages;
   uint8_t _pushConstants[4096];

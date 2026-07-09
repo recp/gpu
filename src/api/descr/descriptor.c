@@ -88,6 +88,33 @@ gpuGetPipelineLayoutPushConstants(GPUPipelineLayout *layout,
   }
 }
 
+GPU_HIDE
+GPUBindGroupLayout *
+gpuBindGroupGetLayout(GPUBindGroup *group) {
+  GPUBindGroupPriv *priv;
+
+  priv = gpu_groupPriv(group);
+  return priv ? priv->layout : NULL;
+}
+
+GPU_HIDE
+int
+gpuPipelineLayoutAcceptsBindGroup(GPUPipelineLayout *pipelineLayout,
+                                  uint32_t setIndex,
+                                  GPUBindGroup *group) {
+  GPUPipelineLayoutPriv *pipelinePriv;
+  GPUBindGroupLayout *groupLayout;
+
+  pipelinePriv = gpu_pipelineLayoutPriv(pipelineLayout);
+  groupLayout = gpuBindGroupGetLayout(group);
+  if (!pipelinePriv || !groupLayout ||
+      setIndex >= pipelinePriv->bindGroupLayoutCount) {
+    return 0;
+  }
+
+  return pipelinePriv->bindGroupLayouts[setIndex] == groupLayout;
+}
+
 static int
 gpu_bindStageIsValid(GPUBindStage stage);
 
@@ -1252,16 +1279,20 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
                    const uint32_t *pDynamicOffsets) {
   GPUBindRenderContext ctx;
 
-  if (!pass || pass->_ended || setIndex != 0 || !group) {
+  if (!pass || pass->_ended || setIndex != 0 || !group ||
+      setIndex >= GPU_ENCODER_MAX_BIND_GROUPS ||
+      !gpuPipelineLayoutAcceptsBindGroup(pass->_pipelineLayout, setIndex, group)) {
     return;
   }
 
   ctx.pass = pass;
-  gpuForEachBindGroupBindingWithDynamicOffsets(group,
-                                               dynamicOffsetCount,
-                                               pDynamicOffsets,
-                                               gpuBindRenderBinding,
-                                               &ctx);
+  if (gpuForEachBindGroupBindingWithDynamicOffsets(group,
+                                                   dynamicOffsetCount,
+                                                   pDynamicOffsets,
+                                                   gpuBindRenderBinding,
+                                                   &ctx)) {
+    pass->_boundGroupLayouts[setIndex] = gpuBindGroupGetLayout(group);
+  }
 }
 
 GPU_HIDE

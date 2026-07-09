@@ -130,6 +130,7 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
     state->workgroupSize[2] = 1u;
   }
   gpuRecordPipelineCompile(device, info->cache);
+  pipeline->_layout = info->layout;
   gpuGetPipelineLayoutPushConstants(info->layout,
                                     &pipeline->_pushConstantSizeBytes,
                                     &pipeline->_pushConstantStages);
@@ -195,6 +196,7 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
   state = pipeline->_state;
   api->compute.setComputePipelineState(pass, state);
   pass->_hasPipeline = true;
+  pass->_pipelineLayout = pipeline->_layout;
   pass->_pushConstantSizeBytes = pipeline->_pushConstantSizeBytes;
   pass->_pushConstantStages = pipeline->_pushConstantStages & GPU_SHADER_STAGE_COMPUTE_BIT;
   if (pass->_pushConstantSizeBytes > 0u) {
@@ -294,16 +296,20 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
   GPUBindComputeContext ctx;
 
   if (!pass || pass->_ended ||
-      setIndex != 0 || !bindGroup) {
+      setIndex != 0 || !bindGroup ||
+      setIndex >= GPU_ENCODER_MAX_BIND_GROUPS ||
+      !gpuPipelineLayoutAcceptsBindGroup(pass->_pipelineLayout, setIndex, bindGroup)) {
     return;
   }
 
   ctx.pass = pass;
-  gpuForEachBindGroupBindingWithDynamicOffsets(bindGroup,
-                                               dynamicOffsetCount,
-                                               pDynamicOffsets,
-                                               gpuBindComputeBinding,
-                                               &ctx);
+  if (gpuForEachBindGroupBindingWithDynamicOffsets(bindGroup,
+                                                   dynamicOffsetCount,
+                                                   pDynamicOffsets,
+                                                   gpuBindComputeBinding,
+                                                   &ctx)) {
+    pass->_boundGroupLayouts[setIndex] = gpuBindGroupGetLayout(bindGroup);
+  }
 }
 
 GPU_EXPORT

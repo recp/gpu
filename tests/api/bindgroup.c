@@ -16,6 +16,93 @@ valid_sampler_desc(void) {
 }
 
 static int
+check_pipeline_layout_bind_validation(GPUDevice *device,
+                                      const GPUBindGroupLayoutCreateInfo *layoutInfo,
+                                      GPUBindGroupLayout *layout,
+                                      GPUPipelineLayout *pipelineLayout) {
+  GPUBindGroupCreateInfo groupInfo = {0};
+  GPUPipelineLayoutCreateInfo otherPipelineInfo = {0};
+  GPUBindGroupLayout *otherLayout = NULL;
+  GPUBindGroupLayout *otherLayouts[1];
+  GPUPipelineLayout *otherPipelineLayout = NULL;
+  GPUBindGroup *group = NULL;
+  GPURenderPassEncoder renderPass = {0};
+  GPUComputePassEncoder computePass = {0};
+  uint32_t dynamicOffset = 0u;
+
+  if (GPUCreateBindGroupLayout(device, layoutInfo, &otherLayout) != GPU_OK ||
+      !otherLayout) {
+    fprintf(stderr, "bind compatibility setup failed to create second layout\n");
+    goto fail;
+  }
+
+  otherLayouts[0] = otherLayout;
+  otherPipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  otherPipelineInfo.chain.structSize = sizeof(otherPipelineInfo);
+  otherPipelineInfo.bindGroupLayoutCount = 1u;
+  otherPipelineInfo.ppBindGroupLayouts = otherLayouts;
+  if (GPUCreatePipelineLayout(device,
+                              &otherPipelineInfo,
+                              &otherPipelineLayout) != GPU_OK ||
+      !otherPipelineLayout) {
+    fprintf(stderr, "bind compatibility setup failed to create second pipeline layout\n");
+    goto fail;
+  }
+
+  groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.layout = layout;
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
+    fprintf(stderr, "bind compatibility setup failed to create group\n");
+    goto fail;
+  }
+
+  renderPass._pipelineLayout = otherPipelineLayout;
+  GPUBindRenderGroup(&renderPass, 0u, group, 0u, NULL);
+  if (renderPass._boundGroupLayouts[0]) {
+    fprintf(stderr, "render bind accepted group from wrong pipeline layout\n");
+    goto fail;
+  }
+
+  renderPass._pipelineLayout = pipelineLayout;
+  GPUBindRenderGroup(&renderPass, 0u, group, 1u, &dynamicOffset);
+  if (renderPass._boundGroupLayouts[0]) {
+    fprintf(stderr, "render bind accepted wrong dynamic offset count\n");
+    goto fail;
+  }
+  GPUBindRenderGroup(&renderPass, 0u, group, 0u, NULL);
+  if (renderPass._boundGroupLayouts[0] != layout) {
+    fprintf(stderr, "render bind rejected compatible pipeline layout\n");
+    goto fail;
+  }
+
+  computePass._pipelineLayout = otherPipelineLayout;
+  GPUBindComputeGroup(&computePass, 0u, group, 0u, NULL);
+  if (computePass._boundGroupLayouts[0]) {
+    fprintf(stderr, "compute bind accepted group from wrong pipeline layout\n");
+    goto fail;
+  }
+
+  computePass._pipelineLayout = pipelineLayout;
+  GPUBindComputeGroup(&computePass, 0u, group, 0u, NULL);
+  if (computePass._boundGroupLayouts[0] != layout) {
+    fprintf(stderr, "compute bind rejected compatible pipeline layout\n");
+    goto fail;
+  }
+
+  GPUDestroyBindGroup(group);
+  GPUDestroyPipelineLayout(otherPipelineLayout);
+  GPUDestroyBindGroupLayout(otherLayout);
+  return 1;
+
+fail:
+  GPUDestroyBindGroup(group);
+  GPUDestroyPipelineLayout(otherPipelineLayout);
+  GPUDestroyBindGroupLayout(otherLayout);
+  return 0;
+}
+
+static int
 check_bind_group_layout_validation(GPUDevice *device) {
   unsigned char fakeSamplerStorage;
   GPUBindGroupLayoutEntry entry;
@@ -281,6 +368,14 @@ check_bind_group_layout_validation(GPUDevice *device) {
   if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_OK ||
       !pipelineLayout) {
     fprintf(stderr, "pipeline layout rejected valid bind group layout\n");
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+  if (!check_pipeline_layout_bind_validation(device,
+                                             &layoutInfo,
+                                             layout,
+                                             pipelineLayout)) {
+    GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyBindGroupLayout(layout);
     return 0;
   }

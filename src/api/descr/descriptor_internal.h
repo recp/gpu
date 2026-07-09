@@ -66,4 +66,14 @@ gpuGetPipelineLayoutPushConstants(GPUPipelineLayout *layout,
                                   uint32_t *outSizeBytes,
                                   GPUShaderStageFlags *outStages);
 
+GPU_HIDE
+int
+gpuPipelineLayoutAcceptsBindGroup(GPUPipelineLayout *pipelineLayout,
+                                  uint32_t setIndex,
+                                  GPUBindGroup *group);
+
+GPU_HIDE
+GPUBindGroupLayout *
+gpuBindGroupGetLayout(GPUBindGroup *group);
+
 #endif /* gpu_descriptor_internal_h */

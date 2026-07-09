@@ -158,6 +158,7 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
   state._priv = pipeline->_state;
   api->rce.setRenderPipelineState(pass, &state);
   pass->_hasPipeline = true;
+  pass->_pipelineLayout = pipeline->_layout;
   pass->_primitiveType = gpu_primitiveTypeFromTopology(pipeline->_primitiveTopology);
   pass->_pushConstantSizeBytes = pipeline->_pushConstantSizeBytes;
   pass->_pushConstantStages = pipeline->_pushConstantStages &

@@ -50,6 +50,10 @@ extern "C" {
 
 #define GPU_ARRAY_LEN(ARR) (sizeof(ARR) / sizeof(ARR[0]))
 
+enum {
+  GPU_ENCODER_MAX_BIND_GROUPS = 4u
+};
+
 #define GPU_STRINGIFY(...)  #__VA_ARGS__
 #define GPU_STRINGIFY2(x)   GPU_STRINGIFY(x)
 

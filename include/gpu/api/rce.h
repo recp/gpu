@@ -25,6 +25,8 @@ extern "C" {
 
 typedef struct GPURenderPipelineState GPURenderPipelineState;
 typedef struct GPURenderPassDesc GPURenderPassDesc;
+typedef struct GPUPipelineLayout GPUPipelineLayout;
+typedef struct GPUBindGroupLayout GPUBindGroupLayout;
 
 enum {
   GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS = 8u
@@ -40,6 +42,8 @@ struct GPURenderCommandEncoder {
   bool              _hasIndexBuffer;
   bool              _hasPipeline;
   bool              _ended;
+  GPUPipelineLayout *_pipelineLayout;
+  GPUBindGroupLayout *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
   uint32_t          _colorAttachmentCount;
   GPUFormat         _colorAttachmentFormats[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   uint32_t          _colorAttachmentSampleCounts[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
