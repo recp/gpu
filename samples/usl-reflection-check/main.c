@@ -88,7 +88,8 @@ static int
 reflection_has_resource(const GPUShaderReflection *reflection,
                         GPUBindingType bindingType,
                         GPUShaderStageFlags visibility,
-                        uint32_t binding) {
+                        uint32_t binding,
+                        int hasDynamicOffset) {
   if (!reflection || (!reflection->pResources && reflection->resourceCount > 0u)) {
     return 0;
   }
@@ -99,7 +100,8 @@ reflection_has_resource(const GPUShaderReflection *reflection,
         item->binding == binding &&
         item->bindingType == bindingType &&
         item->visibility == visibility &&
-        item->arrayCount == 1u) {
+        item->arrayCount == 1u &&
+        (item->hasDynamicOffset ? 1 : 0) == (hasDynamicOffset ? 1 : 0)) {
       return 1;
     }
   }
@@ -112,7 +114,8 @@ layout_has_entry(const GPUBindGroupLayoutEntry *entries,
                  uint32_t count,
                  GPUBindingType bindingType,
                  GPUShaderStageFlags visibility,
-                 uint32_t binding) {
+                 uint32_t binding,
+                 int hasDynamicOffset) {
   if (!entries && count > 0u) {
     return 0;
   }
@@ -121,7 +124,8 @@ layout_has_entry(const GPUBindGroupLayoutEntry *entries,
     if (entries[i].binding == binding &&
         entries[i].bindingType == bindingType &&
         entries[i].visibility == visibility &&
-        entries[i].arrayCount == 1u) {
+        entries[i].arrayCount == 1u &&
+        (entries[i].hasDynamicOffset ? 1 : 0) == (hasDynamicOffset ? 1 : 0)) {
       return 1;
     }
   }
@@ -175,7 +179,8 @@ check_layout_from_reflection(GPUDevice *device,
                           layoutEntryCount,
                           resource->bindingType,
                           resource->visibility,
-                          resource->binding);
+                          resource->binding,
+                          resource->hasDynamicOffset);
   }
 
   rc = GPUCreatePipelineLayoutFromReflection(device,
@@ -225,20 +230,24 @@ check_shader_artifact(GPUDevice *device,
     ok = reflection_has_resource(&reflection,
                                  GPU_BINDING_STORAGE_BUFFER,
                                  GPU_SHADER_STAGE_COMPUTE_BIT,
-                                 0u);
+                                 0u,
+                                 0);
   } else if (ok) {
     ok = reflection_has_resource(&reflection,
                                  GPU_BINDING_SAMPLED_TEXTURE,
                                  GPU_SHADER_STAGE_FRAGMENT_BIT,
-                                 0u) &&
+                                 0u,
+                                 0) &&
          reflection_has_resource(&reflection,
                                  GPU_BINDING_UNIFORM_BUFFER,
                                  GPU_SHADER_STAGE_FRAGMENT_BIT,
-                                 0u) &&
+                                 0u,
+                                 1) &&
          reflection_has_resource(&reflection,
                                  GPU_BINDING_STORAGE_TEXTURE,
                                  GPU_SHADER_STAGE_COMPUTE_BIT,
-                                 0u) &&
+                                 0u,
+                                 0) &&
          GPUShaderFunction(library, "reflect_vs") != NULL &&
          GPUShaderFunction(library, "reflect_fs") != NULL &&
          GPUShaderFunction(library, "reflect_cs") != NULL &&

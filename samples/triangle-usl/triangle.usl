@@ -10,6 +10,6 @@ vert tri_vs(v: VSIn #stage_in) -> float4 {
   return float4(v.position, 0.0, 1.0)
 }
 
-frag tri_fs(uniforms: FragmentUniforms #buffer(0)) -> float4 {
+frag tri_fs(uniforms: FragmentUniforms #buffer(0) #dynamic_offset) -> float4 {
   return uniforms.tint
 }

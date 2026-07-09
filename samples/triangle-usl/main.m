@@ -1,5 +1,6 @@
 #import <AppKit/AppKit.h>
 #include <math.h>
+#include <stdint.h>
 #include <string.h>
 #import <QuartzCore/QuartzCore.h>
 
@@ -37,6 +38,7 @@ static const TriangleVertex kTriangleVertices[] = {
   GPUBuffer *_vertexBuffer;
   GPUBuffer *_fragmentUniformBuffer;
   GPUBindGroup *_fragmentGroup;
+  uint32_t _fragmentUniformOffset;
   NSTimer *_timer;
   NSTimeInterval _animationStart;
 }
@@ -68,6 +70,33 @@ static const TriangleVertex kTriangleVertices[] = {
                         (GPUShaderLibrary **)&_library,
                         &_shaderLayout)) {
     return NO;
+  }
+  if (!_shaderLayout ||
+      _shaderLayout->bindGroupLayoutCount != 1u ||
+      !_shaderLayout->bindGroupLayouts ||
+      !_shaderLayout->bindGroupLayouts[0]) {
+    NSLog(@"GPU: unexpected triangle shader layout");
+    return NO;
+  }
+  {
+    const GPUBindGroupLayoutEntry *entries;
+    uint32_t entryCount = 0u;
+    BOOL sawDynamicUniform = NO;
+
+    entries = GPUGetBindGroupLayoutEntries(_shaderLayout->bindGroupLayouts[0],
+                                           &entryCount);
+    for (uint32_t i = 0; entries && i < entryCount; i++) {
+      if (entries[i].binding == 0u &&
+          entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER &&
+          entries[i].hasDynamicOffset) {
+        sawDynamicUniform = YES;
+        break;
+      }
+    }
+    if (!sawDynamicUniform) {
+      NSLog(@"GPU: triangle uniform reflection is not dynamic-offset capable");
+      return NO;
+    }
   }
 
   GPUVertexAttribute vertexAttrs[] = {
@@ -147,7 +176,7 @@ static const TriangleVertex kTriangleVertices[] = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_TRANSIENT_ALLOCATOR_CONFIG,
                .structSize = sizeof(GPUTransientAllocatorConfig) },
     .ringBytesPerFrame = 256,
-    .framesInFlight = 1,
+    .framesInFlight = 3,
     .chunkBytes = 256,
     .allowChunkFallback = true
   };
@@ -162,8 +191,7 @@ static const TriangleVertex kTriangleVertices[] = {
                                  sizeof(FragmentUniforms),
                                  256,
                                  &initialUniformSlice) != GPU_OK ||
-      !initialUniformSlice.buffer ||
-      initialUniformSlice.offset != 0) {
+      !initialUniformSlice.buffer) {
     NSLog(@"GPU: failed to allocate transient uniform slice");
     return NO;
   }
@@ -211,12 +239,13 @@ static const TriangleVertex kTriangleVertices[] = {
                                  256,
                                  &slice) != GPU_OK ||
       slice.buffer != _fragmentUniformBuffer ||
-      slice.offset != 0 ||
-      !slice.cpuPtr) {
+      !slice.cpuPtr ||
+      slice.offset > UINT32_MAX) {
     NSLog(@"GPU: failed to allocate frame uniform slice");
     return NO;
   }
 
+  _fragmentUniformOffset = (uint32_t)slice.offset;
   memcpy(slice.cpuPtr, &uniforms, sizeof(uniforms));
   return YES;
 }
@@ -265,7 +294,7 @@ static const TriangleVertex kTriangleVertices[] = {
 
   GPUBindRenderPipeline(encoder, _pipeline);
   GPUBindVertexBuffers(encoder, 0, 1, &vertexBuffer);
-  GPUBindRenderGroup(encoder, 0, _fragmentGroup, 0, NULL);
+  GPUBindRenderGroup(encoder, 0, _fragmentGroup, 1, &_fragmentUniformOffset);
   GPUDraw(encoder, 3, 1, 0, 0);
   GPUEndRenderPass(encoder);
   encoder = NULL;

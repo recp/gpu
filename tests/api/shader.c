@@ -53,7 +53,8 @@ static int
 shader_reflection_has_resource(const GPUShaderReflection *reflection,
                                GPUBindingType bindingType,
                                GPUShaderStageFlags visibility,
-                               uint32_t binding) {
+                               uint32_t binding,
+                               int hasDynamicOffset) {
   if (!reflection || (!reflection->pResources && reflection->resourceCount > 0u)) {
     return 0;
   }
@@ -64,7 +65,8 @@ shader_reflection_has_resource(const GPUShaderReflection *reflection,
         item->binding == binding &&
         item->bindingType == bindingType &&
         item->visibility == visibility &&
-        item->arrayCount == 1u) {
+        item->arrayCount == 1u &&
+        (item->hasDynamicOffset ? 1 : 0) == (hasDynamicOffset ? 1 : 0)) {
       return 1;
     }
   }
@@ -78,7 +80,8 @@ layout_has_typed_entry(const GPUBindGroupLayoutEntry *entries,
                        GPUBindStage stage,
                        GPUBindKind kind,
                        GPUBindingType bindingType,
-                       uint32_t binding) {
+                       uint32_t binding,
+                       int hasDynamicOffset) {
   if (!entries && count > 0u) {
     return 0;
   }
@@ -87,7 +90,8 @@ layout_has_typed_entry(const GPUBindGroupLayoutEntry *entries,
     if (entries[i].stage == stage &&
         entries[i].kind == kind &&
         entries[i].bindingType == bindingType &&
-        entries[i].binding == binding) {
+        entries[i].binding == binding &&
+        (entries[i].hasDynamicOffset ? 1 : 0) == (hasDynamicOffset ? 1 : 0)) {
       return 1;
     }
   }
@@ -123,19 +127,22 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
                               GPUBindStageFragment,
                               GPUBindKindTexture,
                               GPU_BINDING_SAMPLED_TEXTURE,
-                              0u) &&
+                              0u,
+                              0) &&
        layout_has_typed_entry(entries,
                               count,
                               GPUBindStageFragment,
                               GPUBindKindBuffer,
                               GPU_BINDING_UNIFORM_BUFFER,
-                              0u) &&
+                              0u,
+                              1) &&
        layout_has_typed_entry(entries,
                               count,
                               GPUBindStageCompute,
                               GPUBindKindTexture,
                               GPU_BINDING_STORAGE_TEXTURE,
-                              0u);
+                              0u,
+                              0);
   if (!ok) {
     fprintf(stderr, "unexpected canonical shader layout entries\n");
     return 0;
@@ -208,15 +215,18 @@ check_canonical_shader_library(GPUDevice *device,
        shader_reflection_has_resource(&reflection,
                                       GPU_BINDING_SAMPLED_TEXTURE,
                                       GPU_SHADER_STAGE_FRAGMENT_BIT,
-                                      0u) &&
+                                      0u,
+                                      0) &&
        shader_reflection_has_resource(&reflection,
                                       GPU_BINDING_UNIFORM_BUFFER,
                                       GPU_SHADER_STAGE_FRAGMENT_BIT,
-                                      0u) &&
+                                      0u,
+                                      1) &&
        shader_reflection_has_resource(&reflection,
                                       GPU_BINDING_STORAGE_TEXTURE,
                                       GPU_SHADER_STAGE_COMPUTE_BIT,
-                                      0u) &&
+                                      0u,
+                                      0) &&
        GPUCreateShaderLayout(device, library, &shaderLayout) == GPU_OK &&
        shaderLayout != NULL;
 
