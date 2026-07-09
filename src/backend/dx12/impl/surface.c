@@ -35,6 +35,13 @@ dx12_createSurface(GPUApi            * __restrict api,
 
 GPU_HIDE
 void
+dx12_destroySurface(GPUSurface * __restrict surface) {
+  free(surface);
+}
+
+GPU_HIDE
+void
 dx12_initSurface(GPUApiSurface *apiDevice) {
-  apiDevice->createSurface = dx12_createSurface;
+  apiDevice->createSurface  = dx12_createSurface;
+  apiDevice->destroySurface = dx12_destroySurface;
 }

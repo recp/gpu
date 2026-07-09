@@ -186,6 +186,7 @@ vk_createSurface(GPUApi            * __restrict api,
   gpuSurface->type  = type;
   gpuSurface->scale = scale;
   surface           = calloc(1, sizeof(*surface));
+  surface->inst     = instVk->inst;
 
   /* TODO: what if a platform supports multiple */
 
@@ -264,6 +265,27 @@ vk_createSurface(GPUApi            * __restrict api,
 
 GPU_HIDE
 void
+vk_destroySurface(GPUSurface * __restrict surface) {
+  GPUSurfaceVk *surfaceVk;
+
+  if (!surface) {
+    return;
+  }
+
+  surfaceVk = surface->_priv;
+  if (surfaceVk) {
+    if (surfaceVk->inst && surfaceVk->surface) {
+      vkDestroySurfaceKHR(surfaceVk->inst, surfaceVk->surface, NULL);
+    }
+    free(surfaceVk);
+  }
+
+  free(surface);
+}
+
+GPU_HIDE
+void
 vk_initSurface(GPUApiSurface * apiDevice) {
-  apiDevice->createSurface = vk_createSurface;
+  apiDevice->createSurface  = vk_createSurface;
+  apiDevice->destroySurface = vk_destroySurface;
 }

@@ -189,6 +189,7 @@ typedef struct GPUCommandQueueVk {
 } GPUCommandQueueVk;
 
 typedef struct GPUSurfaceVk {
+  VkInstance   inst;
   VkSurfaceKHR surface;
 } GPUSurfaceVk;
 
