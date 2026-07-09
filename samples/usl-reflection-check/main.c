@@ -71,24 +71,6 @@ read_file(const char *path, uint64_t *outSize) {
 }
 
 static int
-expected_source_kind(const char *name, uint32_t *outKind) {
-  if (!name || !outKind) {
-    return 0;
-  }
-
-  if (strcmp(name, "generated") == 0) {
-    *outKind = GPUShaderLibraryUSLSourceGenerated;
-    return 1;
-  }
-  if (strcmp(name, "embedded") == 0) {
-    *outKind = GPUShaderLibraryUSLSourceEmbedded;
-    return 1;
-  }
-
-  return 0;
-}
-
-static int
 reflection_has_resource(const GPUShaderReflection *reflection,
                         GPUBindingType bindingType,
                         GPUShaderStageFlags visibility,
@@ -198,11 +180,9 @@ static int
 check_shader_artifact(GPUDevice *device,
                       const void *bytecode,
                       uint64_t bytecodeSize,
-                      uint32_t expectedSourceKind,
                       uint32_t expectedResourceCount,
                       int storageOnly) {
   GPUShaderLibraryCreateInfo createInfo;
-  GPUShaderLibraryUSLInfo uslInfo;
   GPUShaderReflection reflection;
   GPUShaderLibrary *library;
   int ok;
@@ -222,16 +202,9 @@ check_shader_artifact(GPUDevice *device,
     return 0;
   }
 
-  memset(&uslInfo, 0, sizeof(uslInfo));
   memset(&reflection, 0, sizeof(reflection));
 
-  ok = GPUGetShaderLibraryUSLInfo(library, &uslInfo) == 0 &&
-       uslInfo.abiVersion == GPU_SHADER_LIBRARY_USL_INFO_VERSION &&
-       uslInfo.sourceKind == expectedSourceKind &&
-       uslInfo.bytecodeSize == bytecodeSize &&
-       uslInfo.bytecodeContentHash != 0u &&
-       uslInfo.backendContentHash != 0u &&
-       GPUGetShaderReflection(library, &reflection) == GPU_OK &&
+  ok = GPUGetShaderReflection(library, &reflection) == GPU_OK &&
        reflection.resourceCount == expectedResourceCount;
 
   if (ok && storageOnly) {
@@ -278,22 +251,15 @@ main(int argc, char **argv) {
   GPUPhysicalDevice *physicalDevice;
   uint64_t storageBytecodeSize;
   uint64_t bytecodeSize;
-  uint32_t sourceKind;
   GPUDevice *device;
   void *storageBytecode;
   void *bytecode;
   int ok;
 
-  if (argc < 2 || argc > 4) {
+  if (argc < 2 || argc > 3) {
     fprintf(stderr,
-            "usage: %s <reflection.us> [generated|embedded] [storage.us]\n",
+            "usage: %s <reflection.us> [storage.us]\n",
             argv[0]);
-    return 2;
-  }
-
-  sourceKind = GPUShaderLibraryUSLSourceGenerated;
-  if (argc >= 3 && !expected_source_kind(argv[2], &sourceKind)) {
-    fprintf(stderr, "unknown expected source kind: %s\n", argv[2]);
     return 2;
   }
 
@@ -305,10 +271,10 @@ main(int argc, char **argv) {
 
   storageBytecode = NULL;
   storageBytecodeSize = 0u;
-  if (argc == 4) {
-    storageBytecode = read_file(argv[3], &storageBytecodeSize);
+  if (argc == 3) {
+    storageBytecode = read_file(argv[2], &storageBytecodeSize);
     if (!storageBytecode) {
-      fprintf(stderr, "failed to read storage bytecode: %s\n", argv[3]);
+      fprintf(stderr, "failed to read storage bytecode: %s\n", argv[2]);
       free(bytecode);
       return 2;
     }
@@ -330,12 +296,11 @@ main(int argc, char **argv) {
     return 1;
   }
 
-  ok = check_shader_artifact(device, bytecode, bytecodeSize, sourceKind, 3u, 0) &&
+  ok = check_shader_artifact(device, bytecode, bytecodeSize, 3u, 0) &&
        (!storageBytecode ||
         check_shader_artifact(device,
                               storageBytecode,
                               storageBytecodeSize,
-                              sourceKind,
                               1u,
                               1));
 

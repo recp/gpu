@@ -26,7 +26,6 @@ typedef struct GPUApiTestContext {
   GPUPhysicalDevice *physicalDevice;
   GPUDevice         *device;
   const char        *uslBytecodePath;
-  uint32_t           uslExpectedSourceKind;
 } GPUApiTestContext;
 
 typedef int (*GPUApiTestRunFn)(void *ctx);
@@ -46,8 +45,6 @@ int gpu_test_resources(GPUDevice *device);
 int gpu_test_copy(GPUDevice *device);
 int gpu_test_render(GPUDevice *device);
 int gpu_test_compute(GPUDevice *device);
-int gpu_test_shader(GPUDevice *device,
-                    const char *bytecodePath,
-                    uint32_t expectedSourceKind);
+int gpu_test_shader(GPUDevice *device, const char *bytecodePath);
 
 #endif /* gpu_tests_api_test_h */

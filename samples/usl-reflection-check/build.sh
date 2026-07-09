@@ -31,9 +31,7 @@ rm -f \
   "$SAMPLE_DIR/reflection_storage.usl.metal"
 
 ustest_cmd=("$USTEST" --shader "$SAMPLE_DIR/reflection.usl" --no-logs --no-sidecar)
-expected_source_kind="generated"
 if [[ "$EMBED_METAL" == "1" ]]; then
-  expected_source_kind="embedded"
   USL_EMBED_METAL_BLOB=1 "${ustest_cmd[@]}" >/tmp/gpu-usl-reflection-check-ustest.log 2>&1
 else
   "${ustest_cmd[@]}" >/tmp/gpu-usl-reflection-check-ustest.log 2>&1
@@ -89,4 +87,4 @@ xcrun --sdk macosx clang \
   -Wl,-rpath,"$US_DS_LIB_DIR" \
   -o "$OUT_BIN"
 
-"$OUT_BIN" "$SAMPLE_DIR/reflection.us" "$expected_source_kind" "$SAMPLE_DIR/reflection_storage.us"
+"$OUT_BIN" "$SAMPLE_DIR/reflection.us" "$SAMPLE_DIR/reflection_storage.us"

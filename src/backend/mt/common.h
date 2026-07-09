@@ -18,6 +18,7 @@
 #define metal_common_h
 
 #include "../common.h"
+#include "../../api/library_internal.h"
 
 #if defined(__APPLE__) && defined(__OBJC__)
 #import <Metal/Metal.h>

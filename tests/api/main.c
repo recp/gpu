@@ -41,9 +41,7 @@ static int
 run_shader(void *ctx) {
   GPUApiTestContext *testCtx = ctx;
 
-  return gpu_test_shader(testCtx->device,
-                         testCtx->uslBytecodePath,
-                         testCtx->uslExpectedSourceKind);
+  return gpu_test_shader(testCtx->device, testCtx->uslBytecodePath);
 }
 
 int
@@ -54,8 +52,8 @@ main(int argc, char **argv) {
   GPUApiTest tests[8];
   int ok;
 
-  if (argc != 3) {
-    fprintf(stderr, "usage: %s <reflection.us> <generated|embedded>\n", argv[0]);
+  if (argc != 2) {
+    fprintf(stderr, "usage: %s <reflection.us>\n", argv[0]);
     return 2;
   }
 
@@ -74,15 +72,6 @@ main(int argc, char **argv) {
   ctx.physicalDevice = physicalDevice;
   ctx.device = device;
   ctx.uslBytecodePath = argv[1];
-  if (strcmp(argv[2], "generated") == 0) {
-    ctx.uslExpectedSourceKind = GPUShaderLibraryUSLSourceGenerated;
-  } else if (strcmp(argv[2], "embedded") == 0) {
-    ctx.uslExpectedSourceKind = GPUShaderLibraryUSLSourceEmbedded;
-  } else {
-    fprintf(stderr, "unknown USL source kind: %s\n", argv[2]);
-    GPUDestroyDevice(device);
-    return 2;
-  }
 
   tests[0] = (GPUApiTest){ "queue", run_queue, &ctx };
   tests[1] = (GPUApiTest){ "sampler", run_sampler, &ctx };

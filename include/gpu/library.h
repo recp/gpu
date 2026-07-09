@@ -26,35 +26,6 @@ extern "C" {
 #include "device.h"
 //#include <us/us.h>
 
-#define GPU_SHADER_LIBRARY_USL_INFO_VERSION 2u
-
-typedef enum GPUShaderLibraryUSLSourceKind {
-  GPUShaderLibraryUSLSourceNone      = 0,
-  GPUShaderLibraryUSLSourceEmbedded  = 1,
-  GPUShaderLibraryUSLSourceGenerated = 2
-} GPUShaderLibraryUSLSourceKind;
-
-typedef struct GPUShaderLibraryUSLInfo {
-  uint32_t abiVersion;
-  uint32_t targetBackend;
-  uint32_t bytecodeVersion;
-  uint32_t sourceKind;
-  uint32_t targetAtomCount;
-  uint32_t targetAtomTotalCount;
-  uint32_t targetInfoFlags;
-  uint32_t reserved0;
-  uint32_t selectedEntryCount;
-  uint32_t entryTargetInfoVersion;
-  uint32_t targetSupported;
-  uint32_t targetSupportStatus;
-  uint64_t bytecodeSize;
-  uint64_t bytecodeDataSize;
-  uint64_t bytecodeContentHash;
-  uint64_t targetAtomHash;
-  uint64_t backendContentHash;
-  uint64_t selectedEntryHash;
-} GPUShaderLibraryUSLInfo;
-
 typedef struct GPUShaderResourceReflection {
   const char *name;
   uint32_t setIndex;
@@ -71,13 +42,7 @@ typedef struct GPUShaderReflection {
   uint32_t pushConstantSizeBytes;
 } GPUShaderReflection;
 
-typedef struct GPULibrary {
-  void *_priv;
-  GPUShaderLibraryUSLInfo _uslInfo;
-  GPUShaderReflection _reflection;
-  void *_entryInfo;
-} GPULibrary;
-
+typedef struct GPULibrary GPULibrary;
 typedef GPULibrary GPUShaderLibrary;
 
 typedef struct GPUFunction {
@@ -129,11 +94,6 @@ GPUCreateShaderLibraryFromUSL(GPUDevice *device,
                               const void *artifactData,
                               uint64_t artifactSize,
                               GPUShaderLibrary **outLibrary);
-
-GPU_EXPORT
-int
-GPUGetShaderLibraryUSLInfo(GPUShaderLibrary *library,
-                           GPUShaderLibraryUSLInfo *outInfo);
 
 GPU_EXPORT
 GPUResult

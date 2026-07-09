@@ -20,111 +20,6 @@
 
 #define GPU_USL_BYTECODE_VERSION 2u
 
-static uint64_t
-gpu_fnv1a64Append(uint64_t hash, const void *data, uint64_t size) {
-  const uint8_t *bytes = (const uint8_t *)data;
-
-  for (uint64_t i = 0; bytes && i < size; i++) {
-    hash ^= (uint64_t)bytes[i];
-    hash *= 1099511628211ull;
-  }
-
-  return hash;
-}
-
-static uint64_t
-gpu_fnv1a64AppendU32(uint64_t hash, uint32_t value) {
-  uint8_t bytes[4];
-
-  bytes[0] = (uint8_t)(value & 0xffu);
-  bytes[1] = (uint8_t)((value >> 8u) & 0xffu);
-  bytes[2] = (uint8_t)((value >> 16u) & 0xffu);
-  bytes[3] = (uint8_t)((value >> 24u) & 0xffu);
-  return gpu_fnv1a64Append(hash, bytes, sizeof(bytes));
-}
-
-static int
-gpu_uslCapabilityAtomNeedsTextHash(const USLCapabilityAtomDesc *atom) {
-  return atom &&
-         (atom->family == USL_CAPABILITY_ATOM_FAMILY_CUSTOM ||
-          (atom->family == USL_CAPABILITY_ATOM_FAMILY_EXTENSION &&
-           atom->id == USL_CAPABILITY_EXTENSION_ID_CUSTOM));
-}
-
-static uint64_t
-gpu_hashUSLTargetAtoms(const USLBytecodeTargetInfo *targetInfo) {
-  uint64_t hash = 14695981039346656037ull;
-
-  if (!targetInfo) {
-    return 0;
-  }
-
-  hash = gpu_fnv1a64AppendU32(hash, targetInfo->target_atom_total_count);
-  for (uint32_t i = 0; i < targetInfo->target_atom_count; i++) {
-    const USLCapabilityAtomDesc *atom = &targetInfo->target_atoms[i];
-    hash = gpu_fnv1a64AppendU32(hash, atom->family);
-    hash = gpu_fnv1a64AppendU32(hash, atom->id);
-    hash = gpu_fnv1a64AppendU32(hash, atom->major);
-    hash = gpu_fnv1a64AppendU32(hash, atom->minor);
-    if (gpu_uslCapabilityAtomNeedsTextHash(atom)) {
-      hash = gpu_fnv1a64Append(hash, atom->text, strnlen(atom->text, sizeof(atom->text)));
-      hash = gpu_fnv1a64AppendU32(hash, 0u);
-    }
-  }
-
-  return hash;
-}
-
-static uint64_t
-gpu_hashUSLEntryTargetAtoms(const USLBytecodeEntryTargetInfo *targetInfo) {
-  uint64_t hash = 14695981039346656037ull;
-
-  if (!targetInfo) {
-    return 0;
-  }
-
-  hash = gpu_fnv1a64AppendU32(hash, targetInfo->target_atom_total_count);
-  for (uint32_t i = 0; i < targetInfo->target_atom_count; i++) {
-    const USLCapabilityAtomDesc *atom = &targetInfo->target_atoms[i];
-    hash = gpu_fnv1a64AppendU32(hash, atom->family);
-    hash = gpu_fnv1a64AppendU32(hash, atom->id);
-    hash = gpu_fnv1a64AppendU32(hash, atom->major);
-    hash = gpu_fnv1a64AppendU32(hash, atom->minor);
-    if (gpu_uslCapabilityAtomNeedsTextHash(atom)) {
-      hash = gpu_fnv1a64Append(hash, atom->text, strnlen(atom->text, sizeof(atom->text)));
-      hash = gpu_fnv1a64AppendU32(hash, 0u);
-    }
-  }
-
-  return hash;
-}
-
-static uint64_t
-gpu_hashUSLSelectedEntries(const char * const *entryPointNames,
-                           uint32_t entryPointCount) {
-  uint64_t hash = 14695981039346656037ull;
-
-  if (!entryPointNames || entryPointCount == 0u) {
-    return 0;
-  }
-
-  hash = gpu_fnv1a64AppendU32(hash, entryPointCount);
-  for (uint32_t i = 0; i < entryPointCount; i++) {
-    const char *name = entryPointNames[i];
-    uint64_t len;
-
-    if (!name || name[0] == '\0') {
-      return 0;
-    }
-
-    len = (uint64_t)strlen(name);
-    hash = gpu_fnv1a64Append(hash, name, len);
-    hash = gpu_fnv1a64AppendU32(hash, 0u);
-  }
-
-  return hash;
-}
-
 static char *
 gpu_dupText(const char *text) {
   char *copy;
@@ -198,26 +93,6 @@ gpu_uslRuntimeInfoIsUsable(const USLBytecodeRuntimeInfo *runtimeInfo) {
 }
 
 static int
-gpu_uslEntrySelected(const char *entry,
-                     const char * const *entryPointNames,
-                     uint32_t entryPointCount) {
-  if (!entry || entry[0] == '\0') {
-    return 0;
-  }
-  if (!entryPointNames || entryPointCount == 0u) {
-    return 1;
-  }
-
-  for (uint32_t i = 0; i < entryPointCount; i++) {
-    if (entryPointNames[i] && strcmp(entry, entryPointNames[i]) == 0) {
-      return 1;
-    }
-  }
-
-  return 0;
-}
-
-static int
 gpu_shaderVisibilityFromUSLStage(uint32_t stage, GPUShaderStageFlags *outVisibility) {
   if (!outVisibility) {
     return 0;
@@ -240,9 +115,7 @@ gpu_shaderVisibilityFromUSLStage(uint32_t stage, GPUShaderStageFlags *outVisibil
 
 static int
 gpu_setShaderLibraryEntryInfo(GPUShaderLibrary *library,
-                              const USReflection *usReflection,
-                              const char * const *entryPointNames,
-                              uint32_t entryPointCount) {
+                              const USReflection *usReflection) {
   const USLBytecodeRuntimeInfo *runtimeInfo;
   GPUShaderEntryInfoList *list;
   uint32_t count;
@@ -258,13 +131,7 @@ gpu_setShaderLibraryEntryInfo(GPUShaderLibrary *library,
   }
 
   gpu_clearShaderEntryInfo(library);
-  count = 0u;
-  for (uint32_t i = 0; i < runtimeInfo->entry_point_count; i++) {
-    const USLRuntimeEntryPoint *entry = &runtimeInfo->entry_points[i];
-    if (gpu_uslEntrySelected(entry->name, entryPointNames, entryPointCount)) {
-      count++;
-    }
-  }
+  count = runtimeInfo->entry_point_count;
   if (count == 0u) {
     return 1;
   }
@@ -284,9 +151,6 @@ gpu_setShaderLibraryEntryInfo(GPUShaderLibrary *library,
     GPUShaderStageFlags stage;
     GPUShaderEntryInfo *dst;
 
-    if (!gpu_uslEntrySelected(entry->name, entryPointNames, entryPointCount)) {
-      continue;
-    }
     if (!gpu_shaderVisibilityFromUSLStage(entry->stage, &stage)) {
       for (uint32_t j = 0; j < count; j++) {
         free(list->entries[j].name);
@@ -469,9 +333,7 @@ gpu_appendShaderResourceReflection(GPUShaderReflection *reflection,
 
 static int
 gpu_setShaderLibraryReflection(GPUShaderLibrary *library,
-                               const USReflection *usReflection,
-                               const char * const *entryPointNames,
-                               uint32_t entryPointCount) {
+                               const USReflection *usReflection) {
   const USLBytecodeRuntimeInfo *runtimeInfo;
 
   if (!library || !usReflection ||
@@ -491,8 +353,7 @@ gpu_setShaderLibraryReflection(GPUShaderLibrary *library,
     GPUShaderStageFlags visibility;
     GPUBindingType bindingType;
 
-    if (!resource->used ||
-        !gpu_uslEntrySelected(resource->entry, entryPointNames, entryPointCount)) {
+    if (!resource->used) {
       continue;
     }
 
@@ -552,69 +413,6 @@ gpu_copyShaderReflection(const GPUShaderReflection *src,
   return GPU_OK;
 }
 
-static void
-gpu_setShaderLibraryUSLInfo(GPUShaderLibrary *library,
-                            const USLBytecodeTargetInfo *targetInfo,
-                            uint32_t sourceKind,
-                            uint64_t backendContentHash) {
-  GPUShaderLibraryUSLInfo *info;
-
-  if (!library || !targetInfo) {
-    return;
-  }
-
-  info = &library->_uslInfo;
-  memset(info, 0, sizeof(*info));
-  info->abiVersion = GPU_SHADER_LIBRARY_USL_INFO_VERSION;
-  info->targetBackend = (uint32_t)targetInfo->backend;
-  info->bytecodeVersion = targetInfo->bytecode_version;
-  info->sourceKind = sourceKind;
-  info->targetAtomCount = targetInfo->target_atom_count;
-  info->targetAtomTotalCount = targetInfo->target_atom_total_count;
-  info->targetInfoFlags = targetInfo->flags;
-  info->targetSupported = targetInfo->supported;
-  info->targetSupportStatus = targetInfo->status;
-  info->bytecodeSize = targetInfo->bytecode_size;
-  info->bytecodeDataSize = targetInfo->bytecode_data_size;
-  info->bytecodeContentHash = targetInfo->content_hash;
-  info->targetAtomHash = gpu_hashUSLTargetAtoms(targetInfo);
-  info->backendContentHash = backendContentHash;
-}
-
-static void
-gpu_setShaderLibraryUSLInfoForEntries(GPUShaderLibrary *library,
-                                      const USLBytecodeEntryTargetInfo *targetInfo,
-                                      uint32_t sourceKind,
-                                      uint64_t backendContentHash,
-                                      uint32_t selectedEntryCount,
-                                      uint64_t selectedEntryHash) {
-  GPUShaderLibraryUSLInfo *info;
-
-  if (!library || !targetInfo) {
-    return;
-  }
-
-  info = &library->_uslInfo;
-  memset(info, 0, sizeof(*info));
-  info->abiVersion = GPU_SHADER_LIBRARY_USL_INFO_VERSION;
-  info->targetBackend = (uint32_t)targetInfo->backend;
-  info->bytecodeVersion = targetInfo->bytecode_version;
-  info->sourceKind = sourceKind;
-  info->targetAtomCount = targetInfo->target_atom_count;
-  info->targetAtomTotalCount = targetInfo->target_atom_total_count;
-  info->targetInfoFlags = targetInfo->flags;
-  info->selectedEntryCount = selectedEntryCount;
-  info->entryTargetInfoVersion = targetInfo->abi_version;
-  info->targetSupported = targetInfo->supported;
-  info->targetSupportStatus = targetInfo->status;
-  info->bytecodeSize = targetInfo->bytecode_size;
-  info->bytecodeDataSize = targetInfo->bytecode_data_size;
-  info->bytecodeContentHash = targetInfo->content_hash;
-  info->targetAtomHash = gpu_hashUSLEntryTargetAtoms(targetInfo);
-  info->backendContentHash = backendContentHash;
-  info->selectedEntryHash = selectedEntryHash;
-}
-
 //GPU_EXPORT
 //USLibrary*
 //GPUDefaultShaderLibrary(GPUDevice *device) {
@@ -652,8 +450,6 @@ static int
 gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
                                    const void *bytecodeData,
                                    uint64_t bytecodeSize,
-                                   const char * const *entryPointNames,
-                                   uint32_t entryPointCount,
                                    GPUShaderLibrary **outLibrary);
 
 static GPUResult
@@ -713,8 +509,6 @@ GPUCreateShaderLibrary(GPUDevice *device,
       return gpu_createShaderLibraryFromUSLImpl(device,
                                                 info->sourceData,
                                                 info->sourceSize,
-                                                NULL,
-                                                0u,
                                                 outLibrary) == 0
         ? GPU_OK
         : GPU_ERROR_BACKEND_FAILURE;
@@ -729,16 +523,12 @@ static int
 gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
                                    const void *bytecodeData,
                                    uint64_t bytecodeSize,
-                                   const char * const *entryPointNames,
-                                   uint32_t entryPointCount,
                                    GPUShaderLibrary **outLibrary) {
   GPUShaderLibraryCreateInfo info = {0};
   GPUApi *api;
   USLTargetSpec target;
   USCompileInput compileInput;
   USCompileOutput compileOutput;
-  uint64_t selectedEntryHash = 0;
-  int useSelectedEntries;
   int rc;
 
   if (!device || !bytecodeData || !outLibrary) {
@@ -746,16 +536,6 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   }
   *outLibrary = NULL;
   memset(&compileOutput, 0, sizeof(compileOutput));
-
-  useSelectedEntries = entryPointCount > 0u;
-  if (useSelectedEntries) {
-    selectedEntryHash = gpu_hashUSLSelectedEntries(entryPointNames, entryPointCount);
-    if (selectedEntryHash == 0u) {
-      return -1;
-    }
-  } else if (entryPointNames) {
-    return -1;
-  }
 
   if (!(api = gpuActiveGPUApi())) {
     return -2;
@@ -771,8 +551,6 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   compileInput.artifact = bytecodeData;
   compileInput.artifact_size = (size_t)bytecodeSize;
   compileInput.target = &target;
-  compileInput.entry_point_names = entryPointNames;
-  compileInput.entry_point_count = entryPointCount;
   if (us_compile(&compileInput, &compileOutput) != USLOk ||
       compileOutput.backend != USL_BACKEND_METAL ||
       compileOutput.encoding != USL_RUNTIME_EMBEDDED_BLOB_ENCODING_TEXT ||
@@ -781,8 +559,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
     us_free_compile_output(&compileOutput);
     return -4;
   }
-  if ((useSelectedEntries && compileOutput.reflection.entry_target_count == 0u) ||
-      (!useSelectedEntries && !compileOutput.reflection.target_info_valid)) {
+  if (!compileOutput.reflection.target_info_valid) {
     us_free_compile_output(&compileOutput);
     return -6;
   }
@@ -799,35 +576,13 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   rc = GPUCreateShaderLibrary(device, &info, outLibrary);
   if (rc == 0 && outLibrary && *outLibrary) {
     if (!gpu_setShaderLibraryReflection(*outLibrary,
-                                         &compileOutput.reflection,
-                                         entryPointNames,
-                                         entryPointCount) ||
+                                         &compileOutput.reflection) ||
         !gpu_setShaderLibraryEntryInfo(*outLibrary,
-                                       &compileOutput.reflection,
-                                       entryPointNames,
-                                       entryPointCount)) {
+                                       &compileOutput.reflection)) {
       GPUDestroyShaderLibrary(*outLibrary);
       *outLibrary = NULL;
       us_free_compile_output(&compileOutput);
       return -7;
-    }
-
-    if (useSelectedEntries) {
-      gpu_setShaderLibraryUSLInfoForEntries(*outLibrary,
-                                            &compileOutput.reflection.entry_targets[0],
-                                            (compileOutput.flags & US_COMPILE_OUTPUT_FLAG_EMBEDDED_BLOB) != 0u
-                                              ? GPUShaderLibraryUSLSourceEmbedded
-                                              : GPUShaderLibraryUSLSourceGenerated,
-                                            compileOutput.backend_hash,
-                                            entryPointCount,
-                                            selectedEntryHash);
-    } else {
-      gpu_setShaderLibraryUSLInfo(*outLibrary,
-                                  &compileOutput.reflection.target_info,
-                                  (compileOutput.flags & US_COMPILE_OUTPUT_FLAG_EMBEDDED_BLOB) != 0u
-                                    ? GPUShaderLibraryUSLSourceEmbedded
-                                    : GPUShaderLibraryUSLSourceGenerated,
-                                  compileOutput.backend_hash);
     }
   }
   us_free_compile_output(&compileOutput);
@@ -843,28 +598,9 @@ GPUCreateShaderLibraryFromUSL(GPUDevice *device,
   return gpu_createShaderLibraryFromUSLImpl(device,
                                             artifactData,
                                             artifactSize,
-                                            NULL,
-                                            0u,
                                             outLibrary) == 0
     ? GPU_OK
     : GPU_ERROR_BACKEND_FAILURE;
-}
-
-GPU_EXPORT
-int
-GPUGetShaderLibraryUSLInfo(GPUShaderLibrary *library,
-                           GPUShaderLibraryUSLInfo *outInfo) {
-  if (!library || !outInfo) {
-    return -1;
-  }
-
-  memset(outInfo, 0, sizeof(*outInfo));
-  if (library->_uslInfo.abiVersion != GPU_SHADER_LIBRARY_USL_INFO_VERSION) {
-    return -2;
-  }
-
-  *outInfo = library->_uslInfo;
-  return 0;
 }
 
 GPU_EXPORT

@@ -11,7 +11,6 @@ US_ROOT="${USL_ROOT:-/Users/recp/Projects/recp/UniversalShading/us}"
 USTEST="${USL_USTEST:-$US_ROOT/build/ustest}"
 FIXTURE_DIR="${GPU_API_USL_FIXTURE_DIR:-/tmp/gpu-api-usl-fixtures}"
 EMBED_METAL="${GPU_USL_EMBED_METAL:-0}"
-EXPECTED_SOURCE_KIND="generated"
 
 if [[ ! -x "$USTEST" ]]; then
   echo "ustest not found at $USTEST" >&2
@@ -24,7 +23,6 @@ cp "$ROOT/samples/usl-reflection-check/reflection.usl" "$FIXTURE_DIR/reflection.
 
 ustest_cmd=("$USTEST" --shader "$FIXTURE_DIR/reflection.usl" --no-logs --no-sidecar)
 if [[ "$EMBED_METAL" == "1" ]]; then
-  EXPECTED_SOURCE_KIND="embedded"
   USL_EMBED_METAL_BLOB=1 "${ustest_cmd[@]}" >/tmp/gpu-api-tests-ustest.log 2>&1
 else
   "${ustest_cmd[@]}" >/tmp/gpu-api-tests-ustest.log 2>&1
@@ -61,4 +59,4 @@ xcrun --sdk macosx clang \
   -Wl,-rpath,"$LIB_DIR" \
   -o "$OUT_BIN"
 
-"$OUT_BIN" "$FIXTURE_DIR/reflection.us" "$EXPECTED_SOURCE_KIND"
+"$OUT_BIN" "$FIXTURE_DIR/reflection.us"

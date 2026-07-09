@@ -180,10 +180,8 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
 static int
 check_canonical_shader_library(GPUDevice *device,
                                const void *bytecode,
-                               uint64_t bytecodeSize,
-                               uint32_t expectedSourceKind) {
+                               uint64_t bytecodeSize) {
   GPUShaderLibraryCreateInfo createInfo = {0};
-  GPUShaderLibraryUSLInfo info;
   GPUShaderReflection reflection;
   GPUShaderLayout *shaderLayout;
   GPUShaderLibrary *library;
@@ -205,14 +203,7 @@ check_canonical_shader_library(GPUDevice *device,
 
   memset(&reflection, 0, sizeof(reflection));
   shaderLayout = NULL;
-  ok = GPUGetShaderLibraryUSLInfo(library, &info) == 0 &&
-       info.abiVersion == GPU_SHADER_LIBRARY_USL_INFO_VERSION &&
-       info.sourceKind == expectedSourceKind &&
-       info.bytecodeSize == bytecodeSize &&
-       info.bytecodeContentHash != 0u &&
-       info.backendContentHash != 0u &&
-       info.selectedEntryCount == 0u &&
-       GPUGetShaderReflection(library, &reflection) == GPU_OK &&
+  ok = GPUGetShaderReflection(library, &reflection) == GPU_OK &&
        reflection.resourceCount == 3u &&
        shader_reflection_has_resource(&reflection,
                                       GPU_BINDING_SAMPLED_TEXTURE,
@@ -248,9 +239,7 @@ check_canonical_shader_library(GPUDevice *device,
 }
 
 int
-gpu_test_shader(GPUDevice *device,
-                const char *bytecodePath,
-                uint32_t expectedSourceKind) {
+gpu_test_shader(GPUDevice *device, const char *bytecodePath) {
   uint64_t bytecodeSize;
   void *bytecode;
   int ok;
@@ -263,8 +252,7 @@ gpu_test_shader(GPUDevice *device,
 
   ok = check_canonical_shader_library(device,
                                       bytecode,
-                                      bytecodeSize,
-                                      expectedSourceKind);
+                                      bytecodeSize);
 
   free(bytecode);
   return ok;

@@ -19,6 +19,12 @@
 
 #include "../common.h"
 
+struct GPULibrary {
+  void *_priv;
+  GPUShaderReflection _reflection;
+  void *_entryInfo;
+};
+
 GPU_HIDE
 int
 gpuGetShaderLibraryComputeWorkgroupSize(const GPUShaderLibrary *library,
