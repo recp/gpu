@@ -23,6 +23,8 @@ struct GPUSwapChain {
   void *_priv;
   void *target;
   float backingScaleFactor;
+  uint32_t width;
+  uint32_t height;
 };
 
 #endif /* gpu_swapchain_internal_h */

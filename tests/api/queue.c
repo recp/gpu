@@ -201,6 +201,15 @@ check_queue_selection(GPUDevice *device) {
     return 0;
   }
 
+  if (GPUResizeSwapchain(NULL, 640, 480) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUResizeSwapchain((GPUSwapchain *)(uintptr_t)1u, 0, 480) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      GPUResizeSwapchain((GPUSwapchain *)(uintptr_t)1u, 640, 0) !=
+        GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "swapchain resize accepted invalid input\n");
+    return 0;
+  }
+
   graphics0 = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0);
   compute0 = GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0);
   if (!graphics0 || !compute0) {

@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "swapchain_internal.h"
 
 GPU_EXPORT
 GPUSwapChain*
@@ -23,12 +24,24 @@ GPUCreateSwapChain(GPUDevice              * __restrict device,
                    struct GPUSurface      * __restrict surface,
                    GPUExtent2D                         size,
                    bool                                autoResize) {
-  GPUApi *api;
+  GPUApi       *api;
+  GPUSwapChain *swapChain;
 
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->swapchain.createSwapChain(api, device, cmdQue, surface, size, autoResize);
+  swapChain = api->swapchain.createSwapChain(api,
+                                             device,
+                                             cmdQue,
+                                             surface,
+                                             size,
+                                             autoResize);
+  if (swapChain) {
+    swapChain->width  = size.width;
+    swapChain->height = size.height;
+  }
+
+  return swapChain;
 }
 
 GPU_EXPORT
@@ -103,12 +116,27 @@ GPUCreateSwapChainForView(GPUDevice              * __restrict device,
                           uint32_t                            width,
                           uint32_t                            height,
                           bool                                autoResize) {
-  GPUApi *api;
+  GPUApi       *api;
+  GPUSwapChain *swapChain;
 
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->swapchain.createSwapChainForView(api, device, cmdQue, viewHandle, viewHandleType, backingScaleFactor, width, height, autoResize);
+  swapChain = api->swapchain.createSwapChainForView(api,
+                                                    device,
+                                                    cmdQue,
+                                                    viewHandle,
+                                                    viewHandleType,
+                                                    backingScaleFactor,
+                                                    width,
+                                                    height,
+                                                    autoResize);
+  if (swapChain) {
+    swapChain->width  = width;
+    swapChain->height = height;
+  }
+
+  return swapChain;
 }
 
 GPU_EXPORT
@@ -119,12 +147,25 @@ GPUCreateSwapChainForLayer(GPUDevice              * __restrict device,
                            uint32_t                            width,
                            uint32_t                            height,
                            bool                                autoResize) {
-  GPUApi *api;
+  GPUApi       *api;
+  GPUSwapChain *swapChain;
 
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->swapchain.createSwapChainForLayer(api, device, cmdQue, backingScaleFactor, width, height, autoResize);
+  swapChain = api->swapchain.createSwapChainForLayer(api,
+                                                     device,
+                                                     cmdQue,
+                                                     backingScaleFactor,
+                                                     width,
+                                                     height,
+                                                     autoResize);
+  if (swapChain) {
+    swapChain->width  = width;
+    swapChain->height = height;
+  }
+
+  return swapChain;
 }
 
 GPU_EXPORT
@@ -149,6 +190,35 @@ GPU_EXPORT
 void
 GPUDestroySwapchain(GPUSwapchain * __restrict swapChain) {
   GPUDestroySwapChain(swapChain);
+}
+
+GPU_EXPORT
+GPUResult
+GPUResizeSwapchain(GPUSwapchain * __restrict swapChain,
+                   uint32_t                  width,
+                   uint32_t                  height) {
+  GPUApi      *api;
+  GPUExtent2D  size;
+  GPUResult    result;
+
+  if (!swapChain || width == 0 || height == 0)
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  if (!(api = gpuActiveGPUApi()))
+    return GPU_ERROR_BACKEND_FAILURE;
+
+  if (!api->swapchain.resizeSwapChain)
+    return GPU_ERROR_UNSUPPORTED;
+
+  size.width  = width;
+  size.height = height;
+  result = api->swapchain.resizeSwapChain(swapChain, size);
+  if (result == GPU_OK) {
+    swapChain->width  = width;
+    swapChain->height = height;
+  }
+
+  return result;
 }
 
 GPU_EXPORT

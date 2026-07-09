@@ -110,6 +110,12 @@ void
 GPUDestroySwapchain(GPUSwapchain * __restrict swapChain);
 
 GPU_EXPORT
+GPUResult
+GPUResizeSwapchain(GPUSwapchain * __restrict swapChain,
+                   uint32_t                  width,
+                   uint32_t                  height);
+
+GPU_EXPORT
 void
 GPUSwapChainAttachToLayer(GPUSwapChain* swapChain, void* targetLayer, bool autoResize);
 

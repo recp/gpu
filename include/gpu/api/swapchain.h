@@ -54,6 +54,7 @@ typedef struct GPUApiSwapChain {
                              uint32_t                            height,
                              bool                                autoResize);
 
+  GPUResult (*resizeSwapChain)(GPUSwapChain *swapChain, GPUExtent2D size);
   void (*attachToLayer)(GPUSwapChain* swapChain, void* targetLayer, bool autoResize);
   void (*attachToView)(GPUSwapChain* swapChain, void *viewHandle, bool autoResize, bool replace);
   void (*destroySwapChain)(GPUSwapChain *swapChain);

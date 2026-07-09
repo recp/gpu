@@ -273,6 +273,33 @@ mt_createSwapChainForLayer(struct GPUApi          * __restrict api,
 //}
 
 GPU_HIDE
+GPUResult
+mt_resizeSwapChain(GPUSwapChain * __restrict swapChain,
+                   GPUExtent2D                size) {
+  GPUSwapChainMetal *swapChainMtl;
+  CGRect             bounds;
+  CGSize             drawableSize;
+
+  if (!swapChain || !swapChain->_priv || size.width == 0 || size.height == 0) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  swapChainMtl = swapChain->_priv;
+  if (!swapChainMtl->layer) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  bounds       = CGRectMake(0, 0, size.width, size.height);
+  drawableSize = CGSizeMake(size.width  * swapChain->backingScaleFactor,
+                            size.height * swapChain->backingScaleFactor);
+
+  swapChainMtl->layer.bounds       = bounds;
+  swapChainMtl->layer.drawableSize = drawableSize;
+
+  return GPU_OK;
+}
+
+GPU_HIDE
 void
 mt_destroySwapChain(GPUSwapChain * __restrict swapChain) {
   GPUSwapChainMetal *swapChainMtl;
@@ -303,6 +330,7 @@ mt_initSwapChain(GPUApiSwapChain *api) {
   api->createSwapChain         = mt_createSwapChain;
   api->createSwapChainForView  = mt_createSwapChainForView;
   api->createSwapChainForLayer = mt_createSwapChainForLayer;
+  api->resizeSwapChain         = mt_resizeSwapChain;
   api->attachToLayer           = mt_swapChainAttachToLayer;
   api->attachToView            = mt_swapChainAttachToView;
   api->destroySwapChain        = mt_destroySwapChain;
