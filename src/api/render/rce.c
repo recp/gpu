@@ -422,9 +422,11 @@ GPUDraw(GPURenderPassEncoder *pass,
   GPUApi *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline ||
-      !gpuPipelineLayoutIsBound(pass->_pipelineLayout,
-                                pass->_boundGroupLayouts,
-                                GPU_ENCODER_MAX_BIND_GROUPS) ||
+      !gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
+                                     pass->_boundGroupLayouts,
+                                     GPU_ENCODER_MAX_BIND_GROUPS,
+                                     GPU_SHADER_STAGE_VERTEX_BIT |
+                                     GPU_SHADER_STAGE_FRAGMENT_BIT) ||
       vertexCount == 0 || instanceCount == 0)
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.drawPrimitives)
@@ -449,9 +451,11 @@ GPUDrawIndexed(GPURenderPassEncoder *pass,
   GPUApi *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline ||
-      !gpuPipelineLayoutIsBound(pass->_pipelineLayout,
-                                pass->_boundGroupLayouts,
-                                GPU_ENCODER_MAX_BIND_GROUPS) ||
+      !gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
+                                     pass->_boundGroupLayouts,
+                                     GPU_ENCODER_MAX_BIND_GROUPS,
+                                     GPU_SHADER_STAGE_VERTEX_BIT |
+                                     GPU_SHADER_STAGE_FRAGMENT_BIT) ||
       indexCount == 0 || instanceCount == 0 || !pass->_hasIndexBuffer ||
       !gpu_validIndexRange(pass->_indexBuffer,
                            pass->_indexBufferOffset,
@@ -478,9 +482,11 @@ GPUDrawIndirect(GPURenderPassEncoder *pass,
   GPUApi *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline ||
-      !gpuPipelineLayoutIsBound(pass->_pipelineLayout,
-                                pass->_boundGroupLayouts,
-                                GPU_ENCODER_MAX_BIND_GROUPS) ||
+      !gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
+                                     pass->_boundGroupLayouts,
+                                     GPU_ENCODER_MAX_BIND_GROUPS,
+                                     GPU_SHADER_STAGE_VERTEX_BIT |
+                                     GPU_SHADER_STAGE_FRAGMENT_BIT) ||
       !gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
       !gpuBufferRangeValid(argsBuffer, argsOffset, 16u))
     return;
@@ -501,9 +507,11 @@ GPUDrawIndexedIndirect(GPURenderPassEncoder *pass,
   GPUApi *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline ||
-      !gpuPipelineLayoutIsBound(pass->_pipelineLayout,
-                                pass->_boundGroupLayouts,
-                                GPU_ENCODER_MAX_BIND_GROUPS) ||
+      !gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
+                                     pass->_boundGroupLayouts,
+                                     GPU_ENCODER_MAX_BIND_GROUPS,
+                                     GPU_SHADER_STAGE_VERTEX_BIT |
+                                     GPU_SHADER_STAGE_FRAGMENT_BIT) ||
       !pass->_hasIndexBuffer ||
       !gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
       !gpuBufferRangeValid(argsBuffer, argsOffset, 20u))

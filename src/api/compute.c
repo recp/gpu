@@ -364,9 +364,10 @@ GPUDispatch(GPUComputePassEncoder *pass,
   GPUApi *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline ||
-      !gpuPipelineLayoutIsBound(pass->_pipelineLayout,
-                                pass->_boundGroupLayouts,
-                                GPU_ENCODER_MAX_BIND_GROUPS) ||
+      !gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
+                                     pass->_boundGroupLayouts,
+                                     GPU_ENCODER_MAX_BIND_GROUPS,
+                                     GPU_SHADER_STAGE_COMPUTE_BIT) ||
       x == 0 || y == 0 || z == 0) {
     return;
   }
@@ -385,9 +386,10 @@ GPUDispatchIndirect(GPUComputePassEncoder *pass,
   GPUApi *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline ||
-      !gpuPipelineLayoutIsBound(pass->_pipelineLayout,
-                                pass->_boundGroupLayouts,
-                                GPU_ENCODER_MAX_BIND_GROUPS) ||
+      !gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
+                                     pass->_boundGroupLayouts,
+                                     GPU_ENCODER_MAX_BIND_GROUPS,
+                                     GPU_SHADER_STAGE_COMPUTE_BIT) ||
       !gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
       !gpuBufferRangeValid(argsBuffer, argsOffset, 12u)) {
     return;

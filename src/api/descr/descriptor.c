@@ -143,21 +143,34 @@ gpuPipelineLayoutAcceptsBindGroup(GPUPipelineLayout *pipelineLayout,
 
 GPU_HIDE
 int
-gpuPipelineLayoutIsBound(GPUPipelineLayout *pipelineLayout,
-                         GPUBindGroupLayout * const *boundLayouts,
-                         uint32_t boundLayoutCount) {
+gpuPipelineLayoutIsStageBound(GPUPipelineLayout *pipelineLayout,
+                              GPUBindGroupLayout * const *boundLayouts,
+                              uint32_t boundLayoutCount,
+                              GPUShaderStageFlags stages) {
   GPUPipelineLayoutPriv *priv;
 
   priv = gpu_pipelineLayoutPriv(pipelineLayout);
   if (!priv || priv->bindGroupLayoutCount == 0u) {
     return 1;
   }
-  if (!boundLayouts || boundLayoutCount < priv->bindGroupLayoutCount) {
-    return 0;
-  }
 
   for (uint32_t i = 0; i < priv->bindGroupLayoutCount; i++) {
-    if (boundLayouts[i] != priv->bindGroupLayouts[i]) {
+    GPUBindGroupLayoutPriv *layout;
+    int required;
+
+    layout = gpu_layoutPriv(priv->bindGroupLayouts[i]);
+    required = 0;
+    for (uint32_t entryIndex = 0; layout && entryIndex < layout->count; entryIndex++) {
+      if ((layout->entries[entryIndex].visibility & stages) != 0u) {
+        required = 1;
+        break;
+      }
+    }
+
+    if (required &&
+        (!boundLayouts ||
+         i >= boundLayoutCount ||
+         boundLayouts[i] != priv->bindGroupLayouts[i])) {
       return 0;
     }
   }

@@ -29,7 +29,6 @@ typedef struct GeneratedVertex {
   GPUComputePipeline *_computePipeline;
   GPURenderPipeline *_renderPipeline;
   GPUBuffer *_vertexBuffer;
-  GPUBindGroup *_emptyBindGroup;
   GPUBindGroup *_vertexBindGroup;
   NSTimer *_timer;
   NSInteger _exitAfterFrames;
@@ -163,22 +162,8 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   if (!_shaderLayout ||
       _shaderLayout->bindGroupLayoutCount < 2u ||
-      !_shaderLayout->bindGroupLayouts[0] ||
       !_shaderLayout->bindGroupLayouts[1]) {
-    NSLog(@"GPU: expected compute buffer shader layout sets 0 and 1");
-    return NO;
-  }
-
-  GPUBindGroupCreateInfo emptySetInfo = {
-    .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
-               .structSize = sizeof(GPUBindGroupCreateInfo) },
-    .label = "compute-buffer-usl-set0-empty",
-    .layout = _shaderLayout->bindGroupLayouts[0],
-    .entryCount = 0,
-    .pEntries = NULL
-  };
-  if (GPUCreateBindGroup(_device, &emptySetInfo, &_emptyBindGroup) != GPU_OK) {
-    NSLog(@"GPU: failed to create empty bind group");
+    NSLog(@"GPU: expected compute buffer shader layout set 1");
     return NO;
   }
 
@@ -238,7 +223,6 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     goto cleanup;
   }
   GPUBindComputePipeline(compute, _computePipeline);
-  GPUBindComputeGroup(compute, 0, _emptyBindGroup, 0, NULL);
   GPUBindComputeGroup(compute, 1, _vertexBindGroup, 0, NULL);
   GPUDispatch(compute, 1, 1, 1);
   GPUEndComputePass(compute);
@@ -265,8 +249,6 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   vertexBuffer.offset = 0;
 
   GPUBindRenderPipeline(render, _renderPipeline);
-  GPUBindRenderGroup(render, 0, _emptyBindGroup, 0, NULL);
-  GPUBindRenderGroup(render, 1, _vertexBindGroup, 0, NULL);
   GPUBindVertexBuffers(render, 0, 1, &vertexBuffer);
   GPUDraw(render, 3, 1, 0, 0);
   GPUEndRenderPass(render);
@@ -351,10 +333,6 @@ cleanup:
   if (_vertexBindGroup) {
     GPUDestroyBindGroup(_vertexBindGroup);
     _vertexBindGroup = NULL;
-  }
-  if (_emptyBindGroup) {
-    GPUDestroyBindGroup(_emptyBindGroup);
-    _emptyBindGroup = NULL;
   }
   if (_renderPipeline) {
     GPUDestroyRenderPipeline(_renderPipeline);
