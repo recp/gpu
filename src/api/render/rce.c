@@ -72,6 +72,20 @@ gpu_validPushConstantRange(uint32_t limit,
   return sizeBytes <= limit - offset;
 }
 
+static bool
+gpu_validIndirectBatch(uint64_t argsOffset,
+                       uint32_t commandCount,
+                       uint32_t strideBytes) {
+  uint64_t maxCommandIndex;
+
+  if (commandCount == 0u || strideBytes == 0u) {
+    return false;
+  }
+
+  maxCommandIndex = (uint64_t)commandCount - 1u;
+  return maxCommandIndex <= (UINT64_MAX - argsOffset) / strideBytes;
+}
+
 GPU_EXPORT
 void
 GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
@@ -409,6 +423,42 @@ GPUDrawIndexedIndirect(GPURenderPassEncoder *pass,
     return;
 
   api->rce.drawIndexedPrimsIndirect(pass, argsBuffer, argsOffset);
+}
+
+GPU_EXPORT
+void
+GPUMultiDrawIndirect(GPURenderPassEncoder *pass,
+                     GPUBuffer            *argsBuffer,
+                     uint64_t              argsOffset,
+                     uint32_t              drawCount,
+                     uint32_t              strideBytes) {
+  if (!gpu_validIndirectBatch(argsOffset, drawCount, strideBytes)) {
+    return;
+  }
+
+  for (uint32_t i = 0; i < drawCount; i++) {
+    GPUDrawIndirect(pass,
+                    argsBuffer,
+                    argsOffset + (uint64_t)i * strideBytes);
+  }
+}
+
+GPU_EXPORT
+void
+GPUMultiDrawIndexedIndirect(GPURenderPassEncoder *pass,
+                            GPUBuffer            *argsBuffer,
+                            uint64_t              argsOffset,
+                            uint32_t              drawCount,
+                            uint32_t              strideBytes) {
+  if (!gpu_validIndirectBatch(argsOffset, drawCount, strideBytes)) {
+    return;
+  }
+
+  for (uint32_t i = 0; i < drawCount; i++) {
+    GPUDrawIndexedIndirect(pass,
+                           argsBuffer,
+                           argsOffset + (uint64_t)i * strideBytes);
+  }
 }
 
 GPU_EXPORT

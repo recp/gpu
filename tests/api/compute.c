@@ -168,9 +168,15 @@ check_compute_pass_validation(void) {
   GPUDispatch(&fakePass, 1u, 1u, 0u);
   GPUDispatchIndirect(NULL, fakeBuffer, 0u);
   GPUDispatchIndirect(&fakePass, NULL, 0u);
+  GPUMultiDispatchIndirect(NULL, fakeBuffer, 0u, 1u, 12u);
+  GPUMultiDispatchIndirect(&fakePass, NULL, 0u, 1u, 12u);
+  GPUMultiDispatchIndirect(&fakePass, fakeBuffer, 0u, 0u, 12u);
+  GPUMultiDispatchIndirect(&fakePass, fakeBuffer, 0u, 2u, 0u);
   GPUEndComputePass(NULL);
 
   fakePass._hasPipeline = true;
+  GPUMultiDispatchIndirect(&fakePass, fakeBuffer, UINT64_MAX, 2u, 12u);
+  GPUMultiDispatchIndirect(&fakePass, fakeBuffer, 0u, 2u, 12u);
   fakePass._pushConstantSizeBytes = sizeof(pushBefore);
   fakePass._pushConstantStages = GPU_SHADER_STAGE_COMPUTE_BIT;
   GPUSetComputePushConstants(&fakePass, 4u, sizeof(pushValue), &pushValue);
@@ -192,6 +198,7 @@ check_compute_pass_validation(void) {
   GPUSetComputePushConstants(&fakePass, 0u, sizeof(pushValue), &pushValue);
   GPUDispatch(&fakePass, 1u, 1u, 1u);
   GPUDispatchIndirect(&fakePass, fakeBuffer, 0u);
+  GPUMultiDispatchIndirect(&fakePass, fakeBuffer, 0u, 2u, 12u);
   GPUEndComputePass(&fakePass);
 
   return 1;

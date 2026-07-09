@@ -88,6 +88,14 @@ GPUDispatchIndirect(GPUComputePassEncoder *pass,
 
 GPU_EXPORT
 void
+GPUMultiDispatchIndirect(GPUComputePassEncoder *pass,
+                         GPUBuffer            *argsBuffer,
+                         uint64_t              argsOffset,
+                         uint32_t              dispatchCount,
+                         uint32_t              strideBytes);
+
+GPU_EXPORT
+void
 GPUEndComputePass(GPUComputePassEncoder *pass);
 
 #ifdef __cplusplus

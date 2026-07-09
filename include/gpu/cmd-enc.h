@@ -140,6 +140,22 @@ GPUDrawIndexedIndirect(GPURenderPassEncoder *pass,
                        GPUBuffer            *argsBuffer,
                        uint64_t              argsOffset);
 
+GPU_EXPORT
+void
+GPUMultiDrawIndirect(GPURenderPassEncoder *pass,
+                     GPUBuffer            *argsBuffer,
+                     uint64_t              argsOffset,
+                     uint32_t              drawCount,
+                     uint32_t              strideBytes);
+
+GPU_EXPORT
+void
+GPUMultiDrawIndexedIndirect(GPURenderPassEncoder *pass,
+                            GPUBuffer            *argsBuffer,
+                            uint64_t              argsOffset,
+                            uint32_t              drawCount,
+                            uint32_t              strideBytes);
+
 typedef uint64_t GPUDynamicStateMask;
 enum {
   GPU_DYNAMIC_STATE_VIEWPORT_BIT          = 1ull << 0,

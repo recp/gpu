@@ -475,15 +475,23 @@ check_render_encoder_validation(void) {
   GPUDrawIndexed(NULL, 1u, 1u, 0u, 0, 0u);
   GPUDrawIndirect(NULL, fakeBuffer, 0u);
   GPUDrawIndexedIndirect(NULL, fakeBuffer, 0u);
+  GPUMultiDrawIndirect(NULL, fakeBuffer, 0u, 1u, 16u);
+  GPUMultiDrawIndexedIndirect(NULL, fakeBuffer, 0u, 1u, 20u);
   GPUApplyDynamicState(NULL, &dynamicState);
   GPUApplyDynamicState(&pass, NULL);
   GPUSetRenderPushConstants(NULL, 0u, sizeof(pushValue), &pushValue);
   GPUDraw(&pass, 1u, 1u, 0u, 0u);
   GPUDrawIndirect(&pass, fakeBuffer, 0u);
+  GPUMultiDrawIndirect(&pass, fakeBuffer, 0u, 2u, 16u);
 
   pass._hasPipeline = true;
   GPUDrawIndirect(&pass, NULL, 0u);
   GPUDrawIndexedIndirect(&pass, fakeBuffer, 0u);
+  GPUMultiDrawIndirect(&pass, NULL, 0u, 2u, 16u);
+  GPUMultiDrawIndirect(&pass, fakeBuffer, 0u, 0u, 16u);
+  GPUMultiDrawIndirect(&pass, fakeBuffer, 0u, 2u, 0u);
+  GPUMultiDrawIndirect(&pass, fakeBuffer, UINT64_MAX, 2u, 16u);
+  GPUMultiDrawIndexedIndirect(&pass, fakeBuffer, 0u, 2u, 20u);
   pass._pushConstantSizeBytes = sizeof(pushBefore);
   pass._pushConstantStages = GPU_SHADER_STAGE_VERTEX_BIT |
                              GPU_SHADER_STAGE_FRAGMENT_BIT;
@@ -517,6 +525,8 @@ check_render_encoder_validation(void) {
   }
   GPUDrawIndirect(&pass, fakeBuffer, 0u);
   GPUDrawIndexedIndirect(&pass, fakeBuffer, 0u);
+  GPUMultiDrawIndirect(&pass, fakeBuffer, 0u, 2u, 16u);
+  GPUMultiDrawIndexedIndirect(&pass, fakeBuffer, 0u, 2u, 20u);
 
   dynamicState.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   dynamicState.chain.structSize = sizeof(dynamicState);
@@ -539,6 +549,8 @@ check_render_encoder_validation(void) {
   GPUDrawIndexed(&endedPass, 1u, 1u, 0u, 0, 0u);
   GPUDrawIndirect(&endedPass, fakeBuffer, 0u);
   GPUDrawIndexedIndirect(&endedPass, fakeBuffer, 0u);
+  GPUMultiDrawIndirect(&endedPass, fakeBuffer, 0u, 2u, 16u);
+  GPUMultiDrawIndexedIndirect(&endedPass, fakeBuffer, 0u, 2u, 20u);
   GPUApplyDynamicState(&endedPass, &dynamicState);
   GPUEndRenderPass(&endedPass);
 

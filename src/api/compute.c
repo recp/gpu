@@ -36,6 +36,20 @@ gpu_validPushConstantRange(uint32_t limit,
   return sizeBytes <= limit - offset;
 }
 
+static bool
+gpu_validIndirectBatch(uint64_t argsOffset,
+                       uint32_t commandCount,
+                       uint32_t strideBytes) {
+  uint64_t maxCommandIndex;
+
+  if (commandCount == 0u || strideBytes == 0u) {
+    return false;
+  }
+
+  maxCommandIndex = (uint64_t)commandCount - 1u;
+  return maxCommandIndex <= (UINT64_MAX - argsOffset) / strideBytes;
+}
+
 static GPUComputePipelineState *
 gpuCompileComputePipelineState(GPUDevice *device, GPUComputePipeline *pipeline) {
   GPUApi *api;
@@ -355,6 +369,24 @@ GPUDispatchIndirect(GPUComputePassEncoder *pass,
   }
 
   api->compute.dispatchIndirect(pass, argsBuffer, argsOffset);
+}
+
+GPU_EXPORT
+void
+GPUMultiDispatchIndirect(GPUComputePassEncoder *pass,
+                         GPUBuffer            *argsBuffer,
+                         uint64_t              argsOffset,
+                         uint32_t              dispatchCount,
+                         uint32_t              strideBytes) {
+  if (!gpu_validIndirectBatch(argsOffset, dispatchCount, strideBytes)) {
+    return;
+  }
+
+  for (uint32_t i = 0; i < dispatchCount; i++) {
+    GPUDispatchIndirect(pass,
+                        argsBuffer,
+                        argsOffset + (uint64_t)i * strideBytes);
+  }
 }
 
 GPU_EXPORT
