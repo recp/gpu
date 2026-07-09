@@ -42,38 +42,8 @@ typedef enum GPUBindStage {
   GPUBindStageCompute = 3
 } GPUBindStage;
 
-#define GPU_BIND_GROUP_LAYOUT_USL_INFO_VERSION 3u
-#define GPU_BIND_GROUP_LAYOUT_USL_ENTRY_NAME_MAX 128u
-
-typedef struct GPUBindGroupLayoutUSLInfo {
-  uint32_t abiVersion;
-  uint32_t runtimeInfoVersion;
-  uint32_t bytecodeVersion;
-  GPUBindStage stage;
-  uint32_t resourceBindingCount;
-  uint32_t capabilityRequirementCount;
-  uint32_t capabilityRequirementTotalCount;
-  uint32_t capabilityRequirementFlags;
-  uint32_t reserved0;
-  uint64_t bytecodeSize;
-  uint64_t bytecodeDataSize;
-  uint64_t bytecodeContentHash;
-  uint64_t capabilityRequirementHash;
-  uint32_t entryTargetInfoVersion;
-  uint32_t targetBackend;
-  uint32_t targetSupported;
-  uint32_t targetSupportStatus;
-  uint32_t targetAtomCount;
-  uint32_t targetAtomTotalCount;
-  uint32_t targetInfoFlags;
-  uint32_t reserved1;
-  uint64_t targetAtomHash;
-  char entryPointName[GPU_BIND_GROUP_LAYOUT_USL_ENTRY_NAME_MAX];
-} GPUBindGroupLayoutUSLInfo;
-
 typedef struct GPUBindGroupLayout {
   void *_priv;
-  GPUBindGroupLayoutUSLInfo _uslInfo;
 } GPUBindGroupLayout;
 
 typedef struct GPUBindGroup {
@@ -157,20 +127,8 @@ GPUCreateBindGroupLayout(GPUDevice *device,
                          GPUBindGroupLayout **outLayout);
 
 GPU_EXPORT
-int
-GPUCreateBindGroupLayoutFromUSLBytecode(const void *bytecodeData,
-                                        uint64_t bytecodeSize,
-                                        const char *entryPointName,
-                                        GPUBindGroupLayout **outLayout);
-
-GPU_EXPORT
 const GPUBindGroupLayoutEntry *
 GPUGetBindGroupLayoutEntries(GPUBindGroupLayout *layout, uint32_t *outCount);
-
-GPU_EXPORT
-int
-GPUGetBindGroupLayoutUSLInfo(GPUBindGroupLayout *layout,
-                             GPUBindGroupLayoutUSLInfo *outInfo);
 
 GPU_EXPORT
 void

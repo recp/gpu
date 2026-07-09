@@ -22,12 +22,6 @@ extern "C" {
 
 #include "common.h"
 
-typedef enum GPUUSLStage {
-  GPUUSLStageVertex = 1,
-  GPUUSLStageFragment = 2,
-  GPUUSLStageCompute = 3
-} GPUUSLStage;
-
 typedef enum GPUUSLSamplerFilter {
   GPUUSLSamplerFilterNearest = 0,
   GPUUSLSamplerFilterLinear = 1
@@ -57,12 +51,6 @@ typedef enum GPUUSLSamplerCompareFunc {
   GPUUSLSamplerCompareAlways = 7
 } GPUUSLSamplerCompareFunc;
 
-typedef enum GPUUSLResourceKind {
-  GPUUSLResourceKindBuffer = 0,
-  GPUUSLResourceKindTexture = 1,
-  GPUUSLResourceKindSampler = 2
-} GPUUSLResourceKind;
-
 typedef struct GPUUSLStaticSamplerDesc {
   uint32_t logicalIndex;
   uint32_t minFilter;
@@ -75,54 +63,9 @@ typedef struct GPUUSLStaticSamplerDesc {
   uint32_t maxAnisotropy;
 } GPUUSLStaticSamplerDesc;
 
-typedef struct GPUUSLResourceBindingDesc {
-  GPUUSLStage stage;
-  GPUUSLResourceKind kind;
-  uint32_t binding;
-} GPUUSLResourceBindingDesc;
-
-typedef struct GPUUSLEntryReflection {
-  GPUUSLStage stage;
-  uint32_t workgroupSize[3];
-  uint32_t resourceBindingCount;
-  GPUUSLResourceBindingDesc *resourceBindings;
-  uint32_t staticSamplerCount;
-  GPUUSLStaticSamplerDesc *staticSamplers;
-  uint32_t capabilityRequirementCount;
-  uint32_t capabilityRequirementTotalCount;
-  uint32_t capabilityRequirementFlags;
-  uint32_t reserved0;
-  uint32_t runtimeInfoVersion;
-  uint32_t bytecodeVersion;
-  uint64_t bytecodeSize;
-  uint64_t bytecodeDataSize;
-  uint64_t bytecodeContentHash;
-  uint64_t capabilityRequirementHash;
-  uint32_t entryTargetInfoVersion;
-  uint32_t targetBackend;
-  uint32_t targetSupported;
-  uint32_t targetSupportStatus;
-  uint32_t targetAtomCount;
-  uint32_t targetAtomTotalCount;
-  uint32_t targetInfoFlags;
-  uint32_t reserved1;
-  uint64_t targetAtomHash;
-} GPUUSLEntryReflection;
-
 GPU_EXPORT
 int
 GPUUSLStaticSamplerDescIsValid(const GPUUSLStaticSamplerDesc *desc);
-
-GPU_EXPORT
-int
-GPUReflectUSLBytecodeEntry(const void *bytecodeData,
-                           uint64_t bytecodeSize,
-                           const char *entryPointName,
-                           GPUUSLEntryReflection **outReflection);
-
-GPU_EXPORT
-void
-GPUFreeUSLEntryReflection(GPUUSLEntryReflection *reflection);
 
 #ifdef __cplusplus
 }
