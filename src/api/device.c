@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "device_internal.h"
 
 static bool
 gpu_validQueueCreateInfos(GPUCommandQueueCreateInfo queCI[], uint32_t nQueCI) {

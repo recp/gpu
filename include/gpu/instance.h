@@ -40,11 +40,7 @@ typedef struct GPUInitParams {
   bool        validation_usebreak; /* false   */
 } GPUInitParams;
 
-typedef struct GPUInstance {
-  void          *_priv;
-  GPUInitParams *initParams; /* read-only */
-  uint32_t       validationError;
-} GPUInstance;
+typedef struct GPUInstance GPUInstance;
 
 /*!
  * @brief creates GPU instance by specified params, features, options if possible

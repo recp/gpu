@@ -34,12 +34,7 @@ typedef struct GPUPhysicalDevice {
   bool                      separatePresentQueue;
 } GPUPhysicalDevice;
 
-typedef struct GPUDevice {
-  GPUInstance       *inst;
-  GPUPhysicalDevice *phyDevice;
-  void              *_priv;
-  GPUQueueFlagBits   queueFamilies;
-} GPUDevice;
+typedef struct GPUDevice GPUDevice;
 
 GPU_EXPORT
 GPUPhysicalDevice*
