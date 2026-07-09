@@ -35,6 +35,7 @@ extern "C" {
 #include "resource.h"
 #include "cmd-enc.h"
 #include "query.h"
+#include "barrier.h"
 #include "compute.h"
 #include "stage-io.h"
 #include "texture.h"

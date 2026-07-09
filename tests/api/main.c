@@ -43,6 +43,11 @@ run_query(void *ctx) {
 }
 
 static int
+run_barrier(void *ctx) {
+  return gpu_test_barrier(((GPUApiTestContext *)ctx)->device);
+}
+
+static int
 run_shader(void *ctx) {
   GPUApiTestContext *testCtx = ctx;
 
@@ -68,7 +73,7 @@ main(int argc, char **argv) {
   GPUAdapter *adapter;
   GPUDevice *device;
   GPUApiTestContext ctx;
-  GPUApiTest tests[9];
+  GPUApiTest tests[10];
   int ok;
 
   if (argc != 2) {
@@ -100,7 +105,8 @@ main(int argc, char **argv) {
   tests[5] = (GPUApiTest){ "render", run_render, &ctx };
   tests[6] = (GPUApiTest){ "compute", run_compute, &ctx };
   tests[7] = (GPUApiTest){ "query", run_query, &ctx };
-  tests[8] = (GPUApiTest){ "shader", run_shader, &ctx };
+  tests[8] = (GPUApiTest){ "barrier", run_barrier, &ctx };
+  tests[9] = (GPUApiTest){ "shader", run_shader, &ctx };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 
