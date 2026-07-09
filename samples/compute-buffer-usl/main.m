@@ -29,7 +29,8 @@ typedef struct GeneratedVertex {
   GPUComputePipeline *_computePipeline;
   GPURenderPipeline *_renderPipeline;
   GPUBuffer *_vertexBuffer;
-  GPUBindGroup *_bindGroup;
+  GPUBindGroup *_emptyBindGroup;
+  GPUBindGroup *_vertexBindGroup;
   NSTimer *_timer;
   NSInteger _exitAfterFrames;
   NSInteger _submittedFrames;
@@ -76,7 +77,7 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   if (!GPUSampleLoadUSL(_device,
                         @"compute_buffer.us",
-                        1u,
+                        2u,
                         &_library,
                         &_shaderLayout)) {
     return NO;
@@ -160,6 +161,27 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     return NO;
   }
 
+  if (!_shaderLayout ||
+      _shaderLayout->bindGroupLayoutCount < 2u ||
+      !_shaderLayout->bindGroupLayouts[0] ||
+      !_shaderLayout->bindGroupLayouts[1]) {
+    NSLog(@"GPU: expected compute buffer shader layout sets 0 and 1");
+    return NO;
+  }
+
+  GPUBindGroupCreateInfo emptySetInfo = {
+    .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
+               .structSize = sizeof(GPUBindGroupCreateInfo) },
+    .label = "compute-buffer-usl-set0-empty",
+    .layout = _shaderLayout->bindGroupLayouts[0],
+    .entryCount = 0,
+    .pEntries = NULL
+  };
+  if (GPUCreateBindGroup(_device, &emptySetInfo, &_emptyBindGroup) != GPU_OK) {
+    NSLog(@"GPU: failed to create empty bind group");
+    return NO;
+  }
+
   GPUBindGroupEntry groupEntry = {0};
   groupEntry.binding = 0;
   groupEntry.bindingType = GPU_BINDING_STORAGE_BUFFER;
@@ -167,15 +189,15 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   groupEntry.buffer.offset = 0;
   groupEntry.buffer.size = vertexBufferInfo.sizeBytes;
 
-  GPUBindGroupCreateInfo set0Info = {
+  GPUBindGroupCreateInfo set1Info = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
                .structSize = sizeof(GPUBindGroupCreateInfo) },
-    .label = "compute-buffer-usl-set0",
-    .layout = _shaderLayout->bindGroupLayouts[0],
+    .label = "compute-buffer-usl-set1",
+    .layout = _shaderLayout->bindGroupLayouts[1],
     .entryCount = 1,
     .pEntries = &groupEntry
   };
-  if (GPUCreateBindGroup(_device, &set0Info, &_bindGroup) != GPU_OK) {
+  if (GPUCreateBindGroup(_device, &set1Info, &_vertexBindGroup) != GPU_OK) {
     NSLog(@"GPU: failed to create bind group");
     return NO;
   }
@@ -216,7 +238,8 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     goto cleanup;
   }
   GPUBindComputePipeline(compute, _computePipeline);
-  GPUBindComputeGroup(compute, 0, _bindGroup, 0, NULL);
+  GPUBindComputeGroup(compute, 0, _emptyBindGroup, 0, NULL);
+  GPUBindComputeGroup(compute, 1, _vertexBindGroup, 0, NULL);
   GPUDispatch(compute, 1, 1, 1);
   GPUEndComputePass(compute);
   compute = NULL;
@@ -242,6 +265,8 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   vertexBuffer.offset = 0;
 
   GPUBindRenderPipeline(render, _renderPipeline);
+  GPUBindRenderGroup(render, 0, _emptyBindGroup, 0, NULL);
+  GPUBindRenderGroup(render, 1, _vertexBindGroup, 0, NULL);
   GPUBindVertexBuffers(render, 0, 1, &vertexBuffer);
   GPUDraw(render, 3, 1, 0, 0);
   GPUEndRenderPass(render);
@@ -323,9 +348,13 @@ cleanup:
 }
 
 - (void)cleanupGPU {
-  if (_bindGroup) {
-    GPUDestroyBindGroup(_bindGroup);
-    _bindGroup = NULL;
+  if (_vertexBindGroup) {
+    GPUDestroyBindGroup(_vertexBindGroup);
+    _vertexBindGroup = NULL;
+  }
+  if (_emptyBindGroup) {
+    GPUDestroyBindGroup(_emptyBindGroup);
+    _emptyBindGroup = NULL;
   }
   if (_renderPipeline) {
     GPUDestroyRenderPipeline(_renderPipeline);

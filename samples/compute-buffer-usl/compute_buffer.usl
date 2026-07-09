@@ -13,7 +13,7 @@ pub struct VSOut {
   color: float4
 }
 
-kern(1, 1, 1) fill_vertices(inout vertices: [GeneratedVertex] #buffer(0),
+kern(1, 1, 1) fill_vertices(inout vertices: [GeneratedVertex] #buffer(0) #set(1),
                             gid: uint3 #global_id) {
   vertices[0].position = float4(-0.6, -0.6, 0.0, 1.0)
   vertices[0].color = float4(1.0, 0.2, 0.1, 1.0)
