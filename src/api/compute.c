@@ -292,15 +292,17 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
                     const uint32_t        *pDynamicOffsets) {
   GPUBindComputeContext ctx;
 
-  (void)pDynamicOffsets;
-
   if (!pass || pass->_ended ||
-      setIndex != 0 || dynamicOffsetCount != 0 || !bindGroup) {
+      setIndex != 0 || !bindGroup) {
     return;
   }
 
   ctx.pass = pass;
-  gpuForEachBindGroupBinding(bindGroup, gpuBindComputeBinding, &ctx);
+  gpuForEachBindGroupBindingWithDynamicOffsets(bindGroup,
+                                               dynamicOffsetCount,
+                                               pDynamicOffsets,
+                                               gpuBindComputeBinding,
+                                               &ctx);
 }
 
 GPU_EXPORT

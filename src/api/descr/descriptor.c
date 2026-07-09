@@ -51,6 +51,10 @@ typedef struct GPUPipelineLayoutPriv {
   GPUShaderStageFlags pushConstantStages;
 } GPUPipelineLayoutPriv;
 
+typedef struct GPUBindRenderContext {
+  GPURenderPassEncoder *pass;
+} GPUBindRenderContext;
+
 static GPUBindGroupLayoutPriv *
 gpu_layoutPriv(GPUBindGroupLayout *layout) {
   return layout ? layout->_priv : NULL;
@@ -87,6 +91,16 @@ gpu_bindStageIsValid(GPUBindStage stage);
 
 static int
 gpu_bindKindIsValid(GPUBindKind kind);
+
+static int
+gpu_u64Add(uint64_t a, uint64_t b, uint64_t *out) {
+  if (!out || b > UINT64_MAX - a) {
+    return 0;
+  }
+
+  *out = a + b;
+  return 1;
+}
 
 static int
 gpu_samplerDescIsValid(const GPUSamplerDesc *desc) {
@@ -1106,6 +1120,50 @@ GPUDestroyBindGroup(GPUBindGroup *group) {
   free(group);
 }
 
+static void
+gpuBindRenderBinding(void *ctx, const GPUBindGroupBindingView *binding) {
+  GPUBindRenderContext *bindCtx;
+
+  if (!ctx || !binding) {
+    return;
+  }
+
+  bindCtx = ctx;
+  if ((binding->visibility & GPU_SHADER_STAGE_VERTEX_BIT) != 0) {
+    if (binding->kind == GPUBindKindBuffer && binding->buffer) {
+      gpuSetRenderVertexBuffer(bindCtx->pass,
+                               binding->buffer,
+                               binding->offset,
+                               binding->binding);
+    } else if (binding->kind == GPUBindKindTexture && binding->textureView) {
+      gpuSetRenderVertexTexture(bindCtx->pass,
+                                binding->textureView,
+                                binding->binding);
+    } else if (binding->kind == GPUBindKindSampler && binding->sampler) {
+      gpuSetRenderVertexSampler(bindCtx->pass,
+                                binding->sampler,
+                                binding->binding);
+    }
+  }
+
+  if ((binding->visibility & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0) {
+    if (binding->kind == GPUBindKindBuffer && binding->buffer) {
+      gpuSetRenderFragmentBuffer(bindCtx->pass,
+                                 binding->buffer,
+                                 binding->offset,
+                                 binding->binding);
+    } else if (binding->kind == GPUBindKindTexture && binding->textureView) {
+      gpuSetRenderFragmentTexture(bindCtx->pass,
+                                  binding->textureView,
+                                  binding->binding);
+    } else if (binding->kind == GPUBindKindSampler && binding->sampler) {
+      gpuSetRenderFragmentSampler(bindCtx->pass,
+                                  binding->sampler,
+                                  binding->binding);
+    }
+  }
+}
+
 GPU_EXPORT
 void
 GPUBindRenderGroup(GPURenderPassEncoder *pass,
@@ -1113,74 +1171,36 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
                    GPUBindGroup *group,
                    uint32_t dynamicOffsetCount,
                    const uint32_t *pDynamicOffsets) {
-  const GPUBindGroupBindingPriv *binding;
-  GPUBindGroupLayoutPriv *layout;
-  GPUBindGroupPriv *priv;
-  uint32_t i;
+  GPUBindRenderContext ctx;
 
-  (void)pDynamicOffsets;
-
-  if (!pass || setIndex != 0 || dynamicOffsetCount != 0 || !group) {
+  if (!pass || pass->_ended || setIndex != 0 || !group) {
     return;
   }
 
-  priv = gpu_groupPriv(group);
-  layout = gpu_layoutPriv(priv ? priv->layout : NULL);
-  if (!priv || !layout || priv->count < layout->count) {
-    return;
-  }
-
-  for (i = 0; i < layout->count; i++) {
-    const GPUBindGroupLayoutEntry *layoutEntry;
-
-    layoutEntry = &layout->entries[i];
-    binding = &priv->bindings[i];
-
-    if ((layoutEntry->visibility & GPU_SHADER_STAGE_VERTEX_BIT) != 0) {
-      if (layoutEntry->kind == GPUBindKindBuffer && binding->buffer) {
-        gpuSetRenderVertexBuffer(pass,
-                                 binding->buffer,
-                                 binding->offset,
-                                 layoutEntry->binding);
-      } else if (layoutEntry->kind == GPUBindKindTexture && binding->textureView) {
-        gpuSetRenderVertexTexture(pass,
-                                  binding->textureView,
-                                  layoutEntry->binding);
-      } else if (layoutEntry->kind == GPUBindKindSampler && binding->sampler) {
-        gpuSetRenderVertexSampler(pass,
-                                  binding->sampler,
-                                  layoutEntry->binding);
-      }
-    }
-
-    if ((layoutEntry->visibility & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0) {
-      if (layoutEntry->kind == GPUBindKindBuffer && binding->buffer) {
-        gpuSetRenderFragmentBuffer(pass,
-                                   binding->buffer,
-                                   binding->offset,
-                                   layoutEntry->binding);
-      } else if (layoutEntry->kind == GPUBindKindTexture && binding->textureView) {
-        gpuSetRenderFragmentTexture(pass,
-                                    binding->textureView,
-                                    layoutEntry->binding);
-      } else if (layoutEntry->kind == GPUBindKindSampler && binding->sampler) {
-        gpuSetRenderFragmentSampler(pass,
-                                    binding->sampler,
-                                    layoutEntry->binding);
-      }
-    }
-  }
+  ctx.pass = pass;
+  gpuForEachBindGroupBindingWithDynamicOffsets(group,
+                                               dynamicOffsetCount,
+                                               pDynamicOffsets,
+                                               gpuBindRenderBinding,
+                                               &ctx);
 }
 
 GPU_HIDE
 int
-gpuForEachBindGroupBinding(GPUBindGroup *group,
-                           GPUBindGroupBindingFn fn,
-                           void *ctx) {
+gpuForEachBindGroupBindingWithDynamicOffsets(GPUBindGroup *group,
+                                             uint32_t dynamicOffsetCount,
+                                             const uint32_t *pDynamicOffsets,
+                                             GPUBindGroupBindingFn fn,
+                                             void *ctx) {
   GPUBindGroupPriv *priv;
   GPUBindGroupLayoutPriv *layout;
+  uint32_t dynamicIndex;
+  uint32_t dynamicRequired;
 
   if (!group || !fn) {
+    return 0;
+  }
+  if (dynamicOffsetCount > 0u && !pDynamicOffsets) {
     return 0;
   }
 
@@ -1190,13 +1210,51 @@ gpuForEachBindGroupBinding(GPUBindGroup *group,
     return 0;
   }
 
+  dynamicRequired = 0u;
+  for (uint32_t i = 0; i < layout->count; i++) {
+    const GPUBindGroupLayoutEntry *layoutEntry;
+    const GPUBindGroupBindingPriv *binding;
+    uint64_t effectiveOffset;
+
+    layoutEntry = &layout->entries[i];
+    binding = &priv->bindings[i];
+    if (!layoutEntry->hasDynamicOffset) {
+      continue;
+    }
+    if (layoutEntry->kind != GPUBindKindBuffer ||
+        dynamicRequired >= dynamicOffsetCount ||
+        !gpu_u64Add(binding->offset,
+                    pDynamicOffsets[dynamicRequired],
+                    &effectiveOffset)) {
+      return 0;
+    }
+    dynamicRequired++;
+  }
+  if (dynamicRequired != dynamicOffsetCount) {
+    return 0;
+  }
+
+  dynamicIndex = 0u;
   for (uint32_t i = 0; i < layout->count; i++) {
     const GPUBindGroupLayoutEntry *layoutEntry;
     const GPUBindGroupBindingPriv *binding;
     GPUBindGroupBindingView view;
+    uint64_t effectiveOffset;
 
     layoutEntry = &layout->entries[i];
     binding = &priv->bindings[i];
+    effectiveOffset = binding->offset;
+    if (layoutEntry->hasDynamicOffset) {
+      if (layoutEntry->kind != GPUBindKindBuffer ||
+          dynamicIndex >= dynamicOffsetCount ||
+          !gpu_u64Add(effectiveOffset,
+                      pDynamicOffsets[dynamicIndex],
+                      &effectiveOffset)) {
+        return 0;
+      }
+      dynamicIndex++;
+    }
+
     memset(&view, 0, sizeof(view));
     view.stage = binding->stage;
     view.kind = binding->kind;
@@ -1204,11 +1262,19 @@ gpuForEachBindGroupBinding(GPUBindGroup *group,
     view.buffer = binding->buffer;
     view.textureView = binding->textureView;
     view.sampler = binding->sampler;
-    view.offset = binding->offset;
+    view.offset = effectiveOffset;
     view.size = binding->size;
     view.visibility = layoutEntry->visibility;
     fn(ctx, &view);
   }
 
-  return 1;
+  return dynamicIndex == dynamicOffsetCount;
+}
+
+GPU_HIDE
+int
+gpuForEachBindGroupBinding(GPUBindGroup *group,
+                           GPUBindGroupBindingFn fn,
+                           void *ctx) {
+  return gpuForEachBindGroupBindingWithDynamicOffsets(group, 0u, NULL, fn, ctx);
 }

@@ -53,6 +53,14 @@ gpuForEachBindGroupBinding(GPUBindGroup *group,
                            void *ctx);
 
 GPU_HIDE
+int
+gpuForEachBindGroupBindingWithDynamicOffsets(GPUBindGroup *group,
+                                             uint32_t dynamicOffsetCount,
+                                             const uint32_t *pDynamicOffsets,
+                                             GPUBindGroupBindingFn fn,
+                                             void *ctx);
+
+GPU_HIDE
 void
 gpuGetPipelineLayoutPushConstants(GPUPipelineLayout *layout,
                                   uint32_t *outSizeBytes,

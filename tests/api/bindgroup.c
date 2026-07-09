@@ -72,6 +72,28 @@ check_bind_group_layout_validation(GPUDevice *device) {
   }
 
   entry.immutableSamplerDesc = valid_sampler_desc();
+  entry.hasDynamicOffset = true;
+  layout = (GPUBindGroupLayout *)(uintptr_t)1u;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT ||
+      layout != NULL) {
+    fprintf(stderr, "bind group layout accepted dynamic offset on sampler\n");
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  entry.immutableSampler = false;
+  entry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  layout = NULL;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK || !layout) {
+    fprintf(stderr, "bind group layout rejected valid dynamic buffer entry\n");
+    return 0;
+  }
+  GPUDestroyBindGroupLayout(layout);
+
+  entry.bindingType = GPU_BINDING_SAMPLER;
+  entry.hasDynamicOffset = false;
+  entry.immutableSampler = true;
+  entry.immutableSamplerDesc = valid_sampler_desc();
   layout = NULL;
   if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK || !layout) {
     fprintf(stderr, "bind group layout rejected valid immutable sampler\n");
