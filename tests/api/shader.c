@@ -1,4 +1,5 @@
 #include "test.h"
+#include "../../src/api/buffer_internal.h"
 
 static void *
 read_file(const char *path, uint64_t *outSize) {
@@ -103,7 +104,7 @@ static int
 check_shader_layout_after_library_destroy(GPUDevice *device,
                                           GPUShaderLayout *shaderLayout) {
   const GPUBindGroupLayoutEntry *entries;
-  unsigned char fakeBufferStorage;
+  GPUBuffer fakeBufferStorage;
   unsigned char fakeFragmentTextureStorage;
   unsigned char fakeComputeTextureStorage;
   GPUBindGroupEntry groupEntries[3];
@@ -149,6 +150,10 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
   }
 
   memset(groupEntries, 0, sizeof(groupEntries));
+  memset(&fakeBufferStorage, 0, sizeof(fakeBufferStorage));
+  fakeBufferStorage.sizeBytes = 16u;
+  fakeBufferStorage.usage = GPU_BUFFER_USAGE_UNIFORM;
+
   groupEntries[0].binding = 0u;
   groupEntries[0].stage = GPUBindStageFragment;
   groupEntries[0].kind = GPUBindKindTexture;
@@ -158,7 +163,7 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
   groupEntries[1].bindingType = GPU_BINDING_UNIFORM_BUFFER;
   groupEntries[1].stage = GPUBindStageFragment;
   groupEntries[1].kind = GPUBindKindBuffer;
-  groupEntries[1].buffer.buffer = (GPUBuffer *)(void *)&fakeBufferStorage;
+  groupEntries[1].buffer.buffer = &fakeBufferStorage;
   groupEntries[1].buffer.size = 16u;
 
   groupEntries[2].binding = 0u;

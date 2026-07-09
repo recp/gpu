@@ -21,8 +21,12 @@ check_bind_group_layout_validation(GPUDevice *device) {
   GPUBindGroupLayoutCreateInfo layoutInfo;
   GPUBindGroupLayout *layout;
   GPUBindGroupEntry runtimeSamplerEntry;
+  GPUBindGroupEntry bufferEntry;
   GPUBindGroupCreateInfo groupInfo;
+  GPUBufferCreateInfo bufferInfo;
   GPUBindGroup *group;
+  GPUBuffer *uniformBuffer;
+  GPUBuffer *storageOnlyBuffer;
   GPUPipelineLayoutCreateInfo pipelineInfo;
   GPUBindGroupLayout *layouts[1];
   GPUPipelineLayout *pipelineLayout;
@@ -88,6 +92,81 @@ check_bind_group_layout_validation(GPUDevice *device) {
     fprintf(stderr, "bind group layout rejected valid dynamic buffer entry\n");
     return 0;
   }
+
+  memset(&bufferInfo, 0, sizeof(bufferInfo));
+  bufferInfo.chain.sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.sizeBytes = 32u;
+  bufferInfo.usage = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
+  uniformBuffer = NULL;
+  if (GPUCreateBuffer(device, &bufferInfo, &uniformBuffer) != GPU_OK || !uniformBuffer) {
+    fprintf(stderr, "bind group buffer setup failed\n");
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  bufferInfo.usage = GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_DST;
+  storageOnlyBuffer = NULL;
+  if (GPUCreateBuffer(device, &bufferInfo, &storageOnlyBuffer) != GPU_OK ||
+      !storageOnlyBuffer) {
+    fprintf(stderr, "bind group storage buffer setup failed\n");
+    GPUDestroyBuffer(uniformBuffer);
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  memset(&bufferEntry, 0, sizeof(bufferEntry));
+  bufferEntry.binding = 0u;
+  bufferEntry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  bufferEntry.buffer.buffer = uniformBuffer;
+  bufferEntry.buffer.offset = 0u;
+  bufferEntry.buffer.size = 16u;
+
+  memset(&groupInfo, 0, sizeof(groupInfo));
+  groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.label = "uniform-buffer-group";
+  groupInfo.layout = layout;
+  groupInfo.entryCount = 1u;
+  groupInfo.pEntries = &bufferEntry;
+  group = NULL;
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
+    fprintf(stderr, "bind group rejected valid uniform buffer binding\n");
+    GPUDestroyBuffer(storageOnlyBuffer);
+    GPUDestroyBuffer(uniformBuffer);
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  GPUDestroyBindGroup(group);
+
+  bufferEntry.buffer.offset = 24u;
+  group = (GPUBindGroup *)(uintptr_t)1u;
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT ||
+      group != NULL) {
+    fprintf(stderr, "bind group accepted out-of-range buffer binding\n");
+    GPUDestroyBindGroup(group);
+    GPUDestroyBuffer(storageOnlyBuffer);
+    GPUDestroyBuffer(uniformBuffer);
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  bufferEntry.buffer.offset = 0u;
+  bufferEntry.buffer.buffer = storageOnlyBuffer;
+  group = (GPUBindGroup *)(uintptr_t)1u;
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT ||
+      group != NULL) {
+    fprintf(stderr, "bind group accepted buffer without required usage\n");
+    GPUDestroyBindGroup(group);
+    GPUDestroyBuffer(storageOnlyBuffer);
+    GPUDestroyBuffer(uniformBuffer);
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  GPUDestroyBuffer(storageOnlyBuffer);
+  GPUDestroyBuffer(uniformBuffer);
   GPUDestroyBindGroupLayout(layout);
 
   entry.bindingType = GPU_BINDING_SAMPLER;

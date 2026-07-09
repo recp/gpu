@@ -15,6 +15,7 @@
  */
 
 #include "../../common.h"
+#include "../buffer_internal.h"
 #include "../render/rce_internal.h"
 #include "descriptor_internal.h"
 #include "../usl_target.h"
@@ -413,6 +414,42 @@ gpu_bindGroupEntryResourceKind(const GPUBindGroupEntry *entry,
 }
 
 static int
+gpu_bindingBufferUsage(GPUBindingType bindingType, GPUBufferUsageFlags *outUsage) {
+  if (!outUsage) {
+    return 0;
+  }
+
+  switch (bindingType) {
+    case GPU_BINDING_UNIFORM_BUFFER:
+      *outUsage = GPU_BUFFER_USAGE_UNIFORM;
+      return 1;
+    case GPU_BINDING_STORAGE_BUFFER:
+      *outUsage = GPU_BUFFER_USAGE_STORAGE;
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static int
+gpu_bindGroupBufferRangeValid(const GPUBindGroupLayoutEntry *layoutEntry,
+                              const GPUBindGroupEntry       *entry) {
+  GPUBufferUsageFlags usage;
+
+  if (!layoutEntry || !entry || layoutEntry->kind != GPUBindKindBuffer) {
+    return 1;
+  }
+  if (!gpu_bindingBufferUsage(layoutEntry->bindingType, &usage)) {
+    return 0;
+  }
+
+  return gpuBufferHasUsage(entry->buffer.buffer, usage) &&
+         gpuBufferRangeValid(entry->buffer.buffer,
+                             entry->buffer.offset,
+                             entry->buffer.size);
+}
+
+static int
 gpu_bindGroupEntryMatchesLayout(const GPUBindGroupLayoutEntry *layoutEntry,
                                 const GPUBindGroupEntry *entry) {
   GPUBindKind resourceKind;
@@ -438,6 +475,9 @@ gpu_bindGroupEntryMatchesLayout(const GPUBindGroupLayoutEntry *layoutEntry,
   }
   if (layoutEntry->kind == GPUBindKindBuffer &&
       entry->bindingType != layoutEntry->bindingType) {
+    return 0;
+  }
+  if (!gpu_bindGroupBufferRangeValid(layoutEntry, entry)) {
     return 0;
   }
 
@@ -1253,6 +1293,10 @@ gpuForEachBindGroupBindingWithDynamicOffsets(GPUBindGroup *group,
         return 0;
       }
       dynamicIndex++;
+    }
+    if (layoutEntry->kind == GPUBindKindBuffer &&
+        !gpuBufferRangeValid(binding->buffer, effectiveOffset, binding->size)) {
+      return 0;
     }
 
     memset(&view, 0, sizeof(view));
