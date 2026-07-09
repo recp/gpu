@@ -44,6 +44,20 @@ run_shader(void *ctx) {
   return gpu_test_shader(testCtx->device, testCtx->uslBytecodePath);
 }
 
+static GPUAdapter *
+select_adapter(void) {
+  GPUAdapter *adapter = NULL;
+  uint32_t adapterCount = 1;
+  GPUResult result;
+
+  result = GPUEnumerateAdapters(NULL, &adapterCount, &adapter);
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
+      !adapter) {
+    return NULL;
+  }
+  return adapter;
+}
+
 int
 main(int argc, char **argv) {
   GPUAdapter *adapter;
@@ -57,7 +71,7 @@ main(int argc, char **argv) {
     return 2;
   }
 
-  adapter = GPUGetAutoSelectedPhysicalDevice(NULL);
+  adapter = select_adapter();
   if (!adapter) {
     fprintf(stderr, "failed to get adapter\n");
     return 1;

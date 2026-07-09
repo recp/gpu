@@ -47,6 +47,20 @@ GPUSampleCreateWindow(NSString *title,
   return YES;
 }
 
+static inline GPUAdapter *
+GPUSampleSelectAdapter(void) {
+  GPUAdapter *adapter = NULL;
+  uint32_t adapterCount = 1;
+  GPUResult result;
+
+  result = GPUEnumerateAdapters(NULL, &adapterCount, &adapter);
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
+      !adapter) {
+    return NULL;
+  }
+  return adapter;
+}
+
 static inline BOOL
 GPUSampleCreateDefaultSurfaceGPU(NSWindow *window,
                                  NSView *view,
@@ -66,7 +80,7 @@ GPUSampleCreateDefaultSurfaceGPU(NSWindow *window,
     return NO;
   }
 
-  adapter = GPUGetAutoSelectedPhysicalDevice(NULL);
+  adapter = GPUSampleSelectAdapter();
   if (!adapter) {
     NSLog(@"GPU: failed to get adapter");
     return NO;

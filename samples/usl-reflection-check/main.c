@@ -70,6 +70,20 @@ read_file(const char *path, uint64_t *outSize) {
   return bytes;
 }
 
+static GPUAdapter *
+select_adapter(void) {
+  GPUAdapter *adapter = NULL;
+  uint32_t adapterCount = 1;
+  GPUResult result;
+
+  result = GPUEnumerateAdapters(NULL, &adapterCount, &adapter);
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
+      !adapter) {
+    return NULL;
+  }
+  return adapter;
+}
+
 static int
 reflection_has_resource(const GPUShaderReflection *reflection,
                         GPUBindingType bindingType,
@@ -280,7 +294,7 @@ main(int argc, char **argv) {
     }
   }
 
-  adapter = GPUGetAutoSelectedPhysicalDevice(NULL);
+  adapter = select_adapter();
   if (!adapter) {
     fprintf(stderr, "failed to get adapter\n");
     free(storageBytecode);

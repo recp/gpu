@@ -22,6 +22,20 @@ static const TriangleVertex kTriangleVertices[] = {
   { {  0.7f, -0.65f }, { 0.2f, 0.4f, 1.0f, 1.0f } },
 };
 
+static GPUAdapter *
+SelectAdapter(void) {
+  GPUAdapter *adapter = NULL;
+  uint32_t adapterCount = 1;
+  GPUResult result;
+
+  result = GPUEnumerateAdapters(NULL, &adapterCount, &adapter);
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
+      !adapter) {
+    return NULL;
+  }
+  return adapter;
+}
+
 @interface TriangleApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
 @private
   NSWindow *_window;
@@ -95,7 +109,7 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   GPUShaderLibraryCreateInfo shaderInfo = {0};
 
-  _adapter = GPUGetAutoSelectedPhysicalDevice(NULL);
+  _adapter = SelectAdapter();
   if (!_adapter) {
     NSLog(@"GPU: failed to get adapter");
     return NO;
