@@ -12,13 +12,13 @@ vert reflect_vs(v: VSIn #stage_in) -> float4 {
 }
 
 @require(explicit_gradient_sampling)
-frag reflect_fs(colorTex: texture2d<half> #texture(0),
-                uniforms: FragmentUniforms #buffer(0) #dynamic_offset) -> float4 {
+frag reflect_fs(colorTex: texture2d<half> #texture(0) #set(0),
+                uniforms: FragmentUniforms #buffer(0) #set(1) #dynamic_offset) -> float4 {
   let repeatSampler = sampler(.linear, .linear, .linear, .repeat)
   return float4(colorTex.sample(repeatSampler, float2(0.5, 0.5))) * uniforms.tint
 }
 
-kern(8, 8, 1) reflect_cs(outputImage: texture2d<float, write> #texture(0),
+kern(8, 8, 1) reflect_cs(outputImage: texture2d<float, write> #texture(0) #set(1),
                          gid: uint3 #global_id) {
   outputImage.write(float4(1.0, 0.0, 0.0, 1.0), gid.xy)
 }

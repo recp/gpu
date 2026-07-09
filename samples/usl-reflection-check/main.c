@@ -88,6 +88,7 @@ static int
 reflection_has_resource(const GPUShaderReflection *reflection,
                         GPUBindingType bindingType,
                         GPUShaderStageFlags visibility,
+                        uint32_t setIndex,
                         uint32_t binding,
                         int hasDynamicOffset) {
   if (!reflection || (!reflection->pResources && reflection->resourceCount > 0u)) {
@@ -96,7 +97,7 @@ reflection_has_resource(const GPUShaderReflection *reflection,
 
   for (uint32_t i = 0; i < reflection->resourceCount; i++) {
     const GPUShaderResourceReflection *item = &reflection->pResources[i];
-    if (item->setIndex == 0u &&
+    if (item->setIndex == setIndex &&
         item->binding == binding &&
         item->bindingType == bindingType &&
         item->visibility == visibility &&
@@ -136,19 +137,17 @@ layout_has_entry(const GPUBindGroupLayoutEntry *entries,
 static int
 check_layout_from_reflection(GPUDevice *device,
                              GPUShaderLibrary *library,
-                             uint32_t expectedEntryCount,
+                             uint32_t expectedLayoutCount,
                              const GPUShaderReflection *reflection) {
-  const GPUBindGroupLayoutEntry *entries;
-  GPUBindGroupLayout *layouts[1] = { NULL };
+  GPUBindGroupLayout **layouts;
   GPUPipelineLayout *pipelineLayout;
-  uint32_t layoutEntryCount;
   uint32_t layoutCount;
   GPUResult rc;
   int ok;
 
   layoutCount = 0u;
   rc = GPUCreateBindGroupLayoutsFromReflection(device, library, &layoutCount, NULL);
-  if (rc != GPU_OK || layoutCount != (expectedEntryCount > 0u ? 1u : 0u)) {
+  if (rc != GPU_OK || layoutCount != expectedLayoutCount) {
     fprintf(stderr, "unexpected reflected bind group layout count\n");
     return 0;
   }
@@ -165,22 +164,51 @@ check_layout_from_reflection(GPUDevice *device,
     return ok;
   }
 
-  rc = GPUCreateBindGroupLayoutsFromReflection(device, library, &layoutCount, layouts);
-  if (rc != GPU_OK || layoutCount != 1u || !layouts[0]) {
-    fprintf(stderr, "failed to create reflected bind group layout\n");
+  layouts = calloc(layoutCount, sizeof(*layouts));
+  if (!layouts) {
     return 0;
   }
 
-  entries = GPUGetBindGroupLayoutEntries(layouts[0], &layoutEntryCount);
-  ok = layoutEntryCount == expectedEntryCount;
-  for (uint32_t i = 0; ok && reflection && i < reflection->resourceCount; i++) {
-    const GPUShaderResourceReflection *resource = &reflection->pResources[i];
-    ok = layout_has_entry(entries,
-                          layoutEntryCount,
-                          resource->bindingType,
-                          resource->visibility,
-                          resource->binding,
-                          resource->hasDynamicOffset);
+  rc = GPUCreateBindGroupLayoutsFromReflection(device, library, &layoutCount, layouts);
+  if (rc != GPU_OK || layoutCount != expectedLayoutCount) {
+    fprintf(stderr, "failed to create reflected bind group layout\n");
+    free(layouts);
+    return 0;
+  }
+
+  ok = 1;
+  for (uint32_t setIndex = 0; ok && setIndex < layoutCount; setIndex++) {
+    const GPUBindGroupLayoutEntry *entries;
+    uint32_t expectedEntryCount;
+    uint32_t layoutEntryCount;
+
+    if (!layouts[setIndex]) {
+      ok = 0;
+      break;
+    }
+
+    expectedEntryCount = 0u;
+    for (uint32_t i = 0; reflection && i < reflection->resourceCount; i++) {
+      if (reflection->pResources[i].setIndex == setIndex) {
+        expectedEntryCount++;
+      }
+    }
+
+    entries = GPUGetBindGroupLayoutEntries(layouts[setIndex], &layoutEntryCount);
+    ok = layoutEntryCount == expectedEntryCount;
+    for (uint32_t i = 0; ok && reflection && i < reflection->resourceCount; i++) {
+      const GPUShaderResourceReflection *resource = &reflection->pResources[i];
+      if (resource->setIndex != setIndex) {
+        continue;
+      }
+
+      ok = layout_has_entry(entries,
+                            layoutEntryCount,
+                            resource->bindingType,
+                            resource->visibility,
+                            resource->binding,
+                            resource->hasDynamicOffset);
+    }
   }
 
   rc = GPUCreatePipelineLayoutFromReflection(device,
@@ -191,7 +219,10 @@ check_layout_from_reflection(GPUDevice *device,
   ok = ok && rc == GPU_OK && pipelineLayout != NULL;
 
   GPUDestroyPipelineLayout(pipelineLayout);
-  GPUDestroyBindGroupLayout(layouts[0]);
+  for (uint32_t i = 0; i < layoutCount; i++) {
+    GPUDestroyBindGroupLayout(layouts[i]);
+  }
+  free(layouts);
   return ok;
 }
 
@@ -200,6 +231,7 @@ check_shader_artifact(GPUDevice *device,
                       const void *bytecode,
                       uint64_t bytecodeSize,
                       uint32_t expectedResourceCount,
+                      uint32_t expectedLayoutCount,
                       int storageOnly) {
   GPUShaderLibraryCreateInfo createInfo;
   GPUShaderReflection reflection;
@@ -231,21 +263,25 @@ check_shader_artifact(GPUDevice *device,
                                  GPU_BINDING_STORAGE_BUFFER,
                                  GPU_SHADER_STAGE_COMPUTE_BIT,
                                  0u,
+                                 0u,
                                  0);
   } else if (ok) {
     ok = reflection_has_resource(&reflection,
                                  GPU_BINDING_SAMPLED_TEXTURE,
                                  GPU_SHADER_STAGE_FRAGMENT_BIT,
                                  0u,
+                                 0u,
                                  0) &&
          reflection_has_resource(&reflection,
                                  GPU_BINDING_UNIFORM_BUFFER,
                                  GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                 1u,
                                  0u,
                                  1) &&
          reflection_has_resource(&reflection,
                                  GPU_BINDING_STORAGE_TEXTURE,
                                  GPU_SHADER_STAGE_COMPUTE_BIT,
+                                 1u,
                                  0u,
                                  0) &&
          GPUShaderFunction(library, "reflect_vs") != NULL &&
@@ -256,7 +292,7 @@ check_shader_artifact(GPUDevice *device,
 
   ok = ok && check_layout_from_reflection(device,
                                           library,
-                                          expectedResourceCount,
+                                          expectedLayoutCount,
                                           &reflection);
 
   GPUFreeShaderReflection(&reflection);
@@ -319,11 +355,12 @@ main(int argc, char **argv) {
     return 1;
   }
 
-  ok = check_shader_artifact(device, bytecode, bytecodeSize, 3u, 0) &&
+  ok = check_shader_artifact(device, bytecode, bytecodeSize, 3u, 2u, 0) &&
        (!storageBytecode ||
         check_shader_artifact(device,
                               storageBytecode,
                               storageBytecodeSize,
+                              1u,
                               1u,
                               1));
 
