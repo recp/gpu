@@ -28,7 +28,7 @@ struct GPUApi;
 typedef struct GPUApiSurface {
   GPUSurface *(*createSurface)(struct GPUApi            * __restrict api,
                                struct GPUInstance       * __restrict inst,
-                               GPUPhysicalDevice        * __restrict phyDevice,
+                               GPUAdapter               * __restrict adapter,
                                void                     * __restrict nativeHandle,
                                GPUSurfaceType                        type,
                                float                                 scale);

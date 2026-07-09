@@ -158,18 +158,18 @@ GPUAutoSelectPhysicalDeviceIn(GPUInstance       * __restrict inst,
 
 GPU_EXPORT
 GPUDevice *
-GPUCreateDevice(GPUPhysicalDevice        *phyDevice,
+GPUCreateDevice(GPUAdapter               *adapter,
                 GPUCommandQueueCreateInfo queCI[],
                 uint32_t                  nQueCI) {
   GPUApi *api;
 
-  if (!phyDevice || !gpu_validQueueCreateInfos(queCI, nQueCI)) {
+  if (!adapter || !gpu_validQueueCreateInfos(queCI, nQueCI)) {
     return NULL;
   }
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->device.createDevice(phyDevice, queCI, nQueCI);
+  return api->device.createDevice(adapter, queCI, nQueCI);
 }
 
 GPU_EXPORT

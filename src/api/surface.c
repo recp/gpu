@@ -19,7 +19,7 @@
 GPU_EXPORT
 GPUSurface*
 GPUCreateSurface(GPUInstance       * __restrict inst,
-                 GPUPhysicalDevice * __restrict phyDevice,
+                 GPUAdapter        * __restrict adapter,
                  void              * __restrict nativeHandle,
                  GPUSurfaceType                 type,
                  float                          scale) {
@@ -28,7 +28,7 @@ GPUCreateSurface(GPUInstance       * __restrict inst,
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->surface.createSurface(api, inst, phyDevice, nativeHandle, type, scale);
+  return api->surface.createSurface(api, inst, adapter, nativeHandle, type, scale);
 }
 
 GPU_EXPORT

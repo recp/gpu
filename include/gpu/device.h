@@ -76,12 +76,12 @@ GPUGetFirstPhysicalDevice(GPUInstance *inst) {
 
 GPU_EXPORT
 GPUDevice *
-GPUCreateDevice(GPUPhysicalDevice        *phyDevice,
+GPUCreateDevice(GPUAdapter               *adapter,
                 GPUCommandQueueCreateInfo queCI[],
                 uint32_t                  nQueCI);
 
-#define GPUCreateDeviceWithDefaultQueues(phyDevice)                           \
-  GPUCreateDevice(phyDevice, NULL, 0)
+#define GPUCreateDeviceWithDefaultQueues(adapter)                             \
+  GPUCreateDevice(adapter, NULL, 0)
 
 GPU_EXPORT
 GPUDevice *
