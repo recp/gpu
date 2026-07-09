@@ -17,6 +17,7 @@
 #include "../../common.h"
 #include "pipeline_internal.h"
 #include "../library_internal.h"
+#include "../pipeline_cache_internal.h"
 #include "../vertex_internal.h"
 
 #define GPU_RENDER_PIPELINE_MAX_COLOR_TARGETS 8u
@@ -225,6 +226,8 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
 
   if (!device || !info || !info->library || !info->vertexEntry || !info->fragmentEntry)
     return GPU_ERROR_INVALID_ARGUMENT;
+  if (info->cache && info->cache->device != device)
+    return GPU_ERROR_INVALID_ARGUMENT;
   if (!gpu_pipelineInfoIsSupported(info))
     return GPU_ERROR_INVALID_ARGUMENT;
 
@@ -267,6 +270,7 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
+  gpuRecordPipelineCompile(device, info->cache);
   free(state);
   pipeline->_primitiveTopology = info->primitiveTopology;
   pipeline->_cullMode = info->cullMode;
@@ -289,6 +293,114 @@ GPUDestroyRenderPipeline(GPURenderPipeline *pipeline) {
   }
 
   free(pipeline);
+}
+
+GPU_EXPORT
+GPUResult
+GPUCreatePipelineCache(GPUDevice                         * __restrict device,
+                       const GPUPipelineCacheCreateInfo  * __restrict info,
+                       GPUPipelineCache                 ** __restrict outCache) {
+  GPUPipelineCache *cache;
+
+  if (!outCache) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outCache = NULL;
+
+  if (!device || !info) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+      info->chain.sType != GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  cache = calloc(1, sizeof(*cache));
+  if (!cache) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  cache->device = device;
+  *outCache = cache;
+  return GPU_OK;
+}
+
+GPU_EXPORT
+void
+GPUDestroyPipelineCache(GPUPipelineCache *cache) {
+  free(cache);
+}
+
+GPU_EXPORT
+GPUResult
+GPUPrewarmRenderPipelines(GPUDevice                        * __restrict device,
+                          GPUPipelineCache                 * __restrict cache,
+                          uint32_t                                      count,
+                          const GPURenderPipelineCreateInfo * __restrict infos) {
+  if (!device || !cache || cache->device != device || (count > 0u && !infos)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  return GPU_ERROR_UNSUPPORTED;
+}
+
+GPU_EXPORT
+GPUResult
+GPUCompileRenderPipelineAsync(GPUDevice                         * __restrict device,
+                              GPUPipelineCache                  * __restrict cache,
+                              const GPURenderPipelineCreateInfo * __restrict info,
+                              GPUPipelineCompileHandle          * __restrict outHandle) {
+  if (!outHandle) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  outHandle->id = 0;
+  if (!device || !cache || cache->device != device || !info) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  return GPU_ERROR_UNSUPPORTED;
+}
+
+GPU_EXPORT
+GPUResult
+GPUPollRenderPipelineCompile(GPUDevice                 * __restrict device,
+                             GPUPipelineCompileHandle               handle,
+                             GPUPipelineCompileStatus  * __restrict outStatus,
+                             GPURenderPipeline        ** __restrict outPipeline) {
+  GPU__UNUSED(handle);
+
+  if (!outStatus || !outPipeline) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outStatus = GPU_PIPELINE_COMPILE_FAILED;
+  *outPipeline = NULL;
+  if (!device) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  return GPU_ERROR_UNSUPPORTED;
+}
+
+GPU_HIDE
+void
+gpuRecordPipelineCompile(GPUDevice *device, GPUPipelineCache *cache) {
+  if (device) {
+    device->cacheStats.pipelineCompiles++;
+  }
+  if (!cache) {
+    return;
+  }
+
+  cache->stats.pipelineMisses++;
+  cache->stats.pipelineCompiles++;
+  if (cache->device) {
+    cache->device->cacheStats.pipelineMisses++;
+  }
 }
 
 GPU_HIDE

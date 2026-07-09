@@ -106,6 +106,24 @@ typedef struct GPUColorTargetState {
   GPUBlendState blend;
 } GPUColorTargetState;
 
+typedef struct GPUPipelineCacheCreateInfo {
+  GPUChainedStruct chain;
+  const char      *label;
+  bool             enableDiskCache;
+  const char      *cachePath;
+  uint64_t         maxEntries;
+} GPUPipelineCacheCreateInfo;
+
+typedef struct GPUPipelineCompileHandle {
+  uint64_t id;
+} GPUPipelineCompileHandle;
+
+typedef enum GPUPipelineCompileStatus {
+  GPU_PIPELINE_COMPILE_PENDING = 0,
+  GPU_PIPELINE_COMPILE_READY = 1,
+  GPU_PIPELINE_COMPILE_FAILED = 2
+} GPUPipelineCompileStatus;
+
 typedef struct GPUMultisampleState {
   uint32_t sampleCount;
   uint32_t sampleMask;
@@ -138,6 +156,37 @@ GPUResult
 GPUCreateRenderPipeline(GPUDevice                          * __restrict device,
                         const GPURenderPipelineCreateInfo  * __restrict info,
                         GPURenderPipeline                 ** __restrict outPipeline);
+
+GPU_EXPORT
+GPUResult
+GPUCreatePipelineCache(GPUDevice                         * __restrict device,
+                       const GPUPipelineCacheCreateInfo  * __restrict info,
+                       GPUPipelineCache                 ** __restrict outCache);
+
+GPU_EXPORT
+void
+GPUDestroyPipelineCache(GPUPipelineCache *cache);
+
+GPU_EXPORT
+GPUResult
+GPUPrewarmRenderPipelines(GPUDevice                        * __restrict device,
+                          GPUPipelineCache                 * __restrict cache,
+                          uint32_t                                      count,
+                          const GPURenderPipelineCreateInfo * __restrict infos);
+
+GPU_EXPORT
+GPUResult
+GPUCompileRenderPipelineAsync(GPUDevice                         * __restrict device,
+                              GPUPipelineCache                  * __restrict cache,
+                              const GPURenderPipelineCreateInfo * __restrict info,
+                              GPUPipelineCompileHandle          * __restrict outHandle);
+
+GPU_EXPORT
+GPUResult
+GPUPollRenderPipelineCompile(GPUDevice                 * __restrict device,
+                             GPUPipelineCompileHandle               handle,
+                             GPUPipelineCompileStatus  * __restrict outStatus,
+                             GPURenderPipeline        ** __restrict outPipeline);
 
 GPU_EXPORT
 void

@@ -19,6 +19,7 @@
 #include "compute_internal.h"
 #include "descr/descriptor_internal.h"
 #include "library_internal.h"
+#include "pipeline_cache_internal.h"
 
 static GPUComputePipelineState *
 gpuCompileComputePipelineState(GPUDevice *device, GPUComputePipeline *pipeline) {
@@ -47,6 +48,9 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
 
   *outPipeline = NULL;
   if (!device || !info || !info->library || !info->entryPoint) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->cache && info->cache->device != device) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
@@ -95,6 +99,7 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
     state->workgroupSize[1] = 1u;
     state->workgroupSize[2] = 1u;
   }
+  gpuRecordPipelineCompile(device, info->cache);
   *outPipeline = pipeline;
   return GPU_OK;
 }

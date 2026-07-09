@@ -44,6 +44,113 @@ expect_render_pipeline_error(GPUDevice *device,
 }
 
 static int
+check_pipeline_cache_validation(GPUDevice *device,
+                                GPURenderPipelineCreateInfo *info) {
+  GPUPipelineCacheCreateInfo cacheInfo = {0};
+  GPUPipelineCache *cache = NULL;
+  GPURenderPipeline *pipeline = NULL;
+  GPURenderPipeline *asyncPipeline = (GPURenderPipeline *)(uintptr_t)1u;
+  GPUPipelineCompileHandle handle = {0};
+  GPUPipelineCompileStatus status = GPU_PIPELINE_COMPILE_PENDING;
+  GPUCacheStats stats;
+
+  if (GPUGetCacheStats(NULL, &stats) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUGetCacheStats(device, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "cache stats accepted null input\n");
+    return 0;
+  }
+
+  GPUResetStats(device);
+  cacheInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+  cacheInfo.chain.structSize = sizeof(cacheInfo);
+  cacheInfo.label = "api-render-cache";
+
+  if (GPUCreatePipelineCache(NULL, &cacheInfo, &cache) != GPU_ERROR_INVALID_ARGUMENT ||
+      cache != NULL) {
+    fprintf(stderr, "pipeline cache create accepted null device\n");
+    return 0;
+  }
+  if (GPUCreatePipelineCache(device, &cacheInfo, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "pipeline cache create accepted null output\n");
+    return 0;
+  }
+
+  cacheInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_ERROR_INVALID_ARGUMENT ||
+      cache != NULL) {
+    fprintf(stderr, "pipeline cache create accepted wrong sType\n");
+    return 0;
+  }
+
+  cacheInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+  cacheInfo.chain.structSize = (uint32_t)(sizeof(cacheInfo) - 1u);
+  if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_ERROR_INVALID_ARGUMENT ||
+      cache != NULL) {
+    fprintf(stderr, "pipeline cache create accepted short structSize\n");
+    return 0;
+  }
+
+  cacheInfo.chain.structSize = sizeof(cacheInfo);
+  if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {
+    fprintf(stderr, "pipeline cache create rejected valid cache\n");
+    return 0;
+  }
+
+  info->cache = cache;
+  if (GPUCreateRenderPipeline(device, info, &pipeline) != GPU_OK || !pipeline) {
+    fprintf(stderr, "render pipeline create rejected valid cached pipeline\n");
+    goto fail;
+  }
+  GPUDestroyRenderPipeline(pipeline);
+  pipeline = NULL;
+  info->cache = NULL;
+
+  if (GPUGetCacheStats(device, &stats) != GPU_OK ||
+      stats.pipelineCompiles != 1u ||
+      stats.pipelineMisses != 1u ||
+      stats.pipelineHits != 0u) {
+    fprintf(stderr, "pipeline cache stats did not record compile miss\n");
+    goto fail;
+  }
+
+  GPUResetStats(device);
+  if (GPUGetCacheStats(device, &stats) != GPU_OK ||
+      stats.pipelineCompiles != 0u ||
+      stats.pipelineMisses != 0u) {
+    fprintf(stderr, "pipeline cache stats reset failed\n");
+    goto fail;
+  }
+
+  if (GPUCompileRenderPipelineAsync(device, cache, info, NULL) !=
+      GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "async pipeline compile accepted null handle\n");
+    goto fail;
+  }
+  if (GPUCompileRenderPipelineAsync(device, cache, info, &handle) !=
+      GPU_ERROR_UNSUPPORTED ||
+      handle.id != 0u) {
+    fprintf(stderr, "async pipeline compile did not report unsupported\n");
+    goto fail;
+  }
+  if (GPUPollRenderPipelineCompile(device, handle, &status, &asyncPipeline) !=
+      GPU_ERROR_UNSUPPORTED ||
+      status != GPU_PIPELINE_COMPILE_FAILED ||
+      asyncPipeline != NULL) {
+    fprintf(stderr, "async pipeline poll did not report unsupported\n");
+    goto fail;
+  }
+
+  GPUDestroyPipelineCache(cache);
+  return 1;
+
+fail:
+  info->cache = NULL;
+  GPUDestroyRenderPipeline(pipeline);
+  GPUDestroyPipelineCache(cache);
+  return 0;
+}
+
+static int
 check_render_pipeline_validation(GPUDevice *device) {
   GPUShaderLibrary *library = NULL;
   GPUColorTargetState colorTargets[9] = {0};
@@ -238,14 +345,11 @@ check_render_pipeline_validation(GPUDevice *device) {
   }
 
   info.multisample.sampleMask = 0u;
-  pipeline = NULL;
-  if (GPUCreateRenderPipeline(device, &info, &pipeline) != GPU_OK || !pipeline) {
-    fprintf(stderr, "render pipeline create rejected valid pipeline\n");
+  if (!check_pipeline_cache_validation(device, &info)) {
     GPUDestroyShaderLibrary(library);
     return 0;
   }
 
-  GPUDestroyRenderPipeline(pipeline);
   GPUDestroyShaderLibrary(library);
   return 1;
 }

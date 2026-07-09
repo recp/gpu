@@ -455,6 +455,27 @@ GPUGetFormatCapabilities(const GPUAdapter      *adapter,
 }
 
 GPU_EXPORT
+GPUResult
+GPUGetCacheStats(GPUDevice *device, GPUCacheStats *outStats) {
+  if (!device || !outStats) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outStats = device->cacheStats;
+  return GPU_OK;
+}
+
+GPU_EXPORT
+void
+GPUResetStats(GPUDevice *device) {
+  if (!device) {
+    return;
+  }
+
+  memset(&device->cacheStats, 0, sizeof(device->cacheStats));
+}
+
+GPU_EXPORT
 bool
 GPUIsFeatureSupported(const GPUAdapter *adapter, GPUFeature feature) {
   if (!adapter || !gpu_knownFeature(feature)) {

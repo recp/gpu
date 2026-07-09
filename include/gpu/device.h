@@ -114,6 +114,15 @@ typedef struct GPUFormatCapabilities {
   bool depthStencil;
 } GPUFormatCapabilities;
 
+typedef struct GPUCacheStats {
+  uint64_t bindGroupHits;
+  uint64_t bindGroupMisses;
+  uint64_t bindGroupCollisions;
+  uint64_t pipelineHits;
+  uint64_t pipelineMisses;
+  uint64_t pipelineCompiles;
+} GPUCacheStats;
+
 GPU_EXPORT
 GPUResult
 GPUEnumerateAdapters(GPUInstance *inst,
@@ -140,6 +149,14 @@ GPUResult
 GPUGetFormatCapabilities(const GPUAdapter      *adapter,
                          GPUFormat              format,
                          GPUFormatCapabilities *outCaps);
+
+GPU_EXPORT
+GPUResult
+GPUGetCacheStats(GPUDevice *device, GPUCacheStats *outStats);
+
+GPU_EXPORT
+void
+GPUResetStats(GPUDevice *device);
 
 GPU_EXPORT
 bool

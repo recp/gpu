@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 Recep Aslantas
+ * Copyright (C) 2026 Recep Aslantas
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,18 @@
  * limitations under the License.
  */
 
-#ifndef gpu_device_internal_h
-#define gpu_device_internal_h
+#ifndef gpu_pipeline_cache_internal_h
+#define gpu_pipeline_cache_internal_h
 
-#include "adapter_internal.h"
-#include "../common.h"
+#include "device_internal.h"
 
-struct GPUDevice {
-  GPUInstance       *inst;
-  GPUPhysicalDevice *phyDevice;
-  void              *_priv;
-  GPUQueueFlagBits   queueFamilies;
-  uint64_t           enabledFeatureMask;
-  GPUCacheStats      cacheStats;
+struct GPUPipelineCache {
+  GPUDevice     *device;
+  GPUCacheStats  stats;
 };
 
-#endif /* gpu_device_internal_h */
+GPU_HIDE
+void
+gpuRecordPipelineCompile(GPUDevice *device, GPUPipelineCache *cache);
+
+#endif /* gpu_pipeline_cache_internal_h */
