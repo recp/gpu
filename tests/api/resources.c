@@ -1,4 +1,5 @@
 #include "test.h"
+#include "../../src/api/texture_internal.h"
 
 static int
 check_resource_validation(GPUDevice *device) {
@@ -248,6 +249,18 @@ check_resource_validation(GPUDevice *device) {
   view = NULL;
   if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK || !view) {
     fprintf(stderr, "texture view create failed\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+  if (view->_texture != texture ||
+      view->format != viewInfo.format ||
+      view->viewType != viewInfo.viewType ||
+      view->baseMipLevel != viewInfo.baseMipLevel ||
+      view->mipLevelCount != viewInfo.mipLevelCount ||
+      view->baseArrayLayer != viewInfo.baseArrayLayer ||
+      view->arrayLayerCount != viewInfo.arrayLayerCount) {
+    fprintf(stderr, "texture view metadata mismatch\n");
+    GPUDestroyTextureView(view);
     GPUDestroyTexture(texture);
     return 0;
   }

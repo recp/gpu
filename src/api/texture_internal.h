@@ -35,6 +35,12 @@ struct GPUTexture {
 struct GPUTextureView {
   void *_priv;
   GPUTexture *_texture;
+  GPUFormat format;
+  GPUTextureViewType viewType;
+  uint32_t baseMipLevel;
+  uint32_t mipLevelCount;
+  uint32_t baseArrayLayer;
+  uint32_t arrayLayerCount;
   bool _ownsNative;
 };
 

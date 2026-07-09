@@ -57,6 +57,12 @@ mt_beginFrame(GPUApi       *__restrict api,
 
   targetView->_priv = drawable.texture;
   targetView->_texture = target;
+  targetView->format = target->format;
+  targetView->viewType = GPU_TEXTURE_VIEW_2D;
+  targetView->baseMipLevel = 0;
+  targetView->mipLevelCount = 1;
+  targetView->baseArrayLayer = 0;
+  targetView->arrayLayerCount = 1;
   targetView->_ownsNative = false;
 
   frame->_priv      = drawable;

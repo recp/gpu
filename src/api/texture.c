@@ -204,6 +204,8 @@ GPUCreateTextureView(GPUTexture                     * __restrict texture,
                      const GPUTextureViewCreateInfo * __restrict info,
                      GPUTextureView                ** __restrict outView) {
   GPUApi *api;
+  GPUTextureView *view;
+  GPUResult result;
 
   if (!outView) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -235,7 +237,24 @@ GPUCreateTextureView(GPUTexture                     * __restrict texture,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  return api->texture.createView(texture, info, outView);
+  view = NULL;
+  result = api->texture.createView(texture, info, &view);
+  if (result != GPU_OK) {
+    return result;
+  }
+  if (!view) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  view->_texture = texture;
+  view->format = info->format;
+  view->viewType = info->viewType;
+  view->baseMipLevel = info->baseMipLevel;
+  view->mipLevelCount = info->mipLevelCount;
+  view->baseArrayLayer = info->baseArrayLayer;
+  view->arrayLayerCount = info->arrayLayerCount;
+  *outView = view;
+  return GPU_OK;
 }
 
 GPU_EXPORT
