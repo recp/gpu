@@ -17,8 +17,6 @@
 #include "../common.h"
 #include "debug.h"
 
-extern GPUInitParams gpu__defaultInitParams;
-
 /*
  * Return 1 (true) if all layer names specified in check_names
  * can be found in given layer properties.
@@ -52,7 +50,8 @@ vk__checkLayers(uint32_t           check_count,
 
 GPU_HIDE
 GPUInstance*
-vk_createInstance(GPUApi * __restrict api, GPUInitParams * __restrict params) {
+vk_createInstance(GPUApi * __restrict api,
+                  const GPUInstanceCreateInfo * __restrict info) {
   GPUInstance           *gpuInst;
   GPUInstanceVk         *gpuInstVk;
   char                  *validationLayers[] = {"VK_LAYER_KHRONOS_validation"};
@@ -63,13 +62,11 @@ vk_createInstance(GPUApi * __restrict api, GPUInitParams * __restrict params) {
   uint32_t               i, nEnabledExtensions, nEnabledLayers;
   uint32_t               nInstanceExtensions, nInstanceLayers;
   VkBool32               surfaceExtFound, platformSurfaceExtFound, validationFound;
-  bool                   surfaceExtRequired, swapchainExtRequired, portabilityEnum, validate;
+  bool                   portabilityEnum, validate;
 
-  if (!params) { params = &gpu__defaultInitParams; }
+  GPU__UNUSED(api);
 
-  validate                = params->validation;
-  surfaceExtRequired      = (params->requiredFeatures & GPU_FEATURE_SURFACE)   != 0;
-  swapchainExtRequired    = (params->requiredFeatures & GPU_FEATURE_SWAPCHAIN) != 0;
+  validate                = info ? info->enableValidation : false;
 
   portabilityEnum         = false;
   surfaceExtFound         = 0;
@@ -82,7 +79,15 @@ vk_createInstance(GPUApi * __restrict api, GPUInitParams * __restrict params) {
 
   gpuInst        = calloc(1, sizeof(*gpuInst));
   gpuInstVk      = calloc(1, sizeof(*gpuInstVk));
+  if (!gpuInst || !gpuInstVk) {
+    free(gpuInst);
+    free(gpuInstVk);
+    return NULL;
+  }
   gpuInst->_priv = gpuInstVk;
+  if (info) {
+    gpuInst->createInfo = *info;
+  }
 
   /* Look for validation layers */
   if (validate) {
@@ -242,7 +247,7 @@ vk_createInstance(GPUApi * __restrict api, GPUInitParams * __restrict params) {
                        | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
                        | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
       .pfnUserCallback = vk__debug_messengercb,
-      .pUserData       = &inst
+      .pUserData       = gpuInst
     };
   }
 
@@ -261,8 +266,10 @@ vk_createInstance(GPUApi * __restrict api, GPUInitParams * __restrict params) {
              "Please look at the Getting Started guide for additional information.\n",
              "vkCreateInstance Failure");
   }
+
+  gpuInstVk->inst = inst;
   
-  if (params->validation) {
+  if (validate) {
     // Setup VK_EXT_debug_utils function pointers always (we use them for
     // debug labels and names).
     gpuInstVk->CreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)
@@ -314,11 +321,6 @@ vk_createInstance(GPUApi * __restrict api, GPUInitParams * __restrict params) {
   GET_INSTANCE_PROC_ADDR(gpuInstVk, GetPhysicalDeviceSurfacePresentModesKHR);
   GET_INSTANCE_PROC_ADDR(gpuInstVk, GetSwapchainImagesKHR);
 
-  if (!gpuInst->initParams) {
-    gpuInst->initParams = params;
-  }
-
-  gpuInstVk->inst               = inst;
   gpuInstVk->nEnabledLayers     = nEnabledLayers;
   gpuInstVk->nEnabledExtensions = nEnabledExtensions;
 

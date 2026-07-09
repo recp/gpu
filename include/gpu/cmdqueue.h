@@ -25,16 +25,6 @@ extern "C" {
 struct GPUDevice;
 typedef struct GPUFence GPUFence;
 
-typedef enum GPUResult {
-  GPU_OK = 0,
-  GPU_ERROR_INVALID_ARGUMENT = -1,
-  GPU_ERROR_UNSUPPORTED = -2,
-  GPU_ERROR_OUT_OF_MEMORY = -3,
-  GPU_ERROR_BACKEND_FAILURE = -4,
-  GPU_ERROR_INSUFFICIENT_CAPACITY = -5,
-  GPU_ERROR_TIMEOUT = -6
-} GPUResult;
-
 typedef enum GPUQueueFlagBits {
   GPU_QUEUE_GRAPHICS_BIT         = 0x00000001,
   GPU_QUEUE_COMPUTE_BIT          = 0x00000002,

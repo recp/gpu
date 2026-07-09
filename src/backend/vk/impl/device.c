@@ -93,17 +93,14 @@ vk__newPhyDeviceFrom(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   GPUPhysicalDevice     *item;
   GPUPhysicalDeviceVk   *itemVk;
   VkExtensionProperties *extensions;
-  GPUFeatures            gpuFeatures;
   VkResult               err;
   uint32_t               i, nExtensions;
   VkBool32               swapchainExtFound;
   bool                   incrementalPresentEnabled, displayTimingEnabled;
 
-  gpuFeatures               = inst->initParams->optionalFeatures | inst->initParams->requiredFeatures;
   nExtensions               = swapchainExtFound = 0;
-
-  incrementalPresentEnabled = (gpuFeatures & GPU_FEATURE_INCREMENTAL_PRESENT);
-  displayTimingEnabled      = (gpuFeatures & GPU_FEATURE_DISPLAY_TIMING);
+  incrementalPresentEnabled = true;
+  displayTimingEnabled      = true;
 
   item                      = calloc(1, sizeof(*item));
   itemVk                    = calloc(1, sizeof(*itemVk));

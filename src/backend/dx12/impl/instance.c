@@ -16,20 +16,23 @@
 
 #include "../common.h"
 
-extern GPUInitParams gpu__defaultInitParams;
-
 GPU_HIDE
 GPUInstance *
-dx12_createInstance(struct GPUApi * __restrict api, 
-                    GPUInitParams * __restrict params) {
+dx12_createInstance(struct GPUApi * __restrict api,
+                    const GPUInstanceCreateInfo * __restrict info) {
   GPUInstance     *inst;
   GPUInstanceDX12 *instDX12;
   HRESULT          hr;
 
-  if (!params) { params = &gpu__defaultInitParams; }
+  GPU__UNUSED(api);
 
   inst     = calloc(1, sizeof(*inst));
   instDX12 = calloc(1, sizeof(*instDX12));
+  if (!inst || !instDX12) {
+    if (inst)     { free(inst);     }
+    if (instDX12) { free(instDX12); }
+    return NULL;
+  }
 
 #if defined(_DEBUG)
   /* Enable the debug layer (requires the Graphics Tools "optional feature").
@@ -52,7 +55,9 @@ dx12_createInstance(struct GPUApi * __restrict api,
                              (void **)&instDX12->dxgiFactory));
 
   inst->_priv      = instDX12;
-  inst->initParams = params;
+  if (info) {
+    inst->createInfo = *info;
+  }
 
   return inst;
 

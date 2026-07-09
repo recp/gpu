@@ -18,10 +18,22 @@
 
 GPU_HIDE
 GPUInstance*
-mt_createInstance(GPUApi * __restrict api, GPUInitParams * __restrict params) {
+mt_createInstance(GPUApi * __restrict api,
+                  const GPUInstanceCreateInfo * __restrict info) {
   GPUInstance *inst;
 
-  return NULL;
+  GPU__UNUSED(api);
+
+  inst = calloc(1, sizeof(*inst));
+  if (!inst) {
+    return NULL;
+  }
+
+  if (info) {
+    inst->createInfo = *info;
+  }
+
+  return inst;
 }
 
 GPU_HIDE

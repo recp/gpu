@@ -9,11 +9,50 @@ check_adapter_enumeration(void) {
   GPUFormatCapabilities formatCaps;
   GPUNativeSurfaceCreateInfo nativeSurfaceInfo;
   GPUAdapterProperties props;
+  GPUInstance *fakeInstance;
+  GPUInstanceCreateInfo instanceInfo;
   GPUSurfaceCreateInfo surfaceInfo;
   GPUSurface *fakeSurface;
   GPUSurfaceCapabilities surfaceCaps;
   uint32_t adapterCount;
   bool hasBgra8;
+
+  if (GPUCreateInstance(NULL, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "instance create accepted null out pointer\n");
+    return 0;
+  }
+
+  memset(&instanceInfo, 0, sizeof(instanceInfo));
+  instanceInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  fakeInstance = (GPUInstance *)(uintptr_t)1u;
+  if (GPUCreateInstance(&instanceInfo, &fakeInstance) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      fakeInstance != NULL) {
+    fprintf(stderr, "instance create accepted wrong sType\n");
+    return 0;
+  }
+
+  memset(&instanceInfo, 0, sizeof(instanceInfo));
+  instanceInfo.chain.sType = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  instanceInfo.chain.structSize = (uint32_t)(sizeof(instanceInfo) - 1u);
+  fakeInstance = (GPUInstance *)(uintptr_t)1u;
+  if (GPUCreateInstance(&instanceInfo, &fakeInstance) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      fakeInstance != NULL) {
+    fprintf(stderr, "instance create accepted short structSize\n");
+    return 0;
+  }
+
+  memset(&instanceInfo, 0, sizeof(instanceInfo));
+  instanceInfo.chain.sType = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  instanceInfo.chain.structSize = sizeof(instanceInfo);
+  instanceInfo.preferredBackend = (GPUBackend)999u;
+  fakeInstance = (GPUInstance *)(uintptr_t)1u;
+  if (GPUCreateInstance(&instanceInfo, &fakeInstance) != GPU_ERROR_UNSUPPORTED ||
+      fakeInstance != NULL) {
+    fprintf(stderr, "instance create accepted unsupported backend\n");
+    return 0;
+  }
 
   if (GPUEnumerateAdapters(NULL, NULL, NULL) != GPU_ERROR_INVALID_ARGUMENT ||
       GPUGetAdapterProperties(NULL, &props) != GPU_ERROR_INVALID_ARGUMENT ||

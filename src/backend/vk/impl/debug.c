@@ -25,24 +25,15 @@ vk__debug_messengercb(VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverit
                       const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
                       void                                       *pUserData) {
   GPUInstance   *inst;
-  GPUInitParams *initParams;
   char           tmp_message[500];
   char           prefix[64] = "";
   char          *message;
 
-  if ((inst = pUserData) || (initParams = inst->initParams)) {
+  if (!(inst = pUserData)) {
     return false;
   }
 
   assert((message = malloc(strlen(pCallbackData->pMessage) + 5000)));
-
-  if (initParams->validation_usebreak) {
-#ifndef WIN32
-    raise(SIGTRAP);
-#else
-    DebugBreak();
-#endif
-  }
 
   if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
     strcat(prefix, "VERBOSE : ");

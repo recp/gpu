@@ -28,13 +28,6 @@ typedef struct GPUApiList {
 static GPUApi     *gpu__api     = NULL;
 static GPUApiList *gpu__apis    = NULL;
 
-GPUInitParams gpu__defaultInitParams = {
-  .requiredFeatures    = GPU_FEATURE_REQUIRED_DEFAULT,
-  .optionalFeatures    = GPU_FEATURE_OPTIONAL_DEFAULT,
-  .validation          = false,
-  .validation_usebreak = false
-};
-
 static GPUApi*
 gpu__selectDefaultBackend(void) {
 #ifdef __APPLE__
@@ -46,10 +39,63 @@ gpu__selectDefaultBackend(void) {
 #endif
 }
 
+GPU_HIDE
+GPUApi*
+gpuApiForBackend(GPUBackend backend) {
+  GPUApi *api;
+
+  if (gpu__api) {
+    if (backend == GPU_BACKEND_DEFAULT ||
+        backend == GPU_BACKEND_NULL ||
+        backend == gpu__api->backend) {
+      return gpu__api;
+    }
+    return NULL;
+  }
+
+  if (backend == GPU_BACKEND_DEFAULT || backend == GPU_BACKEND_NULL) {
+    return gpu__selectDefaultBackend();
+  }
+
+  api = NULL;
+  switch (backend) {
+#ifdef __APPLE__
+    case GPU_BACKEND_METAL:
+      api = backend_metal();
+      break;
+#endif
+#if defined(GPU_ENABLE_VULKAN)
+    case GPU_BACKEND_VULKAN:
+      api = backend_vk();
+      break;
+#endif
+#if defined(_WIN32) || defined(WIN32)
+    case GPU_BACKEND_DX12:
+      api = backend_dx12();
+      break;
+#endif
+    case GPU_BACKEND_OPENGL:
+      api = backend_gl();
+      break;
+    default:
+      return NULL;
+  }
+
+  return api;
+}
+
+GPU_HIDE
+void
+gpuSetActiveGPUApi(GPUApi *api) {
+  if (!gpu__api) {
+    gpu__api = api;
+  }
+}
+
 static void
 gpu__ensureActiveBackend(void) {
   if (!gpu__api) {
-    gpu__api = gpu__selectDefaultBackend();
+    gpu__api = gpuApiForBackend(GPU_BACKEND_DEFAULT);
   }
 }
 

@@ -17,12 +17,43 @@
 #include "../common.h"
 
 GPU_EXPORT
-GPUInstance*
-GPUCreateInstance(GPUInitParams * __restrict params) {
-  GPUApi *api;
+GPUResult
+GPUCreateInstance(const GPUInstanceCreateInfo * __restrict info,
+                  GPUInstance                ** __restrict outInstance) {
+  GPUInstanceCreateInfo defaultInfo;
+  GPUApi               *api;
 
-  if (!(api = gpuActiveGPUApi()))
-    return NULL;
+  if (!outInstance) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outInstance = NULL;
 
-  return api->instance.createInstance(api, params);
+  if (!info) {
+    memset(&defaultInfo, 0, sizeof(defaultInfo));
+    defaultInfo.chain.sType = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    defaultInfo.chain.structSize = sizeof(defaultInfo);
+    defaultInfo.preferredBackend = GPU_BACKEND_DEFAULT;
+    info = &defaultInfo;
+  }
+
+  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+      info->chain.sType != GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  api = gpuApiForBackend(info->preferredBackend);
+  if (!api || !api->instance.createInstance) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  *outInstance = api->instance.createInstance(api, info);
+  if (!*outInstance) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  gpuSetActiveGPUApi(api);
+
+  return GPU_OK;
 }

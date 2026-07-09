@@ -20,9 +20,9 @@
 #include "../common.h"
 
 struct GPUInstance {
-  void          *_priv;
-  GPUInitParams *initParams;
-  uint32_t       validationError;
+  void                  *_priv;
+  GPUInstanceCreateInfo  createInfo;
+  uint32_t               validationError;
 };
 
 #endif /* gpu_instance_internal_h */

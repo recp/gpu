@@ -41,4 +41,12 @@
 #include "../include/gpu/gpu.h"
 #include "../include/gpu/api/gpudef.h"
 
+GPU_HIDE
+GPUApi*
+gpuApiForBackend(GPUBackend backend);
+
+GPU_HIDE
+void
+gpuSetActiveGPUApi(GPUApi *api);
+
 #endif /* src_common_h */

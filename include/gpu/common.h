@@ -56,10 +56,12 @@ extern "C" {
 #define GPU_FLG(FLAGS, FLAG) ((FLAGS & FLAG) == FLAG)
 
 typedef enum GPUBackend {
-  GPU_BACKEND_NULL      = 0,
+  GPU_BACKEND_DEFAULT   = 0,
+  GPU_BACKEND_NULL      = GPU_BACKEND_DEFAULT,
   GPU_BACKEND_METAL     = 1,
   GPU_BACKEND_VULKAN    = 2,
-  GPU_BACKEND_DIRECTX12 = 3,
+  GPU_BACKEND_DX12      = 3,
+  GPU_BACKEND_DIRECTX12 = GPU_BACKEND_DX12,
   GPU_BACKEND_OPENGL    = 4
 } GPUBackend;
 
@@ -98,6 +100,16 @@ typedef struct GPUChainedStruct {
   uint32_t         structSize;
   const void      *pNext;
 } GPUChainedStruct;
+
+typedef enum GPUResult {
+  GPU_OK = 0,
+  GPU_ERROR_INVALID_ARGUMENT = -1,
+  GPU_ERROR_UNSUPPORTED = -2,
+  GPU_ERROR_OUT_OF_MEMORY = -3,
+  GPU_ERROR_BACKEND_FAILURE = -4,
+  GPU_ERROR_INSUFFICIENT_CAPACITY = -5,
+  GPU_ERROR_TIMEOUT = -6
+} GPUResult;
 
 typedef uint32_t GPUShaderStageFlags;
 enum {
