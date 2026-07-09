@@ -82,18 +82,19 @@ gpuBindGroupDynamicOffsetCount(GPUBindGroup *group);
 
 GPU_HIDE
 int
-gpuPipelineLayoutIsStageBound(GPUPipelineLayout *pipelineLayout,
-                              GPUBindGroupLayout * const *boundLayouts,
-                              uint32_t boundLayoutCount,
-                              GPUShaderStageFlags stages);
-
-GPU_HIDE
-int
 gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout *pipelineLayout,
                                       const GPUShaderLibrary *library,
                                       const char * const *entryPoints,
                                       uint32_t entryPointCount,
-                                      GPUShaderStageFlags fallbackStages);
+                                      GPUShaderStageFlags fallbackStages,
+                                      uint32_t *outRequiredSetMask);
+
+GPU_HIDE
+int
+gpuPipelineLayoutMaskIsBound(GPUPipelineLayout *pipelineLayout,
+                             GPUBindGroupLayout * const *boundLayouts,
+                             uint32_t boundLayoutCount,
+                             uint32_t requiredSetMask);
 
 GPU_HIDE
 int

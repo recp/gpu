@@ -182,6 +182,7 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
   api->rce.setRenderPipelineState(pass, &state);
   pass->_hasPipeline = true;
   pass->_pipelineLayout = pipeline->_layout;
+  pass->_requiredBindGroupMask = pipeline->_requiredBindGroupMask;
   pass->_primitiveType = gpu_primitiveTypeFromTopology(pipeline->_primitiveTopology);
   pass->_pushConstantSizeBytes = pipeline->_pushConstantSizeBytes;
   pass->_pushConstantStages = pipeline->_pushConstantStages &
@@ -444,11 +445,10 @@ GPUDraw(GPURenderPassEncoder *pass,
     gpu_renderValidationError(pass, "GPUDraw skipped: no render pipeline bound");
     return;
   }
-  if (!gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
-                                     pass->_boundGroupLayouts,
-                                     GPU_ENCODER_MAX_BIND_GROUPS,
-                                     GPU_SHADER_STAGE_VERTEX_BIT |
-                                     GPU_SHADER_STAGE_FRAGMENT_BIT)) {
+  if (!gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
+                                    pass->_boundGroupLayouts,
+                                    GPU_ENCODER_MAX_BIND_GROUPS,
+                                    pass->_requiredBindGroupMask)) {
     gpu_renderValidationError(pass, "GPUDraw skipped: missing render bind group");
     return;
   }
@@ -483,11 +483,10 @@ GPUDrawIndexed(GPURenderPassEncoder *pass,
     gpu_renderValidationError(pass, "GPUDrawIndexed skipped: no render pipeline bound");
     return;
   }
-  if (!gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
-                                     pass->_boundGroupLayouts,
-                                     GPU_ENCODER_MAX_BIND_GROUPS,
-                                     GPU_SHADER_STAGE_VERTEX_BIT |
-                                     GPU_SHADER_STAGE_FRAGMENT_BIT)) {
+  if (!gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
+                                    pass->_boundGroupLayouts,
+                                    GPU_ENCODER_MAX_BIND_GROUPS,
+                                    pass->_requiredBindGroupMask)) {
     gpu_renderValidationError(pass, "GPUDrawIndexed skipped: missing render bind group");
     return;
   }
@@ -528,11 +527,10 @@ GPUDrawIndirect(GPURenderPassEncoder *pass,
     gpu_renderValidationError(pass, "GPUDrawIndirect skipped: no render pipeline bound");
     return;
   }
-  if (!gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
-                                     pass->_boundGroupLayouts,
-                                     GPU_ENCODER_MAX_BIND_GROUPS,
-                                     GPU_SHADER_STAGE_VERTEX_BIT |
-                                     GPU_SHADER_STAGE_FRAGMENT_BIT)) {
+  if (!gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
+                                    pass->_boundGroupLayouts,
+                                    GPU_ENCODER_MAX_BIND_GROUPS,
+                                    pass->_requiredBindGroupMask)) {
     gpu_renderValidationError(pass, "GPUDrawIndirect skipped: missing render bind group");
     return;
   }
@@ -563,11 +561,10 @@ GPUDrawIndexedIndirect(GPURenderPassEncoder *pass,
     gpu_renderValidationError(pass, "GPUDrawIndexedIndirect skipped: no render pipeline bound");
     return;
   }
-  if (!gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
-                                     pass->_boundGroupLayouts,
-                                     GPU_ENCODER_MAX_BIND_GROUPS,
-                                     GPU_SHADER_STAGE_VERTEX_BIT |
-                                     GPU_SHADER_STAGE_FRAGMENT_BIT)) {
+  if (!gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
+                                    pass->_boundGroupLayouts,
+                                    GPU_ENCODER_MAX_BIND_GROUPS,
+                                    pass->_requiredBindGroupMask)) {
     gpu_renderValidationError(pass, "GPUDrawIndexedIndirect skipped: missing render bind group");
     return;
   }

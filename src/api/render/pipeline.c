@@ -218,6 +218,7 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   GPUFunction            *fragmentFunc;
   GPUFormat               colorFormat;
   uint32_t                i;
+  uint32_t                requiredBindGroupMask;
   uint32_t                sampleCount;
 
   if (!outPipeline)
@@ -240,7 +241,8 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
                                                entries,
                                                (uint32_t)GPU_ARRAY_LEN(entries),
                                                GPU_SHADER_STAGE_VERTEX_BIT |
-                                                 GPU_SHADER_STAGE_FRAGMENT_BIT))
+                                                 GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                               &requiredBindGroupMask))
       return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -286,6 +288,7 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   gpuRecordPipelineCompile(device, info->cache);
   free(state);
   pipeline->_layout = info->layout;
+  pipeline->_requiredBindGroupMask = requiredBindGroupMask;
   pipeline->_colorTargetCount = info->colorTargetCount;
   for (i = 0; i < info->colorTargetCount; i++)
     pipeline->_colorTargetFormats[i] = info->pColorTargets[i].format;

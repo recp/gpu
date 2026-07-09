@@ -267,6 +267,18 @@ check_compute_dispatch_validation_calls(GPUDevice *device) {
   pass._hasPipeline = true;
   pass._pipelineLayout = pipelineLayout;
 
+  pass._requiredBindGroupMask = 0u;
+  GPUDispatch(&pass, 1u, 1u, 1u);
+  GPUDispatchIndirect(&pass, &indirectBuffer, 0u);
+  if (gComputeDispatchCalls != 1u ||
+      gComputeDispatchIndirectCalls != 1u) {
+    fprintf(stderr, "compute dispatch validation rejected no-bind pipeline\n");
+    goto cleanup;
+  }
+  gComputeDispatchCalls = 0u;
+  gComputeDispatchIndirectCalls = 0u;
+
+  pass._requiredBindGroupMask = 1u;
   GPUDispatch(&pass, 1u, 1u, 1u);
   GPUDispatchIndirect(&pass, &indirectBuffer, 0u);
   if (gComputeDispatchCalls != 0u ||

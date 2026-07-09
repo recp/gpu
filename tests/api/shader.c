@@ -1,6 +1,7 @@
 #include "test.h"
 #include "../../src/api/buffer_internal.h"
 #include "../../src/api/compute_internal.h"
+#include "../../src/api/render/pipeline_internal.h"
 #include "../../src/api/texture_internal.h"
 
 static void *
@@ -130,11 +131,12 @@ check_compute_pipeline_workgroup_size(GPUDevice *device,
   ok = state &&
        state->workgroupSize[0] == 8u &&
        state->workgroupSize[1] == 8u &&
-       state->workgroupSize[2] == 1u;
+       state->workgroupSize[2] == 1u &&
+       pipeline->_requiredBindGroupMask == 2u;
   GPUDestroyComputePipeline(pipeline);
 
   if (!ok) {
-    fprintf(stderr, "compute pipeline did not inherit reflected workgroup size\n");
+    fprintf(stderr, "compute pipeline did not inherit reflected metadata\n");
     return 0;
   }
 
@@ -273,7 +275,8 @@ check_reflected_pipeline_entry_stages(GPUDevice *device,
   renderInfo.layout = emptyLayout;
   renderInfo.fragmentEntry = "reflect_plain_fs";
   if (GPUCreateRenderPipeline(device, &renderInfo, &pipeline) != GPU_OK ||
-      !pipeline) {
+      !pipeline ||
+      pipeline->_requiredBindGroupMask != 0u) {
     fprintf(stderr, "render pipeline rejected no-resource entry with empty layout\n");
     GPUDestroyRenderPipeline(pipeline);
     GPUDestroyPipelineLayout(emptyLayout);
@@ -281,8 +284,32 @@ check_reflected_pipeline_entry_stages(GPUDevice *device,
   }
   GPUDestroyRenderPipeline(pipeline);
   pipeline = NULL;
+
+  renderInfo.layout = layout;
+  renderInfo.fragmentEntry = "reflect_plain_fs";
+  if (GPUCreateRenderPipeline(device, &renderInfo, &pipeline) != GPU_OK ||
+      !pipeline ||
+      pipeline->_requiredBindGroupMask != 0u) {
+    fprintf(stderr, "render pipeline required binds for no-resource entry\n");
+    GPUDestroyRenderPipeline(pipeline);
+    GPUDestroyPipelineLayout(emptyLayout);
+    return 0;
+  }
+  GPUDestroyRenderPipeline(pipeline);
+  pipeline = NULL;
+
   renderInfo.layout = layout;
   renderInfo.fragmentEntry = "reflect_fs";
+  if (GPUCreateRenderPipeline(device, &renderInfo, &pipeline) != GPU_OK ||
+      !pipeline ||
+      pipeline->_requiredBindGroupMask != 3u) {
+    fprintf(stderr, "render pipeline did not record reflected entry bind mask\n");
+    GPUDestroyRenderPipeline(pipeline);
+    GPUDestroyPipelineLayout(emptyLayout);
+    return 0;
+  }
+  GPUDestroyRenderPipeline(pipeline);
+  pipeline = NULL;
 
   renderInfo.vertexEntry = "reflect_cs";
   if (!expect_reflected_render_pipeline_error(

@@ -1395,6 +1395,17 @@ check_render_draw_validation_calls(GPUDevice *device) {
   pass._pipelineLayout = pipelineLayout;
   pass._primitiveType = GPUPrimitiveTypeTriangle;
 
+  pass._requiredBindGroupMask = 0u;
+  GPUDraw(&pass, 3u, 1u, 0u, 0u);
+  GPUDrawIndirect(&pass, &indirectBuffer, 0u);
+  if (gRenderDrawCalls != 1u || gRenderDrawIndirectCalls != 1u) {
+    fprintf(stderr, "render draw validation rejected no-bind pipeline\n");
+    goto cleanup;
+  }
+  gRenderDrawCalls = 0u;
+  gRenderDrawIndirectCalls = 0u;
+
+  pass._requiredBindGroupMask = 1u;
   GPUDraw(&pass, 3u, 1u, 0u, 0u);
   GPUDrawIndexed(&pass, 3u, 1u, 0u, 0, 0u);
   GPUDrawIndirect(&pass, &indirectBuffer, 0u);

@@ -142,39 +142,32 @@ gpuPipelineLayoutAcceptsBindGroup(GPUPipelineLayout *pipelineLayout,
 
 GPU_HIDE
 int
-gpuPipelineLayoutIsStageBound(GPUPipelineLayout *pipelineLayout,
-                              GPUBindGroupLayout * const *boundLayouts,
-                              uint32_t boundLayoutCount,
-                              GPUShaderStageFlags stages) {
+gpuPipelineLayoutMaskIsBound(GPUPipelineLayout *pipelineLayout,
+                             GPUBindGroupLayout * const *boundLayouts,
+                             uint32_t boundLayoutCount,
+                             uint32_t requiredSetMask) {
   GPUPipelineLayoutPriv *priv;
 
   priv = gpu_pipelineLayoutPriv(pipelineLayout);
-  if (!priv || priv->bindGroupLayoutCount == 0u) {
-    return 1;
+  if (!priv) {
+    return requiredSetMask == 0u;
   }
 
-  for (uint32_t i = 0; i < priv->bindGroupLayoutCount; i++) {
-    GPUBindGroupLayoutPriv *layout;
-    int required;
+  for (uint32_t i = 0u; i < priv->bindGroupLayoutCount; i++) {
+    uint32_t setBit;
 
-    layout = gpu_layoutPriv(priv->bindGroupLayouts[i]);
-    required = 0;
-    for (uint32_t entryIndex = 0; layout && entryIndex < layout->count; entryIndex++) {
-      if ((layout->entries[entryIndex].visibility & stages) != 0u) {
-        required = 1;
-        break;
-      }
+    setBit = 1u << i;
+    if ((requiredSetMask & setBit) == 0u) {
+      continue;
     }
-
-    if (required &&
-        (!boundLayouts ||
-         i >= boundLayoutCount ||
-         boundLayouts[i] != priv->bindGroupLayouts[i])) {
+    if (!boundLayouts ||
+        i >= boundLayoutCount ||
+        boundLayouts[i] != priv->bindGroupLayouts[i]) {
       return 0;
     }
   }
 
-  return 1;
+  return (requiredSetMask >> priv->bindGroupLayoutCount) == 0u;
 }
 
 GPU_HIDE
@@ -1219,15 +1212,21 @@ gpu_layoutMatchesReflectionSet(GPUBindGroupLayout *layout,
 static int
 gpu_pipelineLayoutMatchesShaderReflection(GPUPipelineLayout *pipelineLayout,
                                           const GPUShaderReflection *reflection,
-                                          GPUShaderStageFlags stages) {
+                                          GPUShaderStageFlags stages,
+                                          uint32_t *outRequiredSetMask) {
   GPUPipelineLayoutPriv *pipelinePriv;
+  uint32_t requiredSetMask;
   uint32_t requiredCount;
 
+  if (outRequiredSetMask) {
+    *outRequiredSetMask = 0u;
+  }
   pipelinePriv = gpu_pipelineLayoutPriv(pipelineLayout);
   if (!pipelinePriv) {
     return 0;
   }
 
+  requiredSetMask = 0u;
   requiredCount = gpu_reflectionLayoutCountForStages(reflection, stages);
   if (pipelinePriv->bindGroupLayoutCount < requiredCount) {
     return 0;
@@ -1249,8 +1248,12 @@ gpu_pipelineLayoutMatchesShaderReflection(GPUPipelineLayout *pipelineLayout,
     if (!gpu_layoutContainsStageReflectionResource(layoutPriv, resource, stages)) {
       return 0;
     }
+    requiredSetMask |= 1u << resource->setIndex;
   }
 
+  if (outRequiredSetMask) {
+    *outRequiredSetMask = requiredSetMask;
+  }
   return 1;
 }
 
@@ -1260,18 +1263,26 @@ gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout *pipelineLayout,
                                       const GPUShaderLibrary *library,
                                       const char * const *entryPoints,
                                       uint32_t entryPointCount,
-                                      GPUShaderStageFlags fallbackStages) {
+                                      GPUShaderStageFlags fallbackStages,
+                                      uint32_t *outRequiredSetMask) {
   GPUShaderReflection reflection;
   GPUResult rc;
+  uint32_t combinedSetMask;
   int ok;
 
+  if (outRequiredSetMask) {
+    *outRequiredSetMask = 0u;
+  }
   if (!pipelineLayout || !library ||
       (entryPointCount > 0u && !entryPoints)) {
     return 0;
   }
 
+  combinedSetMask = 0u;
   if (gpuShaderLibraryHasEntryResourceInfo(library)) {
     for (uint32_t i = 0u; i < entryPointCount; i++) {
+      uint32_t entrySetMask;
+
       if (!entryPoints[i]) {
         return 0;
       }
@@ -1284,13 +1295,18 @@ gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout *pipelineLayout,
 
       ok = gpu_pipelineLayoutMatchesShaderReflection(pipelineLayout,
                                                      &reflection,
-                                                     fallbackStages);
+                                                     fallbackStages,
+                                                     &entrySetMask);
       GPUFreeShaderReflection(&reflection);
       if (!ok) {
         return 0;
       }
+      combinedSetMask |= entrySetMask;
     }
 
+    if (outRequiredSetMask) {
+      *outRequiredSetMask = combinedSetMask;
+    }
     return 1;
   }
 
@@ -1302,8 +1318,12 @@ gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout *pipelineLayout,
 
   ok = gpu_pipelineLayoutMatchesShaderReflection(pipelineLayout,
                                                  &reflection,
-                                                 fallbackStages);
+                                                 fallbackStages,
+                                                 &combinedSetMask);
   GPUFreeShaderReflection(&reflection);
+  if (ok && outRequiredSetMask) {
+    *outRequiredSetMask = combinedSetMask;
+  }
   return ok;
 }
 

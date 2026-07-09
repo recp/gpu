@@ -87,6 +87,7 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
   GPUComputePipeline *pipeline;
   GPUFunction *function;
   GPUApi *api;
+  uint32_t requiredBindGroupMask;
 
   if (!outPipeline) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -121,7 +122,8 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
                                                info->library,
                                                entries,
                                                (uint32_t)GPU_ARRAY_LEN(entries),
-                                               GPU_SHADER_STAGE_COMPUTE_BIT)) {
+                                               GPU_SHADER_STAGE_COMPUTE_BIT,
+                                               &requiredBindGroupMask)) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   }
@@ -158,6 +160,7 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
   }
   gpuRecordPipelineCompile(device, info->cache);
   pipeline->_layout = info->layout;
+  pipeline->_requiredBindGroupMask = requiredBindGroupMask;
   gpuGetPipelineLayoutPushConstants(info->layout,
                                     &pipeline->_pushConstantSizeBytes,
                                     &pipeline->_pushConstantStages);
@@ -229,6 +232,7 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
   api->compute.setComputePipelineState(pass, state);
   pass->_hasPipeline = true;
   pass->_pipelineLayout = pipeline->_layout;
+  pass->_requiredBindGroupMask = pipeline->_requiredBindGroupMask;
   pass->_pushConstantSizeBytes = pipeline->_pushConstantSizeBytes;
   pass->_pushConstantStages = pipeline->_pushConstantStages & GPU_SHADER_STAGE_COMPUTE_BIT;
   if (pass->_pushConstantSizeBytes > 0u) {
@@ -397,10 +401,10 @@ GPUDispatch(GPUComputePassEncoder *pass,
     gpu_computeValidationError(pass, "GPUDispatch skipped: no compute pipeline bound");
     return;
   }
-  if (!gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
-                                     pass->_boundGroupLayouts,
-                                     GPU_ENCODER_MAX_BIND_GROUPS,
-                                     GPU_SHADER_STAGE_COMPUTE_BIT)) {
+  if (!gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
+                                    pass->_boundGroupLayouts,
+                                    GPU_ENCODER_MAX_BIND_GROUPS,
+                                    pass->_requiredBindGroupMask)) {
     gpu_computeValidationError(pass, "GPUDispatch skipped: missing compute bind group");
     return;
   }
@@ -429,10 +433,10 @@ GPUDispatchIndirect(GPUComputePassEncoder *pass,
     gpu_computeValidationError(pass, "GPUDispatchIndirect skipped: no compute pipeline bound");
     return;
   }
-  if (!gpuPipelineLayoutIsStageBound(pass->_pipelineLayout,
-                                     pass->_boundGroupLayouts,
-                                     GPU_ENCODER_MAX_BIND_GROUPS,
-                                     GPU_SHADER_STAGE_COMPUTE_BIT)) {
+  if (!gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
+                                    pass->_boundGroupLayouts,
+                                    GPU_ENCODER_MAX_BIND_GROUPS,
+                                    pass->_requiredBindGroupMask)) {
     gpu_computeValidationError(pass, "GPUDispatchIndirect skipped: missing compute bind group");
     return;
   }

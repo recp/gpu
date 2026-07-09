@@ -44,6 +44,7 @@ struct GPURenderCommandEncoder {
   bool              _hasPipeline;
   bool              _ended;
   GPUPipelineLayout *_pipelineLayout;
+  uint32_t          _requiredBindGroupMask;
   GPUBindGroup     *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUBindGroupLayout *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
   uint32_t          _colorAttachmentCount;
