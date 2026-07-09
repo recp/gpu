@@ -338,6 +338,13 @@ check_render_pass_validation(void) {
   }
 
   depthStencil.depthLoadOp = GPU_LOAD_OP_CLEAR;
+  fakeCmdb._activeEncoder = true;
+  if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
+    fprintf(stderr, "render pass accepted command buffer with active encoder\n");
+    return 0;
+  }
+
+  fakeCmdb._activeEncoder = false;
   fakeCmdb._submitted = true;
   if (GPUBeginRenderPass(&fakeCmdb, &rp)) {
     fprintf(stderr, "render pass accepted submitted command buffer\n");

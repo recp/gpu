@@ -27,6 +27,7 @@ typedef struct GPUComputePipelineState GPUComputePipelineState;
 
 struct GPUComputePassEncoder {
   void *_priv;
+  GPUCommandBuffer *_cmdb;
   uint32_t _workgroupSize[3];
   bool _hasPipeline;
   bool _ended;

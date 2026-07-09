@@ -42,6 +42,13 @@ check_copy_pass_validation(GPUDevice *device) {
     return 0;
   }
 
+  fakeCmdb._submitted = false;
+  fakeCmdb._activeEncoder = true;
+  if (GPUBeginCopyPass(&fakeCmdb, "active")) {
+    fprintf(stderr, "copy pass accepted command buffer with active encoder\n");
+    return 0;
+  }
+
   for (uint32_t i = 0; i < (uint32_t)sizeof(pixels); i++) {
     pixels[i] = (uint8_t)(i * 3u + 1u);
   }
@@ -103,6 +110,11 @@ check_copy_pass_validation(GPUDevice *device) {
   copyPass = GPUBeginCopyPass(cmdb, "reflection-copy");
   if (!copyPass) {
     fprintf(stderr, "failed to begin copy pass\n");
+    ok = 0;
+    goto cleanup;
+  }
+  if (GPUBeginCopyPass(cmdb, "nested-copy")) {
+    fprintf(stderr, "copy pass accepted nested encoder\n");
     ok = 0;
     goto cleanup;
   }

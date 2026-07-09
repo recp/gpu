@@ -647,6 +647,21 @@ check_queue_submit_fence(GPUDevice *device) {
   }
 
   if (ok) {
+    cmdb->_activeEncoder = true;
+    memset(&submitInfo, 0, sizeof(submitInfo));
+    buffers[0] = cmdb;
+    submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+    submitInfo.chain.structSize = sizeof(submitInfo);
+    submitInfo.commandBufferCount = 1u;
+    submitInfo.ppCommandBuffers = buffers;
+    if (GPUQueueSubmit(queue, &submitInfo) != GPU_ERROR_INVALID_ARGUMENT) {
+      fprintf(stderr, "queue submit accepted command buffer with active encoder\n");
+      ok = 0;
+    }
+    cmdb->_activeEncoder = false;
+  }
+
+  if (ok) {
     memset(&submitInfo, 0, sizeof(submitInfo));
     buffers[0] = cmdb;
     submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;

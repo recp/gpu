@@ -30,6 +30,7 @@ struct GPUCommandBuffer {
   void                         *_onCompleteSender;
   GPUCommandBufferCompletionFn  _onComplete;
   bool                          _submitted;
+  bool                          _activeEncoder;
 };
 
 #endif /* gpu_cmdqueue_internal_h */

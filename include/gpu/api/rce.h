@@ -28,6 +28,7 @@ typedef struct GPURenderPassDesc GPURenderPassDesc;
 
 struct GPURenderCommandEncoder {
   void             *_priv;
+  GPUCommandBuffer *_cmdb;
   GPUPrimitiveType  _primitiveType;
   GPUBuffer        *_indexBuffer;
   uint64_t          _indexBufferOffset;

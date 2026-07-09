@@ -121,14 +121,23 @@ GPUComputePassEncoder*
 GPUBeginComputePass(GPUCommandBuffer *cmdb, const char *label) {
   GPUApi *api;
 
-  if (!cmdb || cmdb->_submitted) {
+  if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder) {
     return NULL;
   }
   if (!(api = gpuActiveGPUApi()) || !api->compute.computeCommandEncoder) {
     return NULL;
   }
 
-  return api->compute.computeCommandEncoder(cmdb, label);
+  {
+    GPUComputePassEncoder *pass;
+
+    pass = api->compute.computeCommandEncoder(cmdb, label);
+    if (pass) {
+      pass->_cmdb = cmdb;
+      cmdb->_activeEncoder = true;
+    }
+    return pass;
+  }
 }
 
 GPU_EXPORT
@@ -296,10 +305,13 @@ GPUEndComputePass(GPUComputePassEncoder *pass) {
   if (!pass || pass->_ended) {
     return;
   }
+  pass->_ended = true;
+  if (pass->_cmdb) {
+    pass->_cmdb->_activeEncoder = false;
+  }
   if (!(api = gpuActiveGPUApi()) || !api->compute.endEncoding) {
     return;
   }
 
-  pass->_ended = true;
   api->compute.endEncoding(pass);
 }

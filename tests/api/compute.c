@@ -145,6 +145,13 @@ check_compute_pass_validation(void) {
     return 0;
   }
 
+  fakeCmdb._submitted = false;
+  fakeCmdb._activeEncoder = true;
+  if (GPUBeginComputePass(&fakeCmdb, "active")) {
+    fprintf(stderr, "compute pass accepted command buffer with active encoder\n");
+    return 0;
+  }
+
   GPUBindComputePipeline(NULL, NULL);
   GPUBindComputePipeline(&fakePass, &fakePipeline);
   GPUBindComputeGroup(NULL, 0u, NULL, 0u, NULL);

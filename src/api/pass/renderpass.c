@@ -174,7 +174,7 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
   GPURenderPassEncoder *encoder;
   GPUApi               *api;
 
-  if (!cmdb || cmdb->_submitted || !gpu_validRenderPassCreateInfo(info))
+  if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder || !gpu_validRenderPassCreateInfo(info))
     return NULL;
   if (!(api = gpuActiveGPUApi()))
     return NULL;
@@ -187,6 +187,10 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
 
   encoder = api->rce.renderCommandEncoder(cmdb, desc);
   gpu_destroyRenderPass(desc);
+  if (encoder) {
+    encoder->_cmdb = cmdb;
+    cmdb->_activeEncoder = true;
+  }
 
   return encoder;
 }
@@ -196,10 +200,16 @@ void
 GPUEndRenderPass(GPURenderPassEncoder *pass) {
   GPUApi *api;
 
-  if (!pass || pass->_ended || !(api = gpuActiveGPUApi()) || !api->rce.endEncoding)
+  if (!pass || pass->_ended)
     return;
 
   pass->_ended = true;
+  if (pass->_cmdb) {
+    pass->_cmdb->_activeEncoder = false;
+  }
+  if (!(api = gpuActiveGPUApi()) || !api->rce.endEncoding)
+    return;
+
   api->rce.endEncoding(pass);
 }
 
@@ -208,14 +218,23 @@ GPUCopyPassEncoder*
 GPUBeginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
   GPUApi *api;
 
-  if (!cmdb || cmdb->_submitted) {
+  if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder) {
     return NULL;
   }
   if (!(api = gpuActiveGPUApi()) || !api->renderPass.beginCopyPass) {
     return NULL;
   }
 
-  return api->renderPass.beginCopyPass(cmdb, label);
+  {
+    GPUCopyPassEncoder *pass;
+
+    pass = api->renderPass.beginCopyPass(cmdb, label);
+    if (pass) {
+      pass->_cmdb = cmdb;
+      cmdb->_activeEncoder = true;
+    }
+    return pass;
+  }
 }
 
 GPU_EXPORT
@@ -325,10 +344,13 @@ GPUEndCopyPass(GPUCopyPassEncoder *pass) {
   if (!pass || pass->_ended) {
     return;
   }
+  pass->_ended = true;
+  if (pass->_cmdb) {
+    pass->_cmdb->_activeEncoder = false;
+  }
   if (!(api = gpuActiveGPUApi()) || !api->renderPass.endCopyPass) {
     return;
   }
 
-  pass->_ended = true;
   api->renderPass.endCopyPass(pass);
 }

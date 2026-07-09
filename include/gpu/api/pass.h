@@ -29,6 +29,7 @@ typedef struct GPURenderPassDesc {
 
 struct GPUCopyPassEncoder {
   void *_priv;
+  GPUCommandBuffer *_cmdb;
   bool _ended;
 };
 

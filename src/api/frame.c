@@ -72,7 +72,7 @@ GPUFinishFrame(GPUCommandQueue  * __restrict cmdq,
   if (!cmdq || !cmdb || !frame)
     return GPU_ERROR_INVALID_ARGUMENT;
 
-  if (cmdb->_submitted || cmdb->_queue != cmdq) {
+  if (cmdb->_submitted || cmdb->_activeEncoder || cmdb->_queue != cmdq) {
     GPUEndFrame(frame);
     return GPU_ERROR_INVALID_ARGUMENT;
   }
