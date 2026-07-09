@@ -321,10 +321,8 @@ err:
 GPU_HIDE
 void
 dx12_initDevice(GPUApiDevice* apiDevice) {
-  apiDevice->getAvailablePhysicalDevicesBy = dx12_getAvailablePhysicalDevicesBy;
-  apiDevice->getAdapterProperties          = dx12_getAdapterProperties;
-  apiDevice->autoSelectPhysicalDeviceIn    = dx12_autoSelectPhysicalDeviceIn;
-  apiDevice->getAutoSelectedPhysicalDevice = dx12_getAutoSelectedPhysicalDevice;
-  apiDevice->createDevice                  = dx12_createDevice;
-  apiDevice->createSystemDefaultDevice     = dx12_createSystemDefaultDevice;
+  apiDevice->getAvailableAdapters      = dx12_getAvailablePhysicalDevicesBy;
+  apiDevice->getAdapterProperties      = dx12_getAdapterProperties;
+  apiDevice->createDevice              = dx12_createDevice;
+  apiDevice->createSystemDefaultDevice = dx12_createSystemDefaultDevice;
 }

@@ -59,7 +59,7 @@ gpu_getAvailableAdapters(GPUInstance *inst, uint32_t maxNumberOfItems) {
   if (!(api = gpuActiveGPUApi()))
     return NULL;
 
-  return api->device.getAvailablePhysicalDevicesBy(inst, maxNumberOfItems);
+  return api->device.getAvailableAdapters(inst, maxNumberOfItems);
 }
 
 GPU_EXPORT

@@ -563,10 +563,8 @@ vk_createSystemDefaultDevice(GPUInstance * __restrict inst) {
 GPU_HIDE
 void
 vk_initDevice(GPUApiDevice* apiDevice) {
-  apiDevice->getAvailablePhysicalDevicesBy = vk_getAvailablePhysicalDevicesBy;
-  apiDevice->getAdapterProperties          = vk_getAdapterProperties;
-  apiDevice->getAutoSelectedPhysicalDevice = vk_getAutoSelectedPhysicalDevice;
-  apiDevice->autoSelectPhysicalDeviceIn    = vk_autoSelectPhysicalDeviceIn;
-  apiDevice->createDevice                  = vk_createDevice;
-  apiDevice->createSystemDefaultDevice     = vk_createSystemDefaultDevice;
+  apiDevice->getAvailableAdapters      = vk_getAvailablePhysicalDevicesBy;
+  apiDevice->getAdapterProperties      = vk_getAdapterProperties;
+  apiDevice->createDevice              = vk_createDevice;
+  apiDevice->createSystemDefaultDevice = vk_createSystemDefaultDevice;
 }

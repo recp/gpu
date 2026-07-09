@@ -30,8 +30,8 @@ typedef struct GPUApiDevice {
   GPUDevice* (*createSystemDefaultDevice)(GPUInstance * __restrict inst);
 
   GPUAdapter*
-  (*getAvailablePhysicalDevicesBy)(GPUInstance   * __restrict inst,
-                                   uint32_t maxNumberOfItems);
+  (*getAvailableAdapters)(GPUInstance   * __restrict inst,
+                          uint32_t maxNumberOfItems);
 
   GPUResult
   (*getAdapterProperties)(const GPUAdapter     * __restrict adapter,
@@ -42,12 +42,6 @@ typedef struct GPUApiDevice {
                              uint32_t                       nQueCI);
 
   void (*destroyDevice)(GPUDevice * __restrict device);
-
-  GPUAdapter* (*getAutoSelectedPhysicalDevice)(GPUInstance *inst);
-
-  GPUAdapter*
-  (*autoSelectPhysicalDeviceIn)(GPUInstance       * __restrict inst,
-                                GPUAdapter        * __restrict deviceList);
 } GPUApiDevice;
 
 #ifdef __cplusplus

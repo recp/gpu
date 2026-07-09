@@ -188,11 +188,9 @@ mt_destroyDevice(GPUDevice * __restrict device) {
 GPU_HIDE
 void
 mt_initDevice(GPUApiDevice *apiDevice) {
-  apiDevice->getAvailablePhysicalDevicesBy = mt_getAvailablePhysicalDevicesBy;
-  apiDevice->getAdapterProperties          = mt_getAdapterProperties;
-  apiDevice->autoSelectPhysicalDeviceIn    = mt_autoSelectPhysicalDeviceIn;
-  apiDevice->getAutoSelectedPhysicalDevice = mt_getAutoSelectedPhysicalDevice;
-  apiDevice->createDevice                  = mt_createDevice;
-  apiDevice->createSystemDefaultDevice     = mt_createSystemDefaultDevice;
-  apiDevice->destroyDevice                 = mt_destroyDevice;
+  apiDevice->getAvailableAdapters      = mt_getAvailablePhysicalDevicesBy;
+  apiDevice->getAdapterProperties      = mt_getAdapterProperties;
+  apiDevice->createDevice              = mt_createDevice;
+  apiDevice->createSystemDefaultDevice = mt_createSystemDefaultDevice;
+  apiDevice->destroyDevice             = mt_destroyDevice;
 }
