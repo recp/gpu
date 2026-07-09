@@ -2,6 +2,25 @@
 #include "../../src/api/cmdqueue_internal.h"
 #include "../../src/api/frame_internal.h"
 
+typedef struct QueueCompletionProbe {
+  int count;
+  void *sender;
+  GPUCommandBuffer *cmdb;
+} QueueCompletionProbe;
+
+static void
+queue_completion_probe(void *sender, GPUCommandBuffer *cmdb) {
+  QueueCompletionProbe *probe = sender;
+
+  if (!probe) {
+    return;
+  }
+
+  probe->count++;
+  probe->sender = sender;
+  probe->cmdb = cmdb;
+}
+
 static int
 check_adapter_enumeration(void) {
   GPUAdapter *adapters[8] = {0};
@@ -527,6 +546,7 @@ check_queue_submit_fence(GPUDevice *device) {
   GPUCommandBuffer *buffers[1];
   GPUCommandBuffer *nullBuffers[1];
   GPUCommandBuffer *duplicateBuffers[2];
+  QueueCompletionProbe completionProbe = {0};
   GPUFence *fence;
   GPUFenceCreateInfo fenceInfo = {0};
   GPUQueueSubmitInfo submitInfo = {0};
@@ -662,6 +682,9 @@ check_queue_submit_fence(GPUDevice *device) {
   }
 
   if (ok) {
+    GPUSetCommandBufferCompletionHandler(cmdb,
+                                         &completionProbe,
+                                         queue_completion_probe);
     memset(&submitInfo, 0, sizeof(submitInfo));
     buffers[0] = cmdb;
     submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
@@ -673,6 +696,13 @@ check_queue_submit_fence(GPUDevice *device) {
         GPUWaitFence(fence, UINT64_MAX) != GPU_OK ||
         !GPUIsFenceSignaled(fence)) {
       fprintf(stderr, "queue submit fence did not signal\n");
+      ok = 0;
+    }
+    if (ok &&
+        (completionProbe.count != 1 ||
+         completionProbe.sender != &completionProbe ||
+         completionProbe.cmdb != cmdb)) {
+      fprintf(stderr, "queue submit completion handler did not run\n");
       ok = 0;
     }
   }
@@ -692,6 +722,8 @@ check_queue_submit_ex_semaphore(GPUDevice *device) {
   GPUSemaphoreCreateInfo semaphoreInfo = {0};
   GPUQueueSemaphoreWait wait = {0};
   GPUQueueSemaphoreSignal signal = {0};
+  GPUCommandBuffer submittedCmdb = {0};
+  GPUCommandBuffer *duplicateBuffers[2];
   GPUQueueSubmitExInfo submitInfo = {0};
   int ok;
 
@@ -771,6 +803,24 @@ check_queue_submit_ex_semaphore(GPUDevice *device) {
   ok = ok && GPUQueueSubmitEx(queue, &submitInfo) == GPU_ERROR_INVALID_ARGUMENT;
 
   submitInfo.chain.structSize = sizeof(submitInfo);
+  duplicateBuffers[0] = cmdb;
+  duplicateBuffers[1] = cmdb;
+  submitInfo.commandBufferCount = 2u;
+  submitInfo.ppCommandBuffers = duplicateBuffers;
+  ok = ok && GPUQueueSubmitEx(queue, &submitInfo) == GPU_ERROR_INVALID_ARGUMENT;
+
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.ppCommandBuffers = buffers;
+  cmdb->_activeEncoder = true;
+  ok = ok && GPUQueueSubmitEx(queue, &submitInfo) == GPU_ERROR_INVALID_ARGUMENT;
+  cmdb->_activeEncoder = false;
+
+  submittedCmdb._queue = queue;
+  submittedCmdb._submitted = true;
+  buffers[0] = &submittedCmdb;
+  ok = ok && GPUQueueSubmitEx(queue, &submitInfo) == GPU_ERROR_INVALID_ARGUMENT;
+  buffers[0] = cmdb;
+
   submitInfo.waitCount = 1u;
   submitInfo.pWaits = NULL;
   ok = ok && GPUQueueSubmitEx(queue, &submitInfo) == GPU_ERROR_INVALID_ARGUMENT;
