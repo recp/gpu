@@ -197,6 +197,7 @@ check_bind_group_layout_validation(GPUDevice *device) {
   GPUBindGroupLayout *dualTextureLayout;
   GPUPipelineLayoutCreateInfo pipelineInfo;
   GPUBindGroupLayout *layouts[1];
+  GPUBindGroupLayout *tooManyLayouts[GPU_ENCODER_MAX_BIND_GROUPS + 1u];
   GPUPipelineLayout *pipelineLayout;
 
   memset(&entry, 0, sizeof(entry));
@@ -214,6 +215,22 @@ check_bind_group_layout_validation(GPUDevice *device) {
   layoutInfo.entryCount = 1u;
   layoutInfo.pEntries = &entry;
 
+  if (GPUCreateBindGroupLayout(device, NULL, &layout) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUCreateBindGroupLayout(device, &layoutInfo, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "bind group layout accepted null input\n");
+    return 0;
+  }
+
+  layout = (GPUBindGroupLayout *)(uintptr_t)1u;
+  layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT ||
+      layout != NULL) {
+    fprintf(stderr, "bind group layout accepted wrong sType\n");
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
   layout = (GPUBindGroupLayout *)(uintptr_t)1u;
   layoutInfo.chain.structSize = (uint32_t)(sizeof(layoutInfo) - 1u);
   if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT ||
@@ -297,6 +314,28 @@ check_bind_group_layout_validation(GPUDevice *device) {
   groupInfo.layout = layout;
   groupInfo.entryCount = 1u;
   groupInfo.pEntries = &bufferEntry;
+  if (GPUCreateBindGroup(device, NULL, &group) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUCreateBindGroup(device, &groupInfo, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "bind group accepted null input\n");
+    GPUDestroyBuffer(storageOnlyBuffer);
+    GPUDestroyBuffer(uniformBuffer);
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  group = (GPUBindGroup *)(uintptr_t)1u;
+  groupInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT ||
+      group != NULL) {
+    fprintf(stderr, "bind group accepted wrong sType\n");
+    GPUDestroyBindGroup(group);
+    GPUDestroyBuffer(storageOnlyBuffer);
+    GPUDestroyBuffer(uniformBuffer);
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   group = NULL;
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "bind group rejected valid uniform buffer binding\n");
@@ -485,6 +524,27 @@ check_bind_group_layout_validation(GPUDevice *device) {
   pipelineInfo.chain.structSize = (uint32_t)(sizeof(pipelineInfo) - 1u);
   pipelineInfo.bindGroupLayoutCount = 1u;
   pipelineInfo.ppBindGroupLayouts = layouts;
+  if (GPUCreatePipelineLayout(device, NULL, &pipelineLayout) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUCreatePipelineLayout(device, &pipelineInfo, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "pipeline layout accepted null input\n");
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
+  pipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) !=
+      GPU_ERROR_INVALID_ARGUMENT ||
+      pipelineLayout != NULL) {
+    fprintf(stderr, "pipeline layout accepted wrong sType\n");
+    GPUDestroyPipelineLayout(pipelineLayout);
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  pipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize = (uint32_t)(sizeof(pipelineInfo) - 1u);
   pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
   if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_ERROR_INVALID_ARGUMENT ||
       pipelineLayout != NULL) {
@@ -513,6 +573,37 @@ check_bind_group_layout_validation(GPUDevice *device) {
 
   GPUDestroyPipelineLayout(pipelineLayout);
 
+  layouts[0] = NULL;
+  pipelineInfo.pushConstantSizeBytes = 0u;
+  pipelineInfo.pushConstantStages = 0u;
+  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) !=
+      GPU_ERROR_INVALID_ARGUMENT ||
+      pipelineLayout != NULL) {
+    fprintf(stderr, "pipeline layout accepted null bind group layout\n");
+    GPUDestroyPipelineLayout(pipelineLayout);
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(tooManyLayouts); i++) {
+    tooManyLayouts[i] = layout;
+  }
+  pipelineInfo.bindGroupLayoutCount = (uint32_t)GPU_ARRAY_LEN(tooManyLayouts);
+  pipelineInfo.ppBindGroupLayouts = tooManyLayouts;
+  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) !=
+      GPU_ERROR_INVALID_ARGUMENT ||
+      pipelineLayout != NULL) {
+    fprintf(stderr, "pipeline layout accepted too many bind group layouts\n");
+    GPUDestroyPipelineLayout(pipelineLayout);
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  layouts[0] = layout;
+  pipelineInfo.bindGroupLayoutCount = 1u;
+  pipelineInfo.ppBindGroupLayouts = layouts;
   pipelineInfo.pushConstantSizeBytes = 16u;
   pipelineInfo.pushConstantStages = 0u;
   pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
