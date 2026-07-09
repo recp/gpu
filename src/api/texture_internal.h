@@ -28,6 +28,7 @@ struct GPUTexture {
   uint32_t depthOrLayers;
   uint32_t mipLevelCount;
   uint32_t sampleCount;
+  GPUTextureUsageFlags usage;
   bool _ownsNative;
 };
 

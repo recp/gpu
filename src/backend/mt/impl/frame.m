@@ -52,6 +52,7 @@ mt_beginFrame(GPUApi       *__restrict api,
   target->depthOrLayers = 1;
   target->mipLevelCount = 1;
   target->sampleCount = 1;
+  target->usage = GPU_TEXTURE_USAGE_COLOR_TARGET;
   target->_ownsNative = false;
 
   targetView->_priv = drawable.texture;

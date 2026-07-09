@@ -5,6 +5,7 @@ check_resource_validation(GPUDevice *device) {
   GPUCommandQueue *queue;
   GPUBufferCreateInfo bufferInfo = {0};
   GPUTextureCreateInfo textureInfo = {0};
+  GPUTextureInfo queriedTextureInfo = {0};
   GPUTextureViewCreateInfo viewInfo = {0};
   GPUTextureWriteRegion region = {0};
   GPUBuffer *buffer;
@@ -133,6 +134,25 @@ check_resource_validation(GPUDevice *device) {
   texture = NULL;
   if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
     fprintf(stderr, "texture create failed\n");
+    return 0;
+  }
+  if (GPUGetTextureInfo(NULL, &queriedTextureInfo) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUGetTextureInfo(texture, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "texture info accepted invalid arguments\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+  if (GPUGetTextureInfo(texture, &queriedTextureInfo) != GPU_OK ||
+      queriedTextureInfo.dimension != textureInfo.dimension ||
+      queriedTextureInfo.format != textureInfo.format ||
+      queriedTextureInfo.width != textureInfo.width ||
+      queriedTextureInfo.height != textureInfo.height ||
+      queriedTextureInfo.depthOrLayers != textureInfo.depthOrLayers ||
+      queriedTextureInfo.mipLevelCount != textureInfo.mipLevelCount ||
+      queriedTextureInfo.sampleCount != textureInfo.sampleCount ||
+      queriedTextureInfo.usage != textureInfo.usage) {
+    fprintf(stderr, "texture info query returned wrong metadata\n");
+    GPUDestroyTexture(texture);
     return 0;
   }
 

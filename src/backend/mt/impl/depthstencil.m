@@ -123,6 +123,7 @@ mt_createTexture(GPUDevice                  * __restrict device,
   texture->depthOrLayers = info->depthOrLayers;
   texture->mipLevelCount = info->mipLevelCount ? info->mipLevelCount : 1u;
   texture->sampleCount = info->sampleCount ? info->sampleCount : 1u;
+  texture->usage = info->usage;
   texture->_ownsNative = true;
 
   *outTexture = texture;

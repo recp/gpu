@@ -142,6 +142,30 @@ GPUDestroyTexture(GPUTexture * __restrict texture) {
 
 GPU_EXPORT
 GPUResult
+GPUGetTextureInfo(GPUTexture * __restrict texture,
+                  GPUTextureInfo * __restrict outInfo) {
+  if (!outInfo) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  memset(outInfo, 0, sizeof(*outInfo));
+  if (!texture) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  outInfo->dimension = texture->dimension;
+  outInfo->format = texture->format;
+  outInfo->width = texture->width;
+  outInfo->height = texture->height;
+  outInfo->depthOrLayers = texture->depthOrLayers;
+  outInfo->mipLevelCount = texture->mipLevelCount;
+  outInfo->sampleCount = texture->sampleCount;
+  outInfo->usage = texture->usage;
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
 GPUCreateTextureView(GPUTexture                     * __restrict texture,
                      const GPUTextureViewCreateInfo * __restrict info,
                      GPUTextureView                ** __restrict outView) {

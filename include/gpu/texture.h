@@ -67,6 +67,17 @@ typedef struct GPUTextureCreateInfo {
   GPUTextureUsageFlags usage;
 } GPUTextureCreateInfo;
 
+typedef struct GPUTextureInfo {
+  GPUTextureDimension dimension;
+  GPUFormat format;
+  uint32_t width;
+  uint32_t height;
+  uint32_t depthOrLayers;
+  uint32_t mipLevelCount;
+  uint32_t sampleCount;
+  GPUTextureUsageFlags usage;
+} GPUTextureInfo;
+
 typedef struct GPUTextureViewCreateInfo {
   GPUChainedStruct chain;
   const char *label;
@@ -98,6 +109,11 @@ GPUCreateTexture(GPUDevice                  * __restrict device,
 GPU_EXPORT
 void
 GPUDestroyTexture(GPUTexture * __restrict texture);
+
+GPU_EXPORT
+GPUResult
+GPUGetTextureInfo(GPUTexture      * __restrict texture,
+                  GPUTextureInfo  * __restrict outInfo);
 
 GPU_EXPORT
 GPUResult
