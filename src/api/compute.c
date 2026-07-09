@@ -306,7 +306,9 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
       !gpuPipelineLayoutAcceptsBindGroup(pass->_pipelineLayout, setIndex, bindGroup)) {
     return;
   }
-  if (dynamicOffsetCount == 0u && pass->_boundGroups[setIndex] == bindGroup) {
+  if (dynamicOffsetCount == 0u &&
+      pass->_boundGroups[setIndex] == bindGroup &&
+      gpuBindGroupDynamicOffsetCount(bindGroup) == 0u) {
     return;
   }
 
@@ -362,6 +364,9 @@ GPUDispatch(GPUComputePassEncoder *pass,
   GPUApi *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline ||
+      !gpuPipelineLayoutIsBound(pass->_pipelineLayout,
+                                pass->_boundGroupLayouts,
+                                GPU_ENCODER_MAX_BIND_GROUPS) ||
       x == 0 || y == 0 || z == 0) {
     return;
   }
@@ -380,6 +385,9 @@ GPUDispatchIndirect(GPUComputePassEncoder *pass,
   GPUApi *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline ||
+      !gpuPipelineLayoutIsBound(pass->_pipelineLayout,
+                                pass->_boundGroupLayouts,
+                                GPU_ENCODER_MAX_BIND_GROUPS) ||
       !gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
       !gpuBufferRangeValid(argsBuffer, argsOffset, 12u)) {
     return;

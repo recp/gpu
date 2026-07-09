@@ -16,6 +16,7 @@
 
 #include "../../common.h"
 #include "../buffer_internal.h"
+#include "../descr/descriptor_internal.h"
 #include "pipeline_internal.h"
 #include "rce_internal.h"
 
@@ -421,6 +422,9 @@ GPUDraw(GPURenderPassEncoder *pass,
   GPUApi *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline ||
+      !gpuPipelineLayoutIsBound(pass->_pipelineLayout,
+                                pass->_boundGroupLayouts,
+                                GPU_ENCODER_MAX_BIND_GROUPS) ||
       vertexCount == 0 || instanceCount == 0)
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.drawPrimitives)
@@ -445,6 +449,9 @@ GPUDrawIndexed(GPURenderPassEncoder *pass,
   GPUApi *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline ||
+      !gpuPipelineLayoutIsBound(pass->_pipelineLayout,
+                                pass->_boundGroupLayouts,
+                                GPU_ENCODER_MAX_BIND_GROUPS) ||
       indexCount == 0 || instanceCount == 0 || !pass->_hasIndexBuffer ||
       !gpu_validIndexRange(pass->_indexBuffer,
                            pass->_indexBufferOffset,
@@ -471,6 +478,9 @@ GPUDrawIndirect(GPURenderPassEncoder *pass,
   GPUApi *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline ||
+      !gpuPipelineLayoutIsBound(pass->_pipelineLayout,
+                                pass->_boundGroupLayouts,
+                                GPU_ENCODER_MAX_BIND_GROUPS) ||
       !gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
       !gpuBufferRangeValid(argsBuffer, argsOffset, 16u))
     return;
@@ -491,6 +501,9 @@ GPUDrawIndexedIndirect(GPURenderPassEncoder *pass,
   GPUApi *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline ||
+      !gpuPipelineLayoutIsBound(pass->_pipelineLayout,
+                                pass->_boundGroupLayouts,
+                                GPU_ENCODER_MAX_BIND_GROUPS) ||
       !pass->_hasIndexBuffer ||
       !gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
       !gpuBufferRangeValid(argsBuffer, argsOffset, 20u))

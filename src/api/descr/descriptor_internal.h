@@ -76,4 +76,14 @@ GPU_HIDE
 GPUBindGroupLayout *
 gpuBindGroupGetLayout(GPUBindGroup *group);
 
+GPU_HIDE
+uint32_t
+gpuBindGroupDynamicOffsetCount(GPUBindGroup *group);
+
+GPU_HIDE
+int
+gpuPipelineLayoutIsBound(GPUPipelineLayout *pipelineLayout,
+                         GPUBindGroupLayout * const *boundLayouts,
+                         uint32_t boundLayoutCount);
+
 #endif /* gpu_descriptor_internal_h */

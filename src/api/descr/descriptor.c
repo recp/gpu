@@ -98,6 +98,29 @@ gpuBindGroupGetLayout(GPUBindGroup *group) {
 }
 
 GPU_HIDE
+uint32_t
+gpuBindGroupDynamicOffsetCount(GPUBindGroup *group) {
+  GPUBindGroupPriv *priv;
+  GPUBindGroupLayoutPriv *layout;
+  uint32_t count;
+
+  priv = gpu_groupPriv(group);
+  layout = priv ? gpu_layoutPriv(priv->layout) : NULL;
+  if (!layout) {
+    return 0u;
+  }
+
+  count = 0u;
+  for (uint32_t i = 0; i < layout->count; i++) {
+    if (layout->entries[i].hasDynamicOffset) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
+GPU_HIDE
 int
 gpuPipelineLayoutAcceptsBindGroup(GPUPipelineLayout *pipelineLayout,
                                   uint32_t setIndex,
@@ -113,6 +136,30 @@ gpuPipelineLayoutAcceptsBindGroup(GPUPipelineLayout *pipelineLayout,
   }
 
   return pipelinePriv->bindGroupLayouts[setIndex] == groupLayout;
+}
+
+GPU_HIDE
+int
+gpuPipelineLayoutIsBound(GPUPipelineLayout *pipelineLayout,
+                         GPUBindGroupLayout * const *boundLayouts,
+                         uint32_t boundLayoutCount) {
+  GPUPipelineLayoutPriv *priv;
+
+  priv = gpu_pipelineLayoutPriv(pipelineLayout);
+  if (!priv || priv->bindGroupLayoutCount == 0u) {
+    return 1;
+  }
+  if (!boundLayouts || boundLayoutCount < priv->bindGroupLayoutCount) {
+    return 0;
+  }
+
+  for (uint32_t i = 0; i < priv->bindGroupLayoutCount; i++) {
+    if (boundLayouts[i] != priv->bindGroupLayouts[i]) {
+      return 0;
+    }
+  }
+
+  return 1;
 }
 
 static int
@@ -1284,7 +1331,9 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
       !gpuPipelineLayoutAcceptsBindGroup(pass->_pipelineLayout, setIndex, group)) {
     return;
   }
-  if (dynamicOffsetCount == 0u && pass->_boundGroups[setIndex] == group) {
+  if (dynamicOffsetCount == 0u &&
+      pass->_boundGroups[setIndex] == group &&
+      gpuBindGroupDynamicOffsetCount(group) == 0u) {
     return;
   }
 
