@@ -18,6 +18,12 @@ static const char *kComputeIndirectMSL =
   "  out[gid.x] += gid.x + 1u;\n"
   "}\n";
 
+typedef enum ComputeReadbackMode {
+  COMPUTE_READBACK_DIRECT = 0,
+  COMPUTE_READBACK_INDIRECT,
+  COMPUTE_READBACK_MULTI_INDIRECT
+} ComputeReadbackMode;
+
 static int
 create_compute_test_library(GPUDevice *device, GPUShaderLibrary **outLibrary) {
   GPUShaderLibraryCreateInfo info = {0};
@@ -234,7 +240,7 @@ check_compute_pass_validation(void) {
 }
 
 static int
-check_compute_indirect_readback_case(GPUDevice *device, int multi) {
+check_compute_readback_case(GPUDevice *device, ComputeReadbackMode mode) {
   typedef struct DispatchArgs {
     uint32_t x, y, z;
   } DispatchArgs;
@@ -248,8 +254,11 @@ check_compute_indirect_readback_case(GPUDevice *device, int multi) {
   const uint32_t *expectedWords;
   const uint32_t expectedSingle[4] = {1u, 2u, 3u, 4u};
   const uint32_t expectedMulti[4] = {2u, 4u, 3u, 4u};
+  const int indirect = mode != COMPUTE_READBACK_DIRECT;
+  const int multi = mode == COMPUTE_READBACK_MULTI_INDIRECT;
   const char *label = multi ? "api-compute-multi-indirect"
-                            : "api-compute-indirect";
+                            : (indirect ? "api-compute-indirect"
+                                        : "api-compute-direct");
   GPUCommandQueue *queue;
   GPUShaderLibrary *library = NULL;
   GPUBindGroupLayout *bindGroupLayout = NULL;
@@ -348,20 +357,22 @@ check_compute_indirect_readback_case(GPUDevice *device, int multi) {
     goto cleanup;
   }
 
-  bufferInfo.label = label;
-  bufferInfo.sizeBytes = multi ? sizeof(kMultiDispatchArgs) :
-                                 sizeof(kDispatchArgs);
-  bufferInfo.usage = GPU_BUFFER_USAGE_INDIRECT | GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(device, &bufferInfo, &argsBuffer) != GPU_OK ||
-      !argsBuffer ||
-      GPUQueueWriteBuffer(queue,
-                          argsBuffer,
-                          0u,
-                          multi ? (const void *)kMultiDispatchArgs :
-                                  (const void *)&kDispatchArgs,
-                          bufferInfo.sizeBytes) != GPU_OK) {
-    fprintf(stderr, "failed to create %s args buffer\n", label);
-    goto cleanup;
+  if (indirect) {
+    bufferInfo.label = label;
+    bufferInfo.sizeBytes = multi ? sizeof(kMultiDispatchArgs) :
+                                   sizeof(kDispatchArgs);
+    bufferInfo.usage = GPU_BUFFER_USAGE_INDIRECT | GPU_BUFFER_USAGE_COPY_DST;
+    if (GPUCreateBuffer(device, &bufferInfo, &argsBuffer) != GPU_OK ||
+        !argsBuffer ||
+        GPUQueueWriteBuffer(queue,
+                            argsBuffer,
+                            0u,
+                            multi ? (const void *)kMultiDispatchArgs :
+                                    (const void *)&kDispatchArgs,
+                            bufferInfo.sizeBytes) != GPU_OK) {
+      fprintf(stderr, "failed to create %s args buffer\n", label);
+      goto cleanup;
+    }
   }
 
   groupEntry.binding = 0u;
@@ -394,7 +405,9 @@ check_compute_indirect_readback_case(GPUDevice *device, int multi) {
   }
   GPUBindComputePipeline(computePass, pipeline);
   GPUBindComputeGroup(computePass, 0u, bindGroup, 0u, NULL);
-  if (multi) {
+  if (!indirect) {
+    GPUDispatch(computePass, 4u, 1u, 1u);
+  } else if (multi) {
     GPUMultiDispatchIndirect(computePass,
                              argsBuffer,
                              0u,
@@ -469,14 +482,15 @@ cleanup:
 }
 
 static int
-check_compute_indirect_readback(GPUDevice *device) {
-  return check_compute_indirect_readback_case(device, 0) &&
-         check_compute_indirect_readback_case(device, 1);
+check_compute_readback(GPUDevice *device) {
+  return check_compute_readback_case(device, COMPUTE_READBACK_DIRECT) &&
+         check_compute_readback_case(device, COMPUTE_READBACK_INDIRECT) &&
+         check_compute_readback_case(device, COMPUTE_READBACK_MULTI_INDIRECT);
 }
 
 int
 gpu_test_compute(GPUDevice *device) {
   return check_compute_pass_validation() &&
          check_compute_pipeline_validation(device) &&
-         check_compute_indirect_readback(device);
+         check_compute_readback(device);
 }
