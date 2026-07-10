@@ -55,6 +55,10 @@ dkms.conf
 *.xcodeproj
 *.xcworkspace
 
+# CMake build trees
+out/
+build/
+
 # Sample build outputs
 samples/**/hello-*
 samples/**/*.us
@@ -63,14 +67,6 @@ samples/**/*.usl.logs
 samples/**/.build.lock/
 samples/usl-reflection-check/usl-reflection-check
 !samples/triangle-manual/triangle.usl.metal
-
-win/.vs/
-win/gpu/
-win/gpu/x64/
-win/gpu/src/
-win/x64/
-win/packages/
-win/ARM64/
 
 # Test build outputs
 tests/api/api-tests

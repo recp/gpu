@@ -3,12 +3,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SAMPLE_DIR="$(cd "$(dirname "$0")" && pwd)"
-DERIVED_DATA="${GPU_VULKAN_DERIVED_DATA:-/tmp/gpu-vk-dd}"
 VULKAN_SDK="${VULKAN_SDK:-$HOME/Library/Developer/VulkanSDK/1.4.350.1}"
 US_ROOT="${USL_ROOT:-/Users/recp/Projects/recp/UniversalShading/us}"
 USTEST="${USL_USTEST:-$US_ROOT/build/ustest}"
-LIB_DIR="$DERIVED_DATA/Build/Products/Debug"
-US_LIB_DIR="$US_ROOT/build/us"
 SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
 OUT_BIN="$SAMPLE_DIR/hello-compute-buffer-vulkan-usl"
 RENDER_OUT_BIN="$SAMPLE_DIR/hello-compute-render-vulkan-usl"
@@ -16,16 +13,8 @@ RENDER_OUT_BIN="$SAMPLE_DIR/hello-compute-render-vulkan-usl"
 "$USTEST" --shader "$SAMPLE_DIR/compute_buffer.usl" --no-logs --no-sidecar \
   >/tmp/gpu-compute-buffer-vulkan-usl-ustest.log 2>&1
 
-xcodebuild \
-  -project "$ROOT/gpu.xcodeproj" \
-  -scheme gpu \
-  -configuration Debug \
-  -derivedDataPath "$DERIVED_DATA" \
-  CODE_SIGNING_ALLOWED=NO \
-  CODE_SIGNING_REQUIRED=NO \
-  'GCC_PREPROCESSOR_DEFINITIONS=$(inherited) GPU_ENABLE_VULKAN=1' \
-  'OTHER_LDFLAGS=$(inherited) -lvulkan' \
-  build
+source "$ROOT/samples/common/build-library.sh"
+gpu_build_library "$ROOT" vulkan
 
 xcrun --sdk macosx clang \
   -std=c11 \

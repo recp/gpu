@@ -3,14 +3,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SAMPLE_DIR="$(cd "$(dirname "$0")" && pwd)"
-DERIVED_DATA="${GPU_DERIVED_DATA:-/tmp/gpu-dd}"
-LIB_DIR="$DERIVED_DATA/Build/Products/Debug"
 OUT_BIN="$SAMPLE_DIR/hello-compute-buffer-usl"
 SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
 US_ROOT="${USL_ROOT:-/Users/recp/Projects/recp/UniversalShading/us}"
 USTEST="${USL_USTEST:-$US_ROOT/build/ustest}"
-US_LIB_DIR="$US_ROOT/build/us"
-US_DS_LIB_DIR="$US_LIB_DIR/deps/ds"
 EMBED_METAL="${GPU_USL_EMBED_METAL:-0}"
 NO_SIDECAR="${GPU_USL_NO_SIDECAR:-0}"
 
@@ -49,14 +45,8 @@ else
   fi
 fi
 
-xcodebuild \
-  -project "$ROOT/gpu.xcodeproj" \
-  -scheme gpu \
-  -configuration Debug \
-  -derivedDataPath "$DERIVED_DATA" \
-  CODE_SIGNING_ALLOWED=NO \
-  CODE_SIGNING_REQUIRED=NO \
-  build
+source "$ROOT/samples/common/build-library.sh"
+gpu_build_library "$ROOT" metal
 
 xcrun --sdk macosx clang \
   -fobjc-arc \

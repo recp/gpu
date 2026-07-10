@@ -3,19 +3,11 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SAMPLE_DIR="$(cd "$(dirname "$0")" && pwd)"
-DERIVED_DATA="${GPU_DERIVED_DATA:-/tmp/gpu-dd}"
-LIB_DIR="$DERIVED_DATA/Build/Products/Debug"
 OUT_BIN="$SAMPLE_DIR/hello-triangle-manual"
 SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
 
-xcodebuild \
-  -project "$ROOT/gpu.xcodeproj" \
-  -scheme gpu \
-  -configuration Debug \
-  -derivedDataPath "$DERIVED_DATA" \
-  CODE_SIGNING_ALLOWED=NO \
-  CODE_SIGNING_REQUIRED=NO \
-  build
+source "$ROOT/samples/common/build-library.sh"
+gpu_build_library "$ROOT" metal
 
 xcrun --sdk macosx clang \
   -fobjc-arc \
