@@ -47,6 +47,37 @@ typedef struct GPUDeviceDX12 {
   uint32_t          nCreatedQueues;
 } GPUDeviceDX12;
 
+typedef struct GPUCommandQueueDX12 GPUCommandQueueDX12;
+
+typedef struct GPUCommandBufferDX12 {
+  GPUCommandQueueDX12          *owner;
+  ID3D12CommandAllocator       *allocator;
+  ID3D12GraphicsCommandList    *commandList;
+  struct GPUCommandBufferDX12  *next;
+  struct GPUCommandBufferDX12  *poolNext;
+  struct GPUCommandBufferDX12  *pendingNext;
+  GPUCommandBuffer              commandBuffer;
+  UINT64                        fenceValue;
+} GPUCommandBufferDX12;
+
+struct GPUCommandQueueDX12 {
+  GPUCommandQueue        *queue;
+  ID3D12CommandQueue     *commandQueue;
+  ID3D12Fence            *completionFence;
+  GPUCommandBufferDX12   *commands;
+  GPUCommandBufferDX12   *freeCommands;
+  GPUCommandBufferDX12   *pendingHead;
+  GPUCommandBufferDX12   *pendingTail;
+  HANDLE                  completionEvent;
+  HANDLE                  worker;
+  UINT64                  nextFenceValue;
+  D3D12_COMMAND_LIST_TYPE type;
+  bool                    workerStarted;
+  bool                    stopping;
+  CRITICAL_SECTION        poolLock;
+  CONDITION_VARIABLE      pendingCondition;
+};
+
 typedef struct GPUInstanceDX12 {
   IDXGIFactory4 *dxgiFactory;
   UINT           dxgiFactoryFlags;

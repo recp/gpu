@@ -50,9 +50,12 @@ dx12_createInstance(struct GPUApi * __restrict api,
   }
 #endif
 
-  DXCHECK(CreateDXGIFactory2(instDX12->dxgiFactoryFlags, 
-                             &IID_IDXGIFactory1, 
-                             (void **)&instDX12->dxgiFactory));
+  hr = CreateDXGIFactory2(instDX12->dxgiFactoryFlags,
+                          &IID_IDXGIFactory4,
+                          (void **)&instDX12->dxgiFactory);
+  if (FAILED(hr)) {
+    goto err;
+  }
 
   inst->_priv      = instDX12;
   if (info) {
@@ -65,8 +68,6 @@ err:
 
   if (inst)     { free(inst);     }
   if (instDX12) { free(instDX12); }
-
-  dxThrowIfFailed(hr);
 
   return NULL;
 }

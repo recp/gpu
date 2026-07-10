@@ -22,6 +22,9 @@ GPU_HIDE void dx12_initDevice(GPUApiDevice* apiDevice);
 // GPU_HIDE void dx12_initRCE(GPUApiRCE* api);
 // GPU_HIDE void dx12_initCmdBuff(GPUApiCommandBuffer* api);
 GPU_HIDE void dx12_initCmdQue(GPUApiCommandQueue* api);
+GPU_HIDE GPUCommandQueue *dx12_createCommandQueue(GPUDevice *device,
+                                                   GPUQueueFlagBits bits);
+GPU_HIDE void dx12_destroyCommandQueue(GPUCommandQueue *queue);
 // GPU_HIDE void dx12_initBuff(GPUApiBuffer* api);
 // GPU_HIDE void dx12_initPass(GPUApiRenderPass* api);
 // GPU_HIDE void dx12_initDepthStencil(GPUApiDepthStencil* api);

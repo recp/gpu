@@ -106,6 +106,7 @@ dx12_createSwapChain(GPUApi          * __restrict api,
   GPUInstance                *inst;
   GPUInstanceDX12            *instDX12;
   GPUDeviceDX12              *deviceDX12;
+  GPUCommandQueueDX12        *queueDX12;
   GPUSwapChain               *swapChain;
   ID3D12Device               *d3dDevice;
   ID3D12CommandQueue         *cmdQueDX12;
@@ -147,8 +148,12 @@ dx12_createSwapChain(GPUApi          * __restrict api,
   swapChainDesc.SampleDesc.Count = 1;
 
   d3dDevice   = deviceDX12->d3dDevice;
-  cmdQueDX12  = cmdQue->_priv;
+  queueDX12   = cmdQue->_priv;
+  cmdQueDX12  = queueDX12 ? queueDX12->commandQueue : NULL;
   dxgiFactory = instDX12->dxgiFactory;
+  if (!cmdQueDX12) {
+    return NULL;
+  }
 
   switch (surface->type) {
   case GPU_SURFACE_WINDOWS_COREWINDOW:

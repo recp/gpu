@@ -10,6 +10,7 @@ include(GNUInstallDirs)
 
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(GPU_ENABLE_VULKAN "Build the Vulkan backend" OFF)
+option(GPU_BUILD_TESTS "Build GPU validation tests" OFF)
 
 set(GPU_USL_ROOT "" CACHE PATH "UniversalShading/us checkout")
 set(GPU_USL_INCLUDE_DIR "" CACHE PATH "USL public include directory")
@@ -196,6 +197,37 @@ if(GPU_ENABLE_VULKAN)
     target_sources(gpu PRIVATE src/backend/vk/impl/surface_apple.m)
   endif()
   target_link_libraries(gpu PRIVATE Vulkan::Vulkan)
+endif()
+
+if(GPU_BUILD_TESTS)
+  enable_testing()
+
+  if(WIN32)
+    add_executable(gpu-dx12-queue-test tests/dx12/queue.c)
+    target_link_libraries(gpu-dx12-queue-test PRIVATE gpu)
+    set_target_properties(gpu-dx12-queue-test PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+    )
+
+    if(TARGET us)
+      add_custom_command(TARGET gpu-dx12-queue-test POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:us>
+                $<TARGET_FILE_DIR:gpu-dx12-queue-test>
+      )
+    endif()
+    if(TARGET ds)
+      add_custom_command(TARGET gpu-dx12-queue-test POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:ds>
+                $<TARGET_FILE_DIR:gpu-dx12-queue-test>
+      )
+    endif()
+
+    add_test(NAME dx12-queue COMMAND gpu-dx12-queue-test)
+  endif()
 endif()
 
 install(TARGETS gpu

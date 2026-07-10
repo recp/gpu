@@ -15,10 +15,7 @@
  */
 
 #include "../common.h"
-
-GPU_HIDE
-GPUCommandQueue *
-dx12_newCommandQueue(GPUDevice *__restrict device);
+#include "../impl.h"
 
 static void
 dx12_fillAdapterName(GPUPhysicalDeviceDX12 *phyDeviceDX12) {
@@ -83,7 +80,7 @@ dx12_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
          && SUCCEEDED(EnumAdapters1(dxgiFactory, adapterIndex, &dxgiAdapter))) {
     if (dxgiAdapter) {
       phyDeviceDX12              = calloc(1, sizeof(*phyDeviceDX12));
-      phyDeviceDX12->dxgiAdapter = dxgiAdapter;
+      phyDeviceDX12->dxgiAdapter = (IUnknown *)dxgiAdapter;
 
       dxgiAdapter->lpVtbl->GetDesc1(dxgiAdapter, &phyDeviceDX12->desc1);
       dx12_fillAdapterName(phyDeviceDX12);
@@ -245,61 +242,89 @@ dx12_getAdapterProperties(const GPUAdapter     * __restrict adapter,
 
 GPU_HIDE
 GPUDevice *
-dx12_createDevice(GPUPhysicalDevice * __restrict phyDevice,
-                  GPUCommandQueueCreateInfo      queCI[],
-                  uint32_t                       nQueCI) {
+dx12_createDevice(GPUPhysicalDevice        * __restrict phyDevice,
+                  GPUCommandQueueCreateInfo queCI[],
+                  uint32_t                  nQueCI) {
   GPUInstance           *inst;
-  GPUInstanceDX12       *instDX12;
   GPUPhysicalDeviceDX12 *phyDeviceDX12;
   GPUDevice             *device;
   GPUDeviceDX12         *deviceDX12;
-  GPU__DX12             *dx12api;
   HRESULT                hr;
-  uint32_t               i;
+  uint32_t               queueCount;
+  uint32_t               queueIndex;
+  uint32_t               i, j;
 
+  device     = NULL;
   deviceDX12 = NULL;
-
-  if (!(inst = phyDevice->inst)
-    || !(phyDeviceDX12 = phyDevice->_priv)) {
+  if (!phyDevice ||
+      !(inst = phyDevice->inst) ||
+      !(phyDeviceDX12 = phyDevice->_priv)) {
     goto err;
   }
 
   GPU__DEFINE_DEFAULT_QUEUES_IF_NEEDED(nQueCI, queCI);
 
-  instDX12   = inst->_priv;
+  device     = calloc(1, sizeof(*device));
   deviceDX12 = calloc(1, sizeof(*deviceDX12));
+  if (!device || !deviceDX12) {
+    goto err;
+  }
 
-  DXCHECK(D3D12CreateDevice(phyDeviceDX12->dxgiAdapter,
-                            D3D_FEATURE_LEVEL_11_0,
-                            &IID_ID3D12Device,
-                            (void **)&deviceDX12->d3dDevice));
+  hr = D3D12CreateDevice(phyDeviceDX12->dxgiAdapter,
+                         D3D_FEATURE_LEVEL_11_0,
+                         &IID_ID3D12Device,
+                         (void **)&deviceDX12->d3dDevice);
+  if (FAILED(hr)) {
+    goto err;
+  }
 
-  GPU__DEFINE_DEFAULT_QUEUES_IF_NEEDED(nQueCI, queCI)
-
-  device            = calloc(1, sizeof(*device));
   device->inst      = inst;
   device->_priv     = deviceDX12;
   device->phyDevice = phyDevice;
 
-  if (nQueCI) {
-    deviceDX12->nCreatedQueues = nQueCI;
-    deviceDX12->createdQueues  = calloc(nQueCI, sizeof(void *));
+  queueCount = 0u;
+  for (i = 0u; i < nQueCI; i++) {
+    queueCount += queCI[i].count;
+  }
+  if (queueCount > 0u) {
+    deviceDX12->createdQueues = calloc(queueCount,
+                                       sizeof(*deviceDX12->createdQueues));
+    if (!deviceDX12->createdQueues) {
+      goto err;
+    }
 
-    for (i = 0; i < nQueCI; i++) {
-      deviceDX12->createdQueues[i] = dx12_newCommandQueue(device);
-      if (deviceDX12->createdQueues[i]) {
-        deviceDX12->createdQueues[i]->bits = queCI[i].flags;
-        device->queueFamilies |= queCI[i].flags;
+    queueIndex = 0u;
+    for (i = 0u; i < nQueCI; i++) {
+      for (j = 0u; j < queCI[i].count; j++) {
+        GPUCommandQueue *queue;
+
+        queue = dx12_createCommandQueue(device, queCI[i].flags);
+        if (!queue) {
+          goto err;
+        }
+        deviceDX12->createdQueues[queueIndex++] = queue;
+        deviceDX12->nCreatedQueues              = queueIndex;
+        device->queueFamilies                  |= queue->bits;
       }
     }
   }
 
   return device;
+
 err:
-  dxThrowIfFailed(hr);
-
-  if (deviceDX12) { free(deviceDX12); }
-
+  if (deviceDX12) {
+    if (deviceDX12->createdQueues) {
+      for (i = 0u; i < deviceDX12->nCreatedQueues; i++) {
+        dx12_destroyCommandQueue(deviceDX12->createdQueues[i]);
+      }
+      free(deviceDX12->createdQueues);
+    }
+    if (deviceDX12->d3dDevice) {
+      deviceDX12->d3dDevice->lpVtbl->Release(deviceDX12->d3dDevice);
+    }
+    free(deviceDX12);
+  }
+  free(device);
   return NULL;
 }
 
@@ -320,9 +345,35 @@ err:
 
 GPU_HIDE
 void
+dx12_destroyDevice(GPUDevice * __restrict device) {
+  GPUDeviceDX12 *deviceDX12;
+
+  if (!device) {
+    return;
+  }
+
+  deviceDX12 = device->_priv;
+  if (deviceDX12) {
+    if (deviceDX12->createdQueues) {
+      for (uint32_t i = 0u; i < deviceDX12->nCreatedQueues; i++) {
+        dx12_destroyCommandQueue(deviceDX12->createdQueues[i]);
+      }
+      free(deviceDX12->createdQueues);
+    }
+    if (deviceDX12->d3dDevice) {
+      deviceDX12->d3dDevice->lpVtbl->Release(deviceDX12->d3dDevice);
+    }
+    free(deviceDX12);
+  }
+  free(device);
+}
+
+GPU_HIDE
+void
 dx12_initDevice(GPUApiDevice* apiDevice) {
   apiDevice->getAvailableAdapters      = dx12_getAvailablePhysicalDevicesBy;
   apiDevice->getAdapterProperties      = dx12_getAdapterProperties;
   apiDevice->createDevice              = dx12_createDevice;
   apiDevice->createSystemDefaultDevice = dx12_createSystemDefaultDevice;
+  apiDevice->destroyDevice             = dx12_destroyDevice;
 }

@@ -16,8 +16,10 @@
 
 #include "../../common.h"
 
+#include <string.h>
+
 GPU_HIDE
 void
 dx12_initDescriptor(GPUApiDescriptor* apiDescriptor) {
-  apiDescriptor->reserved = NULL;
+  memset(apiDescriptor, 0, sizeof(*apiDescriptor));
 }

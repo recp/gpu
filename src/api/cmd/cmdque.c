@@ -93,12 +93,11 @@ gpuFinishCommandBuffer(GPUCommandBuffer          *cmdb,
   cmdb->_onCompleteSender = NULL;
   cmdb->_onComplete = NULL;
 
-  if (recycle) {
-    recycle(cmdb);
-  }
-
   if (onComplete) {
     onComplete(sender, cmdb);
+  }
+  if (recycle) {
+    recycle(cmdb);
   }
   gpu_signalFence(fence);
 }
