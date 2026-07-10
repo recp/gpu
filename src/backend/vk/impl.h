@@ -20,12 +20,13 @@
 GPU_HIDE void vk_initInstance(GPUApiInstance *api);
 GPU_HIDE void vk_initDevice(GPUApiDevice *api);
 GPU_HIDE void vk_initBuff(GPUApiBuffer *api);
+GPU_HIDE void vk_initTexture(GPUApiTexture *api);
+GPU_HIDE void vk_initSampler(GPUApiSampler *api);
 GPU_HIDE void vk_initCmdQue(GPUApiCommandQueue *api);
 GPU_HIDE void vk_initCmdbuf(GPUApiCommandBuffer *api);
 GPU_HIDE void vk_initSwapChain(GPUApiSwapChain *api);
 GPU_HIDE void vk_initFrame(GPUApiFrame *api);
 GPU_HIDE void vk_initDescriptor(GPUApiDescriptor *api);
-GPU_HIDE void vk_initSampler(GPUApiSampler *api);
 GPU_HIDE void vk_initSurface(GPUApiSurface *api);
 GPU_HIDE void vk_initLibrary(GPUApiLibrary *api);
 GPU_HIDE void vk_initRenderPipeline(GPUApiRender *api);
@@ -42,5 +43,23 @@ vk_createCommandQueue(GPUDevice       *device,
 GPU_HIDE
 void
 vk_destroyCommandQueue(GPUCommandQueue *queue);
+
+GPU_HIDE
+GPUResult
+vk_createBuffer(GPUDevice                 * __restrict device,
+                const GPUBufferCreateInfo * __restrict info,
+                GPUBuffer                ** __restrict outBuffer);
+
+GPU_HIDE
+void
+vk_destroyBuffer(GPUBuffer * __restrict buffer);
+
+GPU_HIDE
+GPUResult
+vk_writeBuffer(GPUCommandQueue * __restrict queue,
+               GPUBuffer       * __restrict buffer,
+               uint64_t                     dstOffset,
+               const void      * __restrict data,
+               uint64_t                     sizeBytes);
 
 #endif /* vk_apis_h */

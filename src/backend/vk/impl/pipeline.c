@@ -38,6 +38,170 @@ vk__frontFace(GPUFrontFace face) {
     VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE;
 }
 
+static bool
+vk__vertexFormat(GPUVertexFormat format, VkFormat *outFormat) {
+  VkFormat result;
+
+  if (!outFormat) {
+    return false;
+  }
+
+  switch (format) {
+    case GPUUChar:
+      result = VK_FORMAT_R8_UINT;
+      break;
+    case GPUUChar2:
+      result = VK_FORMAT_R8G8_UINT;
+      break;
+    case GPUUChar3:
+      result = VK_FORMAT_R8G8B8_UINT;
+      break;
+    case GPUUChar4:
+      result = VK_FORMAT_R8G8B8A8_UINT;
+      break;
+    case GPUChar:
+      result = VK_FORMAT_R8_SINT;
+      break;
+    case GPUChar2:
+      result = VK_FORMAT_R8G8_SINT;
+      break;
+    case GPUChar3:
+      result = VK_FORMAT_R8G8B8_SINT;
+      break;
+    case GPUChar4:
+      result = VK_FORMAT_R8G8B8A8_SINT;
+      break;
+    case GPUUCharNormalized:
+      result = VK_FORMAT_R8_UNORM;
+      break;
+    case GPUUChar2Normalized:
+      result = VK_FORMAT_R8G8_UNORM;
+      break;
+    case GPUUChar3Normalized:
+      result = VK_FORMAT_R8G8B8_UNORM;
+      break;
+    case GPUUChar4Normalized:
+      result = VK_FORMAT_R8G8B8A8_UNORM;
+      break;
+    case GPUCharNormalized:
+      result = VK_FORMAT_R8_SNORM;
+      break;
+    case GPUChar2Normalized:
+      result = VK_FORMAT_R8G8_SNORM;
+      break;
+    case GPUChar3Normalized:
+      result = VK_FORMAT_R8G8B8_SNORM;
+      break;
+    case GPUChar4Normalized:
+      result = VK_FORMAT_R8G8B8A8_SNORM;
+      break;
+    case GPUUShort:
+      result = VK_FORMAT_R16_UINT;
+      break;
+    case GPUUShort2:
+      result = VK_FORMAT_R16G16_UINT;
+      break;
+    case GPUUShort3:
+      result = VK_FORMAT_R16G16B16_UINT;
+      break;
+    case GPUUShort4:
+      result = VK_FORMAT_R16G16B16A16_UINT;
+      break;
+    case GPUShort:
+      result = VK_FORMAT_R16_SINT;
+      break;
+    case GPUShort2:
+      result = VK_FORMAT_R16G16_SINT;
+      break;
+    case GPUShort3:
+      result = VK_FORMAT_R16G16B16_SINT;
+      break;
+    case GPUShort4:
+      result = VK_FORMAT_R16G16B16A16_SINT;
+      break;
+    case GPUUShortNormalized:
+      result = VK_FORMAT_R16_UNORM;
+      break;
+    case GPUUShort2Normalized:
+      result = VK_FORMAT_R16G16_UNORM;
+      break;
+    case GPUUShort3Normalized:
+      result = VK_FORMAT_R16G16B16_UNORM;
+      break;
+    case GPUUShort4Normalized:
+      result = VK_FORMAT_R16G16B16A16_UNORM;
+      break;
+    case GPUShortNormalized:
+      result = VK_FORMAT_R16_SNORM;
+      break;
+    case GPUShort2Normalized:
+      result = VK_FORMAT_R16G16_SNORM;
+      break;
+    case GPUShort3Normalized:
+      result = VK_FORMAT_R16G16B16_SNORM;
+      break;
+    case GPUShort4Normalized:
+      result = VK_FORMAT_R16G16B16A16_SNORM;
+      break;
+    case GPUVertexFormatHalf:
+      result = VK_FORMAT_R16_SFLOAT;
+      break;
+    case GPUHalf2:
+      result = VK_FORMAT_R16G16_SFLOAT;
+      break;
+    case GPUHalf3:
+      result = VK_FORMAT_R16G16B16_SFLOAT;
+      break;
+    case GPUHalf4:
+      result = VK_FORMAT_R16G16B16A16_SFLOAT;
+      break;
+    case GPUFloat:
+      result = VK_FORMAT_R32_SFLOAT;
+      break;
+    case GPUFloat2:
+      result = VK_FORMAT_R32G32_SFLOAT;
+      break;
+    case GPUFloat3:
+      result = VK_FORMAT_R32G32B32_SFLOAT;
+      break;
+    case GPUFloat4:
+      result = VK_FORMAT_R32G32B32A32_SFLOAT;
+      break;
+    case GPUInt:
+      result = VK_FORMAT_R32_SINT;
+      break;
+    case GPUInt2:
+      result = VK_FORMAT_R32G32_SINT;
+      break;
+    case GPUInt3:
+      result = VK_FORMAT_R32G32B32_SINT;
+      break;
+    case GPUInt4:
+      result = VK_FORMAT_R32G32B32A32_SINT;
+      break;
+    case GPUUInt:
+      result = VK_FORMAT_R32_UINT;
+      break;
+    case GPUUInt2:
+      result = VK_FORMAT_R32G32_UINT;
+      break;
+    case GPUUInt3:
+      result = VK_FORMAT_R32G32B32_UINT;
+      break;
+    case GPUUInt4:
+      result = VK_FORMAT_R32G32B32A32_UINT;
+      break;
+    case GPUUChar4Normalized_BGRA:
+      result = VK_FORMAT_B8G8R8A8_UNORM;
+      break;
+    default:
+      return false;
+  }
+
+  *outFormat = result;
+  return true;
+}
+
 static VkColorComponentFlags
 vk__colorMask(GPUColorWriteMaskFlags mask) {
   VkColorComponentFlags result;
@@ -103,12 +267,14 @@ vk_createRenderPipeline(GPUDevice                         *device,
                         const GPURenderPipelineCreateInfo *info,
                         uint32_t                           requiredBindGroupMask,
                         GPURenderPipeline                 *pipeline) {
-  GPUDeviceVk                  *deviceVk;
-  GPULibraryVk                 *library;
-  GPUPipelineLayoutVk          *layout;
-  GPURenderPipelineVk          *native;
-  VkFormat                      colorFormat;
-  VkPipelineShaderStageCreateInfo stages[2] = {{0}};
+  GPUDeviceVk                       *deviceVk;
+  GPULibraryVk                      *library;
+  GPUPipelineLayoutVk               *layout;
+  GPURenderPipelineVk               *native;
+  VkVertexInputBindingDescription   *vertexBindings;
+  VkVertexInputAttributeDescription *vertexAttributes;
+  VkFormat                           colorFormat;
+  VkPipelineShaderStageCreateInfo    stages[2] = {{0}};
   VkPipelineVertexInputStateCreateInfo vertexInput = {0};
   VkPipelineInputAssemblyStateCreateInfo inputAssembly = {0};
   VkPipelineViewportStateCreateInfo viewport = {0};
@@ -116,14 +282,14 @@ vk_createRenderPipeline(GPUDevice                         *device,
   VkPipelineMultisampleStateCreateInfo multisample = {0};
   VkPipelineColorBlendAttachmentState colorBlend = {0};
   VkPipelineColorBlendStateCreateInfo blend = {0};
-  VkDynamicState dynamicStates[2];
-  VkPipelineDynamicStateCreateInfo dynamic = {0};
-  VkGraphicsPipelineCreateInfo pipelineInfo = {0};
+  VkDynamicState                    dynamicStates[2];
+  VkPipelineDynamicStateCreateInfo  dynamic = {0};
+  VkGraphicsPipelineCreateInfo      pipelineInfo = {0};
+  uint32_t                          vertexAttributeCount;
 
   if (!device || !device->_priv || !info || !pipeline ||
       !info->library || !info->library->_priv ||
       !info->layout || !info->layout->_native ||
-      info->vertex.bufferLayoutCount != 0u ||
       info->colorTargetCount != 1u ||
       info->depthStencilFormat != GPU_FORMAT_UNDEFINED ||
       (info->multisample.sampleCount != 0u &&
@@ -134,15 +300,73 @@ vk_createRenderPipeline(GPUDevice                         *device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
+  vertexBindings       = NULL;
+  vertexAttributes     = NULL;
+  vertexAttributeCount = 0u;
+  for (uint32_t i = 0u; i < info->vertex.bufferLayoutCount; i++) {
+    if (info->vertex.pBufferLayouts[i].attributeCount >
+        UINT32_MAX - vertexAttributeCount) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    vertexAttributeCount += info->vertex.pBufferLayouts[i].attributeCount;
+  }
+  if (info->vertex.bufferLayoutCount > 0u) {
+    vertexBindings = calloc(info->vertex.bufferLayoutCount,
+                            sizeof(*vertexBindings));
+    if (!vertexBindings) {
+      return GPU_ERROR_OUT_OF_MEMORY;
+    }
+  }
+  if (vertexAttributeCount > 0u) {
+    vertexAttributes = calloc(vertexAttributeCount,
+                              sizeof(*vertexAttributes));
+    if (!vertexAttributes) {
+      free(vertexBindings);
+      return GPU_ERROR_OUT_OF_MEMORY;
+    }
+  }
+
+  vertexAttributeCount = 0u;
+  for (uint32_t i = 0u; i < info->vertex.bufferLayoutCount; i++) {
+    const GPUVertexBufferLayout *bufferLayout;
+
+    bufferLayout = &info->vertex.pBufferLayouts[i];
+    vertexBindings[i].binding   = i;
+    vertexBindings[i].stride    = bufferLayout->strideBytes;
+    vertexBindings[i].inputRate = bufferLayout->stepMode ==
+                                    GPU_VERTEX_STEP_MODE_INSTANCE
+                                      ? VK_VERTEX_INPUT_RATE_INSTANCE
+                                      : VK_VERTEX_INPUT_RATE_VERTEX;
+    for (uint32_t j = 0u; j < bufferLayout->attributeCount; j++) {
+      const GPUVertexAttribute *attribute;
+      VkVertexInputAttributeDescription *nativeAttribute;
+
+      attribute       = &bufferLayout->pAttributes[j];
+      nativeAttribute = &vertexAttributes[vertexAttributeCount++];
+      nativeAttribute->location = attribute->shaderLocation;
+      nativeAttribute->binding  = i;
+      nativeAttribute->offset   = attribute->offset;
+      if (!vk__vertexFormat(attribute->format, &nativeAttribute->format)) {
+        free(vertexAttributes);
+        free(vertexBindings);
+        return GPU_ERROR_UNSUPPORTED;
+      }
+    }
+  }
+
   deviceVk = device->_priv;
   library  = info->library->_priv;
   layout   = info->layout->_native;
   if (!layout->layout) {
+    free(vertexAttributes);
+    free(vertexBindings);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  native   = calloc(1, sizeof(*native));
+  native = calloc(1, sizeof(*native));
   if (!native) {
+    free(vertexAttributes);
+    free(vertexBindings);
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
@@ -152,6 +376,8 @@ vk_createRenderPipeline(GPUDevice                         *device,
   if (vk__createPipelineRenderPass(native->device,
                                    colorFormat,
                                    &native->renderPass) != VK_SUCCESS) {
+    free(vertexAttributes);
+    free(vertexBindings);
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -165,7 +391,13 @@ vk_createRenderPipeline(GPUDevice                         *device,
   stages[1].module = library->module;
   stages[1].pName  = info->fragmentEntry;
 
-  vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  vertexInput.sType                           =
+    VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  vertexInput.vertexBindingDescriptionCount   =
+    info->vertex.bufferLayoutCount;
+  vertexInput.pVertexBindingDescriptions      = vertexBindings;
+  vertexInput.vertexAttributeDescriptionCount = vertexAttributeCount;
+  vertexInput.pVertexAttributeDescriptions    = vertexAttributes;
 
   inputAssembly.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
   inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -215,10 +447,15 @@ vk_createRenderPipeline(GPUDevice                         *device,
                                 &pipelineInfo,
                                 NULL,
                                 &native->pipeline) != VK_SUCCESS) {
+    free(vertexAttributes);
+    free(vertexBindings);
     vkDestroyRenderPass(native->device, native->renderPass, NULL);
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
+  free(vertexAttributes);
+  free(vertexBindings);
 
   pipeline->_priv  = native;
   pipeline->_state = native;

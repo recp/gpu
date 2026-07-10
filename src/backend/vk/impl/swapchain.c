@@ -356,6 +356,7 @@ vk__createImageState(GPUSwapChainVk *swapchain) {
 
     nativeView             = &swapchain->nativeViews[i];
     nativeView->swapchain  = swapchain;
+    nativeView->device     = swapchain->device;
     nativeView->view       = swapchain->imageViews[i];
     nativeView->imageIndex = i;
 

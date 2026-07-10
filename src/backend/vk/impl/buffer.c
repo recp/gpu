@@ -59,13 +59,14 @@ vk__bufferUsage(GPUBufferUsageFlags usage, VkBufferUsageFlags *outUsage) {
   return true;
 }
 
-static bool
-vk__findMemoryType(GPUDevice             *device,
-                   uint32_t               typeBits,
-                   VkMemoryPropertyFlags  required,
-                   VkMemoryPropertyFlags  preferred,
-                   uint32_t              *outIndex,
-                   VkMemoryPropertyFlags *outFlags) {
+GPU_HIDE
+bool
+vk_findMemoryType(GPUDevice             *device,
+                  uint32_t               typeBits,
+                  VkMemoryPropertyFlags  required,
+                  VkMemoryPropertyFlags  preferred,
+                  uint32_t              *outIndex,
+                  VkMemoryPropertyFlags *outFlags) {
   GPUPhysicalDeviceVk     *physical;
   VkPhysicalDeviceMemoryProperties properties;
 
@@ -155,12 +156,12 @@ vk_createBuffer(GPUDevice                 * __restrict device,
   }
 
   vkGetBufferMemoryRequirements(state.device, state.buffer, &requirements);
-  if (!vk__findMemoryType(device,
-                          requirements.memoryTypeBits,
-                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                          &memoryTypeIndex,
-                          &memoryFlags)) {
+  if (!vk_findMemoryType(device,
+                         requirements.memoryTypeBits,
+                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                         &memoryTypeIndex,
+                         &memoryFlags)) {
     vk__destroyBufferState(&state);
     return GPU_ERROR_UNSUPPORTED;
   }

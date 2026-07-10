@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../../../api/buffer_internal.h"
 #include "../../../api/render/pipeline_internal.h"
 
 static GPURenderEncoderVk*
@@ -159,6 +160,30 @@ vk_renderPushConstants(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
+vk_vertexBuffer(GPURenderCommandEncoder *encoder,
+                GPUBuffer               *buffer,
+                size_t                   offset,
+                uint32_t                 index) {
+  GPURenderEncoderVk *native;
+  GPUBufferVk        *bufferVk;
+  VkDeviceSize        nativeOffset;
+
+  native   = vk__renderEncoder(encoder);
+  bufferVk = buffer ? buffer->_priv : NULL;
+  if (!native || !bufferVk || !bufferVk->buffer) {
+    return;
+  }
+
+  nativeOffset = offset;
+  vkCmdBindVertexBuffers(native->command,
+                         index,
+                         1u,
+                         &bufferVk->buffer,
+                         &nativeOffset);
+}
+
+GPU_HIDE
+void
 vk_drawPrimitives(GPURenderCommandEncoder *encoder,
                   GPUPrimitiveType         type,
                   size_t                   start,
@@ -200,6 +225,7 @@ vk_initRCE(GPUApiRCE *api) {
   api->viewport               = vk_viewport;
   api->scissor                = vk_scissor;
   api->pushConstants          = vk_renderPushConstants;
+  api->vertexBuffer           = vk_vertexBuffer;
   api->drawPrimitives         = vk_drawPrimitives;
   api->endEncoding            = vk_endRenderEncoding;
 }

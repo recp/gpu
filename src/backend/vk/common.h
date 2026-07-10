@@ -204,6 +204,14 @@ typedef struct GPUBufferVk {
   bool           coherent;
 } GPUBufferVk;
 
+typedef struct GPUTextureVk {
+  VkDevice           device;
+  VkImage            image;
+  VkDeviceMemory     memory;
+  VkImageLayout      layout;
+  VkImageAspectFlags aspect;
+} GPUTextureVk;
+
 typedef struct GPUBindGroupLayoutVk {
   uint32_t              *dynamicOrder;
   VkDevice               device;
@@ -296,9 +304,15 @@ typedef struct GPUFrameSyncVk {
 
 typedef struct GPUTextureViewVk {
   GPUSwapChainVk *swapchain;
+  VkDevice        device;
   VkImageView     view;
   uint32_t        imageIndex;
 } GPUTextureViewVk;
+
+typedef struct GPUSamplerVk {
+  VkDevice  device;
+  VkSampler sampler;
+} GPUSamplerVk;
 
 typedef struct GPURenderPipelineVk {
   VkDevice         device;
@@ -345,6 +359,15 @@ typedef struct GPULibraryVk {
 GPU_HIDE
 bool
 vk_formatFromGPU(GPUFormat format, VkFormat *outFormat);
+
+GPU_HIDE
+bool
+vk_findMemoryType(GPUDevice             *device,
+                  uint32_t               typeBits,
+                  VkMemoryPropertyFlags  required,
+                  VkMemoryPropertyFlags  preferred,
+                  uint32_t              *outIndex,
+                  VkMemoryPropertyFlags *outFlags);
 
 GPU_HIDE
 GPUFormat

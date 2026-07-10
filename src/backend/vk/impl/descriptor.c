@@ -17,6 +17,8 @@
 #include "../common.h"
 #include "../../../api/buffer_internal.h"
 #include "../../../api/descr/descriptor_internal.h"
+#include "../../../api/sampler_internal.h"
+#include "../../../api/texture_internal.h"
 
 typedef struct GPUDescriptorWriteVk {
   GPUDevice      *device;
@@ -340,14 +342,16 @@ vk__writeDescriptor(void *context,
                     const GPUBindGroupBindingView *binding) {
   GPUDescriptorWriteVk  *writeContext;
   GPUBufferVk           *buffer;
+  GPUTextureVk          *texture;
+  GPUTextureViewVk      *view;
+  GPUSamplerVk          *sampler;
   VkDescriptorBufferInfo bufferInfo = {0};
+  VkDescriptorImageInfo  imageInfo = {0};
   VkWriteDescriptorSet   write = {0};
   VkDescriptorType       type;
 
   writeContext = context;
   if (!writeContext || !writeContext->valid || !binding ||
-      binding->kind != GPUBindKindBuffer || !binding->buffer ||
-      binding->buffer->device != writeContext->device ||
       !vk__descriptorType(binding->bindingType,
                           binding->hasDynamicOffset,
                           &type)) {
@@ -357,22 +361,66 @@ vk__writeDescriptor(void *context,
     return;
   }
 
-  buffer = binding->buffer->_priv;
-  if (!buffer || !buffer->buffer) {
-    writeContext->valid = false;
-    return;
-  }
-
-  bufferInfo.buffer = buffer->buffer;
-  bufferInfo.offset = binding->offset;
-  bufferInfo.range  = binding->size;
-
   write.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
   write.dstSet          = writeContext->group->set;
   write.dstBinding      = binding->binding;
   write.descriptorCount = 1u;
   write.descriptorType  = type;
-  write.pBufferInfo     = &bufferInfo;
+
+  switch (binding->kind) {
+    case GPUBindKindBuffer:
+      if (!binding->buffer ||
+          binding->buffer->device != writeContext->device) {
+        writeContext->valid = false;
+        return;
+      }
+      buffer = binding->buffer->_priv;
+      if (!buffer || !buffer->buffer) {
+        writeContext->valid = false;
+        return;
+      }
+      bufferInfo.buffer = buffer->buffer;
+      bufferInfo.offset = binding->offset;
+      bufferInfo.range  = binding->size;
+      write.pBufferInfo = &bufferInfo;
+      break;
+    case GPUBindKindTexture:
+      view = binding->textureView ? binding->textureView->_priv : NULL;
+      texture = binding->textureView && binding->textureView->_texture
+                  ? binding->textureView->_texture->_priv
+                  : NULL;
+      if (!view || !view->view || !texture || !texture->image ||
+          view->device != writeContext->group->device ||
+          texture->device != writeContext->group->device) {
+        writeContext->valid = false;
+        return;
+      }
+      imageInfo.imageView = view->view;
+      imageInfo.imageLayout = binding->bindingType == GPU_BINDING_STORAGE_TEXTURE
+                                ? VK_IMAGE_LAYOUT_GENERAL
+                                : texture->layout;
+      if (imageInfo.imageLayout != VK_IMAGE_LAYOUT_GENERAL &&
+          imageInfo.imageLayout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+        writeContext->valid = false;
+        return;
+      }
+      write.pImageInfo = &imageInfo;
+      break;
+    case GPUBindKindSampler:
+      sampler = binding->sampler ? binding->sampler->_priv : NULL;
+      if (!sampler || !sampler->sampler ||
+          sampler->device != writeContext->group->device) {
+        writeContext->valid = false;
+        return;
+      }
+      imageInfo.sampler = sampler->sampler;
+      write.pImageInfo  = &imageInfo;
+      break;
+    default:
+      writeContext->valid = false;
+      return;
+  }
+
   vkUpdateDescriptorSets(writeContext->group->device,
                          1u,
                          &write,

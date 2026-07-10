@@ -30,6 +30,8 @@ backend_vk(void) {
     vk_initInstance(&vk.instance);
     vk_initDevice(&vk.device);
     vk_initBuff(&vk.buf);
+    vk_initTexture(&vk.texture);
+    vk_initSampler(&vk.sampler);
     vk_initSurface(&vk.surface);
     vk_initCmdQue(&vk.cmdque);
     vk_initCmdbuf(&vk.cmdbuf);
