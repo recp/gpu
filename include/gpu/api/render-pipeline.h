@@ -26,6 +26,12 @@ extern "C" {
 typedef struct GPURenderPipelineState GPURenderPipelineState;
 
 typedef struct GPUApiRender {
+  GPUResult
+  (*createPipeline)(GPUDevice                         * __restrict device,
+                    const GPURenderPipelineCreateInfo * __restrict info,
+                    uint32_t                                       requiredBindGroupMask,
+                    GPURenderPipeline                 * __restrict pipeline);
+
   GPURenderPipeline*
   (*newRenderPipeline)(GPUPixelFormat pixelFormat);
   

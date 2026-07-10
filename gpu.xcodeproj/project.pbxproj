@@ -16,6 +16,12 @@
 		1EC0DF062AD3000000000000 /* barrier.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0DF052AD3000000000000 /* barrier.c */; };
 		1EC0DF082AD3000000000000 /* barrier.h in Headers */ = {isa = PBXBuildFile; fileRef = 1EC0DF072AD3000000000000 /* barrier.h */; };
 		1EC0E1012AD4000000000000 /* library.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0E1002AD4000000000000 /* library.c */; };
+		1EC0E1112AD5000000000000 /* surface_apple.m in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0E1102AD5000000000000 /* surface_apple.m */; };
+		1EC0E1212AD6000000000000 /* format.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0E1202AD6000000000000 /* format.c */; };
+		1EC0E1312AD7000000000000 /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0E1302AD7000000000000 /* frame.c */; };
+		1EC0E1412AD8000000000000 /* pipeline.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0E1402AD8000000000000 /* pipeline.c */; };
+		1EC0E1512AD9000000000000 /* renderpass.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0E1502AD9000000000000 /* renderpass.c */; };
+		1EC0E1612ADA000000000000 /* rce.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0E1602ADA000000000000 /* rce.c */; };
 		1E12EBF82ADAB480007653D6 /* cmdque.m in Sources */ = {isa = PBXBuildFile; fileRef = 56CDC98024CEE9210021A8A2 /* cmdque.m */; };
 		1E1C3DDE2C862CEC004753CB /* object_type_string_helper.h in Headers */ = {isa = PBXBuildFile; fileRef = 1E1C3DDD2C862CEC004753CB /* object_type_string_helper.h */; };
 		1E2049612AC622EB00B94648 /* descriptor.c in Sources */ = {isa = PBXBuildFile; fileRef = 1E2049602AC622EB00B94648 /* descriptor.c */; };
@@ -141,6 +147,12 @@
 		1E7A58982ACC105200AB25B5 /* instance.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = instance.c; sourceTree = "<group>"; };
 		1E7A589D2ACC334B00AB25B5 /* instance.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = instance.c; sourceTree = "<group>"; };
 		1E7A58A32ACC357800AB25B5 /* libMoltenVK.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libMoltenVK.dylib; path = ../../../Library/Developer/VulkanSDK/1.3.261.1/MoltenVK/dylib/macOS/libMoltenVK.dylib; sourceTree = "<group>"; };
+		1EC0E1102AD5000000000000 /* surface_apple.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = surface_apple.m; sourceTree = "<group>"; };
+		1EC0E1202AD6000000000000 /* format.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = format.c; sourceTree = "<group>"; };
+		1EC0E1302AD7000000000000 /* frame.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
+		1EC0E1402AD8000000000000 /* pipeline.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = pipeline.c; sourceTree = "<group>"; };
+		1EC0E1502AD9000000000000 /* renderpass.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = renderpass.c; sourceTree = "<group>"; };
+		1EC0E1602ADA000000000000 /* rce.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rce.c; sourceTree = "<group>"; };
 		1E977AB4289FA9EF00F18D42 /* libus.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; path = libus.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
 		1EA98C182AB9EE5700E1B576 /* swapchain.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = swapchain.c; sourceTree = "<group>"; };
 		1EA98C1A2AB9F6BD00E1B576 /* swapchain.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = swapchain.m; sourceTree = "<group>"; };
@@ -279,6 +291,12 @@
 				1E7584322ACD4F380022960F /* display.c */,
 				1E7A58982ACC105200AB25B5 /* instance.c */,
 				1EB809D42AD1D90F006A1FCB /* surface.c */,
+				1EC0E1102AD5000000000000 /* surface_apple.m */,
+				1EC0E1202AD6000000000000 /* format.c */,
+				1EC0E1302AD7000000000000 /* frame.c */,
+				1EC0E1402AD8000000000000 /* pipeline.c */,
+				1EC0E1502AD9000000000000 /* renderpass.c */,
+				1EC0E1602ADA000000000000 /* rce.c */,
 				1E75842F2ACD4C050022960F /* device.c */,
 				1EAD86792AD73379004D2BE5 /* cmdque.c */,
 				1EC0E1002AD4000000000000 /* library.c */,
@@ -800,6 +818,13 @@
 				1E75841C2ACD44B40022960F /* debug.c in Sources */,
 				1E7584302ACD4C050022960F /* device.c in Sources */,
 				1E7A58992ACC105200AB25B5 /* instance.c in Sources */,
+				1EC0E1112AD5000000000000 /* surface_apple.m in Sources */,
+				1EC0E1212AD6000000000000 /* format.c in Sources */,
+				1EC0E1312AD7000000000000 /* frame.c in Sources */,
+				1EC0E1412AD8000000000000 /* pipeline.c in Sources */,
+				1EC0E1512AD9000000000000 /* renderpass.c in Sources */,
+				1EC0E1612ADA000000000000 /* rce.c in Sources */,
+				1E30768B2B0C0E4D003B2B6C /* swapchain.c in Sources */,
 				1EAD867A2AD73379004D2BE5 /* cmdque.c in Sources */,
 				1EC0E1012AD4000000000000 /* library.c in Sources */,
 				1EA98C342ABAD64000E1B576 /* pipeline.m in Sources */,

@@ -211,6 +211,7 @@ GPUResult
 GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
                         const GPURenderPipelineCreateInfo * __restrict info,
                         GPURenderPipeline                ** __restrict outPipeline) {
+  GPUApi                 *api;
   GPURenderPipelineState *state;
   GPURenderPipeline      *pipeline;
   GPUVertexDescriptor    *vertexDesc;
@@ -233,6 +234,9 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   if (!gpu_pipelineInfoIsSupported(info))
     return GPU_ERROR_INVALID_ARGUMENT;
+  api = gpuDeviceApi(device);
+  if (!api)
+    return GPU_ERROR_BACKEND_FAILURE;
   {
     const char *entries[] = {info->vertexEntry, info->fragmentEntry};
 
@@ -246,6 +250,27 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
       return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  sampleCount = info->multisample.sampleCount > 0 ?
+    info->multisample.sampleCount : 1u;
+  if (api->render.createPipeline) {
+    GPUResult result;
+
+    pipeline = calloc(1, sizeof(*pipeline));
+    if (!pipeline)
+      return GPU_ERROR_OUT_OF_MEMORY;
+
+    pipeline->_api = api;
+    result = api->render.createPipeline(device,
+                                        info,
+                                        requiredBindGroupMask,
+                                        pipeline);
+    if (result != GPU_OK) {
+      free(pipeline);
+      return result;
+    }
+    goto ready;
+  }
+
   vertexFunc = GPUShaderFunction(info->library, info->vertexEntry);
   fragmentFunc = GPUShaderFunction(info->library, info->fragmentEntry);
   if (!vertexFunc || !fragmentFunc)
@@ -255,6 +280,8 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   pipeline = gpuCreateRenderPipelineDesc(colorFormat);
   if (!pipeline)
     return GPU_ERROR_BACKEND_FAILURE;
+
+  pipeline->_api = api;
 
   gpuPipelineSetFunction(pipeline, vertexFunc, GPU_FUNCTION_VERT);
   gpuPipelineSetFunction(pipeline, fragmentFunc, GPU_FUNCTION_FRAG);
@@ -276,7 +303,6 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     gpuPipelineSetStencilFormat(pipeline, info->depthStencilFormat);
   }
 
-  sampleCount = info->multisample.sampleCount > 0 ? info->multisample.sampleCount : 1;
   gpuPipelineSetSampleCount(pipeline, sampleCount);
 
   state = gpuCompileRenderPipelineState(device, pipeline);
@@ -285,8 +311,10 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  gpuRecordPipelineCompile(device, info->cache);
   free(state);
+
+ready:
+  gpuRecordPipelineCompile(device, info->cache);
   pipeline->_layout = info->layout;
   pipeline->_requiredBindGroupMask = requiredBindGroupMask;
   pipeline->_colorTargetCount = info->colorTargetCount;
@@ -312,7 +340,7 @@ GPUDestroyRenderPipeline(GPURenderPipeline *pipeline) {
   if (!pipeline)
     return;
 
-  if ((api = gpuActiveGPUApi()) && api->render.destroyRenderPipeline) {
+  if ((api = pipeline->_api) && api->render.destroyRenderPipeline) {
     api->render.destroyRenderPipeline(pipeline);
     return;
   }

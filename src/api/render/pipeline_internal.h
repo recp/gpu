@@ -24,6 +24,7 @@ struct GPURenderPipelineState {
 };
 
 struct GPURenderPipeline {
+  GPUApi               *_api;
   void                 *_priv;
   void                 *_state;
   GPUPipelineLayout    *_layout;

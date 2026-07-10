@@ -1,0 +1,205 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "../common.h"
+#include "../../../api/render/pipeline_internal.h"
+
+static GPURenderEncoderVk*
+vk__renderEncoder(GPURenderCommandEncoder *encoder) {
+  return encoder ? encoder->_priv : NULL;
+}
+
+GPU_HIDE
+GPURenderCommandEncoder*
+vk_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
+  GPUCommandBufferVk     *command;
+  GPURenderPassVk        *renderPass;
+  GPURenderCommandEncoder *encoder;
+  GPURenderEncoderVk     *native;
+  VkRenderPassBeginInfo   beginInfo = {0};
+  VkViewport              viewport = {0};
+  VkRect2D                scissor = {0};
+
+  command    = cmdb ? cmdb->_priv : NULL;
+  renderPass = pass ? pass->_priv : NULL;
+  if (!command || !renderPass || !renderPass->renderPass ||
+      !renderPass->framebuffer) {
+    return NULL;
+  }
+
+  encoder = &command->renderEncoder;
+  native  = &command->renderState;
+  memset(encoder, 0, sizeof(*encoder));
+  memset(native, 0, sizeof(*native));
+  native->command = command->command;
+  native->extent  = renderPass->extent;
+
+  beginInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  beginInfo.renderPass        = renderPass->renderPass;
+  beginInfo.framebuffer       = renderPass->framebuffer;
+  beginInfo.renderArea.extent = renderPass->extent;
+  beginInfo.clearValueCount   = 1u;
+  beginInfo.pClearValues      = &renderPass->clearValue;
+  vkCmdBeginRenderPass(native->command,
+                       &beginInfo,
+                       VK_SUBPASS_CONTENTS_INLINE);
+
+  viewport.width    = (float)native->extent.width;
+  viewport.height   = (float)native->extent.height;
+  viewport.maxDepth = 1.0f;
+  scissor.extent    = native->extent;
+  vkCmdSetViewport(native->command, 0u, 1u, &viewport);
+  vkCmdSetScissor(native->command, 0u, 1u, &scissor);
+
+  encoder->_priv          = native;
+  encoder->_primitiveType = GPUPrimitiveTypeTriangle;
+  return encoder;
+}
+
+GPU_HIDE
+void
+vk_setRenderPipelineState(GPURenderCommandEncoder *encoder,
+                          GPURenderPipelineState  *pipelineState) {
+  GPURenderEncoderVk  *native;
+  GPURenderPipelineVk *pipeline;
+
+  native   = vk__renderEncoder(encoder);
+  pipeline = pipelineState ? pipelineState->_priv : NULL;
+  if (!native || !pipeline) {
+    return;
+  }
+
+  vkCmdBindPipeline(native->command,
+                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    pipeline->pipeline);
+  native->pipelineLayout = pipeline->layout;
+}
+
+GPU_HIDE
+void
+vk_viewport(GPURenderCommandEncoder *encoder, const GPUViewport *value) {
+  GPURenderEncoderVk *native;
+  VkViewport          viewport;
+
+  native = vk__renderEncoder(encoder);
+  if (!native || !value) {
+    return;
+  }
+
+  viewport.x        = (float)value->originX;
+  viewport.y        = (float)value->originY;
+  viewport.width    = (float)value->width;
+  viewport.height   = (float)value->height;
+  viewport.minDepth = (float)value->znear;
+  viewport.maxDepth = (float)value->zfar;
+  vkCmdSetViewport(native->command, 0u, 1u, &viewport);
+}
+
+GPU_HIDE
+void
+vk_scissor(GPURenderCommandEncoder *encoder, const GPUScissorRect *value) {
+  GPURenderEncoderVk *native;
+  VkRect2D            scissor;
+
+  native = vk__renderEncoder(encoder);
+  if (!native || !value) {
+    return;
+  }
+
+  scissor.offset.x      = (int32_t)value->x;
+  scissor.offset.y      = (int32_t)value->y;
+  scissor.extent.width  = value->width;
+  scissor.extent.height = value->height;
+  vkCmdSetScissor(native->command, 0u, 1u, &scissor);
+}
+
+GPU_HIDE
+void
+vk_renderPushConstants(GPURenderCommandEncoder *encoder,
+                       GPUShaderStageFlags       stages,
+                       const void               *data,
+                       uint32_t                  sizeBytes) {
+  GPURenderEncoderVk *native;
+  VkShaderStageFlags  stageFlags;
+
+  native = vk__renderEncoder(encoder);
+  if (!native || !native->pipelineLayout || !data || sizeBytes == 0u) {
+    return;
+  }
+
+  stageFlags = 0u;
+  if ((stages & GPU_SHADER_STAGE_VERTEX_BIT) != 0u) {
+    stageFlags |= VK_SHADER_STAGE_VERTEX_BIT;
+  }
+  if ((stages & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0u) {
+    stageFlags |= VK_SHADER_STAGE_FRAGMENT_BIT;
+  }
+  if (stageFlags != 0u) {
+    vkCmdPushConstants(native->command,
+                       native->pipelineLayout,
+                       stageFlags,
+                       0u,
+                       sizeBytes,
+                       data);
+  }
+}
+
+GPU_HIDE
+void
+vk_drawPrimitives(GPURenderCommandEncoder *encoder,
+                  GPUPrimitiveType         type,
+                  size_t                   start,
+                  size_t                   count,
+                  uint32_t                 instanceCount,
+                  uint32_t                 firstInstance) {
+  GPURenderEncoderVk *native;
+
+  GPU__UNUSED(type);
+
+  native = vk__renderEncoder(encoder);
+  if (!native || start > UINT32_MAX || count > UINT32_MAX) {
+    return;
+  }
+
+  vkCmdDraw(native->command,
+            (uint32_t)count,
+            instanceCount,
+            (uint32_t)start,
+            firstInstance);
+}
+
+GPU_HIDE
+void
+vk_endRenderEncoding(GPURenderCommandEncoder *encoder) {
+  GPURenderEncoderVk *native;
+
+  native = vk__renderEncoder(encoder);
+  if (native) {
+    vkCmdEndRenderPass(native->command);
+  }
+}
+
+GPU_HIDE
+void
+vk_initRCE(GPUApiRCE *api) {
+  api->renderCommandEncoder   = vk_renderCommandEncoder;
+  api->setRenderPipelineState = vk_setRenderPipelineState;
+  api->viewport               = vk_viewport;
+  api->scissor                = vk_scissor;
+  api->pushConstants          = vk_renderPushConstants;
+  api->drawPrimitives         = vk_drawPrimitives;
+  api->endEncoding            = vk_endRenderEncoding;
+}

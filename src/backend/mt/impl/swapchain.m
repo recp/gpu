@@ -112,13 +112,24 @@ GPUSwapChain*
 mt_createSwapChain(GPUApi          * __restrict api,
                    GPUDevice       * __restrict device,
                    GPUCommandQueue * __restrict cmdQue,
-                   GPUSurface      * __restrict surface,
-                   GPUExtent2D                  size,
-                   bool                         autoResize) {
+                   const GPUSwapchainCreateInfo * __restrict info) {
   GPUDeviceMT       *deviceMT;
   GPUSwapChain      *swapChain;
   GPUSwapChainMetal *swapChainMtl;
   GPUSwapChainObjc  *objc;
+  GPUSurface        *surface;
+  GPUExtent2D        size;
+
+  GPU__UNUSED(api);
+  GPU__UNUSED(cmdQue);
+
+  if (!device || !info || !info->surface) {
+    return NULL;
+  }
+
+  surface     = info->surface;
+  size.width  = info->width;
+  size.height = info->height;
 
   deviceMT                            = device->_priv;
   swapChain                           = calloc(1, sizeof(*swapChain));
@@ -126,7 +137,7 @@ mt_createSwapChain(GPUApi          * __restrict api,
   swapChainMtl->layer                 = [[CAMetalLayer alloc] init];
   swapChainMtl->layer.bounds          = CGRectMake(0, 0, size.width, size.height);
   swapChainMtl->layer.device          = deviceMT->device;
-  //  swapChainMtl->layer.pixelFormat     = MTLPixelFormatBGRA8Unorm;
+  swapChainMtl->layer.pixelFormat     = (MTLPixelFormat)info->format;
   swapChainMtl->layer.opaque          = YES;
   swapChainMtl->layer.contentsScale   = surface->scale;
   swapChainMtl->layer.contentsGravity = kCAGravityResizeAspectFill;
@@ -138,7 +149,7 @@ mt_createSwapChain(GPUApi          * __restrict api,
   objc->swapChainMtl                  = swapChainMtl;
   objc->backingScaleFactor            = surface->scale;
 
-  mt_swapChainAttachToView(swapChain, surface->_priv, autoResize, true);
+  mt_swapChainAttachToView(swapChain, surface->_priv, true, true);
 
   return swapChain;
 }

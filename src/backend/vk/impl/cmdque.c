@@ -48,6 +48,15 @@ vk__queueSignal(GPUCommandQueueVk *queue) {
 }
 
 static void
+vk__queueBroadcast(GPUCommandQueueVk *queue) {
+#if defined(_WIN32) || defined(WIN32)
+  WakeAllConditionVariable(&queue->pendingCondition);
+#else
+  pthread_cond_broadcast(&queue->pendingCondition);
+#endif
+}
+
+static void
 vk__queueWait(GPUCommandQueueVk *queue) {
 #if defined(_WIN32) || defined(WIN32)
   SleepConditionVariableCS(&queue->pendingCondition,
@@ -111,21 +120,55 @@ vk__completionLoop(GPUCommandQueueVk *queue) {
   GPUCommandBufferVk *native;
   GPUCommandBuffer   *cmdb;
   GPUDeviceVk        *deviceVk;
+  GPUSwapChainVk     *swapchain;
+  VkFence             waitFence;
   VkResult            result;
 
   deviceVk = queue->queue->_device->_priv;
   while ((native = vk__takePendingCommand(queue))) {
-    cmdb = &native->commandBuffer;
+    cmdb      = &native->commandBuffer;
+    waitFence = native->submitFence ? native->submitFence : native->fence;
     result = vkWaitForFences(deviceVk->device,
                              1u,
-                             &native->fence,
+                             &waitFence,
                              VK_TRUE,
                              UINT64_MAX);
     if (result != VK_SUCCESS) {
       vk__logSubmitError(cmdb, result);
     }
+
+    swapchain = native->presentSwapchain;
+    if (swapchain) {
+      vk__queueLock(queue);
+      if (swapchain->inFlightCommandCount > 0u) {
+        swapchain->inFlightCommandCount--;
+      }
+      vk__queueBroadcast(queue);
+      vk__queueUnlock(queue);
+    }
+    native->submitFence       = native->fence;
+    native->presentSwapchain  = NULL;
+    native->presentImageIndex = 0u;
+    native->presentFrameIndex = 0u;
     gpuFinishCommandBuffer(cmdb, vk__recycleCommandBuffer);
   }
+}
+
+GPU_HIDE
+void
+vk_waitSwapChainIdle(GPUSwapChainVk *swapchain) {
+  GPUCommandQueueVk *queue;
+
+  queue = swapchain ? swapchain->queue : NULL;
+  if (!queue) {
+    return;
+  }
+
+  vk__queueLock(queue);
+  while (swapchain->inFlightCommandCount > 0u) {
+    vk__queueWait(queue);
+  }
+  vk__queueUnlock(queue);
 }
 
 #if defined(_WIN32) || defined(WIN32)
@@ -379,6 +422,7 @@ vk__createCommandBufferState(GPUCommandQueue *queue) {
 
   cmdb          = &native->commandBuffer;
   native->owner = queueVk;
+  native->submitFence = native->fence;
   cmdb->_priv   = native;
   cmdb->_queue  = queue;
 
@@ -429,8 +473,12 @@ vk_newCommandBuffer(GPUCommandQueue  * __restrict queue,
 
   cmdb = &native->commandBuffer;
   memset(cmdb, 0, sizeof(*cmdb));
-  cmdb->_priv  = native;
-  cmdb->_queue = queue;
+  native->presentSwapchain  = NULL;
+  native->submitFence       = native->fence;
+  native->presentImageIndex = 0u;
+  native->presentFrameIndex = 0u;
+  cmdb->_priv               = native;
+  cmdb->_queue              = queue;
 
   if (vkResetCommandBuffer(native->command, 0u) != VK_SUCCESS) {
     vk__recycleCommandBuffer(cmdb);
@@ -468,8 +516,15 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   GPUCommandBufferVk *native;
   GPUCommandQueueVk  *queue;
   GPUDeviceVk        *deviceVk;
+  GPUSwapChainVk     *swapchain;
+  GPUFrameSyncVk     *frameSync;
+  VkFence             submitFence;
+  VkPipelineStageFlags waitStage;
   VkSubmitInfo        submitInfo = {0};
+  VkPresentInfoKHR    presentInfo = {0};
   VkResult            result;
+  VkResult            presentResult;
+  bool                frameFenceReset;
 
   native   = cmdb ? cmdb->_priv : NULL;
   queue    = native ? native->owner : NULL;
@@ -479,26 +534,72 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
     return;
   }
 
+  swapchain       = native->presentSwapchain;
+  frameSync       = NULL;
+  submitFence     = native->fence;
+  waitStage       = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  frameFenceReset = false;
+  if (swapchain) {
+    if (!swapchain->frameActive || !swapchain->frameScheduled ||
+        native->presentFrameIndex >= swapchain->imageCount ||
+        native->presentImageIndex >= swapchain->imageCount) {
+      gpuFinishCommandBuffer(cmdb, vk__recycleCommandBuffer);
+      return;
+    }
+    frameSync   = &swapchain->frameSync[native->presentFrameIndex];
+    submitFence = frameSync->fence;
+  }
+
   result = vkEndCommandBuffer(native->command);
   if (result == VK_SUCCESS) {
-    result = vkResetFences(deviceVk->device, 1u, &native->fence);
+    result = vkResetFences(deviceVk->device, 1u, &submitFence);
+    frameFenceReset = result == VK_SUCCESS && frameSync != NULL;
   }
   if (result == VK_SUCCESS) {
     submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1u;
     submitInfo.pCommandBuffers    = &native->command;
+    if (frameSync) {
+      submitInfo.waitSemaphoreCount   = 1u;
+      submitInfo.pWaitSemaphores      = &frameSync->imageAvailable;
+      submitInfo.pWaitDstStageMask    = &waitStage;
+      submitInfo.signalSemaphoreCount = 1u;
+      submitInfo.pSignalSemaphores    = &frameSync->renderFinished;
+    }
     result = vkQueueSubmit(queue->queRaw,
                            1u,
                            &submitInfo,
-                           native->fence);
+                           submitFence);
   }
   if (result != VK_SUCCESS) {
+    if (frameFenceReset) {
+      (void)vk_restoreFrameFence(swapchain, frameSync);
+    }
     vk__logSubmitError(cmdb, result);
     gpuFinishCommandBuffer(cmdb, vk__recycleCommandBuffer);
     return;
   }
 
+  native->submitFence = submitFence;
+  if (swapchain) {
+    swapchain->frameSubmitted = true;
+
+    presentInfo.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.waitSemaphoreCount = 1u;
+    presentInfo.pWaitSemaphores    = &frameSync->renderFinished;
+    presentInfo.swapchainCount     = 1u;
+    presentInfo.pSwapchains        = &swapchain->swapchain;
+    presentInfo.pImageIndices      = &native->presentImageIndex;
+    presentResult = vkQueuePresentKHR(queue->queRaw, &presentInfo);
+    if (presentResult != VK_SUCCESS && presentResult != VK_SUBOPTIMAL_KHR) {
+      vk__logSubmitError(cmdb, presentResult);
+    }
+  }
+
   vk__queueLock(queue);
+  if (swapchain) {
+    swapchain->inFlightCommandCount++;
+  }
   if (queue->pendingTail) {
     queue->pendingTail->pendingNext = native;
   } else {

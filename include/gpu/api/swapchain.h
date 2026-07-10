@@ -30,9 +30,7 @@ typedef struct GPUApiSwapChain {
   (*createSwapChain)(struct GPUApi          * __restrict api,
                      struct GPUDevice       * __restrict device,
                      struct GPUCommandQueue * __restrict cmdQue,
-                     struct GPUSurface      * __restrict surface,
-                     GPUExtent2D                         size,
-                     bool                                autoResize);
+                     const GPUSwapchainCreateInfo * __restrict info);
 
   GPUResult (*resizeSwapChain)(GPUSwapChain *swapChain, GPUExtent2D size);
   void (*destroySwapChain)(GPUSwapChain *swapChain);

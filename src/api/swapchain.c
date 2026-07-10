@@ -20,9 +20,7 @@
 static GPUSwapChain*
 gpuCreateSwapchainInternal(GPUDevice              * __restrict device,
                            struct GPUCommandQueue * __restrict cmdQue,
-                           struct GPUSurface      * __restrict surface,
-                           GPUExtent2D                         size,
-                           bool                                autoResize) {
+                           const GPUSwapchainCreateInfo * __restrict info) {
   GPUApi       *api;
   GPUSwapChain *swapChain;
 
@@ -34,13 +32,11 @@ gpuCreateSwapchainInternal(GPUDevice              * __restrict device,
   swapChain = api->swapchain.createSwapChain(api,
                                              device,
                                              cmdQue,
-                                             surface,
-                                             size,
-                                             autoResize);
+                                             info);
   if (swapChain) {
     swapChain->device = device;
-    swapChain->width  = size.width;
-    swapChain->height = size.height;
+    swapChain->width  = info->width;
+    swapChain->height = info->height;
   }
 
   return swapChain;
@@ -52,7 +48,6 @@ GPUCreateSwapchain(GPUDevice                    * __restrict device,
                    const GPUSwapchainCreateInfo * __restrict info,
                    GPUSwapchain                ** __restrict outSwapchain) {
   GPUCommandQueue *queue;
-  GPUExtent2D      size;
 
   if (!outSwapchain)
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -71,13 +66,9 @@ GPUCreateSwapchain(GPUDevice                    * __restrict device,
   if (!queue)
     return GPU_ERROR_BACKEND_FAILURE;
 
-  size.width      = info->width;
-  size.height     = info->height;
   *outSwapchain = gpuCreateSwapchainInternal(device,
                                              queue,
-                                             info->surface,
-                                             size,
-                                             true);
+                                             info);
   if (!*outSwapchain)
     return GPU_ERROR_BACKEND_FAILURE;
 

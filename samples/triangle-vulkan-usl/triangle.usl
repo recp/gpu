@@ -1,0 +1,9 @@
+vert tri_vs(vertexId: uint #vertex_id) -> float4 {
+  if (vertexId == 0) { return float4(0.0, 0.65, 0.0, 1.0) }
+  if (vertexId == 1) { return float4(-0.7, -0.65, 0.0, 1.0) }
+  return float4(0.7, -0.65, 0.0, 1.0)
+}
+
+frag tri_fs() -> float4 {
+  return float4(0.95, 0.25, 0.12, 1.0)
+}

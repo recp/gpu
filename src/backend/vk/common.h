@@ -26,6 +26,7 @@
 #include "../../api/library_internal.h"
 #include "../../api/surface_internal.h"
 #include "../../api/swapchain_internal.h"
+#include "../../api/texture_internal.h"
 #include <stdarg.h>
 #include <assert.h>
 #include <inttypes.h>
@@ -192,15 +193,38 @@ typedef struct GPUDeviceVk {
 
 typedef struct GPUCommandQueueVk  GPUCommandQueueVk;
 typedef struct GPUCommandBufferVk GPUCommandBufferVk;
+typedef struct GPUSwapChainVk     GPUSwapChainVk;
+
+typedef struct GPURenderPassVk {
+  GPUSwapChainVk *swapchain;
+  VkRenderPass    renderPass;
+  VkFramebuffer   framebuffer;
+  VkExtent2D      extent;
+  VkClearValue    clearValue;
+} GPURenderPassVk;
+
+typedef struct GPURenderEncoderVk {
+  VkCommandBuffer  command;
+  VkPipelineLayout pipelineLayout;
+  VkExtent2D       extent;
+} GPURenderEncoderVk;
 
 struct GPUCommandBufferVk {
-  GPUCommandQueueVk  *owner;
-  GPUCommandBufferVk *next;
-  GPUCommandBufferVk *poolNext;
-  GPUCommandBufferVk *pendingNext;
-  VkCommandBuffer     command;
-  VkFence             fence;
-  GPUCommandBuffer    commandBuffer;
+  GPUCommandQueueVk       *owner;
+  GPUCommandBufferVk      *next;
+  GPUCommandBufferVk      *poolNext;
+  GPUCommandBufferVk      *pendingNext;
+  GPUSwapChainVk          *presentSwapchain;
+  VkCommandBuffer          command;
+  VkFence                  fence;
+  VkFence                  submitFence;
+  GPURenderPassDesc         renderPass;
+  GPURenderPassVk           renderPassState;
+  GPURenderCommandEncoder   renderEncoder;
+  GPURenderEncoderVk        renderState;
+  GPUCommandBuffer          commandBuffer;
+  uint32_t                  presentImageIndex;
+  uint32_t                  presentFrameIndex;
 };
 
 struct GPUCommandQueueVk {
@@ -227,13 +251,96 @@ struct GPUCommandQueueVk {
 };
 
 typedef struct GPUSurfaceVk {
+  void        *metalLayer;
   VkInstance   inst;
   VkSurfaceKHR surface;
 } GPUSurfaceVk;
+
+typedef struct GPUFrameSyncVk {
+  VkSemaphore imageAvailable;
+  VkSemaphore renderFinished;
+  VkFence     fence;
+} GPUFrameSyncVk;
+
+typedef struct GPUTextureViewVk {
+  GPUSwapChainVk *swapchain;
+  VkImageView     view;
+  uint32_t        imageIndex;
+} GPUTextureViewVk;
+
+typedef struct GPURenderPipelineVk {
+  VkDevice         device;
+  VkPipeline       pipeline;
+  VkPipelineLayout layout;
+  VkRenderPass     renderPass;
+} GPURenderPipelineVk;
+
+struct GPUSwapChainVk {
+  GPUDevice         *gpuDevice;
+  GPUCommandQueueVk *queue;
+  GPUSurfaceVk      *surface;
+  VkImage           *images;
+  VkImageView       *imageViews;
+  VkFramebuffer     *framebuffers;
+  GPUTexture        *textures;
+  GPUTextureView    *textureViews;
+  GPUTextureViewVk  *nativeViews;
+  GPUFrameSyncVk    *frameSync;
+  VkDevice           device;
+  VkPhysicalDevice   physicalDevice;
+  VkSwapchainKHR     swapchain;
+  VkRenderPass       renderPasses[3][2];
+  GPUFrame           frame;
+  VkFormat           format;
+  VkExtent2D         extent;
+  uint32_t           imageCount;
+  uint32_t           requestedImageCount;
+  uint32_t           frameIndex;
+  uint32_t           acquiredImageIndex;
+  uint32_t           inFlightCommandCount;
+  GPUFormat          gpuFormat;
+  GPUPresentMode     presentMode;
+  bool               frameActive;
+  bool               frameScheduled;
+  bool               frameSubmitted;
+};
 
 typedef struct GPULibraryVk {
   VkDevice       device;
   VkShaderModule module;
 } GPULibraryVk;
+
+GPU_HIDE
+bool
+vk_formatFromGPU(GPUFormat format, VkFormat *outFormat);
+
+GPU_HIDE
+GPUFormat
+vk_formatToGPU(VkFormat format);
+
+GPU_HIDE
+bool
+vk_restoreFrameFence(GPUSwapChainVk *swapchain, GPUFrameSyncVk *sync);
+
+GPU_HIDE
+void
+vk_waitSwapChainIdle(GPUSwapChainVk *swapchain);
+
+#if defined(__APPLE__)
+GPU_HIDE
+void*
+vk_createMetalLayer(void *nativeHandle, GPUSurfaceType type, float scale);
+
+GPU_HIDE
+void
+vk_resizeMetalLayer(void *metalLayer,
+                    uint32_t width,
+                    uint32_t height,
+                    float scale);
+
+GPU_HIDE
+void
+vk_destroyMetalLayer(void *metalLayer);
+#endif
 
 #endif /* vk_common_h */

@@ -102,9 +102,7 @@ GPUSwapChain*
 dx12_createSwapChain(GPUApi          * __restrict api,
                      GPUDevice       * __restrict device,
                      GPUCommandQueue * __restrict cmdQue,
-                     GPUSurface      * __restrict surface,
-                     GPUExtent2D                  size,
-                     bool                         autoResize) {
+                     const GPUSwapchainCreateInfo * __restrict info) {
   GPUInstance                *inst;
   GPUInstanceDX12            *instDX12;
   GPUDeviceDX12              *deviceDX12;
@@ -123,6 +121,17 @@ dx12_createSwapChain(GPUApi          * __restrict api,
   D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle, *p_rtvHandle;
   UINT                        i, frameIndex;
   SIZE_T                      rtvDescriptorSize;
+  GPUSurface                 *surface;
+  GPUExtent2D                 size;
+
+  GPU__UNUSED(api);
+  if (!device || !cmdQue || !info || !info->surface) {
+    return NULL;
+  }
+
+  surface     = info->surface;
+  size.width  = info->width;
+  size.height = info->height;
 
   inst       = device->inst;
   deviceDX12 = device->_priv;

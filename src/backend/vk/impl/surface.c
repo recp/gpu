@@ -178,9 +178,18 @@ vk_createSurface(GPUApi            * __restrict api,
   GPUPhysicalDeviceVk   *phyDeviceVk;
   GPUSurface            *gpuSurface;
   GPUSurfaceVk          *surface;
-  VkResult U_ASSERT_ONLY err;
+  VkResult               err;
 
-  if (!inst || !phyDevice || !nativeHandle) {
+  GPU__UNUSED(api);
+
+  if (!phyDevice || !nativeHandle) {
+    return NULL;
+  }
+
+  if (!inst) {
+    inst = phyDevice->inst;
+  }
+  if (!inst || !inst->_priv || !phyDevice->_priv) {
     return NULL;
   }
 
@@ -200,6 +209,7 @@ vk_createSurface(GPUApi            * __restrict api,
   }
 
   surface->inst     = instVk->inst;
+  err               = VK_ERROR_EXTENSION_NOT_PRESENT;
 
   /* TODO: what if a platform supports multiple */
 
@@ -261,15 +271,29 @@ vk_createSurface(GPUApi            * __restrict api,
   err = vk_createDisplaySurface(instVk, phyDeviceVk, surface->surface);
 #elif defined(VK_USE_PLATFORM_METAL_EXT)
   VkMetalSurfaceCreateInfoEXT createInfo = {0};
+  surface->metalLayer = vk_createMetalLayer(nativeHandle, type, scale);
+  if (!surface->metalLayer) {
+    free(surface);
+    free(gpuSurface);
+    return NULL;
+  }
+
   createInfo.sType  = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;
   createInfo.pNext  = NULL;
   createInfo.flags  = 0;
-  createInfo.pLayer = nativeHandle;
+  createInfo.pLayer = surface->metalLayer;
 
   err = vkCreateMetalSurfaceEXT(instVk->inst, &createInfo, NULL, &surface->surface);
 #endif
 
-  assert(!err);
+  if (err != VK_SUCCESS) {
+#if defined(__APPLE__)
+    vk_destroyMetalLayer(surface->metalLayer);
+#endif
+    free(surface);
+    free(gpuSurface);
+    return NULL;
+  }
 
   gpuSurface->_priv = surface;
 
@@ -290,6 +314,9 @@ vk_destroySurface(GPUSurface * __restrict surface) {
     if (surfaceVk->inst && surfaceVk->surface) {
       vkDestroySurfaceKHR(surfaceVk->inst, surfaceVk->surface, NULL);
     }
+#if defined(__APPLE__)
+    vk_destroyMetalLayer(surfaceVk->metalLayer);
+#endif
     free(surfaceVk);
   }
 

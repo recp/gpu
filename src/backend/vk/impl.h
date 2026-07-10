@@ -20,12 +20,16 @@
 GPU_HIDE void vk_initInstance(GPUApiInstance *api);
 GPU_HIDE void vk_initDevice(GPUApiDevice *api);
 GPU_HIDE void vk_initCmdQue(GPUApiCommandQueue *api);
+GPU_HIDE void vk_initCmdbuf(GPUApiCommandBuffer *api);
 GPU_HIDE void vk_initSwapChain(GPUApiSwapChain *api);
 GPU_HIDE void vk_initFrame(GPUApiFrame *api);
 GPU_HIDE void vk_initDescriptor(GPUApiDescriptor *api);
 GPU_HIDE void vk_initSampler(GPUApiSampler *api);
 GPU_HIDE void vk_initSurface(GPUApiSurface *api);
 GPU_HIDE void vk_initLibrary(GPUApiLibrary *api);
+GPU_HIDE void vk_initRenderPipeline(GPUApiRender *api);
+GPU_HIDE void vk_initRenderPass(GPUApiRenderPass *api);
+GPU_HIDE void vk_initRCE(GPUApiRCE *api);
 
 GPU_HIDE
 GPUCommandQueue*
