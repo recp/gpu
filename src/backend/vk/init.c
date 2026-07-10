@@ -29,6 +29,7 @@ backend_vk(void) {
   if (!vk.initialized) {
     vk_initInstance(&vk.instance);
     vk_initDevice(&vk.device);
+    vk_initBuff(&vk.buf);
     vk_initSurface(&vk.surface);
     vk_initCmdQue(&vk.cmdque);
     vk_initCmdbuf(&vk.cmdbuf);
@@ -38,7 +39,7 @@ backend_vk(void) {
     vk_initRCE(&vk.rce);
     vk_initSwapChain(&vk.swapchain);
     vk_initFrame(&vk.frame);
-//    vk_initDescriptor(&vk.descriptor);
+    vk_initDescriptor(&vk.descriptor);
 
     vk.initialized = true;
   }

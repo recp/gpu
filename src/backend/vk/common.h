@@ -63,6 +63,10 @@
 #define APP_SHORT_NAME "libgpu"
 #define APP_LONG_NAME  "libgpu"
 
+enum {
+  GPU_VK_MAX_DYNAMIC_OFFSETS = 64u
+};
+
 #if defined(NDEBUG) && defined(__GNUC__)
 #  define U_ASSERT_ONLY __attribute__((unused))
 #else
@@ -191,6 +195,33 @@ typedef struct GPUDeviceVk {
   uint32_t                   nCreatedQueues;
 } GPUDeviceVk;
 
+typedef struct GPUBufferVk {
+  void          *mapped;
+  VkDevice       device;
+  VkBuffer       buffer;
+  VkDeviceMemory memory;
+  VkDeviceSize   allocationSize;
+  bool           coherent;
+} GPUBufferVk;
+
+typedef struct GPUBindGroupLayoutVk {
+  uint32_t              *dynamicOrder;
+  VkDevice               device;
+  VkDescriptorSetLayout  layout;
+  uint32_t                dynamicCount;
+} GPUBindGroupLayoutVk;
+
+typedef struct GPUPipelineLayoutVk {
+  VkDevice         device;
+  VkPipelineLayout layout;
+} GPUPipelineLayoutVk;
+
+typedef struct GPUBindGroupVk {
+  VkDevice         device;
+  VkDescriptorPool pool;
+  VkDescriptorSet  set;
+} GPUBindGroupVk;
+
 typedef struct GPUCommandQueueVk  GPUCommandQueueVk;
 typedef struct GPUCommandBufferVk GPUCommandBufferVk;
 typedef struct GPUSwapChainVk     GPUSwapChainVk;
@@ -207,6 +238,7 @@ typedef struct GPURenderEncoderVk {
   VkCommandBuffer  command;
   VkPipelineLayout pipelineLayout;
   VkExtent2D       extent;
+  uint32_t         dynamicOffsets[GPU_VK_MAX_DYNAMIC_OFFSETS];
 } GPURenderEncoderVk;
 
 struct GPUCommandBufferVk {

@@ -38,19 +38,27 @@ struct GPUPipelineLayout {
 };
 
 typedef struct GPUBindGroupBindingView {
-  GPUBindStage stage;
-  GPUBindKind  kind;
-  uint32_t     binding;
-  GPUBuffer   *buffer;
+  GPUBuffer      *buffer;
   GPUTextureView *textureView;
-  GPUSampler  *sampler;
-  uint64_t     offset;
-  uint64_t     size;
+  GPUSampler     *sampler;
+  uint64_t        offset;
+  uint64_t        size;
   GPUShaderStageFlags visibility;
+  GPUBindingType  bindingType;
+  uint32_t        binding;
+  GPUBindStage    stage;
+  GPUBindKind     kind;
+  bool            hasDynamicOffset;
 } GPUBindGroupBindingView;
 
 typedef void (*GPUBindGroupBindingFn)(void *ctx,
                                       const GPUBindGroupBindingView *binding);
+
+GPU_HIDE
+int
+gpuForEachBindGroupBinding(GPUBindGroup *group,
+                           GPUBindGroupBindingFn fn,
+                           void *ctx);
 
 GPU_HIDE
 int
@@ -67,6 +75,15 @@ void
 gpuGetPipelineLayoutPushConstants(GPUPipelineLayout *layout,
                                   uint32_t *outSizeBytes,
                                   GPUShaderStageFlags *outStages);
+
+GPU_HIDE
+GPUBindGroupLayout * const *
+gpuGetPipelineLayoutGroups(GPUPipelineLayout *layout, uint32_t *outCount);
+
+GPU_HIDE
+const uint32_t *
+gpuGetBindGroupLayoutBackendBindings(GPUBindGroupLayout *layout,
+                                     uint32_t *outCount);
 
 GPU_HIDE
 int
@@ -109,11 +126,5 @@ gpuPipelineLayoutMaskIsBound(GPUPipelineLayout *pipelineLayout,
                              GPUBindGroupLayout * const *boundLayouts,
                              uint32_t boundLayoutCount,
                              uint32_t requiredGroupMask);
-
-GPU_HIDE
-int
-gpuSetBindGroupLayoutBackendBindings(GPUBindGroupLayout *layout,
-                                     const uint32_t *backendBindings,
-                                     uint32_t count);
 
 #endif /* gpu_descriptor_internal_h */

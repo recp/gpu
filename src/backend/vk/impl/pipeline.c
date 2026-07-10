@@ -54,20 +54,6 @@ vk__colorMask(GPUColorWriteMaskFlags mask) {
   return result;
 }
 
-static VkShaderStageFlags
-vk__shaderStages(GPUShaderStageFlags stages) {
-  VkShaderStageFlags result;
-
-  result = 0u;
-  if ((stages & GPU_SHADER_STAGE_VERTEX_BIT) != 0u) {
-    result |= VK_SHADER_STAGE_VERTEX_BIT;
-  }
-  if ((stages & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0u) {
-    result |= VK_SHADER_STAGE_FRAGMENT_BIT;
-  }
-  return result;
-}
-
 static VkResult
 vk__createPipelineRenderPass(VkDevice device,
                              VkFormat format,
@@ -119,10 +105,9 @@ vk_createRenderPipeline(GPUDevice                         *device,
                         GPURenderPipeline                 *pipeline) {
   GPUDeviceVk                  *deviceVk;
   GPULibraryVk                 *library;
+  GPUPipelineLayoutVk          *layout;
   GPURenderPipelineVk          *native;
   VkFormat                      colorFormat;
-  VkPushConstantRange           pushRange = {0};
-  VkPipelineLayoutCreateInfo    layoutInfo = {0};
   VkPipelineShaderStageCreateInfo stages[2] = {{0}};
   VkPipelineVertexInputStateCreateInfo vertexInput = {0};
   VkPipelineInputAssemblyStateCreateInfo inputAssembly = {0};
@@ -134,12 +119,10 @@ vk_createRenderPipeline(GPUDevice                         *device,
   VkDynamicState dynamicStates[2];
   VkPipelineDynamicStateCreateInfo dynamic = {0};
   VkGraphicsPipelineCreateInfo pipelineInfo = {0};
-  uint32_t pushConstantSize;
-  GPUShaderStageFlags pushConstantStages;
 
   if (!device || !device->_priv || !info || !pipeline ||
       !info->library || !info->library->_priv ||
-      requiredBindGroupMask != 0u ||
+      !info->layout || !info->layout->_native ||
       info->vertex.bufferLayoutCount != 0u ||
       info->colorTargetCount != 1u ||
       info->depthStencilFormat != GPU_FORMAT_UNDEFINED ||
@@ -153,37 +136,22 @@ vk_createRenderPipeline(GPUDevice                         *device,
 
   deviceVk = device->_priv;
   library  = info->library->_priv;
+  layout   = info->layout->_native;
+  if (!layout->layout) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
   native   = calloc(1, sizeof(*native));
   if (!native) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
+
+  GPU__UNUSED(requiredBindGroupMask);
   native->device = deviceVk->device;
-
-  gpuGetPipelineLayoutPushConstants(info->layout,
-                                    &pushConstantSize,
-                                    &pushConstantStages);
-  if (pushConstantSize > 0u) {
-    pushRange.stageFlags = vk__shaderStages(pushConstantStages);
-    pushRange.size       = pushConstantSize;
-    if (pushRange.stageFlags == 0u) {
-      free(native);
-      return GPU_ERROR_INVALID_ARGUMENT;
-    }
-  }
-
-  layoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  layoutInfo.pushConstantRangeCount = pushConstantSize > 0u ? 1u : 0u;
-  layoutInfo.pPushConstantRanges    = pushConstantSize > 0u ? &pushRange : NULL;
-  if (vkCreatePipelineLayout(native->device,
-                             &layoutInfo,
-                             NULL,
-                             &native->layout) != VK_SUCCESS ||
-      vk__createPipelineRenderPass(native->device,
+  native->layout = layout->layout;
+  if (vk__createPipelineRenderPass(native->device,
                                    colorFormat,
                                    &native->renderPass) != VK_SUCCESS) {
-    if (native->layout) {
-      vkDestroyPipelineLayout(native->device, native->layout, NULL);
-    }
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -248,7 +216,6 @@ vk_createRenderPipeline(GPUDevice                         *device,
                                 NULL,
                                 &native->pipeline) != VK_SUCCESS) {
     vkDestroyRenderPass(native->device, native->renderPass, NULL);
-    vkDestroyPipelineLayout(native->device, native->layout, NULL);
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -274,9 +241,6 @@ vk_destroyRenderPipeline(GPURenderPipeline *pipeline) {
     }
     if (native->renderPass) {
       vkDestroyRenderPass(native->device, native->renderPass, NULL);
-    }
-    if (native->layout) {
-      vkDestroyPipelineLayout(native->device, native->layout, NULL);
     }
     free(native);
   }

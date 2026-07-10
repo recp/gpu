@@ -6,6 +6,10 @@
 #import "../common/SampleApp.h"
 #import "../common/SampleUSL.h"
 
+typedef struct FragmentUniforms {
+  float tint[4];
+} FragmentUniforms;
+
 @interface TriangleVulkanApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
 @private
   NSWindow           *_window;
@@ -18,6 +22,8 @@
   GPUSwapchain       *_swapchain;
   GPUShaderLibrary   *_library;
   GPUShaderLayout    *_shaderLayout;
+  GPUBuffer          *_uniformBuffer;
+  GPUBindGroup       *_bindGroup;
   GPURenderPipeline  *_pipeline;
   NSTimer            *_timer;
   NSInteger           _exitAfterFrames;
@@ -48,10 +54,17 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
 - (BOOL)setupGPU {
   GPUInstanceCreateInfo instanceInfo = {0};
-  GPUPipelineLayout     *layout;
-  GPUColorTargetState    colorTarget = {0};
+  GPUPipelineLayout      *layout;
+  GPUBindGroupLayout     *groupLayout;
+  const GPUBindGroupLayoutEntry *layoutEntries;
+  GPUBufferCreateInfo     bufferInfo = {0};
+  GPUBindGroupEntry       groupEntry = {0};
+  GPUBindGroupCreateInfo  groupInfo = {0};
+  GPUColorTargetState     colorTarget = {0};
   GPURenderPipelineCreateInfo pipelineInfo = {0};
+  FragmentUniforms        uniforms = {{0.15f, 0.78f, 0.34f, 1.0f}};
   uint32_t adapterCount;
+  uint32_t layoutEntryCount;
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
@@ -97,13 +110,60 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   if (!GPUSampleLoadUSL(_device,
                         @"triangle.us",
-                        0u,
+                        1u,
                         &_library,
                         &_shaderLayout)) {
     return NO;
   }
 
-  layout = _shaderLayout->pipelineLayout;
+  groupLayout = _shaderLayout->bindGroupLayouts[0];
+  layoutEntries = GPUGetBindGroupLayoutEntries(groupLayout,
+                                                &layoutEntryCount);
+  if (!layoutEntries || layoutEntryCount != 1u ||
+      layoutEntries[0].binding != 0u ||
+      layoutEntries[0].bindingType != GPU_BINDING_UNIFORM_BUFFER ||
+      layoutEntries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
+      layoutEntries[0].arrayCount != 1u ||
+      layoutEntries[0].hasDynamicOffset) {
+    NSLog(@"GPU: unexpected Vulkan triangle reflection layout");
+    return NO;
+  }
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "triangle-vulkan-uniforms";
+  bufferInfo.sizeBytes        = sizeof(uniforms);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM |
+                                GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(_device, &bufferInfo, &_uniformBuffer) != GPU_OK ||
+      !_uniformBuffer ||
+      GPUQueueWriteBuffer(_queue,
+                          _uniformBuffer,
+                          0u,
+                          &uniforms,
+                          sizeof(uniforms)) != GPU_OK) {
+    NSLog(@"GPU: failed to create Vulkan triangle uniforms");
+    return NO;
+  }
+
+  groupEntry.binding       = 0u;
+  groupEntry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
+  groupEntry.buffer.buffer = _uniformBuffer;
+  groupEntry.buffer.size   = sizeof(uniforms);
+
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.label            = "triangle-vulkan-group0";
+  groupInfo.layout           = groupLayout;
+  groupInfo.entryCount       = 1u;
+  groupInfo.pEntries         = &groupEntry;
+  if (GPUCreateBindGroup(_device, &groupInfo, &_bindGroup) != GPU_OK ||
+      !_bindGroup) {
+    NSLog(@"GPU: failed to create Vulkan triangle bind group");
+    return NO;
+  }
+
+  layout                      = _shaderLayout->pipelineLayout;
   colorTarget.format          = GPU_FORMAT_BGRA8_UNORM;
   colorTarget.blend.writeMask = GPU_COLOR_WRITE_ALL;
 
@@ -181,6 +241,7 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
 
   GPUBindRenderPipeline(pass, _pipeline);
+  GPUBindRenderGroup(pass, 0u, _bindGroup, 0u, NULL);
   GPUDraw(pass, 3u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
 
@@ -215,6 +276,14 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   if (_pipeline) {
     GPUDestroyRenderPipeline(_pipeline);
     _pipeline = NULL;
+  }
+  if (_bindGroup) {
+    GPUDestroyBindGroup(_bindGroup);
+    _bindGroup = NULL;
+  }
+  if (_uniformBuffer) {
+    GPUDestroyBuffer(_uniformBuffer);
+    _uniformBuffer = NULL;
   }
   if (_shaderLayout) {
     GPUDestroyShaderLayout(_shaderLayout);

@@ -4,6 +4,10 @@ vert tri_vs(vertexId: uint #vertex_id) -> float4 {
   return float4(0.7, -0.65, 0.0, 1.0)
 }
 
-frag tri_fs() -> float4 {
-  return float4(0.95, 0.25, 0.12, 1.0)
+pub struct FragmentUniforms {
+  tint: float4
+}
+
+frag tri_fs(uniforms: FragmentUniforms #buffer(0) #group(0)) -> float4 {
+  return uniforms.tint
 }

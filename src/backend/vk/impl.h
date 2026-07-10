@@ -19,6 +19,7 @@
 
 GPU_HIDE void vk_initInstance(GPUApiInstance *api);
 GPU_HIDE void vk_initDevice(GPUApiDevice *api);
+GPU_HIDE void vk_initBuff(GPUApiBuffer *api);
 GPU_HIDE void vk_initCmdQue(GPUApiCommandQueue *api);
 GPU_HIDE void vk_initCmdbuf(GPUApiCommandBuffer *api);
 GPU_HIDE void vk_initSwapChain(GPUApiSwapChain *api);
