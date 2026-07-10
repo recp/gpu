@@ -775,6 +775,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				56CDC9AF24CEE9210021A8A2 /* init.c in Sources */,
+				1E7A58952ACC0ECC00AB25B5 /* init.c in Sources */,
 				1EA98C312ABAD64000E1B576 /* swapchain.m in Sources */,
 				1EA98C3C2ABAD72B00E1B576 /* frame.c in Sources */,
 				1E12EBF82ADAB480007653D6 /* cmdque.m in Sources */,
@@ -793,7 +794,10 @@
 				56CDC9F124CEF6120021A8A2 /* device.c in Sources */,
 				1EA98C352ABAD64000E1B576 /* library.m in Sources */,
 				1E654B032ACB4328009B2D4A /* instance.c in Sources */,
+				1E75841C2ACD44B40022960F /* debug.c in Sources */,
 				1E7584302ACD4C050022960F /* device.c in Sources */,
+				1E7A58992ACC105200AB25B5 /* instance.c in Sources */,
+				1EAD867A2AD73379004D2BE5 /* cmdque.c in Sources */,
 				1EA98C342ABAD64000E1B576 /* pipeline.m in Sources */,
 				1EB809D22AD1D80E006A1FCB /* surface.c in Sources */,
 				1EA98C2E2ABAD64000E1B576 /* rce.m in Sources */,

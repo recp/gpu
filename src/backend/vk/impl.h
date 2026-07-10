@@ -17,14 +17,24 @@
 #ifndef vk_apis_h
 #define vk_apis_h
 
-GPU_HIDE void vk_initInstance(GPUApiInstance *apiInstance);
-GPU_HIDE void vk_initDevice(GPUApiDevice* apiDevice);
-GPU_HIDE void vk_initCmdQue(GPUApiCommandQueue* api);
-GPU_HIDE void vk_initSwapChain(GPUApiSwapChain* apiSwapChain);
-GPU_HIDE void vk_initFrame(GPUApiFrame *apiFrame);
-GPU_HIDE void vk_initDescriptor(GPUApiDescriptor *apiDescriptor);
-GPU_HIDE void vk_initSampler(GPUApiSampler *apiSampler);
-GPU_HIDE void vk_initSurface(GPUApiSurface * apiDevice);
-GPU_HIDE void vk_initCmdQue(GPUApiCommandQueue * apiQue);
+GPU_HIDE void vk_initInstance(GPUApiInstance *api);
+GPU_HIDE void vk_initDevice(GPUApiDevice *api);
+GPU_HIDE void vk_initCmdQue(GPUApiCommandQueue *api);
+GPU_HIDE void vk_initSwapChain(GPUApiSwapChain *api);
+GPU_HIDE void vk_initFrame(GPUApiFrame *api);
+GPU_HIDE void vk_initDescriptor(GPUApiDescriptor *api);
+GPU_HIDE void vk_initSampler(GPUApiSampler *api);
+GPU_HIDE void vk_initSurface(GPUApiSurface *api);
+
+GPU_HIDE
+GPUCommandQueue*
+vk_createCommandQueue(GPUDevice       *device,
+                      uint32_t         familyIndex,
+                      uint32_t         queueIndex,
+                      GPUQueueFlagBits bits);
+
+GPU_HIDE
+void
+vk_destroyCommandQueue(GPUCommandQueue *queue);
 
 #endif /* vk_apis_h */

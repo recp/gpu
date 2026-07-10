@@ -40,12 +40,20 @@
 #  ifdef __MAC_OS_X_VERSION_MAX_ALLOWED
 #    define VK_USE_PLATFORM_MACOS_MVK      1
 #  endif
+#elif defined(_WIN32) || defined(WIN32)
+#  define VK_USE_PLATFORM_WIN32_KHR        1
 #endif
 
 #ifdef ANDROID
 #  include "vulkan_wrapper.h"
 #else
 #  include <vulkan/vulkan.h>
+#endif
+
+#if defined(_WIN32) || defined(WIN32)
+#  include <windows.h>
+#else
+#  include <pthread.h>
 #endif
 
 #include "object_type_string_helper.h"
@@ -176,17 +184,46 @@ typedef struct GPUPhysicalDeviceVk {
 } GPUPhysicalDeviceVk;
 
 typedef struct GPUDeviceVk {
-  VkDevice                   device;
-  GPUCommandQueueCreateInfo *createCI;
   GPUCommandQueue           **createdQueues;
+  VkDevice                   device;
   uint32_t                   nCreatedQueues;
-  uint32_t                   nCreateCI;
 } GPUDeviceVk;
 
-typedef struct GPUCommandQueueVk {
-  VkQueue                  queRaw;
-  VkDeviceQueueCreateInfo *createCI;
-} GPUCommandQueueVk;
+typedef struct GPUCommandQueueVk  GPUCommandQueueVk;
+typedef struct GPUCommandBufferVk GPUCommandBufferVk;
+
+struct GPUCommandBufferVk {
+  GPUCommandQueueVk  *owner;
+  GPUCommandBufferVk *next;
+  GPUCommandBufferVk *poolNext;
+  GPUCommandBufferVk *pendingNext;
+  VkCommandBuffer     command;
+  VkFence             fence;
+  GPUCommandBuffer    commandBuffer;
+};
+
+struct GPUCommandQueueVk {
+  GPUCommandQueue    *queue;
+  GPUCommandBufferVk *commands;
+  GPUCommandBufferVk *freeCommands;
+  GPUCommandBufferVk *pendingHead;
+  GPUCommandBufferVk *pendingTail;
+  VkQueue             queRaw;
+  VkCommandPool       commandPool;
+#if defined(_WIN32) || defined(WIN32)
+  HANDLE              worker;
+  CRITICAL_SECTION    poolLock;
+  CONDITION_VARIABLE  pendingCondition;
+#else
+  pthread_t           worker;
+  pthread_mutex_t     poolLock;
+  pthread_cond_t      pendingCondition;
+#endif
+  uint32_t            familyIndex;
+  uint32_t            queueIndex;
+  bool                stopping;
+  bool                workerStarted;
+};
 
 typedef struct GPUSurfaceVk {
   VkInstance   inst;

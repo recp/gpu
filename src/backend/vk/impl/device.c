@@ -15,7 +15,9 @@
  */
 
 #include "../common.h"
+#include "../impl.h"
 
+#ifdef DEBUG
 GPU_HIDE
 static char const *
 vk__devicetype_string(const VkPhysicalDeviceType type) {
@@ -34,6 +36,7 @@ vk__devicetype_string(const VkPhysicalDeviceType type) {
       return "Unknown";
   }
 }
+#endif
 
 #if defined(VK_USE_PLATFORM_DISPLAY_KHR)
 GPU_HIDE
@@ -95,10 +98,9 @@ vk__newPhyDeviceFrom(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkExtensionProperties *extensions;
   VkResult               err;
   uint32_t               i, nExtensions;
-  VkBool32               swapchainExtFound;
   bool                   incrementalPresentEnabled, displayTimingEnabled;
 
-  nExtensions               = swapchainExtFound = 0;
+  nExtensions               = 0;
   incrementalPresentEnabled = true;
   displayTimingEnabled      = true;
 
@@ -111,10 +113,13 @@ vk__newPhyDeviceFrom(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   vkGetPhysicalDeviceProperties(raw, &itemVk->props);
 
   /* Call with NULL data to get count */
-  vkGetPhysicalDeviceQueueFamilyProperties(itemVk->phyDevice, &itemVk->nQueFamilies, NULL);
+  vkGetPhysicalDeviceQueueFamilyProperties(itemVk->phyDevice,
+                                           &itemVk->nQueFamilies,
+                                           NULL);
   assert(itemVk->nQueFamilies >= 1);
 
-  itemVk->queueFamilyProps = malloc(itemVk->nQueFamilies * sizeof(*itemVk->queueFamilyProps));
+  itemVk->queueFamilyProps = malloc(itemVk->nQueFamilies *
+                                    sizeof(*itemVk->queueFamilyProps));
   vkGetPhysicalDeviceQueueFamilyProperties(itemVk->phyDevice,
                                            &itemVk->nQueFamilies,
                                            itemVk->queueFamilyProps);
@@ -291,15 +296,14 @@ vk_getAutoSelectedPhysicalDevice(GPUInstance * __restrict inst) {
   uint32_t                   gpuCount;
   int                        gpuIndex;
 
-  gpuIndex         = -1;
-  instVk           = inst->_priv;
-  instRaw          = instVk->inst;
-  phyDevice        = calloc(1, sizeof(*phyDevice));
-  phyDeviceVk      = calloc(1, sizeof(*phyDeviceVk));
-  phyDevice->_priv = phyDeviceVk;
+  gpuIndex    = -1;
+  instVk      = inst->_priv;
+  instRaw     = instVk->inst;
+  phyDevice   = NULL;
+  phyDeviceVk = NULL;
 
-  gpuCount         = 0;
-  err              = vkEnumeratePhysicalDevices(instRaw, &gpuCount, NULL);
+  gpuCount = 0;
+  err      = vkEnumeratePhysicalDevices(instRaw, &gpuCount, NULL);
   assert(!err);
 
   if (gpuCount <= 0) {
@@ -368,169 +372,305 @@ vk_getAutoSelectedPhysicalDevice(GPUInstance * __restrict inst) {
   return phyDevice;
 }
 
-GPU_HIDE
-static
-uint32_t
-vk__findQueueFamily(GPUPhysicalDevice *phyDevice, GPUQueueFlagBits flags) {
-  GPUPhysicalDeviceVk     *phyDeviceVk;
-  VkQueueFamilyProperties *queFamilies;
-  VkQueueFlagBits          vkFlags;
-  uint32_t                 nQueFamilies, i, index;
+typedef struct GPUQueuePlanVk {
+  GPUQueueFlagBits bits;
+  uint32_t         familyIndex;
+  uint32_t         count;
+} GPUQueuePlanVk;
 
-  index        = UINT32_MAX;
-  vkFlags      = 0;
-  nQueFamilies = 0;
-  phyDeviceVk  = phyDevice->_priv;
+static bool
+vk__queueFlags(GPUQueueFlagBits bits, VkQueueFlags *outFlags) {
+  VkQueueFlags flags;
+  uint32_t     mappedBits;
 
-  vkGetPhysicalDeviceQueueFamilyProperties(phyDeviceVk->phyDevice,
-                                           &nQueFamilies,
-                                           NULL);
+  flags      = 0u;
+  mappedBits = GPU_QUEUE_GRAPHICS_BIT |
+               GPU_QUEUE_COMPUTE_BIT |
+               GPU_QUEUE_TRANSFER_BIT |
+               GPU_QUEUE_SPARSE_BINDING_BIT |
+               GPU_QUEUE_PROTECTED_BIT;
 
-  if (nQueFamilies == 0
-      || !(queFamilies = malloc(nQueFamilies * sizeof(queFamilies)))) {
+  if (bits & GPU_QUEUE_GRAPHICS_BIT)       flags |= VK_QUEUE_GRAPHICS_BIT;
+  if (bits & GPU_QUEUE_COMPUTE_BIT)        flags |= VK_QUEUE_COMPUTE_BIT;
+  if (bits & GPU_QUEUE_TRANSFER_BIT)       flags |= VK_QUEUE_TRANSFER_BIT;
+  if (bits & GPU_QUEUE_SPARSE_BINDING_BIT) flags |= VK_QUEUE_SPARSE_BINDING_BIT;
+  if (bits & GPU_QUEUE_PROTECTED_BIT)      flags |= VK_QUEUE_PROTECTED_BIT;
+
+  /* Header guards protect old SDKs; queue-family flags decide runtime support. */
+#ifdef VK_QUEUE_VIDEO_DECODE_BIT_KHR
+  mappedBits |= GPU_QUEUE_VIDEO_DECODE_BIT_KHR;
+  if (bits & GPU_QUEUE_VIDEO_DECODE_BIT_KHR) flags |= VK_QUEUE_VIDEO_DECODE_BIT_KHR;
+#endif
+#ifdef VK_QUEUE_VIDEO_ENCODE_BIT_KHR
+  mappedBits |= GPU_QUEUE_VIDEO_ENCODE_BIT_KHR;
+  if (bits & GPU_QUEUE_VIDEO_ENCODE_BIT_KHR) flags |= VK_QUEUE_VIDEO_ENCODE_BIT_KHR;
+#endif
+#ifdef VK_QUEUE_OPTICAL_FLOW_BIT_NV
+  mappedBits |= GPU_QUEUE_OPTICAL_FLOW_BIT_NV;
+  if (bits & GPU_QUEUE_OPTICAL_FLOW_BIT_NV) flags |= VK_QUEUE_OPTICAL_FLOW_BIT_NV;
+#endif
+
+  *outFlags = flags;
+  return ((uint32_t)bits & ~mappedBits) == 0u;
+}
+
+static uint32_t
+vk__flagCount(VkQueueFlags flags) {
+  uint32_t count;
+
+  count = 0u;
+  while (flags) {
+    flags &= flags - 1u;
+    count++;
+  }
+  return count;
+}
+
+static uint32_t
+vk__findQueueFamily(const GPUPhysicalDeviceVk *phyDeviceVk,
+                    GPUQueueFlagBits           requiredBits,
+                    GPUQueueFlagBits           optionalBits,
+                    uint32_t                   count) {
+  VkQueueFlags requiredFlags;
+  VkQueueFlags optionalFlags;
+  VkQueueFlags commonFlags;
+  uint32_t     bestIndex;
+  uint32_t     bestScore;
+
+  requiredFlags = 0u;
+  optionalFlags = 0u;
+  if (!vk__queueFlags(requiredBits, &requiredFlags)) {
     return UINT32_MAX;
   }
+  (void)vk__queueFlags(optionalBits, &optionalFlags);
+  commonFlags   = VK_QUEUE_GRAPHICS_BIT |
+                  VK_QUEUE_COMPUTE_BIT |
+                  VK_QUEUE_TRANSFER_BIT;
+  bestIndex     = UINT32_MAX;
+  bestScore     = UINT32_MAX;
 
-  vkGetPhysicalDeviceQueueFamilyProperties(phyDeviceVk->phyDevice, 
-                                           &nQueFamilies,
-                                           queFamilies);
+  for (uint32_t i = 0; i < phyDeviceVk->nQueFamilies; i++) {
+    const VkQueueFamilyProperties *family;
+    uint32_t missingOptional;
+    uint32_t extraCapabilities;
+    uint32_t score;
 
-  if (flags & GPU_QUEUE_GRAPHICS_BIT)         vkFlags |= VK_QUEUE_GRAPHICS_BIT;
-  if (flags & GPU_QUEUE_COMPUTE_BIT)          vkFlags |= VK_QUEUE_COMPUTE_BIT;
-  if (flags & GPU_QUEUE_TRANSFER_BIT)         vkFlags |= VK_QUEUE_TRANSFER_BIT;
-  if (flags & GPU_QUEUE_SPARSE_BINDING_BIT)   vkFlags |= VK_QUEUE_SPARSE_BINDING_BIT;
-  if (flags & GPU_QUEUE_PROTECTED_BIT)        vkFlags |= VK_QUEUE_PROTECTED_BIT;
-  if (flags & GPU_QUEUE_VIDEO_DECODE_BIT_KHR) vkFlags |= VK_QUEUE_VIDEO_DECODE_BIT_KHR;
-  if (flags & GPU_QUEUE_VIDEO_ENCODE_BIT_KHR) vkFlags |= VK_QUEUE_VIDEO_ENCODE_BIT_KHR;
-  if (flags & GPU_QUEUE_OPTICAL_FLOW_BIT_NV)  vkFlags |= VK_QUEUE_OPTICAL_FLOW_BIT_NV;
+    family = &phyDeviceVk->queueFamilyProps[i];
+    if (family->queueCount < count ||
+        (family->queueFlags & requiredFlags) != requiredFlags) {
+      continue;
+    }
 
-  for (i = 0; i < nQueFamilies; i++) {
-    if ((queFamilies[i].queueFlags & vkFlags) == vkFlags) {
-      index = i;
-      break;
+    missingOptional   = vk__flagCount(optionalFlags & ~family->queueFlags);
+    extraCapabilities = vk__flagCount((family->queueFlags & commonFlags) &
+                                      ~requiredFlags);
+    score              = missingOptional * 16u + extraCapabilities;
+    if (score < bestScore) {
+      bestScore = score;
+      bestIndex = i;
     }
   }
 
-  free(queFamilies);
-
-  return index;
+  return bestIndex;
 }
 
-GPU_HIDE
-static GPUCommandQueue*
-vk__createCmdQueue(GPUDeviceVk             * __restrict deviceVk,
-                   VkDeviceQueueCreateInfo * __restrict ci,
-                   GPUQueueFlagBits                     bits) {
-  GPUCommandQueue   *que;
-  GPUCommandQueueVk *queVk;
-
-  queVk           = calloc(1, sizeof(*que));
-  que             = calloc(1, sizeof(*que));
-  que->_priv      = queVk;
-  que->bits       = bits;
-  queVk->createCI = ci;
-
-  vkGetDeviceQueue(deviceVk->device, ci->queueFamilyIndex, 0, &queVk->queRaw);
-
-  return que;
+static GPUQueuePlanVk*
+vk__findQueuePlan(GPUQueuePlanVk *plans,
+                  uint32_t        planCount,
+                  uint32_t        familyIndex) {
+  for (uint32_t i = 0; i < planCount; i++) {
+    if (plans[i].familyIndex == familyIndex) {
+      return &plans[i];
+    }
+  }
+  return NULL;
 }
 
 GPU_HIDE
 GPUDevice*
-vk_createDevice(GPUPhysicalDevice * __restrict phyDevice,
+vk_createDevice(GPUPhysicalDevice          * __restrict phyDevice,
                 GPUCommandQueueCreateInfo      queCI[],
                 uint32_t                       nQueCI) {
-  GPUDevice              *device;
-  GPUDeviceVk            *deviceVk;
-  GPUPhysicalDeviceVk    *phyDeviceVk;
-  GPUCommandQueue        **createdQueues;
-  float                  *queuePriorities;
-  VkResult U_ASSERT_ONLY  err;
-  VkDeviceQueueCreateInfo queues[nQueCI];
-  VkDeviceCreateInfo      deviceCI = {0};
-  GPUQueueFlagBits        queueFamilies;
-  uint32_t                i, queueFamilyIndex, nQueues, maxQueCount;
+  GPUDevice               *device;
+  GPUDeviceVk             *deviceVk;
+  GPUPhysicalDeviceVk     *phyDeviceVk;
+  GPUQueuePlanVk          *plans;
+  GPUQueuePlanVk          *plan;
+  VkDeviceQueueCreateInfo *queues;
+  float                   *queuePriorities;
+  VkDeviceCreateInfo       deviceCI = {0};
+  VkResult                 result;
+  uint32_t                 familyIndex;
+  uint32_t                 maxQueueCount;
+  uint32_t                 planCount;
+  uint32_t                 totalQueueCount;
+
+  device          = NULL;
+  deviceVk        = NULL;
+  plans           = NULL;
+  queues          = NULL;
+  queuePriorities = NULL;
 
   GPU__DEFINE_DEFAULT_QUEUES_IF_NEEDED(nQueCI, queCI);
 
-  queueFamilyIndex = UINT32_MAX;
-  nQueues          = 0;
-  maxQueCount      = 0;
-  queueFamilies    = 0;
-  phyDeviceVk      = phyDevice->_priv;
-  deviceVk         = calloc(1, sizeof(*deviceVk));
-  device           = calloc(1, sizeof(*device));
+  if (!phyDevice || !phyDevice->_priv || !queCI || nQueCI == 0u) {
+    return NULL;
+  }
 
-  for (i = 0; i < nQueCI; i++) {
-    if (queCI[i].count > maxQueCount) {
-      maxQueCount = queCI[i].count;
+  device   = calloc(1, sizeof(*device));
+  deviceVk = calloc(1, sizeof(*deviceVk));
+  plans    = calloc(nQueCI, sizeof(*plans));
+  queues   = calloc(nQueCI, sizeof(*queues));
+  if (!device || !deviceVk || !plans || !queues) {
+    goto err;
+  }
+
+  phyDeviceVk     = phyDevice->_priv;
+  planCount       = 0u;
+  maxQueueCount   = 0u;
+  totalQueueCount = 0u;
+
+  for (uint32_t i = 0; i < nQueCI; i++) {
+    familyIndex = vk__findQueueFamily(phyDeviceVk,
+                                      queCI[i].flags,
+                                      queCI[i].optionalFlags,
+                                      queCI[i].count);
+    if (familyIndex == UINT32_MAX) {
+      goto err;
+    }
+
+    plan = vk__findQueuePlan(plans, planCount, familyIndex);
+    if (!plan) {
+      plan              = &plans[planCount++];
+      plan->familyIndex = familyIndex;
+    }
+    plan->bits |= queCI[i].flags;
+    if (queCI[i].count > plan->count) {
+      plan->count = queCI[i].count;
     }
   }
 
-  queuePriorities = alloca(maxQueCount);
-  for (i = 0; i < maxQueCount; i++) {
-    queuePriorities[i] = 1.0f; /* default queue priority */
+  for (uint32_t i = 0; i < planCount; i++) {
+    if (plans[i].count > maxQueueCount) {
+      maxQueueCount = plans[i].count;
+    }
+    totalQueueCount += plans[i].count;
   }
 
-  for (i = 0; i < nQueCI; i++) {
-    queueFamilyIndex = vk__findQueueFamily(phyDevice, queCI[i].flags);
-    if(queueFamilyIndex == UINT32_MAX) {
-      /* handle the error: The requested queue capabilities
-         are not supported by this physical device. */
-      continue;
-    }
+  queuePriorities = calloc(maxQueueCount, sizeof(*queuePriorities));
+  if (!queuePriorities || totalQueueCount == 0u) {
+    goto err;
+  }
+  for (uint32_t i = 0; i < maxQueueCount; i++) {
+    queuePriorities[i] = 1.0f;
+  }
 
-    queueFamilies                 |= queCI[i].flags;
-
-    queues[nQueues].sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queues[nQueues].pNext            = NULL;
-    queues[nQueues].flags            = 0;
-    queues[nQueues].queueFamilyIndex = queueFamilyIndex;
-    queues[nQueues].queueCount       = queCI[i].count;
-    queues[nQueues].pQueuePriorities = queuePriorities;
-
-    nQueues++;
+  for (uint32_t i = 0; i < planCount; i++) {
+    queues[i].sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queues[i].queueFamilyIndex = plans[i].familyIndex;
+    queues[i].queueCount       = plans[i].count;
+    queues[i].pQueuePriorities = queuePriorities;
   }
 
   /* If specific features are required, pass them in here: pEnabledFeatures */
   deviceCI.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  deviceCI.queueCreateInfoCount    = nQueues;
+  deviceCI.queueCreateInfoCount    = planCount;
   deviceCI.pQueueCreateInfos       = queues;
   deviceCI.enabledExtensionCount   = phyDeviceVk->nEnabledExtensions;
   deviceCI.ppEnabledExtensionNames = (void *)phyDeviceVk->extensionNames;
 
-  err = vkCreateDevice(phyDeviceVk->phyDevice, &deviceCI, NULL, &deviceVk->device);
-  if(err) {
+  result = vkCreateDevice(phyDeviceVk->phyDevice,
+                          &deviceCI,
+                          NULL,
+                          &deviceVk->device);
+  if (result != VK_SUCCESS) {
 #ifdef DEBUG
-    fprintf(stderr, "vkCreateDevice failed: %d\n", err);
+    fprintf(stderr, "vkCreateDevice failed: %d\n", result);
 #endif
     goto err;
-  }
-
-  createdQueues = calloc(nQueues, sizeof(*createdQueues));
-  for (i = 0; i < nQueues; i++) {
-    createdQueues[i] = vk__createCmdQueue(deviceVk, &queues[i], queCI[i].flags);
   }
 
   device->_priv            = deviceVk;
   device->inst             = phyDevice->inst;
   device->phyDevice        = phyDevice;
-  device->queueFamilies    = queueFamilies;
 
-  deviceVk->createCI       = queCI;
-  deviceVk->nCreateCI      = nQueCI;
-  deviceVk->nCreatedQueues = nQueues;
-  deviceVk->createdQueues  = createdQueues;
+  deviceVk->createdQueues = calloc(totalQueueCount,
+                                   sizeof(*deviceVk->createdQueues));
+  if (!deviceVk->createdQueues) {
+    goto err;
+  }
 
-  /* set device->availableQueues by created available queues */
+  for (uint32_t i = 0; i < planCount; i++) {
+    for (uint32_t queueIndex = 0; queueIndex < plans[i].count; queueIndex++) {
+      GPUCommandQueue *queue;
+
+      queue = vk_createCommandQueue(device,
+                                    plans[i].familyIndex,
+                                    queueIndex,
+                                    plans[i].bits);
+      if (!queue) {
+        goto err;
+      }
+      deviceVk->createdQueues[deviceVk->nCreatedQueues++] = queue;
+      device->queueFamilies |= queue->bits;
+    }
+  }
+
+  free(queuePriorities);
+  free(queues);
+  free(plans);
 
   return device;
 err:
-
-  if (deviceVk) { free(deviceVk); }
-  if (device)   { free(device); }
+  free(queuePriorities);
+  free(queues);
+  free(plans);
+  if (deviceVk) {
+    if (deviceVk->device) {
+      vkDeviceWaitIdle(deviceVk->device);
+    }
+    if (deviceVk->createdQueues) {
+      for (uint32_t i = 0; i < deviceVk->nCreatedQueues; i++) {
+        vk_destroyCommandQueue(deviceVk->createdQueues[i]);
+      }
+    }
+    free(deviceVk->createdQueues);
+    if (deviceVk->device) {
+      vkDestroyDevice(deviceVk->device, NULL);
+    }
+    free(deviceVk);
+  }
+  free(device);
 
   return NULL;
+}
+
+GPU_HIDE
+void
+vk_destroyDevice(GPUDevice * __restrict device) {
+  GPUDeviceVk *deviceVk;
+
+  if (!device) {
+    return;
+  }
+
+  deviceVk = device->_priv;
+  if (deviceVk) {
+    if (deviceVk->device) {
+      vkDeviceWaitIdle(deviceVk->device);
+    }
+    if (deviceVk->createdQueues) {
+      for (uint32_t i = 0; i < deviceVk->nCreatedQueues; i++) {
+        vk_destroyCommandQueue(deviceVk->createdQueues[i]);
+      }
+    }
+    free(deviceVk->createdQueues);
+    if (deviceVk->device) {
+      vkDestroyDevice(deviceVk->device, NULL);
+    }
+    free(deviceVk);
+  }
+  free(device);
 }
 
 GPU_HIDE
@@ -539,29 +679,15 @@ vk_createSystemDefaultDevice(GPUInstance * __restrict inst) {
   GPUPhysicalDevice *phyDevice;
 
   phyDevice = vk_getAutoSelectedPhysicalDevice(inst);
-
-  /* TODO: */
-  return vk_createDevice(phyDevice, (GPUCommandQueueCreateInfo[]){
-    [0] = {
-      .count = 1,
-      .flags = GPU_QUEUE_GRAPHICS_BIT | GPU_QUEUE_COMPUTE_BIT,
-    },
-    [1] = {
-      .count = 1,
-      .flags = GPU_QUEUE_GRAPHICS_BIT
-    },
-    [2] = {
-      .count = 1,
-      .flags = GPU_QUEUE_COMPUTE_BIT
-    }
-  }, 3);
+  return phyDevice ? vk_createDevice(phyDevice, NULL, 0u) : NULL;
 }
 
 GPU_HIDE
 void
-vk_initDevice(GPUApiDevice* apiDevice) {
+vk_initDevice(GPUApiDevice *apiDevice) {
   apiDevice->getAvailableAdapters      = vk_getAvailablePhysicalDevicesBy;
   apiDevice->getAdapterProperties      = vk_getAdapterProperties;
   apiDevice->createDevice              = vk_createDevice;
   apiDevice->createSystemDefaultDevice = vk_createSystemDefaultDevice;
+  apiDevice->destroyDevice             = vk_destroyDevice;
 }
