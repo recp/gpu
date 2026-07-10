@@ -113,4 +113,24 @@ gpu_uslDefaultMetalTarget(USLTargetSpec *outTarget) {
                         USL_TARGET_PROFILE_MSL_2_0) == USLOk;
 }
 
+static int
+gpu_uslDefaultVulkanTarget(USLTargetSpec *outTarget) {
+  return outTarget &&
+         us_target_init(outTarget,
+                        USL_BACKEND_SPIRV,
+                        USL_TARGET_PROFILE_VULKAN_1_0) == USLOk;
+}
+
+static int
+gpu_uslDefaultTarget(GPUBackend backend, USLTargetSpec *outTarget) {
+  switch (backend) {
+    case GPU_BACKEND_METAL:
+      return gpu_uslDefaultMetalTarget(outTarget);
+    case GPU_BACKEND_VULKAN:
+      return gpu_uslDefaultVulkanTarget(outTarget);
+    default:
+      return 0;
+  }
+}
+
 #endif /* gpu_api_usl_target_h */

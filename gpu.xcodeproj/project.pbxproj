@@ -15,6 +15,7 @@
 		1EC0DF042AD2000000000000 /* query.h in Headers */ = {isa = PBXBuildFile; fileRef = 1EC0DF032AD2000000000000 /* query.h */; };
 		1EC0DF062AD3000000000000 /* barrier.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0DF052AD3000000000000 /* barrier.c */; };
 		1EC0DF082AD3000000000000 /* barrier.h in Headers */ = {isa = PBXBuildFile; fileRef = 1EC0DF072AD3000000000000 /* barrier.h */; };
+		1EC0E1012AD4000000000000 /* library.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0E1002AD4000000000000 /* library.c */; };
 		1E12EBF82ADAB480007653D6 /* cmdque.m in Sources */ = {isa = PBXBuildFile; fileRef = 56CDC98024CEE9210021A8A2 /* cmdque.m */; };
 		1E1C3DDE2C862CEC004753CB /* object_type_string_helper.h in Headers */ = {isa = PBXBuildFile; fileRef = 1E1C3DDD2C862CEC004753CB /* object_type_string_helper.h */; };
 		1E2049612AC622EB00B94648 /* descriptor.c in Sources */ = {isa = PBXBuildFile; fileRef = 1E2049602AC622EB00B94648 /* descriptor.c */; };
@@ -116,6 +117,7 @@
 		1EC0DF032AD2000000000000 /* query.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = query.h; sourceTree = "<group>"; };
 		1EC0DF052AD3000000000000 /* barrier.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = barrier.c; sourceTree = "<group>"; };
 		1EC0DF072AD3000000000000 /* barrier.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = barrier.h; sourceTree = "<group>"; };
+		1EC0E1002AD4000000000000 /* library.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = library.c; sourceTree = "<group>"; };
 		1E1C3DDD2C862CEC004753CB /* object_type_string_helper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = object_type_string_helper.h; sourceTree = "<group>"; };
 		1E1C3DDF2C862D37004753CB /* MoltenVK.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = MoltenVK.xcframework; path = "/Users/recp/Projects/recp/vk-preview/Cube/../../Package/Latest/MoltenVK/dynamic/MoltenVK.xcframework"; sourceTree = "<absolute>"; };
 		1E2049602AC622EB00B94648 /* descriptor.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = descriptor.c; sourceTree = "<group>"; };
@@ -279,6 +281,7 @@
 				1EB809D42AD1D90F006A1FCB /* surface.c */,
 				1E75842F2ACD4C050022960F /* device.c */,
 				1EAD86792AD73379004D2BE5 /* cmdque.c */,
+				1EC0E1002AD4000000000000 /* library.c */,
 				1E30768A2B0C0E4D003B2B6C /* swapchain.c */,
 			);
 			path = impl;
@@ -798,6 +801,7 @@
 				1E7584302ACD4C050022960F /* device.c in Sources */,
 				1E7A58992ACC105200AB25B5 /* instance.c in Sources */,
 				1EAD867A2AD73379004D2BE5 /* cmdque.c in Sources */,
+				1EC0E1012AD4000000000000 /* library.c in Sources */,
 				1EA98C342ABAD64000E1B576 /* pipeline.m in Sources */,
 				1EB809D22AD1D80E006A1FCB /* surface.c in Sources */,
 				1EA98C2E2ABAD64000E1B576 /* rce.m in Sources */,

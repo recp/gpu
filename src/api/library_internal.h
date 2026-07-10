@@ -20,11 +20,12 @@
 #include "../common.h"
 
 struct GPULibrary {
-  void *_priv;
+  GPUApi              *_api;
+  void                *_priv;
   GPUShaderReflection _reflection;
-  void *_entryInfo;
-  void *_entryResources;
-  void *_resourceBindings;
+  void                *_entryInfo;
+  void                *_entryResources;
+  void                *_resourceBindings;
 };
 
 struct GPUFunction {

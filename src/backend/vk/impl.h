@@ -25,6 +25,7 @@ GPU_HIDE void vk_initFrame(GPUApiFrame *api);
 GPU_HIDE void vk_initDescriptor(GPUApiDescriptor *api);
 GPU_HIDE void vk_initSampler(GPUApiSampler *api);
 GPU_HIDE void vk_initSurface(GPUApiSurface *api);
+GPU_HIDE void vk_initLibrary(GPUApiLibrary *api);
 
 GPU_HIDE
 GPUCommandQueue*

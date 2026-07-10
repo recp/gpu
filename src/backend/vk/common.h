@@ -23,6 +23,7 @@
 #include "../../api/device_internal.h"
 #include "../../api/frame_internal.h"
 #include "../../api/instance_internal.h"
+#include "../../api/library_internal.h"
 #include "../../api/surface_internal.h"
 #include "../../api/swapchain_internal.h"
 #include <stdarg.h>
@@ -229,5 +230,10 @@ typedef struct GPUSurfaceVk {
   VkInstance   inst;
   VkSurfaceKHR surface;
 } GPUSurfaceVk;
+
+typedef struct GPULibraryVk {
+  VkDevice       device;
+  VkShaderModule module;
+} GPULibraryVk;
 
 #endif /* vk_common_h */

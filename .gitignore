@@ -75,3 +75,4 @@ win/ARM64/
 # Test build outputs
 tests/api/api-tests
 tests/**/vulkan-queue
+tests/**/vulkan-shader

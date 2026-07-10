@@ -32,6 +32,11 @@ typedef struct GPUApiLibrary {
                           const char *source,
                           uint64_t sourceSize);
 
+  GPULibrary*
+  (*newLibraryWithBinary)(GPUDevice *device,
+                          const void *data,
+                          uint64_t size);
+
   GPUFunction*
   (*newFunction)(GPULibrary *lib, const char *name);
 
