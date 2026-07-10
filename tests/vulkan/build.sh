@@ -7,6 +7,7 @@ DERIVED_DATA="${GPU_VULKAN_DERIVED_DATA:-/tmp/gpu-vk-dd}"
 VULKAN_SDK="${VULKAN_SDK:-$HOME/Library/Developer/VulkanSDK/1.4.350.1}"
 LIB_DIR="$DERIVED_DATA/Build/Products/Debug"
 US_LIB_DIR="${USL_ROOT:-/Users/recp/Projects/recp/UniversalShading/us}/build/us"
+USTEST="${USL_USTEST:-${USL_ROOT:-/Users/recp/Projects/recp/UniversalShading/us}/build/ustest}"
 ICD="$VULKAN_SDK/macOS/share/vulkan/icd.d/MoltenVK_icd.json"
 SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
 
@@ -45,7 +46,16 @@ build_test() {
 build_test "$TEST_DIR/queue.c" "$TEST_DIR/vulkan-queue"
 build_test "$TEST_DIR/shader.c" "$TEST_DIR/vulkan-shader"
 
+COMPUTE_SAMPLE="$ROOT/samples/compute-buffer-vulkan-usl"
+"$USTEST" --shader "$COMPUTE_SAMPLE/compute_buffer.usl" \
+  --no-logs --no-sidecar >/tmp/gpu-vulkan-compute-ustest.log 2>&1
+build_test "$COMPUTE_SAMPLE/main.c" \
+  "$COMPUTE_SAMPLE/hello-compute-buffer-vulkan-usl"
+
 VK_ICD_FILENAMES="$ICD" "$TEST_DIR/vulkan-queue"
 VK_ICD_FILENAMES="$ICD" \
   "$TEST_DIR/vulkan-shader" \
   "$ROOT/samples/triangle-usl/triangle.us"
+VK_ICD_FILENAMES="$ICD" \
+  "$COMPUTE_SAMPLE/hello-compute-buffer-vulkan-usl" \
+  "$COMPUTE_SAMPLE/compute_buffer.us"

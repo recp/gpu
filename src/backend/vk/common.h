@@ -249,6 +249,12 @@ typedef struct GPURenderEncoderVk {
   uint32_t         dynamicOffsets[GPU_VK_MAX_DYNAMIC_OFFSETS];
 } GPURenderEncoderVk;
 
+typedef struct GPUComputeEncoderVk {
+  VkCommandBuffer  command;
+  VkPipelineLayout pipelineLayout;
+  uint32_t         dynamicOffsets[GPU_VK_MAX_DYNAMIC_OFFSETS];
+} GPUComputeEncoderVk;
+
 struct GPUCommandBufferVk {
   GPUCommandQueueVk       *owner;
   GPUCommandBufferVk      *next;
@@ -262,6 +268,8 @@ struct GPUCommandBufferVk {
   GPURenderPassVk           renderPassState;
   GPURenderCommandEncoder   renderEncoder;
   GPURenderEncoderVk        renderState;
+  GPUComputePassEncoder     computeEncoder;
+  GPUComputeEncoderVk       computeState;
   GPUCommandBuffer          commandBuffer;
   uint32_t                  presentImageIndex;
   uint32_t                  presentFrameIndex;
@@ -320,6 +328,12 @@ typedef struct GPURenderPipelineVk {
   VkPipelineLayout layout;
   VkRenderPass     renderPass;
 } GPURenderPipelineVk;
+
+typedef struct GPUComputePipelineVk {
+  VkDevice         device;
+  VkPipeline       pipeline;
+  VkPipelineLayout layout;
+} GPUComputePipelineVk;
 
 struct GPUSwapChainVk {
   GPUDevice         *gpuDevice;

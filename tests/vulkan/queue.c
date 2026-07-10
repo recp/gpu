@@ -58,6 +58,28 @@ submit_empty_batch(GPUCommandQueue *queue,
          GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
 }
 
+static int
+submit_empty_compute(GPUCommandQueue *queue, GPUFence *fence) {
+  GPUCommandBuffer      *cmdb;
+  GPUComputePassEncoder *pass;
+  GPUQueueSubmitInfo     submitInfo = {0};
+
+  cmdb = NULL;
+  if (GPUAcquireCommandBuffer(queue, "vulkan-empty-compute", &cmdb) != GPU_OK ||
+      !cmdb || !(pass = GPUBeginComputePass(cmdb, "vulkan-empty-compute"))) {
+    return 0;
+  }
+  GPUEndComputePass(pass);
+
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.ppCommandBuffers   = &cmdb;
+  submitInfo.fence              = fence;
+  return GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
+         GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+}
+
 int
 main(void) {
   GPUInstanceCreateInfo  instanceInfo  = {0};
@@ -124,10 +146,12 @@ main(void) {
   }
 
   ok = submit_empty_batch(graphics, fence, &probe) &&
+       submit_empty_compute(compute, fence) &&
        probe.count == 1u && probe.cmdb != NULL;
   GPUResetStats(device);
   for (uint32_t i = 0; ok && i < VULKAN_WARM_ITERATIONS; i++) {
-    ok = submit_empty_batch(graphics, fence, NULL);
+    ok = submit_empty_batch(graphics, fence, NULL) &&
+         submit_empty_compute(compute, fence);
   }
 
   device->lastFrameStats = device->currentFrameStats;

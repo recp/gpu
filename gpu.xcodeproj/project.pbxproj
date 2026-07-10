@@ -26,6 +26,7 @@
 		1EC0E1812ADC000000000000 /* descriptor.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0E1802ADC000000000000 /* descriptor.c */; };
 		1EC0E1912ADD000000000000 /* texture.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0E1902ADD000000000000 /* texture.c */; };
 		1EC0E1A12ADE000000000000 /* sampler.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0E1A02ADE000000000000 /* sampler.c */; };
+		1EC0E1B12ADF000000000000 /* compute.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0E1B02ADF000000000000 /* compute.c */; };
 		1E12EBF82ADAB480007653D6 /* cmdque.m in Sources */ = {isa = PBXBuildFile; fileRef = 56CDC98024CEE9210021A8A2 /* cmdque.m */; };
 		1E1C3DDE2C862CEC004753CB /* object_type_string_helper.h in Headers */ = {isa = PBXBuildFile; fileRef = 1E1C3DDD2C862CEC004753CB /* object_type_string_helper.h */; };
 		1E2049612AC622EB00B94648 /* descriptor.c in Sources */ = {isa = PBXBuildFile; fileRef = 1E2049602AC622EB00B94648 /* descriptor.c */; };
@@ -161,6 +162,7 @@
 		1EC0E1802ADC000000000000 /* descriptor.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = descriptor.c; sourceTree = "<group>"; };
 		1EC0E1902ADD000000000000 /* texture.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = texture.c; sourceTree = "<group>"; };
 		1EC0E1A02ADE000000000000 /* sampler.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = sampler.c; sourceTree = "<group>"; };
+		1EC0E1B02ADF000000000000 /* compute.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = compute.c; sourceTree = "<group>"; };
 		1E977AB4289FA9EF00F18D42 /* libus.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; path = libus.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
 		1EA98C182AB9EE5700E1B576 /* swapchain.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = swapchain.c; sourceTree = "<group>"; };
 		1EA98C1A2AB9F6BD00E1B576 /* swapchain.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = swapchain.m; sourceTree = "<group>"; };
@@ -309,6 +311,7 @@
 				1EC0E1802ADC000000000000 /* descriptor.c */,
 				1EC0E1902ADD000000000000 /* texture.c */,
 				1EC0E1A02ADE000000000000 /* sampler.c */,
+				1EC0E1B02ADF000000000000 /* compute.c */,
 				1E75842F2ACD4C050022960F /* device.c */,
 				1EAD86792AD73379004D2BE5 /* cmdque.c */,
 				1EC0E1002AD4000000000000 /* library.c */,
@@ -840,6 +843,7 @@
 				1EC0E1812ADC000000000000 /* descriptor.c in Sources */,
 				1EC0E1912ADD000000000000 /* texture.c in Sources */,
 				1EC0E1A12ADE000000000000 /* sampler.c in Sources */,
+				1EC0E1B12ADF000000000000 /* compute.c in Sources */,
 				1E30768B2B0C0E4D003B2B6C /* swapchain.c in Sources */,
 				1EAD867A2AD73379004D2BE5 /* cmdque.c in Sources */,
 				1EC0E1012AD4000000000000 /* library.c in Sources */,

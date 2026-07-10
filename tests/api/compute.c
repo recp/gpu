@@ -321,7 +321,8 @@ cleanup:
 }
 
 static int
-check_compute_pass_validation(void) {
+check_compute_pass_validation(GPUDevice *device) {
+  GPUCommandQueue fakeQueue = {0};
   GPUCommandBuffer fakeCmdb = {0};
   GPUComputePassEncoder fakePass = {0};
   GPUComputePipeline fakePipeline = {0};
@@ -331,6 +332,9 @@ check_compute_pass_validation(void) {
   uint32_t pushValue = 0x11223344u;
   uint8_t pushBefore[16];
 
+  fakeQueue._device = device;
+  fakeCmdb._queue = &fakeQueue;
+  fakePass._cmdb = &fakeCmdb;
   fakeBufferStorage.sizeBytes = 128u;
   fakeBufferStorage.usage = GPU_BUFFER_USAGE_INDIRECT;
 
@@ -653,7 +657,7 @@ check_compute_readback(GPUDevice *device) {
 
 int
 gpu_test_compute(GPUDevice *device) {
-  return check_compute_pass_validation() &&
+  return check_compute_pass_validation(device) &&
          check_compute_pipeline_validation(device) &&
          check_compute_dispatch_validation_calls(device) &&
          check_compute_readback(device);

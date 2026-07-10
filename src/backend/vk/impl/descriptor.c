@@ -535,6 +535,59 @@ vk_destroyBindGroup(GPUBindGroup *group) {
   group->_native = NULL;
 }
 
+static bool
+vk__bindGroup(VkCommandBuffer       command,
+              VkPipelineBindPoint   bindPoint,
+              VkPipelineLayout      encoderLayout,
+              GPUPipelineLayout    *pipelineLayout,
+              uint32_t              groupIndex,
+              GPUBindGroup         *group,
+              uint32_t              dynamicOffsetCount,
+              const uint32_t       *dynamicOffsets,
+              uint32_t             *reorderedOffsets) {
+  GPUPipelineLayoutVk   *pipeline;
+  GPUBindGroupVk        *groupVk;
+  GPUBindGroupLayout    *layout;
+  GPUBindGroupLayoutVk  *layoutVk;
+  const uint32_t        *nativeOffsets;
+
+  pipeline = pipelineLayout ? pipelineLayout->_native : NULL;
+  groupVk  = group ? group->_native : NULL;
+  layout   = gpuBindGroupGetLayout(group);
+  layoutVk = layout ? layout->_native : NULL;
+  if (!command || !pipeline || !pipeline->layout ||
+      encoderLayout != pipeline->layout ||
+      !groupVk || !groupVk->set || !layoutVk ||
+      groupVk->device != pipeline->device ||
+      layoutVk->device != pipeline->device ||
+      dynamicOffsetCount != layoutVk->dynamicCount ||
+      dynamicOffsetCount > GPU_VK_MAX_DYNAMIC_OFFSETS ||
+      (dynamicOffsetCount > 0u && (!dynamicOffsets || !reorderedOffsets))) {
+    return false;
+  }
+
+  nativeOffsets = dynamicOffsets;
+  for (uint32_t i = 0u; i < dynamicOffsetCount; i++) {
+    if (layoutVk->dynamicOrder[i] != i) {
+      for (uint32_t j = 0u; j < dynamicOffsetCount; j++) {
+        reorderedOffsets[j] = dynamicOffsets[layoutVk->dynamicOrder[j]];
+      }
+      nativeOffsets = reorderedOffsets;
+      break;
+    }
+  }
+
+  vkCmdBindDescriptorSets(command,
+                          bindPoint,
+                          pipeline->layout,
+                          groupIndex,
+                          1u,
+                          &groupVk->set,
+                          dynamicOffsetCount,
+                          nativeOffsets);
+  return true;
+}
+
 GPU_HIDE
 bool
 vk_bindRenderGroup(GPURenderCommandEncoder *pass,
@@ -543,47 +596,40 @@ vk_bindRenderGroup(GPURenderCommandEncoder *pass,
                    GPUBindGroup            *group,
                    uint32_t                 dynamicOffsetCount,
                    const uint32_t          *dynamicOffsets) {
-  GPURenderEncoderVk    *encoder;
-  GPUPipelineLayoutVk   *pipeline;
-  GPUBindGroupVk        *groupVk;
-  GPUBindGroupLayout    *layout;
-  GPUBindGroupLayoutVk  *layoutVk;
-  const uint32_t        *nativeOffsets;
+  GPURenderEncoderVk *encoder;
 
-  encoder  = pass ? pass->_priv : NULL;
-  pipeline = pipelineLayout ? pipelineLayout->_native : NULL;
-  groupVk  = group ? group->_native : NULL;
-  layout   = gpuBindGroupGetLayout(group);
-  layoutVk = layout ? layout->_native : NULL;
-  if (!encoder || !pipeline || !pipeline->layout ||
-      encoder->pipelineLayout != pipeline->layout ||
-      !groupVk || !groupVk->set || !layoutVk ||
-      dynamicOffsetCount != layoutVk->dynamicCount ||
-      dynamicOffsetCount > GPU_VK_MAX_DYNAMIC_OFFSETS ||
-      (dynamicOffsetCount > 0u && !dynamicOffsets)) {
-    return false;
-  }
+  encoder = pass ? pass->_priv : NULL;
+  return encoder && vk__bindGroup(encoder->command,
+                                  VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                  encoder->pipelineLayout,
+                                  pipelineLayout,
+                                  groupIndex,
+                                  group,
+                                  dynamicOffsetCount,
+                                  dynamicOffsets,
+                                  encoder->dynamicOffsets);
+}
 
-  nativeOffsets = dynamicOffsets;
-  for (uint32_t i = 0u; i < dynamicOffsetCount; i++) {
-    if (layoutVk->dynamicOrder[i] != i) {
-      for (uint32_t j = 0u; j < dynamicOffsetCount; j++) {
-        encoder->dynamicOffsets[j] = dynamicOffsets[layoutVk->dynamicOrder[j]];
-      }
-      nativeOffsets = encoder->dynamicOffsets;
-      break;
-    }
-  }
+GPU_HIDE
+bool
+vk_bindComputeGroup(GPUComputePassEncoder *pass,
+                    GPUPipelineLayout     *pipelineLayout,
+                    uint32_t               groupIndex,
+                    GPUBindGroup          *group,
+                    uint32_t               dynamicOffsetCount,
+                    const uint32_t        *dynamicOffsets) {
+  GPUComputeEncoderVk *encoder;
 
-  vkCmdBindDescriptorSets(encoder->command,
-                          VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          pipeline->layout,
-                          groupIndex,
-                          1u,
-                          &groupVk->set,
-                          dynamicOffsetCount,
-                          nativeOffsets);
-  return true;
+  encoder = pass ? pass->_priv : NULL;
+  return encoder && vk__bindGroup(encoder->command,
+                                  VK_PIPELINE_BIND_POINT_COMPUTE,
+                                  encoder->pipelineLayout,
+                                  pipelineLayout,
+                                  groupIndex,
+                                  group,
+                                  dynamicOffsetCount,
+                                  dynamicOffsets,
+                                  encoder->dynamicOffsets);
 }
 
 GPU_HIDE
@@ -596,4 +642,5 @@ vk_initDescriptor(GPUApiDescriptor *api) {
   api->createBindGroup        = vk_createBindGroup;
   api->destroyBindGroup       = vk_destroyBindGroup;
   api->bindRenderGroup        = vk_bindRenderGroup;
+  api->bindComputeGroup       = vk_bindComputeGroup;
 }

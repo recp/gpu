@@ -44,6 +44,11 @@ struct GPUComputePassEncoder {
 };
 
 typedef struct GPUApiCompute {
+  GPUResult
+  (*createPipeline)(GPUDevice                          *device,
+                    const GPUComputePipelineCreateInfo *info,
+                    GPUComputePipeline                 *pipeline);
+
   GPUComputePipeline*
   (*newComputePipeline)(void);
 

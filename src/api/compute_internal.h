@@ -25,12 +25,14 @@ struct GPUComputePipelineState {
 };
 
 struct GPUComputePipeline {
+  GPUApi              *_api;
   void                *_priv;
   void                *_state;
+  GPUDevice           *_device;
   GPUPipelineLayout   *_layout;
   uint32_t             _requiredBindGroupMask;
   uint32_t             _pushConstantSizeBytes;
-  GPUShaderStageFlags _pushConstantStages;
+  GPUShaderStageFlags  _pushConstantStages;
 };
 
 GPU_HIDE
