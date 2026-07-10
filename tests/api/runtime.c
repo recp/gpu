@@ -1,4 +1,5 @@
 #include "test.h"
+#include "../../src/api/device_internal.h"
 
 static int
 check_runtime_config(GPUDevice *device) {
@@ -278,10 +279,77 @@ check_stats_queries(GPUDevice *device) {
   return 1;
 }
 
+static int
+submit_empty(GPUCommandQueue *queue, GPUFence *fence) {
+  GPUCommandBuffer *cmdb;
+  GPUCommandBuffer *buffers[1];
+  GPUQueueSubmitInfo submitInfo = {0};
+
+  cmdb = NULL;
+  if (GPUAcquireCommandBuffer(queue, NULL, &cmdb) != GPU_OK || !cmdb) {
+    return 0;
+  }
+
+  buffers[0] = cmdb;
+  submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.ppCommandBuffers = buffers;
+  submitInfo.fence = fence;
+  return GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
+         GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+}
+
+static int
+check_warm_command_path(GPUDevice *device) {
+  GPUCommandQueue *queue;
+  GPUFence *fence;
+  GPUFrameStats stats;
+
+  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  fence = NULL;
+  if (!queue || GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
+    fprintf(stderr, "warm command path setup failed\n");
+    return 0;
+  }
+
+  if (!submit_empty(queue, fence)) {
+    fprintf(stderr, "warm command path priming submit failed\n");
+    GPUDestroyFence(fence);
+    return 0;
+  }
+
+  GPUResetStats(device);
+  memset(&device->currentFrameStats, 0, sizeof(device->currentFrameStats));
+  for (uint32_t i = 0; i < 16u; i++) {
+    if (!submit_empty(queue, fence)) {
+      fprintf(stderr, "warm command path submit failed\n");
+      GPUDestroyFence(fence);
+      return 0;
+    }
+  }
+  device->lastFrameStats = device->currentFrameStats;
+
+  if (GPUGetLastFrameStats(device, &stats) != GPU_OK ||
+      stats.hotPathAllocCount != 0u ||
+      stats.hotPathFreeCount != 0u) {
+    fprintf(stderr,
+            "warm command path allocated: %llu allocs, %llu frees\n",
+            (unsigned long long)stats.hotPathAllocCount,
+            (unsigned long long)stats.hotPathFreeCount);
+    GPUDestroyFence(fence);
+    return 0;
+  }
+
+  GPUDestroyFence(fence);
+  return 1;
+}
+
 int
 gpu_test_runtime(GPUDevice *device) {
   return check_runtime_config(device) &&
          check_transient_validation(device) &&
          check_transient_fallback(device) &&
-         check_stats_queries(device);
+         check_stats_queries(device) &&
+         check_warm_command_path(device);
 }

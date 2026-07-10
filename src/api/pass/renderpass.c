@@ -271,7 +271,7 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
   if (!api->renderPass.beginRenderPass || !api->rce.renderCommandEncoder)
     return NULL;
 
-  desc = api->renderPass.beginRenderPass(info);
+  desc = api->renderPass.beginRenderPass(cmdb, info);
   if (!desc)
     return NULL;
 

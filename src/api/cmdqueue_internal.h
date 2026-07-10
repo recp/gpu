@@ -28,10 +28,18 @@ struct GPUCommandQueue {
 struct GPUCommandBuffer {
   void                         *_priv;
   GPUCommandQueue              *_queue;
+  GPUFence                     *_submitFence;
   void                         *_onCompleteSender;
   GPUCommandBufferCompletionFn  _onComplete;
   bool                          _submitted;
   bool                          _activeEncoder;
 };
+
+typedef void (*GPUCommandBufferRecycleFn)(GPUCommandBuffer *cmdb);
+
+GPU_HIDE
+void
+gpuFinishCommandBuffer(GPUCommandBuffer          *cmdb,
+                       GPUCommandBufferRecycleFn  recycle);
 
 #endif /* gpu_cmdqueue_internal_h */

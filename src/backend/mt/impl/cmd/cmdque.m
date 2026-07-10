@@ -25,6 +25,12 @@ gpu_cmdoncomplete(GPUCommandBuffer * __restrict cmdb,
 static
 GPU_HIDE
 void
+gpu_cmdoncomplete4(GPUCommandBuffer * __restrict cmdb,
+                   id                        feedback);
+
+static
+GPU_HIDE
+void
 mt_logCommandBufferError(GPUCommandBuffer * __restrict cmdb,
                          id<MTLCommandBuffer>        mtlCmdb);
 
@@ -50,8 +56,16 @@ mt_newCommandQueue(GPUDevice * __restrict device) {
     return NULL;
   }
 
-  native->classic = [deviceMT->device newCommandQueue];
-  if (!native->classic) {
+  native->poolLock = OS_UNFAIR_LOCK_INIT;
+  native->mode = deviceMT->commandMode;
+  if (native->mode == MTCommandMode4) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      native->modern = [deviceMT->device newMTL4CommandQueue];
+    }
+  } else {
+    native->classic = [deviceMT->device newCommandQueue];
+  }
+  if (!native->classic && !native->modern) {
     free(native);
     free(que);
     return NULL;
@@ -66,6 +80,9 @@ mt_newCommandQueue(GPUDevice * __restrict device) {
 GPU_HIDE
 void
 mt_destroyCommandQueue(GPUCommandQueue * __restrict queue) {
+  MTCommandBuffer *command;
+  MTCommandBuffer *next;
+
   if (!queue) {
     return;
   }
@@ -73,7 +90,14 @@ mt_destroyCommandQueue(GPUCommandQueue * __restrict queue) {
   if (queue->_priv) {
     MTCommandQueue *native = mt_commandQueue(queue);
 
+    command = native->commands;
+    while (command) {
+      next = command->next;
+      mt_destroyCommandBufferState(command);
+      command = next;
+    }
     [native->classic release];
+    [native->modern release];
     free(native);
   }
   free(queue);
@@ -105,6 +129,70 @@ mt_getCommandQueue(GPUDevice * __restrict device,
   return NULL;
 }
 
+static MTCommandBuffer *
+mt_createCommandBufferState(GPUCommandQueue *cmdb, MTCommandQueue *queue) {
+  GPUCommandBuffer *cb;
+  MTCommandBuffer  *native;
+  GPUDeviceMT      *deviceMT;
+
+  native = calloc(1, sizeof(*native));
+  if (!native) {
+    return NULL;
+  }
+  gpuDeviceRecordHotPathAlloc(cmdb->_device, sizeof(*native));
+
+  cb = &native->commandBuffer;
+  native->owner = queue;
+  native->mode = queue->mode;
+  cb->_priv = native;
+  cb->_queue = cmdb;
+
+  if (native->mode == MTCommandMode4) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      MTLResidencySetDescriptor *residencyDesc;
+      NSError                   *error;
+
+      deviceMT = cmdb->_device->_priv;
+      native->modern = [deviceMT->device newCommandBuffer];
+      native->allocator = [deviceMT->device newCommandAllocator];
+      residencyDesc = [MTLResidencySetDescriptor new];
+      residencyDesc.label = @"gpu-command-residency";
+      residencyDesc.initialCapacity = 64u;
+      error = nil;
+      native->residency = [deviceMT->device
+        newResidencySetWithDescriptor:residencyDesc
+                                 error:&error];
+      [residencyDesc release];
+    }
+    if (!native->modern || !native->allocator ||
+        !native->residency) {
+      mt_destroyCommandBufferState(native);
+      return NULL;
+    }
+  }
+
+  os_unfair_lock_lock(&queue->poolLock);
+  native->next = queue->commands;
+  queue->commands = native;
+  os_unfair_lock_unlock(&queue->poolLock);
+  return native;
+}
+
+static MTCommandBuffer *
+mt_takeCommandBufferState(GPUCommandQueue *cmdb, MTCommandQueue *queue) {
+  MTCommandBuffer *native;
+
+  os_unfair_lock_lock(&queue->poolLock);
+  native = queue->freeCommands;
+  if (native) {
+    queue->freeCommands = native->poolNext;
+    native->poolNext = NULL;
+  }
+  os_unfair_lock_unlock(&queue->poolLock);
+
+  return native ? native : mt_createCommandBufferState(cmdb, queue);
+}
+
 GPU_HIDE
 GPUCommandBuffer*
 mt_newCommandBuffer(GPUCommandQueue  * __restrict cmdb,
@@ -114,34 +202,53 @@ mt_newCommandBuffer(GPUCommandQueue  * __restrict cmdb,
   MTCommandQueue  *queue;
   GPUCommandBuffer *cb;
   MTCommandBuffer *native;
+  MTUploadChunk   *upload;
 
   queue = mt_commandQueue(cmdb);
-  if (!queue || !queue->classic) {
+  if (!queue || (!queue->classic && !queue->modern)) {
     return NULL;
   }
 
-  cb = calloc(1, sizeof(*cb));
-  native = calloc(1, sizeof(*native));
-  if (!cb || !native) {
-    free(native);
-    free(cb);
+  native = mt_takeCommandBufferState(cmdb, queue);
+  if (!native) {
     return NULL;
   }
 
-  native->classic = [queue->classic commandBuffer];
-  if (!native->classic) {
-    free(native);
-    free(cb);
+  cb = &native->commandBuffer;
+  memset(cb, 0, sizeof(*cb));
+  cb->_priv = native;
+  cb->_queue = cmdb;
+  native->pendingAfterStages = 0u;
+  native->pendingBeforeStages = 0u;
+  native->pendingVisibility = 0u;
+  for (upload = native->uploads; upload; upload = upload->next) {
+    upload->offset = 0u;
+  }
+
+  if (native->mode == MTCommandMode4) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      [native->modern beginCommandBufferWithAllocator:native->allocator];
+      [native->modern useResidencySet:native->residency];
+    }
+  } else {
+    native->classic = [queue->classic commandBuffer];
+  }
+  if (!native->classic && !native->modern) {
+    mt_recycleCommandBuffer(cb);
     return NULL;
   }
   if (label && label[0] != '\0') {
-    native->classic.label = [NSString stringWithUTF8String:label];
+    NSString *nativeLabel = [NSString stringWithUTF8String:label];
+
+    native->classic.label = nativeLabel;
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      [(id<MTL4CommandBuffer>)native->modern setLabel:nativeLabel];
+    }
   }
-  cb->_priv = native;
-  
-  if (oncomplete)
+  if (oncomplete) {
     mt_ccmdbufOnComplete(cb, sender, oncomplete);
-  
+  }
+
   return cb;
 }
 
@@ -161,13 +268,50 @@ mt_ccmdbufOnComplete(GPUCommandBuffer * __restrict cmdb,
 GPU_HIDE
 void
 mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
+  MTCommandBuffer *native;
+  MTCommandQueue  *queue;
   id<MTLCommandBuffer> mcb;
 
   if (!cmdb) {
     return;
   }
 
-  mcb = mt_classicCommandBuffer(cmdb);
+  native = mt_commandBuffer(cmdb);
+  queue = cmdb->_queue ? mt_commandQueue(cmdb->_queue) : NULL;
+  if (!native || !queue) {
+    return;
+  }
+
+  if (native->mode == MTCommandMode4) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      id<CAMetalDrawable> drawable;
+      id<MTL4CommandBuffer> buffers[1];
+      MTL4CommitOptions *options;
+
+      [native->residency commit];
+      [native->modern endCommandBuffer];
+      buffers[0] = native->modern;
+      drawable = native->drawable;
+      native->drawable = nil;
+
+      options = [MTL4CommitOptions new];
+      [options addFeedbackHandler:^(id<MTL4CommitFeedback> feedback) {
+        gpu_cmdoncomplete4(cmdb, feedback);
+      }];
+      [queue->modern commit:buffers
+                       count:1u
+                     options:options];
+      if (drawable) {
+        [queue->modern signalDrawable:drawable];
+        [drawable present];
+        [drawable release];
+      }
+      [options release];
+    }
+    return;
+  }
+
+  mcb = native->classic;
   if (!mcb) {
     return;
   }
@@ -213,13 +357,29 @@ gpu_cmdoncomplete(GPUCommandBuffer * __restrict cmdb,
   }
 
   mt_logCommandBufferError(cmdb, mtlCmdb);
+  gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
+}
 
-  if (cmdb->_onComplete) {
-    cmdb->_onComplete(cmdb->_onCompleteSender, cmdb);
+static
+GPU_HIDE
+void
+gpu_cmdoncomplete4(GPUCommandBuffer * __restrict cmdb,
+                   id                        feedback) {
+  GPUDevice *device;
+
+  if (!cmdb) {
+    return;
   }
 
-  free(cmdb->_priv);
-  free(cmdb);
+  device = cmdb->_queue ? cmdb->_queue->_device : NULL;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    id<MTL4CommitFeedback> modernFeedback = feedback;
+
+    if (modernFeedback.error && device && device->runtimeConfig.enableVerboseLogs) {
+      NSLog(@"GPU Metal 4 command buffer failed: %@", modernFeedback.error);
+    }
+  }
+  gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
 }
 
 GPU_HIDE

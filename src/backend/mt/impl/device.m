@@ -156,6 +156,50 @@ GPU_HIDE
 void
 mt_destroyCommandQueue(GPUCommandQueue * __restrict queue);
 
+static bool
+mt_supportsMetal4(id<MTLDevice> device) {
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    return device &&
+           [device respondsToSelector:@selector(newMTL4CommandQueue)] &&
+           [device respondsToSelector:@selector(newCommandAllocator)] &&
+           [device respondsToSelector:@selector(newArgumentTableWithDescriptor:error:)];
+  }
+
+  return false;
+}
+
+static bool
+mt_selectCommandMode(id<MTLDevice> device, MTCommandMode *outMode) {
+  const char *mode;
+  bool supportsMetal4;
+
+  if (!outMode) {
+    return false;
+  }
+
+  mode = getenv("GPU_METAL_MODE");
+  supportsMetal4 = mt_supportsMetal4(device);
+  if (mode && strcmp(mode, "classic") == 0) {
+    *outMode = MTCommandModeClassic;
+    return true;
+  }
+  if (mode && strcmp(mode, "metal4") == 0) {
+    if (!supportsMetal4) {
+      NSLog(@"GPU_METAL_MODE=metal4 requested on an unsupported device or OS");
+      return false;
+    }
+    *outMode = MTCommandMode4;
+    return true;
+  }
+  if (mode && strcmp(mode, "auto") != 0) {
+    NSLog(@"Unknown GPU_METAL_MODE '%s'; expected auto, classic, or metal4", mode);
+    return false;
+  }
+
+  *outMode = supportsMetal4 ? MTCommandMode4 : MTCommandModeClassic;
+  return true;
+}
+
 GPU_HIDE
 GPUDevice *
 mt_createDevice(GPUPhysicalDevice        *phyDevice,
@@ -163,14 +207,26 @@ mt_createDevice(GPUPhysicalDevice        *phyDevice,
                 uint32_t                  nQueCI) {
   GPUDevice   *device;
   GPUDeviceMT *deviceMT;
+  MTCommandMode commandMode;
   uint32_t     i, j, queueIndex, queueCount;
 
   GPU__DEFINE_DEFAULT_QUEUES_IF_NEEDED(nQueCI, queCI)
 
-  device                   = calloc(1, sizeof(*device));
-  deviceMT                 = calloc(1, sizeof(*deviceMT));
+  if (!phyDevice || !phyDevice->_priv ||
+      !mt_selectCommandMode((id<MTLDevice>)phyDevice->_priv, &commandMode)) {
+    return NULL;
+  }
 
-  deviceMT->device         = phyDevice->_priv;
+  device = calloc(1, sizeof(*device));
+  deviceMT = calloc(1, sizeof(*deviceMT));
+  if (!device || !deviceMT) {
+    free(deviceMT);
+    free(device);
+    return NULL;
+  }
+
+  deviceMT->device = phyDevice->_priv;
+  deviceMT->commandMode = commandMode;
   queueCount               = 0;
   for (i = 0; i < nQueCI; i++) {
     queueCount += queCI[i].count;
@@ -179,6 +235,11 @@ mt_createDevice(GPUPhysicalDevice        *phyDevice,
 
   if (queueCount) {
     deviceMT->createdQueues = calloc(queueCount, sizeof(void*));
+    if (!deviceMT->createdQueues) {
+      free(deviceMT);
+      free(device);
+      return NULL;
+    }
   }
 
   device->_priv            = deviceMT;
@@ -189,10 +250,17 @@ mt_createDevice(GPUPhysicalDevice        *phyDevice,
   for (i = 0; i < nQueCI; i++) {
     for (j = 0; j < queCI[i].count; j++) {
       deviceMT->createdQueues[queueIndex] = mt_newCommandQueue(device);
-      if (deviceMT->createdQueues[queueIndex]) {
-        deviceMT->createdQueues[queueIndex]->bits = queCI[i].flags;
-        device->queueFamilies |= queCI[i].flags;
+      if (!deviceMT->createdQueues[queueIndex]) {
+        for (uint32_t k = 0; k < queueIndex; k++) {
+          mt_destroyCommandQueue(deviceMT->createdQueues[k]);
+        }
+        free(deviceMT->createdQueues);
+        free(deviceMT);
+        free(device);
+        return NULL;
       }
+      deviceMT->createdQueues[queueIndex]->bits = queCI[i].flags;
+      device->queueFamilies |= queCI[i].flags;
       queueIndex++;
     }
   }

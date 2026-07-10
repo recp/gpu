@@ -37,7 +37,8 @@ struct GPUCopyPassEncoder {
 };
 
 typedef struct GPUApiRenderPass {
-  GPURenderPassDesc* (*beginRenderPass)  (const GPURenderPassCreateInfo *info);
+  GPURenderPassDesc* (*beginRenderPass)  (GPUCommandBuffer *cmdb,
+                                          const GPURenderPassCreateInfo *info);
   void               (*destroyRenderPass)(GPURenderPassDesc *pass);
 
   GPUCopyPassEncoder* (*beginCopyPass)(GPUCommandBuffer *cmdb, const char *label);

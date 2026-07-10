@@ -241,6 +241,7 @@ mt_writeTexture(GPUCommandQueue             * __restrict queue,
     mtRegion = MTLRegionMake3D(0, 0, 0, region->width, region->height, region->depth);
     [nativeTexture replaceRegion:mtRegion
                       mipmapLevel:region->mipLevel
+                            slice:0
                         withBytes:bytes
                       bytesPerRow:region->bytesPerRow
                     bytesPerImage:bytesPerImage];

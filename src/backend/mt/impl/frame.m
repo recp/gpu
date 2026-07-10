@@ -27,22 +27,21 @@ mt_beginFrame(GPUApi       *__restrict api,
   id<CAMetalDrawable> drawable;
 
   swapChainMtl = swapChain->_priv;
+  if (!swapChainMtl || swapChainMtl->frameActive) {
+    return NULL;
+  }
   drawable     = [swapChainMtl->layer nextDrawable];
   if (!drawable) {
     return NULL;
   }
 
   [drawable retain];
-  frame = calloc(1, sizeof(*frame));
-  target = calloc(1, sizeof(*target));
-  targetView = calloc(1, sizeof(*targetView));
-  if (!frame || !target || !targetView) {
-    free(targetView);
-    free(target);
-    free(frame);
-    [drawable release];
-    return NULL;
-  }
+  frame = &swapChainMtl->frame;
+  target = &swapChainMtl->target;
+  targetView = &swapChainMtl->targetView;
+  memset(frame, 0, sizeof(*frame));
+  memset(target, 0, sizeof(*target));
+  memset(targetView, 0, sizeof(*targetView));
 
   target->_priv = drawable.texture;
   target->format = (GPUFormat)drawable.texture.pixelFormat;
@@ -65,10 +64,11 @@ mt_beginFrame(GPUApi       *__restrict api,
   targetView->arrayLayerCount = 1;
   targetView->_ownsNative = false;
 
-  frame->_priv      = drawable;
+  frame->_priv      = swapChainMtl;
   frame->target     = target;
   frame->targetView = targetView;
   frame->drawable   = drawable;
+  swapChainMtl->frameActive = true;
 
   return frame;
 }
@@ -77,15 +77,19 @@ GPU_HIDE
 void
 mt_endFrame(GPUApi   *__restrict api,
             GPUFrame *__restrict frame) {
+  GPUSwapChainMetal *swapChainMtl;
+
   (void)api;
 
   if (!frame)
     return;
 
-  free(frame->targetView);
-  free(frame->target);
+  swapChainMtl = frame->_priv;
   [(id<CAMetalDrawable>)frame->drawable release];
-  free(frame);
+  frame->drawable = NULL;
+  if (swapChainMtl) {
+    swapChainMtl->frameActive = false;
+  }
 }
 
 GPU_HIDE

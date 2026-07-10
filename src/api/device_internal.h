@@ -64,6 +64,14 @@ gpuDeviceEndFrame(GPUDevice *device);
 
 GPU_HIDE
 void
+gpuDeviceRecordHotPathAlloc(GPUDevice *device, uint64_t sizeBytes);
+
+GPU_HIDE
+void
+gpuDeviceRecordHotPathFree(GPUDevice *device, uint64_t sizeBytes);
+
+GPU_HIDE
+void
 gpuDeviceRecordValidationError(GPUDevice *device, const char *message);
 
 #endif /* gpu_device_internal_h */

@@ -935,6 +935,28 @@ gpuDeviceEndFrame(GPUDevice *device) {
 
 GPU_HIDE
 void
+gpuDeviceRecordHotPathAlloc(GPUDevice *device, uint64_t sizeBytes) {
+  if (!device) {
+    return;
+  }
+
+  device->currentFrameStats.hotPathAllocCount++;
+  device->currentFrameStats.hotPathAllocBytes += sizeBytes;
+}
+
+GPU_HIDE
+void
+gpuDeviceRecordHotPathFree(GPUDevice *device, uint64_t sizeBytes) {
+  if (!device) {
+    return;
+  }
+
+  device->currentFrameStats.hotPathFreeCount++;
+  device->currentFrameStats.hotPathFreeBytes += sizeBytes;
+}
+
+GPU_HIDE
+void
 gpuDeviceRecordValidationError(GPUDevice *device, const char *message) {
   if (!device ||
       device->runtimeConfig.validationMode == GPU_VALIDATION_OFF ||

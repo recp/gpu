@@ -16,19 +16,124 @@
 
 #include "../common.h"
 
+static MTLLoadAction
+mt_loadAction(GPULoadOp op) {
+  switch (op) {
+    case GPU_LOAD_OP_CLEAR:
+      return MTLLoadActionClear;
+    case GPU_LOAD_OP_DONT_CARE:
+      return MTLLoadActionDontCare;
+    case GPU_LOAD_OP_LOAD:
+    default:
+      return MTLLoadActionLoad;
+  }
+}
+
+static MTLStoreAction
+mt_storeAction(GPUStoreOp op) {
+  return op == GPU_STORE_OP_DONT_CARE ?
+    MTLStoreActionDontCare : MTLStoreActionStore;
+}
+
+static uint64_t
+mt_stageMask(GPUPipelineStageMask stages) {
+  uint64_t result;
+
+  result = 0;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    if ((stages & GPU_STAGE_VERTEX) != 0u) {
+      result |= MTLStageVertex;
+    }
+    if ((stages & GPU_STAGE_FRAGMENT) != 0u) {
+      result |= MTLStageFragment;
+    }
+    if ((stages & GPU_STAGE_COMPUTE) != 0u) {
+      result |= MTLStageDispatch;
+    }
+    if ((stages & GPU_STAGE_TRANSFER) != 0u) {
+      result |= MTLStageBlit;
+    }
+    if ((stages & (GPU_STAGE_TOP | GPU_STAGE_BOTTOM)) != 0u) {
+      result |= MTLStageAll;
+    }
+  }
+  return result;
+}
+
+static void
+mt_resetRenderPass(MTRenderPass *pass) {
+  MTLRenderPassDescriptor *classic;
+
+  if (!pass || !pass->classic) {
+    return;
+  }
+
+  classic = pass->classic;
+  for (uint32_t i = 0; i < GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS; i++) {
+    classic.colorAttachments[i].texture = nil;
+    classic.colorAttachments[i].resolveTexture = nil;
+    classic.colorAttachments[i].loadAction = MTLLoadActionDontCare;
+    classic.colorAttachments[i].storeAction = MTLStoreActionDontCare;
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      MTL4RenderPassDescriptor *modern = pass->modern;
+
+      modern.colorAttachments[i].texture = nil;
+      modern.colorAttachments[i].resolveTexture = nil;
+      modern.colorAttachments[i].loadAction = MTLLoadActionDontCare;
+      modern.colorAttachments[i].storeAction = MTLStoreActionDontCare;
+    }
+  }
+
+  classic.depthAttachment.texture = nil;
+  classic.stencilAttachment.texture = nil;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    MTL4RenderPassDescriptor *modern = pass->modern;
+
+    modern.depthAttachment.texture = nil;
+    modern.stencilAttachment.texture = nil;
+  }
+}
+
 GPU_HIDE
 GPURenderPassDesc*
-mt_beginRenderPass(const GPURenderPassCreateInfo *info) {
+mt_beginRenderPass(GPUCommandBuffer              *cmdb,
+                   const GPURenderPassCreateInfo *info) {
   const GPURenderPassColorAttachment        *color;
   const GPURenderPassDepthStencilAttachment *depthStencil;
+  MTCommandBuffer                           *commandState;
   GPURenderPassDesc                         *renderPass;
+  MTRenderPass                              *nativePass;
   MTLRenderPassDescriptor                   *rpd;
+  id                                         rpd4;
   uint32_t                                   i;
 
-  if (!info || (info->colorAttachmentCount > 0 && !info->pColorAttachments))
+  if (!cmdb || !info ||
+      (info->colorAttachmentCount > 0 && !info->pColorAttachments))
     return NULL;
 
-  rpd = [MTLRenderPassDescriptor renderPassDescriptor];
+  commandState = mt_commandBuffer(cmdb);
+  if (!commandState) {
+    return NULL;
+  }
+
+  renderPass = &commandState->renderPass;
+  nativePass = &commandState->renderPassState;
+  if (!nativePass->classic) {
+    nativePass->classic = [MTLRenderPassDescriptor new];
+  }
+  if (commandState->mode == MTCommandMode4 && !nativePass->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      nativePass->modern = [MTL4RenderPassDescriptor new];
+    }
+  }
+  if (!nativePass->classic ||
+      (commandState->mode == MTCommandMode4 && !nativePass->modern)) {
+    return NULL;
+  }
+
+  rpd = nativePass->classic;
+  rpd4 = nativePass->modern;
+  mt_resetRenderPass(nativePass);
 
   for (i = 0; i < info->colorAttachmentCount; i++) {
     color = &info->pColorAttachments[i];
@@ -38,34 +143,23 @@ mt_beginRenderPass(const GPURenderPassCreateInfo *info) {
     rpd.colorAttachments[i].texture        = (id<MTLTexture>)color->view->_priv;
     rpd.colorAttachments[i].resolveTexture = color->resolveView ?
       (id<MTLTexture>)color->resolveView->_priv : nil;
-
-    switch (color->loadOp) {
-      case GPU_LOAD_OP_CLEAR:
-        rpd.colorAttachments[i].loadAction = MTLLoadActionClear;
-        break;
-      case GPU_LOAD_OP_DONT_CARE:
-        rpd.colorAttachments[i].loadAction = MTLLoadActionDontCare;
-        break;
-      case GPU_LOAD_OP_LOAD:
-      default:
-        rpd.colorAttachments[i].loadAction = MTLLoadActionLoad;
-        break;
-    }
-
-    switch (color->storeOp) {
-      case GPU_STORE_OP_DONT_CARE:
-        rpd.colorAttachments[i].storeAction = MTLStoreActionDontCare;
-        break;
-      case GPU_STORE_OP_STORE:
-      default:
-        rpd.colorAttachments[i].storeAction = MTLStoreActionStore;
-        break;
-    }
-
+    rpd.colorAttachments[i].loadAction = mt_loadAction(color->loadOp);
+    rpd.colorAttachments[i].storeAction = mt_storeAction(color->storeOp);
     rpd.colorAttachments[i].clearColor = MTLClearColorMake(color->clearColor.float32[0],
                                                            color->clearColor.float32[1],
                                                            color->clearColor.float32[2],
                                                            color->clearColor.float32[3]);
+    if (rpd4) {
+      if (@available(macOS 26.0, iOS 26.0, *)) {
+        MTL4RenderPassDescriptor *modern = rpd4;
+
+        modern.colorAttachments[i].texture = rpd.colorAttachments[i].texture;
+        modern.colorAttachments[i].resolveTexture = rpd.colorAttachments[i].resolveTexture;
+        modern.colorAttachments[i].loadAction = rpd.colorAttachments[i].loadAction;
+        modern.colorAttachments[i].storeAction = rpd.colorAttachments[i].storeAction;
+        modern.colorAttachments[i].clearColor = rpd.colorAttachments[i].clearColor;
+      }
+    }
   }
 
   depthStencil = info->pDepthStencilAttachment;
@@ -73,60 +167,24 @@ mt_beginRenderPass(const GPURenderPassCreateInfo *info) {
     rpd.depthAttachment.texture   = (id<MTLTexture>)depthStencil->view->_priv;
     rpd.stencilAttachment.texture = (id<MTLTexture>)depthStencil->view->_priv;
 
-    switch (depthStencil->depthLoadOp) {
-      case GPU_LOAD_OP_CLEAR:
-        rpd.depthAttachment.loadAction = MTLLoadActionClear;
-        break;
-      case GPU_LOAD_OP_DONT_CARE:
-        rpd.depthAttachment.loadAction = MTLLoadActionDontCare;
-        break;
-      case GPU_LOAD_OP_LOAD:
-      default:
-        rpd.depthAttachment.loadAction = MTLLoadActionLoad;
-        break;
-    }
-
-    switch (depthStencil->depthStoreOp) {
-      case GPU_STORE_OP_DONT_CARE:
-        rpd.depthAttachment.storeAction = MTLStoreActionDontCare;
-        break;
-      case GPU_STORE_OP_STORE:
-      default:
-        rpd.depthAttachment.storeAction = MTLStoreActionStore;
-        break;
-    }
-
-    switch (depthStencil->stencilLoadOp) {
-      case GPU_LOAD_OP_CLEAR:
-        rpd.stencilAttachment.loadAction = MTLLoadActionClear;
-        break;
-      case GPU_LOAD_OP_DONT_CARE:
-        rpd.stencilAttachment.loadAction = MTLLoadActionDontCare;
-        break;
-      case GPU_LOAD_OP_LOAD:
-      default:
-        rpd.stencilAttachment.loadAction = MTLLoadActionLoad;
-        break;
-    }
-
-    switch (depthStencil->stencilStoreOp) {
-      case GPU_STORE_OP_DONT_CARE:
-        rpd.stencilAttachment.storeAction = MTLStoreActionDontCare;
-        break;
-      case GPU_STORE_OP_STORE:
-      default:
-        rpd.stencilAttachment.storeAction = MTLStoreActionStore;
-        break;
-    }
-
+    rpd.depthAttachment.loadAction = mt_loadAction(depthStencil->depthLoadOp);
+    rpd.depthAttachment.storeAction = mt_storeAction(depthStencil->depthStoreOp);
+    rpd.stencilAttachment.loadAction = mt_loadAction(depthStencil->stencilLoadOp);
+    rpd.stencilAttachment.storeAction = mt_storeAction(depthStencil->stencilStoreOp);
     rpd.depthAttachment.clearDepth       = depthStencil->clearDepth;
     rpd.stencilAttachment.clearStencil   = depthStencil->clearStencil;
+    if (rpd4) {
+      if (@available(macOS 26.0, iOS 26.0, *)) {
+        MTL4RenderPassDescriptor *modern = rpd4;
+
+        modern.depthAttachment = rpd.depthAttachment;
+        modern.stencilAttachment = rpd.stencilAttachment;
+      }
+    }
   }
 
-  renderPass = calloc(1, sizeof(*renderPass));
-  if (!renderPass)
-    return NULL;
-  renderPass->_priv = rpd;
+  memset(renderPass, 0, sizeof(*renderPass));
+  renderPass->_priv = nativePass;
   renderPass->label = info->label;
 
   return renderPass;
@@ -135,12 +193,20 @@ mt_beginRenderPass(const GPURenderPassCreateInfo *info) {
 GPU_HIDE
 void
 mt_destroyRenderPass(GPURenderPassDesc *pass) {
-  free(pass);
+  (void)pass;
+}
+
+static MTCopyEncoder *
+mt_copyEncoder(GPUCopyPassEncoder *pass) {
+  return pass ? pass->_priv : NULL;
 }
 
 static id<MTLBlitCommandEncoder>
 mt_nativeCopyEncoder(GPUCopyPassEncoder *pass) {
-  return pass ? (__bridge id<MTLBlitCommandEncoder>)pass->_priv : nil;
+  MTCopyEncoder *native;
+
+  native = mt_copyEncoder(pass);
+  return native ? native->classic : nil;
 }
 
 static id<MTLBuffer>
@@ -214,28 +280,44 @@ mt_textureCopySize(const GPUTextureSubresourceRegion *region, bool texture3D) {
 GPU_HIDE
 GPUCopyPassEncoder*
 mt_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
-  id<MTLBlitCommandEncoder> native;
+  MTCommandBuffer    *commandState;
+  MTCopyEncoder      *native;
   GPUCopyPassEncoder *pass;
 
   if (!cmdb) {
     return NULL;
   }
 
-  native = [mt_classicCommandBuffer(cmdb) blitCommandEncoder];
-  if (!native) {
+  commandState = mt_commandBuffer(cmdb);
+  if (!commandState) {
+    return NULL;
+  }
+  pass = &commandState->copyEncoder;
+  native = &commandState->copyState;
+  memset(pass, 0, sizeof(*pass));
+  memset(native, 0, sizeof(*native));
+
+  if (commandState && commandState->mode == MTCommandMode4) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      native->modern = [commandState->modern computeCommandEncoder];
+      mt_applyPendingBarrier(cmdb, native->modern);
+    }
+  } else {
+    native->classic = [mt_classicCommandBuffer(cmdb) blitCommandEncoder];
+  }
+  if (!native->classic && !native->modern) {
     return NULL;
   }
   if (label) {
-    native.label = [NSString stringWithUTF8String:label];
+    NSString *nativeLabel = [NSString stringWithUTF8String:label];
+
+    native->classic.label = nativeLabel;
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      [(id<MTL4ComputeCommandEncoder>)native->modern setLabel:nativeLabel];
+    }
   }
 
-  pass = calloc(1, sizeof(*pass));
-  if (!pass) {
-    [native endEncoding];
-    return NULL;
-  }
-
-  pass->_priv = (__bridge void *)native;
+  pass->_priv = native;
   return pass;
 }
 
@@ -257,6 +339,18 @@ mt_copyBufferToBuffer(GPUCopyPassEncoder        *pass,
     return;
   }
 
+  if (mt_copyEncoder(pass)->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      mt_useAllocation(pass->_cmdb, srcBuffer);
+      mt_useAllocation(pass->_cmdb, dstBuffer);
+      [mt_copyEncoder(pass)->modern copyFromBuffer:srcBuffer
+                                      sourceOffset:(NSUInteger)region->srcOffset
+                                          toBuffer:dstBuffer
+                                 destinationOffset:(NSUInteger)region->dstOffset
+                                              size:(NSUInteger)region->sizeBytes];
+    }
+    return;
+  }
   [mt_nativeCopyEncoder(pass) copyFromBuffer:srcBuffer
                                 sourceOffset:(NSUInteger)region->srcOffset
                                     toBuffer:dstBuffer
@@ -287,6 +381,37 @@ mt_copyBufferToTexture(GPUCopyPassEncoder               *pass,
   texRegion = &region->texture;
   dstTexture = (id<MTLTexture>)dst->_priv;
   texture3D = dst->dimension == GPU_TEXTURE_DIMENSION_3D;
+  if (mt_copyEncoder(pass)->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      mt_useAllocation(pass->_cmdb, srcBuffer);
+      mt_useAllocation(pass->_cmdb, dstTexture);
+      if (texture3D) {
+        [mt_copyEncoder(pass)->modern copyFromBuffer:srcBuffer
+                                        sourceOffset:(NSUInteger)region->bufferOffset
+                                   sourceBytesPerRow:(NSUInteger)region->bytesPerRow
+                                 sourceBytesPerImage:(NSUInteger)bytesPerImage
+                                          sourceSize:mt_textureCopySize(texRegion, true)
+                                           toTexture:dstTexture
+                                    destinationSlice:0
+                                    destinationLevel:texRegion->texture.mipLevel
+                                   destinationOrigin:mt_textureOrigin(&texRegion->texture, true)];
+      } else {
+        for (uint32_t i = 0; i < texRegion->layerCount; i++) {
+          [mt_copyEncoder(pass)->modern copyFromBuffer:srcBuffer
+                                          sourceOffset:(NSUInteger)(region->bufferOffset +
+                                                                    ((uint64_t)i * bytesPerImage))
+                                     sourceBytesPerRow:(NSUInteger)region->bytesPerRow
+                                   sourceBytesPerImage:(NSUInteger)bytesPerImage
+                                            sourceSize:mt_textureCopySize(texRegion, false)
+                                             toTexture:dstTexture
+                                      destinationSlice:texRegion->texture.baseArrayLayer + i
+                                      destinationLevel:texRegion->texture.mipLevel
+                                     destinationOrigin:mt_textureOrigin(&texRegion->texture, false)];
+        }
+      }
+    }
+    return;
+  }
   if (texture3D) {
     [mt_nativeCopyEncoder(pass) copyFromBuffer:srcBuffer
                                   sourceOffset:(NSUInteger)region->bufferOffset
@@ -337,6 +462,37 @@ mt_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
   texRegion = &region->texture;
   srcTexture = (id<MTLTexture>)src->_priv;
   texture3D = src->dimension == GPU_TEXTURE_DIMENSION_3D;
+  if (mt_copyEncoder(pass)->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      mt_useAllocation(pass->_cmdb, srcTexture);
+      mt_useAllocation(pass->_cmdb, dstBuffer);
+      if (texture3D) {
+        [mt_copyEncoder(pass)->modern copyFromTexture:srcTexture
+                                          sourceSlice:0
+                                          sourceLevel:texRegion->texture.mipLevel
+                                         sourceOrigin:mt_textureOrigin(&texRegion->texture, true)
+                                           sourceSize:mt_textureCopySize(texRegion, true)
+                                             toBuffer:dstBuffer
+                                    destinationOffset:(NSUInteger)region->bufferOffset
+                               destinationBytesPerRow:(NSUInteger)region->bytesPerRow
+                             destinationBytesPerImage:(NSUInteger)bytesPerImage];
+      } else {
+        for (uint32_t i = 0; i < texRegion->layerCount; i++) {
+          [mt_copyEncoder(pass)->modern copyFromTexture:srcTexture
+                                            sourceSlice:texRegion->texture.baseArrayLayer + i
+                                            sourceLevel:texRegion->texture.mipLevel
+                                           sourceOrigin:mt_textureOrigin(&texRegion->texture, false)
+                                             sourceSize:mt_textureCopySize(texRegion, false)
+                                               toBuffer:dstBuffer
+                                      destinationOffset:(NSUInteger)(region->bufferOffset +
+                                                                      ((uint64_t)i * bytesPerImage))
+                                 destinationBytesPerRow:(NSUInteger)region->bytesPerRow
+                               destinationBytesPerImage:(NSUInteger)bytesPerImage];
+        }
+      }
+    }
+    return;
+  }
   if (texture3D) {
     [mt_nativeCopyEncoder(pass) copyFromTexture:srcTexture
                                     sourceSlice:0
@@ -383,6 +539,36 @@ mt_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
   dstTexture = (id<MTLTexture>)dst->_priv;
   texture3D = src->dimension == GPU_TEXTURE_DIMENSION_3D;
   size = MTLSizeMake(region->width, region->height, texture3D ? region->depth : 1u);
+  if (mt_copyEncoder(pass)->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      mt_useAllocation(pass->_cmdb, srcTexture);
+      mt_useAllocation(pass->_cmdb, dstTexture);
+      if (texture3D) {
+        [mt_copyEncoder(pass)->modern copyFromTexture:srcTexture
+                                          sourceSlice:0
+                                          sourceLevel:region->src.mipLevel
+                                         sourceOrigin:mt_textureOrigin(&region->src, true)
+                                           sourceSize:size
+                                            toTexture:dstTexture
+                                     destinationSlice:0
+                                     destinationLevel:region->dst.mipLevel
+                                    destinationOrigin:mt_textureOrigin(&region->dst, true)];
+      } else {
+        for (uint32_t i = 0; i < region->layerCount; i++) {
+          [mt_copyEncoder(pass)->modern copyFromTexture:srcTexture
+                                            sourceSlice:region->src.baseArrayLayer + i
+                                            sourceLevel:region->src.mipLevel
+                                           sourceOrigin:mt_textureOrigin(&region->src, false)
+                                             sourceSize:size
+                                              toTexture:dstTexture
+                                       destinationSlice:region->dst.baseArrayLayer + i
+                                       destinationLevel:region->dst.mipLevel
+                                      destinationOrigin:mt_textureOrigin(&region->dst, false)];
+        }
+      }
+    }
+    return;
+  }
   if (texture3D) {
     [mt_nativeCopyEncoder(pass) copyFromTexture:srcTexture
                                     sourceSlice:0
@@ -412,19 +598,46 @@ mt_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
 GPU_HIDE
 void
 mt_endCopyPass(GPUCopyPassEncoder *pass) {
+  MTCopyEncoder *native;
+
   if (!pass) {
     return;
   }
 
-  [mt_nativeCopyEncoder(pass) endEncoding];
-  free(pass);
+  native = mt_copyEncoder(pass);
+  if (native && native->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      [native->modern endEncoding];
+    }
+  } else {
+    [native->classic endEncoding];
+  }
+  native->classic = nil;
+  native->modern = nil;
 }
 
 GPU_HIDE
 void
 mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
-  GPU__UNUSED(cmdb);
-  GPU__UNUSED(barriers);
+  MTCommandBuffer *native;
+
+  if (!cmdb || !barriers || !mt_commandBufferIsModern(cmdb)) {
+    return;
+  }
+
+  native = mt_commandBuffer(cmdb);
+  native->pendingAfterStages |= mt_stageMask(barriers->srcStages);
+  native->pendingBeforeStages |= mt_stageMask(barriers->dstStages);
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    native->pendingVisibility |= MTL4VisibilityOptionDevice;
+  }
+
+  for (uint32_t i = 0; i < barriers->bufferBarrierCount; i++) {
+    mt_useAllocation(cmdb, (id<MTLBuffer>)barriers->pBufferBarriers[i].buffer->_priv);
+  }
+  for (uint32_t i = 0; i < barriers->textureBarrierCount; i++) {
+    mt_useAllocation(cmdb, (id<MTLTexture>)barriers->pTextureBarriers[i].texture->_priv);
+  }
 }
 
 GPU_HIDE

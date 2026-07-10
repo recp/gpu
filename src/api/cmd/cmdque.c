@@ -38,12 +38,6 @@ struct GPUSemaphore {
   uint64_t initialValue;
 };
 
-typedef struct GPUFenceSubmitCompletion {
-  GPUFence                    *fence;
-  void                        *sender;
-  GPUCommandBufferCompletionFn onComplete;
-} GPUFenceSubmitCompletion;
-
 static void
 gpu_signalFence(GPUFence *fence) {
   if (!fence) {
@@ -80,25 +74,33 @@ gpu_resetFenceInternal(GPUFence *fence) {
 #endif
 }
 
-static void
-gpu_submitFenceComplete(void *sender, GPUCommandBuffer *cmdb) {
-  GPUFenceSubmitCompletion *completion;
+GPU_HIDE
+void
+gpuFinishCommandBuffer(GPUCommandBuffer          *cmdb,
+                       GPUCommandBufferRecycleFn  recycle) {
+  GPUFence *fence;
   GPUCommandBufferCompletionFn onComplete;
-  void *userSender;
+  void *sender;
 
-  completion = sender;
-  if (!completion) {
+  if (!cmdb) {
     return;
   }
 
-  onComplete = completion->onComplete;
-  userSender = completion->sender;
-  gpu_signalFence(completion->fence);
-  free(completion);
+  fence = cmdb->_submitFence;
+  sender = cmdb->_onCompleteSender;
+  onComplete = cmdb->_onComplete;
+  cmdb->_submitFence = NULL;
+  cmdb->_onCompleteSender = NULL;
+  cmdb->_onComplete = NULL;
+
+  if (recycle) {
+    recycle(cmdb);
+  }
 
   if (onComplete) {
-    onComplete(userSender, cmdb);
+    onComplete(sender, cmdb);
   }
+  gpu_signalFence(fence);
 }
 
 #if !defined(_WIN32) && !defined(WIN32)
@@ -225,7 +227,6 @@ GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
                const GPUQueueSubmitInfo * __restrict info) {
   GPUApi *api;
   GPUCommandBuffer *lastCmdb;
-  GPUFenceSubmitCompletion *completion;
 
   if (!cmdq || !info || info->commandBufferCount == 0 || !info->ppCommandBuffers) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -258,22 +259,13 @@ GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
   }
 
   lastCmdb = info->ppCommandBuffers[info->commandBufferCount - 1u];
-  completion = NULL;
   if (info->fence) {
     if (!api->cmdque.commandBufferOnComplete) {
       return GPU_ERROR_UNSUPPORTED;
     }
 
-    completion = calloc(1, sizeof(*completion));
-    if (!completion) {
-      return GPU_ERROR_OUT_OF_MEMORY;
-    }
-
-    completion->fence = info->fence;
-    completion->sender = lastCmdb->_onCompleteSender;
-    completion->onComplete = lastCmdb->_onComplete;
     gpu_resetFenceInternal(info->fence);
-    api->cmdque.commandBufferOnComplete(lastCmdb, completion, gpu_submitFenceComplete);
+    lastCmdb->_submitFence = info->fence;
   }
 
   for (uint32_t i = 0; i < info->commandBufferCount; i++) {

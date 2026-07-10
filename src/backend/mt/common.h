@@ -35,6 +35,7 @@
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
 #import <QuartzCore/CAMetalLayer.h>
+#import <os/lock.h>
 
 typedef CALayer GPUViewLayer;
 
@@ -50,32 +51,115 @@ typedef NSView GPUViewHandle;
 
 @class GPUSwapChainObjc;
 
+typedef enum MTCommandMode {
+  MTCommandModeClassic = 0,
+  MTCommandMode4
+} MTCommandMode;
+
 typedef struct GPUSwapChainMetal {
-  CAMetalLayer *layer;
-  void         *objc;
+  CAMetalLayer  *layer;
+  void          *objc;
+  GPUFrame       frame;
+  GPUTexture     target;
+  GPUTextureView targetView;
+  bool           frameActive;
 } GPUSwapChainMetal;
 
 typedef struct GPUDeviceMT {
   id<MTLDevice>     device;
   GPUCommandQueue **createdQueues;
   uint32_t          nCreatedQueues;
+  MTCommandMode     commandMode;
 } GPUDeviceMT;
 
-typedef struct MTCommandQueue {
-  id<MTLCommandQueue> classic;
-} MTCommandQueue;
+enum {
+  MT_ARGUMENT_BUFFER_COUNT  = 31u,
+  MT_ARGUMENT_TEXTURE_COUNT = 128u,
+  MT_ARGUMENT_SAMPLER_COUNT = 16u,
+  MT_PUSH_CONSTANT_INDEX    = 30u
+};
 
-typedef struct MTCommandBuffer {
-  id<MTLCommandBuffer> classic;
-} MTCommandBuffer;
+typedef struct MTArgumentState {
+  id       table;
+  uint64_t textureMask[2];
+  uint32_t bufferMask;
+  uint16_t samplerMask;
+} MTArgumentState;
+
+typedef struct MTUploadChunk {
+  id<MTLBuffer>          buffer;
+  struct MTUploadChunk  *next;
+  uint64_t               capacity;
+  uint64_t               offset;
+} MTUploadChunk;
+
+typedef struct MTRenderPass {
+  MTLRenderPassDescriptor *classic;
+  id                       modern;
+} MTRenderPass;
 
 typedef struct MTRenderEncoder {
   id<MTLRenderCommandEncoder> classic;
+  id                          modern;
+  MTArgumentState            *vertexArguments;
+  MTArgumentState            *fragmentArguments;
 } MTRenderEncoder;
 
 typedef struct MTComputeEncoder {
   id<MTLComputeCommandEncoder> classic;
+  id                           modern;
+  MTArgumentState             *arguments;
 } MTComputeEncoder;
+
+typedef struct MTCopyEncoder {
+  id<MTLBlitCommandEncoder> classic;
+  id                       modern;
+} MTCopyEncoder;
+
+typedef struct MTCommandBuffer MTCommandBuffer;
+
+typedef struct MTCommandQueue {
+  id<MTLCommandQueue> classic;
+  id                   modern;
+  MTCommandBuffer     *commands;
+  MTCommandBuffer     *freeCommands;
+  os_unfair_lock       poolLock;
+  MTCommandMode        mode;
+} MTCommandQueue;
+
+struct MTCommandBuffer {
+  id<MTLCommandBuffer>   classic;
+  id                     modern;
+  id                     allocator;
+  id                     residency;
+  id<CAMetalDrawable>    drawable;
+  MTCommandQueue        *owner;
+  MTCommandBuffer       *next;
+  MTCommandBuffer       *poolNext;
+  MTUploadChunk         *uploads;
+  MTArgumentState        vertexArguments;
+  MTArgumentState        fragmentArguments;
+  MTArgumentState        computeArguments;
+  GPURenderPassDesc       renderPass;
+  MTRenderPass            renderPassState;
+  GPURenderCommandEncoder renderEncoder;
+  MTRenderEncoder         renderState;
+  GPUComputePassEncoder   computeEncoder;
+  MTComputeEncoder        computeState;
+  GPUCopyPassEncoder      copyEncoder;
+  MTCopyEncoder           copyState;
+  GPUCommandBuffer        commandBuffer;
+  uint64_t                pendingAfterStages;
+  uint64_t                pendingBeforeStages;
+  uint64_t                pendingVisibility;
+  MTCommandMode           mode;
+};
+
+typedef struct MTQuerySet {
+  id<MTLCounterSampleBuffer> classic;
+  id                          modern;
+  MTCommandMode              mode;
+} MTQuerySet;
 
 static inline MTCommandQueue *
 mt_commandQueue(GPUCommandQueue *queue) {
@@ -94,6 +178,72 @@ mt_classicCommandBuffer(GPUCommandBuffer *cmdb) {
   native = mt_commandBuffer(cmdb);
   return native ? native->classic : nil;
 }
+
+static inline id
+mt_modernCommandBuffer(GPUCommandBuffer *cmdb) {
+  MTCommandBuffer *native;
+
+  native = mt_commandBuffer(cmdb);
+  return native ? native->modern : nil;
+}
+
+static inline bool
+mt_commandBufferIsModern(GPUCommandBuffer *cmdb) {
+  MTCommandBuffer *native;
+
+  native = mt_commandBuffer(cmdb);
+  return native && native->mode == MTCommandMode4;
+}
+
+GPU_HIDE
+bool
+mt_prepareArgumentState(GPUCommandBuffer *cmdb,
+                        MTArgumentState  *state,
+                        const char       *label);
+
+GPU_HIDE
+void
+mt_setArgumentBuffer(GPUCommandBuffer *cmdb,
+                     MTArgumentState  *state,
+                     id<MTLBuffer>      buffer,
+                     uint64_t           offset,
+                     uint32_t           index);
+
+GPU_HIDE
+void
+mt_setArgumentTexture(GPUCommandBuffer *cmdb,
+                      MTArgumentState  *state,
+                      id<MTLTexture>     texture,
+                      uint32_t           index);
+
+GPU_HIDE
+void
+mt_setArgumentSampler(MTArgumentState   *state,
+                      id<MTLSamplerState> sampler,
+                      uint32_t            index);
+
+GPU_HIDE
+void
+mt_useAllocation(GPUCommandBuffer *cmdb, id allocation);
+
+GPU_HIDE
+bool
+mt_uploadConstants(GPUCommandBuffer *cmdb,
+                   const void       *data,
+                   uint32_t          sizeBytes,
+                   uint64_t         *outAddress);
+
+GPU_HIDE
+void
+mt_applyPendingBarrier(GPUCommandBuffer *cmdb, id encoder);
+
+GPU_HIDE
+void
+mt_destroyCommandBufferState(MTCommandBuffer *native);
+
+GPU_HIDE
+void
+mt_recycleCommandBuffer(GPUCommandBuffer *cmdb);
 
 #endif
 #endif /* metal_common_h */

@@ -13,9 +13,9 @@ static const char *kComputePipelineMSL =
 static const char *kComputeIndirectMSL =
   "#include <metal_stdlib>\n"
   "using namespace metal;\n"
-  "kernel void api_indirect_cs(device uint *out [[buffer(0)]],\n"
+  "kernel void api_indirect_cs(device atomic_uint *out [[buffer(0)]],\n"
   "                            uint3 gid [[thread_position_in_grid]]) {\n"
-  "  out[gid.x] += gid.x + 1u;\n"
+  "  atomic_fetch_add_explicit(&out[gid.x], gid.x + 1u, memory_order_relaxed);\n"
   "}\n";
 
 typedef enum ComputeReadbackMode {

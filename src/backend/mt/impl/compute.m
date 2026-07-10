@@ -17,20 +17,13 @@
 #include "../common.h"
 #include "../../../api/compute_internal.h"
 
-enum {
-  MT_COMPUTE_PUSH_CONSTANT_BUFFER_INDEX = 30u
-};
-
 typedef struct MTComputePipelineDesc {
   id<MTLFunction> function;
 } MTComputePipelineDesc;
 
-static id<MTLComputeCommandEncoder>
-mt_nativeCCE(GPUComputePassEncoder *enc) {
-  MTComputeEncoder *native;
-
-  native = enc ? enc->_priv : NULL;
-  return native ? native->classic : nil;
+static MTComputeEncoder *
+mt_computeEncoder(GPUComputePassEncoder *enc) {
+  return enc ? enc->_priv : NULL;
 }
 
 static id<MTLBuffer>
@@ -134,32 +127,51 @@ mt_destroyComputePipeline(GPUComputePipeline *pipeline) {
 GPU_HIDE
 GPUComputePassEncoder*
 mt_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
-  id<MTLComputeCommandEncoder> native;
-  MTComputeEncoder *nativeState;
+  MTCommandBuffer       *commandState;
+  MTComputeEncoder      *nativeState;
   GPUComputePassEncoder *enc;
 
   if (!cmdb) {
     return NULL;
   }
 
-  native = [mt_classicCommandBuffer(cmdb) computeCommandEncoder];
-  if (!native) {
+  commandState = mt_commandBuffer(cmdb);
+  if (!commandState) {
+    return NULL;
+  }
+  enc = &commandState->computeEncoder;
+  nativeState = &commandState->computeState;
+  memset(enc, 0, sizeof(*enc));
+  memset(nativeState, 0, sizeof(*nativeState));
+
+  if (commandState && commandState->mode == MTCommandMode4) {
+    if (!mt_prepareArgumentState(cmdb,
+                                 &commandState->computeArguments,
+                                 "gpu-metal4-compute-arguments")) {
+      return NULL;
+    }
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      nativeState->modern = [commandState->modern computeCommandEncoder];
+      mt_applyPendingBarrier(cmdb, nativeState->modern);
+      nativeState->arguments = &commandState->computeArguments;
+      [nativeState->modern setArgumentTable:nativeState->arguments->table];
+    }
+  } else {
+    nativeState->classic = [mt_classicCommandBuffer(cmdb) computeCommandEncoder];
+  }
+
+  if (!nativeState->classic && !nativeState->modern) {
     return NULL;
   }
   if (label) {
-    native.label = [NSString stringWithUTF8String:label];
+    NSString *nativeLabel = [NSString stringWithUTF8String:label];
+
+    nativeState->classic.label = nativeLabel;
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      [(id<MTL4ComputeCommandEncoder>)nativeState->modern setLabel:nativeLabel];
+    }
   }
 
-  enc = calloc(1, sizeof(*enc));
-  nativeState = calloc(1, sizeof(*nativeState));
-  if (!enc || !nativeState) {
-    free(nativeState);
-    free(enc);
-    [native endEncoding];
-    return NULL;
-  }
-
-  nativeState->classic = native;
   enc->_priv = nativeState;
   enc->_workgroupSize[0] = 1u;
   enc->_workgroupSize[1] = 1u;
@@ -171,11 +183,23 @@ GPU_HIDE
 void
 mt_setComputePipelineState(GPUComputePassEncoder *enc,
                            GPUComputePipelineState *state) {
+  MTComputeEncoder *native;
+
   if (!enc || !state || !state->_priv) {
     return;
   }
 
-  [mt_nativeCCE(enc) setComputePipelineState:(id<MTLComputePipelineState>)state->_priv];
+  native = mt_computeEncoder(enc);
+  if (!native) {
+    return;
+  }
+  if (native && native->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      [native->modern setComputePipelineState:(id<MTLComputePipelineState>)state->_priv];
+    }
+  } else {
+    [native->classic setComputePipelineState:(id<MTLComputePipelineState>)state->_priv];
+  }
   enc->_workgroupSize[0] = state->workgroupSize[0] ? state->workgroupSize[0] : 1u;
   enc->_workgroupSize[1] = state->workgroupSize[1] ? state->workgroupSize[1] : 1u;
   enc->_workgroupSize[2] = state->workgroupSize[2] ? state->workgroupSize[2] : 1u;
@@ -187,9 +211,19 @@ mt_computeBuffer(GPUComputePassEncoder *enc,
                  GPUBuffer             *buf,
                  size_t                 off,
                  uint32_t               index) {
-  [mt_nativeCCE(enc) setBuffer:mt_nativeBuffer(buf)
-                        offset:(NSUInteger)off
-                       atIndex:index];
+  MTComputeEncoder *native;
+  id<MTLBuffer>     buffer;
+
+  native = mt_computeEncoder(enc);
+  if (!native) {
+    return;
+  }
+  buffer = mt_nativeBuffer(buf);
+  if (native && native->modern) {
+    mt_setArgumentBuffer(enc->_cmdb, native->arguments, buffer, off, index);
+    return;
+  }
+  [native->classic setBuffer:buffer offset:(NSUInteger)off atIndex:index];
 }
 
 GPU_HIDE
@@ -197,8 +231,19 @@ void
 mt_computeTexture(GPUComputePassEncoder *enc,
                   GPUTextureView        *view,
                   uint32_t               index) {
-  [mt_nativeCCE(enc) setTexture:view ? (id<MTLTexture>)view->_priv : nil
-                        atIndex:index];
+  MTComputeEncoder *native;
+  id<MTLTexture>    texture;
+
+  native = mt_computeEncoder(enc);
+  if (!native) {
+    return;
+  }
+  texture = view ? (id<MTLTexture>)view->_priv : nil;
+  if (native && native->modern) {
+    mt_setArgumentTexture(enc->_cmdb, native->arguments, texture, index);
+    return;
+  }
+  [native->classic setTexture:texture atIndex:index];
 }
 
 GPU_HIDE
@@ -206,8 +251,19 @@ void
 mt_computeSampler(GPUComputePassEncoder *enc,
                   GPUSampler            *sampler,
                   uint32_t               index) {
-  [mt_nativeCCE(enc) setSamplerState:sampler ? (id<MTLSamplerState>)sampler->_priv : nil
-                             atIndex:index];
+  MTComputeEncoder    *native;
+  id<MTLSamplerState>  samplerState;
+
+  native = mt_computeEncoder(enc);
+  if (!native) {
+    return;
+  }
+  samplerState = sampler ? (id<MTLSamplerState>)sampler->_priv : nil;
+  if (native && native->modern) {
+    mt_setArgumentSampler(native->arguments, samplerState, index);
+    return;
+  }
+  [native->classic setSamplerState:samplerState atIndex:index];
 }
 
 GPU_HIDE
@@ -215,13 +271,32 @@ void
 mt_computePushConstants(GPUComputePassEncoder *enc,
                         const void            *data,
                         uint32_t               sizeBytes) {
+  MTComputeEncoder *native;
+
   if (!data || sizeBytes == 0u) {
     return;
   }
 
-  [mt_nativeCCE(enc) setBytes:data
-                       length:(NSUInteger)sizeBytes
-                      atIndex:MT_COMPUTE_PUSH_CONSTANT_BUFFER_INDEX];
+  native = mt_computeEncoder(enc);
+  if (!native) {
+    return;
+  }
+  if (native && native->modern) {
+    uint64_t address;
+
+    if (mt_uploadConstants(enc->_cmdb, data, sizeBytes, &address)) {
+      if (@available(macOS 26.0, iOS 26.0, *)) {
+        [(id<MTL4ArgumentTable>)native->arguments->table
+          setAddress:address
+             atIndex:MT_PUSH_CONSTANT_INDEX];
+      }
+      native->arguments->bufferMask |= 1u << MT_PUSH_CONSTANT_INDEX;
+    }
+    return;
+  }
+  [native->classic setBytes:data
+                     length:(NSUInteger)sizeBytes
+                    atIndex:MT_PUSH_CONSTANT_INDEX];
 }
 
 GPU_HIDE
@@ -230,6 +305,7 @@ mt_dispatch(GPUComputePassEncoder *enc,
             uint32_t               x,
             uint32_t               y,
             uint32_t               z) {
+  MTComputeEncoder *native;
   MTLSize groups;
   MTLSize threads;
 
@@ -237,8 +313,18 @@ mt_dispatch(GPUComputePassEncoder *enc,
   threads = MTLSizeMake(enc->_workgroupSize[0] ? enc->_workgroupSize[0] : 1u,
                         enc->_workgroupSize[1] ? enc->_workgroupSize[1] : 1u,
                         enc->_workgroupSize[2] ? enc->_workgroupSize[2] : 1u);
-  [mt_nativeCCE(enc) dispatchThreadgroups:groups
-                    threadsPerThreadgroup:threads];
+  native = mt_computeEncoder(enc);
+  if (!native) {
+    return;
+  }
+  if (native->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      [native->modern dispatchThreadgroups:groups
+                       threadsPerThreadgroup:threads];
+    }
+    return;
+  }
+  [native->classic dispatchThreadgroups:groups threadsPerThreadgroup:threads];
 }
 
 GPU_HIDE
@@ -246,19 +332,52 @@ void
 mt_dispatchIndirect(GPUComputePassEncoder *enc,
                     GPUBuffer             *argsBuffer,
                     uint64_t               argsOffset) {
-  [mt_nativeCCE(enc) dispatchThreadgroupsWithIndirectBuffer:mt_nativeBuffer(argsBuffer)
-                                               indirectBufferOffset:(NSUInteger)argsOffset
-                                             threadsPerThreadgroup:MTLSizeMake(enc->_workgroupSize[0] ? enc->_workgroupSize[0] : 1u,
-                                                                               enc->_workgroupSize[1] ? enc->_workgroupSize[1] : 1u,
-                                                                               enc->_workgroupSize[2] ? enc->_workgroupSize[2] : 1u)];
+  MTComputeEncoder *native;
+  id<MTLBuffer>     args;
+  MTLSize           threads;
+
+  native = mt_computeEncoder(enc);
+  if (!native) {
+    return;
+  }
+  args = mt_nativeBuffer(argsBuffer);
+  threads = MTLSizeMake(enc->_workgroupSize[0] ? enc->_workgroupSize[0] : 1u,
+                        enc->_workgroupSize[1] ? enc->_workgroupSize[1] : 1u,
+                        enc->_workgroupSize[2] ? enc->_workgroupSize[2] : 1u);
+  if (native && native->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      mt_useAllocation(enc->_cmdb, args);
+      [native->modern dispatchThreadgroupsWithIndirectBuffer:args.gpuAddress + argsOffset
+                                       threadsPerThreadgroup:threads];
+    }
+    return;
+  }
+  [native->classic dispatchThreadgroupsWithIndirectBuffer:args
+                                      indirectBufferOffset:(NSUInteger)argsOffset
+                                    threadsPerThreadgroup:threads];
 }
 
 GPU_HIDE
 void
 mt_endComputeEncoding(GPUComputePassEncoder *enc) {
-  [mt_nativeCCE(enc) endEncoding];
-  free(enc->_priv);
-  free(enc);
+  MTComputeEncoder *native;
+
+  if (!enc) {
+    return;
+  }
+  native = mt_computeEncoder(enc);
+  if (!native) {
+    return;
+  }
+  if (native && native->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      [native->modern endEncoding];
+    }
+  } else {
+    [native->classic endEncoding];
+  }
+  native->classic = nil;
+  native->modern = nil;
 }
 
 GPU_HIDE
