@@ -171,6 +171,7 @@ elseif(WIN32)
     src/backend/dx12/impl/sampler.c
     src/backend/dx12/impl/surface.c
     src/backend/dx12/impl/swapchain.c
+    src/backend/dx12/impl/texture.c
   )
   target_link_libraries(gpu PRIVATE d3d12 d3dcompiler dxgi dxguid)
 endif()
@@ -262,6 +263,35 @@ if(GPU_BUILD_SAMPLES AND WIN32)
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
               "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-dx12-usl/triangle.us"
               $<TARGET_FILE_DIR:gpu-triangle-dx12-usl>
+    )
+  endif()
+
+  add_executable(gpu-textured-quad-dx12-usl
+    samples/textured-quad-dx12-usl/main.c
+  )
+  target_link_libraries(gpu-textured-quad-dx12-usl PRIVATE gpu user32)
+  set_target_properties(gpu-textured-quad-dx12-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+
+  foreach(runtime_target us ds)
+    if(TARGET ${runtime_target})
+      add_custom_command(TARGET gpu-textured-quad-dx12-usl POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:${runtime_target}>
+                $<TARGET_FILE_DIR:gpu-textured-quad-dx12-usl>
+      )
+    endif()
+  endforeach()
+
+  if(EXISTS
+     "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-dx12-usl/textured_quad.us")
+    add_custom_command(TARGET gpu-textured-quad-dx12-usl POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-dx12-usl/textured_quad.us"
+              $<TARGET_FILE_DIR:gpu-textured-quad-dx12-usl>
     )
   endif()
 endif()

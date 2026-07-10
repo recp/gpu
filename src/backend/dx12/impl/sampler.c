@@ -134,3 +134,128 @@ dx12_fillStaticSamplerDescFromUSL(const GPUUSLStaticSamplerDesc *uslDesc,
   outDesc->ShaderVisibility = visibility;
   return 1;
 }
+
+static GPUResult
+dx12__createSampler(GPUDevice               *device,
+                    const D3D12_SAMPLER_DESC *desc,
+                    GPUSampler             **outSampler) {
+  GPUSampler     *sampler;
+  GPUSamplerDX12 *native;
+
+  if (!device || !device->_priv || !desc || !outSampler) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outSampler = NULL;
+  sampler = calloc(1, sizeof(*sampler) + sizeof(*native));
+  if (!sampler) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  native         = (GPUSamplerDX12 *)(sampler + 1);
+  native->device = device->_priv;
+  native->desc   = *desc;
+  sampler->_priv = native;
+  *outSampler    = sampler;
+  return GPU_OK;
+}
+
+static D3D12_TEXTURE_ADDRESS_MODE
+dx12__addressMode(GPUAddressMode mode) {
+  static const D3D12_TEXTURE_ADDRESS_MODE modes[] = {
+    [GPU_ADDRESS_MODE_REPEAT]          = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+    [GPU_ADDRESS_MODE_MIRRORED_REPEAT] = D3D12_TEXTURE_ADDRESS_MODE_MIRROR,
+    [GPU_ADDRESS_MODE_CLAMP_TO_EDGE]   = D3D12_TEXTURE_ADDRESS_MODE_CLAMP
+  };
+
+  return (uint32_t)mode < GPU_ARRAY_LEN(modes) && modes[mode] != 0
+           ? modes[mode]
+           : D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+}
+
+GPU_HIDE
+GPUResult
+dx12_createSampler(GPUApi                    * __restrict api,
+                   GPUDevice                 * __restrict device,
+                   const GPUSamplerCreateInfo *info,
+                   bool                       staticIfSupported,
+                   GPUSampler               **outSampler) {
+  GPUUSLStaticSamplerDesc uslDesc = {0};
+  D3D12_SAMPLER_DESC      desc = {0};
+
+  GPU__UNUSED(api);
+  GPU__UNUSED(staticIfSupported);
+  if (!info) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  uslDesc.minFilter = info->desc.minFilter == GPU_FILTER_LINEAR
+                        ? GPUUSLSamplerFilterLinear
+                        : GPUUSLSamplerFilterNearest;
+  uslDesc.magFilter = info->desc.magFilter == GPU_FILTER_LINEAR
+                        ? GPUUSLSamplerFilterLinear
+                        : GPUUSLSamplerFilterNearest;
+  uslDesc.mipFilter = info->desc.mipFilter == GPU_MIP_FILTER_LINEAR
+                        ? GPUUSLSamplerFilterLinear
+                        : GPUUSLSamplerFilterNearest;
+  uslDesc.maxAnisotropy = 1u;
+
+  desc.Filter         = dx12_uslSamplerFilter(&uslDesc);
+  desc.AddressU       = dx12__addressMode(info->desc.addressU);
+  desc.AddressV       = dx12__addressMode(info->desc.addressV);
+  desc.AddressW       = dx12__addressMode(info->desc.addressW);
+  desc.MaxAnisotropy  = 1u;
+  desc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+  desc.MaxLOD         = D3D12_FLOAT32_MAX;
+  return dx12__createSampler(device, &desc, outSampler);
+}
+
+GPU_HIDE
+GPUResult
+dx12_createSamplerFromUSL(GPUApi                        * __restrict api,
+                          GPUDevice                     * __restrict device,
+                          const GPUUSLStaticSamplerDesc *uslDesc,
+                          bool                           staticIfSupported,
+                          GPUSampler                   **outSampler) {
+  D3D12_SAMPLER_DESC desc = {0};
+  D3D12_TEXTURE_ADDRESS_MODE addressMode;
+
+  GPU__UNUSED(api);
+  GPU__UNUSED(staticIfSupported);
+  if (!GPUUSLStaticSamplerDescIsValid(uslDesc)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (uslDesc->coordSpace == GPUUSLSamplerCoordPixel) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  addressMode = dx12_uslSamplerAddressMode(uslDesc->addressMode);
+  desc.Filter         = dx12_uslSamplerFilter(uslDesc);
+  desc.AddressU       = addressMode;
+  desc.AddressV       = addressMode;
+  desc.AddressW       = addressMode;
+  desc.MaxAnisotropy  = uslDesc->maxAnisotropy > 1u
+                          ? (uslDesc->maxAnisotropy > 16u
+                               ? 16u
+                               : uslDesc->maxAnisotropy)
+                          : 1u;
+  desc.ComparisonFunc = uslDesc->hasCompare
+                          ? dx12_uslSamplerCompareFunc(uslDesc->compareFunc)
+                          : D3D12_COMPARISON_FUNC_NEVER;
+  desc.MaxLOD         = D3D12_FLOAT32_MAX;
+  return dx12__createSampler(device, &desc, outSampler);
+}
+
+GPU_HIDE
+void
+dx12_destroySampler(GPUSampler * __restrict sampler) {
+  free(sampler);
+}
+
+GPU_HIDE
+void
+dx12_initSampler(GPUApiSampler *api) {
+  api->createSampler                     = dx12_createSampler;
+  api->createSamplerFromUSLStaticSampler = dx12_createSamplerFromUSL;
+  api->destroySampler                    = dx12_destroySampler;
+}

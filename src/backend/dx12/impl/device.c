@@ -321,6 +321,7 @@ dx12_createDevice(GPUPhysicalDevice        * __restrict phyDevice,
     goto err;
   }
   dx12_queryDeviceCapabilities(deviceDX12);
+  InitializeSRWLock(&deviceDX12->descriptorLock);
 
   device->inst      = inst;
   device->_priv     = deviceDX12;
@@ -364,6 +365,7 @@ err:
       free(deviceDX12->createdQueues);
     }
     if (deviceDX12->d3dDevice) {
+      dx12_destroyDescriptorHeaps(deviceDX12);
       deviceDX12->d3dDevice->lpVtbl->Release(deviceDX12->d3dDevice);
     }
     if (deviceDX12->dxcModule) {
@@ -408,6 +410,7 @@ dx12_destroyDevice(GPUDevice * __restrict device) {
       free(deviceDX12->createdQueues);
     }
     if (deviceDX12->d3dDevice) {
+      dx12_destroyDescriptorHeaps(deviceDX12);
       deviceDX12->d3dDevice->lpVtbl->Release(deviceDX12->d3dDevice);
     }
     if (deviceDX12->dxcModule) {

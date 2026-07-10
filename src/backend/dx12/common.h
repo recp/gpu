@@ -27,6 +27,7 @@
 #include "../../api/instance_internal.h"
 #include "../../api/library_internal.h"
 #include "../../api/render/pipeline_internal.h"
+#include "../../api/sampler_internal.h"
 #include "../../api/surface_internal.h"
 #include "../../api/swapchain_internal.h"
 #include "../../api/texture_internal.h"
@@ -44,10 +45,20 @@ typedef struct GPUPhysicalDeviceDX12 {
   bool               isWarp;
 } GPUPhysicalDeviceDX12;
 
+typedef struct GPUDescriptorHeapDX12 {
+  ID3D12DescriptorHeap *heap;
+  uint64_t             *used;
+  uint32_t              descriptorSize;
+  uint32_t              capacity;
+} GPUDescriptorHeapDX12;
+
 typedef struct GPUDeviceDX12 {
   ID3D12Device              *d3dDevice;
   GPUCommandQueue          **createdQueues;
   HMODULE                    dxcModule;
+  GPUDescriptorHeapDX12      resourceDescriptors;
+  GPUDescriptorHeapDX12      samplerDescriptors;
+  SRWLOCK                    descriptorLock;
   D3D_ROOT_SIGNATURE_VERSION rootSignatureVersion;
   D3D_SHADER_MODEL           shaderModel;
   uint32_t                   nCreatedQueues;
@@ -71,19 +82,43 @@ typedef struct GPURootBindingDX12 {
   GPUBindingType      bindingType;
 } GPURootBindingDX12;
 
+typedef struct GPUDescriptorTableDX12 {
+  uint32_t            rootParameter;
+  uint32_t            descriptorCount;
+  uint32_t            rangeOffset;
+  GPUShaderStageFlags visibility;
+} GPUDescriptorTableDX12;
+
 typedef struct GPUPipelineLayoutDX12 {
   ID3D12RootSignature *rootSignature;
   GPURootBindingDX12  *bindings;
   uint32_t             bindingCount;
+  uint32_t             rangeCount;
+  uint32_t             rootParameterCount;
   uint32_t             groupCount;
   uint32_t             groupOffsets[GPU_ENCODER_MAX_BIND_GROUPS + 1u];
+  GPUDescriptorTableDX12 resourceTables[GPU_ENCODER_MAX_BIND_GROUPS];
+  GPUDescriptorTableDX12 samplerTables[GPU_ENCODER_MAX_BIND_GROUPS];
 } GPUPipelineLayoutDX12;
+
+typedef struct GPUBindGroupDX12 {
+  GPUDeviceDX12 *device;
+  uint32_t       resourceOffset;
+  uint32_t       resourceCount;
+  uint32_t       samplerOffset;
+  uint32_t       samplerCount;
+} GPUBindGroupDX12;
 
 typedef struct GPUBufferDX12 {
   ID3D12Resource            *resource;
   void                      *mapped;
   D3D12_GPU_VIRTUAL_ADDRESS  gpuAddress;
 } GPUBufferDX12;
+
+typedef struct GPUTextureDX12 {
+  ID3D12Resource        *resource;
+  D3D12_RESOURCE_STATES  state;
+} GPUTextureDX12;
 
 typedef struct GPURenderPipelineDX12 {
   ID3D12PipelineState       *pipelineState;
@@ -95,8 +130,10 @@ typedef struct GPUTextureViewDX12 {
   ID3D12Resource             *resource;
   D3D12_RESOURCE_STATES      *state;
   D3D12_CPU_DESCRIPTOR_HANDLE rtv;
+  D3D12_SHADER_RESOURCE_VIEW_DESC srv;
   uint32_t                    width;
   uint32_t                    height;
+  bool                        hasSrv;
   bool                        swapchain;
 } GPUTextureViewDX12;
 
@@ -114,6 +151,8 @@ typedef struct GPURenderEncoderDX12 {
   ID3D12GraphicsCommandList  *commandList;
   ID3D12GraphicsCommandList7 *commandList7;
   ID3D12RootSignature        *rootSignature;
+  ID3D12DescriptorHeap       *resourceHeap;
+  ID3D12DescriptorHeap       *samplerHeap;
   GPURenderPassDX12          *renderPass;
 } GPURenderEncoderDX12;
 
@@ -158,7 +197,9 @@ typedef struct GPUInstanceDX12 {
 } GPUInstanceDX12;
 
 typedef struct GPUSamplerDX12 {
-  bool isStaticSampler;
+  GPUDeviceDX12      *device;
+  D3D12_SAMPLER_DESC  desc;
+  bool                isStaticSampler;
 } GPUSamplerDX12;
 
 typedef struct GPUFrameDX12 {
