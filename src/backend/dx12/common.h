@@ -19,6 +19,7 @@
 
 #include "../common.h"
 #include "../../api/adapter_internal.h"
+#include "../../api/buffer_internal.h"
 #include "../../api/cmdqueue_internal.h"
 #include "../../api/descr/descriptor_internal.h"
 #include "../../api/device_internal.h"
@@ -62,9 +63,27 @@ typedef struct GPULibraryDX12 {
   uint64_t sourceSize;
 } GPULibraryDX12;
 
+typedef struct GPURootBindingDX12 {
+  uint32_t            groupIndex;
+  uint32_t            binding;
+  uint32_t            rootParameter;
+  GPUShaderStageFlags visibility;
+  GPUBindingType      bindingType;
+} GPURootBindingDX12;
+
 typedef struct GPUPipelineLayoutDX12 {
   ID3D12RootSignature *rootSignature;
+  GPURootBindingDX12  *bindings;
+  uint32_t             bindingCount;
+  uint32_t             groupCount;
+  uint32_t             groupOffsets[GPU_ENCODER_MAX_BIND_GROUPS + 1u];
 } GPUPipelineLayoutDX12;
+
+typedef struct GPUBufferDX12 {
+  ID3D12Resource            *resource;
+  void                      *mapped;
+  D3D12_GPU_VIRTUAL_ADDRESS  gpuAddress;
+} GPUBufferDX12;
 
 typedef struct GPURenderPipelineDX12 {
   ID3D12PipelineState       *pipelineState;
@@ -94,6 +113,7 @@ typedef struct GPURenderPassDX12 {
 typedef struct GPURenderEncoderDX12 {
   ID3D12GraphicsCommandList  *commandList;
   ID3D12GraphicsCommandList7 *commandList7;
+  ID3D12RootSignature        *rootSignature;
   GPURenderPassDX12          *renderPass;
 } GPURenderEncoderDX12;
 

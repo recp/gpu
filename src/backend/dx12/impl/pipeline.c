@@ -508,9 +508,11 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   HRESULT                        result;
 
   if (!device || !device->_priv || !info || !info->library ||
-      !info->layout || !pipeline || requiredBindGroupMask != 0u) {
+      !info->layout || !pipeline) {
     return GPU_ERROR_UNSUPPORTED;
   }
+
+  GPU__UNUSED(requiredBindGroupMask);
 
   elements     = NULL;
   elementCount = 0u;

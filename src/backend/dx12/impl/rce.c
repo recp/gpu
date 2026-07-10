@@ -170,6 +170,7 @@ dx12_setRenderPipelineState(GPURenderCommandEncoder *encoder,
                                                  pipeline->pipelineState);
   native->commandList->lpVtbl->IASetPrimitiveTopology(native->commandList,
                                                        pipeline->topology);
+  native->rootSignature = pipeline->rootSignature;
 }
 
 GPU_HIDE

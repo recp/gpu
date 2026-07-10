@@ -157,6 +157,7 @@ if(APPLE)
 elseif(WIN32)
   target_sources(gpu PRIVATE
     src/backend/dx12/init.c
+    src/backend/dx12/impl/buffer.c
     src/backend/dx12/impl/cmdque.c
     src/backend/dx12/impl/descr/descpool.c
     src/backend/dx12/impl/device.c

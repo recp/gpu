@@ -32,7 +32,7 @@ GPU_HIDE void dx12_initLibrary(GPUApiLibrary *api);
 GPU_HIDE void dx12_initRenderPipeline(GPUApiRender *api);
 GPU_HIDE void dx12_initRenderPass(GPUApiRenderPass *api);
 GPU_HIDE void dx12_initRCE(GPUApiRCE *api);
-// GPU_HIDE void dx12_initBuff(GPUApiBuffer* api);
+GPU_HIDE void dx12_initBuff(GPUApiBuffer *api);
 // GPU_HIDE void dx12_initPass(GPUApiRenderPass* api);
 // GPU_HIDE void dx12_initDepthStencil(GPUApiDepthStencil* api);
 // GPU_HIDE void dx12_initVertex(GPUApiVertex* api);

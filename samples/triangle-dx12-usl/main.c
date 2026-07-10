@@ -7,6 +7,10 @@
 #include <stdlib.h>
 #include <wchar.h>
 
+typedef struct FragmentUniforms {
+  float tint[4];
+} FragmentUniforms;
+
 typedef struct TriangleApp {
   GPUInstance       *instance;
   GPUAdapter        *adapter;
@@ -16,6 +20,8 @@ typedef struct TriangleApp {
   GPUSwapchain      *swapchain;
   GPUShaderLibrary  *library;
   GPUShaderLayout   *shaderLayout;
+  GPUBuffer         *uniformBuffer;
+  GPUBindGroup      *bindGroup;
   GPURenderPipeline *pipeline;
   HWND               window;
   uint32_t           width;
@@ -122,13 +128,20 @@ triangle_createWindow(TriangleApp *app, HINSTANCE instance) {
 
 static bool
 triangle_createGPU(TriangleApp *app) {
-  GPUInstanceCreateInfo       instanceInfo = {0};
-  GPUColorTargetState         colorTarget = {0};
-  GPURenderPipelineCreateInfo pipelineInfo = {0};
-  GPUResult                   result;
-  void                       *artifact;
-  uint64_t                    artifactSize;
-  uint32_t                    adapterCount;
+  GPUInstanceCreateInfo          instanceInfo = {0};
+  GPUBindGroupLayout            *groupLayout;
+  const GPUBindGroupLayoutEntry *layoutEntries;
+  GPUBufferCreateInfo            bufferInfo = {0};
+  GPUBindGroupEntry              groupEntry = {0};
+  GPUBindGroupCreateInfo         groupInfo = {0};
+  GPUColorTargetState            colorTarget = {0};
+  GPURenderPipelineCreateInfo    pipelineInfo = {0};
+  FragmentUniforms               uniforms = {{0.15f, 0.78f, 0.34f, 1.0f}};
+  GPUResult                      result;
+  void                          *artifact;
+  uint64_t                       artifactSize;
+  uint32_t                       adapterCount;
+  uint32_t                       layoutEntryCount;
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
@@ -194,9 +207,59 @@ triangle_createGPU(TriangleApp *app) {
   if (GPUCreateShaderLayout(app->device,
                             app->library,
                             &app->shaderLayout) != GPU_OK ||
-      !app->shaderLayout || app->shaderLayout->bindGroupLayoutCount != 0u ||
+      !app->shaderLayout || app->shaderLayout->bindGroupLayoutCount != 1u ||
       !app->shaderLayout->pipelineLayout) {
-    triangle_log("zero-resource shader layout creation failed");
+    triangle_log("shader layout creation failed");
+    return false;
+  }
+
+  groupLayout = app->shaderLayout->bindGroupLayouts[0];
+  layoutEntries = GPUGetBindGroupLayoutEntries(groupLayout,
+                                                &layoutEntryCount);
+  if (!layoutEntries || layoutEntryCount != 1u ||
+      layoutEntries[0].binding != 0u ||
+      layoutEntries[0].bindingType != GPU_BINDING_UNIFORM_BUFFER ||
+      layoutEntries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
+      layoutEntries[0].arrayCount != 1u ||
+      layoutEntries[0].hasDynamicOffset) {
+    triangle_log("unexpected shader reflection layout");
+    return false;
+  }
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "triangle-dx12-uniforms";
+  bufferInfo.sizeBytes        = sizeof(uniforms);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM |
+                                GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(app->device,
+                      &bufferInfo,
+                      &app->uniformBuffer) != GPU_OK ||
+      !app->uniformBuffer ||
+      GPUQueueWriteBuffer(app->queue,
+                          app->uniformBuffer,
+                          0u,
+                          &uniforms,
+                          sizeof(uniforms)) != GPU_OK) {
+    triangle_log("uniform buffer creation failed");
+    return false;
+  }
+
+  groupEntry.binding       = 0u;
+  groupEntry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
+  groupEntry.buffer.buffer = app->uniformBuffer;
+  groupEntry.buffer.size   = sizeof(uniforms);
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.label            = "triangle-dx12-group0";
+  groupInfo.layout           = groupLayout;
+  groupInfo.entryCount       = 1u;
+  groupInfo.pEntries         = &groupEntry;
+  if (GPUCreateBindGroup(app->device,
+                         &groupInfo,
+                         &app->bindGroup) != GPU_OK ||
+      !app->bindGroup) {
+    triangle_log("bind group creation failed");
     return false;
   }
 
@@ -269,6 +332,7 @@ triangle_render(TriangleApp *app) {
   }
 
   GPUBindRenderPipeline(pass, app->pipeline);
+  GPUBindRenderGroup(pass, 0u, app->bindGroup, 0u, NULL);
   GPUDraw(pass, 3u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
   if (GPUFinishFrame(app->queue, cmdb, frame) != GPU_OK) {
@@ -286,6 +350,8 @@ triangle_render(TriangleApp *app) {
 static void
 triangle_destroyGPU(TriangleApp *app) {
   GPUDestroyRenderPipeline(app->pipeline);
+  GPUDestroyBindGroup(app->bindGroup);
+  GPUDestroyBuffer(app->uniformBuffer);
   GPUDestroyShaderLayout(app->shaderLayout);
   GPUDestroyShaderLibrary(app->library);
   GPUDestroySwapchain(app->swapchain);

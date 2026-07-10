@@ -33,7 +33,7 @@ backend_dx12(void) {
     dx12_initRCE(&dx12.rce);
     dx12_initCmdbuf(&dx12.cmdbuf);
     dx12_initCmdQue(&dx12.cmdque);
-    // dx12_initBuff(&dx12.buf);
+    dx12_initBuff(&dx12.buf);
     // dx12_initDepthStencil(&dx12.depthStencil);
     // dx12_initVertex(&dx12.vertex);
     dx12_initLibrary(&dx12.library);
