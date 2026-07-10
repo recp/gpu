@@ -55,6 +55,49 @@ dx12_adapterType(const GPUPhysicalDeviceDX12 *phyDeviceDX12) {
   return GPU_ADAPTER_TYPE_INTEGRATED;
 }
 
+static void
+dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
+  D3D12_FEATURE_DATA_ROOT_SIGNATURE rootSignature = {0};
+  D3D12_FEATURE_DATA_SHADER_MODEL   shaderModel = {0};
+  D3D12_FEATURE_DATA_D3D12_OPTIONS12 options12 = {0};
+
+  if (!device || !device->d3dDevice) {
+    return;
+  }
+
+  rootSignature.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_1;
+  if (FAILED(device->d3dDevice->lpVtbl->CheckFeatureSupport(
+        device->d3dDevice,
+        D3D12_FEATURE_ROOT_SIGNATURE,
+        &rootSignature,
+        sizeof(rootSignature)))) {
+    rootSignature.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
+  }
+  device->rootSignatureVersion = rootSignature.HighestVersion;
+
+  shaderModel.HighestShaderModel = D3D_SHADER_MODEL_6_0;
+  if (FAILED(device->d3dDevice->lpVtbl->CheckFeatureSupport(
+        device->d3dDevice,
+        D3D12_FEATURE_SHADER_MODEL,
+        &shaderModel,
+        sizeof(shaderModel)))) {
+    shaderModel.HighestShaderModel = D3D_SHADER_MODEL_5_1;
+  }
+  device->shaderModel = shaderModel.HighestShaderModel;
+
+  if (SUCCEEDED(device->d3dDevice->lpVtbl->CheckFeatureSupport(
+        device->d3dDevice,
+        D3D12_FEATURE_D3D12_OPTIONS12,
+        &options12,
+        sizeof(options12)))) {
+    device->enhancedBarriers = options12.EnhancedBarriersSupported != FALSE;
+  }
+
+  device->dxcModule    = LoadLibraryW(L"dxcompiler.dll");
+  device->dxcAvailable = device->dxcModule != NULL &&
+                         device->shaderModel >= D3D_SHADER_MODEL_6_0;
+}
+
 GPU_HIDE
 GPUPhysicalDevice *
 dx12_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
@@ -277,6 +320,7 @@ dx12_createDevice(GPUPhysicalDevice        * __restrict phyDevice,
   if (FAILED(hr)) {
     goto err;
   }
+  dx12_queryDeviceCapabilities(deviceDX12);
 
   device->inst      = inst;
   device->_priv     = deviceDX12;
@@ -322,6 +366,9 @@ err:
     if (deviceDX12->d3dDevice) {
       deviceDX12->d3dDevice->lpVtbl->Release(deviceDX12->d3dDevice);
     }
+    if (deviceDX12->dxcModule) {
+      FreeLibrary(deviceDX12->dxcModule);
+    }
     free(deviceDX12);
   }
   free(device);
@@ -362,6 +409,9 @@ dx12_destroyDevice(GPUDevice * __restrict device) {
     }
     if (deviceDX12->d3dDevice) {
       deviceDX12->d3dDevice->lpVtbl->Release(deviceDX12->d3dDevice);
+    }
+    if (deviceDX12->dxcModule) {
+      FreeLibrary(deviceDX12->dxcModule);
     }
     free(deviceDX12);
   }

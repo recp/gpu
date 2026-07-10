@@ -122,12 +122,22 @@ gpu_uslDefaultVulkanTarget(USLTargetSpec *outTarget) {
 }
 
 static int
+gpu_uslDefaultDX12Target(USLTargetSpec *outTarget) {
+  return outTarget &&
+         us_target_init(outTarget,
+                        USL_BACKEND_HLSL,
+                        USL_TARGET_PROFILE_HLSL_SM_5_1) == USLOk;
+}
+
+static int
 gpu_uslDefaultTarget(GPUBackend backend, USLTargetSpec *outTarget) {
   switch (backend) {
     case GPU_BACKEND_METAL:
       return gpu_uslDefaultMetalTarget(outTarget);
     case GPU_BACKEND_VULKAN:
       return gpu_uslDefaultVulkanTarget(outTarget);
+    case GPU_BACKEND_DX12:
+      return gpu_uslDefaultDX12Target(outTarget);
     default:
       return 0;
   }

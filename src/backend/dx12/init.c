@@ -29,14 +29,15 @@ backend_dx12(void) {
   // TODO: init
   if (!dx12.initialized) {
     dx12_initDevice(&dx12.device);
-    // dx12_initRenderPipeline(&dx12.render);
-    // dx12_initRCE(&dx12.rce);
-    // dx12_initCmdBuff(&dx12.cmdbuf);
+    dx12_initRenderPipeline(&dx12.render);
+    dx12_initRCE(&dx12.rce);
+    dx12_initCmdbuf(&dx12.cmdbuf);
     dx12_initCmdQue(&dx12.cmdque);
     // dx12_initBuff(&dx12.buf);
     // dx12_initDepthStencil(&dx12.depthStencil);
     // dx12_initVertex(&dx12.vertex);
-    // dx12_initLibrary(&dx12.library);
+    dx12_initLibrary(&dx12.library);
+    dx12_initRenderPass(&dx12.renderPass);
     dx12_initSwapChain(&dx12.swapchain);
     dx12_initFrame(&dx12.frame);
     dx12_initDescriptor(&dx12.descriptor);

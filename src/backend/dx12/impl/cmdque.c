@@ -305,6 +305,9 @@ dx12_destroyCommandQueue(GPUCommandQueue *queue) {
     command = native->commands;
     while (command) {
       next = command->next;
+      if (command->commandList7) {
+        command->commandList7->lpVtbl->Release(command->commandList7);
+      }
       if (command->commandList) {
         command->commandList->lpVtbl->Release(command->commandList);
       }
@@ -323,6 +326,41 @@ dx12_destroyCommandQueue(GPUCommandQueue *queue) {
     free(native);
   }
   free(queue);
+}
+
+GPU_HIDE
+bool
+dx12_waitCommandQueueIdle(GPUCommandQueueDX12 *queue) {
+  HANDLE  event;
+  UINT64  fenceValue;
+  HRESULT result;
+  DWORD   waitResult;
+
+  if (!queue || !queue->commandQueue || !queue->completionFence) {
+    return false;
+  }
+
+  event = CreateEventW(NULL, FALSE, FALSE, NULL);
+  if (!event) {
+    return false;
+  }
+
+  fenceValue = queue->nextFenceValue++;
+  result = queue->commandQueue->lpVtbl->Signal(queue->commandQueue,
+                                                queue->completionFence,
+                                                fenceValue);
+  if (SUCCEEDED(result)) {
+    result = queue->completionFence->lpVtbl->SetEventOnCompletion(
+      queue->completionFence,
+      fenceValue,
+      event
+    );
+  }
+  waitResult = SUCCEEDED(result)
+                 ? WaitForSingleObject(event, INFINITE)
+                 : WAIT_FAILED;
+  CloseHandle(event);
+  return SUCCEEDED(result) && waitResult == WAIT_OBJECT_0;
 }
 
 GPU_HIDE
@@ -401,6 +439,14 @@ dx12__createCommandBufferState(GPUCommandQueue *queue) {
     goto fail;
   }
 
+  if (deviceDX12->enhancedBarriers) {
+    (void)native->commandList->lpVtbl->QueryInterface(
+      native->commandList,
+      &IID_ID3D12GraphicsCommandList7,
+      (void **)&native->commandList7
+    );
+  }
+
   result = native->commandList->lpVtbl->Close(native->commandList);
   if (FAILED(result)) {
     goto fail;
@@ -418,6 +464,9 @@ dx12__createCommandBufferState(GPUCommandQueue *queue) {
   return native;
 
 fail:
+  if (native->commandList7) {
+    native->commandList7->lpVtbl->Release(native->commandList7);
+  }
   if (native->commandList) {
     native->commandList->lpVtbl->Release(native->commandList);
   }
@@ -479,6 +528,11 @@ dx12_newCommandBuffer(GPUCommandQueue  * __restrict queue,
 
   cmdb = &native->commandBuffer;
   memset(cmdb, 0, sizeof(*cmdb));
+  memset(&native->renderPassDesc, 0, sizeof(native->renderPassDesc));
+  memset(&native->renderPass, 0, sizeof(native->renderPass));
+  memset(&native->renderEncoder, 0, sizeof(native->renderEncoder));
+  memset(&native->renderState, 0, sizeof(native->renderState));
+  native->presentSwapchain  = NULL;
   native->pendingNext       = NULL;
   native->fenceValue        = 0u;
   cmdb->_priv               = native;
@@ -506,8 +560,10 @@ void
 dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   GPUCommandBufferDX12 *native;
   GPUCommandQueueDX12  *queue;
+  GPUSwapChainDX12     *swapchain;
   ID3D12CommandList    *commandLists[1];
   HRESULT               result;
+  HRESULT               presentResult;
   UINT64                fenceValue;
 
   native = cmdb ? cmdb->_priv : NULL;
@@ -527,6 +583,19 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   queue->commandQueue->lpVtbl->ExecuteCommandLists(queue->commandQueue,
                                                     1u,
                                                     commandLists);
+
+  swapchain = native->presentSwapchain;
+  if (swapchain && swapchain->swapChain) {
+    presentResult = swapchain->swapChain->lpVtbl->Present(
+      swapchain->swapChain,
+      swapchain->syncInterval,
+      swapchain->presentFlags
+    );
+    if (FAILED(presentResult)) {
+      dx12__logQueueError(queue, "present", presentResult);
+    }
+  }
+  native->presentSwapchain = NULL;
 
   fenceValue = queue->nextFenceValue++;
   result = queue->commandQueue->lpVtbl->Signal(queue->commandQueue,

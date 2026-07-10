@@ -15,245 +15,353 @@
  */
 
 #include "../common.h"
-//
-//HRESULT createSwapChain(ID3D12Device* device, IDXGISwapChain3** swapChain, HWND hwnd, UINT width, UINT height, UINT bufferCount) {
-//    HRESULT hr;
-//
-//    // Create DXGI factory
-//    IDXGIFactory4* dxgiFactory;
-//    hr = CreateDXGIFactory2(0, &IID_IDXGIFactory4, (void**)&dxgiFactory);
-//    if (FAILED(hr)) {
-//        return hr;
-//    }
-//
-//    // Create swap chain description
-//    DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
-//    swapChainDesc.Width = width;
-//    swapChainDesc.Height = height;
-//    swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-//    swapChainDesc.Stereo = FALSE;
-//    swapChainDesc.SampleDesc.Count = 1;
-//    swapChainDesc.SampleDesc.Quality = 0;
-//    swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-//    swapChainDesc.BufferCount = bufferCount;
-//    swapChainDesc.Scaling = DXGI_SCALING_STRETCH;
-//    swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-//    swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
-//    swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
-//
-//    // Create swap chain
-//    switch (surfaceType) {
-//        case GPU_SURFACE_WINDOWS_CORE_WINDOW:
-//            hr = dxgiFactory->CreateSwapChainForCoreWindow((IUnknown*)commandQueue, hwnd, &swapChainDesc, NULL, swapChain);
-//            break;
-//        case GPU_SURFACE_WINDOWS_HWND:
-//            hr = dxgiFactory->CreateSwapChainForHwnd((IUnknown*)commandQueue, hwnd, &swapChainDesc, NULL, NULL, swapChain);
-//            dxgiFactory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
-//            break;
-//        default:
-//            // TODO: Handle other surface types
-//            return E_FAIL;
-//    }
-//
-//    // Release DXGI factory
-//    dxgiFactory->Release();
-//
-//    // Query IDXGISwapChain3 interface
-//    IDXGISwapChain1* swapChain1;
-//    hr = (*swapChain)->QueryInterface(&IID_IDXGISwapChain1, (void**)&swapChain1);
-//    if (FAILED(hr)) {
-//        return hr;
-//    }
-//    hr = swapChain1->QueryInterface(&IID_IDXGISwapChain3, (void**)swapChain);
-//    swapChain1->Release();
-//    if (FAILED(hr)) {
-//        return hr;
-//    }
-//
-//    // Create descriptor heap for render target views
-//    D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
-//    rtvHeapDesc.NumDescriptors = bufferCount;
-//    rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-//    rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-//    ID3D12DescriptorHeap* rtvHeap;
-//    hr = device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap));
-//    if (FAILED(hr)) {
-//        return hr;
-//    }
-//
-//    // Create render target views for each back buffer
-//    CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(rtvHeap->GetCPUDescriptorHandleForHeapStart());
-//    UINT rtvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-//    for (UINT i = 0; i < bufferCount; i++) {
-//        ID3D12Resource* backBuffer;
-//        hr = (*swapChain)->GetBuffer(i, IID_PPV_ARGS(&backBuffer));
-//        if (FAILED(hr)) {
-//            return hr;
-//        }
-//        device->CreateRenderTargetView(backBuffer, NULL, rtvHandle);
-//        rtvHandle.Offset(1, rtvDescriptorSize);
-//    }
-//
-//    return S_OK;
-//}
+#include "../impl.h"
+
+static void
+dx12__logSwapchainError(const char *operation, HRESULT result) {
+  fprintf(stderr,
+          "GPU Direct3D 12 swapchain %s failed: 0x%08lx\n",
+          operation,
+          (unsigned long)result);
+}
+
+static void
+dx12__releaseBackBuffers(GPUSwapChainDX12 *swapchain) {
+  if (!swapchain || !swapchain->frames) {
+    return;
+  }
+
+  for (UINT i = 0u; i < swapchain->imageCount; i++) {
+    GPUFrameDX12 *frame;
+
+    frame = &swapchain->frames[i];
+    if (frame->renderTarget) {
+      frame->renderTarget->lpVtbl->Release(frame->renderTarget);
+    }
+    memset(frame, 0, sizeof(*frame));
+  }
+}
+
+static bool
+dx12__createBackBuffers(GPUDevice          *device,
+                        GPUSwapChainDX12   *swapchain,
+                        GPUFormat           format,
+                        uint32_t            width,
+                        uint32_t            height) {
+  GPUDeviceDX12              *deviceDX12;
+  D3D12_CPU_DESCRIPTOR_HANDLE rtv;
+  HRESULT                     result;
+
+  if (!device || !device->_priv || !swapchain || !swapchain->swapChain ||
+      !swapchain->rtvHeap || !swapchain->frames || width == 0u || height == 0u) {
+    return false;
+  }
+
+  deviceDX12 = device->_priv;
+  (void)swapchain->rtvHeap->lpVtbl->GetCPUDescriptorHandleForHeapStart(
+    swapchain->rtvHeap,
+    &rtv
+  );
+
+  for (UINT i = 0u; i < swapchain->imageCount; i++) {
+    GPUFrameDX12 *frame;
+
+    frame = &swapchain->frames[i];
+    result = swapchain->swapChain->lpVtbl->GetBuffer(
+      swapchain->swapChain,
+      i,
+      &IID_ID3D12Resource,
+      (void **)&frame->renderTarget
+    );
+    if (FAILED(result)) {
+      dx12__logSwapchainError("GetBuffer", result);
+      dx12__releaseBackBuffers(swapchain);
+      return false;
+    }
+
+    deviceDX12->d3dDevice->lpVtbl->CreateRenderTargetView(
+      deviceDX12->d3dDevice,
+      frame->renderTarget,
+      NULL,
+      rtv
+    );
+
+    frame->swapchain           = swapchain;
+    frame->state               = D3D12_RESOURCE_STATE_PRESENT;
+    frame->nativeView.resource = frame->renderTarget;
+    frame->nativeView.state    = &frame->state;
+    frame->nativeView.rtv      = rtv;
+    frame->nativeView.width    = width;
+    frame->nativeView.height   = height;
+    frame->nativeView.swapchain = true;
+
+    frame->target._priv          = &frame->nativeView;
+    frame->target.device         = device;
+    frame->target.format         = format;
+    frame->target.dimension      = GPU_TEXTURE_DIMENSION_2D;
+    frame->target.width          = width;
+    frame->target.height         = height;
+    frame->target.depthOrLayers  = 1u;
+    frame->target.mipLevelCount  = 1u;
+    frame->target.sampleCount    = 1u;
+    frame->target.usage          = GPU_TEXTURE_USAGE_COLOR_TARGET;
+    frame->target._ownsNative    = false;
+
+    frame->targetView._priv           = &frame->nativeView;
+    frame->targetView._texture        = &frame->target;
+    frame->targetView.format          = format;
+    frame->targetView.viewType        = GPU_TEXTURE_VIEW_2D;
+    frame->targetView.baseMipLevel    = 0u;
+    frame->targetView.mipLevelCount   = 1u;
+    frame->targetView.baseArrayLayer  = 0u;
+    frame->targetView.arrayLayerCount = 1u;
+    frame->targetView._ownsNative     = false;
+
+    frame->frame.device     = device;
+    frame->frame._priv      = swapchain;
+    frame->frame.target     = &frame->target;
+    frame->frame.targetView = &frame->targetView;
+    rtv.ptr                += swapchain->rtvDescriptorSize;
+  }
+
+  return true;
+}
+
+static void
+dx12__destroySwapChainState(GPUSwapChainDX12 *swapchain) {
+  if (!swapchain) {
+    return;
+  }
+
+  dx12__releaseBackBuffers(swapchain);
+  if (swapchain->rtvHeap) {
+    swapchain->rtvHeap->lpVtbl->Release(swapchain->rtvHeap);
+  }
+  if (swapchain->swapChain) {
+    swapchain->swapChain->lpVtbl->Release(swapchain->swapChain);
+  }
+  free(swapchain->frames);
+  free(swapchain);
+}
 
 GPU_HIDE
 GPUSwapChain*
-dx12_createSwapChain(GPUApi          * __restrict api,
-                     GPUDevice       * __restrict device,
-                     GPUCommandQueue * __restrict cmdQue,
+dx12_createSwapChain(GPUApi                    * __restrict api,
+                     GPUDevice                 * __restrict device,
+                     GPUCommandQueue           * __restrict queue,
                      const GPUSwapchainCreateInfo * __restrict info) {
-  GPUInstance                *inst;
-  GPUInstanceDX12            *instDX12;
+  GPUInstanceDX12            *instanceDX12;
   GPUDeviceDX12              *deviceDX12;
   GPUCommandQueueDX12        *queueDX12;
-  GPUSwapChain               *swapChain;
-  ID3D12Device               *d3dDevice;
-  ID3D12CommandQueue         *cmdQueDX12;
-  IDXGIFactory4              *dxgiFactory;
-  IDXGISwapChain1            *swapChain1;
-  IDXGISwapChain3            *swapChain3;
-  ID3D12DescriptorHeap       *rtvHeap;
-  GPUSwapChainDX12           *swapChainDX12;
-  GPUFrameDX12               *frame;
-  HRESULT                     hr;
-  DXGI_SWAP_CHAIN_DESC1       swapChainDesc = {0};
-  D3D12_DESCRIPTOR_HEAP_DESC  rtvHeapDesc   = {0};
-  D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle, *p_rtvHandle;
-  UINT                        i, frameIndex;
-  SIZE_T                      rtvDescriptorSize;
-  GPUSurface                 *surface;
-  GPUExtent2D                 size;
+  GPUSwapChainDX12           *native;
+  GPUSwapChain               *swapchain;
+  IDXGISwapChain1            *swapchain1;
+  D3D12_DESCRIPTOR_HEAP_DESC  heapDesc = {0};
+  DXGI_SWAP_CHAIN_DESC1       desc = {0};
+  DXGI_FORMAT                 format;
+  UINT                        imageCount;
+  HRESULT                     result;
 
   GPU__UNUSED(api);
-  if (!device || !cmdQue || !info || !info->surface) {
+
+  if (!device || !device->_priv || !device->inst || !queue || !queue->_priv ||
+      !info || !info->surface || info->width == 0u || info->height == 0u) {
     return NULL;
   }
 
-  surface     = info->surface;
-  size.width  = info->width;
-  size.height = info->height;
-
-  inst       = device->inst;
-  deviceDX12 = device->_priv;
-  instDX12   = inst->_priv;
-
-  swapChainDX12                  = NULL;
-  swapChainDesc.BufferCount      = FrameCount;
-  swapChainDesc.Width            = size.width;
-  swapChainDesc.Height           = size.height;
-  swapChainDesc.Format           = DXGI_FORMAT_R8G8B8A8_UNORM;
-  swapChainDesc.BufferUsage      = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-  swapChainDesc.SwapEffect       = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-  swapChainDesc.SampleDesc.Count = 1;
-
-  d3dDevice   = deviceDX12->d3dDevice;
-  queueDX12   = cmdQue->_priv;
-  cmdQueDX12  = queueDX12 ? queueDX12->commandQueue : NULL;
-  dxgiFactory = instDX12->dxgiFactory;
-  if (!cmdQueDX12) {
+  format = dx12_format(info->format);
+  if (format == DXGI_FORMAT_UNKNOWN) {
     return NULL;
   }
 
-  switch (surface->type) {
-  case GPU_SURFACE_WINDOWS_COREWINDOW:
-    DXCHECK(dxgiFactory->lpVtbl->CreateSwapChainForCoreWindow(dxgiFactory, 
-                                                              (IUnknown *)cmdQueDX12, 
-                                                              surface->_priv, 
-                                                              &swapChainDesc, 
-                                                              NULL, 
-                                                              &swapChain1));
-    break;
-  case GPU_SURFACE_WINDOWS_HWND:
-    DXCHECK(dxgiFactory->lpVtbl->CreateSwapChainForHwnd(dxgiFactory, 
-                                                        (IUnknown *)cmdQueDX12, 
-                                                        surface->_priv, 
-                                                        &swapChainDesc, 
-                                                        NULL, 
-                                                        NULL, 
-                                                        &swapChain1));
-    DXCHECK(dxgiFactory->lpVtbl->MakeWindowAssociation(dxgiFactory, 
-                                                       surface->_priv, 
-                                                       DXGI_MWA_NO_ALT_ENTER));
-    break;
-  default:
-    /* TODO: ? */
+  imageCount = info->imageCount ? info->imageCount : 2u;
+  if (imageCount < 2u || imageCount > 3u) {
     return NULL;
   }
 
-  hr = swapChain1->lpVtbl->QueryInterface(swapChain1, &IID_IDXGISwapChain3, (void**)&swapChain3);
-  swapChain1->lpVtbl->Release(swapChain1);
-
-  swapChainDX12 = calloc(1, sizeof(*swapChainDX12));
-  frameIndex    = swapChain3->lpVtbl->GetCurrentBackBufferIndex(swapChain3);
-
-  // Create Descriptor Heap for Render Target Views
-  rtvHeapDesc.NumDescriptors = FrameCount;
-  rtvHeapDesc.Type           = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-  DXCHECK(d3dDevice->lpVtbl->CreateDescriptorHeap(d3dDevice, 
-                                                  &rtvHeapDesc, 
-                                                  &IID_ID3D12DescriptorHeap, 
-                                                  (void **)&rtvHeap));
-
-  // Create Render Target Views for each back buffer
-  p_rtvHandle       = rtvHeap->lpVtbl->GetCPUDescriptorHandleForHeapStart(rtvHeap, &rtvHandle);
-  rtvDescriptorSize = d3dDevice->lpVtbl->GetDescriptorHandleIncrementSize(d3dDevice, D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-
-  for (i = 0; i < FrameCount; i++) {
-    frame = &swapChainDX12->frames[i];
-    DXCHECK(swapChain3->lpVtbl->GetBuffer(swapChain3, 
-                                          i, 
-                                          &IID_ID3D12Resource, 
-                                          (void **)&frame->renderTarget));
-
-    d3dDevice->lpVtbl->CreateRenderTargetView(d3dDevice, frame->renderTarget, NULL, rtvHandle);
-    rtvHandle.ptr += rtvDescriptorSize;
-
-    DXCHECK(d3dDevice->lpVtbl->CreateCommandAllocator(d3dDevice,
-                                                      D3D12_COMMAND_LIST_TYPE_DIRECT,
-                                                      &IID_ID3D12CommandAllocator,
-                                                      (void **)&(frame->commandAllocator)));
+  instanceDX12 = device->inst->_priv;
+  deviceDX12   = device->_priv;
+  queueDX12    = queue->_priv;
+  if (!instanceDX12 || !instanceDX12->dxgiFactory ||
+      !deviceDX12->d3dDevice || !queueDX12->commandQueue) {
+    return NULL;
   }
 
-  swapChainDX12->swapChain         = swapChain3;
-  swapChainDX12->frameIndex        = frameIndex;
-  swapChainDX12->rtvHeap           = rtvHeap;
-  swapChainDX12->rtvDescriptorSize = rtvDescriptorSize;
+  native    = calloc(1, sizeof(*native));
+  swapchain = calloc(1, sizeof(*swapchain));
+  if (!native || !swapchain) {
+    free(swapchain);
+    free(native);
+    return NULL;
+  }
 
-  swapChain        = calloc(1, sizeof(*swapChain));
-  swapChain->_priv = swapChainDX12;
+  native->frames = calloc(imageCount, sizeof(*native->frames));
+  if (!native->frames) {
+    free(swapchain);
+    free(native);
+    return NULL;
+  }
 
-  return swapChain;
-err:
-  if (swapChainDX12) {
-    for (i = 0; i < FrameCount; i++) {
-      frame = &swapChainDX12->frames[i];
-      if (frame->renderTarget) {
-        frame->renderTarget->lpVtbl->Release(frame->renderTarget);
+  desc.Width              = info->width;
+  desc.Height             = info->height;
+  desc.Format             = format;
+  desc.Stereo             = FALSE;
+  desc.SampleDesc.Count   = 1u;
+  desc.BufferUsage        = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+  desc.BufferCount        = imageCount;
+  desc.Scaling            = DXGI_SCALING_STRETCH;
+  desc.SwapEffect         = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+  desc.AlphaMode          = DXGI_ALPHA_MODE_UNSPECIFIED;
+  desc.Flags              = 0u;
+
+  swapchain1 = NULL;
+  switch (info->surface->type) {
+    case GPU_SURFACE_WINDOWS_HWND:
+      result = instanceDX12->dxgiFactory->lpVtbl->CreateSwapChainForHwnd(
+        instanceDX12->dxgiFactory,
+        (IUnknown *)queueDX12->commandQueue,
+        (HWND)info->surface->_priv,
+        &desc,
+        NULL,
+        NULL,
+        &swapchain1
+      );
+      if (SUCCEEDED(result)) {
+        (void)instanceDX12->dxgiFactory->lpVtbl->MakeWindowAssociation(
+          instanceDX12->dxgiFactory,
+          (HWND)info->surface->_priv,
+          DXGI_MWA_NO_ALT_ENTER
+        );
       }
-
-      if (frame->commandAllocator) {
-        frame->commandAllocator->lpVtbl->Release(frame->commandAllocator);
-      }
-    }
-
-    if (swapChainDX12->rtvHeap) {
-      swapChainDX12->rtvHeap->lpVtbl->Release(swapChainDX12->rtvHeap);
-    }
-
-    if (swapChainDX12->swapChain) {
-      swapChainDX12->swapChain->lpVtbl->Release(swapChainDX12->swapChain);
-    }
-
-    free(swapChainDX12);
+      break;
+    case GPU_SURFACE_WINDOWS_COREWINDOW:
+      result = instanceDX12->dxgiFactory->lpVtbl->CreateSwapChainForCoreWindow(
+        instanceDX12->dxgiFactory,
+        (IUnknown *)queueDX12->commandQueue,
+        (IUnknown *)info->surface->_priv,
+        &desc,
+        NULL,
+        &swapchain1
+      );
+      break;
+    default:
+      result = E_INVALIDARG;
+      break;
+  }
+  if (FAILED(result) || !swapchain1) {
+    dx12__logSwapchainError("create", result);
+    dx12__destroySwapChainState(native);
+    free(swapchain);
+    return NULL;
   }
 
-  dxThrowIfFailed(hr);
-  return NULL;
+  result = swapchain1->lpVtbl->QueryInterface(swapchain1,
+                                              &IID_IDXGISwapChain3,
+                                              (void **)&native->swapChain);
+  swapchain1->lpVtbl->Release(swapchain1);
+  if (FAILED(result) || !native->swapChain) {
+    dx12__logSwapchainError("QueryInterface", result);
+    dx12__destroySwapChainState(native);
+    free(swapchain);
+    return NULL;
+  }
+
+  heapDesc.Type           = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+  heapDesc.NumDescriptors = imageCount;
+  result = deviceDX12->d3dDevice->lpVtbl->CreateDescriptorHeap(
+    deviceDX12->d3dDevice,
+    &heapDesc,
+    &IID_ID3D12DescriptorHeap,
+    (void **)&native->rtvHeap
+  );
+  if (FAILED(result)) {
+    dx12__logSwapchainError("RTV heap", result);
+    dx12__destroySwapChainState(native);
+    free(swapchain);
+    return NULL;
+  }
+
+  native->queue             = queueDX12;
+  native->format            = format;
+  native->imageCount        = imageCount;
+  native->rtvDescriptorSize = deviceDX12->d3dDevice->lpVtbl
+    ->GetDescriptorHandleIncrementSize(deviceDX12->d3dDevice,
+                                       D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+  native->syncInterval = info->presentMode == GPU_PRESENT_MODE_FIFO ? 1u : 0u;
+  native->presentFlags = 0u;
+  native->frameIndex   = native->swapChain->lpVtbl->GetCurrentBackBufferIndex(
+    native->swapChain
+  );
+  if (!dx12__createBackBuffers(device,
+                               native,
+                               info->format,
+                               info->width,
+                               info->height)) {
+    dx12__destroySwapChainState(native);
+    free(swapchain);
+    return NULL;
+  }
+
+  swapchain->_priv = native;
+  return swapchain;
+}
+
+GPU_HIDE
+GPUResult
+dx12_resizeSwapChain(GPUSwapChain *swapchain, GPUExtent2D size) {
+  GPUSwapChainDX12 *native;
+  GPUDevice        *device;
+  GPUFormat         format;
+  HRESULT           result;
+
+  native = swapchain ? swapchain->_priv : NULL;
+  device = swapchain ? swapchain->device : NULL;
+  if (!native || !device || size.width == 0u || size.height == 0u ||
+      native->frameActive || !dx12_waitCommandQueueIdle(native->queue)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  format = native->frames[0].target.format;
+  dx12__releaseBackBuffers(native);
+  result = native->swapChain->lpVtbl->ResizeBuffers(native->swapChain,
+                                                     native->imageCount,
+                                                     size.width,
+                                                     size.height,
+                                                     native->format,
+                                                     0u);
+  if (FAILED(result) ||
+      !dx12__createBackBuffers(device,
+                               native,
+                               format,
+                               size.width,
+                               size.height)) {
+    if (FAILED(result)) {
+      dx12__logSwapchainError("resize", result);
+    }
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  native->frameIndex = native->swapChain->lpVtbl->GetCurrentBackBufferIndex(
+    native->swapChain
+  );
+  return GPU_OK;
 }
 
 GPU_HIDE
 void
-dx12_initSwapChain(GPUApiSwapChain* apiSwapChain) {
-  apiSwapChain->createSwapChain = dx12_createSwapChain;
+dx12_destroySwapChain(GPUSwapChain *swapchain) {
+  if (!swapchain) {
+    return;
+  }
+
+  dx12__destroySwapChainState(swapchain->_priv);
+  free(swapchain);
+}
+
+GPU_HIDE
+void
+dx12_initSwapChain(GPUApiSwapChain *api) {
+  api->createSwapChain  = dx12_createSwapChain;
+  api->resizeSwapChain  = dx12_resizeSwapChain;
+  api->destroySwapChain = dx12_destroySwapChain;
 }

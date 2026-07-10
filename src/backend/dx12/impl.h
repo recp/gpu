@@ -25,6 +25,13 @@ GPU_HIDE void dx12_initCmdQue(GPUApiCommandQueue* api);
 GPU_HIDE GPUCommandQueue *dx12_createCommandQueue(GPUDevice *device,
                                                    GPUQueueFlagBits bits);
 GPU_HIDE void dx12_destroyCommandQueue(GPUCommandQueue *queue);
+GPU_HIDE bool dx12_waitCommandQueueIdle(GPUCommandQueueDX12 *queue);
+GPU_HIDE DXGI_FORMAT dx12_format(GPUFormat format);
+GPU_HIDE void dx12_initCmdbuf(GPUApiCommandBuffer *api);
+GPU_HIDE void dx12_initLibrary(GPUApiLibrary *api);
+GPU_HIDE void dx12_initRenderPipeline(GPUApiRender *api);
+GPU_HIDE void dx12_initRenderPass(GPUApiRenderPass *api);
+GPU_HIDE void dx12_initRCE(GPUApiRCE *api);
 // GPU_HIDE void dx12_initBuff(GPUApiBuffer* api);
 // GPU_HIDE void dx12_initPass(GPUApiRenderPass* api);
 // GPU_HIDE void dx12_initDepthStencil(GPUApiDepthStencil* api);
@@ -33,7 +40,6 @@ GPU_HIDE void dx12_destroyCommandQueue(GPUCommandQueue *queue);
 GPU_HIDE void dx12_initSwapChain(GPUApiSwapChain* apiSwapChain);
 GPU_HIDE void dx12_initFrame(GPUApiFrame *apiFrame);
 GPU_HIDE void dx12_initDescriptor(GPUApiDescriptor *apiDescriptor);
-GPU_HIDE void dx12_initSampler(GPUApiSampler *apiSampler);
 GPU_HIDE void dx12_initInstance(GPUApiInstance *apiInstance);
 GPU_HIDE void dx12_initSurface(GPUApiSurface *apiDevice);
 

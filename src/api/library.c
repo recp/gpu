@@ -820,9 +820,11 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
                                    GPUShaderLibrary **outLibrary);
 
 static GPUResult
-gpu_createShaderLibraryFromMSLText(GPUDevice *device,
-                                   const GPUShaderLibraryCreateInfo *info,
-                                   GPUShaderLibrary **outLibrary) {
+gpu_createShaderLibraryFromBackendText(GPUDevice        *device,
+                                       const void       *sourceData,
+                                       uint64_t          sourceSize,
+                                       uint32_t          defineCount,
+                                       GPUShaderLibrary **outLibrary) {
   GPUApi *api;
   char *source;
 
@@ -830,22 +832,23 @@ gpu_createShaderLibraryFromMSLText(GPUDevice *device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  if (!api->library.newLibraryWithSource || info->defineCount > 0u) {
+  if (!api->library.newLibraryWithSource || defineCount > 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  if (info->sourceSize > (uint64_t)SIZE_MAX - 1u) {
+  if (!sourceData || sourceSize == 0u ||
+      sourceSize > (uint64_t)SIZE_MAX - 1u) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  source = calloc(1, (size_t)info->sourceSize + 1u);
+  source = calloc(1, (size_t)sourceSize + 1u);
   if (!source) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  memcpy(source, info->sourceData, (size_t)info->sourceSize);
-  source[(size_t)info->sourceSize] = '\0';
+  memcpy(source, sourceData, (size_t)sourceSize);
+  source[(size_t)sourceSize] = '\0';
 
-  *outLibrary = api->library.newLibraryWithSource(device, source, info->sourceSize);
+  *outLibrary = api->library.newLibraryWithSource(device, source, sourceSize);
   free(source);
 
   if (*outLibrary) {
@@ -853,6 +856,24 @@ gpu_createShaderLibraryFromMSLText(GPUDevice *device,
   }
 
   return *outLibrary ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+}
+
+static GPUResult
+gpu_createShaderLibraryFromMSLText(GPUDevice *device,
+                                   const GPUShaderLibraryCreateInfo *info,
+                                   GPUShaderLibrary **outLibrary) {
+  GPUApi *api;
+
+  api = gpuDeviceApi(device);
+  if (!api || api->backend != GPU_BACKEND_METAL) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  return gpu_createShaderLibraryFromBackendText(device,
+                                                info->sourceData,
+                                                info->sourceSize,
+                                                info->defineCount,
+                                                outLibrary);
 }
 
 static GPUResult
@@ -924,7 +945,6 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   USCompileInput compileInput;
   USCompileOutput compileOutput;
   GPUResult rc;
-  GPUShaderSourceKind sourceKind;
   uint32_t encoding;
 
   if (!device || !bytecodeData || !outLibrary) {
@@ -941,9 +961,6 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  sourceKind = target.backend == USL_BACKEND_SPIRV
-                 ? GPU_SHADER_SOURCE_SPIRV_BINARY
-                 : GPU_SHADER_SOURCE_MSL_TEXT;
   encoding   = target.backend == USL_BACKEND_SPIRV
                  ? USL_RUNTIME_EMBEDDED_BLOB_ENCODING_BINARY
                  : USL_RUNTIME_EMBEDDED_BLOB_ENCODING_TEXT;
@@ -966,15 +983,23 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  info.label            = api->backend == GPU_BACKEND_VULKAN
-                            ? "usl-vulkan"
-                            : "usl-metal";
-  info.chain.sType      = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
-  info.chain.structSize = sizeof(info);
-  info.sourceKind       = sourceKind;
-  info.sourceData       = compileOutput.backend_data;
-  info.sourceSize       = compileOutput.backend_size;
-  rc = GPUCreateShaderLibrary(device, &info, outLibrary);
+  if (target.backend == USL_BACKEND_SPIRV) {
+    info.chain.sType      = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
+    info.chain.structSize = sizeof(info);
+    info.sourceKind       = GPU_SHADER_SOURCE_SPIRV_BINARY;
+    info.sourceData       = compileOutput.backend_data;
+    info.sourceSize       = compileOutput.backend_size;
+    rc = gpu_createShaderLibraryFromBinary(device, &info, outLibrary);
+  } else if (target.backend == USL_BACKEND_METAL ||
+             target.backend == USL_BACKEND_HLSL) {
+    rc = gpu_createShaderLibraryFromBackendText(device,
+                                                compileOutput.backend_data,
+                                                compileOutput.backend_size,
+                                                0u,
+                                                outLibrary);
+  } else {
+    rc = GPU_ERROR_UNSUPPORTED;
+  }
   if (rc == GPU_OK && outLibrary && *outLibrary) {
     if (!gpu_setShaderLibraryReflection(*outLibrary,
                                          &compileOutput.reflection) ||
