@@ -219,7 +219,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   };
   GPUColorTargetState colorTargets[] = {
     {
-      .format = GPU_FORMAT_BGRA8_UNORM_SRGB,
+      .format = GPU_FORMAT_BGRA8_UNORM,
       .blend = {
         .enabled = false,
         .writeMask = GPU_COLOR_WRITE_ALL
