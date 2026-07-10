@@ -1,6 +1,7 @@
 #include "test.h"
 #include <gpu/api/gpudef.h>
 #include "../../src/api/cmdqueue_internal.h"
+#include "../../src/api/device_internal.h"
 
 static GPUCommandBuffer       *gLastBarrierCmdb;
 static const GPUBarrierBatch *gLastBarrierBatch;
@@ -20,6 +21,7 @@ check_barrier_forwarding(GPUDevice *device) {
   GPUTexture *texture = NULL;
   void (*savedEncodeBarriers)(GPUCommandBuffer *cmdb,
                               const GPUBarrierBatch *barriers);
+  GPUCommandQueue fakeQueue = {0};
   GPUCommandBuffer fakeCmdb = {0};
   GPUBufferCreateInfo bufferInfo = {0};
   GPUTextureCreateInfo textureInfo = {0};
@@ -28,7 +30,7 @@ check_barrier_forwarding(GPUDevice *device) {
   GPUBarrierBatch batch = {0};
   int ok = 0;
 
-  api = gpuActiveGPUApi();
+  api = gpuDeviceApi(device);
   if (!api) {
     fprintf(stderr, "barrier test active api missing\n");
     return 0;
@@ -39,6 +41,8 @@ check_barrier_forwarding(GPUDevice *device) {
   gBarrierForwardCount = 0u;
   gLastBarrierCmdb = NULL;
   gLastBarrierBatch = NULL;
+  fakeQueue._device = device;
+  fakeCmdb._queue   = &fakeQueue;
 
   bufferInfo.chain.sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
@@ -101,6 +105,11 @@ check_barrier_forwarding(GPUDevice *device) {
   batch.srcStages = GPU_STAGE_TRANSFER;
   bufferBarrier.sizeBytes = 0u;
   GPUEncodeBarriers(&fakeCmdb, &batch);
+  bufferBarrier.sizeBytes = 256u;
+  bufferBarrier.offset = 240u;
+  bufferBarrier.sizeBytes = 32u;
+  GPUEncodeBarriers(&fakeCmdb, &batch);
+  bufferBarrier.offset = 0u;
   bufferBarrier.sizeBytes = 256u;
   textureBarrier.mipCount = 0u;
   GPUEncodeBarriers(&fakeCmdb, &batch);

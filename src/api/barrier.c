@@ -15,7 +15,9 @@
  */
 
 #include "../common.h"
+#include "buffer_internal.h"
 #include "cmdqueue_internal.h"
+#include "device_internal.h"
 
 static bool
 gpu_validStageMask(GPUPipelineStageMask stages) {
@@ -45,7 +47,7 @@ gpu_validAccessMask(GPUAccessMask access) {
 }
 
 static bool
-gpu_validBarrierBatch(const GPUBarrierBatch *barriers) {
+gpu_validBarrierBatch(GPUDevice *device, const GPUBarrierBatch *barriers) {
   if (!barriers) {
     return false;
   }
@@ -61,7 +63,10 @@ gpu_validBarrierBatch(const GPUBarrierBatch *barriers) {
   for (uint32_t i = 0; i < barriers->bufferBarrierCount; i++) {
     const GPUBufferBarrier *barrier = &barriers->pBufferBarriers[i];
 
-    if (!barrier->buffer || barrier->sizeBytes == 0u ||
+    if (!barrier->buffer || barrier->buffer->device != device ||
+        !gpuBufferRangeValid(barrier->buffer,
+                             barrier->offset,
+                             barrier->sizeBytes) ||
         !gpu_validAccessMask(barrier->srcAccess) ||
         !gpu_validAccessMask(barrier->dstAccess)) {
       return false;
@@ -84,14 +89,17 @@ gpu_validBarrierBatch(const GPUBarrierBatch *barriers) {
 GPU_EXPORT
 void
 GPUEncodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
-  GPUApi *api;
+  GPUDevice *device;
+  GPUApi    *api;
 
-  if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder ||
-      !gpu_validBarrierBatch(barriers)) {
+  if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder) {
     return;
   }
 
-  if (!(api = gpuActiveGPUApi()) || !api->renderPass.encodeBarriers) {
+  device = cmdb->_queue ? cmdb->_queue->_device : NULL;
+  if (!gpu_validBarrierBatch(device, barriers) ||
+      !(api = gpuDeviceApi(device)) ||
+      !api->renderPass.encodeBarriers) {
     return;
   }
 

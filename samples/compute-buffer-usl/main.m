@@ -9,6 +9,10 @@
 #import "../common/SampleApp.h"
 #import "../common/SampleUSL.h"
 
+#ifndef GPU_SAMPLE_BACKEND
+#  define GPU_SAMPLE_BACKEND GPU_BACKEND_METAL
+#endif
+
 typedef struct GeneratedVertex {
   float position[4];
   float color[4];
@@ -16,27 +20,27 @@ typedef struct GeneratedVertex {
 
 @interface ComputeBufferUSLApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
 @private
-  NSWindow *_window;
-  NSView *_view;
-
-  GPUAdapter *_adapter;
-  GPUDevice *_device;
-  GPUCommandQueue *_queue;
-  GPUSurface *_surface;
-  GPUSwapchain *_swapchain;
-  GPUShaderLibrary *_library;
-  GPUShaderLayout *_shaderLayout;
+  NSWindow           *_window;
+  NSView             *_view;
+  GPUInstance        *_instance;
+  GPUAdapter         *_adapter;
+  GPUDevice          *_device;
+  GPUCommandQueue    *_queue;
+  GPUSurface         *_surface;
+  GPUSwapchain       *_swapchain;
+  GPUShaderLibrary   *_library;
+  GPUShaderLayout    *_shaderLayout;
   GPUComputePipeline *_computePipeline;
-  GPURenderPipeline *_renderPipeline;
-  GPUBuffer *_vertexBuffer;
-  GPUBindGroup *_vertexBindGroup;
-  NSTimer *_timer;
-  NSInteger _exitAfterFrames;
-  NSInteger _submittedFrames;
-  NSInteger _completedFrames;
-  BOOL _validationFailed;
-  BOOL _terminating;
-  BOOL _skipComputeBind;
+  GPURenderPipeline  *_renderPipeline;
+  GPUBuffer          *_vertexBuffer;
+  GPUBindGroup       *_vertexBindGroup;
+  NSTimer            *_timer;
+  NSInteger           _exitAfterFrames;
+  NSInteger           _submittedFrames;
+  NSInteger           _completedFrames;
+  BOOL                _validationFailed;
+  BOOL                _terminating;
+  BOOL                _skipComputeBind;
 }
 - (void)frameCompleted;
 - (BOOL)validationFailed;
@@ -67,13 +71,48 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (BOOL)setupGPU {
-  if (!GPUSampleCreateDefaultSurfaceGPU(_window,
-                                        _view,
-                                        &_adapter,
-                                        &_device,
-                                        &_queue,
-                                        &_surface,
-                                        &_swapchain)) {
+  GPUInstanceCreateInfo instanceInfo = {0};
+  uint32_t              adapterCount;
+
+  instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  instanceInfo.chain.structSize = sizeof(instanceInfo);
+  instanceInfo.preferredBackend = GPU_SAMPLE_BACKEND;
+  instanceInfo.enableValidation = true;
+  if (GPUCreateInstance(&instanceInfo, &_instance) != GPU_OK || !_instance) {
+    NSLog(@"GPU: failed to create instance");
+    return NO;
+  }
+
+  adapterCount = 1u;
+  if (GPUEnumerateAdapters(_instance, &adapterCount, &_adapter) != GPU_OK ||
+      !_adapter) {
+    NSLog(@"GPU: failed to get adapter");
+    return NO;
+  }
+
+  _device = GPUCreateDeviceWithDefaultQueues(_adapter);
+  _queue  = GPUGetQueue(_device, GPU_QUEUE_GRAPHICS, 0u);
+  if (!_device || !_queue) {
+    NSLog(@"GPU: failed to create device or graphics queue");
+    return NO;
+  }
+
+  _surface = GPUCreateSurfaceFromNative(_instance,
+                                        _adapter,
+                                        (__bridge void *)_view,
+                                        GPU_SURFACE_APPLE_NSVIEW,
+                                        _window.backingScaleFactor ?: 1.0f);
+  if (!_surface) {
+    NSLog(@"GPU: failed to create surface");
+    return NO;
+  }
+
+  _swapchain = GPUCreateSwapchainDefault(_device,
+                                         _surface,
+                                         (uint32_t)_view.bounds.size.width,
+                                         (uint32_t)_view.bounds.size.height);
+  if (!_swapchain) {
+    NSLog(@"GPU: failed to create swapchain");
     return NO;
   }
 
@@ -241,7 +280,7 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   if (!_skipComputeBind) {
     GPUBindComputeGroup(compute, 1, _vertexBindGroup, 0, NULL);
   }
-  GPUDispatch(compute, 1, 1, 1);
+  GPUDispatch(compute, 3, 1, 1);
   GPUEndComputePass(compute);
   compute = NULL;
 
@@ -399,6 +438,10 @@ cleanup:
     GPUDestroyDevice(_device);
     _device = NULL;
     _queue = NULL;
+  }
+  if (_instance) {
+    GPUDestroyInstance(_instance);
+    _instance = NULL;
   }
 }
 
