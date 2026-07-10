@@ -47,7 +47,9 @@ check_barrier_forwarding(GPUDevice *device) {
   bufferInfo.chain.sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.sizeBytes = 256u;
-  bufferInfo.usage = GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
+  bufferInfo.usage = GPU_BUFFER_USAGE_STORAGE |
+                     GPU_BUFFER_USAGE_COPY_SRC |
+                     GPU_BUFFER_USAGE_COPY_DST;
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
     fprintf(stderr, "barrier test buffer create failed\n");
     goto done;
@@ -114,6 +116,18 @@ check_barrier_forwarding(GPUDevice *device) {
   textureBarrier.mipCount = 0u;
   GPUEncodeBarriers(&fakeCmdb, &batch);
   textureBarrier.mipCount = 1u;
+  textureBarrier.baseMip = 1u;
+  GPUEncodeBarriers(&fakeCmdb, &batch);
+  textureBarrier.baseMip = 0u;
+  textureBarrier.baseLayer = 1u;
+  GPUEncodeBarriers(&fakeCmdb, &batch);
+  textureBarrier.baseLayer = 0u;
+  textureBarrier.dstAccess = GPU_ACCESS_INDIRECT_READ;
+  GPUEncodeBarriers(&fakeCmdb, &batch);
+  textureBarrier.dstAccess = GPU_ACCESS_SHADER_READ;
+  textureBarrier.srcAccess = GPU_ACCESS_COLOR_WRITE;
+  GPUEncodeBarriers(&fakeCmdb, &batch);
+  textureBarrier.srcAccess = GPU_ACCESS_TRANSFER_WRITE;
 
   if (gBarrierForwardCount != 1u ||
       gLastBarrierCmdb != &fakeCmdb ||

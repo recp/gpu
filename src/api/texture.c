@@ -15,6 +15,8 @@
  */
 
 #include "../common.h"
+#include "cmdqueue_internal.h"
+#include "device_internal.h"
 #include "texture_internal.h"
 
 static bool
@@ -126,7 +128,8 @@ GPUResult
 GPUCreateTexture(GPUDevice                  * __restrict device,
                  const GPUTextureCreateInfo * __restrict info,
                  GPUTexture                ** __restrict outTexture) {
-  GPUApi *api;
+  GPUApi    *api;
+  GPUResult  result;
 
   if (!outTexture) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -151,11 +154,20 @@ GPUCreateTexture(GPUDevice                  * __restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuActiveGPUApi()) || !api->texture.create) {
+  if (!(api = gpuDeviceApi(device)) || !api->texture.create) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  return api->texture.create(device, info, outTexture);
+  result = api->texture.create(device, info, outTexture);
+  if (result != GPU_OK) {
+    return result;
+  }
+  if (!*outTexture) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  (*outTexture)->device = device;
+  return GPU_OK;
 }
 
 GPU_EXPORT
@@ -167,7 +179,7 @@ GPUDestroyTexture(GPUTexture * __restrict texture) {
     return;
   }
 
-  if (!(api = gpuActiveGPUApi()) || !api->texture.destroy) {
+  if (!(api = gpuDeviceApi(texture->device)) || !api->texture.destroy) {
     return;
   }
 
@@ -233,7 +245,7 @@ GPUCreateTextureView(GPUTexture                     * __restrict texture,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuActiveGPUApi()) || !api->texture.createView) {
+  if (!(api = gpuDeviceApi(texture->device)) || !api->texture.createView) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -266,7 +278,9 @@ GPUDestroyTextureView(GPUTextureView * __restrict view) {
     return;
   }
 
-  if (!(api = gpuActiveGPUApi()) || !api->texture.destroyView) {
+  if (!view->_texture ||
+      !(api = gpuDeviceApi(view->_texture->device)) ||
+      !api->texture.destroyView) {
     return;
   }
 
@@ -282,7 +296,8 @@ GPUQueueWriteTexture(GPUCommandQueue             * __restrict queue,
                      uint64_t                                 sizeBytes) {
   GPUApi *api;
 
-  if (!queue || !texture || !region || !data ||
+  if (!queue || !texture || queue->_device != texture->device ||
+      !region || !data ||
       (texture->usage & GPU_TEXTURE_USAGE_COPY_DST) == 0 ||
       region->width == 0 ||
       region->height == 0 ||
@@ -311,7 +326,7 @@ GPUQueueWriteTexture(GPUCommandQueue             * __restrict queue,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuActiveGPUApi()) || !api->texture.write) {
+  if (!(api = gpuDeviceApi(texture->device)) || !api->texture.write) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 

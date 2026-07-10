@@ -342,6 +342,7 @@ vk__writeDescriptor(void *context,
                     const GPUBindGroupBindingView *binding) {
   GPUDescriptorWriteVk  *writeContext;
   GPUBufferVk           *buffer;
+  GPUTexture            *gpuTexture;
   GPUTextureVk          *texture;
   GPUTextureViewVk      *view;
   GPUSamplerVk          *sampler;
@@ -385,10 +386,11 @@ vk__writeDescriptor(void *context,
       write.pBufferInfo = &bufferInfo;
       break;
     case GPUBindKindTexture:
-      view = binding->textureView ? binding->textureView->_priv : NULL;
-      texture = binding->textureView && binding->textureView->_texture
-                  ? binding->textureView->_texture->_priv
-                  : NULL;
+      view       = binding->textureView ? binding->textureView->_priv : NULL;
+      gpuTexture = binding->textureView
+                     ? binding->textureView->_texture
+                     : NULL;
+      texture    = gpuTexture ? gpuTexture->_priv : NULL;
       if (!view || !view->view || !texture || !texture->image ||
           view->device != writeContext->group->device ||
           texture->device != writeContext->group->device) {
@@ -396,14 +398,11 @@ vk__writeDescriptor(void *context,
         return;
       }
       imageInfo.imageView = view->view;
-      imageInfo.imageLayout = binding->bindingType == GPU_BINDING_STORAGE_TEXTURE
-                                ? VK_IMAGE_LAYOUT_GENERAL
-                                : texture->layout;
-      if (imageInfo.imageLayout != VK_IMAGE_LAYOUT_GENERAL &&
-          imageInfo.imageLayout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-        writeContext->valid = false;
-        return;
-      }
+      imageInfo.imageLayout =
+        binding->bindingType == GPU_BINDING_STORAGE_TEXTURE ||
+        (gpuTexture->usage & GPU_TEXTURE_USAGE_STORAGE) != 0u
+          ? VK_IMAGE_LAYOUT_GENERAL
+          : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
       write.pImageInfo = &imageInfo;
       break;
     case GPUBindKindSampler:

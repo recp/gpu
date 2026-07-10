@@ -16,6 +16,7 @@
 
 #include "../common.h"
 #include "../../../api/buffer_internal.h"
+#include "../../../api/texture_internal.h"
 
 enum {
   GPU_VK_BARRIER_CHUNK_SIZE = 16u
@@ -108,49 +109,107 @@ vk__bufferBarrierAccess(const GPUBuffer       *buffer,
   return result;
 }
 
+static VkImageLayout
+vk__textureBarrierLayout(const GPUTexture *texture,
+                         GPUAccessMask     access,
+                         bool              source) {
+  uint32_t categoryCount;
+
+  if (access == GPU_ACCESS_NONE) {
+    return source ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_GENERAL;
+  }
+
+  categoryCount  = (access & (GPU_ACCESS_SHADER_READ |
+                              GPU_ACCESS_SHADER_WRITE)) != 0u;
+  categoryCount += (access & (GPU_ACCESS_COLOR_READ |
+                              GPU_ACCESS_COLOR_WRITE)) != 0u;
+  categoryCount += (access & (GPU_ACCESS_DEPTH_READ |
+                              GPU_ACCESS_DEPTH_WRITE)) != 0u;
+  categoryCount += (access & (GPU_ACCESS_TRANSFER_READ |
+                              GPU_ACCESS_TRANSFER_WRITE)) != 0u;
+  if (categoryCount != 1u) {
+    return VK_IMAGE_LAYOUT_GENERAL;
+  }
+
+  if ((access & GPU_ACCESS_SHADER_WRITE) != 0u ||
+      ((access & GPU_ACCESS_SHADER_READ) != 0u &&
+       (texture->usage & GPU_TEXTURE_USAGE_STORAGE) != 0u)) {
+    return VK_IMAGE_LAYOUT_GENERAL;
+  }
+  if ((access & GPU_ACCESS_SHADER_READ) != 0u) {
+    return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  }
+  if ((access & (GPU_ACCESS_COLOR_READ | GPU_ACCESS_COLOR_WRITE)) != 0u) {
+    return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  }
+  if ((access & (GPU_ACCESS_DEPTH_READ | GPU_ACCESS_DEPTH_WRITE)) != 0u) {
+    return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+  }
+  if ((access & GPU_ACCESS_TRANSFER_READ) != 0u &&
+      (access & GPU_ACCESS_TRANSFER_WRITE) == 0u) {
+    return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  }
+  if ((access & GPU_ACCESS_TRANSFER_WRITE) != 0u &&
+      (access & GPU_ACCESS_TRANSFER_READ) == 0u) {
+    return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  }
+
+  return VK_IMAGE_LAYOUT_GENERAL;
+}
+
 GPU_HIDE
 void
 vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
   GPUCommandBufferVk  *command;
+  GPUDevice           *gpuDevice;
   GPUDeviceVk         *device;
   VkPipelineStageFlags srcStages;
   VkPipelineStageFlags dstStages;
-  uint32_t             offset;
+  uint32_t             bufferOffset;
+  uint32_t             textureOffset;
 
-  command = cmdb ? cmdb->_priv : NULL;
-  device  = cmdb && cmdb->_queue && cmdb->_queue->_device
-              ? cmdb->_queue->_device->_priv
-              : NULL;
+  command   = cmdb ? cmdb->_priv : NULL;
+  gpuDevice = cmdb && cmdb->_queue ? cmdb->_queue->_device : NULL;
+  device    = gpuDevice ? gpuDevice->_priv : NULL;
   if (!command || !command->command || !device || !barriers) {
     return;
   }
 
-  srcStages = vk__barrierStages(barriers->srcStages);
-  dstStages = vk__barrierStages(barriers->dstStages);
-  offset    = 0u;
-  while (offset < barriers->bufferBarrierCount) {
+  srcStages     = vk__barrierStages(barriers->srcStages);
+  dstStages     = vk__barrierStages(barriers->dstStages);
+  bufferOffset  = 0u;
+  textureOffset = 0u;
+  while (bufferOffset < barriers->bufferBarrierCount ||
+         textureOffset < barriers->textureBarrierCount) {
     VkBufferMemoryBarrier nativeBarriers[GPU_VK_BARRIER_CHUNK_SIZE];
-    uint32_t              nativeCount;
-    uint32_t              chunkCount;
+    VkImageMemoryBarrier  nativeImages[GPU_VK_BARRIER_CHUNK_SIZE];
+    uint32_t              nativeBarrierCount;
+    uint32_t              nativeImageCount;
+    uint32_t              bufferChunkCount;
+    uint32_t              textureChunkCount;
 
-    chunkCount = barriers->bufferBarrierCount - offset;
-    if (chunkCount > GPU_VK_BARRIER_CHUNK_SIZE) {
-      chunkCount = GPU_VK_BARRIER_CHUNK_SIZE;
+    bufferChunkCount = barriers->bufferBarrierCount - bufferOffset;
+    if (bufferChunkCount > GPU_VK_BARRIER_CHUNK_SIZE) {
+      bufferChunkCount = GPU_VK_BARRIER_CHUNK_SIZE;
+    }
+    textureChunkCount = barriers->textureBarrierCount - textureOffset;
+    if (textureChunkCount > GPU_VK_BARRIER_CHUNK_SIZE) {
+      textureChunkCount = GPU_VK_BARRIER_CHUNK_SIZE;
     }
 
-    nativeCount = 0u;
-    for (uint32_t i = 0u; i < chunkCount; i++) {
+    nativeBarrierCount = 0u;
+    for (uint32_t i = 0u; i < bufferChunkCount; i++) {
       const GPUBufferBarrier *barrier;
       GPUBufferVk            *buffer;
       VkBufferMemoryBarrier  *native;
 
-      barrier = &barriers->pBufferBarriers[offset + i];
+      barrier = &barriers->pBufferBarriers[bufferOffset + i];
       buffer  = barrier->buffer ? barrier->buffer->_priv : NULL;
       if (!buffer || !buffer->buffer || buffer->device != device->device) {
         continue;
       }
 
-      native                      = &nativeBarriers[nativeCount++];
+      native                      = &nativeBarriers[nativeBarrierCount++];
       memset(native, 0, sizeof(*native));
       native->sType               = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
       native->srcAccessMask       = vk__bufferBarrierAccess(barrier->buffer,
@@ -166,19 +225,67 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
       native->size                = barrier->sizeBytes;
     }
 
-    if (nativeCount > 0u) {
+    nativeImageCount = 0u;
+    for (uint32_t i = 0u; i < textureChunkCount; i++) {
+      const GPUTextureBarrier *barrier;
+      GPUTextureVk            *texture;
+      VkImageMemoryBarrier    *native;
+
+      barrier = &barriers->pTextureBarriers[textureOffset + i];
+      if (!barrier->texture->_ownsNative) {
+        gpuDeviceRecordValidationError(
+          gpuDevice,
+          "Vulkan barriers do not support swapchain textures"
+        );
+        continue;
+      }
+
+      texture = barrier->texture->_priv;
+      if (!texture || !texture->image || texture->device != device->device) {
+        gpuDeviceRecordValidationError(
+          gpuDevice,
+          "Vulkan texture barrier has no compatible native image"
+        );
+        continue;
+      }
+
+      native                                = &nativeImages[nativeImageCount++];
+      memset(native, 0, sizeof(*native));
+      native->sType                         = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+      native->srcAccessMask                 = vk__barrierAccess(barrier->srcAccess);
+      native->dstAccessMask                 = vk__barrierAccess(barrier->dstAccess);
+      native->oldLayout                     =
+        vk__textureBarrierLayout(barrier->texture,
+                                 barrier->srcAccess,
+                                 true);
+      native->newLayout                     =
+        vk__textureBarrierLayout(barrier->texture,
+                                 barrier->dstAccess,
+                                 false);
+      native->srcQueueFamilyIndex           = VK_QUEUE_FAMILY_IGNORED;
+      native->dstQueueFamilyIndex           = VK_QUEUE_FAMILY_IGNORED;
+      native->image                         = texture->image;
+      native->subresourceRange.aspectMask     = texture->aspect;
+      native->subresourceRange.baseMipLevel   = barrier->baseMip;
+      native->subresourceRange.levelCount     = barrier->mipCount;
+      native->subresourceRange.baseArrayLayer = barrier->baseLayer;
+      native->subresourceRange.layerCount     = barrier->layerCount;
+    }
+
+    if (nativeBarrierCount > 0u || nativeImageCount > 0u) {
       vkCmdPipelineBarrier(command->command,
                            srcStages,
                            dstStages,
                            0u,
                            0u,
                            NULL,
-                           nativeCount,
+                           nativeBarrierCount,
                            nativeBarriers,
-                           0u,
-                           NULL);
+                           nativeImageCount,
+                           nativeImages);
     }
-    offset += chunkCount;
+    bufferOffset  += bufferChunkCount;
+    textureOffset += textureChunkCount;
   }
 }
 

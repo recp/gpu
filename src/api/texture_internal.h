@@ -20,28 +20,59 @@
 #include "../common.h"
 
 struct GPUTexture {
-  void *_priv;
-  GPUFormat format;
+  void                *_priv;
+  GPUDevice           *device;
+  GPUFormat            format;
   GPUTextureDimension dimension;
-  uint32_t width;
-  uint32_t height;
-  uint32_t depthOrLayers;
-  uint32_t mipLevelCount;
-  uint32_t sampleCount;
+  uint32_t             width;
+  uint32_t             height;
+  uint32_t             depthOrLayers;
+  uint32_t             mipLevelCount;
+  uint32_t             sampleCount;
   GPUTextureUsageFlags usage;
-  bool _ownsNative;
+  bool                 _ownsNative;
 };
 
 struct GPUTextureView {
-  void *_priv;
-  GPUTexture *_texture;
-  GPUFormat format;
+  void              *_priv;
+  GPUTexture        *_texture;
+  GPUFormat          format;
   GPUTextureViewType viewType;
-  uint32_t baseMipLevel;
-  uint32_t mipLevelCount;
-  uint32_t baseArrayLayer;
-  uint32_t arrayLayerCount;
-  bool _ownsNative;
+  uint32_t           baseMipLevel;
+  uint32_t           mipLevelCount;
+  uint32_t           baseArrayLayer;
+  uint32_t           arrayLayerCount;
+  bool               _ownsNative;
 };
+
+static inline uint32_t
+gpuTextureArrayLayerCount(const GPUTexture *texture) {
+  if (!texture) {
+    return 0u;
+  }
+
+  return texture->dimension == GPU_TEXTURE_DIMENSION_3D
+           ? 1u
+           : texture->depthOrLayers;
+}
+
+static inline bool
+gpuTextureSubresourceRangeValid(const GPUTexture *texture,
+                                uint32_t          baseMip,
+                                uint32_t          mipCount,
+                                uint32_t          baseLayer,
+                                uint32_t          layerCount) {
+  uint32_t arrayLayerCount;
+
+  if (!texture || mipCount == 0u || layerCount == 0u ||
+      baseMip >= texture->mipLevelCount ||
+      mipCount > texture->mipLevelCount - baseMip) {
+    return false;
+  }
+
+  arrayLayerCount = gpuTextureArrayLayerCount(texture);
+  return baseLayer < arrayLayerCount &&
+         layerCount <= arrayLayerCount - baseLayer;
+}
 
 #endif /* gpu_texture_internal_h */

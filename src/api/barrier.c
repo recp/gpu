@@ -18,6 +18,7 @@
 #include "buffer_internal.h"
 #include "cmdqueue_internal.h"
 #include "device_internal.h"
+#include "texture_internal.h"
 
 static bool
 gpu_validStageMask(GPUPipelineStageMask stages) {
@@ -44,6 +45,45 @@ gpu_validAccessMask(GPUAccessMask access) {
                              GPU_ACCESS_INDIRECT_READ;
 
   return (((uint32_t)access & ~knownMask) == 0u);
+}
+
+static bool
+gpu_validTextureAccess(const GPUTexture *texture, GPUAccessMask access) {
+  GPUTextureUsageFlags usage;
+
+  if (!texture || !gpu_validAccessMask(access) ||
+      (access & GPU_ACCESS_INDIRECT_READ) != 0u) {
+    return false;
+  }
+
+  usage = texture->usage;
+  if ((access & GPU_ACCESS_SHADER_READ) != 0u &&
+      (usage & (GPU_TEXTURE_USAGE_SAMPLED |
+                GPU_TEXTURE_USAGE_STORAGE)) == 0u) {
+    return false;
+  }
+  if ((access & GPU_ACCESS_SHADER_WRITE) != 0u &&
+      (usage & GPU_TEXTURE_USAGE_STORAGE) == 0u) {
+    return false;
+  }
+  if ((access & (GPU_ACCESS_COLOR_READ | GPU_ACCESS_COLOR_WRITE)) != 0u &&
+      (usage & GPU_TEXTURE_USAGE_COLOR_TARGET) == 0u) {
+    return false;
+  }
+  if ((access & (GPU_ACCESS_DEPTH_READ | GPU_ACCESS_DEPTH_WRITE)) != 0u &&
+      (usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) == 0u) {
+    return false;
+  }
+  if ((access & GPU_ACCESS_TRANSFER_READ) != 0u &&
+      (usage & GPU_TEXTURE_USAGE_COPY_SRC) == 0u) {
+    return false;
+  }
+  if ((access & GPU_ACCESS_TRANSFER_WRITE) != 0u &&
+      (usage & GPU_TEXTURE_USAGE_COPY_DST) == 0u) {
+    return false;
+  }
+
+  return true;
 }
 
 static bool
@@ -76,9 +116,14 @@ gpu_validBarrierBatch(GPUDevice *device, const GPUBarrierBatch *barriers) {
   for (uint32_t i = 0; i < barriers->textureBarrierCount; i++) {
     const GPUTextureBarrier *barrier = &barriers->pTextureBarriers[i];
 
-    if (!barrier->texture || barrier->mipCount == 0u || barrier->layerCount == 0u ||
-        !gpu_validAccessMask(barrier->srcAccess) ||
-        !gpu_validAccessMask(barrier->dstAccess)) {
+    if (!barrier->texture || barrier->texture->device != device ||
+        !gpuTextureSubresourceRangeValid(barrier->texture,
+                                         barrier->baseMip,
+                                         barrier->mipCount,
+                                         barrier->baseLayer,
+                                         barrier->layerCount) ||
+        !gpu_validTextureAccess(barrier->texture, barrier->srcAccess) ||
+        !gpu_validTextureAccess(barrier->texture, barrier->dstAccess)) {
       return false;
     }
   }

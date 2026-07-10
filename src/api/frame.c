@@ -19,6 +19,7 @@
 #include "device_internal.h"
 #include "frame_internal.h"
 #include "swapchain_internal.h"
+#include "texture_internal.h"
 
 GPU_EXPORT
 GPUFrame*
@@ -36,6 +37,9 @@ GPUBeginFrame(GPUSwapchain* swapchain) {
   frame = api->frame.beginFrame(api, swapchain);
   if (frame) {
     frame->device = swapchain->device;
+    if (frame->target) {
+      frame->target->device = frame->device;
+    }
     gpuDeviceBeginFrame(frame->device);
   }
 
