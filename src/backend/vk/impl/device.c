@@ -227,6 +227,10 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       return vk_hasQueueCapability(adapterVk, VK_QUEUE_COMPUTE_BIT);
     case GPU_FEATURE_TIMESTAMPS:
       return vk_hasTimestampCapability(adapterVk);
+    case GPU_FEATURE_PIPELINE_STATISTICS:
+      return adapterVk->features.pipelineStatisticsQuery &&
+             (vk_hasQueueCapability(adapterVk, VK_QUEUE_GRAPHICS_BIT) ||
+              vk_hasQueueCapability(adapterVk, VK_QUEUE_COMPUTE_BIT));
     case GPU_FEATURE_INDIRECT_DRAW:
       return vk_hasQueueCapability(adapterVk, VK_QUEUE_GRAPHICS_BIT);
     case GPU_FEATURE_MULTI_DRAW:
@@ -618,6 +622,8 @@ vk_createDevice(GPUPhysicalDevice          * __restrict phyDevice,
     queues[i].pQueuePriorities = queuePriorities;
   }
 
+  enabledFeatures.pipelineStatisticsQuery =
+    phyDeviceVk->features.pipelineStatisticsQuery;
   enabledFeatures.multiDrawIndirect = phyDeviceVk->features.multiDrawIndirect;
 
   deviceCI.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

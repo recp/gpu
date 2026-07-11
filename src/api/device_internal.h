@@ -28,25 +28,29 @@ typedef struct GPUTransientChunk {
 } GPUTransientChunk;
 
 struct GPUDevice {
-  GPUInstance       *inst;
-  GPUPhysicalDevice *phyDevice;
-  GPUApi            *_api;
-  void              *_priv;
-  GPUQueueFlagBits   queueFamilies;
-  uint64_t           enabledFeatureMask;
-  GPUCacheStats      cacheStats;
-  GPURuntimeConfig   runtimeConfig;
-  GPUFrameStats      currentFrameStats;
-  GPUFrameStats      lastFrameStats;
-  GPUAllocatorStats  allocatorStats;
+  GPUInstance                 *inst;
+  GPUPhysicalDevice           *phyDevice;
+  GPUApi                      *_api;
+  void                        *_priv;
+  GPUBuffer                   *transientBuffer;
+  GPUTransientChunk           *transientChunks;
+  void                        *transientCpuPtr;
+  GPUFeatureSet                enabledFeatures;
+  GPUCacheStats                cacheStats;
+  GPURuntimeConfig             runtimeConfig;
+  GPUFrameStats                currentFrameStats;
+  GPUFrameStats                lastFrameStats;
+  GPUAllocatorStats            allocatorStats;
   GPUTransientAllocatorConfig transientConfig;
-  GPUBuffer         *transientBuffer;
-  void              *transientCpuPtr;
-  uint64_t           transientFrameOffset;
-  uint32_t           transientFrameIndex;
-  bool               transientConfigured;
-  bool               transientFrameBegun;
-  GPUTransientChunk *transientChunks;
+  uint64_t                     enabledFeatureMask;
+  uint64_t                     transientFrameOffset;
+  GPUQueueFlagBits             queueFamilies;
+  uint32_t                     transientFrameIndex;
+  bool                         transientConfigured;
+  bool                         transientFrameBegun;
+  GPUFeature                   enabledFeatureStorage[
+    GPU_FEATURE_VARIABLE_RATE_SHADING + 1u
+  ];
 };
 
 static inline GPUApi *

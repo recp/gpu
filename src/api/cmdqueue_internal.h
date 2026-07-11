@@ -29,8 +29,10 @@ struct GPUCommandBuffer {
   void                         *_priv;
   GPUCommandQueue              *_queue;
   GPUFence                     *_submitFence;
+  GPUQuerySet                  *_pipelineStatsQuery;
   void                         *_onCompleteSender;
   GPUCommandBufferCompletionFn  _onComplete;
+  uint32_t                      _pipelineStatsQueryIndex;
   bool                          _submitted;
   bool                          _activeEncoder;
 };

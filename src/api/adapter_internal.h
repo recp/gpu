@@ -25,10 +25,14 @@ struct GPUAdapter {
   struct GPUAdapter *next;
   GPUInstance       *inst;
   void              *_priv;
+  GPUFeatureSet      supportedFeatures;
   bool               supportsSwapchain;
   bool               supportsDisplayTiming;
   bool               supportsIncrementalPresent;
   bool               separatePresentQueue;
+  GPUFeature         supportedFeatureStorage[
+    GPU_FEATURE_VARIABLE_RATE_SHADING + 1u
+  ];
 };
 
 #endif /* gpu_adapter_internal_h */

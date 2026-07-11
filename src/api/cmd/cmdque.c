@@ -247,7 +247,8 @@ GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
     GPUCommandBuffer *cmdb;
 
     cmdb = info->ppCommandBuffers[i];
-    if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder || cmdb->_queue != cmdq) {
+    if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder ||
+        cmdb->_pipelineStatsQuery || cmdb->_queue != cmdq) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
     for (uint32_t j = 0; j < i; j++) {

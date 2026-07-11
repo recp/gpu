@@ -1,6 +1,9 @@
 #include "test.h"
 #include "../../src/api/cmdqueue_internal.h"
 
+_Static_assert(sizeof(GPUPipelineStatisticsResult) == 11u * sizeof(uint64_t),
+               "pipeline statistics result layout changed");
+
 static int
 check_query_set_create_validation(GPUDevice *device) {
   GPUQuerySetCreateInfo info = {0};
