@@ -102,6 +102,13 @@ main(void) {
     GPUDestroyInstance(instance);
     return 1;
   }
+  if (!GPUIsFeatureSupported(adapter, GPU_FEATURE_COMPUTE) ||
+      !GPUIsFeatureSupported(adapter, GPU_FEATURE_INDIRECT_DRAW) ||
+      GPUIsFeatureSupported(adapter, GPU_FEATURE_MULTI_DRAW)) {
+    fprintf(stderr, "DX12 feature reporting failed\n");
+    GPUDestroyInstance(instance);
+    return 1;
+  }
 
   memset(&queueRequest, 0, sizeof(queueRequest));
   queueRequest.type  = GPU_QUEUE_GRAPHICS;
@@ -118,6 +125,13 @@ main(void) {
   device = NULL;
   if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device) {
     fprintf(stderr, "DX12 device creation failed\n");
+    GPUDestroyInstance(instance);
+    return 1;
+  }
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_COMPUTE) ||
+      GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_DRAW)) {
+    fprintf(stderr, "DX12 enabled unrequested feature\n");
+    GPUDestroyDevice(device);
     GPUDestroyInstance(instance);
     return 1;
   }

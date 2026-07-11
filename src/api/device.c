@@ -78,9 +78,36 @@ gpu_knownFeature(GPUFeature feature) {
          feature <= GPU_FEATURE_VARIABLE_RATE_SHADING;
 }
 
+static uint64_t
+gpu_featureBit(GPUFeature feature) {
+  return 1ull << (uint32_t)feature;
+}
+
 static bool
-gpu_builtinSupportedFeature(GPUFeature feature) {
-  return feature == GPU_FEATURE_COMPUTE;
+gpu_builtinSupportedFeature(const GPUApi *api, GPUFeature feature) {
+  bool hasComputePipeline;
+
+  if (!api) {
+    return false;
+  }
+
+  switch (feature) {
+    case GPU_FEATURE_COMPUTE:
+      hasComputePipeline = api->compute.createPipeline ||
+                           (api->compute.newComputePipeline &&
+                            api->compute.setFunction &&
+                            api->compute.newComputeState);
+      return hasComputePipeline &&
+             api->compute.computeCommandEncoder &&
+             api->compute.setComputePipelineState &&
+             api->compute.dispatch &&
+             api->compute.endEncoding;
+    case GPU_FEATURE_INDIRECT_DRAW:
+      return api->rce.drawPrimitivesIndirect &&
+             api->rce.drawIndexedPrimsIndirect;
+    default:
+      return false;
+  }
 }
 
 static bool
@@ -94,12 +121,7 @@ gpu_adapterSupportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
     return api->device.supportsFeature(adapter, feature);
   }
 
-  return gpu_builtinSupportedFeature(feature);
-}
-
-static uint64_t
-gpu_featureBit(GPUFeature feature) {
-  return 1ull << (uint32_t)feature;
+  return gpu_builtinSupportedFeature(api, feature);
 }
 
 static uint64_t
@@ -122,8 +144,28 @@ gpu_collectEnabledFeatures(const GPUAdapter *adapter, const GPUFeatureSet *set) 
 }
 
 static uint64_t
-gpu_defaultEnabledFeatureMask(void) {
-  return gpu_featureBit(GPU_FEATURE_COMPUTE);
+gpu_defaultEnabledFeatureMask(const GPUAdapter *adapter) {
+  static const GPUFeature defaultFeatures[] = {
+    GPU_FEATURE_COMPUTE,
+    GPU_FEATURE_INDIRECT_DRAW
+  };
+  GPUApi *api;
+  uint64_t mask;
+
+  api  = gpuActiveGPUApi();
+  mask = 0;
+  for (uint32_t i = 0; i < GPU_ARRAY_LEN(defaultFeatures); i++) {
+    bool supported;
+
+    supported = adapter ?
+      gpu_adapterSupportsFeature(adapter, defaultFeatures[i]) :
+      gpu_builtinSupportedFeature(api, defaultFeatures[i]);
+    if (supported) {
+      mask |= gpu_featureBit(defaultFeatures[i]);
+    }
+  }
+
+  return mask;
 }
 
 static uint64_t
@@ -132,12 +174,68 @@ gpu_enabledFeatureMaskForCreateInfo(const GPUAdapter *adapter,
   uint64_t mask;
 
   if (!info) {
-    return gpu_defaultEnabledFeatureMask();
+    return gpu_defaultEnabledFeatureMask(adapter);
   }
 
   mask = gpu_collectEnabledFeatures(adapter, &info->required);
   mask |= gpu_collectEnabledFeatures(adapter, &info->optional);
   return mask;
+}
+
+static uint64_t
+gpu_supportedFeatureMask(const GPUAdapter *adapter) {
+  static const GPUFeature queryableFeatures[] = {
+    GPU_FEATURE_COMPUTE,
+    GPU_FEATURE_TIMESTAMPS,
+    GPU_FEATURE_INDIRECT_DRAW
+  };
+  uint64_t mask;
+
+  mask = 0;
+  for (uint32_t i = 0; i < GPU_ARRAY_LEN(queryableFeatures); i++) {
+    if (gpu_adapterSupportsFeature(adapter, queryableFeatures[i])) {
+      mask |= gpu_featureBit(queryableFeatures[i]);
+    }
+  }
+
+  return mask;
+}
+
+static void
+gpu_fillFeatureSet(uint64_t mask, GPUFeatureSet *outSet) {
+  static const GPUFeature featureLists[8][3] = {
+    [1] = {GPU_FEATURE_COMPUTE},
+    [2] = {GPU_FEATURE_TIMESTAMPS},
+    [3] = {GPU_FEATURE_COMPUTE, GPU_FEATURE_TIMESTAMPS},
+    [4] = {GPU_FEATURE_INDIRECT_DRAW},
+    [5] = {GPU_FEATURE_COMPUTE, GPU_FEATURE_INDIRECT_DRAW},
+    [6] = {GPU_FEATURE_TIMESTAMPS, GPU_FEATURE_INDIRECT_DRAW},
+    [7] = {
+      GPU_FEATURE_COMPUTE,
+      GPU_FEATURE_TIMESTAMPS,
+      GPU_FEATURE_INDIRECT_DRAW
+    }
+  };
+  static const uint8_t featureCounts[8] = {
+    0u, 1u, 1u, 2u, 1u, 2u, 2u, 3u
+  };
+  uint32_t listIndex;
+
+  listIndex = 0;
+  if (mask & gpu_featureBit(GPU_FEATURE_COMPUTE)) {
+    listIndex |= 1u;
+  }
+  if (mask & gpu_featureBit(GPU_FEATURE_TIMESTAMPS)) {
+    listIndex |= 2u;
+  }
+  if (mask & gpu_featureBit(GPU_FEATURE_INDIRECT_DRAW)) {
+    listIndex |= 4u;
+  }
+
+  outSet->featureCount = featureCounts[listIndex];
+  outSet->pFeatures    = featureCounts[listIndex] ?
+    featureLists[listIndex] :
+    NULL;
 }
 
 static GPUResult
@@ -650,26 +748,12 @@ GPU_EXPORT
 GPUResult
 GPUGetAdapterCapabilities(const GPUAdapter       *adapter,
                           GPUAdapterCapabilities *outCaps) {
-  static const GPUFeature supportedCompute[] = {
-    GPU_FEATURE_COMPUTE
-  };
-  static const GPUFeature supportedComputeTimestamp[] = {
-    GPU_FEATURE_COMPUTE,
-    GPU_FEATURE_TIMESTAMPS
-  };
-
   if (!adapter || !outCaps) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   memset(outCaps, 0, sizeof(*outCaps));
-  if (gpu_adapterSupportsFeature(adapter, GPU_FEATURE_TIMESTAMPS)) {
-    outCaps->supported.featureCount = (uint32_t)GPU_ARRAY_LEN(supportedComputeTimestamp);
-    outCaps->supported.pFeatures = supportedComputeTimestamp;
-  } else {
-    outCaps->supported.featureCount = (uint32_t)GPU_ARRAY_LEN(supportedCompute);
-    outCaps->supported.pFeatures = supportedCompute;
-  }
+  gpu_fillFeatureSet(gpu_supportedFeatureMask(adapter), &outCaps->supported);
   gpu_fillDefaultLimits(&outCaps->limits);
 
   return GPU_OK;
@@ -679,36 +763,12 @@ GPU_EXPORT
 GPUResult
 GPUGetDeviceCapabilities(const GPUDevice       *device,
                          GPUDeviceCapabilities *outCaps) {
-  static const GPUFeature enabledCompute[] = {
-    GPU_FEATURE_COMPUTE
-  };
-  static const GPUFeature enabledTimestamp[] = {
-    GPU_FEATURE_TIMESTAMPS
-  };
-  static const GPUFeature enabledComputeTimestamp[] = {
-    GPU_FEATURE_COMPUTE,
-    GPU_FEATURE_TIMESTAMPS
-  };
-  bool computeEnabled;
-  bool timestampEnabled;
-
   if (!device || !outCaps) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   memset(outCaps, 0, sizeof(*outCaps));
-  computeEnabled = (device->enabledFeatureMask & gpu_featureBit(GPU_FEATURE_COMPUTE)) != 0;
-  timestampEnabled = (device->enabledFeatureMask & gpu_featureBit(GPU_FEATURE_TIMESTAMPS)) != 0;
-  if (computeEnabled && timestampEnabled) {
-    outCaps->enabled.featureCount = (uint32_t)GPU_ARRAY_LEN(enabledComputeTimestamp);
-    outCaps->enabled.pFeatures = enabledComputeTimestamp;
-  } else if (computeEnabled) {
-    outCaps->enabled.featureCount = (uint32_t)GPU_ARRAY_LEN(enabledCompute);
-    outCaps->enabled.pFeatures = enabledCompute;
-  } else if (timestampEnabled) {
-    outCaps->enabled.featureCount = (uint32_t)GPU_ARRAY_LEN(enabledTimestamp);
-    outCaps->enabled.pFeatures = enabledTimestamp;
-  }
+  gpu_fillFeatureSet(device->enabledFeatureMask, &outCaps->enabled);
   gpu_fillDefaultLimits(&outCaps->limits);
 
   return GPU_OK;
@@ -999,7 +1059,7 @@ GPUCreateSystemDefaultDevice(GPUInstance *inst) {
   device = api->device.createSystemDefaultDevice(inst);
   if (device) {
     device->_api = api;
-    device->enabledFeatureMask = gpu_defaultEnabledFeatureMask();
+    device->enabledFeatureMask = gpu_defaultEnabledFeatureMask(device->phyDevice);
   }
 
   return device;

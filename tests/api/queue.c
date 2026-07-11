@@ -21,6 +21,21 @@ queue_completion_probe(void *sender, GPUCommandBuffer *cmdb) {
   probe->cmdb = cmdb;
 }
 
+static bool
+feature_set_contains(const GPUFeatureSet *set, GPUFeature feature) {
+  if (!set || !set->pFeatures) {
+    return false;
+  }
+
+  for (uint32_t i = 0; i < set->featureCount; i++) {
+    if (set->pFeatures[i] == feature) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 static int
 check_adapter_enumeration(void) {
   GPUAdapter *adapters[8] = {0};
@@ -121,9 +136,13 @@ check_adapter_enumeration(void) {
   memset(&caps, 0, sizeof(caps));
   if (GPUGetAdapterCapabilities(adapters[0], &caps) != GPU_OK ||
       !GPUIsFeatureSupported(adapters[0], GPU_FEATURE_COMPUTE) ||
+      !GPUIsFeatureSupported(adapters[0], GPU_FEATURE_INDIRECT_DRAW) ||
+      GPUIsFeatureSupported(adapters[0], GPU_FEATURE_MULTI_DRAW) ||
       GPUIsFeatureSupported(adapters[0], GPU_FEATURE_SHADER_F16) ||
       caps.supported.featureCount == 0 ||
       !caps.supported.pFeatures ||
+      !feature_set_contains(&caps.supported, GPU_FEATURE_COMPUTE) ||
+      !feature_set_contains(&caps.supported, GPU_FEATURE_INDIRECT_DRAW) ||
       caps.limits.maxBindGroups == 0 ||
       caps.limits.minUniformBufferOffsetAlignment == 0) {
     fprintf(stderr, "adapter capabilities query failed\n");
@@ -394,9 +413,13 @@ check_queue_selection(GPUDevice *device) {
       GPUGetDeviceCapabilities(device, NULL) != GPU_ERROR_INVALID_ARGUMENT ||
       GPUGetDeviceCapabilities(device, &caps) != GPU_OK ||
       !GPUIsFeatureEnabled(device, GPU_FEATURE_COMPUTE) ||
+      !GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_DRAW) ||
+      GPUIsFeatureEnabled(device, GPU_FEATURE_MULTI_DRAW) ||
       GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16) ||
       caps.enabled.featureCount == 0 ||
       !caps.enabled.pFeatures ||
+      !feature_set_contains(&caps.enabled, GPU_FEATURE_COMPUTE) ||
+      !feature_set_contains(&caps.enabled, GPU_FEATURE_INDIRECT_DRAW) ||
       caps.limits.maxBindGroups == 0 ||
       caps.limits.maxComputeWorkgroupSizeX == 0) {
     fprintf(stderr, "device capabilities query failed\n");
@@ -477,6 +500,20 @@ check_device_queue_create_validation(GPUAdapter *adapter) {
   }
   GPUDestroyDevice(device);
 
+  requiredFeature = GPU_FEATURE_INDIRECT_DRAW;
+  device = NULL;
+  if (GPUCreateDevice(adapter, &createInfo, &device) != GPU_OK || !device) {
+    fprintf(stderr, "device create rejected required indirect draw feature\n");
+    return 0;
+  }
+  if (!GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_DRAW) ||
+      GPUIsFeatureEnabled(device, GPU_FEATURE_COMPUTE)) {
+    fprintf(stderr, "device create reported wrong indirect draw feature set\n");
+    GPUDestroyDevice(device);
+    return 0;
+  }
+  GPUDestroyDevice(device);
+
   memset(&createInfo, 0, sizeof(createInfo));
   createInfo.chain.sType = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   createInfo.chain.structSize = sizeof(createInfo);
@@ -512,8 +549,9 @@ check_device_queue_create_validation(GPUAdapter *adapter) {
     fprintf(stderr, "device create rejected explicit queue count\n");
     return 0;
   }
-  if (GPUIsFeatureEnabled(device, GPU_FEATURE_COMPUTE)) {
-    fprintf(stderr, "device create enabled unrequested compute feature\n");
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_COMPUTE) ||
+      GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_DRAW)) {
+    fprintf(stderr, "device create enabled unrequested feature\n");
     GPUDestroyDevice(device);
     return 0;
   }
