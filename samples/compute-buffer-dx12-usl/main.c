@@ -73,13 +73,16 @@ main(int argc, char **argv) {
   GPUBuffer             *buffer;
   GPUBuffer             *indirectBuffer;
   GPUBuffer             *dispatchBuffer;
+  GPUBuffer             *queryBuffer;
   GPUBindGroup          *bindGroup;
+  GPUQuerySet           *querySet;
   GPUCommandBuffer      *cmdb;
   GPUComputePassEncoder *pass;
   GPUFence              *fence;
   void                  *artifact;
   const char            *artifactPath;
   GPUInstanceCreateInfo        instanceInfo = {0};
+  GPUDeviceCreateInfo          deviceInfo = {0};
   GPURuntimeConfig             runtimeConfig = {0};
   GPUComputePipelineCreateInfo pipelineInfo = {0};
   GPUBufferCreateInfo          bufferInfo = {0};
@@ -88,14 +91,24 @@ main(int argc, char **argv) {
   GPUBufferBarrier             barriers[2] = {0};
   GPUBarrierBatch              barrierBatch = {0};
   GPUQueueSubmitInfo           submitInfo = {0};
+  GPUQuerySetCreateInfo        queryInfo = {0};
+  GPUPipelineStatisticsResult  pipelineStats = {0};
   GeneratedVertex              vertices[3] = {0};
   uint32_t                     drawArgs[5] = {0};
   const uint32_t               expectedDrawArgs[5] = {3u, 1u, 0u, 0u, 0u};
   const uint32_t               dispatchArgs[3] = {3u, 1u, 1u};
+  const GPUFeature             requiredFeatures[] = {
+    GPU_FEATURE_COMPUTE,
+    GPU_FEATURE_INDIRECT_DRAW
+  };
+  const GPUFeature             optionalFeatures[] = {
+    GPU_FEATURE_PIPELINE_STATISTICS
+  };
   const GPUBindGroupLayoutEntry *layoutEntries;
   uint64_t               artifactSize;
   uint32_t               adapterCount;
   uint32_t               layoutEntryCount;
+  bool                   pipelineStatsEnabled;
   int                    ok;
 
   if (argc > 2) {
@@ -113,14 +126,17 @@ main(int argc, char **argv) {
   buffer         = NULL;
   indirectBuffer = NULL;
   dispatchBuffer = NULL;
+  queryBuffer    = NULL;
   bindGroup      = NULL;
+  querySet       = NULL;
   cmdb           = NULL;
   pass           = NULL;
   fence          = NULL;
-  artifactSize   = 0u;
-  artifactPath   = argc == 2 ? argv[1] : "compute_buffer.us";
-  artifact       = read_file(artifactPath, &artifactSize);
-  ok             = 0;
+  artifactSize         = 0u;
+  artifactPath         = argc == 2 ? argv[1] : "compute_buffer.us";
+  artifact             = read_file(artifactPath, &artifactSize);
+  pipelineStatsEnabled = false;
+  ok                   = 0;
   if (!artifact) {
     fprintf(stderr, "USL artifact read failed\n");
     goto cleanup;
@@ -142,12 +158,27 @@ main(int argc, char **argv) {
     goto cleanup;
   }
 
-  device = GPUCreateDeviceWithDefaultQueues(adapter);
+  deviceInfo.chain.sType      = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  deviceInfo.chain.structSize = sizeof(deviceInfo);
+  deviceInfo.label            = "dx12-compute-device";
+  deviceInfo.required.featureCount =
+    (uint32_t)(sizeof(requiredFeatures) / sizeof(requiredFeatures[0]));
+  deviceInfo.required.pFeatures    = requiredFeatures;
+  deviceInfo.optional.featureCount =
+    (uint32_t)(sizeof(optionalFeatures) / sizeof(optionalFeatures[0]));
+  deviceInfo.optional.pFeatures    = optionalFeatures;
+  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK) {
+    device = NULL;
+  }
   queue  = GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0u);
   if (!device || !queue) {
     fprintf(stderr, "Direct3D 12 compute queue creation failed\n");
     goto cleanup;
   }
+  pipelineStatsEnabled = GPUIsFeatureEnabled(
+    device,
+    GPU_FEATURE_PIPELINE_STATISTICS
+  );
 
   runtimeConfig.chain.sType       = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtimeConfig.chain.structSize  = sizeof(runtimeConfig);
@@ -265,9 +296,47 @@ main(int argc, char **argv) {
     goto cleanup;
   }
 
+  if (pipelineStatsEnabled) {
+    queryInfo.chain.sType       = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
+    queryInfo.chain.structSize  = sizeof(queryInfo);
+    queryInfo.label             = "dx12-compute-pipeline-stats";
+    queryInfo.type              = GPU_QUERY_PIPELINE_STATISTICS;
+    queryInfo.count             = 1u;
+    queryInfo.pipelineStatsMask = GPU_PIPESTAT_COMPUTE_SHADER_INVOCATIONS;
+    if (GPUCreateQuerySet(device, &queryInfo, &querySet) != GPU_OK ||
+        !querySet) {
+      fprintf(stderr,
+              "Direct3D 12 pipeline statistics query creation failed\n");
+      goto cleanup;
+    }
+
+    bufferInfo.label     = "dx12-compute-pipeline-stats-result";
+    bufferInfo.sizeBytes = sizeof(pipelineStats);
+    bufferInfo.usage     = GPU_BUFFER_USAGE_STORAGE |
+                           GPU_BUFFER_USAGE_COPY_SRC |
+                           GPU_BUFFER_USAGE_COPY_DST;
+    if (GPUCreateBuffer(device, &bufferInfo, &queryBuffer) != GPU_OK ||
+        !queryBuffer) {
+      fprintf(stderr,
+              "Direct3D 12 pipeline statistics buffer creation failed\n");
+      goto cleanup;
+    }
+  }
+
   if (GPUAcquireCommandBuffer(queue, "dx12-compute", &cmdb) != GPU_OK ||
-      !cmdb || !(pass = GPUBeginComputePass(cmdb, "fill-vertices"))) {
+      !cmdb) {
     fprintf(stderr, "Direct3D 12 compute command encoding failed\n");
+    goto cleanup;
+  }
+  if (pipelineStatsEnabled) {
+    GPUBeginPipelineStatisticsQuery(cmdb, querySet, 0u);
+  }
+  pass = GPUBeginComputePass(cmdb, "fill-vertices");
+  if (!pass) {
+    if (pipelineStatsEnabled) {
+      GPUEndPipelineStatisticsQuery(cmdb, querySet);
+    }
+    fprintf(stderr, "Direct3D 12 compute pass creation failed\n");
     goto cleanup;
   }
   GPUBindComputePipeline(pass, pipeline);
@@ -275,6 +344,10 @@ main(int argc, char **argv) {
   GPUDispatchIndirect(pass, dispatchBuffer, 0u);
   GPUEndComputePass(pass);
   pass = NULL;
+  if (pipelineStatsEnabled) {
+    GPUEndPipelineStatisticsQuery(cmdb, querySet);
+    GPUResolveQuerySet(cmdb, querySet, 0u, 1u, queryBuffer, 0u);
+  }
 
   barriers[0].buffer              = buffer;
   barriers[0].srcAccess           = GPU_ACCESS_SHADER_WRITE;
@@ -316,6 +389,26 @@ main(int argc, char **argv) {
     fprintf(stderr, "Direct3D 12 compute readback validation failed\n");
     goto cleanup;
   }
+  if (pipelineStatsEnabled) {
+    GPUResult queryReadResult;
+
+    queryReadResult = GPUQueueReadBuffer(queue,
+                                         queryBuffer,
+                                         0u,
+                                         &pipelineStats,
+                                         sizeof(pipelineStats));
+    if (queryReadResult != GPU_OK ||
+        pipelineStats.computeShaderInvocations < 3u) {
+      fprintf(stderr,
+              "Direct3D 12 pipeline statistics validation failed "
+              "(read=%d, CSInvocations=%llu)\n",
+              (int)queryReadResult,
+              (unsigned long long)pipelineStats.computeShaderInvocations);
+      goto cleanup;
+    }
+  } else {
+    puts("Direct3D 12 pipeline statistics unavailable; skipped");
+  }
 
   ok = 1;
 
@@ -324,6 +417,8 @@ cleanup:
     GPUEndComputePass(pass);
   }
   GPUDestroyFence(fence);
+  GPUDestroyBuffer(queryBuffer);
+  GPUDestroyQuerySet(querySet);
   GPUDestroyBindGroup(bindGroup);
   GPUDestroyBuffer(dispatchBuffer);
   GPUDestroyBuffer(indirectBuffer);

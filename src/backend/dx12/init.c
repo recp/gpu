@@ -33,6 +33,7 @@ backend_dx12(void) {
     dx12_initCompute(&dx12.compute);
     dx12_initRCE(&dx12.rce);
     dx12_initCmdbuf(&dx12.cmdbuf);
+    dx12_initQuery(&dx12.cmdbuf);
     dx12_initCmdQue(&dx12.cmdque);
     dx12_initBuff(&dx12.buf);
     dx12_initTexture(&dx12.texture);

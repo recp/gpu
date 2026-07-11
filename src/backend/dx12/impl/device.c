@@ -349,15 +349,21 @@ GPU_HIDE
 bool
 dx12_supportsFeature(const GPUAdapter * __restrict adapter,
                      GPUFeature feature) {
+  GPUPhysicalDeviceDX12 *adapterDX12;
+
   if (!adapter || !adapter->_priv) {
     return false;
   }
+  adapterDX12 = adapter->_priv;
 
   switch (feature) {
     case GPU_FEATURE_COMPUTE:
     case GPU_FEATURE_INDIRECT_DRAW:
     case GPU_FEATURE_MULTI_DRAW:
       return true;
+    case GPU_FEATURE_PIPELINE_STATISTICS:
+      /* Parallels accepts these queries but resolves every counter to zero. */
+      return !strstr(adapterDX12->name, "Parallels Display Adapter");
     default:
       return false;
   }

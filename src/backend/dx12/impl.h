@@ -28,6 +28,7 @@ GPU_HIDE void dx12_destroyCommandQueue(GPUCommandQueue *queue);
 GPU_HIDE bool dx12_waitCommandQueueIdle(GPUCommandQueueDX12 *queue);
 GPU_HIDE DXGI_FORMAT dx12_format(GPUFormat format);
 GPU_HIDE void dx12_initCmdbuf(GPUApiCommandBuffer *api);
+GPU_HIDE void dx12_initQuery(GPUApiCommandBuffer *api);
 GPU_HIDE void dx12_initLibrary(GPUApiLibrary *api);
 GPU_HIDE void dx12_initRenderPipeline(GPUApiRender *api);
 GPU_HIDE void dx12_initCompute(GPUApiCompute *api);
