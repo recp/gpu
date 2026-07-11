@@ -91,12 +91,19 @@ timestamp_roundtrip(GPUDevice       *device,
   GPUQuerySet          *set;
   GPUBuffer            *buffer;
   uint64_t              timestamps[2] = {UINT64_MAX, UINT64_MAX};
+  double                timestampPeriod;
   int                   ok;
 
   set    = NULL;
   buffer = NULL;
   cmdb   = NULL;
   ok     = 0;
+
+  timestampPeriod = 0.0;
+  if (GPUGetTimestampPeriod(queue, &timestampPeriod) != GPU_OK ||
+      !(timestampPeriod > 0.0)) {
+    goto cleanup;
+  }
 
   queryInfo.chain.sType      = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
   queryInfo.chain.structSize = sizeof(queryInfo);

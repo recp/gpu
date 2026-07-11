@@ -17,6 +17,7 @@
 #include "../common.h"
 #include "buffer_internal.h"
 #include "cmdqueue_internal.h"
+#include "device_internal.h"
 #include "query_internal.h"
 
 static bool
@@ -123,6 +124,43 @@ GPUDestroyQuerySet(GPUQuerySet *set) {
     api->cmdbuf.destroyQuerySet(set);
   }
   free(set);
+}
+
+GPU_EXPORT
+GPUResult
+GPUGetTimestampPeriod(GPUCommandQueue *queue,
+                      double          *outNanosecondsPerTick) {
+  GPUDevice *device;
+  GPUResult  result;
+  GPUApi    *api;
+
+  if (!outNanosecondsPerTick) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outNanosecondsPerTick = 0.0;
+
+  device = queue ? queue->_device : NULL;
+  if (!device) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!GPUIsFeatureEnabled(device, GPU_FEATURE_TIMESTAMPS)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  if (!(api = gpuDeviceApi(device)) || !api->cmdque.getTimestampPeriod) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  result = api->cmdque.getTimestampPeriod(queue, outNanosecondsPerTick);
+  if (result != GPU_OK) {
+    *outNanosecondsPerTick = 0.0;
+    return result;
+  }
+  if (!(*outNanosecondsPerTick > 0.0)) {
+    *outNanosecondsPerTick = 0.0;
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  return GPU_OK;
 }
 
 GPU_EXPORT

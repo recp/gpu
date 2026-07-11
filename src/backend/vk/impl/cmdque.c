@@ -375,6 +375,26 @@ vk_getCommandQueue(GPUDevice *device, GPUQueueFlagBits bits, uint32_t index) {
 }
 
 GPU_HIDE
+GPUResult
+vk_getTimestampPeriod(GPUCommandQueue *queue,
+                      double          *outNanosecondsPerTick) {
+  GPUPhysicalDeviceVk *physical;
+  GPUCommandQueueVk   *native;
+  GPUDevice           *device;
+
+  native   = queue ? queue->_priv : NULL;
+  device   = queue ? queue->_device : NULL;
+  physical = device && device->phyDevice ? device->phyDevice->_priv : NULL;
+  if (!native || native->timestampValidBits == 0u || !physical ||
+      !(physical->props.limits.timestampPeriod > 0.0f)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  *outNanosecondsPerTick = (double)physical->props.limits.timestampPeriod;
+  return GPU_OK;
+}
+
+GPU_HIDE
 GPUCommandQueue*
 vk_newCommandQueue(GPUDevice * __restrict device) {
   return vk_getCommandQueue(
@@ -621,6 +641,7 @@ GPU_HIDE
 void
 vk_initCmdQue(GPUApiCommandQueue *apiQue) {
   apiQue->getCommandQueue         = vk_getCommandQueue;
+  apiQue->getTimestampPeriod      = vk_getTimestampPeriod;
   apiQue->newCommandQueue         = vk_newCommandQueue;
   apiQue->newCommandBuffer        = vk_newCommandBuffer;
   apiQue->commandBufferOnComplete = vk_commandBufferOnComplete;

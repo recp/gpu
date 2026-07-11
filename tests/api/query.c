@@ -4,7 +4,9 @@
 static int
 check_query_set_create_validation(GPUDevice *device) {
   GPUQuerySetCreateInfo info = {0};
-  GPUQuerySet *set;
+  GPUCommandQueue      *queue;
+  GPUQuerySet          *set;
+  double                timestampPeriod;
 
   info.chain.sType = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
   info.chain.structSize = sizeof(info);
@@ -73,6 +75,14 @@ check_query_set_create_validation(GPUDevice *device) {
     fprintf(stderr, "timestamp query did not report unsupported\n");
     return 0;
   }
+  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  timestampPeriod = 1.0;
+  if (!queue ||
+      GPUGetTimestampPeriod(queue, &timestampPeriod) != GPU_ERROR_UNSUPPORTED ||
+      timestampPeriod != 0.0) {
+    fprintf(stderr, "disabled timestamp period did not report unsupported\n");
+    return 0;
+  }
 
   info.type = GPU_QUERY_OCCLUSION;
   set = (GPUQuerySet *)(uintptr_t)1u;
@@ -116,6 +126,7 @@ static int
 check_query_commands_are_safe_noops(void) {
   GPURenderPassEncoder endedPass = {0};
   GPUCommandBuffer submittedCmdb = {0};
+  double timestampPeriod;
 
   endedPass._ended = true;
   submittedCmdb._submitted = true;
@@ -132,6 +143,14 @@ check_query_commands_are_safe_noops(void) {
   GPUEndPipelineStatisticsQuery(&submittedCmdb, NULL);
   GPUResolveQuerySet(NULL, NULL, 0u, 0u, NULL, 0u);
   GPUResolveQuerySet(&submittedCmdb, NULL, 0u, 0u, NULL, 0u);
+  timestampPeriod = 1.0;
+  if (GPUGetTimestampPeriod(NULL, &timestampPeriod) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      timestampPeriod != 0.0 ||
+      GPUGetTimestampPeriod(NULL, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "timestamp period accepted invalid arguments\n");
+    return 0;
+  }
 
   return 1;
 }
@@ -151,8 +170,11 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
   GPUQuerySet *set = NULL;
   GPUBuffer *buffer = NULL;
   GPUFence *fence = NULL;
+  const char *metalMode;
   GPUCommandBuffer *buffers[1];
   uint64_t timestamps[2] = {0, 0};
+  double timestampPeriod;
+  GPUResult periodResult;
   int ok = 0;
 
   if (!GPUIsFeatureSupported(adapter, GPU_FEATURE_TIMESTAMPS)) {
@@ -177,6 +199,28 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0);
   if (!queue) {
     fprintf(stderr, "timestamp query device missing graphics queue\n");
+    goto cleanup;
+  }
+
+  metalMode       = getenv("GPU_METAL_MODE");
+  timestampPeriod = 0.0;
+  periodResult    = GPUGetTimestampPeriod(queue, &timestampPeriod);
+  if (periodResult != GPU_OK && periodResult != GPU_ERROR_UNSUPPORTED) {
+    fprintf(stderr, "timestamp period query failed\n");
+    goto cleanup;
+  }
+  if (periodResult == GPU_OK && !(timestampPeriod > 0.0)) {
+    fprintf(stderr, "timestamp period was invalid\n");
+    goto cleanup;
+  }
+  if (metalMode && strcmp(metalMode, "metal4") == 0 &&
+      periodResult != GPU_OK) {
+    fprintf(stderr, "Metal 4 timestamp period was unavailable\n");
+    goto cleanup;
+  }
+  if (metalMode && strcmp(metalMode, "classic") == 0 &&
+      (periodResult != GPU_ERROR_UNSUPPORTED || timestampPeriod != 0.0)) {
+    fprintf(stderr, "classic Metal exposed an uncalibrated timestamp period\n");
     goto cleanup;
   }
 

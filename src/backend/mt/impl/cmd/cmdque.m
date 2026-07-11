@@ -129,6 +129,34 @@ mt_getCommandQueue(GPUDevice * __restrict device,
   return NULL;
 }
 
+GPU_HIDE
+GPUResult
+mt_getTimestampPeriod(GPUCommandQueue *queue,
+                      double          *outNanosecondsPerTick) {
+  GPUDeviceMT    *deviceMT;
+  MTCommandQueue *native;
+  uint64_t        frequency;
+
+  native   = mt_commandQueue(queue);
+  deviceMT = queue && queue->_device ? queue->_device->_priv : NULL;
+  if (!native || native->mode != MTCommandMode4 || !deviceMT ||
+      !deviceMT->device) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    frequency = [deviceMT->device queryTimestampFrequency];
+    if (frequency == 0u) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+
+    *outNanosecondsPerTick = 1000000000.0 / (double)frequency;
+    return GPU_OK;
+  }
+
+  return GPU_ERROR_UNSUPPORTED;
+}
+
 static MTCommandBuffer *
 mt_createCommandBufferState(GPUCommandQueue *cmdb, MTCommandQueue *queue) {
   GPUCommandBuffer *cb;
@@ -387,6 +415,7 @@ void
 mt_initCmdQue(GPUApiCommandQueue *api) {
   api->newCommandQueue         = mt_newCommandQueue;
   api->getCommandQueue         = mt_getCommandQueue;
+  api->getTimestampPeriod      = mt_getTimestampPeriod;
   api->newCommandBuffer        = mt_newCommandBuffer;
   api->commandBufferOnComplete = mt_ccmdbufOnComplete;
   api->commit                  = mt_cmdbufCommit;

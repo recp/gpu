@@ -32,6 +32,10 @@ typedef struct GPUApiCommandQueue {
                      GPUQueueFlagBits              bits,
                      uint32_t                      index);
 
+  GPUResult
+  (*getTimestampPeriod)(GPUCommandQueue *queue,
+                        double          *outNanosecondsPerTick);
+
   GPUCommandBuffer*
   (*newCommandBuffer)(GPUCommandQueue  * __restrict cmdb,
                       const char       * __restrict label,

@@ -60,6 +60,12 @@ GPU_EXPORT
 void
 GPUDestroyQuerySet(GPUQuerySet *set);
 
+/* Nanoseconds represented by one raw timestamp tick. */
+GPU_EXPORT
+GPUResult
+GPUGetTimestampPeriod(GPUCommandQueue *queue,
+                      double          *outNanosecondsPerTick);
+
 GPU_EXPORT
 void
 GPUWriteTimestamp(GPUCommandBuffer *cmdb,
