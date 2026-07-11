@@ -69,6 +69,7 @@ mt_resetRenderPass(MTRenderPass *pass) {
   }
 
   classic = pass->classic;
+  classic.visibilityResultBuffer = nil;
   for (uint32_t i = 0; i < GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS; i++) {
     classic.colorAttachments[i].texture = nil;
     classic.colorAttachments[i].resolveTexture = nil;
@@ -91,6 +92,7 @@ mt_resetRenderPass(MTRenderPass *pass) {
 
     modern.depthAttachment.texture = nil;
     modern.stencilAttachment.texture = nil;
+    modern.visibilityResultBuffer = nil;
   }
 }
 
@@ -104,6 +106,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
   GPURenderPassDesc                         *renderPass;
   MTRenderPass                              *nativePass;
   MTLRenderPassDescriptor                   *rpd;
+  MTQuerySet                                *occlusion;
   id                                         rpd4;
   uint32_t                                   i;
 
@@ -134,6 +137,19 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
   rpd = nativePass->classic;
   rpd4 = nativePass->modern;
   mt_resetRenderPass(nativePass);
+  occlusion = info->occlusionQuerySet ? info->occlusionQuerySet->_priv : NULL;
+  if (info->occlusionQuerySet && (!occlusion || !occlusion->visibility)) {
+    return NULL;
+  }
+  rpd.visibilityResultBuffer = occlusion ? occlusion->visibility : nil;
+  if (rpd4) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      MTL4RenderPassDescriptor *modern = rpd4;
+
+      modern.visibilityResultBuffer = rpd.visibilityResultBuffer;
+      modern.visibilityResultType   = MTLVisibilityResultTypeReset;
+    }
+  }
 
   for (i = 0; i < info->colorAttachmentCount; i++) {
     color = &info->pColorAttachments[i];

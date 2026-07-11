@@ -36,6 +36,7 @@ enum {
 struct GPURenderCommandEncoder {
   void               *_priv;
   GPUCommandBuffer   *_cmdb;
+  GPUQuerySet        *_occlusionQuerySet;
   GPUBuffer          *_indexBuffer;
   GPUPipelineLayout  *_pipelineLayout;
   GPUBindGroup       *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
@@ -43,6 +44,7 @@ struct GPURenderCommandEncoder {
   uint64_t            _indexBufferOffset;
   GPUPrimitiveType    _primitiveType;
   GPUIndexType        _indexType;
+  uint32_t            _occlusionQueryIndex;
   uint32_t            _requiredBindGroupMask;
   uint32_t            _colorAttachmentCount;
   GPUFormat           _colorAttachmentFormats[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
@@ -54,6 +56,7 @@ struct GPURenderCommandEncoder {
   bool                _colorAttachmentHasResolve[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   bool                _hasIndexBuffer;
   bool                _hasPipeline;
+  bool                _occlusionQueryActive;
   bool                _ended;
   uint8_t             _pushConstants[4096];
 };

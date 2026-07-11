@@ -403,6 +403,10 @@ GPU_HIDE
 void
 vk_waitSwapChainIdle(GPUSwapChainVk *swapchain);
 
+GPU_HIDE
+void
+vk_resetQuerySet(GPUCommandBuffer *cmdb, GPUQuerySet *set);
+
 #if defined(__APPLE__)
 GPU_HIDE
 void*

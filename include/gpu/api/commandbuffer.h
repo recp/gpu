@@ -35,6 +35,12 @@ typedef struct GPUApiCommandBuffer {
   void (*writeTimestamp)(GPUCommandBuffer *cmdb,
                          GPUQuerySet *set,
                          uint32_t queryIndex);
+  void (*beginOcclusionQuery)(GPURenderPassEncoder *pass,
+                              GPUQuerySet *set,
+                              uint32_t queryIndex);
+  void (*endOcclusionQuery)(GPURenderPassEncoder *pass,
+                            GPUQuerySet *set,
+                            uint32_t queryIndex);
   void (*beginPipelineStatisticsQuery)(GPUCommandBuffer *cmdb,
                                        GPUQuerySet *set,
                                        uint32_t queryIndex);

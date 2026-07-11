@@ -88,12 +88,13 @@ check_query_set_create_validation(GPUDevice *device) {
   }
 
   info.type = GPU_QUERY_OCCLUSION;
-  set = (GPUQuerySet *)(uintptr_t)1u;
-  if (GPUCreateQuerySet(device, &info, &set) != GPU_ERROR_UNSUPPORTED ||
-      set != NULL) {
-    fprintf(stderr, "occlusion query did not report unsupported\n");
+  set = NULL;
+  if (GPUCreateQuerySet(device, &info, &set) != GPU_OK || !set) {
+    fprintf(stderr, "occlusion query set create failed\n");
     return 0;
   }
+  GPUDestroyQuerySet(set);
+  set = NULL;
 
   info.type = GPU_QUERY_PIPELINE_STATISTICS;
   info.pipelineStatsMask = 0u;

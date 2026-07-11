@@ -32,6 +32,7 @@ typedef GPURenderCommandEncoder GPURenderPassEncoder;
 #endif
 
 typedef struct GPUCopyPassEncoder GPUCopyPassEncoder;
+typedef struct GPUQuerySet        GPUQuerySet;
 
 typedef enum GPULoadOp {
   GPU_LOAD_OP_LOAD      = 0,
@@ -71,6 +72,7 @@ typedef struct GPURenderPassDepthStencilAttachment {
 typedef struct GPURenderPassCreateInfo {
   GPUChainedStruct                         chain;
   const char                                *label;
+  GPUQuerySet                               *occlusionQuerySet;
   uint32_t                                   colorAttachmentCount;
   const GPURenderPassColorAttachment        *pColorAttachments;
   const GPURenderPassDepthStencilAttachment *pDepthStencilAttachment;

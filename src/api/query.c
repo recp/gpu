@@ -75,9 +75,9 @@ GPUResult
 GPUCreateQuerySet(GPUDevice                *device,
                   const GPUQuerySetCreateInfo *info,
                   GPUQuerySet             **outSet) {
-  GPUApi *api;
+  GPUApi      *api;
   GPUQuerySet *set;
-  GPUResult result;
+  GPUResult    result;
 
   if (!outSet) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -86,9 +86,6 @@ GPUCreateQuerySet(GPUDevice                *device,
 
   if (!device || !gpu_validQueryCreateInfo(info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  if (info->type == GPU_QUERY_OCCLUSION) {
-    return GPU_ERROR_UNSUPPORTED;
   }
   if (info->type == GPU_QUERY_TIMESTAMP &&
       !GPUIsFeatureEnabled(device, GPU_FEATURE_TIMESTAMPS)) {
@@ -107,9 +104,9 @@ GPUCreateQuerySet(GPUDevice                *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  set->device = device;
-  set->type = info->type;
-  set->count = info->count;
+  set->device            = device;
+  set->type              = info->type;
+  set->count             = info->count;
   set->pipelineStatsMask = info->pipelineStatsMask;
 
   result = api->cmdbuf.createQuerySet(device, info, set);
@@ -200,15 +197,50 @@ void
 GPUBeginOcclusionQuery(GPURenderPassEncoder *pass,
                        GPUQuerySet          *set,
                        uint32_t              queryIndex) {
-  GPU__UNUSED(pass);
-  GPU__UNUSED(set);
-  GPU__UNUSED(queryIndex);
+  GPUDevice *device;
+  GPUApi    *api;
+
+  device = pass && pass->_cmdb && pass->_cmdb->_queue
+             ? pass->_cmdb->_queue->_device
+             : NULL;
+  if (!pass || pass->_ended || pass->_occlusionQueryActive ||
+      !set || pass->_occlusionQuerySet != set || set->device != device ||
+      set->type != GPU_QUERY_OCCLUSION || queryIndex >= set->count) {
+    return;
+  }
+  if (!(api = gpuDeviceApi(device)) || !api->cmdbuf.beginOcclusionQuery) {
+    return;
+  }
+
+  pass->_occlusionQueryIndex  = queryIndex;
+  pass->_occlusionQueryActive = true;
+  api->cmdbuf.beginOcclusionQuery(pass, set, queryIndex);
 }
 
 GPU_EXPORT
 void
 GPUEndOcclusionQuery(GPURenderPassEncoder *pass) {
-  GPU__UNUSED(pass);
+  GPUQuerySet *set;
+  GPUDevice   *device;
+  GPUApi      *api;
+  uint32_t     queryIndex;
+
+  set    = pass ? pass->_occlusionQuerySet : NULL;
+  device = pass && pass->_cmdb && pass->_cmdb->_queue
+             ? pass->_cmdb->_queue->_device
+             : NULL;
+  if (!pass || pass->_ended || !pass->_occlusionQueryActive ||
+      !set || set->device != device || set->type != GPU_QUERY_OCCLUSION) {
+    return;
+  }
+  if (!(api = gpuDeviceApi(device)) || !api->cmdbuf.endOcclusionQuery) {
+    return;
+  }
+
+  queryIndex = pass->_occlusionQueryIndex;
+  api->cmdbuf.endOcclusionQuery(pass, set, queryIndex);
+  pass->_occlusionQueryIndex  = 0u;
+  pass->_occlusionQueryActive = false;
 }
 
 GPU_EXPORT
@@ -277,6 +309,7 @@ GPUResolveQuerySet(GPUCommandBuffer *cmdb,
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder ||
       cmdb->_pipelineStatsQuery || !set || !dstBuffer ||
       (set->type != GPU_QUERY_TIMESTAMP &&
+       set->type != GPU_QUERY_OCCLUSION &&
        set->type != GPU_QUERY_PIPELINE_STATISTICS) ||
       set->device != device || dstBuffer->device != device ||
       !gpuBufferHasUsage(dstBuffer, GPU_BUFFER_USAGE_COPY_DST) ||

@@ -73,6 +73,7 @@ vk_createQuerySet(GPUDevice                  *device,
   deviceVk = device ? device->_priv : NULL;
   if (!deviceVk || !deviceVk->device || !info || !set ||
       (info->type != GPU_QUERY_TIMESTAMP &&
+       info->type != GPU_QUERY_OCCLUSION &&
        info->type != GPU_QUERY_PIPELINE_STATISTICS)) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -87,6 +88,8 @@ vk_createQuerySet(GPUDevice                  *device,
   if (info->type == GPU_QUERY_PIPELINE_STATISTICS) {
     queryInfo.queryType          = VK_QUERY_TYPE_PIPELINE_STATISTICS;
     queryInfo.pipelineStatistics = vk_pipelineStatisticFlags();
+  } else if (info->type == GPU_QUERY_OCCLUSION) {
+    queryInfo.queryType = VK_QUERY_TYPE_OCCLUSION;
   } else {
     queryInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
   }
@@ -101,6 +104,55 @@ vk_createQuerySet(GPUDevice                  *device,
   native->device = deviceVk->device;
   set->_priv      = native;
   return GPU_OK;
+}
+
+GPU_HIDE
+void
+vk_resetQuerySet(GPUCommandBuffer *cmdb, GPUQuerySet *set) {
+  GPUCommandBufferVk *command;
+  GPUQuerySetVk      *native;
+
+  command = cmdb ? cmdb->_priv : NULL;
+  native  = set ? set->_priv : NULL;
+  if (!command || !command->command || !native || !native->pool) {
+    return;
+  }
+
+  vkCmdResetQueryPool(command->command, native->pool, 0u, set->count);
+}
+
+GPU_HIDE
+void
+vk_beginOcclusionQuery(GPURenderPassEncoder *pass,
+                       GPUQuerySet          *set,
+                       uint32_t              queryIndex) {
+  GPURenderEncoderVk *encoder;
+  GPUQuerySetVk      *native;
+
+  encoder = pass ? pass->_priv : NULL;
+  native  = set ? set->_priv : NULL;
+  if (!encoder || !encoder->command || !native || !native->pool) {
+    return;
+  }
+
+  vkCmdBeginQuery(encoder->command, native->pool, queryIndex, 0u);
+}
+
+GPU_HIDE
+void
+vk_endOcclusionQuery(GPURenderPassEncoder *pass,
+                     GPUQuerySet          *set,
+                     uint32_t              queryIndex) {
+  GPURenderEncoderVk *encoder;
+  GPUQuerySetVk      *native;
+
+  encoder = pass ? pass->_priv : NULL;
+  native  = set ? set->_priv : NULL;
+  if (!encoder || !encoder->command || !native || !native->pool) {
+    return;
+  }
+
+  vkCmdEndQuery(encoder->command, native->pool, queryIndex);
 }
 
 GPU_HIDE
@@ -204,6 +256,8 @@ vk_resolveQuerySet(GPUCommandBuffer *cmdb,
       return;
     }
     resultStride = sizeof(uint64_t);
+  } else if (set->type == GPU_QUERY_OCCLUSION) {
+    resultStride = sizeof(uint64_t);
   } else if (set->type == GPU_QUERY_PIPELINE_STATISTICS) {
     resultStride = sizeof(GPUPipelineStatisticsResult);
   } else {
@@ -227,6 +281,8 @@ vk_initQuery(GPUApiCommandBuffer *api) {
   api->createQuerySet                  = vk_createQuerySet;
   api->destroyQuerySet                 = vk_destroyQuerySet;
   api->writeTimestamp                  = vk_writeTimestamp;
+  api->beginOcclusionQuery             = vk_beginOcclusionQuery;
+  api->endOcclusionQuery               = vk_endOcclusionQuery;
   api->beginPipelineStatisticsQuery    = vk_beginPipelineStatisticsQuery;
   api->endPipelineStatisticsQuery      = vk_endPipelineStatisticsQuery;
   api->resolveQuerySet                 = vk_resolveQuerySet;

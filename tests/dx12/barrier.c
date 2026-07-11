@@ -428,6 +428,242 @@ cleanup:
   return ok;
 }
 
+typedef struct DX12TestRenderTarget {
+  GPUTexture             texture;
+  GPUTextureDX12         nativeTexture;
+  GPUTextureView         view;
+  GPUTextureViewDX12     nativeView;
+  ID3D12DescriptorHeap  *rtvHeap;
+} DX12TestRenderTarget;
+
+static bool
+dx12_createTestRenderTarget(GPUDevice *device, DX12TestRenderTarget *target) {
+  GPUDeviceDX12             *nativeDevice;
+  D3D12_HEAP_PROPERTIES      heap = {0};
+  D3D12_RESOURCE_DESC        desc = {0};
+  D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {0};
+  HRESULT                    result;
+
+  nativeDevice = device ? device->_priv : NULL;
+  if (!nativeDevice || !nativeDevice->d3dDevice || !target) {
+    return false;
+  }
+  memset(target, 0, sizeof(*target));
+
+  heap.Type                   = D3D12_HEAP_TYPE_DEFAULT;
+  heap.CreationNodeMask       = 1u;
+  heap.VisibleNodeMask        = 1u;
+  desc.Dimension              = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+  desc.Width                  = 4u;
+  desc.Height                 = 4u;
+  desc.DepthOrArraySize       = 1u;
+  desc.MipLevels              = 1u;
+  desc.Format                 = DXGI_FORMAT_B8G8R8A8_UNORM;
+  desc.SampleDesc.Count       = 1u;
+  desc.Layout                 = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+  desc.Flags                  = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+  result = nativeDevice->d3dDevice->lpVtbl->CreateCommittedResource(
+    nativeDevice->d3dDevice,
+    &heap,
+    D3D12_HEAP_FLAG_NONE,
+    &desc,
+    D3D12_RESOURCE_STATE_RENDER_TARGET,
+    NULL,
+    &IID_ID3D12Resource,
+    (void **)&target->nativeTexture.resource
+  );
+  if (FAILED(result) || !target->nativeTexture.resource) {
+    return false;
+  }
+
+  heapDesc.Type           = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+  heapDesc.NumDescriptors = 1u;
+  result = nativeDevice->d3dDevice->lpVtbl->CreateDescriptorHeap(
+    nativeDevice->d3dDevice,
+    &heapDesc,
+    &IID_ID3D12DescriptorHeap,
+    (void **)&target->rtvHeap
+  );
+  if (FAILED(result) || !target->rtvHeap) {
+    target->nativeTexture.resource->lpVtbl->Release(
+      target->nativeTexture.resource
+    );
+    target->nativeTexture.resource = NULL;
+    return false;
+  }
+
+  target->rtvHeap->lpVtbl->GetCPUDescriptorHandleForHeapStart(
+    target->rtvHeap,
+    &target->nativeView.rtv
+  );
+  nativeDevice->d3dDevice->lpVtbl->CreateRenderTargetView(
+    nativeDevice->d3dDevice,
+    target->nativeTexture.resource,
+    NULL,
+    target->nativeView.rtv
+  );
+
+  target->nativeTexture.state            = D3D12_RESOURCE_STATE_RENDER_TARGET;
+  target->nativeTexture.states           = &target->nativeTexture.state;
+  target->nativeTexture.mipLevelCount    = 1u;
+  target->nativeTexture.arrayLayerCount  = 1u;
+  target->nativeTexture.subresourceCount = 1u;
+  target->nativeTexture.stateUniform     = true;
+  target->texture._priv                  = &target->nativeTexture;
+  target->texture.device                 = device;
+  target->texture.format                 = GPU_FORMAT_BGRA8_UNORM;
+  target->texture.dimension              = GPU_TEXTURE_DIMENSION_2D;
+  target->texture.width                  = 4u;
+  target->texture.height                 = 4u;
+  target->texture.depthOrLayers          = 1u;
+  target->texture.mipLevelCount          = 1u;
+  target->texture.sampleCount            = 1u;
+  target->texture.usage                  = GPU_TEXTURE_USAGE_COLOR_TARGET;
+
+  target->nativeView.resource   = target->nativeTexture.resource;
+  target->nativeView.state      = &target->nativeTexture.state;
+  target->nativeView.texture    = &target->nativeTexture;
+  target->nativeView.width      = 4u;
+  target->nativeView.height     = 4u;
+  target->nativeView.mipCount   = 1u;
+  target->nativeView.layerCount = 1u;
+  target->view._priv            = &target->nativeView;
+  target->view._texture         = &target->texture;
+  target->view.format           = GPU_FORMAT_BGRA8_UNORM;
+  return true;
+}
+
+static void
+dx12_destroyTestRenderTarget(DX12TestRenderTarget *target) {
+  if (!target) {
+    return;
+  }
+  if (target->rtvHeap) {
+    target->rtvHeap->lpVtbl->Release(target->rtvHeap);
+  }
+  if (target->nativeTexture.resource) {
+    target->nativeTexture.resource->lpVtbl->Release(
+      target->nativeTexture.resource
+    );
+  }
+}
+
+static bool
+run_occlusion_case(GPUAdapter *adapter) {
+  DX12TestRenderTarget         target;
+  GPUDevice                   *device;
+  GPUCommandQueue             *queue;
+  GPUCommandBuffer            *cmdb;
+  GPUCommandBuffer            *buffers[1];
+  GPUQuerySet                 *querySet;
+  GPUBuffer                   *resultBuffer;
+  GPUFence                    *fence;
+  GPURenderPassEncoder        *pass;
+  GPUQuerySetCreateInfo        queryInfo = {0};
+  GPUBufferCreateInfo          bufferInfo = {0};
+  GPURenderPassColorAttachment color = {0};
+  GPURenderPassCreateInfo      passInfo = {0};
+  GPUFenceCreateInfo           fenceInfo = {0};
+  GPUQueueSubmitInfo           submitInfo = {0};
+  uint64_t                     resultValue;
+  bool                         ok;
+
+  memset(&target, 0, sizeof(target));
+  device       = GPUCreateDeviceWithDefaultQueues(adapter);
+  queue        = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  cmdb         = NULL;
+  querySet     = NULL;
+  resultBuffer = NULL;
+  fence        = NULL;
+  pass         = NULL;
+  resultValue  = UINT64_MAX;
+  ok           = false;
+  if (!device || !queue || !dx12_createTestRenderTarget(device, &target)) {
+    goto cleanup;
+  }
+
+  queryInfo.chain.sType      = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
+  queryInfo.chain.structSize = sizeof(queryInfo);
+  queryInfo.label            = "dx12-occlusion";
+  queryInfo.type             = GPU_QUERY_OCCLUSION;
+  queryInfo.count            = 1u;
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "dx12-occlusion-result";
+  bufferInfo.sizeBytes        = sizeof(resultValue);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
+                                GPU_BUFFER_USAGE_COPY_SRC;
+  if (GPUCreateQuerySet(device, &queryInfo, &querySet) != GPU_OK ||
+      !querySet ||
+      GPUCreateBuffer(device, &bufferInfo, &resultBuffer) != GPU_OK ||
+      !resultBuffer ||
+      GPUAcquireCommandBuffer(queue, "dx12-occlusion", &cmdb) != GPU_OK ||
+      !cmdb) {
+    goto cleanup;
+  }
+
+  color.view                    = &target.view;
+  color.loadOp                  = GPU_LOAD_OP_CLEAR;
+  color.storeOp                 = GPU_STORE_OP_STORE;
+  passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  passInfo.chain.structSize     = sizeof(passInfo);
+  passInfo.label                = "dx12-occlusion";
+  passInfo.occlusionQuerySet    = querySet;
+  passInfo.colorAttachmentCount = 1u;
+  passInfo.pColorAttachments    = &color;
+  pass = GPUBeginRenderPass(cmdb, &passInfo);
+  if (!pass) {
+    goto cleanup;
+  }
+
+  GPUBeginOcclusionQuery(pass, querySet, 0u);
+  if (!pass->_occlusionQueryActive) {
+    goto cleanup;
+  }
+  GPUEndOcclusionQuery(pass);
+  GPUEndRenderPass(pass);
+  pass = NULL;
+  GPUResolveQuerySet(cmdb, querySet, 0u, 1u, resultBuffer, 0u);
+
+  fenceInfo.chain.sType      = GPU_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  fenceInfo.chain.structSize = sizeof(fenceInfo);
+  if (GPUCreateFence(device, &fenceInfo, &fence) != GPU_OK || !fence) {
+    goto cleanup;
+  }
+
+  buffers[0]                    = cmdb;
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.ppCommandBuffers   = buffers;
+  submitInfo.fence              = fence;
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
+      GPUWaitFence(fence, UINT64_MAX) != GPU_OK ||
+      GPUQueueReadBuffer(queue,
+                         resultBuffer,
+                         0u,
+                         &resultValue,
+                         sizeof(resultValue)) != GPU_OK ||
+      resultValue != 0u) {
+    cmdb = NULL;
+    goto cleanup;
+  }
+  cmdb = NULL;
+  ok   = true;
+
+cleanup:
+  if (pass) {
+    GPUEndOcclusionQuery(pass);
+    GPUEndRenderPass(pass);
+  }
+  GPUDestroyFence(fence);
+  GPUDestroyBuffer(resultBuffer);
+  GPUDestroyQuerySet(querySet);
+  dx12_destroyTestRenderTarget(&target);
+  GPUDestroyDevice(device);
+  return ok;
+}
+
 int
 main(void) {
   GPUInstanceCreateInfo instanceInfo = {0};
@@ -453,7 +689,8 @@ main(void) {
   }
 
   ok = run_barrier_case(adapter, false) &&
-       run_barrier_case(adapter, true);
+       run_barrier_case(adapter, true) &&
+       run_occlusion_case(adapter);
   GPUDestroyInstance(instance);
   if (!ok) {
     return 1;

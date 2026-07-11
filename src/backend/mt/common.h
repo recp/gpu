@@ -157,6 +157,7 @@ struct MTCommandBuffer {
 
 typedef struct MTQuerySet {
   id<MTLCounterSampleBuffer> classic;
+  id<MTLBuffer>              visibility;
   id                          modern;
   MTCommandMode              mode;
 } MTQuerySet;

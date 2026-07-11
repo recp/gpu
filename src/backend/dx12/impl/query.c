@@ -98,7 +98,8 @@ dx12_createQuerySet(GPUDevice                  *device,
 
   deviceDX12 = device ? device->_priv : NULL;
   if (!deviceDX12 || !deviceDX12->d3dDevice || !info || !set ||
-      info->type != GPU_QUERY_PIPELINE_STATISTICS) {
+      (info->type != GPU_QUERY_OCCLUSION &&
+       info->type != GPU_QUERY_PIPELINE_STATISTICS)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -107,7 +108,9 @@ dx12_createQuerySet(GPUDevice                  *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  desc.Type     = D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS;
+  desc.Type     = info->type == GPU_QUERY_OCCLUSION
+                    ? D3D12_QUERY_HEAP_TYPE_OCCLUSION
+                    : D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS;
   desc.Count    = info->count;
   desc.NodeMask = 0u;
   result = deviceDX12->d3dDevice->lpVtbl->CreateQueryHeap(
@@ -124,6 +127,50 @@ dx12_createQuerySet(GPUDevice                  *device,
   dx12__setQueryName(native->heap, info->label);
   set->_priv = native;
   return GPU_OK;
+}
+
+GPU_HIDE
+void
+dx12_beginOcclusionQuery(GPURenderPassEncoder *pass,
+                         GPUQuerySet          *set,
+                         uint32_t              queryIndex) {
+  GPURenderEncoderDX12 *encoder;
+  GPUQuerySetDX12      *native;
+
+  encoder = pass ? pass->_priv : NULL;
+  native  = set ? set->_priv : NULL;
+  if (!encoder || !encoder->commandList || !native || !native->heap) {
+    return;
+  }
+
+  encoder->commandList->lpVtbl->BeginQuery(
+    encoder->commandList,
+    native->heap,
+    D3D12_QUERY_TYPE_BINARY_OCCLUSION,
+    queryIndex
+  );
+}
+
+GPU_HIDE
+void
+dx12_endOcclusionQuery(GPURenderPassEncoder *pass,
+                       GPUQuerySet          *set,
+                       uint32_t              queryIndex) {
+  GPURenderEncoderDX12 *encoder;
+  GPUQuerySetDX12      *native;
+
+  encoder = pass ? pass->_priv : NULL;
+  native  = set ? set->_priv : NULL;
+  if (!encoder || !encoder->commandList || !native || !native->heap) {
+    return;
+  }
+
+  encoder->commandList->lpVtbl->EndQuery(
+    encoder->commandList,
+    native->heap,
+    D3D12_QUERY_TYPE_BINARY_OCCLUSION,
+    queryIndex
+  );
 }
 
 GPU_HIDE
@@ -198,6 +245,7 @@ dx12_resolveQuerySet(GPUCommandBuffer *cmdb,
   GPUCommandBufferDX12 *command;
   GPUQuerySetDX12      *native;
   GPUBufferDX12        *buffer;
+  D3D12_QUERY_TYPE      queryType;
   D3D12_RESOURCE_STATES previousState;
 
   command = cmdb ? cmdb->_priv : NULL;
@@ -213,6 +261,13 @@ dx12_resolveQuerySet(GPUCommandBuffer *cmdb,
     }
     return;
   }
+  if (set->type == GPU_QUERY_OCCLUSION) {
+    queryType = D3D12_QUERY_TYPE_BINARY_OCCLUSION;
+  } else if (set->type == GPU_QUERY_PIPELINE_STATISTICS) {
+    queryType = D3D12_QUERY_TYPE_PIPELINE_STATISTICS;
+  } else {
+    return;
+  }
 
   previousState = buffer->state;
   dx12__transitionQueryBuffer(command,
@@ -221,7 +276,7 @@ dx12_resolveQuerySet(GPUCommandBuffer *cmdb,
   command->commandList->lpVtbl->ResolveQueryData(
     command->commandList,
     native->heap,
-    D3D12_QUERY_TYPE_PIPELINE_STATISTICS,
+    queryType,
     firstQuery,
     queryCount,
     buffer->resource,
@@ -235,6 +290,8 @@ void
 dx12_initQuery(GPUApiCommandBuffer *api) {
   api->createQuerySet               = dx12_createQuerySet;
   api->destroyQuerySet              = dx12_destroyQuerySet;
+  api->beginOcclusionQuery          = dx12_beginOcclusionQuery;
+  api->endOcclusionQuery            = dx12_endOcclusionQuery;
   api->beginPipelineStatisticsQuery = dx12_beginPipelineStatisticsQuery;
   api->endPipelineStatisticsQuery   = dx12_endPipelineStatisticsQuery;
   api->resolveQuerySet              = dx12_resolveQuerySet;

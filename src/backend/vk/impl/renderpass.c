@@ -324,6 +324,9 @@ vk_beginRenderPass(GPUCommandBuffer              *cmdb,
       view->imageIndex != swapchain->acquiredImageIndex) {
     return NULL;
   }
+  if (info->occlusionQuerySet) {
+    vk_resetQuerySet(cmdb, info->occlusionQuerySet);
+  }
 
   pass   = &command->renderPass;
   native = &command->renderPassState;

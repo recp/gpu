@@ -596,7 +596,8 @@ typedef enum RenderReadbackDrawMode {
   RENDER_READBACK_DRAW_INDIRECT,
   RENDER_READBACK_DRAW_INDEXED_INDIRECT,
   RENDER_READBACK_DRAW_MULTI_INDIRECT,
-  RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT
+  RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT,
+  RENDER_READBACK_DRAW_OCCLUSION
 } RenderReadbackDrawMode;
 
 typedef struct RenderIndirectArgs {
@@ -628,6 +629,8 @@ render_readback_label(RenderReadbackDrawMode mode, int clipped) {
       return "api-render-readback-multi-indirect";
     case RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT:
       return "api-render-readback-indexed-multi-indirect";
+    case RENDER_READBACK_DRAW_OCCLUSION:
+      return "api-render-readback-occlusion";
     case RENDER_READBACK_DRAW:
     default:
       return "api-render-readback";
@@ -708,6 +711,7 @@ check_render_readback_case(GPUDevice *device,
                        mode == RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT;
   const int multi = mode == RENDER_READBACK_DRAW_MULTI_INDIRECT ||
                     mode == RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT;
+  const int occlusion = mode == RENDER_READBACK_DRAW_OCCLUSION;
   const void *vertexData = multi ? (const void *)kMultiTriangles :
                                   (const void *)kFullscreenTriangle;
   const uint64_t vertexDataSize = multi ? sizeof(kMultiTriangles) :
@@ -723,8 +727,10 @@ check_render_readback_case(GPUDevice *device,
   GPUBuffer *indexBuffer = NULL;
   GPUBuffer *argsBuffer = NULL;
   GPUBuffer *readbackBuffer = NULL;
+  GPUBuffer *queryBuffer = NULL;
   GPUTexture *target = NULL;
   GPUTextureView *targetView = NULL;
+  GPUQuerySet *querySet = NULL;
   GPUPipelineLayout *pipelineLayout = NULL;
   GPUCommandBuffer *cmdb = NULL;
   GPUCommandBuffer *buffers[1];
@@ -737,6 +743,7 @@ check_render_readback_case(GPUDevice *device,
   GPUPipelineLayoutCreateInfo pipelineLayoutInfo = {0};
   GPURenderPipelineCreateInfo pipelineInfo = {0};
   GPUBufferCreateInfo bufferInfo = {0};
+  GPUQuerySetCreateInfo queryInfo = {0};
   GPUTextureCreateInfo textureInfo = {0};
   GPUTextureViewCreateInfo viewInfo = {0};
   GPURenderPassColorAttachment color = {0};
@@ -748,6 +755,7 @@ check_render_readback_case(GPUDevice *device,
   GPUQueueSubmitInfo submitInfo = {0};
   GPUDynamicStateApplyInfo dynamicState = {0};
   uint8_t pixels[4u * 4u * 4u] = {0};
+  uint64_t occlusionResult = 0u;
   size_t centerOffset;
   int ok = 0;
 
@@ -870,6 +878,27 @@ check_render_readback_case(GPUDevice *device,
     fprintf(stderr, "failed to create %s readback buffer\n", label);
     goto cleanup;
   }
+  if (occlusion) {
+    queryInfo.chain.sType      = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
+    queryInfo.chain.structSize = sizeof(queryInfo);
+    queryInfo.label            = label;
+    queryInfo.type             = GPU_QUERY_OCCLUSION;
+    queryInfo.count            = 1u;
+    if (GPUCreateQuerySet(device, &queryInfo, &querySet) != GPU_OK ||
+        !querySet) {
+      fprintf(stderr, "failed to create %s query set\n", label);
+      goto cleanup;
+    }
+
+    bufferInfo.sizeBytes = sizeof(occlusionResult);
+    bufferInfo.usage     = GPU_BUFFER_USAGE_COPY_DST |
+                           GPU_BUFFER_USAGE_COPY_SRC;
+    if (GPUCreateBuffer(device, &bufferInfo, &queryBuffer) != GPU_OK ||
+        !queryBuffer) {
+      fprintf(stderr, "failed to create %s query buffer\n", label);
+      goto cleanup;
+    }
+  }
 
   textureInfo.chain.sType = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
@@ -917,6 +946,7 @@ check_render_readback_case(GPUDevice *device,
   rp.chain.sType = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   rp.chain.structSize = sizeof(rp);
   rp.label = label;
+  rp.occlusionQuerySet = querySet;
   rp.colorAttachmentCount = 1u;
   rp.pColorAttachments = &color;
 
@@ -945,6 +975,18 @@ check_render_readback_case(GPUDevice *device,
     dynamicState.scissor.height = 2u;
     GPUApplyDynamicState(renderPass, &dynamicState);
   }
+  if (occlusion) {
+    GPUBeginOcclusionQuery(renderPass, querySet, 0u);
+    if (!renderPass->_occlusionQueryActive) {
+      fprintf(stderr, "failed to begin %s query\n", label);
+      goto cleanup;
+    }
+    GPUEndRenderPass(renderPass);
+    if (renderPass->_ended || !renderPass->_occlusionQueryActive) {
+      fprintf(stderr, "%s pass ended with an active query\n", label);
+      goto cleanup;
+    }
+  }
   if (mode == RENDER_READBACK_DRAW_INDEXED) {
     GPUBindIndexBuffer(renderPass, indexBuffer, 0u, GPUIndexTypeUInt16);
     GPUDrawIndexed(renderPass, 3u, 1u, 0u, 0, 0u);
@@ -969,8 +1011,18 @@ check_render_readback_case(GPUDevice *device,
   } else {
     GPUDraw(renderPass, 3u, 1u, 0u, 0u);
   }
+  if (occlusion) {
+    GPUEndOcclusionQuery(renderPass);
+    if (renderPass->_occlusionQueryActive) {
+      fprintf(stderr, "failed to end %s query\n", label);
+      goto cleanup;
+    }
+  }
   GPUEndRenderPass(renderPass);
   renderPass = NULL;
+  if (occlusion) {
+    GPUResolveQuerySet(cmdb, querySet, 0u, 1u, queryBuffer, 0u);
+  }
 
   textureBarrier.texture = target;
   textureBarrier.srcAccess = GPU_ACCESS_COLOR_WRITE;
@@ -1025,6 +1077,16 @@ check_render_readback_case(GPUDevice *device,
     fprintf(stderr, "%s buffer read failed\n", label);
     goto cleanup;
   }
+  if (occlusion &&
+      (GPUQueueReadBuffer(queue,
+                          queryBuffer,
+                          0u,
+                          &occlusionResult,
+                          sizeof(occlusionResult)) != GPU_OK ||
+       occlusionResult == 0u)) {
+    fprintf(stderr, "%s query result was not visible\n", label);
+    goto cleanup;
+  }
 
   if (clipped &&
       (pixels[0] > 2u || pixels[1] > 2u || pixels[2] > 2u ||
@@ -1064,15 +1126,18 @@ cleanup:
     GPUEndCopyPass(copyPass);
   }
   if (renderPass) {
+    GPUEndOcclusionQuery(renderPass);
     GPUEndRenderPass(renderPass);
   }
   GPUDestroyFence(fence);
   GPUDestroyTextureView(targetView);
   GPUDestroyTexture(target);
+  GPUDestroyBuffer(queryBuffer);
   GPUDestroyBuffer(readbackBuffer);
   GPUDestroyBuffer(argsBuffer);
   GPUDestroyBuffer(indexBuffer);
   GPUDestroyBuffer(vertexBuffer);
+  GPUDestroyQuerySet(querySet);
   GPUDestroyRenderPipeline(pipeline);
   GPUDestroyPipelineLayout(pipelineLayout);
   GPUDestroyShaderLibrary(library);
@@ -1092,6 +1157,9 @@ check_render_readback(GPUDevice *device) {
                                     0) &&
          check_render_readback_case(device,
                                     RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT,
+                                    0) &&
+         check_render_readback_case(device,
+                                    RENDER_READBACK_DRAW_OCCLUSION,
                                     0);
 }
 

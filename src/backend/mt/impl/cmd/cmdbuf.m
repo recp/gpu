@@ -411,33 +411,58 @@ mt_supportsBlitCounterSampling(id<MTLDevice> device) {
 
 GPU_HIDE
 GPUResult
-mt_createQuerySet(GPUDevice *device,
+mt_createQuerySet(GPUDevice                  *device,
                   const GPUQuerySetCreateInfo *info,
-                  GPUQuerySet *set) {
-  GPUDeviceMT *deviceMT;
-  MTQuerySet *native;
+                  GPUQuerySet                *set) {
+  GPUDeviceMT                      *deviceMT;
+  MTQuerySet                       *native;
   MTLCounterSampleBufferDescriptor *desc;
-  id<MTLCounterSampleBuffer> sampleBuffer;
-  id<MTLCounterSet> counterSet;
-  NSError *error;
+  id<MTLCounterSampleBuffer>       sampleBuffer;
+  id<MTLCounterSet>                counterSet;
+  NSError                         *error;
 
-  if (!device || !info || !set || info->type != GPU_QUERY_TIMESTAMP) {
+  if (!device || !info || !set ||
+      (info->type != GPU_QUERY_TIMESTAMP &&
+       info->type != GPU_QUERY_OCCLUSION)) {
     return GPU_ERROR_UNSUPPORTED;
   }
   if (!device->_priv) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!mt_counterApiAvailable()) {
-    return GPU_ERROR_UNSUPPORTED;
-  }
-
   deviceMT = device->_priv;
-  native = calloc(1, sizeof(*native));
+  native   = calloc(1, sizeof(*native));
   if (!native) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
   native->mode = (MTCommandMode)deviceMT->commandMode;
+  if (info->type == GPU_QUERY_OCCLUSION) {
+    uint64_t resultBytes;
+
+    resultBytes = (uint64_t)info->count * sizeof(uint64_t);
+    if (resultBytes > NSUIntegerMax) {
+      free(native);
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    native->visibility = [deviceMT->device
+      newBufferWithLength:(NSUInteger)resultBytes
+                  options:MTLResourceStorageModePrivate];
+    if (!native->visibility) {
+      free(native);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    if (info->label && info->label[0] != '\0') {
+      native->visibility.label = [NSString stringWithUTF8String:info->label];
+    }
+    set->_priv = native;
+    return GPU_OK;
+  }
+
+  if (!mt_counterApiAvailable()) {
+    free(native);
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
   if (native->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       MTL4CounterHeapDescriptor *heapDesc;
@@ -506,6 +531,7 @@ mt_destroyQuerySet(GPUQuerySet *set) {
 
   native = set->_priv;
   [native->classic release];
+  [native->visibility release];
   [native->modern release];
   free(native);
   set->_priv = NULL;
@@ -550,33 +576,132 @@ mt_writeTimestamp(GPUCommandBuffer *cmdb, GPUQuerySet *set, uint32_t queryIndex)
 
 GPU_HIDE
 void
+mt_beginOcclusionQuery(GPURenderPassEncoder *pass,
+                       GPUQuerySet          *set,
+                       uint32_t              queryIndex) {
+  MTRenderEncoder *encoder;
+  MTQuerySet      *native;
+  NSUInteger       offset;
+
+  encoder = pass ? pass->_priv : NULL;
+  native  = set ? set->_priv : NULL;
+  if (!encoder || !native || !native->visibility) {
+    return;
+  }
+
+  offset = (NSUInteger)queryIndex * sizeof(uint64_t);
+  if (encoder->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      [encoder->modern setVisibilityResultMode:MTLVisibilityResultModeBoolean
+                                        offset:offset];
+    }
+    return;
+  }
+  [encoder->classic setVisibilityResultMode:MTLVisibilityResultModeBoolean
+                                     offset:offset];
+}
+
+GPU_HIDE
+void
+mt_endOcclusionQuery(GPURenderPassEncoder *pass,
+                     GPUQuerySet          *set,
+                     uint32_t              queryIndex) {
+  MTRenderEncoder *encoder;
+  MTQuerySet      *native;
+  NSUInteger       offset;
+
+  encoder = pass ? pass->_priv : NULL;
+  native  = set ? set->_priv : NULL;
+  if (!encoder || !native || !native->visibility) {
+    return;
+  }
+
+  offset = (NSUInteger)queryIndex * sizeof(uint64_t);
+  if (encoder->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      [encoder->modern setVisibilityResultMode:MTLVisibilityResultModeDisabled
+                                        offset:offset];
+    }
+    return;
+  }
+  [encoder->classic setVisibilityResultMode:MTLVisibilityResultModeDisabled
+                                     offset:offset];
+}
+
+GPU_HIDE
+void
 mt_resolveQuerySet(GPUCommandBuffer *cmdb,
-                   GPUQuerySet *set,
-                   uint32_t firstQuery,
-                   uint32_t queryCount,
-                   GPUBuffer *dstBuffer,
-                   uint64_t dstOffset) {
-  MTQuerySet *native;
+                   GPUQuerySet      *set,
+                   uint32_t          firstQuery,
+                   uint32_t          queryCount,
+                   GPUBuffer        *dstBuffer,
+                   uint64_t          dstOffset) {
+  MTQuerySet               *native;
   id<MTLBlitCommandEncoder> blit;
-  id<MTLBuffer> dst;
-  uint64_t resolveBytes;
+  id<MTLBuffer>             dst;
+  uint64_t                  resolveBytes;
 
   if (!cmdb || !cmdb->_priv || !set || !set->_priv || !dstBuffer ||
       queryCount == 0u || firstQuery > set->count ||
       queryCount > set->count - firstQuery) {
     return;
   }
-  if (!mt_counterApiAvailable()) {
-    return;
-  }
-
-  dst = (id<MTLBuffer>)dstBuffer->_priv;
-  resolveBytes = (uint64_t)queryCount * sizeof(MTLCounterResultTimestamp);
+  dst          = (id<MTLBuffer>)dstBuffer->_priv;
+  resolveBytes = (uint64_t)queryCount * sizeof(uint64_t);
   if (dstOffset > [dst length] || resolveBytes > [dst length] - dstOffset) {
     return;
   }
 
   native = set->_priv;
+  if (set->type == GPU_QUERY_OCCLUSION) {
+    uint64_t sourceOffset;
+
+    sourceOffset = (uint64_t)firstQuery * sizeof(uint64_t);
+    if (!native->visibility ||
+        sourceOffset > [native->visibility length] ||
+        resolveBytes > [native->visibility length] - sourceOffset) {
+      return;
+    }
+    if (native->mode == MTCommandMode4) {
+      if (@available(macOS 26.0, iOS 26.0, *)) {
+        id<MTL4ComputeCommandEncoder> copy;
+
+        copy = [(id<MTL4CommandBuffer>)mt_modernCommandBuffer(cmdb)
+          computeCommandEncoder];
+        if (!copy) {
+          return;
+        }
+        [copy barrierAfterQueueStages:MTLStageVertex | MTLStageFragment
+                         beforeStages:MTLStageBlit
+                    visibilityOptions:MTL4VisibilityOptionDevice];
+        mt_useAllocation(cmdb, native->visibility);
+        mt_useAllocation(cmdb, dst);
+        [copy copyFromBuffer:native->visibility
+                sourceOffset:(NSUInteger)sourceOffset
+                    toBuffer:dst
+           destinationOffset:(NSUInteger)dstOffset
+                        size:(NSUInteger)resolveBytes];
+        [copy endEncoding];
+      }
+      return;
+    }
+
+    blit = [mt_classicCommandBuffer(cmdb) blitCommandEncoder];
+    if (!blit) {
+      return;
+    }
+    [blit copyFromBuffer:native->visibility
+            sourceOffset:(NSUInteger)sourceOffset
+                toBuffer:dst
+       destinationOffset:(NSUInteger)dstOffset
+                    size:(NSUInteger)resolveBytes];
+    [blit endEncoding];
+    return;
+  }
+  if (!mt_counterApiAvailable()) {
+    return;
+  }
+
   if (native->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       MTL4BufferRange range;
@@ -607,9 +732,11 @@ mt_resolveQuerySet(GPUCommandBuffer *cmdb,
 GPU_HIDE
 void
 mt_initCmdBuff(GPUApiCommandBuffer *api) {
-  api->presentDrawable = mt_cmdBufDrawable;
-  api->createQuerySet = mt_createQuerySet;
-  api->destroyQuerySet = mt_destroyQuerySet;
-  api->writeTimestamp = mt_writeTimestamp;
-  api->resolveQuerySet = mt_resolveQuerySet;
+  api->presentDrawable     = mt_cmdBufDrawable;
+  api->createQuerySet      = mt_createQuerySet;
+  api->destroyQuerySet     = mt_destroyQuerySet;
+  api->writeTimestamp      = mt_writeTimestamp;
+  api->beginOcclusionQuery = mt_beginOcclusionQuery;
+  api->endOcclusionQuery   = mt_endOcclusionQuery;
+  api->resolveQuerySet     = mt_resolveQuerySet;
 }

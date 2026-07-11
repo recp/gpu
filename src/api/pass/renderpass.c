@@ -17,6 +17,8 @@
 #include "../../common.h"
 #include "../buffer_internal.h"
 #include "../cmdqueue_internal.h"
+#include "../device_internal.h"
+#include "../query_internal.h"
 #include "../texture_internal.h"
 
 #define GPU_RENDER_PASS_MAX_COLOR_ATTACHMENTS 8u
@@ -55,7 +57,8 @@ gpu_formatIsDepthStencil(GPUFormat format) {
 }
 
 static bool
-gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info) {
+gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
+                              const GPUDevice               *device) {
   const GPURenderPassDepthStencilAttachment *depthStencil;
 
   if (!info) {
@@ -72,6 +75,11 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info) {
     return false;
   }
   if (info->colorAttachmentCount > 0 && !info->pColorAttachments) {
+    return false;
+  }
+  if (info->occlusionQuerySet &&
+      (info->occlusionQuerySet->device != device ||
+       info->occlusionQuerySet->type != GPU_QUERY_OCCLUSION)) {
     return false;
   }
 
@@ -115,6 +123,7 @@ gpu_setRenderPassEncoderInfo(GPURenderPassEncoder *encoder,
                              const GPURenderPassCreateInfo *info) {
   const GPURenderPassDepthStencilAttachment *depthStencil;
 
+  encoder->_occlusionQuerySet    = info->occlusionQuerySet;
   encoder->_colorAttachmentCount = info->colorAttachmentCount;
   for (uint32_t i = 0; i < info->colorAttachmentCount; i++) {
     const GPURenderPassColorAttachment *color;
@@ -262,9 +271,12 @@ GPURenderPassEncoder*
 GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) {
   GPURenderPassDesc    *desc;
   GPURenderPassEncoder *encoder;
+  GPUDevice            *device;
   GPUApi               *api;
 
-  if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder || !gpu_validRenderPassCreateInfo(info))
+  device = cmdb && cmdb->_queue ? cmdb->_queue->_device : NULL;
+  if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder ||
+      !gpu_validRenderPassCreateInfo(info, device))
     return NULL;
   if (!(api = gpuActiveGPUApi()))
     return NULL;
@@ -293,6 +305,18 @@ GPUEndRenderPass(GPURenderPassEncoder *pass) {
 
   if (!pass || pass->_ended)
     return;
+  if (pass->_occlusionQueryActive) {
+    GPUDevice *device;
+
+    device = pass->_cmdb && pass->_cmdb->_queue
+               ? pass->_cmdb->_queue->_device
+               : NULL;
+    gpuDeviceRecordValidationError(
+      device,
+      "GPUEndRenderPass requires ending the active occlusion query"
+    );
+    return;
+  }
 
   pass->_ended = true;
   if (pass->_cmdb) {

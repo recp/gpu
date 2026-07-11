@@ -42,6 +42,7 @@ mt_useRenderPassAllocations(GPUCommandBuffer *cmdb, id pass) {
     }
     mt_useAllocation(cmdb, modern.depthAttachment.texture);
     mt_useAllocation(cmdb, modern.stencilAttachment.texture);
+    mt_useAllocation(cmdb, modern.visibilityResultBuffer);
   }
 }
 
