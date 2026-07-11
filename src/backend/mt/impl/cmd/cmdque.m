@@ -294,20 +294,20 @@ mt_ccmdbufOnComplete(GPUCommandBuffer * __restrict cmdb,
 }
 
 GPU_HIDE
-void
+GPUResult
 mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
-  MTCommandBuffer *native;
-  MTCommandQueue  *queue;
-  id<MTLCommandBuffer> mcb;
+  MTCommandBuffer      *native;
+  MTCommandQueue       *queue;
+  id<MTLCommandBuffer>  mcb;
 
   if (!cmdb) {
-    return;
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
   native = mt_commandBuffer(cmdb);
-  queue = cmdb->_queue ? mt_commandQueue(cmdb->_queue) : NULL;
+  queue  = cmdb->_queue ? mt_commandQueue(cmdb->_queue) : NULL;
   if (!native || !queue) {
-    return;
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
   if (native->mode == MTCommandMode4) {
@@ -335,19 +335,21 @@ mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
         [drawable release];
       }
       [options release];
+      return GPU_OK;
     }
-    return;
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
   mcb = native->classic;
   if (!mcb) {
-    return;
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
   [mcb addCompletedHandler:^(id<MTLCommandBuffer> _Nonnull buffer) {
     gpu_cmdoncomplete(cmdb, buffer);
   }];
   [mcb commit];
+  return GPU_OK;
 }
 
 static

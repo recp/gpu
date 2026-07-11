@@ -538,7 +538,7 @@ vk_commandBufferOnComplete(GPUCommandBuffer * __restrict cmdb,
 }
 
 GPU_HIDE
-void
+GPUResult
 vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   GPUCommandBufferVk *native;
   GPUCommandQueueVk  *queue;
@@ -551,6 +551,7 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   VkPresentInfoKHR    presentInfo = {0};
   VkResult            result;
   VkResult            presentResult;
+  GPUResult           commitResult;
   bool                frameFenceReset;
 
   native   = cmdb ? cmdb->_priv : NULL;
@@ -558,7 +559,7 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   deviceVk = cmdb && cmdb->_queue && cmdb->_queue->_device ?
     cmdb->_queue->_device->_priv : NULL;
   if (!native || !queue || !deviceVk) {
-    return;
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
   swapchain       = native->presentSwapchain;
@@ -571,7 +572,7 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
         native->presentFrameIndex >= swapchain->imageCount ||
         native->presentImageIndex >= swapchain->imageCount) {
       gpuFinishCommandBuffer(cmdb, vk__recycleCommandBuffer);
-      return;
+      return GPU_ERROR_BACKEND_FAILURE;
     }
     frameSync   = &swapchain->frameSync[native->presentFrameIndex];
     submitFence = frameSync->fence;
@@ -604,9 +605,10 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
     }
     vk__logSubmitError(cmdb, result);
     gpuFinishCommandBuffer(cmdb, vk__recycleCommandBuffer);
-    return;
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
+  commitResult        = GPU_OK;
   native->submitFence = submitFence;
   if (swapchain) {
     swapchain->frameSubmitted = true;
@@ -620,6 +622,7 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
     presentResult = vkQueuePresentKHR(queue->queRaw, &presentInfo);
     if (presentResult != VK_SUCCESS && presentResult != VK_SUBOPTIMAL_KHR) {
       vk__logSubmitError(cmdb, presentResult);
+      commitResult = GPU_ERROR_BACKEND_FAILURE;
     }
   }
 
@@ -635,6 +638,7 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   queue->pendingTail = native;
   vk__queueSignal(queue);
   vk__queueUnlock(queue);
+  return commitResult;
 }
 
 GPU_HIDE

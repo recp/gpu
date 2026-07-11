@@ -224,8 +224,9 @@ GPU_EXPORT
 GPUResult
 GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
                const GPUQueueSubmitInfo * __restrict info) {
-  GPUApi *api;
+  GPUApi           *api;
   GPUCommandBuffer *lastCmdb;
+  GPUResult         result;
 
   if (!cmdq || !info || info->commandBufferCount == 0 || !info->ppCommandBuffers) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -272,11 +273,17 @@ GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
     info->ppCommandBuffers[i]->_submitted = true;
   }
 
+  result = GPU_OK;
   for (uint32_t i = 0; i < info->commandBufferCount; i++) {
-    api->cmdque.commit(info->ppCommandBuffers[i]);
+    GPUResult commitResult;
+
+    commitResult = api->cmdque.commit(info->ppCommandBuffers[i]);
+    if (result == GPU_OK && commitResult != GPU_OK) {
+      result = commitResult;
+    }
   }
 
-  return GPU_OK;
+  return result;
 }
 
 GPU_EXPORT

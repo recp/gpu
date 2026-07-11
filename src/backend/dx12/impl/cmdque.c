@@ -607,7 +607,7 @@ dx12_commandBufferOnComplete(GPUCommandBuffer * __restrict cmdb,
 }
 
 GPU_HIDE
-void
+GPUResult
 dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   GPUCommandBufferDX12 *native;
   GPUCommandQueueDX12  *queue;
@@ -615,12 +615,13 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   ID3D12CommandList    *commandLists[1];
   HRESULT               result;
   HRESULT               presentResult;
+  GPUResult              commitResult;
   UINT64                fenceValue;
 
   native = cmdb ? cmdb->_priv : NULL;
   queue  = native ? native->owner : NULL;
   if (!native || !queue || !native->commandList) {
-    return;
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
   result = native->commandList->lpVtbl->Close(native->commandList);
@@ -628,7 +629,7 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
     dx12__logQueueError(queue, "command list close", result);
     dx12__logDebugMessages(queue);
     gpuFinishCommandBuffer(cmdb, dx12__recycleCommandBuffer);
-    return;
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
   commandLists[0] = (ID3D12CommandList *)native->commandList;
@@ -636,7 +637,8 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
                                                     1u,
                                                     commandLists);
 
-  swapchain = native->presentSwapchain;
+  commitResult = GPU_OK;
+  swapchain    = native->presentSwapchain;
   if (swapchain && swapchain->swapChain) {
     presentResult = swapchain->swapChain->lpVtbl->Present(
       swapchain->swapChain,
@@ -645,6 +647,7 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
     );
     if (FAILED(presentResult)) {
       dx12__logQueueError(queue, "present", presentResult);
+      commitResult = GPU_ERROR_BACKEND_FAILURE;
     }
   }
   native->presentSwapchain = NULL;
@@ -656,7 +659,7 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   if (FAILED(result)) {
     dx12__logQueueError(queue, "queue signal", result);
     gpuFinishCommandBuffer(cmdb, NULL);
-    return;
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
   native->fenceValue = fenceValue;
@@ -669,6 +672,7 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   queue->pendingTail = native;
   dx12__queueSignal(queue);
   dx12__queueUnlock(queue);
+  return commitResult;
 }
 
 GPU_HIDE

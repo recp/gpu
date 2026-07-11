@@ -1,4 +1,4 @@
-#include <gpu/gpu.h>
+#include "../../src/backend/dx12/common.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -66,6 +66,31 @@ submit_empty(GPUCommandQueue *queue,
     return NULL;
   }
   return cmdb;
+}
+
+static bool
+submit_error_propagates(GPUCommandQueue *queue) {
+  GPUCommandBuffer     *cmdb;
+  GPUCommandBuffer     *buffers[1];
+  GPUCommandBufferDX12 *native;
+  GPUQueueSubmitInfo    submitInfo;
+
+  cmdb = NULL;
+  if (GPUAcquireCommandBuffer(queue, "dx12-submit-error", &cmdb) != GPU_OK ||
+      !cmdb || !(native = cmdb->_priv) || !native->commandList) {
+    return false;
+  }
+  if (FAILED(native->commandList->lpVtbl->Close(native->commandList))) {
+    return false;
+  }
+
+  buffers[0] = cmdb;
+  memset(&submitInfo, 0, sizeof(submitInfo));
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.ppCommandBuffers   = buffers;
+  return GPUQueueSubmit(queue, &submitInfo) == GPU_ERROR_BACKEND_FAILURE;
 }
 
 int
@@ -179,6 +204,14 @@ main(void) {
 
   if (!submit_empty(queue1, fence, &probe) || probe.count != 3u) {
     fprintf(stderr, "DX12 second queue submit failed\n");
+    goto fail;
+  }
+  if (!submit_error_propagates(queue0)) {
+    fprintf(stderr, "DX12 submit error was not propagated\n");
+    goto fail;
+  }
+  if (!submit_empty(queue0, fence, &probe) || probe.count != 4u) {
+    fprintf(stderr, "DX12 queue did not recover after submit error\n");
     goto fail;
   }
 
