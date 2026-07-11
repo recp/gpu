@@ -325,6 +325,35 @@ if(GPU_BUILD_SAMPLES AND WIN32)
     )
   endif()
 
+  add_executable(gpu-compute-render-dx12-usl
+    samples/compute-buffer-dx12-usl/window.c
+  )
+  target_link_libraries(gpu-compute-render-dx12-usl PRIVATE gpu user32)
+  set_target_properties(gpu-compute-render-dx12-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+
+  foreach(runtime_target us ds)
+    if(TARGET ${runtime_target})
+      add_custom_command(TARGET gpu-compute-render-dx12-usl POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:${runtime_target}>
+                $<TARGET_FILE_DIR:gpu-compute-render-dx12-usl>
+      )
+    endif()
+  endforeach()
+
+  if(EXISTS
+     "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-dx12-usl/compute_buffer.us")
+    add_custom_command(TARGET gpu-compute-render-dx12-usl POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-dx12-usl/compute_buffer.us"
+              $<TARGET_FILE_DIR:gpu-compute-render-dx12-usl>
+    )
+  endif()
+
   if(GPU_BUILD_TESTS)
     add_test(NAME dx12-compute-buffer COMMAND gpu-compute-buffer-dx12-usl)
   endif()

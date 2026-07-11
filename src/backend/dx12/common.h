@@ -131,6 +131,10 @@ typedef struct GPURenderPipelineDX12 {
   ID3D12PipelineState       *pipelineState;
   ID3D12RootSignature      *rootSignature;
   D3D12_PRIMITIVE_TOPOLOGY  topology;
+  uint32_t                  vertexBufferCount;
+  uint32_t                  vertexStrides[
+    D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT
+  ];
 } GPURenderPipelineDX12;
 
 typedef struct GPUComputePipelineDX12 {
@@ -166,6 +170,14 @@ typedef struct GPURenderEncoderDX12 {
   ID3D12DescriptorHeap       *resourceHeap;
   ID3D12DescriptorHeap       *samplerHeap;
   GPURenderPassDX12          *renderPass;
+  GPURenderPipelineDX12      *pipeline;
+  GPUBuffer                  *vertexBuffers[
+    D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT
+  ];
+  uint64_t                    vertexOffsets[
+    D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT
+  ];
+  uint32_t                    vertexBufferMask;
 } GPURenderEncoderDX12;
 
 typedef struct GPUComputeEncoderDX12 {

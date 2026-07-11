@@ -530,6 +530,8 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   library    = info->library->_priv;
   layout     = info->layout->_native;
   if (!library || !library->source || !layout || !layout->rootSignature ||
+      info->vertex.bufferLayoutCount >
+        D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT ||
       !dx12__inputLayout(&info->vertex, &elements, &elementCount)) {
     free(elements);
     return GPU_ERROR_UNSUPPORTED;
@@ -539,6 +541,10 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   if (!native) {
     free(elements);
     return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  native->vertexBufferCount = info->vertex.bufferLayoutCount;
+  for (uint32_t i = 0u; i < native->vertexBufferCount; i++) {
+    native->vertexStrides[i] = info->vertex.pBufferLayouts[i].strideBytes;
   }
   if (!dx12__topology(info->primitiveTopology,
                       &desc.PrimitiveTopologyType,

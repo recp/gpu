@@ -16,6 +16,55 @@
 
 #include "../common.h"
 
+static uint32_t
+dx12__firstSetBit(uint32_t mask) {
+  uint32_t index;
+
+  index = 0u;
+  while ((mask & 1u) == 0u) {
+    mask >>= 1u;
+    index++;
+  }
+  return index;
+}
+
+static void
+dx12__emitVertexBuffer(GPURenderEncoderDX12 *encoder, uint32_t index) {
+  GPURenderPipelineDX12   *pipeline;
+  GPUBuffer               *buffer;
+  GPUBufferDX12           *nativeBuffer;
+  D3D12_VERTEX_BUFFER_VIEW view = {0};
+  uint64_t                 offset;
+  uint64_t                 remaining;
+
+  pipeline = encoder ? encoder->pipeline : NULL;
+  if (!encoder || !encoder->commandList || !pipeline ||
+      index >= pipeline->vertexBufferCount ||
+      index >= D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT) {
+    return;
+  }
+
+  buffer       = encoder->vertexBuffers[index];
+  offset       = encoder->vertexOffsets[index];
+  nativeBuffer = buffer ? buffer->_priv : NULL;
+  if (!buffer || !nativeBuffer || !nativeBuffer->resource ||
+      nativeBuffer->gpuAddress == 0u || offset >= buffer->sizeBytes ||
+      offset > UINT64_MAX - nativeBuffer->gpuAddress ||
+      (nativeBuffer->state &
+       D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER) == 0u) {
+    return;
+  }
+
+  remaining           = buffer->sizeBytes - offset;
+  view.BufferLocation = nativeBuffer->gpuAddress + offset;
+  view.SizeInBytes    = remaining > UINT_MAX ? UINT_MAX : (UINT)remaining;
+  view.StrideInBytes  = pipeline->vertexStrides[index];
+  encoder->commandList->lpVtbl->IASetVertexBuffers(encoder->commandList,
+                                                   index,
+                                                   1u,
+                                                   &view);
+}
+
 static void
 dx12__transitionView(GPURenderEncoderDX12 *encoder,
                      GPUTextureViewDX12   *view,
@@ -171,6 +220,32 @@ dx12_setRenderPipelineState(GPURenderCommandEncoder *encoder,
   native->commandList->lpVtbl->IASetPrimitiveTopology(native->commandList,
                                                        pipeline->topology);
   native->rootSignature = pipeline->rootSignature;
+  native->pipeline      = pipeline;
+
+  for (uint32_t mask = native->vertexBufferMask;
+       mask != 0u;
+       mask &= mask - 1u) {
+    dx12__emitVertexBuffer(native, dx12__firstSetBit(mask));
+  }
+}
+
+GPU_HIDE
+void
+dx12_vertexBuffer(GPURenderCommandEncoder *encoder,
+                  GPUBuffer               *buffer,
+                  size_t                   offset,
+                  uint32_t                 index) {
+  GPURenderEncoderDX12 *native;
+
+  native = encoder ? encoder->_priv : NULL;
+  if (!native || !buffer || index >= D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT) {
+    return;
+  }
+
+  native->vertexBuffers[index] = buffer;
+  native->vertexOffsets[index] = offset;
+  native->vertexBufferMask    |= 1u << index;
+  dx12__emitVertexBuffer(native, index);
 }
 
 GPU_HIDE
@@ -296,6 +371,7 @@ dx12_initRCE(GPUApiRCE *api) {
   api->scissor                = dx12_scissor;
   api->blendConstant          = dx12_blendConstant;
   api->stencilReference       = dx12_stencilReference;
+  api->vertexBuffer           = dx12_vertexBuffer;
   api->drawPrimitives         = dx12_drawPrimitives;
   api->endEncoding            = dx12_endRenderEncoding;
 }

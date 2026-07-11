@@ -83,6 +83,8 @@ main(int argc, char **argv) {
   GPUBufferCreateInfo          bufferInfo = {0};
   GPUBindGroupEntry            groupEntry = {0};
   GPUBindGroupCreateInfo       groupInfo = {0};
+  GPUBufferBarrier             vertexBarrier = {0};
+  GPUBarrierBatch              barrierBatch = {0};
   GPUQueueSubmitInfo           submitInfo = {0};
   GeneratedVertex              vertices[3] = {0};
   const GPUBindGroupLayoutEntry *layoutEntries;
@@ -191,7 +193,8 @@ main(int argc, char **argv) {
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.label            = "dx12-compute-vertices";
   bufferInfo.sizeBytes        = sizeof(vertices);
-  bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE |
+  bufferInfo.usage            = GPU_BUFFER_USAGE_VERTEX |
+                                GPU_BUFFER_USAGE_STORAGE |
                                 GPU_BUFFER_USAGE_COPY_SRC |
                                 GPU_BUFFER_USAGE_COPY_DST;
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer ||
@@ -230,6 +233,16 @@ main(int argc, char **argv) {
   GPUDispatch(pass, 3u, 1u, 1u);
   GPUEndComputePass(pass);
   pass = NULL;
+
+  vertexBarrier.buffer              = buffer;
+  vertexBarrier.srcAccess           = GPU_ACCESS_SHADER_WRITE;
+  vertexBarrier.dstAccess           = GPU_ACCESS_SHADER_READ;
+  vertexBarrier.sizeBytes           = sizeof(vertices);
+  barrierBatch.srcStages            = GPU_STAGE_COMPUTE;
+  barrierBatch.dstStages            = GPU_STAGE_VERTEX;
+  barrierBatch.bufferBarrierCount = 1u;
+  barrierBatch.pBufferBarriers     = &vertexBarrier;
+  GPUEncodeBarriers(cmdb, &barrierBatch);
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
     fprintf(stderr, "Direct3D 12 compute fence creation failed\n");
