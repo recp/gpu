@@ -177,6 +177,16 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
 
   srcStages     = vk__barrierStages(barriers->srcStages);
   dstStages     = vk__barrierStages(barriers->dstStages);
+  for (uint32_t i = 0u; i < barriers->bufferBarrierCount; i++) {
+    const GPUBufferBarrier *barrier = &barriers->pBufferBarriers[i];
+
+    if ((barrier->srcAccess & GPU_ACCESS_INDIRECT_READ) != 0u) {
+      srcStages |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+    }
+    if ((barrier->dstAccess & GPU_ACCESS_INDIRECT_READ) != 0u) {
+      dstStages |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+    }
+  }
   bufferOffset  = 0u;
   textureOffset = 0u;
   while (bufferOffset < barriers->bufferBarrierCount ||

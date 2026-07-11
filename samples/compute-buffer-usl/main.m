@@ -33,7 +33,10 @@ typedef struct GeneratedVertex {
   GPUComputePipeline *_computePipeline;
   GPURenderPipeline  *_renderPipeline;
   GPUBuffer          *_vertexBuffer;
-  GPUBindGroup       *_vertexBindGroup;
+  GPUBuffer          *_indexBuffer;
+  GPUBuffer          *_indirectBuffer;
+  GPUBuffer          *_dispatchBuffer;
+  GPUBindGroup       *_computeBindGroup;
   NSTimer            *_timer;
   NSInteger           _exitAfterFrames;
   NSInteger           _submittedFrames;
@@ -51,6 +54,10 @@ static const GeneratedVertex kExpectedVertices[] = {
   { {  0.6f, -0.6f, 0.0f, 1.0f }, { 0.1f, 1.0f, 0.3f, 1.0f } },
   { {  0.0f,  0.6f, 0.0f, 1.0f }, { 0.2f, 0.4f, 1.0f, 1.0f } },
 };
+
+static const uint16_t kIndices[] = {0u, 1u, 2u};
+static const uint32_t kDispatchArgs[] = {3u, 1u, 1u};
+static const uint32_t kExpectedDrawArgs[] = {3u, 1u, 0u, 0u, 0u};
 
 static volatile int gComputeBufferValidationFailed = 0;
 
@@ -212,6 +219,58 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     return NO;
   }
 
+  GPUBufferCreateInfo indexBufferInfo = {
+    .chain = { .sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+               .structSize = sizeof(GPUBufferCreateInfo) },
+    .label = "compute-buffer-usl-indices",
+    .sizeBytes = sizeof(kIndices),
+    .usage = GPU_BUFFER_USAGE_INDEX | GPU_BUFFER_USAGE_COPY_DST
+  };
+  if (GPUCreateBuffer(_device, &indexBufferInfo, &_indexBuffer) != GPU_OK ||
+      GPUQueueWriteBuffer(_queue,
+                          _indexBuffer,
+                          0u,
+                          kIndices,
+                          sizeof(kIndices)) != GPU_OK) {
+    NSLog(@"GPU: failed to create index buffer");
+    return NO;
+  }
+
+  GPUBufferCreateInfo indirectBufferInfo = {
+    .chain = { .sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+               .structSize = sizeof(GPUBufferCreateInfo) },
+    .label = "compute-buffer-usl-draw-args",
+    .sizeBytes = sizeof(kExpectedDrawArgs),
+    .usage = GPU_BUFFER_USAGE_STORAGE |
+             GPU_BUFFER_USAGE_INDIRECT |
+             GPU_BUFFER_USAGE_COPY_SRC
+  };
+  if (GPUCreateBuffer(_device,
+                      &indirectBufferInfo,
+                      &_indirectBuffer) != GPU_OK) {
+    NSLog(@"GPU: failed to create indirect/storage buffer");
+    return NO;
+  }
+
+  GPUBufferCreateInfo dispatchBufferInfo = {
+    .chain = { .sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+               .structSize = sizeof(GPUBufferCreateInfo) },
+    .label = "compute-buffer-usl-dispatch-args",
+    .sizeBytes = sizeof(kDispatchArgs),
+    .usage = GPU_BUFFER_USAGE_INDIRECT | GPU_BUFFER_USAGE_COPY_DST
+  };
+  if (GPUCreateBuffer(_device,
+                      &dispatchBufferInfo,
+                      &_dispatchBuffer) != GPU_OK ||
+      GPUQueueWriteBuffer(_queue,
+                          _dispatchBuffer,
+                          0u,
+                          kDispatchArgs,
+                          sizeof(kDispatchArgs)) != GPU_OK) {
+    NSLog(@"GPU: failed to create dispatch argument buffer");
+    return NO;
+  }
+
   if (!_shaderLayout ||
       _shaderLayout->bindGroupLayoutCount < 2u ||
       !_shaderLayout->bindGroupLayouts[1]) {
@@ -219,22 +278,39 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     return NO;
   }
 
-  GPUBindGroupEntry groupEntry = {0};
-  groupEntry.binding = 0;
-  groupEntry.bindingType = GPU_BINDING_STORAGE_BUFFER;
-  groupEntry.buffer.buffer = _vertexBuffer;
-  groupEntry.buffer.offset = 0;
-  groupEntry.buffer.size = vertexBufferInfo.sizeBytes;
+  uint32_t layoutEntryCount = 0u;
+  const GPUBindGroupLayoutEntry *layoutEntries = GPUGetBindGroupLayoutEntries(
+    _shaderLayout->bindGroupLayouts[1],
+    &layoutEntryCount
+  );
+  if (!layoutEntries || layoutEntryCount != 2u ||
+      layoutEntries[0].binding != 0u ||
+      layoutEntries[0].bindingType != GPU_BINDING_STORAGE_BUFFER ||
+      layoutEntries[1].binding != 1u ||
+      layoutEntries[1].bindingType != GPU_BINDING_STORAGE_BUFFER) {
+    NSLog(@"GPU: unexpected compute buffer reflection layout");
+    return NO;
+  }
+
+  GPUBindGroupEntry groupEntries[2] = {0};
+  groupEntries[0].binding       = 0u;
+  groupEntries[0].bindingType   = GPU_BINDING_STORAGE_BUFFER;
+  groupEntries[0].buffer.buffer = _vertexBuffer;
+  groupEntries[0].buffer.size   = vertexBufferInfo.sizeBytes;
+  groupEntries[1].binding       = 1u;
+  groupEntries[1].bindingType   = GPU_BINDING_STORAGE_BUFFER;
+  groupEntries[1].buffer.buffer = _indirectBuffer;
+  groupEntries[1].buffer.size   = indirectBufferInfo.sizeBytes;
 
   GPUBindGroupCreateInfo group1Info = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
                .structSize = sizeof(GPUBindGroupCreateInfo) },
     .label = "compute-buffer-usl-group1",
     .layout = _shaderLayout->bindGroupLayouts[1],
-    .entryCount = 1,
-    .pEntries = &groupEntry
+    .entryCount = 2,
+    .pEntries = groupEntries
   };
-  if (GPUCreateBindGroup(_device, &group1Info, &_vertexBindGroup) != GPU_OK) {
+  if (GPUCreateBindGroup(_device, &group1Info, &_computeBindGroup) != GPU_OK) {
     NSLog(@"GPU: failed to create bind group");
     return NO;
   }
@@ -250,7 +326,7 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPURenderPassColorAttachment color = {0};
   GPURenderPassCreateInfo rp = {0};
   GPUBufferBinding vertexBuffer = {0};
-  GPUBufferBarrier vertexBarrier = {0};
+  GPUBufferBarrier barriers[2] = {0};
   GPUBarrierBatch barrierBatch = {0};
   GPUResult submitResult = GPU_OK;
 
@@ -278,20 +354,24 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
   GPUBindComputePipeline(compute, _computePipeline);
   if (!_skipComputeBind) {
-    GPUBindComputeGroup(compute, 1, _vertexBindGroup, 0, NULL);
+    GPUBindComputeGroup(compute, 1, _computeBindGroup, 0, NULL);
   }
-  GPUDispatch(compute, 3, 1, 1);
+  GPUDispatchIndirect(compute, _dispatchBuffer, 0u);
   GPUEndComputePass(compute);
   compute = NULL;
 
-  vertexBarrier.buffer = _vertexBuffer;
-  vertexBarrier.srcAccess = GPU_ACCESS_SHADER_WRITE;
-  vertexBarrier.dstAccess = GPU_ACCESS_SHADER_READ;
-  vertexBarrier.sizeBytes = sizeof(GeneratedVertex) * 3u;
-  barrierBatch.srcStages = GPU_STAGE_COMPUTE;
-  barrierBatch.dstStages = GPU_STAGE_VERTEX;
-  barrierBatch.bufferBarrierCount = 1u;
-  barrierBatch.pBufferBarriers = &vertexBarrier;
+  barriers[0].buffer    = _vertexBuffer;
+  barriers[0].srcAccess = GPU_ACCESS_SHADER_WRITE;
+  barriers[0].dstAccess = GPU_ACCESS_SHADER_READ;
+  barriers[0].sizeBytes = sizeof(GeneratedVertex) * 3u;
+  barriers[1].buffer    = _indirectBuffer;
+  barriers[1].srcAccess = GPU_ACCESS_SHADER_WRITE;
+  barriers[1].dstAccess = GPU_ACCESS_INDIRECT_READ;
+  barriers[1].sizeBytes = sizeof(kExpectedDrawArgs);
+  barrierBatch.srcStages          = GPU_STAGE_COMPUTE;
+  barrierBatch.dstStages          = GPU_STAGE_VERTEX;
+  barrierBatch.bufferBarrierCount = 2u;
+  barrierBatch.pBufferBarriers     = barriers;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
   color.view = GPUFrameGetTargetView(frame);
@@ -316,7 +396,8 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   GPUBindRenderPipeline(render, _renderPipeline);
   GPUBindVertexBuffers(render, 0, 1, &vertexBuffer);
-  GPUDraw(render, 3, 1, 0, 0);
+  GPUBindIndexBuffer(render, _indexBuffer, 0u, GPUIndexTypeUInt16);
+  GPUDrawIndexedIndirect(render, _indirectBuffer, 0u);
   GPUEndRenderPass(render);
   render = NULL;
 
@@ -340,9 +421,11 @@ cleanup:
 
 - (BOOL)verifyReadback {
   GeneratedVertex vertices[3];
+  uint32_t        drawArgs[5];
   GPUResult result;
 
   memset(vertices, 0, sizeof(vertices));
+  memset(drawArgs, 0, sizeof(drawArgs));
   result = GPUQueueReadBuffer(_queue,
                               _vertexBuffer,
                               0,
@@ -350,6 +433,15 @@ cleanup:
                               sizeof(vertices));
   if (result != GPU_OK) {
     NSLog(@"GPUQueueReadBuffer failed: %d", result);
+    return NO;
+  }
+  result = GPUQueueReadBuffer(_queue,
+                              _indirectBuffer,
+                              0u,
+                              drawArgs,
+                              sizeof(drawArgs));
+  if (result != GPU_OK) {
+    NSLog(@"GPUQueueReadBuffer for draw args failed: %d", result);
     return NO;
   }
 
@@ -365,6 +457,13 @@ cleanup:
         return NO;
       }
     }
+  }
+
+  if (memcmp(drawArgs, kExpectedDrawArgs, sizeof(drawArgs)) != 0) {
+    if (!_skipComputeBind) {
+      NSLog(@"GPU indirect draw argument readback mismatch");
+    }
+    return NO;
   }
 
   return YES;
@@ -402,9 +501,9 @@ cleanup:
 }
 
 - (void)cleanupGPU {
-  if (_vertexBindGroup) {
-    GPUDestroyBindGroup(_vertexBindGroup);
-    _vertexBindGroup = NULL;
+  if (_computeBindGroup) {
+    GPUDestroyBindGroup(_computeBindGroup);
+    _computeBindGroup = NULL;
   }
   if (_renderPipeline) {
     GPUDestroyRenderPipeline(_renderPipeline);
@@ -417,6 +516,18 @@ cleanup:
   if (_vertexBuffer) {
     GPUDestroyBuffer(_vertexBuffer);
     _vertexBuffer = NULL;
+  }
+  if (_indexBuffer) {
+    GPUDestroyBuffer(_indexBuffer);
+    _indexBuffer = NULL;
+  }
+  if (_indirectBuffer) {
+    GPUDestroyBuffer(_indirectBuffer);
+    _indirectBuffer = NULL;
+  }
+  if (_dispatchBuffer) {
+    GPUDestroyBuffer(_dispatchBuffer);
+    _dispatchBuffer = NULL;
   }
   if (_shaderLayout) {
     GPUDestroyShaderLayout(_shaderLayout);

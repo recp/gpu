@@ -243,10 +243,14 @@ typedef struct GPURenderPassVk {
 } GPURenderPassVk;
 
 typedef struct GPURenderEncoderVk {
+  GPUBuffer       *indexBuffer;
   VkCommandBuffer  command;
   VkPipelineLayout pipelineLayout;
+  VkDeviceSize     indexOffset;
   VkExtent2D       extent;
   uint32_t         dynamicOffsets[GPU_VK_MAX_DYNAMIC_OFFSETS];
+  GPUIndexType     indexType;
+  bool             indexBound;
 } GPURenderEncoderVk;
 
 typedef struct GPUComputeEncoderVk {

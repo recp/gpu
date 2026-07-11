@@ -13,10 +13,17 @@ pub struct VSOut {
   color:    float4
 }
 
-kern(1, 1, 1) fill_vertices(inout vertices: [GeneratedVertex] #buffer(0) #group(1), gid: uint3 #global_id) {
+kern(1, 1, 1) fill_vertices(inout vertices: [GeneratedVertex] #buffer(0) #group(1),
+                            inout drawArgs: [uint] #buffer(1) #group(1),
+                            gid: uint3 #global_id) {
   if (gid.x == 0) {
     vertices[gid.x].position = float4(-0.6, -0.6, 0.0, 1.0)
     vertices[gid.x].color    = float4( 1.0,  0.2, 0.1, 1.0)
+    drawArgs[0] = 3
+    drawArgs[1] = 1
+    drawArgs[2] = 0
+    drawArgs[3] = 0
+    drawArgs[4] = 0
   } else if (gid.x == 1) {
     vertices[gid.x].position = float4( 0.6, -0.6, 0.0, 1.0)
     vertices[gid.x].color    = float4( 0.1,  1.0, 0.3, 1.0)

@@ -23,6 +23,41 @@ vk__renderEncoder(GPURenderCommandEncoder *encoder) {
   return encoder ? encoder->_priv : NULL;
 }
 
+static bool
+vk__bindIndexBuffer(GPURenderCommandEncoder *encoder,
+                    GPURenderEncoderVk      *native) {
+  GPUBuffer    *buffer;
+  GPUBufferVk  *bufferVk;
+  VkDeviceSize  offset;
+  VkIndexType   indexType;
+  uint64_t      indexSize;
+
+  buffer    = encoder ? encoder->_indexBuffer : NULL;
+  bufferVk  = buffer ? buffer->_priv : NULL;
+  offset    = encoder ? encoder->_indexBufferOffset : 0u;
+  indexSize = encoder && encoder->_indexType == GPUIndexTypeUInt32 ? 4u : 2u;
+  indexType = indexSize == 4u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
+  if (!native || !native->command || !buffer || !bufferVk ||
+      !bufferVk->buffer || offset >= buffer->sizeBytes ||
+      buffer->sizeBytes - offset < indexSize ||
+      (offset & (indexSize - 1u)) != 0u) {
+    return false;
+  }
+
+  if (native->indexBound && native->indexBuffer == buffer &&
+      native->indexOffset == offset &&
+      native->indexType == encoder->_indexType) {
+    return true;
+  }
+
+  vkCmdBindIndexBuffer(native->command, bufferVk->buffer, offset, indexType);
+  native->indexBuffer = buffer;
+  native->indexOffset = offset;
+  native->indexType   = encoder->_indexType;
+  native->indexBound  = true;
+  return true;
+}
+
 GPU_HIDE
 GPURenderCommandEncoder*
 vk_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
@@ -208,6 +243,74 @@ vk_drawPrimitives(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
+vk_drawIndexedPrims(GPURenderCommandEncoder *encoder,
+                    uint32_t                 indexCount,
+                    uint32_t                 instanceCount,
+                    uint32_t                 firstIndex,
+                    int32_t                  vertexOffset,
+                    uint32_t                 firstInstance) {
+  GPURenderEncoderVk *native;
+
+  native = vk__renderEncoder(encoder);
+  if (!vk__bindIndexBuffer(encoder, native)) {
+    return;
+  }
+
+  vkCmdDrawIndexed(native->command,
+                   indexCount,
+                   instanceCount,
+                   firstIndex,
+                   vertexOffset,
+                   firstInstance);
+}
+
+GPU_HIDE
+void
+vk_drawPrimitivesIndirect(GPURenderCommandEncoder *encoder,
+                          GPUPrimitiveType         type,
+                          GPUBuffer               *argsBuffer,
+                          uint64_t                 argsOffset) {
+  GPURenderEncoderVk *native;
+  GPUBufferVk        *buffer;
+
+  GPU__UNUSED(type);
+
+  native = vk__renderEncoder(encoder);
+  buffer = argsBuffer ? argsBuffer->_priv : NULL;
+  if (!native || !native->command || !buffer || !buffer->buffer) {
+    return;
+  }
+
+  vkCmdDrawIndirect(native->command,
+                    buffer->buffer,
+                    argsOffset,
+                    1u,
+                    sizeof(VkDrawIndirectCommand));
+}
+
+GPU_HIDE
+void
+vk_drawIndexedPrimsIndirect(GPURenderCommandEncoder *encoder,
+                            GPUBuffer               *argsBuffer,
+                            uint64_t                 argsOffset) {
+  GPURenderEncoderVk *native;
+  GPUBufferVk        *buffer;
+
+  native = vk__renderEncoder(encoder);
+  buffer = argsBuffer ? argsBuffer->_priv : NULL;
+  if (!vk__bindIndexBuffer(encoder, native) || !buffer || !buffer->buffer) {
+    return;
+  }
+
+  vkCmdDrawIndexedIndirect(native->command,
+                           buffer->buffer,
+                           argsOffset,
+                           1u,
+                           sizeof(VkDrawIndexedIndirectCommand));
+}
+
+GPU_HIDE
+void
 vk_endRenderEncoding(GPURenderCommandEncoder *encoder) {
   GPURenderEncoderVk *native;
 
@@ -220,12 +323,15 @@ vk_endRenderEncoding(GPURenderCommandEncoder *encoder) {
 GPU_HIDE
 void
 vk_initRCE(GPUApiRCE *api) {
-  api->renderCommandEncoder   = vk_renderCommandEncoder;
-  api->setRenderPipelineState = vk_setRenderPipelineState;
-  api->viewport               = vk_viewport;
-  api->scissor                = vk_scissor;
-  api->pushConstants          = vk_renderPushConstants;
-  api->vertexBuffer           = vk_vertexBuffer;
-  api->drawPrimitives         = vk_drawPrimitives;
-  api->endEncoding            = vk_endRenderEncoding;
+  api->renderCommandEncoder     = vk_renderCommandEncoder;
+  api->setRenderPipelineState   = vk_setRenderPipelineState;
+  api->viewport                 = vk_viewport;
+  api->scissor                  = vk_scissor;
+  api->pushConstants            = vk_renderPushConstants;
+  api->vertexBuffer             = vk_vertexBuffer;
+  api->drawPrimitives           = vk_drawPrimitives;
+  api->drawIndexedPrims         = vk_drawIndexedPrims;
+  api->drawPrimitivesIndirect   = vk_drawPrimitivesIndirect;
+  api->drawIndexedPrimsIndirect = vk_drawIndexedPrimsIndirect;
+  api->endEncoding              = vk_endRenderEncoding;
 }
