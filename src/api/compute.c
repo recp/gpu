@@ -62,13 +62,16 @@ gpu_validPushConstantRange(uint32_t limit,
 }
 
 static bool
-gpu_validIndirectBatch(uint64_t argsOffset,
+gpu_validIndirectBatch(GPUBuffer *argsBuffer,
+                       uint64_t argsOffset,
                        uint32_t commandCount,
                        uint32_t strideBytes,
                        uint32_t commandSize) {
   uint64_t maxCommandIndex;
+  uint64_t lastCommandOffset;
 
-  if ((argsOffset & 3u) != 0u ||
+  if (!gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
+      (argsOffset & 3u) != 0u ||
       commandCount == 0u ||
       strideBytes < commandSize ||
       (strideBytes & 3u) != 0u ||
@@ -77,8 +80,13 @@ gpu_validIndirectBatch(uint64_t argsOffset,
   }
 
   maxCommandIndex = (uint64_t)commandCount - 1u;
-  return maxCommandIndex <=
-         (UINT64_MAX - argsOffset - commandSize) / strideBytes;
+  if (maxCommandIndex >
+      (UINT64_MAX - argsOffset - commandSize) / strideBytes) {
+    return false;
+  }
+
+  lastCommandOffset = argsOffset + maxCommandIndex * strideBytes;
+  return gpuBufferRangeValid(argsBuffer, lastCommandOffset, commandSize);
 }
 
 static GPUComputePipelineState *
@@ -530,17 +538,58 @@ GPUMultiDispatchIndirect(GPUComputePassEncoder *pass,
                          uint64_t              argsOffset,
                          uint32_t              dispatchCount,
                          uint32_t              strideBytes) {
-  if (!gpu_validIndirectBatch(argsOffset,
+  GPUApi *api;
+
+  if (!pass || pass->_ended) {
+    return;
+  }
+  if (!pass->_hasPipeline) {
+    gpu_computeValidationError(
+      pass,
+      "GPUMultiDispatchIndirect skipped: no compute pipeline bound"
+    );
+    return;
+  }
+  if (!gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
+                                    pass->_boundGroupLayouts,
+                                    GPU_ENCODER_MAX_BIND_GROUPS,
+                                    pass->_requiredBindGroupMask)) {
+    gpu_computeValidationError(
+      pass,
+      "GPUMultiDispatchIndirect skipped: missing compute bind group"
+    );
+    return;
+  }
+  if (!gpu_validIndirectBatch(argsBuffer,
+                              argsOffset,
                               dispatchCount,
                               strideBytes,
                               12u)) {
+    gpu_computeValidationError(
+      pass,
+      "GPUMultiDispatchIndirect skipped: invalid indirect batch"
+    );
+    return;
+  }
+  if (!(api = gpu_computePassApi(pass))) {
+    return;
+  }
+  if (api->compute.multiDispatchIndirect &&
+      api->compute.multiDispatchIndirect(pass,
+                                         argsBuffer,
+                                         argsOffset,
+                                         dispatchCount,
+                                         strideBytes)) {
+    return;
+  }
+  if (!api->compute.dispatchIndirect) {
     return;
   }
 
   for (uint32_t i = 0; i < dispatchCount; i++) {
-    GPUDispatchIndirect(pass,
-                        argsBuffer,
-                        argsOffset + (uint64_t)i * strideBytes);
+    api->compute.dispatchIndirect(pass,
+                                  argsBuffer,
+                                  argsOffset + (uint64_t)i * strideBytes);
   }
 }
 

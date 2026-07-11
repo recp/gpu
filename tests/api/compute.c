@@ -73,6 +73,7 @@ expect_compute_pipeline_error(GPUDevice *device,
 
 static uint32_t gComputeDispatchCalls;
 static uint32_t gComputeDispatchIndirectCalls;
+static uint32_t gComputeMultiDispatchIndirectCalls;
 
 static void
 count_dispatch(GPUComputePassEncoder *enc,
@@ -94,6 +95,21 @@ count_dispatch_indirect(GPUComputePassEncoder *enc,
   (void)argsBuffer;
   (void)argsOffset;
   gComputeDispatchIndirectCalls++;
+}
+
+static bool
+count_multi_dispatch_indirect(GPUComputePassEncoder *enc,
+                              GPUBuffer *argsBuffer,
+                              uint64_t argsOffset,
+                              uint32_t dispatchCount,
+                              uint32_t strideBytes) {
+  (void)enc;
+  (void)argsBuffer;
+  (void)argsOffset;
+  (void)dispatchCount;
+  (void)strideBytes;
+  gComputeMultiDispatchIndirectCalls++;
+  return true;
 }
 
 static int
@@ -209,6 +225,11 @@ check_compute_dispatch_validation_calls(GPUDevice *device) {
   GPUApi *api;
   void (*oldDispatch)(GPUComputePassEncoder *, uint32_t, uint32_t, uint32_t);
   void (*oldDispatchIndirect)(GPUComputePassEncoder *, GPUBuffer *, uint64_t);
+  bool (*oldMultiDispatchIndirect)(GPUComputePassEncoder *,
+                                   GPUBuffer *,
+                                   uint64_t,
+                                   uint32_t,
+                                   uint32_t);
   GPUBindGroupLayoutEntry entry = {0};
   GPUBindGroupLayoutCreateInfo layoutInfo = {0};
   GPUBindGroupLayout *layout = NULL;
@@ -254,10 +275,13 @@ check_compute_dispatch_validation_calls(GPUDevice *device) {
 
   oldDispatch = api->compute.dispatch;
   oldDispatchIndirect = api->compute.dispatchIndirect;
+  oldMultiDispatchIndirect = api->compute.multiDispatchIndirect;
   api->compute.dispatch = count_dispatch;
   api->compute.dispatchIndirect = count_dispatch_indirect;
+  api->compute.multiDispatchIndirect = count_multi_dispatch_indirect;
   gComputeDispatchCalls = 0u;
   gComputeDispatchIndirectCalls = 0u;
+  gComputeMultiDispatchIndirectCalls = 0u;
 
   indirectBuffer.sizeBytes = 64u;
   indirectBuffer.usage = GPU_BUFFER_USAGE_INDIRECT;
@@ -281,8 +305,10 @@ check_compute_dispatch_validation_calls(GPUDevice *device) {
   pass._requiredBindGroupMask = 1u;
   GPUDispatch(&pass, 1u, 1u, 1u);
   GPUDispatchIndirect(&pass, &indirectBuffer, 0u);
+  GPUMultiDispatchIndirect(&pass, &indirectBuffer, 0u, 2u, 12u);
   if (gComputeDispatchCalls != 0u ||
-      gComputeDispatchIndirectCalls != 0u) {
+      gComputeDispatchIndirectCalls != 0u ||
+      gComputeMultiDispatchIndirectCalls != 0u) {
     fprintf(stderr, "compute dispatch validation called backend without required bind group\n");
     goto cleanup;
   }
@@ -299,8 +325,10 @@ check_compute_dispatch_validation_calls(GPUDevice *device) {
   GPUMultiDispatchIndirect(&pass, &indirectBuffer, 2u, 2u, 12u);
   GPUMultiDispatchIndirect(&pass, &indirectBuffer, 0u, 2u, 8u);
   GPUMultiDispatchIndirect(&pass, &indirectBuffer, 0u, 2u, 14u);
+  GPUMultiDispatchIndirect(&pass, &indirectBuffer, 48u, 2u, 12u);
   if (gComputeDispatchCalls != 0u ||
-      gComputeDispatchIndirectCalls != 0u) {
+      gComputeDispatchIndirectCalls != 0u ||
+      gComputeMultiDispatchIndirectCalls != 0u) {
     fprintf(stderr, "compute dispatch validation called backend for invalid dispatch\n");
     goto cleanup;
   }
@@ -309,7 +337,8 @@ check_compute_dispatch_validation_calls(GPUDevice *device) {
   GPUDispatchIndirect(&pass, &indirectBuffer, 0u);
   GPUMultiDispatchIndirect(&pass, &indirectBuffer, 0u, 2u, 12u);
   if (gComputeDispatchCalls != 1u ||
-      gComputeDispatchIndirectCalls != 3u) {
+      gComputeDispatchIndirectCalls != 1u ||
+      gComputeMultiDispatchIndirectCalls != 1u) {
     fprintf(stderr, "compute dispatch validation rejected valid dispatch\n");
     goto cleanup;
   }
@@ -319,6 +348,7 @@ check_compute_dispatch_validation_calls(GPUDevice *device) {
 cleanup:
   api->compute.dispatch = oldDispatch;
   api->compute.dispatchIndirect = oldDispatchIndirect;
+  api->compute.multiDispatchIndirect = oldMultiDispatchIndirect;
   GPUDestroyPipelineLayout(pipelineLayout);
   GPUDestroyBindGroupLayout(layout);
   return ok;

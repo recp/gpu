@@ -182,11 +182,12 @@ dx12_dispatch(GPUComputePassEncoder *encoder,
   native->commandList->lpVtbl->Dispatch(native->commandList, x, y, z);
 }
 
-GPU_HIDE
-void
-dx12_dispatchIndirect(GPUComputePassEncoder *encoder,
-                      GPUBuffer             *argsBuffer,
-                      uint64_t               argsOffset) {
+static bool
+dx12__dispatchIndirect(GPUComputePassEncoder *encoder,
+                       GPUBuffer             *argsBuffer,
+                       uint64_t               argsOffset,
+                       uint32_t               dispatchCount,
+                       uint32_t               strideBytes) {
   GPUComputeEncoderDX12 *native;
   GPUBufferDX12         *buffer;
 
@@ -194,19 +195,47 @@ dx12_dispatchIndirect(GPUComputePassEncoder *encoder,
   buffer = argsBuffer ? argsBuffer->_priv : NULL;
   if (!native || !native->device || !native->commandList || !buffer ||
       !buffer->resource || !native->device->dispatchSignature ||
-      (buffer->state & D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT) == 0u) {
-    return;
+      (buffer->state & D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT) == 0u ||
+      strideBytes != (uint32_t)sizeof(D3D12_DISPATCH_ARGUMENTS)) {
+    return false;
   }
 
   native->commandList->lpVtbl->ExecuteIndirect(
     native->commandList,
     native->device->dispatchSignature,
-    1u,
+    dispatchCount,
     buffer->resource,
     argsOffset,
     NULL,
     0u
   );
+  return true;
+}
+
+GPU_HIDE
+void
+dx12_dispatchIndirect(GPUComputePassEncoder *encoder,
+                      GPUBuffer             *argsBuffer,
+                      uint64_t               argsOffset) {
+  (void)dx12__dispatchIndirect(encoder,
+                               argsBuffer,
+                               argsOffset,
+                               1u,
+                               (uint32_t)sizeof(D3D12_DISPATCH_ARGUMENTS));
+}
+
+GPU_HIDE
+bool
+dx12_multiDispatchIndirect(GPUComputePassEncoder *encoder,
+                           GPUBuffer             *argsBuffer,
+                           uint64_t               argsOffset,
+                           uint32_t               dispatchCount,
+                           uint32_t               strideBytes) {
+  return dx12__dispatchIndirect(encoder,
+                                argsBuffer,
+                                argsOffset,
+                                dispatchCount,
+                                strideBytes);
 }
 
 GPU_HIDE
@@ -235,5 +264,6 @@ dx12_initCompute(GPUApiCompute *api) {
   api->setComputePipelineState = dx12_setComputePipelineState;
   api->dispatch                = dx12_dispatch;
   api->dispatchIndirect        = dx12_dispatchIndirect;
+  api->multiDispatchIndirect   = dx12_multiDispatchIndirect;
   api->endEncoding             = dx12_endComputeEncoding;
 }

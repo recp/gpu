@@ -100,6 +100,13 @@ typedef struct GPUApiCompute {
                       GPUBuffer             *argsBuffer,
                       uint64_t               argsOffset);
 
+  bool
+  (*multiDispatchIndirect)(GPUComputePassEncoder *enc,
+                           GPUBuffer             *argsBuffer,
+                           uint64_t               argsOffset,
+                           uint32_t               dispatchCount,
+                           uint32_t               strideBytes);
+
   void
   (*endEncoding)(GPUComputePassEncoder *enc);
 } GPUApiCompute;
