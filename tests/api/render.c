@@ -14,6 +14,9 @@ static const char *kRenderPipelineMSL =
   "}\n"
   "fragment float4 api_fs() {\n"
   "  return float4(1.0, 0.0, 0.0, 1.0);\n"
+  "}\n"
+  "fragment float4 api_alpha_fs() {\n"
+  "  return float4(1.0, 0.0, 0.0, 0.5);\n"
   "}\n";
 
 static int
@@ -601,15 +604,18 @@ check_render_pipeline_validation(GPUDevice *device) {
 
   info.pDepthStencilState = NULL;
   info.depthStencilFormat = GPU_FORMAT_UNDEFINED;
+  info.multisample.sampleCount           = 4u;
   info.multisample.alphaToCoverageEnable = true;
-  if (!expect_render_pipeline_error(device,
-                                    &info,
-                                    "render pipeline create accepted alpha-to-coverage")) {
+  pipeline = NULL;
+  if (GPUCreateRenderPipeline(device, &info, &pipeline) != GPU_OK || !pipeline) {
+    fprintf(stderr, "render pipeline create rejected alpha-to-coverage\n");
     GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
+  GPUDestroyRenderPipeline(pipeline);
 
+  info.multisample.sampleCount           = 1u;
   info.multisample.alphaToCoverageEnable = false;
   info.multisample.sampleMask = 0x7fffffffu;
   if (!expect_render_pipeline_error(device,
@@ -693,6 +699,19 @@ render_readback_pixel_is_red(const uint8_t *pixels,
          pixels[offset + 1u] <= 2u &&
          pixels[offset + 2u] >= 250u &&
          pixels[offset + 3u] >= 250u;
+}
+
+static int
+render_readback_pixel_is_half_red(const uint8_t *pixels,
+                                  uint32_t       width,
+                                  uint32_t       x,
+                                  uint32_t       y) {
+  size_t offset = ((size_t)y * width + x) * 4u;
+
+  return pixels[offset + 0u] <= 2u &&
+         pixels[offset + 1u] <= 2u &&
+         pixels[offset + 2u] >= 96u &&
+         pixels[offset + 2u] <= 160u;
 }
 
 static int
@@ -842,7 +861,7 @@ check_render_readback_case(GPUDevice *device,
   pipelineInfo.layout = pipelineLayout;
   pipelineInfo.library = library;
   pipelineInfo.vertexEntry = "api_vs";
-  pipelineInfo.fragmentEntry = "api_fs";
+  pipelineInfo.fragmentEntry = msaa ? "api_alpha_fs" : "api_fs";
   pipelineInfo.vertex.bufferLayoutCount = 1u;
   pipelineInfo.vertex.pBufferLayouts = &vertexLayout;
   pipelineInfo.colorTargetCount = 1u;
@@ -850,7 +869,8 @@ check_render_readback_case(GPUDevice *device,
   pipelineInfo.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
   pipelineInfo.cullMode = GPU_CULL_MODE_NONE;
   pipelineInfo.frontFace = GPU_FRONT_FACE_CCW;
-  pipelineInfo.multisample.sampleCount = msaa ? 4u : 1u;
+  pipelineInfo.multisample.sampleCount           = msaa ? 4u : 1u;
+  pipelineInfo.multisample.alphaToCoverageEnable = msaa;
   if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
       !pipeline) {
     fprintf(stderr, "failed to create %s pipeline\n", label);
@@ -1171,7 +1191,9 @@ check_render_readback_case(GPUDevice *device,
       fprintf(stderr, "%s multi draw did not touch both target halves\n", label);
       goto cleanup;
     }
-  } else if (!render_readback_pixel_is_red(pixels, width, 2u, 2u)) {
+  } else if (msaa
+               ? !render_readback_pixel_is_half_red(pixels, width, 2u, 2u)
+               : !render_readback_pixel_is_red(pixels, width, 2u, 2u)) {
     centerOffset = ((size_t)2u * width + 2u) * 4u;
     fprintf(stderr,
             "%s draw pixel mismatch: %u %u %u %u\n",

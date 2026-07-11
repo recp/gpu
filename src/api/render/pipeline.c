@@ -227,9 +227,8 @@ gpu_pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info) {
       info->multisample.sampleCount != 4u &&
       info->multisample.sampleCount != 8u)
     return false;
-  if (info->multisample.alphaToCoverageEnable ||
-      (info->multisample.sampleMask != 0u &&
-       info->multisample.sampleMask != UINT32_MAX))
+  if (info->multisample.sampleMask != 0u &&
+      info->multisample.sampleMask != UINT32_MAX)
     return false;
   if (!gpu_depthStencilStateIsValid(info->depthStencilFormat,
                                     info->pDepthStencilState))
@@ -345,6 +344,9 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   if (info->pDepthStencilState)
     pipeline->_depthStencilState = *info->pDepthStencilState;
 
+  pipeline->_sampleCount = sampleCount;
+  pipeline->_alphaToCoverageEnable =
+    info->multisample.alphaToCoverageEnable;
   gpuPipelineSetSampleCount(pipeline, sampleCount);
 
   state = gpuCompileRenderPipelineState(device, pipeline);
@@ -364,6 +366,8 @@ ready:
     pipeline->_colorTargetFormats[i] = info->pColorTargets[i].format;
   pipeline->_depthStencilFormat = info->depthStencilFormat;
   pipeline->_sampleCount = sampleCount;
+  pipeline->_alphaToCoverageEnable =
+    info->multisample.alphaToCoverageEnable;
   pipeline->_primitiveTopology = info->primitiveTopology;
   pipeline->_cullMode = info->cullMode;
   pipeline->_frontFace = info->frontFace;

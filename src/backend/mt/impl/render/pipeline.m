@@ -97,6 +97,8 @@ mt_newRenderState(GPUDevice         * __restrict device,
   if (!native) {
     return NULL;
   }
+  ((MTLRenderPipelineDescriptor *)pipeline->_priv).alphaToCoverageEnabled =
+    pipeline->_alphaToCoverageEnable;
   native->render = [deviceMT->device
     newRenderPipelineStateWithDescriptor:(MTLRenderPipelineDescriptor *)pipeline->_priv
                                    error:&error];

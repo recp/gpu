@@ -163,8 +163,9 @@ test_depth_pipeline(GPUDevice *device, GPUShaderLibrary *library) {
   pipelineInfo.primitiveTopology     = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
   pipelineInfo.cullMode              = GPU_CULL_MODE_NONE;
   pipelineInfo.frontFace             = GPU_FRONT_FACE_CCW;
-  pipelineInfo.multisample.sampleCount = 1u;
-  pipelineInfo.multisample.sampleMask  = UINT32_MAX;
+  pipelineInfo.multisample.sampleCount           = 4u;
+  pipelineInfo.multisample.sampleMask            = UINT32_MAX;
+  pipelineInfo.multisample.alphaToCoverageEnable = true;
   ok = GPUCreateRenderPipeline(device,
                                &pipelineInfo,
                                &pipeline) == GPU_OK && pipeline;
