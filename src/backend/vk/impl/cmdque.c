@@ -258,9 +258,10 @@ vk_createCommandQueue(GPUDevice       *device,
                       uint32_t         familyIndex,
                       uint32_t         queueIndex,
                       GPUQueueFlagBits bits) {
-  GPUCommandQueue   *queue;
-  GPUCommandQueueVk *native;
-  GPUDeviceVk       *deviceVk;
+  GPUCommandQueue     *queue;
+  GPUCommandQueueVk   *native;
+  GPUDeviceVk         *deviceVk;
+  GPUPhysicalDeviceVk *physical;
   VkCommandPoolCreateInfo poolInfo = {0};
 
   if (!device || !device->_priv || bits == 0u) {
@@ -276,12 +277,18 @@ vk_createCommandQueue(GPUDevice       *device,
   }
 
   deviceVk            = device->_priv;
+  physical            = device->phyDevice ? device->phyDevice->_priv : NULL;
   queue->_priv        = native;
   queue->_device      = device;
   queue->bits         = bits;
   native->queue       = queue;
   native->familyIndex = familyIndex;
   native->queueIndex  = queueIndex;
+  native->timestampValidBits = 0u;
+  if (physical && familyIndex < physical->nQueFamilies) {
+    native->timestampValidBits =
+      physical->queueFamilyProps[familyIndex].timestampValidBits;
+  }
   vkGetDeviceQueue(deviceVk->device, familyIndex, queueIndex, &native->queRaw);
   if (!native->queRaw) {
     free(native);

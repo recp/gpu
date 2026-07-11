@@ -80,9 +80,92 @@ submit_empty_compute(GPUCommandQueue *queue, GPUFence *fence) {
          GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
 }
 
+static int
+timestamp_roundtrip(GPUDevice       *device,
+                    GPUCommandQueue *queue,
+                    GPUFence        *fence) {
+  GPUQuerySetCreateInfo queryInfo = {0};
+  GPUBufferCreateInfo   bufferInfo = {0};
+  GPUQueueSubmitInfo    submitInfo = {0};
+  GPUCommandBuffer     *cmdb;
+  GPUQuerySet          *set;
+  GPUBuffer            *buffer;
+  uint64_t              timestamps[2] = {UINT64_MAX, UINT64_MAX};
+  int                   ok;
+
+  set    = NULL;
+  buffer = NULL;
+  cmdb   = NULL;
+  ok     = 0;
+
+  queryInfo.chain.sType      = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
+  queryInfo.chain.structSize = sizeof(queryInfo);
+  queryInfo.label            = "vulkan-timestamps";
+  queryInfo.type             = GPU_QUERY_TIMESTAMP;
+  queryInfo.count            = 2u;
+  if (GPUCreateQuerySet(device, &queryInfo, &set) != GPU_OK || !set) {
+    goto cleanup;
+  }
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "vulkan-timestamp-results";
+  bufferInfo.sizeBytes        = sizeof(timestamps);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
+                                GPU_BUFFER_USAGE_COPY_SRC;
+  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
+    goto cleanup;
+  }
+  if (GPUQueueWriteBuffer(queue,
+                          buffer,
+                          0u,
+                          timestamps,
+                          sizeof(timestamps)) != GPU_OK) {
+    goto cleanup;
+  }
+  if (GPUAcquireCommandBuffer(queue,
+                              "vulkan-timestamp",
+                              &cmdb) != GPU_OK || !cmdb) {
+    goto cleanup;
+  }
+
+  GPUWriteTimestamp(cmdb, set, 0u);
+  GPUWriteTimestamp(cmdb, set, 1u);
+  GPUResolveQuerySet(cmdb, set, 0u, 2u, buffer, 0u);
+
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.ppCommandBuffers   = &cmdb;
+  submitInfo.fence              = fence;
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK) {
+    cmdb = NULL;
+    goto cleanup;
+  }
+  cmdb = NULL;
+  if (GPUWaitFence(fence, UINT64_MAX) != GPU_OK ||
+      GPUQueueReadBuffer(queue,
+                         buffer,
+                         0u,
+                         timestamps,
+                         sizeof(timestamps)) != GPU_OK ||
+      timestamps[0] == UINT64_MAX || timestamps[1] == UINT64_MAX ||
+      timestamps[1] < timestamps[0]) {
+    goto cleanup;
+  }
+
+  ok = 1;
+
+cleanup:
+  GPUDestroyBuffer(buffer);
+  GPUDestroyQuerySet(set);
+  return ok;
+}
+
 int
 main(void) {
   GPUInstanceCreateInfo  instanceInfo  = {0};
+  GPUDeviceCreateInfo    deviceInfo    = {0};
   GPURuntimeConfig       runtimeConfig = {0};
   CompletionProbe        probe         = {0};
   GPUFrameStats          stats;
@@ -92,12 +175,14 @@ main(void) {
   GPUCommandQueue       *graphics;
   GPUCommandQueue       *compute;
   GPUFence              *fence;
+  GPUFeature             requiredFeatures[4];
   uint32_t               adapterCount;
   int                    ok;
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = GPU_BACKEND_VULKAN;
+  instanceInfo.enableValidation = true;
   instance = NULL;
   if (GPUCreateInstance(&instanceInfo, &instance) != GPU_OK || !instance) {
     fprintf(stderr, "vulkan instance failed\n");
@@ -113,6 +198,7 @@ main(void) {
     return 1;
   }
   if (!GPUIsFeatureSupported(adapter, GPU_FEATURE_COMPUTE) ||
+      !GPUIsFeatureSupported(adapter, GPU_FEATURE_TIMESTAMPS) ||
       !GPUIsFeatureSupported(adapter, GPU_FEATURE_INDIRECT_DRAW) ||
       !GPUIsFeatureSupported(adapter, GPU_FEATURE_MULTI_DRAW)) {
     fprintf(stderr, "vulkan feature reporting failed\n");
@@ -120,13 +206,21 @@ main(void) {
     return 1;
   }
 
-  device = GPUCreateDeviceWithDefaultQueues(adapter);
-  if (!device) {
+  requiredFeatures[0]                = GPU_FEATURE_COMPUTE;
+  requiredFeatures[1]                = GPU_FEATURE_TIMESTAMPS;
+  requiredFeatures[2]                = GPU_FEATURE_INDIRECT_DRAW;
+  requiredFeatures[3]                = GPU_FEATURE_MULTI_DRAW;
+  deviceInfo.chain.sType             = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  deviceInfo.chain.structSize        = sizeof(deviceInfo);
+  deviceInfo.required.featureCount   = GPU_ARRAY_LEN(requiredFeatures);
+  deviceInfo.required.pFeatures      = requiredFeatures;
+  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device) {
     fprintf(stderr, "vulkan device failed\n");
     GPUDestroyInstance(instance);
     return 1;
   }
   if (!GPUIsFeatureEnabled(device, GPU_FEATURE_COMPUTE) ||
+      !GPUIsFeatureEnabled(device, GPU_FEATURE_TIMESTAMPS) ||
       !GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_DRAW) ||
       !GPUIsFeatureEnabled(device, GPU_FEATURE_MULTI_DRAW)) {
     fprintf(stderr, "vulkan enabled feature reporting failed\n");
@@ -160,7 +254,8 @@ main(void) {
     return 1;
   }
 
-  ok = submit_empty_batch(graphics, fence, &probe) &&
+  ok = timestamp_roundtrip(device, graphics, fence) &&
+       submit_empty_batch(graphics, fence, &probe) &&
        submit_empty_compute(compute, fence) &&
        probe.count == 1u && probe.cmdb != NULL;
   GPUResetStats(device);

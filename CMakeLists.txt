@@ -194,6 +194,7 @@ if(GPU_ENABLE_VULKAN)
     src/backend/vk/impl/instance.c
     src/backend/vk/impl/library.c
     src/backend/vk/impl/pipeline.c
+    src/backend/vk/impl/query.c
     src/backend/vk/impl/rce.c
     src/backend/vk/impl/renderpass.c
     src/backend/vk/impl/sampler.c

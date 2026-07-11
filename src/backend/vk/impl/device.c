@@ -106,6 +106,11 @@ vk_hasQueueCapability(const GPUPhysicalDeviceVk *adapter,
   return false;
 }
 
+static bool
+vk_hasTimestampCapability(const GPUPhysicalDeviceVk *adapter) {
+  return adapter && adapter->props.limits.timestampComputeAndGraphics;
+}
+
 GPU_HIDE
 GPUPhysicalDevice*
 vk__newPhyDeviceFrom(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
@@ -220,6 +225,8 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
   switch (feature) {
     case GPU_FEATURE_COMPUTE:
       return vk_hasQueueCapability(adapterVk, VK_QUEUE_COMPUTE_BIT);
+    case GPU_FEATURE_TIMESTAMPS:
+      return vk_hasTimestampCapability(adapterVk);
     case GPU_FEATURE_INDIRECT_DRAW:
       return vk_hasQueueCapability(adapterVk, VK_QUEUE_GRAPHICS_BIT);
     case GPU_FEATURE_MULTI_DRAW:

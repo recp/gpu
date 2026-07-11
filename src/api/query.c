@@ -130,10 +130,13 @@ void
 GPUWriteTimestamp(GPUCommandBuffer *cmdb,
                   GPUQuerySet      *set,
                   uint32_t          queryIndex) {
-  GPUApi *api;
+  GPUDevice *device;
+  GPUApi    *api;
 
+  device = cmdb && cmdb->_queue ? cmdb->_queue->_device : NULL;
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder ||
-      !set || set->type != GPU_QUERY_TIMESTAMP || queryIndex >= set->count) {
+      !set || set->device != device || set->type != GPU_QUERY_TIMESTAMP ||
+      queryIndex >= set->count) {
     return;
   }
   if (!(api = gpuActiveGPUApi()) || !api->cmdbuf.writeTimestamp) {
@@ -184,11 +187,15 @@ GPUResolveQuerySet(GPUCommandBuffer *cmdb,
                    uint32_t          queryCount,
                    GPUBuffer        *dstBuffer,
                    uint64_t          dstOffset) {
-  GPUApi *api;
+  GPUDevice *device;
+  GPUApi    *api;
 
+  device = cmdb && cmdb->_queue ? cmdb->_queue->_device : NULL;
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder ||
       !set || !dstBuffer || set->type != GPU_QUERY_TIMESTAMP ||
+      set->device != device || dstBuffer->device != device ||
       !gpuBufferHasUsage(dstBuffer, GPU_BUFFER_USAGE_COPY_DST) ||
+      (dstOffset & 7u) != 0u ||
       !gpuBufferRangeValid(dstBuffer,
                            dstOffset,
                            (uint64_t)queryCount * sizeof(uint64_t)) ||

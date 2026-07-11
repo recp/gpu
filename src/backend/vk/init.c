@@ -35,6 +35,7 @@ backend_vk(void) {
     vk_initSurface(&vk.surface);
     vk_initCmdQue(&vk.cmdque);
     vk_initCmdbuf(&vk.cmdbuf);
+    vk_initQuery(&vk.cmdbuf);
     vk_initLibrary(&vk.library);
     vk_initRenderPipeline(&vk.render);
     vk_initRenderPass(&vk.renderPass);
