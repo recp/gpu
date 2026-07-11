@@ -53,17 +53,20 @@ typedef struct GPUDescriptorHeapDX12 {
 } GPUDescriptorHeapDX12;
 
 typedef struct GPUDeviceDX12 {
-  ID3D12Device              *d3dDevice;
-  GPUCommandQueue          **createdQueues;
-  HMODULE                    dxcModule;
-  GPUDescriptorHeapDX12      resourceDescriptors;
-  GPUDescriptorHeapDX12      samplerDescriptors;
-  SRWLOCK                    descriptorLock;
-  D3D_ROOT_SIGNATURE_VERSION rootSignatureVersion;
-  D3D_SHADER_MODEL           shaderModel;
-  uint32_t                   nCreatedQueues;
-  bool                       enhancedBarriers;
-  bool                       dxcAvailable;
+  ID3D12Device               *d3dDevice;
+  ID3D12CommandSignature     *drawSignature;
+  ID3D12CommandSignature     *drawIndexedSignature;
+  ID3D12CommandSignature     *dispatchSignature;
+  GPUCommandQueue           **createdQueues;
+  HMODULE                     dxcModule;
+  GPUDescriptorHeapDX12       resourceDescriptors;
+  GPUDescriptorHeapDX12       samplerDescriptors;
+  SRWLOCK                     descriptorLock;
+  D3D_ROOT_SIGNATURE_VERSION  rootSignatureVersion;
+  D3D_SHADER_MODEL            shaderModel;
+  uint32_t                    nCreatedQueues;
+  bool                        enhancedBarriers;
+  bool                        dxcAvailable;
 } GPUDeviceDX12;
 
 typedef struct GPUCommandQueueDX12 GPUCommandQueueDX12;
@@ -174,6 +177,7 @@ typedef struct GPURenderPassDX12 {
 } GPURenderPassDX12;
 
 typedef struct GPURenderEncoderDX12 {
+  GPUDeviceDX12             *device;
   ID3D12GraphicsCommandList  *commandList;
   ID3D12GraphicsCommandList7 *commandList7;
   ID3D12RootSignature        *rootSignature;
@@ -195,6 +199,7 @@ typedef struct GPURenderEncoderDX12 {
 } GPURenderEncoderDX12;
 
 typedef struct GPUComputeEncoderDX12 {
+  GPUDeviceDX12             *device;
   ID3D12GraphicsCommandList *commandList;
   ID3D12RootSignature       *rootSignature;
   ID3D12DescriptorHeap      *resourceHeap;

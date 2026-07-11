@@ -71,6 +71,8 @@ main(int argc, char **argv) {
   GPUShaderLayout       *shaderLayout;
   GPUComputePipeline    *pipeline;
   GPUBuffer             *buffer;
+  GPUBuffer             *indirectBuffer;
+  GPUBuffer             *dispatchBuffer;
   GPUBindGroup          *bindGroup;
   GPUCommandBuffer      *cmdb;
   GPUComputePassEncoder *pass;
@@ -81,12 +83,15 @@ main(int argc, char **argv) {
   GPURuntimeConfig             runtimeConfig = {0};
   GPUComputePipelineCreateInfo pipelineInfo = {0};
   GPUBufferCreateInfo          bufferInfo = {0};
-  GPUBindGroupEntry            groupEntry = {0};
+  GPUBindGroupEntry            groupEntries[2] = {0};
   GPUBindGroupCreateInfo       groupInfo = {0};
-  GPUBufferBarrier             vertexBarrier = {0};
+  GPUBufferBarrier             barriers[2] = {0};
   GPUBarrierBatch              barrierBatch = {0};
   GPUQueueSubmitInfo           submitInfo = {0};
   GeneratedVertex              vertices[3] = {0};
+  uint32_t                     drawArgs[5] = {0};
+  const uint32_t               expectedDrawArgs[5] = {3u, 1u, 0u, 0u, 0u};
+  const uint32_t               dispatchArgs[3] = {3u, 1u, 1u};
   const GPUBindGroupLayoutEntry *layoutEntries;
   uint64_t               artifactSize;
   uint32_t               adapterCount;
@@ -98,22 +103,24 @@ main(int argc, char **argv) {
     return 1;
   }
 
-  instance     = NULL;
-  adapter      = NULL;
-  device       = NULL;
-  queue        = NULL;
-  library      = NULL;
-  shaderLayout = NULL;
-  pipeline     = NULL;
-  buffer       = NULL;
-  bindGroup    = NULL;
-  cmdb         = NULL;
-  pass         = NULL;
-  fence        = NULL;
-  artifactSize = 0u;
-  artifactPath = argc == 2 ? argv[1] : "compute_buffer.us";
-  artifact     = read_file(artifactPath, &artifactSize);
-  ok           = 0;
+  instance       = NULL;
+  adapter        = NULL;
+  device         = NULL;
+  queue          = NULL;
+  library        = NULL;
+  shaderLayout   = NULL;
+  pipeline       = NULL;
+  buffer         = NULL;
+  indirectBuffer = NULL;
+  dispatchBuffer = NULL;
+  bindGroup      = NULL;
+  cmdb           = NULL;
+  pass           = NULL;
+  fence          = NULL;
+  artifactSize   = 0u;
+  artifactPath   = argc == 2 ? argv[1] : "compute_buffer.us";
+  artifact       = read_file(artifactPath, &artifactSize);
+  ok             = 0;
   if (!artifact) {
     fprintf(stderr, "USL artifact read failed\n");
     goto cleanup;
@@ -167,12 +174,17 @@ main(int argc, char **argv) {
     shaderLayout->bindGroupLayouts[1],
     &layoutEntryCount
   );
-  if (!layoutEntries || layoutEntryCount != 1u ||
+  if (!layoutEntries || layoutEntryCount != 2u ||
       layoutEntries[0].binding != 0u ||
       layoutEntries[0].bindingType != GPU_BINDING_STORAGE_BUFFER ||
       layoutEntries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
       layoutEntries[0].arrayCount != 1u ||
-      layoutEntries[0].hasDynamicOffset) {
+      layoutEntries[0].hasDynamicOffset ||
+      layoutEntries[1].binding != 1u ||
+      layoutEntries[1].bindingType != GPU_BINDING_STORAGE_BUFFER ||
+      layoutEntries[1].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
+      layoutEntries[1].arrayCount != 1u ||
+      layoutEntries[1].hasDynamicOffset) {
     fprintf(stderr, "Unexpected Direct3D 12 compute reflection layout\n");
     goto cleanup;
   }
@@ -207,16 +219,46 @@ main(int argc, char **argv) {
     goto cleanup;
   }
 
-  groupEntry.binding       = 0u;
-  groupEntry.bindingType   = GPU_BINDING_STORAGE_BUFFER;
-  groupEntry.buffer.buffer = buffer;
-  groupEntry.buffer.size   = sizeof(vertices);
+  bufferInfo.label     = "dx12-compute-draw-args";
+  bufferInfo.sizeBytes = sizeof(drawArgs);
+  bufferInfo.usage     = GPU_BUFFER_USAGE_STORAGE |
+                         GPU_BUFFER_USAGE_INDIRECT |
+                         GPU_BUFFER_USAGE_COPY_SRC;
+  if (GPUCreateBuffer(device, &bufferInfo, &indirectBuffer) != GPU_OK ||
+      !indirectBuffer) {
+    fprintf(stderr, "Direct3D 12 indirect buffer creation failed\n");
+    goto cleanup;
+  }
+
+  bufferInfo.label     = "dx12-compute-dispatch-args";
+  bufferInfo.sizeBytes = sizeof(dispatchArgs);
+  bufferInfo.usage     = GPU_BUFFER_USAGE_INDIRECT |
+                         GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(device, &bufferInfo, &dispatchBuffer) != GPU_OK ||
+      !dispatchBuffer ||
+      GPUQueueWriteBuffer(queue,
+                          dispatchBuffer,
+                          0u,
+                          dispatchArgs,
+                          sizeof(dispatchArgs)) != GPU_OK) {
+    fprintf(stderr, "Direct3D 12 dispatch buffer creation failed\n");
+    goto cleanup;
+  }
+
+  groupEntries[0].binding       = 0u;
+  groupEntries[0].bindingType   = GPU_BINDING_STORAGE_BUFFER;
+  groupEntries[0].buffer.buffer = buffer;
+  groupEntries[0].buffer.size   = sizeof(vertices);
+  groupEntries[1].binding       = 1u;
+  groupEntries[1].bindingType   = GPU_BINDING_STORAGE_BUFFER;
+  groupEntries[1].buffer.buffer = indirectBuffer;
+  groupEntries[1].buffer.size   = sizeof(drawArgs);
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "dx12-compute-group1";
   groupInfo.layout           = shaderLayout->bindGroupLayouts[1];
-  groupInfo.entryCount       = 1u;
-  groupInfo.pEntries         = &groupEntry;
+  groupInfo.entryCount       = 2u;
+  groupInfo.pEntries         = groupEntries;
   if (GPUCreateBindGroup(device, &groupInfo, &bindGroup) != GPU_OK ||
       !bindGroup) {
     fprintf(stderr, "Direct3D 12 compute bind group creation failed\n");
@@ -230,18 +272,22 @@ main(int argc, char **argv) {
   }
   GPUBindComputePipeline(pass, pipeline);
   GPUBindComputeGroup(pass, 1u, bindGroup, 0u, NULL);
-  GPUDispatch(pass, 3u, 1u, 1u);
+  GPUDispatchIndirect(pass, dispatchBuffer, 0u);
   GPUEndComputePass(pass);
   pass = NULL;
 
-  vertexBarrier.buffer              = buffer;
-  vertexBarrier.srcAccess           = GPU_ACCESS_SHADER_WRITE;
-  vertexBarrier.dstAccess           = GPU_ACCESS_SHADER_READ;
-  vertexBarrier.sizeBytes           = sizeof(vertices);
-  barrierBatch.srcStages            = GPU_STAGE_COMPUTE;
-  barrierBatch.dstStages            = GPU_STAGE_VERTEX;
-  barrierBatch.bufferBarrierCount = 1u;
-  barrierBatch.pBufferBarriers     = &vertexBarrier;
+  barriers[0].buffer              = buffer;
+  barriers[0].srcAccess           = GPU_ACCESS_SHADER_WRITE;
+  barriers[0].dstAccess           = GPU_ACCESS_SHADER_READ;
+  barriers[0].sizeBytes           = sizeof(vertices);
+  barriers[1].buffer              = indirectBuffer;
+  barriers[1].srcAccess           = GPU_ACCESS_SHADER_WRITE;
+  barriers[1].dstAccess           = GPU_ACCESS_INDIRECT_READ;
+  barriers[1].sizeBytes           = sizeof(drawArgs);
+  barrierBatch.srcStages          = GPU_STAGE_COMPUTE;
+  barrierBatch.dstStages          = GPU_STAGE_VERTEX;
+  barrierBatch.bufferBarrierCount = 2u;
+  barrierBatch.pBufferBarriers     = barriers;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
@@ -260,7 +306,13 @@ main(int argc, char **argv) {
                          0u,
                          vertices,
                          sizeof(vertices)) != GPU_OK ||
-      !vertices_match(vertices)) {
+      GPUQueueReadBuffer(queue,
+                         indirectBuffer,
+                         0u,
+                         drawArgs,
+                         sizeof(drawArgs)) != GPU_OK ||
+      !vertices_match(vertices) ||
+      memcmp(drawArgs, expectedDrawArgs, sizeof(drawArgs)) != 0) {
     fprintf(stderr, "Direct3D 12 compute readback validation failed\n");
     goto cleanup;
   }
@@ -273,6 +325,8 @@ cleanup:
   }
   GPUDestroyFence(fence);
   GPUDestroyBindGroup(bindGroup);
+  GPUDestroyBuffer(dispatchBuffer);
+  GPUDestroyBuffer(indirectBuffer);
   GPUDestroyBuffer(buffer);
   GPUDestroyComputePipeline(pipeline);
   GPUDestroyShaderLayout(shaderLayout);

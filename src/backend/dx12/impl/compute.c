@@ -114,14 +114,18 @@ dx12_destroyComputePipeline(GPUComputePipeline *pipeline) {
 GPU_HIDE
 GPUComputePassEncoder *
 dx12_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
+  GPUDeviceDX12           *device;
   GPUCommandBufferDX12    *command;
   GPUComputePassEncoder   *encoder;
   GPUComputeEncoderDX12   *native;
 
   GPU__UNUSED(label);
 
+  device  = cmdb && cmdb->_queue && cmdb->_queue->_device
+              ? cmdb->_queue->_device->_priv
+              : NULL;
   command = cmdb ? cmdb->_priv : NULL;
-  if (!command || !command->commandList) {
+  if (!device || !command || !command->commandList) {
     return NULL;
   }
 
@@ -129,6 +133,7 @@ dx12_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
   native  = &command->computeState;
   memset(encoder, 0, sizeof(*encoder));
   memset(native, 0, sizeof(*native));
+  native->device             = device;
   native->commandList        = command->commandList;
   encoder->_priv             = native;
   encoder->_workgroupSize[0] = 1u;
@@ -179,6 +184,33 @@ dx12_dispatch(GPUComputePassEncoder *encoder,
 
 GPU_HIDE
 void
+dx12_dispatchIndirect(GPUComputePassEncoder *encoder,
+                      GPUBuffer             *argsBuffer,
+                      uint64_t               argsOffset) {
+  GPUComputeEncoderDX12 *native;
+  GPUBufferDX12         *buffer;
+
+  native = dx12__computeEncoder(encoder);
+  buffer = argsBuffer ? argsBuffer->_priv : NULL;
+  if (!native || !native->device || !native->commandList || !buffer ||
+      !buffer->resource || !native->device->dispatchSignature ||
+      (buffer->state & D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT) == 0u) {
+    return;
+  }
+
+  native->commandList->lpVtbl->ExecuteIndirect(
+    native->commandList,
+    native->device->dispatchSignature,
+    1u,
+    buffer->resource,
+    argsOffset,
+    NULL,
+    0u
+  );
+}
+
+GPU_HIDE
+void
 dx12_endComputeEncoding(GPUComputePassEncoder *encoder) {
   GPUComputeEncoderDX12 *native;
 
@@ -187,6 +219,7 @@ dx12_endComputeEncoding(GPUComputePassEncoder *encoder) {
     return;
   }
 
+  native->device        = NULL;
   native->commandList   = NULL;
   native->rootSignature = NULL;
   native->resourceHeap  = NULL;
@@ -201,5 +234,6 @@ dx12_initCompute(GPUApiCompute *api) {
   api->computeCommandEncoder   = dx12_computeCommandEncoder;
   api->setComputePipelineState = dx12_setComputePipelineState;
   api->dispatch                = dx12_dispatch;
+  api->dispatchIndirect        = dx12_dispatchIndirect;
   api->endEncoding             = dx12_endComputeEncoding;
 }

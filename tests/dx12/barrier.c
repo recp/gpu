@@ -76,6 +76,8 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
     0u, 0u, 255u, 255u,
     255u, 255u, 255u, 255u
   };
+  const uint64_t         indexBufferSize    = 6u;
+  const uint64_t         indirectBufferSize = 20u;
   GPUDevice             *device;
   GPUDeviceDX12         *deviceDX12;
   GPUCommandQueue       *queue;
@@ -83,7 +85,9 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
   GPUCommandBuffer      *buffers[1];
   GPUCommandBufferDX12  *command;
   GPUBuffer             *indexBuffer;
+  GPUBuffer             *indirectBuffer;
   GPUBufferDX12         *nativeIndex;
+  GPUBufferDX12         *nativeIndirect;
   GPUTexture            *texture;
   GPUTextureDX12        *native;
   GPUFence              *fence;
@@ -96,13 +100,14 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
   GPUQueueSubmitInfo     submitInfo = {0};
   bool                   ok;
 
-  device      = GPUCreateDeviceWithDefaultQueues(adapter);
-  queue       = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
-  indexBuffer = NULL;
-  texture     = NULL;
-  fence       = NULL;
-  cmdb        = NULL;
-  ok          = false;
+  device         = GPUCreateDeviceWithDefaultQueues(adapter);
+  queue          = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  indexBuffer    = NULL;
+  indirectBuffer = NULL;
+  texture        = NULL;
+  fence          = NULL;
+  cmdb           = NULL;
+  ok             = false;
   if (!device || !queue) {
     fprintf(stderr, "DX12 barrier device creation failed\n");
     goto cleanup;
@@ -122,12 +127,24 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
   bufferInfo.label            = forceLegacy
                                   ? "dx12-index-barrier-legacy"
                                   : "dx12-index-barrier-enhanced";
-  bufferInfo.sizeBytes        = 6u;
+  bufferInfo.sizeBytes        = indexBufferSize;
   bufferInfo.usage            = GPU_BUFFER_USAGE_INDEX |
                                 GPU_BUFFER_USAGE_STORAGE;
   if (GPUCreateBuffer(device, &bufferInfo, &indexBuffer) != GPU_OK ||
       !indexBuffer) {
     fprintf(stderr, "DX12 index barrier buffer creation failed\n");
+    goto cleanup;
+  }
+
+  bufferInfo.label     = forceLegacy
+                           ? "dx12-indirect-barrier-legacy"
+                           : "dx12-indirect-barrier-enhanced";
+  bufferInfo.sizeBytes = indirectBufferSize;
+  bufferInfo.usage     = GPU_BUFFER_USAGE_INDIRECT |
+                         GPU_BUFFER_USAGE_STORAGE;
+  if (GPUCreateBuffer(device, &bufferInfo, &indirectBuffer) != GPU_OK ||
+      !indirectBuffer) {
+    fprintf(stderr, "DX12 indirect barrier buffer creation failed\n");
     goto cleanup;
   }
 
@@ -197,7 +214,7 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
   bufferBarrier.buffer    = indexBuffer;
   bufferBarrier.srcAccess = GPU_ACCESS_SHADER_WRITE;
   bufferBarrier.dstAccess = GPU_ACCESS_SHADER_READ;
-  bufferBarrier.sizeBytes = bufferInfo.sizeBytes;
+  bufferBarrier.sizeBytes = indexBufferSize;
   bufferBatch.srcStages   = GPU_STAGE_COMPUTE;
   bufferBatch.dstStages   = GPU_STAGE_VERTEX;
   bufferBatch.bufferBarrierCount = 1u;
@@ -206,6 +223,17 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
   nativeIndex = indexBuffer->_priv;
   if (!nativeIndex || nativeIndex->state != D3D12_RESOURCE_STATE_INDEX_BUFFER) {
     fprintf(stderr, "DX12 index barrier state mismatch\n");
+    goto cleanup;
+  }
+
+  bufferBarrier.buffer    = indirectBuffer;
+  bufferBarrier.dstAccess = GPU_ACCESS_INDIRECT_READ;
+  bufferBarrier.sizeBytes = indirectBufferSize;
+  GPUEncodeBarriers(cmdb, &bufferBatch);
+  nativeIndirect = indirectBuffer->_priv;
+  if (!nativeIndirect ||
+      nativeIndirect->state != D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT) {
+    fprintf(stderr, "DX12 indirect barrier state mismatch\n");
     goto cleanup;
   }
 
@@ -318,6 +346,7 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
 cleanup:
   GPUDestroyFence(fence);
   GPUDestroyTexture(texture);
+  GPUDestroyBuffer(indirectBuffer);
   GPUDestroyBuffer(indexBuffer);
   GPUDestroyDevice(device);
   return ok;

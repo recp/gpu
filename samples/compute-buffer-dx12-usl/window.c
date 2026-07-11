@@ -25,7 +25,9 @@ typedef struct ComputeRenderApp {
   GPUShaderLayout    *shaderLayout;
   GPUBuffer          *vertexBuffer;
   GPUBuffer          *indexBuffer;
-  GPUBindGroup       *vertexBindGroup;
+  GPUBuffer          *indirectBuffer;
+  GPUBuffer          *dispatchBuffer;
+  GPUBindGroup       *computeBindGroup;
   GPUComputePipeline *computePipeline;
   GPURenderPipeline  *renderPipeline;
   HWND                window;
@@ -134,12 +136,13 @@ compute_render_createWindow(ComputeRenderApp *app, HINSTANCE instance) {
 
 static bool
 compute_render_createGPU(ComputeRenderApp *app) {
-  const uint16_t indices[3] = {0u, 1u, 2u};
+  const uint16_t indices[3]     = {0u, 1u, 2u};
+  const uint32_t dispatchArgs[3] = {3u, 1u, 1u};
   GPUInstanceCreateInfo          instanceInfo = {0};
   GPUBindGroupLayout            *group1Layout;
   const GPUBindGroupLayoutEntry *layoutEntries;
   GPUBufferCreateInfo            bufferInfo = {0};
-  GPUBindGroupEntry              groupEntry = {0};
+  GPUBindGroupEntry              groupEntries[2] = {0};
   GPUBindGroupCreateInfo         groupInfo = {0};
   GPUComputePipelineCreateInfo   computeInfo = {0};
   GPUVertexAttribute             vertexAttributes[2] = {0};
@@ -226,12 +229,17 @@ compute_render_createGPU(ComputeRenderApp *app) {
   group1Layout = app->shaderLayout->bindGroupLayouts[1];
   layoutEntries = GPUGetBindGroupLayoutEntries(group1Layout,
                                                 &layoutEntryCount);
-  if (!layoutEntries || layoutEntryCount != 1u ||
+  if (!layoutEntries || layoutEntryCount != 2u ||
       layoutEntries[0].binding != 0u ||
       layoutEntries[0].bindingType != GPU_BINDING_STORAGE_BUFFER ||
       layoutEntries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
       layoutEntries[0].arrayCount != 1u ||
-      layoutEntries[0].hasDynamicOffset) {
+      layoutEntries[0].hasDynamicOffset ||
+      layoutEntries[1].binding != 1u ||
+      layoutEntries[1].bindingType != GPU_BINDING_STORAGE_BUFFER ||
+      layoutEntries[1].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
+      layoutEntries[1].arrayCount != 1u ||
+      layoutEntries[1].hasDynamicOffset) {
     compute_render_log("unexpected shader reflection layout");
     return false;
   }
@@ -248,6 +256,36 @@ compute_render_createGPU(ComputeRenderApp *app) {
                       &app->vertexBuffer) != GPU_OK ||
       !app->vertexBuffer) {
     compute_render_log("vertex/storage buffer creation failed");
+    return false;
+  }
+
+  bufferInfo.label     = "compute-render-dx12-draw-args";
+  bufferInfo.sizeBytes = sizeof(uint32_t) * 5u;
+  bufferInfo.usage     = GPU_BUFFER_USAGE_STORAGE |
+                         GPU_BUFFER_USAGE_INDIRECT |
+                         GPU_BUFFER_USAGE_COPY_SRC;
+  if (GPUCreateBuffer(app->device,
+                      &bufferInfo,
+                      &app->indirectBuffer) != GPU_OK ||
+      !app->indirectBuffer) {
+    compute_render_log("indirect/storage buffer creation failed");
+    return false;
+  }
+
+  bufferInfo.label     = "compute-render-dx12-dispatch-args";
+  bufferInfo.sizeBytes = sizeof(dispatchArgs);
+  bufferInfo.usage     = GPU_BUFFER_USAGE_INDIRECT |
+                         GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(app->device,
+                      &bufferInfo,
+                      &app->dispatchBuffer) != GPU_OK ||
+      !app->dispatchBuffer ||
+      GPUQueueWriteBuffer(app->queue,
+                          app->dispatchBuffer,
+                          0u,
+                          dispatchArgs,
+                          sizeof(dispatchArgs)) != GPU_OK) {
+    compute_render_log("dispatch argument buffer creation failed");
     return false;
   }
 
@@ -268,20 +306,24 @@ compute_render_createGPU(ComputeRenderApp *app) {
     return false;
   }
 
-  groupEntry.binding       = 0u;
-  groupEntry.bindingType   = GPU_BINDING_STORAGE_BUFFER;
-  groupEntry.buffer.buffer = app->vertexBuffer;
-  groupEntry.buffer.size   = bufferInfo.sizeBytes;
+  groupEntries[0].binding       = 0u;
+  groupEntries[0].bindingType   = GPU_BINDING_STORAGE_BUFFER;
+  groupEntries[0].buffer.buffer = app->vertexBuffer;
+  groupEntries[0].buffer.size   = sizeof(GeneratedVertex) * 3u;
+  groupEntries[1].binding       = 1u;
+  groupEntries[1].bindingType   = GPU_BINDING_STORAGE_BUFFER;
+  groupEntries[1].buffer.buffer = app->indirectBuffer;
+  groupEntries[1].buffer.size   = sizeof(uint32_t) * 5u;
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "compute-render-dx12-group1";
   groupInfo.layout           = group1Layout;
-  groupInfo.entryCount       = 1u;
-  groupInfo.pEntries         = &groupEntry;
+  groupInfo.entryCount       = 2u;
+  groupInfo.pEntries         = groupEntries;
   if (GPUCreateBindGroup(app->device,
                          &groupInfo,
-                         &app->vertexBindGroup) != GPU_OK ||
-      !app->vertexBindGroup) {
+                         &app->computeBindGroup) != GPU_OK ||
+      !app->computeBindGroup) {
     compute_render_log("bind group creation failed");
     return false;
   }
@@ -348,7 +390,7 @@ compute_render_render(ComputeRenderApp *app) {
   GPUCommandBuffer             *cmdb;
   GPUComputePassEncoder        *compute;
   GPURenderPassEncoder         *render;
-  GPUBufferBarrier              vertexBarrier = {0};
+  GPUBufferBarrier              barriers[2] = {0};
   GPUBarrierBatch               barrierBatch = {0};
   GPUBufferBinding              vertexBinding = {0};
   GPURenderPassColorAttachment  color = {0};
@@ -373,18 +415,22 @@ compute_render_render(ComputeRenderApp *app) {
     return false;
   }
   GPUBindComputePipeline(compute, app->computePipeline);
-  GPUBindComputeGroup(compute, 1u, app->vertexBindGroup, 0u, NULL);
-  GPUDispatch(compute, 3u, 1u, 1u);
+  GPUBindComputeGroup(compute, 1u, app->computeBindGroup, 0u, NULL);
+  GPUDispatchIndirect(compute, app->dispatchBuffer, 0u);
   GPUEndComputePass(compute);
 
-  vertexBarrier.buffer              = app->vertexBuffer;
-  vertexBarrier.srcAccess           = GPU_ACCESS_SHADER_WRITE;
-  vertexBarrier.dstAccess           = GPU_ACCESS_SHADER_READ;
-  vertexBarrier.sizeBytes           = sizeof(GeneratedVertex) * 3u;
+  barriers[0].buffer              = app->vertexBuffer;
+  barriers[0].srcAccess           = GPU_ACCESS_SHADER_WRITE;
+  barriers[0].dstAccess           = GPU_ACCESS_SHADER_READ;
+  barriers[0].sizeBytes           = sizeof(GeneratedVertex) * 3u;
+  barriers[1].buffer              = app->indirectBuffer;
+  barriers[1].srcAccess           = GPU_ACCESS_SHADER_WRITE;
+  barriers[1].dstAccess           = GPU_ACCESS_INDIRECT_READ;
+  barriers[1].sizeBytes           = sizeof(uint32_t) * 5u;
   barrierBatch.srcStages          = GPU_STAGE_COMPUTE;
   barrierBatch.dstStages          = GPU_STAGE_VERTEX;
-  barrierBatch.bufferBarrierCount = 1u;
-  barrierBatch.pBufferBarriers     = &vertexBarrier;
+  barrierBatch.bufferBarrierCount = 2u;
+  barrierBatch.pBufferBarriers     = barriers;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
   color.view                  = GPUFrameGetTargetView(frame);
@@ -414,7 +460,7 @@ compute_render_render(ComputeRenderApp *app) {
                      app->indexBuffer,
                      0u,
                      GPUIndexTypeUInt16);
-  GPUDrawIndexed(render, 3u, 1u, 0u, 0, 0u);
+  GPUDrawIndexedIndirect(render, app->indirectBuffer, 0u);
   GPUEndRenderPass(render);
   if (GPUFinishFrame(app->queue, cmdb, frame) != GPU_OK) {
     return false;
@@ -432,7 +478,9 @@ static void
 compute_render_destroyGPU(ComputeRenderApp *app) {
   GPUDestroyRenderPipeline(app->renderPipeline);
   GPUDestroyComputePipeline(app->computePipeline);
-  GPUDestroyBindGroup(app->vertexBindGroup);
+  GPUDestroyBindGroup(app->computeBindGroup);
+  GPUDestroyBuffer(app->dispatchBuffer);
+  GPUDestroyBuffer(app->indirectBuffer);
   GPUDestroyBuffer(app->indexBuffer);
   GPUDestroyBuffer(app->vertexBuffer);
   GPUDestroyShaderLayout(app->shaderLayout);

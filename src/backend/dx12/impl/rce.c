@@ -97,10 +97,15 @@ dx12__bindIndexBuffer(GPURenderCommandEncoder *encoder,
   remaining = buffer->sizeBytes - offset;
   viewSize  = remaining > UINT_MAX ? UINT_MAX : remaining;
   viewSize &= ~(indexSize - 1u);
-  firstByte = (uint64_t)firstIndex * indexSize;
-  byteCount = (uint64_t)indexCount * indexSize;
-  if (firstByte > viewSize || byteCount > viewSize - firstByte) {
+  if (viewSize == 0u) {
     return false;
+  }
+  if (indexCount > 0u) {
+    firstByte = (uint64_t)firstIndex * indexSize;
+    byteCount = (uint64_t)indexCount * indexSize;
+    if (firstByte > viewSize || byteCount > viewSize - firstByte) {
+      return false;
+    }
   }
 
   if (native->indexBound && native->indexBuffer == buffer &&
@@ -188,6 +193,7 @@ dx12__transitionView(GPURenderEncoderDX12 *encoder,
 GPU_HIDE
 GPURenderCommandEncoder*
 dx12_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
+  GPUDeviceDX12          *device;
   GPUCommandBufferDX12   *command;
   GPURenderPassDX12      *renderPass;
   GPURenderCommandEncoder *encoder;
@@ -196,9 +202,12 @@ dx12_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   D3D12_VIEWPORT          viewport;
   D3D12_RECT              scissor;
 
+  device     = cmdb && cmdb->_queue && cmdb->_queue->_device
+                 ? cmdb->_queue->_device->_priv
+                 : NULL;
   command    = cmdb ? cmdb->_priv : NULL;
   renderPass = pass ? pass->_priv : NULL;
-  if (!command || !command->commandList || !renderPass ||
+  if (!device || !command || !command->commandList || !renderPass ||
       renderPass->colorCount == 0u) {
     return NULL;
   }
@@ -207,6 +216,7 @@ dx12_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   native  = &command->renderState;
   memset(encoder, 0, sizeof(*encoder));
   memset(native, 0, sizeof(*native));
+  native->device       = device;
   native->commandList  = command->commandList;
   native->commandList7 = command->commandList7;
   native->renderPass   = renderPass;
@@ -425,6 +435,64 @@ dx12_drawIndexedPrims(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
+dx12_drawPrimitivesIndirect(GPURenderCommandEncoder *encoder,
+                            GPUPrimitiveType         type,
+                            GPUBuffer               *argsBuffer,
+                            uint64_t                 argsOffset) {
+  GPURenderEncoderDX12 *native;
+  GPUBufferDX12        *buffer;
+
+  GPU__UNUSED(type);
+
+  native = encoder ? encoder->_priv : NULL;
+  buffer = argsBuffer ? argsBuffer->_priv : NULL;
+  if (!native || !native->device || !native->commandList || !buffer ||
+      !buffer->resource || !native->device->drawSignature ||
+      (buffer->state & D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT) == 0u) {
+    return;
+  }
+
+  native->commandList->lpVtbl->ExecuteIndirect(
+    native->commandList,
+    native->device->drawSignature,
+    1u,
+    buffer->resource,
+    argsOffset,
+    NULL,
+    0u
+  );
+}
+
+GPU_HIDE
+void
+dx12_drawIndexedPrimsIndirect(GPURenderCommandEncoder *encoder,
+                              GPUBuffer               *argsBuffer,
+                              uint64_t                 argsOffset) {
+  GPURenderEncoderDX12 *native;
+  GPUBufferDX12        *buffer;
+
+  native = encoder ? encoder->_priv : NULL;
+  buffer = argsBuffer ? argsBuffer->_priv : NULL;
+  if (!native || !native->device || !native->commandList || !buffer ||
+      !buffer->resource || !native->device->drawIndexedSignature ||
+      (buffer->state & D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT) == 0u ||
+      !dx12__bindIndexBuffer(encoder, native, 0u, 0u)) {
+    return;
+  }
+
+  native->commandList->lpVtbl->ExecuteIndirect(
+    native->commandList,
+    native->device->drawIndexedSignature,
+    1u,
+    buffer->resource,
+    argsOffset,
+    NULL,
+    0u
+  );
+}
+
+GPU_HIDE
+void
 dx12_endRenderEncoding(GPURenderCommandEncoder *encoder) {
   GPURenderEncoderDX12 *native;
   GPURenderPassDX12    *renderPass;
@@ -448,14 +516,16 @@ dx12_endRenderEncoding(GPURenderCommandEncoder *encoder) {
 GPU_HIDE
 void
 dx12_initRCE(GPUApiRCE *api) {
-  api->renderCommandEncoder   = dx12_renderCommandEncoder;
-  api->setRenderPipelineState = dx12_setRenderPipelineState;
-  api->viewport               = dx12_viewport;
-  api->scissor                = dx12_scissor;
-  api->blendConstant          = dx12_blendConstant;
-  api->stencilReference       = dx12_stencilReference;
-  api->vertexBuffer           = dx12_vertexBuffer;
-  api->drawPrimitives         = dx12_drawPrimitives;
-  api->drawIndexedPrims       = dx12_drawIndexedPrims;
-  api->endEncoding            = dx12_endRenderEncoding;
+  api->renderCommandEncoder     = dx12_renderCommandEncoder;
+  api->setRenderPipelineState   = dx12_setRenderPipelineState;
+  api->viewport                 = dx12_viewport;
+  api->scissor                  = dx12_scissor;
+  api->blendConstant            = dx12_blendConstant;
+  api->stencilReference         = dx12_stencilReference;
+  api->vertexBuffer             = dx12_vertexBuffer;
+  api->drawPrimitives           = dx12_drawPrimitives;
+  api->drawIndexedPrims         = dx12_drawIndexedPrims;
+  api->drawPrimitivesIndirect   = dx12_drawPrimitivesIndirect;
+  api->drawIndexedPrimsIndirect = dx12_drawIndexedPrimsIndirect;
+  api->endEncoding              = dx12_endRenderEncoding;
 }

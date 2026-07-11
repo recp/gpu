@@ -98,6 +98,68 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
                          device->shaderModel >= D3D_SHADER_MODEL_6_0;
 }
 
+static bool
+dx12__newSignature(GPUDeviceDX12               *device,
+                   D3D12_INDIRECT_ARGUMENT_TYPE type,
+                   UINT                         stride,
+                   ID3D12CommandSignature     **outSignature) {
+  D3D12_INDIRECT_ARGUMENT_DESC argument = {0};
+  D3D12_COMMAND_SIGNATURE_DESC desc     = {0};
+
+  if (!device || !device->d3dDevice || !outSignature) {
+    return false;
+  }
+
+  argument.Type         = type;
+  desc.ByteStride       = stride;
+  desc.NumArgumentDescs = 1u;
+  desc.pArgumentDescs   = &argument;
+  return SUCCEEDED(device->d3dDevice->lpVtbl->CreateCommandSignature(
+    device->d3dDevice,
+    &desc,
+    NULL,
+    &IID_ID3D12CommandSignature,
+    (void **)outSignature
+  ));
+}
+
+static bool
+dx12__newSignatures(GPUDeviceDX12 *device) {
+  return dx12__newSignature(device,
+                            D3D12_INDIRECT_ARGUMENT_TYPE_DRAW,
+                            sizeof(D3D12_DRAW_ARGUMENTS),
+                            &device->drawSignature) &&
+         dx12__newSignature(device,
+                            D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED,
+                            sizeof(D3D12_DRAW_INDEXED_ARGUMENTS),
+                            &device->drawIndexedSignature) &&
+         dx12__newSignature(device,
+                            D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH,
+                            sizeof(D3D12_DISPATCH_ARGUMENTS),
+                            &device->dispatchSignature);
+}
+
+static void
+dx12__freeSignatures(GPUDeviceDX12 *device) {
+  if (!device) {
+    return;
+  }
+  if (device->dispatchSignature) {
+    device->dispatchSignature->lpVtbl->Release(device->dispatchSignature);
+    device->dispatchSignature = NULL;
+  }
+  if (device->drawIndexedSignature) {
+    device->drawIndexedSignature->lpVtbl->Release(
+      device->drawIndexedSignature
+    );
+    device->drawIndexedSignature = NULL;
+  }
+  if (device->drawSignature) {
+    device->drawSignature->lpVtbl->Release(device->drawSignature);
+    device->drawSignature = NULL;
+  }
+}
+
 GPU_HIDE
 GPUPhysicalDevice *
 dx12_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
@@ -322,6 +384,9 @@ dx12_createDevice(GPUPhysicalDevice        * __restrict phyDevice,
   }
   dx12_queryDeviceCapabilities(deviceDX12);
   InitializeSRWLock(&deviceDX12->descriptorLock);
+  if (!dx12__newSignatures(deviceDX12)) {
+    goto err;
+  }
 
   device->inst      = inst;
   device->_priv     = deviceDX12;
@@ -365,6 +430,7 @@ err:
       free(deviceDX12->createdQueues);
     }
     if (deviceDX12->d3dDevice) {
+      dx12__freeSignatures(deviceDX12);
       dx12_destroyDescriptorHeaps(deviceDX12);
       deviceDX12->d3dDevice->lpVtbl->Release(deviceDX12->d3dDevice);
     }
@@ -410,6 +476,7 @@ dx12_destroyDevice(GPUDevice * __restrict device) {
       free(deviceDX12->createdQueues);
     }
     if (deviceDX12->d3dDevice) {
+      dx12__freeSignatures(deviceDX12);
       dx12_destroyDescriptorHeaps(deviceDX12);
       deviceDX12->d3dDevice->lpVtbl->Release(deviceDX12->d3dDevice);
     }
