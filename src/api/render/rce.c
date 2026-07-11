@@ -122,15 +122,21 @@ gpu_renderPipelineMatchesPass(const GPURenderPassEncoder *pass,
 static bool
 gpu_validIndirectBatch(uint64_t argsOffset,
                        uint32_t commandCount,
-                       uint32_t strideBytes) {
+                       uint32_t strideBytes,
+                       uint32_t commandSize) {
   uint64_t maxCommandIndex;
 
-  if (commandCount == 0u || strideBytes == 0u) {
+  if ((argsOffset & 3u) != 0u ||
+      commandCount == 0u ||
+      strideBytes < commandSize ||
+      (strideBytes & 3u) != 0u ||
+      commandSize > UINT64_MAX - argsOffset) {
     return false;
   }
 
   maxCommandIndex = (uint64_t)commandCount - 1u;
-  return maxCommandIndex <= (UINT64_MAX - argsOffset) / strideBytes;
+  return maxCommandIndex <=
+         (UINT64_MAX - argsOffset - commandSize) / strideBytes;
 }
 
 static bool
@@ -535,6 +541,7 @@ GPUDrawIndirect(GPURenderPassEncoder *pass,
     return;
   }
   if (!gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
+      (argsOffset & 3u) != 0u ||
       !gpuBufferRangeValid(argsBuffer, argsOffset, 16u)) {
     gpu_renderValidationError(pass, "GPUDrawIndirect skipped: invalid indirect buffer");
     return;
@@ -570,6 +577,7 @@ GPUDrawIndexedIndirect(GPURenderPassEncoder *pass,
   }
   if (!pass->_hasIndexBuffer ||
       !gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
+      (argsOffset & 3u) != 0u ||
       !gpuBufferRangeValid(argsBuffer, argsOffset, 20u)) {
     gpu_renderValidationError(pass, "GPUDrawIndexedIndirect skipped: invalid indirect/index buffer");
     return;
@@ -587,7 +595,7 @@ GPUMultiDrawIndirect(GPURenderPassEncoder *pass,
                      uint64_t              argsOffset,
                      uint32_t              drawCount,
                      uint32_t              strideBytes) {
-  if (!gpu_validIndirectBatch(argsOffset, drawCount, strideBytes)) {
+  if (!gpu_validIndirectBatch(argsOffset, drawCount, strideBytes, 16u)) {
     return;
   }
 
@@ -605,7 +613,7 @@ GPUMultiDrawIndexedIndirect(GPURenderPassEncoder *pass,
                             uint64_t              argsOffset,
                             uint32_t              drawCount,
                             uint32_t              strideBytes) {
-  if (!gpu_validIndirectBatch(argsOffset, drawCount, strideBytes)) {
+  if (!gpu_validIndirectBatch(argsOffset, drawCount, strideBytes, 20u)) {
     return;
   }
 

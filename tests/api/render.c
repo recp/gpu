@@ -1422,7 +1422,11 @@ check_render_draw_validation_calls(GPUDevice *device) {
   GPUDraw(&pass, 0u, 1u, 0u, 0u);
   GPUDraw(&pass, 3u, 0u, 0u, 0u);
   GPUDrawIndirect(&pass, &wrongUsageBuffer, 0u);
+  GPUDrawIndirect(&pass, &indirectBuffer, 2u);
   GPUDrawIndirect(&pass, &indirectBuffer, 120u);
+  GPUMultiDrawIndirect(&pass, &indirectBuffer, 2u, 2u, 16u);
+  GPUMultiDrawIndirect(&pass, &indirectBuffer, 0u, 2u, 12u);
+  GPUMultiDrawIndirect(&pass, &indirectBuffer, 0u, 2u, 18u);
   if (gRenderDrawCalls != 0u || gRenderDrawIndirectCalls != 0u) {
     fprintf(stderr, "render draw validation called backend for invalid non-indexed draw\n");
     goto cleanup;
@@ -1447,6 +1451,14 @@ check_render_draw_validation_calls(GPUDevice *device) {
   }
 
   GPUBindIndexBuffer(&pass, &indirectBuffer, 0u, GPUIndexTypeUInt16);
+  GPUDrawIndexedIndirect(&pass, &indirectBuffer, 2u);
+  GPUMultiDrawIndexedIndirect(&pass, &indirectBuffer, 2u, 2u, 20u);
+  GPUMultiDrawIndexedIndirect(&pass, &indirectBuffer, 0u, 2u, 16u);
+  GPUMultiDrawIndexedIndirect(&pass, &indirectBuffer, 0u, 2u, 22u);
+  if (gRenderDrawIndexedIndirectCalls != 0u) {
+    fprintf(stderr, "render draw validation accepted invalid indexed indirect layout\n");
+    goto cleanup;
+  }
   GPUDrawIndexed(&pass, 3u, 1u, 0u, 0, 0u);
   GPUDrawIndexedIndirect(&pass, &indirectBuffer, 0u);
   if (gRenderDrawIndexedCalls != 1u ||

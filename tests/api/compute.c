@@ -292,9 +292,13 @@ check_compute_dispatch_validation_calls(GPUDevice *device) {
   GPUDispatch(&pass, 1u, 0u, 1u);
   GPUDispatch(&pass, 1u, 1u, 0u);
   GPUDispatchIndirect(&pass, &wrongUsageBuffer, 0u);
+  GPUDispatchIndirect(&pass, &indirectBuffer, 2u);
   GPUDispatchIndirect(&pass, &indirectBuffer, 60u);
   GPUMultiDispatchIndirect(&pass, &indirectBuffer, UINT64_MAX, 2u, 12u);
   GPUMultiDispatchIndirect(&pass, &indirectBuffer, 0u, 0u, 12u);
+  GPUMultiDispatchIndirect(&pass, &indirectBuffer, 2u, 2u, 12u);
+  GPUMultiDispatchIndirect(&pass, &indirectBuffer, 0u, 2u, 8u);
+  GPUMultiDispatchIndirect(&pass, &indirectBuffer, 0u, 2u, 14u);
   if (gComputeDispatchCalls != 0u ||
       gComputeDispatchIndirectCalls != 0u) {
     fprintf(stderr, "compute dispatch validation called backend for invalid dispatch\n");

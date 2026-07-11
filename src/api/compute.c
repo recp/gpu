@@ -64,15 +64,21 @@ gpu_validPushConstantRange(uint32_t limit,
 static bool
 gpu_validIndirectBatch(uint64_t argsOffset,
                        uint32_t commandCount,
-                       uint32_t strideBytes) {
+                       uint32_t strideBytes,
+                       uint32_t commandSize) {
   uint64_t maxCommandIndex;
 
-  if (commandCount == 0u || strideBytes == 0u) {
+  if ((argsOffset & 3u) != 0u ||
+      commandCount == 0u ||
+      strideBytes < commandSize ||
+      (strideBytes & 3u) != 0u ||
+      commandSize > UINT64_MAX - argsOffset) {
     return false;
   }
 
   maxCommandIndex = (uint64_t)commandCount - 1u;
-  return maxCommandIndex <= (UINT64_MAX - argsOffset) / strideBytes;
+  return maxCommandIndex <=
+         (UINT64_MAX - argsOffset - commandSize) / strideBytes;
 }
 
 static GPUComputePipelineState *
@@ -505,6 +511,7 @@ GPUDispatchIndirect(GPUComputePassEncoder *pass,
     return;
   }
   if (!gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
+      (argsOffset & 3u) != 0u ||
       !gpuBufferRangeValid(argsBuffer, argsOffset, 12u)) {
     gpu_computeValidationError(pass, "GPUDispatchIndirect skipped: invalid indirect buffer");
     return;
@@ -523,7 +530,10 @@ GPUMultiDispatchIndirect(GPUComputePassEncoder *pass,
                          uint64_t              argsOffset,
                          uint32_t              dispatchCount,
                          uint32_t              strideBytes) {
-  if (!gpu_validIndirectBatch(argsOffset, dispatchCount, strideBytes)) {
+  if (!gpu_validIndirectBatch(argsOffset,
+                              dispatchCount,
+                              strideBytes,
+                              12u)) {
     return;
   }
 
