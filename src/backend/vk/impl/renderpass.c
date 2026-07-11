@@ -319,24 +319,41 @@ vk_beginRenderPass(GPUCommandBuffer              *cmdb,
   command   = cmdb->_priv;
   view      = color->view ? color->view->_priv : NULL;
   swapchain = view ? view->swapchain : NULL;
-  if (!command || !view || !swapchain || !swapchain->frameActive ||
-      color->resolveView ||
-      view->imageIndex != swapchain->acquiredImageIndex) {
+  if (!command || !view || color->resolveView) {
     return NULL;
   }
-  if (info->occlusionQuerySet) {
-    vk_resetQuerySet(cmdb, info->occlusionQuerySet);
-  }
-
   pass   = &command->renderPass;
   native = &command->renderPassState;
   memset(pass, 0, sizeof(*pass));
   memset(native, 0, sizeof(*native));
 
-  native->swapchain   = swapchain;
-  native->renderPass  = swapchain->renderPasses[color->loadOp][color->storeOp];
-  native->framebuffer = swapchain->framebuffers[view->imageIndex];
-  native->extent      = swapchain->extent;
+  native->swapchain = swapchain;
+  if (swapchain) {
+    if (!swapchain->frameActive ||
+        view->imageIndex != swapchain->acquiredImageIndex) {
+      return NULL;
+    }
+    native->renderPass  = swapchain->renderPasses[color->loadOp]
+                                                  [color->storeOp];
+    native->framebuffer = swapchain->framebuffers[view->imageIndex];
+    native->extent      = swapchain->extent;
+  } else {
+    if (!view->texture || !view->framebuffer) {
+      return NULL;
+    }
+    native->renderPass  = view->texture->renderPasses[color->loadOp]
+                                                   [color->storeOp];
+    native->framebuffer = view->framebuffer;
+    native->extent      = view->extent;
+    view->texture->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  }
+  if (!native->renderPass || !native->framebuffer ||
+      native->extent.width == 0u || native->extent.height == 0u) {
+    return NULL;
+  }
+  if (info->occlusionQuerySet) {
+    vk_resetQuerySet(cmdb, info->occlusionQuerySet);
+  }
   native->clearValue.color.float32[0] = color->clearColor.float32[0];
   native->clearValue.color.float32[1] = color->clearColor.float32[1];
   native->clearValue.color.float32[2] = color->clearColor.float32[2];

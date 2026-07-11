@@ -9,6 +9,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+enum {
+  DX12_OFFSCREEN_WARM_ITERATIONS = 64u
+};
+
 static GPUAdapter*
 first_adapter(GPUInstance *instance) {
   GPUAdapter *adapter;
@@ -428,137 +432,21 @@ cleanup:
   return ok;
 }
 
-typedef struct DX12TestRenderTarget {
-  GPUTexture             texture;
-  GPUTextureDX12         nativeTexture;
-  GPUTextureView         view;
-  GPUTextureViewDX12     nativeView;
-  ID3D12DescriptorHeap  *rtvHeap;
-} DX12TestRenderTarget;
-
-static bool
-dx12_createTestRenderTarget(GPUDevice *device, DX12TestRenderTarget *target) {
-  GPUDeviceDX12             *nativeDevice;
-  D3D12_HEAP_PROPERTIES      heap = {0};
-  D3D12_RESOURCE_DESC        desc = {0};
-  D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {0};
-  HRESULT                    result;
-
-  nativeDevice = device ? device->_priv : NULL;
-  if (!nativeDevice || !nativeDevice->d3dDevice || !target) {
-    return false;
-  }
-  memset(target, 0, sizeof(*target));
-
-  heap.Type                   = D3D12_HEAP_TYPE_DEFAULT;
-  heap.CreationNodeMask       = 1u;
-  heap.VisibleNodeMask        = 1u;
-  desc.Dimension              = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-  desc.Width                  = 4u;
-  desc.Height                 = 4u;
-  desc.DepthOrArraySize       = 1u;
-  desc.MipLevels              = 1u;
-  desc.Format                 = DXGI_FORMAT_B8G8R8A8_UNORM;
-  desc.SampleDesc.Count       = 1u;
-  desc.Layout                 = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-  desc.Flags                  = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-  result = nativeDevice->d3dDevice->lpVtbl->CreateCommittedResource(
-    nativeDevice->d3dDevice,
-    &heap,
-    D3D12_HEAP_FLAG_NONE,
-    &desc,
-    D3D12_RESOURCE_STATE_RENDER_TARGET,
-    NULL,
-    &IID_ID3D12Resource,
-    (void **)&target->nativeTexture.resource
-  );
-  if (FAILED(result) || !target->nativeTexture.resource) {
-    return false;
-  }
-
-  heapDesc.Type           = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-  heapDesc.NumDescriptors = 1u;
-  result = nativeDevice->d3dDevice->lpVtbl->CreateDescriptorHeap(
-    nativeDevice->d3dDevice,
-    &heapDesc,
-    &IID_ID3D12DescriptorHeap,
-    (void **)&target->rtvHeap
-  );
-  if (FAILED(result) || !target->rtvHeap) {
-    target->nativeTexture.resource->lpVtbl->Release(
-      target->nativeTexture.resource
-    );
-    target->nativeTexture.resource = NULL;
-    return false;
-  }
-
-  target->rtvHeap->lpVtbl->GetCPUDescriptorHandleForHeapStart(
-    target->rtvHeap,
-    &target->nativeView.rtv
-  );
-  nativeDevice->d3dDevice->lpVtbl->CreateRenderTargetView(
-    nativeDevice->d3dDevice,
-    target->nativeTexture.resource,
-    NULL,
-    target->nativeView.rtv
-  );
-
-  target->nativeTexture.state            = D3D12_RESOURCE_STATE_RENDER_TARGET;
-  target->nativeTexture.states           = &target->nativeTexture.state;
-  target->nativeTexture.mipLevelCount    = 1u;
-  target->nativeTexture.arrayLayerCount  = 1u;
-  target->nativeTexture.subresourceCount = 1u;
-  target->nativeTexture.stateUniform     = true;
-  target->texture._priv                  = &target->nativeTexture;
-  target->texture.device                 = device;
-  target->texture.format                 = GPU_FORMAT_BGRA8_UNORM;
-  target->texture.dimension              = GPU_TEXTURE_DIMENSION_2D;
-  target->texture.width                  = 4u;
-  target->texture.height                 = 4u;
-  target->texture.depthOrLayers          = 1u;
-  target->texture.mipLevelCount          = 1u;
-  target->texture.sampleCount            = 1u;
-  target->texture.usage                  = GPU_TEXTURE_USAGE_COLOR_TARGET;
-
-  target->nativeView.resource   = target->nativeTexture.resource;
-  target->nativeView.state      = &target->nativeTexture.state;
-  target->nativeView.texture    = &target->nativeTexture;
-  target->nativeView.width      = 4u;
-  target->nativeView.height     = 4u;
-  target->nativeView.mipCount   = 1u;
-  target->nativeView.layerCount = 1u;
-  target->view._priv            = &target->nativeView;
-  target->view._texture         = &target->texture;
-  target->view.format           = GPU_FORMAT_BGRA8_UNORM;
-  return true;
-}
-
-static void
-dx12_destroyTestRenderTarget(DX12TestRenderTarget *target) {
-  if (!target) {
-    return;
-  }
-  if (target->rtvHeap) {
-    target->rtvHeap->lpVtbl->Release(target->rtvHeap);
-  }
-  if (target->nativeTexture.resource) {
-    target->nativeTexture.resource->lpVtbl->Release(
-      target->nativeTexture.resource
-    );
-  }
-}
-
 static bool
 run_occlusion_case(GPUAdapter *adapter) {
-  DX12TestRenderTarget         target;
   GPUDevice                   *device;
+  GPUDeviceDX12               *deviceDX12;
   GPUCommandQueue             *queue;
   GPUCommandBuffer            *cmdb;
   GPUCommandBuffer            *buffers[1];
+  GPUTexture                  *target;
+  GPUTextureView              *targetView;
   GPUQuerySet                 *querySet;
   GPUBuffer                   *resultBuffer;
   GPUFence                    *fence;
   GPURenderPassEncoder        *pass;
+  GPUTextureCreateInfo         textureInfo = {0};
+  GPUTextureViewCreateInfo     viewInfo = {0};
   GPUQuerySetCreateInfo        queryInfo = {0};
   GPUBufferCreateInfo          bufferInfo = {0};
   GPURenderPassColorAttachment color = {0};
@@ -568,32 +456,55 @@ run_occlusion_case(GPUAdapter *adapter) {
   uint64_t                     resultValue;
   bool                         ok;
 
-  memset(&target, 0, sizeof(target));
   device       = GPUCreateDeviceWithDefaultQueues(adapter);
+  deviceDX12   = device ? device->_priv : NULL;
   queue        = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   cmdb         = NULL;
+  target       = NULL;
+  targetView   = NULL;
   querySet     = NULL;
   resultBuffer = NULL;
   fence        = NULL;
   pass         = NULL;
   resultValue  = UINT64_MAX;
   ok           = false;
-  if (!device || !queue || !dx12_createTestRenderTarget(device, &target)) {
+  if (!device || !deviceDX12 || !queue) {
     goto cleanup;
   }
 
-  queryInfo.chain.sType      = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
-  queryInfo.chain.structSize = sizeof(queryInfo);
-  queryInfo.label            = "dx12-occlusion";
-  queryInfo.type             = GPU_QUERY_OCCLUSION;
-  queryInfo.count            = 1u;
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "dx12-occlusion-target";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_BGRA8_UNORM;
+  textureInfo.width            = 4u;
+  textureInfo.height           = 4u;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET;
+  viewInfo.chain.sType         = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize    = sizeof(viewInfo);
+  viewInfo.label               = "dx12-occlusion-target-view";
+  viewInfo.viewType            = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format              = GPU_FORMAT_BGRA8_UNORM;
+  viewInfo.mipLevelCount       = 1u;
+  viewInfo.arrayLayerCount     = 1u;
+  queryInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
+  queryInfo.chain.structSize   = sizeof(queryInfo);
+  queryInfo.label              = "dx12-occlusion";
+  queryInfo.type               = GPU_QUERY_OCCLUSION;
+  queryInfo.count              = 1u;
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.label            = "dx12-occlusion-result";
   bufferInfo.sizeBytes        = sizeof(resultValue);
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
                                 GPU_BUFFER_USAGE_COPY_SRC;
-  if (GPUCreateQuerySet(device, &queryInfo, &querySet) != GPU_OK ||
+  if (GPUCreateTexture(device, &textureInfo, &target) != GPU_OK || !target ||
+      GPUCreateTextureView(target, &viewInfo, &targetView) != GPU_OK ||
+      !targetView ||
+      GPUCreateQuerySet(device, &queryInfo, &querySet) != GPU_OK ||
       !querySet ||
       GPUCreateBuffer(device, &bufferInfo, &resultBuffer) != GPU_OK ||
       !resultBuffer ||
@@ -602,7 +513,7 @@ run_occlusion_case(GPUAdapter *adapter) {
     goto cleanup;
   }
 
-  color.view                    = &target.view;
+  color.view                    = targetView;
   color.loadOp                  = GPU_LOAD_OP_CLEAR;
   color.storeOp                 = GPU_STORE_OP_STORE;
   passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -644,12 +555,39 @@ run_occlusion_case(GPUAdapter *adapter) {
                          0u,
                          &resultValue,
                          sizeof(resultValue)) != GPU_OK ||
-      resultValue != 0u) {
+      resultValue != 0u || has_debug_errors(deviceDX12)) {
     cmdb = NULL;
     goto cleanup;
   }
   cmdb = NULL;
-  ok   = true;
+
+  passInfo.occlusionQuerySet = NULL;
+  GPUResetStats(device);
+  for (uint32_t i = 0u; i < DX12_OFFSCREEN_WARM_ITERATIONS; i++) {
+    color.loadOp  = (GPULoadOp)(i % 3u);
+    color.storeOp = (GPUStoreOp)((i / 3u) % 2u);
+    if (GPUAcquireCommandBuffer(queue, "dx12-offscreen-warm", &cmdb) != GPU_OK ||
+        !cmdb || !(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
+      goto cleanup;
+    }
+    GPUEndRenderPass(pass);
+    pass = NULL;
+
+    buffers[0]                  = cmdb;
+    submitInfo.ppCommandBuffers = buffers;
+    if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
+        GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+      cmdb = NULL;
+      goto cleanup;
+    }
+    cmdb = NULL;
+  }
+  if (device->currentFrameStats.hotPathAllocCount != 0u ||
+      device->currentFrameStats.hotPathFreeCount != 0u ||
+      has_debug_errors(deviceDX12)) {
+    goto cleanup;
+  }
+  ok = true;
 
 cleanup:
   if (pass) {
@@ -659,7 +597,8 @@ cleanup:
   GPUDestroyFence(fence);
   GPUDestroyBuffer(resultBuffer);
   GPUDestroyQuerySet(querySet);
-  dx12_destroyTestRenderTarget(&target);
+  GPUDestroyTextureView(targetView);
+  GPUDestroyTexture(target);
   GPUDestroyDevice(device);
   return ok;
 }

@@ -1,8 +1,6 @@
 #include <gpu/gpu.h>
 
 #include "api/device_internal.h"
-#include "api/query_internal.h"
-#include "backend/vk/common.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -17,11 +15,6 @@ typedef struct CompletionProbe {
   GPUCommandBuffer *cmdb;
   uint32_t          count;
 } CompletionProbe;
-
-typedef struct VulkanTestQuerySet {
-  VkDevice    device;
-  VkQueryPool pool;
-} VulkanTestQuerySet;
 
 _Static_assert(sizeof(GPUPipelineStatisticsResult) == 11u * sizeof(uint64_t),
                "pipeline statistics result layout changed");
@@ -279,52 +272,30 @@ static int
 occlusion_roundtrip(GPUDevice       *device,
                     GPUCommandQueue *queue,
                     GPUFence        *fence) {
-  GPUDeviceVk                   *deviceVk;
-  GPUCommandBufferVk            *command;
-  GPUTextureVk                  *textureVk;
-  GPUTextureViewVk              *viewVk;
-  VulkanTestQuerySet            *queryVk;
   GPUTextureCreateInfo           textureInfo = {0};
   GPUTextureViewCreateInfo       viewInfo = {0};
   GPUQuerySetCreateInfo          queryInfo = {0};
   GPUBufferCreateInfo            bufferInfo = {0};
+  GPURenderPassColorAttachment   color = {0};
+  GPURenderPassCreateInfo        passInfo = {0};
   GPUQueueSubmitInfo             submitInfo = {0};
-  GPURenderPassEncoder           pass = {0};
-  GPURenderEncoderVk             encoder = {0};
-  VkAttachmentDescription       attachment = {0};
-  VkAttachmentReference         colorReference = {0};
-  VkSubpassDescription          subpass = {0};
-  VkRenderPassCreateInfo        renderPassInfo = {0};
-  VkFramebufferCreateInfo       framebufferInfo = {0};
-  VkImageMemoryBarrier          imageBarrier = {0};
-  VkRenderPassBeginInfo         beginInfo = {0};
-  VkClearValue                  clearValue = {0};
-  GPUTexture                   *texture;
-  GPUTextureView               *view;
-  GPUQuerySet                  *querySet;
-  GPUBuffer                    *resultBuffer;
-  GPUCommandBuffer             *cmdb;
-  GPUCommandBuffer             *buffers[1];
-  VkRenderPass                  renderPass;
-  VkFramebuffer                 framebuffer;
-  uint64_t                      resultValue;
-  bool                          nativePassActive;
-  int                           ok;
+  GPUTexture                    *texture;
+  GPUTextureView                *view;
+  GPUQuerySet                   *querySet;
+  GPUBuffer                     *resultBuffer;
+  GPUCommandBuffer              *cmdb;
+  GPURenderPassEncoder          *pass;
+  uint64_t                       resultValue;
+  int                            ok;
 
-  deviceVk         = device ? device->_priv : NULL;
-  texture          = NULL;
-  view             = NULL;
-  querySet         = NULL;
-  resultBuffer     = NULL;
-  cmdb             = NULL;
-  renderPass       = VK_NULL_HANDLE;
-  framebuffer      = VK_NULL_HANDLE;
-  resultValue      = UINT64_MAX;
-  nativePassActive = false;
-  ok               = 0;
-  if (!deviceVk || !deviceVk->device) {
-    goto cleanup;
-  }
+  texture      = NULL;
+  view         = NULL;
+  querySet     = NULL;
+  resultBuffer = NULL;
+  cmdb         = NULL;
+  pass         = NULL;
+  resultValue  = UINT64_MAX;
+  ok           = 0;
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
@@ -365,113 +336,33 @@ occlusion_roundtrip(GPUDevice       *device,
     goto cleanup;
   }
 
-  textureVk = texture->_priv;
-  viewVk    = view->_priv;
-  queryVk   = querySet->_priv;
-  command   = cmdb->_priv;
-  if (!textureVk || !textureVk->image || !viewVk || !viewVk->view ||
-      !queryVk || !queryVk->pool || !command || !command->command) {
+  color.view                    = view;
+  color.loadOp                  = GPU_LOAD_OP_CLEAR;
+  color.storeOp                 = GPU_STORE_OP_STORE;
+  passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  passInfo.chain.structSize     = sizeof(passInfo);
+  passInfo.label                = "vulkan-occlusion";
+  passInfo.occlusionQuerySet    = querySet;
+  passInfo.colorAttachmentCount = 1u;
+  passInfo.pColorAttachments    = &color;
+  pass = GPUBeginRenderPass(cmdb, &passInfo);
+  if (!pass) {
     goto cleanup;
   }
 
-  attachment.format         = VK_FORMAT_B8G8R8A8_UNORM;
-  attachment.samples        = VK_SAMPLE_COUNT_1_BIT;
-  attachment.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
-  attachment.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
-  attachment.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-  attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  attachment.initialLayout  = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-  attachment.finalLayout    = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-  colorReference.attachment = 0u;
-  colorReference.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-  subpass.pipelineBindPoint      = VK_PIPELINE_BIND_POINT_GRAPHICS;
-  subpass.colorAttachmentCount  = 1u;
-  subpass.pColorAttachments      = &colorReference;
-  renderPassInfo.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  renderPassInfo.attachmentCount = 1u;
-  renderPassInfo.pAttachments    = &attachment;
-  renderPassInfo.subpassCount    = 1u;
-  renderPassInfo.pSubpasses      = &subpass;
-  if (vkCreateRenderPass(deviceVk->device,
-                         &renderPassInfo,
-                         NULL,
-                         &renderPass) != VK_SUCCESS) {
+  GPUBeginOcclusionQuery(pass, querySet, 0u);
+  if (!pass->_occlusionQueryActive) {
     goto cleanup;
   }
-
-  framebufferInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-  framebufferInfo.renderPass      = renderPass;
-  framebufferInfo.attachmentCount = 1u;
-  framebufferInfo.pAttachments    = &viewVk->view;
-  framebufferInfo.width           = 4u;
-  framebufferInfo.height          = 4u;
-  framebufferInfo.layers          = 1u;
-  if (vkCreateFramebuffer(deviceVk->device,
-                          &framebufferInfo,
-                          NULL,
-                          &framebuffer) != VK_SUCCESS) {
-    goto cleanup;
-  }
-
-  imageBarrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  imageBarrier.srcAccessMask       = 0u;
-  imageBarrier.dstAccessMask       = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-  imageBarrier.oldLayout           = textureVk->layout;
-  imageBarrier.newLayout           = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-  imageBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  imageBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  imageBarrier.image               = textureVk->image;
-  imageBarrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
-  imageBarrier.subresourceRange.baseMipLevel   = 0u;
-  imageBarrier.subresourceRange.levelCount     = 1u;
-  imageBarrier.subresourceRange.baseArrayLayer = 0u;
-  imageBarrier.subresourceRange.layerCount     = 1u;
-  vkCmdPipelineBarrier(command->command,
-                       VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                       0u,
-                       0u,
-                       NULL,
-                       0u,
-                       NULL,
-                       1u,
-                       &imageBarrier);
-  textureVk->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-  vkCmdResetQueryPool(command->command, queryVk->pool, 0u, querySet->count);
-  beginInfo.sType                   = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-  beginInfo.renderPass              = renderPass;
-  beginInfo.framebuffer             = framebuffer;
-  beginInfo.renderArea.extent.width  = 4u;
-  beginInfo.renderArea.extent.height = 4u;
-  beginInfo.clearValueCount         = 1u;
-  beginInfo.pClearValues            = &clearValue;
-  vkCmdBeginRenderPass(command->command,
-                       &beginInfo,
-                       VK_SUBPASS_CONTENTS_INLINE);
-  nativePassActive = true;
-
-  encoder.command         = command->command;
-  pass._priv              = &encoder;
-  pass._cmdb              = cmdb;
-  pass._occlusionQuerySet = querySet;
-  cmdb->_activeEncoder    = true;
-  GPUBeginOcclusionQuery(&pass, querySet, 0u);
-  if (!pass._occlusionQueryActive) {
-    goto cleanup;
-  }
-  GPUEndOcclusionQuery(&pass);
-  vkCmdEndRenderPass(command->command);
-  nativePassActive     = false;
-  pass._ended          = true;
-  cmdb->_activeEncoder = false;
+  GPUEndOcclusionQuery(pass);
+  GPUEndRenderPass(pass);
+  pass = NULL;
   GPUResolveQuerySet(cmdb, querySet, 0u, 1u, resultBuffer, 0u);
 
-  buffers[0]                    = cmdb;
   submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   submitInfo.chain.structSize   = sizeof(submitInfo);
   submitInfo.commandBufferCount = 1u;
-  submitInfo.ppCommandBuffers   = buffers;
+  submitInfo.ppCommandBuffers   = &cmdb;
   submitInfo.fence              = fence;
   if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
       GPUWaitFence(fence, UINT64_MAX) != GPU_OK ||
@@ -485,20 +376,39 @@ occlusion_roundtrip(GPUDevice       *device,
     goto cleanup;
   }
   cmdb = NULL;
-  ok   = 1;
+
+  passInfo.occlusionQuerySet = NULL;
+  GPUResetStats(device);
+  for (uint32_t i = 0u; i < VULKAN_WARM_ITERATIONS; i++) {
+    color.loadOp  = (GPULoadOp)(i % 3u);
+    color.storeOp = (GPUStoreOp)((i / 3u) % 2u);
+    if (GPUAcquireCommandBuffer(queue,
+                                "vulkan-offscreen-warm",
+                                &cmdb) != GPU_OK ||
+        !cmdb || !(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
+      goto cleanup;
+    }
+    GPUEndRenderPass(pass);
+    pass = NULL;
+
+    submitInfo.ppCommandBuffers = &cmdb;
+    if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
+        GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+      cmdb = NULL;
+      goto cleanup;
+    }
+    cmdb = NULL;
+  }
+  if (device->currentFrameStats.hotPathAllocCount != 0u ||
+      device->currentFrameStats.hotPathFreeCount != 0u) {
+    goto cleanup;
+  }
+  ok = 1;
 
 cleanup:
-  if (nativePassActive) {
-    GPUEndOcclusionQuery(&pass);
-    vkCmdEndRenderPass(command->command);
-    pass._ended          = true;
-    cmdb->_activeEncoder = false;
-  }
-  if (framebuffer) {
-    vkDestroyFramebuffer(deviceVk->device, framebuffer, NULL);
-  }
-  if (renderPass) {
-    vkDestroyRenderPass(deviceVk->device, renderPass, NULL);
+  if (pass) {
+    GPUEndOcclusionQuery(pass);
+    GPUEndRenderPass(pass);
   }
   GPUDestroyBuffer(resultBuffer);
   GPUDestroyQuerySet(querySet);

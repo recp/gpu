@@ -23,12 +23,9 @@ build_test() {
     -isysroot "$SDK_PATH" \
     -I"$ROOT/include" \
     -I"$ROOT/src" \
-    -I"$VULKAN_SDK/macOS/include" \
     "$source" \
     -L"$LIB_DIR" \
-    -L"$VULKAN_SDK/macOS/lib" \
     -lgpu \
-    -lvulkan \
     -Wl,-rpath,"$LIB_DIR" \
     -Wl,-rpath,"$US_LIB_DIR" \
     -Wl,-rpath,"$VULKAN_SDK/macOS/lib" \

@@ -44,6 +44,9 @@ dx12__descriptorHeap(GPUDeviceDX12            *device,
   if (type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER) {
     return &device->samplerDescriptors;
   }
+  if (type == D3D12_DESCRIPTOR_HEAP_TYPE_RTV) {
+    return &device->rtvDescriptors;
+  }
 
   return NULL;
 }
@@ -75,7 +78,10 @@ dx12__ensureDescriptorHeap(GPUDeviceDX12             *device,
 
   desc.Type           = type;
   desc.NumDescriptors = capacity;
-  desc.Flags          = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+  desc.Flags          = type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV ||
+                        type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
+                          ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
+                          : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
   result = device->d3dDevice->lpVtbl->CreateDescriptorHeap(
     device->d3dDevice,
     &desc,
@@ -92,22 +98,6 @@ dx12__ensureDescriptorHeap(GPUDeviceDX12             *device,
     ->GetDescriptorHandleIncrementSize(device->d3dDevice, type);
   heap->capacity = capacity;
   return GPU_OK;
-}
-
-static GPUResult
-dx12__ensureDescriptorHeaps(GPUDeviceDX12 *device) {
-  GPUResult result;
-
-  result = dx12__ensureDescriptorHeap(device,
-                                      D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-                                      &device->resourceDescriptors);
-  if (result != GPU_OK) {
-    return result;
-  }
-
-  return dx12__ensureDescriptorHeap(device,
-                                    D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
-                                    &device->samplerDescriptors);
 }
 
 static bool
@@ -145,11 +135,12 @@ dx12__markDescriptorRange(GPUDescriptorHeapDX12 *heap,
   }
 }
 
-static GPUResult
-dx12__allocateDescriptors(GPUDeviceDX12             *device,
-                          D3D12_DESCRIPTOR_HEAP_TYPE type,
-                          uint32_t                    count,
-                          uint32_t                   *outOffset) {
+GPU_HIDE
+GPUResult
+dx12_allocateDescriptors(GPUDeviceDX12             *device,
+                         D3D12_DESCRIPTOR_HEAP_TYPE type,
+                         uint32_t                    count,
+                         uint32_t                   *outOffset) {
   GPUDescriptorHeapDX12 *heap;
   GPUResult              result;
 
@@ -163,7 +154,7 @@ dx12__allocateDescriptors(GPUDeviceDX12             *device,
 
   AcquireSRWLockExclusive(&device->descriptorLock);
   heap   = dx12__descriptorHeap(device, type);
-  result = heap ? dx12__ensureDescriptorHeaps(device)
+  result = heap ? dx12__ensureDescriptorHeap(device, type, heap)
                 : GPU_ERROR_INVALID_ARGUMENT;
   if (result == GPU_OK && count <= heap->capacity) {
     result = GPU_ERROR_OUT_OF_MEMORY;
@@ -184,11 +175,12 @@ dx12__allocateDescriptors(GPUDeviceDX12             *device,
   return result;
 }
 
-static void
-dx12__freeDescriptors(GPUDeviceDX12             *device,
-                      D3D12_DESCRIPTOR_HEAP_TYPE type,
-                      uint32_t                    offset,
-                      uint32_t                    count) {
+GPU_HIDE
+void
+dx12_freeDescriptors(GPUDeviceDX12             *device,
+                     D3D12_DESCRIPTOR_HEAP_TYPE type,
+                     uint32_t                    offset,
+                     uint32_t                    count) {
   GPUDescriptorHeapDX12 *heap;
 
   if (!device || count == 0u) {
@@ -204,8 +196,9 @@ dx12__freeDescriptors(GPUDeviceDX12             *device,
   ReleaseSRWLockExclusive(&device->descriptorLock);
 }
 
-static D3D12_CPU_DESCRIPTOR_HANDLE
-dx12__cpuDescriptor(const GPUDescriptorHeapDX12 *heap, uint32_t offset) {
+GPU_HIDE
+D3D12_CPU_DESCRIPTOR_HANDLE
+dx12_cpuDescriptor(const GPUDescriptorHeapDX12 *heap, uint32_t offset) {
   D3D12_CPU_DESCRIPTOR_HANDLE handle = {0};
 
   if (heap && heap->heap && offset < heap->capacity) {
@@ -231,7 +224,7 @@ dx12__gpuDescriptor(const GPUDescriptorHeapDX12 *heap, uint32_t offset) {
 GPU_HIDE
 void
 dx12_destroyDescriptorHeaps(GPUDeviceDX12 *device) {
-  GPUDescriptorHeapDX12 *heaps[2];
+  GPUDescriptorHeapDX12 *heaps[3];
 
   if (!device) {
     return;
@@ -239,6 +232,7 @@ dx12_destroyDescriptorHeaps(GPUDeviceDX12 *device) {
 
   heaps[0] = &device->resourceDescriptors;
   heaps[1] = &device->samplerDescriptors;
+  heaps[2] = &device->rtvDescriptors;
   for (uint32_t i = 0u; i < GPU_ARRAY_LEN(heaps); i++) {
     if (heaps[i]->heap) {
       heaps[i]->heap->lpVtbl->Release(heaps[i]->heap);
@@ -795,7 +789,7 @@ dx12__writeBindGroup(void *context,
         return;
       }
 
-      handle = dx12__cpuDescriptor(
+      handle = dx12_cpuDescriptor(
         &writeContext->group->device->resourceDescriptors,
         writeContext->group->resourceOffset + writeContext->resourceIndex++
       );
@@ -818,7 +812,7 @@ dx12__writeBindGroup(void *context,
         return;
       }
 
-      handle = dx12__cpuDescriptor(
+      handle = dx12_cpuDescriptor(
         &writeContext->group->device->samplerDescriptors,
         writeContext->group->samplerOffset + writeContext->samplerIndex++
       );
@@ -877,7 +871,7 @@ dx12_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
     }
   }
 
-  result = dx12__allocateDescriptors(native->device,
+  result = dx12_allocateDescriptors(native->device,
                                      D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
                                      native->resourceCount,
                                      &native->resourceOffset);
@@ -885,12 +879,12 @@ dx12_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
     free(native);
     return result;
   }
-  result = dx12__allocateDescriptors(native->device,
+  result = dx12_allocateDescriptors(native->device,
                                      D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
                                      native->samplerCount,
                                      &native->samplerOffset);
   if (result != GPU_OK) {
-    dx12__freeDescriptors(native->device,
+    dx12_freeDescriptors(native->device,
                           D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
                           native->resourceOffset,
                           native->resourceCount);
@@ -907,11 +901,11 @@ dx12_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
       !writeContext.valid ||
       writeContext.resourceIndex != native->resourceCount ||
       writeContext.samplerIndex != native->samplerCount) {
-    dx12__freeDescriptors(native->device,
+    dx12_freeDescriptors(native->device,
                           D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
                           native->samplerOffset,
                           native->samplerCount);
-    dx12__freeDescriptors(native->device,
+    dx12_freeDescriptors(native->device,
                           D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
                           native->resourceOffset,
                           native->resourceCount);
@@ -933,11 +927,11 @@ dx12_destroyBindGroup(GPUBindGroup *group) {
     return;
   }
 
-  dx12__freeDescriptors(native->device,
+  dx12_freeDescriptors(native->device,
                         D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
                         native->samplerOffset,
                         native->samplerCount);
-  dx12__freeDescriptors(native->device,
+  dx12_freeDescriptors(native->device,
                         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
                         native->resourceOffset,
                         native->resourceCount);

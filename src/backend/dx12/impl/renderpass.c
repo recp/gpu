@@ -498,7 +498,8 @@ dx12_beginRenderPass(GPUCommandBuffer             *cmdb,
 
     attachment = &info->pColorAttachments[i];
     view       = attachment->view ? attachment->view->_priv : NULL;
-    if (!view || !view->resource || !view->state || attachment->resolveView ||
+    if (!view || !view->resource || !view->state || !view->hasRtv ||
+        attachment->resolveView ||
         view->width == 0u || view->height == 0u ||
         (i > 0u &&
          (view->width != renderPass->width ||

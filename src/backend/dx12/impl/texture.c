@@ -258,7 +258,6 @@ dx12_createTexture(GPUDevice                  * __restrict device,
                    const GPUTextureCreateInfo * __restrict info,
                    GPUTexture                ** __restrict outTexture) {
   const GPUTextureUsageFlags unsupported = GPU_TEXTURE_USAGE_STORAGE |
-                                           GPU_TEXTURE_USAGE_COLOR_TARGET |
                                            GPU_TEXTURE_USAGE_DEPTH_STENCIL;
   GPUDeviceDX12           *deviceDX12;
   GPUTexture              *texture;
@@ -289,6 +288,12 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   *outTexture = NULL;
   format = dx12_format(info->format);
   if (format == DXGI_FORMAT_UNKNOWN) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  if ((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u &&
+      (info->format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+       info->format == GPU_FORMAT_DEPTH32_FLOAT ||
+       info->format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -326,6 +331,9 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   desc.Format           = format;
   desc.SampleDesc.Count = 1u;
   desc.Layout           = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+  if ((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u) {
+    desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+  }
   initialState = (info->usage & GPU_TEXTURE_USAGE_COPY_DST) != 0u
                    ? D3D12_RESOURCE_STATE_COPY_DEST
                    : D3D12_RESOURCE_STATE_COMMON;
@@ -447,20 +455,56 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo *info,
   }
 }
 
+static bool
+dx12__fillTextureRtv(const GPUTextureViewCreateInfo *info,
+                     DXGI_FORMAT                     format,
+                     D3D12_RENDER_TARGET_VIEW_DESC  *rtv) {
+  if (!info || !rtv || info->mipLevelCount != 1u) {
+    return false;
+  }
+
+  memset(rtv, 0, sizeof(*rtv));
+  rtv->Format = format;
+  switch (info->viewType) {
+    case GPU_TEXTURE_VIEW_2D:
+      rtv->ViewDimension        = D3D12_RTV_DIMENSION_TEXTURE2D;
+      rtv->Texture2D.MipSlice   = info->baseMipLevel;
+      rtv->Texture2D.PlaneSlice = 0u;
+      return info->arrayLayerCount == 1u;
+    case GPU_TEXTURE_VIEW_2D_ARRAY:
+      rtv->ViewDimension                         =
+        D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
+      rtv->Texture2DArray.MipSlice               = info->baseMipLevel;
+      rtv->Texture2DArray.FirstArraySlice        = info->baseArrayLayer;
+      rtv->Texture2DArray.ArraySize              = info->arrayLayerCount;
+      rtv->Texture2DArray.PlaneSlice             = 0u;
+      return true;
+    default:
+      return false;
+  }
+}
+
 GPU_HIDE
 GPUResult
 dx12_createTextureView(GPUTexture                     * __restrict texture,
                        const GPUTextureViewCreateInfo * __restrict info,
                        GPUTextureView                ** __restrict outView) {
+  GPUDeviceDX12      *device;
   GPUTextureDX12     *textureDX12;
   GPUTextureView     *view;
   GPUTextureViewDX12 *native;
-  DXGI_FORMAT         format;
+  D3D12_SHADER_RESOURCE_VIEW_DESC srv = {0};
+  D3D12_RENDER_TARGET_VIEW_DESC   rtv = {0};
+  DXGI_FORMAT                     format;
+  GPUResult                       result;
+  uint32_t                        rtvOffset;
+  bool                            sampled;
+  bool                            colorTarget;
+  bool                            hasRtv;
 
   textureDX12 = texture ? texture->_priv : NULL;
   if (!textureDX12 || !textureDX12->resource || !info || !outView ||
-      info->format != texture->format ||
-      (texture->usage & GPU_TEXTURE_USAGE_SAMPLED) == 0u) {
+      info->format != texture->format) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if ((info->viewType == GPU_TEXTURE_VIEW_1D &&
@@ -487,39 +531,95 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
     return GPU_ERROR_UNSUPPORTED;
   }
 
+  sampled     = (texture->usage & GPU_TEXTURE_USAGE_SAMPLED) != 0u;
+  colorTarget = (texture->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u;
+  if (sampled) {
+    srv.Format                  = format;
+    srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+  }
+  hasRtv = colorTarget && dx12__fillTextureRtv(info,
+                                               format,
+                                               &rtv);
+  if ((!sampled && !hasRtv) ||
+      (sampled && !dx12__fillTextureSrv(info, &srv))) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
   view = calloc(1, sizeof(*view) + sizeof(*native));
   if (!view) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native = (GPUTextureViewDX12 *)(view + 1);
-  native->srv.Format                  = format;
-  native->srv.Shader4ComponentMapping =
-    D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-  if (!dx12__fillTextureSrv(info, &native->srv)) {
+  device = texture->device ? texture->device->_priv : NULL;
+  if (!device || !device->d3dDevice) {
     free(view);
-    return GPU_ERROR_UNSUPPORTED;
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  native = (GPUTextureViewDX12 *)(view + 1);
+  if (sampled) {
+    native->srv    = srv;
+    native->hasSrv = true;
+  }
+  if (hasRtv) {
+    result = dx12_allocateDescriptors(device,
+                                      D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
+                                      1u,
+                                      &rtvOffset);
+    if (result != GPU_OK) {
+      free(view);
+      return result;
+    }
+    native->device    = device;
+    native->rtvOffset = rtvOffset;
+    native->rtv       = dx12_cpuDescriptor(&device->rtvDescriptors, rtvOffset);
+    if (native->rtv.ptr == 0u) {
+      dx12_freeDescriptors(device,
+                           D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
+                           rtvOffset,
+                           1u);
+      free(view);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    device->d3dDevice->lpVtbl->CreateRenderTargetView(device->d3dDevice,
+                                                       textureDX12->resource,
+                                                       &rtv,
+                                                       native->rtv);
+    native->hasRtv = true;
   }
 
   native->resource   = textureDX12->resource;
   native->state      = &textureDX12->state;
   native->texture    = textureDX12;
-  native->width      = texture->width;
-  native->height     = texture->height;
+  native->width      = texture->width >> info->baseMipLevel;
+  native->height     = texture->height >> info->baseMipLevel;
+  if (native->width == 0u) {
+    native->width = 1u;
+  }
+  if (native->height == 0u) {
+    native->height = 1u;
+  }
   native->baseMip    = info->baseMipLevel;
   native->mipCount   = info->mipLevelCount;
   native->baseLayer  = info->baseArrayLayer;
   native->layerCount = info->arrayLayerCount;
-  native->hasSrv     = true;
   view->_priv        = native;
-  view->_ownsNative = true;
-  *outView         = view;
+  view->_ownsNative  = true;
+  *outView           = view;
   return GPU_OK;
 }
 
 GPU_HIDE
 void
 dx12_destroyTextureView(GPUTextureView * __restrict view) {
+  GPUTextureViewDX12 *native;
+
+  native = view ? view->_priv : NULL;
+  if (native && native->device && native->hasRtv) {
+    dx12_freeDescriptors(native->device,
+                         D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
+                         native->rtvOffset,
+                         1u);
+  }
   free(view);
 }
 

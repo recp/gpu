@@ -61,6 +61,7 @@ typedef struct GPUDeviceDX12 {
   HMODULE                     dxcModule;
   GPUDescriptorHeapDX12       resourceDescriptors;
   GPUDescriptorHeapDX12       samplerDescriptors;
+  GPUDescriptorHeapDX12       rtvDescriptors;
   SRWLOCK                     descriptorLock;
   D3D_ROOT_SIGNATURE_VERSION  rootSignatureVersion;
   D3D_SHADER_MODEL            shaderModel;
@@ -152,6 +153,7 @@ typedef struct GPUComputePipelineDX12 {
 
 typedef struct GPUTextureViewDX12 {
   ID3D12Resource             *resource;
+  GPUDeviceDX12              *device;
   D3D12_RESOURCE_STATES      *state;
   GPUTextureDX12             *texture;
   D3D12_CPU_DESCRIPTOR_HANDLE rtv;
@@ -162,7 +164,9 @@ typedef struct GPUTextureViewDX12 {
   uint32_t                    mipCount;
   uint32_t                    baseLayer;
   uint32_t                    layerCount;
+  uint32_t                    rtvOffset;
   bool                        hasSrv;
+  bool                        hasRtv;
   bool                        swapchain;
 } GPUTextureViewDX12;
 
@@ -310,6 +314,24 @@ dx12_transitionTexture(ID3D12GraphicsCommandList *commandList,
                        uint32_t                   baseLayer,
                        uint32_t                   layerCount,
                        D3D12_RESOURCE_STATES      state);
+
+GPU_HIDE
+GPUResult
+dx12_allocateDescriptors(GPUDeviceDX12             *device,
+                         D3D12_DESCRIPTOR_HEAP_TYPE type,
+                         uint32_t                    count,
+                         uint32_t                   *outOffset);
+
+GPU_HIDE
+void
+dx12_freeDescriptors(GPUDeviceDX12             *device,
+                     D3D12_DESCRIPTOR_HEAP_TYPE type,
+                     uint32_t                    offset,
+                     uint32_t                    count);
+
+GPU_HIDE
+D3D12_CPU_DESCRIPTOR_HANDLE
+dx12_cpuDescriptor(const GPUDescriptorHeapDX12 *heap, uint32_t offset);
 
 GPU_INLINE
 void

@@ -133,8 +133,20 @@ dx12__transitionView(GPURenderEncoderDX12 *encoder,
                      D3D12_RESOURCE_STATES nextState) {
   D3D12_RESOURCE_STATES previousState;
 
-  if (!encoder || !encoder->commandList || !view || !view->resource ||
-      !view->state || *view->state == nextState) {
+  if (!encoder || !encoder->commandList || !view || !view->resource) {
+    return;
+  }
+  if (view->texture) {
+    (void)dx12_transitionTexture(encoder->commandList,
+                                 view->texture,
+                                 view->baseMip,
+                                 view->mipCount,
+                                 view->baseLayer,
+                                 view->layerCount,
+                                 nextState);
+    return;
+  }
+  if (!view->state || *view->state == nextState) {
     return;
   }
 

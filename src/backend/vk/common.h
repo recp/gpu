@@ -210,6 +210,7 @@ typedef struct GPUTextureVk {
   VkDevice           device;
   VkImage            image;
   VkDeviceMemory     memory;
+  VkRenderPass       renderPasses[3][2];
   VkImageLayout      layout;
   VkImageAspectFlags aspect;
 } GPUTextureVk;
@@ -320,8 +321,11 @@ typedef struct GPUFrameSyncVk {
 
 typedef struct GPUTextureViewVk {
   GPUSwapChainVk *swapchain;
+  GPUTextureVk   *texture;
   VkDevice        device;
   VkImageView     view;
+  VkFramebuffer   framebuffer;
+  VkExtent2D      extent;
   uint32_t        imageIndex;
 } GPUTextureViewVk;
 

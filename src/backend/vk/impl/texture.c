@@ -285,12 +285,86 @@ vk__destroyTextureState(GPUTextureVk *native) {
     return;
   }
 
+  for (uint32_t load = 0u; load < 3u; load++) {
+    for (uint32_t store = 0u; store < 2u; store++) {
+      if (native->renderPasses[load][store]) {
+        vkDestroyRenderPass(native->device,
+                            native->renderPasses[load][store],
+                            NULL);
+      }
+    }
+  }
   if (native->image) {
     vkDestroyImage(native->device, native->image, NULL);
   }
   if (native->memory) {
     vkFreeMemory(native->device, native->memory, NULL);
   }
+}
+
+static VkAttachmentLoadOp
+vk__colorLoadOp(uint32_t load) {
+  static const VkAttachmentLoadOp ops[] = {
+    VK_ATTACHMENT_LOAD_OP_LOAD,
+    VK_ATTACHMENT_LOAD_OP_CLEAR,
+    VK_ATTACHMENT_LOAD_OP_DONT_CARE
+  };
+
+  return ops[load];
+}
+
+static VkAttachmentStoreOp
+vk__colorStoreOp(uint32_t store) {
+  return store == GPU_STORE_OP_STORE
+           ? VK_ATTACHMENT_STORE_OP_STORE
+           : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+}
+
+static VkResult
+vk__createColorRenderPass(VkDevice      device,
+                          VkFormat      format,
+                          uint32_t      load,
+                          uint32_t      store,
+                          VkRenderPass *outRenderPass) {
+  VkAttachmentDescription attachment = {0};
+  VkAttachmentReference   color      = {0};
+  VkSubpassDescription    subpass    = {0};
+  VkSubpassDependency     dependency = {0};
+  VkRenderPassCreateInfo  info       = {0};
+
+  attachment.format         = format;
+  attachment.samples        = VK_SAMPLE_COUNT_1_BIT;
+  attachment.loadOp         = vk__colorLoadOp(load);
+  attachment.storeOp        = vk__colorStoreOp(store);
+  attachment.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  attachment.initialLayout  = load == GPU_LOAD_OP_LOAD
+                                ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+                                : VK_IMAGE_LAYOUT_UNDEFINED;
+  attachment.finalLayout    = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+  color.attachment = 0u;
+  color.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+  subpass.pipelineBindPoint    = VK_PIPELINE_BIND_POINT_GRAPHICS;
+  subpass.colorAttachmentCount = 1u;
+  subpass.pColorAttachments    = &color;
+
+  dependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
+  dependency.dstSubpass    = 0u;
+  dependency.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  dependency.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+  info.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  info.attachmentCount = 1u;
+  info.pAttachments    = &attachment;
+  info.subpassCount    = 1u;
+  info.pSubpasses      = &subpass;
+  info.dependencyCount = 1u;
+  info.pDependencies   = &dependency;
+  return vkCreateRenderPass(device, &info, NULL, outRenderPass);
 }
 
 GPU_HIDE
@@ -322,6 +396,10 @@ vk_createTexture(GPUDevice                  * __restrict device,
   state.device            = deviceVk->device;
   state.layout            = VK_IMAGE_LAYOUT_UNDEFINED;
   state.aspect            = vk__imageAspect(info->format);
+  if ((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u &&
+      state.aspect != VK_IMAGE_ASPECT_COLOR_BIT) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
   imageInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
   imageInfo.extent.width  = info->width;
   imageInfo.extent.height = info->dimension == GPU_TEXTURE_DIMENSION_1D
@@ -377,6 +455,23 @@ vk_createTexture(GPUDevice                  * __restrict device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
+  if ((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u) {
+    for (uint32_t load = 0u; load < 3u; load++) {
+      for (uint32_t store = 0u; store < 2u; store++) {
+        if (vk__createColorRenderPass(
+              state.device,
+              imageInfo.format,
+              load,
+              store,
+              &state.renderPasses[load][store]
+            ) != VK_SUCCESS) {
+          vk__destroyTextureState(&state);
+          return GPU_ERROR_BACKEND_FAILURE;
+        }
+      }
+    }
+  }
+
   texture = calloc(1, sizeof(*texture) + sizeof(*native));
   if (!texture) {
     vk__destroyTextureState(&state);
@@ -419,6 +514,8 @@ vk_createTextureView(GPUTexture                     * __restrict texture,
   GPUTextureView       *view;
   GPUTextureViewVk     *native;
   VkImageViewCreateInfo viewInfo = {0};
+  VkFramebufferCreateInfo framebufferInfo = {0};
+  bool targetView;
 
   textureVk = texture ? texture->_priv : NULL;
   if (!texture || !textureVk || !textureVk->image || !info || !outView ||
@@ -451,6 +548,47 @@ vk_createTextureView(GPUTexture                     * __restrict texture,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
+  targetView = (texture->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u &&
+               info->mipLevelCount == 1u &&
+               (info->viewType == GPU_TEXTURE_VIEW_2D ||
+                info->viewType == GPU_TEXTURE_VIEW_2D_ARRAY);
+  if ((texture->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u &&
+      (texture->usage & GPU_TEXTURE_USAGE_SAMPLED) == 0u &&
+      !targetView) {
+    vkDestroyImageView(native->device, native->view, NULL);
+    free(view);
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  if (targetView) {
+    native->texture       = textureVk;
+    native->extent.width  = texture->width >> info->baseMipLevel;
+    native->extent.height = texture->height >> info->baseMipLevel;
+    if (native->extent.width == 0u) {
+      native->extent.width = 1u;
+    }
+    if (native->extent.height == 0u) {
+      native->extent.height = 1u;
+    }
+
+    framebufferInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebufferInfo.renderPass      =
+      textureVk->renderPasses[GPU_LOAD_OP_CLEAR][GPU_STORE_OP_STORE];
+    framebufferInfo.attachmentCount = 1u;
+    framebufferInfo.pAttachments    = &native->view;
+    framebufferInfo.width           = native->extent.width;
+    framebufferInfo.height          = native->extent.height;
+    framebufferInfo.layers          = info->arrayLayerCount;
+    if (!framebufferInfo.renderPass ||
+        vkCreateFramebuffer(native->device,
+                            &framebufferInfo,
+                            NULL,
+                            &native->framebuffer) != VK_SUCCESS) {
+      vkDestroyImageView(native->device, native->view, NULL);
+      free(view);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+
   view->_priv       = native;
   view->_texture    = texture;
   view->_ownsNative = true;
@@ -468,8 +606,13 @@ vk_destroyTextureView(GPUTextureView * __restrict view) {
   }
 
   native = view->_priv;
-  if (native && native->device && native->view) {
-    vkDestroyImageView(native->device, native->view, NULL);
+  if (native && native->device) {
+    if (native->framebuffer) {
+      vkDestroyFramebuffer(native->device, native->framebuffer, NULL);
+    }
+    if (native->view) {
+      vkDestroyImageView(native->device, native->view, NULL);
+    }
   }
   free(view);
 }
