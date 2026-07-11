@@ -114,7 +114,7 @@ main(void) {
   }
   if (!GPUIsFeatureSupported(adapter, GPU_FEATURE_COMPUTE) ||
       !GPUIsFeatureSupported(adapter, GPU_FEATURE_INDIRECT_DRAW) ||
-      GPUIsFeatureSupported(adapter, GPU_FEATURE_MULTI_DRAW)) {
+      !GPUIsFeatureSupported(adapter, GPU_FEATURE_MULTI_DRAW)) {
     fprintf(stderr, "vulkan feature reporting failed\n");
     GPUDestroyInstance(instance);
     return 1;
@@ -128,7 +128,7 @@ main(void) {
   }
   if (!GPUIsFeatureEnabled(device, GPU_FEATURE_COMPUTE) ||
       !GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_DRAW) ||
-      GPUIsFeatureEnabled(device, GPU_FEATURE_MULTI_DRAW)) {
+      !GPUIsFeatureEnabled(device, GPU_FEATURE_MULTI_DRAW)) {
     fprintf(stderr, "vulkan enabled feature reporting failed\n");
     GPUDestroyDevice(device);
     GPUDestroyInstance(instance);

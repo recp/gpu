@@ -346,6 +346,24 @@ dx12_getAdapterProperties(const GPUAdapter     * __restrict adapter,
 }
 
 GPU_HIDE
+bool
+dx12_supportsFeature(const GPUAdapter * __restrict adapter,
+                     GPUFeature feature) {
+  if (!adapter || !adapter->_priv) {
+    return false;
+  }
+
+  switch (feature) {
+    case GPU_FEATURE_COMPUTE:
+    case GPU_FEATURE_INDIRECT_DRAW:
+    case GPU_FEATURE_MULTI_DRAW:
+      return true;
+    default:
+      return false;
+  }
+}
+
+GPU_HIDE
 GPUDevice *
 dx12_createDevice(GPUPhysicalDevice        * __restrict phyDevice,
                   GPUCommandQueueCreateInfo queCI[],
@@ -493,6 +511,7 @@ void
 dx12_initDevice(GPUApiDevice* apiDevice) {
   apiDevice->getAvailableAdapters      = dx12_getAvailablePhysicalDevicesBy;
   apiDevice->getAdapterProperties      = dx12_getAdapterProperties;
+  apiDevice->supportsFeature           = dx12_supportsFeature;
   apiDevice->createDevice              = dx12_createDevice;
   apiDevice->createSystemDefaultDevice = dx12_createSystemDefaultDevice;
   apiDevice->destroyDevice             = dx12_destroyDevice;

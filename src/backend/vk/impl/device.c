@@ -90,6 +90,22 @@ vk_adapterType(VkPhysicalDeviceType type) {
   }
 }
 
+static bool
+vk_hasQueueCapability(const GPUPhysicalDeviceVk *adapter,
+                      VkQueueFlags               capability) {
+  if (!adapter) {
+    return false;
+  }
+
+  for (uint32_t i = 0; i < adapter->nQueFamilies; i++) {
+    if (adapter->queueFamilyProps[i].queueFlags & capability) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 GPU_HIDE
 GPUPhysicalDevice*
 vk__newPhyDeviceFrom(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
@@ -190,6 +206,28 @@ vk_getAdapterProperties(const GPUAdapter     * __restrict adapter,
   outProps->type = vk_adapterType(adapterVk->props.deviceType);
 
   return GPU_OK;
+}
+
+GPU_HIDE
+bool
+vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
+  GPUPhysicalDeviceVk *adapterVk;
+
+  if (!adapter || !(adapterVk = adapter->_priv)) {
+    return false;
+  }
+
+  switch (feature) {
+    case GPU_FEATURE_COMPUTE:
+      return vk_hasQueueCapability(adapterVk, VK_QUEUE_COMPUTE_BIT);
+    case GPU_FEATURE_INDIRECT_DRAW:
+      return vk_hasQueueCapability(adapterVk, VK_QUEUE_GRAPHICS_BIT);
+    case GPU_FEATURE_MULTI_DRAW:
+      return adapterVk->features.multiDrawIndirect &&
+             vk_hasQueueCapability(adapterVk, VK_QUEUE_GRAPHICS_BIT);
+    default:
+      return false;
+  }
 }
 
 GPU_HIDE
@@ -694,6 +732,7 @@ void
 vk_initDevice(GPUApiDevice *apiDevice) {
   apiDevice->getAvailableAdapters      = vk_getAvailablePhysicalDevicesBy;
   apiDevice->getAdapterProperties      = vk_getAdapterProperties;
+  apiDevice->supportsFeature           = vk_supportsFeature;
   apiDevice->createDevice              = vk_createDevice;
   apiDevice->createSystemDefaultDevice = vk_createSystemDefaultDevice;
   apiDevice->destroyDevice             = vk_destroyDevice;

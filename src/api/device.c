@@ -105,6 +105,9 @@ gpu_builtinSupportedFeature(const GPUApi *api, GPUFeature feature) {
     case GPU_FEATURE_INDIRECT_DRAW:
       return api->rce.drawPrimitivesIndirect &&
              api->rce.drawIndexedPrimsIndirect;
+    case GPU_FEATURE_MULTI_DRAW:
+      return api->rce.multiDrawPrimitivesIndirect &&
+             api->rce.multiDrawIndexedPrimsIndirect;
     default:
       return false;
   }
@@ -147,7 +150,8 @@ static uint64_t
 gpu_defaultEnabledFeatureMask(const GPUAdapter *adapter) {
   static const GPUFeature defaultFeatures[] = {
     GPU_FEATURE_COMPUTE,
-    GPU_FEATURE_INDIRECT_DRAW
+    GPU_FEATURE_INDIRECT_DRAW,
+    GPU_FEATURE_MULTI_DRAW
   };
   GPUApi *api;
   uint64_t mask;
@@ -187,7 +191,8 @@ gpu_supportedFeatureMask(const GPUAdapter *adapter) {
   static const GPUFeature queryableFeatures[] = {
     GPU_FEATURE_COMPUTE,
     GPU_FEATURE_TIMESTAMPS,
-    GPU_FEATURE_INDIRECT_DRAW
+    GPU_FEATURE_INDIRECT_DRAW,
+    GPU_FEATURE_MULTI_DRAW
   };
   uint64_t mask;
 
@@ -203,7 +208,7 @@ gpu_supportedFeatureMask(const GPUAdapter *adapter) {
 
 static void
 gpu_fillFeatureSet(uint64_t mask, GPUFeatureSet *outSet) {
-  static const GPUFeature featureLists[8][3] = {
+  static const GPUFeature featureLists[16][4] = {
     [1] = {GPU_FEATURE_COMPUTE},
     [2] = {GPU_FEATURE_TIMESTAMPS},
     [3] = {GPU_FEATURE_COMPUTE, GPU_FEATURE_TIMESTAMPS},
@@ -214,10 +219,36 @@ gpu_fillFeatureSet(uint64_t mask, GPUFeatureSet *outSet) {
       GPU_FEATURE_COMPUTE,
       GPU_FEATURE_TIMESTAMPS,
       GPU_FEATURE_INDIRECT_DRAW
+    },
+    [8] = {GPU_FEATURE_MULTI_DRAW},
+    [9] = {GPU_FEATURE_COMPUTE, GPU_FEATURE_MULTI_DRAW},
+    [10] = {GPU_FEATURE_TIMESTAMPS, GPU_FEATURE_MULTI_DRAW},
+    [11] = {
+      GPU_FEATURE_COMPUTE,
+      GPU_FEATURE_TIMESTAMPS,
+      GPU_FEATURE_MULTI_DRAW
+    },
+    [12] = {GPU_FEATURE_INDIRECT_DRAW, GPU_FEATURE_MULTI_DRAW},
+    [13] = {
+      GPU_FEATURE_COMPUTE,
+      GPU_FEATURE_INDIRECT_DRAW,
+      GPU_FEATURE_MULTI_DRAW
+    },
+    [14] = {
+      GPU_FEATURE_TIMESTAMPS,
+      GPU_FEATURE_INDIRECT_DRAW,
+      GPU_FEATURE_MULTI_DRAW
+    },
+    [15] = {
+      GPU_FEATURE_COMPUTE,
+      GPU_FEATURE_TIMESTAMPS,
+      GPU_FEATURE_INDIRECT_DRAW,
+      GPU_FEATURE_MULTI_DRAW
     }
   };
-  static const uint8_t featureCounts[8] = {
-    0u, 1u, 1u, 2u, 1u, 2u, 2u, 3u
+  static const uint8_t featureCounts[16] = {
+    0u, 1u, 1u, 2u, 1u, 2u, 2u, 3u,
+    1u, 2u, 2u, 3u, 2u, 3u, 3u, 4u
   };
   uint32_t listIndex;
 
@@ -230,6 +261,9 @@ gpu_fillFeatureSet(uint64_t mask, GPUFeatureSet *outSet) {
   }
   if (mask & gpu_featureBit(GPU_FEATURE_INDIRECT_DRAW)) {
     listIndex |= 4u;
+  }
+  if (mask & gpu_featureBit(GPU_FEATURE_MULTI_DRAW)) {
+    listIndex |= 8u;
   }
 
   outSet->featureCount = featureCounts[listIndex];

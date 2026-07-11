@@ -603,6 +603,7 @@ GPUMultiDrawIndirect(GPURenderPassEncoder *pass,
                      uint64_t              argsOffset,
                      uint32_t              drawCount,
                      uint32_t              strideBytes) {
+  GPUDevice *device;
   GPUApi *api;
 
   if (!pass || pass->_ended) {
@@ -633,7 +634,9 @@ GPUMultiDrawIndirect(GPURenderPassEncoder *pass,
   if (!(api = gpuActiveGPUApi())) {
     return;
   }
-  if (api->rce.multiDrawPrimitivesIndirect &&
+  device = gpu_renderPassDevice(pass);
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_MULTI_DRAW) &&
+      api->rce.multiDrawPrimitivesIndirect &&
       api->rce.multiDrawPrimitivesIndirect(pass,
                                            pass->_primitiveType,
                                            argsBuffer,
@@ -661,6 +664,7 @@ GPUMultiDrawIndexedIndirect(GPURenderPassEncoder *pass,
                             uint64_t              argsOffset,
                             uint32_t              drawCount,
                             uint32_t              strideBytes) {
+  GPUDevice *device;
   GPUApi *api;
 
   if (!pass || pass->_ended) {
@@ -698,7 +702,9 @@ GPUMultiDrawIndexedIndirect(GPURenderPassEncoder *pass,
   if (!(api = gpuActiveGPUApi())) {
     return;
   }
-  if (api->rce.multiDrawIndexedPrimsIndirect &&
+  device = gpu_renderPassDevice(pass);
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_MULTI_DRAW) &&
+      api->rce.multiDrawIndexedPrimsIndirect &&
       api->rce.multiDrawIndexedPrimsIndirect(pass,
                                              argsBuffer,
                                              argsOffset,

@@ -1,6 +1,7 @@
 #include "test.h"
 #include "../../src/api/buffer_internal.h"
 #include "../../src/api/cmdqueue_internal.h"
+#include "../../src/api/device_internal.h"
 #include "../../src/api/render/pipeline_internal.h"
 #include "../../src/api/texture_internal.h"
 
@@ -1380,9 +1381,12 @@ check_render_draw_validation_calls(GPUDevice *device) {
   GPUBindGroupLayout *layouts[1];
   GPUPipelineLayoutCreateInfo pipelineInfo = {0};
   GPUPipelineLayout *pipelineLayout = NULL;
+  GPUCommandQueue fakeQueue = {0};
+  GPUCommandBuffer fakeCmdb = {0};
   GPURenderPassEncoder pass = {0};
   GPUBuffer indirectBuffer = {0};
   GPUBuffer wrongUsageBuffer = {0};
+  uint64_t oldEnabledFeatureMask;
   int ok = 0;
 
   api = gpuActiveGPUApi();
@@ -1390,6 +1394,10 @@ check_render_draw_validation_calls(GPUDevice *device) {
     fprintf(stderr, "render draw validation could not get active api\n");
     return 0;
   }
+  oldEnabledFeatureMask = device->enabledFeatureMask;
+  fakeQueue._device     = device;
+  fakeCmdb._queue       = &fakeQueue;
+  pass._cmdb            = &fakeCmdb;
 
   entry.binding = 0u;
   entry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
@@ -1494,9 +1502,18 @@ check_render_draw_validation_calls(GPUDevice *device) {
   GPUDrawIndirect(&pass, &indirectBuffer, 0u);
   GPUMultiDrawIndirect(&pass, &indirectBuffer, 0u, 2u, 16u);
   if (gRenderDrawCalls != 1u ||
-      gRenderDrawIndirectCalls != 1u ||
+      gRenderDrawIndirectCalls != 3u ||
+      gRenderMultiDrawIndirectCalls != 0u) {
+    fprintf(stderr, "render draw validation rejected multi-draw fallback\n");
+    goto cleanup;
+  }
+
+  gRenderDrawIndirectCalls = 0u;
+  device->enabledFeatureMask |= 1ull << GPU_FEATURE_MULTI_DRAW;
+  GPUMultiDrawIndirect(&pass, &indirectBuffer, 0u, 2u, 16u);
+  if (gRenderDrawIndirectCalls != 0u ||
       gRenderMultiDrawIndirectCalls != 1u) {
-    fprintf(stderr, "render draw validation rejected valid non-indexed draw\n");
+    fprintf(stderr, "render draw validation rejected native multi-draw path\n");
     goto cleanup;
   }
 
@@ -1535,6 +1552,7 @@ check_render_draw_validation_calls(GPUDevice *device) {
   ok = 1;
 
 cleanup:
+  device->enabledFeatureMask = oldEnabledFeatureMask;
   api->rce.drawPrimitives = oldDraw;
   api->rce.drawIndexedPrims = oldDrawIndexed;
   api->rce.drawPrimitivesIndirect = oldDrawIndirect;
