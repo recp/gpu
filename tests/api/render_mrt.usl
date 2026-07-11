@@ -1,0 +1,17 @@
+struct APIRenderVertexIn {
+  position: float2 #attribute(0)
+}
+
+struct APIRenderMRTOut {
+  color0: float4
+  color1: float4
+}
+
+vert api_vs(input: APIRenderVertexIn #stage_in) -> float4 {
+  return float4(input.position, 0.0, 1.0)
+}
+
+frag api_mrt_fs() -> APIRenderMRTOut {
+  return APIRenderMRTOut(float4(1.0, 0.0, 0.0, 0.5),
+                         float4(0.0, 1.0, 0.0, 1.0))
+}

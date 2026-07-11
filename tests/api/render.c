@@ -17,16 +17,6 @@ static const char *kRenderPipelineMSL =
   "}\n"
   "fragment float4 api_alpha_fs() {\n"
   "  return float4(1.0, 0.0, 0.0, 0.5);\n"
-  "}\n"
-  "struct MRTOut {\n"
-  "  float4 color0 [[color(0)]];\n"
-  "  float4 color1 [[color(1)]];\n"
-  "};\n"
-  "fragment MRTOut api_mrt_fs() {\n"
-  "  MRTOut out;\n"
-  "  out.color0 = float4(1.0, 0.0, 0.0, 0.5);\n"
-  "  out.color1 = float4(0.0, 1.0, 0.0, 1.0);\n"
-  "  return out;\n"
   "}\n";
 
 static int
@@ -42,6 +32,27 @@ create_render_test_library(GPUDevice *device, GPUShaderLibrary **outLibrary) {
 
   return GPUCreateShaderLibrary(device, &info, outLibrary) == GPU_OK &&
          *outLibrary;
+}
+
+static int
+create_render_usl_library(GPUDevice *device,
+                          const char *bytecodePath,
+                          GPUShaderLibrary **outLibrary) {
+  uint64_t bytecodeSize;
+  void *bytecode;
+  GPUResult result;
+
+  bytecode = gpu_test_read_file(bytecodePath, &bytecodeSize);
+  if (!bytecode) {
+    return 0;
+  }
+
+  result = GPUCreateShaderLibraryFromUSL(device,
+                                         bytecode,
+                                         bytecodeSize,
+                                         outLibrary);
+  free(bytecode);
+  return result == GPU_OK && *outLibrary;
 }
 
 static int
@@ -783,7 +794,8 @@ render_readback_has_red_in_x_range(const uint8_t *pixels,
 static int
 check_render_readback_case(GPUDevice *device,
                            RenderReadbackDrawMode mode,
-                           int clipped) {
+                           int clipped,
+                           const char *mrtBytecodePath) {
   static const float kFullscreenTriangle[] = {
     -1.0f, -1.0f,
      3.0f, -1.0f,
@@ -885,7 +897,10 @@ check_render_readback_case(GPUDevice *device,
     fprintf(stderr, "failed to get graphics queue for %s test\n", label);
     return 0;
   }
-  if (!create_render_test_library(device, &library)) {
+  if (!(mrt ? create_render_usl_library(device,
+                                        mrtBytecodePath,
+                                        &library)
+            : create_render_test_library(device, &library))) {
     fprintf(stderr, "failed to create %s library\n", label);
     goto cleanup;
   }
@@ -1339,24 +1354,40 @@ cleanup:
 }
 
 static int
-check_render_readback(GPUDevice *device) {
-  return check_render_readback_case(device, RENDER_READBACK_DRAW, 0) &&
-         check_render_readback_case(device, RENDER_READBACK_DRAW_INDEXED, 1) &&
-         check_render_readback_case(device, RENDER_READBACK_DRAW_INDIRECT, 0) &&
+check_render_readback(GPUDevice *device, const char *mrtBytecodePath) {
+  return check_render_readback_case(device, RENDER_READBACK_DRAW, 0, NULL) &&
+         check_render_readback_case(device,
+                                    RENDER_READBACK_DRAW_INDEXED,
+                                    1,
+                                    NULL) &&
+         check_render_readback_case(device,
+                                    RENDER_READBACK_DRAW_INDIRECT,
+                                    0,
+                                    NULL) &&
          check_render_readback_case(device,
                                     RENDER_READBACK_DRAW_INDEXED_INDIRECT,
-                                    0) &&
+                                    0,
+                                    NULL) &&
          check_render_readback_case(device,
                                     RENDER_READBACK_DRAW_MULTI_INDIRECT,
-                                    0) &&
+                                    0,
+                                    NULL) &&
          check_render_readback_case(device,
                                     RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT,
-                                    0) &&
+                                    0,
+                                    NULL) &&
          check_render_readback_case(device,
                                     RENDER_READBACK_DRAW_OCCLUSION,
-                                    0) &&
-         check_render_readback_case(device, RENDER_READBACK_DRAW_MSAA, 0) &&
-         check_render_readback_case(device, RENDER_READBACK_DRAW_MRT, 0);
+                                    0,
+                                    NULL) &&
+         check_render_readback_case(device,
+                                    RENDER_READBACK_DRAW_MSAA,
+                                    0,
+                                    NULL) &&
+         check_render_readback_case(device,
+                                    RENDER_READBACK_DRAW_MRT,
+                                    0,
+                                    mrtBytecodePath);
 }
 
 static int
@@ -2072,11 +2103,11 @@ check_render_encoder_validation(void) {
 }
 
 int
-gpu_test_render(GPUDevice *device) {
+gpu_test_render(GPUDevice *device, const char *mrtBytecodePath) {
   return check_render_pass_validation() &&
          check_render_encoder_validation() &&
          check_render_pipeline_validation(device) &&
          check_render_draw_validation_calls(device) &&
          check_dynamic_state_validation_calls() &&
-         check_render_readback(device);
+         check_render_readback(device, mrtBytecodePath);
 }

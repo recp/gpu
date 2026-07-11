@@ -23,9 +23,10 @@
 #include <string.h>
 
 typedef struct GPUApiTestContext {
-  GPUAdapter *adapter;
-  GPUDevice         *device;
-  const char        *uslBytecodePath;
+  GPUAdapter  *adapter;
+  GPUDevice   *device;
+  const char  *uslBytecodePath;
+  const char  *mrtBytecodePath;
 } GPUApiTestContext;
 
 typedef int (*GPUApiTestRunFn)(void *ctx);
@@ -37,13 +38,14 @@ typedef struct GPUApiTest {
 } GPUApiTest;
 
 int gpu_run_api_tests(const GPUApiTest *tests, uint32_t count);
+void *gpu_test_read_file(const char *path, uint64_t *outSize);
 
 int gpu_test_queue(GPUAdapter *adapter, GPUDevice *device);
 int gpu_test_sampler(GPUDevice *device);
 int gpu_test_bindgroup(GPUDevice *device);
 int gpu_test_resources(GPUDevice *device);
 int gpu_test_copy(GPUDevice *device);
-int gpu_test_render(GPUDevice *device);
+int gpu_test_render(GPUDevice *device, const char *mrtBytecodePath);
 int gpu_test_compute(GPUDevice *device);
 int gpu_test_query(GPUAdapter *adapter, GPUDevice *device);
 int gpu_test_barrier(GPUDevice *device);

@@ -18,22 +18,26 @@ fi
 rm -rf "$FIXTURE_DIR"
 mkdir -p "$FIXTURE_DIR"
 cp "$ROOT/samples/usl-reflection-check/reflection.usl" "$FIXTURE_DIR/reflection.usl"
+cp "$TEST_DIR/render_mrt.usl" "$FIXTURE_DIR/render_mrt.usl"
 
-ustest_cmd=("$USTEST" --shader "$FIXTURE_DIR/reflection.usl" --no-logs --no-sidecar)
-if [[ "$EMBED_METAL" == "1" ]]; then
-  USL_EMBED_METAL_BLOB=1 "${ustest_cmd[@]}" >/tmp/gpu-api-tests-ustest.log 2>&1
-else
-  "${ustest_cmd[@]}" >/tmp/gpu-api-tests-ustest.log 2>&1
-fi
+for shader in reflection render_mrt; do
+  ustest_cmd=("$USTEST" --shader "$FIXTURE_DIR/$shader.usl" --no-logs --no-sidecar)
+  if [[ "$EMBED_METAL" == "1" ]]; then
+    USL_EMBED_METAL_BLOB=1 "${ustest_cmd[@]}" \
+      >"/tmp/gpu-api-tests-$shader-ustest.log" 2>&1
+  else
+    "${ustest_cmd[@]}" >"/tmp/gpu-api-tests-$shader-ustest.log" 2>&1
+  fi
 
-if [[ ! -f "$FIXTURE_DIR/reflection.us" ]]; then
-  echo "USL bytecode artifact was not generated: $FIXTURE_DIR/reflection.us" >&2
-  exit 1
-fi
-if [[ -f "$FIXTURE_DIR/reflection.usl.metal" ]]; then
-  echo "USL Metal sidecar should not be generated in --no-sidecar mode" >&2
-  exit 1
-fi
+  if [[ ! -f "$FIXTURE_DIR/$shader.us" ]]; then
+    echo "USL bytecode artifact was not generated: $FIXTURE_DIR/$shader.us" >&2
+    exit 1
+  fi
+  if [[ -f "$FIXTURE_DIR/$shader.usl.metal" ]]; then
+    echo "USL Metal sidecar should not be generated in --no-sidecar mode" >&2
+    exit 1
+  fi
+done
 
 source "$ROOT/samples/common/build-library.sh"
 gpu_build_library "$ROOT" metal
@@ -51,4 +55,4 @@ xcrun --sdk macosx clang \
   -Wl,-rpath,"$LIB_DIR" \
   -o "$OUT_BIN"
 
-"$OUT_BIN" "$FIXTURE_DIR/reflection.us"
+"$OUT_BIN" "$FIXTURE_DIR/reflection.us" "$FIXTURE_DIR/render_mrt.us"

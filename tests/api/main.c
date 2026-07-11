@@ -29,7 +29,9 @@ run_copy(void *ctx) {
 
 static int
 run_render(void *ctx) {
-  return gpu_test_render(((GPUApiTestContext *)ctx)->device);
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_render(testCtx->device, testCtx->mrtBytecodePath);
 }
 
 static int
@@ -83,8 +85,8 @@ main(int argc, char **argv) {
   GPUApiTest tests[11];
   int ok;
 
-  if (argc != 2) {
-    fprintf(stderr, "usage: %s <reflection.us>\n", argv[0]);
+  if (argc != 3) {
+    fprintf(stderr, "usage: %s <reflection.us> <render_mrt.us>\n", argv[0]);
     return 2;
   }
 
@@ -103,6 +105,7 @@ main(int argc, char **argv) {
   ctx.adapter = adapter;
   ctx.device = device;
   ctx.uslBytecodePath = argv[1];
+  ctx.mrtBytecodePath = argv[2];
 
   tests[0] = (GPUApiTest){ "queue", run_queue, &ctx };
   tests[1] = (GPUApiTest){ "sampler", run_sampler, &ctx };

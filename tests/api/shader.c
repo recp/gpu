@@ -4,55 +4,6 @@
 #include "../../src/api/render/pipeline_internal.h"
 #include "../../src/api/texture_internal.h"
 
-static void *
-read_file(const char *path, uint64_t *outSize) {
-  unsigned char *bytes;
-  long length;
-  FILE *file;
-
-  if (!path || !outSize) {
-    return NULL;
-  }
-
-  *outSize = 0;
-  file = fopen(path, "rb");
-  if (!file) {
-    return NULL;
-  }
-
-  if (fseek(file, 0, SEEK_END) != 0) {
-    fclose(file);
-    return NULL;
-  }
-
-  length = ftell(file);
-  if (length <= 0) {
-    fclose(file);
-    return NULL;
-  }
-
-  if (fseek(file, 0, SEEK_SET) != 0) {
-    fclose(file);
-    return NULL;
-  }
-
-  bytes = malloc((size_t)length);
-  if (!bytes) {
-    fclose(file);
-    return NULL;
-  }
-
-  if (fread(bytes, 1, (size_t)length, file) != (size_t)length) {
-    free(bytes);
-    fclose(file);
-    return NULL;
-  }
-
-  fclose(file);
-  *outSize = (uint64_t)length;
-  return bytes;
-}
-
 static int
 shader_reflection_has_resource(const GPUShaderReflection *reflection,
                                GPUBindingType bindingType,
@@ -1085,7 +1036,7 @@ gpu_test_shader(GPUDevice *device, const char *bytecodePath) {
   void *bytecode;
   int ok;
 
-  bytecode = read_file(bytecodePath, &bytecodeSize);
+  bytecode = gpu_test_read_file(bytecodePath, &bytecodeSize);
   if (!bytecode) {
     fprintf(stderr, "failed to read shader bytecode: %s\n", bytecodePath);
     return 0;
