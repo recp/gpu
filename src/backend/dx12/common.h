@@ -74,6 +74,11 @@ typedef struct GPULibraryDX12 {
   uint64_t sourceSize;
 } GPULibraryDX12;
 
+typedef struct DX12ShaderCode {
+  void  *data;
+  SIZE_T size;
+} DX12ShaderCode;
+
 typedef struct GPURootBindingDX12 {
   uint32_t            groupIndex;
   uint32_t            binding;
@@ -113,6 +118,8 @@ typedef struct GPUBufferDX12 {
   ID3D12Resource            *resource;
   void                      *mapped;
   D3D12_GPU_VIRTUAL_ADDRESS  gpuAddress;
+  D3D12_RESOURCE_STATES      state;
+  bool                       defaultHeap;
 } GPUBufferDX12;
 
 typedef struct GPUTextureDX12 {
@@ -125,6 +132,11 @@ typedef struct GPURenderPipelineDX12 {
   ID3D12RootSignature      *rootSignature;
   D3D12_PRIMITIVE_TOPOLOGY  topology;
 } GPURenderPipelineDX12;
+
+typedef struct GPUComputePipelineDX12 {
+  ID3D12PipelineState  *pipelineState;
+  ID3D12RootSignature *rootSignature;
+} GPUComputePipelineDX12;
 
 typedef struct GPUTextureViewDX12 {
   ID3D12Resource             *resource;
@@ -156,6 +168,13 @@ typedef struct GPURenderEncoderDX12 {
   GPURenderPassDX12          *renderPass;
 } GPURenderEncoderDX12;
 
+typedef struct GPUComputeEncoderDX12 {
+  ID3D12GraphicsCommandList *commandList;
+  ID3D12RootSignature       *rootSignature;
+  ID3D12DescriptorHeap      *resourceHeap;
+  ID3D12DescriptorHeap      *samplerHeap;
+} GPUComputeEncoderDX12;
+
 typedef struct GPUCommandBufferDX12 {
   GPUCommandQueueDX12          *owner;
   ID3D12CommandAllocator       *allocator;
@@ -171,6 +190,8 @@ typedef struct GPUCommandBufferDX12 {
   GPURenderPassDX12             renderPass;
   GPURenderPassEncoder          renderEncoder;
   GPURenderEncoderDX12          renderState;
+  GPUComputePassEncoder         computeEncoder;
+  GPUComputeEncoderDX12         computeState;
 } GPUCommandBufferDX12;
 
 struct GPUCommandQueueDX12 {

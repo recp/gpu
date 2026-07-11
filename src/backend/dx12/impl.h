@@ -30,6 +30,7 @@ GPU_HIDE DXGI_FORMAT dx12_format(GPUFormat format);
 GPU_HIDE void dx12_initCmdbuf(GPUApiCommandBuffer *api);
 GPU_HIDE void dx12_initLibrary(GPUApiLibrary *api);
 GPU_HIDE void dx12_initRenderPipeline(GPUApiRender *api);
+GPU_HIDE void dx12_initCompute(GPUApiCompute *api);
 GPU_HIDE void dx12_initRenderPass(GPUApiRenderPass *api);
 GPU_HIDE void dx12_initRCE(GPUApiRCE *api);
 GPU_HIDE void dx12_initBuff(GPUApiBuffer *api);
@@ -45,5 +46,11 @@ GPU_HIDE void dx12_initFrame(GPUApiFrame *apiFrame);
 GPU_HIDE void dx12_initDescriptor(GPUApiDescriptor *apiDescriptor);
 GPU_HIDE void dx12_initInstance(GPUApiInstance *apiInstance);
 GPU_HIDE void dx12_initSurface(GPUApiSurface *apiDevice);
+GPU_HIDE bool dx12_compileShader(GPUDeviceDX12      *device,
+                                 GPULibraryDX12     *library,
+                                 const char         *entry,
+                                 GPUShaderStageFlags stage,
+                                 DX12ShaderCode     *outCode);
+GPU_HIDE void dx12_freeShaderCode(DX12ShaderCode *code);
 
 #endif /* dx12_apis_h */

@@ -30,6 +30,7 @@ backend_dx12(void) {
   if (!dx12.initialized) {
     dx12_initDevice(&dx12.device);
     dx12_initRenderPipeline(&dx12.render);
+    dx12_initCompute(&dx12.compute);
     dx12_initRCE(&dx12.rce);
     dx12_initCmdbuf(&dx12.cmdbuf);
     dx12_initCmdQue(&dx12.cmdque);

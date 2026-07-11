@@ -313,6 +313,7 @@ dx12__makeLayoutPlan(GPUBindGroupLayout * const *groups,
 
       switch (entries[i].bindingType) {
         case GPU_BINDING_UNIFORM_BUFFER:
+        case GPU_BINDING_STORAGE_BUFFER:
           plan.bindingCount++;
           plan.rootParameterCount++;
           plan.rootDwordCount += 2u;
@@ -382,7 +383,8 @@ dx12__fillLayoutPlan(GPUBindGroupLayout * const *groups,
     native->groupOffsets[groupIndex] = bindingCursor;
 
     for (uint32_t i = 0u; i < entryCount; i++) {
-      if (entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER) {
+      if (entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER ||
+          entries[i].bindingType == GPU_BINDING_STORAGE_BUFFER) {
         native->bindings[bindingCursor].groupIndex    = groupIndex;
         native->bindings[bindingCursor].binding       = backendBindings[i];
         native->bindings[bindingCursor].rootParameter = rootCursor++;
@@ -441,7 +443,9 @@ dx12__fillRanges11(GPUBindGroupLayout * const *groups,
                    D3D12_DESCRIPTOR_RANGE1     *ranges) {
   for (uint32_t i = 0u; i < native->bindingCount; i++) {
     parameters[native->bindings[i].rootParameter].ParameterType =
-      D3D12_ROOT_PARAMETER_TYPE_CBV;
+      native->bindings[i].bindingType == GPU_BINDING_STORAGE_BUFFER
+        ? D3D12_ROOT_PARAMETER_TYPE_UAV
+        : D3D12_ROOT_PARAMETER_TYPE_CBV;
     parameters[native->bindings[i].rootParameter]
       .Descriptor.ShaderRegister = native->bindings[i].binding;
     parameters[native->bindings[i].rootParameter]
@@ -528,7 +532,9 @@ dx12__fillRanges10(GPUBindGroupLayout * const *groups,
                    D3D12_DESCRIPTOR_RANGE      *ranges) {
   for (uint32_t i = 0u; i < native->bindingCount; i++) {
     parameters[native->bindings[i].rootParameter].ParameterType =
-      D3D12_ROOT_PARAMETER_TYPE_CBV;
+      native->bindings[i].bindingType == GPU_BINDING_STORAGE_BUFFER
+        ? D3D12_ROOT_PARAMETER_TYPE_UAV
+        : D3D12_ROOT_PARAMETER_TYPE_CBV;
     parameters[native->bindings[i].rootParameter]
       .Descriptor.ShaderRegister = native->bindings[i].binding;
     parameters[native->bindings[i].rootParameter]
@@ -766,9 +772,12 @@ dx12__writeBindGroup(void *context,
 
   switch (binding->bindingType) {
     case GPU_BINDING_UNIFORM_BUFFER:
+    case GPU_BINDING_STORAGE_BUFFER:
       if (binding->kind != GPUBindKindBuffer || !binding->buffer ||
           !binding->buffer->device ||
-          binding->buffer->device->_priv != writeContext->group->device) {
+          binding->buffer->device->_priv != writeContext->group->device ||
+          (binding->bindingType == GPU_BINDING_STORAGE_BUFFER &&
+           !gpuBufferHasUsage(binding->buffer, GPU_BUFFER_USAGE_STORAGE))) {
         writeContext->valid = false;
       }
       break;
@@ -861,7 +870,8 @@ dx12_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
       native->resourceCount++;
     } else if (entries[i].bindingType == GPU_BINDING_SAMPLER) {
       native->samplerCount++;
-    } else if (entries[i].bindingType != GPU_BINDING_UNIFORM_BUFFER) {
+    } else if (entries[i].bindingType != GPU_BINDING_UNIFORM_BUFFER &&
+               entries[i].bindingType != GPU_BINDING_STORAGE_BUFFER) {
       free(native);
       return GPU_ERROR_UNSUPPORTED;
     }
@@ -935,24 +945,27 @@ dx12_destroyBindGroup(GPUBindGroup *group) {
   group->_native = NULL;
 }
 
-typedef struct DX12RenderBindContext {
-  GPURenderEncoderDX12      *encoder;
+typedef struct DX12BindContext {
+  ID3D12GraphicsCommandList *commandList;
   GPUPipelineLayoutDX12     *layout;
   GPUDevice                 *device;
   uint32_t                   groupIndex;
   uint32_t                   boundCount;
+  bool                       compute;
   bool                       valid;
-} DX12RenderBindContext;
+} DX12BindContext;
 
 static bool
-dx12__bindDescriptorHeaps(GPURenderEncoderDX12 *encoder,
-                          GPUDeviceDX12         *device,
-                          bool                   needsResources,
-                          bool                   needsSamplers) {
+dx12__bindDescriptorHeaps(ID3D12GraphicsCommandList *commandList,
+                          ID3D12DescriptorHeap      **boundResourceHeap,
+                          ID3D12DescriptorHeap      **boundSamplerHeap,
+                          GPUDeviceDX12              *device,
+                          bool                        needsResources,
+                          bool                        needsSamplers) {
   ID3D12DescriptorHeap *heaps[2];
   uint32_t              count;
 
-  if (!encoder || !encoder->commandList || !device) {
+  if (!commandList || !boundResourceHeap || !boundSamplerHeap || !device) {
     return false;
   }
   if ((needsResources && !device->resourceDescriptors.heap) ||
@@ -960,8 +973,8 @@ dx12__bindDescriptorHeaps(GPURenderEncoderDX12 *encoder,
     return false;
   }
 
-  if (encoder->resourceHeap == device->resourceDescriptors.heap &&
-      encoder->samplerHeap == device->samplerDescriptors.heap) {
+  if (*boundResourceHeap == device->resourceDescriptors.heap &&
+      *boundSamplerHeap == device->samplerDescriptors.heap) {
     return true;
   }
 
@@ -973,25 +986,22 @@ dx12__bindDescriptorHeaps(GPURenderEncoderDX12 *encoder,
     heaps[count++] = device->samplerDescriptors.heap;
   }
   if (count > 0u) {
-    encoder->commandList->lpVtbl->SetDescriptorHeaps(encoder->commandList,
-                                                     count,
-                                                     heaps);
+    commandList->lpVtbl->SetDescriptorHeaps(commandList, count, heaps);
   }
-  encoder->resourceHeap = device->resourceDescriptors.heap;
-  encoder->samplerHeap  = device->samplerDescriptors.heap;
+  *boundResourceHeap = device->resourceDescriptors.heap;
+  *boundSamplerHeap  = device->samplerDescriptors.heap;
   return true;
 }
 
 static bool
-dx12__transitionSampledTexture(GPURenderEncoderDX12 *encoder,
-                               GPUTextureViewDX12   *view) {
+dx12__transitionSampledTexture(ID3D12GraphicsCommandList *commandList,
+                               GPUTextureViewDX12        *view) {
   const D3D12_RESOURCE_STATES requiredState =
     D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE |
     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
   D3D12_RESOURCE_BARRIER barrier = {0};
 
-  if (!encoder || !encoder->commandList || !view || !view->resource ||
-      !view->state) {
+  if (!commandList || !view || !view->resource || !view->state) {
     return false;
   }
 
@@ -1004,17 +1014,36 @@ dx12__transitionSampledTexture(GPURenderEncoderDX12 *encoder,
   barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
   barrier.Transition.StateBefore = *view->state;
   barrier.Transition.StateAfter  = requiredState;
-  encoder->commandList->lpVtbl->ResourceBarrier(encoder->commandList,
-                                                1u,
-                                                &barrier);
+  commandList->lpVtbl->ResourceBarrier(commandList, 1u, &barrier);
   *view->state = requiredState;
   return true;
 }
 
+static bool
+dx12__transitionStorageBuffer(ID3D12GraphicsCommandList *commandList,
+                              GPUBufferDX12             *buffer) {
+  D3D12_RESOURCE_BARRIER barrier = {0};
+
+  if (!commandList || !buffer || !buffer->resource || !buffer->defaultHeap) {
+    return false;
+  }
+  if (buffer->state == D3D12_RESOURCE_STATE_UNORDERED_ACCESS) {
+    return true;
+  }
+
+  barrier.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+  barrier.Transition.pResource   = buffer->resource;
+  barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+  barrier.Transition.StateBefore = buffer->state;
+  barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+  commandList->lpVtbl->ResourceBarrier(commandList, 1u, &barrier);
+  buffer->state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+  return true;
+}
+
 static void
-dx12__bindRenderRoot(void *context,
-                     const GPUBindGroupBindingView *binding) {
-  DX12RenderBindContext    *bindContext;
+dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
+  DX12BindContext *bindContext;
 
   bindContext = context;
   if (!bindContext || !bindContext->valid || !binding) {
@@ -1045,10 +1074,53 @@ dx12__bindRenderRoot(void *context,
       }
 
       address = buffer->gpuAddress + binding->offset;
-      bindContext->encoder->commandList->lpVtbl
-        ->SetGraphicsRootConstantBufferView(bindContext->encoder->commandList,
-                                            rootBinding->rootParameter,
-                                            address);
+      if (bindContext->compute) {
+        bindContext->commandList->lpVtbl->SetComputeRootConstantBufferView(
+          bindContext->commandList,
+          rootBinding->rootParameter,
+          address
+        );
+      } else {
+        bindContext->commandList->lpVtbl->SetGraphicsRootConstantBufferView(
+          bindContext->commandList,
+          rootBinding->rootParameter,
+          address
+        );
+      }
+      break;
+    }
+    case GPU_BINDING_STORAGE_BUFFER: {
+      const GPURootBindingDX12 *rootBinding;
+      GPUBufferDX12            *buffer;
+      D3D12_GPU_VIRTUAL_ADDRESS address;
+
+      rootBinding = dx12__findRootBinding(bindContext->layout,
+                                          bindContext->groupIndex,
+                                          binding->binding);
+      buffer = binding->buffer ? binding->buffer->_priv : NULL;
+      if (binding->kind != GPUBindKindBuffer || !binding->buffer ||
+          binding->buffer->device != bindContext->device || !rootBinding ||
+          !gpuBufferHasUsage(binding->buffer, GPU_BUFFER_USAGE_STORAGE) ||
+          !dx12__transitionStorageBuffer(bindContext->commandList, buffer) ||
+          binding->offset > UINT64_MAX - buffer->gpuAddress) {
+        bindContext->valid = false;
+        return;
+      }
+
+      address = buffer->gpuAddress + binding->offset;
+      if (bindContext->compute) {
+        bindContext->commandList->lpVtbl->SetComputeRootUnorderedAccessView(
+          bindContext->commandList,
+          rootBinding->rootParameter,
+          address
+        );
+      } else {
+        bindContext->commandList->lpVtbl->SetGraphicsRootUnorderedAccessView(
+          bindContext->commandList,
+          rootBinding->rootParameter,
+          address
+        );
+      }
       break;
     }
     case GPU_BINDING_SAMPLED_TEXTURE: {
@@ -1058,7 +1130,7 @@ dx12__bindRenderRoot(void *context,
       if (binding->kind != GPUBindKindTexture || !view || !view->hasSrv ||
           !binding->textureView->_texture ||
           binding->textureView->_texture->device != bindContext->device ||
-          !dx12__transitionSampledTexture(bindContext->encoder, view)) {
+          !dx12__transitionSampledTexture(bindContext->commandList, view)) {
         bindContext->valid = false;
         return;
       }
@@ -1091,7 +1163,7 @@ dx12_bindRenderGroup(GPURenderCommandEncoder *pass,
                      GPUBindGroup            *group,
                      uint32_t                 dynamicOffsetCount,
                      const uint32_t          *dynamicOffsets) {
-  DX12RenderBindContext  context;
+  DX12BindContext        context;
   GPURenderEncoderDX12  *encoder;
   GPUPipelineLayoutDX12 *layout;
   GPUBindGroupDX12      *nativeGroup;
@@ -1119,7 +1191,9 @@ dx12_bindRenderGroup(GPURenderCommandEncoder *pass,
         layout->resourceTables[groupIndex].descriptorCount ||
       nativeGroup->samplerCount !=
         layout->samplerTables[groupIndex].descriptorCount ||
-      !dx12__bindDescriptorHeaps(encoder,
+      !dx12__bindDescriptorHeaps(encoder->commandList,
+                                &encoder->resourceHeap,
+                                &encoder->samplerHeap,
                                 device,
                                 nativeGroup->resourceCount > 0u,
                                 nativeGroup->samplerCount > 0u)) {
@@ -1127,17 +1201,17 @@ dx12_bindRenderGroup(GPURenderCommandEncoder *pass,
   }
 
   memset(&context, 0, sizeof(context));
-  context.encoder    = encoder;
-  context.layout     = layout;
-  context.device     = pipelineLayout->_device;
-  context.groupIndex = groupIndex;
-  context.valid      = true;
+  context.commandList = encoder->commandList;
+  context.layout      = layout;
+  context.device      = pipelineLayout->_device;
+  context.groupIndex  = groupIndex;
+  context.valid       = true;
   valid = gpuForEachBindGroupBindingWithDynamicOffsets(pipelineLayout,
                                                         groupIndex,
                                                         group,
                                                         dynamicOffsetCount,
                                                         dynamicOffsets,
-                                                        dx12__bindRenderRoot,
+                                                        dx12__bindRoot,
                                                         &context) &&
           context.valid && context.boundCount == expectedCount;
   if (!valid) {
@@ -1154,6 +1228,89 @@ dx12_bindRenderGroup(GPURenderCommandEncoder *pass,
   }
   if (nativeGroup->samplerCount > 0u) {
     encoder->commandList->lpVtbl->SetGraphicsRootDescriptorTable(
+      encoder->commandList,
+      layout->samplerTables[groupIndex].rootParameter,
+      dx12__gpuDescriptor(&device->samplerDescriptors,
+                          nativeGroup->samplerOffset)
+    );
+  }
+  return true;
+}
+
+GPU_HIDE
+bool
+dx12_bindComputeGroup(GPUComputePassEncoder *pass,
+                      GPUPipelineLayout     *pipelineLayout,
+                      uint32_t               groupIndex,
+                      GPUBindGroup          *group,
+                      uint32_t               dynamicOffsetCount,
+                      const uint32_t        *dynamicOffsets) {
+  DX12BindContext         context;
+  GPUComputeEncoderDX12  *encoder;
+  GPUPipelineLayoutDX12  *layout;
+  GPUBindGroupDX12       *nativeGroup;
+  GPUDeviceDX12          *device;
+  GPUBindGroupLayout     *groupLayout;
+  uint32_t                expectedCount;
+  bool                    valid;
+
+  encoder = pass ? pass->_priv : NULL;
+  layout  = pipelineLayout ? pipelineLayout->_native : NULL;
+  nativeGroup = group ? group->_native : NULL;
+  device = pipelineLayout && pipelineLayout->_device
+             ? pipelineLayout->_device->_priv
+             : NULL;
+  if (!encoder || !encoder->commandList || !layout || !layout->rootSignature ||
+      encoder->rootSignature != layout->rootSignature ||
+      !nativeGroup || nativeGroup->device != device ||
+      groupIndex >= layout->groupCount) {
+    return false;
+  }
+
+  groupLayout = gpuBindGroupGetLayout(group);
+  (void)GPUGetBindGroupLayoutEntries(groupLayout, &expectedCount);
+  if (nativeGroup->resourceCount !=
+        layout->resourceTables[groupIndex].descriptorCount ||
+      nativeGroup->samplerCount !=
+        layout->samplerTables[groupIndex].descriptorCount ||
+      !dx12__bindDescriptorHeaps(encoder->commandList,
+                                &encoder->resourceHeap,
+                                &encoder->samplerHeap,
+                                device,
+                                nativeGroup->resourceCount > 0u,
+                                nativeGroup->samplerCount > 0u)) {
+    return false;
+  }
+
+  memset(&context, 0, sizeof(context));
+  context.commandList = encoder->commandList;
+  context.layout      = layout;
+  context.device      = pipelineLayout->_device;
+  context.groupIndex  = groupIndex;
+  context.compute     = true;
+  context.valid       = true;
+  valid = gpuForEachBindGroupBindingWithDynamicOffsets(pipelineLayout,
+                                                        groupIndex,
+                                                        group,
+                                                        dynamicOffsetCount,
+                                                        dynamicOffsets,
+                                                        dx12__bindRoot,
+                                                        &context) &&
+          context.valid && context.boundCount == expectedCount;
+  if (!valid) {
+    return false;
+  }
+
+  if (nativeGroup->resourceCount > 0u) {
+    encoder->commandList->lpVtbl->SetComputeRootDescriptorTable(
+      encoder->commandList,
+      layout->resourceTables[groupIndex].rootParameter,
+      dx12__gpuDescriptor(&device->resourceDescriptors,
+                          nativeGroup->resourceOffset)
+    );
+  }
+  if (nativeGroup->samplerCount > 0u) {
+    encoder->commandList->lpVtbl->SetComputeRootDescriptorTable(
       encoder->commandList,
       layout->samplerTables[groupIndex].rootParameter,
       dx12__gpuDescriptor(&device->samplerDescriptors,
@@ -1189,4 +1346,5 @@ dx12_initDescriptor(GPUApiDescriptor *api) {
   api->createBindGroup       = dx12_createBindGroup;
   api->destroyBindGroup      = dx12_destroyBindGroup;
   api->bindRenderGroup       = dx12_bindRenderGroup;
+  api->bindComputeGroup      = dx12_bindComputeGroup;
 }

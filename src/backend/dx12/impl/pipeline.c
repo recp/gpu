@@ -78,11 +78,6 @@ struct DXCResult {
 
 typedef HRESULT (WINAPI *DXCCreateInstanceFn)(REFCLSID, REFIID, void **);
 
-typedef struct DX12ShaderCode {
-  void  *data;
-  SIZE_T size;
-} DX12ShaderCode;
-
 static const CLSID dx12_clsidDxcCompiler = {
   0x73e22d93,
   0xe6ce,
@@ -148,8 +143,9 @@ static const DXGI_FORMAT dx12_vertexFormats[GPUVertexFormatHalf + 1u] = {
   [GPUVertexFormatHalf]        = DXGI_FORMAT_R16_FLOAT
 };
 
-static void
-dx12__freeShaderCode(DX12ShaderCode *code) {
+GPU_HIDE
+void
+dx12_freeShaderCode(DX12ShaderCode *code) {
   if (!code) {
     return;
   }
@@ -349,13 +345,27 @@ dx12__compileLegacy(const char     *source,
   return SUCCEEDED(result);
 }
 
-static bool
-dx12__compileShader(GPUDeviceDX12   *device,
-                    GPULibraryDX12  *library,
-                    const char      *entry,
-                    bool             vertex,
-                    DX12ShaderCode  *outCode) {
-  if (!device || !library || !entry || !outCode) {
+GPU_HIDE
+bool
+dx12_compileShader(GPUDeviceDX12      *device,
+                   GPULibraryDX12     *library,
+                   const char         *entry,
+                   GPUShaderStageFlags stage,
+                   DX12ShaderCode     *outCode) {
+  static const wchar_t *dxcProfiles[GPU_SHADER_STAGE_COMPUTE_BIT + 1u] = {
+    [GPU_SHADER_STAGE_VERTEX_BIT]   = L"vs_6_0",
+    [GPU_SHADER_STAGE_FRAGMENT_BIT] = L"ps_6_0",
+    [GPU_SHADER_STAGE_COMPUTE_BIT]  = L"cs_6_0"
+  };
+  static const char *legacyProfiles[GPU_SHADER_STAGE_COMPUTE_BIT + 1u] = {
+    [GPU_SHADER_STAGE_VERTEX_BIT]   = "vs_5_1",
+    [GPU_SHADER_STAGE_FRAGMENT_BIT] = "ps_5_1",
+    [GPU_SHADER_STAGE_COMPUTE_BIT]  = "cs_5_1"
+  };
+
+  if (!device || !library || !entry || !outCode ||
+      stage >= GPU_ARRAY_LEN(dxcProfiles) || !dxcProfiles[stage] ||
+      !legacyProfiles[stage]) {
     return false;
   }
 
@@ -364,14 +374,14 @@ dx12__compileShader(GPUDeviceDX12   *device,
                             library->source,
                             library->sourceSize,
                             entry,
-                            vertex ? L"vs_6_0" : L"ps_6_0",
+                            dxcProfiles[stage],
                             outCode);
   }
 
   return dx12__compileLegacy(library->source,
                              library->sourceSize,
                              entry,
-                             vertex ? "vs_5_1" : "ps_5_1",
+                             legacyProfiles[stage],
                              outCode);
 }
 
@@ -533,18 +543,18 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   if (!dx12__topology(info->primitiveTopology,
                       &desc.PrimitiveTopologyType,
                       &native->topology) ||
-      !dx12__compileShader(deviceDX12,
-                           library,
-                           info->vertexEntry,
-                           true,
-                           &vertexCode) ||
-      !dx12__compileShader(deviceDX12,
-                           library,
-                           info->fragmentEntry,
-                           false,
-                           &fragmentCode)) {
-    dx12__freeShaderCode(&vertexCode);
-    dx12__freeShaderCode(&fragmentCode);
+      !dx12_compileShader(deviceDX12,
+                          library,
+                          info->vertexEntry,
+                          GPU_SHADER_STAGE_VERTEX_BIT,
+                          &vertexCode) ||
+      !dx12_compileShader(deviceDX12,
+                          library,
+                          info->fragmentEntry,
+                          GPU_SHADER_STAGE_FRAGMENT_BIT,
+                          &fragmentCode)) {
+    dx12_freeShaderCode(&vertexCode);
+    dx12_freeShaderCode(&fragmentCode);
     free(elements);
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
@@ -622,8 +632,8 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   );
 
 done:
-  dx12__freeShaderCode(&vertexCode);
-  dx12__freeShaderCode(&fragmentCode);
+  dx12_freeShaderCode(&vertexCode);
+  dx12_freeShaderCode(&fragmentCode);
   free(elements);
   if (FAILED(result)) {
     free(native);
