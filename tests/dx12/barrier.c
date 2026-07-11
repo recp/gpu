@@ -2,8 +2,11 @@
 
 #include "../../src/backend/dx12/common.h"
 
+#include <d3d12sdklayers.h>
+
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static GPUAdapter*
@@ -69,6 +72,52 @@ texture_states_are(const GPUTextureDX12     *texture,
 }
 
 static bool
+has_debug_errors(GPUDeviceDX12 *device) {
+  ID3D12InfoQueue *infoQueue;
+  D3D12_MESSAGE   *message;
+  UINT64           messageCount;
+  bool             foundError;
+
+  infoQueue  = NULL;
+  foundError = false;
+  if (!device || !device->d3dDevice ||
+      FAILED(device->d3dDevice->lpVtbl->QueryInterface(
+        device->d3dDevice,
+        &IID_ID3D12InfoQueue,
+        (void **)&infoQueue
+      ))) {
+    return false;
+  }
+
+  messageCount = infoQueue->lpVtbl->GetNumStoredMessages(infoQueue);
+  for (UINT64 i = 0u; i < messageCount; i++) {
+    SIZE_T messageBytes;
+
+    messageBytes = 0u;
+    if (FAILED(infoQueue->lpVtbl->GetMessage(infoQueue,
+                                             i,
+                                             NULL,
+                                             &messageBytes)) ||
+        messageBytes == 0u || !(message = malloc(messageBytes))) {
+      continue;
+    }
+    if (SUCCEEDED(infoQueue->lpVtbl->GetMessage(infoQueue,
+                                                i,
+                                                message,
+                                                &messageBytes)) &&
+        (message->Severity == D3D12_MESSAGE_SEVERITY_CORRUPTION ||
+         message->Severity == D3D12_MESSAGE_SEVERITY_ERROR)) {
+      fprintf(stderr, "DX12 validation: %s\n", message->pDescription);
+      foundError = true;
+    }
+    free(message);
+  }
+  infoQueue->lpVtbl->ClearStoredMessages(infoQueue);
+  infoQueue->lpVtbl->Release(infoQueue);
+  return foundError;
+}
+
+static bool
 run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
   const uint8_t pixels[16] = {
     255u, 0u, 0u, 255u,
@@ -76,6 +125,7 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
     0u, 0u, 255u, 255u,
     255u, 255u, 255u, 255u
   };
+  const uint64_t         vertexBufferSize   = 48u;
   const uint64_t         indexBufferSize    = 6u;
   const uint64_t         indirectBufferSize = 20u;
   GPUDevice             *device;
@@ -84,8 +134,10 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
   GPUCommandBuffer      *cmdb;
   GPUCommandBuffer      *buffers[1];
   GPUCommandBufferDX12  *command;
+  GPUBuffer             *vertexBuffer;
   GPUBuffer             *indexBuffer;
   GPUBuffer             *indirectBuffer;
+  GPUBufferDX12         *nativeVertex;
   GPUBufferDX12         *nativeIndex;
   GPUBufferDX12         *nativeIndirect;
   GPUTexture            *texture;
@@ -93,7 +145,7 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
   GPUFence              *fence;
   GPUTextureCreateInfo   textureInfo = {0};
   GPUBufferCreateInfo    bufferInfo = {0};
-  GPUBufferBarrier       bufferBarrier = {0};
+  GPUBufferBarrier       bufferBarriers[2] = {0};
   GPUBarrierBatch        bufferBatch = {0};
   GPUTextureWriteRegion  writeRegion = {0};
   GPUFenceCreateInfo     fenceInfo = {0};
@@ -102,6 +154,7 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
 
   device         = GPUCreateDeviceWithDefaultQueues(adapter);
   queue          = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  vertexBuffer   = NULL;
   indexBuffer    = NULL;
   indirectBuffer = NULL;
   texture        = NULL;
@@ -124,6 +177,18 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
 
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = forceLegacy
+                                  ? "dx12-vertex-barrier-legacy"
+                                  : "dx12-vertex-barrier-enhanced";
+  bufferInfo.sizeBytes        = vertexBufferSize;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_VERTEX |
+                                GPU_BUFFER_USAGE_STORAGE;
+  if (GPUCreateBuffer(device, &bufferInfo, &vertexBuffer) != GPU_OK ||
+      !vertexBuffer) {
+    fprintf(stderr, "DX12 vertex barrier buffer creation failed\n");
+    goto cleanup;
+  }
+
   bufferInfo.label            = forceLegacy
                                   ? "dx12-index-barrier-legacy"
                                   : "dx12-index-barrier-enhanced";
@@ -211,29 +276,36 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
     goto cleanup;
   }
 
-  bufferBarrier.buffer    = indexBuffer;
-  bufferBarrier.srcAccess = GPU_ACCESS_SHADER_WRITE;
-  bufferBarrier.dstAccess = GPU_ACCESS_SHADER_READ;
-  bufferBarrier.sizeBytes = indexBufferSize;
-  bufferBatch.srcStages   = GPU_STAGE_COMPUTE;
-  bufferBatch.dstStages   = GPU_STAGE_VERTEX;
+  bufferBarriers[0].buffer    = vertexBuffer;
+  bufferBarriers[0].srcAccess = GPU_ACCESS_SHADER_WRITE;
+  bufferBarriers[0].dstAccess = GPU_ACCESS_SHADER_READ;
+  bufferBarriers[0].sizeBytes = vertexBufferSize;
+  bufferBarriers[1].buffer    = indirectBuffer;
+  bufferBarriers[1].srcAccess = GPU_ACCESS_SHADER_WRITE;
+  bufferBarriers[1].dstAccess = GPU_ACCESS_INDIRECT_READ;
+  bufferBarriers[1].sizeBytes = indirectBufferSize;
+  bufferBatch.srcStages       = GPU_STAGE_COMPUTE;
+  bufferBatch.dstStages       = GPU_STAGE_VERTEX;
+  bufferBatch.bufferBarrierCount = 2u;
+  bufferBatch.pBufferBarriers     = bufferBarriers;
+  GPUEncodeBarriers(cmdb, &bufferBatch);
+  nativeVertex   = vertexBuffer->_priv;
+  nativeIndirect = indirectBuffer->_priv;
+  if (!nativeVertex ||
+      nativeVertex->state != D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER ||
+      !nativeIndirect ||
+      nativeIndirect->state != D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT) {
+    fprintf(stderr, "DX12 vertex/indirect barrier state mismatch\n");
+    goto cleanup;
+  }
+
+  bufferBarriers[0].buffer    = indexBuffer;
+  bufferBarriers[0].sizeBytes = indexBufferSize;
   bufferBatch.bufferBarrierCount = 1u;
-  bufferBatch.pBufferBarriers     = &bufferBarrier;
   GPUEncodeBarriers(cmdb, &bufferBatch);
   nativeIndex = indexBuffer->_priv;
   if (!nativeIndex || nativeIndex->state != D3D12_RESOURCE_STATE_INDEX_BUFFER) {
     fprintf(stderr, "DX12 index barrier state mismatch\n");
-    goto cleanup;
-  }
-
-  bufferBarrier.buffer    = indirectBuffer;
-  bufferBarrier.dstAccess = GPU_ACCESS_INDIRECT_READ;
-  bufferBarrier.sizeBytes = indirectBufferSize;
-  GPUEncodeBarriers(cmdb, &bufferBatch);
-  nativeIndirect = indirectBuffer->_priv;
-  if (!nativeIndirect ||
-      nativeIndirect->state != D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT) {
-    fprintf(stderr, "DX12 indirect barrier state mismatch\n");
     goto cleanup;
   }
 
@@ -341,13 +413,17 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
     goto cleanup;
   }
   cmdb = NULL;
-  ok   = true;
+  if (has_debug_errors(deviceDX12)) {
+    goto cleanup;
+  }
+  ok = true;
 
 cleanup:
   GPUDestroyFence(fence);
   GPUDestroyTexture(texture);
   GPUDestroyBuffer(indirectBuffer);
   GPUDestroyBuffer(indexBuffer);
+  GPUDestroyBuffer(vertexBuffer);
   GPUDestroyDevice(device);
   return ok;
 }

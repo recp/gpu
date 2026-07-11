@@ -16,6 +16,8 @@
 
 #include "../common.h"
 
+#include <d3d12sdklayers.h>
+
 enum {
   DX12_COMPLETION_STACK_SIZE = 64u * 1024u
 };
@@ -60,6 +62,53 @@ dx12__logQueueError(GPUCommandQueueDX12 *queue,
             operation,
             (unsigned long)result);
   }
+}
+
+static void
+dx12__logDebugMessages(GPUCommandQueueDX12 *queue) {
+  GPUDeviceDX12   *device;
+  ID3D12InfoQueue *infoQueue;
+  D3D12_MESSAGE   *message;
+  UINT64           messageCount;
+  UINT64           firstMessage;
+
+  device    = queue && queue->queue && queue->queue->_device
+                ? queue->queue->_device->_priv
+                : NULL;
+  infoQueue = NULL;
+  if (!device || !device->d3dDevice ||
+      !queue->queue->_device->runtimeConfig.enableVerboseLogs ||
+      FAILED(device->d3dDevice->lpVtbl->QueryInterface(
+        device->d3dDevice,
+        &IID_ID3D12InfoQueue,
+        (void **)&infoQueue
+      ))) {
+    return;
+  }
+
+  messageCount = infoQueue->lpVtbl->GetNumStoredMessages(infoQueue);
+  firstMessage = messageCount > 16u ? messageCount - 16u : 0u;
+  for (UINT64 i = firstMessage; i < messageCount; i++) {
+    SIZE_T messageBytes;
+
+    messageBytes = 0u;
+    if (FAILED(infoQueue->lpVtbl->GetMessage(infoQueue,
+                                             i,
+                                             NULL,
+                                             &messageBytes)) ||
+        messageBytes == 0u || !(message = malloc(messageBytes))) {
+      continue;
+    }
+    if (SUCCEEDED(infoQueue->lpVtbl->GetMessage(infoQueue,
+                                                i,
+                                                message,
+                                                &messageBytes))) {
+      fprintf(stderr, "GPU Direct3D 12: %s\n", message->pDescription);
+    }
+    free(message);
+  }
+  infoQueue->lpVtbl->ClearStoredMessages(infoQueue);
+  infoQueue->lpVtbl->Release(infoQueue);
 }
 
 static void
@@ -577,6 +626,7 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   result = native->commandList->lpVtbl->Close(native->commandList);
   if (FAILED(result)) {
     dx12__logQueueError(queue, "command list close", result);
+    dx12__logDebugMessages(queue);
     gpuFinishCommandBuffer(cmdb, dx12__recycleCommandBuffer);
     return;
   }

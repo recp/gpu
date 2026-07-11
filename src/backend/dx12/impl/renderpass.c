@@ -25,16 +25,18 @@ dx12__barrierSync(GPUPipelineStageMask stages, GPUAccessMask access) {
   }
 
   sync = D3D12_BARRIER_SYNC_NONE;
-  if ((stages & GPU_STAGE_VERTEX) != 0u) {
-    sync |= D3D12_BARRIER_SYNC_VERTEX_SHADING;
+  if ((access & (GPU_ACCESS_SHADER_READ | GPU_ACCESS_SHADER_WRITE)) != 0u) {
+    if ((stages & GPU_STAGE_VERTEX) != 0u) {
+      sync |= D3D12_BARRIER_SYNC_VERTEX_SHADING;
+    }
+    if ((stages & GPU_STAGE_FRAGMENT) != 0u) {
+      sync |= D3D12_BARRIER_SYNC_PIXEL_SHADING;
+    }
+    if ((stages & GPU_STAGE_COMPUTE) != 0u) {
+      sync |= D3D12_BARRIER_SYNC_COMPUTE_SHADING;
+    }
   }
-  if ((stages & GPU_STAGE_FRAGMENT) != 0u) {
-    sync |= D3D12_BARRIER_SYNC_PIXEL_SHADING;
-  }
-  if ((stages & GPU_STAGE_COMPUTE) != 0u) {
-    sync |= D3D12_BARRIER_SYNC_COMPUTE_SHADING;
-  }
-  if ((stages & GPU_STAGE_TRANSFER) != 0u) {
+  if ((access & (GPU_ACCESS_TRANSFER_READ | GPU_ACCESS_TRANSFER_WRITE)) != 0u) {
     sync |= D3D12_BARRIER_SYNC_COPY;
   }
   if ((access & (GPU_ACCESS_COLOR_READ | GPU_ACCESS_COLOR_WRITE)) != 0u) {
@@ -59,6 +61,10 @@ dx12__bufferBarrierSync(const GPUBuffer      *buffer,
   if ((access & GPU_ACCESS_SHADER_READ) != 0u &&
       (stages & GPU_STAGE_VERTEX) != 0u &&
       gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_INDEX)) {
+    if (!gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_VERTEX) &&
+        !gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_UNIFORM)) {
+      sync &= ~D3D12_BARRIER_SYNC_VERTEX_SHADING;
+    }
     sync |= D3D12_BARRIER_SYNC_INDEX_INPUT;
   }
   return sync;
@@ -71,11 +77,14 @@ dx12__bufferBarrierAccess(const GPUBuffer       *buffer,
   D3D12_BARRIER_ACCESS nativeAccess;
   bool                 inputAccess;
 
+  if (access == GPU_ACCESS_NONE) {
+    return D3D12_BARRIER_ACCESS_NO_ACCESS;
+  }
   if ((access & GPU_ACCESS_SHADER_WRITE) != 0u) {
     return D3D12_BARRIER_ACCESS_UNORDERED_ACCESS;
   }
 
-  nativeAccess = D3D12_BARRIER_ACCESS_NO_ACCESS;
+  nativeAccess = D3D12_BARRIER_ACCESS_COMMON;
   if ((access & GPU_ACCESS_TRANSFER_READ) != 0u) {
     nativeAccess |= D3D12_BARRIER_ACCESS_COPY_SOURCE;
   }
@@ -161,7 +170,11 @@ static D3D12_BARRIER_ACCESS
 dx12__textureBarrierAccess(GPUAccessMask access) {
   D3D12_BARRIER_ACCESS nativeAccess;
 
-  nativeAccess = D3D12_BARRIER_ACCESS_NO_ACCESS;
+  if (access == GPU_ACCESS_NONE) {
+    return D3D12_BARRIER_ACCESS_NO_ACCESS;
+  }
+
+  nativeAccess = D3D12_BARRIER_ACCESS_COMMON;
   if ((access & GPU_ACCESS_SHADER_READ) != 0u) {
     nativeAccess |= D3D12_BARRIER_ACCESS_SHADER_RESOURCE;
   }
