@@ -47,6 +47,9 @@ dx12__descriptorHeap(GPUDeviceDX12            *device,
   if (type == D3D12_DESCRIPTOR_HEAP_TYPE_RTV) {
     return &device->rtvDescriptors;
   }
+  if (type == D3D12_DESCRIPTOR_HEAP_TYPE_DSV) {
+    return &device->dsvDescriptors;
+  }
 
   return NULL;
 }
@@ -224,7 +227,7 @@ dx12__gpuDescriptor(const GPUDescriptorHeapDX12 *heap, uint32_t offset) {
 GPU_HIDE
 void
 dx12_destroyDescriptorHeaps(GPUDeviceDX12 *device) {
-  GPUDescriptorHeapDX12 *heaps[3];
+  GPUDescriptorHeapDX12 *heaps[4];
 
   if (!device) {
     return;
@@ -233,6 +236,7 @@ dx12_destroyDescriptorHeaps(GPUDeviceDX12 *device) {
   heaps[0] = &device->resourceDescriptors;
   heaps[1] = &device->samplerDescriptors;
   heaps[2] = &device->rtvDescriptors;
+  heaps[3] = &device->dsvDescriptors;
   for (uint32_t i = 0u; i < GPU_ARRAY_LEN(heaps); i++) {
     if (heaps[i]->heap) {
       heaps[i]->heap->lpVtbl->Release(heaps[i]->heap);

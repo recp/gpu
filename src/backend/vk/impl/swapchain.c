@@ -266,6 +266,7 @@ vk__allocateArrays(GPUSwapChainVk *swapchain, uint32_t count) {
 
 static bool
 vk__createImageState(GPUSwapChainVk *swapchain) {
+  GPUDeviceVk             *device;
   VkSemaphoreCreateInfo semaphoreInfo = {0};
   VkFenceCreateInfo     fenceInfo = {0};
   VkImageViewCreateInfo viewInfo = {0};
@@ -276,6 +277,10 @@ vk__createImageState(GPUSwapChainVk *swapchain) {
   if (!vk__allocateArrays(swapchain, count)) {
     return false;
   }
+  device = swapchain->gpuDevice ? swapchain->gpuDevice->_priv : NULL;
+  if (!device) {
+    return false;
+  }
   if (vkGetSwapchainImagesKHR(swapchain->device,
                               swapchain->swapchain,
                               &count,
@@ -284,14 +289,16 @@ vk__createImageState(GPUSwapChainVk *swapchain) {
     return false;
   }
 
-  for (uint32_t load = 0u; load < 3u; load++) {
-    for (uint32_t store = 0u; store < 2u; store++) {
-      if (vk__createRenderPass(swapchain,
-                               load,
-                               store,
-                               &swapchain->renderPasses[load][store]) !=
-          VK_SUCCESS) {
-        return false;
+  if (!device->dynamicRendering) {
+    for (uint32_t load = 0u; load < 3u; load++) {
+      for (uint32_t store = 0u; store < 2u; store++) {
+        if (vk__createRenderPass(swapchain,
+                                 load,
+                                 store,
+                                 &swapchain->renderPasses[load][store]) !=
+            VK_SUCCESS) {
+          return false;
+        }
       }
     }
   }
@@ -335,10 +342,11 @@ vk__createImageState(GPUSwapChainVk *swapchain) {
     }
 
     framebufferInfo.pAttachments = &swapchain->imageViews[i];
-    if (vkCreateFramebuffer(swapchain->device,
-                            &framebufferInfo,
-                            NULL,
-                            &swapchain->framebuffers[i]) != VK_SUCCESS ||
+    if ((!device->dynamicRendering &&
+         vkCreateFramebuffer(swapchain->device,
+                             &framebufferInfo,
+                             NULL,
+                             &swapchain->framebuffers[i]) != VK_SUCCESS) ||
         vkCreateSemaphore(swapchain->device,
                           &semaphoreInfo,
                           NULL,
@@ -356,9 +364,15 @@ vk__createImageState(GPUSwapChainVk *swapchain) {
 
     nativeView             = &swapchain->nativeViews[i];
     nativeView->swapchain  = swapchain;
+    nativeView->layout     = &nativeView->localLayout;
     nativeView->device     = swapchain->device;
+    nativeView->image      = swapchain->images[i];
     nativeView->view       = swapchain->imageViews[i];
+    nativeView->extent     = swapchain->extent;
+    nativeView->aspect     = VK_IMAGE_ASPECT_COLOR_BIT;
     nativeView->imageIndex = i;
+    nativeView->mipCount   = 1u;
+    nativeView->layerCount = 1u;
 
     texture                = &swapchain->textures[i];
     texture->_priv         = nativeView;

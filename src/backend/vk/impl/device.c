@@ -116,20 +116,29 @@ GPUPhysicalDevice*
 vk__newPhyDeviceFrom(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   GPUPhysicalDevice     *item;
   GPUPhysicalDeviceVk   *itemVk;
+  GPUInstanceVk         *instanceVk;
   VkExtensionProperties *extensions;
+  PFN_vkGetPhysicalDeviceFeatures2KHR getFeatures2;
+  VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamicFeatures = {0};
+  VkPhysicalDeviceFeatures2KHR features2 = {0};
   VkResult               err;
   uint32_t               i, nExtensions;
   bool                   incrementalPresentEnabled, displayTimingEnabled;
+  bool                   dynamicExtension;
+  bool                   dynamicCore;
 
   nExtensions               = 0;
   incrementalPresentEnabled = true;
   displayTimingEnabled      = true;
+  dynamicExtension          = false;
+  dynamicCore               = false;
 
   item                      = calloc(1, sizeof(*item));
   itemVk                    = calloc(1, sizeof(*itemVk));
   itemVk->phyDevice         = raw;
   item->_priv               = itemVk;
   item->inst                = inst;
+  instanceVk                = inst ? inst->_priv : NULL;
 
   vkGetPhysicalDeviceProperties(raw, &itemVk->props);
 
@@ -176,6 +185,11 @@ vk__newPhyDeviceFrom(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 
       VK__ADD_EXT_IF("VK_KHR_portability_subset", (void)NULL);
 
+      if (!strcmp(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        dynamicExtension = true;
+      }
+
       if (incrementalPresentEnabled) {
         VK__ADD_EXT_IF(VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME,
                        item->supportsIncrementalPresent = true);
@@ -187,6 +201,37 @@ vk__newPhyDeviceFrom(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       }
     }
     free(extensions);
+  }
+
+  dynamicCore = instanceVk && instanceVk->apiVersion >= VK_API_VERSION_1_3 &&
+                itemVk->props.apiVersion >= VK_API_VERSION_1_3;
+  getFeatures2 = instanceVk
+                   ? (PFN_vkGetPhysicalDeviceFeatures2KHR)
+                       vkGetInstanceProcAddr(instanceVk->inst,
+                                             "vkGetPhysicalDeviceFeatures2")
+                   : NULL;
+  if (!getFeatures2 && instanceVk) {
+    getFeatures2 = (PFN_vkGetPhysicalDeviceFeatures2KHR)
+      vkGetInstanceProcAddr(instanceVk->inst,
+                            "vkGetPhysicalDeviceFeatures2KHR");
+  }
+  if (getFeatures2 &&
+      (dynamicCore ||
+       (dynamicExtension && instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
+        itemVk->props.apiVersion >= VK_API_VERSION_1_2))) {
+    dynamicFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR;
+    features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR;
+    features2.pNext = &dynamicFeatures;
+    getFeatures2(raw, &features2);
+    if (dynamicFeatures.dynamicRendering) {
+      if (!dynamicCore) {
+        itemVk->extensionNames[itemVk->nEnabledExtensions++] =
+          VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME;
+        assert(itemVk->nEnabledExtensions < 64);
+      }
+      itemVk->dynamicRendering = true;
+    }
   }
 
 #undef VK__ADD_EXT_IF
@@ -548,6 +593,7 @@ vk_createDevice(GPUPhysicalDevice          * __restrict phyDevice,
   VkDeviceQueueCreateInfo *queues;
   float                   *queuePriorities;
   VkPhysicalDeviceFeatures enabledFeatures = {0};
+  VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamicFeatures = {0};
   VkDeviceCreateInfo       deviceCI = {0};
   VkResult                 result;
   uint32_t                 familyIndex;
@@ -632,6 +678,12 @@ vk_createDevice(GPUPhysicalDevice          * __restrict phyDevice,
   deviceCI.pQueueCreateInfos       = queues;
   deviceCI.enabledExtensionCount   = phyDeviceVk->nEnabledExtensions;
   deviceCI.ppEnabledExtensionNames = (void *)phyDeviceVk->extensionNames;
+  if (phyDeviceVk->dynamicRendering) {
+    dynamicFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR;
+    dynamicFeatures.dynamicRendering = VK_TRUE;
+    deviceCI.pNext = &dynamicFeatures;
+  }
 
   result = vkCreateDevice(phyDeviceVk->phyDevice,
                           &deviceCI,
@@ -647,6 +699,22 @@ vk_createDevice(GPUPhysicalDevice          * __restrict phyDevice,
   deviceVk->maxDrawIndirectCount =
     phyDeviceVk->props.limits.maxDrawIndirectCount;
   deviceVk->multiDrawIndirect = enabledFeatures.multiDrawIndirect;
+  if (phyDeviceVk->dynamicRendering) {
+    deviceVk->beginRendering = (PFN_vkCmdBeginRenderingKHR)
+      vkGetDeviceProcAddr(deviceVk->device, "vkCmdBeginRendering");
+    deviceVk->endRendering = (PFN_vkCmdEndRenderingKHR)
+      vkGetDeviceProcAddr(deviceVk->device, "vkCmdEndRendering");
+    if (!deviceVk->beginRendering || !deviceVk->endRendering) {
+      deviceVk->beginRendering = (PFN_vkCmdBeginRenderingKHR)
+        vkGetDeviceProcAddr(deviceVk->device, "vkCmdBeginRenderingKHR");
+      deviceVk->endRendering = (PFN_vkCmdEndRenderingKHR)
+        vkGetDeviceProcAddr(deviceVk->device, "vkCmdEndRenderingKHR");
+    }
+    if (!deviceVk->beginRendering || !deviceVk->endRendering) {
+      goto err;
+    }
+    deviceVk->dynamicRendering = true;
+  }
 
   device->_priv            = deviceVk;
   device->inst             = phyDevice->inst;

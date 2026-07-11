@@ -22,6 +22,101 @@ enum {
   GPU_VK_BARRIER_CHUNK_SIZE = 16u
 };
 
+static VkAttachmentLoadOp
+vk__loadOp(GPULoadOp op) {
+  static const VkAttachmentLoadOp operations[] = {
+    [GPU_LOAD_OP_LOAD]      = VK_ATTACHMENT_LOAD_OP_LOAD,
+    [GPU_LOAD_OP_CLEAR]     = VK_ATTACHMENT_LOAD_OP_CLEAR,
+    [GPU_LOAD_OP_DONT_CARE] = VK_ATTACHMENT_LOAD_OP_DONT_CARE
+  };
+
+  return (uint32_t)op < GPU_ARRAY_LEN(operations)
+           ? operations[op]
+           : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+}
+
+static VkAttachmentStoreOp
+vk__storeOp(GPUStoreOp op) {
+  return op == GPU_STORE_OP_STORE
+           ? VK_ATTACHMENT_STORE_OP_STORE
+           : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+}
+
+static void
+vk__layoutAccess(VkImageLayout        layout,
+                 VkPipelineStageFlags *outStage,
+                 VkAccessFlags        *outAccess) {
+  switch (layout) {
+    case VK_IMAGE_LAYOUT_UNDEFINED:
+      *outStage  = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+      *outAccess = 0u;
+      break;
+    case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
+      *outStage  = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+      *outAccess = 0u;
+      break;
+    case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+      *outStage  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+      *outAccess = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                   VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+      break;
+    case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+      *outStage  = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                   VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+      *outAccess = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+      break;
+    default:
+      *outStage  = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+      *outAccess = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+      break;
+  }
+}
+
+GPU_HIDE
+void
+vk_transitionView(VkCommandBuffer   command,
+                  GPUTextureViewVk *view,
+                  VkImageLayout     nextLayout) {
+  VkImageMemoryBarrier  barrier = {0};
+  VkPipelineStageFlags  srcStage;
+  VkPipelineStageFlags  dstStage;
+  VkAccessFlags         srcAccess;
+  VkAccessFlags         dstAccess;
+
+  if (!command || !view || !view->image || !view->layout ||
+      *view->layout == nextLayout) {
+    return;
+  }
+
+  vk__layoutAccess(*view->layout, &srcStage, &srcAccess);
+  vk__layoutAccess(nextLayout, &dstStage, &dstAccess);
+  barrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.srcAccessMask                   = srcAccess;
+  barrier.dstAccessMask                   = dstAccess;
+  barrier.oldLayout                       = *view->layout;
+  barrier.newLayout                       = nextLayout;
+  barrier.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+  barrier.image                           = view->image;
+  barrier.subresourceRange.aspectMask     = view->aspect;
+  barrier.subresourceRange.baseMipLevel   = view->baseMip;
+  barrier.subresourceRange.levelCount     = view->mipCount;
+  barrier.subresourceRange.baseArrayLayer = view->baseLayer;
+  barrier.subresourceRange.layerCount     = view->layerCount;
+  vkCmdPipelineBarrier(command,
+                       srcStage,
+                       dstStage,
+                       0u,
+                       0u,
+                       NULL,
+                       0u,
+                       NULL,
+                       1u,
+                       &barrier);
+  *view->layout = nextLayout;
+}
+
 static VkPipelineStageFlags
 vk__barrierStages(GPUPipelineStageMask stages) {
   VkPipelineStageFlags result;
@@ -299,6 +394,153 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
   }
 }
 
+static GPURenderPassDesc*
+vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
+                          const GPURenderPassCreateInfo *info,
+                          GPUCommandBufferVk            *command,
+                          GPUDeviceVk                   *device) {
+  GPURenderPassDesc *pass;
+  GPURenderPassVk   *native;
+  uint32_t           layerCount;
+
+  if (!cmdb || !info || !command || !device || !device->dynamicRendering ||
+      info->colorAttachmentCount > GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS) {
+    return NULL;
+  }
+
+  pass       = &command->renderPass;
+  native     = &command->renderPassState;
+  layerCount = 0u;
+  memset(pass, 0, sizeof(*pass));
+  memset(native, 0, sizeof(*native));
+
+  for (uint32_t i = 0u; i < info->colorAttachmentCount; i++) {
+    const GPURenderPassColorAttachment *attachment;
+    GPUTextureViewVk                   *view;
+    GPUSwapChainVk                     *swapchain;
+    VkRenderingAttachmentInfoKHR       *nativeAttachment;
+
+    attachment = &info->pColorAttachments[i];
+    view       = attachment->view ? attachment->view->_priv : NULL;
+    swapchain  = view ? view->swapchain : NULL;
+    if (!view || !view->view || !view->image || !view->layout ||
+        attachment->resolveView || view->extent.width == 0u ||
+        view->extent.height == 0u || view->layerCount == 0u ||
+        (swapchain &&
+         (!swapchain->frameActive ||
+          view->imageIndex != swapchain->acquiredImageIndex)) ||
+        (native->extent.width > 0u &&
+         (native->extent.width != view->extent.width ||
+          native->extent.height != view->extent.height ||
+          layerCount != view->layerCount))) {
+      return NULL;
+    }
+
+    vk_transitionView(command->command,
+                      view,
+                      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    nativeAttachment = &native->colorAttachments[i];
+    nativeAttachment->sType =
+      VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
+    nativeAttachment->imageView   = view->view;
+    nativeAttachment->imageLayout =
+      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    nativeAttachment->loadOp  = vk__loadOp(attachment->loadOp);
+    nativeAttachment->storeOp = vk__storeOp(attachment->storeOp);
+    nativeAttachment->clearValue.color.float32[0] =
+      attachment->clearColor.float32[0];
+    nativeAttachment->clearValue.color.float32[1] =
+      attachment->clearColor.float32[1];
+    nativeAttachment->clearValue.color.float32[2] =
+      attachment->clearColor.float32[2];
+    nativeAttachment->clearValue.color.float32[3] =
+      attachment->clearColor.float32[3];
+    native->colorViews[i] = view;
+    native->extent        = view->extent;
+    native->swapchain     = swapchain;
+    layerCount            = view->layerCount;
+  }
+
+  if (info->pDepthStencilAttachment) {
+    const GPURenderPassDepthStencilAttachment *attachment;
+    GPUTextureViewVk                          *view;
+    bool                                       hasStencil;
+
+    attachment = info->pDepthStencilAttachment;
+    view       = attachment->view ? attachment->view->_priv : NULL;
+    if (!view || !view->view || !view->image || !view->layout ||
+        view->extent.width == 0u || view->extent.height == 0u ||
+        view->layerCount == 0u ||
+        (native->extent.width > 0u &&
+         (native->extent.width != view->extent.width ||
+          native->extent.height != view->extent.height ||
+          layerCount != view->layerCount))) {
+      return NULL;
+    }
+
+    vk_transitionView(command->command,
+                      view,
+                      VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    native->depthAttachment.sType =
+      VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
+    native->depthAttachment.imageView   = view->view;
+    native->depthAttachment.imageLayout =
+      VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    native->depthAttachment.loadOp      =
+      vk__loadOp(attachment->depthLoadOp);
+    native->depthAttachment.storeOp     =
+      vk__storeOp(attachment->depthStoreOp);
+    native->depthAttachment.clearValue.depthStencil.depth =
+      attachment->clearDepth;
+    native->depthAttachment.clearValue.depthStencil.stencil =
+      attachment->clearStencil;
+    native->depthStencilView = view;
+    native->extent           = view->extent;
+    layerCount               = view->layerCount;
+
+    hasStencil = attachment->view->format ==
+                   GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+                 attachment->view->format ==
+                   GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+    if (hasStencil) {
+      native->stencilAttachment = native->depthAttachment;
+      native->stencilAttachment.loadOp =
+        vk__loadOp(attachment->stencilLoadOp);
+      native->stencilAttachment.storeOp =
+        vk__storeOp(attachment->stencilStoreOp);
+    }
+  }
+
+  if (native->extent.width == 0u || native->extent.height == 0u ||
+      layerCount == 0u) {
+    return NULL;
+  }
+  if (info->occlusionQuerySet) {
+    vk_resetQuerySet(cmdb, info->occlusionQuerySet);
+  }
+
+  native->colorCount                         = info->colorAttachmentCount;
+  native->dynamic                            = true;
+  native->renderingInfo.sType                =
+    VK_STRUCTURE_TYPE_RENDERING_INFO_KHR;
+  native->renderingInfo.renderArea.extent    = native->extent;
+  native->renderingInfo.layerCount           = layerCount;
+  native->renderingInfo.colorAttachmentCount = native->colorCount;
+  native->renderingInfo.pColorAttachments    = native->colorCount > 0u
+                                                  ? native->colorAttachments
+                                                  : NULL;
+  native->renderingInfo.pDepthAttachment     = native->depthStencilView
+                                                  ? &native->depthAttachment
+                                                  : NULL;
+  native->renderingInfo.pStencilAttachment =
+    native->stencilAttachment.imageView
+      ? &native->stencilAttachment
+      : NULL;
+  pass->_priv = native;
+  pass->label = info->label;
+  return pass;
+}
+
 GPU_HIDE
 GPURenderPassDesc*
 vk_beginRenderPass(GPUCommandBuffer              *cmdb,
@@ -309,6 +551,14 @@ vk_beginRenderPass(GPUCommandBuffer              *cmdb,
   GPUSwapChainVk                      *swapchain;
   GPURenderPassDesc                   *pass;
   GPURenderPassVk                     *native;
+  GPUDeviceVk                         *device;
+
+  device = cmdb && cmdb->_queue && cmdb->_queue->_device
+             ? cmdb->_queue->_device->_priv
+             : NULL;
+  if (device && device->dynamicRendering) {
+    return vk_beginDynamicRenderPass(cmdb, info, cmdb->_priv, device);
+  }
 
   if (!cmdb || !info || info->colorAttachmentCount != 1u ||
       !info->pColorAttachments || info->pDepthStencilAttachment) {

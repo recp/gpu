@@ -108,6 +108,72 @@ test_texture_barriers(GPUDevice *device) {
   return ok;
 }
 
+static int
+test_depth_pipeline(GPUDevice *device, GPUShaderLibrary *library) {
+  GPUShaderLayout                *layout;
+  GPURenderPipeline              *pipeline;
+  GPUVertexAttribute              attribute = {0};
+  GPUVertexBufferLayout           vertexLayout = {0};
+  GPUColorTargetState             colorTarget = {0};
+  GPUDepthStencilState            depthStencil = {0};
+  GPURenderPipelineCreateInfo     pipelineInfo = {0};
+  int                             ok;
+
+  layout   = NULL;
+  pipeline = NULL;
+  if (GPUCreateShaderLayout(device, library, &layout) != GPU_OK || !layout) {
+    return 0;
+  }
+
+  attribute.shaderLocation           = 0u;
+  attribute.format                   = GPUFloat2;
+  vertexLayout.strideBytes           = 8u;
+  vertexLayout.stepMode              = GPU_VERTEX_STEP_MODE_VERTEX;
+  vertexLayout.attributeCount        = 1u;
+  vertexLayout.pAttributes           = &attribute;
+  colorTarget.format                 = GPU_FORMAT_BGRA8_UNORM;
+  colorTarget.blend.writeMask        = GPU_COLOR_WRITE_ALL;
+  depthStencil.depthTestEnable       = true;
+  depthStencil.depthWriteEnable      = true;
+  depthStencil.depthCompare          = GPU_COMPARE_LESS;
+  depthStencil.stencilTestEnable     = true;
+  depthStencil.front.compare         = GPU_COMPARE_ALWAYS;
+  depthStencil.front.failOp          = GPU_STENCIL_OP_REPLACE;
+  depthStencil.front.depthFailOp     = GPU_STENCIL_OP_INCREMENT_CLAMP;
+  depthStencil.front.passOp          = GPU_STENCIL_OP_KEEP;
+  depthStencil.back.compare          = GPU_COMPARE_ALWAYS;
+  depthStencil.back.failOp           = GPU_STENCIL_OP_ZERO;
+  depthStencil.back.depthFailOp      = GPU_STENCIL_OP_DECREMENT_WRAP;
+  depthStencil.back.passOp           = GPU_STENCIL_OP_INVERT;
+  depthStencil.stencilReadMask       = UINT8_MAX;
+  depthStencil.stencilWriteMask      = UINT8_MAX;
+  pipelineInfo.chain.sType           =
+    GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  pipelineInfo.chain.structSize      = sizeof(pipelineInfo);
+  pipelineInfo.layout                = layout->pipelineLayout;
+  pipelineInfo.library               = library;
+  pipelineInfo.vertexEntry           = "tri_vs";
+  pipelineInfo.fragmentEntry         = "tri_fs";
+  pipelineInfo.vertex.bufferLayoutCount = 1u;
+  pipelineInfo.vertex.pBufferLayouts = &vertexLayout;
+  pipelineInfo.colorTargetCount      = 1u;
+  pipelineInfo.pColorTargets         = &colorTarget;
+  pipelineInfo.depthStencilFormat    = GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+  pipelineInfo.pDepthStencilState    = &depthStencil;
+  pipelineInfo.primitiveTopology     = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  pipelineInfo.cullMode              = GPU_CULL_MODE_NONE;
+  pipelineInfo.frontFace             = GPU_FRONT_FACE_CCW;
+  pipelineInfo.multisample.sampleCount = 1u;
+  pipelineInfo.multisample.sampleMask  = UINT32_MAX;
+  ok = GPUCreateRenderPipeline(device,
+                               &pipelineInfo,
+                               &pipeline) == GPU_OK && pipeline;
+
+  GPUDestroyRenderPipeline(pipeline);
+  GPUDestroyShaderLayout(layout);
+  return ok;
+}
+
 int
 main(int argc, char **argv) {
   GPUInstanceCreateInfo instanceInfo = {0};
@@ -175,6 +241,7 @@ main(int argc, char **argv) {
        reflection.pResources[0].binding == 0u &&
        reflection.pResources[0].bindingType == GPU_BINDING_UNIFORM_BUFFER &&
        reflection.pResources[0].hasDynamicOffset &&
+       test_depth_pipeline(device, library) &&
        test_texture_barriers(device);
 
   GPUFreeShaderReflection(&reflection);

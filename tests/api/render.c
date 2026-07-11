@@ -552,13 +552,55 @@ check_render_pipeline_validation(GPUDevice *device) {
   info.pDepthStencilState = &depthStencil;
   if (!expect_render_pipeline_error(device,
                                     &info,
-                                    "render pipeline create accepted unsupported depth state")) {
+                                    "render pipeline create accepted depth state without format")) {
     GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
 
+  info.depthStencilFormat = GPU_FORMAT_DEPTH32_FLOAT;
+  depthStencil.depthWriteEnable = true;
+  depthStencil.depthCompare     = GPU_COMPARE_LESS;
+  pipeline = NULL;
+  if (GPUCreateRenderPipeline(device, &info, &pipeline) != GPU_OK || !pipeline) {
+    fprintf(stderr, "render pipeline create rejected valid depth state\n");
+    GPUDestroyPipelineLayout(pipelineLayout);
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+  GPUDestroyRenderPipeline(pipeline);
+
+  depthStencil.stencilTestEnable = true;
+  if (!expect_render_pipeline_error(device,
+                                    &info,
+                                    "render pipeline accepted stencil state without stencil format")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+
+  info.depthStencilFormat          = GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+  depthStencil.front.compare       = GPU_COMPARE_ALWAYS;
+  depthStencil.front.failOp        = GPU_STENCIL_OP_REPLACE;
+  depthStencil.front.depthFailOp   = GPU_STENCIL_OP_INCREMENT_CLAMP;
+  depthStencil.front.passOp        = GPU_STENCIL_OP_KEEP;
+  depthStencil.back.compare        = GPU_COMPARE_ALWAYS;
+  depthStencil.back.failOp         = GPU_STENCIL_OP_ZERO;
+  depthStencil.back.depthFailOp    = GPU_STENCIL_OP_DECREMENT_WRAP;
+  depthStencil.back.passOp         = GPU_STENCIL_OP_INVERT;
+  depthStencil.stencilReadMask     = UINT8_MAX;
+  depthStencil.stencilWriteMask    = UINT8_MAX;
+  pipeline = NULL;
+  if (GPUCreateRenderPipeline(device, &info, &pipeline) != GPU_OK || !pipeline) {
+    fprintf(stderr, "render pipeline create rejected valid stencil state\n");
+    GPUDestroyPipelineLayout(pipelineLayout);
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+  GPUDestroyRenderPipeline(pipeline);
+
   info.pDepthStencilState = NULL;
+  info.depthStencilFormat = GPU_FORMAT_UNDEFINED;
   info.multisample.alphaToCoverageEnable = true;
   if (!expect_render_pipeline_error(device,
                                     &info,

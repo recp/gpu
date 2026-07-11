@@ -38,6 +38,55 @@ vk__frontFace(GPUFrontFace face) {
     VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE;
 }
 
+static VkCompareOp
+vk__compareOp(GPUCompareOp op) {
+  static const VkCompareOp operations[] = {
+    [GPU_COMPARE_NEVER]         = VK_COMPARE_OP_NEVER,
+    [GPU_COMPARE_LESS]          = VK_COMPARE_OP_LESS,
+    [GPU_COMPARE_EQUAL]         = VK_COMPARE_OP_EQUAL,
+    [GPU_COMPARE_LESS_EQUAL]    = VK_COMPARE_OP_LESS_OR_EQUAL,
+    [GPU_COMPARE_GREATER]       = VK_COMPARE_OP_GREATER,
+    [GPU_COMPARE_NOT_EQUAL]     = VK_COMPARE_OP_NOT_EQUAL,
+    [GPU_COMPARE_GREATER_EQUAL] = VK_COMPARE_OP_GREATER_OR_EQUAL,
+    [GPU_COMPARE_ALWAYS]        = VK_COMPARE_OP_ALWAYS
+  };
+
+  return (uint32_t)op < GPU_ARRAY_LEN(operations)
+           ? operations[op]
+           : VK_COMPARE_OP_NEVER;
+}
+
+static VkStencilOp
+vk__stencilOp(GPUStencilOp op) {
+  static const VkStencilOp operations[] = {
+    [GPU_STENCIL_OP_KEEP]            = VK_STENCIL_OP_KEEP,
+    [GPU_STENCIL_OP_ZERO]            = VK_STENCIL_OP_ZERO,
+    [GPU_STENCIL_OP_REPLACE]         = VK_STENCIL_OP_REPLACE,
+    [GPU_STENCIL_OP_INCREMENT_CLAMP] = VK_STENCIL_OP_INCREMENT_AND_CLAMP,
+    [GPU_STENCIL_OP_DECREMENT_CLAMP] = VK_STENCIL_OP_DECREMENT_AND_CLAMP,
+    [GPU_STENCIL_OP_INVERT]          = VK_STENCIL_OP_INVERT,
+    [GPU_STENCIL_OP_INCREMENT_WRAP]  = VK_STENCIL_OP_INCREMENT_AND_WRAP,
+    [GPU_STENCIL_OP_DECREMENT_WRAP]  = VK_STENCIL_OP_DECREMENT_AND_WRAP
+  };
+
+  return (uint32_t)op < GPU_ARRAY_LEN(operations)
+           ? operations[op]
+           : VK_STENCIL_OP_KEEP;
+}
+
+static void
+vk__fillStencilState(VkStencilOpState          *native,
+                     const GPUStencilFaceState *state,
+                     uint32_t                   compareMask,
+                     uint32_t                   writeMask) {
+  native->failOp      = vk__stencilOp(state->failOp);
+  native->passOp      = vk__stencilOp(state->passOp);
+  native->depthFailOp = vk__stencilOp(state->depthFailOp);
+  native->compareOp   = vk__compareOp(state->compare);
+  native->compareMask = compareMask;
+  native->writeMask   = writeMask;
+}
+
 static bool
 vk__vertexFormat(GPUVertexFormat format, VkFormat *outFormat) {
   VkFormat result;
@@ -271,19 +320,24 @@ vk_createRenderPipeline(GPUDevice                         *device,
   GPULibraryVk                      *library;
   GPUPipelineLayoutVk               *layout;
   GPURenderPipelineVk               *native;
+  const GPUDepthStencilState        *depthState;
   VkVertexInputBindingDescription   *vertexBindings;
   VkVertexInputAttributeDescription *vertexAttributes;
   VkFormat                           colorFormat;
+  VkFormat                           depthFormat;
+  VkFormat                           stencilFormat;
   VkPipelineShaderStageCreateInfo    stages[2] = {{0}};
   VkPipelineVertexInputStateCreateInfo vertexInput = {0};
   VkPipelineInputAssemblyStateCreateInfo inputAssembly = {0};
   VkPipelineViewportStateCreateInfo viewport = {0};
   VkPipelineRasterizationStateCreateInfo raster = {0};
   VkPipelineMultisampleStateCreateInfo multisample = {0};
+  VkPipelineDepthStencilStateCreateInfo depthStencil = {0};
   VkPipelineColorBlendAttachmentState colorBlend = {0};
   VkPipelineColorBlendStateCreateInfo blend = {0};
-  VkDynamicState                    dynamicStates[2];
+  VkDynamicState                    dynamicStates[3];
   VkPipelineDynamicStateCreateInfo  dynamic = {0};
+  VkPipelineRenderingCreateInfoKHR  rendering = {0};
   VkGraphicsPipelineCreateInfo      pipelineInfo = {0};
   uint32_t                          vertexAttributeCount;
 
@@ -291,13 +345,27 @@ vk_createRenderPipeline(GPUDevice                         *device,
       !info->library || !info->library->_priv ||
       !info->layout || !info->layout->_native ||
       info->colorTargetCount != 1u ||
-      info->depthStencilFormat != GPU_FORMAT_UNDEFINED ||
       (info->multisample.sampleCount != 0u &&
        info->multisample.sampleCount != 1u)) {
     return GPU_ERROR_UNSUPPORTED;
   }
+  deviceVk = device->_priv;
+  if (!deviceVk->dynamicRendering &&
+      info->depthStencilFormat != GPU_FORMAT_UNDEFINED) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
   if (!vk_formatFromGPU(info->pColorTargets[0].format, &colorFormat)) {
     return GPU_ERROR_UNSUPPORTED;
+  }
+  depthFormat   = VK_FORMAT_UNDEFINED;
+  stencilFormat = VK_FORMAT_UNDEFINED;
+  if (info->depthStencilFormat != GPU_FORMAT_UNDEFINED &&
+      !vk_formatFromGPU(info->depthStencilFormat, &depthFormat)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  if (info->depthStencilFormat == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+      info->depthStencilFormat == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8) {
+    stencilFormat = depthFormat;
   }
 
   vertexBindings       = NULL;
@@ -354,9 +422,9 @@ vk_createRenderPipeline(GPUDevice                         *device,
     }
   }
 
-  deviceVk = device->_priv;
   library  = info->library->_priv;
   layout   = info->layout->_native;
+  depthState = info->pDepthStencilState;
   if (!layout->layout) {
     free(vertexAttributes);
     free(vertexBindings);
@@ -373,7 +441,8 @@ vk_createRenderPipeline(GPUDevice                         *device,
   GPU__UNUSED(requiredBindGroupMask);
   native->device = deviceVk->device;
   native->layout = layout->layout;
-  if (vk__createPipelineRenderPass(native->device,
+  if (!deviceVk->dynamicRendering &&
+      vk__createPipelineRenderPass(native->device,
                                    colorFormat,
                                    &native->renderPass) != VK_SUCCESS) {
     free(vertexAttributes);
@@ -417,6 +486,30 @@ vk_createRenderPipeline(GPUDevice                         *device,
   multisample.pSampleMask          = info->multisample.sampleMask ?
     &info->multisample.sampleMask : NULL;
 
+  depthStencil.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  depthStencil.depthTestEnable =
+    depthState && (depthState->depthTestEnable ||
+                   depthState->depthWriteEnable);
+  depthStencil.depthWriteEnable =
+    depthState && depthState->depthWriteEnable;
+  depthStencil.depthCompareOp =
+    depthState && depthState->depthTestEnable
+      ? vk__compareOp(depthState->depthCompare)
+      : VK_COMPARE_OP_ALWAYS;
+  depthStencil.stencilTestEnable =
+    depthState && depthState->stencilTestEnable;
+  if (depthState) {
+    vk__fillStencilState(&depthStencil.front,
+                         &depthState->front,
+                         depthState->stencilReadMask,
+                         depthState->stencilWriteMask);
+    vk__fillStencilState(&depthStencil.back,
+                         &depthState->back,
+                         depthState->stencilReadMask,
+                         depthState->stencilWriteMask);
+  }
+
   colorBlend.colorWriteMask = vk__colorMask(info->pColorTargets[0].blend.writeMask);
   blend.sType               = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
   blend.attachmentCount     = 1u;
@@ -424,11 +517,21 @@ vk_createRenderPipeline(GPUDevice                         *device,
 
   dynamicStates[0]       = VK_DYNAMIC_STATE_VIEWPORT;
   dynamicStates[1]       = VK_DYNAMIC_STATE_SCISSOR;
+  dynamicStates[2]       = VK_DYNAMIC_STATE_STENCIL_REFERENCE;
   dynamic.sType          = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-  dynamic.dynamicStateCount = 2u;
+  dynamic.dynamicStateCount = 3u;
   dynamic.pDynamicStates = dynamicStates;
 
+  rendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
+  rendering.colorAttachmentCount = 1u;
+  rendering.pColorAttachmentFormats = &colorFormat;
+  rendering.depthAttachmentFormat = depthFormat;
+  rendering.stencilAttachmentFormat = stencilFormat;
+
   pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+  pipelineInfo.pNext               = deviceVk->dynamicRendering
+                                       ? &rendering
+                                       : NULL;
   pipelineInfo.stageCount          = 2u;
   pipelineInfo.pStages             = stages;
   pipelineInfo.pVertexInputState   = &vertexInput;
@@ -436,10 +539,13 @@ vk_createRenderPipeline(GPUDevice                         *device,
   pipelineInfo.pViewportState      = &viewport;
   pipelineInfo.pRasterizationState = &raster;
   pipelineInfo.pMultisampleState   = &multisample;
+  pipelineInfo.pDepthStencilState  = &depthStencil;
   pipelineInfo.pColorBlendState    = &blend;
   pipelineInfo.pDynamicState       = &dynamic;
   pipelineInfo.layout              = native->layout;
-  pipelineInfo.renderPass          = native->renderPass;
+  pipelineInfo.renderPass          = deviceVk->dynamicRendering
+                                       ? VK_NULL_HANDLE
+                                       : native->renderPass;
   pipelineInfo.subpass             = 0u;
   if (vkCreateGraphicsPipelines(native->device,
                                 VK_NULL_HANDLE,

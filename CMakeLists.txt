@@ -257,6 +257,29 @@ if(GPU_BUILD_TESTS)
     endforeach()
 
     add_test(NAME dx12-barrier COMMAND gpu-dx12-barrier-test)
+
+    add_executable(gpu-dx12-depth-test tests/dx12/depth.c)
+    target_link_libraries(gpu-dx12-depth-test PRIVATE gpu)
+    set_target_properties(gpu-dx12-depth-test PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+    )
+
+    foreach(runtime_target us ds)
+      if(TARGET ${runtime_target})
+        add_custom_command(TARGET gpu-dx12-depth-test POST_BUILD
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                  $<TARGET_FILE:${runtime_target}>
+                  $<TARGET_FILE_DIR:gpu-dx12-depth-test>
+        )
+      endif()
+    endforeach()
+
+    add_test(NAME dx12-depth-pipeline
+      COMMAND gpu-dx12-depth-test
+              "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-dx12-usl/triangle.us"
+    )
   endif()
 endif()
 

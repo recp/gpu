@@ -481,9 +481,10 @@ dx12_beginRenderPass(GPUCommandBuffer             *cmdb,
 
   command = cmdb ? cmdb->_priv : NULL;
   if (!command || !command->commandList || !info ||
-      info->colorAttachmentCount == 0u ||
       info->colorAttachmentCount > GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS ||
-      !info->pColorAttachments || info->pDepthStencilAttachment) {
+      (info->colorAttachmentCount > 0u && !info->pColorAttachments) ||
+      (info->colorAttachmentCount == 0u &&
+       !info->pDepthStencilAttachment)) {
     return NULL;
   }
 
@@ -516,6 +517,34 @@ dx12_beginRenderPass(GPUCommandBuffer             *cmdb,
     renderPass->clearColors[i][3] = attachment->clearColor.float32[3];
     renderPass->width             = view->width;
     renderPass->height            = view->height;
+  }
+
+  if (info->pDepthStencilAttachment) {
+    const GPURenderPassDepthStencilAttachment *attachment;
+    GPUTextureViewDX12                       *view;
+
+    attachment = info->pDepthStencilAttachment;
+    view       = attachment->view ? attachment->view->_priv : NULL;
+    if (!view || !view->resource || !view->state || !view->hasDsv ||
+        view->width == 0u || view->height == 0u ||
+        (renderPass->width > 0u &&
+         (view->width != renderPass->width ||
+          view->height != renderPass->height))) {
+      return NULL;
+    }
+
+    renderPass->depthStencilView = view;
+    renderPass->depthLoadOp      = attachment->depthLoadOp;
+    renderPass->depthStoreOp     = attachment->depthStoreOp;
+    renderPass->stencilLoadOp    = attachment->stencilLoadOp;
+    renderPass->stencilStoreOp   = attachment->stencilStoreOp;
+    renderPass->clearDepth       = attachment->clearDepth;
+    renderPass->clearStencil     = attachment->clearStencil;
+    renderPass->depthHasStencil  =
+      attachment->view->format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+      attachment->view->format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+    renderPass->width            = view->width;
+    renderPass->height           = view->height;
   }
 
   renderPass->colorCount = info->colorAttachmentCount;

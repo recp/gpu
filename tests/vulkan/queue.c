@@ -273,14 +273,19 @@ occlusion_roundtrip(GPUDevice       *device,
                     GPUCommandQueue *queue,
                     GPUFence        *fence) {
   GPUTextureCreateInfo           textureInfo = {0};
+  GPUTextureCreateInfo           depthTextureInfo = {0};
   GPUTextureViewCreateInfo       viewInfo = {0};
+  GPUTextureViewCreateInfo       depthViewInfo = {0};
   GPUQuerySetCreateInfo          queryInfo = {0};
   GPUBufferCreateInfo            bufferInfo = {0};
   GPURenderPassColorAttachment   color = {0};
+  GPURenderPassDepthStencilAttachment depthStencil = {0};
   GPURenderPassCreateInfo        passInfo = {0};
   GPUQueueSubmitInfo             submitInfo = {0};
   GPUTexture                    *texture;
+  GPUTexture                    *depthTexture;
   GPUTextureView                *view;
+  GPUTextureView                *depthView;
   GPUQuerySet                   *querySet;
   GPUBuffer                     *resultBuffer;
   GPUCommandBuffer              *cmdb;
@@ -289,7 +294,9 @@ occlusion_roundtrip(GPUDevice       *device,
   int                            ok;
 
   texture      = NULL;
+  depthTexture = NULL;
   view         = NULL;
+  depthView    = NULL;
   querySet     = NULL;
   resultBuffer = NULL;
   cmdb         = NULL;
@@ -315,6 +322,24 @@ occlusion_roundtrip(GPUDevice       *device,
   viewInfo.format              = GPU_FORMAT_BGRA8_UNORM;
   viewInfo.mipLevelCount       = 1u;
   viewInfo.arrayLayerCount     = 1u;
+  depthTextureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  depthTextureInfo.chain.structSize = sizeof(depthTextureInfo);
+  depthTextureInfo.label            = "vulkan-depth-stencil-target";
+  depthTextureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  depthTextureInfo.format           = GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+  depthTextureInfo.width            = 4u;
+  depthTextureInfo.height           = 4u;
+  depthTextureInfo.depthOrLayers    = 1u;
+  depthTextureInfo.mipLevelCount    = 1u;
+  depthTextureInfo.sampleCount      = 1u;
+  depthTextureInfo.usage            = GPU_TEXTURE_USAGE_DEPTH_STENCIL;
+  depthViewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  depthViewInfo.chain.structSize = sizeof(depthViewInfo);
+  depthViewInfo.label            = "vulkan-depth-stencil-view";
+  depthViewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
+  depthViewInfo.format           = GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+  depthViewInfo.mipLevelCount    = 1u;
+  depthViewInfo.arrayLayerCount  = 1u;
   queryInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
   queryInfo.chain.structSize   = sizeof(queryInfo);
   queryInfo.label              = "vulkan-occlusion";
@@ -328,6 +353,10 @@ occlusion_roundtrip(GPUDevice       *device,
                                  GPU_BUFFER_USAGE_COPY_SRC;
   if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture ||
       GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK || !view ||
+      GPUCreateTexture(device, &depthTextureInfo, &depthTexture) != GPU_OK ||
+      !depthTexture ||
+      GPUCreateTextureView(depthTexture, &depthViewInfo, &depthView) != GPU_OK ||
+      !depthView ||
       GPUCreateQuerySet(device, &queryInfo, &querySet) != GPU_OK || !querySet ||
       GPUCreateBuffer(device, &bufferInfo, &resultBuffer) != GPU_OK ||
       !resultBuffer ||
@@ -339,12 +368,20 @@ occlusion_roundtrip(GPUDevice       *device,
   color.view                    = view;
   color.loadOp                  = GPU_LOAD_OP_CLEAR;
   color.storeOp                 = GPU_STORE_OP_STORE;
+  depthStencil.view             = depthView;
+  depthStencil.depthLoadOp      = GPU_LOAD_OP_CLEAR;
+  depthStencil.depthStoreOp     = GPU_STORE_OP_STORE;
+  depthStencil.stencilLoadOp    = GPU_LOAD_OP_CLEAR;
+  depthStencil.stencilStoreOp   = GPU_STORE_OP_STORE;
+  depthStencil.clearDepth       = 1.0f;
+  depthStencil.clearStencil     = 7u;
   passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   passInfo.chain.structSize     = sizeof(passInfo);
   passInfo.label                = "vulkan-occlusion";
   passInfo.occlusionQuerySet    = querySet;
   passInfo.colorAttachmentCount = 1u;
   passInfo.pColorAttachments    = &color;
+  passInfo.pDepthStencilAttachment = &depthStencil;
   pass = GPUBeginRenderPass(cmdb, &passInfo);
   if (!pass) {
     goto cleanup;
@@ -382,6 +419,11 @@ occlusion_roundtrip(GPUDevice       *device,
   for (uint32_t i = 0u; i < VULKAN_WARM_ITERATIONS; i++) {
     color.loadOp  = (GPULoadOp)(i % 3u);
     color.storeOp = (GPUStoreOp)((i / 3u) % 2u);
+    depthStencil.depthLoadOp    = (GPULoadOp)((i / 2u) % 3u);
+    depthStencil.depthStoreOp   = (GPUStoreOp)((i / 5u) % 2u);
+    depthStencil.stencilLoadOp  = (GPULoadOp)((i / 3u) % 3u);
+    depthStencil.stencilStoreOp = (GPUStoreOp)((i / 7u) % 2u);
+    passInfo.colorAttachmentCount = i & 1u;
     if (GPUAcquireCommandBuffer(queue,
                                 "vulkan-offscreen-warm",
                                 &cmdb) != GPU_OK ||
@@ -399,6 +441,7 @@ occlusion_roundtrip(GPUDevice       *device,
     }
     cmdb = NULL;
   }
+  passInfo.colorAttachmentCount = 1u;
   if (device->currentFrameStats.hotPathAllocCount != 0u ||
       device->currentFrameStats.hotPathFreeCount != 0u) {
     goto cleanup;
@@ -412,6 +455,8 @@ cleanup:
   }
   GPUDestroyBuffer(resultBuffer);
   GPUDestroyQuerySet(querySet);
+  GPUDestroyTextureView(depthView);
+  GPUDestroyTexture(depthTexture);
   GPUDestroyTextureView(view);
   GPUDestroyTexture(texture);
   return ok;

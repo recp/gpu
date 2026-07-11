@@ -57,6 +57,12 @@ gpu_formatIsDepthStencil(GPUFormat format) {
 }
 
 static bool
+gpu_formatHasStencil(GPUFormat format) {
+  return format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+         format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+}
+
+static bool
 gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
                               const GPUDevice               *device) {
   const GPURenderPassDepthStencilAttachment *depthStencil;
@@ -110,7 +116,15 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
         !gpu_validLoadOp(depthStencil->depthLoadOp) ||
         !gpu_validStoreOp(depthStencil->depthStoreOp) ||
         !gpu_validLoadOp(depthStencil->stencilLoadOp) ||
-        !gpu_validStoreOp(depthStencil->stencilStoreOp)) {
+        !gpu_validStoreOp(depthStencil->stencilStoreOp) ||
+        (depthStencil->depthLoadOp == GPU_LOAD_OP_CLEAR &&
+         (depthStencil->clearDepth < 0.0f ||
+          depthStencil->clearDepth > 1.0f)) ||
+        (gpu_formatHasStencil(depthStencil->view->format)
+           ? (depthStencil->stencilLoadOp == GPU_LOAD_OP_CLEAR &&
+              depthStencil->clearStencil > UINT8_MAX)
+           : (depthStencil->stencilLoadOp != GPU_LOAD_OP_DONT_CARE ||
+              depthStencil->stencilStoreOp != GPU_STORE_OP_DONT_CARE))) {
       return false;
     }
   }

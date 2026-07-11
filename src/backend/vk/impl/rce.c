@@ -71,8 +71,11 @@ vk_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
 
   command    = cmdb ? cmdb->_priv : NULL;
   renderPass = pass ? pass->_priv : NULL;
-  if (!command || !renderPass || !renderPass->renderPass ||
-      !renderPass->framebuffer) {
+  if (!command || !renderPass ||
+      (renderPass->dynamic
+         ? (!renderPass->renderingInfo.pColorAttachments &&
+            !renderPass->renderingInfo.pDepthAttachment)
+         : (!renderPass->renderPass || !renderPass->framebuffer))) {
     return NULL;
   }
 
@@ -83,18 +86,27 @@ vk_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   native->device  = cmdb && cmdb->_queue && cmdb->_queue->_device ?
     cmdb->_queue->_device->_priv :
     NULL;
-  native->command = command->command;
-  native->extent  = renderPass->extent;
+  native->renderPass = renderPass;
+  native->command    = command->command;
+  native->extent     = renderPass->extent;
 
-  beginInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-  beginInfo.renderPass        = renderPass->renderPass;
-  beginInfo.framebuffer       = renderPass->framebuffer;
-  beginInfo.renderArea.extent = renderPass->extent;
-  beginInfo.clearValueCount   = 1u;
-  beginInfo.pClearValues      = &renderPass->clearValue;
-  vkCmdBeginRenderPass(native->command,
-                       &beginInfo,
-                       VK_SUBPASS_CONTENTS_INLINE);
+  if (renderPass->dynamic) {
+    if (!native->device || !native->device->beginRendering) {
+      return NULL;
+    }
+    native->device->beginRendering(native->command,
+                                   &renderPass->renderingInfo);
+  } else {
+    beginInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    beginInfo.renderPass        = renderPass->renderPass;
+    beginInfo.framebuffer       = renderPass->framebuffer;
+    beginInfo.renderArea.extent = renderPass->extent;
+    beginInfo.clearValueCount   = 1u;
+    beginInfo.pClearValues      = &renderPass->clearValue;
+    vkCmdBeginRenderPass(native->command,
+                         &beginInfo,
+                         VK_SUBPASS_CONTENTS_INLINE);
+  }
 
   viewport.width    = (float)native->extent.width;
   viewport.height   = (float)native->extent.height;
@@ -102,6 +114,9 @@ vk_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   scissor.extent    = native->extent;
   vkCmdSetViewport(native->command, 0u, 1u, &viewport);
   vkCmdSetScissor(native->command, 0u, 1u, &scissor);
+  vkCmdSetStencilReference(native->command,
+                           VK_STENCIL_FACE_FRONT_AND_BACK,
+                           0u);
 
   encoder->_priv          = native;
   encoder->_primitiveType = GPUPrimitiveTypeTriangle;
@@ -163,6 +178,21 @@ vk_scissor(GPURenderCommandEncoder *encoder, const GPUScissorRect *value) {
   scissor.extent.width  = value->width;
   scissor.extent.height = value->height;
   vkCmdSetScissor(native->command, 0u, 1u, &scissor);
+}
+
+GPU_HIDE
+void
+vk_stencilReference(GPURenderCommandEncoder *encoder, uint32_t reference) {
+  GPURenderEncoderVk *native;
+
+  native = vk__renderEncoder(encoder);
+  if (!native) {
+    return;
+  }
+
+  vkCmdSetStencilReference(native->command,
+                           VK_STENCIL_FACE_FRONT_AND_BACK,
+                           reference);
 }
 
 GPU_HIDE
@@ -377,7 +407,21 @@ vk_endRenderEncoding(GPURenderCommandEncoder *encoder) {
 
   native = vk__renderEncoder(encoder);
   if (native) {
-    vkCmdEndRenderPass(native->command);
+    if (native->renderPass && native->renderPass->dynamic) {
+      native->device->endRendering(native->command);
+      for (uint32_t i = 0u; i < native->renderPass->colorCount; i++) {
+        GPUTextureViewVk *view;
+
+        view = native->renderPass->colorViews[i];
+        if (view && view->swapchain) {
+          vk_transitionView(native->command,
+                            view,
+                            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+        }
+      }
+    } else {
+      vkCmdEndRenderPass(native->command);
+    }
   }
 }
 
@@ -388,6 +432,7 @@ vk_initRCE(GPUApiRCE *api) {
   api->setRenderPipelineState   = vk_setRenderPipelineState;
   api->viewport                 = vk_viewport;
   api->scissor                  = vk_scissor;
+  api->stencilReference         = vk_stencilReference;
   api->pushConstants            = vk_renderPushConstants;
   api->vertexBuffer             = vk_vertexBuffer;
   api->drawPrimitives           = vk_drawPrimitives;

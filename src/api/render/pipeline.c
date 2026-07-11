@@ -30,13 +30,45 @@ gpu_blendStateIsDefault(const GPUBlendState *blend) {
 }
 
 static bool
-gpu_depthStencilStateIsDefault(const GPUDepthStencilState *state) {
-  return !state ||
-         (!state->depthTestEnable &&
-          !state->depthWriteEnable &&
-          !state->stencilTestEnable &&
-          state->stencilReadMask == 0 &&
-          state->stencilWriteMask == 0);
+gpu_depthStencilStateIsValid(GPUFormat                    format,
+                             const GPUDepthStencilState *state) {
+  bool hasDepth;
+  bool hasStencil;
+
+  hasDepth = format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+             format == GPU_FORMAT_DEPTH32_FLOAT ||
+             format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+  if (format != GPU_FORMAT_UNDEFINED && !hasDepth) {
+    return false;
+  }
+  if (!state) {
+    return true;
+  }
+  if ((uint32_t)state->depthCompare > GPU_COMPARE_ALWAYS ||
+      (uint32_t)state->front.compare > GPU_COMPARE_ALWAYS ||
+      (uint32_t)state->back.compare > GPU_COMPARE_ALWAYS ||
+      (uint32_t)state->front.failOp > GPU_STENCIL_OP_DECREMENT_WRAP ||
+      (uint32_t)state->front.depthFailOp > GPU_STENCIL_OP_DECREMENT_WRAP ||
+      (uint32_t)state->front.passOp > GPU_STENCIL_OP_DECREMENT_WRAP ||
+      (uint32_t)state->back.failOp > GPU_STENCIL_OP_DECREMENT_WRAP ||
+      (uint32_t)state->back.depthFailOp > GPU_STENCIL_OP_DECREMENT_WRAP ||
+      (uint32_t)state->back.passOp > GPU_STENCIL_OP_DECREMENT_WRAP ||
+      state->stencilReadMask > UINT8_MAX ||
+      state->stencilWriteMask > UINT8_MAX) {
+    return false;
+  }
+
+  if (!state->depthTestEnable && !state->depthWriteEnable &&
+      !state->stencilTestEnable) {
+    return true;
+  }
+  if (!hasDepth) {
+    return false;
+  }
+
+  hasStencil = format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+               format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+  return !state->stencilTestEnable || hasStencil;
 }
 
 static bool
@@ -194,7 +226,8 @@ gpu_pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info) {
   if (info->multisample.sampleMask != 0 &&
       info->multisample.sampleMask != 0xffffffffu)
     return false;
-  if (!gpu_depthStencilStateIsDefault(info->pDepthStencilState))
+  if (!gpu_depthStencilStateIsValid(info->depthStencilFormat,
+                                    info->pDepthStencilState))
     return false;
   for (i = 0; i < info->colorTargetCount; i++) {
     if (info->pColorTargets[i].format == GPU_FORMAT_UNDEFINED)
@@ -300,8 +333,12 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
 
   if (info->depthStencilFormat != GPU_FORMAT_UNDEFINED) {
     gpuPipelineSetDepthFormat(pipeline, info->depthStencilFormat);
-    gpuPipelineSetStencilFormat(pipeline, info->depthStencilFormat);
+    if (info->depthStencilFormat == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+        info->depthStencilFormat == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8)
+      gpuPipelineSetStencilFormat(pipeline, info->depthStencilFormat);
   }
+  if (info->pDepthStencilState)
+    pipeline->_depthStencilState = *info->pDepthStencilState;
 
   gpuPipelineSetSampleCount(pipeline, sampleCount);
 

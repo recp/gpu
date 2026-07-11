@@ -73,6 +73,41 @@ dx12__textureFinalState(GPUTextureUsageFlags usage) {
 }
 
 static bool
+dx12__depthFormat(GPUFormat format) {
+  return format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+         format == GPU_FORMAT_DEPTH32_FLOAT ||
+         format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+}
+
+static DXGI_FORMAT
+dx12__textureResourceFormat(GPUFormat format) {
+  switch (format) {
+    case GPU_FORMAT_DEPTH24_UNORM_STENCIL8:
+      return DXGI_FORMAT_R24G8_TYPELESS;
+    case GPU_FORMAT_DEPTH32_FLOAT:
+      return DXGI_FORMAT_R32_TYPELESS;
+    case GPU_FORMAT_DEPTH32_FLOAT_STENCIL8:
+      return DXGI_FORMAT_R32G8X24_TYPELESS;
+    default:
+      return dx12_format(format);
+  }
+}
+
+static DXGI_FORMAT
+dx12__textureSrvFormat(GPUFormat format) {
+  switch (format) {
+    case GPU_FORMAT_DEPTH24_UNORM_STENCIL8:
+      return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+    case GPU_FORMAT_DEPTH32_FLOAT:
+      return DXGI_FORMAT_R32_FLOAT;
+    case GPU_FORMAT_DEPTH32_FLOAT_STENCIL8:
+      return DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
+    default:
+      return dx12_format(format);
+  }
+}
+
+static bool
 dx12__textureRangeValid(const GPUTextureDX12 *texture,
                         uint32_t               baseMip,
                         uint32_t               mipCount,
@@ -257,13 +292,13 @@ GPUResult
 dx12_createTexture(GPUDevice                  * __restrict device,
                    const GPUTextureCreateInfo * __restrict info,
                    GPUTexture                ** __restrict outTexture) {
-  const GPUTextureUsageFlags unsupported = GPU_TEXTURE_USAGE_STORAGE |
-                                           GPU_TEXTURE_USAGE_DEPTH_STENCIL;
+  const GPUTextureUsageFlags unsupported = GPU_TEXTURE_USAGE_STORAGE;
   GPUDeviceDX12           *deviceDX12;
   GPUTexture              *texture;
   GPUTextureDX12          *native;
   D3D12_HEAP_PROPERTIES    heap = {0};
   D3D12_RESOURCE_DESC      desc = {0};
+  D3D12_CLEAR_VALUE        clearValue = {0};
   D3D12_RESOURCE_DIMENSION dimension;
   D3D12_RESOURCE_STATES    initialState;
   DXGI_FORMAT              format;
@@ -286,14 +321,20 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   }
 
   *outTexture = NULL;
-  format = dx12_format(info->format);
+  format = dx12__textureResourceFormat(info->format);
   if (format == DXGI_FORMAT_UNKNOWN) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  if ((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u &&
-      (info->format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
-       info->format == GPU_FORMAT_DEPTH32_FLOAT ||
-       info->format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8)) {
+  if (((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u &&
+       dx12__depthFormat(info->format)) ||
+      ((info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u &&
+       !dx12__depthFormat(info->format)) ||
+      (info->usage & (GPU_TEXTURE_USAGE_COLOR_TARGET |
+                      GPU_TEXTURE_USAGE_DEPTH_STENCIL)) ==
+        (GPU_TEXTURE_USAGE_COLOR_TARGET |
+         GPU_TEXTURE_USAGE_DEPTH_STENCIL) ||
+      ((info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u &&
+       info->dimension != GPU_TEXTURE_DIMENSION_2D)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -334,6 +375,12 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   if ((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u) {
     desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
   }
+  if ((info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u) {
+    desc.Flags              |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+    clearValue.Format        = dx12_format(info->format);
+    clearValue.DepthStencil.Depth   = 1.0f;
+    clearValue.DepthStencil.Stencil = 0u;
+  }
   initialState = (info->usage & GPU_TEXTURE_USAGE_COPY_DST) != 0u
                    ? D3D12_RESOURCE_STATE_COPY_DEST
                    : D3D12_RESOURCE_STATE_COMMON;
@@ -343,7 +390,7 @@ dx12_createTexture(GPUDevice                  * __restrict device,
     D3D12_HEAP_FLAG_NONE,
     &desc,
     initialState,
-    NULL,
+    (info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u ? &clearValue : NULL,
     &IID_ID3D12Resource,
     (void **)&native->resource
   );
@@ -484,6 +531,32 @@ dx12__fillTextureRtv(const GPUTextureViewCreateInfo *info,
   }
 }
 
+static bool
+dx12__fillTextureDsv(const GPUTextureViewCreateInfo *info,
+                     DXGI_FORMAT                     format,
+                     D3D12_DEPTH_STENCIL_VIEW_DESC  *dsv) {
+  if (!info || !dsv || info->mipLevelCount != 1u) {
+    return false;
+  }
+
+  memset(dsv, 0, sizeof(*dsv));
+  dsv->Format = format;
+  switch (info->viewType) {
+    case GPU_TEXTURE_VIEW_2D:
+      dsv->ViewDimension      = D3D12_DSV_DIMENSION_TEXTURE2D;
+      dsv->Texture2D.MipSlice = info->baseMipLevel;
+      return info->arrayLayerCount == 1u;
+    case GPU_TEXTURE_VIEW_2D_ARRAY:
+      dsv->ViewDimension                   = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+      dsv->Texture2DArray.MipSlice         = info->baseMipLevel;
+      dsv->Texture2DArray.FirstArraySlice  = info->baseArrayLayer;
+      dsv->Texture2DArray.ArraySize        = info->arrayLayerCount;
+      return true;
+    default:
+      return false;
+  }
+}
+
 GPU_HIDE
 GPUResult
 dx12_createTextureView(GPUTexture                     * __restrict texture,
@@ -495,12 +568,16 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
   GPUTextureViewDX12 *native;
   D3D12_SHADER_RESOURCE_VIEW_DESC srv = {0};
   D3D12_RENDER_TARGET_VIEW_DESC   rtv = {0};
+  D3D12_DEPTH_STENCIL_VIEW_DESC   dsv = {0};
   DXGI_FORMAT                     format;
   GPUResult                       result;
   uint32_t                        rtvOffset;
+  uint32_t                        dsvOffset;
   bool                            sampled;
   bool                            colorTarget;
+  bool                            depthTarget;
   bool                            hasRtv;
+  bool                            hasDsv;
 
   textureDX12 = texture ? texture->_priv : NULL;
   if (!textureDX12 || !textureDX12->resource || !info || !outView ||
@@ -533,14 +610,18 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
 
   sampled     = (texture->usage & GPU_TEXTURE_USAGE_SAMPLED) != 0u;
   colorTarget = (texture->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u;
+  depthTarget = (texture->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u;
   if (sampled) {
-    srv.Format                  = format;
+    srv.Format                  = dx12__textureSrvFormat(info->format);
     srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
   }
   hasRtv = colorTarget && dx12__fillTextureRtv(info,
                                                format,
                                                &rtv);
-  if ((!sampled && !hasRtv) ||
+  hasDsv = depthTarget && dx12__fillTextureDsv(info,
+                                               format,
+                                               &dsv);
+  if ((!sampled && !hasRtv && !hasDsv) ||
       (sampled && !dx12__fillTextureSrv(info, &srv))) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -586,6 +667,44 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
                                                        native->rtv);
     native->hasRtv = true;
   }
+  if (hasDsv) {
+    result = dx12_allocateDescriptors(device,
+                                      D3D12_DESCRIPTOR_HEAP_TYPE_DSV,
+                                      1u,
+                                      &dsvOffset);
+    if (result != GPU_OK) {
+      if (native->hasRtv) {
+        dx12_freeDescriptors(device,
+                             D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
+                             native->rtvOffset,
+                             1u);
+      }
+      free(view);
+      return result;
+    }
+    native->device    = device;
+    native->dsvOffset = dsvOffset;
+    native->dsv       = dx12_cpuDescriptor(&device->dsvDescriptors, dsvOffset);
+    if (native->dsv.ptr == 0u) {
+      dx12_freeDescriptors(device,
+                           D3D12_DESCRIPTOR_HEAP_TYPE_DSV,
+                           dsvOffset,
+                           1u);
+      if (native->hasRtv) {
+        dx12_freeDescriptors(device,
+                             D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
+                             native->rtvOffset,
+                             1u);
+      }
+      free(view);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    device->d3dDevice->lpVtbl->CreateDepthStencilView(device->d3dDevice,
+                                                       textureDX12->resource,
+                                                       &dsv,
+                                                       native->dsv);
+    native->hasDsv = true;
+  }
 
   native->resource   = textureDX12->resource;
   native->state      = &textureDX12->state;
@@ -618,6 +737,12 @@ dx12_destroyTextureView(GPUTextureView * __restrict view) {
     dx12_freeDescriptors(native->device,
                          D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
                          native->rtvOffset,
+                         1u);
+  }
+  if (native && native->device && native->hasDsv) {
+    dx12_freeDescriptors(native->device,
+                         D3D12_DESCRIPTOR_HEAP_TYPE_DSV,
+                         native->dsvOffset,
                          1u);
   }
   free(view);

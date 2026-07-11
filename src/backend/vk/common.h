@@ -149,6 +149,7 @@ typedef struct GPUInstanceVk {
   char       *extensionNames[64];
   char       *enabledLayers[64];
   VkInstance  inst;
+  uint32_t    apiVersion;
   bool        invalid_gpu_selection;
   int32_t     gpu_number;
   uint32_t    nEnabledExtensions;
@@ -187,14 +188,18 @@ typedef struct GPUPhysicalDeviceVk {
   VkPhysicalDeviceFeatures   features;
   uint32_t                   nDisplayProperties;
   VkDisplayPropertiesKHR     displayProps;
+  bool                       dynamicRendering;
 } GPUPhysicalDeviceVk;
 
 typedef struct GPUDeviceVk {
   GPUCommandQueue           **createdQueues;
+  PFN_vkCmdBeginRenderingKHR  beginRendering;
+  PFN_vkCmdEndRenderingKHR    endRendering;
   VkDevice                   device;
   uint32_t                   nCreatedQueues;
   uint32_t                   maxDrawIndirectCount;
   VkBool32                   multiDrawIndirect;
+  bool                       dynamicRendering;
 } GPUDeviceVk;
 
 typedef struct GPUBufferVk {
@@ -207,6 +212,7 @@ typedef struct GPUBufferVk {
 } GPUBufferVk;
 
 typedef struct GPUTextureVk {
+  GPUDeviceVk       *gpuDevice;
   VkDevice           device;
   VkImage            image;
   VkDeviceMemory     memory;
@@ -236,17 +242,27 @@ typedef struct GPUBindGroupVk {
 typedef struct GPUCommandQueueVk  GPUCommandQueueVk;
 typedef struct GPUCommandBufferVk GPUCommandBufferVk;
 typedef struct GPUSwapChainVk     GPUSwapChainVk;
+typedef struct GPUTextureViewVk   GPUTextureViewVk;
 
 typedef struct GPURenderPassVk {
-  GPUSwapChainVk *swapchain;
-  VkRenderPass    renderPass;
-  VkFramebuffer   framebuffer;
-  VkExtent2D      extent;
-  VkClearValue    clearValue;
+  GPUSwapChainVk              *swapchain;
+  GPUTextureViewVk            *colorViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  GPUTextureViewVk            *depthStencilView;
+  VkRenderPass                 renderPass;
+  VkFramebuffer                framebuffer;
+  VkRenderingAttachmentInfoKHR colorAttachments[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  VkRenderingAttachmentInfoKHR depthAttachment;
+  VkRenderingAttachmentInfoKHR stencilAttachment;
+  VkRenderingInfoKHR           renderingInfo;
+  VkExtent2D                    extent;
+  VkClearValue                 clearValue;
+  uint32_t                     colorCount;
+  bool                         dynamic;
 } GPURenderPassVk;
 
 typedef struct GPURenderEncoderVk {
   GPUDeviceVk     *device;
+  GPURenderPassVk *renderPass;
   GPUBuffer       *indexBuffer;
   VkCommandBuffer  command;
   VkPipelineLayout pipelineLayout;
@@ -319,15 +335,23 @@ typedef struct GPUFrameSyncVk {
   VkFence     fence;
 } GPUFrameSyncVk;
 
-typedef struct GPUTextureViewVk {
-  GPUSwapChainVk *swapchain;
-  GPUTextureVk   *texture;
-  VkDevice        device;
-  VkImageView     view;
-  VkFramebuffer   framebuffer;
-  VkExtent2D      extent;
-  uint32_t        imageIndex;
-} GPUTextureViewVk;
+struct GPUTextureViewVk {
+  GPUSwapChainVk    *swapchain;
+  GPUTextureVk      *texture;
+  VkImageLayout     *layout;
+  VkDevice           device;
+  VkImage            image;
+  VkImageView        view;
+  VkFramebuffer      framebuffer;
+  VkExtent2D         extent;
+  VkImageLayout      localLayout;
+  VkImageAspectFlags aspect;
+  uint32_t           imageIndex;
+  uint32_t           baseMip;
+  uint32_t           mipCount;
+  uint32_t           baseLayer;
+  uint32_t           layerCount;
+};
 
 typedef struct GPUSamplerVk {
   VkDevice  device;
@@ -398,6 +422,12 @@ vk_findMemoryType(GPUDevice             *device,
 GPU_HIDE
 GPUFormat
 vk_formatToGPU(VkFormat format);
+
+GPU_HIDE
+void
+vk_transitionView(VkCommandBuffer   command,
+                  GPUTextureViewVk *view,
+                  VkImageLayout     nextLayout);
 
 GPU_HIDE
 bool

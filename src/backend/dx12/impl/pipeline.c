@@ -432,6 +432,51 @@ dx12__cullMode(GPUCullMode mode) {
            : D3D12_CULL_MODE_NONE;
 }
 
+static D3D12_COMPARISON_FUNC
+dx12__compareFunction(GPUCompareOp op) {
+  static const D3D12_COMPARISON_FUNC functions[] = {
+    [GPU_COMPARE_NEVER]         = D3D12_COMPARISON_FUNC_NEVER,
+    [GPU_COMPARE_LESS]          = D3D12_COMPARISON_FUNC_LESS,
+    [GPU_COMPARE_EQUAL]         = D3D12_COMPARISON_FUNC_EQUAL,
+    [GPU_COMPARE_LESS_EQUAL]    = D3D12_COMPARISON_FUNC_LESS_EQUAL,
+    [GPU_COMPARE_GREATER]       = D3D12_COMPARISON_FUNC_GREATER,
+    [GPU_COMPARE_NOT_EQUAL]     = D3D12_COMPARISON_FUNC_NOT_EQUAL,
+    [GPU_COMPARE_GREATER_EQUAL] = D3D12_COMPARISON_FUNC_GREATER_EQUAL,
+    [GPU_COMPARE_ALWAYS]        = D3D12_COMPARISON_FUNC_ALWAYS
+  };
+
+  return (uint32_t)op < GPU_ARRAY_LEN(functions)
+           ? functions[op]
+           : D3D12_COMPARISON_FUNC_NEVER;
+}
+
+static D3D12_STENCIL_OP
+dx12__stencilOperation(GPUStencilOp op) {
+  static const D3D12_STENCIL_OP operations[] = {
+    [GPU_STENCIL_OP_KEEP]            = D3D12_STENCIL_OP_KEEP,
+    [GPU_STENCIL_OP_ZERO]            = D3D12_STENCIL_OP_ZERO,
+    [GPU_STENCIL_OP_REPLACE]         = D3D12_STENCIL_OP_REPLACE,
+    [GPU_STENCIL_OP_INCREMENT_CLAMP] = D3D12_STENCIL_OP_INCR_SAT,
+    [GPU_STENCIL_OP_DECREMENT_CLAMP] = D3D12_STENCIL_OP_DECR_SAT,
+    [GPU_STENCIL_OP_INVERT]          = D3D12_STENCIL_OP_INVERT,
+    [GPU_STENCIL_OP_INCREMENT_WRAP]  = D3D12_STENCIL_OP_INCR,
+    [GPU_STENCIL_OP_DECREMENT_WRAP]  = D3D12_STENCIL_OP_DECR
+  };
+
+  return (uint32_t)op < GPU_ARRAY_LEN(operations)
+           ? operations[op]
+           : D3D12_STENCIL_OP_KEEP;
+}
+
+static void
+dx12__fillStencilFace(D3D12_DEPTH_STENCILOP_DESC  *desc,
+                      const GPUStencilFaceState   *state) {
+  desc->StencilFailOp      = dx12__stencilOperation(state->failOp);
+  desc->StencilDepthFailOp = dx12__stencilOperation(state->depthFailOp);
+  desc->StencilPassOp      = dx12__stencilOperation(state->passOp);
+  desc->StencilFunc        = dx12__compareFunction(state->compare);
+}
+
 static bool
 dx12__inputLayout(const GPUVertexState       *state,
                   D3D12_INPUT_ELEMENT_DESC **outElements,
@@ -510,6 +555,7 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   GPULibraryDX12                 *library;
   GPUPipelineLayoutDX12          *layout;
   GPURenderPipelineDX12          *native;
+  const GPUDepthStencilState     *depthStencil;
   D3D12_INPUT_ELEMENT_DESC       *elements;
   D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {0};
   DX12ShaderCode                 vertexCode = {0};
@@ -529,6 +575,7 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   deviceDX12 = device->_priv;
   library    = info->library->_priv;
   layout     = info->layout->_native;
+  depthStencil = info->pDepthStencilState;
   if (!library || !library->source || !layout || !layout->rootSignature ||
       info->vertex.bufferLayoutCount >
         D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT ||
@@ -591,12 +638,35 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   desc.RasterizerState.ForcedSampleCount       = 0u;
   desc.RasterizerState.ConservativeRaster      =
     D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
-  desc.DepthStencilState.DepthEnable           = FALSE;
-  desc.DepthStencilState.DepthWriteMask        = D3D12_DEPTH_WRITE_MASK_ZERO;
-  desc.DepthStencilState.DepthFunc             = D3D12_COMPARISON_FUNC_ALWAYS;
-  desc.DepthStencilState.StencilEnable         = FALSE;
-  desc.DepthStencilState.StencilReadMask       = D3D12_DEFAULT_STENCIL_READ_MASK;
-  desc.DepthStencilState.StencilWriteMask      = D3D12_DEFAULT_STENCIL_WRITE_MASK;
+  desc.DepthStencilState.DepthEnable           =
+    depthStencil && (depthStencil->depthTestEnable ||
+                     depthStencil->depthWriteEnable);
+  desc.DepthStencilState.DepthWriteMask        =
+    depthStencil && depthStencil->depthWriteEnable
+      ? D3D12_DEPTH_WRITE_MASK_ALL
+      : D3D12_DEPTH_WRITE_MASK_ZERO;
+  desc.DepthStencilState.DepthFunc             =
+    depthStencil && depthStencil->depthTestEnable
+      ? dx12__compareFunction(depthStencil->depthCompare)
+      : D3D12_COMPARISON_FUNC_ALWAYS;
+  desc.DepthStencilState.StencilEnable         =
+    depthStencil && depthStencil->stencilTestEnable;
+  desc.DepthStencilState.StencilReadMask       =
+    depthStencil ? (UINT8)depthStencil->stencilReadMask : 0u;
+  desc.DepthStencilState.StencilWriteMask      =
+    depthStencil ? (UINT8)depthStencil->stencilWriteMask : 0u;
+  if (depthStencil) {
+    dx12__fillStencilFace(&desc.DepthStencilState.FrontFace,
+                          &depthStencil->front);
+    dx12__fillStencilFace(&desc.DepthStencilState.BackFace,
+                          &depthStencil->back);
+  } else {
+    GPUStencilFaceState defaultFace = {0};
+
+    defaultFace.compare = GPU_COMPARE_ALWAYS;
+    dx12__fillStencilFace(&desc.DepthStencilState.FrontFace, &defaultFace);
+    dx12__fillStencilFace(&desc.DepthStencilState.BackFace, &defaultFace);
+  }
   desc.InputLayout.pInputElementDescs          = elements;
   desc.InputLayout.NumElements                 = elementCount;
   desc.IBStripCutValue                         = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;

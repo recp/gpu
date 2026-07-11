@@ -48,6 +48,20 @@ vk__checkLayers(uint32_t           check_count,
   return 1;
 }
 
+static uint32_t
+vk__apiVersion(void) {
+  PFN_vkEnumerateInstanceVersion enumerateVersion;
+  uint32_t                       version;
+
+  version = VK_API_VERSION_1_0;
+  enumerateVersion = (PFN_vkEnumerateInstanceVersion)
+    vkGetInstanceProcAddr(VK_NULL_HANDLE, "vkEnumerateInstanceVersion");
+  if (enumerateVersion && enumerateVersion(&version) != VK_SUCCESS) {
+    version = VK_API_VERSION_1_0;
+  }
+  return version > VK_API_VERSION_1_3 ? VK_API_VERSION_1_3 : version;
+}
+
 GPU_HIDE
 GPUInstance*
 vk_createInstance(GPUApi * __restrict api,
@@ -61,6 +75,7 @@ vk_createInstance(GPUApi * __restrict api,
   VkResult               err;
   uint32_t               i, nEnabledExtensions, nEnabledLayers;
   uint32_t               nInstanceExtensions, nInstanceLayers;
+  uint32_t               apiVersion;
   VkBool32               surfaceExtFound, platformSurfaceExtFound, validationFound;
   bool                   portabilityEnum, validate;
 
@@ -76,6 +91,7 @@ vk_createInstance(GPUApi * __restrict api,
   validationFound         = 0;
   nEnabledExtensions      = 0;
   nEnabledLayers          = 0;
+  apiVersion              = vk__apiVersion();
 
   gpuInst        = calloc(1, sizeof(*gpuInst));
   gpuInstVk      = calloc(1, sizeof(*gpuInstVk));
@@ -222,7 +238,7 @@ vk_createInstance(GPUApi * __restrict api,
       .applicationVersion    = 0,
       .pEngineName           = APP_SHORT_NAME,
       .engineVersion         = 0,
-      .apiVersion            = VK_API_VERSION_1_0,
+      .apiVersion            = apiVersion,
     },
     .enabledLayerCount       = nEnabledLayers,
     .ppEnabledLayerNames     = (const char *const *)validationLayers,
@@ -267,7 +283,8 @@ vk_createInstance(GPUApi * __restrict api,
              "vkCreateInstance Failure");
   }
 
-  gpuInstVk->inst = inst;
+  gpuInstVk->inst       = inst;
+  gpuInstVk->apiVersion = apiVersion;
   
   if (validate) {
     // Setup VK_EXT_debug_utils function pointers always (we use them for

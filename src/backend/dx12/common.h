@@ -62,6 +62,7 @@ typedef struct GPUDeviceDX12 {
   GPUDescriptorHeapDX12       resourceDescriptors;
   GPUDescriptorHeapDX12       samplerDescriptors;
   GPUDescriptorHeapDX12       rtvDescriptors;
+  GPUDescriptorHeapDX12       dsvDescriptors;
   SRWLOCK                     descriptorLock;
   D3D_ROOT_SIGNATURE_VERSION  rootSignatureVersion;
   D3D_SHADER_MODEL            shaderModel;
@@ -157,6 +158,7 @@ typedef struct GPUTextureViewDX12 {
   D3D12_RESOURCE_STATES      *state;
   GPUTextureDX12             *texture;
   D3D12_CPU_DESCRIPTOR_HANDLE rtv;
+  D3D12_CPU_DESCRIPTOR_HANDLE dsv;
   D3D12_SHADER_RESOURCE_VIEW_DESC srv;
   uint32_t                    width;
   uint32_t                    height;
@@ -165,19 +167,29 @@ typedef struct GPUTextureViewDX12 {
   uint32_t                    baseLayer;
   uint32_t                    layerCount;
   uint32_t                    rtvOffset;
+  uint32_t                    dsvOffset;
   bool                        hasSrv;
   bool                        hasRtv;
+  bool                        hasDsv;
   bool                        swapchain;
 } GPUTextureViewDX12;
 
 typedef struct GPURenderPassDX12 {
+  GPUTextureViewDX12  *depthStencilView;
   GPUTextureViewDX12  *colorViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   float                clearColors[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS][4];
+  float                clearDepth;
   GPULoadOp            loadOps[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   GPUStoreOp           storeOps[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  GPULoadOp            depthLoadOp;
+  GPUStoreOp           depthStoreOp;
+  GPULoadOp            stencilLoadOp;
+  GPUStoreOp           stencilStoreOp;
   uint32_t             colorCount;
   uint32_t             width;
   uint32_t             height;
+  uint32_t             clearStencil;
+  bool                 depthHasStencil;
 } GPURenderPassDX12;
 
 typedef struct GPURenderEncoderDX12 {

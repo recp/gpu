@@ -156,21 +156,26 @@ GPU_HIDE
 void
 mt_setRenderPipelineState(GPURenderCommandEncoder *rce,
                           GPURenderPipelineState  *pipelineState) {
-  MTRenderEncoder *native;
-  id<MTLRenderPipelineState> state;
+  MTRenderEncoder       *native;
+  MTRenderPipelineState *state;
 
   native = mt_renderEncoder(rce);
   if (!native) {
     return;
   }
-  state = pipelineState ? (id<MTLRenderPipelineState>)pipelineState->_priv : nil;
+  state = pipelineState ? pipelineState->_priv : NULL;
+  if (!state || !state->render || !state->depthStencil) {
+    return;
+  }
   if (native && native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
-      [native->modern setRenderPipelineState:state];
+      [native->modern setRenderPipelineState:state->render];
+      [native->modern setDepthStencilState:state->depthStencil];
     }
     return;
   }
-  [native->classic setRenderPipelineState:state];
+  [native->classic setRenderPipelineState:state->render];
+  [native->classic setDepthStencilState:state->depthStencil];
 }
 
 GPU_HIDE

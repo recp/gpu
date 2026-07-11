@@ -211,6 +211,7 @@ dx12_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   GPURenderCommandEncoder *encoder;
   GPURenderEncoderDX12   *native;
   D3D12_CPU_DESCRIPTOR_HANDLE rtvs[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  D3D12_CPU_DESCRIPTOR_HANDLE dsv = {0};
   D3D12_VIEWPORT          viewport;
   D3D12_RECT              scissor;
 
@@ -220,7 +221,7 @@ dx12_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   command    = cmdb ? cmdb->_priv : NULL;
   renderPass = pass ? pass->_priv : NULL;
   if (!device || !command || !command->commandList || !renderPass ||
-      renderPass->colorCount == 0u) {
+      (renderPass->colorCount == 0u && !renderPass->depthStencilView)) {
     return NULL;
   }
 
@@ -240,18 +241,51 @@ dx12_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
     rtvs[i] = view->rtv;
     dx12__transitionView(native, view, D3D12_RESOURCE_STATE_RENDER_TARGET);
   }
+  if (renderPass->depthStencilView) {
+    dsv = renderPass->depthStencilView->dsv;
+    dx12__transitionView(native,
+                         renderPass->depthStencilView,
+                         D3D12_RESOURCE_STATE_DEPTH_WRITE);
+  }
 
   native->commandList->lpVtbl->OMSetRenderTargets(native->commandList,
                                                    renderPass->colorCount,
-                                                   rtvs,
+                                                   renderPass->colorCount > 0u
+                                                     ? rtvs
+                                                     : NULL,
                                                    FALSE,
-                                                   NULL);
+                                                   renderPass->depthStencilView
+                                                     ? &dsv
+                                                     : NULL);
   for (uint32_t i = 0u; i < renderPass->colorCount; i++) {
     if (renderPass->loadOps[i] == GPU_LOAD_OP_CLEAR) {
       native->commandList->lpVtbl->ClearRenderTargetView(
         native->commandList,
         rtvs[i],
         renderPass->clearColors[i],
+        0u,
+        NULL
+      );
+    }
+  }
+  if (renderPass->depthStencilView) {
+    D3D12_CLEAR_FLAGS flags;
+
+    flags = (D3D12_CLEAR_FLAGS)0;
+    if (renderPass->depthLoadOp == GPU_LOAD_OP_CLEAR) {
+      flags |= D3D12_CLEAR_FLAG_DEPTH;
+    }
+    if (renderPass->depthHasStencil &&
+        renderPass->stencilLoadOp == GPU_LOAD_OP_CLEAR) {
+      flags |= D3D12_CLEAR_FLAG_STENCIL;
+    }
+    if (flags != 0) {
+      native->commandList->lpVtbl->ClearDepthStencilView(
+        native->commandList,
+        dsv,
+        flags,
+        renderPass->clearDepth,
+        (UINT8)renderPass->clearStencil,
         0u,
         NULL
       );

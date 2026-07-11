@@ -105,6 +105,11 @@ typedef struct MTRenderEncoder {
   MTArgumentState            *fragmentArguments;
 } MTRenderEncoder;
 
+typedef struct MTRenderPipelineState {
+  id<MTLRenderPipelineState> render;
+  id<MTLDepthStencilState>   depthStencil;
+} MTRenderPipelineState;
+
 typedef struct MTComputeEncoder {
   id<MTLComputeCommandEncoder> classic;
   id                           modern;
