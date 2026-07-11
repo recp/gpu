@@ -80,6 +80,9 @@ vk_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   native  = &command->renderState;
   memset(encoder, 0, sizeof(*encoder));
   memset(native, 0, sizeof(*native));
+  native->device  = cmdb && cmdb->_queue && cmdb->_queue->_device ?
+    cmdb->_queue->_device->_priv :
+    NULL;
   native->command = command->command;
   native->extent  = renderPass->extent;
 
@@ -310,6 +313,64 @@ vk_drawIndexedPrimsIndirect(GPURenderCommandEncoder *encoder,
 }
 
 GPU_HIDE
+bool
+vk_multiDrawPrimitivesIndirect(GPURenderCommandEncoder *encoder,
+                               GPUPrimitiveType         type,
+                               GPUBuffer               *argsBuffer,
+                               uint64_t                 argsOffset,
+                               uint32_t                 drawCount,
+                               uint32_t                 strideBytes) {
+  GPURenderEncoderVk *native;
+  GPUBufferVk        *buffer;
+
+  GPU__UNUSED(type);
+
+  native = vk__renderEncoder(encoder);
+  buffer = argsBuffer ? argsBuffer->_priv : NULL;
+  if (!native || !native->device || !native->command ||
+      !buffer || !buffer->buffer ||
+      drawCount > native->device->maxDrawIndirectCount ||
+      (drawCount > 1u && !native->device->multiDrawIndirect)) {
+    return false;
+  }
+
+  vkCmdDrawIndirect(native->command,
+                    buffer->buffer,
+                    argsOffset,
+                    drawCount,
+                    strideBytes);
+  return true;
+}
+
+GPU_HIDE
+bool
+vk_multiDrawIndexedPrimsIndirect(GPURenderCommandEncoder *encoder,
+                                 GPUBuffer               *argsBuffer,
+                                 uint64_t                 argsOffset,
+                                 uint32_t                 drawCount,
+                                 uint32_t                 strideBytes) {
+  GPURenderEncoderVk *native;
+  GPUBufferVk        *buffer;
+
+  native = vk__renderEncoder(encoder);
+  buffer = argsBuffer ? argsBuffer->_priv : NULL;
+  if (!native || !native->device || !native->command ||
+      !buffer || !buffer->buffer ||
+      drawCount > native->device->maxDrawIndirectCount ||
+      (drawCount > 1u && !native->device->multiDrawIndirect) ||
+      !vk__bindIndexBuffer(encoder, native)) {
+    return false;
+  }
+
+  vkCmdDrawIndexedIndirect(native->command,
+                           buffer->buffer,
+                           argsOffset,
+                           drawCount,
+                           strideBytes);
+  return true;
+}
+
+GPU_HIDE
 void
 vk_endRenderEncoding(GPURenderCommandEncoder *encoder) {
   GPURenderEncoderVk *native;
@@ -333,5 +394,9 @@ vk_initRCE(GPUApiRCE *api) {
   api->drawIndexedPrims         = vk_drawIndexedPrims;
   api->drawPrimitivesIndirect   = vk_drawPrimitivesIndirect;
   api->drawIndexedPrimsIndirect = vk_drawIndexedPrimsIndirect;
+
+  api->multiDrawPrimitivesIndirect = vk_multiDrawPrimitivesIndirect;
+  api->multiDrawIndexedPrimsIndirect = vk_multiDrawIndexedPrimsIndirect;
+
   api->endEncoding              = vk_endRenderEncoding;
 }

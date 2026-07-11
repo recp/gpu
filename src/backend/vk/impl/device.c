@@ -498,6 +498,7 @@ vk_createDevice(GPUPhysicalDevice          * __restrict phyDevice,
   GPUQueuePlanVk          *plan;
   VkDeviceQueueCreateInfo *queues;
   float                   *queuePriorities;
+  VkPhysicalDeviceFeatures enabledFeatures = {0};
   VkDeviceCreateInfo       deviceCI = {0};
   VkResult                 result;
   uint32_t                 familyIndex;
@@ -572,8 +573,10 @@ vk_createDevice(GPUPhysicalDevice          * __restrict phyDevice,
     queues[i].pQueuePriorities = queuePriorities;
   }
 
-  /* If specific features are required, pass them in here: pEnabledFeatures */
+  enabledFeatures.multiDrawIndirect = phyDeviceVk->features.multiDrawIndirect;
+
   deviceCI.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  deviceCI.pEnabledFeatures        = &enabledFeatures;
   deviceCI.queueCreateInfoCount    = planCount;
   deviceCI.pQueueCreateInfos       = queues;
   deviceCI.enabledExtensionCount   = phyDeviceVk->nEnabledExtensions;
@@ -589,6 +592,10 @@ vk_createDevice(GPUPhysicalDevice          * __restrict phyDevice,
 #endif
     goto err;
   }
+
+  deviceVk->maxDrawIndirectCount =
+    phyDeviceVk->props.limits.maxDrawIndirectCount;
+  deviceVk->multiDrawIndirect = enabledFeatures.multiDrawIndirect;
 
   device->_priv            = deviceVk;
   device->inst             = phyDevice->inst;

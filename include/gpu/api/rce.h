@@ -155,6 +155,21 @@ typedef struct GPUApiRCE {
                               GPUBuffer               *argsBuffer,
                               uint64_t                 argsOffset);
 
+  bool
+  (*multiDrawPrimitivesIndirect)(GPURenderCommandEncoder *rce,
+                                 GPUPrimitiveType         type,
+                                 GPUBuffer               *argsBuffer,
+                                 uint64_t                 argsOffset,
+                                 uint32_t                 drawCount,
+                                 uint32_t                 strideBytes);
+
+  bool
+  (*multiDrawIndexedPrimsIndirect)(GPURenderCommandEncoder *rce,
+                                   GPUBuffer               *argsBuffer,
+                                   uint64_t                 argsOffset,
+                                   uint32_t                 drawCount,
+                                   uint32_t                 strideBytes);
+
   void
   (*endEncoding)(GPURenderCommandEncoder *rce);
 } GPUApiRCE;

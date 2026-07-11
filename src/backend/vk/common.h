@@ -193,6 +193,8 @@ typedef struct GPUDeviceVk {
   GPUCommandQueue           **createdQueues;
   VkDevice                   device;
   uint32_t                   nCreatedQueues;
+  uint32_t                   maxDrawIndirectCount;
+  VkBool32                   multiDrawIndirect;
 } GPUDeviceVk;
 
 typedef struct GPUBufferVk {
@@ -243,6 +245,7 @@ typedef struct GPURenderPassVk {
 } GPURenderPassVk;
 
 typedef struct GPURenderEncoderVk {
+  GPUDeviceVk     *device;
   GPUBuffer       *indexBuffer;
   VkCommandBuffer  command;
   VkPipelineLayout pipelineLayout;

@@ -433,34 +433,63 @@ dx12_drawIndexedPrims(GPURenderCommandEncoder *encoder,
                                                      firstInstance);
 }
 
+static bool
+dx12__drawIndirect(GPURenderCommandEncoder *encoder,
+                   GPUBuffer               *argsBuffer,
+                   uint64_t                 argsOffset,
+                   uint32_t                 drawCount,
+                   uint32_t                 strideBytes,
+                   bool                     indexed) {
+  GPURenderEncoderDX12   *native;
+  GPUBufferDX12          *buffer;
+  ID3D12CommandSignature *signature;
+  uint32_t                 commandSize;
+
+  native = encoder ? encoder->_priv : NULL;
+  buffer = argsBuffer ? argsBuffer->_priv : NULL;
+  if (!native || !native->device || !native->commandList || !buffer ||
+      !buffer->resource ||
+      (buffer->state & D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT) == 0u) {
+    return false;
+  }
+
+  signature   = indexed ?
+    native->device->drawIndexedSignature :
+    native->device->drawSignature;
+  commandSize = indexed ?
+    (uint32_t)sizeof(D3D12_DRAW_INDEXED_ARGUMENTS) :
+    (uint32_t)sizeof(D3D12_DRAW_ARGUMENTS);
+  if (!signature || strideBytes != commandSize ||
+      (indexed && !dx12__bindIndexBuffer(encoder, native, 0u, 0u))) {
+    return false;
+  }
+
+  native->commandList->lpVtbl->ExecuteIndirect(
+    native->commandList,
+    signature,
+    drawCount,
+    buffer->resource,
+    argsOffset,
+    NULL,
+    0u
+  );
+  return true;
+}
+
 GPU_HIDE
 void
 dx12_drawPrimitivesIndirect(GPURenderCommandEncoder *encoder,
                             GPUPrimitiveType         type,
                             GPUBuffer               *argsBuffer,
                             uint64_t                 argsOffset) {
-  GPURenderEncoderDX12 *native;
-  GPUBufferDX12        *buffer;
-
   GPU__UNUSED(type);
 
-  native = encoder ? encoder->_priv : NULL;
-  buffer = argsBuffer ? argsBuffer->_priv : NULL;
-  if (!native || !native->device || !native->commandList || !buffer ||
-      !buffer->resource || !native->device->drawSignature ||
-      (buffer->state & D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT) == 0u) {
-    return;
-  }
-
-  native->commandList->lpVtbl->ExecuteIndirect(
-    native->commandList,
-    native->device->drawSignature,
-    1u,
-    buffer->resource,
-    argsOffset,
-    NULL,
-    0u
-  );
+  (void)dx12__drawIndirect(encoder,
+                           argsBuffer,
+                           argsOffset,
+                           1u,
+                           (uint32_t)sizeof(D3D12_DRAW_ARGUMENTS),
+                           false);
 }
 
 GPU_HIDE
@@ -468,27 +497,45 @@ void
 dx12_drawIndexedPrimsIndirect(GPURenderCommandEncoder *encoder,
                               GPUBuffer               *argsBuffer,
                               uint64_t                 argsOffset) {
-  GPURenderEncoderDX12 *native;
-  GPUBufferDX12        *buffer;
+  (void)dx12__drawIndirect(encoder,
+                           argsBuffer,
+                           argsOffset,
+                           1u,
+                           (uint32_t)sizeof(D3D12_DRAW_INDEXED_ARGUMENTS),
+                           true);
+}
 
-  native = encoder ? encoder->_priv : NULL;
-  buffer = argsBuffer ? argsBuffer->_priv : NULL;
-  if (!native || !native->device || !native->commandList || !buffer ||
-      !buffer->resource || !native->device->drawIndexedSignature ||
-      (buffer->state & D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT) == 0u ||
-      !dx12__bindIndexBuffer(encoder, native, 0u, 0u)) {
-    return;
-  }
+GPU_HIDE
+bool
+dx12_multiDrawPrimitivesIndirect(GPURenderCommandEncoder *encoder,
+                                 GPUPrimitiveType         type,
+                                 GPUBuffer               *argsBuffer,
+                                 uint64_t                 argsOffset,
+                                 uint32_t                 drawCount,
+                                 uint32_t                 strideBytes) {
+  GPU__UNUSED(type);
 
-  native->commandList->lpVtbl->ExecuteIndirect(
-    native->commandList,
-    native->device->drawIndexedSignature,
-    1u,
-    buffer->resource,
-    argsOffset,
-    NULL,
-    0u
-  );
+  return dx12__drawIndirect(encoder,
+                            argsBuffer,
+                            argsOffset,
+                            drawCount,
+                            strideBytes,
+                            false);
+}
+
+GPU_HIDE
+bool
+dx12_multiDrawIndexedPrimsIndirect(GPURenderCommandEncoder *encoder,
+                                   GPUBuffer               *argsBuffer,
+                                   uint64_t                 argsOffset,
+                                   uint32_t                 drawCount,
+                                   uint32_t                 strideBytes) {
+  return dx12__drawIndirect(encoder,
+                            argsBuffer,
+                            argsOffset,
+                            drawCount,
+                            strideBytes,
+                            true);
 }
 
 GPU_HIDE
@@ -527,5 +574,9 @@ dx12_initRCE(GPUApiRCE *api) {
   api->drawIndexedPrims         = dx12_drawIndexedPrims;
   api->drawPrimitivesIndirect   = dx12_drawPrimitivesIndirect;
   api->drawIndexedPrimsIndirect = dx12_drawIndexedPrimsIndirect;
+
+  api->multiDrawPrimitivesIndirect = dx12_multiDrawPrimitivesIndirect;
+  api->multiDrawIndexedPrimsIndirect = dx12_multiDrawIndexedPrimsIndirect;
+
   api->endEncoding              = dx12_endRenderEncoding;
 }

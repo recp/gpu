@@ -120,13 +120,16 @@ gpu_renderPipelineMatchesPass(const GPURenderPassEncoder *pass,
 }
 
 static bool
-gpu_validIndirectBatch(uint64_t argsOffset,
+gpu_validIndirectBatch(GPUBuffer *argsBuffer,
+                       uint64_t argsOffset,
                        uint32_t commandCount,
                        uint32_t strideBytes,
                        uint32_t commandSize) {
   uint64_t maxCommandIndex;
+  uint64_t lastCommandOffset;
 
-  if ((argsOffset & 3u) != 0u ||
+  if (!gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT) ||
+      (argsOffset & 3u) != 0u ||
       commandCount == 0u ||
       strideBytes < commandSize ||
       (strideBytes & 3u) != 0u ||
@@ -135,8 +138,13 @@ gpu_validIndirectBatch(uint64_t argsOffset,
   }
 
   maxCommandIndex = (uint64_t)commandCount - 1u;
-  return maxCommandIndex <=
-         (UINT64_MAX - argsOffset - commandSize) / strideBytes;
+  if (maxCommandIndex >
+      (UINT64_MAX - argsOffset - commandSize) / strideBytes) {
+    return false;
+  }
+
+  lastCommandOffset = argsOffset + maxCommandIndex * strideBytes;
+  return gpuBufferRangeValid(argsBuffer, lastCommandOffset, commandSize);
 }
 
 static bool
@@ -595,14 +603,54 @@ GPUMultiDrawIndirect(GPURenderPassEncoder *pass,
                      uint64_t              argsOffset,
                      uint32_t              drawCount,
                      uint32_t              strideBytes) {
-  if (!gpu_validIndirectBatch(argsOffset, drawCount, strideBytes, 16u)) {
+  GPUApi *api;
+
+  if (!pass || pass->_ended) {
+    return;
+  }
+  if (!pass->_hasPipeline) {
+    gpu_renderValidationError(pass,
+                              "GPUMultiDrawIndirect skipped: no render pipeline bound");
+    return;
+  }
+  if (!gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
+                                    pass->_boundGroupLayouts,
+                                    GPU_ENCODER_MAX_BIND_GROUPS,
+                                    pass->_requiredBindGroupMask)) {
+    gpu_renderValidationError(pass,
+                              "GPUMultiDrawIndirect skipped: missing render bind group");
+    return;
+  }
+  if (!gpu_validIndirectBatch(argsBuffer,
+                              argsOffset,
+                              drawCount,
+                              strideBytes,
+                              16u)) {
+    gpu_renderValidationError(pass,
+                              "GPUMultiDrawIndirect skipped: invalid indirect batch");
+    return;
+  }
+  if (!(api = gpuActiveGPUApi())) {
+    return;
+  }
+  if (api->rce.multiDrawPrimitivesIndirect &&
+      api->rce.multiDrawPrimitivesIndirect(pass,
+                                           pass->_primitiveType,
+                                           argsBuffer,
+                                           argsOffset,
+                                           drawCount,
+                                           strideBytes)) {
+    return;
+  }
+  if (!api->rce.drawPrimitivesIndirect) {
     return;
   }
 
   for (uint32_t i = 0; i < drawCount; i++) {
-    GPUDrawIndirect(pass,
-                    argsBuffer,
-                    argsOffset + (uint64_t)i * strideBytes);
+    api->rce.drawPrimitivesIndirect(pass,
+                                    pass->_primitiveType,
+                                    argsBuffer,
+                                    argsOffset + (uint64_t)i * strideBytes);
   }
 }
 
@@ -613,14 +661,61 @@ GPUMultiDrawIndexedIndirect(GPURenderPassEncoder *pass,
                             uint64_t              argsOffset,
                             uint32_t              drawCount,
                             uint32_t              strideBytes) {
-  if (!gpu_validIndirectBatch(argsOffset, drawCount, strideBytes, 20u)) {
+  GPUApi *api;
+
+  if (!pass || pass->_ended) {
+    return;
+  }
+  if (!pass->_hasPipeline) {
+    gpu_renderValidationError(
+      pass,
+      "GPUMultiDrawIndexedIndirect skipped: no render pipeline bound"
+    );
+    return;
+  }
+  if (!gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
+                                    pass->_boundGroupLayouts,
+                                    GPU_ENCODER_MAX_BIND_GROUPS,
+                                    pass->_requiredBindGroupMask)) {
+    gpu_renderValidationError(
+      pass,
+      "GPUMultiDrawIndexedIndirect skipped: missing render bind group"
+    );
+    return;
+  }
+  if (!pass->_hasIndexBuffer ||
+      !gpu_validIndirectBatch(argsBuffer,
+                              argsOffset,
+                              drawCount,
+                              strideBytes,
+                              20u)) {
+    gpu_renderValidationError(
+      pass,
+      "GPUMultiDrawIndexedIndirect skipped: invalid indirect/index batch"
+    );
+    return;
+  }
+  if (!(api = gpuActiveGPUApi())) {
+    return;
+  }
+  if (api->rce.multiDrawIndexedPrimsIndirect &&
+      api->rce.multiDrawIndexedPrimsIndirect(pass,
+                                             argsBuffer,
+                                             argsOffset,
+                                             drawCount,
+                                             strideBytes)) {
+    return;
+  }
+  if (!api->rce.drawIndexedPrimsIndirect) {
     return;
   }
 
   for (uint32_t i = 0; i < drawCount; i++) {
-    GPUDrawIndexedIndirect(pass,
-                           argsBuffer,
-                           argsOffset + (uint64_t)i * strideBytes);
+    api->rce.drawIndexedPrimsIndirect(
+      pass,
+      argsBuffer,
+      argsOffset + (uint64_t)i * strideBytes
+    );
   }
 }
 

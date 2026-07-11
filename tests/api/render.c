@@ -50,6 +50,8 @@ static uint32_t gRenderDrawCalls;
 static uint32_t gRenderDrawIndexedCalls;
 static uint32_t gRenderDrawIndirectCalls;
 static uint32_t gRenderDrawIndexedIndirectCalls;
+static uint32_t gRenderMultiDrawIndirectCalls;
+static uint32_t gRenderMultiDrawIndexedIndirectCalls;
 static uint32_t gRenderViewportCalls;
 static uint32_t gRenderScissorCalls;
 static uint32_t gRenderBlendCalls;
@@ -107,6 +109,38 @@ count_draw_indexed_indirect(GPURenderCommandEncoder *rce,
   (void)argsBuffer;
   (void)argsOffset;
   gRenderDrawIndexedIndirectCalls++;
+}
+
+static bool
+count_multi_draw_indirect(GPURenderCommandEncoder *rce,
+                          GPUPrimitiveType type,
+                          GPUBuffer *argsBuffer,
+                          uint64_t argsOffset,
+                          uint32_t drawCount,
+                          uint32_t strideBytes) {
+  (void)rce;
+  (void)type;
+  (void)argsBuffer;
+  (void)argsOffset;
+  (void)drawCount;
+  (void)strideBytes;
+  gRenderMultiDrawIndirectCalls++;
+  return true;
+}
+
+static bool
+count_multi_draw_indexed_indirect(GPURenderCommandEncoder *rce,
+                                  GPUBuffer *argsBuffer,
+                                  uint64_t argsOffset,
+                                  uint32_t drawCount,
+                                  uint32_t strideBytes) {
+  (void)rce;
+  (void)argsBuffer;
+  (void)argsOffset;
+  (void)drawCount;
+  (void)strideBytes;
+  gRenderMultiDrawIndexedIndirectCalls++;
+  return true;
 }
 
 static void
@@ -1329,6 +1363,17 @@ check_render_draw_validation_calls(GPUDevice *device) {
   void (*oldDrawIndexedIndirect)(GPURenderCommandEncoder *,
                                  GPUBuffer *,
                                  uint64_t);
+  bool (*oldMultiDrawIndirect)(GPURenderCommandEncoder *,
+                               GPUPrimitiveType,
+                               GPUBuffer *,
+                               uint64_t,
+                               uint32_t,
+                               uint32_t);
+  bool (*oldMultiDrawIndexedIndirect)(GPURenderCommandEncoder *,
+                                      GPUBuffer *,
+                                      uint64_t,
+                                      uint32_t,
+                                      uint32_t);
   GPUBindGroupLayoutEntry entry = {0};
   GPUBindGroupLayoutCreateInfo layoutInfo = {0};
   GPUBindGroupLayout *layout = NULL;
@@ -1376,15 +1421,21 @@ check_render_draw_validation_calls(GPUDevice *device) {
   oldDrawIndexed = api->rce.drawIndexedPrims;
   oldDrawIndirect = api->rce.drawPrimitivesIndirect;
   oldDrawIndexedIndirect = api->rce.drawIndexedPrimsIndirect;
+  oldMultiDrawIndirect = api->rce.multiDrawPrimitivesIndirect;
+  oldMultiDrawIndexedIndirect = api->rce.multiDrawIndexedPrimsIndirect;
   api->rce.drawPrimitives = count_draw_primitives;
   api->rce.drawIndexedPrims = count_draw_indexed;
   api->rce.drawPrimitivesIndirect = count_draw_indirect;
   api->rce.drawIndexedPrimsIndirect = count_draw_indexed_indirect;
+  api->rce.multiDrawPrimitivesIndirect = count_multi_draw_indirect;
+  api->rce.multiDrawIndexedPrimsIndirect = count_multi_draw_indexed_indirect;
 
   gRenderDrawCalls = 0u;
   gRenderDrawIndexedCalls = 0u;
   gRenderDrawIndirectCalls = 0u;
   gRenderDrawIndexedIndirectCalls = 0u;
+  gRenderMultiDrawIndirectCalls = 0u;
+  gRenderMultiDrawIndexedIndirectCalls = 0u;
 
   indirectBuffer.sizeBytes = 128u;
   indirectBuffer.usage = GPU_BUFFER_USAGE_INDIRECT | GPU_BUFFER_USAGE_INDEX;
@@ -1410,10 +1461,14 @@ check_render_draw_validation_calls(GPUDevice *device) {
   GPUDrawIndexed(&pass, 3u, 1u, 0u, 0, 0u);
   GPUDrawIndirect(&pass, &indirectBuffer, 0u);
   GPUDrawIndexedIndirect(&pass, &indirectBuffer, 0u);
+  GPUMultiDrawIndirect(&pass, &indirectBuffer, 0u, 2u, 16u);
+  GPUMultiDrawIndexedIndirect(&pass, &indirectBuffer, 0u, 2u, 20u);
   if (gRenderDrawCalls != 0u ||
       gRenderDrawIndexedCalls != 0u ||
       gRenderDrawIndirectCalls != 0u ||
-      gRenderDrawIndexedIndirectCalls != 0u) {
+      gRenderDrawIndexedIndirectCalls != 0u ||
+      gRenderMultiDrawIndirectCalls != 0u ||
+      gRenderMultiDrawIndexedIndirectCalls != 0u) {
     fprintf(stderr, "render draw validation called backend without required bind group\n");
     goto cleanup;
   }
@@ -1427,14 +1482,20 @@ check_render_draw_validation_calls(GPUDevice *device) {
   GPUMultiDrawIndirect(&pass, &indirectBuffer, 2u, 2u, 16u);
   GPUMultiDrawIndirect(&pass, &indirectBuffer, 0u, 2u, 12u);
   GPUMultiDrawIndirect(&pass, &indirectBuffer, 0u, 2u, 18u);
-  if (gRenderDrawCalls != 0u || gRenderDrawIndirectCalls != 0u) {
+  GPUMultiDrawIndirect(&pass, &indirectBuffer, 96u, 3u, 16u);
+  if (gRenderDrawCalls != 0u ||
+      gRenderDrawIndirectCalls != 0u ||
+      gRenderMultiDrawIndirectCalls != 0u) {
     fprintf(stderr, "render draw validation called backend for invalid non-indexed draw\n");
     goto cleanup;
   }
 
   GPUDraw(&pass, 3u, 1u, 0u, 0u);
   GPUDrawIndirect(&pass, &indirectBuffer, 0u);
-  if (gRenderDrawCalls != 1u || gRenderDrawIndirectCalls != 1u) {
+  GPUMultiDrawIndirect(&pass, &indirectBuffer, 0u, 2u, 16u);
+  if (gRenderDrawCalls != 1u ||
+      gRenderDrawIndirectCalls != 1u ||
+      gRenderMultiDrawIndirectCalls != 1u) {
     fprintf(stderr, "render draw validation rejected valid non-indexed draw\n");
     goto cleanup;
   }
@@ -1455,14 +1516,18 @@ check_render_draw_validation_calls(GPUDevice *device) {
   GPUMultiDrawIndexedIndirect(&pass, &indirectBuffer, 2u, 2u, 20u);
   GPUMultiDrawIndexedIndirect(&pass, &indirectBuffer, 0u, 2u, 16u);
   GPUMultiDrawIndexedIndirect(&pass, &indirectBuffer, 0u, 2u, 22u);
-  if (gRenderDrawIndexedIndirectCalls != 0u) {
+  GPUMultiDrawIndexedIndirect(&pass, &indirectBuffer, 92u, 2u, 20u);
+  if (gRenderDrawIndexedIndirectCalls != 0u ||
+      gRenderMultiDrawIndexedIndirectCalls != 0u) {
     fprintf(stderr, "render draw validation accepted invalid indexed indirect layout\n");
     goto cleanup;
   }
   GPUDrawIndexed(&pass, 3u, 1u, 0u, 0, 0u);
   GPUDrawIndexedIndirect(&pass, &indirectBuffer, 0u);
+  GPUMultiDrawIndexedIndirect(&pass, &indirectBuffer, 0u, 2u, 20u);
   if (gRenderDrawIndexedCalls != 1u ||
-      gRenderDrawIndexedIndirectCalls != 1u) {
+      gRenderDrawIndexedIndirectCalls != 1u ||
+      gRenderMultiDrawIndexedIndirectCalls != 1u) {
     fprintf(stderr, "render draw validation rejected valid indexed draw\n");
     goto cleanup;
   }
@@ -1474,6 +1539,8 @@ cleanup:
   api->rce.drawIndexedPrims = oldDrawIndexed;
   api->rce.drawPrimitivesIndirect = oldDrawIndirect;
   api->rce.drawIndexedPrimsIndirect = oldDrawIndexedIndirect;
+  api->rce.multiDrawPrimitivesIndirect = oldMultiDrawIndirect;
+  api->rce.multiDrawIndexedPrimsIndirect = oldMultiDrawIndexedIndirect;
   GPUDestroyPipelineLayout(pipelineLayout);
   GPUDestroyBindGroupLayout(layout);
   return ok;
