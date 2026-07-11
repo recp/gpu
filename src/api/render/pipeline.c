@@ -24,9 +24,18 @@
 #define GPU_RENDER_PIPELINE_MAX_COLOR_TARGETS 8u
 
 static bool
-gpu_blendStateIsDefault(const GPUBlendState *blend) {
-  return !blend->enabled &&
-         (blend->writeMask == 0 || blend->writeMask == GPU_COLOR_WRITE_ALL);
+gpu_blendStateIsValid(const GPUBlendState *blend) {
+  return (uint32_t)blend->color.srcFactor <=
+           GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA &&
+         (uint32_t)blend->color.dstFactor <=
+           GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA &&
+         (uint32_t)blend->alpha.srcFactor <=
+           GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA &&
+         (uint32_t)blend->alpha.dstFactor <=
+           GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA &&
+         (uint32_t)blend->color.op <= GPU_BLEND_OP_MAX &&
+         (uint32_t)blend->alpha.op <= GPU_BLEND_OP_MAX &&
+         (blend->writeMask & ~GPU_COLOR_WRITE_ALL) == 0u;
 }
 
 static bool
@@ -236,7 +245,7 @@ gpu_pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info) {
   for (i = 0; i < info->colorTargetCount; i++) {
     if (info->pColorTargets[i].format == GPU_FORMAT_UNDEFINED)
       return false;
-    if (!gpu_blendStateIsDefault(&info->pColorTargets[i].blend))
+    if (!gpu_blendStateIsValid(&info->pColorTargets[i].blend))
       return false;
   }
 
@@ -347,6 +356,11 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   pipeline->_sampleCount = sampleCount;
   pipeline->_alphaToCoverageEnable =
     info->multisample.alphaToCoverageEnable;
+  pipeline->_colorTargetCount = info->colorTargetCount;
+  for (i = 0; i < info->colorTargetCount; i++) {
+    pipeline->_colorTargetFormats[i] = info->pColorTargets[i].format;
+    pipeline->_colorTargetBlends[i] = info->pColorTargets[i].blend;
+  }
   gpuPipelineSetSampleCount(pipeline, sampleCount);
 
   state = gpuCompileRenderPipelineState(device, pipeline);
@@ -362,8 +376,10 @@ ready:
   pipeline->_layout = info->layout;
   pipeline->_requiredBindGroupMask = requiredBindGroupMask;
   pipeline->_colorTargetCount = info->colorTargetCount;
-  for (i = 0; i < info->colorTargetCount; i++)
+  for (i = 0; i < info->colorTargetCount; i++) {
     pipeline->_colorTargetFormats[i] = info->pColorTargets[i].format;
+    pipeline->_colorTargetBlends[i] = info->pColorTargets[i].blend;
+  }
   pipeline->_depthStencilFormat = info->depthStencilFormat;
   pipeline->_sampleCount = sampleCount;
   pipeline->_alphaToCoverageEnable =

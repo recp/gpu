@@ -279,6 +279,49 @@ vk__colorMask(GPUColorWriteMaskFlags mask) {
   return result;
 }
 
+static VkBlendFactor
+vk__blendFactor(GPUBlendFactor factor) {
+  static const VkBlendFactor factors[] = {
+    [GPU_BLEND_FACTOR_ZERO]                = VK_BLEND_FACTOR_ZERO,
+    [GPU_BLEND_FACTOR_ONE]                 = VK_BLEND_FACTOR_ONE,
+    [GPU_BLEND_FACTOR_SRC_ALPHA]           = VK_BLEND_FACTOR_SRC_ALPHA,
+    [GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA] =
+      VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA
+  };
+
+  return (uint32_t)factor < GPU_ARRAY_LEN(factors)
+           ? factors[factor]
+           : VK_BLEND_FACTOR_ZERO;
+}
+
+static VkBlendOp
+vk__blendOp(GPUBlendOp op) {
+  static const VkBlendOp operations[] = {
+    [GPU_BLEND_OP_ADD]              = VK_BLEND_OP_ADD,
+    [GPU_BLEND_OP_SUBTRACT]         = VK_BLEND_OP_SUBTRACT,
+    [GPU_BLEND_OP_REVERSE_SUBTRACT] = VK_BLEND_OP_REVERSE_SUBTRACT,
+    [GPU_BLEND_OP_MIN]              = VK_BLEND_OP_MIN,
+    [GPU_BLEND_OP_MAX]              = VK_BLEND_OP_MAX
+  };
+
+  return (uint32_t)op < GPU_ARRAY_LEN(operations)
+           ? operations[op]
+           : VK_BLEND_OP_ADD;
+}
+
+static void
+vk__fillBlendState(VkPipelineColorBlendAttachmentState *native,
+                   const GPUBlendState                  *blend) {
+  native->blendEnable         = blend->enabled;
+  native->srcColorBlendFactor = vk__blendFactor(blend->color.srcFactor);
+  native->dstColorBlendFactor = vk__blendFactor(blend->color.dstFactor);
+  native->colorBlendOp        = vk__blendOp(blend->color.op);
+  native->srcAlphaBlendFactor = vk__blendFactor(blend->alpha.srcFactor);
+  native->dstAlphaBlendFactor = vk__blendFactor(blend->alpha.dstFactor);
+  native->alphaBlendOp        = vk__blendOp(blend->alpha.op);
+  native->colorWriteMask      = vk__colorMask(blend->writeMask);
+}
+
 static VkResult
 vk__createPipelineRenderPass(VkDevice device,
                              VkFormat format,
@@ -335,7 +378,7 @@ vk_createRenderPipeline(GPUDevice                         *device,
   const GPUDepthStencilState        *depthState;
   VkVertexInputBindingDescription   *vertexBindings;
   VkVertexInputAttributeDescription *vertexAttributes;
-  VkFormat                           colorFormat;
+  VkFormat                           colorFormats[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   VkFormat                           depthFormat;
   VkFormat                           stencilFormat;
   VkPipelineShaderStageCreateInfo    stages[2] = {{0}};
@@ -345,7 +388,7 @@ vk_createRenderPipeline(GPUDevice                         *device,
   VkPipelineRasterizationStateCreateInfo raster = {0};
   VkPipelineMultisampleStateCreateInfo multisample = {0};
   VkPipelineDepthStencilStateCreateInfo depthStencil = {0};
-  VkPipelineColorBlendAttachmentState colorBlend = {0};
+  VkPipelineColorBlendAttachmentState colorBlends[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS] = {{0}};
   VkPipelineColorBlendStateCreateInfo blend = {0};
   VkDynamicState                    dynamicStates[3];
   VkPipelineDynamicStateCreateInfo  dynamic = {0};
@@ -356,11 +399,13 @@ vk_createRenderPipeline(GPUDevice                         *device,
 
   if (!device || !device->_priv || !info || !pipeline ||
       !info->library || !info->library->_priv ||
-      !info->layout || !info->layout->_native ||
-      info->colorTargetCount != 1u) {
+      !info->layout || !info->layout->_native) {
     return GPU_ERROR_UNSUPPORTED;
   }
   deviceVk = device->_priv;
+  if (!deviceVk->dynamicRendering && info->colorTargetCount != 1u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
   sampleCount = vk__sampleCount(info->multisample.sampleCount
                                   ? info->multisample.sampleCount
                                   : 1u);
@@ -375,8 +420,17 @@ vk_createRenderPipeline(GPUDevice                         *device,
       info->depthStencilFormat != GPU_FORMAT_UNDEFINED) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  if (!vk_formatFromGPU(info->pColorTargets[0].format, &colorFormat)) {
-    return GPU_ERROR_UNSUPPORTED;
+  for (uint32_t i = 0u; i < info->colorTargetCount; i++) {
+    if (!vk_formatFromGPU(info->pColorTargets[i].format, &colorFormats[i])) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+    vk__fillBlendState(&colorBlends[i], &info->pColorTargets[i].blend);
+    if (!deviceVk->independentBlend && i > 0u &&
+        memcmp(&colorBlends[0],
+               &colorBlends[i],
+               sizeof(colorBlends[i])) != 0) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
   }
   depthFormat   = VK_FORMAT_UNDEFINED;
   stencilFormat = VK_FORMAT_UNDEFINED;
@@ -464,7 +518,7 @@ vk_createRenderPipeline(GPUDevice                         *device,
   native->layout = layout->layout;
   if (!deviceVk->dynamicRendering &&
       vk__createPipelineRenderPass(native->device,
-                                   colorFormat,
+                                   colorFormats[0],
                                    &native->renderPass) != VK_SUCCESS) {
     free(vertexAttributes);
     free(vertexBindings);
@@ -533,10 +587,9 @@ vk_createRenderPipeline(GPUDevice                         *device,
                          depthState->stencilWriteMask);
   }
 
-  colorBlend.colorWriteMask = vk__colorMask(info->pColorTargets[0].blend.writeMask);
-  blend.sType               = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-  blend.attachmentCount     = 1u;
-  blend.pAttachments        = &colorBlend;
+  blend.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+  blend.attachmentCount = info->colorTargetCount;
+  blend.pAttachments    = colorBlends;
 
   dynamicStates[0]       = VK_DYNAMIC_STATE_VIEWPORT;
   dynamicStates[1]       = VK_DYNAMIC_STATE_SCISSOR;
@@ -546,8 +599,8 @@ vk_createRenderPipeline(GPUDevice                         *device,
   dynamic.pDynamicStates = dynamicStates;
 
   rendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
-  rendering.colorAttachmentCount = 1u;
-  rendering.pColorAttachmentFormats = &colorFormat;
+  rendering.colorAttachmentCount = info->colorTargetCount;
+  rendering.pColorAttachmentFormats = colorFormats;
   rendering.depthAttachmentFormat = depthFormat;
   rendering.stencilAttachmentFormat = stencilFormat;
 

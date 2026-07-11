@@ -32,6 +32,7 @@ struct GPURenderPipeline {
   uint32_t              _requiredBindGroupMask;
   uint32_t              _colorTargetCount;
   GPUFormat             _colorTargetFormats[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  GPUBlendState         _colorTargetBlends[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   GPUFormat             _depthStencilFormat;
   uint32_t              _sampleCount;
   GPUPrimitiveTopology  _primitiveTopology;

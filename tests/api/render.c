@@ -17,6 +17,16 @@ static const char *kRenderPipelineMSL =
   "}\n"
   "fragment float4 api_alpha_fs() {\n"
   "  return float4(1.0, 0.0, 0.0, 0.5);\n"
+  "}\n"
+  "struct MRTOut {\n"
+  "  float4 color0 [[color(0)]];\n"
+  "  float4 color1 [[color(1)]];\n"
+  "};\n"
+  "fragment MRTOut api_mrt_fs() {\n"
+  "  MRTOut out;\n"
+  "  out.color0 = float4(1.0, 0.0, 0.0, 0.5);\n"
+  "  out.color1 = float4(0.0, 1.0, 0.0, 1.0);\n"
+  "  return out;\n"
   "}\n";
 
 static int
@@ -541,10 +551,46 @@ check_render_pipeline_validation(GPUDevice *device) {
   }
 
   info.frontFace = GPU_FRONT_FACE_CCW;
-  colorTargets[0].blend.enabled = true;
+  colorTargets[0].blend.enabled         = true;
+  colorTargets[0].blend.color.srcFactor = GPU_BLEND_FACTOR_SRC_ALPHA;
+  colorTargets[0].blend.color.dstFactor =
+    GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  colorTargets[0].blend.color.op         = GPU_BLEND_OP_ADD;
+  colorTargets[0].blend.alpha.srcFactor = GPU_BLEND_FACTOR_ONE;
+  colorTargets[0].blend.alpha.dstFactor = GPU_BLEND_FACTOR_ZERO;
+  colorTargets[0].blend.alpha.op         = GPU_BLEND_OP_ADD;
+  colorTargets[0].blend.writeMask        = GPU_COLOR_WRITE_ALL;
+  pipeline = NULL;
+  if (GPUCreateRenderPipeline(device, &info, &pipeline) != GPU_OK || !pipeline) {
+    fprintf(stderr, "render pipeline create rejected valid blend state\n");
+    GPUDestroyPipelineLayout(pipelineLayout);
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+  GPUDestroyRenderPipeline(pipeline);
+
+  colorTargets[0].blend.color.srcFactor = (GPUBlendFactor)99;
   if (!expect_render_pipeline_error(device,
                                     &info,
-                                    "render pipeline create accepted unsupported blend state")) {
+                                    "render pipeline create accepted invalid blend factor")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+  colorTargets[0].blend.color.srcFactor = GPU_BLEND_FACTOR_SRC_ALPHA;
+  colorTargets[0].blend.alpha.op = (GPUBlendOp)99;
+  if (!expect_render_pipeline_error(device,
+                                    &info,
+                                    "render pipeline create accepted invalid blend op")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+  colorTargets[0].blend.alpha.op  = GPU_BLEND_OP_ADD;
+  colorTargets[0].blend.writeMask = GPU_COLOR_WRITE_ALL | (1u << 8);
+  if (!expect_render_pipeline_error(device,
+                                    &info,
+                                    "render pipeline create accepted invalid color write mask")) {
     GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
@@ -646,7 +692,8 @@ typedef enum RenderReadbackDrawMode {
   RENDER_READBACK_DRAW_MULTI_INDIRECT,
   RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT,
   RENDER_READBACK_DRAW_OCCLUSION,
-  RENDER_READBACK_DRAW_MSAA
+  RENDER_READBACK_DRAW_MSAA,
+  RENDER_READBACK_DRAW_MRT
 } RenderReadbackDrawMode;
 
 typedef struct RenderIndirectArgs {
@@ -682,6 +729,8 @@ render_readback_label(RenderReadbackDrawMode mode, int clipped) {
       return "api-render-readback-occlusion";
     case RENDER_READBACK_DRAW_MSAA:
       return "api-render-readback-msaa";
+    case RENDER_READBACK_DRAW_MRT:
+      return "api-render-readback-mrt";
     case RENDER_READBACK_DRAW:
     default:
       return "api-render-readback";
@@ -765,6 +814,8 @@ check_render_readback_case(GPUDevice *device,
   const uint32_t width = 4u;
   const uint32_t height = 4u;
   const uint64_t pixelBytes = (uint64_t)width * height * 4u;
+  const uint64_t readbackBytes = pixelBytes *
+                                 (mode == RENDER_READBACK_DRAW_MRT ? 2u : 1u);
   const char *label = render_readback_label(mode, clipped);
   const int indexed = mode == RENDER_READBACK_DRAW_INDEXED ||
                       mode == RENDER_READBACK_DRAW_INDEXED_INDIRECT ||
@@ -777,6 +828,7 @@ check_render_readback_case(GPUDevice *device,
                     mode == RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT;
   const int occlusion = mode == RENDER_READBACK_DRAW_OCCLUSION;
   const int msaa = mode == RENDER_READBACK_DRAW_MSAA;
+  const int mrt = mode == RENDER_READBACK_DRAW_MRT;
   const void *vertexData = multi ? (const void *)kMultiTriangles :
                                   (const void *)kFullscreenTriangle;
   const uint64_t vertexDataSize = multi ? sizeof(kMultiTriangles) :
@@ -794,8 +846,10 @@ check_render_readback_case(GPUDevice *device,
   GPUBuffer *readbackBuffer = NULL;
   GPUBuffer *queryBuffer = NULL;
   GPUTexture *target = NULL;
+  GPUTexture *target2 = NULL;
   GPUTexture *resolveTarget = NULL;
   GPUTextureView *targetView = NULL;
+  GPUTextureView *targetView2 = NULL;
   GPUTextureView *resolveView = NULL;
   GPUQuerySet *querySet = NULL;
   GPUPipelineLayout *pipelineLayout = NULL;
@@ -804,7 +858,7 @@ check_render_readback_case(GPUDevice *device,
   GPURenderPassEncoder *renderPass = NULL;
   GPUCopyPassEncoder *copyPass = NULL;
   GPUFence *fence = NULL;
-  GPUColorTargetState colorTarget = {0};
+  GPUColorTargetState colorTargets[2] = {{0}};
   GPUVertexAttribute attr = {0};
   GPUVertexBufferLayout vertexLayout = {0};
   GPUPipelineLayoutCreateInfo pipelineLayoutInfo = {0};
@@ -813,15 +867,15 @@ check_render_readback_case(GPUDevice *device,
   GPUQuerySetCreateInfo queryInfo = {0};
   GPUTextureCreateInfo textureInfo = {0};
   GPUTextureViewCreateInfo viewInfo = {0};
-  GPURenderPassColorAttachment color = {0};
+  GPURenderPassColorAttachment colors[2] = {{0}};
   GPURenderPassCreateInfo rp = {0};
   GPUBufferBinding vertexBinding = {0};
-  GPUTextureBarrier textureBarrier = {0};
+  GPUTextureBarrier textureBarriers[2] = {{0}};
   GPUBarrierBatch barrierBatch = {0};
   GPUBufferTextureCopyRegion copyRegion = {0};
   GPUQueueSubmitInfo submitInfo = {0};
   GPUDynamicStateApplyInfo dynamicState = {0};
-  uint8_t pixels[4u * 4u * 4u] = {0};
+  uint8_t pixels[2u * 4u * 4u * 4u] = {0};
   uint64_t occlusionResult = 0u;
   size_t centerOffset;
   int ok = 0;
@@ -836,7 +890,20 @@ check_render_readback_case(GPUDevice *device,
     goto cleanup;
   }
 
-  colorTarget.format = GPU_FORMAT_BGRA8_UNORM;
+  colorTargets[0].format = GPU_FORMAT_BGRA8_UNORM;
+  colorTargets[1].format = GPU_FORMAT_BGRA8_UNORM;
+  if (mrt) {
+    colorTargets[0].blend.enabled         = true;
+    colorTargets[0].blend.color.srcFactor = GPU_BLEND_FACTOR_SRC_ALPHA;
+    colorTargets[0].blend.color.dstFactor =
+      GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    colorTargets[0].blend.color.op         = GPU_BLEND_OP_ADD;
+    colorTargets[0].blend.alpha.srcFactor = GPU_BLEND_FACTOR_ONE;
+    colorTargets[0].blend.alpha.dstFactor = GPU_BLEND_FACTOR_ZERO;
+    colorTargets[0].blend.alpha.op         = GPU_BLEND_OP_ADD;
+    colorTargets[0].blend.writeMask        = GPU_COLOR_WRITE_ALL;
+    colorTargets[1].blend.writeMask        = GPU_COLOR_WRITE_G;
+  }
   attr.shaderLocation = 0u;
   attr.format = GPUFloat2;
   attr.offset = 0u;
@@ -861,11 +928,12 @@ check_render_readback_case(GPUDevice *device,
   pipelineInfo.layout = pipelineLayout;
   pipelineInfo.library = library;
   pipelineInfo.vertexEntry = "api_vs";
-  pipelineInfo.fragmentEntry = msaa ? "api_alpha_fs" : "api_fs";
+  pipelineInfo.fragmentEntry = mrt ? "api_mrt_fs"
+                                   : (msaa ? "api_alpha_fs" : "api_fs");
   pipelineInfo.vertex.bufferLayoutCount = 1u;
   pipelineInfo.vertex.pBufferLayouts = &vertexLayout;
-  pipelineInfo.colorTargetCount = 1u;
-  pipelineInfo.pColorTargets = &colorTarget;
+  pipelineInfo.colorTargetCount = mrt ? 2u : 1u;
+  pipelineInfo.pColorTargets = colorTargets;
   pipelineInfo.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
   pipelineInfo.cullMode = GPU_CULL_MODE_NONE;
   pipelineInfo.frontFace = GPU_FRONT_FACE_CCW;
@@ -939,7 +1007,7 @@ check_render_readback_case(GPUDevice *device,
   }
 
   bufferInfo.label = label;
-  bufferInfo.sizeBytes = pixelBytes;
+  bufferInfo.sizeBytes = readbackBytes;
   bufferInfo.usage = GPU_BUFFER_USAGE_COPY_DST | GPU_BUFFER_USAGE_COPY_SRC;
   if (GPUCreateBuffer(device, &bufferInfo, &readbackBuffer) != GPU_OK ||
       !readbackBuffer) {
@@ -997,6 +1065,14 @@ check_render_readback_case(GPUDevice *device,
     fprintf(stderr, "failed to create %s target view\n", label);
     goto cleanup;
   }
+  if (mrt &&
+      (GPUCreateTexture(device, &textureInfo, &target2) != GPU_OK ||
+       !target2 ||
+       GPUCreateTextureView(target2, &viewInfo, &targetView2) != GPU_OK ||
+       !targetView2)) {
+    fprintf(stderr, "failed to create %s second target\n", label);
+    goto cleanup;
+  }
   if (msaa) {
     textureInfo.sampleCount = 1u;
     textureInfo.usage       = GPU_TEXTURE_USAGE_COLOR_TARGET |
@@ -1016,20 +1092,23 @@ check_render_readback_case(GPUDevice *device,
     goto cleanup;
   }
 
-  color.view = targetView;
-  color.resolveView = resolveView;
-  color.loadOp = GPU_LOAD_OP_CLEAR;
-  color.storeOp = GPU_STORE_OP_STORE;
-  color.clearColor.float32[0] = 0.0f;
-  color.clearColor.float32[1] = 0.0f;
-  color.clearColor.float32[2] = 0.0f;
-  color.clearColor.float32[3] = 1.0f;
+  colors[0].view = targetView;
+  colors[0].resolveView = resolveView;
+  colors[0].loadOp = GPU_LOAD_OP_CLEAR;
+  colors[0].storeOp = GPU_STORE_OP_STORE;
+  colors[0].clearColor.float32[0] = 0.0f;
+  colors[0].clearColor.float32[1] = 0.0f;
+  colors[0].clearColor.float32[2] = mrt ? 1.0f : 0.0f;
+  colors[0].clearColor.float32[3] = 1.0f;
+  colors[1] = colors[0];
+  colors[1].view = targetView2;
+  colors[1].resolveView = NULL;
   rp.chain.sType = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   rp.chain.structSize = sizeof(rp);
   rp.label = label;
   rp.occlusionQuerySet = querySet;
-  rp.colorAttachmentCount = 1u;
-  rp.pColorAttachments = &color;
+  rp.colorAttachmentCount = mrt ? 2u : 1u;
+  rp.pColorAttachments = colors;
 
   renderPass = GPUBeginRenderPass(cmdb, &rp);
   if (!renderPass) {
@@ -1105,15 +1184,17 @@ check_render_readback_case(GPUDevice *device,
     GPUResolveQuerySet(cmdb, querySet, 0u, 1u, queryBuffer, 0u);
   }
 
-  textureBarrier.texture = msaa ? resolveTarget : target;
-  textureBarrier.srcAccess = GPU_ACCESS_COLOR_WRITE;
-  textureBarrier.dstAccess = GPU_ACCESS_TRANSFER_READ;
-  textureBarrier.mipCount = 1u;
-  textureBarrier.layerCount = 1u;
+  textureBarriers[0].texture = msaa ? resolveTarget : target;
+  textureBarriers[0].srcAccess = GPU_ACCESS_COLOR_WRITE;
+  textureBarriers[0].dstAccess = GPU_ACCESS_TRANSFER_READ;
+  textureBarriers[0].mipCount = 1u;
+  textureBarriers[0].layerCount = 1u;
+  textureBarriers[1] = textureBarriers[0];
+  textureBarriers[1].texture = target2;
   barrierBatch.srcStages = GPU_STAGE_FRAGMENT;
   barrierBatch.dstStages = GPU_STAGE_TRANSFER;
-  barrierBatch.textureBarrierCount = 1u;
-  barrierBatch.pTextureBarriers = &textureBarrier;
+  barrierBatch.textureBarrierCount = mrt ? 2u : 1u;
+  barrierBatch.pTextureBarriers = textureBarriers;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
   copyPass = GPUBeginCopyPass(cmdb, label);
@@ -1131,6 +1212,13 @@ check_render_readback_case(GPUDevice *device,
                          msaa ? resolveTarget : target,
                          readbackBuffer,
                          &copyRegion);
+  if (mrt) {
+    copyRegion.bufferOffset = pixelBytes;
+    GPUCopyTextureToBuffer(copyPass,
+                           target2,
+                           readbackBuffer,
+                           &copyRegion);
+  }
   GPUEndCopyPass(copyPass);
   copyPass = NULL;
 
@@ -1157,7 +1245,7 @@ check_render_readback_case(GPUDevice *device,
                          readbackBuffer,
                          0u,
                          pixels,
-                         sizeof(pixels)) != GPU_OK) {
+                         readbackBytes) != GPU_OK) {
     fprintf(stderr, "%s buffer read failed\n", label);
     goto cleanup;
   }
@@ -1185,7 +1273,23 @@ check_render_readback_case(GPUDevice *device,
     goto cleanup;
   }
 
-  if (multi) {
+  if (mrt) {
+    centerOffset = ((size_t)2u * width + 2u) * 4u;
+    if (pixels[centerOffset + 0u] < 96u ||
+        pixels[centerOffset + 0u] > 160u ||
+        pixels[centerOffset + 1u] > 2u ||
+        pixels[centerOffset + 2u] < 96u ||
+        pixels[centerOffset + 2u] > 160u ||
+        pixels[centerOffset + 3u] < 96u ||
+        pixels[centerOffset + 3u] > 160u ||
+        pixels[pixelBytes + centerOffset + 0u] < 250u ||
+        pixels[pixelBytes + centerOffset + 1u] < 250u ||
+        pixels[pixelBytes + centerOffset + 2u] > 2u ||
+        pixels[pixelBytes + centerOffset + 3u] < 250u) {
+      fprintf(stderr, "%s blend/write-mask readback mismatch\n", label);
+      goto cleanup;
+    }
+  } else if (multi) {
     if (!render_readback_has_red_in_x_range(pixels, width, height, 0u, 2u) ||
         !render_readback_has_red_in_x_range(pixels, width, height, 2u, 4u)) {
       fprintf(stderr, "%s multi draw did not touch both target halves\n", label);
@@ -1218,6 +1322,8 @@ cleanup:
   GPUDestroyFence(fence);
   GPUDestroyTextureView(resolveView);
   GPUDestroyTexture(resolveTarget);
+  GPUDestroyTextureView(targetView2);
+  GPUDestroyTexture(target2);
   GPUDestroyTextureView(targetView);
   GPUDestroyTexture(target);
   GPUDestroyBuffer(queryBuffer);
@@ -1249,7 +1355,8 @@ check_render_readback(GPUDevice *device) {
          check_render_readback_case(device,
                                     RENDER_READBACK_DRAW_OCCLUSION,
                                     0) &&
-         check_render_readback_case(device, RENDER_READBACK_DRAW_MSAA, 0);
+         check_render_readback_case(device, RENDER_READBACK_DRAW_MSAA, 0) &&
+         check_render_readback_case(device, RENDER_READBACK_DRAW_MRT, 0);
 }
 
 static int

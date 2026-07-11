@@ -671,6 +671,7 @@ vk_createDevice(GPUPhysicalDevice          * __restrict phyDevice,
   enabledFeatures.pipelineStatisticsQuery =
     phyDeviceVk->features.pipelineStatisticsQuery;
   enabledFeatures.multiDrawIndirect = phyDeviceVk->features.multiDrawIndirect;
+  enabledFeatures.independentBlend   = phyDeviceVk->features.independentBlend;
 
   deviceCI.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceCI.pEnabledFeatures        = &enabledFeatures;
@@ -703,6 +704,7 @@ vk_createDevice(GPUPhysicalDevice          * __restrict phyDevice,
   deviceVk->depthSampleCounts =
     phyDeviceVk->props.limits.framebufferDepthSampleCounts;
   deviceVk->multiDrawIndirect = enabledFeatures.multiDrawIndirect;
+  deviceVk->independentBlend  = enabledFeatures.independentBlend;
   if (phyDeviceVk->dynamicRendering) {
     deviceVk->beginRendering = (PFN_vkCmdBeginRenderingKHR)
       vkGetDeviceProcAddr(deviceVk->device, "vkCmdBeginRendering");

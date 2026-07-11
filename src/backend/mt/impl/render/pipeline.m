@@ -53,6 +53,64 @@ mt_stencilOperation(GPUStencilOp op) {
            : MTLStencilOperationKeep;
 }
 
+static MTLBlendFactor
+mt_blendFactor(GPUBlendFactor factor) {
+  static const MTLBlendFactor factors[] = {
+    [GPU_BLEND_FACTOR_ZERO]                = MTLBlendFactorZero,
+    [GPU_BLEND_FACTOR_ONE]                 = MTLBlendFactorOne,
+    [GPU_BLEND_FACTOR_SRC_ALPHA]           = MTLBlendFactorSourceAlpha,
+    [GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA] = MTLBlendFactorOneMinusSourceAlpha
+  };
+
+  return (uint32_t)factor < GPU_ARRAY_LEN(factors)
+           ? factors[factor]
+           : MTLBlendFactorZero;
+}
+
+static MTLBlendOperation
+mt_blendOperation(GPUBlendOp op) {
+  static const MTLBlendOperation operations[] = {
+    [GPU_BLEND_OP_ADD]              = MTLBlendOperationAdd,
+    [GPU_BLEND_OP_SUBTRACT]         = MTLBlendOperationSubtract,
+    [GPU_BLEND_OP_REVERSE_SUBTRACT] = MTLBlendOperationReverseSubtract,
+    [GPU_BLEND_OP_MIN]              = MTLBlendOperationMin,
+    [GPU_BLEND_OP_MAX]              = MTLBlendOperationMax
+  };
+
+  return (uint32_t)op < GPU_ARRAY_LEN(operations)
+           ? operations[op]
+           : MTLBlendOperationAdd;
+}
+
+static MTLColorWriteMask
+mt_colorWriteMask(GPUColorWriteMaskFlags mask) {
+  MTLColorWriteMask result;
+
+  if (mask == 0u) {
+    return MTLColorWriteMaskAll;
+  }
+
+  result = MTLColorWriteMaskNone;
+  if ((mask & GPU_COLOR_WRITE_R) != 0u) result |= MTLColorWriteMaskRed;
+  if ((mask & GPU_COLOR_WRITE_G) != 0u) result |= MTLColorWriteMaskGreen;
+  if ((mask & GPU_COLOR_WRITE_B) != 0u) result |= MTLColorWriteMaskBlue;
+  if ((mask & GPU_COLOR_WRITE_A) != 0u) result |= MTLColorWriteMaskAlpha;
+  return result;
+}
+
+static void
+mt_fillBlendDescriptor(MTLRenderPipelineColorAttachmentDescriptor *desc,
+                       const GPUBlendState                         *blend) {
+  desc.blendingEnabled             = blend->enabled;
+  desc.sourceRGBBlendFactor        = mt_blendFactor(blend->color.srcFactor);
+  desc.destinationRGBBlendFactor   = mt_blendFactor(blend->color.dstFactor);
+  desc.rgbBlendOperation           = mt_blendOperation(blend->color.op);
+  desc.sourceAlphaBlendFactor      = mt_blendFactor(blend->alpha.srcFactor);
+  desc.destinationAlphaBlendFactor = mt_blendFactor(blend->alpha.dstFactor);
+  desc.alphaBlendOperation         = mt_blendOperation(blend->alpha.op);
+  desc.writeMask                   = mt_colorWriteMask(blend->writeMask);
+}
+
 static void
 mt_fillStencilDescriptor(MTLStencilDescriptor      *desc,
                          const GPUStencilFaceState *state,
@@ -83,13 +141,15 @@ GPU_HIDE
 GPURenderPipelineState*
 mt_newRenderState(GPUDevice         * __restrict device,
                   GPURenderPipeline * __restrict pipeline) {
-  GPUDeviceMT                *deviceMT;
-  GPURenderPipelineState     *renderPipeline;
-  MTRenderPipelineState      *native;
-  MTLDepthStencilDescriptor  *depthDesc;
-  MTLStencilDescriptor       *frontDesc;
-  MTLStencilDescriptor       *backDesc;
-  NSError                    *error;
+  GPUDeviceMT                 *deviceMT;
+  GPURenderPipelineState      *renderPipeline;
+  MTRenderPipelineState       *native;
+  MTLRenderPipelineDescriptor *renderDesc;
+  MTLDepthStencilDescriptor   *depthDesc;
+  MTLStencilDescriptor        *frontDesc;
+  MTLStencilDescriptor        *backDesc;
+  NSError                     *error;
+  uint32_t                     i;
   
   deviceMT = device->_priv;
   error    = nil;
@@ -97,10 +157,14 @@ mt_newRenderState(GPUDevice         * __restrict device,
   if (!native) {
     return NULL;
   }
-  ((MTLRenderPipelineDescriptor *)pipeline->_priv).alphaToCoverageEnabled =
-    pipeline->_alphaToCoverageEnable;
+  renderDesc = pipeline->_priv;
+  renderDesc.alphaToCoverageEnabled = pipeline->_alphaToCoverageEnable;
+  for (i = 0u; i < pipeline->_colorTargetCount; i++) {
+    mt_fillBlendDescriptor(renderDesc.colorAttachments[i],
+                           &pipeline->_colorTargetBlends[i]);
+  }
   native->render = [deviceMT->device
-    newRenderPipelineStateWithDescriptor:(MTLRenderPipelineDescriptor *)pipeline->_priv
+    newRenderPipelineStateWithDescriptor:renderDesc
                                    error:&error];
   if (!native->render) {
     NSLog(@"Failed to create render pipeline state: %@", error);

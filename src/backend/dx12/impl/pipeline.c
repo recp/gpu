@@ -468,6 +468,35 @@ dx12__stencilOperation(GPUStencilOp op) {
            : D3D12_STENCIL_OP_KEEP;
 }
 
+static D3D12_BLEND
+dx12__blendFactor(GPUBlendFactor factor) {
+  static const D3D12_BLEND factors[] = {
+    [GPU_BLEND_FACTOR_ZERO]                = D3D12_BLEND_ZERO,
+    [GPU_BLEND_FACTOR_ONE]                 = D3D12_BLEND_ONE,
+    [GPU_BLEND_FACTOR_SRC_ALPHA]           = D3D12_BLEND_SRC_ALPHA,
+    [GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA] = D3D12_BLEND_INV_SRC_ALPHA
+  };
+
+  return (uint32_t)factor < GPU_ARRAY_LEN(factors)
+           ? factors[factor]
+           : D3D12_BLEND_ZERO;
+}
+
+static D3D12_BLEND_OP
+dx12__blendOperation(GPUBlendOp op) {
+  static const D3D12_BLEND_OP operations[] = {
+    [GPU_BLEND_OP_ADD]              = D3D12_BLEND_OP_ADD,
+    [GPU_BLEND_OP_SUBTRACT]         = D3D12_BLEND_OP_SUBTRACT,
+    [GPU_BLEND_OP_REVERSE_SUBTRACT] = D3D12_BLEND_OP_REV_SUBTRACT,
+    [GPU_BLEND_OP_MIN]              = D3D12_BLEND_OP_MIN,
+    [GPU_BLEND_OP_MAX]              = D3D12_BLEND_OP_MAX
+  };
+
+  return (uint32_t)op < GPU_ARRAY_LEN(operations)
+           ? operations[op]
+           : D3D12_BLEND_OP_ADD;
+}
+
 static void
 dx12__fillStencilFace(D3D12_DEPTH_STENCILOP_DESC  *desc,
                       const GPUStencilFaceState   *state) {
@@ -689,12 +718,18 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
 
     desc.BlendState.RenderTarget[i].BlendEnable           = blend->enabled;
     desc.BlendState.RenderTarget[i].LogicOpEnable         = FALSE;
-    desc.BlendState.RenderTarget[i].SrcBlend              = D3D12_BLEND_ONE;
-    desc.BlendState.RenderTarget[i].DestBlend             = D3D12_BLEND_ZERO;
-    desc.BlendState.RenderTarget[i].BlendOp               = D3D12_BLEND_OP_ADD;
-    desc.BlendState.RenderTarget[i].SrcBlendAlpha         = D3D12_BLEND_ONE;
-    desc.BlendState.RenderTarget[i].DestBlendAlpha        = D3D12_BLEND_ZERO;
-    desc.BlendState.RenderTarget[i].BlendOpAlpha          = D3D12_BLEND_OP_ADD;
+    desc.BlendState.RenderTarget[i].SrcBlend              =
+      dx12__blendFactor(blend->color.srcFactor);
+    desc.BlendState.RenderTarget[i].DestBlend             =
+      dx12__blendFactor(blend->color.dstFactor);
+    desc.BlendState.RenderTarget[i].BlendOp               =
+      dx12__blendOperation(blend->color.op);
+    desc.BlendState.RenderTarget[i].SrcBlendAlpha         =
+      dx12__blendFactor(blend->alpha.srcFactor);
+    desc.BlendState.RenderTarget[i].DestBlendAlpha        =
+      dx12__blendFactor(blend->alpha.dstFactor);
+    desc.BlendState.RenderTarget[i].BlendOpAlpha          =
+      dx12__blendOperation(blend->alpha.op);
     desc.BlendState.RenderTarget[i].LogicOp               = D3D12_LOGIC_OP_NOOP;
     desc.BlendState.RenderTarget[i].RenderTargetWriteMask =
       (UINT8)(blend->writeMask ? blend->writeMask : GPU_COLOR_WRITE_ALL);

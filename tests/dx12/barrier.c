@@ -440,10 +440,14 @@ run_occlusion_case(GPUAdapter *adapter) {
   GPUCommandBuffer            *cmdb;
   GPUCommandBuffer            *buffers[1];
   GPUTexture                  *target;
+  GPUTexture                  *target2;
   GPUTexture                  *resolveTarget;
+  GPUTexture                  *resolveTarget2;
   GPUTexture                  *depthTarget;
   GPUTextureView              *targetView;
+  GPUTextureView              *targetView2;
   GPUTextureView              *resolveView;
+  GPUTextureView              *resolveView2;
   GPUTextureView              *depthView;
   GPUQuerySet                 *querySet;
   GPUBuffer                   *resultBuffer;
@@ -456,7 +460,7 @@ run_occlusion_case(GPUAdapter *adapter) {
   GPUTextureViewCreateInfo     depthViewInfo = {0};
   GPUQuerySetCreateInfo        queryInfo = {0};
   GPUBufferCreateInfo          bufferInfo = {0};
-  GPURenderPassColorAttachment color = {0};
+  GPURenderPassColorAttachment colors[2] = {{0}};
   GPURenderPassDepthStencilAttachment depthStencil = {0};
   GPURenderPassCreateInfo      passInfo = {0};
   GPUFenceCreateInfo           fenceInfo = {0};
@@ -464,22 +468,26 @@ run_occlusion_case(GPUAdapter *adapter) {
   uint64_t                     resultValue;
   bool                         ok;
 
-  device        = GPUCreateDeviceWithDefaultQueues(adapter);
-  deviceDX12    = device ? device->_priv : NULL;
-  queue         = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
-  cmdb          = NULL;
-  target        = NULL;
-  resolveTarget = NULL;
-  depthTarget   = NULL;
-  targetView    = NULL;
-  resolveView   = NULL;
-  depthView     = NULL;
-  querySet      = NULL;
-  resultBuffer  = NULL;
-  fence         = NULL;
-  pass          = NULL;
-  resultValue   = UINT64_MAX;
-  ok            = false;
+  device         = GPUCreateDeviceWithDefaultQueues(adapter);
+  deviceDX12     = device ? device->_priv : NULL;
+  queue          = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  cmdb           = NULL;
+  target         = NULL;
+  target2        = NULL;
+  resolveTarget  = NULL;
+  resolveTarget2 = NULL;
+  depthTarget    = NULL;
+  targetView     = NULL;
+  targetView2    = NULL;
+  resolveView    = NULL;
+  resolveView2   = NULL;
+  depthView      = NULL;
+  querySet       = NULL;
+  resultBuffer   = NULL;
+  fence          = NULL;
+  pass           = NULL;
+  resultValue    = UINT64_MAX;
+  ok             = false;
   if (!device || !deviceDX12 || !queue) {
     goto cleanup;
   }
@@ -537,10 +545,21 @@ run_occlusion_case(GPUAdapter *adapter) {
   if (GPUCreateTexture(device, &textureInfo, &target) != GPU_OK || !target ||
       GPUCreateTextureView(target, &viewInfo, &targetView) != GPU_OK ||
       !targetView ||
+      GPUCreateTexture(device, &textureInfo, &target2) != GPU_OK || !target2 ||
+      GPUCreateTextureView(target2, &viewInfo, &targetView2) != GPU_OK ||
+      !targetView2 ||
       GPUCreateTexture(device, &resolveTextureInfo, &resolveTarget) != GPU_OK ||
       !resolveTarget ||
       GPUCreateTextureView(resolveTarget, &viewInfo, &resolveView) != GPU_OK ||
       !resolveView ||
+      GPUCreateTexture(device,
+                       &resolveTextureInfo,
+                       &resolveTarget2) != GPU_OK ||
+      !resolveTarget2 ||
+      GPUCreateTextureView(resolveTarget2,
+                           &viewInfo,
+                           &resolveView2) != GPU_OK ||
+      !resolveView2 ||
       GPUCreateTexture(device, &depthTextureInfo, &depthTarget) != GPU_OK ||
       !depthTarget ||
       GPUCreateTextureView(depthTarget, &depthViewInfo, &depthView) != GPU_OK ||
@@ -554,10 +573,13 @@ run_occlusion_case(GPUAdapter *adapter) {
     goto cleanup;
   }
 
-  color.view                    = targetView;
-  color.resolveView             = resolveView;
-  color.loadOp                  = GPU_LOAD_OP_CLEAR;
-  color.storeOp                 = GPU_STORE_OP_STORE;
+  colors[0].view                = targetView;
+  colors[0].resolveView         = resolveView;
+  colors[0].loadOp              = GPU_LOAD_OP_CLEAR;
+  colors[0].storeOp             = GPU_STORE_OP_STORE;
+  colors[1]                     = colors[0];
+  colors[1].view                = targetView2;
+  colors[1].resolveView         = resolveView2;
   depthStencil.view             = depthView;
   depthStencil.depthLoadOp      = GPU_LOAD_OP_CLEAR;
   depthStencil.depthStoreOp     = GPU_STORE_OP_STORE;
@@ -569,8 +591,8 @@ run_occlusion_case(GPUAdapter *adapter) {
   passInfo.chain.structSize     = sizeof(passInfo);
   passInfo.label                = "dx12-occlusion";
   passInfo.occlusionQuerySet    = querySet;
-  passInfo.colorAttachmentCount = 1u;
-  passInfo.pColorAttachments    = &color;
+  passInfo.colorAttachmentCount = 2u;
+  passInfo.pColorAttachments    = colors;
   passInfo.pDepthStencilAttachment = &depthStencil;
   pass = GPUBeginRenderPass(cmdb, &passInfo);
   if (!pass) {
@@ -614,13 +636,15 @@ run_occlusion_case(GPUAdapter *adapter) {
   passInfo.occlusionQuerySet = NULL;
   GPUResetStats(device);
   for (uint32_t i = 0u; i < DX12_OFFSCREEN_WARM_ITERATIONS; i++) {
-    color.loadOp  = (GPULoadOp)(i % 3u);
-    color.storeOp = (GPUStoreOp)((i / 3u) % 2u);
+    colors[0].loadOp  = (GPULoadOp)(i % 3u);
+    colors[0].storeOp = (GPUStoreOp)((i / 3u) % 2u);
+    colors[1].loadOp  = (GPULoadOp)((i / 2u) % 3u);
+    colors[1].storeOp = (GPUStoreOp)((i / 5u) % 2u);
     depthStencil.depthLoadOp    = (GPULoadOp)((i / 2u) % 3u);
     depthStencil.depthStoreOp   = (GPUStoreOp)((i / 5u) % 2u);
     depthStencil.stencilLoadOp  = (GPULoadOp)((i / 3u) % 3u);
     depthStencil.stencilStoreOp = (GPUStoreOp)((i / 7u) % 2u);
-    passInfo.colorAttachmentCount = i & 1u;
+    passInfo.colorAttachmentCount = i % 3u;
     if (GPUAcquireCommandBuffer(queue, "dx12-offscreen-warm", &cmdb) != GPU_OK ||
         !cmdb || !(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
       goto cleanup;
@@ -637,7 +661,7 @@ run_occlusion_case(GPUAdapter *adapter) {
     }
     cmdb = NULL;
   }
-  passInfo.colorAttachmentCount = 1u;
+  passInfo.colorAttachmentCount = 2u;
   if (device->currentFrameStats.hotPathAllocCount != 0u ||
       device->currentFrameStats.hotPathFreeCount != 0u ||
       has_debug_errors(deviceDX12)) {
@@ -657,8 +681,12 @@ cleanup:
   GPUDestroyTexture(depthTarget);
   GPUDestroyTextureView(targetView);
   GPUDestroyTexture(target);
+  GPUDestroyTextureView(targetView2);
+  GPUDestroyTexture(target2);
   GPUDestroyTextureView(resolveView);
   GPUDestroyTexture(resolveTarget);
+  GPUDestroyTextureView(resolveView2);
+  GPUDestroyTexture(resolveTarget2);
   GPUDestroyDevice(device);
   return ok;
 }

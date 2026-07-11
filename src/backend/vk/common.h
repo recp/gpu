@@ -201,6 +201,7 @@ typedef struct GPUDeviceVk {
   uint32_t                   nCreatedQueues;
   uint32_t                   maxDrawIndirectCount;
   VkBool32                   multiDrawIndirect;
+  VkBool32                   independentBlend;
   bool                       dynamicRendering;
 } GPUDeviceVk;
 

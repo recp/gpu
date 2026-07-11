@@ -114,7 +114,7 @@ test_depth_pipeline(GPUDevice *device, GPUShaderLibrary *library) {
   GPURenderPipeline              *pipeline;
   GPUVertexAttribute              attribute = {0};
   GPUVertexBufferLayout           vertexLayout = {0};
-  GPUColorTargetState             colorTarget = {0};
+  GPUColorTargetState             colorTargets[2] = {{0}};
   GPUDepthStencilState            depthStencil = {0};
   GPURenderPipelineCreateInfo     pipelineInfo = {0};
   int                             ok;
@@ -131,8 +131,18 @@ test_depth_pipeline(GPUDevice *device, GPUShaderLibrary *library) {
   vertexLayout.stepMode              = GPU_VERTEX_STEP_MODE_VERTEX;
   vertexLayout.attributeCount        = 1u;
   vertexLayout.pAttributes           = &attribute;
-  colorTarget.format                 = GPU_FORMAT_BGRA8_UNORM;
-  colorTarget.blend.writeMask        = GPU_COLOR_WRITE_ALL;
+  colorTargets[0].format                 = GPU_FORMAT_BGRA8_UNORM;
+  colorTargets[0].blend.enabled          = true;
+  colorTargets[0].blend.color.srcFactor  = GPU_BLEND_FACTOR_SRC_ALPHA;
+  colorTargets[0].blend.color.dstFactor  =
+    GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  colorTargets[0].blend.color.op          = GPU_BLEND_OP_ADD;
+  colorTargets[0].blend.alpha.srcFactor  = GPU_BLEND_FACTOR_ONE;
+  colorTargets[0].blend.alpha.dstFactor  = GPU_BLEND_FACTOR_ZERO;
+  colorTargets[0].blend.alpha.op          = GPU_BLEND_OP_ADD;
+  colorTargets[0].blend.writeMask         = GPU_COLOR_WRITE_ALL;
+  colorTargets[1].format                  = GPU_FORMAT_BGRA8_UNORM;
+  colorTargets[1].blend.writeMask         = GPU_COLOR_WRITE_G;
   depthStencil.depthTestEnable       = true;
   depthStencil.depthWriteEnable      = true;
   depthStencil.depthCompare          = GPU_COMPARE_LESS;
@@ -156,8 +166,8 @@ test_depth_pipeline(GPUDevice *device, GPUShaderLibrary *library) {
   pipelineInfo.fragmentEntry         = "tri_fs";
   pipelineInfo.vertex.bufferLayoutCount = 1u;
   pipelineInfo.vertex.pBufferLayouts = &vertexLayout;
-  pipelineInfo.colorTargetCount      = 1u;
-  pipelineInfo.pColorTargets         = &colorTarget;
+  pipelineInfo.colorTargetCount      = 2u;
+  pipelineInfo.pColorTargets         = colorTargets;
   pipelineInfo.depthStencilFormat    = GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
   pipelineInfo.pDepthStencilState    = &depthStencil;
   pipelineInfo.primitiveTopology     = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
