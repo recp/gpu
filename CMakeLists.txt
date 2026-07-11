@@ -235,6 +235,26 @@ if(GPU_BUILD_TESTS)
     endif()
 
     add_test(NAME dx12-queue COMMAND gpu-dx12-queue-test)
+
+    add_executable(gpu-dx12-barrier-test tests/dx12/barrier.c)
+    target_link_libraries(gpu-dx12-barrier-test PRIVATE gpu)
+    set_target_properties(gpu-dx12-barrier-test PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+    )
+
+    foreach(runtime_target us ds)
+      if(TARGET ${runtime_target})
+        add_custom_command(TARGET gpu-dx12-barrier-test POST_BUILD
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                  $<TARGET_FILE:${runtime_target}>
+                  $<TARGET_FILE_DIR:gpu-dx12-barrier-test>
+        )
+      endif()
+    endforeach()
+
+    add_test(NAME dx12-barrier COMMAND gpu-dx12-barrier-test)
   endif()
 endif()
 

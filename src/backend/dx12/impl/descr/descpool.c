@@ -1005,6 +1005,16 @@ dx12__transitionSampledTexture(ID3D12GraphicsCommandList *commandList,
     return false;
   }
 
+  if (view->texture) {
+    return dx12_transitionTexture(commandList,
+                                  view->texture,
+                                  view->baseMip,
+                                  view->mipCount,
+                                  view->baseLayer,
+                                  view->layerCount,
+                                  requiredState);
+  }
+
   if (*view->state == requiredState) {
     return true;
   }

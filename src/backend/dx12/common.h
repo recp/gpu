@@ -123,8 +123,13 @@ typedef struct GPUBufferDX12 {
 } GPUBufferDX12;
 
 typedef struct GPUTextureDX12 {
-  ID3D12Resource        *resource;
-  D3D12_RESOURCE_STATES  state;
+  ID3D12Resource         *resource;
+  D3D12_RESOURCE_STATES  *states;
+  D3D12_RESOURCE_STATES   state;
+  uint32_t                mipLevelCount;
+  uint32_t                arrayLayerCount;
+  uint32_t                subresourceCount;
+  bool                    stateUniform;
 } GPUTextureDX12;
 
 typedef struct GPURenderPipelineDX12 {
@@ -145,10 +150,15 @@ typedef struct GPUComputePipelineDX12 {
 typedef struct GPUTextureViewDX12 {
   ID3D12Resource             *resource;
   D3D12_RESOURCE_STATES      *state;
+  GPUTextureDX12             *texture;
   D3D12_CPU_DESCRIPTOR_HANDLE rtv;
   D3D12_SHADER_RESOURCE_VIEW_DESC srv;
   uint32_t                    width;
   uint32_t                    height;
+  uint32_t                    baseMip;
+  uint32_t                    mipCount;
+  uint32_t                    baseLayer;
+  uint32_t                    layerCount;
   bool                        hasSrv;
   bool                        swapchain;
 } GPUTextureViewDX12;
@@ -272,6 +282,25 @@ dx12_fillStaticSamplerDescFromUSL(const GPUUSLStaticSamplerDesc *uslDesc,
                                   uint32_t shaderRegister,
                                   D3D12_SHADER_VISIBILITY visibility,
                                   D3D12_STATIC_SAMPLER_DESC *outDesc);
+
+GPU_HIDE
+void
+dx12_setTextureState(GPUTextureDX12        *texture,
+                     uint32_t               baseMip,
+                     uint32_t               mipCount,
+                     uint32_t               baseLayer,
+                     uint32_t               layerCount,
+                     D3D12_RESOURCE_STATES  state);
+
+GPU_HIDE
+bool
+dx12_transitionTexture(ID3D12GraphicsCommandList *commandList,
+                       GPUTextureDX12            *texture,
+                       uint32_t                   baseMip,
+                       uint32_t                   mipCount,
+                       uint32_t                   baseLayer,
+                       uint32_t                   layerCount,
+                       D3D12_RESOURCE_STATES      state);
 
 GPU_INLINE
 void

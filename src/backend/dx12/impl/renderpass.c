@@ -17,7 +17,7 @@
 #include "../common.h"
 
 static D3D12_BARRIER_SYNC
-dx12__barrierSync(GPUPipelineStageMask stages) {
+dx12__barrierSync(GPUPipelineStageMask stages, GPUAccessMask access) {
   D3D12_BARRIER_SYNC sync;
 
   if ((stages & (GPU_STAGE_TOP | GPU_STAGE_BOTTOM)) != 0u) {
@@ -36,6 +36,15 @@ dx12__barrierSync(GPUPipelineStageMask stages) {
   }
   if ((stages & GPU_STAGE_TRANSFER) != 0u) {
     sync |= D3D12_BARRIER_SYNC_COPY;
+  }
+  if ((access & (GPU_ACCESS_COLOR_READ | GPU_ACCESS_COLOR_WRITE)) != 0u) {
+    sync |= D3D12_BARRIER_SYNC_RENDER_TARGET;
+  }
+  if ((access & (GPU_ACCESS_DEPTH_READ | GPU_ACCESS_DEPTH_WRITE)) != 0u) {
+    sync |= D3D12_BARRIER_SYNC_DEPTH_STENCIL;
+  }
+  if ((access & GPU_ACCESS_INDIRECT_READ) != 0u) {
+    sync |= D3D12_BARRIER_SYNC_EXECUTE_INDIRECT;
   }
   return sync;
 }
@@ -109,6 +118,116 @@ dx12__bufferBarrierState(const GPUBuffer      *buffer,
   return state;
 }
 
+static D3D12_BARRIER_ACCESS
+dx12__textureBarrierAccess(GPUAccessMask access) {
+  D3D12_BARRIER_ACCESS nativeAccess;
+
+  nativeAccess = D3D12_BARRIER_ACCESS_NO_ACCESS;
+  if ((access & GPU_ACCESS_SHADER_READ) != 0u) {
+    nativeAccess |= D3D12_BARRIER_ACCESS_SHADER_RESOURCE;
+  }
+  if ((access & GPU_ACCESS_SHADER_WRITE) != 0u) {
+    nativeAccess |= D3D12_BARRIER_ACCESS_UNORDERED_ACCESS;
+  }
+  if ((access & (GPU_ACCESS_COLOR_READ | GPU_ACCESS_COLOR_WRITE)) != 0u) {
+    nativeAccess |= D3D12_BARRIER_ACCESS_RENDER_TARGET;
+  }
+  if ((access & GPU_ACCESS_DEPTH_READ) != 0u) {
+    nativeAccess |= D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ;
+  }
+  if ((access & GPU_ACCESS_DEPTH_WRITE) != 0u) {
+    nativeAccess |= D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE;
+  }
+  if ((access & GPU_ACCESS_TRANSFER_READ) != 0u) {
+    nativeAccess |= D3D12_BARRIER_ACCESS_COPY_SOURCE;
+  }
+  if ((access & GPU_ACCESS_TRANSFER_WRITE) != 0u) {
+    nativeAccess |= D3D12_BARRIER_ACCESS_COPY_DEST;
+  }
+  return nativeAccess;
+}
+
+static D3D12_BARRIER_LAYOUT
+dx12__textureBarrierLayout(GPUAccessMask access, bool source) {
+  bool shaderRead;
+  bool transferRead;
+
+  if (access == GPU_ACCESS_NONE) {
+    return source ? D3D12_BARRIER_LAYOUT_UNDEFINED
+                  : D3D12_BARRIER_LAYOUT_COMMON;
+  }
+  if ((access & GPU_ACCESS_SHADER_WRITE) != 0u) {
+    return D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS;
+  }
+  if ((access & (GPU_ACCESS_COLOR_READ | GPU_ACCESS_COLOR_WRITE)) != 0u) {
+    return D3D12_BARRIER_LAYOUT_RENDER_TARGET;
+  }
+  if ((access & GPU_ACCESS_DEPTH_WRITE) != 0u) {
+    return D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE;
+  }
+  if ((access & GPU_ACCESS_DEPTH_READ) != 0u) {
+    return D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_READ;
+  }
+  if ((access & GPU_ACCESS_TRANSFER_WRITE) != 0u) {
+    return D3D12_BARRIER_LAYOUT_COPY_DEST;
+  }
+
+  shaderRead   = (access & GPU_ACCESS_SHADER_READ) != 0u;
+  transferRead = (access & GPU_ACCESS_TRANSFER_READ) != 0u;
+  if (shaderRead && transferRead) {
+    return D3D12_BARRIER_LAYOUT_GENERIC_READ;
+  }
+  if (shaderRead) {
+    return D3D12_BARRIER_LAYOUT_SHADER_RESOURCE;
+  }
+  if (transferRead) {
+    return D3D12_BARRIER_LAYOUT_COPY_SOURCE;
+  }
+  return D3D12_BARRIER_LAYOUT_COMMON;
+}
+
+static D3D12_RESOURCE_STATES
+dx12__textureBarrierState(GPUAccessMask         access,
+                          GPUPipelineStageMask  stages) {
+  D3D12_RESOURCE_STATES state;
+
+  if ((access & GPU_ACCESS_SHADER_WRITE) != 0u) {
+    return D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+  }
+  if ((access & (GPU_ACCESS_COLOR_READ | GPU_ACCESS_COLOR_WRITE)) != 0u) {
+    return D3D12_RESOURCE_STATE_RENDER_TARGET;
+  }
+  if ((access & GPU_ACCESS_DEPTH_WRITE) != 0u) {
+    return D3D12_RESOURCE_STATE_DEPTH_WRITE;
+  }
+  if ((access & GPU_ACCESS_DEPTH_READ) != 0u) {
+    return D3D12_RESOURCE_STATE_DEPTH_READ;
+  }
+  if ((access & GPU_ACCESS_TRANSFER_WRITE) != 0u) {
+    return D3D12_RESOURCE_STATE_COPY_DEST;
+  }
+
+  state = D3D12_RESOURCE_STATE_COMMON;
+  if ((access & GPU_ACCESS_SHADER_READ) != 0u) {
+    if ((stages & (GPU_STAGE_VERTEX | GPU_STAGE_COMPUTE)) != 0u) {
+      state |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+    }
+    if ((stages & GPU_STAGE_FRAGMENT) != 0u) {
+      state |= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    }
+    if ((stages & (GPU_STAGE_VERTEX |
+                   GPU_STAGE_FRAGMENT |
+                   GPU_STAGE_COMPUTE)) == 0u) {
+      state |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE |
+               D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    }
+  }
+  if ((access & GPU_ACCESS_TRANSFER_READ) != 0u) {
+    state |= D3D12_RESOURCE_STATE_COPY_SOURCE;
+  }
+  return state;
+}
+
 static void
 dx12__encodeBufferBarrier(GPUCommandBufferDX12   *command,
                           const GPUBufferBarrier *barrier,
@@ -129,8 +248,10 @@ dx12__encodeBufferBarrier(GPUCommandBufferDX12   *command,
     D3D12_BUFFER_BARRIER nativeBarrier = {0};
     D3D12_BARRIER_GROUP  group = {0};
 
-    nativeBarrier.SyncBefore   = dx12__barrierSync(srcStages);
-    nativeBarrier.SyncAfter    = dx12__barrierSync(dstStages);
+    nativeBarrier.SyncBefore   = dx12__barrierSync(srcStages,
+                                                   barrier->srcAccess);
+    nativeBarrier.SyncAfter    = dx12__barrierSync(dstStages,
+                                                   barrier->dstAccess);
     nativeBarrier.AccessBefore = dx12__bufferBarrierAccess(barrier->buffer,
                                                            barrier->srcAccess,
                                                            srcStages);
@@ -169,13 +290,115 @@ dx12__encodeBufferBarrier(GPUCommandBufferDX12   *command,
   buffer->state = nextState;
 }
 
+static void
+dx12__encodeTextureBarrier(GPUCommandBufferDX12    *command,
+                           GPUDevice               *device,
+                           const GPUTextureBarrier *barrier,
+                           GPUPipelineStageMask     srcStages,
+                           GPUPipelineStageMask     dstStages) {
+  GPUTextureDX12        *texture;
+  D3D12_RESOURCE_STATES  nextState;
+
+  if (!command || !command->commandList || !barrier || !barrier->texture) {
+    return;
+  }
+  if (!barrier->texture->_ownsNative) {
+    gpuDeviceRecordValidationError(
+      device,
+      "Direct3D 12 barriers do not support swapchain textures"
+    );
+    return;
+  }
+
+  texture = barrier->texture->_priv;
+  if (!texture || !texture->resource) {
+    gpuDeviceRecordValidationError(
+      device,
+      "Direct3D 12 texture barrier has no compatible native texture"
+    );
+    return;
+  }
+
+  nextState = dx12__textureBarrierState(barrier->dstAccess, dstStages);
+  if (command->commandList7) {
+    D3D12_TEXTURE_BARRIER nativeBarrier = {0};
+    D3D12_BARRIER_GROUP   group = {0};
+
+    nativeBarrier.SyncBefore = dx12__barrierSync(srcStages,
+                                                 barrier->srcAccess);
+    nativeBarrier.SyncAfter  = dx12__barrierSync(dstStages,
+                                                 barrier->dstAccess);
+    nativeBarrier.AccessBefore = dx12__textureBarrierAccess(
+      barrier->srcAccess
+    );
+    nativeBarrier.AccessAfter = dx12__textureBarrierAccess(
+      barrier->dstAccess
+    );
+    nativeBarrier.LayoutBefore = dx12__textureBarrierLayout(
+      barrier->srcAccess,
+      true
+    );
+    nativeBarrier.LayoutAfter = dx12__textureBarrierLayout(
+      barrier->dstAccess,
+      false
+    );
+    nativeBarrier.pResource                         = texture->resource;
+    nativeBarrier.Subresources.IndexOrFirstMipLevel = barrier->baseMip;
+    nativeBarrier.Subresources.NumMipLevels         = barrier->mipCount;
+    nativeBarrier.Subresources.FirstArraySlice      = barrier->baseLayer;
+    nativeBarrier.Subresources.NumArraySlices       = barrier->layerCount;
+    nativeBarrier.Subresources.FirstPlane           = 0u;
+    nativeBarrier.Subresources.NumPlanes             = 1u;
+    nativeBarrier.Flags                              =
+      D3D12_TEXTURE_BARRIER_FLAG_NONE;
+    group.Type             = D3D12_BARRIER_TYPE_TEXTURE;
+    group.NumBarriers      = 1u;
+    group.pTextureBarriers = &nativeBarrier;
+    command->commandList7->lpVtbl->Barrier(command->commandList7,
+                                            1u,
+                                            &group);
+    dx12_setTextureState(texture,
+                         barrier->baseMip,
+                         barrier->mipCount,
+                         barrier->baseLayer,
+                         barrier->layerCount,
+                         nextState);
+    return;
+  }
+
+  if ((barrier->srcAccess & GPU_ACCESS_SHADER_WRITE) != 0u &&
+      (barrier->dstAccess & GPU_ACCESS_SHADER_WRITE) != 0u) {
+    D3D12_RESOURCE_BARRIER nativeBarrier = {0};
+
+    nativeBarrier.Type          = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+    nativeBarrier.UAV.pResource = texture->resource;
+    command->commandList->lpVtbl->ResourceBarrier(command->commandList,
+                                                   1u,
+                                                   &nativeBarrier);
+  }
+  if (!dx12_transitionTexture(command->commandList,
+                              texture,
+                              barrier->baseMip,
+                              barrier->mipCount,
+                              barrier->baseLayer,
+                              barrier->layerCount,
+                              nextState)) {
+    gpuDeviceRecordValidationError(
+      device,
+      "Direct3D 12 texture barrier transition failed"
+    );
+  }
+}
+
 GPU_HIDE
 void
 dx12_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
   GPUCommandBufferDX12 *command;
+  GPUDevice            *device;
 
   command = cmdb ? cmdb->_priv : NULL;
-  if (!command || !barriers) {
+  device  = cmdb && cmdb->_queue ? cmdb->_queue->_device : NULL;
+  if (!command || !device || !barriers) {
     return;
   }
 
@@ -184,6 +407,13 @@ dx12_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
                               &barriers->pBufferBarriers[i],
                               barriers->srcStages,
                               barriers->dstStages);
+  }
+  for (uint32_t i = 0u; i < barriers->textureBarrierCount; i++) {
+    dx12__encodeTextureBarrier(command,
+                               device,
+                               &barriers->pTextureBarriers[i],
+                               barriers->srcStages,
+                               barriers->dstStages);
   }
 }
 

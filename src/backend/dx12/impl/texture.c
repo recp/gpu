@@ -17,6 +17,10 @@
 #include "../common.h"
 #include "../impl.h"
 
+enum {
+  DX12_TEXTURE_BARRIER_CHUNK_SIZE = 16u
+};
+
 static void
 dx12__setTextureName(ID3D12Resource *resource, const char *label) {
   wchar_t name[256];
@@ -68,6 +72,186 @@ dx12__textureFinalState(GPUTextureUsageFlags usage) {
   return D3D12_RESOURCE_STATE_COPY_DEST;
 }
 
+static bool
+dx12__textureRangeValid(const GPUTextureDX12 *texture,
+                        uint32_t               baseMip,
+                        uint32_t               mipCount,
+                        uint32_t               baseLayer,
+                        uint32_t               layerCount) {
+  return texture && texture->resource && texture->states &&
+         mipCount > 0u && layerCount > 0u &&
+         baseMip < texture->mipLevelCount &&
+         mipCount <= texture->mipLevelCount - baseMip &&
+         baseLayer < texture->arrayLayerCount &&
+         layerCount <= texture->arrayLayerCount - baseLayer;
+}
+
+static uint32_t
+dx12__textureSubresource(const GPUTextureDX12 *texture,
+                         uint32_t               mip,
+                         uint32_t               layer) {
+  return mip + layer * texture->mipLevelCount;
+}
+
+static bool
+dx12__textureRangeFull(const GPUTextureDX12 *texture,
+                       uint32_t               baseMip,
+                       uint32_t               mipCount,
+                       uint32_t               baseLayer,
+                       uint32_t               layerCount) {
+  return baseMip == 0u && mipCount == texture->mipLevelCount &&
+         baseLayer == 0u && layerCount == texture->arrayLayerCount;
+}
+
+static void
+dx12__materializeTextureStates(GPUTextureDX12 *texture) {
+  if (!texture || !texture->states || !texture->stateUniform) {
+    return;
+  }
+
+  for (uint32_t i = 0u; i < texture->subresourceCount; i++) {
+    texture->states[i] = texture->state;
+  }
+}
+
+GPU_HIDE
+void
+dx12_setTextureState(GPUTextureDX12        *texture,
+                     uint32_t               baseMip,
+                     uint32_t               mipCount,
+                     uint32_t               baseLayer,
+                     uint32_t               layerCount,
+                     D3D12_RESOURCE_STATES  state) {
+  if (!dx12__textureRangeValid(texture,
+                               baseMip,
+                               mipCount,
+                               baseLayer,
+                               layerCount)) {
+    return;
+  }
+
+  if (dx12__textureRangeFull(texture,
+                             baseMip,
+                             mipCount,
+                             baseLayer,
+                             layerCount)) {
+    texture->state        = state;
+    texture->stateUniform = true;
+    return;
+  }
+  if (texture->stateUniform && texture->state == state) {
+    return;
+  }
+
+  dx12__materializeTextureStates(texture);
+  for (uint32_t layer = baseLayer; layer < baseLayer + layerCount; layer++) {
+    for (uint32_t mip = baseMip; mip < baseMip + mipCount; mip++) {
+      uint32_t subresource;
+
+      subresource = dx12__textureSubresource(texture, mip, layer);
+      texture->states[subresource] = state;
+    }
+  }
+  texture->stateUniform = false;
+}
+
+GPU_HIDE
+bool
+dx12_transitionTexture(ID3D12GraphicsCommandList *commandList,
+                       GPUTextureDX12            *texture,
+                       uint32_t                   baseMip,
+                       uint32_t                   mipCount,
+                       uint32_t                   baseLayer,
+                       uint32_t                   layerCount,
+                       D3D12_RESOURCE_STATES      state) {
+  D3D12_RESOURCE_BARRIER barriers[DX12_TEXTURE_BARRIER_CHUNK_SIZE];
+  uint32_t               barrierCount;
+  bool                   fullRange;
+  bool                   changed;
+
+  if (!commandList ||
+      !dx12__textureRangeValid(texture,
+                               baseMip,
+                               mipCount,
+                               baseLayer,
+                               layerCount)) {
+    return false;
+  }
+
+  fullRange = dx12__textureRangeFull(texture,
+                                     baseMip,
+                                     mipCount,
+                                     baseLayer,
+                                     layerCount);
+  if (fullRange && texture->stateUniform) {
+    if (texture->state == state) {
+      return true;
+    }
+
+    memset(&barriers[0], 0, sizeof(barriers[0]));
+    barriers[0].Type                   =
+      D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barriers[0].Transition.pResource   = texture->resource;
+    barriers[0].Transition.Subresource =
+      D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barriers[0].Transition.StateBefore = texture->state;
+    barriers[0].Transition.StateAfter  = state;
+    commandList->lpVtbl->ResourceBarrier(commandList, 1u, barriers);
+    texture->state        = state;
+    texture->stateUniform = true;
+    return true;
+  }
+  if (texture->stateUniform && texture->state == state) {
+    return true;
+  }
+
+  dx12__materializeTextureStates(texture);
+  barrierCount = 0u;
+  changed      = false;
+  for (uint32_t layer = baseLayer; layer < baseLayer + layerCount; layer++) {
+    for (uint32_t mip = baseMip; mip < baseMip + mipCount; mip++) {
+      D3D12_RESOURCE_BARRIER *barrier;
+      uint32_t                subresource;
+
+      subresource = dx12__textureSubresource(texture, mip, layer);
+      if (texture->states[subresource] == state) {
+        continue;
+      }
+
+      barrier = &barriers[barrierCount++];
+      memset(barrier, 0, sizeof(*barrier));
+      barrier->Type                   =
+        D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+      barrier->Transition.pResource   = texture->resource;
+      barrier->Transition.Subresource = subresource;
+      barrier->Transition.StateBefore = texture->states[subresource];
+      barrier->Transition.StateAfter  = state;
+      texture->states[subresource]    = state;
+      changed                         = true;
+
+      if (barrierCount == DX12_TEXTURE_BARRIER_CHUNK_SIZE) {
+        commandList->lpVtbl->ResourceBarrier(commandList,
+                                              barrierCount,
+                                              barriers);
+        barrierCount = 0u;
+      }
+    }
+  }
+  if (barrierCount > 0u) {
+    commandList->lpVtbl->ResourceBarrier(commandList,
+                                          barrierCount,
+                                          barriers);
+  }
+
+  if (fullRange) {
+    texture->state        = state;
+    texture->stateUniform = true;
+  } else if (changed && texture->stateUniform && texture->state != state) {
+    texture->stateUniform = false;
+  }
+  return true;
+}
+
 GPU_HIDE
 GPUResult
 dx12_createTexture(GPUDevice                  * __restrict device,
@@ -84,6 +268,9 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   D3D12_RESOURCE_DIMENSION dimension;
   D3D12_RESOURCE_STATES    initialState;
   DXGI_FORMAT              format;
+  size_t                   allocationSize;
+  uint32_t                 arrayLayerCount;
+  uint32_t                 subresourceCount;
   HRESULT                  result;
 
   if (!device || !device->_priv || !info || !outTexture ||
@@ -105,7 +292,21 @@ dx12_createTexture(GPUDevice                  * __restrict device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  texture = calloc(1, sizeof(*texture) + sizeof(*native));
+  arrayLayerCount = info->dimension == GPU_TEXTURE_DIMENSION_3D
+                      ? 1u
+                      : info->depthOrLayers;
+  if (info->mipLevelCount > UINT32_MAX / arrayLayerCount) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  subresourceCount = info->mipLevelCount * arrayLayerCount;
+  if (subresourceCount >
+      (SIZE_MAX - sizeof(*texture) - sizeof(*native)) /
+        sizeof(*native->states)) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  allocationSize = sizeof(*texture) + sizeof(*native) +
+                   (size_t)subresourceCount * sizeof(*native->states);
+  texture = calloc(1, allocationSize);
   if (!texture) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
@@ -144,7 +345,12 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   }
 
   dx12__setTextureName(native->resource, info->label);
-  native->state          = initialState;
+  native->states           = (D3D12_RESOURCE_STATES *)(native + 1);
+  native->state            = initialState;
+  native->mipLevelCount    = info->mipLevelCount;
+  native->arrayLayerCount  = arrayLayerCount;
+  native->subresourceCount = subresourceCount;
+  native->stateUniform     = true;
   texture->_priv         = native;
   texture->device        = device;
   texture->format        = info->format;
@@ -295,12 +501,17 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  native->resource = textureDX12->resource;
-  native->state    = &textureDX12->state;
-  native->width    = texture->width;
-  native->height   = texture->height;
-  native->hasSrv   = true;
-  view->_priv      = native;
+  native->resource   = textureDX12->resource;
+  native->state      = &textureDX12->state;
+  native->texture    = textureDX12;
+  native->width      = texture->width;
+  native->height     = texture->height;
+  native->baseMip    = info->baseMipLevel;
+  native->mipCount   = info->mipLevelCount;
+  native->baseLayer  = info->baseArrayLayer;
+  native->layerCount = info->arrayLayerCount;
+  native->hasSrv     = true;
+  view->_priv        = native;
   view->_ownsNative = true;
   *outView         = view;
   return GPU_OK;
@@ -327,25 +538,6 @@ dx12__formatBytes(GPUFormat format) {
     default:
       return 0u;
   }
-}
-
-static void
-dx12__transitionTexture(ID3D12GraphicsCommandList *commandList,
-                        ID3D12Resource            *resource,
-                        D3D12_RESOURCE_STATES      before,
-                        D3D12_RESOURCE_STATES      after) {
-  D3D12_RESOURCE_BARRIER barrier = {0};
-
-  if (before == after) {
-    return;
-  }
-
-  barrier.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-  barrier.Transition.pResource   = resource;
-  barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-  barrier.Transition.StateBefore = before;
-  barrier.Transition.StateAfter  = after;
-  commandList->lpVtbl->ResourceBarrier(commandList, 1u, &barrier);
 }
 
 GPU_HIDE
@@ -492,10 +684,15 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
     goto cleanup;
   }
 
-  dx12__transitionTexture(commandList,
-                          native->resource,
-                          native->state,
-                          D3D12_RESOURCE_STATE_COPY_DEST);
+  if (!dx12_transitionTexture(commandList,
+                              native,
+                              region->mipLevel,
+                              1u,
+                              region->baseArrayLayer,
+                              1u,
+                              D3D12_RESOURCE_STATE_COPY_DEST)) {
+    goto cleanup;
+  }
   source.pResource             = upload;
   source.Type                  = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
   source.PlacedFootprint       = footprint;
@@ -513,10 +710,15 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
                                          &source,
                                          &sourceBox);
   finalState = dx12__textureFinalState(texture->usage);
-  dx12__transitionTexture(commandList,
-                          native->resource,
-                          D3D12_RESOURCE_STATE_COPY_DEST,
-                          finalState);
+  if (!dx12_transitionTexture(commandList,
+                              native,
+                              region->mipLevel,
+                              1u,
+                              region->baseArrayLayer,
+                              1u,
+                              finalState)) {
+    goto cleanup;
+  }
   result = commandList->lpVtbl->Close(commandList);
   if (FAILED(result)) {
     goto cleanup;
@@ -541,7 +743,6 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
   queueDX12->commandQueue->lpVtbl->ExecuteCommandLists(queueDX12->commandQueue,
                                                        1u,
                                                        commandLists);
-  native->state = finalState;
   result = queueDX12->commandQueue->lpVtbl->Signal(queueDX12->commandQueue,
                                                    fence,
                                                    1u);
