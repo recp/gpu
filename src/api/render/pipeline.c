@@ -221,10 +221,15 @@ gpu_pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info) {
     return false;
   if (info->primitiveTopology != GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
     return false;
-  if (info->multisample.alphaToCoverageEnable)
+  if (info->multisample.sampleCount != 0u &&
+      info->multisample.sampleCount != 1u &&
+      info->multisample.sampleCount != 2u &&
+      info->multisample.sampleCount != 4u &&
+      info->multisample.sampleCount != 8u)
     return false;
-  if (info->multisample.sampleMask != 0 &&
-      info->multisample.sampleMask != 0xffffffffu)
+  if (info->multisample.alphaToCoverageEnable ||
+      (info->multisample.sampleMask != 0u &&
+       info->multisample.sampleMask != UINT32_MAX))
     return false;
   if (!gpu_depthStencilStateIsValid(info->depthStencilFormat,
                                     info->pDepthStencilState))

@@ -49,6 +49,20 @@ gpu_textureViewSampleCount(const GPUTextureView *view) {
   return view && view->_texture ? view->_texture->sampleCount : 0u;
 }
 
+static uint32_t
+gpu_textureViewExtent(uint32_t extent, const GPUTextureView *view) {
+  uint32_t result;
+
+  if (!view) {
+    return 0u;
+  }
+  if (view->baseMipLevel >= 32u) {
+    return 1u;
+  }
+  result = extent >> view->baseMipLevel;
+  return result ? result : 1u;
+}
+
 static bool
 gpu_formatIsDepthStencil(GPUFormat format) {
   return format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
@@ -66,6 +80,7 @@ static bool
 gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
                               const GPUDevice               *device) {
   const GPURenderPassDepthStencilAttachment *depthStencil;
+  uint32_t                                   sampleCount;
 
   if (!info) {
     return false;
@@ -89,29 +104,45 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
     return false;
   }
 
+  sampleCount = 0u;
   for (uint32_t i = 0; i < info->colorAttachmentCount; i++) {
     const GPURenderPassColorAttachment *color;
 
     color = &info->pColorAttachments[i];
     if (!color->view ||
         !gpu_textureViewHasUsage(color->view, GPU_TEXTURE_USAGE_COLOR_TARGET) ||
+        color->view->_texture->device != device ||
         gpu_formatIsDepthStencil(color->view->format) ||
         (color->resolveView &&
          (!gpu_textureViewHasUsage(color->resolveView, GPU_TEXTURE_USAGE_COLOR_TARGET) ||
+          color->resolveView->_texture->device != device ||
           gpu_formatIsDepthStencil(color->resolveView->format) ||
           color->resolveView->format != color->view->format ||
+          gpu_textureViewExtent(color->resolveView->_texture->width,
+                                color->resolveView) !=
+            gpu_textureViewExtent(color->view->_texture->width, color->view) ||
+          gpu_textureViewExtent(color->resolveView->_texture->height,
+                                color->resolveView) !=
+            gpu_textureViewExtent(color->view->_texture->height, color->view) ||
+          color->resolveView->arrayLayerCount != color->view->arrayLayerCount ||
           gpu_textureViewSampleCount(color->view) <= 1u ||
           gpu_textureViewSampleCount(color->resolveView) != 1u)) ||
         !gpu_validLoadOp(color->loadOp) ||
         !gpu_validStoreOp(color->storeOp)) {
       return false;
     }
+    if (sampleCount != 0u &&
+        sampleCount != gpu_textureViewSampleCount(color->view)) {
+      return false;
+    }
+    sampleCount = gpu_textureViewSampleCount(color->view);
   }
 
   depthStencil = info->pDepthStencilAttachment;
   if (depthStencil) {
     if (!depthStencil->view ||
         !gpu_textureViewHasUsage(depthStencil->view, GPU_TEXTURE_USAGE_DEPTH_STENCIL) ||
+        depthStencil->view->_texture->device != device ||
         !gpu_formatIsDepthStencil(depthStencil->view->format) ||
         !gpu_validLoadOp(depthStencil->depthLoadOp) ||
         !gpu_validStoreOp(depthStencil->depthStoreOp) ||
@@ -125,6 +156,10 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
               depthStencil->clearStencil > UINT8_MAX)
            : (depthStencil->stencilLoadOp != GPU_LOAD_OP_DONT_CARE ||
               depthStencil->stencilStoreOp != GPU_STORE_OP_DONT_CARE))) {
+      return false;
+    }
+    if (sampleCount != 0u &&
+        sampleCount != gpu_textureViewSampleCount(depthStencil->view)) {
       return false;
     }
   }

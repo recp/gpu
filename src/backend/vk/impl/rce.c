@@ -418,6 +418,12 @@ vk_endRenderEncoding(GPURenderCommandEncoder *encoder) {
                             view,
                             VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
         }
+        view = native->renderPass->resolveViews[i];
+        if (view && view->swapchain) {
+          vk_transitionView(native->command,
+                            view,
+                            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+        }
       }
     } else {
       vkCmdEndRenderPass(native->command);

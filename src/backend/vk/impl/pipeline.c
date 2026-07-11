@@ -56,6 +56,18 @@ vk__compareOp(GPUCompareOp op) {
            : VK_COMPARE_OP_NEVER;
 }
 
+static VkSampleCountFlagBits
+vk__sampleCount(uint32_t count) {
+  static const VkSampleCountFlagBits counts[] = {
+    [1] = VK_SAMPLE_COUNT_1_BIT,
+    [2] = VK_SAMPLE_COUNT_2_BIT,
+    [4] = VK_SAMPLE_COUNT_4_BIT,
+    [8] = VK_SAMPLE_COUNT_8_BIT
+  };
+
+  return count < GPU_ARRAY_LEN(counts) ? counts[count] : 0;
+}
+
 static VkStencilOp
 vk__stencilOp(GPUStencilOp op) {
   static const VkStencilOp operations[] = {
@@ -340,16 +352,25 @@ vk_createRenderPipeline(GPUDevice                         *device,
   VkPipelineRenderingCreateInfoKHR  rendering = {0};
   VkGraphicsPipelineCreateInfo      pipelineInfo = {0};
   uint32_t                          vertexAttributeCount;
+  VkSampleCountFlagBits             sampleCount;
 
   if (!device || !device->_priv || !info || !pipeline ||
       !info->library || !info->library->_priv ||
       !info->layout || !info->layout->_native ||
-      info->colorTargetCount != 1u ||
-      (info->multisample.sampleCount != 0u &&
-       info->multisample.sampleCount != 1u)) {
+      info->colorTargetCount != 1u) {
     return GPU_ERROR_UNSUPPORTED;
   }
   deviceVk = device->_priv;
+  sampleCount = vk__sampleCount(info->multisample.sampleCount
+                                  ? info->multisample.sampleCount
+                                  : 1u);
+  if (!sampleCount ||
+      (sampleCount > VK_SAMPLE_COUNT_1_BIT && !deviceVk->dynamicRendering) ||
+      (deviceVk->colorSampleCounts & sampleCount) == 0u ||
+      (info->depthStencilFormat != GPU_FORMAT_UNDEFINED &&
+       (deviceVk->depthSampleCounts & sampleCount) == 0u)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
   if (!deviceVk->dynamicRendering &&
       info->depthStencilFormat != GPU_FORMAT_UNDEFINED) {
     return GPU_ERROR_UNSUPPORTED;
@@ -482,7 +503,9 @@ vk_createRenderPipeline(GPUDevice                         *device,
   raster.lineWidth   = 1.0f;
 
   multisample.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-  multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+  multisample.rasterizationSamples = sampleCount;
+  multisample.alphaToCoverageEnable =
+    info->multisample.alphaToCoverageEnable;
   multisample.pSampleMask          = info->multisample.sampleMask ?
     &info->multisample.sampleMask : NULL;
 

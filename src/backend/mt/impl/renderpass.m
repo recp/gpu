@@ -35,6 +35,13 @@ mt_storeAction(GPUStoreOp op) {
     MTLStoreActionDontCare : MTLStoreActionStore;
 }
 
+static MTLStoreAction
+mt_resolveStoreAction(GPUStoreOp op) {
+  return op == GPU_STORE_OP_STORE
+           ? MTLStoreActionStoreAndMultisampleResolve
+           : MTLStoreActionMultisampleResolve;
+}
+
 static uint64_t
 mt_stageMask(GPUPipelineStageMask stages) {
   uint64_t result;
@@ -160,7 +167,9 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
     rpd.colorAttachments[i].resolveTexture = color->resolveView ?
       (id<MTLTexture>)color->resolveView->_priv : nil;
     rpd.colorAttachments[i].loadAction = mt_loadAction(color->loadOp);
-    rpd.colorAttachments[i].storeAction = mt_storeAction(color->storeOp);
+    rpd.colorAttachments[i].storeAction = color->resolveView
+                                            ? mt_resolveStoreAction(color->storeOp)
+                                            : mt_storeAction(color->storeOp);
     rpd.colorAttachments[i].clearColor = MTLClearColorMake(color->clearColor.float32[0],
                                                            color->clearColor.float32[1],
                                                            color->clearColor.float32[2],

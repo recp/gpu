@@ -698,6 +698,10 @@ vk_createDevice(GPUPhysicalDevice          * __restrict phyDevice,
 
   deviceVk->maxDrawIndirectCount =
     phyDeviceVk->props.limits.maxDrawIndirectCount;
+  deviceVk->colorSampleCounts =
+    phyDeviceVk->props.limits.framebufferColorSampleCounts;
+  deviceVk->depthSampleCounts =
+    phyDeviceVk->props.limits.framebufferDepthSampleCounts;
   deviceVk->multiDrawIndirect = enabledFeatures.multiDrawIndirect;
   if (phyDeviceVk->dynamicRendering) {
     deviceVk->beginRendering = (PFN_vkCmdBeginRenderingKHR)

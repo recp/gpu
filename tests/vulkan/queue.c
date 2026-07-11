@@ -273,6 +273,7 @@ occlusion_roundtrip(GPUDevice       *device,
                     GPUCommandQueue *queue,
                     GPUFence        *fence) {
   GPUTextureCreateInfo           textureInfo = {0};
+  GPUTextureCreateInfo           resolveTextureInfo = {0};
   GPUTextureCreateInfo           depthTextureInfo = {0};
   GPUTextureViewCreateInfo       viewInfo = {0};
   GPUTextureViewCreateInfo       depthViewInfo = {0};
@@ -283,8 +284,10 @@ occlusion_roundtrip(GPUDevice       *device,
   GPURenderPassCreateInfo        passInfo = {0};
   GPUQueueSubmitInfo             submitInfo = {0};
   GPUTexture                    *texture;
+  GPUTexture                    *resolveTexture;
   GPUTexture                    *depthTexture;
   GPUTextureView                *view;
+  GPUTextureView                *resolveView;
   GPUTextureView                *depthView;
   GPUQuerySet                   *querySet;
   GPUBuffer                     *resultBuffer;
@@ -293,16 +296,18 @@ occlusion_roundtrip(GPUDevice       *device,
   uint64_t                       resultValue;
   int                            ok;
 
-  texture      = NULL;
-  depthTexture = NULL;
-  view         = NULL;
-  depthView    = NULL;
-  querySet     = NULL;
-  resultBuffer = NULL;
-  cmdb         = NULL;
-  pass         = NULL;
-  resultValue  = UINT64_MAX;
-  ok           = 0;
+  texture        = NULL;
+  resolveTexture = NULL;
+  depthTexture   = NULL;
+  view           = NULL;
+  resolveView    = NULL;
+  depthView      = NULL;
+  querySet       = NULL;
+  resultBuffer   = NULL;
+  cmdb           = NULL;
+  pass           = NULL;
+  resultValue    = UINT64_MAX;
+  ok             = 0;
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
@@ -313,7 +318,7 @@ occlusion_roundtrip(GPUDevice       *device,
   textureInfo.height           = 4u;
   textureInfo.depthOrLayers    = 1u;
   textureInfo.mipLevelCount    = 1u;
-  textureInfo.sampleCount      = 1u;
+  textureInfo.sampleCount      = 4u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET;
   viewInfo.chain.sType         = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
   viewInfo.chain.structSize    = sizeof(viewInfo);
@@ -322,6 +327,9 @@ occlusion_roundtrip(GPUDevice       *device,
   viewInfo.format              = GPU_FORMAT_BGRA8_UNORM;
   viewInfo.mipLevelCount       = 1u;
   viewInfo.arrayLayerCount     = 1u;
+  resolveTextureInfo             = textureInfo;
+  resolveTextureInfo.label       = "vulkan-resolve-target";
+  resolveTextureInfo.sampleCount = 1u;
   depthTextureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   depthTextureInfo.chain.structSize = sizeof(depthTextureInfo);
   depthTextureInfo.label            = "vulkan-depth-stencil-target";
@@ -331,7 +339,7 @@ occlusion_roundtrip(GPUDevice       *device,
   depthTextureInfo.height           = 4u;
   depthTextureInfo.depthOrLayers    = 1u;
   depthTextureInfo.mipLevelCount    = 1u;
-  depthTextureInfo.sampleCount      = 1u;
+  depthTextureInfo.sampleCount      = 4u;
   depthTextureInfo.usage            = GPU_TEXTURE_USAGE_DEPTH_STENCIL;
   depthViewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
   depthViewInfo.chain.structSize = sizeof(depthViewInfo);
@@ -353,6 +361,10 @@ occlusion_roundtrip(GPUDevice       *device,
                                  GPU_BUFFER_USAGE_COPY_SRC;
   if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture ||
       GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK || !view ||
+      GPUCreateTexture(device, &resolveTextureInfo, &resolveTexture) != GPU_OK ||
+      !resolveTexture ||
+      GPUCreateTextureView(resolveTexture, &viewInfo, &resolveView) != GPU_OK ||
+      !resolveView ||
       GPUCreateTexture(device, &depthTextureInfo, &depthTexture) != GPU_OK ||
       !depthTexture ||
       GPUCreateTextureView(depthTexture, &depthViewInfo, &depthView) != GPU_OK ||
@@ -366,6 +378,7 @@ occlusion_roundtrip(GPUDevice       *device,
   }
 
   color.view                    = view;
+  color.resolveView             = resolveView;
   color.loadOp                  = GPU_LOAD_OP_CLEAR;
   color.storeOp                 = GPU_STORE_OP_STORE;
   depthStencil.view             = depthView;
@@ -459,6 +472,8 @@ cleanup:
   GPUDestroyTexture(depthTexture);
   GPUDestroyTextureView(view);
   GPUDestroyTexture(texture);
+  GPUDestroyTextureView(resolveView);
+  GPUDestroyTexture(resolveTexture);
   return ok;
 }
 

@@ -305,11 +305,12 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   size_t                   allocationSize;
   uint32_t                 arrayLayerCount;
   uint32_t                 subresourceCount;
+  uint32_t                 sampleCount;
   HRESULT                  result;
 
   if (!device || !device->_priv || !info || !outTexture ||
       info->mipLevelCount == 0u || info->mipLevelCount > UINT16_MAX ||
-      info->depthOrLayers > UINT16_MAX || info->sampleCount != 1u ||
+      info->depthOrLayers > UINT16_MAX ||
       (info->usage & unsupported) != 0u ||
       !dx12__textureDimension(info->dimension, &dimension)) {
     return GPU_ERROR_UNSUPPORTED;
@@ -358,6 +359,21 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   }
 
   deviceDX12            = device->_priv;
+  sampleCount           = info->sampleCount ? info->sampleCount : 1u;
+  if (sampleCount > 1u) {
+    D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS levels = {0};
+
+    levels.Format      = dx12_format(info->format);
+    levels.SampleCount = sampleCount;
+    if (FAILED(deviceDX12->d3dDevice->lpVtbl->CheckFeatureSupport(
+          deviceDX12->d3dDevice,
+          D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,
+          &levels,
+          sizeof(levels))) || levels.NumQualityLevels == 0u) {
+      free(texture);
+      return GPU_ERROR_UNSUPPORTED;
+    }
+  }
   native                = (GPUTextureDX12 *)(texture + 1);
   heap.Type             = D3D12_HEAP_TYPE_DEFAULT;
   heap.CreationNodeMask = 1u;
@@ -370,7 +386,7 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   desc.DepthOrArraySize = (UINT16)info->depthOrLayers;
   desc.MipLevels        = (UINT16)info->mipLevelCount;
   desc.Format           = format;
-  desc.SampleDesc.Count = 1u;
+  desc.SampleDesc.Count = sampleCount;
   desc.Layout           = D3D12_TEXTURE_LAYOUT_UNKNOWN;
   if ((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u) {
     desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
@@ -414,7 +430,7 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   texture->height        = info->height;
   texture->depthOrLayers = info->depthOrLayers;
   texture->mipLevelCount = info->mipLevelCount;
-  texture->sampleCount   = info->sampleCount;
+  texture->sampleCount   = sampleCount;
   texture->usage         = info->usage;
   texture->_ownsNative   = true;
   *outTexture            = texture;
@@ -505,6 +521,7 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo *info,
 static bool
 dx12__fillTextureRtv(const GPUTextureViewCreateInfo *info,
                      DXGI_FORMAT                     format,
+                     bool                            multisampled,
                      D3D12_RENDER_TARGET_VIEW_DESC  *rtv) {
   if (!info || !rtv || info->mipLevelCount != 1u) {
     return false;
@@ -514,9 +531,13 @@ dx12__fillTextureRtv(const GPUTextureViewCreateInfo *info,
   rtv->Format = format;
   switch (info->viewType) {
     case GPU_TEXTURE_VIEW_2D:
-      rtv->ViewDimension        = D3D12_RTV_DIMENSION_TEXTURE2D;
-      rtv->Texture2D.MipSlice   = info->baseMipLevel;
-      rtv->Texture2D.PlaneSlice = 0u;
+      rtv->ViewDimension = multisampled
+                             ? D3D12_RTV_DIMENSION_TEXTURE2DMS
+                             : D3D12_RTV_DIMENSION_TEXTURE2D;
+      if (!multisampled) {
+        rtv->Texture2D.MipSlice   = info->baseMipLevel;
+        rtv->Texture2D.PlaneSlice = 0u;
+      }
       return info->arrayLayerCount == 1u;
     case GPU_TEXTURE_VIEW_2D_ARRAY:
       rtv->ViewDimension                         =
@@ -534,6 +555,7 @@ dx12__fillTextureRtv(const GPUTextureViewCreateInfo *info,
 static bool
 dx12__fillTextureDsv(const GPUTextureViewCreateInfo *info,
                      DXGI_FORMAT                     format,
+                     bool                            multisampled,
                      D3D12_DEPTH_STENCIL_VIEW_DESC  *dsv) {
   if (!info || !dsv || info->mipLevelCount != 1u) {
     return false;
@@ -543,8 +565,12 @@ dx12__fillTextureDsv(const GPUTextureViewCreateInfo *info,
   dsv->Format = format;
   switch (info->viewType) {
     case GPU_TEXTURE_VIEW_2D:
-      dsv->ViewDimension      = D3D12_DSV_DIMENSION_TEXTURE2D;
-      dsv->Texture2D.MipSlice = info->baseMipLevel;
+      dsv->ViewDimension = multisampled
+                             ? D3D12_DSV_DIMENSION_TEXTURE2DMS
+                             : D3D12_DSV_DIMENSION_TEXTURE2D;
+      if (!multisampled) {
+        dsv->Texture2D.MipSlice = info->baseMipLevel;
+      }
       return info->arrayLayerCount == 1u;
     case GPU_TEXTURE_VIEW_2D_ARRAY:
       dsv->ViewDimension                   = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
@@ -617,9 +643,11 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
   }
   hasRtv = colorTarget && dx12__fillTextureRtv(info,
                                                format,
+                                               texture->sampleCount > 1u,
                                                &rtv);
   hasDsv = depthTarget && dx12__fillTextureDsv(info,
                                                format,
+                                               texture->sampleCount > 1u,
                                                &dsv);
   if ((!sampled && !hasRtv && !hasDsv) ||
       (sampled && !dx12__fillTextureSrv(info, &srv))) {

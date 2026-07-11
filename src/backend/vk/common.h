@@ -196,6 +196,8 @@ typedef struct GPUDeviceVk {
   PFN_vkCmdBeginRenderingKHR  beginRendering;
   PFN_vkCmdEndRenderingKHR    endRendering;
   VkDevice                   device;
+  VkSampleCountFlags         colorSampleCounts;
+  VkSampleCountFlags         depthSampleCounts;
   uint32_t                   nCreatedQueues;
   uint32_t                   maxDrawIndirectCount;
   VkBool32                   multiDrawIndirect;
@@ -247,6 +249,7 @@ typedef struct GPUTextureViewVk   GPUTextureViewVk;
 typedef struct GPURenderPassVk {
   GPUSwapChainVk              *swapchain;
   GPUTextureViewVk            *colorViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  GPUTextureViewVk            *resolveViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   GPUTextureViewVk            *depthStencilView;
   VkRenderPass                 renderPass;
   VkFramebuffer                framebuffer;

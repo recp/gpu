@@ -138,6 +138,22 @@ check_resource_validation(GPUDevice *device) {
     return 0;
   }
 
+  textureInfo.sampleCount = 3u;
+  texture = (GPUTexture *)(uintptr_t)1u;
+  if (GPUCreateTexture(device, &textureInfo, &texture) !=
+        GPU_ERROR_INVALID_ARGUMENT || texture != NULL) {
+    fprintf(stderr, "texture create accepted invalid sample count\n");
+    return 0;
+  }
+  textureInfo.sampleCount = 4u;
+  texture = (GPUTexture *)(uintptr_t)1u;
+  if (GPUCreateTexture(device, &textureInfo, &texture) !=
+        GPU_ERROR_INVALID_ARGUMENT || texture != NULL) {
+    fprintf(stderr, "texture create accepted multisampled copy texture\n");
+    return 0;
+  }
+  textureInfo.sampleCount = 1u;
+
   textureInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   texture = (GPUTexture *)(uintptr_t)1u;
   if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT ||

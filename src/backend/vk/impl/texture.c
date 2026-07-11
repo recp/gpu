@@ -19,6 +19,18 @@
 #include "../../../api/buffer_internal.h"
 #include "../../../api/texture_internal.h"
 
+static VkSampleCountFlagBits
+vk__sampleCount(uint32_t count) {
+  static const VkSampleCountFlagBits counts[] = {
+    [1] = VK_SAMPLE_COUNT_1_BIT,
+    [2] = VK_SAMPLE_COUNT_2_BIT,
+    [4] = VK_SAMPLE_COUNT_4_BIT,
+    [8] = VK_SAMPLE_COUNT_8_BIT
+  };
+
+  return count < GPU_ARRAY_LEN(counts) ? counts[count] : 0;
+}
+
 static bool
 vk__textureUsage(GPUTextureUsageFlags usage, VkImageUsageFlags *outUsage) {
   const GPUTextureUsageFlags known = GPU_TEXTURE_USAGE_SAMPLED |
@@ -380,19 +392,30 @@ vk_createTexture(GPUDevice                  * __restrict device,
   VkMemoryRequirements   requirements;
   VkMemoryAllocateInfo   allocationInfo = {0};
   VkMemoryPropertyFlags  memoryFlags;
+  VkSampleCountFlagBits  sampleCount;
   uint32_t               memoryTypeIndex;
 
   if (!device || !device->_priv || !info || !outTexture ||
       !vk__imageType(info->dimension, &imageInfo.imageType) ||
       !vk_formatFromGPU(info->format, &imageInfo.format) ||
       !vk__textureUsage(info->usage, &imageInfo.usage) ||
-      (info->sampleCount != 0u && info->sampleCount != 1u) ||
       (info->dimension == GPU_TEXTURE_DIMENSION_1D && info->height != 1u)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
   *outTexture             = NULL;
   deviceVk                = device->_priv;
+  sampleCount             = vk__sampleCount(info->sampleCount
+                                              ? info->sampleCount
+                                              : 1u);
+  if (!sampleCount ||
+      (sampleCount > VK_SAMPLE_COUNT_1_BIT && !deviceVk->dynamicRendering) ||
+      (((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u) &&
+       (deviceVk->colorSampleCounts & sampleCount) == 0u) ||
+      (((info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u) &&
+       (deviceVk->depthSampleCounts & sampleCount) == 0u)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
   state.gpuDevice         = deviceVk;
   state.device            = deviceVk->device;
   state.layout            = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -421,7 +444,7 @@ vk_createTexture(GPUDevice                  * __restrict device,
   imageInfo.arrayLayers   = info->dimension == GPU_TEXTURE_DIMENSION_3D
                               ? 1u
                               : info->depthOrLayers;
-  imageInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
+  imageInfo.samples       = sampleCount;
   imageInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
   imageInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
   imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -497,7 +520,7 @@ vk_createTexture(GPUDevice                  * __restrict device,
   texture->height        = info->height;
   texture->depthOrLayers = info->depthOrLayers;
   texture->mipLevelCount = imageInfo.mipLevels;
-  texture->sampleCount   = 1u;
+  texture->sampleCount   = info->sampleCount ? info->sampleCount : 1u;
   texture->usage         = info->usage;
   texture->_ownsNative   = true;
   *outTexture            = texture;

@@ -77,22 +77,30 @@ mt_createTexture(GPUDevice                  * __restrict device,
   MTLTextureDescriptor *desc;
   id<MTLTexture>        nativeTexture;
   GPUTexture           *texture;
+  uint32_t              sampleCount;
 
   if (!device || !info || !outTexture) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   *outTexture = NULL;
 
-  deviceMT = device->_priv;
+  deviceMT    = device->_priv;
+  sampleCount = info->sampleCount ? info->sampleCount : 1u;
+  if (sampleCount > 1u &&
+      ![deviceMT->device supportsTextureSampleCount:sampleCount]) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
   desc = [MTLTextureDescriptor new];
-  desc.textureType = mt_textureType(info->dimension, info->depthOrLayers);
+  desc.textureType = sampleCount > 1u
+                       ? MTLTextureType2DMultisample
+                       : mt_textureType(info->dimension, info->depthOrLayers);
   desc.pixelFormat = (MTLPixelFormat)info->format;
   desc.width = info->width;
   desc.height = info->height;
   desc.depth = info->dimension == GPU_TEXTURE_DIMENSION_3D ? info->depthOrLayers : 1u;
   desc.arrayLength = info->dimension == GPU_TEXTURE_DIMENSION_3D ? 1u : info->depthOrLayers;
   desc.mipmapLevelCount = info->mipLevelCount ? info->mipLevelCount : 1u;
-  desc.sampleCount = info->sampleCount ? info->sampleCount : 1u;
+  desc.sampleCount = sampleCount;
   desc.usage = mt_textureUsage(info->usage);
   desc.storageMode = MTLStorageModePrivate;
   if ((info->usage & GPU_TEXTURE_USAGE_COPY_DST) != 0) {

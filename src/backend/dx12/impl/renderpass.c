@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../impl.h"
 
 static D3D12_BARRIER_SYNC
 dx12__barrierSync(GPUPipelineStageMask stages, GPUAccessMask access) {
@@ -496,19 +497,30 @@ dx12_beginRenderPass(GPUCommandBuffer             *cmdb,
   for (uint32_t i = 0u; i < info->colorAttachmentCount; i++) {
     const GPURenderPassColorAttachment *attachment;
     GPUTextureViewDX12                 *view;
+    GPUTextureViewDX12                 *resolveView;
 
     attachment = &info->pColorAttachments[i];
     view       = attachment->view ? attachment->view->_priv : NULL;
+    resolveView = attachment->resolveView
+                    ? attachment->resolveView->_priv
+                    : NULL;
     if (!view || !view->resource || !view->state || !view->hasRtv ||
-        attachment->resolveView ||
         view->width == 0u || view->height == 0u ||
         (i > 0u &&
          (view->width != renderPass->width ||
           view->height != renderPass->height))) {
       return NULL;
     }
+    if (resolveView &&
+        (!resolveView->resource || !resolveView->state ||
+         resolveView->width != view->width ||
+         resolveView->height != view->height)) {
+      return NULL;
+    }
 
     renderPass->colorViews[i]     = view;
+    renderPass->resolveViews[i]   = resolveView;
+    renderPass->resolveFormats[i] = dx12_format(attachment->view->format);
     renderPass->loadOps[i]        = attachment->loadOp;
     renderPass->storeOps[i]       = attachment->storeOp;
     renderPass->clearColors[i][0] = attachment->clearColor.float32[0];

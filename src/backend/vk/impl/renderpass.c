@@ -417,14 +417,18 @@ vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
   for (uint32_t i = 0u; i < info->colorAttachmentCount; i++) {
     const GPURenderPassColorAttachment *attachment;
     GPUTextureViewVk                   *view;
+    GPUTextureViewVk                   *resolveView;
     GPUSwapChainVk                     *swapchain;
     VkRenderingAttachmentInfoKHR       *nativeAttachment;
 
     attachment = &info->pColorAttachments[i];
     view       = attachment->view ? attachment->view->_priv : NULL;
+    resolveView = attachment->resolveView
+                    ? attachment->resolveView->_priv
+                    : NULL;
     swapchain  = view ? view->swapchain : NULL;
     if (!view || !view->view || !view->image || !view->layout ||
-        attachment->resolveView || view->extent.width == 0u ||
+        view->extent.width == 0u ||
         view->extent.height == 0u || view->layerCount == 0u ||
         (swapchain &&
          (!swapchain->frameActive ||
@@ -433,6 +437,13 @@ vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
          (native->extent.width != view->extent.width ||
           native->extent.height != view->extent.height ||
           layerCount != view->layerCount))) {
+      return NULL;
+    }
+    if (resolveView &&
+        (!resolveView->view || !resolveView->image || !resolveView->layout ||
+         resolveView->extent.width != view->extent.width ||
+         resolveView->extent.height != view->extent.height ||
+         resolveView->layerCount != view->layerCount)) {
       return NULL;
     }
 
@@ -447,6 +458,15 @@ vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     nativeAttachment->loadOp  = vk__loadOp(attachment->loadOp);
     nativeAttachment->storeOp = vk__storeOp(attachment->storeOp);
+    if (resolveView) {
+      vk_transitionView(command->command,
+                        resolveView,
+                        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+      nativeAttachment->resolveMode        = VK_RESOLVE_MODE_AVERAGE_BIT;
+      nativeAttachment->resolveImageView   = resolveView->view;
+      nativeAttachment->resolveImageLayout =
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
     nativeAttachment->clearValue.color.float32[0] =
       attachment->clearColor.float32[0];
     nativeAttachment->clearValue.color.float32[1] =
@@ -456,6 +476,7 @@ vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
     nativeAttachment->clearValue.color.float32[3] =
       attachment->clearColor.float32[3];
     native->colorViews[i] = view;
+    native->resolveViews[i] = resolveView;
     native->extent        = view->extent;
     native->swapchain     = swapchain;
     layerCount            = view->layerCount;

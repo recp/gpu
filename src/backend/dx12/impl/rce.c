@@ -598,8 +598,32 @@ dx12_endRenderEncoding(GPURenderCommandEncoder *encoder) {
 
   for (uint32_t i = 0u; i < renderPass->colorCount; i++) {
     GPUTextureViewDX12 *view;
+    GPUTextureViewDX12 *resolveView;
+    uint32_t             srcSubresource;
+    uint32_t             dstSubresource;
 
-    view = renderPass->colorViews[i];
+    view        = renderPass->colorViews[i];
+    resolveView = renderPass->resolveViews[i];
+    if (view && resolveView) {
+      dx12__transitionView(native, view, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+      dx12__transitionView(native,
+                           resolveView,
+                           D3D12_RESOURCE_STATE_RESOLVE_DEST);
+      srcSubresource = view->baseMip +
+                       view->baseLayer * view->texture->mipLevelCount;
+      dstSubresource = resolveView->baseMip +
+                       resolveView->baseLayer *
+                         resolveView->texture->mipLevelCount;
+      native->commandList->lpVtbl->ResolveSubresource(
+        native->commandList,
+        resolveView->resource,
+        dstSubresource,
+        view->resource,
+        srcSubresource,
+        renderPass->resolveFormats[i]
+      );
+    }
+    view = resolveView ? resolveView : view;
     if (view && view->swapchain) {
       dx12__transitionView(native, view, D3D12_RESOURCE_STATE_PRESENT);
     }

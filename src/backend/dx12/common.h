@@ -177,6 +177,8 @@ typedef struct GPUTextureViewDX12 {
 typedef struct GPURenderPassDX12 {
   GPUTextureViewDX12  *depthStencilView;
   GPUTextureViewDX12  *colorViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  GPUTextureViewDX12  *resolveViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  DXGI_FORMAT          resolveFormats[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   float                clearColors[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS][4];
   float                clearDepth;
   GPULoadOp            loadOps[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];

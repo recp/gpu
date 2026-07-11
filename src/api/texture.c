@@ -36,6 +36,12 @@ gpuIsTextureViewTypeValid(GPUTextureViewType viewType) {
          viewType == GPU_TEXTURE_VIEW_3D;
 }
 
+static bool
+gpuIsSampleCountValid(uint32_t sampleCount) {
+  return sampleCount == 0u || sampleCount == 1u || sampleCount == 2u ||
+         sampleCount == 4u || sampleCount == 8u;
+}
+
 static uint32_t
 gpuMipExtent(uint32_t extent, uint32_t mipLevel) {
   uint32_t mipExtent;
@@ -151,6 +157,18 @@ GPUCreateTexture(GPUDevice                  * __restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (!gpuIsTextureDimensionValid(info->dimension) || info->usage == 0) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!gpuIsSampleCountValid(info->sampleCount) ||
+      (info->sampleCount > 1u &&
+       (info->dimension != GPU_TEXTURE_DIMENSION_2D ||
+        info->depthOrLayers != 1u || info->mipLevelCount != 1u ||
+        (info->usage & (GPU_TEXTURE_USAGE_COLOR_TARGET |
+                        GPU_TEXTURE_USAGE_DEPTH_STENCIL)) == 0u ||
+        (info->usage & (GPU_TEXTURE_USAGE_COPY_SRC |
+                        GPU_TEXTURE_USAGE_COPY_DST |
+                        GPU_TEXTURE_USAGE_SAMPLED |
+                        GPU_TEXTURE_USAGE_STORAGE)) != 0u))) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -296,7 +314,8 @@ GPUQueueWriteTexture(GPUCommandQueue             * __restrict queue,
                      uint64_t                                 sizeBytes) {
   GPUApi *api;
 
-  if (!queue || !texture || queue->_device != texture->device ||
+  if (!queue || !texture || texture->sampleCount > 1u ||
+      queue->_device != texture->device ||
       !region || !data ||
       (texture->usage & GPU_TEXTURE_USAGE_COPY_DST) == 0 ||
       region->width == 0 ||

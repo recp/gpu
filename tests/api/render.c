@@ -639,7 +639,8 @@ typedef enum RenderReadbackDrawMode {
   RENDER_READBACK_DRAW_INDEXED_INDIRECT,
   RENDER_READBACK_DRAW_MULTI_INDIRECT,
   RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT,
-  RENDER_READBACK_DRAW_OCCLUSION
+  RENDER_READBACK_DRAW_OCCLUSION,
+  RENDER_READBACK_DRAW_MSAA
 } RenderReadbackDrawMode;
 
 typedef struct RenderIndirectArgs {
@@ -673,6 +674,8 @@ render_readback_label(RenderReadbackDrawMode mode, int clipped) {
       return "api-render-readback-indexed-multi-indirect";
     case RENDER_READBACK_DRAW_OCCLUSION:
       return "api-render-readback-occlusion";
+    case RENDER_READBACK_DRAW_MSAA:
+      return "api-render-readback-msaa";
     case RENDER_READBACK_DRAW:
     default:
       return "api-render-readback";
@@ -754,6 +757,7 @@ check_render_readback_case(GPUDevice *device,
   const int multi = mode == RENDER_READBACK_DRAW_MULTI_INDIRECT ||
                     mode == RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT;
   const int occlusion = mode == RENDER_READBACK_DRAW_OCCLUSION;
+  const int msaa = mode == RENDER_READBACK_DRAW_MSAA;
   const void *vertexData = multi ? (const void *)kMultiTriangles :
                                   (const void *)kFullscreenTriangle;
   const uint64_t vertexDataSize = multi ? sizeof(kMultiTriangles) :
@@ -771,7 +775,9 @@ check_render_readback_case(GPUDevice *device,
   GPUBuffer *readbackBuffer = NULL;
   GPUBuffer *queryBuffer = NULL;
   GPUTexture *target = NULL;
+  GPUTexture *resolveTarget = NULL;
   GPUTextureView *targetView = NULL;
+  GPUTextureView *resolveView = NULL;
   GPUQuerySet *querySet = NULL;
   GPUPipelineLayout *pipelineLayout = NULL;
   GPUCommandBuffer *cmdb = NULL;
@@ -844,7 +850,7 @@ check_render_readback_case(GPUDevice *device,
   pipelineInfo.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
   pipelineInfo.cullMode = GPU_CULL_MODE_NONE;
   pipelineInfo.frontFace = GPU_FRONT_FACE_CCW;
-  pipelineInfo.multisample.sampleCount = 1u;
+  pipelineInfo.multisample.sampleCount = msaa ? 4u : 1u;
   if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
       !pipeline) {
     fprintf(stderr, "failed to create %s pipeline\n", label);
@@ -951,9 +957,9 @@ check_render_readback_case(GPUDevice *device,
   textureInfo.height = height;
   textureInfo.depthOrLayers = 1u;
   textureInfo.mipLevelCount = 1u;
-  textureInfo.sampleCount = 1u;
+  textureInfo.sampleCount = msaa ? 4u : 1u;
   textureInfo.usage = GPU_TEXTURE_USAGE_COLOR_TARGET |
-                      GPU_TEXTURE_USAGE_COPY_SRC;
+                      (msaa ? 0u : GPU_TEXTURE_USAGE_COPY_SRC);
   if (GPUCreateTexture(device, &textureInfo, &target) != GPU_OK || !target) {
     fprintf(stderr, "failed to create %s target\n", label);
     goto cleanup;
@@ -971,6 +977,18 @@ check_render_readback_case(GPUDevice *device,
     fprintf(stderr, "failed to create %s target view\n", label);
     goto cleanup;
   }
+  if (msaa) {
+    textureInfo.sampleCount = 1u;
+    textureInfo.usage       = GPU_TEXTURE_USAGE_COLOR_TARGET |
+                              GPU_TEXTURE_USAGE_COPY_SRC;
+    if (GPUCreateTexture(device, &textureInfo, &resolveTarget) != GPU_OK ||
+        !resolveTarget ||
+        GPUCreateTextureView(resolveTarget, &viewInfo, &resolveView) != GPU_OK ||
+        !resolveView) {
+      fprintf(stderr, "failed to create %s resolve target\n", label);
+      goto cleanup;
+    }
+  }
 
   if (GPUAcquireCommandBuffer(queue, label, &cmdb) != GPU_OK ||
       !cmdb) {
@@ -979,6 +997,7 @@ check_render_readback_case(GPUDevice *device,
   }
 
   color.view = targetView;
+  color.resolveView = resolveView;
   color.loadOp = GPU_LOAD_OP_CLEAR;
   color.storeOp = GPU_STORE_OP_STORE;
   color.clearColor.float32[0] = 0.0f;
@@ -1066,7 +1085,7 @@ check_render_readback_case(GPUDevice *device,
     GPUResolveQuerySet(cmdb, querySet, 0u, 1u, queryBuffer, 0u);
   }
 
-  textureBarrier.texture = target;
+  textureBarrier.texture = msaa ? resolveTarget : target;
   textureBarrier.srcAccess = GPU_ACCESS_COLOR_WRITE;
   textureBarrier.dstAccess = GPU_ACCESS_TRANSFER_READ;
   textureBarrier.mipCount = 1u;
@@ -1088,7 +1107,10 @@ check_render_readback_case(GPUDevice *device,
   copyRegion.texture.height = height;
   copyRegion.texture.depth = 1u;
   copyRegion.texture.layerCount = 1u;
-  GPUCopyTextureToBuffer(copyPass, target, readbackBuffer, &copyRegion);
+  GPUCopyTextureToBuffer(copyPass,
+                         msaa ? resolveTarget : target,
+                         readbackBuffer,
+                         &copyRegion);
   GPUEndCopyPass(copyPass);
   copyPass = NULL;
 
@@ -1172,6 +1194,8 @@ cleanup:
     GPUEndRenderPass(renderPass);
   }
   GPUDestroyFence(fence);
+  GPUDestroyTextureView(resolveView);
+  GPUDestroyTexture(resolveTarget);
   GPUDestroyTextureView(targetView);
   GPUDestroyTexture(target);
   GPUDestroyBuffer(queryBuffer);
@@ -1202,7 +1226,8 @@ check_render_readback(GPUDevice *device) {
                                     0) &&
          check_render_readback_case(device,
                                     RENDER_READBACK_DRAW_OCCLUSION,
-                                    0);
+                                    0) &&
+         check_render_readback_case(device, RENDER_READBACK_DRAW_MSAA, 0);
 }
 
 static int
