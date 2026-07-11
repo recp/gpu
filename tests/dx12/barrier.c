@@ -82,21 +82,27 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
   GPUCommandBuffer      *cmdb;
   GPUCommandBuffer      *buffers[1];
   GPUCommandBufferDX12  *command;
+  GPUBuffer             *indexBuffer;
+  GPUBufferDX12         *nativeIndex;
   GPUTexture            *texture;
   GPUTextureDX12        *native;
   GPUFence              *fence;
   GPUTextureCreateInfo   textureInfo = {0};
+  GPUBufferCreateInfo    bufferInfo = {0};
+  GPUBufferBarrier       bufferBarrier = {0};
+  GPUBarrierBatch        bufferBatch = {0};
   GPUTextureWriteRegion  writeRegion = {0};
   GPUFenceCreateInfo     fenceInfo = {0};
   GPUQueueSubmitInfo     submitInfo = {0};
   bool                   ok;
 
-  device  = GPUCreateDeviceWithDefaultQueues(adapter);
-  queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
-  texture = NULL;
-  fence   = NULL;
-  cmdb    = NULL;
-  ok      = false;
+  device      = GPUCreateDeviceWithDefaultQueues(adapter);
+  queue       = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  indexBuffer = NULL;
+  texture     = NULL;
+  fence       = NULL;
+  cmdb        = NULL;
+  ok          = false;
   if (!device || !queue) {
     fprintf(stderr, "DX12 barrier device creation failed\n");
     goto cleanup;
@@ -109,6 +115,20 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
   }
   if (forceLegacy) {
     deviceDX12->enhancedBarriers = false;
+  }
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = forceLegacy
+                                  ? "dx12-index-barrier-legacy"
+                                  : "dx12-index-barrier-enhanced";
+  bufferInfo.sizeBytes        = 6u;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_INDEX |
+                                GPU_BUFFER_USAGE_STORAGE;
+  if (GPUCreateBuffer(device, &bufferInfo, &indexBuffer) != GPU_OK ||
+      !indexBuffer) {
+    fprintf(stderr, "DX12 index barrier buffer creation failed\n");
+    goto cleanup;
   }
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
@@ -171,6 +191,21 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
       (!forceLegacy && deviceDX12->enhancedBarriers &&
        !command->commandList7)) {
     fprintf(stderr, "DX12 barrier command path mismatch\n");
+    goto cleanup;
+  }
+
+  bufferBarrier.buffer    = indexBuffer;
+  bufferBarrier.srcAccess = GPU_ACCESS_SHADER_WRITE;
+  bufferBarrier.dstAccess = GPU_ACCESS_SHADER_READ;
+  bufferBarrier.sizeBytes = bufferInfo.sizeBytes;
+  bufferBatch.srcStages   = GPU_STAGE_COMPUTE;
+  bufferBatch.dstStages   = GPU_STAGE_VERTEX;
+  bufferBatch.bufferBarrierCount = 1u;
+  bufferBatch.pBufferBarriers     = &bufferBarrier;
+  GPUEncodeBarriers(cmdb, &bufferBatch);
+  nativeIndex = indexBuffer->_priv;
+  if (!nativeIndex || nativeIndex->state != D3D12_RESOURCE_STATE_INDEX_BUFFER) {
+    fprintf(stderr, "DX12 index barrier state mismatch\n");
     goto cleanup;
   }
 
@@ -283,6 +318,7 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
 cleanup:
   GPUDestroyFence(fence);
   GPUDestroyTexture(texture);
+  GPUDestroyBuffer(indexBuffer);
   GPUDestroyDevice(device);
   return ok;
 }

@@ -49,11 +49,27 @@ dx12__barrierSync(GPUPipelineStageMask stages, GPUAccessMask access) {
   return sync;
 }
 
+static D3D12_BARRIER_SYNC
+dx12__bufferBarrierSync(const GPUBuffer      *buffer,
+                        GPUAccessMask         access,
+                        GPUPipelineStageMask  stages) {
+  D3D12_BARRIER_SYNC sync;
+
+  sync = dx12__barrierSync(stages, access);
+  if ((access & GPU_ACCESS_SHADER_READ) != 0u &&
+      (stages & GPU_STAGE_VERTEX) != 0u &&
+      gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_INDEX)) {
+    sync |= D3D12_BARRIER_SYNC_INDEX_INPUT;
+  }
+  return sync;
+}
+
 static D3D12_BARRIER_ACCESS
 dx12__bufferBarrierAccess(const GPUBuffer       *buffer,
                           GPUAccessMask          access,
                           GPUPipelineStageMask   stages) {
   D3D12_BARRIER_ACCESS nativeAccess;
+  bool                 inputAccess;
 
   if ((access & GPU_ACCESS_SHADER_WRITE) != 0u) {
     return D3D12_BARRIER_ACCESS_UNORDERED_ACCESS;
@@ -70,12 +86,22 @@ dx12__bufferBarrierAccess(const GPUBuffer       *buffer,
     nativeAccess |= D3D12_BARRIER_ACCESS_INDIRECT_ARGUMENT;
   }
   if ((access & GPU_ACCESS_SHADER_READ) != 0u) {
-    if ((stages & GPU_STAGE_VERTEX) != 0u &&
-        gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_VERTEX)) {
-      nativeAccess |= D3D12_BARRIER_ACCESS_VERTEX_BUFFER;
-    } else if (gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_UNIFORM)) {
+    inputAccess = false;
+    if ((stages & GPU_STAGE_VERTEX) != 0u) {
+      if (gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_VERTEX)) {
+        nativeAccess |= D3D12_BARRIER_ACCESS_VERTEX_BUFFER;
+        inputAccess   = true;
+      }
+      if (gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_INDEX)) {
+        nativeAccess |= D3D12_BARRIER_ACCESS_INDEX_BUFFER;
+        inputAccess   = true;
+      }
+    }
+    if (gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_UNIFORM)) {
       nativeAccess |= D3D12_BARRIER_ACCESS_CONSTANT_BUFFER;
-    } else {
+      inputAccess   = true;
+    }
+    if (!inputAccess) {
       nativeAccess |= D3D12_BARRIER_ACCESS_SHADER_RESOURCE;
     }
   }
@@ -87,6 +113,7 @@ dx12__bufferBarrierState(const GPUBuffer      *buffer,
                          GPUAccessMask         access,
                          GPUPipelineStageMask  stages) {
   D3D12_RESOURCE_STATES state;
+  bool                  inputState;
 
   if ((access & GPU_ACCESS_SHADER_WRITE) != 0u) {
     return D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
@@ -103,10 +130,22 @@ dx12__bufferBarrierState(const GPUBuffer      *buffer,
     state |= D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
   }
   if ((access & GPU_ACCESS_SHADER_READ) != 0u) {
-    if ((stages & GPU_STAGE_VERTEX) != 0u &&
-        gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_VERTEX)) {
+    inputState = false;
+    if ((stages & GPU_STAGE_VERTEX) != 0u) {
+      if (gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_VERTEX)) {
+        state     |= D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+        inputState = true;
+      }
+      if (gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_INDEX)) {
+        state     |= D3D12_RESOURCE_STATE_INDEX_BUFFER;
+        inputState = true;
+      }
+    }
+    if (gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_UNIFORM)) {
       state |= D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-    } else {
+      inputState = true;
+    }
+    if (!inputState) {
       if ((stages & (GPU_STAGE_VERTEX | GPU_STAGE_COMPUTE)) != 0u) {
         state |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
       }
@@ -248,10 +287,12 @@ dx12__encodeBufferBarrier(GPUCommandBufferDX12   *command,
     D3D12_BUFFER_BARRIER nativeBarrier = {0};
     D3D12_BARRIER_GROUP  group = {0};
 
-    nativeBarrier.SyncBefore   = dx12__barrierSync(srcStages,
-                                                   barrier->srcAccess);
-    nativeBarrier.SyncAfter    = dx12__barrierSync(dstStages,
-                                                   barrier->dstAccess);
+    nativeBarrier.SyncBefore   = dx12__bufferBarrierSync(barrier->buffer,
+                                                         barrier->srcAccess,
+                                                         srcStages);
+    nativeBarrier.SyncAfter    = dx12__bufferBarrierSync(barrier->buffer,
+                                                         barrier->dstAccess,
+                                                         dstStages);
     nativeBarrier.AccessBefore = dx12__bufferBarrierAccess(barrier->buffer,
                                                            barrier->srcAccess,
                                                            srcStages);

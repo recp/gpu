@@ -181,13 +181,17 @@ typedef struct GPURenderEncoderDX12 {
   ID3D12DescriptorHeap       *samplerHeap;
   GPURenderPassDX12          *renderPass;
   GPURenderPipelineDX12      *pipeline;
+  GPUBuffer                  *indexBuffer;
   GPUBuffer                  *vertexBuffers[
     D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT
   ];
+  uint64_t                    indexOffset;
   uint64_t                    vertexOffsets[
     D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT
   ];
+  GPUIndexType                indexType;
   uint32_t                    vertexBufferMask;
+  bool                        indexBound;
 } GPURenderEncoderDX12;
 
 typedef struct GPUComputeEncoderDX12 {

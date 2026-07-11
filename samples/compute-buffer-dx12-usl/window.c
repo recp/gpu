@@ -4,6 +4,7 @@
 #include <windows.h>
 
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <wchar.h>
@@ -23,6 +24,7 @@ typedef struct ComputeRenderApp {
   GPUShaderLibrary   *library;
   GPUShaderLayout    *shaderLayout;
   GPUBuffer          *vertexBuffer;
+  GPUBuffer          *indexBuffer;
   GPUBindGroup       *vertexBindGroup;
   GPUComputePipeline *computePipeline;
   GPURenderPipeline  *renderPipeline;
@@ -132,6 +134,7 @@ compute_render_createWindow(ComputeRenderApp *app, HINSTANCE instance) {
 
 static bool
 compute_render_createGPU(ComputeRenderApp *app) {
+  const uint16_t indices[3] = {0u, 1u, 2u};
   GPUInstanceCreateInfo          instanceInfo = {0};
   GPUBindGroupLayout            *group1Layout;
   const GPUBindGroupLayoutEntry *layoutEntries;
@@ -245,6 +248,23 @@ compute_render_createGPU(ComputeRenderApp *app) {
                       &app->vertexBuffer) != GPU_OK ||
       !app->vertexBuffer) {
     compute_render_log("vertex/storage buffer creation failed");
+    return false;
+  }
+
+  bufferInfo.label     = "compute-render-dx12-indices";
+  bufferInfo.sizeBytes = sizeof(indices);
+  bufferInfo.usage     = GPU_BUFFER_USAGE_INDEX |
+                         GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(app->device,
+                      &bufferInfo,
+                      &app->indexBuffer) != GPU_OK ||
+      !app->indexBuffer ||
+      GPUQueueWriteBuffer(app->queue,
+                          app->indexBuffer,
+                          0u,
+                          indices,
+                          sizeof(indices)) != GPU_OK) {
+    compute_render_log("index buffer creation failed");
     return false;
   }
 
@@ -390,7 +410,11 @@ compute_render_render(ComputeRenderApp *app) {
   vertexBinding.buffer = app->vertexBuffer;
   GPUBindRenderPipeline(render, app->renderPipeline);
   GPUBindVertexBuffers(render, 0u, 1u, &vertexBinding);
-  GPUDraw(render, 3u, 1u, 0u, 0u);
+  GPUBindIndexBuffer(render,
+                     app->indexBuffer,
+                     0u,
+                     GPUIndexTypeUInt16);
+  GPUDrawIndexed(render, 3u, 1u, 0u, 0, 0u);
   GPUEndRenderPass(render);
   if (GPUFinishFrame(app->queue, cmdb, frame) != GPU_OK) {
     return false;
@@ -409,6 +433,7 @@ compute_render_destroyGPU(ComputeRenderApp *app) {
   GPUDestroyRenderPipeline(app->renderPipeline);
   GPUDestroyComputePipeline(app->computePipeline);
   GPUDestroyBindGroup(app->vertexBindGroup);
+  GPUDestroyBuffer(app->indexBuffer);
   GPUDestroyBuffer(app->vertexBuffer);
   GPUDestroyShaderLayout(app->shaderLayout);
   GPUDestroyShaderLibrary(app->library);

@@ -65,6 +65,63 @@ dx12__emitVertexBuffer(GPURenderEncoderDX12 *encoder, uint32_t index) {
                                                    &view);
 }
 
+static bool
+dx12__bindIndexBuffer(GPURenderCommandEncoder *encoder,
+                      GPURenderEncoderDX12     *native,
+                      uint32_t                  firstIndex,
+                      uint32_t                  indexCount) {
+  GPUBuffer              *buffer;
+  GPUBufferDX12          *nativeBuffer;
+  D3D12_INDEX_BUFFER_VIEW view = {0};
+  uint64_t                offset;
+  uint64_t                remaining;
+  uint64_t                firstByte;
+  uint64_t                byteCount;
+  uint64_t                indexSize;
+  uint64_t                viewSize;
+
+  buffer       = encoder ? encoder->_indexBuffer : NULL;
+  nativeBuffer = buffer ? buffer->_priv : NULL;
+  offset       = encoder ? encoder->_indexBufferOffset : 0u;
+  indexSize    = encoder && encoder->_indexType == GPUIndexTypeUInt32
+                   ? 4u
+                   : 2u;
+  if (!native || !native->commandList || !buffer || !nativeBuffer ||
+      !nativeBuffer->resource || nativeBuffer->gpuAddress == 0u ||
+      offset >= buffer->sizeBytes || (offset & (indexSize - 1u)) != 0u ||
+      offset > UINT64_MAX - nativeBuffer->gpuAddress ||
+      (nativeBuffer->state & D3D12_RESOURCE_STATE_INDEX_BUFFER) == 0u) {
+    return false;
+  }
+
+  remaining = buffer->sizeBytes - offset;
+  viewSize  = remaining > UINT_MAX ? UINT_MAX : remaining;
+  viewSize &= ~(indexSize - 1u);
+  firstByte = (uint64_t)firstIndex * indexSize;
+  byteCount = (uint64_t)indexCount * indexSize;
+  if (firstByte > viewSize || byteCount > viewSize - firstByte) {
+    return false;
+  }
+
+  if (native->indexBound && native->indexBuffer == buffer &&
+      native->indexOffset == offset &&
+      native->indexType == encoder->_indexType) {
+    return true;
+  }
+
+  view.BufferLocation = nativeBuffer->gpuAddress + offset;
+  view.SizeInBytes    = (UINT)viewSize;
+  view.Format         = encoder->_indexType == GPUIndexTypeUInt32
+                          ? DXGI_FORMAT_R32_UINT
+                          : DXGI_FORMAT_R16_UINT;
+  native->commandList->lpVtbl->IASetIndexBuffer(native->commandList, &view);
+  native->indexBuffer = buffer;
+  native->indexOffset = offset;
+  native->indexType   = encoder->_indexType;
+  native->indexBound  = true;
+  return true;
+}
+
 static void
 dx12__transitionView(GPURenderEncoderDX12 *encoder,
                      GPUTextureViewDX12   *view,
@@ -342,6 +399,32 @@ dx12_drawPrimitives(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
+dx12_drawIndexedPrims(GPURenderCommandEncoder *encoder,
+                      uint32_t                 indexCount,
+                      uint32_t                 instanceCount,
+                      uint32_t                 firstIndex,
+                      int32_t                  vertexOffset,
+                      uint32_t                 firstInstance) {
+  GPURenderEncoderDX12 *native;
+
+  native = encoder ? encoder->_priv : NULL;
+  if (!dx12__bindIndexBuffer(encoder,
+                             native,
+                             firstIndex,
+                             indexCount)) {
+    return;
+  }
+
+  native->commandList->lpVtbl->DrawIndexedInstanced(native->commandList,
+                                                     indexCount,
+                                                     instanceCount,
+                                                     firstIndex,
+                                                     vertexOffset,
+                                                     firstInstance);
+}
+
+GPU_HIDE
+void
 dx12_endRenderEncoding(GPURenderCommandEncoder *encoder) {
   GPURenderEncoderDX12 *native;
   GPURenderPassDX12    *renderPass;
@@ -373,5 +456,6 @@ dx12_initRCE(GPUApiRCE *api) {
   api->stencilReference       = dx12_stencilReference;
   api->vertexBuffer           = dx12_vertexBuffer;
   api->drawPrimitives         = dx12_drawPrimitives;
+  api->drawIndexedPrims       = dx12_drawIndexedPrims;
   api->endEncoding            = dx12_endRenderEncoding;
 }
