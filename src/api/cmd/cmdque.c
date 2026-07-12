@@ -131,7 +131,7 @@ gpu_newCommandBuffer(GPUCommandQueue  * __restrict cmdq,
 
   if (!cmdq)
     return NULL;
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpuCommandQueueApi(cmdq)))
     return NULL;
   if (!api->cmdque.newCommandBuffer)
     return NULL;
@@ -160,7 +160,7 @@ GPUGetQueue(GPUDevice * __restrict device,
   if (!device || bits == 0) {
     return NULL;
   }
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpuDeviceApi(device)))
     return NULL;
   if (!api->cmdque.getCommandQueue)
     return NULL;
@@ -195,7 +195,7 @@ GPUSetCommandBufferCompletionHandler(GPUCommandBuffer * __restrict cmdb,
 
   if (!cmdb)
     return;
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpuCommandBufferApi(cmdb)))
     return;
   if (!api->cmdque.commandBufferOnComplete)
     return;
@@ -239,7 +239,7 @@ GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpuCommandQueueApi(cmdq)))
     return GPU_ERROR_BACKEND_FAILURE;
   if (!api->cmdque.commit)
     return GPU_ERROR_BACKEND_FAILURE;

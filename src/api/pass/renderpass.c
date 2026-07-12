@@ -23,19 +23,9 @@
 
 #define GPU_RENDER_PASS_MAX_COLOR_ATTACHMENTS 8u
 
-static GPUDevice *
-gpu_commandBufferDevice(const GPUCommandBuffer *cmdb) {
-  return cmdb && cmdb->_queue ? cmdb->_queue->_device : NULL;
-}
-
-static GPUApi *
-gpu_commandBufferApi(const GPUCommandBuffer *cmdb) {
-  return gpuDeviceApi(gpu_commandBufferDevice(cmdb));
-}
-
 static GPUApi *
 gpu_copyPassApi(const GPUCopyPassEncoder *pass) {
-  return pass ? gpu_commandBufferApi(pass->_cmdb) : NULL;
+  return pass ? gpuCommandBufferApi(pass->_cmdb) : NULL;
 }
 
 static bool
@@ -335,7 +325,7 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
   GPUDevice            *device;
   GPUApi               *api;
 
-  device = gpu_commandBufferDevice(cmdb);
+  device = gpuCommandBufferDevice(cmdb);
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder ||
       !gpu_validRenderPassCreateInfo(info, device))
     return NULL;
@@ -383,7 +373,7 @@ GPUEndRenderPass(GPURenderPassEncoder *pass) {
   if (pass->_cmdb) {
     pass->_cmdb->_activeEncoder = false;
   }
-  if (!(api = gpu_commandBufferApi(pass->_cmdb)) || !api->rce.endEncoding)
+  if (!(api = gpuCommandBufferApi(pass->_cmdb)) || !api->rce.endEncoding)
     return;
 
   api->rce.endEncoding(pass);
@@ -397,7 +387,7 @@ GPUBeginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder) {
     return NULL;
   }
-  if (!(api = gpu_commandBufferApi(cmdb)) || !api->renderPass.beginCopyPass) {
+  if (!(api = gpuCommandBufferApi(cmdb)) || !api->renderPass.beginCopyPass) {
     return NULL;
   }
 

@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "device_internal.h"
 #include "swapchain_internal.h"
 
 static GPUSwapChain*
@@ -24,7 +25,7 @@ gpuCreateSwapchainInternal(GPUDevice              * __restrict device,
   GPUApi       *api;
   GPUSwapChain *swapChain;
 
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpuDeviceApi(device)))
     return NULL;
   if (!api->swapchain.createSwapChain)
     return NULL;
@@ -108,7 +109,7 @@ GPUDestroySwapchain(GPUSwapchain * __restrict swapChain) {
     return;
   }
 
-  if (!(api = gpuActiveGPUApi())) {
+  if (!(api = gpuDeviceApi(swapChain->device))) {
     return;
   }
 
@@ -129,7 +130,7 @@ GPUResizeSwapchain(GPUSwapchain * __restrict swapChain,
   if (!swapChain || width == 0 || height == 0)
     return GPU_ERROR_INVALID_ARGUMENT;
 
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpuDeviceApi(swapChain->device)))
     return GPU_ERROR_BACKEND_FAILURE;
 
   if (!api->swapchain.resizeSwapChain)

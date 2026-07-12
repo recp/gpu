@@ -23,11 +23,12 @@ void
 GPUSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   GPUApi *api;
 
-  if (!cmdb || cmdb->_submitted || !frame || !frame->drawable) {
+  if (!cmdb || cmdb->_submitted || !frame || !frame->drawable ||
+      gpuCommandBufferDevice(cmdb) != frame->device) {
     return;
   }
 
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpuCommandBufferApi(cmdb)))
     return;
   if (!api->cmdbuf.presentDrawable)
     return;

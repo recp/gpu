@@ -18,6 +18,7 @@
 #define gpu_cmdqueue_internal_h
 
 #include "../common.h"
+#include "device_internal.h"
 
 struct GPUCommandQueue {
   void            *_priv;
@@ -36,6 +37,26 @@ struct GPUCommandBuffer {
   bool                          _submitted;
   bool                          _activeEncoder;
 };
+
+static inline GPUDevice *
+gpuCommandQueueDevice(const GPUCommandQueue *queue) {
+  return queue ? queue->_device : NULL;
+}
+
+static inline GPUApi *
+gpuCommandQueueApi(const GPUCommandQueue *queue) {
+  return gpuDeviceApi(gpuCommandQueueDevice(queue));
+}
+
+static inline GPUDevice *
+gpuCommandBufferDevice(const GPUCommandBuffer *cmdb) {
+  return cmdb ? gpuCommandQueueDevice(cmdb->_queue) : NULL;
+}
+
+static inline GPUApi *
+gpuCommandBufferApi(const GPUCommandBuffer *cmdb) {
+  return gpuDeviceApi(gpuCommandBufferDevice(cmdb));
+}
 
 typedef void (*GPUCommandBufferRecycleFn)(GPUCommandBuffer *cmdb);
 

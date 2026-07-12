@@ -1,12 +1,139 @@
 #include "test.h"
 #include "../../src/api/cmdqueue_internal.h"
+#include "../../src/api/device_internal.h"
 #include "../../src/api/frame_internal.h"
+#include "../../src/api/swapchain_internal.h"
 
 typedef struct QueueCompletionProbe {
   int count;
   void *sender;
   GPUCommandBuffer *cmdb;
 } QueueCompletionProbe;
+
+static GPUCommandQueue  gScopedQueue;
+static GPUCommandBuffer gScopedCmdb;
+static GPUFrame         gScopedFrame;
+static uint32_t         gScopedQueueGetCalls;
+static uint32_t         gScopedCmdbNewCalls;
+static uint32_t         gScopedPresentCalls;
+static uint32_t         gScopedCommitCalls;
+static uint32_t         gScopedFrameBeginCalls;
+static uint32_t         gScopedFrameEndCalls;
+
+static GPUCommandQueue *
+get_scoped_queue(GPUDevice * __restrict device,
+                 GPUQueueFlagBits       bits,
+                 uint32_t               index) {
+  (void)index;
+  memset(&gScopedQueue, 0, sizeof(gScopedQueue));
+  gScopedQueue._device = device;
+  gScopedQueue.bits    = bits;
+  gScopedQueueGetCalls++;
+  return &gScopedQueue;
+}
+
+static GPUCommandBuffer *
+new_scoped_cmdb(GPUCommandQueue * __restrict queue,
+                const char      * __restrict label,
+                void            * __restrict sender,
+                GPUCommandBufferCompletionFn onComplete) {
+  (void)queue;
+  (void)label;
+  (void)sender;
+  (void)onComplete;
+  memset(&gScopedCmdb, 0, sizeof(gScopedCmdb));
+  gScopedCmdbNewCalls++;
+  return &gScopedCmdb;
+}
+
+static void
+present_scoped_frame(GPUCommandBuffer *cmdb, GPUFrame *frame) {
+  (void)cmdb;
+  (void)frame;
+  gScopedPresentCalls++;
+}
+
+static GPUResult
+commit_scoped_cmdb(GPUCommandBuffer * __restrict cmdb) {
+  (void)cmdb;
+  gScopedCommitCalls++;
+  return GPU_OK;
+}
+
+static GPUFrame *
+begin_scoped_frame(GPUApi       * __restrict api,
+                   GPUSwapChain * __restrict swapchain) {
+  (void)api;
+  (void)swapchain;
+  memset(&gScopedFrame, 0, sizeof(gScopedFrame));
+  gScopedFrame.drawable = &gScopedFrame;
+  gScopedFrameBeginCalls++;
+  return &gScopedFrame;
+}
+
+static void
+end_scoped_frame(GPUApi   * __restrict api,
+                 GPUFrame * __restrict frame) {
+  (void)api;
+  (void)frame;
+  gScopedFrameEndCalls++;
+}
+
+static int
+check_queue_frame_device_dispatch(void) {
+  GPUApi           *api;
+  GPUCommandQueue  *queue;
+  GPUCommandBuffer *cmdb;
+  GPUFrame         *frame;
+  GPUApi            scopedApi;
+  GPUDevice         device    = {0};
+  GPUSwapChain      swapchain = {0};
+
+  api = gpuActiveGPUApi();
+  if (!api) {
+    fprintf(stderr, "queue/frame dispatch could not get active api\n");
+    return 0;
+  }
+
+  scopedApi                                = *api;
+  scopedApi.cmdque.getCommandQueue         = get_scoped_queue;
+  scopedApi.cmdque.newCommandBuffer        = new_scoped_cmdb;
+  scopedApi.cmdque.commit                  = commit_scoped_cmdb;
+  scopedApi.cmdbuf.presentDrawable         = present_scoped_frame;
+  scopedApi.frame.beginFrame               = begin_scoped_frame;
+  scopedApi.frame.endFrame                 = end_scoped_frame;
+  device._api                              = &scopedApi;
+  swapchain.device                         = &device;
+  gScopedQueueGetCalls                     = 0u;
+  gScopedCmdbNewCalls                      = 0u;
+  gScopedPresentCalls                      = 0u;
+  gScopedCommitCalls                       = 0u;
+  gScopedFrameBeginCalls                   = 0u;
+  gScopedFrameEndCalls                     = 0u;
+
+  queue = GPUGetQueue(&device, GPU_QUEUE_GRAPHICS, 0u);
+  cmdb  = NULL;
+  frame = GPUBeginFrame(&swapchain);
+  if (queue != &gScopedQueue || !frame ||
+      GPUAcquireCommandBuffer(queue, "device-scoped", &cmdb) != GPU_OK ||
+      cmdb != &gScopedCmdb ||
+      GPUFinishFrame(queue, cmdb, frame) != GPU_OK) {
+    fprintf(stderr, "queue/frame device dispatch failed\n");
+    return 0;
+  }
+
+  if (gScopedQueueGetCalls != 1u ||
+      gScopedCmdbNewCalls != 1u ||
+      gScopedPresentCalls != 1u ||
+      gScopedCommitCalls != 1u ||
+      gScopedFrameBeginCalls != 1u ||
+      gScopedFrameEndCalls != 1u) {
+    fprintf(stderr, "queue/frame device dispatch called wrong backend\n");
+    return 0;
+  }
+
+  return 1;
+}
 
 static void
 queue_completion_probe(void *sender, GPUCommandBuffer *cmdb) {
@@ -924,7 +1051,8 @@ int
 gpu_test_queue(GPUInstance *instance,
                GPUAdapter  *adapter,
                GPUDevice   *device) {
-  return check_adapter_enumeration(instance) &&
+  return check_queue_frame_device_dispatch() &&
+         check_adapter_enumeration(instance) &&
          check_device_queue_create_validation(adapter) &&
          check_queue_selection(device) &&
          check_queue_submit_fence(device) &&

@@ -29,7 +29,7 @@ GPUBeginFrame(GPUSwapchain* swapchain) {
 
   if (!swapchain)
     return NULL;
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpuDeviceApi(swapchain->device)))
     return NULL;
   if (!api->frame.beginFrame)
     return NULL;
@@ -65,7 +65,7 @@ GPUEndFrame(GPUFrame* frame) {
 
   if (!frame)
     return;
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpuDeviceApi(frame->device)))
     return;
   if (!api->frame.endFrame)
     return;
@@ -86,7 +86,8 @@ GPUFinishFrame(GPUCommandQueue  * __restrict cmdq,
   if (!cmdq || !cmdb || !frame)
     return GPU_ERROR_INVALID_ARGUMENT;
 
-  if (cmdb->_submitted || cmdb->_activeEncoder || cmdb->_queue != cmdq) {
+  if (cmdb->_submitted || cmdb->_activeEncoder || cmdb->_queue != cmdq ||
+      gpuCommandQueueDevice(cmdq) != frame->device) {
     GPUEndFrame(frame);
     return GPU_ERROR_INVALID_ARGUMENT;
   }
