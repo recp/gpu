@@ -1,4 +1,44 @@
 #include "test.h"
+#include "../../src/api/device_internal.h"
+
+enum {
+  GPU_SOURCE_SAMPLER_WARM_ITERATIONS = 16u
+};
+
+static int
+submit_source_sampler_draw(GPUCommandQueue            *queue,
+                           GPURenderPipeline          *pipeline,
+                           GPUBindGroup               *group,
+                           GPURenderPassCreateInfo    *passInfo,
+                           GPUFence                   *fence) {
+  GPUCommandBuffer     *cmdb;
+  GPUCommandBuffer     *submitBuffers[1];
+  GPURenderPassEncoder *renderPass;
+  GPUQueueSubmitInfo    submitInfo = {0};
+
+  cmdb       = NULL;
+  renderPass = NULL;
+  if (GPUAcquireCommandBuffer(queue,
+                              "api-source-sampler-warm",
+                              &cmdb) != GPU_OK ||
+      !cmdb || !(renderPass = GPUBeginRenderPass(cmdb, passInfo))) {
+    return 0;
+  }
+
+  GPUBindRenderPipeline(renderPass, pipeline);
+  GPUBindRenderGroup(renderPass, 0u, group, 0u, NULL);
+  GPUDraw(renderPass, 6u, 1u, 0u, 0u);
+  GPUEndRenderPass(renderPass);
+
+  submitBuffers[0]              = cmdb;
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.ppCommandBuffers   = submitBuffers;
+  submitInfo.fence              = fence;
+  return GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
+         GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+}
 
 int
 gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
@@ -322,6 +362,33 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
             (unsigned)pixels[centerOffset + 1u],
             (unsigned)pixels[centerOffset + 2u],
             (unsigned)pixels[centerOffset + 3u]);
+    goto cleanup;
+  }
+
+  GPUResetStats(device);
+  for (uint32_t i = 0u; i < GPU_SOURCE_SAMPLER_WARM_ITERATIONS; i++) {
+    if (!submit_source_sampler_draw(queue,
+                                    pipeline,
+                                    group,
+                                    &passInfo,
+                                    fence)) {
+      fprintf(stderr, "source sampler warm draw submission failed\n");
+      ok = 0;
+      goto cleanup;
+    }
+  }
+  if (device->currentFrameStats.hotPathAllocCount != 0u ||
+      device->currentFrameStats.hotPathAllocBytes != 0u ||
+      device->currentFrameStats.hotPathFreeCount != 0u ||
+      device->currentFrameStats.hotPathFreeBytes != 0u) {
+    fprintf(stderr,
+            "source sampler warm path allocated: %llu/%llu bytes, "
+            "%llu/%llu bytes freed\n",
+            (unsigned long long)device->currentFrameStats.hotPathAllocCount,
+            (unsigned long long)device->currentFrameStats.hotPathAllocBytes,
+            (unsigned long long)device->currentFrameStats.hotPathFreeCount,
+            (unsigned long long)device->currentFrameStats.hotPathFreeBytes);
+    ok = 0;
   }
 
 cleanup:
