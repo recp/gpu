@@ -226,6 +226,7 @@ if(GPU_BUILD_TESTS)
     tests/api/runtime.c
     tests/api/sampler.c
     tests/api/shader.c
+    tests/api/shader_sampler.c
   )
   target_link_libraries(gpu-api-test PRIVATE gpu)
   set_target_properties(gpu-api-test PROPERTIES
@@ -249,6 +250,7 @@ if(GPU_BUILD_TESTS)
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/usl-reflection-check/reflection.us"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/render_mrt.us"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/compute.us"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/source_sampler.us"
   )
 
   if(GPU_ENABLE_VULKAN)
@@ -257,6 +259,7 @@ if(GPU_BUILD_TESTS)
               "${CMAKE_CURRENT_SOURCE_DIR}/samples/usl-reflection-check/reflection.us"
               "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/render_mrt.us"
               "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/compute.us"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/source_sampler.us"
               vulkan
     )
   endif()

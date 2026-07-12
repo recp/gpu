@@ -1,0 +1,43 @@
+pub struct SourceSamplerVSOut {
+  position: float4 #position
+  uv: float2
+}
+
+fn source_sampler_position(vertexId: uint) -> float4 {
+  switch (vertexId) {
+    case 0, 3:
+      return float4(-1.0, -1.0, 0.0, 1.0)
+    case 1:
+      return float4(-1.0, 1.0, 0.0, 1.0)
+    case 2, 4:
+      return float4(1.0, 1.0, 0.0, 1.0)
+    default:
+      return float4(1.0, -1.0, 0.0, 1.0)
+  }
+}
+
+fn source_sampler_uv(vertexId: uint) -> float2 {
+  switch (vertexId) {
+    case 0, 3:
+      return float2(0.0, 1.0)
+    case 1:
+      return float2(0.0, 0.0)
+    case 2, 4:
+      return float2(1.0, 0.0)
+    default:
+      return float2(1.0, 1.0)
+  }
+}
+
+vert source_sampler_vs(vertexId: uint #vertex_id) -> SourceSamplerVSOut {
+  var out: SourceSamplerVSOut
+  out.position = source_sampler_position(vertexId)
+  out.uv = source_sampler_uv(vertexId)
+  return out
+}
+
+frag source_sampler_fs(input: SourceSamplerVSOut #stage_in,
+                       colorTex: texture2d<float> #texture(0)) -> float4 {
+  let linearSampler = sampler(.linear, .linear, .linear, .clampToEdge)
+  return colorTex.sample(linearSampler, input.uv)
+}

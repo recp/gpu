@@ -67,6 +67,14 @@ run_shader(void *ctx) {
   return gpu_test_shader(testCtx->device, testCtx->uslBytecodePath);
 }
 
+static int
+run_source_sampler(void *ctx) {
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_source_sampler_draw(testCtx->device,
+                                      testCtx->sourceSamplerBytecodePath);
+}
+
 static GPUAdapter *
 select_adapter(GPUInstance *instance) {
   GPUAdapter *adapter = NULL;
@@ -102,16 +110,17 @@ parse_backend(const char *name, GPUBackend *outBackend) {
 int
 main(int argc, char **argv) {
   GPUInstanceCreateInfo instanceInfo = {0};
-  GPUInstance *instance;
-  GPUAdapter *adapter;
-  GPUDevice *device;
-  GPUApiTestContext ctx;
-  GPUApiTest tests[11];
-  int ok;
+  GPUInstance          *instance;
+  GPUAdapter           *adapter;
+  GPUDevice            *device;
+  GPUApiTestContext      ctx;
+  GPUApiTest             tests[12];
+  int                    ok;
 
-  if (argc != 4 && argc != 5) {
+  if (argc != 5 && argc != 6) {
     fprintf(stderr,
             "usage: %s <reflection.us> <render_mrt.us> <compute.us> "
+            "<source_sampler.us> "
             "[metal|vulkan|dx12]\n",
             argv[0]);
     return 2;
@@ -121,9 +130,9 @@ main(int argc, char **argv) {
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = GPU_BACKEND_DEFAULT;
   instanceInfo.enableValidation = true;
-  if (argc == 5 &&
-      !parse_backend(argv[4], &instanceInfo.preferredBackend)) {
-    fprintf(stderr, "unknown backend: %s\n", argv[4]);
+  if (argc == 6 &&
+      !parse_backend(argv[5], &instanceInfo.preferredBackend)) {
+    fprintf(stderr, "unknown backend: %s\n", argv[5]);
     return 2;
   }
   instance = NULL;
@@ -146,24 +155,26 @@ main(int argc, char **argv) {
     return 1;
   }
 
-  ctx.instance = instance;
-  ctx.adapter = adapter;
-  ctx.device = device;
-  ctx.uslBytecodePath = argv[1];
-  ctx.mrtBytecodePath = argv[2];
-  ctx.computeBytecodePath = argv[3];
+  ctx.instance                  = instance;
+  ctx.adapter                   = adapter;
+  ctx.device                    = device;
+  ctx.uslBytecodePath           = argv[1];
+  ctx.mrtBytecodePath           = argv[2];
+  ctx.computeBytecodePath       = argv[3];
+  ctx.sourceSamplerBytecodePath = argv[4];
 
-  tests[0] = (GPUApiTest){ "queue", run_queue, &ctx };
-  tests[1] = (GPUApiTest){ "sampler", run_sampler, &ctx };
-  tests[2] = (GPUApiTest){ "bindgroup", run_bindgroup, &ctx };
-  tests[3] = (GPUApiTest){ "resources", run_resources, &ctx };
-  tests[4] = (GPUApiTest){ "copy", run_copy, &ctx };
-  tests[5] = (GPUApiTest){ "render", run_render, &ctx };
-  tests[6] = (GPUApiTest){ "compute", run_compute, &ctx };
-  tests[7] = (GPUApiTest){ "query", run_query, &ctx };
-  tests[8] = (GPUApiTest){ "barrier", run_barrier, &ctx };
-  tests[9] = (GPUApiTest){ "runtime", run_runtime, &ctx };
+  tests[0]  = (GPUApiTest){ "queue", run_queue, &ctx };
+  tests[1]  = (GPUApiTest){ "sampler", run_sampler, &ctx };
+  tests[2]  = (GPUApiTest){ "bindgroup", run_bindgroup, &ctx };
+  tests[3]  = (GPUApiTest){ "resources", run_resources, &ctx };
+  tests[4]  = (GPUApiTest){ "copy", run_copy, &ctx };
+  tests[5]  = (GPUApiTest){ "render", run_render, &ctx };
+  tests[6]  = (GPUApiTest){ "compute", run_compute, &ctx };
+  tests[7]  = (GPUApiTest){ "query", run_query, &ctx };
+  tests[8]  = (GPUApiTest){ "barrier", run_barrier, &ctx };
+  tests[9]  = (GPUApiTest){ "runtime", run_runtime, &ctx };
   tests[10] = (GPUApiTest){ "shader", run_shader, &ctx };
+  tests[11] = (GPUApiTest){ "source-sampler", run_source_sampler, &ctx };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 

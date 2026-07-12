@@ -1477,8 +1477,10 @@ dx12_bindRenderGroup(GPURenderCommandEncoder *pass,
   device = pipelineLayout && pipelineLayout->_device
              ? pipelineLayout->_device->_priv
              : NULL;
-  if (!encoder || !encoder->commandList || !layout || !layout->rootSignature ||
-      encoder->rootSignature != layout->rootSignature ||
+  if (!encoder || !encoder->commandList || !encoder->pipeline ||
+      !layout || !layout->rootSignature ||
+      pass->_pipelineLayout != pipelineLayout ||
+      encoder->rootSignature != encoder->pipeline->rootSignature ||
       !nativeGroup || nativeGroup->device != device ||
       groupIndex >= layout->groupCount) {
     return false;
@@ -1560,7 +1562,7 @@ dx12_bindComputeGroup(GPUComputePassEncoder *pass,
              ? pipelineLayout->_device->_priv
              : NULL;
   if (!encoder || !encoder->commandList || !layout || !layout->rootSignature ||
-      encoder->rootSignature != layout->rootSignature ||
+      pass->_pipelineLayout != pipelineLayout || !encoder->rootSignature ||
       !nativeGroup || nativeGroup->device != device ||
       groupIndex >= layout->groupCount) {
     return false;
