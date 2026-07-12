@@ -286,53 +286,89 @@ GPUBindIndexBuffer(GPURenderPassEncoder *pass,
 GPU_EXPORT
 void
 GPUSetViewport(GPURenderPassEncoder *pass, const GPUViewport *viewport) {
+  GPUDevice *device;
   GPUApi *api;
 
   if (!pass || pass->_ended || !viewport)
+    return;
+  device = gpu_renderPassDevice(pass);
+  gpuDeviceRecordStateRequest(device);
+  if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_VIEWPORT_BIT) != 0u &&
+      memcmp(&pass->_viewport, viewport, sizeof(*viewport)) == 0)
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.viewport)
     return;
 
   api->rce.viewport(pass, viewport);
+  pass->_viewport = *viewport;
+  pass->_dynamicStateMask |= GPU_DYNAMIC_STATE_VIEWPORT_BIT;
+  gpuDeviceRecordStateEmission(device);
 }
 
 GPU_EXPORT
 void
 GPUSetScissor(GPURenderPassEncoder *pass, const GPUScissorRect *scissor) {
+  GPUDevice *device;
   GPUApi *api;
 
   if (!pass || pass->_ended || !scissor)
+    return;
+  device = gpu_renderPassDevice(pass);
+  gpuDeviceRecordStateRequest(device);
+  if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_SCISSOR_BIT) != 0u &&
+      memcmp(&pass->_scissor, scissor, sizeof(*scissor)) == 0)
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.scissor)
     return;
 
   api->rce.scissor(pass, scissor);
+  pass->_scissor = *scissor;
+  pass->_dynamicStateMask |= GPU_DYNAMIC_STATE_SCISSOR_BIT;
+  gpuDeviceRecordStateEmission(device);
 }
 
 GPU_EXPORT
 void
 GPUSetBlendConstant(GPURenderPassEncoder *pass, const float rgba[4]) {
+  GPUDevice *device;
   GPUApi *api;
 
   if (!pass || pass->_ended || !rgba)
+    return;
+  device = gpu_renderPassDevice(pass);
+  gpuDeviceRecordStateRequest(device);
+  if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT) != 0u &&
+      memcmp(pass->_blendConstant, rgba, sizeof(pass->_blendConstant)) == 0)
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.blendConstant)
     return;
 
   api->rce.blendConstant(pass, rgba);
+  memcpy(pass->_blendConstant, rgba, sizeof(pass->_blendConstant));
+  pass->_dynamicStateMask |= GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT;
+  gpuDeviceRecordStateEmission(device);
 }
 
 GPU_EXPORT
 void
 GPUSetStencilReference(GPURenderPassEncoder *pass, uint32_t reference) {
+  GPUDevice *device;
   GPUApi *api;
 
   if (!pass || pass->_ended)
+    return;
+  device = gpu_renderPassDevice(pass);
+  gpuDeviceRecordStateRequest(device);
+  if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT) != 0u &&
+      pass->_stencilReference == reference)
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.stencilReference)
     return;
 
   api->rce.stencilReference(pass, reference);
+  pass->_stencilReference = reference;
+  pass->_dynamicStateMask |= GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
+  gpuDeviceRecordStateEmission(device);
 }
 
 GPU_HIDE

@@ -185,6 +185,19 @@ vk_scissor(GPURenderCommandEncoder *encoder, const GPUScissorRect *value) {
 
 GPU_HIDE
 void
+vk_blendConstant(GPURenderCommandEncoder *encoder, const float rgba[4]) {
+  GPURenderEncoderVk *native;
+
+  native = vk__renderEncoder(encoder);
+  if (!native || !rgba) {
+    return;
+  }
+
+  vkCmdSetBlendConstants(native->command, rgba);
+}
+
+GPU_HIDE
+void
 vk_stencilReference(GPURenderCommandEncoder *encoder, uint32_t reference) {
   GPURenderEncoderVk *native;
 
@@ -441,6 +454,7 @@ vk_initRCE(GPUApiRCE *api) {
   api->setRenderPipelineState   = vk_setRenderPipelineState;
   api->viewport                 = vk_viewport;
   api->scissor                  = vk_scissor;
+  api->blendConstant            = vk_blendConstant;
   api->stencilReference         = vk_stencilReference;
   api->pushConstants            = vk_renderPushConstants;
   api->vertexBuffer             = vk_vertexBuffer;

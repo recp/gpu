@@ -6,7 +6,11 @@ enum {
   GPU_SOURCE_SAMPLER_WARM_BIND_REQUESTS =
     GPU_SOURCE_SAMPLER_WARM_ITERATIONS * 4u,
   GPU_SOURCE_SAMPLER_WARM_BIND_EMISSIONS =
-    GPU_SOURCE_SAMPLER_WARM_ITERATIONS * 2u
+    GPU_SOURCE_SAMPLER_WARM_ITERATIONS * 2u,
+  GPU_SOURCE_SAMPLER_WARM_STATE_REQUESTS =
+    GPU_SOURCE_SAMPLER_WARM_ITERATIONS * 8u,
+  GPU_SOURCE_SAMPLER_WARM_STATE_EMISSIONS =
+    GPU_SOURCE_SAMPLER_WARM_ITERATIONS * 4u
 };
 
 static int
@@ -15,10 +19,11 @@ submit_source_sampler_draw(GPUCommandQueue            *queue,
                            GPUBindGroup               *group,
                            GPURenderPassCreateInfo    *passInfo,
                            GPUFence                   *fence) {
-  GPUCommandBuffer     *cmdb;
-  GPUCommandBuffer     *submitBuffers[1];
-  GPURenderPassEncoder *renderPass;
-  GPUQueueSubmitInfo    submitInfo = {0};
+  GPUCommandBuffer         *cmdb;
+  GPUCommandBuffer         *submitBuffers[1];
+  GPURenderPassEncoder     *renderPass;
+  GPUQueueSubmitInfo        submitInfo   = {0};
+  GPUDynamicStateApplyInfo  dynamicState = {0};
 
   cmdb       = NULL;
   renderPass = NULL;
@@ -33,6 +38,20 @@ submit_source_sampler_draw(GPUCommandQueue            *queue,
   GPUBindRenderPipeline(renderPass, pipeline);
   GPUBindRenderGroup(renderPass, 0u, group, 0u, NULL);
   GPUBindRenderGroup(renderPass, 0u, group, 0u, NULL);
+  dynamicState.chain.sType      = GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO;
+  dynamicState.chain.structSize = sizeof(dynamicState);
+  dynamicState.mask             = GPU_DYNAMIC_STATE_VIEWPORT_BIT |
+                                  GPU_DYNAMIC_STATE_SCISSOR_BIT |
+                                  GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT |
+                                  GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
+  dynamicState.viewport.width   = 4.0;
+  dynamicState.viewport.height  = 4.0;
+  dynamicState.viewport.zfar    = 1.0;
+  dynamicState.scissor.width    = 4u;
+  dynamicState.scissor.height   = 4u;
+  dynamicState.blendConstant[3] = 1.0f;
+  GPUApplyDynamicState(renderPass, &dynamicState);
+  GPUApplyDynamicState(renderPass, &dynamicState);
   GPUDraw(renderPass, 6u, 1u, 0u, 0u);
   GPUEndRenderPass(renderPass);
 
@@ -390,16 +409,22 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
       device->currentFrameStats.requestedBindCalls !=
         GPU_SOURCE_SAMPLER_WARM_BIND_REQUESTS ||
       device->currentFrameStats.emittedBindCalls !=
-        GPU_SOURCE_SAMPLER_WARM_BIND_EMISSIONS) {
+        GPU_SOURCE_SAMPLER_WARM_BIND_EMISSIONS ||
+      device->currentFrameStats.requestedStateCalls !=
+        GPU_SOURCE_SAMPLER_WARM_STATE_REQUESTS ||
+      device->currentFrameStats.emittedStateCalls !=
+        GPU_SOURCE_SAMPLER_WARM_STATE_EMISSIONS) {
     fprintf(stderr,
             "source sampler warm path allocated: %llu/%llu bytes, "
-            "%llu/%llu bytes freed; binds %u/%u\n",
+            "%llu/%llu bytes freed; binds %u/%u; state %u/%u\n",
             (unsigned long long)device->currentFrameStats.hotPathAllocCount,
             (unsigned long long)device->currentFrameStats.hotPathAllocBytes,
             (unsigned long long)device->currentFrameStats.hotPathFreeCount,
             (unsigned long long)device->currentFrameStats.hotPathFreeBytes,
             device->currentFrameStats.requestedBindCalls,
-            device->currentFrameStats.emittedBindCalls);
+            device->currentFrameStats.emittedBindCalls,
+            device->currentFrameStats.requestedStateCalls,
+            device->currentFrameStats.emittedStateCalls);
     ok = 0;
   }
 

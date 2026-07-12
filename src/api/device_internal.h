@@ -73,6 +73,20 @@ gpuDeviceRecordBindEmission(GPUDevice *device) {
   }
 }
 
+static inline void
+gpuDeviceRecordStateRequest(GPUDevice *device) {
+  if (device && device->runtimeConfig.enableStats) {
+    device->currentFrameStats.requestedStateCalls++;
+  }
+}
+
+static inline void
+gpuDeviceRecordStateEmission(GPUDevice *device) {
+  if (device && device->runtimeConfig.enableStats) {
+    device->currentFrameStats.emittedStateCalls++;
+  }
+}
+
 GPU_HIDE
 void
 gpuDeviceBeginFrame(GPUDevice *device);

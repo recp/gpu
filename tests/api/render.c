@@ -1849,7 +1849,10 @@ cleanup:
 
 static int
 check_dynamic_state_validation_calls(void) {
-  GPUApi *api;
+  GPUDevice        device = {0};
+  GPUCommandQueue  queue  = {0};
+  GPUCommandBuffer cmdb   = {0};
+  GPUApi          *api;
   void (*oldViewport)(GPURenderCommandEncoder *, const GPUViewport *);
   void (*oldScissor)(GPURenderCommandEncoder *, const GPUScissorRect *);
   void (*oldBlend)(GPURenderCommandEncoder *, const float[4]);
@@ -1865,14 +1868,19 @@ check_dynamic_state_validation_calls(void) {
     return 0;
   }
 
-  oldViewport = api->rce.viewport;
-  oldScissor = api->rce.scissor;
-  oldBlend = api->rce.blendConstant;
-  oldStencil = api->rce.stencilReference;
-  api->rce.viewport = count_viewport;
-  api->rce.scissor = count_scissor;
-  api->rce.blendConstant = count_blend_constant;
+  oldViewport               = api->rce.viewport;
+  oldScissor                = api->rce.scissor;
+  oldBlend                  = api->rce.blendConstant;
+  oldStencil                = api->rce.stencilReference;
+  api->rce.viewport         = count_viewport;
+  api->rce.scissor          = count_scissor;
+  api->rce.blendConstant    = count_blend_constant;
   api->rce.stencilReference = count_stencil_reference;
+
+  device.runtimeConfig.enableStats = true;
+  queue._device                    = &device;
+  cmdb._queue                      = &queue;
+  pass._cmdb                       = &cmdb;
 
   gRenderViewportCalls = 0u;
   gRenderScissorCalls = 0u;
@@ -1926,8 +1934,31 @@ check_dynamic_state_validation_calls(void) {
   if (gRenderViewportCalls != 1u ||
       gRenderScissorCalls != 1u ||
       gRenderBlendCalls != 1u ||
-      gRenderStencilCalls != 1u) {
+      gRenderStencilCalls != 1u ||
+      device.currentFrameStats.requestedStateCalls != 4u ||
+      device.currentFrameStats.emittedStateCalls != 4u) {
     fprintf(stderr, "dynamic state validation did not apply selected state\n");
+    goto cleanup;
+  }
+
+  GPUApplyDynamicState(&pass, &info);
+  if (gRenderViewportCalls != 1u ||
+      gRenderScissorCalls != 1u ||
+      gRenderBlendCalls != 1u ||
+      gRenderStencilCalls != 1u ||
+      device.currentFrameStats.requestedStateCalls != 8u ||
+      device.currentFrameStats.emittedStateCalls != 4u) {
+    fprintf(stderr, "dynamic state shadowing emitted redundant state\n");
+    goto cleanup;
+  }
+
+  info.mask = GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
+  info.stencilReference = 7u;
+  GPUApplyDynamicState(&pass, &info);
+  if (gRenderStencilCalls != 2u ||
+      device.currentFrameStats.requestedStateCalls != 9u ||
+      device.currentFrameStats.emittedStateCalls != 5u) {
+    fprintf(stderr, "dynamic state shadowing suppressed changed state\n");
     goto cleanup;
   }
 

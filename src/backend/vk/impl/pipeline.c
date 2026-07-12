@@ -390,7 +390,7 @@ vk_createRenderPipeline(GPUDevice                         *device,
   VkPipelineDepthStencilStateCreateInfo depthStencil = {0};
   VkPipelineColorBlendAttachmentState colorBlends[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS] = {{0}};
   VkPipelineColorBlendStateCreateInfo blend = {0};
-  VkDynamicState                    dynamicStates[3];
+  VkDynamicState                    dynamicStates[4];
   VkPipelineDynamicStateCreateInfo  dynamic = {0};
   VkPipelineRenderingCreateInfoKHR  rendering = {0};
   VkGraphicsPipelineCreateInfo      pipelineInfo = {0};
@@ -600,12 +600,13 @@ vk_createRenderPipeline(GPUDevice                         *device,
   blend.attachmentCount = info->colorTargetCount;
   blend.pAttachments    = colorBlends;
 
-  dynamicStates[0]       = VK_DYNAMIC_STATE_VIEWPORT;
-  dynamicStates[1]       = VK_DYNAMIC_STATE_SCISSOR;
-  dynamicStates[2]       = VK_DYNAMIC_STATE_STENCIL_REFERENCE;
-  dynamic.sType          = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-  dynamic.dynamicStateCount = 3u;
-  dynamic.pDynamicStates = dynamicStates;
+  dynamicStates[0]          = VK_DYNAMIC_STATE_VIEWPORT;
+  dynamicStates[1]          = VK_DYNAMIC_STATE_SCISSOR;
+  dynamicStates[2]          = VK_DYNAMIC_STATE_BLEND_CONSTANTS;
+  dynamicStates[3]          = VK_DYNAMIC_STATE_STENCIL_REFERENCE;
+  dynamic.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+  dynamic.dynamicStateCount = 4u;
+  dynamic.pDynamicStates    = dynamicStates;
 
   rendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
   rendering.colorAttachmentCount = info->colorTargetCount;

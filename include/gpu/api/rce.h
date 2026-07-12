@@ -43,8 +43,11 @@ struct GPURenderCommandEncoder {
   GPUBindGroup       *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUBindGroupLayout *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
   uint64_t            _indexBufferOffset;
+  GPUDynamicStateMask _dynamicStateMask;
+  GPUViewport         _viewport;
   GPUPrimitiveType    _primitiveType;
   GPUIndexType        _indexType;
+  GPUScissorRect      _scissor;
   uint32_t            _occlusionQueryIndex;
   uint32_t            _requiredBindGroupMask;
   uint32_t            _colorAttachmentCount;
@@ -54,6 +57,8 @@ struct GPURenderCommandEncoder {
   uint32_t            _depthStencilSampleCount;
   uint32_t            _pushConstantSizeBytes;
   GPUShaderStageFlags _pushConstantStages;
+  uint32_t            _stencilReference;
+  float               _blendConstant[4];
   bool                _colorAttachmentHasResolve[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   bool                _hasIndexBuffer;
   bool                _hasPipeline;
