@@ -1906,6 +1906,7 @@ check_vertex_buffer_shadowing_calls(void) {
 
   oldVertexBuffer                     = api->rce.vertexBuffer;
   api->rce.vertexBuffer               = count_vertex_buffer;
+  device._api                         = api;
   device.runtimeConfig.enableStats    = true;
   queue._device                       = &device;
   cmdb._queue                         = &queue;
@@ -2025,14 +2026,11 @@ cleanup:
 
 static int
 check_dynamic_state_validation_calls(void) {
-  GPUDevice        device = {0};
-  GPUCommandQueue  queue  = {0};
-  GPUCommandBuffer cmdb   = {0};
-  GPUApi          *api;
-  void (*oldViewport)(GPURenderCommandEncoder *, const GPUViewport *);
-  void (*oldScissor)(GPURenderCommandEncoder *, const GPUScissorRect *);
-  void (*oldBlend)(GPURenderCommandEncoder *, const float[4]);
-  void (*oldStencil)(GPURenderCommandEncoder *, uint32_t);
+  GPUApi             *api;
+  GPUApi              scopedApi;
+  GPUDevice           device = {0};
+  GPUCommandQueue     queue  = {0};
+  GPUCommandBuffer    cmdb   = {0};
   GPURenderPassEncoder pass = {0};
   GPURenderPassEncoder endedPass = {0};
   GPUDynamicStateApplyInfo info = {0};
@@ -2044,15 +2042,13 @@ check_dynamic_state_validation_calls(void) {
     return 0;
   }
 
-  oldViewport               = api->rce.viewport;
-  oldScissor                = api->rce.scissor;
-  oldBlend                  = api->rce.blendConstant;
-  oldStencil                = api->rce.stencilReference;
-  api->rce.viewport         = count_viewport;
-  api->rce.scissor          = count_scissor;
-  api->rce.blendConstant    = count_blend_constant;
-  api->rce.stencilReference = count_stencil_reference;
+  scopedApi                      = *api;
+  scopedApi.rce.viewport         = count_viewport;
+  scopedApi.rce.scissor          = count_scissor;
+  scopedApi.rce.blendConstant    = count_blend_constant;
+  scopedApi.rce.stencilReference = count_stencil_reference;
 
+  device._api                      = &scopedApi;
   device.runtimeConfig.enableStats = true;
   queue._device                    = &device;
   cmdb._queue                      = &queue;
@@ -2141,15 +2137,13 @@ check_dynamic_state_validation_calls(void) {
   ok = 1;
 
 cleanup:
-  api->rce.viewport = oldViewport;
-  api->rce.scissor = oldScissor;
-  api->rce.blendConstant = oldBlend;
-  api->rce.stencilReference = oldStencil;
   return ok;
 }
 
 static int
-check_render_encoder_validation(void) {
+check_render_encoder_validation(GPUDevice *device) {
+  GPUCommandQueue fakeQueue = {0};
+  GPUCommandBuffer fakeCmdb = {0};
   GPURenderPassEncoder pass = {0};
   GPURenderPassEncoder endedPass = {0};
   GPURenderPipeline fakePipeline = {0};
@@ -2159,6 +2153,10 @@ check_render_encoder_validation(void) {
   GPUDynamicStateApplyInfo dynamicState = {0};
   uint32_t pushValue = 0xaabbccddu;
   uint8_t pushBefore[16];
+
+  fakeQueue._device = device;
+  fakeCmdb._queue   = &fakeQueue;
+  pass._cmdb        = &fakeCmdb;
 
   fakeBufferStorage.sizeBytes = 128u;
   fakeBufferStorage.usage = GPU_BUFFER_USAGE_VERTEX |
@@ -2300,7 +2298,7 @@ check_render_encoder_validation(void) {
 int
 gpu_test_render(GPUDevice *device, const char *mrtBytecodePath) {
   return check_render_pass_validation() &&
-         check_render_encoder_validation() &&
+         check_render_encoder_validation(device) &&
          check_render_pipeline_validation(device, mrtBytecodePath) &&
          check_render_draw_validation_calls(device) &&
          check_vertex_buffer_shadowing_calls() &&

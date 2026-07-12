@@ -1,5 +1,6 @@
 #include "test.h"
 #include "../../src/api/cmdqueue_internal.h"
+#include "../../src/api/device_internal.h"
 
 enum {
   COPY_TEST_WIDTH     = 4u,
@@ -7,6 +8,66 @@ enum {
   COPY_TEST_PIXEL_SIZE = 4u,
   COPY_TEST_ROW_PITCH = 256u
 };
+
+static GPUCopyPassEncoder gScopedCopyPass;
+static uint32_t           gScopedCopyBeginCalls;
+static uint32_t           gScopedCopyEndCalls;
+
+static GPUCopyPassEncoder *
+begin_scoped_copy_pass(GPUCommandBuffer *cmdb, const char *label) {
+  (void)cmdb;
+  (void)label;
+  memset(&gScopedCopyPass, 0, sizeof(gScopedCopyPass));
+  gScopedCopyBeginCalls++;
+  return &gScopedCopyPass;
+}
+
+static void
+end_scoped_copy_pass(GPUCopyPassEncoder *pass) {
+  (void)pass;
+  gScopedCopyEndCalls++;
+}
+
+static int
+check_copy_pass_device_dispatch(void) {
+  GPUApi             *api;
+  GPUCopyPassEncoder *pass;
+  GPUApi              scopedApi;
+  GPUDevice           device = {0};
+  GPUCommandQueue     queue  = {0};
+  GPUCommandBuffer    cmdb   = {0};
+
+  api = gpuActiveGPUApi();
+  if (!api) {
+    fprintf(stderr, "copy pass dispatch could not get active api\n");
+    return 0;
+  }
+
+  scopedApi                          = *api;
+  scopedApi.renderPass.beginCopyPass = begin_scoped_copy_pass;
+  scopedApi.renderPass.endCopyPass   = end_scoped_copy_pass;
+  device._api                        = &scopedApi;
+  queue._device                      = &device;
+  cmdb._queue                        = &queue;
+  gScopedCopyBeginCalls              = 0u;
+  gScopedCopyEndCalls                = 0u;
+
+  pass = GPUBeginCopyPass(&cmdb, "device-scoped-copy");
+  if (pass != &gScopedCopyPass ||
+      gScopedCopyBeginCalls != 1u ||
+      !cmdb._activeEncoder) {
+    fprintf(stderr, "copy pass did not use device dispatch\n");
+    return 0;
+  }
+
+  GPUEndCopyPass(pass);
+  if (gScopedCopyEndCalls != 1u || cmdb._activeEncoder) {
+    fprintf(stderr, "copy pass end did not use device dispatch\n");
+    return 0;
+  }
+
+  return 1;
+}
 
 static int
 copy_test_rows_equal(const uint8_t *tight, const uint8_t *padded) {
@@ -489,6 +550,7 @@ cleanup:
 
 int
 gpu_test_copy(GPUDevice *device) {
-  return check_copy_pass_validation(device) &&
+  return check_copy_pass_device_dispatch() &&
+         check_copy_pass_validation(device) &&
          check_copy_pass_invalid_copy_noops(device);
 }

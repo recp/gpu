@@ -23,6 +23,21 @@
 
 #define GPU_RENDER_PASS_MAX_COLOR_ATTACHMENTS 8u
 
+static GPUDevice *
+gpu_commandBufferDevice(const GPUCommandBuffer *cmdb) {
+  return cmdb && cmdb->_queue ? cmdb->_queue->_device : NULL;
+}
+
+static GPUApi *
+gpu_commandBufferApi(const GPUCommandBuffer *cmdb) {
+  return gpuDeviceApi(gpu_commandBufferDevice(cmdb));
+}
+
+static GPUApi *
+gpu_copyPassApi(const GPUCopyPassEncoder *pass) {
+  return pass ? gpu_commandBufferApi(pass->_cmdb) : NULL;
+}
+
 static bool
 gpu_validLoadOp(GPULoadOp op) {
   return op == GPU_LOAD_OP_LOAD ||
@@ -299,14 +314,11 @@ gpu_bufferTextureCopyBytes(const GPUBufferTextureCopyRegion *region,
 }
 
 static void
-gpu_destroyRenderPass(GPURenderPassDesc *pass) {
-  GPUApi *api;
-
+gpu_destroyRenderPass(GPUApi *api, GPURenderPassDesc *pass) {
   if (!pass) {
     return;
   }
 
-  api = gpuActiveGPUApi();
   if (api && api->renderPass.destroyRenderPass) {
     api->renderPass.destroyRenderPass(pass);
     return;
@@ -323,11 +335,11 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
   GPUDevice            *device;
   GPUApi               *api;
 
-  device = cmdb && cmdb->_queue ? cmdb->_queue->_device : NULL;
+  device = gpu_commandBufferDevice(cmdb);
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder ||
       !gpu_validRenderPassCreateInfo(info, device))
     return NULL;
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpuDeviceApi(device)))
     return NULL;
   if (!api->renderPass.beginRenderPass || !api->rce.renderCommandEncoder)
     return NULL;
@@ -337,7 +349,7 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
     return NULL;
 
   encoder = api->rce.renderCommandEncoder(cmdb, desc);
-  gpu_destroyRenderPass(desc);
+  gpu_destroyRenderPass(api, desc);
   if (encoder) {
     encoder->_cmdb = cmdb;
     gpu_setRenderPassEncoderInfo(encoder, info);
@@ -371,7 +383,7 @@ GPUEndRenderPass(GPURenderPassEncoder *pass) {
   if (pass->_cmdb) {
     pass->_cmdb->_activeEncoder = false;
   }
-  if (!(api = gpuActiveGPUApi()) || !api->rce.endEncoding)
+  if (!(api = gpu_commandBufferApi(pass->_cmdb)) || !api->rce.endEncoding)
     return;
 
   api->rce.endEncoding(pass);
@@ -385,7 +397,7 @@ GPUBeginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder) {
     return NULL;
   }
-  if (!(api = gpuActiveGPUApi()) || !api->renderPass.beginCopyPass) {
+  if (!(api = gpu_commandBufferApi(cmdb)) || !api->renderPass.beginCopyPass) {
     return NULL;
   }
 
@@ -417,7 +429,7 @@ GPUCopyBufferToBuffer(GPUCopyPassEncoder        *pass,
       !gpuBufferRangeValid(dst, region->dstOffset, region->sizeBytes)) {
     return;
   }
-  if (!(api = gpuActiveGPUApi()) || !api->renderPass.copyBufferToBuffer) {
+  if (!(api = gpu_copyPassApi(pass)) || !api->renderPass.copyBufferToBuffer) {
     return;
   }
 
@@ -441,7 +453,7 @@ GPUCopyBufferToTexture(GPUCopyPassEncoder               *pass,
       !gpuBufferRangeValid(src, region->bufferOffset, copyBytes)) {
     return;
   }
-  if (!(api = gpuActiveGPUApi()) || !api->renderPass.copyBufferToTexture) {
+  if (!(api = gpu_copyPassApi(pass)) || !api->renderPass.copyBufferToTexture) {
     return;
   }
 
@@ -465,7 +477,7 @@ GPUCopyTextureToBuffer(GPUCopyPassEncoder               *pass,
       !gpuBufferRangeValid(dst, region->bufferOffset, copyBytes)) {
     return;
   }
-  if (!(api = gpuActiveGPUApi()) || !api->renderPass.copyTextureToBuffer) {
+  if (!(api = gpu_copyPassApi(pass)) || !api->renderPass.copyTextureToBuffer) {
     return;
   }
 
@@ -509,7 +521,7 @@ GPUCopyTextureToTexture(GPUCopyPassEncoder                  *pass,
       !gpu_validTextureCopyRegion(&dstRegion, dst)) {
     return;
   }
-  if (!(api = gpuActiveGPUApi()) || !api->renderPass.copyTextureToTexture) {
+  if (!(api = gpu_copyPassApi(pass)) || !api->renderPass.copyTextureToTexture) {
     return;
   }
 
@@ -528,7 +540,7 @@ GPUEndCopyPass(GPUCopyPassEncoder *pass) {
   if (pass->_cmdb) {
     pass->_cmdb->_activeEncoder = false;
   }
-  if (!(api = gpuActiveGPUApi()) || !api->renderPass.endCopyPass) {
+  if (!(api = gpu_copyPassApi(pass)) || !api->renderPass.endCopyPass) {
     return;
   }
 

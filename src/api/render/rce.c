@@ -31,6 +31,11 @@ gpu_renderPassDevice(const GPURenderPassEncoder *pass) {
   return pass->_cmdb->_queue->_device;
 }
 
+static GPUApi *
+gpu_renderPassApi(const GPURenderPassEncoder *pass) {
+  return gpuDeviceApi(gpu_renderPassDevice(pass));
+}
+
 static void
 gpu_renderValidationError(const GPURenderPassEncoder *pass,
                           const char *message) {
@@ -175,15 +180,23 @@ gpu_validIndexRange(GPUBuffer *buffer,
 GPU_EXPORT
 void
 GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
+  GPUDevice             *device;
+  GPUApi                *api;
   GPURenderPipelineState state;
-  GPUApi *api;
 
   if (!pass || pass->_ended || !pipeline || !pipeline->_state)
     return;
   if (!gpu_renderPipelineMatchesPass(pass, pipeline))
     return;
-  if (!(api = gpuActiveGPUApi()))
+  device = gpu_renderPassDevice(pass);
+  if (!(api = gpuDeviceApi(device)))
     return;
+  if (pipeline->_api != api || !pipeline->_layout ||
+      pipeline->_layout->_device != device) {
+    gpu_renderValidationError(pass,
+                              "GPUBindRenderPipeline skipped: device mismatch");
+    return;
+  }
   if (!api->rce.setRenderPipelineState)
     return;
 
@@ -259,7 +272,7 @@ gpuSetRenderVertexBuffer(GPURenderPassEncoder *pass,
 
   if (!pass || pass->_ended || !buf)
     return;
-  if (!(api = gpuActiveGPUApi()) || !api->rce.vertexBuffer)
+  if (!(api = gpu_renderPassApi(pass)) || !api->rce.vertexBuffer)
     return;
 
   gpu_bindRenderVertexBuffer(pass, api, buf, off, index);
@@ -278,7 +291,7 @@ GPUBindVertexBuffers(GPURenderPassEncoder   *pass,
     return;
   if (count == 0 || firstSlot > UINT32_MAX - (count - 1u))
     return;
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpu_renderPassApi(pass)))
     return;
   if (!api->rce.vertexBuffer)
     return;
@@ -329,7 +342,7 @@ GPUSetViewport(GPURenderPassEncoder *pass, const GPUViewport *viewport) {
   if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_VIEWPORT_BIT) != 0u &&
       memcmp(&pass->_viewport, viewport, sizeof(*viewport)) == 0)
     return;
-  if (!(api = gpuActiveGPUApi()) || !api->rce.viewport)
+  if (!(api = gpu_renderPassApi(pass)) || !api->rce.viewport)
     return;
 
   api->rce.viewport(pass, viewport);
@@ -351,7 +364,7 @@ GPUSetScissor(GPURenderPassEncoder *pass, const GPUScissorRect *scissor) {
   if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_SCISSOR_BIT) != 0u &&
       memcmp(&pass->_scissor, scissor, sizeof(*scissor)) == 0)
     return;
-  if (!(api = gpuActiveGPUApi()) || !api->rce.scissor)
+  if (!(api = gpu_renderPassApi(pass)) || !api->rce.scissor)
     return;
 
   api->rce.scissor(pass, scissor);
@@ -373,7 +386,7 @@ GPUSetBlendConstant(GPURenderPassEncoder *pass, const float rgba[4]) {
   if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT) != 0u &&
       memcmp(pass->_blendConstant, rgba, sizeof(pass->_blendConstant)) == 0)
     return;
-  if (!(api = gpuActiveGPUApi()) || !api->rce.blendConstant)
+  if (!(api = gpu_renderPassApi(pass)) || !api->rce.blendConstant)
     return;
 
   api->rce.blendConstant(pass, rgba);
@@ -395,7 +408,7 @@ GPUSetStencilReference(GPURenderPassEncoder *pass, uint32_t reference) {
   if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT) != 0u &&
       pass->_stencilReference == reference)
     return;
-  if (!(api = gpuActiveGPUApi()) || !api->rce.stencilReference)
+  if (!(api = gpu_renderPassApi(pass)) || !api->rce.stencilReference)
     return;
 
   api->rce.stencilReference(pass, reference);
@@ -413,7 +426,7 @@ gpuSetRenderVertexTexture(GPURenderPassEncoder *pass,
 
   if (!pass || pass->_ended || !view)
     return;
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpu_renderPassApi(pass)))
     return;
 
   if (api->rce.setVertexTexture) {
@@ -430,7 +443,7 @@ gpuSetRenderVertexSampler(GPURenderPassEncoder *pass,
 
   if (!pass || pass->_ended || !sampler)
     return;
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpu_renderPassApi(pass)))
     return;
 
   if (api->rce.setVertexSampler) {
@@ -448,7 +461,7 @@ gpuSetRenderFragmentBuffer(GPURenderPassEncoder *pass,
 
   if (!pass || pass->_ended || !buf)
     return;
-  if (!(api = gpuActiveGPUApi()) || !api->rce.fragmentBuffer)
+  if (!(api = gpu_renderPassApi(pass)) || !api->rce.fragmentBuffer)
     return;
   
   api->rce.fragmentBuffer(pass, buf, off, index);
@@ -463,7 +476,7 @@ gpuSetRenderFragmentTexture(GPURenderPassEncoder *pass,
 
   if (!pass || pass->_ended || !view)
     return;
-  if (!(api = gpuActiveGPUApi()) || !api->rce.setFragmentTexture)
+  if (!(api = gpu_renderPassApi(pass)) || !api->rce.setFragmentTexture)
     return;
   
   api->rce.setFragmentTexture(pass, view, index);
@@ -478,7 +491,7 @@ gpuSetRenderFragmentSampler(GPURenderPassEncoder *pass,
 
   if (!pass || pass->_ended || !sampler)
     return;
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpu_renderPassApi(pass)))
     return;
 
   if (api->rce.setFragmentSampler) {
@@ -515,7 +528,7 @@ GPUSetRenderPushConstants(GPURenderPassEncoder *pass,
       memcmp(pass->_pushConstants + offset, data, sizeBytes) == 0) {
     return;
   }
-  if (!(api = gpuActiveGPUApi()) || !api->rce.pushConstants) {
+  if (!(api = gpu_renderPassApi(pass)) || !api->rce.pushConstants) {
     return;
   }
 
@@ -554,7 +567,7 @@ GPUDraw(GPURenderPassEncoder *pass,
     gpu_renderValidationError(pass, "GPUDraw skipped: zero draw count");
     return;
   }
-  if (!(api = gpuActiveGPUApi()) || !api->rce.drawPrimitives)
+  if (!(api = gpu_renderPassApi(pass)) || !api->rce.drawPrimitives)
     return;
 
   api->rce.drawPrimitives(pass,
@@ -602,7 +615,7 @@ GPUDrawIndexed(GPURenderPassEncoder *pass,
     gpu_renderValidationError(pass, "GPUDrawIndexed skipped: invalid index buffer");
     return;
   }
-  if (!(api = gpuActiveGPUApi()) || !api->rce.drawIndexedPrims)
+  if (!(api = gpu_renderPassApi(pass)) || !api->rce.drawIndexedPrims)
     return;
   
   api->rce.drawIndexedPrims(pass,
@@ -640,7 +653,7 @@ GPUDrawIndirect(GPURenderPassEncoder *pass,
     gpu_renderValidationError(pass, "GPUDrawIndirect skipped: invalid indirect buffer");
     return;
   }
-  if (!(api = gpuActiveGPUApi()) || !api->rce.drawPrimitivesIndirect)
+  if (!(api = gpu_renderPassApi(pass)) || !api->rce.drawPrimitivesIndirect)
     return;
 
   api->rce.drawPrimitivesIndirect(pass,
@@ -677,7 +690,7 @@ GPUDrawIndexedIndirect(GPURenderPassEncoder *pass,
     gpu_renderValidationError(pass, "GPUDrawIndexedIndirect skipped: invalid indirect/index buffer");
     return;
   }
-  if (!(api = gpuActiveGPUApi()) || !api->rce.drawIndexedPrimsIndirect)
+  if (!(api = gpu_renderPassApi(pass)) || !api->rce.drawIndexedPrimsIndirect)
     return;
 
   api->rce.drawIndexedPrimsIndirect(pass, argsBuffer, argsOffset);
@@ -719,7 +732,7 @@ GPUMultiDrawIndirect(GPURenderPassEncoder *pass,
                               "GPUMultiDrawIndirect skipped: invalid indirect batch");
     return;
   }
-  if (!(api = gpuActiveGPUApi())) {
+  if (!(api = gpu_renderPassApi(pass))) {
     return;
   }
   device = gpu_renderPassDevice(pass);
@@ -789,7 +802,7 @@ GPUMultiDrawIndexedIndirect(GPURenderPassEncoder *pass,
     );
     return;
   }
-  if (!(api = gpuActiveGPUApi())) {
+  if (!(api = gpu_renderPassApi(pass))) {
     return;
   }
   device = gpu_renderPassDevice(pass);
