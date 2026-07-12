@@ -18,6 +18,7 @@
 #define gpu_adapter_internal_h
 
 #include "../common.h"
+#include "instance_internal.h"
 
 typedef GPUAdapter GPUPhysicalDevice;
 
@@ -34,5 +35,10 @@ struct GPUAdapter {
     GPU_FEATURE_VARIABLE_RATE_SHADING + 1u
   ];
 };
+
+static inline GPUApi *
+gpuAdapterApi(const GPUAdapter *adapter) {
+  return adapter ? gpuInstanceApi(adapter->inst) : NULL;
+}
 
 #endif /* gpu_adapter_internal_h */

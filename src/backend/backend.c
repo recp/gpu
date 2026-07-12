@@ -44,15 +44,6 @@ GPUApi*
 gpuApiForBackend(GPUBackend backend) {
   GPUApi *api;
 
-  if (gpu__api) {
-    if (backend == GPU_BACKEND_DEFAULT ||
-        backend == GPU_BACKEND_NULL ||
-        backend == gpu__api->backend) {
-      return gpu__api;
-    }
-    return NULL;
-  }
-
   if (backend == GPU_BACKEND_DEFAULT || backend == GPU_BACKEND_NULL) {
     return gpu__selectDefaultBackend();
   }

@@ -20,9 +20,15 @@
 #include "../common.h"
 
 struct GPUInstance {
+  GPUApi                *_api;
   void                  *_priv;
   GPUInstanceCreateInfo  createInfo;
   uint32_t               validationError;
 };
+
+static inline GPUApi *
+gpuInstanceApi(const GPUInstance *instance) {
+  return instance ? instance->_api : NULL;
+}
 
 #endif /* gpu_instance_internal_h */

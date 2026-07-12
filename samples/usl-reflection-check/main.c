@@ -71,12 +71,12 @@ read_file(const char *path, uint64_t *outSize) {
 }
 
 static GPUAdapter *
-select_adapter(void) {
+select_adapter(GPUInstance *instance) {
   GPUAdapter *adapter = NULL;
   uint32_t adapterCount = 1;
   GPUResult result;
 
-  result = GPUEnumerateAdapters(NULL, &adapterCount, &adapter);
+  result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
   if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
       !adapter) {
     return NULL;
@@ -305,12 +305,13 @@ check_shader_artifact(GPUDevice *device,
 
 int
 main(int argc, char **argv) {
-  GPUAdapter *adapter;
+  GPUAdapter  *adapter;
+  GPUInstance *instance;
+  GPUDevice   *device;
+  void        *storageBytecode;
+  void        *bytecode;
   uint64_t storageBytecodeSize;
   uint64_t bytecodeSize;
-  GPUDevice *device;
-  void *storageBytecode;
-  void *bytecode;
   int ok;
 
   if (argc < 2 || argc > 3) {
@@ -337,9 +338,18 @@ main(int argc, char **argv) {
     }
   }
 
-  adapter = select_adapter();
+  instance = NULL;
+  if (GPUCreateInstance(NULL, &instance) != GPU_OK || !instance) {
+    fprintf(stderr, "failed to create instance\n");
+    free(storageBytecode);
+    free(bytecode);
+    return 1;
+  }
+
+  adapter = select_adapter(instance);
   if (!adapter) {
     fprintf(stderr, "failed to get adapter\n");
+    GPUDestroyInstance(instance);
     free(storageBytecode);
     free(bytecode);
     return 1;
@@ -348,6 +358,7 @@ main(int argc, char **argv) {
   device = GPUCreateDeviceWithDefaultQueues(adapter);
   if (!device) {
     fprintf(stderr, "failed to create device\n");
+    GPUDestroyInstance(instance);
     free(storageBytecode);
     free(bytecode);
     return 1;
@@ -363,6 +374,7 @@ main(int argc, char **argv) {
                               1));
 
   GPUDestroyDevice(device);
+  GPUDestroyInstance(instance);
   free(storageBytecode);
   free(bytecode);
 

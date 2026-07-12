@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "buffer_internal.h"
 #include "device_internal.h"
 
 static const char*
@@ -120,7 +121,7 @@ gpu_adapterSupportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
   if (!gpu_knownFeature(feature)) {
     return false;
   }
-  if ((api = gpuActiveGPUApi()) && api->device.supportsFeature) {
+  if ((api = gpuAdapterApi(adapter)) && api->device.supportsFeature) {
     return api->device.supportsFeature(adapter, feature);
   }
 
@@ -156,7 +157,7 @@ gpu_defaultEnabledFeatureMask(const GPUAdapter *adapter) {
   GPUApi *api;
   uint64_t mask;
 
-  api  = gpuActiveGPUApi();
+  api  = gpuAdapterApi(adapter);
   mask = 0;
   for (uint32_t i = 0; i < GPU_ARRAY_LEN(defaultFeatures); i++) {
     bool supported;
@@ -339,7 +340,7 @@ gpu_bufferContents(GPUBuffer *buffer) {
   if (!buffer) {
     return NULL;
   }
-  if (!(api = gpuActiveGPUApi()) || !api->buf.contents) {
+  if (!(api = gpuDeviceApi(buffer->device)) || !api->buf.contents) {
     return NULL;
   }
 
@@ -391,23 +392,24 @@ gpu_createTransientBuffer(GPUDevice *device,
                           uint64_t sizeBytes,
                           GPUBuffer **outBuffer,
                           void **outCpuPtr) {
-  GPUBufferCreateInfo info = {0};
-  GPUBuffer *buffer;
-  void *cpuPtr;
-  GPUResult result;
+  GPUBuffer           *buffer;
+  GPUApi              *api;
+  void                *cpuPtr;
+  GPUBufferCreateInfo  info = {0};
+  GPUResult            result;
 
   if (!device || !outBuffer || !outCpuPtr || sizeBytes == 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  if (!gpuActiveGPUApi() || !gpuActiveGPUApi()->buf.contents) {
+  if (!(api = gpuDeviceApi(device)) || !api->buf.contents) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  info.chain.sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  info.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   info.chain.structSize = sizeof(info);
-  info.label = "transient-buffer";
-  info.sizeBytes = sizeBytes;
-  info.usage = usage;
+  info.label            = "transient-buffer";
+  info.sizeBytes        = sizeBytes;
+  info.usage            = usage;
 
   buffer = NULL;
   result = GPUCreateBuffer(device, &info, &buffer);
@@ -678,7 +680,7 @@ static GPUAdapter*
 gpu_getAvailableAdapters(GPUInstance *inst, uint32_t maxNumberOfItems) {
   GPUApi *api;
 
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpuInstanceApi(inst)) || !api->device.getAvailableAdapters)
     return NULL;
 
   return api->device.getAvailableAdapters(inst, maxNumberOfItems);
@@ -694,7 +696,7 @@ GPUEnumerateAdapters(GPUInstance *inst,
   uint32_t capacity;
   uint32_t count;
 
-  if (!inoutAdapterCount) {
+  if (!inst || !inoutAdapterCount) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -703,6 +705,7 @@ GPUEnumerateAdapters(GPUInstance *inst,
   count = 0;
 
   for (item = deviceList; item; item = item->next) {
+    item->inst = inst;
     gpu_fillFeatureSet(gpu_supportedFeatureMask(item),
                        item->supportedFeatureStorage,
                        (uint32_t)GPU_ARRAY_LEN(item->supportedFeatureStorage),
@@ -733,7 +736,7 @@ GPUGetAdapterProperties(const GPUAdapter     *adapter,
   }
 
   memset(outProps, 0, sizeof(*outProps));
-  api = gpuActiveGPUApi();
+  api = gpuAdapterApi(adapter);
   if (api && api->device.getAdapterProperties) {
     return api->device.getAdapterProperties(adapter, outProps);
   }
@@ -1071,7 +1074,8 @@ GPUCreateSystemDefaultDevice(GPUInstance *inst) {
   GPUApi *api;
   GPUDevice *device;
 
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpuInstanceApi(inst)) ||
+      !api->device.createSystemDefaultDevice)
     return NULL;
 
   device = api->device.createSystemDefaultDevice(inst);
@@ -1125,7 +1129,7 @@ GPUCreateDevice(GPUAdapter                *adapter,
       return featureResult;
     }
   }
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpuAdapterApi(adapter)) || !api->device.createDevice)
     return GPU_ERROR_BACKEND_FAILURE;
 
   queueInfos = NULL;
@@ -1193,7 +1197,7 @@ GPUDestroyDevice(GPUDevice * __restrict device) {
     return;
   }
 
-  if (!(api = gpuDeviceApi(device)) && !(api = gpuActiveGPUApi())) {
+  if (!(api = gpuDeviceApi(device))) {
     return;
   }
 

@@ -54,6 +54,7 @@ GPUCreateInstance(const GPUInstanceCreateInfo * __restrict info,
   if (!*outInstance) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
+  (*outInstance)->_api = api;
   gpuSetActiveGPUApi(api);
 
   return GPU_OK;
@@ -68,7 +69,7 @@ GPUDestroyInstance(GPUInstance *instance) {
     return;
   }
 
-  api = gpuActiveGPUApi();
+  api = gpuInstanceApi(instance);
   if (api && api->instance.destroyInstance) {
     api->instance.destroyInstance(api, instance);
     return;

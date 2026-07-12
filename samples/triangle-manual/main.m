@@ -23,12 +23,12 @@ static const TriangleVertex kTriangleVertices[] = {
 };
 
 static GPUAdapter *
-SelectAdapter(void) {
+SelectAdapter(GPUInstance *instance) {
   GPUAdapter *adapter = NULL;
   uint32_t adapterCount = 1;
   GPUResult result;
 
-  result = GPUEnumerateAdapters(NULL, &adapterCount, &adapter);
+  result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
   if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
       !adapter) {
     return NULL;
@@ -41,6 +41,7 @@ SelectAdapter(void) {
   NSWindow *_window;
   NSView *_view;
 
+  GPUInstance *_instance;
   GPUAdapter *_adapter;
   GPUDevice *_device;
   GPUCommandQueue *_queue;
@@ -109,7 +110,12 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   GPUShaderLibraryCreateInfo shaderInfo = {0};
 
-  _adapter = SelectAdapter();
+  if (GPUCreateInstance(NULL, &_instance) != GPU_OK || !_instance) {
+    NSLog(@"GPU: failed to create instance");
+    return NO;
+  }
+
+  _adapter = SelectAdapter(_instance);
   if (!_adapter) {
     NSLog(@"GPU: failed to get adapter");
     return NO;
@@ -127,7 +133,7 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     return NO;
   }
 
-  _surface = GPUCreateSurfaceFromNative(NULL,
+  _surface = GPUCreateSurfaceFromNative(_instance,
                                         _adapter,
                                         (__bridge void *)_view,
                                         GPU_SURFACE_APPLE_NSVIEW,
@@ -481,6 +487,11 @@ cleanup:
     GPUDestroyDevice(_device);
     _device = NULL;
     _queue = NULL;
+  }
+  if (_instance) {
+    GPUDestroyInstance(_instance);
+    _instance = NULL;
+    _adapter = NULL;
   }
 }
 

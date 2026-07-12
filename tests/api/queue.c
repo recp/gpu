@@ -2,6 +2,7 @@
 #include "../../src/api/cmdqueue_internal.h"
 #include "../../src/api/device_internal.h"
 #include "../../src/api/frame_internal.h"
+#include "../../src/api/surface_internal.h"
 #include "../../src/api/swapchain_internal.h"
 
 typedef struct QueueCompletionProbe {
@@ -19,6 +20,235 @@ static uint32_t         gScopedPresentCalls;
 static uint32_t         gScopedCommitCalls;
 static uint32_t         gScopedFrameBeginCalls;
 static uint32_t         gScopedFrameEndCalls;
+
+static GPUAdapter gOwnershipAdapter;
+static GPUDevice  gOwnershipDevice;
+static GPUSurface gOwnershipSurface;
+static uint32_t   gOwnershipAdapterCalls;
+static uint32_t   gOwnershipPropertiesCalls;
+static uint32_t   gOwnershipFeatureCalls;
+static uint32_t   gOwnershipDeviceCreateCalls;
+static uint32_t   gOwnershipDeviceDestroyCalls;
+static uint32_t   gOwnershipSurfaceCreateCalls;
+static uint32_t   gOwnershipSurfaceDestroyCalls;
+static uint32_t   gOwnershipInstanceDestroyCalls;
+
+static GPUAdapter *
+get_ownership_adapters(GPUInstance * __restrict instance,
+                       uint32_t                   maxCount) {
+  (void)maxCount;
+  memset(&gOwnershipAdapter, 0, sizeof(gOwnershipAdapter));
+  gOwnershipAdapter.inst = instance;
+  gOwnershipAdapterCalls++;
+  return &gOwnershipAdapter;
+}
+
+static GPUResult
+get_ownership_properties(const GPUAdapter     * __restrict adapter,
+                         GPUAdapterProperties * __restrict outProps) {
+  outProps->name    = "scoped-adapter";
+  outProps->backend = gpuAdapterApi(adapter)->backend;
+  outProps->type    = GPU_ADAPTER_TYPE_INTEGRATED;
+  gOwnershipPropertiesCalls++;
+  return GPU_OK;
+}
+
+static bool
+supports_ownership_feature(const GPUAdapter * __restrict adapter,
+                           GPUFeature feature) {
+  (void)adapter;
+  (void)feature;
+  gOwnershipFeatureCalls++;
+  return false;
+}
+
+static GPUDevice *
+create_ownership_device(GPUAdapter               * __restrict adapter,
+                        GPUCommandQueueCreateInfo *queueInfos,
+                        uint32_t                   queueInfoCount) {
+  (void)queueInfos;
+  (void)queueInfoCount;
+  memset(&gOwnershipDevice, 0, sizeof(gOwnershipDevice));
+  gOwnershipDevice.inst      = adapter->inst;
+  gOwnershipDevice.phyDevice = adapter;
+  gOwnershipDeviceCreateCalls++;
+  return &gOwnershipDevice;
+}
+
+static void
+destroy_ownership_device(GPUDevice * __restrict device) {
+  (void)device;
+  gOwnershipDeviceDestroyCalls++;
+}
+
+static GPUSurface *
+create_ownership_surface(GPUApi      * __restrict api,
+                         GPUInstance * __restrict instance,
+                         GPUAdapter  * __restrict adapter,
+                         void        * __restrict nativeHandle,
+                         GPUSurfaceType           type,
+                         float                    scale) {
+  (void)api;
+  (void)instance;
+  (void)adapter;
+  (void)nativeHandle;
+  (void)type;
+  (void)scale;
+  memset(&gOwnershipSurface, 0, sizeof(gOwnershipSurface));
+  gOwnershipSurfaceCreateCalls++;
+  return &gOwnershipSurface;
+}
+
+static void
+destroy_ownership_surface(GPUSurface * __restrict surface) {
+  (void)surface;
+  gOwnershipSurfaceDestroyCalls++;
+}
+
+static void
+destroy_ownership_instance(GPUApi      * __restrict api,
+                           GPUInstance * __restrict instance) {
+  (void)api;
+  (void)instance;
+  gOwnershipInstanceDestroyCalls++;
+}
+
+static int
+check_instance_ownership_dispatch(void) {
+  GPUNativeSurfaceCreateInfo nativeInfo = {0};
+  GPUSurfaceCreateInfo       surfaceInfo = {0};
+  GPUAdapterProperties       properties;
+  GPUApi                    *activeApi;
+  GPUAdapter                *adapter;
+  GPUDevice                 *device;
+  GPUSurface                *surface;
+  GPUApi                     scopedApi;
+  GPUInstance                instance = {0};
+  GPUInstance                otherInstance = {0};
+  uint32_t                   adapterCount;
+
+  activeApi = gpuActiveGPUApi();
+  if (!activeApi) {
+    fprintf(stderr, "instance ownership could not get active api\n");
+    return 0;
+  }
+
+  scopedApi                              = *activeApi;
+  scopedApi.device.getAvailableAdapters = get_ownership_adapters;
+  scopedApi.device.getAdapterProperties = get_ownership_properties;
+  scopedApi.device.supportsFeature      = supports_ownership_feature;
+  scopedApi.device.createDevice         = create_ownership_device;
+  scopedApi.device.destroyDevice        = destroy_ownership_device;
+  scopedApi.surface.createSurface       = create_ownership_surface;
+  scopedApi.surface.destroySurface      = destroy_ownership_surface;
+  scopedApi.instance.destroyInstance    = destroy_ownership_instance;
+  instance._api                         = &scopedApi;
+  otherInstance._api                    = &scopedApi;
+  gOwnershipAdapterCalls                = 0u;
+  gOwnershipPropertiesCalls             = 0u;
+  gOwnershipFeatureCalls                = 0u;
+  gOwnershipDeviceCreateCalls           = 0u;
+  gOwnershipDeviceDestroyCalls          = 0u;
+  gOwnershipSurfaceCreateCalls          = 0u;
+  gOwnershipSurfaceDestroyCalls         = 0u;
+  gOwnershipInstanceDestroyCalls        = 0u;
+
+  adapter      = NULL;
+  adapterCount = 1u;
+  if (GPUEnumerateAdapters(&instance, &adapterCount, &adapter) != GPU_OK ||
+      adapterCount != 1u || adapter != &gOwnershipAdapter) {
+    fprintf(stderr, "instance-scoped adapter enumeration failed\n");
+    return 0;
+  }
+
+  memset(&properties, 0, sizeof(properties));
+  device = NULL;
+  if (GPUGetAdapterProperties(adapter, &properties) != GPU_OK ||
+      strcmp(properties.name, "scoped-adapter") != 0 ||
+      GPUCreateDevice(adapter, NULL, &device) != GPU_OK ||
+      device != &gOwnershipDevice || device->_api != &scopedApi) {
+    fprintf(stderr, "instance-scoped adapter/device dispatch failed\n");
+    return 0;
+  }
+
+  nativeInfo.chain.sType      = GPU_STRUCTURE_TYPE_NATIVE_SURFACE_CREATE_INFO;
+  nativeInfo.chain.structSize = sizeof(nativeInfo);
+  nativeInfo.adapter          = adapter;
+  nativeInfo.nativeHandle     = &instance;
+  nativeInfo.type             = GPU_SURFACE_APPLE_NSVIEW;
+  nativeInfo.scale            = 1.0f;
+  surfaceInfo.chain.sType      = GPU_STRUCTURE_TYPE_SURFACE_CREATE_INFO;
+  surfaceInfo.chain.structSize = sizeof(surfaceInfo);
+  surfaceInfo.chain.pNext      = &nativeInfo;
+  surface = NULL;
+  if (GPUCreateSurface(&otherInstance, &surfaceInfo, &surface) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      surface ||
+      GPUCreateSurface(&instance, &surfaceInfo, &surface) != GPU_OK ||
+      surface != &gOwnershipSurface || surface->inst != &instance) {
+    fprintf(stderr, "instance-scoped surface dispatch failed\n");
+    return 0;
+  }
+
+  GPUDestroySurface(surface);
+  GPUDestroyDevice(device);
+  GPUDestroyInstance(&instance);
+
+  if (gOwnershipAdapterCalls != 1u ||
+      gOwnershipPropertiesCalls != 1u ||
+      gOwnershipFeatureCalls == 0u ||
+      gOwnershipDeviceCreateCalls != 1u ||
+      gOwnershipDeviceDestroyCalls != 1u ||
+      gOwnershipSurfaceCreateCalls != 1u ||
+      gOwnershipSurfaceDestroyCalls != 1u ||
+      gOwnershipInstanceDestroyCalls != 1u) {
+    fprintf(stderr, "instance ownership called wrong backend\n");
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
+check_secondary_backend_instance(const GPUInstance *activeInstance) {
+  GPUInstanceCreateInfo info = {0};
+  GPUInstance          *instance;
+  GPUBackend            backend;
+  GPUResult             result;
+
+  if (!activeInstance || !gpuInstanceApi(activeInstance)) {
+    fprintf(stderr, "secondary backend test has no active instance api\n");
+    return 0;
+  }
+
+  backend = gpuInstanceApi(activeInstance)->backend;
+  if (backend == GPU_BACKEND_METAL) {
+    backend = GPU_BACKEND_VULKAN;
+  } else if (backend == GPU_BACKEND_VULKAN) {
+    backend = GPU_BACKEND_METAL;
+  } else {
+    return 1;
+  }
+
+  info.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.preferredBackend = backend;
+  instance = NULL;
+  result   = GPUCreateInstance(&info, &instance);
+  if (result == GPU_ERROR_UNSUPPORTED) {
+    return 1;
+  }
+  if (result != GPU_OK || !instance ||
+      !gpuInstanceApi(instance) ||
+      gpuInstanceApi(instance)->backend != backend ||
+      gpuInstanceApi(instance) == gpuInstanceApi(activeInstance)) {
+    fprintf(stderr, "secondary backend instance selection failed\n");
+    return 0;
+  }
+
+  GPUDestroyInstance(instance);
+  return 1;
+}
 
 static GPUCommandQueue *
 get_scoped_queue(GPUDevice * __restrict device,
@@ -1051,7 +1281,9 @@ int
 gpu_test_queue(GPUInstance *instance,
                GPUAdapter  *adapter,
                GPUDevice   *device) {
-  return check_queue_frame_device_dispatch() &&
+  return check_instance_ownership_dispatch() &&
+         check_secondary_backend_instance(instance) &&
+         check_queue_frame_device_dispatch() &&
          check_adapter_enumeration(instance) &&
          check_device_queue_create_validation(adapter) &&
          check_queue_selection(device) &&

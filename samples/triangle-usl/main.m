@@ -29,6 +29,7 @@ static const TriangleVertex kTriangleVertices[] = {
   NSWindow *_window;
   NSView *_view;
 
+  GPUInstance *_instance;
   GPUAdapter *_adapter;
   GPUDevice *_device;
   GPUCommandQueue *_queue;
@@ -70,6 +71,7 @@ TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 - (BOOL)setupGPU {
   if (!GPUSampleCreateDefaultSurfaceGPU(_window,
                                         _view,
+                                        &_instance,
                                         &_adapter,
                                         &_device,
                                         &_queue,
@@ -396,6 +398,11 @@ cleanup:
     GPUDestroyDevice(_device);
     _device = NULL;
     _queue = NULL;
+  }
+  if (_instance) {
+    GPUDestroyInstance(_instance);
+    _instance = NULL;
+    _adapter = NULL;
   }
 }
 

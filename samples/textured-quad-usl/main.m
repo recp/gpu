@@ -35,6 +35,7 @@ static const uint8_t kCheckerPixels[] = {
   NSWindow *_window;
   NSView *_view;
 
+  GPUInstance *_instance;
   GPUAdapter *_adapter;
   GPUDevice *_device;
   GPUCommandQueue *_queue;
@@ -157,6 +158,7 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   if (!GPUSampleCreateDefaultSurfaceGPU(_window,
                                         _view,
+                                        &_instance,
                                         &_adapter,
                                         &_device,
                                         &_queue,
@@ -478,6 +480,11 @@ cleanup:
     GPUDestroyDevice(_device);
     _device = NULL;
     _queue = NULL;
+  }
+  if (_instance) {
+    GPUDestroyInstance(_instance);
+    _instance = NULL;
+    _adapter = NULL;
   }
 }
 

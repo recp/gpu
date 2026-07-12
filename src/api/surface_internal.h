@@ -18,11 +18,18 @@
 #define gpu_surface_internal_h
 
 #include "../common.h"
+#include "instance_internal.h"
 
 struct GPUSurface {
+  GPUInstance   *inst;
   void          *_priv;
   GPUSurfaceType type;
   float          scale;
 };
+
+static inline GPUApi *
+gpuSurfaceApi(const GPUSurface *surface) {
+  return surface ? gpuInstanceApi(surface->inst) : NULL;
+}
 
 #endif /* gpu_surface_internal_h */

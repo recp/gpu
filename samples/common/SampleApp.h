@@ -48,12 +48,14 @@ GPUSampleCreateWindow(NSString *title,
 }
 
 static inline GPUAdapter *
-GPUSampleSelectAdapter(void) {
-  GPUAdapter *adapter = NULL;
-  uint32_t adapterCount = 1;
-  GPUResult result;
+GPUSampleSelectAdapter(GPUInstance *instance) {
+  GPUAdapter *adapter;
+  uint32_t    adapterCount;
+  GPUResult   result;
 
-  result = GPUEnumerateAdapters(NULL, &adapterCount, &adapter);
+  adapter      = NULL;
+  adapterCount = 1;
+  result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
   if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
       !adapter) {
     return NULL;
@@ -62,49 +64,63 @@ GPUSampleSelectAdapter(void) {
 }
 
 static inline BOOL
-GPUSampleCreateDefaultSurfaceGPU(NSWindow *window,
-                                 NSView *view,
-                                 GPUAdapter **outAdapter,
-                                 GPUDevice **outDevice,
+GPUSampleCreateDefaultSurfaceGPU(NSWindow        *window,
+                                 NSView          *view,
+                                 GPUInstance    **outInstance,
+                                 GPUAdapter     **outAdapter,
+                                 GPUDevice      **outDevice,
                                  GPUCommandQueue **outQueue,
-                                 GPUSurface **outSurface,
-                                 GPUSwapchain **outSwapchain) {
-  GPUAdapter *adapter;
-  GPUDevice *device;
+                                 GPUSurface     **outSurface,
+                                 GPUSwapchain   **outSwapchain) {
+  GPUInstance     *instance;
+  GPUAdapter      *adapter;
+  GPUDevice       *device;
   GPUCommandQueue *queue;
-  GPUSurface *surface;
-  GPUSwapchain *swapchain;
+  GPUSurface      *surface;
+  GPUSwapchain    *swapchain;
 
-  if (!window || !view || !outAdapter || !outDevice || !outQueue ||
-      !outSurface || !outSwapchain) {
+  if (!window || !view || !outInstance || !outAdapter || !outDevice ||
+      !outQueue || !outSurface || !outSwapchain) {
     return NO;
   }
 
-  adapter = GPUSampleSelectAdapter();
+  instance = NULL;
+  if (GPUCreateInstance(NULL, &instance) != GPU_OK || !instance) {
+    NSLog(@"GPU: failed to create instance");
+    return NO;
+  }
+
+  adapter = GPUSampleSelectAdapter(instance);
   if (!adapter) {
     NSLog(@"GPU: failed to get adapter");
+    GPUDestroyInstance(instance);
     return NO;
   }
 
   device = GPUCreateDeviceWithDefaultQueues(adapter);
   if (!device) {
     NSLog(@"GPU: failed to create device");
+    GPUDestroyInstance(instance);
     return NO;
   }
 
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0);
   if (!queue) {
     NSLog(@"GPU: failed to get command queue");
+    GPUDestroyDevice(device);
+    GPUDestroyInstance(instance);
     return NO;
   }
 
-  surface = GPUCreateSurfaceFromNative(NULL,
+  surface = GPUCreateSurfaceFromNative(instance,
                                        adapter,
                                        (__bridge void *)view,
                                        GPU_SURFACE_APPLE_NSVIEW,
                                        window.backingScaleFactor ?: 1.0f);
   if (!surface) {
     NSLog(@"GPU: failed to create surface");
+    GPUDestroyDevice(device);
+    GPUDestroyInstance(instance);
     return NO;
   }
 
@@ -114,13 +130,17 @@ GPUSampleCreateDefaultSurfaceGPU(NSWindow *window,
                                         (uint32_t)view.bounds.size.height);
   if (!swapchain) {
     NSLog(@"GPU: failed to create swapchain");
+    GPUDestroySurface(surface);
+    GPUDestroyDevice(device);
+    GPUDestroyInstance(instance);
     return NO;
   }
 
-  *outAdapter = adapter;
-  *outDevice = device;
-  *outQueue = queue;
-  *outSurface = surface;
+  *outInstance  = instance;
+  *outAdapter   = adapter;
+  *outDevice    = device;
+  *outQueue     = queue;
+  *outSurface   = surface;
   *outSwapchain = swapchain;
   return YES;
 }

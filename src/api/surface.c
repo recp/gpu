@@ -15,6 +15,8 @@
  */
 
 #include "../common.h"
+#include "adapter_internal.h"
+#include "surface_internal.h"
 
 static const uint32_t GPU_SURFACE_DEFAULT_FORMATS[] = {
   GPU_FORMAT_BGRA8_UNORM,
@@ -60,7 +62,7 @@ GPUCreateSurface(GPUInstance       * __restrict inst,
   }
   *outSurface = NULL;
 
-  if (!info) {
+  if (!inst || !info) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
@@ -76,13 +78,14 @@ GPUCreateSurface(GPUInstance       * __restrict inst,
       (nativeInfo->chain.structSize != 0 &&
        nativeInfo->chain.structSize < sizeof(*nativeInfo)) ||
       !nativeInfo->adapter ||
+      nativeInfo->adapter->inst != inst ||
       !nativeInfo->nativeHandle ||
       !gpuIsSurfaceTypeValid(nativeInfo->type) ||
       !(nativeInfo->scale > 0.0f)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuActiveGPUApi())) {
+  if (!(api = gpuInstanceApi(inst))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -99,6 +102,7 @@ GPUCreateSurface(GPUInstance       * __restrict inst,
   if (!*outSurface) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
+  (*outSurface)->inst = inst;
 
   return GPU_OK;
 }
@@ -142,7 +146,7 @@ GPUDestroySurface(GPUSurface * __restrict surface) {
     return;
   }
 
-  if (!(api = gpuActiveGPUApi())) {
+  if (!(api = gpuSurfaceApi(surface))) {
     return;
   }
 
