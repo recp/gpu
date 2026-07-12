@@ -67,6 +67,7 @@ struct GPURenderCommandEncoder {
   bool                _colorAttachmentHasResolve[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   bool                _hasIndexBuffer;
   bool                _hasPipeline;
+  bool                _pushConstantsEmitted;
   bool                _occlusionQueryActive;
   bool                _ended;
   uint8_t             _pushConstants[4096];

@@ -49,6 +49,7 @@ static uint32_t gRenderDrawIndexedIndirectCalls;
 static uint32_t gRenderMultiDrawIndirectCalls;
 static uint32_t gRenderMultiDrawIndexedIndirectCalls;
 static uint32_t gRenderVertexBufferCalls;
+static uint32_t gRenderPushConstantCalls;
 static uint32_t gRenderViewportCalls;
 static uint32_t gRenderScissorCalls;
 static uint32_t gRenderBlendCalls;
@@ -150,6 +151,18 @@ count_vertex_buffer(GPURenderCommandEncoder *rce,
   (void)offset;
   (void)index;
   gRenderVertexBufferCalls++;
+}
+
+static void
+count_render_push_constants(GPURenderCommandEncoder *rce,
+                            GPUShaderStageFlags       stages,
+                            const void               *data,
+                            uint32_t                  sizeBytes) {
+  (void)rce;
+  (void)stages;
+  (void)data;
+  (void)sizeBytes;
+  gRenderPushConstantCalls++;
 }
 
 static void
@@ -1944,6 +1957,73 @@ cleanup:
 }
 
 static int
+check_render_push_constant_shadowing_calls(void) {
+  GPUApi *api;
+  void (*oldPushConstants)(GPURenderCommandEncoder *,
+                           GPUShaderStageFlags,
+                           const void *,
+                           uint32_t);
+  GPUDevice            device = {0};
+  GPUCommandQueue      queue  = {0};
+  GPUCommandBuffer     cmdb   = {0};
+  GPURenderPassEncoder pass   = {0};
+  uint32_t             value;
+  int                  ok;
+
+  api = gpuActiveGPUApi();
+  if (!api) {
+    fprintf(stderr, "render push constant shadowing could not get active api\n");
+    return 0;
+  }
+
+  oldPushConstants                  = api->rce.pushConstants;
+  api->rce.pushConstants            = count_render_push_constants;
+  device._api                       = api;
+  device.runtimeConfig.enableStats = true;
+  queue._device                     = &device;
+  cmdb._queue                       = &queue;
+  pass._cmdb                        = &cmdb;
+  pass._hasPipeline                 = true;
+  pass._pushConstantSizeBytes       = 16u;
+  pass._pushConstantStages          = GPU_SHADER_STAGE_VERTEX_BIT |
+                                      GPU_SHADER_STAGE_FRAGMENT_BIT;
+  value                             = 0u;
+  gRenderPushConstantCalls          = 0u;
+  ok                                = 0;
+
+  GPUSetRenderPushConstants(&pass, 0u, sizeof(value), &value);
+  GPUSetRenderPushConstants(&pass, 0u, sizeof(value), &value);
+  if (gRenderPushConstantCalls != 1u ||
+      device.currentFrameStats.requestedStateCalls != 2u ||
+      device.currentFrameStats.emittedStateCalls != 1u) {
+    fprintf(stderr, "render push constant first-zero shadowing failed\n");
+    goto cleanup;
+  }
+
+  GPUResetStats(&device);
+  gRenderPushConstantCalls = 0u;
+  for (uint32_t i = 1u; i <= 16u; i++) {
+    value = i;
+    GPUSetRenderPushConstants(&pass, (i & 1u) * 4u, sizeof(value), &value);
+    GPUSetRenderPushConstants(&pass, (i & 1u) * 4u, sizeof(value), &value);
+  }
+  if (gRenderPushConstantCalls != 16u ||
+      device.currentFrameStats.requestedStateCalls != 32u ||
+      device.currentFrameStats.emittedStateCalls != 16u ||
+      device.currentFrameStats.hotPathAllocCount != 0u ||
+      device.currentFrameStats.hotPathFreeCount != 0u) {
+    fprintf(stderr, "render push constant shadowing warm path mismatch\n");
+    goto cleanup;
+  }
+
+  ok = 1;
+
+cleanup:
+  api->rce.pushConstants = oldPushConstants;
+  return ok;
+}
+
+static int
 check_dynamic_state_validation_calls(void) {
   GPUDevice        device = {0};
   GPUCommandQueue  queue  = {0};
@@ -2224,6 +2304,7 @@ gpu_test_render(GPUDevice *device, const char *mrtBytecodePath) {
          check_render_pipeline_validation(device, mrtBytecodePath) &&
          check_render_draw_validation_calls(device) &&
          check_vertex_buffer_shadowing_calls() &&
+         check_render_push_constant_shadowing_calls() &&
          check_dynamic_state_validation_calls() &&
          check_render_readback(device, mrtBytecodePath);
 }

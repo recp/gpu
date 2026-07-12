@@ -199,15 +199,16 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
   state._priv = pipeline->_state;
   api->rce.setRenderPipelineState(pass, &state);
   gpuDeviceRecordBindEmission(gpu_renderPassDevice(pass));
-  pass->_hasPipeline = true;
-  pass->_pipeline = pipeline;
-  pass->_pipelineLayout = pipeline->_layout;
+  pass->_hasPipeline           = true;
+  pass->_pipeline              = pipeline;
+  pass->_pipelineLayout        = pipeline->_layout;
   pass->_requiredBindGroupMask = pipeline->_requiredBindGroupMask;
   pass->_primitiveType = gpu_primitiveTypeFromTopology(pipeline->_primitiveTopology);
   pass->_pushConstantSizeBytes = pipeline->_pushConstantSizeBytes;
-  pass->_pushConstantStages = pipeline->_pushConstantStages &
-                              (GPU_SHADER_STAGE_VERTEX_BIT |
-                               GPU_SHADER_STAGE_FRAGMENT_BIT);
+  pass->_pushConstantStages    = pipeline->_pushConstantStages &
+                                 (GPU_SHADER_STAGE_VERTEX_BIT |
+                                  GPU_SHADER_STAGE_FRAGMENT_BIT);
+  pass->_pushConstantsEmitted  = false;
   if (pass->_pushConstantSizeBytes > 0u) {
     memset(pass->_pushConstants, 0, pass->_pushConstantSizeBytes);
   }
@@ -491,6 +492,7 @@ GPUSetRenderPushConstants(GPURenderPassEncoder *pass,
                           uint32_t              offset,
                           uint32_t              sizeBytes,
                           const void           *data) {
+  GPUDevice *device;
   GPUApi *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline ||
@@ -507,6 +509,12 @@ GPUSetRenderPushConstants(GPURenderPassEncoder *pass,
   if (sizeBytes == 0u) {
     return;
   }
+  device = gpu_renderPassDevice(pass);
+  gpuDeviceRecordStateRequest(device);
+  if (pass->_pushConstantsEmitted &&
+      memcmp(pass->_pushConstants + offset, data, sizeBytes) == 0) {
+    return;
+  }
   if (!(api = gpuActiveGPUApi()) || !api->rce.pushConstants) {
     return;
   }
@@ -516,6 +524,8 @@ GPUSetRenderPushConstants(GPURenderPassEncoder *pass,
                          pass->_pushConstantStages,
                          pass->_pushConstants,
                          pass->_pushConstantSizeBytes);
+  pass->_pushConstantsEmitted = true;
+  gpuDeviceRecordStateEmission(device);
 }
 
 GPU_EXPORT

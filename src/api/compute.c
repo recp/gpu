@@ -291,12 +291,14 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
   state = pipeline->_state;
   api->compute.setComputePipelineState(pass, state);
   gpuDeviceRecordBindEmission(pipeline->_device);
-  pass->_hasPipeline = true;
-  pass->_pipeline = pipeline;
-  pass->_pipelineLayout = pipeline->_layout;
-  pass->_requiredBindGroupMask = pipeline->_requiredBindGroupMask;
-  pass->_pushConstantSizeBytes = pipeline->_pushConstantSizeBytes;
-  pass->_pushConstantStages = pipeline->_pushConstantStages & GPU_SHADER_STAGE_COMPUTE_BIT;
+  pass->_hasPipeline             = true;
+  pass->_pipeline                = pipeline;
+  pass->_pipelineLayout          = pipeline->_layout;
+  pass->_requiredBindGroupMask   = pipeline->_requiredBindGroupMask;
+  pass->_pushConstantSizeBytes   = pipeline->_pushConstantSizeBytes;
+  pass->_pushConstantStages      = pipeline->_pushConstantStages &
+                                   GPU_SHADER_STAGE_COMPUTE_BIT;
+  pass->_pushConstantsEmitted    = false;
   if (pass->_pushConstantSizeBytes > 0u) {
     memset(pass->_pushConstants, 0, pass->_pushConstantSizeBytes);
   }
@@ -450,6 +452,7 @@ GPUSetComputePushConstants(GPUComputePassEncoder *pass,
                            uint32_t               offset,
                            uint32_t               sizeBytes,
                            const void            *data) {
+  GPUDevice *device;
   GPUApi *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline ||
@@ -466,6 +469,12 @@ GPUSetComputePushConstants(GPUComputePassEncoder *pass,
   if (sizeBytes == 0u) {
     return;
   }
+  device = gpu_computePassDevice(pass);
+  gpuDeviceRecordStateRequest(device);
+  if (pass->_pushConstantsEmitted &&
+      memcmp(pass->_pushConstants + offset, data, sizeBytes) == 0) {
+    return;
+  }
   if (!(api = gpu_computePassApi(pass)) || !api->compute.pushConstants) {
     return;
   }
@@ -474,6 +483,8 @@ GPUSetComputePushConstants(GPUComputePassEncoder *pass,
   api->compute.pushConstants(pass,
                              pass->_pushConstants,
                              pass->_pushConstantSizeBytes);
+  pass->_pushConstantsEmitted = true;
+  gpuDeviceRecordStateEmission(device);
 }
 
 GPU_EXPORT

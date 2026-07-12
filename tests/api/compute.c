@@ -50,6 +50,7 @@ expect_compute_pipeline_error(GPUDevice *device,
 static uint32_t gComputeDispatchCalls;
 static uint32_t gComputeDispatchIndirectCalls;
 static uint32_t gComputeMultiDispatchIndirectCalls;
+static uint32_t gComputePushConstantCalls;
 
 static void
 count_dispatch(GPUComputePassEncoder *enc,
@@ -86,6 +87,81 @@ count_multi_dispatch_indirect(GPUComputePassEncoder *enc,
   (void)strideBytes;
   gComputeMultiDispatchIndirectCalls++;
   return true;
+}
+
+static void
+count_compute_push_constants(GPUComputePassEncoder *enc,
+                             const void            *data,
+                             uint32_t               sizeBytes) {
+  (void)enc;
+  (void)data;
+  (void)sizeBytes;
+  gComputePushConstantCalls++;
+}
+
+static int
+check_compute_push_constant_shadowing_calls(void) {
+  GPUApi *api;
+  void (*oldPushConstants)(GPUComputePassEncoder *,
+                           const void *,
+                           uint32_t);
+  GPUDevice             device = {0};
+  GPUCommandQueue       queue  = {0};
+  GPUCommandBuffer      cmdb   = {0};
+  GPUComputePassEncoder pass   = {0};
+  uint32_t              value;
+  int                   ok;
+
+  api = gpuActiveGPUApi();
+  if (!api) {
+    fprintf(stderr, "compute push constant shadowing could not get active api\n");
+    return 0;
+  }
+
+  oldPushConstants                  = api->compute.pushConstants;
+  api->compute.pushConstants        = count_compute_push_constants;
+  device._api                       = api;
+  device.runtimeConfig.enableStats = true;
+  queue._device                     = &device;
+  cmdb._queue                       = &queue;
+  pass._cmdb                        = &cmdb;
+  pass._hasPipeline                 = true;
+  pass._pushConstantSizeBytes       = 16u;
+  pass._pushConstantStages          = GPU_SHADER_STAGE_COMPUTE_BIT;
+  value                             = 0u;
+  gComputePushConstantCalls         = 0u;
+  ok                                = 0;
+
+  GPUSetComputePushConstants(&pass, 0u, sizeof(value), &value);
+  GPUSetComputePushConstants(&pass, 0u, sizeof(value), &value);
+  if (gComputePushConstantCalls != 1u ||
+      device.currentFrameStats.requestedStateCalls != 2u ||
+      device.currentFrameStats.emittedStateCalls != 1u) {
+    fprintf(stderr, "compute push constant first-zero shadowing failed\n");
+    goto cleanup;
+  }
+
+  GPUResetStats(&device);
+  gComputePushConstantCalls = 0u;
+  for (uint32_t i = 1u; i <= 16u; i++) {
+    value = i;
+    GPUSetComputePushConstants(&pass, (i & 1u) * 4u, sizeof(value), &value);
+    GPUSetComputePushConstants(&pass, (i & 1u) * 4u, sizeof(value), &value);
+  }
+  if (gComputePushConstantCalls != 16u ||
+      device.currentFrameStats.requestedStateCalls != 32u ||
+      device.currentFrameStats.emittedStateCalls != 16u ||
+      device.currentFrameStats.hotPathAllocCount != 0u ||
+      device.currentFrameStats.hotPathFreeCount != 0u) {
+    fprintf(stderr, "compute push constant shadowing warm path mismatch\n");
+    goto cleanup;
+  }
+
+  ok = 1;
+
+cleanup:
+  api->compute.pushConstants = oldPushConstants;
+  return ok;
 }
 
 static int
@@ -710,6 +786,7 @@ gpu_test_compute(GPUDevice *device, const char *bytecodePath) {
   ok = check_compute_pass_validation(device) &&
        check_compute_pipeline_validation(device, bytecodePath) &&
        check_compute_dispatch_validation_calls(device) &&
+       check_compute_push_constant_shadowing_calls() &&
        check_compute_readback(device, bytecodePath);
   device->runtimeConfig = savedConfig;
   return ok;
