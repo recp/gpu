@@ -19,13 +19,27 @@
 
 #include "../common.h"
 
+typedef struct GPUShaderStaticSamplerInfo {
+  GPUUSLStaticSamplerDesc desc;
+  GPUShaderStageFlags     visibility;
+  uint32_t                hlslIndex;
+  uint32_t                spirvGroup;
+  uint32_t                spirvBinding;
+} GPUShaderStaticSamplerInfo;
+
+typedef struct GPUShaderStaticSamplerInfoList {
+  uint32_t                   count;
+  GPUShaderStaticSamplerInfo items[];
+} GPUShaderStaticSamplerInfoList;
+
 struct GPULibrary {
-  GPUApi              *_api;
-  void                *_priv;
-  GPUShaderReflection _reflection;
-  void                *_entryInfo;
-  void                *_entryResources;
-  void                *_resourceBindings;
+  GPUApi                         *_api;
+  void                           *_priv;
+  GPUShaderStaticSamplerInfoList *_staticSamplers;
+  GPUShaderReflection             _reflection;
+  void                           *_entryInfo;
+  void                           *_entryResources;
+  void                           *_resourceBindings;
 };
 
 struct GPUFunction {
@@ -59,5 +73,10 @@ int
 gpuGetShaderResourceBackendBinding(const GPUShaderLibrary *library,
                                    const GPUShaderResourceReflection *resource,
                                    uint32_t *outBinding);
+
+GPU_HIDE
+const GPUShaderStaticSamplerInfo *
+gpuGetShaderLibraryStaticSamplers(const GPUShaderLibrary *library,
+                                  uint32_t *outCount);
 
 #endif /* gpu_library_internal_h */

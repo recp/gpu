@@ -5,35 +5,6 @@
 #include "../../src/api/render/pipeline_internal.h"
 #include "../../src/api/texture_internal.h"
 
-static const char *kRenderPipelineMSL =
-  "#include <metal_stdlib>\n"
-  "using namespace metal;\n"
-  "struct VSIn { float2 position [[attribute(0)]]; };\n"
-  "vertex float4 api_vs(VSIn in [[stage_in]]) {\n"
-  "  return float4(in.position, 0.0, 1.0);\n"
-  "}\n"
-  "fragment float4 api_fs() {\n"
-  "  return float4(1.0, 0.0, 0.0, 1.0);\n"
-  "}\n"
-  "fragment float4 api_alpha_fs() {\n"
-  "  return float4(1.0, 0.0, 0.0, 0.5);\n"
-  "}\n";
-
-static int
-create_render_test_library(GPUDevice *device, GPUShaderLibrary **outLibrary) {
-  GPUShaderLibraryCreateInfo info = {0};
-
-  info.chain.sType = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
-  info.chain.structSize = sizeof(info);
-  info.label = "api-render-pipeline.metal";
-  info.sourceKind = GPU_SHADER_SOURCE_MSL_TEXT;
-  info.sourceData = kRenderPipelineMSL;
-  info.sourceSize = (uint64_t)strlen(kRenderPipelineMSL);
-
-  return GPUCreateShaderLibrary(device, &info, outLibrary) == GPU_OK &&
-         *outLibrary;
-}
-
 static int
 create_render_usl_library(GPUDevice *device,
                           const char *bytecodePath,
@@ -304,7 +275,8 @@ fail:
 }
 
 static int
-check_render_pipeline_validation(GPUDevice *device) {
+check_render_pipeline_validation(GPUDevice *device,
+                                 const char *bytecodePath) {
   GPUShaderLibrary *library = NULL;
   GPUPipelineLayoutCreateInfo layoutInfo = {0};
   GPUPipelineLayout *pipelineLayout = NULL;
@@ -315,7 +287,7 @@ check_render_pipeline_validation(GPUDevice *device) {
   GPUDepthStencilState depthStencil = {0};
   GPURenderPipeline *pipeline;
 
-  if (!create_render_test_library(device, &library)) {
+  if (!create_render_usl_library(device, bytecodePath, &library)) {
     fprintf(stderr, "failed to create render pipeline test library\n");
     return 0;
   }
@@ -750,10 +722,10 @@ render_readback_label(RenderReadbackDrawMode mode, int clipped) {
 
 static int
 render_readback_pixel_is_red(const uint8_t *pixels,
-                             uint32_t width,
+                             uint32_t rowPitch,
                              uint32_t x,
                              uint32_t y) {
-  size_t offset = ((size_t)y * width + x) * 4u;
+  size_t offset = (size_t)y * rowPitch + (size_t)x * 4u;
 
   return pixels[offset + 0u] <= 2u &&
          pixels[offset + 1u] <= 2u &&
@@ -763,10 +735,10 @@ render_readback_pixel_is_red(const uint8_t *pixels,
 
 static int
 render_readback_pixel_is_half_red(const uint8_t *pixels,
-                                  uint32_t       width,
+                                  uint32_t       rowPitch,
                                   uint32_t       x,
                                   uint32_t       y) {
-  size_t offset = ((size_t)y * width + x) * 4u;
+  size_t offset = (size_t)y * rowPitch + (size_t)x * 4u;
 
   return pixels[offset + 0u] <= 2u &&
          pixels[offset + 1u] <= 2u &&
@@ -776,13 +748,13 @@ render_readback_pixel_is_half_red(const uint8_t *pixels,
 
 static int
 render_readback_has_red_in_x_range(const uint8_t *pixels,
-                                   uint32_t width,
                                    uint32_t height,
+                                   uint32_t rowPitch,
                                    uint32_t minX,
                                    uint32_t maxX) {
   for (uint32_t y = 0u; y < height; y++) {
     for (uint32_t x = minX; x < maxX; x++) {
-      if (render_readback_pixel_is_red(pixels, width, x, y)) {
+      if (render_readback_pixel_is_red(pixels, rowPitch, x, y)) {
         return 1;
       }
     }
@@ -825,8 +797,9 @@ check_render_readback_case(GPUDevice *device,
   };
   const uint32_t width = 4u;
   const uint32_t height = 4u;
-  const uint64_t pixelBytes = (uint64_t)width * height * 4u;
-  const uint64_t readbackBytes = pixelBytes *
+  const uint32_t rowPitch = 256u;
+  const uint64_t imageBytes = (uint64_t)rowPitch * height;
+  const uint64_t readbackBytes = imageBytes *
                                  (mode == RENDER_READBACK_DRAW_MRT ? 2u : 1u);
   const char *label = render_readback_label(mode, clipped);
   const int indexed = mode == RENDER_READBACK_DRAW_INDEXED ||
@@ -887,7 +860,7 @@ check_render_readback_case(GPUDevice *device,
   GPUBufferTextureCopyRegion copyRegion = {0};
   GPUQueueSubmitInfo submitInfo = {0};
   GPUDynamicStateApplyInfo dynamicState = {0};
-  uint8_t pixels[2u * 4u * 4u * 4u] = {0};
+  uint8_t pixels[2u * 256u * 4u] = {0};
   uint64_t occlusionResult = 0u;
   size_t centerOffset;
   int ok = 0;
@@ -897,10 +870,7 @@ check_render_readback_case(GPUDevice *device,
     fprintf(stderr, "failed to get graphics queue for %s test\n", label);
     return 0;
   }
-  if (!(mrt ? create_render_usl_library(device,
-                                        mrtBytecodePath,
-                                        &library)
-            : create_render_test_library(device, &library))) {
+  if (!create_render_usl_library(device, mrtBytecodePath, &library)) {
     fprintf(stderr, "failed to create %s library\n", label);
     goto cleanup;
   }
@@ -1217,7 +1187,7 @@ check_render_readback_case(GPUDevice *device,
     fprintf(stderr, "failed to begin %s copy pass\n", label);
     goto cleanup;
   }
-  copyRegion.bytesPerRow = width * 4u;
+  copyRegion.bytesPerRow = rowPitch;
   copyRegion.rowsPerImage = height;
   copyRegion.texture.width = width;
   copyRegion.texture.height = height;
@@ -1228,7 +1198,7 @@ check_render_readback_case(GPUDevice *device,
                          readbackBuffer,
                          &copyRegion);
   if (mrt) {
-    copyRegion.bufferOffset = pixelBytes;
+    copyRegion.bufferOffset = imageBytes;
     GPUCopyTextureToBuffer(copyPass,
                            target2,
                            readbackBuffer,
@@ -1289,7 +1259,7 @@ check_render_readback_case(GPUDevice *device,
   }
 
   if (mrt) {
-    centerOffset = ((size_t)2u * width + 2u) * 4u;
+    centerOffset = (size_t)2u * rowPitch + 2u * 4u;
     if (pixels[centerOffset + 0u] < 96u ||
         pixels[centerOffset + 0u] > 160u ||
         pixels[centerOffset + 1u] > 2u ||
@@ -1297,23 +1267,37 @@ check_render_readback_case(GPUDevice *device,
         pixels[centerOffset + 2u] > 160u ||
         pixels[centerOffset + 3u] < 96u ||
         pixels[centerOffset + 3u] > 160u ||
-        pixels[pixelBytes + centerOffset + 0u] < 250u ||
-        pixels[pixelBytes + centerOffset + 1u] < 250u ||
-        pixels[pixelBytes + centerOffset + 2u] > 2u ||
-        pixels[pixelBytes + centerOffset + 3u] < 250u) {
+        pixels[imageBytes + centerOffset + 0u] < 250u ||
+        pixels[imageBytes + centerOffset + 1u] < 250u ||
+        pixels[imageBytes + centerOffset + 2u] > 2u ||
+        pixels[imageBytes + centerOffset + 3u] < 250u) {
       fprintf(stderr, "%s blend/write-mask readback mismatch\n", label);
       goto cleanup;
     }
   } else if (multi) {
-    if (!render_readback_has_red_in_x_range(pixels, width, height, 0u, 2u) ||
-        !render_readback_has_red_in_x_range(pixels, width, height, 2u, 4u)) {
+    if (!render_readback_has_red_in_x_range(pixels,
+                                            height,
+                                            rowPitch,
+                                            0u,
+                                            2u) ||
+        !render_readback_has_red_in_x_range(pixels,
+                                            height,
+                                            rowPitch,
+                                            2u,
+                                            4u)) {
       fprintf(stderr, "%s multi draw did not touch both target halves\n", label);
       goto cleanup;
     }
   } else if (msaa
-               ? !render_readback_pixel_is_half_red(pixels, width, 2u, 2u)
-               : !render_readback_pixel_is_red(pixels, width, 2u, 2u)) {
-    centerOffset = ((size_t)2u * width + 2u) * 4u;
+               ? !render_readback_pixel_is_half_red(pixels,
+                                                    rowPitch,
+                                                    2u,
+                                                    2u)
+               : !render_readback_pixel_is_red(pixels,
+                                               rowPitch,
+                                               2u,
+                                               2u)) {
+    centerOffset = (size_t)2u * rowPitch + 2u * 4u;
     fprintf(stderr,
             "%s draw pixel mismatch: %u %u %u %u\n",
             label,
@@ -1355,35 +1339,38 @@ cleanup:
 
 static int
 check_render_readback(GPUDevice *device, const char *mrtBytecodePath) {
-  return check_render_readback_case(device, RENDER_READBACK_DRAW, 0, NULL) &&
+  return check_render_readback_case(device,
+                                    RENDER_READBACK_DRAW,
+                                    0,
+                                    mrtBytecodePath) &&
          check_render_readback_case(device,
                                     RENDER_READBACK_DRAW_INDEXED,
                                     1,
-                                    NULL) &&
+                                    mrtBytecodePath) &&
          check_render_readback_case(device,
                                     RENDER_READBACK_DRAW_INDIRECT,
                                     0,
-                                    NULL) &&
+                                    mrtBytecodePath) &&
          check_render_readback_case(device,
                                     RENDER_READBACK_DRAW_INDEXED_INDIRECT,
                                     0,
-                                    NULL) &&
+                                    mrtBytecodePath) &&
          check_render_readback_case(device,
                                     RENDER_READBACK_DRAW_MULTI_INDIRECT,
                                     0,
-                                    NULL) &&
+                                    mrtBytecodePath) &&
          check_render_readback_case(device,
                                     RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT,
                                     0,
-                                    NULL) &&
+                                    mrtBytecodePath) &&
          check_render_readback_case(device,
                                     RENDER_READBACK_DRAW_OCCLUSION,
                                     0,
-                                    NULL) &&
+                                    mrtBytecodePath) &&
          check_render_readback_case(device,
                                     RENDER_READBACK_DRAW_MSAA,
                                     0,
-                                    NULL) &&
+                                    mrtBytecodePath) &&
          check_render_readback_case(device,
                                     RENDER_READBACK_DRAW_MRT,
                                     0,
@@ -1739,6 +1726,7 @@ check_render_draw_validation_calls(GPUDevice *device) {
   gRenderDrawIndexedIndirectCalls = 0u;
   gRenderMultiDrawIndirectCalls = 0u;
   gRenderMultiDrawIndexedIndirectCalls = 0u;
+  device->enabledFeatureMask &= ~(1ull << GPU_FEATURE_MULTI_DRAW);
 
   indirectBuffer.sizeBytes = 128u;
   indirectBuffer.usage = GPU_BUFFER_USAGE_INDIRECT | GPU_BUFFER_USAGE_INDEX;
@@ -2106,7 +2094,7 @@ int
 gpu_test_render(GPUDevice *device, const char *mrtBytecodePath) {
   return check_render_pass_validation() &&
          check_render_encoder_validation() &&
-         check_render_pipeline_validation(device) &&
+         check_render_pipeline_validation(device, mrtBytecodePath) &&
          check_render_draw_validation_calls(device) &&
          check_dynamic_state_validation_calls() &&
          check_render_readback(device, mrtBytecodePath);

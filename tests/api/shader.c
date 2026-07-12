@@ -1,4 +1,5 @@
 #include "test.h"
+#include <gpu/api/gpudef.h>
 #include "../../src/api/buffer_internal.h"
 #include "../../src/api/compute_internal.h"
 #include "../../src/api/render/pipeline_internal.h"
@@ -254,7 +255,9 @@ check_reflected_pipeline_entry_stages(GPUDevice *device,
   if (GPUCreateRenderPipeline(device, &renderInfo, &pipeline) != GPU_OK ||
       !pipeline ||
       pipeline->_requiredBindGroupMask != 3u) {
-    fprintf(stderr, "render pipeline did not record reflected entry bind mask\n");
+    fprintf(stderr,
+            "render pipeline did not record reflected entry bind mask: %u\n",
+            pipeline ? pipeline->_requiredBindGroupMask : 0u);
     GPUDestroyRenderPipeline(pipeline);
     GPUDestroyPipelineLayout(emptyLayout);
     return 0;
@@ -443,6 +446,8 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
   GPUBindGroupCreateInfo groupInfo = {0};
   GPUBindGroup *group0Group;
   GPUBindGroup *group1Group;
+  GPUApiDescriptor savedDescriptor;
+  GPUApi *api;
   uint32_t count;
   int ok;
 
@@ -538,9 +543,17 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
   groupInfo.entryCount = (uint32_t)GPU_ARRAY_LEN(group0Entries);
   groupInfo.pEntries = group0Entries;
 
+  api = gpuActiveGPUApi();
+  if (!api) {
+    return 0;
+  }
+  savedDescriptor = api->descriptor;
+  api->descriptor.createBindGroup = NULL;
+
   group0Group = NULL;
   if (GPUCreateBindGroup(device, &groupInfo, &group0Group) != GPU_OK || !group0Group) {
     fprintf(stderr, "shader layout group0 failed after library destroy\n");
+    api->descriptor = savedDescriptor;
     GPUDestroyBindGroup(group0Group);
     return 0;
   }
@@ -553,11 +566,13 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
   group1Group = NULL;
   if (GPUCreateBindGroup(device, &groupInfo, &group1Group) != GPU_OK || !group1Group) {
     fprintf(stderr, "shader layout group1 failed after library destroy\n");
+    api->descriptor = savedDescriptor;
     GPUDestroyBindGroup(group1Group);
     GPUDestroyBindGroup(group0Group);
     return 0;
   }
 
+  api->descriptor = savedDescriptor;
   GPUDestroyBindGroup(group1Group);
   GPUDestroyBindGroup(group0Group);
   return 1;
@@ -580,6 +595,9 @@ check_reflection_objects_after_library_destroy(GPUDevice *device,
   GPUPipelineLayout *pipelineLayout = NULL;
   GPUBindGroup *group0Group = NULL;
   GPUBindGroup *group1Group = NULL;
+  GPUApiDescriptor savedDescriptor;
+  GPUApi *api;
+  int descriptorHookDisabled = 0;
   uint32_t count;
   int ok = 0;
 
@@ -680,6 +698,13 @@ check_reflection_objects_after_library_destroy(GPUDevice *device,
   groupInfo.layout = layouts[0];
   groupInfo.entryCount = (uint32_t)GPU_ARRAY_LEN(group0Entries);
   groupInfo.pEntries = group0Entries;
+  api = gpuActiveGPUApi();
+  if (!api) {
+    goto cleanup;
+  }
+  savedDescriptor = api->descriptor;
+  api->descriptor.createBindGroup = NULL;
+  descriptorHookDisabled = 1;
   if (GPUCreateBindGroup(device, &groupInfo, &group0Group) != GPU_OK || !group0Group) {
     fprintf(stderr, "reflection group 0 failed after library destroy\n");
     goto cleanup;
@@ -697,6 +722,9 @@ check_reflection_objects_after_library_destroy(GPUDevice *device,
   ok = 1;
 
 cleanup:
+  if (descriptorHookDisabled) {
+    api->descriptor = savedDescriptor;
+  }
   GPUDestroyBindGroup(group1Group);
   GPUDestroyBindGroup(group0Group);
   GPUDestroyPipelineLayout(pipelineLayout);

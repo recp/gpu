@@ -172,7 +172,7 @@ check_transient_validation(GPUDevice *device) {
   }
 
   if (GPUAllocateTransientBuffer(device,
-                                 GPU_BUFFER_USAGE_STORAGE,
+                                 GPU_BUFFER_USAGE_VERTEX,
                                  32u,
                                  64u,
                                  &slice) != GPU_OK ||

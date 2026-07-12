@@ -106,6 +106,8 @@ typedef struct GPUPipelineLayoutDX12 {
   uint32_t             rangeCount;
   uint32_t             rootParameterCount;
   uint32_t             groupCount;
+  uint32_t             pushConstantRootParameter;
+  uint32_t             pushConstantDwordCount;
   uint32_t             groupOffsets[GPU_ENCODER_MAX_BIND_GROUPS + 1u];
   GPUDescriptorTableDX12 resourceTables[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUDescriptorTableDX12 samplerTables[GPU_ENCODER_MAX_BIND_GROUPS];
@@ -160,6 +162,7 @@ typedef struct GPUTextureViewDX12 {
   D3D12_CPU_DESCRIPTOR_HANDLE rtv;
   D3D12_CPU_DESCRIPTOR_HANDLE dsv;
   D3D12_SHADER_RESOURCE_VIEW_DESC srv;
+  D3D12_UNORDERED_ACCESS_VIEW_DESC uav;
   uint32_t                    width;
   uint32_t                    height;
   uint32_t                    baseMip;
@@ -169,6 +172,7 @@ typedef struct GPUTextureViewDX12 {
   uint32_t                    rtvOffset;
   uint32_t                    dsvOffset;
   bool                        hasSrv;
+  bool                        hasUav;
   bool                        hasRtv;
   bool                        hasDsv;
   bool                        swapchain;
@@ -310,6 +314,21 @@ dx12_fillStaticSamplerDescFromUSL(const GPUUSLStaticSamplerDesc *uslDesc,
                                   uint32_t shaderRegister,
                                   D3D12_SHADER_VISIBILITY visibility,
                                   D3D12_STATIC_SAMPLER_DESC *outDesc);
+
+GPU_HIDE
+int
+dx12_fillStaticSamplerDesc(const GPUSamplerDesc       *desc,
+                           uint32_t                    shaderRegister,
+                           uint32_t                    registerSpace,
+                           D3D12_SHADER_VISIBILITY     visibility,
+                           D3D12_STATIC_SAMPLER_DESC *outDesc);
+
+GPU_HIDE
+GPUResult
+dx12_createShaderRootSignature(GPUDevice              *device,
+                               GPUPipelineLayout      *layout,
+                               const GPUShaderLibrary *library,
+                               ID3D12RootSignature   **outRootSignature);
 
 GPU_HIDE
 void

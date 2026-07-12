@@ -48,6 +48,7 @@ gpu_run_api_tests(const GPUApiTest *tests, uint32_t count) {
     }
 
     printf("api:%s\n", tests[i].name);
+    fflush(stdout);
     if (!tests[i].run(tests[i].ctx)) {
       fprintf(stderr, "api test failed: %s\n", tests[i].name);
       return 0;

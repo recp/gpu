@@ -66,6 +66,9 @@ dx12__textureFinalState(GPUTextureUsageFlags usage) {
     return D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE |
            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
   }
+  if ((usage & GPU_TEXTURE_USAGE_STORAGE) != 0u) {
+    return D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+  }
   if ((usage & GPU_TEXTURE_USAGE_COPY_SRC) != 0u) {
     return D3D12_RESOURCE_STATE_COPY_SOURCE;
   }
@@ -292,7 +295,6 @@ GPUResult
 dx12_createTexture(GPUDevice                  * __restrict device,
                    const GPUTextureCreateInfo * __restrict info,
                    GPUTexture                ** __restrict outTexture) {
-  const GPUTextureUsageFlags unsupported = GPU_TEXTURE_USAGE_STORAGE;
   GPUDeviceDX12           *deviceDX12;
   GPUTexture              *texture;
   GPUTextureDX12          *native;
@@ -311,7 +313,6 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   if (!device || !device->_priv || !info || !outTexture ||
       info->mipLevelCount == 0u || info->mipLevelCount > UINT16_MAX ||
       info->depthOrLayers > UINT16_MAX ||
-      (info->usage & unsupported) != 0u ||
       !dx12__textureDimension(info->dimension, &dimension)) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -334,6 +335,9 @@ dx12_createTexture(GPUDevice                  * __restrict device,
                       GPU_TEXTURE_USAGE_DEPTH_STENCIL)) ==
         (GPU_TEXTURE_USAGE_COLOR_TARGET |
          GPU_TEXTURE_USAGE_DEPTH_STENCIL) ||
+      ((info->usage & GPU_TEXTURE_USAGE_STORAGE) != 0u &&
+       ((info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u ||
+        (info->sampleCount > 1u))) ||
       ((info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u &&
        info->dimension != GPU_TEXTURE_DIMENSION_2D)) {
     return GPU_ERROR_UNSUPPORTED;
@@ -396,6 +400,9 @@ dx12_createTexture(GPUDevice                  * __restrict device,
     clearValue.Format        = dx12_format(info->format);
     clearValue.DepthStencil.Depth   = 1.0f;
     clearValue.DepthStencil.Stencil = 0u;
+  }
+  if ((info->usage & GPU_TEXTURE_USAGE_STORAGE) != 0u) {
+    desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
   }
   initialState = (info->usage & GPU_TEXTURE_USAGE_COPY_DST) != 0u
                    ? D3D12_RESOURCE_STATE_COPY_DEST
@@ -553,6 +560,45 @@ dx12__fillTextureRtv(const GPUTextureViewCreateInfo *info,
 }
 
 static bool
+dx12__fillTextureUav(const GPUTextureViewCreateInfo   *info,
+                     DXGI_FORMAT                       format,
+                     D3D12_UNORDERED_ACCESS_VIEW_DESC *uav) {
+  if (!info || !uav || info->mipLevelCount != 1u) {
+    return false;
+  }
+
+  memset(uav, 0, sizeof(*uav));
+  uav->Format = format;
+  switch (info->viewType) {
+    case GPU_TEXTURE_VIEW_1D:
+      uav->ViewDimension       = D3D12_UAV_DIMENSION_TEXTURE1D;
+      uav->Texture1D.MipSlice  = info->baseMipLevel;
+      return info->arrayLayerCount == 1u;
+    case GPU_TEXTURE_VIEW_2D:
+      uav->ViewDimension         = D3D12_UAV_DIMENSION_TEXTURE2D;
+      uav->Texture2D.MipSlice    = info->baseMipLevel;
+      uav->Texture2D.PlaneSlice  = 0u;
+      return info->arrayLayerCount == 1u;
+    case GPU_TEXTURE_VIEW_2D_ARRAY:
+      uav->ViewDimension                         =
+        D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+      uav->Texture2DArray.MipSlice               = info->baseMipLevel;
+      uav->Texture2DArray.FirstArraySlice        = info->baseArrayLayer;
+      uav->Texture2DArray.ArraySize              = info->arrayLayerCount;
+      uav->Texture2DArray.PlaneSlice             = 0u;
+      return true;
+    case GPU_TEXTURE_VIEW_3D:
+      uav->ViewDimension         = D3D12_UAV_DIMENSION_TEXTURE3D;
+      uav->Texture3D.MipSlice    = info->baseMipLevel;
+      uav->Texture3D.FirstWSlice = 0u;
+      uav->Texture3D.WSize       = UINT32_MAX;
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool
 dx12__fillTextureDsv(const GPUTextureViewCreateInfo *info,
                      DXGI_FORMAT                     format,
                      bool                            multisampled,
@@ -592,18 +638,21 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
   GPUTextureDX12     *textureDX12;
   GPUTextureView     *view;
   GPUTextureViewDX12 *native;
-  D3D12_SHADER_RESOURCE_VIEW_DESC srv = {0};
-  D3D12_RENDER_TARGET_VIEW_DESC   rtv = {0};
-  D3D12_DEPTH_STENCIL_VIEW_DESC   dsv = {0};
-  DXGI_FORMAT                     format;
-  GPUResult                       result;
-  uint32_t                        rtvOffset;
-  uint32_t                        dsvOffset;
-  bool                            sampled;
-  bool                            colorTarget;
-  bool                            depthTarget;
-  bool                            hasRtv;
-  bool                            hasDsv;
+  D3D12_SHADER_RESOURCE_VIEW_DESC  srv = {0};
+  D3D12_UNORDERED_ACCESS_VIEW_DESC uav = {0};
+  D3D12_RENDER_TARGET_VIEW_DESC    rtv = {0};
+  D3D12_DEPTH_STENCIL_VIEW_DESC    dsv = {0};
+  DXGI_FORMAT                      format;
+  GPUResult                        result;
+  uint32_t                         rtvOffset;
+  uint32_t                         dsvOffset;
+  bool                             sampled;
+  bool                             storage;
+  bool                             colorTarget;
+  bool                             depthTarget;
+  bool                             hasRtv;
+  bool                             hasDsv;
+  bool                             hasUav;
 
   textureDX12 = texture ? texture->_priv : NULL;
   if (!textureDX12 || !textureDX12->resource || !info || !outView ||
@@ -635,6 +684,7 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
   }
 
   sampled     = (texture->usage & GPU_TEXTURE_USAGE_SAMPLED) != 0u;
+  storage     = (texture->usage & GPU_TEXTURE_USAGE_STORAGE) != 0u;
   colorTarget = (texture->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u;
   depthTarget = (texture->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u;
   if (sampled) {
@@ -649,8 +699,11 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
                                                format,
                                                texture->sampleCount > 1u,
                                                &dsv);
-  if ((!sampled && !hasRtv && !hasDsv) ||
-      (sampled && !dx12__fillTextureSrv(info, &srv))) {
+  hasUav = storage && texture->sampleCount == 1u &&
+           dx12__fillTextureUav(info, format, &uav);
+  if ((!sampled && !hasRtv && !hasDsv && !hasUav) ||
+      (sampled && !dx12__fillTextureSrv(info, &srv)) ||
+      (storage && !hasUav)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -668,6 +721,10 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
   if (sampled) {
     native->srv    = srv;
     native->hasSrv = true;
+  }
+  if (hasUav) {
+    native->uav    = uav;
+    native->hasUav = true;
   }
   if (hasRtv) {
     result = dx12_allocateDescriptors(device,

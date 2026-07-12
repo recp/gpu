@@ -36,8 +36,38 @@ feature_set_contains(const GPUFeatureSet *set, GPUFeature feature) {
   return false;
 }
 
+static bool
+feature_set_matches_adapter(const GPUAdapter    *adapter,
+                            const GPUFeatureSet *set) {
+  for (GPUFeature feature = GPU_FEATURE_COMPUTE;
+       feature <= GPU_FEATURE_VARIABLE_RATE_SHADING;
+       feature = (GPUFeature)(feature + 1)) {
+    if (feature_set_contains(set, feature) !=
+        GPUIsFeatureSupported(adapter, feature)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+static bool
+feature_set_matches_device(const GPUDevice     *device,
+                           const GPUFeatureSet *set) {
+  for (GPUFeature feature = GPU_FEATURE_COMPUTE;
+       feature <= GPU_FEATURE_VARIABLE_RATE_SHADING;
+       feature = (GPUFeature)(feature + 1)) {
+    if (feature_set_contains(set, feature) !=
+        GPUIsFeatureEnabled(device, feature)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 static int
-check_adapter_enumeration(void) {
+check_adapter_enumeration(GPUInstance *activeInstance) {
   GPUAdapter *adapters[8] = {0};
   GPUAdapterCapabilities caps;
   GPUFormatCapabilities formatCaps;
@@ -110,7 +140,7 @@ check_adapter_enumeration(void) {
   }
 
   adapterCount = 0;
-  if (GPUEnumerateAdapters(NULL, &adapterCount, NULL) != GPU_OK ||
+  if (GPUEnumerateAdapters(activeInstance, &adapterCount, NULL) != GPU_OK ||
       adapterCount == 0) {
     fprintf(stderr, "adapter count query failed\n");
     return 0;
@@ -119,7 +149,7 @@ check_adapter_enumeration(void) {
   if (adapterCount > GPU_ARRAY_LEN(adapters)) {
     adapterCount = (uint32_t)GPU_ARRAY_LEN(adapters);
   }
-  if (GPUEnumerateAdapters(NULL, &adapterCount, adapters) != GPU_OK ||
+  if (GPUEnumerateAdapters(activeInstance, &adapterCount, adapters) != GPU_OK ||
       adapterCount == 0 ||
       !adapters[0]) {
     fprintf(stderr, "adapter enumeration failed\n");
@@ -137,12 +167,11 @@ check_adapter_enumeration(void) {
   if (GPUGetAdapterCapabilities(adapters[0], &caps) != GPU_OK ||
       !GPUIsFeatureSupported(adapters[0], GPU_FEATURE_COMPUTE) ||
       !GPUIsFeatureSupported(adapters[0], GPU_FEATURE_INDIRECT_DRAW) ||
-      GPUIsFeatureSupported(adapters[0], GPU_FEATURE_MULTI_DRAW) ||
-      GPUIsFeatureSupported(adapters[0], GPU_FEATURE_SHADER_F16) ||
       caps.supported.featureCount == 0 ||
       !caps.supported.pFeatures ||
       !feature_set_contains(&caps.supported, GPU_FEATURE_COMPUTE) ||
       !feature_set_contains(&caps.supported, GPU_FEATURE_INDIRECT_DRAW) ||
+      !feature_set_matches_adapter(adapters[0], &caps.supported) ||
       caps.limits.maxBindGroups == 0 ||
       caps.limits.minUniformBufferOffsetAlignment == 0) {
     fprintf(stderr, "adapter capabilities query failed\n");
@@ -292,7 +321,7 @@ check_adapter_enumeration(void) {
   }
 
   adapterCount = 0;
-  if (GPUEnumerateAdapters(NULL, &adapterCount, adapters) !=
+  if (GPUEnumerateAdapters(activeInstance, &adapterCount, adapters) !=
       GPU_ERROR_INSUFFICIENT_CAPACITY) {
     fprintf(stderr, "adapter enumeration accepted insufficient capacity\n");
     return 0;
@@ -414,12 +443,11 @@ check_queue_selection(GPUDevice *device) {
       GPUGetDeviceCapabilities(device, &caps) != GPU_OK ||
       !GPUIsFeatureEnabled(device, GPU_FEATURE_COMPUTE) ||
       !GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_DRAW) ||
-      GPUIsFeatureEnabled(device, GPU_FEATURE_MULTI_DRAW) ||
-      GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16) ||
       caps.enabled.featureCount == 0 ||
       !caps.enabled.pFeatures ||
       !feature_set_contains(&caps.enabled, GPU_FEATURE_COMPUTE) ||
       !feature_set_contains(&caps.enabled, GPU_FEATURE_INDIRECT_DRAW) ||
+      !feature_set_matches_device(device, &caps.enabled) ||
       caps.limits.maxBindGroups == 0 ||
       caps.limits.maxComputeWorkgroupSizeX == 0) {
     fprintf(stderr, "device capabilities query failed\n");
@@ -894,8 +922,10 @@ check_queue_submit_ex_semaphore(GPUDevice *device) {
 }
 
 int
-gpu_test_queue(GPUAdapter *adapter, GPUDevice *device) {
-  return check_adapter_enumeration() &&
+gpu_test_queue(GPUInstance *instance,
+               GPUAdapter  *adapter,
+               GPUDevice   *device) {
+  return check_adapter_enumeration(instance) &&
          check_device_queue_create_validation(adapter) &&
          check_queue_selection(device) &&
          check_queue_submit_fence(device) &&

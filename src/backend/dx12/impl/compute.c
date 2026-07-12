@@ -33,6 +33,7 @@ dx12_createComputePipeline(GPUDevice                          *device,
   GPUPipelineLayoutDX12   *layout;
   GPUComputePipelineState *state;
   GPUComputePipelineDX12  *native;
+  ID3D12RootSignature     *rootSignature;
   D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {0};
   DX12ShaderCode           shaderCode = {0};
   HRESULT                  result;
@@ -51,17 +52,26 @@ dx12_createComputePipeline(GPUDevice                          *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
   native = (GPUComputePipelineDX12 *)(state + 1);
+  rootSignature = NULL;
+  if (dx12_createShaderRootSignature(device,
+                                     info->layout,
+                                     info->library,
+                                     &rootSignature) != GPU_OK) {
+    free(state);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
 
   if (!dx12_compileShader(deviceDX12,
                           library,
                           info->entryPoint,
                           GPU_SHADER_STAGE_COMPUTE_BIT,
                           &shaderCode)) {
+    rootSignature->lpVtbl->Release(rootSignature);
     free(state);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  desc.pRootSignature      = layout->rootSignature;
+  desc.pRootSignature      = rootSignature;
   desc.CS.pShaderBytecode  = shaderCode.data;
   desc.CS.BytecodeLength   = shaderCode.size;
   result = deviceDX12->d3dDevice->lpVtbl->CreateComputePipelineState(
@@ -72,12 +82,12 @@ dx12_createComputePipeline(GPUDevice                          *device,
   );
   dx12_freeShaderCode(&shaderCode);
   if (FAILED(result) || !native->pipelineState) {
+    rootSignature->lpVtbl->Release(rootSignature);
     free(state);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  native->rootSignature = layout->rootSignature;
-  native->rootSignature->lpVtbl->AddRef(native->rootSignature);
+  native->rootSignature = rootSignature;
   state->_priv            = native;
   state->workgroupSize[0] = 1u;
   state->workgroupSize[1] = 1u;
@@ -164,6 +174,33 @@ dx12_setComputePipelineState(GPUComputePassEncoder   *encoder,
   encoder->_workgroupSize[0] = pipelineState->workgroupSize[0];
   encoder->_workgroupSize[1] = pipelineState->workgroupSize[1];
   encoder->_workgroupSize[2] = pipelineState->workgroupSize[2];
+}
+
+GPU_HIDE
+void
+dx12_computePushConstants(GPUComputePassEncoder *encoder,
+                          const void            *data,
+                          uint32_t               sizeBytes) {
+  GPUComputeEncoderDX12 *native;
+  GPUPipelineLayoutDX12 *layout;
+
+  native = dx12__computeEncoder(encoder);
+  layout = encoder && encoder->_pipelineLayout
+             ? encoder->_pipelineLayout->_native
+             : NULL;
+  if (!native || !native->commandList || !layout || !data ||
+      layout->pushConstantRootParameter == UINT32_MAX ||
+      sizeBytes != layout->pushConstantDwordCount * 4u) {
+    return;
+  }
+
+  native->commandList->lpVtbl->SetComputeRoot32BitConstants(
+    native->commandList,
+    layout->pushConstantRootParameter,
+    layout->pushConstantDwordCount,
+    data,
+    0u
+  );
 }
 
 GPU_HIDE
@@ -262,6 +299,7 @@ dx12_initCompute(GPUApiCompute *api) {
   api->destroyComputePipeline  = dx12_destroyComputePipeline;
   api->computeCommandEncoder   = dx12_computeCommandEncoder;
   api->setComputePipelineState = dx12_setComputePipelineState;
+  api->pushConstants           = dx12_computePushConstants;
   api->dispatch                = dx12_dispatch;
   api->dispatchIndirect        = dx12_dispatchIndirect;
   api->multiDispatchIndirect   = dx12_multiDispatchIndirect;

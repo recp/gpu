@@ -4,7 +4,9 @@ static int
 run_queue(void *ctx) {
   GPUApiTestContext *testCtx = ctx;
 
-  return gpu_test_queue(testCtx->adapter, testCtx->device);
+  return gpu_test_queue(testCtx->instance,
+                        testCtx->adapter,
+                        testCtx->device);
 }
 
 static int
@@ -36,7 +38,9 @@ run_render(void *ctx) {
 
 static int
 run_compute(void *ctx) {
-  return gpu_test_compute(((GPUApiTestContext *)ctx)->device);
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_compute(testCtx->device, testCtx->computeBytecodePath);
 }
 
 static int
@@ -64,12 +68,12 @@ run_shader(void *ctx) {
 }
 
 static GPUAdapter *
-select_adapter(void) {
+select_adapter(GPUInstance *instance) {
   GPUAdapter *adapter = NULL;
   uint32_t adapterCount = 1;
   GPUResult result;
 
-  result = GPUEnumerateAdapters(NULL, &adapterCount, &adapter);
+  result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
   if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
       !adapter) {
     return NULL;
@@ -79,33 +83,51 @@ select_adapter(void) {
 
 int
 main(int argc, char **argv) {
+  GPUInstanceCreateInfo instanceInfo = {0};
+  GPUInstance *instance;
   GPUAdapter *adapter;
   GPUDevice *device;
   GPUApiTestContext ctx;
   GPUApiTest tests[11];
   int ok;
 
-  if (argc != 3) {
-    fprintf(stderr, "usage: %s <reflection.us> <render_mrt.us>\n", argv[0]);
+  if (argc != 4) {
+    fprintf(stderr,
+            "usage: %s <reflection.us> <render_mrt.us> <compute.us>\n",
+            argv[0]);
     return 2;
   }
 
-  adapter = select_adapter();
+  instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  instanceInfo.chain.structSize = sizeof(instanceInfo);
+  instanceInfo.preferredBackend = GPU_BACKEND_DEFAULT;
+  instanceInfo.enableValidation = true;
+  instance = NULL;
+  if (GPUCreateInstance(&instanceInfo, &instance) != GPU_OK || !instance) {
+    fprintf(stderr, "failed to create instance\n");
+    return 1;
+  }
+
+  adapter = select_adapter(instance);
   if (!adapter) {
     fprintf(stderr, "failed to get adapter\n");
+    GPUDestroyInstance(instance);
     return 1;
   }
 
   device = GPUCreateDeviceWithDefaultQueues(adapter);
   if (!device) {
     fprintf(stderr, "failed to create device\n");
+    GPUDestroyInstance(instance);
     return 1;
   }
 
+  ctx.instance = instance;
   ctx.adapter = adapter;
   ctx.device = device;
   ctx.uslBytecodePath = argv[1];
   ctx.mrtBytecodePath = argv[2];
+  ctx.computeBytecodePath = argv[3];
 
   tests[0] = (GPUApiTest){ "queue", run_queue, &ctx };
   tests[1] = (GPUApiTest){ "sampler", run_sampler, &ctx };
@@ -122,6 +144,7 @@ main(int argc, char **argv) {
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 
   GPUDestroyDevice(device);
+  GPUDestroyInstance(instance);
   if (!ok) {
     return 1;
   }

@@ -126,7 +126,7 @@ gpu_uslDefaultDX12Target(USLTargetSpec *outTarget) {
   return outTarget &&
          us_target_init(outTarget,
                         USL_BACKEND_HLSL,
-                        USL_TARGET_PROFILE_HLSL_SM_5_1) == USLOk;
+                        USL_TARGET_PROFILE_HLSL_SM_6_0) == USLOk;
 }
 
 static int

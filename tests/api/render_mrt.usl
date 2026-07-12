@@ -11,6 +11,14 @@ vert api_vs(input: APIRenderVertexIn #stage_in) -> float4 {
   return float4(input.position, 0.0, 1.0)
 }
 
+frag api_fs() -> float4 {
+  return float4(1.0, 0.0, 0.0, 1.0)
+}
+
+frag api_alpha_fs() -> float4 {
+  return float4(1.0, 0.0, 0.0, 0.5)
+}
+
 frag api_mrt_fs() -> APIRenderMRTOut {
   return APIRenderMRTOut(float4(1.0, 0.0, 0.0, 0.5),
                          float4(0.0, 1.0, 0.0, 1.0))

@@ -1,6 +1,27 @@
 #include "test.h"
 #include "../../src/api/cmdqueue_internal.h"
 
+enum {
+  COPY_TEST_WIDTH     = 4u,
+  COPY_TEST_HEIGHT    = 4u,
+  COPY_TEST_PIXEL_SIZE = 4u,
+  COPY_TEST_ROW_PITCH = 256u
+};
+
+static int
+copy_test_rows_equal(const uint8_t *tight, const uint8_t *padded) {
+  const size_t rowBytes = COPY_TEST_WIDTH * COPY_TEST_PIXEL_SIZE;
+
+  for (uint32_t row = 0u; row < COPY_TEST_HEIGHT; row++) {
+    if (memcmp(tight + row * rowBytes,
+               padded + row * COPY_TEST_ROW_PITCH,
+               rowBytes) != 0) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
 static int
 check_copy_pass_validation(GPUDevice *device) {
   GPUCommandQueue *queue;
@@ -18,12 +39,14 @@ check_copy_pass_validation(GPUDevice *device) {
   GPUTextureToTextureCopyRegion textureRegion = {0};
   GPUBuffer *sourceBuffer;
   GPUBuffer *bufferCopy;
+  GPUBuffer *textureUpload;
   GPUBuffer *textureReadback;
   GPUTexture *textureA;
   GPUTexture *textureB;
   uint8_t pixels[4u * 4u * 4u];
   uint8_t bufferCopyBytes[sizeof(pixels)] = {0};
-  uint8_t textureBytes[sizeof(pixels)] = {0};
+  uint8_t textureUploadBytes[COPY_TEST_ROW_PITCH * COPY_TEST_HEIGHT] = {0};
+  uint8_t textureBytes[sizeof(textureUploadBytes)] = {0};
   int ok;
 
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
@@ -60,6 +83,7 @@ check_copy_pass_validation(GPUDevice *device) {
 
   sourceBuffer = NULL;
   bufferCopy = NULL;
+  textureUpload = NULL;
   textureReadback = NULL;
   textureA = NULL;
   textureB = NULL;
@@ -68,10 +92,27 @@ check_copy_pass_validation(GPUDevice *device) {
   copyPass = NULL;
   ok = GPUCreateBuffer(device, &bufferInfo, &sourceBuffer) == GPU_OK &&
        GPUCreateBuffer(device, &bufferInfo, &bufferCopy) == GPU_OK &&
-       GPUCreateBuffer(device, &bufferInfo, &textureReadback) == GPU_OK &&
        GPUQueueWriteBuffer(queue, sourceBuffer, 0u, pixels, sizeof(pixels)) == GPU_OK;
   if (!ok) {
     fprintf(stderr, "copy test buffer setup failed\n");
+    goto cleanup;
+  }
+
+  for (uint32_t row = 0u; row < COPY_TEST_HEIGHT; row++) {
+    memcpy(textureUploadBytes + row * COPY_TEST_ROW_PITCH,
+           pixels + row * COPY_TEST_WIDTH * COPY_TEST_PIXEL_SIZE,
+           COPY_TEST_WIDTH * COPY_TEST_PIXEL_SIZE);
+  }
+  bufferInfo.sizeBytes = sizeof(textureUploadBytes);
+  ok = GPUCreateBuffer(device, &bufferInfo, &textureUpload) == GPU_OK &&
+       GPUCreateBuffer(device, &bufferInfo, &textureReadback) == GPU_OK &&
+       GPUQueueWriteBuffer(queue,
+                           textureUpload,
+                           0u,
+                           textureUploadBytes,
+                           sizeof(textureUploadBytes)) == GPU_OK;
+  if (!ok) {
+    fprintf(stderr, "copy test texture buffer setup failed\n");
     goto cleanup;
   }
 
@@ -122,13 +163,13 @@ check_copy_pass_validation(GPUDevice *device) {
   bufferRegion.sizeBytes = sizeof(pixels);
   GPUCopyBufferToBuffer(copyPass, sourceBuffer, bufferCopy, &bufferRegion);
 
-  bufferTextureRegion.bytesPerRow = 4u * 4u;
+  bufferTextureRegion.bytesPerRow = COPY_TEST_ROW_PITCH;
   bufferTextureRegion.rowsPerImage = 4u;
   bufferTextureRegion.texture.width = 4u;
   bufferTextureRegion.texture.height = 4u;
   bufferTextureRegion.texture.depth = 1u;
   bufferTextureRegion.texture.layerCount = 1u;
-  GPUCopyBufferToTexture(copyPass, sourceBuffer, textureA, &bufferTextureRegion);
+  GPUCopyBufferToTexture(copyPass, textureUpload, textureA, &bufferTextureRegion);
 
   textureRegion.width = 4u;
   textureRegion.height = 4u;
@@ -175,7 +216,7 @@ check_copy_pass_validation(GPUDevice *device) {
                           textureBytes,
                           sizeof(textureBytes)) == GPU_OK &&
        memcmp(pixels, bufferCopyBytes, sizeof(pixels)) == 0 &&
-       memcmp(pixels, textureBytes, sizeof(pixels)) == 0;
+       copy_test_rows_equal(pixels, textureBytes);
   if (!ok) {
     fprintf(stderr, "copy pass readback mismatch\n");
   }
@@ -188,6 +229,7 @@ cleanup:
   GPUDestroyTexture(textureB);
   GPUDestroyTexture(textureA);
   GPUDestroyBuffer(textureReadback);
+  GPUDestroyBuffer(textureUpload);
   GPUDestroyBuffer(bufferCopy);
   GPUDestroyBuffer(sourceBuffer);
   return ok;
@@ -220,7 +262,7 @@ check_copy_pass_invalid_copy_noops(GPUDevice *device) {
   uint8_t protectedBytes[4u * 4u * 4u];
   uint8_t overwriteBytes[sizeof(protectedBytes)];
   uint8_t bufferOut[sizeof(protectedBytes)] = {0};
-  uint8_t textureOut[sizeof(protectedBytes)] = {0};
+  uint8_t textureOut[COPY_TEST_ROW_PITCH * COPY_TEST_HEIGHT] = {0};
   int ok;
 
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
@@ -251,13 +293,20 @@ check_copy_pass_invalid_copy_noops(GPUDevice *device) {
   bufferInfo.usage = GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
 
   ok = GPUCreateBuffer(device, &bufferInfo, &sourceBuffer) == GPU_OK &&
-       GPUCreateBuffer(device, &bufferInfo, &protectedBuffer) == GPU_OK &&
-       GPUCreateBuffer(device, &bufferInfo, &textureReadback) == GPU_OK;
+       GPUCreateBuffer(device, &bufferInfo, &protectedBuffer) == GPU_OK;
   if (!ok) {
     fprintf(stderr, "invalid copy buffer setup failed\n");
     goto cleanup;
   }
 
+  bufferInfo.sizeBytes = sizeof(textureOut);
+  ok = GPUCreateBuffer(device, &bufferInfo, &textureReadback) == GPU_OK;
+  if (!ok) {
+    fprintf(stderr, "invalid copy texture readback setup failed\n");
+    goto cleanup;
+  }
+
+  bufferInfo.sizeBytes = sizeof(protectedBytes);
   bufferInfo.usage = GPU_BUFFER_USAGE_COPY_DST;
   ok = GPUCreateBuffer(device, &bufferInfo, &noCopySrcBuffer) == GPU_OK;
   if (!ok) {
@@ -348,7 +397,7 @@ check_copy_pass_invalid_copy_noops(GPUDevice *device) {
   GPUCopyBufferToBuffer(copyPass, sourceBuffer, protectedBuffer, &badBufferRegion);
   GPUCopyBufferToBuffer(copyPass, noCopySrcBuffer, protectedBuffer, &fullBufferRegion);
 
-  fullTextureRegion.bytesPerRow = 4u * 4u;
+  fullTextureRegion.bytesPerRow = COPY_TEST_ROW_PITCH;
   fullTextureRegion.rowsPerImage = 4u;
   fullTextureRegion.texture.width = 4u;
   fullTextureRegion.texture.height = 4u;
@@ -418,7 +467,7 @@ check_copy_pass_invalid_copy_noops(GPUDevice *device) {
                           textureOut,
                           sizeof(textureOut)) == GPU_OK &&
        memcmp(protectedBytes, bufferOut, sizeof(protectedBytes)) == 0 &&
-       memcmp(protectedBytes, textureOut, sizeof(protectedBytes)) == 0;
+       copy_test_rows_equal(protectedBytes, textureOut);
   if (!ok) {
     fprintf(stderr, "invalid copy no-op target changed\n");
   }

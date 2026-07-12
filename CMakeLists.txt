@@ -212,6 +212,45 @@ endif()
 if(GPU_BUILD_TESTS)
   enable_testing()
 
+  add_executable(gpu-api-test
+    tests/api/barrier.c
+    tests/api/bindgroup.c
+    tests/api/compute.c
+    tests/api/copy.c
+    tests/api/main.c
+    tests/api/query.c
+    tests/api/queue.c
+    tests/api/render.c
+    tests/api/resources.c
+    tests/api/runner.c
+    tests/api/runtime.c
+    tests/api/sampler.c
+    tests/api/shader.c
+  )
+  target_link_libraries(gpu-api-test PRIVATE gpu)
+  set_target_properties(gpu-api-test PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+
+  foreach(runtime_target us ds)
+    if(TARGET ${runtime_target})
+      add_custom_command(TARGET gpu-api-test POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:${runtime_target}>
+                $<TARGET_FILE_DIR:gpu-api-test>
+      )
+    endif()
+  endforeach()
+
+  add_test(NAME api-validation
+    COMMAND gpu-api-test
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/usl-reflection-check/reflection.us"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/render_mrt.us"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/compute.us"
+  )
+
   if(WIN32)
     add_executable(gpu-dx12-queue-test tests/dx12/queue.c)
     target_link_libraries(gpu-dx12-queue-test PRIVATE gpu)

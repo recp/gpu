@@ -45,6 +45,7 @@ struct GPUDevice {
   uint64_t                     enabledFeatureMask;
   uint64_t                     transientFrameOffset;
   GPUQueueFlagBits             queueFamilies;
+  GPUBufferUsageFlags          transientBufferUsage;
   uint32_t                     transientFrameIndex;
   bool                         transientConfigured;
   bool                         transientFrameBegun;

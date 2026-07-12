@@ -2033,6 +2033,9 @@ gpuForEachBindGroupBinding(GPUBindGroup *group,
 
     layoutEntry = &layout->entries[i];
     binding     = &priv->bindings[i];
+    if (!gpu_bindGroupLayoutEntryNeedsBinding(layoutEntry)) {
+      continue;
+    }
 
     memset(&view, 0, sizeof(view));
     view.buffer           = binding->buffer;
@@ -2150,6 +2153,9 @@ gpuForEachBindGroupBindingWithDynamicOffsets(GPUPipelineLayout *pipelineLayout,
 
     layoutEntry = &layout->entries[i];
     binding = &priv->bindings[i];
+    if (!gpu_bindGroupLayoutEntryNeedsBinding(layoutEntry)) {
+      continue;
+    }
     effectiveOffset = binding->offset;
     if (layoutEntry->hasDynamicOffset) {
       if (layoutEntry->kind != GPUBindKindBuffer ||

@@ -430,6 +430,36 @@ dx12_stencilReference(GPURenderCommandEncoder *encoder, uint32_t reference) {
 
 GPU_HIDE
 void
+dx12_renderPushConstants(GPURenderCommandEncoder *encoder,
+                         GPUShaderStageFlags       stages,
+                         const void               *data,
+                         uint32_t                  sizeBytes) {
+  GPURenderEncoderDX12  *native;
+  GPUPipelineLayoutDX12 *layout;
+
+  GPU__UNUSED(stages);
+
+  native = encoder ? encoder->_priv : NULL;
+  layout = encoder && encoder->_pipelineLayout
+             ? encoder->_pipelineLayout->_native
+             : NULL;
+  if (!native || !native->commandList || !layout || !data ||
+      layout->pushConstantRootParameter == UINT32_MAX ||
+      sizeBytes != layout->pushConstantDwordCount * 4u) {
+    return;
+  }
+
+  native->commandList->lpVtbl->SetGraphicsRoot32BitConstants(
+    native->commandList,
+    layout->pushConstantRootParameter,
+    layout->pushConstantDwordCount,
+    data,
+    0u
+  );
+}
+
+GPU_HIDE
+void
 dx12_drawPrimitives(GPURenderCommandEncoder *encoder,
                     GPUPrimitiveType         type,
                     size_t                   start,
@@ -639,6 +669,7 @@ dx12_initRCE(GPUApiRCE *api) {
   api->scissor                  = dx12_scissor;
   api->blendConstant            = dx12_blendConstant;
   api->stencilReference         = dx12_stencilReference;
+  api->pushConstants            = dx12_renderPushConstants;
   api->vertexBuffer             = dx12_vertexBuffer;
   api->drawPrimitives           = dx12_drawPrimitives;
   api->drawIndexedPrims         = dx12_drawIndexedPrims;

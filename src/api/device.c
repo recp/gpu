@@ -317,6 +317,15 @@ gpu_knownTransientBufferUsageMask(void) {
          GPU_BUFFER_USAGE_INDIRECT;
 }
 
+static GPUBufferUsageFlags
+gpu_transientUploadUsageMask(void) {
+  return GPU_BUFFER_USAGE_VERTEX |
+         GPU_BUFFER_USAGE_INDEX |
+         GPU_BUFFER_USAGE_UNIFORM |
+         GPU_BUFFER_USAGE_COPY_SRC |
+         GPU_BUFFER_USAGE_INDIRECT;
+}
+
 static bool
 gpu_validTransientBufferUsage(GPUBufferUsageFlags usage) {
   return usage != 0u &&
@@ -365,12 +374,13 @@ gpu_destroyTransientAllocator(GPUDevice *device) {
 
   gpu_destroyTransientChunks(device);
   GPUDestroyBuffer(device->transientBuffer);
-  device->transientBuffer = NULL;
-  device->transientCpuPtr = NULL;
-  device->transientFrameOffset = 0;
-  device->transientFrameIndex = 0;
-  device->transientConfigured = false;
-  device->transientFrameBegun = false;
+  device->transientBuffer       = NULL;
+  device->transientCpuPtr       = NULL;
+  device->transientFrameOffset  = 0;
+  device->transientBufferUsage  = 0;
+  device->transientFrameIndex   = 0;
+  device->transientConfigured   = false;
+  device->transientFrameBegun   = false;
   memset(&device->transientConfig, 0, sizeof(device->transientConfig));
   memset(&device->allocatorStats, 0, sizeof(device->allocatorStats));
 }
@@ -833,6 +843,7 @@ GPUConfigureTransientAllocator(GPUDevice *device,
   GPUBuffer *buffer;
   void *cpuPtr;
   uint64_t capacityBytes;
+  GPUBufferUsageFlags usage;
   GPUResult result;
 
   if (!device || !gpu_validTransientAllocatorConfig(config, &capacityBytes)) {
@@ -841,21 +852,31 @@ GPUConfigureTransientAllocator(GPUDevice *device,
 
   buffer = NULL;
   cpuPtr = NULL;
+  usage  = gpu_knownTransientBufferUsageMask();
   result = gpu_createTransientBuffer(device,
-                                     gpu_knownTransientBufferUsageMask(),
+                                     usage,
                                      capacityBytes,
                                      &buffer,
                                      &cpuPtr);
+  if (result != GPU_OK) {
+    usage  = gpu_transientUploadUsageMask();
+    result = gpu_createTransientBuffer(device,
+                                       usage,
+                                       capacityBytes,
+                                       &buffer,
+                                       &cpuPtr);
+  }
   if (result != GPU_OK) {
     return result;
   }
 
   gpu_destroyTransientAllocator(device);
-  device->transientBuffer = buffer;
-  device->transientCpuPtr = cpuPtr;
-  device->transientConfig = *config;
-  device->transientConfigured = true;
-  device->transientFrameIndex = 0;
+  device->transientBuffer       = buffer;
+  device->transientCpuPtr       = cpuPtr;
+  device->transientBufferUsage  = usage;
+  device->transientConfig       = *config;
+  device->transientConfigured   = true;
+  device->transientFrameIndex   = 0;
   device->allocatorStats.ringCapacityBytes = capacityBytes;
   return GPU_OK;
 }
@@ -882,6 +903,10 @@ GPUAllocateTransientBuffer(GPUDevice *device,
       sizeBytes == 0u ||
       !gpu_isPowerOfTwo(alignment)) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!device->transientBuffer ||
+      (usage & ~device->transientBufferUsage) != 0u) {
+    return GPU_ERROR_UNSUPPORTED;
   }
 
   if (!gpu_alignUp(device->transientFrameOffset, alignment, &alignedOffset) ||

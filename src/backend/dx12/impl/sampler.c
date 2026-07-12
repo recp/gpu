@@ -174,6 +174,46 @@ dx12__addressMode(GPUAddressMode mode) {
 }
 
 GPU_HIDE
+int
+dx12_fillStaticSamplerDesc(const GPUSamplerDesc       *desc,
+                           uint32_t                    shaderRegister,
+                           uint32_t                    registerSpace,
+                           D3D12_SHADER_VISIBILITY     visibility,
+                           D3D12_STATIC_SAMPLER_DESC *outDesc) {
+  GPUUSLStaticSamplerDesc uslDesc = {0};
+
+  if (!desc || !outDesc) {
+    return 0;
+  }
+
+  uslDesc.minFilter = desc->minFilter == GPU_FILTER_LINEAR
+                        ? GPUUSLSamplerFilterLinear
+                        : GPUUSLSamplerFilterNearest;
+  uslDesc.magFilter = desc->magFilter == GPU_FILTER_LINEAR
+                        ? GPUUSLSamplerFilterLinear
+                        : GPUUSLSamplerFilterNearest;
+  uslDesc.mipFilter = desc->mipFilter == GPU_MIP_FILTER_LINEAR
+                        ? GPUUSLSamplerFilterLinear
+                        : GPUUSLSamplerFilterNearest;
+  uslDesc.maxAnisotropy = 1u;
+
+  memset(outDesc, 0, sizeof(*outDesc));
+  outDesc->Filter           = dx12_uslSamplerFilter(&uslDesc);
+  outDesc->AddressU         = dx12__addressMode(desc->addressU);
+  outDesc->AddressV         = dx12__addressMode(desc->addressV);
+  outDesc->AddressW         = dx12__addressMode(desc->addressW);
+  outDesc->MaxAnisotropy    = 1u;
+  outDesc->ComparisonFunc   = D3D12_COMPARISON_FUNC_NEVER;
+  outDesc->BorderColor      = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+  outDesc->MinLOD           = 0.0f;
+  outDesc->MaxLOD           = D3D12_FLOAT32_MAX;
+  outDesc->ShaderRegister   = shaderRegister;
+  outDesc->RegisterSpace    = registerSpace;
+  outDesc->ShaderVisibility = visibility;
+  return 1;
+}
+
+GPU_HIDE
 GPUResult
 dx12_createSampler(GPUApi                    * __restrict api,
                    GPUDevice                 * __restrict device,

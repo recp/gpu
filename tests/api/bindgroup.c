@@ -196,6 +196,8 @@ check_pipeline_layout_bind_validation(GPUDevice *device,
                                       const GPUBindGroupLayoutCreateInfo *layoutInfo,
                                       GPUBindGroupLayout *layout,
                                       GPUPipelineLayout *pipelineLayout) {
+  GPUApiDescriptor saved;
+  GPUApi *api;
   GPUBindGroupCreateInfo groupInfo = {0};
   GPUBindGroupLayoutCreateInfo secondLayoutInfo = {0};
   GPUPipelineLayoutCreateInfo otherPipelineInfo = {0};
@@ -211,6 +213,14 @@ check_pipeline_layout_bind_validation(GPUDevice *device,
   GPURenderPassEncoder renderPass = {0};
   GPUComputePassEncoder computePass = {0};
   uint32_t dynamicOffset = 0u;
+
+  api = gpuActiveGPUApi();
+  if (!api) {
+    return 0;
+  }
+  saved = api->descriptor;
+  api->descriptor.bindRenderGroup  = NULL;
+  api->descriptor.bindComputeGroup = NULL;
 
   secondLayoutInfo = *layoutInfo;
   if (!layoutInfo || layoutInfo->entryCount != 1u || !layoutInfo->pEntries) {
@@ -337,9 +347,11 @@ check_pipeline_layout_bind_validation(GPUDevice *device,
   GPUDestroyPipelineLayout(twoGroupPipelineLayout);
   GPUDestroyPipelineLayout(otherPipelineLayout);
   GPUDestroyBindGroupLayout(otherLayout);
+  api->descriptor = saved;
   return 1;
 
 fail:
+  api->descriptor = saved;
   GPUDestroyBindGroup(secondGroup);
   GPUDestroyBindGroup(group);
   GPUDestroyPipelineLayout(twoGroupPipelineLayout);
@@ -361,15 +373,17 @@ check_bind_group_layout_validation(GPUDevice *device) {
   GPUBindGroupEntry textureGroupEntries[2];
   GPUBindGroupCreateInfo groupInfo;
   GPUBufferCreateInfo bufferInfo;
+  GPUTextureCreateInfo textureInfo;
+  GPUTextureViewCreateInfo viewInfo;
   GPUBindGroup *group;
   GPUBuffer *uniformBuffer;
   GPUBuffer *storageOnlyBuffer;
-  GPUTexture sampledTexture;
   GPUTexture storageTexture;
-  GPUTexture dualUseTexture;
-  GPUTextureView sampledView;
   GPUTextureView storageView;
-  GPUTextureView dualUseView;
+  GPUTexture *sampledTexture;
+  GPUTexture *dualUseTexture;
+  GPUTextureView *sampledView;
+  GPUTextureView *dualUseView;
   GPUBindGroupLayoutEntry textureLayoutEntries[2];
   GPUBindGroupLayout *dualTextureLayout;
   GPUPipelineLayoutCreateInfo pipelineInfo;
@@ -582,22 +596,63 @@ check_bind_group_layout_validation(GPUDevice *device) {
     return 0;
   }
 
-  memset(&sampledTexture, 0, sizeof(sampledTexture));
   memset(&storageTexture, 0, sizeof(storageTexture));
-  memset(&dualUseTexture, 0, sizeof(dualUseTexture));
-  memset(&sampledView, 0, sizeof(sampledView));
   memset(&storageView, 0, sizeof(storageView));
-  memset(&dualUseView, 0, sizeof(dualUseView));
-  sampledTexture.usage = GPU_TEXTURE_USAGE_SAMPLED;
+  sampledTexture       = NULL;
+  dualUseTexture       = NULL;
+  sampledView          = NULL;
+  dualUseView          = NULL;
   storageTexture.usage = GPU_TEXTURE_USAGE_STORAGE;
-  dualUseTexture.usage = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_STORAGE;
-  sampledView._texture = &sampledTexture;
   storageView._texture = &storageTexture;
-  dualUseView._texture = &dualUseTexture;
+
+  memset(&textureInfo, 0, sizeof(textureInfo));
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "bind-group-texture";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = 1u;
+  textureInfo.height           = 1u;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED;
+  memset(&viewInfo, 0, sizeof(viewInfo));
+  viewInfo.chain.sType         = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize    = sizeof(viewInfo);
+  viewInfo.label               = "bind-group-texture-view";
+  viewInfo.viewType            = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format              = GPU_FORMAT_RGBA8_UNORM;
+  viewInfo.mipLevelCount       = 1u;
+  viewInfo.arrayLayerCount     = 1u;
+  if (GPUCreateTexture(device, &textureInfo, &sampledTexture) != GPU_OK ||
+      !sampledTexture ||
+      GPUCreateTextureView(sampledTexture, &viewInfo, &sampledView) != GPU_OK ||
+      !sampledView) {
+    fprintf(stderr, "sampled texture setup failed\n");
+    GPUDestroyTextureView(sampledView);
+    GPUDestroyTexture(sampledTexture);
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  textureInfo.usage = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_STORAGE;
+  if (GPUCreateTexture(device, &textureInfo, &dualUseTexture) != GPU_OK ||
+      !dualUseTexture ||
+      GPUCreateTextureView(dualUseTexture, &viewInfo, &dualUseView) != GPU_OK ||
+      !dualUseView) {
+    fprintf(stderr, "sampled/storage texture setup failed\n");
+    GPUDestroyTextureView(dualUseView);
+    GPUDestroyTexture(dualUseTexture);
+    GPUDestroyTextureView(sampledView);
+    GPUDestroyTexture(sampledTexture);
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
 
   memset(&textureEntry, 0, sizeof(textureEntry));
   textureEntry.binding = 0u;
-  textureEntry.textureView = &sampledView;
+  textureEntry.textureView = sampledView;
 
   memset(&groupInfo, 0, sizeof(groupInfo));
   groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
@@ -610,6 +665,10 @@ check_bind_group_layout_validation(GPUDevice *device) {
   group = NULL;
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "bind group rejected valid sampled texture view\n");
+    GPUDestroyTextureView(dualUseView);
+    GPUDestroyTexture(dualUseTexture);
+    GPUDestroyTextureView(sampledView);
+    GPUDestroyTexture(sampledTexture);
     GPUDestroyBindGroupLayout(layout);
     return 0;
   }
@@ -621,6 +680,10 @@ check_bind_group_layout_validation(GPUDevice *device) {
       group != NULL) {
     fprintf(stderr, "bind group accepted texture view without sampled usage\n");
     GPUDestroyBindGroup(group);
+    GPUDestroyTextureView(dualUseView);
+    GPUDestroyTexture(dualUseTexture);
+    GPUDestroyTextureView(sampledView);
+    GPUDestroyTexture(sampledTexture);
     GPUDestroyBindGroupLayout(layout);
     return 0;
   }
@@ -638,10 +701,14 @@ check_bind_group_layout_validation(GPUDevice *device) {
   if (GPUCreateBindGroupLayout(device, &layoutInfo, &dualTextureLayout) != GPU_OK ||
       !dualTextureLayout) {
     fprintf(stderr, "bind group layout rejected sampled/storage texture pair\n");
+    GPUDestroyTextureView(dualUseView);
+    GPUDestroyTexture(dualUseTexture);
+    GPUDestroyTextureView(sampledView);
+    GPUDestroyTexture(sampledTexture);
     return 0;
   }
 
-  textureEntry.textureView = &dualUseView;
+  textureEntry.textureView = dualUseView;
   memset(&groupInfo, 0, sizeof(groupInfo));
   groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
@@ -655,16 +722,20 @@ check_bind_group_layout_validation(GPUDevice *device) {
     fprintf(stderr, "bind group accepted missing storage texture binding\n");
     GPUDestroyBindGroup(group);
     GPUDestroyBindGroupLayout(dualTextureLayout);
+    GPUDestroyTextureView(dualUseView);
+    GPUDestroyTexture(dualUseTexture);
+    GPUDestroyTextureView(sampledView);
+    GPUDestroyTexture(sampledTexture);
     return 0;
   }
 
   memset(textureGroupEntries, 0, sizeof(textureGroupEntries));
   textureGroupEntries[0].binding = 0u;
   textureGroupEntries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
-  textureGroupEntries[0].textureView = &dualUseView;
+  textureGroupEntries[0].textureView = dualUseView;
   textureGroupEntries[1].binding = 1u;
   textureGroupEntries[1].bindingType = GPU_BINDING_STORAGE_TEXTURE;
-  textureGroupEntries[1].textureView = &dualUseView;
+  textureGroupEntries[1].textureView = dualUseView;
   groupInfo.label = "typed-texture-group";
   groupInfo.entryCount = 2u;
   groupInfo.pEntries = textureGroupEntries;
@@ -672,10 +743,18 @@ check_bind_group_layout_validation(GPUDevice *device) {
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "bind group rejected explicit sampled/storage texture bindings\n");
     GPUDestroyBindGroupLayout(dualTextureLayout);
+    GPUDestroyTextureView(dualUseView);
+    GPUDestroyTexture(dualUseTexture);
+    GPUDestroyTextureView(sampledView);
+    GPUDestroyTexture(sampledTexture);
     return 0;
   }
   GPUDestroyBindGroup(group);
   GPUDestroyBindGroupLayout(dualTextureLayout);
+  GPUDestroyTextureView(dualUseView);
+  GPUDestroyTexture(dualUseTexture);
+  GPUDestroyTextureView(sampledView);
+  GPUDestroyTexture(sampledTexture);
 
   layoutInfo.entryCount = 1u;
   layoutInfo.pEntries = &entry;
@@ -844,6 +923,8 @@ check_bind_group_layout_validation(GPUDevice *device) {
 
 static int
 check_dynamic_offset_bind_validation(GPUDevice *device) {
+  GPUApiDescriptor saved;
+  GPUApi *api;
   GPUBindGroupLayoutEntry entry = {0};
   GPUBindGroupLayoutCreateInfo layoutInfo = {0};
   GPUBindGroupLayout *layout = NULL;
@@ -861,6 +942,14 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
   uint32_t invalidOffset = 9u;
   uint32_t extraOffsets[2] = { 8u, 0u };
   int ok = 0;
+
+  api = gpuActiveGPUApi();
+  if (!api) {
+    return 0;
+  }
+  saved = api->descriptor;
+  api->descriptor.bindRenderGroup  = NULL;
+  api->descriptor.bindComputeGroup = NULL;
 
   entry.binding = 0u;
   entry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
@@ -952,6 +1041,7 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
   ok = 1;
 
 cleanup:
+  api->descriptor = saved;
   GPUDestroyBindGroup(group);
   GPUDestroyBuffer(buffer);
   GPUDestroyPipelineLayout(pipelineLayout);

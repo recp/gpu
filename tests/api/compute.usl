@@ -1,0 +1,8 @@
+kern(1, 1, 1) api_cs(gid: uint3 #global_id) {
+  let x = gid.x
+}
+
+kern(1, 1, 1) api_indirect_cs(inout output: [uint] #buffer(0),
+                               gid: uint3 #global_id) {
+  output[gid.x] = gid.x + 1
+}

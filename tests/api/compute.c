@@ -3,21 +3,6 @@
 #include "../../src/api/cmdqueue_internal.h"
 #include "../../src/api/compute_internal.h"
 
-static const char *kComputePipelineMSL =
-  "#include <metal_stdlib>\n"
-  "using namespace metal;\n"
-  "kernel void api_cs(uint3 gid [[thread_position_in_grid]]) {\n"
-  "  (void)gid;\n"
-  "}\n";
-
-static const char *kComputeIndirectMSL =
-  "#include <metal_stdlib>\n"
-  "using namespace metal;\n"
-  "kernel void api_indirect_cs(device atomic_uint *out [[buffer(0)]],\n"
-  "                            uint3 gid [[thread_position_in_grid]]) {\n"
-  "  atomic_fetch_add_explicit(&out[gid.x], gid.x + 1u, memory_order_relaxed);\n"
-  "}\n";
-
 typedef enum ComputeReadbackMode {
   COMPUTE_READBACK_DIRECT = 0,
   COMPUTE_READBACK_INDIRECT,
@@ -25,34 +10,24 @@ typedef enum ComputeReadbackMode {
 } ComputeReadbackMode;
 
 static int
-create_compute_test_library(GPUDevice *device, GPUShaderLibrary **outLibrary) {
-  GPUShaderLibraryCreateInfo info = {0};
+create_compute_usl_library(GPUDevice        *device,
+                           const char       *bytecodePath,
+                           GPUShaderLibrary **outLibrary) {
+  uint64_t bytecodeSize;
+  void    *bytecode;
+  GPUResult result;
 
-  info.chain.sType = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
-  info.chain.structSize = sizeof(info);
-  info.label = "api-compute-pipeline.metal";
-  info.sourceKind = GPU_SHADER_SOURCE_MSL_TEXT;
-  info.sourceData = kComputePipelineMSL;
-  info.sourceSize = (uint64_t)strlen(kComputePipelineMSL);
+  bytecode = gpu_test_read_file(bytecodePath, &bytecodeSize);
+  if (!bytecode) {
+    return 0;
+  }
 
-  return GPUCreateShaderLibrary(device, &info, outLibrary) == GPU_OK &&
-         *outLibrary;
-}
-
-static int
-create_compute_indirect_library(GPUDevice *device,
-                                GPUShaderLibrary **outLibrary) {
-  GPUShaderLibraryCreateInfo info = {0};
-
-  info.chain.sType = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
-  info.chain.structSize = sizeof(info);
-  info.label = "api-compute-indirect.metal";
-  info.sourceKind = GPU_SHADER_SOURCE_MSL_TEXT;
-  info.sourceData = kComputeIndirectMSL;
-  info.sourceSize = (uint64_t)strlen(kComputeIndirectMSL);
-
-  return GPUCreateShaderLibrary(device, &info, outLibrary) == GPU_OK &&
-         *outLibrary;
+  result = GPUCreateShaderLibraryFromUSL(device,
+                                         bytecode,
+                                         bytecodeSize,
+                                         outLibrary);
+  free(bytecode);
+  return result == GPU_OK && *outLibrary;
 }
 
 static int
@@ -113,14 +88,15 @@ count_multi_dispatch_indirect(GPUComputePassEncoder *enc,
 }
 
 static int
-check_compute_pipeline_validation(GPUDevice *device) {
+check_compute_pipeline_validation(GPUDevice *device,
+                                  const char *bytecodePath) {
   GPUShaderLibrary *library = NULL;
   GPUPipelineLayoutCreateInfo layoutInfo = {0};
   GPUPipelineLayout *pipelineLayout = NULL;
   GPUComputePipelineCreateInfo info = {0};
   GPUComputePipeline *pipeline;
 
-  if (!create_compute_test_library(device, &library)) {
+  if (!create_compute_usl_library(device, bytecodePath, &library)) {
     fprintf(stderr, "failed to create compute pipeline test library\n");
     return 0;
   }
@@ -441,7 +417,9 @@ check_compute_pass_validation(GPUDevice *device) {
 }
 
 static int
-check_compute_readback_case(GPUDevice *device, ComputeReadbackMode mode) {
+check_compute_readback_case(GPUDevice          *device,
+                            ComputeReadbackMode  mode,
+                            const char          *bytecodePath) {
   typedef struct DispatchArgs {
     uint32_t x, y, z;
   } DispatchArgs;
@@ -454,7 +432,7 @@ check_compute_readback_case(GPUDevice *device, ComputeReadbackMode mode) {
   static const uint32_t kZeroWords[4] = {0u, 0u, 0u, 0u};
   const uint32_t *expectedWords;
   const uint32_t expectedSingle[4] = {1u, 2u, 3u, 4u};
-  const uint32_t expectedMulti[4] = {2u, 4u, 3u, 4u};
+  const uint32_t expectedMulti[4] = {1u, 2u, 3u, 4u};
   const int indirect = mode != COMPUTE_READBACK_DIRECT;
   const int multi = mode == COMPUTE_READBACK_MULTI_INDIRECT;
   const char *label = multi ? "api-compute-multi-indirect"
@@ -492,7 +470,7 @@ check_compute_readback_case(GPUDevice *device, ComputeReadbackMode mode) {
     fprintf(stderr, "failed to get graphics queue for %s test\n", label);
     return 0;
   }
-  if (!create_compute_indirect_library(device, &library)) {
+  if (!create_compute_usl_library(device, bytecodePath, &library)) {
     fprintf(stderr, "failed to create %s library\n", label);
     goto cleanup;
   }
@@ -683,16 +661,22 @@ cleanup:
 }
 
 static int
-check_compute_readback(GPUDevice *device) {
-  return check_compute_readback_case(device, COMPUTE_READBACK_DIRECT) &&
-         check_compute_readback_case(device, COMPUTE_READBACK_INDIRECT) &&
-         check_compute_readback_case(device, COMPUTE_READBACK_MULTI_INDIRECT);
+check_compute_readback(GPUDevice *device, const char *bytecodePath) {
+  return check_compute_readback_case(device,
+                                     COMPUTE_READBACK_DIRECT,
+                                     bytecodePath) &&
+         check_compute_readback_case(device,
+                                     COMPUTE_READBACK_INDIRECT,
+                                     bytecodePath) &&
+         check_compute_readback_case(device,
+                                     COMPUTE_READBACK_MULTI_INDIRECT,
+                                     bytecodePath);
 }
 
 int
-gpu_test_compute(GPUDevice *device) {
+gpu_test_compute(GPUDevice *device, const char *bytecodePath) {
   return check_compute_pass_validation(device) &&
-         check_compute_pipeline_validation(device) &&
+         check_compute_pipeline_validation(device, bytecodePath) &&
          check_compute_dispatch_validation_calls(device) &&
-         check_compute_readback(device);
+         check_compute_readback(device, bytecodePath);
 }

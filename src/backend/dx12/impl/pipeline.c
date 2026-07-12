@@ -584,6 +584,7 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   GPULibraryDX12                 *library;
   GPUPipelineLayoutDX12          *layout;
   GPURenderPipelineDX12          *native;
+  ID3D12RootSignature            *rootSignature;
   const GPUDepthStencilState     *depthStencil;
   D3D12_INPUT_ELEMENT_DESC       *elements;
   D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {0};
@@ -601,6 +602,7 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
 
   elements     = NULL;
   elementCount = 0u;
+  rootSignature = NULL;
   deviceDX12 = device->_priv;
   library    = info->library->_priv;
   layout     = info->layout->_native;
@@ -617,6 +619,14 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   if (!native) {
     free(elements);
     return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  if (dx12_createShaderRootSignature(device,
+                                     info->layout,
+                                     info->library,
+                                     &rootSignature) != GPU_OK) {
+    free(elements);
+    free(native);
+    return GPU_ERROR_BACKEND_FAILURE;
   }
   native->vertexBufferCount = info->vertex.bufferLayoutCount;
   for (uint32_t i = 0u; i < native->vertexBufferCount; i++) {
@@ -637,12 +647,13 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
                           &fragmentCode)) {
     dx12_freeShaderCode(&vertexCode);
     dx12_freeShaderCode(&fragmentCode);
+    rootSignature->lpVtbl->Release(rootSignature);
     free(elements);
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  desc.pRootSignature        = layout->rootSignature;
+  desc.pRootSignature        = rootSignature;
   desc.VS.pShaderBytecode    = vertexCode.data;
   desc.VS.BytecodeLength     = vertexCode.size;
   desc.PS.pShaderBytecode    = fragmentCode.data;
@@ -747,12 +758,12 @@ done:
   dx12_freeShaderCode(&fragmentCode);
   free(elements);
   if (FAILED(result)) {
+    rootSignature->lpVtbl->Release(rootSignature);
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  native->rootSignature = layout->rootSignature;
-  native->rootSignature->lpVtbl->AddRef(native->rootSignature);
+  native->rootSignature = rootSignature;
   pipeline->_state = native;
   return GPU_OK;
 }

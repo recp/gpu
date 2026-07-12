@@ -115,6 +115,16 @@ gpu_clearShaderResourceBindingInfo(GPUShaderLibrary *library) {
 }
 
 static void
+gpu_clearShaderStaticSamplers(GPUShaderLibrary *library) {
+  if (!library) {
+    return;
+  }
+
+  free(library->_staticSamplers);
+  library->_staticSamplers = NULL;
+}
+
+static void
 gpu_clearShaderReflection(GPUShaderReflection *reflection) {
   GPUShaderResourceReflection *resources;
 
@@ -402,6 +412,20 @@ gpuGetShaderResourceBackendBinding(const GPUShaderLibrary *library,
   }
 
   return 0;
+}
+
+GPU_HIDE
+const GPUShaderStaticSamplerInfo *
+gpuGetShaderLibraryStaticSamplers(const GPUShaderLibrary *library,
+                                  uint32_t *outCount) {
+  if (outCount) {
+    *outCount = library && library->_staticSamplers
+                  ? library->_staticSamplers->count
+                  : 0u;
+  }
+  return library && library->_staticSamplers
+           ? library->_staticSamplers->items
+           : NULL;
 }
 
 static int
@@ -733,6 +757,109 @@ gpu_setShaderLibraryReflection(GPUShaderLibrary *library,
   return 1;
 }
 
+static int
+gpu_staticSamplerDescEqual(const GPUUSLStaticSamplerDesc *a,
+                           const GPUUSLStaticSamplerDesc *b) {
+  return a && b &&
+         a->minFilter == b->minFilter &&
+         a->magFilter == b->magFilter &&
+         a->mipFilter == b->mipFilter &&
+         a->addressMode == b->addressMode &&
+         a->coordSpace == b->coordSpace &&
+         a->compareFunc == b->compareFunc &&
+         a->hasCompare == b->hasCompare &&
+         a->maxAnisotropy == b->maxAnisotropy;
+}
+
+static int
+gpu_setShaderLibraryStaticSamplers(GPUShaderLibrary *library,
+                                   const USReflection *usReflection) {
+  const USLBytecodeRuntimeInfo *runtimeInfo;
+  GPUShaderStaticSamplerInfoList *list;
+  uint32_t count;
+
+  if (!library || !usReflection ||
+      usReflection->abi_version != US_REFLECTION_VERSION) {
+    return 0;
+  }
+
+  runtimeInfo = &usReflection->runtime;
+  if (!gpu_uslRuntimeInfoIsUsable(runtimeInfo) ||
+      (runtimeInfo->flags &
+       USL_BYTECODE_RUNTIME_INFO_FLAG_STATIC_SAMPLER_OVERFLOW) != 0u) {
+    return 0;
+  }
+
+  gpu_clearShaderStaticSamplers(library);
+  count = runtimeInfo->static_sampler_count;
+  if (count == 0u) {
+    return 1;
+  }
+  if ((size_t)count > (SIZE_MAX - sizeof(*list)) / sizeof(list->items[0])) {
+    return 0;
+  }
+
+  list = calloc(1, sizeof(*list) + (size_t)count * sizeof(list->items[0]));
+  if (!list) {
+    return 0;
+  }
+
+  for (uint32_t i = 0u; i < count; i++) {
+    const USLRuntimeStaticSampler *src;
+    GPUShaderStaticSamplerInfo item;
+    GPUShaderStageFlags visibility;
+    uint32_t duplicate;
+
+    src = &runtimeInfo->static_samplers[i];
+    if (!gpu_shaderVisibilityFromUSLStage(src->stage, &visibility)) {
+      free(list);
+      return 0;
+    }
+
+    memset(&item, 0, sizeof(item));
+    item.desc.logicalIndex  = src->id;
+    item.desc.minFilter     = src->min_filter;
+    item.desc.magFilter     = src->mag_filter;
+    item.desc.mipFilter     = src->mip_filter;
+    item.desc.addressMode   = src->address_mode;
+    item.desc.coordSpace    = src->coord_space;
+    item.desc.compareFunc   = src->compare_func;
+    item.desc.hasCompare    = src->has_compare;
+    item.desc.maxAnisotropy = src->max_anisotropy;
+    item.visibility         = visibility;
+    item.hlslIndex          = src->hlsl_index >= 0
+                                ? (uint32_t)src->hlsl_index
+                                : UINT32_MAX;
+    item.spirvGroup         = src->spirv_set;
+    item.spirvBinding = src->spirv_binding >= 0
+                          ? (uint32_t)src->spirv_binding
+                          : UINT32_MAX;
+    if (!GPUUSLStaticSamplerDescIsValid(&item.desc)) {
+      free(list);
+      return 0;
+    }
+
+    duplicate = UINT32_MAX;
+    for (uint32_t j = 0u; j < list->count; j++) {
+      if (list->items[j].hlslIndex == item.hlslIndex &&
+          list->items[j].spirvGroup == item.spirvGroup &&
+          list->items[j].spirvBinding == item.spirvBinding &&
+          gpu_staticSamplerDescEqual(&list->items[j].desc, &item.desc)) {
+        duplicate = j;
+        break;
+      }
+    }
+    if (duplicate != UINT32_MAX) {
+      list->items[duplicate].visibility |= visibility;
+      continue;
+    }
+    list->items[list->count++] = item;
+  }
+
+  library->_staticSamplers = list;
+  return 1;
+}
+
 static GPUResult
 gpu_copyShaderReflection(const GPUShaderReflection *src,
                          GPUShaderReflection *dst) {
@@ -1004,7 +1131,9 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
     if (!gpu_setShaderLibraryReflection(*outLibrary,
                                          &compileOutput.reflection) ||
         !gpu_setShaderLibraryEntryInfo(*outLibrary,
-                                       &compileOutput.reflection)) {
+                                       &compileOutput.reflection) ||
+        !gpu_setShaderLibraryStaticSamplers(*outLibrary,
+                                            &compileOutput.reflection)) {
       GPUDestroyShaderLibrary(*outLibrary);
       *outLibrary = NULL;
       us_free_compile_output(&compileOutput);
@@ -1065,6 +1194,7 @@ GPUDestroyShaderLibrary(GPUShaderLibrary *library) {
   gpu_clearShaderEntryInfo(library);
   gpu_clearShaderEntryResourceInfo(library);
   gpu_clearShaderResourceBindingInfo(library);
+  gpu_clearShaderStaticSamplers(library);
   if (!(api = library->_api)) {
     free(library);
     return;

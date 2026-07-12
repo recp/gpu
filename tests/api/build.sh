@@ -19,8 +19,9 @@ rm -rf "$FIXTURE_DIR"
 mkdir -p "$FIXTURE_DIR"
 cp "$ROOT/samples/usl-reflection-check/reflection.usl" "$FIXTURE_DIR/reflection.usl"
 cp "$TEST_DIR/render_mrt.usl" "$FIXTURE_DIR/render_mrt.usl"
+cp "$TEST_DIR/compute.usl" "$FIXTURE_DIR/compute.usl"
 
-for shader in reflection render_mrt; do
+for shader in reflection render_mrt compute; do
   ustest_cmd=("$USTEST" --shader "$FIXTURE_DIR/$shader.usl" --no-logs --no-sidecar)
   if [[ "$EMBED_METAL" == "1" ]]; then
     USL_EMBED_METAL_BLOB=1 "${ustest_cmd[@]}" \
@@ -55,4 +56,7 @@ xcrun --sdk macosx clang \
   -Wl,-rpath,"$LIB_DIR" \
   -o "$OUT_BIN"
 
-"$OUT_BIN" "$FIXTURE_DIR/reflection.us" "$FIXTURE_DIR/render_mrt.us"
+"$OUT_BIN" \
+  "$FIXTURE_DIR/reflection.us" \
+  "$FIXTURE_DIR/render_mrt.us" \
+  "$FIXTURE_DIR/compute.us"
