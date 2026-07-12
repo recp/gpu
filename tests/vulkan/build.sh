@@ -37,15 +37,23 @@ build_test() {
 build_test "$TEST_DIR/queue.c" "$TEST_DIR/vulkan-queue"
 build_test "$TEST_DIR/shader.c" \
   "$TEST_DIR/vulkan-shader" \
-  "$ROOT/tests/api/copy.c"
+  "$ROOT/tests/api/copy.c" \
+  "$TEST_DIR/texture.c"
 
 COMPUTE_SAMPLE="$ROOT/samples/compute-buffer-vulkan-usl"
 MRT_FIXTURE="${GPU_VULKAN_MRT_FIXTURE:-/tmp/gpu-vulkan-render-mrt}"
+TEXTURE_FIXTURE="${GPU_VULKAN_TEXTURE_FIXTURE:-/tmp/gpu-vulkan-textured-quad}"
 rm -rf "$MRT_FIXTURE"
+rm -rf "$TEXTURE_FIXTURE"
 mkdir -p "$MRT_FIXTURE"
+mkdir -p "$TEXTURE_FIXTURE"
 cp "$ROOT/tests/api/render_mrt.usl" "$MRT_FIXTURE/render_mrt.usl"
+cp "$ROOT/samples/textured-quad-vulkan-usl/textured_quad.usl" \
+  "$TEXTURE_FIXTURE/textured_quad.usl"
 "$USTEST" --shader "$MRT_FIXTURE/render_mrt.usl" \
   --no-logs --no-sidecar >/tmp/gpu-vulkan-mrt-ustest.log 2>&1
+"$USTEST" --shader "$TEXTURE_FIXTURE/textured_quad.usl" \
+  --no-logs --no-sidecar >/tmp/gpu-vulkan-texture-ustest.log 2>&1
 "$USTEST" --shader "$COMPUTE_SAMPLE/compute_buffer.usl" \
   --no-logs --no-sidecar >/tmp/gpu-vulkan-compute-ustest.log 2>&1
 build_test "$COMPUTE_SAMPLE/main.c" \
@@ -55,7 +63,8 @@ VK_ICD_FILENAMES="$ICD" "$TEST_DIR/vulkan-queue"
 VK_ICD_FILENAMES="$ICD" \
   "$TEST_DIR/vulkan-shader" \
   "$ROOT/samples/triangle-usl/triangle.us" \
-  "$MRT_FIXTURE/render_mrt.us"
+  "$MRT_FIXTURE/render_mrt.us" \
+  "$TEXTURE_FIXTURE/textured_quad.us"
 VK_ICD_FILENAMES="$ICD" \
   "$COMPUTE_SAMPLE/hello-compute-buffer-vulkan-usl" \
   "$COMPUTE_SAMPLE/compute_buffer.us"

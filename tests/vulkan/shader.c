@@ -4,6 +4,9 @@
 #include <stdlib.h>
 
 int gpu_test_copy(GPUDevice *device);
+int gpu_test_vulkan_texture(GPUDevice  *device,
+                            const void *artifact,
+                            uint64_t    artifactSize);
 
 static void *
 read_file(const char *path, uint64_t *outSize) {
@@ -486,22 +489,28 @@ main(int argc, char **argv) {
   GPUShaderLibrary     *library;
   void                 *artifact;
   void                 *mrtArtifact;
+  void                 *textureArtifact;
   uint64_t              artifactSize;
   uint64_t              mrtArtifactSize;
+  uint64_t              textureArtifactSize;
   uint32_t              adapterCount;
   int                   ok;
 
-  if (argc != 3) {
-    fprintf(stderr, "usage: vulkan-shader artifact.us render_mrt.us\n");
+  if (argc != 4) {
+    fprintf(stderr,
+            "usage: vulkan-shader artifact.us render_mrt.us textured_quad.us\n");
     return 1;
   }
 
-  artifactSize    = 0u;
-  mrtArtifactSize = 0u;
-  artifact        = read_file(argv[1], &artifactSize);
-  mrtArtifact     = read_file(argv[2], &mrtArtifactSize);
-  if (!artifact || !mrtArtifact) {
+  artifactSize        = 0u;
+  mrtArtifactSize     = 0u;
+  textureArtifactSize = 0u;
+  artifact            = read_file(argv[1], &artifactSize);
+  mrtArtifact         = read_file(argv[2], &mrtArtifactSize);
+  textureArtifact     = read_file(argv[3], &textureArtifactSize);
+  if (!artifact || !mrtArtifact || !textureArtifact) {
     fprintf(stderr, "shader artifact read failed\n");
+    free(textureArtifact);
     free(mrtArtifact);
     free(artifact);
     return 1;
@@ -514,6 +523,7 @@ main(int argc, char **argv) {
   instance = NULL;
   if (GPUCreateInstance(&instanceInfo, &instance) != GPU_OK || !instance) {
     fprintf(stderr, "vulkan instance failed\n");
+    free(textureArtifact);
     free(mrtArtifact);
     free(artifact);
     return 1;
@@ -525,6 +535,7 @@ main(int argc, char **argv) {
       !adapter) {
     fprintf(stderr, "vulkan adapter failed\n");
     GPUDestroyInstance(instance);
+    free(textureArtifact);
     free(mrtArtifact);
     free(artifact);
     return 1;
@@ -534,6 +545,7 @@ main(int argc, char **argv) {
   if (!device) {
     fprintf(stderr, "vulkan device failed\n");
     GPUDestroyInstance(instance);
+    free(textureArtifact);
     free(mrtArtifact);
     free(artifact);
     return 1;
@@ -555,12 +567,16 @@ main(int argc, char **argv) {
        test_depth_pipeline(device, library) &&
        test_texture_barriers(device) &&
        gpu_test_copy(device) &&
-       test_mrt_render(device, mrtArtifact, mrtArtifactSize);
+       test_mrt_render(device, mrtArtifact, mrtArtifactSize) &&
+       gpu_test_vulkan_texture(device,
+                               textureArtifact,
+                               textureArtifactSize);
 
   GPUFreeShaderReflection(&reflection);
   GPUDestroyShaderLibrary(library);
   GPUDestroyDevice(device);
   GPUDestroyInstance(instance);
+  free(textureArtifact);
   free(mrtArtifact);
   free(artifact);
 
