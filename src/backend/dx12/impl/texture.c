@@ -776,8 +776,9 @@ dx12_destroyTextureView(GPUTextureView * __restrict view) {
   free(view);
 }
 
-static uint32_t
-dx12__formatBytes(GPUFormat format) {
+GPU_HIDE
+uint32_t
+dx12_formatBytes(GPUFormat format) {
   switch (format) {
     case GPU_FORMAT_RGBA8_UNORM:
     case GPU_FORMAT_RGBA8_UNORM_SRGB:
@@ -841,7 +842,7 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  formatBytes = dx12__formatBytes(texture->format);
+  formatBytes = dx12_formatBytes(texture->format);
   if (formatBytes == 0u ||
       region->width > UINT64_MAX / formatBytes) {
     return GPU_ERROR_UNSUPPORTED;

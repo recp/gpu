@@ -241,6 +241,7 @@ typedef struct GPUCommandBufferDX12 {
   GPURenderEncoderDX12          renderState;
   GPUComputePassEncoder         computeEncoder;
   GPUComputeEncoderDX12         computeState;
+  GPUCopyPassEncoder            copyEncoder;
 } GPUCommandBufferDX12;
 
 struct GPUCommandQueueDX12 {

@@ -583,6 +583,7 @@ dx12_newCommandBuffer(GPUCommandQueue  * __restrict queue,
   memset(&native->renderState, 0, sizeof(native->renderState));
   memset(&native->computeEncoder, 0, sizeof(native->computeEncoder));
   memset(&native->computeState, 0, sizeof(native->computeState));
+  memset(&native->copyEncoder, 0, sizeof(native->copyEncoder));
   native->presentSwapchain  = NULL;
   native->pendingNext       = NULL;
   native->fenceValue        = 0u;

@@ -280,6 +280,29 @@ if(GPU_BUILD_TESTS)
       COMMAND gpu-dx12-depth-test
               "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-dx12-usl/triangle.us"
     )
+
+    add_executable(gpu-dx12-texture-test tests/dx12/texture.c)
+    target_link_libraries(gpu-dx12-texture-test PRIVATE gpu)
+    set_target_properties(gpu-dx12-texture-test PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+    )
+
+    foreach(runtime_target us ds)
+      if(TARGET ${runtime_target})
+        add_custom_command(TARGET gpu-dx12-texture-test POST_BUILD
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                  $<TARGET_FILE:${runtime_target}>
+                  $<TARGET_FILE_DIR:gpu-dx12-texture-test>
+        )
+      endif()
+    endforeach()
+
+    add_test(NAME dx12-texture
+      COMMAND gpu-dx12-texture-test
+              "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-dx12-usl/textured_quad.us"
+    )
   endif()
 endif()
 
@@ -400,7 +423,11 @@ if(GPU_BUILD_SAMPLES AND WIN32)
   endif()
 
   if(GPU_BUILD_TESTS)
-    add_test(NAME dx12-compute-buffer COMMAND gpu-compute-buffer-dx12-usl)
+    add_test(
+      NAME dx12-compute-buffer
+      COMMAND gpu-compute-buffer-dx12-usl
+              "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-dx12-usl/compute_buffer.us"
+    )
   endif()
 endif()
 

@@ -45,6 +45,37 @@ dx12__alignUniformBufferSize(uint64_t sizeBytes, uint64_t *outSizeBytes) {
   return true;
 }
 
+static D3D12_RESOURCE_STATES
+dx12__bufferInitialState(GPUBufferUsageFlags usage, bool defaultHeap) {
+  D3D12_RESOURCE_STATES state;
+
+  if (!defaultHeap) {
+    return D3D12_RESOURCE_STATE_GENERIC_READ;
+  }
+  if ((usage & GPU_BUFFER_USAGE_STORAGE) != 0u) {
+    return D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+  }
+
+  state = D3D12_RESOURCE_STATE_COMMON;
+  if ((usage & (GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_UNIFORM)) != 0u) {
+    state |= D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+  }
+  if ((usage & GPU_BUFFER_USAGE_INDEX) != 0u) {
+    state |= D3D12_RESOURCE_STATE_INDEX_BUFFER;
+  }
+  if ((usage & GPU_BUFFER_USAGE_INDIRECT) != 0u) {
+    state |= D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
+  }
+  if ((usage & GPU_BUFFER_USAGE_COPY_SRC) != 0u) {
+    state |= D3D12_RESOURCE_STATE_COPY_SOURCE;
+  }
+  if (state == D3D12_RESOURCE_STATE_COMMON &&
+      (usage & GPU_BUFFER_USAGE_COPY_DST) != 0u) {
+    state = D3D12_RESOURCE_STATE_COPY_DEST;
+  }
+  return state;
+}
+
 static void
 dx12__setBufferName(ID3D12Resource *resource, const char *label) {
   wchar_t name[256];
@@ -259,6 +290,7 @@ dx12_createBuffer(GPUDevice                 * __restrict device,
   GPUResult                usageResult;
   uint64_t                 allocationSize;
   bool                     defaultHeap;
+  bool                     storage;
   HRESULT                  result;
 
   if (!device || !device->_priv || !info || !outBuffer ||
@@ -285,7 +317,9 @@ dx12_createBuffer(GPUDevice                 * __restrict device,
 
   deviceDX12              = device->_priv;
   native                  = (GPUBufferDX12 *)(buffer + 1);
-  defaultHeap             = (info->usage & GPU_BUFFER_USAGE_STORAGE) != 0u;
+  storage                 = (info->usage & GPU_BUFFER_USAGE_STORAGE) != 0u;
+  defaultHeap             = storage ||
+                            (info->usage & GPU_BUFFER_USAGE_COPY_DST) != 0u;
   heap.Type               = defaultHeap ? D3D12_HEAP_TYPE_DEFAULT
                                         : D3D12_HEAP_TYPE_UPLOAD;
   heap.CreationNodeMask   = 1u;
@@ -297,12 +331,10 @@ dx12_createBuffer(GPUDevice                 * __restrict device,
   desc.MipLevels          = 1u;
   desc.SampleDesc.Count   = 1u;
   desc.Layout             = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-  desc.Flags              = defaultHeap
+  desc.Flags              = storage
                               ? D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
                               : D3D12_RESOURCE_FLAG_NONE;
-  initialState            = defaultHeap
-                              ? D3D12_RESOURCE_STATE_UNORDERED_ACCESS
-                              : D3D12_RESOURCE_STATE_GENERIC_READ;
+  initialState            = dx12__bufferInitialState(info->usage, defaultHeap);
   result = deviceDX12->d3dDevice->lpVtbl->CreateCommittedResource(
     deviceDX12->d3dDevice,
     &heap,

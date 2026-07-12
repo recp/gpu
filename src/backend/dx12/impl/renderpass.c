@@ -571,10 +571,388 @@ dx12_destroyRenderPass(GPURenderPassDesc *pass) {
   GPU__UNUSED(pass);
 }
 
+static GPUCommandBufferDX12*
+dx12__copyCommand(GPUCopyPassEncoder *pass) {
+  return pass ? pass->_priv : NULL;
+}
+
+static void
+dx12__copyError(GPUCopyPassEncoder *pass, const char *message) {
+  GPUDevice *device;
+
+  device = pass && pass->_cmdb && pass->_cmdb->_queue
+             ? pass->_cmdb->_queue->_device
+             : NULL;
+  gpuDeviceRecordValidationError(device, message);
+}
+
+static bool
+dx12__transitionCopyBuffer(GPUCommandBufferDX12 *command,
+                           GPUBufferDX12        *buffer,
+                           D3D12_RESOURCE_STATES state) {
+  D3D12_RESOURCE_BARRIER barrier = {0};
+
+  if (!command || !command->commandList || !buffer || !buffer->resource) {
+    return false;
+  }
+  if (!buffer->defaultHeap) {
+    return state == D3D12_RESOURCE_STATE_COPY_SOURCE &&
+           buffer->state == D3D12_RESOURCE_STATE_GENERIC_READ;
+  }
+  if (buffer->state == state) {
+    return true;
+  }
+
+  barrier.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+  barrier.Transition.pResource   = buffer->resource;
+  barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+  barrier.Transition.StateBefore = buffer->state;
+  barrier.Transition.StateAfter  = state;
+  command->commandList->lpVtbl->ResourceBarrier(command->commandList,
+                                                 1u,
+                                                 &barrier);
+  buffer->state = state;
+  return true;
+}
+
+static bool
+dx12__copyFootprint(const GPUTexture                   *texture,
+                    const GPUBufferTextureCopyRegion   *region,
+                    uint32_t                            layer,
+                    D3D12_PLACED_SUBRESOURCE_FOOTPRINT *outFootprint) {
+  uint64_t bytesPerImage;
+  uint64_t offset;
+  uint64_t rowBytes;
+  uint32_t rowsPerImage;
+  uint32_t formatBytes;
+
+  if (!texture || !region || !outFootprint) {
+    return false;
+  }
+
+  formatBytes  = dx12_formatBytes(texture->format);
+  rowsPerImage = region->rowsPerImage > 0u
+                   ? region->rowsPerImage
+                   : region->texture.height;
+  rowBytes      = (uint64_t)region->texture.width * formatBytes;
+  bytesPerImage = (uint64_t)region->bytesPerRow * rowsPerImage;
+  if (formatBytes == 0u || region->bytesPerRow < rowBytes ||
+      region->bytesPerRow % D3D12_TEXTURE_DATA_PITCH_ALIGNMENT != 0u ||
+      (layer > 0u &&
+       bytesPerImage > (UINT64_MAX - region->bufferOffset) / layer)) {
+    return false;
+  }
+
+  offset = region->bufferOffset + bytesPerImage * layer;
+  if (offset % D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT != 0u) {
+    return false;
+  }
+
+  memset(outFootprint, 0, sizeof(*outFootprint));
+  outFootprint->Offset             = offset;
+  outFootprint->Footprint.Format   = dx12_format(texture->format);
+  outFootprint->Footprint.Width    = region->texture.width;
+  outFootprint->Footprint.Height   = rowsPerImage;
+  outFootprint->Footprint.Depth    =
+    texture->dimension == GPU_TEXTURE_DIMENSION_3D
+      ? region->texture.depth
+      : 1u;
+  outFootprint->Footprint.RowPitch = region->bytesPerRow;
+  return outFootprint->Footprint.Format != DXGI_FORMAT_UNKNOWN;
+}
+
+static GPUCopyPassEncoder*
+dx12_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
+  GPUCommandBufferDX12 *command;
+  GPUCopyPassEncoder   *pass;
+
+  GPU__UNUSED(label);
+  command = cmdb ? cmdb->_priv : NULL;
+  if (!command || !command->commandList) {
+    return NULL;
+  }
+
+  pass = &command->copyEncoder;
+  memset(pass, 0, sizeof(*pass));
+  pass->_priv = command;
+  return pass;
+}
+
+static void
+dx12_copyBufferToBuffer(GPUCopyPassEncoder        *pass,
+                        GPUBuffer                 *src,
+                        GPUBuffer                 *dst,
+                        const GPUBufferCopyRegion *region) {
+  GPUCommandBufferDX12 *command;
+  GPUBufferDX12        *srcBuffer;
+  GPUBufferDX12        *dstBuffer;
+
+  command   = dx12__copyCommand(pass);
+  srcBuffer = src ? src->_priv : NULL;
+  dstBuffer = dst ? dst->_priv : NULL;
+  if (!command || !srcBuffer || !dstBuffer || !region || src == dst ||
+      !dx12__transitionCopyBuffer(command,
+                                  srcBuffer,
+                                  D3D12_RESOURCE_STATE_COPY_SOURCE) ||
+      !dx12__transitionCopyBuffer(command,
+                                  dstBuffer,
+                                  D3D12_RESOURCE_STATE_COPY_DEST)) {
+    dx12__copyError(pass, "Direct3D 12 buffer copy is not representable");
+    return;
+  }
+
+  command->commandList->lpVtbl->CopyBufferRegion(command->commandList,
+                                                  dstBuffer->resource,
+                                                  region->dstOffset,
+                                                  srcBuffer->resource,
+                                                  region->srcOffset,
+                                                  region->sizeBytes);
+}
+
+static void
+dx12_copyBufferToTexture(GPUCopyPassEncoder               *pass,
+                         GPUBuffer                        *src,
+                         GPUTexture                       *dst,
+                         const GPUBufferTextureCopyRegion *region) {
+  GPUCommandBufferDX12 *command;
+  GPUBufferDX12        *srcBuffer;
+  GPUTextureDX12       *dstTexture;
+  D3D12_BOX             sourceBox = {0};
+  bool                  texture3D;
+  uint32_t              copyCount;
+
+  command    = dx12__copyCommand(pass);
+  srcBuffer  = src ? src->_priv : NULL;
+  dstTexture = dst ? dst->_priv : NULL;
+  texture3D  = dst && dst->dimension == GPU_TEXTURE_DIMENSION_3D;
+  if (!command || !srcBuffer || !dstTexture || !region) {
+    dx12__copyError(pass, "Direct3D 12 buffer-to-texture copy is invalid");
+    return;
+  }
+
+  copyCount = texture3D ? 1u : region->texture.layerCount;
+  for (uint32_t layer = 0u; layer < copyCount; layer++) {
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
+
+    if (!dx12__copyFootprint(dst, region, layer, &footprint)) {
+      dx12__copyError(pass,
+                      "Direct3D 12 buffer-to-texture layout is invalid");
+      return;
+    }
+  }
+  if (!dx12__transitionCopyBuffer(command,
+                                  srcBuffer,
+                                  D3D12_RESOURCE_STATE_COPY_SOURCE) ||
+      !dx12_transitionTexture(command->commandList,
+                              dstTexture,
+                              region->texture.texture.mipLevel,
+                              1u,
+                              region->texture.texture.baseArrayLayer,
+                              texture3D ? 1u : region->texture.layerCount,
+                              D3D12_RESOURCE_STATE_COPY_DEST)) {
+    dx12__copyError(pass,
+                    "Direct3D 12 buffer-to-texture copy transition failed");
+    return;
+  }
+
+  sourceBox.right  = region->texture.width;
+  sourceBox.bottom = region->texture.height;
+  sourceBox.back   = texture3D ? region->texture.depth : 1u;
+  for (uint32_t layer = 0u; layer < copyCount; layer++) {
+    D3D12_TEXTURE_COPY_LOCATION source      = {0};
+    D3D12_TEXTURE_COPY_LOCATION destination = {0};
+
+    if (!dx12__copyFootprint(dst, region, layer, &source.PlacedFootprint)) {
+      dx12__copyError(pass,
+                      "Direct3D 12 buffer-to-texture layout is invalid");
+      return;
+    }
+    source.pResource        = srcBuffer->resource;
+    source.Type             = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    destination.pResource   = dstTexture->resource;
+    destination.Type        = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    destination.SubresourceIndex =
+      region->texture.texture.mipLevel +
+      (region->texture.texture.baseArrayLayer + layer) * dst->mipLevelCount;
+    command->commandList->lpVtbl->CopyTextureRegion(
+      command->commandList,
+      &destination,
+      region->texture.texture.x,
+      region->texture.texture.y,
+      texture3D ? region->texture.texture.z : 0u,
+      &source,
+      &sourceBox
+    );
+  }
+}
+
+static void
+dx12_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
+                         GPUTexture                       *src,
+                         GPUBuffer                        *dst,
+                         const GPUBufferTextureCopyRegion *region) {
+  GPUCommandBufferDX12 *command;
+  GPUTextureDX12       *srcTexture;
+  GPUBufferDX12        *dstBuffer;
+  D3D12_BOX             sourceBox = {0};
+  bool                  texture3D;
+  uint32_t              copyCount;
+
+  command    = dx12__copyCommand(pass);
+  srcTexture = src ? src->_priv : NULL;
+  dstBuffer  = dst ? dst->_priv : NULL;
+  texture3D  = src && src->dimension == GPU_TEXTURE_DIMENSION_3D;
+  if (!command || !srcTexture || !dstBuffer || !region) {
+    dx12__copyError(pass, "Direct3D 12 texture-to-buffer copy is invalid");
+    return;
+  }
+
+  copyCount = texture3D ? 1u : region->texture.layerCount;
+  for (uint32_t layer = 0u; layer < copyCount; layer++) {
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
+
+    if (!dx12__copyFootprint(src, region, layer, &footprint)) {
+      dx12__copyError(pass,
+                      "Direct3D 12 texture-to-buffer layout is invalid");
+      return;
+    }
+  }
+  if (!dx12_transitionTexture(command->commandList,
+                              srcTexture,
+                              region->texture.texture.mipLevel,
+                              1u,
+                              region->texture.texture.baseArrayLayer,
+                              texture3D ? 1u : region->texture.layerCount,
+                              D3D12_RESOURCE_STATE_COPY_SOURCE) ||
+      !dx12__transitionCopyBuffer(command,
+                                  dstBuffer,
+                                  D3D12_RESOURCE_STATE_COPY_DEST)) {
+    dx12__copyError(pass,
+                    "Direct3D 12 texture-to-buffer copy transition failed");
+    return;
+  }
+
+  sourceBox.left   = region->texture.texture.x;
+  sourceBox.top    = region->texture.texture.y;
+  sourceBox.front  = texture3D ? region->texture.texture.z : 0u;
+  sourceBox.right  = sourceBox.left + region->texture.width;
+  sourceBox.bottom = sourceBox.top + region->texture.height;
+  sourceBox.back   = sourceBox.front +
+                     (texture3D ? region->texture.depth : 1u);
+  for (uint32_t layer = 0u; layer < copyCount; layer++) {
+    D3D12_TEXTURE_COPY_LOCATION source      = {0};
+    D3D12_TEXTURE_COPY_LOCATION destination = {0};
+
+    if (!dx12__copyFootprint(src,
+                             region,
+                             layer,
+                             &destination.PlacedFootprint)) {
+      dx12__copyError(pass,
+                      "Direct3D 12 texture-to-buffer layout is invalid");
+      return;
+    }
+    source.pResource   = srcTexture->resource;
+    source.Type        = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    source.SubresourceIndex =
+      region->texture.texture.mipLevel +
+      (region->texture.texture.baseArrayLayer + layer) * src->mipLevelCount;
+    destination.pResource = dstBuffer->resource;
+    destination.Type      = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    command->commandList->lpVtbl->CopyTextureRegion(command->commandList,
+                                                     &destination,
+                                                     0u,
+                                                     0u,
+                                                     0u,
+                                                     &source,
+                                                     &sourceBox);
+  }
+}
+
+static void
+dx12_copyTextureToTexture(
+  GPUCopyPassEncoder                  *pass,
+  GPUTexture                          *src,
+  GPUTexture                          *dst,
+  const GPUTextureToTextureCopyRegion *region) {
+  GPUCommandBufferDX12 *command;
+  GPUTextureDX12       *srcTexture;
+  GPUTextureDX12       *dstTexture;
+  D3D12_BOX             sourceBox = {0};
+  bool                  texture3D;
+  uint32_t              copyCount;
+
+  command    = dx12__copyCommand(pass);
+  srcTexture = src ? src->_priv : NULL;
+  dstTexture = dst ? dst->_priv : NULL;
+  texture3D  = src && src->dimension == GPU_TEXTURE_DIMENSION_3D;
+  if (!command || !srcTexture || !dstTexture || !region || src == dst ||
+      !dx12_transitionTexture(command->commandList,
+                              srcTexture,
+                              region->src.mipLevel,
+                              1u,
+                              region->src.baseArrayLayer,
+                              texture3D ? 1u : region->layerCount,
+                              D3D12_RESOURCE_STATE_COPY_SOURCE) ||
+      !dx12_transitionTexture(command->commandList,
+                              dstTexture,
+                              region->dst.mipLevel,
+                              1u,
+                              region->dst.baseArrayLayer,
+                              texture3D ? 1u : region->layerCount,
+                              D3D12_RESOURCE_STATE_COPY_DEST)) {
+    dx12__copyError(pass,
+                    "Direct3D 12 texture-to-texture copy transition failed");
+    return;
+  }
+
+  copyCount       = texture3D ? 1u : region->layerCount;
+  sourceBox.left   = region->src.x;
+  sourceBox.top    = region->src.y;
+  sourceBox.front  = texture3D ? region->src.z : 0u;
+  sourceBox.right  = sourceBox.left + region->width;
+  sourceBox.bottom = sourceBox.top + region->height;
+  sourceBox.back   = sourceBox.front + (texture3D ? region->depth : 1u);
+  for (uint32_t layer = 0u; layer < copyCount; layer++) {
+    D3D12_TEXTURE_COPY_LOCATION source      = {0};
+    D3D12_TEXTURE_COPY_LOCATION destination = {0};
+
+    source.pResource   = srcTexture->resource;
+    source.Type        = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    source.SubresourceIndex = region->src.mipLevel +
+                              (region->src.baseArrayLayer + layer) *
+                                src->mipLevelCount;
+    destination.pResource   = dstTexture->resource;
+    destination.Type        = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    destination.SubresourceIndex = region->dst.mipLevel +
+                                   (region->dst.baseArrayLayer + layer) *
+                                     dst->mipLevelCount;
+    command->commandList->lpVtbl->CopyTextureRegion(
+      command->commandList,
+      &destination,
+      region->dst.x,
+      region->dst.y,
+      texture3D ? region->dst.z : 0u,
+      &source,
+      &sourceBox
+    );
+  }
+}
+
+static void
+dx12_endCopyPass(GPUCopyPassEncoder *pass) {
+  GPU__UNUSED(pass);
+}
+
 GPU_HIDE
 void
 dx12_initRenderPass(GPUApiRenderPass *api) {
-  api->beginRenderPass   = dx12_beginRenderPass;
-  api->destroyRenderPass = dx12_destroyRenderPass;
-  api->encodeBarriers    = dx12_encodeBarriers;
+  api->beginRenderPass      = dx12_beginRenderPass;
+  api->destroyRenderPass    = dx12_destroyRenderPass;
+  api->beginCopyPass        = dx12_beginCopyPass;
+  api->copyBufferToBuffer   = dx12_copyBufferToBuffer;
+  api->copyBufferToTexture  = dx12_copyBufferToTexture;
+  api->copyTextureToBuffer  = dx12_copyTextureToBuffer;
+  api->copyTextureToTexture = dx12_copyTextureToTexture;
+  api->endCopyPass          = dx12_endCopyPass;
+  api->encodeBarriers       = dx12_encodeBarriers;
 }
