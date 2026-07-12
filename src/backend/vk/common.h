@@ -298,6 +298,7 @@ struct GPUCommandBufferVk {
   GPURenderEncoderVk        renderState;
   GPUComputePassEncoder     computeEncoder;
   GPUComputeEncoderVk       computeState;
+  GPUCopyPassEncoder        copyEncoder;
   GPUCommandBuffer          commandBuffer;
   uint32_t                  presentImageIndex;
   uint32_t                  presentFrameIndex;
@@ -413,6 +414,10 @@ typedef struct GPULibraryVk {
 GPU_HIDE
 bool
 vk_formatFromGPU(GPUFormat format, VkFormat *outFormat);
+
+GPU_HIDE
+uint32_t
+vk_formatBytes(GPUFormat format);
 
 GPU_HIDE
 bool

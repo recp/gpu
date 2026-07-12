@@ -133,8 +133,9 @@ vk__imageAspect(GPUFormat format) {
   }
 }
 
-static uint32_t
-vk__formatBytes(GPUFormat format) {
+GPU_HIDE
+uint32_t
+vk_formatBytes(GPUFormat format) {
   switch (format) {
     case GPU_FORMAT_RGBA8_UNORM:
     case GPU_FORMAT_RGBA8_UNORM_SRGB:
@@ -693,7 +694,7 @@ vk__submitTextureWrite(GPUCommandQueue             *queue,
   deviceVk      = queue && queue->_device ? queue->_device->_priv : NULL;
   textureVk     = texture ? texture->_priv : NULL;
   bufferVk      = staging ? staging->_priv : NULL;
-  bytesPerPixel = texture ? vk__formatBytes(texture->format) : 0u;
+  bytesPerPixel = texture ? vk_formatBytes(texture->format) : 0u;
   if (!queueVk || !deviceVk || !textureVk || !bufferVk || !region ||
       textureVk->device != deviceVk->device ||
       bufferVk->device != deviceVk->device) {

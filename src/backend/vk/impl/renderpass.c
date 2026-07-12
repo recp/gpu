@@ -66,6 +66,18 @@ vk__layoutAccess(VkImageLayout        layout,
       *outAccess = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
       break;
+    case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+      *outStage  = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+      *outAccess = VK_ACCESS_SHADER_READ_BIT;
+      break;
+    case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+      *outStage  = VK_PIPELINE_STAGE_TRANSFER_BIT;
+      *outAccess = VK_ACCESS_TRANSFER_READ_BIT;
+      break;
+    case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+      *outStage  = VK_PIPELINE_STAGE_TRANSFER_BIT;
+      *outAccess = VK_ACCESS_TRANSFER_WRITE_BIT;
+      break;
     default:
       *outStage  = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
       *outAccess = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
@@ -115,6 +127,53 @@ vk_transitionView(VkCommandBuffer   command,
                        1u,
                        &barrier);
   *view->layout = nextLayout;
+}
+
+static void
+vk__transitionTexture(VkCommandBuffer command,
+                      GPUTexture     *texture,
+                      VkImageLayout   nextLayout) {
+  GPUTextureVk         *native;
+  VkImageMemoryBarrier  barrier = {0};
+  VkPipelineStageFlags  srcStage;
+  VkPipelineStageFlags  dstStage;
+  VkAccessFlags         srcAccess;
+  VkAccessFlags         dstAccess;
+
+  native = texture ? texture->_priv : NULL;
+  if (!command || !native || !native->image || native->layout == nextLayout) {
+    return;
+  }
+
+  vk__layoutAccess(native->layout, &srcStage, &srcAccess);
+  vk__layoutAccess(nextLayout, &dstStage, &dstAccess);
+  barrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.srcAccessMask                   = srcAccess;
+  barrier.dstAccessMask                   = dstAccess;
+  barrier.oldLayout                       = native->layout;
+  barrier.newLayout                       = nextLayout;
+  barrier.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+  barrier.image                           = native->image;
+  barrier.subresourceRange.aspectMask     = native->aspect;
+  barrier.subresourceRange.baseMipLevel   = 0u;
+  barrier.subresourceRange.levelCount     = texture->mipLevelCount;
+  barrier.subresourceRange.baseArrayLayer = 0u;
+  barrier.subresourceRange.layerCount     =
+    texture->dimension == GPU_TEXTURE_DIMENSION_3D
+      ? 1u
+      : texture->depthOrLayers;
+  vkCmdPipelineBarrier(command,
+                       srcStage,
+                       dstStage,
+                       0u,
+                       0u,
+                       NULL,
+                       0u,
+                       NULL,
+                       1u,
+                       &barrier);
+  native->layout = nextLayout;
 }
 
 static VkPipelineStageFlags
@@ -359,10 +418,7 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
       native->sType                         = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
       native->srcAccessMask                 = vk__barrierAccess(barrier->srcAccess);
       native->dstAccessMask                 = vk__barrierAccess(barrier->dstAccess);
-      native->oldLayout                     =
-        vk__textureBarrierLayout(barrier->texture,
-                                 barrier->srcAccess,
-                                 true);
+      native->oldLayout                     = texture->layout;
       native->newLayout                     =
         vk__textureBarrierLayout(barrier->texture,
                                  barrier->dstAccess,
@@ -375,6 +431,7 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
       native->subresourceRange.levelCount     = barrier->mipCount;
       native->subresourceRange.baseArrayLayer = barrier->baseLayer;
       native->subresourceRange.layerCount     = barrier->layerCount;
+      texture->layout                        = native->newLayout;
     }
 
     if (nativeBarrierCount > 0u || nativeImageCount > 0u) {
@@ -641,10 +698,222 @@ vk_destroyRenderPass(GPURenderPassDesc *pass) {
   GPU__UNUSED(pass);
 }
 
+static GPUCommandBufferVk*
+vk__copyCommand(GPUCopyPassEncoder *pass) {
+  return pass ? pass->_priv : NULL;
+}
+
+static GPUCopyPassEncoder*
+vk_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
+  GPUCommandBufferVk *command;
+  GPUCopyPassEncoder *pass;
+
+  GPU__UNUSED(label);
+  command = cmdb ? cmdb->_priv : NULL;
+  if (!command || !command->command) {
+    return NULL;
+  }
+
+  pass = &command->copyEncoder;
+  memset(pass, 0, sizeof(*pass));
+  pass->_priv = command;
+  return pass;
+}
+
+static void
+vk_copyBufferToBuffer(GPUCopyPassEncoder        *pass,
+                      GPUBuffer                 *src,
+                      GPUBuffer                 *dst,
+                      const GPUBufferCopyRegion *region) {
+  GPUCommandBufferVk *command;
+  GPUBufferVk        *srcVk;
+  GPUBufferVk        *dstVk;
+  VkBufferCopy        copy = {0};
+
+  command = vk__copyCommand(pass);
+  srcVk   = src ? src->_priv : NULL;
+  dstVk   = dst ? dst->_priv : NULL;
+  if (!command || !srcVk || !dstVk || !region) {
+    return;
+  }
+
+  copy.srcOffset = region->srcOffset;
+  copy.dstOffset = region->dstOffset;
+  copy.size      = region->sizeBytes;
+  vkCmdCopyBuffer(command->command, srcVk->buffer, dstVk->buffer, 1u, &copy);
+}
+
+static bool
+vk__bufferImageCopy(GPUTexture                       *texture,
+                    const GPUBufferTextureCopyRegion *region,
+                    VkBufferImageCopy                *outCopy) {
+  GPUTextureVk *textureVk;
+  uint32_t      formatBytes;
+
+  textureVk   = texture ? texture->_priv : NULL;
+  formatBytes = texture ? vk_formatBytes(texture->format) : 0u;
+  if (!textureVk || !region || !outCopy || formatBytes == 0u ||
+      region->bytesPerRow % formatBytes != 0u) {
+    return false;
+  }
+
+  memset(outCopy, 0, sizeof(*outCopy));
+  outCopy->bufferOffset                    = region->bufferOffset;
+  outCopy->bufferRowLength                 = region->bytesPerRow / formatBytes;
+  outCopy->bufferImageHeight               = region->rowsPerImage;
+  outCopy->imageSubresource.aspectMask     = textureVk->aspect;
+  outCopy->imageSubresource.mipLevel       = region->texture.texture.mipLevel;
+  outCopy->imageSubresource.baseArrayLayer =
+    texture->dimension == GPU_TEXTURE_DIMENSION_3D
+      ? 0u
+      : region->texture.texture.baseArrayLayer;
+  outCopy->imageSubresource.layerCount =
+    texture->dimension == GPU_TEXTURE_DIMENSION_3D
+      ? 1u
+      : region->texture.layerCount;
+  outCopy->imageOffset.x      = (int32_t)region->texture.texture.x;
+  outCopy->imageOffset.y      = (int32_t)region->texture.texture.y;
+  outCopy->imageOffset.z      =
+    texture->dimension == GPU_TEXTURE_DIMENSION_3D
+      ? (int32_t)region->texture.texture.z
+      : 0;
+  outCopy->imageExtent.width  = region->texture.width;
+  outCopy->imageExtent.height = region->texture.height;
+  outCopy->imageExtent.depth  =
+    texture->dimension == GPU_TEXTURE_DIMENSION_3D
+      ? region->texture.depth
+      : 1u;
+  return true;
+}
+
+static void
+vk_copyBufferToTexture(GPUCopyPassEncoder               *pass,
+                       GPUBuffer                        *src,
+                       GPUTexture                       *dst,
+                       const GPUBufferTextureCopyRegion *region) {
+  GPUCommandBufferVk *command;
+  GPUBufferVk        *buffer;
+  GPUTextureVk       *texture;
+  VkBufferImageCopy   copy;
+
+  command = vk__copyCommand(pass);
+  buffer  = src ? src->_priv : NULL;
+  texture = dst ? dst->_priv : NULL;
+  if (!command || !buffer || !texture ||
+      !vk__bufferImageCopy(dst, region, &copy)) {
+    return;
+  }
+
+  vk__transitionTexture(command->command,
+                        dst,
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+  vkCmdCopyBufferToImage(command->command,
+                         buffer->buffer,
+                         texture->image,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                         1u,
+                         &copy);
+}
+
+static void
+vk_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
+                       GPUTexture                       *src,
+                       GPUBuffer                        *dst,
+                       const GPUBufferTextureCopyRegion *region) {
+  GPUCommandBufferVk *command;
+  GPUTextureVk       *texture;
+  GPUBufferVk        *buffer;
+  VkBufferImageCopy   copy;
+
+  command = vk__copyCommand(pass);
+  texture = src ? src->_priv : NULL;
+  buffer  = dst ? dst->_priv : NULL;
+  if (!command || !texture || !buffer ||
+      !vk__bufferImageCopy(src, region, &copy)) {
+    return;
+  }
+
+  vk__transitionTexture(command->command,
+                        src,
+                        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+  vkCmdCopyImageToBuffer(command->command,
+                         texture->image,
+                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                         buffer->buffer,
+                         1u,
+                         &copy);
+}
+
+static void
+vk_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
+                        GPUTexture                          *src,
+                        GPUTexture                          *dst,
+                        const GPUTextureToTextureCopyRegion *region) {
+  GPUCommandBufferVk *command;
+  GPUTextureVk       *srcVk;
+  GPUTextureVk       *dstVk;
+  VkImageCopy         copy = {0};
+  bool                texture3D;
+
+  command   = vk__copyCommand(pass);
+  srcVk     = src ? src->_priv : NULL;
+  dstVk     = dst ? dst->_priv : NULL;
+  texture3D = src && src->dimension == GPU_TEXTURE_DIMENSION_3D;
+  if (!command || !srcVk || !dstVk || !region) {
+    return;
+  }
+
+  vk__transitionTexture(command->command,
+                        src,
+                        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+  vk__transitionTexture(command->command,
+                        dst,
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+  copy.srcSubresource.aspectMask     = srcVk->aspect;
+  copy.srcSubresource.mipLevel       = region->src.mipLevel;
+  copy.srcSubresource.baseArrayLayer = texture3D
+                                         ? 0u
+                                         : region->src.baseArrayLayer;
+  copy.srcSubresource.layerCount     = texture3D ? 1u : region->layerCount;
+  copy.srcOffset.x                   = (int32_t)region->src.x;
+  copy.srcOffset.y                   = (int32_t)region->src.y;
+  copy.srcOffset.z                   = texture3D ? (int32_t)region->src.z : 0;
+  copy.dstSubresource.aspectMask     = dstVk->aspect;
+  copy.dstSubresource.mipLevel       = region->dst.mipLevel;
+  copy.dstSubresource.baseArrayLayer = texture3D
+                                         ? 0u
+                                         : region->dst.baseArrayLayer;
+  copy.dstSubresource.layerCount     = texture3D ? 1u : region->layerCount;
+  copy.dstOffset.x                   = (int32_t)region->dst.x;
+  copy.dstOffset.y                   = (int32_t)region->dst.y;
+  copy.dstOffset.z                   = texture3D ? (int32_t)region->dst.z : 0;
+  copy.extent.width                  = region->width;
+  copy.extent.height                 = region->height;
+  copy.extent.depth                  = texture3D ? region->depth : 1u;
+  vkCmdCopyImage(command->command,
+                 srcVk->image,
+                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                 dstVk->image,
+                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                 1u,
+                 &copy);
+}
+
+static void
+vk_endCopyPass(GPUCopyPassEncoder *pass) {
+  GPU__UNUSED(pass);
+}
+
 GPU_HIDE
 void
 vk_initRenderPass(GPUApiRenderPass *api) {
-  api->beginRenderPass   = vk_beginRenderPass;
-  api->destroyRenderPass = vk_destroyRenderPass;
-  api->encodeBarriers    = vk_encodeBarriers;
+  api->beginRenderPass      = vk_beginRenderPass;
+  api->destroyRenderPass    = vk_destroyRenderPass;
+  api->beginCopyPass        = vk_beginCopyPass;
+  api->copyBufferToBuffer   = vk_copyBufferToBuffer;
+  api->copyBufferToTexture  = vk_copyBufferToTexture;
+  api->copyTextureToBuffer  = vk_copyTextureToBuffer;
+  api->copyTextureToTexture = vk_copyTextureToTexture;
+  api->endCopyPass          = vk_endCopyPass;
+  api->encodeBarriers       = vk_encodeBarriers;
 }
