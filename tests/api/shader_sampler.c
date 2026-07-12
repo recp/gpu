@@ -413,10 +413,12 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
       device->currentFrameStats.requestedStateCalls !=
         GPU_SOURCE_SAMPLER_WARM_STATE_REQUESTS ||
       device->currentFrameStats.emittedStateCalls !=
-        GPU_SOURCE_SAMPLER_WARM_STATE_EMISSIONS) {
+        GPU_SOURCE_SAMPLER_WARM_STATE_EMISSIONS ||
+      device->currentFrameStats.drawCalls !=
+        GPU_SOURCE_SAMPLER_WARM_ITERATIONS) {
     fprintf(stderr,
             "source sampler warm path allocated: %llu/%llu bytes, "
-            "%llu/%llu bytes freed; binds %u/%u; state %u/%u\n",
+            "%llu/%llu bytes freed; binds %u/%u; state %u/%u; draws %u\n",
             (unsigned long long)device->currentFrameStats.hotPathAllocCount,
             (unsigned long long)device->currentFrameStats.hotPathAllocBytes,
             (unsigned long long)device->currentFrameStats.hotPathFreeCount,
@@ -424,7 +426,8 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
             device->currentFrameStats.requestedBindCalls,
             device->currentFrameStats.emittedBindCalls,
             device->currentFrameStats.requestedStateCalls,
-            device->currentFrameStats.emittedStateCalls);
+            device->currentFrameStats.emittedStateCalls,
+            device->currentFrameStats.drawCalls);
     ok = 0;
   }
 

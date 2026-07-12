@@ -217,6 +217,37 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
     api->rce.frontFace(pass, pipeline->_frontFace);
 }
 
+static void
+gpu_bindRenderVertexBuffer(GPURenderPassEncoder *pass,
+                           GPUApi               *api,
+                           GPUBuffer            *buf,
+                           size_t                off,
+                           uint32_t              index) {
+  GPUDevice *device;
+  uint32_t slotBit;
+
+  device = gpu_renderPassDevice(pass);
+  gpuDeviceRecordBindRequest(device);
+  if (index < GPU__RENDER_VERTEX_SHADOW_SLOT_COUNT) {
+    slotBit = 1u << index;
+    if ((pass->_vertexBufferMask & slotBit) != 0u &&
+        pass->_vertexBuffers[index] == buf &&
+        pass->_vertexBufferOffsets[index] == off) {
+      return;
+    }
+  } else {
+    slotBit = 0u;
+  }
+
+  api->rce.vertexBuffer(pass, buf, off, index);
+  gpuDeviceRecordBindEmission(device);
+  if (slotBit != 0u) {
+    pass->_vertexBuffers[index]       = buf;
+    pass->_vertexBufferOffsets[index] = off;
+    pass->_vertexBufferMask          |= slotBit;
+  }
+}
+
 GPU_HIDE
 void
 gpuSetRenderVertexBuffer(GPURenderPassEncoder *pass,
@@ -229,8 +260,8 @@ gpuSetRenderVertexBuffer(GPURenderPassEncoder *pass,
     return;
   if (!(api = gpuActiveGPUApi()) || !api->rce.vertexBuffer)
     return;
-  
-  api->rce.vertexBuffer(pass, buf, off, index);
+
+  gpu_bindRenderVertexBuffer(pass, api, buf, off, index);
 }
 
 GPU_EXPORT
@@ -255,10 +286,11 @@ GPUBindVertexBuffers(GPURenderPassEncoder   *pass,
     if (bindings[i].buffer &&
         gpuBufferHasUsage(bindings[i].buffer, GPU_BUFFER_USAGE_VERTEX) &&
         gpuBufferOffsetValid(bindings[i].buffer, bindings[i].offset)) {
-      api->rce.vertexBuffer(pass,
-                            bindings[i].buffer,
-                            bindings[i].offset,
-                            firstSlot + i);
+      gpu_bindRenderVertexBuffer(pass,
+                                 api,
+                                 bindings[i].buffer,
+                                 bindings[i].offset,
+                                 firstSlot + i);
     }
   }
 }
@@ -521,6 +553,7 @@ GPUDraw(GPURenderPassEncoder *pass,
                           vertexCount,
                           instanceCount,
                           firstInstance);
+  gpuDeviceRecordDraws(gpu_renderPassDevice(pass), 1u);
 }
 
 GPU_EXPORT
@@ -568,6 +601,7 @@ GPUDrawIndexed(GPURenderPassEncoder *pass,
                             firstIndex,
                             vertexOffset,
                             firstInstance);
+  gpuDeviceRecordDraws(gpu_renderPassDevice(pass), 1u);
 }
 
 GPU_EXPORT
@@ -603,6 +637,7 @@ GPUDrawIndirect(GPURenderPassEncoder *pass,
                                   pass->_primitiveType,
                                   argsBuffer,
                                   argsOffset);
+  gpuDeviceRecordDraws(gpu_renderPassDevice(pass), 1u);
 }
 
 GPU_EXPORT
@@ -636,6 +671,7 @@ GPUDrawIndexedIndirect(GPURenderPassEncoder *pass,
     return;
 
   api->rce.drawIndexedPrimsIndirect(pass, argsBuffer, argsOffset);
+  gpuDeviceRecordDraws(gpu_renderPassDevice(pass), 1u);
 }
 
 GPU_EXPORT
@@ -685,6 +721,7 @@ GPUMultiDrawIndirect(GPURenderPassEncoder *pass,
                                            argsOffset,
                                            drawCount,
                                            strideBytes)) {
+    gpuDeviceRecordDraws(device, drawCount);
     return;
   }
   if (!api->rce.drawPrimitivesIndirect) {
@@ -697,6 +734,7 @@ GPUMultiDrawIndirect(GPURenderPassEncoder *pass,
                                     argsBuffer,
                                     argsOffset + (uint64_t)i * strideBytes);
   }
+  gpuDeviceRecordDraws(device, drawCount);
 }
 
 GPU_EXPORT
@@ -752,6 +790,7 @@ GPUMultiDrawIndexedIndirect(GPURenderPassEncoder *pass,
                                              argsOffset,
                                              drawCount,
                                              strideBytes)) {
+    gpuDeviceRecordDraws(device, drawCount);
     return;
   }
   if (!api->rce.drawIndexedPrimsIndirect) {
@@ -765,6 +804,7 @@ GPUMultiDrawIndexedIndirect(GPURenderPassEncoder *pass,
       argsOffset + (uint64_t)i * strideBytes
     );
   }
+  gpuDeviceRecordDraws(device, drawCount);
 }
 
 GPU_EXPORT

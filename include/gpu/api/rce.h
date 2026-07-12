@@ -29,6 +29,8 @@ typedef struct GPUPipelineLayout      GPUPipelineLayout;
 typedef struct GPUBindGroupLayout     GPUBindGroupLayout;
 typedef struct GPUBindGroup           GPUBindGroup;
 
+#define GPU__RENDER_VERTEX_SHADOW_SLOT_COUNT 32u
+
 enum {
   GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS = 8u
 };
@@ -42,7 +44,9 @@ struct GPURenderCommandEncoder {
   GPUPipelineLayout  *_pipelineLayout;
   GPUBindGroup       *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUBindGroupLayout *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
+  GPUBuffer          *_vertexBuffers[GPU__RENDER_VERTEX_SHADOW_SLOT_COUNT];
   uint64_t            _indexBufferOffset;
+  uint64_t            _vertexBufferOffsets[GPU__RENDER_VERTEX_SHADOW_SLOT_COUNT];
   GPUDynamicStateMask _dynamicStateMask;
   GPUViewport         _viewport;
   GPUPrimitiveType    _primitiveType;
@@ -57,6 +61,7 @@ struct GPURenderCommandEncoder {
   uint32_t            _depthStencilSampleCount;
   uint32_t            _pushConstantSizeBytes;
   GPUShaderStageFlags _pushConstantStages;
+  uint32_t            _vertexBufferMask;
   uint32_t            _stencilReference;
   float               _blendConstant[4];
   bool                _colorAttachmentHasResolve[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];

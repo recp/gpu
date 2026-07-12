@@ -48,6 +48,7 @@ static uint32_t gRenderDrawIndirectCalls;
 static uint32_t gRenderDrawIndexedIndirectCalls;
 static uint32_t gRenderMultiDrawIndirectCalls;
 static uint32_t gRenderMultiDrawIndexedIndirectCalls;
+static uint32_t gRenderVertexBufferCalls;
 static uint32_t gRenderViewportCalls;
 static uint32_t gRenderScissorCalls;
 static uint32_t gRenderBlendCalls;
@@ -137,6 +138,18 @@ count_multi_draw_indexed_indirect(GPURenderCommandEncoder *rce,
   (void)strideBytes;
   gRenderMultiDrawIndexedIndirectCalls++;
   return true;
+}
+
+static void
+count_vertex_buffer(GPURenderCommandEncoder *rce,
+                    GPUBuffer               *buffer,
+                    size_t                   offset,
+                    uint32_t                 index) {
+  (void)rce;
+  (void)buffer;
+  (void)offset;
+  (void)index;
+  gRenderVertexBufferCalls++;
 }
 
 static void
@@ -1657,19 +1670,21 @@ check_render_draw_validation_calls(GPUDevice *device) {
                                       uint64_t,
                                       uint32_t,
                                       uint32_t);
-  GPUBindGroupLayoutEntry entry = {0};
-  GPUBindGroupLayoutCreateInfo layoutInfo = {0};
-  GPUBindGroupLayout *layout = NULL;
-  GPUBindGroupLayout *layouts[1];
-  GPUPipelineLayoutCreateInfo pipelineInfo = {0};
-  GPUPipelineLayout *pipelineLayout = NULL;
-  GPUCommandQueue fakeQueue = {0};
-  GPUCommandBuffer fakeCmdb = {0};
-  GPURenderPassEncoder pass = {0};
-  GPUBuffer indirectBuffer = {0};
-  GPUBuffer wrongUsageBuffer = {0};
-  uint64_t oldEnabledFeatureMask;
-  int ok = 0;
+  GPUBindGroupLayout          *layout         = NULL;
+  GPUBindGroupLayout          *layouts[1];
+  GPUPipelineLayout           *pipelineLayout = NULL;
+  GPUBindGroupLayoutEntry      entry           = {0};
+  GPUBindGroupLayoutCreateInfo layoutInfo      = {0};
+  GPUPipelineLayoutCreateInfo  pipelineInfo    = {0};
+  GPUCommandQueue              fakeQueue       = {0};
+  GPUCommandBuffer             fakeCmdb        = {0};
+  GPURenderPassEncoder         pass            = {0};
+  GPUBuffer                    indirectBuffer  = {0};
+  GPUBuffer                    wrongUsageBuffer = {0};
+  GPUFrameStats                savedFrameStats;
+  uint64_t                     oldEnabledFeatureMask;
+  bool                         savedStatsEnabled;
+  int                          ok = 0;
 
   api = gpuActiveGPUApi();
   if (!api) {
@@ -1719,6 +1734,11 @@ check_render_draw_validation_calls(GPUDevice *device) {
   api->rce.drawIndexedPrimsIndirect = count_draw_indexed_indirect;
   api->rce.multiDrawPrimitivesIndirect = count_multi_draw_indirect;
   api->rce.multiDrawIndexedPrimsIndirect = count_multi_draw_indexed_indirect;
+
+  savedFrameStats                   = device->currentFrameStats;
+  savedStatsEnabled                 = device->runtimeConfig.enableStats;
+  device->runtimeConfig.enableStats = true;
+  device->currentFrameStats.drawCalls = 0u;
 
   gRenderDrawCalls = 0u;
   gRenderDrawIndexedCalls = 0u;
@@ -1827,7 +1847,8 @@ check_render_draw_validation_calls(GPUDevice *device) {
   GPUMultiDrawIndexedIndirect(&pass, &indirectBuffer, 0u, 2u, 20u);
   if (gRenderDrawIndexedCalls != 1u ||
       gRenderDrawIndexedIndirectCalls != 1u ||
-      gRenderMultiDrawIndexedIndirectCalls != 1u) {
+      gRenderMultiDrawIndexedIndirectCalls != 1u ||
+      device->currentFrameStats.drawCalls != 12u) {
     fprintf(stderr, "render draw validation rejected valid indexed draw\n");
     goto cleanup;
   }
@@ -1835,15 +1856,90 @@ check_render_draw_validation_calls(GPUDevice *device) {
   ok = 1;
 
 cleanup:
-  device->enabledFeatureMask = oldEnabledFeatureMask;
-  api->rce.drawPrimitives = oldDraw;
-  api->rce.drawIndexedPrims = oldDrawIndexed;
-  api->rce.drawPrimitivesIndirect = oldDrawIndirect;
-  api->rce.drawIndexedPrimsIndirect = oldDrawIndexedIndirect;
-  api->rce.multiDrawPrimitivesIndirect = oldMultiDrawIndirect;
+  device->currentFrameStats                    = savedFrameStats;
+  device->runtimeConfig.enableStats           = savedStatsEnabled;
+  device->enabledFeatureMask                  = oldEnabledFeatureMask;
+  api->rce.drawPrimitives                     = oldDraw;
+  api->rce.drawIndexedPrims                   = oldDrawIndexed;
+  api->rce.drawPrimitivesIndirect             = oldDrawIndirect;
+  api->rce.drawIndexedPrimsIndirect           = oldDrawIndexedIndirect;
+  api->rce.multiDrawPrimitivesIndirect        = oldMultiDrawIndirect;
   api->rce.multiDrawIndexedPrimsIndirect = oldMultiDrawIndexedIndirect;
   GPUDestroyPipelineLayout(pipelineLayout);
   GPUDestroyBindGroupLayout(layout);
+  return ok;
+}
+
+static int
+check_vertex_buffer_shadowing_calls(void) {
+  GPUApi *api;
+  void (*oldVertexBuffer)(GPURenderCommandEncoder *,
+                          GPUBuffer *,
+                          size_t,
+                          uint32_t);
+  GPUDevice            device  = {0};
+  GPUCommandQueue      queue   = {0};
+  GPUCommandBuffer     cmdb    = {0};
+  GPUBuffer            buffer  = {0};
+  GPUBufferBinding     binding = {0};
+  GPURenderPassEncoder pass    = {0};
+  int                  ok;
+
+  api = gpuActiveGPUApi();
+  if (!api) {
+    fprintf(stderr, "vertex buffer shadowing could not get active api\n");
+    return 0;
+  }
+
+  oldVertexBuffer                     = api->rce.vertexBuffer;
+  api->rce.vertexBuffer               = count_vertex_buffer;
+  device.runtimeConfig.enableStats    = true;
+  queue._device                       = &device;
+  cmdb._queue                         = &queue;
+  pass._cmdb                          = &cmdb;
+  buffer.sizeBytes                    = 256u;
+  buffer.usage                        = GPU_BUFFER_USAGE_VERTEX;
+  binding.buffer                      = &buffer;
+  binding.offset                      = 0u;
+  gRenderVertexBufferCalls            = 0u;
+  ok                                  = 0;
+
+  GPUBindVertexBuffers(&pass, 0u, 1u, &binding);
+  GPUResetStats(&device);
+  gRenderVertexBufferCalls = 0u;
+  for (uint32_t i = 1u; i <= 16u; i++) {
+    binding.offset = i * 4u;
+    GPUBindVertexBuffers(&pass, 0u, 1u, &binding);
+    GPUBindVertexBuffers(&pass, 0u, 1u, &binding);
+  }
+  if (gRenderVertexBufferCalls != 16u ||
+      device.currentFrameStats.requestedBindCalls != 32u ||
+      device.currentFrameStats.emittedBindCalls != 16u ||
+      device.currentFrameStats.hotPathAllocCount != 0u ||
+      device.currentFrameStats.hotPathFreeCount != 0u) {
+    fprintf(stderr, "vertex buffer shadowing warm path mismatch\n");
+    goto cleanup;
+  }
+
+  GPUBindVertexBuffers(&pass,
+                       GPU__RENDER_VERTEX_SHADOW_SLOT_COUNT,
+                       1u,
+                       &binding);
+  GPUBindVertexBuffers(&pass,
+                       GPU__RENDER_VERTEX_SHADOW_SLOT_COUNT,
+                       1u,
+                       &binding);
+  if (gRenderVertexBufferCalls != 18u ||
+      device.currentFrameStats.requestedBindCalls != 34u ||
+      device.currentFrameStats.emittedBindCalls != 18u) {
+    fprintf(stderr, "vertex buffer shadowing constrained high slots\n");
+    goto cleanup;
+  }
+
+  ok = 1;
+
+cleanup:
+  api->rce.vertexBuffer = oldVertexBuffer;
   return ok;
 }
 
@@ -2127,6 +2223,7 @@ gpu_test_render(GPUDevice *device, const char *mrtBytecodePath) {
          check_render_encoder_validation() &&
          check_render_pipeline_validation(device, mrtBytecodePath) &&
          check_render_draw_validation_calls(device) &&
+         check_vertex_buffer_shadowing_calls() &&
          check_dynamic_state_validation_calls() &&
          check_render_readback(device, mrtBytecodePath);
 }

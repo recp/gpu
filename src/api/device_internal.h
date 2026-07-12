@@ -87,6 +87,13 @@ gpuDeviceRecordStateEmission(GPUDevice *device) {
   }
 }
 
+static inline void
+gpuDeviceRecordDraws(GPUDevice *device, uint32_t drawCount) {
+  if (device && device->runtimeConfig.enableStats) {
+    device->currentFrameStats.drawCalls += drawCount;
+  }
+}
+
 GPU_HIDE
 void
 gpuDeviceBeginFrame(GPUDevice *device);
