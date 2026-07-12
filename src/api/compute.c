@@ -278,6 +278,11 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
     return;
   }
 
+  gpuDeviceRecordBindRequest(pipeline->_device);
+  if (pass->_pipeline == pipeline) {
+    return;
+  }
+
   if (pass->_pipelineLayout != pipeline->_layout) {
     memset(pass->_boundGroups, 0, sizeof(pass->_boundGroups));
     memset(pass->_boundGroupLayouts, 0, sizeof(pass->_boundGroupLayouts));
@@ -285,7 +290,9 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
 
   state = pipeline->_state;
   api->compute.setComputePipelineState(pass, state);
+  gpuDeviceRecordBindEmission(pipeline->_device);
   pass->_hasPipeline = true;
+  pass->_pipeline = pipeline;
   pass->_pipelineLayout = pipeline->_layout;
   pass->_requiredBindGroupMask = pipeline->_requiredBindGroupMask;
   pass->_pushConstantSizeBytes = pipeline->_pushConstantSizeBytes;
@@ -385,7 +392,8 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
                     uint32_t               dynamicOffsetCount,
                     const uint32_t        *pDynamicOffsets) {
   GPUBindComputeContext ctx;
-  GPUApi *api;
+  GPUDevice            *device;
+  GPUApi               *api;
 
   if (!pass || pass->_ended ||
       !bindGroup ||
@@ -394,6 +402,8 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
       !gpuPipelineLayoutAcceptsBindGroup(pass->_pipelineLayout, groupIndex, bindGroup)) {
     return;
   }
+  device = gpuBindGroupGetDevice(bindGroup);
+  gpuDeviceRecordBindRequest(device);
   if (dynamicOffsetCount == 0u &&
       pass->_boundGroups[groupIndex] == bindGroup &&
       gpuBindGroupDynamicOffsetCount(bindGroup) == 0u) {
@@ -415,6 +425,7 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
                                          pDynamicOffsets)) {
       pass->_boundGroups[groupIndex] = bindGroup;
       pass->_boundGroupLayouts[groupIndex] = gpuBindGroupGetLayout(bindGroup);
+      gpuDeviceRecordBindEmission(device);
     }
     return;
   }
@@ -429,6 +440,7 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
                                                    &ctx)) {
     pass->_boundGroups[groupIndex] = bindGroup;
     pass->_boundGroupLayouts[groupIndex] = gpuBindGroupGetLayout(bindGroup);
+    gpuDeviceRecordBindEmission(device);
   }
 }
 

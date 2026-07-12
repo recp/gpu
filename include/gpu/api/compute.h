@@ -30,6 +30,7 @@ typedef struct GPUBindGroup            GPUBindGroup;
 
 struct GPUComputePassEncoder {
   void                *_priv;
+  void                *_pipeline;
   GPUCommandBuffer    *_cmdb;
   GPUPipelineLayout   *_pipelineLayout;
   GPUBindGroup        *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];

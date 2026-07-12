@@ -35,6 +35,7 @@ enum {
 
 struct GPURenderCommandEncoder {
   void               *_priv;
+  void               *_pipeline;
   GPUCommandBuffer   *_cmdb;
   GPUQuerySet        *_occlusionQuerySet;
   GPUBuffer          *_indexBuffer;

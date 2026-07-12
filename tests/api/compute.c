@@ -2,6 +2,7 @@
 #include "../../src/api/buffer_internal.h"
 #include "../../src/api/cmdqueue_internal.h"
 #include "../../src/api/compute_internal.h"
+#include "../../src/api/device_internal.h"
 
 typedef enum ComputeReadbackMode {
   COMPUTE_READBACK_DIRECT = 0,
@@ -582,8 +583,22 @@ check_compute_readback_case(GPUDevice          *device,
     fprintf(stderr, "failed to begin %s pass\n", label);
     goto cleanup;
   }
+  if (!indirect) {
+    GPUResetStats(device);
+  }
+  GPUBindComputePipeline(computePass, pipeline);
   GPUBindComputePipeline(computePass, pipeline);
   GPUBindComputeGroup(computePass, 0u, bindGroup, 0u, NULL);
+  GPUBindComputeGroup(computePass, 0u, bindGroup, 0u, NULL);
+  if (!indirect &&
+      (device->currentFrameStats.requestedBindCalls != 4u ||
+       device->currentFrameStats.emittedBindCalls != 2u)) {
+    fprintf(stderr,
+            "compute bind shadowing mismatch: %u requested, %u emitted\n",
+            device->currentFrameStats.requestedBindCalls,
+            device->currentFrameStats.emittedBindCalls);
+    goto cleanup;
+  }
   if (!indirect) {
     GPUDispatch(computePass, 4u, 1u, 1u);
   } else if (multi) {
@@ -675,8 +690,27 @@ check_compute_readback(GPUDevice *device, const char *bytecodePath) {
 
 int
 gpu_test_compute(GPUDevice *device, const char *bytecodePath) {
-  return check_compute_pass_validation(device) &&
-         check_compute_pipeline_validation(device, bytecodePath) &&
-         check_compute_dispatch_validation_calls(device) &&
-         check_compute_readback(device, bytecodePath);
+  GPURuntimeConfig config;
+  GPURuntimeConfig savedConfig;
+  int              ok;
+
+  if (!device) {
+    return 0;
+  }
+
+  savedConfig            = device->runtimeConfig;
+  config                 = savedConfig;
+  config.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
+  config.chain.structSize = sizeof(config);
+  config.enableStats      = true;
+  if (GPUConfigureRuntime(device, &config) != GPU_OK) {
+    return 0;
+  }
+
+  ok = check_compute_pass_validation(device) &&
+       check_compute_pipeline_validation(device, bytecodePath) &&
+       check_compute_dispatch_validation_calls(device) &&
+       check_compute_readback(device, bytecodePath);
+  device->runtimeConfig = savedConfig;
+  return ok;
 }

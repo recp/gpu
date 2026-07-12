@@ -187,6 +187,10 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
   if (!api->rce.setRenderPipelineState)
     return;
 
+  gpuDeviceRecordBindRequest(gpu_renderPassDevice(pass));
+  if (pass->_pipeline == pipeline)
+    return;
+
   if (pass->_pipelineLayout != pipeline->_layout) {
     memset(pass->_boundGroups, 0, sizeof(pass->_boundGroups));
     memset(pass->_boundGroupLayouts, 0, sizeof(pass->_boundGroupLayouts));
@@ -194,7 +198,9 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
 
   state._priv = pipeline->_state;
   api->rce.setRenderPipelineState(pass, &state);
+  gpuDeviceRecordBindEmission(gpu_renderPassDevice(pass));
   pass->_hasPipeline = true;
+  pass->_pipeline = pipeline;
   pass->_pipelineLayout = pipeline->_layout;
   pass->_requiredBindGroupMask = pipeline->_requiredBindGroupMask;
   pass->_primitiveType = gpu_primitiveTypeFromTopology(pipeline->_primitiveTopology);

@@ -59,6 +59,20 @@ gpuDeviceApi(const GPUDevice *device) {
   return device ? device->_api : NULL;
 }
 
+static inline void
+gpuDeviceRecordBindRequest(GPUDevice *device) {
+  if (device && device->runtimeConfig.enableStats) {
+    device->currentFrameStats.requestedBindCalls++;
+  }
+}
+
+static inline void
+gpuDeviceRecordBindEmission(GPUDevice *device) {
+  if (device && device->runtimeConfig.enableStats) {
+    device->currentFrameStats.emittedBindCalls++;
+  }
+}
+
 GPU_HIDE
 void
 gpuDeviceBeginFrame(GPUDevice *device);

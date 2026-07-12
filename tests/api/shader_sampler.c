@@ -2,7 +2,11 @@
 #include "../../src/api/device_internal.h"
 
 enum {
-  GPU_SOURCE_SAMPLER_WARM_ITERATIONS = 16u
+  GPU_SOURCE_SAMPLER_WARM_ITERATIONS = 16u,
+  GPU_SOURCE_SAMPLER_WARM_BIND_REQUESTS =
+    GPU_SOURCE_SAMPLER_WARM_ITERATIONS * 4u,
+  GPU_SOURCE_SAMPLER_WARM_BIND_EMISSIONS =
+    GPU_SOURCE_SAMPLER_WARM_ITERATIONS * 2u
 };
 
 static int
@@ -26,6 +30,8 @@ submit_source_sampler_draw(GPUCommandQueue            *queue,
   }
 
   GPUBindRenderPipeline(renderPass, pipeline);
+  GPUBindRenderPipeline(renderPass, pipeline);
+  GPUBindRenderGroup(renderPass, 0u, group, 0u, NULL);
   GPUBindRenderGroup(renderPass, 0u, group, 0u, NULL);
   GPUDraw(renderPass, 6u, 1u, 0u, 0u);
   GPUEndRenderPass(renderPass);
@@ -380,14 +386,20 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   if (device->currentFrameStats.hotPathAllocCount != 0u ||
       device->currentFrameStats.hotPathAllocBytes != 0u ||
       device->currentFrameStats.hotPathFreeCount != 0u ||
-      device->currentFrameStats.hotPathFreeBytes != 0u) {
+      device->currentFrameStats.hotPathFreeBytes != 0u ||
+      device->currentFrameStats.requestedBindCalls !=
+        GPU_SOURCE_SAMPLER_WARM_BIND_REQUESTS ||
+      device->currentFrameStats.emittedBindCalls !=
+        GPU_SOURCE_SAMPLER_WARM_BIND_EMISSIONS) {
     fprintf(stderr,
             "source sampler warm path allocated: %llu/%llu bytes, "
-            "%llu/%llu bytes freed\n",
+            "%llu/%llu bytes freed; binds %u/%u\n",
             (unsigned long long)device->currentFrameStats.hotPathAllocCount,
             (unsigned long long)device->currentFrameStats.hotPathAllocBytes,
             (unsigned long long)device->currentFrameStats.hotPathFreeCount,
-            (unsigned long long)device->currentFrameStats.hotPathFreeBytes);
+            (unsigned long long)device->currentFrameStats.hotPathFreeBytes,
+            device->currentFrameStats.requestedBindCalls,
+            device->currentFrameStats.emittedBindCalls);
     ok = 0;
   }
 
