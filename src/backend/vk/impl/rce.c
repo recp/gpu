@@ -139,7 +139,10 @@ vk_setRenderPipelineState(GPURenderCommandEncoder *encoder,
   vkCmdBindPipeline(native->command,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipeline->pipeline);
-  native->pipelineLayout = pipeline->layout;
+  vk_bindShaderSamplers(native->command,
+                        VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        &pipeline->shaderLayout);
+  native->pipelineLayout = pipeline->shaderLayout.layout;
 }
 
 GPU_HIDE

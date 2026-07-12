@@ -515,13 +515,22 @@ vk_createRenderPipeline(GPUDevice                         *device,
 
   GPU__UNUSED(requiredBindGroupMask);
   native->device = deviceVk->device;
-  native->layout = layout->layout;
+  if (vk_createShaderLayout(device,
+                            info->layout,
+                            info->library,
+                            &native->shaderLayout) != GPU_OK) {
+    free(vertexAttributes);
+    free(vertexBindings);
+    free(native);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
   if (!deviceVk->dynamicRendering &&
       vk__createPipelineRenderPass(native->device,
                                    colorFormats[0],
                                    &native->renderPass) != VK_SUCCESS) {
     free(vertexAttributes);
     free(vertexBindings);
+    vk_destroyShaderLayout(&native->shaderLayout);
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -618,7 +627,7 @@ vk_createRenderPipeline(GPUDevice                         *device,
   pipelineInfo.pDepthStencilState  = &depthStencil;
   pipelineInfo.pColorBlendState    = &blend;
   pipelineInfo.pDynamicState       = &dynamic;
-  pipelineInfo.layout              = native->layout;
+  pipelineInfo.layout              = native->shaderLayout.layout;
   pipelineInfo.renderPass          = deviceVk->dynamicRendering
                                        ? VK_NULL_HANDLE
                                        : native->renderPass;
@@ -632,6 +641,7 @@ vk_createRenderPipeline(GPUDevice                         *device,
     free(vertexAttributes);
     free(vertexBindings);
     vkDestroyRenderPass(native->device, native->renderPass, NULL);
+    vk_destroyShaderLayout(&native->shaderLayout);
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -661,6 +671,7 @@ vk_destroyRenderPipeline(GPURenderPipeline *pipeline) {
     if (native->renderPass) {
       vkDestroyRenderPass(native->device, native->renderPass, NULL);
     }
+    vk_destroyShaderLayout(&native->shaderLayout);
     free(native);
   }
   free(pipeline);

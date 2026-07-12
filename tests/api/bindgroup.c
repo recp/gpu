@@ -938,9 +938,9 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
   GPUBindGroup *group = NULL;
   GPURenderPassEncoder renderPass = {0};
   GPUComputePassEncoder computePass = {0};
-  uint32_t validOffset = 8u;
-  uint32_t invalidOffset = 9u;
-  uint32_t extraOffsets[2] = { 8u, 0u };
+  uint32_t validOffset = 256u;
+  uint32_t invalidOffset = 497u;
+  uint32_t extraOffsets[2] = { 256u, 0u };
   int ok = 0;
 
   api = gpuActiveGPUApi();
@@ -982,7 +982,7 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
 
   bufferInfo.chain.sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
-  bufferInfo.sizeBytes = 32u;
+  bufferInfo.sizeBytes = 512u;
   bufferInfo.usage = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
     fprintf(stderr, "dynamic offset buffer setup failed\n");
@@ -992,7 +992,7 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
   groupEntry.binding = 0u;
   groupEntry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
   groupEntry.buffer.buffer = buffer;
-  groupEntry.buffer.offset = 8u;
+  groupEntry.buffer.offset = 0u;
   groupEntry.buffer.size = 16u;
 
   groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;

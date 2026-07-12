@@ -251,6 +251,16 @@ if(GPU_BUILD_TESTS)
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/compute.us"
   )
 
+  if(GPU_ENABLE_VULKAN)
+    add_test(NAME api-validation-vulkan
+      COMMAND gpu-api-test
+              "${CMAKE_CURRENT_SOURCE_DIR}/samples/usl-reflection-check/reflection.us"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/render_mrt.us"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/compute.us"
+              vulkan
+    )
+  endif()
+
   if(WIN32)
     add_executable(gpu-dx12-queue-test tests/dx12/queue.c)
     target_link_libraries(gpu-dx12-queue-test PRIVATE gpu)

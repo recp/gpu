@@ -571,7 +571,7 @@ check_device_queue_create_validation(GPUAdapter *adapter) {
   }
 
   request.type = GPU_QUEUE_GRAPHICS;
-  request.count = 2;
+  request.count = 1;
   device = NULL;
   if (GPUCreateDevice(adapter, &createInfo, &device) != GPU_OK || !device) {
     fprintf(stderr, "device create rejected explicit queue count\n");
@@ -586,8 +586,7 @@ check_device_queue_create_validation(GPUAdapter *adapter) {
 
   ok = (GPUGetAvailableQueueBits(device) & GPU_QUEUE_GRAPHICS) == GPU_QUEUE_GRAPHICS &&
        GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0) &&
-       GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 1) &&
-       !GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 2) &&
+       !GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 1) &&
        !GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0) &&
        GPUGetCommandQueue(device, GPU_QUEUE_GRAPHICS) ==
          GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0);

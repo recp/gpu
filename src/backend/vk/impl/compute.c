@@ -55,20 +55,27 @@ vk_createComputePipeline(GPUDevice                          *device,
 
   native           = (GPUComputePipelineVk *)(state + 1);
   native->device   = deviceVk->device;
-  native->layout   = layout->layout;
+  if (vk_createShaderLayout(device,
+                            info->layout,
+                            info->library,
+                            &native->shaderLayout) != GPU_OK) {
+    free(state);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
   stage.sType      = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
   stage.stage      = VK_SHADER_STAGE_COMPUTE_BIT;
   stage.module     = library->module;
   stage.pName      = info->entryPoint;
   pipelineInfo.sType  = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
   pipelineInfo.stage  = stage;
-  pipelineInfo.layout = native->layout;
+  pipelineInfo.layout = native->shaderLayout.layout;
   if (vkCreateComputePipelines(native->device,
                                VK_NULL_HANDLE,
                                1u,
                                &pipelineInfo,
                                NULL,
                                &native->pipeline) != VK_SUCCESS) {
+    vk_destroyShaderLayout(&native->shaderLayout);
     free(state);
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -96,6 +103,9 @@ vk_destroyComputePipeline(GPUComputePipeline *pipeline) {
   native = state ? state->_priv : NULL;
   if (native && native->device && native->pipeline) {
     vkDestroyPipeline(native->device, native->pipeline, NULL);
+  }
+  if (native) {
+    vk_destroyShaderLayout(&native->shaderLayout);
   }
   free(state);
   free(pipeline);
@@ -143,7 +153,10 @@ vk_setComputePipelineState(GPUComputePassEncoder   *encoder,
   vkCmdBindPipeline(native->command,
                     VK_PIPELINE_BIND_POINT_COMPUTE,
                     pipeline->pipeline);
-  native->pipelineLayout      = pipeline->layout;
+  vk_bindShaderSamplers(native->command,
+                        VK_PIPELINE_BIND_POINT_COMPUTE,
+                        &pipeline->shaderLayout);
+  native->pipelineLayout      = pipeline->shaderLayout.layout;
   encoder->_workgroupSize[0] = pipelineState->workgroupSize[0];
   encoder->_workgroupSize[1] = pipelineState->workgroupSize[1];
   encoder->_workgroupSize[2] = pipelineState->workgroupSize[2];

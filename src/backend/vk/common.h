@@ -226,9 +226,11 @@ typedef struct GPUTextureVk {
 
 typedef struct GPUBindGroupLayoutVk {
   uint32_t              *dynamicOrder;
+  VkSampler             *immutableSamplers;
   VkDevice               device;
   VkDescriptorSetLayout  layout;
   uint32_t                dynamicCount;
+  uint32_t                immutableSamplerCount;
 } GPUBindGroupLayoutVk;
 
 typedef struct GPUPipelineLayoutVk {
@@ -363,17 +365,56 @@ typedef struct GPUSamplerVk {
   VkSampler sampler;
 } GPUSamplerVk;
 
+typedef struct GPUShaderLayoutVk {
+  VkSampler             *samplers;
+  VkDevice               device;
+  VkPipelineLayout       layout;
+  VkDescriptorSetLayout  samplerLayout;
+  VkDescriptorSetLayout  emptyLayout;
+  VkDescriptorPool       samplerPool;
+  VkDescriptorSet        samplerSet;
+  uint32_t               samplerCount;
+  uint32_t               samplerGroup;
+  bool                   ownsLayout;
+} GPUShaderLayoutVk;
+
+GPU_HIDE
+void
+vk_fillSamplerInfo(const GPUSamplerDesc *desc, VkSamplerCreateInfo *outInfo);
+
+GPU_HIDE
+void
+vk_fillUSLSamplerInfo(const GPUUSLStaticSamplerDesc *desc,
+                      VkSamplerCreateInfo           *outInfo);
+
+GPU_HIDE
+GPUResult
+vk_createShaderLayout(GPUDevice             *device,
+                      GPUPipelineLayout      *layout,
+                      const GPUShaderLibrary *library,
+                      GPUShaderLayoutVk      *outLayout);
+
+GPU_HIDE
+void
+vk_destroyShaderLayout(GPUShaderLayoutVk *layout);
+
+GPU_HIDE
+void
+vk_bindShaderSamplers(VkCommandBuffer          command,
+                      VkPipelineBindPoint      bindPoint,
+                      const GPUShaderLayoutVk *layout);
+
 typedef struct GPURenderPipelineVk {
-  VkDevice         device;
-  VkPipeline       pipeline;
-  VkPipelineLayout layout;
-  VkRenderPass     renderPass;
+  GPUShaderLayoutVk shaderLayout;
+  VkDevice          device;
+  VkPipeline        pipeline;
+  VkRenderPass      renderPass;
 } GPURenderPipelineVk;
 
 typedef struct GPUComputePipelineVk {
-  VkDevice         device;
-  VkPipeline       pipeline;
-  VkPipelineLayout layout;
+  GPUShaderLayoutVk shaderLayout;
+  VkDevice          device;
+  VkPipeline        pipeline;
 } GPUComputePipelineVk;
 
 struct GPUSwapChainVk {

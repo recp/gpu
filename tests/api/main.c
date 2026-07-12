@@ -81,6 +81,24 @@ select_adapter(GPUInstance *instance) {
   return adapter;
 }
 
+static bool
+parse_backend(const char *name, GPUBackend *outBackend) {
+  if (!name || !outBackend) {
+    return false;
+  }
+
+  if (strcmp(name, "metal") == 0) {
+    *outBackend = GPU_BACKEND_METAL;
+  } else if (strcmp(name, "vulkan") == 0) {
+    *outBackend = GPU_BACKEND_VULKAN;
+  } else if (strcmp(name, "dx12") == 0) {
+    *outBackend = GPU_BACKEND_DX12;
+  } else {
+    return false;
+  }
+  return true;
+}
+
 int
 main(int argc, char **argv) {
   GPUInstanceCreateInfo instanceInfo = {0};
@@ -91,9 +109,10 @@ main(int argc, char **argv) {
   GPUApiTest tests[11];
   int ok;
 
-  if (argc != 4) {
+  if (argc != 4 && argc != 5) {
     fprintf(stderr,
-            "usage: %s <reflection.us> <render_mrt.us> <compute.us>\n",
+            "usage: %s <reflection.us> <render_mrt.us> <compute.us> "
+            "[metal|vulkan|dx12]\n",
             argv[0]);
     return 2;
   }
@@ -102,6 +121,11 @@ main(int argc, char **argv) {
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = GPU_BACKEND_DEFAULT;
   instanceInfo.enableValidation = true;
+  if (argc == 5 &&
+      !parse_backend(argv[4], &instanceInfo.preferredBackend)) {
+    fprintf(stderr, "unknown backend: %s\n", argv[4]);
+    return 2;
+  }
   instance = NULL;
   if (GPUCreateInstance(&instanceInfo, &instance) != GPU_OK || !instance) {
     fprintf(stderr, "failed to create instance\n");
