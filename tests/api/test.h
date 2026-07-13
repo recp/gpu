@@ -57,6 +57,7 @@ int gpu_test_copy(GPUDevice *device);
 int gpu_test_texture_transfer(GPUDevice *device);
 int gpu_test_texture_view_render(GPUDevice *device);
 int gpu_test_texture_view_depth(GPUDevice *device);
+int gpu_test_texture_view_depth_stencil(GPUDevice *device);
 int gpu_test_render(GPUDevice *device, const char *mrtBytecodePath);
 int gpu_test_compute(GPUDevice *device, const char *bytecodePath);
 int gpu_test_query(GPUAdapter *adapter, GPUDevice *device);

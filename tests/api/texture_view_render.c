@@ -1,4 +1,5 @@
 #include "test.h"
+#include "../../src/api/device_internal.h"
 
 enum {
   VIEW_TARGET_WIDTH         = 8u,
@@ -138,10 +139,33 @@ view_render_begin_depth_clear(GPUCommandBuffer *cmdb,
   depth.stencilLoadOp                     = GPU_LOAD_OP_DONT_CARE;
   depth.stencilStoreOp                    = GPU_STORE_OP_DONT_CARE;
   depth.clearDepth                        = clearDepth;
-  passInfo.chain.sType = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  passInfo.chain.sType                    = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   passInfo.chain.structSize               = sizeof(passInfo);
   passInfo.label                          = label;
   passInfo.pDepthStencilAttachment        = &depth;
+  return GPUBeginRenderPass(cmdb, &passInfo);
+}
+
+static GPURenderPassEncoder *
+view_render_begin_ds_clear(GPUCommandBuffer *cmdb,
+                           GPUTextureView   *view,
+                           float             clearDepth,
+                           uint32_t          clearStencil,
+                           const char       *label) {
+  GPURenderPassDepthStencilAttachment depthStencil = {0};
+  GPURenderPassCreateInfo              passInfo     = {0};
+
+  depthStencil.view                       = view;
+  depthStencil.depthLoadOp                = GPU_LOAD_OP_CLEAR;
+  depthStencil.depthStoreOp               = GPU_STORE_OP_STORE;
+  depthStencil.stencilLoadOp              = GPU_LOAD_OP_CLEAR;
+  depthStencil.stencilStoreOp             = GPU_STORE_OP_STORE;
+  depthStencil.clearDepth                 = clearDepth;
+  depthStencil.clearStencil               = clearStencil;
+  passInfo.chain.sType                    = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  passInfo.chain.structSize               = sizeof(passInfo);
+  passInfo.label                          = label;
+  passInfo.pDepthStencilAttachment        = &depthStencil;
   return GPUBeginRenderPass(cmdb, &passInfo);
 }
 
@@ -557,6 +581,116 @@ cleanup:
   GPUDestroyBuffer(readback);
   GPUDestroyTextureView(secondView);
   GPUDestroyTextureView(firstView);
+  GPUDestroyTexture(texture);
+  return ok;
+}
+
+int
+gpu_test_texture_view_depth_stencil(GPUDevice *device) {
+  static const GPUFormat formats[] = {
+    GPU_FORMAT_DEPTH32_FLOAT_STENCIL8,
+    GPU_FORMAT_DEPTH24_UNORM_STENCIL8
+  };
+
+  GPUCommandQueue          *queue;
+  GPUCommandBuffer         *cmdb;
+  GPURenderPassEncoder     *renderPass;
+  GPUTexture               *texture;
+  GPUTextureView           *view;
+  GPUTextureCreateInfo      textureInfo = {0};
+  GPUTextureViewCreateInfo  viewInfo    = {0};
+  GPUFormatCapabilities     formatCaps;
+  GPUFormat                 format;
+  int                       ok;
+
+  queue      = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  cmdb       = NULL;
+  renderPass = NULL;
+  texture    = NULL;
+  view       = NULL;
+  ok         = queue != NULL;
+  if (!ok) {
+    fprintf(stderr, "texture view depth-stencil has no graphics queue\n");
+    return 0;
+  }
+  ok = 0;
+
+  format = GPU_FORMAT_UNDEFINED;
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(formats); i++) {
+    if (GPUGetFormatCapabilities(device->phyDevice,
+                                 formats[i],
+                                 &formatCaps) == GPU_OK &&
+        formatCaps.depthStencil) {
+      format = formats[i];
+      break;
+    }
+  }
+  if (format == GPU_FORMAT_UNDEFINED) {
+    printf("texture view depth-stencil skipped: unsupported format\n");
+    return 1;
+  }
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "texture-view-depth-stencil-target";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = format;
+  textureInfo.width            = VIEW_TARGET_WIDTH;
+  textureInfo.height           = VIEW_TARGET_HEIGHT;
+  textureInfo.depthOrLayers    = VIEW_TARGET_LAYERS;
+  textureInfo.mipLevelCount    = VIEW_TARGET_MIPS;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_DEPTH_STENCIL;
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
+    fprintf(stderr, "texture view depth-stencil texture setup failed\n");
+    goto cleanup;
+  }
+
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.label            = "texture-view-depth-stencil-subresource";
+  viewInfo.viewType         = GPU_TEXTURE_VIEW_2D_ARRAY;
+  viewInfo.format           = format;
+  viewInfo.baseMipLevel     = VIEW_SECOND_MIP;
+  viewInfo.mipLevelCount    = 1u;
+  viewInfo.baseArrayLayer   = VIEW_SECOND_LAYER;
+  viewInfo.arrayLayerCount  = 1u;
+  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK || !view) {
+    fprintf(stderr, "texture view depth-stencil view setup failed\n");
+    goto cleanup;
+  }
+
+  if (GPUAcquireCommandBuffer(queue,
+                              "texture-view-depth-stencil",
+                              &cmdb) != GPU_OK ||
+      !cmdb) {
+    fprintf(stderr, "texture view depth-stencil command buffer failed\n");
+    goto cleanup;
+  }
+
+  renderPass = view_render_begin_ds_clear(cmdb,
+                                          view,
+                                          0.375f,
+                                          37u,
+                                          "texture-view-depth-stencil-clear");
+  if (!renderPass) {
+    fprintf(stderr, "texture view depth-stencil render pass failed\n");
+    goto cleanup;
+  }
+  GPUEndRenderPass(renderPass);
+  renderPass = NULL;
+
+  ok   = view_render_submit(device, queue, cmdb);
+  cmdb = NULL;
+  if (!ok) {
+    fprintf(stderr, "texture view depth-stencil submit failed\n");
+  }
+
+cleanup:
+  if (renderPass) {
+    GPUEndRenderPass(renderPass);
+  }
+  GPUDestroyTextureView(view);
   GPUDestroyTexture(texture);
   return ok;
 }
