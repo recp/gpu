@@ -38,6 +38,7 @@ struct GPUDevice {
   GPUTransientChunk           *transientChunks;
   GPUPipelineCache            *_pipelineCaches;
   void                        *_pipelineCacheLock;
+  void                        *_bindGroupCache;
   void                        *transientCpuPtr;
   GPUFeatureSet                enabledFeatures;
   GPUCacheStats                cacheStats;

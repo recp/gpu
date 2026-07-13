@@ -22,7 +22,18 @@
 #include "../texture_internal.h"
 #include "descriptor_internal.h"
 
+#if !defined(_WIN32) && !defined(WIN32)
+#  include <pthread.h>
+#endif
+
 #define GPU_PUSH_CONSTANT_MAX_SIZE_BYTES 4096u
+
+enum {
+  GPU_BIND_GROUP_CACHE_CAPACITY = 256u,
+  GPU_BIND_GROUP_CACHE_MASK     = GPU_BIND_GROUP_CACHE_CAPACITY - 1u
+};
+
+/* Cache entries intern live groups without extending resource lifetimes. */
 
 typedef struct GPUBindGroupLayoutPriv {
   GPUBindGroupLayoutEntry *entries;
@@ -45,8 +56,26 @@ typedef struct GPUBindGroupBindingPriv {
 typedef struct GPUBindGroupPriv {
   GPUBindGroupLayout       *layout;
   GPUBindGroupBindingPriv *bindings;
+  uint64_t                 hash;
   uint32_t                 count;
 } GPUBindGroupPriv;
+
+typedef struct GPUBindGroupCacheEntry {
+  GPUBindGroup *group;
+} GPUBindGroupCacheEntry;
+
+typedef struct GPUBindGroupCache {
+#if defined(_WIN32) || defined(WIN32)
+  CRITICAL_SECTION lock;
+#else
+  pthread_mutex_t lock;
+#endif
+  GPUBindGroupCacheEntry entries[GPU_BIND_GROUP_CACHE_CAPACITY];
+} GPUBindGroupCache;
+
+_Static_assert((GPU_BIND_GROUP_CACHE_CAPACITY &
+                (GPU_BIND_GROUP_CACHE_CAPACITY - 1u)) == 0u,
+               "bind group cache capacity must be a power of two");
 
 typedef struct GPUPipelineLayoutPriv {
   GPUBindGroupLayout **bindGroupLayouts;
@@ -68,6 +97,232 @@ gpu_layoutPriv(GPUBindGroupLayout *layout) {
 static GPUBindGroupPriv *
 gpu_groupPriv(GPUBindGroup *group) {
   return group ? group->_priv : NULL;
+}
+
+static GPUBindGroupCache *
+gpu_bindGroupCache(GPUDevice *device) {
+  return device ? device->_bindGroupCache : NULL;
+}
+
+static void
+gpu_bindGroupCacheLock(GPUBindGroupCache *cache) {
+#if defined(_WIN32) || defined(WIN32)
+  EnterCriticalSection(&cache->lock);
+#else
+  pthread_mutex_lock(&cache->lock);
+#endif
+}
+
+static void
+gpu_bindGroupCacheUnlock(GPUBindGroupCache *cache) {
+#if defined(_WIN32) || defined(WIN32)
+  LeaveCriticalSection(&cache->lock);
+#else
+  pthread_mutex_unlock(&cache->lock);
+#endif
+}
+
+GPU_HIDE
+GPUResult
+gpuInitBindGroupCacheDevice(GPUDevice *device) {
+  GPUBindGroupCache *cache;
+
+  if (!device) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  cache = calloc(1, sizeof(*cache));
+  if (!cache) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+#if defined(_WIN32) || defined(WIN32)
+  InitializeCriticalSection(&cache->lock);
+#else
+  if (pthread_mutex_init(&cache->lock, NULL) != 0) {
+    free(cache);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+#endif
+  device->_bindGroupCache = cache;
+  return GPU_OK;
+}
+
+GPU_HIDE
+void
+gpuDestroyBindGroupCacheDevice(GPUDevice *device) {
+  GPUBindGroupCache *cache;
+
+  cache = gpu_bindGroupCache(device);
+  if (!cache) {
+    return;
+  }
+#if defined(_WIN32) || defined(WIN32)
+  DeleteCriticalSection(&cache->lock);
+#else
+  pthread_mutex_destroy(&cache->lock);
+#endif
+  free(cache);
+  device->_bindGroupCache = NULL;
+}
+
+static uint64_t
+gpu_bindGroupHashBytes(uint64_t hash, const void *data, size_t size) {
+  const uint8_t *bytes;
+
+  bytes = data;
+  for (size_t i = 0u; i < size; i++) {
+    hash ^= bytes[i];
+    hash *= 1099511628211ull;
+  }
+  return hash;
+}
+
+#define GPU_BIND_GROUP_HASH(HASH, VALUE) \
+  gpu_bindGroupHashBytes((HASH), &(VALUE), sizeof(VALUE))
+
+static uint64_t
+gpu_bindGroupHash(const GPUBindGroupPriv *priv) {
+  uintptr_t layout;
+  uint64_t  hash;
+
+  layout = (uintptr_t)priv->layout;
+  hash   = 14695981039346656037ull;
+  hash   = GPU_BIND_GROUP_HASH(hash, layout);
+  hash   = GPU_BIND_GROUP_HASH(hash, priv->count);
+  for (uint32_t i = 0u; i < priv->count; i++) {
+    const GPUBindGroupBindingPriv *binding;
+    uintptr_t                      buffer;
+    uintptr_t                      textureView;
+    uintptr_t                      sampler;
+
+    binding     = &priv->bindings[i];
+    buffer      = (uintptr_t)binding->buffer;
+    textureView = (uintptr_t)binding->textureView;
+    sampler     = (uintptr_t)binding->sampler;
+    hash        = GPU_BIND_GROUP_HASH(hash, buffer);
+    hash        = GPU_BIND_GROUP_HASH(hash, textureView);
+    hash        = GPU_BIND_GROUP_HASH(hash, sampler);
+    hash        = GPU_BIND_GROUP_HASH(hash, binding->offset);
+    hash        = GPU_BIND_GROUP_HASH(hash, binding->size);
+    hash        = GPU_BIND_GROUP_HASH(hash, binding->binding);
+    hash        = GPU_BIND_GROUP_HASH(hash, binding->stage);
+    hash        = GPU_BIND_GROUP_HASH(hash, binding->kind);
+  }
+  return hash;
+}
+
+static bool
+gpu_bindGroupsEqual(const GPUBindGroup *a, const GPUBindGroup *b) {
+  const GPUBindGroupPriv *aPriv;
+  const GPUBindGroupPriv *bPriv;
+
+  aPriv = a ? a->_priv : NULL;
+  bPriv = b ? b->_priv : NULL;
+  if (!aPriv || !bPriv || aPriv->hash != bPriv->hash ||
+      aPriv->layout != bPriv->layout || aPriv->count != bPriv->count) {
+    return false;
+  }
+
+  for (uint32_t i = 0u; i < aPriv->count; i++) {
+    const GPUBindGroupBindingPriv *aBinding;
+    const GPUBindGroupBindingPriv *bBinding;
+
+    aBinding = &aPriv->bindings[i];
+    bBinding = &bPriv->bindings[i];
+    if (aBinding->buffer != bBinding->buffer ||
+        aBinding->textureView != bBinding->textureView ||
+        aBinding->sampler != bBinding->sampler ||
+        aBinding->offset != bBinding->offset ||
+        aBinding->size != bBinding->size ||
+        aBinding->binding != bBinding->binding ||
+        aBinding->stage != bBinding->stage ||
+        aBinding->kind != bBinding->kind) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static GPUBindGroup *
+gpu_bindGroupCacheFind(GPUDevice *device, GPUBindGroup *candidate) {
+  GPUBindGroupCache      *cache;
+  GPUBindGroupCacheEntry *entry;
+  GPUBindGroupPriv       *priv;
+  GPUBindGroup           *result;
+
+  cache  = gpu_bindGroupCache(device);
+  priv   = gpu_groupPriv(candidate);
+  result = NULL;
+  if (!cache || !priv) {
+    return NULL;
+  }
+
+  entry = &cache->entries[priv->hash & GPU_BIND_GROUP_CACHE_MASK];
+  gpu_bindGroupCacheLock(cache);
+  if (entry->group && gpu_bindGroupsEqual(entry->group, candidate)) {
+    result = entry->group;
+    result->_refCount++;
+    device->cacheStats.bindGroupHits++;
+  }
+  gpu_bindGroupCacheUnlock(cache);
+  return result;
+}
+
+static GPUBindGroup *
+gpu_bindGroupCacheStore(GPUDevice *device, GPUBindGroup *candidate) {
+  GPUBindGroupCache      *cache;
+  GPUBindGroupCacheEntry *entry;
+  GPUBindGroupPriv       *priv;
+  GPUBindGroup           *result;
+
+  cache  = gpu_bindGroupCache(device);
+  priv   = gpu_groupPriv(candidate);
+  result = candidate;
+  if (!cache || !priv) {
+    return result;
+  }
+
+  entry = &cache->entries[priv->hash & GPU_BIND_GROUP_CACHE_MASK];
+  gpu_bindGroupCacheLock(cache);
+  if (entry->group && gpu_bindGroupsEqual(entry->group, candidate)) {
+    result = entry->group;
+    result->_refCount++;
+    device->cacheStats.bindGroupHits++;
+  } else {
+    if (entry->group) {
+      device->cacheStats.bindGroupCollisions++;
+    }
+    device->cacheStats.bindGroupMisses++;
+    entry->group = candidate;
+  }
+  gpu_bindGroupCacheUnlock(cache);
+  return result;
+}
+
+static bool
+gpu_releaseBindGroup(GPUBindGroup *group) {
+  GPUBindGroupCache      *cache;
+  GPUBindGroupCacheEntry *entry;
+  GPUBindGroupPriv       *priv;
+  bool                    destroy;
+
+  if (!group || group->_refCount == 0u) {
+    return false;
+  }
+  cache = gpu_bindGroupCache(group->_device);
+  priv  = gpu_groupPriv(group);
+  if (!cache || !priv) {
+    return --group->_refCount == 0u;
+  }
+
+  entry = &cache->entries[priv->hash & GPU_BIND_GROUP_CACHE_MASK];
+  gpu_bindGroupCacheLock(cache);
+  group->_refCount--;
+  destroy = group->_refCount == 0u;
+  if (destroy && entry->group == group) {
+    entry->group = NULL;
+  }
+  gpu_bindGroupCacheUnlock(cache);
+  return destroy;
 }
 
 static GPUPipelineLayoutPriv *
@@ -1772,6 +2027,7 @@ GPUResult
 GPUCreateBindGroup(GPUDevice *device,
                    const GPUBindGroupCreateInfo *info,
                    GPUBindGroup **outGroup) {
+  GPUBindGroup *cached;
   GPUBindGroup *group;
   GPUBindGroupPriv *priv;
   GPUBindGroupLayoutPriv *layoutPriv;
@@ -1868,10 +2124,21 @@ GPUCreateBindGroup(GPUDevice *device,
     }
   }
 
-  priv->layout = layout;
-  priv->count = layoutPriv->count;
-  group->_device = device;
-  group->_priv = priv;
+  priv->layout     = layout;
+  priv->count      = layoutPriv->count;
+  priv->hash       = gpu_bindGroupHash(priv);
+  group->_device   = device;
+  group->_priv     = priv;
+  group->_refCount = 1u;
+
+  cached = gpu_bindGroupCacheFind(device, group);
+  if (cached) {
+    free(priv->bindings);
+    free(priv);
+    free(group);
+    *outGroup = cached;
+    return GPU_OK;
+  }
 
   api = gpuDeviceApi(device);
   if (api && api->descriptor.createBindGroup) {
@@ -1880,6 +2147,17 @@ GPUCreateBindGroup(GPUDevice *device,
       GPUDestroyBindGroup(group);
       return result;
     }
+  }
+
+  cached = gpu_bindGroupCacheStore(device, group);
+  if (cached != group) {
+    if (api && api->descriptor.destroyBindGroup) {
+      api->descriptor.destroyBindGroup(group);
+    }
+    free(priv->bindings);
+    free(priv);
+    free(group);
+    group = cached;
   }
 
   *outGroup = group;
@@ -1893,6 +2171,9 @@ GPUDestroyBindGroup(GPUBindGroup *group) {
   GPUApi *api;
 
   if (!group) {
+    return;
+  }
+  if (!gpu_releaseBindGroup(group)) {
     return;
   }
 

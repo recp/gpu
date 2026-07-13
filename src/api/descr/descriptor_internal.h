@@ -29,6 +29,7 @@ struct GPUBindGroup {
   GPUDevice *_device;
   void      *_native;
   void      *_priv;
+  uint32_t   _refCount;
 };
 
 struct GPUPipelineLayout {
@@ -53,6 +54,14 @@ typedef struct GPUBindGroupBindingView {
 
 typedef void (*GPUBindGroupBindingFn)(void *ctx,
                                       const GPUBindGroupBindingView *binding);
+
+GPU_HIDE
+GPUResult
+gpuInitBindGroupCacheDevice(GPUDevice *device);
+
+GPU_HIDE
+void
+gpuDestroyBindGroupCacheDevice(GPUDevice *device);
 
 GPU_HIDE
 int

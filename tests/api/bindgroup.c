@@ -1050,9 +1050,111 @@ cleanup:
   return ok;
 }
 
+static int
+check_bind_group_cache(GPUDevice *device) {
+  GPUBindGroupLayout          *layout;
+  GPUBindGroup                *first;
+  GPUBindGroup                *second;
+  GPUBindGroup                *third;
+  GPUBuffer                   *buffer;
+  GPUBindGroupLayoutEntry      entry      = {0};
+  GPUBindGroupLayoutCreateInfo layoutInfo = {0};
+  GPUBindGroupEntry            groupEntry = {0};
+  GPUBindGroupCreateInfo       groupInfo  = {0};
+  GPUBufferCreateInfo          bufferInfo = {0};
+  GPUCacheStats                stats;
+  int                          ok;
+
+  layout = NULL;
+  first  = NULL;
+  second = NULL;
+  third  = NULL;
+  buffer = NULL;
+  ok     = 0;
+
+  entry.binding     = 0u;
+  entry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  entry.visibility  = GPU_SHADER_STAGE_FRAGMENT_BIT;
+  entry.arrayCount  = 1u;
+  layoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  layoutInfo.entryCount       = 1u;
+  layoutInfo.pEntries         = &entry;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK ||
+      !layout) {
+    fprintf(stderr, "bind group cache layout setup failed\n");
+    goto cleanup;
+  }
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.sizeBytes        = 64u;
+  bufferInfo.usage = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
+    fprintf(stderr, "bind group cache buffer setup failed\n");
+    goto cleanup;
+  }
+
+  groupEntry.binding       = 0u;
+  groupEntry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
+  groupEntry.buffer.buffer = buffer;
+  groupEntry.buffer.size   = 64u;
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.layout            = layout;
+  groupInfo.entryCount        = 1u;
+  groupInfo.pEntries          = &groupEntry;
+
+  GPUResetStats(device);
+  if (GPUCreateBindGroup(device, &groupInfo, &first) != GPU_OK || !first ||
+      GPUCreateBindGroup(device, &groupInfo, &second) != GPU_OK ||
+      second != first ||
+      GPUGetCacheStats(device, &stats) != GPU_OK ||
+      stats.bindGroupHits != 1u ||
+      stats.bindGroupMisses != 1u ||
+      stats.bindGroupCollisions != 0u) {
+    fprintf(stderr, "bind group cache did not reuse an identical group\n");
+    goto cleanup;
+  }
+
+  GPUDestroyBindGroup(second);
+  second = NULL;
+  if (GPUCreateBindGroup(device, &groupInfo, &second) != GPU_OK ||
+      second != first ||
+      GPUGetCacheStats(device, &stats) != GPU_OK ||
+      stats.bindGroupHits != 2u ||
+      stats.bindGroupMisses != 1u) {
+    fprintf(stderr, "bind group cache did not retain a shared group\n");
+    goto cleanup;
+  }
+
+  GPUDestroyBindGroup(second);
+  second = NULL;
+  GPUDestroyBindGroup(first);
+  first = NULL;
+  if (GPUCreateBindGroup(device, &groupInfo, &third) != GPU_OK || !third ||
+      GPUGetCacheStats(device, &stats) != GPU_OK ||
+      stats.bindGroupHits != 2u ||
+      stats.bindGroupMisses != 2u) {
+    fprintf(stderr, "bind group cache retained a released group\n");
+    goto cleanup;
+  }
+
+  ok = 1;
+
+cleanup:
+  GPUDestroyBindGroup(third);
+  GPUDestroyBindGroup(second);
+  GPUDestroyBindGroup(first);
+  GPUDestroyBuffer(buffer);
+  GPUDestroyBindGroupLayout(layout);
+  return ok;
+}
+
 int
 gpu_test_bindgroup(GPUDevice *device) {
   return check_backend_descriptor_hooks(device) &&
          check_bind_group_layout_validation(device) &&
-         check_dynamic_offset_bind_validation(device);
+         check_dynamic_offset_bind_validation(device) &&
+         check_bind_group_cache(device);
 }

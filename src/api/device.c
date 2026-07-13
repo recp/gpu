@@ -16,6 +16,7 @@
 
 #include "../common.h"
 #include "buffer_internal.h"
+#include "descr/descriptor_internal.h"
 #include "device_internal.h"
 #include "pipeline_cache_internal.h"
 
@@ -1088,6 +1089,11 @@ GPUCreateSystemDefaultDevice(GPUInstance *inst) {
       api->device.destroyDevice(device);
       return NULL;
     }
+    if (gpuInitBindGroupCacheDevice(device) != GPU_OK) {
+      gpuDestroyPipelineCacheDevice(device);
+      api->device.destroyDevice(device);
+      return NULL;
+    }
     device->enabledFeatureMask = gpu_defaultEnabledFeatureMask(device->phyDevice);
     gpu_fillFeatureSet(device->enabledFeatureMask,
                        device->enabledFeatureStorage,
@@ -1170,6 +1176,13 @@ GPUCreateDevice(GPUAdapter                *adapter,
     *outDevice = NULL;
     return result;
   }
+  result = gpuInitBindGroupCacheDevice(*outDevice);
+  if (result != GPU_OK) {
+    gpuDestroyPipelineCacheDevice(*outDevice);
+    api->device.destroyDevice(*outDevice);
+    *outDevice = NULL;
+    return result;
+  }
   (*outDevice)->enabledFeatureMask = gpu_enabledFeatureMaskForCreateInfo(adapter, info);
   gpu_fillFeatureSet((*outDevice)->enabledFeatureMask,
                      (*outDevice)->enabledFeatureStorage,
@@ -1215,6 +1228,7 @@ GPUDestroyDevice(GPUDevice * __restrict device) {
   }
 
   gpu_destroyTransientAllocator(device);
+  gpuDestroyBindGroupCacheDevice(device);
   gpuDestroyPipelineCacheDevice(device);
   if (api->device.destroyDevice) {
     api->device.destroyDevice(device);
