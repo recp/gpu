@@ -38,6 +38,13 @@ struct GPUPipelineLayout {
   void      *_priv;
 };
 
+typedef enum GPUBindKind {
+  GPUBindKindBuffer  = 0,
+  GPUBindKindTexture = 1,
+  GPUBindKindSampler = 2,
+  GPUBindKindCount
+} GPUBindKind;
+
 typedef struct GPUBindGroupBindingView {
   GPUBuffer      *buffer;
   GPUTextureView *textureView;
@@ -48,7 +55,6 @@ typedef struct GPUBindGroupBindingView {
   GPUBindingType  bindingType;
   uint32_t        binding;
   uint32_t        arrayIndex;
-  GPUBindStage    stage;
   GPUBindKind     kind;
   bool            hasDynamicOffset;
 } GPUBindGroupBindingView;

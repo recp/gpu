@@ -36,21 +36,9 @@ typedef struct GPURenderCommandEncoder GPURenderCommandEncoder;
 typedef GPURenderCommandEncoder GPURenderPassEncoder;
 #endif
 
-typedef enum GPUBindStage {
-  GPUBindStageVertex = 1,
-  GPUBindStageFragment = 2,
-  GPUBindStageCompute = 3
-} GPUBindStage;
-
 typedef struct GPUBindGroupLayout GPUBindGroupLayout;
 
 typedef struct GPUBindGroup GPUBindGroup;
-
-typedef enum GPUBindKind {
-  GPUBindKindBuffer = 0,
-  GPUBindKindTexture = 1,
-  GPUBindKindSampler = 2
-} GPUBindKind;
 
 typedef struct GPUBindGroupLayoutEntry {
   uint32_t binding;
@@ -60,9 +48,6 @@ typedef struct GPUBindGroupLayoutEntry {
   bool hasDynamicOffset;
   bool immutableSampler;
   GPUSamplerDesc immutableSamplerDesc;
-
-  GPUBindStage stage;
-  GPUBindKind kind;
 } GPUBindGroupLayoutEntry;
 
 typedef struct GPUBindGroupLayoutCreateInfo {
@@ -85,9 +70,6 @@ typedef struct GPUBindGroupEntry {
 
   GPUTextureView *textureView;
   GPUSampler *sampler;
-
-  GPUBindStage stage;
-  GPUBindKind kind;
 } GPUBindGroupEntry;
 
 typedef struct GPUBindGroupCreateInfo {

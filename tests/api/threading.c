@@ -139,8 +139,6 @@ gpu_threadingRound(GPUThreadContext *ctx) {
   groupEntry.bindingType      = GPU_BINDING_UNIFORM_BUFFER;
   groupEntry.buffer.buffer    = buffer;
   groupEntry.buffer.size      = 256u;
-  groupEntry.stage            = GPUBindStageVertex;
-  groupEntry.kind             = GPUBindKindBuffer;
   groupInfo.chain.sType       = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize  = sizeof(groupInfo);
   groupInfo.label             = "thread-local-group";
@@ -286,8 +284,6 @@ gpu_test_threading(GPUDevice *device, const char *artifactPath) {
   layoutEntry.bindingType     = GPU_BINDING_UNIFORM_BUFFER;
   layoutEntry.visibility      = GPU_SHADER_STAGE_VERTEX_BIT;
   layoutEntry.arrayCount      = 1u;
-  layoutEntry.stage           = GPUBindStageVertex;
-  layoutEntry.kind            = GPUBindKindBuffer;
   layoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
   layoutInfo.chain.structSize = sizeof(layoutInfo);
   layoutInfo.label            = "thread-layout";

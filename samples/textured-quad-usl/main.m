@@ -299,8 +299,9 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
 
   GPUBindGroupEntry samplerEntry = {0};
-  samplerEntry.binding = 0;
-  samplerEntry.sampler = _sampler;
+  samplerEntry.binding     = 0;
+  samplerEntry.bindingType = GPU_BINDING_SAMPLER;
+  samplerEntry.sampler     = _sampler;
 
   GPUBindGroupCreateInfo group1Info = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,

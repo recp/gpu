@@ -650,7 +650,8 @@ check_bind_group_layout_validation(GPUDevice *device) {
   }
 
   memset(&textureEntry, 0, sizeof(textureEntry));
-  textureEntry.binding = 0u;
+  textureEntry.binding     = 0u;
+  textureEntry.bindingType = GPU_BINDING_SAMPLED_TEXTURE;
   textureEntry.textureView = sampledView;
 
   memset(&groupInfo, 0, sizeof(groupInfo));
@@ -782,8 +783,9 @@ check_bind_group_layout_validation(GPUDevice *device) {
   GPUDestroyBindGroup(group);
 
   memset(&runtimeSamplerEntry, 0, sizeof(runtimeSamplerEntry));
-  runtimeSamplerEntry.binding = 0u;
-  runtimeSamplerEntry.sampler = (GPUSampler *)(void *)&fakeSamplerStorage;
+  runtimeSamplerEntry.binding     = 0u;
+  runtimeSamplerEntry.bindingType = GPU_BINDING_SAMPLER;
+  runtimeSamplerEntry.sampler     = (GPUSampler *)(void *)&fakeSamplerStorage;
   groupInfo.entryCount = 1u;
   groupInfo.pEntries = &runtimeSamplerEntry;
   group = (GPUBindGroup *)(uintptr_t)1u;

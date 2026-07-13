@@ -182,7 +182,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     entries = GPUGetBindGroupLayoutEntries(_shaderLayout->bindGroupLayouts[0],
                                            &entryCount);
     for (uint32_t i = 0; entries && i < entryCount; i++) {
-      if (entries[i].stage == GPUBindStageCompute &&
+      if ((entries[i].visibility & GPU_SHADER_STAGE_COMPUTE_BIT) != 0u &&
           entries[i].binding == 1u &&
           entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER &&
           entries[i].hasDynamicOffset) {
@@ -352,8 +352,9 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
 
   GPUBindGroupEntry samplerEntry = {0};
-  samplerEntry.binding = 0;
-  samplerEntry.sampler = _sampler;
+  samplerEntry.binding     = 0;
+  samplerEntry.bindingType = GPU_BINDING_SAMPLER;
+  samplerEntry.sampler     = _sampler;
 
   GPUBindGroupCreateInfo group1Info = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
