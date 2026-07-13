@@ -6,9 +6,9 @@
 #include "../../src/api/swapchain_internal.h"
 
 typedef struct QueueCompletionProbe {
-  int count;
-  void *sender;
+  void             *sender;
   GPUCommandBuffer *cmdb;
+  int               count;
 } QueueCompletionProbe;
 
 static GPUCommandQueue  gScopedQueue;
@@ -1252,7 +1252,7 @@ static int
 check_device_destroy_waits_for_submission(GPUAdapter *adapter) {
   enum { submitCount = 8 };
 
-  QueueCompletionProbe completionProbe = {0};
+  QueueCompletionProbe  completionProbes[submitCount] = {0};
   GPUCommandBuffer     *buffers[submitCount];
   GPUCommandQueue      *queue;
   GPUDevice            *device;
@@ -1282,7 +1282,7 @@ check_device_destroy_waits_for_submission(GPUAdapter *adapter) {
       return 0;
     }
     GPUSetCommandBufferCompletionHandler(buffers[i],
-                                         &completionProbe,
+                                         &completionProbes[i],
                                          queue_completion_probe);
   }
 
@@ -1297,11 +1297,13 @@ check_device_destroy_waits_for_submission(GPUAdapter *adapter) {
   }
 
   GPUDestroyDevice(device);
-  if (completionProbe.count != submitCount ||
-      completionProbe.sender != &completionProbe ||
-      !completionProbe.cmdb) {
-    fprintf(stderr, "device destroy returned before queue completion\n");
-    return 0;
+  for (uint32_t i = 0u; i < submitCount; i++) {
+    if (completionProbes[i].count != 1 ||
+        completionProbes[i].sender != &completionProbes[i] ||
+        completionProbes[i].cmdb != buffers[i]) {
+      fprintf(stderr, "device destroy returned before queue completion\n");
+      return 0;
+    }
   }
   return 1;
 }

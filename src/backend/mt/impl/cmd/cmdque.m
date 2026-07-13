@@ -20,12 +20,16 @@ static
 GPU_HIDE
 void
 gpu_cmdoncomplete(GPUCommandBuffer * __restrict cmdb,
+                  MTCommandBuffer  * __restrict native,
+                  MTCommandQueue   * __restrict queue,
                   id<MTLCommandBuffer>        mtlCmdb);
 
 static
 GPU_HIDE
 void
 gpu_cmdoncomplete4(GPUCommandBuffer * __restrict cmdb,
+                   MTCommandBuffer  * __restrict native,
+                   MTCommandQueue   * __restrict queue,
                    id                        feedback);
 
 static
@@ -176,6 +180,7 @@ mt_createCommandBufferState(GPUCommandQueue *cmdb, MTCommandQueue *queue) {
   if (!native) {
     return NULL;
   }
+  atomic_init(&native->completionReady, false);
   gpuDeviceRecordHotPathAlloc(cmdb->_device, sizeof(*native));
 
   cb = &native->commandBuffer;
@@ -256,6 +261,9 @@ mt_newCommandBuffer(GPUCommandQueue  * __restrict cmdb,
   }
 
   cb = &native->commandBuffer;
+  atomic_store_explicit(&native->completionReady,
+                        false,
+                        memory_order_relaxed);
   memset(cb, 0, sizeof(*cb));
   cb->_priv = native;
   cb->_queue = cmdb;
@@ -342,9 +350,12 @@ mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
 
       options = [MTL4CommitOptions new];
       [options addFeedbackHandler:^(id<MTL4CommitFeedback> feedback) {
-        gpu_cmdoncomplete4(cmdb, feedback);
+        gpu_cmdoncomplete4(cmdb, native, queue, feedback);
       }];
       dispatch_group_enter(queue->inFlightGroup);
+      atomic_store_explicit(&native->completionReady,
+                            true,
+                            memory_order_release);
       [queue->modern commit:buffers
                        count:1u
                      options:options];
@@ -367,9 +378,12 @@ mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
   }
 
   [mcb addCompletedHandler:^(id<MTLCommandBuffer> _Nonnull buffer) {
-    gpu_cmdoncomplete(cmdb, buffer);
+    gpu_cmdoncomplete(cmdb, native, queue, buffer);
   }];
   dispatch_group_enter(queue->inFlightGroup);
+  atomic_store_explicit(&native->completionReady,
+                        true,
+                        memory_order_release);
   [mcb commit];
   return GPU_OK;
 }
@@ -454,40 +468,37 @@ static
 GPU_HIDE
 void
 gpu_cmdoncomplete(GPUCommandBuffer * __restrict cmdb,
+                  MTCommandBuffer  * __restrict native,
+                  MTCommandQueue   * __restrict queue,
                   id<MTLCommandBuffer>        mtlCmdb) {
-  MTCommandBuffer *native;
-  MTCommandQueue  *queue;
-
-  if (!cmdb) {
+  if (!cmdb || !native || !queue ||
+      !atomic_load_explicit(&native->completionReady,
+                            memory_order_acquire)) {
     return;
   }
 
-  native = mt_commandBuffer(cmdb);
-  queue  = native ? native->owner : NULL;
   if (mtlCmdb && mtlCmdb.status == MTLCommandBufferStatusError) {
     mt_reportCommandBufferError(cmdb, mtlCmdb.error);
   }
   gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
-  if (queue) {
-    dispatch_group_leave(queue->inFlightGroup);
-  }
+  dispatch_group_leave(queue->inFlightGroup);
 }
 
 static
 GPU_HIDE
 void
 gpu_cmdoncomplete4(GPUCommandBuffer * __restrict cmdb,
+                   MTCommandBuffer  * __restrict native,
+                   MTCommandQueue   * __restrict queue,
                    id                        feedback) {
-  MTCommandBuffer *native;
-  MTCommandQueue  *queue;
   GPUDevice       *device;
 
-  if (!cmdb) {
+  if (!cmdb || !native || !queue ||
+      !atomic_load_explicit(&native->completionReady,
+                            memory_order_acquire)) {
     return;
   }
 
-  native = mt_commandBuffer(cmdb);
-  queue  = native ? native->owner : NULL;
   device = cmdb->_queue ? cmdb->_queue->_device : NULL;
   if (@available(macOS 26.0, iOS 26.0, *)) {
     id<MTL4CommitFeedback> modernFeedback = feedback;
@@ -497,9 +508,7 @@ gpu_cmdoncomplete4(GPUCommandBuffer * __restrict cmdb,
     }
   }
   gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
-  if (queue) {
-    dispatch_group_leave(queue->inFlightGroup);
-  }
+  dispatch_group_leave(queue->inFlightGroup);
 }
 
 GPU_HIDE

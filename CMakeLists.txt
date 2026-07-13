@@ -314,6 +314,7 @@ if(GPU_BUILD_TESTS)
     tests/api/storage_texture.c
     tests/api/texture_transfer.c
     tests/api/texture_view_render.c
+    tests/api/threading.c
     tests/api/volume_texture.c
   )
   target_link_libraries(gpu-api-test PRIVATE gpu)

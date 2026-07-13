@@ -31,6 +31,8 @@
 #include "../../api/swapchain_internal.h"
 #include "../../api/texture_internal.h"
 
+#include <stdatomic.h>
+
 #if defined(__APPLE__) && defined(__OBJC__)
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
@@ -166,6 +168,7 @@ struct MTCommandBuffer {
   uint64_t                pendingBeforeStages;
   uint64_t                pendingVisibility;
   MTCommandMode           mode;
+  atomic_bool             completionReady;
 };
 
 typedef struct MTQuerySet {

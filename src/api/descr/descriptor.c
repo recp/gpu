@@ -305,19 +305,25 @@ gpu_releaseBindGroup(GPUBindGroup *group) {
   GPUBindGroupPriv       *priv;
   bool                    destroy;
 
-  if (!group || group->_refCount == 0u) {
+  if (!group) {
     return false;
   }
   cache = gpu_bindGroupCache(group->_device);
   priv  = gpu_groupPriv(group);
   if (!cache || !priv) {
+    if (group->_refCount == 0u) {
+      return false;
+    }
     return --group->_refCount == 0u;
   }
 
   entry = &cache->entries[priv->hash & GPU_BIND_GROUP_CACHE_MASK];
   gpu_bindGroupCacheLock(cache);
-  group->_refCount--;
-  destroy = group->_refCount == 0u;
+  destroy = false;
+  if (group->_refCount > 0u) {
+    group->_refCount--;
+    destroy = group->_refCount == 0u;
+  }
   if (destroy && entry->group == group) {
     entry->group = NULL;
   }
