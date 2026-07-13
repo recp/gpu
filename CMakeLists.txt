@@ -48,6 +48,11 @@ set(GPU_CORE_SOURCES
 add_library(gpu ${GPU_CORE_SOURCES})
 add_library(gpu::gpu ALIAS gpu)
 
+if(NOT WIN32)
+  find_package(Threads REQUIRED)
+  target_link_libraries(gpu PRIVATE Threads::Threads)
+endif()
+
 set_target_properties(gpu PROPERTIES
   C_STANDARD 11
   C_STANDARD_REQUIRED YES

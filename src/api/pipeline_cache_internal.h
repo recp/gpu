@@ -20,16 +20,31 @@
 #include "device_internal.h"
 
 typedef struct GPUPipelineCacheEntry GPUPipelineCacheEntry;
+typedef struct GPUPipelineCompileJob GPUPipelineCompileJob;
 
 struct GPUPipelineCache {
   GPUDevice             *device;
-  void                  *_lock;
+  void                  *_sync;
+  GPUPipelineCache      *deviceNext;
   GPUPipelineCacheEntry *head;
   GPUPipelineCacheEntry *tail;
+  GPUPipelineCompileJob *jobs;
+  GPUPipelineCompileJob *queueHead;
+  GPUPipelineCompileJob *queueTail;
   GPUCacheStats          stats;
   uint64_t               maxEntries;
   uint64_t               entryCount;
+  uint64_t               jobCount;
+  bool                   stopWorker;
 };
+
+GPU_HIDE
+GPUResult
+gpuInitPipelineCacheDevice(GPUDevice *device);
+
+GPU_HIDE
+void
+gpuDestroyPipelineCacheDevice(GPUDevice *device);
 
 GPU_HIDE
 void

@@ -318,17 +318,34 @@ check_pipeline_cache_validation(GPUDevice *device,
     fprintf(stderr, "async pipeline compile accepted null handle\n");
     goto fail;
   }
-  if (GPUCompileRenderPipelineAsync(device, cache, info, &handle) !=
-      GPU_ERROR_UNSUPPORTED ||
-      handle.id != 0u) {
-    fprintf(stderr, "async pipeline compile did not report unsupported\n");
+  if (GPUCompileRenderPipelineAsync(device, cache, info, &handle) != GPU_OK ||
+      handle.id == 0u) {
+    fprintf(stderr, "async pipeline compile enqueue failed\n");
     goto fail;
   }
-  if (GPUPollRenderPipelineCompile(device, handle, &status, &asyncPipeline) !=
-      GPU_ERROR_UNSUPPORTED ||
-      status != GPU_PIPELINE_COMPILE_FAILED ||
-      asyncPipeline != NULL) {
-    fprintf(stderr, "async pipeline poll did not report unsupported\n");
+  for (uint32_t i = 0u; i < 1000000u; i++) {
+    if (GPUPollRenderPipelineCompile(device,
+                                     handle,
+                                     &status,
+                                     &asyncPipeline) != GPU_OK) {
+      fprintf(stderr, "async pipeline poll failed\n");
+      goto fail;
+    }
+    if (status != GPU_PIPELINE_COMPILE_PENDING) {
+      break;
+    }
+  }
+  if (status != GPU_PIPELINE_COMPILE_READY || !asyncPipeline) {
+    fprintf(stderr, "async pipeline compile did not become ready\n");
+    goto fail;
+  }
+  GPUDestroyRenderPipeline(asyncPipeline);
+  asyncPipeline = NULL;
+  if (GPUPollRenderPipelineCompile(device,
+                                   handle,
+                                   &status,
+                                   &asyncPipeline) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "async pipeline handle was not consumed\n");
     goto fail;
   }
 
@@ -338,6 +355,7 @@ check_pipeline_cache_validation(GPUDevice *device,
 fail:
   info->cache = NULL;
   GPUDestroyRenderPipeline(pipeline);
+  GPUDestroyRenderPipeline(asyncPipeline);
   GPUDestroyPipelineCache(cache);
   return 0;
 }

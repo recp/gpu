@@ -27,6 +27,8 @@ typedef struct GPUTransientChunk {
   struct GPUTransientChunk *next;
 } GPUTransientChunk;
 
+typedef struct GPUPipelineCache GPUPipelineCache;
+
 struct GPUDevice {
   GPUInstance                 *inst;
   GPUPhysicalDevice           *phyDevice;
@@ -34,6 +36,8 @@ struct GPUDevice {
   void                        *_priv;
   GPUBuffer                   *transientBuffer;
   GPUTransientChunk           *transientChunks;
+  GPUPipelineCache            *_pipelineCaches;
+  void                        *_pipelineCacheLock;
   void                        *transientCpuPtr;
   GPUFeatureSet                enabledFeatures;
   GPUCacheStats                cacheStats;
@@ -44,6 +48,7 @@ struct GPUDevice {
   GPUTransientAllocatorConfig transientConfig;
   uint64_t                     enabledFeatureMask;
   uint64_t                     transientFrameOffset;
+  uint64_t                     _nextPipelineCompileId;
   GPUQueueFlagBits             queueFamilies;
   GPUBufferUsageFlags          transientBufferUsage;
   uint32_t                     transientFrameIndex;

@@ -37,11 +37,11 @@ typedef enum GPUPipelineCacheEntryType {
 } GPUPipelineCacheEntryType;
 
 struct GPUPipelineCacheEntry {
-  GPUPipelineCacheEntry *next;
-  void                  *pipeline;
-  uint8_t               *keyData;
-  size_t                 keySize;
-  uint64_t               keyHash;
+  GPUPipelineCacheEntry    *next;
+  void                     *pipeline;
+  uint8_t                  *keyData;
+  size_t                    keySize;
+  uint64_t                  keyHash;
   GPUPipelineCacheEntryType type;
 };
 
@@ -51,21 +51,80 @@ typedef struct GPUPipelineKeyWriter {
   bool     valid;
 } GPUPipelineKeyWriter;
 
+typedef struct GPUPipelineCacheSync {
+#if defined(_WIN32) || defined(WIN32)
+  CRITICAL_SECTION lock;
+  CONDITION_VARIABLE condition;
+  HANDLE worker;
+#else
+  pthread_mutex_t lock;
+  pthread_cond_t  condition;
+  pthread_t       worker;
+#endif
+  bool workerStarted;
+} GPUPipelineCacheSync;
+
+typedef enum GPUPipelineCompileJobState {
+  GPU_PIPELINE_JOB_QUEUED = 0,
+  GPU_PIPELINE_JOB_COMPILING,
+  GPU_PIPELINE_JOB_READY,
+  GPU_PIPELINE_JOB_FAILED
+} GPUPipelineCompileJobState;
+
+struct GPUPipelineCompileJob {
+  GPUPipelineCompileJob       *allNext;
+  GPUPipelineCompileJob       *queueNext;
+  GPURenderPipeline           *pipeline;
+  char                        *label;
+  char                        *vertexEntry;
+  char                        *fragmentEntry;
+  GPUColorTargetState         *colorTargets;
+  GPUVertexBufferLayout       *bufferLayouts;
+  GPUVertexAttribute          *attributes;
+  GPUDepthStencilState         depthStencil;
+  GPURenderPipelineCreateInfo  info;
+  uint64_t                     id;
+  GPUPipelineCompileJobState   state;
+};
+
+static GPUPipelineCacheSync *
+gpu_pipelineCacheSync(GPUPipelineCache *cache) {
+  return cache ? cache->_sync : NULL;
+}
+
 static void
 gpu_pipelineCacheLock(GPUPipelineCache *cache) {
+  GPUPipelineCacheSync *sync;
+
+  sync = gpu_pipelineCacheSync(cache);
 #if defined(_WIN32) || defined(WIN32)
-  EnterCriticalSection(cache->_lock);
+  EnterCriticalSection(&sync->lock);
 #else
-  pthread_mutex_lock(cache->_lock);
+  pthread_mutex_lock(&sync->lock);
 #endif
 }
 
 static void
 gpu_pipelineCacheUnlock(GPUPipelineCache *cache) {
+  GPUPipelineCacheSync *sync;
+
+  sync = gpu_pipelineCacheSync(cache);
 #if defined(_WIN32) || defined(WIN32)
-  LeaveCriticalSection(cache->_lock);
+  LeaveCriticalSection(&sync->lock);
 #else
-  pthread_mutex_unlock(cache->_lock);
+  pthread_mutex_unlock(&sync->lock);
+#endif
+}
+
+static void
+gpu_pipelineCacheSignal(GPUPipelineCache *cache) {
+  GPUPipelineCacheSync *sync;
+
+  sync = gpu_pipelineCacheSync(cache);
+#if defined(_WIN32) || defined(WIN32)
+  WakeAllConditionVariable(&sync->condition);
+#else
+  pthread_cond_broadcast(&sync->condition);
 #endif
 }
 
@@ -508,13 +567,295 @@ gpuPipelineCacheStoreCompute(GPUPipelineCache                   *cache,
                                 pipeline);
 }
 
+static void
+gpu_deviceCacheLock(GPUDevice *device) {
+#if defined(_WIN32) || defined(WIN32)
+  EnterCriticalSection(device->_pipelineCacheLock);
+#else
+  pthread_mutex_lock(device->_pipelineCacheLock);
+#endif
+}
+
+static void
+gpu_deviceCacheUnlock(GPUDevice *device) {
+#if defined(_WIN32) || defined(WIN32)
+  LeaveCriticalSection(device->_pipelineCacheLock);
+#else
+  pthread_mutex_unlock(device->_pipelineCacheLock);
+#endif
+}
+
+GPU_HIDE
+GPUResult
+gpuInitPipelineCacheDevice(GPUDevice *device) {
+  void *lock;
+
+  if (!device) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+#if defined(_WIN32) || defined(WIN32)
+  lock = calloc(1, sizeof(CRITICAL_SECTION));
+  if (!lock) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  InitializeCriticalSection(lock);
+#else
+  lock = calloc(1, sizeof(pthread_mutex_t));
+  if (!lock) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  if (pthread_mutex_init(lock, NULL) != 0) {
+    free(lock);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+#endif
+  device->_pipelineCacheLock     = lock;
+  device->_nextPipelineCompileId = 1u;
+  return GPU_OK;
+}
+
+GPU_HIDE
+void
+gpuDestroyPipelineCacheDevice(GPUDevice *device) {
+  if (!device || !device->_pipelineCacheLock) {
+    return;
+  }
+#if defined(_WIN32) || defined(WIN32)
+  DeleteCriticalSection(device->_pipelineCacheLock);
+#else
+  pthread_mutex_destroy(device->_pipelineCacheLock);
+#endif
+  free(device->_pipelineCacheLock);
+  device->_pipelineCacheLock = NULL;
+}
+
+static char *
+gpu_pipelineCacheDupString(const char *value) {
+  size_t size;
+  char  *copy;
+
+  if (!value) {
+    return NULL;
+  }
+  size = strlen(value) + 1u;
+  copy = malloc(size);
+  if (copy) {
+    memcpy(copy, value, size);
+  }
+  return copy;
+}
+
+static void
+gpu_destroyPipelineJob(GPUPipelineCompileJob *job) {
+  if (!job) {
+    return;
+  }
+  GPUDestroyRenderPipeline(job->pipeline);
+  free(job->attributes);
+  free(job->bufferLayouts);
+  free(job->colorTargets);
+  free(job->fragmentEntry);
+  free(job->vertexEntry);
+  free(job->label);
+  free(job);
+}
+
+static GPUPipelineCompileJob *
+gpu_createPipelineJob(GPUPipelineCache                  *cache,
+                      const GPURenderPipelineCreateInfo *info) {
+  GPUPipelineCompileJob *job;
+  uint32_t               attributeCount;
+  uint32_t               cursor;
+
+  job = calloc(1, sizeof(*job));
+  if (!job) {
+    return NULL;
+  }
+  job->label         = gpu_pipelineCacheDupString(info->label);
+  job->vertexEntry   = gpu_pipelineCacheDupString(info->vertexEntry);
+  job->fragmentEntry = gpu_pipelineCacheDupString(info->fragmentEntry);
+  if ((info->label && !job->label) || !job->vertexEntry ||
+      !job->fragmentEntry) {
+    gpu_destroyPipelineJob(job);
+    return NULL;
+  }
+
+  if (info->colorTargetCount > 0u) {
+    job->colorTargets = malloc((size_t)info->colorTargetCount *
+                               sizeof(*job->colorTargets));
+    if (!job->colorTargets) {
+      gpu_destroyPipelineJob(job);
+      return NULL;
+    }
+    memcpy(job->colorTargets,
+           info->pColorTargets,
+           (size_t)info->colorTargetCount * sizeof(*job->colorTargets));
+  }
+
+  attributeCount = 0u;
+  for (uint32_t i = 0u; i < info->vertex.bufferLayoutCount; i++) {
+    if (info->vertex.pBufferLayouts[i].attributeCount >
+        UINT32_MAX - attributeCount) {
+      gpu_destroyPipelineJob(job);
+      return NULL;
+    }
+    attributeCount += info->vertex.pBufferLayouts[i].attributeCount;
+  }
+  if (info->vertex.bufferLayoutCount > 0u) {
+    job->bufferLayouts = calloc(info->vertex.bufferLayoutCount,
+                                sizeof(*job->bufferLayouts));
+    if (!job->bufferLayouts) {
+      gpu_destroyPipelineJob(job);
+      return NULL;
+    }
+  }
+  if (attributeCount > 0u) {
+    job->attributes = malloc((size_t)attributeCount * sizeof(*job->attributes));
+    if (!job->attributes) {
+      gpu_destroyPipelineJob(job);
+      return NULL;
+    }
+  }
+
+  cursor = 0u;
+  for (uint32_t i = 0u; i < info->vertex.bufferLayoutCount; i++) {
+    job->bufferLayouts[i] = info->vertex.pBufferLayouts[i];
+    job->bufferLayouts[i].pAttributes =
+      job->bufferLayouts[i].attributeCount > 0u
+        ? &job->attributes[cursor]
+        : NULL;
+    if (job->bufferLayouts[i].attributeCount > 0u) {
+      memcpy(&job->attributes[cursor],
+             info->vertex.pBufferLayouts[i].pAttributes,
+             (size_t)job->bufferLayouts[i].attributeCount *
+               sizeof(*job->attributes));
+      cursor += job->bufferLayouts[i].attributeCount;
+    }
+  }
+
+  job->info                       = *info;
+  job->info.label                 = job->label;
+  job->info.cache                 = cache;
+  job->info.vertexEntry           = job->vertexEntry;
+  job->info.fragmentEntry         = job->fragmentEntry;
+  job->info.pColorTargets         = job->colorTargets;
+  job->info.vertex.pBufferLayouts = job->bufferLayouts;
+  if (info->pDepthStencilState) {
+    job->depthStencil            = *info->pDepthStencilState;
+    job->info.pDepthStencilState = &job->depthStencil;
+  }
+  job->state = GPU_PIPELINE_JOB_QUEUED;
+  return job;
+}
+
+static bool
+gpu_pipelineInfoCanCopy(const GPURenderPipelineCreateInfo *info) {
+  if (!info || !info->layout || !info->library || !info->vertexEntry ||
+      !info->fragmentEntry || info->chain.pNext ||
+      (info->colorTargetCount > 0u && !info->pColorTargets) ||
+      (info->vertex.bufferLayoutCount > 0u &&
+       !info->vertex.pBufferLayouts)) {
+    return false;
+  }
+  for (uint32_t i = 0u; i < info->vertex.bufferLayoutCount; i++) {
+    if (info->vertex.pBufferLayouts[i].attributeCount > 0u &&
+        !info->vertex.pBufferLayouts[i].pAttributes) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static void
+gpu_pipelineCacheWorkerRun(GPUPipelineCache *cache) {
+  GPUPipelineCacheSync *sync;
+
+  sync = gpu_pipelineCacheSync(cache);
+  for (;;) {
+    GPUPipelineCompileJob *job;
+    GPURenderPipeline     *pipeline;
+    GPUResult              result;
+
+    gpu_pipelineCacheLock(cache);
+    while (!cache->stopWorker && !cache->queueHead) {
+#if defined(_WIN32) || defined(WIN32)
+      SleepConditionVariableCS(&sync->condition, &sync->lock, INFINITE);
+#else
+      pthread_cond_wait(&sync->condition, &sync->lock);
+#endif
+    }
+    if (cache->stopWorker) {
+      gpu_pipelineCacheUnlock(cache);
+      return;
+    }
+    job              = cache->queueHead;
+    cache->queueHead = job->queueNext;
+    if (!cache->queueHead) {
+      cache->queueTail = NULL;
+    }
+    job->queueNext = NULL;
+    job->state     = GPU_PIPELINE_JOB_COMPILING;
+    gpu_pipelineCacheUnlock(cache);
+
+    pipeline = NULL;
+    result   = GPUCreateRenderPipeline(cache->device, &job->info, &pipeline);
+
+    gpu_pipelineCacheLock(cache);
+    job->pipeline = pipeline;
+    job->state    = result == GPU_OK
+                      ? GPU_PIPELINE_JOB_READY
+                      : GPU_PIPELINE_JOB_FAILED;
+    gpu_pipelineCacheSignal(cache);
+    gpu_pipelineCacheUnlock(cache);
+  }
+}
+
+#if defined(_WIN32) || defined(WIN32)
+static DWORD WINAPI
+gpu_pipelineCacheWorker(void *context) {
+  gpu_pipelineCacheWorkerRun(context);
+  return 0u;
+}
+#else
+static void *
+gpu_pipelineCacheWorker(void *context) {
+  gpu_pipelineCacheWorkerRun(context);
+  return NULL;
+}
+#endif
+
+static bool
+gpu_pipelineCacheStartWorker(GPUPipelineCache *cache) {
+  GPUPipelineCacheSync *sync;
+
+  sync = gpu_pipelineCacheSync(cache);
+  if (sync->workerStarted) {
+    return true;
+  }
+#if defined(_WIN32) || defined(WIN32)
+  sync->worker = CreateThread(NULL,
+                              0u,
+                              gpu_pipelineCacheWorker,
+                              cache,
+                              0u,
+                              NULL);
+  sync->workerStarted = sync->worker != NULL;
+#else
+  sync->workerStarted = pthread_create(&sync->worker,
+                                       NULL,
+                                       gpu_pipelineCacheWorker,
+                                       cache) == 0;
+#endif
+  return sync->workerStarted;
+}
+
 GPU_EXPORT
 GPUResult
 GPUCreatePipelineCache(GPUDevice                         * __restrict device,
                        const GPUPipelineCacheCreateInfo  * __restrict info,
                        GPUPipelineCache                 ** __restrict outCache) {
-  GPUPipelineCache *cache;
-  void             *lock;
+  GPUPipelineCache     *cache;
+  GPUPipelineCacheSync *sync;
 
   if (!outCache) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -540,31 +881,37 @@ GPUCreatePipelineCache(GPUDevice                         * __restrict device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
+  sync = calloc(1, sizeof(*sync));
+  if (!sync) {
+    free(cache);
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
 #if defined(_WIN32) || defined(WIN32)
-  lock = calloc(1, sizeof(CRITICAL_SECTION));
-  if (!lock) {
-    free(cache);
-    return GPU_ERROR_OUT_OF_MEMORY;
-  }
-  InitializeCriticalSection(lock);
+  InitializeCriticalSection(&sync->lock);
+  InitializeConditionVariable(&sync->condition);
 #else
-  lock = calloc(1, sizeof(pthread_mutex_t));
-  if (!lock) {
+  if (pthread_mutex_init(&sync->lock, NULL) != 0) {
+    free(sync);
     free(cache);
-    return GPU_ERROR_OUT_OF_MEMORY;
+    return GPU_ERROR_BACKEND_FAILURE;
   }
-  if (pthread_mutex_init(lock, NULL) != 0) {
-    free(lock);
+  if (pthread_cond_init(&sync->condition, NULL) != 0) {
+    pthread_mutex_destroy(&sync->lock);
+    free(sync);
     free(cache);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 #endif
 
   cache->device     = device;
-  cache->_lock      = lock;
+  cache->_sync      = sync;
   cache->maxEntries = info->maxEntries > 0u
                         ? info->maxEntries
                         : GPU_PIPELINE_CACHE_DEFAULT_ENTRIES;
+  gpu_deviceCacheLock(device);
+  cache->deviceNext       = device->_pipelineCaches;
+  device->_pipelineCaches = cache;
+  gpu_deviceCacheUnlock(device);
   *outCache = cache;
   return GPU_OK;
 }
@@ -573,24 +920,56 @@ GPU_EXPORT
 void
 GPUDestroyPipelineCache(GPUPipelineCache *cache) {
   GPUPipelineCacheEntry *entry;
+  GPUPipelineCompileJob *job;
+  GPUPipelineCacheSync  *sync;
+  GPUPipelineCache     **link;
 
   if (!cache) {
     return;
   }
 
+  sync = gpu_pipelineCacheSync(cache);
+  gpu_deviceCacheLock(cache->device);
+  for (link = &cache->device->_pipelineCaches; *link; link = &(*link)->deviceNext) {
+    if (*link == cache) {
+      *link = cache->deviceNext;
+      break;
+    }
+  }
+  gpu_deviceCacheUnlock(cache->device);
+
+  gpu_pipelineCacheLock(cache);
+  cache->stopWorker = true;
+  gpu_pipelineCacheSignal(cache);
+  gpu_pipelineCacheUnlock(cache);
+  if (sync->workerStarted) {
+#if defined(_WIN32) || defined(WIN32)
+    WaitForSingleObject(sync->worker, INFINITE);
+    CloseHandle(sync->worker);
+#else
+    pthread_join(sync->worker, NULL);
+#endif
+  }
+
   gpu_pipelineCacheLock(cache);
   entry             = cache->head;
+  job               = cache->jobs;
   cache->head       = NULL;
   cache->tail       = NULL;
+  cache->jobs       = NULL;
+  cache->queueHead  = NULL;
+  cache->queueTail  = NULL;
   cache->entryCount = 0u;
+  cache->jobCount   = 0u;
   gpu_pipelineCacheUnlock(cache);
 
 #if defined(_WIN32) || defined(WIN32)
-  DeleteCriticalSection(cache->_lock);
+  DeleteCriticalSection(&sync->lock);
 #else
-  pthread_mutex_destroy(cache->_lock);
+  pthread_cond_destroy(&sync->condition);
+  pthread_mutex_destroy(&sync->lock);
 #endif
-  free(cache->_lock);
+  free(sync);
 
   while (entry) {
     GPUPipelineCacheEntry *next;
@@ -600,6 +979,13 @@ GPUDestroyPipelineCache(GPUPipelineCache *cache) {
     free(entry->keyData);
     free(entry);
     entry = next;
+  }
+  while (job) {
+    GPUPipelineCompileJob *next;
+
+    next = job->allNext;
+    gpu_destroyPipelineJob(job);
+    job = next;
   }
   free(cache);
 }
@@ -642,11 +1028,52 @@ GPUCompileRenderPipelineAsync(GPUDevice                         * __restrict dev
   }
 
   outHandle->id = 0;
-  if (!device || !cache || cache->device != device || !info) {
+  if (!device || !cache || cache->device != device ||
+      !gpu_pipelineInfoCanCopy(info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  return GPU_ERROR_UNSUPPORTED;
+  {
+    GPUPipelineCompileJob *job;
+
+    job = gpu_createPipelineJob(cache, info);
+    if (!job) {
+      return GPU_ERROR_OUT_OF_MEMORY;
+    }
+
+    gpu_deviceCacheLock(device);
+    job->id = device->_nextPipelineCompileId++;
+    if (job->id == 0u) {
+      job->id = device->_nextPipelineCompileId++;
+    }
+    gpu_pipelineCacheLock(cache);
+    if (cache->jobCount == cache->maxEntries) {
+      gpu_pipelineCacheUnlock(cache);
+      gpu_deviceCacheUnlock(device);
+      gpu_destroyPipelineJob(job);
+      return GPU_ERROR_INSUFFICIENT_CAPACITY;
+    }
+    if (!gpu_pipelineCacheStartWorker(cache)) {
+      gpu_pipelineCacheUnlock(cache);
+      gpu_deviceCacheUnlock(device);
+      gpu_destroyPipelineJob(job);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    job->allNext = cache->jobs;
+    cache->jobs  = job;
+    if (cache->queueTail) {
+      cache->queueTail->queueNext = job;
+    } else {
+      cache->queueHead = job;
+    }
+    cache->queueTail  = job;
+    cache->jobCount++;
+    outHandle->id = job->id;
+    gpu_pipelineCacheSignal(cache);
+    gpu_pipelineCacheUnlock(cache);
+    gpu_deviceCacheUnlock(device);
+  }
+  return GPU_OK;
 }
 
 GPU_EXPORT
@@ -655,19 +1082,56 @@ GPUPollRenderPipelineCompile(GPUDevice                 * __restrict device,
                              GPUPipelineCompileHandle               handle,
                              GPUPipelineCompileStatus  * __restrict outStatus,
                              GPURenderPipeline        ** __restrict outPipeline) {
-  GPU__UNUSED(handle);
-
   if (!outStatus || !outPipeline) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  *outStatus = GPU_PIPELINE_COMPILE_FAILED;
+  *outStatus   = GPU_PIPELINE_COMPILE_FAILED;
   *outPipeline = NULL;
-  if (!device) {
+  if (!device || !device->_pipelineCacheLock || handle.id == 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  return GPU_ERROR_UNSUPPORTED;
+  gpu_deviceCacheLock(device);
+  for (GPUPipelineCache *cache = device->_pipelineCaches;
+       cache;
+       cache = cache->deviceNext) {
+    GPUPipelineCompileJob **link;
+    GPUPipelineCompileJob  *job;
+
+    gpu_pipelineCacheLock(cache);
+    for (link = &cache->jobs; *link; link = &(*link)->allNext) {
+      if ((*link)->id == handle.id) {
+        break;
+      }
+    }
+    job = *link;
+    if (!job) {
+      gpu_pipelineCacheUnlock(cache);
+      continue;
+    }
+    if (job->state == GPU_PIPELINE_JOB_QUEUED ||
+        job->state == GPU_PIPELINE_JOB_COMPILING) {
+      *outStatus = GPU_PIPELINE_COMPILE_PENDING;
+      gpu_pipelineCacheUnlock(cache);
+      gpu_deviceCacheUnlock(device);
+      return GPU_OK;
+    }
+
+    *link = job->allNext;
+    cache->jobCount--;
+    if (job->state == GPU_PIPELINE_JOB_READY) {
+      *outStatus    = GPU_PIPELINE_COMPILE_READY;
+      *outPipeline  = job->pipeline;
+      job->pipeline = NULL;
+    }
+    gpu_pipelineCacheUnlock(cache);
+    gpu_deviceCacheUnlock(device);
+    gpu_destroyPipelineJob(job);
+    return GPU_OK;
+  }
+  gpu_deviceCacheUnlock(device);
+  return GPU_ERROR_INVALID_ARGUMENT;
 }
 
 GPU_HIDE
