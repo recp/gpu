@@ -1,0 +1,11 @@
+kern(1, 1, 1) volume_view_cs(
+  inputVolume: texture3d<float> #texture(0),
+  outputVolume: texture3d<float, write> #texture(1)
+) {
+  let nearestSampler = sampler(.nearest, .nearest, .nearest, .clampToEdge)
+  let sampledColor = inputVolume.sample(nearestSampler,
+                                        float3(0.5, 0.5, 0.625),
+                                        level(0.0))
+  outputVolume.write(sampledColor, uint3(1, 1, 2))
+  outputVolume.write(float4(1.0, 0.0, 0.0, 1.0), uint3(1, 1, 3))
+}

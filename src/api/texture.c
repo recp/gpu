@@ -37,13 +37,16 @@ gpuIsTextureViewTypeValid(GPUTextureViewType viewType) {
 }
 
 static bool
-gpuCubeViewRangeValid(const GPUTextureViewCreateInfo *info) {
+gpuTextureViewRangeValid(const GPUTextureViewCreateInfo *info) {
   if (info->viewType == GPU_TEXTURE_VIEW_CUBE) {
     return info->baseArrayLayer == 0u && info->arrayLayerCount == 6u;
   }
   if (info->viewType == GPU_TEXTURE_VIEW_CUBE_ARRAY) {
     return info->baseArrayLayer % 6u == 0u &&
            info->arrayLayerCount % 6u == 0u;
+  }
+  if (info->viewType == GPU_TEXTURE_VIEW_3D) {
+    return info->baseArrayLayer == 0u && info->arrayLayerCount == 1u;
   }
   return true;
 }
@@ -297,7 +300,7 @@ GPUCreateTextureView(GPUTexture                     * __restrict texture,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (!gpuIsTextureViewTypeValid(info->viewType) ||
-      !gpuCubeViewRangeValid(info) ||
+      !gpuTextureViewRangeValid(info) ||
       info->baseMipLevel >= texture->mipLevelCount ||
       info->mipLevelCount > texture->mipLevelCount - info->baseMipLevel ||
       info->baseArrayLayer >= texture->depthOrLayers ||

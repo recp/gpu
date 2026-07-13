@@ -802,11 +802,78 @@ check_cube_view_validation(GPUDevice *device) {
   return 1;
 }
 
+static int
+check_3d_view_validation(GPUDevice *device) {
+  typedef struct Texture3DViewCase {
+    uint32_t baseLayer;
+    uint32_t layerCount;
+    bool     valid;
+  } Texture3DViewCase;
+
+  static const Texture3DViewCase cases[] = {
+    {0u, 1u, true},
+    {1u, 1u, false},
+    {0u, 2u, false}
+  };
+  GPUTexture               *texture;
+  GPUTextureView           *view;
+  GPUTextureCreateInfo      textureInfo = {0};
+  GPUTextureViewCreateInfo  viewInfo    = {0};
+  GPUResult                 result;
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "api-3d-view-validation";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_3D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = 4u;
+  textureInfo.height           = 4u;
+  textureInfo.depthOrLayers    = 4u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED;
+  texture                      = NULL;
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
+    fprintf(stderr, "3D view validation texture creation failed\n");
+    return 0;
+  }
+
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.label            = "api-3d-view-validation";
+  viewInfo.viewType         = GPU_TEXTURE_VIEW_3D;
+  viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  viewInfo.mipLevelCount    = 1u;
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(cases); i++) {
+    viewInfo.baseArrayLayer  = cases[i].baseLayer;
+    viewInfo.arrayLayerCount = cases[i].layerCount;
+
+    view   = (GPUTextureView *)(uintptr_t)1u;
+    result = GPUCreateTextureView(texture, &viewInfo, &view);
+    if ((cases[i].valid && (result != GPU_OK || !view)) ||
+        (!cases[i].valid &&
+         (result != GPU_ERROR_INVALID_ARGUMENT || view != NULL))) {
+      fprintf(stderr,
+              "3D view validation case %u returned %d\n",
+              i,
+              result);
+      GPUDestroyTextureView(view);
+      GPUDestroyTexture(texture);
+      return 0;
+    }
+    GPUDestroyTextureView(view);
+  }
+
+  GPUDestroyTexture(texture);
+  return 1;
+}
+
 int
 gpu_test_resources(GPUDevice *device) {
   return check_destroy_null_handles() &&
          check_buffer_device_dispatch(device) &&
          check_texture_transfer_layout(device) &&
          check_resource_validation(device) &&
-         check_cube_view_validation(device);
+         check_cube_view_validation(device) &&
+         check_3d_view_validation(device);
 }

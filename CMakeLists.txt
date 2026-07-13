@@ -313,6 +313,7 @@ if(GPU_BUILD_TESTS)
     tests/api/storage_texture.c
     tests/api/texture_transfer.c
     tests/api/texture_view_render.c
+    tests/api/volume_texture.c
   )
   target_link_libraries(gpu-api-test PRIVATE gpu)
   target_compile_definitions(gpu-api-test PRIVATE
@@ -343,6 +344,7 @@ if(GPU_BUILD_TESTS)
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/source_sampler.us"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/storage_texture.us"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/cube_texture.us"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/volume_texture.us"
   )
 
   if(GPU_BUILD_VULKAN)
@@ -354,6 +356,7 @@ if(GPU_BUILD_TESTS)
               "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/source_sampler.us"
               "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/storage_texture.us"
               "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/cube_texture.us"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/volume_texture.us"
               vulkan
     )
   endif()
