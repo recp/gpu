@@ -1,0 +1,6 @@
+kern(4, 4, 1) storage_view_cs(
+  outputImage: texture2d_array<float, write> #texture(0),
+  gid: uint3 #global_id
+) {
+  outputImage.write(float4(1.0, 0.0, 0.0, 1.0), gid)
+}

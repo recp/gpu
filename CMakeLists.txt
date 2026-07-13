@@ -309,6 +309,7 @@ if(GPU_BUILD_TESTS)
     tests/api/sampler.c
     tests/api/shader.c
     tests/api/shader_sampler.c
+    tests/api/storage_texture.c
     tests/api/texture_transfer.c
     tests/api/texture_view_render.c
   )
@@ -339,6 +340,7 @@ if(GPU_BUILD_TESTS)
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/render_mrt.us"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/compute.us"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/source_sampler.us"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/storage_texture.us"
   )
 
   if(GPU_BUILD_VULKAN)
@@ -348,6 +350,7 @@ if(GPU_BUILD_TESTS)
               "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/render_mrt.us"
               "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/compute.us"
               "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/source_sampler.us"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/storage_texture.us"
               vulkan
     )
   endif()

@@ -21,8 +21,9 @@ cp "$ROOT/samples/usl-reflection-check/reflection.usl" "$FIXTURE_DIR/reflection.
 cp "$TEST_DIR/render_mrt.usl" "$FIXTURE_DIR/render_mrt.usl"
 cp "$TEST_DIR/compute.usl" "$FIXTURE_DIR/compute.usl"
 cp "$TEST_DIR/source_sampler.usl" "$FIXTURE_DIR/source_sampler.usl"
+cp "$TEST_DIR/storage_texture.usl" "$FIXTURE_DIR/storage_texture.usl"
 
-for shader in reflection render_mrt compute source_sampler; do
+for shader in reflection render_mrt compute source_sampler storage_texture; do
   ustest_cmd=("$USTEST" --shader "$FIXTURE_DIR/$shader.usl" --no-logs --no-sidecar)
   if [[ "$EMBED_METAL" == "1" ]]; then
     USL_EMBED_METAL_BLOB=1 "${ustest_cmd[@]}" \
@@ -61,4 +62,5 @@ xcrun --sdk macosx clang \
   "$FIXTURE_DIR/reflection.us" \
   "$FIXTURE_DIR/render_mrt.us" \
   "$FIXTURE_DIR/compute.us" \
-  "$FIXTURE_DIR/source_sampler.us"
+  "$FIXTURE_DIR/source_sampler.us" \
+  "$FIXTURE_DIR/storage_texture.us"
