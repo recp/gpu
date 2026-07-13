@@ -46,28 +46,31 @@ transfer_equal(const uint8_t *tight,
 }
 
 static void
-transfer_fill_depth(uint8_t *pixels, float value) {
+transfer_fill_depth(uint8_t *pixels, uint32_t value) {
   for (uint32_t y = 0u; y < TRANSFER_HEIGHT; y++) {
-    float *row;
+    uint8_t *row;
 
-    row = (float *)(pixels + (uint64_t)y * TRANSFER_ROW_PITCH);
+    row = pixels + (uint64_t)y * TRANSFER_ROW_PITCH;
     for (uint32_t x = 0u; x < TRANSFER_WIDTH; x++) {
-      row[x] = value;
+      memcpy(row + x * sizeof(value), &value, sizeof(value));
     }
   }
 }
 
 static bool
-transfer_depth_equal(const uint8_t *pixels, uint64_t offset, float expected) {
+transfer_depth_equal(const uint8_t *pixels,
+                     uint64_t       offset,
+                     uint32_t       expected,
+                     uint32_t       mask) {
   for (uint32_t y = 0u; y < TRANSFER_HEIGHT; y++) {
     const uint8_t *row;
 
     row = pixels + offset + (uint64_t)y * TRANSFER_ROW_PITCH;
     for (uint32_t x = 0u; x < TRANSFER_WIDTH; x++) {
-      float value;
+      uint32_t value;
 
       memcpy(&value, row + x * sizeof(value), sizeof(value));
-      if (value != expected) {
+      if ((value & mask) != expected) {
         return false;
       }
     }
@@ -458,7 +461,7 @@ cleanup:
 }
 
 static int
-check_depth_stencil_plane_copies(GPUDevice *device) {
+check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
   enum {
     DEPTH_AFTER_DEPTH_OFFSET     = 0u,
     STENCIL_AFTER_DEPTH_OFFSET   = TRANSFER_IMAGE_STRIDE,
@@ -484,6 +487,9 @@ check_depth_stencil_plane_copies(GPUDevice *device) {
   uint8_t                       destinationDepth[TRANSFER_IMAGE_STRIDE] = {0};
   uint8_t                       destinationStencil[TRANSFER_IMAGE_STRIDE] = {0};
   uint8_t                       readbackBytes[READBACK_BYTES] = {0};
+  uint32_t                      sourceDepthValue;
+  uint32_t                      destinationDepthValue;
+  uint32_t                      depthMask;
   bool                          depthAfterDepth;
   bool                          stencilAfterDepth;
   bool                          depthAfterStencil;
@@ -491,10 +497,11 @@ check_depth_stencil_plane_copies(GPUDevice *device) {
   int                           ok;
 
   if (GPUGetFormatCapabilities(device->phyDevice,
-                               GPU_FORMAT_DEPTH32_FLOAT_STENCIL8,
+                               format,
                                &formatCaps) != GPU_OK ||
       !formatCaps.depthStencil) {
-    printf("depth-stencil plane copy skipped: unsupported format\n");
+    printf("depth-stencil plane copy skipped: unsupported format=%u\n",
+           (uint32_t)format);
     return 1;
   }
 
@@ -504,8 +511,24 @@ check_depth_stencil_plane_copies(GPUDevice *device) {
     return 0;
   }
 
-  transfer_fill_depth(sourceDepth, 0.75f);
-  transfer_fill_depth(destinationDepth, 0.25f);
+  if (format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8) {
+    sourceDepthValue      = UINT32_C(0x00bfffff);
+    destinationDepthValue = UINT32_C(0x00400000);
+    depthMask             = UINT32_C(0x00ffffff);
+  } else {
+    float sourceValue;
+    float destinationValue;
+
+    sourceValue      = 0.75f;
+    destinationValue = 0.25f;
+    memcpy(&sourceDepthValue, &sourceValue, sizeof(sourceDepthValue));
+    memcpy(&destinationDepthValue,
+           &destinationValue,
+           sizeof(destinationDepthValue));
+    depthMask = UINT32_MAX;
+  }
+  transfer_fill_depth(sourceDepth, sourceDepthValue);
+  transfer_fill_depth(destinationDepth, destinationDepthValue);
   for (uint32_t y = 0u; y < TRANSFER_HEIGHT; y++) {
     memset(sourceStencil + (uint64_t)y * TRANSFER_ROW_PITCH,
            91,
@@ -536,11 +559,11 @@ check_depth_stencil_plane_copies(GPUDevice *device) {
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
   textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
-  textureInfo.format           = GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
-  textureInfo.width            = TRANSFER_WIDTH;
-  textureInfo.height           = TRANSFER_HEIGHT;
-  textureInfo.depthOrLayers    = 1u;
-  textureInfo.mipLevelCount    = 1u;
+  textureInfo.format           = format;
+  textureInfo.width            = TRANSFER_WIDTH * 2u;
+  textureInfo.height           = TRANSFER_HEIGHT * 2u;
+  textureInfo.depthOrLayers    = 2u;
+  textureInfo.mipLevelCount    = 2u;
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_COPY_SRC |
                                  GPU_TEXTURE_USAGE_COPY_DST;
@@ -559,6 +582,8 @@ check_depth_stencil_plane_copies(GPUDevice *device) {
   writeRegion.width          = TRANSFER_WIDTH;
   writeRegion.height         = TRANSFER_HEIGHT;
   writeRegion.depth          = 1u;
+  writeRegion.mipLevel       = 1u;
+  writeRegion.baseArrayLayer = 1u;
   writeRegion.layerCount     = 1u;
   writeRegion.bytesPerRow    = TRANSFER_ROW_PITCH;
   writeRegion.rowsPerImage   = TRANSFER_HEIGHT;
@@ -604,22 +629,26 @@ check_depth_stencil_plane_copies(GPUDevice *device) {
     goto cleanup;
   }
 
-  textureRegion.src.aspect = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
-  textureRegion.dst.aspect = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
-  textureRegion.width      = TRANSFER_WIDTH;
-  textureRegion.height     = TRANSFER_HEIGHT;
-  textureRegion.depth      = 1u;
-  textureRegion.layerCount = 1u;
+  textureRegion.src.aspect         = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
+  textureRegion.src.mipLevel       = 1u;
+  textureRegion.src.baseArrayLayer = 1u;
+  textureRegion.dst.aspect         = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
+  textureRegion.dst.mipLevel       = 1u;
+  textureRegion.dst.baseArrayLayer = 1u;
+  textureRegion.width              = TRANSFER_WIDTH;
+  textureRegion.height             = TRANSFER_HEIGHT;
+  textureRegion.depth              = 1u;
+  textureRegion.layerCount         = 1u;
   GPUCopyTextureToTexture(copyPass, source, destination, &textureRegion);
 
-  bufferRegion.bytesPerRow                = TRANSFER_ROW_PITCH;
-  bufferRegion.rowsPerImage               = TRANSFER_HEIGHT;
-  bufferRegion.texture.texture.aspect     = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
-  bufferRegion.texture.width              = TRANSFER_WIDTH;
-  bufferRegion.texture.height             = TRANSFER_HEIGHT;
-  bufferRegion.texture.depth              = 1u;
-  bufferRegion.texture.layerCount         = 1u;
-  bufferRegion.bufferOffset               = DEPTH_AFTER_DEPTH_OFFSET;
+  bufferRegion.texture.texture    = textureRegion.dst;
+  bufferRegion.texture.width      = TRANSFER_WIDTH;
+  bufferRegion.texture.height     = TRANSFER_HEIGHT;
+  bufferRegion.texture.depth      = 1u;
+  bufferRegion.texture.layerCount = 1u;
+  bufferRegion.bufferOffset       = DEPTH_AFTER_DEPTH_OFFSET;
+  bufferRegion.bytesPerRow        = TRANSFER_ROW_PITCH;
+  bufferRegion.rowsPerImage       = TRANSFER_HEIGHT;
   GPUCopyTextureToBuffer(copyPass, destination, readback, &bufferRegion);
   bufferRegion.texture.texture.aspect = GPU_TEXTURE_ASPECT_STENCIL_ONLY;
   bufferRegion.bufferOffset           = STENCIL_AFTER_DEPTH_OFFSET;
@@ -659,13 +688,15 @@ check_depth_stencil_plane_copies(GPUDevice *device) {
 
   depthAfterDepth     = transfer_depth_equal(readbackBytes,
                                              DEPTH_AFTER_DEPTH_OFFSET,
-                                             0.75f);
+                                             sourceDepthValue,
+                                             depthMask);
   stencilAfterDepth   = transfer_stencil_equal(readbackBytes,
                                                STENCIL_AFTER_DEPTH_OFFSET,
                                                17u);
   depthAfterStencil   = transfer_depth_equal(readbackBytes,
                                              DEPTH_AFTER_STENCIL_OFFSET,
-                                             0.75f);
+                                             sourceDepthValue,
+                                             depthMask);
   stencilAfterStencil = transfer_stencil_equal(
     readbackBytes,
     STENCIL_AFTER_STENCIL_OFFSET,
@@ -698,5 +729,12 @@ int
 gpu_test_texture_transfer(GPUDevice *device) {
   return check_array_mip_transfers(device) &&
          check_3d_texture_transfers(device) &&
-         check_depth_stencil_plane_copies(device);
+         check_depth_stencil_plane_copies(
+           device,
+           GPU_FORMAT_DEPTH32_FLOAT_STENCIL8
+         ) &&
+         check_depth_stencil_plane_copies(
+           device,
+           GPU_FORMAT_DEPTH24_UNORM_STENCIL8
+         );
 }
