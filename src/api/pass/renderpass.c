@@ -357,6 +357,7 @@ GPUEndRenderPass(GPURenderPassEncoder *pass) {
   if (!pass || pass->_ended)
     return;
   if (pass->_occlusionQueryActive) {
+#if GPU_BUILD_WITH_VALIDATION
     GPUDevice *device;
 
     device = pass->_cmdb && pass->_cmdb->_queue
@@ -366,6 +367,7 @@ GPUEndRenderPass(GPURenderPassEncoder *pass) {
       device,
       "GPUEndRenderPass requires ending the active occlusion query"
     );
+#endif
     return;
   }
 

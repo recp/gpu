@@ -28,11 +28,13 @@ void
 gpu_cmdoncomplete4(GPUCommandBuffer * __restrict cmdb,
                    id                        feedback);
 
+#if GPU_BUILD_WITH_VALIDATION
 static
 GPU_HIDE
 void
 mt_logCommandBufferError(GPUCommandBuffer * __restrict cmdb,
                          id<MTLCommandBuffer>        mtlCmdb);
+#endif
 
 GPU_HIDE
 void
@@ -352,6 +354,7 @@ mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
   return GPU_OK;
 }
 
+#if GPU_BUILD_WITH_VALIDATION
 static
 GPU_HIDE
 void
@@ -376,6 +379,7 @@ mt_logCommandBufferError(GPUCommandBuffer * __restrict cmdb,
     NSLog(@"GPU Metal command buffer failed");
   }
 }
+#endif
 
 static
 GPU_HIDE
@@ -386,7 +390,9 @@ gpu_cmdoncomplete(GPUCommandBuffer * __restrict cmdb,
     return;
   }
 
+#if GPU_BUILD_WITH_VALIDATION
   mt_logCommandBufferError(cmdb, mtlCmdb);
+#endif
   gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
 }
 
@@ -395,12 +401,15 @@ GPU_HIDE
 void
 gpu_cmdoncomplete4(GPUCommandBuffer * __restrict cmdb,
                    id                        feedback) {
+#if GPU_BUILD_WITH_VALIDATION
   GPUDevice *device;
+#endif
 
   if (!cmdb) {
     return;
   }
 
+#if GPU_BUILD_WITH_VALIDATION
   device = cmdb->_queue ? cmdb->_queue->_device : NULL;
   if (@available(macOS 26.0, iOS 26.0, *)) {
     id<MTL4CommitFeedback> modernFeedback = feedback;
@@ -409,6 +418,9 @@ gpu_cmdoncomplete4(GPUCommandBuffer * __restrict cmdb,
       NSLog(@"GPU Metal 4 command buffer failed: %@", modernFeedback.error);
     }
   }
+#else
+  GPU__UNUSED(feedback);
+#endif
   gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
 }
 

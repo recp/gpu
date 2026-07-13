@@ -34,11 +34,11 @@ dx12_createInstance(struct GPUApi * __restrict api,
     return NULL;
   }
 
-#if defined(_DEBUG)
+#if GPU_BUILD_WITH_VALIDATION && defined(_DEBUG)
   /* Enable the debug layer (requires the Graphics Tools "optional feature").
      NOTE: Enabling the debug layer after device creation will invalidate the active device.
    */
-  {
+  if (info && info->enableValidation) {
     ID3D12Debug *debugController;
     if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug, (void **)&debugController))) {
       debugController->lpVtbl->EnableDebugLayer(debugController);

@@ -49,6 +49,7 @@ dx12__queueWait(GPUCommandQueueDX12 *queue) {
                            INFINITE);
 }
 
+#if GPU_BUILD_WITH_VALIDATION
 static void
 dx12__logQueueError(GPUCommandQueueDX12 *queue,
                     const char          *operation,
@@ -110,6 +111,10 @@ dx12__logDebugMessages(GPUCommandQueueDX12 *queue) {
   infoQueue->lpVtbl->ClearStoredMessages(infoQueue);
   infoQueue->lpVtbl->Release(infoQueue);
 }
+#else
+#  define dx12__logQueueError(queue, operation, result) ((void)0)
+#  define dx12__logDebugMessages(queue)                 ((void)0)
+#endif
 
 static void
 dx12__recycleCommandBuffer(GPUCommandBuffer *cmdb) {

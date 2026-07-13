@@ -12,6 +12,8 @@ option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(GPU_ENABLE_VULKAN "Build the Vulkan backend" OFF)
 option(GPU_BUILD_TESTS "Build GPU validation tests" OFF)
 option(GPU_BUILD_SAMPLES "Build GPU samples" OFF)
+option(GPU_BUILD_WITH_VALIDATION "Build validation and verbose diagnostics" ON)
+option(GPU_BUILD_WITH_DEBUG_MARKERS "Build debug marker support" ON)
 
 set(GPU_USL_ROOT "" CACHE PATH "UniversalShading/us checkout")
 set(GPU_USL_INCLUDE_DIR "" CACHE PATH "USL public include directory")
@@ -47,6 +49,11 @@ set(GPU_CORE_SOURCES
 
 add_library(gpu ${GPU_CORE_SOURCES})
 add_library(gpu::gpu ALIAS gpu)
+
+target_compile_definitions(gpu PRIVATE
+  GPU_BUILD_WITH_VALIDATION=$<BOOL:${GPU_BUILD_WITH_VALIDATION}>
+  GPU_BUILD_WITH_DEBUG_MARKERS=$<BOOL:${GPU_BUILD_WITH_DEBUG_MARKERS}>
+)
 
 if(NOT WIN32)
   find_package(Threads REQUIRED)
@@ -192,7 +199,6 @@ if(GPU_ENABLE_VULKAN)
     src/backend/vk/impl/buffer.c
     src/backend/vk/impl/cmdque.c
     src/backend/vk/impl/compute.c
-    src/backend/vk/impl/debug.c
     src/backend/vk/impl/descriptor.c
     src/backend/vk/impl/device.c
     src/backend/vk/impl/display.c
@@ -209,6 +215,9 @@ if(GPU_ENABLE_VULKAN)
     src/backend/vk/impl/swapchain.c
     src/backend/vk/impl/texture.c
   )
+  if(GPU_BUILD_WITH_VALIDATION)
+    target_sources(gpu PRIVATE src/backend/vk/impl/debug.c)
+  endif()
   if(APPLE)
     target_sources(gpu PRIVATE src/backend/vk/impl/surface_apple.m)
   endif()

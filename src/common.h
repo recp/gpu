@@ -27,6 +27,14 @@
 
 #define GPU__UNUSED(X) (void)X
 
+#ifndef GPU_BUILD_WITH_VALIDATION
+#  define GPU_BUILD_WITH_VALIDATION 1
+#endif
+
+#ifndef GPU_BUILD_WITH_DEBUG_MARKERS
+#  define GPU_BUILD_WITH_DEBUG_MARKERS 1
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>

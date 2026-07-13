@@ -67,6 +67,7 @@ vk__queueWait(GPUCommandQueueVk *queue) {
 #endif
 }
 
+#if GPU_BUILD_WITH_VALIDATION
 static void
 vk__logSubmitError(GPUCommandBuffer *cmdb, VkResult result) {
   GPUDevice *device;
@@ -76,6 +77,9 @@ vk__logSubmitError(GPUCommandBuffer *cmdb, VkResult result) {
     fprintf(stderr, "GPU Vulkan command submission failed: %d\n", result);
   }
 }
+#else
+#  define vk__logSubmitError(cmdb, result) ((void)0)
+#endif
 
 static void
 vk__recycleCommandBuffer(GPUCommandBuffer *cmdb) {

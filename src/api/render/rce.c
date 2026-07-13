@@ -36,11 +36,15 @@ gpu_renderPassApi(const GPURenderPassEncoder *pass) {
   return gpuDeviceApi(gpu_renderPassDevice(pass));
 }
 
+#if GPU_BUILD_WITH_VALIDATION
 static void
 gpu_renderValidationError(const GPURenderPassEncoder *pass,
-                          const char *message) {
+                          const char                   *message) {
   gpuDeviceRecordValidationError(gpu_renderPassDevice(pass), message);
 }
+#else
+#  define gpu_renderValidationError(pass, message) ((void)0)
+#endif
 
 static GPUPrimitiveType
 gpu_primitiveTypeFromTopology(GPUPrimitiveTopology topology) {

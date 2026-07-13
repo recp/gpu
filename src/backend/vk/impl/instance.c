@@ -15,8 +15,11 @@
  */
 
 #include "../common.h"
-#include "debug.h"
+#if GPU_BUILD_WITH_VALIDATION
+#  include "debug.h"
+#endif
 
+#if GPU_BUILD_WITH_VALIDATION
 /*
  * Return 1 (true) if all layer names specified in check_names
  * can be found in given layer properties.
@@ -47,6 +50,7 @@ vk__checkLayers(uint32_t           check_count,
 
   return 1;
 }
+#endif
 
 static uint32_t
 vk__apiVersion(void) {
@@ -68,27 +72,43 @@ vk_createInstance(GPUApi * __restrict api,
                   const GPUInstanceCreateInfo * __restrict info) {
   GPUInstance           *gpuInst;
   GPUInstanceVk         *gpuInstVk;
+#if GPU_BUILD_WITH_VALIDATION
   char                  *validationLayers[] = {"VK_LAYER_KHRONOS_validation"};
+#endif
   VkExtensionProperties *instanceExtensions;
+#if GPU_BUILD_WITH_VALIDATION
   VkLayerProperties     *instanceLayers;
+#endif
   VkInstance             inst;
   VkResult               err;
   uint32_t               i, nEnabledExtensions, nEnabledLayers;
+#if GPU_BUILD_WITH_VALIDATION
   uint32_t               nInstanceExtensions, nInstanceLayers;
+#else
+  uint32_t               nInstanceExtensions;
+#endif
   uint32_t               apiVersion;
-  VkBool32               surfaceExtFound, platformSurfaceExtFound, validationFound;
-  bool                   portabilityEnum, validate;
+  VkBool32               surfaceExtFound, platformSurfaceExtFound;
+#if GPU_BUILD_WITH_VALIDATION
+  VkBool32               validationFound;
+  bool                   validate;
+#endif
+  bool                   portabilityEnum;
 
   GPU__UNUSED(api);
 
+#if GPU_BUILD_WITH_VALIDATION
   validate                = info ? info->enableValidation : false;
+#endif
 
   portabilityEnum         = false;
   surfaceExtFound         = 0;
   platformSurfaceExtFound = 0;
   nInstanceExtensions     = 0;
+#if GPU_BUILD_WITH_VALIDATION
   nInstanceLayers         = 0;
   validationFound         = 0;
+#endif
   nEnabledExtensions      = 0;
   nEnabledLayers          = 0;
   apiVersion              = vk__apiVersion();
@@ -105,6 +125,7 @@ vk_createInstance(GPUApi * __restrict api,
     gpuInst->createInfo = *info;
   }
 
+#if GPU_BUILD_WITH_VALIDATION
   /* Look for validation layers */
   if (validate) {
     err = vkEnumerateInstanceLayerProperties(&nInstanceLayers, NULL);
@@ -132,6 +153,7 @@ vk_createInstance(GPUApi * __restrict api,
                "vkCreateInstance Failure");
     }
   }
+#endif
 
   /* Look for instance extensions */
   memset(gpuInstVk->extensionNames, 0, sizeof(gpuInstVk->extensionNames));
@@ -198,9 +220,11 @@ vk_createInstance(GPUApi * __restrict api,
       }
 
       if (!strcmp(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
+#if GPU_BUILD_WITH_VALIDATION
         if (validate) {
           gpuInstVk->extensionNames[nEnabledExtensions++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
         }
+#endif
       }
 
       // We want cube to be able to enumerate drivers that support the portability_subset extension, so we have to enable the
@@ -241,11 +265,16 @@ vk_createInstance(GPUApi * __restrict api,
       .apiVersion            = apiVersion,
     },
     .enabledLayerCount       = nEnabledLayers,
+#if GPU_BUILD_WITH_VALIDATION
     .ppEnabledLayerNames     = (const char *const *)validationLayers,
+#else
+    .ppEnabledLayerNames     = NULL,
+#endif
     .enabledExtensionCount   = nEnabledExtensions,
     .ppEnabledExtensionNames = (const char *const *)gpuInstVk->extensionNames,
   };
 
+#if GPU_BUILD_WITH_VALIDATION
   /*
    * This is info for a temp callback to use during CreateInstance.
    * After the instance is created, we use the instance-based
@@ -266,6 +295,7 @@ vk_createInstance(GPUApi * __restrict api,
       .pUserData       = gpuInst
     };
   }
+#endif
 
   err = vkCreateInstance(&instCI, NULL, &inst);
   if (err == VK_ERROR_INCOMPATIBLE_DRIVER) {
@@ -286,6 +316,7 @@ vk_createInstance(GPUApi * __restrict api,
   gpuInstVk->inst       = inst;
   gpuInstVk->apiVersion = apiVersion;
   
+#if GPU_BUILD_WITH_VALIDATION
   if (validate) {
     // Setup VK_EXT_debug_utils function pointers always (we use them for
     // debug labels and names).
@@ -331,6 +362,7 @@ vk_createInstance(GPUApi * __restrict api,
         break;
     }
   }
+#endif
 
   GET_INSTANCE_PROC_ADDR(gpuInstVk, GetPhysicalDeviceSurfaceSupportKHR);
   GET_INSTANCE_PROC_ADDR(gpuInstVk, GetPhysicalDeviceSurfaceCapabilitiesKHR);
@@ -357,11 +389,13 @@ vk_destroyInstance(GPUApi * __restrict api, GPUInstance * __restrict inst) {
 
   instVk = inst->_priv;
   if (instVk) {
+#if GPU_BUILD_WITH_VALIDATION
     if (instVk->DestroyDebugUtilsMessengerEXT && instVk->dbg_messenger) {
       instVk->DestroyDebugUtilsMessengerEXT(instVk->inst,
                                             instVk->dbg_messenger,
                                             NULL);
     }
+#endif
     if (instVk->inst) {
       vkDestroyInstance(instVk->inst, NULL);
     }

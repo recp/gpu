@@ -40,11 +40,15 @@ gpu_computePassApi(const GPUComputePassEncoder *pass) {
   return gpuDeviceApi(gpu_computePassDevice(pass));
 }
 
+#if GPU_BUILD_WITH_VALIDATION
 static void
 gpu_computeValidationError(const GPUComputePassEncoder *pass,
-                           const char *message) {
+                           const char                    *message) {
   gpuDeviceRecordValidationError(gpu_computePassDevice(pass), message);
 }
+#else
+#  define gpu_computeValidationError(pass, message) ((void)0)
+#endif
 
 static bool
 gpu_validPushConstantRange(uint32_t limit,

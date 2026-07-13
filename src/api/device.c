@@ -1037,6 +1037,7 @@ gpuDeviceRecordHotPathFree(GPUDevice *device, uint64_t sizeBytes) {
   device->currentFrameStats.hotPathFreeBytes += sizeBytes;
 }
 
+#if GPU_BUILD_WITH_VALIDATION
 GPU_HIDE
 void
 gpuDeviceRecordValidationError(GPUDevice *device, const char *message) {
@@ -1048,6 +1049,7 @@ gpuDeviceRecordValidationError(GPUDevice *device, const char *message) {
 
   fprintf(stderr, "GPU validation: %s\n", message ? message : "validation error");
 }
+#endif
 
 GPU_EXPORT
 bool

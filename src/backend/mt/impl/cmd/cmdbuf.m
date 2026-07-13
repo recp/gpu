@@ -110,9 +110,11 @@ mt_prepareArgumentState(GPUCommandBuffer *cmdb,
     [desc release];
   }
   if (!state->table) {
+#if GPU_BUILD_WITH_VALIDATION
     if (cmdb->_queue->_device->runtimeConfig.enableVerboseLogs && error) {
       NSLog(@"GPU Metal 4 argument table failed: %@", error);
     }
+#endif
     return false;
   }
 

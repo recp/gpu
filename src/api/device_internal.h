@@ -115,8 +115,12 @@ GPU_HIDE
 void
 gpuDeviceRecordHotPathFree(GPUDevice *device, uint64_t sizeBytes);
 
+#if GPU_BUILD_WITH_VALIDATION
 GPU_HIDE
 void
 gpuDeviceRecordValidationError(GPUDevice *device, const char *message);
+#else
+#  define gpuDeviceRecordValidationError(device, message) ((void)0)
+#endif
 
 #endif /* gpu_device_internal_h */
