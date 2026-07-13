@@ -165,7 +165,8 @@ mt_createTextureView(GPUTexture                      * __restrict texture,
   NSRange slices;
   bool fullView;
 
-  if (!texture || !texture->_priv || !info || !outView) {
+  if (!texture || !texture->_priv || !info || !outView ||
+      info->format != texture->format) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   *outView = NULL;

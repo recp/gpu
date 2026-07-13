@@ -808,6 +808,7 @@ vk_createTextureView(GPUTexture                     * __restrict texture,
 
   textureVk = texture ? texture->_priv : NULL;
   if (!texture || !textureVk || !textureVk->image || !info || !outView ||
+      info->format != texture->format ||
       !vk__imageViewType(info->viewType, &viewInfo.viewType) ||
       !vk_formatFromGPU(info->format, &viewInfo.format)) {
     return GPU_ERROR_INVALID_ARGUMENT;

@@ -3,13 +3,16 @@
 #include "../../src/api/cmdqueue_internal.h"
 #include "../../src/api/texture_internal.h"
 
-static GPUBuffer gScopedBuffer;
-static uint8_t   gScopedBufferStorage[32];
-static uint32_t  gScopedBufferCreateCalls;
-static uint32_t  gScopedBufferWriteCalls;
-static uint32_t  gScopedBufferReadCalls;
-static uint32_t  gScopedBufferDestroyCalls;
-static uint32_t  gScopedTextureWriteCalls;
+static GPUBuffer      gScopedBuffer;
+static GPUTextureView gScopedTextureView;
+static uint8_t        gScopedBufferStorage[32];
+static uint32_t       gScopedBufferCreateCalls;
+static uint32_t       gScopedBufferWriteCalls;
+static uint32_t       gScopedBufferReadCalls;
+static uint32_t       gScopedBufferDestroyCalls;
+static uint32_t       gScopedTextureViewCreateCalls;
+static uint32_t       gScopedTextureViewDestroyCalls;
+static uint32_t       gScopedTextureWriteCalls;
 
 static GPUResult
 create_scoped_buffer(GPUDevice                 * __restrict device,
@@ -69,6 +72,24 @@ write_scoped_texture(GPUCommandQueue             * __restrict queue,
   (void)sizeBytes;
   gScopedTextureWriteCalls++;
   return GPU_OK;
+}
+
+static GPUResult
+create_scoped_texture_view(GPUTexture                     * __restrict texture,
+                           const GPUTextureViewCreateInfo * __restrict info,
+                           GPUTextureView                ** __restrict outView) {
+  (void)texture;
+  (void)info;
+  memset(&gScopedTextureView, 0, sizeof(gScopedTextureView));
+  *outView = &gScopedTextureView;
+  gScopedTextureViewCreateCalls++;
+  return GPU_OK;
+}
+
+static void
+destroy_scoped_texture_view(GPUTextureView * __restrict view) {
+  (void)view;
+  gScopedTextureViewDestroyCalls++;
 }
 
 static int
@@ -236,6 +257,91 @@ check_texture_transfer_layout(GPUDevice *activeDevice) {
                            sizeof(blocks)) != GPU_ERROR_INVALID_ARGUMENT ||
       gScopedTextureWriteCalls != 1u) {
     fprintf(stderr, "texture layout accepted a partial compressed block\n");
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
+check_texture_view_format_validation(GPUDevice *activeDevice) {
+  typedef struct TextureViewFormatCase {
+    GPUFormat textureFormat;
+    GPUFormat viewFormat;
+    bool      valid;
+  } TextureViewFormatCase;
+
+  static const TextureViewFormatCase cases[] = {
+    {GPU_FORMAT_RGBA8_UNORM,            GPU_FORMAT_RGBA8_UNORM,            true},
+    {GPU_FORMAT_RGBA8_UNORM,            GPU_FORMAT_RGBA8_UNORM_SRGB,       false},
+    {GPU_FORMAT_DEPTH32_FLOAT,           GPU_FORMAT_DEPTH32_FLOAT,           true},
+    {GPU_FORMAT_DEPTH32_FLOAT,           GPU_FORMAT_R32_FLOAT,               false},
+    {GPU_FORMAT_STENCIL8,                GPU_FORMAT_STENCIL8,                true},
+    {GPU_FORMAT_STENCIL8,                GPU_FORMAT_R8_UINT,                 false},
+    {GPU_FORMAT_DEPTH24_UNORM_STENCIL8,  GPU_FORMAT_DEPTH24_UNORM_STENCIL8,  true},
+    {GPU_FORMAT_DEPTH24_UNORM_STENCIL8,  GPU_FORMAT_DEPTH32_FLOAT_STENCIL8,  false}
+  };
+
+  GPUTextureViewCreateInfo viewInfo = {0};
+  GPUTexture               texture  = {0};
+  GPUDevice                device   = {0};
+  GPUApi                   scopedApi;
+  GPUTextureView          *view;
+  GPUResult                result;
+  uint32_t                 validCount;
+  uint32_t                 i;
+
+  if (!activeDevice || !gpuDeviceApi(activeDevice)) {
+    fprintf(stderr, "texture view format test has no device api\n");
+    return 0;
+  }
+
+  scopedApi                     = *gpuDeviceApi(activeDevice);
+  scopedApi.texture.createView  = create_scoped_texture_view;
+  scopedApi.texture.destroyView = destroy_scoped_texture_view;
+  device._api                   = &scopedApi;
+
+  texture.device        = &device;
+  texture.dimension     = GPU_TEXTURE_DIMENSION_2D;
+  texture.width         = 4u;
+  texture.height        = 4u;
+  texture.depthOrLayers = 1u;
+  texture.mipLevelCount = 1u;
+  texture.sampleCount   = 1u;
+
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
+  viewInfo.mipLevelCount    = 1u;
+  viewInfo.arrayLayerCount  = 1u;
+
+  validCount                         = 0u;
+  gScopedTextureViewCreateCalls      = 0u;
+  gScopedTextureViewDestroyCalls     = 0u;
+  for (i = 0u; i < GPU_ARRAY_LEN(cases); i++) {
+    texture.format  = cases[i].textureFormat;
+    viewInfo.format = cases[i].viewFormat;
+    view             = (GPUTextureView *)(uintptr_t)1u;
+    result           = GPUCreateTextureView(&texture, &viewInfo, &view);
+    if ((cases[i].valid && (result != GPU_OK || !view)) ||
+        (!cases[i].valid &&
+         (result != GPU_ERROR_INVALID_ARGUMENT || view != NULL))) {
+      fprintf(stderr,
+              "texture view format case %u returned %d\n",
+              i,
+              result);
+      return 0;
+    }
+
+    if (cases[i].valid) {
+      validCount++;
+      GPUDestroyTextureView(view);
+    }
+  }
+
+  if (gScopedTextureViewCreateCalls != validCount ||
+      gScopedTextureViewDestroyCalls != validCount) {
+    fprintf(stderr, "texture view format validation reached backend incorrectly\n");
     return 0;
   }
 
@@ -988,6 +1094,7 @@ gpu_test_resources(GPUDevice *device) {
   return check_destroy_null_handles() &&
          check_buffer_device_dispatch(device) &&
          check_texture_transfer_layout(device) &&
+         check_texture_view_format_validation(device) &&
          check_resource_validation(device) &&
          check_cube_view_validation(device) &&
          check_3d_view_validation(device) &&

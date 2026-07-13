@@ -339,6 +339,7 @@ GPUCreateTextureView(GPUTexture                     * __restrict texture,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (!gpuIsTextureViewTypeValid(info->viewType) ||
+      info->format != texture->format ||
       !gpuTextureViewCompatible(texture, info) ||
       !gpuTextureViewRangeValid(info) ||
       info->baseMipLevel >= texture->mipLevelCount ||
