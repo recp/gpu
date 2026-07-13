@@ -11,6 +11,15 @@ vert api_vs(input: APIRenderVertexIn #stage_in) -> float4 {
   return float4(input.position, 0.0, 1.0)
 }
 
+vert api_slot_padding_vs(offset: float4 #buffer(0) #group(0)) -> float4 {
+  return offset
+}
+
+vert api_slot_vs(input: APIRenderVertexIn #stage_in,
+                 offset: float4 #buffer(0) #group(1)) -> float4 {
+  return float4(input.position + offset.xy, offset.z, 1.0)
+}
+
 frag api_fs() -> float4 {
   return float4(1.0, 0.0, 0.0, 1.0)
 }

@@ -368,14 +368,14 @@ gpuGetPipelineLayoutGroups(GPUPipelineLayout *layout, uint32_t *outCount) {
 
 GPU_HIDE
 uint32_t
-gpuPipelineLayoutBackendSlotCount(GPUPipelineLayout  *layout,
-                                  GPUBindKind         kind,
-                                  GPUShaderStageFlags stages) {
+gpuPipelineLayoutBackendSlotMask(GPUPipelineLayout  *layout,
+                                 GPUBindKind         kind,
+                                 GPUShaderStageFlags stages) {
   GPUPipelineLayoutPriv *priv;
-  uint32_t               count;
+  uint32_t               mask;
 
-  priv  = gpu_pipelineLayoutPriv(layout);
-  count = 0u;
+  priv = gpu_pipelineLayoutPriv(layout);
+  mask = 0u;
   if (!priv || !priv->backendBindings) {
     return 0u;
   }
@@ -398,13 +398,13 @@ gpuPipelineLayoutBackendSlotCount(GPUPipelineLayout  *layout,
       if (entry->kind == kind &&
           (entry->visibility & stages) != 0u &&
           binding != UINT32_MAX &&
-          binding >= count) {
-        count = binding + 1u;
+          binding < 32u) {
+        mask |= 1u << binding;
       }
     }
   }
 
-  return count;
+  return mask;
 }
 
 GPU_HIDE
@@ -1709,10 +1709,14 @@ gpu_layoutMatchesReflectionResource(const GPUBindGroupLayoutEntry *entry,
 static int
 gpu_layoutContainsStageReflectionResource(const GPUBindGroupLayoutPriv *priv,
                                           const GPUShaderResourceReflection *resource,
-                                          GPUShaderStageFlags stages) {
+                                          GPUShaderStageFlags stages,
+                                          uint32_t *outEntryIndex) {
   uint32_t resourceArrayCount;
   GPUShaderStageFlags requiredVisibility;
 
+  if (outEntryIndex) {
+    *outEntryIndex = UINT32_MAX;
+  }
   if (!priv || !resource) {
     return 0;
   }
@@ -1732,6 +1736,9 @@ gpu_layoutContainsStageReflectionResource(const GPUBindGroupLayoutPriv *priv,
         (entry->visibility & requiredVisibility) == requiredVisibility &&
         entry->arrayCount == resourceArrayCount &&
         entry->hasDynamicOffset == resource->hasDynamicOffset) {
+      if (outEntryIndex) {
+        *outEntryIndex = i;
+      }
       return 1;
     }
   }
@@ -1793,6 +1800,7 @@ gpu_layoutMatchesReflectionGroup(GPUBindGroupLayout *layout,
 
 static int
 gpu_pipelineLayoutMatchesShaderReflection(GPUPipelineLayout *pipelineLayout,
+                                          const GPUShaderLibrary *library,
                                           const GPUShaderReflection *reflection,
                                           GPUShaderStageFlags stages,
                                           uint32_t *outRequiredGroupMask) {
@@ -1817,6 +1825,8 @@ gpu_pipelineLayoutMatchesShaderReflection(GPUPipelineLayout *pipelineLayout,
   for (uint32_t i = 0u; reflection && i < reflection->resourceCount; i++) {
     const GPUShaderResourceReflection *resource;
     GPUBindGroupLayoutPriv *layoutPriv;
+    uint32_t backendBinding;
+    uint32_t entryIndex;
 
     resource = &reflection->pResources[i];
     if ((resource->visibility & stages) == 0u) {
@@ -1827,7 +1837,20 @@ gpu_pipelineLayoutMatchesShaderReflection(GPUPipelineLayout *pipelineLayout,
     }
 
     layoutPriv = gpu_layoutPriv(pipelinePriv->bindGroupLayouts[resource->groupIndex]);
-    if (!gpu_layoutContainsStageReflectionResource(layoutPriv, resource, stages)) {
+    if (!gpu_layoutContainsStageReflectionResource(layoutPriv,
+                                                   resource,
+                                                   stages,
+                                                   &entryIndex)) {
+      return 0;
+    }
+    backendBinding = resource->binding;
+    if (!gpuGetShaderResourceBackendBinding(library,
+                                            resource,
+                                            &backendBinding) ||
+        !pipelinePriv->backendBindings ||
+        !pipelinePriv->backendBindings[resource->groupIndex] ||
+        pipelinePriv->backendBindings[resource->groupIndex][entryIndex] !=
+          backendBinding) {
       return 0;
     }
     requiredGroupMask |= 1u << resource->groupIndex;
@@ -1876,6 +1899,7 @@ gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout *pipelineLayout,
       }
 
       ok = gpu_pipelineLayoutMatchesShaderReflection(pipelineLayout,
+                                                     library,
                                                      &reflection,
                                                      fallbackStages,
                                                      &entryGroupMask);
@@ -1899,6 +1923,7 @@ gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout *pipelineLayout,
   }
 
   ok = gpu_pipelineLayoutMatchesShaderReflection(pipelineLayout,
+                                                 library,
                                                  &reflection,
                                                  fallbackStages,
                                                  &combinedGroupMask);

@@ -123,18 +123,18 @@ gpu_bindingTypeIsBuffer(GPUBindingType type) {
 }
 
 static GPUResult
-gpu_metalVertexResourceSlotCount(const GPURenderPipelineCreateInfo *info,
-                                 uint32_t                          *outCount) {
+gpu_metalVertexResourceSlotMask(const GPURenderPipelineCreateInfo *info,
+                                uint32_t                          *outMask) {
   GPUShaderReflection reflection;
   GPUResult            result;
-  uint32_t             count;
+  uint32_t             mask;
 
-  if (!info || !outCount) {
+  if (!info || !outMask) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   if (!gpuShaderLibraryHasEntryResourceInfo(info->library)) {
-    *outCount = gpuPipelineLayoutBackendSlotCount(
+    *outMask = gpuPipelineLayoutBackendSlotMask(
       info->layout,
       GPUBindKindBuffer,
       GPU_SHADER_STAGE_VERTEX_BIT
@@ -149,7 +149,7 @@ gpu_metalVertexResourceSlotCount(const GPURenderPipelineCreateInfo *info,
     return result;
   }
 
-  count = 0u;
+  mask = 0u;
   for (uint32_t i = 0u; i < reflection.resourceCount; i++) {
     const GPUShaderResourceReflection *resource;
     uint32_t                           binding;
@@ -160,14 +160,18 @@ gpu_metalVertexResourceSlotCount(const GPURenderPipelineCreateInfo *info,
       continue;
     }
     binding = resource->binding;
-    gpuGetShaderResourceBackendBinding(info->library, resource, &binding);
-    if (binding >= count) {
-      count = binding + 1u;
+    if (!gpuGetShaderResourceBackendBinding(info->library,
+                                            resource,
+                                            &binding) ||
+        binding >= MT_BIND_GROUP_BUFFER_COUNT) {
+      GPUFreeShaderReflection(&reflection);
+      return GPU_ERROR_UNSUPPORTED;
     }
+    mask |= 1u << binding;
   }
 
   GPUFreeShaderReflection(&reflection);
-  *outCount = count;
+  *outMask = mask;
   return GPU_OK;
 }
 
@@ -175,13 +179,13 @@ static GPUResult
 gpu_validateMetalVertexBindings(const GPUApi                       *api,
                                 const GPURenderPipelineCreateInfo *info) {
   GPUResult result;
-  uint32_t  resourceSlotCount;
+  uint32_t  resourceSlotMask;
 
   if (!api || api->backend != GPU_BACKEND_METAL) {
     return GPU_OK;
   }
 
-  result = gpu_metalVertexResourceSlotCount(info, &resourceSlotCount);
+  result = gpu_metalVertexResourceSlotMask(info, &resourceSlotMask);
   if (result != GPU_OK) {
     return result;
   }
@@ -193,7 +197,8 @@ gpu_validateMetalVertexBindings(const GPUApi                       *api,
       continue;
     }
     nativeIndex = mt_vertexBufferIndex(i);
-    if (nativeIndex == UINT32_MAX || resourceSlotCount > nativeIndex) {
+    if (nativeIndex == UINT32_MAX ||
+        (resourceSlotMask & (1u << nativeIndex)) != 0u) {
       return GPU_ERROR_UNSUPPORTED;
     }
   }

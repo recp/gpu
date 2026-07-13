@@ -91,9 +91,9 @@ gpuGetPipelineLayoutGroups(GPUPipelineLayout *layout, uint32_t *outCount);
 
 GPU_HIDE
 uint32_t
-gpuPipelineLayoutBackendSlotCount(GPUPipelineLayout  *layout,
-                                  GPUBindKind         kind,
-                                  GPUShaderStageFlags stages);
+gpuPipelineLayoutBackendSlotMask(GPUPipelineLayout  *layout,
+                                 GPUBindKind         kind,
+                                 GPUShaderStageFlags stages);
 
 GPU_HIDE
 const uint32_t *

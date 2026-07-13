@@ -4,7 +4,6 @@
 #include "../../src/api/device_internal.h"
 #include "../../src/api/render/pipeline_internal.h"
 #include "../../src/api/texture_internal.h"
-#include "../../src/backend/mt/binding_limits.h"
 
 static int
 create_render_usl_library(GPUDevice *device,
@@ -804,134 +803,6 @@ check_render_pipeline_validation(GPUDevice *device,
   GPUDestroyPipelineLayout(pipelineLayout);
   GPUDestroyShaderLibrary(library);
   return 1;
-}
-
-static int
-check_metal_vertex_resource_slots(GPUDevice *device) {
-  static const char source[] =
-    "#include <metal_stdlib>\n"
-    "using namespace metal;\n"
-    "struct SlotVertexIn { float2 position [[attribute(0)]]; };\n"
-    "vertex float4 slot_vs(SlotVertexIn input [[stage_in]], "
-    "constant float4& offset [[buffer(0)]]) {\n"
-    "  return float4(input.position + offset.xy, offset.z, 1.0);\n"
-    "}\n"
-    "fragment float4 slot_fs() { return float4(1.0); }\n";
-  GPUShaderLibraryCreateInfo   libraryInfo = {0};
-  GPUBindGroupLayoutEntry      groupEntry = {0};
-  GPUBindGroupLayoutCreateInfo groupInfo = {0};
-  GPUPipelineLayoutCreateInfo  layoutInfo = {0};
-  GPUVertexAttribute           attribute = {0};
-  GPUVertexBufferLayout        vertexLayout = {0};
-  GPUVertexBufferLayout        vertexLayouts[MT_VERTEX_BUFFER_COUNT] = {{0}};
-  GPUColorTargetState          colorTarget = {0};
-  GPURenderPipelineCreateInfo  pipelineInfo = {0};
-  GPUShaderLibrary            *library;
-  GPUBindGroupLayout          *groupLayout;
-  GPUPipelineLayout           *pipelineLayout;
-  GPURenderPipeline           *pipeline;
-  GPUBindGroupLayout          *groups[1];
-  GPUApi                      *api;
-  int                          ok;
-
-  api = gpuDeviceApi(device);
-  if (!api || api->backend != GPU_BACKEND_METAL) {
-    return 1;
-  }
-
-  library        = NULL;
-  groupLayout    = NULL;
-  pipelineLayout = NULL;
-  pipeline       = NULL;
-  ok             = 0;
-
-  libraryInfo.chain.sType      = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
-  libraryInfo.chain.structSize = sizeof(libraryInfo);
-  libraryInfo.label            = "metal-vertex-resource-slots";
-  libraryInfo.sourceKind       = GPU_SHADER_SOURCE_MSL_TEXT;
-  libraryInfo.sourceData       = source;
-  libraryInfo.sourceSize       = sizeof(source) - 1u;
-  if (GPUCreateShaderLibrary(device, &libraryInfo, &library) != GPU_OK ||
-      !library) {
-    fprintf(stderr, "Metal vertex/resource slot shader setup failed\n");
-    goto cleanup;
-  }
-
-  groupEntry.binding     = 0u;
-  groupEntry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
-  groupEntry.visibility  = GPU_SHADER_STAGE_VERTEX_BIT;
-  groupEntry.arrayCount  = 1u;
-  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
-  groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label            = "metal-vertex-resource-group";
-  groupInfo.entryCount       = 1u;
-  groupInfo.pEntries         = &groupEntry;
-  if (GPUCreateBindGroupLayout(device, &groupInfo, &groupLayout) != GPU_OK ||
-      !groupLayout) {
-    fprintf(stderr, "Metal vertex/resource slot group setup failed\n");
-    goto cleanup;
-  }
-
-  groups[0]                       = groupLayout;
-  layoutInfo.chain.sType          = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  layoutInfo.chain.structSize     = sizeof(layoutInfo);
-  layoutInfo.label                = "metal-vertex-resource-layout";
-  layoutInfo.bindGroupLayoutCount = 1u;
-  layoutInfo.ppBindGroupLayouts   = groups;
-  if (GPUCreatePipelineLayout(device, &layoutInfo, &pipelineLayout) != GPU_OK ||
-      !pipelineLayout) {
-    fprintf(stderr, "Metal vertex/resource pipeline layout setup failed\n");
-    goto cleanup;
-  }
-
-  attribute.shaderLocation       = 0u;
-  attribute.format               = GPUFloat2;
-  vertexLayout.strideBytes       = 8u;
-  vertexLayout.stepMode          = GPU_VERTEX_STEP_MODE_VERTEX;
-  vertexLayout.attributeCount    = 1u;
-  vertexLayout.pAttributes       = &attribute;
-  colorTarget.format             = GPU_FORMAT_BGRA8_UNORM;
-  pipelineInfo.chain.sType       = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
-  pipelineInfo.chain.structSize  = sizeof(pipelineInfo);
-  pipelineInfo.label             = "metal-vertex-resource-pipeline";
-  pipelineInfo.layout            = pipelineLayout;
-  pipelineInfo.library           = library;
-  pipelineInfo.vertexEntry       = "slot_vs";
-  pipelineInfo.fragmentEntry     = "slot_fs";
-  pipelineInfo.vertex.bufferLayoutCount = 1u;
-  pipelineInfo.vertex.pBufferLayouts    = &vertexLayout;
-  pipelineInfo.colorTargetCount         = 1u;
-  pipelineInfo.pColorTargets            = &colorTarget;
-  pipelineInfo.primitiveTopology        = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  pipelineInfo.cullMode                 = GPU_CULL_MODE_NONE;
-  pipelineInfo.frontFace                = GPU_FRONT_FACE_CCW;
-  pipelineInfo.multisample.sampleCount  = 1u;
-  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
-      !pipeline) {
-    fprintf(stderr, "Metal vertex input collided with vertex resource slot 0\n");
-    goto cleanup;
-  }
-  GPUDestroyRenderPipeline(pipeline);
-  pipeline = (GPURenderPipeline *)(uintptr_t)1u;
-
-  vertexLayouts[MT_VERTEX_BUFFER_COUNT - 1u] = vertexLayout;
-  pipelineInfo.vertex.bufferLayoutCount = MT_VERTEX_BUFFER_COUNT;
-  pipelineInfo.vertex.pBufferLayouts    = vertexLayouts;
-  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) !=
-        GPU_ERROR_UNSUPPORTED ||
-      pipeline != NULL) {
-    fprintf(stderr, "Metal accepted overlapping vertex input/resource slots\n");
-    goto cleanup;
-  }
-
-  ok = 1;
-
-cleanup:
-  GPUDestroyRenderPipeline(pipeline);
-  GPUDestroyPipelineLayout(pipelineLayout);
-  GPUDestroyBindGroupLayout(groupLayout);
-  GPUDestroyShaderLibrary(library);
-  return ok;
 }
 
 typedef enum RenderReadbackDrawMode {
@@ -2576,7 +2447,7 @@ gpu_test_render(GPUDevice *device, const char *mrtBytecodePath) {
   return check_render_pass_validation() &&
          check_render_encoder_validation(device) &&
          check_render_pipeline_validation(device, mrtBytecodePath) &&
-         check_metal_vertex_resource_slots(device) &&
+         gpu_test_metal_vertex_slots(device, mrtBytecodePath) &&
          check_render_draw_validation_calls(device) &&
          check_vertex_buffer_shadowing_calls(device) &&
          check_render_push_constant_shadowing_calls(device) &&

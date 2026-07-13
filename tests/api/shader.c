@@ -303,6 +303,7 @@ check_reflected_dynamic_offset_validation(GPUDevice *device,
                                           GPUShaderLibrary *library) {
   GPUBindGroupLayout *layouts[2] = {0};
   GPUBindGroupLayout *badLayouts[2] = {0};
+  GPUBindGroupLayoutEntry badGroup0Entries[2] = {{0}};
   GPUBindGroupLayoutEntry badGroup1Entries[2] = {{0}};
   GPUBindGroupLayoutCreateInfo layoutInfo = {0};
   GPUPipelineLayoutCreateInfo pipelineInfo = {0};
@@ -326,6 +327,28 @@ check_reflected_dynamic_offset_validation(GPUDevice *device,
     goto cleanup;
   }
 
+  badGroup0Entries[0].binding = 0u;
+  badGroup0Entries[0].bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  badGroup0Entries[0].visibility = GPU_SHADER_STAGE_FRAGMENT_BIT;
+  badGroup0Entries[0].arrayCount = 1u;
+
+  badGroup0Entries[1].binding = 1u;
+  badGroup0Entries[1].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+  badGroup0Entries[1].visibility = GPU_SHADER_STAGE_FRAGMENT_BIT |
+                                   GPU_SHADER_STAGE_COMPUTE_BIT;
+  badGroup0Entries[1].arrayCount = 1u;
+
+  layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  layoutInfo.label = "api-reflection-manual-slot-group0";
+  layoutInfo.entryCount = (uint32_t)GPU_ARRAY_LEN(badGroup0Entries);
+  layoutInfo.pEntries = badGroup0Entries;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &badLayouts[0]) != GPU_OK ||
+      !badLayouts[0]) {
+    fprintf(stderr, "dynamic offset validation could not create group 0 layout\n");
+    goto cleanup;
+  }
+
   badGroup1Entries[0].binding = 0u;
   badGroup1Entries[0].bindingType = GPU_BINDING_UNIFORM_BUFFER;
   badGroup1Entries[0].visibility = GPU_SHADER_STAGE_FRAGMENT_BIT;
@@ -337,8 +360,6 @@ check_reflected_dynamic_offset_validation(GPUDevice *device,
   badGroup1Entries[1].visibility = GPU_SHADER_STAGE_COMPUTE_BIT;
   badGroup1Entries[1].arrayCount = 1u;
 
-  layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
-  layoutInfo.chain.structSize = sizeof(layoutInfo);
   layoutInfo.label = "api-reflection-bad-dynamic-offset-group1";
   layoutInfo.entryCount = (uint32_t)GPU_ARRAY_LEN(badGroup1Entries);
   layoutInfo.pEntries = badGroup1Entries;
@@ -347,8 +368,6 @@ check_reflected_dynamic_offset_validation(GPUDevice *device,
     fprintf(stderr, "dynamic offset validation could not create mismatch layout\n");
     goto cleanup;
   }
-  badLayouts[0] = layouts[0];
-
   pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
   if (GPUCreatePipelineLayoutFromReflection(device,
                                             library,
@@ -427,6 +446,7 @@ cleanup:
   GPUDestroyComputePipeline(computePipeline);
   GPUDestroyPipelineLayout(pipelineLayout);
   GPUDestroyBindGroupLayout(badLayouts[1]);
+  GPUDestroyBindGroupLayout(badLayouts[0]);
   GPUDestroyBindGroupLayout(layouts[1]);
   GPUDestroyBindGroupLayout(layouts[0]);
   return ok;

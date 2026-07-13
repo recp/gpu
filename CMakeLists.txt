@@ -302,6 +302,7 @@ if(GPU_BUILD_TESTS)
     tests/api/cube_texture.c
     tests/api/line_texture.c
     tests/api/main.c
+    tests/api/metal_vertex_slots.c
     tests/api/query.c
     tests/api/queue.c
     tests/api/render.c
