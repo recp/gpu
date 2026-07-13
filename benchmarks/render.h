@@ -48,7 +48,10 @@ typedef struct BenchRender {
 
 typedef struct BenchPipelineInfo {
   const char   *label;
+  const char   *vertexEntry;
+  const char   *fragmentEntry;
   GPUFrontFace  frontFace;
+  bool          vertexInput;
   bool          blendEnabled;
 } BenchPipelineInfo;
 

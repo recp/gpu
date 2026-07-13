@@ -53,8 +53,9 @@ main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  pipelineInfo.label     = "static-scene-pipeline";
-  pipelineInfo.frontFace = GPU_FRONT_FACE_CCW;
+  pipelineInfo.label       = "static-scene-pipeline";
+  pipelineInfo.frontFace   = GPU_FRONT_FACE_CCW;
+  pipelineInfo.vertexInput = true;
   if (!bench_renderPipeline(&bench, &pipelineInfo, &pipeline)) {
     fprintf(stderr, "failed to create static scene pipeline\n");
     bench_renderCleanup(&bench);

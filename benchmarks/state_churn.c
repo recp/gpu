@@ -125,8 +125,9 @@ main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  pipelineInfo.label     = "state-churn-pipeline-a";
-  pipelineInfo.frontFace = GPU_FRONT_FACE_CCW;
+  pipelineInfo.label       = "state-churn-pipeline-a";
+  pipelineInfo.frontFace   = GPU_FRONT_FACE_CCW;
+  pipelineInfo.vertexInput = true;
   if (!bench_renderPipeline(&bench,
                             &pipelineInfo,
                             &churn.pipelines[0])) {

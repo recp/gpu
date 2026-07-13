@@ -95,7 +95,7 @@ bench_renderConfig(int argc, char *argv[], BenchRenderConfig *config) {
   if (!config || argc < 2 || argc > 7) {
     if (argv && argv[0]) {
       fprintf(stderr,
-              "usage: %s <render_mrt.us> [default|metal|vulkan|dx12] "
+              "usage: %s <shader.us> [default|metal|vulkan|dx12] "
               "[draws] [warmup] [frames] [repeats]\n",
               argv[0]);
     }
@@ -308,12 +308,14 @@ bench_renderPipeline(BenchRender             *bench,
   memset(&vertexLayout, 0, sizeof(vertexLayout));
   memset(&colorTarget, 0, sizeof(colorTarget));
 
-  attribute.shaderLocation    = 0u;
-  attribute.format            = GPU_VERTEX_FORMAT_FLOAT2;
-  vertexLayout.strideBytes    = 2u * sizeof(float);
-  vertexLayout.stepMode       = GPU_VERTEX_STEP_MODE_VERTEX;
-  vertexLayout.attributeCount = 1u;
-  vertexLayout.pAttributes    = &attribute;
+  if (info->vertexInput) {
+    attribute.shaderLocation    = 0u;
+    attribute.format            = GPU_VERTEX_FORMAT_FLOAT2;
+    vertexLayout.strideBytes    = 2u * sizeof(float);
+    vertexLayout.stepMode       = GPU_VERTEX_STEP_MODE_VERTEX;
+    vertexLayout.attributeCount = 1u;
+    vertexLayout.pAttributes    = &attribute;
+  }
   colorTarget.format          = GPU_FORMAT_BGRA8_UNORM;
   colorTarget.blend.writeMask = GPU_COLOR_WRITE_ALL;
   if (info->blendEnabled) {
@@ -332,10 +334,14 @@ bench_renderPipeline(BenchRender             *bench,
   pipelineInfo.label            = info->label;
   pipelineInfo.layout           = bench->pipelineLayout;
   pipelineInfo.library          = bench->library;
-  pipelineInfo.vertexEntry      = "api_vs";
-  pipelineInfo.fragmentEntry    = "api_fs";
-  pipelineInfo.vertex.bufferLayoutCount = 1u;
-  pipelineInfo.vertex.pBufferLayouts    = &vertexLayout;
+  pipelineInfo.vertexEntry   = info->vertexEntry ? info->vertexEntry : "api_vs";
+  pipelineInfo.fragmentEntry = info->fragmentEntry
+                                 ? info->fragmentEntry
+                                 : "api_fs";
+  pipelineInfo.vertex.bufferLayoutCount = info->vertexInput ? 1u : 0u;
+  pipelineInfo.vertex.pBufferLayouts    = info->vertexInput
+                                            ? &vertexLayout
+                                            : NULL;
   pipelineInfo.colorTargetCount         = 1u;
   pipelineInfo.pColorTargets            = &colorTarget;
   pipelineInfo.depthStencilFormat       = GPU_FORMAT_UNDEFINED;

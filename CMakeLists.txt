@@ -635,11 +635,35 @@ if(GPU_BUILD_BENCHMARKS)
     target_compile_options(gpu-state-churn-bench PRIVATE -Wall -Wextra)
   endif()
 
+  add_executable(gpu-binding-churn-bench
+    benchmarks/bench.c
+    benchmarks/render.c
+    benchmarks/binding_churn.c
+  )
+  target_link_libraries(gpu-binding-churn-bench PRIVATE gpu)
+  target_include_directories(gpu-binding-churn-bench PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_compile_definitions(gpu-binding-churn-bench PRIVATE
+    GPU_BUILD_WITH_VALIDATION=$<BOOL:${GPU_BUILD_WITH_VALIDATION}>
+  )
+  set_target_properties(gpu-binding-churn-bench PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_options(gpu-binding-churn-bench PRIVATE /W3)
+  else()
+    target_compile_options(gpu-binding-churn-bench PRIVATE -Wall -Wextra)
+  endif()
+
   if(WIN32)
     foreach(benchmark_target
             gpu-dispatch-bench
             gpu-static-scene-bench
-            gpu-state-churn-bench)
+            gpu-state-churn-bench
+            gpu-binding-churn-bench)
       foreach(runtime_target us ds)
         if(TARGET ${runtime_target})
           add_custom_command(TARGET ${benchmark_target} POST_BUILD
