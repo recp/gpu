@@ -537,7 +537,7 @@ vk_createSwapchain(GPUApi          * __restrict api,
                    GPUQueue        * __restrict cmdQue,
                    const GPUSwapchainCreateInfo * __restrict info) {
   GPUDeviceVk         *deviceVk;
-  GPUPhysicalDeviceVk *physicalDeviceVk;
+  GPUAdapterVk        *adapterVk;
   GPUSwapchain        *swapchainObj;
   GPUSwapchainVk      *swapchain;
   GPUSurfaceVk        *surface;
@@ -545,17 +545,17 @@ vk_createSwapchain(GPUApi          * __restrict api,
 
   GPU__UNUSED(api);
 
-  if (!device || !device->_priv || !device->phyDevice ||
+  if (!device || !device->_priv || !device->adapter ||
       !cmdQue || !cmdQue->_priv || !info || !info->surface ||
       !info->surface->_priv || info->width == 0u || info->height == 0u) {
     return NULL;
   }
 
   deviceVk         = device->_priv;
-  physicalDeviceVk = device->phyDevice->_priv;
+  adapterVk        = device->adapter->_priv;
   surface          = info->surface->_priv;
   presentSupported = VK_FALSE;
-  if (vkGetPhysicalDeviceSurfaceSupportKHR(physicalDeviceVk->phyDevice,
+  if (vkGetPhysicalDeviceSurfaceSupportKHR(adapterVk->physicalDevice,
                                            ((GPUQueueVk *)cmdQue->_priv)->familyIndex,
                                            surface->surface,
                                            &presentSupported) != VK_SUCCESS ||
@@ -577,7 +577,7 @@ vk_createSwapchain(GPUApi          * __restrict api,
   swapchain->queue                = cmdQue->_priv;
   swapchain->surface              = surface;
   swapchain->device               = deviceVk->device;
-  swapchain->physicalDevice       = physicalDeviceVk->phyDevice;
+  swapchain->physicalDevice       = adapterVk->physicalDevice;
   swapchain->requestedImageCount = info->imageCount ? info->imageCount : 3u;
   swapchain->gpuFormat            = info->format;
   swapchain->presentMode          = info->presentMode;

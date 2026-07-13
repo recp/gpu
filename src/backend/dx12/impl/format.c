@@ -99,7 +99,7 @@ dx12_sampledFormat(GPUFormat format) {
 }
 
 static void
-dx12_queryFormatCapabilities(GPUPhysicalDeviceDX12 *adapter) {
+dx12_queryFormatCapabilities(GPUAdapterDX12 *adapter) {
   ID3D12Device *device;
   HRESULT       result;
 
@@ -189,7 +189,7 @@ dx12_getFormatCapabilities(
   const GPUAdapter      * __restrict adapter,
   GPUFormat              format,
   GPUFormatCapabilities * __restrict outCaps) {
-  GPUPhysicalDeviceDX12 *adapterDX12;
+  GPUAdapterDX12 *adapterDX12;
 
   adapterDX12 = adapter ? adapter->_priv : NULL;
   if (!outCaps) {

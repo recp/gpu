@@ -19,7 +19,7 @@
 GPUSurface *
 dx12_createSurface(GPUApi            * __restrict api,
                    GPUInstance       * __restrict inst,
-                   GPUPhysicalDevice * __restrict phyDevice,
+                   GPUAdapter        * __restrict adapter,
                    void              * __restrict nativeHandle,
                    GPUSurfaceType                 type,
                    float                          scale) {

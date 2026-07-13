@@ -874,7 +874,7 @@ GPUGetDeviceCapabilities(const GPUDevice       *device,
 
   memset(outCaps, 0, sizeof(*outCaps));
   outCaps->enabled = device->enabledFeatures;
-  gpu_fillAdapterLimits(device->phyDevice, &outCaps->limits);
+  gpu_fillAdapterLimits(device->adapter, &outCaps->limits);
 
   return GPU_OK;
 }

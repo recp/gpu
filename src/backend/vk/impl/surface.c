@@ -22,7 +22,7 @@ GPU_HIDE
 static
 VkResult
 vk_createDisplaySurface(GPUInstanceVk       * __restrict inst,
-                        GPUPhysicalDeviceVk * __restrict phyDevice,
+                        GPUAdapterVk        * __restrict adapter,
                         GPUSurfaceVk        * __restrict surface) {
   VkDisplayPlanePropertiesKHR  *plane_props;
   VkDisplayPropertiesKHR        display_props;
@@ -36,7 +36,7 @@ vk_createDisplaySurface(GPUInstanceVk       * __restrict inst,
 
   // Get the first display
   display_count = 1;
-  err           = vkGetPhysicalDeviceDisplayPropertiesKHR(phyDevice->phyDevice,
+  err           = vkGetPhysicalDeviceDisplayPropertiesKHR(adapter->physicalDevice,
                                                           &display_count,
                                                           &display_props);
   assert(!err || (err == VK_INCOMPLETE));
@@ -44,7 +44,7 @@ vk_createDisplaySurface(GPUInstanceVk       * __restrict inst,
   display = display_props.display;
 
   // Get the first mode of the display
-  err = vkGetDisplayModePropertiesKHR(phyDevice->phyDevice, display, &mode_count, NULL);
+  err = vkGetDisplayModePropertiesKHR(adapter->physicalDevice, display, &mode_count, NULL);
   assert(!err);
 
   if (mode_count == 0) {
@@ -54,11 +54,11 @@ vk_createDisplaySurface(GPUInstanceVk       * __restrict inst,
   }
 
   mode_count = 1;
-  err = vkGetDisplayModePropertiesKHR(phyDevice->phyDevice, display, &mode_count, &mode_props);
+  err = vkGetDisplayModePropertiesKHR(adapter->physicalDevice, display, &mode_count, &mode_props);
   assert(!err || (err == VK_INCOMPLETE));
 
   // Get the list of planes
-  err = vkGetPhysicalDeviceDisplayPlanePropertiesKHR(phyDevice->phyDevice, &plane_count, NULL);
+  err = vkGetPhysicalDeviceDisplayPlanePropertiesKHR(adapter->physicalDevice, &plane_count, NULL);
   assert(!err);
 
   if (plane_count == 0) {
@@ -70,7 +70,7 @@ vk_createDisplaySurface(GPUInstanceVk       * __restrict inst,
   plane_props = malloc(sizeof(VkDisplayPlanePropertiesKHR) * plane_count);
   assert(plane_props);
 
-  err = vkGetPhysicalDeviceDisplayPlanePropertiesKHR(phyDevice->phyDevice, 
+  err = vkGetPhysicalDeviceDisplayPlanePropertiesKHR(adapter->physicalDevice,
                                                      &plane_count,
                                                      plane_props);
   assert(!err);
@@ -86,7 +86,7 @@ vk_createDisplaySurface(GPUInstanceVk       * __restrict inst,
       continue;
     }
 
-    err = vkGetDisplayPlaneSupportedDisplaysKHR(phyDevice->phyDevice, 
+    err = vkGetDisplayPlaneSupportedDisplaysKHR(adapter->physicalDevice,
                                                 plane_index,
                                                 &supported_count,
                                                 NULL);
@@ -99,7 +99,7 @@ vk_createDisplaySurface(GPUInstanceVk       * __restrict inst,
     supported_displays = malloc(sizeof(VkDisplayKHR) * supported_count);
     assert(supported_displays);
 
-    err = vkGetDisplayPlaneSupportedDisplaysKHR(phyDevice->phyDevice, 
+    err = vkGetDisplayPlaneSupportedDisplaysKHR(adapter->physicalDevice,
                                                 plane_index,
                                                 &supported_count,
                                                 supported_displays);
@@ -128,7 +128,7 @@ vk_createDisplaySurface(GPUInstanceVk       * __restrict inst,
   free(plane_props);
 
   VkDisplayPlaneCapabilitiesKHR planeCaps;
-  vkGetDisplayPlaneCapabilitiesKHR(phyDevice->phyDevice, 
+  vkGetDisplayPlaneCapabilitiesKHR(adapter->physicalDevice,
                                    mode_props.displayMode,
                                    plane_index,
                                    &planeCaps);
@@ -170,32 +170,36 @@ GPU_HIDE
 GPUSurface*
 vk_createSurface(GPUApi            * __restrict api,
                  GPUInstance       * __restrict inst,
-                 GPUPhysicalDevice * __restrict phyDevice,
+                 GPUAdapter        * __restrict adapter,
                  void              * __restrict nativeHandle,
                  GPUSurfaceType                 type,
                  float                          scale) {
-  GPUInstanceVk         *instVk;
-  GPUPhysicalDeviceVk   *phyDeviceVk;
-  GPUSurface            *gpuSurface;
-  GPUSurfaceVk          *surface;
-  VkResult               err;
+  GPUInstanceVk *instVk;
+#if defined(VK_USE_PLATFORM_DISPLAY_KHR)
+  GPUAdapterVk  *adapterVk;
+#endif
+  GPUSurface    *gpuSurface;
+  GPUSurfaceVk  *surface;
+  VkResult       err;
 
   GPU__UNUSED(api);
 
-  if (!phyDevice || !nativeHandle) {
+  if (!adapter || !nativeHandle) {
     return NULL;
   }
 
   if (!inst) {
-    inst = phyDevice->inst;
+    inst = adapter->inst;
   }
-  if (!inst || !inst->_priv || !phyDevice->_priv) {
+  if (!inst || !inst->_priv || !adapter->_priv) {
     return NULL;
   }
 
-  instVk            = inst->_priv;
-  phyDeviceVk       = phyDevice->_priv;
-  gpuSurface        = calloc(1, sizeof(*gpuSurface));
+  instVk     = inst->_priv;
+  gpuSurface = calloc(1, sizeof(*gpuSurface));
+#if defined(VK_USE_PLATFORM_DISPLAY_KHR)
+  adapterVk = adapter->_priv;
+#endif
   if (!gpuSurface) {
     return NULL;
   }
@@ -268,7 +272,7 @@ vk_createSurface(GPUApi            * __restrict api,
 
   err = vkCreateDirectFBSurfaceEXT(instVk->inst, &createInfo, NULL, &surface->surface);
 #elif defined(VK_USE_PLATFORM_DISPLAY_KHR)
-  err = vk_createDisplaySurface(instVk, phyDeviceVk, surface->surface);
+  err = vk_createDisplaySurface(instVk, adapterVk, surface->surface);
 #elif defined(VK_USE_PLATFORM_METAL_EXT)
   VkMetalSurfaceCreateInfoEXT createInfo = {0};
   surface->metalLayer = vk_createMetalLayer(nativeHandle, type, scale);

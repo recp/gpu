@@ -184,10 +184,10 @@ typedef struct GPUInstanceVk {
 #endif
 } GPUInstanceVk;
 
-typedef struct GPUPhysicalDeviceVk {
+typedef struct GPUAdapterVk {
   char                      *extensionNames[64];
   VkQueueFamilyProperties   *queueFamilyProps;
-  VkPhysicalDevice           phyDevice;
+  VkPhysicalDevice           physicalDevice;
   uint32_t                   nQueFamilies;
   uint32_t                   nEnabledExtensions;
   VkPhysicalDeviceProperties props;
@@ -195,7 +195,7 @@ typedef struct GPUPhysicalDeviceVk {
   uint32_t                   nDisplayProperties;
   VkDisplayPropertiesKHR     displayProps;
   bool                       dynamicRendering;
-} GPUPhysicalDeviceVk;
+} GPUAdapterVk;
 
 typedef struct GPUDeviceVk {
   GPUQueue                  **createdQueues;

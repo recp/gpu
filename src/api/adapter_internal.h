@@ -20,8 +20,6 @@
 #include "../common.h"
 #include "instance_internal.h"
 
-typedef GPUAdapter GPUPhysicalDevice;
-
 struct GPUAdapter {
   struct GPUAdapter *next;
   GPUInstance       *inst;

@@ -637,7 +637,7 @@ check_compressed_texture_copies(GPUDevice *device) {
   int                           ok;
 
   if (!device ||
-      GPUGetFormatCapabilities(device->phyDevice,
+      GPUGetFormatCapabilities(device->adapter,
                                GPU_FORMAT_BC1_RGBA_UNORM,
                                &formatCaps) != GPU_OK ||
       !formatCaps.sampled) {

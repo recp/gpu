@@ -100,7 +100,7 @@ gpuValidateTextureFormatUsage(const GPUDevice       *device,
   GPUFormatCapabilities caps;
   GPUResult             result;
 
-  result = GPUGetFormatCapabilities(device->phyDevice, format, &caps);
+  result = GPUGetFormatCapabilities(device->adapter, format, &caps);
   if (result != GPU_OK) {
     return result;
   }

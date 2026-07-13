@@ -17,48 +17,48 @@
 #include "../common.h"
 
 GPU_HIDE
-GPUPhysicalDevice *
-mt_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
-                                 uint32_t                 maxNumberOfItems) {
+GPUAdapter *
+mt_getAvailableAdapters(GPUInstance * __restrict inst,
+                        uint32_t                 maxNumberOfItems) {
   NSArray<id<MTLDevice>> *devices;
-  GPUPhysicalDevice      *firstDevice, *lastDevice, *item;
+  GPUAdapter             *firstAdapter, *lastAdapter, *adapter;
   uint32_t                i;
 
-  i           = 0;
-  firstDevice = lastDevice = NULL;
-  devices     = MTLCopyAllDevices();
+  i            = 0;
+  firstAdapter = lastAdapter = NULL;
+  devices      = MTLCopyAllDevices();
 
   for (id<MTLDevice> device in devices) {
-    item = calloc(1, sizeof(*item));
-    if (!item) {
+    adapter = calloc(1, sizeof(*adapter));
+    if (!adapter) {
       break;
     }
-    item->separatePresentQueue       = 1;
-    item->supportsDisplayTiming      = 1;
-    item->supportsIncrementalPresent = 1; /* TODO: */
-    item->supportsSwapchain          = 1;
-    item->inst                       = inst;
-    item->_priv                      = [device retain];
+    adapter->separatePresentQueue       = 1;
+    adapter->supportsDisplayTiming      = 1;
+    adapter->supportsIncrementalPresent = 1; /* TODO: */
+    adapter->supportsSwapchain          = 1;
+    adapter->inst                       = inst;
+    adapter->_priv                      = [device retain];
 
-    /* add to linked list of devices */
-    if (lastDevice) { lastDevice->next = item; }
-    else            { firstDevice      = item; }
-    lastDevice = item;
+    if (lastAdapter) { lastAdapter->next = adapter; }
+    else             { firstAdapter      = adapter; }
+    lastAdapter = adapter;
 
     if (++i >= maxNumberOfItems) { break; }
   }
 
   [devices release];
 
-  return firstDevice;
+  return firstAdapter;
 }
 
 GPU_HIDE
-GPUPhysicalDevice*
-mt_autoSelectPhysicalDeviceIn(GPUInstance       * __restrict inst,
-                              GPUPhysicalDevice * __restrict deviceList) {
+GPUAdapter *
+mt_selectAdapter(GPUInstance * __restrict inst,
+                 GPUAdapter  * __restrict adapters) {
   /* TODO: implement this later */
-  return deviceList;
+  GPU__UNUSED(inst);
+  return adapters;
 }
 
 GPU_HIDE
@@ -357,22 +357,22 @@ mt_selectCommandMode(id<MTLDevice> device, MTCommandMode *outMode) {
 
 GPU_HIDE
 GPUDevice *
-mt_createDevice(GPUPhysicalDevice        *phyDevice,
+mt_createDevice(GPUAdapter        * __restrict adapter,
                 GPUQueueCreateInfo queCI[],
-                uint32_t                  nQueCI) {
-  GPUDevice   *device;
-  GPUDeviceMT *deviceMT;
-  MTCommandMode commandMode;
-  uint32_t     i, j, queueIndex, queueCount;
+                uint32_t           nQueCI) {
+  GPUDevice     *device;
+  GPUDeviceMT   *deviceMT;
+  MTCommandMode  commandMode;
+  uint32_t       i, j, queueIndex, queueCount;
 
   GPU__DEFINE_DEFAULT_QUEUES_IF_NEEDED(nQueCI, queCI)
 
-  if (!phyDevice || !phyDevice->_priv ||
-      !mt_selectCommandMode((id<MTLDevice>)phyDevice->_priv, &commandMode)) {
+  if (!adapter || !adapter->_priv ||
+      !mt_selectCommandMode((id<MTLDevice>)adapter->_priv, &commandMode)) {
     return NULL;
   }
 
-  device = calloc(1, sizeof(*device));
+  device   = calloc(1, sizeof(*device));
   deviceMT = calloc(1, sizeof(*deviceMT));
   if (!device || !deviceMT) {
     free(deviceMT);
@@ -380,9 +380,9 @@ mt_createDevice(GPUPhysicalDevice        *phyDevice,
     return NULL;
   }
 
-  deviceMT->device = phyDevice->_priv;
+  deviceMT->device      = adapter->_priv;
   deviceMT->commandMode = commandMode;
-  queueCount               = 0;
+  queueCount            = 0;
   for (i = 0; i < nQueCI; i++) {
     queueCount += queCI[i].count;
   }
@@ -398,8 +398,8 @@ mt_createDevice(GPUPhysicalDevice        *phyDevice,
   }
 
   device->_priv            = deviceMT;
-  device->inst             = phyDevice->inst;
-  device->phyDevice        = phyDevice;
+  device->inst             = adapter->inst;
+  device->adapter          = adapter;
 
   queueIndex = 0;
   for (i = 0; i < nQueCI; i++) {
@@ -473,8 +473,8 @@ mt_destroyDevice(GPUDevice * __restrict device) {
 GPU_HIDE
 void
 mt_initDevice(GPUApiDevice *apiDevice) {
-  apiDevice->getAvailableAdapters      = mt_getAvailablePhysicalDevicesBy;
-  apiDevice->selectAdapter             = mt_autoSelectPhysicalDeviceIn;
+  apiDevice->getAvailableAdapters      = mt_getAvailableAdapters;
+  apiDevice->selectAdapter             = mt_selectAdapter;
   apiDevice->destroyAdapter            = mt_destroyAdapter;
   apiDevice->getAdapterProperties      = mt_getAdapterProperties;
   apiDevice->supportsFeature           = mt_supportsFeature;

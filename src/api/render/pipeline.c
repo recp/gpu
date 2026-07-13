@@ -89,7 +89,7 @@ gpu_validatePipelineFormats(const GPUDevice                   *device,
   GPUResult             result;
 
   for (uint32_t i = 0; i < info->colorTargetCount; i++) {
-    result = GPUGetFormatCapabilities(device->phyDevice,
+    result = GPUGetFormatCapabilities(device->adapter,
                                       info->pColorTargets[i].format,
                                       &caps);
     if (result != GPU_OK) {
@@ -102,7 +102,7 @@ gpu_validatePipelineFormats(const GPUDevice                   *device,
   }
 
   if (info->depthStencilFormat != GPU_FORMAT_UNDEFINED) {
-    result = GPUGetFormatCapabilities(device->phyDevice,
+    result = GPUGetFormatCapabilities(device->adapter,
                                       info->depthStencilFormat,
                                       &caps);
     if (result != GPU_OK) {

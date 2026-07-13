@@ -18,34 +18,34 @@
 #include "../impl.h"
 
 static void
-dx12_fillAdapterName(GPUPhysicalDeviceDX12 *phyDeviceDX12) {
-  if (!phyDeviceDX12) {
+dx12_fillAdapterName(GPUAdapterDX12 *adapterDX12) {
+  if (!adapterDX12) {
     return;
   }
 
-  phyDeviceDX12->name[0] = '\0';
+  adapterDX12->name[0] = '\0';
   WideCharToMultiByte(CP_UTF8,
                       0,
-                      phyDeviceDX12->desc1.Description,
+                      adapterDX12->desc1.Description,
                       -1,
-                      phyDeviceDX12->name,
-                      (int)sizeof(phyDeviceDX12->name),
+                      adapterDX12->name,
+                      (int)sizeof(adapterDX12->name),
                       NULL,
                       NULL);
 }
 
 static GPUAdapterType
-dx12_adapterType(const GPUPhysicalDeviceDX12 *phyDeviceDX12) {
+dx12_adapterType(const GPUAdapterDX12 *adapterDX12) {
   const DXGI_ADAPTER_DESC1 *desc;
 
-  if (!phyDeviceDX12) {
+  if (!adapterDX12) {
     return GPU_ADAPTER_TYPE_UNKNOWN;
   }
-  if (phyDeviceDX12->isWarp) {
+  if (adapterDX12->isWarp) {
     return GPU_ADAPTER_TYPE_SOFTWARE;
   }
 
-  desc = &phyDeviceDX12->desc1;
+  desc = &adapterDX12->desc1;
   if (desc->Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
     return GPU_ADAPTER_TYPE_SOFTWARE;
   }
@@ -180,20 +180,20 @@ dx12__freeSignatures(GPUDeviceDX12 *device) {
 }
 
 GPU_HIDE
-GPUPhysicalDevice *
-dx12_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
-                                   uint32_t                 maxNumberOfItems) {
-  GPUPhysicalDeviceDX12 *phyDeviceDX12;
+GPUAdapter *
+dx12_getAvailableAdapters(GPUInstance * __restrict inst,
+                          uint32_t                 maxNumberOfItems) {
+  GPUAdapterDX12        *adapterDX12;
   GPUInstanceDX12       *instDX12;
   IDXGIFactory4         *dxgiFactory;
-  GPUPhysicalDevice     *firstDevice, *lastDevice, *item;
+  GPUAdapter            *firstAdapter, *lastAdapter, *adapter;
   IDXGIAdapter1         *dxgiAdapter;
   IDXGIAdapter          *warpAdapter;
   UINT                   adapterIndex, i;
   HRESULT                hr;
   HRESULT              (*EnumAdapters1)(IDXGIFactory4*, UINT, IDXGIAdapter1**);
 
-  firstDevice   = lastDevice = NULL;
+  firstAdapter  = lastAdapter = NULL;
   adapterIndex  = i = 0;
   instDX12      = inst->_priv;
   dxgiFactory   = instDX12->dxgiFactory;
@@ -203,18 +203,18 @@ dx12_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
   while (i < maxNumberOfItems
          && SUCCEEDED(EnumAdapters1(dxgiFactory, adapterIndex, &dxgiAdapter))) {
     if (dxgiAdapter) {
-      phyDeviceDX12              = calloc(1, sizeof(*phyDeviceDX12));
-      phyDeviceDX12->dxgiAdapter = (IUnknown *)dxgiAdapter;
-      InitializeSRWLock(&phyDeviceDX12->formatCapsLock);
+      adapterDX12              = calloc(1, sizeof(*adapterDX12));
+      adapterDX12->dxgiAdapter = (IUnknown *)dxgiAdapter;
+      InitializeSRWLock(&adapterDX12->formatCapsLock);
 
-      dxgiAdapter->lpVtbl->GetDesc1(dxgiAdapter, &phyDeviceDX12->desc1);
-      dx12_fillAdapterName(phyDeviceDX12);
+      dxgiAdapter->lpVtbl->GetDesc1(dxgiAdapter, &adapterDX12->desc1);
+      dx12_fillAdapterName(adapterDX12);
 
-      if (phyDeviceDX12->desc1.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
+      if (adapterDX12->desc1.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
         /* Don't select the Basic Render Driver adapter.*/
         /* Release the current adapter before moving to next */
         dxgiAdapter->lpVtbl->Release(dxgiAdapter);
-        free(phyDeviceDX12);
+        free(adapterDX12);
         goto nxt;
       }
 
@@ -224,22 +224,21 @@ dx12_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
                                    D3D_FEATURE_LEVEL_11_0,
                                    &IID_ID3D12Device, NULL))) {
         dxgiAdapter->lpVtbl->Release(dxgiAdapter);
-        free(phyDeviceDX12);
+        free(adapterDX12);
         goto nxt;
       }
 
-      item = calloc(1, sizeof(*item));
-      item->_priv                      = phyDeviceDX12;
-      item->inst                       = inst;
-      item->separatePresentQueue       = 1; /* builtin */
-      item->supportsDisplayTiming      = 1; /* TODO: not builtin, implement later */
-      item->supportsIncrementalPresent = 1; /* TODO: not builtin, implement later */
-      item->supportsSwapchain          = 1; /* builtin */
+      adapter = calloc(1, sizeof(*adapter));
+      adapter->_priv                      = adapterDX12;
+      adapter->inst                       = inst;
+      adapter->separatePresentQueue       = 1; /* builtin */
+      adapter->supportsDisplayTiming      = 1; /* TODO */
+      adapter->supportsIncrementalPresent = 1; /* TODO */
+      adapter->supportsSwapchain          = 1; /* builtin */
 
-      /* add to linked list of devices */
-      if (lastDevice) { lastDevice->next = item; } 
-      else            { firstDevice      = item; }
-      lastDevice = item;
+      if (lastAdapter) { lastAdapter->next = adapter; }
+      else             { firstAdapter      = adapter; }
+      lastAdapter = adapter;
 
       /* move on to the next adapter. */
       /* dxgiAdapter->lpVtbl->Release(dxgiAdapter); */
@@ -250,83 +249,85 @@ dx12_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
     adapterIndex++;
   }
 
-  /* use WARP if there is no Phy Device */
-  if (!firstDevice) {
+  /* Use WARP when no hardware adapter is available. */
+  if (!firstAdapter) {
     DXCHECK(dxgiFactory->lpVtbl->EnumWarpAdapter(dxgiFactory, 
                                                  &IID_IDXGIAdapter, 
                                                  (void **)&warpAdapter));
-    item          = calloc(1, sizeof(*item));
-    phyDeviceDX12 = calloc(1, sizeof(*phyDeviceDX12));
+    adapter       = calloc(1, sizeof(*adapter));
+    adapterDX12   = calloc(1, sizeof(*adapterDX12));
 
-    phyDeviceDX12->dxgiAdapter       = (IUnknown *)warpAdapter;
-    phyDeviceDX12->isWarp            = true;
-    InitializeSRWLock(&phyDeviceDX12->formatCapsLock);
-    snprintf(phyDeviceDX12->name, sizeof(phyDeviceDX12->name), "WARP");
-    item->_priv                      = phyDeviceDX12;
-    item->inst                       = inst;
-    item->separatePresentQueue       = 1; /* builtin */
-    item->supportsDisplayTiming      = 1; /* TODO: not builtin, implement later */
-    item->supportsIncrementalPresent = 1; /* TODO: not builtin, implement later */
-    item->supportsSwapchain          = 1; /* builtin */
+    adapterDX12->dxgiAdapter       = (IUnknown *)warpAdapter;
+    adapterDX12->isWarp            = true;
+    InitializeSRWLock(&adapterDX12->formatCapsLock);
+    snprintf(adapterDX12->name, sizeof(adapterDX12->name), "WARP");
+    adapter->_priv                      = adapterDX12;
+    adapter->inst                       = inst;
+    adapter->separatePresentQueue       = 1; /* builtin */
+    adapter->supportsDisplayTiming      = 1; /* TODO */
+    adapter->supportsIncrementalPresent = 1; /* TODO */
+    adapter->supportsSwapchain          = 1; /* builtin */
 
-    firstDevice = item;
+    firstAdapter = adapter;
   }
 
-  return firstDevice;
+  return firstAdapter;
 err:
   dxThrowIfFailed(hr);
   return NULL;
 }
 
 GPU_HIDE
-GPUPhysicalDevice *
-dx12_autoSelectPhysicalDeviceIn(GPUInstance       * __restrict inst,
-                                GPUPhysicalDevice * __restrict deviceList) {
-  GPUPhysicalDevice     *item;
-  GPUPhysicalDeviceDX12 *itemDX12;
-  GPUPhysicalDevice     *devicesByType[4] = {0}; /* Four main types for DX12 */
-  DXGI_ADAPTER_DESC1    *desc;
-  uint32_t               i;
+GPUAdapter *
+dx12_selectAdapter(GPUInstance * __restrict inst,
+                   GPUAdapter  * __restrict adapters) {
+  GPUAdapter         *adapter;
+  GPUAdapterDX12     *adapterDX12;
+  GPUAdapter         *adaptersByType[4] = {0};
+  GPUAdapter         *priorityList[4];
+  DXGI_ADAPTER_DESC1 *desc;
+  uint32_t            i;
 
-  item = deviceList;
+  GPU__UNUSED(inst);
+  adapter = adapters;
 
   /* Classify devices into different categories based on criteria */
-  while (item) {
-    itemDX12 = item->_priv;
-    desc     = &itemDX12->desc1;
+  while (adapter) {
+    adapterDX12 = adapter->_priv;
+    desc        = &adapterDX12->desc1;
 
-    if (itemDX12->isWarp) {
-      devicesByType[3] = item; /* WARP */
+    if (adapterDX12->isWarp) {
+      adaptersByType[3] = adapter; /* WARP */
     } else if (desc->Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
-      devicesByType[2] = item; /* Other (software adapters excluding WARP) */
+      adaptersByType[2] = adapter; /* Other software adapter */
     } else if (desc->DedicatedVideoMemory > 1 * 1024 * 1024 * 1024) {
-      devicesByType[0] = item; /* Discrete GPU */
+      adaptersByType[0] = adapter; /* Discrete GPU */
     } else if (desc->DedicatedVideoMemory > 0) {
-      devicesByType[1] = item; /* Integrated GPU */
+      adaptersByType[1] = adapter; /* Integrated GPU */
     }
 
-    item = item->next;
+    adapter = adapter->next;
   }
 
-  /* Device selection based on priority */
-  GPUPhysicalDevice *priorityList[] = {
-      devicesByType[0], /* Discrete GPU   */
-      devicesByType[1], /* Integrated GPU */
-      devicesByType[2], /* Other          */
-      devicesByType[3]  /* WARP           */
-  };
+  priorityList[0] = adaptersByType[0]; /* Discrete GPU   */
+  priorityList[1] = adaptersByType[1]; /* Integrated GPU */
+  priorityList[2] = adaptersByType[2]; /* Other          */
+  priorityList[3] = adaptersByType[3]; /* WARP           */
 
-  /* select device based on priority */
-  for (i = 0; i < 4 && !(item = priorityList[i]); ++i);
+  for (i = 0u; i < GPU_ARRAY_LEN(priorityList) &&
+                  !(adapter = priorityList[i]); i++);
 
-  if (!item) { goto err; }
+  if (!adapter) { goto err; }
 
 #ifdef DEBUG
-  desc = &((GPUPhysicalDeviceDX12 *)item->_priv)->desc1; /* Directly access stored description */
-  fprintf(stderr, "Selected GPU: %S, type: %d\n", desc->Description, desc->VendorId);
+  desc = &((GPUAdapterDX12 *)adapter->_priv)->desc1;
+  fprintf(stderr,
+          "Selected GPU: %S, type: %d\n",
+          desc->Description,
+          desc->VendorId);
 #endif
 
-  return item;
+  return adapter;
 
 err:
   return NULL;
@@ -335,7 +336,7 @@ err:
 GPU_HIDE
 void
 dx12_destroyAdapter(GPUAdapter * __restrict adapter) {
-  GPUPhysicalDeviceDX12 *adapterDX12;
+  GPUAdapterDX12 *adapterDX12;
 
   if (!adapter) {
     return;
@@ -355,19 +356,19 @@ GPU_HIDE
 GPUResult
 dx12_getAdapterProperties(const GPUAdapter     * __restrict adapter,
                           GPUAdapterProperties * __restrict outProps) {
-  GPUPhysicalDeviceDX12 *phyDeviceDX12;
+  GPUAdapterDX12 *adapterDX12;
 
   if (!adapter || !outProps || !adapter->_priv) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  phyDeviceDX12 = adapter->_priv;
+  adapterDX12 = adapter->_priv;
   memset(outProps, 0, sizeof(*outProps));
   outProps->backend = GPU_BACKEND_DIRECTX12;
-  outProps->name = phyDeviceDX12->name[0] ?
-    phyDeviceDX12->name :
+  outProps->name = adapterDX12->name[0] ?
+    adapterDX12->name :
     "Direct3D 12";
-  outProps->type = dx12_adapterType(phyDeviceDX12);
+  outProps->type = dx12_adapterType(adapterDX12);
 
   return GPU_OK;
 }
@@ -376,7 +377,7 @@ GPU_HIDE
 bool
 dx12_supportsFeature(const GPUAdapter * __restrict adapter,
                      GPUFeature feature) {
-  GPUPhysicalDeviceDX12 *adapterDX12;
+  GPUAdapterDX12 *adapterDX12;
 
   if (!adapter || !adapter->_priv) {
     return false;
@@ -413,11 +414,11 @@ dx12_getLimits(const GPUAdapter * __restrict adapter,
 
 GPU_HIDE
 GPUDevice *
-dx12_createDevice(GPUPhysicalDevice        * __restrict phyDevice,
+dx12_createDevice(GPUAdapter        * __restrict adapter,
                   GPUQueueCreateInfo queCI[],
-                  uint32_t                  nQueCI) {
+                  uint32_t           nQueCI) {
   GPUInstance           *inst;
-  GPUPhysicalDeviceDX12 *phyDeviceDX12;
+  GPUAdapterDX12        *adapterDX12;
   GPUDevice             *device;
   GPUDeviceDX12         *deviceDX12;
   HRESULT                hr;
@@ -427,9 +428,9 @@ dx12_createDevice(GPUPhysicalDevice        * __restrict phyDevice,
 
   device     = NULL;
   deviceDX12 = NULL;
-  if (!phyDevice ||
-      !(inst = phyDevice->inst) ||
-      !(phyDeviceDX12 = phyDevice->_priv)) {
+  if (!adapter ||
+      !(inst = adapter->inst) ||
+      !(adapterDX12 = adapter->_priv)) {
     goto err;
   }
 
@@ -441,7 +442,7 @@ dx12_createDevice(GPUPhysicalDevice        * __restrict phyDevice,
     goto err;
   }
 
-  hr = D3D12CreateDevice(phyDeviceDX12->dxgiAdapter,
+  hr = D3D12CreateDevice(adapterDX12->dxgiAdapter,
                          D3D_FEATURE_LEVEL_11_0,
                          &IID_ID3D12Device,
                          (void **)&deviceDX12->d3dDevice);
@@ -450,7 +451,7 @@ dx12_createDevice(GPUPhysicalDevice        * __restrict phyDevice,
   }
   /* Parallels removes or corrupts devices on combined stencil-plane copies. */
   deviceDX12->stencilPlaneCopies =
-    !strstr(phyDeviceDX12->name, "Parallels Display Adapter");
+    !strstr(adapterDX12->name, "Parallels Display Adapter");
   dx12_queryDeviceCapabilities(deviceDX12);
   InitializeSRWLock(&deviceDX12->descriptorLock);
   if (!dx12__newSignatures(deviceDX12)) {
@@ -459,7 +460,7 @@ dx12_createDevice(GPUPhysicalDevice        * __restrict phyDevice,
 
   device->inst      = inst;
   device->_priv     = deviceDX12;
-  device->phyDevice = phyDevice;
+  device->adapter   = adapter;
 
   queueCount = 0u;
   for (i = 0u; i < nQueCI; i++) {
@@ -555,8 +556,8 @@ dx12_destroyDevice(GPUDevice * __restrict device) {
 GPU_HIDE
 void
 dx12_initDevice(GPUApiDevice* apiDevice) {
-  apiDevice->getAvailableAdapters      = dx12_getAvailablePhysicalDevicesBy;
-  apiDevice->selectAdapter             = dx12_autoSelectPhysicalDeviceIn;
+  apiDevice->getAvailableAdapters      = dx12_getAvailableAdapters;
+  apiDevice->selectAdapter             = dx12_selectAdapter;
   apiDevice->destroyAdapter            = dx12_destroyAdapter;
   apiDevice->getAdapterProperties      = dx12_getAdapterProperties;
   apiDevice->supportsFeature           = dx12_supportsFeature;

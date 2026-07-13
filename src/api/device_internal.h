@@ -34,7 +34,7 @@ typedef struct GPUPipelineCache GPUPipelineCache;
 
 struct GPUDevice {
   GPUInstance                 *inst;
-  GPUPhysicalDevice           *phyDevice;
+  GPUAdapter                  *adapter;
   GPUApi                      *_api;
   void                        *_priv;
   GPUBuffer                   *transientBuffer;

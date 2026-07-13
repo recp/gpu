@@ -663,7 +663,7 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
 
   format = GPU_FORMAT_UNDEFINED;
   for (uint32_t i = 0u; i < GPU_ARRAY_LEN(formats); i++) {
-    if (GPUGetFormatCapabilities(device->phyDevice,
+    if (GPUGetFormatCapabilities(device->adapter,
                                  formats[i],
                                  &formatCaps) == GPU_OK &&
         formatCaps.depthStencil) {

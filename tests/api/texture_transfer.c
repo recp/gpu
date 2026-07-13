@@ -681,7 +681,7 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
   bool                          uploadsPending;
   int                           ok;
 
-  if (GPUGetFormatCapabilities(device->phyDevice,
+  if (GPUGetFormatCapabilities(device->adapter,
                                format,
                                &formatCaps) != GPU_OK ||
       !formatCaps.depthStencil) {

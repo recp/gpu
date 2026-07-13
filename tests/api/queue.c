@@ -110,7 +110,7 @@ create_ownership_device(GPUAdapter               * __restrict adapter,
   (void)queueInfoCount;
   memset(&gOwnershipDevice, 0, sizeof(gOwnershipDevice));
   gOwnershipDevice.inst      = adapter->inst;
-  gOwnershipDevice.phyDevice = adapter;
+  gOwnershipDevice.adapter = adapter;
   gOwnershipDeviceCreateCalls++;
   return &gOwnershipDevice;
 }

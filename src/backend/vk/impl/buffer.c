@@ -67,15 +67,15 @@ vk_findMemoryType(GPUDevice             *device,
                   VkMemoryPropertyFlags  preferred,
                   uint32_t              *outIndex,
                   VkMemoryPropertyFlags *outFlags) {
-  GPUPhysicalDeviceVk     *physical;
+  GPUAdapterVk                     *adapterVk;
   VkPhysicalDeviceMemoryProperties properties;
 
-  physical = device && device->phyDevice ? device->phyDevice->_priv : NULL;
-  if (!physical || !outIndex || !outFlags) {
+  adapterVk = device && device->adapter ? device->adapter->_priv : NULL;
+  if (!adapterVk || !outIndex || !outFlags) {
     return false;
   }
 
-  vkGetPhysicalDeviceMemoryProperties(physical->phyDevice, &properties);
+  vkGetPhysicalDeviceMemoryProperties(adapterVk->physicalDevice, &properties);
   for (uint32_t i = 0u; i < properties.memoryTypeCount; i++) {
     VkMemoryPropertyFlags flags;
 

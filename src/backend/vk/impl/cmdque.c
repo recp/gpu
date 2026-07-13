@@ -692,7 +692,7 @@ vk_createCommandQueue(GPUDevice       *device,
   GPUQueue            *queue;
   GPUQueueVk          *native;
   GPUDeviceVk         *deviceVk;
-  GPUPhysicalDeviceVk *physical;
+  GPUAdapterVk        *adapterVk;
   VkCommandPoolCreateInfo poolInfo = {0};
 
   if (!device || !device->_priv || bits == 0u) {
@@ -708,7 +708,7 @@ vk_createCommandQueue(GPUDevice       *device,
   }
 
   deviceVk            = device->_priv;
-  physical            = device->phyDevice ? device->phyDevice->_priv : NULL;
+  adapterVk           = device->adapter ? device->adapter->_priv : NULL;
   queue->_priv        = native;
   queue->_device      = device;
   queue->bits         = bits;
@@ -716,9 +716,9 @@ vk_createCommandQueue(GPUDevice       *device,
   native->familyIndex = familyIndex;
   native->queueIndex  = queueIndex;
   native->timestampValidBits = 0u;
-  if (physical && familyIndex < physical->nQueFamilies) {
+  if (adapterVk && familyIndex < adapterVk->nQueFamilies) {
     native->timestampValidBits =
-      physical->queueFamilyProps[familyIndex].timestampValidBits;
+      adapterVk->queueFamilyProps[familyIndex].timestampValidBits;
   }
   vkGetDeviceQueue(deviceVk->device, familyIndex, queueIndex, &native->queRaw);
   if (!native->queRaw) {
@@ -835,19 +835,19 @@ GPU_HIDE
 GPUResult
 vk_getTimestampPeriod(GPUQueue *queue,
                       double   *outNanosecondsPerTick) {
-  GPUPhysicalDeviceVk *physical;
+  GPUAdapterVk        *adapterVk;
   GPUQueueVk          *native;
   GPUDevice           *device;
 
-  native   = queue ? queue->_priv : NULL;
-  device   = queue ? queue->_device : NULL;
-  physical = device && device->phyDevice ? device->phyDevice->_priv : NULL;
-  if (!native || native->timestampValidBits == 0u || !physical ||
-      !(physical->props.limits.timestampPeriod > 0.0f)) {
+  native    = queue ? queue->_priv : NULL;
+  device    = queue ? queue->_device : NULL;
+  adapterVk = device && device->adapter ? device->adapter->_priv : NULL;
+  if (!native || native->timestampValidBits == 0u || !adapterVk ||
+      !(adapterVk->props.limits.timestampPeriod > 0.0f)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  *outNanosecondsPerTick = (double)physical->props.limits.timestampPeriod;
+  *outNanosecondsPerTick = (double)adapterVk->props.limits.timestampPeriod;
   return GPU_OK;
 }
 

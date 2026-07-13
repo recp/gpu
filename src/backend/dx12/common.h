@@ -37,7 +37,7 @@
 
 #define DXCHECK(D) hr = D; if (FAILED(hr)) { goto err; }
 
-typedef struct GPUPhysicalDeviceDX12 {
+typedef struct GPUAdapterDX12 {
   /* IDXGIAdapter1*dxgiAdapter; */
   IUnknown             *dxgiAdapter;
   DXGI_ADAPTER_DESC1    desc1;
@@ -46,7 +46,7 @@ typedef struct GPUPhysicalDeviceDX12 {
   bool                  isWarp;
   bool                  formatCapsReady;
   GPUFormatCapabilities formatCaps[GPU_FORMAT_COUNT];
-} GPUPhysicalDeviceDX12;
+} GPUAdapterDX12;
 
 typedef struct GPUDescriptorHeapDX12 {
   ID3D12DescriptorHeap *heap;
