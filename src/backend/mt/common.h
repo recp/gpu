@@ -17,6 +17,7 @@
 #ifndef metal_common_h
 #define metal_common_h
 
+#include "binding_limits.h"
 #include "../common.h"
 #include "../../api/adapter_internal.h"
 #include "../../api/buffer_internal.h"
@@ -79,13 +80,6 @@ typedef struct GPUTextureMT {
   id<MTLTexture> texture;
   id<MTLTexture> stencilCopyView;
 } GPUTextureMT;
-
-enum {
-  MT_ARGUMENT_BUFFER_COUNT  = 31u,
-  MT_ARGUMENT_TEXTURE_COUNT = 128u,
-  MT_ARGUMENT_SAMPLER_COUNT = 16u,
-  MT_PUSH_CONSTANT_INDEX    = 30u
-};
 
 typedef struct MTArgumentState {
   id       table;

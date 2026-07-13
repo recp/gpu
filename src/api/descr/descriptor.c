@@ -15,6 +15,7 @@
  */
 
 #include "../../common.h"
+#include "../../backend/mt/binding_limits.h"
 #include "../buffer_internal.h"
 #include "../device_internal.h"
 #include "../library_internal.h"
@@ -1152,7 +1153,8 @@ gpu_clearPipelineBindings(GPUPipelineLayoutPriv *priv) {
 static int
 gpu_pipelineSlotIsUsed(const GPUPipelineLayoutPriv *priv,
                        GPUBindKind kind,
-                       uint32_t slot) {
+                       uint32_t slot,
+                       GPUShaderStageFlags visibility) {
   if (!priv || !priv->backendBindings) {
     return 0;
   }
@@ -1168,6 +1170,7 @@ gpu_pipelineSlotIsUsed(const GPUPipelineLayoutPriv *priv,
     }
     for (uint32_t entryIndex = 0; entryIndex < layout->count; entryIndex++) {
       if (layout->entries[entryIndex].kind == kind &&
+          (layout->entries[entryIndex].visibility & visibility) != 0u &&
           priv->backendBindings[groupIndex][entryIndex] == slot) {
         return 1;
       }
@@ -1175,6 +1178,20 @@ gpu_pipelineSlotIsUsed(const GPUPipelineLayoutPriv *priv,
   }
 
   return 0;
+}
+
+static uint32_t
+gpu_metalBindingLimit(GPUBindKind kind) {
+  static const uint32_t limits[] = {
+    [GPUBindKindBuffer]  = MT_BIND_GROUP_BUFFER_COUNT,
+    [GPUBindKindTexture] = MT_ARGUMENT_TEXTURE_COUNT,
+    [GPUBindKindSampler] = MT_ARGUMENT_SAMPLER_COUNT
+  };
+
+  if (kind < GPUBindKindBuffer || kind > GPUBindKindSampler) {
+    return 0u;
+  }
+  return limits[kind];
 }
 
 static int
@@ -1280,12 +1297,21 @@ gpu_compilePipelineBindings(GPUPipelineLayoutPriv *priv,
     }
     if (layout->hasBackendBindings) {
       for (uint32_t entryIndex = 0; entryIndex < layout->count; entryIndex++) {
-        if (layout->backendBindings[entryIndex] == UINT32_MAX) {
+        const GPUBindGroupLayoutEntry *entry;
+        uint32_t backendBinding;
+
+        entry          = &layout->entries[entryIndex];
+        backendBinding = layout->backendBindings[entryIndex];
+        if (backendBinding == UINT32_MAX) {
           gpu_clearPipelineBindings(priv);
           return GPU_ERROR_INVALID_ARGUMENT;
         }
-        priv->backendBindings[groupIndex][entryIndex] =
-          layout->backendBindings[entryIndex];
+        if (backend == GPU_BACKEND_METAL &&
+            backendBinding >= gpu_metalBindingLimit(entry->kind)) {
+          gpu_clearPipelineBindings(priv);
+          return GPU_ERROR_UNSUPPORTED;
+        }
+        priv->backendBindings[groupIndex][entryIndex] = backendBinding;
       }
     }
   }
@@ -1313,6 +1339,7 @@ gpu_compilePipelineBindings(GPUPipelineLayoutPriv *priv,
       uint32_t selectedEntry = UINT32_MAX;
       uint32_t selectedBinding = UINT32_MAX;
       uint32_t backendBinding = 0u;
+      GPUShaderStageFlags selectedVisibility = 0u;
 
       for (uint32_t groupIndex = 0;
            groupIndex < priv->bindGroupLayoutCount;
@@ -1333,6 +1360,7 @@ gpu_compilePipelineBindings(GPUPipelineLayoutPriv *priv,
             selectedGroup = groupIndex;
             selectedEntry = entryIndex;
             selectedBinding = entry->binding;
+            selectedVisibility = entry->visibility;
           }
         }
       }
@@ -1343,7 +1371,8 @@ gpu_compilePipelineBindings(GPUPipelineLayoutPriv *priv,
 
       while (gpu_pipelineSlotIsUsed(priv,
                                     kinds[kindIndex],
-                                    backendBinding)) {
+                                    backendBinding,
+                                    selectedVisibility)) {
         if (backendBinding == UINT32_MAX - 1u) {
           gpu_clearPipelineBindings(priv);
           return GPU_ERROR_BACKEND_FAILURE;
@@ -1353,6 +1382,10 @@ gpu_compilePipelineBindings(GPUPipelineLayoutPriv *priv,
       if (backendBinding == UINT32_MAX) {
         gpu_clearPipelineBindings(priv);
         return GPU_ERROR_BACKEND_FAILURE;
+      }
+      if (backendBinding >= gpu_metalBindingLimit(kinds[kindIndex])) {
+        gpu_clearPipelineBindings(priv);
+        return GPU_ERROR_UNSUPPORTED;
       }
       priv->backendBindings[selectedGroup][selectedEntry] = backendBinding;
     }

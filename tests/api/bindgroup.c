@@ -1151,10 +1151,150 @@ cleanup:
   return ok;
 }
 
+static int
+check_metal_pipeline_binding_limits(GPUDevice *device) {
+  GPUBindGroupLayoutEntry      entries[30];
+  GPUBindGroupLayoutCreateInfo layoutInfo = {0};
+  GPUPipelineLayoutCreateInfo  pipelineInfo = {0};
+  GPUBindGroupLayout          *layouts[3] = {0};
+  GPUPipelineLayout           *pipelineLayout;
+  GPUApi                      *api;
+  int                          ok;
+
+  api = gpuDeviceApi(device);
+  if (!api || api->backend != GPU_BACKEND_METAL) {
+    return 1;
+  }
+
+  memset(entries, 0, sizeof(entries));
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(entries); i++) {
+    entries[i].binding     = i;
+    entries[i].bindingType = GPU_BINDING_UNIFORM_BUFFER;
+    entries[i].visibility  = GPU_SHADER_STAGE_FRAGMENT_BIT;
+    entries[i].arrayCount  = 1u;
+  }
+
+  layoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  layoutInfo.label            = "metal-buffer-limit";
+  layoutInfo.entryCount       = (uint32_t)GPU_ARRAY_LEN(entries);
+  layoutInfo.pEntries         = entries;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[0]) != GPU_OK ||
+      !layouts[0]) {
+    fprintf(stderr, "Metal rejected its usable bind group buffer slots\n");
+    return 0;
+  }
+
+  pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
+  pipelineInfo.bindGroupLayoutCount = 1u;
+  pipelineInfo.ppBindGroupLayouts   = layouts;
+  pipelineLayout = NULL;
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_OK ||
+      !pipelineLayout) {
+    fprintf(stderr, "Metal rejected a pipeline using its available buffer slots\n");
+    GPUDestroyBindGroupLayout(layouts[0]);
+    return 0;
+  }
+  GPUDestroyPipelineLayout(pipelineLayout);
+
+  entries[0].binding     = 30u;
+  entries[0].visibility  = GPU_SHADER_STAGE_FRAGMENT_BIT;
+  layoutInfo.entryCount  = 1u;
+  layoutInfo.label       = "metal-buffer-overflow";
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[1]) != GPU_OK ||
+      !layouts[1]) {
+    fprintf(stderr, "Metal buffer overflow layout setup failed\n");
+    GPUDestroyBindGroupLayout(layouts[0]);
+    return 0;
+  }
+
+  pipelineInfo.bindGroupLayoutCount = 2u;
+  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
+  ok = GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) ==
+         GPU_ERROR_UNSUPPORTED &&
+       pipelineLayout == NULL;
+  GPUDestroyBindGroupLayout(layouts[1]);
+  GPUDestroyBindGroupLayout(layouts[0]);
+  if (!ok) {
+    fprintf(stderr, "Metal pipeline accepted a bind group buffer at reserved slot 30\n");
+    GPUDestroyPipelineLayout(pipelineLayout);
+    return 0;
+  }
+
+  memset(entries, 0, sizeof(entries));
+  for (uint32_t i = 0u; i < 16u; i++) {
+    entries[i].binding     = i;
+    entries[i].bindingType = GPU_BINDING_SAMPLER;
+    entries[i].visibility  = GPU_SHADER_STAGE_VERTEX_BIT;
+    entries[i].arrayCount  = 1u;
+  }
+  layoutInfo.label       = "metal-vertex-samplers";
+  layoutInfo.entryCount  = 16u;
+  layoutInfo.pEntries    = entries;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[0]) != GPU_OK ||
+      !layouts[0]) {
+    fprintf(stderr, "Metal vertex sampler layout setup failed\n");
+    return 0;
+  }
+
+  for (uint32_t i = 0u; i < 16u; i++) {
+    entries[i].visibility = GPU_SHADER_STAGE_FRAGMENT_BIT;
+  }
+  layoutInfo.label = "metal-fragment-samplers";
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[1]) != GPU_OK ||
+      !layouts[1]) {
+    fprintf(stderr, "Metal fragment sampler layout setup failed\n");
+    GPUDestroyBindGroupLayout(layouts[0]);
+    return 0;
+  }
+
+  pipelineInfo.bindGroupLayoutCount = 2u;
+  pipelineLayout = NULL;
+  ok = GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) == GPU_OK &&
+       pipelineLayout != NULL;
+  GPUDestroyPipelineLayout(pipelineLayout);
+  if (!ok) {
+    fprintf(stderr, "Metal did not reuse sampler slots across disjoint stages\n");
+    GPUDestroyBindGroupLayout(layouts[1]);
+    GPUDestroyBindGroupLayout(layouts[0]);
+    return 0;
+  }
+
+  entries[0].binding    = 16u;
+  entries[0].visibility = GPU_SHADER_STAGE_FRAGMENT_BIT;
+  layoutInfo.label      = "metal-sampler-overflow";
+  layoutInfo.entryCount = 1u;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[2]) != GPU_OK ||
+      !layouts[2]) {
+    fprintf(stderr, "Metal sampler overflow layout setup failed\n");
+    GPUDestroyBindGroupLayout(layouts[1]);
+    GPUDestroyBindGroupLayout(layouts[0]);
+    return 0;
+  }
+
+  pipelineInfo.bindGroupLayoutCount = 3u;
+  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
+  ok = GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) ==
+         GPU_ERROR_UNSUPPORTED &&
+       pipelineLayout == NULL;
+  GPUDestroyBindGroupLayout(layouts[2]);
+  GPUDestroyBindGroupLayout(layouts[1]);
+  GPUDestroyBindGroupLayout(layouts[0]);
+  if (!ok) {
+    fprintf(stderr, "Metal pipeline accepted more than 16 fragment samplers\n");
+    GPUDestroyPipelineLayout(pipelineLayout);
+    return 0;
+  }
+
+  return 1;
+}
+
 int
 gpu_test_bindgroup(GPUDevice *device) {
   return check_backend_descriptor_hooks(device) &&
          check_bind_group_layout_validation(device) &&
          check_dynamic_offset_bind_validation(device) &&
-         check_bind_group_cache(device);
+         check_bind_group_cache(device) &&
+         check_metal_pipeline_binding_limits(device);
 }
