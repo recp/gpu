@@ -505,29 +505,11 @@ vk__queueFlags(GPUQueueFlagBits bits, VkQueueFlags *outFlags) {
   flags      = 0u;
   mappedBits = GPU_QUEUE_GRAPHICS_BIT |
                GPU_QUEUE_COMPUTE_BIT |
-               GPU_QUEUE_TRANSFER_BIT |
-               GPU_QUEUE_SPARSE_BINDING_BIT |
-               GPU_QUEUE_PROTECTED_BIT;
+               GPU_QUEUE_TRANSFER_BIT;
 
-  if (bits & GPU_QUEUE_GRAPHICS_BIT)       flags |= VK_QUEUE_GRAPHICS_BIT;
-  if (bits & GPU_QUEUE_COMPUTE_BIT)        flags |= VK_QUEUE_COMPUTE_BIT;
-  if (bits & GPU_QUEUE_TRANSFER_BIT)       flags |= VK_QUEUE_TRANSFER_BIT;
-  if (bits & GPU_QUEUE_SPARSE_BINDING_BIT) flags |= VK_QUEUE_SPARSE_BINDING_BIT;
-  if (bits & GPU_QUEUE_PROTECTED_BIT)      flags |= VK_QUEUE_PROTECTED_BIT;
-
-  /* Header guards protect old SDKs; queue-family flags decide runtime support. */
-#ifdef VK_QUEUE_VIDEO_DECODE_BIT_KHR
-  mappedBits |= GPU_QUEUE_VIDEO_DECODE_BIT_KHR;
-  if (bits & GPU_QUEUE_VIDEO_DECODE_BIT_KHR) flags |= VK_QUEUE_VIDEO_DECODE_BIT_KHR;
-#endif
-#ifdef VK_QUEUE_VIDEO_ENCODE_BIT_KHR
-  mappedBits |= GPU_QUEUE_VIDEO_ENCODE_BIT_KHR;
-  if (bits & GPU_QUEUE_VIDEO_ENCODE_BIT_KHR) flags |= VK_QUEUE_VIDEO_ENCODE_BIT_KHR;
-#endif
-#ifdef VK_QUEUE_OPTICAL_FLOW_BIT_NV
-  mappedBits |= GPU_QUEUE_OPTICAL_FLOW_BIT_NV;
-  if (bits & GPU_QUEUE_OPTICAL_FLOW_BIT_NV) flags |= VK_QUEUE_OPTICAL_FLOW_BIT_NV;
-#endif
+  if (bits & GPU_QUEUE_GRAPHICS_BIT) flags |= VK_QUEUE_GRAPHICS_BIT;
+  if (bits & GPU_QUEUE_COMPUTE_BIT)  flags |= VK_QUEUE_COMPUTE_BIT;
+  if (bits & GPU_QUEUE_TRANSFER_BIT) flags |= VK_QUEUE_TRANSFER_BIT;
 
   *outFlags = flags;
   return ((uint32_t)bits & ~mappedBits) == 0u;

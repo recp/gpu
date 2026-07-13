@@ -1033,6 +1033,15 @@ check_device_queue_create_validation(GPUAdapter *adapter) {
     return 0;
   }
 
+  request.type = (GPUQueueFlagBits)0x00000008u;
+  device = (GPUDevice *)(uintptr_t)1u;
+  if (GPUCreateDevice(adapter, &createInfo, &device) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      device != NULL) {
+    fprintf(stderr, "device create accepted an unknown queue type\n");
+    return 0;
+  }
+
   request.type = GPU_QUEUE_GRAPHICS;
   request.count = 0;
   device = (GPUDevice *)(uintptr_t)1u;
