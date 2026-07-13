@@ -627,6 +627,7 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   native = cmdb ? cmdb->_priv : NULL;
   queue  = native ? native->owner : NULL;
   if (!native || !queue || !native->commandList) {
+    gpuFinishCommandBuffer(cmdb, dx12__recycleCommandBuffer);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 

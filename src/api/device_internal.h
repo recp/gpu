@@ -39,6 +39,7 @@ struct GPUDevice {
   void                        *_priv;
   GPUBuffer                   *transientBuffer;
   GPUTransientChunk           *transientChunks;
+  GPUFence                   **transientFrameFences;
   GPUPipelineCache            *_pipelineCaches;
   void                        *_pipelineCacheLock;
   void                        *_bindGroupCache;
@@ -63,18 +64,31 @@ struct GPUDevice {
   ];
 };
 
-static inline void
+static inline GPUResult
 gpuDeviceAdvanceFrameSlot(GPUDevice *device) {
   GPUTransientChunk *chunk;
+  GPUFence          *fence;
+  GPUResult          result;
   uint32_t           nextFrameIndex;
 
   if (!device || !device->transientConfigured) {
-    return;
+    return GPU_OK;
   }
 
   nextFrameIndex = device->transientFrameIndex + 1u;
   if (nextFrameIndex >= device->transientConfig.framesInFlight) {
     nextFrameIndex = 0u;
+  }
+
+  fence = device->transientFrameFences
+            ? device->transientFrameFences[nextFrameIndex]
+            : NULL;
+  if (fence && !GPUIsFenceSignaled(fence)) {
+    device->allocatorStats.uploadStallCount++;
+    result = GPUWaitFence(fence, UINT64_MAX);
+    if (result != GPU_OK) {
+      return result;
+    }
   }
   if (device->transientFrameBegun &&
       nextFrameIndex <= device->transientFrameIndex) {
@@ -91,6 +105,7 @@ gpuDeviceAdvanceFrameSlot(GPUDevice *device) {
       chunk->offset = 0u;
     }
   }
+  return GPU_OK;
 }
 
 static inline GPUApi *
@@ -134,7 +149,7 @@ gpuDeviceRecordDraws(GPUDevice *device, uint32_t drawCount) {
 }
 
 GPU_HIDE
-void
+GPUResult
 gpuDeviceBeginFrame(GPUDevice *device);
 
 GPU_HIDE

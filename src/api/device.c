@@ -370,11 +370,31 @@ gpu_destroyTransientChunks(GPUDevice *device) {
 }
 
 static void
+gpu_destroyTransientFrameFences(GPUDevice *device) {
+  if (!device || !device->transientFrameFences) {
+    return;
+  }
+
+  for (uint32_t i = 0u; i < device->transientConfig.framesInFlight; i++) {
+    GPUFence *fence;
+
+    fence = device->transientFrameFences[i];
+    if (fence) {
+      (void)GPUWaitFence(fence, UINT64_MAX);
+      GPUDestroyFence(fence);
+    }
+  }
+  free(device->transientFrameFences);
+  device->transientFrameFences = NULL;
+}
+
+static void
 gpu_destroyTransientAllocator(GPUDevice *device) {
   if (!device) {
     return;
   }
 
+  gpu_destroyTransientFrameFences(device);
   gpu_destroyTransientChunks(device);
   GPUDestroyBuffer(device->transientBuffer);
   device->transientBuffer       = NULL;
@@ -386,6 +406,45 @@ gpu_destroyTransientAllocator(GPUDevice *device) {
   device->transientFrameBegun   = false;
   memset(&device->transientConfig, 0, sizeof(device->transientConfig));
   memset(&device->allocatorStats, 0, sizeof(device->allocatorStats));
+}
+
+static GPUResult
+gpu_createTransientFrameFences(GPUDevice *device,
+                               uint32_t framesInFlight,
+                               GPUFence ***outFences) {
+  GPUFenceCreateInfo info;
+  GPUFence         **fences;
+
+  if (!device || framesInFlight == 0u || !outFences) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outFences = NULL;
+
+  fences = calloc(framesInFlight, sizeof(*fences));
+  if (!fences) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  memset(&info, 0, sizeof(info));
+  info.chain.sType      = GPU_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.label            = "transient-frame";
+  info.signaled         = true;
+  for (uint32_t i = 0u; i < framesInFlight; i++) {
+    GPUResult result;
+
+    result = GPUCreateFence(device, &info, &fences[i]);
+    if (result != GPU_OK) {
+      for (uint32_t j = 0u; j < i; j++) {
+        GPUDestroyFence(fences[j]);
+      }
+      free(fences);
+      return result;
+    }
+  }
+
+  *outFences = fences;
+  return GPU_OK;
 }
 
 static GPUResult
@@ -872,19 +931,21 @@ GPU_EXPORT
 GPUResult
 GPUConfigureTransientAllocator(GPUDevice *device,
                                const GPUTransientAllocatorConfig *config) {
-  GPUBuffer *buffer;
-  void *cpuPtr;
-  uint64_t capacityBytes;
-  GPUBufferUsageFlags usage;
-  GPUResult result;
+  GPUBuffer           *buffer;
+  GPUFence           **frameFences;
+  void                *cpuPtr;
+  uint64_t             capacityBytes;
+  GPUBufferUsageFlags  usage;
+  GPUResult            result;
 
   if (!device || !gpu_validTransientAllocatorConfig(config, &capacityBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  buffer = NULL;
-  cpuPtr = NULL;
-  usage  = gpu_knownTransientBufferUsageMask();
+  buffer      = NULL;
+  frameFences = NULL;
+  cpuPtr      = NULL;
+  usage       = gpu_knownTransientBufferUsageMask();
   result = gpu_createTransientBuffer(device,
                                      usage,
                                      capacityBytes,
@@ -901,14 +962,22 @@ GPUConfigureTransientAllocator(GPUDevice *device,
   if (result != GPU_OK) {
     return result;
   }
+  result = gpu_createTransientFrameFences(device,
+                                          config->framesInFlight,
+                                          &frameFences);
+  if (result != GPU_OK) {
+    GPUDestroyBuffer(buffer);
+    return result;
+  }
 
   gpu_destroyTransientAllocator(device);
-  device->transientBuffer       = buffer;
-  device->transientCpuPtr       = cpuPtr;
-  device->transientBufferUsage  = usage;
-  device->transientConfig       = *config;
-  device->transientConfigured   = true;
-  device->transientFrameIndex   = 0;
+  device->transientBuffer           = buffer;
+  device->transientFrameFences      = frameFences;
+  device->transientCpuPtr           = cpuPtr;
+  device->transientBufferUsage      = usage;
+  device->transientConfig           = *config;
+  device->transientConfigured       = true;
+  device->transientFrameIndex       = 0u;
   device->allocatorStats.ringCapacityBytes = capacityBytes;
   return GPU_OK;
 }
@@ -1009,14 +1078,14 @@ GPUResetStats(GPUDevice *device) {
 }
 
 GPU_HIDE
-void
+GPUResult
 gpuDeviceBeginFrame(GPUDevice *device) {
   if (!device) {
-    return;
+    return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   memset(&device->currentFrameStats, 0, sizeof(device->currentFrameStats));
-  gpuDeviceAdvanceFrameSlot(device);
+  return gpuDeviceAdvanceFrameSlot(device);
 }
 
 GPU_HIDE

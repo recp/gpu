@@ -79,6 +79,7 @@ void
 gpuFinishCommandBuffer(GPUCommandBuffer          *cmdb,
                        GPUCommandBufferRecycleFn  recycle) {
   GPUFence *fence;
+  GPUFence *transientFence;
   GPUCommandBufferCompletionFn onComplete;
   void *sender;
 
@@ -86,12 +87,16 @@ gpuFinishCommandBuffer(GPUCommandBuffer          *cmdb,
     return;
   }
 
-  fence = cmdb->_submitFence;
-  sender = cmdb->_onCompleteSender;
-  onComplete = cmdb->_onComplete;
-  cmdb->_submitFence = NULL;
+  fence          = cmdb->_submitFence;
+  transientFence = cmdb->_transientFence;
+  sender         = cmdb->_onCompleteSender;
+  onComplete     = cmdb->_onComplete;
+  cmdb->_submitFence      = NULL;
+  cmdb->_transientFence   = NULL;
   cmdb->_onCompleteSender = NULL;
-  cmdb->_onComplete = NULL;
+  cmdb->_onComplete       = NULL;
+
+  gpu_signalFence(transientFence);
 
   if (onComplete) {
     onComplete(sender, cmdb);
@@ -225,8 +230,12 @@ GPUResult
 GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
                const GPUQueueSubmitInfo * __restrict info) {
   GPUApi           *api;
+  GPUDevice        *device;
+  GPUFence         *transientFence;
   GPUCommandBuffer *lastCmdb;
   GPUResult         result;
+  uint32_t          transientFrameIndex;
+  bool              transientFrameTagged;
 
   if (!cmdq || !info || info->commandBufferCount == 0 || !info->ppCommandBuffers) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -239,11 +248,15 @@ GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  device = gpuCommandQueueDevice(cmdq);
   if (!(api = gpuCommandQueueApi(cmdq)))
     return GPU_ERROR_BACKEND_FAILURE;
   if (!api->cmdque.commit)
     return GPU_ERROR_BACKEND_FAILURE;
 
+  transientFence       = NULL;
+  transientFrameIndex  = 0u;
+  transientFrameTagged = false;
   for (uint32_t i = 0; i < info->commandBufferCount; i++) {
     GPUCommandBuffer *cmdb;
 
@@ -257,9 +270,30 @@ GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
         return GPU_ERROR_INVALID_ARGUMENT;
       }
     }
+    if (cmdb->_transientFrameTagged) {
+      if (!device || !device->transientConfigured ||
+          !device->transientFrameFences ||
+          cmdb->_transientFrameIndex >=
+            device->transientConfig.framesInFlight ||
+          (transientFrameTagged &&
+           transientFrameIndex != cmdb->_transientFrameIndex)) {
+        return GPU_ERROR_INVALID_ARGUMENT;
+      }
+      transientFrameIndex  = cmdb->_transientFrameIndex;
+      transientFrameTagged = true;
+    }
   }
 
   lastCmdb = info->ppCommandBuffers[info->commandBufferCount - 1u];
+  if (transientFrameTagged) {
+    if (!api->cmdque.commandBufferOnComplete) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+    transientFence = device->transientFrameFences[transientFrameIndex];
+    if (!transientFence || !GPUIsFenceSignaled(transientFence)) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+  }
   if (info->fence) {
     if (!api->cmdque.commandBufferOnComplete) {
       return GPU_ERROR_UNSUPPORTED;
@@ -267,6 +301,10 @@ GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
 
     gpu_resetFenceInternal(info->fence);
     lastCmdb->_submitFence = info->fence;
+  }
+  if (transientFence) {
+    GPUResetFence(transientFence);
+    lastCmdb->_transientFence = transientFence;
   }
 
   for (uint32_t i = 0; i < info->commandBufferCount; i++) {

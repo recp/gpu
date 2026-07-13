@@ -25,6 +25,8 @@ struct GPUFrame {
   GPUTexture     *target;
   GPUTextureView *targetView;
   void           *drawable;
+  uint32_t        transientFrameIndex;
+  bool            transientFrameActive;
 };
 
 #endif /* gpu_frame_internal_h */

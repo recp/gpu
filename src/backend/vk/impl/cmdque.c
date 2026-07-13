@@ -563,6 +563,7 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   deviceVk = cmdb && cmdb->_queue && cmdb->_queue->_device ?
     cmdb->_queue->_device->_priv : NULL;
   if (!native || !queue || !deviceVk) {
+    gpuFinishCommandBuffer(cmdb, vk__recycleCommandBuffer);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 

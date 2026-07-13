@@ -147,7 +147,9 @@ upload_encode(GPURenderPassEncoder *pass,
   UploadHeavy *upload;
 
   upload = userData;
-  gpuDeviceAdvanceFrameSlot(upload->bench->device);
+  if (gpuDeviceAdvanceFrameSlot(upload->bench->device) != GPU_OK) {
+    return false;
+  }
   GPUBindRenderPipeline(pass, upload->pipeline);
   for (uint32_t draw = 0u; draw < drawCount; draw++) {
     GPUTransientBufferSlice uniformSlice;

@@ -34,6 +34,10 @@ GPUSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
     return;
 
   api->cmdbuf.presentDrawable(cmdb, frame);
+  if (frame->transientFrameActive) {
+    cmdb->_transientFrameIndex  = frame->transientFrameIndex;
+    cmdb->_transientFrameTagged = true;
+  }
 }
 
 GPU_EXPORT

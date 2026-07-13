@@ -30,12 +30,15 @@ struct GPUCommandBuffer {
   void                         *_priv;
   GPUCommandQueue              *_queue;
   GPUFence                     *_submitFence;
+  GPUFence                     *_transientFence;
   GPUQuerySet                  *_pipelineStatsQuery;
   void                         *_onCompleteSender;
   GPUCommandBufferCompletionFn  _onComplete;
   uint32_t                      _pipelineStatsQueryIndex;
+  uint32_t                      _transientFrameIndex;
   bool                          _submitted;
   bool                          _activeEncoder;
+  bool                          _transientFrameTagged;
 };
 
 static inline GPUDevice *

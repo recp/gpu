@@ -25,22 +25,27 @@ GPU_EXPORT
 GPUFrame*
 GPUBeginFrame(GPUSwapchain* swapchain) {
   GPUApi *api;
+  GPUDevice *device;
   GPUFrame *frame;
 
   if (!swapchain)
     return NULL;
-  if (!(api = gpuDeviceApi(swapchain->device)))
+  device = swapchain->device;
+  if (!(api = gpuDeviceApi(device)))
     return NULL;
   if (!api->frame.beginFrame)
+    return NULL;
+  if (gpuDeviceBeginFrame(device) != GPU_OK)
     return NULL;
 
   frame = api->frame.beginFrame(api, swapchain);
   if (frame) {
-    frame->device = swapchain->device;
+    frame->device = device;
     if (frame->target) {
       frame->target->device = frame->device;
     }
-    gpuDeviceBeginFrame(frame->device);
+    frame->transientFrameIndex  = device->transientFrameIndex;
+    frame->transientFrameActive = device->transientConfigured;
   }
 
   return frame;
@@ -70,6 +75,7 @@ GPUEndFrame(GPUFrame* frame) {
   if (!api->frame.endFrame)
     return;
 
+  frame->transientFrameActive = false;
   gpuDeviceEndFrame(frame->device);
   api->frame.endFrame(api, frame);
 }

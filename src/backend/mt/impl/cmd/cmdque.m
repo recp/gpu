@@ -309,6 +309,7 @@ mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
   native = mt_commandBuffer(cmdb);
   queue  = cmdb->_queue ? mt_commandQueue(cmdb->_queue) : NULL;
   if (!native || !queue) {
+    gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -339,11 +340,13 @@ mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
       [options release];
       return GPU_OK;
     }
+    gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   mcb = native->classic;
   if (!mcb) {
+    gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 

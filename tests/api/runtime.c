@@ -1,4 +1,5 @@
 #include "test.h"
+#include "../../src/api/cmdqueue_internal.h"
 #include "../../src/api/device_internal.h"
 
 static int
@@ -260,7 +261,10 @@ check_transient_fallback(GPUDevice *device) {
     return 0;
   }
 
-  gpuDeviceAdvanceFrameSlot(device);
+  if (gpuDeviceAdvanceFrameSlot(device) != GPU_OK) {
+    fprintf(stderr, "transient frame slot advance failed\n");
+    return 0;
+  }
   GPUResetStats(device);
   if (GPUAllocateTransientBuffer(device,
                                  GPU_BUFFER_USAGE_UNIFORM,
@@ -306,7 +310,10 @@ check_stats_queries(GPUDevice *device) {
 }
 
 static int
-submit_empty(GPUCommandQueue *queue, GPUFence *fence) {
+submit_empty(GPUCommandQueue *queue,
+             GPUFence        *fence,
+             uint32_t         transientFrameIndex,
+             bool             tagTransientFrame) {
   GPUCommandBuffer *cmdb;
   GPUCommandBuffer *buffers[1];
   GPUQueueSubmitInfo submitInfo = {0};
@@ -315,6 +322,8 @@ submit_empty(GPUCommandQueue *queue, GPUFence *fence) {
   if (GPUAcquireCommandBuffer(queue, NULL, &cmdb) != GPU_OK || !cmdb) {
     return 0;
   }
+  cmdb->_transientFrameIndex  = transientFrameIndex;
+  cmdb->_transientFrameTagged = tagTransientFrame;
 
   buffers[0] = cmdb;
   submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
@@ -329,6 +338,7 @@ submit_empty(GPUCommandQueue *queue, GPUFence *fence) {
 static int
 check_warm_command_path(GPUDevice *device) {
   GPUCommandQueue *queue;
+  GPUFence *transientFence;
   GPUFence *fence;
   GPUFrameStats stats;
 
@@ -339,7 +349,17 @@ check_warm_command_path(GPUDevice *device) {
     return 0;
   }
 
-  if (!submit_empty(queue, fence)) {
+  transientFence = device->transientFrameFences
+                     ? device->transientFrameFences[0]
+                     : NULL;
+  if (!transientFence || !submit_empty(queue, fence, 0u, true) ||
+      !GPUIsFenceSignaled(transientFence)) {
+    fprintf(stderr, "transient frame completion fence failed\n");
+    GPUDestroyFence(fence);
+    return 0;
+  }
+
+  if (!submit_empty(queue, fence, 0u, false)) {
     fprintf(stderr, "warm command path priming submit failed\n");
     GPUDestroyFence(fence);
     return 0;
@@ -348,7 +368,7 @@ check_warm_command_path(GPUDevice *device) {
   GPUResetStats(device);
   memset(&device->currentFrameStats, 0, sizeof(device->currentFrameStats));
   for (uint32_t i = 0; i < 16u; i++) {
-    if (!submit_empty(queue, fence)) {
+    if (!submit_empty(queue, fence, 0u, false)) {
       fprintf(stderr, "warm command path submit failed\n");
       GPUDestroyFence(fence);
       return 0;
