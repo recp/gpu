@@ -50,11 +50,14 @@ typedef enum GPUVisibilityResultMode {
 } GPUVisibilityResultMode;
 
 typedef struct GPUScissorRect {
-  uint32_t x, y, width, height;
+  int32_t  x, y;
+  uint32_t width, height;
 } GPUScissorRect;
 
 typedef struct GPUViewport {
-  double originX, originY, width, height, znear, zfar;
+  float x, y;
+  float width, height;
+  float minDepth, maxDepth;
 } GPUViewport;
 
 typedef enum GPUDepthClipMode {
@@ -74,7 +77,7 @@ typedef enum GPURenderStages {
 
 typedef struct GPUBufferBinding {
   GPUBuffer *buffer;
-  size_t     offset;
+  uint64_t   offset;
 } GPUBufferBinding;
 
 GPU_EXPORT

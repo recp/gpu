@@ -43,8 +43,8 @@ state_init(StateChurn *churn) {
     churn->states[i].chain.sType = GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO;
     churn->states[i].chain.structSize = sizeof(churn->states[i]);
     churn->states[i].mask              = mask;
-    churn->states[i].viewport.znear    = 0.0;
-    churn->states[i].viewport.zfar     = 1.0;
+    churn->states[i].viewport.minDepth = 0.0f;
+    churn->states[i].viewport.maxDepth = 1.0f;
   }
 
   churn->states[0].viewport.width  = STATE_TARGET_SIZE;
@@ -52,12 +52,12 @@ state_init(StateChurn *churn) {
   churn->states[0].scissor.width   = STATE_TARGET_SIZE;
   churn->states[0].scissor.height  = STATE_TARGET_SIZE;
 
-  churn->states[1].viewport.originX = 1.0;
-  churn->states[1].viewport.originY = 1.0;
+  churn->states[1].viewport.x       = 1.0f;
+  churn->states[1].viewport.y       = 1.0f;
   churn->states[1].viewport.width   = STATE_TARGET_SIZE - 2u;
   churn->states[1].viewport.height  = STATE_TARGET_SIZE - 2u;
-  churn->states[1].scissor.x        = 1u;
-  churn->states[1].scissor.y        = 1u;
+  churn->states[1].scissor.x        = 1;
+  churn->states[1].scissor.y        = 1;
   churn->states[1].scissor.width    = STATE_TARGET_SIZE - 2u;
   churn->states[1].scissor.height   = STATE_TARGET_SIZE - 2u;
   churn->states[1].blendConstant[0] = 1.0f;

@@ -40,7 +40,7 @@ GPU_HIDE
 void
 gpuSetComputeBuffer(GPUComputePassEncoder *pass,
                     GPUBuffer             *buf,
-                    size_t                 off,
+                    uint64_t               off,
                     uint32_t               index);
 
 GPU_HIDE

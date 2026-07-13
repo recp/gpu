@@ -351,7 +351,7 @@ GPU_HIDE
 void
 gpuSetComputeBuffer(GPUComputePassEncoder *pass,
                     GPUBuffer             *buf,
-                    size_t                 off,
+                    uint64_t               off,
                     uint32_t               index) {
   GPUApi *api;
 
@@ -416,7 +416,7 @@ gpuBindComputeBinding(void *ctx, const GPUBindGroupBindingView *binding) {
   if (binding->kind == GPUBindKindBuffer && binding->buffer) {
     gpuSetComputeBuffer(bindCtx->pass,
                         binding->buffer,
-                        (size_t)binding->offset,
+                        binding->offset,
                         binding->binding + binding->arrayIndex);
   } else if (binding->kind == GPUBindKindTexture && binding->textureView) {
     gpuSetComputeTexture(bindCtx->pass,

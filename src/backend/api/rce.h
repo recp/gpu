@@ -117,13 +117,13 @@ typedef struct GPUApiRCE {
   void
   (*vertexBuffer)(GPURenderCommandEncoder *rce,
                   GPUBuffer               *buf,
-                  size_t                   off,
+                  uint64_t                 off,
                   uint32_t                 index);
 
   void
   (*vertexInputBuffer)(GPURenderCommandEncoder *rce,
                        GPUBuffer               *buf,
-                       size_t                   off,
+                       uint64_t                 off,
                        uint32_t                 index);
 
   void
@@ -139,7 +139,7 @@ typedef struct GPUApiRCE {
   void
   (*fragmentBuffer)(GPURenderCommandEncoder *rce,
                     GPUBuffer               *buf,
-                    size_t                   off,
+                    uint64_t                 off,
                     uint32_t                 index);
   
   void

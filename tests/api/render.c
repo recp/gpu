@@ -144,7 +144,7 @@ count_multi_draw_indexed_indirect(GPURenderCommandEncoder *rce,
 static void
 count_vertex_buffer(GPURenderCommandEncoder *rce,
                     GPUBuffer               *buffer,
-                    size_t                   offset,
+                    uint64_t                 offset,
                     uint32_t                 index) {
   (void)rce;
   (void)buffer;
@@ -1246,16 +1246,16 @@ check_render_readback_case(GPUDevice *device,
     dynamicState.chain.structSize = sizeof(dynamicState);
     dynamicState.mask = GPU_DYNAMIC_STATE_VIEWPORT_BIT |
                         GPU_DYNAMIC_STATE_SCISSOR_BIT;
-    dynamicState.viewport.originX = 0.0;
-    dynamicState.viewport.originY = 0.0;
-    dynamicState.viewport.width = (double)width;
-    dynamicState.viewport.height = (double)height;
-    dynamicState.viewport.znear = 0.0;
-    dynamicState.viewport.zfar = 1.0;
-    dynamicState.scissor.x = 1u;
-    dynamicState.scissor.y = 1u;
-    dynamicState.scissor.width = 2u;
-    dynamicState.scissor.height = 2u;
+    dynamicState.viewport.x        = 0.0f;
+    dynamicState.viewport.y        = 0.0f;
+    dynamicState.viewport.width    = (float)width;
+    dynamicState.viewport.height   = (float)height;
+    dynamicState.viewport.minDepth = 0.0f;
+    dynamicState.viewport.maxDepth = 1.0f;
+    dynamicState.scissor.x         = 1;
+    dynamicState.scissor.y         = 1;
+    dynamicState.scissor.width     = 2u;
+    dynamicState.scissor.height    = 2u;
     GPUApplyDynamicState(renderPass, &dynamicState);
   }
   if (occlusion) {
@@ -2035,7 +2035,7 @@ check_vertex_buffer_shadowing_calls(GPUDevice *activeDevice) {
   GPUApi *api;
   void (*oldVertexBuffer)(GPURenderCommandEncoder *,
                           GPUBuffer *,
-                          size_t,
+                          uint64_t,
                           uint32_t);
   GPUDevice            device  = {0};
   GPUCommandQueue      queue   = {0};

@@ -76,7 +76,7 @@ typedef struct GPUApiCompute {
   void
   (*buffer)(GPUComputePassEncoder *enc,
             GPUBuffer             *buf,
-            size_t                 off,
+            uint64_t               off,
             uint32_t               index);
 
   void

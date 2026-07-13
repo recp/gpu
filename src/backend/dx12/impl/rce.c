@@ -356,7 +356,7 @@ GPU_HIDE
 void
 dx12_vertexBuffer(GPURenderCommandEncoder *encoder,
                   GPUBuffer               *buffer,
-                  size_t                   offset,
+                  uint64_t                 offset,
                   uint32_t                 index) {
   GPURenderEncoderDX12 *native;
 
@@ -382,12 +382,12 @@ dx12_viewport(GPURenderCommandEncoder *encoder, const GPUViewport *value) {
     return;
   }
 
-  viewport.TopLeftX = (float)value->originX;
-  viewport.TopLeftY = (float)value->originY;
-  viewport.Width    = (float)value->width;
-  viewport.Height   = (float)value->height;
-  viewport.MinDepth = (float)value->znear;
-  viewport.MaxDepth = (float)value->zfar;
+  viewport.TopLeftX = value->x;
+  viewport.TopLeftY = value->y;
+  viewport.Width    = value->width;
+  viewport.Height   = value->height;
+  viewport.MinDepth = value->minDepth;
+  viewport.MaxDepth = value->maxDepth;
   native->commandList->lpVtbl->RSSetViewports(native->commandList,
                                                1u,
                                                &viewport);
@@ -398,19 +398,24 @@ void
 dx12_scissor(GPURenderCommandEncoder *encoder, const GPUScissorRect *value) {
   GPURenderEncoderDX12 *native;
   D3D12_RECT            scissor;
+  int64_t               right;
+  int64_t               bottom;
 
   native = encoder ? encoder->_priv : NULL;
-  if (!native || !native->commandList || !value ||
-      value->x > LONG_MAX || value->y > LONG_MAX ||
-      value->width > (uint32_t)(LONG_MAX - (LONG)value->x) ||
-      value->height > (uint32_t)(LONG_MAX - (LONG)value->y)) {
+  if (!native || !native->commandList || !value) {
+    return;
+  }
+
+  right  = (int64_t)value->x + value->width;
+  bottom = (int64_t)value->y + value->height;
+  if (right > LONG_MAX || bottom > LONG_MAX) {
     return;
   }
 
   scissor.left   = (LONG)value->x;
   scissor.top    = (LONG)value->y;
-  scissor.right  = scissor.left + (LONG)value->width;
-  scissor.bottom = scissor.top + (LONG)value->height;
+  scissor.right  = (LONG)right;
+  scissor.bottom = (LONG)bottom;
   native->commandList->lpVtbl->RSSetScissorRects(native->commandList,
                                                   1u,
                                                   &scissor);

@@ -255,7 +255,7 @@ static void
 gpu_bindRenderVertexBuffer(GPURenderPassEncoder *pass,
                            GPUApi               *api,
                            GPUBuffer            *buf,
-                           size_t                off,
+                           uint64_t              off,
                            uint32_t              index) {
   GPUDevice *device;
   uint32_t slotBit;
@@ -286,7 +286,7 @@ GPU_HIDE
 void
 gpuSetRenderVertexBuffer(GPURenderPassEncoder *pass,
                          GPUBuffer            *buf,
-                         size_t                off,
+                         uint64_t              off,
                          uint32_t              index) {
   GPUApi *api;
 
@@ -475,7 +475,7 @@ GPU_HIDE
 void
 gpuSetRenderFragmentBuffer(GPURenderPassEncoder *pass,
                            GPUBuffer            *buf,
-                           size_t                off,
+                           uint64_t              off,
                            uint32_t              index) {
   GPUApi *api;
 

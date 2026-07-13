@@ -215,7 +215,7 @@ GPU_HIDE
 void
 mt_computeBuffer(GPUComputePassEncoder *enc,
                  GPUBuffer             *buf,
-                 size_t                 off,
+                 uint64_t               off,
                  uint32_t               index) {
   MTComputeEncoder *native;
   id<MTLBuffer>     buffer;

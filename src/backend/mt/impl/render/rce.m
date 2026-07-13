@@ -191,12 +191,12 @@ mt_viewport(GPURenderCommandEncoder *rce, const GPUViewport *viewport) {
   MTRenderEncoder *native;
   MTLViewport      vp;
 
-  vp.originX = viewport->originX;
-  vp.originY = viewport->originY;
+  vp.originX = viewport->x;
+  vp.originY = viewport->y;
   vp.width   = viewport->width;
   vp.height  = viewport->height;
-  vp.znear   = viewport->znear;
-  vp.zfar    = viewport->zfar;
+  vp.znear   = viewport->minDepth;
+  vp.zfar    = viewport->maxDepth;
 
   native = mt_renderEncoder(rce);
   if (!native) {
@@ -211,16 +211,32 @@ mt_viewport(GPURenderCommandEncoder *rce, const GPUViewport *viewport) {
   [native->classic setViewport:vp];
 }
 
+static void
+mt_scissorAxis(int32_t     origin,
+               uint32_t    extent,
+               NSUInteger *outOrigin,
+               NSUInteger *outExtent) {
+  uint64_t clipped;
+
+  if (origin >= 0) {
+    *outOrigin = (NSUInteger)origin;
+    *outExtent = (NSUInteger)extent;
+    return;
+  }
+
+  clipped    = (uint64_t)-(int64_t)origin;
+  *outOrigin = 0u;
+  *outExtent = clipped >= extent ? 0u : (NSUInteger)(extent - clipped);
+}
+
 GPU_HIDE
 void
 mt_scissor(GPURenderCommandEncoder *rce, const GPUScissorRect *scissor) {
   MTRenderEncoder *native;
   MTLScissorRect   rect;
 
-  rect.x      = scissor->x;
-  rect.y      = scissor->y;
-  rect.width  = scissor->width;
-  rect.height = scissor->height;
+  mt_scissorAxis(scissor->x, scissor->width, &rect.x, &rect.width);
+  mt_scissorAxis(scissor->y, scissor->height, &rect.y, &rect.height);
 
   native = mt_renderEncoder(rce);
   if (!native) {
@@ -364,7 +380,7 @@ GPU_HIDE
 void
 mt_vertexBuffer(GPURenderCommandEncoder *rce,
                 GPUBuffer               *buffer,
-                size_t                   offset,
+                uint64_t                 offset,
                 uint32_t                 index) {
   MTRenderEncoder *native;
   id<MTLBuffer>    nativeBuffer;
@@ -382,14 +398,16 @@ mt_vertexBuffer(GPURenderCommandEncoder *rce,
                          index);
     return;
   }
-  [native->classic setVertexBuffer:nativeBuffer offset:offset atIndex:index];
+  [native->classic setVertexBuffer:nativeBuffer
+                            offset:(NSUInteger)offset
+                           atIndex:index];
 }
 
 GPU_HIDE
 void
 mt_vertexInputBuffer(GPURenderCommandEncoder *rce,
                      GPUBuffer               *buffer,
-                     size_t                   offset,
+                     uint64_t                 offset,
                      uint32_t                 index) {
   index = mt_vertexBufferIndex(index);
   if (index != UINT32_MAX) {
@@ -441,7 +459,7 @@ GPU_HIDE
 void
 mt_fragmentBuffer(GPURenderCommandEncoder *rce,
                   GPUBuffer               *buffer,
-                  size_t                   offset,
+                  uint64_t                 offset,
                   uint32_t                 index) {
   MTRenderEncoder *native;
   id<MTLBuffer>    nativeBuffer;
@@ -459,7 +477,9 @@ mt_fragmentBuffer(GPURenderCommandEncoder *rce,
                          index);
     return;
   }
-  [native->classic setFragmentBuffer:nativeBuffer offset:offset atIndex:index];
+  [native->classic setFragmentBuffer:nativeBuffer
+                              offset:(NSUInteger)offset
+                             atIndex:index];
 }
 
 GPU_HIDE

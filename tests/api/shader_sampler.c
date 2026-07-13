@@ -56,12 +56,12 @@ submit_source_sampler_draw(GPUCommandQueue            *queue,
                                   GPU_DYNAMIC_STATE_SCISSOR_BIT |
                                   GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT |
                                   GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
-  dynamicState.viewport.width   = 4.0;
-  dynamicState.viewport.height  = 4.0;
-  dynamicState.viewport.zfar    = 1.0;
-  dynamicState.scissor.width    = 4u;
-  dynamicState.scissor.height   = 4u;
-  dynamicState.blendConstant[3] = 1.0f;
+  dynamicState.viewport.width    = 4.0f;
+  dynamicState.viewport.height   = 4.0f;
+  dynamicState.viewport.maxDepth = 1.0f;
+  dynamicState.scissor.width     = 4u;
+  dynamicState.scissor.height    = 4u;
+  dynamicState.blendConstant[3]  = 1.0f;
   GPUApplyDynamicState(renderPass, &dynamicState);
   GPUApplyDynamicState(renderPass, &dynamicState);
   GPUDraw(renderPass, 6u, 1u, 0u, 0u);

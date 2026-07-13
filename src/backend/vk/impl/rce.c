@@ -162,12 +162,12 @@ vk_viewport(GPURenderCommandEncoder *encoder, const GPUViewport *value) {
     return;
   }
 
-  viewport.x        = (float)value->originX;
-  viewport.y        = (float)value->originY;
-  viewport.width    = (float)value->width;
-  viewport.height   = (float)value->height;
-  viewport.minDepth = (float)value->znear;
-  viewport.maxDepth = (float)value->zfar;
+  viewport.x        = value->x;
+  viewport.y        = value->y;
+  viewport.width    = value->width;
+  viewport.height   = value->height;
+  viewport.minDepth = value->minDepth;
+  viewport.maxDepth = value->maxDepth;
   vkCmdSetViewport(native->command, 0u, 1u, &viewport);
 }
 
@@ -182,8 +182,8 @@ vk_scissor(GPURenderCommandEncoder *encoder, const GPUScissorRect *value) {
     return;
   }
 
-  scissor.offset.x      = (int32_t)value->x;
-  scissor.offset.y      = (int32_t)value->y;
+  scissor.offset.x      = value->x;
+  scissor.offset.y      = value->y;
   scissor.extent.width  = value->width;
   scissor.extent.height = value->height;
   vkCmdSetScissor(native->command, 0u, 1u, &scissor);
@@ -252,7 +252,7 @@ GPU_HIDE
 void
 vk_vertexBuffer(GPURenderCommandEncoder *encoder,
                 GPUBuffer               *buffer,
-                size_t                   offset,
+                uint64_t                 offset,
                 uint32_t                 index) {
   GPURenderEncoderVk *native;
   GPUBufferVk        *bufferVk;
