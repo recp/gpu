@@ -55,7 +55,6 @@ GPUCreateInstance(const GPUInstanceCreateInfo * __restrict info,
     return GPU_ERROR_BACKEND_FAILURE;
   }
   (*outInstance)->_api = api;
-  gpuSetActiveGPUApi(api);
 
   return GPU_OK;
 }

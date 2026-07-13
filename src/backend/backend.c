@@ -25,7 +25,6 @@ typedef struct GPUApiList {
   GPUApi            *api;
 } GPUApiList;
 
-static GPUApi     *gpu__api     = NULL;
 static GPUApiList *gpu__apis    = NULL;
 
 static GPUApi*
@@ -75,21 +74,6 @@ gpuApiForBackend(GPUBackend backend) {
   return api;
 }
 
-GPU_HIDE
-void
-gpuSetActiveGPUApi(GPUApi *api) {
-  if (!gpu__api) {
-    gpu__api = api;
-  }
-}
-
-static void
-gpu__ensureActiveBackend(void) {
-  if (!gpu__api) {
-    gpu__api = gpuApiForBackend(GPU_BACKEND_DEFAULT);
-  }
-}
-
 GPU_EXPORT
 void
 gpuRegisterCustomGPUApi(GPUApi * __restrict gpuApi) {
@@ -99,11 +83,4 @@ gpuRegisterCustomGPUApi(GPUApi * __restrict gpuApi) {
   item->api  = gpuApi;
   item->next = gpu__apis;
   gpu__apis  = item;
-}
-
-GPU_EXPORT
-GPUApi*
-gpuActiveGPUApi(void) {
-  gpu__ensureActiveBackend();
-  return gpu__api;
 }

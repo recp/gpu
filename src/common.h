@@ -45,8 +45,4 @@ GPU_HIDE
 GPUApi*
 gpuApiForBackend(GPUBackend backend);
 
-GPU_HIDE
-void
-gpuSetActiveGPUApi(GPUApi *api);
-
 #endif /* src_common_h */

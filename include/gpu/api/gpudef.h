@@ -69,10 +69,6 @@ GPU_EXPORT
 void
 gpuRegisterCustomGPUApi(GPUApi * __restrict gpuApi);
 
-GPU_EXPORT
-GPUApi*
-gpuActiveGPUApi(void);
-
 #ifdef __cplusplus
 }
 #endif

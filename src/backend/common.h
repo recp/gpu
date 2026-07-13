@@ -35,16 +35,6 @@
   x;                                                                          \
 })
 
-#define GPU__API()                                                            \
-  ({                                                                          \
-    GPUApi *api;                                                              \
-                                                                              \
-    if (!(api = gpuActiveGPUApi()))                                           \
-      return NULL;                                                            \
-                                                                              \
-    api;                                                                      \
-  })                                                                          \
-
 #define GPU__DEFINE_DEFAULT_QUEUES_IF_NEEDED(nQueCI, queCI)                   \
   if (queCI == NULL) {                                                        \
     nQueCI = 3;                                                               \
