@@ -863,20 +863,24 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
   D3D12_RESOURCE_DESC        uploadDesc = {0};
   D3D12_RESOURCE_DESC        textureDesc;
   D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {0};
-  D3D12_TEXTURE_COPY_LOCATION source = {0};
-  D3D12_TEXTURE_COPY_LOCATION destination = {0};
   D3D12_BOX                   sourceBox = {0};
   D3D12_RANGE                 readRange = {0};
   D3D12_RESOURCE_STATES       finalState;
   uint8_t                    *mapped;
   HANDLE                      event;
   uint64_t                    rowSize;
+  uint64_t                    layerSize;
+  uint64_t                    layerStride;
   uint64_t                    totalSize;
+  uint32_t                    copyCount;
+  uint32_t                    copyDepth;
   uint32_t                    rowCount;
   uint32_t                    subresource;
+  uint32_t                    transitionLayerCount;
   HRESULT                     result;
   DWORD                       waitResult;
   GPUResult                   gpuResult;
+  bool                        texture3D;
 
   queueDX12  = queue ? queue->_priv : NULL;
   deviceDX12 = queue && queue->_device ? queue->_device->_priv : NULL;
@@ -884,9 +888,7 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
   if (!queueDX12 || !queueDX12->commandQueue || !deviceDX12 || !native ||
       !native->resource ||
       !region || !data || sizeBytes > SIZE_MAX ||
-      queueDX12->type != D3D12_COMMAND_LIST_TYPE_DIRECT ||
-      texture->dimension != GPU_TEXTURE_DIMENSION_2D ||
-      region->depth != 1u || region->layerCount != 1u) {
+      queueDX12->type != D3D12_COMMAND_LIST_TYPE_DIRECT) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -911,6 +913,10 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
   mapped      = NULL;
   event       = NULL;
   gpuResult   = GPU_ERROR_BACKEND_FAILURE;
+  texture3D            = texture->dimension == GPU_TEXTURE_DIMENSION_3D;
+  copyCount            = texture3D ? 1u : region->layerCount;
+  copyDepth            = texture3D ? region->depth : 1u;
+  transitionLayerCount = texture3D ? 1u : region->layerCount;
   native->resource->lpVtbl->GetDesc(native->resource, &textureDesc);
   subresource = region->mipLevel +
                 region->baseArrayLayer * texture->mipLevelCount;
@@ -923,12 +929,26 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
     &footprint,
     &rowCount,
     &rowSize,
-    &totalSize
+    &layerSize
   );
-  if (totalSize == 0u || totalSize > SIZE_MAX ||
+  if (layerSize == 0u ||
       rowCount < dataLayout.blockRows ||
-      rowSize < dataLayout.bytesInLastRow) {
+      rowSize < dataLayout.bytesInLastRow ||
+      footprint.Footprint.Depth < copyDepth ||
+      layerSize > UINT64_MAX -
+                    (D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1u)) {
     return GPU_ERROR_BACKEND_FAILURE;
+  }
+  layerStride =
+    (layerSize + D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1u) &
+    ~(uint64_t)(D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1u);
+  if (copyCount > 1u &&
+      layerStride > (UINT64_MAX - layerSize) / (copyCount - 1u)) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  totalSize = layerStride * (copyCount - 1u) + layerSize;
+  if (totalSize > SIZE_MAX) {
+    return GPU_ERROR_OUT_OF_MEMORY;
   }
 
   heap.Type                  = D3D12_HEAP_TYPE_UPLOAD;
@@ -959,11 +979,49 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
   if (FAILED(result) || !mapped) {
     goto cleanup;
   }
-  for (uint32_t row = 0u; row < dataLayout.blockRows; row++) {
-    memcpy(mapped + (size_t)footprint.Offset +
-             (size_t)row * footprint.Footprint.RowPitch,
-           (const uint8_t *)data + (size_t)row * region->bytesPerRow,
-           dataLayout.bytesInLastRow);
+  for (uint32_t layer = 0u; layer < copyCount; layer++) {
+    uint64_t baseOffset;
+    uint64_t ignoredSize;
+
+    baseOffset  = (uint64_t)layer * layerStride;
+    subresource = region->mipLevel +
+                  (region->baseArrayLayer + layer) * texture->mipLevelCount;
+    deviceDX12->d3dDevice->lpVtbl->GetCopyableFootprints(
+      deviceDX12->d3dDevice,
+      &textureDesc,
+      subresource,
+      1u,
+      baseOffset,
+      &footprint,
+      &rowCount,
+      &rowSize,
+      &ignoredSize
+    );
+    if (rowCount < dataLayout.blockRows ||
+        rowSize < dataLayout.bytesInLastRow ||
+        footprint.Footprint.Depth < copyDepth) {
+      goto cleanup;
+    }
+
+    for (uint32_t slice = 0u; slice < copyDepth; slice++) {
+      uint32_t sourceImage;
+
+      sourceImage = texture3D ? slice : layer;
+      for (uint32_t row = 0u; row < dataLayout.blockRows; row++) {
+        uint64_t destinationOffset;
+        uint64_t sourceOffset;
+
+        destinationOffset = footprint.Offset +
+                            (uint64_t)slice *
+                              footprint.Footprint.RowPitch * rowCount +
+                            (uint64_t)row * footprint.Footprint.RowPitch;
+        sourceOffset = (uint64_t)sourceImage * dataLayout.bytesPerImage +
+                       (uint64_t)row * region->bytesPerRow;
+        memcpy(mapped + (size_t)destinationOffset,
+               (const uint8_t *)data + (size_t)sourceOffset,
+               dataLayout.bytesInLastRow);
+      }
+    }
   }
   upload->lpVtbl->Unmap(upload, 0u, NULL);
   mapped = NULL;
@@ -995,33 +1053,51 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
                               region->mipLevel,
                               1u,
                               region->baseArrayLayer,
-                              1u,
+                              transitionLayerCount,
                               D3D12_RESOURCE_STATE_COPY_DEST)) {
     goto cleanup;
   }
-  source.pResource             = upload;
-  source.Type                  = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-  source.PlacedFootprint       = footprint;
-  destination.pResource       = native->resource;
-  destination.Type            = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-  destination.SubresourceIndex = subresource;
-  sourceBox.right             = region->width;
-  sourceBox.bottom            = region->height;
-  sourceBox.back              = 1u;
-  commandList->lpVtbl->CopyTextureRegion(commandList,
-                                         &destination,
-                                         0u,
-                                         0u,
-                                         0u,
-                                         &source,
-                                         &sourceBox);
+  sourceBox.right  = region->width;
+  sourceBox.bottom = region->height;
+  sourceBox.back   = copyDepth;
+  for (uint32_t layer = 0u; layer < copyCount; layer++) {
+    D3D12_TEXTURE_COPY_LOCATION source      = {0};
+    D3D12_TEXTURE_COPY_LOCATION destination = {0};
+    uint64_t                    ignoredSize;
+
+    subresource = region->mipLevel +
+                  (region->baseArrayLayer + layer) * texture->mipLevelCount;
+    deviceDX12->d3dDevice->lpVtbl->GetCopyableFootprints(
+      deviceDX12->d3dDevice,
+      &textureDesc,
+      subresource,
+      1u,
+      (uint64_t)layer * layerStride,
+      &source.PlacedFootprint,
+      &rowCount,
+      &rowSize,
+      &ignoredSize
+    );
+    source.pResource              = upload;
+    source.Type                   = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    destination.pResource        = native->resource;
+    destination.Type             = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    destination.SubresourceIndex = subresource;
+    commandList->lpVtbl->CopyTextureRegion(commandList,
+                                           &destination,
+                                           0u,
+                                           0u,
+                                           0u,
+                                           &source,
+                                           &sourceBox);
+  }
   finalState = dx12__textureFinalState(texture->usage);
   if (!dx12_transitionTexture(commandList,
                               native,
                               region->mipLevel,
                               1u,
                               region->baseArrayLayer,
-                              1u,
+                              transitionLayerCount,
                               finalState)) {
     goto cleanup;
   }

@@ -770,5 +770,6 @@ gpu_test_copy(GPUDevice *device) {
   return check_copy_pass_device_dispatch(device) &&
          check_copy_pass_validation(device) &&
          check_copy_pass_invalid_copy_noops(device) &&
-         check_compressed_texture_copies(device);
+         check_compressed_texture_copies(device) &&
+         gpu_test_texture_transfer(device);
 }
