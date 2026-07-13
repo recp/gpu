@@ -688,6 +688,7 @@ vk_createDevice(GPUPhysicalDevice          * __restrict phyDevice,
     phyDeviceVk->features.pipelineStatisticsQuery;
   enabledFeatures.multiDrawIndirect = phyDeviceVk->features.multiDrawIndirect;
   enabledFeatures.independentBlend   = phyDeviceVk->features.independentBlend;
+  enabledFeatures.imageCubeArray     = phyDeviceVk->features.imageCubeArray;
 
   deviceCI.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceCI.pEnabledFeatures        = &enabledFeatures;
