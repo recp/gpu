@@ -110,6 +110,7 @@ parse_backend(const char *name, GPUBackend *outBackend) {
 int
 main(int argc, char **argv) {
   GPUInstanceCreateInfo instanceInfo = {0};
+  GPURuntimeConfig      runtimeConfig = {0};
   GPUInstance          *instance;
   GPUAdapter           *adapter;
   GPUDevice            *device;
@@ -151,6 +152,16 @@ main(int argc, char **argv) {
   device = GPUCreateDeviceWithDefaultQueues(adapter);
   if (!device) {
     fprintf(stderr, "failed to create device\n");
+    GPUDestroyInstance(instance);
+    return 1;
+  }
+
+  runtimeConfig.chain.sType          = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
+  runtimeConfig.chain.structSize     = sizeof(runtimeConfig);
+  runtimeConfig.enableDebugMarkers   = true;
+  if (GPUConfigureRuntime(device, &runtimeConfig) != GPU_OK) {
+    fprintf(stderr, "failed to enable debug markers\n");
+    GPUDestroyDevice(device);
     GPUDestroyInstance(instance);
     return 1;
   }

@@ -708,7 +708,6 @@ vk_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
   GPUCommandBufferVk *command;
   GPUCopyPassEncoder *pass;
 
-  GPU__UNUSED(label);
   command = cmdb ? cmdb->_priv : NULL;
   if (!command || !command->command) {
     return NULL;
@@ -717,6 +716,11 @@ vk_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
   pass = &command->copyEncoder;
   memset(pass, 0, sizeof(*pass));
   pass->_priv = command;
+  command->copyDebugLabelActive = vk_beginDebugLabel(
+    gpuCommandBufferDevice(cmdb),
+    command->command,
+    label
+  );
   return pass;
 }
 
@@ -901,7 +905,13 @@ vk_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
 
 static void
 vk_endCopyPass(GPUCopyPassEncoder *pass) {
-  GPU__UNUSED(pass);
+  GPUCommandBufferVk *command;
+
+  command = vk__copyCommand(pass);
+  if (command && command->copyDebugLabelActive) {
+    vk_endDebugLabel(gpuCommandBufferDevice(pass->_cmdb), command->command);
+    command->copyDebugLabelActive = false;
+  }
 }
 
 GPU_HIDE

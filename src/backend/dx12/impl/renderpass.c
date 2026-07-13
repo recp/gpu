@@ -666,7 +666,6 @@ dx12_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
   GPUCommandBufferDX12 *command;
   GPUCopyPassEncoder   *pass;
 
-  GPU__UNUSED(label);
   command = cmdb ? cmdb->_priv : NULL;
   if (!command || !command->commandList) {
     return NULL;
@@ -675,6 +674,11 @@ dx12_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
   pass = &command->copyEncoder;
   memset(pass, 0, sizeof(*pass));
   pass->_priv = command;
+  command->copyDebugEventActive = dx12_beginDebugEvent(
+    gpuCommandBufferDevice(cmdb),
+    command->commandList,
+    label
+  );
   return pass;
 }
 
@@ -940,7 +944,14 @@ dx12_copyTextureToTexture(
 
 static void
 dx12_endCopyPass(GPUCopyPassEncoder *pass) {
-  GPU__UNUSED(pass);
+  GPUCommandBufferDX12 *command;
+
+  command = dx12__copyCommand(pass);
+  if (command && command->copyDebugEventActive) {
+    dx12_endDebugEvent(gpuCommandBufferDevice(pass->_cmdb),
+                       command->commandList);
+    command->copyDebugEventActive = false;
+  }
 }
 
 GPU_HIDE

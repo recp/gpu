@@ -220,9 +220,14 @@ vk_createInstance(GPUApi * __restrict api,
       }
 
       if (!strcmp(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-#if GPU_BUILD_WITH_VALIDATION
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+        gpuInstVk->extensionNames[nEnabledExtensions++] =
+          VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+        gpuInstVk->debugUtilsEnabled = true;
+#elif GPU_BUILD_WITH_VALIDATION
         if (validate) {
           gpuInstVk->extensionNames[nEnabledExtensions++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+          gpuInstVk->debugUtilsEnabled = true;
         }
 #endif
       }
@@ -318,37 +323,19 @@ vk_createInstance(GPUApi * __restrict api,
   
 #if GPU_BUILD_WITH_VALIDATION
   if (validate) {
-    /* Setup the validation messenger and optional marker entry points. */
+    /* Setup the validation messenger. */
     gpuInstVk->CreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)
         vkGetInstanceProcAddr(gpuInstVk->inst, "vkCreateDebugUtilsMessengerEXT");
     gpuInstVk->DestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)
         vkGetInstanceProcAddr(gpuInstVk->inst, "vkDestroyDebugUtilsMessengerEXT");
     gpuInstVk->SubmitDebugUtilsMessageEXT = (PFN_vkSubmitDebugUtilsMessageEXT)
         vkGetInstanceProcAddr(gpuInstVk->inst, "vkSubmitDebugUtilsMessageEXT");
-#if GPU_BUILD_WITH_DEBUG_MARKERS
-    gpuInstVk->CmdBeginDebugUtilsLabelEXT = (PFN_vkCmdBeginDebugUtilsLabelEXT)
-        vkGetInstanceProcAddr(gpuInstVk->inst, "vkCmdBeginDebugUtilsLabelEXT");
-    gpuInstVk->CmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)
-        vkGetInstanceProcAddr(gpuInstVk->inst, "vkCmdEndDebugUtilsLabelEXT");
-    gpuInstVk->CmdInsertDebugUtilsLabelEXT = (PFN_vkCmdInsertDebugUtilsLabelEXT)
-        vkGetInstanceProcAddr(gpuInstVk->inst, "vkCmdInsertDebugUtilsLabelEXT");
-    gpuInstVk->SetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)
-        vkGetInstanceProcAddr(gpuInstVk->inst, "vkSetDebugUtilsObjectNameEXT");
-#endif
 
     if (gpuInstVk->CreateDebugUtilsMessengerEXT == NULL
         || gpuInstVk->DestroyDebugUtilsMessengerEXT == NULL
         || gpuInstVk->SubmitDebugUtilsMessageEXT == NULL) {
       ERR_EXIT("GetProcAddr: Failed to init VK_EXT_debug_utils\n", "GetProcAddr: Failure");
     }
-#if GPU_BUILD_WITH_DEBUG_MARKERS
-    if (gpuInstVk->CmdBeginDebugUtilsLabelEXT == NULL
-        || gpuInstVk->CmdEndDebugUtilsLabelEXT == NULL
-        || gpuInstVk->CmdInsertDebugUtilsLabelEXT == NULL
-        || gpuInstVk->SetDebugUtilsObjectNameEXT == NULL) {
-      ERR_EXIT("GetProcAddr: Failed to init VK_EXT_debug_utils\n", "GetProcAddr: Failure");
-    }
-#endif
 
     err = gpuInstVk->CreateDebugUtilsMessengerEXT(gpuInstVk->inst, 
                                                   instCI.pNext,
@@ -366,6 +353,19 @@ vk_createInstance(GPUApi * __restrict api,
                  "CreateDebugUtilsMessengerEXT Failure");
         break;
     }
+  }
+#endif
+
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  if (gpuInstVk->debugUtilsEnabled) {
+    gpuInstVk->CmdBeginDebugUtilsLabelEXT = (PFN_vkCmdBeginDebugUtilsLabelEXT)
+      vkGetInstanceProcAddr(gpuInstVk->inst, "vkCmdBeginDebugUtilsLabelEXT");
+    gpuInstVk->CmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)
+      vkGetInstanceProcAddr(gpuInstVk->inst, "vkCmdEndDebugUtilsLabelEXT");
+    gpuInstVk->CmdInsertDebugUtilsLabelEXT = (PFN_vkCmdInsertDebugUtilsLabelEXT)
+      vkGetInstanceProcAddr(gpuInstVk->inst, "vkCmdInsertDebugUtilsLabelEXT");
+    gpuInstVk->SetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)
+      vkGetInstanceProcAddr(gpuInstVk->inst, "vkSetDebugUtilsObjectNameEXT");
   }
 #endif
 

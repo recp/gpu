@@ -229,10 +229,15 @@ dx12_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   native  = &command->renderState;
   memset(encoder, 0, sizeof(*encoder));
   memset(native, 0, sizeof(*native));
-  native->device       = device;
-  native->commandList  = command->commandList;
-  native->commandList7 = command->commandList7;
-  native->renderPass   = renderPass;
+  native->device           = device;
+  native->commandList      = command->commandList;
+  native->commandList7     = command->commandList7;
+  native->renderPass       = renderPass;
+  native->debugEventActive = dx12_beginDebugEvent(
+    gpuCommandBufferDevice(cmdb),
+    native->commandList,
+    pass->label
+  );
 
   for (uint32_t i = 0u; i < renderPass->colorCount; i++) {
     GPUTextureViewDX12 *view;
@@ -657,6 +662,11 @@ dx12_endRenderEncoding(GPURenderCommandEncoder *encoder) {
     if (view && view->swapchain) {
       dx12__transitionView(native, view, D3D12_RESOURCE_STATE_PRESENT);
     }
+  }
+  if (native->debugEventActive) {
+    dx12_endDebugEvent(gpuCommandBufferDevice(encoder->_cmdb),
+                       native->commandList);
+    native->debugEventActive = false;
   }
 }
 

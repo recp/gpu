@@ -129,8 +129,6 @@ dx12_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
   GPUComputePassEncoder   *encoder;
   GPUComputeEncoderDX12   *native;
 
-  GPU__UNUSED(label);
-
   device  = cmdb && cmdb->_queue && cmdb->_queue->_device
               ? cmdb->_queue->_device->_priv
               : NULL;
@@ -143,8 +141,13 @@ dx12_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
   native  = &command->computeState;
   memset(encoder, 0, sizeof(*encoder));
   memset(native, 0, sizeof(*native));
-  native->device             = device;
-  native->commandList        = command->commandList;
+  native->device           = device;
+  native->commandList      = command->commandList;
+  native->debugEventActive = dx12_beginDebugEvent(
+    gpuCommandBufferDevice(cmdb),
+    native->commandList,
+    label
+  );
   encoder->_priv             = native;
   encoder->_workgroupSize[0] = 1u;
   encoder->_workgroupSize[1] = 1u;
@@ -285,11 +288,17 @@ dx12_endComputeEncoding(GPUComputePassEncoder *encoder) {
     return;
   }
 
-  native->device        = NULL;
-  native->commandList   = NULL;
-  native->rootSignature = NULL;
-  native->resourceHeap  = NULL;
-  native->samplerHeap   = NULL;
+  if (native->debugEventActive) {
+    dx12_endDebugEvent(gpuCommandBufferDevice(encoder->_cmdb),
+                       native->commandList);
+  }
+
+  native->device           = NULL;
+  native->commandList      = NULL;
+  native->rootSignature    = NULL;
+  native->resourceHeap     = NULL;
+  native->samplerHeap      = NULL;
+  native->debugEventActive = false;
 }
 
 GPU_HIDE

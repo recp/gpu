@@ -118,8 +118,6 @@ vk_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
   GPUComputePassEncoder  *encoder;
   GPUComputeEncoderVk    *native;
 
-  GPU__UNUSED(label);
-
   command = cmdb ? cmdb->_priv : NULL;
   if (!command || !command->command) {
     return NULL;
@@ -129,8 +127,13 @@ vk_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
   native  = &command->computeState;
   memset(encoder, 0, sizeof(*encoder));
   memset(native, 0, sizeof(*native));
-  native->command           = command->command;
-  encoder->_priv            = native;
+  native->command          = command->command;
+  native->debugLabelActive = vk_beginDebugLabel(
+    gpuCommandBufferDevice(cmdb),
+    native->command,
+    label
+  );
+  encoder->_priv             = native;
   encoder->_workgroupSize[0] = 1u;
   encoder->_workgroupSize[1] = 1u;
   encoder->_workgroupSize[2] = 1u;
@@ -156,7 +159,7 @@ vk_setComputePipelineState(GPUComputePassEncoder   *encoder,
   vk_bindShaderSamplers(native->command,
                         VK_PIPELINE_BIND_POINT_COMPUTE,
                         &pipeline->shaderLayout);
-  native->pipelineLayout      = pipeline->shaderLayout.layout;
+  native->pipelineLayout     = pipeline->shaderLayout.layout;
   encoder->_workgroupSize[0] = pipelineState->workgroupSize[0];
   encoder->_workgroupSize[1] = pipelineState->workgroupSize[1];
   encoder->_workgroupSize[2] = pipelineState->workgroupSize[2];
@@ -226,8 +229,13 @@ vk_endComputeEncoding(GPUComputePassEncoder *encoder) {
     return;
   }
 
+  if (native->debugLabelActive) {
+    vk_endDebugLabel(gpuCommandBufferDevice(encoder->_cmdb), native->command);
+  }
+
   native->command        = VK_NULL_HANDLE;
   native->pipelineLayout = VK_NULL_HANDLE;
+  native->debugLabelActive = false;
 }
 
 GPU_HIDE

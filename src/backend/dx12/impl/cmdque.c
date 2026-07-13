@@ -558,7 +558,6 @@ dx12_newCommandBuffer(GPUCommandQueue  * __restrict queue,
   GPUCommandBuffer     *cmdb;
   HRESULT               result;
 
-  GPU__UNUSED(label);
   if (!queue || !queue->_priv || !queue->_device) {
     return NULL;
   }
@@ -580,6 +579,8 @@ dx12_newCommandBuffer(GPUCommandQueue  * __restrict queue,
     return NULL;
   }
 
+  dx12_setCommandListName(queue->_device, native->commandList, label);
+
   cmdb = &native->commandBuffer;
   memset(cmdb, 0, sizeof(*cmdb));
   memset(&native->renderPassDesc, 0, sizeof(native->renderPassDesc));
@@ -589,6 +590,7 @@ dx12_newCommandBuffer(GPUCommandQueue  * __restrict queue,
   memset(&native->computeEncoder, 0, sizeof(native->computeEncoder));
   memset(&native->computeState, 0, sizeof(native->computeState));
   memset(&native->copyEncoder, 0, sizeof(native->copyEncoder));
+  native->copyDebugEventActive = false;
   native->presentSwapchain  = NULL;
   native->pendingNext       = NULL;
   native->fenceValue        = 0u;

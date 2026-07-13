@@ -52,6 +52,13 @@ typedef struct GPUDescriptorHeapDX12 {
   uint32_t              capacity;
 } GPUDescriptorHeapDX12;
 
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+typedef void (WINAPI *DX12PixBeginEventFn)(ID3D12GraphicsCommandList *commandList,
+                                           UINT64                      color,
+                                           PCSTR                       label);
+typedef void (WINAPI *DX12PixEndEventFn)(ID3D12GraphicsCommandList *commandList);
+#endif
+
 typedef struct GPUDeviceDX12 {
   ID3D12Device               *d3dDevice;
   ID3D12CommandSignature     *drawSignature;
@@ -59,6 +66,11 @@ typedef struct GPUDeviceDX12 {
   ID3D12CommandSignature     *dispatchSignature;
   GPUCommandQueue           **createdQueues;
   HMODULE                     dxcModule;
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  HMODULE                     pixModule;
+  DX12PixBeginEventFn         pixBeginEvent;
+  DX12PixEndEventFn           pixEndEvent;
+#endif
   GPUDescriptorHeapDX12       resourceDescriptors;
   GPUDescriptorHeapDX12       samplerDescriptors;
   GPUDescriptorHeapDX12       rtvDescriptors;
@@ -70,6 +82,59 @@ typedef struct GPUDeviceDX12 {
   bool                        enhancedBarriers;
   bool                        dxcAvailable;
 } GPUDeviceDX12;
+
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+static inline bool
+dx12_beginDebugEvent(GPUDevice                 *device,
+                     ID3D12GraphicsCommandList *commandList,
+                     const char                *label) {
+  GPUDeviceDX12 *deviceDX12;
+
+  deviceDX12 = device ? device->_priv : NULL;
+  if (!gpuDeviceDebugMarkersEnabled(device) || !commandList ||
+      !label || label[0] == '\0' || !deviceDX12 ||
+      !deviceDX12->pixBeginEvent) {
+    return false;
+  }
+
+  deviceDX12->pixBeginEvent(commandList, 0u, label);
+  return true;
+}
+
+static inline void
+dx12_endDebugEvent(GPUDevice                 *device,
+                   ID3D12GraphicsCommandList *commandList) {
+  GPUDeviceDX12 *deviceDX12;
+
+  deviceDX12 = device ? device->_priv : NULL;
+  if (commandList && deviceDX12 && deviceDX12->pixEndEvent) {
+    deviceDX12->pixEndEvent(commandList);
+  }
+}
+
+static inline void
+dx12_setCommandListName(GPUDevice                 *device,
+                        ID3D12GraphicsCommandList *commandList,
+                        const char                *label) {
+  wchar_t name[256];
+
+  if (!gpuDeviceDebugMarkersEnabled(device) || !commandList ||
+      !label || label[0] == '\0' ||
+      MultiByteToWideChar(CP_UTF8,
+                          MB_ERR_INVALID_CHARS,
+                          label,
+                          -1,
+                          name,
+                          (int)GPU_ARRAY_LEN(name)) <= 0) {
+    return;
+  }
+  (void)commandList->lpVtbl->SetName(commandList, name);
+}
+#else
+#  define dx12_beginDebugEvent(device, commandList, label) false
+#  define dx12_endDebugEvent(device, commandList) ((void)0)
+#  define dx12_setCommandListName(device, commandList, label) ((void)0)
+#endif
 
 typedef struct GPUCommandQueueDX12 GPUCommandQueueDX12;
 typedef struct GPUSwapChainDX12    GPUSwapChainDX12;
@@ -218,6 +283,7 @@ typedef struct GPURenderEncoderDX12 {
   GPUIndexType                indexType;
   uint32_t                    vertexBufferMask;
   bool                        indexBound;
+  bool                        debugEventActive;
 } GPURenderEncoderDX12;
 
 typedef struct GPUComputeEncoderDX12 {
@@ -226,6 +292,7 @@ typedef struct GPUComputeEncoderDX12 {
   ID3D12RootSignature       *rootSignature;
   ID3D12DescriptorHeap      *resourceHeap;
   ID3D12DescriptorHeap      *samplerHeap;
+  bool                       debugEventActive;
 } GPUComputeEncoderDX12;
 
 typedef struct GPUCommandBufferDX12 {
@@ -246,6 +313,7 @@ typedef struct GPUCommandBufferDX12 {
   GPUComputePassEncoder         computeEncoder;
   GPUComputeEncoderDX12         computeState;
   GPUCopyPassEncoder            copyEncoder;
+  bool                          copyDebugEventActive;
 } GPUCommandBufferDX12;
 
 struct GPUCommandQueueDX12 {

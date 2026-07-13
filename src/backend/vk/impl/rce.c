@@ -90,10 +90,16 @@ vk_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   native->command    = command->command;
   native->extent     = renderPass->extent;
 
+  if (renderPass->dynamic &&
+      (!native->device || !native->device->beginRendering)) {
+    return NULL;
+  }
+  native->debugLabelActive = vk_beginDebugLabel(
+    gpuCommandBufferDevice(cmdb),
+    native->command,
+    pass->label
+  );
   if (renderPass->dynamic) {
-    if (!native->device || !native->device->beginRendering) {
-      return NULL;
-    }
     native->device->beginRendering(native->command,
                                    &renderPass->renderingInfo);
   } else {
@@ -443,6 +449,10 @@ vk_endRenderEncoding(GPURenderCommandEncoder *encoder) {
       }
     } else {
       vkCmdEndRenderPass(native->command);
+    }
+    if (native->debugLabelActive) {
+      vk_endDebugLabel(gpuCommandBufferDevice(encoder->_cmdb), native->command);
+      native->debugLabelActive = false;
     }
   }
 }

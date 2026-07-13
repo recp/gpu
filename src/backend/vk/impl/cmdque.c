@@ -491,8 +491,6 @@ vk_newCommandBuffer(GPUCommandQueue  * __restrict queue,
   GPUCommandBuffer   *cmdb;
   VkCommandBufferBeginInfo beginInfo = {0};
 
-  GPU__UNUSED(label);
-
   if (!queue || !queue->_priv || !queue->_device) {
     return NULL;
   }
@@ -508,6 +506,7 @@ vk_newCommandBuffer(GPUCommandQueue  * __restrict queue,
   native->submitFence       = native->fence;
   native->presentImageIndex = 0u;
   native->presentFrameIndex = 0u;
+  native->copyDebugLabelActive = false;
   cmdb->_priv               = native;
   cmdb->_queue              = queue;
 
@@ -522,6 +521,11 @@ vk_newCommandBuffer(GPUCommandQueue  * __restrict queue,
     vk__recycleCommandBuffer(cmdb);
     return NULL;
   }
+
+  vk_setDebugName(queue->_device,
+                  VK_OBJECT_TYPE_COMMAND_BUFFER,
+                  (uint64_t)(uintptr_t)native->command,
+                  label);
 
   cmdb->_onCompleteSender = sender;
   cmdb->_onComplete       = oncomplete;

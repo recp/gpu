@@ -96,6 +96,25 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
   device->dxcModule    = LoadLibraryW(L"dxcompiler.dll");
   device->dxcAvailable = device->dxcModule != NULL &&
                          device->shaderModel >= D3D_SHADER_MODEL_6_0;
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  device->pixModule = LoadLibraryW(L"WinPixEventRuntime.dll");
+  if (device->pixModule) {
+    device->pixBeginEvent = (DX12PixBeginEventFn)GetProcAddress(
+      device->pixModule,
+      "PIXBeginEventOnCommandList"
+    );
+    device->pixEndEvent = (DX12PixEndEventFn)GetProcAddress(
+      device->pixModule,
+      "PIXEndEventOnCommandList"
+    );
+    if (!device->pixBeginEvent || !device->pixEndEvent) {
+      FreeLibrary(device->pixModule);
+      device->pixModule     = NULL;
+      device->pixBeginEvent = NULL;
+      device->pixEndEvent   = NULL;
+    }
+  }
+#endif
 }
 
 static bool
@@ -461,6 +480,11 @@ err:
     if (deviceDX12->dxcModule) {
       FreeLibrary(deviceDX12->dxcModule);
     }
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+    if (deviceDX12->pixModule) {
+      FreeLibrary(deviceDX12->pixModule);
+    }
+#endif
     free(deviceDX12);
   }
   free(device);
@@ -507,6 +531,11 @@ dx12_destroyDevice(GPUDevice * __restrict device) {
     if (deviceDX12->dxcModule) {
       FreeLibrary(deviceDX12->dxcModule);
     }
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+    if (deviceDX12->pixModule) {
+      FreeLibrary(deviceDX12->pixModule);
+    }
+#endif
     free(deviceDX12);
   }
   free(device);

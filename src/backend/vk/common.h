@@ -150,10 +150,13 @@ typedef struct GPUInstanceVk {
   char       *enabledLayers[64];
   VkInstance  inst;
   uint32_t    apiVersion;
-  bool        invalid_gpu_selection;
-  int32_t     gpu_number;
   uint32_t    nEnabledExtensions;
   uint32_t    nEnabledLayers;
+  int32_t     gpu_number;
+  bool        invalid_gpu_selection;
+#if GPU_BUILD_WITH_VALIDATION || GPU_BUILD_WITH_DEBUG_MARKERS
+  bool        debugUtilsEnabled;
+#endif
 
   PFN_vkGetPhysicalDeviceSurfaceSupportKHR      fpGetPhysicalDeviceSurfaceSupportKHR;
   PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR fpGetPhysicalDeviceSurfaceCapabilitiesKHR;
@@ -207,6 +210,71 @@ typedef struct GPUDeviceVk {
   VkBool32                   independentBlend;
   bool                       dynamicRendering;
 } GPUDeviceVk;
+
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+static inline GPUInstanceVk *
+vk_debugInstance(GPUDevice *device) {
+  return device && device->inst ? device->inst->_priv : NULL;
+}
+
+static inline bool
+vk_beginDebugLabel(GPUDevice      *device,
+                   VkCommandBuffer command,
+                   const char     *label) {
+  GPUInstanceVk        *instance;
+  VkDebugUtilsLabelEXT info = {0};
+
+  instance = vk_debugInstance(device);
+  if (!gpuDeviceDebugMarkersEnabled(device) || !command ||
+      !label || label[0] == '\0' || !instance ||
+      !instance->CmdBeginDebugUtilsLabelEXT) {
+    return false;
+  }
+
+  info.sType      = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
+  info.pLabelName = label;
+  instance->CmdBeginDebugUtilsLabelEXT(command, &info);
+  return true;
+}
+
+static inline void
+vk_endDebugLabel(GPUDevice *device, VkCommandBuffer command) {
+  GPUInstanceVk *instance;
+
+  instance = vk_debugInstance(device);
+  if (command && instance && instance->CmdEndDebugUtilsLabelEXT) {
+    instance->CmdEndDebugUtilsLabelEXT(command);
+  }
+}
+
+static inline void
+vk_setDebugName(GPUDevice   *device,
+                VkObjectType objectType,
+                uint64_t     objectHandle,
+                const char  *label) {
+  GPUInstanceVk                 *instance;
+  GPUDeviceVk                   *deviceVk;
+  VkDebugUtilsObjectNameInfoEXT  info = {0};
+
+  instance = vk_debugInstance(device);
+  deviceVk = device ? device->_priv : NULL;
+  if (!gpuDeviceDebugMarkersEnabled(device) || objectHandle == 0u ||
+      !label || label[0] == '\0' || !instance || !deviceVk ||
+      !instance->SetDebugUtilsObjectNameEXT) {
+    return;
+  }
+
+  info.sType        = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+  info.objectType   = objectType;
+  info.objectHandle = objectHandle;
+  info.pObjectName  = label;
+  instance->SetDebugUtilsObjectNameEXT(deviceVk->device, &info);
+}
+#else
+#  define vk_beginDebugLabel(device, command, label) false
+#  define vk_endDebugLabel(device, command) ((void)0)
+#  define vk_setDebugName(device, objectType, objectHandle, label) ((void)0)
+#endif
 
 typedef struct GPUBufferVk {
   void          *mapped;
@@ -280,12 +348,14 @@ typedef struct GPURenderEncoderVk {
   uint32_t         dynamicOffsets[GPU_VK_MAX_DYNAMIC_OFFSETS];
   GPUIndexType     indexType;
   bool             indexBound;
+  bool             debugLabelActive;
 } GPURenderEncoderVk;
 
 typedef struct GPUComputeEncoderVk {
   VkCommandBuffer  command;
   VkPipelineLayout pipelineLayout;
   uint32_t         dynamicOffsets[GPU_VK_MAX_DYNAMIC_OFFSETS];
+  bool             debugLabelActive;
 } GPUComputeEncoderVk;
 
 struct GPUCommandBufferVk {
@@ -307,6 +377,7 @@ struct GPUCommandBufferVk {
   GPUCommandBuffer          commandBuffer;
   uint32_t                  presentImageIndex;
   uint32_t                  presentFrameIndex;
+  bool                      copyDebugLabelActive;
 };
 
 struct GPUCommandQueueVk {
