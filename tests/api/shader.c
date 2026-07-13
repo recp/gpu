@@ -1144,7 +1144,7 @@ check_descriptor_array_reflection(GPUDevice *device, const char *bytecodePath) {
   }
 
   layoutCount = (uint32_t)GPU_ARRAY_LEN(layouts);
-  ok = reflection.resourceCount == 5u &&
+  ok = reflection.resourceCount == 6u &&
        shader_reflection_has_array_resource(&reflection,
                                             GPU_BINDING_SAMPLED_TEXTURE,
                                             GPU_SHADER_STAGE_FRAGMENT_BIT |
@@ -1177,6 +1177,12 @@ check_descriptor_array_reflection(GPUDevice *device, const char *bytecodePath) {
                                       1u,
                                       5u,
                                       0) &&
+       shader_reflection_has_array_resource(&reflection,
+                                            GPU_BINDING_STORAGE_TEXTURE,
+                                            GPU_SHADER_STAGE_COMPUTE_BIT,
+                                            1u,
+                                            6u,
+                                            2u) &&
        GPUCreateBindGroupLayoutsFromReflection(device,
                                                library,
                                                &layoutCount,
@@ -1197,7 +1203,7 @@ check_descriptor_array_reflection(GPUDevice *device, const char *bytecodePath) {
 
   entries = GPUGetBindGroupLayoutEntries(layouts[1], &entryCount);
   ok = entries &&
-       entryCount == 5u &&
+       entryCount == 6u &&
        entries[0].binding == 0u &&
        entries[0].arrayCount == 2u &&
        entries[1].binding == 1u &&
@@ -1207,7 +1213,10 @@ check_descriptor_array_reflection(GPUDevice *device, const char *bytecodePath) {
        entries[3].binding == 4u &&
        entries[3].bindingType == GPU_BINDING_UNIFORM_BUFFER &&
        entries[4].binding == 5u &&
-       entries[4].bindingType == GPU_BINDING_STORAGE_BUFFER;
+       entries[4].bindingType == GPU_BINDING_STORAGE_BUFFER &&
+       entries[5].binding == 6u &&
+       entries[5].bindingType == GPU_BINDING_STORAGE_TEXTURE &&
+       entries[5].arrayCount == 2u;
   if (!ok) {
     fprintf(stderr, "descriptor array layout contract mismatch\n");
   }
