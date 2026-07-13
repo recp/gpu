@@ -17,8 +17,20 @@
 #ifndef gpu_bench_h
 #define gpu_bench_h
 
+#include <gpu/gpu.h>
+
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+const char *
+bench_backendName(GPUBackend backend);
+
+bool
+bench_parseBackend(const char *value, GPUBackend *outBackend);
+
+bool
+bench_parseU32(const char *value, uint32_t minimum, uint32_t *outValue);
 
 double
 bench_now(void);

@@ -681,13 +681,37 @@ if(GPU_BUILD_BENCHMARKS)
     target_compile_options(gpu-upload-heavy-bench PRIVATE -Wall -Wextra)
   endif()
 
+  add_executable(gpu-pipeline-stress-bench
+    benchmarks/bench.c
+    benchmarks/render.c
+    benchmarks/pipeline_stress.c
+  )
+  target_link_libraries(gpu-pipeline-stress-bench PRIVATE gpu)
+  target_include_directories(gpu-pipeline-stress-bench PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_compile_definitions(gpu-pipeline-stress-bench PRIVATE
+    GPU_BUILD_WITH_VALIDATION=$<BOOL:${GPU_BUILD_WITH_VALIDATION}>
+  )
+  set_target_properties(gpu-pipeline-stress-bench PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_options(gpu-pipeline-stress-bench PRIVATE /W3)
+  else()
+    target_compile_options(gpu-pipeline-stress-bench PRIVATE -Wall -Wextra)
+  endif()
+
   if(WIN32)
     foreach(benchmark_target
             gpu-dispatch-bench
             gpu-static-scene-bench
             gpu-state-churn-bench
             gpu-binding-churn-bench
-            gpu-upload-heavy-bench)
+            gpu-upload-heavy-bench
+            gpu-pipeline-stress-bench)
       foreach(runtime_target us ds)
         if(TARGET ${runtime_target})
           add_custom_command(TARGET ${benchmark_target} POST_BUILD

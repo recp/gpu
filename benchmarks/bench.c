@@ -16,8 +16,10 @@
 
 #include "bench.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #if defined(_WIN32) || defined(WIN32)
 #  include <windows.h>
@@ -33,6 +35,59 @@ bench_compare(const void *left, const void *right) {
   a = *(const double *)left;
   b = *(const double *)right;
   return (a > b) - (a < b);
+}
+
+const char *
+bench_backendName(GPUBackend backend) {
+  switch (backend) {
+    case GPU_BACKEND_METAL:
+      return "metal";
+    case GPU_BACKEND_VULKAN:
+      return "vulkan";
+    case GPU_BACKEND_DX12:
+      return "dx12";
+    case GPU_BACKEND_OPENGL:
+      return "opengl";
+    default:
+      return "default";
+  }
+}
+
+bool
+bench_parseBackend(const char *value, GPUBackend *outBackend) {
+  if (!value || !outBackend) {
+    return false;
+  }
+  if (strcmp(value, "default") == 0) {
+    *outBackend = GPU_BACKEND_DEFAULT;
+  } else if (strcmp(value, "metal") == 0) {
+    *outBackend = GPU_BACKEND_METAL;
+  } else if (strcmp(value, "vulkan") == 0) {
+    *outBackend = GPU_BACKEND_VULKAN;
+  } else if (strcmp(value, "dx12") == 0) {
+    *outBackend = GPU_BACKEND_DX12;
+  } else {
+    return false;
+  }
+  return true;
+}
+
+bool
+bench_parseU32(const char *value, uint32_t minimum, uint32_t *outValue) {
+  unsigned long parsed;
+  char         *end;
+
+  if (!value || !outValue) {
+    return false;
+  }
+  errno  = 0;
+  parsed = strtoul(value, &end, 10);
+  if (errno != 0 || end == value || *end != '\0' ||
+      parsed < minimum || parsed > UINT32_MAX) {
+    return false;
+  }
+  *outValue = (uint32_t)parsed;
+  return true;
 }
 
 double
