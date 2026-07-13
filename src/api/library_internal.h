@@ -35,11 +35,12 @@ typedef struct GPUShaderStaticSamplerInfoList {
 struct GPULibrary {
   GPUApi                         *_api;
   void                           *_priv;
+  void                           *_metadata;
   GPUShaderStaticSamplerInfoList *_staticSamplers;
-  GPUShaderReflection             _reflection;
   void                           *_entryInfo;
   void                           *_entryResources;
   void                           *_resourceBindings;
+  GPUShaderReflection             _reflection;
 };
 
 struct GPUFunction {
@@ -63,10 +64,15 @@ int
 gpuShaderLibraryHasEntryResourceInfo(const GPUShaderLibrary *library);
 
 GPU_HIDE
-GPUResult
-gpuGetShaderEntryReflection(const GPUShaderLibrary *library,
-                            const char *entryPoint,
-                            GPUShaderReflection *outReflection);
+const GPUShaderReflection *
+gpuShaderReflectionView(const GPUShaderLibrary *library);
+
+GPU_HIDE
+int
+gpuShaderEntryView(const GPUShaderLibrary *library,
+                   const char *entryPoint,
+                   GPUShaderStageFlags *outStage,
+                   GPUShaderReflection *outReflection);
 
 GPU_HIDE
 int

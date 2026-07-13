@@ -125,9 +125,10 @@ gpu_bindingTypeIsBuffer(GPUBindingType type) {
 static GPUResult
 gpu_metalVertexResourceSlotMask(const GPURenderPipelineCreateInfo *info,
                                 uint32_t                          *outMask) {
-  GPUShaderReflection reflection;
-  GPUResult            result;
-  uint32_t             mask;
+  const GPUShaderResourceReflection *resource;
+  GPUShaderReflection                reflection;
+  GPUShaderStageFlags                stage;
+  uint32_t                           mask;
 
   if (!info || !outMask) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -142,17 +143,17 @@ gpu_metalVertexResourceSlotMask(const GPURenderPipelineCreateInfo *info,
     return GPU_OK;
   }
 
-  result = gpuGetShaderEntryReflection(info->library,
-                                       info->vertexEntry,
-                                       &reflection);
-  if (result != GPU_OK) {
-    return result;
+  if (!gpuShaderEntryView(info->library,
+                          info->vertexEntry,
+                          &stage,
+                          &reflection) ||
+      stage != GPU_SHADER_STAGE_VERTEX_BIT) {
+    return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   mask = 0u;
   for (uint32_t i = 0u; i < reflection.resourceCount; i++) {
-    const GPUShaderResourceReflection *resource;
-    uint32_t                           binding;
+    uint32_t binding;
 
     resource = &reflection.pResources[i];
     if (!gpu_bindingTypeIsBuffer(resource->bindingType) ||
@@ -164,13 +165,11 @@ gpu_metalVertexResourceSlotMask(const GPURenderPipelineCreateInfo *info,
                                             resource,
                                             &binding) ||
         binding >= MT_BIND_GROUP_BUFFER_COUNT) {
-      GPUFreeShaderReflection(&reflection);
       return GPU_ERROR_UNSUPPORTED;
     }
     mask |= 1u << binding;
   }
 
-  GPUFreeShaderReflection(&reflection);
   *outMask = mask;
   return GPU_OK;
 }

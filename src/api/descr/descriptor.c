@@ -23,6 +23,8 @@
 #include "../texture_internal.h"
 #include "descriptor_internal.h"
 
+#include <limits.h>
+
 #if !defined(_WIN32) && !defined(WIN32)
 #  include <pthread.h>
 #endif
@@ -1820,31 +1822,6 @@ gpu_reflectionResourceCountForGroup(const GPUShaderReflection *reflection,
   return count;
 }
 
-static uint32_t
-gpu_reflectionLayoutCountForStages(const GPUShaderReflection *reflection,
-                                   GPUShaderStageFlags stages) {
-  uint32_t maxGroup;
-  int hasResource;
-
-  if (!reflection || reflection->resourceCount == 0u || !reflection->pResources) {
-    return 0u;
-  }
-
-  maxGroup = 0u;
-  hasResource = 0;
-  for (uint32_t i = 0; i < reflection->resourceCount; i++) {
-    if ((reflection->pResources[i].visibility & stages) == 0u) {
-      continue;
-    }
-    hasResource = 1;
-    if (reflection->pResources[i].groupIndex > maxGroup) {
-      maxGroup = reflection->pResources[i].groupIndex;
-    }
-  }
-
-  return hasResource ? maxGroup + 1u : 0u;
-}
-
 static GPUResult
 gpu_createLayoutForReflectionGroup(GPUDevice *device,
                                    const GPUShaderLibrary *library,
@@ -1971,12 +1948,13 @@ gpu_layoutMatchesReflectionGroup(GPUBindGroupLayout *layout,
                                  const GPUShaderReflection *reflection,
                                  uint32_t groupIndex) {
   GPUBindGroupLayoutPriv *priv;
+  uint64_t matchedMask;
   uint32_t expectedCount;
-  uint8_t *matched;
 
   priv = gpu_layoutPriv(layout);
   expectedCount = gpu_reflectionResourceCountForGroup(reflection, groupIndex);
-  if (!priv || priv->count != expectedCount) {
+  if (!priv || priv->count != expectedCount ||
+      expectedCount > sizeof(matchedMask) * CHAR_BIT) {
     return 0;
   }
 
@@ -1984,11 +1962,7 @@ gpu_layoutMatchesReflectionGroup(GPUBindGroupLayout *layout,
     return 1;
   }
 
-  matched = calloc(expectedCount, sizeof(*matched));
-  if (!matched) {
-    return 0;
-  }
-
+  matchedMask = 0u;
   for (uint32_t i = 0u; i < reflection->resourceCount; i++) {
     const GPUShaderResourceReflection *resource;
     int found;
@@ -2000,30 +1974,30 @@ gpu_layoutMatchesReflectionGroup(GPUBindGroupLayout *layout,
 
     found = 0;
     for (uint32_t j = 0u; j < priv->count; j++) {
-      if (!matched[j] &&
+      uint64_t bit = UINT64_C(1) << j;
+
+      if ((matchedMask & bit) == 0u &&
           gpu_layoutMatchesReflectionResource(&priv->entries[j], resource)) {
-        matched[j] = 1u;
+        matchedMask |= bit;
         found = 1;
         break;
       }
     }
 
     if (!found) {
-      free(matched);
       return 0;
     }
   }
 
-  free(matched);
   return 1;
 }
 
 static int
-gpu_pipelineLayoutMatchesShaderReflection(GPUPipelineLayout *pipelineLayout,
-                                          const GPUShaderLibrary *library,
-                                          const GPUShaderReflection *reflection,
-                                          GPUShaderStageFlags stages,
-                                          uint32_t *outRequiredGroupMask) {
+gpu_pipelineLayoutMatchesShaderResources(GPUPipelineLayout *pipelineLayout,
+                                         const GPUShaderLibrary *library,
+                                         const GPUShaderReflection *reflection,
+                                         GPUShaderStageFlags stages,
+                                         uint32_t *outRequiredGroupMask) {
   GPUPipelineLayoutPriv *pipelinePriv;
   uint32_t requiredGroupMask;
   uint32_t requiredCount;
@@ -2036,19 +2010,31 @@ gpu_pipelineLayoutMatchesShaderReflection(GPUPipelineLayout *pipelineLayout,
     return 0;
   }
 
+  if (!reflection ||
+      (reflection->resourceCount > 0u && !reflection->pResources)) {
+    return 0;
+  }
+
   requiredGroupMask = 0u;
-  requiredCount = gpu_reflectionLayoutCountForStages(reflection, stages);
+  requiredCount     = 0u;
+  for (uint32_t i = 0u; i < reflection->resourceCount; i++) {
+    const GPUShaderResourceReflection *resource = &reflection->pResources[i];
+
+    if ((resource->visibility & stages) != 0u &&
+        resource->groupIndex >= requiredCount) {
+      requiredCount = resource->groupIndex + 1u;
+    }
+  }
   if (pipelinePriv->bindGroupLayoutCount < requiredCount) {
     return 0;
   }
 
-  for (uint32_t i = 0u; reflection && i < reflection->resourceCount; i++) {
-    const GPUShaderResourceReflection *resource;
+  for (uint32_t i = 0u; i < reflection->resourceCount; i++) {
+    const GPUShaderResourceReflection *resource = &reflection->pResources[i];
     GPUBindGroupLayoutPriv *layoutPriv;
     uint32_t backendBinding;
     uint32_t entryIndex;
 
-    resource = &reflection->pResources[i];
     if ((resource->visibility & stages) == 0u) {
       continue;
     }
@@ -2090,8 +2076,7 @@ gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout *pipelineLayout,
                                       uint32_t entryPointCount,
                                       GPUShaderStageFlags fallbackStages,
                                       uint32_t *outRequiredGroupMask) {
-  GPUShaderReflection reflection;
-  GPUResult rc;
+  const GPUShaderReflection *reflection;
   uint32_t combinedGroupMask;
   int ok;
 
@@ -2106,24 +2091,26 @@ gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout *pipelineLayout,
   combinedGroupMask = 0u;
   if (gpuShaderLibraryHasEntryResourceInfo(library)) {
     for (uint32_t i = 0u; i < entryPointCount; i++) {
+      GPUShaderReflection entryReflection;
+      GPUShaderStageFlags entryStage;
       uint32_t entryGroupMask;
 
       if (!entryPoints[i]) {
         return 0;
       }
 
-      memset(&reflection, 0, sizeof(reflection));
-      rc = gpuGetShaderEntryReflection(library, entryPoints[i], &reflection);
-      if (rc != GPU_OK) {
+      if (!gpuShaderEntryView(library,
+                              entryPoints[i],
+                              &entryStage,
+                              &entryReflection)) {
         return 0;
       }
 
-      ok = gpu_pipelineLayoutMatchesShaderReflection(pipelineLayout,
-                                                     library,
-                                                     &reflection,
-                                                     fallbackStages,
-                                                     &entryGroupMask);
-      GPUFreeShaderReflection(&reflection);
+      ok = gpu_pipelineLayoutMatchesShaderResources(pipelineLayout,
+                                                    library,
+                                                    &entryReflection,
+                                                    entryStage,
+                                                    &entryGroupMask);
       if (!ok) {
         return 0;
       }
@@ -2136,18 +2123,16 @@ gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout *pipelineLayout,
     return 1;
   }
 
-  memset(&reflection, 0, sizeof(reflection));
-  rc = GPUGetShaderReflection(library, &reflection);
-  if (rc != GPU_OK) {
+  reflection = gpuShaderReflectionView(library);
+  if (!reflection) {
     return 0;
   }
 
-  ok = gpu_pipelineLayoutMatchesShaderReflection(pipelineLayout,
-                                                 library,
-                                                 &reflection,
-                                                 fallbackStages,
-                                                 &combinedGroupMask);
-  GPUFreeShaderReflection(&reflection);
+  ok = gpu_pipelineLayoutMatchesShaderResources(pipelineLayout,
+                                                library,
+                                                reflection,
+                                                fallbackStages,
+                                                &combinedGroupMask);
   if (ok && outRequiredGroupMask) {
     *outRequiredGroupMask = combinedGroupMask;
   }
@@ -2160,7 +2145,7 @@ GPUCreateBindGroupLayoutsFromReflection(GPUDevice *device,
                                         const GPUShaderLibrary *library,
                                         uint32_t *inoutLayoutCount,
                                         GPUBindGroupLayout **outLayouts) {
-  GPUShaderReflection reflection;
+  const GPUShaderReflection *reflection;
   uint32_t requiredCount;
   GPUResult rc;
 
@@ -2168,22 +2153,19 @@ GPUCreateBindGroupLayoutsFromReflection(GPUDevice *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  memset(&reflection, 0, sizeof(reflection));
-  rc = GPUGetShaderReflection(library, &reflection);
-  if (rc != GPU_OK) {
-    return rc;
+  reflection = gpuShaderReflectionView(library);
+  if (!reflection) {
+    return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  requiredCount = gpu_reflectionLayoutCount(&reflection);
+  requiredCount = gpu_reflectionLayoutCount(reflection);
   if (!outLayouts) {
     *inoutLayoutCount = requiredCount;
-    GPUFreeShaderReflection(&reflection);
     return GPU_OK;
   }
 
   if (*inoutLayoutCount < requiredCount) {
     *inoutLayoutCount = requiredCount;
-    GPUFreeShaderReflection(&reflection);
     return GPU_ERROR_INSUFFICIENT_CAPACITY;
   }
 
@@ -2192,19 +2174,21 @@ GPUCreateBindGroupLayoutsFromReflection(GPUDevice *device,
   }
 
   for (uint32_t i = 0; i < requiredCount; i++) {
-    rc = gpu_createLayoutForReflectionGroup(device, library, &reflection, i, &outLayouts[i]);
+    rc = gpu_createLayoutForReflectionGroup(device,
+                                            library,
+                                            reflection,
+                                            i,
+                                            &outLayouts[i]);
     if (rc != GPU_OK) {
       for (uint32_t j = 0; j < i; j++) {
         GPUDestroyBindGroupLayout(outLayouts[j]);
         outLayouts[j] = NULL;
       }
-      GPUFreeShaderReflection(&reflection);
       return rc;
     }
   }
 
   *inoutLayoutCount = requiredCount;
-  GPUFreeShaderReflection(&reflection);
   return GPU_OK;
 }
 
@@ -2216,9 +2200,8 @@ GPUCreatePipelineLayoutFromReflection(GPUDevice *device,
                                       GPUBindGroupLayout * const *ppLayouts,
                                       GPUPipelineLayout **outLayout) {
   GPUPipelineLayoutCreateInfo info;
-  GPUShaderReflection reflection;
+  const GPUShaderReflection *reflection;
   uint32_t requiredCount;
-  GPUResult rc;
 
   if (!outLayout) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -2228,20 +2211,17 @@ GPUCreatePipelineLayoutFromReflection(GPUDevice *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  memset(&reflection, 0, sizeof(reflection));
-  rc = GPUGetShaderReflection(library, &reflection);
-  if (rc != GPU_OK) {
-    return rc;
+  reflection = gpuShaderReflectionView(library);
+  if (!reflection) {
+    return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  requiredCount = gpu_reflectionLayoutCount(&reflection);
+  requiredCount = gpu_reflectionLayoutCount(reflection);
   if (bindGroupLayoutCount < requiredCount) {
-    GPUFreeShaderReflection(&reflection);
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   for (uint32_t i = 0u; i < requiredCount; i++) {
-    if (!gpu_layoutMatchesReflectionGroup(ppLayouts[i], &reflection, i)) {
-      GPUFreeShaderReflection(&reflection);
+    if (!gpu_layoutMatchesReflectionGroup(ppLayouts[i], reflection, i)) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   }
@@ -2251,15 +2231,13 @@ GPUCreatePipelineLayoutFromReflection(GPUDevice *device,
   info.chain.structSize = sizeof(info);
   info.bindGroupLayoutCount = bindGroupLayoutCount;
   info.ppBindGroupLayouts = ppLayouts;
-  info.pushConstantSizeBytes = reflection.pushConstantSizeBytes;
-  info.pushConstantStages = reflection.pushConstantSizeBytes > 0u
+  info.pushConstantSizeBytes = reflection->pushConstantSizeBytes;
+  info.pushConstantStages = reflection->pushConstantSizeBytes > 0u
                                ? (GPU_SHADER_STAGE_VERTEX_BIT |
                                   GPU_SHADER_STAGE_FRAGMENT_BIT |
                                   GPU_SHADER_STAGE_COMPUTE_BIT)
                                : 0u;
-  rc = GPUCreatePipelineLayout(device, &info, outLayout);
-  GPUFreeShaderReflection(&reflection);
-  return rc;
+  return GPUCreatePipelineLayout(device, &info, outLayout);
 }
 
 GPU_EXPORT
