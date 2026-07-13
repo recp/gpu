@@ -40,6 +40,7 @@ struct GPURenderPipeline {
   GPUFrontFace          _frontFace;
   uint32_t              _pushConstantSizeBytes;
   GPUShaderStageFlags   _pushConstantStages;
+  uint32_t              _refCount;
   bool                  _alphaToCoverageEnable;
 };
 

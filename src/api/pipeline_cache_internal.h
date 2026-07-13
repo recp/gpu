@@ -19,13 +19,36 @@
 
 #include "device_internal.h"
 
+typedef struct GPUPipelineCacheEntry GPUPipelineCacheEntry;
+
 struct GPUPipelineCache {
-  GPUDevice     *device;
-  GPUCacheStats  stats;
+  GPUDevice             *device;
+  void                  *_lock;
+  GPUPipelineCacheEntry *head;
+  GPUPipelineCacheEntry *tail;
+  GPUCacheStats          stats;
+  uint64_t               maxEntries;
+  uint64_t               entryCount;
 };
 
 GPU_HIDE
 void
 gpuRecordPipelineCompile(GPUDevice *device, GPUPipelineCache *cache);
+
+GPU_HIDE
+GPUResult
+gpuPipelineCacheFindRender(GPUPipelineCache                  *cache,
+                           const GPURenderPipelineCreateInfo *info,
+                           GPURenderPipeline                **outPipeline);
+
+GPU_HIDE
+GPURenderPipeline *
+gpuPipelineCacheStoreRender(GPUPipelineCache                  *cache,
+                            const GPURenderPipelineCreateInfo *info,
+                            GPURenderPipeline                 *pipeline);
+
+GPU_HIDE
+bool
+gpuReleaseRenderPipeline(GPURenderPipeline *pipeline);
 
 #endif /* gpu_pipeline_cache_internal_h */

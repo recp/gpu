@@ -203,6 +203,8 @@ check_pipeline_cache_validation(GPUDevice *device,
   GPUPipelineCompileHandle handle = {0};
   GPUPipelineCompileStatus status = GPU_PIPELINE_COMPILE_PENDING;
   GPUCacheStats stats;
+  GPUCullMode originalCull;
+  GPUCullMode alternateCull;
 
   if (GPUGetCacheStats(NULL, &stats) != GPU_ERROR_INVALID_ARGUMENT ||
       GPUGetCacheStats(device, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
@@ -241,6 +243,14 @@ check_pipeline_cache_validation(GPUDevice *device,
   }
 
   cacheInfo.chain.structSize = sizeof(cacheInfo);
+  cacheInfo.enableDiskCache = true;
+  if (GPUCreatePipelineCache(device, &cacheInfo, &cache) !=
+        GPU_ERROR_UNSUPPORTED || cache != NULL) {
+    fprintf(stderr, "pipeline cache accepted unsupported disk cache\n");
+    return 0;
+  }
+  cacheInfo.enableDiskCache = false;
+  cacheInfo.maxEntries      = 1u;
   if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {
     fprintf(stderr, "pipeline cache create rejected valid cache\n");
     return 0;
@@ -253,16 +263,48 @@ check_pipeline_cache_validation(GPUDevice *device,
   }
   GPUDestroyRenderPipeline(pipeline);
   pipeline = NULL;
-  info->cache = NULL;
 
-  if (GPUGetCacheStats(device, &stats) != GPU_OK ||
-      stats.pipelineCompiles != 1u ||
-      stats.pipelineMisses != 1u ||
-      stats.pipelineHits != 0u) {
-    fprintf(stderr, "pipeline cache stats did not record compile miss\n");
+  if (GPUCreateRenderPipeline(device, info, &pipeline) != GPU_OK || !pipeline) {
+    fprintf(stderr, "render pipeline cache hit failed\n");
+    goto fail;
+  }
+  GPUDestroyRenderPipeline(pipeline);
+  pipeline = NULL;
+
+  if (GPUPrewarmRenderPipelines(device, cache, 1u, info) != GPU_OK) {
+    fprintf(stderr, "render pipeline prewarm failed\n");
     goto fail;
   }
 
+  originalCull  = info->cullMode;
+  alternateCull = originalCull == GPU_CULL_MODE_BACK
+                    ? GPU_CULL_MODE_FRONT
+                    : GPU_CULL_MODE_BACK;
+  info->cullMode = alternateCull;
+  if (GPUCreateRenderPipeline(device, info, &pipeline) != GPU_OK || !pipeline) {
+    fprintf(stderr, "render pipeline cache key change failed\n");
+    goto fail;
+  }
+  GPUDestroyRenderPipeline(pipeline);
+  pipeline = NULL;
+
+  info->cullMode = originalCull;
+  if (GPUCreateRenderPipeline(device, info, &pipeline) != GPU_OK || !pipeline) {
+    fprintf(stderr, "render pipeline cache eviction failed\n");
+    goto fail;
+  }
+  GPUDestroyRenderPipeline(pipeline);
+  pipeline = NULL;
+
+  if (GPUGetCacheStats(device, &stats) != GPU_OK ||
+      stats.pipelineCompiles != 3u ||
+      stats.pipelineMisses != 3u ||
+      stats.pipelineHits != 2u) {
+    fprintf(stderr, "pipeline cache stats did not record hits and eviction\n");
+    goto fail;
+  }
+
+  info->cache = NULL;
   GPUResetStats(device);
   if (GPUGetCacheStats(device, &stats) != GPU_OK ||
       stats.pipelineCompiles != 0u ||

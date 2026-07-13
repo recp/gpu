@@ -30,6 +30,7 @@ set(GPU_CORE_SOURCES
   src/api/instance.c
   src/api/library.c
   src/api/pass/renderpass.c
+  src/api/pipeline_cache.c
   src/api/query.c
   src/api/render/pipeline.c
   src/api/render/rce.c
