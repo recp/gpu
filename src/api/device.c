@@ -667,30 +667,7 @@ gpu_formatIsCompressed(GPUFormat format) {
 
 static bool
 gpu_formatIsInteger(GPUFormat format) {
-  switch (format) {
-    case GPU_FORMAT_R8_UINT:
-    case GPU_FORMAT_R8_SINT:
-    case GPU_FORMAT_R16_UINT:
-    case GPU_FORMAT_R16_SINT:
-    case GPU_FORMAT_RG8_UINT:
-    case GPU_FORMAT_RG8_SINT:
-    case GPU_FORMAT_R32_UINT:
-    case GPU_FORMAT_R32_SINT:
-    case GPU_FORMAT_RG16_UINT:
-    case GPU_FORMAT_RG16_SINT:
-    case GPU_FORMAT_RGBA8_UINT:
-    case GPU_FORMAT_RGBA8_SINT:
-    case GPU_FORMAT_RGB10A2_UINT:
-    case GPU_FORMAT_RG32_UINT:
-    case GPU_FORMAT_RG32_SINT:
-    case GPU_FORMAT_RGBA16_UINT:
-    case GPU_FORMAT_RGBA16_SINT:
-    case GPU_FORMAT_RGBA32_UINT:
-    case GPU_FORMAT_RGBA32_SINT:
-      return true;
-    default:
-      return false;
-  }
+  return gpuFormatNumericType(format) != GPU_FORMAT_NUMERIC_FLOAT;
 }
 
 static bool

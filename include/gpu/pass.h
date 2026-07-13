@@ -45,18 +45,18 @@ typedef enum GPUStoreOp {
   GPU_STORE_OP_DONT_CARE = 1
 } GPUStoreOp;
 
-typedef union GPUColorValue {
+typedef union GPUClearColorValue {
   float    float32[4];
   uint32_t uint32[4];
-  int32_t  int32[4];
-} GPUColorValue;
+  int32_t  sint32[4];
+} GPUClearColorValue;
 
 typedef struct GPURenderPassColorAttachment {
-  GPUTextureView *view;
-  GPUTextureView *resolveView;
-  GPULoadOp       loadOp;
-  GPUStoreOp      storeOp;
-  GPUColorValue   clearColor;
+  GPUTextureView     *view;
+  GPUTextureView     *resolveView;
+  GPULoadOp           loadOp;
+  GPUStoreOp          storeOp;
+  GPUClearColorValue  clearColor;
 } GPURenderPassColorAttachment;
 
 typedef struct GPURenderPassDepthStencilAttachment {

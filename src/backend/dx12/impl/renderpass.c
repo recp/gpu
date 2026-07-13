@@ -17,6 +17,27 @@
 #include "../common.h"
 #include "../impl.h"
 
+static void
+dx12__clearColor(float                    outColor[4],
+                 const GPUClearColorValue *color,
+                 GPUFormat                 format) {
+  switch (gpuFormatNumericType(format)) {
+    case GPU_FORMAT_NUMERIC_UINT:
+      for (uint32_t i = 0u; i < 4u; i++) {
+        outColor[i] = (float)color->uint32[i];
+      }
+      break;
+    case GPU_FORMAT_NUMERIC_SINT:
+      for (uint32_t i = 0u; i < 4u; i++) {
+        outColor[i] = (float)color->sint32[i];
+      }
+      break;
+    default:
+      memcpy(outColor, color->float32, sizeof(color->float32));
+      break;
+  }
+}
+
 static D3D12_RESOURCE_STATES
 dx12__bufferBarrierState(const GPUBuffer      *buffer,
                          GPUAccessMask         access,
@@ -275,10 +296,9 @@ dx12_beginRenderPass(GPUCommandBuffer             *cmdb,
     renderPass->resolveFormats[i] = dx12_format(attachment->view->format);
     renderPass->loadOps[i]        = attachment->loadOp;
     renderPass->storeOps[i]       = attachment->storeOp;
-    renderPass->clearColors[i][0] = attachment->clearColor.float32[0];
-    renderPass->clearColors[i][1] = attachment->clearColor.float32[1];
-    renderPass->clearColors[i][2] = attachment->clearColor.float32[2];
-    renderPass->clearColors[i][3] = attachment->clearColor.float32[3];
+    dx12__clearColor(renderPass->clearColors[i],
+                     &attachment->clearColor,
+                     attachment->view->format);
     renderPass->width             = view->width;
     renderPass->height            = view->height;
   }

@@ -42,6 +42,27 @@ mt_resolveStoreAction(GPUStoreOp op) {
            : MTLStoreActionMultisampleResolve;
 }
 
+static MTLClearColor
+mt_clearColor(const GPUClearColorValue *color, GPUFormat format) {
+  switch (gpuFormatNumericType(format)) {
+    case GPU_FORMAT_NUMERIC_UINT:
+      return MTLClearColorMake((double)color->uint32[0],
+                               (double)color->uint32[1],
+                               (double)color->uint32[2],
+                               (double)color->uint32[3]);
+    case GPU_FORMAT_NUMERIC_SINT:
+      return MTLClearColorMake((double)color->sint32[0],
+                               (double)color->sint32[1],
+                               (double)color->sint32[2],
+                               (double)color->sint32[3]);
+    default:
+      return MTLClearColorMake(color->float32[0],
+                               color->float32[1],
+                               color->float32[2],
+                               color->float32[3]);
+  }
+}
+
 static uint64_t
 mt_stageMask(GPUPipelineStageMask stages) {
   uint64_t result;
@@ -170,10 +191,8 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
     rpd.colorAttachments[i].storeAction = color->resolveView
                                             ? mt_resolveStoreAction(color->storeOp)
                                             : mt_storeAction(color->storeOp);
-    rpd.colorAttachments[i].clearColor = MTLClearColorMake(color->clearColor.float32[0],
-                                                           color->clearColor.float32[1],
-                                                           color->clearColor.float32[2],
-                                                           color->clearColor.float32[3]);
+    rpd.colorAttachments[i].clearColor =
+      mt_clearColor(&color->clearColor, color->view->format);
     if (rpd4) {
       if (@available(macOS 26.0, iOS 26.0, *)) {
         MTL4RenderPassDescriptor *modern = rpd4;

@@ -43,6 +43,24 @@ vk__storeOp(GPUStoreOp op) {
            : VK_ATTACHMENT_STORE_OP_DONT_CARE;
 }
 
+static VkClearColorValue
+vk__clearColor(const GPUClearColorValue *color, GPUFormat format) {
+  VkClearColorValue result;
+
+  switch (gpuFormatNumericType(format)) {
+    case GPU_FORMAT_NUMERIC_UINT:
+      memcpy(result.uint32, color->uint32, sizeof(result.uint32));
+      break;
+    case GPU_FORMAT_NUMERIC_SINT:
+      memcpy(result.int32, color->sint32, sizeof(result.int32));
+      break;
+    default:
+      memcpy(result.float32, color->float32, sizeof(result.float32));
+      break;
+  }
+  return result;
+}
+
 static void
 vk__layoutAccess(VkImageLayout        layout,
                  VkPipelineStageFlags *outStage,
@@ -532,14 +550,8 @@ vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
       nativeAttachment->resolveImageLayout =
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     }
-    nativeAttachment->clearValue.color.float32[0] =
-      attachment->clearColor.float32[0];
-    nativeAttachment->clearValue.color.float32[1] =
-      attachment->clearColor.float32[1];
-    nativeAttachment->clearValue.color.float32[2] =
-      attachment->clearColor.float32[2];
-    nativeAttachment->clearValue.color.float32[3] =
-      attachment->clearColor.float32[3];
+    nativeAttachment->clearValue.color =
+      vk__clearColor(&attachment->clearColor, attachment->view->format);
     native->colorViews[i] = view;
     native->resolveViews[i] = resolveView;
     native->extent        = view->extent;
@@ -705,10 +717,8 @@ vk_beginRenderPass(GPUCommandBuffer              *cmdb,
   if (info->occlusionQuerySet) {
     vk_resetQuerySet(cmdb, info->occlusionQuerySet);
   }
-  native->clearValue.color.float32[0] = color->clearColor.float32[0];
-  native->clearValue.color.float32[1] = color->clearColor.float32[1];
-  native->clearValue.color.float32[2] = color->clearColor.float32[2];
-  native->clearValue.color.float32[3] = color->clearColor.float32[3];
+  native->clearValue.color =
+    vk__clearColor(&color->clearColor, color->view->format);
 
   pass->_priv = native;
   pass->label = info->label;

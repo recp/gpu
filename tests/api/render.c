@@ -2454,6 +2454,7 @@ gpu_test_render(GPUDevice *device, const char *mrtBytecodePath) {
          check_dynamic_state_validation_calls(device) &&
          check_render_readback(device, mrtBytecodePath) &&
          gpu_test_texture_view_render(device) &&
+         gpu_test_texture_integer_clear(device) &&
          gpu_test_texture_view_depth(device) &&
          gpu_test_texture_view_depth_stencil(device);
 }
