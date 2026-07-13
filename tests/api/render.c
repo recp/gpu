@@ -415,6 +415,10 @@ fail:
 static int
 check_render_pipeline_validation(GPUDevice *device,
                                  const char *bytecodePath) {
+  static const GPUPrimitiveTopology topologies[] = {
+    GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+    GPU_PRIMITIVE_TOPOLOGY_LINE_LIST
+  };
   GPUShaderLibrary *library = NULL;
   GPUPipelineLayoutCreateInfo layoutInfo = {0};
   GPUPipelineLayout *pipelineLayout = NULL;
@@ -642,13 +646,19 @@ check_render_pipeline_validation(GPUDevice *device,
     return 0;
   }
 
-  info.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-  if (!expect_render_pipeline_error(device,
-                                    &info,
-                                    "render pipeline create accepted unsupported topology")) {
-    GPUDestroyPipelineLayout(pipelineLayout);
-    GPUDestroyShaderLibrary(library);
-    return 0;
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(topologies); i++) {
+    info.primitiveTopology = topologies[i];
+    pipeline               = NULL;
+    if (GPUCreateRenderPipeline(device, &info, &pipeline) != GPU_OK ||
+        !pipeline) {
+      fprintf(stderr,
+              "render pipeline create rejected valid topology %u\n",
+              (unsigned)topologies[i]);
+      GPUDestroyPipelineLayout(pipelineLayout);
+      GPUDestroyShaderLibrary(library);
+      return 0;
+    }
+    GPUDestroyRenderPipeline(pipeline);
   }
 
   info.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;

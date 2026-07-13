@@ -53,6 +53,21 @@ mt_stencilOperation(GPUStencilOp op) {
            : MTLStencilOperationKeep;
 }
 
+static MTLPrimitiveTopologyClass
+mt_topologyClass(GPUPrimitiveTopology topology) {
+  switch (topology) {
+    case GPU_PRIMITIVE_TOPOLOGY_POINT_LIST:
+      return MTLPrimitiveTopologyClassPoint;
+    case GPU_PRIMITIVE_TOPOLOGY_LINE_LIST:
+    case GPU_PRIMITIVE_TOPOLOGY_LINE_STRIP:
+      return MTLPrimitiveTopologyClassLine;
+    case GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST:
+    case GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP:
+    default:
+      return MTLPrimitiveTopologyClassTriangle;
+  }
+}
+
 static MTLBlendFactor
 mt_blendFactor(GPUBlendFactor factor) {
   static const MTLBlendFactor factors[] = {
@@ -158,6 +173,8 @@ mt_newRenderState(GPUDevice         * __restrict device,
     return NULL;
   }
   renderDesc = pipeline->_priv;
+  renderDesc.inputPrimitiveTopology =
+    mt_topologyClass(pipeline->_primitiveTopology);
   renderDesc.alphaToCoverageEnabled = pipeline->_alphaToCoverageEnable;
   for (i = 0u; i < pipeline->_colorTargetCount; i++) {
     mt_fillBlendDescriptor(renderDesc.colorAttachments[i],

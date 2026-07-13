@@ -38,6 +38,21 @@ vk__frontFace(GPUFrontFace face) {
     VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE;
 }
 
+static VkPrimitiveTopology
+vk__primitiveTopology(GPUPrimitiveTopology topology) {
+  static const VkPrimitiveTopology topologies[] = {
+    [GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST]  = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+    [GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP] = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+    [GPU_PRIMITIVE_TOPOLOGY_LINE_LIST]      = VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
+    [GPU_PRIMITIVE_TOPOLOGY_LINE_STRIP]     = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,
+    [GPU_PRIMITIVE_TOPOLOGY_POINT_LIST]     = VK_PRIMITIVE_TOPOLOGY_POINT_LIST
+  };
+
+  return (uint32_t)topology < GPU_ARRAY_LEN(topologies)
+           ? topologies[topology]
+           : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+}
+
 static VkCompareOp
 vk__compareOp(GPUCompareOp op) {
   static const VkCompareOp operations[] = {
@@ -557,7 +572,7 @@ vk_createRenderPipeline(GPUDevice                         *device,
   vertexInput.pVertexAttributeDescriptions    = vertexAttributes;
 
   inputAssembly.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-  inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  inputAssembly.topology = vk__primitiveTopology(info->primitiveTopology);
 
   viewport.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
   viewport.viewportCount = 1u;

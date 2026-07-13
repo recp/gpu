@@ -365,8 +365,6 @@ gpu_pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info) {
       !gpu_cullModeIsValid(info->cullMode) ||
       !gpu_frontFaceIsValid(info->frontFace))
     return false;
-  if (info->primitiveTopology != GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
-    return false;
   if (info->multisample.sampleCount != 0u &&
       info->multisample.sampleCount != 1u &&
       info->multisample.sampleCount != 2u &&
@@ -512,6 +510,7 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     pipeline->_depthStencilState = *info->pDepthStencilState;
 
   pipeline->_sampleCount = sampleCount;
+  pipeline->_primitiveTopology = info->primitiveTopology;
   pipeline->_alphaToCoverageEnable =
     info->multisample.alphaToCoverageEnable;
   pipeline->_colorTargetCount = info->colorTargetCount;
