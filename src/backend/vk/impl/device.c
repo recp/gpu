@@ -286,6 +286,52 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
   }
 }
 
+static uint32_t
+vk_limitU32(uint32_t implementationLimit, uint32_t nativeLimit) {
+  return implementationLimit < nativeLimit ? implementationLimit : nativeLimit;
+}
+
+static void
+vk_getLimits(const GPUAdapter * __restrict adapter,
+             GPULimits       * __restrict outLimits) {
+  GPUPhysicalDeviceVk          *adapterVk;
+  const VkPhysicalDeviceLimits *native;
+
+  adapterVk = adapter ? adapter->_priv : NULL;
+  if (!adapterVk || !outLimits) {
+    return;
+  }
+
+  native = &adapterVk->props.limits;
+  outLimits->maxBindGroups = vk_limitU32(
+    outLimits->maxBindGroups,
+    native->maxBoundDescriptorSets
+  );
+  outLimits->maxBindingsPerGroup = vk_limitU32(
+    outLimits->maxBindingsPerGroup,
+    native->maxPerStageResources
+  );
+  outLimits->maxDynamicUniformBuffers = vk_limitU32(
+    outLimits->maxDynamicUniformBuffers,
+    native->maxDescriptorSetUniformBuffersDynamic
+  );
+  outLimits->maxDynamicStorageBuffers = vk_limitU32(
+    outLimits->maxDynamicStorageBuffers,
+    native->maxDescriptorSetStorageBuffersDynamic
+  );
+  outLimits->minUniformBufferOffsetAlignment =
+    native->minUniformBufferOffsetAlignment;
+  outLimits->minStorageBufferOffsetAlignment =
+    native->minStorageBufferOffsetAlignment;
+  outLimits->maxColorAttachments = vk_limitU32(
+    outLimits->maxColorAttachments,
+    native->maxColorAttachments
+  );
+  outLimits->maxComputeWorkgroupSizeX = native->maxComputeWorkGroupSize[0];
+  outLimits->maxComputeWorkgroupSizeY = native->maxComputeWorkGroupSize[1];
+  outLimits->maxComputeWorkgroupSizeZ = native->maxComputeWorkGroupSize[2];
+}
+
 GPU_HIDE
 GPUPhysicalDevice*
 vk_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
@@ -820,6 +866,7 @@ vk_initDevice(GPUApiDevice *apiDevice) {
   apiDevice->getAvailableAdapters      = vk_getAvailablePhysicalDevicesBy;
   apiDevice->getAdapterProperties      = vk_getAdapterProperties;
   apiDevice->supportsFeature           = vk_supportsFeature;
+  apiDevice->getLimits                 = vk_getLimits;
   apiDevice->createDevice              = vk_createDevice;
   apiDevice->createSystemDefaultDevice = vk_createSystemDefaultDevice;
   apiDevice->destroyDevice             = vk_destroyDevice;

@@ -254,16 +254,28 @@ static void
 gpu_fillDefaultLimits(GPULimits *limits) {
   memset(limits, 0, sizeof(*limits));
 
-  limits->maxBindGroups = 4;
-  limits->maxBindingsPerGroup = 64;
-  limits->maxDynamicUniformBuffers = 8;
-  limits->maxDynamicStorageBuffers = 4;
-  limits->minUniformBufferOffsetAlignment = 256;
-  limits->minStorageBufferOffsetAlignment = 256;
-  limits->maxColorAttachments = 4;
-  limits->maxComputeWorkgroupSizeX = 1024;
-  limits->maxComputeWorkgroupSizeY = 1024;
-  limits->maxComputeWorkgroupSizeZ = 64;
+  limits->maxBindGroups                     = GPU_ENCODER_MAX_BIND_GROUPS;
+  limits->maxBindingsPerGroup               = 64u;
+  limits->maxDynamicUniformBuffers          = 8u;
+  limits->maxDynamicStorageBuffers          = 4u;
+  limits->minUniformBufferOffsetAlignment   = 256u;
+  limits->minStorageBufferOffsetAlignment   = 256u;
+  limits->maxColorAttachments               =
+    GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS;
+  limits->maxComputeWorkgroupSizeX          = 1024u;
+  limits->maxComputeWorkgroupSizeY          = 1024u;
+  limits->maxComputeWorkgroupSizeZ          = 64u;
+}
+
+static void
+gpu_fillAdapterLimits(const GPUAdapter *adapter, GPULimits *limits) {
+  GPUApi *api;
+
+  gpu_fillDefaultLimits(limits);
+  api = gpuAdapterApi(adapter);
+  if (api && api->device.getLimits) {
+    api->device.getLimits(adapter, limits);
+  }
 }
 
 static bool
@@ -848,7 +860,7 @@ GPUGetAdapterCapabilities(const GPUAdapter       *adapter,
 
   memset(outCaps, 0, sizeof(*outCaps));
   outCaps->supported = adapter->supportedFeatures;
-  gpu_fillDefaultLimits(&outCaps->limits);
+  gpu_fillAdapterLimits(adapter, &outCaps->limits);
 
   return GPU_OK;
 }
@@ -863,7 +875,7 @@ GPUGetDeviceCapabilities(const GPUDevice       *device,
 
   memset(outCaps, 0, sizeof(*outCaps));
   outCaps->enabled = device->enabledFeatures;
-  gpu_fillDefaultLimits(&outCaps->limits);
+  gpu_fillAdapterLimits(device->phyDevice, &outCaps->limits);
 
   return GPU_OK;
 }

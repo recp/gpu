@@ -27,6 +27,7 @@ static GPUSurface gOwnershipSurface;
 static uint32_t   gOwnershipAdapterCalls;
 static uint32_t   gOwnershipPropertiesCalls;
 static uint32_t   gOwnershipFeatureCalls;
+static uint32_t   gOwnershipLimitsCalls;
 static uint32_t   gOwnershipDeviceCreateCalls;
 static uint32_t   gOwnershipDeviceDestroyCalls;
 static uint32_t   gOwnershipSurfaceCreateCalls;
@@ -60,6 +61,15 @@ supports_ownership_feature(const GPUAdapter * __restrict adapter,
   (void)feature;
   gOwnershipFeatureCalls++;
   return false;
+}
+
+static void
+get_ownership_limits(const GPUAdapter * __restrict adapter,
+                     GPULimits       * __restrict outLimits) {
+  (void)adapter;
+  outLimits->maxColorAttachments      = 7u;
+  outLimits->maxComputeWorkgroupSizeX = 321u;
+  gOwnershipLimitsCalls++;
 }
 
 static GPUDevice *
@@ -118,6 +128,8 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   GPUNativeSurfaceCreateInfo nativeInfo = {0};
   GPUSurfaceCreateInfo       surfaceInfo = {0};
   GPUAdapterProperties       properties;
+  GPUAdapterCapabilities     adapterCaps;
+  GPUDeviceCapabilities      deviceCaps;
   GPUApi                    *activeApi;
   GPUAdapter                *adapter;
   GPUDevice                 *device;
@@ -137,6 +149,7 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   scopedApi.device.getAvailableAdapters = get_ownership_adapters;
   scopedApi.device.getAdapterProperties = get_ownership_properties;
   scopedApi.device.supportsFeature      = supports_ownership_feature;
+  scopedApi.device.getLimits            = get_ownership_limits;
   scopedApi.device.createDevice         = create_ownership_device;
   scopedApi.device.destroyDevice        = destroy_ownership_device;
   scopedApi.surface.createSurface       = create_ownership_surface;
@@ -147,6 +160,7 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   gOwnershipAdapterCalls                = 0u;
   gOwnershipPropertiesCalls             = 0u;
   gOwnershipFeatureCalls                = 0u;
+  gOwnershipLimitsCalls                 = 0u;
   gOwnershipDeviceCreateCalls           = 0u;
   gOwnershipDeviceDestroyCalls          = 0u;
   gOwnershipSurfaceCreateCalls          = 0u;
@@ -162,11 +176,20 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   }
 
   memset(&properties, 0, sizeof(properties));
+  memset(&adapterCaps, 0, sizeof(adapterCaps));
+  memset(&deviceCaps, 0, sizeof(deviceCaps));
   device = NULL;
   if (GPUGetAdapterProperties(adapter, &properties) != GPU_OK ||
       strcmp(properties.name, "scoped-adapter") != 0 ||
+      GPUGetAdapterCapabilities(adapter, &adapterCaps) != GPU_OK ||
+      adapterCaps.limits.maxColorAttachments != 7u ||
+      adapterCaps.limits.maxComputeWorkgroupSizeX != 321u ||
       GPUCreateDevice(adapter, NULL, &device) != GPU_OK ||
-      device != &gOwnershipDevice || device->_api != &scopedApi) {
+      device != &gOwnershipDevice || device->_api != &scopedApi ||
+      GPUGetDeviceCapabilities(device, &deviceCaps) != GPU_OK ||
+      deviceCaps.limits.maxColorAttachments != 7u ||
+      deviceCaps.limits.maxComputeWorkgroupSizeX != 321u ||
+      gOwnershipLimitsCalls != 2u) {
     fprintf(stderr, "instance-scoped adapter/device dispatch failed\n");
     return 0;
   }

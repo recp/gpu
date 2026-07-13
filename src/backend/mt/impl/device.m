@@ -148,6 +148,23 @@ mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
   }
 }
 
+static void
+mt_getLimits(const GPUAdapter * __restrict adapter,
+             GPULimits       * __restrict outLimits) {
+  id<MTLDevice> device;
+  MTLSize       threads;
+
+  device = adapter ? (id<MTLDevice>)adapter->_priv : nil;
+  if (!device || !outLimits) {
+    return;
+  }
+
+  threads = device.maxThreadsPerThreadgroup;
+  outLimits->maxComputeWorkgroupSizeX = (uint32_t)threads.width;
+  outLimits->maxComputeWorkgroupSizeY = (uint32_t)threads.height;
+  outLimits->maxComputeWorkgroupSizeZ = (uint32_t)threads.depth;
+}
+
 extern
 GPU_HIDE
 GPUCommandQueue*
@@ -311,6 +328,7 @@ mt_initDevice(GPUApiDevice *apiDevice) {
   apiDevice->getAvailableAdapters      = mt_getAvailablePhysicalDevicesBy;
   apiDevice->getAdapterProperties      = mt_getAdapterProperties;
   apiDevice->supportsFeature           = mt_supportsFeature;
+  apiDevice->getLimits                 = mt_getLimits;
   apiDevice->createDevice              = mt_createDevice;
   apiDevice->createSystemDefaultDevice = mt_createSystemDefaultDevice;
   apiDevice->destroyDevice             = mt_destroyDevice;

@@ -388,6 +388,20 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
   }
 }
 
+static void
+dx12_getLimits(const GPUAdapter * __restrict adapter,
+               GPULimits       * __restrict outLimits) {
+  GPU__UNUSED(adapter);
+  if (!outLimits) {
+    return;
+  }
+
+  outLimits->maxColorAttachments      = D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT;
+  outLimits->maxComputeWorkgroupSizeX = D3D12_CS_THREAD_GROUP_MAX_X;
+  outLimits->maxComputeWorkgroupSizeY = D3D12_CS_THREAD_GROUP_MAX_Y;
+  outLimits->maxComputeWorkgroupSizeZ = D3D12_CS_THREAD_GROUP_MAX_Z;
+}
+
 GPU_HIDE
 GPUDevice *
 dx12_createDevice(GPUPhysicalDevice        * __restrict phyDevice,
@@ -547,6 +561,7 @@ dx12_initDevice(GPUApiDevice* apiDevice) {
   apiDevice->getAvailableAdapters      = dx12_getAvailablePhysicalDevicesBy;
   apiDevice->getAdapterProperties      = dx12_getAdapterProperties;
   apiDevice->supportsFeature           = dx12_supportsFeature;
+  apiDevice->getLimits                 = dx12_getLimits;
   apiDevice->createDevice              = dx12_createDevice;
   apiDevice->createSystemDefaultDevice = dx12_createSystemDefaultDevice;
   apiDevice->destroyDevice             = dx12_destroyDevice;
