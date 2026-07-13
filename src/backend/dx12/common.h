@@ -363,6 +363,7 @@ struct GPUCommandQueueDX12 {
   uint32_t                     inFlightCount;
   bool                         workerStarted;
   bool                         stopping;
+  bool                         transferOpen;
   CRITICAL_SECTION             poolLock;
   CONDITION_VARIABLE           pendingCondition;
 };
@@ -468,6 +469,23 @@ dx12_transitionTexturePlane(ID3D12GraphicsCommandList *commandList,
                             uint32_t                   layerCount,
                             uint32_t                   plane,
                             D3D12_RESOURCE_STATES      state);
+
+GPU_HIDE
+GPUResult
+dx12_beginTransfer(GPUCommandQueue             *queue,
+                   D3D12_HEAP_TYPE              heapType,
+                   uint64_t                     stagingBytes,
+                   ID3D12GraphicsCommandList  **outCommandList,
+                   ID3D12Resource             **outStaging,
+                   void                       **outMapped);
+
+GPU_HIDE
+GPUResult
+dx12_submitTransfer(GPUCommandQueue *queue);
+
+GPU_HIDE
+void
+dx12_abortTransfer(GPUCommandQueue *queue);
 
 GPU_HIDE
 GPUResult

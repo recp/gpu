@@ -409,6 +409,328 @@ dx12__queueType(GPUQueueFlagBits bits, D3D12_COMMAND_LIST_TYPE *outType) {
   return true;
 }
 
+static ID3D12Resource *
+dx12__createTransferStaging(GPUDeviceDX12 *device,
+                            uint64_t        sizeBytes,
+                            D3D12_HEAP_TYPE heapType) {
+  ID3D12Resource        *resource;
+  D3D12_HEAP_PROPERTIES  heap = {0};
+  D3D12_RESOURCE_DESC    desc = {0};
+  D3D12_RESOURCE_STATES  initialState;
+  HRESULT                result;
+
+  if (!device || !device->d3dDevice || sizeBytes == 0u ||
+      (heapType != D3D12_HEAP_TYPE_UPLOAD &&
+       heapType != D3D12_HEAP_TYPE_READBACK)) {
+    return NULL;
+  }
+
+  resource                 = NULL;
+  heap.Type                = heapType;
+  heap.CreationNodeMask    = 1u;
+  heap.VisibleNodeMask     = 1u;
+  desc.Dimension           = D3D12_RESOURCE_DIMENSION_BUFFER;
+  desc.Width               = sizeBytes;
+  desc.Height              = 1u;
+  desc.DepthOrArraySize    = 1u;
+  desc.MipLevels           = 1u;
+  desc.SampleDesc.Count    = 1u;
+  desc.Layout              = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+  initialState = heapType == D3D12_HEAP_TYPE_UPLOAD
+                   ? D3D12_RESOURCE_STATE_GENERIC_READ
+                   : D3D12_RESOURCE_STATE_COPY_DEST;
+  result = device->d3dDevice->lpVtbl->CreateCommittedResource(
+    device->d3dDevice,
+    &heap,
+    D3D12_HEAP_FLAG_NONE,
+    &desc,
+    initialState,
+    NULL,
+    &IID_ID3D12Resource,
+    (void **)&resource
+  );
+  return SUCCEEDED(result) ? resource : NULL;
+}
+
+static uint64_t
+dx12__transferCapacity(uint64_t sizeBytes) {
+  uint64_t capacity;
+
+  capacity = 64u * 1024u;
+  while (capacity < sizeBytes) {
+    if (capacity > UINT64_MAX / 2u) {
+      return sizeBytes;
+    }
+    capacity *= 2u;
+  }
+  return capacity;
+}
+
+static bool
+dx12__ensureTransferContext(GPUCommandQueueDX12 *queue,
+                            GPUDeviceDX12       *device) {
+  ID3D12CommandAllocator    *allocator;
+  ID3D12GraphicsCommandList *commandList;
+  ID3D12Fence               *fence;
+  HANDLE                     event;
+  HRESULT                    result;
+
+  if (!queue || !device || !device->d3dDevice) {
+    return false;
+  }
+  if (queue->transferAllocator && queue->transferCommandList &&
+      queue->transferFence && queue->transferEvent) {
+    return true;
+  }
+  if (queue->transferAllocator || queue->transferCommandList ||
+      queue->transferFence || queue->transferEvent) {
+    return false;
+  }
+
+  allocator   = NULL;
+  commandList = NULL;
+  fence       = NULL;
+  event       = NULL;
+  result = device->d3dDevice->lpVtbl->CreateCommandAllocator(
+    device->d3dDevice,
+    queue->type,
+    &IID_ID3D12CommandAllocator,
+    (void **)&allocator
+  );
+  if (FAILED(result)) {
+    goto fail;
+  }
+  result = device->d3dDevice->lpVtbl->CreateCommandList(
+    device->d3dDevice,
+    0u,
+    queue->type,
+    allocator,
+    NULL,
+    &IID_ID3D12GraphicsCommandList,
+    (void **)&commandList
+  );
+  if (FAILED(result) || FAILED(commandList->lpVtbl->Close(commandList))) {
+    goto fail;
+  }
+  result = device->d3dDevice->lpVtbl->CreateFence(device->d3dDevice,
+                                                   0u,
+                                                   D3D12_FENCE_FLAG_NONE,
+                                                   &IID_ID3D12Fence,
+                                                   (void **)&fence);
+  if (FAILED(result) || !(event = CreateEventW(NULL, FALSE, FALSE, NULL))) {
+    goto fail;
+  }
+
+  queue->transferAllocator   = allocator;
+  queue->transferCommandList = commandList;
+  queue->transferFence       = fence;
+  queue->transferEvent       = event;
+  return true;
+
+fail:
+  if (event) {
+    CloseHandle(event);
+  }
+  if (fence) {
+    fence->lpVtbl->Release(fence);
+  }
+  if (commandList) {
+    commandList->lpVtbl->Release(commandList);
+  }
+  if (allocator) {
+    allocator->lpVtbl->Release(allocator);
+  }
+  return false;
+}
+
+static bool
+dx12__ensureTransferStaging(GPUCommandQueueDX12 *queue,
+                            GPUDeviceDX12       *device,
+                            uint64_t              sizeBytes,
+                            D3D12_HEAP_TYPE       heapType) {
+  ID3D12Resource *resource;
+  void           *mapped;
+  D3D12_RANGE     readRange = {0};
+  uint64_t        capacity;
+  bool            upload;
+
+  if (!queue || !device || sizeBytes == 0u ||
+      (heapType != D3D12_HEAP_TYPE_UPLOAD &&
+       heapType != D3D12_HEAP_TYPE_READBACK)) {
+    return false;
+  }
+
+  upload = heapType == D3D12_HEAP_TYPE_UPLOAD;
+  if (upload && queue->uploadStaging &&
+      queue->uploadCapacity >= sizeBytes) {
+    return queue->uploadMapped != NULL;
+  }
+  if (!upload && queue->readbackStaging &&
+      queue->readbackCapacity >= sizeBytes) {
+    return true;
+  }
+
+  capacity = dx12__transferCapacity(sizeBytes);
+  resource = dx12__createTransferStaging(device, capacity, heapType);
+  mapped   = NULL;
+  if (!resource ||
+      (upload &&
+       (FAILED(resource->lpVtbl->Map(resource, 0u, &readRange, &mapped)) ||
+        !mapped))) {
+    if (resource) {
+      resource->lpVtbl->Release(resource);
+    }
+    return false;
+  }
+
+  if (upload) {
+    if (queue->uploadStaging) {
+      queue->uploadStaging->lpVtbl->Unmap(queue->uploadStaging, 0u, NULL);
+      queue->uploadStaging->lpVtbl->Release(queue->uploadStaging);
+    }
+    queue->uploadStaging  = resource;
+    queue->uploadMapped   = mapped;
+    queue->uploadCapacity = capacity;
+  } else {
+    if (queue->readbackStaging) {
+      queue->readbackStaging->lpVtbl->Release(queue->readbackStaging);
+    }
+    queue->readbackStaging  = resource;
+    queue->readbackCapacity = capacity;
+  }
+  return true;
+}
+
+GPU_HIDE
+GPUResult
+dx12_beginTransfer(GPUCommandQueue             *queue,
+                   D3D12_HEAP_TYPE              heapType,
+                   uint64_t                     stagingBytes,
+                   ID3D12GraphicsCommandList  **outCommandList,
+                   ID3D12Resource             **outStaging,
+                   void                       **outMapped) {
+  GPUCommandQueueDX12 *native;
+  GPUDeviceDX12       *device;
+  HRESULT              result;
+  bool                 upload;
+
+  if (!queue || !queue->_device || !outCommandList || !outStaging ||
+      !outMapped || stagingBytes == 0u) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outCommandList = NULL;
+  *outStaging     = NULL;
+  *outMapped      = NULL;
+  native          = queue->_priv;
+  device          = queue->_device->_priv;
+  upload          = heapType == D3D12_HEAP_TYPE_UPLOAD;
+  if (!native || !native->commandQueue || !device || !device->d3dDevice ||
+      native->type == D3D12_COMMAND_LIST_TYPE_COPY ||
+      (!upload && heapType != D3D12_HEAP_TYPE_READBACK)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  if (native->transferOpen) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!dx12__ensureTransferContext(native, device) ||
+      !dx12__ensureTransferStaging(native,
+                                   device,
+                                   stagingBytes,
+                                   heapType)) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  result = native->transferAllocator->lpVtbl->Reset(
+    native->transferAllocator
+  );
+  if (FAILED(result)) {
+    dx12__reportQueueError(native, "reset transfer allocator", result);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  result = native->transferCommandList->lpVtbl->Reset(
+    native->transferCommandList,
+    native->transferAllocator,
+    NULL
+  );
+  if (FAILED(result)) {
+    dx12__reportQueueError(native, "reset transfer command list", result);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  native->transferOpen = true;
+  *outCommandList      = native->transferCommandList;
+  *outStaging          = upload ? native->uploadStaging
+                                : native->readbackStaging;
+  *outMapped           = upload ? native->uploadMapped : NULL;
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
+dx12_submitTransfer(GPUCommandQueue *queue) {
+  GPUCommandQueueDX12 *native;
+  ID3D12CommandList   *commandLists[1];
+  UINT64               fenceValue;
+  HRESULT              result;
+  DWORD                waitResult;
+
+  native = queue ? queue->_priv : NULL;
+  if (!native || !native->commandQueue || !native->transferOpen ||
+      !native->transferCommandList || !native->transferFence ||
+      !native->transferEvent) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  result = native->transferCommandList->lpVtbl->Close(
+    native->transferCommandList
+  );
+  native->transferOpen = false;
+  if (FAILED(result)) {
+    dx12__reportQueueError(native, "close transfer command list", result);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  commandLists[0] = (ID3D12CommandList *)native->transferCommandList;
+  native->commandQueue->lpVtbl->ExecuteCommandLists(native->commandQueue,
+                                                     1u,
+                                                     commandLists);
+  fenceValue = ++native->transferFenceValue;
+  result = native->commandQueue->lpVtbl->Signal(native->commandQueue,
+                                                 native->transferFence,
+                                                 fenceValue);
+  if (SUCCEEDED(result)) {
+    result = native->transferFence->lpVtbl->SetEventOnCompletion(
+      native->transferFence,
+      fenceValue,
+      native->transferEvent
+    );
+  }
+  if (FAILED(result)) {
+    dx12__reportQueueError(native, "signal transfer fence", result);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  waitResult = WaitForSingleObject(native->transferEvent, INFINITE);
+  return waitResult == WAIT_OBJECT_0 ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+}
+
+GPU_HIDE
+void
+dx12_abortTransfer(GPUCommandQueue *queue) {
+  GPUCommandQueueDX12 *native;
+
+  native = queue ? queue->_priv : NULL;
+  if (!native || !native->transferOpen || !native->transferCommandList) {
+    return;
+  }
+
+  (void)native->transferCommandList->lpVtbl->Close(
+    native->transferCommandList
+  );
+  native->transferOpen = false;
+}
+
 GPU_HIDE
 GPUCommandQueue*
 dx12_createCommandQueue(GPUDevice *device, GPUQueueFlagBits bits) {
@@ -490,6 +812,7 @@ dx12_destroyCommandQueue(GPUCommandQueue *queue) {
   native = queue->_priv;
   if (native) {
     dx12__stopWorker(native);
+    dx12_abortTransfer(queue);
     command = native->commands;
     while (command) {
       next = command->next;

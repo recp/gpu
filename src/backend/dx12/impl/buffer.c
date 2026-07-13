@@ -81,6 +81,44 @@ dx12_transitionBuffer(ID3D12GraphicsCommandList *commandList,
   return true;
 }
 
+static bool
+dx12__recordBufferTransfer(ID3D12GraphicsCommandList *commandList,
+                           GPUBufferDX12             *buffer,
+                           ID3D12Resource            *staging,
+                           uint64_t                    bufferOffset,
+                           uint64_t                    sizeBytes,
+                           bool                        upload) {
+  D3D12_RESOURCE_STATES originalState;
+  D3D12_RESOURCE_STATES copyState;
+
+  if (!commandList || !buffer || !staging) {
+    return false;
+  }
+
+  originalState = buffer->state;
+  copyState      = upload ? D3D12_RESOURCE_STATE_COPY_DEST
+                          : D3D12_RESOURCE_STATE_COPY_SOURCE;
+  if (!dx12_transitionBuffer(commandList, buffer, copyState)) {
+    return false;
+  }
+  if (upload) {
+    commandList->lpVtbl->CopyBufferRegion(commandList,
+                                           buffer->resource,
+                                           bufferOffset,
+                                           staging,
+                                           0u,
+                                           sizeBytes);
+  } else {
+    commandList->lpVtbl->CopyBufferRegion(commandList,
+                                           staging,
+                                           0u,
+                                           buffer->resource,
+                                           bufferOffset,
+                                           sizeBytes);
+  }
+  return dx12_transitionBuffer(commandList, buffer, originalState);
+}
+
 #if GPU_BUILD_WITH_DEBUG_MARKERS
 static void
 dx12__setBufferName(ID3D12Resource *resource, const char *label) {
@@ -99,328 +137,6 @@ dx12__setBufferName(ID3D12Resource *resource, const char *label) {
   (void)resource->lpVtbl->SetName(resource, name);
 }
 #endif
-
-static ID3D12Resource *
-dx12__createStagingBuffer(GPUDeviceDX12 *device,
-                          uint64_t        sizeBytes,
-                          D3D12_HEAP_TYPE heapType) {
-  ID3D12Resource        *resource;
-  D3D12_HEAP_PROPERTIES  heap = {0};
-  D3D12_RESOURCE_DESC    desc = {0};
-  D3D12_RESOURCE_STATES  initialState;
-  HRESULT                result;
-
-  if (!device || !device->d3dDevice || sizeBytes == 0u ||
-      (heapType != D3D12_HEAP_TYPE_UPLOAD &&
-       heapType != D3D12_HEAP_TYPE_READBACK)) {
-    return NULL;
-  }
-
-  resource                 = NULL;
-  heap.Type                = heapType;
-  heap.CreationNodeMask    = 1u;
-  heap.VisibleNodeMask     = 1u;
-  desc.Dimension           = D3D12_RESOURCE_DIMENSION_BUFFER;
-  desc.Width               = sizeBytes;
-  desc.Height              = 1u;
-  desc.DepthOrArraySize    = 1u;
-  desc.MipLevels           = 1u;
-  desc.SampleDesc.Count    = 1u;
-  desc.Layout              = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-  initialState = heapType == D3D12_HEAP_TYPE_UPLOAD
-                   ? D3D12_RESOURCE_STATE_GENERIC_READ
-                   : D3D12_RESOURCE_STATE_COPY_DEST;
-  result       = device->d3dDevice->lpVtbl->CreateCommittedResource(
-    device->d3dDevice,
-    &heap,
-    D3D12_HEAP_FLAG_NONE,
-    &desc,
-    initialState,
-    NULL,
-    &IID_ID3D12Resource,
-    (void **)&resource
-  );
-  return SUCCEEDED(result) ? resource : NULL;
-}
-
-static uint64_t
-dx12__transferCapacity(uint64_t sizeBytes) {
-  uint64_t capacity;
-
-  capacity = 64u * 1024u;
-  while (capacity < sizeBytes) {
-    if (capacity > UINT64_MAX / 2u) {
-      return sizeBytes;
-    }
-    capacity *= 2u;
-  }
-  return capacity;
-}
-
-static bool
-dx12__ensureTransferContext(GPUCommandQueueDX12 *queue,
-                            GPUDeviceDX12       *device) {
-  ID3D12CommandAllocator    *allocator;
-  ID3D12GraphicsCommandList *commandList;
-  ID3D12Fence               *fence;
-  HANDLE                     event;
-  HRESULT                    result;
-
-  if (!queue || !device || !device->d3dDevice) {
-    return false;
-  }
-  if (queue->transferAllocator && queue->transferCommandList &&
-      queue->transferFence && queue->transferEvent) {
-    return true;
-  }
-  if (queue->transferAllocator || queue->transferCommandList ||
-      queue->transferFence || queue->transferEvent) {
-    return false;
-  }
-
-  allocator   = NULL;
-  commandList = NULL;
-  fence       = NULL;
-  event       = NULL;
-  result      = device->d3dDevice->lpVtbl->CreateCommandAllocator(
-    device->d3dDevice,
-    queue->type,
-    &IID_ID3D12CommandAllocator,
-    (void **)&allocator
-  );
-  if (FAILED(result)) {
-    goto fail;
-  }
-  result = device->d3dDevice->lpVtbl->CreateCommandList(
-    device->d3dDevice,
-    0u,
-    queue->type,
-    allocator,
-    NULL,
-    &IID_ID3D12GraphicsCommandList,
-    (void **)&commandList
-  );
-  if (FAILED(result) || FAILED(commandList->lpVtbl->Close(commandList))) {
-    goto fail;
-  }
-  result = device->d3dDevice->lpVtbl->CreateFence(device->d3dDevice,
-                                                   0u,
-                                                   D3D12_FENCE_FLAG_NONE,
-                                                   &IID_ID3D12Fence,
-                                                   (void **)&fence);
-  if (FAILED(result) || !(event = CreateEventW(NULL, FALSE, FALSE, NULL))) {
-    goto fail;
-  }
-
-  queue->transferAllocator   = allocator;
-  queue->transferCommandList = commandList;
-  queue->transferFence       = fence;
-  queue->transferEvent       = event;
-  return true;
-
-fail:
-  if (event) {
-    CloseHandle(event);
-  }
-  if (fence) {
-    fence->lpVtbl->Release(fence);
-  }
-  if (commandList) {
-    commandList->lpVtbl->Release(commandList);
-  }
-  if (allocator) {
-    allocator->lpVtbl->Release(allocator);
-  }
-  return false;
-}
-
-static bool
-dx12__ensureTransferStaging(GPUCommandQueueDX12 *queue,
-                            GPUDeviceDX12       *device,
-                            uint64_t              sizeBytes,
-                            bool                  upload) {
-  ID3D12Resource *resource;
-  void           *mapped;
-  D3D12_RANGE     readRange = {0};
-  uint64_t        capacity;
-
-  if (!queue || !device || sizeBytes == 0u) {
-    return false;
-  }
-  if (upload && queue->uploadStaging &&
-      queue->uploadCapacity >= sizeBytes) {
-    return queue->uploadMapped != NULL;
-  }
-  if (!upload && queue->readbackStaging &&
-      queue->readbackCapacity >= sizeBytes) {
-    return true;
-  }
-
-  capacity = dx12__transferCapacity(sizeBytes);
-  resource = dx12__createStagingBuffer(
-    device,
-    capacity,
-    upload ? D3D12_HEAP_TYPE_UPLOAD : D3D12_HEAP_TYPE_READBACK
-  );
-  mapped = NULL;
-  if (!resource ||
-      (upload &&
-       (FAILED(resource->lpVtbl->Map(resource, 0u, &readRange, &mapped)) ||
-        !mapped))) {
-    if (resource) {
-      resource->lpVtbl->Release(resource);
-    }
-    return false;
-  }
-
-  if (upload) {
-    if (queue->uploadStaging) {
-      queue->uploadStaging->lpVtbl->Unmap(queue->uploadStaging, 0u, NULL);
-      queue->uploadStaging->lpVtbl->Release(queue->uploadStaging);
-    }
-    queue->uploadStaging  = resource;
-    queue->uploadMapped   = mapped;
-    queue->uploadCapacity = capacity;
-  } else {
-    if (queue->readbackStaging) {
-      queue->readbackStaging->lpVtbl->Release(queue->readbackStaging);
-    }
-    queue->readbackStaging  = resource;
-    queue->readbackCapacity = capacity;
-  }
-  return true;
-}
-
-static GPUResult
-dx12__copyBufferSync(GPUCommandQueue *queue,
-                     GPUBufferDX12  *native,
-                     ID3D12Resource *staging,
-                     uint64_t        nativeOffset,
-                     uint64_t        sizeBytes,
-                     bool            upload) {
-  GPUCommandQueueDX12    *queueDX12;
-  GPUDeviceDX12          *device;
-  ID3D12CommandList      *commandLists[1];
-  D3D12_RESOURCE_BARRIER  barriers[2] = {0};
-  D3D12_RESOURCE_STATES   copyState;
-  UINT64                  fenceValue;
-  HRESULT                 result;
-  DWORD                   waitResult;
-  GPUResult               gpuResult;
-  bool                    commandListOpen;
-  bool                    transition;
-
-  queueDX12       = queue ? queue->_priv : NULL;
-  device          = queue && queue->_device ? queue->_device->_priv : NULL;
-  gpuResult       = GPU_ERROR_BACKEND_FAILURE;
-  commandListOpen = false;
-  if (!queueDX12 || !queueDX12->commandQueue || !device ||
-      !device->d3dDevice || !native || !native->resource || !staging ||
-      queueDX12->type == D3D12_COMMAND_LIST_TYPE_COPY) {
-    return GPU_ERROR_UNSUPPORTED;
-  }
-  if (!dx12__ensureTransferContext(queueDX12, device)) {
-    return GPU_ERROR_BACKEND_FAILURE;
-  }
-
-  result = queueDX12->transferAllocator->lpVtbl->Reset(
-    queueDX12->transferAllocator
-  );
-  if (FAILED(result)) {
-    goto cleanup;
-  }
-  result = queueDX12->transferCommandList->lpVtbl->Reset(
-    queueDX12->transferCommandList,
-    queueDX12->transferAllocator,
-    NULL
-  );
-  if (FAILED(result)) {
-    goto cleanup;
-  }
-  commandListOpen = true;
-
-  copyState  = upload ? D3D12_RESOURCE_STATE_COPY_DEST
-                      : D3D12_RESOURCE_STATE_COPY_SOURCE;
-  transition = native->state != copyState;
-  barriers[0].Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-  barriers[0].Transition.pResource   = native->resource;
-  barriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-  barriers[0].Transition.StateBefore = native->state;
-  barriers[0].Transition.StateAfter  = copyState;
-  barriers[1]                        = barriers[0];
-  barriers[1].Transition.StateBefore = copyState;
-  barriers[1].Transition.StateAfter  = native->state;
-  if (transition) {
-    queueDX12->transferCommandList->lpVtbl->ResourceBarrier(
-      queueDX12->transferCommandList,
-      1u,
-      &barriers[0]
-    );
-  }
-  if (upload) {
-    queueDX12->transferCommandList->lpVtbl->CopyBufferRegion(
-      queueDX12->transferCommandList,
-      native->resource,
-      nativeOffset,
-      staging,
-      0u,
-      sizeBytes
-    );
-  } else {
-    queueDX12->transferCommandList->lpVtbl->CopyBufferRegion(
-      queueDX12->transferCommandList,
-      staging,
-      0u,
-      native->resource,
-      nativeOffset,
-      sizeBytes
-    );
-  }
-  if (transition) {
-    queueDX12->transferCommandList->lpVtbl->ResourceBarrier(
-      queueDX12->transferCommandList,
-      1u,
-      &barriers[1]
-    );
-  }
-  result = queueDX12->transferCommandList->lpVtbl->Close(
-    queueDX12->transferCommandList
-  );
-  if (FAILED(result)) {
-    goto cleanup;
-  }
-  commandListOpen = false;
-
-  commandLists[0] = (ID3D12CommandList *)queueDX12->transferCommandList;
-  queueDX12->commandQueue->lpVtbl->ExecuteCommandLists(queueDX12->commandQueue,
-                                                       1u,
-                                                       commandLists);
-  fenceValue = ++queueDX12->transferFenceValue;
-  result = queueDX12->commandQueue->lpVtbl->Signal(queueDX12->commandQueue,
-                                                   queueDX12->transferFence,
-                                                   fenceValue);
-  if (SUCCEEDED(result)) {
-    result = queueDX12->transferFence->lpVtbl->SetEventOnCompletion(
-      queueDX12->transferFence,
-      fenceValue,
-      queueDX12->transferEvent
-    );
-  }
-  waitResult = SUCCEEDED(result)
-                 ? WaitForSingleObject(queueDX12->transferEvent, INFINITE)
-                 : WAIT_FAILED;
-  if (SUCCEEDED(result) && waitResult == WAIT_OBJECT_0) {
-    gpuResult = GPU_OK;
-  }
-
-cleanup:
-  if (commandListOpen) {
-    (void)queueDX12->transferCommandList->lpVtbl->Close(
-      queueDX12->transferCommandList
-    );
-  }
-  return gpuResult;
-}
 
 GPU_HIDE
 GPUResult
@@ -552,9 +268,12 @@ dx12_writeBuffer(GPUCommandQueue * __restrict queue,
                  uint64_t                     dstOffset,
                  const void      * __restrict data,
                  uint64_t                     sizeBytes) {
-  GPUCommandQueueDX12 *queueDX12;
-  GPUDeviceDX12       *device;
-  GPUBufferDX12       *native;
+  ID3D12GraphicsCommandList *commandList;
+  ID3D12Resource            *staging;
+  GPUCommandQueueDX12       *queueDX12;
+  GPUBufferDX12             *native;
+  void                      *mapped;
+  GPUResult                  result;
 
   queueDX12 = queue ? queue->_priv : NULL;
   native    = buffer ? buffer->_priv : NULL;
@@ -572,18 +291,27 @@ dx12_writeBuffer(GPUCommandQueue * __restrict queue,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  device = queue->_device->_priv;
-  if (!dx12__ensureTransferStaging(queueDX12, device, sizeBytes, true)) {
-    return GPU_ERROR_BACKEND_FAILURE;
+  result = dx12_beginTransfer(queue,
+                              D3D12_HEAP_TYPE_UPLOAD,
+                              sizeBytes,
+                              &commandList,
+                              &staging,
+                              &mapped);
+  if (result != GPU_OK) {
+    return result;
   }
 
-  memcpy(queueDX12->uploadMapped, data, (size_t)sizeBytes);
-  return dx12__copyBufferSync(queue,
-                              native,
-                              queueDX12->uploadStaging,
-                              dstOffset,
-                              sizeBytes,
-                              true);
+  memcpy(mapped, data, (size_t)sizeBytes);
+  if (!dx12__recordBufferTransfer(commandList,
+                                  native,
+                                  staging,
+                                  dstOffset,
+                                  sizeBytes,
+                                  true)) {
+    dx12_abortTransfer(queue);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  return dx12_submitTransfer(queue);
 }
 
 GPU_HIDE
@@ -593,12 +321,13 @@ dx12_readBuffer(GPUCommandQueue * __restrict queue,
                 uint64_t                     srcOffset,
                 void           * __restrict outData,
                 uint64_t                     sizeBytes) {
-  GPUCommandQueueDX12 *queueDX12;
-  GPUDeviceDX12       *device;
-  GPUBufferDX12       *native;
-  void                *mapped;
-  D3D12_RANGE          readRange;
-  GPUResult            result;
+  ID3D12GraphicsCommandList *commandList;
+  ID3D12Resource            *staging;
+  GPUCommandQueueDX12       *queueDX12;
+  GPUBufferDX12             *native;
+  void                      *mapped;
+  D3D12_RANGE                readRange;
+  GPUResult                  result;
 
   queueDX12 = queue ? queue->_priv : NULL;
   native    = buffer ? buffer->_priv : NULL;
@@ -618,36 +347,36 @@ dx12_readBuffer(GPUCommandQueue * __restrict queue,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  device = queue->_device->_priv;
-  if (!dx12__ensureTransferStaging(queueDX12, device, sizeBytes, false)) {
-    return GPU_ERROR_BACKEND_FAILURE;
+  result = dx12_beginTransfer(queue,
+                              D3D12_HEAP_TYPE_READBACK,
+                              sizeBytes,
+                              &commandList,
+                              &staging,
+                              &mapped);
+  if (result != GPU_OK) {
+    return result;
   }
 
-  result = dx12__copyBufferSync(queue,
-                                native,
-                                queueDX12->readbackStaging,
-                                srcOffset,
-                                sizeBytes,
-                                false);
+  if (!dx12__recordBufferTransfer(commandList,
+                                  native,
+                                  staging,
+                                  srcOffset,
+                                  sizeBytes,
+                                  false)) {
+    dx12_abortTransfer(queue);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  result = dx12_submitTransfer(queue);
   if (result == GPU_OK) {
     readRange.Begin = 0u;
     readRange.End   = (SIZE_T)sizeBytes;
     mapped          = NULL;
-    if (FAILED(queueDX12->readbackStaging->lpVtbl->Map(
-          queueDX12->readbackStaging,
-          0u,
-          &readRange,
-          &mapped
-        )) ||
+    if (FAILED(staging->lpVtbl->Map(staging, 0u, &readRange, &mapped)) ||
         !mapped) {
       result = GPU_ERROR_BACKEND_FAILURE;
     } else {
       memcpy(outData, mapped, (size_t)sizeBytes);
-      queueDX12->readbackStaging->lpVtbl->Unmap(
-        queueDX12->readbackStaging,
-        0u,
-        NULL
-      );
+      staging->lpVtbl->Unmap(staging, 0u, NULL);
     }
   }
   return result;

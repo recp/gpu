@@ -183,6 +183,84 @@ sync_transfers_reuse(GPUCommandQueue *queue, GPUDevice *device) {
   return ok;
 }
 
+static bool
+texture_transfers_reuse(GPUCommandQueue *queue, GPUDevice *device) {
+  GPUCommandQueueDX12       *native;
+  GPUTextureCreateInfo       textureInfo;
+  GPUTextureWriteRegion      writeRegion;
+  GPUTexture                *texture;
+  ID3D12CommandAllocator    *allocator;
+  ID3D12GraphicsCommandList *commandList;
+  ID3D12Fence               *fence;
+  ID3D12Resource            *upload;
+  uint64_t                   uploadCapacity;
+  uint8_t                    pixel[4];
+  bool                       ok;
+
+  native  = queue ? queue->_priv : NULL;
+  texture = NULL;
+  if (!native || !device || !native->transferAllocator ||
+      !native->transferCommandList || !native->transferFence ||
+      !native->uploadStaging) {
+    return false;
+  }
+
+  memset(&textureInfo, 0, sizeof(textureInfo));
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "dx12-sync-texture-transfer";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = 1u;
+  textureInfo.height           = 1u;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_COPY_DST;
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK ||
+      !texture) {
+    return false;
+  }
+
+  memset(&writeRegion, 0, sizeof(writeRegion));
+  writeRegion.width        = 1u;
+  writeRegion.height       = 1u;
+  writeRegion.depth        = 1u;
+  writeRegion.layerCount   = 1u;
+  writeRegion.bytesPerRow  = sizeof(pixel);
+  writeRegion.rowsPerImage = 1u;
+
+  allocator        = native->transferAllocator;
+  commandList      = native->transferCommandList;
+  fence            = native->transferFence;
+  upload           = native->uploadStaging;
+  uploadCapacity   = native->uploadCapacity;
+  ok               = true;
+  for (uint32_t i = 0u; i < 16u; i++) {
+    pixel[0] = (uint8_t)i;
+    pixel[1] = (uint8_t)(i + 1u);
+    pixel[2] = (uint8_t)(i + 2u);
+    pixel[3] = 255u;
+    if (GPUQueueWriteTexture(queue,
+                             texture,
+                             &writeRegion,
+                             pixel,
+                             sizeof(pixel)) != GPU_OK ||
+        native->transferAllocator != allocator ||
+        native->transferCommandList != commandList ||
+        native->transferFence != fence ||
+        native->uploadStaging != upload ||
+        native->uploadCapacity != uploadCapacity ||
+        native->transferOpen) {
+      ok = false;
+      break;
+    }
+  }
+
+  GPUDestroyTexture(texture);
+  return ok;
+}
+
 int
 main(void) {
   GPUInstanceCreateInfo instanceInfo;
@@ -279,6 +357,10 @@ main(void) {
   }
   if (!sync_transfers_reuse(queue0, device)) {
     fprintf(stderr, "DX12 synchronous transfer reuse failed\n");
+    goto fail;
+  }
+  if (!texture_transfers_reuse(queue0, device)) {
+    fprintf(stderr, "DX12 texture transfer reuse failed\n");
     goto fail;
   }
 

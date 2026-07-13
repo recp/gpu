@@ -962,20 +962,14 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
   GPUCommandQueueDX12       *queueDX12;
   GPUDeviceDX12             *deviceDX12;
   GPUTextureDX12            *native;
-  ID3D12CommandAllocator    *allocator;
   ID3D12GraphicsCommandList *commandList;
   ID3D12Resource            *upload;
-  ID3D12Fence               *fence;
-  ID3D12CommandList         *commandLists[1];
-  D3D12_HEAP_PROPERTIES      heap = {0};
-  D3D12_RESOURCE_DESC        uploadDesc = {0};
   D3D12_RESOURCE_DESC        textureDesc;
   D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {0};
   D3D12_BOX                   sourceBox = {0};
-  D3D12_RANGE                 readRange = {0};
   D3D12_RESOURCE_STATES       finalState;
+  void                       *mappedData;
   uint8_t                    *mapped;
-  HANDLE                      event;
   uint64_t                    rowSize;
   uint64_t                    layerSize;
   uint64_t                    layerStride;
@@ -986,9 +980,7 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
   uint32_t                    rowCount;
   uint32_t                    subresource;
   uint32_t                    transitionLayerCount;
-  HRESULT                     result;
-  DWORD                       waitResult;
-  GPUResult                   gpuResult;
+  GPUResult                   result;
   bool                        texture3D;
 
   queueDX12  = queue ? queue->_priv : NULL;
@@ -1023,13 +1015,6 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  allocator   = NULL;
-  commandList = NULL;
-  upload      = NULL;
-  fence       = NULL;
-  mapped      = NULL;
-  event       = NULL;
-  gpuResult   = GPU_ERROR_BACKEND_FAILURE;
   texture3D            = texture->dimension == GPU_TEXTURE_DIMENSION_3D;
   copyCount            = texture3D ? 1u : region->layerCount;
   copyDepth            = texture3D ? region->depth : 1u;
@@ -1070,34 +1055,16 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  heap.Type                  = D3D12_HEAP_TYPE_UPLOAD;
-  heap.CreationNodeMask      = 1u;
-  heap.VisibleNodeMask       = 1u;
-  uploadDesc.Dimension       = D3D12_RESOURCE_DIMENSION_BUFFER;
-  uploadDesc.Width           = totalSize;
-  uploadDesc.Height          = 1u;
-  uploadDesc.DepthOrArraySize = 1u;
-  uploadDesc.MipLevels       = 1u;
-  uploadDesc.SampleDesc.Count = 1u;
-  uploadDesc.Layout          = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-  result = deviceDX12->d3dDevice->lpVtbl->CreateCommittedResource(
-    deviceDX12->d3dDevice,
-    &heap,
-    D3D12_HEAP_FLAG_NONE,
-    &uploadDesc,
-    D3D12_RESOURCE_STATE_GENERIC_READ,
-    NULL,
-    &IID_ID3D12Resource,
-    (void **)&upload
-  );
-  if (FAILED(result)) {
-    goto cleanup;
+  result = dx12_beginTransfer(queue,
+                              D3D12_HEAP_TYPE_UPLOAD,
+                              totalSize,
+                              &commandList,
+                              &upload,
+                              &mappedData);
+  if (result != GPU_OK) {
+    return result;
   }
-
-  result = upload->lpVtbl->Map(upload, 0u, &readRange, (void **)&mapped);
-  if (FAILED(result) || !mapped) {
-    goto cleanup;
-  }
+  mapped = mappedData;
   for (uint32_t layer = 0u; layer < copyCount; layer++) {
     uint64_t baseOffset;
     uint64_t ignoredSize;
@@ -1121,7 +1088,8 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
     if (rowCount < dataLayout.blockRows ||
         rowSize < dataLayout.bytesInLastRow ||
         footprint.Footprint.Depth < copyDepth) {
-      goto cleanup;
+      dx12_abortTransfer(queue);
+      return GPU_ERROR_BACKEND_FAILURE;
     }
 
     for (uint32_t slice = 0u; slice < copyDepth; slice++) {
@@ -1144,30 +1112,6 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
       }
     }
   }
-  upload->lpVtbl->Unmap(upload, 0u, NULL);
-  mapped = NULL;
-
-  result = deviceDX12->d3dDevice->lpVtbl->CreateCommandAllocator(
-    deviceDX12->d3dDevice,
-    D3D12_COMMAND_LIST_TYPE_DIRECT,
-    &IID_ID3D12CommandAllocator,
-    (void **)&allocator
-  );
-  if (FAILED(result)) {
-    goto cleanup;
-  }
-  result = deviceDX12->d3dDevice->lpVtbl->CreateCommandList(
-    deviceDX12->d3dDevice,
-    0u,
-    D3D12_COMMAND_LIST_TYPE_DIRECT,
-    allocator,
-    NULL,
-    &IID_ID3D12GraphicsCommandList,
-    (void **)&commandList
-  );
-  if (FAILED(result)) {
-    goto cleanup;
-  }
 
   if (!dx12_transitionTexturePlane(commandList,
                                    native,
@@ -1177,7 +1121,8 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
                                    transitionLayerCount,
                                    plane,
                                    D3D12_RESOURCE_STATE_COPY_DEST)) {
-    goto cleanup;
+    dx12_abortTransfer(queue);
+    return GPU_ERROR_BACKEND_FAILURE;
   }
   sourceBox.right  = region->width;
   sourceBox.bottom = region->height;
@@ -1226,65 +1171,10 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
                                    transitionLayerCount,
                                    plane,
                                    finalState)) {
-    goto cleanup;
+    dx12_abortTransfer(queue);
+    return GPU_ERROR_BACKEND_FAILURE;
   }
-  result = commandList->lpVtbl->Close(commandList);
-  if (FAILED(result)) {
-    goto cleanup;
-  }
-
-  result = deviceDX12->d3dDevice->lpVtbl->CreateFence(
-    deviceDX12->d3dDevice,
-    0u,
-    D3D12_FENCE_FLAG_NONE,
-    &IID_ID3D12Fence,
-    (void **)&fence
-  );
-  if (FAILED(result)) {
-    goto cleanup;
-  }
-  event = CreateEventW(NULL, FALSE, FALSE, NULL);
-  if (!event) {
-    goto cleanup;
-  }
-
-  commandLists[0] = (ID3D12CommandList *)commandList;
-  queueDX12->commandQueue->lpVtbl->ExecuteCommandLists(queueDX12->commandQueue,
-                                                       1u,
-                                                       commandLists);
-  result = queueDX12->commandQueue->lpVtbl->Signal(queueDX12->commandQueue,
-                                                   fence,
-                                                   1u);
-  if (SUCCEEDED(result)) {
-    result = fence->lpVtbl->SetEventOnCompletion(fence, 1u, event);
-  }
-  waitResult = SUCCEEDED(result)
-                 ? WaitForSingleObject(event, INFINITE)
-                 : WAIT_FAILED;
-  if (SUCCEEDED(result) && waitResult == WAIT_OBJECT_0) {
-    gpuResult = GPU_OK;
-  }
-
-cleanup:
-  if (mapped && upload) {
-    upload->lpVtbl->Unmap(upload, 0u, NULL);
-  }
-  if (event) {
-    CloseHandle(event);
-  }
-  if (fence) {
-    fence->lpVtbl->Release(fence);
-  }
-  if (commandList) {
-    commandList->lpVtbl->Release(commandList);
-  }
-  if (allocator) {
-    allocator->lpVtbl->Release(allocator);
-  }
-  if (upload) {
-    upload->lpVtbl->Release(upload);
-  }
-  return gpuResult;
+  return dx12_submitTransfer(queue);
 }
 
 GPU_HIDE
