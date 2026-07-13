@@ -28,13 +28,11 @@ void
 gpu_cmdoncomplete4(GPUCommandBuffer * __restrict cmdb,
                    id                        feedback);
 
-#if GPU_BUILD_WITH_VALIDATION
 static
 GPU_HIDE
 void
-mt_logCommandBufferError(GPUCommandBuffer * __restrict cmdb,
-                         id<MTLCommandBuffer>        mtlCmdb);
-#endif
+mt_reportCommandBufferError(GPUCommandBuffer * __restrict cmdb,
+                            NSError          * __restrict error);
 
 GPU_HIDE
 void
@@ -366,32 +364,81 @@ mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
   return GPU_OK;
 }
 
-#if GPU_BUILD_WITH_VALIDATION
 static
 GPU_HIDE
 void
-mt_logCommandBufferError(GPUCommandBuffer * __restrict cmdb,
-                         id<MTLCommandBuffer>        mtlCmdb) {
-  GPUCommandQueue *queue;
-  GPUDevice       *device;
+mt_reportCommandBufferError(GPUCommandBuffer * __restrict cmdb,
+                            NSError          * __restrict error) {
+  GPUDeviceErrorType  type;
+  GPUDeviceLostReason lostReason;
+  GPUCommandQueue    *queue;
+  GPUDevice          *device;
+  GPUResult           result;
+  const char         *detail;
+  char                message[256];
 
-  if (!cmdb || !mtlCmdb || mtlCmdb.status != MTLCommandBufferStatusError) {
+  if (!cmdb) {
     return;
   }
 
   queue = cmdb->_queue;
   device = queue ? queue->_device : NULL;
-  if (!device || !device->runtimeConfig.enableVerboseLogs) {
+  if (!device) {
     return;
   }
 
-  if (mtlCmdb.error) {
-    NSLog(@"GPU Metal command buffer failed: %@", mtlCmdb.error);
-  } else {
-    NSLog(@"GPU Metal command buffer failed");
+  type       = GPU_DEVICE_ERROR_BACKEND;
+  lostReason = GPU_DEVICE_LOST_REASON_UNKNOWN;
+  result     = GPU_ERROR_BACKEND_FAILURE;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    if ([error.domain isEqualToString:MTL4CommandQueueErrorDomain]) {
+      switch ((MTL4CommandQueueError)error.code) {
+        case MTL4CommandQueueErrorOutOfMemory:
+          type   = GPU_DEVICE_ERROR_OUT_OF_MEMORY;
+          result = GPU_ERROR_OUT_OF_MEMORY;
+          break;
+        case MTL4CommandQueueErrorDeviceRemoved:
+          type       = GPU_DEVICE_ERROR_LOST;
+          lostReason = GPU_DEVICE_LOST_REASON_REMOVED;
+          break;
+        case MTL4CommandQueueErrorAccessRevoked:
+          type       = GPU_DEVICE_ERROR_LOST;
+          lostReason = GPU_DEVICE_LOST_REASON_DRIVER_ERROR;
+          break;
+        default:
+          break;
+      }
+    }
   }
-}
+  if ([error.domain isEqualToString:MTLCommandBufferErrorDomain]) {
+    switch ((MTLCommandBufferError)error.code) {
+      case MTLCommandBufferErrorOutOfMemory:
+        type   = GPU_DEVICE_ERROR_OUT_OF_MEMORY;
+        result = GPU_ERROR_OUT_OF_MEMORY;
+        break;
+      case MTLCommandBufferErrorAccessRevoked:
+        type       = GPU_DEVICE_ERROR_LOST;
+        lostReason = GPU_DEVICE_LOST_REASON_DRIVER_ERROR;
+        break;
+#if TARGET_OS_OSX
+      case MTLCommandBufferErrorDeviceRemoved:
+        type       = GPU_DEVICE_ERROR_LOST;
+        lostReason = GPU_DEVICE_LOST_REASON_REMOVED;
+        break;
 #endif
+      default:
+        break;
+    }
+  }
+
+  detail = error ? error.localizedDescription.UTF8String : NULL;
+  snprintf(message,
+           sizeof(message),
+           "Metal command buffer failed%s%s",
+           detail ? ": " : "",
+           detail ? detail : "");
+  gpuDeviceReportError(device, type, lostReason, result, message);
+}
 
 static
 GPU_HIDE
@@ -402,9 +449,9 @@ gpu_cmdoncomplete(GPUCommandBuffer * __restrict cmdb,
     return;
   }
 
-#if GPU_BUILD_WITH_VALIDATION
-  mt_logCommandBufferError(cmdb, mtlCmdb);
-#endif
+  if (mtlCmdb && mtlCmdb.status == MTLCommandBufferStatusError) {
+    mt_reportCommandBufferError(cmdb, mtlCmdb.error);
+  }
   gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
 }
 
@@ -413,26 +460,20 @@ GPU_HIDE
 void
 gpu_cmdoncomplete4(GPUCommandBuffer * __restrict cmdb,
                    id                        feedback) {
-#if GPU_BUILD_WITH_VALIDATION
   GPUDevice *device;
-#endif
 
   if (!cmdb) {
     return;
   }
 
-#if GPU_BUILD_WITH_VALIDATION
   device = cmdb->_queue ? cmdb->_queue->_device : NULL;
   if (@available(macOS 26.0, iOS 26.0, *)) {
     id<MTL4CommitFeedback> modernFeedback = feedback;
 
-    if (modernFeedback.error && device && device->runtimeConfig.enableVerboseLogs) {
-      NSLog(@"GPU Metal 4 command buffer failed: %@", modernFeedback.error);
+    if (modernFeedback.error && device) {
+      mt_reportCommandBufferError(cmdb, modernFeedback.error);
     }
   }
-#else
-  GPU__UNUSED(feedback);
-#endif
   gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
 }
 

@@ -44,6 +44,8 @@ struct GPUDevice {
   void                        *_pipelineCacheLock;
   void                        *_bindGroupCache;
   void                        *transientCpuPtr;
+  GPUDeviceErrorCallback       errorCallback;
+  void                        *errorUserData;
   GPUFeatureSet                enabledFeatures;
   GPUCacheStats                cacheStats;
   GPURuntimeConfig             runtimeConfig;
@@ -57,6 +59,7 @@ struct GPUDevice {
   GPUQueueFlagBits             queueFamilies;
   GPUBufferUsageFlags          transientBufferUsage;
   uint32_t                     transientFrameIndex;
+  uint32_t                     deviceLostReported;
   bool                         transientConfigured;
   bool                         transientFrameBegun;
   GPUFeature                   enabledFeatureStorage[
@@ -178,6 +181,14 @@ gpuDeviceRecordHotPathAlloc(GPUDevice *device, uint64_t sizeBytes);
 GPU_HIDE
 void
 gpuDeviceRecordHotPathFree(GPUDevice *device, uint64_t sizeBytes);
+
+GPU_HIDE
+void
+gpuDeviceReportError(GPUDevice           *device,
+                     GPUDeviceErrorType    type,
+                     GPUDeviceLostReason  lostReason,
+                     GPUResult            result,
+                     const char          *message);
 
 #if GPU_BUILD_WITH_VALIDATION
 static inline bool

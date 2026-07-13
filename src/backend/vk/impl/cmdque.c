@@ -67,19 +67,41 @@ vk__queueWait(GPUCommandQueueVk *queue) {
 #endif
 }
 
-#if GPU_BUILD_WITH_VALIDATION
 static void
-vk__logSubmitError(GPUCommandBuffer *cmdb, VkResult result) {
-  GPUDevice *device;
+vk__reportQueueError(GPUCommandBuffer *cmdb,
+                     const char       *operation,
+                     VkResult          result) {
+  GPUDeviceErrorType type;
+  GPUDevice          *device;
+  GPUResult           gpuResult;
+  char                message[96];
 
   device = cmdb && cmdb->_queue ? cmdb->_queue->_device : NULL;
-  if (device && device->runtimeConfig.enableVerboseLogs) {
-    fprintf(stderr, "GPU Vulkan command submission failed: %d\n", result);
+  if (!device) {
+    return;
   }
+
+  type      = GPU_DEVICE_ERROR_BACKEND;
+  gpuResult = GPU_ERROR_BACKEND_FAILURE;
+  if (result == VK_ERROR_DEVICE_LOST) {
+    type = GPU_DEVICE_ERROR_LOST;
+  } else if (result == VK_ERROR_OUT_OF_HOST_MEMORY ||
+             result == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
+    type      = GPU_DEVICE_ERROR_OUT_OF_MEMORY;
+    gpuResult = GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  snprintf(message,
+           sizeof(message),
+           "Vulkan %s failed: %d",
+           operation,
+           result);
+  gpuDeviceReportError(device,
+                       type,
+                       GPU_DEVICE_LOST_REASON_UNKNOWN,
+                       gpuResult,
+                       message);
 }
-#else
-#  define vk__logSubmitError(cmdb, result) ((void)0)
-#endif
 
 static void
 vk__recycleCommandBuffer(GPUCommandBuffer *cmdb) {
@@ -146,7 +168,7 @@ vk__completionLoop(GPUCommandQueueVk *queue) {
                              VK_TRUE,
                              UINT64_MAX);
     if (result != VK_SUCCESS) {
-      vk__logSubmitError(cmdb, result);
+      vk__reportQueueError(cmdb, "fence wait", result);
     }
 
     swapchain = native->presentSwapchain;
@@ -630,7 +652,7 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
     if (frameFenceReset) {
       (void)vk_restoreFrameFence(swapchain, frameSync);
     }
-    vk__logSubmitError(cmdb, result);
+    vk__reportQueueError(cmdb, "queue submit", result);
     gpuFinishCommandBuffer(cmdb, vk__recycleCommandBuffer);
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -648,7 +670,7 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
     presentInfo.pImageIndices      = &native->presentImageIndex;
     presentResult = vkQueuePresentKHR(queue->queRaw, &presentInfo);
     if (presentResult != VK_SUCCESS && presentResult != VK_SUBOPTIMAL_KHR) {
-      vk__logSubmitError(cmdb, presentResult);
+      vk__reportQueueError(cmdb, "present", presentResult);
       commitResult = GPU_ERROR_BACKEND_FAILURE;
     }
   }

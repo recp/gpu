@@ -49,22 +49,83 @@ dx12__queueWait(GPUCommandQueueDX12 *queue) {
                            INFINITE);
 }
 
-#if GPU_BUILD_WITH_VALIDATION
-static void
-dx12__logQueueError(GPUCommandQueueDX12 *queue,
-                    const char          *operation,
-                    HRESULT             result) {
-  GPUDevice *device;
+static GPUDevice *
+dx12__queueDevice(GPUCommandQueueDX12 *queue) {
+  return queue && queue->queue ? queue->queue->_device : NULL;
+}
 
-  device = queue && queue->queue ? queue->queue->_device : NULL;
-  if (device && device->runtimeConfig.enableVerboseLogs) {
-    fprintf(stderr,
-            "GPU Direct3D 12 %s failed: 0x%08lx\n",
-            operation,
-            (unsigned long)result);
+static bool
+dx12__lostReason(GPUCommandQueueDX12 *queue,
+                 HRESULT              result,
+                 GPUDeviceLostReason *outReason) {
+  GPUDeviceDX12 *native;
+  GPUDevice     *device;
+  HRESULT        removedReason;
+
+  device = dx12__queueDevice(queue);
+  native = device ? device->_priv : NULL;
+  removedReason = result;
+  if (result == DXGI_ERROR_DEVICE_REMOVED && native && native->d3dDevice) {
+    removedReason = native->d3dDevice->lpVtbl->GetDeviceRemovedReason(
+      native->d3dDevice
+    );
+    if (SUCCEEDED(removedReason)) {
+      removedReason = result;
+    }
+  }
+
+  switch (removedReason) {
+    case DXGI_ERROR_DEVICE_REMOVED:
+      *outReason = GPU_DEVICE_LOST_REASON_REMOVED;
+      return true;
+    case DXGI_ERROR_DEVICE_RESET:
+      *outReason = GPU_DEVICE_LOST_REASON_RESET;
+      return true;
+    case DXGI_ERROR_DEVICE_HUNG:
+      *outReason = GPU_DEVICE_LOST_REASON_HUNG;
+      return true;
+    case DXGI_ERROR_DRIVER_INTERNAL_ERROR:
+      *outReason = GPU_DEVICE_LOST_REASON_DRIVER_ERROR;
+      return true;
+    default:
+      return false;
   }
 }
 
+static void
+dx12__reportQueueError(GPUCommandQueueDX12 *queue,
+                       const char          *operation,
+                       HRESULT             result) {
+  GPUDeviceErrorType  type;
+  GPUDeviceLostReason lostReason;
+  GPUDevice          *device;
+  GPUResult           gpuResult;
+  char                message[128];
+
+  device = dx12__queueDevice(queue);
+  if (!device) {
+    return;
+  }
+
+  type       = GPU_DEVICE_ERROR_BACKEND;
+  lostReason = GPU_DEVICE_LOST_REASON_UNKNOWN;
+  gpuResult  = GPU_ERROR_BACKEND_FAILURE;
+  if (dx12__lostReason(queue, result, &lostReason)) {
+    type = GPU_DEVICE_ERROR_LOST;
+  } else if (result == E_OUTOFMEMORY) {
+    type      = GPU_DEVICE_ERROR_OUT_OF_MEMORY;
+    gpuResult = GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  snprintf(message,
+           sizeof(message),
+           "Direct3D 12 %s failed: 0x%08lx",
+           operation,
+           (unsigned long)result);
+  gpuDeviceReportError(device, type, lostReason, gpuResult, message);
+}
+
+#if GPU_BUILD_WITH_VALIDATION
 static void
 dx12__logDebugMessages(GPUCommandQueueDX12 *queue) {
   GPUDeviceDX12   *device;
@@ -112,8 +173,7 @@ dx12__logDebugMessages(GPUCommandQueueDX12 *queue) {
   infoQueue->lpVtbl->Release(infoQueue);
 }
 #else
-#  define dx12__logQueueError(queue, operation, result) ((void)0)
-#  define dx12__logDebugMessages(queue)                 ((void)0)
+#  define dx12__logDebugMessages(queue) ((void)0)
 #endif
 
 static void
@@ -164,7 +224,9 @@ dx12__waitForFence(GPUCommandQueueDX12 *queue, UINT64 value) {
     queue->completionFence
   );
   if (completedValue == UINT64_MAX) {
-    dx12__logQueueError(queue, "fence completion", DXGI_ERROR_DEVICE_REMOVED);
+    dx12__reportQueueError(queue,
+                           "fence completion",
+                           DXGI_ERROR_DEVICE_REMOVED);
     return false;
   }
   if (completedValue >= value) {
@@ -177,15 +239,15 @@ dx12__waitForFence(GPUCommandQueueDX12 *queue, UINT64 value) {
     queue->completionEvent
   );
   if (FAILED(result)) {
-    dx12__logQueueError(queue, "fence wait", result);
+    dx12__reportQueueError(queue, "fence wait", result);
     return false;
   }
 
   waitResult = WaitForSingleObject(queue->completionEvent, INFINITE);
   if (waitResult != WAIT_OBJECT_0) {
-    dx12__logQueueError(queue,
-                        "completion event wait",
-                        HRESULT_FROM_WIN32(GetLastError()));
+    dx12__reportQueueError(queue,
+                           "completion event wait",
+                           HRESULT_FROM_WIN32(GetLastError()));
     return false;
   }
   return true;
@@ -574,7 +636,7 @@ dx12_newCommandBuffer(GPUCommandQueue  * __restrict queue,
                                                  NULL);
   }
   if (FAILED(result)) {
-    dx12__logQueueError(native->owner, "command buffer reset", result);
+    dx12__reportQueueError(native->owner, "command buffer reset", result);
     dx12__recycleCommandBuffer(&native->commandBuffer);
     return NULL;
   }
@@ -635,7 +697,7 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
 
   result = native->commandList->lpVtbl->Close(native->commandList);
   if (FAILED(result)) {
-    dx12__logQueueError(queue, "command list close", result);
+    dx12__reportQueueError(queue, "command list close", result);
     dx12__logDebugMessages(queue);
     gpuFinishCommandBuffer(cmdb, dx12__recycleCommandBuffer);
     return GPU_ERROR_BACKEND_FAILURE;
@@ -655,7 +717,7 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
       swapchain->presentFlags
     );
     if (FAILED(presentResult)) {
-      dx12__logQueueError(queue, "present", presentResult);
+      dx12__reportQueueError(queue, "present", presentResult);
       commitResult = GPU_ERROR_BACKEND_FAILURE;
     }
   }
@@ -666,7 +728,7 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
                                                 queue->completionFence,
                                                 fenceValue);
   if (FAILED(result)) {
-    dx12__logQueueError(queue, "queue signal", result);
+    dx12__reportQueueError(queue, "queue signal", result);
     gpuFinishCommandBuffer(cmdb, NULL);
     return GPU_ERROR_BACKEND_FAILURE;
   }

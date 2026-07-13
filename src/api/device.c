@@ -76,6 +76,25 @@ gpu_validValidationMode(GPUValidationMode mode) {
 }
 
 static bool
+gpu_reportDeviceLostOnce(GPUDevice *device) {
+#if defined(_WIN32) || defined(WIN32)
+  return InterlockedCompareExchange((volatile LONG *)&device->deviceLostReported,
+                                    1,
+                                    0) == 0;
+#else
+  uint32_t expected;
+
+  expected = 0u;
+  return __atomic_compare_exchange_n(&device->deviceLostReported,
+                                     &expected,
+                                     1u,
+                                     false,
+                                     __ATOMIC_ACQ_REL,
+                                     __ATOMIC_ACQUIRE);
+#endif
+}
+
+static bool
 gpu_knownFeature(GPUFeature feature) {
   return feature >= GPU_FEATURE_COMPUTE &&
          feature <= GPU_FEATURE_VARIABLE_RATE_SHADING;
@@ -1112,19 +1131,76 @@ gpuDeviceRecordHotPathFree(GPUDevice *device, uint64_t sizeBytes) {
   device->currentFrameStats.hotPathFreeBytes += sizeBytes;
 }
 
+GPU_HIDE
+void
+gpuDeviceReportError(GPUDevice           *device,
+                     GPUDeviceErrorType    type,
+                     GPUDeviceLostReason  lostReason,
+                     GPUResult            result,
+                     const char          *message) {
+  GPUDeviceErrorCallback callback;
+  GPUDeviceErrorInfo     info;
+
+  if (!device || type < GPU_DEVICE_ERROR_VALIDATION ||
+      type > GPU_DEVICE_ERROR_LOST) {
+    return;
+  }
+  if (type == GPU_DEVICE_ERROR_LOST && !gpu_reportDeviceLostOnce(device)) {
+    return;
+  }
+
+  callback = device->errorCallback;
+  info.message    = message;
+  info.result     = result;
+  info.type       = type;
+  info.lostReason = type == GPU_DEVICE_ERROR_LOST
+                      ? lostReason
+                      : GPU_DEVICE_LOST_REASON_UNKNOWN;
+  if (callback) {
+    callback(device, &info, device->errorUserData);
+    return;
+  }
+  if (!device->runtimeConfig.enableVerboseLogs) {
+    return;
+  }
+
+  fprintf(stderr,
+          type == GPU_DEVICE_ERROR_VALIDATION
+            ? "GPU validation: %s\n"
+            : "GPU device error: %s\n",
+          message ? message : "unknown error");
+}
+
 #if GPU_BUILD_WITH_VALIDATION
 GPU_HIDE
 void
 gpuDeviceRecordValidationError(GPUDevice *device, const char *message) {
   if (!device ||
-      device->runtimeConfig.validationMode == GPU_VALIDATION_OFF ||
-      !device->runtimeConfig.enableVerboseLogs) {
+      device->runtimeConfig.validationMode == GPU_VALIDATION_OFF) {
     return;
   }
 
-  fprintf(stderr, "GPU validation: %s\n", message ? message : "validation error");
+  gpuDeviceReportError(device,
+                       GPU_DEVICE_ERROR_VALIDATION,
+                       GPU_DEVICE_LOST_REASON_UNKNOWN,
+                       GPU_ERROR_INVALID_ARGUMENT,
+                       message ? message : "validation error");
 }
 #endif
+
+GPU_EXPORT
+GPUResult
+GPUSetDeviceErrorCallback(GPUDevice              *device,
+                          GPUDeviceErrorCallback  callback,
+                          void                   *userData) {
+  if (!device) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  device->errorUserData = callback ? userData : NULL;
+  device->errorCallback = callback;
+  return GPU_OK;
+}
 
 GPU_EXPORT
 bool

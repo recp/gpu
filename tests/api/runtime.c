@@ -2,6 +2,91 @@
 #include "../../src/api/cmdqueue_internal.h"
 #include "../../src/api/device_internal.h"
 
+typedef struct GPUDeviceErrorCapture {
+  GPUDevice           *device;
+  GPUResult            result;
+  GPUDeviceErrorType   type;
+  GPUDeviceLostReason  lostReason;
+  uint32_t             count;
+  char                 message[96];
+} GPUDeviceErrorCapture;
+
+static void
+capture_device_error(GPUDevice                *device,
+                     const GPUDeviceErrorInfo *error,
+                     void                     *userData) {
+  GPUDeviceErrorCapture *capture;
+
+  capture = userData;
+  if (!capture || !error) {
+    return;
+  }
+
+  capture->device     = device;
+  capture->result     = error->result;
+  capture->type       = error->type;
+  capture->lostReason = error->lostReason;
+  capture->count++;
+  snprintf(capture->message,
+           sizeof(capture->message),
+           "%s",
+           error->message ? error->message : "");
+}
+
+static int
+check_device_error_callback(GPUDevice *device) {
+  GPUDeviceErrorCapture capture = {0};
+#if GPU_BUILD_WITH_VALIDATION
+  GPUCommandQueue       queue = {0};
+  GPUCommandBuffer      cmdb = {0};
+  GPURenderPassEncoder  pass = {0};
+#endif
+
+  if (GPUSetDeviceErrorCallback(NULL,
+                                capture_device_error,
+                                &capture) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUSetDeviceErrorCallback(device,
+                                capture_device_error,
+                                &capture) != GPU_OK) {
+    fprintf(stderr, "device error callback registration failed\n");
+    return 0;
+  }
+
+#if GPU_BUILD_WITH_VALIDATION
+  queue._device = device;
+  cmdb._queue   = &queue;
+  pass._cmdb    = &cmdb;
+  GPUDraw(&pass, 3u, 1u, 0u, 0u);
+  if (capture.count != 1u || capture.device != device ||
+      capture.type != GPU_DEVICE_ERROR_VALIDATION ||
+      capture.result != GPU_ERROR_INVALID_ARGUMENT ||
+      capture.lostReason != GPU_DEVICE_LOST_REASON_UNKNOWN ||
+      strcmp(capture.message,
+             "GPUDraw skipped: no render pipeline bound") != 0) {
+    fprintf(stderr, "device validation callback mismatch\n");
+    goto fail;
+  }
+#endif
+
+  if (GPUSetDeviceErrorCallback(device, NULL, &capture) != GPU_OK) {
+    fprintf(stderr, "device error callback clear failed\n");
+    goto fail;
+  }
+#if GPU_BUILD_WITH_VALIDATION
+  GPUDraw(&pass, 3u, 1u, 0u, 0u);
+  if (capture.count != 1u) {
+    fprintf(stderr, "cleared device callback was invoked\n");
+    goto fail;
+  }
+#endif
+
+  return 1;
+
+fail:
+  (void)GPUSetDeviceErrorCallback(device, NULL, NULL);
+  return 0;
+}
+
 static int
 check_runtime_config(GPUDevice *device) {
   GPURuntimeConfig config = {0};
@@ -394,6 +479,7 @@ check_warm_command_path(GPUDevice *device) {
 int
 gpu_test_runtime(GPUDevice *device) {
   return check_runtime_config(device) &&
+         check_device_error_callback(device) &&
          check_transient_validation(device) &&
          check_transient_fallback(device) &&
          check_stats_queries(device) &&

@@ -43,6 +43,32 @@ typedef struct GPUAdapterProperties {
 
 typedef struct GPUDevice GPUDevice;
 
+typedef enum GPUDeviceErrorType {
+  GPU_DEVICE_ERROR_VALIDATION = 0,
+  GPU_DEVICE_ERROR_OUT_OF_MEMORY,
+  GPU_DEVICE_ERROR_BACKEND,
+  GPU_DEVICE_ERROR_LOST
+} GPUDeviceErrorType;
+
+typedef enum GPUDeviceLostReason {
+  GPU_DEVICE_LOST_REASON_UNKNOWN = 0,
+  GPU_DEVICE_LOST_REASON_REMOVED,
+  GPU_DEVICE_LOST_REASON_RESET,
+  GPU_DEVICE_LOST_REASON_HUNG,
+  GPU_DEVICE_LOST_REASON_DRIVER_ERROR
+} GPUDeviceLostReason;
+
+typedef struct GPUDeviceErrorInfo {
+  const char          *message;
+  GPUResult            result;
+  GPUDeviceErrorType   type;
+  GPUDeviceLostReason  lostReason;
+} GPUDeviceErrorInfo;
+
+typedef void (*GPUDeviceErrorCallback)(GPUDevice                *device,
+                                       const GPUDeviceErrorInfo *error,
+                                       void                     *userData);
+
 typedef enum GPUFeature {
   GPU_FEATURE_COMPUTE = 0,
   GPU_FEATURE_TIMESTAMPS = 1,
@@ -209,6 +235,12 @@ GPUGetCacheStats(GPUDevice *device, GPUCacheStats *outStats);
 GPU_EXPORT
 GPUResult
 GPUConfigureRuntime(GPUDevice *device, const GPURuntimeConfig *config);
+
+GPU_EXPORT
+GPUResult
+GPUSetDeviceErrorCallback(GPUDevice              *device,
+                          GPUDeviceErrorCallback  callback,
+                          void                   *userData);
 
 GPU_EXPORT
 GPUResult
