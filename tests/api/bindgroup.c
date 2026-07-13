@@ -558,6 +558,20 @@ check_bind_group_layout_validation(GPUDevice *device) {
 
   GPUDestroyBindGroup(group);
 
+  bufferEntry.bindingType = GPU_BINDING_STORAGE_BUFFER;
+  group = (GPUBindGroup *)(uintptr_t)1u;
+  if (GPUCreateBindGroup(device, &groupInfo, &group) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      group != NULL) {
+    fprintf(stderr, "bind group accepted a mismatched resource tag\n");
+    GPUDestroyBindGroup(group);
+    GPUDestroyBuffer(storageOnlyBuffer);
+    GPUDestroyBuffer(uniformBuffer);
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  bufferEntry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
   bufferEntry.buffer.offset = 24u;
   group = (GPUBindGroup *)(uintptr_t)1u;
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT ||

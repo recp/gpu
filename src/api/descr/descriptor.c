@@ -46,16 +46,21 @@ typedef struct GPUBindGroupLayoutPriv {
 } GPUBindGroupLayoutPriv;
 
 typedef struct GPUBindGroupBindingPriv {
-  GPUBuffer      *buffer;
-  GPUTextureView *textureView;
-  GPUSampler     *sampler;
-  uint64_t        offset;
-  uint64_t        size;
-  uint32_t        binding;
-  uint32_t        arrayIndex;
-  uint32_t        layoutEntryIndex;
-  uint32_t        dynamicOffsetIndex;
-  GPUBindKind     kind;
+  union {
+    struct {
+      GPUBuffer *buffer;
+      uint64_t   offset;
+      uint64_t   size;
+    };
+
+    GPUTextureView *textureView;
+    GPUSampler     *sampler;
+  };
+  uint32_t    binding;
+  uint32_t    arrayIndex;
+  uint32_t    layoutEntryIndex;
+  uint32_t    dynamicOffsetIndex;
+  GPUBindKind kind;
 } GPUBindGroupBindingPriv;
 
 typedef struct GPUBindGroupPriv {
@@ -196,22 +201,30 @@ gpu_bindGroupHash(const GPUBindGroupPriv *priv) {
   hash   = GPU_BIND_GROUP_HASH(hash, priv->count);
   for (uint32_t i = 0u; i < priv->count; i++) {
     const GPUBindGroupBindingPriv *binding;
-    uintptr_t                      buffer;
-    uintptr_t                      textureView;
-    uintptr_t                      sampler;
+    uintptr_t                      resource;
 
-    binding     = &priv->bindings[i];
-    buffer      = (uintptr_t)binding->buffer;
-    textureView = (uintptr_t)binding->textureView;
-    sampler     = (uintptr_t)binding->sampler;
-    hash        = GPU_BIND_GROUP_HASH(hash, buffer);
-    hash        = GPU_BIND_GROUP_HASH(hash, textureView);
-    hash        = GPU_BIND_GROUP_HASH(hash, sampler);
-    hash        = GPU_BIND_GROUP_HASH(hash, binding->offset);
-    hash        = GPU_BIND_GROUP_HASH(hash, binding->size);
-    hash        = GPU_BIND_GROUP_HASH(hash, binding->binding);
-    hash        = GPU_BIND_GROUP_HASH(hash, binding->arrayIndex);
-    hash        = GPU_BIND_GROUP_HASH(hash, binding->kind);
+    binding = &priv->bindings[i];
+    hash    = GPU_BIND_GROUP_HASH(hash, binding->binding);
+    hash    = GPU_BIND_GROUP_HASH(hash, binding->arrayIndex);
+    hash    = GPU_BIND_GROUP_HASH(hash, binding->kind);
+    switch (binding->kind) {
+      case GPUBindKindBuffer:
+        resource = (uintptr_t)binding->buffer;
+        hash     = GPU_BIND_GROUP_HASH(hash, resource);
+        hash     = GPU_BIND_GROUP_HASH(hash, binding->offset);
+        hash     = GPU_BIND_GROUP_HASH(hash, binding->size);
+        break;
+      case GPUBindKindTexture:
+        resource = (uintptr_t)binding->textureView;
+        hash     = GPU_BIND_GROUP_HASH(hash, resource);
+        break;
+      case GPUBindKindSampler:
+        resource = (uintptr_t)binding->sampler;
+        hash     = GPU_BIND_GROUP_HASH(hash, resource);
+        break;
+      default:
+        break;
+    }
   }
   return hash;
 }
@@ -234,15 +247,31 @@ gpu_bindGroupsEqual(const GPUBindGroup *a, const GPUBindGroup *b) {
 
     aBinding = &aPriv->bindings[i];
     bBinding = &bPriv->bindings[i];
-    if (aBinding->buffer != bBinding->buffer ||
-        aBinding->textureView != bBinding->textureView ||
-        aBinding->sampler != bBinding->sampler ||
-        aBinding->offset != bBinding->offset ||
-        aBinding->size != bBinding->size ||
-        aBinding->binding != bBinding->binding ||
+    if (aBinding->binding != bBinding->binding ||
         aBinding->arrayIndex != bBinding->arrayIndex ||
         aBinding->kind != bBinding->kind) {
       return false;
+    }
+    switch (aBinding->kind) {
+      case GPUBindKindBuffer:
+        if (aBinding->buffer != bBinding->buffer ||
+            aBinding->offset != bBinding->offset ||
+            aBinding->size != bBinding->size) {
+          return false;
+        }
+        break;
+      case GPUBindKindTexture:
+        if (aBinding->textureView != bBinding->textureView) {
+          return false;
+        }
+        break;
+      case GPUBindKindSampler:
+        if (aBinding->sampler != bBinding->sampler) {
+          return false;
+        }
+        break;
+      default:
+        return false;
     }
   }
   return true;
@@ -726,39 +755,6 @@ gpu_bindGroupEntryHasResource(const GPUBindGroupLayoutEntry *layoutEntry,
 }
 
 static int
-gpu_bindGroupEntryResourceKind(const GPUBindGroupEntry *entry,
-                               GPUBindKind *outKind) {
-  GPUBindKind kind;
-  uint32_t resourceCount;
-
-  if (!entry || !outKind) {
-    return 0;
-  }
-
-  kind = GPUBindKindBuffer;
-  resourceCount = 0;
-  if (entry->buffer.buffer) {
-    kind = GPUBindKindBuffer;
-    resourceCount++;
-  }
-  if (entry->textureView) {
-    kind = GPUBindKindTexture;
-    resourceCount++;
-  }
-  if (entry->sampler) {
-    kind = GPUBindKindSampler;
-    resourceCount++;
-  }
-
-  if (resourceCount != 1) {
-    return 0;
-  }
-
-  *outKind = kind;
-  return 1;
-}
-
-static int
 gpu_bindingBufferUsage(GPUBindingType bindingType, GPUBufferUsageFlags *outUsage) {
   if (!outUsage) {
     return 0;
@@ -835,22 +831,17 @@ static int
 gpu_bindGroupEntryMatchesLayout(const GPUBindGroupLayoutEntry *layoutEntry,
                                 const GPUBindGroupEntry *entry) {
   GPUBindKind layoutKind;
-  GPUBindKind resourceKind;
 
-  layoutKind = gpu_layoutEntryKind(layoutEntry);
   if (!layoutEntry || !entry ||
       entry->binding != layoutEntry->binding ||
       entry->arrayIndex >= layoutEntry->arrayCount ||
-      !gpu_bindGroupEntryResourceKind(entry, &resourceKind) ||
-      resourceKind != layoutKind) {
+      entry->bindingType != layoutEntry->bindingType) {
     return 0;
   }
 
+  layoutKind = gpu_layoutEntryKind(layoutEntry);
   if (layoutEntry->immutableSampler &&
       layoutKind == GPUBindKindSampler) {
-    return 0;
-  }
-  if (entry->bindingType != layoutEntry->bindingType) {
     return 0;
   }
   if (!gpu_bindGroupBufferRangeValid(layoutEntry, entry)) {
@@ -2349,11 +2340,6 @@ GPUCreateBindGroup(GPUDevice *device,
       }
 
       binding                     = &priv->bindings[cursor++];
-      binding->buffer             = entry->buffer.buffer;
-      binding->textureView        = entry->textureView;
-      binding->sampler            = entry->sampler;
-      binding->offset             = entry->buffer.offset;
-      binding->size               = entry->buffer.size;
       binding->binding            = layoutEntry->binding;
       binding->arrayIndex         = arrayIndex;
       binding->layoutEntryIndex   = i;
@@ -2361,6 +2347,24 @@ GPUCreateBindGroup(GPUDevice *device,
                                       ? dynamicBase + arrayIndex
                                       : UINT32_MAX;
       binding->kind               = gpu_layoutEntryKind(layoutEntry);
+      switch (binding->kind) {
+        case GPUBindKindBuffer:
+          binding->buffer = entry->buffer.buffer;
+          binding->offset = entry->buffer.offset;
+          binding->size   = entry->buffer.size;
+          break;
+        case GPUBindKindTexture:
+          binding->textureView = entry->textureView;
+          break;
+        case GPUBindKindSampler:
+          binding->sampler = entry->sampler;
+          break;
+        default:
+          free(priv->bindings);
+          free(priv);
+          free(group);
+          return GPU_ERROR_INVALID_ARGUMENT;
+      }
     }
   }
 
@@ -2584,11 +2588,21 @@ gpuForEachBindGroupBinding(GPUBindGroup *group,
     binding     = &priv->bindings[i];
 
     memset(&view, 0, sizeof(view));
-    view.buffer           = binding->buffer;
-    view.textureView      = binding->textureView;
-    view.sampler          = binding->sampler;
-    view.offset           = binding->offset;
-    view.size             = binding->size;
+    switch (binding->kind) {
+      case GPUBindKindBuffer:
+        view.buffer = binding->buffer;
+        view.offset = binding->offset;
+        view.size   = binding->size;
+        break;
+      case GPUBindKindTexture:
+        view.textureView = binding->textureView;
+        break;
+      case GPUBindKindSampler:
+        view.sampler = binding->sampler;
+        break;
+      default:
+        return 0;
+    }
     view.visibility       = layoutEntry->visibility;
     view.bindingType      = layoutEntry->bindingType;
     view.binding          = layout->backendBindings[binding->layoutEntryIndex];
@@ -2666,10 +2680,11 @@ gpuForEachBindGroupBindingWithDynamicOffsets(GPUPipelineLayout *pipelineLayout,
                                              const uint32_t *pDynamicOffsets,
                                              GPUBindGroupBindingFn fn,
                                              void *ctx) {
-  GPUBindGroupPriv *priv;
+  GPUBindGroupPriv       *priv;
   GPUBindGroupLayoutPriv *layout;
-  GPUPipelineLayoutPriv *pipeline;
-  uint32_t dynamicIndex;
+  GPUPipelineLayoutPriv  *pipeline;
+  uint32_t                dynamicIndex;
+
   if (!fn ||
       !gpuValidateBindGroupDynamicOffsets(pipelineLayout,
                                           groupIndex,
@@ -2679,8 +2694,8 @@ gpuForEachBindGroupBindingWithDynamicOffsets(GPUPipelineLayout *pipelineLayout,
     return 0;
   }
 
-  priv = gpu_groupPriv(group);
-  layout = gpu_layoutPriv(priv ? priv->layout : NULL);
+  priv     = gpu_groupPriv(group);
+  layout   = gpu_layoutPriv(priv ? priv->layout : NULL);
   pipeline = gpu_pipelineLayoutPriv(pipelineLayout);
   if (!priv || !layout || !pipeline ||
       groupIndex >= pipeline->bindGroupLayoutCount ||
@@ -2703,7 +2718,9 @@ gpuForEachBindGroupBindingWithDynamicOffsets(GPUPipelineLayout *pipelineLayout,
       return 0;
     }
     layoutEntry = &layout->entries[binding->layoutEntryIndex];
-    effectiveOffset = binding->offset;
+    effectiveOffset = binding->kind == GPUBindKindBuffer
+                        ? binding->offset
+                        : 0u;
     if (binding->dynamicOffsetIndex != UINT32_MAX) {
       if (binding->kind != GPUBindKindBuffer ||
           binding->dynamicOffsetIndex >= dynamicOffsetCount ||
@@ -2720,11 +2737,21 @@ gpuForEachBindGroupBindingWithDynamicOffsets(GPUPipelineLayout *pipelineLayout,
     }
 
     memset(&view, 0, sizeof(view));
-    view.buffer           = binding->buffer;
-    view.textureView      = binding->textureView;
-    view.sampler          = binding->sampler;
-    view.offset           = effectiveOffset;
-    view.size             = binding->size;
+    switch (binding->kind) {
+      case GPUBindKindBuffer:
+        view.buffer = binding->buffer;
+        view.offset = effectiveOffset;
+        view.size   = binding->size;
+        break;
+      case GPUBindKindTexture:
+        view.textureView = binding->textureView;
+        break;
+      case GPUBindKindSampler:
+        view.sampler = binding->sampler;
+        break;
+      default:
+        return 0;
+    }
     view.visibility       = layoutEntry->visibility;
     view.bindingType      = layoutEntry->bindingType;
     view.binding          = pipeline->backendBindings[groupIndex]

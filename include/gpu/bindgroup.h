@@ -62,14 +62,16 @@ typedef struct GPUBindGroupEntry {
   uint32_t arrayIndex; /* 0 for non-array. */
   GPUBindingType bindingType;
 
-  struct {
-    GPUBuffer *buffer;
-    uint64_t offset;
-    uint64_t size;
-  } buffer;
+  union {
+    struct {
+      GPUBuffer *buffer;
+      uint64_t   offset;
+      uint64_t   size;
+    } buffer;
 
-  GPUTextureView *textureView;
-  GPUSampler *sampler;
+    GPUTextureView *textureView;
+    GPUSampler     *sampler;
+  };
 } GPUBindGroupEntry;
 
 typedef struct GPUBindGroupCreateInfo {
