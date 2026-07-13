@@ -21,10 +21,13 @@
 #include "../common.h"
 
 typedef struct GPUTransientChunk {
-  GPUBuffer *buffer;
-  void *cpuPtr;
-  uint64_t sizeBytes;
+  GPUBuffer                *buffer;
+  void                     *cpuPtr;
   struct GPUTransientChunk *next;
+  uint64_t                  sizeBytes;
+  uint64_t                  offset;
+  GPUBufferUsageFlags       usage;
+  uint32_t                  frameIndex;
 } GPUTransientChunk;
 
 typedef struct GPUPipelineCache GPUPipelineCache;
@@ -59,6 +62,36 @@ struct GPUDevice {
     GPU_FEATURE_VARIABLE_RATE_SHADING + 1u
   ];
 };
+
+static inline void
+gpuDeviceAdvanceFrameSlot(GPUDevice *device) {
+  GPUTransientChunk *chunk;
+  uint32_t           nextFrameIndex;
+
+  if (!device || !device->transientConfigured) {
+    return;
+  }
+
+  nextFrameIndex = device->transientFrameIndex + 1u;
+  if (nextFrameIndex >= device->transientConfig.framesInFlight) {
+    nextFrameIndex = 0u;
+  }
+  if (device->transientFrameBegun &&
+      nextFrameIndex <= device->transientFrameIndex) {
+    device->allocatorStats.ringWrapCount++;
+  }
+
+  device->transientFrameIndex             = nextFrameIndex;
+  device->transientFrameOffset            = 0u;
+  device->transientFrameBegun             = true;
+  device->allocatorStats.ringUsedBytes    = 0u;
+
+  for (chunk = device->transientChunks; chunk; chunk = chunk->next) {
+    if (chunk->frameIndex == nextFrameIndex) {
+      chunk->offset = 0u;
+    }
+  }
+}
 
 static inline GPUApi *
 gpuDeviceApi(const GPUDevice *device) {

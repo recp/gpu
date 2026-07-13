@@ -197,6 +197,7 @@ check_transient_validation(GPUDevice *device) {
 static int
 check_transient_fallback(GPUDevice *device) {
   GPUTransientAllocatorConfig config = {0};
+  GPUTransientBufferSlice firstSlice;
   GPUTransientBufferSlice slice;
   GPUAllocatorStats stats;
 
@@ -234,17 +235,42 @@ check_transient_fallback(GPUDevice *device) {
                                  GPU_BUFFER_USAGE_UNIFORM,
                                  128u,
                                  16u,
-                                 &slice) != GPU_OK ||
-      !slice.buffer ||
-      !slice.cpuPtr ||
-      slice.offset != 0u ||
-      slice.sizeBytes != 128u) {
+                                 &firstSlice) != GPU_OK ||
+      !firstSlice.buffer ||
+      !firstSlice.cpuPtr ||
+      firstSlice.offset != 0u ||
+      firstSlice.sizeBytes != 128u) {
     fprintf(stderr, "transient fallback alloc failed\n");
     return 0;
   }
+  if (GPUAllocateTransientBuffer(device,
+                                 GPU_BUFFER_USAGE_UNIFORM,
+                                 128u,
+                                 16u,
+                                 &slice) != GPU_OK ||
+      slice.buffer != firstSlice.buffer ||
+      slice.offset != 128u ||
+      slice.cpuPtr == firstSlice.cpuPtr) {
+    fprintf(stderr, "transient fallback chunk suballocation failed\n");
+    return 0;
+  }
   if (GPUGetAllocatorStats(device, &stats) != GPU_OK ||
-      stats.uploadStallCount != 1u) {
+      stats.uploadStallCount != 2u) {
     fprintf(stderr, "transient fallback stall stat is wrong\n");
+    return 0;
+  }
+
+  gpuDeviceAdvanceFrameSlot(device);
+  GPUResetStats(device);
+  if (GPUAllocateTransientBuffer(device,
+                                 GPU_BUFFER_USAGE_UNIFORM,
+                                 128u,
+                                 16u,
+                                 &slice) != GPU_OK ||
+      slice.buffer != firstSlice.buffer ||
+      slice.offset != 0u ||
+      device->currentFrameStats.hotPathAllocCount != 0u) {
+    fprintf(stderr, "transient fallback chunk reuse failed\n");
     return 0;
   }
 

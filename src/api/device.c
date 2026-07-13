@@ -477,21 +477,45 @@ static GPUResult
 gpu_allocateTransientChunk(GPUDevice *device,
                            GPUBufferUsageFlags usage,
                            uint64_t sizeBytes,
+                           uint64_t alignment,
                            GPUTransientBufferSlice *outSlice) {
   GPUTransientChunk *chunk;
-  GPUBuffer *buffer;
-  void *cpuPtr;
-  uint64_t chunkBytes;
-  GPUResult result;
+  GPUBuffer         *buffer;
+  void              *cpuPtr;
+  uint64_t           alignedOffset;
+  uint64_t           endOffset;
+  uint64_t           chunkBytes;
+  GPUResult          result;
 
   if (!device->transientConfig.allowChunkFallback) {
     device->allocatorStats.uploadStallCount++;
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
+  for (chunk = device->transientChunks; chunk; chunk = chunk->next) {
+    if (chunk->frameIndex != device->transientFrameIndex ||
+        (usage & ~chunk->usage) != 0u ||
+        !gpu_alignUp(chunk->offset, alignment, &alignedOffset) ||
+        gpu_u64AddOverflow(alignedOffset, sizeBytes, &endOffset) ||
+        endOffset > chunk->sizeBytes) {
+      continue;
+    }
+
+    chunk->offset       = endOffset;
+    outSlice->buffer    = chunk->buffer;
+    outSlice->offset    = alignedOffset;
+    outSlice->sizeBytes = sizeBytes;
+    outSlice->cpuPtr    = (uint8_t *)chunk->cpuPtr + alignedOffset;
+    device->allocatorStats.uploadStallCount++;
+    return GPU_OK;
+  }
+
+  if (!gpu_alignUp(sizeBytes, alignment, &endOffset)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
   chunkBytes = device->transientConfig.chunkBytes;
-  if (chunkBytes < sizeBytes) {
-    chunkBytes = sizeBytes;
+  if (chunkBytes < endOffset) {
+    chunkBytes = endOffset;
   }
 
   chunk = calloc(1, sizeof(*chunk));
@@ -507,11 +531,14 @@ gpu_allocateTransientChunk(GPUDevice *device,
     return result;
   }
 
-  chunk->buffer = buffer;
-  chunk->cpuPtr = cpuPtr;
-  chunk->sizeBytes = chunkBytes;
-  chunk->next = device->transientChunks;
-  device->transientChunks = chunk;
+  chunk->buffer     = buffer;
+  chunk->cpuPtr     = cpuPtr;
+  chunk->next       = device->transientChunks;
+  chunk->sizeBytes  = chunkBytes;
+  chunk->offset     = sizeBytes;
+  chunk->usage      = usage;
+  chunk->frameIndex = device->transientFrameIndex;
+  device->transientChunks  = chunk;
 
   device->allocatorStats.uploadStallCount++;
   device->currentFrameStats.hotPathAllocCount++;
@@ -920,7 +947,11 @@ GPUAllocateTransientBuffer(GPUDevice *device,
   }
 
   if (endOffset > device->transientConfig.ringBytesPerFrame) {
-    return gpu_allocateTransientChunk(device, usage, sizeBytes, outSlice);
+    return gpu_allocateTransientChunk(device,
+                                      usage,
+                                      sizeBytes,
+                                      alignment,
+                                      outSlice);
   }
 
   frameBaseOffset = (uint64_t)device->transientFrameIndex *
@@ -980,30 +1011,12 @@ GPUResetStats(GPUDevice *device) {
 GPU_HIDE
 void
 gpuDeviceBeginFrame(GPUDevice *device) {
-  uint32_t nextFrameIndex;
-
   if (!device) {
     return;
   }
 
   memset(&device->currentFrameStats, 0, sizeof(device->currentFrameStats));
-  if (!device->transientConfigured) {
-    return;
-  }
-
-  nextFrameIndex = device->transientFrameIndex + 1u;
-  if (nextFrameIndex >= device->transientConfig.framesInFlight) {
-    nextFrameIndex = 0;
-  }
-  if (device->transientFrameBegun &&
-      nextFrameIndex <= device->transientFrameIndex) {
-    device->allocatorStats.ringWrapCount++;
-  }
-
-  device->transientFrameIndex = nextFrameIndex;
-  device->transientFrameOffset = 0;
-  device->transientFrameBegun = true;
-  device->allocatorStats.ringUsedBytes = 0;
+  gpuDeviceAdvanceFrameSlot(device);
 }
 
 GPU_HIDE
