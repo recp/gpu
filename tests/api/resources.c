@@ -731,10 +731,82 @@ check_resource_validation(GPUDevice *device) {
   return 1;
 }
 
+static int
+check_cube_view_validation(GPUDevice *device) {
+  typedef struct CubeViewCase {
+    GPUTextureViewType viewType;
+    uint32_t           baseLayer;
+    uint32_t           layerCount;
+    bool               valid;
+  } CubeViewCase;
+
+  static const CubeViewCase cases[] = {
+    {GPU_TEXTURE_VIEW_CUBE,       0u,  6u, true},
+    {GPU_TEXTURE_VIEW_CUBE,       6u,  6u, false},
+    {GPU_TEXTURE_VIEW_CUBE,       0u, 12u, false},
+    {GPU_TEXTURE_VIEW_CUBE_ARRAY, 0u,  6u, true},
+    {GPU_TEXTURE_VIEW_CUBE_ARRAY, 6u,  6u, true},
+    {GPU_TEXTURE_VIEW_CUBE_ARRAY, 1u,  6u, false},
+    {GPU_TEXTURE_VIEW_CUBE_ARRAY, 6u,  5u, false}
+  };
+  GPUTexture               *texture;
+  GPUTextureView           *view;
+  GPUTextureCreateInfo      textureInfo = {0};
+  GPUTextureViewCreateInfo  viewInfo    = {0};
+  GPUResult                 result;
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "api-cube-view-validation";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = 4u;
+  textureInfo.height           = 4u;
+  textureInfo.depthOrLayers    = 12u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED;
+  texture                      = NULL;
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
+    fprintf(stderr, "cube view validation texture creation failed\n");
+    return 0;
+  }
+
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.label            = "api-cube-view-validation";
+  viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  viewInfo.mipLevelCount    = 1u;
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(cases); i++) {
+    viewInfo.viewType        = cases[i].viewType;
+    viewInfo.baseArrayLayer  = cases[i].baseLayer;
+    viewInfo.arrayLayerCount = cases[i].layerCount;
+
+    view   = (GPUTextureView *)(uintptr_t)1u;
+    result = GPUCreateTextureView(texture, &viewInfo, &view);
+    if ((cases[i].valid && (result != GPU_OK || !view)) ||
+        (!cases[i].valid &&
+         (result != GPU_ERROR_INVALID_ARGUMENT || view != NULL))) {
+      fprintf(stderr,
+              "cube view validation case %u returned %d\n",
+              i,
+              result);
+      GPUDestroyTextureView(view);
+      GPUDestroyTexture(texture);
+      return 0;
+    }
+    GPUDestroyTextureView(view);
+  }
+
+  GPUDestroyTexture(texture);
+  return 1;
+}
+
 int
 gpu_test_resources(GPUDevice *device) {
   return check_destroy_null_handles() &&
          check_buffer_device_dispatch(device) &&
          check_texture_transfer_layout(device) &&
-         check_resource_validation(device);
+         check_resource_validation(device) &&
+         check_cube_view_validation(device);
 }
