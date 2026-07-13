@@ -417,6 +417,7 @@ struct GPUCommandQueueVk {
   uint32_t            familyIndex;
   uint32_t            queueIndex;
   uint32_t            timestampValidBits;
+  uint32_t            inFlightCount;
   bool                stopping;
   bool                workerStarted;
 };

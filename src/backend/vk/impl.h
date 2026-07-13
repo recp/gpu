@@ -48,6 +48,10 @@ vk_destroyCommandQueue(GPUCommandQueue *queue);
 
 GPU_HIDE
 GPUResult
+vk_waitDeviceIdle(GPUDevice * __restrict device);
+
+GPU_HIDE
+GPUResult
 vk_createBuffer(GPUDevice                 * __restrict device,
                 const GPUBufferCreateInfo * __restrict info,
                 GPUBuffer                ** __restrict outBuffer);

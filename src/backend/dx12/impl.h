@@ -26,6 +26,7 @@ GPU_HIDE GPUCommandQueue *dx12_createCommandQueue(GPUDevice *device,
                                                    GPUQueueFlagBits bits);
 GPU_HIDE void dx12_destroyCommandQueue(GPUCommandQueue *queue);
 GPU_HIDE bool dx12_waitCommandQueueIdle(GPUCommandQueueDX12 *queue);
+GPU_HIDE GPUResult dx12_waitDeviceIdle(GPUDevice * __restrict device);
 GPU_HIDE DXGI_FORMAT dx12_format(GPUFormat format);
 GPU_HIDE void dx12_getFormatCapabilities(
   const GPUAdapter      * __restrict adapter,

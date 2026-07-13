@@ -35,6 +35,7 @@
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
 #import <QuartzCore/CAMetalLayer.h>
+#import <dispatch/dispatch.h>
 #import <os/lock.h>
 
 typedef CALayer GPUViewLayer;
@@ -129,13 +130,14 @@ typedef struct MTCopyEncoder {
 typedef struct MTCommandBuffer MTCommandBuffer;
 
 typedef struct MTCommandQueue {
-  id<MTLCommandQueue> classic;
-  id<MTLCommandQueue> upload;
-  id                   modern;
-  MTCommandBuffer     *commands;
-  MTCommandBuffer     *freeCommands;
-  os_unfair_lock       poolLock;
-  MTCommandMode        mode;
+  id<MTLCommandQueue>  classic;
+  id<MTLCommandQueue>  upload;
+  id                    modern;
+  dispatch_group_t      inFlightGroup;
+  MTCommandBuffer      *commands;
+  MTCommandBuffer      *freeCommands;
+  os_unfair_lock        poolLock;
+  MTCommandMode         mode;
 } MTCommandQueue;
 
 struct MTCommandBuffer {

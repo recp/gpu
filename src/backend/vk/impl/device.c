@@ -832,5 +832,6 @@ vk_initDevice(GPUApiDevice *apiDevice) {
   apiDevice->getLimits                 = vk_getLimits;
   apiDevice->getFormatCapabilities     = vk_getFormatCapabilities;
   apiDevice->createDevice              = vk_createDevice;
+  apiDevice->waitIdle                  = vk_waitDeviceIdle;
   apiDevice->destroyDevice             = vk_destroyDevice;
 }

@@ -32,7 +32,9 @@ static uint32_t   gOwnershipFeatureCalls;
 static uint32_t   gOwnershipLimitsCalls;
 static uint32_t   gOwnershipFormatCalls;
 static uint32_t   gOwnershipDeviceCreateCalls;
+static uint32_t   gOwnershipDeviceWaitCalls;
 static uint32_t   gOwnershipDeviceDestroyCalls;
+static bool       gOwnershipDeviceDestroyOrderValid;
 static uint32_t   gOwnershipSurfaceCreateCalls;
 static uint32_t   gOwnershipSurfaceDestroyCalls;
 static uint32_t   gOwnershipInstanceDestroyCalls;
@@ -116,7 +118,17 @@ create_ownership_device(GPUAdapter               * __restrict adapter,
 static void
 destroy_ownership_device(GPUDevice * __restrict device) {
   (void)device;
+  if (gOwnershipDeviceWaitCalls != gOwnershipDeviceDestroyCalls + 1u) {
+    gOwnershipDeviceDestroyOrderValid = false;
+  }
   gOwnershipDeviceDestroyCalls++;
+}
+
+static GPUResult
+wait_ownership_device(GPUDevice * __restrict device) {
+  (void)device;
+  gOwnershipDeviceWaitCalls++;
+  return GPU_OK;
 }
 
 static GPUSurface *
@@ -184,6 +196,7 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   scopedApi.device.getFormatCapabilities =
     get_ownership_format_capabilities;
   scopedApi.device.createDevice         = create_ownership_device;
+  scopedApi.device.waitIdle             = wait_ownership_device;
   scopedApi.device.destroyDevice        = destroy_ownership_device;
   scopedApi.surface.createSurface       = create_ownership_surface;
   scopedApi.surface.destroySurface      = destroy_ownership_surface;
@@ -198,7 +211,9 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   gOwnershipLimitsCalls                 = 0u;
   gOwnershipFormatCalls                 = 0u;
   gOwnershipDeviceCreateCalls           = 0u;
+  gOwnershipDeviceWaitCalls             = 0u;
   gOwnershipDeviceDestroyCalls          = 0u;
+  gOwnershipDeviceDestroyOrderValid     = true;
   gOwnershipSurfaceCreateCalls          = 0u;
   gOwnershipSurfaceDestroyCalls         = 0u;
   gOwnershipInstanceDestroyCalls        = 0u;
@@ -277,7 +292,9 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
       gOwnershipPropertiesCalls != 1u ||
       gOwnershipFeatureCalls == 0u ||
       gOwnershipDeviceCreateCalls != 2u ||
+      gOwnershipDeviceWaitCalls != 2u ||
       gOwnershipDeviceDestroyCalls != 2u ||
+      !gOwnershipDeviceDestroyOrderValid ||
       gOwnershipSurfaceCreateCalls != 1u ||
       gOwnershipSurfaceDestroyCalls != 1u ||
       gOwnershipInstanceDestroyCalls != 1u) {
@@ -1232,6 +1249,64 @@ check_queue_submit_fence(GPUDevice *device) {
 }
 
 static int
+check_device_destroy_waits_for_submission(GPUAdapter *adapter) {
+  enum { submitCount = 8 };
+
+  QueueCompletionProbe completionProbe = {0};
+  GPUCommandBuffer     *buffers[submitCount];
+  GPUCommandQueue      *queue;
+  GPUDevice            *device;
+  GPUQueueSubmitInfo    submitInfo = {0};
+
+  device = GPUCreateDeviceWithDefaultQueues(adapter);
+  if (!device) {
+    fprintf(stderr, "failed to create device for destroy wait test\n");
+    return 0;
+  }
+
+  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  if (!queue) {
+    fprintf(stderr, "failed to get queue for destroy wait test\n");
+    GPUDestroyDevice(device);
+    return 0;
+  }
+
+  for (uint32_t i = 0u; i < submitCount; i++) {
+    buffers[i] = NULL;
+    if (GPUAcquireCommandBuffer(queue,
+                                "destroy-wait",
+                                &buffers[i]) != GPU_OK ||
+        !buffers[i]) {
+      fprintf(stderr, "failed to acquire command buffer for destroy wait test\n");
+      GPUDestroyDevice(device);
+      return 0;
+    }
+    GPUSetCommandBufferCompletionHandler(buffers[i],
+                                         &completionProbe,
+                                         queue_completion_probe);
+  }
+
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
+  submitInfo.commandBufferCount = submitCount;
+  submitInfo.ppCommandBuffers   = buffers;
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK) {
+    fprintf(stderr, "queue submit failed for destroy wait test\n");
+    GPUDestroyDevice(device);
+    return 0;
+  }
+
+  GPUDestroyDevice(device);
+  if (completionProbe.count != submitCount ||
+      completionProbe.sender != &completionProbe ||
+      !completionProbe.cmdb) {
+    fprintf(stderr, "device destroy returned before queue completion\n");
+    return 0;
+  }
+  return 1;
+}
+
+static int
 check_queue_submit_ex_semaphore(GPUDevice *device) {
   GPUCommandQueue *queue;
   GPUCommandBuffer *cmdb;
@@ -1384,6 +1459,7 @@ gpu_test_queue(GPUInstance *instance,
          check_queue_frame_device_dispatch(device) &&
          check_adapter_enumeration(instance) &&
          check_device_queue_create_validation(adapter) &&
+         check_device_destroy_waits_for_submission(adapter) &&
          check_queue_selection(device) &&
          check_queue_submit_fence(device) &&
          check_queue_submit_ex_semaphore(device);

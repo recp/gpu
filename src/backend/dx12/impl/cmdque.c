@@ -49,6 +49,15 @@ dx12__queueWait(GPUCommandQueueDX12 *queue) {
                            INFINITE);
 }
 
+static void
+dx12__waitForCompletions(GPUCommandQueueDX12 *queue) {
+  dx12__queueLock(queue);
+  while (queue->inFlightCount > 0u) {
+    dx12__queueWait(queue);
+  }
+  dx12__queueUnlock(queue);
+}
+
 static GPUDevice *
 dx12__queueDevice(GPUCommandQueueDX12 *queue) {
   return queue && queue->queue ? queue->queue->_device : NULL;
@@ -266,6 +275,13 @@ dx12__completionMain(LPVOID context) {
     completed = dx12__waitForFence(queue, native->fenceValue);
     gpuFinishCommandBuffer(cmdb,
                            completed ? dx12__recycleCommandBuffer : NULL);
+
+    dx12__queueLock(queue);
+    if (queue->inFlightCount > 0u) {
+      queue->inFlightCount--;
+    }
+    dx12__queueBroadcast(queue);
+    dx12__queueUnlock(queue);
   }
   return 0;
 }
@@ -477,6 +493,33 @@ dx12_waitCommandQueueIdle(GPUCommandQueueDX12 *queue) {
                  : WAIT_FAILED;
   CloseHandle(event);
   return SUCCEEDED(result) && waitResult == WAIT_OBJECT_0;
+}
+
+GPU_HIDE
+GPUResult
+dx12_waitDeviceIdle(GPUDevice * __restrict device) {
+  GPUDeviceDX12 *deviceDX12;
+  bool           idle;
+
+  deviceDX12 = device ? device->_priv : NULL;
+  if (!deviceDX12) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  idle = true;
+  for (uint32_t i = 0u; i < deviceDX12->nCreatedQueues; i++) {
+    GPUCommandQueueDX12 *queue;
+
+    queue = deviceDX12->createdQueues[i] ?
+      deviceDX12->createdQueues[i]->_priv : NULL;
+    if (!queue) {
+      continue;
+    }
+
+    idle = dx12_waitCommandQueueIdle(queue) && idle;
+    dx12__waitForCompletions(queue);
+  }
+  return idle ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
 }
 
 GPU_HIDE
@@ -735,6 +778,7 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
 
   native->fenceValue = fenceValue;
   dx12__queueLock(queue);
+  queue->inFlightCount++;
   if (queue->pendingTail) {
     queue->pendingTail->pendingNext = native;
   } else {

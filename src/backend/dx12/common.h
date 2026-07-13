@@ -331,6 +331,7 @@ struct GPUCommandQueueDX12 {
   HANDLE                  worker;
   UINT64                  nextFenceValue;
   D3D12_COMMAND_LIST_TYPE type;
+  uint32_t                inFlightCount;
   bool                    workerStarted;
   bool                    stopping;
   CRITICAL_SECTION        poolLock;

@@ -423,6 +423,25 @@ mt_createDevice(GPUPhysicalDevice        *phyDevice,
   return device;
 }
 
+static GPUResult
+mt_waitDeviceIdle(GPUDevice * __restrict device) {
+  GPUDeviceMT *deviceMT;
+
+  if (!device || !(deviceMT = device->_priv)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  for (uint32_t i = 0u; i < deviceMT->nCreatedQueues; i++) {
+    MTCommandQueue *queue;
+
+    queue = mt_commandQueue(deviceMT->createdQueues[i]);
+    if (queue && queue->inFlightGroup) {
+      dispatch_group_wait(queue->inFlightGroup, DISPATCH_TIME_FOREVER);
+    }
+  }
+  return GPU_OK;
+}
+
 GPU_HIDE
 void
 mt_destroyDevice(GPUDevice * __restrict device) {
@@ -457,5 +476,6 @@ mt_initDevice(GPUApiDevice *apiDevice) {
   apiDevice->getLimits                 = mt_getLimits;
   apiDevice->getFormatCapabilities     = mt_getFormatCapabilities;
   apiDevice->createDevice              = mt_createDevice;
+  apiDevice->waitIdle                  = mt_waitDeviceIdle;
   apiDevice->destroyDevice             = mt_destroyDevice;
 }

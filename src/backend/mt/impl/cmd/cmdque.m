@@ -65,7 +65,13 @@ mt_newCommandQueue(GPUDevice * __restrict device) {
   } else {
     native->classic = [deviceMT->device newCommandQueue];
   }
-  if (!native->classic && !native->modern) {
+  native->inFlightGroup = dispatch_group_create();
+  if ((!native->classic && !native->modern) || !native->inFlightGroup) {
+    [native->classic release];
+    [native->modern release];
+    if (native->inFlightGroup) {
+      dispatch_release(native->inFlightGroup);
+    }
     free(native);
     free(que);
     return NULL;
@@ -90,6 +96,7 @@ mt_destroyCommandQueue(GPUCommandQueue * __restrict queue) {
   if (queue->_priv) {
     MTCommandQueue *native = mt_commandQueue(queue);
 
+    dispatch_group_wait(native->inFlightGroup, DISPATCH_TIME_FOREVER);
     command = native->commands;
     while (command) {
       next = command->next;
@@ -99,6 +106,7 @@ mt_destroyCommandQueue(GPUCommandQueue * __restrict queue) {
     [native->classic release];
     [native->upload release];
     [native->modern release];
+    dispatch_release(native->inFlightGroup);
     free(native);
   }
   free(queue);
@@ -336,6 +344,7 @@ mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
       [options addFeedbackHandler:^(id<MTL4CommitFeedback> feedback) {
         gpu_cmdoncomplete4(cmdb, feedback);
       }];
+      dispatch_group_enter(queue->inFlightGroup);
       [queue->modern commit:buffers
                        count:1u
                      options:options];
@@ -360,6 +369,7 @@ mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
   [mcb addCompletedHandler:^(id<MTLCommandBuffer> _Nonnull buffer) {
     gpu_cmdoncomplete(cmdb, buffer);
   }];
+  dispatch_group_enter(queue->inFlightGroup);
   [mcb commit];
   return GPU_OK;
 }
@@ -445,14 +455,22 @@ GPU_HIDE
 void
 gpu_cmdoncomplete(GPUCommandBuffer * __restrict cmdb,
                   id<MTLCommandBuffer>        mtlCmdb) {
+  MTCommandBuffer *native;
+  MTCommandQueue  *queue;
+
   if (!cmdb) {
     return;
   }
 
+  native = mt_commandBuffer(cmdb);
+  queue  = native ? native->owner : NULL;
   if (mtlCmdb && mtlCmdb.status == MTLCommandBufferStatusError) {
     mt_reportCommandBufferError(cmdb, mtlCmdb.error);
   }
   gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
+  if (queue) {
+    dispatch_group_leave(queue->inFlightGroup);
+  }
 }
 
 static
@@ -460,12 +478,16 @@ GPU_HIDE
 void
 gpu_cmdoncomplete4(GPUCommandBuffer * __restrict cmdb,
                    id                        feedback) {
-  GPUDevice *device;
+  MTCommandBuffer *native;
+  MTCommandQueue  *queue;
+  GPUDevice       *device;
 
   if (!cmdb) {
     return;
   }
 
+  native = mt_commandBuffer(cmdb);
+  queue  = native ? native->owner : NULL;
   device = cmdb->_queue ? cmdb->_queue->_device : NULL;
   if (@available(macOS 26.0, iOS 26.0, *)) {
     id<MTL4CommitFeedback> modernFeedback = feedback;
@@ -475,6 +497,9 @@ gpu_cmdoncomplete4(GPUCommandBuffer * __restrict cmdb,
     }
   }
   gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
+  if (queue) {
+    dispatch_group_leave(queue->inFlightGroup);
+  }
 }
 
 GPU_HIDE

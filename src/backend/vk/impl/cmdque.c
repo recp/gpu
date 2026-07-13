@@ -68,6 +68,15 @@ vk__queueWait(GPUCommandQueueVk *queue) {
 }
 
 static void
+vk__waitQueueIdle(GPUCommandQueueVk *queue) {
+  vk__queueLock(queue);
+  while (queue->inFlightCount > 0u) {
+    vk__queueWait(queue);
+  }
+  vk__queueUnlock(queue);
+}
+
+static void
 vk__reportQueueError(GPUCommandBuffer *cmdb,
                      const char       *operation,
                      VkResult          result) {
@@ -185,6 +194,13 @@ vk__completionLoop(GPUCommandQueueVk *queue) {
     native->presentImageIndex = 0u;
     native->presentFrameIndex = 0u;
     gpuFinishCommandBuffer(cmdb, vk__recycleCommandBuffer);
+
+    vk__queueLock(queue);
+    if (queue->inFlightCount > 0u) {
+      queue->inFlightCount--;
+    }
+    vk__queueBroadcast(queue);
+    vk__queueUnlock(queue);
   }
 }
 
@@ -203,6 +219,38 @@ vk_waitSwapChainIdle(GPUSwapChainVk *swapchain) {
     vk__queueWait(queue);
   }
   vk__queueUnlock(queue);
+}
+
+GPU_HIDE
+GPUResult
+vk_waitDeviceIdle(GPUDevice * __restrict device) {
+  GPUDeviceVk *deviceVk;
+  VkResult     result;
+
+  deviceVk = device ? device->_priv : NULL;
+  if (!deviceVk || !deviceVk->device) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  result = vkDeviceWaitIdle(deviceVk->device);
+  for (uint32_t i = 0u; i < deviceVk->nCreatedQueues; i++) {
+    GPUCommandQueueVk *queue;
+
+    queue = deviceVk->createdQueues[i] ?
+      deviceVk->createdQueues[i]->_priv : NULL;
+    if (queue) {
+      vk__waitQueueIdle(queue);
+    }
+  }
+
+  if (result == VK_SUCCESS) {
+    return GPU_OK;
+  }
+  if (result == VK_ERROR_OUT_OF_HOST_MEMORY ||
+      result == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  return GPU_ERROR_BACKEND_FAILURE;
 }
 
 #if defined(_WIN32) || defined(WIN32)
@@ -676,6 +724,7 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   }
 
   vk__queueLock(queue);
+  queue->inFlightCount++;
   if (swapchain) {
     swapchain->inFlightCommandCount++;
   }

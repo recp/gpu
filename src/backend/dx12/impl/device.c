@@ -557,5 +557,6 @@ dx12_initDevice(GPUApiDevice* apiDevice) {
   apiDevice->getLimits                 = dx12_getLimits;
   apiDevice->getFormatCapabilities     = dx12_getFormatCapabilities;
   apiDevice->createDevice              = dx12_createDevice;
+  apiDevice->waitIdle                  = dx12_waitDeviceIdle;
   apiDevice->destroyDevice             = dx12_destroyDevice;
 }

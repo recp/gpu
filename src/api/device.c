@@ -1367,6 +1367,9 @@ GPUDestroyDevice(GPUDevice * __restrict device) {
     return;
   }
 
+  if (api->device.waitIdle) {
+    (void)api->device.waitIdle(device);
+  }
   gpu_destroyTransientAllocator(device);
   gpuDestroyBindGroupCacheDevice(device);
   gpuDestroyPipelineCacheDevice(device);
