@@ -31,11 +31,6 @@ typedef struct GPUPipelineLayout GPUPipelineLayout;
 typedef struct GPUPipelineCache GPUPipelineCache;
 typedef struct GPUDevice GPUDevice;
 
-typedef enum GPUFunctionType {
-  GPU_FUNCTION_VERT = 1,
-  GPU_FUNCTION_FRAG = 2
-} GPUFunctionType;
-
 typedef enum GPUPrimitiveTopology {
   GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST = 0,
   GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP = 1,
@@ -54,14 +49,6 @@ typedef enum GPUFrontFace {
   GPU_FRONT_FACE_CCW = 0,
   GPU_FRONT_FACE_CW = 1
 } GPUFrontFace;
-
-typedef GPUFrontFace GPUWinding;
-
-#define GPUCullModeNone                 GPU_CULL_MODE_NONE
-#define GPUCullModeFront                GPU_CULL_MODE_FRONT
-#define GPUCullModeBack                 GPU_CULL_MODE_BACK
-#define GPUWindingCounterClockwise      GPU_FRONT_FACE_CCW
-#define GPUWindingClockwise             GPU_FRONT_FACE_CW
 
 typedef enum GPUBlendFactor {
   GPU_BLEND_FACTOR_ZERO = 0,

@@ -122,7 +122,7 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
 
 GPU_HIDE
 void
-mt_frontFace(GPURenderCommandEncoder *rce, GPUWinding winding) {
+mt_frontFace(GPURenderCommandEncoder *rce, GPUFrontFace frontFace) {
   MTRenderEncoder *native;
   MTLWinding       mtWinding;
 
@@ -130,7 +130,7 @@ mt_frontFace(GPURenderCommandEncoder *rce, GPUWinding winding) {
   if (!native) {
     return;
   }
-  mtWinding = winding == GPU_FRONT_FACE_CW ?
+  mtWinding = frontFace == GPU_FRONT_FACE_CW ?
     MTLWindingClockwise : MTLWindingCounterClockwise;
   if (native && native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {

@@ -89,7 +89,7 @@ typedef struct GPUApiRCE {
   (*renderCommandEncoder)(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass);
   
   void
-  (*frontFace)(GPURenderCommandEncoder *rce, GPUWinding winding);
+  (*frontFace)(GPURenderCommandEncoder *rce, GPUFrontFace frontFace);
   
   void
   (*cullMode)(GPURenderCommandEncoder *rce, GPUCullMode mode);

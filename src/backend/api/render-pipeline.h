@@ -25,6 +25,11 @@ extern "C" {
 
 typedef struct GPURenderPipelineState GPURenderPipelineState;
 
+typedef enum GPUFunctionType {
+  GPU_FUNCTION_VERT = 1,
+  GPU_FUNCTION_FRAG = 2
+} GPUFunctionType;
+
 typedef struct GPUApiRender {
   GPUResult
   (*createPipeline)(GPUDevice                         * __restrict device,
