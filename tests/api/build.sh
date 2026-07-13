@@ -9,6 +9,16 @@ US_ROOT="${USL_ROOT:-/Users/recp/Projects/recp/UniversalShading/us}"
 USTEST="${USL_USTEST:-$US_ROOT/build/ustest}"
 FIXTURE_DIR="${GPU_API_USL_FIXTURE_DIR:-/tmp/gpu-api-usl-fixtures}"
 EMBED_METAL="${GPU_USL_EMBED_METAL:-0}"
+BACKEND="${GPU_API_BACKEND:-metal}"
+VULKAN_SDK="${VULKAN_SDK:-$HOME/Library/Developer/VulkanSDK/1.4.350.1}"
+
+case "$BACKEND" in
+  metal|vulkan) ;;
+  *)
+    echo "unsupported GPU API test backend: $BACKEND" >&2
+    exit 2
+    ;;
+esac
 
 if [[ ! -x "$USTEST" ]]; then
   echo "ustest not found at $USTEST" >&2
@@ -58,7 +68,16 @@ for shader in "${shaders[@]}"; do
 done
 
 source "$ROOT/samples/common/build-library.sh"
-gpu_build_library "$ROOT" metal
+gpu_build_library "$ROOT" "$BACKEND"
+
+link_args=(
+  -Wl,-rpath,"$LIB_DIR"
+  -Wl,-rpath,"$US_LIB_DIR"
+  -Wl,-rpath,"$US_DS_LIB_DIR"
+)
+if [[ "$BACKEND" == "vulkan" ]]; then
+  link_args+=(-Wl,-rpath,"$VULKAN_SDK/macOS/lib")
+fi
 
 xcrun --sdk macosx clang \
   -std=c11 \
@@ -70,8 +89,12 @@ xcrun --sdk macosx clang \
   "$TEST_DIR"/*.c \
   -L"$LIB_DIR" \
   -lgpu \
-  -Wl,-rpath,"$LIB_DIR" \
+  "${link_args[@]}" \
   -o "$OUT_BIN"
+
+if [[ "$BACKEND" == "vulkan" ]]; then
+  export VK_ICD_FILENAMES="$VULKAN_SDK/macOS/share/vulkan/icd.d/MoltenVK_icd.json"
+fi
 
 "$OUT_BIN" \
   "$FIXTURE_DIR/reflection.us" \
@@ -82,4 +105,5 @@ xcrun --sdk macosx clang \
   "$FIXTURE_DIR/cube_texture.us" \
   "$FIXTURE_DIR/line_texture.us" \
   "$FIXTURE_DIR/volume_texture.us" \
-  "$FIXTURE_DIR/descriptor_arrays.us"
+  "$FIXTURE_DIR/descriptor_arrays.us" \
+  "$BACKEND"
