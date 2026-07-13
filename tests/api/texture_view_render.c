@@ -15,17 +15,18 @@ enum {
   VIEW_SECOND_WIDTH         = 2u,
   VIEW_SECOND_HEIGHT        = 2u,
   VIEW_ROW_PITCH            = 256u,
+  VIEW_DS_ROW_PITCH         = 512u,
   VIEW_SECOND_BUFFER_OFFSET = VIEW_ROW_PITCH * VIEW_FIRST_HEIGHT,
   VIEW_READBACK_BYTES       = VIEW_SECOND_BUFFER_OFFSET +
                               VIEW_ROW_PITCH * VIEW_SECOND_HEIGHT,
   VIEW_DS_FIRST_DEPTH_OFFSET    = 0u,
-  VIEW_DS_FIRST_STENCIL_OFFSET  = VIEW_ROW_PITCH * VIEW_FIRST_HEIGHT,
+  VIEW_DS_FIRST_STENCIL_OFFSET  = VIEW_DS_ROW_PITCH * VIEW_FIRST_HEIGHT,
   VIEW_DS_SECOND_DEPTH_OFFSET   = VIEW_DS_FIRST_STENCIL_OFFSET +
-                                  VIEW_ROW_PITCH * VIEW_FIRST_HEIGHT,
+                                  VIEW_DS_ROW_PITCH * VIEW_FIRST_HEIGHT,
   VIEW_DS_SECOND_STENCIL_OFFSET = VIEW_DS_SECOND_DEPTH_OFFSET +
-                                  VIEW_ROW_PITCH * VIEW_SECOND_HEIGHT,
+                                  VIEW_DS_ROW_PITCH * VIEW_SECOND_HEIGHT,
   VIEW_DS_READBACK_BYTES        = VIEW_DS_SECOND_STENCIL_OFFSET +
-                                  VIEW_ROW_PITCH * VIEW_SECOND_HEIGHT
+                                  VIEW_DS_ROW_PITCH * VIEW_SECOND_HEIGHT
 };
 
 static bool
@@ -91,13 +92,14 @@ view_render_pixels_equal(const uint8_t *pixels,
 static bool
 view_render_depths_equal(const uint8_t *pixels,
                          uint64_t       offset,
+                         uint32_t       rowPitch,
                          uint32_t       width,
                          uint32_t       height,
                          float          expected) {
   for (uint32_t y = 0u; y < height; y++) {
     const uint8_t *row;
 
-    row = pixels + offset + (uint64_t)y * VIEW_ROW_PITCH;
+    row = pixels + offset + (uint64_t)y * rowPitch;
     for (uint32_t x = 0u; x < width; x++) {
       float depth;
 
@@ -113,13 +115,14 @@ view_render_depths_equal(const uint8_t *pixels,
 static bool
 view_render_stencils_equal(const uint8_t *pixels,
                            uint64_t       offset,
+                           uint32_t       rowPitch,
                            uint32_t       width,
                            uint32_t       height,
                            uint8_t        expected) {
   for (uint32_t y = 0u; y < height; y++) {
     const uint8_t *row;
 
-    row = pixels + offset + (uint64_t)y * VIEW_ROW_PITCH;
+    row = pixels + offset + (uint64_t)y * rowPitch;
     for (uint32_t x = 0u; x < width; x++) {
       if (row[x] != expected) {
         return false;
@@ -575,11 +578,13 @@ gpu_test_texture_view_depth(GPUDevice *device) {
 
   firstMatches = view_render_depths_equal(pixels,
                                           0u,
+                                          VIEW_ROW_PITCH,
                                           VIEW_FIRST_WIDTH,
                                           VIEW_FIRST_HEIGHT,
                                           0.25f);
   secondMatches = view_render_depths_equal(pixels,
                                            VIEW_SECOND_BUFFER_OFFSET,
+                                           VIEW_ROW_PITCH,
                                            VIEW_SECOND_WIDTH,
                                            VIEW_SECOND_HEIGHT,
                                            0.75f);
@@ -635,9 +640,9 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
   GPUBarrierBatch            barrierBatch   = {0};
   GPUFormatCapabilities      formatCaps;
   GPUFormat                  format;
-  uint8_t                    depthUpload[VIEW_ROW_PITCH *
+  uint8_t                    depthUpload[VIEW_DS_ROW_PITCH *
                                          VIEW_FIRST_HEIGHT] = {0};
-  uint8_t                    stencilUpload[VIEW_ROW_PITCH *
+  uint8_t                    stencilUpload[VIEW_DS_ROW_PITCH *
                                            VIEW_FIRST_HEIGHT] = {0};
   uint8_t                    pixels[VIEW_DS_READBACK_BYTES] = {0};
   int                        ok;
@@ -719,11 +724,12 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
     for (uint32_t y = 0u; y < VIEW_FIRST_HEIGHT; y++) {
       float *depthRow;
 
-      depthRow = (float *)(depthUpload + (uint64_t)y * VIEW_ROW_PITCH);
+      depthRow = (float *)(depthUpload +
+                           (uint64_t)y * VIEW_DS_ROW_PITCH);
       for (uint32_t x = 0u; x < VIEW_FIRST_WIDTH; x++) {
         depthRow[x] = 0.625f;
       }
-      memset(stencilUpload + (uint64_t)y * VIEW_ROW_PITCH,
+      memset(stencilUpload + (uint64_t)y * VIEW_DS_ROW_PITCH,
              53,
              VIEW_FIRST_WIDTH);
     }
@@ -734,7 +740,7 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
     writeRegion.mipLevel       = VIEW_FIRST_MIP;
     writeRegion.baseArrayLayer = VIEW_FIRST_LAYER;
     writeRegion.layerCount     = 1u;
-    writeRegion.bytesPerRow    = VIEW_ROW_PITCH;
+    writeRegion.bytesPerRow    = VIEW_DS_ROW_PITCH;
     writeRegion.rowsPerImage   = VIEW_FIRST_HEIGHT;
     writeRegion.aspect         = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
     if (GPUQueueWriteTexture(queue,
@@ -797,7 +803,7 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
       fprintf(stderr, "texture view depth-stencil copy pass failed\n");
       goto cleanup;
     }
-    copyRegion.bytesPerRow                    = VIEW_ROW_PITCH;
+    copyRegion.bytesPerRow                    = VIEW_DS_ROW_PITCH;
     copyRegion.rowsPerImage                   = VIEW_FIRST_HEIGHT;
     copyRegion.texture.texture.mipLevel       = VIEW_FIRST_MIP;
     copyRegion.texture.texture.baseArrayLayer = VIEW_FIRST_LAYER;
@@ -850,21 +856,25 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
   if (readback &&
       (!view_render_depths_equal(pixels,
                                  VIEW_DS_FIRST_DEPTH_OFFSET,
+                                 VIEW_DS_ROW_PITCH,
                                  VIEW_FIRST_WIDTH,
                                  VIEW_FIRST_HEIGHT,
                                  0.625f) ||
        !view_render_stencils_equal(pixels,
                                    VIEW_DS_FIRST_STENCIL_OFFSET,
+                                   VIEW_DS_ROW_PITCH,
                                    VIEW_FIRST_WIDTH,
                                    VIEW_FIRST_HEIGHT,
                                    53u) ||
        !view_render_depths_equal(pixels,
                                  VIEW_DS_SECOND_DEPTH_OFFSET,
+                                 VIEW_DS_ROW_PITCH,
                                  VIEW_SECOND_WIDTH,
                                  VIEW_SECOND_HEIGHT,
                                  0.375f) ||
        !view_render_stencils_equal(pixels,
                                    VIEW_DS_SECOND_STENCIL_OFFSET,
+                                   VIEW_DS_ROW_PITCH,
                                    VIEW_SECOND_WIDTH,
                                    VIEW_SECOND_HEIGHT,
                                    37u))) {
