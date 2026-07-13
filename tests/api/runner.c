@@ -36,6 +36,9 @@ gpu_test_read_file(const char *path, uint64_t *outSize) {
 
 int
 gpu_run_api_tests(const GPUApiTest *tests, uint32_t count) {
+  const char *filter = getenv("GPU_API_TEST");
+  uint32_t    runCount = 0u;
+
   if (!tests && count > 0u) {
     fprintf(stderr, "api test runner missing test table\n");
     return 0;
@@ -46,13 +49,22 @@ gpu_run_api_tests(const GPUApiTest *tests, uint32_t count) {
       fprintf(stderr, "api test runner has invalid test at index %u\n", i);
       return 0;
     }
+    if (filter && strcmp(tests[i].name, filter) != 0) {
+      continue;
+    }
 
     printf("api:%s\n", tests[i].name);
     fflush(stdout);
+    runCount++;
     if (!tests[i].run(tests[i].ctx)) {
       fprintf(stderr, "api test failed: %s\n", tests[i].name);
       return 0;
     }
+  }
+
+  if (filter && runCount == 0u) {
+    fprintf(stderr, "api test filter matched nothing: %s\n", filter);
+    return 0;
   }
 
   return 1;

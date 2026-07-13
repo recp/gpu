@@ -308,9 +308,168 @@ cleanup:
   return ok;
 }
 
+static int
+check_pipeline_statistics_roundtrip(GPUAdapter *adapter,
+                                    const char *bytecodePath) {
+  GPUFeature                    feature         = GPU_FEATURE_PIPELINE_STATISTICS;
+  GPUDeviceCreateInfo           deviceInfo      = {0};
+  GPUComputePipelineCreateInfo  pipelineInfo    = {0};
+  GPUQuerySetCreateInfo         queryInfo       = {0};
+  GPUBufferCreateInfo           bufferInfo      = {0};
+  GPUQueueSubmitInfo            submitInfo      = {0};
+  GPUPipelineStatisticsResult   statistics      = {0};
+  GPUCommandBuffer             *submitBuffers[1];
+  GPUDevice                    *device          = NULL;
+  GPUCommandQueue              *queue           = NULL;
+  GPUShaderLibrary             *library         = NULL;
+  GPUShaderLayout              *shaderLayout    = NULL;
+  GPUComputePipeline           *pipeline        = NULL;
+  GPUQuerySet                  *set             = NULL;
+  GPUBuffer                    *buffer          = NULL;
+  GPUCommandBuffer             *cmdb            = NULL;
+  GPUComputePassEncoder        *pass            = NULL;
+  GPUFence                     *fence           = NULL;
+  void                         *bytecode         = NULL;
+  uint64_t                      bytecodeSize     = 0u;
+  int                           ok               = 0;
+
+  if (!GPUIsFeatureSupported(adapter, feature)) {
+    return 1;
+  }
+  if (!bytecodePath) {
+    return 0;
+  }
+
+  deviceInfo.chain.sType            = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  deviceInfo.chain.structSize       = sizeof(deviceInfo);
+  deviceInfo.required.featureCount  = 1u;
+  deviceInfo.required.pFeatures     = &feature;
+  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device) {
+    fprintf(stderr, "pipeline statistics feature device create failed\n");
+    goto cleanup;
+  }
+
+  queue    = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  bytecode = gpu_test_read_file(bytecodePath, &bytecodeSize);
+  if (!queue || !bytecode ||
+      GPUCreateShaderLibraryFromUSL(device,
+                                    bytecode,
+                                    bytecodeSize,
+                                    &library) != GPU_OK ||
+      !library ||
+      GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
+      !shaderLayout || !shaderLayout->pipelineLayout) {
+    fprintf(stderr, "pipeline statistics shader setup failed\n");
+    goto cleanup;
+  }
+
+  pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
+  pipelineInfo.label            = "api-pipeline-statistics";
+  pipelineInfo.layout           = shaderLayout->pipelineLayout;
+  pipelineInfo.library          = library;
+  pipelineInfo.entryPoint       = "api_cs";
+  if (GPUCreateComputePipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
+      !pipeline) {
+    fprintf(stderr, "pipeline statistics pipeline create failed\n");
+    goto cleanup;
+  }
+
+  queryInfo.chain.sType       = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
+  queryInfo.chain.structSize  = sizeof(queryInfo);
+  queryInfo.label             = "api-pipeline-statistics";
+  queryInfo.type              = GPU_QUERY_PIPELINE_STATISTICS;
+  queryInfo.count             = 1u;
+  queryInfo.pipelineStatsMask = GPU_PIPESTAT_COMPUTE_SHADER_INVOCATIONS;
+  if (GPUCreateQuerySet(device, &queryInfo, &set) != GPU_OK || !set) {
+    fprintf(stderr, "pipeline statistics query set create failed\n");
+    goto cleanup;
+  }
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "api-pipeline-statistics";
+  bufferInfo.sizeBytes        = sizeof(statistics);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
+                                GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
+    fprintf(stderr, "pipeline statistics resolve buffer create failed\n");
+    goto cleanup;
+  }
+
+  if (GPUAcquireCommandBuffer(queue, "api-pipeline-statistics", &cmdb) !=
+        GPU_OK || !cmdb) {
+    fprintf(stderr, "pipeline statistics command buffer acquire failed\n");
+    goto cleanup;
+  }
+
+  GPUBeginPipelineStatisticsQuery(cmdb, set, 0u);
+  pass = GPUBeginComputePass(cmdb, "api-pipeline-statistics");
+  if (!pass) {
+    fprintf(stderr, "pipeline statistics compute pass begin failed\n");
+    goto cleanup;
+  }
+  GPUBindComputePipeline(pass, pipeline);
+  GPUDispatch(pass, 4u, 1u, 1u);
+  GPUEndComputePass(pass);
+  pass = NULL;
+  GPUEndPipelineStatisticsQuery(cmdb, set);
+  GPUResolveQuerySet(cmdb, set, 0u, 1u, buffer, 0u);
+
+  if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
+    fprintf(stderr, "pipeline statistics fence create failed\n");
+    goto cleanup;
+  }
+
+  submitBuffers[0]              = cmdb;
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.ppCommandBuffers   = submitBuffers;
+  submitInfo.fence              = fence;
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
+      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+    fprintf(stderr, "pipeline statistics submit failed\n");
+    cmdb = NULL;
+    goto cleanup;
+  }
+  cmdb = NULL;
+
+  if (GPUQueueReadBuffer(queue,
+                         buffer,
+                         0u,
+                         &statistics,
+                         sizeof(statistics)) != GPU_OK ||
+      statistics.computeShaderInvocations < 4u) {
+    fprintf(stderr,
+            "pipeline statistics readback mismatch: %llu compute invocations\n",
+            (unsigned long long)statistics.computeShaderInvocations);
+    goto cleanup;
+  }
+
+  ok = 1;
+
+cleanup:
+  if (pass) {
+    GPUEndComputePass(pass);
+  }
+  free(bytecode);
+  GPUDestroyFence(fence);
+  GPUDestroyBuffer(buffer);
+  GPUDestroyQuerySet(set);
+  GPUDestroyComputePipeline(pipeline);
+  GPUDestroyShaderLayout(shaderLayout);
+  GPUDestroyShaderLibrary(library);
+  GPUDestroyDevice(device);
+  return ok;
+}
+
 int
-gpu_test_query(GPUAdapter *adapter, GPUDevice *device) {
+gpu_test_query(GPUAdapter *adapter,
+               GPUDevice  *device,
+               const char *computeBytecodePath) {
   return check_query_set_create_validation(device) &&
          check_query_commands_are_safe_noops() &&
+         check_pipeline_statistics_roundtrip(adapter, computeBytecodePath) &&
          check_timestamp_query_roundtrip(adapter);
 }

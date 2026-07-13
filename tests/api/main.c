@@ -47,7 +47,9 @@ static int
 run_query(void *ctx) {
   GPUApiTestContext *testCtx = ctx;
 
-  return gpu_test_query(testCtx->adapter, testCtx->device);
+  return gpu_test_query(testCtx->adapter,
+                        testCtx->device,
+                        testCtx->computeBytecodePath);
 }
 
 static int
