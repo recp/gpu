@@ -45,6 +45,131 @@ on_complete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 static int
+buffer_transfers_reuse(GPUDevice *device, GPUCommandQueue *queue) {
+  GPUCommandQueueVk     *native;
+  GPUBufferCreateInfo    bufferInfo = {0};
+  GPUBuffer             *buffer;
+  GPUBufferVk           *bufferNative;
+  GPUBuffer             *upload;
+  GPUBufferVk           *uploadNative;
+  GPUBuffer             *readback;
+  GPUBufferVk           *readbackNative;
+  VkCommandBuffer        command;
+  VkFence                fence;
+  VkBuffer               uploadBuffer;
+  VkBuffer               readbackBuffer;
+  VkDeviceMemory         uploadMemory;
+  VkDeviceMemory         readbackMemory;
+  void                  *uploadMapped;
+  void                  *readbackMapped;
+  uint64_t               uploadCapacity;
+  uint64_t               readbackCapacity;
+  uint32_t               value;
+  uint32_t               copied;
+  int                    ok;
+
+  native = queue ? queue->_priv : NULL;
+  buffer = NULL;
+  if (!native || !device) {
+    return 0;
+  }
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "vulkan-sync-buffer-transfer";
+  bufferInfo.sizeBytes        = 64u;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
+                                GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
+    return 0;
+  }
+
+  bufferNative = buffer->_priv;
+  value        = UINT32_C(0x12345678);
+  copied       = 0u;
+  ok = bufferNative && !bufferNative->mapped &&
+       GPUQueueWriteBuffer(queue,
+                           buffer,
+                           0u,
+                           &value,
+                           sizeof(value)) == GPU_OK &&
+       GPUQueueReadBuffer(queue,
+                          buffer,
+                          0u,
+                          &copied,
+                          sizeof(copied)) == GPU_OK &&
+       copied == value &&
+       native->transferCommand && native->transferFence &&
+       native->uploadStaging && native->readbackStaging &&
+       native->uploadCapacity >= sizeof(value) &&
+       native->readbackCapacity >= sizeof(value) &&
+       !native->transferOpen;
+  if (!ok) {
+    GPUDestroyBuffer(buffer);
+    return 0;
+  }
+
+  upload         = native->uploadStaging;
+  uploadNative   = upload->_priv;
+  readback       = native->readbackStaging;
+  readbackNative = readback->_priv;
+  if (!uploadNative || !uploadNative->buffer || !uploadNative->memory ||
+      !uploadNative->mapped ||
+      !readbackNative || !readbackNative->buffer || !readbackNative->memory ||
+      !readbackNative->mapped) {
+    GPUDestroyBuffer(buffer);
+    return 0;
+  }
+
+  command          = native->transferCommand;
+  fence            = native->transferFence;
+  uploadBuffer     = uploadNative->buffer;
+  uploadMemory     = uploadNative->memory;
+  uploadMapped     = uploadNative->mapped;
+  uploadCapacity   = native->uploadCapacity;
+  readbackBuffer   = readbackNative->buffer;
+  readbackMemory   = readbackNative->memory;
+  readbackMapped   = readbackNative->mapped;
+  readbackCapacity = native->readbackCapacity;
+  for (uint32_t i = 0u; i < 16u; i++) {
+    value  = UINT32_C(0xabc00000) + i;
+    copied = 0u;
+    if (GPUQueueWriteBuffer(queue,
+                            buffer,
+                            0u,
+                            &value,
+                            sizeof(value)) != GPU_OK ||
+        GPUQueueReadBuffer(queue,
+                           buffer,
+                           0u,
+                           &copied,
+                           sizeof(copied)) != GPU_OK ||
+        copied != value ||
+        native->transferCommand != command ||
+        native->transferFence != fence ||
+        native->uploadStaging != upload ||
+        native->readbackStaging != readback ||
+        native->uploadStaging->_priv != uploadNative ||
+        native->readbackStaging->_priv != readbackNative ||
+        uploadNative->buffer != uploadBuffer ||
+        uploadNative->memory != uploadMemory ||
+        uploadNative->mapped != uploadMapped ||
+        readbackNative->buffer != readbackBuffer ||
+        readbackNative->memory != readbackMemory ||
+        readbackNative->mapped != readbackMapped ||
+        native->uploadCapacity != uploadCapacity ||
+        native->readbackCapacity != readbackCapacity ||
+        native->transferOpen) {
+      ok = 0;
+      break;
+    }
+  }
+
+  GPUDestroyBuffer(buffer);
+  return ok;
+}
+
+static int
 texture_uploads_reuse(GPUDevice *device, GPUCommandQueue *queue) {
   GPUCommandQueueVk     *native;
   GPUTextureCreateInfo   textureInfo = {0};
@@ -96,10 +221,10 @@ texture_uploads_reuse(GPUDevice *device, GPUCommandQueue *queue) {
                             &writeRegion,
                             pixel,
                             sizeof(pixel)) == GPU_OK &&
-       native->uploadCommand && native->uploadFence &&
+       native->transferCommand && native->transferFence &&
        native->uploadStaging &&
        native->uploadCapacity >= sizeof(pixel) &&
-       !native->uploadOpen;
+       !native->transferOpen;
   if (!ok) {
     GPUDestroyTexture(texture);
     return 0;
@@ -112,8 +237,8 @@ texture_uploads_reuse(GPUDevice *device, GPUCommandQueue *queue) {
     GPUDestroyTexture(texture);
     return 0;
   }
-  command  = native->uploadCommand;
-  fence    = native->uploadFence;
+  command  = native->transferCommand;
+  fence    = native->transferFence;
   buffer   = uploadNative->buffer;
   memory   = uploadNative->memory;
   mapped   = uploadNative->mapped;
@@ -127,15 +252,15 @@ texture_uploads_reuse(GPUDevice *device, GPUCommandQueue *queue) {
                              &writeRegion,
                              pixel,
                              sizeof(pixel)) != GPU_OK ||
-        native->uploadCommand != command ||
-        native->uploadFence != fence ||
+        native->transferCommand != command ||
+        native->transferFence != fence ||
         native->uploadStaging != upload ||
         native->uploadStaging->_priv != uploadNative ||
         uploadNative->buffer != buffer ||
         uploadNative->memory != memory ||
         uploadNative->mapped != mapped ||
         native->uploadCapacity != capacity ||
-        native->uploadOpen) {
+        native->transferOpen) {
       ok = 0;
       break;
     }
@@ -720,7 +845,8 @@ main(void) {
     return 1;
   }
 
-  ok = texture_uploads_reuse(device, graphics) &&
+  ok = buffer_transfers_reuse(device, graphics) &&
+       texture_uploads_reuse(device, graphics) &&
        timestamp_roundtrip(device, graphics, fence) &&
        occlusion_roundtrip(device, graphics, fence) &&
        (!pipelineStatsSupported ||

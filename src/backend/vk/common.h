@@ -404,10 +404,11 @@ struct GPUCommandQueueVk {
   GPUCommandBufferVk *pendingHead;
   GPUCommandBufferVk *pendingTail;
   GPUBuffer          *uploadStaging;
+  GPUBuffer          *readbackStaging;
   VkQueue             queRaw;
   VkCommandPool       commandPool;
-  VkCommandBuffer     uploadCommand;
-  VkFence             uploadFence;
+  VkCommandBuffer     transferCommand;
+  VkFence             transferFence;
 #if defined(_WIN32) || defined(WIN32)
   HANDLE              worker;
   CRITICAL_SECTION    poolLock;
@@ -422,9 +423,10 @@ struct GPUCommandQueueVk {
   uint32_t            timestampValidBits;
   uint32_t            inFlightCount;
   uint64_t            uploadCapacity;
+  uint64_t            readbackCapacity;
   bool                stopping;
   bool                workerStarted;
-  bool                uploadOpen;
+  bool                transferOpen;
 };
 
 typedef struct GPUSurfaceVk {
@@ -611,18 +613,19 @@ vk_restoreFrameFence(GPUSwapChainVk *swapchain, GPUFrameSyncVk *sync);
 
 GPU_HIDE
 GPUResult
-vk_beginUpload(GPUCommandQueue *queue,
-               uint64_t         sizeBytes,
-               VkCommandBuffer *outCommand,
-               GPUBuffer      **outStaging);
+vk_beginTransfer(GPUCommandQueue *queue,
+                 bool             upload,
+                 uint64_t         sizeBytes,
+                 VkCommandBuffer *outCommand,
+                 GPUBuffer      **outStaging);
 
 GPU_HIDE
 GPUResult
-vk_submitUpload(GPUCommandQueue *queue);
+vk_submitTransfer(GPUCommandQueue *queue);
 
 GPU_HIDE
 void
-vk_abortUpload(GPUCommandQueue *queue);
+vk_abortTransfer(GPUCommandQueue *queue);
 
 GPU_HIDE
 void

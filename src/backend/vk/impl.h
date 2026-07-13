@@ -57,6 +57,12 @@ vk_createBuffer(GPUDevice                 * __restrict device,
                 GPUBuffer                ** __restrict outBuffer);
 
 GPU_HIDE
+GPUResult
+vk_createHostBuffer(GPUDevice                 * __restrict device,
+                    const GPUBufferCreateInfo * __restrict info,
+                    GPUBuffer                ** __restrict outBuffer);
+
+GPU_HIDE
 void
 vk_destroyBuffer(GPUBuffer * __restrict buffer);
 

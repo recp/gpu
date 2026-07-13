@@ -121,11 +121,11 @@ vk__destroyBufferState(GPUBufferVk *native) {
   }
 }
 
-GPU_HIDE
-GPUResult
-vk_createBuffer(GPUDevice                 * __restrict device,
-                const GPUBufferCreateInfo * __restrict info,
-                GPUBuffer                ** __restrict outBuffer) {
+static GPUResult
+vk__createBuffer(GPUDevice                 * __restrict device,
+                 const GPUBufferCreateInfo * __restrict info,
+                 bool                                   hostVisible,
+                 GPUBuffer                ** __restrict outBuffer) {
   GPUDeviceVk             *deviceVk;
   GPUBuffer               *buffer;
   GPUBufferVk             *native;
@@ -134,6 +134,8 @@ vk_createBuffer(GPUDevice                 * __restrict device,
   VkMemoryAllocateInfo     allocationInfo = {0};
   VkMemoryRequirements     requirements;
   VkMemoryPropertyFlags    memoryFlags;
+  VkMemoryPropertyFlags    preferredFlags;
+  VkMemoryPropertyFlags    requiredFlags;
   uint32_t                 memoryTypeIndex;
 
   if (!device || !device->_priv || !info || !outBuffer ||
@@ -156,10 +158,13 @@ vk_createBuffer(GPUDevice                 * __restrict device,
   }
 
   vkGetBufferMemoryRequirements(state.device, state.buffer, &requirements);
+  requiredFlags  = hostVisible ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+                               : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+  preferredFlags = hostVisible ? VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : 0u;
   if (!vk_findMemoryType(device,
                          requirements.memoryTypeBits,
-                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                         requiredFlags,
+                         preferredFlags,
                          &memoryTypeIndex,
                          &memoryFlags)) {
     vk__destroyBufferState(&state);
@@ -176,7 +181,11 @@ vk_createBuffer(GPUDevice                 * __restrict device,
       vkBindBufferMemory(state.device,
                          state.buffer,
                          state.memory,
-                         0u) != VK_SUCCESS ||
+                         0u) != VK_SUCCESS) {
+    vk__destroyBufferState(&state);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  if (hostVisible &&
       vkMapMemory(state.device,
                   state.memory,
                   0u,
@@ -188,7 +197,8 @@ vk_createBuffer(GPUDevice                 * __restrict device,
   }
 
   state.allocationSize = requirements.size;
-  state.coherent       = (memoryFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0u;
+  state.coherent       = hostVisible &&
+                         (memoryFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0u;
 
   buffer = calloc(1, sizeof(*buffer) + sizeof(*native));
   if (!buffer) {
@@ -207,6 +217,32 @@ vk_createBuffer(GPUDevice                 * __restrict device,
 }
 
 GPU_HIDE
+GPUResult
+vk_createBuffer(GPUDevice                 * __restrict device,
+                const GPUBufferCreateInfo * __restrict info,
+                GPUBuffer                ** __restrict outBuffer) {
+  const GPUBufferUsageFlags deviceLocal = GPU_BUFFER_USAGE_STORAGE |
+                                          GPU_BUFFER_USAGE_COPY_DST;
+  GPUResult result;
+  bool hostVisible;
+
+  hostVisible = info && (info->usage & deviceLocal) == 0u;
+  result      = vk__createBuffer(device, info, hostVisible, outBuffer);
+  if (result == GPU_ERROR_UNSUPPORTED && !hostVisible) {
+    result = vk__createBuffer(device, info, true, outBuffer);
+  }
+  return result;
+}
+
+GPU_HIDE
+GPUResult
+vk_createHostBuffer(GPUDevice                 * __restrict device,
+                    const GPUBufferCreateInfo * __restrict info,
+                    GPUBuffer                ** __restrict outBuffer) {
+  return vk__createBuffer(device, info, true, outBuffer);
+}
+
+GPU_HIDE
 void
 vk_destroyBuffer(GPUBuffer * __restrict buffer) {
   if (!buffer) {
@@ -217,6 +253,37 @@ vk_destroyBuffer(GPUBuffer * __restrict buffer) {
   free(buffer);
 }
 
+static void
+vk__bufferBarrier(VkCommandBuffer       command,
+                  VkBuffer              buffer,
+                  VkDeviceSize          offset,
+                  VkDeviceSize          size,
+                  VkPipelineStageFlags  srcStages,
+                  VkPipelineStageFlags  dstStages,
+                  VkAccessFlags         srcAccess,
+                  VkAccessFlags         dstAccess) {
+  VkBufferMemoryBarrier barrier = {0};
+
+  barrier.sType               = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+  barrier.srcAccessMask       = srcAccess;
+  barrier.dstAccessMask       = dstAccess;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.buffer              = buffer;
+  barrier.offset              = offset;
+  barrier.size                = size;
+  vkCmdPipelineBarrier(command,
+                       srcStages,
+                       dstStages,
+                       0u,
+                       0u,
+                       NULL,
+                       1u,
+                       &barrier,
+                       0u,
+                       NULL);
+}
+
 GPU_HIDE
 GPUResult
 vk_writeBuffer(GPUCommandQueue * __restrict queue,
@@ -224,27 +291,80 @@ vk_writeBuffer(GPUCommandQueue * __restrict queue,
                uint64_t                     dstOffset,
                const void      * __restrict data,
                uint64_t                     sizeBytes) {
-  GPUBufferVk         *native;
-  VkMappedMemoryRange  range = {0};
+  VkCommandBuffer       command;
+  GPUBuffer            *staging;
+  GPUBufferVk          *stagingVk;
+  GPUBufferVk          *native;
+  VkBufferCopy          copy = {0};
+  VkMappedMemoryRange   range = {0};
+  GPUResult             result;
 
   native = buffer ? buffer->_priv : NULL;
   if (!queue || !buffer || queue->_device != buffer->device ||
-      !native || !native->mapped || !data || sizeBytes > SIZE_MAX ||
+      !native || !native->buffer || !data || sizeBytes > SIZE_MAX ||
       !gpuBufferRangeValid(buffer, dstOffset, sizeBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  memcpy((uint8_t *)native->mapped + dstOffset, data, (size_t)sizeBytes);
-  if (!native->coherent) {
+  if (native->mapped) {
+    memcpy((uint8_t *)native->mapped + dstOffset, data, (size_t)sizeBytes);
+    if (!native->coherent) {
+      range.sType  = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+      range.memory = native->memory;
+      range.size   = VK_WHOLE_SIZE;
+      if (vkFlushMappedMemoryRanges(native->device, 1u, &range) != VK_SUCCESS) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+    return GPU_OK;
+  }
+
+  result = vk_beginTransfer(queue, true, sizeBytes, &command, &staging);
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  stagingVk = staging ? staging->_priv : NULL;
+  if (!stagingVk || !stagingVk->mapped || !stagingVk->buffer) {
+    vk_abortTransfer(queue);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  memcpy(stagingVk->mapped, data, (size_t)sizeBytes);
+  if (!stagingVk->coherent) {
     range.sType  = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-    range.memory = native->memory;
+    range.memory = stagingVk->memory;
     range.size   = VK_WHOLE_SIZE;
-    if (vkFlushMappedMemoryRanges(native->device, 1u, &range) != VK_SUCCESS) {
+    if (vkFlushMappedMemoryRanges(stagingVk->device,
+                                  1u,
+                                  &range) != VK_SUCCESS) {
+      vk_abortTransfer(queue);
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
 
-  return GPU_OK;
+  vk__bufferBarrier(command,
+                    native->buffer,
+                    dstOffset,
+                    sizeBytes,
+                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+                    VK_ACCESS_TRANSFER_WRITE_BIT);
+
+  copy.srcOffset = 0u;
+  copy.dstOffset = dstOffset;
+  copy.size      = sizeBytes;
+  vkCmdCopyBuffer(command, stagingVk->buffer, native->buffer, 1u, &copy);
+
+  vk__bufferBarrier(command,
+                    native->buffer,
+                    dstOffset,
+                    sizeBytes,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                    VK_ACCESS_TRANSFER_WRITE_BIT,
+                    VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT);
+  return vk_submitTransfer(queue);
 }
 
 GPU_HIDE
@@ -254,27 +374,87 @@ vk_readBuffer(GPUCommandQueue * __restrict queue,
               uint64_t                     srcOffset,
               void           * __restrict outData,
               uint64_t                     sizeBytes) {
-  GPUBufferVk         *native;
-  VkMappedMemoryRange  range = {0};
+  VkCommandBuffer       command;
+  GPUBuffer            *staging;
+  GPUBufferVk          *stagingVk;
+  GPUBufferVk          *native;
+  VkBufferCopy          copy = {0};
+  VkMappedMemoryRange   range = {0};
+  GPUResult             result;
 
   native = buffer ? buffer->_priv : NULL;
   if (!queue || !buffer || queue->_device != buffer->device ||
-      !native || !native->mapped || !outData || sizeBytes > SIZE_MAX ||
+      !native || !native->buffer || !outData || sizeBytes > SIZE_MAX ||
       !gpuBufferRangeValid(buffer, srcOffset, sizeBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!native->coherent) {
+  if (native->mapped) {
+    if (!native->coherent) {
+      range.sType  = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+      range.memory = native->memory;
+      range.size   = VK_WHOLE_SIZE;
+      if (vkInvalidateMappedMemoryRanges(native->device,
+                                         1u,
+                                         &range) != VK_SUCCESS) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+    memcpy(outData,
+           (const uint8_t *)native->mapped + srcOffset,
+           (size_t)sizeBytes);
+    return GPU_OK;
+  }
+
+  result = vk_beginTransfer(queue, false, sizeBytes, &command, &staging);
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  stagingVk = staging ? staging->_priv : NULL;
+  if (!stagingVk || !stagingVk->mapped || !stagingVk->buffer) {
+    vk_abortTransfer(queue);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  vk__bufferBarrier(command,
+                    native->buffer,
+                    srcOffset,
+                    sizeBytes,
+                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+                    VK_ACCESS_TRANSFER_READ_BIT);
+
+  copy.srcOffset = srcOffset;
+  copy.dstOffset = 0u;
+  copy.size      = sizeBytes;
+  vkCmdCopyBuffer(command, native->buffer, stagingVk->buffer, 1u, &copy);
+
+  vk__bufferBarrier(command,
+                    stagingVk->buffer,
+                    0u,
+                    sizeBytes,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_HOST_BIT,
+                    VK_ACCESS_TRANSFER_WRITE_BIT,
+                    VK_ACCESS_HOST_READ_BIT);
+
+  result = vk_submitTransfer(queue);
+  if (result != GPU_OK) {
+    return result;
+  }
+  if (!stagingVk->coherent) {
     range.sType  = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-    range.memory = native->memory;
+    range.memory = stagingVk->memory;
     range.size   = VK_WHOLE_SIZE;
-    if (vkInvalidateMappedMemoryRanges(native->device,
+    if (vkInvalidateMappedMemoryRanges(stagingVk->device,
                                        1u,
                                        &range) != VK_SUCCESS) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
-  memcpy(outData, (const uint8_t *)native->mapped + srcOffset, (size_t)sizeBytes);
+  memcpy(outData, stagingVk->mapped, (size_t)sizeBytes);
   return GPU_OK;
 }
 

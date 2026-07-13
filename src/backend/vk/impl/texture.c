@@ -1048,7 +1048,7 @@ vk_writeTexture(GPUCommandQueue             * __restrict queue,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  result = vk_beginUpload(queue, sizeBytes, &command, &staging);
+  result = vk_beginTransfer(queue, true, sizeBytes, &command, &staging);
   if (result != GPU_OK) {
     return result;
   }
@@ -1062,10 +1062,10 @@ vk_writeTexture(GPUCommandQueue             * __restrict queue,
     result = vk__recordTextureWrite(command, stagingVk->buffer, texture, region);
   }
   if (result != GPU_OK) {
-    vk_abortUpload(queue);
+    vk_abortTransfer(queue);
     return result;
   }
-  return vk_submitUpload(queue);
+  return vk_submitTransfer(queue);
 }
 
 GPU_HIDE

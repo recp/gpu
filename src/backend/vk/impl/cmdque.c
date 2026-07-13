@@ -336,7 +336,7 @@ vk__stopWorker(GPUCommandQueueVk *queue) {
 }
 
 static uint64_t
-vk__uploadCapacity(uint64_t sizeBytes) {
+vk__transferCapacity(uint64_t sizeBytes) {
   uint64_t capacity;
 
   capacity = 64u * 1024u;
@@ -350,7 +350,7 @@ vk__uploadCapacity(uint64_t sizeBytes) {
 }
 
 static bool
-vk__ensureUploadContext(GPUCommandQueueVk *queue, GPUDeviceVk *device) {
+vk__ensureTransferContext(GPUCommandQueueVk *queue, GPUDeviceVk *device) {
   VkCommandBufferAllocateInfo allocationInfo = {0};
   VkFenceCreateInfo           fenceInfo = {0};
   VkCommandBuffer             command;
@@ -359,10 +359,10 @@ vk__ensureUploadContext(GPUCommandQueueVk *queue, GPUDeviceVk *device) {
   if (!queue || !device || !device->device || !queue->commandPool) {
     return false;
   }
-  if (queue->uploadCommand && queue->uploadFence) {
+  if (queue->transferCommand && queue->transferFence) {
     return true;
   }
-  if (queue->uploadCommand || queue->uploadFence) {
+  if (queue->transferCommand || queue->transferFence) {
     return false;
   }
 
@@ -388,48 +388,58 @@ vk__ensureUploadContext(GPUCommandQueueVk *queue, GPUDeviceVk *device) {
     return false;
   }
 
-  queue->uploadCommand = command;
-  queue->uploadFence   = fence;
+  queue->transferCommand = command;
+  queue->transferFence   = fence;
   return true;
 }
 
 static bool
-vk__ensureUploadBuffer(GPUCommandQueueVk *queue, uint64_t sizeBytes) {
-  GPUBufferCreateInfo info = {0};
-  GPUBuffer          *staging;
-  uint64_t            capacity;
+vk__ensureTransferBuffer(GPUCommandQueueVk *queue,
+                         bool               upload,
+                         uint64_t           sizeBytes) {
+  GPUBufferCreateInfo  info = {0};
+  GPUBuffer           **slot;
+  GPUBuffer            *staging;
+  uint64_t             *currentCapacity;
+  uint64_t              capacity;
 
   if (!queue || sizeBytes == 0u) {
     return false;
   }
-  if (queue->uploadStaging && queue->uploadCapacity >= sizeBytes) {
+  slot            = upload ? &queue->uploadStaging : &queue->readbackStaging;
+  currentCapacity = upload ? &queue->uploadCapacity
+                           : &queue->readbackCapacity;
+  if (*slot && *currentCapacity >= sizeBytes) {
     return true;
   }
 
-  capacity = vk__uploadCapacity(sizeBytes);
+  capacity = vk__transferCapacity(sizeBytes);
   info.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   info.chain.structSize = sizeof(info);
-  info.label            = "vulkan-upload-staging";
+  info.label            = upload ? "vulkan-upload-staging"
+                                 : "vulkan-readback-staging";
   info.sizeBytes        = capacity;
-  info.usage            = GPU_BUFFER_USAGE_COPY_SRC;
+  info.usage            = upload ? GPU_BUFFER_USAGE_COPY_SRC
+                                 : GPU_BUFFER_USAGE_COPY_DST;
   staging               = NULL;
-  if (vk_createBuffer(queue->queue->_device, &info, &staging) != GPU_OK ||
+  if (vk_createHostBuffer(queue->queue->_device, &info, &staging) != GPU_OK ||
       !staging) {
     return false;
   }
 
-  vk_destroyBuffer(queue->uploadStaging);
-  queue->uploadStaging  = staging;
-  queue->uploadCapacity = capacity;
+  vk_destroyBuffer(*slot);
+  *slot            = staging;
+  *currentCapacity = capacity;
   return true;
 }
 
 GPU_HIDE
 GPUResult
-vk_beginUpload(GPUCommandQueue *queue,
-               uint64_t         sizeBytes,
-               VkCommandBuffer *outCommand,
-               GPUBuffer      **outStaging) {
+vk_beginTransfer(GPUCommandQueue *queue,
+                 bool             upload,
+                 uint64_t         sizeBytes,
+                 VkCommandBuffer *outCommand,
+                 GPUBuffer      **outStaging) {
   GPUCommandQueueVk       *native;
   GPUDeviceVk             *device;
   VkCommandBufferBeginInfo beginInfo = {0};
@@ -446,32 +456,33 @@ vk_beginUpload(GPUCommandQueue *queue,
   if (!native || !device || !device->device || !native->queRaw) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  if (native->uploadOpen) {
+  if (native->transferOpen) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  if (!vk__ensureUploadContext(native, device) ||
-      !vk__ensureUploadBuffer(native, sizeBytes)) {
+  if (!vk__ensureTransferContext(native, device) ||
+      !vk__ensureTransferBuffer(native, upload, sizeBytes)) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  if (vkResetCommandBuffer(native->uploadCommand, 0u) != VK_SUCCESS) {
+  if (vkResetCommandBuffer(native->transferCommand, 0u) != VK_SUCCESS) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
   beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-  if (vkBeginCommandBuffer(native->uploadCommand, &beginInfo) != VK_SUCCESS) {
+  if (vkBeginCommandBuffer(native->transferCommand, &beginInfo) != VK_SUCCESS) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  native->uploadOpen = true;
-  *outCommand        = native->uploadCommand;
-  *outStaging        = native->uploadStaging;
+  native->transferOpen = true;
+  *outCommand          = native->transferCommand;
+  *outStaging          = upload ? native->uploadStaging
+                                : native->readbackStaging;
   return GPU_OK;
 }
 
 GPU_HIDE
 GPUResult
-vk_submitUpload(GPUCommandQueue *queue) {
+vk_submitTransfer(GPUCommandQueue *queue) {
   GPUCommandQueueVk *native;
   GPUDeviceVk       *device;
   VkSubmitInfo       submitInfo = {0};
@@ -481,34 +492,34 @@ vk_submitUpload(GPUCommandQueue *queue) {
   native = queue ? queue->_priv : NULL;
   device = queue && queue->_device ? queue->_device->_priv : NULL;
   if (!native || !device || !device->device || !native->queRaw ||
-      !native->uploadOpen || !native->uploadCommand ||
-      !native->uploadFence || !native->uploadStaging) {
+      !native->transferOpen || !native->transferCommand ||
+      !native->transferFence) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  result             = vkEndCommandBuffer(native->uploadCommand);
-  native->uploadOpen = false;
+  result               = vkEndCommandBuffer(native->transferCommand);
+  native->transferOpen = false;
   if (result != VK_SUCCESS) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  result = vkResetFences(device->device, 1u, &native->uploadFence);
+  result = vkResetFences(device->device, 1u, &native->transferFence);
   if (result != VK_SUCCESS) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
   submitInfo.commandBufferCount = 1u;
-  submitInfo.pCommandBuffers    = &native->uploadCommand;
+  submitInfo.pCommandBuffers    = &native->transferCommand;
   result    = vkQueueSubmit(native->queRaw,
                             1u,
                             &submitInfo,
-                            native->uploadFence);
+                            native->transferFence);
   submitted = result == VK_SUCCESS;
   if (submitted) {
     result = vkWaitForFences(device->device,
                              1u,
-                             &native->uploadFence,
+                             &native->transferFence,
                              VK_TRUE,
                              UINT64_MAX);
   }
@@ -520,16 +531,16 @@ vk_submitUpload(GPUCommandQueue *queue) {
 
 GPU_HIDE
 void
-vk_abortUpload(GPUCommandQueue *queue) {
+vk_abortTransfer(GPUCommandQueue *queue) {
   GPUCommandQueueVk *native;
 
   native = queue ? queue->_priv : NULL;
-  if (!native || !native->uploadOpen || !native->uploadCommand) {
+  if (!native || !native->transferOpen || !native->transferCommand) {
     return;
   }
 
-  (void)vkEndCommandBuffer(native->uploadCommand);
-  native->uploadOpen = false;
+  (void)vkEndCommandBuffer(native->transferCommand);
+  native->transferOpen = false;
 }
 
 GPU_HIDE
@@ -612,7 +623,7 @@ vk_destroyCommandQueue(GPUCommandQueue *queue) {
   deviceVk = queue->_device ? queue->_device->_priv : NULL;
   if (native) {
     vk__stopWorker(native);
-    vk_abortUpload(queue);
+    vk_abortTransfer(queue);
     command = native->commands;
     while (command) {
       next = command->next;
@@ -632,10 +643,11 @@ vk_destroyCommandQueue(GPUCommandQueue *queue) {
       free(command);
       command = next;
     }
-    if (deviceVk && native->uploadFence) {
-      vkDestroyFence(deviceVk->device, native->uploadFence, NULL);
+    if (deviceVk && native->transferFence) {
+      vkDestroyFence(deviceVk->device, native->transferFence, NULL);
     }
     vk_destroyBuffer(native->uploadStaging);
+    vk_destroyBuffer(native->readbackStaging);
     if (deviceVk && native->commandPool) {
       vkDestroyCommandPool(deviceVk->device, native->commandPool, NULL);
     }
