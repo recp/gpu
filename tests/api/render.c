@@ -2235,6 +2235,10 @@ check_dynamic_state_validation_calls(GPUDevice *activeDevice) {
   info.chain.structSize = sizeof(info);
   GPUApplyDynamicState(&endedPass, &info);
 
+  info.chain.sType      = GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO;
+  info.mask            |= 1ull << 63;
+  GPUApplyDynamicState(&pass, &info);
+
   if (gRenderViewportCalls != 0u ||
       gRenderScissorCalls != 0u ||
       gRenderBlendCalls != 0u ||

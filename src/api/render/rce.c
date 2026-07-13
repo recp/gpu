@@ -84,6 +84,12 @@ gpu_validIndexType(GPUIndexType indexType) {
 
 static bool
 gpu_validDynamicStateApplyInfo(const GPUDynamicStateApplyInfo *info) {
+  const GPUDynamicStateMask validMask =
+    GPU_DYNAMIC_STATE_VIEWPORT_BIT |
+    GPU_DYNAMIC_STATE_SCISSOR_BIT |
+    GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT |
+    GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
+
   if (!info) {
     return false;
   }
@@ -95,7 +101,7 @@ gpu_validDynamicStateApplyInfo(const GPUDynamicStateApplyInfo *info) {
     return false;
   }
 
-  return true;
+  return (info->mask & ~validMask) == 0u;
 }
 
 static bool
