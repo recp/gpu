@@ -93,6 +93,26 @@ gpu_formatHasStencil(GPUFormat format) {
 }
 
 static bool
+gpu_textureCopySubresourcesOverlap(
+  const GPUTexture                    *texture,
+  const GPUTextureToTextureCopyRegion *region) {
+  uint32_t srcLayerEnd;
+  uint32_t dstLayerEnd;
+
+  if (region->src.mipLevel != region->dst.mipLevel) {
+    return false;
+  }
+  if (texture->dimension == GPU_TEXTURE_DIMENSION_3D) {
+    return true;
+  }
+
+  srcLayerEnd = region->src.baseArrayLayer + region->layerCount;
+  dstLayerEnd = region->dst.baseArrayLayer + region->layerCount;
+  return region->src.baseArrayLayer < dstLayerEnd &&
+         region->dst.baseArrayLayer < srcLayerEnd;
+}
+
+static bool
 gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
                               const GPUDevice               *device) {
   const GPURenderPassDepthStencilAttachment *depthStencil;
@@ -533,7 +553,8 @@ GPUCopyTextureToTexture(GPUCopyPassEncoder                  *pass,
                                   &dstAspect) ||
       srcAspect != dstAspect ||
       !gpu_validTextureCopyRegion(&srcRegion, src) ||
-      !gpu_validTextureCopyRegion(&dstRegion, dst)) {
+      !gpu_validTextureCopyRegion(&dstRegion, dst) ||
+      (src == dst && gpu_textureCopySubresourcesOverlap(src, region))) {
     return;
   }
   if (!(api = gpu_copyPassApi(pass)) || !api->renderPass.copyTextureToTexture) {

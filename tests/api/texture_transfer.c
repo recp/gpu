@@ -461,6 +461,180 @@ cleanup:
 }
 
 static int
+check_same_texture_copies(GPUDevice *device) {
+  enum {
+    LAYER_COPY_OFFSET = 0u,
+    MIP_COPY_OFFSET   = TRANSFER_IMAGE_STRIDE,
+    READBACK_BYTES    = TRANSFER_IMAGE_STRIDE * 2u
+  };
+
+  GPUCommandQueue              *queue;
+  GPUCommandBuffer             *cmdb;
+  GPUCopyPassEncoder           *copyPass;
+  GPUBuffer                    *readback;
+  GPUTexture                   *texture;
+  GPUBufferCreateInfo           bufferInfo = {0};
+  GPUTextureCreateInfo          textureInfo = {0};
+  GPUTextureWriteRegion         writeRegion = {0};
+  GPUTextureToTextureCopyRegion textureRegion = {0};
+  GPUBufferTextureCopyRegion    bufferRegion = {0};
+  uint8_t                       sourceBytes[TRANSFER_IMAGE_BYTES];
+  uint8_t                       readbackBytes[READBACK_BYTES] = {0};
+  bool                          layerEqual;
+  bool                          mipEqual;
+  int                           ok;
+
+  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  if (!queue) {
+    fprintf(stderr, "same-texture copy has no graphics queue\n");
+    return 0;
+  }
+
+  for (uint32_t i = 0u; i < (uint32_t)sizeof(sourceBytes); i++) {
+    sourceBytes[i] = (uint8_t)(0x35u + i * 13u);
+  }
+
+  cmdb     = NULL;
+  copyPass = NULL;
+  readback = NULL;
+  texture  = NULL;
+  ok       = 0;
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "same-texture-copy-readback";
+  bufferInfo.sizeBytes        = READBACK_BYTES;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
+                                GPU_BUFFER_USAGE_COPY_SRC;
+  if (GPUCreateBuffer(device, &bufferInfo, &readback) != GPU_OK || !readback) {
+    fprintf(stderr, "same-texture copy readback setup failed\n");
+    goto cleanup;
+  }
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "same-texture-copy";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = TRANSFER_WIDTH * 2u;
+  textureInfo.height           = TRANSFER_HEIGHT * 2u;
+  textureInfo.depthOrLayers    = 2u;
+  textureInfo.mipLevelCount    = 2u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_COPY_SRC |
+                                 GPU_TEXTURE_USAGE_COPY_DST;
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
+    fprintf(stderr, "same-texture copy texture setup failed\n");
+    goto cleanup;
+  }
+
+  writeRegion.width          = TRANSFER_WIDTH;
+  writeRegion.height         = TRANSFER_HEIGHT;
+  writeRegion.depth          = 1u;
+  writeRegion.mipLevel       = 1u;
+  writeRegion.baseArrayLayer = 0u;
+  writeRegion.layerCount     = 1u;
+  writeRegion.bytesPerRow    = TRANSFER_ROW_BYTES;
+  writeRegion.rowsPerImage   = TRANSFER_HEIGHT;
+  if (GPUQueueWriteTexture(queue,
+                           texture,
+                           &writeRegion,
+                           sourceBytes,
+                           sizeof(sourceBytes)) != GPU_OK) {
+    fprintf(stderr, "same-texture copy upload failed\n");
+    goto cleanup;
+  }
+
+  if (GPUAcquireCommandBuffer(queue, "same-texture-copy", &cmdb) != GPU_OK ||
+      !cmdb) {
+    fprintf(stderr, "same-texture copy command buffer failed\n");
+    goto cleanup;
+  }
+  copyPass = GPUBeginCopyPass(cmdb, "same-texture-copy");
+  if (!copyPass) {
+    fprintf(stderr, "same-texture copy pass failed\n");
+    goto cleanup;
+  }
+
+  textureRegion.src.mipLevel       = 1u;
+  textureRegion.src.baseArrayLayer = 0u;
+  textureRegion.dst.mipLevel       = 1u;
+  textureRegion.dst.baseArrayLayer = 1u;
+  textureRegion.width              = TRANSFER_WIDTH;
+  textureRegion.height             = TRANSFER_HEIGHT;
+  textureRegion.depth              = 1u;
+  textureRegion.layerCount         = 1u;
+  GPUCopyTextureToTexture(copyPass, texture, texture, &textureRegion);
+
+  textureRegion.src                  = textureRegion.dst;
+  textureRegion.dst.x                = 1u;
+  textureRegion.width                = TRANSFER_WIDTH - 1u;
+  GPUCopyTextureToTexture(copyPass, texture, texture, &textureRegion);
+
+  memset(&textureRegion, 0, sizeof(textureRegion));
+  textureRegion.src.mipLevel = 1u;
+  textureRegion.dst.mipLevel = 0u;
+  textureRegion.width        = TRANSFER_WIDTH;
+  textureRegion.height       = TRANSFER_HEIGHT;
+  textureRegion.depth        = 1u;
+  textureRegion.layerCount   = 1u;
+  GPUCopyTextureToTexture(copyPass, texture, texture, &textureRegion);
+
+  bufferRegion.texture.texture.mipLevel       = 1u;
+  bufferRegion.texture.texture.baseArrayLayer = 1u;
+  bufferRegion.texture.width                  = TRANSFER_WIDTH;
+  bufferRegion.texture.height                 = TRANSFER_HEIGHT;
+  bufferRegion.texture.depth                  = 1u;
+  bufferRegion.texture.layerCount             = 1u;
+  bufferRegion.bufferOffset                   = LAYER_COPY_OFFSET;
+  bufferRegion.bytesPerRow                    = TRANSFER_ROW_PITCH;
+  bufferRegion.rowsPerImage                   = TRANSFER_HEIGHT;
+  GPUCopyTextureToBuffer(copyPass, texture, readback, &bufferRegion);
+
+  bufferRegion.texture.texture.mipLevel       = 0u;
+  bufferRegion.texture.texture.baseArrayLayer = 0u;
+  bufferRegion.bufferOffset                   = MIP_COPY_OFFSET;
+  GPUCopyTextureToBuffer(copyPass, texture, readback, &bufferRegion);
+  GPUEndCopyPass(copyPass);
+  copyPass = NULL;
+
+  ok   = transfer_submit(device, queue, cmdb);
+  cmdb = NULL;
+  if (!ok ||
+      GPUQueueReadBuffer(queue,
+                         readback,
+                         0u,
+                         readbackBytes,
+                         sizeof(readbackBytes)) != GPU_OK) {
+    fprintf(stderr, "same-texture copy readback failed\n");
+    ok = 0;
+    goto cleanup;
+  }
+
+  layerEqual = transfer_equal(sourceBytes,
+                              readbackBytes + LAYER_COPY_OFFSET,
+                              1u);
+  mipEqual   = transfer_equal(sourceBytes,
+                              readbackBytes + MIP_COPY_OFFSET,
+                              1u);
+  if (!layerEqual || !mipEqual) {
+    fprintf(stderr,
+            "same-texture copy mismatch: layer=%u mip=%u\n",
+            layerEqual ? 1u : 0u,
+            mipEqual ? 1u : 0u);
+    ok = 0;
+  }
+
+cleanup:
+  if (copyPass) {
+    GPUEndCopyPass(copyPass);
+  }
+  GPUDestroyTexture(texture);
+  GPUDestroyBuffer(readback);
+  return ok;
+}
+
+static int
 check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
   enum {
     DEPTH_AFTER_DEPTH_OFFSET     = 0u,
@@ -729,6 +903,7 @@ int
 gpu_test_texture_transfer(GPUDevice *device) {
   return check_array_mip_transfers(device) &&
          check_3d_texture_transfers(device) &&
+         check_same_texture_copies(device) &&
          check_depth_stencil_plane_copies(
            device,
            GPU_FORMAT_DEPTH32_FLOAT_STENCIL8

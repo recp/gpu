@@ -737,7 +737,7 @@ dx12_copyTextureToTexture(
   srcTexture = src ? src->_priv : NULL;
   dstTexture = dst ? dst->_priv : NULL;
   texture3D  = src && src->dimension == GPU_TEXTURE_DIMENSION_3D;
-  if (!command || !srcTexture || !dstTexture || !region || src == dst ||
+  if (!command || !srcTexture || !dstTexture || !region ||
       !dx12__copyPlane(src->format, region->src.aspect, &srcPlane) ||
       !dx12__copyPlane(dst->format, region->dst.aspect, &dstPlane) ||
       srcPlane != dstPlane ||
