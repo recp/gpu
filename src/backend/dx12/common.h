@@ -44,7 +44,7 @@ typedef struct GPUPhysicalDeviceDX12 {
   char                  name[256];
   bool                  isWarp;
   bool                  formatCapsReady;
-  GPUFormatCapabilities formatCaps[GPUPixelFormatX24_Stencil8 + 1u];
+  GPUFormatCapabilities formatCaps[GPU_FORMAT_COUNT];
 } GPUPhysicalDeviceDX12;
 
 typedef struct GPUDescriptorHeapDX12 {

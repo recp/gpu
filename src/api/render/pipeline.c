@@ -44,10 +44,14 @@ gpu_depthStencilStateIsValid(GPUFormat                    format,
   bool hasDepth;
   bool hasStencil;
 
-  hasDepth = format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+  hasDepth = format == GPU_FORMAT_DEPTH16_UNORM ||
+             format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
              format == GPU_FORMAT_DEPTH32_FLOAT ||
              format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
-  if (format != GPU_FORMAT_UNDEFINED && !hasDepth) {
+  hasStencil = format == GPU_FORMAT_STENCIL8 ||
+               format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+               format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+  if (format != GPU_FORMAT_UNDEFINED && !hasDepth && !hasStencil) {
     return false;
   }
   if (!state) {
@@ -71,13 +75,44 @@ gpu_depthStencilStateIsValid(GPUFormat                    format,
       !state->stencilTestEnable) {
     return true;
   }
-  if (!hasDepth) {
+  if ((state->depthTestEnable || state->depthWriteEnable) && !hasDepth) {
     return false;
   }
-
-  hasStencil = format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
-               format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
   return !state->stencilTestEnable || hasStencil;
+}
+
+static GPUResult
+gpu_validatePipelineFormats(const GPUDevice                   *device,
+                            const GPURenderPipelineCreateInfo *info) {
+  GPUFormatCapabilities caps;
+  GPUResult             result;
+
+  for (uint32_t i = 0; i < info->colorTargetCount; i++) {
+    result = GPUGetFormatCapabilities(device->phyDevice,
+                                      info->pColorTargets[i].format,
+                                      &caps);
+    if (result != GPU_OK) {
+      return result;
+    }
+    if (!caps.colorAttachment ||
+        (info->pColorTargets[i].blend.enabled && !caps.blendable)) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+  }
+
+  if (info->depthStencilFormat != GPU_FORMAT_UNDEFINED) {
+    result = GPUGetFormatCapabilities(device->phyDevice,
+                                      info->depthStencilFormat,
+                                      &caps);
+    if (result != GPU_OK) {
+      return result;
+    }
+    if (!caps.depthStencil) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+  }
+
+  return GPU_OK;
 }
 
 static bool
@@ -276,6 +311,7 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   GPUFunction            *vertexFunc;
   GPUFunction            *fragmentFunc;
   GPUFormat               colorFormat;
+  GPUResult               result;
   uint32_t                i;
   uint32_t                requiredBindGroupMask;
   uint32_t                sampleCount;
@@ -292,9 +328,10 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   if (!gpu_pipelineInfoIsSupported(info))
     return GPU_ERROR_INVALID_ARGUMENT;
+  result = gpu_validatePipelineFormats(device, info);
+  if (result != GPU_OK)
+    return result;
   if (info->cache && !info->chain.pNext) {
-    GPUResult result;
-
     result = gpuPipelineCacheFindRender(info->cache, info, &pipeline);
     if (result != GPU_OK) {
       return result;
@@ -325,8 +362,6 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   sampleCount = info->multisample.sampleCount > 0 ?
     info->multisample.sampleCount : 1u;
   if (api->render.createPipeline) {
-    GPUResult result;
-
     pipeline = calloc(1, sizeof(*pipeline));
     if (!pipeline)
       return GPU_ERROR_OUT_OF_MEMORY;
@@ -373,8 +408,10 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     gpuPipelineSetColorFormat(pipeline, i, info->pColorTargets[i].format);
 
   if (info->depthStencilFormat != GPU_FORMAT_UNDEFINED) {
-    gpuPipelineSetDepthFormat(pipeline, info->depthStencilFormat);
-    if (info->depthStencilFormat == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+    if (info->depthStencilFormat != GPU_FORMAT_STENCIL8)
+      gpuPipelineSetDepthFormat(pipeline, info->depthStencilFormat);
+    if (info->depthStencilFormat == GPU_FORMAT_STENCIL8 ||
+        info->depthStencilFormat == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
         info->depthStencilFormat == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8)
       gpuPipelineSetStencilFormat(pipeline, info->depthStencilFormat);
   }
@@ -448,7 +485,7 @@ GPUDestroyRenderPipeline(GPURenderPipeline *pipeline) {
 
 GPU_HIDE
 GPURenderPipeline *
-gpuCreateRenderPipelineDesc(GPUApi *api, GPUPixelFormat pixelFormat) {
+gpuCreateRenderPipelineDesc(GPUApi *api, GPUFormat pixelFormat) {
   if (!api || !api->render.newRenderPipeline)
     return NULL;
 
@@ -485,7 +522,7 @@ GPU_HIDE
 void
 gpuPipelineSetColorFormat(GPURenderPipeline * __restrict pipeline,
                           uint32_t                       index,
-                          GPUPixelFormat                 pixelFormat) {
+                          GPUFormat                      pixelFormat) {
   GPUApi *api;
 
   if (!pipeline || !(api = pipeline->_api) || !api->render.colorFormat)
@@ -497,7 +534,7 @@ gpuPipelineSetColorFormat(GPURenderPipeline * __restrict pipeline,
 GPU_HIDE
 void
 gpuPipelineSetDepthFormat(GPURenderPipeline * __restrict pipeline,
-                          GPUPixelFormat                 pixelFormat) {
+                          GPUFormat                      pixelFormat) {
   GPUApi *api;
 
   if (!pipeline || !(api = pipeline->_api) || !api->render.depthFormat)
@@ -509,7 +546,7 @@ gpuPipelineSetDepthFormat(GPURenderPipeline * __restrict pipeline,
 GPU_HIDE
 void
 gpuPipelineSetStencilFormat(GPURenderPipeline * __restrict pipeline,
-                            GPUPixelFormat                pixelFormat) {
+                            GPUFormat                      pixelFormat) {
   GPUApi *api;
 
   if (!pipeline || !(api = pipeline->_api) || !api->render.stencilFormat)

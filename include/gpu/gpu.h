@@ -23,7 +23,7 @@ extern "C" {
 #include "common.h"
 #include "geometric.h"
 
-#include "pixelformat.h"
+#include "format.h"
 #include "device.h"
 #include "pipeline.h"
 #include "library.h"

@@ -600,6 +600,25 @@ check_adapter_enumeration(GPUInstance *activeInstance) {
     fprintf(stderr, "adapter properties query failed\n");
     return 0;
   }
+  if (GPUGetFormatCapabilities(adapters[0],
+                               GPU_FORMAT_UNDEFINED,
+                               &formatCaps) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUGetFormatCapabilities(adapters[0],
+                               GPU_FORMAT_COUNT,
+                               &formatCaps) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "format capabilities accepted invalid format\n");
+    return 0;
+  }
+  for (GPUFormat format = GPU_FORMAT_R8_UNORM;
+       format < GPU_FORMAT_COUNT;
+       format = (GPUFormat)(format + 1)) {
+    if (GPUGetFormatCapabilities(adapters[0], format, &formatCaps) != GPU_OK) {
+      fprintf(stderr,
+              "format capabilities query failed for %u\n",
+              (uint32_t)format);
+      return 0;
+    }
+  }
   memset(&caps, 0, sizeof(caps));
   if (GPUGetAdapterCapabilities(adapters[0], &caps) != GPU_OK ||
       !GPUIsFeatureSupported(adapters[0], GPU_FEATURE_COMPUTE) ||

@@ -19,7 +19,7 @@
 
 GPU_HIDE
 GPURenderPipeline*
-gl_newPipeline(GPUPixelFormat pixelFormat) {
+gl_newPipeline(GPUFormat pixelFormat) {
   GPURenderPipeline *pipeline;
 
   pipeline = calloc(1, sizeof(*pipeline));
@@ -60,21 +60,21 @@ GPU_HIDE
 void
 gl_colorFormat(GPURenderPipeline * __restrict pipline,
                uint32_t                       index,
-               GPUPixelFormat                 pixelFormat) {
+               GPUFormat                      pixelFormat) {
   
 }
 
 GPU_HIDE
 void
 gl_depthFormat(GPURenderPipeline * __restrict pipline,
-               GPUPixelFormat                 pixelFormat) {
+               GPUFormat                      pixelFormat) {
   
 }
 
 GPU_HIDE
 void
 gl_stencilFormat(GPURenderPipeline * __restrict pipline,
-                 GPUPixelFormat           pixelFormat) {
+                 GPUFormat                      pixelFormat) {
   
 }
 

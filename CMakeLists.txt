@@ -200,6 +200,7 @@ if(GPU_BUILD_METAL)
     src/backend/mt/impl/depthstencil.m
     src/backend/mt/impl/device.m
     src/backend/mt/impl/frame.m
+    src/backend/mt/impl/format.m
     src/backend/mt/impl/library.m
     src/backend/mt/impl/render/pipeline.m
     src/backend/mt/impl/render/rce.m

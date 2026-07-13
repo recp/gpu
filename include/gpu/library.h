@@ -22,7 +22,7 @@ extern "C" {
 
 #include "common.h"
 #include "cmdqueue.h"
-#include "pixelformat.h"
+#include "format.h"
 #include "device.h"
 //#include <us/us.h>
 

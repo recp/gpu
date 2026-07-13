@@ -79,7 +79,8 @@ dx12__textureFinalState(GPUTextureUsageFlags usage) {
 
 static bool
 dx12__depthFormat(GPUFormat format) {
-  return format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+  return format == GPU_FORMAT_DEPTH16_UNORM ||
+         format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
          format == GPU_FORMAT_DEPTH32_FLOAT ||
          format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
 }
@@ -87,6 +88,8 @@ dx12__depthFormat(GPUFormat format) {
 static DXGI_FORMAT
 dx12__textureResourceFormat(GPUFormat format) {
   switch (format) {
+    case GPU_FORMAT_DEPTH16_UNORM:
+      return DXGI_FORMAT_R16_TYPELESS;
     case GPU_FORMAT_DEPTH24_UNORM_STENCIL8:
       return DXGI_FORMAT_R24G8_TYPELESS;
     case GPU_FORMAT_DEPTH32_FLOAT:
@@ -101,6 +104,8 @@ dx12__textureResourceFormat(GPUFormat format) {
 static DXGI_FORMAT
 dx12__textureSrvFormat(GPUFormat format) {
   switch (format) {
+    case GPU_FORMAT_DEPTH16_UNORM:
+      return DXGI_FORMAT_R16_UNORM;
     case GPU_FORMAT_DEPTH24_UNORM_STENCIL8:
       return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
     case GPU_FORMAT_DEPTH32_FLOAT:

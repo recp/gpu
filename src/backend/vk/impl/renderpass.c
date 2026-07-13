@@ -559,33 +559,44 @@ vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
     vk_transitionView(command->command,
                       view,
                       VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-    native->depthAttachment.sType =
-      VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
-    native->depthAttachment.imageView   = view->view;
-    native->depthAttachment.imageLayout =
-      VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    native->depthAttachment.loadOp      =
-      vk__loadOp(attachment->depthLoadOp);
-    native->depthAttachment.storeOp     =
-      vk__storeOp(attachment->depthStoreOp);
-    native->depthAttachment.clearValue.depthStencil.depth =
-      attachment->clearDepth;
-    native->depthAttachment.clearValue.depthStencil.stencil =
-      attachment->clearStencil;
+    if (attachment->view->format != GPU_FORMAT_STENCIL8) {
+      native->depthAttachment.sType =
+        VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
+      native->depthAttachment.imageView   = view->view;
+      native->depthAttachment.imageLayout =
+        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+      native->depthAttachment.loadOp =
+        vk__loadOp(attachment->depthLoadOp);
+      native->depthAttachment.storeOp =
+        vk__storeOp(attachment->depthStoreOp);
+      native->depthAttachment.clearValue.depthStencil.depth =
+        attachment->clearDepth;
+      native->depthAttachment.clearValue.depthStencil.stencil =
+        attachment->clearStencil;
+    }
     native->depthStencilView = view;
     native->extent           = view->extent;
     layerCount               = view->layerCount;
 
-    hasStencil = attachment->view->format ==
+    hasStencil = attachment->view->format == GPU_FORMAT_STENCIL8 ||
+                 attachment->view->format ==
                    GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
                  attachment->view->format ==
                    GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
     if (hasStencil) {
-      native->stencilAttachment = native->depthAttachment;
+      native->stencilAttachment.sType =
+        VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
+      native->stencilAttachment.imageView   = view->view;
+      native->stencilAttachment.imageLayout =
+        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
       native->stencilAttachment.loadOp =
         vk__loadOp(attachment->stencilLoadOp);
       native->stencilAttachment.storeOp =
         vk__storeOp(attachment->stencilStoreOp);
+      native->stencilAttachment.clearValue.depthStencil.depth =
+        attachment->clearDepth;
+      native->stencilAttachment.clearValue.depthStencil.stencil =
+        attachment->clearStencil;
     }
   }
 
@@ -607,9 +618,8 @@ vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
   native->renderingInfo.pColorAttachments    = native->colorCount > 0u
                                                   ? native->colorAttachments
                                                   : NULL;
-  native->renderingInfo.pDepthAttachment     = native->depthStencilView
-                                                  ? &native->depthAttachment
-                                                  : NULL;
+  native->renderingInfo.pDepthAttachment =
+    native->depthAttachment.imageView ? &native->depthAttachment : NULL;
   native->renderingInfo.pStencilAttachment =
     native->stencilAttachment.imageView
       ? &native->stencilAttachment

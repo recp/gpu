@@ -163,36 +163,36 @@ mt_getLimits(const GPUAdapter * __restrict adapter,
 
 static bool
 mt_isFloat32Format(GPUFormat format) {
-  return format == GPUPixelFormatR32Float ||
-         format == GPUPixelFormatRG32Float ||
-         format == GPUPixelFormatRGBA32Float;
+  return format == GPU_FORMAT_R32_FLOAT ||
+         format == GPU_FORMAT_RG32_FLOAT ||
+         format == GPU_FORMAT_RGBA32_FLOAT;
 }
 
 static bool
 mt_isTier1StorageFormat(GPUFormat format) {
-  return format == GPUPixelFormatR32Uint ||
-         format == GPUPixelFormatR32Sint ||
-         format == GPUPixelFormatR32Float;
+  return format == GPU_FORMAT_R32_UINT ||
+         format == GPU_FORMAT_R32_SINT ||
+         format == GPU_FORMAT_R32_FLOAT;
 }
 
 static bool
 mt_isTier2StorageFormat(GPUFormat format) {
   switch (format) {
-    case GPUPixelFormatR8Unorm:
-    case GPUPixelFormatR8Uint:
-    case GPUPixelFormatR8Sint:
-    case GPUPixelFormatR16Uint:
-    case GPUPixelFormatR16Sint:
-    case GPUPixelFormatR16Float:
-    case GPUPixelFormatRGBA8Unorm:
-    case GPUPixelFormatRGBA8Uint:
-    case GPUPixelFormatRGBA8Sint:
-    case GPUPixelFormatRGBA16Uint:
-    case GPUPixelFormatRGBA16Sint:
-    case GPUPixelFormatRGBA16Float:
-    case GPUPixelFormatRGBA32Uint:
-    case GPUPixelFormatRGBA32Sint:
-    case GPUPixelFormatRGBA32Float:
+    case GPU_FORMAT_R8_UNORM:
+    case GPU_FORMAT_R8_UINT:
+    case GPU_FORMAT_R8_SINT:
+    case GPU_FORMAT_R16_UINT:
+    case GPU_FORMAT_R16_SINT:
+    case GPU_FORMAT_R16_FLOAT:
+    case GPU_FORMAT_RGBA8_UNORM:
+    case GPU_FORMAT_RGBA8_UINT:
+    case GPU_FORMAT_RGBA8_SINT:
+    case GPU_FORMAT_RGBA16_UINT:
+    case GPU_FORMAT_RGBA16_SINT:
+    case GPU_FORMAT_RGBA16_FLOAT:
+    case GPU_FORMAT_RGBA32_UINT:
+    case GPU_FORMAT_RGBA32_SINT:
+    case GPU_FORMAT_RGBA32_FLOAT:
       return true;
     default:
       return mt_isTier1StorageFormat(format);
@@ -201,12 +201,20 @@ mt_isTier2StorageFormat(GPUFormat format) {
 
 static bool
 mt_isBCFormat(GPUFormat format) {
-  return (format >= GPUPixelFormatBC1_RGBA &&
-          format <= GPUPixelFormatBC3_RGBA_sRGB) ||
-         (format >= GPUPixelFormatBC4_RUnorm &&
-          format <= GPUPixelFormatBC5_RGSnorm) ||
-         (format >= GPUPixelFormatBC6H_RGBFloat &&
-          format <= GPUPixelFormatBC7_RGBAUnorm_sRGB);
+  return format >= GPU_FORMAT_BC1_RGBA_UNORM &&
+         format <= GPU_FORMAT_BC7_RGBA_UNORM_SRGB;
+}
+
+static bool
+mt_isETCFormat(GPUFormat format) {
+  return format >= GPU_FORMAT_EAC_R11_UNORM &&
+         format <= GPU_FORMAT_ETC2_RGB8A1_UNORM_SRGB;
+}
+
+static bool
+mt_isASTCFormat(GPUFormat format) {
+  return format >= GPU_FORMAT_ASTC_4X4_UNORM &&
+         format <= GPU_FORMAT_ASTC_12X12_UNORM_SRGB;
 }
 
 static void
@@ -218,6 +226,8 @@ mt_getFormatCapabilities(
   MTLReadWriteTextureTier storageTier;
   bool                    depthSupported;
   bool                    float32Filterable;
+  bool                    appleFamily1;
+  bool                    appleFamily2;
   bool                    bcSupported;
 
   device = adapter ? (id<MTLDevice>)adapter->_priv : nil;
@@ -227,6 +237,8 @@ mt_getFormatCapabilities(
 
   storageTier       = MTLReadWriteTextureTierNone;
   float32Filterable = false;
+  appleFamily1      = false;
+  appleFamily2      = false;
   bcSupported       = false;
   if (@available(macOS 10.13, iOS 11.0, *)) {
     storageTier = device.readWriteTextureSupport;
@@ -237,11 +249,27 @@ mt_getFormatCapabilities(
   if (@available(macOS 11.0, iOS 16.4, *)) {
     bcSupported = device.supportsBCTextureCompression;
   }
+  if (@available(macOS 10.15, iOS 13.0, *)) {
+    appleFamily1 = [device supportsFamily:MTLGPUFamilyApple1];
+    appleFamily2 = [device supportsFamily:MTLGPUFamilyApple2];
+  }
 
   if (mt_isBCFormat(format)) {
     memset(outCaps, 0, sizeof(*outCaps));
     outCaps->sampled    = bcSupported;
     outCaps->filterable = bcSupported;
+    return;
+  }
+  if (mt_isETCFormat(format)) {
+    memset(outCaps, 0, sizeof(*outCaps));
+    outCaps->sampled    = appleFamily1;
+    outCaps->filterable = appleFamily1;
+    return;
+  }
+  if (mt_isASTCFormat(format)) {
+    memset(outCaps, 0, sizeof(*outCaps));
+    outCaps->sampled    = appleFamily2;
+    outCaps->filterable = appleFamily2;
     return;
   }
 

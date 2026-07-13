@@ -625,6 +625,8 @@ gpu_allocateTransientChunk(GPUDevice *device,
 static bool
 gpu_formatIsDepthStencil(GPUFormat format) {
   switch (format) {
+    case GPU_FORMAT_DEPTH16_UNORM:
+    case GPU_FORMAT_STENCIL8:
     case GPU_FORMAT_DEPTH24_UNORM_STENCIL8:
     case GPU_FORMAT_DEPTH32_FLOAT:
     case GPU_FORMAT_DEPTH32_FLOAT_STENCIL8:
@@ -635,27 +637,37 @@ gpu_formatIsDepthStencil(GPUFormat format) {
 }
 
 static bool
+gpu_formatIsCompressed(GPUFormat format) {
+  return (format >= GPU_FORMAT_BC1_RGBA_UNORM &&
+          format <= GPU_FORMAT_BC7_RGBA_UNORM_SRGB) ||
+         (format >= GPU_FORMAT_EAC_R11_UNORM &&
+          format <= GPU_FORMAT_ETC2_RGB8A1_UNORM_SRGB) ||
+         (format >= GPU_FORMAT_ASTC_4X4_UNORM &&
+          format <= GPU_FORMAT_ASTC_12X12_UNORM_SRGB);
+}
+
+static bool
 gpu_formatIsInteger(GPUFormat format) {
   switch (format) {
-    case GPUPixelFormatR8Uint:
-    case GPUPixelFormatR8Sint:
-    case GPUPixelFormatR16Uint:
-    case GPUPixelFormatR16Sint:
-    case GPUPixelFormatRG8Uint:
-    case GPUPixelFormatRG8Sint:
-    case GPUPixelFormatR32Uint:
-    case GPUPixelFormatR32Sint:
-    case GPUPixelFormatRG16Uint:
-    case GPUPixelFormatRG16Sint:
-    case GPUPixelFormatRGBA8Uint:
-    case GPUPixelFormatRGBA8Sint:
-    case GPUPixelFormatRGB10A2Uint:
-    case GPUPixelFormatRG32Uint:
-    case GPUPixelFormatRG32Sint:
-    case GPUPixelFormatRGBA16Uint:
-    case GPUPixelFormatRGBA16Sint:
-    case GPUPixelFormatRGBA32Uint:
-    case GPUPixelFormatRGBA32Sint:
+    case GPU_FORMAT_R8_UINT:
+    case GPU_FORMAT_R8_SINT:
+    case GPU_FORMAT_R16_UINT:
+    case GPU_FORMAT_R16_SINT:
+    case GPU_FORMAT_RG8_UINT:
+    case GPU_FORMAT_RG8_SINT:
+    case GPU_FORMAT_R32_UINT:
+    case GPU_FORMAT_R32_SINT:
+    case GPU_FORMAT_RG16_UINT:
+    case GPU_FORMAT_RG16_SINT:
+    case GPU_FORMAT_RGBA8_UINT:
+    case GPU_FORMAT_RGBA8_SINT:
+    case GPU_FORMAT_RGB10A2_UINT:
+    case GPU_FORMAT_RG32_UINT:
+    case GPU_FORMAT_RG32_SINT:
+    case GPU_FORMAT_RGBA16_UINT:
+    case GPU_FORMAT_RGBA16_SINT:
+    case GPU_FORMAT_RGBA32_UINT:
+    case GPU_FORMAT_RGBA32_SINT:
       return true;
     default:
       return false;
@@ -664,56 +676,9 @@ gpu_formatIsInteger(GPUFormat format) {
 
 static bool
 gpu_formatIsKnownColor(GPUFormat format) {
-  switch (format) {
-    case GPU_FORMAT_RGBA8_UNORM:
-    case GPU_FORMAT_RGBA8_UNORM_SRGB:
-    case GPU_FORMAT_BGRA8_UNORM:
-    case GPU_FORMAT_BGRA8_UNORM_SRGB:
-    case GPU_FORMAT_RGBA16_FLOAT:
-    case GPU_FORMAT_RGBA32_FLOAT:
-    case GPU_FORMAT_RG11B10_UFLOAT:
-    case GPUPixelFormatR8Unorm:
-    case GPUPixelFormatR8Unorm_sRGB:
-    case GPUPixelFormatR8Snorm:
-    case GPUPixelFormatR8Uint:
-    case GPUPixelFormatR8Sint:
-    case GPUPixelFormatR16Unorm:
-    case GPUPixelFormatR16Snorm:
-    case GPUPixelFormatR16Uint:
-    case GPUPixelFormatR16Sint:
-    case GPUPixelFormatR16Float:
-    case GPUPixelFormatRG8Unorm:
-    case GPUPixelFormatRG8Unorm_sRGB:
-    case GPUPixelFormatRG8Snorm:
-    case GPUPixelFormatRG8Uint:
-    case GPUPixelFormatRG8Sint:
-    case GPUPixelFormatR32Uint:
-    case GPUPixelFormatR32Sint:
-    case GPUPixelFormatR32Float:
-    case GPUPixelFormatRG16Unorm:
-    case GPUPixelFormatRG16Snorm:
-    case GPUPixelFormatRG16Uint:
-    case GPUPixelFormatRG16Sint:
-    case GPUPixelFormatRG16Float:
-    case GPUPixelFormatRGBA8Snorm:
-    case GPUPixelFormatRGBA8Uint:
-    case GPUPixelFormatRGBA8Sint:
-    case GPUPixelFormatBGRX8Unorm:
-    case GPUPixelFormatRGB10A2Unorm:
-    case GPUPixelFormatRGB10A2Uint:
-    case GPUPixelFormatRG32Uint:
-    case GPUPixelFormatRG32Sint:
-    case GPUPixelFormatRG32Float:
-    case GPUPixelFormatRGBA16Unorm:
-    case GPUPixelFormatRGBA16Snorm:
-    case GPUPixelFormatRGBA16Uint:
-    case GPUPixelFormatRGBA16Sint:
-    case GPUPixelFormatRGBA32Uint:
-    case GPUPixelFormatRGBA32Sint:
-      return true;
-    default:
-      return false;
-  }
+  return format > GPU_FORMAT_UNDEFINED && format < GPU_FORMAT_COUNT &&
+         !gpu_formatIsDepthStencil(format) &&
+         !gpu_formatIsCompressed(format);
 }
 
 static GPUResult
@@ -904,14 +869,15 @@ GPUGetFormatCapabilities(const GPUAdapter      *adapter,
   bool color;
   bool integerFormat;
 
-  if (!adapter || !outCaps) {
+  if (!adapter || !outCaps ||
+      format <= GPU_FORMAT_UNDEFINED || format >= GPU_FORMAT_COUNT) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   memset(outCaps, 0, sizeof(*outCaps));
-  if (format != GPU_FORMAT_UNDEFINED && gpu_formatIsDepthStencil(format)) {
+  if (gpu_formatIsDepthStencil(format)) {
     outCaps->depthStencil = true;
-  } else if (format != GPU_FORMAT_UNDEFINED) {
+  } else {
     color = gpu_formatIsKnownColor(format);
     if (color) {
       integerFormat = gpu_formatIsInteger(format);

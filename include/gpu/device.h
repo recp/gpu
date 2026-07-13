@@ -23,7 +23,7 @@ extern "C" {
 #include "common.h"
 #include "instance.h"
 #include "cmdqueue.h"
-#include "pixelformat.h"
+#include "format.h"
 #include "buffer.h"
 
 typedef struct GPUAdapter GPUAdapter;

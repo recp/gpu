@@ -42,6 +42,27 @@ gpuIsSampleCountValid(uint32_t sampleCount) {
          sampleCount == 4u || sampleCount == 8u;
 }
 
+static GPUResult
+gpuValidateTextureFormatUsage(const GPUDevice       *device,
+                              GPUFormat              format,
+                              GPUTextureUsageFlags   usage) {
+  GPUFormatCapabilities caps;
+  GPUResult             result;
+
+  result = GPUGetFormatCapabilities(device->phyDevice, format, &caps);
+  if (result != GPU_OK) {
+    return result;
+  }
+  if (((usage & GPU_TEXTURE_USAGE_SAMPLED) && !caps.sampled) ||
+      ((usage & GPU_TEXTURE_USAGE_STORAGE) && !caps.storage) ||
+      ((usage & GPU_TEXTURE_USAGE_COLOR_TARGET) && !caps.colorAttachment) ||
+      ((usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) && !caps.depthStencil)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  return GPU_OK;
+}
+
 static uint32_t
 gpuMipExtent(uint32_t extent, uint32_t mipLevel) {
   uint32_t mipExtent;
@@ -143,7 +164,8 @@ GPUCreateTexture(GPUDevice                  * __restrict device,
   *outTexture = NULL;
 
   if (!device || !info ||
-      info->format == GPU_FORMAT_UNDEFINED ||
+      info->format <= GPU_FORMAT_UNDEFINED ||
+      info->format >= GPU_FORMAT_COUNT ||
       info->width == 0 ||
       info->height == 0 ||
       info->depthOrLayers == 0) {
@@ -170,6 +192,11 @@ GPUCreateTexture(GPUDevice                  * __restrict device,
                         GPU_TEXTURE_USAGE_SAMPLED |
                         GPU_TEXTURE_USAGE_STORAGE)) != 0u))) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  result = gpuValidateTextureFormatUsage(device, info->format, info->usage);
+  if (result != GPU_OK) {
+    return result;
   }
 
   if (!(api = gpuDeviceApi(device)) || !api->texture.create) {
@@ -243,7 +270,8 @@ GPUCreateTextureView(GPUTexture                     * __restrict texture,
   *outView = NULL;
 
   if (!texture || !info ||
-      info->format == GPU_FORMAT_UNDEFINED ||
+      info->format <= GPU_FORMAT_UNDEFINED ||
+      info->format >= GPU_FORMAT_COUNT ||
       info->mipLevelCount == 0 ||
       info->arrayLayerCount == 0) {
     return GPU_ERROR_INVALID_ARGUMENT;

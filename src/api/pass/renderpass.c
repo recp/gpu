@@ -70,14 +70,25 @@ gpu_textureViewExtent(uint32_t extent, const GPUTextureView *view) {
 
 static bool
 gpu_formatIsDepthStencil(GPUFormat format) {
-  return format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+  return format == GPU_FORMAT_DEPTH16_UNORM ||
+         format == GPU_FORMAT_STENCIL8 ||
+         format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+         format == GPU_FORMAT_DEPTH32_FLOAT ||
+         format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+}
+
+static bool
+gpu_formatHasDepth(GPUFormat format) {
+  return format == GPU_FORMAT_DEPTH16_UNORM ||
+         format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
          format == GPU_FORMAT_DEPTH32_FLOAT ||
          format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
 }
 
 static bool
 gpu_formatHasStencil(GPUFormat format) {
-  return format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+  return format == GPU_FORMAT_STENCIL8 ||
+         format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
          format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
 }
 
@@ -153,9 +164,12 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
         !gpu_validStoreOp(depthStencil->depthStoreOp) ||
         !gpu_validLoadOp(depthStencil->stencilLoadOp) ||
         !gpu_validStoreOp(depthStencil->stencilStoreOp) ||
-        (depthStencil->depthLoadOp == GPU_LOAD_OP_CLEAR &&
-         (depthStencil->clearDepth < 0.0f ||
-          depthStencil->clearDepth > 1.0f)) ||
+        (gpu_formatHasDepth(depthStencil->view->format)
+           ? (depthStencil->depthLoadOp == GPU_LOAD_OP_CLEAR &&
+              (depthStencil->clearDepth < 0.0f ||
+               depthStencil->clearDepth > 1.0f))
+           : (depthStencil->depthLoadOp != GPU_LOAD_OP_DONT_CARE ||
+              depthStencil->depthStoreOp != GPU_STORE_OP_DONT_CARE)) ||
         (gpu_formatHasStencil(depthStencil->view->format)
            ? (depthStencil->stencilLoadOp == GPU_LOAD_OP_CLEAR &&
               depthStencil->clearStencil > UINT8_MAX)

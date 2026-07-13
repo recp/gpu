@@ -167,6 +167,9 @@ typedef struct MTQuerySet {
   MTCommandMode              mode;
 } MTQuerySet;
 
+GPU_HIDE MTLPixelFormat mt_format(GPUFormat format);
+GPU_HIDE GPUFormat mt_formatFromNative(MTLPixelFormat format);
+
 static inline MTCommandQueue *
 mt_commandQueue(GPUCommandQueue *queue) {
   return queue ? queue->_priv : NULL;

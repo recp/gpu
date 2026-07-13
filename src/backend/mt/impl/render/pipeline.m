@@ -126,12 +126,12 @@ mt_fillStencilDescriptor(MTLStencilDescriptor      *desc,
 
 GPU_HIDE
 GPURenderPipeline*
-mt_newRenderPipeline(GPUPixelFormat pixelFormat) {
+mt_newRenderPipeline(GPUFormat pixelFormat) {
   GPURenderPipeline            *pipeline;
   MTLRenderPipelineDescriptor *renderDesc;
 
   renderDesc = [MTLRenderPipelineDescriptor new];
-  renderDesc.colorAttachments[0].pixelFormat = (MTLPixelFormat)pixelFormat;
+  renderDesc.colorAttachments[0].pixelFormat = mt_format(pixelFormat);
   pipeline = calloc(1, sizeof(*pipeline));
   pipeline->_priv = renderDesc;
   return pipeline;
@@ -257,23 +257,26 @@ mt_setFunction(GPURenderPipeline * __restrict pipline,
 GPU_HIDE
 void
 mt_colorFormat(GPURenderPipeline * __restrict pipline,
-               uint32_t                 index,
-               GPUPixelFormat           pixelFormat) {
-  ((MTLRenderPipelineDescriptor *)pipline->_priv).colorAttachments[index].pixelFormat = (MTLPixelFormat)pixelFormat;
+               uint32_t                       index,
+               GPUFormat                      pixelFormat) {
+  ((MTLRenderPipelineDescriptor *)pipline->_priv)
+    .colorAttachments[index].pixelFormat = mt_format(pixelFormat);
 }
 
 GPU_HIDE
 void
 mt_depthFormat(GPURenderPipeline * __restrict pipline,
-               GPUPixelFormat           pixelFormat) {
-  ((MTLRenderPipelineDescriptor *)pipline->_priv).depthAttachmentPixelFormat = (MTLPixelFormat)pixelFormat;
+               GPUFormat                      pixelFormat) {
+  ((MTLRenderPipelineDescriptor *)pipline->_priv).depthAttachmentPixelFormat =
+    mt_format(pixelFormat);
 }
 
 GPU_HIDE
 void
 mt_stencilFormat(GPURenderPipeline * __restrict pipline,
-                 GPUPixelFormat           pixelFormat) {
-  ((MTLRenderPipelineDescriptor *)pipline->_priv).stencilAttachmentPixelFormat = (MTLPixelFormat)pixelFormat;
+                 GPUFormat                      pixelFormat) {
+  ((MTLRenderPipelineDescriptor *)pipline->_priv)
+    .stencilAttachmentPixelFormat = mt_format(pixelFormat);
 }
 
 GPU_HIDE

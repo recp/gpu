@@ -33,7 +33,7 @@ typedef struct GPUApiRender {
                     GPURenderPipeline                 * __restrict pipeline);
 
   GPURenderPipeline*
-  (*newRenderPipeline)(GPUPixelFormat pixelFormat);
+  (*newRenderPipeline)(GPUFormat pixelFormat);
   
   GPURenderPipelineState*
   (*newRenderState)(GPUDevice         * __restrict device,
@@ -50,15 +50,15 @@ typedef struct GPUApiRender {
   void
   (*colorFormat)(GPURenderPipeline * __restrict pipline,
                  uint32_t                       index,
-                 GPUPixelFormat                 pixelFormat);
+                 GPUFormat                      pixelFormat);
   
   void
   (*depthFormat)(GPURenderPipeline * __restrict pipline,
-                 GPUPixelFormat                 pixelFormat);
+                 GPUFormat                      pixelFormat);
   
   void
   (*stencilFormat)(GPURenderPipeline * __restrict pipline,
-                   GPUPixelFormat                 pixelFormat);
+                   GPUFormat                      pixelFormat);
   
   void
   (*sampleCount)(GPURenderPipeline * __restrict pipline,

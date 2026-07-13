@@ -322,6 +322,14 @@ check_resource_validation(GPUDevice *device) {
     return 0;
   }
 
+  textureInfo.format = GPU_FORMAT_COUNT;
+  texture = (GPUTexture *)(uintptr_t)1u;
+  if (GPUCreateTexture(device, &textureInfo, &texture) !=
+        GPU_ERROR_INVALID_ARGUMENT || texture != NULL) {
+    fprintf(stderr, "texture create accepted out-of-range format\n");
+    return 0;
+  }
+
   textureInfo.format = GPU_FORMAT_RGBA8_UNORM;
   textureInfo.width = 0u;
   texture = (GPUTexture *)(uintptr_t)1u;

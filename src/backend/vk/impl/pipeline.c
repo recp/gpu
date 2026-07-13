@@ -438,9 +438,13 @@ vk_createRenderPipeline(GPUDevice                         *device,
       !vk_formatFromGPU(info->depthStencilFormat, &depthFormat)) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  if (info->depthStencilFormat == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+  if (info->depthStencilFormat == GPU_FORMAT_STENCIL8 ||
+      info->depthStencilFormat == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
       info->depthStencilFormat == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8) {
     stencilFormat = depthFormat;
+  }
+  if (info->depthStencilFormat == GPU_FORMAT_STENCIL8) {
+    depthFormat = VK_FORMAT_UNDEFINED;
   }
 
   vertexBindings       = NULL;

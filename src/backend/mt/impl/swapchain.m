@@ -137,7 +137,7 @@ mt_createSwapChain(GPUApi          * __restrict api,
   swapChainMtl->layer                 = [[CAMetalLayer alloc] init];
   swapChainMtl->layer.bounds          = CGRectMake(0, 0, size.width, size.height);
   swapChainMtl->layer.device          = deviceMT->device;
-  swapChainMtl->layer.pixelFormat     = (MTLPixelFormat)info->format;
+  swapChainMtl->layer.pixelFormat     = mt_format(info->format);
   swapChainMtl->layer.opaque          = YES;
   swapChainMtl->layer.contentsScale   = surface->scale;
   swapChainMtl->layer.contentsGravity = kCAGravityResizeAspectFill;

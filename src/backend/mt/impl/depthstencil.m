@@ -94,7 +94,7 @@ mt_createTexture(GPUDevice                  * __restrict device,
   desc.textureType = sampleCount > 1u
                        ? MTLTextureType2DMultisample
                        : mt_textureType(info->dimension, info->depthOrLayers);
-  desc.pixelFormat = (MTLPixelFormat)info->format;
+  desc.pixelFormat = mt_format(info->format);
   desc.width = info->width;
   desc.height = info->height;
   desc.depth = info->dimension == GPU_TEXTURE_DIMENSION_3D ? info->depthOrLayers : 1u;
@@ -180,7 +180,7 @@ mt_createTextureView(GPUTexture                      * __restrict texture,
   } else {
     levels = NSMakeRange(info->baseMipLevel, info->mipLevelCount);
     slices = NSMakeRange(info->baseArrayLayer, info->arrayLayerCount);
-    nativeView = [nativeTexture newTextureViewWithPixelFormat:(MTLPixelFormat)info->format
+    nativeView = [nativeTexture newTextureViewWithPixelFormat:mt_format(info->format)
                                                   textureType:mt_textureViewType(info->viewType)
                                                        levels:levels
                                                        slices:slices];

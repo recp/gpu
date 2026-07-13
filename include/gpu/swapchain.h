@@ -21,7 +21,7 @@ extern "C" {
 #endif
 
 #include "common.h"
-#include "pixelformat.h"
+#include "format.h"
 
 typedef struct GPUDevice GPUDevice;
 struct GPUSurface;

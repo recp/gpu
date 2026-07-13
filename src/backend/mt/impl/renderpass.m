@@ -189,13 +189,21 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
 
   depthStencil = info->pDepthStencilAttachment;
   if (depthStencil && depthStencil->view) {
-    rpd.depthAttachment.texture   = (id<MTLTexture>)depthStencil->view->_priv;
+    GPUFormat format;
 
-    rpd.depthAttachment.loadAction = mt_loadAction(depthStencil->depthLoadOp);
-    rpd.depthAttachment.storeAction = mt_storeAction(depthStencil->depthStoreOp);
-    rpd.depthAttachment.clearDepth       = depthStencil->clearDepth;
-    if (depthStencil->view->format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
-        depthStencil->view->format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8) {
+    format = depthStencil->view->format;
+    if (format != GPU_FORMAT_STENCIL8) {
+      rpd.depthAttachment.texture =
+        (id<MTLTexture>)depthStencil->view->_priv;
+      rpd.depthAttachment.loadAction =
+        mt_loadAction(depthStencil->depthLoadOp);
+      rpd.depthAttachment.storeAction =
+        mt_storeAction(depthStencil->depthStoreOp);
+      rpd.depthAttachment.clearDepth = depthStencil->clearDepth;
+    }
+    if (format == GPU_FORMAT_STENCIL8 ||
+        format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+        format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8) {
       rpd.stencilAttachment.texture =
         (id<MTLTexture>)depthStencil->view->_priv;
       rpd.stencilAttachment.loadAction =

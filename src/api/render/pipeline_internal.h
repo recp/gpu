@@ -46,7 +46,7 @@ struct GPURenderPipeline {
 
 GPU_HIDE
 GPURenderPipeline *
-gpuCreateRenderPipelineDesc(GPUApi *api, GPUPixelFormat pixelFormat);
+gpuCreateRenderPipelineDesc(GPUApi *api, GPUFormat pixelFormat);
 
 GPU_HIDE
 GPURenderPipelineState *
@@ -63,17 +63,17 @@ GPU_HIDE
 void
 gpuPipelineSetColorFormat(GPURenderPipeline * __restrict pipeline,
                           uint32_t                       index,
-                          GPUPixelFormat                 pixelFormat);
+                          GPUFormat                      pixelFormat);
 
 GPU_HIDE
 void
 gpuPipelineSetDepthFormat(GPURenderPipeline * __restrict pipeline,
-                          GPUPixelFormat                 pixelFormat);
+                          GPUFormat                      pixelFormat);
 
 GPU_HIDE
 void
 gpuPipelineSetStencilFormat(GPURenderPipeline * __restrict pipeline,
-                            GPUPixelFormat                 pixelFormat);
+                            GPUFormat                      pixelFormat);
 
 GPU_HIDE
 void
