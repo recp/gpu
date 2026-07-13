@@ -855,25 +855,9 @@ gpu_copyShaderReflection(const GPUShaderReflection *src,
   return GPU_OK;
 }
 
-GPU_EXPORT
-GPULibrary*
-GPUDefaultLibrary(GPUDevice *device) {
-  GPUApi     *api;
-  GPULibrary *library;
-
-  if (!(api = gpuDeviceApi(device)) || !api->library.defaultLibrary)
-    return NULL;
-
-  library = api->library.defaultLibrary(device);
-  if (library) {
-    library->_api = api;
-  }
-  return library;
-}
-
-GPU_EXPORT
-GPUFunction*
-GPUShaderFunction(GPULibrary *lib, const char *name) {
+GPU_HIDE
+GPUShaderFunction*
+gpuShaderFunction(GPUShaderLibrary *lib, const char *name) {
   GPUApi *api;
 
   if (!lib || !name || !(api = lib->_api) || !api->library.newFunction)

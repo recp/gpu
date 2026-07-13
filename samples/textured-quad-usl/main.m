@@ -42,7 +42,7 @@ static const uint8_t kCheckerPixels[] = {
   GPUCommandQueue *_queue;
   GPUSurface *_surface;
   GPUSwapchain *_swapchain;
-  GPULibrary *_library;
+  GPUShaderLibrary *_library;
   GPUShaderLayout *_shaderLayout;
   GPURenderPipeline *_pipeline;
   GPUBuffer *_vertexBuffer;
@@ -174,7 +174,7 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   if (!GPUSampleLoadUSL(_device,
                         @"textured_quad.us",
                         2u,
-                        (GPUShaderLibrary **)&_library,
+                        &_library,
                         &_shaderLayout)) {
     return NO;
   }
@@ -218,7 +218,7 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                .structSize = sizeof(GPURenderPipelineCreateInfo) },
     .label = "textured-quad-usl-pipeline",
     .layout = _shaderLayout->pipelineLayout,
-    .library = (GPUShaderLibrary *)_library,
+    .library = _library,
     .vertexEntry = "quad_vs",
     .fragmentEntry = "quad_fs",
     .vertex = {
@@ -481,7 +481,7 @@ cleanup:
     _shaderLayout = NULL;
   }
   if (_library) {
-    GPUDestroyShaderLibrary((GPUShaderLibrary *)_library);
+    GPUDestroyShaderLibrary(_library);
     _library = NULL;
   }
   if (_swapchain) {

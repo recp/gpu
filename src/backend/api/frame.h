@@ -26,7 +26,7 @@ extern "C" {
 struct GPUApi;
 
 typedef struct GPUApiFrame {
-  GPUFrame* (*beginFrame)(struct GPUApi * __restrict api, GPUSwapChain * __restrict swapchain);
+  GPUFrame* (*beginFrame)(struct GPUApi * __restrict api, GPUSwapchain * __restrict swapchain);
   void      (*endFrame)  (struct GPUApi * __restrict api, GPUFrame     * __restrict frame);
 } GPUApiFrame;
 

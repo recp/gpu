@@ -19,26 +19,26 @@
 GPU_HIDE
 GPUFrame*
 mt_beginFrame(GPUApi       *__restrict api,
-              GPUSwapChain *__restrict swapChain) {
+              GPUSwapchain *__restrict swapchain) {
   GPUFrame           *frame;
   GPUTexture         *target;
   GPUTextureView     *targetView;
-  GPUSwapChainMetal  *swapChainMtl;
+  GPUSwapchainMetal  *swapchainMtl;
   id<CAMetalDrawable> drawable;
 
-  swapChainMtl = swapChain->_priv;
-  if (!swapChainMtl || swapChainMtl->frameActive) {
+  swapchainMtl = swapchain->_priv;
+  if (!swapchainMtl || swapchainMtl->frameActive) {
     return NULL;
   }
-  drawable     = [swapChainMtl->layer nextDrawable];
+  drawable     = [swapchainMtl->layer nextDrawable];
   if (!drawable) {
     return NULL;
   }
 
   [drawable retain];
-  frame = &swapChainMtl->frame;
-  target = &swapChainMtl->target;
-  targetView = &swapChainMtl->targetView;
+  frame = &swapchainMtl->frame;
+  target = &swapchainMtl->target;
+  targetView = &swapchainMtl->targetView;
   memset(frame, 0, sizeof(*frame));
   memset(target, 0, sizeof(*target));
   memset(targetView, 0, sizeof(*targetView));
@@ -64,11 +64,11 @@ mt_beginFrame(GPUApi       *__restrict api,
   targetView->arrayLayerCount = 1;
   targetView->_ownsNative = false;
 
-  frame->_priv      = swapChainMtl;
+  frame->_priv      = swapchainMtl;
   frame->target     = target;
   frame->targetView = targetView;
   frame->drawable   = drawable;
-  swapChainMtl->frameActive = true;
+  swapchainMtl->frameActive = true;
 
   return frame;
 }
@@ -77,18 +77,18 @@ GPU_HIDE
 void
 mt_endFrame(GPUApi   *__restrict api,
             GPUFrame *__restrict frame) {
-  GPUSwapChainMetal *swapChainMtl;
+  GPUSwapchainMetal *swapchainMtl;
 
   (void)api;
 
   if (!frame)
     return;
 
-  swapChainMtl = frame->_priv;
+  swapchainMtl = frame->_priv;
   [(id<CAMetalDrawable>)frame->drawable release];
   frame->drawable = NULL;
-  if (swapChainMtl) {
-    swapChainMtl->frameActive = false;
+  if (swapchainMtl) {
+    swapchainMtl->frameActive = false;
   }
 }
 

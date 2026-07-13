@@ -22,6 +22,7 @@ extern "C" {
 
 #include <gpu/common.h>
 #include <gpu/gpu.h>
+#include "library.h"
 
 typedef struct GPURenderPipelineState GPURenderPipelineState;
 
@@ -49,7 +50,7 @@ typedef struct GPUApiRender {
   
   void
   (*setFunction)(GPURenderPipeline * __restrict pipline,
-                 GPUFunction       * __restrict func,
+                 GPUShaderFunction * __restrict func,
                  GPUFunctionType                functype);
   
   void

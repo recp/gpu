@@ -31,7 +31,7 @@ vk_createComputePipeline(GPUDevice                          *device,
                          const GPUComputePipelineCreateInfo *info,
                          GPUComputePipeline                 *pipeline) {
   GPUDeviceVk                    *deviceVk;
-  GPULibraryVk                   *library;
+  GPUShaderLibraryVk                   *library;
   GPUPipelineLayoutVk            *layout;
   GPUComputePipelineState        *state;
   GPUComputePipelineVk           *native;

@@ -240,7 +240,7 @@ mt_destroyRenderPipeline(GPURenderPipeline *pipeline) {
 GPU_HIDE
 void
 mt_setFunction(GPURenderPipeline * __restrict pipline,
-               GPUFunction       * __restrict func,
+               GPUShaderFunction * __restrict func,
                GPUFunctionType                functype) {
   MTLRenderPipelineDescriptor *desc;
   desc = pipline->_priv;

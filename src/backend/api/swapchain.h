@@ -25,16 +25,16 @@ extern "C" {
 
 struct GPUApi;
 
-typedef struct GPUApiSwapChain {
-  GPUSwapChain*
-  (*createSwapChain)(struct GPUApi          * __restrict api,
+typedef struct GPUApiSwapchain {
+  GPUSwapchain*
+  (*createSwapchain)(struct GPUApi          * __restrict api,
                      struct GPUDevice       * __restrict device,
                      struct GPUCommandQueue * __restrict cmdQue,
                      const GPUSwapchainCreateInfo * __restrict info);
 
-  GPUResult (*resizeSwapChain)(GPUSwapChain *swapChain, GPUExtent2D size);
-  void (*destroySwapChain)(GPUSwapChain *swapChain);
-} GPUApiSwapChain;
+  GPUResult (*resizeSwapchain)(GPUSwapchain *swapchain, GPUExtent2D size);
+  void (*destroySwapchain)(GPUSwapchain *swapchain);
+} GPUApiSwapchain;
 
 #ifdef __cplusplus
 }

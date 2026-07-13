@@ -41,7 +41,7 @@ backend_vk(void) {
     vk_initRenderPass(&vk.renderPass);
     vk_initRCE(&vk.rce);
     vk_initCompute(&vk.compute);
-    vk_initSwapChain(&vk.swapchain);
+    vk_initSwapchain(&vk.swapchain);
     vk_initFrame(&vk.frame);
     vk_initDescriptor(&vk.descriptor);
 

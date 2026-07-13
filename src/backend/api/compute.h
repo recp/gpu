@@ -22,6 +22,7 @@ extern "C" {
 
 #include <gpu/common.h>
 #include <gpu/gpu.h>
+#include "library.h"
 #include "descriptor.h"
 
 typedef struct GPUComputePipelineState GPUComputePipelineState;
@@ -58,7 +59,7 @@ typedef struct GPUApiCompute {
   (*newComputePipeline)(void);
 
   void
-  (*setFunction)(GPUComputePipeline *pipeline, GPUFunction *func);
+  (*setFunction)(GPUComputePipeline *pipeline, GPUShaderFunction *func);
 
   GPUComputePipelineState*
   (*newComputeState)(GPUDevice *device, GPUComputePipeline *pipeline);

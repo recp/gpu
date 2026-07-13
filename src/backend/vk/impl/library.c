@@ -17,17 +17,17 @@
 #include "../common.h"
 
 GPU_HIDE
-GPULibrary*
+GPUShaderLibrary*
 vk_newLibraryWithBinary(GPUDevice *device,
                         const void *data,
                         uint64_t size) {
   VkShaderModuleCreateInfo createInfo = {0};
-  GPUDeviceVk             *deviceVk;
-  GPULibraryVk            *libraryVk;
-  GPULibrary              *library;
-  const uint32_t          *words;
-  uint32_t                *alignedWords;
-  VkResult                 result;
+  GPUDeviceVk        *deviceVk;
+  GPUShaderLibraryVk *libraryVk;
+  GPUShaderLibrary   *library;
+  const uint32_t     *words;
+  uint32_t           *alignedWords;
+  VkResult            result;
 
   if (!device || !device->_priv || !data || size < 20u ||
       size > (uint64_t)SIZE_MAX || size % sizeof(uint32_t) != 0u) {
@@ -80,8 +80,8 @@ vk_newLibraryWithBinary(GPUDevice *device,
 
 GPU_HIDE
 void
-vk_destroyLibrary(GPULibrary *library) {
-  GPULibraryVk *libraryVk;
+vk_destroyLibrary(GPUShaderLibrary *library) {
+  GPUShaderLibraryVk *libraryVk;
 
   if (!library) {
     return;

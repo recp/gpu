@@ -18,7 +18,7 @@
 
 GPU_HIDE
 bool
-vk_restoreFrameFence(GPUSwapChainVk *swapchain, GPUFrameSyncVk *sync) {
+vk_restoreFrameFence(GPUSwapchainVk *swapchain, GPUFrameSyncVk *sync) {
   VkFenceCreateInfo info = {0};
   VkFence           replacement;
 
@@ -48,7 +48,7 @@ vk_restoreFrameFence(GPUSwapChainVk *swapchain, GPUFrameSyncVk *sync) {
 }
 
 static bool
-vk__presentAcquiredFrame(GPUSwapChainVk *swapchain) {
+vk__presentAcquiredFrame(GPUSwapchainVk *swapchain) {
   GPUFrameSyncVk      *sync;
   VkPipelineStageFlags waitStage;
   VkSubmitInfo         submitInfo = {0};
@@ -88,8 +88,8 @@ vk__presentAcquiredFrame(GPUSwapChainVk *swapchain) {
 
 GPU_HIDE
 GPUFrame*
-vk_beginFrame(GPUApi *api, GPUSwapChain *swapChain) {
-  GPUSwapChainVk *swapchain;
+vk_beginFrame(GPUApi *api, GPUSwapchain *swapchainObj) {
+  GPUSwapchainVk *swapchain;
   GPUFrameSyncVk *sync;
   GPUFrame       *frame;
   VkResult        result;
@@ -97,7 +97,7 @@ vk_beginFrame(GPUApi *api, GPUSwapChain *swapChain) {
 
   GPU__UNUSED(api);
 
-  swapchain = swapChain ? swapChain->_priv : NULL;
+  swapchain = swapchainObj ? swapchainObj->_priv : NULL;
   if (!swapchain || swapchain->frameActive || swapchain->imageCount == 0u) {
     return NULL;
   }
@@ -140,7 +140,7 @@ vk_beginFrame(GPUApi *api, GPUSwapChain *swapChain) {
 GPU_HIDE
 void
 vk_endFrame(GPUApi *api, GPUFrame *frame) {
-  GPUSwapChainVk *swapchain;
+  GPUSwapchainVk *swapchain;
 
   GPU__UNUSED(api);
 
@@ -164,7 +164,7 @@ GPU_HIDE
 void
 vk_schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   GPUCommandBufferVk *command;
-  GPUSwapChainVk     *swapchain;
+  GPUSwapchainVk     *swapchain;
 
   command   = cmdb ? cmdb->_priv : NULL;
   swapchain = frame ? frame->_priv : NULL;

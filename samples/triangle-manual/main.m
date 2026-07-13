@@ -47,7 +47,7 @@ SelectAdapter(GPUInstance *instance) {
   GPUCommandQueue *_queue;
   GPUSurface *_surface;
   GPUSwapchain *_swapchain;
-  GPULibrary *_library;
+  GPUShaderLibrary *_library;
   GPURenderPipeline *_pipeline;
   GPUBuffer *_vertexBuffer;
   GPUBuffer *_fragmentUniformBuffer;
@@ -186,7 +186,7 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   shaderInfo.sourceData = shaderText.UTF8String;
   shaderInfo.sourceSize = (uint64_t)[shaderText lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
   shaderInfo.sourcePathHint = shaderPath.UTF8String;
-  if (GPUCreateShaderLibrary(_device, &shaderInfo, (GPUShaderLibrary **)&_library) != 0) {
+  if (GPUCreateShaderLibrary(_device, &shaderInfo, &_library) != 0) {
     NSLog(@"GPU: failed to create shader library");
     return NO;
   }
@@ -259,7 +259,7 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                .structSize = sizeof(GPURenderPipelineCreateInfo) },
     .label = "triangle-manual-pipeline",
     .layout = _pipelineLayout,
-    .library = (GPUShaderLibrary *)_library,
+    .library = _library,
     .vertexEntry = "tri_vs",
     .fragmentEntry = "tri_fs",
     .vertex = {
@@ -472,7 +472,7 @@ cleanup:
     _fragmentLayout = NULL;
   }
   if (_library) {
-    GPUDestroyShaderLibrary((GPUShaderLibrary *)_library);
+    GPUDestroyShaderLibrary(_library);
     _library = NULL;
   }
   if (_swapchain) {

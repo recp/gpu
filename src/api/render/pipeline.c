@@ -394,17 +394,17 @@ GPUResult
 GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
                         const GPURenderPipelineCreateInfo * __restrict info,
                         GPURenderPipeline                ** __restrict outPipeline) {
-  GPUApi                 *api;
-  GPURenderPipelineState *state;
-  GPURenderPipeline      *pipeline;
-  GPUVertexDescriptor    *vertexDesc;
-  GPUFunction            *vertexFunc;
-  GPUFunction            *fragmentFunc;
-  GPUFormat               colorFormat;
-  GPUResult               result;
-  uint32_t                i;
-  uint32_t                requiredBindGroupMask;
-  uint32_t                sampleCount;
+  GPUApi                  *api;
+  GPURenderPipelineState  *state;
+  GPURenderPipeline       *pipeline;
+  GPUVertexDescriptor     *vertexDesc;
+  GPUShaderFunction       *vertexFunc;
+  GPUShaderFunction       *fragmentFunc;
+  GPUFormat                colorFormat;
+  GPUResult                result;
+  uint32_t                 i;
+  uint32_t                 requiredBindGroupMask;
+  uint32_t                 sampleCount;
 
   if (!outPipeline)
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -472,8 +472,8 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     goto ready;
   }
 
-  vertexFunc = GPUShaderFunction(info->library, info->vertexEntry);
-  fragmentFunc = GPUShaderFunction(info->library, info->fragmentEntry);
+  vertexFunc   = gpuShaderFunction(info->library, info->vertexEntry);
+  fragmentFunc = gpuShaderFunction(info->library, info->fragmentEntry);
   if (!vertexFunc || !fragmentFunc)
     return GPU_ERROR_INVALID_ARGUMENT;
 
@@ -601,7 +601,7 @@ gpuCompileRenderPipelineState(GPUDevice         * __restrict device,
 GPU_HIDE
 void
 gpuPipelineSetFunction(GPURenderPipeline * __restrict pipeline,
-                       GPUFunction       * __restrict func,
+                       GPUShaderFunction * __restrict func,
                        GPUFunctionType                functionType) {
   GPUApi *api;
 

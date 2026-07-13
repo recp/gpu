@@ -372,7 +372,7 @@ vk_createRenderPipeline(GPUDevice                         *device,
                         uint32_t                           requiredBindGroupMask,
                         GPURenderPipeline                 *pipeline) {
   GPUDeviceVk                       *deviceVk;
-  GPULibraryVk                      *library;
+  GPUShaderLibraryVk                      *library;
   GPUPipelineLayoutVk               *layout;
   GPURenderPipelineVk               *native;
   const GPUDepthStencilState        *depthState;

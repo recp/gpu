@@ -36,7 +36,7 @@ static const TriangleVertex kTriangleVertices[] = {
   GPUCommandQueue *_queue;
   GPUSurface *_surface;
   GPUSwapchain *_swapchain;
-  GPULibrary *_library;
+  GPUShaderLibrary *_library;
   GPUShaderLayout *_shaderLayout;
   GPURenderPipeline *_pipeline;
   GPUBuffer *_vertexBuffer;
@@ -87,7 +87,7 @@ TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   if (!GPUSampleLoadUSL(_device,
                         @"triangle.us",
                         1u,
-                        (GPUShaderLibrary **)&_library,
+                        &_library,
                         &_shaderLayout)) {
     return NO;
   }
@@ -150,7 +150,7 @@ TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                .structSize = sizeof(GPURenderPipelineCreateInfo) },
     .label = "triangle-usl-pipeline",
     .layout = _shaderLayout->pipelineLayout,
-    .library = (GPUShaderLibrary *)_library,
+    .library = _library,
     .vertexEntry = "tri_vs",
     .fragmentEntry = "tri_fs",
     .vertex = {
@@ -398,7 +398,7 @@ cleanup:
     _shaderLayout = NULL;
   }
   if (_library) {
-    GPUDestroyShaderLibrary((GPUShaderLibrary *)_library);
+    GPUDestroyShaderLibrary(_library);
     _library = NULL;
   }
   if (_swapchain) {

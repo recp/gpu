@@ -19,7 +19,7 @@
 
 #include "../common.h"
 
-struct GPUSwapChain {
+struct GPUSwapchain {
   GPUDevice *device;
   void *_priv;
   void *target;

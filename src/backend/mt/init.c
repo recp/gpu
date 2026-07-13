@@ -40,7 +40,7 @@ backend_metal(void) {
     mt_initLibrary(&mt.library);
     mt_initSampler(&mt.sampler);
     mt_initRenderPass(&mt.renderPass);
-    mt_initSwapChain(&mt.swapchain);
+    mt_initSwapchain(&mt.swapchain);
     mt_initFrame(&mt.frame);
     mt_initInstance(&mt.instance);
     mt_initSurface(&mt.surface);

@@ -168,7 +168,7 @@ vk__completionLoop(GPUCommandQueueVk *queue) {
   GPUCommandBufferVk *native;
   GPUCommandBuffer   *cmdb;
   GPUDeviceVk        *deviceVk;
-  GPUSwapChainVk     *swapchain;
+  GPUSwapchainVk     *swapchain;
   VkFence             waitFence;
   VkResult            result;
 
@@ -211,7 +211,7 @@ vk__completionLoop(GPUCommandQueueVk *queue) {
 
 GPU_HIDE
 void
-vk_waitSwapChainIdle(GPUSwapChainVk *swapchain) {
+vk_waitSwapchainIdle(GPUSwapchainVk *swapchain) {
   GPUCommandQueueVk *queue;
 
   queue = swapchain ? swapchain->queue : NULL;
@@ -1004,7 +1004,7 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   GPUCommandBufferVk *native;
   GPUCommandQueueVk  *queue;
   GPUDeviceVk        *deviceVk;
-  GPUSwapChainVk     *swapchain;
+  GPUSwapchainVk     *swapchain;
   GPUFrameSyncVk     *frameSync;
   VkFence             submitFence;
   VkPipelineStageFlags waitStage;

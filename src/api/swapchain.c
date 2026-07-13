@@ -18,29 +18,29 @@
 #include "device_internal.h"
 #include "swapchain_internal.h"
 
-static GPUSwapChain*
+static GPUSwapchain*
 gpuCreateSwapchainInternal(GPUDevice              * __restrict device,
                            struct GPUCommandQueue * __restrict cmdQue,
                            const GPUSwapchainCreateInfo * __restrict info) {
   GPUApi       *api;
-  GPUSwapChain *swapChain;
+  GPUSwapchain *swapchain;
 
   if (!(api = gpuDeviceApi(device)))
     return NULL;
-  if (!api->swapchain.createSwapChain)
+  if (!api->swapchain.createSwapchain)
     return NULL;
 
-  swapChain = api->swapchain.createSwapChain(api,
+  swapchain = api->swapchain.createSwapchain(api,
                                              device,
                                              cmdQue,
                                              info);
-  if (swapChain) {
-    swapChain->device = device;
-    swapChain->width  = info->width;
-    swapChain->height = info->height;
+  if (swapchain) {
+    swapchain->device = device;
+    swapchain->width  = info->width;
+    swapchain->height = info->height;
   }
 
-  return swapChain;
+  return swapchain;
 }
 
 GPU_EXPORT
@@ -102,46 +102,46 @@ GPUCreateSwapchainDefault(GPUDevice         * __restrict device,
 
 GPU_EXPORT
 void
-GPUDestroySwapchain(GPUSwapchain * __restrict swapChain) {
+GPUDestroySwapchain(GPUSwapchain * __restrict swapchain) {
   GPUApi *api;
 
-  if (!swapChain) {
+  if (!swapchain) {
     return;
   }
 
-  if (!(api = gpuDeviceApi(swapChain->device))) {
+  if (!(api = gpuDeviceApi(swapchain->device))) {
     return;
   }
 
-  if (api->swapchain.destroySwapChain) {
-    api->swapchain.destroySwapChain(swapChain);
+  if (api->swapchain.destroySwapchain) {
+    api->swapchain.destroySwapchain(swapchain);
   }
 }
 
 GPU_EXPORT
 GPUResult
-GPUResizeSwapchain(GPUSwapchain * __restrict swapChain,
+GPUResizeSwapchain(GPUSwapchain * __restrict swapchain,
                    uint32_t                  width,
                    uint32_t                  height) {
   GPUApi      *api;
   GPUExtent2D  size;
   GPUResult    result;
 
-  if (!swapChain || width == 0 || height == 0)
+  if (!swapchain || width == 0 || height == 0)
     return GPU_ERROR_INVALID_ARGUMENT;
 
-  if (!(api = gpuDeviceApi(swapChain->device)))
+  if (!(api = gpuDeviceApi(swapchain->device)))
     return GPU_ERROR_BACKEND_FAILURE;
 
-  if (!api->swapchain.resizeSwapChain)
+  if (!api->swapchain.resizeSwapchain)
     return GPU_ERROR_UNSUPPORTED;
 
   size.width  = width;
   size.height = height;
-  result = api->swapchain.resizeSwapChain(swapChain, size);
+  result = api->swapchain.resizeSwapchain(swapchain, size);
   if (result == GPU_OK) {
-    swapChain->width  = width;
-    swapChain->height = height;
+    swapchain->width  = width;
+    swapchain->height = height;
   }
 
   return result;

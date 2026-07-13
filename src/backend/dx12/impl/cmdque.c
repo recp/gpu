@@ -1278,7 +1278,7 @@ GPUResult
 dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   GPUCommandBufferDX12 *native;
   GPUCommandQueueDX12  *queue;
-  GPUSwapChainDX12     *swapchain;
+  GPUSwapchainDX12     *swapchain;
   ID3D12CommandList    *commandLists[1];
   HRESULT               result;
   HRESULT               presentResult;
@@ -1313,9 +1313,9 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
 
   commitResult = GPU_OK;
   swapchain    = native->presentSwapchain;
-  if (swapchain && swapchain->swapChain) {
-    presentResult = swapchain->swapChain->lpVtbl->Present(
-      swapchain->swapChain,
+  if (swapchain && swapchain->swapchain) {
+    presentResult = swapchain->swapchain->lpVtbl->Present(
+      swapchain->swapchain,
       swapchain->syncInterval,
       swapchain->presentFlags
     );

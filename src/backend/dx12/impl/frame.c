@@ -20,21 +20,21 @@
 GPU_HIDE
 GPUFrame*
 dx12_beginFrame(GPUApi       * __restrict api,
-                GPUSwapChain * __restrict swapChain) {
-  GPUSwapChainDX12 *native;
+                GPUSwapchain * __restrict swapchain) {
+  GPUSwapchainDX12 *native;
   GPUFrameDX12     *frame;
   UINT              frameIndex;
 
   GPU__UNUSED(api);
 
-  native = swapChain ? swapChain->_priv : NULL;
-  if (!native || !native->swapChain || !native->frames ||
+  native = swapchain ? swapchain->_priv : NULL;
+  if (!native || !native->swapchain || !native->frames ||
       native->imageCount == 0u || native->frameActive) {
     return NULL;
   }
 
-  frameIndex = native->swapChain->lpVtbl->GetCurrentBackBufferIndex(
-    native->swapChain
+  frameIndex = native->swapchain->lpVtbl->GetCurrentBackBufferIndex(
+    native->swapchain
   );
   if (frameIndex >= native->imageCount) {
     return NULL;
@@ -61,7 +61,7 @@ GPU_HIDE
 void
 dx12_endFrame(GPUApi   * __restrict api,
               GPUFrame * __restrict frame) {
-  GPUSwapChainDX12 *native;
+  GPUSwapchainDX12 *native;
 
   GPU__UNUSED(api);
 
@@ -79,7 +79,7 @@ GPU_HIDE
 void
 dx12_schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   GPUCommandBufferDX12 *command;
-  GPUSwapChainDX12     *swapchain;
+  GPUSwapchainDX12     *swapchain;
 
   command   = cmdb ? cmdb->_priv : NULL;
   swapchain = frame ? frame->_priv : NULL;

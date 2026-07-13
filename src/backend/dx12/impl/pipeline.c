@@ -348,7 +348,7 @@ dx12__compileLegacy(const char     *source,
 GPU_HIDE
 bool
 dx12_compileShader(GPUDeviceDX12      *device,
-                   GPULibraryDX12     *library,
+                   GPUShaderLibraryDX12     *library,
                    const char         *entry,
                    GPUShaderStageFlags stage,
                    DX12ShaderCode     *outCode) {
@@ -581,7 +581,7 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
                           uint32_t                                       requiredBindGroupMask,
                           GPURenderPipeline                 * __restrict pipeline) {
   GPUDeviceDX12                  *deviceDX12;
-  GPULibraryDX12                 *library;
+  GPUShaderLibraryDX12                 *library;
   GPUPipelineLayoutDX12          *layout;
   GPURenderPipelineDX12          *native;
   ID3D12RootSignature            *rootSignature;

@@ -16,32 +16,16 @@
 
 #include "../common.h"
 
-GPU_EXPORT
-GPULibrary*
-mt_defaultLibrary(GPUDevice *device) {
-  GPUDeviceMT *deviceMT;
-  GPULibrary  *library;
-  id<MTLLibrary> mtLibrary;
-
-  deviceMT  = device->_priv;
-  mtLibrary = [deviceMT->device newDefaultLibrary];
-  library   = calloc(1, sizeof(*library));
-
-  library->_priv = mtLibrary;
-
-  return library;
-}
-
 GPU_HIDE
-GPULibrary*
+GPUShaderLibrary*
 mt_newLibraryWithSource(GPUDevice *device,
                         const char *source,
                         uint64_t sourceSize) {
-  GPUDeviceMT *deviceMT;
-  GPULibrary  *library;
-  id<MTLLibrary> mtLibrary;
-  NSError     *error;
-  NSString    *nsSource;
+  GPUDeviceMT       *deviceMT;
+  GPUShaderLibrary  *library;
+  id<MTLLibrary>     mtLibrary;
+  NSError           *error;
+  NSString          *nsSource;
   MTLCompileOptions *options;
 
   deviceMT  = device->_priv;
@@ -67,10 +51,10 @@ mt_newLibraryWithSource(GPUDevice *device,
   return library;
 }
 
-GPU_EXPORT
-GPUFunction*
-mt_newFunction(GPULibrary *lib, const char *name) {
-  GPUFunction *func;
+GPU_HIDE
+GPUShaderFunction*
+mt_newFunction(GPUShaderLibrary *lib, const char *name) {
+  GPUShaderFunction *func;
   id<MTLFunction> mtFunc;
 
   mtFunc = [(id<MTLLibrary>)lib->_priv newFunctionWithName:[NSString stringWithUTF8String:name]];
@@ -299,7 +283,7 @@ mt_destroySampler(GPUSampler * __restrict sampler) {
 
 GPU_HIDE
 void
-mt_destroyLibrary(GPULibrary *lib) {
+mt_destroyLibrary(GPUShaderLibrary *lib) {
   if (!lib) {
     return;
   }
@@ -314,7 +298,6 @@ mt_destroyLibrary(GPULibrary *lib) {
 GPU_HIDE
 void
 mt_initLibrary(GPUApiLibrary *api) {
-  api->defaultLibrary      = mt_defaultLibrary;
   api->newLibraryWithSource = mt_newLibraryWithSource;
   api->newFunction         = mt_newFunction;
   api->destroyLibrary      = mt_destroyLibrary;

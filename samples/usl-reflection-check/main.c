@@ -281,11 +281,7 @@ check_shader_artifact(GPUDevice *device,
                                  GPU_SHADER_STAGE_COMPUTE_BIT,
                                  1u,
                                  1u,
-                                 0) &&
-         GPUShaderFunction(library, "reflect_vs") != NULL &&
-         GPUShaderFunction(library, "reflect_fs") != NULL &&
-         GPUShaderFunction(library, "reflect_cs") != NULL &&
-         GPUShaderFunction(library, "missing_entry") == NULL;
+                                 0);
   }
 
   ok = ok && check_layout_from_reflection(device,

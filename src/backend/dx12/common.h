@@ -156,12 +156,12 @@ dx12_setCommandListName(GPUDevice                 *device,
 #endif
 
 typedef struct GPUCommandQueueDX12 GPUCommandQueueDX12;
-typedef struct GPUSwapChainDX12    GPUSwapChainDX12;
+typedef struct GPUSwapchainDX12    GPUSwapchainDX12;
 
-typedef struct GPULibraryDX12 {
+typedef struct GPUShaderLibraryDX12 {
   char    *source;
   uint64_t sourceSize;
-} GPULibraryDX12;
+} GPUShaderLibraryDX12;
 
 typedef struct DX12ShaderCode {
   void  *data;
@@ -321,7 +321,7 @@ typedef struct GPUCommandBufferDX12 {
   ID3D12CommandAllocator       *allocator;
   ID3D12GraphicsCommandList    *commandList;
   ID3D12GraphicsCommandList7   *commandList7;
-  GPUSwapChainDX12             *presentSwapchain;
+  GPUSwapchainDX12             *presentSwapchain;
   struct GPUCommandBufferDX12  *next;
   struct GPUCommandBufferDX12  *poolNext;
   struct GPUCommandBufferDX12  *pendingNext;
@@ -394,7 +394,7 @@ typedef struct GPUSamplerDX12 {
 } GPUSamplerDX12;
 
 typedef struct GPUFrameDX12 {
-  GPUSwapChainDX12      *swapchain;
+  GPUSwapchainDX12      *swapchain;
   ID3D12Resource        *renderTarget;
   UINT64                 fenceValue;
   D3D12_RESOURCE_STATES  state;
@@ -404,9 +404,9 @@ typedef struct GPUFrameDX12 {
   GPUTextureViewDX12     nativeView;
 } GPUFrameDX12;
 
-struct GPUSwapChainDX12 {
+struct GPUSwapchainDX12 {
   GPUCommandQueueDX12  *queue;
-  IDXGISwapChain3      *swapChain;
+  IDXGISwapChain3      *swapchain;
   ID3D12DescriptorHeap *rtvHeap;
   GPUFrameDX12         *frames;
   HANDLE                 frameEvent;

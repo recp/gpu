@@ -51,7 +51,7 @@ gl_destroyPipeline(GPURenderPipeline *pipeline) {
 GPU_HIDE
 void
 gl_setFunction(GPURenderPipeline * __restrict pipline,
-               GPUFunction       * __restrict func,
+               GPUShaderFunction * __restrict func,
                GPUFunctionType                functype) {
   
 }

@@ -30,7 +30,7 @@ GPU_HIDE void mt_initDepthStencil(GPUApiDepthStencil *api);
 GPU_HIDE void mt_initVertex(GPUApiVertex *api);
 GPU_HIDE void mt_initLibrary(GPUApiLibrary *api);
 GPU_HIDE void mt_initSampler(GPUApiSampler *api);
-GPU_HIDE void mt_initSwapChain(GPUApiSwapChain *api);
+GPU_HIDE void mt_initSwapchain(GPUApiSwapchain *api);
 GPU_HIDE void mt_initFrame(GPUApiFrame *api);
 GPU_HIDE void mt_initInstance(GPUApiInstance *api);
 GPU_HIDE void mt_initSurface(GPUApiSurface * apiDevice);

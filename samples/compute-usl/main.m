@@ -44,7 +44,7 @@ static const QuadVertex kQuadVertices[] = {
   GPUCommandQueue *_queue;
   GPUSurface *_surface;
   GPUSwapchain *_swapchain;
-  GPULibrary *_library;
+  GPUShaderLibrary *_library;
   GPUShaderLayout *_shaderLayout;
   GPUComputePipeline *_computePipeline;
   GPURenderPipeline *_renderPipeline;
@@ -162,7 +162,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   if (!GPUSampleLoadUSL(_device,
                         @"compute_visible.us",
                         2u,
-                        (GPUShaderLibrary **)&_library,
+                        &_library,
                         &_shaderLayout)) {
     return NO;
   }
@@ -201,7 +201,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                .structSize = sizeof(GPUComputePipelineCreateInfo) },
     .label = "compute-usl-fill-image",
     .layout = _shaderLayout->pipelineLayout,
-    .library = (GPUShaderLibrary *)_library,
+    .library = _library,
     .entryPoint = "fill_image"
   };
   if (GPUCreateComputePipeline(_device, &computeInfo, &_computePipeline) != GPU_OK) {
@@ -241,7 +241,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                .structSize = sizeof(GPURenderPipelineCreateInfo) },
     .label = "compute-usl-render-pipeline",
     .layout = _shaderLayout->pipelineLayout,
-    .library = (GPUShaderLibrary *)_library,
+    .library = _library,
     .vertexEntry = "quad_vs",
     .fragmentEntry = "quad_fs",
     .vertex = {
@@ -675,7 +675,7 @@ cleanup:
     _shaderLayout = NULL;
   }
   if (_library) {
-    GPUDestroyShaderLibrary((GPUShaderLibrary *)_library);
+    GPUDestroyShaderLibrary(_library);
     _library = NULL;
   }
   if (_swapchain) {

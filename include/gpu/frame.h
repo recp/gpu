@@ -23,8 +23,7 @@ extern "C" {
 #include "texture.h"
 #include "cmdqueue.h"
 
-typedef struct GPUSwapChain GPUSwapChain;
-typedef struct GPUSwapChain GPUSwapchain;
+typedef struct GPUSwapchain GPUSwapchain;
 
 typedef struct GPUFrame GPUFrame;
 

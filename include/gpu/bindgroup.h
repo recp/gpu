@@ -27,7 +27,7 @@ extern "C" {
 
 typedef struct GPUBuffer GPUBuffer;
 typedef struct GPUDevice GPUDevice;
-typedef struct GPULibrary GPUShaderLibrary;
+typedef struct GPUShaderLibrary GPUShaderLibrary;
 typedef struct GPUSampler GPUSampler;
 
 #ifndef GPU_RENDER_ENCODER_TYPES_DEFINED

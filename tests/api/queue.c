@@ -388,7 +388,7 @@ commit_scoped_cmdb(GPUCommandBuffer * __restrict cmdb) {
 
 static GPUFrame *
 begin_scoped_frame(GPUApi       * __restrict api,
-                   GPUSwapChain * __restrict swapchain) {
+                   GPUSwapchain * __restrict swapchain) {
   (void)api;
   (void)swapchain;
   memset(&gScopedFrame, 0, sizeof(gScopedFrame));
@@ -413,7 +413,7 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   GPUFrame         *frame;
   GPUApi            scopedApi;
   GPUDevice         device    = {0};
-  GPUSwapChain      swapchain = {0};
+  GPUSwapchain      swapchain = {0};
 
   api = gpuDeviceApi(activeDevice);
   if (!api) {

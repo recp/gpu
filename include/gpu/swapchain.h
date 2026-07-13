@@ -26,9 +26,7 @@ extern "C" {
 typedef struct GPUDevice GPUDevice;
 struct GPUSurface;
 
-typedef struct GPUSwapChain GPUSwapChain;
-
-typedef GPUSwapChain GPUSwapchain;
+typedef struct GPUSwapchain GPUSwapchain;
 
 typedef enum GPUPresentMode {
   GPU_PRESENT_MODE_FIFO = 0,
@@ -62,11 +60,11 @@ GPUCreateSwapchainDefault(GPUDevice          * __restrict device,
 
 GPU_EXPORT
 void
-GPUDestroySwapchain(GPUSwapchain * __restrict swapChain);
+GPUDestroySwapchain(GPUSwapchain * __restrict swapchain);
 
 GPU_EXPORT
 GPUResult
-GPUResizeSwapchain(GPUSwapchain * __restrict swapChain,
+GPUResizeSwapchain(GPUSwapchain * __restrict swapchain,
                    uint32_t                  width,
                    uint32_t                  height);
 

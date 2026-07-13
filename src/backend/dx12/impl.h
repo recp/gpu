@@ -50,13 +50,13 @@ GPU_HIDE void dx12_destroyDescriptorHeaps(GPUDeviceDX12 *device);
 // GPU_HIDE void dx12_initDepthStencil(GPUApiDepthStencil* api);
 // GPU_HIDE void dx12_initVertex(GPUApiVertex* api);
 // GPU_HIDE void dx12_initLibrary(GPUApiLibrary* api);
-GPU_HIDE void dx12_initSwapChain(GPUApiSwapChain* apiSwapChain);
+GPU_HIDE void dx12_initSwapchain(GPUApiSwapchain* apiSwapchain);
 GPU_HIDE void dx12_initFrame(GPUApiFrame *apiFrame);
 GPU_HIDE void dx12_initDescriptor(GPUApiDescriptor *apiDescriptor);
 GPU_HIDE void dx12_initInstance(GPUApiInstance *apiInstance);
 GPU_HIDE void dx12_initSurface(GPUApiSurface *apiDevice);
 GPU_HIDE bool dx12_compileShader(GPUDeviceDX12      *device,
-                                 GPULibraryDX12     *library,
+                                 GPUShaderLibraryDX12     *library,
                                  const char         *entry,
                                  GPUShaderStageFlags stage,
                                  DX12ShaderCode     *outCode);

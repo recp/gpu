@@ -32,7 +32,7 @@ typedef struct GPUShaderStaticSamplerInfoList {
   GPUShaderStaticSamplerInfo items[];
 } GPUShaderStaticSamplerInfoList;
 
-struct GPULibrary {
+struct GPUShaderLibrary {
   GPUApi                         *_api;
   void                           *_priv;
   void                           *_metadata;
@@ -43,9 +43,13 @@ struct GPULibrary {
   GPUShaderReflection             _reflection;
 };
 
-struct GPUFunction {
+struct GPUShaderFunction {
   void *_priv;
 };
+
+GPU_HIDE
+GPUShaderFunction *
+gpuShaderFunction(GPUShaderLibrary *library, const char *name);
 
 GPU_HIDE
 int

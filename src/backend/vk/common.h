@@ -331,11 +331,11 @@ typedef struct GPUBindGroupVk {
 
 typedef struct GPUCommandQueueVk  GPUCommandQueueVk;
 typedef struct GPUCommandBufferVk GPUCommandBufferVk;
-typedef struct GPUSwapChainVk     GPUSwapChainVk;
+typedef struct GPUSwapchainVk     GPUSwapchainVk;
 typedef struct GPUTextureViewVk   GPUTextureViewVk;
 
 typedef struct GPURenderPassVk {
-  GPUSwapChainVk              *swapchain;
+  GPUSwapchainVk              *swapchain;
   GPUTextureViewVk            *colorViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   GPUTextureViewVk            *resolveViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   GPUTextureViewVk            *depthStencilView;
@@ -377,7 +377,7 @@ struct GPUCommandBufferVk {
   GPUCommandBufferVk      *next;
   GPUCommandBufferVk      *poolNext;
   GPUCommandBufferVk      *pendingNext;
-  GPUSwapChainVk          *presentSwapchain;
+  GPUSwapchainVk          *presentSwapchain;
 #ifdef __APPLE__
   GPUTransferChunkVk      *transferChunks;
 #endif
@@ -455,7 +455,7 @@ typedef struct GPUFrameSyncVk {
 } GPUFrameSyncVk;
 
 struct GPUTextureViewVk {
-  GPUSwapChainVk    *swapchain;
+  GPUSwapchainVk    *swapchain;
   GPUTextureVk      *texture;
   VkImageLayout     *layout;
   VkDevice           device;
@@ -529,7 +529,7 @@ typedef struct GPUComputePipelineVk {
   VkPipeline        pipeline;
 } GPUComputePipelineVk;
 
-struct GPUSwapChainVk {
+struct GPUSwapchainVk {
   GPUDevice         *gpuDevice;
   GPUCommandQueueVk *queue;
   GPUSurfaceVk      *surface;
@@ -559,10 +559,10 @@ struct GPUSwapChainVk {
   bool               frameSubmitted;
 };
 
-typedef struct GPULibraryVk {
+typedef struct GPUShaderLibraryVk {
   VkDevice       device;
   VkShaderModule module;
-} GPULibraryVk;
+} GPUShaderLibraryVk;
 
 GPU_HIDE
 bool
@@ -622,7 +622,7 @@ vk_setTextureLayout(GPUTextureVk  *texture,
 
 GPU_HIDE
 bool
-vk_restoreFrameFence(GPUSwapChainVk *swapchain, GPUFrameSyncVk *sync);
+vk_restoreFrameFence(GPUSwapchainVk *swapchain, GPUFrameSyncVk *sync);
 
 GPU_HIDE
 GPUResult
@@ -643,7 +643,7 @@ vk_abortTransfer(GPUCommandQueue *queue);
 
 GPU_HIDE
 void
-vk_waitSwapChainIdle(GPUSwapChainVk *swapchain);
+vk_waitSwapchainIdle(GPUSwapchainVk *swapchain);
 
 GPU_HIDE
 void

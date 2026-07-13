@@ -124,7 +124,7 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
                          GPUComputePipeline                ** __restrict outPipeline) {
   GPUComputePipelineState *state;
   GPUComputePipeline      *pipeline;
-  GPUFunction             *function;
+  GPUShaderFunction       *function;
   GPUApi                  *api;
   uint32_t                 requiredBindGroupMask;
 
@@ -207,7 +207,7 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
-    function = GPUShaderFunction(info->library, info->entryPoint);
+    function = gpuShaderFunction(info->library, info->entryPoint);
     if (!function) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }

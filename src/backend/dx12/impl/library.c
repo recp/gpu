@@ -17,12 +17,12 @@
 #include "../common.h"
 
 GPU_HIDE
-GPULibrary*
+GPUShaderLibrary*
 dx12_newLibraryWithSource(GPUDevice *device,
                           const char *source,
                           uint64_t    sourceSize) {
-  GPULibraryDX12 *native;
-  GPULibrary     *library;
+  GPUShaderLibraryDX12 *native;
+  GPUShaderLibrary     *library;
 
   if (!device || !source || sourceSize == 0u ||
       sourceSize > (uint64_t)SIZE_MAX - 1u) {
@@ -53,8 +53,8 @@ dx12_newLibraryWithSource(GPUDevice *device,
 
 GPU_HIDE
 void
-dx12_destroyLibrary(GPULibrary *library) {
-  GPULibraryDX12 *native;
+dx12_destroyLibrary(GPUShaderLibrary *library) {
+  GPUShaderLibraryDX12 *native;
 
   if (!library) {
     return;

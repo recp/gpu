@@ -56,7 +56,7 @@ typedef struct GPUApi {
   GPUApiDepthStencil  depthStencil;
   GPUApiVertex        vertex;
   GPUApiLibrary       library;
-  GPUApiSwapChain     swapchain;
+  GPUApiSwapchain     swapchain;
   GPUApiFrame         frame;
   GPUApiDescriptor    descriptor;
   GPUApiSampler       sampler;

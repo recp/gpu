@@ -51,7 +51,7 @@ mt_newComputePipeline(void) {
 
 GPU_HIDE
 void
-mt_setComputeFunction(GPUComputePipeline *pipeline, GPUFunction *func) {
+mt_setComputeFunction(GPUComputePipeline *pipeline, GPUShaderFunction *func) {
   MTComputePipelineDesc *desc;
 
   if (!pipeline || !pipeline->_priv || !func) {

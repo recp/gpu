@@ -42,10 +42,7 @@ typedef struct GPUShaderReflection {
   uint32_t pushConstantSizeBytes;
 } GPUShaderReflection;
 
-typedef struct GPULibrary GPULibrary;
-typedef GPULibrary GPUShaderLibrary;
-
-typedef struct GPUFunction GPUFunction;
+typedef struct GPUShaderLibrary GPUShaderLibrary;
 
 typedef enum GPUShaderSourceKind {
   GPU_SHADER_SOURCE_USL_TEXT = 0,
@@ -71,14 +68,6 @@ typedef struct GPUShaderLibraryCreateInfo {
   bool generateReflection;
   bool enableDiskCache;
 } GPUShaderLibraryCreateInfo;
-
-GPU_EXPORT
-GPULibrary*
-GPUDefaultLibrary(GPUDevice *device);
-
-GPU_EXPORT
-GPUFunction*
-GPUShaderFunction(GPULibrary *lib, const char *name);
 
 GPU_EXPORT
 GPUResult

@@ -53,7 +53,7 @@ typedef NSView GPUViewHandle;
 #error "Unsupported platform"
 #endif
 
-@class GPUSwapChainObjc;
+@class GPUSwapchainObjc;
 
 typedef enum MTCommandMode {
   MTCommandModeClassic = 0,
@@ -64,14 +64,14 @@ enum {
   MT_TRANSFER_SLOT_COUNT = 3u
 };
 
-typedef struct GPUSwapChainMetal {
+typedef struct GPUSwapchainMetal {
   CAMetalLayer  *layer;
   void          *objc;
   GPUFrame       frame;
   GPUTexture     target;
   GPUTextureView targetView;
   bool           frameActive;
-} GPUSwapChainMetal;
+} GPUSwapchainMetal;
 
 typedef struct GPUDeviceMT {
   id<MTLDevice>     device;

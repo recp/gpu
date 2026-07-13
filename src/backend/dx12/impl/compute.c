@@ -29,7 +29,7 @@ dx12_createComputePipeline(GPUDevice                          *device,
                            const GPUComputePipelineCreateInfo *info,
                            GPUComputePipeline                 *pipeline) {
   GPUDeviceDX12           *deviceDX12;
-  GPULibraryDX12          *library;
+  GPUShaderLibraryDX12          *library;
   GPUPipelineLayoutDX12   *layout;
   GPUComputePipelineState *state;
   GPUComputePipelineDX12  *native;

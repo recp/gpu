@@ -56,7 +56,7 @@ gpuCompileRenderPipelineState(GPUDevice * __restrict device,
 GPU_HIDE
 void
 gpuPipelineSetFunction(GPURenderPipeline * __restrict pipeline,
-                       GPUFunction       * __restrict func,
+                       GPUShaderFunction * __restrict func,
                        GPUFunctionType                functionType);
 
 GPU_HIDE

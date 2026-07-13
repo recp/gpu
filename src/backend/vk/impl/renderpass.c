@@ -483,7 +483,7 @@ vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
     const GPURenderPassColorAttachment *attachment;
     GPUTextureViewVk                   *view;
     GPUTextureViewVk                   *resolveView;
-    GPUSwapChainVk                     *swapchain;
+    GPUSwapchainVk                     *swapchain;
     VkRenderingAttachmentInfoKHR       *nativeAttachment;
 
     attachment = &info->pColorAttachments[i];
@@ -644,7 +644,7 @@ vk_beginRenderPass(GPUCommandBuffer              *cmdb,
   const GPURenderPassColorAttachment *color;
   GPUCommandBufferVk                  *command;
   GPUTextureViewVk                    *view;
-  GPUSwapChainVk                      *swapchain;
+  GPUSwapchainVk                      *swapchain;
   GPURenderPassDesc                   *pass;
   GPURenderPassVk                     *native;
   GPUDeviceVk                         *device;
