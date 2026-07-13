@@ -30,6 +30,14 @@ typedef struct GPUPipelineLayout      GPUPipelineLayout;
 typedef struct GPUBindGroupLayout     GPUBindGroupLayout;
 typedef struct GPUBindGroup           GPUBindGroup;
 
+typedef enum GPUPrimitiveType {
+  GPUPrimitiveTypePoint         = 0,
+  GPUPrimitiveTypeLine          = 1,
+  GPUPrimitiveTypeLineStrip     = 2,
+  GPUPrimitiveTypeTriangle      = 3,
+  GPUPrimitiveTypeTriangleStrip = 4
+} GPUPrimitiveType;
+
 #define GPU__RENDER_VERTEX_SHADOW_SLOT_COUNT 32u
 
 enum {

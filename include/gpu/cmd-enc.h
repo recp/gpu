@@ -35,20 +35,6 @@ typedef struct GPURenderCommandEncoder GPURenderCommandEncoder;
 typedef GPURenderCommandEncoder GPURenderPassEncoder;
 #endif
 
-typedef enum GPUPrimitiveType {
-  GPUPrimitiveTypePoint         = 0,
-  GPUPrimitiveTypeLine          = 1,
-  GPUPrimitiveTypeLineStrip     = 2,
-  GPUPrimitiveTypeTriangle      = 3,
-  GPUPrimitiveTypeTriangleStrip = 4
-} GPUPrimitiveType;
-
-typedef enum GPUVisibilityResultMode {
-  GPUVisibilityResultModeDisabled = 0,
-  GPUVisibilityResultModeBoolean  = 1,
-  GPUVisibilityResultModeCounting = 2
-} GPUVisibilityResultMode;
-
 typedef struct GPUScissorRect {
   int32_t  x, y;
   uint32_t width, height;
@@ -59,21 +45,6 @@ typedef struct GPUViewport {
   float width, height;
   float minDepth, maxDepth;
 } GPUViewport;
-
-typedef enum GPUDepthClipMode {
-  GPUDepthClipModeClip  = 0,
-  GPUDepthClipModeClamp = 1
-} GPUDepthClipMode;
-
-typedef enum GPUTriangleFillMode {
-  GPUTriangleFillModeFill  = 0,
-  GPUTriangleFillModeLines = 1
-} GPUTriangleFillMode;
-
-typedef enum GPURenderStages {
-  GPURenderStageVertex   = 0,
-  GPURenderStageFragment = 1
-} GPURenderStages;
 
 typedef struct GPUBufferBinding {
   GPUBuffer *buffer;
