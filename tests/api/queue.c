@@ -114,7 +114,7 @@ destroy_ownership_instance(GPUApi      * __restrict api,
 }
 
 static int
-check_instance_ownership_dispatch(void) {
+check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   GPUNativeSurfaceCreateInfo nativeInfo = {0};
   GPUSurfaceCreateInfo       surfaceInfo = {0};
   GPUAdapterProperties       properties;
@@ -127,9 +127,9 @@ check_instance_ownership_dispatch(void) {
   GPUInstance                otherInstance = {0};
   uint32_t                   adapterCount;
 
-  activeApi = gpuActiveGPUApi();
+  activeApi = gpuInstanceApi(activeInstance);
   if (!activeApi) {
-    fprintf(stderr, "instance ownership could not get active api\n");
+    fprintf(stderr, "instance ownership has no instance api\n");
     return 0;
   }
 
@@ -310,7 +310,7 @@ end_scoped_frame(GPUApi   * __restrict api,
 }
 
 static int
-check_queue_frame_device_dispatch(void) {
+check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   GPUApi           *api;
   GPUCommandQueue  *queue;
   GPUCommandBuffer *cmdb;
@@ -319,9 +319,9 @@ check_queue_frame_device_dispatch(void) {
   GPUDevice         device    = {0};
   GPUSwapChain      swapchain = {0};
 
-  api = gpuActiveGPUApi();
+  api = gpuDeviceApi(activeDevice);
   if (!api) {
-    fprintf(stderr, "queue/frame dispatch could not get active api\n");
+    fprintf(stderr, "queue/frame dispatch has no device api\n");
     return 0;
   }
 
@@ -366,7 +366,8 @@ check_queue_frame_device_dispatch(void) {
 }
 
 static void
-queue_completion_probe(void *sender, GPUCommandBuffer *cmdb) {
+queue_completion_probe(void            * __restrict sender,
+                       GPUCommandBuffer * __restrict cmdb) {
   QueueCompletionProbe *probe = sender;
 
   if (!probe) {
@@ -1281,9 +1282,9 @@ int
 gpu_test_queue(GPUInstance *instance,
                GPUAdapter  *adapter,
                GPUDevice   *device) {
-  return check_instance_ownership_dispatch() &&
+  return check_instance_ownership_dispatch(instance) &&
          check_secondary_backend_instance(instance) &&
-         check_queue_frame_device_dispatch() &&
+         check_queue_frame_device_dispatch(device) &&
          check_adapter_enumeration(instance) &&
          check_device_queue_create_validation(adapter) &&
          check_queue_selection(device) &&

@@ -100,7 +100,7 @@ count_compute_push_constants(GPUComputePassEncoder *enc,
 }
 
 static int
-check_compute_push_constant_shadowing_calls(void) {
+check_compute_push_constant_shadowing_calls(GPUDevice *activeDevice) {
   GPUApi *api;
   void (*oldPushConstants)(GPUComputePassEncoder *,
                            const void *,
@@ -112,9 +112,9 @@ check_compute_push_constant_shadowing_calls(void) {
   uint32_t              value;
   int                   ok;
 
-  api = gpuActiveGPUApi();
+  api = gpuDeviceApi(activeDevice);
   if (!api) {
-    fprintf(stderr, "compute push constant shadowing could not get active api\n");
+    fprintf(stderr, "compute push constant shadowing has no device api\n");
     return 0;
   }
 
@@ -294,9 +294,9 @@ check_compute_dispatch_validation_calls(GPUDevice *device) {
   GPUBuffer wrongUsageBuffer = {0};
   int ok = 0;
 
-  api = gpuActiveGPUApi();
+  api = gpuDeviceApi(device);
   if (!api) {
-    fprintf(stderr, "compute dispatch validation could not get active api\n");
+    fprintf(stderr, "compute dispatch validation has no device api\n");
     return 0;
   }
 
@@ -786,7 +786,7 @@ gpu_test_compute(GPUDevice *device, const char *bytecodePath) {
   ok = check_compute_pass_validation(device) &&
        check_compute_pipeline_validation(device, bytecodePath) &&
        check_compute_dispatch_validation_calls(device) &&
-       check_compute_push_constant_shadowing_calls() &&
+       check_compute_push_constant_shadowing_calls(device) &&
        check_compute_readback(device, bytecodePath);
   device->runtimeConfig = savedConfig;
   return ok;

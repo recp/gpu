@@ -1,5 +1,6 @@
 #include "test.h"
 #include <gpu/api/gpudef.h>
+#include "../../src/api/device_internal.h"
 #include "../../src/api/texture_internal.h"
 
 typedef struct GPUDescriptorHookCounts {
@@ -111,7 +112,7 @@ check_backend_descriptor_hooks(GPUDevice *device) {
   GPUApi *api;
   int ok;
 
-  api = gpuActiveGPUApi();
+  api = gpuDeviceApi(device);
   if (!api) {
     return 0;
   }
@@ -214,7 +215,7 @@ check_pipeline_layout_bind_validation(GPUDevice *device,
   GPUComputePassEncoder computePass = {0};
   uint32_t dynamicOffset = 0u;
 
-  api = gpuActiveGPUApi();
+  api = gpuDeviceApi(device);
   if (!api) {
     return 0;
   }
@@ -943,7 +944,7 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
   uint32_t extraOffsets[2] = { 256u, 0u };
   int ok = 0;
 
-  api = gpuActiveGPUApi();
+  api = gpuDeviceApi(device);
   if (!api) {
     return 0;
   }

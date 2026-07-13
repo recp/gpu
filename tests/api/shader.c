@@ -543,7 +543,7 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
   groupInfo.entryCount = (uint32_t)GPU_ARRAY_LEN(group0Entries);
   groupInfo.pEntries = group0Entries;
 
-  api = gpuActiveGPUApi();
+  api = gpuDeviceApi(device);
   if (!api) {
     return 0;
   }
@@ -698,7 +698,7 @@ check_reflection_objects_after_library_destroy(GPUDevice *device,
   groupInfo.layout = layouts[0];
   groupInfo.entryCount = (uint32_t)GPU_ARRAY_LEN(group0Entries);
   groupInfo.pEntries = group0Entries;
-  api = gpuActiveGPUApi();
+  api = gpuDeviceApi(device);
   if (!api) {
     goto cleanup;
   }

@@ -29,7 +29,7 @@ end_scoped_copy_pass(GPUCopyPassEncoder *pass) {
 }
 
 static int
-check_copy_pass_device_dispatch(void) {
+check_copy_pass_device_dispatch(GPUDevice *activeDevice) {
   GPUApi             *api;
   GPUCopyPassEncoder *pass;
   GPUApi              scopedApi;
@@ -37,9 +37,9 @@ check_copy_pass_device_dispatch(void) {
   GPUCommandQueue     queue  = {0};
   GPUCommandBuffer    cmdb   = {0};
 
-  api = gpuActiveGPUApi();
+  api = gpuDeviceApi(activeDevice);
   if (!api) {
-    fprintf(stderr, "copy pass dispatch could not get active api\n");
+    fprintf(stderr, "copy pass dispatch has no device api\n");
     return 0;
   }
 
@@ -550,7 +550,7 @@ cleanup:
 
 int
 gpu_test_copy(GPUDevice *device) {
-  return check_copy_pass_device_dispatch() &&
+  return check_copy_pass_device_dispatch(device) &&
          check_copy_pass_validation(device) &&
          check_copy_pass_invalid_copy_noops(device);
 }

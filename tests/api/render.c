@@ -1699,9 +1699,9 @@ check_render_draw_validation_calls(GPUDevice *device) {
   bool                         savedStatsEnabled;
   int                          ok = 0;
 
-  api = gpuActiveGPUApi();
+  api = gpuDeviceApi(device);
   if (!api) {
-    fprintf(stderr, "render draw validation could not get active api\n");
+    fprintf(stderr, "render draw validation has no device api\n");
     return 0;
   }
   oldEnabledFeatureMask = device->enabledFeatureMask;
@@ -1884,7 +1884,7 @@ cleanup:
 }
 
 static int
-check_vertex_buffer_shadowing_calls(void) {
+check_vertex_buffer_shadowing_calls(GPUDevice *activeDevice) {
   GPUApi *api;
   void (*oldVertexBuffer)(GPURenderCommandEncoder *,
                           GPUBuffer *,
@@ -1898,9 +1898,9 @@ check_vertex_buffer_shadowing_calls(void) {
   GPURenderPassEncoder pass    = {0};
   int                  ok;
 
-  api = gpuActiveGPUApi();
+  api = gpuDeviceApi(activeDevice);
   if (!api) {
-    fprintf(stderr, "vertex buffer shadowing could not get active api\n");
+    fprintf(stderr, "vertex buffer shadowing has no device api\n");
     return 0;
   }
 
@@ -1958,7 +1958,7 @@ cleanup:
 }
 
 static int
-check_render_push_constant_shadowing_calls(void) {
+check_render_push_constant_shadowing_calls(GPUDevice *activeDevice) {
   GPUApi *api;
   void (*oldPushConstants)(GPURenderCommandEncoder *,
                            GPUShaderStageFlags,
@@ -1971,9 +1971,9 @@ check_render_push_constant_shadowing_calls(void) {
   uint32_t             value;
   int                  ok;
 
-  api = gpuActiveGPUApi();
+  api = gpuDeviceApi(activeDevice);
   if (!api) {
-    fprintf(stderr, "render push constant shadowing could not get active api\n");
+    fprintf(stderr, "render push constant shadowing has no device api\n");
     return 0;
   }
 
@@ -2025,7 +2025,7 @@ cleanup:
 }
 
 static int
-check_dynamic_state_validation_calls(void) {
+check_dynamic_state_validation_calls(GPUDevice *activeDevice) {
   GPUApi             *api;
   GPUApi              scopedApi;
   GPUDevice           device = {0};
@@ -2036,9 +2036,9 @@ check_dynamic_state_validation_calls(void) {
   GPUDynamicStateApplyInfo info = {0};
   int ok = 0;
 
-  api = gpuActiveGPUApi();
+  api = gpuDeviceApi(activeDevice);
   if (!api) {
-    fprintf(stderr, "dynamic state validation could not get active api\n");
+    fprintf(stderr, "dynamic state validation has no device api\n");
     return 0;
   }
 
@@ -2301,8 +2301,8 @@ gpu_test_render(GPUDevice *device, const char *mrtBytecodePath) {
          check_render_encoder_validation(device) &&
          check_render_pipeline_validation(device, mrtBytecodePath) &&
          check_render_draw_validation_calls(device) &&
-         check_vertex_buffer_shadowing_calls() &&
-         check_render_push_constant_shadowing_calls() &&
-         check_dynamic_state_validation_calls() &&
+         check_vertex_buffer_shadowing_calls(device) &&
+         check_render_push_constant_shadowing_calls(device) &&
+         check_dynamic_state_validation_calls(device) &&
          check_render_readback(device, mrtBytecodePath);
 }
