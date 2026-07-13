@@ -20,13 +20,6 @@
 
 #include "backends.h"
 
-typedef struct GPUApiList {
-  struct GPUApiList *next;
-  GPUApi            *api;
-} GPUApiList;
-
-static GPUApiList *gpu__apis    = NULL;
-
 static GPUApi*
 gpu__selectDefaultBackend(void) {
 #ifdef __APPLE__
@@ -72,15 +65,4 @@ gpuApiForBackend(GPUBackend backend) {
   }
 
   return api;
-}
-
-GPU_EXPORT
-void
-gpuRegisterCustomGPUApi(GPUApi * __restrict gpuApi) {
-  GPUApiList *item;
-  
-  item       = calloc(1, sizeof(*item));
-  item->api  = gpuApi;
-  item->next = gpu__apis;
-  gpu__apis  = item;
 }

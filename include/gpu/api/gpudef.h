@@ -65,10 +65,6 @@ typedef struct GPUApi {
   void               *reserved;
 } GPUApi;
 
-GPU_EXPORT
-void
-gpuRegisterCustomGPUApi(GPUApi * __restrict gpuApi);
-
 #ifdef __cplusplus
 }
 #endif
