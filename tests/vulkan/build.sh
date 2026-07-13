@@ -38,6 +38,7 @@ build_test "$TEST_DIR/queue.c" "$TEST_DIR/vulkan-queue"
 build_test "$TEST_DIR/shader.c" \
   "$TEST_DIR/vulkan-shader" \
   "$ROOT/tests/api/copy.c" \
+  "$ROOT/tests/api/texture_transfer.c" \
   "$TEST_DIR/texture.c"
 
 COMPUTE_SAMPLE="$ROOT/samples/compute-buffer-vulkan-usl"
