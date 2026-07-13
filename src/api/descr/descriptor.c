@@ -32,8 +32,9 @@
 #define GPU_PUSH_CONSTANT_MAX_SIZE_BYTES 4096u
 
 enum {
-  GPU_BIND_GROUP_CACHE_CAPACITY = 256u,
-  GPU_BIND_GROUP_CACHE_MASK     = GPU_BIND_GROUP_CACHE_CAPACITY - 1u
+  GPU_BIND_GROUP_CACHE_CAPACITY    = 256u,
+  GPU_BIND_GROUP_CACHE_MASK        = GPU_BIND_GROUP_CACHE_CAPACITY - 1u,
+  GPU_BIND_GROUP_MATCH_STACK_WORDS = 4u
 };
 
 /* Cache entries intern live groups without extending resource lifetimes. */
@@ -964,10 +965,12 @@ gpu_bindGroupDynamicBase(const GPUBindGroupLayoutPriv *layout,
 
 static GPUResult
 gpu_validateBindGroupEntries(const GPUBindGroupLayoutPriv *layoutPriv,
-                             const GPUBindGroupEntry *entries,
-                             uint32_t count) {
-  uint8_t *matched;
-  uint32_t runtimeCount;
+                             const GPUBindGroupEntry       *entries,
+                             uint32_t                       count) {
+  uint64_t *matched;
+  uint64_t  stackMatched[GPU_BIND_GROUP_MATCH_STACK_WORDS] = {0};
+  size_t    matchedWordCount;
+  uint32_t  runtimeCount;
 
   if (!layoutPriv || (!entries && count > 0)) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -978,21 +981,29 @@ gpu_validateBindGroupEntries(const GPUBindGroupLayoutPriv *layoutPriv,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  matched = NULL;
-  if (runtimeCount > 0u) {
-    matched = calloc(runtimeCount, sizeof(*matched));
+  matched          = stackMatched;
+  matchedWordCount = runtimeCount / 64u;
+  if (runtimeCount % 64u != 0u) {
+    matchedWordCount++;
+  }
+  if (matchedWordCount > GPU_ARRAY_LEN(stackMatched)) {
+    matched = calloc(matchedWordCount, sizeof(*matched));
     if (!matched) {
-      return GPU_ERROR_BACKEND_FAILURE;
+      return GPU_ERROR_OUT_OF_MEMORY;
     }
   }
 
   for (uint32_t i = 0; i < count; i++) {
+    uint64_t matchMask;
+    size_t   matchWord;
     uint32_t matchIndex;
     uint32_t matchBase;
+    uint32_t matchSlot;
 
     matchIndex = UINT32_MAX;
     for (uint32_t j = 0; j < layoutPriv->count; j++) {
-      if (!gpu_bindGroupEntryMatchesLayout(&layoutPriv->entries[j], &entries[i])) {
+      if (!gpu_bindGroupEntryMatchesLayout(&layoutPriv->entries[j],
+                                           &entries[i])) {
         continue;
       }
       matchIndex = j;
@@ -1001,23 +1012,29 @@ gpu_validateBindGroupEntries(const GPUBindGroupLayoutPriv *layoutPriv,
 
     if (matchIndex == UINT32_MAX ||
         !gpu_bindGroupRuntimeBase(layoutPriv, matchIndex, &matchBase) ||
-        entries[i].arrayIndex > UINT32_MAX - matchBase ||
-        matched[matchBase + entries[i].arrayIndex]) {
-      free(matched);
-      return GPU_ERROR_INVALID_ARGUMENT;
+        entries[i].arrayIndex > UINT32_MAX - matchBase) {
+      goto invalid;
     }
-    matched[matchBase + entries[i].arrayIndex] = 1u;
+
+    matchSlot = matchBase + entries[i].arrayIndex;
+    matchWord = matchSlot / 64u;
+    matchMask = 1ull << (matchSlot % 64u);
+    if ((matched[matchWord] & matchMask) != 0u) {
+      goto invalid;
+    }
+    matched[matchWord] |= matchMask;
   }
 
-  for (uint32_t i = 0; i < runtimeCount; i++) {
-    if (!matched[i]) {
-      free(matched);
-      return GPU_ERROR_INVALID_ARGUMENT;
-    }
+  if (matched != stackMatched) {
+    free(matched);
   }
-
-  free(matched);
   return GPU_OK;
+
+invalid:
+  if (matched != stackMatched) {
+    free(matched);
+  }
+  return GPU_ERROR_INVALID_ARGUMENT;
 }
 
 static GPUResult
