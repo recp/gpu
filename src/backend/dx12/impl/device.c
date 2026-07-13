@@ -276,7 +276,7 @@ err:
   return NULL;
 }
 
-GPU_EXPORT
+GPU_HIDE
 GPUPhysicalDevice *
 dx12_autoSelectPhysicalDeviceIn(GPUInstance       * __restrict inst,
                                 GPUPhysicalDevice * __restrict deviceList) {
@@ -331,16 +331,22 @@ err:
 }
 
 GPU_HIDE
-GPUPhysicalDevice *
-dx12_getAutoSelectedPhysicalDevice(GPUInstance *__restrict inst) {
-  GPUPhysicalDevice *deviceList;
-  GPUPhysicalDevice *selectedDevice;
+void
+dx12_destroyAdapter(GPUAdapter * __restrict adapter) {
+  GPUPhysicalDeviceDX12 *adapterDX12;
 
-  deviceList     = dx12_getAvailablePhysicalDevicesBy(inst, 3);
-  selectedDevice = dx12_autoSelectPhysicalDeviceIn(inst, deviceList);
+  if (!adapter) {
+    return;
+  }
 
-  /* TODO: keep link for mem management */
-  return selectedDevice;
+  adapterDX12 = adapter->_priv;
+  if (adapterDX12) {
+    if (adapterDX12->dxgiAdapter) {
+      adapterDX12->dxgiAdapter->lpVtbl->Release(adapterDX12->dxgiAdapter);
+    }
+    free(adapterDX12);
+  }
+  free(adapter);
 }
 
 GPU_HIDE
@@ -506,21 +512,6 @@ err:
 }
 
 GPU_HIDE
-GPUDevice*
-dx12_createSystemDefaultDevice(GPUInstance * __restrict inst) {
-  GPUPhysicalDevice *phyDevice;
-
-  if (!(phyDevice = dx12_getAutoSelectedPhysicalDevice(inst))) {
-    goto err;
-  }
-
-  return dx12_createDevice(phyDevice, NULL, 0);
-
-err:
-  return NULL;
-}
-
-GPU_HIDE
 void
 dx12_destroyDevice(GPUDevice * __restrict device) {
   GPUDeviceDX12 *deviceDX12;
@@ -559,11 +550,12 @@ GPU_HIDE
 void
 dx12_initDevice(GPUApiDevice* apiDevice) {
   apiDevice->getAvailableAdapters      = dx12_getAvailablePhysicalDevicesBy;
+  apiDevice->selectAdapter             = dx12_autoSelectPhysicalDeviceIn;
+  apiDevice->destroyAdapter            = dx12_destroyAdapter;
   apiDevice->getAdapterProperties      = dx12_getAdapterProperties;
   apiDevice->supportsFeature           = dx12_supportsFeature;
   apiDevice->getLimits                 = dx12_getLimits;
   apiDevice->getFormatCapabilities     = dx12_getFormatCapabilities;
   apiDevice->createDevice              = dx12_createDevice;
-  apiDevice->createSystemDefaultDevice = dx12_createSystemDefaultDevice;
   apiDevice->destroyDevice             = dx12_destroyDevice;
 }

@@ -407,10 +407,12 @@ vk_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
     lastDevice = item;
   }
 
+  free(phyDevices);
+
   return firstDevice;
 }
 
-GPU_EXPORT
+GPU_HIDE
 GPUPhysicalDevice*
 vk_autoSelectPhysicalDeviceIn(GPUInstance       * __restrict inst,
                               GPUPhysicalDevice * __restrict deviceList) {
@@ -446,7 +448,9 @@ vk_autoSelectPhysicalDeviceIn(GPUInstance       * __restrict inst,
   for (i = 0; i < GPU_ARRAY_LEN(priorityList) && !(item = priorityList[i]); ++i);
 #endif
 
+#if defined(VK_USE_PLATFORM_DISPLAY_KHR)
 ok:
+#endif
   if (!item) { goto err; }
 
 #ifdef DEBUG
@@ -462,92 +466,20 @@ err:
 }
 
 GPU_HIDE
-GPUPhysicalDevice*
-vk_getAutoSelectedPhysicalDevice(GPUInstance * __restrict inst) {
-  GPUInstanceVk             *instVk;
-  GPUPhysicalDevice         *phyDevice;
-  GPUPhysicalDeviceVk       *phyDeviceVk;
-  VkPhysicalDevice          *phyDevices;
-  VkPhysicalDeviceProperties phyDeviceProps;
-  VkInstance                 instRaw;
-  VkResult                   err;
-  uint32_t                   gpuCount;
-  int                        gpuIndex;
+void
+vk_destroyAdapter(GPUAdapter * __restrict adapter) {
+  GPUPhysicalDeviceVk *adapterVk;
 
-  gpuIndex    = -1;
-  instVk      = inst->_priv;
-  instRaw     = instVk->inst;
-  phyDevice   = NULL;
-  phyDeviceVk = NULL;
-
-  gpuCount = 0;
-  err      = vkEnumeratePhysicalDevices(instRaw, &gpuCount, NULL);
-  assert(!err);
-
-  if (gpuCount <= 0) {
-    ERR_EXIT("vkEnumeratePhysicalDevices reported zero accessible devices.\n\n",
-             "vkEnumeratePhysicalDevices Failure");
+  if (!adapter) {
+    return;
   }
 
-  phyDevices = malloc(sizeof(VkPhysicalDevice) * gpuCount);
-  err        = vkEnumeratePhysicalDevices(instRaw, &gpuCount, phyDevices);
-  assert(!err);
-
-#if defined(VK_USE_PLATFORM_DISPLAY_KHR)
-  gpuIndex = vk__find_display_gpu(gpu_number, gpu_count, physical_devices);
-  if (gpuIndex < 0) {
-    ERR_EXIT("Cannot find any display!\n", "vk__find_display_gpu failure");
+  adapterVk = adapter->_priv;
+  if (adapterVk) {
+    free(adapterVk->queueFamilyProps);
+    free(adapterVk);
   }
-#else
-  /* Try to auto select most suitable device */
-  if (gpuIndex == -1) {
-    uint32_t             countDeviceType[VK_PHYSICAL_DEVICE_TYPE_CPU + 1], i;
-    VkPhysicalDeviceType searchForDeviceType;
-
-    memset(countDeviceType, 0, sizeof(countDeviceType));
-    searchForDeviceType = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
-
-    for (i = 0; i < gpuCount; i++) {
-      vkGetPhysicalDeviceProperties(phyDevices[i], &phyDeviceProps);
-      assert(phyDeviceProps.deviceType <= VK_PHYSICAL_DEVICE_TYPE_CPU);
-      countDeviceType[phyDeviceProps.deviceType]++;
-    }
-
-    if (countDeviceType[VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU]) {
-      searchForDeviceType = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
-    } else if (countDeviceType[VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU]) {
-      searchForDeviceType = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
-    } else if (countDeviceType[VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU]) {
-      searchForDeviceType = VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU;
-    } else if (countDeviceType[VK_PHYSICAL_DEVICE_TYPE_CPU]) {
-      searchForDeviceType = VK_PHYSICAL_DEVICE_TYPE_CPU;
-    } else if (countDeviceType[VK_PHYSICAL_DEVICE_TYPE_OTHER]) {
-      searchForDeviceType = VK_PHYSICAL_DEVICE_TYPE_OTHER;
-    }
-
-    for (i = 0; i < gpuCount; i++) {
-      vkGetPhysicalDeviceProperties(phyDevices[i], &phyDeviceProps);
-      if (phyDeviceProps.deviceType == searchForDeviceType) {
-        gpuIndex = i;
-        break;
-      }
-    }
-  }
-#endif
-
-  phyDevice   = vk__newPhyDeviceFrom(inst, phyDevices[gpuIndex]);
-  phyDeviceVk = phyDevice->_priv;
-
-#ifdef DEBUG
-  fprintf(stderr, "Selected GPU %d: %s, type: %s\n",
-          gpuIndex,
-          phyDeviceProps.deviceName,
-          vk__devicetype_string(phyDeviceVk->props.deviceType));
-#endif
-
-  free(phyDevices);
-
-  return phyDevice;
+  free(adapter);
 }
 
 typedef struct GPUQueuePlanVk {
@@ -890,23 +822,15 @@ vk_destroyDevice(GPUDevice * __restrict device) {
 }
 
 GPU_HIDE
-GPUDevice*
-vk_createSystemDefaultDevice(GPUInstance * __restrict inst) {
-  GPUPhysicalDevice *phyDevice;
-
-  phyDevice = vk_getAutoSelectedPhysicalDevice(inst);
-  return phyDevice ? vk_createDevice(phyDevice, NULL, 0u) : NULL;
-}
-
-GPU_HIDE
 void
 vk_initDevice(GPUApiDevice *apiDevice) {
   apiDevice->getAvailableAdapters      = vk_getAvailablePhysicalDevicesBy;
+  apiDevice->selectAdapter             = vk_autoSelectPhysicalDeviceIn;
+  apiDevice->destroyAdapter            = vk_destroyAdapter;
   apiDevice->getAdapterProperties      = vk_getAdapterProperties;
   apiDevice->supportsFeature           = vk_supportsFeature;
   apiDevice->getLimits                 = vk_getLimits;
   apiDevice->getFormatCapabilities     = vk_getFormatCapabilities;
   apiDevice->createDevice              = vk_createDevice;
-  apiDevice->createSystemDefaultDevice = vk_createSystemDefaultDevice;
   apiDevice->destroyDevice             = vk_destroyDevice;
 }

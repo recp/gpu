@@ -15,7 +15,31 @@
  */
 
 #include "../common.h"
+#include "adapter_internal.h"
 #include "instance_internal.h"
+
+static void
+gpu_destroyInstanceAdapters(GPUInstance *instance) {
+  GPUAdapter *adapter;
+  GPUAdapter *next;
+  GPUApi     *api;
+
+  api                     = gpuInstanceApi(instance);
+  adapter                 = instance->_adapters;
+  instance->_adapters     = NULL;
+  instance->_adapterCount = 0u;
+
+  while (adapter) {
+    next = adapter->next;
+    if (api && api->device.destroyAdapter) {
+      api->device.destroyAdapter(adapter);
+    } else {
+      free(adapter->_priv);
+      free(adapter);
+    }
+    adapter = next;
+  }
+}
 
 GPU_EXPORT
 GPUResult
@@ -69,6 +93,7 @@ GPUDestroyInstance(GPUInstance *instance) {
   }
 
   api = gpuInstanceApi(instance);
+  gpu_destroyInstanceAdapters(instance);
   if (api && api->instance.destroyInstance) {
     api->instance.destroyInstance(api, instance);
     return;

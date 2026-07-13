@@ -25,6 +25,8 @@ static GPUAdapter gOwnershipAdapter;
 static GPUDevice  gOwnershipDevice;
 static GPUSurface gOwnershipSurface;
 static uint32_t   gOwnershipAdapterCalls;
+static uint32_t   gOwnershipAdapterDestroyCalls;
+static uint32_t   gOwnershipAdapterSelectCalls;
 static uint32_t   gOwnershipPropertiesCalls;
 static uint32_t   gOwnershipFeatureCalls;
 static uint32_t   gOwnershipLimitsCalls;
@@ -43,6 +45,20 @@ get_ownership_adapters(GPUInstance * __restrict instance,
   gOwnershipAdapter.inst = instance;
   gOwnershipAdapterCalls++;
   return &gOwnershipAdapter;
+}
+
+static void
+destroy_ownership_adapter(GPUAdapter * __restrict adapter) {
+  (void)adapter;
+  gOwnershipAdapterDestroyCalls++;
+}
+
+static GPUAdapter *
+select_ownership_adapter(GPUInstance * __restrict instance,
+                         GPUAdapter  * __restrict adapters) {
+  (void)instance;
+  gOwnershipAdapterSelectCalls++;
+  return adapters;
 }
 
 static GPUResult
@@ -160,6 +176,8 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
 
   scopedApi                              = *activeApi;
   scopedApi.device.getAvailableAdapters = get_ownership_adapters;
+  scopedApi.device.selectAdapter        = select_ownership_adapter;
+  scopedApi.device.destroyAdapter       = destroy_ownership_adapter;
   scopedApi.device.getAdapterProperties = get_ownership_properties;
   scopedApi.device.supportsFeature      = supports_ownership_feature;
   scopedApi.device.getLimits            = get_ownership_limits;
@@ -173,6 +191,8 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   instance._api                         = &scopedApi;
   otherInstance._api                    = &scopedApi;
   gOwnershipAdapterCalls                = 0u;
+  gOwnershipAdapterDestroyCalls         = 0u;
+  gOwnershipAdapterSelectCalls          = 0u;
   gOwnershipPropertiesCalls             = 0u;
   gOwnershipFeatureCalls                = 0u;
   gOwnershipLimitsCalls                 = 0u;
@@ -184,6 +204,12 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   gOwnershipInstanceDestroyCalls        = 0u;
 
   adapter      = NULL;
+  adapterCount = 0u;
+  if (GPUEnumerateAdapters(&instance, &adapterCount, NULL) != GPU_OK ||
+      adapterCount != 1u) {
+    fprintf(stderr, "instance-scoped adapter count failed\n");
+    return 0;
+  }
   adapterCount = 1u;
   if (GPUEnumerateAdapters(&instance, &adapterCount, &adapter) != GPU_OK ||
       adapterCount != 1u || adapter != &gOwnershipAdapter) {
@@ -237,13 +263,21 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
 
   GPUDestroySurface(surface);
   GPUDestroyDevice(device);
+  device = GPUCreateSystemDefaultDevice(&instance);
+  if (device != &gOwnershipDevice) {
+    fprintf(stderr, "instance-scoped default device selection failed\n");
+    return 0;
+  }
+  GPUDestroyDevice(device);
   GPUDestroyInstance(&instance);
 
   if (gOwnershipAdapterCalls != 1u ||
+      gOwnershipAdapterDestroyCalls != 1u ||
+      gOwnershipAdapterSelectCalls != 1u ||
       gOwnershipPropertiesCalls != 1u ||
       gOwnershipFeatureCalls == 0u ||
-      gOwnershipDeviceCreateCalls != 1u ||
-      gOwnershipDeviceDestroyCalls != 1u ||
+      gOwnershipDeviceCreateCalls != 2u ||
+      gOwnershipDeviceDestroyCalls != 2u ||
       gOwnershipSurfaceCreateCalls != 1u ||
       gOwnershipSurfaceDestroyCalls != 1u ||
       gOwnershipInstanceDestroyCalls != 1u) {

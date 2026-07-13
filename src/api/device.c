@@ -777,13 +777,32 @@ gpu_buildQueueCreateInfos(const GPUDeviceCreateInfo  *info,
 }
 
 static GPUAdapter*
-gpu_getAvailableAdapters(GPUInstance *inst, uint32_t maxNumberOfItems) {
-  GPUApi *api;
+gpu_getInstanceAdapters(GPUInstance *inst) {
+  GPUAdapter *item;
+  GPUApi     *api;
+  uint32_t    count;
 
-  if (!(api = gpuInstanceApi(inst)) || !api->device.getAvailableAdapters)
+  if (!(api = gpuInstanceApi(inst)) || !api->device.getAvailableAdapters) {
     return NULL;
+  }
+  if (inst->_adaptersEnumerated) {
+    return inst->_adapters;
+  }
 
-  return api->device.getAvailableAdapters(inst, maxNumberOfItems);
+  inst->_adaptersEnumerated = true;
+  inst->_adapters = api->device.getAvailableAdapters(inst, UINT32_MAX);
+  count = 0u;
+  for (item = inst->_adapters; item; item = item->next) {
+    item->inst = inst;
+    gpu_fillFeatureSet(gpu_supportedFeatureMask(item),
+                       item->supportedFeatureStorage,
+                       (uint32_t)GPU_ARRAY_LEN(item->supportedFeatureStorage),
+                       &item->supportedFeatures);
+    count++;
+  }
+  inst->_adapterCount = count;
+
+  return inst->_adapters;
 }
 
 GPU_EXPORT
@@ -795,25 +814,21 @@ GPUEnumerateAdapters(GPUInstance *inst,
   GPUAdapter *item;
   uint32_t capacity;
   uint32_t count;
+  uint32_t i;
 
   if (!inst || !inoutAdapterCount) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   capacity = *inoutAdapterCount;
-  deviceList = gpu_getAvailableAdapters(inst, UINT32_MAX);
-  count = 0;
+  deviceList = gpu_getInstanceAdapters(inst);
+  count = inst->_adapterCount;
+  i = 0u;
 
-  for (item = deviceList; item; item = item->next) {
-    item->inst = inst;
-    gpu_fillFeatureSet(gpu_supportedFeatureMask(item),
-                       item->supportedFeatureStorage,
-                       (uint32_t)GPU_ARRAY_LEN(item->supportedFeatureStorage),
-                       &item->supportedFeatures);
-    if (outAdapters && count < capacity) {
-      outAdapters[count] = item;
+  if (outAdapters) {
+    for (item = deviceList; item && i < capacity; item = item->next) {
+      outAdapters[i++] = item;
     }
-    count++;
   }
 
   *inoutAdapterCount = count;
@@ -1168,30 +1183,20 @@ GPUIsFeatureEnabled(const GPUDevice *device, GPUFeature feature) {
 GPU_EXPORT
 GPUDevice*
 GPUCreateSystemDefaultDevice(GPUInstance *inst) {
-  GPUApi *api;
+  GPUAdapter *adapter;
   GPUDevice *device;
+  GPUApi     *api;
 
-  if (!(api = gpuInstanceApi(inst)) ||
-      !api->device.createSystemDefaultDevice)
+  if (!(api = gpuInstanceApi(inst))) {
     return NULL;
+  }
 
-  device = api->device.createSystemDefaultDevice(inst);
-  if (device) {
-    device->_api = api;
-    if (gpuInitPipelineCacheDevice(device) != GPU_OK) {
-      api->device.destroyDevice(device);
-      return NULL;
-    }
-    if (gpuInitBindGroupCacheDevice(device) != GPU_OK) {
-      gpuDestroyPipelineCacheDevice(device);
-      api->device.destroyDevice(device);
-      return NULL;
-    }
-    device->enabledFeatureMask = gpu_defaultEnabledFeatureMask(device->phyDevice);
-    gpu_fillFeatureSet(device->enabledFeatureMask,
-                       device->enabledFeatureStorage,
-                       (uint32_t)GPU_ARRAY_LEN(device->enabledFeatureStorage),
-                       &device->enabledFeatures);
+  adapter = gpu_getInstanceAdapters(inst);
+  if (api->device.selectAdapter) {
+    adapter = api->device.selectAdapter(inst, adapter);
+  }
+  if (!adapter || GPUCreateDevice(adapter, NULL, &device) != GPU_OK) {
+    return NULL;
   }
 
   return device;

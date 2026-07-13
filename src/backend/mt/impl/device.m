@@ -30,12 +30,15 @@ mt_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
 
   for (id<MTLDevice> device in devices) {
     item = calloc(1, sizeof(*item));
+    if (!item) {
+      break;
+    }
     item->separatePresentQueue       = 1;
     item->supportsDisplayTiming      = 1;
     item->supportsIncrementalPresent = 1; /* TODO: */
     item->supportsSwapchain          = 1;
     item->inst                       = inst;
-    item->_priv                      = device;
+    item->_priv                      = [device retain];
 
     /* add to linked list of devices */
     if (lastDevice) { lastDevice->next = item; }
@@ -45,10 +48,12 @@ mt_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
     if (++i >= maxNumberOfItems) { break; }
   }
 
+  [devices release];
+
   return firstDevice;
 }
 
-GPU_EXPORT
+GPU_HIDE
 GPUPhysicalDevice*
 mt_autoSelectPhysicalDeviceIn(GPUInstance       * __restrict inst,
                               GPUPhysicalDevice * __restrict deviceList) {
@@ -57,22 +62,13 @@ mt_autoSelectPhysicalDeviceIn(GPUInstance       * __restrict inst,
 }
 
 GPU_HIDE
-GPUPhysicalDevice*
-mt_getAutoSelectedPhysicalDevice(GPUInstance * __restrict inst) {
-  GPUPhysicalDevice *phyDevice;
-  id<MTLDevice>      mtlDevice;
-
-  mtlDevice = MTLCreateSystemDefaultDevice();
-  phyDevice = calloc(1, sizeof(*phyDevice));
-
-  phyDevice->separatePresentQueue       = 1;
-  phyDevice->supportsDisplayTiming      = 1;
-  phyDevice->supportsIncrementalPresent = 1; /* TODO: */
-  phyDevice->supportsSwapchain          = 1;
-  phyDevice->inst                       = inst;
-  phyDevice->_priv                      = mtlDevice;
-
-  return phyDevice;
+void
+mt_destroyAdapter(GPUAdapter * __restrict adapter) {
+  if (!adapter) {
+    return;
+  }
+  [(id<MTLDevice>)adapter->_priv release];
+  free(adapter);
 }
 
 GPU_HIDE
@@ -400,19 +396,6 @@ mt_createDevice(GPUPhysicalDevice        *phyDevice,
 }
 
 GPU_HIDE
-GPUDevice*
-mt_createSystemDefaultDevice(GPUInstance * __restrict inst) {
-  GPUPhysicalDevice *phyDevice;
-
-  /* TODO: keep global reference of phyDevice for mem management */
-  if (!(phyDevice = mt_getAutoSelectedPhysicalDevice(inst))) {
-    return NULL;
-  }
-
-  return mt_createDevice(phyDevice, NULL, 0);
-}
-
-GPU_HIDE
 void
 mt_destroyDevice(GPUDevice * __restrict device) {
   GPUDeviceMT *deviceMT;
@@ -439,11 +422,12 @@ GPU_HIDE
 void
 mt_initDevice(GPUApiDevice *apiDevice) {
   apiDevice->getAvailableAdapters      = mt_getAvailablePhysicalDevicesBy;
+  apiDevice->selectAdapter             = mt_autoSelectPhysicalDeviceIn;
+  apiDevice->destroyAdapter            = mt_destroyAdapter;
   apiDevice->getAdapterProperties      = mt_getAdapterProperties;
   apiDevice->supportsFeature           = mt_supportsFeature;
   apiDevice->getLimits                 = mt_getLimits;
   apiDevice->getFormatCapabilities     = mt_getFormatCapabilities;
   apiDevice->createDevice              = mt_createDevice;
-  apiDevice->createSystemDefaultDevice = mt_createSystemDefaultDevice;
   apiDevice->destroyDevice             = mt_destroyDevice;
 }
