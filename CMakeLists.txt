@@ -300,6 +300,7 @@ if(GPU_BUILD_TESTS)
     tests/api/compute.c
     tests/api/copy.c
     tests/api/cube_texture.c
+    tests/api/descriptor_array.c
     tests/api/line_texture.c
     tests/api/main.c
     tests/api/metal_vertex_slots.c

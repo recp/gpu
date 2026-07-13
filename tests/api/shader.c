@@ -1144,10 +1144,11 @@ check_descriptor_array_reflection(GPUDevice *device, const char *bytecodePath) {
   }
 
   layoutCount = (uint32_t)GPU_ARRAY_LEN(layouts);
-  ok = reflection.resourceCount == 3u &&
+  ok = reflection.resourceCount == 5u &&
        shader_reflection_has_array_resource(&reflection,
                                             GPU_BINDING_SAMPLED_TEXTURE,
-                                            GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                            GPU_SHADER_STAGE_FRAGMENT_BIT |
+                                              GPU_SHADER_STAGE_COMPUTE_BIT,
                                             1u,
                                             0u,
                                             2u) &&
@@ -1159,10 +1160,23 @@ check_descriptor_array_reflection(GPUDevice *device, const char *bytecodePath) {
                                             1u) &&
        shader_reflection_has_array_resource(&reflection,
                                             GPU_BINDING_SAMPLER,
-                                            GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                            GPU_SHADER_STAGE_FRAGMENT_BIT |
+                                              GPU_SHADER_STAGE_COMPUTE_BIT,
                                             1u,
                                             3u,
                                             2u) &&
+       shader_reflection_has_resource(&reflection,
+                                      GPU_BINDING_UNIFORM_BUFFER,
+                                      GPU_SHADER_STAGE_COMPUTE_BIT,
+                                      1u,
+                                      4u,
+                                      0) &&
+       shader_reflection_has_resource(&reflection,
+                                      GPU_BINDING_STORAGE_BUFFER,
+                                      GPU_SHADER_STAGE_COMPUTE_BIT,
+                                      1u,
+                                      5u,
+                                      0) &&
        GPUCreateBindGroupLayoutsFromReflection(device,
                                                library,
                                                &layoutCount,
@@ -1183,13 +1197,17 @@ check_descriptor_array_reflection(GPUDevice *device, const char *bytecodePath) {
 
   entries = GPUGetBindGroupLayoutEntries(layouts[1], &entryCount);
   ok = entries &&
-       entryCount == 3u &&
+       entryCount == 5u &&
        entries[0].binding == 0u &&
        entries[0].arrayCount == 2u &&
        entries[1].binding == 1u &&
        entries[1].arrayCount == 1u &&
        entries[2].binding == 3u &&
-       entries[2].arrayCount == 2u;
+       entries[2].arrayCount == 2u &&
+       entries[3].binding == 4u &&
+       entries[3].bindingType == GPU_BINDING_UNIFORM_BUFFER &&
+       entries[4].binding == 5u &&
+       entries[4].bindingType == GPU_BINDING_STORAGE_BUFFER;
   if (!ok) {
     fprintf(stderr, "descriptor array layout contract mismatch\n");
   }

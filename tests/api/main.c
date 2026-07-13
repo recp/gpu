@@ -85,6 +85,14 @@ run_source_sampler(void *ctx) {
 }
 
 static int
+run_descriptor_array(void *ctx) {
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_descriptor_array(testCtx->device,
+                                   testCtx->descriptorArrayBytecodePath);
+}
+
+static int
 run_storage_texture(void *ctx) {
   GPUApiTestContext *testCtx = ctx;
 
@@ -156,7 +164,7 @@ main(int argc, char **argv) {
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUApiTestContext      ctx;
-  GPUApiTest             tests[17];
+  GPUApiTest             tests[18];
   int                    ok;
 
   if (argc != 10 && argc != 11) {
@@ -238,6 +246,7 @@ main(int argc, char **argv) {
   tests[14] = (GPUApiTest){ "cube-texture", run_cube_texture, &ctx };
   tests[15] = (GPUApiTest){ "line-texture", run_line_texture, &ctx };
   tests[16] = (GPUApiTest){ "volume-texture", run_volume_texture, &ctx };
+  tests[17] = (GPUApiTest){ "descriptor-array", run_descriptor_array, &ctx };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 
