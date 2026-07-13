@@ -19,7 +19,8 @@
 #include "../../../api/texture_internal.h"
 
 enum {
-  GPU_VK_BARRIER_CHUNK_SIZE = 16u
+  GPU_VK_BARRIER_CHUNK_SIZE  = 16u,
+  GPU_VK_TRANSFER_CHUNK_SIZE = 64u * 1024u
 };
 
 static VkAttachmentLoadOp
@@ -924,6 +925,225 @@ vk_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
                          &copy);
 }
 
+#ifdef __APPLE__
+static bool
+vk__reserveScratch(GPUCopyPassEncoder *pass,
+                   uint64_t            sizeBytes,
+                   uint64_t            alignment,
+                   VkBuffer           *outBuffer,
+                   VkDeviceSize       *outOffset) {
+  GPUCommandBufferVk *command;
+  GPUTransferChunkVk *chunk;
+  GPUTransferChunkVk *candidate;
+  GPUBufferCreateInfo info = {0};
+  GPUBufferVk        *bufferVk;
+  uint64_t            alignedOffset;
+  uint64_t            capacity;
+
+  if (!pass || !pass->_cmdb || !pass->_cmdb->_queue ||
+      !pass->_cmdb->_queue->_device || sizeBytes == 0u ||
+      alignment == 0u || (alignment & (alignment - 1u)) != 0u ||
+      !outBuffer || !outOffset) {
+    return false;
+  }
+  *outBuffer = VK_NULL_HANDLE;
+  *outOffset = 0u;
+
+  command       = pass->_cmdb->_priv;
+  chunk         = NULL;
+  alignedOffset = 0u;
+  if (!command) {
+    return false;
+  }
+
+  for (candidate = command->transferChunks; candidate;
+       candidate = candidate->next) {
+    uint64_t offset;
+
+    if (candidate->offset > UINT64_MAX - (alignment - 1u)) {
+      continue;
+    }
+    offset = (candidate->offset + alignment - 1u) & ~(alignment - 1u);
+    if (offset <= candidate->capacity &&
+        sizeBytes <= candidate->capacity - offset) {
+      chunk         = candidate;
+      alignedOffset = offset;
+      break;
+    }
+  }
+
+  if (!chunk) {
+    if (sizeBytes > UINT64_MAX - (alignment - 1u)) {
+      return false;
+    }
+    capacity = sizeBytes > GPU_VK_TRANSFER_CHUNK_SIZE
+                 ? (sizeBytes + alignment - 1u) & ~(alignment - 1u)
+                 : GPU_VK_TRANSFER_CHUNK_SIZE;
+    chunk = calloc(1, sizeof(*chunk));
+    if (!chunk) {
+      return false;
+    }
+
+    info.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    info.chain.structSize = sizeof(info);
+    info.label            = "vulkan-transfer-scratch";
+    info.sizeBytes        = capacity;
+    info.usage            = GPU_BUFFER_USAGE_COPY_SRC |
+                            GPU_BUFFER_USAGE_COPY_DST;
+    if (GPUCreateBuffer(pass->_cmdb->_queue->_device,
+                        &info,
+                        &chunk->buffer) != GPU_OK) {
+      free(chunk);
+      return false;
+    }
+
+    chunk->capacity         = capacity;
+    chunk->next             = command->transferChunks;
+    command->transferChunks = chunk;
+    gpuDeviceRecordHotPathAlloc(pass->_cmdb->_queue->_device,
+                                sizeof(*chunk) + capacity);
+  }
+
+  bufferVk = chunk->buffer->_priv;
+  if (!bufferVk || !bufferVk->buffer) {
+    return false;
+  }
+  chunk->offset = alignedOffset + sizeBytes;
+  *outBuffer    = bufferVk->buffer;
+  *outOffset    = alignedOffset;
+  return true;
+}
+
+static bool
+vk__copyDepthStencilPlane(GPUCopyPassEncoder                  *pass,
+                          GPUTexture                          *src,
+                          GPUTexture                          *dst,
+                          const GPUTextureToTextureCopyRegion *region,
+                          VkImageAspectFlags                   aspect) {
+  GPUCommandBufferVk   *command;
+  GPUTextureVk         *srcVk;
+  GPUTextureVk         *dstVk;
+  GPUFormatLayout       layout;
+  VkBuffer              scratch;
+  VkDeviceSize          scratchOffset;
+  VkBufferImageCopy     copy = {0};
+  VkBufferMemoryBarrier barrier = {0};
+  uint64_t              rowBytes;
+  uint64_t              rowPitch;
+  uint64_t              imageBytes;
+  uint64_t              scratchBytes;
+  uint64_t              rowLength;
+  bool                  texture3D;
+
+  command   = vk__copyCommand(pass);
+  srcVk     = src ? src->_priv : NULL;
+  dstVk     = dst ? dst->_priv : NULL;
+  texture3D = src && src->dimension == GPU_TEXTURE_DIMENSION_3D;
+  if (!command || !srcVk || !dstVk || !region ||
+      !gpuFormatAspectLayout(src->format, region->src.aspect, &layout) ||
+      layout.blockWidth != 1u || layout.blockHeight != 1u ||
+      region->width > UINT64_MAX / layout.bytesPerBlock) {
+    return false;
+  }
+
+  rowBytes = (uint64_t)region->width * layout.bytesPerBlock;
+  if (rowBytes > UINT64_MAX - 255u) {
+    return false;
+  }
+  rowPitch = (rowBytes + 255u) & ~UINT64_C(255);
+  rowLength = rowPitch / layout.bytesPerBlock;
+  if (rowLength > UINT32_MAX) {
+    return false;
+  }
+  if (region->height > UINT64_MAX / rowPitch) {
+    return false;
+  }
+  imageBytes = rowPitch * region->height;
+  if (region->depth > UINT64_MAX / imageBytes) {
+    return false;
+  }
+  scratchBytes = imageBytes * region->depth;
+  if (region->layerCount > UINT64_MAX / scratchBytes) {
+    return false;
+  }
+  scratchBytes *= region->layerCount;
+  if (!vk__reserveScratch(pass,
+                          scratchBytes,
+                          256u,
+                          &scratch,
+                          &scratchOffset)) {
+    return false;
+  }
+
+  (void)vk_transitionTexture(command->command,
+                             srcVk,
+                             region->src.mipLevel,
+                             1u,
+                             texture3D ? 0u : region->src.baseArrayLayer,
+                             texture3D ? 1u : region->layerCount,
+                             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+  (void)vk_transitionTexture(command->command,
+                             dstVk,
+                             region->dst.mipLevel,
+                             1u,
+                             texture3D ? 0u : region->dst.baseArrayLayer,
+                             texture3D ? 1u : region->layerCount,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+  copy.bufferOffset                    = scratchOffset;
+  copy.bufferRowLength                 = (uint32_t)rowLength;
+  copy.bufferImageHeight               = region->height;
+  copy.imageSubresource.aspectMask     = aspect;
+  copy.imageSubresource.mipLevel       = region->src.mipLevel;
+  copy.imageSubresource.baseArrayLayer = texture3D
+                                           ? 0u
+                                           : region->src.baseArrayLayer;
+  copy.imageSubresource.layerCount     = texture3D
+                                           ? 1u
+                                           : region->layerCount;
+  copy.imageExtent.width               = region->width;
+  copy.imageExtent.height              = region->height;
+  copy.imageExtent.depth               = texture3D ? region->depth : 1u;
+  vkCmdCopyImageToBuffer(command->command,
+                         srcVk->image,
+                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                         scratch,
+                         1u,
+                         &copy);
+
+  barrier.sType               = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+  barrier.srcAccessMask       = VK_ACCESS_TRANSFER_WRITE_BIT;
+  barrier.dstAccessMask       = VK_ACCESS_TRANSFER_READ_BIT;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.buffer              = scratch;
+  barrier.offset              = scratchOffset;
+  barrier.size                = scratchBytes;
+  vkCmdPipelineBarrier(command->command,
+                       VK_PIPELINE_STAGE_TRANSFER_BIT,
+                       VK_PIPELINE_STAGE_TRANSFER_BIT,
+                       0u,
+                       0u,
+                       NULL,
+                       1u,
+                       &barrier,
+                       0u,
+                       NULL);
+
+  copy.imageSubresource.mipLevel       = region->dst.mipLevel;
+  copy.imageSubresource.baseArrayLayer = texture3D
+                                           ? 0u
+                                           : region->dst.baseArrayLayer;
+  vkCmdCopyBufferToImage(command->command,
+                         scratch,
+                         dstVk->image,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                         1u,
+                         &copy);
+  return true;
+}
+#endif
+
 static void
 vk_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
                         GPUTexture                          *src,
@@ -947,6 +1167,18 @@ vk_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
       srcAspect != dstAspect) {
     return;
   }
+
+#ifdef __APPLE__
+  if (src->format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+      src->format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8) {
+    (void)vk__copyDepthStencilPlane(pass,
+                                    src,
+                                    dst,
+                                    region,
+                                    srcAspect);
+    return;
+  }
+#endif
 
   (void)vk_transitionTexture(command->command,
                              srcVk,

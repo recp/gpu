@@ -248,6 +248,14 @@ mt_useAllocation(GPUCommandBuffer *cmdb, id allocation);
 
 GPU_HIDE
 bool
+mt_reserveUpload(GPUCommandBuffer *cmdb,
+                 uint64_t          sizeBytes,
+                 uint64_t          alignment,
+                 id<MTLBuffer>     *outBuffer,
+                 uint64_t         *outOffset);
+
+GPU_HIDE
+bool
 mt_uploadConstants(GPUCommandBuffer *cmdb,
                    const void       *data,
                    uint32_t          sizeBytes,

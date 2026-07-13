@@ -285,6 +285,15 @@ typedef struct GPUBufferVk {
   bool           coherent;
 } GPUBufferVk;
 
+#ifdef __APPLE__
+typedef struct GPUTransferChunkVk {
+  GPUBuffer                 *buffer;
+  struct GPUTransferChunkVk *next;
+  uint64_t                   offset;
+  uint64_t                   capacity;
+} GPUTransferChunkVk;
+#endif
+
 typedef struct GPUTextureVk {
   GPUDeviceVk       *gpuDevice;
   VkImageLayout     *layouts;
@@ -369,6 +378,9 @@ struct GPUCommandBufferVk {
   GPUCommandBufferVk      *poolNext;
   GPUCommandBufferVk      *pendingNext;
   GPUSwapChainVk          *presentSwapchain;
+#ifdef __APPLE__
+  GPUTransferChunkVk      *transferChunks;
+#endif
   VkCommandBuffer          command;
   VkFence                  fence;
   VkFence                  submitFence;

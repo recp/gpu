@@ -85,6 +85,9 @@ static void
 vk__recycleCommandBuffer(GPUCommandBuffer *cmdb) {
   GPUCommandBufferVk *native;
   GPUCommandQueueVk  *queue;
+#ifdef __APPLE__
+  GPUTransferChunkVk *chunk;
+#endif
 
   native = cmdb ? cmdb->_priv : NULL;
   queue  = native ? native->owner : NULL;
@@ -92,6 +95,11 @@ vk__recycleCommandBuffer(GPUCommandBuffer *cmdb) {
     return;
   }
 
+#ifdef __APPLE__
+  for (chunk = native->transferChunks; chunk; chunk = chunk->next) {
+    chunk->offset = 0u;
+  }
+#endif
   vk__queueLock(queue);
   native->poolNext = queue->freeCommands;
   queue->freeCommands = native;
@@ -339,6 +347,16 @@ vk_destroyCommandQueue(GPUCommandQueue *queue) {
     command = native->commands;
     while (command) {
       next = command->next;
+#ifdef __APPLE__
+      while (command->transferChunks) {
+        GPUTransferChunkVk *chunk;
+
+        chunk = command->transferChunks;
+        command->transferChunks = chunk->next;
+        GPUDestroyBuffer(chunk->buffer);
+        free(chunk);
+      }
+#endif
       if (deviceVk && command->fence) {
         vkDestroyFence(deviceVk->device, command->fence, NULL);
       }

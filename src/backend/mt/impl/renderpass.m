@@ -581,6 +581,123 @@ mt_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
   }
 }
 
+static void
+mt_copyDepthStencilPlane(GPUCopyPassEncoder                  *pass,
+                         GPUTexture                          *src,
+                         GPUTexture                          *dst,
+                         const GPUTextureToTextureCopyRegion *region) {
+  id<MTLTexture>            srcTexture;
+  id<MTLTexture>            dstTexture;
+  id<MTLBuffer>             scratch;
+  GPUFormatLayout           layout;
+  MTLBlitOption             option;
+  MTLSize                   size;
+  uint64_t                  scratchOffset;
+  uint64_t                  rowBytes;
+  uint64_t                  rowPitch;
+  uint64_t                  bytesPerImage;
+  uint64_t                  scratchBytes;
+
+  srcTexture = mt_nativeTexture(src);
+  dstTexture = mt_nativeTexture(dst);
+  option     = mt_copyOption(src->format, region->src.aspect);
+  if (!srcTexture || !dstTexture || option == MTLBlitOptionNone ||
+      !gpuFormatAspectLayout(src->format, region->src.aspect, &layout) ||
+      layout.blockWidth != 1u || layout.blockHeight != 1u ||
+      region->width > UINT64_MAX / layout.bytesPerBlock) {
+    return;
+  }
+
+  rowBytes = (uint64_t)region->width * layout.bytesPerBlock;
+  if (rowBytes > UINT64_MAX - 255u) {
+    return;
+  }
+  rowPitch = (rowBytes + 255u) & ~UINT64_C(255);
+  if (region->height > UINT64_MAX / rowPitch) {
+    return;
+  }
+  bytesPerImage = rowPitch * region->height;
+  if (region->layerCount > UINT64_MAX / bytesPerImage) {
+    return;
+  }
+  scratchBytes = bytesPerImage * region->layerCount;
+  if (!mt_reserveUpload(pass->_cmdb,
+                        scratchBytes,
+                        256u,
+                        &scratch,
+                        &scratchOffset)) {
+    return;
+  }
+
+  size = MTLSizeMake(region->width, region->height, 1u);
+  if (mt_copyEncoder(pass)->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      id<MTL4ComputeCommandEncoder> modern;
+
+      modern = mt_copyEncoder(pass)->modern;
+      mt_useAllocation(pass->_cmdb, srcTexture);
+      mt_useAllocation(pass->_cmdb, dstTexture);
+      for (uint32_t i = 0u; i < region->layerCount; i++) {
+        [modern copyFromTexture:srcTexture
+                    sourceSlice:region->src.baseArrayLayer + i
+                    sourceLevel:region->src.mipLevel
+                   sourceOrigin:MTLOriginMake(0u, 0u, 0u)
+                     sourceSize:size
+                       toBuffer:scratch
+              destinationOffset:(NSUInteger)(scratchOffset +
+                                               (uint64_t)i * bytesPerImage)
+         destinationBytesPerRow:(NSUInteger)rowPitch
+       destinationBytesPerImage:(NSUInteger)bytesPerImage
+                        options:option];
+      }
+      [modern barrierAfterEncoderStages:MTLStageBlit
+                    beforeEncoderStages:MTLStageBlit
+                      visibilityOptions:MTL4VisibilityOptionDevice];
+      for (uint32_t i = 0u; i < region->layerCount; i++) {
+        [modern copyFromBuffer:scratch
+                  sourceOffset:(NSUInteger)(scratchOffset +
+                                             (uint64_t)i * bytesPerImage)
+             sourceBytesPerRow:(NSUInteger)rowPitch
+           sourceBytesPerImage:(NSUInteger)bytesPerImage
+                    sourceSize:size
+                     toTexture:dstTexture
+              destinationSlice:region->dst.baseArrayLayer + i
+              destinationLevel:region->dst.mipLevel
+             destinationOrigin:MTLOriginMake(0u, 0u, 0u)
+                       options:option];
+      }
+    }
+    return;
+  }
+
+  for (uint32_t i = 0u; i < region->layerCount; i++) {
+    [mt_nativeCopyEncoder(pass) copyFromTexture:srcTexture
+                                    sourceSlice:region->src.baseArrayLayer + i
+                                    sourceLevel:region->src.mipLevel
+                                   sourceOrigin:MTLOriginMake(0u, 0u, 0u)
+                                     sourceSize:size
+                                       toBuffer:scratch
+                              destinationOffset:(NSUInteger)(scratchOffset +
+                                                              (uint64_t)i * bytesPerImage)
+                         destinationBytesPerRow:(NSUInteger)rowPitch
+                       destinationBytesPerImage:(NSUInteger)bytesPerImage
+                                        options:option];
+  }
+  for (uint32_t i = 0u; i < region->layerCount; i++) {
+    [mt_nativeCopyEncoder(pass) copyFromBuffer:scratch
+                                  sourceOffset:(NSUInteger)(scratchOffset +
+                                                            (uint64_t)i * bytesPerImage)
+                             sourceBytesPerRow:(NSUInteger)rowPitch
+                           sourceBytesPerImage:(NSUInteger)bytesPerImage
+                                    sourceSize:size
+                                     toTexture:dstTexture
+                              destinationSlice:region->dst.baseArrayLayer + i
+                              destinationLevel:region->dst.mipLevel
+                             destinationOrigin:MTLOriginMake(0u, 0u, 0u)
+                                       options:option];
+  }
+}
+
 GPU_HIDE
 void
 mt_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
@@ -589,10 +706,17 @@ mt_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
                         const GPUTextureToTextureCopyRegion *region) {
   id<MTLTexture> srcTexture;
   id<MTLTexture> dstTexture;
+  MTLBlitOption option;
   MTLSize size;
   bool texture3D;
 
   if (!pass || !src || !dst || !src->_priv || !dst->_priv || !region) {
+    return;
+  }
+
+  option = mt_copyOption(src->format, region->src.aspect);
+  if (option != MTLBlitOptionNone) {
+    mt_copyDepthStencilPlane(pass, src, dst, region);
     return;
   }
 

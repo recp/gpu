@@ -201,10 +201,11 @@ mt_setArgumentSampler(MTArgumentState    *state,
 
 GPU_HIDE
 bool
-mt_uploadConstants(GPUCommandBuffer *cmdb,
-                   const void       *data,
-                   uint32_t          sizeBytes,
-                   uint64_t         *outAddress) {
+mt_reserveUpload(GPUCommandBuffer *cmdb,
+                 uint64_t          sizeBytes,
+                 uint64_t          alignment,
+                 id<MTLBuffer>     *outBuffer,
+                 uint64_t         *outOffset) {
   MTCommandBuffer *native;
   MTUploadChunk   *chunk;
   MTUploadChunk   *candidate;
@@ -212,21 +213,30 @@ mt_uploadConstants(GPUCommandBuffer *cmdb,
   uint64_t         alignedOffset;
   uint64_t         capacity;
 
-  if (!cmdb || !data || sizeBytes == 0u || !outAddress ||
+  if (!cmdb || sizeBytes == 0u || sizeBytes > NSUIntegerMax ||
+      alignment == 0u || (alignment & (alignment - 1u)) != 0u ||
+      !outBuffer || !outOffset ||
       !cmdb->_queue || !cmdb->_queue->_device) {
     return false;
   }
+  *outBuffer = nil;
+  *outOffset = 0u;
 
-  native = mt_commandBuffer(cmdb);
+  native   = mt_commandBuffer(cmdb);
   deviceMT = cmdb->_queue->_device->_priv;
-  if (!native || native->mode != MTCommandMode4 || !deviceMT) {
+  if (!native || !deviceMT) {
     return false;
   }
 
-  chunk = NULL;
+  chunk         = NULL;
   alignedOffset = 0u;
   for (candidate = native->uploads; candidate; candidate = candidate->next) {
-    uint64_t offset = mt_alignUp(candidate->offset, MT_CONSTANT_UPLOAD_ALIGNMENT);
+    uint64_t offset;
+
+    if (candidate->offset > UINT64_MAX - (alignment - 1u)) {
+      continue;
+    }
+    offset = mt_alignUp(candidate->offset, alignment);
 
     if (offset <= candidate->capacity &&
         sizeBytes <= candidate->capacity - offset) {
@@ -236,9 +246,15 @@ mt_uploadConstants(GPUCommandBuffer *cmdb,
     }
   }
   if (!chunk) {
-    capacity = sizeBytes > MT_CONSTANT_UPLOAD_CHUNK_SIZE ?
-      mt_alignUp(sizeBytes, MT_CONSTANT_UPLOAD_ALIGNMENT) :
-      MT_CONSTANT_UPLOAD_CHUNK_SIZE;
+    if (sizeBytes > UINT64_MAX - (alignment - 1u)) {
+      return false;
+    }
+    capacity = sizeBytes > MT_CONSTANT_UPLOAD_CHUNK_SIZE
+                 ? mt_alignUp(sizeBytes, alignment)
+                 : MT_CONSTANT_UPLOAD_CHUNK_SIZE;
+    if (capacity > NSUIntegerMax) {
+      return false;
+    }
     chunk = calloc(1, sizeof(*chunk));
     if (!chunk) {
       return false;
@@ -252,7 +268,7 @@ mt_uploadConstants(GPUCommandBuffer *cmdb,
     }
 #if GPU_BUILD_WITH_DEBUG_MARKERS
     if (gpuDeviceDebugMarkersEnabled(cmdb->_queue->_device)) {
-      chunk->buffer.label = @"gpu-metal4-constants";
+      chunk->buffer.label = @"gpu-command-upload";
     }
 #endif
     chunk->capacity = capacity;
@@ -263,14 +279,39 @@ mt_uploadConstants(GPUCommandBuffer *cmdb,
     alignedOffset = 0u;
   }
 
-  memcpy((uint8_t *)chunk->buffer.contents + alignedOffset, data, sizeBytes);
   chunk->offset = alignedOffset + sizeBytes;
+  *outBuffer    = chunk->buffer;
+  *outOffset    = alignedOffset;
+  mt_useAllocation(cmdb, chunk->buffer);
+  return true;
+}
+
+GPU_HIDE
+bool
+mt_uploadConstants(GPUCommandBuffer *cmdb,
+                   const void       *data,
+                   uint32_t          sizeBytes,
+                   uint64_t         *outAddress) {
+  MTCommandBuffer *native;
+  id<MTLBuffer>    buffer;
+  uint64_t         offset;
+
+  native = mt_commandBuffer(cmdb);
+  if (!native || native->mode != MTCommandMode4 || !data || !outAddress ||
+      !mt_reserveUpload(cmdb,
+                        sizeBytes,
+                        MT_CONSTANT_UPLOAD_ALIGNMENT,
+                        &buffer,
+                        &offset)) {
+    return false;
+  }
+
+  memcpy((uint8_t *)buffer.contents + offset, data, sizeBytes);
   if (@available(macOS 26.0, iOS 26.0, *)) {
-    *outAddress = chunk->buffer.gpuAddress + alignedOffset;
+    *outAddress = buffer.gpuAddress + offset;
   } else {
     return false;
   }
-  mt_useAllocation(cmdb, chunk->buffer);
   return true;
 }
 
