@@ -102,6 +102,12 @@ gpuGetBindGroupLayoutBackendBindings(GPUBindGroupLayout *layout,
                                      uint32_t *outCount);
 
 GPU_HIDE
+const uint32_t *
+gpuGetPipelineLayoutBackendBindings(GPUPipelineLayout *layout,
+                                    uint32_t groupIndex,
+                                    uint32_t *outCount);
+
+GPU_HIDE
 int
 gpuPipelineLayoutAcceptsBindGroup(GPUPipelineLayout *pipelineLayout,
                                   uint32_t groupIndex,

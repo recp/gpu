@@ -337,6 +337,7 @@ check_reflected_dynamic_offset_validation(GPUDevice *device,
   GPURenderPipelineCreateInfo renderInfo = {0};
   GPUComputePipelineCreateInfo computeInfo = {0};
   GPUComputePipeline *computePipeline = NULL;
+  GPUResult computeResult;
   GPUColorTargetState colorTarget = {0};
   GPUVertexAttribute attrs[2] = {{0}};
   GPUVertexBufferLayout vertexLayout = {0};
@@ -459,10 +460,15 @@ check_reflected_dynamic_offset_validation(GPUDevice *device,
   computeInfo.layout = pipelineLayout;
   computeInfo.library = library;
   computeInfo.entryPoint = "reflect_cs";
-  if (GPUCreateComputePipeline(device, &computeInfo, &computePipeline) != GPU_OK ||
+  computeResult = GPUCreateComputePipeline(device, &computeInfo, &computePipeline);
+  if (computeResult != GPU_OK ||
       !computePipeline ||
       computePipeline->_requiredBindGroupMask != 2u) {
-    fprintf(stderr, "compute pipeline rejected unrelated fragment dynamic offset mismatch\n");
+    fprintf(stderr,
+            "compute pipeline rejected unrelated fragment dynamic offset "
+            "mismatch: result=%d mask=%u\n",
+            computeResult,
+            computePipeline ? computePipeline->_requiredBindGroupMask : 0u);
     goto cleanup;
   }
 

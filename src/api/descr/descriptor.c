@@ -437,6 +437,29 @@ gpuGetBindGroupLayoutBackendBindings(GPUBindGroupLayout *layout,
 }
 
 GPU_HIDE
+const uint32_t *
+gpuGetPipelineLayoutBackendBindings(GPUPipelineLayout *layout,
+                                    uint32_t groupIndex,
+                                    uint32_t *outCount) {
+  GPUPipelineLayoutPriv *priv;
+  GPUBindGroupLayoutPriv *group;
+
+  priv  = gpu_pipelineLayoutPriv(layout);
+  group = priv && groupIndex < priv->bindGroupLayoutCount
+            ? gpu_layoutPriv(priv->bindGroupLayouts[groupIndex])
+            : NULL;
+  if (outCount) {
+    *outCount = group ? group->count : 0u;
+  }
+  if (!group || !priv->backendBindings ||
+      !priv->backendBindings[groupIndex]) {
+    return NULL;
+  }
+
+  return priv->backendBindings[groupIndex];
+}
+
+GPU_HIDE
 GPUBindGroupLayout *
 gpuBindGroupGetLayout(GPUBindGroup *group) {
   GPUBindGroupPriv *priv;
@@ -1417,6 +1440,71 @@ gpu_pipelineBindingsAreUnique(const GPUPipelineLayoutPriv *priv) {
 }
 
 static GPUResult
+gpu_compileDX12PipelineBindings(GPUPipelineLayoutPriv *priv) {
+  static const GPUBindKind kinds[] = {
+    GPUBindKindBuffer,
+    GPUBindKindTexture,
+    GPUBindKindSampler
+  };
+
+  for (uint32_t groupIndex = 0u;
+       groupIndex < priv->bindGroupLayoutCount;
+       groupIndex++) {
+    GPUBindGroupLayoutPriv *layout;
+
+    layout = gpu_layoutPriv(priv->bindGroupLayouts[groupIndex]);
+    if (!layout || layout->hasBackendBindings) {
+      continue;
+    }
+
+    for (uint32_t kindIndex = 0u;
+         kindIndex < GPU_ARRAY_LEN(kinds);
+         kindIndex++) {
+      uint32_t cursor;
+
+      cursor = 0u;
+      for (;;) {
+        uint32_t selectedEntry;
+        uint32_t selectedBinding;
+        uint32_t selectedCount;
+
+        selectedEntry   = UINT32_MAX;
+        selectedBinding = UINT32_MAX;
+        for (uint32_t entryIndex = 0u;
+             entryIndex < layout->count;
+             entryIndex++) {
+          const GPUBindGroupLayoutEntry *entry;
+
+          entry = &layout->entries[entryIndex];
+          if (entry->kind != kinds[kindIndex] ||
+              priv->backendBindings[groupIndex][entryIndex] != UINT32_MAX) {
+            continue;
+          }
+          if (selectedEntry == UINT32_MAX ||
+              entry->binding < selectedBinding) {
+            selectedEntry   = entryIndex;
+            selectedBinding = entry->binding;
+          }
+        }
+
+        if (selectedEntry == UINT32_MAX) {
+          break;
+        }
+
+        selectedCount = layout->entries[selectedEntry].arrayCount;
+        if (selectedCount == 0u || selectedCount > UINT32_MAX - cursor) {
+          return GPU_ERROR_UNSUPPORTED;
+        }
+        priv->backendBindings[groupIndex][selectedEntry] = cursor;
+        cursor += selectedCount;
+      }
+    }
+  }
+
+  return GPU_OK;
+}
+
+static GPUResult
 gpu_compilePipelineBindings(GPUPipelineLayoutPriv *priv,
                             GPUBackend backend) {
   static const GPUBindKind kinds[] = {
@@ -1483,6 +1571,10 @@ gpu_compilePipelineBindings(GPUPipelineLayoutPriv *priv,
         priv->backendBindings[groupIndex][entryIndex] = backendBinding;
       }
     }
+  }
+
+  if (backend == GPU_BACKEND_DX12) {
+    return gpu_compileDX12PipelineBindings(priv);
   }
 
   if (backend != GPU_BACKEND_METAL) {

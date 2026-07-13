@@ -268,7 +268,8 @@ typedef struct DX12LayoutPlan {
 } DX12LayoutPlan;
 
 static GPUResult
-dx12__makeLayoutPlan(GPUBindGroupLayout * const *groups,
+dx12__makeLayoutPlan(GPUPipelineLayout         *layout,
+                     GPUBindGroupLayout * const *groups,
                      uint32_t                    groupCount,
                      DX12LayoutPlan             *outPlan) {
   DX12LayoutPlan plan;
@@ -292,8 +293,9 @@ dx12__makeLayoutPlan(GPUBindGroupLayout * const *groups,
     }
 
     entries = GPUGetBindGroupLayoutEntries(groups[groupIndex], &entryCount);
-    backendBindings = gpuGetBindGroupLayoutBackendBindings(
-      groups[groupIndex],
+    backendBindings = gpuGetPipelineLayoutBackendBindings(
+      layout,
+      groupIndex,
       &backendBindingCount
     );
     if (entryCount != backendBindingCount ||
@@ -378,7 +380,8 @@ dx12__makeLayoutPlan(GPUBindGroupLayout * const *groups,
 }
 
 static void
-dx12__fillLayoutPlan(GPUBindGroupLayout * const *groups,
+dx12__fillLayoutPlan(GPUPipelineLayout         *layout,
+                     GPUBindGroupLayout * const *groups,
                      uint32_t                    groupCount,
                      GPUPipelineLayoutDX12      *native) {
   uint32_t bindingCursor;
@@ -396,8 +399,9 @@ dx12__fillLayoutPlan(GPUBindGroupLayout * const *groups,
     uint32_t                       entryCount;
 
     entries = GPUGetBindGroupLayoutEntries(groups[groupIndex], &entryCount);
-    backendBindings = gpuGetBindGroupLayoutBackendBindings(groups[groupIndex],
-                                                           NULL);
+    backendBindings = gpuGetPipelineLayoutBackendBindings(layout,
+                                                          groupIndex,
+                                                          NULL);
     resourceTable = &native->resourceTables[groupIndex];
     samplerTable  = &native->samplerTables[groupIndex];
     resourceTable->rootParameter = UINT32_MAX;
@@ -468,7 +472,8 @@ dx12__findRootBinding(const GPUPipelineLayoutDX12 *layout,
 }
 
 static bool
-dx12__fillStaticSamplers(GPUBindGroupLayout * const        *groups,
+dx12__fillStaticSamplers(GPUPipelineLayout                 *layout,
+                         GPUBindGroupLayout * const        *groups,
                          uint32_t                          groupCount,
                          const GPUShaderStaticSamplerInfo *sourceSamplers,
                          uint32_t                          sourceSamplerCount,
@@ -483,8 +488,9 @@ dx12__fillStaticSamplers(GPUBindGroupLayout * const        *groups,
     uint32_t                       entryCount;
 
     entries = GPUGetBindGroupLayoutEntries(groups[groupIndex], &entryCount);
-    backendBindings = gpuGetBindGroupLayoutBackendBindings(groups[groupIndex],
-                                                           NULL);
+    backendBindings = gpuGetPipelineLayoutBackendBindings(layout,
+                                                          groupIndex,
+                                                          NULL);
     for (uint32_t i = 0u; i < entryCount; i++) {
       if (!entries[i].immutableSampler) {
         continue;
@@ -524,7 +530,8 @@ dx12__fillStaticSamplers(GPUBindGroupLayout * const        *groups,
 }
 
 static void
-dx12__fillRanges11(GPUBindGroupLayout * const *groups,
+dx12__fillRanges11(GPUPipelineLayout          *layout,
+                   GPUBindGroupLayout * const *groups,
                    const GPUPipelineLayoutDX12 *native,
                    D3D12_ROOT_PARAMETER1       *parameters,
                    D3D12_DESCRIPTOR_RANGE1     *ranges) {
@@ -557,8 +564,9 @@ dx12__fillRanges11(GPUBindGroupLayout * const *groups,
     uint32_t                       samplerRange;
 
     entries = GPUGetBindGroupLayoutEntries(groups[groupIndex], &entryCount);
-    backendBindings = gpuGetBindGroupLayoutBackendBindings(groups[groupIndex],
-                                                           NULL);
+    backendBindings = gpuGetPipelineLayoutBackendBindings(layout,
+                                                          groupIndex,
+                                                          NULL);
     resourceTable = &native->resourceTables[groupIndex];
     samplerTable  = &native->samplerTables[groupIndex];
     resourceOffset = 0u;
@@ -624,7 +632,8 @@ dx12__fillRanges11(GPUBindGroupLayout * const *groups,
 }
 
 static void
-dx12__fillRanges10(GPUBindGroupLayout * const *groups,
+dx12__fillRanges10(GPUPipelineLayout          *layout,
+                   GPUBindGroupLayout * const *groups,
                    const GPUPipelineLayoutDX12 *native,
                    D3D12_ROOT_PARAMETER        *parameters,
                    D3D12_DESCRIPTOR_RANGE      *ranges) {
@@ -655,8 +664,9 @@ dx12__fillRanges10(GPUBindGroupLayout * const *groups,
     uint32_t                       samplerRange;
 
     entries = GPUGetBindGroupLayoutEntries(groups[groupIndex], &entryCount);
-    backendBindings = gpuGetBindGroupLayoutBackendBindings(groups[groupIndex],
-                                                           NULL);
+    backendBindings = gpuGetPipelineLayoutBackendBindings(layout,
+                                                          groupIndex,
+                                                          NULL);
     resourceTable = &native->resourceTables[groupIndex];
     samplerTable  = &native->samplerTables[groupIndex];
     resourceOffset = 0u;
@@ -749,7 +759,7 @@ dx12__createPipelineLayout(GPUDevice                        *device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  planResult = dx12__makeLayoutPlan(groups, groupCount, &plan);
+  planResult = dx12__makeLayoutPlan(layout, groups, groupCount, &plan);
   if (planResult != GPU_OK) {
     return planResult;
   }
@@ -784,7 +794,7 @@ dx12__createPipelineLayout(GPUDevice                        *device,
   native->groupCount         = groupCount;
   native->pushConstantRootParameter = pushRootParameter;
   native->pushConstantDwordCount     = pushDwordCount;
-  dx12__fillLayoutPlan(groups, groupCount, native);
+  dx12__fillLayoutPlan(layout, groups, groupCount, native);
 
   deviceDX12 = device->_priv;
   serialized = NULL;
@@ -808,7 +818,8 @@ dx12__createPipelineLayout(GPUDevice                        *device,
     if ((plan.rootParameterCount > 0u && !parameters) ||
         (plan.rangeCount > 0u && !ranges) ||
         (plan.staticSamplerCount > 0u && !staticSamplers) ||
-        !dx12__fillStaticSamplers(groups,
+        !dx12__fillStaticSamplers(layout,
+                                  groups,
                                   groupCount,
                                   sourceSamplers,
                                   sourceSamplerCount,
@@ -821,7 +832,7 @@ dx12__createPipelineLayout(GPUDevice                        *device,
       return GPU_ERROR_OUT_OF_MEMORY;
     }
 
-    dx12__fillRanges11(groups, native, parameters, ranges);
+    dx12__fillRanges11(layout, groups, native, parameters, ranges);
     if (pushDwordCount > 0u) {
       parameters[pushRootParameter].ParameterType =
         D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
@@ -866,7 +877,8 @@ dx12__createPipelineLayout(GPUDevice                        *device,
     if ((plan.rootParameterCount > 0u && !parameters) ||
         (plan.rangeCount > 0u && !ranges) ||
         (plan.staticSamplerCount > 0u && !staticSamplers) ||
-        !dx12__fillStaticSamplers(groups,
+        !dx12__fillStaticSamplers(layout,
+                                  groups,
                                   groupCount,
                                   sourceSamplers,
                                   sourceSamplerCount,
@@ -879,7 +891,7 @@ dx12__createPipelineLayout(GPUDevice                        *device,
       return GPU_ERROR_OUT_OF_MEMORY;
     }
 
-    dx12__fillRanges10(groups, native, parameters, ranges);
+    dx12__fillRanges10(layout, groups, native, parameters, ranges);
     if (pushDwordCount > 0u) {
       parameters[pushRootParameter].ParameterType =
         D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
