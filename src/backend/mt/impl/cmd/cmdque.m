@@ -16,6 +16,212 @@
 
 #include "../../common.h"
 
+enum {
+  MT_TRANSFER_STAGING_CAPACITY = 4u * 1024u * 1024u,
+  MT_TRANSFER_OFFSET_ALIGNMENT = 256u
+};
+
+static uint64_t
+mt_transferCapacity(uint64_t sizeBytes) {
+  uint64_t capacity;
+
+  capacity = MT_TRANSFER_STAGING_CAPACITY;
+  while (capacity < sizeBytes) {
+    if (capacity > UINT64_MAX / 2u) {
+      return sizeBytes;
+    }
+    capacity *= 2u;
+  }
+  return capacity;
+}
+
+static GPUResult
+mt_waitTransfer(GPUCommandQueue *queue,
+                MTTransferSlot *slot,
+                bool            countStall) {
+  MTLCommandBufferStatus status;
+
+  if (!slot || !slot->pending) {
+    return GPU_OK;
+  }
+  if (!slot->command) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  status = slot->command.status;
+  if (status != MTLCommandBufferStatusCompleted &&
+      status != MTLCommandBufferStatusError) {
+    if (countStall && queue && queue->_device) {
+      queue->_device->allocatorStats.uploadStallCount++;
+    }
+    [slot->command waitUntilCompleted];
+    status = slot->command.status;
+  }
+
+  [slot->command release];
+  slot->command = nil;
+  slot->used    = 0u;
+  slot->pending = false;
+  return status == MTLCommandBufferStatusCompleted
+           ? GPU_OK
+           : GPU_ERROR_BACKEND_FAILURE;
+}
+
+static bool
+mt_ensureTransferStaging(GPUCommandQueue *queue,
+                         MTTransferSlot *slot,
+                         uint64_t        sizeBytes) {
+  GPUDeviceMT *device;
+  id<MTLBuffer> staging;
+  uint64_t      capacity;
+
+  if (!queue || !queue->_device || !slot || sizeBytes == 0u) {
+    return false;
+  }
+  if (slot->staging && slot->capacity >= sizeBytes) {
+    return true;
+  }
+
+  device   = queue->_device->_priv;
+  capacity = mt_transferCapacity(sizeBytes);
+  if (!device || !device->device || capacity > NSUIntegerMax) {
+    return false;
+  }
+  staging = [device->device newBufferWithLength:(NSUInteger)capacity
+                                        options:MTLResourceStorageModeShared];
+  if (!staging) {
+    return false;
+  }
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  if (gpuDeviceDebugMarkersEnabled(queue->_device)) {
+    staging.label = @"gpu-queue-upload";
+  }
+#endif
+
+  [slot->staging release];
+  slot->staging  = staging;
+  slot->capacity = capacity;
+  slot->used     = 0u;
+  return true;
+}
+
+GPU_HIDE
+GPUResult
+mt_beginTransfer(GPUCommandQueue           *queue,
+                 uint64_t                   sizeBytes,
+                 id<MTLBlitCommandEncoder> *outBlit,
+                 id<MTLBuffer>             *outStaging,
+                 uint64_t                  *outOffset) {
+  MTCommandQueue      *native;
+  MTTransferSlot      *slot;
+  id<MTLCommandQueue>  commandQueue;
+  uint64_t             offset;
+  GPUResult            result;
+
+  if (!queue || !queue->_device || !outBlit || !outStaging || !outOffset ||
+      sizeBytes == 0u) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outBlit    = nil;
+  *outStaging = nil;
+  *outOffset  = 0u;
+  native      = mt_commandQueue(queue);
+  if (!native || (!native->classic && !native->upload)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  if (native->transferOpen) {
+    slot = &native->transferSlots[native->activeTransferSlot];
+    if (!slot->blit || !slot->staging) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    if (slot->used <= UINT64_MAX - (MT_TRANSFER_OFFSET_ALIGNMENT - 1u)) {
+      offset = (slot->used + MT_TRANSFER_OFFSET_ALIGNMENT - 1u) &
+               ~(uint64_t)(MT_TRANSFER_OFFSET_ALIGNMENT - 1u);
+      if (offset <= slot->capacity && sizeBytes <= slot->capacity - offset) {
+        slot->used  = offset + sizeBytes;
+        *outBlit    = slot->blit;
+        *outStaging = slot->staging;
+        *outOffset  = offset;
+        return GPU_OK;
+      }
+    }
+    result = mt_flushTransfers(queue, false);
+    if (result != GPU_OK) {
+      return result;
+    }
+  }
+
+  slot   = &native->transferSlots[native->nextTransferSlot];
+  result = mt_waitTransfer(queue, slot, true);
+  if (result != GPU_OK ||
+      !mt_ensureTransferStaging(queue, slot, sizeBytes)) {
+    return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  commandQueue = native->classic ? native->classic : native->upload;
+  slot->command = [[commandQueue commandBuffer] retain];
+  slot->blit    = [[slot->command blitCommandEncoder] retain];
+  if (!slot->command || !slot->blit) {
+    [slot->blit release];
+    [slot->command release];
+    slot->blit    = nil;
+    slot->command = nil;
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  slot->used                  = sizeBytes;
+  native->activeTransferSlot  = native->nextTransferSlot;
+  native->transferOpen        = true;
+  *outBlit                    = slot->blit;
+  *outStaging                 = slot->staging;
+  *outOffset                  = 0u;
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
+mt_flushTransfers(GPUCommandQueue *queue, bool wait) {
+  MTCommandQueue *native;
+  MTTransferSlot *slot;
+  GPUResult       flushResult;
+
+  native = mt_commandQueue(queue);
+  if (!native) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  flushResult = GPU_OK;
+
+  if (native->transferOpen) {
+    slot = &native->transferSlots[native->activeTransferSlot];
+    if (!slot->command || !slot->blit) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+
+    [slot->blit endEncoding];
+    [slot->blit release];
+    slot->blit = nil;
+    [slot->command commit];
+    slot->pending              = true;
+    native->transferOpen       = false;
+    native->nextTransferSlot   =
+      (native->activeTransferSlot + 1u) % MT_TRANSFER_SLOT_COUNT;
+  }
+
+  if (wait) {
+    for (uint32_t i = 0u; i < MT_TRANSFER_SLOT_COUNT; i++) {
+      GPUResult result;
+
+      result = mt_waitTransfer(queue, &native->transferSlots[i], false);
+      if (flushResult == GPU_OK && result != GPU_OK) {
+        flushResult = result;
+      }
+    }
+  }
+  return flushResult;
+}
+
 static
 GPU_HIDE
 void
@@ -61,17 +267,20 @@ mt_newCommandQueue(GPUDevice * __restrict device) {
   }
 
   native->poolLock = OS_UNFAIR_LOCK_INIT;
-  native->mode = deviceMT->commandMode;
+  native->mode     = deviceMT->commandMode;
   if (native->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       native->modern = [deviceMT->device newMTL4CommandQueue];
+      native->upload = [deviceMT->device newCommandQueue];
     }
   } else {
     native->classic = [deviceMT->device newCommandQueue];
   }
   native->inFlightGroup = dispatch_group_create();
-  if ((!native->classic && !native->modern) || !native->inFlightGroup) {
+  if ((!native->classic && (!native->modern || !native->upload)) ||
+      !native->inFlightGroup) {
     [native->classic release];
+    [native->upload release];
     [native->modern release];
     if (native->inFlightGroup) {
       dispatch_release(native->inFlightGroup);
@@ -81,7 +290,7 @@ mt_newCommandQueue(GPUDevice * __restrict device) {
     return NULL;
   }
 
-  que->_priv = native;
+  que->_priv   = native;
   que->_device = device;
 
   return que;
@@ -100,6 +309,7 @@ mt_destroyCommandQueue(GPUCommandQueue * __restrict queue) {
   if (queue->_priv) {
     MTCommandQueue *native = mt_commandQueue(queue);
 
+    (void)mt_flushTransfers(queue, true);
     dispatch_group_wait(native->inFlightGroup, DISPATCH_TIME_FOREVER);
     command = native->commands;
     while (command) {
@@ -110,6 +320,11 @@ mt_destroyCommandQueue(GPUCommandQueue * __restrict queue) {
     [native->classic release];
     [native->upload release];
     [native->modern release];
+    for (uint32_t i = 0u; i < MT_TRANSFER_SLOT_COUNT; i++) {
+      [native->transferSlots[i].blit release];
+      [native->transferSlots[i].command release];
+      [native->transferSlots[i].staging release];
+    }
     dispatch_release(native->inFlightGroup);
     free(native);
   }
@@ -332,6 +547,12 @@ mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
   native = mt_commandBuffer(cmdb);
   queue  = cmdb->_queue ? mt_commandQueue(cmdb->_queue) : NULL;
   if (!native || !queue) {
+    gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  if (mt_flushTransfers(cmdb->_queue,
+                        native->mode == MTCommandMode4) != GPU_OK) {
     gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
     return GPU_ERROR_BACKEND_FAILURE;
   }

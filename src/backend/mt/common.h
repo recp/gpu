@@ -60,6 +60,10 @@ typedef enum MTCommandMode {
   MTCommandMode4
 } MTCommandMode;
 
+enum {
+  MT_TRANSFER_SLOT_COUNT = 3u
+};
+
 typedef struct GPUSwapChainMetal {
   CAMetalLayer  *layer;
   void          *objc;
@@ -94,6 +98,15 @@ typedef struct MTUploadChunk {
   uint64_t               capacity;
   uint64_t               offset;
 } MTUploadChunk;
+
+typedef struct MTTransferSlot {
+  id<MTLBuffer>             staging;
+  id<MTLCommandBuffer>      command;
+  id<MTLBlitCommandEncoder> blit;
+  uint64_t                  capacity;
+  uint64_t                  used;
+  bool                      pending;
+} MTTransferSlot;
 
 typedef struct MTRenderPass {
   MTLRenderPassDescriptor *classic;
@@ -132,8 +145,12 @@ typedef struct MTCommandQueue {
   dispatch_group_t      inFlightGroup;
   MTCommandBuffer      *commands;
   MTCommandBuffer      *freeCommands;
+  MTTransferSlot        transferSlots[MT_TRANSFER_SLOT_COUNT];
   os_unfair_lock        poolLock;
   MTCommandMode         mode;
+  uint32_t              activeTransferSlot;
+  uint32_t              nextTransferSlot;
+  bool                  transferOpen;
 } MTCommandQueue;
 
 struct MTCommandBuffer {
@@ -259,6 +276,18 @@ mt_uploadConstants(GPUCommandBuffer *cmdb,
                    const void       *data,
                    uint32_t          sizeBytes,
                    uint64_t         *outAddress);
+
+GPU_HIDE
+GPUResult
+mt_beginTransfer(GPUCommandQueue             *queue,
+                 uint64_t                     sizeBytes,
+                 id<MTLBlitCommandEncoder>   *outBlit,
+                 id<MTLBuffer>               *outStaging,
+                 uint64_t                    *outOffset);
+
+GPU_HIDE
+GPUResult
+mt_flushTransfers(GPUCommandQueue *queue, bool wait);
 
 GPU_HIDE
 void

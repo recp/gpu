@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include <string.h>
 
 GPU_INLINE
 MTLTextureUsage
@@ -252,71 +253,49 @@ mt_destroyTexture(GPUTexture * __restrict texture) {
   free(texture);
 }
 
-static id<MTLCommandQueue>
-mt_uploadCommandQueue(GPUCommandQueue *queue) {
-  GPUDeviceMT        *device;
-  MTCommandQueue     *native;
-  id<MTLCommandQueue> upload;
-
-  native = mt_commandQueue(queue);
-  if (!native) {
-    return nil;
-  }
-  if (native->classic) {
-    return native->classic;
-  }
-
-  device = queue && queue->_device ? queue->_device->_priv : NULL;
-  if (!device || !device->device) {
-    return nil;
-  }
-
-  os_unfair_lock_lock(&native->poolLock);
-  if (!native->upload) {
-    native->upload = [device->device newCommandQueue];
-  }
-  upload = native->upload;
-  os_unfair_lock_unlock(&native->poolLock);
-  return upload;
-}
-
 static GPUResult
 mt_writeDepthStencilPlane(GPUCommandQueue             *queue,
                           GPUTexture                  *texture,
                           const GPUTextureWriteRegion *region,
                           const void                  *data,
                           const GPUFormatDataLayout   *dataLayout) {
-  id<MTLCommandQueue>       commandQueue;
-  id<MTLCommandBuffer>      command;
   id<MTLBlitCommandEncoder> blit;
   id<MTLBuffer>             upload;
   id<MTLTexture>            nativeTexture;
+  uint8_t                  *contents;
   MTLBlitOption             option;
   MTLSize                   size;
+  uint64_t                  uploadOffset;
+  GPUResult                 result;
 
-  commandQueue  = mt_uploadCommandQueue(queue);
   nativeTexture = mt_nativeTexture(texture);
   option        = mt_copyOption(texture->format, region->aspect);
-  if (!commandQueue || !nativeTexture || option == MTLBlitOptionNone ||
+  if (!nativeTexture || option == MTLBlitOptionNone ||
       dataLayout->requiredBytes > NSUIntegerMax) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  upload = [nativeTexture.device
-    newBufferWithBytes:data
-                length:(NSUInteger)dataLayout->requiredBytes
-               options:MTLResourceStorageModeShared];
-  command = [commandQueue commandBuffer];
-  blit    = [command blitCommandEncoder];
-  if (!upload || !command || !blit) {
-    [upload release];
+  result = mt_beginTransfer(queue,
+                            dataLayout->requiredBytes,
+                            &blit,
+                            &upload,
+                            &uploadOffset);
+  if (result != GPU_OK) {
+    return result;
+  }
+  contents = (uint8_t *)[upload contents];
+  if (!contents) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
+  memcpy(contents + uploadOffset,
+         data,
+         (size_t)dataLayout->requiredBytes);
 
   size = MTLSizeMake(region->width, region->height, 1u);
   for (uint32_t i = 0u; i < region->layerCount; i++) {
     [blit copyFromBuffer:upload
-            sourceOffset:(NSUInteger)((uint64_t)i * dataLayout->bytesPerImage)
+            sourceOffset:(NSUInteger)(uploadOffset +
+                                      (uint64_t)i * dataLayout->bytesPerImage)
        sourceBytesPerRow:region->bytesPerRow
      sourceBytesPerImage:(NSUInteger)dataLayout->bytesPerImage
               sourceSize:size
@@ -326,13 +305,7 @@ mt_writeDepthStencilPlane(GPUCommandQueue             *queue,
        destinationOrigin:MTLOriginMake(0u, 0u, 0u)
                  options:option];
   }
-  [blit endEncoding];
-  [command commit];
-  [command waitUntilCompleted];
-  [upload release];
-  return command.status == MTLCommandBufferStatusCompleted
-           ? GPU_OK
-           : GPU_ERROR_BACKEND_FAILURE;
+  return GPU_OK;
 }
 
 GPU_HIDE
