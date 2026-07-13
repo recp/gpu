@@ -73,6 +73,13 @@ typedef struct GPUBindGroupPriv {
   uint32_t                 dynamicOffsetCount;
 } GPUBindGroupPriv;
 
+/* The public handle, cache key, and binding list have one lifetime. */
+typedef struct GPUBindGroupStorage {
+  GPUBindGroup            group;
+  GPUBindGroupPriv        priv;
+  GPUBindGroupBindingPriv bindings[];
+} GPUBindGroupStorage;
+
 typedef struct GPUBindGroupCacheEntry {
   GPUBindGroup *group;
 } GPUBindGroupCacheEntry;
@@ -2251,12 +2258,14 @@ GPUCreateBindGroup(GPUDevice *device,
   GPUBindGroupBindingPriv  *candidateBindings;
   GPUBindGroupLayoutPriv   *layoutPriv;
   GPUBindGroupLayout       *layout;
+  GPUBindGroupStorage      *storage;
   const GPUBindGroupEntry  *entries;
   GPUBindGroupBindingPriv   stackBindings[
                              GPU_BIND_GROUP_CANDIDATE_STACK_SIZE] = {0};
   GPUBindGroupPriv          candidate = {0};
   GPUApi                   *api;
   GPUResult                 result;
+  size_t                    storageSize;
   uint32_t                  count;
   uint32_t                  cursor;
   uint32_t                  runtimeCount;
@@ -2298,9 +2307,12 @@ GPUCreateBindGroup(GPUDevice *device,
     }
   }
 
-  if (!gpu_bindGroupRuntimeCount(layoutPriv, &runtimeCount) ||
-      (size_t)runtimeCount > SIZE_MAX / sizeof(*candidateBindings)) {
+  if (!gpu_bindGroupRuntimeCount(layoutPriv, &runtimeCount)) {
     return GPU_ERROR_BACKEND_FAILURE;
+  }
+  if ((size_t)runtimeCount >
+      (SIZE_MAX - sizeof(*storage)) / sizeof(*candidateBindings)) {
+    return GPU_ERROR_OUT_OF_MEMORY;
   }
 
   heapCandidate = runtimeCount > GPU_BIND_GROUP_CANDIDATE_STACK_SIZE;
@@ -2399,32 +2411,29 @@ GPUCreateBindGroup(GPUDevice *device,
     return GPU_OK;
   }
 
-  group = calloc(1, sizeof(*group));
-  priv  = calloc(1, sizeof(*priv));
-  if (!group || !priv) {
+  storageSize = sizeof(*storage) +
+                (size_t)runtimeCount * sizeof(*storage->bindings);
+  storage = calloc(1, storageSize);
+  if (!storage) {
     if (heapCandidate) {
       free(candidateBindings);
     }
-    free(group);
-    free(priv);
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
+  group = &storage->group;
+  priv  = &storage->priv;
   *priv = candidate;
-  if (heapCandidate) {
-    priv->bindings = candidateBindings;
-  } else if (runtimeCount > 0u) {
-    priv->bindings = malloc((size_t)runtimeCount * sizeof(*priv->bindings));
-    if (!priv->bindings) {
-      free(priv);
-      free(group);
-      return GPU_ERROR_OUT_OF_MEMORY;
-    }
-    memcpy(priv->bindings,
+  if (runtimeCount > 0u) {
+    priv->bindings = storage->bindings;
+    memcpy(storage->bindings,
            candidateBindings,
-           (size_t)runtimeCount * sizeof(*priv->bindings));
+           (size_t)runtimeCount * sizeof(*storage->bindings));
   } else {
     priv->bindings = NULL;
+  }
+  if (heapCandidate) {
+    free(candidateBindings);
   }
 
   group->_device   = device;
@@ -2445,9 +2454,7 @@ GPUCreateBindGroup(GPUDevice *device,
     if (api && api->descriptor.destroyBindGroup) {
       api->descriptor.destroyBindGroup(group);
     }
-    free(priv->bindings);
-    free(priv);
-    free(group);
+    free((GPUBindGroupStorage *)group);
     group = cached;
   }
 
@@ -2458,7 +2465,6 @@ GPUCreateBindGroup(GPUDevice *device,
 GPU_EXPORT
 void
 GPUDestroyBindGroup(GPUBindGroup *group) {
-  GPUBindGroupPriv *priv;
   GPUApi *api;
 
   if (!group) {
@@ -2473,13 +2479,7 @@ GPUDestroyBindGroup(GPUBindGroup *group) {
     api->descriptor.destroyBindGroup(group);
   }
 
-  priv = gpu_groupPriv(group);
-  if (priv) {
-    free(priv->bindings);
-    free(priv);
-  }
-
-  free(group);
+  free((GPUBindGroupStorage *)group);
 }
 
 static void
