@@ -950,6 +950,7 @@ vk_destroyTextureView(GPUTextureView * __restrict view) {
 static GPUResult
 vk__recordTextureWrite(VkCommandBuffer             command,
                        VkBuffer                    staging,
+                       uint64_t                    stagingOffset,
                        GPUTexture                 *texture,
                        const GPUTextureWriteRegion *region) {
   GPUFormatLayout   formatLayout;
@@ -996,7 +997,7 @@ vk__recordTextureWrite(VkCommandBuffer             command,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  copy.bufferOffset                    = 0u;
+  copy.bufferOffset                    = stagingOffset;
   copy.bufferRowLength                 = rowLength;
   copy.bufferImageHeight               = region->rowsPerImage;
   copy.imageSubresource.aspectMask     = aspect;
@@ -1041,6 +1042,7 @@ vk_writeTexture(GPUCommandQueue             * __restrict queue,
   VkCommandBuffer command;
   GPUBuffer      *staging;
   GPUBufferVk    *stagingVk;
+  uint64_t        stagingOffset;
   GPUResult       result;
 
   if (!queue || !texture || !texture->_ownsNative || !region || !data ||
@@ -1048,18 +1050,31 @@ vk_writeTexture(GPUCommandQueue             * __restrict queue,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  result = vk_beginTransfer(queue, true, sizeBytes, &command, &staging);
+  result = vk_beginTransfer(queue,
+                            true,
+                            sizeBytes,
+                            &command,
+                            &staging,
+                            &stagingOffset);
   if (result != GPU_OK) {
     return result;
   }
 
-  result = vk_writeBuffer(queue, staging, 0u, data, sizeBytes);
+  result = vk_writeBuffer(queue,
+                          staging,
+                          stagingOffset,
+                          data,
+                          sizeBytes);
   stagingVk = staging ? staging->_priv : NULL;
   if (result == GPU_OK && (!stagingVk || !stagingVk->buffer)) {
     result = GPU_ERROR_BACKEND_FAILURE;
   }
   if (result == GPU_OK) {
-    result = vk__recordTextureWrite(command, stagingVk->buffer, texture, region);
+    result = vk__recordTextureWrite(command,
+                                    stagingVk->buffer,
+                                    stagingOffset,
+                                    texture,
+                                    region);
   }
   if (result != GPU_OK) {
     vk_abortTransfer(queue);

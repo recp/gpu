@@ -18,8 +18,12 @@
 #include "../impl.h"
 
 enum {
-  VK_COMPLETION_STACK_SIZE = 64u * 1024u
+  VK_COMPLETION_STACK_SIZE     = 64u * 1024u,
+  VK_TRANSFER_OFFSET_ALIGNMENT = 512u
 };
+
+static GPUResult
+vk__flushTransfers(GPUCommandQueue *queue, bool wait);
 
 static void
 vk__queueLock(GPUCommandQueueVk *queue) {
@@ -226,11 +230,27 @@ GPU_HIDE
 GPUResult
 vk_waitDeviceIdle(GPUDevice * __restrict device) {
   GPUDeviceVk *deviceVk;
+  GPUResult    flushResult;
   VkResult     result;
 
   deviceVk = device ? device->_priv : NULL;
   if (!deviceVk || !deviceVk->device) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  flushResult = GPU_OK;
+  for (uint32_t i = 0u; i < deviceVk->nCreatedQueues; i++) {
+    GPUCommandQueue *queue;
+    GPUResult        queueResult;
+
+    queue = deviceVk->createdQueues[i];
+    if (!queue) {
+      continue;
+    }
+    queueResult = vk__flushTransfers(queue, false);
+    if (flushResult == GPU_OK && queueResult != GPU_OK) {
+      flushResult = queueResult;
+    }
   }
 
   result = vkDeviceWaitIdle(deviceVk->device);
@@ -249,6 +269,9 @@ vk_waitDeviceIdle(GPUDevice * __restrict device) {
     }
   }
 
+  if (flushResult != GPU_OK) {
+    return flushResult;
+  }
   if (result == VK_SUCCESS) {
     return GPU_OK;
   }
@@ -488,27 +511,53 @@ vk_beginTransfer(GPUCommandQueue *queue,
                  bool             upload,
                  uint64_t         sizeBytes,
                  VkCommandBuffer *outCommand,
-                 GPUBuffer      **outStaging) {
+                 GPUBuffer      **outStaging,
+                 uint64_t        *outOffset) {
   GPUCommandQueueVk       *native;
   GPUDeviceVk             *device;
   GPUTransferSlotVk       *slot;
   VkCommandBufferBeginInfo beginInfo = {0};
   GPUResult                result;
 
-  if (!queue || !queue->_device || !outCommand || !outStaging ||
+  if (!queue || !queue->_device || !outCommand || !outStaging || !outOffset ||
       sizeBytes == 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   *outCommand = VK_NULL_HANDLE;
   *outStaging = NULL;
+  *outOffset  = 0u;
   native      = queue->_priv;
   device      = queue->_device->_priv;
   if (!native || !device || !device->device || !native->queRaw) {
     return GPU_ERROR_UNSUPPORTED;
   }
   if (native->transferOpen) {
-    return GPU_ERROR_INVALID_ARGUMENT;
+    uint64_t offset;
+
+    if (!native->transferUpload) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    if (upload) {
+      slot = &native->transferSlots[native->activeTransferSlot];
+      if (slot->uploadUsed <=
+          UINT64_MAX - (VK_TRANSFER_OFFSET_ALIGNMENT - 1u)) {
+        offset = (slot->uploadUsed + VK_TRANSFER_OFFSET_ALIGNMENT - 1u) &
+                 ~(uint64_t)(VK_TRANSFER_OFFSET_ALIGNMENT - 1u);
+        if (offset <= slot->uploadCapacity &&
+            sizeBytes <= slot->uploadCapacity - offset) {
+          slot->uploadUsed = offset + sizeBytes;
+          *outCommand      = slot->command;
+          *outStaging      = slot->uploadStaging;
+          *outOffset       = offset;
+          return GPU_OK;
+        }
+      }
+    }
+    result = vk__flushTransfers(queue, false);
+    if (result != GPU_OK) {
+      return result;
+    }
   }
   slot   = &native->transferSlots[native->nextTransferSlot];
   result = vk__waitTransfer(queue, slot, true);
@@ -531,15 +580,17 @@ vk_beginTransfer(GPUCommandQueue *queue,
 
   native->activeTransferSlot = native->nextTransferSlot;
   native->transferOpen       = true;
+  native->transferUpload     = upload;
+  slot->uploadUsed           = upload ? sizeBytes : 0u;
   *outCommand                = slot->command;
   *outStaging                = upload ? slot->uploadStaging
                                       : native->readbackStaging;
+  *outOffset                 = 0u;
   return GPU_OK;
 }
 
-GPU_HIDE
-GPUResult
-vk_submitTransfer(GPUCommandQueue *queue, bool wait) {
+static GPUResult
+vk__flushTransfers(GPUCommandQueue *queue, bool wait) {
   GPUCommandQueueVk *native;
   GPUDeviceVk       *device;
   GPUTransferSlotVk *slot;
@@ -548,40 +599,68 @@ vk_submitTransfer(GPUCommandQueue *queue, bool wait) {
 
   native = queue ? queue->_priv : NULL;
   device = queue && queue->_device ? queue->_device->_priv : NULL;
-  slot = native && native->activeTransferSlot < GPU_VK_TRANSFER_SLOT_COUNT
-           ? &native->transferSlots[native->activeTransferSlot]
-           : NULL;
-  if (!native || !device || !device->device || !native->queRaw || !slot ||
-      !native->transferOpen || !slot->command || !slot->fence) {
+  if (!native || !device || !device->device || !native->queRaw) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  if (native->transferOpen) {
+    slot = native->activeTransferSlot < GPU_VK_TRANSFER_SLOT_COUNT
+             ? &native->transferSlots[native->activeTransferSlot]
+             : NULL;
+    if (!slot || !slot->command || !slot->fence) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
 
-  result               = vkEndCommandBuffer(slot->command);
-  native->transferOpen = false;
-  if (result != VK_SUCCESS) {
-    return GPU_ERROR_BACKEND_FAILURE;
+    result                 = vkEndCommandBuffer(slot->command);
+    native->transferOpen   = false;
+    native->transferUpload = false;
+    if (result != VK_SUCCESS) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+
+    result = vkResetFences(device->device, 1u, &slot->fence);
+    if (result != VK_SUCCESS) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+
+    submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1u;
+    submitInfo.pCommandBuffers    = &slot->command;
+    result = vkQueueSubmit(native->queRaw, 1u, &submitInfo, slot->fence);
+    if (result != VK_SUCCESS) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+
+    slot->pending            = true;
+    native->nextTransferSlot =
+      (native->activeTransferSlot + 1u) % GPU_VK_TRANSFER_SLOT_COUNT;
   }
 
-  result = vkResetFences(device->device, 1u, &slot->fence);
-  if (result != VK_SUCCESS) {
-    return GPU_ERROR_BACKEND_FAILURE;
-  }
+  if (wait) {
+    for (uint32_t i = 0u; i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
+      GPUResult waitResult;
 
-  submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submitInfo.commandBufferCount = 1u;
-  submitInfo.pCommandBuffers    = &slot->command;
-  result    = vkQueueSubmit(native->queRaw,
-                            1u,
-                            &submitInfo,
-                            slot->fence);
-  if (result != VK_SUCCESS) {
-    return GPU_ERROR_BACKEND_FAILURE;
+      waitResult = vk__waitTransfer(queue, &native->transferSlots[i], false);
+      if (waitResult != GPU_OK) {
+        return waitResult;
+      }
+    }
   }
+  return GPU_OK;
+}
 
-  slot->pending            = true;
-  native->nextTransferSlot =
-    (native->activeTransferSlot + 1u) % GPU_VK_TRANSFER_SLOT_COUNT;
-  return wait ? vk__waitTransfer(queue, slot, false) : GPU_OK;
+GPU_HIDE
+GPUResult
+vk_submitTransfer(GPUCommandQueue *queue, bool wait) {
+  GPUCommandQueueVk *native;
+
+  native = queue ? queue->_priv : NULL;
+  if (!native || !native->transferOpen) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!wait && native->transferUpload) {
+    return GPU_OK;
+  }
+  return vk__flushTransfers(queue, wait);
 }
 
 GPU_HIDE
@@ -599,7 +678,9 @@ vk_abortTransfer(GPUCommandQueue *queue) {
   }
 
   (void)vkEndCommandBuffer(slot->command);
-  native->transferOpen = false;
+  slot->uploadUsed         = 0u;
+  native->transferOpen     = false;
+  native->transferUpload   = false;
 }
 
 GPU_HIDE
@@ -682,7 +763,9 @@ vk_destroyCommandQueue(GPUCommandQueue *queue) {
   deviceVk = queue->_device ? queue->_device->_priv : NULL;
   if (native) {
     vk__stopWorker(native);
-    vk_abortTransfer(queue);
+    if (vk__flushTransfers(queue, true) != GPU_OK) {
+      vk_abortTransfer(queue);
+    }
     for (uint32_t slot = 0u; slot < GPU_VK_TRANSFER_SLOT_COUNT; slot++) {
       (void)vk__waitTransfer(queue, &native->transferSlots[slot], false);
     }
@@ -939,6 +1022,12 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   if (!native || !queue || !deviceVk) {
     gpuFinishCommandBuffer(cmdb, vk__recycleCommandBuffer);
     return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  commitResult = vk__flushTransfers(queue->queue, false);
+  if (commitResult != GPU_OK) {
+    gpuFinishCommandBuffer(cmdb, vk__recycleCommandBuffer);
+    return commitResult;
   }
 
   swapchain       = native->presentSwapchain;

@@ -406,6 +406,7 @@ typedef struct GPUTransferSlotVk {
   VkCommandBuffer  command;
   VkFence          fence;
   uint64_t         uploadCapacity;
+  uint64_t         uploadUsed;
   bool             pending;
 } GPUTransferSlotVk;
 
@@ -438,6 +439,7 @@ struct GPUCommandQueueVk {
   bool                stopping;
   bool                workerStarted;
   bool                transferOpen;
+  bool                transferUpload;
 };
 
 typedef struct GPUSurfaceVk {
@@ -628,7 +630,8 @@ vk_beginTransfer(GPUCommandQueue *queue,
                  bool             upload,
                  uint64_t         sizeBytes,
                  VkCommandBuffer *outCommand,
-                 GPUBuffer      **outStaging);
+                 GPUBuffer      **outStaging,
+                 uint64_t        *outOffset);
 
 GPU_HIDE
 GPUResult

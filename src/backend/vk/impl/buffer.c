@@ -297,6 +297,7 @@ vk_writeBuffer(GPUCommandQueue * __restrict queue,
   GPUBufferVk          *native;
   VkBufferCopy          copy = {0};
   VkMappedMemoryRange   range = {0};
+  uint64_t              stagingOffset;
   GPUResult             result;
 
   native = buffer ? buffer->_priv : NULL;
@@ -319,7 +320,12 @@ vk_writeBuffer(GPUCommandQueue * __restrict queue,
     return GPU_OK;
   }
 
-  result = vk_beginTransfer(queue, true, sizeBytes, &command, &staging);
+  result = vk_beginTransfer(queue,
+                            true,
+                            sizeBytes,
+                            &command,
+                            &staging,
+                            &stagingOffset);
   if (result != GPU_OK) {
     return result;
   }
@@ -329,7 +335,9 @@ vk_writeBuffer(GPUCommandQueue * __restrict queue,
     vk_abortTransfer(queue);
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  memcpy(stagingVk->mapped, data, (size_t)sizeBytes);
+  memcpy((uint8_t *)stagingVk->mapped + stagingOffset,
+         data,
+         (size_t)sizeBytes);
   if (!stagingVk->coherent) {
     range.sType  = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
     range.memory = stagingVk->memory;
@@ -351,7 +359,7 @@ vk_writeBuffer(GPUCommandQueue * __restrict queue,
                     VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT);
 
-  copy.srcOffset = 0u;
+  copy.srcOffset = stagingOffset;
   copy.dstOffset = dstOffset;
   copy.size      = sizeBytes;
   vkCmdCopyBuffer(command, stagingVk->buffer, native->buffer, 1u, &copy);
@@ -380,6 +388,7 @@ vk_readBuffer(GPUCommandQueue * __restrict queue,
   GPUBufferVk          *native;
   VkBufferCopy          copy = {0};
   VkMappedMemoryRange   range = {0};
+  uint64_t              stagingOffset;
   GPUResult             result;
 
   native = buffer ? buffer->_priv : NULL;
@@ -406,7 +415,12 @@ vk_readBuffer(GPUCommandQueue * __restrict queue,
     return GPU_OK;
   }
 
-  result = vk_beginTransfer(queue, false, sizeBytes, &command, &staging);
+  result = vk_beginTransfer(queue,
+                            false,
+                            sizeBytes,
+                            &command,
+                            &staging,
+                            &stagingOffset);
   if (result != GPU_OK) {
     return result;
   }
@@ -427,13 +441,13 @@ vk_readBuffer(GPUCommandQueue * __restrict queue,
                     VK_ACCESS_TRANSFER_READ_BIT);
 
   copy.srcOffset = srcOffset;
-  copy.dstOffset = 0u;
+  copy.dstOffset = stagingOffset;
   copy.size      = sizeBytes;
   vkCmdCopyBuffer(command, native->buffer, stagingVk->buffer, 1u, &copy);
 
   vk__bufferBarrier(command,
                     stagingVk->buffer,
-                    0u,
+                    stagingOffset,
                     sizeBytes,
                     VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_PIPELINE_STAGE_HOST_BIT,
@@ -454,7 +468,9 @@ vk_readBuffer(GPUCommandQueue * __restrict queue,
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
-  memcpy(outData, stagingVk->mapped, (size_t)sizeBytes);
+  memcpy(outData,
+         (const uint8_t *)stagingVk->mapped + stagingOffset,
+         (size_t)sizeBytes);
   return GPU_OK;
 }
 

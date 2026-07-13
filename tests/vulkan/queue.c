@@ -9,8 +9,9 @@
 #include <string.h>
 
 enum {
-  VULKAN_COMMAND_BATCH_SIZE = 4u,
-  VULKAN_WARM_ITERATIONS    = 256u
+  VULKAN_COMMAND_BATCH_SIZE  = 4u,
+  VULKAN_TRANSFER_TEST_BYTES = 64u * 1024u,
+  VULKAN_WARM_ITERATIONS     = 256u
 };
 
 typedef struct CompletionProbe {
@@ -80,6 +81,7 @@ buffer_transfers_reuse(GPUDevice       *device,
   VkDeviceMemory      readbackMemory;
   void               *readbackMapped;
   uint64_t            readbackCapacity;
+  static uint8_t      upload[VULKAN_TRANSFER_TEST_BYTES];
   uint32_t            value;
   uint32_t            copied;
   int                 ok;
@@ -93,7 +95,7 @@ buffer_transfers_reuse(GPUDevice       *device,
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.label            = "vulkan-sync-buffer-transfer";
-  bufferInfo.sizeBytes        = 64u;
+  bufferInfo.sizeBytes        = sizeof(upload);
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
                                 GPU_BUFFER_USAGE_COPY_DST;
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
@@ -104,11 +106,12 @@ buffer_transfers_reuse(GPUDevice       *device,
   ok = bufferNative && !bufferNative->mapped;
   for (uint32_t i = 0u; ok && i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
     value = UINT32_C(0x12340000) + i;
+    memcpy(upload, &value, sizeof(value));
     ok = GPUQueueWriteBuffer(queue,
                              buffer,
                              0u,
-                             &value,
-                             sizeof(value)) == GPU_OK;
+                             upload,
+                             sizeof(upload)) == GPU_OK;
   }
   copied = 0u;
   ok = ok && GPUQueueReadBuffer(queue,
@@ -130,7 +133,7 @@ buffer_transfers_reuse(GPUDevice       *device,
     upload   = slots[i].uploadStaging ? slots[i].uploadStaging->_priv : NULL;
     if (!slots[i].command || !slots[i].fence || !upload ||
         !upload->buffer || !upload->memory || !upload->mapped ||
-        slots[i].uploadCapacity < sizeof(value)) {
+        slots[i].uploadCapacity < VULKAN_TRANSFER_TEST_BYTES) {
       (void)wait_queue(queue, fence);
       GPUDestroyBuffer(buffer);
       return 0;
@@ -199,7 +202,7 @@ texture_uploads_reuse(GPUDevice       *device,
   GPUTextureWriteRegion writeRegion = {0};
   GPUTransferSlotVk      slots[GPU_VK_TRANSFER_SLOT_COUNT];
   GPUTexture            *texture;
-  uint8_t                pixel[4];
+  static uint8_t         pixels[VULKAN_TRANSFER_TEST_BYTES];
   int                    ok;
 
   native  = queue ? queue->_priv : NULL;
@@ -213,8 +216,8 @@ texture_uploads_reuse(GPUDevice       *device,
   textureInfo.label            = "vulkan-sync-texture-transfer";
   textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
   textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
-  textureInfo.width            = 1u;
-  textureInfo.height           = 1u;
+  textureInfo.width            = 128u;
+  textureInfo.height           = 128u;
   textureInfo.depthOrLayers    = 1u;
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
@@ -224,22 +227,22 @@ texture_uploads_reuse(GPUDevice       *device,
     return 0;
   }
 
-  writeRegion.width        = 1u;
-  writeRegion.height       = 1u;
+  writeRegion.width        = 128u;
+  writeRegion.height       = 128u;
   writeRegion.depth        = 1u;
   writeRegion.layerCount   = 1u;
-  writeRegion.bytesPerRow  = sizeof(pixel);
-  writeRegion.rowsPerImage = 1u;
-  memset(pixel, 0, sizeof(pixel));
-  pixel[3] = 255u;
+  writeRegion.bytesPerRow  = 128u * 4u;
+  writeRegion.rowsPerImage = 128u;
+  memset(pixels, 0, sizeof(pixels));
+  pixels[3] = 255u;
   ok = 1;
   for (uint32_t i = 0u; ok && i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
-    pixel[0] = (uint8_t)i;
+    pixels[0] = (uint8_t)i;
     ok = GPUQueueWriteTexture(queue,
                               texture,
                               &writeRegion,
-                              pixel,
-                              sizeof(pixel)) == GPU_OK;
+                              pixels,
+                              sizeof(pixels)) == GPU_OK;
   }
   ok = ok && wait_queue(queue, fence);
   for (uint32_t i = 0u; ok && i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
@@ -249,18 +252,18 @@ texture_uploads_reuse(GPUDevice       *device,
     upload   = slots[i].uploadStaging ? slots[i].uploadStaging->_priv : NULL;
     ok = slots[i].command && slots[i].fence && upload && upload->buffer &&
          upload->memory && upload->mapped &&
-         slots[i].uploadCapacity >= sizeof(pixel);
+         slots[i].uploadCapacity >= sizeof(pixels);
   }
   for (uint32_t i = 0u; ok && i < 16u; i++) {
-    pixel[0] = (uint8_t)i;
-    pixel[1] = (uint8_t)(i + 1u);
-    pixel[2] = (uint8_t)(i + 2u);
+    pixels[0] = (uint8_t)i;
+    pixels[1] = (uint8_t)(i + 1u);
+    pixels[2] = (uint8_t)(i + 2u);
     if (GPUQueueWriteTexture(queue,
                              texture,
                              &writeRegion,
-                             pixel,
-                             sizeof(pixel)) != GPU_OK ||
-        native->transferOpen) {
+                             pixels,
+                             sizeof(pixels)) != GPU_OK ||
+        !native->transferOpen) {
       ok = 0;
       break;
     }
