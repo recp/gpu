@@ -1,0 +1,15 @@
+kern(1, 1, 1) cube_view_cs(
+  cubeMap: texturecube<float> #texture(0),
+  cubeArray: texturecube_array<float> #texture(1),
+  inout output: [float4] #buffer(2),
+  gid: uint3 #global_id
+) {
+  let nearestSampler = sampler(.nearest, .nearest, .nearest, .clampToEdge)
+  let cubeColor = cubeMap.sample(nearestSampler,
+                                 float3(1.0, 0.0, 0.0),
+                                 level(0.0))
+  let arrayColor = cubeArray.sample(nearestSampler,
+                                    float4(0.0, 1.0, 0.0, 0.0),
+                                    level(0.0))
+  output[gid.x] = float4(cubeColor.r, arrayColor.g, 0.0, 1.0)
+}
