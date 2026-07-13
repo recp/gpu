@@ -16,6 +16,7 @@
 
 #include "../common.h"
 #include "buffer_internal.h"
+#include "cmdqueue_internal.h"
 
 GPU_EXPORT
 GPUResult
@@ -23,6 +24,7 @@ GPUCreateBuffer(GPUDevice                 * __restrict device,
                 const GPUBufferCreateInfo * __restrict info,
                 GPUBuffer                ** __restrict outBuffer) {
   GPUApi *api;
+  GPUResult result;
 
   if (!outBuffer) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -43,14 +45,25 @@ GPUCreateBuffer(GPUDevice                 * __restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuActiveGPUApi())) {
+  if (!(api = gpuDeviceApi(device))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
   if (!api->buf.create) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
   
-  return api->buf.create(device, info, outBuffer);
+  result = api->buf.create(device, info, outBuffer);
+  if (result != GPU_OK) {
+    return result;
+  }
+  if (!*outBuffer) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  (*outBuffer)->device    = device;
+  (*outBuffer)->sizeBytes = info->sizeBytes;
+  (*outBuffer)->usage     = info->usage;
+  return GPU_OK;
 }
 
 GPU_EXPORT
@@ -62,7 +75,7 @@ GPUDestroyBuffer(GPUBuffer * __restrict buff) {
     return;
   }
 
-  if (!(api = gpuActiveGPUApi())) {
+  if (!(api = gpuBufferApi(buff))) {
     return;
   }
 
@@ -81,12 +94,13 @@ GPUQueueWriteBuffer(GPUCommandQueue * __restrict queue,
   GPUApi *api;
 
   if (!queue || !buff || !data || sizeBytes == 0 ||
+      gpuCommandQueueDevice(queue) != buff->device ||
       !gpuBufferHasUsage(buff, GPU_BUFFER_USAGE_COPY_DST) ||
       !gpuBufferRangeValid(buff, dstOffset, sizeBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuActiveGPUApi())) {
+  if (!(api = gpuCommandQueueApi(queue))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
   if (!api->buf.write) {
@@ -106,12 +120,13 @@ GPUQueueReadBuffer(GPUCommandQueue * __restrict queue,
   GPUApi *api;
 
   if (!queue || !buff || !outData || sizeBytes == 0 ||
+      gpuCommandQueueDevice(queue) != buff->device ||
       !gpuBufferHasUsage(buff, GPU_BUFFER_USAGE_COPY_SRC) ||
       !gpuBufferRangeValid(buff, srcOffset, sizeBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuActiveGPUApi())) {
+  if (!(api = gpuCommandQueueApi(queue))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
   if (!api->buf.read) {

@@ -1,5 +1,138 @@
 #include "test.h"
+#include "../../src/api/buffer_internal.h"
+#include "../../src/api/cmdqueue_internal.h"
 #include "../../src/api/texture_internal.h"
+
+static GPUBuffer gScopedBuffer;
+static uint8_t   gScopedBufferStorage[32];
+static uint32_t  gScopedBufferCreateCalls;
+static uint32_t  gScopedBufferWriteCalls;
+static uint32_t  gScopedBufferReadCalls;
+static uint32_t  gScopedBufferDestroyCalls;
+
+static GPUResult
+create_scoped_buffer(GPUDevice                 * __restrict device,
+                     const GPUBufferCreateInfo * __restrict info,
+                     GPUBuffer                ** __restrict outBuffer) {
+  (void)device;
+  (void)info;
+  memset(&gScopedBuffer, 0, sizeof(gScopedBuffer));
+  memset(gScopedBufferStorage, 0, sizeof(gScopedBufferStorage));
+  *outBuffer = &gScopedBuffer;
+  gScopedBufferCreateCalls++;
+  return GPU_OK;
+}
+
+static void
+destroy_scoped_buffer(GPUBuffer * __restrict buffer) {
+  (void)buffer;
+  gScopedBufferDestroyCalls++;
+}
+
+static GPUResult
+write_scoped_buffer(GPUCommandQueue * __restrict queue,
+                    GPUBuffer       * __restrict buffer,
+                    uint64_t                     offset,
+                    const void      * __restrict data,
+                    uint64_t                     sizeBytes) {
+  (void)queue;
+  (void)buffer;
+  memcpy(gScopedBufferStorage + offset, data, (size_t)sizeBytes);
+  gScopedBufferWriteCalls++;
+  return GPU_OK;
+}
+
+static GPUResult
+read_scoped_buffer(GPUCommandQueue * __restrict queue,
+                   GPUBuffer       * __restrict buffer,
+                   uint64_t                     offset,
+                   void           * __restrict outData,
+                   uint64_t                     sizeBytes) {
+  (void)queue;
+  (void)buffer;
+  memcpy(outData, gScopedBufferStorage + offset, (size_t)sizeBytes);
+  gScopedBufferReadCalls++;
+  return GPU_OK;
+}
+
+static int
+check_buffer_device_dispatch(GPUDevice *activeDevice) {
+  GPUBuffer           *buffer;
+  GPUBufferCreateInfo info = {0};
+  GPUCommandQueue     queue = {0};
+  GPUCommandQueue     foreignQueue = {0};
+  GPUDevice           device = {0};
+  GPUApi              scopedApi;
+  uint32_t             source[4] = { 2u, 4u, 6u, 8u };
+  uint32_t             result[4] = {0};
+
+  if (!activeDevice || !gpuDeviceApi(activeDevice)) {
+    fprintf(stderr, "buffer dispatch has no device api\n");
+    return 0;
+  }
+
+  scopedApi                          = *gpuDeviceApi(activeDevice);
+  scopedApi.buf.create               = create_scoped_buffer;
+  scopedApi.buf.destroy              = destroy_scoped_buffer;
+  scopedApi.buf.write                = write_scoped_buffer;
+  scopedApi.buf.read                 = read_scoped_buffer;
+  device._api                        = &scopedApi;
+  queue._device                      = &device;
+  foreignQueue._device               = activeDevice;
+  gScopedBufferCreateCalls  = 0u;
+  gScopedBufferWriteCalls   = 0u;
+  gScopedBufferReadCalls    = 0u;
+  gScopedBufferDestroyCalls = 0u;
+
+  info.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.sizeBytes        = sizeof(source);
+  info.usage            = GPU_BUFFER_USAGE_COPY_SRC |
+                          GPU_BUFFER_USAGE_COPY_DST;
+  buffer = NULL;
+  if (GPUCreateBuffer(&device, &info, &buffer) != GPU_OK ||
+      buffer != &gScopedBuffer || buffer->device != &device ||
+      buffer->sizeBytes != sizeof(source) || buffer->usage != info.usage ||
+      GPUQueueWriteBuffer(&queue,
+                          buffer,
+                          0u,
+                          source,
+                          sizeof(source)) != GPU_OK ||
+      GPUQueueReadBuffer(&queue,
+                         buffer,
+                         0u,
+                         result,
+                         sizeof(result)) != GPU_OK ||
+      memcmp(source, result, sizeof(source)) != 0) {
+    fprintf(stderr, "buffer device dispatch failed\n");
+    return 0;
+  }
+
+  if (GPUQueueWriteBuffer(&foreignQueue,
+                          buffer,
+                          0u,
+                          source,
+                          sizeof(source)) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUQueueReadBuffer(&foreignQueue,
+                         buffer,
+                         0u,
+                         result,
+                         sizeof(result)) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "buffer accepted a foreign queue\n");
+    return 0;
+  }
+
+  GPUDestroyBuffer(buffer);
+  if (gScopedBufferCreateCalls != 1u ||
+      gScopedBufferWriteCalls != 1u ||
+      gScopedBufferReadCalls != 1u ||
+      gScopedBufferDestroyCalls != 1u) {
+    fprintf(stderr, "buffer dispatch called wrong backend\n");
+    return 0;
+  }
+
+  return 1;
+}
 
 static int
 check_destroy_null_handles(void) {
@@ -485,5 +618,6 @@ check_resource_validation(GPUDevice *device) {
 int
 gpu_test_resources(GPUDevice *device) {
   return check_destroy_null_handles() &&
+         check_buffer_device_dispatch(device) &&
          check_resource_validation(device);
 }

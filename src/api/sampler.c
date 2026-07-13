@@ -15,6 +15,8 @@
  */
 
 #include "../common.h"
+#include "device_internal.h"
+#include "sampler_internal.h"
 
 static int
 gpu_samplerDescIsValid(const GPUSamplerDesc *desc) {
@@ -46,6 +48,7 @@ GPUCreateSampler(GPUDevice                  *__restrict device,
                  bool                                   staticIfSupported,
                  GPUSampler               **__restrict outSampler) {
   GPUApi *api;
+  GPUResult result;
 
   if (!outSampler) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -66,12 +69,27 @@ GPUCreateSampler(GPUDevice                  *__restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuActiveGPUApi()))
+  if (!(api = gpuDeviceApi(device)))
     return GPU_ERROR_BACKEND_FAILURE;
 
-  return api->sampler.createSampler ?
-    api->sampler.createSampler(api, device, info, staticIfSupported, outSampler) :
-    GPU_ERROR_BACKEND_FAILURE;
+  if (!api->sampler.createSampler) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  result = api->sampler.createSampler(api,
+                                      device,
+                                      info,
+                                      staticIfSupported,
+                                      outSampler);
+  if (result != GPU_OK) {
+    return result;
+  }
+  if (!*outSampler) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  (*outSampler)->device = device;
+  return GPU_OK;
 }
 
 GPU_EXPORT
@@ -83,7 +101,7 @@ GPUDestroySampler(GPUSampler *__restrict sampler) {
     return;
   }
 
-  if (!(api = gpuActiveGPUApi())) {
+  if (!(api = gpuSamplerApi(sampler))) {
     return;
   }
 
@@ -99,6 +117,7 @@ GPUCreateSamplerFromUSLStaticSampler(GPUDevice *__restrict device,
                                      bool staticIfSupported,
                                      GPUSampler **__restrict outSampler) {
   GPUApi *api;
+  GPUResult result;
 
   if (!outSampler) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -109,16 +128,25 @@ GPUCreateSamplerFromUSLStaticSampler(GPUDevice *__restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuActiveGPUApi())) {
+  if (!(api = gpuDeviceApi(device))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   if (api->sampler.createSamplerFromUSLStaticSampler) {
-    return api->sampler.createSamplerFromUSLStaticSampler(api,
-                                                          device,
-                                                          desc,
-                                                          staticIfSupported,
-                                                          outSampler);
+    result = api->sampler.createSamplerFromUSLStaticSampler(api,
+                                                            device,
+                                                            desc,
+                                                            staticIfSupported,
+                                                            outSampler);
+    if (result != GPU_OK) {
+      return result;
+    }
+    if (!*outSampler) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+
+    (*outSampler)->device = device;
+    return GPU_OK;
   }
 
   return GPU_ERROR_BACKEND_FAILURE;

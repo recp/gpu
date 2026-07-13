@@ -18,9 +18,16 @@
 #define gpu_sampler_internal_h
 
 #include "../common.h"
+#include "device_internal.h"
 
 struct GPUSampler {
-  void *_priv;
+  GPUDevice *device;
+  void      *_priv;
 };
+
+static inline GPUApi *
+gpuSamplerApi(const GPUSampler *sampler) {
+  return sampler ? gpuDeviceApi(sampler->device) : NULL;
+}
 
 #endif /* gpu_sampler_internal_h */

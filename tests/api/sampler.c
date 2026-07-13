@@ -1,4 +1,49 @@
 #include "test.h"
+#include "../../src/api/device_internal.h"
+#include "../../src/api/sampler_internal.h"
+
+static GPUSampler gScopedSampler;
+static uint32_t   gScopedSamplerCreateCalls;
+static uint32_t   gScopedUSLSamplerCreateCalls;
+static uint32_t   gScopedSamplerDestroyCalls;
+
+static GPUResult
+create_scoped_sampler(GPUApi                    * __restrict api,
+                      GPUDevice                 * __restrict device,
+                      const GPUSamplerCreateInfo *info,
+                      bool                       staticIfSupported,
+                      GPUSampler               **outSampler) {
+  (void)api;
+  (void)device;
+  (void)info;
+  (void)staticIfSupported;
+  memset(&gScopedSampler, 0, sizeof(gScopedSampler));
+  *outSampler = &gScopedSampler;
+  gScopedSamplerCreateCalls++;
+  return GPU_OK;
+}
+
+static GPUResult
+create_scoped_usl_sampler(GPUApi                        * __restrict api,
+                          GPUDevice                     * __restrict device,
+                          const GPUUSLStaticSamplerDesc *desc,
+                          bool                           staticIfSupported,
+                          GPUSampler                   **outSampler) {
+  (void)api;
+  (void)device;
+  (void)desc;
+  (void)staticIfSupported;
+  memset(&gScopedSampler, 0, sizeof(gScopedSampler));
+  *outSampler = &gScopedSampler;
+  gScopedUSLSamplerCreateCalls++;
+  return GPU_OK;
+}
+
+static void
+destroy_scoped_sampler(GPUSampler * __restrict sampler) {
+  (void)sampler;
+  gScopedSamplerDestroyCalls++;
+}
 
 static GPUSamplerDesc
 valid_sampler_desc(void) {
@@ -12,6 +57,61 @@ valid_sampler_desc(void) {
   desc.addressV = GPU_ADDRESS_MODE_REPEAT;
   desc.addressW = GPU_ADDRESS_MODE_REPEAT;
   return desc;
+}
+
+static int
+check_sampler_device_dispatch(GPUDevice *activeDevice) {
+  GPUSampler              *sampler;
+  GPUUSLStaticSamplerDesc uslDesc = {0};
+  GPUSamplerCreateInfo    info = {0};
+  GPUDevice               device = {0};
+  GPUApi                  scopedApi;
+
+  if (!activeDevice || !gpuDeviceApi(activeDevice)) {
+    fprintf(stderr, "sampler dispatch has no device api\n");
+    return 0;
+  }
+
+  scopedApi = *gpuDeviceApi(activeDevice);
+  scopedApi.sampler.createSampler = create_scoped_sampler;
+  scopedApi.sampler.createSamplerFromUSLStaticSampler =
+    create_scoped_usl_sampler;
+  scopedApi.sampler.destroySampler = destroy_scoped_sampler;
+  device._api                      = &scopedApi;
+  gScopedSamplerCreateCalls        = 0u;
+  gScopedUSLSamplerCreateCalls     = 0u;
+  gScopedSamplerDestroyCalls       = 0u;
+
+  info.chain.sType      = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.desc             = valid_sampler_desc();
+  sampler = NULL;
+  if (GPUCreateSampler(&device, &info, false, &sampler) != GPU_OK ||
+      sampler != &gScopedSampler || sampler->device != &device) {
+    fprintf(stderr, "sampler device dispatch failed\n");
+    return 0;
+  }
+  GPUDestroySampler(sampler);
+
+  sampler = NULL;
+  if (GPUCreateSamplerFromUSLStaticSampler(&device,
+                                           &uslDesc,
+                                           true,
+                                           &sampler) != GPU_OK ||
+      sampler != &gScopedSampler || sampler->device != &device) {
+    fprintf(stderr, "USL sampler device dispatch failed\n");
+    return 0;
+  }
+  GPUDestroySampler(sampler);
+
+  if (gScopedSamplerCreateCalls != 1u ||
+      gScopedUSLSamplerCreateCalls != 1u ||
+      gScopedSamplerDestroyCalls != 2u) {
+    fprintf(stderr, "sampler dispatch called wrong backend\n");
+    return 0;
+  }
+
+  return 1;
 }
 
 static int
@@ -98,5 +198,6 @@ check_sampler_validation(GPUDevice *device) {
 
 int
 gpu_test_sampler(GPUDevice *device) {
-  return check_sampler_validation(device);
+  return check_sampler_device_dispatch(device) &&
+         check_sampler_validation(device);
 }

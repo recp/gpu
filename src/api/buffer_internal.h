@@ -18,6 +18,7 @@
 #define gpu_buffer_internal_h
 
 #include "../common.h"
+#include "device_internal.h"
 
 struct GPUBuffer {
   void                *_priv;
@@ -25,6 +26,11 @@ struct GPUBuffer {
   uint64_t             sizeBytes;
   GPUBufferUsageFlags  usage;
 };
+
+static inline GPUApi *
+gpuBufferApi(const GPUBuffer *buffer) {
+  return buffer ? gpuDeviceApi(buffer->device) : NULL;
+}
 
 static inline bool
 gpuBufferHasUsage(const GPUBuffer *buffer, GPUBufferUsageFlags usage) {
