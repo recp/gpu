@@ -1223,6 +1223,16 @@ GPUIsFeatureEnabled(const GPUDevice *device, GPUFeature feature) {
 }
 
 GPU_EXPORT
+GPUProc
+GPUGetProcAddr(GPUDevice *device, const char *name) {
+  if (!gpuDeviceApi(device) || !name || name[0] == '\0') {
+    return NULL;
+  }
+
+  return NULL;
+}
+
+GPU_EXPORT
 GPUDevice*
 GPUCreateSystemDefaultDevice(GPUInstance *inst) {
   GPUAdapter *adapter;

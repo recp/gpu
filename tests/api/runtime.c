@@ -395,6 +395,19 @@ check_stats_queries(GPUDevice *device) {
 }
 
 static int
+check_extension_lookup(GPUDevice *device) {
+  if (GPUGetProcAddr(NULL, "GPUUnknownEXT") != NULL ||
+      GPUGetProcAddr(device, NULL) != NULL ||
+      GPUGetProcAddr(device, "") != NULL ||
+      GPUGetProcAddr(device, "GPUUnknownEXT") != NULL) {
+    fprintf(stderr, "extension lookup returned an unknown entry point\n");
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
 submit_empty(GPUCommandQueue *queue,
              GPUFence        *fence,
              uint32_t         transientFrameIndex,
@@ -483,5 +496,6 @@ gpu_test_runtime(GPUDevice *device) {
          check_transient_validation(device) &&
          check_transient_fallback(device) &&
          check_stats_queries(device) &&
+         check_extension_lookup(device) &&
          check_warm_command_path(device);
 }

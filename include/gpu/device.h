@@ -69,6 +69,8 @@ typedef void (*GPUDeviceErrorCallback)(GPUDevice                *device,
                                        const GPUDeviceErrorInfo *error,
                                        void                     *userData);
 
+typedef void (*GPUProc)(void);
+
 typedef enum GPUFeature {
   GPU_FEATURE_COMPUTE = 0,
   GPU_FEATURE_TIMESTAMPS = 1,
@@ -274,6 +276,10 @@ GPUIsFeatureSupported(const GPUAdapter *adapter, GPUFeature feature);
 GPU_EXPORT
 bool
 GPUIsFeatureEnabled(const GPUDevice *device, GPUFeature feature);
+
+GPU_EXPORT
+GPUProc
+GPUGetProcAddr(GPUDevice *device, const char *name);
 
 GPU_EXPORT
 GPUResult
