@@ -63,9 +63,9 @@ typedef struct GPURenderPassDepthStencilAttachment {
   GPUTextureView *view;
   GPULoadOp       depthLoadOp;
   GPUStoreOp      depthStoreOp;
+  float           clearDepth;
   GPULoadOp       stencilLoadOp;
   GPUStoreOp      stencilStoreOp;
-  float           clearDepth;
   uint32_t        clearStencil;
 } GPURenderPassDepthStencilAttachment;
 
