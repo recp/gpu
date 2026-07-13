@@ -2452,5 +2452,6 @@ gpu_test_render(GPUDevice *device, const char *mrtBytecodePath) {
          check_render_push_constant_shadowing_calls(device) &&
          check_dynamic_state_validation_calls(device) &&
          check_render_readback(device, mrtBytecodePath) &&
-         gpu_test_texture_view_render(device);
+         gpu_test_texture_view_render(device) &&
+         gpu_test_texture_view_depth(device);
 }
