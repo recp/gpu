@@ -4,6 +4,10 @@
 #include <stdio.h>
 #include <string.h>
 
+enum {
+  DX12_TRANSFER_TEST_BYTES = 64u * 1024u
+};
+
 typedef struct CompletionProbe {
   GPUCommandBuffer *cmdb;
   uint32_t          count;
@@ -113,6 +117,7 @@ buffer_transfers_reuse(GPUCommandQueue *queue,
   ID3D12Resource       *readback;
   HANDLE                event;
   uint64_t              readbackCapacity;
+  static uint8_t        upload[DX12_TRANSFER_TEST_BYTES];
   uint32_t              value;
   uint32_t              copied;
   bool                  ok;
@@ -127,7 +132,7 @@ buffer_transfers_reuse(GPUCommandQueue *queue,
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.label            = "dx12-sync-transfer";
-  bufferInfo.sizeBytes        = 64u;
+  bufferInfo.sizeBytes        = sizeof(upload);
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
                                 GPU_BUFFER_USAGE_COPY_DST;
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
@@ -137,11 +142,12 @@ buffer_transfers_reuse(GPUCommandQueue *queue,
   ok = true;
   for (uint32_t i = 0u; ok && i < GPU_DX12_TRANSFER_SLOT_COUNT; i++) {
     value = UINT32_C(0x12340000) + i;
+    memcpy(upload, &value, sizeof(value));
     ok = GPUQueueWriteBuffer(queue,
                              buffer,
                              0u,
-                             &value,
-                             sizeof(value)) == GPU_OK;
+                             upload,
+                             sizeof(upload)) == GPU_OK;
   }
   copied = 0u;
   ok = ok && GPUQueueReadBuffer(queue,
@@ -161,7 +167,7 @@ buffer_transfers_reuse(GPUCommandQueue *queue,
     slots[i] = native->transferSlots[i];
     if (!slots[i].allocator || !slots[i].commandList ||
         !slots[i].uploadStaging || !slots[i].uploadMapped ||
-        slots[i].uploadCapacity < sizeof(value)) {
+        slots[i].uploadCapacity < DX12_TRANSFER_TEST_BYTES) {
       (void)wait_queue(queue, queueFence);
       GPUDestroyBuffer(buffer);
       return false;
@@ -222,7 +228,7 @@ texture_transfers_reuse(GPUCommandQueue *queue,
   GPUTexture           *texture;
   ID3D12Fence          *fence;
   HANDLE                event;
-  uint8_t               pixel[4];
+  static uint8_t        pixels[DX12_TRANSFER_TEST_BYTES];
   bool                  ok;
 
   native  = queue ? queue->_priv : NULL;
@@ -237,8 +243,8 @@ texture_transfers_reuse(GPUCommandQueue *queue,
   textureInfo.label            = "dx12-sync-texture-transfer";
   textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
   textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
-  textureInfo.width            = 1u;
-  textureInfo.height           = 1u;
+  textureInfo.width            = 128u;
+  textureInfo.height           = 128u;
   textureInfo.depthOrLayers    = 1u;
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
@@ -249,24 +255,25 @@ texture_transfers_reuse(GPUCommandQueue *queue,
   }
 
   memset(&writeRegion, 0, sizeof(writeRegion));
-  writeRegion.width        = 1u;
-  writeRegion.height       = 1u;
+  writeRegion.width        = 128u;
+  writeRegion.height       = 128u;
   writeRegion.depth        = 1u;
   writeRegion.layerCount   = 1u;
-  writeRegion.bytesPerRow  = sizeof(pixel);
-  writeRegion.rowsPerImage = 1u;
+  writeRegion.bytesPerRow  = 128u * 4u;
+  writeRegion.rowsPerImage = 128u;
+  memset(pixels, 0, sizeof(pixels));
 
   ok = true;
   for (uint32_t i = 0u; ok && i < GPU_DX12_TRANSFER_SLOT_COUNT; i++) {
-    pixel[0] = (uint8_t)i;
-    pixel[1] = (uint8_t)(i + 1u);
-    pixel[2] = (uint8_t)(i + 2u);
-    pixel[3] = 255u;
+    pixels[0] = (uint8_t)i;
+    pixels[1] = (uint8_t)(i + 1u);
+    pixels[2] = (uint8_t)(i + 2u);
+    pixels[3] = 255u;
     if (GPUQueueWriteTexture(queue,
                              texture,
                              &writeRegion,
-                             pixel,
-                             sizeof(pixel)) != GPU_OK) {
+                             pixels,
+                             sizeof(pixels)) != GPU_OK) {
       ok = false;
       break;
     }
@@ -276,23 +283,23 @@ texture_transfers_reuse(GPUCommandQueue *queue,
     slots[i] = native->transferSlots[i];
     ok = slots[i].allocator && slots[i].commandList &&
          slots[i].uploadStaging && slots[i].uploadMapped &&
-         slots[i].uploadCapacity >= sizeof(pixel);
+         slots[i].uploadCapacity >= sizeof(pixels);
   }
   fence = native->transferFence;
   event = native->transferEvent;
   for (uint32_t i = 0u; ok && i < 16u; i++) {
-    pixel[0] = (uint8_t)i;
-    pixel[1] = (uint8_t)(i + 1u);
-    pixel[2] = (uint8_t)(i + 2u);
-    pixel[3] = 255u;
+    pixels[0] = (uint8_t)i;
+    pixels[1] = (uint8_t)(i + 1u);
+    pixels[2] = (uint8_t)(i + 2u);
+    pixels[3] = 255u;
     if (GPUQueueWriteTexture(queue,
                              texture,
                              &writeRegion,
-                             pixel,
-                             sizeof(pixel)) != GPU_OK ||
+                             pixels,
+                             sizeof(pixels)) != GPU_OK ||
         native->transferFence != fence ||
         native->transferEvent != event ||
-        native->transferOpen) {
+        !native->transferOpen) {
       ok = false;
       break;
     }

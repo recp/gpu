@@ -86,6 +86,34 @@ create_scoped_texture_view(GPUTexture                     * __restrict texture,
   return GPU_OK;
 }
 
+static int
+wait_queue_writes(GPUDevice *device, GPUCommandQueue *queue) {
+  GPUQueueSubmitInfo submitInfo = {0};
+  GPUCommandBuffer  *cmdb;
+  GPUFence          *fence;
+  int                ok;
+
+  cmdb  = NULL;
+  fence = NULL;
+  if (!device || !queue ||
+      GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence ||
+      GPUAcquireCommandBuffer(queue, "resource-write-wait", &cmdb) != GPU_OK ||
+      !cmdb) {
+    GPUDestroyFence(fence);
+    return 0;
+  }
+
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.ppCommandBuffers   = &cmdb;
+  submitInfo.fence              = fence;
+  ok = GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
+       GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+  GPUDestroyFence(fence);
+  return ok;
+}
+
 static void
 destroy_scoped_texture_view(GPUTextureView * __restrict view) {
   (void)view;
@@ -738,6 +766,11 @@ check_resource_validation(GPUDevice *device) {
   }
   if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) != GPU_OK) {
     fprintf(stderr, "texture write failed\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+  if (!wait_queue_writes(device, queue)) {
+    fprintf(stderr, "texture write wait failed\n");
     GPUDestroyTexture(texture);
     return 0;
   }

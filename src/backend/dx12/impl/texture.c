@@ -973,6 +973,7 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
   uint64_t                    rowSize;
   uint64_t                    layerSize;
   uint64_t                    layerStride;
+  uint64_t                    stagingOffset;
   uint64_t                    totalSize;
   uint32_t                    copyCount;
   uint32_t                    copyDepth;
@@ -1060,7 +1061,8 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
                               totalSize,
                               &commandList,
                               &upload,
-                              &mappedData);
+                              &mappedData,
+                              &stagingOffset);
   if (result != GPU_OK) {
     return result;
   }
@@ -1069,7 +1071,7 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
     uint64_t baseOffset;
     uint64_t ignoredSize;
 
-    baseOffset  = (uint64_t)layer * layerStride;
+    baseOffset  = stagingOffset + (uint64_t)layer * layerStride;
     subresource = dx12__textureSubresource(native,
                                            region->mipLevel,
                                            region->baseArrayLayer + layer,
@@ -1141,7 +1143,7 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
       &textureDesc,
       subresource,
       1u,
-      (uint64_t)layer * layerStride,
+      stagingOffset + (uint64_t)layer * layerStride,
       &source.PlacedFootprint,
       &rowCount,
       &rowSize,

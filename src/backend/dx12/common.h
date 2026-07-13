@@ -348,6 +348,7 @@ typedef struct GPUTransferSlotDX12 {
   void                      *uploadMapped;
   UINT64                     fenceValue;
   uint64_t                   uploadCapacity;
+  uint64_t                   uploadUsed;
   bool                       pending;
 } GPUTransferSlotDX12;
 
@@ -376,6 +377,7 @@ struct GPUCommandQueueDX12 {
   bool                         workerStarted;
   bool                         stopping;
   bool                         transferOpen;
+  bool                         transferUpload;
   CRITICAL_SECTION             poolLock;
   CONDITION_VARIABLE           pendingCondition;
 };
@@ -489,7 +491,8 @@ dx12_beginTransfer(GPUCommandQueue             *queue,
                    uint64_t                     stagingBytes,
                    ID3D12GraphicsCommandList  **outCommandList,
                    ID3D12Resource             **outStaging,
-                   void                       **outMapped);
+                   void                       **outMapped,
+                   uint64_t                    *outOffset);
 
 GPU_HIDE
 GPUResult

@@ -85,6 +85,7 @@ static bool
 dx12__recordBufferTransfer(ID3D12GraphicsCommandList *commandList,
                            GPUBufferDX12             *buffer,
                            ID3D12Resource            *staging,
+                           uint64_t                    stagingOffset,
                            uint64_t                    bufferOffset,
                            uint64_t                    sizeBytes,
                            bool                        upload) {
@@ -106,12 +107,12 @@ dx12__recordBufferTransfer(ID3D12GraphicsCommandList *commandList,
                                            buffer->resource,
                                            bufferOffset,
                                            staging,
-                                           0u,
+                                           stagingOffset,
                                            sizeBytes);
   } else {
     commandList->lpVtbl->CopyBufferRegion(commandList,
                                            staging,
-                                           0u,
+                                           stagingOffset,
                                            buffer->resource,
                                            bufferOffset,
                                            sizeBytes);
@@ -273,6 +274,7 @@ dx12_writeBuffer(GPUCommandQueue * __restrict queue,
   GPUCommandQueueDX12       *queueDX12;
   GPUBufferDX12             *native;
   void                      *mapped;
+  uint64_t                   stagingOffset;
   GPUResult                  result;
 
   queueDX12 = queue ? queue->_priv : NULL;
@@ -296,15 +298,17 @@ dx12_writeBuffer(GPUCommandQueue * __restrict queue,
                               sizeBytes,
                               &commandList,
                               &staging,
-                              &mapped);
+                              &mapped,
+                              &stagingOffset);
   if (result != GPU_OK) {
     return result;
   }
 
-  memcpy(mapped, data, (size_t)sizeBytes);
+  memcpy((uint8_t *)mapped + stagingOffset, data, (size_t)sizeBytes);
   if (!dx12__recordBufferTransfer(commandList,
                                   native,
                                   staging,
+                                  stagingOffset,
                                   dstOffset,
                                   sizeBytes,
                                   true)) {
@@ -327,6 +331,7 @@ dx12_readBuffer(GPUCommandQueue * __restrict queue,
   GPUBufferDX12             *native;
   void                      *mapped;
   D3D12_RANGE                readRange;
+  uint64_t                   stagingOffset;
   GPUResult                  result;
 
   queueDX12 = queue ? queue->_priv : NULL;
@@ -352,7 +357,8 @@ dx12_readBuffer(GPUCommandQueue * __restrict queue,
                               sizeBytes,
                               &commandList,
                               &staging,
-                              &mapped);
+                              &mapped,
+                              &stagingOffset);
   if (result != GPU_OK) {
     return result;
   }
@@ -360,6 +366,7 @@ dx12_readBuffer(GPUCommandQueue * __restrict queue,
   if (!dx12__recordBufferTransfer(commandList,
                                   native,
                                   staging,
+                                  stagingOffset,
                                   srcOffset,
                                   sizeBytes,
                                   false)) {
@@ -368,14 +375,16 @@ dx12_readBuffer(GPUCommandQueue * __restrict queue,
   }
   result = dx12_submitTransfer(queue, true);
   if (result == GPU_OK) {
-    readRange.Begin = 0u;
-    readRange.End   = (SIZE_T)sizeBytes;
+    readRange.Begin = (SIZE_T)stagingOffset;
+    readRange.End   = (SIZE_T)(stagingOffset + sizeBytes);
     mapped          = NULL;
     if (FAILED(staging->lpVtbl->Map(staging, 0u, &readRange, &mapped)) ||
         !mapped) {
       result = GPU_ERROR_BACKEND_FAILURE;
     } else {
-      memcpy(outData, mapped, (size_t)sizeBytes);
+      memcpy(outData,
+             (const uint8_t *)mapped + stagingOffset,
+             (size_t)sizeBytes);
       staging->lpVtbl->Unmap(staging, 0u, NULL);
     }
   }
