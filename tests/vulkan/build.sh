@@ -24,6 +24,7 @@ build_test() {
     -isysroot "$SDK_PATH" \
     -I"$ROOT/include" \
     -I"$ROOT/src" \
+    -I"$VULKAN_SDK/macOS/include" \
     "$source" \
     "$@" \
     -L"$LIB_DIR" \

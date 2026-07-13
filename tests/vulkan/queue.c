@@ -1,5 +1,7 @@
 #include <gpu/gpu.h>
 
+#include "backend/vk/common.h"
+#include "api/buffer_internal.h"
 #include "api/device_internal.h"
 
 #include <stdint.h>
@@ -40,6 +42,107 @@ on_complete(void *sender, GPUCommandBuffer *cmdb) {
   probe       = sender;
   probe->cmdb = cmdb;
   probe->count++;
+}
+
+static int
+texture_uploads_reuse(GPUDevice *device, GPUCommandQueue *queue) {
+  GPUCommandQueueVk     *native;
+  GPUTextureCreateInfo   textureInfo = {0};
+  GPUTextureWriteRegion writeRegion = {0};
+  GPUTexture            *texture;
+  GPUBuffer             *upload;
+  GPUBufferVk           *uploadNative;
+  void                  *mapped;
+  VkCommandBuffer        command;
+  VkFence                fence;
+  VkBuffer               buffer;
+  VkDeviceMemory         memory;
+  VkDeviceSize           capacity;
+  uint8_t                pixel[4];
+  int                    ok;
+
+  native  = queue ? queue->_priv : NULL;
+  texture = NULL;
+  if (!native || !device) {
+    return 0;
+  }
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "vulkan-sync-texture-transfer";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = 1u;
+  textureInfo.height           = 1u;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_COPY_DST;
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK ||
+      !texture) {
+    return 0;
+  }
+
+  writeRegion.width        = 1u;
+  writeRegion.height       = 1u;
+  writeRegion.depth        = 1u;
+  writeRegion.layerCount   = 1u;
+  writeRegion.bytesPerRow  = sizeof(pixel);
+  writeRegion.rowsPerImage = 1u;
+  memset(pixel, 0, sizeof(pixel));
+  pixel[3] = 255u;
+  ok = GPUQueueWriteTexture(queue,
+                            texture,
+                            &writeRegion,
+                            pixel,
+                            sizeof(pixel)) == GPU_OK &&
+       native->uploadCommand && native->uploadFence &&
+       native->uploadStaging &&
+       native->uploadCapacity >= sizeof(pixel) &&
+       !native->uploadOpen;
+  if (!ok) {
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+
+  upload       = native->uploadStaging;
+  uploadNative = upload->_priv;
+  if (!uploadNative || !uploadNative->buffer || !uploadNative->memory ||
+      !uploadNative->mapped) {
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+  command  = native->uploadCommand;
+  fence    = native->uploadFence;
+  buffer   = uploadNative->buffer;
+  memory   = uploadNative->memory;
+  mapped   = uploadNative->mapped;
+  capacity = native->uploadCapacity;
+  for (uint32_t i = 0u; i < 16u; i++) {
+    pixel[0] = (uint8_t)i;
+    pixel[1] = (uint8_t)(i + 1u);
+    pixel[2] = (uint8_t)(i + 2u);
+    if (GPUQueueWriteTexture(queue,
+                             texture,
+                             &writeRegion,
+                             pixel,
+                             sizeof(pixel)) != GPU_OK ||
+        native->uploadCommand != command ||
+        native->uploadFence != fence ||
+        native->uploadStaging != upload ||
+        native->uploadStaging->_priv != uploadNative ||
+        uploadNative->buffer != buffer ||
+        uploadNative->memory != memory ||
+        uploadNative->mapped != mapped ||
+        native->uploadCapacity != capacity ||
+        native->uploadOpen) {
+      ok = 0;
+      break;
+    }
+  }
+
+  GPUDestroyTexture(texture);
+  return ok;
 }
 
 static int
@@ -617,7 +720,8 @@ main(void) {
     return 1;
   }
 
-  ok = timestamp_roundtrip(device, graphics, fence) &&
+  ok = texture_uploads_reuse(device, graphics) &&
+       timestamp_roundtrip(device, graphics, fence) &&
        occlusion_roundtrip(device, graphics, fence) &&
        (!pipelineStatsSupported ||
         pipeline_statistics_roundtrip(device, graphics, fence)) &&

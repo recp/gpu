@@ -403,8 +403,11 @@ struct GPUCommandQueueVk {
   GPUCommandBufferVk *freeCommands;
   GPUCommandBufferVk *pendingHead;
   GPUCommandBufferVk *pendingTail;
+  GPUBuffer          *uploadStaging;
   VkQueue             queRaw;
   VkCommandPool       commandPool;
+  VkCommandBuffer     uploadCommand;
+  VkFence             uploadFence;
 #if defined(_WIN32) || defined(WIN32)
   HANDLE              worker;
   CRITICAL_SECTION    poolLock;
@@ -418,8 +421,10 @@ struct GPUCommandQueueVk {
   uint32_t            queueIndex;
   uint32_t            timestampValidBits;
   uint32_t            inFlightCount;
+  uint64_t            uploadCapacity;
   bool                stopping;
   bool                workerStarted;
+  bool                uploadOpen;
 };
 
 typedef struct GPUSurfaceVk {
@@ -603,6 +608,21 @@ vk_setTextureLayout(GPUTextureVk  *texture,
 GPU_HIDE
 bool
 vk_restoreFrameFence(GPUSwapChainVk *swapchain, GPUFrameSyncVk *sync);
+
+GPU_HIDE
+GPUResult
+vk_beginUpload(GPUCommandQueue *queue,
+               uint64_t         sizeBytes,
+               VkCommandBuffer *outCommand,
+               GPUBuffer      **outStaging);
+
+GPU_HIDE
+GPUResult
+vk_submitUpload(GPUCommandQueue *queue);
+
+GPU_HIDE
+void
+vk_abortUpload(GPUCommandQueue *queue);
 
 GPU_HIDE
 void

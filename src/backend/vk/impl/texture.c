@@ -948,36 +948,20 @@ vk_destroyTextureView(GPUTextureView * __restrict view) {
 }
 
 static GPUResult
-vk__submitTextureWrite(GPUCommandQueue             *queue,
-                       GPUTexture                  *texture,
-                       const GPUTextureWriteRegion *region,
-                       GPUBuffer                   *staging) {
-  GPUFormatLayout            formatLayout;
-  GPUCommandQueueVk          *queueVk;
-  GPUDeviceVk                *deviceVk;
-  GPUTextureVk               *textureVk;
-  GPUBufferVk                *bufferVk;
-  VkCommandBuffer             command;
-  VkFence                     fence;
-  VkCommandBufferAllocateInfo allocationInfo = {0};
-  VkCommandBufferBeginInfo    beginInfo = {0};
-  VkFenceCreateInfo           fenceInfo = {0};
-  VkBufferImageCopy           copy = {0};
-  VkSubmitInfo                submitInfo = {0};
-  VkImageAspectFlags          aspect;
-  VkImageLayout               finalLayout;
-  VkResult                    result;
-  uint32_t                    rowBlocks;
-  uint32_t                    rowLength;
-  bool                        submitted;
+vk__recordTextureWrite(VkCommandBuffer             command,
+                       VkBuffer                    staging,
+                       GPUTexture                 *texture,
+                       const GPUTextureWriteRegion *region) {
+  GPUFormatLayout   formatLayout;
+  GPUTextureVk     *textureVk;
+  VkBufferImageCopy copy = {0};
+  VkImageAspectFlags aspect;
+  VkImageLayout      finalLayout;
+  uint32_t           rowBlocks;
+  uint32_t           rowLength;
 
-  queueVk       = queue ? queue->_priv : NULL;
-  deviceVk      = queue && queue->_device ? queue->_device->_priv : NULL;
-  textureVk     = texture ? texture->_priv : NULL;
-  bufferVk      = staging ? staging->_priv : NULL;
-  if (!queueVk || !deviceVk || !textureVk || !bufferVk || !region ||
-      textureVk->device != deviceVk->device ||
-      bufferVk->device != deviceVk->device) {
+  textureVk = texture ? texture->_priv : NULL;
+  if (!command || !staging || !textureVk || !region) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (!vk__copyAspect(texture->format, region->aspect, &aspect) ||
@@ -998,26 +982,6 @@ vk__submitTextureWrite(GPUCommandQueue             *queue,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  command   = VK_NULL_HANDLE;
-  fence     = VK_NULL_HANDLE;
-  submitted = false;
-  allocationInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  allocationInfo.commandPool        = queueVk->commandPool;
-  allocationInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  allocationInfo.commandBufferCount = 1u;
-  if (vkAllocateCommandBuffers(deviceVk->device,
-                               &allocationInfo,
-                               &command) != VK_SUCCESS) {
-    return GPU_ERROR_BACKEND_FAILURE;
-  }
-
-  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-  result = vkBeginCommandBuffer(command, &beginInfo);
-  if (result != VK_SUCCESS) {
-    goto cleanup;
-  }
-
   if (!vk_transitionTexture(command,
                             textureVk,
                             region->mipLevel,
@@ -1029,8 +993,7 @@ vk__submitTextureWrite(GPUCommandQueue             *queue,
                               ? 1u
                               : region->layerCount,
                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)) {
-    result = VK_ERROR_UNKNOWN;
-    goto cleanup;
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
   copy.bufferOffset                    = 0u;
@@ -1044,7 +1007,7 @@ vk__submitTextureWrite(GPUCommandQueue             *queue,
   copy.imageExtent.height              = region->height;
   copy.imageExtent.depth               = region->depth;
   vkCmdCopyBufferToImage(command,
-                         bufferVk->buffer,
+                         staging,
                          textureVk->image,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                          1u,
@@ -1063,47 +1026,9 @@ vk__submitTextureWrite(GPUCommandQueue             *queue,
                               ? 1u
                               : region->layerCount,
                             finalLayout)) {
-    result = VK_ERROR_UNKNOWN;
-    goto cleanup;
+    return GPU_ERROR_BACKEND_FAILURE;
   }
-
-  result = vkEndCommandBuffer(command);
-  if (result != VK_SUCCESS) {
-    goto cleanup;
-  }
-
-  fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-  result = vkCreateFence(deviceVk->device, &fenceInfo, NULL, &fence);
-  if (result != VK_SUCCESS) {
-    goto cleanup;
-  }
-
-  submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submitInfo.commandBufferCount = 1u;
-  submitInfo.pCommandBuffers    = &command;
-  result = vkQueueSubmit(queueVk->queRaw, 1u, &submitInfo, fence);
-  if (result == VK_SUCCESS) {
-    submitted = true;
-    result = vkWaitForFences(deviceVk->device,
-                             1u,
-                             &fence,
-                             VK_TRUE,
-                             UINT64_MAX);
-  }
-cleanup:
-  if (submitted && result != VK_SUCCESS) {
-    (void)vkDeviceWaitIdle(deviceVk->device);
-  }
-  if (fence) {
-    vkDestroyFence(deviceVk->device, fence, NULL);
-  }
-  if (command) {
-    vkFreeCommandBuffers(deviceVk->device,
-                         queueVk->commandPool,
-                         1u,
-                         &command);
-  }
-  return result == VK_SUCCESS ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+  return GPU_OK;
 }
 
 GPU_HIDE
@@ -1113,33 +1038,34 @@ vk_writeTexture(GPUCommandQueue             * __restrict queue,
                 const GPUTextureWriteRegion * __restrict region,
                 const void                  * __restrict data,
                 uint64_t                                 sizeBytes) {
-  GPUBufferCreateInfo stagingInfo = {0};
-  GPUBuffer          *staging;
-  GPUResult           result;
+  VkCommandBuffer command;
+  GPUBuffer      *staging;
+  GPUBufferVk    *stagingVk;
+  GPUResult       result;
 
   if (!queue || !texture || !texture->_ownsNative || !region || !data ||
-      sizeBytes == 0u) {
+      sizeBytes == 0u || sizeBytes > SIZE_MAX) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  stagingInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  stagingInfo.chain.structSize = sizeof(stagingInfo);
-  stagingInfo.label            = "vulkan-texture-upload";
-  stagingInfo.sizeBytes        = sizeBytes;
-  stagingInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
-                                 GPU_BUFFER_USAGE_COPY_DST;
-  staging = NULL;
-  result = vk_createBuffer(queue->_device, &stagingInfo, &staging);
+  result = vk_beginUpload(queue, sizeBytes, &command, &staging);
   if (result != GPU_OK) {
     return result;
   }
 
   result = vk_writeBuffer(queue, staging, 0u, data, sizeBytes);
-  if (result == GPU_OK) {
-    result = vk__submitTextureWrite(queue, texture, region, staging);
+  stagingVk = staging ? staging->_priv : NULL;
+  if (result == GPU_OK && (!stagingVk || !stagingVk->buffer)) {
+    result = GPU_ERROR_BACKEND_FAILURE;
   }
-  vk_destroyBuffer(staging);
-  return result;
+  if (result == GPU_OK) {
+    result = vk__recordTextureWrite(command, stagingVk->buffer, texture, region);
+  }
+  if (result != GPU_OK) {
+    vk_abortUpload(queue);
+    return result;
+  }
+  return vk_submitUpload(queue);
 }
 
 GPU_HIDE
