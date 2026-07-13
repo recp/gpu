@@ -59,6 +59,7 @@
 
 #include "../include/gpu/common.h"
 #include "../include/gpu/gpu.h"
+#include "api/format_internal.h"
 #include "backend/api/gpudef.h"
 
 GPU_HIDE

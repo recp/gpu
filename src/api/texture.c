@@ -117,37 +117,38 @@ gpuTextureRegionInRange(const GPUTexture *texture,
 }
 
 static bool
-gpuTextureWriteSizeValid(const GPUTextureWriteRegion *region,
-                         uint64_t                     sizeBytes) {
-  uint64_t rowsPerImage;
-  uint64_t bytesPerImage;
-  uint64_t imageCount;
-  uint64_t requiredBytes;
+gpuTextureWriteLayoutValid(const GPUTexture            *texture,
+                           const GPUTextureWriteRegion *region,
+                           uint64_t                     sizeBytes) {
+  GPUFormatDataLayout layout;
+  uint32_t            mipHeight;
+  uint32_t            mipWidth;
 
-  if (!region || sizeBytes == 0u || region->bytesPerRow == 0u) {
+  if (!texture || !region || sizeBytes == 0u) {
     return false;
   }
 
-  rowsPerImage = region->rowsPerImage ? region->rowsPerImage : region->height;
-  if (rowsPerImage == 0u ||
-      region->bytesPerRow > UINT64_MAX / rowsPerImage) {
+  mipWidth  = gpuMipExtent(texture->width, region->mipLevel);
+  mipHeight = gpuMipExtent(texture->height, region->mipLevel);
+  if (!gpuFormatCopyAligned(texture->format,
+                            0u,
+                            0u,
+                            region->width,
+                            region->height,
+                            mipWidth,
+                            mipHeight)) {
     return false;
   }
 
-  bytesPerImage = (uint64_t)region->bytesPerRow * rowsPerImage;
-  if (region->depth == 0u ||
-      region->layerCount == 0u ||
-      region->depth > UINT64_MAX / region->layerCount) {
-    return false;
-  }
-
-  imageCount = (uint64_t)region->depth * region->layerCount;
-  if (bytesPerImage > UINT64_MAX / imageCount) {
-    return false;
-  }
-
-  requiredBytes = bytesPerImage * imageCount;
-  return sizeBytes >= requiredBytes;
+  return gpuFormatDataLayout(texture->format,
+                             region->width,
+                             region->height,
+                             region->depth,
+                             region->layerCount,
+                             region->bytesPerRow,
+                             region->rowsPerImage,
+                             &layout) &&
+         sizeBytes >= layout.requiredBytes;
 }
 
 GPU_EXPORT
@@ -366,10 +367,7 @@ GPUQueueWriteTexture(GPUCommandQueue             * __restrict queue,
                                region->layerCount)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  if (region->rowsPerImage != 0 && region->rowsPerImage < region->height) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  if (!gpuTextureWriteSizeValid(region, sizeBytes)) {
+  if (!gpuTextureWriteLayoutValid(texture, region, sizeBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 

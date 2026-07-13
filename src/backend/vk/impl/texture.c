@@ -136,26 +136,6 @@ vk__imageAspect(GPUFormat format) {
   }
 }
 
-GPU_HIDE
-uint32_t
-vk_formatBytes(GPUFormat format) {
-  switch (format) {
-    case GPU_FORMAT_RGBA8_UNORM:
-    case GPU_FORMAT_RGBA8_UNORM_SRGB:
-    case GPU_FORMAT_BGRA8_UNORM:
-    case GPU_FORMAT_BGRA8_UNORM_SRGB:
-    case GPU_FORMAT_RG11B10_UFLOAT:
-    case GPU_FORMAT_DEPTH32_FLOAT:
-      return 4u;
-    case GPU_FORMAT_RGBA16_FLOAT:
-      return 8u;
-    case GPU_FORMAT_RGBA32_FLOAT:
-      return 16u;
-    default:
-      return 0u;
-  }
-}
-
 static void
 vk__layoutSource(VkImageLayout layout,
                  VkPipelineStageFlags *outStage,
@@ -673,6 +653,7 @@ vk__submitTextureWrite(GPUCommandQueue             *queue,
                        GPUTexture                  *texture,
                        const GPUTextureWriteRegion *region,
                        GPUBuffer                   *staging) {
+  GPUFormatLayout            formatLayout;
   GPUCommandQueueVk          *queueVk;
   GPUDeviceVk                *deviceVk;
   GPUTextureVk               *textureVk;
@@ -690,24 +671,31 @@ vk__submitTextureWrite(GPUCommandQueue             *queue,
   VkAccessFlags               dstAccess;
   VkImageLayout               finalLayout;
   VkResult                    result;
-  uint32_t                    bytesPerPixel;
+  uint32_t                    rowBlocks;
+  uint32_t                    rowLength;
   bool                        submitted;
 
   queueVk       = queue ? queue->_priv : NULL;
   deviceVk      = queue && queue->_device ? queue->_device->_priv : NULL;
   textureVk     = texture ? texture->_priv : NULL;
   bufferVk      = staging ? staging->_priv : NULL;
-  bytesPerPixel = texture ? vk_formatBytes(texture->format) : 0u;
   if (!queueVk || !deviceVk || !textureVk || !bufferVk || !region ||
       textureVk->device != deviceVk->device ||
       bufferVk->device != deviceVk->device) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  if (bytesPerPixel == 0u) {
+  if (!gpuFormatLayout(texture->format, &formatLayout)) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  if (region->bytesPerRow % bytesPerPixel != 0u ||
-      region->bytesPerRow / bytesPerPixel < region->width) {
+  if (region->bytesPerRow % formatLayout.bytesPerBlock != 0u) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  rowBlocks = region->bytesPerRow / formatLayout.bytesPerBlock;
+  if (rowBlocks > UINT32_MAX / formatLayout.blockWidth) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  rowLength = rowBlocks * formatLayout.blockWidth;
+  if (rowLength < region->width) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -743,10 +731,8 @@ vk__submitTextureWrite(GPUCommandQueue             *queue,
                    VK_ACCESS_TRANSFER_WRITE_BIT);
 
   copy.bufferOffset                    = 0u;
-  copy.bufferRowLength                 = region->bytesPerRow / bytesPerPixel;
-  copy.bufferImageHeight               = region->rowsPerImage
-                                           ? region->rowsPerImage
-                                           : region->height;
+  copy.bufferRowLength                 = rowLength;
+  copy.bufferImageHeight               = region->rowsPerImage;
   copy.imageSubresource.aspectMask     = textureVk->aspect;
   copy.imageSubresource.mipLevel       = region->mipLevel;
   copy.imageSubresource.baseArrayLayer = region->baseArrayLayer;

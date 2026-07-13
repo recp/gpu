@@ -620,30 +620,33 @@ dx12__copyFootprint(const GPUTexture                   *texture,
                     const GPUBufferTextureCopyRegion   *region,
                     uint32_t                            layer,
                     D3D12_PLACED_SUBRESOURCE_FOOTPRINT *outFootprint) {
-  uint64_t bytesPerImage;
-  uint64_t offset;
-  uint64_t rowBytes;
-  uint32_t rowsPerImage;
-  uint32_t formatBytes;
+  GPUFormatDataLayout dataLayout;
+  uint64_t            offset;
+  uint32_t            rowsPerImage;
 
-  if (!texture || !region || !outFootprint) {
+  if (!texture || !region || !outFootprint ||
+      !gpuFormatDataLayout(texture->format,
+                           region->texture.width,
+                           region->texture.height,
+                           region->texture.depth,
+                           region->texture.layerCount,
+                           region->bytesPerRow,
+                           region->rowsPerImage,
+                           &dataLayout)) {
     return false;
   }
 
-  formatBytes  = dx12_formatBytes(texture->format);
   rowsPerImage = region->rowsPerImage > 0u
                    ? region->rowsPerImage
                    : region->texture.height;
-  rowBytes      = (uint64_t)region->texture.width * formatBytes;
-  bytesPerImage = (uint64_t)region->bytesPerRow * rowsPerImage;
-  if (formatBytes == 0u || region->bytesPerRow < rowBytes ||
-      region->bytesPerRow % D3D12_TEXTURE_DATA_PITCH_ALIGNMENT != 0u ||
+  if (region->bytesPerRow % D3D12_TEXTURE_DATA_PITCH_ALIGNMENT != 0u ||
       (layer > 0u &&
-       bytesPerImage > (UINT64_MAX - region->bufferOffset) / layer)) {
+       dataLayout.bytesPerImage >
+         (UINT64_MAX - region->bufferOffset) / layer)) {
     return false;
   }
 
-  offset = region->bufferOffset + bytesPerImage * layer;
+  offset = region->bufferOffset + dataLayout.bytesPerImage * layer;
   if (offset % D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT != 0u) {
     return false;
   }

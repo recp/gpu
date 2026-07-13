@@ -222,10 +222,8 @@ mt_writeTexture(GPUCommandQueue             * __restrict queue,
                 const GPUTextureWriteRegion * __restrict region,
                 const void                  * __restrict data,
                 uint64_t                                 sizeBytes) {
+  GPUFormatDataLayout dataLayout;
   id<MTLTexture> nativeTexture;
-  NSUInteger bytesPerImage;
-  NSUInteger imageCount;
-  NSUInteger requiredBytes;
   MTLRegion mtRegion;
   const uint8_t *bytes;
 
@@ -234,12 +232,16 @@ mt_writeTexture(GPUCommandQueue             * __restrict queue,
   if (!texture || !texture->_priv || !region || !data) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-
-  bytesPerImage = (NSUInteger)region->bytesPerRow *
-                  (NSUInteger)(region->rowsPerImage ? region->rowsPerImage : region->height);
-  imageCount = (NSUInteger)region->depth * (NSUInteger)region->layerCount;
-  requiredBytes = bytesPerImage * imageCount;
-  if (sizeBytes < (uint64_t)requiredBytes) {
+  if (!gpuFormatDataLayout(texture->format,
+                           region->width,
+                           region->height,
+                           region->depth,
+                           region->layerCount,
+                           region->bytesPerRow,
+                           region->rowsPerImage,
+                           &dataLayout) ||
+      sizeBytes < dataLayout.requiredBytes ||
+      dataLayout.bytesPerImage > NSUIntegerMax) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -252,7 +254,7 @@ mt_writeTexture(GPUCommandQueue             * __restrict queue,
                             slice:0
                         withBytes:bytes
                       bytesPerRow:region->bytesPerRow
-                    bytesPerImage:bytesPerImage];
+                    bytesPerImage:(NSUInteger)dataLayout.bytesPerImage];
     return GPU_OK;
   }
 
@@ -261,9 +263,11 @@ mt_writeTexture(GPUCommandQueue             * __restrict queue,
     [nativeTexture replaceRegion:mtRegion
                       mipmapLevel:region->mipLevel
                             slice:region->baseArrayLayer + i
-                        withBytes:bytes + ((NSUInteger)i * bytesPerImage)
+                        withBytes:bytes +
+                                  ((NSUInteger)i *
+                                   (NSUInteger)dataLayout.bytesPerImage)
                       bytesPerRow:region->bytesPerRow
-                    bytesPerImage:bytesPerImage];
+                    bytesPerImage:(NSUInteger)dataLayout.bytesPerImage];
   }
   return GPU_OK;
 }

@@ -31,7 +31,6 @@ GPU_HIDE void dx12_getFormatCapabilities(
   const GPUAdapter      * __restrict adapter,
   GPUFormat              format,
   GPUFormatCapabilities * __restrict outCaps);
-GPU_HIDE uint32_t dx12_formatBytes(GPUFormat format);
 GPU_HIDE void dx12_initCmdbuf(GPUApiCommandBuffer *api);
 GPU_HIDE void dx12_initQuery(GPUApiCommandBuffer *api);
 GPU_HIDE void dx12_initLibrary(GPUApiLibrary *api);

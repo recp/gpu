@@ -9,6 +9,7 @@ static uint32_t  gScopedBufferCreateCalls;
 static uint32_t  gScopedBufferWriteCalls;
 static uint32_t  gScopedBufferReadCalls;
 static uint32_t  gScopedBufferDestroyCalls;
+static uint32_t  gScopedTextureWriteCalls;
 
 static GPUResult
 create_scoped_buffer(GPUDevice                 * __restrict device,
@@ -52,6 +53,21 @@ read_scoped_buffer(GPUCommandQueue * __restrict queue,
   (void)buffer;
   memcpy(outData, gScopedBufferStorage + offset, (size_t)sizeBytes);
   gScopedBufferReadCalls++;
+  return GPU_OK;
+}
+
+static GPUResult
+write_scoped_texture(GPUCommandQueue             * __restrict queue,
+                     GPUTexture                  * __restrict texture,
+                     const GPUTextureWriteRegion * __restrict region,
+                     const void                  * __restrict data,
+                     uint64_t                                 sizeBytes) {
+  (void)queue;
+  (void)texture;
+  (void)region;
+  (void)data;
+  (void)sizeBytes;
+  gScopedTextureWriteCalls++;
   return GPU_OK;
 }
 
@@ -128,6 +144,98 @@ check_buffer_device_dispatch(GPUDevice *activeDevice) {
       gScopedBufferReadCalls != 1u ||
       gScopedBufferDestroyCalls != 1u) {
     fprintf(stderr, "buffer dispatch called wrong backend\n");
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
+check_texture_transfer_layout(GPUDevice *activeDevice) {
+  GPUTextureWriteRegion region = {0};
+  GPUCommandQueue       queue = {0};
+  GPUTexture            texture = {0};
+  GPUDevice             device = {0};
+  GPUApi                scopedApi;
+  uint8_t               blocks[64] = {0};
+
+  if (!activeDevice || !gpuDeviceApi(activeDevice)) {
+    fprintf(stderr, "texture layout has no device api\n");
+    return 0;
+  }
+
+  scopedApi               = *gpuDeviceApi(activeDevice);
+  scopedApi.texture.write = write_scoped_texture;
+  device._api             = &scopedApi;
+  queue._device           = &device;
+  texture.device          = &device;
+  texture.format          = GPU_FORMAT_ASTC_5X4_UNORM;
+  texture.dimension       = GPU_TEXTURE_DIMENSION_2D;
+  texture.width           = 7u;
+  texture.height          = 5u;
+  texture.depthOrLayers   = 1u;
+  texture.mipLevelCount   = 1u;
+  texture.sampleCount     = 1u;
+  texture.usage           = GPU_TEXTURE_USAGE_COPY_DST;
+
+  region.width        = 7u;
+  region.height       = 5u;
+  region.depth        = 1u;
+  region.layerCount   = 1u;
+  region.bytesPerRow  = 32u;
+  region.rowsPerImage = 8u;
+
+  gScopedTextureWriteCalls = 0u;
+
+  if (GPUQueueWriteTexture(&queue,
+                           &texture,
+                           &region,
+                           blocks,
+                           sizeof(blocks)) != GPU_OK ||
+      gScopedTextureWriteCalls != 1u) {
+    fprintf(stderr, "texture layout rejected a valid mip edge\n");
+    return 0;
+  }
+  if (GPUQueueWriteTexture(&queue,
+                           &texture,
+                           &region,
+                           blocks,
+                           sizeof(blocks) - 1u) != GPU_ERROR_INVALID_ARGUMENT ||
+      gScopedTextureWriteCalls != 1u) {
+    fprintf(stderr, "texture layout accepted undersized block data\n");
+    return 0;
+  }
+
+  region.bytesPerRow = 16u;
+  if (GPUQueueWriteTexture(&queue,
+                           &texture,
+                           &region,
+                           blocks,
+                           sizeof(blocks)) != GPU_ERROR_INVALID_ARGUMENT ||
+      gScopedTextureWriteCalls != 1u) {
+    fprintf(stderr, "texture layout accepted a short block row\n");
+    return 0;
+  }
+  region.bytesPerRow  = 32u;
+  region.rowsPerImage = 5u;
+  if (GPUQueueWriteTexture(&queue,
+                           &texture,
+                           &region,
+                           blocks,
+                           sizeof(blocks)) != GPU_ERROR_INVALID_ARGUMENT ||
+      gScopedTextureWriteCalls != 1u) {
+    fprintf(stderr, "texture layout accepted unaligned rowsPerImage\n");
+    return 0;
+  }
+  region.rowsPerImage = 8u;
+  region.width        = 6u;
+  if (GPUQueueWriteTexture(&queue,
+                           &texture,
+                           &region,
+                           blocks,
+                           sizeof(blocks)) != GPU_ERROR_INVALID_ARGUMENT ||
+      gScopedTextureWriteCalls != 1u) {
+    fprintf(stderr, "texture layout accepted a partial compressed block\n");
     return 0;
   }
 
@@ -627,5 +735,6 @@ int
 gpu_test_resources(GPUDevice *device) {
   return check_destroy_null_handles() &&
          check_buffer_device_dispatch(device) &&
+         check_texture_transfer_layout(device) &&
          check_resource_validation(device);
 }

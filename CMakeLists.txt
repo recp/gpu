@@ -78,6 +78,7 @@ set(GPU_CORE_SOURCES
   src/api/compute.c
   src/api/descr/descriptor.c
   src/api/device.c
+  src/api/format.c
   src/api/frame.c
   src/api/instance.c
   src/api/library.c

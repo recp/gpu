@@ -844,30 +844,13 @@ dx12_destroyTextureView(GPUTextureView * __restrict view) {
 }
 
 GPU_HIDE
-uint32_t
-dx12_formatBytes(GPUFormat format) {
-  switch (format) {
-    case GPU_FORMAT_RGBA8_UNORM:
-    case GPU_FORMAT_RGBA8_UNORM_SRGB:
-    case GPU_FORMAT_BGRA8_UNORM:
-    case GPU_FORMAT_BGRA8_UNORM_SRGB:
-      return 4u;
-    case GPU_FORMAT_RGBA16_FLOAT:
-      return 8u;
-    case GPU_FORMAT_RGBA32_FLOAT:
-      return 16u;
-    default:
-      return 0u;
-  }
-}
-
-GPU_HIDE
 GPUResult
 dx12_writeTexture(GPUCommandQueue             * __restrict queue,
                    GPUTexture                  * __restrict texture,
                    const GPUTextureWriteRegion * __restrict region,
                    const void                  * __restrict data,
                    uint64_t                                 sizeBytes) {
+  GPUFormatDataLayout        dataLayout;
   GPUCommandQueueDX12       *queueDX12;
   GPUDeviceDX12             *deviceDX12;
   GPUTextureDX12            *native;
@@ -889,9 +872,7 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
   HANDLE                      event;
   uint64_t                    rowSize;
   uint64_t                    totalSize;
-  uint64_t                    sourceRowBytes;
   uint32_t                    rowCount;
-  uint32_t                    formatBytes;
   uint32_t                    subresource;
   HRESULT                     result;
   DWORD                       waitResult;
@@ -909,13 +890,17 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  formatBytes = dx12_formatBytes(texture->format);
-  if (formatBytes == 0u ||
-      region->width > UINT64_MAX / formatBytes) {
+  if (!gpuFormatDataLayout(texture->format,
+                           region->width,
+                           region->height,
+                           region->depth,
+                           region->layerCount,
+                           region->bytesPerRow,
+                           region->rowsPerImage,
+                           &dataLayout)) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  sourceRowBytes = (uint64_t)region->width * formatBytes;
-  if (region->bytesPerRow < sourceRowBytes) {
+  if (sizeBytes < dataLayout.requiredBytes) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -941,8 +926,8 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
     &totalSize
   );
   if (totalSize == 0u || totalSize > SIZE_MAX ||
-      rowCount < region->height ||
-      rowSize < sourceRowBytes) {
+      rowCount < dataLayout.blockRows ||
+      rowSize < dataLayout.bytesInLastRow) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -974,11 +959,11 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
   if (FAILED(result) || !mapped) {
     goto cleanup;
   }
-  for (uint32_t row = 0u; row < region->height; row++) {
+  for (uint32_t row = 0u; row < dataLayout.blockRows; row++) {
     memcpy(mapped + (size_t)footprint.Offset +
              (size_t)row * footprint.Footprint.RowPitch,
            (const uint8_t *)data + (size_t)row * region->bytesPerRow,
-           (size_t)sourceRowBytes);
+           dataLayout.bytesInLastRow);
   }
   upload->lpVtbl->Unmap(upload, 0u, NULL);
   mapped = NULL;

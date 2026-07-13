@@ -761,19 +761,27 @@ static bool
 vk__bufferImageCopy(GPUTexture                       *texture,
                     const GPUBufferTextureCopyRegion *region,
                     VkBufferImageCopy                *outCopy) {
+  GPUFormatLayout formatLayout;
   GPUTextureVk *textureVk;
-  uint32_t      formatBytes;
+  uint32_t      rowBlocks;
+  uint32_t      rowLength;
 
-  textureVk   = texture ? texture->_priv : NULL;
-  formatBytes = texture ? vk_formatBytes(texture->format) : 0u;
-  if (!textureVk || !region || !outCopy || formatBytes == 0u ||
-      region->bytesPerRow % formatBytes != 0u) {
+  textureVk = texture ? texture->_priv : NULL;
+  if (!textureVk || !region || !outCopy ||
+      !gpuFormatLayout(texture->format, &formatLayout) ||
+      region->bytesPerRow % formatLayout.bytesPerBlock != 0u) {
     return false;
   }
 
+  rowBlocks = region->bytesPerRow / formatLayout.bytesPerBlock;
+  if (rowBlocks > UINT32_MAX / formatLayout.blockWidth) {
+    return false;
+  }
+  rowLength = rowBlocks * formatLayout.blockWidth;
+
   memset(outCopy, 0, sizeof(*outCopy));
   outCopy->bufferOffset                    = region->bufferOffset;
-  outCopy->bufferRowLength                 = region->bytesPerRow / formatBytes;
+  outCopy->bufferRowLength                 = rowLength;
   outCopy->bufferImageHeight               = region->rowsPerImage;
   outCopy->imageSubresource.aspectMask     = textureVk->aspect;
   outCopy->imageSubresource.mipLevel       = region->texture.texture.mipLevel;

@@ -548,9 +548,227 @@ cleanup:
   return ok;
 }
 
+static int
+check_compressed_texture_copies(GPUDevice *device) {
+  const uint8_t textureBlock[8] = {
+    0x00u, 0xf8u, 0x00u, 0xf8u, 0x00u, 0x00u, 0x00u, 0x00u
+  };
+  const uint8_t bufferBlock[8] = {
+    0xe0u, 0x07u, 0xe0u, 0x07u, 0x00u, 0x00u, 0x00u, 0x00u
+  };
+  GPUCommandQueue              *queue;
+  GPUCommandBuffer             *cmdb;
+  GPUCommandBuffer             *buffers[1];
+  GPUFence                     *fence;
+  GPUCopyPassEncoder           *copyPass;
+  GPUBuffer                    *upload;
+  GPUBuffer                    *readback;
+  GPUTexture                   *textureA;
+  GPUTexture                   *textureB;
+  GPUQueueSubmitInfo            submitInfo = {0};
+  GPUBufferCreateInfo           bufferInfo = {0};
+  GPUTextureCreateInfo          textureInfo = {0};
+  GPUTextureWriteRegion         writeRegion = {0};
+  GPUBufferTextureCopyRegion    bufferRegion = {0};
+  GPUTextureToTextureCopyRegion textureRegion = {0};
+  GPUFormatCapabilities         formatCaps;
+  uint8_t                       uploadBytes[1024] = {0};
+  uint8_t                       readbackBytes[1024] = {0};
+  int                           ok;
+
+  if (!device ||
+      GPUGetFormatCapabilities(device->phyDevice,
+                               GPU_FORMAT_BC1_RGBA_UNORM,
+                               &formatCaps) != GPU_OK ||
+      !formatCaps.sampled) {
+    return 1;
+  }
+
+  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  if (!queue) {
+    fprintf(stderr, "compressed copy has no graphics queue\n");
+    return 0;
+  }
+
+  memcpy(uploadBytes, bufferBlock, sizeof(bufferBlock));
+  upload   = NULL;
+  readback = NULL;
+  textureA = NULL;
+  textureB = NULL;
+  fence    = NULL;
+  cmdb     = NULL;
+  copyPass = NULL;
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.sizeBytes        = sizeof(uploadBytes);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
+                                GPU_BUFFER_USAGE_COPY_DST;
+  ok = GPUCreateBuffer(device, &bufferInfo, &upload) == GPU_OK &&
+       GPUCreateBuffer(device, &bufferInfo, &readback) == GPU_OK &&
+       GPUQueueWriteBuffer(queue,
+                           upload,
+                           0u,
+                           uploadBytes,
+                           sizeof(uploadBytes)) == GPU_OK;
+  if (!ok) {
+    fprintf(stderr, "compressed copy buffer setup failed\n");
+    goto cleanup;
+  }
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_BC1_RGBA_UNORM;
+  textureInfo.width            = 4u;
+  textureInfo.height           = 4u;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
+                                 GPU_TEXTURE_USAGE_COPY_SRC |
+                                 GPU_TEXTURE_USAGE_COPY_DST;
+  ok = GPUCreateTexture(device, &textureInfo, &textureA) == GPU_OK &&
+       GPUCreateTexture(device, &textureInfo, &textureB) == GPU_OK;
+  if (!ok) {
+    fprintf(stderr, "compressed copy texture setup failed\n");
+    goto cleanup;
+  }
+
+  writeRegion.width        = 4u;
+  writeRegion.height       = 4u;
+  writeRegion.depth        = 1u;
+  writeRegion.layerCount   = 1u;
+  writeRegion.bytesPerRow  = sizeof(textureBlock);
+  writeRegion.rowsPerImage = 4u;
+  ok = GPUQueueWriteTexture(queue,
+                            textureA,
+                            &writeRegion,
+                            textureBlock,
+                            sizeof(textureBlock)) == GPU_OK &&
+       GPUQueueWriteTexture(queue,
+                            textureA,
+                            &writeRegion,
+                            textureBlock,
+                            sizeof(textureBlock) - 1u) ==
+         GPU_ERROR_INVALID_ARGUMENT;
+  if (!ok) {
+    fprintf(stderr, "compressed texture write failed\n");
+    goto cleanup;
+  }
+
+  writeRegion.bytesPerRow = 7u;
+  if (GPUQueueWriteTexture(queue,
+                           textureA,
+                           &writeRegion,
+                           textureBlock,
+                           sizeof(textureBlock)) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "compressed write accepted a partial block row\n");
+    ok = 0;
+    goto cleanup;
+  }
+  writeRegion.bytesPerRow  = sizeof(textureBlock);
+  writeRegion.rowsPerImage = 3u;
+  if (GPUQueueWriteTexture(queue,
+                           textureA,
+                           &writeRegion,
+                           textureBlock,
+                           sizeof(textureBlock)) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "compressed write accepted an unaligned image height\n");
+    ok = 0;
+    goto cleanup;
+  }
+  writeRegion.rowsPerImage = 4u;
+  writeRegion.width        = 3u;
+  if (GPUQueueWriteTexture(queue,
+                           textureA,
+                           &writeRegion,
+                           textureBlock,
+                           sizeof(textureBlock)) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "compressed write accepted an unaligned extent\n");
+    ok = 0;
+    goto cleanup;
+  }
+
+  ok = GPUAcquireCommandBuffer(queue, "compressed-copy", &cmdb) == GPU_OK &&
+       cmdb;
+  if (!ok) {
+    fprintf(stderr, "compressed copy command buffer failed\n");
+    goto cleanup;
+  }
+  copyPass = GPUBeginCopyPass(cmdb, "compressed-copy");
+  if (!copyPass) {
+    fprintf(stderr, "compressed copy pass failed\n");
+    ok = 0;
+    goto cleanup;
+  }
+
+  textureRegion.width      = 4u;
+  textureRegion.height     = 4u;
+  textureRegion.depth      = 1u;
+  textureRegion.layerCount = 1u;
+  GPUCopyTextureToTexture(copyPass, textureA, textureB, &textureRegion);
+
+  bufferRegion.bytesPerRow        = COPY_TEST_ROW_PITCH;
+  bufferRegion.rowsPerImage       = 4u;
+  bufferRegion.texture.width      = 4u;
+  bufferRegion.texture.height     = 4u;
+  bufferRegion.texture.depth      = 1u;
+  bufferRegion.texture.layerCount = 1u;
+  GPUCopyTextureToBuffer(copyPass, textureB, readback, &bufferRegion);
+  GPUCopyBufferToTexture(copyPass, upload, textureA, &bufferRegion);
+  bufferRegion.bufferOffset = 512u;
+  GPUCopyTextureToBuffer(copyPass, textureA, readback, &bufferRegion);
+  GPUEndCopyPass(copyPass);
+  copyPass = NULL;
+
+  ok = GPUCreateFence(device, NULL, &fence) == GPU_OK && fence;
+  if (!ok) {
+    fprintf(stderr, "compressed copy fence failed\n");
+    goto cleanup;
+  }
+
+  buffers[0]                           = cmdb;
+  submitInfo.chain.sType               = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize          = sizeof(submitInfo);
+  submitInfo.commandBufferCount        = 1u;
+  submitInfo.ppCommandBuffers          = buffers;
+  submitInfo.fence                     = fence;
+  ok = GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
+       GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+  cmdb = NULL;
+  if (!ok) {
+    fprintf(stderr, "compressed copy submit failed\n");
+    goto cleanup;
+  }
+
+  ok = GPUQueueReadBuffer(queue,
+                          readback,
+                          0u,
+                          readbackBytes,
+                          sizeof(readbackBytes)) == GPU_OK &&
+       memcmp(readbackBytes, textureBlock, sizeof(textureBlock)) == 0 &&
+       memcmp(readbackBytes + 512u, bufferBlock, sizeof(bufferBlock)) == 0;
+  if (!ok) {
+    fprintf(stderr, "compressed copy readback mismatch\n");
+  }
+
+cleanup:
+  if (copyPass) {
+    GPUEndCopyPass(copyPass);
+  }
+  GPUDestroyFence(fence);
+  GPUDestroyTexture(textureB);
+  GPUDestroyTexture(textureA);
+  GPUDestroyBuffer(readback);
+  GPUDestroyBuffer(upload);
+  return ok;
+}
+
 int
 gpu_test_copy(GPUDevice *device) {
   return check_copy_pass_device_dispatch(device) &&
          check_copy_pass_validation(device) &&
-         check_copy_pass_invalid_copy_noops(device);
+         check_copy_pass_invalid_copy_noops(device) &&
+         check_compressed_texture_copies(device);
 }

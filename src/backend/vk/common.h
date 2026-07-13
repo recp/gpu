@@ -531,10 +531,6 @@ bool
 vk_formatFromGPU(GPUFormat format, VkFormat *outFormat);
 
 GPU_HIDE
-uint32_t
-vk_formatBytes(GPUFormat format);
-
-GPU_HIDE
 bool
 vk_findMemoryType(GPUDevice             *device,
                   uint32_t               typeBits,

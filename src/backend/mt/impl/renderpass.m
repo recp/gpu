@@ -268,43 +268,30 @@ mt_bufferCopyRangeValid(id<MTLBuffer> buffer, uint64_t offset, uint64_t size) {
 }
 
 static bool
-mt_bufferTextureRangeValid(id<MTLBuffer>                         buffer,
-                           const GPUBufferTextureCopyRegion     *region,
-                           uint64_t                             *outBytesPerImage) {
-  uint64_t rowsPerImage;
-  uint64_t bytesPerImage;
-  uint64_t imageCount;
-  uint64_t totalBytes;
+mt_bufferTextureRangeValid(id<MTLBuffer>                     buffer,
+                           const GPUTexture                 *texture,
+                           const GPUBufferTextureCopyRegion *region,
+                           uint64_t                         *outBytesPerImage) {
+  GPUFormatDataLayout layout;
 
-  if (!buffer || !region || region->bytesPerRow == 0) {
+  if (!buffer || !texture || !region || !outBytesPerImage ||
+      !gpuFormatDataLayout(texture->format,
+                           region->texture.width,
+                           region->texture.height,
+                           region->texture.depth,
+                           region->texture.layerCount,
+                           region->bytesPerRow,
+                           region->rowsPerImage,
+                           &layout)) {
+    return false;
+  }
+  if (!mt_bufferCopyRangeValid(buffer,
+                               region->bufferOffset,
+                               layout.requiredBytes)) {
     return false;
   }
 
-  rowsPerImage = region->rowsPerImage ?
-    region->rowsPerImage : region->texture.height;
-  if (rowsPerImage == 0 ||
-      region->bytesPerRow > UINT64_MAX / rowsPerImage) {
-    return false;
-  }
-
-  bytesPerImage = (uint64_t)region->bytesPerRow * rowsPerImage;
-  if (region->texture.depth == 0 ||
-      region->texture.layerCount == 0 ||
-      region->texture.depth > UINT64_MAX / region->texture.layerCount) {
-    return false;
-  }
-
-  imageCount = (uint64_t)region->texture.depth * region->texture.layerCount;
-  if (bytesPerImage > UINT64_MAX / imageCount) {
-    return false;
-  }
-
-  totalBytes = bytesPerImage * imageCount;
-  if (!mt_bufferCopyRangeValid(buffer, region->bufferOffset, totalBytes)) {
-    return false;
-  }
-
-  *outBytesPerImage = bytesPerImage;
+  *outBytesPerImage = layout.bytesPerImage;
   return true;
 }
 
@@ -419,7 +406,10 @@ mt_copyBufferToTexture(GPUCopyPassEncoder               *pass,
   if (!pass ||
       !dst ||
       !dst->_priv ||
-      !mt_bufferTextureRangeValid(srcBuffer, region, &bytesPerImage)) {
+      !mt_bufferTextureRangeValid(srcBuffer,
+                                  dst,
+                                  region,
+                                  &bytesPerImage)) {
     return;
   }
 
@@ -500,7 +490,10 @@ mt_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
   if (!pass ||
       !src ||
       !src->_priv ||
-      !mt_bufferTextureRangeValid(dstBuffer, region, &bytesPerImage)) {
+      !mt_bufferTextureRangeValid(dstBuffer,
+                                  src,
+                                  region,
+                                  &bytesPerImage)) {
     return;
   }
 
