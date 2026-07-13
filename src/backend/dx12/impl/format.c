@@ -78,6 +78,97 @@ static const DXGI_FORMAT dx12_formats[GPUPixelFormatX24_Stencil8 + 1u] = {
   [GPUPixelFormatDepth32Float_Stencil8] = DXGI_FORMAT_D32_FLOAT_S8X24_UINT
 };
 
+static DXGI_FORMAT
+dx12_sampledFormat(GPUFormat format) {
+  switch (format) {
+    case GPU_FORMAT_DEPTH24_UNORM_STENCIL8:
+      return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+    case GPU_FORMAT_DEPTH32_FLOAT:
+      return DXGI_FORMAT_R32_FLOAT;
+    case GPU_FORMAT_DEPTH32_FLOAT_STENCIL8:
+      return DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
+    default:
+      return (uint32_t)format < GPU_ARRAY_LEN(dx12_formats)
+               ? dx12_formats[format]
+               : DXGI_FORMAT_UNKNOWN;
+  }
+}
+
+static void
+dx12_queryFormatCapabilities(GPUPhysicalDeviceDX12 *adapter) {
+  ID3D12Device *device;
+  HRESULT       result;
+
+  memset(adapter->formatCaps, 0, sizeof(adapter->formatCaps));
+  adapter->formatCapsReady = true;
+  device = NULL;
+  result = D3D12CreateDevice(adapter->dxgiAdapter,
+                             D3D_FEATURE_LEVEL_11_0,
+                             &IID_ID3D12Device,
+                             (void **)&device);
+  if (FAILED(result) || !device) {
+    return;
+  }
+
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(dx12_formats); i++) {
+    D3D12_FEATURE_DATA_FORMAT_SUPPORT  attachmentSupport = {0};
+    D3D12_FEATURE_DATA_FORMAT_SUPPORT  sampledSupport = {0};
+    GPUFormatCapabilities             *caps;
+    DXGI_FORMAT                        attachmentFormat;
+    DXGI_FORMAT                        sampledFormat;
+
+    attachmentFormat = dx12_formats[i];
+    if (attachmentFormat == DXGI_FORMAT_UNKNOWN) {
+      continue;
+    }
+
+    attachmentSupport.Format = attachmentFormat;
+    if (FAILED(device->lpVtbl->CheckFeatureSupport(
+          device,
+          D3D12_FEATURE_FORMAT_SUPPORT,
+          &attachmentSupport,
+          sizeof(attachmentSupport)))) {
+      continue;
+    }
+
+    sampledFormat = dx12_sampledFormat((GPUFormat)i);
+    sampledSupport.Format = sampledFormat;
+    if (sampledFormat == attachmentFormat) {
+      sampledSupport = attachmentSupport;
+    } else if (FAILED(device->lpVtbl->CheckFeatureSupport(
+                 device,
+                 D3D12_FEATURE_FORMAT_SUPPORT,
+                 &sampledSupport,
+                 sizeof(sampledSupport)))) {
+      memset(&sampledSupport, 0, sizeof(sampledSupport));
+    }
+
+    caps = &adapter->formatCaps[i];
+    caps->sampled =
+      (sampledSupport.Support1 &
+       (D3D12_FORMAT_SUPPORT1_SHADER_LOAD |
+        D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE)) != 0u;
+    caps->filterable =
+      (sampledSupport.Support1 & D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE) != 0u;
+    caps->storage =
+      (attachmentSupport.Support1 &
+       D3D12_FORMAT_SUPPORT1_TYPED_UNORDERED_ACCESS_VIEW) != 0u &&
+      (attachmentSupport.Support2 &
+       (D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD |
+        D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE)) ==
+        (D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD |
+         D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE);
+    caps->colorAttachment =
+      (attachmentSupport.Support1 & D3D12_FORMAT_SUPPORT1_RENDER_TARGET) != 0u;
+    caps->blendable =
+      (attachmentSupport.Support1 & D3D12_FORMAT_SUPPORT1_BLENDABLE) != 0u;
+    caps->depthStencil =
+      (attachmentSupport.Support1 & D3D12_FORMAT_SUPPORT1_DEPTH_STENCIL) != 0u;
+  }
+
+  device->lpVtbl->Release(device);
+}
+
 GPU_HIDE
 DXGI_FORMAT
 dx12_format(GPUFormat format) {
@@ -86,4 +177,28 @@ dx12_format(GPUFormat format) {
   }
 
   return dx12_formats[format];
+}
+
+GPU_HIDE
+void
+dx12_getFormatCapabilities(
+  const GPUAdapter      * __restrict adapter,
+  GPUFormat              format,
+  GPUFormatCapabilities * __restrict outCaps) {
+  GPUPhysicalDeviceDX12 *adapterDX12;
+
+  adapterDX12 = adapter ? adapter->_priv : NULL;
+  if (!outCaps) {
+    return;
+  }
+
+  memset(outCaps, 0, sizeof(*outCaps));
+  if (!adapterDX12 || (uint32_t)format >= GPU_ARRAY_LEN(dx12_formats)) {
+    return;
+  }
+  if (!adapterDX12->formatCapsReady) {
+    dx12_queryFormatCapabilities(adapterDX12);
+  }
+
+  *outCaps = adapterDX12->formatCaps[format];
 }

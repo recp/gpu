@@ -45,6 +45,11 @@ typedef struct GPUApiDevice {
   (*getLimits)(const GPUAdapter * __restrict adapter,
                GPULimits       * __restrict outLimits);
 
+  void
+  (*getFormatCapabilities)(const GPUAdapter      * __restrict adapter,
+                           GPUFormat              format,
+                           GPUFormatCapabilities * __restrict outCaps);
+
   GPUDevice* (*createDevice)(GPUAdapter        * __restrict adapter,
                              GPUCommandQueueCreateInfo      queCI[],
                              uint32_t                       nQueCI);

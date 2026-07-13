@@ -165,6 +165,119 @@ mt_getLimits(const GPUAdapter * __restrict adapter,
   outLimits->maxComputeWorkgroupSizeZ = (uint32_t)threads.depth;
 }
 
+static bool
+mt_isFloat32Format(GPUFormat format) {
+  return format == GPUPixelFormatR32Float ||
+         format == GPUPixelFormatRG32Float ||
+         format == GPUPixelFormatRGBA32Float;
+}
+
+static bool
+mt_isTier1StorageFormat(GPUFormat format) {
+  return format == GPUPixelFormatR32Uint ||
+         format == GPUPixelFormatR32Sint ||
+         format == GPUPixelFormatR32Float;
+}
+
+static bool
+mt_isTier2StorageFormat(GPUFormat format) {
+  switch (format) {
+    case GPUPixelFormatR8Unorm:
+    case GPUPixelFormatR8Uint:
+    case GPUPixelFormatR8Sint:
+    case GPUPixelFormatR16Uint:
+    case GPUPixelFormatR16Sint:
+    case GPUPixelFormatR16Float:
+    case GPUPixelFormatRGBA8Unorm:
+    case GPUPixelFormatRGBA8Uint:
+    case GPUPixelFormatRGBA8Sint:
+    case GPUPixelFormatRGBA16Uint:
+    case GPUPixelFormatRGBA16Sint:
+    case GPUPixelFormatRGBA16Float:
+    case GPUPixelFormatRGBA32Uint:
+    case GPUPixelFormatRGBA32Sint:
+    case GPUPixelFormatRGBA32Float:
+      return true;
+    default:
+      return mt_isTier1StorageFormat(format);
+  }
+}
+
+static bool
+mt_isBCFormat(GPUFormat format) {
+  return (format >= GPUPixelFormatBC1_RGBA &&
+          format <= GPUPixelFormatBC3_RGBA_sRGB) ||
+         (format >= GPUPixelFormatBC4_RUnorm &&
+          format <= GPUPixelFormatBC5_RGSnorm) ||
+         (format >= GPUPixelFormatBC6H_RGBFloat &&
+          format <= GPUPixelFormatBC7_RGBAUnorm_sRGB);
+}
+
+static void
+mt_getFormatCapabilities(
+  const GPUAdapter      * __restrict adapter,
+  GPUFormat              format,
+  GPUFormatCapabilities * __restrict outCaps) {
+  id<MTLDevice>           device;
+  MTLReadWriteTextureTier storageTier;
+  bool                    depthSupported;
+  bool                    float32Filterable;
+  bool                    bcSupported;
+
+  device = adapter ? (id<MTLDevice>)adapter->_priv : nil;
+  if (!device || !outCaps) {
+    return;
+  }
+
+  storageTier       = MTLReadWriteTextureTierNone;
+  float32Filterable = false;
+  bcSupported       = false;
+  if (@available(macOS 10.13, iOS 11.0, *)) {
+    storageTier = device.readWriteTextureSupport;
+  }
+  if (@available(macOS 11.0, iOS 14.0, *)) {
+    float32Filterable = device.supports32BitFloatFiltering;
+  }
+  if (@available(macOS 11.0, iOS 16.4, *)) {
+    bcSupported = device.supportsBCTextureCompression;
+  }
+
+  if (mt_isBCFormat(format)) {
+    memset(outCaps, 0, sizeof(*outCaps));
+    outCaps->sampled    = bcSupported;
+    outCaps->filterable = bcSupported;
+    return;
+  }
+
+  depthSupported = true;
+  if (format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8) {
+#if TARGET_OS_IOS
+    depthSupported = false;
+#else
+    depthSupported = device.depth24Stencil8PixelFormatSupported;
+#endif
+  }
+  if (outCaps->depthStencil) {
+    if (!depthSupported) {
+      memset(outCaps, 0, sizeof(*outCaps));
+      return;
+    }
+    outCaps->sampled    = true;
+    outCaps->filterable = false;
+    return;
+  }
+
+  outCaps->storage =
+    (storageTier >= MTLReadWriteTextureTier1 &&
+     mt_isTier1StorageFormat(format)) ||
+    (storageTier >= MTLReadWriteTextureTier2 &&
+     mt_isTier2StorageFormat(format));
+  if (mt_isFloat32Format(format)) {
+    outCaps->filterable = float32Filterable;
+    outCaps->blendable  = false;
+  }
+}
+
 extern
 GPU_HIDE
 GPUCommandQueue*
@@ -329,6 +442,7 @@ mt_initDevice(GPUApiDevice *apiDevice) {
   apiDevice->getAdapterProperties      = mt_getAdapterProperties;
   apiDevice->supportsFeature           = mt_supportsFeature;
   apiDevice->getLimits                 = mt_getLimits;
+  apiDevice->getFormatCapabilities     = mt_getFormatCapabilities;
   apiDevice->createDevice              = mt_createDevice;
   apiDevice->createSystemDefaultDevice = mt_createSystemDefaultDevice;
   apiDevice->destroyDevice             = mt_destroyDevice;

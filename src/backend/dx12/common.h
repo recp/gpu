@@ -39,10 +39,12 @@
 
 typedef struct GPUPhysicalDeviceDX12 {
   /* IDXGIAdapter1*dxgiAdapter; */
-  IUnknown          *dxgiAdapter;
-  DXGI_ADAPTER_DESC1 desc1;
-  char               name[256];
-  bool               isWarp;
+  IUnknown             *dxgiAdapter;
+  DXGI_ADAPTER_DESC1    desc1;
+  char                  name[256];
+  bool                  isWarp;
+  bool                  formatCapsReady;
+  GPUFormatCapabilities formatCaps[GPUPixelFormatX24_Stencil8 + 1u];
 } GPUPhysicalDeviceDX12;
 
 typedef struct GPUDescriptorHeapDX12 {

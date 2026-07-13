@@ -332,6 +332,44 @@ vk_getLimits(const GPUAdapter * __restrict adapter,
   outLimits->maxComputeWorkgroupSizeZ = native->maxComputeWorkGroupSize[2];
 }
 
+static void
+vk_getFormatCapabilities(
+  const GPUAdapter      * __restrict adapter,
+  GPUFormat              format,
+  GPUFormatCapabilities * __restrict outCaps) {
+  GPUPhysicalDeviceVk *adapterVk;
+  VkFormatProperties   properties;
+  VkFormat             nativeFormat;
+  VkFormatFeatureFlags features;
+
+  adapterVk = adapter ? adapter->_priv : NULL;
+  if (!adapterVk || !outCaps ||
+      !vk_formatFromGPU(format, &nativeFormat)) {
+    if (outCaps) {
+      memset(outCaps, 0, sizeof(*outCaps));
+    }
+    return;
+  }
+
+  vkGetPhysicalDeviceFormatProperties(adapterVk->phyDevice,
+                                      nativeFormat,
+                                      &properties);
+  features = properties.optimalTilingFeatures;
+  memset(outCaps, 0, sizeof(*outCaps));
+  outCaps->sampled =
+    (features & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0u;
+  outCaps->filterable =
+    (features & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0u;
+  outCaps->storage =
+    (features & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0u;
+  outCaps->colorAttachment =
+    (features & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) != 0u;
+  outCaps->blendable =
+    (features & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0u;
+  outCaps->depthStencil =
+    (features & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0u;
+}
+
 GPU_HIDE
 GPUPhysicalDevice*
 vk_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
@@ -867,6 +905,7 @@ vk_initDevice(GPUApiDevice *apiDevice) {
   apiDevice->getAdapterProperties      = vk_getAdapterProperties;
   apiDevice->supportsFeature           = vk_supportsFeature;
   apiDevice->getLimits                 = vk_getLimits;
+  apiDevice->getFormatCapabilities     = vk_getFormatCapabilities;
   apiDevice->createDevice              = vk_createDevice;
   apiDevice->createSystemDefaultDevice = vk_createSystemDefaultDevice;
   apiDevice->destroyDevice             = vk_destroyDevice;

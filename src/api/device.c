@@ -885,6 +885,7 @@ GPUResult
 GPUGetFormatCapabilities(const GPUAdapter      *adapter,
                          GPUFormat              format,
                          GPUFormatCapabilities *outCaps) {
+  GPUApi *api;
   bool color;
   bool integerFormat;
 
@@ -893,26 +894,24 @@ GPUGetFormatCapabilities(const GPUAdapter      *adapter,
   }
 
   memset(outCaps, 0, sizeof(*outCaps));
-  if (format == GPU_FORMAT_UNDEFINED) {
-    return GPU_OK;
-  }
-
-  if (gpu_formatIsDepthStencil(format)) {
+  if (format != GPU_FORMAT_UNDEFINED && gpu_formatIsDepthStencil(format)) {
     outCaps->depthStencil = true;
-    return GPU_OK;
+  } else if (format != GPU_FORMAT_UNDEFINED) {
+    color = gpu_formatIsKnownColor(format);
+    if (color) {
+      integerFormat = gpu_formatIsInteger(format);
+      outCaps->sampled         = true;
+      outCaps->filterable      = !integerFormat;
+      outCaps->storage         = !integerFormat;
+      outCaps->colorAttachment = true;
+      outCaps->blendable       = !integerFormat;
+    }
   }
 
-  color = gpu_formatIsKnownColor(format);
-  if (!color) {
-    return GPU_OK;
+  api = gpuAdapterApi(adapter);
+  if (api && api->device.getFormatCapabilities) {
+    api->device.getFormatCapabilities(adapter, format, outCaps);
   }
-
-  integerFormat = gpu_formatIsInteger(format);
-  outCaps->sampled = true;
-  outCaps->filterable = !integerFormat;
-  outCaps->storage = !integerFormat;
-  outCaps->colorAttachment = true;
-  outCaps->blendable = !integerFormat;
 
   return GPU_OK;
 }
