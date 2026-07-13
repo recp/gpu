@@ -29,6 +29,15 @@ struct GPUDevice;
 struct GPUPipelineLayout;
 struct GPURenderCommandEncoder;
 
+/* Covers the portable v1 dynamic-buffer limits without heap storage. */
+enum {
+  GPU_ENCODER_DYNAMIC_OFFSET_SHADOW_CAPACITY = 12u
+};
+
+typedef uint32_t GPUDynamicOffsetShadow[
+  GPU_ENCODER_DYNAMIC_OFFSET_SHADOW_CAPACITY
+];
+
 typedef struct GPUApiDescriptor {
   GPUResult
   (*createBindGroupLayout)(struct GPUDevice          *device,

@@ -22,6 +22,7 @@ extern "C" {
 
 #include <gpu/common.h>
 #include <gpu/gpu.h>
+#include "descriptor.h"
 
 typedef struct GPURenderPipelineState GPURenderPipelineState;
 typedef struct GPURenderPassDesc      GPURenderPassDesc;
@@ -36,41 +37,43 @@ enum {
 };
 
 struct GPURenderCommandEncoder {
-  void               *_priv;
-  void               *_pipeline;
-  GPUCommandBuffer   *_cmdb;
-  GPUQuerySet        *_occlusionQuerySet;
-  GPUBuffer          *_indexBuffer;
-  GPUPipelineLayout  *_pipelineLayout;
-  GPUBindGroup       *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
-  GPUBindGroupLayout *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
-  GPUBuffer          *_vertexBuffers[GPU__RENDER_VERTEX_SHADOW_SLOT_COUNT];
-  uint64_t            _indexBufferOffset;
-  uint64_t            _vertexBufferOffsets[GPU__RENDER_VERTEX_SHADOW_SLOT_COUNT];
-  GPUDynamicStateMask _dynamicStateMask;
-  GPUViewport         _viewport;
-  GPUPrimitiveType    _primitiveType;
-  GPUIndexType        _indexType;
-  GPUScissorRect      _scissor;
-  uint32_t            _occlusionQueryIndex;
-  uint32_t            _requiredBindGroupMask;
-  uint32_t            _colorAttachmentCount;
-  GPUFormat           _colorAttachmentFormats[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
-  uint32_t            _colorAttachmentSampleCounts[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
-  GPUFormat           _depthStencilFormat;
-  uint32_t            _depthStencilSampleCount;
-  uint32_t            _pushConstantSizeBytes;
-  GPUShaderStageFlags _pushConstantStages;
-  uint32_t            _vertexBufferMask;
-  uint32_t            _stencilReference;
-  float               _blendConstant[4];
-  bool                _colorAttachmentHasResolve[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
-  bool                _hasIndexBuffer;
-  bool                _hasPipeline;
-  bool                _pushConstantsEmitted;
-  bool                _occlusionQueryActive;
-  bool                _ended;
-  uint8_t             _pushConstants[4096];
+  void                   *_priv;
+  void                   *_pipeline;
+  GPUCommandBuffer       *_cmdb;
+  GPUQuerySet            *_occlusionQuerySet;
+  GPUBuffer              *_indexBuffer;
+  GPUPipelineLayout      *_pipelineLayout;
+  GPUBindGroup           *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
+  GPUBindGroupLayout     *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
+  GPUBuffer              *_vertexBuffers[GPU__RENDER_VERTEX_SHADOW_SLOT_COUNT];
+  uint64_t                _indexBufferOffset;
+  uint64_t                _vertexBufferOffsets[GPU__RENDER_VERTEX_SHADOW_SLOT_COUNT];
+  GPUDynamicOffsetShadow  _boundDynamicOffsets[GPU_ENCODER_MAX_BIND_GROUPS];
+  uint32_t                _boundDynamicOffsetCounts[GPU_ENCODER_MAX_BIND_GROUPS];
+  GPUDynamicStateMask     _dynamicStateMask;
+  GPUViewport             _viewport;
+  GPUPrimitiveType        _primitiveType;
+  GPUIndexType            _indexType;
+  GPUScissorRect          _scissor;
+  uint32_t                _occlusionQueryIndex;
+  uint32_t                _requiredBindGroupMask;
+  uint32_t                _colorAttachmentCount;
+  GPUFormat               _colorAttachmentFormats[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  uint32_t                _colorAttachmentSampleCounts[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  GPUFormat               _depthStencilFormat;
+  uint32_t                _depthStencilSampleCount;
+  uint32_t                _pushConstantSizeBytes;
+  GPUShaderStageFlags     _pushConstantStages;
+  uint32_t                _vertexBufferMask;
+  uint32_t                _stencilReference;
+  float                   _blendConstant[4];
+  bool                    _colorAttachmentHasResolve[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  bool                    _hasIndexBuffer;
+  bool                    _hasPipeline;
+  bool                    _pushConstantsEmitted;
+  bool                    _occlusionQueryActive;
+  bool                    _ended;
+  uint8_t                 _pushConstants[4096];
 };
 
 typedef struct GPUApiRCE {

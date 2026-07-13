@@ -475,15 +475,6 @@ gpuBindGroupGetDevice(GPUBindGroup *group) {
 }
 
 GPU_HIDE
-uint32_t
-gpuBindGroupDynamicOffsetCount(GPUBindGroup *group) {
-  GPUBindGroupPriv *priv;
-
-  priv = gpu_groupPriv(group);
-  return priv ? priv->dynamicOffsetCount : 0u;
-}
-
-GPU_HIDE
 int
 gpuPipelineLayoutAcceptsBindGroup(GPUPipelineLayout *pipelineLayout,
                                   uint32_t groupIndex,
@@ -2624,9 +2615,13 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
   }
   device = gpuBindGroupGetDevice(group);
   gpuDeviceRecordBindRequest(device);
-  if (dynamicOffsetCount == 0u &&
-      pass->_boundGroups[groupIndex] == group &&
-      gpuBindGroupDynamicOffsetCount(group) == 0u) {
+  if (gpuBindGroupShadowMatches(
+        pass->_boundGroups[groupIndex],
+        pass->_boundDynamicOffsetCounts[groupIndex],
+        pass->_boundDynamicOffsets[groupIndex],
+        group,
+        dynamicOffsetCount,
+        pDynamicOffsets)) {
     return;
   }
 
@@ -2645,6 +2640,11 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
                                         pDynamicOffsets)) {
       pass->_boundGroups[groupIndex] = group;
       pass->_boundGroupLayouts[groupIndex] = gpuBindGroupGetLayout(group);
+      gpuStoreBindGroupShadow(
+        &pass->_boundDynamicOffsetCounts[groupIndex],
+        pass->_boundDynamicOffsets[groupIndex],
+        dynamicOffsetCount,
+        pDynamicOffsets);
       gpuDeviceRecordBindEmission(device);
     }
     return;
@@ -2660,6 +2660,11 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
                                                    &ctx)) {
     pass->_boundGroups[groupIndex] = group;
     pass->_boundGroupLayouts[groupIndex] = gpuBindGroupGetLayout(group);
+    gpuStoreBindGroupShadow(
+      &pass->_boundDynamicOffsetCounts[groupIndex],
+      pass->_boundDynamicOffsets[groupIndex],
+      dynamicOffsetCount,
+      pDynamicOffsets);
     gpuDeviceRecordBindEmission(device);
   }
 }

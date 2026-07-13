@@ -224,6 +224,9 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
   if (pass->_pipelineLayout != pipeline->_layout) {
     memset(pass->_boundGroups, 0, sizeof(pass->_boundGroups));
     memset(pass->_boundGroupLayouts, 0, sizeof(pass->_boundGroupLayouts));
+    memset(pass->_boundDynamicOffsetCounts,
+           0,
+           sizeof(pass->_boundDynamicOffsetCounts));
   }
 
   state._priv = pipeline->_state;

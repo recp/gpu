@@ -22,6 +22,7 @@ extern "C" {
 
 #include <gpu/common.h>
 #include <gpu/gpu.h>
+#include "descriptor.h"
 
 typedef struct GPUComputePipelineState GPUComputePipelineState;
 typedef struct GPUPipelineLayout       GPUPipelineLayout;
@@ -29,20 +30,22 @@ typedef struct GPUBindGroupLayout      GPUBindGroupLayout;
 typedef struct GPUBindGroup            GPUBindGroup;
 
 struct GPUComputePassEncoder {
-  void                *_priv;
-  void                *_pipeline;
-  GPUCommandBuffer    *_cmdb;
-  GPUPipelineLayout   *_pipelineLayout;
-  GPUBindGroup        *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
-  GPUBindGroupLayout  *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
-  uint32_t             _workgroupSize[3];
-  uint32_t             _requiredBindGroupMask;
-  uint32_t             _pushConstantSizeBytes;
-  GPUShaderStageFlags _pushConstantStages;
-  bool                 _hasPipeline;
-  bool                 _pushConstantsEmitted;
-  bool                 _ended;
-  uint8_t              _pushConstants[4096];
+  void                   *_priv;
+  void                   *_pipeline;
+  GPUCommandBuffer       *_cmdb;
+  GPUPipelineLayout      *_pipelineLayout;
+  GPUBindGroup           *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
+  GPUBindGroupLayout     *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
+  GPUDynamicOffsetShadow  _boundDynamicOffsets[GPU_ENCODER_MAX_BIND_GROUPS];
+  uint32_t                _boundDynamicOffsetCounts[GPU_ENCODER_MAX_BIND_GROUPS];
+  uint32_t                _workgroupSize[3];
+  uint32_t                _requiredBindGroupMask;
+  uint32_t                _pushConstantSizeBytes;
+  GPUShaderStageFlags     _pushConstantStages;
+  bool                    _hasPipeline;
+  bool                    _pushConstantsEmitted;
+  bool                    _ended;
+  uint8_t                 _pushConstants[4096];
 };
 
 typedef struct GPUApiCompute {

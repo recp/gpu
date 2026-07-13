@@ -56,6 +56,41 @@ typedef struct GPUBindGroupBindingView {
 typedef void (*GPUBindGroupBindingFn)(void *ctx,
                                       const GPUBindGroupBindingView *binding);
 
+static GPU_INLINE bool
+gpuBindGroupShadowMatches(GPUBindGroup  *boundGroup,
+                          uint32_t       boundOffsetCount,
+                          const uint32_t *boundOffsets,
+                          GPUBindGroup  *group,
+                          uint32_t       offsetCount,
+                          const uint32_t *offsets) {
+  if (boundGroup != group || boundOffsetCount != offsetCount ||
+      offsetCount > GPU_ENCODER_DYNAMIC_OFFSET_SHADOW_CAPACITY) {
+    return false;
+  }
+
+  return offsetCount == 0u ||
+         (offsets && memcmp(boundOffsets,
+                            offsets,
+                            offsetCount * sizeof(*offsets)) == 0);
+}
+
+static GPU_INLINE void
+gpuStoreBindGroupShadow(uint32_t       *boundOffsetCount,
+                        uint32_t       *boundOffsets,
+                        uint32_t        offsetCount,
+                        const uint32_t *offsets) {
+  if (offsetCount > GPU_ENCODER_DYNAMIC_OFFSET_SHADOW_CAPACITY ||
+      (offsetCount > 0u && !offsets)) {
+    *boundOffsetCount = UINT32_MAX;
+    return;
+  }
+
+  if (offsetCount > 0u) {
+    memcpy(boundOffsets, offsets, offsetCount * sizeof(*offsets));
+  }
+  *boundOffsetCount = offsetCount;
+}
+
 GPU_HIDE
 GPUResult
 gpuInitBindGroupCacheDevice(GPUDevice *device);
@@ -120,10 +155,6 @@ gpuBindGroupGetLayout(GPUBindGroup *group);
 GPU_HIDE
 GPUDevice *
 gpuBindGroupGetDevice(GPUBindGroup *group);
-
-GPU_HIDE
-uint32_t
-gpuBindGroupDynamicOffsetCount(GPUBindGroup *group);
 
 GPU_HIDE
 int

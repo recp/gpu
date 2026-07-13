@@ -32,6 +32,7 @@ typedef struct BindingChurn {
   GPUBindGroup       *groups[BINDING_GROUP_COUNT];
   GPUBindGroup       *aliases[BINDING_GROUP_COUNT];
   GPUCacheStats       setupCacheStats;
+  bool                dynamicOffset;
 } BindingChurn;
 
 static bool
@@ -63,9 +64,10 @@ binding_createLayout(BenchRender *bench, BindingChurn *churn) {
   if (!entries || entryCount != 1u || entries[0].binding != 0u ||
       entries[0].bindingType != GPU_BINDING_UNIFORM_BUFFER ||
       entries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      entries[0].arrayCount != 1u || entries[0].hasDynamicOffset) {
+      entries[0].arrayCount != 1u) {
     return false;
   }
+  churn->dynamicOffset = entries[0].hasDynamicOffset;
 
   return GPUCreatePipelineLayoutFromReflection(bench->device,
                                                 bench->library,
@@ -148,9 +150,15 @@ binding_encode(GPURenderPassEncoder *pass,
   GPUBindRenderPipeline(pass, churn->pipeline);
   for (uint32_t draw = 0u; draw < drawCount; draw++) {
     uint32_t groupIndex;
+    uint32_t dynamicOffset;
 
-    groupIndex = (draw >> 1u) & 1u;
-    GPUBindRenderGroup(pass, 0u, churn->groups[groupIndex], 0u, NULL);
+    groupIndex    = (draw >> 1u) & 1u;
+    dynamicOffset = 0u;
+    GPUBindRenderGroup(pass,
+                       0u,
+                       churn->groups[groupIndex],
+                       churn->dynamicOffset ? 1u : 0u,
+                       churn->dynamicOffset ? &dynamicOffset : NULL);
     GPUDraw(pass, 3u, 1u, 0u, 0u);
   }
   return true;
@@ -211,6 +219,7 @@ main(int argc, char *argv[]) {
   pipelineInfo.vertexEntry   = "tri_vs";
   pipelineInfo.fragmentEntry = "tri_fs";
   pipelineInfo.frontFace     = GPU_FRONT_FACE_CCW;
+  pipelineInfo.vertexInput   = true;
   if (!bench_renderPipeline(&bench, &pipelineInfo, &churn.pipeline)) {
     fprintf(stderr, "failed to create binding churn pipeline\n");
     binding_cleanup(&bench, &churn);

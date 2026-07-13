@@ -71,9 +71,8 @@ test_bindRenderGroup(GPURenderPassEncoder *pass,
                      GPUBindGroup         *group,
                      uint32_t              dynamicOffsetCount,
                      const uint32_t       *dynamicOffsets) {
-  (void)dynamicOffsets;
   if (!pass || !pipelineLayout || !group || groupIndex != 0u ||
-      dynamicOffsetCount != 0u) {
+      (dynamicOffsetCount > 0u && !dynamicOffsets)) {
     return false;
   }
   descriptorHookCounts.bindRender++;
@@ -87,9 +86,8 @@ test_bindComputeGroup(GPUComputePassEncoder *pass,
                       GPUBindGroup          *group,
                       uint32_t               dynamicOffsetCount,
                       const uint32_t        *dynamicOffsets) {
-  (void)dynamicOffsets;
   if (!pass || !pipelineLayout || !group || groupIndex != 0u ||
-      dynamicOffsetCount != 0u) {
+      (dynamicOffsetCount > 0u && !dynamicOffsets)) {
     return false;
   }
   descriptorHookCounts.bindCompute++;
@@ -939,18 +937,21 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
   GPUBindGroup *group = NULL;
   GPURenderPassEncoder renderPass = {0};
   GPUComputePassEncoder computePass = {0};
-  uint32_t validOffset = 256u;
+  uint32_t validOffset   = 256u;
+  uint32_t changedOffset = 0u;
   uint32_t invalidOffset = 497u;
-  uint32_t extraOffsets[2] = { 256u, 0u };
-  int ok = 0;
+  uint32_t extraOffsets[2] = {256u, 0u};
+  int      ok = 0;
 
   api = gpuDeviceApi(device);
   if (!api) {
     return 0;
   }
   saved = api->descriptor;
-  api->descriptor.bindRenderGroup  = NULL;
-  api->descriptor.bindComputeGroup = NULL;
+  api->descriptor.bindRenderGroup  = test_bindRenderGroup;
+  api->descriptor.bindComputeGroup = test_bindComputeGroup;
+  descriptorHookCounts.bindRender  = 0u;
+  descriptorHookCounts.bindCompute = 0u;
 
   entry.binding = 0u;
   entry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
@@ -1022,6 +1023,14 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
     fprintf(stderr, "render bind rejected valid dynamic offset\n");
     goto cleanup;
   }
+  GPUBindRenderGroup(&renderPass, 0u, group, 1u, &validOffset);
+  GPUBindRenderGroup(&renderPass, 0u, group, 1u, &changedOffset);
+  if (descriptorHookCounts.bindRender != 2u ||
+      renderPass._boundDynamicOffsetCounts[0] != 1u ||
+      renderPass._boundDynamicOffsets[0][0] != changedOffset) {
+    fprintf(stderr, "render dynamic offset shadowing failed\n");
+    goto cleanup;
+  }
 
   computePass._pipelineLayout = pipelineLayout;
   GPUBindComputeGroup(&computePass, 0u, group, 1u, NULL);
@@ -1036,6 +1045,14 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
   GPUBindComputeGroup(&computePass, 0u, group, 1u, &validOffset);
   if (computePass._boundGroupLayouts[0] != layout) {
     fprintf(stderr, "compute bind rejected valid dynamic offset\n");
+    goto cleanup;
+  }
+  GPUBindComputeGroup(&computePass, 0u, group, 1u, &validOffset);
+  GPUBindComputeGroup(&computePass, 0u, group, 1u, &changedOffset);
+  if (descriptorHookCounts.bindCompute != 2u ||
+      computePass._boundDynamicOffsetCounts[0] != 1u ||
+      computePass._boundDynamicOffsets[0][0] != changedOffset) {
+    fprintf(stderr, "compute dynamic offset shadowing failed\n");
     goto cleanup;
   }
 
