@@ -719,8 +719,16 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
 
   for (uint32_t i = 0u; i < info->colorTargetCount; i++) {
     const GPUBlendState *blend;
+    UINT8                writeMask;
 
     blend = &info->pColorTargets[i].blend;
+    if (blend->writeMask == GPU_COLOR_WRITE_DEFAULT) {
+      writeMask = GPU_COLOR_WRITE_ALL;
+    } else if (blend->writeMask == GPU_COLOR_WRITE_NONE) {
+      writeMask = 0u;
+    } else {
+      writeMask = (UINT8)blend->writeMask;
+    }
     desc.RTVFormats[i] = dx12_format(info->pColorTargets[i].format);
     if (desc.RTVFormats[i] == DXGI_FORMAT_UNKNOWN) {
       result = E_INVALIDARG;
@@ -743,7 +751,7 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
       dx12__blendOperation(blend->alpha.op);
     desc.BlendState.RenderTarget[i].LogicOp               = D3D12_LOGIC_OP_NOOP;
     desc.BlendState.RenderTarget[i].RenderTargetWriteMask =
-      (UINT8)(blend->writeMask ? blend->writeMask : GPU_COLOR_WRITE_ALL);
+      writeMask;
   }
 
   result = deviceDX12->d3dDevice->lpVtbl->CreateGraphicsPipelineState(

@@ -746,6 +746,16 @@ check_render_pipeline_validation(GPUDevice *device,
     GPUDestroyShaderLibrary(library);
     return 0;
   }
+  colorTargets[0].blend.writeMask =
+    GPU_COLOR_WRITE_NONE | GPU_COLOR_WRITE_R;
+  if (!expect_render_pipeline_error(
+        device,
+        &info,
+        "render pipeline create accepted mixed color write none mask")) {
+    GPUDestroyPipelineLayout(pipelineLayout);
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
 
   memset(&colorTargets[0].blend, 0, sizeof(colorTargets[0].blend));
   depthStencil.depthTestEnable = true;
@@ -844,7 +854,8 @@ typedef enum RenderReadbackDrawMode {
   RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT,
   RENDER_READBACK_DRAW_OCCLUSION,
   RENDER_READBACK_DRAW_MSAA,
-  RENDER_READBACK_DRAW_MRT
+  RENDER_READBACK_DRAW_MRT,
+  RENDER_READBACK_DRAW_COLOR_WRITE_NONE
 } RenderReadbackDrawMode;
 
 typedef struct RenderIndirectArgs {
@@ -882,6 +893,8 @@ render_readback_label(RenderReadbackDrawMode mode, int clipped) {
       return "api-render-readback-msaa";
     case RENDER_READBACK_DRAW_MRT:
       return "api-render-readback-mrt";
+    case RENDER_READBACK_DRAW_COLOR_WRITE_NONE:
+      return "api-render-readback-color-write-none";
     case RENDER_READBACK_DRAW:
     default:
       return "api-render-readback";
@@ -982,6 +995,8 @@ check_render_readback_case(GPUDevice *device,
   const int occlusion = mode == RENDER_READBACK_DRAW_OCCLUSION;
   const int msaa = mode == RENDER_READBACK_DRAW_MSAA;
   const int mrt = mode == RENDER_READBACK_DRAW_MRT;
+  const int colorWriteNone =
+    mode == RENDER_READBACK_DRAW_COLOR_WRITE_NONE;
   const void *vertexData = multi ? (const void *)kMultiTriangles :
                                   (const void *)kFullscreenTriangle;
   const uint64_t vertexDataSize = multi ? sizeof(kMultiTriangles) :
@@ -1045,6 +1060,9 @@ check_render_readback_case(GPUDevice *device,
 
   colorTargets[0].format = GPU_FORMAT_BGRA8_UNORM;
   colorTargets[1].format = GPU_FORMAT_BGRA8_UNORM;
+  if (colorWriteNone) {
+    colorTargets[0].blend.writeMask = GPU_COLOR_WRITE_NONE;
+  }
   if (mrt) {
     colorTargets[0].blend.enabled         = true;
     colorTargets[0].blend.color.srcFactor = GPU_BLEND_FACTOR_SRC_ALPHA;
@@ -1413,6 +1431,17 @@ check_render_readback_case(GPUDevice *device,
     goto cleanup;
   }
 
+  if (colorWriteNone) {
+    centerOffset = (size_t)2u * rowPitch + 2u * 4u;
+    if (pixels[centerOffset + 0u] > 2u ||
+        pixels[centerOffset + 1u] > 2u ||
+        pixels[centerOffset + 2u] > 2u ||
+        pixels[centerOffset + 3u] < 250u) {
+      fprintf(stderr, "%s draw modified disabled target\n", label);
+      goto cleanup;
+    }
+  }
+
   if (clipped &&
       (pixels[0] > 2u || pixels[1] > 2u || pixels[2] > 2u ||
        pixels[3] < 250u)) {
@@ -1456,15 +1485,16 @@ check_render_readback_case(GPUDevice *device,
       fprintf(stderr, "%s multi draw did not touch both target halves\n", label);
       goto cleanup;
     }
-  } else if (msaa
-               ? !render_readback_pixel_is_half_red(pixels,
-                                                    rowPitch,
-                                                    2u,
-                                                    2u)
-               : !render_readback_pixel_is_red(pixels,
-                                               rowPitch,
-                                               2u,
-                                               2u)) {
+  } else if (!colorWriteNone &&
+             (msaa
+                ? !render_readback_pixel_is_half_red(pixels,
+                                                     rowPitch,
+                                                     2u,
+                                                     2u)
+                : !render_readback_pixel_is_red(pixels,
+                                                rowPitch,
+                                                2u,
+                                                2u))) {
     centerOffset = (size_t)2u * rowPitch + 2u * 4u;
     fprintf(stderr,
             "%s draw pixel mismatch: %u %u %u %u\n",
@@ -1541,6 +1571,10 @@ check_render_readback(GPUDevice *device, const char *mrtBytecodePath) {
                                     mrtBytecodePath) &&
          check_render_readback_case(device,
                                     RENDER_READBACK_DRAW_MRT,
+                                    0,
+                                    mrtBytecodePath) &&
+         check_render_readback_case(device,
+                                    RENDER_READBACK_DRAW_COLOR_WRITE_NONE,
                                     0,
                                     mrtBytecodePath);
 }

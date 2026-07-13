@@ -66,11 +66,14 @@ typedef enum GPUBlendOp {
 } GPUBlendOp;
 
 typedef uint32_t GPUColorWriteMaskFlags;
+/* Zero-initialized masks write all channels; NONE must be used alone. */
 enum {
+  GPU_COLOR_WRITE_DEFAULT = 0u,
   GPU_COLOR_WRITE_R = 1u << 0,
   GPU_COLOR_WRITE_G = 1u << 1,
   GPU_COLOR_WRITE_B = 1u << 2,
   GPU_COLOR_WRITE_A = 1u << 3,
+  GPU_COLOR_WRITE_NONE = 1u << 4,
   GPU_COLOR_WRITE_ALL = GPU_COLOR_WRITE_R | GPU_COLOR_WRITE_G |
                         GPU_COLOR_WRITE_B | GPU_COLOR_WRITE_A
 };

@@ -36,7 +36,8 @@ gpu_blendStateIsValid(const GPUBlendState *blend) {
            GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA &&
          (uint32_t)blend->color.op <= GPU_BLEND_OP_MAX &&
          (uint32_t)blend->alpha.op <= GPU_BLEND_OP_MAX &&
-         (blend->writeMask & ~GPU_COLOR_WRITE_ALL) == 0u;
+         (blend->writeMask == GPU_COLOR_WRITE_NONE ||
+          (blend->writeMask & ~GPU_COLOR_WRITE_ALL) == 0u);
 }
 
 static bool

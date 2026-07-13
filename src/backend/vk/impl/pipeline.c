@@ -282,8 +282,10 @@ static VkColorComponentFlags
 vk__colorMask(GPUColorWriteMaskFlags mask) {
   VkColorComponentFlags result;
 
-  if (mask == 0u) {
+  if (mask == GPU_COLOR_WRITE_DEFAULT) {
     mask = GPU_COLOR_WRITE_ALL;
+  } else if (mask == GPU_COLOR_WRITE_NONE) {
+    return 0u;
   }
 
   result = 0u;

@@ -101,8 +101,11 @@ static MTLColorWriteMask
 mt_colorWriteMask(GPUColorWriteMaskFlags mask) {
   MTLColorWriteMask result;
 
-  if (mask == 0u) {
+  if (mask == GPU_COLOR_WRITE_DEFAULT) {
     return MTLColorWriteMaskAll;
+  }
+  if (mask == GPU_COLOR_WRITE_NONE) {
+    return MTLColorWriteMaskNone;
   }
 
   result = MTLColorWriteMaskNone;
