@@ -7,6 +7,7 @@
 
 #import "../../include/gpu/gpu.h"
 #import "../common/SampleApp.h"
+#import "../common/SampleStats.h"
 #import "../common/SampleUSL.h"
 
 #ifndef GPU_SAMPLE_BACKEND
@@ -41,6 +42,7 @@ typedef struct GeneratedVertex {
   NSInteger           _exitAfterFrames;
   NSInteger           _submittedFrames;
   NSInteger           _completedFrames;
+  BOOL                _assertZeroAlloc;
   BOOL                _validationFailed;
   BOOL                _terminating;
   BOOL                _skipComputeBind;
@@ -407,6 +409,18 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     NSLog(@"GPUFinishFrame failed: %d", submitResult);
   } else {
     _submittedFrames++;
+    if (!GPUSampleCheckZeroAlloc(_device,
+                                 (uint32_t)_submittedFrames,
+                                 _assertZeroAlloc,
+                                 "GPU compute render")) {
+      _validationFailed = YES;
+      gComputeBufferValidationFailed = 1;
+      _terminating = YES;
+      [_timer invalidate];
+      _timer = nil;
+      [NSApp terminate:nil];
+      return;
+    }
   }
 
 cleanup:
@@ -573,6 +587,7 @@ cleanup:
   if (exitAfterFrames && exitAfterFrames[0] != '\0') {
     _exitAfterFrames = strtol(exitAfterFrames, NULL, 10);
   }
+  _assertZeroAlloc = GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
   _skipComputeBind = getenv("GPU_SAMPLE_SKIP_COMPUTE_BIND") != NULL;
 
   _timer = [NSTimer timerWithTimeInterval:(1.0 / 60.0)

@@ -1,5 +1,7 @@
 #include <gpu/gpu.h>
 
+#include "../common/SampleStats.h"
+
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
@@ -26,6 +28,7 @@ typedef struct TexturedQuadApp {
   uint32_t           height;
   uint32_t           frameCount;
   uint32_t           exitAfterFrames;
+  bool               assertZeroAlloc;
   bool               ready;
   bool               running;
 } TexturedQuadApp;
@@ -417,6 +420,12 @@ textured_quad_render(TexturedQuadApp *app) {
   }
 
   app->frameCount++;
+  if (!GPUSampleCheckZeroAlloc(app->device,
+                               app->frameCount,
+                               app->assertZeroAlloc,
+                               "GPU DX12 textured quad")) {
+    return false;
+  }
   if (app->exitAfterFrames > 0u &&
       app->frameCount >= app->exitAfterFrames) {
     app->running = false;
@@ -542,8 +551,9 @@ main(void) {
   if (exitFrames) {
     app.exitAfterFrames = (uint32_t)strtoul(exitFrames, NULL, 10);
   }
-  app.running = true;
-  result      = 0;
+  app.assertZeroAlloc = GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
+  app.running         = true;
+  result              = 0;
   while (app.running) {
     while (PeekMessageW(&message, NULL, 0u, 0u, PM_REMOVE)) {
       if (message.message == WM_QUIT) {

@@ -86,6 +86,9 @@ run_step "textured-quad-usl embedded no-sidecar" \
 run_step "textured-quad-usl one-frame" \
   run_sample textured-quad-usl env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 GPU_USL_NO_SIDECAR=1 ./hello-textured-quad-usl
 
+run_step "textured-quad-usl warm-frame allocations" \
+  run_sample textured-quad-usl env GPU_SAMPLE_EXIT_AFTER_FRAMES=96 GPU_SAMPLE_ASSERT_ZERO_ALLOC=1 GPU_USL_NO_SIDECAR=1 ./hello-textured-quad-usl
+
 run_step "compute-usl sidecar" \
   run_sample compute-usl ./build.sh
 
@@ -103,6 +106,9 @@ run_step "compute-buffer-usl generated no-sidecar" \
 
 run_step "compute-buffer-usl readback" \
   run_sample compute-buffer-usl env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 GPU_USL_NO_SIDECAR=1 ./hello-compute-buffer-usl
+
+run_step "compute-buffer-usl warm-frame allocations" \
+  run_sample compute-buffer-usl env GPU_SAMPLE_EXIT_AFTER_FRAMES=96 GPU_SAMPLE_ASSERT_ZERO_ALLOC=1 GPU_USL_NO_SIDECAR=1 ./hello-compute-buffer-usl
 
 run_expect_fail_with_output "compute-buffer-usl missing group 1 bind" \
   "GPU validation: GPUDispatchIndirect skipped: missing compute bind group" \

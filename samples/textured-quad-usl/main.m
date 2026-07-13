@@ -6,6 +6,7 @@
 
 #import "../../include/gpu/gpu.h"
 #import "../common/SampleApp.h"
+#import "../common/SampleStats.h"
 #import "../common/SampleUSL.h"
 
 typedef struct QuadVertex {
@@ -56,9 +57,12 @@ static const uint8_t kCheckerPixels[] = {
   NSInteger _exitAfterFrames;
   NSInteger _submittedFrames;
   NSInteger _completedFrames;
+  BOOL _assertZeroAlloc;
+  BOOL _statsFailed;
   BOOL _terminating;
 }
 - (void)frameCompleted;
+- (BOOL)statsFailed;
 @end
 
 static void
@@ -390,9 +394,20 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   frame = NULL;
   if (submitResult != GPU_OK) {
     NSLog(@"GPUFinishFrame failed: %d", submitResult);
-  } else if (_exitAfterFrames > 0) {
+  } else {
     _submittedFrames++;
-    if (_submittedFrames >= _exitAfterFrames) {
+    if (!GPUSampleCheckZeroAlloc(_device,
+                                 (uint32_t)_submittedFrames,
+                                 _assertZeroAlloc,
+                                 "GPU Metal textured quad")) {
+      _statsFailed = YES;
+      _terminating = YES;
+      [_timer invalidate];
+      _timer = nil;
+      [NSApp terminate:nil];
+      return;
+    }
+    if (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) {
       [_timer invalidate];
       _timer = nil;
     }
@@ -508,6 +523,7 @@ cleanup:
       _exitAfterFrames = 1;
     }
   }
+  _assertZeroAlloc = GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
 
   _animationStart = CACurrentMediaTime();
   _timer = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
@@ -518,6 +534,10 @@ cleanup:
   [[NSRunLoop mainRunLoop] addTimer:_timer forMode:NSRunLoopCommonModes];
 
   [self renderFrame];
+}
+
+- (BOOL)statsFailed {
+  return _statsFailed;
 }
 
 - (void)applicationWillTerminate:(NSNotification *)notification {
@@ -550,6 +570,9 @@ cleanup:
 @end
 
 int main(int argc, const char * argv[]) {
+  int result;
+
+  result = 0;
   @autoreleasepool {
     TexturedQuadApp *delegate;
 
@@ -561,6 +584,7 @@ int main(int argc, const char * argv[]) {
     [NSApp setDelegate:delegate];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     [NSApp run];
+    result = [delegate statsFailed] ? 1 : 0;
   }
-  return 0;
+  return result;
 }
