@@ -614,6 +614,25 @@ if(GPU_BUILD_BENCHMARKS)
     target_compile_options(gpu-dispatch-bench PRIVATE -Wall -Wextra)
   endif()
 
+  add_executable(gpu-queue-upload-bench
+    benchmarks/bench.c
+    benchmarks/queue_upload.c
+  )
+  target_link_libraries(gpu-queue-upload-bench PRIVATE gpu)
+  target_include_directories(gpu-queue-upload-bench PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  set_target_properties(gpu-queue-upload-bench PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_options(gpu-queue-upload-bench PRIVATE /W3)
+  else()
+    target_compile_options(gpu-queue-upload-bench PRIVATE -Wall -Wextra)
+  endif()
+
   add_executable(gpu-static-scene-bench
     benchmarks/bench.c
     benchmarks/render.c
@@ -776,6 +795,7 @@ if(GPU_BUILD_BENCHMARKS)
   if(WIN32)
     foreach(benchmark_target
             gpu-dispatch-bench
+            gpu-queue-upload-bench
             gpu-static-scene-bench
             gpu-state-churn-bench
             gpu-binding-churn-bench
