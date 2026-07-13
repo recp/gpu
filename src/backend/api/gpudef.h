@@ -20,8 +20,8 @@
 extern "C" {
 #endif
 
-#include "../common.h"
-#include "../gpu.h"
+#include <gpu/common.h>
+#include <gpu/gpu.h>
 #include "device.h"
 #include "render-pipeline.h"
 #include "rce.h"

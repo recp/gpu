@@ -14,25 +14,37 @@
  * limitations under the License.
  */
 
-#ifndef gpu_gpudef_instance_h
-#define gpu_gpudef_instance_h
+#ifndef gpu_gpudef_library_h
+#define gpu_gpudef_library_h
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "../common.h"
-#include "../gpu.h"
+#include <gpu/common.h>
+#include <gpu/gpu.h>
 
-struct GPUApi;
+typedef struct GPUApiLibrary {
+  GPULibrary*
+  (*defaultLibrary)(GPUDevice *device);
+  
+  GPULibrary*
+  (*newLibraryWithSource)(GPUDevice *device,
+                          const char *source,
+                          uint64_t sourceSize);
 
-typedef struct GPUApiInstance {
-  GPUInstance *(*createInstance)(struct GPUApi * __restrict api,
-                                 const GPUInstanceCreateInfo * __restrict info);
-  void         (*destroyInstance)(struct GPUApi * __restrict api,
-                                  GPUInstance * __restrict instance);
-} GPUApiInstance;
+  GPULibrary*
+  (*newLibraryWithBinary)(GPUDevice *device,
+                          const void *data,
+                          uint64_t size);
+
+  GPUFunction*
+  (*newFunction)(GPULibrary *lib, const char *name);
+
+  void
+  (*destroyLibrary)(GPULibrary *lib);
+} GPUApiLibrary;
 
 #ifdef __cplusplus
 }
 #endif
-#endif /* gpu_gpudef_instance_h */
+#endif /* gpu_gpudef_library_h */

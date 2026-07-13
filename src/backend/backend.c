@@ -16,7 +16,6 @@
 
 #include "common.h"
 #include "../../include/gpu/gpu.h"
-#include "../../include/gpu/api/gpudef.h"
 
 #include "backends.h"
 

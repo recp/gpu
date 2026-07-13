@@ -12,9 +12,9 @@
 #define gpu_tests_api_test_h
 
 #include <gpu/bindgroup.h>
-#include <gpu/api/compute.h>
-#include <gpu/api/pass.h>
-#include <gpu/api/rce.h>
+#include "../../src/backend/api/compute.h"
+#include "../../src/backend/api/pass.h"
+#include "../../src/backend/api/rce.h"
 #include <gpu/gpu.h>
 
 #include <stdint.h>

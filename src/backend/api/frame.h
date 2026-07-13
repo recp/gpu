@@ -14,37 +14,23 @@
  * limitations under the License.
  */
 
-#ifndef gpu_gpudef_library_h
-#define gpu_gpudef_library_h
+#ifndef gpu_gpudef_frame_h
+#define gpu_gpudef_frame_h
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "../common.h"
-#include "../gpu.h"
-
-typedef struct GPUApiLibrary {
-  GPULibrary*
-  (*defaultLibrary)(GPUDevice *device);
+#include <gpu/common.h>
+#include <gpu/gpu.h>
   
-  GPULibrary*
-  (*newLibraryWithSource)(GPUDevice *device,
-                          const char *source,
-                          uint64_t sourceSize);
+struct GPUApi;
 
-  GPULibrary*
-  (*newLibraryWithBinary)(GPUDevice *device,
-                          const void *data,
-                          uint64_t size);
-
-  GPUFunction*
-  (*newFunction)(GPULibrary *lib, const char *name);
-
-  void
-  (*destroyLibrary)(GPULibrary *lib);
-} GPUApiLibrary;
+typedef struct GPUApiFrame {
+  GPUFrame* (*beginFrame)(struct GPUApi * __restrict api, GPUSwapChain * __restrict swapchain);
+  void      (*endFrame)  (struct GPUApi * __restrict api, GPUFrame     * __restrict frame);
+} GPUApiFrame;
 
 #ifdef __cplusplus
 }
 #endif
-#endif /* gpu_gpudef_library_h */
+#endif /* gpu_gpudef_frame_h */

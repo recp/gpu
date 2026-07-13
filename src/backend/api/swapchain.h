@@ -14,19 +14,29 @@
  * limitations under the License.
  */
 
-#ifndef gpu_gpudef_depthstencil_h
-#define gpu_gpudef_depthstencil_h
+#ifndef gpu_gpudef_swapchain_h
+#define gpu_gpudef_swapchain_h
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "../common.h"
+#include <gpu/common.h>
+#include <gpu/gpu.h>
 
-typedef struct GPUApiDepthStencil {
-  void *reserved;
-} GPUApiDepthStencil;
+struct GPUApi;
+
+typedef struct GPUApiSwapChain {
+  GPUSwapChain*
+  (*createSwapChain)(struct GPUApi          * __restrict api,
+                     struct GPUDevice       * __restrict device,
+                     struct GPUCommandQueue * __restrict cmdQue,
+                     const GPUSwapchainCreateInfo * __restrict info);
+
+  GPUResult (*resizeSwapChain)(GPUSwapChain *swapChain, GPUExtent2D size);
+  void (*destroySwapChain)(GPUSwapChain *swapChain);
+} GPUApiSwapChain;
 
 #ifdef __cplusplus
 }
 #endif
-#endif /* gpu_gpudef_depthstencil_h */
+#endif /* gpu_gpudef_swapchain_h */

@@ -18,7 +18,7 @@
 #define backend_common_h
 
 #include "../common.h"
-#include "../../include/gpu/api/gpudef.h"
+#include "api/gpudef.h"
 
 #define GPUBackendTypeSuffix Vk
 #define CONCAT_IMPL(a, b) a ## b

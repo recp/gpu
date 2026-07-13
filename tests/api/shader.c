@@ -1,5 +1,5 @@
 #include "test.h"
-#include <gpu/api/gpudef.h>
+#include "../../src/backend/api/gpudef.h"
 #include "../../src/api/buffer_internal.h"
 #include "../../src/api/compute_internal.h"
 #include "../../src/api/render/pipeline_internal.h"

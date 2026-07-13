@@ -14,23 +14,25 @@
  * limitations under the License.
  */
 
-#ifndef gpu_gpudef_frame_h
-#define gpu_gpudef_frame_h
+#ifndef gpu_gpudef_instance_h
+#define gpu_gpudef_instance_h
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "../common.h"
-#include "../gpu.h"
-  
+#include <gpu/common.h>
+#include <gpu/gpu.h>
+
 struct GPUApi;
 
-typedef struct GPUApiFrame {
-  GPUFrame* (*beginFrame)(struct GPUApi * __restrict api, GPUSwapChain * __restrict swapchain);
-  void      (*endFrame)  (struct GPUApi * __restrict api, GPUFrame     * __restrict frame);
-} GPUApiFrame;
+typedef struct GPUApiInstance {
+  GPUInstance *(*createInstance)(struct GPUApi * __restrict api,
+                                 const GPUInstanceCreateInfo * __restrict info);
+  void         (*destroyInstance)(struct GPUApi * __restrict api,
+                                  GPUInstance * __restrict instance);
+} GPUApiInstance;
 
 #ifdef __cplusplus
 }
 #endif
-#endif /* gpu_gpudef_frame_h */
+#endif /* gpu_gpudef_instance_h */

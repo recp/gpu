@@ -39,7 +39,7 @@
 
 #include "../include/gpu/common.h"
 #include "../include/gpu/gpu.h"
-#include "../include/gpu/api/gpudef.h"
+#include "backend/api/gpudef.h"
 
 GPU_HIDE
 GPUApi*

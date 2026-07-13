@@ -20,8 +20,8 @@
 extern "C" {
 #endif
 
-#include "../common.h"
-#include "../gpu.h"
+#include <gpu/common.h>
+#include <gpu/gpu.h>
 
 typedef struct GPUApiCommandQueue {
   GPUCommandQueue*

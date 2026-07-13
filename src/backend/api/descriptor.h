@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-#include "../common.h"
+#include <gpu/common.h>
 
 struct GPUBindGroup;
 struct GPUBindGroupLayout;

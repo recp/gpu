@@ -1,5 +1,5 @@
 #include "test.h"
-#include <gpu/api/gpudef.h>
+#include "../../src/backend/api/gpudef.h"
 #include "../../src/api/cmdqueue_internal.h"
 #include "../../src/api/device_internal.h"
 
