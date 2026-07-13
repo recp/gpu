@@ -448,6 +448,9 @@ dx12_createDevice(GPUPhysicalDevice        * __restrict phyDevice,
   if (FAILED(hr)) {
     goto err;
   }
+  /* Parallels removes or corrupts devices on combined stencil-plane copies. */
+  deviceDX12->stencilPlaneCopies =
+    !strstr(phyDeviceDX12->name, "Parallels Display Adapter");
   dx12_queryDeviceCapabilities(deviceDX12);
   InitializeSRWLock(&deviceDX12->descriptorLock);
   if (!dx12__newSignatures(deviceDX12)) {

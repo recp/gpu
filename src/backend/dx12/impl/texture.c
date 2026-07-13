@@ -1015,6 +1015,10 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
                                  &dataLayout)) {
     return GPU_ERROR_UNSUPPORTED;
   }
+  if (dx12_combinedStencilPlane(texture->format, plane) &&
+      !deviceDX12->stencilPlaneCopies) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
   if (sizeBytes < dataLayout.requiredBytes) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }

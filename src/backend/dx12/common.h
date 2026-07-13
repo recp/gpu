@@ -84,7 +84,23 @@ typedef struct GPUDeviceDX12 {
   uint32_t                    nCreatedQueues;
   bool                        enhancedBarriers;
   bool                        dxcAvailable;
+  bool                        stencilPlaneCopies;
 } GPUDeviceDX12;
+
+static inline bool
+dx12_combinedStencilPlane(GPUFormat format, uint32_t plane) {
+  return plane == 1u &&
+         (format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+          format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8);
+}
+
+static inline bool
+dx12_stencilPlaneCopiesSupported(const GPUDevice *device) {
+  const GPUDeviceDX12 *native;
+
+  native = device ? device->_priv : NULL;
+  return native && native->stencilPlaneCopies;
+}
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
 static inline bool

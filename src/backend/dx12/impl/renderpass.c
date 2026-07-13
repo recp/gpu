@@ -544,6 +544,12 @@ dx12_copyBufferToTexture(GPUCopyPassEncoder               *pass,
     dx12__copyError(pass, "Direct3D 12 buffer-to-texture copy is invalid");
     return;
   }
+  if (dx12_combinedStencilPlane(dst->format, plane) &&
+      !dx12_stencilPlaneCopiesSupported(gpuCommandBufferDevice(pass->_cmdb))) {
+    dx12__copyError(pass,
+                    "Direct3D 12 stencil plane copies are unsupported");
+    return;
+  }
 
   copyCount = texture3D ? 1u : region->texture.layerCount;
   for (uint32_t layer = 0u; layer < copyCount; layer++) {
@@ -627,6 +633,12 @@ dx12_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
                        region->texture.texture.aspect,
                        &plane)) {
     dx12__copyError(pass, "Direct3D 12 texture-to-buffer copy is invalid");
+    return;
+  }
+  if (dx12_combinedStencilPlane(src->format, plane) &&
+      !dx12_stencilPlaneCopiesSupported(gpuCommandBufferDevice(pass->_cmdb))) {
+    dx12__copyError(pass,
+                    "Direct3D 12 stencil plane copies are unsupported");
     return;
   }
 
@@ -719,8 +731,17 @@ dx12_copyTextureToTexture(
   if (!command || !srcTexture || !dstTexture || !region ||
       !dx12__copyPlane(src->format, region->src.aspect, &srcPlane) ||
       !dx12__copyPlane(dst->format, region->dst.aspect, &dstPlane) ||
-      srcPlane != dstPlane ||
-      !dx12_transitionTexturePlane(command->commandList,
+      srcPlane != dstPlane) {
+    dx12__copyError(pass, "Direct3D 12 texture copy is invalid");
+    return;
+  }
+  if (dx12_combinedStencilPlane(src->format, srcPlane) &&
+      !dx12_stencilPlaneCopiesSupported(gpuCommandBufferDevice(pass->_cmdb))) {
+    dx12__copyError(pass,
+                    "Direct3D 12 stencil plane copies are unsupported");
+    return;
+  }
+  if (!dx12_transitionTexturePlane(command->commandList,
                                    srcTexture,
                                    region->src.mipLevel,
                                    1u,
