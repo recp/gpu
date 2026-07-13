@@ -46,8 +46,21 @@ gpu_computeValidationError(const GPUComputePassEncoder *pass,
                            const char                    *message) {
   gpuDeviceRecordValidationError(gpu_computePassDevice(pass), message);
 }
+
+static inline bool
+gpu_computeBindingsComplete(const GPUComputePassEncoder *pass) {
+  if (!gpuDeviceValidationEnabled(gpu_computePassDevice(pass))) {
+    return true;
+  }
+
+  return gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
+                                      pass->_boundGroupLayouts,
+                                      GPU_ENCODER_MAX_BIND_GROUPS,
+                                      pass->_requiredBindGroupMask);
+}
 #else
 #  define gpu_computeValidationError(pass, message) ((void)0)
+#  define gpu_computeBindingsComplete(pass) true
 #endif
 
 static bool
@@ -528,10 +541,7 @@ GPUDispatch(GPUComputePassEncoder *pass,
     gpu_computeValidationError(pass, "GPUDispatch skipped: no compute pipeline bound");
     return;
   }
-  if (!gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
-                                    pass->_boundGroupLayouts,
-                                    GPU_ENCODER_MAX_BIND_GROUPS,
-                                    pass->_requiredBindGroupMask)) {
+  if (!gpu_computeBindingsComplete(pass)) {
     gpu_computeValidationError(pass, "GPUDispatch skipped: missing compute bind group");
     return;
   }
@@ -560,10 +570,7 @@ GPUDispatchIndirect(GPUComputePassEncoder *pass,
     gpu_computeValidationError(pass, "GPUDispatchIndirect skipped: no compute pipeline bound");
     return;
   }
-  if (!gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
-                                    pass->_boundGroupLayouts,
-                                    GPU_ENCODER_MAX_BIND_GROUPS,
-                                    pass->_requiredBindGroupMask)) {
+  if (!gpu_computeBindingsComplete(pass)) {
     gpu_computeValidationError(pass, "GPUDispatchIndirect skipped: missing compute bind group");
     return;
   }
@@ -599,10 +606,7 @@ GPUMultiDispatchIndirect(GPUComputePassEncoder *pass,
     );
     return;
   }
-  if (!gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
-                                    pass->_boundGroupLayouts,
-                                    GPU_ENCODER_MAX_BIND_GROUPS,
-                                    pass->_requiredBindGroupMask)) {
+  if (!gpu_computeBindingsComplete(pass)) {
     gpu_computeValidationError(
       pass,
       "GPUMultiDispatchIndirect skipped: missing compute bind group"

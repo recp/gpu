@@ -309,6 +309,9 @@ if(GPU_BUILD_TESTS)
     tests/api/shader_sampler.c
   )
   target_link_libraries(gpu-api-test PRIVATE gpu)
+  target_compile_definitions(gpu-api-test PRIVATE
+    GPU_BUILD_WITH_VALIDATION=$<BOOL:${GPU_BUILD_WITH_VALIDATION}>
+  )
   set_target_properties(gpu-api-test PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED YES
@@ -704,6 +707,28 @@ if(GPU_BUILD_BENCHMARKS)
     target_compile_options(gpu-pipeline-stress-bench PRIVATE -Wall -Wextra)
   endif()
 
+  add_executable(gpu-validation-bench
+    benchmarks/bench.c
+    benchmarks/validation.c
+  )
+  target_link_libraries(gpu-validation-bench PRIVATE gpu)
+  target_include_directories(gpu-validation-bench PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_compile_definitions(gpu-validation-bench PRIVATE
+    GPU_BUILD_WITH_VALIDATION=$<BOOL:${GPU_BUILD_WITH_VALIDATION}>
+  )
+  set_target_properties(gpu-validation-bench PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_options(gpu-validation-bench PRIVATE /W3)
+  else()
+    target_compile_options(gpu-validation-bench PRIVATE -Wall -Wextra)
+  endif()
+
   if(WIN32)
     foreach(benchmark_target
             gpu-dispatch-bench
@@ -711,7 +736,8 @@ if(GPU_BUILD_BENCHMARKS)
             gpu-state-churn-bench
             gpu-binding-churn-bench
             gpu-upload-heavy-bench
-            gpu-pipeline-stress-bench)
+            gpu-pipeline-stress-bench
+            gpu-validation-bench)
       foreach(runtime_target us ds)
         if(TARGET ${runtime_target})
           add_custom_command(TARGET ${benchmark_target} POST_BUILD

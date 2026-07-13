@@ -342,6 +342,7 @@ check_compute_dispatch_validation_calls(GPUDevice *device) {
   GPUComputePassEncoder pass = {0};
   GPUBuffer indirectBuffer = {0};
   GPUBuffer wrongUsageBuffer = {0};
+  GPUValidationMode savedValidationMode;
   int ok = 0;
 
   api = gpuDeviceApi(device);
@@ -393,6 +394,17 @@ check_compute_dispatch_validation_calls(GPUDevice *device) {
 
   pass._hasPipeline = true;
   pass._pipelineLayout = pipelineLayout;
+  savedValidationMode = device->runtimeConfig.validationMode;
+
+  device->runtimeConfig.validationMode = GPU_VALIDATION_OFF;
+  pass._requiredBindGroupMask = 1u;
+  GPUDispatch(&pass, 1u, 1u, 1u);
+  if (gComputeDispatchCalls != 1u) {
+    fprintf(stderr, "compute dispatch runtime-off fast path failed\n");
+    goto cleanup;
+  }
+  gComputeDispatchCalls = 0u;
+  device->runtimeConfig.validationMode = GPU_VALIDATION_BASIC;
 
   pass._requiredBindGroupMask = 0u;
   GPUDispatch(&pass, 1u, 1u, 1u);
@@ -409,12 +421,24 @@ check_compute_dispatch_validation_calls(GPUDevice *device) {
   GPUDispatch(&pass, 1u, 1u, 1u);
   GPUDispatchIndirect(&pass, &indirectBuffer, 0u);
   GPUMultiDispatchIndirect(&pass, &indirectBuffer, 0u, 2u, 12u);
+#if GPU_BUILD_WITH_VALIDATION
   if (gComputeDispatchCalls != 0u ||
       gComputeDispatchIndirectCalls != 0u ||
       gComputeMultiDispatchIndirectCalls != 0u) {
     fprintf(stderr, "compute dispatch validation called backend without required bind group\n");
     goto cleanup;
   }
+#else
+  if (gComputeDispatchCalls != 1u ||
+      gComputeDispatchIndirectCalls != 1u ||
+      gComputeMultiDispatchIndirectCalls != 1u) {
+    fprintf(stderr, "compiled-out compute validation did not reach backend\n");
+    goto cleanup;
+  }
+#endif
+  gComputeDispatchCalls = 0u;
+  gComputeDispatchIndirectCalls = 0u;
+  gComputeMultiDispatchIndirectCalls = 0u;
 
   pass._boundGroupLayouts[0] = layout;
   GPUDispatch(&pass, 0u, 1u, 1u);
@@ -449,6 +473,7 @@ check_compute_dispatch_validation_calls(GPUDevice *device) {
   ok = 1;
 
 cleanup:
+  device->runtimeConfig.validationMode = savedValidationMode;
   api->compute.dispatch = oldDispatch;
   api->compute.dispatchIndirect = oldDispatchIndirect;
   api->compute.multiDispatchIndirect = oldMultiDispatchIndirect;

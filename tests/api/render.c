@@ -1807,7 +1807,9 @@ check_render_draw_validation_calls(GPUDevice *device) {
   GPUBuffer                    indirectBuffer  = {0};
   GPUBuffer                    wrongUsageBuffer = {0};
   GPUFrameStats                savedFrameStats;
+  GPUValidationMode            savedValidationMode;
   uint64_t                     oldEnabledFeatureMask;
+  uint64_t                     drawCallsBeforeMissing;
   bool                         savedStatsEnabled;
   int                          ok = 0;
 
@@ -1881,6 +1883,18 @@ check_render_draw_validation_calls(GPUDevice *device) {
   pass._hasPipeline = true;
   pass._pipelineLayout = pipelineLayout;
   pass._primitiveType = GPUPrimitiveTypeTriangle;
+  savedValidationMode = device->runtimeConfig.validationMode;
+
+  device->runtimeConfig.validationMode = GPU_VALIDATION_OFF;
+  pass._requiredBindGroupMask = 1u;
+  GPUDraw(&pass, 3u, 1u, 0u, 0u);
+  if (gRenderDrawCalls != 1u) {
+    fprintf(stderr, "render draw runtime-off fast path failed\n");
+    goto cleanup;
+  }
+  gRenderDrawCalls = 0u;
+  device->currentFrameStats.drawCalls = 0u;
+  device->runtimeConfig.validationMode = GPU_VALIDATION_BASIC;
 
   pass._requiredBindGroupMask = 0u;
   GPUDraw(&pass, 3u, 1u, 0u, 0u);
@@ -1892,6 +1906,7 @@ check_render_draw_validation_calls(GPUDevice *device) {
   gRenderDrawCalls = 0u;
   gRenderDrawIndirectCalls = 0u;
 
+  drawCallsBeforeMissing = device->currentFrameStats.drawCalls;
   pass._requiredBindGroupMask = 1u;
   GPUDraw(&pass, 3u, 1u, 0u, 0u);
   GPUDrawIndexed(&pass, 3u, 1u, 0u, 0, 0u);
@@ -1899,6 +1914,7 @@ check_render_draw_validation_calls(GPUDevice *device) {
   GPUDrawIndexedIndirect(&pass, &indirectBuffer, 0u);
   GPUMultiDrawIndirect(&pass, &indirectBuffer, 0u, 2u, 16u);
   GPUMultiDrawIndexedIndirect(&pass, &indirectBuffer, 0u, 2u, 20u);
+#if GPU_BUILD_WITH_VALIDATION
   if (gRenderDrawCalls != 0u ||
       gRenderDrawIndexedCalls != 0u ||
       gRenderDrawIndirectCalls != 0u ||
@@ -1908,6 +1924,24 @@ check_render_draw_validation_calls(GPUDevice *device) {
     fprintf(stderr, "render draw validation called backend without required bind group\n");
     goto cleanup;
   }
+#else
+  if (gRenderDrawCalls != 1u ||
+      gRenderDrawIndexedCalls != 0u ||
+      gRenderDrawIndirectCalls != 3u ||
+      gRenderDrawIndexedIndirectCalls != 0u ||
+      gRenderMultiDrawIndirectCalls != 0u ||
+      gRenderMultiDrawIndexedIndirectCalls != 0u) {
+    fprintf(stderr, "compiled-out render validation did not reach backend\n");
+    goto cleanup;
+  }
+#endif
+  gRenderDrawCalls = 0u;
+  gRenderDrawIndexedCalls = 0u;
+  gRenderDrawIndirectCalls = 0u;
+  gRenderDrawIndexedIndirectCalls = 0u;
+  gRenderMultiDrawIndirectCalls = 0u;
+  gRenderMultiDrawIndexedIndirectCalls = 0u;
+  device->currentFrameStats.drawCalls = drawCallsBeforeMissing;
 
   pass._boundGroupLayouts[0] = layout;
   GPUDraw(&pass, 0u, 1u, 0u, 0u);
@@ -1983,6 +2017,7 @@ check_render_draw_validation_calls(GPUDevice *device) {
 cleanup:
   device->currentFrameStats                    = savedFrameStats;
   device->runtimeConfig.enableStats           = savedStatsEnabled;
+  device->runtimeConfig.validationMode         = savedValidationMode;
   device->enabledFeatureMask                  = oldEnabledFeatureMask;
   api->rce.drawPrimitives                     = oldDraw;
   api->rce.drawIndexedPrims                   = oldDrawIndexed;

@@ -165,10 +165,17 @@ void
 gpuDeviceRecordHotPathFree(GPUDevice *device, uint64_t sizeBytes);
 
 #if GPU_BUILD_WITH_VALIDATION
+static inline bool
+gpuDeviceValidationEnabled(const GPUDevice *device) {
+  return device &&
+         device->runtimeConfig.validationMode != GPU_VALIDATION_OFF;
+}
+
 GPU_HIDE
 void
 gpuDeviceRecordValidationError(GPUDevice *device, const char *message);
 #else
+#  define gpuDeviceValidationEnabled(device) false
 #  define gpuDeviceRecordValidationError(device, message) ((void)0)
 #endif
 

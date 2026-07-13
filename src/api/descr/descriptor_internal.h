@@ -129,11 +129,13 @@ gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout *pipelineLayout,
                                       GPUShaderStageFlags fallbackStages,
                                       uint32_t *outRequiredGroupMask);
 
+#if GPU_BUILD_WITH_VALIDATION
 GPU_HIDE
 int
 gpuPipelineLayoutMaskIsBound(GPUPipelineLayout *pipelineLayout,
                              GPUBindGroupLayout * const *boundLayouts,
                              uint32_t boundLayoutCount,
                              uint32_t requiredGroupMask);
+#endif
 
 #endif /* gpu_descriptor_internal_h */

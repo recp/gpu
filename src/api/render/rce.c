@@ -42,8 +42,21 @@ gpu_renderValidationError(const GPURenderPassEncoder *pass,
                           const char                   *message) {
   gpuDeviceRecordValidationError(gpu_renderPassDevice(pass), message);
 }
+
+static inline bool
+gpu_renderBindingsComplete(const GPURenderPassEncoder *pass) {
+  if (!gpuDeviceValidationEnabled(gpu_renderPassDevice(pass))) {
+    return true;
+  }
+
+  return gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
+                                      pass->_boundGroupLayouts,
+                                      GPU_ENCODER_MAX_BIND_GROUPS,
+                                      pass->_requiredBindGroupMask);
+}
 #else
 #  define gpu_renderValidationError(pass, message) ((void)0)
+#  define gpu_renderBindingsComplete(pass) true
 #endif
 
 static GPUPrimitiveType
@@ -560,10 +573,7 @@ GPUDraw(GPURenderPassEncoder *pass,
     gpu_renderValidationError(pass, "GPUDraw skipped: no render pipeline bound");
     return;
   }
-  if (!gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
-                                    pass->_boundGroupLayouts,
-                                    GPU_ENCODER_MAX_BIND_GROUPS,
-                                    pass->_requiredBindGroupMask)) {
+  if (!gpu_renderBindingsComplete(pass)) {
     gpu_renderValidationError(pass, "GPUDraw skipped: missing render bind group");
     return;
   }
@@ -599,10 +609,7 @@ GPUDrawIndexed(GPURenderPassEncoder *pass,
     gpu_renderValidationError(pass, "GPUDrawIndexed skipped: no render pipeline bound");
     return;
   }
-  if (!gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
-                                    pass->_boundGroupLayouts,
-                                    GPU_ENCODER_MAX_BIND_GROUPS,
-                                    pass->_requiredBindGroupMask)) {
+  if (!gpu_renderBindingsComplete(pass)) {
     gpu_renderValidationError(pass, "GPUDrawIndexed skipped: missing render bind group");
     return;
   }
@@ -644,10 +651,7 @@ GPUDrawIndirect(GPURenderPassEncoder *pass,
     gpu_renderValidationError(pass, "GPUDrawIndirect skipped: no render pipeline bound");
     return;
   }
-  if (!gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
-                                    pass->_boundGroupLayouts,
-                                    GPU_ENCODER_MAX_BIND_GROUPS,
-                                    pass->_requiredBindGroupMask)) {
+  if (!gpu_renderBindingsComplete(pass)) {
     gpu_renderValidationError(pass, "GPUDrawIndirect skipped: missing render bind group");
     return;
   }
@@ -680,10 +684,7 @@ GPUDrawIndexedIndirect(GPURenderPassEncoder *pass,
     gpu_renderValidationError(pass, "GPUDrawIndexedIndirect skipped: no render pipeline bound");
     return;
   }
-  if (!gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
-                                    pass->_boundGroupLayouts,
-                                    GPU_ENCODER_MAX_BIND_GROUPS,
-                                    pass->_requiredBindGroupMask)) {
+  if (!gpu_renderBindingsComplete(pass)) {
     gpu_renderValidationError(pass, "GPUDrawIndexedIndirect skipped: missing render bind group");
     return;
   }
@@ -719,10 +720,7 @@ GPUMultiDrawIndirect(GPURenderPassEncoder *pass,
                               "GPUMultiDrawIndirect skipped: no render pipeline bound");
     return;
   }
-  if (!gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
-                                    pass->_boundGroupLayouts,
-                                    GPU_ENCODER_MAX_BIND_GROUPS,
-                                    pass->_requiredBindGroupMask)) {
+  if (!gpu_renderBindingsComplete(pass)) {
     gpu_renderValidationError(pass,
                               "GPUMultiDrawIndirect skipped: missing render bind group");
     return;
@@ -784,10 +782,7 @@ GPUMultiDrawIndexedIndirect(GPURenderPassEncoder *pass,
     );
     return;
   }
-  if (!gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
-                                    pass->_boundGroupLayouts,
-                                    GPU_ENCODER_MAX_BIND_GROUPS,
-                                    pass->_requiredBindGroupMask)) {
+  if (!gpu_renderBindingsComplete(pass)) {
     gpu_renderValidationError(
       pass,
       "GPUMultiDrawIndexedIndirect skipped: missing render bind group"

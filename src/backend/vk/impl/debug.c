@@ -15,7 +15,62 @@
  */
 
 #include "debug.h"
-#include <signal.h>
+
+static const char *
+vk_debugSeverityName(VkDebugUtilsMessageSeverityFlagBitsEXT severity) {
+  if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+    return "ERROR";
+  }
+  if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+    return "WARNING";
+  }
+  if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
+    return "INFO";
+  }
+  return "VERBOSE";
+}
+
+static const char *
+vk_debugTypeName(VkDebugUtilsMessageTypeFlagsEXT type) {
+  if ((type & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) &&
+      (type & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)) {
+    return "VALIDATION|PERFORMANCE";
+  }
+  if (type & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) {
+    return "VALIDATION";
+  }
+  if (type & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT) {
+    return "PERFORMANCE";
+  }
+  return "GENERAL";
+}
+
+static void
+vk_debugLog(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+            const char                                *format,
+            ...) {
+  va_list args;
+
+  va_start(args, format);
+#if defined(__ANDROID__)
+  int priority;
+
+  if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+    priority = ANDROID_LOG_ERROR;
+  } else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+    priority = ANDROID_LOG_WARN;
+  } else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
+    priority = ANDROID_LOG_INFO;
+  } else {
+    priority = ANDROID_LOG_VERBOSE;
+  }
+  __android_log_vprint(priority, APP_SHORT_NAME, format, args);
+#else
+  vfprintf(stderr, format, args);
+  fflush(stderr);
+#endif
+  va_end(args);
+}
 
 VKAPI_ATTR
 VkBool32
@@ -24,128 +79,76 @@ vk__debug_messengercb(VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverit
                       VkDebugUtilsMessageTypeFlagsEXT             messageType,
                       const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
                       void                                       *pUserData) {
-  GPUInstance   *inst;
-  char           tmp_message[500];
-  char           prefix[64] = "";
-  char          *message;
+  GPUInstance *inst;
 
-  if (!(inst = pUserData)) {
+  if (!(inst = pUserData) || !pCallbackData) {
     return false;
   }
 
-  assert((message = malloc(strlen(pCallbackData->pMessage) + 5000)));
-
-  if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
-    strcat(prefix, "VERBOSE : ");
-  } else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
-    strcat(prefix, "INFO : ");
-  } else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-    strcat(prefix, "WARNING : ");
-  } else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-    strcat(prefix, "ERROR : ");
+  if (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) {
+    inst->validationError = 1;
   }
 
-  if (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT) {
-    strcat(prefix, "GENERAL");
-  } else {
-    if (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) {
-      strcat(prefix, "VALIDATION");
-      inst->validationError = 1;
-    }
-    if (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT) {
-      if (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) {
-        strcat(prefix, "|");
-      }
-      strcat(prefix, "PERFORMANCE");
-    }
-  }
-
-  sprintf(message, "%s - Message Id Number: %d | Message Id Name: %s\n\t%s\n",
-          prefix,
-          pCallbackData->messageIdNumber,
-          pCallbackData->pMessageIdName == NULL ? "" : pCallbackData->pMessageIdName,
-          pCallbackData->pMessage);
+  vk_debugLog(messageSeverity,
+              "%s : %s - Message Id Number: %d | Message Id Name: %s\n"
+              "\t%s\n",
+              vk_debugSeverityName(messageSeverity),
+              vk_debugTypeName(messageType),
+              pCallbackData->messageIdNumber,
+              pCallbackData->pMessageIdName ? pCallbackData->pMessageIdName : "",
+              pCallbackData->pMessage ? pCallbackData->pMessage : "");
 
   if (pCallbackData->objectCount > 0) {
-    tmp_message[0] = '\0';
-
-    sprintf(tmp_message, "\n\tObjects - %d\n", pCallbackData->objectCount);
-    strcat(message, tmp_message);
+    vk_debugLog(messageSeverity,
+                "\n\tObjects - %u\n",
+                pCallbackData->objectCount);
     for (uint32_t object = 0; object < pCallbackData->objectCount; ++object) {
-      sprintf(tmp_message, "\t\tObject[%d] - %s",
-              object,
-              string_VkObjectType(pCallbackData->pObjects[object].objectType));
-      strcat(message, tmp_message);
+      const VkDebugUtilsObjectNameInfoEXT *info;
+      VkObjectType                         type;
 
-      VkObjectType t = pCallbackData->pObjects[object].objectType;
-      if (t == VK_OBJECT_TYPE_INSTANCE
-          || t == VK_OBJECT_TYPE_PHYSICAL_DEVICE
-          || t == VK_OBJECT_TYPE_DEVICE
-          || t == VK_OBJECT_TYPE_COMMAND_BUFFER
-          || t == VK_OBJECT_TYPE_QUEUE) {
-        sprintf(tmp_message, ", Handle %p", (void *)(uintptr_t)(pCallbackData->pObjects[object].objectHandle));
-        strcat(message, tmp_message);
+      info = &pCallbackData->pObjects[object];
+      type = info->objectType;
+      vk_debugLog(messageSeverity,
+                  "\t\tObject[%u] - %s",
+                  object,
+                  string_VkObjectType(type));
+      if (type == VK_OBJECT_TYPE_INSTANCE ||
+          type == VK_OBJECT_TYPE_PHYSICAL_DEVICE ||
+          type == VK_OBJECT_TYPE_DEVICE ||
+          type == VK_OBJECT_TYPE_COMMAND_BUFFER ||
+          type == VK_OBJECT_TYPE_QUEUE) {
+        vk_debugLog(messageSeverity,
+                    ", Handle %p",
+                    (void *)(uintptr_t)info->objectHandle);
       } else {
-        sprintf(tmp_message, ", Handle Ox%" PRIx64, (pCallbackData->pObjects[object].objectHandle));
-        strcat(message, tmp_message);
+        vk_debugLog(messageSeverity,
+                    ", Handle 0x%" PRIx64,
+                    info->objectHandle);
       }
-
-      if (pCallbackData->pObjects[object].pObjectName
-          && strlen(pCallbackData->pObjects[object].pObjectName) > 0) {
-        sprintf(tmp_message, ", Name \"%s\"", pCallbackData->pObjects[object].pObjectName);
-        strcat(message, tmp_message);
+      if (info->pObjectName && info->pObjectName[0] != '\0') {
+        vk_debugLog(messageSeverity, ", Name \"%s\"", info->pObjectName);
       }
-      sprintf(tmp_message, "\n");
-      strcat(message, tmp_message);
+      vk_debugLog(messageSeverity, "\n");
     }
   }
 
   if (pCallbackData->cmdBufLabelCount > 0) {
-    tmp_message[0] = '\0';
+    vk_debugLog(messageSeverity,
+                "\n\tCommand Buffer Labels - %u\n",
+                pCallbackData->cmdBufLabelCount);
+    for (uint32_t i = 0; i < pCallbackData->cmdBufLabelCount; ++i) {
+      const VkDebugUtilsLabelEXT *label;
 
-    sprintf(tmp_message, "\n\tCommand Buffer Labels - %d\n", pCallbackData->cmdBufLabelCount);
-    strcat(message, tmp_message);
-    for (uint32_t cmd_buf_label = 0; cmd_buf_label < pCallbackData->cmdBufLabelCount; ++cmd_buf_label) {
-      sprintf(tmp_message, "\t\tLabel[%d] - %s { %f, %f, %f, %f}\n",
-              cmd_buf_label,
-              pCallbackData->pCmdBufLabels[cmd_buf_label].pLabelName,
-              pCallbackData->pCmdBufLabels[cmd_buf_label].color[0],
-              pCallbackData->pCmdBufLabels[cmd_buf_label].color[1],
-              pCallbackData->pCmdBufLabels[cmd_buf_label].color[2],
-              pCallbackData->pCmdBufLabels[cmd_buf_label].color[3]);
-      strcat(message, tmp_message);
+      label = &pCallbackData->pCmdBufLabels[i];
+      vk_debugLog(messageSeverity,
+                  "\t\tLabel[%u] - %s { %f, %f, %f, %f}\n",
+                  i,
+                  label->pLabelName ? label->pLabelName : "",
+                  label->color[0],
+                  label->color[1],
+                  label->color[2],
+                  label->color[3]);
     }
   }
-
-#ifdef _WIN32
-
-  in_callback = true;
-  if (!demo->suppress_popups) MessageBox(NULL, message, "Alert", MB_OK);
-  in_callback = false;
-
-#elif defined(ANDROID)
-
-  if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
-    __android_log_print(ANDROID_LOG_INFO, APP_SHORT_NAME, "%s", message);
-  } else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-    __android_log_print(ANDROID_LOG_WARN, APP_SHORT_NAME, "%s", message);
-  } else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-    __android_log_print(ANDROID_LOG_ERROR, APP_SHORT_NAME, "%s", message);
-  } else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
-    __android_log_print(ANDROID_LOG_VERBOSE, APP_SHORT_NAME, "%s", message);
-  } else {
-    __android_log_print(ANDROID_LOG_INFO, APP_SHORT_NAME, "%s", message);
-  }
-
-#else
-
-  printf("%s\n", message);
-  fflush(stdout);
-
-#endif
-
-  free(message);
-
-  // Don't bail out, but keep going.
   return false;
 }

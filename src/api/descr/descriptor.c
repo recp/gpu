@@ -429,6 +429,7 @@ gpuPipelineLayoutAcceptsBindGroup(GPUPipelineLayout *pipelineLayout,
   return pipelinePriv->bindGroupLayouts[groupIndex] == groupLayout;
 }
 
+#if GPU_BUILD_WITH_VALIDATION
 GPU_HIDE
 int
 gpuPipelineLayoutMaskIsBound(GPUPipelineLayout *pipelineLayout,
@@ -458,6 +459,7 @@ gpuPipelineLayoutMaskIsBound(GPUPipelineLayout *pipelineLayout,
 
   return (requiredGroupMask >> priv->bindGroupLayoutCount) == 0u;
 }
+#endif
 
 static int
 gpu_bindStageIsValid(GPUBindStage stage);
