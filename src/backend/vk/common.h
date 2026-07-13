@@ -397,18 +397,28 @@ struct GPUCommandBufferVk {
   bool                      copyDebugLabelActive;
 };
 
+enum {
+  GPU_VK_TRANSFER_SLOT_COUNT = 8
+};
+
+typedef struct GPUTransferSlotVk {
+  GPUBuffer       *uploadStaging;
+  VkCommandBuffer  command;
+  VkFence          fence;
+  uint64_t         uploadCapacity;
+  bool             pending;
+} GPUTransferSlotVk;
+
 struct GPUCommandQueueVk {
   GPUCommandQueue    *queue;
   GPUCommandBufferVk *commands;
   GPUCommandBufferVk *freeCommands;
   GPUCommandBufferVk *pendingHead;
   GPUCommandBufferVk *pendingTail;
-  GPUBuffer          *uploadStaging;
   GPUBuffer          *readbackStaging;
+  GPUTransferSlotVk   transferSlots[GPU_VK_TRANSFER_SLOT_COUNT];
   VkQueue             queRaw;
   VkCommandPool       commandPool;
-  VkCommandBuffer     transferCommand;
-  VkFence             transferFence;
 #if defined(_WIN32) || defined(WIN32)
   HANDLE              worker;
   CRITICAL_SECTION    poolLock;
@@ -422,12 +432,12 @@ struct GPUCommandQueueVk {
   uint32_t            queueIndex;
   uint32_t            timestampValidBits;
   uint32_t            inFlightCount;
-  uint64_t            uploadCapacity;
+  uint32_t            activeTransferSlot;
+  uint32_t            nextTransferSlot;
   uint64_t            readbackCapacity;
   bool                stopping;
   bool                workerStarted;
   bool                transferOpen;
-  bool                transferPending;
 };
 
 typedef struct GPUSurfaceVk {
