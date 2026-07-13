@@ -349,6 +349,7 @@ if(GPU_BUILD_TESTS)
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/cube_texture.us"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/line_texture.us"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/volume_texture.us"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/descriptor_arrays.us"
   )
 
   if(GPU_BUILD_VULKAN)
@@ -362,6 +363,7 @@ if(GPU_BUILD_TESTS)
               "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/cube_texture.us"
               "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/line_texture.us"
               "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/volume_texture.us"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/descriptor_arrays.us"
               vulkan
     )
   endif()

@@ -571,7 +571,10 @@ gpu_appendShaderEntryResourceInfo(GPUShaderLibrary *library,
     return 0;
   }
 
-  resourceArrayCount = 1u;
+  resourceArrayCount = resource->descriptor_count;
+  if (resourceArrayCount == 0u) {
+    return 0;
+  }
   list = library->_entryResources;
   for (uint32_t i = 0; list && i < list->count; i++) {
     GPUShaderEntryResourceInfo *entry = &list->entries[i];
@@ -581,6 +584,9 @@ gpu_appendShaderEntryResourceInfo(GPUShaderLibrary *library,
         entry->resource.groupIndex == groupIndex &&
         entry->resource.binding == binding &&
         entry->resource.bindingType == bindingType) {
+      if (entry->resource.arrayCount != resourceArrayCount) {
+        return 0;
+      }
       entry->resource.visibility |= visibility;
       entry->resource.hasDynamicOffset = entry->resource.hasDynamicOffset ||
                                          resource->dynamic_offset != 0u;
@@ -642,6 +648,7 @@ gpu_appendShaderResourceReflection(GPUShaderLibrary *library,
   uint32_t binding;
   uint32_t backendBinding;
   uint32_t groupIndex;
+  uint32_t resourceArrayCount;
   size_t nextCount;
 
   if (!library || !resource || visibility == 0) {
@@ -649,6 +656,10 @@ gpu_appendShaderResourceReflection(GPUShaderLibrary *library,
   }
 
   backend = library->_api ? library->_api->backend : GPU_BACKEND_NULL;
+  resourceArrayCount = resource->descriptor_count;
+  if (resourceArrayCount == 0u) {
+    return 0;
+  }
   if (!gpu_shaderPublicBindingFromUSLResource(resource, &groupIndex, &binding) ||
       !gpu_shaderBackendBindingFromUSLResource(backend,
                                                resource,
@@ -674,6 +685,9 @@ gpu_appendShaderResourceReflection(GPUShaderLibrary *library,
     if (resources[i].groupIndex == groupIndex &&
         resources[i].binding == binding &&
         resources[i].bindingType == bindingType) {
+      if (resources[i].arrayCount != resourceArrayCount) {
+        return 0;
+      }
       resources[i].visibility |= visibility;
       resources[i].hasDynamicOffset = resources[i].hasDynamicOffset ||
                                       resource->dynamic_offset != 0u;
@@ -706,7 +720,7 @@ gpu_appendShaderResourceReflection(GPUShaderLibrary *library,
   resources[reflection->resourceCount].binding = binding;
   resources[reflection->resourceCount].bindingType = bindingType;
   resources[reflection->resourceCount].visibility = visibility;
-  resources[reflection->resourceCount].arrayCount = 1u;
+  resources[reflection->resourceCount].arrayCount = resourceArrayCount;
   resources[reflection->resourceCount].hasDynamicOffset =
     resource->dynamic_offset != 0u;
   reflection->resourceCount++;

@@ -32,6 +32,32 @@ shader_reflection_has_resource(const GPUShaderReflection *reflection,
 }
 
 static int
+shader_reflection_has_array_resource(const GPUShaderReflection *reflection,
+                                     GPUBindingType bindingType,
+                                     GPUShaderStageFlags visibility,
+                                     uint32_t groupIndex,
+                                     uint32_t binding,
+                                     uint32_t arrayCount) {
+  if (!reflection || (!reflection->pResources && reflection->resourceCount > 0u)) {
+    return 0;
+  }
+
+  for (uint32_t i = 0; i < reflection->resourceCount; i++) {
+    const GPUShaderResourceReflection *item = &reflection->pResources[i];
+
+    if (item->groupIndex == groupIndex &&
+        item->binding == binding &&
+        item->bindingType == bindingType &&
+        item->visibility == visibility &&
+        item->arrayCount == arrayCount) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+static int
 layout_has_typed_entry(const GPUBindGroupLayoutEntry *entries,
                        uint32_t count,
                        GPUBindStage stage,
@@ -1078,8 +1104,104 @@ check_usl_shader_library_helper(GPUDevice *device,
   return 1;
 }
 
+static int
+check_descriptor_array_reflection(GPUDevice *device, const char *bytecodePath) {
+  GPUBindGroupLayout              *layouts[2] = {0};
+  const GPUBindGroupLayoutEntry   *entries;
+  GPUPipelineLayout               *pipelineLayout;
+  GPUShaderLibrary                *library;
+  GPUShaderReflection              reflection;
+  uint64_t                         bytecodeSize;
+  uint32_t                         entryCount;
+  uint32_t                         layoutCount;
+  void                            *bytecode;
+  int                              ok;
+
+  bytecode = gpu_test_read_file(bytecodePath, &bytecodeSize);
+  if (!bytecode) {
+    fprintf(stderr, "failed to read descriptor array bytecode: %s\n", bytecodePath);
+    return 0;
+  }
+
+  library       = NULL;
+  pipelineLayout = NULL;
+  memset(&reflection, 0, sizeof(reflection));
+  if (GPUCreateShaderLibraryFromUSL(device,
+                                    bytecode,
+                                    bytecodeSize,
+                                    &library) != GPU_OK ||
+      !library ||
+      GPUGetShaderReflection(library, &reflection) != GPU_OK) {
+    fprintf(stderr, "failed to reflect descriptor array shader\n");
+    ok = 0;
+    goto cleanup;
+  }
+
+  layoutCount = (uint32_t)GPU_ARRAY_LEN(layouts);
+  ok = reflection.resourceCount == 3u &&
+       shader_reflection_has_array_resource(&reflection,
+                                            GPU_BINDING_SAMPLED_TEXTURE,
+                                            GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                            1u,
+                                            0u,
+                                            2u) &&
+       shader_reflection_has_array_resource(&reflection,
+                                            GPU_BINDING_SAMPLED_TEXTURE,
+                                            GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                            1u,
+                                            1u,
+                                            1u) &&
+       shader_reflection_has_array_resource(&reflection,
+                                            GPU_BINDING_SAMPLER,
+                                            GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                            1u,
+                                            3u,
+                                            2u) &&
+       GPUCreateBindGroupLayoutsFromReflection(device,
+                                               library,
+                                               &layoutCount,
+                                               layouts) == GPU_OK &&
+       layoutCount == (uint32_t)GPU_ARRAY_LEN(layouts) &&
+       layouts[0] != NULL &&
+       layouts[1] != NULL &&
+       GPUCreatePipelineLayoutFromReflection(device,
+                                             library,
+                                             layoutCount,
+                                             layouts,
+                                             &pipelineLayout) == GPU_OK &&
+       pipelineLayout != NULL;
+  if (!ok) {
+    fprintf(stderr, "descriptor array reflection contract mismatch\n");
+    goto cleanup;
+  }
+
+  entries = GPUGetBindGroupLayoutEntries(layouts[1], &entryCount);
+  ok = entries &&
+       entryCount == 3u &&
+       entries[0].binding == 0u &&
+       entries[0].arrayCount == 2u &&
+       entries[1].binding == 1u &&
+       entries[1].arrayCount == 1u &&
+       entries[2].binding == 3u &&
+       entries[2].arrayCount == 2u;
+  if (!ok) {
+    fprintf(stderr, "descriptor array layout contract mismatch\n");
+  }
+
+cleanup:
+  GPUDestroyPipelineLayout(pipelineLayout);
+  GPUDestroyBindGroupLayout(layouts[1]);
+  GPUDestroyBindGroupLayout(layouts[0]);
+  GPUFreeShaderReflection(&reflection);
+  GPUDestroyShaderLibrary(library);
+  free(bytecode);
+  return ok;
+}
+
 int
-gpu_test_shader(GPUDevice *device, const char *bytecodePath) {
+gpu_test_shader(GPUDevice *device,
+                const char *bytecodePath,
+                const char *descriptorArrayBytecodePath) {
   uint64_t bytecodeSize;
   void *bytecode;
   int ok;
@@ -1095,7 +1217,8 @@ gpu_test_shader(GPUDevice *device, const char *bytecodePath) {
                                       bytecodeSize) &&
        check_usl_shader_library_helper(device,
                                        bytecode,
-                                       bytecodeSize);
+                                       bytecodeSize) &&
+       check_descriptor_array_reflection(device, descriptorArrayBytecodePath);
 
   free(bytecode);
   return ok;

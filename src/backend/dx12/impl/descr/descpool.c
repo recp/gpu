@@ -304,27 +304,40 @@ dx12__makeLayoutPlan(GPUBindGroupLayout * const *groups,
     resourceCount = 0u;
     samplerCount  = 0u;
     for (uint32_t i = 0u; i < entryCount; i++) {
-      if (entries[i].arrayCount != 1u) {
+      if (entries[i].arrayCount == 0u) {
         return GPU_ERROR_UNSUPPORTED;
       }
       if (entries[i].visibility == 0u || backendBindings[i] == UINT32_MAX) {
         return GPU_ERROR_INVALID_ARGUMENT;
+      }
+      if (entries[i].arrayCount - 1u >
+          UINT32_MAX - backendBindings[i]) {
+        return GPU_ERROR_UNSUPPORTED;
       }
       if (entries[i].immutableSampler) {
         if (entries[i].bindingType != GPU_BINDING_SAMPLER ||
             entries[i].hasDynamicOffset) {
           return GPU_ERROR_INVALID_ARGUMENT;
         }
-        plan.staticSamplerCount++;
+        if (entries[i].arrayCount > UINT32_MAX - plan.staticSamplerCount) {
+          return GPU_ERROR_UNSUPPORTED;
+        }
+        plan.staticSamplerCount += entries[i].arrayCount;
         continue;
       }
 
       switch (entries[i].bindingType) {
         case GPU_BINDING_UNIFORM_BUFFER:
         case GPU_BINDING_STORAGE_BUFFER:
-          plan.bindingCount++;
-          plan.rootParameterCount++;
-          plan.rootDwordCount += 2u;
+          if (entries[i].arrayCount > UINT32_MAX - plan.bindingCount ||
+              entries[i].arrayCount > UINT32_MAX - plan.rootParameterCount ||
+              entries[i].arrayCount >
+                (UINT32_MAX - plan.rootDwordCount) / 2u) {
+            return GPU_ERROR_UNSUPPORTED;
+          }
+          plan.bindingCount       += entries[i].arrayCount;
+          plan.rootParameterCount += entries[i].arrayCount;
+          plan.rootDwordCount     += entries[i].arrayCount * 2u;
           break;
         case GPU_BINDING_SAMPLED_TEXTURE:
         case GPU_BINDING_STORAGE_TEXTURE:
@@ -394,19 +407,26 @@ dx12__fillLayoutPlan(GPUBindGroupLayout * const *groups,
     for (uint32_t i = 0u; i < entryCount; i++) {
       if (entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER ||
           entries[i].bindingType == GPU_BINDING_STORAGE_BUFFER) {
-        native->bindings[bindingCursor].groupIndex    = groupIndex;
-        native->bindings[bindingCursor].binding       = backendBindings[i];
-        native->bindings[bindingCursor].rootParameter = rootCursor++;
-        native->bindings[bindingCursor].visibility    = entries[i].visibility;
-        native->bindings[bindingCursor].bindingType   = entries[i].bindingType;
-        bindingCursor++;
+        for (uint32_t arrayIndex = 0u;
+             arrayIndex < entries[i].arrayCount;
+             arrayIndex++) {
+          native->bindings[bindingCursor].groupIndex = groupIndex;
+          native->bindings[bindingCursor].binding =
+            backendBindings[i] + arrayIndex;
+          native->bindings[bindingCursor].rootParameter = rootCursor++;
+          native->bindings[bindingCursor].visibility = entries[i].visibility;
+          native->bindings[bindingCursor].bindingType = entries[i].bindingType;
+          bindingCursor++;
+        }
       } else if (entries[i].bindingType == GPU_BINDING_SAMPLED_TEXTURE ||
                  entries[i].bindingType == GPU_BINDING_STORAGE_TEXTURE) {
-        resourceTable->descriptorCount++;
+        resourceTable->descriptorCount += entries[i].arrayCount;
+        resourceTable->rangeCount++;
         resourceTable->visibility |= entries[i].visibility;
       } else if (entries[i].bindingType == GPU_BINDING_SAMPLER &&
                  !entries[i].immutableSampler) {
-        samplerTable->descriptorCount++;
+        samplerTable->descriptorCount += entries[i].arrayCount;
+        samplerTable->rangeCount++;
         samplerTable->visibility |= entries[i].visibility;
       }
     }
@@ -415,12 +435,12 @@ dx12__fillLayoutPlan(GPUBindGroupLayout * const *groups,
     if (resourceTable->descriptorCount > 0u) {
       resourceTable->rootParameter = rootCursor++;
       resourceTable->rangeOffset   = rangeCursor;
-      rangeCursor += resourceTable->descriptorCount;
+      rangeCursor += resourceTable->rangeCount;
     }
     if (samplerTable->descriptorCount > 0u) {
       samplerTable->rootParameter = rootCursor++;
       samplerTable->rangeOffset   = rangeCursor;
-      rangeCursor += samplerTable->descriptorCount;
+      rangeCursor += samplerTable->rangeCount;
     }
   }
 }
@@ -469,17 +489,21 @@ dx12__fillStaticSamplers(GPUBindGroupLayout * const        *groups,
       if (!entries[i].immutableSampler) {
         continue;
       }
-      if (cursor >= samplerCount ||
-          !dx12_fillStaticSamplerDesc(&entries[i].immutableSamplerDesc,
-                                      backendBindings[i],
-                                      groupIndex,
-                                      dx12__shaderVisibility(
-                                        entries[i].visibility
-                                      ),
-                                      &samplers[cursor])) {
-        return false;
+      for (uint32_t arrayIndex = 0u;
+           arrayIndex < entries[i].arrayCount;
+           arrayIndex++) {
+        if (cursor >= samplerCount ||
+            !dx12_fillStaticSamplerDesc(&entries[i].immutableSamplerDesc,
+                                        backendBindings[i] + arrayIndex,
+                                        groupIndex,
+                                        dx12__shaderVisibility(
+                                          entries[i].visibility
+                                        ),
+                                        &samplers[cursor])) {
+          return false;
+        }
+        cursor++;
       }
-      cursor++;
     }
   }
 
@@ -527,24 +551,29 @@ dx12__fillRanges11(GPUBindGroupLayout * const *groups,
     const GPUDescriptorTableDX12  *resourceTable;
     const GPUDescriptorTableDX12  *samplerTable;
     uint32_t                       entryCount;
-    uint32_t                       resourceIndex;
-    uint32_t                       samplerIndex;
+    uint32_t                       resourceOffset;
+    uint32_t                       resourceRange;
+    uint32_t                       samplerOffset;
+    uint32_t                       samplerRange;
 
     entries = GPUGetBindGroupLayoutEntries(groups[groupIndex], &entryCount);
     backendBindings = gpuGetBindGroupLayoutBackendBindings(groups[groupIndex],
                                                            NULL);
     resourceTable = &native->resourceTables[groupIndex];
     samplerTable  = &native->samplerTables[groupIndex];
-    resourceIndex = 0u;
-    samplerIndex  = 0u;
+    resourceOffset = 0u;
+    resourceRange  = 0u;
+    samplerOffset  = 0u;
+    samplerRange   = 0u;
     for (uint32_t i = 0u; i < entryCount; i++) {
       D3D12_DESCRIPTOR_RANGE1 *range;
       uint32_t                 tableOffset;
 
       if (entries[i].bindingType == GPU_BINDING_SAMPLED_TEXTURE ||
           entries[i].bindingType == GPU_BINDING_STORAGE_TEXTURE) {
-        tableOffset = resourceIndex++;
-        range = &ranges[resourceTable->rangeOffset + tableOffset];
+        tableOffset = resourceOffset;
+        range = &ranges[resourceTable->rangeOffset + resourceRange++];
+        resourceOffset += entries[i].arrayCount;
         range->RangeType = entries[i].bindingType == GPU_BINDING_STORAGE_TEXTURE
                              ? D3D12_DESCRIPTOR_RANGE_TYPE_UAV
                              : D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
@@ -553,15 +582,16 @@ dx12__fillRanges11(GPUBindGroupLayout * const *groups,
                          : D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
       } else if (entries[i].bindingType == GPU_BINDING_SAMPLER &&
                  !entries[i].immutableSampler) {
-        tableOffset = samplerIndex++;
-        range = &ranges[samplerTable->rangeOffset + tableOffset];
+        tableOffset = samplerOffset;
+        range = &ranges[samplerTable->rangeOffset + samplerRange++];
+        samplerOffset += entries[i].arrayCount;
         range->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
         range->Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
       } else {
         continue;
       }
 
-      range->NumDescriptors                  = 1u;
+      range->NumDescriptors                  = entries[i].arrayCount;
       range->BaseShaderRegister              = backendBindings[i];
       range->RegisterSpace                   = groupIndex;
       range->OffsetInDescriptorsFromTableStart = tableOffset;
@@ -572,7 +602,7 @@ dx12__fillRanges11(GPUBindGroupLayout * const *groups,
         D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
       parameters[resourceTable->rootParameter]
         .DescriptorTable.NumDescriptorRanges =
-          resourceTable->descriptorCount;
+          resourceTable->rangeCount;
       parameters[resourceTable->rootParameter]
         .DescriptorTable.pDescriptorRanges =
           &ranges[resourceTable->rangeOffset];
@@ -583,7 +613,7 @@ dx12__fillRanges11(GPUBindGroupLayout * const *groups,
       parameters[samplerTable->rootParameter].ParameterType =
         D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
       parameters[samplerTable->rootParameter]
-        .DescriptorTable.NumDescriptorRanges = samplerTable->descriptorCount;
+        .DescriptorTable.NumDescriptorRanges = samplerTable->rangeCount;
       parameters[samplerTable->rootParameter]
         .DescriptorTable.pDescriptorRanges =
           &ranges[samplerTable->rangeOffset];
@@ -619,37 +649,43 @@ dx12__fillRanges10(GPUBindGroupLayout * const *groups,
     const GPUDescriptorTableDX12  *resourceTable;
     const GPUDescriptorTableDX12  *samplerTable;
     uint32_t                       entryCount;
-    uint32_t                       resourceIndex;
-    uint32_t                       samplerIndex;
+    uint32_t                       resourceOffset;
+    uint32_t                       resourceRange;
+    uint32_t                       samplerOffset;
+    uint32_t                       samplerRange;
 
     entries = GPUGetBindGroupLayoutEntries(groups[groupIndex], &entryCount);
     backendBindings = gpuGetBindGroupLayoutBackendBindings(groups[groupIndex],
                                                            NULL);
     resourceTable = &native->resourceTables[groupIndex];
     samplerTable  = &native->samplerTables[groupIndex];
-    resourceIndex = 0u;
-    samplerIndex  = 0u;
+    resourceOffset = 0u;
+    resourceRange  = 0u;
+    samplerOffset  = 0u;
+    samplerRange   = 0u;
     for (uint32_t i = 0u; i < entryCount; i++) {
       D3D12_DESCRIPTOR_RANGE *range;
       uint32_t                tableOffset;
 
       if (entries[i].bindingType == GPU_BINDING_SAMPLED_TEXTURE ||
           entries[i].bindingType == GPU_BINDING_STORAGE_TEXTURE) {
-        tableOffset = resourceIndex++;
-        range = &ranges[resourceTable->rangeOffset + tableOffset];
+        tableOffset = resourceOffset;
+        range = &ranges[resourceTable->rangeOffset + resourceRange++];
+        resourceOffset += entries[i].arrayCount;
         range->RangeType = entries[i].bindingType == GPU_BINDING_STORAGE_TEXTURE
                              ? D3D12_DESCRIPTOR_RANGE_TYPE_UAV
                              : D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
       } else if (entries[i].bindingType == GPU_BINDING_SAMPLER &&
                  !entries[i].immutableSampler) {
-        tableOffset = samplerIndex++;
-        range = &ranges[samplerTable->rangeOffset + tableOffset];
+        tableOffset = samplerOffset;
+        range = &ranges[samplerTable->rangeOffset + samplerRange++];
+        samplerOffset += entries[i].arrayCount;
         range->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
       } else {
         continue;
       }
 
-      range->NumDescriptors                  = 1u;
+      range->NumDescriptors                  = entries[i].arrayCount;
       range->BaseShaderRegister              = backendBindings[i];
       range->RegisterSpace                   = groupIndex;
       range->OffsetInDescriptorsFromTableStart = tableOffset;
@@ -660,7 +696,7 @@ dx12__fillRanges10(GPUBindGroupLayout * const *groups,
         D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
       parameters[resourceTable->rootParameter]
         .DescriptorTable.NumDescriptorRanges =
-          resourceTable->descriptorCount;
+          resourceTable->rangeCount;
       parameters[resourceTable->rootParameter]
         .DescriptorTable.pDescriptorRanges =
           &ranges[resourceTable->rangeOffset];
@@ -671,7 +707,7 @@ dx12__fillRanges10(GPUBindGroupLayout * const *groups,
       parameters[samplerTable->rootParameter].ParameterType =
         D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
       parameters[samplerTable->rootParameter]
-        .DescriptorTable.NumDescriptorRanges = samplerTable->descriptorCount;
+        .DescriptorTable.NumDescriptorRanges = samplerTable->rangeCount;
       parameters[samplerTable->rootParameter]
         .DescriptorTable.pDescriptorRanges =
           &ranges[samplerTable->rangeOffset];
@@ -1098,7 +1134,7 @@ dx12_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
   native->device = device->_priv;
 
   for (uint32_t i = 0u; i < entryCount; i++) {
-    if (entries[i].arrayCount != 1u) {
+    if (entries[i].arrayCount == 0u) {
       free(native);
       return GPU_ERROR_UNSUPPORTED;
     }
@@ -1107,9 +1143,17 @@ dx12_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
     }
     if (entries[i].bindingType == GPU_BINDING_SAMPLED_TEXTURE ||
         entries[i].bindingType == GPU_BINDING_STORAGE_TEXTURE) {
-      native->resourceCount++;
+      if (entries[i].arrayCount > UINT32_MAX - native->resourceCount) {
+        free(native);
+        return GPU_ERROR_UNSUPPORTED;
+      }
+      native->resourceCount += entries[i].arrayCount;
     } else if (entries[i].bindingType == GPU_BINDING_SAMPLER) {
-      native->samplerCount++;
+      if (entries[i].arrayCount > UINT32_MAX - native->samplerCount) {
+        free(native);
+        return GPU_ERROR_UNSUPPORTED;
+      }
+      native->samplerCount += entries[i].arrayCount;
     } else if (entries[i].bindingType != GPU_BINDING_UNIFORM_BUFFER &&
                entries[i].bindingType != GPU_BINDING_STORAGE_BUFFER) {
       free(native);
@@ -1209,7 +1253,10 @@ dx12__runtimeBindingCount(GPUBindGroupLayout *layout) {
 
   for (uint32_t i = 0u; i < entryCount; i++) {
     if (!entries[i].immutableSampler) {
-      runtimeCount++;
+      if (entries[i].arrayCount > UINT32_MAX - runtimeCount) {
+        return 0u;
+      }
+      runtimeCount += entries[i].arrayCount;
     }
   }
   return runtimeCount;
@@ -1347,7 +1394,8 @@ dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
 
       rootBinding = dx12__findRootBinding(bindContext->layout,
                                           bindContext->groupIndex,
-                                          binding->binding);
+                                          binding->binding +
+                                            binding->arrayIndex);
       buffer = binding->buffer ? binding->buffer->_priv : NULL;
       if (binding->kind != GPUBindKindBuffer || !binding->buffer ||
           binding->buffer->device != bindContext->device || !rootBinding ||
@@ -1382,7 +1430,8 @@ dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
 
       rootBinding = dx12__findRootBinding(bindContext->layout,
                                           bindContext->groupIndex,
-                                          binding->binding);
+                                          binding->binding +
+                                            binding->arrayIndex);
       buffer = binding->buffer ? binding->buffer->_priv : NULL;
       if (binding->kind != GPUBindKindBuffer || !binding->buffer ||
           binding->buffer->device != bindContext->device || !rootBinding ||

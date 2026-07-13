@@ -47,6 +47,7 @@ typedef struct GPUBindGroupBindingView {
   GPUShaderStageFlags visibility;
   GPUBindingType  bindingType;
   uint32_t        binding;
+  uint32_t        arrayIndex;
   GPUBindStage    stage;
   GPUBindKind     kind;
   bool            hasDynamicOffset;

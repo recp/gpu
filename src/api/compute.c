@@ -414,15 +414,15 @@ gpuBindComputeBinding(void *ctx, const GPUBindGroupBindingView *binding) {
     gpuSetComputeBuffer(bindCtx->pass,
                         binding->buffer,
                         (size_t)binding->offset,
-                        binding->binding);
+                        binding->binding + binding->arrayIndex);
   } else if (binding->kind == GPUBindKindTexture && binding->textureView) {
     gpuSetComputeTexture(bindCtx->pass,
                          binding->textureView,
-                         binding->binding);
+                         binding->binding + binding->arrayIndex);
   } else if (binding->kind == GPUBindKindSampler && binding->sampler) {
     gpuSetComputeSampler(bindCtx->pass,
                          binding->sampler,
-                         binding->binding);
+                         binding->binding + binding->arrayIndex);
   }
 }
 

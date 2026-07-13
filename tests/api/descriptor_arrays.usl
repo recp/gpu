@@ -1,0 +1,11 @@
+struct DescriptorArrayInput {
+  uv: float2 #attribute(0)
+}
+
+frag descriptor_array_fs(input: DescriptorArrayInput #stage_in,
+                         textures: [texture2d<float>; 2] #texture(0) #group(1),
+                         extra: texture2d<float> #texture(1) #group(1),
+                         samplers: [sampler; 2] #sampler(3) #group(1)) -> float4 {
+  return textures[0].sample(samplers[0], input.uv)
+       + extra.sample(samplers[1], input.uv)
+}

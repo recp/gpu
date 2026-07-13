@@ -162,6 +162,7 @@ typedef struct GPURootBindingDX12 {
 typedef struct GPUDescriptorTableDX12 {
   uint32_t            rootParameter;
   uint32_t            descriptorCount;
+  uint32_t            rangeCount;
   uint32_t            rangeOffset;
   GPUShaderStageFlags visibility;
 } GPUDescriptorTableDX12;

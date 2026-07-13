@@ -1152,6 +1152,183 @@ cleanup:
 }
 
 static int
+check_binding_arrays(GPUDevice *device) {
+  GPUBindGroupLayoutEntry       layoutEntries[2] = {0};
+  GPUBindGroupLayoutCreateInfo  layoutInfo = {0};
+  GPUBindGroupLayout           *layout = NULL;
+  GPUBindGroupLayout           *layouts[1];
+  GPUPipelineLayoutCreateInfo   pipelineInfo = {0};
+  GPUPipelineLayout            *pipelineLayout = NULL;
+  GPUBufferCreateInfo           bufferInfo = {0};
+  GPUBuffer                    *buffer = NULL;
+  GPUSamplerCreateInfo          samplerInfo = {0};
+  GPUSampler                   *samplers[2] = {0};
+  GPUBindGroupEntry             groupEntries[4] = {0};
+  GPUBindGroupCreateInfo        groupInfo = {0};
+  GPUBindGroup                 *group = NULL;
+  GPUBindGroup                 *invalidGroup = NULL;
+  GPURenderPassEncoder          renderPass = {0};
+  GPUApiDescriptor              savedDescriptor;
+  GPUApi                       *api;
+  uint32_t                      validOffsets[2] = {0u, 256u};
+  uint32_t                      invalidOffsets[2] = {0u, 1024u};
+  bool                          descriptorSaved = false;
+  int                           ok = 0;
+
+  api = gpuDeviceApi(device);
+  if (!api) {
+    return 0;
+  }
+
+  layoutEntries[0].binding          = 3u;
+  layoutEntries[0].bindingType      = GPU_BINDING_UNIFORM_BUFFER;
+  layoutEntries[0].visibility       = GPU_SHADER_STAGE_VERTEX_BIT |
+                                      GPU_SHADER_STAGE_FRAGMENT_BIT |
+                                      GPU_SHADER_STAGE_COMPUTE_BIT;
+  layoutEntries[0].arrayCount       = 2u;
+  layoutEntries[0].hasDynamicOffset = true;
+  layoutEntries[1].binding          = 7u;
+  layoutEntries[1].bindingType      = GPU_BINDING_SAMPLER;
+  layoutEntries[1].visibility       = GPU_SHADER_STAGE_FRAGMENT_BIT |
+                                      GPU_SHADER_STAGE_COMPUTE_BIT;
+  layoutEntries[1].arrayCount       = 2u;
+
+  layoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  layoutInfo.label            = "binding-array-layout";
+  layoutInfo.entryCount       = (uint32_t)GPU_ARRAY_LEN(layoutEntries);
+  layoutInfo.pEntries         = layoutEntries;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK ||
+      !layout) {
+    fprintf(stderr, "binding array layout setup failed\n");
+    goto cleanup;
+  }
+
+  layouts[0]                        = layout;
+  pipelineInfo.chain.sType          = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize     = sizeof(pipelineInfo);
+  pipelineInfo.bindGroupLayoutCount = 1u;
+  pipelineInfo.ppBindGroupLayouts   = layouts;
+  if (GPUCreatePipelineLayout(device,
+                              &pipelineInfo,
+                              &pipelineLayout) != GPU_OK ||
+      !pipelineLayout) {
+    fprintf(stderr, "binding array pipeline layout setup failed\n");
+    goto cleanup;
+  }
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "binding-array-buffer";
+  bufferInfo.sizeBytes        = 1024u;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM |
+                                GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
+    fprintf(stderr, "binding array buffer setup failed\n");
+    goto cleanup;
+  }
+
+  samplerInfo.chain.sType      = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  samplerInfo.chain.structSize = sizeof(samplerInfo);
+  samplerInfo.desc             = valid_sampler_desc();
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(samplers); i++) {
+    if (GPUCreateSampler(device,
+                         &samplerInfo,
+                         false,
+                         &samplers[i]) != GPU_OK ||
+        !samplers[i]) {
+      fprintf(stderr, "binding array sampler setup failed\n");
+      goto cleanup;
+    }
+  }
+
+  for (uint32_t i = 0u; i < 2u; i++) {
+    groupEntries[i].binding       = 3u;
+    groupEntries[i].arrayIndex    = i;
+    groupEntries[i].bindingType   = GPU_BINDING_UNIFORM_BUFFER;
+    groupEntries[i].buffer.buffer = buffer;
+    groupEntries[i].buffer.offset = 0u;
+    groupEntries[i].buffer.size   = 256u;
+    groupEntries[2u + i].binding     = 7u;
+    groupEntries[2u + i].arrayIndex  = i;
+    groupEntries[2u + i].bindingType = GPU_BINDING_SAMPLER;
+    groupEntries[2u + i].sampler     = samplers[i];
+  }
+
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.label            = "binding-array-group";
+  groupInfo.layout           = layout;
+  groupInfo.entryCount       = (uint32_t)GPU_ARRAY_LEN(groupEntries);
+  groupInfo.pEntries         = groupEntries;
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
+    fprintf(stderr, "binding array group setup failed\n");
+    goto cleanup;
+  }
+
+  groupInfo.entryCount = 3u;
+  if (GPUCreateBindGroup(device,
+                         &groupInfo,
+                         &invalidGroup) != GPU_ERROR_INVALID_ARGUMENT ||
+      invalidGroup) {
+    fprintf(stderr, "binding array accepted a missing element\n");
+    goto cleanup;
+  }
+
+  groupInfo.entryCount         = (uint32_t)GPU_ARRAY_LEN(groupEntries);
+  groupEntries[1].arrayIndex   = 0u;
+  if (GPUCreateBindGroup(device,
+                         &groupInfo,
+                         &invalidGroup) != GPU_ERROR_INVALID_ARGUMENT ||
+      invalidGroup) {
+    fprintf(stderr, "binding array accepted a duplicate element\n");
+    goto cleanup;
+  }
+
+  groupEntries[1].arrayIndex = 2u;
+  if (GPUCreateBindGroup(device,
+                         &groupInfo,
+                         &invalidGroup) != GPU_ERROR_INVALID_ARGUMENT ||
+      invalidGroup) {
+    fprintf(stderr, "binding array accepted an out-of-range element\n");
+    goto cleanup;
+  }
+
+  groupEntries[1].arrayIndex = 1u;
+  savedDescriptor            = api->descriptor;
+  descriptorSaved            = true;
+  api->descriptor.bindRenderGroup = NULL;
+  renderPass._pipelineLayout       = pipelineLayout;
+  GPUBindRenderGroup(&renderPass, 0u, group, 1u, validOffsets);
+  GPUBindRenderGroup(&renderPass, 0u, group, 2u, invalidOffsets);
+  if (renderPass._boundGroupLayouts[0]) {
+    fprintf(stderr, "binding array accepted invalid dynamic offsets\n");
+    goto cleanup;
+  }
+  GPUBindRenderGroup(&renderPass, 0u, group, 2u, validOffsets);
+  if (renderPass._boundGroupLayouts[0] != layout) {
+    fprintf(stderr, "binding array rejected valid dynamic offsets\n");
+    goto cleanup;
+  }
+
+  ok = 1;
+
+cleanup:
+  if (descriptorSaved) {
+    api->descriptor = savedDescriptor;
+  }
+  GPUDestroyBindGroup(invalidGroup);
+  GPUDestroyBindGroup(group);
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(samplers); i++) {
+    GPUDestroySampler(samplers[i]);
+  }
+  GPUDestroyBuffer(buffer);
+  GPUDestroyPipelineLayout(pipelineLayout);
+  GPUDestroyBindGroupLayout(layout);
+  return ok;
+}
+
+static int
 check_metal_pipeline_binding_limits(GPUDevice *device) {
   GPUBindGroupLayoutEntry      entries[30];
   GPUBindGroupLayoutCreateInfo layoutInfo = {0};
@@ -1295,6 +1472,7 @@ gpu_test_bindgroup(GPUDevice *device) {
   return check_backend_descriptor_hooks(device) &&
          check_bind_group_layout_validation(device) &&
          check_dynamic_offset_bind_validation(device) &&
+         check_binding_arrays(device) &&
          check_bind_group_cache(device) &&
          check_metal_pipeline_binding_limits(device);
 }

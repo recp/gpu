@@ -25,6 +25,7 @@ cp "$TEST_DIR/storage_texture.usl" "$FIXTURE_DIR/storage_texture.usl"
 cp "$TEST_DIR/cube_texture.usl" "$FIXTURE_DIR/cube_texture.usl"
 cp "$TEST_DIR/line_texture.usl" "$FIXTURE_DIR/line_texture.usl"
 cp "$TEST_DIR/volume_texture.usl" "$FIXTURE_DIR/volume_texture.usl"
+cp "$TEST_DIR/descriptor_arrays.usl" "$FIXTURE_DIR/descriptor_arrays.usl"
 
 shaders=(
   reflection
@@ -35,6 +36,7 @@ shaders=(
   cube_texture
   line_texture
   volume_texture
+  descriptor_arrays
 )
 for shader in "${shaders[@]}"; do
   ustest_cmd=("$USTEST" --shader "$FIXTURE_DIR/$shader.usl" --no-logs --no-sidecar)
@@ -79,4 +81,5 @@ xcrun --sdk macosx clang \
   "$FIXTURE_DIR/storage_texture.us" \
   "$FIXTURE_DIR/cube_texture.us" \
   "$FIXTURE_DIR/line_texture.us" \
-  "$FIXTURE_DIR/volume_texture.us"
+  "$FIXTURE_DIR/volume_texture.us" \
+  "$FIXTURE_DIR/descriptor_arrays.us"

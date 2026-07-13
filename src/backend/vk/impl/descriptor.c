@@ -114,12 +114,18 @@ GPU_HIDE
 GPUResult
 vk_createBindGroupLayout(GPUDevice          *device,
                          GPUBindGroupLayout *layout) {
+  typedef struct VkDynamicBindingOrder {
+    uint32_t backendBinding;
+    uint32_t arrayIndex;
+    uint32_t callerIndex;
+  } VkDynamicBindingOrder;
+
   GPUBindGroupLayoutVk              *native;
   const GPUBindGroupLayoutEntry     *entries;
   const uint32_t                    *backendBindings;
   VkDescriptorSetLayoutBinding      *bindings;
   VkDescriptorSetLayoutCreateInfo    info = {0};
-  uint32_t                           dynamicBindings[GPU_VK_MAX_DYNAMIC_OFFSETS];
+  VkDynamicBindingOrder              dynamicBindings[GPU_VK_MAX_DYNAMIC_OFFSETS];
   uint32_t                           backendBindingCount;
   uint32_t                           entryCount;
   uint32_t                           immutableSamplerCount;
@@ -141,7 +147,10 @@ vk_createBindGroupLayout(GPUDevice          *device,
   immutableSamplerCount = 0u;
   for (uint32_t i = 0u; i < entryCount; i++) {
     if (entries[i].immutableSampler) {
-      immutableSamplerCount++;
+      if (entries[i].arrayCount > UINT32_MAX - immutableSamplerCount) {
+        return GPU_ERROR_UNSUPPORTED;
+      }
+      immutableSamplerCount += entries[i].arrayCount;
     }
   }
 
@@ -168,7 +177,7 @@ vk_createBindGroupLayout(GPUDevice          *device,
     VkShaderStageFlags stages;
 
     stages = vk__descriptorStages(entries[i].visibility);
-    if (entries[i].arrayCount != 1u || stages == 0u ||
+    if (entries[i].arrayCount == 0u || stages == 0u ||
         !vk__descriptorType(entries[i].bindingType,
                             entries[i].hasDynamicOffset,
                             &type)) {
@@ -179,12 +188,12 @@ vk_createBindGroupLayout(GPUDevice          *device,
 
     bindings[i].binding         = backendBindings[i];
     bindings[i].descriptorType  = type;
-    bindings[i].descriptorCount = 1u;
+    bindings[i].descriptorCount = entries[i].arrayCount;
     bindings[i].stageFlags      = stages;
 
     if (entries[i].immutableSampler) {
       VkSamplerCreateInfo samplerInfo;
-      VkSampler          *sampler;
+      VkSampler          *samplers;
 
       if (entries[i].bindingType != GPU_BINDING_SAMPLER ||
           entries[i].hasDynamicOffset) {
@@ -193,43 +202,68 @@ vk_createBindGroupLayout(GPUDevice          *device,
         return GPU_ERROR_INVALID_ARGUMENT;
       }
 
-      sampler = &native->immutableSamplers[native->immutableSamplerCount];
+      samplers = &native->immutableSamplers[native->immutableSamplerCount];
       vk_fillSamplerInfo(&entries[i].immutableSamplerDesc, &samplerInfo);
-      if (vkCreateSampler(native->device,
-                          &samplerInfo,
-                          NULL,
-                          sampler) != VK_SUCCESS) {
-        free(bindings);
-        vk__destroyBindGroupLayoutState(native);
-        return GPU_ERROR_BACKEND_FAILURE;
+      for (uint32_t arrayIndex = 0u;
+           arrayIndex < entries[i].arrayCount;
+           arrayIndex++) {
+        if (vkCreateSampler(native->device,
+                            &samplerInfo,
+                            NULL,
+                            &samplers[arrayIndex]) != VK_SUCCESS) {
+          free(bindings);
+          vk__destroyBindGroupLayoutState(native);
+          return GPU_ERROR_BACKEND_FAILURE;
+        }
+        native->immutableSamplerCount++;
       }
-      native->immutableSamplerCount++;
-      bindings[i].pImmutableSamplers = sampler;
+      bindings[i].pImmutableSamplers = samplers;
     }
 
     if (entries[i].hasDynamicOffset) {
-      uint32_t position;
+      uint32_t callerBase;
 
-      if (native->dynamicCount >= GPU_VK_MAX_DYNAMIC_OFFSETS) {
+      if (entries[i].arrayCount >
+          GPU_VK_MAX_DYNAMIC_OFFSETS - native->dynamicCount) {
         free(bindings);
         vk__destroyBindGroupLayoutState(native);
         return GPU_ERROR_UNSUPPORTED;
       }
 
-      position = native->dynamicCount;
-      while (position > 0u &&
-             dynamicBindings[position - 1u] > backendBindings[i]) {
-        dynamicBindings[position] = dynamicBindings[position - 1u];
-        position--;
+      callerBase = 0u;
+      for (uint32_t j = 0u; j < entryCount; j++) {
+        if (entries[j].hasDynamicOffset &&
+            entries[j].binding < entries[i].binding) {
+          callerBase += entries[j].arrayCount;
+        }
       }
-      dynamicBindings[position] = backendBindings[i];
-      native->dynamicCount++;
+      for (uint32_t arrayIndex = 0u;
+           arrayIndex < entries[i].arrayCount;
+           arrayIndex++) {
+        VkDynamicBindingOrder order;
+        uint32_t              position;
+
+        order.backendBinding = backendBindings[i];
+        order.arrayIndex     = arrayIndex;
+        order.callerIndex    = callerBase + arrayIndex;
+        position             = native->dynamicCount;
+        while (position > 0u &&
+               (dynamicBindings[position - 1u].backendBinding >
+                  order.backendBinding ||
+                (dynamicBindings[position - 1u].backendBinding ==
+                   order.backendBinding &&
+                 dynamicBindings[position - 1u].arrayIndex >
+                   order.arrayIndex))) {
+          dynamicBindings[position] = dynamicBindings[position - 1u];
+          position--;
+        }
+        dynamicBindings[position] = order;
+        native->dynamicCount++;
+      }
     }
   }
 
   if (native->dynamicCount > 0u) {
-    uint32_t callerIndex;
-
     native->dynamicOrder = calloc(native->dynamicCount,
                                   sizeof(*native->dynamicOrder));
     if (!native->dynamicOrder) {
@@ -238,17 +272,8 @@ vk_createBindGroupLayout(GPUDevice          *device,
       return GPU_ERROR_OUT_OF_MEMORY;
     }
 
-    callerIndex = 0u;
-    for (uint32_t i = 0u; i < entryCount; i++) {
-      if (entries[i].hasDynamicOffset) {
-        for (uint32_t j = 0u; j < native->dynamicCount; j++) {
-          if (dynamicBindings[j] == backendBindings[i]) {
-            native->dynamicOrder[j] = callerIndex;
-            break;
-          }
-        }
-        callerIndex++;
-      }
+    for (uint32_t i = 0u; i < native->dynamicCount; i++) {
+      native->dynamicOrder[i] = dynamicBindings[i].callerIndex;
     }
   }
 
@@ -645,6 +670,7 @@ vk__writeDescriptor(void *context,
   write.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
   write.dstSet          = writeContext->group->set;
   write.dstBinding      = binding->binding;
+  write.dstArrayElement = binding->arrayIndex;
   write.descriptorCount = 1u;
   write.descriptorType  = type;
 

@@ -74,6 +74,7 @@ typedef struct GPUBindGroupLayoutCreateInfo {
 
 typedef struct GPUBindGroupEntry {
   uint32_t binding;
+  uint32_t arrayIndex; /* 0 for non-array. */
   GPUBindingType bindingType;
 
   struct {

@@ -50,6 +50,9 @@ typedef struct GPUBindGroupBindingPriv {
   uint64_t        offset;
   uint64_t        size;
   uint32_t        binding;
+  uint32_t        arrayIndex;
+  uint32_t        layoutEntryIndex;
+  uint32_t        dynamicOffsetIndex;
   GPUBindStage    stage;
   GPUBindKind     kind;
 } GPUBindGroupBindingPriv;
@@ -59,6 +62,7 @@ typedef struct GPUBindGroupPriv {
   GPUBindGroupBindingPriv *bindings;
   uint64_t                 hash;
   uint32_t                 count;
+  uint32_t                 dynamicOffsetCount;
 } GPUBindGroupPriv;
 
 typedef struct GPUBindGroupCacheEntry {
@@ -205,6 +209,7 @@ gpu_bindGroupHash(const GPUBindGroupPriv *priv) {
     hash        = GPU_BIND_GROUP_HASH(hash, binding->offset);
     hash        = GPU_BIND_GROUP_HASH(hash, binding->size);
     hash        = GPU_BIND_GROUP_HASH(hash, binding->binding);
+    hash        = GPU_BIND_GROUP_HASH(hash, binding->arrayIndex);
     hash        = GPU_BIND_GROUP_HASH(hash, binding->stage);
     hash        = GPU_BIND_GROUP_HASH(hash, binding->kind);
   }
@@ -235,6 +240,7 @@ gpu_bindGroupsEqual(const GPUBindGroup *a, const GPUBindGroup *b) {
         aBinding->offset != bBinding->offset ||
         aBinding->size != bBinding->size ||
         aBinding->binding != bBinding->binding ||
+        aBinding->arrayIndex != bBinding->arrayIndex ||
         aBinding->stage != bBinding->stage ||
         aBinding->kind != bBinding->kind) {
       return false;
@@ -397,9 +403,18 @@ gpuPipelineLayoutBackendSlotMask(GPUPipelineLayout  *layout,
       binding = priv->backendBindings[groupIndex][entryIndex];
       if (entry->kind == kind &&
           (entry->visibility & stages) != 0u &&
-          binding != UINT32_MAX &&
-          binding < 32u) {
-        mask |= 1u << binding;
+          binding != UINT32_MAX) {
+        for (uint32_t arrayIndex = 0u;
+             arrayIndex < entry->arrayCount &&
+             binding <= UINT32_MAX - arrayIndex;
+             arrayIndex++) {
+          uint32_t slot;
+
+          slot = binding + arrayIndex;
+          if (slot < 32u) {
+            mask |= 1u << slot;
+          }
+        }
       }
     }
   }
@@ -440,23 +455,9 @@ GPU_HIDE
 uint32_t
 gpuBindGroupDynamicOffsetCount(GPUBindGroup *group) {
   GPUBindGroupPriv *priv;
-  GPUBindGroupLayoutPriv *layout;
-  uint32_t count;
 
   priv = gpu_groupPriv(group);
-  layout = priv ? gpu_layoutPriv(priv->layout) : NULL;
-  if (!layout) {
-    return 0u;
-  }
-
-  count = 0u;
-  for (uint32_t i = 0; i < layout->count; i++) {
-    if (layout->entries[i].hasDynamicOffset) {
-      count++;
-    }
-  }
-
-  return count;
+  return priv ? priv->dynamicOffsetCount : 0u;
 }
 
 GPU_HIDE
@@ -907,6 +908,7 @@ gpu_bindGroupEntryMatchesLayout(const GPUBindGroupLayoutEntry *layoutEntry,
 
   if (!layoutEntry || !entry ||
       entry->binding != layoutEntry->binding ||
+      entry->arrayIndex >= layoutEntry->arrayCount ||
       !gpu_bindGroupEntryResourceKind(entry, &resourceKind) ||
       resourceKind != layoutEntry->kind) {
     return 0;
@@ -946,7 +948,8 @@ gpu_bindGroupEntryMatchesLayout(const GPUBindGroupLayoutEntry *layoutEntry,
 static const GPUBindGroupEntry *
 gpu_findBindGroupEntry(const GPUBindGroupEntry *entries,
                        uint32_t count,
-                       const GPUBindGroupLayoutEntry *layoutEntry) {
+                       const GPUBindGroupLayoutEntry *layoutEntry,
+                       uint32_t arrayIndex) {
   uint32_t i;
 
   if (!entries || !layoutEntry) {
@@ -954,7 +957,8 @@ gpu_findBindGroupEntry(const GPUBindGroupEntry *entries,
   }
 
   for (i = 0; i < count; i++) {
-    if (gpu_bindGroupEntryMatchesLayout(layoutEntry, &entries[i])) {
+    if (entries[i].arrayIndex == arrayIndex &&
+        gpu_bindGroupEntryMatchesLayout(layoutEntry, &entries[i])) {
       return &entries[i];
     }
   }
@@ -971,48 +975,132 @@ gpu_bindGroupLayoutEntryNeedsBinding(const GPUBindGroupLayoutEntry *entry) {
   return !(entry->immutableSampler && entry->kind == GPUBindKindSampler);
 }
 
+static int
+gpu_bindGroupRuntimeCount(const GPUBindGroupLayoutPriv *layout,
+                          uint32_t                     *outCount) {
+  uint32_t count;
+
+  if (!layout || !outCount) {
+    return 0;
+  }
+
+  count = 0u;
+  for (uint32_t i = 0u; i < layout->count; i++) {
+    if (!gpu_bindGroupLayoutEntryNeedsBinding(&layout->entries[i])) {
+      continue;
+    }
+    if (layout->entries[i].arrayCount > UINT32_MAX - count) {
+      return 0;
+    }
+    count += layout->entries[i].arrayCount;
+  }
+
+  *outCount = count;
+  return 1;
+}
+
+static int
+gpu_bindGroupRuntimeBase(const GPUBindGroupLayoutPriv *layout,
+                         uint32_t                      layoutEntryIndex,
+                         uint32_t                     *outBase) {
+  uint32_t base;
+
+  if (!layout || !outBase || layoutEntryIndex >= layout->count) {
+    return 0;
+  }
+
+  base = 0u;
+  for (uint32_t i = 0u; i < layoutEntryIndex; i++) {
+    if (!gpu_bindGroupLayoutEntryNeedsBinding(&layout->entries[i])) {
+      continue;
+    }
+    if (layout->entries[i].arrayCount > UINT32_MAX - base) {
+      return 0;
+    }
+    base += layout->entries[i].arrayCount;
+  }
+
+  *outBase = base;
+  return 1;
+}
+
+static int
+gpu_bindGroupDynamicBase(const GPUBindGroupLayoutPriv *layout,
+                         uint32_t                      binding,
+                         uint32_t                     *outBase) {
+  uint32_t base;
+
+  if (!layout || !outBase) {
+    return 0;
+  }
+
+  base = 0u;
+  for (uint32_t i = 0u; i < layout->count; i++) {
+    const GPUBindGroupLayoutEntry *entry;
+
+    entry = &layout->entries[i];
+    if (!entry->hasDynamicOffset || entry->binding >= binding) {
+      continue;
+    }
+    if (entry->arrayCount > UINT32_MAX - base) {
+      return 0;
+    }
+    base += entry->arrayCount;
+  }
+
+  *outBase = base;
+  return 1;
+}
+
 static GPUResult
 gpu_validateBindGroupEntries(const GPUBindGroupLayoutPriv *layoutPriv,
                              const GPUBindGroupEntry *entries,
                              uint32_t count) {
   uint8_t *matched;
+  uint32_t runtimeCount;
 
   if (!layoutPriv || (!entries && count > 0)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  if (!gpu_bindGroupRuntimeCount(layoutPriv, &runtimeCount) ||
+      count != runtimeCount) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
   matched = NULL;
-  if (layoutPriv->count > 0) {
-    matched = calloc(layoutPriv->count, sizeof(*matched));
+  if (runtimeCount > 0u) {
+    matched = calloc(runtimeCount, sizeof(*matched));
     if (!matched) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
 
   for (uint32_t i = 0; i < count; i++) {
-    uint32_t matchCount;
     uint32_t matchIndex;
+    uint32_t matchBase;
 
-    matchCount = 0;
     matchIndex = UINT32_MAX;
     for (uint32_t j = 0; j < layoutPriv->count; j++) {
       if (!gpu_bindGroupEntryMatchesLayout(&layoutPriv->entries[j], &entries[i])) {
         continue;
       }
-      matchCount++;
       matchIndex = j;
+      break;
     }
 
-    if (matchCount != 1 || matched[matchIndex]) {
+    if (matchIndex == UINT32_MAX ||
+        !gpu_bindGroupRuntimeBase(layoutPriv, matchIndex, &matchBase) ||
+        entries[i].arrayIndex > UINT32_MAX - matchBase ||
+        matched[matchBase + entries[i].arrayIndex]) {
       free(matched);
       return GPU_ERROR_INVALID_ARGUMENT;
     }
-    matched[matchIndex] = 1u;
+    matched[matchBase + entries[i].arrayIndex] = 1u;
   }
 
-  for (uint32_t i = 0; i < layoutPriv->count; i++) {
-    if (gpu_bindGroupLayoutEntryNeedsBinding(&layoutPriv->entries[i]) &&
-        !matched[i]) {
+  for (uint32_t i = 0; i < runtimeCount; i++) {
+    if (!matched[i]) {
       free(matched);
       return GPU_ERROR_INVALID_ARGUMENT;
     }
@@ -1212,9 +1300,36 @@ gpu_pipelineSlotIsUsed(const GPUPipelineLayoutPriv *priv,
     for (uint32_t entryIndex = 0; entryIndex < layout->count; entryIndex++) {
       if (layout->entries[entryIndex].kind == kind &&
           (layout->entries[entryIndex].visibility & visibility) != 0u &&
-          priv->backendBindings[groupIndex][entryIndex] == slot) {
-        return 1;
+          priv->backendBindings[groupIndex][entryIndex] <= slot) {
+        uint32_t base;
+
+        base = priv->backendBindings[groupIndex][entryIndex];
+        if (slot - base < layout->entries[entryIndex].arrayCount) {
+          return 1;
+        }
       }
+    }
+  }
+
+  return 0;
+}
+
+static int
+gpu_pipelineRangeIsUsed(const GPUPipelineLayoutPriv *priv,
+                        GPUBindKind                  kind,
+                        uint32_t                     firstSlot,
+                        uint32_t                     slotCount,
+                        GPUShaderStageFlags          visibility) {
+  if (slotCount == 0u || firstSlot > UINT32_MAX - (slotCount - 1u)) {
+    return 1;
+  }
+
+  for (uint32_t i = 0u; i < slotCount; i++) {
+    if (gpu_pipelineSlotIsUsed(priv,
+                               kind,
+                               firstSlot + i,
+                               visibility)) {
+      return 1;
     }
   }
 
@@ -1271,8 +1386,19 @@ gpu_pipelineBindingsAreUnique(const GPUPipelineLayoutPriv *priv) {
         for (uint32_t entryB = entryStartB; entryB < layoutB->count; entryB++) {
           const GPUBindGroupLayoutEntry *b = &layoutB->entries[entryB];
           uint32_t backendB = priv->backendBindings[groupB][entryB];
+          uint32_t endA;
+          uint32_t endB;
 
-          if (a->kind != b->kind || backendA != backendB) {
+          if (a->kind != b->kind) {
+            continue;
+          }
+          if (backendA > UINT32_MAX - a->arrayCount ||
+              backendB > UINT32_MAX - b->arrayCount) {
+            return 0;
+          }
+          endA = backendA + a->arrayCount;
+          endB = backendB + b->arrayCount;
+          if (backendA >= endB || backendB >= endA) {
             continue;
           }
 
@@ -1348,7 +1474,9 @@ gpu_compilePipelineBindings(GPUPipelineLayoutPriv *priv,
           return GPU_ERROR_INVALID_ARGUMENT;
         }
         if (backend == GPU_BACKEND_METAL &&
-            backendBinding >= gpu_metalBindingLimit(entry->kind)) {
+            (entry->arrayCount > gpu_metalBindingLimit(entry->kind) ||
+             backendBinding >
+               gpu_metalBindingLimit(entry->kind) - entry->arrayCount)) {
           gpu_clearPipelineBindings(priv);
           return GPU_ERROR_UNSUPPORTED;
         }
@@ -1380,6 +1508,7 @@ gpu_compilePipelineBindings(GPUPipelineLayoutPriv *priv,
       uint32_t selectedEntry = UINT32_MAX;
       uint32_t selectedBinding = UINT32_MAX;
       uint32_t backendBinding = 0u;
+      uint32_t selectedCount = 0u;
       GPUShaderStageFlags selectedVisibility = 0u;
 
       for (uint32_t groupIndex = 0;
@@ -1409,11 +1538,14 @@ gpu_compilePipelineBindings(GPUPipelineLayoutPriv *priv,
       if (selectedGroup == UINT32_MAX) {
         break;
       }
+      selectedCount = gpu_layoutPriv(priv->bindGroupLayouts[selectedGroup])
+                        ->entries[selectedEntry].arrayCount;
 
-      while (gpu_pipelineSlotIsUsed(priv,
-                                    kinds[kindIndex],
-                                    backendBinding,
-                                    selectedVisibility)) {
+      while (gpu_pipelineRangeIsUsed(priv,
+                                     kinds[kindIndex],
+                                     backendBinding,
+                                     selectedCount,
+                                     selectedVisibility)) {
         if (backendBinding == UINT32_MAX - 1u) {
           gpu_clearPipelineBindings(priv);
           return GPU_ERROR_BACKEND_FAILURE;
@@ -1424,9 +1556,14 @@ gpu_compilePipelineBindings(GPUPipelineLayoutPriv *priv,
         gpu_clearPipelineBindings(priv);
         return GPU_ERROR_BACKEND_FAILURE;
       }
-      if (backendBinding >= gpu_metalBindingLimit(kinds[kindIndex])) {
-        gpu_clearPipelineBindings(priv);
-        return GPU_ERROR_UNSUPPORTED;
+      {
+        uint32_t limit;
+
+        limit = gpu_metalBindingLimit(kinds[kindIndex]);
+        if (selectedCount > limit || backendBinding > limit - selectedCount) {
+          gpu_clearPipelineBindings(priv);
+          return GPU_ERROR_UNSUPPORTED;
+        }
       }
       priv->backendBindings[selectedGroup][selectedEntry] = backendBinding;
     }
@@ -2143,7 +2280,8 @@ GPUCreateBindGroup(GPUDevice *device,
   GPUApi *api;
   GPUResult result;
   uint32_t count;
-  uint32_t i;
+  uint32_t cursor;
+  uint32_t runtimeCount;
 
   if (!outGroup) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -2189,14 +2327,15 @@ GPUCreateBindGroup(GPUDevice *device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  if ((size_t)layoutPriv->count > SIZE_MAX / sizeof(*priv->bindings)) {
+  if (!gpu_bindGroupRuntimeCount(layoutPriv, &runtimeCount) ||
+      (size_t)runtimeCount > SIZE_MAX / sizeof(*priv->bindings)) {
     free(priv);
     free(group);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  if (layoutPriv->count > 0) {
-    priv->bindings = calloc(layoutPriv->count, sizeof(*priv->bindings));
+  if (runtimeCount > 0u) {
+    priv->bindings = calloc(runtimeCount, sizeof(*priv->bindings));
     if (!priv->bindings) {
       free(priv);
       free(group);
@@ -2204,35 +2343,68 @@ GPUCreateBindGroup(GPUDevice *device,
     }
   }
 
-  for (i = 0; i < layoutPriv->count; i++) {
+  cursor = 0u;
+  for (uint32_t i = 0u; i < layoutPriv->count; i++) {
     const GPUBindGroupLayoutEntry *layoutEntry;
-    const GPUBindGroupEntry *entry;
+    uint32_t dynamicBase;
 
     layoutEntry = &layoutPriv->entries[i];
-    entry = gpu_findBindGroupEntry(entries,
-                                   count,
-                                   layoutEntry);
-    if (!gpu_bindGroupEntryHasResource(layoutEntry, entry)) {
+    if (!gpu_bindGroupLayoutEntryNeedsBinding(layoutEntry)) {
+      continue;
+    }
+    dynamicBase = UINT32_MAX;
+    if (layoutEntry->hasDynamicOffset &&
+        !gpu_bindGroupDynamicBase(layoutPriv,
+                                  layoutEntry->binding,
+                                  &dynamicBase)) {
       free(priv->bindings);
       free(priv);
       free(group);
-      return GPU_ERROR_INVALID_ARGUMENT;
+      return GPU_ERROR_BACKEND_FAILURE;
     }
 
-    priv->bindings[i].stage = layoutEntry->stage;
-    priv->bindings[i].binding = layoutEntry->binding;
-    priv->bindings[i].kind = layoutEntry->kind;
-    if (entry) {
-      priv->bindings[i].buffer = entry->buffer.buffer;
-      priv->bindings[i].textureView = entry->textureView;
-      priv->bindings[i].sampler = entry->sampler;
-      priv->bindings[i].offset = entry->buffer.offset;
-      priv->bindings[i].size = entry->buffer.size;
+    for (uint32_t arrayIndex = 0u;
+         arrayIndex < layoutEntry->arrayCount;
+         arrayIndex++) {
+      const GPUBindGroupEntry *entry;
+      GPUBindGroupBindingPriv *binding;
+
+      entry = gpu_findBindGroupEntry(entries,
+                                     count,
+                                     layoutEntry,
+                                     arrayIndex);
+      if (!entry || cursor >= runtimeCount) {
+        free(priv->bindings);
+        free(priv);
+        free(group);
+        return GPU_ERROR_INVALID_ARGUMENT;
+      }
+
+      binding                     = &priv->bindings[cursor++];
+      binding->buffer             = entry->buffer.buffer;
+      binding->textureView        = entry->textureView;
+      binding->sampler            = entry->sampler;
+      binding->offset             = entry->buffer.offset;
+      binding->size               = entry->buffer.size;
+      binding->binding            = layoutEntry->binding;
+      binding->arrayIndex         = arrayIndex;
+      binding->layoutEntryIndex   = i;
+      binding->dynamicOffsetIndex = layoutEntry->hasDynamicOffset
+                                      ? dynamicBase + arrayIndex
+                                      : UINT32_MAX;
+      binding->stage              = layoutEntry->stage;
+      binding->kind               = layoutEntry->kind;
     }
   }
 
-  priv->layout     = layout;
-  priv->count      = layoutPriv->count;
+  priv->layout              = layout;
+  priv->count               = runtimeCount;
+  priv->dynamicOffsetCount  = 0u;
+  for (uint32_t i = 0u; i < priv->count; i++) {
+    if (priv->bindings[i].dynamicOffsetIndex != UINT32_MAX) {
+      priv->dynamicOffsetCount++;
+    }
+  }
   priv->hash       = gpu_bindGroupHash(priv);
   group->_device   = device;
   group->_priv     = priv;
@@ -2312,15 +2484,15 @@ gpuBindRenderBinding(void *ctx, const GPUBindGroupBindingView *binding) {
       gpuSetRenderVertexBuffer(bindCtx->pass,
                                binding->buffer,
                                binding->offset,
-                               binding->binding);
+                               binding->binding + binding->arrayIndex);
     } else if (binding->kind == GPUBindKindTexture && binding->textureView) {
       gpuSetRenderVertexTexture(bindCtx->pass,
                                 binding->textureView,
-                                binding->binding);
+                                binding->binding + binding->arrayIndex);
     } else if (binding->kind == GPUBindKindSampler && binding->sampler) {
       gpuSetRenderVertexSampler(bindCtx->pass,
                                 binding->sampler,
-                                binding->binding);
+                                binding->binding + binding->arrayIndex);
     }
   }
 
@@ -2329,15 +2501,15 @@ gpuBindRenderBinding(void *ctx, const GPUBindGroupBindingView *binding) {
       gpuSetRenderFragmentBuffer(bindCtx->pass,
                                  binding->buffer,
                                  binding->offset,
-                                 binding->binding);
+                                 binding->binding + binding->arrayIndex);
     } else if (binding->kind == GPUBindKindTexture && binding->textureView) {
       gpuSetRenderFragmentTexture(bindCtx->pass,
                                   binding->textureView,
-                                  binding->binding);
+                                  binding->binding + binding->arrayIndex);
     } else if (binding->kind == GPUBindKindSampler && binding->sampler) {
       gpuSetRenderFragmentSampler(bindCtx->pass,
                                   binding->sampler,
-                                  binding->binding);
+                                  binding->binding + binding->arrayIndex);
     }
   }
 }
@@ -2414,21 +2586,21 @@ gpuForEachBindGroupBinding(GPUBindGroup *group,
 
   priv   = gpu_groupPriv(group);
   layout = gpu_layoutPriv(priv ? priv->layout : NULL);
-  if (!priv || !layout || priv->count < layout->count ||
+  if (!priv || !layout ||
       (layout->count > 0u && !layout->backendBindings)) {
     return 0;
   }
 
-  for (uint32_t i = 0u; i < layout->count; i++) {
+  for (uint32_t i = 0u; i < priv->count; i++) {
     const GPUBindGroupLayoutEntry *layoutEntry;
     const GPUBindGroupBindingPriv *binding;
     GPUBindGroupBindingView        view;
 
-    layoutEntry = &layout->entries[i];
-    binding     = &priv->bindings[i];
-    if (!gpu_bindGroupLayoutEntryNeedsBinding(layoutEntry)) {
-      continue;
+    if (priv->bindings[i].layoutEntryIndex >= layout->count) {
+      return 0;
     }
+    layoutEntry = &layout->entries[priv->bindings[i].layoutEntryIndex];
+    binding     = &priv->bindings[i];
 
     memset(&view, 0, sizeof(view));
     view.buffer           = binding->buffer;
@@ -2438,7 +2610,8 @@ gpuForEachBindGroupBinding(GPUBindGroup *group,
     view.size             = binding->size;
     view.visibility       = layoutEntry->visibility;
     view.bindingType      = layoutEntry->bindingType;
-    view.binding          = layout->backendBindings[i];
+    view.binding          = layout->backendBindings[binding->layoutEntryIndex];
+    view.arrayIndex       = binding->arrayIndex;
     view.stage            = binding->stage;
     view.kind             = binding->kind;
     view.hasDynamicOffset = layoutEntry->hasDynamicOffset;
@@ -2473,26 +2646,29 @@ gpuValidateBindGroupDynamicOffsets(GPUPipelineLayout *pipelineLayout,
       pipeline->bindGroupLayouts[groupIndex] != priv->layout ||
       (layout->count > 0u &&
        (!pipeline->backendBindings || !pipeline->backendBindings[groupIndex])) ||
-      priv->count < layout->count) {
+      dynamicOffsetCount != priv->dynamicOffsetCount) {
     return 0;
   }
 
   dynamicIndex = 0u;
-  for (uint32_t i = 0; i < layout->count; i++) {
+  for (uint32_t i = 0u; i < priv->count; i++) {
     const GPUBindGroupLayoutEntry *layoutEntry;
     const GPUBindGroupBindingPriv *binding;
     uint64_t effectiveOffset;
 
-    layoutEntry = &layout->entries[i];
-    if (!layoutEntry->hasDynamicOffset) {
+    binding = &priv->bindings[i];
+    if (binding->layoutEntryIndex >= layout->count) {
+      return 0;
+    }
+    layoutEntry = &layout->entries[binding->layoutEntryIndex];
+    if (binding->dynamicOffsetIndex == UINT32_MAX) {
       continue;
     }
 
-    binding = &priv->bindings[i];
     if (layoutEntry->kind != GPUBindKindBuffer ||
-        dynamicIndex >= dynamicOffsetCount ||
+        binding->dynamicOffsetIndex >= dynamicOffsetCount ||
         !gpu_u64Add(binding->offset,
-                    dynamicOffsets[dynamicIndex],
+                    dynamicOffsets[binding->dynamicOffsetIndex],
                     &effectiveOffset) ||
         !gpuBufferRangeValid(binding->buffer, effectiveOffset, binding->size)) {
       return 0;
@@ -2533,28 +2709,28 @@ gpuForEachBindGroupBindingWithDynamicOffsets(GPUPipelineLayout *pipelineLayout,
       pipeline->bindGroupLayouts[groupIndex] != priv->layout ||
       (layout->count > 0u &&
        (!pipeline->backendBindings || !pipeline->backendBindings[groupIndex])) ||
-      priv->count < layout->count) {
+      dynamicOffsetCount != priv->dynamicOffsetCount) {
     return 0;
   }
 
   dynamicIndex = 0u;
-  for (uint32_t i = 0; i < layout->count; i++) {
+  for (uint32_t i = 0u; i < priv->count; i++) {
     const GPUBindGroupLayoutEntry *layoutEntry;
     const GPUBindGroupBindingPriv *binding;
     GPUBindGroupBindingView view;
     uint64_t effectiveOffset;
 
-    layoutEntry = &layout->entries[i];
     binding = &priv->bindings[i];
-    if (!gpu_bindGroupLayoutEntryNeedsBinding(layoutEntry)) {
-      continue;
+    if (binding->layoutEntryIndex >= layout->count) {
+      return 0;
     }
+    layoutEntry = &layout->entries[binding->layoutEntryIndex];
     effectiveOffset = binding->offset;
-    if (layoutEntry->hasDynamicOffset) {
+    if (binding->dynamicOffsetIndex != UINT32_MAX) {
       if (layoutEntry->kind != GPUBindKindBuffer ||
-          dynamicIndex >= dynamicOffsetCount ||
+          binding->dynamicOffsetIndex >= dynamicOffsetCount ||
           !gpu_u64Add(effectiveOffset,
-                      pDynamicOffsets[dynamicIndex],
+                      pDynamicOffsets[binding->dynamicOffsetIndex],
                       &effectiveOffset)) {
         return 0;
       }
@@ -2573,7 +2749,9 @@ gpuForEachBindGroupBindingWithDynamicOffsets(GPUPipelineLayout *pipelineLayout,
     view.size             = binding->size;
     view.visibility       = layoutEntry->visibility;
     view.bindingType      = layoutEntry->bindingType;
-    view.binding          = pipeline->backendBindings[groupIndex][i];
+    view.binding          = pipeline->backendBindings[groupIndex]
+                                                     [binding->layoutEntryIndex];
+    view.arrayIndex       = binding->arrayIndex;
     view.stage            = binding->stage;
     view.kind             = binding->kind;
     view.hasDynamicOffset = layoutEntry->hasDynamicOffset;
