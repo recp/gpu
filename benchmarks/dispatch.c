@@ -16,17 +16,12 @@
 
 #include "api/cmdqueue_internal.h"
 #include "backend/api/gpudef.h"
+#include "bench.h"
 
 #include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#if defined(_WIN32) || defined(WIN32)
-#  include <windows.h>
-#else
-#  include <time.h>
-#endif
 
 #if defined(_MSC_VER)
 #  define BENCH_NOINLINE __declspec(noinline)
@@ -75,27 +70,6 @@ bench_draw(GPURenderPassEncoder *pass,
 }
 
 static double
-bench_now(void) {
-#if defined(_WIN32) || defined(WIN32)
-  LARGE_INTEGER counter;
-  LARGE_INTEGER frequency;
-
-  QueryPerformanceCounter(&counter);
-  QueryPerformanceFrequency(&frequency);
-  return (double)counter.QuadPart / (double)frequency.QuadPart;
-#else
-  struct timespec time;
-
-#  if defined(CLOCK_MONOTONIC_RAW)
-  clock_gettime(CLOCK_MONOTONIC_RAW, &time);
-#  else
-  clock_gettime(CLOCK_MONOTONIC, &time);
-#  endif
-  return (double)time.tv_sec + (double)time.tv_nsec * 1e-9;
-#endif
-}
-
-static double
 bench_run(BenchPath path,
           GPURenderPassEncoder *pass,
           uint64_t iterations) {
@@ -131,23 +105,6 @@ bench_run(BenchPath path,
   }
   end = bench_now();
   return (end - begin) * 1e9 / (double)iterations;
-}
-
-static double
-bench_median(double values[BENCH_REPEATS]) {
-  for (uint32_t i = 1u; i < BENCH_REPEATS; i++) {
-    double value;
-    uint32_t j;
-
-    value = values[i];
-    j     = i;
-    while (j > 0u && values[j - 1u] > value) {
-      values[j] = values[j - 1u];
-      j--;
-    }
-    values[j] = value;
-  }
-  return values[BENCH_REPEATS / 2u];
 }
 
 static int
@@ -216,7 +173,7 @@ main(int argc, char *argv[]) {
   }
 
   for (uint32_t path = 0u; path < BENCH_PATH_COUNT; path++) {
-    median[path] = bench_median(samples[path]);
+    median[path] = bench_percentile(samples[path], BENCH_REPEATS, 0.5);
   }
 
   printf("GPU dispatch microbenchmark\n");

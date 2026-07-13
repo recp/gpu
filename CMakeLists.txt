@@ -564,7 +564,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
 endif()
 
 if(GPU_BUILD_BENCHMARKS)
-  add_executable(gpu-dispatch-bench benchmarks/dispatch.c)
+  add_executable(gpu-dispatch-bench
+    benchmarks/bench.c
+    benchmarks/dispatch.c
+  )
   target_link_libraries(gpu-dispatch-bench PRIVATE gpu)
   target_include_directories(gpu-dispatch-bench PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -584,6 +587,42 @@ if(GPU_BUILD_BENCHMARKS)
     target_compile_options(gpu-dispatch-bench PRIVATE /W3)
   else()
     target_compile_options(gpu-dispatch-bench PRIVATE -Wall -Wextra)
+  endif()
+
+  add_executable(gpu-static-scene-bench
+    benchmarks/bench.c
+    benchmarks/static_scene.c
+  )
+  target_link_libraries(gpu-static-scene-bench PRIVATE gpu)
+  target_include_directories(gpu-static-scene-bench PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_compile_definitions(gpu-static-scene-bench PRIVATE
+    GPU_BUILD_WITH_VALIDATION=$<BOOL:${GPU_BUILD_WITH_VALIDATION}>
+  )
+  set_target_properties(gpu-static-scene-bench PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_options(gpu-static-scene-bench PRIVATE /W3)
+  else()
+    target_compile_options(gpu-static-scene-bench PRIVATE -Wall -Wextra)
+  endif()
+
+  if(WIN32)
+    foreach(benchmark_target gpu-dispatch-bench gpu-static-scene-bench)
+      foreach(runtime_target us ds)
+        if(TARGET ${runtime_target})
+          add_custom_command(TARGET ${benchmark_target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_FILE:${runtime_target}>
+                    $<TARGET_FILE_DIR:${benchmark_target}>
+          )
+        endif()
+      endforeach()
+    endforeach()
   endif()
 endif()
 
