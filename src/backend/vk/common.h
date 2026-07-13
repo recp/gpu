@@ -287,12 +287,17 @@ typedef struct GPUBufferVk {
 
 typedef struct GPUTextureVk {
   GPUDeviceVk       *gpuDevice;
+  VkImageLayout     *layouts;
   VkDevice           device;
   VkImage            image;
   VkDeviceMemory     memory;
   VkRenderPass       renderPasses[3][2];
   VkImageLayout      layout;
   VkImageAspectFlags aspect;
+  uint32_t           mipLevelCount;
+  uint32_t           arrayLayerCount;
+  uint32_t           subresourceCount;
+  bool               layoutUniform;
 } GPUTextureVk;
 
 typedef struct GPUBindGroupLayoutVk {
@@ -548,6 +553,39 @@ void
 vk_transitionView(VkCommandBuffer   command,
                   GPUTextureViewVk *view,
                   VkImageLayout     nextLayout);
+
+GPU_HIDE
+bool
+vk_transitionTexture(VkCommandBuffer command,
+                     GPUTextureVk   *texture,
+                     uint32_t        baseMip,
+                     uint32_t        mipCount,
+                     uint32_t        baseLayer,
+                     uint32_t        layerCount,
+                     VkImageLayout   nextLayout);
+
+GPU_HIDE
+bool
+vk_transitionTextureBarrier(VkCommandBuffer      command,
+                            GPUTextureVk        *texture,
+                            uint32_t             baseMip,
+                            uint32_t             mipCount,
+                            uint32_t             baseLayer,
+                            uint32_t             layerCount,
+                            VkImageLayout        nextLayout,
+                            VkPipelineStageFlags srcStages,
+                            VkPipelineStageFlags dstStages,
+                            VkAccessFlags        srcAccess,
+                            VkAccessFlags        dstAccess);
+
+GPU_HIDE
+void
+vk_setTextureLayout(GPUTextureVk  *texture,
+                    uint32_t       baseMip,
+                    uint32_t       mipCount,
+                    uint32_t       baseLayer,
+                    uint32_t       layerCount,
+                    VkImageLayout  layout);
 
 GPU_HIDE
 bool

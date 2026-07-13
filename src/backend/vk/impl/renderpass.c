@@ -96,8 +96,20 @@ vk_transitionView(VkCommandBuffer   command,
   VkAccessFlags         srcAccess;
   VkAccessFlags         dstAccess;
 
-  if (!command || !view || !view->image || !view->layout ||
-      *view->layout == nextLayout) {
+  if (!command || !view || !view->image) {
+    return;
+  }
+  if (view->texture) {
+    (void)vk_transitionTexture(command,
+                               view->texture,
+                               view->baseMip,
+                               view->mipCount,
+                               view->baseLayer,
+                               view->layerCount,
+                               nextLayout);
+    return;
+  }
+  if (!view->layout || *view->layout == nextLayout) {
     return;
   }
 
@@ -127,53 +139,6 @@ vk_transitionView(VkCommandBuffer   command,
                        1u,
                        &barrier);
   *view->layout = nextLayout;
-}
-
-static void
-vk__transitionTexture(VkCommandBuffer command,
-                      GPUTexture     *texture,
-                      VkImageLayout   nextLayout) {
-  GPUTextureVk         *native;
-  VkImageMemoryBarrier  barrier = {0};
-  VkPipelineStageFlags  srcStage;
-  VkPipelineStageFlags  dstStage;
-  VkAccessFlags         srcAccess;
-  VkAccessFlags         dstAccess;
-
-  native = texture ? texture->_priv : NULL;
-  if (!command || !native || !native->image || native->layout == nextLayout) {
-    return;
-  }
-
-  vk__layoutAccess(native->layout, &srcStage, &srcAccess);
-  vk__layoutAccess(nextLayout, &dstStage, &dstAccess);
-  barrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  barrier.srcAccessMask                   = srcAccess;
-  barrier.dstAccessMask                   = dstAccess;
-  barrier.oldLayout                       = native->layout;
-  barrier.newLayout                       = nextLayout;
-  barrier.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
-  barrier.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
-  barrier.image                           = native->image;
-  barrier.subresourceRange.aspectMask     = native->aspect;
-  barrier.subresourceRange.baseMipLevel   = 0u;
-  barrier.subresourceRange.levelCount     = texture->mipLevelCount;
-  barrier.subresourceRange.baseArrayLayer = 0u;
-  barrier.subresourceRange.layerCount     =
-    texture->dimension == GPU_TEXTURE_DIMENSION_3D
-      ? 1u
-      : texture->depthOrLayers;
-  vkCmdPipelineBarrier(command,
-                       srcStage,
-                       dstStage,
-                       0u,
-                       0u,
-                       NULL,
-                       0u,
-                       NULL,
-                       1u,
-                       &barrier);
-  native->layout = nextLayout;
 }
 
 static VkPipelineStageFlags
@@ -394,6 +359,7 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
       const GPUTextureBarrier *barrier;
       GPUTextureVk            *texture;
       VkImageMemoryBarrier    *native;
+      VkImageLayout            newLayout;
 
       barrier = &barriers->pTextureBarriers[textureOffset + i];
       if (!barrier->texture->_ownsNative) {
@@ -413,16 +379,52 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
         continue;
       }
 
+      newLayout = vk__textureBarrierLayout(barrier->texture,
+                                           barrier->dstAccess,
+                                           false);
+      if (!texture->layoutUniform) {
+        if (nativeBarrierCount > 0u || nativeImageCount > 0u) {
+          vkCmdPipelineBarrier(command->command,
+                               srcStages,
+                               dstStages,
+                               0u,
+                               0u,
+                               NULL,
+                               nativeBarrierCount,
+                               nativeBarriers,
+                               nativeImageCount,
+                               nativeImages);
+          nativeBarrierCount = 0u;
+          nativeImageCount   = 0u;
+        }
+        if (!vk_transitionTextureBarrier(
+              command->command,
+              texture,
+              barrier->baseMip,
+              barrier->mipCount,
+              barrier->baseLayer,
+              barrier->layerCount,
+              newLayout,
+              srcStages,
+              dstStages,
+              vk__barrierAccess(barrier->srcAccess),
+              vk__barrierAccess(barrier->dstAccess)
+            )) {
+          gpuDeviceRecordValidationError(
+            gpuDevice,
+            "Vulkan texture barrier range transition failed"
+          );
+        }
+        continue;
+      }
+
       native                                = &nativeImages[nativeImageCount++];
       memset(native, 0, sizeof(*native));
       native->sType                         = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
       native->srcAccessMask                 = vk__barrierAccess(barrier->srcAccess);
       native->dstAccessMask                 = vk__barrierAccess(barrier->dstAccess);
       native->oldLayout                     = texture->layout;
-      native->newLayout                     =
-        vk__textureBarrierLayout(barrier->texture,
-                                 barrier->dstAccess,
-                                 false);
+      native->newLayout                     = newLayout;
       native->srcQueueFamilyIndex           = VK_QUEUE_FAMILY_IGNORED;
       native->dstQueueFamilyIndex           = VK_QUEUE_FAMILY_IGNORED;
       native->image                         = texture->image;
@@ -431,7 +433,12 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
       native->subresourceRange.levelCount     = barrier->mipCount;
       native->subresourceRange.baseArrayLayer = barrier->baseLayer;
       native->subresourceRange.layerCount     = barrier->layerCount;
-      texture->layout                        = native->newLayout;
+      vk_setTextureLayout(texture,
+                          barrier->baseMip,
+                          barrier->mipCount,
+                          barrier->baseLayer,
+                          barrier->layerCount,
+                          native->newLayout);
     }
 
     if (nativeBarrierCount > 0u || nativeImageCount > 0u) {
@@ -683,7 +690,12 @@ vk_beginRenderPass(GPUCommandBuffer              *cmdb,
                                                    [color->storeOp];
     native->framebuffer = view->framebuffer;
     native->extent      = view->extent;
-    view->texture->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    vk_setTextureLayout(view->texture,
+                        view->baseMip,
+                        view->mipCount,
+                        view->baseLayer,
+                        view->layerCount,
+                        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
   }
   if (!native->renderPass || !native->framebuffer ||
       native->extent.width == 0u || native->extent.height == 0u) {
@@ -826,9 +838,17 @@ vk_copyBufferToTexture(GPUCopyPassEncoder               *pass,
     return;
   }
 
-  vk__transitionTexture(command->command,
-                        dst,
-                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+  (void)vk_transitionTexture(command->command,
+                             texture,
+                             region->texture.texture.mipLevel,
+                             1u,
+                             dst->dimension == GPU_TEXTURE_DIMENSION_3D
+                               ? 0u
+                               : region->texture.texture.baseArrayLayer,
+                             dst->dimension == GPU_TEXTURE_DIMENSION_3D
+                               ? 1u
+                               : region->texture.layerCount,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
   vkCmdCopyBufferToImage(command->command,
                          buffer->buffer,
                          texture->image,
@@ -855,9 +875,17 @@ vk_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
     return;
   }
 
-  vk__transitionTexture(command->command,
-                        src,
-                        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+  (void)vk_transitionTexture(command->command,
+                             texture,
+                             region->texture.texture.mipLevel,
+                             1u,
+                             src->dimension == GPU_TEXTURE_DIMENSION_3D
+                               ? 0u
+                               : region->texture.texture.baseArrayLayer,
+                             src->dimension == GPU_TEXTURE_DIMENSION_3D
+                               ? 1u
+                               : region->texture.layerCount,
+                             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
   vkCmdCopyImageToBuffer(command->command,
                          texture->image,
                          VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -885,12 +913,20 @@ vk_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
     return;
   }
 
-  vk__transitionTexture(command->command,
-                        src,
-                        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-  vk__transitionTexture(command->command,
-                        dst,
-                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+  (void)vk_transitionTexture(command->command,
+                             srcVk,
+                             region->src.mipLevel,
+                             1u,
+                             texture3D ? 0u : region->src.baseArrayLayer,
+                             texture3D ? 1u : region->layerCount,
+                             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+  (void)vk_transitionTexture(command->command,
+                             dstVk,
+                             region->dst.mipLevel,
+                             1u,
+                             texture3D ? 0u : region->dst.baseArrayLayer,
+                             texture3D ? 1u : region->layerCount,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
   copy.srcSubresource.aspectMask     = srcVk->aspect;
   copy.srcSubresource.mipLevel       = region->src.mipLevel;
   copy.srcSubresource.baseArrayLayer = texture3D

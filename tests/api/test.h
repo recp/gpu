@@ -51,6 +51,7 @@ int gpu_test_bindgroup(GPUDevice *device);
 int gpu_test_resources(GPUDevice *device);
 int gpu_test_copy(GPUDevice *device);
 int gpu_test_texture_transfer(GPUDevice *device);
+int gpu_test_texture_view_render(GPUDevice *device);
 int gpu_test_render(GPUDevice *device, const char *mrtBytecodePath);
 int gpu_test_compute(GPUDevice *device, const char *bytecodePath);
 int gpu_test_query(GPUAdapter *adapter, GPUDevice *device);

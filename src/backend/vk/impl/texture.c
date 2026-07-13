@@ -19,6 +19,10 @@
 #include "../../../api/buffer_internal.h"
 #include "../../../api/texture_internal.h"
 
+enum {
+  VK_TEXTURE_BARRIER_CHUNK_SIZE = 16u
+};
+
 static VkSampleCountFlagBits
 vk__sampleCount(uint32_t count) {
   static const VkSampleCountFlagBits counts[] = {
@@ -179,6 +183,333 @@ vk__layoutSource(VkImageLayout layout,
   }
 }
 
+static bool
+vk__textureRangeValid(const GPUTextureVk *texture,
+                      uint32_t            baseMip,
+                      uint32_t            mipCount,
+                      uint32_t            baseLayer,
+                      uint32_t            layerCount) {
+  return texture && texture->image && texture->layouts &&
+         mipCount > 0u && layerCount > 0u &&
+         baseMip < texture->mipLevelCount &&
+         mipCount <= texture->mipLevelCount - baseMip &&
+         baseLayer < texture->arrayLayerCount &&
+         layerCount <= texture->arrayLayerCount - baseLayer;
+}
+
+static uint32_t
+vk__textureSubresource(const GPUTextureVk *texture,
+                       uint32_t            mip,
+                       uint32_t            layer) {
+  return mip + layer * texture->mipLevelCount;
+}
+
+static bool
+vk__textureRangeFull(const GPUTextureVk *texture,
+                     uint32_t            baseMip,
+                     uint32_t            mipCount,
+                     uint32_t            baseLayer,
+                     uint32_t            layerCount) {
+  return baseMip == 0u && mipCount == texture->mipLevelCount &&
+         baseLayer == 0u && layerCount == texture->arrayLayerCount;
+}
+
+static void
+vk__materializeTextureLayouts(GPUTextureVk *texture) {
+  if (!texture || !texture->layouts || !texture->layoutUniform) {
+    return;
+  }
+
+  for (uint32_t i = 0u; i < texture->subresourceCount; i++) {
+    texture->layouts[i] = texture->layout;
+  }
+}
+
+GPU_HIDE
+void
+vk_setTextureLayout(GPUTextureVk *texture,
+                    uint32_t      baseMip,
+                    uint32_t      mipCount,
+                    uint32_t      baseLayer,
+                    uint32_t      layerCount,
+                    VkImageLayout layout) {
+  if (!vk__textureRangeValid(texture,
+                             baseMip,
+                             mipCount,
+                             baseLayer,
+                             layerCount)) {
+    return;
+  }
+  if (vk__textureRangeFull(texture,
+                           baseMip,
+                           mipCount,
+                           baseLayer,
+                           layerCount)) {
+    texture->layout        = layout;
+    texture->layoutUniform = true;
+    return;
+  }
+  if (texture->layoutUniform && texture->layout == layout) {
+    return;
+  }
+
+  vk__materializeTextureLayouts(texture);
+  for (uint32_t layer = baseLayer; layer < baseLayer + layerCount; layer++) {
+    for (uint32_t mip = baseMip; mip < baseMip + mipCount; mip++) {
+      uint32_t subresource;
+
+      subresource = vk__textureSubresource(texture, mip, layer);
+      texture->layouts[subresource] = layout;
+    }
+  }
+  texture->layoutUniform = false;
+}
+
+static void
+vk__flushTextureBarriers(VkCommandBuffer       command,
+                         VkImageMemoryBarrier  *barriers,
+                         uint32_t               barrierCount,
+                         VkPipelineStageFlags   srcStages,
+                         VkPipelineStageFlags   dstStages) {
+  if (barrierCount == 0u) {
+    return;
+  }
+
+  vkCmdPipelineBarrier(command,
+                       srcStages,
+                       dstStages,
+                       0u,
+                       0u,
+                       NULL,
+                       0u,
+                       NULL,
+                       barrierCount,
+                       barriers);
+}
+
+static void
+vk__fillTextureBarrier(VkImageMemoryBarrier *barrier,
+                       GPUTextureVk         *texture,
+                       VkImageLayout         oldLayout,
+                       VkImageLayout         newLayout,
+                       uint32_t              baseMip,
+                       uint32_t              mipCount,
+                       uint32_t              baseLayer,
+                       uint32_t              layerCount,
+                       VkAccessFlags         srcAccess,
+                       VkAccessFlags         dstAccess) {
+  memset(barrier, 0, sizeof(*barrier));
+  barrier->sType                           =
+    VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier->srcAccessMask                   = srcAccess;
+  barrier->dstAccessMask                   = dstAccess;
+  barrier->oldLayout                       = oldLayout;
+  barrier->newLayout                       = newLayout;
+  barrier->srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+  barrier->dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+  barrier->image                           = texture->image;
+  barrier->subresourceRange.aspectMask     = texture->aspect;
+  barrier->subresourceRange.baseMipLevel   = baseMip;
+  barrier->subresourceRange.levelCount     = mipCount;
+  barrier->subresourceRange.baseArrayLayer = baseLayer;
+  barrier->subresourceRange.layerCount     = layerCount;
+}
+
+static bool
+vk__transitionTexture(VkCommandBuffer      command,
+                      GPUTextureVk        *texture,
+                      uint32_t             baseMip,
+                      uint32_t             mipCount,
+                      uint32_t             baseLayer,
+                      uint32_t             layerCount,
+                      VkImageLayout        nextLayout,
+                      VkPipelineStageFlags explicitSrcStages,
+                      VkPipelineStageFlags explicitDstStages,
+                      VkAccessFlags        explicitSrcAccess,
+                      VkAccessFlags        explicitDstAccess,
+                      bool                 explicitSync) {
+  VkImageMemoryBarrier barriers[VK_TEXTURE_BARRIER_CHUNK_SIZE];
+  VkPipelineStageFlags chunkSrcStages;
+  VkPipelineStageFlags dstStages;
+  VkAccessFlags        dstAccess;
+  uint32_t             barrierCount;
+  bool                 fullRange;
+
+  if (!command ||
+      !vk__textureRangeValid(texture,
+                             baseMip,
+                             mipCount,
+                             baseLayer,
+                             layerCount)) {
+    return false;
+  }
+
+  fullRange = vk__textureRangeFull(texture,
+                                   baseMip,
+                                   mipCount,
+                                   baseLayer,
+                                   layerCount);
+  if (texture->layoutUniform) {
+    VkPipelineStageFlags srcStages;
+    VkAccessFlags        srcAccess;
+
+    if (!explicitSync && texture->layout == nextLayout) {
+      return true;
+    }
+
+    if (explicitSync) {
+      srcStages = explicitSrcStages;
+      dstStages = explicitDstStages;
+      srcAccess = explicitSrcAccess;
+      dstAccess = explicitDstAccess;
+    } else {
+      vk__layoutSource(texture->layout, &srcStages, &srcAccess);
+      vk__layoutSource(nextLayout, &dstStages, &dstAccess);
+    }
+    vk__fillTextureBarrier(&barriers[0],
+                           texture,
+                           texture->layout,
+                           nextLayout,
+                           baseMip,
+                           mipCount,
+                           baseLayer,
+                           layerCount,
+                           srcAccess,
+                           dstAccess);
+    vk__flushTextureBarriers(command,
+                             barriers,
+                             1u,
+                             srcStages,
+                             dstStages);
+    if (fullRange) {
+      texture->layout        = nextLayout;
+      texture->layoutUniform = true;
+    } else {
+      vk_setTextureLayout(texture,
+                          baseMip,
+                          mipCount,
+                          baseLayer,
+                          layerCount,
+                          nextLayout);
+    }
+    return true;
+  }
+
+  if (explicitSync) {
+    dstStages = explicitDstStages;
+    dstAccess = explicitDstAccess;
+  } else {
+    vk__layoutSource(nextLayout, &dstStages, &dstAccess);
+  }
+  barrierCount   = 0u;
+  chunkSrcStages = explicitSync ? explicitSrcStages : 0u;
+  for (uint32_t layer = baseLayer; layer < baseLayer + layerCount; layer++) {
+    for (uint32_t mip = baseMip; mip < baseMip + mipCount; mip++) {
+      VkPipelineStageFlags srcStages;
+      VkAccessFlags        srcAccess;
+      VkImageLayout        oldLayout;
+      uint32_t             subresource;
+
+      subresource = vk__textureSubresource(texture, mip, layer);
+      oldLayout   = texture->layouts[subresource];
+      if (!explicitSync && oldLayout == nextLayout) {
+        continue;
+      }
+
+      if (explicitSync) {
+        srcStages = explicitSrcStages;
+        srcAccess = explicitSrcAccess;
+      } else {
+        vk__layoutSource(oldLayout, &srcStages, &srcAccess);
+        chunkSrcStages |= srcStages;
+      }
+      vk__fillTextureBarrier(&barriers[barrierCount++],
+                             texture,
+                             oldLayout,
+                             nextLayout,
+                             mip,
+                             1u,
+                             layer,
+                             1u,
+                             srcAccess,
+                             dstAccess);
+      texture->layouts[subresource] = nextLayout;
+      if (barrierCount == VK_TEXTURE_BARRIER_CHUNK_SIZE) {
+        vk__flushTextureBarriers(command,
+                                 barriers,
+                                 barrierCount,
+                                 chunkSrcStages,
+                                 dstStages);
+        barrierCount   = 0u;
+        chunkSrcStages = explicitSync ? explicitSrcStages : 0u;
+      }
+    }
+  }
+  if (barrierCount > 0u) {
+    vk__flushTextureBarriers(command,
+                             barriers,
+                             barrierCount,
+                             chunkSrcStages,
+                             dstStages);
+  }
+
+  if (fullRange) {
+    texture->layout        = nextLayout;
+    texture->layoutUniform = true;
+  }
+  return true;
+}
+
+GPU_HIDE
+bool
+vk_transitionTexture(VkCommandBuffer command,
+                     GPUTextureVk   *texture,
+                     uint32_t        baseMip,
+                     uint32_t        mipCount,
+                     uint32_t        baseLayer,
+                     uint32_t        layerCount,
+                     VkImageLayout   nextLayout) {
+  return vk__transitionTexture(command,
+                               texture,
+                               baseMip,
+                               mipCount,
+                               baseLayer,
+                               layerCount,
+                               nextLayout,
+                               0u,
+                               0u,
+                               0u,
+                               0u,
+                               false);
+}
+
+GPU_HIDE
+bool
+vk_transitionTextureBarrier(VkCommandBuffer      command,
+                            GPUTextureVk        *texture,
+                            uint32_t             baseMip,
+                            uint32_t             mipCount,
+                            uint32_t             baseLayer,
+                            uint32_t             layerCount,
+                            VkImageLayout        nextLayout,
+                            VkPipelineStageFlags srcStages,
+                            VkPipelineStageFlags dstStages,
+                            VkAccessFlags        srcAccess,
+                            VkAccessFlags        dstAccess) {
+  return vk__transitionTexture(command,
+                               texture,
+                               baseMip,
+                               mipCount,
+                               baseLayer,
+                               layerCount,
+                               nextLayout,
+                               srcStages,
+                               dstStages,
+                               srcAccess,
+                               dstAccess,
+                               true);
+}
+
 static VkImageLayout
 vk__finalImageLayout(GPUTextureUsageFlags usage) {
   if ((usage & GPU_TEXTURE_USAGE_STORAGE) != 0u) {
@@ -197,82 +528,6 @@ vk__finalImageLayout(GPUTextureUsageFlags usage) {
     return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
   }
   return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-}
-
-static void
-vk__finalLayoutTarget(VkImageLayout layout,
-                      VkPipelineStageFlags *outStage,
-                      VkAccessFlags *outAccess) {
-  switch (layout) {
-    case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-      *outStage  = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-      *outAccess = VK_ACCESS_SHADER_READ_BIT;
-      break;
-    case VK_IMAGE_LAYOUT_GENERAL:
-      *outStage  = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-      *outAccess = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-      break;
-    case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-      *outStage  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-      *outAccess = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-                   VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-      break;
-    case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
-      *outStage  = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-                   VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-      *outAccess = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-      break;
-    case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
-      *outStage  = VK_PIPELINE_STAGE_TRANSFER_BIT;
-      *outAccess = VK_ACCESS_TRANSFER_READ_BIT;
-      break;
-    default:
-      *outStage  = VK_PIPELINE_STAGE_TRANSFER_BIT;
-      *outAccess = VK_ACCESS_TRANSFER_WRITE_BIT;
-      break;
-  }
-}
-
-static void
-vk__imageBarrier(VkCommandBuffer command,
-                 GPUTextureVk *texture,
-                 const GPUTexture *gpuTexture,
-                 VkImageLayout oldLayout,
-                 VkImageLayout newLayout,
-                 VkPipelineStageFlags srcStage,
-                 VkPipelineStageFlags dstStage,
-                 VkAccessFlags srcAccess,
-                 VkAccessFlags dstAccess) {
-  VkImageMemoryBarrier barrier = {0};
-
-  barrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  barrier.srcAccessMask                   = srcAccess;
-  barrier.dstAccessMask                   = dstAccess;
-  barrier.oldLayout                       = oldLayout;
-  barrier.newLayout                       = newLayout;
-  barrier.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
-  barrier.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
-  barrier.image                           = texture->image;
-  barrier.subresourceRange.aspectMask     = texture->aspect;
-  barrier.subresourceRange.baseMipLevel   = 0u;
-  barrier.subresourceRange.levelCount     = gpuTexture->mipLevelCount;
-  barrier.subresourceRange.baseArrayLayer = 0u;
-  barrier.subresourceRange.layerCount     =
-    gpuTexture->dimension == GPU_TEXTURE_DIMENSION_3D
-      ? 1u
-      : gpuTexture->depthOrLayers;
-
-  vkCmdPipelineBarrier(command,
-                       srcStage,
-                       dstStage,
-                       0u,
-                       0u,
-                       NULL,
-                       0u,
-                       NULL,
-                       1u,
-                       &barrier);
 }
 
 static void
@@ -377,6 +632,8 @@ vk_createTexture(GPUDevice                  * __restrict device,
   VkMemoryAllocateInfo   allocationInfo = {0};
   VkMemoryPropertyFlags  memoryFlags;
   VkSampleCountFlagBits  sampleCount;
+  uint32_t               arrayLayerCount;
+  uint32_t               subresourceCount;
   uint32_t               memoryTypeIndex;
 
   if (!device || !device->_priv || !info || !outTexture ||
@@ -436,6 +693,15 @@ vk_createTexture(GPUDevice                  * __restrict device,
       info->depthOrLayers >= 6u && info->depthOrLayers % 6u == 0u) {
     imageInfo.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
   }
+  arrayLayerCount = imageInfo.arrayLayers;
+  if (imageInfo.mipLevels > UINT32_MAX / arrayLayerCount) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  subresourceCount = imageInfo.mipLevels * arrayLayerCount;
+  state.mipLevelCount    = imageInfo.mipLevels;
+  state.arrayLayerCount  = arrayLayerCount;
+  state.subresourceCount = subresourceCount;
+  state.layoutUniform    = true;
 
   if (vkCreateImage(state.device,
                     &imageInfo,
@@ -489,7 +755,9 @@ vk_createTexture(GPUDevice                  * __restrict device,
     }
   }
 
-  texture = calloc(1, sizeof(*texture) + sizeof(*native));
+  texture = calloc(1,
+                   sizeof(*texture) + sizeof(*native) +
+                     (size_t)subresourceCount * sizeof(*native->layouts));
   if (!texture) {
     vk__destroyTextureState(&state);
     return GPU_ERROR_OUT_OF_MEMORY;
@@ -497,6 +765,7 @@ vk_createTexture(GPUDevice                  * __restrict device,
 
   native                 = (GPUTextureVk *)(texture + 1);
   *native                = state;
+  native->layouts        = (VkImageLayout *)(native + 1);
   texture->_priv         = native;
   texture->format        = info->format;
   texture->dimension     = info->dimension;
@@ -665,10 +934,6 @@ vk__submitTextureWrite(GPUCommandQueue             *queue,
   VkFenceCreateInfo           fenceInfo = {0};
   VkBufferImageCopy           copy = {0};
   VkSubmitInfo                submitInfo = {0};
-  VkPipelineStageFlags        srcStage;
-  VkPipelineStageFlags        dstStage;
-  VkAccessFlags               srcAccess;
-  VkAccessFlags               dstAccess;
   VkImageLayout               finalLayout;
   VkResult                    result;
   uint32_t                    rowBlocks;
@@ -719,16 +984,20 @@ vk__submitTextureWrite(GPUCommandQueue             *queue,
     goto cleanup;
   }
 
-  vk__layoutSource(textureVk->layout, &srcStage, &srcAccess);
-  vk__imageBarrier(command,
-                   textureVk,
-                   texture,
-                   textureVk->layout,
-                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                   srcStage,
-                   VK_PIPELINE_STAGE_TRANSFER_BIT,
-                   srcAccess,
-                   VK_ACCESS_TRANSFER_WRITE_BIT);
+  if (!vk_transitionTexture(command,
+                            textureVk,
+                            region->mipLevel,
+                            1u,
+                            texture->dimension == GPU_TEXTURE_DIMENSION_3D
+                              ? 0u
+                              : region->baseArrayLayer,
+                            texture->dimension == GPU_TEXTURE_DIMENSION_3D
+                              ? 1u
+                              : region->layerCount,
+                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)) {
+    result = VK_ERROR_UNKNOWN;
+    goto cleanup;
+  }
 
   copy.bufferOffset                    = 0u;
   copy.bufferRowLength                 = rowLength;
@@ -748,17 +1017,20 @@ vk__submitTextureWrite(GPUCommandQueue             *queue,
                          &copy);
 
   finalLayout = vk__finalImageLayout(texture->usage);
-  if (finalLayout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-    vk__finalLayoutTarget(finalLayout, &dstStage, &dstAccess);
-    vk__imageBarrier(command,
-                     textureVk,
-                     texture,
-                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                     finalLayout,
-                     VK_PIPELINE_STAGE_TRANSFER_BIT,
-                     dstStage,
-                     VK_ACCESS_TRANSFER_WRITE_BIT,
-                     dstAccess);
+  if (finalLayout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+      !vk_transitionTexture(command,
+                            textureVk,
+                            region->mipLevel,
+                            1u,
+                            texture->dimension == GPU_TEXTURE_DIMENSION_3D
+                              ? 0u
+                              : region->baseArrayLayer,
+                            texture->dimension == GPU_TEXTURE_DIMENSION_3D
+                              ? 1u
+                              : region->layerCount,
+                            finalLayout)) {
+    result = VK_ERROR_UNKNOWN;
+    goto cleanup;
   }
 
   result = vkEndCommandBuffer(command);
@@ -784,10 +1056,6 @@ vk__submitTextureWrite(GPUCommandQueue             *queue,
                              VK_TRUE,
                              UINT64_MAX);
   }
-  if (result == VK_SUCCESS) {
-    textureVk->layout = finalLayout;
-  }
-
 cleanup:
   if (submitted && result != VK_SUCCESS) {
     (void)vkDeviceWaitIdle(deviceVk->device);

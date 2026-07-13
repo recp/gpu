@@ -310,6 +310,7 @@ if(GPU_BUILD_TESTS)
     tests/api/shader.c
     tests/api/shader_sampler.c
     tests/api/texture_transfer.c
+    tests/api/texture_view_render.c
   )
   target_link_libraries(gpu-api-test PRIVATE gpu)
   target_compile_definitions(gpu-api-test PRIVATE
