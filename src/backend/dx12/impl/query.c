@@ -100,7 +100,8 @@ dx12_createQuerySet(GPUDevice                  *device,
 
   deviceDX12 = device ? device->_priv : NULL;
   if (!deviceDX12 || !deviceDX12->d3dDevice || !info || !set ||
-      (info->type != GPU_QUERY_OCCLUSION &&
+      (info->type != GPU_QUERY_TIMESTAMP &&
+       info->type != GPU_QUERY_OCCLUSION &&
        info->type != GPU_QUERY_PIPELINE_STATISTICS)) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -110,9 +111,13 @@ dx12_createQuerySet(GPUDevice                  *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  desc.Type     = info->type == GPU_QUERY_OCCLUSION
-                    ? D3D12_QUERY_HEAP_TYPE_OCCLUSION
-                    : D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS;
+  if (info->type == GPU_QUERY_TIMESTAMP) {
+    desc.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
+  } else if (info->type == GPU_QUERY_OCCLUSION) {
+    desc.Type = D3D12_QUERY_HEAP_TYPE_OCCLUSION;
+  } else {
+    desc.Type = D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS;
+  }
   desc.Count    = info->count;
   desc.NodeMask = 0u;
   result = deviceDX12->d3dDevice->lpVtbl->CreateQueryHeap(
@@ -132,6 +137,26 @@ dx12_createQuerySet(GPUDevice                  *device,
 #endif
   set->_priv = native;
   return GPU_OK;
+}
+
+GPU_HIDE
+void
+dx12_writeTimestamp(GPUCommandBuffer *cmdb,
+                    GPUQuerySet      *set,
+                    uint32_t          queryIndex) {
+  GPUCommandBufferDX12 *command;
+  GPUQuerySetDX12      *native;
+
+  command = cmdb ? cmdb->_priv : NULL;
+  native  = set ? set->_priv : NULL;
+  if (!command || !command->commandList || !native || !native->heap) {
+    return;
+  }
+
+  command->commandList->lpVtbl->EndQuery(command->commandList,
+                                          native->heap,
+                                          D3D12_QUERY_TYPE_TIMESTAMP,
+                                          queryIndex);
 }
 
 GPU_HIDE
@@ -266,7 +291,9 @@ dx12_resolveQuerySet(GPUCommandBuffer *cmdb,
     }
     return;
   }
-  if (set->type == GPU_QUERY_OCCLUSION) {
+  if (set->type == GPU_QUERY_TIMESTAMP) {
+    queryType = D3D12_QUERY_TYPE_TIMESTAMP;
+  } else if (set->type == GPU_QUERY_OCCLUSION) {
     queryType = D3D12_QUERY_TYPE_BINARY_OCCLUSION;
   } else if (set->type == GPU_QUERY_PIPELINE_STATISTICS) {
     queryType = D3D12_QUERY_TYPE_PIPELINE_STATISTICS;
@@ -295,6 +322,7 @@ void
 dx12_initQuery(GPUApiCommandBuffer *api) {
   api->createQuerySet               = dx12_createQuerySet;
   api->destroyQuerySet              = dx12_destroyQuerySet;
+  api->writeTimestamp               = dx12_writeTimestamp;
   api->beginOcclusionQuery          = dx12_beginOcclusionQuery;
   api->endOcclusionQuery            = dx12_endOcclusionQuery;
   api->beginPipelineStatisticsQuery = dx12_beginPipelineStatisticsQuery;

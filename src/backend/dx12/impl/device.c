@@ -383,6 +383,7 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
 
   switch (feature) {
     case GPU_FEATURE_COMPUTE:
+    case GPU_FEATURE_TIMESTAMPS:
     case GPU_FEATURE_INDIRECT_DRAW:
     case GPU_FEATURE_MULTI_DRAW:
       return true;

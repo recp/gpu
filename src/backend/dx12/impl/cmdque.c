@@ -63,6 +63,26 @@ dx12__queueDevice(GPUCommandQueueDX12 *queue) {
   return queue && queue->queue ? queue->queue->_device : NULL;
 }
 
+GPU_HIDE
+GPUResult
+dx12_getTimestampPeriod(GPUCommandQueue *queue,
+                        double          *outNanosecondsPerTick) {
+  GPUCommandQueueDX12 *native;
+  UINT64               frequency;
+
+  native = queue ? queue->_priv : NULL;
+  if (!native || !native->commandQueue || !outNanosecondsPerTick ||
+      FAILED(native->commandQueue->lpVtbl->GetTimestampFrequency(
+        native->commandQueue,
+        &frequency
+      )) || frequency == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  *outNanosecondsPerTick = 1000000000.0 / (double)frequency;
+  return GPU_OK;
+}
+
 static bool
 dx12__lostReason(GPUCommandQueueDX12 *queue,
                  HRESULT              result,
@@ -795,6 +815,7 @@ void
 dx12_initCmdQue(GPUApiCommandQueue *api) {
   api->newCommandQueue         = dx12_newCommandQueue;
   api->getCommandQueue         = dx12_getCommandQueue;
+  api->getTimestampPeriod      = dx12_getTimestampPeriod;
   api->newCommandBuffer        = dx12_newCommandBuffer;
   api->commandBufferOnComplete = dx12_commandBufferOnComplete;
   api->commit                  = dx12_commitCommandBuffer;

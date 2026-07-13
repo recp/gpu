@@ -176,7 +176,7 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
   GPUFence *fence = NULL;
   const char *metalMode;
   GPUCommandBuffer *buffers[1];
-  uint64_t timestamps[2] = {0, 0};
+  uint64_t timestamps[2] = {UINT64_MAX, UINT64_MAX};
   double timestampPeriod;
   GPUResult periodResult;
   int ok = 0;
@@ -246,6 +246,14 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
     fprintf(stderr, "timestamp resolve buffer create failed\n");
     goto cleanup;
   }
+  if (GPUQueueWriteBuffer(queue,
+                          buffer,
+                          0u,
+                          timestamps,
+                          sizeof(timestamps)) != GPU_OK) {
+    fprintf(stderr, "timestamp resolve buffer initialize failed\n");
+    goto cleanup;
+  }
 
   if (GPUAcquireCommandBuffer(queue, "timestamp-query-test", &cmdb) != GPU_OK || !cmdb) {
     fprintf(stderr, "timestamp query command buffer acquire failed\n");
@@ -284,7 +292,8 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
     fprintf(stderr, "timestamp query readback failed\n");
     goto cleanup;
   }
-  if (timestamps[0] == UINT64_MAX || timestamps[1] == UINT64_MAX) {
+  if (timestamps[0] == UINT64_MAX || timestamps[1] == UINT64_MAX ||
+      timestamps[1] < timestamps[0]) {
     fprintf(stderr, "timestamp query resolved error values\n");
     goto cleanup;
   }
