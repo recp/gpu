@@ -287,13 +287,14 @@ GPUCreateDevice(GPUAdapter               *adapter,
                 const GPUDeviceCreateInfo *info,
                 GPUDevice                **outDevice);
 
+/*! Returns an instance-owned adapter selected for general use. */
 GPU_EXPORT
-GPUDevice *
-GPUCreateDeviceWithDefaultQueues(GPUAdapter *adapter);
+GPUAdapter *
+GPUGetAutoSelectedAdapter(GPUInstance *inst);
 
 GPU_EXPORT
 GPUDevice *
-GPUCreateSystemDefaultDevice(GPUInstance *inst);
+GPUCreateDeviceWithDefaultQueues(GPUAdapter *adapter);
 
 /*! Returns queue bits created and usable on this device. */
 GPU_EXPORT

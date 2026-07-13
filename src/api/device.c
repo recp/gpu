@@ -1233,10 +1233,9 @@ GPUGetProcAddr(GPUDevice *device, const char *name) {
 }
 
 GPU_EXPORT
-GPUDevice*
-GPUCreateSystemDefaultDevice(GPUInstance *inst) {
+GPUAdapter *
+GPUGetAutoSelectedAdapter(GPUInstance *inst) {
   GPUAdapter *adapter;
-  GPUDevice *device;
   GPUApi     *api;
 
   if (!(api = gpuInstanceApi(inst))) {
@@ -1247,11 +1246,7 @@ GPUCreateSystemDefaultDevice(GPUInstance *inst) {
   if (api->device.selectAdapter) {
     adapter = api->device.selectAdapter(inst, adapter);
   }
-  if (!adapter || GPUCreateDevice(adapter, NULL, &device) != GPU_OK) {
-    return NULL;
-  }
-
-  return device;
+  return adapter;
 }
 
 GPU_EXPORT

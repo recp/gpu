@@ -278,9 +278,10 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
 
   GPUDestroySurface(surface);
   GPUDestroyDevice(device);
-  device = GPUCreateSystemDefaultDevice(&instance);
-  if (device != &gOwnershipDevice) {
-    fprintf(stderr, "instance-scoped default device selection failed\n");
+  adapter = GPUGetAutoSelectedAdapter(&instance);
+  device  = GPUCreateDeviceWithDefaultQueues(adapter);
+  if (adapter != &gOwnershipAdapter || device != &gOwnershipDevice) {
+    fprintf(stderr, "instance-scoped automatic adapter selection failed\n");
     return 0;
   }
   GPUDestroyDevice(device);
