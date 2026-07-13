@@ -771,12 +771,13 @@ cleanup:
 static int
 check_reflection_layout_api(GPUDevice *device, GPUShaderLibrary *library) {
   const GPUBindGroupLayoutEntry *entries;
-  GPUBindGroupLayout *layouts[2] = {0};
-  GPUBindGroupLayout *smallLayouts[1] = {0};
-  GPUBindGroupLayout *reversedLayouts[2] = {0};
-  GPUPipelineLayout *pipelineLayout;
-  uint32_t count;
-  int ok;
+  GPUBindGroupLayout            *layouts[2]         = {0};
+  GPUBindGroupLayout            *smallLayouts[1]    = {0};
+  GPUBindGroupLayout            *reversedLayouts[2] = {0};
+  GPUPipelineLayout             *pipelineLayout;
+  GPUShaderLayout               *shaderLayout;
+  uint32_t                       count;
+  int                            ok;
 
   count = 0u;
   if (GPUCreateBindGroupLayoutsFromReflection(device, NULL, &count, NULL) !=
@@ -800,6 +801,25 @@ check_reflection_layout_api(GPUDevice *device, GPUShaderLibrary *library) {
                                             NULL) !=
         GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "reflection pipeline layout accepted null input\n");
+    return 0;
+  }
+
+  shaderLayout = (GPUShaderLayout *)(uintptr_t)1u;
+  if (GPUCreateShaderLayout(NULL, library, &shaderLayout) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      shaderLayout != NULL ||
+      GPUCreateShaderLayout(device, NULL, &shaderLayout) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      shaderLayout != NULL ||
+      GPUCreateShaderLayout(device, library, NULL) !=
+        GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "shader layout accepted null input\n");
+    return 0;
+  }
+
+  count = UINT32_MAX;
+  if (GPUGetBindGroupLayoutEntries(NULL, &count) != NULL || count != 0u) {
+    fprintf(stderr, "layout introspection accepted null layout\n");
     return 0;
   }
 

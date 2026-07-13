@@ -96,7 +96,7 @@ typedef struct GPUBindRenderContext {
 } GPUBindRenderContext;
 
 static GPUBindGroupLayoutPriv *
-gpu_layoutPriv(GPUBindGroupLayout *layout) {
+gpu_layoutPriv(const GPUBindGroupLayout *layout) {
   return layout ? layout->_priv : NULL;
 }
 
@@ -1143,7 +1143,8 @@ GPUCreateBindGroupLayout(GPUDevice *device,
 
 GPU_EXPORT
 const GPUBindGroupLayoutEntry *
-GPUGetBindGroupLayoutEntries(GPUBindGroupLayout *layout, uint32_t *outCount) {
+GPUGetBindGroupLayoutEntries(const GPUBindGroupLayout *layout,
+                             uint32_t                 *outCount) {
   GPUBindGroupLayoutPriv *priv;
 
   priv = gpu_layoutPriv(layout);
@@ -2159,13 +2160,13 @@ GPUCreateShaderLayout(GPUDevice *device,
   }
 
   *outLayout = NULL;
-  if (!library) {
+  if (!device || !library) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   layout = calloc(1, sizeof(*layout));
   if (!layout) {
-    return GPU_ERROR_BACKEND_FAILURE;
+    return GPU_ERROR_OUT_OF_MEMORY;
   }
 
   layoutCount = 0u;
@@ -2178,13 +2179,14 @@ GPUCreateShaderLayout(GPUDevice *device,
   if (layoutCount > 0u) {
     if ((size_t)layoutCount > SIZE_MAX / sizeof(*layout->bindGroupLayouts)) {
       free(layout);
-      return GPU_ERROR_BACKEND_FAILURE;
+      return GPU_ERROR_OUT_OF_MEMORY;
     }
 
-    layout->bindGroupLayouts = calloc(layoutCount, sizeof(*layout->bindGroupLayouts));
+    layout->bindGroupLayouts = calloc(layoutCount,
+                                      sizeof(*layout->bindGroupLayouts));
     if (!layout->bindGroupLayouts) {
       free(layout);
-      return GPU_ERROR_BACKEND_FAILURE;
+      return GPU_ERROR_OUT_OF_MEMORY;
     }
 
     rc = GPUCreateBindGroupLayoutsFromReflection(device,

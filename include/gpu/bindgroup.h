@@ -83,9 +83,9 @@ typedef struct GPUBindGroupCreateInfo {
 typedef struct GPUPipelineLayout GPUPipelineLayout;
 
 typedef struct GPUShaderLayout {
-  GPUPipelineLayout *pipelineLayout;
-  uint32_t bindGroupLayoutCount;
+  GPUPipelineLayout   *pipelineLayout;
   GPUBindGroupLayout **bindGroupLayouts;
+  uint32_t             bindGroupLayoutCount;
 } GPUShaderLayout;
 
 typedef struct GPUPipelineLayoutCreateInfo {
@@ -105,7 +105,8 @@ GPUCreateBindGroupLayout(GPUDevice *device,
 
 GPU_EXPORT
 const GPUBindGroupLayoutEntry *
-GPUGetBindGroupLayoutEntries(GPUBindGroupLayout *layout, uint32_t *outCount);
+GPUGetBindGroupLayoutEntries(const GPUBindGroupLayout *layout,
+                             uint32_t                 *outCount);
 
 GPU_EXPORT
 void
