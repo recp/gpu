@@ -426,7 +426,8 @@ vk_createRenderPipeline(GPUDevice                         *device,
                                   : 1u);
   if (!sampleCount ||
       (sampleCount > VK_SAMPLE_COUNT_1_BIT && !deviceVk->dynamicRendering) ||
-      (deviceVk->colorSampleCounts & sampleCount) == 0u ||
+      (info->colorTargetCount > 0u &&
+       (deviceVk->colorSampleCounts & sampleCount) == 0u) ||
       (info->depthStencilFormat != GPU_FORMAT_UNDEFINED &&
        (deviceVk->depthSampleCounts & sampleCount) == 0u)) {
     return GPU_ERROR_UNSUPPORTED;

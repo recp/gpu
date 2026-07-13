@@ -146,7 +146,9 @@ mt_newRenderPipeline(GPUFormat pixelFormat) {
   MTLRenderPipelineDescriptor *renderDesc;
 
   renderDesc = [MTLRenderPipelineDescriptor new];
-  renderDesc.colorAttachments[0].pixelFormat = mt_format(pixelFormat);
+  if (pixelFormat != GPU_FORMAT_UNDEFINED) {
+    renderDesc.colorAttachments[0].pixelFormat = mt_format(pixelFormat);
+  }
   pipeline = calloc(1, sizeof(*pipeline));
   pipeline->_priv = renderDesc;
   return pipeline;

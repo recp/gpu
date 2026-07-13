@@ -559,15 +559,35 @@ check_render_pipeline_validation(GPUDevice *device,
   info.layout = pipelineLayout;
 
   info.colorTargetCount = 0u;
+  info.pColorTargets     = NULL;
   if (!expect_render_pipeline_error(device,
                                     &info,
-                                    "render pipeline create accepted no color targets")) {
+                                    "render pipeline create accepted no attachments")) {
     GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyShaderLibrary(library);
     return 0;
   }
 
-  info.colorTargetCount = (uint32_t)GPU_ARRAY_LEN(colorTargets);
+  depthStencil.depthTestEnable  = true;
+  depthStencil.depthWriteEnable = true;
+  depthStencil.depthCompare     = GPU_COMPARE_LESS;
+  info.depthStencilFormat       = GPU_FORMAT_DEPTH32_FLOAT;
+  info.pDepthStencilState       = &depthStencil;
+  pipeline                      = NULL;
+  if (GPUCreateRenderPipeline(device, &info, &pipeline) != GPU_OK ||
+      !pipeline) {
+    fprintf(stderr, "render pipeline create rejected depth-only target\n");
+    GPUDestroyPipelineLayout(pipelineLayout);
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+  GPUDestroyRenderPipeline(pipeline);
+
+  memset(&depthStencil, 0, sizeof(depthStencil));
+  info.depthStencilFormat = GPU_FORMAT_UNDEFINED;
+  info.pDepthStencilState = NULL;
+  info.pColorTargets      = colorTargets;
+  info.colorTargetCount   = (uint32_t)GPU_ARRAY_LEN(colorTargets);
   if (!expect_render_pipeline_error(device,
                                     &info,
                                     "render pipeline create accepted too many color targets")) {

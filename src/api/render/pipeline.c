@@ -355,9 +355,10 @@ gpu_pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info) {
   }
   if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info))
     return false;
-  if (info->colorTargetCount == 0 ||
-      info->colorTargetCount > GPU_RENDER_PIPELINE_MAX_COLOR_TARGETS ||
-      !info->pColorTargets)
+  if (info->colorTargetCount > GPU_RENDER_PIPELINE_MAX_COLOR_TARGETS ||
+      (info->colorTargetCount > 0u && !info->pColorTargets) ||
+      (info->colorTargetCount == 0u &&
+       info->depthStencilFormat == GPU_FORMAT_UNDEFINED))
     return false;
   if (!gpu_vertexStateIsValid(&info->vertex))
     return false;
@@ -475,7 +476,9 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   if (!vertexFunc || !fragmentFunc)
     return GPU_ERROR_INVALID_ARGUMENT;
 
-  colorFormat = info->pColorTargets[0].format;
+  colorFormat = info->colorTargetCount > 0u
+                  ? info->pColorTargets[0].format
+                  : GPU_FORMAT_UNDEFINED;
   pipeline = gpuCreateRenderPipelineDesc(api, colorFormat);
   if (!pipeline)
     return GPU_ERROR_BACKEND_FAILURE;
