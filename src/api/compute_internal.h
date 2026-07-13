@@ -33,6 +33,7 @@ struct GPUComputePipeline {
   uint32_t             _requiredBindGroupMask;
   uint32_t             _pushConstantSizeBytes;
   GPUShaderStageFlags  _pushConstantStages;
+  uint32_t             _refCount;
 };
 
 GPU_HIDE

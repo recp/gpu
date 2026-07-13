@@ -48,7 +48,23 @@ gpuPipelineCacheStoreRender(GPUPipelineCache                  *cache,
                             GPURenderPipeline                 *pipeline);
 
 GPU_HIDE
+GPUResult
+gpuPipelineCacheFindCompute(GPUPipelineCache                   *cache,
+                            const GPUComputePipelineCreateInfo *info,
+                            GPUComputePipeline                **outPipeline);
+
+GPU_HIDE
+GPUComputePipeline *
+gpuPipelineCacheStoreCompute(GPUPipelineCache                   *cache,
+                             const GPUComputePipelineCreateInfo *info,
+                             GPUComputePipeline                 *pipeline);
+
+GPU_HIDE
 bool
 gpuReleaseRenderPipeline(GPURenderPipeline *pipeline);
+
+GPU_HIDE
+bool
+gpuReleaseComputePipeline(GPUComputePipeline *pipeline);
 
 #endif /* gpu_pipeline_cache_internal_h */

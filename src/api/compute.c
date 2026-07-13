@@ -150,6 +150,19 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
     }
   }
 
+  if (info->cache && !info->chain.pNext) {
+    GPUResult result;
+
+    result = gpuPipelineCacheFindCompute(info->cache, info, &pipeline);
+    if (result != GPU_OK) {
+      return result;
+    }
+    if (pipeline) {
+      *outPipeline = pipeline;
+      return GPU_OK;
+    }
+  }
+
   if (!(api = gpuDeviceApi(device))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -160,8 +173,9 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
     if (!pipeline) {
       return GPU_ERROR_OUT_OF_MEMORY;
     }
-    pipeline->_api    = api;
-    pipeline->_device = device;
+    pipeline->_api      = api;
+    pipeline->_device   = device;
+    pipeline->_refCount = 1u;
     result = api->compute.createPipeline(device, info, pipeline);
     if (result != GPU_OK) {
       free(pipeline);
@@ -187,8 +201,9 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
-    pipeline->_api    = api;
-    pipeline->_device = device;
+    pipeline->_api      = api;
+    pipeline->_device   = device;
+    pipeline->_refCount = 1u;
     api->compute.setFunction(pipeline, function);
     state = gpuCompileComputePipelineState(device, pipeline);
     if (!state) {
@@ -204,12 +219,16 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
     state->workgroupSize[1] = 1u;
     state->workgroupSize[2] = 1u;
   }
-  gpuRecordPipelineCompile(device, info->cache);
   pipeline->_layout = info->layout;
   pipeline->_requiredBindGroupMask = requiredBindGroupMask;
   gpuGetPipelineLayoutPushConstants(info->layout,
                                     &pipeline->_pushConstantSizeBytes,
                                     &pipeline->_pushConstantStages);
+  if (info->cache && !info->chain.pNext) {
+    pipeline = gpuPipelineCacheStoreCompute(info->cache, info, pipeline);
+  } else {
+    gpuRecordPipelineCompile(device, info->cache);
+  }
   *outPipeline = pipeline;
   return GPU_OK;
 }
@@ -220,6 +239,10 @@ GPUDestroyComputePipeline(GPUComputePipeline *pipeline) {
   GPUApi *api;
 
   if (!pipeline) {
+    return;
+  }
+
+  if (!gpuReleaseComputePipeline(pipeline)) {
     return;
   }
 

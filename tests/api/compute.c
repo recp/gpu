@@ -170,8 +170,11 @@ check_compute_pipeline_validation(GPUDevice *device,
   GPUShaderLibrary *library = NULL;
   GPUPipelineLayoutCreateInfo layoutInfo = {0};
   GPUPipelineLayout *pipelineLayout = NULL;
+  GPUPipelineCacheCreateInfo cacheInfo = {0};
+  GPUPipelineCache *cache = NULL;
   GPUComputePipelineCreateInfo info = {0};
   GPUComputePipeline *pipeline;
+  GPUCacheStats stats;
 
   if (!create_compute_usl_library(device, bytecodePath, &library)) {
     fprintf(stderr, "failed to create compute pipeline test library\n");
@@ -268,9 +271,56 @@ check_compute_pipeline_validation(GPUDevice *device,
   }
 
   GPUDestroyComputePipeline(pipeline);
+  pipeline = NULL;
+
+  cacheInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+  cacheInfo.chain.structSize = sizeof(cacheInfo);
+  cacheInfo.label            = "api-compute-cache";
+  cacheInfo.maxEntries       = 2u;
+  GPUResetStats(device);
+  if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {
+    fprintf(stderr, "failed to create compute pipeline cache\n");
+    GPUDestroyPipelineLayout(pipelineLayout);
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+
+  info.cache = cache;
+  if (GPUCreateComputePipeline(device, &info, &pipeline) != GPU_OK ||
+      !pipeline) {
+    fprintf(stderr, "compute pipeline cache miss create failed\n");
+    goto cache_fail;
+  }
+  GPUDestroyComputePipeline(pipeline);
+  pipeline = NULL;
+  if (GPUCreateComputePipeline(device, &info, &pipeline) != GPU_OK ||
+      !pipeline) {
+    fprintf(stderr, "compute pipeline cache hit failed\n");
+    goto cache_fail;
+  }
+  GPUDestroyComputePipeline(pipeline);
+  pipeline = NULL;
+  if (GPUGetCacheStats(device, &stats) != GPU_OK ||
+      stats.pipelineCompiles != 1u ||
+      stats.pipelineMisses != 1u ||
+      stats.pipelineHits != 1u) {
+    fprintf(stderr, "compute pipeline cache stats mismatch\n");
+    goto cache_fail;
+  }
+
+  info.cache = NULL;
+  GPUDestroyPipelineCache(cache);
   GPUDestroyPipelineLayout(pipelineLayout);
   GPUDestroyShaderLibrary(library);
   return 1;
+
+cache_fail:
+  info.cache = NULL;
+  GPUDestroyComputePipeline(pipeline);
+  GPUDestroyPipelineCache(cache);
+  GPUDestroyPipelineLayout(pipelineLayout);
+  GPUDestroyShaderLibrary(library);
+  return 0;
 }
 
 static int
