@@ -14,6 +14,55 @@ option(GPU_BUILD_TESTS "Build GPU validation tests" OFF)
 option(GPU_BUILD_SAMPLES "Build GPU samples" OFF)
 option(GPU_BUILD_WITH_VALIDATION "Build validation and verbose diagnostics" ON)
 option(GPU_BUILD_WITH_DEBUG_MARKERS "Build debug marker support" ON)
+option(GPU_BACKEND_METAL_ONLY "Build only the Metal backend" OFF)
+option(GPU_BACKEND_VULKAN_ONLY "Build only the Vulkan backend" OFF)
+option(GPU_BACKEND_DX12_ONLY "Build only the Direct3D 12 backend" OFF)
+
+set(GPU_SINGLE_BACKEND_COUNT 0)
+foreach(_gpu_backend_only
+        GPU_BACKEND_METAL_ONLY
+        GPU_BACKEND_VULKAN_ONLY
+        GPU_BACKEND_DX12_ONLY)
+  if(${_gpu_backend_only})
+    math(EXPR GPU_SINGLE_BACKEND_COUNT "${GPU_SINGLE_BACKEND_COUNT} + 1")
+  endif()
+endforeach()
+
+if(GPU_SINGLE_BACKEND_COUNT GREATER 1)
+  message(FATAL_ERROR "Select at most one GPU_BACKEND_*_ONLY option")
+endif()
+if(GPU_BACKEND_METAL_ONLY AND NOT APPLE)
+  message(FATAL_ERROR "GPU_BACKEND_METAL_ONLY requires an Apple platform")
+endif()
+if(GPU_BACKEND_DX12_ONLY AND NOT WIN32)
+  message(FATAL_ERROR "GPU_BACKEND_DX12_ONLY requires Windows")
+endif()
+if(GPU_BACKEND_VULKAN_ONLY)
+  set(GPU_ENABLE_VULKAN ON)
+endif()
+
+set(GPU_BUILD_METAL OFF)
+set(GPU_BUILD_VULKAN OFF)
+set(GPU_BUILD_DX12 OFF)
+set(GPU_BUILD_OPENGL OFF)
+
+if(GPU_BACKEND_METAL_ONLY)
+  set(GPU_BUILD_METAL ON)
+elseif(GPU_BACKEND_VULKAN_ONLY)
+  set(GPU_BUILD_VULKAN ON)
+elseif(GPU_BACKEND_DX12_ONLY)
+  set(GPU_BUILD_DX12 ON)
+else()
+  set(GPU_BUILD_OPENGL ON)
+  if(APPLE)
+    set(GPU_BUILD_METAL ON)
+  elseif(WIN32)
+    set(GPU_BUILD_DX12 ON)
+  endif()
+  if(GPU_ENABLE_VULKAN)
+    set(GPU_BUILD_VULKAN ON)
+  endif()
+endif()
 
 set(GPU_USL_ROOT "" CACHE PATH "UniversalShading/us checkout")
 set(GPU_USL_INCLUDE_DIR "" CACHE PATH "USL public include directory")
@@ -42,9 +91,6 @@ set(GPU_CORE_SOURCES
   src/api/texture.c
   src/api/vertex.c
   src/backend/backend.c
-  src/backend/gl/api.c
-  src/backend/gl/impl/device.c
-  src/backend/gl/impl/render/pipeline.c
 )
 
 add_library(gpu ${GPU_CORE_SOURCES})
@@ -53,7 +99,18 @@ add_library(gpu::gpu ALIAS gpu)
 target_compile_definitions(gpu PRIVATE
   GPU_BUILD_WITH_VALIDATION=$<BOOL:${GPU_BUILD_WITH_VALIDATION}>
   GPU_BUILD_WITH_DEBUG_MARKERS=$<BOOL:${GPU_BUILD_WITH_DEBUG_MARKERS}>
+  GPU_BACKEND_METAL_ONLY=$<BOOL:${GPU_BACKEND_METAL_ONLY}>
+  GPU_BACKEND_VULKAN_ONLY=$<BOOL:${GPU_BACKEND_VULKAN_ONLY}>
+  GPU_BACKEND_DX12_ONLY=$<BOOL:${GPU_BACKEND_DX12_ONLY}>
 )
+
+if(GPU_BUILD_OPENGL)
+  target_sources(gpu PRIVATE
+    src/backend/gl/api.c
+    src/backend/gl/impl/device.c
+    src/backend/gl/impl/render/pipeline.c
+  )
+endif()
 
 if(NOT WIN32)
   find_package(Threads REQUIRED)
@@ -129,7 +186,7 @@ else()
   )
 endif()
 
-if(APPLE)
+if(GPU_BUILD_METAL)
   target_sources(gpu PRIVATE
     src/backend/mt/init.c
     src/backend/mt/impl/impl.c
@@ -150,9 +207,16 @@ if(APPLE)
     src/backend/mt/impl/vertex.m
   )
 
-  find_library(GPU_FRAMEWORK_FOUNDATION Foundation REQUIRED)
   find_library(GPU_FRAMEWORK_METAL Metal REQUIRED)
   find_library(GPU_FRAMEWORK_METALKIT MetalKit REQUIRED)
+  target_link_libraries(gpu PRIVATE
+    ${GPU_FRAMEWORK_METAL}
+    ${GPU_FRAMEWORK_METALKIT}
+  )
+endif()
+
+if(APPLE AND (GPU_BUILD_METAL OR GPU_BUILD_VULKAN))
+  find_library(GPU_FRAMEWORK_FOUNDATION Foundation REQUIRED)
   find_library(GPU_FRAMEWORK_QUARTZCORE QuartzCore REQUIRED)
   if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     find_library(GPU_FRAMEWORK_UI UIKit REQUIRED)
@@ -162,12 +226,12 @@ if(APPLE)
 
   target_link_libraries(gpu PRIVATE
     ${GPU_FRAMEWORK_FOUNDATION}
-    ${GPU_FRAMEWORK_METAL}
-    ${GPU_FRAMEWORK_METALKIT}
     ${GPU_FRAMEWORK_QUARTZCORE}
     ${GPU_FRAMEWORK_UI}
   )
-elseif(WIN32)
+endif()
+
+if(GPU_BUILD_DX12)
   target_sources(gpu PRIVATE
     src/backend/dx12/init.c
     src/backend/dx12/impl/buffer.c
@@ -191,7 +255,7 @@ elseif(WIN32)
   target_link_libraries(gpu PRIVATE d3d12 d3dcompiler dxgi dxguid)
 endif()
 
-if(GPU_ENABLE_VULKAN)
+if(GPU_BUILD_VULKAN)
   find_package(Vulkan REQUIRED)
   target_compile_definitions(gpu PRIVATE GPU_ENABLE_VULKAN=1)
   target_sources(gpu PRIVATE
@@ -268,7 +332,7 @@ if(GPU_BUILD_TESTS)
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/source_sampler.us"
   )
 
-  if(GPU_ENABLE_VULKAN)
+  if(GPU_BUILD_VULKAN)
     add_test(NAME api-validation-vulkan
       COMMAND gpu-api-test
               "${CMAKE_CURRENT_SOURCE_DIR}/samples/usl-reflection-check/reflection.us"
@@ -279,7 +343,7 @@ if(GPU_BUILD_TESTS)
     )
   endif()
 
-  if(WIN32)
+  if(GPU_BUILD_DX12)
     add_executable(gpu-dx12-queue-test tests/dx12/queue.c)
     target_link_libraries(gpu-dx12-queue-test PRIVATE gpu)
     set_target_properties(gpu-dx12-queue-test PROPERTIES
@@ -373,7 +437,7 @@ if(GPU_BUILD_TESTS)
   endif()
 endif()
 
-if(GPU_BUILD_SAMPLES AND WIN32)
+if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
   add_executable(gpu-triangle-dx12-usl
     samples/triangle-dx12-usl/main.c
   )

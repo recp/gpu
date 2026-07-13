@@ -21,10 +21,18 @@
 
 static GPUApi*
 gpu__selectDefaultBackend(void) {
-#ifdef __APPLE__
+#if GPU_BACKEND_METAL_ONLY
+  return backend_metal();
+#elif GPU_BACKEND_VULKAN_ONLY
+  return backend_vk();
+#elif GPU_BACKEND_DX12_ONLY
+  return backend_dx12();
+#elif defined(__APPLE__)
   return backend_metal();
 #elif defined(_WIN32) || defined(WIN32)
   return backend_dx12();
+#elif defined(GPU_ENABLE_VULKAN)
+  return backend_vk();
 #else
   return NULL;
 #endif
@@ -33,6 +41,28 @@ gpu__selectDefaultBackend(void) {
 GPU_HIDE
 GPUApi*
 gpuApiForBackend(GPUBackend backend) {
+#if GPU_BACKEND_METAL_ONLY
+  if (backend == GPU_BACKEND_DEFAULT ||
+      backend == GPU_BACKEND_NULL ||
+      backend == GPU_BACKEND_METAL) {
+    return gpu__selectDefaultBackend();
+  }
+  return NULL;
+#elif GPU_BACKEND_VULKAN_ONLY
+  if (backend == GPU_BACKEND_DEFAULT ||
+      backend == GPU_BACKEND_NULL ||
+      backend == GPU_BACKEND_VULKAN) {
+    return gpu__selectDefaultBackend();
+  }
+  return NULL;
+#elif GPU_BACKEND_DX12_ONLY
+  if (backend == GPU_BACKEND_DEFAULT ||
+      backend == GPU_BACKEND_NULL ||
+      backend == GPU_BACKEND_DX12) {
+    return gpu__selectDefaultBackend();
+  }
+  return NULL;
+#else
   GPUApi *api;
 
   if (backend == GPU_BACKEND_DEFAULT || backend == GPU_BACKEND_NULL) {
@@ -64,4 +94,5 @@ gpuApiForBackend(GPUBackend backend) {
   }
 
   return api;
+#endif
 }

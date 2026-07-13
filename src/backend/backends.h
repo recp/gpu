@@ -19,23 +19,29 @@
 
 #include "common.h"
 
-#ifdef __APPLE__
+#if defined(__APPLE__) && !GPU_BACKEND_VULKAN_ONLY
 GPU_HIDE
 GPUApi*
 backend_metal(void);
 #endif
 
-#if defined(_WIN32) || defined(WIN32)
+#if (defined(_WIN32) || defined(WIN32)) && !GPU_BACKEND_VULKAN_ONLY
 GPU_HIDE
 GPUApi*
 backend_dx12(void);
 #endif
 
+#if !GPU_BACKEND_METAL_ONLY && \
+    !GPU_BACKEND_VULKAN_ONLY && \
+    !GPU_BACKEND_DX12_ONLY
 GPU_HIDE
 GPUApi*
 backend_gl(void);
+#endif
 
-#if defined(GPU_ENABLE_VULKAN)
+#if defined(GPU_ENABLE_VULKAN) && \
+    !GPU_BACKEND_METAL_ONLY && \
+    !GPU_BACKEND_DX12_ONLY
 GPU_HIDE
 GPUApi*
 backend_vk(void);

@@ -35,6 +35,18 @@
 #  define GPU_BUILD_WITH_DEBUG_MARKERS 1
 #endif
 
+#ifndef GPU_BACKEND_METAL_ONLY
+#  define GPU_BACKEND_METAL_ONLY 0
+#endif
+
+#ifndef GPU_BACKEND_VULKAN_ONLY
+#  define GPU_BACKEND_VULKAN_ONLY 0
+#endif
+
+#ifndef GPU_BACKEND_DX12_ONLY
+#  define GPU_BACKEND_DX12_ONLY 0
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
