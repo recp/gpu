@@ -384,18 +384,21 @@ GPUEndRenderPass(GPURenderPassEncoder *pass) {
 GPU_EXPORT
 GPUCopyPassEncoder*
 GPUBeginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
+  GPUDevice *device;
   GPUApi *api;
 
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder) {
     return NULL;
   }
-  if (!(api = gpuCommandBufferApi(cmdb)) || !api->renderPass.beginCopyPass) {
+  device = gpuCommandBufferDevice(cmdb);
+  if (!(api = gpuDeviceApi(device)) || !api->renderPass.beginCopyPass) {
     return NULL;
   }
 
   {
     GPUCopyPassEncoder *pass;
 
+    label = gpuDeviceDebugLabel(device, label);
     pass = api->renderPass.beginCopyPass(cmdb, label);
     if (pass) {
       pass->_cmdb = cmdb;

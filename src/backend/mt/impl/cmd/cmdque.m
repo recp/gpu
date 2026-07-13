@@ -186,7 +186,11 @@ mt_createCommandBufferState(GPUCommandQueue *cmdb, MTCommandQueue *queue) {
       native->modern = [deviceMT->device newCommandBuffer];
       native->allocator = [deviceMT->device newCommandAllocator];
       residencyDesc = [MTLResidencySetDescriptor new];
-      residencyDesc.label = @"gpu-command-residency";
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+      if (gpuDeviceDebugMarkersEnabled(cmdb->_device)) {
+        residencyDesc.label = @"gpu-command-residency";
+      }
+#endif
       residencyDesc.initialCapacity = 64u;
       error = nil;
       native->residency = [deviceMT->device
@@ -267,6 +271,7 @@ mt_newCommandBuffer(GPUCommandQueue  * __restrict cmdb,
     mt_recycleCommandBuffer(cb);
     return NULL;
   }
+#if GPU_BUILD_WITH_DEBUG_MARKERS
   if (label && label[0] != '\0') {
     NSString *nativeLabel = [NSString stringWithUTF8String:label];
 
@@ -275,6 +280,9 @@ mt_newCommandBuffer(GPUCommandQueue  * __restrict cmdb,
       [(id<MTL4CommandBuffer>)native->modern setLabel:nativeLabel];
     }
   }
+#else
+  GPU__UNUSED(label);
+#endif
   if (oncomplete) {
     mt_ccmdbufOnComplete(cb, sender, oncomplete);
   }

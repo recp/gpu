@@ -113,6 +113,21 @@ gpuDeviceApi(const GPUDevice *device) {
   return device ? device->_api : NULL;
 }
 
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+static inline bool
+gpuDeviceDebugMarkersEnabled(const GPUDevice *device) {
+  return device && device->runtimeConfig.enableDebugMarkers;
+}
+
+static inline const char *
+gpuDeviceDebugLabel(const GPUDevice *device, const char *label) {
+  return gpuDeviceDebugMarkersEnabled(device) ? label : NULL;
+}
+#else
+#  define gpuDeviceDebugMarkersEnabled(device) false
+#  define gpuDeviceDebugLabel(device, label) NULL
+#endif
+
 static inline void
 gpuDeviceRecordBindRequest(GPUDevice *device) {
   if (device && device->runtimeConfig.enableStats) {

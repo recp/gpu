@@ -216,7 +216,9 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
 
   memset(renderPass, 0, sizeof(*renderPass));
   renderPass->_priv = nativePass;
+#if GPU_BUILD_WITH_DEBUG_MARKERS
   renderPass->label = info->label;
+#endif
 
   return renderPass;
 }
@@ -339,7 +341,8 @@ mt_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
   if (!native->classic && !native->modern) {
     return NULL;
   }
-  if (label) {
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  if (label && label[0] != '\0') {
     NSString *nativeLabel = [NSString stringWithUTF8String:label];
 
     native->classic.label = nativeLabel;
@@ -347,6 +350,9 @@ mt_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
       [(id<MTL4ComputeCommandEncoder>)native->modern setLabel:nativeLabel];
     }
   }
+#else
+  GPU__UNUSED(label);
+#endif
 
   pass->_priv = native;
   return pass;

@@ -41,9 +41,12 @@ mt_createBuffer(GPUDevice                 * __restrict device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  if (info->label && info->label[0] != '\0') {
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  if (gpuDeviceDebugMarkersEnabled(device) &&
+      info->label && info->label[0] != '\0') {
     buffer.label = [NSString stringWithUTF8String:info->label];
   }
+#endif
 
   gpuBuffer = calloc(1, sizeof(*gpuBuffer));
   if (!gpuBuffer) {

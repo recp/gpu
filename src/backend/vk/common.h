@@ -167,15 +167,18 @@ typedef struct GPUInstanceVk {
   PFN_vkGetRefreshCycleDurationGOOGLE           fpGetRefreshCycleDurationGOOGLE;
   PFN_vkGetPastPresentationTimingGOOGLE         fpGetPastPresentationTimingGOOGLE;
 
-  /* DEBUG helpers */
+#if GPU_BUILD_WITH_VALIDATION
   PFN_vkCreateDebugUtilsMessengerEXT            CreateDebugUtilsMessengerEXT;
   PFN_vkDestroyDebugUtilsMessengerEXT           DestroyDebugUtilsMessengerEXT;
   PFN_vkSubmitDebugUtilsMessageEXT              SubmitDebugUtilsMessageEXT;
+  VkDebugUtilsMessengerEXT                      dbg_messenger;
+#endif
+#if GPU_BUILD_WITH_DEBUG_MARKERS
   PFN_vkCmdBeginDebugUtilsLabelEXT              CmdBeginDebugUtilsLabelEXT;
   PFN_vkCmdEndDebugUtilsLabelEXT                CmdEndDebugUtilsLabelEXT;
   PFN_vkCmdInsertDebugUtilsLabelEXT             CmdInsertDebugUtilsLabelEXT;
   PFN_vkSetDebugUtilsObjectNameEXT              SetDebugUtilsObjectNameEXT;
-  VkDebugUtilsMessengerEXT                      dbg_messenger;
+#endif
 } GPUInstanceVk;
 
 typedef struct GPUPhysicalDeviceVk {

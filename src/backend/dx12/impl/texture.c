@@ -21,6 +21,7 @@ enum {
   DX12_TEXTURE_BARRIER_CHUNK_SIZE = 16u
 };
 
+#if GPU_BUILD_WITH_DEBUG_MARKERS
 static void
 dx12__setTextureName(ID3D12Resource *resource, const char *label) {
   wchar_t name[256];
@@ -37,6 +38,7 @@ dx12__setTextureName(ID3D12Resource *resource, const char *label) {
 
   (void)resource->lpVtbl->SetName(resource, name);
 }
+#endif
 
 static bool
 dx12__textureDimension(GPUTextureDimension dimension,
@@ -422,7 +424,10 @@ dx12_createTexture(GPUDevice                  * __restrict device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  dx12__setTextureName(native->resource, info->label);
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  dx12__setTextureName(native->resource,
+                       gpuDeviceDebugLabel(device, info->label));
+#endif
   native->states           = (D3D12_RESOURCE_STATES *)(native + 1);
   native->state            = initialState;
   native->mipLevelCount    = info->mipLevelCount;

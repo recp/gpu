@@ -318,14 +318,14 @@ vk_createInstance(GPUApi * __restrict api,
   
 #if GPU_BUILD_WITH_VALIDATION
   if (validate) {
-    // Setup VK_EXT_debug_utils function pointers always (we use them for
-    // debug labels and names).
+    /* Setup the validation messenger and optional marker entry points. */
     gpuInstVk->CreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)
         vkGetInstanceProcAddr(gpuInstVk->inst, "vkCreateDebugUtilsMessengerEXT");
     gpuInstVk->DestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)
         vkGetInstanceProcAddr(gpuInstVk->inst, "vkDestroyDebugUtilsMessengerEXT");
     gpuInstVk->SubmitDebugUtilsMessageEXT = (PFN_vkSubmitDebugUtilsMessageEXT)
         vkGetInstanceProcAddr(gpuInstVk->inst, "vkSubmitDebugUtilsMessageEXT");
+#if GPU_BUILD_WITH_DEBUG_MARKERS
     gpuInstVk->CmdBeginDebugUtilsLabelEXT = (PFN_vkCmdBeginDebugUtilsLabelEXT)
         vkGetInstanceProcAddr(gpuInstVk->inst, "vkCmdBeginDebugUtilsLabelEXT");
     gpuInstVk->CmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)
@@ -334,16 +334,21 @@ vk_createInstance(GPUApi * __restrict api,
         vkGetInstanceProcAddr(gpuInstVk->inst, "vkCmdInsertDebugUtilsLabelEXT");
     gpuInstVk->SetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)
         vkGetInstanceProcAddr(gpuInstVk->inst, "vkSetDebugUtilsObjectNameEXT");
+#endif
 
     if (gpuInstVk->CreateDebugUtilsMessengerEXT == NULL
         || gpuInstVk->DestroyDebugUtilsMessengerEXT == NULL
-        || gpuInstVk->SubmitDebugUtilsMessageEXT == NULL
-        || gpuInstVk->CmdBeginDebugUtilsLabelEXT == NULL
+        || gpuInstVk->SubmitDebugUtilsMessageEXT == NULL) {
+      ERR_EXIT("GetProcAddr: Failed to init VK_EXT_debug_utils\n", "GetProcAddr: Failure");
+    }
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+    if (gpuInstVk->CmdBeginDebugUtilsLabelEXT == NULL
         || gpuInstVk->CmdEndDebugUtilsLabelEXT == NULL
         || gpuInstVk->CmdInsertDebugUtilsLabelEXT == NULL
         || gpuInstVk->SetDebugUtilsObjectNameEXT == NULL) {
       ERR_EXIT("GetProcAddr: Failed to init VK_EXT_debug_utils\n", "GetProcAddr: Failure");
     }
+#endif
 
     err = gpuInstVk->CreateDebugUtilsMessengerEXT(gpuInstVk->inst, 
                                                   instCI.pNext,

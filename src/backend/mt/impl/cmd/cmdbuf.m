@@ -102,9 +102,14 @@ mt_prepareArgumentState(GPUCommandBuffer *cmdb,
     desc.maxTextureBindCount = MT_ARGUMENT_TEXTURE_COUNT;
     desc.maxSamplerStateBindCount = MT_ARGUMENT_SAMPLER_COUNT;
     desc.initializeBindings = YES;
-    if (label && label[0] != '\0') {
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+    if (gpuDeviceDebugMarkersEnabled(cmdb->_queue->_device) &&
+        label && label[0] != '\0') {
       desc.label = [NSString stringWithUTF8String:label];
     }
+#else
+    GPU__UNUSED(label);
+#endif
 
     state->table = [deviceMT->device newArgumentTableWithDescriptor:desc error:&error];
     [desc release];
@@ -245,7 +250,11 @@ mt_uploadConstants(GPUCommandBuffer *cmdb,
       free(chunk);
       return false;
     }
-    chunk->buffer.label = @"gpu-metal4-constants";
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+    if (gpuDeviceDebugMarkersEnabled(cmdb->_queue->_device)) {
+      chunk->buffer.label = @"gpu-metal4-constants";
+    }
+#endif
     chunk->capacity = capacity;
     chunk->next = native->uploads;
     native->uploads = chunk;
@@ -453,9 +462,12 @@ mt_createQuerySet(GPUDevice                  *device,
       free(native);
       return GPU_ERROR_BACKEND_FAILURE;
     }
-    if (info->label && info->label[0] != '\0') {
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+    if (gpuDeviceDebugMarkersEnabled(device) &&
+        info->label && info->label[0] != '\0') {
       native->visibility.label = [NSString stringWithUTF8String:info->label];
     }
+#endif
     set->_priv = native;
     return GPU_OK;
   }
@@ -476,10 +488,13 @@ mt_createQuerySet(GPUDevice                  *device,
       native->modern = [deviceMT->device newCounterHeapWithDescriptor:heapDesc
                                                                 error:&error];
       [heapDesc release];
-      if (native->modern && info->label) {
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+      if (native->modern && gpuDeviceDebugMarkersEnabled(device) &&
+          info->label && info->label[0] != '\0') {
         [(id<MTL4CounterHeap>)native->modern
           setLabel:[NSString stringWithUTF8String:info->label]];
       }
+#endif
     }
     if (!native->modern) {
       free(native);
@@ -504,9 +519,12 @@ mt_createQuerySet(GPUDevice                  *device,
   desc.counterSet = counterSet;
   desc.sampleCount = (NSUInteger)info->count;
   desc.storageMode = MTLStorageModePrivate;
-  if (info->label) {
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  if (gpuDeviceDebugMarkersEnabled(device) &&
+      info->label && info->label[0] != '\0') {
     desc.label = [NSString stringWithUTF8String:info->label];
   }
+#endif
 
   error = nil;
   sampleBuffer = [deviceMT->device newCounterSampleBufferWithDescriptor:desc

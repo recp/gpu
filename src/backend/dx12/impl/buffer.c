@@ -76,6 +76,7 @@ dx12__bufferInitialState(GPUBufferUsageFlags usage, bool defaultHeap) {
   return state;
 }
 
+#if GPU_BUILD_WITH_DEBUG_MARKERS
 static void
 dx12__setBufferName(ID3D12Resource *resource, const char *label) {
   wchar_t name[256];
@@ -92,6 +93,7 @@ dx12__setBufferName(ID3D12Resource *resource, const char *label) {
 
   (void)resource->lpVtbl->SetName(resource, name);
 }
+#endif
 
 static ID3D12Resource *
 dx12__createStagingBuffer(GPUDeviceDX12 *device,
@@ -362,7 +364,10 @@ dx12_createBuffer(GPUDevice                 * __restrict device,
     }
   }
 
-  dx12__setBufferName(native->resource, info->label);
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  dx12__setBufferName(native->resource,
+                      gpuDeviceDebugLabel(device, info->label));
+#endif
   native->gpuAddress     = native->resource->lpVtbl->GetGPUVirtualAddress(
     native->resource
   );

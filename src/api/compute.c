@@ -287,6 +287,7 @@ GPUBeginComputePass(GPUCommandBuffer *cmdb, const char *label) {
   {
     GPUComputePassEncoder *pass;
 
+    label = gpuDeviceDebugLabel(device, label);
     pass = api->compute.computeCommandEncoder(cmdb, label);
     if (pass) {
       pass->_cmdb = cmdb;

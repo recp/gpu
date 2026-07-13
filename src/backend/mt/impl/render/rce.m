@@ -72,10 +72,14 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
     if (!nativePass->modern ||
         !mt_prepareArgumentState(cmdb,
                                  &commandState->vertexArguments,
-                                 "gpu-metal4-vertex-arguments") ||
+                                 gpuDeviceDebugLabel(
+                                   gpuCommandBufferDevice(cmdb),
+                                   "gpu-metal4-vertex-arguments")) ||
         !mt_prepareArgumentState(cmdb,
                                  &commandState->fragmentArguments,
-                                 "gpu-metal4-fragment-arguments")) {
+                                 gpuDeviceDebugLabel(
+                                   gpuCommandBufferDevice(cmdb),
+                                   "gpu-metal4-fragment-arguments"))) {
       return NULL;
     }
 
@@ -99,7 +103,9 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   if (!nativeState->classic && !nativeState->modern) {
     return NULL;
   }
-  if (pass->label && pass->label[0] != '\0') {
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  if (gpuDeviceDebugMarkersEnabled(gpuCommandBufferDevice(cmdb)) &&
+      pass->label && pass->label[0] != '\0') {
     NSString *label = [NSString stringWithUTF8String:pass->label];
 
     nativeState->classic.label = label;
@@ -107,6 +113,7 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
       [(id<MTL4RenderCommandEncoder>)nativeState->modern setLabel:label];
     }
   }
+#endif
 
   enc->_priv = nativeState;
   enc->_primitiveType = GPUPrimitiveTypeTriangle;

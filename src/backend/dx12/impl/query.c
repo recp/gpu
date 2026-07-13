@@ -47,6 +47,7 @@ _Static_assert(sizeof(GPUPipelineStatisticsResult) ==
                  sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS),
                "pipeline statistics result must match Direct3D 12");
 
+#if GPU_BUILD_WITH_DEBUG_MARKERS
 static void
 dx12__setQueryName(ID3D12QueryHeap *heap, const char *label) {
   wchar_t name[256];
@@ -63,6 +64,7 @@ dx12__setQueryName(ID3D12QueryHeap *heap, const char *label) {
 
   (void)heap->lpVtbl->SetName(heap, name);
 }
+#endif
 
 static void
 dx12__transitionQueryBuffer(GPUCommandBufferDX12 *command,
@@ -124,7 +126,10 @@ dx12_createQuerySet(GPUDevice                  *device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  dx12__setQueryName(native->heap, info->label);
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  dx12__setQueryName(native->heap,
+                     gpuDeviceDebugLabel(device, info->label));
+#endif
   set->_priv = native;
   return GPU_OK;
 }

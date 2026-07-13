@@ -141,6 +141,7 @@ gpu_newCommandBuffer(GPUCommandQueue  * __restrict cmdq,
   if (!api->cmdque.newCommandBuffer)
     return NULL;
 
+  label = gpuDeviceDebugLabel(cmdq->_device, label);
   cmdb = api->cmdque.newCommandBuffer(cmdq, label, sender, oncomplete);
   if (cmdb) {
     cmdb->_queue = cmdq;

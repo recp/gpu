@@ -147,7 +147,9 @@ mt_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
   if (commandState && commandState->mode == MTCommandMode4) {
     if (!mt_prepareArgumentState(cmdb,
                                  &commandState->computeArguments,
-                                 "gpu-metal4-compute-arguments")) {
+                                 gpuDeviceDebugLabel(
+                                   gpuCommandBufferDevice(cmdb),
+                                   "gpu-metal4-compute-arguments"))) {
       return NULL;
     }
     if (@available(macOS 26.0, iOS 26.0, *)) {
@@ -163,7 +165,8 @@ mt_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
   if (!nativeState->classic && !nativeState->modern) {
     return NULL;
   }
-  if (label) {
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  if (label && label[0] != '\0') {
     NSString *nativeLabel = [NSString stringWithUTF8String:label];
 
     nativeState->classic.label = nativeLabel;
@@ -171,6 +174,9 @@ mt_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
       [(id<MTL4ComputeCommandEncoder>)nativeState->modern setLabel:nativeLabel];
     }
   }
+#else
+  GPU__UNUSED(label);
+#endif
 
   enc->_priv = nativeState;
   enc->_workgroupSize[0] = 1u;
