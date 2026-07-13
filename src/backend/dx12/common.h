@@ -338,23 +338,33 @@ typedef struct GPUCommandBufferDX12 {
 } GPUCommandBufferDX12;
 
 struct GPUCommandQueueDX12 {
-  GPUCommandQueue        *queue;
-  ID3D12CommandQueue     *commandQueue;
-  ID3D12Fence            *completionFence;
-  GPUCommandBufferDX12   *commands;
-  GPUCommandBufferDX12   *freeCommands;
-  GPUCommandBufferDX12   *pendingHead;
-  GPUCommandBufferDX12   *pendingTail;
-  HANDLE                  completionEvent;
-  HANDLE                  worker;
-  UINT64                  nextFenceValue;
-  UINT64                  finishedFenceValue;
-  D3D12_COMMAND_LIST_TYPE type;
-  uint32_t                inFlightCount;
-  bool                    workerStarted;
-  bool                    stopping;
-  CRITICAL_SECTION        poolLock;
-  CONDITION_VARIABLE      pendingCondition;
+  GPUCommandQueue             *queue;
+  ID3D12CommandQueue          *commandQueue;
+  ID3D12Fence                 *completionFence;
+  ID3D12CommandAllocator      *transferAllocator;
+  ID3D12GraphicsCommandList   *transferCommandList;
+  ID3D12Fence                 *transferFence;
+  ID3D12Resource              *uploadStaging;
+  ID3D12Resource              *readbackStaging;
+  GPUCommandBufferDX12        *commands;
+  GPUCommandBufferDX12        *freeCommands;
+  GPUCommandBufferDX12        *pendingHead;
+  GPUCommandBufferDX12        *pendingTail;
+  void                        *uploadMapped;
+  HANDLE                       completionEvent;
+  HANDLE                       transferEvent;
+  HANDLE                       worker;
+  UINT64                       nextFenceValue;
+  UINT64                       finishedFenceValue;
+  UINT64                       transferFenceValue;
+  uint64_t                     uploadCapacity;
+  uint64_t                     readbackCapacity;
+  D3D12_COMMAND_LIST_TYPE      type;
+  uint32_t                     inFlightCount;
+  bool                         workerStarted;
+  bool                         stopping;
+  CRITICAL_SECTION             poolLock;
+  CONDITION_VARIABLE           pendingCondition;
 };
 
 typedef struct GPUInstanceDX12 {

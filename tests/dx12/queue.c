@@ -93,6 +93,96 @@ submit_error_propagates(GPUCommandQueue *queue) {
   return GPUQueueSubmit(queue, &submitInfo) == GPU_ERROR_BACKEND_FAILURE;
 }
 
+static bool
+sync_transfers_reuse(GPUCommandQueue *queue, GPUDevice *device) {
+  GPUCommandQueueDX12       *native;
+  GPUBufferCreateInfo        bufferInfo;
+  GPUBuffer                 *buffer;
+  ID3D12CommandAllocator    *allocator;
+  ID3D12GraphicsCommandList *commandList;
+  ID3D12Fence               *fence;
+  ID3D12Resource            *upload;
+  ID3D12Resource            *readback;
+  uint64_t                   uploadCapacity;
+  uint64_t                   readbackCapacity;
+  uint32_t                   value;
+  uint32_t                   copied;
+  bool                       ok;
+
+  native = queue ? queue->_priv : NULL;
+  buffer = NULL;
+  if (!native || !device) {
+    return false;
+  }
+
+  memset(&bufferInfo, 0, sizeof(bufferInfo));
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "dx12-sync-transfer";
+  bufferInfo.sizeBytes        = 64u;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
+                                GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
+    return false;
+  }
+
+  value  = UINT32_C(0x12345678);
+  copied = 0u;
+  ok = GPUQueueWriteBuffer(queue,
+                           buffer,
+                           0u,
+                           &value,
+                           sizeof(value)) == GPU_OK &&
+       GPUQueueReadBuffer(queue,
+                          buffer,
+                          0u,
+                          &copied,
+                          sizeof(copied)) == GPU_OK &&
+       copied == value;
+  if (!ok || !native->transferAllocator || !native->transferCommandList ||
+      !native->transferFence || !native->transferEvent ||
+      !native->uploadStaging || !native->readbackStaging) {
+    GPUDestroyBuffer(buffer);
+    return false;
+  }
+
+  allocator        = native->transferAllocator;
+  commandList      = native->transferCommandList;
+  fence            = native->transferFence;
+  upload           = native->uploadStaging;
+  readback         = native->readbackStaging;
+  uploadCapacity   = native->uploadCapacity;
+  readbackCapacity = native->readbackCapacity;
+  for (uint32_t i = 0u; i < 16u; i++) {
+    value  = UINT32_C(0xabc00000) + i;
+    copied = 0u;
+    if (GPUQueueWriteBuffer(queue,
+                            buffer,
+                            0u,
+                            &value,
+                            sizeof(value)) != GPU_OK ||
+        GPUQueueReadBuffer(queue,
+                           buffer,
+                           0u,
+                           &copied,
+                           sizeof(copied)) != GPU_OK ||
+        copied != value ||
+        native->transferAllocator != allocator ||
+        native->transferCommandList != commandList ||
+        native->transferFence != fence ||
+        native->uploadStaging != upload ||
+        native->readbackStaging != readback ||
+        native->uploadCapacity != uploadCapacity ||
+        native->readbackCapacity != readbackCapacity) {
+      ok = false;
+      break;
+    }
+  }
+
+  GPUDestroyBuffer(buffer);
+  return ok;
+}
+
 int
 main(void) {
   GPUInstanceCreateInfo instanceInfo;
@@ -186,6 +276,10 @@ main(void) {
     GPUDestroyDevice(device);
     GPUDestroyInstance(instance);
     return 1;
+  }
+  if (!sync_transfers_reuse(queue0, device)) {
+    fprintf(stderr, "DX12 synchronous transfer reuse failed\n");
+    goto fail;
   }
 
   memset(&probe, 0, sizeof(probe));

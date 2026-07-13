@@ -505,6 +505,31 @@ dx12_destroyCommandQueue(GPUCommandQueue *queue) {
       free(command);
       command = next;
     }
+    if (native->uploadStaging) {
+      if (native->uploadMapped) {
+        native->uploadStaging->lpVtbl->Unmap(native->uploadStaging,
+                                             0u,
+                                             NULL);
+      }
+      native->uploadStaging->lpVtbl->Release(native->uploadStaging);
+    }
+    if (native->readbackStaging) {
+      native->readbackStaging->lpVtbl->Release(native->readbackStaging);
+    }
+    if (native->transferCommandList) {
+      native->transferCommandList->lpVtbl->Release(
+        native->transferCommandList
+      );
+    }
+    if (native->transferAllocator) {
+      native->transferAllocator->lpVtbl->Release(native->transferAllocator);
+    }
+    if (native->transferFence) {
+      native->transferFence->lpVtbl->Release(native->transferFence);
+    }
+    if (native->transferEvent) {
+      CloseHandle(native->transferEvent);
+    }
     if (native->completionFence) {
       native->completionFence->lpVtbl->Release(native->completionFence);
     }
