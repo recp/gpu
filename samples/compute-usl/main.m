@@ -9,6 +9,7 @@
 
 #import "../../include/gpu/gpu.h"
 #import "../common/SampleApp.h"
+#import "../common/SampleStats.h"
 #import "../common/SampleUSL.h"
 
 typedef struct QuadVertex {
@@ -61,6 +62,7 @@ static const QuadVertex kQuadVertices[] = {
   NSInteger _exitAfterFrames;
   NSInteger _submittedFrames;
   NSInteger _completedFrames;
+  BOOL _assertZeroAlloc;
   BOOL _validationFailed;
   BOOL _terminating;
 }
@@ -543,6 +545,18 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     NSLog(@"GPUFinishFrame failed: %d", submitResult);
   } else {
     _submittedFrames++;
+    if (!GPUSampleCheckZeroAlloc(_device,
+                                 (uint32_t)_submittedFrames,
+                                 _assertZeroAlloc,
+                                 "GPU Metal compute texture copy")) {
+      _validationFailed = YES;
+      gComputeUSLValidationFailed = 1;
+      _terminating = YES;
+      [_timer invalidate];
+      _timer = nil;
+      [NSApp terminate:nil];
+      return;
+    }
   }
 
 cleanup:
@@ -690,6 +704,7 @@ cleanup:
   if (exitAfterFrames && exitAfterFrames[0] != '\0') {
     _exitAfterFrames = strtol(exitAfterFrames, NULL, 10);
   }
+  _assertZeroAlloc = GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
 
   if (![self setupWindow]) {
     [NSApp terminate:nil];

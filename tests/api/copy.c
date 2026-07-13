@@ -3,10 +3,11 @@
 #include "../../src/api/device_internal.h"
 
 enum {
-  COPY_TEST_WIDTH     = 4u,
-  COPY_TEST_HEIGHT    = 4u,
+  COPY_TEST_WIDTH      = 4u,
+  COPY_TEST_HEIGHT     = 4u,
   COPY_TEST_PIXEL_SIZE = 4u,
-  COPY_TEST_ROW_PITCH = 256u
+  COPY_TEST_ROW_PITCH  = 256u,
+  COPY_TEST_WARM_RUNS  = 16u
 };
 
 static GPUCopyPassEncoder gScopedCopyPass;
@@ -280,6 +281,65 @@ check_copy_pass_validation(GPUDevice *device) {
        copy_test_rows_equal(pixels, textureBytes);
   if (!ok) {
     fprintf(stderr, "copy pass readback mismatch\n");
+    goto cleanup;
+  }
+
+  GPUResetStats(device);
+  for (uint32_t i = 0u; i < COPY_TEST_WARM_RUNS; i++) {
+    ok = GPUAcquireCommandBuffer(queue, "warm-copy-pass", &cmdb) == GPU_OK &&
+         cmdb;
+    if (!ok) {
+      fprintf(stderr, "failed to acquire warm copy command buffer\n");
+      goto cleanup;
+    }
+
+    copyPass = GPUBeginCopyPass(cmdb, "warm-copy-pass");
+    if (!copyPass) {
+      fprintf(stderr, "failed to begin warm copy pass\n");
+      ok = 0;
+      goto cleanup;
+    }
+
+    GPUCopyBufferToBuffer(copyPass, sourceBuffer, bufferCopy, &bufferRegion);
+    GPUCopyBufferToTexture(copyPass,
+                           textureUpload,
+                           textureA,
+                           &bufferTextureRegion);
+    GPUCopyTextureToTexture(copyPass, textureA, textureB, &textureRegion);
+    GPUCopyTextureToBuffer(copyPass,
+                           textureB,
+                           textureReadback,
+                           &bufferTextureRegion);
+    GPUEndCopyPass(copyPass);
+    copyPass = NULL;
+
+    buffers[0]                  = cmdb;
+    submitInfo.ppCommandBuffers = buffers;
+    ok = GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
+         GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+    cmdb = NULL;
+    if (!ok) {
+      fprintf(stderr, "warm copy submit failed\n");
+      goto cleanup;
+    }
+  }
+
+  if (device->currentFrameStats.hotPathAllocCount != 0u ||
+      device->currentFrameStats.hotPathAllocBytes != 0u ||
+      device->currentFrameStats.hotPathFreeCount != 0u ||
+      device->currentFrameStats.hotPathFreeBytes != 0u) {
+    fprintf(stderr,
+            "warm copy path allocated %llu bytes in %llu calls and freed "
+            "%llu bytes in %llu calls\n",
+            (unsigned long long)
+              device->currentFrameStats.hotPathAllocBytes,
+            (unsigned long long)
+              device->currentFrameStats.hotPathAllocCount,
+            (unsigned long long)
+              device->currentFrameStats.hotPathFreeBytes,
+            (unsigned long long)
+              device->currentFrameStats.hotPathFreeCount);
+    ok = 0;
   }
 
 cleanup:

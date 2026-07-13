@@ -98,6 +98,9 @@ run_step "compute-usl embedded no-sidecar" \
 run_step "compute-usl readback" \
   run_sample compute-usl env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 GPU_USL_NO_SIDECAR=1 ./hello-compute-usl
 
+run_step "compute-usl warm-frame allocations" \
+  run_sample compute-usl env GPU_SAMPLE_EXIT_AFTER_FRAMES=96 GPU_SAMPLE_ASSERT_ZERO_ALLOC=1 GPU_USL_NO_SIDECAR=1 ./hello-compute-usl
+
 run_step "compute-buffer-usl sidecar" \
   run_sample compute-buffer-usl ./build.sh
 
