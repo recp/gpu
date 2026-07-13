@@ -54,6 +54,8 @@ mt_textureViewType(GPUTextureViewType viewType) {
   switch (viewType) {
     case GPU_TEXTURE_VIEW_1D:
       return MTLTextureType1D;
+    case GPU_TEXTURE_VIEW_1D_ARRAY:
+      return MTLTextureType1DArray;
     case GPU_TEXTURE_VIEW_2D_ARRAY:
       return MTLTextureType2DArray;
     case GPU_TEXTURE_VIEW_CUBE:

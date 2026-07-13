@@ -1,0 +1,11 @@
+kern(1, 1, 1) line_view_cs(
+  inputLine: texture1d<float> #texture(0),
+  outputLine: texture1d<float, write> #texture(1),
+  inputLines: texture1d_array<float> #texture(2),
+  outputLines: texture1d_array<float, write> #texture(3)
+) {
+  let lineColor = inputLine.read(2u)
+  let arrayColor = inputLines.read(uint2(2, 0))
+  outputLine.write(lineColor, 1u)
+  outputLines.write(arrayColor, uint2(1, 0))
+}

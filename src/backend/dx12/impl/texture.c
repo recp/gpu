@@ -483,6 +483,15 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo *info,
       srv->Texture1D.MipLevels           = info->mipLevelCount;
       srv->Texture1D.ResourceMinLODClamp = 0.0f;
       return true;
+    case GPU_TEXTURE_VIEW_1D_ARRAY:
+      srv->ViewDimension                      =
+        D3D12_SRV_DIMENSION_TEXTURE1DARRAY;
+      srv->Texture1DArray.MostDetailedMip     = info->baseMipLevel;
+      srv->Texture1DArray.MipLevels           = info->mipLevelCount;
+      srv->Texture1DArray.FirstArraySlice     = info->baseArrayLayer;
+      srv->Texture1DArray.ArraySize           = info->arrayLayerCount;
+      srv->Texture1DArray.ResourceMinLODClamp = 0.0f;
+      return true;
     case GPU_TEXTURE_VIEW_2D:
       if (info->arrayLayerCount != 1u) {
         return false;
@@ -584,6 +593,12 @@ dx12__fillTextureUav(const GPUTextureViewCreateInfo   *info,
       uav->ViewDimension       = D3D12_UAV_DIMENSION_TEXTURE1D;
       uav->Texture1D.MipSlice  = info->baseMipLevel;
       return info->arrayLayerCount == 1u;
+    case GPU_TEXTURE_VIEW_1D_ARRAY:
+      uav->ViewDimension                  = D3D12_UAV_DIMENSION_TEXTURE1DARRAY;
+      uav->Texture1DArray.MipSlice        = info->baseMipLevel;
+      uav->Texture1DArray.FirstArraySlice = info->baseArrayLayer;
+      uav->Texture1DArray.ArraySize       = info->arrayLayerCount;
+      return true;
     case GPU_TEXTURE_VIEW_2D:
       uav->ViewDimension         = D3D12_UAV_DIMENSION_TEXTURE2D;
       uav->Texture2D.MipSlice    = info->baseMipLevel;
@@ -672,6 +687,9 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
   if ((info->viewType == GPU_TEXTURE_VIEW_1D &&
        (texture->dimension != GPU_TEXTURE_DIMENSION_1D ||
         texture->depthOrLayers != 1u || info->baseArrayLayer != 0u)) ||
+      (info->viewType == GPU_TEXTURE_VIEW_1D_ARRAY &&
+       (texture->dimension != GPU_TEXTURE_DIMENSION_1D ||
+        texture->depthOrLayers <= 1u)) ||
       (info->viewType == GPU_TEXTURE_VIEW_2D &&
        (texture->dimension != GPU_TEXTURE_DIMENSION_2D ||
         texture->depthOrLayers != 1u || info->baseArrayLayer != 0u)) ||

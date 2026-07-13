@@ -29,11 +29,47 @@ gpuIsTextureDimensionValid(GPUTextureDimension dimension) {
 static bool
 gpuIsTextureViewTypeValid(GPUTextureViewType viewType) {
   return viewType == GPU_TEXTURE_VIEW_1D ||
+         viewType == GPU_TEXTURE_VIEW_1D_ARRAY ||
          viewType == GPU_TEXTURE_VIEW_2D ||
          viewType == GPU_TEXTURE_VIEW_2D_ARRAY ||
          viewType == GPU_TEXTURE_VIEW_CUBE ||
          viewType == GPU_TEXTURE_VIEW_CUBE_ARRAY ||
          viewType == GPU_TEXTURE_VIEW_3D;
+}
+
+static bool
+gpuTextureViewCompatible(const GPUTexture               *texture,
+                         const GPUTextureViewCreateInfo *info) {
+  switch (texture->dimension) {
+    case GPU_TEXTURE_DIMENSION_1D:
+      if (texture->depthOrLayers == 1u) {
+        return info->viewType == GPU_TEXTURE_VIEW_1D &&
+               info->baseArrayLayer == 0u &&
+               info->arrayLayerCount == 1u;
+      }
+      return info->viewType == GPU_TEXTURE_VIEW_1D_ARRAY;
+    case GPU_TEXTURE_DIMENSION_2D:
+      if (info->viewType == GPU_TEXTURE_VIEW_2D) {
+        return texture->depthOrLayers == 1u &&
+               info->baseArrayLayer == 0u &&
+               info->arrayLayerCount == 1u;
+      }
+      if (info->viewType == GPU_TEXTURE_VIEW_2D_ARRAY) {
+        return texture->depthOrLayers > 1u;
+      }
+      if (info->viewType == GPU_TEXTURE_VIEW_CUBE ||
+          info->viewType == GPU_TEXTURE_VIEW_CUBE_ARRAY) {
+        return texture->depthOrLayers >= 6u &&
+               texture->depthOrLayers % 6u == 0u;
+      }
+      return false;
+    case GPU_TEXTURE_DIMENSION_3D:
+      return info->viewType == GPU_TEXTURE_VIEW_3D &&
+             info->baseArrayLayer == 0u &&
+             info->arrayLayerCount == 1u;
+    default:
+      return false;
+  }
 }
 
 static bool
@@ -197,6 +233,9 @@ GPUCreateTexture(GPUDevice                  * __restrict device,
   if (!gpuIsTextureDimensionValid(info->dimension) || info->usage == 0) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  if (info->dimension == GPU_TEXTURE_DIMENSION_1D && info->height != 1u) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
   if (!gpuIsSampleCountValid(info->sampleCount) ||
       (info->sampleCount > 1u &&
        (info->dimension != GPU_TEXTURE_DIMENSION_2D ||
@@ -300,6 +339,7 @@ GPUCreateTextureView(GPUTexture                     * __restrict texture,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (!gpuIsTextureViewTypeValid(info->viewType) ||
+      !gpuTextureViewCompatible(texture, info) ||
       !gpuTextureViewRangeValid(info) ||
       info->baseMipLevel >= texture->mipLevelCount ||
       info->mipLevelCount > texture->mipLevelCount - info->baseMipLevel ||

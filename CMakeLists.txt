@@ -300,6 +300,7 @@ if(GPU_BUILD_TESTS)
     tests/api/compute.c
     tests/api/copy.c
     tests/api/cube_texture.c
+    tests/api/line_texture.c
     tests/api/main.c
     tests/api/query.c
     tests/api/queue.c
@@ -344,6 +345,7 @@ if(GPU_BUILD_TESTS)
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/source_sampler.us"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/storage_texture.us"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/cube_texture.us"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/line_texture.us"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/volume_texture.us"
   )
 
@@ -356,6 +358,7 @@ if(GPU_BUILD_TESTS)
               "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/source_sampler.us"
               "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/storage_texture.us"
               "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/cube_texture.us"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/line_texture.us"
               "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/volume_texture.us"
               vulkan
     )

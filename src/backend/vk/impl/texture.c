@@ -104,6 +104,9 @@ vk__imageViewType(GPUTextureViewType viewType, VkImageViewType *outType) {
     case GPU_TEXTURE_VIEW_1D:
       *outType = VK_IMAGE_VIEW_TYPE_1D;
       return true;
+    case GPU_TEXTURE_VIEW_1D_ARRAY:
+      *outType = VK_IMAGE_VIEW_TYPE_1D_ARRAY;
+      return true;
     case GPU_TEXTURE_VIEW_2D:
       *outType = VK_IMAGE_VIEW_TYPE_2D;
       return true;

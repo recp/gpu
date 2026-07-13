@@ -23,6 +23,7 @@ cp "$TEST_DIR/compute.usl" "$FIXTURE_DIR/compute.usl"
 cp "$TEST_DIR/source_sampler.usl" "$FIXTURE_DIR/source_sampler.usl"
 cp "$TEST_DIR/storage_texture.usl" "$FIXTURE_DIR/storage_texture.usl"
 cp "$TEST_DIR/cube_texture.usl" "$FIXTURE_DIR/cube_texture.usl"
+cp "$TEST_DIR/line_texture.usl" "$FIXTURE_DIR/line_texture.usl"
 cp "$TEST_DIR/volume_texture.usl" "$FIXTURE_DIR/volume_texture.usl"
 
 shaders=(
@@ -32,6 +33,7 @@ shaders=(
   source_sampler
   storage_texture
   cube_texture
+  line_texture
   volume_texture
 )
 for shader in "${shaders[@]}"; do
@@ -76,4 +78,5 @@ xcrun --sdk macosx clang \
   "$FIXTURE_DIR/source_sampler.us" \
   "$FIXTURE_DIR/storage_texture.us" \
   "$FIXTURE_DIR/cube_texture.us" \
+  "$FIXTURE_DIR/line_texture.us" \
   "$FIXTURE_DIR/volume_texture.us"

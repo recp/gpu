@@ -726,6 +726,17 @@ check_resource_validation(GPUDevice *device) {
     return 0;
   }
   GPUDestroyTextureView(view);
+
+  viewInfo.viewType = GPU_TEXTURE_VIEW_2D_ARRAY;
+  view = (GPUTextureView *)(uintptr_t)1u;
+  if (GPUCreateTextureView(texture, &viewInfo, &view) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      view != NULL) {
+    fprintf(stderr, "single-layer texture accepted a 2D array view\n");
+    GPUDestroyTextureView(view);
+    GPUDestroyTexture(texture);
+    return 0;
+  }
   GPUDestroyTexture(texture);
 
   return 1;
@@ -741,6 +752,8 @@ check_cube_view_validation(GPUDevice *device) {
   } CubeViewCase;
 
   static const CubeViewCase cases[] = {
+    {GPU_TEXTURE_VIEW_2D,         0u,  1u, false},
+    {GPU_TEXTURE_VIEW_2D_ARRAY,   1u,  2u, true},
     {GPU_TEXTURE_VIEW_CUBE,       0u,  6u, true},
     {GPU_TEXTURE_VIEW_CUBE,       6u,  6u, false},
     {GPU_TEXTURE_VIEW_CUBE,       0u, 12u, false},
@@ -805,15 +818,17 @@ check_cube_view_validation(GPUDevice *device) {
 static int
 check_3d_view_validation(GPUDevice *device) {
   typedef struct Texture3DViewCase {
+    GPUTextureViewType viewType;
     uint32_t baseLayer;
     uint32_t layerCount;
     bool     valid;
   } Texture3DViewCase;
 
   static const Texture3DViewCase cases[] = {
-    {0u, 1u, true},
-    {1u, 1u, false},
-    {0u, 2u, false}
+    {GPU_TEXTURE_VIEW_3D, 0u, 1u, true},
+    {GPU_TEXTURE_VIEW_2D, 0u, 1u, false},
+    {GPU_TEXTURE_VIEW_3D, 1u, 1u, false},
+    {GPU_TEXTURE_VIEW_3D, 0u, 2u, false}
   };
   GPUTexture               *texture;
   GPUTextureView           *view;
@@ -841,10 +856,10 @@ check_3d_view_validation(GPUDevice *device) {
   viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
   viewInfo.chain.structSize = sizeof(viewInfo);
   viewInfo.label            = "api-3d-view-validation";
-  viewInfo.viewType         = GPU_TEXTURE_VIEW_3D;
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
   for (uint32_t i = 0u; i < GPU_ARRAY_LEN(cases); i++) {
+    viewInfo.viewType        = cases[i].viewType;
     viewInfo.baseArrayLayer  = cases[i].baseLayer;
     viewInfo.arrayLayerCount = cases[i].layerCount;
 
@@ -868,6 +883,106 @@ check_3d_view_validation(GPUDevice *device) {
   return 1;
 }
 
+static int
+check_1d_view_validation(GPUDevice *device) {
+  typedef struct Texture1DViewCase {
+    GPUTextureViewType viewType;
+    uint32_t           baseLayer;
+    uint32_t           layerCount;
+    bool               arrayTexture;
+    bool               valid;
+  } Texture1DViewCase;
+
+  static const Texture1DViewCase cases[] = {
+    {GPU_TEXTURE_VIEW_1D,       0u, 1u, false, true},
+    {GPU_TEXTURE_VIEW_1D_ARRAY, 0u, 1u, false, false},
+    {GPU_TEXTURE_VIEW_2D,       0u, 1u, false, false},
+    {GPU_TEXTURE_VIEW_1D,       0u, 1u, true,  false},
+    {GPU_TEXTURE_VIEW_1D_ARRAY, 0u, 3u, true,  true},
+    {GPU_TEXTURE_VIEW_1D_ARRAY, 1u, 2u, true,  true},
+    {GPU_TEXTURE_VIEW_1D_ARRAY, 2u, 2u, true,  false}
+  };
+  GPUTexture               *singleTexture;
+  GPUTexture               *arrayTexture;
+  GPUTexture               *texture;
+  GPUTextureView           *view;
+  GPUTextureCreateInfo      textureInfo = {0};
+  GPUTextureViewCreateInfo  viewInfo    = {0};
+  GPUResult                 result;
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "api-1d-view-validation";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_1D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = 4u;
+  textureInfo.height           = 2u;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED;
+
+  texture = (GPUTexture *)(uintptr_t)1u;
+  if (GPUCreateTexture(device, &textureInfo, &texture) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      texture != NULL) {
+    fprintf(stderr, "1D texture accepted height greater than one\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+
+  textureInfo.height = 1u;
+  singleTexture      = NULL;
+  if (GPUCreateTexture(device, &textureInfo, &singleTexture) != GPU_OK ||
+      !singleTexture) {
+    fprintf(stderr, "single 1D validation texture creation failed\n");
+    return 0;
+  }
+
+  textureInfo.depthOrLayers = 3u;
+  arrayTexture              = NULL;
+  if (GPUCreateTexture(device, &textureInfo, &arrayTexture) != GPU_OK ||
+      !arrayTexture) {
+    fprintf(stderr, "array 1D validation texture creation failed\n");
+    GPUDestroyTexture(singleTexture);
+    return 0;
+  }
+
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.label            = "api-1d-view-validation";
+  viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  viewInfo.mipLevelCount    = 1u;
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(cases); i++) {
+    texture                  = cases[i].arrayTexture
+                                 ? arrayTexture
+                                 : singleTexture;
+    viewInfo.viewType        = cases[i].viewType;
+    viewInfo.baseArrayLayer  = cases[i].baseLayer;
+    viewInfo.arrayLayerCount = cases[i].layerCount;
+
+    view   = (GPUTextureView *)(uintptr_t)1u;
+    result = GPUCreateTextureView(texture, &viewInfo, &view);
+    if ((cases[i].valid && (result != GPU_OK || !view)) ||
+        (!cases[i].valid &&
+         (result != GPU_ERROR_INVALID_ARGUMENT || view != NULL))) {
+      fprintf(stderr,
+              "1D view validation case %u returned %d\n",
+              i,
+              result);
+      GPUDestroyTextureView(view);
+      GPUDestroyTexture(arrayTexture);
+      GPUDestroyTexture(singleTexture);
+      return 0;
+    }
+    GPUDestroyTextureView(view);
+  }
+
+  GPUDestroyTexture(arrayTexture);
+  GPUDestroyTexture(singleTexture);
+  return 1;
+}
+
 int
 gpu_test_resources(GPUDevice *device) {
   return check_destroy_null_handles() &&
@@ -875,5 +990,6 @@ gpu_test_resources(GPUDevice *device) {
          check_texture_transfer_layout(device) &&
          check_resource_validation(device) &&
          check_cube_view_validation(device) &&
-         check_3d_view_validation(device);
+         check_3d_view_validation(device) &&
+         check_1d_view_validation(device);
 }

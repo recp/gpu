@@ -43,12 +43,13 @@ typedef enum GPUTextureDimension {
 } GPUTextureDimension;
 
 typedef enum GPUTextureViewType {
-  GPU_TEXTURE_VIEW_1D = 0,
-  GPU_TEXTURE_VIEW_2D = 1,
-  GPU_TEXTURE_VIEW_2D_ARRAY = 2,
-  GPU_TEXTURE_VIEW_CUBE = 3,
-  GPU_TEXTURE_VIEW_CUBE_ARRAY = 4,
-  GPU_TEXTURE_VIEW_3D = 5
+  GPU_TEXTURE_VIEW_1D          = 0,
+  GPU_TEXTURE_VIEW_1D_ARRAY    = 1,
+  GPU_TEXTURE_VIEW_2D          = 2,
+  GPU_TEXTURE_VIEW_2D_ARRAY    = 3,
+  GPU_TEXTURE_VIEW_CUBE        = 4,
+  GPU_TEXTURE_VIEW_CUBE_ARRAY  = 5,
+  GPU_TEXTURE_VIEW_3D          = 6
 } GPUTextureViewType;
 
 typedef struct GPUTexture GPUTexture;

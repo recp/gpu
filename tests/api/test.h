@@ -32,6 +32,7 @@ typedef struct GPUApiTestContext {
   const char  *sourceSamplerBytecodePath;
   const char  *storageTextureBytecodePath;
   const char  *cubeTextureBytecodePath;
+  const char  *lineTextureBytecodePath;
   const char  *volumeTextureBytecodePath;
 } GPUApiTestContext;
 
@@ -65,6 +66,7 @@ int gpu_test_shader(GPUDevice *device, const char *bytecodePath);
 int gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath);
 int gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath);
 int gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath);
+int gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath);
 int gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath);
 
 #endif /* gpu_tests_api_test_h */

@@ -92,6 +92,14 @@ run_cube_texture(void *ctx) {
 }
 
 static int
+run_line_texture(void *ctx) {
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_line_texture_view(testCtx->device,
+                                    testCtx->lineTextureBytecodePath);
+}
+
+static int
 run_volume_texture(void *ctx) {
   GPUApiTestContext *testCtx = ctx;
 
@@ -139,14 +147,14 @@ main(int argc, char **argv) {
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUApiTestContext      ctx;
-  GPUApiTest             tests[15];
+  GPUApiTest             tests[16];
   int                    ok;
 
-  if (argc != 8 && argc != 9) {
+  if (argc != 9 && argc != 10) {
     fprintf(stderr,
             "usage: %s <reflection.us> <render_mrt.us> <compute.us> "
             "<source_sampler.us> <storage_texture.us> <cube_texture.us> "
-            "<volume_texture.us> "
+            "<line_texture.us> <volume_texture.us> "
             "[metal|vulkan|dx12]\n",
             argv[0]);
     return 2;
@@ -156,9 +164,9 @@ main(int argc, char **argv) {
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = GPU_BACKEND_DEFAULT;
   instanceInfo.enableValidation = true;
-  if (argc == 9 &&
-      !parse_backend(argv[8], &instanceInfo.preferredBackend)) {
-    fprintf(stderr, "unknown backend: %s\n", argv[8]);
+  if (argc == 10 &&
+      !parse_backend(argv[9], &instanceInfo.preferredBackend)) {
+    fprintf(stderr, "unknown backend: %s\n", argv[9]);
     return 2;
   }
   instance = NULL;
@@ -200,7 +208,8 @@ main(int argc, char **argv) {
   ctx.sourceSamplerBytecodePath  = argv[4];
   ctx.storageTextureBytecodePath = argv[5];
   ctx.cubeTextureBytecodePath    = argv[6];
-  ctx.volumeTextureBytecodePath  = argv[7];
+  ctx.lineTextureBytecodePath    = argv[7];
+  ctx.volumeTextureBytecodePath  = argv[8];
 
   tests[0]  = (GPUApiTest){ "queue", run_queue, &ctx };
   tests[1]  = (GPUApiTest){ "sampler", run_sampler, &ctx };
@@ -216,7 +225,8 @@ main(int argc, char **argv) {
   tests[11] = (GPUApiTest){ "source-sampler", run_source_sampler, &ctx };
   tests[12] = (GPUApiTest){ "storage-texture", run_storage_texture, &ctx };
   tests[13] = (GPUApiTest){ "cube-texture", run_cube_texture, &ctx };
-  tests[14] = (GPUApiTest){ "volume-texture", run_volume_texture, &ctx };
+  tests[14] = (GPUApiTest){ "line-texture", run_line_texture, &ctx };
+  tests[15] = (GPUApiTest){ "volume-texture", run_volume_texture, &ctx };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 
