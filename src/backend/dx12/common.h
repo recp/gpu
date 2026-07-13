@@ -203,6 +203,7 @@ typedef struct GPUTextureDX12 {
   uint32_t                mipLevelCount;
   uint32_t                arrayLayerCount;
   uint32_t                subresourceCount;
+  uint32_t                planeCount;
   bool                    stateUniform;
 } GPUTextureDX12;
 
@@ -418,6 +419,17 @@ dx12_transitionTexture(ID3D12GraphicsCommandList *commandList,
                        uint32_t                   baseLayer,
                        uint32_t                   layerCount,
                        D3D12_RESOURCE_STATES      state);
+
+GPU_HIDE
+bool
+dx12_transitionTexturePlane(ID3D12GraphicsCommandList *commandList,
+                            GPUTextureDX12            *texture,
+                            uint32_t                   baseMip,
+                            uint32_t                   mipCount,
+                            uint32_t                   baseLayer,
+                            uint32_t                   layerCount,
+                            uint32_t                   plane,
+                            D3D12_RESOURCE_STATES      state);
 
 GPU_HIDE
 GPUResult

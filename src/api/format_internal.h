@@ -19,6 +19,7 @@
 
 #include "../../include/gpu/common.h"
 #include "../../include/gpu/format.h"
+#include "../../include/gpu/texture.h"
 
 typedef struct GPUFormatLayout {
   uint32_t bytesPerBlock;
@@ -38,6 +39,18 @@ bool
 gpuFormatLayout(GPUFormat format, GPUFormatLayout *outLayout);
 
 GPU_HIDE
+bool
+gpuFormatResolveCopyAspect(GPUFormat        format,
+                           GPUTextureAspect aspect,
+                           GPUTextureAspect *outAspect);
+
+GPU_HIDE
+bool
+gpuFormatAspectLayout(GPUFormat        format,
+                      GPUTextureAspect aspect,
+                      GPUFormatLayout *outLayout);
+
+GPU_HIDE
 uint32_t
 gpuBlockCount(uint32_t extent, uint32_t blockExtent);
 
@@ -51,6 +64,18 @@ gpuFormatDataLayout(GPUFormat            format,
                     uint32_t             bytesPerRow,
                     uint32_t             rowsPerImage,
                     GPUFormatDataLayout *outLayout);
+
+GPU_HIDE
+bool
+gpuFormatAspectDataLayout(GPUFormat            format,
+                          GPUTextureAspect     aspect,
+                          uint32_t             width,
+                          uint32_t             height,
+                          uint32_t             depth,
+                          uint32_t             layerCount,
+                          uint32_t             bytesPerRow,
+                          uint32_t             rowsPerImage,
+                          GPUFormatDataLayout *outLayout);
 
 GPU_HIDE
 bool

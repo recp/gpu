@@ -275,14 +275,15 @@ mt_bufferTextureRangeValid(id<MTLBuffer>                     buffer,
   GPUFormatDataLayout layout;
 
   if (!buffer || !texture || !region || !outBytesPerImage ||
-      !gpuFormatDataLayout(texture->format,
-                           region->texture.width,
-                           region->texture.height,
-                           region->texture.depth,
-                           region->texture.layerCount,
-                           region->bytesPerRow,
-                           region->rowsPerImage,
-                           &layout)) {
+      !gpuFormatAspectDataLayout(texture->format,
+                                 region->texture.texture.aspect,
+                                 region->texture.width,
+                                 region->texture.height,
+                                 region->texture.depth,
+                                 region->texture.layerCount,
+                                 region->bytesPerRow,
+                                 region->rowsPerImage,
+                                 &layout)) {
     return false;
   }
   if (!mt_bufferCopyRangeValid(buffer,
@@ -414,7 +415,10 @@ mt_copyBufferToTexture(GPUCopyPassEncoder               *pass,
   }
 
   texRegion = &region->texture;
-  dstTexture = (id<MTLTexture>)dst->_priv;
+  dstTexture = mt_copyTexture(dst, texRegion->texture.aspect);
+  if (!dstTexture) {
+    return;
+  }
   texture3D = dst->dimension == GPU_TEXTURE_DIMENSION_3D;
   if (mt_copyEncoder(pass)->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
@@ -498,7 +502,10 @@ mt_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
   }
 
   texRegion = &region->texture;
-  srcTexture = (id<MTLTexture>)src->_priv;
+  srcTexture = mt_copyTexture(src, texRegion->texture.aspect);
+  if (!srcTexture) {
+    return;
+  }
   texture3D = src->dimension == GPU_TEXTURE_DIMENSION_3D;
   if (mt_copyEncoder(pass)->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
@@ -573,8 +580,11 @@ mt_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
     return;
   }
 
-  srcTexture = (id<MTLTexture>)src->_priv;
-  dstTexture = (id<MTLTexture>)dst->_priv;
+  srcTexture = mt_copyTexture(src, region->src.aspect);
+  dstTexture = mt_copyTexture(dst, region->dst.aspect);
+  if (!srcTexture || !dstTexture) {
+    return;
+  }
   texture3D = src->dimension == GPU_TEXTURE_DIMENSION_3D;
   size = MTLSizeMake(region->width, region->height, texture3D ? region->depth : 1u);
   if (mt_copyEncoder(pass)->modern) {
@@ -674,7 +684,8 @@ mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
     mt_useAllocation(cmdb, (id<MTLBuffer>)barriers->pBufferBarriers[i].buffer->_priv);
   }
   for (uint32_t i = 0; i < barriers->textureBarrierCount; i++) {
-    mt_useAllocation(cmdb, (id<MTLTexture>)barriers->pTextureBarriers[i].texture->_priv);
+    mt_useAllocation(cmdb,
+                     mt_nativeTexture(barriers->pTextureBarriers[i].texture));
   }
 }
 

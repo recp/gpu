@@ -224,6 +224,7 @@ static bool
 gpu_validTextureCopyRegion(const GPUTextureSubresourceRegion *region,
                            const GPUTexture                  *texture) {
   const GPUTextureLocation *location;
+  GPUTextureAspect          aspect;
   uint32_t mipWidth;
   uint32_t mipHeight;
   uint32_t mipDepth;
@@ -238,7 +239,10 @@ gpu_validTextureCopyRegion(const GPUTextureSubresourceRegion *region,
   }
 
   location = &region->texture;
-  if (location->mipLevel >= texture->mipLevelCount) {
+  if (location->mipLevel >= texture->mipLevelCount ||
+      !gpuFormatResolveCopyAspect(texture->format,
+                                  location->aspect,
+                                  &aspect)) {
     return false;
   }
 
@@ -257,6 +261,12 @@ gpu_validTextureCopyRegion(const GPUTextureSubresourceRegion *region,
                             region->height,
                             mipWidth,
                             mipHeight)) {
+    return false;
+  }
+  if (aspect != GPU_TEXTURE_ASPECT_ALL &&
+      (location->x != 0u || location->y != 0u || location->z != 0u ||
+       region->width != mipWidth || region->height != mipHeight ||
+       region->depth != 1u)) {
     return false;
   }
 
@@ -287,14 +297,16 @@ gpu_validBufferTextureCopy(const GPUBufferTextureCopyRegion *region,
 
   if (!region || !texture || !outBytes ||
       !gpu_validTextureCopyRegion(&region->texture, texture) ||
-      !gpuFormatDataLayout(texture->format,
-                           region->texture.width,
-                           region->texture.height,
-                           region->texture.depth,
-                           region->texture.layerCount,
-                           region->bytesPerRow,
-                           region->rowsPerImage,
-                           &layout)) {
+      texture->sampleCount != 1u ||
+      !gpuFormatAspectDataLayout(texture->format,
+                                 region->texture.texture.aspect,
+                                 region->texture.width,
+                                 region->texture.height,
+                                 region->texture.depth,
+                                 region->texture.layerCount,
+                                 region->bytesPerRow,
+                                 region->rowsPerImage,
+                                 &layout)) {
     return false;
   }
 
@@ -484,10 +496,14 @@ GPUCopyTextureToTexture(GPUCopyPassEncoder                  *pass,
                         const GPUTextureToTextureCopyRegion *region) {
   GPUTextureSubresourceRegion srcRegion;
   GPUTextureSubresourceRegion dstRegion;
+  GPUTextureAspect            srcAspect;
+  GPUTextureAspect            dstAspect;
   GPUApi *api;
 
   if (!pass || pass->_ended || !src || !dst || !region ||
       src->dimension != dst->dimension ||
+      src->format != dst->format ||
+      src->sampleCount != dst->sampleCount ||
       (src->usage & GPU_TEXTURE_USAGE_COPY_SRC) == 0 ||
       (dst->usage & GPU_TEXTURE_USAGE_COPY_DST) == 0 ||
       region->width == 0 ||
@@ -509,7 +525,14 @@ GPUCopyTextureToTexture(GPUCopyPassEncoder                  *pass,
   dstRegion.height = region->height;
   dstRegion.depth = region->depth;
   dstRegion.layerCount = region->layerCount;
-  if (!gpu_validTextureCopyRegion(&srcRegion, src) ||
+  if (!gpuFormatResolveCopyAspect(src->format,
+                                  region->src.aspect,
+                                  &srcAspect) ||
+      !gpuFormatResolveCopyAspect(dst->format,
+                                  region->dst.aspect,
+                                  &dstAspect) ||
+      srcAspect != dstAspect ||
+      !gpu_validTextureCopyRegion(&srcRegion, src) ||
       !gpu_validTextureCopyRegion(&dstRegion, dst)) {
     return;
   }

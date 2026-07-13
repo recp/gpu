@@ -102,6 +102,25 @@ view_render_depths_equal(const uint8_t *pixels,
   return true;
 }
 
+static bool
+view_render_stencils_equal(const uint8_t *pixels,
+                           uint64_t       offset,
+                           uint32_t       width,
+                           uint32_t       height,
+                           uint8_t        expected) {
+  for (uint32_t y = 0u; y < height; y++) {
+    const uint8_t *row;
+
+    row = pixels + offset + (uint64_t)y * VIEW_ROW_PITCH;
+    for (uint32_t x = 0u; x < width; x++) {
+      if (row[x] != expected) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 static GPURenderPassEncoder *
 view_render_begin_clear(GPUCommandBuffer *cmdb,
                         GPUTextureView   *view,
@@ -592,22 +611,31 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
     GPU_FORMAT_DEPTH24_UNORM_STENCIL8
   };
 
-  GPUCommandQueue          *queue;
-  GPUCommandBuffer         *cmdb;
-  GPURenderPassEncoder     *renderPass;
-  GPUTexture               *texture;
-  GPUTextureView           *view;
-  GPUTextureCreateInfo      textureInfo = {0};
-  GPUTextureViewCreateInfo  viewInfo    = {0};
-  GPUFormatCapabilities     formatCaps;
-  GPUFormat                 format;
-  int                       ok;
+  GPUCommandQueue           *queue;
+  GPUCommandBuffer          *cmdb;
+  GPURenderPassEncoder      *renderPass;
+  GPUCopyPassEncoder        *copyPass;
+  GPUTexture                *texture;
+  GPUTextureView            *view;
+  GPUBuffer                 *readback;
+  GPUTextureCreateInfo       textureInfo   = {0};
+  GPUTextureViewCreateInfo   viewInfo      = {0};
+  GPUBufferCreateInfo        bufferInfo    = {0};
+  GPUBufferTextureCopyRegion copyRegion = {0};
+  GPUTextureBarrier          textureBarrier = {0};
+  GPUBarrierBatch            barrierBatch   = {0};
+  GPUFormatCapabilities      formatCaps;
+  GPUFormat                  format;
+  uint8_t                    pixels[VIEW_READBACK_BYTES] = {0};
+  int                        ok;
 
   queue      = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   cmdb       = NULL;
   renderPass = NULL;
+  copyPass   = NULL;
   texture    = NULL;
   view       = NULL;
+  readback   = NULL;
   ok         = queue != NULL;
   if (!ok) {
     fprintf(stderr, "texture view depth-stencil has no graphics queue\n");
@@ -640,7 +668,8 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
   textureInfo.depthOrLayers    = VIEW_TARGET_LAYERS;
   textureInfo.mipLevelCount    = VIEW_TARGET_MIPS;
   textureInfo.sampleCount      = 1u;
-  textureInfo.usage            = GPU_TEXTURE_USAGE_DEPTH_STENCIL;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_DEPTH_STENCIL |
+                                 GPU_TEXTURE_USAGE_COPY_SRC;
   if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
     fprintf(stderr, "texture view depth-stencil texture setup failed\n");
     goto cleanup;
@@ -658,6 +687,20 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
   if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK || !view) {
     fprintf(stderr, "texture view depth-stencil view setup failed\n");
     goto cleanup;
+  }
+
+  if (format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8) {
+    bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.chain.structSize = sizeof(bufferInfo);
+    bufferInfo.label            = "texture-view-depth-stencil-readback";
+    bufferInfo.sizeBytes        = VIEW_READBACK_BYTES;
+    bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
+                                  GPU_BUFFER_USAGE_COPY_SRC;
+    if (GPUCreateBuffer(device, &bufferInfo, &readback) != GPU_OK ||
+        !readback) {
+      fprintf(stderr, "texture view depth-stencil readback setup failed\n");
+      goto cleanup;
+    }
   }
 
   if (GPUAcquireCommandBuffer(queue,
@@ -680,16 +723,90 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
   GPUEndRenderPass(renderPass);
   renderPass = NULL;
 
+  if (readback) {
+    textureBarrier.texture    = texture;
+    textureBarrier.srcAccess  = GPU_ACCESS_DEPTH_WRITE;
+    textureBarrier.dstAccess  = GPU_ACCESS_TRANSFER_READ;
+    textureBarrier.baseMip    = VIEW_SECOND_MIP;
+    textureBarrier.mipCount   = 1u;
+    textureBarrier.baseLayer  = VIEW_SECOND_LAYER;
+    textureBarrier.layerCount = 1u;
+    barrierBatch.srcStages           = GPU_STAGE_FRAGMENT;
+    barrierBatch.dstStages           = GPU_STAGE_TRANSFER;
+    barrierBatch.textureBarrierCount = 1u;
+    barrierBatch.pTextureBarriers    = &textureBarrier;
+    GPUEncodeBarriers(cmdb, &barrierBatch);
+
+    copyPass = GPUBeginCopyPass(cmdb,
+                                "texture-view-depth-stencil-readback");
+    if (!copyPass) {
+      fprintf(stderr, "texture view depth-stencil copy pass failed\n");
+      goto cleanup;
+    }
+    copyRegion.bytesPerRow                    = VIEW_ROW_PITCH;
+    copyRegion.rowsPerImage                   = VIEW_SECOND_HEIGHT;
+    copyRegion.texture.texture.mipLevel       = VIEW_SECOND_MIP;
+    copyRegion.texture.texture.baseArrayLayer = VIEW_SECOND_LAYER;
+    copyRegion.texture.texture.aspect         =
+      GPU_TEXTURE_ASPECT_DEPTH_ONLY;
+    copyRegion.texture.width                  = VIEW_SECOND_WIDTH;
+    copyRegion.texture.height                 = VIEW_SECOND_HEIGHT;
+    copyRegion.texture.depth                  = 1u;
+    copyRegion.texture.layerCount             = 1u;
+    GPUCopyTextureToBuffer(copyPass, texture, readback, &copyRegion);
+
+    copyRegion.bufferOffset           = VIEW_SECOND_BUFFER_OFFSET;
+    copyRegion.texture.texture.aspect = GPU_TEXTURE_ASPECT_STENCIL_ONLY;
+    GPUCopyTextureToBuffer(copyPass, texture, readback, &copyRegion);
+    GPUEndCopyPass(copyPass);
+    copyPass = NULL;
+  }
+
   ok   = view_render_submit(device, queue, cmdb);
   cmdb = NULL;
   if (!ok) {
     fprintf(stderr, "texture view depth-stencil submit failed\n");
+    goto cleanup;
+  }
+  if (readback &&
+      GPUQueueReadBuffer(queue,
+                         readback,
+                         0u,
+                         pixels,
+                         sizeof(pixels)) != GPU_OK) {
+    fprintf(stderr, "texture view depth-stencil readback failed\n");
+    ok = 0;
+    goto cleanup;
+  }
+  if (readback &&
+      (!view_render_depths_equal(pixels,
+                                 0u,
+                                 VIEW_SECOND_WIDTH,
+                                 VIEW_SECOND_HEIGHT,
+                                 0.375f) ||
+       !view_render_stencils_equal(pixels,
+                                   VIEW_SECOND_BUFFER_OFFSET,
+                                   VIEW_SECOND_WIDTH,
+                                   VIEW_SECOND_HEIGHT,
+                                   37u))) {
+    float depth;
+
+    memcpy(&depth, pixels, sizeof(depth));
+    fprintf(stderr,
+            "texture view depth-stencil mismatch: depth=%f stencil=%u\n",
+            depth,
+            pixels[VIEW_SECOND_BUFFER_OFFSET]);
+    ok = 0;
   }
 
 cleanup:
+  if (copyPass) {
+    GPUEndCopyPass(copyPass);
+  }
   if (renderPass) {
     GPUEndRenderPass(renderPass);
   }
+  GPUDestroyBuffer(readback);
   GPUDestroyTextureView(view);
   GPUDestroyTexture(texture);
   return ok;

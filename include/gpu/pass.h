@@ -103,6 +103,7 @@ typedef struct GPUTextureLocation {
   uint32_t x, y, z;
   uint32_t mipLevel;
   uint32_t baseArrayLayer;
+  GPUTextureAspect aspect;
 } GPUTextureLocation;
 
 typedef struct GPUTextureSubresourceRegion {

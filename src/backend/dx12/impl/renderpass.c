@@ -17,107 +17,6 @@
 #include "../common.h"
 #include "../impl.h"
 
-static D3D12_BARRIER_SYNC
-dx12__barrierSync(GPUPipelineStageMask stages, GPUAccessMask access) {
-  D3D12_BARRIER_SYNC sync;
-
-  if ((stages & (GPU_STAGE_TOP | GPU_STAGE_BOTTOM)) != 0u) {
-    return D3D12_BARRIER_SYNC_ALL;
-  }
-
-  sync = D3D12_BARRIER_SYNC_NONE;
-  if ((access & (GPU_ACCESS_SHADER_READ | GPU_ACCESS_SHADER_WRITE)) != 0u) {
-    if ((stages & GPU_STAGE_VERTEX) != 0u) {
-      sync |= D3D12_BARRIER_SYNC_VERTEX_SHADING;
-    }
-    if ((stages & GPU_STAGE_FRAGMENT) != 0u) {
-      sync |= D3D12_BARRIER_SYNC_PIXEL_SHADING;
-    }
-    if ((stages & GPU_STAGE_COMPUTE) != 0u) {
-      sync |= D3D12_BARRIER_SYNC_COMPUTE_SHADING;
-    }
-  }
-  if ((access & (GPU_ACCESS_TRANSFER_READ | GPU_ACCESS_TRANSFER_WRITE)) != 0u) {
-    sync |= D3D12_BARRIER_SYNC_COPY;
-  }
-  if ((access & (GPU_ACCESS_COLOR_READ | GPU_ACCESS_COLOR_WRITE)) != 0u) {
-    sync |= D3D12_BARRIER_SYNC_RENDER_TARGET;
-  }
-  if ((access & (GPU_ACCESS_DEPTH_READ | GPU_ACCESS_DEPTH_WRITE)) != 0u) {
-    sync |= D3D12_BARRIER_SYNC_DEPTH_STENCIL;
-  }
-  if ((access & GPU_ACCESS_INDIRECT_READ) != 0u) {
-    sync |= D3D12_BARRIER_SYNC_EXECUTE_INDIRECT;
-  }
-  return sync;
-}
-
-static D3D12_BARRIER_SYNC
-dx12__bufferBarrierSync(const GPUBuffer      *buffer,
-                        GPUAccessMask         access,
-                        GPUPipelineStageMask  stages) {
-  D3D12_BARRIER_SYNC sync;
-
-  sync = dx12__barrierSync(stages, access);
-  if ((access & GPU_ACCESS_SHADER_READ) != 0u &&
-      (stages & GPU_STAGE_VERTEX) != 0u &&
-      gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_INDEX)) {
-    if (!gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_VERTEX) &&
-        !gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_UNIFORM)) {
-      sync &= ~D3D12_BARRIER_SYNC_VERTEX_SHADING;
-    }
-    sync |= D3D12_BARRIER_SYNC_INDEX_INPUT;
-  }
-  return sync;
-}
-
-static D3D12_BARRIER_ACCESS
-dx12__bufferBarrierAccess(const GPUBuffer       *buffer,
-                          GPUAccessMask          access,
-                          GPUPipelineStageMask   stages) {
-  D3D12_BARRIER_ACCESS nativeAccess;
-  bool                 inputAccess;
-
-  if (access == GPU_ACCESS_NONE) {
-    return D3D12_BARRIER_ACCESS_NO_ACCESS;
-  }
-  if ((access & GPU_ACCESS_SHADER_WRITE) != 0u) {
-    return D3D12_BARRIER_ACCESS_UNORDERED_ACCESS;
-  }
-
-  nativeAccess = D3D12_BARRIER_ACCESS_COMMON;
-  if ((access & GPU_ACCESS_TRANSFER_READ) != 0u) {
-    nativeAccess |= D3D12_BARRIER_ACCESS_COPY_SOURCE;
-  }
-  if ((access & GPU_ACCESS_TRANSFER_WRITE) != 0u) {
-    nativeAccess |= D3D12_BARRIER_ACCESS_COPY_DEST;
-  }
-  if ((access & GPU_ACCESS_INDIRECT_READ) != 0u) {
-    nativeAccess |= D3D12_BARRIER_ACCESS_INDIRECT_ARGUMENT;
-  }
-  if ((access & GPU_ACCESS_SHADER_READ) != 0u) {
-    inputAccess = false;
-    if ((stages & GPU_STAGE_VERTEX) != 0u) {
-      if (gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_VERTEX)) {
-        nativeAccess |= D3D12_BARRIER_ACCESS_VERTEX_BUFFER;
-        inputAccess   = true;
-      }
-      if (gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_INDEX)) {
-        nativeAccess |= D3D12_BARRIER_ACCESS_INDEX_BUFFER;
-        inputAccess   = true;
-      }
-    }
-    if (gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_UNIFORM)) {
-      nativeAccess |= D3D12_BARRIER_ACCESS_CONSTANT_BUFFER;
-      inputAccess   = true;
-    }
-    if (!inputAccess) {
-      nativeAccess |= D3D12_BARRIER_ACCESS_SHADER_RESOURCE;
-    }
-  }
-  return nativeAccess;
-}
-
 static D3D12_RESOURCE_STATES
 dx12__bufferBarrierState(const GPUBuffer      *buffer,
                          GPUAccessMask         access,
@@ -167,78 +66,6 @@ dx12__bufferBarrierState(const GPUBuffer      *buffer,
   return state;
 }
 
-static D3D12_BARRIER_ACCESS
-dx12__textureBarrierAccess(GPUAccessMask access) {
-  D3D12_BARRIER_ACCESS nativeAccess;
-
-  if (access == GPU_ACCESS_NONE) {
-    return D3D12_BARRIER_ACCESS_NO_ACCESS;
-  }
-
-  nativeAccess = D3D12_BARRIER_ACCESS_COMMON;
-  if ((access & GPU_ACCESS_SHADER_READ) != 0u) {
-    nativeAccess |= D3D12_BARRIER_ACCESS_SHADER_RESOURCE;
-  }
-  if ((access & GPU_ACCESS_SHADER_WRITE) != 0u) {
-    nativeAccess |= D3D12_BARRIER_ACCESS_UNORDERED_ACCESS;
-  }
-  if ((access & (GPU_ACCESS_COLOR_READ | GPU_ACCESS_COLOR_WRITE)) != 0u) {
-    nativeAccess |= D3D12_BARRIER_ACCESS_RENDER_TARGET;
-  }
-  if ((access & GPU_ACCESS_DEPTH_READ) != 0u) {
-    nativeAccess |= D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ;
-  }
-  if ((access & GPU_ACCESS_DEPTH_WRITE) != 0u) {
-    nativeAccess |= D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE;
-  }
-  if ((access & GPU_ACCESS_TRANSFER_READ) != 0u) {
-    nativeAccess |= D3D12_BARRIER_ACCESS_COPY_SOURCE;
-  }
-  if ((access & GPU_ACCESS_TRANSFER_WRITE) != 0u) {
-    nativeAccess |= D3D12_BARRIER_ACCESS_COPY_DEST;
-  }
-  return nativeAccess;
-}
-
-static D3D12_BARRIER_LAYOUT
-dx12__textureBarrierLayout(GPUAccessMask access, bool source) {
-  bool shaderRead;
-  bool transferRead;
-
-  if (access == GPU_ACCESS_NONE) {
-    return source ? D3D12_BARRIER_LAYOUT_UNDEFINED
-                  : D3D12_BARRIER_LAYOUT_COMMON;
-  }
-  if ((access & GPU_ACCESS_SHADER_WRITE) != 0u) {
-    return D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS;
-  }
-  if ((access & (GPU_ACCESS_COLOR_READ | GPU_ACCESS_COLOR_WRITE)) != 0u) {
-    return D3D12_BARRIER_LAYOUT_RENDER_TARGET;
-  }
-  if ((access & GPU_ACCESS_DEPTH_WRITE) != 0u) {
-    return D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE;
-  }
-  if ((access & GPU_ACCESS_DEPTH_READ) != 0u) {
-    return D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_READ;
-  }
-  if ((access & GPU_ACCESS_TRANSFER_WRITE) != 0u) {
-    return D3D12_BARRIER_LAYOUT_COPY_DEST;
-  }
-
-  shaderRead   = (access & GPU_ACCESS_SHADER_READ) != 0u;
-  transferRead = (access & GPU_ACCESS_TRANSFER_READ) != 0u;
-  if (shaderRead && transferRead) {
-    return D3D12_BARRIER_LAYOUT_GENERIC_READ;
-  }
-  if (shaderRead) {
-    return D3D12_BARRIER_LAYOUT_SHADER_RESOURCE;
-  }
-  if (transferRead) {
-    return D3D12_BARRIER_LAYOUT_COPY_SOURCE;
-  }
-  return D3D12_BARRIER_LAYOUT_COMMON;
-}
-
 static D3D12_RESOURCE_STATES
 dx12__textureBarrierState(GPUAccessMask         access,
                           GPUPipelineStageMask  stages) {
@@ -281,13 +108,14 @@ dx12__textureBarrierState(GPUAccessMask         access,
   return state;
 }
 
+/* Legacy states remain canonical until enhanced layouts are tracked end-to-end. */
 static void
 dx12__encodeBufferBarrier(GPUCommandBufferDX12   *command,
                           const GPUBufferBarrier *barrier,
-                          GPUPipelineStageMask    srcStages,
                           GPUPipelineStageMask    dstStages) {
-  GPUBufferDX12        *buffer;
-  D3D12_RESOURCE_STATES nextState;
+  GPUBufferDX12          *buffer;
+  D3D12_RESOURCE_BARRIER nativeBarrier = {0};
+  D3D12_RESOURCE_STATES  nextState;
 
   buffer = barrier && barrier->buffer ? barrier->buffer->_priv : NULL;
   if (!command || !command->commandList || !buffer || !buffer->resource) {
@@ -297,50 +125,23 @@ dx12__encodeBufferBarrier(GPUCommandBufferDX12   *command,
   nextState = dx12__bufferBarrierState(barrier->buffer,
                                       barrier->dstAccess,
                                       dstStages);
-  if (command->commandList7) {
-    D3D12_BUFFER_BARRIER nativeBarrier = {0};
-    D3D12_BARRIER_GROUP  group = {0};
-
-    nativeBarrier.SyncBefore   = dx12__bufferBarrierSync(barrier->buffer,
-                                                         barrier->srcAccess,
-                                                         srcStages);
-    nativeBarrier.SyncAfter    = dx12__bufferBarrierSync(barrier->buffer,
-                                                         barrier->dstAccess,
-                                                         dstStages);
-    nativeBarrier.AccessBefore = dx12__bufferBarrierAccess(barrier->buffer,
-                                                           barrier->srcAccess,
-                                                           srcStages);
-    nativeBarrier.AccessAfter  = dx12__bufferBarrierAccess(barrier->buffer,
-                                                           barrier->dstAccess,
-                                                           dstStages);
-    nativeBarrier.pResource    = buffer->resource;
-    nativeBarrier.Offset       = barrier->offset;
-    nativeBarrier.Size         = barrier->sizeBytes;
-    group.Type                 = D3D12_BARRIER_TYPE_BUFFER;
-    group.NumBarriers          = 1u;
-    group.pBufferBarriers      = &nativeBarrier;
-    command->commandList7->lpVtbl->Barrier(command->commandList7, 1u, &group);
-  } else {
-    D3D12_RESOURCE_BARRIER nativeBarrier = {0};
-
-    if (buffer->state != nextState) {
-      nativeBarrier.Type                   =
-        D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-      nativeBarrier.Transition.pResource   = buffer->resource;
-      nativeBarrier.Transition.Subresource =
-        D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-      nativeBarrier.Transition.StateBefore = buffer->state;
-      nativeBarrier.Transition.StateAfter  = nextState;
-      command->commandList->lpVtbl->ResourceBarrier(command->commandList,
-                                                     1u,
-                                                     &nativeBarrier);
-    } else if ((barrier->srcAccess & GPU_ACCESS_SHADER_WRITE) != 0u) {
-      nativeBarrier.Type          = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-      nativeBarrier.UAV.pResource = buffer->resource;
-      command->commandList->lpVtbl->ResourceBarrier(command->commandList,
-                                                     1u,
-                                                     &nativeBarrier);
-    }
+  if (buffer->state != nextState) {
+    nativeBarrier.Type                   =
+      D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    nativeBarrier.Transition.pResource   = buffer->resource;
+    nativeBarrier.Transition.Subresource =
+      D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    nativeBarrier.Transition.StateBefore = buffer->state;
+    nativeBarrier.Transition.StateAfter  = nextState;
+    command->commandList->lpVtbl->ResourceBarrier(command->commandList,
+                                                   1u,
+                                                   &nativeBarrier);
+  } else if ((barrier->srcAccess & GPU_ACCESS_SHADER_WRITE) != 0u) {
+    nativeBarrier.Type          = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+    nativeBarrier.UAV.pResource = buffer->resource;
+    command->commandList->lpVtbl->ResourceBarrier(command->commandList,
+                                                   1u,
+                                                   &nativeBarrier);
   }
   buffer->state = nextState;
 }
@@ -349,7 +150,6 @@ static void
 dx12__encodeTextureBarrier(GPUCommandBufferDX12    *command,
                            GPUDevice               *device,
                            const GPUTextureBarrier *barrier,
-                           GPUPipelineStageMask     srcStages,
                            GPUPipelineStageMask     dstStages) {
   GPUTextureDX12        *texture;
   D3D12_RESOURCE_STATES  nextState;
@@ -375,52 +175,6 @@ dx12__encodeTextureBarrier(GPUCommandBufferDX12    *command,
   }
 
   nextState = dx12__textureBarrierState(barrier->dstAccess, dstStages);
-  if (command->commandList7) {
-    D3D12_TEXTURE_BARRIER nativeBarrier = {0};
-    D3D12_BARRIER_GROUP   group = {0};
-
-    nativeBarrier.SyncBefore = dx12__barrierSync(srcStages,
-                                                 barrier->srcAccess);
-    nativeBarrier.SyncAfter  = dx12__barrierSync(dstStages,
-                                                 barrier->dstAccess);
-    nativeBarrier.AccessBefore = dx12__textureBarrierAccess(
-      barrier->srcAccess
-    );
-    nativeBarrier.AccessAfter = dx12__textureBarrierAccess(
-      barrier->dstAccess
-    );
-    nativeBarrier.LayoutBefore = dx12__textureBarrierLayout(
-      barrier->srcAccess,
-      true
-    );
-    nativeBarrier.LayoutAfter = dx12__textureBarrierLayout(
-      barrier->dstAccess,
-      false
-    );
-    nativeBarrier.pResource                         = texture->resource;
-    nativeBarrier.Subresources.IndexOrFirstMipLevel = barrier->baseMip;
-    nativeBarrier.Subresources.NumMipLevels         = barrier->mipCount;
-    nativeBarrier.Subresources.FirstArraySlice      = barrier->baseLayer;
-    nativeBarrier.Subresources.NumArraySlices       = barrier->layerCount;
-    nativeBarrier.Subresources.FirstPlane           = 0u;
-    nativeBarrier.Subresources.NumPlanes             = 1u;
-    nativeBarrier.Flags                              =
-      D3D12_TEXTURE_BARRIER_FLAG_NONE;
-    group.Type             = D3D12_BARRIER_TYPE_TEXTURE;
-    group.NumBarriers      = 1u;
-    group.pTextureBarriers = &nativeBarrier;
-    command->commandList7->lpVtbl->Barrier(command->commandList7,
-                                            1u,
-                                            &group);
-    dx12_setTextureState(texture,
-                         barrier->baseMip,
-                         barrier->mipCount,
-                         barrier->baseLayer,
-                         barrier->layerCount,
-                         nextState);
-    return;
-  }
-
   if ((barrier->srcAccess & GPU_ACCESS_SHADER_WRITE) != 0u &&
       (barrier->dstAccess & GPU_ACCESS_SHADER_WRITE) != 0u) {
     D3D12_RESOURCE_BARRIER nativeBarrier = {0};
@@ -460,14 +214,12 @@ dx12_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
   for (uint32_t i = 0u; i < barriers->bufferBarrierCount; i++) {
     dx12__encodeBufferBarrier(command,
                               &barriers->pBufferBarriers[i],
-                              barriers->srcStages,
                               barriers->dstStages);
   }
   for (uint32_t i = 0u; i < barriers->textureBarrierCount; i++) {
     dx12__encodeTextureBarrier(command,
                                device,
                                &barriers->pTextureBarriers[i],
-                               barriers->srcStages,
                                barriers->dstStages);
   }
 }
@@ -616,23 +368,76 @@ dx12__transitionCopyBuffer(GPUCommandBufferDX12 *command,
 }
 
 static bool
+dx12__copyPlane(GPUFormat         format,
+                GPUTextureAspect  aspect,
+                uint32_t         *outPlane) {
+  GPUTextureAspect resolved;
+
+  if (!outPlane ||
+      !gpuFormatResolveCopyAspect(format, aspect, &resolved)) {
+    return false;
+  }
+
+  *outPlane = resolved == GPU_TEXTURE_ASPECT_STENCIL_ONLY &&
+              (format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+               format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8)
+                ? 1u
+                : 0u;
+  return true;
+}
+
+static bool
+dx12__copyWholeSubresource(GPUFormat format) {
+  return format == GPU_FORMAT_DEPTH16_UNORM ||
+         format == GPU_FORMAT_STENCIL8 ||
+         format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+         format == GPU_FORMAT_DEPTH32_FLOAT ||
+         format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+}
+
+static uint32_t
+dx12__copySubresource(const GPUTextureDX12 *texture,
+                      uint32_t               mip,
+                      uint32_t               layer,
+                      uint32_t               plane) {
+  return mip + layer * texture->mipLevelCount +
+         plane * texture->mipLevelCount * texture->arrayLayerCount;
+}
+
+static bool
 dx12__copyFootprint(const GPUTexture                   *texture,
                     const GPUBufferTextureCopyRegion   *region,
                     uint32_t                            layer,
                     D3D12_PLACED_SUBRESOURCE_FOOTPRINT *outFootprint) {
-  GPUFormatDataLayout dataLayout;
-  uint64_t            offset;
-  uint32_t            rowsPerImage;
+  GPUFormatDataLayout                   dataLayout;
+  GPUDeviceDX12                        *device;
+  GPUTextureDX12                       *native;
+  D3D12_RESOURCE_DESC                   desc;
+  D3D12_PLACED_SUBRESOURCE_FOOTPRINT    nativeFootprint;
+  uint64_t                              footprintBytes;
+  uint64_t                              offset;
+  uint64_t                              rowSize;
+  uint32_t                              rowCount;
+  uint32_t                              rowsPerImage;
+  uint32_t                              plane;
+  uint32_t                              subresource;
 
   if (!texture || !region || !outFootprint ||
-      !gpuFormatDataLayout(texture->format,
-                           region->texture.width,
-                           region->texture.height,
-                           region->texture.depth,
-                           region->texture.layerCount,
-                           region->bytesPerRow,
-                           region->rowsPerImage,
-                           &dataLayout)) {
+      !texture->device ||
+      !(device = texture->device->_priv) ||
+      !(native = texture->_priv) || !native->resource ||
+      !dx12__copyPlane(texture->format,
+                       region->texture.texture.aspect,
+                       &plane) ||
+      !gpuFormatAspectDataLayout(texture->format,
+                                 region->texture.texture.aspect,
+                                 region->texture.width,
+                                 region->texture.height,
+                                 region->texture.depth,
+                                 region->texture.layerCount,
+                                 region->bytesPerRow,
+                                 region->rowsPerImage,
+                                 &dataLayout)) {
     return false;
   }
 
@@ -651,9 +456,29 @@ dx12__copyFootprint(const GPUTexture                   *texture,
     return false;
   }
 
-  memset(outFootprint, 0, sizeof(*outFootprint));
-  outFootprint->Offset             = offset;
-  outFootprint->Footprint.Format   = dx12_format(texture->format);
+  native->resource->lpVtbl->GetDesc(native->resource, &desc);
+  subresource = dx12__copySubresource(
+    native,
+    region->texture.texture.mipLevel,
+    region->texture.texture.baseArrayLayer + layer,
+    plane
+  );
+  device->d3dDevice->lpVtbl->GetCopyableFootprints(device->d3dDevice,
+                                                    &desc,
+                                                    subresource,
+                                                    1u,
+                                                    0u,
+                                                    &nativeFootprint,
+                                                    &rowCount,
+                                                    &rowSize,
+                                                    &footprintBytes);
+  if (footprintBytes == 0u || rowCount < dataLayout.blockRows ||
+      rowSize > region->bytesPerRow) {
+    return false;
+  }
+
+  *outFootprint                     = nativeFootprint;
+  outFootprint->Offset              = offset;
   outFootprint->Footprint.Width    = region->texture.width;
   outFootprint->Footprint.Height   = rowsPerImage;
   outFootprint->Footprint.Depth    =
@@ -726,13 +551,17 @@ dx12_copyBufferToTexture(GPUCopyPassEncoder               *pass,
   GPUTextureDX12       *dstTexture;
   D3D12_BOX             sourceBox = {0};
   bool                  texture3D;
+  uint32_t              plane;
   uint32_t              copyCount;
 
   command    = dx12__copyCommand(pass);
   srcBuffer  = src ? src->_priv : NULL;
   dstTexture = dst ? dst->_priv : NULL;
   texture3D  = dst && dst->dimension == GPU_TEXTURE_DIMENSION_3D;
-  if (!command || !srcBuffer || !dstTexture || !region) {
+  if (!command || !srcBuffer || !dstTexture || !region ||
+      !dx12__copyPlane(dst->format,
+                       region->texture.texture.aspect,
+                       &plane)) {
     dx12__copyError(pass, "Direct3D 12 buffer-to-texture copy is invalid");
     return;
   }
@@ -750,13 +579,14 @@ dx12_copyBufferToTexture(GPUCopyPassEncoder               *pass,
   if (!dx12__transitionCopyBuffer(command,
                                   srcBuffer,
                                   D3D12_RESOURCE_STATE_COPY_SOURCE) ||
-      !dx12_transitionTexture(command->commandList,
-                              dstTexture,
-                              region->texture.texture.mipLevel,
-                              1u,
-                              region->texture.texture.baseArrayLayer,
-                              texture3D ? 1u : region->texture.layerCount,
-                              D3D12_RESOURCE_STATE_COPY_DEST)) {
+      !dx12_transitionTexturePlane(command->commandList,
+                                   dstTexture,
+                                   region->texture.texture.mipLevel,
+                                   1u,
+                                   region->texture.texture.baseArrayLayer,
+                                   texture3D ? 1u : region->texture.layerCount,
+                                   plane,
+                                   D3D12_RESOURCE_STATE_COPY_DEST)) {
     dx12__copyError(pass,
                     "Direct3D 12 buffer-to-texture copy transition failed");
     return;
@@ -778,9 +608,12 @@ dx12_copyBufferToTexture(GPUCopyPassEncoder               *pass,
     source.Type             = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
     destination.pResource   = dstTexture->resource;
     destination.Type        = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-    destination.SubresourceIndex =
-      region->texture.texture.mipLevel +
-      (region->texture.texture.baseArrayLayer + layer) * dst->mipLevelCount;
+    destination.SubresourceIndex = dx12__copySubresource(
+      dstTexture,
+      region->texture.texture.mipLevel,
+      region->texture.texture.baseArrayLayer + layer,
+      plane
+    );
     command->commandList->lpVtbl->CopyTextureRegion(
       command->commandList,
       &destination,
@@ -788,7 +621,7 @@ dx12_copyBufferToTexture(GPUCopyPassEncoder               *pass,
       region->texture.texture.y,
       texture3D ? region->texture.texture.z : 0u,
       &source,
-      &sourceBox
+      dx12__copyWholeSubresource(dst->format) ? NULL : &sourceBox
     );
   }
 }
@@ -803,13 +636,17 @@ dx12_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
   GPUBufferDX12        *dstBuffer;
   D3D12_BOX             sourceBox = {0};
   bool                  texture3D;
+  uint32_t              plane;
   uint32_t              copyCount;
 
   command    = dx12__copyCommand(pass);
   srcTexture = src ? src->_priv : NULL;
   dstBuffer  = dst ? dst->_priv : NULL;
   texture3D  = src && src->dimension == GPU_TEXTURE_DIMENSION_3D;
-  if (!command || !srcTexture || !dstBuffer || !region) {
+  if (!command || !srcTexture || !dstBuffer || !region ||
+      !dx12__copyPlane(src->format,
+                       region->texture.texture.aspect,
+                       &plane)) {
     dx12__copyError(pass, "Direct3D 12 texture-to-buffer copy is invalid");
     return;
   }
@@ -824,13 +661,14 @@ dx12_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
       return;
     }
   }
-  if (!dx12_transitionTexture(command->commandList,
-                              srcTexture,
-                              region->texture.texture.mipLevel,
-                              1u,
-                              region->texture.texture.baseArrayLayer,
-                              texture3D ? 1u : region->texture.layerCount,
-                              D3D12_RESOURCE_STATE_COPY_SOURCE) ||
+  if (!dx12_transitionTexturePlane(command->commandList,
+                                   srcTexture,
+                                   region->texture.texture.mipLevel,
+                                   1u,
+                                   region->texture.texture.baseArrayLayer,
+                                   texture3D ? 1u : region->texture.layerCount,
+                                   plane,
+                                   D3D12_RESOURCE_STATE_COPY_SOURCE) ||
       !dx12__transitionCopyBuffer(command,
                                   dstBuffer,
                                   D3D12_RESOURCE_STATE_COPY_DEST)) {
@@ -860,9 +698,12 @@ dx12_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
     }
     source.pResource   = srcTexture->resource;
     source.Type        = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-    source.SubresourceIndex =
-      region->texture.texture.mipLevel +
-      (region->texture.texture.baseArrayLayer + layer) * src->mipLevelCount;
+    source.SubresourceIndex = dx12__copySubresource(
+      srcTexture,
+      region->texture.texture.mipLevel,
+      region->texture.texture.baseArrayLayer + layer,
+      plane
+    );
     destination.pResource = dstBuffer->resource;
     destination.Type      = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
     command->commandList->lpVtbl->CopyTextureRegion(command->commandList,
@@ -871,7 +712,9 @@ dx12_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
                                                      0u,
                                                      0u,
                                                      &source,
-                                                     &sourceBox);
+                                                     dx12__copyWholeSubresource(
+                                                       src->format
+                                                     ) ? NULL : &sourceBox);
   }
 }
 
@@ -886,6 +729,8 @@ dx12_copyTextureToTexture(
   GPUTextureDX12       *dstTexture;
   D3D12_BOX             sourceBox = {0};
   bool                  texture3D;
+  uint32_t              srcPlane;
+  uint32_t              dstPlane;
   uint32_t              copyCount;
 
   command    = dx12__copyCommand(pass);
@@ -893,20 +738,25 @@ dx12_copyTextureToTexture(
   dstTexture = dst ? dst->_priv : NULL;
   texture3D  = src && src->dimension == GPU_TEXTURE_DIMENSION_3D;
   if (!command || !srcTexture || !dstTexture || !region || src == dst ||
-      !dx12_transitionTexture(command->commandList,
-                              srcTexture,
-                              region->src.mipLevel,
-                              1u,
-                              region->src.baseArrayLayer,
-                              texture3D ? 1u : region->layerCount,
-                              D3D12_RESOURCE_STATE_COPY_SOURCE) ||
-      !dx12_transitionTexture(command->commandList,
-                              dstTexture,
-                              region->dst.mipLevel,
-                              1u,
-                              region->dst.baseArrayLayer,
-                              texture3D ? 1u : region->layerCount,
-                              D3D12_RESOURCE_STATE_COPY_DEST)) {
+      !dx12__copyPlane(src->format, region->src.aspect, &srcPlane) ||
+      !dx12__copyPlane(dst->format, region->dst.aspect, &dstPlane) ||
+      srcPlane != dstPlane ||
+      !dx12_transitionTexturePlane(command->commandList,
+                                   srcTexture,
+                                   region->src.mipLevel,
+                                   1u,
+                                   region->src.baseArrayLayer,
+                                   texture3D ? 1u : region->layerCount,
+                                   srcPlane,
+                                   D3D12_RESOURCE_STATE_COPY_SOURCE) ||
+      !dx12_transitionTexturePlane(command->commandList,
+                                   dstTexture,
+                                   region->dst.mipLevel,
+                                   1u,
+                                   region->dst.baseArrayLayer,
+                                   texture3D ? 1u : region->layerCount,
+                                   dstPlane,
+                                   D3D12_RESOURCE_STATE_COPY_DEST)) {
     dx12__copyError(pass,
                     "Direct3D 12 texture-to-texture copy transition failed");
     return;
@@ -925,14 +775,20 @@ dx12_copyTextureToTexture(
 
     source.pResource   = srcTexture->resource;
     source.Type        = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-    source.SubresourceIndex = region->src.mipLevel +
-                              (region->src.baseArrayLayer + layer) *
-                                src->mipLevelCount;
+    source.SubresourceIndex = dx12__copySubresource(
+      srcTexture,
+      region->src.mipLevel,
+      region->src.baseArrayLayer + layer,
+      srcPlane
+    );
     destination.pResource   = dstTexture->resource;
     destination.Type        = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-    destination.SubresourceIndex = region->dst.mipLevel +
-                                   (region->dst.baseArrayLayer + layer) *
-                                     dst->mipLevelCount;
+    destination.SubresourceIndex = dx12__copySubresource(
+      dstTexture,
+      region->dst.mipLevel,
+      region->dst.baseArrayLayer + layer,
+      dstPlane
+    );
     command->commandList->lpVtbl->CopyTextureRegion(
       command->commandList,
       &destination,
@@ -940,7 +796,7 @@ dx12_copyTextureToTexture(
       region->dst.y,
       texture3D ? region->dst.z : 0u,
       &source,
-      &sourceBox
+      dx12__copyWholeSubresource(src->format) ? NULL : &sourceBox
     );
   }
 }

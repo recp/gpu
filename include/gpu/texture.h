@@ -42,6 +42,12 @@ typedef enum GPUTextureDimension {
   GPU_TEXTURE_DIMENSION_3D = 2
 } GPUTextureDimension;
 
+typedef enum GPUTextureAspect {
+  GPU_TEXTURE_ASPECT_ALL          = 0,
+  GPU_TEXTURE_ASPECT_DEPTH_ONLY   = 1,
+  GPU_TEXTURE_ASPECT_STENCIL_ONLY = 2
+} GPUTextureAspect;
+
 typedef enum GPUTextureViewType {
   GPU_TEXTURE_VIEW_1D          = 0,
   GPU_TEXTURE_VIEW_1D_ARRAY    = 1,

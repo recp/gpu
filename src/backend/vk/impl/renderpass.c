@@ -770,17 +770,47 @@ vk_copyBufferToBuffer(GPUCopyPassEncoder        *pass,
 }
 
 static bool
+vk__copyAspect(GPUFormat           format,
+               GPUTextureAspect    aspect,
+               VkImageAspectFlags *outAspect) {
+  GPUTextureAspect resolved;
+
+  if (!outAspect ||
+      !gpuFormatResolveCopyAspect(format, aspect, &resolved)) {
+    return false;
+  }
+
+  switch (resolved) {
+    case GPU_TEXTURE_ASPECT_DEPTH_ONLY:
+      *outAspect = VK_IMAGE_ASPECT_DEPTH_BIT;
+      return true;
+    case GPU_TEXTURE_ASPECT_STENCIL_ONLY:
+      *outAspect = VK_IMAGE_ASPECT_STENCIL_BIT;
+      return true;
+    case GPU_TEXTURE_ASPECT_ALL:
+      *outAspect = VK_IMAGE_ASPECT_COLOR_BIT;
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool
 vk__bufferImageCopy(GPUTexture                       *texture,
                     const GPUBufferTextureCopyRegion *region,
                     VkBufferImageCopy                *outCopy) {
   GPUFormatLayout formatLayout;
-  GPUTextureVk *textureVk;
-  uint32_t      rowBlocks;
-  uint32_t      rowLength;
+  VkImageAspectFlags aspect;
+  uint32_t           rowBlocks;
+  uint32_t           rowLength;
 
-  textureVk = texture ? texture->_priv : NULL;
-  if (!textureVk || !region || !outCopy ||
-      !gpuFormatLayout(texture->format, &formatLayout) ||
+  if (!texture || !texture->_priv || !region || !outCopy ||
+      !vk__copyAspect(texture->format,
+                      region->texture.texture.aspect,
+                      &aspect) ||
+      !gpuFormatAspectLayout(texture->format,
+                             region->texture.texture.aspect,
+                             &formatLayout) ||
       region->bytesPerRow % formatLayout.bytesPerBlock != 0u) {
     return false;
   }
@@ -795,7 +825,7 @@ vk__bufferImageCopy(GPUTexture                       *texture,
   outCopy->bufferOffset                    = region->bufferOffset;
   outCopy->bufferRowLength                 = rowLength;
   outCopy->bufferImageHeight               = region->rowsPerImage;
-  outCopy->imageSubresource.aspectMask     = textureVk->aspect;
+  outCopy->imageSubresource.aspectMask     = aspect;
   outCopy->imageSubresource.mipLevel       = region->texture.texture.mipLevel;
   outCopy->imageSubresource.baseArrayLayer =
     texture->dimension == GPU_TEXTURE_DIMENSION_3D
@@ -903,13 +933,18 @@ vk_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
   GPUTextureVk       *srcVk;
   GPUTextureVk       *dstVk;
   VkImageCopy         copy = {0};
+  VkImageAspectFlags  srcAspect;
+  VkImageAspectFlags  dstAspect;
   bool                texture3D;
 
   command   = vk__copyCommand(pass);
   srcVk     = src ? src->_priv : NULL;
   dstVk     = dst ? dst->_priv : NULL;
   texture3D = src && src->dimension == GPU_TEXTURE_DIMENSION_3D;
-  if (!command || !srcVk || !dstVk || !region) {
+  if (!command || !srcVk || !dstVk || !region ||
+      !vk__copyAspect(src->format, region->src.aspect, &srcAspect) ||
+      !vk__copyAspect(dst->format, region->dst.aspect, &dstAspect) ||
+      srcAspect != dstAspect) {
     return;
   }
 
@@ -927,7 +962,7 @@ vk_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
                              texture3D ? 0u : region->dst.baseArrayLayer,
                              texture3D ? 1u : region->layerCount,
                              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-  copy.srcSubresource.aspectMask     = srcVk->aspect;
+  copy.srcSubresource.aspectMask     = srcAspect;
   copy.srcSubresource.mipLevel       = region->src.mipLevel;
   copy.srcSubresource.baseArrayLayer = texture3D
                                          ? 0u
@@ -936,7 +971,7 @@ vk_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
   copy.srcOffset.x                   = (int32_t)region->src.x;
   copy.srcOffset.y                   = (int32_t)region->src.y;
   copy.srcOffset.z                   = texture3D ? (int32_t)region->src.z : 0;
-  copy.dstSubresource.aspectMask     = dstVk->aspect;
+  copy.dstSubresource.aspectMask     = dstAspect;
   copy.dstSubresource.mipLevel       = region->dst.mipLevel;
   copy.dstSubresource.baseArrayLayer = texture3D
                                          ? 0u

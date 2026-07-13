@@ -72,6 +72,11 @@ typedef struct GPUDeviceMT {
   MTCommandMode     commandMode;
 } GPUDeviceMT;
 
+typedef struct GPUTextureMT {
+  id<MTLTexture> texture;
+  id<MTLTexture> stencilCopyView;
+} GPUTextureMT;
+
 enum {
   MT_ARGUMENT_BUFFER_COUNT  = 31u,
   MT_ARGUMENT_TEXTURE_COUNT = 128u,
@@ -169,6 +174,9 @@ typedef struct MTQuerySet {
 
 GPU_HIDE MTLPixelFormat mt_format(GPUFormat format);
 GPU_HIDE GPUFormat mt_formatFromNative(MTLPixelFormat format);
+GPU_HIDE id<MTLTexture> mt_nativeTexture(GPUTexture *texture);
+GPU_HIDE id<MTLTexture> mt_copyTexture(GPUTexture *texture,
+                                       GPUTextureAspect aspect);
 
 static inline MTCommandQueue *
 mt_commandQueue(GPUCommandQueue *queue) {

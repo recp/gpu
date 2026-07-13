@@ -117,6 +117,14 @@ dx12__textureSrvFormat(GPUFormat format) {
   }
 }
 
+static uint32_t
+dx12__texturePlaneCount(GPUFormat format) {
+  return format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+         format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8
+           ? 2u
+           : 1u;
+}
+
 static bool
 dx12__textureRangeValid(const GPUTextureDX12 *texture,
                         uint32_t               baseMip,
@@ -134,8 +142,10 @@ dx12__textureRangeValid(const GPUTextureDX12 *texture,
 static uint32_t
 dx12__textureSubresource(const GPUTextureDX12 *texture,
                          uint32_t               mip,
-                         uint32_t               layer) {
-  return mip + layer * texture->mipLevelCount;
+                         uint32_t               layer,
+                         uint32_t               plane) {
+  return mip + layer * texture->mipLevelCount +
+         plane * texture->mipLevelCount * texture->arrayLayerCount;
 }
 
 static bool
@@ -143,9 +153,12 @@ dx12__textureRangeFull(const GPUTextureDX12 *texture,
                        uint32_t               baseMip,
                        uint32_t               mipCount,
                        uint32_t               baseLayer,
-                       uint32_t               layerCount) {
+                       uint32_t               layerCount,
+                       uint32_t               basePlane,
+                       uint32_t               planeCount) {
   return baseMip == 0u && mipCount == texture->mipLevelCount &&
-         baseLayer == 0u && layerCount == texture->arrayLayerCount;
+         baseLayer == 0u && layerCount == texture->arrayLayerCount &&
+         basePlane == 0u && planeCount == texture->planeCount;
 }
 
 static void
@@ -179,7 +192,9 @@ dx12_setTextureState(GPUTextureDX12        *texture,
                              baseMip,
                              mipCount,
                              baseLayer,
-                             layerCount)) {
+                             layerCount,
+                             0u,
+                             texture->planeCount)) {
     texture->state        = state;
     texture->stateUniform = true;
     return;
@@ -189,26 +204,29 @@ dx12_setTextureState(GPUTextureDX12        *texture,
   }
 
   dx12__materializeTextureStates(texture);
-  for (uint32_t layer = baseLayer; layer < baseLayer + layerCount; layer++) {
-    for (uint32_t mip = baseMip; mip < baseMip + mipCount; mip++) {
-      uint32_t subresource;
+  for (uint32_t plane = 0u; plane < texture->planeCount; plane++) {
+    for (uint32_t layer = baseLayer; layer < baseLayer + layerCount; layer++) {
+      for (uint32_t mip = baseMip; mip < baseMip + mipCount; mip++) {
+        uint32_t subresource;
 
-      subresource = dx12__textureSubresource(texture, mip, layer);
-      texture->states[subresource] = state;
+        subresource = dx12__textureSubresource(texture, mip, layer, plane);
+        texture->states[subresource] = state;
+      }
     }
   }
   texture->stateUniform = false;
 }
 
-GPU_HIDE
-bool
-dx12_transitionTexture(ID3D12GraphicsCommandList *commandList,
-                       GPUTextureDX12            *texture,
-                       uint32_t                   baseMip,
-                       uint32_t                   mipCount,
-                       uint32_t                   baseLayer,
-                       uint32_t                   layerCount,
-                       D3D12_RESOURCE_STATES      state) {
+static bool
+dx12__transitionTexture(ID3D12GraphicsCommandList *commandList,
+                        GPUTextureDX12            *texture,
+                        uint32_t                   baseMip,
+                        uint32_t                   mipCount,
+                        uint32_t                   baseLayer,
+                        uint32_t                   layerCount,
+                        uint32_t                   basePlane,
+                        uint32_t                   planeCount,
+                        D3D12_RESOURCE_STATES      state) {
   D3D12_RESOURCE_BARRIER barriers[DX12_TEXTURE_BARRIER_CHUNK_SIZE];
   uint32_t               barrierCount;
   bool                   fullRange;
@@ -219,7 +237,9 @@ dx12_transitionTexture(ID3D12GraphicsCommandList *commandList,
                                baseMip,
                                mipCount,
                                baseLayer,
-                               layerCount)) {
+                               layerCount) ||
+      planeCount == 0u || basePlane >= texture->planeCount ||
+      planeCount > texture->planeCount - basePlane) {
     return false;
   }
 
@@ -227,7 +247,9 @@ dx12_transitionTexture(ID3D12GraphicsCommandList *commandList,
                                      baseMip,
                                      mipCount,
                                      baseLayer,
-                                     layerCount);
+                                     layerCount,
+                                     basePlane,
+                                     planeCount);
   if (fullRange && texture->stateUniform) {
     if (texture->state == state) {
       return true;
@@ -253,32 +275,34 @@ dx12_transitionTexture(ID3D12GraphicsCommandList *commandList,
   dx12__materializeTextureStates(texture);
   barrierCount = 0u;
   changed      = false;
-  for (uint32_t layer = baseLayer; layer < baseLayer + layerCount; layer++) {
-    for (uint32_t mip = baseMip; mip < baseMip + mipCount; mip++) {
-      D3D12_RESOURCE_BARRIER *barrier;
-      uint32_t                subresource;
+  for (uint32_t plane = basePlane; plane < basePlane + planeCount; plane++) {
+    for (uint32_t layer = baseLayer; layer < baseLayer + layerCount; layer++) {
+      for (uint32_t mip = baseMip; mip < baseMip + mipCount; mip++) {
+        D3D12_RESOURCE_BARRIER *barrier;
+        uint32_t                subresource;
 
-      subresource = dx12__textureSubresource(texture, mip, layer);
-      if (texture->states[subresource] == state) {
-        continue;
-      }
+        subresource = dx12__textureSubresource(texture, mip, layer, plane);
+        if (texture->states[subresource] == state) {
+          continue;
+        }
 
-      barrier = &barriers[barrierCount++];
-      memset(barrier, 0, sizeof(*barrier));
-      barrier->Type                   =
-        D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-      barrier->Transition.pResource   = texture->resource;
-      barrier->Transition.Subresource = subresource;
-      barrier->Transition.StateBefore = texture->states[subresource];
-      barrier->Transition.StateAfter  = state;
-      texture->states[subresource]    = state;
-      changed                         = true;
+        barrier = &barriers[barrierCount++];
+        memset(barrier, 0, sizeof(*barrier));
+        barrier->Type                   =
+          D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier->Transition.pResource   = texture->resource;
+        barrier->Transition.Subresource = subresource;
+        barrier->Transition.StateBefore = texture->states[subresource];
+        barrier->Transition.StateAfter  = state;
+        texture->states[subresource]    = state;
+        changed                         = true;
 
-      if (barrierCount == DX12_TEXTURE_BARRIER_CHUNK_SIZE) {
-        commandList->lpVtbl->ResourceBarrier(commandList,
-                                              barrierCount,
-                                              barriers);
-        barrierCount = 0u;
+        if (barrierCount == DX12_TEXTURE_BARRIER_CHUNK_SIZE) {
+          commandList->lpVtbl->ResourceBarrier(commandList,
+                                                barrierCount,
+                                                barriers);
+          barrierCount = 0u;
+        }
       }
     }
   }
@@ -298,6 +322,47 @@ dx12_transitionTexture(ID3D12GraphicsCommandList *commandList,
 }
 
 GPU_HIDE
+bool
+dx12_transitionTexture(ID3D12GraphicsCommandList *commandList,
+                       GPUTextureDX12            *texture,
+                       uint32_t                   baseMip,
+                       uint32_t                   mipCount,
+                       uint32_t                   baseLayer,
+                       uint32_t                   layerCount,
+                       D3D12_RESOURCE_STATES      state) {
+  return dx12__transitionTexture(commandList,
+                                 texture,
+                                 baseMip,
+                                 mipCount,
+                                 baseLayer,
+                                 layerCount,
+                                 0u,
+                                 texture ? texture->planeCount : 0u,
+                                 state);
+}
+
+GPU_HIDE
+bool
+dx12_transitionTexturePlane(ID3D12GraphicsCommandList *commandList,
+                            GPUTextureDX12            *texture,
+                            uint32_t                   baseMip,
+                            uint32_t                   mipCount,
+                            uint32_t                   baseLayer,
+                            uint32_t                   layerCount,
+                            uint32_t                   plane,
+                            D3D12_RESOURCE_STATES      state) {
+  return dx12__transitionTexture(commandList,
+                                 texture,
+                                 baseMip,
+                                 mipCount,
+                                 baseLayer,
+                                 layerCount,
+                                 plane,
+                                 1u,
+                                 state);
+}
+
+GPU_HIDE
 GPUResult
 dx12_createTexture(GPUDevice                  * __restrict device,
                    const GPUTextureCreateInfo * __restrict info,
@@ -314,6 +379,7 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   size_t                   allocationSize;
   uint32_t                 arrayLayerCount;
   uint32_t                 subresourceCount;
+  uint32_t                 planeCount;
   uint32_t                 sampleCount;
   HRESULT                  result;
 
@@ -353,10 +419,15 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   arrayLayerCount = info->dimension == GPU_TEXTURE_DIMENSION_3D
                       ? 1u
                       : info->depthOrLayers;
+  planeCount = dx12__texturePlaneCount(info->format);
   if (info->mipLevelCount > UINT32_MAX / arrayLayerCount) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
   subresourceCount = info->mipLevelCount * arrayLayerCount;
+  if (subresourceCount > UINT32_MAX / planeCount) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  subresourceCount *= planeCount;
   if (subresourceCount >
       (SIZE_MAX - sizeof(*texture) - sizeof(*native)) /
         sizeof(*native->states)) {
@@ -438,19 +509,20 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   native->mipLevelCount    = info->mipLevelCount;
   native->arrayLayerCount  = arrayLayerCount;
   native->subresourceCount = subresourceCount;
+  native->planeCount       = planeCount;
   native->stateUniform     = true;
-  texture->_priv         = native;
-  texture->device        = device;
-  texture->format        = info->format;
-  texture->dimension     = info->dimension;
-  texture->width         = info->width;
-  texture->height        = info->height;
-  texture->depthOrLayers = info->depthOrLayers;
-  texture->mipLevelCount = info->mipLevelCount;
-  texture->sampleCount   = sampleCount;
-  texture->usage         = info->usage;
-  texture->_ownsNative   = true;
-  *outTexture            = texture;
+  texture->_priv          = native;
+  texture->device         = device;
+  texture->format         = info->format;
+  texture->dimension      = info->dimension;
+  texture->width          = info->width;
+  texture->height         = info->height;
+  texture->depthOrLayers  = info->depthOrLayers;
+  texture->mipLevelCount  = info->mipLevelCount;
+  texture->sampleCount    = sampleCount;
+  texture->usage          = info->usage;
+  texture->_ownsNative    = true;
+  *outTexture             = texture;
   return GPU_OK;
 }
 

@@ -147,6 +147,86 @@ gpuFormatLayout(GPUFormat format, GPUFormatLayout *outLayout) {
 }
 
 GPU_HIDE
+bool
+gpuFormatResolveCopyAspect(GPUFormat         format,
+                           GPUTextureAspect  aspect,
+                           GPUTextureAspect *outAspect) {
+  GPUTextureAspect resolved;
+
+  if (!outAspect ||
+      (aspect != GPU_TEXTURE_ASPECT_ALL &&
+       aspect != GPU_TEXTURE_ASPECT_DEPTH_ONLY &&
+       aspect != GPU_TEXTURE_ASPECT_STENCIL_ONLY)) {
+    return false;
+  }
+
+  switch (format) {
+    case GPU_FORMAT_DEPTH16_UNORM:
+    case GPU_FORMAT_DEPTH32_FLOAT:
+      if (aspect == GPU_TEXTURE_ASPECT_STENCIL_ONLY) {
+        return false;
+      }
+      resolved = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
+      break;
+    case GPU_FORMAT_STENCIL8:
+      if (aspect == GPU_TEXTURE_ASPECT_DEPTH_ONLY) {
+        return false;
+      }
+      resolved = GPU_TEXTURE_ASPECT_STENCIL_ONLY;
+      break;
+    case GPU_FORMAT_DEPTH24_UNORM_STENCIL8:
+    case GPU_FORMAT_DEPTH32_FLOAT_STENCIL8:
+      if (aspect == GPU_TEXTURE_ASPECT_ALL) {
+        return false;
+      }
+      resolved = aspect;
+      break;
+    default:
+      if (aspect != GPU_TEXTURE_ASPECT_ALL ||
+          format <= GPU_FORMAT_UNDEFINED || format >= GPU_FORMAT_COUNT) {
+        return false;
+      }
+      resolved = GPU_TEXTURE_ASPECT_ALL;
+      break;
+  }
+
+  *outAspect = resolved;
+  return true;
+}
+
+GPU_HIDE
+bool
+gpuFormatAspectLayout(GPUFormat         format,
+                      GPUTextureAspect  aspect,
+                      GPUFormatLayout  *outLayout) {
+  GPUTextureAspect resolved;
+
+  if (!outLayout ||
+      !gpuFormatResolveCopyAspect(format, aspect, &resolved)) {
+    return false;
+  }
+  if (resolved == GPU_TEXTURE_ASPECT_STENCIL_ONLY) {
+    *outLayout = (GPUFormatLayout)GPU_TEXEL(1u);
+    return true;
+  }
+  if (resolved == GPU_TEXTURE_ASPECT_DEPTH_ONLY) {
+    switch (format) {
+      case GPU_FORMAT_DEPTH16_UNORM:
+        *outLayout = (GPUFormatLayout)GPU_TEXEL(2u);
+        return true;
+      case GPU_FORMAT_DEPTH24_UNORM_STENCIL8:
+      case GPU_FORMAT_DEPTH32_FLOAT:
+      case GPU_FORMAT_DEPTH32_FLOAT_STENCIL8:
+        *outLayout = (GPUFormatLayout)GPU_TEXEL(4u);
+        return true;
+      default:
+        return false;
+    }
+  }
+  return gpuFormatLayout(format, outLayout);
+}
+
+GPU_HIDE
 uint32_t
 gpuBlockCount(uint32_t extent, uint32_t blockExtent) {
   if (extent == 0u || blockExtent == 0u) {
@@ -155,17 +235,15 @@ gpuBlockCount(uint32_t extent, uint32_t blockExtent) {
   return 1u + ((extent - 1u) / blockExtent);
 }
 
-GPU_HIDE
-bool
-gpuFormatDataLayout(GPUFormat            format,
-                    uint32_t             width,
-                    uint32_t             height,
-                    uint32_t             depth,
-                    uint32_t             layerCount,
-                    uint32_t             bytesPerRow,
-                    uint32_t             rowsPerImage,
-                    GPUFormatDataLayout *outLayout) {
-  GPUFormatLayout layout;
+static bool
+gpuFormatDataLayoutForLayout(const GPUFormatLayout *formatLayout,
+                             uint32_t               width,
+                             uint32_t               height,
+                             uint32_t               depth,
+                             uint32_t               layerCount,
+                             uint32_t               bytesPerRow,
+                             uint32_t               rowsPerImage,
+                             GPUFormatDataLayout   *outLayout) {
   uint64_t        bytesPerImage;
   uint64_t        imageCount;
   uint64_t        imageRows;
@@ -175,29 +253,28 @@ gpuFormatDataLayout(GPUFormat            format,
   uint32_t        rowBlocks;
 
   if (!outLayout || width == 0u || height == 0u || depth == 0u ||
-      layerCount == 0u || bytesPerRow == 0u ||
-      !gpuFormatLayout(format, &layout)) {
+      layerCount == 0u || bytesPerRow == 0u || !formatLayout) {
     return false;
   }
 
-  rowBlocks = gpuBlockCount(width, layout.blockWidth);
-  blockRows = gpuBlockCount(height, layout.blockHeight);
-  if (rowBlocks > UINT32_MAX / layout.bytesPerBlock) {
+  rowBlocks = gpuBlockCount(width, formatLayout->blockWidth);
+  blockRows = gpuBlockCount(height, formatLayout->blockHeight);
+  if (rowBlocks > UINT32_MAX / formatLayout->bytesPerBlock) {
     return false;
   }
 
-  bytesInLastRow = rowBlocks * layout.bytesPerBlock;
+  bytesInLastRow = rowBlocks * formatLayout->bytesPerBlock;
   if (bytesPerRow < bytesInLastRow ||
-      bytesPerRow % layout.bytesPerBlock != 0u) {
+      bytesPerRow % formatLayout->bytesPerBlock != 0u) {
     return false;
   }
 
   if (rowsPerImage != 0u) {
     if (rowsPerImage < height ||
-        rowsPerImage % layout.blockHeight != 0u) {
+        rowsPerImage % formatLayout->blockHeight != 0u) {
       return false;
     }
-    imageRows = rowsPerImage / layout.blockHeight;
+    imageRows = rowsPerImage / formatLayout->blockHeight;
   } else {
     imageRows = blockRows;
   }
@@ -240,6 +317,53 @@ gpuFormatDataLayout(GPUFormat            format,
   outLayout->bytesInLastRow = bytesInLastRow;
   outLayout->blockRows      = blockRows;
   return true;
+}
+
+GPU_HIDE
+bool
+gpuFormatDataLayout(GPUFormat            format,
+                    uint32_t             width,
+                    uint32_t             height,
+                    uint32_t             depth,
+                    uint32_t             layerCount,
+                    uint32_t             bytesPerRow,
+                    uint32_t             rowsPerImage,
+                    GPUFormatDataLayout *outLayout) {
+  GPUFormatLayout layout;
+
+  return gpuFormatLayout(format, &layout) &&
+         gpuFormatDataLayoutForLayout(&layout,
+                                      width,
+                                      height,
+                                      depth,
+                                      layerCount,
+                                      bytesPerRow,
+                                      rowsPerImage,
+                                      outLayout);
+}
+
+GPU_HIDE
+bool
+gpuFormatAspectDataLayout(GPUFormat            format,
+                          GPUTextureAspect     aspect,
+                          uint32_t             width,
+                          uint32_t             height,
+                          uint32_t             depth,
+                          uint32_t             layerCount,
+                          uint32_t             bytesPerRow,
+                          uint32_t             rowsPerImage,
+                          GPUFormatDataLayout *outLayout) {
+  GPUFormatLayout layout;
+
+  return gpuFormatAspectLayout(format, aspect, &layout) &&
+         gpuFormatDataLayoutForLayout(&layout,
+                                      width,
+                                      height,
+                                      depth,
+                                      layerCount,
+                                      bytesPerRow,
+                                      rowsPerImage,
+                                      outLayout);
 }
 
 GPU_HIDE
