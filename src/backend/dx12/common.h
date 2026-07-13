@@ -337,34 +337,45 @@ typedef struct GPUCommandBufferDX12 {
   bool                          copyDebugEventActive;
 } GPUCommandBufferDX12;
 
+enum {
+  GPU_DX12_TRANSFER_SLOT_COUNT = 8
+};
+
+typedef struct GPUTransferSlotDX12 {
+  ID3D12CommandAllocator    *allocator;
+  ID3D12GraphicsCommandList *commandList;
+  ID3D12Resource            *uploadStaging;
+  void                      *uploadMapped;
+  UINT64                     fenceValue;
+  uint64_t                   uploadCapacity;
+  bool                       pending;
+} GPUTransferSlotDX12;
+
 struct GPUCommandQueueDX12 {
   GPUCommandQueue             *queue;
   ID3D12CommandQueue          *commandQueue;
   ID3D12Fence                 *completionFence;
-  ID3D12CommandAllocator      *transferAllocator;
-  ID3D12GraphicsCommandList   *transferCommandList;
   ID3D12Fence                 *transferFence;
-  ID3D12Resource              *uploadStaging;
   ID3D12Resource              *readbackStaging;
   GPUCommandBufferDX12        *commands;
   GPUCommandBufferDX12        *freeCommands;
   GPUCommandBufferDX12        *pendingHead;
   GPUCommandBufferDX12        *pendingTail;
-  void                        *uploadMapped;
+  GPUTransferSlotDX12          transferSlots[GPU_DX12_TRANSFER_SLOT_COUNT];
   HANDLE                       completionEvent;
   HANDLE                       transferEvent;
   HANDLE                       worker;
   UINT64                       nextFenceValue;
   UINT64                       finishedFenceValue;
   UINT64                       transferFenceValue;
-  uint64_t                     uploadCapacity;
   uint64_t                     readbackCapacity;
   D3D12_COMMAND_LIST_TYPE      type;
   uint32_t                     inFlightCount;
+  uint32_t                     activeTransferSlot;
+  uint32_t                     nextTransferSlot;
   bool                         workerStarted;
   bool                         stopping;
   bool                         transferOpen;
-  bool                         transferPending;
   CRITICAL_SECTION             poolLock;
   CONDITION_VARIABLE           pendingCondition;
 };

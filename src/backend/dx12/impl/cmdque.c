@@ -468,29 +468,44 @@ dx12__transferCapacity(uint64_t sizeBytes) {
 
 static bool
 dx12__ensureTransferContext(GPUCommandQueueDX12 *queue,
-                            GPUDeviceDX12       *device) {
+                            GPUDeviceDX12       *device,
+                            GPUTransferSlotDX12 *slot) {
   ID3D12CommandAllocator    *allocator;
   ID3D12GraphicsCommandList *commandList;
   ID3D12Fence               *fence;
   HANDLE                     event;
   HRESULT                    result;
 
-  if (!queue || !device || !device->d3dDevice) {
+  if (!queue || !device || !device->d3dDevice || !slot) {
     return false;
   }
-  if (queue->transferAllocator && queue->transferCommandList &&
-      queue->transferFence && queue->transferEvent) {
+  if ((!queue->transferFence) != (!queue->transferEvent) ||
+      (!slot->allocator) != (!slot->commandList)) {
+    return false;
+  }
+  if (!queue->transferFence) {
+    fence = NULL;
+    event = NULL;
+    result = device->d3dDevice->lpVtbl->CreateFence(device->d3dDevice,
+                                                     0u,
+                                                     D3D12_FENCE_FLAG_NONE,
+                                                     &IID_ID3D12Fence,
+                                                     (void **)&fence);
+    if (FAILED(result) || !(event = CreateEventW(NULL, FALSE, FALSE, NULL))) {
+      if (fence) {
+        fence->lpVtbl->Release(fence);
+      }
+      return false;
+    }
+    queue->transferFence = fence;
+    queue->transferEvent = event;
+  }
+  if (slot->allocator) {
     return true;
-  }
-  if (queue->transferAllocator || queue->transferCommandList ||
-      queue->transferFence || queue->transferEvent) {
-    return false;
   }
 
   allocator   = NULL;
   commandList = NULL;
-  fence       = NULL;
-  event       = NULL;
   result = device->d3dDevice->lpVtbl->CreateCommandAllocator(
     device->d3dDevice,
     queue->type,
@@ -512,28 +527,12 @@ dx12__ensureTransferContext(GPUCommandQueueDX12 *queue,
   if (FAILED(result) || FAILED(commandList->lpVtbl->Close(commandList))) {
     goto fail;
   }
-  result = device->d3dDevice->lpVtbl->CreateFence(device->d3dDevice,
-                                                   0u,
-                                                   D3D12_FENCE_FLAG_NONE,
-                                                   &IID_ID3D12Fence,
-                                                   (void **)&fence);
-  if (FAILED(result) || !(event = CreateEventW(NULL, FALSE, FALSE, NULL))) {
-    goto fail;
-  }
 
-  queue->transferAllocator   = allocator;
-  queue->transferCommandList = commandList;
-  queue->transferFence       = fence;
-  queue->transferEvent       = event;
+  slot->allocator   = allocator;
+  slot->commandList = commandList;
   return true;
 
 fail:
-  if (event) {
-    CloseHandle(event);
-  }
-  if (fence) {
-    fence->lpVtbl->Release(fence);
-  }
   if (commandList) {
     commandList->lpVtbl->Release(commandList);
   }
@@ -546,6 +545,7 @@ fail:
 static bool
 dx12__ensureTransferStaging(GPUCommandQueueDX12 *queue,
                             GPUDeviceDX12       *device,
+                            GPUTransferSlotDX12 *slot,
                             uint64_t              sizeBytes,
                             D3D12_HEAP_TYPE       heapType) {
   ID3D12Resource *resource;
@@ -554,16 +554,16 @@ dx12__ensureTransferStaging(GPUCommandQueueDX12 *queue,
   uint64_t        capacity;
   bool            upload;
 
-  if (!queue || !device || sizeBytes == 0u ||
+  if (!queue || !device || !slot || sizeBytes == 0u ||
       (heapType != D3D12_HEAP_TYPE_UPLOAD &&
        heapType != D3D12_HEAP_TYPE_READBACK)) {
     return false;
   }
 
   upload = heapType == D3D12_HEAP_TYPE_UPLOAD;
-  if (upload && queue->uploadStaging &&
-      queue->uploadCapacity >= sizeBytes) {
-    return queue->uploadMapped != NULL;
+  if (upload && slot->uploadStaging &&
+      slot->uploadCapacity >= sizeBytes) {
+    return slot->uploadMapped != NULL;
   }
   if (!upload && queue->readbackStaging &&
       queue->readbackCapacity >= sizeBytes) {
@@ -584,13 +584,13 @@ dx12__ensureTransferStaging(GPUCommandQueueDX12 *queue,
   }
 
   if (upload) {
-    if (queue->uploadStaging) {
-      queue->uploadStaging->lpVtbl->Unmap(queue->uploadStaging, 0u, NULL);
-      queue->uploadStaging->lpVtbl->Release(queue->uploadStaging);
+    if (slot->uploadStaging) {
+      slot->uploadStaging->lpVtbl->Unmap(slot->uploadStaging, 0u, NULL);
+      slot->uploadStaging->lpVtbl->Release(slot->uploadStaging);
     }
-    queue->uploadStaging  = resource;
-    queue->uploadMapped   = mapped;
-    queue->uploadCapacity = capacity;
+    slot->uploadStaging  = resource;
+    slot->uploadMapped   = mapped;
+    slot->uploadCapacity = capacity;
   } else {
     if (queue->readbackStaging) {
       queue->readbackStaging->lpVtbl->Release(queue->readbackStaging);
@@ -602,7 +602,9 @@ dx12__ensureTransferStaging(GPUCommandQueueDX12 *queue,
 }
 
 static GPUResult
-dx12__waitTransfer(GPUCommandQueue *queue, bool countStall) {
+dx12__waitTransfer(GPUCommandQueue     *queue,
+                   GPUTransferSlotDX12 *slot,
+                   bool                 countStall) {
   GPUCommandQueueDX12 *native;
   GPUDeviceDX12       *device;
   UINT64               completedValue;
@@ -611,10 +613,10 @@ dx12__waitTransfer(GPUCommandQueue *queue, bool countStall) {
 
   native = queue ? queue->_priv : NULL;
   device = queue && queue->_device ? queue->_device->_priv : NULL;
-  if (!native || !device || !device->d3dDevice) {
+  if (!native || !device || !device->d3dDevice || !slot) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  if (!native->transferPending) {
+  if (!slot->pending) {
     return GPU_OK;
   }
   if (!native->transferFence || !native->transferEvent) {
@@ -631,10 +633,10 @@ dx12__waitTransfer(GPUCommandQueue *queue, bool countStall) {
     dx12__reportQueueError(native, "wait for transfer", result);
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  if (completedValue < native->transferFenceValue) {
+  if (completedValue < slot->fenceValue) {
     result = native->transferFence->lpVtbl->SetEventOnCompletion(
       native->transferFence,
-      native->transferFenceValue,
+      slot->fenceValue,
       native->transferEvent
     );
     if (FAILED(result)) {
@@ -654,7 +656,7 @@ dx12__waitTransfer(GPUCommandQueue *queue, bool countStall) {
     }
   }
 
-  native->transferPending = false;
+  slot->pending = false;
   return GPU_OK;
 }
 
@@ -668,6 +670,7 @@ dx12_beginTransfer(GPUCommandQueue             *queue,
                    void                       **outMapped) {
   GPUCommandQueueDX12 *native;
   GPUDeviceDX12       *device;
+  GPUTransferSlotDX12 *slot;
   GPUResult            waitResult;
   HRESULT              result;
   bool                 upload;
@@ -691,28 +694,30 @@ dx12_beginTransfer(GPUCommandQueue             *queue,
   if (native->transferOpen) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  waitResult = dx12__waitTransfer(queue, true);
+  slot       = &native->transferSlots[native->nextTransferSlot];
+  waitResult = dx12__waitTransfer(queue, slot, true);
   if (waitResult != GPU_OK) {
     return waitResult;
   }
-  if (!dx12__ensureTransferContext(native, device) ||
+  if (!dx12__ensureTransferContext(native, device, slot) ||
       !dx12__ensureTransferStaging(native,
                                    device,
+                                   slot,
                                    stagingBytes,
                                    heapType)) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  result = native->transferAllocator->lpVtbl->Reset(
-    native->transferAllocator
+  result = slot->allocator->lpVtbl->Reset(
+    slot->allocator
   );
   if (FAILED(result)) {
     dx12__reportQueueError(native, "reset transfer allocator", result);
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  result = native->transferCommandList->lpVtbl->Reset(
-    native->transferCommandList,
-    native->transferAllocator,
+  result = slot->commandList->lpVtbl->Reset(
+    slot->commandList,
+    slot->allocator,
     NULL
   );
   if (FAILED(result)) {
@@ -720,11 +725,12 @@ dx12_beginTransfer(GPUCommandQueue             *queue,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  native->transferOpen = true;
-  *outCommandList      = native->transferCommandList;
-  *outStaging          = upload ? native->uploadStaging
-                                : native->readbackStaging;
-  *outMapped           = upload ? native->uploadMapped : NULL;
+  native->activeTransferSlot = native->nextTransferSlot;
+  native->transferOpen       = true;
+  *outCommandList            = slot->commandList;
+  *outStaging                = upload ? slot->uploadStaging
+                                      : native->readbackStaging;
+  *outMapped                 = upload ? slot->uploadMapped : NULL;
   return GPU_OK;
 }
 
@@ -732,19 +738,23 @@ GPU_HIDE
 GPUResult
 dx12_submitTransfer(GPUCommandQueue *queue, bool wait) {
   GPUCommandQueueDX12 *native;
+  GPUTransferSlotDX12 *slot;
   ID3D12CommandList   *commandLists[1];
   UINT64               fenceValue;
   HRESULT              result;
 
   native = queue ? queue->_priv : NULL;
+  slot = native && native->activeTransferSlot < GPU_DX12_TRANSFER_SLOT_COUNT
+           ? &native->transferSlots[native->activeTransferSlot]
+           : NULL;
   if (!native || !native->commandQueue || !native->transferOpen ||
-      !native->transferCommandList || !native->transferFence ||
+      !slot || !slot->commandList || !native->transferFence ||
       !native->transferEvent) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  result = native->transferCommandList->lpVtbl->Close(
-    native->transferCommandList
+  result = slot->commandList->lpVtbl->Close(
+    slot->commandList
   );
   native->transferOpen = false;
   if (FAILED(result)) {
@@ -752,7 +762,7 @@ dx12_submitTransfer(GPUCommandQueue *queue, bool wait) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  commandLists[0] = (ID3D12CommandList *)native->transferCommandList;
+  commandLists[0] = (ID3D12CommandList *)slot->commandList;
   native->commandQueue->lpVtbl->ExecuteCommandLists(native->commandQueue,
                                                      1u,
                                                      commandLists);
@@ -765,23 +775,28 @@ dx12_submitTransfer(GPUCommandQueue *queue, bool wait) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  native->transferPending = true;
-  return wait ? dx12__waitTransfer(queue, false) : GPU_OK;
+  slot->fenceValue         = fenceValue;
+  slot->pending            = true;
+  native->nextTransferSlot =
+    (native->activeTransferSlot + 1u) % GPU_DX12_TRANSFER_SLOT_COUNT;
+  return wait ? dx12__waitTransfer(queue, slot, false) : GPU_OK;
 }
 
 GPU_HIDE
 void
 dx12_abortTransfer(GPUCommandQueue *queue) {
   GPUCommandQueueDX12 *native;
+  GPUTransferSlotDX12 *slot;
 
   native = queue ? queue->_priv : NULL;
-  if (!native || !native->transferOpen || !native->transferCommandList) {
+  slot = native && native->activeTransferSlot < GPU_DX12_TRANSFER_SLOT_COUNT
+           ? &native->transferSlots[native->activeTransferSlot]
+           : NULL;
+  if (!native || !slot || !native->transferOpen || !slot->commandList) {
     return;
   }
 
-  (void)native->transferCommandList->lpVtbl->Close(
-    native->transferCommandList
-  );
+  (void)slot->commandList->lpVtbl->Close(slot->commandList);
   native->transferOpen = false;
 }
 
@@ -867,7 +882,9 @@ dx12_destroyCommandQueue(GPUCommandQueue *queue) {
   if (native) {
     dx12__stopWorker(native);
     dx12_abortTransfer(queue);
-    (void)dx12__waitTransfer(queue, false);
+    for (uint32_t slot = 0u; slot < GPU_DX12_TRANSFER_SLOT_COUNT; slot++) {
+      (void)dx12__waitTransfer(queue, &native->transferSlots[slot], false);
+    }
     command = native->commands;
     while (command) {
       next = command->next;
@@ -883,24 +900,27 @@ dx12_destroyCommandQueue(GPUCommandQueue *queue) {
       free(command);
       command = next;
     }
-    if (native->uploadStaging) {
-      if (native->uploadMapped) {
-        native->uploadStaging->lpVtbl->Unmap(native->uploadStaging,
-                                             0u,
-                                             NULL);
+    for (uint32_t slot = 0u; slot < GPU_DX12_TRANSFER_SLOT_COUNT; slot++) {
+      GPUTransferSlotDX12 *transfer;
+
+      transfer = &native->transferSlots[slot];
+      if (transfer->uploadStaging) {
+        if (transfer->uploadMapped) {
+          transfer->uploadStaging->lpVtbl->Unmap(transfer->uploadStaging,
+                                                 0u,
+                                                 NULL);
+        }
+        transfer->uploadStaging->lpVtbl->Release(transfer->uploadStaging);
       }
-      native->uploadStaging->lpVtbl->Release(native->uploadStaging);
+      if (transfer->commandList) {
+        transfer->commandList->lpVtbl->Release(transfer->commandList);
+      }
+      if (transfer->allocator) {
+        transfer->allocator->lpVtbl->Release(transfer->allocator);
+      }
     }
     if (native->readbackStaging) {
       native->readbackStaging->lpVtbl->Release(native->readbackStaging);
-    }
-    if (native->transferCommandList) {
-      native->transferCommandList->lpVtbl->Release(
-        native->transferCommandList
-      );
-    }
-    if (native->transferAllocator) {
-      native->transferAllocator->lpVtbl->Release(native->transferAllocator);
     }
     if (native->transferFence) {
       native->transferFence->lpVtbl->Release(native->transferFence);
@@ -952,7 +972,9 @@ dx12_waitCommandQueueIdle(GPUCommandQueueDX12 *queue) {
                  : WAIT_FAILED;
   CloseHandle(event);
   if (SUCCEEDED(result) && waitResult == WAIT_OBJECT_0) {
-    queue->transferPending = false;
+    for (uint32_t slot = 0u; slot < GPU_DX12_TRANSFER_SLOT_COUNT; slot++) {
+      queue->transferSlots[slot].pending = false;
+    }
     return true;
   }
   return false;

@@ -105,19 +105,17 @@ static bool
 buffer_transfers_reuse(GPUCommandQueue *queue,
                        GPUDevice       *device,
                        GPUFence        *queueFence) {
-  GPUCommandQueueDX12       *native;
-  GPUBufferCreateInfo        bufferInfo;
-  GPUBuffer                 *buffer;
-  ID3D12CommandAllocator    *allocator;
-  ID3D12GraphicsCommandList *commandList;
-  ID3D12Fence               *fence;
-  ID3D12Resource            *upload;
-  ID3D12Resource            *readback;
-  uint64_t                   uploadCapacity;
-  uint64_t                   readbackCapacity;
-  uint32_t                   value;
-  uint32_t                   copied;
-  bool                       ok;
+  GPUCommandQueueDX12  *native;
+  GPUBufferCreateInfo   bufferInfo;
+  GPUTransferSlotDX12   slots[GPU_DX12_TRANSFER_SLOT_COUNT];
+  GPUBuffer            *buffer;
+  ID3D12Fence          *fence;
+  ID3D12Resource       *readback;
+  HANDLE                event;
+  uint64_t              readbackCapacity;
+  uint32_t              value;
+  uint32_t              copied;
+  bool                  ok;
 
   native = queue ? queue->_priv : NULL;
   buffer = NULL;
@@ -136,39 +134,43 @@ buffer_transfers_reuse(GPUCommandQueue *queue,
     return false;
   }
 
-  value  = UINT32_C(0x12345678);
-  copied = 0u;
-  ok = GPUQueueWriteBuffer(queue,
-                           buffer,
-                           0u,
-                           &value,
-                           sizeof(value)) == GPU_OK &&
-       native->transferPending;
-  if (ok) {
-    ok = GPUQueueReadBuffer(queue,
-                            buffer,
-                            0u,
-                            &copied,
-                            sizeof(copied)) == GPU_OK &&
-         copied == value &&
-         !native->transferPending;
+  ok = true;
+  for (uint32_t i = 0u; ok && i < GPU_DX12_TRANSFER_SLOT_COUNT; i++) {
+    value = UINT32_C(0x12340000) + i;
+    ok = GPUQueueWriteBuffer(queue,
+                             buffer,
+                             0u,
+                             &value,
+                             sizeof(value)) == GPU_OK;
   }
-  if (!ok || !native->transferAllocator || !native->transferCommandList ||
-      !native->transferFence || !native->transferEvent ||
-      !native->uploadStaging || !native->readbackStaging) {
-    if (native->transferPending) {
-      (void)wait_queue(queue, queueFence);
-    }
+  copied = 0u;
+  ok = ok && GPUQueueReadBuffer(queue,
+                                buffer,
+                                0u,
+                                &copied,
+                                sizeof(copied)) == GPU_OK &&
+       copied == value && !native->transferOpen;
+  if (!ok || !native->transferFence || !native->transferEvent ||
+      !native->readbackStaging) {
+    (void)wait_queue(queue, queueFence);
     GPUDestroyBuffer(buffer);
     return false;
   }
 
-  allocator        = native->transferAllocator;
-  commandList      = native->transferCommandList;
+  for (uint32_t i = 0u; i < GPU_DX12_TRANSFER_SLOT_COUNT; i++) {
+    slots[i] = native->transferSlots[i];
+    if (!slots[i].allocator || !slots[i].commandList ||
+        !slots[i].uploadStaging || !slots[i].uploadMapped ||
+        slots[i].uploadCapacity < sizeof(value)) {
+      (void)wait_queue(queue, queueFence);
+      GPUDestroyBuffer(buffer);
+      return false;
+    }
+  }
+
   fence            = native->transferFence;
-  upload           = native->uploadStaging;
+  event            = native->transferEvent;
   readback         = native->readbackStaging;
-  uploadCapacity   = native->uploadCapacity;
   readbackCapacity = native->readbackCapacity;
   for (uint32_t i = 0u; i < 16u; i++) {
     value  = UINT32_C(0xabc00000) + i;
@@ -178,29 +180,33 @@ buffer_transfers_reuse(GPUCommandQueue *queue,
                             0u,
                             &value,
                             sizeof(value)) != GPU_OK ||
-        !native->transferPending ||
         GPUQueueReadBuffer(queue,
                            buffer,
                            0u,
                            &copied,
                            sizeof(copied)) != GPU_OK ||
         copied != value ||
-        native->transferPending ||
-        native->transferAllocator != allocator ||
-        native->transferCommandList != commandList ||
         native->transferFence != fence ||
-        native->uploadStaging != upload ||
+        native->transferEvent != event ||
         native->readbackStaging != readback ||
-        native->uploadCapacity != uploadCapacity ||
-        native->readbackCapacity != readbackCapacity) {
+        native->readbackCapacity != readbackCapacity ||
+        native->transferOpen) {
       ok = false;
       break;
     }
   }
 
-  if (native->transferPending) {
-    ok = wait_queue(queue, queueFence) && ok;
+  for (uint32_t i = 0u; ok && i < GPU_DX12_TRANSFER_SLOT_COUNT; i++) {
+    GPUTransferSlotDX12 *slot;
+
+    slot = &native->transferSlots[i];
+    ok = slot->allocator == slots[i].allocator &&
+         slot->commandList == slots[i].commandList &&
+         slot->uploadStaging == slots[i].uploadStaging &&
+         slot->uploadMapped == slots[i].uploadMapped &&
+         slot->uploadCapacity == slots[i].uploadCapacity;
   }
+  ok = wait_queue(queue, queueFence) && ok;
   GPUDestroyBuffer(buffer);
   return ok;
 }
@@ -209,23 +215,19 @@ static bool
 texture_transfers_reuse(GPUCommandQueue *queue,
                         GPUDevice       *device,
                         GPUFence        *queueFence) {
-  GPUCommandQueueDX12       *native;
-  GPUTextureCreateInfo       textureInfo;
-  GPUTextureWriteRegion      writeRegion;
-  GPUTexture                *texture;
-  ID3D12CommandAllocator    *allocator;
-  ID3D12GraphicsCommandList *commandList;
-  ID3D12Fence               *fence;
-  ID3D12Resource            *upload;
-  uint64_t                   uploadCapacity;
-  uint8_t                    pixel[4];
-  bool                       ok;
+  GPUCommandQueueDX12  *native;
+  GPUTextureCreateInfo  textureInfo;
+  GPUTextureWriteRegion writeRegion;
+  GPUTransferSlotDX12   slots[GPU_DX12_TRANSFER_SLOT_COUNT];
+  GPUTexture           *texture;
+  ID3D12Fence          *fence;
+  HANDLE                event;
+  uint8_t               pixel[4];
+  bool                  ok;
 
   native  = queue ? queue->_priv : NULL;
   texture = NULL;
-  if (!native || !device || !native->transferAllocator ||
-      !native->transferCommandList || !native->transferFence ||
-      !native->uploadStaging) {
+  if (!native || !device) {
     return false;
   }
 
@@ -254,13 +256,31 @@ texture_transfers_reuse(GPUCommandQueue *queue,
   writeRegion.bytesPerRow  = sizeof(pixel);
   writeRegion.rowsPerImage = 1u;
 
-  allocator        = native->transferAllocator;
-  commandList      = native->transferCommandList;
-  fence            = native->transferFence;
-  upload           = native->uploadStaging;
-  uploadCapacity   = native->uploadCapacity;
-  ok               = true;
-  for (uint32_t i = 0u; i < 16u; i++) {
+  ok = true;
+  for (uint32_t i = 0u; ok && i < GPU_DX12_TRANSFER_SLOT_COUNT; i++) {
+    pixel[0] = (uint8_t)i;
+    pixel[1] = (uint8_t)(i + 1u);
+    pixel[2] = (uint8_t)(i + 2u);
+    pixel[3] = 255u;
+    if (GPUQueueWriteTexture(queue,
+                             texture,
+                             &writeRegion,
+                             pixel,
+                             sizeof(pixel)) != GPU_OK) {
+      ok = false;
+      break;
+    }
+  }
+  ok = ok && wait_queue(queue, queueFence);
+  for (uint32_t i = 0u; ok && i < GPU_DX12_TRANSFER_SLOT_COUNT; i++) {
+    slots[i] = native->transferSlots[i];
+    ok = slots[i].allocator && slots[i].commandList &&
+         slots[i].uploadStaging && slots[i].uploadMapped &&
+         slots[i].uploadCapacity >= sizeof(pixel);
+  }
+  fence = native->transferFence;
+  event = native->transferEvent;
+  for (uint32_t i = 0u; ok && i < 16u; i++) {
     pixel[0] = (uint8_t)i;
     pixel[1] = (uint8_t)(i + 1u);
     pixel[2] = (uint8_t)(i + 2u);
@@ -270,20 +290,25 @@ texture_transfers_reuse(GPUCommandQueue *queue,
                              &writeRegion,
                              pixel,
                              sizeof(pixel)) != GPU_OK ||
-        native->transferAllocator != allocator ||
-        native->transferCommandList != commandList ||
         native->transferFence != fence ||
-        native->uploadStaging != upload ||
-        native->uploadCapacity != uploadCapacity ||
-        native->transferOpen || !native->transferPending) {
+        native->transferEvent != event ||
+        native->transferOpen) {
       ok = false;
       break;
     }
   }
 
-  if (native->transferPending) {
-    ok = wait_queue(queue, queueFence) && ok;
+  for (uint32_t i = 0u; ok && i < GPU_DX12_TRANSFER_SLOT_COUNT; i++) {
+    GPUTransferSlotDX12 *slot;
+
+    slot = &native->transferSlots[i];
+    ok = slot->allocator == slots[i].allocator &&
+         slot->commandList == slots[i].commandList &&
+         slot->uploadStaging == slots[i].uploadStaging &&
+         slot->uploadMapped == slots[i].uploadMapped &&
+         slot->uploadCapacity == slots[i].uploadCapacity;
   }
+  ok = wait_queue(queue, queueFence) && ok;
   GPUDestroyTexture(texture);
   return ok;
 }
