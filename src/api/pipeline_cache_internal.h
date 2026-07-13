@@ -28,6 +28,7 @@ struct GPUPipelineCache {
   GPUPipelineCache      *deviceNext;
   GPUPipelineCacheEntry *head;
   GPUPipelineCacheEntry *tail;
+  GPUPipelineCacheEntry **buckets;
   GPUPipelineCompileJob *jobs;
   GPUPipelineCompileJob *queueHead;
   GPUPipelineCompileJob *queueTail;
@@ -35,6 +36,7 @@ struct GPUPipelineCache {
   uint64_t               maxEntries;
   uint64_t               entryCount;
   uint64_t               jobCount;
+  size_t                 bucketCount;
   bool                   stopWorker;
 };
 

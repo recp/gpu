@@ -24,11 +24,16 @@
 #endif
 
 #define GPU_PIPELINE_CACHE_DEFAULT_ENTRIES 256u
+#define GPU_PIPELINE_CACHE_INLINE_KEY_SIZE 256u
+#define GPU_PIPELINE_CACHE_MAX_BUCKETS     4096u
+#define GPU_PIPELINE_KEY_HASH_SEED         14695981039346656037ull
 
 typedef struct GPUPipelineCacheKey {
   uint8_t *data;
   size_t   size;
   uint64_t hash;
+  bool     ownsData;
+  uint8_t  inlineData[GPU_PIPELINE_CACHE_INLINE_KEY_SIZE];
 } GPUPipelineCacheKey;
 
 typedef enum GPUPipelineCacheEntryType {
@@ -38,6 +43,7 @@ typedef enum GPUPipelineCacheEntryType {
 
 struct GPUPipelineCacheEntry {
   GPUPipelineCacheEntry    *next;
+  GPUPipelineCacheEntry    *hashNext;
   void                     *pipeline;
   uint8_t                  *keyData;
   size_t                    keySize;
@@ -48,6 +54,7 @@ struct GPUPipelineCacheEntry {
 typedef struct GPUPipelineKeyWriter {
   uint8_t *data;
   size_t   offset;
+  uint64_t hash;
   bool     valid;
 } GPUPipelineKeyWriter;
 
@@ -194,6 +201,10 @@ gpu_pipelineKeyWrite(GPUPipelineKeyWriter *writer,
   }
   if (writer->data && size > 0u) {
     memcpy(writer->data + writer->offset, value, size);
+    for (size_t i = 0u; i < size; i++) {
+      writer->hash ^= ((const uint8_t *)value)[i];
+      writer->hash *= 1099511628211ull;
+    }
   }
   writer->offset += size;
 }
@@ -296,16 +307,34 @@ gpu_pipelineKeyWriteComputeInfo(GPUPipelineKeyWriter               *writer,
   gpu_pipelineKeyWriteString(writer, info->entryPoint);
 }
 
-static uint64_t
-gpu_pipelineKeyHash(const uint8_t *data, size_t size) {
-  uint64_t hash;
-
-  hash = 14695981039346656037ull;
-  for (size_t i = 0u; i < size; i++) {
-    hash ^= data[i];
-    hash *= 1099511628211ull;
+static bool
+gpu_pipelineKeyPrepare(GPUPipelineCacheKey *key, size_t size) {
+  key->size = size;
+  if (size <= sizeof(key->inlineData)) {
+    key->data = key->inlineData;
+    return true;
   }
-  return hash;
+
+  key->data = malloc(size);
+  if (!key->data) {
+    return false;
+  }
+  key->ownsData = true;
+  return true;
+}
+
+static void
+gpu_pipelineKeyRelease(GPUPipelineCacheKey *key) {
+  if (!key) {
+    return;
+  }
+  if (key->ownsData) {
+    free(key->data);
+  }
+  key->data     = NULL;
+  key->size     = 0u;
+  key->hash     = 0u;
+  key->ownsData = false;
 }
 
 static bool
@@ -313,34 +342,36 @@ gpu_buildRenderPipelineKey(const GPURenderPipelineCreateInfo *info,
                            GPUPipelineCacheKey                *outKey) {
   GPUPipelineKeyWriter writer;
 
-  memset(outKey, 0, sizeof(*outKey));
+  outKey->data     = NULL;
+  outKey->size     = 0u;
+  outKey->hash     = 0u;
+  outKey->ownsData = false;
   if (info->chain.pNext) {
     return false;
   }
 
   writer.data   = NULL;
   writer.offset = 0u;
+  writer.hash   = GPU_PIPELINE_KEY_HASH_SEED;
   writer.valid  = true;
   gpu_pipelineKeyWriteRenderInfo(&writer, info);
   if (!writer.valid || writer.offset == 0u) {
     return false;
   }
 
-  outKey->data = malloc(writer.offset);
-  if (!outKey->data) {
+  if (!gpu_pipelineKeyPrepare(outKey, writer.offset)) {
     return false;
   }
-  outKey->size  = writer.offset;
   writer.data   = outKey->data;
   writer.offset = 0u;
+  writer.hash   = GPU_PIPELINE_KEY_HASH_SEED;
   writer.valid  = true;
   gpu_pipelineKeyWriteRenderInfo(&writer, info);
   if (!writer.valid || writer.offset != outKey->size) {
-    free(outKey->data);
-    memset(outKey, 0, sizeof(*outKey));
+    gpu_pipelineKeyRelease(outKey);
     return false;
   }
-  outKey->hash = gpu_pipelineKeyHash(outKey->data, outKey->size);
+  outKey->hash = writer.hash;
   return true;
 }
 
@@ -349,34 +380,36 @@ gpu_buildComputePipelineKey(const GPUComputePipelineCreateInfo *info,
                             GPUPipelineCacheKey                 *outKey) {
   GPUPipelineKeyWriter writer;
 
-  memset(outKey, 0, sizeof(*outKey));
+  outKey->data     = NULL;
+  outKey->size     = 0u;
+  outKey->hash     = 0u;
+  outKey->ownsData = false;
   if (info->chain.pNext) {
     return false;
   }
 
   writer.data   = NULL;
   writer.offset = 0u;
+  writer.hash   = GPU_PIPELINE_KEY_HASH_SEED;
   writer.valid  = true;
   gpu_pipelineKeyWriteComputeInfo(&writer, info);
   if (!writer.valid || writer.offset == 0u) {
     return false;
   }
 
-  outKey->data = malloc(writer.offset);
-  if (!outKey->data) {
+  if (!gpu_pipelineKeyPrepare(outKey, writer.offset)) {
     return false;
   }
-  outKey->size  = writer.offset;
   writer.data   = outKey->data;
   writer.offset = 0u;
+  writer.hash   = GPU_PIPELINE_KEY_HASH_SEED;
   writer.valid  = true;
   gpu_pipelineKeyWriteComputeInfo(&writer, info);
   if (!writer.valid || writer.offset != outKey->size) {
-    free(outKey->data);
-    memset(outKey, 0, sizeof(*outKey));
+    gpu_pipelineKeyRelease(outKey);
     return false;
   }
-  outKey->hash = gpu_pipelineKeyHash(outKey->data, outKey->size);
+  outKey->hash = writer.hash;
   return true;
 }
 
@@ -385,8 +418,10 @@ gpu_pipelineCacheFindEntry(GPUPipelineCache          *cache,
                            const GPUPipelineCacheKey *key,
                            GPUPipelineCacheEntryType  type) {
   GPUPipelineCacheEntry *entry;
+  size_t                 bucket;
 
-  for (entry = cache->head; entry; entry = entry->next) {
+  bucket = (size_t)key->hash & (cache->bucketCount - 1u);
+  for (entry = cache->buckets[bucket]; entry; entry = entry->hashNext) {
     if (entry->type == type && entry->keyHash == key->hash &&
         entry->keySize == key->size &&
         memcmp(entry->keyData, key->data, key->size) == 0) {
@@ -394,6 +429,21 @@ gpu_pipelineCacheFindEntry(GPUPipelineCache          *cache,
     }
   }
   return NULL;
+}
+
+static void
+gpu_pipelineCacheRemoveEntry(GPUPipelineCache      *cache,
+                             GPUPipelineCacheEntry *entry) {
+  GPUPipelineCacheEntry **link;
+  size_t                  bucket;
+
+  bucket = (size_t)entry->keyHash & (cache->bucketCount - 1u);
+  for (link = &cache->buckets[bucket]; *link; link = &(*link)->hashNext) {
+    if (*link == entry) {
+      *link = entry->hashNext;
+      return;
+    }
+  }
 }
 
 static void *
@@ -424,21 +474,28 @@ gpu_pipelineCacheStore(GPUPipelineCache    *cache,
   GPUPipelineCacheEntry *entry;
   GPUPipelineCacheEntry *evicted;
   void                   *result;
+  size_t                  bucket;
 
   entry = calloc(1, sizeof(*entry));
   if (!entry) {
-    gpu_pipelineCacheLock(cache);
-    cache->stats.pipelineMisses++;
-    cache->stats.pipelineCompiles++;
-    cache->device->cacheStats.pipelineMisses++;
-    cache->device->cacheStats.pipelineCompiles++;
-    gpu_pipelineCacheUnlock(cache);
-    free(key->data);
-    memset(key, 0, sizeof(*key));
+    gpuRecordPipelineCompile(cache->device, cache);
+    gpu_pipelineKeyRelease(key);
     return pipeline;
   }
+  if (key->ownsData) {
+    entry->keyData = key->data;
+    key->ownsData  = false;
+  } else {
+    entry->keyData = malloc(key->size);
+    if (!entry->keyData) {
+      free(entry);
+      gpuRecordPipelineCompile(cache->device, cache);
+      gpu_pipelineKeyRelease(key);
+      return pipeline;
+    }
+    memcpy(entry->keyData, key->data, key->size);
+  }
   entry->pipeline = pipeline;
-  entry->keyData  = key->data;
   entry->keySize  = key->size;
   entry->keyHash  = key->hash;
   entry->type     = type;
@@ -461,7 +518,7 @@ gpu_pipelineCacheStore(GPUPipelineCache    *cache,
       free(entry->keyData);
       free(entry);
       gpu_destroyPipeline(type, pipeline);
-      memset(key, 0, sizeof(*key));
+      gpu_pipelineKeyRelease(key);
       return result;
     }
   }
@@ -469,6 +526,7 @@ gpu_pipelineCacheStore(GPUPipelineCache    *cache,
   if (cache->entryCount == cache->maxEntries) {
     evicted     = cache->head;
     cache->head = evicted->next;
+    gpu_pipelineCacheRemoveEntry(cache, evicted);
     if (!cache->head) {
       cache->tail = NULL;
     }
@@ -480,7 +538,11 @@ gpu_pipelineCacheStore(GPUPipelineCache    *cache,
   } else {
     cache->head = entry;
   }
-  cache->tail = entry;
+  bucket                 = (size_t)entry->keyHash &
+                           (cache->bucketCount - 1u);
+  entry->hashNext        = cache->buckets[bucket];
+  cache->buckets[bucket] = entry;
+  cache->tail            = entry;
   cache->entryCount++;
   cache->stats.pipelineMisses++;
   cache->stats.pipelineCompiles++;
@@ -488,7 +550,7 @@ gpu_pipelineCacheStore(GPUPipelineCache    *cache,
   cache->device->cacheStats.pipelineCompiles++;
   gpu_pipelineCacheUnlock(cache);
 
-  memset(key, 0, sizeof(*key));
+  gpu_pipelineKeyRelease(key);
   if (evicted) {
     gpu_destroyPipeline(evicted->type, evicted->pipeline);
     free(evicted->keyData);
@@ -511,7 +573,7 @@ gpuPipelineCacheFindRender(GPUPipelineCache                  *cache,
   *outPipeline = gpu_pipelineCacheFind(cache,
                                        &key,
                                        GPU_PIPELINE_CACHE_RENDER);
-  free(key.data);
+  gpu_pipelineKeyRelease(&key);
   return GPU_OK;
 }
 
@@ -546,7 +608,7 @@ gpuPipelineCacheFindCompute(GPUPipelineCache                   *cache,
   *outPipeline = gpu_pipelineCacheFind(cache,
                                        &key,
                                        GPU_PIPELINE_CACHE_COMPUTE);
-  free(key.data);
+  gpu_pipelineKeyRelease(&key);
   return GPU_OK;
 }
 
@@ -849,6 +911,21 @@ gpu_pipelineCacheStartWorker(GPUPipelineCache *cache) {
   return sync->workerStarted;
 }
 
+static size_t
+gpu_pipelineCacheBucketCount(uint64_t maxEntries) {
+  size_t count;
+  size_t target;
+
+  target = maxEntries > GPU_PIPELINE_CACHE_MAX_BUCKETS
+             ? GPU_PIPELINE_CACHE_MAX_BUCKETS
+             : (size_t)maxEntries;
+  count = 1u;
+  while (count < target) {
+    count <<= 1u;
+  }
+  return count;
+}
+
 GPU_EXPORT
 GPUResult
 GPUCreatePipelineCache(GPUDevice                         * __restrict device,
@@ -856,6 +933,8 @@ GPUCreatePipelineCache(GPUDevice                         * __restrict device,
                        GPUPipelineCache                 ** __restrict outCache) {
   GPUPipelineCache     *cache;
   GPUPipelineCacheSync *sync;
+  uint64_t              maxEntries;
+  size_t                bucketCount;
 
   if (!outCache) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -876,13 +955,23 @@ GPUCreatePipelineCache(GPUDevice                         * __restrict device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
+  maxEntries  = info->maxEntries > 0u
+                  ? info->maxEntries
+                  : GPU_PIPELINE_CACHE_DEFAULT_ENTRIES;
+  bucketCount = gpu_pipelineCacheBucketCount(maxEntries);
   cache = calloc(1, sizeof(*cache));
   if (!cache) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  cache->buckets = calloc(bucketCount, sizeof(*cache->buckets));
+  if (!cache->buckets) {
+    free(cache);
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
   sync = calloc(1, sizeof(*sync));
   if (!sync) {
+    free(cache->buckets);
     free(cache);
     return GPU_ERROR_OUT_OF_MEMORY;
   }
@@ -892,22 +981,23 @@ GPUCreatePipelineCache(GPUDevice                         * __restrict device,
 #else
   if (pthread_mutex_init(&sync->lock, NULL) != 0) {
     free(sync);
+    free(cache->buckets);
     free(cache);
     return GPU_ERROR_BACKEND_FAILURE;
   }
   if (pthread_cond_init(&sync->condition, NULL) != 0) {
     pthread_mutex_destroy(&sync->lock);
     free(sync);
+    free(cache->buckets);
     free(cache);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 #endif
 
-  cache->device     = device;
-  cache->_sync      = sync;
-  cache->maxEntries = info->maxEntries > 0u
-                        ? info->maxEntries
-                        : GPU_PIPELINE_CACHE_DEFAULT_ENTRIES;
+  cache->device      = device;
+  cache->_sync       = sync;
+  cache->maxEntries  = maxEntries;
+  cache->bucketCount = bucketCount;
   gpu_deviceCacheLock(device);
   cache->deviceNext       = device->_pipelineCaches;
   device->_pipelineCaches = cache;
@@ -987,6 +1077,7 @@ GPUDestroyPipelineCache(GPUPipelineCache *cache) {
     gpu_destroyPipelineJob(job);
     job = next;
   }
+  free(cache->buckets);
   free(cache);
 }
 

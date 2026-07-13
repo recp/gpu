@@ -194,6 +194,55 @@ count_stencil_reference(GPURenderCommandEncoder *rce, uint32_t reference) {
 }
 
 static int
+check_wide_pipeline_cache_key(GPUDevice                   *device,
+                              GPURenderPipelineCreateInfo *info) {
+  const GPUColorTargetState *originalTargets;
+  GPURenderPipeline         *pipeline;
+  GPUColorTargetState        targets[4];
+  GPUCacheStats              stats;
+  uint32_t                   originalTargetCount;
+  int                        ok;
+
+  originalTargets     = info->pColorTargets;
+  originalTargetCount = info->colorTargetCount;
+  pipeline            = NULL;
+  ok                  = 0;
+  for (uint32_t i = 0u; i < (uint32_t)GPU_ARRAY_LEN(targets); i++) {
+    targets[i] = originalTargets[0];
+  }
+
+  info->colorTargetCount = (uint32_t)GPU_ARRAY_LEN(targets);
+  info->pColorTargets    = targets;
+  GPUResetStats(device);
+  if (GPUCreateRenderPipeline(device, info, &pipeline) != GPU_OK ||
+      !pipeline) {
+    fprintf(stderr, "wide render pipeline cache miss failed\n");
+    goto cleanup;
+  }
+  GPUDestroyRenderPipeline(pipeline);
+  pipeline = NULL;
+  if (GPUCreateRenderPipeline(device, info, &pipeline) != GPU_OK ||
+      !pipeline) {
+    fprintf(stderr, "wide render pipeline cache hit failed\n");
+    goto cleanup;
+  }
+  if (GPUGetCacheStats(device, &stats) != GPU_OK ||
+      stats.pipelineCompiles != 1u ||
+      stats.pipelineMisses != 1u ||
+      stats.pipelineHits != 1u) {
+    fprintf(stderr, "wide render pipeline cache stats mismatch\n");
+    goto cleanup;
+  }
+  ok = 1;
+
+cleanup:
+  GPUDestroyRenderPipeline(pipeline);
+  info->colorTargetCount = originalTargetCount;
+  info->pColorTargets    = originalTargets;
+  return ok;
+}
+
+static int
 check_pipeline_cache_validation(GPUDevice *device,
                                 GPURenderPipelineCreateInfo *info) {
   GPUPipelineCacheCreateInfo cacheInfo = {0};
@@ -301,6 +350,9 @@ check_pipeline_cache_validation(GPUDevice *device,
       stats.pipelineMisses != 3u ||
       stats.pipelineHits != 2u) {
     fprintf(stderr, "pipeline cache stats did not record hits and eviction\n");
+    goto fail;
+  }
+  if (!check_wide_pipeline_cache_key(device, info)) {
     goto fail;
   }
 

@@ -133,6 +133,18 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
   if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  if (info->cache && !info->chain.pNext) {
+    GPUResult result;
+
+    result = gpuPipelineCacheFindCompute(info->cache, info, &pipeline);
+    if (result != GPU_OK) {
+      return result;
+    }
+    if (pipeline) {
+      *outPipeline = pipeline;
+      return GPU_OK;
+    }
+  }
   {
     GPUShaderStageFlags stage;
 
@@ -151,19 +163,6 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
                                                GPU_SHADER_STAGE_COMPUTE_BIT,
                                                &requiredBindGroupMask)) {
       return GPU_ERROR_INVALID_ARGUMENT;
-    }
-  }
-
-  if (info->cache && !info->chain.pNext) {
-    GPUResult result;
-
-    result = gpuPipelineCacheFindCompute(info->cache, info, &pipeline);
-    if (result != GPU_OK) {
-      return result;
-    }
-    if (pipeline) {
-      *outPipeline = pipeline;
-      return GPU_OK;
     }
   }
 

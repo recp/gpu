@@ -240,8 +240,6 @@ gpu_pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info) {
       !gpu_cullModeIsValid(info->cullMode) ||
       !gpu_frontFaceIsValid(info->frontFace))
     return false;
-  if (!gpu_renderPipelineEntriesMatchStages(info))
-    return false;
   if (info->primitiveTopology != GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
     return false;
   if (info->multisample.sampleCount != 0u &&
@@ -294,6 +292,20 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   if (!gpu_pipelineInfoIsSupported(info))
     return GPU_ERROR_INVALID_ARGUMENT;
+  if (info->cache && !info->chain.pNext) {
+    GPUResult result;
+
+    result = gpuPipelineCacheFindRender(info->cache, info, &pipeline);
+    if (result != GPU_OK) {
+      return result;
+    }
+    if (pipeline) {
+      *outPipeline = pipeline;
+      return GPU_OK;
+    }
+  }
+  if (!gpu_renderPipelineEntriesMatchStages(info))
+    return GPU_ERROR_INVALID_ARGUMENT;
   api = gpuDeviceApi(device);
   if (!api)
     return GPU_ERROR_BACKEND_FAILURE;
@@ -308,19 +320,6 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
                                                  GPU_SHADER_STAGE_FRAGMENT_BIT,
                                                &requiredBindGroupMask))
       return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  if (info->cache && !info->chain.pNext) {
-    GPUResult result;
-
-    result = gpuPipelineCacheFindRender(info->cache, info, &pipeline);
-    if (result != GPU_OK) {
-      return result;
-    }
-    if (pipeline) {
-      *outPipeline = pipeline;
-      return GPU_OK;
-    }
   }
 
   sampleCount = info->multisample.sampleCount > 0 ?
