@@ -38,7 +38,7 @@ read_file(const char *path, uint64_t *outSize) {
 static int
 test_texture_barriers(GPUDevice *device) {
   GPUCommandBuffer     *cmdb;
-  GPUCommandQueue      *queue;
+  GPUQueue             *queue;
   GPUFence             *fence;
   GPUTexture           *texture;
   GPUTextureCreateInfo  textureInfo   = {0};
@@ -202,7 +202,7 @@ test_mrt_render(GPUDevice  *device,
   const uint32_t width      = 4u;
   const uint32_t height     = 4u;
   const uint64_t pixelBytes = (uint64_t)width * height * 4u;
-  GPUCommandQueue                 *queue;
+  GPUQueue                        *queue;
   GPUShaderLibrary                *library        = NULL;
   GPUPipelineLayout               *pipelineLayout = NULL;
   GPURenderPipeline               *pipeline       = NULL;

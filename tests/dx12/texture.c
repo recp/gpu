@@ -42,7 +42,7 @@ main(int argc, char **argv) {
   GPUInstance          *instance       = NULL;
   GPUAdapter           *adapter        = NULL;
   GPUDevice            *device         = NULL;
-  GPUCommandQueue      *queue          = NULL;
+  GPUQueue             *queue          = NULL;
   GPUShaderLibrary     *library        = NULL;
   GPUShaderLayout      *shaderLayout   = NULL;
   GPURenderPipeline    *pipeline       = NULL;

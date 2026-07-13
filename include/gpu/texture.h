@@ -135,7 +135,7 @@ GPUDestroyTextureView(GPUTextureView * __restrict view);
 
 GPU_EXPORT
 GPUResult
-GPUQueueWriteTexture(GPUCommandQueue              * __restrict queue,
+GPUQueueWriteTexture(GPUQueue                     * __restrict queue,
                      GPUTexture                   * __restrict texture,
                      const GPUTextureWriteRegion  * __restrict region,
                      const void                   * __restrict data,

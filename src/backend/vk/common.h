@@ -198,7 +198,7 @@ typedef struct GPUPhysicalDeviceVk {
 } GPUPhysicalDeviceVk;
 
 typedef struct GPUDeviceVk {
-  GPUCommandQueue           **createdQueues;
+  GPUQueue                  **createdQueues;
   PFN_vkCmdBeginRenderingKHR  beginRendering;
   PFN_vkCmdEndRenderingKHR    endRendering;
   VkDevice                   device;
@@ -329,7 +329,7 @@ typedef struct GPUBindGroupVk {
   VkDescriptorSet  set;
 } GPUBindGroupVk;
 
-typedef struct GPUCommandQueueVk  GPUCommandQueueVk;
+typedef struct GPUQueueVk         GPUQueueVk;
 typedef struct GPUCommandBufferVk GPUCommandBufferVk;
 typedef struct GPUSwapchainVk     GPUSwapchainVk;
 typedef struct GPUTextureViewVk   GPUTextureViewVk;
@@ -373,7 +373,7 @@ typedef struct GPUComputeEncoderVk {
 } GPUComputeEncoderVk;
 
 struct GPUCommandBufferVk {
-  GPUCommandQueueVk       *owner;
+  GPUQueueVk              *owner;
   GPUCommandBufferVk      *next;
   GPUCommandBufferVk      *poolNext;
   GPUCommandBufferVk      *pendingNext;
@@ -410,8 +410,8 @@ typedef struct GPUTransferSlotVk {
   bool             pending;
 } GPUTransferSlotVk;
 
-struct GPUCommandQueueVk {
-  GPUCommandQueue    *queue;
+struct GPUQueueVk {
+  GPUQueue           *queue;
   GPUCommandBufferVk *commands;
   GPUCommandBufferVk *freeCommands;
   GPUCommandBufferVk *pendingHead;
@@ -531,7 +531,7 @@ typedef struct GPUComputePipelineVk {
 
 struct GPUSwapchainVk {
   GPUDevice         *gpuDevice;
-  GPUCommandQueueVk *queue;
+  GPUQueueVk        *queue;
   GPUSurfaceVk      *surface;
   VkImage           *images;
   VkImageView       *imageViews;
@@ -626,7 +626,7 @@ vk_restoreFrameFence(GPUSwapchainVk *swapchain, GPUFrameSyncVk *sync);
 
 GPU_HIDE
 GPUResult
-vk_beginTransfer(GPUCommandQueue *queue,
+vk_beginTransfer(GPUQueue *queue,
                  bool             upload,
                  uint64_t         sizeBytes,
                  VkCommandBuffer *outCommand,
@@ -635,11 +635,11 @@ vk_beginTransfer(GPUCommandQueue *queue,
 
 GPU_HIDE
 GPUResult
-vk_submitTransfer(GPUCommandQueue *queue, bool wait);
+vk_submitTransfer(GPUQueue *queue, bool wait);
 
 GPU_HIDE
 void
-vk_abortTransfer(GPUCommandQueue *queue);
+vk_abortTransfer(GPUQueue *queue);
 
 GPU_HIDE
 void

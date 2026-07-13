@@ -286,7 +286,7 @@ vk__bufferBarrier(VkCommandBuffer       command,
 
 GPU_HIDE
 GPUResult
-vk_writeBuffer(GPUCommandQueue * __restrict queue,
+vk_writeBuffer(GPUQueue * __restrict queue,
                GPUBuffer       * __restrict buffer,
                uint64_t                     dstOffset,
                const void      * __restrict data,
@@ -377,7 +377,7 @@ vk_writeBuffer(GPUCommandQueue * __restrict queue,
 
 GPU_HIDE
 GPUResult
-vk_readBuffer(GPUCommandQueue * __restrict queue,
+vk_readBuffer(GPUQueue * __restrict queue,
               GPUBuffer       * __restrict buffer,
               uint64_t                     srcOffset,
               void           * __restrict outData,

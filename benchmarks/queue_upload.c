@@ -36,7 +36,7 @@ typedef struct QueueUpload {
   GPUInstance     *instance;
   GPUAdapter      *adapter;
   GPUDevice       *device;
-  GPUCommandQueue *queue;
+  GPUQueue        *queue;
   GPUBuffer       *buffer;
   GPUFence        *fence;
   void            *bytes;

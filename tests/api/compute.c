@@ -106,7 +106,7 @@ check_compute_push_constant_shadowing_calls(GPUDevice *activeDevice) {
                            const void *,
                            uint32_t);
   GPUDevice             device = {0};
-  GPUCommandQueue       queue  = {0};
+  GPUQueue              queue  = {0};
   GPUCommandBuffer      cmdb   = {0};
   GPUComputePassEncoder pass   = {0};
   uint32_t              value;
@@ -484,7 +484,7 @@ cleanup:
 
 static int
 check_compute_pass_validation(GPUDevice *device) {
-  GPUCommandQueue fakeQueue = {0};
+  GPUQueue        fakeQueue = {0};
   GPUCommandBuffer fakeCmdb = {0};
   GPUComputePassEncoder fakePass = {0};
   GPUComputePipeline fakePipeline = {0};
@@ -590,7 +590,7 @@ check_compute_readback_case(GPUDevice          *device,
   const char *label = multi ? "api-compute-multi-indirect"
                             : (indirect ? "api-compute-indirect"
                                         : "api-compute-direct");
-  GPUCommandQueue *queue;
+  GPUQueue        *queue;
   GPUShaderLibrary *library = NULL;
   GPUBindGroupLayout *bindGroupLayout = NULL;
   GPUPipelineLayout *pipelineLayout = NULL;

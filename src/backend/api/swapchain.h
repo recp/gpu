@@ -29,7 +29,7 @@ typedef struct GPUApiSwapchain {
   GPUSwapchain*
   (*createSwapchain)(struct GPUApi          * __restrict api,
                      struct GPUDevice       * __restrict device,
-                     struct GPUCommandQueue * __restrict cmdQue,
+                     struct GPUQueue * __restrict cmdQue,
                      const GPUSwapchainCreateInfo * __restrict info);
 
   GPUResult (*resizeSwapchain)(GPUSwapchain *swapchain, GPUExtent2D size);

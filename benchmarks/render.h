@@ -36,7 +36,7 @@ typedef struct BenchRender {
   GPUInstance          *instance;
   GPUAdapter           *adapter;
   GPUDevice            *device;
-  GPUCommandQueue      *queue;
+  GPUQueue             *queue;
   GPUShaderLibrary     *library;
   GPUPipelineLayout    *pipelineLayout;
   GPUBuffer            *vertexBuffer;

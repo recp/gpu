@@ -38,7 +38,7 @@ gpu_backendName(GPUBackend backend) {
 }
 
 static bool
-gpu_validQueueCreateInfos(const GPUCommandQueueCreateInfo queCI[],
+gpu_validQueueCreateInfos(const GPUQueueCreateInfo queCI[],
                           uint32_t                        nQueCI) {
   if (!queCI) {
     return nQueCI == 0;
@@ -702,12 +702,12 @@ gpu_formatIsKnownColor(GPUFormat format) {
 
 static GPUResult
 gpu_buildQueueCreateInfos(const GPUDeviceCreateInfo  *info,
-                          GPUCommandQueueCreateInfo  *stackInfos,
+                          GPUQueueCreateInfo  *stackInfos,
                           uint32_t                    stackInfoCount,
-                          GPUCommandQueueCreateInfo **outInfos,
+                          GPUQueueCreateInfo **outInfos,
                           uint32_t                   *outInfoCount) {
   const GPUDeviceQueueCreateInfo *queueInfo;
-  GPUCommandQueueCreateInfo *infos;
+  GPUQueueCreateInfo *infos;
   uint32_t requestCount;
 
   *outInfos = NULL;
@@ -1259,8 +1259,8 @@ GPUResult
 GPUCreateDevice(GPUAdapter                *adapter,
                 const GPUDeviceCreateInfo *info,
                 GPUDevice                **outDevice) {
-  GPUCommandQueueCreateInfo stackQueueInfos[8];
-  GPUCommandQueueCreateInfo *queueInfos;
+  GPUQueueCreateInfo stackQueueInfos[8];
+  GPUQueueCreateInfo *queueInfos;
   uint32_t queueInfoCount;
   GPUResult result;
   GPUResult featureResult;

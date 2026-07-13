@@ -960,7 +960,7 @@ check_render_readback_case(GPUDevice *device,
                                  (const void *)kTriangleIndices;
   const uint64_t indexDataSize = multi ? sizeof(kMultiTriangleIndices) :
                                          sizeof(kTriangleIndices);
-  GPUCommandQueue *queue;
+  GPUQueue        *queue;
   GPUShaderLibrary *library = NULL;
   GPURenderPipeline *pipeline = NULL;
   GPUBuffer *vertexBuffer = NULL;
@@ -1801,7 +1801,7 @@ check_render_draw_validation_calls(GPUDevice *device) {
   GPUBindGroupLayoutEntry      entry           = {0};
   GPUBindGroupLayoutCreateInfo layoutInfo      = {0};
   GPUPipelineLayoutCreateInfo  pipelineInfo    = {0};
-  GPUCommandQueue              fakeQueue       = {0};
+  GPUQueue                     fakeQueue       = {0};
   GPUCommandBuffer             fakeCmdb        = {0};
   GPURenderPassEncoder         pass            = {0};
   GPUBuffer                    indirectBuffer  = {0};
@@ -2038,7 +2038,7 @@ check_vertex_buffer_shadowing_calls(GPUDevice *activeDevice) {
                           uint64_t,
                           uint32_t);
   GPUDevice            device  = {0};
-  GPUCommandQueue      queue   = {0};
+  GPUQueue             queue   = {0};
   GPUCommandBuffer     cmdb    = {0};
   GPUBuffer            buffer  = {0};
   GPUBufferBinding     binding = {0};
@@ -2112,7 +2112,7 @@ check_render_push_constant_shadowing_calls(GPUDevice *activeDevice) {
                            const void *,
                            uint32_t);
   GPUDevice            device = {0};
-  GPUCommandQueue      queue  = {0};
+  GPUQueue             queue  = {0};
   GPUCommandBuffer     cmdb   = {0};
   GPURenderPassEncoder pass   = {0};
   uint32_t             value;
@@ -2176,7 +2176,7 @@ check_dynamic_state_validation_calls(GPUDevice *activeDevice) {
   GPUApi             *api;
   GPUApi              scopedApi;
   GPUDevice           device = {0};
-  GPUCommandQueue     queue  = {0};
+  GPUQueue            queue  = {0};
   GPUCommandBuffer    cmdb   = {0};
   GPURenderPassEncoder pass = {0};
   GPURenderPassEncoder endedPass = {0};
@@ -2289,7 +2289,7 @@ cleanup:
 
 static int
 check_render_encoder_validation(GPUDevice *device) {
-  GPUCommandQueue fakeQueue = {0};
+  GPUQueue        fakeQueue = {0};
   GPUCommandBuffer fakeCmdb = {0};
   GPURenderPassEncoder pass = {0};
   GPURenderPassEncoder endedPass = {0};

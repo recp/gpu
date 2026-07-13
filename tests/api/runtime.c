@@ -37,7 +37,7 @@ static int
 check_device_error_callback(GPUDevice *device) {
   GPUDeviceErrorCapture capture = {0};
 #if GPU_BUILD_WITH_VALIDATION
-  GPUCommandQueue       queue = {0};
+  GPUQueue              queue = {0};
   GPUCommandBuffer      cmdb = {0};
   GPURenderPassEncoder  pass = {0};
 #endif
@@ -408,7 +408,7 @@ check_extension_lookup(GPUDevice *device) {
 }
 
 static int
-submit_empty(GPUCommandQueue *queue,
+submit_empty(GPUQueue *queue,
              GPUFence        *fence,
              uint32_t         transientFrameIndex,
              bool             tagTransientFrame) {
@@ -435,7 +435,7 @@ submit_empty(GPUCommandQueue *queue,
 
 static int
 check_warm_command_path(GPUDevice *device) {
-  GPUCommandQueue *queue;
+  GPUQueue        *queue;
   GPUFence *transientFence;
   GPUFence *fence;
   GPUFrameStats stats;

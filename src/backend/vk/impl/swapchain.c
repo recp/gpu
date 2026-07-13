@@ -534,7 +534,7 @@ GPU_HIDE
 GPUSwapchain*
 vk_createSwapchain(GPUApi          * __restrict api,
                    GPUDevice       * __restrict device,
-                   GPUCommandQueue * __restrict cmdQue,
+                   GPUQueue        * __restrict cmdQue,
                    const GPUSwapchainCreateInfo * __restrict info) {
   GPUDeviceVk         *deviceVk;
   GPUPhysicalDeviceVk *physicalDeviceVk;
@@ -556,7 +556,7 @@ vk_createSwapchain(GPUApi          * __restrict api,
   surface          = info->surface->_priv;
   presentSupported = VK_FALSE;
   if (vkGetPhysicalDeviceSurfaceSupportKHR(physicalDeviceVk->phyDevice,
-                                           ((GPUCommandQueueVk *)cmdQue->_priv)->familyIndex,
+                                           ((GPUQueueVk *)cmdQue->_priv)->familyIndex,
                                            surface->surface,
                                            &presentSupported) != VK_SUCCESS ||
       !presentSupported) {

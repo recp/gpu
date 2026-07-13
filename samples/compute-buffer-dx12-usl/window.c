@@ -20,7 +20,7 @@ typedef struct ComputeRenderApp {
   GPUInstance        *instance;
   GPUAdapter         *adapter;
   GPUDevice          *device;
-  GPUCommandQueue    *queue;
+  GPUQueue           *queue;
   GPUSurface         *surface;
   GPUSwapchain       *swapchain;
   GPUShaderLibrary   *library;

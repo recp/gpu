@@ -44,7 +44,7 @@ first_adapter(GPUInstance *instance) {
 }
 
 static GPUCommandBuffer*
-submit_empty(GPUCommandQueue *queue,
+submit_empty(GPUQueue *queue,
              GPUFence        *fence,
              CompletionProbe *probe) {
   GPUCommandBuffer *cmdb;
@@ -73,7 +73,7 @@ submit_empty(GPUCommandQueue *queue,
 }
 
 static bool
-wait_queue(GPUCommandQueue *queue, GPUFence *fence) {
+wait_queue(GPUQueue *queue, GPUFence *fence) {
   CompletionProbe probe;
 
   memset(&probe, 0, sizeof(probe));
@@ -81,7 +81,7 @@ wait_queue(GPUCommandQueue *queue, GPUFence *fence) {
 }
 
 static bool
-submit_error_propagates(GPUCommandQueue *queue) {
+submit_error_propagates(GPUQueue *queue) {
   GPUCommandBuffer     *cmdb;
   GPUCommandBuffer     *buffers[1];
   GPUCommandBufferDX12 *native;
@@ -106,10 +106,10 @@ submit_error_propagates(GPUCommandQueue *queue) {
 }
 
 static bool
-buffer_transfers_reuse(GPUCommandQueue *queue,
+buffer_transfers_reuse(GPUQueue *queue,
                        GPUDevice       *device,
                        GPUFence        *queueFence) {
-  GPUCommandQueueDX12  *native;
+  GPUQueueDX12         *native;
   GPUBufferCreateInfo   bufferInfo;
   GPUTransferSlotDX12   slots[GPU_DX12_TRANSFER_SLOT_COUNT];
   GPUBuffer            *buffer;
@@ -218,10 +218,10 @@ buffer_transfers_reuse(GPUCommandQueue *queue,
 }
 
 static bool
-texture_transfers_reuse(GPUCommandQueue *queue,
+texture_transfers_reuse(GPUQueue *queue,
                         GPUDevice       *device,
                         GPUFence        *queueFence) {
-  GPUCommandQueueDX12  *native;
+  GPUQueueDX12         *native;
   GPUTextureCreateInfo  textureInfo;
   GPUTextureWriteRegion writeRegion;
   GPUTransferSlotDX12   slots[GPU_DX12_TRANSFER_SLOT_COUNT];
@@ -329,8 +329,8 @@ main(void) {
   GPUFeature            requiredFeature;
   GPUCommandBuffer     *firstCmdb;
   GPUCommandBuffer     *secondCmdb;
-  GPUCommandQueue      *queue0;
-  GPUCommandQueue      *queue1;
+  GPUQueue             *queue0;
+  GPUQueue             *queue1;
   CompletionProbe       probe;
   GPUInstance          *instance;
   GPUAdapter           *adapter;

@@ -26,7 +26,7 @@ enum {
 };
 
 static int
-submit_source_sampler_draw(GPUCommandQueue            *queue,
+submit_source_sampler_draw(GPUQueue            *queue,
                            GPURenderPipeline          *pipeline,
                            GPUBindGroup               *group,
                            GPURenderPassCreateInfo    *passInfo,
@@ -85,7 +85,7 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   const uint32_t height       = GPU_SOURCE_SAMPLER_VIEW_HEIGHT;
   const uint32_t rowPitch     = GPU_SOURCE_SAMPLER_ROW_PITCH;
   const uint64_t imageBytes   = (uint64_t)rowPitch * height;
-  GPUCommandQueue                  *queue;
+  GPUQueue                         *queue;
   GPUShaderLibrary                 *library;
   GPUShaderLayout                  *shaderLayout;
   GPURenderPipeline                *pipeline;

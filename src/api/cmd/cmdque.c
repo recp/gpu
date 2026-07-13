@@ -127,9 +127,9 @@ gpu_timeoutFromNow(uint64_t timeoutNs, struct timespec *outTime) {
 #endif
 
 static GPUCommandBuffer*
-gpu_newCommandBuffer(GPUCommandQueue  * __restrict cmdq,
-                     const char       * __restrict label,
-                     void             * __restrict sender,
+gpu_newCommandBuffer(GPUQueue                  * __restrict cmdq,
+                     const char                * __restrict label,
+                     void                      * __restrict sender,
                      GPUCommandBufferCompletionFn  oncomplete) {
   GPUApi *api;
   GPUCommandBuffer *cmdb;
@@ -151,13 +151,13 @@ gpu_newCommandBuffer(GPUCommandQueue  * __restrict cmdq,
 }
 
 GPU_EXPORT
-GPUCommandQueue*
+GPUQueue*
 GPUGetCommandQueue(GPUDevice * __restrict device, GPUQueueFlagBits bits) {
   return GPUGetQueue(device, bits, 0);
 }
 
 GPU_EXPORT
-GPUCommandQueue*
+GPUQueue*
 GPUGetQueue(GPUDevice * __restrict device,
             GPUQueueFlagBits       bits,
             uint32_t               index) {
@@ -176,7 +176,7 @@ GPUGetQueue(GPUDevice * __restrict device,
 
 GPU_EXPORT
 GPUResult
-GPUAcquireCommandBuffer(GPUCommandQueue   * __restrict cmdq,
+GPUAcquireCommandBuffer(GPUQueue          * __restrict cmdq,
                         const char        * __restrict label,
                         GPUCommandBuffer ** __restrict outCmdb) {
   if (!outCmdb) {
@@ -228,7 +228,7 @@ GPUCommit(GPUCommandBuffer * __restrict cmdb) {
 
 GPU_EXPORT
 GPUResult
-GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
+GPUQueueSubmit(GPUQueue                 * __restrict cmdq,
                const GPUQueueSubmitInfo * __restrict info) {
   GPUApi           *api;
   GPUDevice        *device;
@@ -327,7 +327,7 @@ GPUQueueSubmit(GPUCommandQueue          * __restrict cmdq,
 
 GPU_EXPORT
 GPUResult
-GPUQueueSubmitEx(GPUCommandQueue            * __restrict cmdq,
+GPUQueueSubmitEx(GPUQueue                   * __restrict cmdq,
                  const GPUQueueSubmitExInfo * __restrict info) {
   GPUQueueSubmitInfo baseInfo;
 

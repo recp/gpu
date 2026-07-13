@@ -69,7 +69,7 @@ check_rgba8(const uint8_t *pixels,
 
 int
 gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath) {
-  GPUCommandQueue               *queue;
+  GPUQueue                      *queue;
   GPUShaderLibrary              *library;
   GPUShaderLayout               *shaderLayout;
   GPUComputePipeline            *pipeline;

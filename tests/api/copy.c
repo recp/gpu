@@ -35,7 +35,7 @@ check_copy_pass_device_dispatch(GPUDevice *activeDevice) {
   GPUCopyPassEncoder *pass;
   GPUApi              scopedApi;
   GPUDevice           device = {0};
-  GPUCommandQueue     queue  = {0};
+  GPUQueue            queue  = {0};
   GPUCommandBuffer    cmdb   = {0};
 
   api = gpuDeviceApi(activeDevice);
@@ -86,7 +86,7 @@ copy_test_rows_equal(const uint8_t *tight, const uint8_t *padded) {
 
 static int
 check_copy_pass_validation(GPUDevice *device) {
-  GPUCommandQueue *queue;
+  GPUQueue        *queue;
   GPUCommandBuffer fakeCmdb = {0};
   GPUCopyPassEncoder endedPass = {0};
   GPUCommandBuffer *cmdb;
@@ -358,7 +358,7 @@ cleanup:
 
 static int
 check_copy_pass_invalid_copy_noops(GPUDevice *device) {
-  GPUCommandQueue *queue;
+  GPUQueue        *queue;
   GPUCommandBuffer *cmdb;
   GPUCommandBuffer *buffers[1];
   GPUQueueSubmitInfo submitInfo = {0};
@@ -616,7 +616,7 @@ check_compressed_texture_copies(GPUDevice *device) {
   const uint8_t bufferBlock[8] = {
     0xe0u, 0x07u, 0xe0u, 0x07u, 0x00u, 0x00u, 0x00u, 0x00u
   };
-  GPUCommandQueue              *queue;
+  GPUQueue                     *queue;
   GPUCommandBuffer             *cmdb;
   GPUCommandBuffer             *buffers[1];
   GPUFence                     *fence;

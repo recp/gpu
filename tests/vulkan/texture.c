@@ -34,7 +34,7 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   static const float kTint[] = {0.9f, 0.95f, 1.0f, 1.0f};
   const uint32_t width  = 4u;
   const uint32_t height = 4u;
-  GPUCommandQueue                 *queue;
+  GPUQueue                        *queue;
   GPUShaderLibrary                *library        = NULL;
   GPUShaderLayout                 *shaderLayout   = NULL;
   GPURenderPipeline               *pipeline       = NULL;

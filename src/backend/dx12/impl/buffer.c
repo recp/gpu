@@ -264,14 +264,14 @@ dx12_destroyBuffer(GPUBuffer * __restrict buffer) {
 
 GPU_HIDE
 GPUResult
-dx12_writeBuffer(GPUCommandQueue * __restrict queue,
+dx12_writeBuffer(GPUQueue * __restrict queue,
                  GPUBuffer       * __restrict buffer,
                  uint64_t                     dstOffset,
                  const void      * __restrict data,
                  uint64_t                     sizeBytes) {
   ID3D12GraphicsCommandList *commandList;
   ID3D12Resource            *staging;
-  GPUCommandQueueDX12       *queueDX12;
+  GPUQueueDX12              *queueDX12;
   GPUBufferDX12             *native;
   void                      *mapped;
   uint64_t                   stagingOffset;
@@ -320,14 +320,14 @@ dx12_writeBuffer(GPUCommandQueue * __restrict queue,
 
 GPU_HIDE
 GPUResult
-dx12_readBuffer(GPUCommandQueue * __restrict queue,
+dx12_readBuffer(GPUQueue * __restrict queue,
                 GPUBuffer       * __restrict buffer,
                 uint64_t                     srcOffset,
                 void           * __restrict outData,
                 uint64_t                     sizeBytes) {
   ID3D12GraphicsCommandList *commandList;
   ID3D12Resource            *staging;
-  GPUCommandQueueDX12       *queueDX12;
+  GPUQueueDX12              *queueDX12;
   GPUBufferDX12             *native;
   void                      *mapped;
   D3D12_RANGE                readRange;

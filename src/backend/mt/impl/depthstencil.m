@@ -254,7 +254,7 @@ mt_destroyTexture(GPUTexture * __restrict texture) {
 }
 
 static GPUResult
-mt_writeDepthStencilPlane(GPUCommandQueue             *queue,
+mt_writeDepthStencilPlane(GPUQueue             *queue,
                           GPUTexture                  *texture,
                           const GPUTextureWriteRegion *region,
                           const void                  *data,
@@ -375,7 +375,7 @@ mt_destroyTextureView(GPUTextureView * __restrict view) {
 
 GPU_HIDE
 GPUResult
-mt_writeTexture(GPUCommandQueue             * __restrict queue,
+mt_writeTexture(GPUQueue             * __restrict queue,
                 GPUTexture                  * __restrict texture,
                 const GPUTextureWriteRegion * __restrict region,
                 const void                  * __restrict data,

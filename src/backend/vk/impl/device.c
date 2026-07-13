@@ -599,7 +599,7 @@ vk__findQueuePlan(GPUQueuePlanVk *plans,
 GPU_HIDE
 GPUDevice*
 vk_createDevice(GPUPhysicalDevice          * __restrict phyDevice,
-                GPUCommandQueueCreateInfo      queCI[],
+                GPUQueueCreateInfo      queCI[],
                 uint32_t                       nQueCI) {
   GPUDevice               *device;
   GPUDeviceVk             *deviceVk;
@@ -751,7 +751,7 @@ vk_createDevice(GPUPhysicalDevice          * __restrict phyDevice,
 
   for (uint32_t i = 0; i < planCount; i++) {
     for (uint32_t queueIndex = 0; queueIndex < plans[i].count; queueIndex++) {
-      GPUCommandQueue *queue;
+      GPUQueue        *queue;
 
       queue = vk_createCommandQueue(device,
                                     plans[i].familyIndex,

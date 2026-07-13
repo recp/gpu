@@ -136,7 +136,7 @@ GPUDestroyQuerySet(GPUQuerySet *set) {
 
 GPU_EXPORT
 GPUResult
-GPUGetTimestampPeriod(GPUCommandQueue *queue,
+GPUGetTimestampPeriod(GPUQueue *queue,
                       double          *outNanosecondsPerTick) {
   GPUDevice *device;
   GPUResult  result;

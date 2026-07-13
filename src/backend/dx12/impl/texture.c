@@ -953,13 +953,13 @@ dx12_destroyTextureView(GPUTextureView * __restrict view) {
 
 GPU_HIDE
 GPUResult
-dx12_writeTexture(GPUCommandQueue             * __restrict queue,
+dx12_writeTexture(GPUQueue             * __restrict queue,
                    GPUTexture                  * __restrict texture,
                    const GPUTextureWriteRegion * __restrict region,
                    const void                  * __restrict data,
                    uint64_t                                 sizeBytes) {
   GPUFormatDataLayout        dataLayout;
-  GPUCommandQueueDX12       *queueDX12;
+  GPUQueueDX12              *queueDX12;
   GPUDeviceDX12             *deviceDX12;
   GPUTextureDX12            *native;
   ID3D12GraphicsCommandList *commandList;

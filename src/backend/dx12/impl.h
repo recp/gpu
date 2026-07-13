@@ -22,11 +22,11 @@ GPU_HIDE void dx12_initDevice(GPUApiDevice* apiDevice);
 // GPU_HIDE void dx12_initRCE(GPUApiRCE* api);
 // GPU_HIDE void dx12_initCmdBuff(GPUApiCommandBuffer* api);
 GPU_HIDE void dx12_initCmdQue(GPUApiCommandQueue* api);
-GPU_HIDE GPUCommandQueue *dx12_createCommandQueue(GPUDevice *device,
+GPU_HIDE GPUQueue *dx12_createCommandQueue(GPUDevice *device,
                                                    GPUQueueFlagBits bits);
-GPU_HIDE void dx12_destroyCommandQueue(GPUCommandQueue *queue);
-GPU_HIDE bool dx12_waitCommandQueueIdle(GPUCommandQueueDX12 *queue);
-GPU_HIDE bool dx12_waitQueueFence(GPUCommandQueueDX12 *queue,
+GPU_HIDE void dx12_destroyCommandQueue(GPUQueue *queue);
+GPU_HIDE bool dx12_waitCommandQueueIdle(GPUQueueDX12 *queue);
+GPU_HIDE bool dx12_waitQueueFence(GPUQueueDX12 *queue,
                                   UINT64                value,
                                   HANDLE                event);
 GPU_HIDE GPUResult dx12_waitDeviceIdle(GPUDevice * __restrict device);

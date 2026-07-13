@@ -414,7 +414,7 @@ dx12_getLimits(const GPUAdapter * __restrict adapter,
 GPU_HIDE
 GPUDevice *
 dx12_createDevice(GPUPhysicalDevice        * __restrict phyDevice,
-                  GPUCommandQueueCreateInfo queCI[],
+                  GPUQueueCreateInfo queCI[],
                   uint32_t                  nQueCI) {
   GPUInstance           *inst;
   GPUPhysicalDeviceDX12 *phyDeviceDX12;
@@ -475,7 +475,7 @@ dx12_createDevice(GPUPhysicalDevice        * __restrict phyDevice,
     queueIndex = 0u;
     for (i = 0u; i < nQueCI; i++) {
       for (j = 0u; j < queCI[i].count; j++) {
-        GPUCommandQueue *queue;
+        GPUQueue        *queue;
 
         queue = dx12_createCommandQueue(device, queCI[i].flags);
         if (!queue) {

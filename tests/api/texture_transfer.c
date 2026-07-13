@@ -103,7 +103,7 @@ transfer_stencil_equal(const uint8_t *pixels,
 
 static bool
 transfer_submit(GPUDevice        *device,
-                GPUCommandQueue  *queue,
+                GPUQueue         *queue,
                 GPUCommandBuffer *cmdb) {
   GPUCommandBuffer  *buffers[1];
   GPUQueueSubmitInfo submitInfo = {0};
@@ -140,7 +140,7 @@ transfer_submit(GPUDevice        *device,
 
 static int
 check_array_mip_transfers(GPUDevice *device) {
-  GPUCommandQueue              *queue;
+  GPUQueue                     *queue;
   GPUCommandBuffer             *cmdb;
   GPUCopyPassEncoder           *copyPass;
   GPUBuffer                    *upload;
@@ -298,7 +298,7 @@ cleanup:
 
 static int
 check_3d_texture_transfers(GPUDevice *device) {
-  GPUCommandQueue              *queue;
+  GPUQueue                     *queue;
   GPUCommandBuffer             *cmdb;
   GPUCopyPassEncoder           *copyPass;
   GPUBuffer                    *upload;
@@ -474,7 +474,7 @@ check_same_texture_copies(GPUDevice *device) {
     READBACK_BYTES    = TRANSFER_IMAGE_STRIDE * 2u
   };
 
-  GPUCommandQueue              *queue;
+  GPUQueue                     *queue;
   GPUCommandBuffer             *cmdb;
   GPUCopyPassEncoder           *copyPass;
   GPUBuffer                    *readback;
@@ -650,7 +650,7 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
     READBACK_BYTES               = TRANSFER_DS_STRIDE * 4u
   };
 
-  GPUCommandQueue              *queue;
+  GPUQueue                     *queue;
   GPUCommandBuffer             *cmdb;
   GPUCopyPassEncoder           *copyPass;
   GPUBuffer                    *readback;

@@ -128,7 +128,7 @@ int
 main(int argc, char *argv[]) {
   GPURenderPassEncoder pass;
   GPUCommandBuffer     cmdb;
-  GPUCommandQueue      queue;
+  GPUQueue             queue;
   GPUDevice            device;
   GPUApi               api;
   double               samples[BENCH_PATH_COUNT][BENCH_REPEATS];

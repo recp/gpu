@@ -66,7 +66,7 @@ main(int argc, char **argv) {
   GPUInstance           *instance;
   GPUAdapter            *adapter;
   GPUDevice             *device;
-  GPUCommandQueue       *queue;
+  GPUQueue              *queue;
   GPUShaderLibrary      *library;
   GPUShaderLayout       *shaderLayout;
   GPUComputePipeline    *pipeline;

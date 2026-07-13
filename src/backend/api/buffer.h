@@ -33,14 +33,14 @@ typedef struct GPUApiBuffer {
   (*destroy)(GPUBuffer * __restrict buff);
 
   GPUResult
-  (*write)(GPUCommandQueue * __restrict queue,
+  (*write)(GPUQueue * __restrict queue,
            GPUBuffer       * __restrict buff,
            uint64_t                     dstOffset,
            const void      * __restrict data,
            uint64_t                     sizeBytes);
 
   GPUResult
-  (*read)(GPUCommandQueue * __restrict queue,
+  (*read)(GPUQueue * __restrict queue,
           GPUBuffer       * __restrict buff,
           uint64_t                     srcOffset,
           void           * __restrict outData,

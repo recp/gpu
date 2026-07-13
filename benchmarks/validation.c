@@ -64,7 +64,7 @@ typedef struct ValidationFixture {
   GPURenderPassEncoder   render;
   GPUComputePassEncoder  compute;
   GPUCommandBuffer       cmdb;
-  GPUCommandQueue        queue;
+  GPUQueue               queue;
   GPUDevice              device;
   GPUApi                 api;
 } ValidationFixture;

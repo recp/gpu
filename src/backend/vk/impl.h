@@ -36,7 +36,7 @@ GPU_HIDE void vk_initRCE(GPUApiRCE *api);
 GPU_HIDE void vk_initCompute(GPUApiCompute *api);
 
 GPU_HIDE
-GPUCommandQueue*
+GPUQueue*
 vk_createCommandQueue(GPUDevice       *device,
                       uint32_t         familyIndex,
                       uint32_t         queueIndex,
@@ -44,7 +44,7 @@ vk_createCommandQueue(GPUDevice       *device,
 
 GPU_HIDE
 void
-vk_destroyCommandQueue(GPUCommandQueue *queue);
+vk_destroyCommandQueue(GPUQueue *queue);
 
 GPU_HIDE
 GPUResult
@@ -68,7 +68,7 @@ vk_destroyBuffer(GPUBuffer * __restrict buffer);
 
 GPU_HIDE
 GPUResult
-vk_writeBuffer(GPUCommandQueue * __restrict queue,
+vk_writeBuffer(GPUQueue * __restrict queue,
                GPUBuffer       * __restrict buffer,
                uint64_t                     dstOffset,
                const void      * __restrict data,

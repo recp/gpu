@@ -7,7 +7,7 @@ enum {
 
 static int
 create_color_texture(GPUDevice       *device,
-                     GPUCommandQueue *queue,
+                     GPUQueue        *queue,
                      const char      *label,
                      const uint8_t    color[4],
                      GPUTexture     **outTexture,
@@ -65,7 +65,7 @@ gpu_test_descriptor_array(GPUDevice *device, const char *bytecodePath) {
   static const uint8_t red[4]   = {255u, 0u, 0u, 255u};
   static const uint8_t green[4] = {0u, 255u, 0u, 255u};
   static const uint8_t black[4] = {0u, 0u, 0u, 255u};
-  GPUCommandQueue                  *queue;
+  GPUQueue                         *queue;
   GPUShaderLibrary                 *library;
   GPUShaderLayout                  *shaderLayout;
   GPUComputePipeline               *pipeline;

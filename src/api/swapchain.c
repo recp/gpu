@@ -20,7 +20,7 @@
 
 static GPUSwapchain*
 gpuCreateSwapchainInternal(GPUDevice              * __restrict device,
-                           struct GPUCommandQueue * __restrict cmdQue,
+                           struct GPUQueue * __restrict cmdQue,
                            const GPUSwapchainCreateInfo * __restrict info) {
   GPUApi       *api;
   GPUSwapchain *swapchain;
@@ -48,7 +48,7 @@ GPUResult
 GPUCreateSwapchain(GPUDevice                    * __restrict device,
                    const GPUSwapchainCreateInfo * __restrict info,
                    GPUSwapchain                ** __restrict outSwapchain) {
-  GPUCommandQueue *queue;
+  GPUQueue        *queue;
 
   if (!outSwapchain)
     return GPU_ERROR_INVALID_ARGUMENT;

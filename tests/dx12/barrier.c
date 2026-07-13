@@ -134,7 +134,7 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
   const uint64_t         indirectBufferSize = 20u;
   GPUDevice             *device;
   GPUDeviceDX12         *deviceDX12;
-  GPUCommandQueue       *queue;
+  GPUQueue              *queue;
   GPUCommandBuffer      *cmdb;
   GPUCommandBuffer      *buffers[1];
   GPUCommandBufferDX12  *command;
@@ -436,7 +436,7 @@ static bool
 run_occlusion_case(GPUAdapter *adapter) {
   GPUDevice                   *device;
   GPUDeviceDX12               *deviceDX12;
-  GPUCommandQueue             *queue;
+  GPUQueue                    *queue;
   GPUCommandBuffer            *cmdb;
   GPUCommandBuffer            *buffers[1];
   GPUTexture                  *target;

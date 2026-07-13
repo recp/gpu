@@ -20,7 +20,7 @@
 #include "../common.h"
 #include "device_internal.h"
 
-struct GPUCommandQueue {
+struct GPUQueue {
   void            *_priv;
   GPUDevice       *_device;
   GPUQueueFlagBits bits;
@@ -28,7 +28,7 @@ struct GPUCommandQueue {
 
 struct GPUCommandBuffer {
   void                         *_priv;
-  GPUCommandQueue              *_queue;
+  GPUQueue                     *_queue;
   GPUFence                     *_submitFence;
   GPUFence                     *_transientFence;
   GPUQuerySet                  *_pipelineStatsQuery;
@@ -42,12 +42,12 @@ struct GPUCommandBuffer {
 };
 
 static inline GPUDevice *
-gpuCommandQueueDevice(const GPUCommandQueue *queue) {
+gpuCommandQueueDevice(const GPUQueue *queue) {
   return queue ? queue->_device : NULL;
 }
 
 static inline GPUApi *
-gpuCommandQueueApi(const GPUCommandQueue *queue) {
+gpuCommandQueueApi(const GPUQueue *queue) {
   return gpuDeviceApi(gpuCommandQueueDevice(queue));
 }
 

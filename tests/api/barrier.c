@@ -21,7 +21,7 @@ check_barrier_forwarding(GPUDevice *device) {
   GPUTexture *texture = NULL;
   void (*savedEncodeBarriers)(GPUCommandBuffer *cmdb,
                               const GPUBarrierBatch *barriers);
-  GPUCommandQueue fakeQueue = {0};
+  GPUQueue        fakeQueue = {0};
   GPUCommandBuffer fakeCmdb = {0};
   GPUBufferCreateInfo bufferInfo = {0};
   GPUTextureCreateInfo textureInfo = {0};

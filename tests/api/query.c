@@ -7,7 +7,7 @@ _Static_assert(sizeof(GPUPipelineStatisticsResult) == 11u * sizeof(uint64_t),
 static int
 check_query_set_create_validation(GPUDevice *device) {
   GPUQuerySetCreateInfo info = {0};
-  GPUCommandQueue      *queue;
+  GPUQueue             *queue;
   GPUQuerySet          *set;
   double                timestampPeriod;
 
@@ -169,7 +169,7 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
   GPUQueueSubmitInfo submitInfo = {0};
   GPUDeviceCapabilities caps = {0};
   GPUDevice *device = NULL;
-  GPUCommandQueue *queue = NULL;
+  GPUQueue        *queue = NULL;
   GPUCommandBuffer *cmdb = NULL;
   GPUQuerySet *set = NULL;
   GPUBuffer *buffer = NULL;
@@ -320,7 +320,7 @@ check_pipeline_statistics_roundtrip(GPUAdapter *adapter,
   GPUPipelineStatisticsResult   statistics      = {0};
   GPUCommandBuffer             *submitBuffers[1];
   GPUDevice                    *device          = NULL;
-  GPUCommandQueue              *queue           = NULL;
+  GPUQueue                     *queue           = NULL;
   GPUShaderLibrary             *library         = NULL;
   GPUShaderLayout              *shaderLayout    = NULL;
   GPUComputePipeline           *pipeline        = NULL;

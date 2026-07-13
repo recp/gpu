@@ -75,7 +75,7 @@ typedef struct GPUSwapchainMetal {
 
 typedef struct GPUDeviceMT {
   id<MTLDevice>     device;
-  GPUCommandQueue **createdQueues;
+  GPUQueue        **createdQueues;
   uint32_t          nCreatedQueues;
   MTCommandMode     commandMode;
 } GPUDeviceMT;
@@ -198,7 +198,7 @@ GPU_HIDE MTLBlitOption mt_copyOption(GPUFormat format,
                                      GPUTextureAspect aspect);
 
 static inline MTCommandQueue *
-mt_commandQueue(GPUCommandQueue *queue) {
+mt_commandQueue(GPUQueue *queue) {
   return queue ? queue->_priv : NULL;
 }
 
@@ -279,7 +279,7 @@ mt_uploadConstants(GPUCommandBuffer *cmdb,
 
 GPU_HIDE
 GPUResult
-mt_beginTransfer(GPUCommandQueue             *queue,
+mt_beginTransfer(GPUQueue             *queue,
                  uint64_t                     sizeBytes,
                  id<MTLBlitCommandEncoder>   *outBlit,
                  id<MTLBuffer>               *outStaging,
@@ -287,7 +287,7 @@ mt_beginTransfer(GPUCommandQueue             *queue,
 
 GPU_HIDE
 GPUResult
-mt_flushTransfers(GPUCommandQueue *queue, bool wait);
+mt_flushTransfers(GPUQueue *queue, bool wait);
 
 GPU_HIDE
 void

@@ -82,7 +82,7 @@ GPUEndFrame(GPUFrame* frame) {
 
 GPU_EXPORT
 GPUResult
-GPUFinishFrame(GPUCommandQueue  * __restrict cmdq,
+GPUFinishFrame(GPUQueue         * __restrict cmdq,
                GPUCommandBuffer * __restrict cmdb,
                GPUFrame         * __restrict frame) {
   GPUCommandBuffer *buffers[1];

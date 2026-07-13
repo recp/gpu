@@ -67,7 +67,7 @@ typedef struct GPUDeviceDX12 {
   ID3D12CommandSignature     *drawSignature;
   ID3D12CommandSignature     *drawIndexedSignature;
   ID3D12CommandSignature     *dispatchSignature;
-  GPUCommandQueue           **createdQueues;
+  GPUQueue                  **createdQueues;
   HMODULE                     dxcModule;
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   HMODULE                     pixModule;
@@ -155,7 +155,7 @@ dx12_setCommandListName(GPUDevice                 *device,
 #  define dx12_setCommandListName(device, commandList, label) ((void)0)
 #endif
 
-typedef struct GPUCommandQueueDX12 GPUCommandQueueDX12;
+typedef struct GPUQueueDX12 GPUQueueDX12;
 typedef struct GPUSwapchainDX12    GPUSwapchainDX12;
 
 typedef struct GPUShaderLibraryDX12 {
@@ -317,7 +317,7 @@ typedef struct GPUComputeEncoderDX12 {
 } GPUComputeEncoderDX12;
 
 typedef struct GPUCommandBufferDX12 {
-  GPUCommandQueueDX12          *owner;
+  GPUQueueDX12                 *owner;
   ID3D12CommandAllocator       *allocator;
   ID3D12GraphicsCommandList    *commandList;
   ID3D12GraphicsCommandList7   *commandList7;
@@ -352,8 +352,8 @@ typedef struct GPUTransferSlotDX12 {
   bool                       pending;
 } GPUTransferSlotDX12;
 
-struct GPUCommandQueueDX12 {
-  GPUCommandQueue             *queue;
+struct GPUQueueDX12 {
+  GPUQueue                    *queue;
   ID3D12CommandQueue          *commandQueue;
   ID3D12Fence                 *completionFence;
   ID3D12Fence                 *transferFence;
@@ -405,7 +405,7 @@ typedef struct GPUFrameDX12 {
 } GPUFrameDX12;
 
 struct GPUSwapchainDX12 {
-  GPUCommandQueueDX12  *queue;
+  GPUQueueDX12         *queue;
   IDXGISwapChain3      *swapchain;
   ID3D12DescriptorHeap *rtvHeap;
   GPUFrameDX12         *frames;
@@ -486,7 +486,7 @@ dx12_transitionTexturePlane(ID3D12GraphicsCommandList *commandList,
 
 GPU_HIDE
 GPUResult
-dx12_beginTransfer(GPUCommandQueue             *queue,
+dx12_beginTransfer(GPUQueue             *queue,
                    D3D12_HEAP_TYPE              heapType,
                    uint64_t                     stagingBytes,
                    ID3D12GraphicsCommandList  **outCommandList,
@@ -496,11 +496,11 @@ dx12_beginTransfer(GPUCommandQueue             *queue,
 
 GPU_HIDE
 GPUResult
-dx12_submitTransfer(GPUCommandQueue *queue, bool wait);
+dx12_submitTransfer(GPUQueue *queue, bool wait);
 
 GPU_HIDE
 void
-dx12_abortTransfer(GPUCommandQueue *queue);
+dx12_abortTransfer(GPUQueue *queue);
 
 GPU_HIDE
 GPUResult

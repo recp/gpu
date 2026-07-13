@@ -31,7 +31,7 @@ enum {
 
 static bool
 view_render_submit(GPUDevice        *device,
-                   GPUCommandQueue  *queue,
+                   GPUQueue         *queue,
                    GPUCommandBuffer *cmdb) {
   GPUCommandBuffer  *buffers[1];
   GPUQueueSubmitInfo submitInfo = {0};
@@ -203,7 +203,7 @@ int
 gpu_test_texture_view_render(GPUDevice *device) {
   static const float firstClear[4]  = {1.0f, 0.0f, 0.0f, 1.0f};
   static const float secondClear[4] = {0.0f, 1.0f, 0.0f, 1.0f};
-  GPUCommandQueue               *queue;
+  GPUQueue                      *queue;
   GPUCommandBuffer              *cmdb;
   GPURenderPassEncoder          *renderPass;
   GPUCopyPassEncoder            *copyPass;
@@ -413,7 +413,7 @@ cleanup:
 
 int
 gpu_test_texture_view_depth(GPUDevice *device) {
-  GPUCommandQueue               *queue;
+  GPUQueue                      *queue;
   GPUCommandBuffer              *cmdb;
   GPURenderPassEncoder          *renderPass;
   GPUCopyPassEncoder            *copyPass;
@@ -624,7 +624,7 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
     GPU_FORMAT_DEPTH24_UNORM_STENCIL8
   };
 
-  GPUCommandQueue           *queue;
+  GPUQueue                  *queue;
   GPUCommandBuffer          *cmdb;
   GPURenderPassEncoder      *renderPass;
   GPUCopyPassEncoder        *copyPass;

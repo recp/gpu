@@ -34,7 +34,7 @@ destroy_scoped_buffer(GPUBuffer * __restrict buffer) {
 }
 
 static GPUResult
-write_scoped_buffer(GPUCommandQueue * __restrict queue,
+write_scoped_buffer(GPUQueue * __restrict queue,
                     GPUBuffer       * __restrict buffer,
                     uint64_t                     offset,
                     const void      * __restrict data,
@@ -47,7 +47,7 @@ write_scoped_buffer(GPUCommandQueue * __restrict queue,
 }
 
 static GPUResult
-read_scoped_buffer(GPUCommandQueue * __restrict queue,
+read_scoped_buffer(GPUQueue * __restrict queue,
                    GPUBuffer       * __restrict buffer,
                    uint64_t                     offset,
                    void           * __restrict outData,
@@ -60,7 +60,7 @@ read_scoped_buffer(GPUCommandQueue * __restrict queue,
 }
 
 static GPUResult
-write_scoped_texture(GPUCommandQueue             * __restrict queue,
+write_scoped_texture(GPUQueue             * __restrict queue,
                      GPUTexture                  * __restrict texture,
                      const GPUTextureWriteRegion * __restrict region,
                      const void                  * __restrict data,
@@ -87,7 +87,7 @@ create_scoped_texture_view(GPUTexture                     * __restrict texture,
 }
 
 static int
-wait_queue_writes(GPUDevice *device, GPUCommandQueue *queue) {
+wait_queue_writes(GPUDevice *device, GPUQueue *queue) {
   GPUQueueSubmitInfo submitInfo = {0};
   GPUCommandBuffer  *cmdb;
   GPUFence          *fence;
@@ -124,8 +124,8 @@ static int
 check_buffer_device_dispatch(GPUDevice *activeDevice) {
   GPUBuffer           *buffer;
   GPUBufferCreateInfo info = {0};
-  GPUCommandQueue     queue = {0};
-  GPUCommandQueue     foreignQueue = {0};
+  GPUQueue            queue = {0};
+  GPUQueue            foreignQueue = {0};
   GPUDevice           device = {0};
   GPUApi              scopedApi;
   uint32_t             source[4] = { 2u, 4u, 6u, 8u };
@@ -202,7 +202,7 @@ check_buffer_device_dispatch(GPUDevice *activeDevice) {
 static int
 check_texture_transfer_layout(GPUDevice *activeDevice) {
   GPUTextureWriteRegion region = {0};
-  GPUCommandQueue       queue = {0};
+  GPUQueue              queue = {0};
   GPUTexture            texture = {0};
   GPUDevice             device = {0};
   GPUApi                scopedApi;
@@ -294,7 +294,7 @@ check_texture_transfer_layout(GPUDevice *activeDevice) {
 static int
 check_texture_write_aspects(GPUDevice *activeDevice) {
   GPUTextureWriteRegion region  = {0};
-  GPUCommandQueue       queue   = {0};
+  GPUQueue              queue   = {0};
   GPUTexture            texture = {0};
   GPUDevice             device  = {0};
   GPUApi                scopedApi;
@@ -511,7 +511,7 @@ check_destroy_null_handles(void) {
 
 static int
 check_resource_validation(GPUDevice *device) {
-  GPUCommandQueue *queue;
+  GPUQueue        *queue;
   GPUBufferCreateInfo bufferInfo = {0};
   GPUTextureCreateInfo textureInfo = {0};
   GPUTextureInfo queriedTextureInfo = {0};

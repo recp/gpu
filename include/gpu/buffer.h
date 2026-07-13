@@ -56,7 +56,7 @@ GPUDestroyBuffer(GPUBuffer * __restrict buff);
 
 GPU_EXPORT
 GPUResult
-GPUQueueWriteBuffer(GPUCommandQueue * __restrict queue,
+GPUQueueWriteBuffer(GPUQueue        * __restrict queue,
                     GPUBuffer       * __restrict buff,
                     uint64_t                     dstOffset,
                     const void      * __restrict data,
@@ -64,7 +64,7 @@ GPUQueueWriteBuffer(GPUCommandQueue * __restrict queue,
 
 GPU_EXPORT
 GPUResult
-GPUQueueReadBuffer(GPUCommandQueue * __restrict queue,
+GPUQueueReadBuffer(GPUQueue        * __restrict queue,
                    GPUBuffer       * __restrict buff,
                    uint64_t                     srcOffset,
                    void           * __restrict outData,

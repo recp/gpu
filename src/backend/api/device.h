@@ -26,6 +26,12 @@ extern "C" {
 struct GPUApi;
 struct GPUInstance;
 
+typedef struct GPUQueueCreateInfo {
+  GPUQueueFlagBits flags;
+  GPUQueueFlagBits optionalFlags;
+  uint32_t         count;
+} GPUQueueCreateInfo;
+
 typedef struct GPUApiDevice {
   GPUAdapter*
   (*getAvailableAdapters)(GPUInstance   * __restrict inst,
@@ -55,9 +61,9 @@ typedef struct GPUApiDevice {
                            GPUFormat              format,
                            GPUFormatCapabilities * __restrict outCaps);
 
-  GPUDevice* (*createDevice)(GPUAdapter        * __restrict adapter,
-                             GPUCommandQueueCreateInfo      queCI[],
-                             uint32_t                       nQueCI);
+  GPUDevice* (*createDevice)(GPUAdapter             * __restrict adapter,
+                             GPUQueueCreateInfo       queCI[],
+                             uint32_t                 nQueCI);
 
   GPUResult (*waitIdle)(GPUDevice * __restrict device);
   void (*destroyDevice)(GPUDevice * __restrict device);

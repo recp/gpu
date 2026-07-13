@@ -11,7 +11,7 @@ typedef struct QueueCompletionProbe {
   int               count;
 } QueueCompletionProbe;
 
-static GPUCommandQueue  gScopedQueue;
+static GPUQueue  gScopedQueue;
 static GPUCommandBuffer gScopedCmdb;
 static GPUFrame         gScopedFrame;
 static uint32_t         gScopedQueueGetCalls;
@@ -104,7 +104,7 @@ get_ownership_format_capabilities(
 
 static GPUDevice *
 create_ownership_device(GPUAdapter               * __restrict adapter,
-                        GPUCommandQueueCreateInfo *queueInfos,
+                        GPUQueueCreateInfo *queueInfos,
                         uint32_t                   queueInfoCount) {
   (void)queueInfos;
   (void)queueInfoCount;
@@ -346,7 +346,7 @@ check_secondary_backend_instance(const GPUInstance *activeInstance) {
   return 1;
 }
 
-static GPUCommandQueue *
+static GPUQueue *
 get_scoped_queue(GPUDevice * __restrict device,
                  GPUQueueFlagBits       bits,
                  uint32_t               index) {
@@ -359,7 +359,7 @@ get_scoped_queue(GPUDevice * __restrict device,
 }
 
 static GPUCommandBuffer *
-new_scoped_cmdb(GPUCommandQueue * __restrict queue,
+new_scoped_cmdb(GPUQueue * __restrict queue,
                 const char      * __restrict label,
                 void            * __restrict sender,
                 GPUCommandBufferCompletionFn onComplete) {
@@ -408,7 +408,7 @@ end_scoped_frame(GPUApi   * __restrict api,
 static int
 check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   GPUApi           *api;
-  GPUCommandQueue  *queue;
+  GPUQueue         *queue;
   GPUCommandBuffer *cmdb;
   GPUFrame         *frame;
   GPUApi            scopedApi;
@@ -877,8 +877,8 @@ check_fence_create_validation(GPUDevice *device) {
 static int
 check_queue_selection(GPUDevice *device) {
   GPUDeviceCapabilities caps;
-  GPUCommandQueue *graphics0;
-  GPUCommandQueue *compute0;
+  GPUQueue        *graphics0;
+  GPUQueue        *compute0;
 
   if (!device) {
     return 0;
@@ -1072,11 +1072,11 @@ check_device_queue_create_validation(GPUAdapter *adapter) {
 
 static int
 check_queue_submit_fence(GPUDevice *device) {
-  GPUCommandQueue *queue;
+  GPUQueue        *queue;
   GPUCommandBuffer submittedCmdb = {0};
   GPUCommandBuffer noDrawableCmdb = {0};
   GPUCommandBuffer foreignCmdb = {0};
-  GPUCommandQueue foreignQueue = {0};
+  GPUQueue        foreignQueue = {0};
   GPUFrame fakeFrame = {0};
   GPUFrame noDrawableFrame = {0};
   GPUCommandBuffer *cmdb;
@@ -1254,7 +1254,7 @@ check_device_destroy_waits_for_submission(GPUAdapter *adapter) {
 
   QueueCompletionProbe  completionProbes[submitCount] = {0};
   GPUCommandBuffer     *buffers[submitCount];
-  GPUCommandQueue      *queue;
+  GPUQueue             *queue;
   GPUDevice            *device;
   GPUQueueSubmitInfo    submitInfo = {0};
 
@@ -1310,7 +1310,7 @@ check_device_destroy_waits_for_submission(GPUAdapter *adapter) {
 
 static int
 check_queue_submit_ex_semaphore(GPUDevice *device) {
-  GPUCommandQueue *queue;
+  GPUQueue        *queue;
   GPUCommandBuffer *cmdb;
   GPUCommandBuffer *buffers[1];
   GPUFence *fence;

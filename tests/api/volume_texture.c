@@ -122,7 +122,7 @@ check_volume_pixels(const uint8_t *pixels) {
 
 int
 gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
-  GPUCommandQueue               *queue;
+  GPUQueue                      *queue;
   GPUShaderLibrary              *library;
   GPUShaderLayout               *shaderLayout;
   GPUComputePipeline            *pipeline;

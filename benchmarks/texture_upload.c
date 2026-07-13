@@ -39,7 +39,7 @@ typedef struct TextureUpload {
   GPUInstance     *instance;
   GPUAdapter      *adapter;
   GPUDevice       *device;
-  GPUCommandQueue *queue;
+  GPUQueue        *queue;
   GPUTexture      *texture;
   GPUFence        *fence;
   void            *bytes;

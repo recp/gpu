@@ -77,7 +77,7 @@ mt_destroyBuffer(GPUBuffer * __restrict buff) {
 
 GPU_HIDE
 GPUResult
-mt_writeBuffer(GPUCommandQueue * __restrict queue,
+mt_writeBuffer(GPUQueue * __restrict queue,
                GPUBuffer       * __restrict buff,
                uint64_t                     dstOffset,
                const void      * __restrict data,
@@ -110,7 +110,7 @@ mt_writeBuffer(GPUCommandQueue * __restrict queue,
 
 GPU_HIDE
 GPUResult
-mt_readBuffer(GPUCommandQueue * __restrict queue,
+mt_readBuffer(GPUQueue * __restrict queue,
               GPUBuffer       * __restrict buff,
               uint64_t                     srcOffset,
               void           * __restrict outData,

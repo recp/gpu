@@ -152,11 +152,11 @@ GPU_HIDE
 GPUSwapchain*
 dx12_createSwapchain(GPUApi                    * __restrict api,
                      GPUDevice                 * __restrict device,
-                     GPUCommandQueue           * __restrict queue,
+                     GPUQueue                  * __restrict queue,
                      const GPUSwapchainCreateInfo * __restrict info) {
   GPUInstanceDX12            *instanceDX12;
   GPUDeviceDX12              *deviceDX12;
-  GPUCommandQueueDX12        *queueDX12;
+  GPUQueueDX12               *queueDX12;
   GPUSwapchainDX12           *native;
   GPUSwapchain               *swapchain;
   IDXGISwapChain1            *swapchain1;

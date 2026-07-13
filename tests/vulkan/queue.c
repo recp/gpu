@@ -46,7 +46,7 @@ on_complete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 static int
-wait_queue(GPUCommandQueue *queue, GPUFence *fence) {
+wait_queue(GPUQueue *queue, GPUFence *fence) {
   GPUQueueSubmitInfo submitInfo = {0};
   GPUCommandBuffer  *cmdb;
 
@@ -68,9 +68,9 @@ wait_queue(GPUCommandQueue *queue, GPUFence *fence) {
 
 static int
 buffer_transfers_reuse(GPUDevice       *device,
-                       GPUCommandQueue *queue,
+                       GPUQueue        *queue,
                        GPUFence        *fence) {
-  GPUCommandQueueVk  *native;
+  GPUQueueVk         *native;
   GPUBufferCreateInfo bufferInfo = {0};
   GPUTransferSlotVk   slots[GPU_VK_TRANSFER_SLOT_COUNT];
   GPUBuffer          *buffer;
@@ -195,9 +195,9 @@ buffer_transfers_reuse(GPUDevice       *device,
 
 static int
 texture_uploads_reuse(GPUDevice       *device,
-                      GPUCommandQueue *queue,
+                      GPUQueue        *queue,
                       GPUFence        *fence) {
-  GPUCommandQueueVk     *native;
+  GPUQueueVk            *native;
   GPUTextureCreateInfo   textureInfo = {0};
   GPUTextureWriteRegion writeRegion = {0};
   GPUTransferSlotVk      slots[GPU_VK_TRANSFER_SLOT_COUNT];
@@ -284,7 +284,7 @@ texture_uploads_reuse(GPUDevice       *device,
 }
 
 static int
-submit_empty_batch(GPUCommandQueue *queue,
+submit_empty_batch(GPUQueue *queue,
                    GPUFence        *fence,
                    CompletionProbe *probe) {
   GPUCommandBuffer *buffers[VULKAN_COMMAND_BATCH_SIZE];
@@ -317,7 +317,7 @@ submit_empty_batch(GPUCommandQueue *queue,
 }
 
 static int
-submit_empty_compute(GPUCommandQueue *queue, GPUFence *fence) {
+submit_empty_compute(GPUQueue *queue, GPUFence *fence) {
   GPUCommandBuffer      *cmdb;
   GPUComputePassEncoder *pass;
   GPUQueueSubmitInfo     submitInfo = {0};
@@ -340,7 +340,7 @@ submit_empty_compute(GPUCommandQueue *queue, GPUFence *fence) {
 
 static int
 timestamp_roundtrip(GPUDevice       *device,
-                    GPUCommandQueue *queue,
+                    GPUQueue        *queue,
                     GPUFence        *fence) {
   GPUQuerySetCreateInfo queryInfo = {0};
   GPUBufferCreateInfo   bufferInfo = {0};
@@ -429,7 +429,7 @@ cleanup:
 
 static int
 pipeline_statistics_roundtrip(GPUDevice       *device,
-                              GPUCommandQueue *queue,
+                              GPUQueue        *queue,
                               GPUFence        *fence) {
   GPUQuerySetCreateInfo  queryInfo  = {0};
   GPUBufferCreateInfo    bufferInfo = {0};
@@ -511,7 +511,7 @@ cleanup:
 
 static int
 occlusion_roundtrip(GPUDevice       *device,
-                    GPUCommandQueue *queue,
+                    GPUQueue        *queue,
                     GPUFence        *fence) {
   GPUTextureCreateInfo           textureInfo = {0};
   GPUTextureCreateInfo           resolveTextureInfo = {0};
@@ -757,8 +757,8 @@ main(void) {
   GPUInstance           *instance;
   GPUAdapter            *adapter;
   GPUDevice             *device;
-  GPUCommandQueue       *graphics;
-  GPUCommandQueue       *compute;
+  GPUQueue              *graphics;
+  GPUQueue              *compute;
   GPUFence              *fence;
   GPUFeature             requiredFeatures[5];
   uint32_t               adapterCount;

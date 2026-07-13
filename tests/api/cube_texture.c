@@ -73,7 +73,7 @@ check_cube_layout(GPUShaderLayout *shaderLayout) {
 
 int
 gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath) {
-  GPUCommandQueue              *queue;
+  GPUQueue                     *queue;
   GPUShaderLibrary             *library;
   GPUShaderLayout              *shaderLayout;
   GPUComputePipeline           *pipeline;

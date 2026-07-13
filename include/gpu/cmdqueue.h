@@ -43,13 +43,7 @@ typedef enum GPUQueueFlagBits {
 #define GPU_QUEUE_COMPUTE  GPU_QUEUE_COMPUTE_BIT
 #define GPU_QUEUE_TRANSFER GPU_QUEUE_TRANSFER_BIT
 
-typedef struct GPUCommandQueueCreateInfo {
-  GPUQueueFlagBits flags;
-  GPUQueueFlagBits optionalFlags;
-  uint32_t         count;
-} GPUCommandQueueCreateInfo;
-
-typedef struct GPUCommandQueue GPUCommandQueue;
+typedef struct GPUQueue GPUQueue;
 typedef struct GPUCommandBuffer GPUCommandBuffer;
 
 typedef void (*GPUCommandBufferCompletionFn)(void            *__restrict sender,
@@ -96,29 +90,20 @@ typedef struct GPUSemaphoreCreateInfo {
   uint64_t         initialValue;
 } GPUSemaphoreCreateInfo;
 
-/*!
- * @brief get command queue created created with logical device creation.
- *
- * @param[in]  device init params, NULL to default.
- * @param[in]  bits   command queue type bits
- *
- * Convenience alias:
- * - `GPUGetCommandQueue(device, bits)` is a convenience wrapper over
- *   `GPUGetQueue(device, bits, 0)`.
- */
+/* Convenience alias for GPUGetQueue(device, bits, 0). */
 GPU_EXPORT
-GPUCommandQueue*
+GPUQueue*
 GPUGetCommandQueue(struct GPUDevice * __restrict device, GPUQueueFlagBits bits);
 
 GPU_EXPORT
-GPUCommandQueue*
+GPUQueue*
 GPUGetQueue(struct GPUDevice * __restrict device,
             GPUQueueFlagBits              bits,
             uint32_t                      index);
 
 GPU_EXPORT
 GPUResult
-GPUAcquireCommandBuffer(GPUCommandQueue   * __restrict cmdq,
+GPUAcquireCommandBuffer(GPUQueue          * __restrict cmdq,
                         const char        * __restrict label,
                         GPUCommandBuffer ** __restrict outCmdb);
 
@@ -134,13 +119,13 @@ GPUCommit(GPUCommandBuffer * __restrict cmdb);
 
 GPU_EXPORT
 GPUResult
-GPUQueueSubmit(GPUCommandQueue           * __restrict cmdq,
-               const GPUQueueSubmitInfo  * __restrict info);
+GPUQueueSubmit(GPUQueue                 * __restrict cmdq,
+               const GPUQueueSubmitInfo * __restrict info);
 
 GPU_EXPORT
 GPUResult
-GPUQueueSubmitEx(GPUCommandQueue             * __restrict cmdq,
-                 const GPUQueueSubmitExInfo  * __restrict info);
+GPUQueueSubmitEx(GPUQueue                   * __restrict cmdq,
+                 const GPUQueueSubmitExInfo * __restrict info);
 
 GPU_EXPORT
 GPUResult

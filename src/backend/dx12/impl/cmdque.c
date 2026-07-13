@@ -24,37 +24,37 @@ enum {
 };
 
 static GPUResult
-dx12__flushTransfers(GPUCommandQueue *queue, bool wait);
+dx12__flushTransfers(GPUQueue *queue, bool wait);
 
 static void
-dx12__queueLock(GPUCommandQueueDX12 *queue) {
+dx12__queueLock(GPUQueueDX12 *queue) {
   EnterCriticalSection(&queue->poolLock);
 }
 
 static void
-dx12__queueUnlock(GPUCommandQueueDX12 *queue) {
+dx12__queueUnlock(GPUQueueDX12 *queue) {
   LeaveCriticalSection(&queue->poolLock);
 }
 
 static void
-dx12__queueSignal(GPUCommandQueueDX12 *queue) {
+dx12__queueSignal(GPUQueueDX12 *queue) {
   WakeConditionVariable(&queue->pendingCondition);
 }
 
 static void
-dx12__queueBroadcast(GPUCommandQueueDX12 *queue) {
+dx12__queueBroadcast(GPUQueueDX12 *queue) {
   WakeAllConditionVariable(&queue->pendingCondition);
 }
 
 static void
-dx12__queueWait(GPUCommandQueueDX12 *queue) {
+dx12__queueWait(GPUQueueDX12 *queue) {
   SleepConditionVariableCS(&queue->pendingCondition,
                            &queue->poolLock,
                            INFINITE);
 }
 
 static void
-dx12__waitForCompletions(GPUCommandQueueDX12 *queue) {
+dx12__waitForCompletions(GPUQueueDX12 *queue) {
   dx12__queueLock(queue);
   while (queue->inFlightCount > 0u) {
     dx12__queueWait(queue);
@@ -63,15 +63,15 @@ dx12__waitForCompletions(GPUCommandQueueDX12 *queue) {
 }
 
 static GPUDevice *
-dx12__queueDevice(GPUCommandQueueDX12 *queue) {
+dx12__queueDevice(GPUQueueDX12 *queue) {
   return queue && queue->queue ? queue->queue->_device : NULL;
 }
 
 GPU_HIDE
 GPUResult
-dx12_getTimestampPeriod(GPUCommandQueue *queue,
+dx12_getTimestampPeriod(GPUQueue *queue,
                         double          *outNanosecondsPerTick) {
-  GPUCommandQueueDX12 *native;
+  GPUQueueDX12        *native;
   UINT64               frequency;
 
   native = queue ? queue->_priv : NULL;
@@ -88,7 +88,7 @@ dx12_getTimestampPeriod(GPUCommandQueue *queue,
 }
 
 static bool
-dx12__lostReason(GPUCommandQueueDX12 *queue,
+dx12__lostReason(GPUQueueDX12 *queue,
                  HRESULT              result,
                  GPUDeviceLostReason *outReason) {
   GPUDeviceDX12 *native;
@@ -126,7 +126,7 @@ dx12__lostReason(GPUCommandQueueDX12 *queue,
 }
 
 static void
-dx12__reportQueueError(GPUCommandQueueDX12 *queue,
+dx12__reportQueueError(GPUQueueDX12 *queue,
                        const char          *operation,
                        HRESULT             result) {
   GPUDeviceErrorType  type;
@@ -160,7 +160,7 @@ dx12__reportQueueError(GPUCommandQueueDX12 *queue,
 
 #if GPU_BUILD_WITH_VALIDATION
 static void
-dx12__logDebugMessages(GPUCommandQueueDX12 *queue) {
+dx12__logDebugMessages(GPUQueueDX12 *queue) {
   GPUDeviceDX12   *device;
   ID3D12InfoQueue *infoQueue;
   D3D12_MESSAGE   *message;
@@ -212,7 +212,7 @@ dx12__logDebugMessages(GPUCommandQueueDX12 *queue) {
 static void
 dx12__recycleCommandBuffer(GPUCommandBuffer *cmdb) {
   GPUCommandBufferDX12 *native;
-  GPUCommandQueueDX12  *queue;
+  GPUQueueDX12         *queue;
 
   native = cmdb ? cmdb->_priv : NULL;
   queue  = native ? native->owner : NULL;
@@ -227,7 +227,7 @@ dx12__recycleCommandBuffer(GPUCommandBuffer *cmdb) {
 }
 
 static GPUCommandBufferDX12*
-dx12__takePendingCommand(GPUCommandQueueDX12 *queue) {
+dx12__takePendingCommand(GPUQueueDX12 *queue) {
   GPUCommandBufferDX12 *native;
 
   dx12__queueLock(queue);
@@ -248,7 +248,7 @@ dx12__takePendingCommand(GPUCommandQueueDX12 *queue) {
 }
 
 static bool
-dx12__waitForFence(GPUCommandQueueDX12 *queue,
+dx12__waitForFence(GPUQueueDX12 *queue,
                    UINT64                value,
                    HANDLE                event) {
   UINT64  completedValue;
@@ -294,7 +294,7 @@ dx12__waitForFence(GPUCommandQueueDX12 *queue,
 
 GPU_HIDE
 bool
-dx12_waitQueueFence(GPUCommandQueueDX12 *queue,
+dx12_waitQueueFence(GPUQueueDX12 *queue,
                     UINT64                value,
                     HANDLE                event) {
   bool finished;
@@ -317,7 +317,7 @@ dx12_waitQueueFence(GPUCommandQueueDX12 *queue,
 
 static DWORD WINAPI
 dx12__completionMain(LPVOID context) {
-  GPUCommandQueueDX12  *queue;
+  GPUQueueDX12         *queue;
   GPUCommandBufferDX12 *native;
   GPUCommandBuffer     *cmdb;
   UINT64                fenceValue;
@@ -347,7 +347,7 @@ dx12__completionMain(LPVOID context) {
 }
 
 static bool
-dx12__startWorker(GPUCommandQueueDX12 *queue) {
+dx12__startWorker(GPUQueueDX12 *queue) {
   InitializeCriticalSection(&queue->poolLock);
   InitializeConditionVariable(&queue->pendingCondition);
 
@@ -373,7 +373,7 @@ dx12__startWorker(GPUCommandQueueDX12 *queue) {
 }
 
 static void
-dx12__stopWorker(GPUCommandQueueDX12 *queue) {
+dx12__stopWorker(GPUQueueDX12 *queue) {
   if (!queue || !queue->workerStarted) {
     return;
   }
@@ -471,7 +471,7 @@ dx12__transferCapacity(uint64_t sizeBytes) {
 }
 
 static bool
-dx12__ensureTransferContext(GPUCommandQueueDX12 *queue,
+dx12__ensureTransferContext(GPUQueueDX12 *queue,
                             GPUDeviceDX12       *device,
                             GPUTransferSlotDX12 *slot) {
   ID3D12CommandAllocator    *allocator;
@@ -547,7 +547,7 @@ fail:
 }
 
 static bool
-dx12__ensureTransferStaging(GPUCommandQueueDX12 *queue,
+dx12__ensureTransferStaging(GPUQueueDX12 *queue,
                             GPUDeviceDX12       *device,
                             GPUTransferSlotDX12 *slot,
                             uint64_t              sizeBytes,
@@ -606,10 +606,10 @@ dx12__ensureTransferStaging(GPUCommandQueueDX12 *queue,
 }
 
 static GPUResult
-dx12__waitTransfer(GPUCommandQueue     *queue,
+dx12__waitTransfer(GPUQueue     *queue,
                    GPUTransferSlotDX12 *slot,
                    bool                 countStall) {
-  GPUCommandQueueDX12 *native;
+  GPUQueueDX12        *native;
   GPUDeviceDX12       *device;
   UINT64               completedValue;
   HRESULT              result;
@@ -666,14 +666,14 @@ dx12__waitTransfer(GPUCommandQueue     *queue,
 
 GPU_HIDE
 GPUResult
-dx12_beginTransfer(GPUCommandQueue             *queue,
+dx12_beginTransfer(GPUQueue             *queue,
                    D3D12_HEAP_TYPE              heapType,
                    uint64_t                     stagingBytes,
                    ID3D12GraphicsCommandList  **outCommandList,
                    ID3D12Resource             **outStaging,
                    void                       **outMapped,
                    uint64_t                    *outOffset) {
-  GPUCommandQueueDX12 *native;
+  GPUQueueDX12        *native;
   GPUDeviceDX12       *device;
   GPUTransferSlotDX12 *slot;
   GPUResult            waitResult;
@@ -769,8 +769,8 @@ dx12_beginTransfer(GPUCommandQueue             *queue,
 }
 
 static GPUResult
-dx12__flushTransfers(GPUCommandQueue *queue, bool wait) {
-  GPUCommandQueueDX12 *native;
+dx12__flushTransfers(GPUQueue *queue, bool wait) {
+  GPUQueueDX12        *native;
   GPUTransferSlotDX12 *slot;
   ID3D12CommandList   *commandLists[1];
   UINT64               fenceValue;
@@ -831,8 +831,8 @@ dx12__flushTransfers(GPUCommandQueue *queue, bool wait) {
 
 GPU_HIDE
 GPUResult
-dx12_submitTransfer(GPUCommandQueue *queue, bool wait) {
-  GPUCommandQueueDX12 *native;
+dx12_submitTransfer(GPUQueue *queue, bool wait) {
+  GPUQueueDX12        *native;
 
   native = queue ? queue->_priv : NULL;
   if (!native || !native->transferOpen) {
@@ -846,8 +846,8 @@ dx12_submitTransfer(GPUCommandQueue *queue, bool wait) {
 
 GPU_HIDE
 void
-dx12_abortTransfer(GPUCommandQueue *queue) {
-  GPUCommandQueueDX12 *native;
+dx12_abortTransfer(GPUQueue *queue) {
+  GPUQueueDX12        *native;
   GPUTransferSlotDX12 *slot;
 
   native = queue ? queue->_priv : NULL;
@@ -865,10 +865,10 @@ dx12_abortTransfer(GPUCommandQueue *queue) {
 }
 
 GPU_HIDE
-GPUCommandQueue*
+GPUQueue*
 dx12_createCommandQueue(GPUDevice *device, GPUQueueFlagBits bits) {
-  GPUCommandQueueDX12      *native;
-  GPUCommandQueue          *queue;
+  GPUQueueDX12             *native;
+  GPUQueue                 *queue;
   GPUDeviceDX12            *deviceDX12;
   D3D12_COMMAND_QUEUE_DESC  queueDesc = {0};
   D3D12_COMMAND_LIST_TYPE   type;
@@ -933,8 +933,8 @@ fail:
 
 GPU_HIDE
 void
-dx12_destroyCommandQueue(GPUCommandQueue *queue) {
-  GPUCommandQueueDX12  *native;
+dx12_destroyCommandQueue(GPUQueue *queue) {
+  GPUQueueDX12         *native;
   GPUCommandBufferDX12 *command;
   GPUCommandBufferDX12 *next;
 
@@ -1007,7 +1007,7 @@ dx12_destroyCommandQueue(GPUCommandQueue *queue) {
 
 GPU_HIDE
 bool
-dx12_waitCommandQueueIdle(GPUCommandQueueDX12 *queue) {
+dx12_waitCommandQueueIdle(GPUQueueDX12 *queue) {
   HANDLE  event;
   UINT64  fenceValue;
   HRESULT result;
@@ -1062,7 +1062,7 @@ dx12_waitDeviceIdle(GPUDevice * __restrict device) {
 
   idle = true;
   for (uint32_t i = 0u; i < deviceDX12->nCreatedQueues; i++) {
-    GPUCommandQueueDX12 *queue;
+    GPUQueueDX12        *queue;
 
     queue = deviceDX12->createdQueues[i] ?
       deviceDX12->createdQueues[i]->_priv : NULL;
@@ -1077,11 +1077,11 @@ dx12_waitDeviceIdle(GPUDevice * __restrict device) {
 }
 
 GPU_HIDE
-GPUCommandQueue*
+GPUQueue*
 dx12_getCommandQueue(GPUDevice * __restrict device,
                      GPUQueueFlagBits         bits,
                      uint32_t                 index) {
-  GPUCommandQueue *queue;
+  GPUQueue        *queue;
   GPUDeviceDX12   *deviceDX12;
   uint32_t         matchIndex;
   uint32_t         i;
@@ -1105,7 +1105,7 @@ dx12_getCommandQueue(GPUDevice * __restrict device,
 }
 
 GPU_HIDE
-GPUCommandQueue*
+GPUQueue*
 dx12_newCommandQueue(GPUDevice * __restrict device) {
   return dx12_getCommandQueue(device,
                               GPU_QUEUE_GRAPHICS_BIT |
@@ -1114,8 +1114,8 @@ dx12_newCommandQueue(GPUDevice * __restrict device) {
 }
 
 static GPUCommandBufferDX12*
-dx12__createCommandBufferState(GPUCommandQueue *queue) {
-  GPUCommandQueueDX12  *queueDX12;
+dx12__createCommandBufferState(GPUQueue *queue) {
+  GPUQueueDX12         *queueDX12;
   GPUCommandBufferDX12 *native;
   GPUCommandBuffer     *cmdb;
   GPUDeviceDX12        *deviceDX12;
@@ -1192,8 +1192,8 @@ fail:
 }
 
 static GPUCommandBufferDX12*
-dx12__takeCommandBufferState(GPUCommandQueue *queue) {
-  GPUCommandQueueDX12  *queueDX12;
+dx12__takeCommandBufferState(GPUQueue *queue) {
+  GPUQueueDX12         *queueDX12;
   GPUCommandBufferDX12 *native;
 
   queueDX12 = queue->_priv;
@@ -1209,7 +1209,7 @@ dx12__takeCommandBufferState(GPUCommandQueue *queue) {
 
 GPU_HIDE
 GPUCommandBuffer*
-dx12_newCommandBuffer(GPUCommandQueue  * __restrict queue,
+dx12_newCommandBuffer(GPUQueue  * __restrict queue,
                       const char       * __restrict label,
                       void             * __restrict sender,
                       GPUCommandBufferCompletionFn  oncomplete) {
@@ -1277,7 +1277,7 @@ GPU_HIDE
 GPUResult
 dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   GPUCommandBufferDX12 *native;
-  GPUCommandQueueDX12  *queue;
+  GPUQueueDX12         *queue;
   GPUSwapchainDX12     *swapchain;
   ID3D12CommandList    *commandLists[1];
   HRESULT               result;

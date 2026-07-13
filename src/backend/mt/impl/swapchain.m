@@ -111,7 +111,7 @@ GPU_HIDE
 GPUSwapchain*
 mt_createSwapchain(GPUApi          * __restrict api,
                    GPUDevice       * __restrict device,
-                   GPUCommandQueue * __restrict cmdQue,
+                   GPUQueue        * __restrict cmdQue,
                    const GPUSwapchainCreateInfo * __restrict info) {
   GPUDeviceMT       *deviceMT;
   GPUSwapchain      *swapchain;

@@ -1034,7 +1034,7 @@ vk__recordTextureWrite(VkCommandBuffer             command,
 
 GPU_HIDE
 GPUResult
-vk_writeTexture(GPUCommandQueue             * __restrict queue,
+vk_writeTexture(GPUQueue             * __restrict queue,
                 GPUTexture                  * __restrict texture,
                 const GPUTextureWriteRegion * __restrict region,
                 const void                  * __restrict data,

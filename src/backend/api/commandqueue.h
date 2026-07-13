@@ -24,22 +24,22 @@ extern "C" {
 #include <gpu/gpu.h>
 
 typedef struct GPUApiCommandQueue {
-  GPUCommandQueue*
+  GPUQueue*
   (*newCommandQueue)(GPUDevice * __restrict device);
 
-  GPUCommandQueue*
+  GPUQueue*
   (*getCommandQueue)(struct GPUDevice * __restrict device,
                      GPUQueueFlagBits              bits,
                      uint32_t                      index);
 
   GPUResult
-  (*getTimestampPeriod)(GPUCommandQueue *queue,
-                        double          *outNanosecondsPerTick);
+  (*getTimestampPeriod)(GPUQueue *queue,
+                        double   *outNanosecondsPerTick);
 
   GPUCommandBuffer*
-  (*newCommandBuffer)(GPUCommandQueue  * __restrict cmdb,
-                      const char       * __restrict label,
-                      void             * __restrict sender,
+  (*newCommandBuffer)(GPUQueue                  * __restrict cmdb,
+                      const char                * __restrict label,
+                      void                      * __restrict sender,
                       GPUCommandBufferCompletionFn  oncomplete);
   
   void

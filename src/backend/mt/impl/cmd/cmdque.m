@@ -36,7 +36,7 @@ mt_transferCapacity(uint64_t sizeBytes) {
 }
 
 static GPUResult
-mt_waitTransfer(GPUCommandQueue *queue,
+mt_waitTransfer(GPUQueue *queue,
                 MTTransferSlot *slot,
                 bool            countStall) {
   MTLCommandBufferStatus status;
@@ -68,7 +68,7 @@ mt_waitTransfer(GPUCommandQueue *queue,
 }
 
 static bool
-mt_ensureTransferStaging(GPUCommandQueue *queue,
+mt_ensureTransferStaging(GPUQueue *queue,
                          MTTransferSlot *slot,
                          uint64_t        sizeBytes) {
   GPUDeviceMT *device;
@@ -107,7 +107,7 @@ mt_ensureTransferStaging(GPUCommandQueue *queue,
 
 GPU_HIDE
 GPUResult
-mt_beginTransfer(GPUCommandQueue           *queue,
+mt_beginTransfer(GPUQueue           *queue,
                  uint64_t                   sizeBytes,
                  id<MTLBlitCommandEncoder> *outBlit,
                  id<MTLBuffer>             *outStaging,
@@ -182,7 +182,7 @@ mt_beginTransfer(GPUCommandQueue           *queue,
 
 GPU_HIDE
 GPUResult
-mt_flushTransfers(GPUCommandQueue *queue, bool wait) {
+mt_flushTransfers(GPUQueue *queue, bool wait) {
   MTCommandQueue *native;
   MTTransferSlot *slot;
   GPUResult       flushResult;
@@ -251,11 +251,11 @@ mt_ccmdbufOnComplete(GPUCommandBuffer * __restrict cmdb,
                      GPUCommandBufferCompletionFn  oncomplete);
 
 GPU_HIDE
-GPUCommandQueue*
+GPUQueue*
 mt_newCommandQueue(GPUDevice * __restrict device) {
-  GPUDeviceMT     *deviceMT;
-  GPUCommandQueue *que;
-  MTCommandQueue  *native;
+  GPUDeviceMT    *deviceMT;
+  GPUQueue       *que;
+  MTCommandQueue *native;
 
   deviceMT = device->_priv;
   que = calloc(1, sizeof(*que));
@@ -298,7 +298,7 @@ mt_newCommandQueue(GPUDevice * __restrict device) {
 
 GPU_HIDE
 void
-mt_destroyCommandQueue(GPUCommandQueue * __restrict queue) {
+mt_destroyCommandQueue(GPUQueue * __restrict queue) {
   MTCommandBuffer *command;
   MTCommandBuffer *next;
 
@@ -332,14 +332,14 @@ mt_destroyCommandQueue(GPUCommandQueue * __restrict queue) {
 }
 
 GPU_HIDE
-GPUCommandQueue*
+GPUQueue*
 mt_getCommandQueue(GPUDevice * __restrict device,
                    GPUQueueFlagBits       bits,
                    uint32_t               index) {
-  GPUCommandQueue *que;
-  GPUDeviceMT     *deviceMT;
-  uint32_t          matchIndex;
-  uint32_t          i;
+  GPUQueue    *que;
+  GPUDeviceMT *deviceMT;
+  uint32_t     matchIndex;
+  uint32_t     i;
 
   deviceMT = device->_priv;
   matchIndex = 0;
@@ -359,7 +359,7 @@ mt_getCommandQueue(GPUDevice * __restrict device,
 
 GPU_HIDE
 GPUResult
-mt_getTimestampPeriod(GPUCommandQueue *queue,
+mt_getTimestampPeriod(GPUQueue *queue,
                       double          *outNanosecondsPerTick) {
   GPUDeviceMT    *deviceMT;
   MTCommandQueue *native;
@@ -386,7 +386,7 @@ mt_getTimestampPeriod(GPUCommandQueue *queue,
 }
 
 static MTCommandBuffer *
-mt_createCommandBufferState(GPUCommandQueue *cmdb, MTCommandQueue *queue) {
+mt_createCommandBufferState(GPUQueue *cmdb, MTCommandQueue *queue) {
   GPUCommandBuffer *cb;
   MTCommandBuffer  *native;
   GPUDeviceMT      *deviceMT;
@@ -440,7 +440,7 @@ mt_createCommandBufferState(GPUCommandQueue *cmdb, MTCommandQueue *queue) {
 }
 
 static MTCommandBuffer *
-mt_takeCommandBufferState(GPUCommandQueue *cmdb, MTCommandQueue *queue) {
+mt_takeCommandBufferState(GPUQueue *cmdb, MTCommandQueue *queue) {
   MTCommandBuffer *native;
 
   os_unfair_lock_lock(&queue->poolLock);
@@ -456,7 +456,7 @@ mt_takeCommandBufferState(GPUCommandQueue *cmdb, MTCommandQueue *queue) {
 
 GPU_HIDE
 GPUCommandBuffer*
-mt_newCommandBuffer(GPUCommandQueue  * __restrict cmdb,
+mt_newCommandBuffer(GPUQueue  * __restrict cmdb,
                     const char       * __restrict label,
                     void             * __restrict sender,
                     GPUCommandBufferCompletionFn  oncomplete) {
@@ -616,7 +616,7 @@ mt_reportCommandBufferError(GPUCommandBuffer * __restrict cmdb,
                             NSError          * __restrict error) {
   GPUDeviceErrorType  type;
   GPUDeviceLostReason lostReason;
-  GPUCommandQueue    *queue;
+  GPUQueue           *queue;
   GPUDevice          *device;
   GPUResult           result;
   const char         *detail;

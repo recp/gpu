@@ -57,7 +57,7 @@ GPUPresent(GPUCommandBuffer *cmdb, GPUFrame *frame);
 /* Schedules, submits, and consumes a frame with one command buffer. */
 GPU_EXPORT
 GPUResult
-GPUFinishFrame(GPUCommandQueue  * __restrict cmdq,
+GPUFinishFrame(GPUQueue         * __restrict cmdq,
                GPUCommandBuffer * __restrict cmdb,
                GPUFrame         * __restrict frame);
 

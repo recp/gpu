@@ -57,7 +57,7 @@ static const char *markerModeNames[] = {
 
 typedef struct MarkerFixture {
   GPUCommandBuffer      cmdb;
-  GPUCommandQueue       queue;
+  GPUQueue              queue;
   GPUDevice             device;
   GPUApi                api;
 } MarkerFixture;
@@ -68,7 +68,7 @@ static const char       *markerCopyLabel;
 static volatile uint64_t markerSink;
 
 static GPUCommandBuffer *
-marker_newCommandBuffer(GPUCommandQueue                *queue,
+marker_newCommandBuffer(GPUQueue                *queue,
                         const char                     *label,
                         void                           *sender,
                         GPUCommandBufferCompletionFn    oncomplete) {

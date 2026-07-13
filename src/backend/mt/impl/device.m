@@ -304,12 +304,12 @@ mt_getFormatCapabilities(
 
 extern
 GPU_HIDE
-GPUCommandQueue*
+GPUQueue*
 mt_newCommandQueue(GPUDevice * __restrict device);
 
 GPU_HIDE
 void
-mt_destroyCommandQueue(GPUCommandQueue * __restrict queue);
+mt_destroyCommandQueue(GPUQueue * __restrict queue);
 
 static bool
 mt_supportsMetal4(id<MTLDevice> device) {
@@ -358,7 +358,7 @@ mt_selectCommandMode(id<MTLDevice> device, MTCommandMode *outMode) {
 GPU_HIDE
 GPUDevice *
 mt_createDevice(GPUPhysicalDevice        *phyDevice,
-                GPUCommandQueueCreateInfo queCI[],
+                GPUQueueCreateInfo queCI[],
                 uint32_t                  nQueCI) {
   GPUDevice   *device;
   GPUDeviceMT *deviceMT;
@@ -432,7 +432,7 @@ mt_waitDeviceIdle(GPUDevice * __restrict device) {
   }
 
   for (uint32_t i = 0u; i < deviceMT->nCreatedQueues; i++) {
-    GPUCommandQueue *commandQueue;
+    GPUQueue        *commandQueue;
     MTCommandQueue *queue;
 
     commandQueue = deviceMT->createdQueues[i];

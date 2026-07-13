@@ -26,7 +26,7 @@ typedef struct GeneratedVertex {
   GPUInstance        *_instance;
   GPUAdapter         *_adapter;
   GPUDevice          *_device;
-  GPUCommandQueue    *_queue;
+  GPUQueue           *_queue;
   GPUSurface         *_surface;
   GPUSwapchain       *_swapchain;
   GPUShaderLibrary   *_library;

@@ -41,7 +41,7 @@ typedef struct GPUApiTexture {
   (*destroyView)(GPUTextureView * __restrict view);
 
   GPUResult
-  (*write)(GPUCommandQueue             * __restrict queue,
+  (*write)(GPUQueue             * __restrict queue,
            GPUTexture                  * __restrict texture,
            const GPUTextureWriteRegion * __restrict region,
            const void                  * __restrict data,

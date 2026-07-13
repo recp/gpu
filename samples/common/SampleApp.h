@@ -69,13 +69,13 @@ GPUSampleCreateDefaultSurfaceGPU(NSWindow        *window,
                                  GPUInstance    **outInstance,
                                  GPUAdapter     **outAdapter,
                                  GPUDevice      **outDevice,
-                                 GPUCommandQueue **outQueue,
+                                 GPUQueue       **outQueue,
                                  GPUSurface     **outSurface,
                                  GPUSwapchain   **outSwapchain) {
   GPUInstance     *instance;
   GPUAdapter      *adapter;
   GPUDevice       *device;
-  GPUCommandQueue *queue;
+  GPUQueue        *queue;
   GPUSurface      *surface;
   GPUSwapchain    *swapchain;
 

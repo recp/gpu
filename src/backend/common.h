@@ -38,7 +38,7 @@
 #define GPU__DEFINE_DEFAULT_QUEUES_IF_NEEDED(nQueCI, queCI)                   \
   if (queCI == NULL) {                                                        \
     nQueCI = 3;                                                               \
-    queCI  = (GPUCommandQueueCreateInfo[]){                                   \
+    queCI  = (GPUQueueCreateInfo[]){                                   \
       [0] = {                                                                 \
         .count = 1,                                                           \
         .flags = GPU_QUEUE_GRAPHICS_BIT | GPU_QUEUE_COMPUTE_BIT,              \
