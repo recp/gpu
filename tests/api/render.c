@@ -792,7 +792,7 @@ check_render_pipeline_validation(GPUDevice *device,
   info.depthStencilFormat          = GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
   depthStencil.front.compare       = GPU_COMPARE_ALWAYS;
   depthStencil.front.failOp        = GPU_STENCIL_OP_REPLACE;
-  depthStencil.front.depthFailOp   = GPU_STENCIL_OP_INCREMENT_CLAMP;
+  depthStencil.front.depthFailOp   = GPU_STENCIL_OP_INCREMENT_WRAP;
   depthStencil.front.passOp        = GPU_STENCIL_OP_KEEP;
   depthStencil.back.compare        = GPU_COMPARE_ALWAYS;
   depthStencil.back.failOp         = GPU_STENCIL_OP_ZERO;
