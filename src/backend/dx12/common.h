@@ -332,6 +332,7 @@ struct GPUCommandQueueDX12 {
   HANDLE                  completionEvent;
   HANDLE                  worker;
   UINT64                  nextFenceValue;
+  UINT64                  finishedFenceValue;
   D3D12_COMMAND_LIST_TYPE type;
   uint32_t                inFlightCount;
   bool                    workerStarted;
@@ -354,6 +355,7 @@ typedef struct GPUSamplerDX12 {
 typedef struct GPUFrameDX12 {
   GPUSwapChainDX12      *swapchain;
   ID3D12Resource        *renderTarget;
+  UINT64                 fenceValue;
   D3D12_RESOURCE_STATES  state;
   GPUFrame               frame;
   GPUTexture             target;
@@ -366,6 +368,7 @@ struct GPUSwapChainDX12 {
   IDXGISwapChain3      *swapChain;
   ID3D12DescriptorHeap *rtvHeap;
   GPUFrameDX12         *frames;
+  HANDLE                 frameEvent;
   DXGI_FORMAT           format;
   UINT                  imageCount;
   UINT                  frameIndex;

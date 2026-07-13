@@ -244,10 +244,16 @@ dx12__takePendingCommand(GPUCommandQueueDX12 *queue) {
 }
 
 static bool
-dx12__waitForFence(GPUCommandQueueDX12 *queue, UINT64 value) {
+dx12__waitForFence(GPUCommandQueueDX12 *queue,
+                   UINT64                value,
+                   HANDLE                event) {
   UINT64  completedValue;
   HRESULT result;
   DWORD   waitResult;
+
+  if (!queue || !queue->completionFence || !event || value == 0u) {
+    return value == 0u;
+  }
 
   completedValue = queue->completionFence->lpVtbl->GetCompletedValue(
     queue->completionFence
@@ -265,14 +271,14 @@ dx12__waitForFence(GPUCommandQueueDX12 *queue, UINT64 value) {
   result = queue->completionFence->lpVtbl->SetEventOnCompletion(
     queue->completionFence,
     value,
-    queue->completionEvent
+    event
   );
   if (FAILED(result)) {
     dx12__reportQueueError(queue, "fence wait", result);
     return false;
   }
 
-  waitResult = WaitForSingleObject(queue->completionEvent, INFINITE);
+  waitResult = WaitForSingleObject(event, INFINITE);
   if (waitResult != WAIT_OBJECT_0) {
     dx12__reportQueueError(queue,
                            "completion event wait",
@@ -282,21 +288,51 @@ dx12__waitForFence(GPUCommandQueueDX12 *queue, UINT64 value) {
   return true;
 }
 
+GPU_HIDE
+bool
+dx12_waitQueueFence(GPUCommandQueueDX12 *queue,
+                    UINT64                value,
+                    HANDLE                event) {
+  bool finished;
+
+  if (value == 0u) {
+    return true;
+  }
+  if (!dx12__waitForFence(queue, value, event)) {
+    return false;
+  }
+
+  dx12__queueLock(queue);
+  while (!queue->stopping && queue->finishedFenceValue < value) {
+    dx12__queueWait(queue);
+  }
+  finished = queue->finishedFenceValue >= value;
+  dx12__queueUnlock(queue);
+  return finished;
+}
+
 static DWORD WINAPI
 dx12__completionMain(LPVOID context) {
   GPUCommandQueueDX12  *queue;
   GPUCommandBufferDX12 *native;
   GPUCommandBuffer     *cmdb;
+  UINT64                fenceValue;
   bool                  completed;
 
   queue = context;
   while ((native = dx12__takePendingCommand(queue))) {
-    cmdb      = &native->commandBuffer;
-    completed = dx12__waitForFence(queue, native->fenceValue);
+    cmdb       = &native->commandBuffer;
+    fenceValue = native->fenceValue;
+    completed  = dx12__waitForFence(queue,
+                                    fenceValue,
+                                    queue->completionEvent);
     gpuFinishCommandBuffer(cmdb,
                            completed ? dx12__recycleCommandBuffer : NULL);
 
     dx12__queueLock(queue);
+    if (completed && fenceValue > queue->finishedFenceValue) {
+      queue->finishedFenceValue = fenceValue;
+    }
     if (queue->inFlightCount > 0u) {
       queue->inFlightCount--;
     }
@@ -797,6 +833,9 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   }
 
   native->fenceValue = fenceValue;
+  if (swapchain && swapchain->frameIndex < swapchain->imageCount) {
+    swapchain->frames[swapchain->frameIndex].fenceValue = fenceValue;
+  }
   dx12__queueLock(queue);
   queue->inFlightCount++;
   if (queue->pendingTail) {

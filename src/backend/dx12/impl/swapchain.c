@@ -141,6 +141,9 @@ dx12__destroySwapChainState(GPUSwapChainDX12 *swapchain) {
   if (swapchain->swapChain) {
     swapchain->swapChain->lpVtbl->Release(swapchain->swapChain);
   }
+  if (swapchain->frameEvent) {
+    CloseHandle(swapchain->frameEvent);
+  }
   free(swapchain->frames);
   free(swapchain);
 }
@@ -262,6 +265,13 @@ dx12_createSwapChain(GPUApi                    * __restrict api,
   swapchain1->lpVtbl->Release(swapchain1);
   if (FAILED(result) || !native->swapChain) {
     dx12__logSwapchainError("QueryInterface", result);
+    dx12__destroySwapChainState(native);
+    free(swapchain);
+    return NULL;
+  }
+
+  native->frameEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
+  if (!native->frameEvent) {
     dx12__destroySwapChainState(native);
     free(swapchain);
     return NULL;

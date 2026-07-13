@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../impl.h"
 
 GPU_HIDE
 GPUFrame*
@@ -39,10 +40,16 @@ dx12_beginFrame(GPUApi       * __restrict api,
     return NULL;
   }
 
+  frame = &native->frames[frameIndex];
+  if (!dx12_waitQueueFence(native->queue,
+                           frame->fenceValue,
+                           native->frameEvent)) {
+    return NULL;
+  }
+
   native->frameIndex     = frameIndex;
   native->frameActive    = true;
   native->frameScheduled = false;
-  frame                  = &native->frames[frameIndex];
   frame->frame._priv      = native;
   frame->frame.target     = &frame->target;
   frame->frame.targetView = &frame->targetView;

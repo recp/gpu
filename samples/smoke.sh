@@ -74,6 +74,9 @@ run_step "triangle-usl embedded no-sidecar" \
 run_step "triangle-usl one-frame" \
   run_sample triangle-usl env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 GPU_USL_NO_SIDECAR=1 ./hello-triangle-usl
 
+run_step "triangle-usl warm-frame allocations" \
+  run_sample triangle-usl env GPU_SAMPLE_EXIT_AFTER_FRAMES=96 GPU_SAMPLE_ASSERT_ZERO_ALLOC=1 GPU_USL_NO_SIDECAR=1 ./hello-triangle-usl
+
 run_step "textured-quad-usl sidecar" \
   run_sample textured-quad-usl ./build.sh
 
