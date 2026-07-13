@@ -427,6 +427,7 @@ struct GPUCommandQueueVk {
   bool                stopping;
   bool                workerStarted;
   bool                transferOpen;
+  bool                transferPending;
 };
 
 typedef struct GPUSurfaceVk {
@@ -621,7 +622,7 @@ vk_beginTransfer(GPUCommandQueue *queue,
 
 GPU_HIDE
 GPUResult
-vk_submitTransfer(GPUCommandQueue *queue);
+vk_submitTransfer(GPUCommandQueue *queue, bool wait);
 
 GPU_HIDE
 void

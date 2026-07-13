@@ -1065,7 +1065,7 @@ vk_writeTexture(GPUCommandQueue             * __restrict queue,
     vk_abortTransfer(queue);
     return result;
   }
-  return vk_submitTransfer(queue);
+  return vk_submitTransfer(queue, false);
 }
 
 GPU_HIDE

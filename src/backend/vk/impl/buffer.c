@@ -364,7 +364,7 @@ vk_writeBuffer(GPUCommandQueue * __restrict queue,
                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT,
                     VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT);
-  return vk_submitTransfer(queue);
+  return vk_submitTransfer(queue, false);
 }
 
 GPU_HIDE
@@ -440,7 +440,7 @@ vk_readBuffer(GPUCommandQueue * __restrict queue,
                     VK_ACCESS_TRANSFER_WRITE_BIT,
                     VK_ACCESS_HOST_READ_BIT);
 
-  result = vk_submitTransfer(queue);
+  result = vk_submitTransfer(queue, true);
   if (result != GPU_OK) {
     return result;
   }
