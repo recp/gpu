@@ -2,6 +2,18 @@
 #include "../../src/api/device_internal.h"
 
 enum {
+  GPU_SOURCE_SAMPLER_VIEW_WIDTH     = 4u,
+  GPU_SOURCE_SAMPLER_VIEW_HEIGHT    = 4u,
+  GPU_SOURCE_SAMPLER_BASE_WIDTH     = GPU_SOURCE_SAMPLER_VIEW_WIDTH * 2u,
+  GPU_SOURCE_SAMPLER_BASE_HEIGHT    = GPU_SOURCE_SAMPLER_VIEW_HEIGHT * 2u,
+  GPU_SOURCE_SAMPLER_VIEW_BYTES     = GPU_SOURCE_SAMPLER_VIEW_WIDTH *
+                                      GPU_SOURCE_SAMPLER_VIEW_HEIGHT * 4u,
+  GPU_SOURCE_SAMPLER_BASE_BYTES     = GPU_SOURCE_SAMPLER_BASE_WIDTH *
+                                      GPU_SOURCE_SAMPLER_BASE_HEIGHT * 4u,
+  GPU_SOURCE_SAMPLER_ROW_PITCH      = 256u,
+  GPU_SOURCE_SAMPLER_READBACK_BYTES = GPU_SOURCE_SAMPLER_ROW_PITCH *
+                                      GPU_SOURCE_SAMPLER_VIEW_HEIGHT,
+
   GPU_SOURCE_SAMPLER_WARM_ITERATIONS = 16u,
   GPU_SOURCE_SAMPLER_WARM_BIND_REQUESTS =
     GPU_SOURCE_SAMPLER_WARM_ITERATIONS * 4u,
@@ -67,11 +79,12 @@ submit_source_sampler_draw(GPUCommandQueue            *queue,
 
 int
 gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
-  static const uint8_t sourcePixel[] = {255u, 0u, 0u, 255u};
-  const uint32_t width      = 4u;
-  const uint32_t height     = 4u;
-  const uint32_t rowPitch   = 256u;
-  const uint64_t imageBytes = (uint64_t)rowPitch * height;
+  const uint32_t sourceWidth  = GPU_SOURCE_SAMPLER_VIEW_WIDTH;
+  const uint32_t sourceHeight = GPU_SOURCE_SAMPLER_VIEW_HEIGHT;
+  const uint32_t width        = GPU_SOURCE_SAMPLER_VIEW_WIDTH;
+  const uint32_t height       = GPU_SOURCE_SAMPLER_VIEW_HEIGHT;
+  const uint32_t rowPitch     = GPU_SOURCE_SAMPLER_ROW_PITCH;
+  const uint64_t imageBytes   = (uint64_t)rowPitch * height;
   GPUCommandQueue                  *queue;
   GPUShaderLibrary                 *library;
   GPUShaderLayout                  *shaderLayout;
@@ -103,7 +116,10 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   GPUBufferTextureCopyRegion        copyRegion = {0};
   GPUQueueSubmitInfo                submitInfo = {0};
   const GPUBindGroupLayoutEntry    *layoutEntries;
-  uint8_t                           pixels[256u * 4u] = {0};
+  uint8_t                           greenPixels[GPU_SOURCE_SAMPLER_BASE_BYTES];
+  uint8_t                           bluePixels[GPU_SOURCE_SAMPLER_VIEW_BYTES];
+  uint8_t                           redPixels[GPU_SOURCE_SAMPLER_VIEW_BYTES];
+  uint8_t pixels[GPU_SOURCE_SAMPLER_READBACK_BYTES] = {0};
   uint64_t                          bytecodeSize;
   uint32_t                          layoutEntryCount;
   size_t                            centerOffset;
@@ -133,6 +149,25 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   if (!ok) {
     fprintf(stderr, "source sampler fixture setup failed\n");
     goto cleanup;
+  }
+
+  for (uint32_t i = 0u;
+       i < GPU_SOURCE_SAMPLER_BASE_WIDTH * GPU_SOURCE_SAMPLER_BASE_HEIGHT;
+       i++) {
+    greenPixels[i * 4u + 0u] = 0u;
+    greenPixels[i * 4u + 1u] = 255u;
+    greenPixels[i * 4u + 2u] = 0u;
+    greenPixels[i * 4u + 3u] = 255u;
+  }
+  for (uint32_t i = 0u; i < sourceWidth * sourceHeight; i++) {
+    bluePixels[i * 4u + 0u] = 0u;
+    bluePixels[i * 4u + 1u] = 0u;
+    bluePixels[i * 4u + 2u] = 255u;
+    bluePixels[i * 4u + 3u] = 255u;
+    redPixels[i * 4u + 0u]  = 255u;
+    redPixels[i * 4u + 1u]  = 0u;
+    redPixels[i * 4u + 2u]  = 0u;
+    redPixels[i * 4u + 3u]  = 255u;
   }
 
   if (GPUCreateShaderLibraryFromUSL(device,
@@ -168,10 +203,10 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   textureInfo.label            = "api-source-sampler-texture";
   textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
   textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
-  textureInfo.width            = 1u;
-  textureInfo.height           = 1u;
-  textureInfo.depthOrLayers    = 1u;
-  textureInfo.mipLevelCount    = 1u;
+  textureInfo.width            = GPU_SOURCE_SAMPLER_BASE_WIDTH;
+  textureInfo.height           = GPU_SOURCE_SAMPLER_BASE_HEIGHT;
+  textureInfo.depthOrLayers    = 3u;
+  textureInfo.mipLevelCount    = 3u;
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
                                  GPU_TEXTURE_USAGE_COPY_DST;
@@ -182,17 +217,43 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
     goto cleanup;
   }
 
-  writeRegion.width        = 1u;
-  writeRegion.height       = 1u;
-  writeRegion.depth        = 1u;
-  writeRegion.layerCount   = 1u;
-  writeRegion.bytesPerRow  = (uint32_t)sizeof(sourcePixel);
-  writeRegion.rowsPerImage = 1u;
+  writeRegion.width          = GPU_SOURCE_SAMPLER_BASE_WIDTH;
+  writeRegion.height         = GPU_SOURCE_SAMPLER_BASE_HEIGHT;
+  writeRegion.depth          = 1u;
+  writeRegion.baseArrayLayer = 1u;
+  writeRegion.layerCount     = 1u;
+  writeRegion.bytesPerRow    = GPU_SOURCE_SAMPLER_BASE_WIDTH * 4u;
+  writeRegion.rowsPerImage   = GPU_SOURCE_SAMPLER_BASE_HEIGHT;
   if (GPUQueueWriteTexture(queue,
                            sampledTexture,
                            &writeRegion,
-                           sourcePixel,
-                           sizeof(sourcePixel)) != GPU_OK) {
+                           greenPixels,
+                           sizeof(greenPixels)) != GPU_OK) {
+    fprintf(stderr, "source sampler base mip upload failed\n");
+    ok = 0;
+    goto cleanup;
+  }
+  writeRegion.mipLevel       = 1u;
+  writeRegion.width          = sourceWidth;
+  writeRegion.height         = sourceHeight;
+  writeRegion.baseArrayLayer = 0u;
+  writeRegion.bytesPerRow    = sourceWidth * 4u;
+  writeRegion.rowsPerImage   = sourceHeight;
+  if (GPUQueueWriteTexture(queue,
+                           sampledTexture,
+                           &writeRegion,
+                           bluePixels,
+                           sizeof(bluePixels)) != GPU_OK) {
+    fprintf(stderr, "source sampler base layer upload failed\n");
+    ok = 0;
+    goto cleanup;
+  }
+  writeRegion.baseArrayLayer = 1u;
+  if (GPUQueueWriteTexture(queue,
+                           sampledTexture,
+                           &writeRegion,
+                           redPixels,
+                           sizeof(redPixels)) != GPU_OK) {
     fprintf(stderr, "source sampler texture upload failed\n");
     ok = 0;
     goto cleanup;
@@ -201,9 +262,11 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
   viewInfo.chain.structSize = sizeof(viewInfo);
   viewInfo.label            = "api-source-sampler-view";
-  viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
+  viewInfo.viewType         = GPU_TEXTURE_VIEW_2D_ARRAY;
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  viewInfo.baseMipLevel     = 1u;
   viewInfo.mipLevelCount    = 1u;
+  viewInfo.baseArrayLayer   = 1u;
   viewInfo.arrayLayerCount  = 1u;
   if (GPUCreateTextureView(sampledTexture, &viewInfo, &sampledView) != GPU_OK ||
       !sampledView) {
@@ -250,11 +313,13 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
     goto cleanup;
   }
 
-  textureInfo.label  = "api-source-sampler-target";
-  textureInfo.width  = width;
-  textureInfo.height = height;
-  textureInfo.usage  = GPU_TEXTURE_USAGE_COLOR_TARGET |
-                       GPU_TEXTURE_USAGE_COPY_SRC;
+  textureInfo.label         = "api-source-sampler-target";
+  textureInfo.width         = width;
+  textureInfo.height        = height;
+  textureInfo.depthOrLayers = 1u;
+  textureInfo.mipLevelCount = 1u;
+  textureInfo.usage         = GPU_TEXTURE_USAGE_COLOR_TARGET |
+                              GPU_TEXTURE_USAGE_COPY_SRC;
   if (GPUCreateTexture(device, &textureInfo, &targetTexture) != GPU_OK ||
       !targetTexture) {
     fprintf(stderr, "source sampler target creation failed\n");
@@ -262,7 +327,10 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
     goto cleanup;
   }
 
-  viewInfo.label = "api-source-sampler-target-view";
+  viewInfo.label          = "api-source-sampler-target-view";
+  viewInfo.viewType       = GPU_TEXTURE_VIEW_2D;
+  viewInfo.baseMipLevel   = 0u;
+  viewInfo.baseArrayLayer = 0u;
   if (GPUCreateTextureView(targetTexture, &viewInfo, &targetView) != GPU_OK ||
       !targetView) {
     fprintf(stderr, "source sampler target view creation failed\n");

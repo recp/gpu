@@ -37,7 +37,7 @@ vert source_sampler_vs(vertexId: uint #vertex_id) -> SourceSamplerVSOut {
 }
 
 frag source_sampler_fs(input: SourceSamplerVSOut #stage_in,
-                       colorTex: texture2d<float> #texture(0)) -> float4 {
+                       colorTex: texture2d_array<float> #texture(0)) -> float4 {
   let linearSampler = sampler(.linear, .linear, .linear, .clampToEdge)
-  return colorTex.sample(linearSampler, input.uv)
+  return colorTex.sample(linearSampler, float3(input.uv, 0.0))
 }
