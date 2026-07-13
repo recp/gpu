@@ -468,6 +468,7 @@ vk_initRCE(GPUApiRCE *api) {
   api->stencilReference         = vk_stencilReference;
   api->pushConstants            = vk_renderPushConstants;
   api->vertexBuffer             = vk_vertexBuffer;
+  api->vertexInputBuffer        = vk_vertexBuffer;
   api->drawPrimitives           = vk_drawPrimitives;
   api->drawIndexedPrims         = vk_drawIndexedPrims;
   api->drawPrimitivesIndirect   = vk_drawPrimitivesIndirect;

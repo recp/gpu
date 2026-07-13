@@ -387,6 +387,18 @@ mt_vertexBuffer(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
+mt_vertexInputBuffer(GPURenderCommandEncoder *rce,
+                     GPUBuffer               *buffer,
+                     size_t                   offset,
+                     uint32_t                 index) {
+  index = mt_vertexBufferIndex(index);
+  if (index != UINT32_MAX) {
+    mt_vertexBuffer(rce, buffer, offset, index);
+  }
+}
+
+GPU_HIDE
+void
 mt_rceSetVertexTexture(GPURenderCommandEncoder *rce,
                        GPUTextureView          *view,
                        uint32_t                 index) {
@@ -664,6 +676,7 @@ mt_initRCE(GPUApiRCE *api) {
   api->pushConstants            = mt_renderPushConstants;
   api->vertexBytes              = mt_vertexBytes;
   api->vertexBuffer             = mt_vertexBuffer;
+  api->vertexInputBuffer        = mt_vertexInputBuffer;
   api->setVertexTexture         = mt_rceSetVertexTexture;
   api->setVertexSampler         = mt_rceSetVertexSampler;
   api->fragmentBuffer           = mt_fragmentBuffer;

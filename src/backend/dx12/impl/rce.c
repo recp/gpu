@@ -681,6 +681,7 @@ dx12_initRCE(GPUApiRCE *api) {
   api->stencilReference         = dx12_stencilReference;
   api->pushConstants            = dx12_renderPushConstants;
   api->vertexBuffer             = dx12_vertexBuffer;
+  api->vertexInputBuffer        = dx12_vertexBuffer;
   api->drawPrimitives           = dx12_drawPrimitives;
   api->drawIndexedPrims         = dx12_drawIndexedPrims;
   api->drawPrimitivesIndirect   = dx12_drawPrimitivesIndirect;

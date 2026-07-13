@@ -367,6 +367,47 @@ gpuGetPipelineLayoutGroups(GPUPipelineLayout *layout, uint32_t *outCount) {
 }
 
 GPU_HIDE
+uint32_t
+gpuPipelineLayoutBackendSlotCount(GPUPipelineLayout  *layout,
+                                  GPUBindKind         kind,
+                                  GPUShaderStageFlags stages) {
+  GPUPipelineLayoutPriv *priv;
+  uint32_t               count;
+
+  priv  = gpu_pipelineLayoutPriv(layout);
+  count = 0u;
+  if (!priv || !priv->backendBindings) {
+    return 0u;
+  }
+
+  for (uint32_t groupIndex = 0u;
+       groupIndex < priv->bindGroupLayoutCount;
+       groupIndex++) {
+    GPUBindGroupLayoutPriv *group;
+
+    group = gpu_layoutPriv(priv->bindGroupLayouts[groupIndex]);
+    if (!group || !priv->backendBindings[groupIndex]) {
+      continue;
+    }
+    for (uint32_t entryIndex = 0u; entryIndex < group->count; entryIndex++) {
+      const GPUBindGroupLayoutEntry *entry;
+      uint32_t                       binding;
+
+      entry   = &group->entries[entryIndex];
+      binding = priv->backendBindings[groupIndex][entryIndex];
+      if (entry->kind == kind &&
+          (entry->visibility & stages) != 0u &&
+          binding != UINT32_MAX &&
+          binding >= count) {
+        count = binding + 1u;
+      }
+    }
+  }
+
+  return count;
+}
+
+GPU_HIDE
 const uint32_t *
 gpuGetBindGroupLayoutBackendBindings(GPUBindGroupLayout *layout,
                                      uint32_t *outCount) {

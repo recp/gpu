@@ -270,7 +270,7 @@ gpu_bindRenderVertexBuffer(GPURenderPassEncoder *pass,
     slotBit = 0u;
   }
 
-  api->rce.vertexBuffer(pass, buf, off, index);
+  api->rce.vertexInputBuffer(pass, buf, off, index);
   gpuDeviceRecordBindEmission(device);
   if (slotBit != 0u) {
     pass->_vertexBuffers[index]       = buf;
@@ -292,7 +292,7 @@ gpuSetRenderVertexBuffer(GPURenderPassEncoder *pass,
   if (!(api = gpu_renderPassApi(pass)) || !api->rce.vertexBuffer)
     return;
 
-  gpu_bindRenderVertexBuffer(pass, api, buf, off, index);
+  api->rce.vertexBuffer(pass, buf, off, index);
 }
 
 GPU_EXPORT
@@ -310,7 +310,7 @@ GPUBindVertexBuffers(GPURenderPassEncoder   *pass,
     return;
   if (!(api = gpu_renderPassApi(pass)))
     return;
-  if (!api->rce.vertexBuffer)
+  if (!api->rce.vertexInputBuffer)
     return;
 
   for (i = 0; i < count; i++) {

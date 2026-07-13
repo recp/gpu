@@ -17,12 +17,22 @@
 #ifndef metal_binding_limits_h
 #define metal_binding_limits_h
 
+#include <stdint.h>
+
 enum {
   MT_ARGUMENT_BUFFER_COUNT   = 31u,
   MT_ARGUMENT_TEXTURE_COUNT  = 128u,
   MT_ARGUMENT_SAMPLER_COUNT  = 16u,
   MT_PUSH_CONSTANT_INDEX     = 30u,
-  MT_BIND_GROUP_BUFFER_COUNT = MT_PUSH_CONSTANT_INDEX
+  MT_BIND_GROUP_BUFFER_COUNT = MT_PUSH_CONSTANT_INDEX,
+  MT_VERTEX_BUFFER_COUNT     = MT_BIND_GROUP_BUFFER_COUNT
 };
+
+static inline uint32_t
+mt_vertexBufferIndex(uint32_t slot) {
+  return slot < MT_VERTEX_BUFFER_COUNT
+           ? MT_PUSH_CONSTANT_INDEX - 1u - slot
+           : UINT32_MAX;
+}
 
 #endif /* metal_binding_limits_h */

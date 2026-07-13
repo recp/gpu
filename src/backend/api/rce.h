@@ -118,6 +118,12 @@ typedef struct GPUApiRCE {
                   uint32_t                 index);
 
   void
+  (*vertexInputBuffer)(GPURenderCommandEncoder *rce,
+                       GPUBuffer               *buf,
+                       size_t                   off,
+                       uint32_t                 index);
+
+  void
   (*setVertexTexture)(GPURenderCommandEncoder *rce,
                       GPUTextureView          *view,
                       uint32_t                 index);

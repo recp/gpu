@@ -15,6 +15,7 @@
  */
 
 #include "../../common.h"
+#include "../../backend/mt/binding_limits.h"
 #include "pipeline_internal.h"
 #include "../descr/descriptor_internal.h"
 #include "../library_internal.h"
@@ -108,6 +109,91 @@ gpu_validatePipelineFormats(const GPUDevice                   *device,
       return result;
     }
     if (!caps.depthStencil) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+  }
+
+  return GPU_OK;
+}
+
+static bool
+gpu_bindingTypeIsBuffer(GPUBindingType type) {
+  return type == GPU_BINDING_UNIFORM_BUFFER ||
+         type == GPU_BINDING_STORAGE_BUFFER;
+}
+
+static GPUResult
+gpu_metalVertexResourceSlotCount(const GPURenderPipelineCreateInfo *info,
+                                 uint32_t                          *outCount) {
+  GPUShaderReflection reflection;
+  GPUResult            result;
+  uint32_t             count;
+
+  if (!info || !outCount) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (!gpuShaderLibraryHasEntryResourceInfo(info->library)) {
+    *outCount = gpuPipelineLayoutBackendSlotCount(
+      info->layout,
+      GPUBindKindBuffer,
+      GPU_SHADER_STAGE_VERTEX_BIT
+    );
+    return GPU_OK;
+  }
+
+  result = gpuGetShaderEntryReflection(info->library,
+                                       info->vertexEntry,
+                                       &reflection);
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  count = 0u;
+  for (uint32_t i = 0u; i < reflection.resourceCount; i++) {
+    const GPUShaderResourceReflection *resource;
+    uint32_t                           binding;
+
+    resource = &reflection.pResources[i];
+    if (!gpu_bindingTypeIsBuffer(resource->bindingType) ||
+        (resource->visibility & GPU_SHADER_STAGE_VERTEX_BIT) == 0u) {
+      continue;
+    }
+    binding = resource->binding;
+    gpuGetShaderResourceBackendBinding(info->library, resource, &binding);
+    if (binding >= count) {
+      count = binding + 1u;
+    }
+  }
+
+  GPUFreeShaderReflection(&reflection);
+  *outCount = count;
+  return GPU_OK;
+}
+
+static GPUResult
+gpu_validateMetalVertexBindings(const GPUApi                       *api,
+                                const GPURenderPipelineCreateInfo *info) {
+  GPUResult result;
+  uint32_t  resourceSlotCount;
+
+  if (!api || api->backend != GPU_BACKEND_METAL) {
+    return GPU_OK;
+  }
+
+  result = gpu_metalVertexResourceSlotCount(info, &resourceSlotCount);
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  for (uint32_t i = 0u; i < info->vertex.bufferLayoutCount; i++) {
+    uint32_t nativeIndex;
+
+    if (info->vertex.pBufferLayouts[i].attributeCount == 0u) {
+      continue;
+    }
+    nativeIndex = mt_vertexBufferIndex(i);
+    if (nativeIndex == UINT32_MAX || resourceSlotCount > nativeIndex) {
       return GPU_ERROR_UNSUPPORTED;
     }
   }
@@ -331,6 +417,12 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   result = gpu_validatePipelineFormats(device, info);
   if (result != GPU_OK)
     return result;
+  api = gpuDeviceApi(device);
+  if (!api)
+    return GPU_ERROR_BACKEND_FAILURE;
+  result = gpu_validateMetalVertexBindings(api, info);
+  if (result != GPU_OK)
+    return result;
   if (info->cache && !info->chain.pNext) {
     result = gpuPipelineCacheFindRender(info->cache, info, &pipeline);
     if (result != GPU_OK) {
@@ -343,9 +435,6 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   }
   if (!gpu_renderPipelineEntriesMatchStages(info))
     return GPU_ERROR_INVALID_ARGUMENT;
-  api = gpuDeviceApi(device);
-  if (!api)
-    return GPU_ERROR_BACKEND_FAILURE;
   {
     const char *entries[] = {info->vertexEntry, info->fragmentEntry};
 

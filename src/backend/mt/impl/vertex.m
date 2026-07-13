@@ -52,10 +52,16 @@ mt_attrib(GPUVertexDescriptor * __restrict vert,
           uint32_t                         offset,
           uint32_t                         bufferIndex) {
   MTLVertexDescriptor *desc;
+  uint32_t              nativeIndex;
+
+  nativeIndex = mt_vertexBufferIndex(bufferIndex);
+  if (nativeIndex == UINT32_MAX) {
+    return;
+  }
   desc = vert->_priv;
   desc.attributes[attribIndex].format = (MTLVertexFormat)format;
   desc.attributes[attribIndex].offset = offset;
-  desc.attributes[attribIndex].bufferIndex = bufferIndex;
+  desc.attributes[attribIndex].bufferIndex = nativeIndex;
 }
 
 GPU_HIDE
@@ -66,10 +72,16 @@ mt_layout(GPUVertexDescriptor * __restrict vert,
           uint32_t                         stepRate,
           GPUVertexStepFunction            stepFunction) {
   MTLVertexDescriptor *desc;
+  uint32_t              nativeIndex;
+
+  nativeIndex = mt_vertexBufferIndex(layoutIndex);
+  if (nativeIndex == UINT32_MAX) {
+    return;
+  }
   desc = vert->_priv;
-  desc.layouts[layoutIndex].stride = stride;
-  desc.layouts[layoutIndex].stepRate = stepRate;
-  desc.layouts[layoutIndex].stepFunction = (MTLVertexStepFunction)stepFunction;
+  desc.layouts[nativeIndex].stride       = stride;
+  desc.layouts[nativeIndex].stepRate     = stepRate;
+  desc.layouts[nativeIndex].stepFunction = (MTLVertexStepFunction)stepFunction;
 }
 
 GPU_HIDE
