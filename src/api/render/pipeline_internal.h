@@ -44,11 +44,11 @@ struct GPURenderPipeline {
 };
 
 GPU_HIDE
-GPURenderPipeline*
-gpuCreateRenderPipelineDesc(GPUPixelFormat pixelFormat);
+GPURenderPipeline *
+gpuCreateRenderPipelineDesc(GPUApi *api, GPUPixelFormat pixelFormat);
 
 GPU_HIDE
-GPURenderPipelineState*
+GPURenderPipelineState *
 gpuCompileRenderPipelineState(GPUDevice * __restrict device,
                               GPURenderPipeline * __restrict pipeline);
 

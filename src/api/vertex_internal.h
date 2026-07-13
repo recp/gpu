@@ -24,16 +24,17 @@ struct GPUVertexDescriptor {
 };
 
 GPU_HIDE
-GPUVertexDescriptor*
-gpuCreateVertexDesc(void);
+GPUVertexDescriptor *
+gpuCreateVertexDesc(GPUApi *api);
 
 GPU_HIDE
 void
-gpuDestroyVertexDesc(GPUVertexDescriptor *vert);
+gpuDestroyVertexDesc(GPUApi *api, GPUVertexDescriptor *vert);
 
 GPU_HIDE
 void
-gpuVertexDescAttrib(GPUVertexDescriptor * __restrict vertex,
+gpuVertexDescAttrib(GPUApi             * __restrict api,
+                    GPUVertexDescriptor * __restrict vertex,
                     uint32_t                         attribIndex,
                     GPUVertexFormat                  format,
                     uint32_t                         offset,
@@ -41,7 +42,8 @@ gpuVertexDescAttrib(GPUVertexDescriptor * __restrict vertex,
 
 GPU_HIDE
 void
-gpuVertexDescLayout(GPUVertexDescriptor * __restrict vertex,
+gpuVertexDescLayout(GPUApi             * __restrict api,
+                    GPUVertexDescriptor * __restrict vertex,
                     uint32_t                         layoutIndex,
                     uint32_t                         stride,
                     uint32_t                         stepRate,

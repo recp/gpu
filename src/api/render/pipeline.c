@@ -134,26 +134,35 @@ gpu_vertexStepFunction(GPUVertexStepMode mode) {
 }
 
 static GPUVertexDescriptor *
-gpu_createVertexDescriptorFromState(const GPUVertexState *state) {
+gpu_createVertexDescriptorFromState(GPUApi              *api,
+                                    const GPUVertexState *state) {
   GPUVertexDescriptor *desc;
   uint32_t i, j;
 
   if (state->bufferLayoutCount == 0)
     return NULL;
-  if (!state->pBufferLayouts)
+  if (!api || !state->pBufferLayouts ||
+      !api->vertex.newVertexDesc ||
+      !api->vertex.destroyVertexDesc ||
+      !api->vertex.attrib ||
+      !api->vertex.layout ||
+      !api->vertex.vertexDesc)
     return NULL;
 
-  desc = gpuCreateVertexDesc();
+  desc = gpuCreateVertexDesc(api);
   if (!desc)
     return NULL;
 
   for (i = 0; i < state->bufferLayoutCount; i++) {
     const GPUVertexBufferLayout *layout = &state->pBufferLayouts[i];
 
-    if (layout->attributeCount > 0 && !layout->pAttributes)
+    if (layout->attributeCount > 0 && !layout->pAttributes) {
+      gpuDestroyVertexDesc(api, desc);
       return NULL;
+    }
 
-    gpuVertexDescLayout(desc,
+    gpuVertexDescLayout(api,
+                        desc,
                         i,
                         layout->strideBytes,
                         1,
@@ -161,7 +170,12 @@ gpu_createVertexDescriptorFromState(const GPUVertexState *state) {
     for (j = 0; j < layout->attributeCount; j++) {
       const GPUVertexAttribute *attr = &layout->pAttributes[j];
 
-      gpuVertexDescAttrib(desc, attr->shaderLocation, attr->format, attr->offset, i);
+      gpuVertexDescAttrib(api,
+                          desc,
+                          attr->shaderLocation,
+                          attr->format,
+                          attr->offset,
+                          i);
     }
   }
 
@@ -323,7 +337,7 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
 
   colorFormat = info->pColorTargets[0].format;
-  pipeline = gpuCreateRenderPipelineDesc(colorFormat);
+  pipeline = gpuCreateRenderPipelineDesc(api, colorFormat);
   if (!pipeline)
     return GPU_ERROR_BACKEND_FAILURE;
 
@@ -332,14 +346,14 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   gpuPipelineSetFunction(pipeline, vertexFunc, GPU_FUNCTION_VERT);
   gpuPipelineSetFunction(pipeline, fragmentFunc, GPU_FUNCTION_FRAG);
 
-  vertexDesc = gpu_createVertexDescriptorFromState(&info->vertex);
+  vertexDesc = gpu_createVertexDescriptorFromState(api, &info->vertex);
   if (info->vertex.bufferLayoutCount > 0 && !vertexDesc) {
     GPUDestroyRenderPipeline(pipeline);
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (vertexDesc)
     gpuPipelineSetVertexDesc(pipeline, vertexDesc);
-  gpuDestroyVertexDesc(vertexDesc);
+  gpuDestroyVertexDesc(api, vertexDesc);
 
   for (i = 0; i < info->colorTargetCount; i++)
     gpuPipelineSetColorFormat(pipeline, i, info->pColorTargets[i].format);
@@ -519,23 +533,22 @@ gpuRecordPipelineCompile(GPUDevice *device, GPUPipelineCache *cache) {
 }
 
 GPU_HIDE
-GPURenderPipeline*
-gpuCreateRenderPipelineDesc(GPUPixelFormat pixelFormat) {
-  GPUApi *api;
-
-  if (!(api = gpuActiveGPUApi()))
+GPURenderPipeline *
+gpuCreateRenderPipelineDesc(GPUApi *api, GPUPixelFormat pixelFormat) {
+  if (!api || !api->render.newRenderPipeline)
     return NULL;
 
   return api->render.newRenderPipeline(pixelFormat);
 }
 
 GPU_HIDE
-GPURenderPipelineState*
+GPURenderPipelineState *
 gpuCompileRenderPipelineState(GPUDevice         * __restrict device,
                               GPURenderPipeline * __restrict pipeline) {
   GPUApi *api;
 
-  if (!(api = gpuActiveGPUApi()))
+  if (!device || !pipeline || !(api = gpuDeviceApi(device)) ||
+      pipeline->_api != api || !api->render.newRenderState)
     return NULL;
   
   return api->render.newRenderState(device, pipeline);
@@ -543,62 +556,62 @@ gpuCompileRenderPipelineState(GPUDevice         * __restrict device,
 
 GPU_HIDE
 void
-gpuPipelineSetFunction(GPURenderPipeline * __restrict pipline,
+gpuPipelineSetFunction(GPURenderPipeline * __restrict pipeline,
                        GPUFunction       * __restrict func,
-                       GPUFunctionType                functype) {
+                       GPUFunctionType                functionType) {
   GPUApi *api;
 
-  if (!(api = gpuActiveGPUApi()))
+  if (!pipeline || !(api = pipeline->_api) || !api->render.setFunction)
     return;
   
-  api->render.setFunction(pipline, func, functype);
+  api->render.setFunction(pipeline, func, functionType);
 }
 
 GPU_HIDE
 void
-gpuPipelineSetColorFormat(GPURenderPipeline * __restrict pipline,
+gpuPipelineSetColorFormat(GPURenderPipeline * __restrict pipeline,
                           uint32_t                       index,
                           GPUPixelFormat                 pixelFormat) {
   GPUApi *api;
 
-  if (!(api = gpuActiveGPUApi()))
+  if (!pipeline || !(api = pipeline->_api) || !api->render.colorFormat)
     return;
   
-  api->render.colorFormat(pipline, index, pixelFormat);
+  api->render.colorFormat(pipeline, index, pixelFormat);
 }
 
 GPU_HIDE
 void
-gpuPipelineSetDepthFormat(GPURenderPipeline * __restrict pipline,
+gpuPipelineSetDepthFormat(GPURenderPipeline * __restrict pipeline,
                           GPUPixelFormat                 pixelFormat) {
   GPUApi *api;
 
-  if (!(api = gpuActiveGPUApi()))
+  if (!pipeline || !(api = pipeline->_api) || !api->render.depthFormat)
     return;
   
-  api->render.depthFormat(pipline, pixelFormat);
+  api->render.depthFormat(pipeline, pixelFormat);
 }
 
 GPU_HIDE
 void
-gpuPipelineSetStencilFormat(GPURenderPipeline * __restrict pipline,
+gpuPipelineSetStencilFormat(GPURenderPipeline * __restrict pipeline,
                             GPUPixelFormat                pixelFormat) {
   GPUApi *api;
 
-  if (!(api = gpuActiveGPUApi()))
+  if (!pipeline || !(api = pipeline->_api) || !api->render.stencilFormat)
     return;
 
-  api->render.stencilFormat(pipline, pixelFormat);
+  api->render.stencilFormat(pipeline, pixelFormat);
 }
 
 GPU_HIDE
 void
-gpuPipelineSetSampleCount(GPURenderPipeline * __restrict pipline,
+gpuPipelineSetSampleCount(GPURenderPipeline * __restrict pipeline,
                           uint32_t                       sampleCount) {
   GPUApi *api;
 
-  if (!(api = gpuActiveGPUApi()))
+  if (!pipeline || !(api = pipeline->_api) || !api->render.sampleCount)
     return;
   
-  api->render.sampleCount(pipline, sampleCount);
+  api->render.sampleCount(pipeline, sampleCount);
 }

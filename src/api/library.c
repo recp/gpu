@@ -902,17 +902,6 @@ gpu_copyShaderReflection(const GPUShaderReflection *src,
   return GPU_OK;
 }
 
-//GPU_EXPORT
-//USLibrary*
-//GPUDefaultShaderLibrary(GPUDevice *device) {
-//  GPUApi *api;
-//
-//  if (!(api = gpuActiveGPUApi()))
-//    return NULL;
-//
-//  return NULL;
-//}
-
 GPU_EXPORT
 GPULibrary*
 GPUDefaultLibrary(GPUDevice *device) {
