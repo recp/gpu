@@ -126,6 +126,24 @@ dx12__texturePlaneCount(GPUFormat format) {
 }
 
 static bool
+dx12__textureWritePlane(GPUFormat         format,
+                        GPUTextureAspect  aspect,
+                        uint32_t         *outPlane) {
+  GPUTextureAspect resolved;
+
+  if (!outPlane ||
+      !gpuFormatResolveCopyAspect(format, aspect, &resolved)) {
+    return false;
+  }
+
+  *outPlane = resolved == GPU_TEXTURE_ASPECT_STENCIL_ONLY &&
+              dx12__texturePlaneCount(format) > 1u
+                ? 1u
+                : 0u;
+  return true;
+}
+
+static bool
 dx12__textureRangeValid(const GPUTextureDX12 *texture,
                         uint32_t               baseMip,
                         uint32_t               mipCount,
@@ -964,6 +982,7 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
   uint64_t                    totalSize;
   uint32_t                    copyCount;
   uint32_t                    copyDepth;
+  uint32_t                    plane;
   uint32_t                    rowCount;
   uint32_t                    subresource;
   uint32_t                    transitionLayerCount;
@@ -982,14 +1001,18 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  if (!gpuFormatDataLayout(texture->format,
-                           region->width,
-                           region->height,
-                           region->depth,
-                           region->layerCount,
-                           region->bytesPerRow,
-                           region->rowsPerImage,
-                           &dataLayout)) {
+  if (!dx12__textureWritePlane(texture->format,
+                               region->aspect,
+                               &plane) ||
+      !gpuFormatAspectDataLayout(texture->format,
+                                 region->aspect,
+                                 region->width,
+                                 region->height,
+                                 region->depth,
+                                 region->layerCount,
+                                 region->bytesPerRow,
+                                 region->rowsPerImage,
+                                 &dataLayout)) {
     return GPU_ERROR_UNSUPPORTED;
   }
   if (sizeBytes < dataLayout.requiredBytes) {
@@ -1008,8 +1031,10 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
   copyDepth            = texture3D ? region->depth : 1u;
   transitionLayerCount = texture3D ? 1u : region->layerCount;
   native->resource->lpVtbl->GetDesc(native->resource, &textureDesc);
-  subresource = region->mipLevel +
-                region->baseArrayLayer * texture->mipLevelCount;
+  subresource = dx12__textureSubresource(native,
+                                         region->mipLevel,
+                                         region->baseArrayLayer,
+                                         plane);
   deviceDX12->d3dDevice->lpVtbl->GetCopyableFootprints(
     deviceDX12->d3dDevice,
     &textureDesc,
@@ -1074,8 +1099,10 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
     uint64_t ignoredSize;
 
     baseOffset  = (uint64_t)layer * layerStride;
-    subresource = region->mipLevel +
-                  (region->baseArrayLayer + layer) * texture->mipLevelCount;
+    subresource = dx12__textureSubresource(native,
+                                           region->mipLevel,
+                                           region->baseArrayLayer + layer,
+                                           plane);
     deviceDX12->d3dDevice->lpVtbl->GetCopyableFootprints(
       deviceDX12->d3dDevice,
       &textureDesc,
@@ -1138,13 +1165,14 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
     goto cleanup;
   }
 
-  if (!dx12_transitionTexture(commandList,
-                              native,
-                              region->mipLevel,
-                              1u,
-                              region->baseArrayLayer,
-                              transitionLayerCount,
-                              D3D12_RESOURCE_STATE_COPY_DEST)) {
+  if (!dx12_transitionTexturePlane(commandList,
+                                   native,
+                                   region->mipLevel,
+                                   1u,
+                                   region->baseArrayLayer,
+                                   transitionLayerCount,
+                                   plane,
+                                   D3D12_RESOURCE_STATE_COPY_DEST)) {
     goto cleanup;
   }
   sourceBox.right  = region->width;
@@ -1155,8 +1183,10 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
     D3D12_TEXTURE_COPY_LOCATION destination = {0};
     uint64_t                    ignoredSize;
 
-    subresource = region->mipLevel +
-                  (region->baseArrayLayer + layer) * texture->mipLevelCount;
+    subresource = dx12__textureSubresource(native,
+                                           region->mipLevel,
+                                           region->baseArrayLayer + layer,
+                                           plane);
     deviceDX12->d3dDevice->lpVtbl->GetCopyableFootprints(
       deviceDX12->d3dDevice,
       &textureDesc,
@@ -1179,16 +1209,19 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
                                            0u,
                                            0u,
                                            &source,
-                                           &sourceBox);
+                                           dx12__depthFormat(texture->format)
+                                             ? NULL
+                                             : &sourceBox);
   }
   finalState = dx12__textureFinalState(texture->usage);
-  if (!dx12_transitionTexture(commandList,
-                              native,
-                              region->mipLevel,
-                              1u,
-                              region->baseArrayLayer,
-                              transitionLayerCount,
-                              finalState)) {
+  if (!dx12_transitionTexturePlane(commandList,
+                                   native,
+                                   region->mipLevel,
+                                   1u,
+                                   region->baseArrayLayer,
+                                   transitionLayerCount,
+                                   plane,
+                                   finalState)) {
     goto cleanup;
   }
   result = commandList->lpVtbl->Close(commandList);

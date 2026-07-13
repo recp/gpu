@@ -130,6 +130,7 @@ typedef struct MTCommandBuffer MTCommandBuffer;
 
 typedef struct MTCommandQueue {
   id<MTLCommandQueue> classic;
+  id<MTLCommandQueue> upload;
   id                   modern;
   MTCommandBuffer     *commands;
   MTCommandBuffer     *freeCommands;
@@ -177,6 +178,8 @@ GPU_HIDE GPUFormat mt_formatFromNative(MTLPixelFormat format);
 GPU_HIDE id<MTLTexture> mt_nativeTexture(GPUTexture *texture);
 GPU_HIDE id<MTLTexture> mt_copyTexture(GPUTexture *texture,
                                        GPUTextureAspect aspect);
+GPU_HIDE MTLBlitOption mt_copyOption(GPUFormat format,
+                                     GPUTextureAspect aspect);
 
 static inline MTCommandQueue *
 mt_commandQueue(GPUCommandQueue *queue) {

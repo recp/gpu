@@ -17,7 +17,15 @@ enum {
   VIEW_ROW_PITCH            = 256u,
   VIEW_SECOND_BUFFER_OFFSET = VIEW_ROW_PITCH * VIEW_FIRST_HEIGHT,
   VIEW_READBACK_BYTES       = VIEW_SECOND_BUFFER_OFFSET +
-                              VIEW_ROW_PITCH * VIEW_SECOND_HEIGHT
+                              VIEW_ROW_PITCH * VIEW_SECOND_HEIGHT,
+  VIEW_DS_FIRST_DEPTH_OFFSET    = 0u,
+  VIEW_DS_FIRST_STENCIL_OFFSET  = VIEW_ROW_PITCH * VIEW_FIRST_HEIGHT,
+  VIEW_DS_SECOND_DEPTH_OFFSET   = VIEW_DS_FIRST_STENCIL_OFFSET +
+                                  VIEW_ROW_PITCH * VIEW_FIRST_HEIGHT,
+  VIEW_DS_SECOND_STENCIL_OFFSET = VIEW_DS_SECOND_DEPTH_OFFSET +
+                                  VIEW_ROW_PITCH * VIEW_SECOND_HEIGHT,
+  VIEW_DS_READBACK_BYTES        = VIEW_DS_SECOND_STENCIL_OFFSET +
+                                  VIEW_ROW_PITCH * VIEW_SECOND_HEIGHT
 };
 
 static bool
@@ -621,12 +629,17 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
   GPUTextureCreateInfo       textureInfo   = {0};
   GPUTextureViewCreateInfo   viewInfo      = {0};
   GPUBufferCreateInfo        bufferInfo    = {0};
-  GPUBufferTextureCopyRegion copyRegion = {0};
+  GPUBufferTextureCopyRegion copyRegion    = {0};
+  GPUTextureWriteRegion      writeRegion   = {0};
   GPUTextureBarrier          textureBarrier = {0};
   GPUBarrierBatch            barrierBatch   = {0};
   GPUFormatCapabilities      formatCaps;
   GPUFormat                  format;
-  uint8_t                    pixels[VIEW_READBACK_BYTES] = {0};
+  uint8_t                    depthUpload[VIEW_ROW_PITCH *
+                                         VIEW_FIRST_HEIGHT] = {0};
+  uint8_t                    stencilUpload[VIEW_ROW_PITCH *
+                                           VIEW_FIRST_HEIGHT] = {0};
+  uint8_t                    pixels[VIEW_DS_READBACK_BYTES] = {0};
   int                        ok;
 
   queue      = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
@@ -669,7 +682,8 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
   textureInfo.mipLevelCount    = VIEW_TARGET_MIPS;
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_DEPTH_STENCIL |
-                                 GPU_TEXTURE_USAGE_COPY_SRC;
+                                 GPU_TEXTURE_USAGE_COPY_SRC |
+                                 GPU_TEXTURE_USAGE_COPY_DST;
   if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
     fprintf(stderr, "texture view depth-stencil texture setup failed\n");
     goto cleanup;
@@ -693,12 +707,52 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
     bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.chain.structSize = sizeof(bufferInfo);
     bufferInfo.label            = "texture-view-depth-stencil-readback";
-    bufferInfo.sizeBytes        = VIEW_READBACK_BYTES;
+    bufferInfo.sizeBytes        = VIEW_DS_READBACK_BYTES;
     bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
                                   GPU_BUFFER_USAGE_COPY_SRC;
     if (GPUCreateBuffer(device, &bufferInfo, &readback) != GPU_OK ||
         !readback) {
       fprintf(stderr, "texture view depth-stencil readback setup failed\n");
+      goto cleanup;
+    }
+
+    for (uint32_t y = 0u; y < VIEW_FIRST_HEIGHT; y++) {
+      float *depthRow;
+
+      depthRow = (float *)(depthUpload + (uint64_t)y * VIEW_ROW_PITCH);
+      for (uint32_t x = 0u; x < VIEW_FIRST_WIDTH; x++) {
+        depthRow[x] = 0.625f;
+      }
+      memset(stencilUpload + (uint64_t)y * VIEW_ROW_PITCH,
+             53,
+             VIEW_FIRST_WIDTH);
+    }
+
+    writeRegion.width          = VIEW_FIRST_WIDTH;
+    writeRegion.height         = VIEW_FIRST_HEIGHT;
+    writeRegion.depth          = 1u;
+    writeRegion.mipLevel       = VIEW_FIRST_MIP;
+    writeRegion.baseArrayLayer = VIEW_FIRST_LAYER;
+    writeRegion.layerCount     = 1u;
+    writeRegion.bytesPerRow    = VIEW_ROW_PITCH;
+    writeRegion.rowsPerImage   = VIEW_FIRST_HEIGHT;
+    writeRegion.aspect         = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
+    if (GPUQueueWriteTexture(queue,
+                             texture,
+                             &writeRegion,
+                             depthUpload,
+                             sizeof(depthUpload)) != GPU_OK) {
+      fprintf(stderr, "texture view depth write failed\n");
+      goto cleanup;
+    }
+
+    writeRegion.aspect = GPU_TEXTURE_ASPECT_STENCIL_ONLY;
+    if (GPUQueueWriteTexture(queue,
+                             texture,
+                             &writeRegion,
+                             stencilUpload,
+                             sizeof(stencilUpload)) != GPU_OK) {
+      fprintf(stderr, "texture view stencil write failed\n");
       goto cleanup;
     }
   }
@@ -744,6 +798,23 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
       goto cleanup;
     }
     copyRegion.bytesPerRow                    = VIEW_ROW_PITCH;
+    copyRegion.rowsPerImage                   = VIEW_FIRST_HEIGHT;
+    copyRegion.texture.texture.mipLevel       = VIEW_FIRST_MIP;
+    copyRegion.texture.texture.baseArrayLayer = VIEW_FIRST_LAYER;
+    copyRegion.texture.texture.aspect         =
+      GPU_TEXTURE_ASPECT_DEPTH_ONLY;
+    copyRegion.texture.width                  = VIEW_FIRST_WIDTH;
+    copyRegion.texture.height                 = VIEW_FIRST_HEIGHT;
+    copyRegion.texture.depth                  = 1u;
+    copyRegion.texture.layerCount             = 1u;
+    copyRegion.bufferOffset                   = VIEW_DS_FIRST_DEPTH_OFFSET;
+    GPUCopyTextureToBuffer(copyPass, texture, readback, &copyRegion);
+
+    copyRegion.bufferOffset           = VIEW_DS_FIRST_STENCIL_OFFSET;
+    copyRegion.texture.texture.aspect = GPU_TEXTURE_ASPECT_STENCIL_ONLY;
+    GPUCopyTextureToBuffer(copyPass, texture, readback, &copyRegion);
+
+    copyRegion.bufferOffset                   = VIEW_DS_SECOND_DEPTH_OFFSET;
     copyRegion.rowsPerImage                   = VIEW_SECOND_HEIGHT;
     copyRegion.texture.texture.mipLevel       = VIEW_SECOND_MIP;
     copyRegion.texture.texture.baseArrayLayer = VIEW_SECOND_LAYER;
@@ -751,11 +822,9 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
       GPU_TEXTURE_ASPECT_DEPTH_ONLY;
     copyRegion.texture.width                  = VIEW_SECOND_WIDTH;
     copyRegion.texture.height                 = VIEW_SECOND_HEIGHT;
-    copyRegion.texture.depth                  = 1u;
-    copyRegion.texture.layerCount             = 1u;
     GPUCopyTextureToBuffer(copyPass, texture, readback, &copyRegion);
 
-    copyRegion.bufferOffset           = VIEW_SECOND_BUFFER_OFFSET;
+    copyRegion.bufferOffset           = VIEW_DS_SECOND_STENCIL_OFFSET;
     copyRegion.texture.texture.aspect = GPU_TEXTURE_ASPECT_STENCIL_ONLY;
     GPUCopyTextureToBuffer(copyPass, texture, readback, &copyRegion);
     GPUEndCopyPass(copyPass);
@@ -780,22 +849,41 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
   }
   if (readback &&
       (!view_render_depths_equal(pixels,
-                                 0u,
+                                 VIEW_DS_FIRST_DEPTH_OFFSET,
+                                 VIEW_FIRST_WIDTH,
+                                 VIEW_FIRST_HEIGHT,
+                                 0.625f) ||
+       !view_render_stencils_equal(pixels,
+                                   VIEW_DS_FIRST_STENCIL_OFFSET,
+                                   VIEW_FIRST_WIDTH,
+                                   VIEW_FIRST_HEIGHT,
+                                   53u) ||
+       !view_render_depths_equal(pixels,
+                                 VIEW_DS_SECOND_DEPTH_OFFSET,
                                  VIEW_SECOND_WIDTH,
                                  VIEW_SECOND_HEIGHT,
                                  0.375f) ||
        !view_render_stencils_equal(pixels,
-                                   VIEW_SECOND_BUFFER_OFFSET,
+                                   VIEW_DS_SECOND_STENCIL_OFFSET,
                                    VIEW_SECOND_WIDTH,
                                    VIEW_SECOND_HEIGHT,
                                    37u))) {
-    float depth;
+    float firstDepth;
+    float secondDepth;
 
-    memcpy(&depth, pixels, sizeof(depth));
+    memcpy(&firstDepth,
+           pixels + VIEW_DS_FIRST_DEPTH_OFFSET,
+           sizeof(firstDepth));
+    memcpy(&secondDepth,
+           pixels + VIEW_DS_SECOND_DEPTH_OFFSET,
+           sizeof(secondDepth));
     fprintf(stderr,
-            "texture view depth-stencil mismatch: depth=%f stencil=%u\n",
-            depth,
-            pixels[VIEW_SECOND_BUFFER_OFFSET]);
+            "texture view depth-stencil mismatch: "
+            "first=%f/%u second=%f/%u\n",
+            firstDepth,
+            pixels[VIEW_DS_FIRST_STENCIL_OFFSET],
+            secondDepth,
+            pixels[VIEW_DS_SECOND_STENCIL_OFFSET]);
     ok = 0;
   }
 

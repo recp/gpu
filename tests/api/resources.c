@@ -264,6 +264,115 @@ check_texture_transfer_layout(GPUDevice *activeDevice) {
 }
 
 static int
+check_texture_write_aspects(GPUDevice *activeDevice) {
+  GPUTextureWriteRegion region  = {0};
+  GPUCommandQueue       queue   = {0};
+  GPUTexture            texture = {0};
+  GPUDevice             device  = {0};
+  GPUApi                scopedApi;
+  uint8_t               pixels[64] = {0};
+
+  if (!activeDevice || !gpuDeviceApi(activeDevice)) {
+    fprintf(stderr, "texture aspects have no device api\n");
+    return 0;
+  }
+
+  scopedApi               = *gpuDeviceApi(activeDevice);
+  scopedApi.texture.write = write_scoped_texture;
+  device._api             = &scopedApi;
+  queue._device           = &device;
+  texture.device          = &device;
+  texture.format          = GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+  texture.dimension       = GPU_TEXTURE_DIMENSION_2D;
+  texture.width           = 4u;
+  texture.height          = 4u;
+  texture.depthOrLayers   = 1u;
+  texture.mipLevelCount   = 1u;
+  texture.sampleCount     = 1u;
+  texture.usage           = GPU_TEXTURE_USAGE_COPY_DST;
+
+  region.width          = 4u;
+  region.height         = 4u;
+  region.depth          = 1u;
+  region.layerCount     = 1u;
+  region.bytesPerRow    = 16u;
+  region.rowsPerImage   = 4u;
+  gScopedTextureWriteCalls = 0u;
+
+  if (GPUQueueWriteTexture(&queue,
+                           &texture,
+                           &region,
+                           pixels,
+                           sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT ||
+      gScopedTextureWriteCalls != 0u) {
+    fprintf(stderr, "combined texture write accepted all aspects\n");
+    return 0;
+  }
+
+  region.aspect = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
+  if (GPUQueueWriteTexture(&queue,
+                           &texture,
+                           &region,
+                           pixels,
+                           sizeof(pixels)) != GPU_OK ||
+      gScopedTextureWriteCalls != 1u) {
+    fprintf(stderr, "combined texture rejected depth write\n");
+    return 0;
+  }
+
+  region.aspect      = GPU_TEXTURE_ASPECT_STENCIL_ONLY;
+  region.bytesPerRow = 4u;
+  if (GPUQueueWriteTexture(&queue,
+                           &texture,
+                           &region,
+                           pixels,
+                           16u) != GPU_OK ||
+      gScopedTextureWriteCalls != 2u) {
+    fprintf(stderr, "combined texture rejected stencil write\n");
+    return 0;
+  }
+
+  region.width = 3u;
+  if (GPUQueueWriteTexture(&queue,
+                           &texture,
+                           &region,
+                           pixels,
+                           16u) != GPU_ERROR_INVALID_ARGUMENT ||
+      gScopedTextureWriteCalls != 2u) {
+    fprintf(stderr, "combined texture write accepted partial plane\n");
+    return 0;
+  }
+
+  texture.format      = GPU_FORMAT_DEPTH32_FLOAT;
+  region.width        = 4u;
+  region.aspect       = GPU_TEXTURE_ASPECT_ALL;
+  region.bytesPerRow  = 16u;
+  if (GPUQueueWriteTexture(&queue,
+                           &texture,
+                           &region,
+                           pixels,
+                           sizeof(pixels)) != GPU_OK ||
+      gScopedTextureWriteCalls != 3u) {
+    fprintf(stderr, "depth texture rejected default aspect\n");
+    return 0;
+  }
+
+  texture.format = GPU_FORMAT_RGBA8_UNORM;
+  region.aspect  = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
+  if (GPUQueueWriteTexture(&queue,
+                           &texture,
+                           &region,
+                           pixels,
+                           sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT ||
+      gScopedTextureWriteCalls != 3u) {
+    fprintf(stderr, "color texture write accepted depth aspect\n");
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
 check_texture_view_format_validation(GPUDevice *activeDevice) {
   typedef struct TextureViewFormatCase {
     GPUFormat textureFormat;
@@ -1094,6 +1203,7 @@ gpu_test_resources(GPUDevice *device) {
   return check_destroy_null_handles() &&
          check_buffer_device_dispatch(device) &&
          check_texture_transfer_layout(device) &&
+         check_texture_write_aspects(device) &&
          check_texture_view_format_validation(device) &&
          check_resource_validation(device) &&
          check_cube_view_validation(device) &&

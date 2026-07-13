@@ -102,6 +102,7 @@ typedef struct GPUTextureWriteRegion {
   uint32_t depth;
   uint32_t mipLevel;
   uint32_t baseArrayLayer;
+  GPUTextureAspect aspect;
   uint32_t layerCount;
   uint32_t bytesPerRow;
   uint32_t rowsPerImage;

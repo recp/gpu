@@ -99,6 +99,7 @@ mt_destroyCommandQueue(GPUCommandQueue * __restrict queue) {
       command = next;
     }
     [native->classic release];
+    [native->upload release];
     [native->modern release];
     free(native);
   }

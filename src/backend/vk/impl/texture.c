@@ -143,6 +143,32 @@ vk__imageAspect(GPUFormat format) {
   }
 }
 
+static bool
+vk__copyAspect(GPUFormat           format,
+               GPUTextureAspect    aspect,
+               VkImageAspectFlags *outAspect) {
+  GPUTextureAspect resolved;
+
+  if (!outAspect ||
+      !gpuFormatResolveCopyAspect(format, aspect, &resolved)) {
+    return false;
+  }
+
+  switch (resolved) {
+    case GPU_TEXTURE_ASPECT_DEPTH_ONLY:
+      *outAspect = VK_IMAGE_ASPECT_DEPTH_BIT;
+      return true;
+    case GPU_TEXTURE_ASPECT_STENCIL_ONLY:
+      *outAspect = VK_IMAGE_ASPECT_STENCIL_BIT;
+      return true;
+    case GPU_TEXTURE_ASPECT_ALL:
+      *outAspect = VK_IMAGE_ASPECT_COLOR_BIT;
+      return true;
+    default:
+      return false;
+  }
+}
+
 static void
 vk__layoutSource(VkImageLayout layout,
                  VkPipelineStageFlags *outStage,
@@ -938,6 +964,7 @@ vk__submitTextureWrite(GPUCommandQueue             *queue,
   VkFenceCreateInfo           fenceInfo = {0};
   VkBufferImageCopy           copy = {0};
   VkSubmitInfo                submitInfo = {0};
+  VkImageAspectFlags          aspect;
   VkImageLayout               finalLayout;
   VkResult                    result;
   uint32_t                    rowBlocks;
@@ -953,7 +980,10 @@ vk__submitTextureWrite(GPUCommandQueue             *queue,
       bufferVk->device != deviceVk->device) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  if (!gpuFormatLayout(texture->format, &formatLayout)) {
+  if (!vk__copyAspect(texture->format, region->aspect, &aspect) ||
+      !gpuFormatAspectLayout(texture->format,
+                             region->aspect,
+                             &formatLayout)) {
     return GPU_ERROR_UNSUPPORTED;
   }
   if (region->bytesPerRow % formatLayout.bytesPerBlock != 0u) {
@@ -1006,7 +1036,7 @@ vk__submitTextureWrite(GPUCommandQueue             *queue,
   copy.bufferOffset                    = 0u;
   copy.bufferRowLength                 = rowLength;
   copy.bufferImageHeight               = region->rowsPerImage;
-  copy.imageSubresource.aspectMask     = textureVk->aspect;
+  copy.imageSubresource.aspectMask     = aspect;
   copy.imageSubresource.mipLevel       = region->mipLevel;
   copy.imageSubresource.baseArrayLayer = region->baseArrayLayer;
   copy.imageSubresource.layerCount     = region->layerCount;

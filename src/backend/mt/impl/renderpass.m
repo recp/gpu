@@ -398,10 +398,11 @@ mt_copyBufferToTexture(GPUCopyPassEncoder               *pass,
                        GPUTexture                       *dst,
                        const GPUBufferTextureCopyRegion *region) {
   const GPUTextureSubresourceRegion *texRegion;
-  id<MTLBuffer> srcBuffer;
+  id<MTLBuffer>  srcBuffer;
   id<MTLTexture> dstTexture;
-  uint64_t bytesPerImage;
-  bool texture3D;
+  MTLBlitOption  option;
+  uint64_t       bytesPerImage;
+  bool           texture3D;
 
   srcBuffer = mt_nativeBuffer(src);
   if (!pass ||
@@ -414,8 +415,11 @@ mt_copyBufferToTexture(GPUCopyPassEncoder               *pass,
     return;
   }
 
-  texRegion = &region->texture;
-  dstTexture = mt_copyTexture(dst, texRegion->texture.aspect);
+  texRegion  = &region->texture;
+  option     = mt_copyOption(dst->format, texRegion->texture.aspect);
+  dstTexture = option == MTLBlitOptionNone
+                 ? mt_copyTexture(dst, texRegion->texture.aspect)
+                 : mt_nativeTexture(dst);
   if (!dstTexture) {
     return;
   }
@@ -433,7 +437,8 @@ mt_copyBufferToTexture(GPUCopyPassEncoder               *pass,
                                            toTexture:dstTexture
                                     destinationSlice:0
                                     destinationLevel:texRegion->texture.mipLevel
-                                   destinationOrigin:mt_textureOrigin(&texRegion->texture, true)];
+                                   destinationOrigin:mt_textureOrigin(&texRegion->texture, true)
+                                             options:option];
       } else {
         for (uint32_t i = 0; i < texRegion->layerCount; i++) {
           [mt_copyEncoder(pass)->modern copyFromBuffer:srcBuffer
@@ -445,7 +450,8 @@ mt_copyBufferToTexture(GPUCopyPassEncoder               *pass,
                                              toTexture:dstTexture
                                       destinationSlice:texRegion->texture.baseArrayLayer + i
                                       destinationLevel:texRegion->texture.mipLevel
-                                     destinationOrigin:mt_textureOrigin(&texRegion->texture, false)];
+                                     destinationOrigin:mt_textureOrigin(&texRegion->texture, false)
+                                               options:option];
         }
       }
     }
@@ -460,7 +466,8 @@ mt_copyBufferToTexture(GPUCopyPassEncoder               *pass,
                                      toTexture:dstTexture
                               destinationSlice:0
                               destinationLevel:texRegion->texture.mipLevel
-                             destinationOrigin:mt_textureOrigin(&texRegion->texture, true)];
+                             destinationOrigin:mt_textureOrigin(&texRegion->texture, true)
+                                       options:option];
     return;
   }
 
@@ -474,7 +481,8 @@ mt_copyBufferToTexture(GPUCopyPassEncoder               *pass,
                                      toTexture:dstTexture
                               destinationSlice:texRegion->texture.baseArrayLayer + i
                               destinationLevel:texRegion->texture.mipLevel
-                             destinationOrigin:mt_textureOrigin(&texRegion->texture, false)];
+                             destinationOrigin:mt_textureOrigin(&texRegion->texture, false)
+                                       options:option];
   }
 }
 
@@ -486,9 +494,10 @@ mt_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
                        const GPUBufferTextureCopyRegion *region) {
   const GPUTextureSubresourceRegion *texRegion;
   id<MTLTexture> srcTexture;
-  id<MTLBuffer> dstBuffer;
-  uint64_t bytesPerImage;
-  bool texture3D;
+  id<MTLBuffer>  dstBuffer;
+  MTLBlitOption  option;
+  uint64_t       bytesPerImage;
+  bool           texture3D;
 
   dstBuffer = mt_nativeBuffer(dst);
   if (!pass ||
@@ -501,8 +510,11 @@ mt_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
     return;
   }
 
-  texRegion = &region->texture;
-  srcTexture = mt_copyTexture(src, texRegion->texture.aspect);
+  texRegion  = &region->texture;
+  option     = mt_copyOption(src->format, texRegion->texture.aspect);
+  srcTexture = option == MTLBlitOptionNone
+                 ? mt_copyTexture(src, texRegion->texture.aspect)
+                 : mt_nativeTexture(src);
   if (!srcTexture) {
     return;
   }
@@ -520,7 +532,8 @@ mt_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
                                              toBuffer:dstBuffer
                                     destinationOffset:(NSUInteger)region->bufferOffset
                                destinationBytesPerRow:(NSUInteger)region->bytesPerRow
-                             destinationBytesPerImage:(NSUInteger)bytesPerImage];
+                             destinationBytesPerImage:(NSUInteger)bytesPerImage
+                                              options:option];
       } else {
         for (uint32_t i = 0; i < texRegion->layerCount; i++) {
           [mt_copyEncoder(pass)->modern copyFromTexture:srcTexture
@@ -532,7 +545,8 @@ mt_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
                                       destinationOffset:(NSUInteger)(region->bufferOffset +
                                                                       ((uint64_t)i * bytesPerImage))
                                  destinationBytesPerRow:(NSUInteger)region->bytesPerRow
-                               destinationBytesPerImage:(NSUInteger)bytesPerImage];
+                               destinationBytesPerImage:(NSUInteger)bytesPerImage
+                                                options:option];
         }
       }
     }
@@ -547,7 +561,8 @@ mt_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
                                        toBuffer:dstBuffer
                               destinationOffset:(NSUInteger)region->bufferOffset
                          destinationBytesPerRow:(NSUInteger)region->bytesPerRow
-                       destinationBytesPerImage:(NSUInteger)bytesPerImage];
+                       destinationBytesPerImage:(NSUInteger)bytesPerImage
+                                        options:option];
     return;
   }
 
@@ -561,7 +576,8 @@ mt_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
                               destinationOffset:(NSUInteger)(region->bufferOffset +
                                                             ((uint64_t)i * bytesPerImage))
                          destinationBytesPerRow:(NSUInteger)region->bytesPerRow
-                       destinationBytesPerImage:(NSUInteger)bytesPerImage];
+                       destinationBytesPerImage:(NSUInteger)bytesPerImage
+                                        options:option];
   }
 }
 

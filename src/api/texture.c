@@ -172,15 +172,24 @@ gpuTextureWriteLayoutValid(const GPUTexture            *texture,
                            const GPUTextureWriteRegion *region,
                            uint64_t                     sizeBytes) {
   GPUFormatDataLayout layout;
+  GPUTextureAspect    aspect;
   uint32_t            mipHeight;
   uint32_t            mipWidth;
 
-  if (!texture || !region || sizeBytes == 0u) {
+  if (!texture || !region || sizeBytes == 0u ||
+      !gpuFormatResolveCopyAspect(texture->format,
+                                  region->aspect,
+                                  &aspect)) {
     return false;
   }
 
   mipWidth  = gpuMipExtent(texture->width, region->mipLevel);
   mipHeight = gpuMipExtent(texture->height, region->mipLevel);
+  if (aspect != GPU_TEXTURE_ASPECT_ALL &&
+      (region->width != mipWidth || region->height != mipHeight ||
+       region->depth != 1u)) {
+    return false;
+  }
   if (!gpuFormatCopyAligned(texture->format,
                             0u,
                             0u,
@@ -191,14 +200,15 @@ gpuTextureWriteLayoutValid(const GPUTexture            *texture,
     return false;
   }
 
-  return gpuFormatDataLayout(texture->format,
-                             region->width,
-                             region->height,
-                             region->depth,
-                             region->layerCount,
-                             region->bytesPerRow,
-                             region->rowsPerImage,
-                             &layout) &&
+  return gpuFormatAspectDataLayout(texture->format,
+                                   region->aspect,
+                                   region->width,
+                                   region->height,
+                                   region->depth,
+                                   region->layerCount,
+                                   region->bytesPerRow,
+                                   region->rowsPerImage,
+                                   &layout) &&
          sizeBytes >= layout.requiredBytes;
 }
 
