@@ -473,7 +473,8 @@ dx12__copyFootprint(const GPUTexture                   *texture,
                                                     &rowSize,
                                                     &footprintBytes);
   if (footprintBytes == 0u || rowCount < dataLayout.blockRows ||
-      rowSize > region->bytesPerRow) {
+      rowSize > region->bytesPerRow ||
+      nativeFootprint.Footprint.RowPitch > region->bytesPerRow) {
     return false;
   }
 

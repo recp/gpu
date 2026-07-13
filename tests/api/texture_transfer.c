@@ -9,7 +9,9 @@ enum {
   TRANSFER_IMAGE_BYTES  = TRANSFER_ROW_BYTES * TRANSFER_HEIGHT,
   TRANSFER_ROW_PITCH    = 256u,
   TRANSFER_IMAGE_STRIDE = TRANSFER_ROW_PITCH * TRANSFER_HEIGHT,
-  TRANSFER_SECOND_COPY  = TRANSFER_IMAGE_STRIDE * 2u
+  TRANSFER_SECOND_COPY  = TRANSFER_IMAGE_STRIDE * 2u,
+  TRANSFER_DS_ROW_PITCH = 512u,
+  TRANSFER_DS_STRIDE    = TRANSFER_DS_ROW_PITCH * TRANSFER_HEIGHT
 };
 
 static void
@@ -46,11 +48,13 @@ transfer_equal(const uint8_t *tight,
 }
 
 static void
-transfer_fill_depth(uint8_t *pixels, uint32_t value) {
+transfer_fill_depth(uint8_t *pixels,
+                    uint32_t rowPitch,
+                    uint32_t value) {
   for (uint32_t y = 0u; y < TRANSFER_HEIGHT; y++) {
     uint8_t *row;
 
-    row = pixels + (uint64_t)y * TRANSFER_ROW_PITCH;
+    row = pixels + (uint64_t)y * rowPitch;
     for (uint32_t x = 0u; x < TRANSFER_WIDTH; x++) {
       memcpy(row + x * sizeof(value), &value, sizeof(value));
     }
@@ -60,12 +64,13 @@ transfer_fill_depth(uint8_t *pixels, uint32_t value) {
 static bool
 transfer_depth_equal(const uint8_t *pixels,
                      uint64_t       offset,
+                     uint32_t       rowPitch,
                      uint32_t       expected,
                      uint32_t       mask) {
   for (uint32_t y = 0u; y < TRANSFER_HEIGHT; y++) {
     const uint8_t *row;
 
-    row = pixels + offset + (uint64_t)y * TRANSFER_ROW_PITCH;
+    row = pixels + offset + (uint64_t)y * rowPitch;
     for (uint32_t x = 0u; x < TRANSFER_WIDTH; x++) {
       uint32_t value;
 
@@ -81,11 +86,12 @@ transfer_depth_equal(const uint8_t *pixels,
 static bool
 transfer_stencil_equal(const uint8_t *pixels,
                        uint64_t       offset,
+                       uint32_t       rowPitch,
                        uint8_t        expected) {
   for (uint32_t y = 0u; y < TRANSFER_HEIGHT; y++) {
     const uint8_t *row;
 
-    row = pixels + offset + (uint64_t)y * TRANSFER_ROW_PITCH;
+    row = pixels + offset + (uint64_t)y * rowPitch;
     for (uint32_t x = 0u; x < TRANSFER_WIDTH; x++) {
       if (row[x] != expected) {
         return false;
@@ -638,10 +644,10 @@ static int
 check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
   enum {
     DEPTH_AFTER_DEPTH_OFFSET     = 0u,
-    STENCIL_AFTER_DEPTH_OFFSET   = TRANSFER_IMAGE_STRIDE,
-    DEPTH_AFTER_STENCIL_OFFSET   = TRANSFER_IMAGE_STRIDE * 2u,
-    STENCIL_AFTER_STENCIL_OFFSET = TRANSFER_IMAGE_STRIDE * 3u,
-    READBACK_BYTES               = TRANSFER_IMAGE_STRIDE * 4u
+    STENCIL_AFTER_DEPTH_OFFSET   = TRANSFER_DS_STRIDE,
+    DEPTH_AFTER_STENCIL_OFFSET   = TRANSFER_DS_STRIDE * 2u,
+    STENCIL_AFTER_STENCIL_OFFSET = TRANSFER_DS_STRIDE * 3u,
+    READBACK_BYTES               = TRANSFER_DS_STRIDE * 4u
   };
 
   GPUCommandQueue              *queue;
@@ -656,10 +662,10 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
   GPUBufferTextureCopyRegion    bufferRegion = {0};
   GPUTextureToTextureCopyRegion textureRegion = {0};
   GPUFormatCapabilities         formatCaps;
-  uint8_t                       sourceDepth[TRANSFER_IMAGE_STRIDE] = {0};
-  uint8_t                       sourceStencil[TRANSFER_IMAGE_STRIDE] = {0};
-  uint8_t                       destinationDepth[TRANSFER_IMAGE_STRIDE] = {0};
-  uint8_t                       destinationStencil[TRANSFER_IMAGE_STRIDE] = {0};
+  uint8_t                       sourceDepth[TRANSFER_DS_STRIDE] = {0};
+  uint8_t                       sourceStencil[TRANSFER_DS_STRIDE] = {0};
+  uint8_t                       destinationDepth[TRANSFER_DS_STRIDE] = {0};
+  uint8_t                       destinationStencil[TRANSFER_DS_STRIDE] = {0};
   uint8_t                       readbackBytes[READBACK_BYTES] = {0};
   uint32_t                      sourceDepthValue;
   uint32_t                      destinationDepthValue;
@@ -701,13 +707,15 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
            sizeof(destinationDepthValue));
     depthMask = UINT32_MAX;
   }
-  transfer_fill_depth(sourceDepth, sourceDepthValue);
-  transfer_fill_depth(destinationDepth, destinationDepthValue);
+  transfer_fill_depth(sourceDepth, TRANSFER_DS_ROW_PITCH, sourceDepthValue);
+  transfer_fill_depth(destinationDepth,
+                      TRANSFER_DS_ROW_PITCH,
+                      destinationDepthValue);
   for (uint32_t y = 0u; y < TRANSFER_HEIGHT; y++) {
-    memset(sourceStencil + (uint64_t)y * TRANSFER_ROW_PITCH,
+    memset(sourceStencil + (uint64_t)y * TRANSFER_DS_ROW_PITCH,
            91,
            TRANSFER_WIDTH);
-    memset(destinationStencil + (uint64_t)y * TRANSFER_ROW_PITCH,
+    memset(destinationStencil + (uint64_t)y * TRANSFER_DS_ROW_PITCH,
            17,
            TRANSFER_WIDTH);
   }
@@ -759,7 +767,7 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
   writeRegion.mipLevel       = 1u;
   writeRegion.baseArrayLayer = 1u;
   writeRegion.layerCount     = 1u;
-  writeRegion.bytesPerRow    = TRANSFER_ROW_PITCH;
+  writeRegion.bytesPerRow    = TRANSFER_DS_ROW_PITCH;
   writeRegion.rowsPerImage   = TRANSFER_HEIGHT;
   writeRegion.aspect         = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
   if (GPUQueueWriteTexture(queue,
@@ -821,7 +829,7 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
   bufferRegion.texture.depth      = 1u;
   bufferRegion.texture.layerCount = 1u;
   bufferRegion.bufferOffset       = DEPTH_AFTER_DEPTH_OFFSET;
-  bufferRegion.bytesPerRow        = TRANSFER_ROW_PITCH;
+  bufferRegion.bytesPerRow        = TRANSFER_DS_ROW_PITCH;
   bufferRegion.rowsPerImage       = TRANSFER_HEIGHT;
   GPUCopyTextureToBuffer(copyPass, destination, readback, &bufferRegion);
   bufferRegion.texture.texture.aspect = GPU_TEXTURE_ASPECT_STENCIL_ONLY;
@@ -862,18 +870,22 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
 
   depthAfterDepth     = transfer_depth_equal(readbackBytes,
                                              DEPTH_AFTER_DEPTH_OFFSET,
+                                             TRANSFER_DS_ROW_PITCH,
                                              sourceDepthValue,
                                              depthMask);
   stencilAfterDepth   = transfer_stencil_equal(readbackBytes,
                                                STENCIL_AFTER_DEPTH_OFFSET,
+                                               TRANSFER_DS_ROW_PITCH,
                                                17u);
   depthAfterStencil   = transfer_depth_equal(readbackBytes,
                                              DEPTH_AFTER_STENCIL_OFFSET,
+                                             TRANSFER_DS_ROW_PITCH,
                                              sourceDepthValue,
                                              depthMask);
   stencilAfterStencil = transfer_stencil_equal(
     readbackBytes,
     STENCIL_AFTER_STENCIL_OFFSET,
+    TRANSFER_DS_ROW_PITCH,
     91u);
   if (!depthAfterDepth || !stencilAfterDepth ||
       !depthAfterStencil || !stencilAfterStencil) {
