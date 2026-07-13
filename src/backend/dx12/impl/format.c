@@ -104,7 +104,6 @@ dx12_queryFormatCapabilities(GPUPhysicalDeviceDX12 *adapter) {
   HRESULT       result;
 
   memset(adapter->formatCaps, 0, sizeof(adapter->formatCaps));
-  adapter->formatCapsReady = true;
   device = NULL;
   result = D3D12CreateDevice(adapter->dxgiAdapter,
                              D3D_FEATURE_LEVEL_11_0,
@@ -171,6 +170,7 @@ dx12_queryFormatCapabilities(GPUPhysicalDeviceDX12 *adapter) {
   }
 
   device->lpVtbl->Release(device);
+  adapter->formatCapsReady = true;
 }
 
 GPU_HIDE
@@ -200,9 +200,11 @@ dx12_getFormatCapabilities(
   if (!adapterDX12 || (uint32_t)format >= GPU_ARRAY_LEN(dx12_formats)) {
     return;
   }
+  AcquireSRWLockExclusive(&adapterDX12->formatCapsLock);
   if (!adapterDX12->formatCapsReady) {
     dx12_queryFormatCapabilities(adapterDX12);
   }
 
   *outCaps = adapterDX12->formatCaps[format];
+  ReleaseSRWLockExclusive(&adapterDX12->formatCapsLock);
 }

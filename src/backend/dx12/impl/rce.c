@@ -50,8 +50,11 @@ dx12__emitVertexBuffer(GPURenderEncoderDX12 *encoder, uint32_t index) {
   if (!buffer || !nativeBuffer || !nativeBuffer->resource ||
       nativeBuffer->gpuAddress == 0u || offset >= buffer->sizeBytes ||
       offset > UINT64_MAX - nativeBuffer->gpuAddress ||
-      (nativeBuffer->state &
-       D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER) == 0u) {
+      !dx12_transitionBuffer(
+        encoder->commandList,
+        nativeBuffer,
+        D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER
+      )) {
     return;
   }
 
@@ -90,7 +93,9 @@ dx12__bindIndexBuffer(GPURenderCommandEncoder *encoder,
       !nativeBuffer->resource || nativeBuffer->gpuAddress == 0u ||
       offset >= buffer->sizeBytes || (offset & (indexSize - 1u)) != 0u ||
       offset > UINT64_MAX - nativeBuffer->gpuAddress ||
-      (nativeBuffer->state & D3D12_RESOURCE_STATE_INDEX_BUFFER) == 0u) {
+      !dx12_transitionBuffer(native->commandList,
+                             nativeBuffer,
+                             D3D12_RESOURCE_STATE_INDEX_BUFFER)) {
     return false;
   }
 
@@ -530,7 +535,9 @@ dx12__drawIndirect(GPURenderCommandEncoder *encoder,
   buffer = argsBuffer ? argsBuffer->_priv : NULL;
   if (!native || !native->device || !native->commandList || !buffer ||
       !buffer->resource ||
-      (buffer->state & D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT) == 0u) {
+      !dx12_transitionBuffer(native->commandList,
+                             buffer,
+                             D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT)) {
     return false;
   }
 

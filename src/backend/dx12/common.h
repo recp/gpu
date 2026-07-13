@@ -41,6 +41,7 @@ typedef struct GPUPhysicalDeviceDX12 {
   /* IDXGIAdapter1*dxgiAdapter; */
   IUnknown             *dxgiAdapter;
   DXGI_ADAPTER_DESC1    desc1;
+  SRWLOCK               formatCapsLock;
   char                  name[256];
   bool                  isWarp;
   bool                  formatCapsReady;
@@ -411,6 +412,12 @@ dx12_setTextureState(GPUTextureDX12        *texture,
                      uint32_t               baseLayer,
                      uint32_t               layerCount,
                      D3D12_RESOURCE_STATES  state);
+
+GPU_HIDE
+bool
+dx12_transitionBuffer(ID3D12GraphicsCommandList *commandList,
+                      GPUBufferDX12             *buffer,
+                      D3D12_RESOURCE_STATES      state);
 
 GPU_HIDE
 bool

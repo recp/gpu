@@ -211,6 +211,7 @@ main(int argc, char **argv) {
   runtimeConfig.chain.sType          = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtimeConfig.chain.structSize     = sizeof(runtimeConfig);
   runtimeConfig.enableDebugMarkers   = true;
+  runtimeConfig.enableVerboseLogs    = getenv("GPU_API_VERBOSE") != NULL;
   if (GPUConfigureRuntime(device, &runtimeConfig) != GPU_OK) {
     fprintf(stderr, "failed to enable debug markers\n");
     GPUDestroyDevice(device);

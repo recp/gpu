@@ -123,12 +123,15 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   uint64_t                          bytecodeSize;
   uint32_t                          layoutEntryCount;
   size_t                            centerOffset;
+  bool                              savedStatsEnabled;
   int                               ok;
 
   if (!device || !bytecodePath) {
     return 0;
   }
 
+  savedStatsEnabled                 = device->runtimeConfig.enableStats;
+  device->runtimeConfig.enableStats = true;
   queue          = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   library        = NULL;
   shaderLayout   = NULL;
@@ -516,6 +519,7 @@ cleanup:
   GPUDestroyTexture(sampledTexture);
   GPUDestroyShaderLayout(shaderLayout);
   GPUDestroyShaderLibrary(library);
+  device->runtimeConfig.enableStats = savedStatsEnabled;
   free(bytecode);
   return ok;
 }

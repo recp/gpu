@@ -205,6 +205,7 @@ dx12_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
     if (dxgiAdapter) {
       phyDeviceDX12              = calloc(1, sizeof(*phyDeviceDX12));
       phyDeviceDX12->dxgiAdapter = (IUnknown *)dxgiAdapter;
+      InitializeSRWLock(&phyDeviceDX12->formatCapsLock);
 
       dxgiAdapter->lpVtbl->GetDesc1(dxgiAdapter, &phyDeviceDX12->desc1);
       dx12_fillAdapterName(phyDeviceDX12);
@@ -259,6 +260,7 @@ dx12_getAvailablePhysicalDevicesBy(GPUInstance * __restrict inst,
 
     phyDeviceDX12->dxgiAdapter       = (IUnknown *)warpAdapter;
     phyDeviceDX12->isWarp            = true;
+    InitializeSRWLock(&phyDeviceDX12->formatCapsLock);
     snprintf(phyDeviceDX12->name, sizeof(phyDeviceDX12->name), "WARP");
     item->_priv                      = phyDeviceDX12;
     item->inst                       = inst;

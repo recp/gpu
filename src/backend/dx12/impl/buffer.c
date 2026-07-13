@@ -47,33 +47,38 @@ dx12__alignUniformBufferSize(uint64_t sizeBytes, uint64_t *outSizeBytes) {
 
 static D3D12_RESOURCE_STATES
 dx12__bufferInitialState(GPUBufferUsageFlags usage, bool defaultHeap) {
-  D3D12_RESOURCE_STATES state;
-
   if (!defaultHeap) {
     return D3D12_RESOURCE_STATE_GENERIC_READ;
   }
-  if ((usage & GPU_BUFFER_USAGE_STORAGE) != 0u) {
-    return D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+  GPU__UNUSED(usage);
+  return D3D12_RESOURCE_STATE_COMMON;
+}
+
+GPU_HIDE
+bool
+dx12_transitionBuffer(ID3D12GraphicsCommandList *commandList,
+                      GPUBufferDX12             *buffer,
+                      D3D12_RESOURCE_STATES      state) {
+  D3D12_RESOURCE_BARRIER barrier = {0};
+
+  if (!commandList || !buffer || !buffer->resource) {
+    return false;
+  }
+  if (!buffer->defaultHeap) {
+    return (buffer->state & state) == state;
+  }
+  if (buffer->state == state) {
+    return true;
   }
 
-  state = D3D12_RESOURCE_STATE_COMMON;
-  if ((usage & (GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_UNIFORM)) != 0u) {
-    state |= D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-  }
-  if ((usage & GPU_BUFFER_USAGE_INDEX) != 0u) {
-    state |= D3D12_RESOURCE_STATE_INDEX_BUFFER;
-  }
-  if ((usage & GPU_BUFFER_USAGE_INDIRECT) != 0u) {
-    state |= D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
-  }
-  if ((usage & GPU_BUFFER_USAGE_COPY_SRC) != 0u) {
-    state |= D3D12_RESOURCE_STATE_COPY_SOURCE;
-  }
-  if (state == D3D12_RESOURCE_STATE_COMMON &&
-      (usage & GPU_BUFFER_USAGE_COPY_DST) != 0u) {
-    state = D3D12_RESOURCE_STATE_COPY_DEST;
-  }
-  return state;
+  barrier.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+  barrier.Transition.pResource   = buffer->resource;
+  barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+  barrier.Transition.StateBefore = buffer->state;
+  barrier.Transition.StateAfter  = state;
+  commandList->lpVtbl->ResourceBarrier(commandList, 1u, &barrier);
+  buffer->state = state;
+  return true;
 }
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS

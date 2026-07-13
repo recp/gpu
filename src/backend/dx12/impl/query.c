@@ -66,28 +66,6 @@ dx12__setQueryName(ID3D12QueryHeap *heap, const char *label) {
 }
 #endif
 
-static void
-dx12__transitionQueryBuffer(GPUCommandBufferDX12 *command,
-                            GPUBufferDX12        *buffer,
-                            D3D12_RESOURCE_STATES state) {
-  D3D12_RESOURCE_BARRIER barrier = {0};
-
-  if (!command || !command->commandList || !buffer || !buffer->resource ||
-      buffer->state == state) {
-    return;
-  }
-
-  barrier.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-  barrier.Transition.pResource   = buffer->resource;
-  barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-  barrier.Transition.StateBefore = buffer->state;
-  barrier.Transition.StateAfter  = state;
-  command->commandList->lpVtbl->ResourceBarrier(command->commandList,
-                                                 1u,
-                                                 &barrier);
-  buffer->state = state;
-}
-
 GPU_HIDE
 GPUResult
 dx12_createQuerySet(GPUDevice                  *device,
@@ -276,7 +254,6 @@ dx12_resolveQuerySet(GPUCommandBuffer *cmdb,
   GPUQuerySetDX12      *native;
   GPUBufferDX12        *buffer;
   D3D12_QUERY_TYPE      queryType;
-  D3D12_RESOURCE_STATES previousState;
 
   command = cmdb ? cmdb->_priv : NULL;
   native  = set ? set->_priv : NULL;
@@ -301,10 +278,11 @@ dx12_resolveQuerySet(GPUCommandBuffer *cmdb,
     return;
   }
 
-  previousState = buffer->state;
-  dx12__transitionQueryBuffer(command,
-                              buffer,
-                              D3D12_RESOURCE_STATE_COPY_DEST);
+  if (!dx12_transitionBuffer(command->commandList,
+                             buffer,
+                             D3D12_RESOURCE_STATE_COPY_DEST)) {
+    return;
+  }
   command->commandList->lpVtbl->ResolveQueryData(
     command->commandList,
     native->heap,
@@ -314,7 +292,6 @@ dx12_resolveQuerySet(GPUCommandBuffer *cmdb,
     buffer->resource,
     dstOffset
   );
-  dx12__transitionQueryBuffer(command, buffer, previousState);
 }
 
 GPU_HIDE

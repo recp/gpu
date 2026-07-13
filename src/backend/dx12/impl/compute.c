@@ -235,7 +235,9 @@ dx12__dispatchIndirect(GPUComputePassEncoder *encoder,
   buffer = argsBuffer ? argsBuffer->_priv : NULL;
   if (!native || !native->device || !native->commandList || !buffer ||
       !buffer->resource || !native->device->dispatchSignature ||
-      (buffer->state & D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT) == 0u ||
+      !dx12_transitionBuffer(native->commandList,
+                             buffer,
+                             D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT) ||
       strideBytes != (uint32_t)sizeof(D3D12_DISPATCH_ARGUMENTS)) {
     return false;
   }

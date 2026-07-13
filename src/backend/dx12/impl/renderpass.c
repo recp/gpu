@@ -342,29 +342,7 @@ static bool
 dx12__transitionCopyBuffer(GPUCommandBufferDX12 *command,
                            GPUBufferDX12        *buffer,
                            D3D12_RESOURCE_STATES state) {
-  D3D12_RESOURCE_BARRIER barrier = {0};
-
-  if (!command || !command->commandList || !buffer || !buffer->resource) {
-    return false;
-  }
-  if (!buffer->defaultHeap) {
-    return state == D3D12_RESOURCE_STATE_COPY_SOURCE &&
-           buffer->state == D3D12_RESOURCE_STATE_GENERIC_READ;
-  }
-  if (buffer->state == state) {
-    return true;
-  }
-
-  barrier.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-  barrier.Transition.pResource   = buffer->resource;
-  barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-  barrier.Transition.StateBefore = buffer->state;
-  barrier.Transition.StateAfter  = state;
-  command->commandList->lpVtbl->ResourceBarrier(command->commandList,
-                                                 1u,
-                                                 &barrier);
-  buffer->state = state;
-  return true;
+  return command && dx12_transitionBuffer(command->commandList, buffer, state);
 }
 
 static bool

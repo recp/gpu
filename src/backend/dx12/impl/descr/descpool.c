@@ -1351,23 +1351,9 @@ dx12__transitionSampledTexture(ID3D12GraphicsCommandList *commandList,
 static bool
 dx12__transitionStorageBuffer(ID3D12GraphicsCommandList *commandList,
                               GPUBufferDX12             *buffer) {
-  D3D12_RESOURCE_BARRIER barrier = {0};
-
-  if (!commandList || !buffer || !buffer->resource || !buffer->defaultHeap) {
-    return false;
-  }
-  if (buffer->state == D3D12_RESOURCE_STATE_UNORDERED_ACCESS) {
-    return true;
-  }
-
-  barrier.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-  barrier.Transition.pResource   = buffer->resource;
-  barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-  barrier.Transition.StateBefore = buffer->state;
-  barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-  commandList->lpVtbl->ResourceBarrier(commandList, 1u, &barrier);
-  buffer->state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-  return true;
+  return dx12_transitionBuffer(commandList,
+                               buffer,
+                               D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
 static bool
@@ -1412,6 +1398,11 @@ dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
       if (binding->kind != GPUBindKindBuffer || !binding->buffer ||
           binding->buffer->device != bindContext->device || !rootBinding ||
           !buffer || !buffer->resource || buffer->gpuAddress == 0u ||
+          !dx12_transitionBuffer(
+            bindContext->commandList,
+            buffer,
+            D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER
+          ) ||
           (binding->offset &
            (D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1u)) != 0u ||
           binding->offset > UINT64_MAX - buffer->gpuAddress) {
