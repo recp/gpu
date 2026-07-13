@@ -12,6 +12,7 @@ option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(GPU_ENABLE_VULKAN "Build the Vulkan backend" OFF)
 option(GPU_BUILD_TESTS "Build GPU validation tests" OFF)
 option(GPU_BUILD_SAMPLES "Build GPU samples" OFF)
+option(GPU_BUILD_BENCHMARKS "Build GPU microbenchmarks" OFF)
 option(GPU_BUILD_WITH_VALIDATION "Build validation and verbose diagnostics" ON)
 option(GPU_BUILD_WITH_DEBUG_MARKERS "Build debug marker support" ON)
 option(GPU_BACKEND_METAL_ONLY "Build only the Metal backend" OFF)
@@ -559,6 +560,30 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
       COMMAND gpu-compute-buffer-dx12-usl
               "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-dx12-usl/compute_buffer.us"
     )
+  endif()
+endif()
+
+if(GPU_BUILD_BENCHMARKS)
+  add_executable(gpu-dispatch-bench benchmarks/dispatch.c)
+  target_link_libraries(gpu-dispatch-bench PRIVATE gpu)
+  target_include_directories(gpu-dispatch-bench PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_compile_definitions(gpu-dispatch-bench PRIVATE
+    GPU_BUILD_WITH_VALIDATION=$<BOOL:${GPU_BUILD_WITH_VALIDATION}>
+    GPU_BACKEND_METAL_ONLY=$<BOOL:${GPU_BACKEND_METAL_ONLY}>
+    GPU_BACKEND_VULKAN_ONLY=$<BOOL:${GPU_BACKEND_VULKAN_ONLY}>
+    GPU_BACKEND_DX12_ONLY=$<BOOL:${GPU_BACKEND_DX12_ONLY}>
+  )
+  set_target_properties(gpu-dispatch-bench PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_options(gpu-dispatch-bench PRIVATE /W3)
+  else()
+    target_compile_options(gpu-dispatch-bench PRIVATE -Wall -Wextra)
   endif()
 endif()
 
