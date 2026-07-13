@@ -41,7 +41,6 @@ extern "C" {
 #include "texture.h"
 #include "swapchain.h"
 #include "frame.h"
-#include "feature.h"
 #include "bindgroup.h"
 #include "usl.h"
 #include "sampler.h"
