@@ -364,6 +364,7 @@ struct GPUCommandQueueDX12 {
   bool                         workerStarted;
   bool                         stopping;
   bool                         transferOpen;
+  bool                         transferPending;
   CRITICAL_SECTION             poolLock;
   CONDITION_VARIABLE           pendingCondition;
 };
@@ -481,7 +482,7 @@ dx12_beginTransfer(GPUCommandQueue             *queue,
 
 GPU_HIDE
 GPUResult
-dx12_submitTransfer(GPUCommandQueue *queue);
+dx12_submitTransfer(GPUCommandQueue *queue, bool wait);
 
 GPU_HIDE
 void

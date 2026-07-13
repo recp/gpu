@@ -601,6 +601,63 @@ dx12__ensureTransferStaging(GPUCommandQueueDX12 *queue,
   return true;
 }
 
+static GPUResult
+dx12__waitTransfer(GPUCommandQueue *queue, bool countStall) {
+  GPUCommandQueueDX12 *native;
+  GPUDeviceDX12       *device;
+  UINT64               completedValue;
+  HRESULT              result;
+  DWORD                waitResult;
+
+  native = queue ? queue->_priv : NULL;
+  device = queue && queue->_device ? queue->_device->_priv : NULL;
+  if (!native || !device || !device->d3dDevice) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!native->transferPending) {
+    return GPU_OK;
+  }
+  if (!native->transferFence || !native->transferEvent) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  completedValue = native->transferFence->lpVtbl->GetCompletedValue(
+    native->transferFence
+  );
+  if (completedValue == UINT64_MAX) {
+    result = device->d3dDevice->lpVtbl->GetDeviceRemovedReason(
+      device->d3dDevice
+    );
+    dx12__reportQueueError(native, "wait for transfer", result);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  if (completedValue < native->transferFenceValue) {
+    result = native->transferFence->lpVtbl->SetEventOnCompletion(
+      native->transferFence,
+      native->transferFenceValue,
+      native->transferEvent
+    );
+    if (FAILED(result)) {
+      dx12__reportQueueError(native, "wait for transfer", result);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    if (countStall) {
+      queue->_device->allocatorStats.uploadStallCount++;
+    }
+    waitResult = WaitForSingleObject(native->transferEvent, INFINITE);
+    if (waitResult != WAIT_OBJECT_0) {
+      result = waitResult == WAIT_FAILED
+                 ? HRESULT_FROM_WIN32(GetLastError())
+                 : E_FAIL;
+      dx12__reportQueueError(native, "wait for transfer", result);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+
+  native->transferPending = false;
+  return GPU_OK;
+}
+
 GPU_HIDE
 GPUResult
 dx12_beginTransfer(GPUCommandQueue             *queue,
@@ -611,6 +668,7 @@ dx12_beginTransfer(GPUCommandQueue             *queue,
                    void                       **outMapped) {
   GPUCommandQueueDX12 *native;
   GPUDeviceDX12       *device;
+  GPUResult            waitResult;
   HRESULT              result;
   bool                 upload;
 
@@ -632,6 +690,10 @@ dx12_beginTransfer(GPUCommandQueue             *queue,
   }
   if (native->transferOpen) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  waitResult = dx12__waitTransfer(queue, true);
+  if (waitResult != GPU_OK) {
+    return waitResult;
   }
   if (!dx12__ensureTransferContext(native, device) ||
       !dx12__ensureTransferStaging(native,
@@ -668,12 +730,11 @@ dx12_beginTransfer(GPUCommandQueue             *queue,
 
 GPU_HIDE
 GPUResult
-dx12_submitTransfer(GPUCommandQueue *queue) {
+dx12_submitTransfer(GPUCommandQueue *queue, bool wait) {
   GPUCommandQueueDX12 *native;
   ID3D12CommandList   *commandLists[1];
   UINT64               fenceValue;
   HRESULT              result;
-  DWORD                waitResult;
 
   native = queue ? queue->_priv : NULL;
   if (!native || !native->commandQueue || !native->transferOpen ||
@@ -699,20 +760,13 @@ dx12_submitTransfer(GPUCommandQueue *queue) {
   result = native->commandQueue->lpVtbl->Signal(native->commandQueue,
                                                  native->transferFence,
                                                  fenceValue);
-  if (SUCCEEDED(result)) {
-    result = native->transferFence->lpVtbl->SetEventOnCompletion(
-      native->transferFence,
-      fenceValue,
-      native->transferEvent
-    );
-  }
   if (FAILED(result)) {
     dx12__reportQueueError(native, "signal transfer fence", result);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  waitResult = WaitForSingleObject(native->transferEvent, INFINITE);
-  return waitResult == WAIT_OBJECT_0 ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+  native->transferPending = true;
+  return wait ? dx12__waitTransfer(queue, false) : GPU_OK;
 }
 
 GPU_HIDE
@@ -813,6 +867,7 @@ dx12_destroyCommandQueue(GPUCommandQueue *queue) {
   if (native) {
     dx12__stopWorker(native);
     dx12_abortTransfer(queue);
+    (void)dx12__waitTransfer(queue, false);
     command = native->commands;
     while (command) {
       next = command->next;
@@ -896,7 +951,11 @@ dx12_waitCommandQueueIdle(GPUCommandQueueDX12 *queue) {
                  ? WaitForSingleObject(event, INFINITE)
                  : WAIT_FAILED;
   CloseHandle(event);
-  return SUCCEEDED(result) && waitResult == WAIT_OBJECT_0;
+  if (SUCCEEDED(result) && waitResult == WAIT_OBJECT_0) {
+    queue->transferPending = false;
+    return true;
+  }
+  return false;
 }
 
 GPU_HIDE

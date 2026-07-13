@@ -311,7 +311,7 @@ dx12_writeBuffer(GPUCommandQueue * __restrict queue,
     dx12_abortTransfer(queue);
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  return dx12_submitTransfer(queue);
+  return dx12_submitTransfer(queue, false);
 }
 
 GPU_HIDE
@@ -366,7 +366,7 @@ dx12_readBuffer(GPUCommandQueue * __restrict queue,
     dx12_abortTransfer(queue);
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  result = dx12_submitTransfer(queue);
+  result = dx12_submitTransfer(queue, true);
   if (result == GPU_OK) {
     readRange.Begin = 0u;
     readRange.End   = (SIZE_T)sizeBytes;

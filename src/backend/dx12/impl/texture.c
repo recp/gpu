@@ -1174,7 +1174,7 @@ dx12_writeTexture(GPUCommandQueue             * __restrict queue,
     dx12_abortTransfer(queue);
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  return dx12_submitTransfer(queue);
+  return dx12_submitTransfer(queue, false);
 }
 
 GPU_HIDE

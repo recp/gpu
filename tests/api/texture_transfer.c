@@ -662,6 +662,8 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
   GPUBufferTextureCopyRegion    bufferRegion = {0};
   GPUTextureToTextureCopyRegion textureRegion = {0};
   GPUFormatCapabilities         formatCaps;
+  GPUResult                     sourceDepthWrite;
+  GPUResult                     destinationDepthWrite;
   GPUResult                     sourceStencilWrite;
   GPUResult                     destinationStencilWrite;
   uint8_t                       sourceDepth[TRANSFER_DS_STRIDE] = {0};
@@ -676,6 +678,7 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
   bool                          stencilAfterDepth;
   bool                          depthAfterStencil;
   bool                          stencilAfterStencil;
+  bool                          uploadsPending;
   int                           ok;
 
   if (GPUGetFormatCapabilities(device->phyDevice,
@@ -722,12 +725,13 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
            TRANSFER_WIDTH);
   }
 
-  cmdb        = NULL;
-  copyPass    = NULL;
-  readback    = NULL;
-  source      = NULL;
-  destination = NULL;
-  ok          = 0;
+  cmdb           = NULL;
+  copyPass       = NULL;
+  readback       = NULL;
+  source         = NULL;
+  destination    = NULL;
+  uploadsPending = false;
+  ok             = 0;
 
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
@@ -772,16 +776,19 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
   writeRegion.bytesPerRow    = TRANSFER_DS_ROW_PITCH;
   writeRegion.rowsPerImage   = TRANSFER_HEIGHT;
   writeRegion.aspect         = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
-  if (GPUQueueWriteTexture(queue,
-                           source,
-                           &writeRegion,
-                           sourceDepth,
-                           sizeof(sourceDepth)) != GPU_OK ||
-      GPUQueueWriteTexture(queue,
-                           destination,
-                           &writeRegion,
-                           destinationDepth,
-                           sizeof(destinationDepth)) != GPU_OK) {
+  sourceDepthWrite = GPUQueueWriteTexture(queue,
+                                          source,
+                                          &writeRegion,
+                                          sourceDepth,
+                                          sizeof(sourceDepth));
+  destinationDepthWrite = GPUQueueWriteTexture(queue,
+                                               destination,
+                                               &writeRegion,
+                                               destinationDepth,
+                                               sizeof(destinationDepth));
+  uploadsPending = sourceDepthWrite == GPU_OK ||
+                   destinationDepthWrite == GPU_OK;
+  if (sourceDepthWrite != GPU_OK || destinationDepthWrite != GPU_OK) {
     fprintf(stderr, "depth-stencil plane depth upload failed\n");
     goto cleanup;
   }
@@ -798,6 +805,8 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
     destinationStencil,
     sizeof(destinationStencil)
   );
+  uploadsPending = uploadsPending || sourceStencilWrite == GPU_OK ||
+                   destinationStencilWrite == GPU_OK;
   if (sourceStencilWrite == GPU_ERROR_UNSUPPORTED ||
       destinationStencilWrite == GPU_ERROR_UNSUPPORTED) {
     printf("depth-stencil plane copy skipped: backend limitation format=%u\n",
@@ -869,6 +878,9 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
 
   ok   = transfer_submit(device, queue, cmdb);
   cmdb = NULL;
+  if (ok) {
+    uploadsPending = false;
+  }
   if (!ok ||
       GPUQueueReadBuffer(queue,
                          readback,
@@ -916,6 +928,19 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
 cleanup:
   if (copyPass) {
     GPUEndCopyPass(copyPass);
+    copyPass = NULL;
+  }
+  if (uploadsPending) {
+    if (!cmdb &&
+        (GPUAcquireCommandBuffer(queue,
+                                 "depth-stencil-upload-wait",
+                                 &cmdb) != GPU_OK ||
+         !cmdb)) {
+      ok = 0;
+    } else if (!transfer_submit(device, queue, cmdb)) {
+      ok = 0;
+    }
+    cmdb = NULL;
   }
   GPUDestroyTexture(destination);
   GPUDestroyTexture(source);

@@ -69,6 +69,14 @@ submit_empty(GPUCommandQueue *queue,
 }
 
 static bool
+wait_queue(GPUCommandQueue *queue, GPUFence *fence) {
+  CompletionProbe probe;
+
+  memset(&probe, 0, sizeof(probe));
+  return submit_empty(queue, fence, &probe) != NULL && probe.count == 1u;
+}
+
+static bool
 submit_error_propagates(GPUCommandQueue *queue) {
   GPUCommandBuffer     *cmdb;
   GPUCommandBuffer     *buffers[1];
@@ -94,7 +102,9 @@ submit_error_propagates(GPUCommandQueue *queue) {
 }
 
 static bool
-sync_transfers_reuse(GPUCommandQueue *queue, GPUDevice *device) {
+buffer_transfers_reuse(GPUCommandQueue *queue,
+                       GPUDevice       *device,
+                       GPUFence        *queueFence) {
   GPUCommandQueueDX12       *native;
   GPUBufferCreateInfo        bufferInfo;
   GPUBuffer                 *buffer;
@@ -133,15 +143,22 @@ sync_transfers_reuse(GPUCommandQueue *queue, GPUDevice *device) {
                            0u,
                            &value,
                            sizeof(value)) == GPU_OK &&
-       GPUQueueReadBuffer(queue,
-                          buffer,
-                          0u,
-                          &copied,
-                          sizeof(copied)) == GPU_OK &&
-       copied == value;
+       native->transferPending;
+  if (ok) {
+    ok = GPUQueueReadBuffer(queue,
+                            buffer,
+                            0u,
+                            &copied,
+                            sizeof(copied)) == GPU_OK &&
+         copied == value &&
+         !native->transferPending;
+  }
   if (!ok || !native->transferAllocator || !native->transferCommandList ||
       !native->transferFence || !native->transferEvent ||
       !native->uploadStaging || !native->readbackStaging) {
+    if (native->transferPending) {
+      (void)wait_queue(queue, queueFence);
+    }
     GPUDestroyBuffer(buffer);
     return false;
   }
@@ -161,12 +178,14 @@ sync_transfers_reuse(GPUCommandQueue *queue, GPUDevice *device) {
                             0u,
                             &value,
                             sizeof(value)) != GPU_OK ||
+        !native->transferPending ||
         GPUQueueReadBuffer(queue,
                            buffer,
                            0u,
                            &copied,
                            sizeof(copied)) != GPU_OK ||
         copied != value ||
+        native->transferPending ||
         native->transferAllocator != allocator ||
         native->transferCommandList != commandList ||
         native->transferFence != fence ||
@@ -179,12 +198,17 @@ sync_transfers_reuse(GPUCommandQueue *queue, GPUDevice *device) {
     }
   }
 
+  if (native->transferPending) {
+    ok = wait_queue(queue, queueFence) && ok;
+  }
   GPUDestroyBuffer(buffer);
   return ok;
 }
 
 static bool
-texture_transfers_reuse(GPUCommandQueue *queue, GPUDevice *device) {
+texture_transfers_reuse(GPUCommandQueue *queue,
+                        GPUDevice       *device,
+                        GPUFence        *queueFence) {
   GPUCommandQueueDX12       *native;
   GPUTextureCreateInfo       textureInfo;
   GPUTextureWriteRegion      writeRegion;
@@ -251,12 +275,15 @@ texture_transfers_reuse(GPUCommandQueue *queue, GPUDevice *device) {
         native->transferFence != fence ||
         native->uploadStaging != upload ||
         native->uploadCapacity != uploadCapacity ||
-        native->transferOpen) {
+        native->transferOpen || !native->transferPending) {
       ok = false;
       break;
     }
   }
 
+  if (native->transferPending) {
+    ok = wait_queue(queue, queueFence) && ok;
+  }
   GPUDestroyTexture(texture);
   return ok;
 }
@@ -355,11 +382,11 @@ main(void) {
     GPUDestroyInstance(instance);
     return 1;
   }
-  if (!sync_transfers_reuse(queue0, device)) {
-    fprintf(stderr, "DX12 synchronous transfer reuse failed\n");
+  if (!buffer_transfers_reuse(queue0, device, fence)) {
+    fprintf(stderr, "DX12 buffer transfer reuse failed\n");
     goto fail;
   }
-  if (!texture_transfers_reuse(queue0, device)) {
+  if (!texture_transfers_reuse(queue0, device, fence)) {
     fprintf(stderr, "DX12 texture transfer reuse failed\n");
     goto fail;
   }
