@@ -4,6 +4,7 @@
 #include "../../src/api/frame_internal.h"
 #include "../../src/api/surface_internal.h"
 #include "../../src/api/swapchain_internal.h"
+#include "../../src/api/texture_internal.h"
 
 typedef struct QueueCompletionProbe {
   void             *sender;
@@ -14,6 +15,8 @@ typedef struct QueueCompletionProbe {
 static GPUQueue         gScopedQueue;
 static GPUCommandBuffer gScopedCmdb;
 static GPUFrame         gScopedFrame;
+static GPUTexture       gScopedFrameTarget;
+static GPUTextureView   gScopedFrameTargetView;
 static uint32_t         gScopedQueueGetCalls;
 static uint32_t         gScopedCmdbNewCalls;
 static uint32_t         gScopedPresentCalls;
@@ -410,7 +413,11 @@ begin_scoped_frame(GPUApi       * __restrict api,
   (void)api;
   (void)swapchain;
   memset(&gScopedFrame, 0, sizeof(gScopedFrame));
-  gScopedFrame.drawable = &gScopedFrame;
+  memset(&gScopedFrameTarget, 0, sizeof(gScopedFrameTarget));
+  memset(&gScopedFrameTargetView, 0, sizeof(gScopedFrameTargetView));
+  gScopedFrame.drawable   = &gScopedFrame;
+  gScopedFrame.target     = &gScopedFrameTarget;
+  gScopedFrame.targetView = &gScopedFrameTargetView;
   gScopedFrameBeginCalls++;
   return &gScopedFrame;
 }
@@ -430,6 +437,7 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   GPUCommandBuffer   *cmdb;
   GPUCommandBuffer   *batchBuffers[2];
   GPUFrame           *frame;
+  GPUCommandBuffer    aliasCmdb  = {0};
   GPUCommandBuffer    batch[2]   = {0};
   GPUQueueSubmitInfo  submitInfo = {0};
   GPUApi              scopedApi;
@@ -467,6 +475,8 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   cmdb  = NULL;
   frame = GPUBeginFrame(&swapchain);
   if (queue != &gScopedQueue || !frame ||
+      GPUFrameGetTarget(frame) != gScopedFrame.target ||
+      GPUFrameGetTargetView(frame) != gScopedFrame.targetView ||
       GPUAcquireCommandBuffer(queue, "device-scoped", &cmdb) != GPU_OK ||
       cmdb != &gScopedCmdb || frame->cpuEncodeFrequency < 1000u ||
       frame->cpuEncodeStartTicks < frame->cpuEncodeFrequency / 1000u) {
@@ -498,14 +508,19 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
     return 0;
   }
 
+  aliasCmdb._queue = queue;
+  GPUCommit(&aliasCmdb);
+  GPUCommit(&aliasCmdb);
+
   if (gScopedQueueGetCalls != 1u ||
       gScopedCmdbNewCalls != 1u ||
       gScopedPresentCalls != 2u ||
-      gScopedCommitCalls != 1u ||
+      gScopedCommitCalls != 2u ||
       gScopedSubmitCalls != 1u ||
       gScopedSubmitCount != 2u ||
       gScopedFrameBeginCalls != 1u ||
-      gScopedFrameEndCalls != 1u) {
+      gScopedFrameEndCalls != 1u ||
+      !aliasCmdb._submitted) {
     fprintf(stderr, "queue/frame device dispatch called wrong backend\n");
     return 0;
   }
