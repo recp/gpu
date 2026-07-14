@@ -210,8 +210,8 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
 
   GPUVertexAttribute vertexAttrs[] = {
-    { .shaderLocation = 0, .format = GPU_VERTEX_FORMAT_FLOAT4, .offset = offsetof(QuadVertex, position) },
-    { .shaderLocation = 1, .format = GPU_VERTEX_FORMAT_FLOAT2, .offset = offsetof(QuadVertex, uv) }
+    { .shaderLocation = 0, .format = GPU_VERTEX_FORMAT_FLOAT32X4, .offset = offsetof(QuadVertex, position) },
+    { .shaderLocation = 1, .format = GPU_VERTEX_FORMAT_FLOAT32X2, .offset = offsetof(QuadVertex, uv) }
   };
   GPUVertexBufferLayout vertexBuffers[] = {
     {

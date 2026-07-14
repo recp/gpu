@@ -157,8 +157,8 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
 
   GPUVertexAttribute vertexAttrs[] = {
-    { .shaderLocation = 0, .format = GPU_VERTEX_FORMAT_FLOAT4, .offset = offsetof(GeneratedVertex, position) },
-    { .shaderLocation = 1, .format = GPU_VERTEX_FORMAT_FLOAT4, .offset = offsetof(GeneratedVertex, color) }
+    { .shaderLocation = 0, .format = GPU_VERTEX_FORMAT_FLOAT32X4, .offset = offsetof(GeneratedVertex, position) },
+    { .shaderLocation = 1, .format = GPU_VERTEX_FORMAT_FLOAT32X4, .offset = offsetof(GeneratedVertex, color) }
   };
   GPUVertexBufferLayout vertexBuffers[] = {
     {

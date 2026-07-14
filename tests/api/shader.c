@@ -192,10 +192,10 @@ check_reflected_pipeline_entry_stages(GPUDevice *device,
 
   colorTarget.format = GPU_FORMAT_BGRA8_UNORM;
   attrs[0].shaderLocation = 0u;
-  attrs[0].format = GPUFloat2;
+  attrs[0].format = GPU_VERTEX_FORMAT_FLOAT32X2;
   attrs[0].offset = 0u;
   attrs[1].shaderLocation = 1u;
-  attrs[1].format = GPUFloat2;
+  attrs[1].format = GPU_VERTEX_FORMAT_FLOAT32X2;
   attrs[1].offset = 8u;
   vertexLayout.strideBytes = 16u;
   vertexLayout.stepMode = GPU_VERTEX_STEP_MODE_VERTEX;
@@ -420,10 +420,10 @@ check_reflected_dynamic_offset_validation(GPUDevice *device,
 
   colorTarget.format = GPU_FORMAT_BGRA8_UNORM;
   attrs[0].shaderLocation = 0u;
-  attrs[0].format = GPUFloat2;
+  attrs[0].format = GPU_VERTEX_FORMAT_FLOAT32X2;
   attrs[0].offset = 0u;
   attrs[1].shaderLocation = 1u;
-  attrs[1].format = GPUFloat2;
+  attrs[1].format = GPU_VERTEX_FORMAT_FLOAT32X2;
   attrs[1].offset = 8u;
   vertexLayout.strideBytes = 16u;
   vertexLayout.stepMode = GPU_VERTEX_STEP_MODE_VERTEX;

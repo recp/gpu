@@ -188,7 +188,7 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
 
   GPUVertexAttribute vertexAttrs[] = {
-    { .shaderLocation = 0, .format = GPU_VERTEX_FORMAT_FLOAT4, .offset = offsetof(QuadVertex, position) }
+    { .shaderLocation = 0, .format = GPU_VERTEX_FORMAT_FLOAT32X4, .offset = offsetof(QuadVertex, position) }
   };
   GPUVertexBufferLayout vertexBuffers[] = {
     {

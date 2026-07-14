@@ -436,7 +436,7 @@ check_render_pipeline_validation(GPUDevice *device,
 
   colorTargets[0].format = GPU_FORMAT_BGRA8_UNORM;
   attr.shaderLocation = 0u;
-  attr.format = GPUFloat2;
+  attr.format = GPU_VERTEX_FORMAT_FLOAT32X2;
   attr.offset = 0u;
   vertexLayout.strideBytes = 8u;
   vertexLayout.stepMode = GPU_VERTEX_STEP_MODE_VERTEX;
@@ -637,7 +637,7 @@ check_render_pipeline_validation(GPUDevice *device,
   }
 
   vertexLayout.pAttributes = &attr;
-  attr.format = GPUUnknown;
+  attr.format = GPU_VERTEX_FORMAT_UNDEFINED;
   if (!expect_render_pipeline_error(device,
                                     &info,
                                     "render pipeline create accepted invalid vertex format")) {
@@ -646,7 +646,7 @@ check_render_pipeline_validation(GPUDevice *device,
     return 0;
   }
 
-  attr.format = GPUFloat2;
+  attr.format = GPU_VERTEX_FORMAT_FLOAT32X2;
   vertexLayout.stepMode = (GPUVertexStepMode)99;
   if (!expect_render_pipeline_error(device,
                                     &info,
@@ -1076,7 +1076,7 @@ check_render_readback_case(GPUDevice *device,
     colorTargets[1].blend.writeMask        = GPU_COLOR_WRITE_G;
   }
   attr.shaderLocation = 0u;
-  attr.format = GPUFloat2;
+  attr.format = GPU_VERTEX_FORMAT_FLOAT32X2;
   attr.offset = 0u;
   vertexLayout.strideBytes = 8u;
   vertexLayout.stepMode = GPU_VERTEX_STEP_MODE_VERTEX;

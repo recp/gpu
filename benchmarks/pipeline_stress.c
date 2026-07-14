@@ -165,7 +165,7 @@ pipeline_init(PipelineStress             *stress,
   }
 
   stress->attribute.shaderLocation    = 0u;
-  stress->attribute.format            = GPU_VERTEX_FORMAT_FLOAT2;
+  stress->attribute.format            = GPU_VERTEX_FORMAT_FLOAT32X2;
   stress->vertexLayout.strideBytes    = 2u * sizeof(float);
   stress->vertexLayout.stepMode       = GPU_VERTEX_STEP_MODE_VERTEX;
   stress->vertexLayout.attributeCount = 1u;

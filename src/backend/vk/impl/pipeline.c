@@ -116,162 +116,60 @@ vk__fillStencilState(VkStencilOpState          *native,
 
 static bool
 vk__vertexFormat(GPUVertexFormat format, VkFormat *outFormat) {
+  static const VkFormat formats[GPU_VERTEX_FORMAT_COUNT] = {
+    [GPU_VERTEX_FORMAT_UNDEFINED]       = VK_FORMAT_UNDEFINED,
+    [GPU_VERTEX_FORMAT_UINT8]           = VK_FORMAT_R8_UINT,
+    [GPU_VERTEX_FORMAT_UINT8X2]         = VK_FORMAT_R8G8_UINT,
+    [GPU_VERTEX_FORMAT_UINT8X4]         = VK_FORMAT_R8G8B8A8_UINT,
+    [GPU_VERTEX_FORMAT_SINT8]           = VK_FORMAT_R8_SINT,
+    [GPU_VERTEX_FORMAT_SINT8X2]         = VK_FORMAT_R8G8_SINT,
+    [GPU_VERTEX_FORMAT_SINT8X4]         = VK_FORMAT_R8G8B8A8_SINT,
+    [GPU_VERTEX_FORMAT_UNORM8]          = VK_FORMAT_R8_UNORM,
+    [GPU_VERTEX_FORMAT_UNORM8X2]        = VK_FORMAT_R8G8_UNORM,
+    [GPU_VERTEX_FORMAT_UNORM8X4]        = VK_FORMAT_R8G8B8A8_UNORM,
+    [GPU_VERTEX_FORMAT_SNORM8]          = VK_FORMAT_R8_SNORM,
+    [GPU_VERTEX_FORMAT_SNORM8X2]        = VK_FORMAT_R8G8_SNORM,
+    [GPU_VERTEX_FORMAT_SNORM8X4]        = VK_FORMAT_R8G8B8A8_SNORM,
+    [GPU_VERTEX_FORMAT_UINT16]          = VK_FORMAT_R16_UINT,
+    [GPU_VERTEX_FORMAT_UINT16X2]        = VK_FORMAT_R16G16_UINT,
+    [GPU_VERTEX_FORMAT_UINT16X4]        = VK_FORMAT_R16G16B16A16_UINT,
+    [GPU_VERTEX_FORMAT_SINT16]          = VK_FORMAT_R16_SINT,
+    [GPU_VERTEX_FORMAT_SINT16X2]        = VK_FORMAT_R16G16_SINT,
+    [GPU_VERTEX_FORMAT_SINT16X4]        = VK_FORMAT_R16G16B16A16_SINT,
+    [GPU_VERTEX_FORMAT_UNORM16]         = VK_FORMAT_R16_UNORM,
+    [GPU_VERTEX_FORMAT_UNORM16X2]       = VK_FORMAT_R16G16_UNORM,
+    [GPU_VERTEX_FORMAT_UNORM16X4]       = VK_FORMAT_R16G16B16A16_UNORM,
+    [GPU_VERTEX_FORMAT_SNORM16]         = VK_FORMAT_R16_SNORM,
+    [GPU_VERTEX_FORMAT_SNORM16X2]       = VK_FORMAT_R16G16_SNORM,
+    [GPU_VERTEX_FORMAT_SNORM16X4]       = VK_FORMAT_R16G16B16A16_SNORM,
+    [GPU_VERTEX_FORMAT_FLOAT16]         = VK_FORMAT_R16_SFLOAT,
+    [GPU_VERTEX_FORMAT_FLOAT16X2]       = VK_FORMAT_R16G16_SFLOAT,
+    [GPU_VERTEX_FORMAT_FLOAT16X4]       = VK_FORMAT_R16G16B16A16_SFLOAT,
+    [GPU_VERTEX_FORMAT_FLOAT32]         = VK_FORMAT_R32_SFLOAT,
+    [GPU_VERTEX_FORMAT_FLOAT32X2]       = VK_FORMAT_R32G32_SFLOAT,
+    [GPU_VERTEX_FORMAT_FLOAT32X3]       = VK_FORMAT_R32G32B32_SFLOAT,
+    [GPU_VERTEX_FORMAT_FLOAT32X4]       = VK_FORMAT_R32G32B32A32_SFLOAT,
+    [GPU_VERTEX_FORMAT_SINT32]          = VK_FORMAT_R32_SINT,
+    [GPU_VERTEX_FORMAT_SINT32X2]        = VK_FORMAT_R32G32_SINT,
+    [GPU_VERTEX_FORMAT_SINT32X3]        = VK_FORMAT_R32G32B32_SINT,
+    [GPU_VERTEX_FORMAT_SINT32X4]        = VK_FORMAT_R32G32B32A32_SINT,
+    [GPU_VERTEX_FORMAT_UINT32]          = VK_FORMAT_R32_UINT,
+    [GPU_VERTEX_FORMAT_UINT32X2]        = VK_FORMAT_R32G32_UINT,
+    [GPU_VERTEX_FORMAT_UINT32X3]        = VK_FORMAT_R32G32B32_UINT,
+    [GPU_VERTEX_FORMAT_UINT32X4]        = VK_FORMAT_R32G32B32A32_UINT,
+    [GPU_VERTEX_FORMAT_UNORM10_10_10_2] =
+      VK_FORMAT_A2B10G10R10_UNORM_PACK32,
+    [GPU_VERTEX_FORMAT_UNORM8X4_BGRA]   = VK_FORMAT_B8G8R8A8_UNORM
+  };
   VkFormat result;
 
-  if (!outFormat) {
+  if (!outFormat || (uint32_t)format >= GPU_ARRAY_LEN(formats)) {
     return false;
   }
 
-  switch (format) {
-    case GPUUChar:
-      result = VK_FORMAT_R8_UINT;
-      break;
-    case GPUUChar2:
-      result = VK_FORMAT_R8G8_UINT;
-      break;
-    case GPUUChar3:
-      result = VK_FORMAT_R8G8B8_UINT;
-      break;
-    case GPUUChar4:
-      result = VK_FORMAT_R8G8B8A8_UINT;
-      break;
-    case GPUChar:
-      result = VK_FORMAT_R8_SINT;
-      break;
-    case GPUChar2:
-      result = VK_FORMAT_R8G8_SINT;
-      break;
-    case GPUChar3:
-      result = VK_FORMAT_R8G8B8_SINT;
-      break;
-    case GPUChar4:
-      result = VK_FORMAT_R8G8B8A8_SINT;
-      break;
-    case GPUUCharNormalized:
-      result = VK_FORMAT_R8_UNORM;
-      break;
-    case GPUUChar2Normalized:
-      result = VK_FORMAT_R8G8_UNORM;
-      break;
-    case GPUUChar3Normalized:
-      result = VK_FORMAT_R8G8B8_UNORM;
-      break;
-    case GPUUChar4Normalized:
-      result = VK_FORMAT_R8G8B8A8_UNORM;
-      break;
-    case GPUCharNormalized:
-      result = VK_FORMAT_R8_SNORM;
-      break;
-    case GPUChar2Normalized:
-      result = VK_FORMAT_R8G8_SNORM;
-      break;
-    case GPUChar3Normalized:
-      result = VK_FORMAT_R8G8B8_SNORM;
-      break;
-    case GPUChar4Normalized:
-      result = VK_FORMAT_R8G8B8A8_SNORM;
-      break;
-    case GPUUShort:
-      result = VK_FORMAT_R16_UINT;
-      break;
-    case GPUUShort2:
-      result = VK_FORMAT_R16G16_UINT;
-      break;
-    case GPUUShort3:
-      result = VK_FORMAT_R16G16B16_UINT;
-      break;
-    case GPUUShort4:
-      result = VK_FORMAT_R16G16B16A16_UINT;
-      break;
-    case GPUShort:
-      result = VK_FORMAT_R16_SINT;
-      break;
-    case GPUShort2:
-      result = VK_FORMAT_R16G16_SINT;
-      break;
-    case GPUShort3:
-      result = VK_FORMAT_R16G16B16_SINT;
-      break;
-    case GPUShort4:
-      result = VK_FORMAT_R16G16B16A16_SINT;
-      break;
-    case GPUUShortNormalized:
-      result = VK_FORMAT_R16_UNORM;
-      break;
-    case GPUUShort2Normalized:
-      result = VK_FORMAT_R16G16_UNORM;
-      break;
-    case GPUUShort3Normalized:
-      result = VK_FORMAT_R16G16B16_UNORM;
-      break;
-    case GPUUShort4Normalized:
-      result = VK_FORMAT_R16G16B16A16_UNORM;
-      break;
-    case GPUShortNormalized:
-      result = VK_FORMAT_R16_SNORM;
-      break;
-    case GPUShort2Normalized:
-      result = VK_FORMAT_R16G16_SNORM;
-      break;
-    case GPUShort3Normalized:
-      result = VK_FORMAT_R16G16B16_SNORM;
-      break;
-    case GPUShort4Normalized:
-      result = VK_FORMAT_R16G16B16A16_SNORM;
-      break;
-    case GPUVertexFormatHalf:
-      result = VK_FORMAT_R16_SFLOAT;
-      break;
-    case GPUHalf2:
-      result = VK_FORMAT_R16G16_SFLOAT;
-      break;
-    case GPUHalf3:
-      result = VK_FORMAT_R16G16B16_SFLOAT;
-      break;
-    case GPUHalf4:
-      result = VK_FORMAT_R16G16B16A16_SFLOAT;
-      break;
-    case GPUFloat:
-      result = VK_FORMAT_R32_SFLOAT;
-      break;
-    case GPUFloat2:
-      result = VK_FORMAT_R32G32_SFLOAT;
-      break;
-    case GPUFloat3:
-      result = VK_FORMAT_R32G32B32_SFLOAT;
-      break;
-    case GPUFloat4:
-      result = VK_FORMAT_R32G32B32A32_SFLOAT;
-      break;
-    case GPUInt:
-      result = VK_FORMAT_R32_SINT;
-      break;
-    case GPUInt2:
-      result = VK_FORMAT_R32G32_SINT;
-      break;
-    case GPUInt3:
-      result = VK_FORMAT_R32G32B32_SINT;
-      break;
-    case GPUInt4:
-      result = VK_FORMAT_R32G32B32A32_SINT;
-      break;
-    case GPUUInt:
-      result = VK_FORMAT_R32_UINT;
-      break;
-    case GPUUInt2:
-      result = VK_FORMAT_R32G32_UINT;
-      break;
-    case GPUUInt3:
-      result = VK_FORMAT_R32G32B32_UINT;
-      break;
-    case GPUUInt4:
-      result = VK_FORMAT_R32G32B32A32_UINT;
-      break;
-    case GPUUChar4Normalized_BGRA:
-      result = VK_FORMAT_B8G8R8A8_UNORM;
-      break;
-    default:
-      return false;
+  result = formats[format];
+  if (result == VK_FORMAT_UNDEFINED) {
+    return false;
   }
 
   *outFormat = result;

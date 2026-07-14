@@ -9,7 +9,7 @@ init_vertex_layout(GPUVertexAttribute    *attribute,
   memset(layout, 0, sizeof(*layout));
 
   attribute->shaderLocation = 0u;
-  attribute->format         = GPUFloat2;
+  attribute->format         = GPU_VERTEX_FORMAT_FLOAT32X2;
   layout->strideBytes       = 8u;
   layout->stepMode          = GPU_VERTEX_STEP_MODE_VERTEX;
   layout->attributeCount    = 1u;

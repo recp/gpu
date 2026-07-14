@@ -131,7 +131,7 @@ test_depth_pipeline(GPUDevice *device, GPUShaderLibrary *library) {
   }
 
   attribute.shaderLocation           = 0u;
-  attribute.format                   = GPUFloat2;
+  attribute.format                   = GPU_VERTEX_FORMAT_FLOAT32X2;
   vertexLayout.strideBytes           = 8u;
   vertexLayout.stepMode              = GPU_VERTEX_STEP_MODE_VERTEX;
   vertexLayout.attributeCount        = 1u;
@@ -255,7 +255,7 @@ test_mrt_render(GPUDevice  *device,
   }
 
   attribute.shaderLocation      = 0u;
-  attribute.format              = GPUFloat2;
+  attribute.format              = GPU_VERTEX_FORMAT_FLOAT32X2;
   vertexLayout.strideBytes      = 8u;
   vertexLayout.stepMode         = GPU_VERTEX_STEP_MODE_VERTEX;
   vertexLayout.attributeCount   = 1u;

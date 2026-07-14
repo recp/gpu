@@ -321,7 +321,7 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
 
   vertexAttribute.shaderLocation = 0u;
-  vertexAttribute.format         = GPU_VERTEX_FORMAT_FLOAT4;
+  vertexAttribute.format         = GPU_VERTEX_FORMAT_FLOAT32X4;
   vertexLayout.strideBytes       = sizeof(QuadVertex);
   vertexLayout.stepMode          = GPU_VERTEX_STEP_MODE_VERTEX;
   vertexLayout.attributeCount    = 1u;

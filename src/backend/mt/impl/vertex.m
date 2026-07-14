@@ -44,6 +44,60 @@ mt_destroyVertexDesc(GPUVertexDescriptor *vert) {
   free(vert);
 }
 
+static MTLVertexFormat
+mt_vertexFormat(GPUVertexFormat format) {
+  static const MTLVertexFormat formats[GPU_VERTEX_FORMAT_COUNT] = {
+    [GPU_VERTEX_FORMAT_UNDEFINED]       = MTLVertexFormatInvalid,
+    [GPU_VERTEX_FORMAT_UINT8]           = MTLVertexFormatUChar,
+    [GPU_VERTEX_FORMAT_UINT8X2]         = MTLVertexFormatUChar2,
+    [GPU_VERTEX_FORMAT_UINT8X4]         = MTLVertexFormatUChar4,
+    [GPU_VERTEX_FORMAT_SINT8]           = MTLVertexFormatChar,
+    [GPU_VERTEX_FORMAT_SINT8X2]         = MTLVertexFormatChar2,
+    [GPU_VERTEX_FORMAT_SINT8X4]         = MTLVertexFormatChar4,
+    [GPU_VERTEX_FORMAT_UNORM8]          = MTLVertexFormatUCharNormalized,
+    [GPU_VERTEX_FORMAT_UNORM8X2]        = MTLVertexFormatUChar2Normalized,
+    [GPU_VERTEX_FORMAT_UNORM8X4]        = MTLVertexFormatUChar4Normalized,
+    [GPU_VERTEX_FORMAT_SNORM8]          = MTLVertexFormatCharNormalized,
+    [GPU_VERTEX_FORMAT_SNORM8X2]        = MTLVertexFormatChar2Normalized,
+    [GPU_VERTEX_FORMAT_SNORM8X4]        = MTLVertexFormatChar4Normalized,
+    [GPU_VERTEX_FORMAT_UINT16]          = MTLVertexFormatUShort,
+    [GPU_VERTEX_FORMAT_UINT16X2]        = MTLVertexFormatUShort2,
+    [GPU_VERTEX_FORMAT_UINT16X4]        = MTLVertexFormatUShort4,
+    [GPU_VERTEX_FORMAT_SINT16]          = MTLVertexFormatShort,
+    [GPU_VERTEX_FORMAT_SINT16X2]        = MTLVertexFormatShort2,
+    [GPU_VERTEX_FORMAT_SINT16X4]        = MTLVertexFormatShort4,
+    [GPU_VERTEX_FORMAT_UNORM16]         = MTLVertexFormatUShortNormalized,
+    [GPU_VERTEX_FORMAT_UNORM16X2]       = MTLVertexFormatUShort2Normalized,
+    [GPU_VERTEX_FORMAT_UNORM16X4]       = MTLVertexFormatUShort4Normalized,
+    [GPU_VERTEX_FORMAT_SNORM16]         = MTLVertexFormatShortNormalized,
+    [GPU_VERTEX_FORMAT_SNORM16X2]       = MTLVertexFormatShort2Normalized,
+    [GPU_VERTEX_FORMAT_SNORM16X4]       = MTLVertexFormatShort4Normalized,
+    [GPU_VERTEX_FORMAT_FLOAT16]         = MTLVertexFormatHalf,
+    [GPU_VERTEX_FORMAT_FLOAT16X2]       = MTLVertexFormatHalf2,
+    [GPU_VERTEX_FORMAT_FLOAT16X4]       = MTLVertexFormatHalf4,
+    [GPU_VERTEX_FORMAT_FLOAT32]         = MTLVertexFormatFloat,
+    [GPU_VERTEX_FORMAT_FLOAT32X2]       = MTLVertexFormatFloat2,
+    [GPU_VERTEX_FORMAT_FLOAT32X3]       = MTLVertexFormatFloat3,
+    [GPU_VERTEX_FORMAT_FLOAT32X4]       = MTLVertexFormatFloat4,
+    [GPU_VERTEX_FORMAT_SINT32]          = MTLVertexFormatInt,
+    [GPU_VERTEX_FORMAT_SINT32X2]        = MTLVertexFormatInt2,
+    [GPU_VERTEX_FORMAT_SINT32X3]        = MTLVertexFormatInt3,
+    [GPU_VERTEX_FORMAT_SINT32X4]        = MTLVertexFormatInt4,
+    [GPU_VERTEX_FORMAT_UINT32]          = MTLVertexFormatUInt,
+    [GPU_VERTEX_FORMAT_UINT32X2]        = MTLVertexFormatUInt2,
+    [GPU_VERTEX_FORMAT_UINT32X3]        = MTLVertexFormatUInt3,
+    [GPU_VERTEX_FORMAT_UINT32X4]        = MTLVertexFormatUInt4,
+    [GPU_VERTEX_FORMAT_UNORM10_10_10_2] =
+      MTLVertexFormatUInt1010102Normalized,
+    [GPU_VERTEX_FORMAT_UNORM8X4_BGRA]   =
+      MTLVertexFormatUChar4Normalized_BGRA
+  };
+
+  return (uint32_t)format < GPU_ARRAY_LEN(formats)
+           ? formats[format]
+           : MTLVertexFormatInvalid;
+}
+
 GPU_HIDE
 void
 mt_attrib(GPUVertexDescriptor * __restrict vert,
@@ -59,8 +113,8 @@ mt_attrib(GPUVertexDescriptor * __restrict vert,
     return;
   }
   desc = vert->_priv;
-  desc.attributes[attribIndex].format = (MTLVertexFormat)format;
-  desc.attributes[attribIndex].offset = offset;
+  desc.attributes[attribIndex].format      = mt_vertexFormat(format);
+  desc.attributes[attribIndex].offset      = offset;
   desc.attributes[attribIndex].bufferIndex = nativeIndex;
 }
 

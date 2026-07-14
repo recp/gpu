@@ -347,10 +347,10 @@ compute_render_createGPU(ComputeRenderApp *app) {
   }
 
   vertexAttributes[0].shaderLocation = 0u;
-  vertexAttributes[0].format         = GPU_VERTEX_FORMAT_FLOAT4;
+  vertexAttributes[0].format         = GPU_VERTEX_FORMAT_FLOAT32X4;
   vertexAttributes[0].offset         = offsetof(GeneratedVertex, position);
   vertexAttributes[1].shaderLocation = 1u;
-  vertexAttributes[1].format         = GPU_VERTEX_FORMAT_FLOAT4;
+  vertexAttributes[1].format         = GPU_VERTEX_FORMAT_FLOAT32X4;
   vertexAttributes[1].offset         = offsetof(GeneratedVertex, color);
   vertexLayout.strideBytes           = sizeof(GeneratedVertex);
   vertexLayout.stepMode              = GPU_VERTEX_STEP_MODE_VERTEX;

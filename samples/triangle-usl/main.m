@@ -120,7 +120,7 @@ TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
 
   GPUVertexAttribute vertexAttrs[] = {
-    { .shaderLocation = 0, .format = GPU_VERTEX_FORMAT_FLOAT2, .offset = offsetof(TriangleVertex, position) }
+    { .shaderLocation = 0, .format = GPU_VERTEX_FORMAT_FLOAT32X2, .offset = offsetof(TriangleVertex, position) }
   };
   GPUVertexBufferLayout vertexBuffers[] = {
     {

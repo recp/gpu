@@ -208,7 +208,8 @@ gpu_validateMetalVertexBindings(const GPUApi                       *api,
 
 static bool
 gpu_vertexFormatIsValid(GPUVertexFormat format) {
-  return format != GPUUnknown && format <= GPUVertexFormatHalf;
+  return (uint32_t)format > GPU_VERTEX_FORMAT_UNDEFINED &&
+         (uint32_t)format < GPU_VERTEX_FORMAT_COUNT;
 }
 
 static bool

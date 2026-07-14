@@ -256,7 +256,7 @@ bench_renderPipeline(BenchRender             *bench,
 
   if (info->vertexInput) {
     attribute.shaderLocation    = 0u;
-    attribute.format            = GPU_VERTEX_FORMAT_FLOAT2;
+    attribute.format            = GPU_VERTEX_FORMAT_FLOAT32X2;
     vertexLayout.strideBytes    = 2u * sizeof(float);
     vertexLayout.stepMode       = GPU_VERTEX_STEP_MODE_VERTEX;
     vertexLayout.attributeCount = 1u;

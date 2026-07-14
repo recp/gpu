@@ -114,7 +114,7 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   }
 
   attribute.shaderLocation      = 0u;
-  attribute.format              = GPU_VERTEX_FORMAT_FLOAT4;
+  attribute.format              = GPU_VERTEX_FORMAT_FLOAT32X4;
   vertexLayout.strideBytes      = 4u * sizeof(float);
   vertexLayout.stepMode         = GPU_VERTEX_STEP_MODE_VERTEX;
   vertexLayout.attributeCount   = 1u;
