@@ -865,6 +865,17 @@ if(GPU_BUILD_TESTS)
       C_EXTENSIONS NO
     )
 
+    add_executable(gpu-vulkan-mesh-test
+      tests/vulkan/mesh.c
+    )
+    target_link_libraries(gpu-vulkan-mesh-test PRIVATE gpu)
+    add_dependencies(gpu-vulkan-mesh-test gpu-vulkan-fixtures)
+    set_target_properties(gpu-vulkan-mesh-test PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+    )
+
     if(NOT MSVC)
       target_compile_options(gpu-vulkan-queue-test PRIVATE
         -Wall
@@ -872,6 +883,11 @@ if(GPU_BUILD_TESTS)
         -Werror
       )
       target_compile_options(gpu-vulkan-shader-test PRIVATE
+        -Wall
+        -Wextra
+        -Werror
+      )
+      target_compile_options(gpu-vulkan-mesh-test PRIVATE
         -Wall
         -Wextra
         -Werror
@@ -886,6 +902,13 @@ if(GPU_BUILD_TESTS)
               "${GPU_VULKAN_DYNAMIC_TRIANGLE_US}"
               "${GPU_VULKAN_RENDER_MRT_US}"
               "${GPU_VULKAN_TEXTURED_QUAD_US}"
+    )
+    add_test(NAME vulkan-mesh
+      COMMAND gpu-vulkan-mesh-test
+              "${GPU_VULKAN_MESH_TRIANGLE_US}"
+    )
+    set_tests_properties(vulkan-mesh PROPERTIES
+      SKIP_RETURN_CODE 77
     )
   endif()
 
@@ -1428,6 +1451,7 @@ if((GPU_BUILD_TESTS OR GPU_BUILD_BENCHMARKS) AND
             api-validation-vulkan
             vulkan-queue
             vulkan-shader
+            vulkan-mesh
             vulkan-compute-buffer
             vulkan-triangle
             vulkan-textured-quad
