@@ -19,6 +19,7 @@
 
 enum {
   VK_COMPLETION_STACK_SIZE     = 64u * 1024u,
+  VK_TRANSFER_STAGING_CAPACITY = 512u * 1024u,
   VK_TRANSFER_OFFSET_ALIGNMENT = 512u
 };
 
@@ -367,7 +368,7 @@ static uint64_t
 vk__transferCapacity(uint64_t sizeBytes) {
   uint64_t capacity;
 
-  capacity = 64u * 1024u;
+  capacity = VK_TRANSFER_STAGING_CAPACITY;
   while (capacity < sizeBytes) {
     if (capacity > UINT64_MAX / 2u) {
       return sizeBytes;
