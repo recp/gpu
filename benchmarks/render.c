@@ -523,8 +523,14 @@ bench_renderFreeMetrics(BenchSceneMetrics *metrics) {
 
 void
 bench_renderCleanup(BenchRender *bench) {
+  GPUApi *api;
+
   if (!bench) {
     return;
+  }
+  api = gpuDeviceApi(bench->device);
+  if (api && api->device.waitIdle) {
+    (void)api->device.waitIdle(bench->device);
   }
   GPUDestroyFence(bench->fence);
   GPUDestroyTextureView(bench->targetView);
