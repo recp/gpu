@@ -115,6 +115,7 @@ mt_createSwapchain(GPUApi          * __restrict api,
   GPUSwapchainObjc  *objc;
   GPUSurface        *surface;
   GPUExtent2D        size;
+  uint32_t           imageCount;
 
   GPU__UNUSED(api);
   GPU__UNUSED(cmdQue);
@@ -126,6 +127,7 @@ mt_createSwapchain(GPUApi          * __restrict api,
   surface     = info->surface;
   size.width  = info->width;
   size.height = info->height;
+  imageCount  = info->imageCount ? info->imageCount : 3u;
 
   deviceMT                            = device->_priv;
   swapchain                           = calloc(1, sizeof(*swapchain));
@@ -137,6 +139,11 @@ mt_createSwapchain(GPUApi          * __restrict api,
   swapchainMtl->layer.opaque          = YES;
   swapchainMtl->layer.contentsScale   = surface->scale;
   swapchainMtl->layer.contentsGravity = kCAGravityResizeAspectFill;
+  swapchainMtl->layer.maximumDrawableCount = imageCount;
+#if TARGET_OS_OSX
+  swapchainMtl->layer.displaySyncEnabled =
+    info->presentMode != GPU_PRESENT_MODE_IMMEDIATE;
+#endif
   swapchain->_priv                    = swapchainMtl;
   swapchain->backingScaleFactor       = surface->scale;
   swapchainMtl->objc                  = [GPUSwapchainObjc new];

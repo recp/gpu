@@ -176,9 +176,24 @@ GPUGetSurfaceCapabilities(const GPUAdapter * __restrict adapter,
   }
   if (outCaps->minImageCount == 0u ||
       outCaps->maxImageCount < outCaps->minImageCount ||
-      outCaps->formatCount == 0u || !outCaps->pFormats) {
+      outCaps->formatCount == 0u || !outCaps->pFormats ||
+      outCaps->presentModeCount == 0u || !outCaps->pPresentModes) {
     memset(outCaps, 0, sizeof(*outCaps));
     return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  for (uint32_t i = 0u; i < outCaps->formatCount; i++) {
+    if (outCaps->pFormats[i] <= GPU_FORMAT_UNDEFINED ||
+        outCaps->pFormats[i] >= GPU_FORMAT_COUNT) {
+      memset(outCaps, 0, sizeof(*outCaps));
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+  for (uint32_t i = 0u; i < outCaps->presentModeCount; i++) {
+    if (outCaps->pPresentModes[i] > GPU_PRESENT_MODE_IMMEDIATE) {
+      memset(outCaps, 0, sizeof(*outCaps));
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
   }
 
   return GPU_OK;

@@ -23,6 +23,15 @@ static const uint32_t dx12_surfaceFormats[] = {
   GPU_FORMAT_RGB10A2_UNORM
 };
 
+static const uint32_t dx12_fifoPresentMode[] = {
+  GPU_PRESENT_MODE_FIFO
+};
+
+static const uint32_t dx12_tearingPresentModes[] = {
+  GPU_PRESENT_MODE_FIFO,
+  GPU_PRESENT_MODE_IMMEDIATE
+};
+
 GPUSurface *
 dx12_createSurface(GPUApi            * __restrict api,
                    GPUInstance       * __restrict inst,
@@ -48,18 +57,24 @@ static GPUResult
 dx12_getSurfaceCapabilities(const GPUAdapter       * __restrict adapter,
                             GPUSurface             * __restrict surface,
                             GPUSurfaceCapabilities * __restrict outCaps) {
-  GPU__UNUSED(adapter);
+  GPUInstanceDX12 *instance;
 
-  if (!surface || !outCaps ||
+  if (!adapter || !adapter->inst || !surface || !outCaps ||
       (surface->type != GPU_SURFACE_WINDOWS_HWND &&
        surface->type != GPU_SURFACE_WINDOWS_COREWINDOW)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  outCaps->minImageCount = 2u;
-  outCaps->maxImageCount = 3u;
-  outCaps->formatCount   = (uint32_t)GPU_ARRAY_LEN(dx12_surfaceFormats);
-  outCaps->pFormats      = dx12_surfaceFormats;
+  instance                  = adapter->inst->_priv;
+  outCaps->pFormats         = dx12_surfaceFormats;
+  outCaps->pPresentModes    = instance && instance->allowTearing ?
+    dx12_tearingPresentModes : dx12_fifoPresentMode;
+  outCaps->minImageCount    = 2u;
+  outCaps->maxImageCount    = 3u;
+  outCaps->formatCount      = (uint32_t)GPU_ARRAY_LEN(dx12_surfaceFormats);
+  outCaps->presentModeCount = instance && instance->allowTearing ?
+    (uint32_t)GPU_ARRAY_LEN(dx12_tearingPresentModes) :
+    (uint32_t)GPU_ARRAY_LEN(dx12_fifoPresentMode);
   return GPU_OK;
 }
 

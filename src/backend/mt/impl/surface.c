@@ -15,11 +15,23 @@
  */
 
 #include "../common.h"
+#include <TargetConditionals.h>
 
 static const uint32_t mt_surfaceFormats[] = {
   GPU_FORMAT_BGRA8_UNORM,
   GPU_FORMAT_BGRA8_UNORM_SRGB
 };
+
+#if TARGET_OS_OSX
+static const uint32_t mt_presentModes[] = {
+  GPU_PRESENT_MODE_FIFO,
+  GPU_PRESENT_MODE_IMMEDIATE
+};
+#else
+static const uint32_t mt_presentModes[] = {
+  GPU_PRESENT_MODE_FIFO
+};
+#endif
 
 GPUSurface*
 mt_createSurface(GPUApi            * __restrict api,
@@ -54,10 +66,12 @@ mt_getSurfaceCapabilities(const GPUAdapter       * __restrict adapter,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  outCaps->minImageCount = 2u;
-  outCaps->maxImageCount = 3u;
-  outCaps->formatCount   = (uint32_t)GPU_ARRAY_LEN(mt_surfaceFormats);
-  outCaps->pFormats      = mt_surfaceFormats;
+  outCaps->pFormats         = mt_surfaceFormats;
+  outCaps->pPresentModes    = mt_presentModes;
+  outCaps->minImageCount    = 2u;
+  outCaps->maxImageCount    = 3u;
+  outCaps->formatCount      = (uint32_t)GPU_ARRAY_LEN(mt_surfaceFormats);
+  outCaps->presentModeCount = (uint32_t)GPU_ARRAY_LEN(mt_presentModes);
   return GPU_OK;
 }
 

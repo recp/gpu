@@ -32,7 +32,7 @@
 #include "../../api/swapchain_internal.h"
 #include "../../api/texture_internal.h"
 
-#include <dxgi1_4.h>
+#include <dxgi1_5.h>
 #include <d3d12.h>
 
 #define DXCHECK(D) hr = D; if (FAILED(hr)) { goto err; }
@@ -426,6 +426,7 @@ struct GPUQueueDX12 {
 typedef struct GPUInstanceDX12 {
   IDXGIFactory4 *dxgiFactory;
   UINT           dxgiFactoryFlags;
+  bool           allowTearing;
 } GPUInstanceDX12;
 
 typedef struct GPUSamplerDX12 {
@@ -457,6 +458,7 @@ struct GPUSwapchainDX12 {
   UINT                  rtvDescriptorSize;
   UINT                  syncInterval;
   UINT                  presentFlags;
+  UINT                  swapchainFlags;
   bool                  frameActive;
   bool                  frameScheduled;
 };

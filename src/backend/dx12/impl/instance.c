@@ -22,6 +22,8 @@ dx12_createInstance(struct GPUApi * __restrict api,
                     const GPUInstanceCreateInfo * __restrict info) {
   GPUInstance     *inst;
   GPUInstanceDX12 *instDX12;
+  IDXGIFactory5   *factory5;
+  BOOL             allowTearing;
   HRESULT          hr;
 
   GPU__UNUSED(api);
@@ -56,6 +58,23 @@ dx12_createInstance(struct GPUApi * __restrict api,
   if (FAILED(hr)) {
     goto err;
   }
+
+  factory5      = NULL;
+  allowTearing = FALSE;
+  if (SUCCEEDED(instDX12->dxgiFactory->lpVtbl->QueryInterface(
+        instDX12->dxgiFactory,
+        &IID_IDXGIFactory5,
+        (void **)&factory5)) && factory5) {
+    if (FAILED(factory5->lpVtbl->CheckFeatureSupport(
+          factory5,
+          DXGI_FEATURE_PRESENT_ALLOW_TEARING,
+          &allowTearing,
+          sizeof(allowTearing)))) {
+      allowTearing = FALSE;
+    }
+    factory5->lpVtbl->Release(factory5);
+  }
+  instDX12->allowTearing = allowTearing == TRUE;
 
   inst->_priv      = instDX12;
   if (info) {

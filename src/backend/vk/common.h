@@ -487,6 +487,7 @@ typedef struct GPUSurfaceVk {
   VkInstance   inst;
   VkSurfaceKHR surface;
   uint32_t     formats[GPU_FORMAT_COUNT];
+  uint32_t     presentModes[GPU_PRESENT_MODE_IMMEDIATE + 1u];
 } GPUSurfaceVk;
 
 typedef struct GPUFrameSyncVk {

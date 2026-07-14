@@ -46,10 +46,12 @@ typedef struct GPUNativeSurfaceCreateInfo {
 } GPUNativeSurfaceCreateInfo;
 
 typedef struct GPUSurfaceCapabilities {
-  uint32_t       minImageCount;
-  uint32_t       maxImageCount;
-  uint32_t       formatCount;
   const uint32_t *pFormats;
+  const uint32_t *pPresentModes;
+  uint32_t        minImageCount;
+  uint32_t        maxImageCount;
+  uint32_t        formatCount;
+  uint32_t        presentModeCount;
 } GPUSurfaceCapabilities;
 
 GPU_EXPORT

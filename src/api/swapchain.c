@@ -61,6 +61,7 @@ GPUCreateSwapchain(GPUDevice                    * __restrict device,
   GPUQueue             *queue;
   GPUResult             result;
   bool                  formatSupported;
+  bool                  presentModeSupported;
 
   if (!outSwapchain)
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -108,6 +109,22 @@ GPUCreateSwapchain(GPUDevice                    * __restrict device,
   if (!formatSupported) {
     return GPU_ERROR_UNSUPPORTED;
   }
+  if (info->imageCount != 0u &&
+      (info->imageCount < surfaceCaps.minImageCount ||
+       info->imageCount > surfaceCaps.maxImageCount)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  presentModeSupported = false;
+  for (uint32_t i = 0u; i < surfaceCaps.presentModeCount; i++) {
+    if (surfaceCaps.pPresentModes[i] == (uint32_t)info->presentMode) {
+      presentModeSupported = true;
+      break;
+    }
+  }
+  if (!presentModeSupported) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
 
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0);
   if (!queue)
@@ -137,7 +154,7 @@ GPUCreateSwapchainDefault(GPUDevice         * __restrict device,
   info.width            = width;
   info.height           = height;
   info.format           = GPU_FORMAT_BGRA8_UNORM;
-  info.imageCount       = 3;
+  info.imageCount       = 0;
   info.presentMode      = GPU_PRESENT_MODE_FIFO;
 
   if (GPUCreateSwapchain(device, &info, &swapchain) != GPU_OK)

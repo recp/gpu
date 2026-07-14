@@ -50,6 +50,47 @@ static const uint32_t gOwnershipSurfaceFormats[] = {
   GPU_FORMAT_BGRA8_UNORM
 };
 
+static const uint32_t gOwnershipPresentModes[] = {
+  GPU_PRESENT_MODE_FIFO
+};
+
+static const uint32_t gValidationSurfaceFormats[] = {
+  GPU_FORMAT_BGRA8_UNORM
+};
+
+static const uint32_t gValidationPresentModes[] = {
+  GPU_PRESENT_MODE_FIFO
+};
+
+static void
+get_validation_format_capabilities(
+  const GPUAdapter      * __restrict adapter,
+  GPUFormat              format,
+  GPUFormatCapabilities * __restrict outCaps) {
+  (void)adapter;
+  (void)format;
+  outCaps->colorAttachment = true;
+}
+
+static GPUResult
+get_validation_surface_capabilities(
+  const GPUAdapter       * __restrict adapter,
+  GPUSurface             * __restrict surface,
+  GPUSurfaceCapabilities * __restrict outCaps) {
+  (void)adapter;
+  (void)surface;
+
+  outCaps->pFormats         = gValidationSurfaceFormats;
+  outCaps->pPresentModes    = gValidationPresentModes;
+  outCaps->minImageCount    = 2u;
+  outCaps->maxImageCount    = 3u;
+  outCaps->formatCount      =
+    (uint32_t)GPU_ARRAY_LEN(gValidationSurfaceFormats);
+  outCaps->presentModeCount =
+    (uint32_t)GPU_ARRAY_LEN(gValidationPresentModes);
+  return GPU_OK;
+}
+
 static GPUAdapter *
 get_ownership_adapters(GPUInstance * __restrict instance,
                        uint32_t                   maxCount) {
@@ -176,10 +217,13 @@ get_ownership_surface_capabilities(
   (void)adapter;
   (void)surface;
 
-  outCaps->minImageCount = 2u;
-  outCaps->maxImageCount = 3u;
-  outCaps->formatCount   = (uint32_t)GPU_ARRAY_LEN(gOwnershipSurfaceFormats);
-  outCaps->pFormats      = gOwnershipSurfaceFormats;
+  outCaps->pFormats         = gOwnershipSurfaceFormats;
+  outCaps->pPresentModes    = gOwnershipPresentModes;
+  outCaps->minImageCount    = 2u;
+  outCaps->maxImageCount    = 3u;
+  outCaps->formatCount      = (uint32_t)GPU_ARRAY_LEN(gOwnershipSurfaceFormats);
+  outCaps->presentModeCount =
+    (uint32_t)GPU_ARRAY_LEN(gOwnershipPresentModes);
   gOwnershipSurfaceCapabilityCalls++;
   return GPU_OK;
 }
@@ -308,7 +352,9 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
       surfaceCaps.minImageCount != 2u ||
       surfaceCaps.maxImageCount != 3u ||
       surfaceCaps.formatCount != 1u ||
-      surfaceCaps.pFormats[0] != GPU_FORMAT_BGRA8_UNORM) {
+      surfaceCaps.pFormats[0] != GPU_FORMAT_BGRA8_UNORM ||
+      surfaceCaps.presentModeCount != 1u ||
+      surfaceCaps.pPresentModes[0] != GPU_PRESENT_MODE_FIFO) {
     fprintf(stderr, "instance-scoped surface dispatch failed\n");
     return 0;
   }
@@ -1028,14 +1074,31 @@ check_queue_selection(GPUDevice *device) {
 static int
 check_swapchain_create_validation(GPUDevice *device) {
   GPUInstance            foreignInstance = {0};
+  GPUInstance            scopedInstance  = {0};
+  GPUAdapter             scopedAdapter   = {0};
+  GPUDevice              scopedDevice    = {0};
   GPUSurface             foreignSurface  = {0};
+  GPUSurface             scopedSurface   = {0};
   GPUSurface             surface         = {0};
   GPUSwapchain          *swapchain;
   GPUSwapchainCreateInfo info            = {0};
+  GPUApi                  scopedApi;
 
   if (!device) {
     return 0;
   }
+
+  scopedApi                                  = *gpuDeviceApi(device);
+  scopedApi.device.getFormatCapabilities    =
+    get_validation_format_capabilities;
+  scopedApi.surface.getCapabilities          =
+    get_validation_surface_capabilities;
+  scopedInstance._api                        = &scopedApi;
+  scopedAdapter.inst                         = &scopedInstance;
+  scopedDevice.inst                          = &scopedInstance;
+  scopedDevice.adapter                       = &scopedAdapter;
+  scopedDevice._api                          = &scopedApi;
+  scopedSurface.inst                         = &scopedInstance;
 
   surface.inst          = device->inst;
   foreignSurface.inst   = &foreignInstance;
@@ -1103,6 +1166,27 @@ check_swapchain_create_validation(GPUDevice *device) {
   if (GPUCreateSwapchain(device, &info, &swapchain) !=
       GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "swapchain create accepted invalid present mode\n");
+    return 0;
+  }
+
+  info.surface     = &scopedSurface;
+  info.presentMode = GPU_PRESENT_MODE_FIFO;
+  info.imageCount  = 1u;
+  swapchain        = (GPUSwapchain *)(uintptr_t)1u;
+  if (GPUCreateSwapchain(&scopedDevice, &info, &swapchain) !=
+        GPU_ERROR_UNSUPPORTED ||
+      swapchain != NULL) {
+    fprintf(stderr, "swapchain create accepted unsupported image count\n");
+    return 0;
+  }
+
+  info.imageCount  = 3u;
+  info.presentMode = GPU_PRESENT_MODE_IMMEDIATE;
+  swapchain        = (GPUSwapchain *)(uintptr_t)1u;
+  if (GPUCreateSwapchain(&scopedDevice, &info, &swapchain) !=
+        GPU_ERROR_UNSUPPORTED ||
+      swapchain != NULL) {
+    fprintf(stderr, "swapchain create accepted unsupported present mode\n");
     return 0;
   }
 

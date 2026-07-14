@@ -216,7 +216,8 @@ dx12_createSwapchain(GPUApi                    * __restrict api,
   desc.Scaling            = DXGI_SCALING_STRETCH;
   desc.SwapEffect         = DXGI_SWAP_EFFECT_FLIP_DISCARD;
   desc.AlphaMode          = DXGI_ALPHA_MODE_UNSPECIFIED;
-  desc.Flags              = 0u;
+  desc.Flags              = info->presentMode == GPU_PRESENT_MODE_IMMEDIATE ?
+    DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0u;
 
   swapchain1 = NULL;
   switch (info->surface->type) {
@@ -298,9 +299,11 @@ dx12_createSwapchain(GPUApi                    * __restrict api,
   native->rtvDescriptorSize = deviceDX12->d3dDevice->lpVtbl
     ->GetDescriptorHandleIncrementSize(deviceDX12->d3dDevice,
                                        D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-  native->syncInterval = info->presentMode == GPU_PRESENT_MODE_FIFO ? 1u : 0u;
-  native->presentFlags = 0u;
-  native->frameIndex   = native->swapchain->lpVtbl->GetCurrentBackBufferIndex(
+  native->syncInterval   = info->presentMode == GPU_PRESENT_MODE_FIFO ? 1u : 0u;
+  native->presentFlags   = info->presentMode == GPU_PRESENT_MODE_IMMEDIATE ?
+    DXGI_PRESENT_ALLOW_TEARING : 0u;
+  native->swapchainFlags = desc.Flags;
+  native->frameIndex     = native->swapchain->lpVtbl->GetCurrentBackBufferIndex(
     native->swapchain
   );
   if (!dx12__createBackBuffers(device,
@@ -339,7 +342,7 @@ dx12_resizeSwapchain(GPUSwapchain *swapchain, GPUExtent2D size) {
                                                      size.width,
                                                      size.height,
                                                      native->format,
-                                                     0u);
+                                                     native->swapchainFlags);
   if (FAILED(result) ||
       !dx12__createBackBuffers(device,
                                native,
