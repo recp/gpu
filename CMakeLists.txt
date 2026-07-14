@@ -291,7 +291,7 @@ if(GPU_BUILD_VULKAN)
   target_link_libraries(gpu PRIVATE Vulkan::Vulkan)
 endif()
 
-if(GPU_BUILD_TESTS OR (GPU_BUILD_SAMPLES AND GPU_BUILD_DX12))
+if(GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES)
   add_executable(gpu-usl-fixture tests/usl_fixture.c)
   if(TARGET us)
     target_link_libraries(gpu-usl-fixture PRIVATE us)
@@ -360,6 +360,26 @@ if(GPU_BUILD_TESTS OR (GPU_BUILD_SAMPLES AND GPU_BUILD_DX12))
       list(APPEND outputs "${fixtureOutput}")
     endforeach()
     set(${outVar} "${outputs}" PARENT_SCOPE)
+  endfunction()
+
+  function(gpu_attach_usl_sample target fixtureTarget artifact)
+    add_dependencies(${target} ${fixtureTarget})
+    if(WIN32)
+      foreach(runtimeTarget us ds)
+        if(TARGET ${runtimeTarget})
+          add_custom_command(TARGET ${target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_FILE:${runtimeTarget}>
+                    $<TARGET_FILE_DIR:${target}>
+          )
+        endif()
+      endforeach()
+    endif()
+    add_custom_command(TARGET ${target} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${artifact}"
+              $<TARGET_FILE_DIR:${target}>
+    )
   endfunction()
 endif()
 
@@ -463,6 +483,21 @@ if(GPU_BUILD_DX12 AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
   list(GET GPU_DX12_USL_FIXTURES 1 GPU_DX12_TEXTURED_QUAD_US)
   list(GET GPU_DX12_USL_FIXTURES 2 GPU_DX12_COMPUTE_BUFFER_US)
   add_custom_target(gpu-dx12-fixtures DEPENDS ${GPU_DX12_USL_FIXTURES})
+endif()
+
+if(GPU_BUILD_VULKAN AND GPU_BUILD_SAMPLES)
+  gpu_add_usl_fixtures(
+    GPU_VULKAN_USL_FIXTURES
+    vulkan
+    samples
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-vulkan-usl/triangle.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-vulkan-usl/textured_quad.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-vulkan-usl/compute_buffer.usl"
+  )
+  list(GET GPU_VULKAN_USL_FIXTURES 0 GPU_VULKAN_TRIANGLE_US)
+  list(GET GPU_VULKAN_USL_FIXTURES 1 GPU_VULKAN_TEXTURED_QUAD_US)
+  list(GET GPU_VULKAN_USL_FIXTURES 2 GPU_VULKAN_COMPUTE_BUFFER_US)
+  add_custom_target(gpu-vulkan-fixtures DEPENDS ${GPU_VULKAN_USL_FIXTURES})
 endif()
 
 if(GPU_BUILD_TESTS)
@@ -642,108 +677,52 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
     samples/triangle-dx12-usl/main.c
   )
   target_link_libraries(gpu-triangle-dx12-usl PRIVATE gpu user32)
-  add_dependencies(gpu-triangle-dx12-usl gpu-dx12-fixtures)
+  gpu_attach_usl_sample(gpu-triangle-dx12-usl
+                        gpu-dx12-fixtures
+                        "${GPU_DX12_TRIANGLE_US}")
   set_target_properties(gpu-triangle-dx12-usl PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
   )
 
-  foreach(runtime_target us ds)
-    if(TARGET ${runtime_target})
-      add_custom_command(TARGET gpu-triangle-dx12-usl POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:${runtime_target}>
-                $<TARGET_FILE_DIR:gpu-triangle-dx12-usl>
-      )
-    endif()
-  endforeach()
-
-  add_custom_command(TARGET gpu-triangle-dx12-usl POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${GPU_DX12_TRIANGLE_US}"
-            $<TARGET_FILE_DIR:gpu-triangle-dx12-usl>
-  )
-
   add_executable(gpu-textured-quad-dx12-usl
     samples/textured-quad-dx12-usl/main.c
   )
   target_link_libraries(gpu-textured-quad-dx12-usl PRIVATE gpu user32)
-  add_dependencies(gpu-textured-quad-dx12-usl gpu-dx12-fixtures)
+  gpu_attach_usl_sample(gpu-textured-quad-dx12-usl
+                        gpu-dx12-fixtures
+                        "${GPU_DX12_TEXTURED_QUAD_US}")
   set_target_properties(gpu-textured-quad-dx12-usl PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
   )
 
-  foreach(runtime_target us ds)
-    if(TARGET ${runtime_target})
-      add_custom_command(TARGET gpu-textured-quad-dx12-usl POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:${runtime_target}>
-                $<TARGET_FILE_DIR:gpu-textured-quad-dx12-usl>
-      )
-    endif()
-  endforeach()
-
-  add_custom_command(TARGET gpu-textured-quad-dx12-usl POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${GPU_DX12_TEXTURED_QUAD_US}"
-            $<TARGET_FILE_DIR:gpu-textured-quad-dx12-usl>
-  )
-
   add_executable(gpu-compute-buffer-dx12-usl
     samples/compute-buffer-dx12-usl/main.c
   )
   target_link_libraries(gpu-compute-buffer-dx12-usl PRIVATE gpu)
-  add_dependencies(gpu-compute-buffer-dx12-usl gpu-dx12-fixtures)
+  gpu_attach_usl_sample(gpu-compute-buffer-dx12-usl
+                        gpu-dx12-fixtures
+                        "${GPU_DX12_COMPUTE_BUFFER_US}")
   set_target_properties(gpu-compute-buffer-dx12-usl PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
   )
 
-  foreach(runtime_target us ds)
-    if(TARGET ${runtime_target})
-      add_custom_command(TARGET gpu-compute-buffer-dx12-usl POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:${runtime_target}>
-                $<TARGET_FILE_DIR:gpu-compute-buffer-dx12-usl>
-      )
-    endif()
-  endforeach()
-
-  add_custom_command(TARGET gpu-compute-buffer-dx12-usl POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${GPU_DX12_COMPUTE_BUFFER_US}"
-            $<TARGET_FILE_DIR:gpu-compute-buffer-dx12-usl>
-  )
-
   add_executable(gpu-compute-render-dx12-usl
     samples/compute-buffer-dx12-usl/window.c
   )
   target_link_libraries(gpu-compute-render-dx12-usl PRIVATE gpu user32)
-  add_dependencies(gpu-compute-render-dx12-usl gpu-dx12-fixtures)
+  gpu_attach_usl_sample(gpu-compute-render-dx12-usl
+                        gpu-dx12-fixtures
+                        "${GPU_DX12_COMPUTE_BUFFER_US}")
   set_target_properties(gpu-compute-render-dx12-usl PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
-  )
-
-  foreach(runtime_target us ds)
-    if(TARGET ${runtime_target})
-      add_custom_command(TARGET gpu-compute-render-dx12-usl POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:${runtime_target}>
-                $<TARGET_FILE_DIR:gpu-compute-render-dx12-usl>
-      )
-    endif()
-  endforeach()
-
-  add_custom_command(TARGET gpu-compute-render-dx12-usl POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${GPU_DX12_COMPUTE_BUFFER_US}"
-            $<TARGET_FILE_DIR:gpu-compute-render-dx12-usl>
   )
 
   if(GPU_BUILD_TESTS)
@@ -752,6 +731,79 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
       COMMAND gpu-compute-buffer-dx12-usl
               "${GPU_DX12_COMPUTE_BUFFER_US}"
     )
+  endif()
+endif()
+
+if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
+  add_executable(gpu-compute-buffer-vulkan-usl
+    samples/compute-buffer-vulkan-usl/main.c
+  )
+  target_link_libraries(gpu-compute-buffer-vulkan-usl PRIVATE gpu)
+  if(NOT WIN32)
+    target_link_libraries(gpu-compute-buffer-vulkan-usl PRIVATE m)
+  endif()
+  gpu_attach_usl_sample(gpu-compute-buffer-vulkan-usl
+                        gpu-vulkan-fixtures
+                        "${GPU_VULKAN_COMPUTE_BUFFER_US}")
+  set_target_properties(gpu-compute-buffer-vulkan-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+
+  if(GPU_BUILD_TESTS)
+    add_test(
+      NAME vulkan-compute-buffer
+      COMMAND gpu-compute-buffer-vulkan-usl
+              "${GPU_VULKAN_COMPUTE_BUFFER_US}"
+    )
+  endif()
+
+  if(APPLE)
+    add_executable(gpu-triangle-vulkan-usl
+      samples/triangle-vulkan-usl/main.m
+    )
+    target_compile_options(gpu-triangle-vulkan-usl PRIVATE -fobjc-arc)
+    target_link_libraries(gpu-triangle-vulkan-usl PRIVATE
+      gpu
+      "-framework AppKit"
+      "-framework Foundation"
+      "-framework QuartzCore"
+    )
+    gpu_attach_usl_sample(gpu-triangle-vulkan-usl
+                          gpu-vulkan-fixtures
+                          "${GPU_VULKAN_TRIANGLE_US}")
+
+    add_executable(gpu-textured-quad-vulkan-usl
+      samples/textured-quad-vulkan-usl/main.m
+    )
+    target_compile_options(gpu-textured-quad-vulkan-usl PRIVATE -fobjc-arc)
+    target_link_libraries(gpu-textured-quad-vulkan-usl PRIVATE
+      gpu
+      "-framework AppKit"
+      "-framework Foundation"
+      "-framework QuartzCore"
+    )
+    gpu_attach_usl_sample(gpu-textured-quad-vulkan-usl
+                          gpu-vulkan-fixtures
+                          "${GPU_VULKAN_TEXTURED_QUAD_US}")
+
+    add_executable(gpu-compute-render-vulkan-usl
+      samples/compute-buffer-usl/main.m
+    )
+    target_compile_options(gpu-compute-render-vulkan-usl PRIVATE -fobjc-arc)
+    target_compile_definitions(gpu-compute-render-vulkan-usl PRIVATE
+      GPU_SAMPLE_BACKEND=GPU_BACKEND_VULKAN
+    )
+    target_link_libraries(gpu-compute-render-vulkan-usl PRIVATE
+      gpu
+      "-framework AppKit"
+      "-framework Foundation"
+      "-framework QuartzCore"
+    )
+    gpu_attach_usl_sample(gpu-compute-render-vulkan-usl
+                          gpu-vulkan-fixtures
+                          "${GPU_VULKAN_COMPUTE_BUFFER_US}")
   endif()
 endif()
 
