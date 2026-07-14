@@ -23,6 +23,24 @@ vk__renderEncoder(GPURenderCommandEncoder *encoder) {
   return encoder ? encoder->_priv : NULL;
 }
 
+static VkViewport
+vk__viewport(float x,
+             float y,
+             float width,
+             float height,
+             float minDepth,
+             float maxDepth) {
+  VkViewport viewport;
+
+  viewport.x        = x;
+  viewport.y        = y + height;
+  viewport.width    = width;
+  viewport.height   = -height;
+  viewport.minDepth = minDepth;
+  viewport.maxDepth = maxDepth;
+  return viewport;
+}
+
 static bool
 vk__bindIndexBuffer(GPURenderCommandEncoder *encoder,
                     GPURenderEncoderVk      *native) {
@@ -116,9 +134,12 @@ vk_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
                          VK_SUBPASS_CONTENTS_INLINE);
   }
 
-  viewport.width    = (float)native->extent.width;
-  viewport.height   = (float)native->extent.height;
-  viewport.maxDepth = 1.0f;
+  viewport = vk__viewport(0.0f,
+                          0.0f,
+                          (float)native->extent.width,
+                          (float)native->extent.height,
+                          0.0f,
+                          1.0f);
   scissor.extent    = native->extent;
   vkCmdSetViewport(native->command, 0u, 1u, &viewport);
   vkCmdSetScissor(native->command, 0u, 1u, &scissor);
@@ -164,12 +185,12 @@ vk_viewport(GPURenderCommandEncoder *encoder, const GPUViewport *value) {
     return;
   }
 
-  viewport.x        = value->x;
-  viewport.y        = value->y;
-  viewport.width    = value->width;
-  viewport.height   = value->height;
-  viewport.minDepth = value->minDepth;
-  viewport.maxDepth = value->maxDepth;
+  viewport = vk__viewport(value->x,
+                          value->y,
+                          value->width,
+                          value->height,
+                          value->minDepth,
+                          value->maxDepth);
   vkCmdSetViewport(native->command, 0u, 1u, &viewport);
 }
 

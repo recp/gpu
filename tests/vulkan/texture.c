@@ -1,6 +1,24 @@
 #include <gpu/gpu.h>
 
+#include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
+
+typedef struct VulkanTextureVertex {
+  float position[4];
+  float uv[2];
+} VulkanTextureVertex;
+
+static int
+pixel_matches(const uint8_t pixel[4],
+              uint8_t       red,
+              uint8_t       green,
+              uint8_t       blue) {
+  return abs((int)pixel[0] - red) <= 3 &&
+         abs((int)pixel[1] - green) <= 3 &&
+         abs((int)pixel[2] - blue) <= 3 &&
+         pixel[3] >= 250u;
+}
 
 static const GPUBindGroupLayoutEntry*
 find_layout_entry(GPUBindGroupLayout *layout,
@@ -22,10 +40,13 @@ int
 gpu_test_vulkan_texture(GPUDevice  *device,
                         const void *artifact,
                         uint64_t    artifactSize) {
-  static const float kVertices[] = {
-    -1.0f, -1.0f, 0.0f, 1.0f,
-     3.0f, -1.0f, 0.0f, 1.0f,
-    -1.0f,  3.0f, 0.0f, 1.0f
+  static const VulkanTextureVertex kVertices[] = {
+    {{-1.0f, -1.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{ 1.0f, -1.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-1.0f,  1.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+    {{-1.0f,  1.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+    {{ 1.0f, -1.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{ 1.0f,  1.0f, 0.0f, 1.0f}, {1.0f, 0.0f}}
   };
   static const uint8_t kCheckerPixels[] = {
     255u,   0u,   0u, 255u,   0u, 255u,   0u, 255u,
@@ -53,7 +74,7 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   GPURenderPassEncoder            *renderPass     = NULL;
   GPUCopyPassEncoder              *copyPass       = NULL;
   GPUFence                        *fence          = NULL;
-  GPUVertexAttribute               attribute      = {0};
+  GPUVertexAttribute               attributes[2]  = {{0}};
   GPUVertexBufferLayout            vertexLayout   = {0};
   GPUColorTargetState              colorTarget    = {0};
   GPURenderPipelineCreateInfo      pipelineInfo   = {0};
@@ -67,6 +88,7 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   GPUBindGroupCreateInfo           groupInfo      = {0};
   GPURenderPassColorAttachment     color          = {0};
   GPURenderPassCreateInfo          passInfo       = {0};
+  GPUViewport                      viewport       = {0};
   GPUBufferBinding                 vertexBinding  = {0};
   GPUTextureBarrier                textureBarrier = {0};
   GPUBarrierBatch                  barrierBatch   = {0};
@@ -76,7 +98,10 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   const GPUBindGroupLayoutEntry   *textureEntry;
   const GPUBindGroupLayoutEntry   *uniformEntry;
   const GPUBindGroupLayoutEntry   *samplerLayoutEntry;
-  size_t                           centerOffset;
+  size_t                           bottomLeftOffset;
+  size_t                           bottomRightOffset;
+  size_t                           topLeftOffset;
+  size_t                           topRightOffset;
   int                              ok = 0;
 
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
@@ -113,12 +138,16 @@ gpu_test_vulkan_texture(GPUDevice  *device,
     goto cleanup;
   }
 
-  attribute.shaderLocation      = 0u;
-  attribute.format              = GPU_VERTEX_FORMAT_FLOAT32X4;
-  vertexLayout.strideBytes      = 4u * sizeof(float);
-  vertexLayout.stepMode         = GPU_VERTEX_STEP_MODE_VERTEX;
-  vertexLayout.attributeCount   = 1u;
-  vertexLayout.pAttributes      = &attribute;
+  attributes[0].shaderLocation = 0u;
+  attributes[0].format         = GPU_VERTEX_FORMAT_FLOAT32X4;
+  attributes[0].offset         = offsetof(VulkanTextureVertex, position);
+  attributes[1].shaderLocation = 1u;
+  attributes[1].format         = GPU_VERTEX_FORMAT_FLOAT32X2;
+  attributes[1].offset         = offsetof(VulkanTextureVertex, uv);
+  vertexLayout.strideBytes     = sizeof(VulkanTextureVertex);
+  vertexLayout.stepMode        = GPU_VERTEX_STEP_MODE_VERTEX;
+  vertexLayout.attributeCount  = 2u;
+  vertexLayout.pAttributes     = attributes;
   colorTarget.format            = GPU_FORMAT_RGBA8_UNORM;
   colorTarget.blend.writeMask   = GPU_COLOR_WRITE_ALL;
   pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
@@ -133,7 +162,7 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   pipelineInfo.colorTargetCount          = 1u;
   pipelineInfo.pColorTargets             = &colorTarget;
   pipelineInfo.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  pipelineInfo.cullMode          = GPU_CULL_MODE_NONE;
+  pipelineInfo.cullMode          = GPU_CULL_MODE_BACK;
   pipelineInfo.frontFace         = GPU_FRONT_FACE_CCW;
   pipelineInfo.multisample.sampleCount = 1u;
   if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
@@ -231,9 +260,9 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   samplerInfo.chain.sType      = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
   samplerInfo.chain.structSize = sizeof(samplerInfo);
   samplerInfo.label            = "vulkan-usl-texture-sampler";
-  samplerInfo.desc.minFilter   = GPU_FILTER_LINEAR;
-  samplerInfo.desc.magFilter   = GPU_FILTER_LINEAR;
-  samplerInfo.desc.mipFilter   = GPU_MIP_FILTER_LINEAR;
+  samplerInfo.desc.minFilter   = GPU_FILTER_NEAREST;
+  samplerInfo.desc.magFilter   = GPU_FILTER_NEAREST;
+  samplerInfo.desc.mipFilter   = GPU_MIP_FILTER_NEAREST;
   samplerInfo.desc.addressU    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
   samplerInfo.desc.addressV    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
   samplerInfo.desc.addressW    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -316,7 +345,11 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   GPUBindVertexBuffers(renderPass, 0u, 1u, &vertexBinding);
   GPUBindRenderGroup(renderPass, 0u, fragmentGroup, 0u, NULL);
   GPUBindRenderGroup(renderPass, 1u, samplerGroup, 0u, NULL);
-  GPUDraw(renderPass, 3u, 1u, 0u, 0u);
+  viewport.width    = (float)width;
+  viewport.height   = (float)height;
+  viewport.maxDepth = 1.0f;
+  GPUSetViewport(renderPass, &viewport);
+  GPUDraw(renderPass, 6u, 1u, 0u, 0u);
   GPUEndRenderPass(renderPass);
   renderPass = NULL;
 
@@ -373,20 +406,29 @@ gpu_test_vulkan_texture(GPUDevice  *device,
     goto cleanup;
   }
 
-  centerOffset = ((size_t)2u * width + 2u) * 4u;
-  if (pixels[centerOffset + 0u] < 110u ||
-      pixels[centerOffset + 0u] > 120u ||
-      pixels[centerOffset + 1u] < 116u ||
-      pixels[centerOffset + 1u] > 126u ||
-      pixels[centerOffset + 2u] < 123u ||
-      pixels[centerOffset + 2u] > 133u ||
-      pixels[centerOffset + 3u] < 250u) {
+  topLeftOffset     = 0u;
+  topRightOffset    = ((size_t)width - 1u) * 4u;
+  bottomLeftOffset  = ((size_t)height - 1u) * width * 4u;
+  bottomRightOffset = ((size_t)width * height - 1u) * 4u;
+  if (!pixel_matches(&pixels[topLeftOffset], 230u, 0u, 0u) ||
+      !pixel_matches(&pixels[topRightOffset], 0u, 242u, 0u) ||
+      !pixel_matches(&pixels[bottomLeftOffset], 0u, 0u, 255u) ||
+      !pixel_matches(&pixels[bottomRightOffset], 230u, 242u, 255u)) {
     fprintf(stderr,
-            "Vulkan texture readback mismatch: %u %u %u %u\n",
-            (unsigned)pixels[centerOffset + 0u],
-            (unsigned)pixels[centerOffset + 1u],
-            (unsigned)pixels[centerOffset + 2u],
-            (unsigned)pixels[centerOffset + 3u]);
+            "Vulkan texture orientation mismatch: "
+            "tl=%u,%u,%u tr=%u,%u,%u bl=%u,%u,%u br=%u,%u,%u\n",
+            pixels[topLeftOffset + 0u],
+            pixels[topLeftOffset + 1u],
+            pixels[topLeftOffset + 2u],
+            pixels[topRightOffset + 0u],
+            pixels[topRightOffset + 1u],
+            pixels[topRightOffset + 2u],
+            pixels[bottomLeftOffset + 0u],
+            pixels[bottomLeftOffset + 1u],
+            pixels[bottomLeftOffset + 2u],
+            pixels[bottomRightOffset + 0u],
+            pixels[bottomRightOffset + 1u],
+            pixels[bottomRightOffset + 2u]);
     goto cleanup;
   }
 

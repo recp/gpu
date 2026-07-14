@@ -9,6 +9,7 @@
 
 typedef struct QuadVertex {
   float position[4];
+  float uv[2];
 } QuadVertex;
 
 typedef struct FragmentUniforms {
@@ -16,12 +17,12 @@ typedef struct FragmentUniforms {
 } FragmentUniforms;
 
 static const QuadVertex kQuadVertices[] = {
-  {{-0.8f, -0.8f, 0.0f, 1.0f}},
-  {{ 0.8f, -0.8f, 0.0f, 1.0f}},
-  {{-0.8f,  0.8f, 0.0f, 1.0f}},
-  {{-0.8f,  0.8f, 0.0f, 1.0f}},
-  {{ 0.8f, -0.8f, 0.0f, 1.0f}},
-  {{ 0.8f,  0.8f, 0.0f, 1.0f}}
+  {{-0.8f, -0.8f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+  {{ 0.8f, -0.8f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+  {{-0.8f,  0.8f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+  {{-0.8f,  0.8f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+  {{ 0.8f, -0.8f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+  {{ 0.8f,  0.8f, 0.0f, 1.0f}, {1.0f, 0.0f}}
 };
 
 static const uint8_t kCheckerPixels[] = {
@@ -186,9 +187,9 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   samplerInfo.chain.sType      = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
   samplerInfo.chain.structSize = sizeof(samplerInfo);
   samplerInfo.label            = "textured-quad-vulkan-sampler";
-  samplerInfo.desc.minFilter   = GPU_FILTER_LINEAR;
-  samplerInfo.desc.magFilter   = GPU_FILTER_LINEAR;
-  samplerInfo.desc.mipFilter   = GPU_MIP_FILTER_LINEAR;
+  samplerInfo.desc.minFilter   = GPU_FILTER_NEAREST;
+  samplerInfo.desc.magFilter   = GPU_FILTER_NEAREST;
+  samplerInfo.desc.mipFilter   = GPU_MIP_FILTER_NEAREST;
   samplerInfo.desc.addressU    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
   samplerInfo.desc.addressV    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
   samplerInfo.desc.addressW    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -240,13 +241,14 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
 - (BOOL)setupGPU {
   GPUInstanceCreateInfo       instanceInfo = {0};
-  GPUVertexAttribute          vertexAttribute = {0};
+  GPUVertexAttribute          vertexAttributes[2] = {{0}};
   GPUVertexBufferLayout       vertexLayout = {0};
   GPUColorTargetState         colorTarget = {0};
   GPURenderPipelineCreateInfo pipelineInfo = {0};
   const GPUBindGroupLayoutEntry *textureEntry;
   const GPUBindGroupLayoutEntry *uniformEntry;
   const GPUBindGroupLayoutEntry *samplerEntry;
+  GPUResult                      result;
   uint32_t adapterCount;
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -259,7 +261,8 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
 
   adapterCount = 1u;
-  if (GPUEnumerateAdapters(_instance, &adapterCount, &_adapter) != GPU_OK ||
+  result = GPUEnumerateAdapters(_instance, &adapterCount, &_adapter);
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
       !_adapter) {
     NSLog(@"GPU: failed to get Vulkan adapter");
     return NO;
@@ -320,12 +323,16 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     return NO;
   }
 
-  vertexAttribute.shaderLocation = 0u;
-  vertexAttribute.format         = GPU_VERTEX_FORMAT_FLOAT32X4;
-  vertexLayout.strideBytes       = sizeof(QuadVertex);
-  vertexLayout.stepMode          = GPU_VERTEX_STEP_MODE_VERTEX;
-  vertexLayout.attributeCount    = 1u;
-  vertexLayout.pAttributes       = &vertexAttribute;
+  vertexAttributes[0].shaderLocation = 0u;
+  vertexAttributes[0].format         = GPU_VERTEX_FORMAT_FLOAT32X4;
+  vertexAttributes[0].offset         = offsetof(QuadVertex, position);
+  vertexAttributes[1].shaderLocation = 1u;
+  vertexAttributes[1].format         = GPU_VERTEX_FORMAT_FLOAT32X2;
+  vertexAttributes[1].offset         = offsetof(QuadVertex, uv);
+  vertexLayout.strideBytes           = sizeof(QuadVertex);
+  vertexLayout.stepMode              = GPU_VERTEX_STEP_MODE_VERTEX;
+  vertexLayout.attributeCount        = 2u;
+  vertexLayout.pAttributes           = vertexAttributes;
   colorTarget.format             = GPUGetSwapchainFormat(_swapchain);
   colorTarget.blend.writeMask    = GPU_COLOR_WRITE_ALL;
 

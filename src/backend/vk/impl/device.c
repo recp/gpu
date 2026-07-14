@@ -199,6 +199,8 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool                                      timelineCore;
   bool                                      sync2Extension;
   bool                                      sync2Core;
+  bool                                      maintenance1Extension;
+  bool                                      maintenance1Core;
 
   nExtensions               = 0;
   incrementalPresentEnabled = true;
@@ -213,6 +215,8 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   timelineCore              = false;
   sync2Extension            = false;
   sync2Core                 = false;
+  maintenance1Extension     = false;
+  maintenance1Core          = false;
 
   adapter                   = calloc(1, sizeof(*adapter));
   adapterVk                 = calloc(1, sizeof(*adapterVk));
@@ -286,6 +290,10 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                   extensions[i].extensionName)) {
         subgroupSizeControl = true;
       }
+      if (!strcmp(VK_KHR_MAINTENANCE1_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        maintenance1Extension = true;
+      }
 
       if (incrementalPresentEnabled) {
         VK__ADD_EXT_IF(VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME,
@@ -304,6 +312,15 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       adapterVk->props.apiVersion >= VK_API_VERSION_1_3) {
     subgroupSizeControl = true;
   }
+  maintenance1Core = instanceVk &&
+                     instanceVk->apiVersion >= VK_API_VERSION_1_1 &&
+                     adapterVk->props.apiVersion >= VK_API_VERSION_1_1;
+  if (!maintenance1Core && maintenance1Extension) {
+    adapterVk->extensionNames[adapterVk->nEnabledExtensions++] =
+      VK_KHR_MAINTENANCE1_EXTENSION_NAME;
+    assert(adapterVk->nEnabledExtensions < 64);
+  }
+  adapterVk->negativeViewport = maintenance1Core || maintenance1Extension;
   vk_querySubgroupCapabilities(instanceVk,
                                adapterVk,
                                subgroupSizeControl);
@@ -803,6 +820,9 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
   }
 
   adapterVk = adapter->_priv;
+  if (!adapterVk->negativeViewport) {
+    goto err;
+  }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u &&
       !adapterVk->shaderFloat16) {
     goto err;

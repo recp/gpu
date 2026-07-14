@@ -11,6 +11,7 @@
 
 typedef struct QuadVertex {
   float position[4];
+  float uv[2];
 } QuadVertex;
 
 typedef struct FragmentUniforms {
@@ -18,12 +19,12 @@ typedef struct FragmentUniforms {
 } FragmentUniforms;
 
 static const QuadVertex kQuadVertices[] = {
-  { { -0.8f, -0.8f, 0.0f, 1.0f } },
-  { {  0.8f, -0.8f, 0.0f, 1.0f } },
-  { { -0.8f,  0.8f, 0.0f, 1.0f } },
-  { { -0.8f,  0.8f, 0.0f, 1.0f } },
-  { {  0.8f, -0.8f, 0.0f, 1.0f } },
-  { {  0.8f,  0.8f, 0.0f, 1.0f } },
+  { { -0.8f, -0.8f, 0.0f, 1.0f }, { 0.0f, 1.0f } },
+  { {  0.8f, -0.8f, 0.0f, 1.0f }, { 1.0f, 1.0f } },
+  { { -0.8f,  0.8f, 0.0f, 1.0f }, { 0.0f, 0.0f } },
+  { { -0.8f,  0.8f, 0.0f, 1.0f }, { 0.0f, 0.0f } },
+  { {  0.8f, -0.8f, 0.0f, 1.0f }, { 1.0f, 1.0f } },
+  { {  0.8f,  0.8f, 0.0f, 1.0f }, { 1.0f, 0.0f } },
 };
 
 static const uint8_t kCheckerPixels[] = {
@@ -121,9 +122,9 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                .structSize = sizeof(GPUSamplerCreateInfo) },
     .label = "checker-sampler",
     .desc = {
-      .minFilter = GPU_FILTER_LINEAR,
-      .magFilter = GPU_FILTER_LINEAR,
-      .mipFilter = GPU_MIP_FILTER_LINEAR,
+      .minFilter = GPU_FILTER_NEAREST,
+      .magFilter = GPU_FILTER_NEAREST,
+      .mipFilter = GPU_MIP_FILTER_NEAREST,
       .addressU = GPU_ADDRESS_MODE_CLAMP_TO_EDGE,
       .addressV = GPU_ADDRESS_MODE_CLAMP_TO_EDGE,
       .addressW = GPU_ADDRESS_MODE_CLAMP_TO_EDGE
@@ -188,13 +189,14 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
 
   GPUVertexAttribute vertexAttrs[] = {
-    { .shaderLocation = 0, .format = GPU_VERTEX_FORMAT_FLOAT32X4, .offset = offsetof(QuadVertex, position) }
+    { .shaderLocation = 0, .format = GPU_VERTEX_FORMAT_FLOAT32X4, .offset = offsetof(QuadVertex, position) },
+    { .shaderLocation = 1, .format = GPU_VERTEX_FORMAT_FLOAT32X2, .offset = offsetof(QuadVertex, uv) }
   };
   GPUVertexBufferLayout vertexBuffers[] = {
     {
       .strideBytes = sizeof(QuadVertex),
       .stepMode = GPU_VERTEX_STEP_MODE_VERTEX,
-      .attributeCount = 1,
+      .attributeCount = 2,
       .pAttributes = vertexAttrs
     }
   };

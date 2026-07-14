@@ -206,6 +206,7 @@ typedef struct GPUAdapterVk {
   bool                       bindless;
   bool                       timelineSemaphore;
   bool                       synchronization2;
+  bool                       negativeViewport;
 } GPUAdapterVk;
 
 typedef struct GPUDeviceVk {
