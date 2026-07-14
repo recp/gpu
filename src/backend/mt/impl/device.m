@@ -16,11 +16,33 @@
 
 #include "../common.h"
 
+typedef struct GPUAdapterMT {
+  id<MTLDevice>  device;
+  os_unfair_lock subgroupLock;
+  uint32_t       subgroupSize;
+  bool           subgroupProbed;
+  bool           subgroups;
+} GPUAdapterMT;
+
+static GPUAdapterMT *
+mt_adapter(const GPUAdapter *adapter) {
+  return adapter ? adapter->_priv : NULL;
+}
+
+static id<MTLDevice>
+mt_adapterDevice(const GPUAdapter *adapter) {
+  GPUAdapterMT *adapterMT;
+
+  adapterMT = mt_adapter(adapter);
+  return adapterMT ? adapterMT->device : nil;
+}
+
 GPU_HIDE
 GPUAdapter *
 mt_getAvailableAdapters(GPUInstance * __restrict inst,
                         uint32_t                 maxNumberOfItems) {
   NSArray<id<MTLDevice>> *devices;
+  GPUAdapterMT           *adapterMT;
   GPUAdapter             *firstAdapter, *lastAdapter, *adapter;
   uint32_t                i;
 
@@ -29,16 +51,21 @@ mt_getAvailableAdapters(GPUInstance * __restrict inst,
   devices      = MTLCopyAllDevices();
 
   for (id<MTLDevice> device in devices) {
-    adapter = calloc(1, sizeof(*adapter));
-    if (!adapter) {
+    adapter   = calloc(1, sizeof(*adapter));
+    adapterMT = calloc(1, sizeof(*adapterMT));
+    if (!adapter || !adapterMT) {
+      free(adapterMT);
+      free(adapter);
       break;
     }
+    adapterMT->device                      = [device retain];
+    adapterMT->subgroupLock                = OS_UNFAIR_LOCK_INIT;
     adapter->separatePresentQueue       = 1;
     adapter->supportsDisplayTiming      = 1;
     adapter->supportsIncrementalPresent = 1; /* TODO: */
     adapter->supportsSwapchain          = 1;
     adapter->inst                       = inst;
-    adapter->_priv                      = [device retain];
+    adapter->_priv                      = adapterMT;
 
     if (lastAdapter) { lastAdapter->next = adapter; }
     else             { firstAdapter      = adapter; }
@@ -64,10 +91,17 @@ mt_selectAdapter(GPUInstance * __restrict inst,
 GPU_HIDE
 void
 mt_destroyAdapter(GPUAdapter * __restrict adapter) {
+  GPUAdapterMT *adapterMT;
+
   if (!adapter) {
     return;
   }
-  [(id<MTLDevice>)adapter->_priv release];
+
+  adapterMT = mt_adapter(adapter);
+  if (adapterMT) {
+    [adapterMT->device release];
+    free(adapterMT);
+  }
   free(adapter);
 }
 
@@ -81,7 +115,7 @@ mt_getAdapterProperties(const GPUAdapter     * __restrict adapter,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  device = (id<MTLDevice>)adapter->_priv;
+  device = mt_adapterDevice(adapter);
   memset(outProps, 0, sizeof(*outProps));
   outProps->backend = GPU_BACKEND_METAL;
   outProps->name = device.name.UTF8String;
@@ -122,12 +156,72 @@ mt_supportsBlitCounterSampling(id<MTLDevice> device) {
   return false;
 }
 
+static bool
+mt_supportsSubgroupFamily(id<MTLDevice> device) {
+  if (@available(macOS 10.15, iOS 13.0, *)) {
+    return device &&
+           ([device supportsFamily:MTLGPUFamilyApple6] ||
+            [device supportsFamily:MTLGPUFamilyMac2]);
+  }
+
+  return false;
+}
+
+static void
+mt_probeSubgroups(GPUAdapterMT *adapterMT) {
+  static NSString *source =
+    @"#include <metal_stdlib>\n"
+     "using namespace metal;\n"
+     "kernel void gpu_subgroup_probe(device uint *output [[buffer(0)]],\n"
+     "                               uint tid [[thread_position_in_grid]]) {\n"
+     "  output[tid] = simd_shuffle_xor(tid, 1u);\n"
+     "}\n";
+  id<MTLComputePipelineState> pipeline;
+  id<MTLFunction>             function;
+  id<MTLLibrary>              library;
+
+  if (!adapterMT) {
+    return;
+  }
+
+  os_unfair_lock_lock(&adapterMT->subgroupLock);
+  if (adapterMT->subgroupProbed) {
+    os_unfair_lock_unlock(&adapterMT->subgroupLock);
+    return;
+  }
+  adapterMT->subgroupProbed = true;
+
+  if (!mt_supportsSubgroupFamily(adapterMT->device)) {
+    os_unfair_lock_unlock(&adapterMT->subgroupLock);
+    return;
+  }
+
+  library = [adapterMT->device newLibraryWithSource:source
+                                             options:nil
+                                               error:nil];
+  function = [library newFunctionWithName:@"gpu_subgroup_probe"];
+  pipeline = function
+    ? [adapterMT->device newComputePipelineStateWithFunction:function
+                                                       error:nil]
+    : nil;
+  if (pipeline && pipeline.threadExecutionWidth > 0u) {
+    adapterMT->subgroupSize = (uint32_t)pipeline.threadExecutionWidth;
+    adapterMT->subgroups    = true;
+  }
+
+  [pipeline release];
+  [function release];
+  [library release];
+  os_unfair_lock_unlock(&adapterMT->subgroupLock);
+}
+
 GPU_HIDE
 bool
 mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
+  GPUAdapterMT *adapterMT;
   id<MTLDevice> device;
 
-  if (!adapter) {
+  if (!(adapterMT = mt_adapter(adapter))) {
     return false;
   }
 
@@ -136,8 +230,11 @@ mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
     case GPU_FEATURE_INDIRECT_DRAW:
     case GPU_FEATURE_SHADER_F16:
       return true;
+    case GPU_FEATURE_SUBGROUPS:
+      mt_probeSubgroups(adapterMT);
+      return adapterMT->subgroups;
     case GPU_FEATURE_TIMESTAMPS:
-      device = (id<MTLDevice>)adapter->_priv;
+      device = adapterMT->device;
       return mt_hasCounterSet(device, MTLCommonCounterSetTimestamp) &&
              mt_supportsBlitCounterSampling(device);
     default:
@@ -148,18 +245,23 @@ mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
 static void
 mt_getLimits(const GPUAdapter * __restrict adapter,
              GPULimits       * __restrict outLimits) {
+  GPUAdapterMT *adapterMT;
   id<MTLDevice> device;
   MTLSize       threads;
 
-  device = adapter ? (id<MTLDevice>)adapter->_priv : nil;
-  if (!device || !outLimits) {
+  adapterMT = mt_adapter(adapter);
+  device    = adapterMT ? adapterMT->device : nil;
+  if (!adapterMT || !device || !outLimits) {
     return;
   }
 
+  mt_probeSubgroups(adapterMT);
   threads = device.maxThreadsPerThreadgroup;
   outLimits->maxComputeWorkgroupSizeX = (uint32_t)threads.width;
   outLimits->maxComputeWorkgroupSizeY = (uint32_t)threads.height;
   outLimits->maxComputeWorkgroupSizeZ = (uint32_t)threads.depth;
+  outLimits->minSubgroupSize           = adapterMT->subgroupSize;
+  outLimits->maxSubgroupSize           = adapterMT->subgroupSize;
 }
 
 static bool
@@ -231,7 +333,7 @@ mt_getFormatCapabilities(
   bool                    appleFamily2;
   bool                    bcSupported;
 
-  device = adapter ? (id<MTLDevice>)adapter->_priv : nil;
+  device = mt_adapterDevice(adapter);
   if (!device || !outCaps) {
     return;
   }
@@ -362,6 +464,7 @@ mt_createDevice(GPUAdapter        * __restrict adapter,
                 GPUQueueCreateInfo queCI[],
                 uint32_t           nQueCI,
                 uint64_t           enabledFeatureMask) {
+  GPUAdapterMT *adapterMT;
   GPUDevice     *device;
   GPUDeviceMT   *deviceMT;
   MTCommandMode  commandMode;
@@ -371,8 +474,9 @@ mt_createDevice(GPUAdapter        * __restrict adapter,
 
   GPU__DEFINE_DEFAULT_QUEUES_IF_NEEDED(nQueCI, queCI)
 
-  if (!adapter || !adapter->_priv ||
-      !mt_selectCommandMode((id<MTLDevice>)adapter->_priv, &commandMode)) {
+  adapterMT = mt_adapter(adapter);
+  if (!adapterMT ||
+      !mt_selectCommandMode(adapterMT->device, &commandMode)) {
     return NULL;
   }
 
@@ -384,7 +488,7 @@ mt_createDevice(GPUAdapter        * __restrict adapter,
     return NULL;
   }
 
-  deviceMT->device      = adapter->_priv;
+  deviceMT->device      = adapterMT->device;
   deviceMT->commandMode = commandMode;
   queueCount            = 0;
   for (i = 0; i < nQueCI; i++) {

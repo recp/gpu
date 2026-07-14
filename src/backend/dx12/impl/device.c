@@ -81,6 +81,35 @@ dx12_supportsShaderF16(ID3D12Device    *device,
          options4.Native16BitShaderOpsSupported != FALSE;
 }
 
+static bool
+dx12_querySubgroups(ID3D12Device *device,
+                    uint32_t     *outMinSubgroupSize,
+                    uint32_t     *outMaxSubgroupSize) {
+  D3D12_FEATURE_DATA_D3D12_OPTIONS1 options1 = {0};
+
+  if (outMinSubgroupSize) {
+    *outMinSubgroupSize = 0u;
+  }
+  if (outMaxSubgroupSize) {
+    *outMaxSubgroupSize = 0u;
+  }
+  if (!device || !outMinSubgroupSize || !outMaxSubgroupSize ||
+      FAILED(device->lpVtbl->CheckFeatureSupport(
+        device,
+        D3D12_FEATURE_D3D12_OPTIONS1,
+        &options1,
+        sizeof(options1))) ||
+      options1.WaveOps == FALSE ||
+      options1.WaveLaneCountMin == 0u ||
+      options1.WaveLaneCountMax < options1.WaveLaneCountMin) {
+    return false;
+  }
+
+  *outMinSubgroupSize = options1.WaveLaneCountMin;
+  *outMaxSubgroupSize = options1.WaveLaneCountMax;
+  return true;
+}
+
 static HMODULE
 dx12_loadDXCompiler(void) {
   HMODULE module;
@@ -115,6 +144,10 @@ dx12_probeAdapter(GPUAdapterDX12 *adapter) {
 
   shaderModel        = dx12_queryShaderModel(device);
   dxcModule          = dx12_loadDXCompiler();
+  adapter->subgroups = dxcModule && shaderModel >= D3D_SHADER_MODEL_6_0 &&
+                       dx12_querySubgroups(device,
+                                           &adapter->minSubgroupSize,
+                                           &adapter->maxSubgroupSize);
   adapter->shaderF16 = dxcModule &&
                        dx12_supportsShaderF16(device, shaderModel);
   if (dxcModule) {
@@ -149,6 +182,8 @@ static void
 dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
   D3D12_FEATURE_DATA_ROOT_SIGNATURE rootSignature = {0};
   D3D12_FEATURE_DATA_D3D12_OPTIONS12 options12 = {0};
+  uint32_t minSubgroupSize;
+  uint32_t maxSubgroupSize;
 
   if (!device || !device->d3dDevice) {
     return;
@@ -177,6 +212,10 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
   device->dxcModule    = dx12_loadDXCompiler();
   device->dxcAvailable = device->dxcModule != NULL &&
                          device->shaderModel >= D3D_SHADER_MODEL_6_0;
+  device->subgroups    = device->dxcAvailable &&
+                         dx12_querySubgroups(device->d3dDevice,
+                                             &minSubgroupSize,
+                                             &maxSubgroupSize);
   device->shaderF16    = device->dxcAvailable &&
                          dx12_supportsShaderF16(device->d3dDevice,
                                                device->shaderModel);
@@ -478,6 +517,8 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
       return true;
     case GPU_FEATURE_SHADER_F16:
       return adapterDX12->shaderF16;
+    case GPU_FEATURE_SUBGROUPS:
+      return adapterDX12->subgroups;
     case GPU_FEATURE_TIMESTAMPS:
     case GPU_FEATURE_PIPELINE_STATISTICS:
       return dx12_queryResultsReliable(adapterDX12);
@@ -489,8 +530,10 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
 static void
 dx12_getLimits(const GPUAdapter * __restrict adapter,
                GPULimits       * __restrict outLimits) {
-  GPU__UNUSED(adapter);
-  if (!outLimits) {
+  GPUAdapterDX12 *adapterDX12;
+
+  adapterDX12 = adapter ? adapter->_priv : NULL;
+  if (!adapterDX12 || !outLimits) {
     return;
   }
 
@@ -498,6 +541,8 @@ dx12_getLimits(const GPUAdapter * __restrict adapter,
   outLimits->maxComputeWorkgroupSizeX = D3D12_CS_THREAD_GROUP_MAX_X;
   outLimits->maxComputeWorkgroupSizeY = D3D12_CS_THREAD_GROUP_MAX_Y;
   outLimits->maxComputeWorkgroupSizeZ = D3D12_CS_THREAD_GROUP_MAX_Z;
+  outLimits->minSubgroupSize           = adapterDX12->minSubgroupSize;
+  outLimits->maxSubgroupSize           = adapterDX12->maxSubgroupSize;
 }
 
 GPU_HIDE
@@ -544,6 +589,10 @@ dx12_createDevice(GPUAdapter        * __restrict adapter,
   /* Parallels accepts query commands but never writes resolved data. */
   deviceDX12->queryResultsReliable = dx12_queryResultsReliable(adapterDX12);
   dx12_queryDeviceCapabilities(deviceDX12);
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_SUBGROUPS)) != 0u &&
+      !deviceDX12->subgroups) {
+    goto err;
+  }
   deviceDX12->shaderF16Enabled =
     (enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u;
   if (deviceDX12->shaderF16Enabled && !deviceDX12->shaderF16) {

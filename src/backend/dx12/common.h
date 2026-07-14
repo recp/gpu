@@ -42,9 +42,12 @@ typedef struct GPUAdapterDX12 {
   IUnknown             *dxgiAdapter;
   DXGI_ADAPTER_DESC1    desc1;
   SRWLOCK               formatCapsLock;
+  uint32_t              minSubgroupSize;
+  uint32_t              maxSubgroupSize;
   char                  name[256];
   bool                  isWarp;
   bool                  formatCapsReady;
+  bool                  subgroups;
   bool                  shaderF16;
   GPUFormatCapabilities formatCaps[GPU_FORMAT_COUNT];
 } GPUAdapterDX12;
@@ -85,6 +88,7 @@ typedef struct GPUDeviceDX12 {
   uint32_t                    nCreatedQueues;
   bool                        enhancedBarriers;
   bool                        dxcAvailable;
+  bool                        subgroups;
   bool                        shaderF16;
   bool                        shaderF16Enabled;
   bool                        queryResultsReliable;
