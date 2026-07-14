@@ -224,7 +224,7 @@ triangle_createGPU(TriangleApp *app) {
       layoutEntries[0].bindingType != GPU_BINDING_UNIFORM_BUFFER ||
       layoutEntries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
       layoutEntries[0].arrayCount != 1u ||
-      layoutEntries[0].hasDynamicOffset) {
+      !layoutEntries[0].hasDynamicOffset) {
     triangle_log("unexpected shader reflection layout");
     return false;
   }
@@ -301,6 +301,7 @@ triangle_render(TriangleApp *app) {
   GPURenderPassEncoder         *pass;
   GPURenderPassColorAttachment  color = {0};
   GPURenderPassCreateInfo       passInfo = {0};
+  uint32_t                      dynamicOffset;
 
   frame = GPUBeginFrame(app->swapchain);
   if (!frame) {
@@ -335,7 +336,8 @@ triangle_render(TriangleApp *app) {
   }
 
   GPUBindRenderPipeline(pass, app->pipeline);
-  GPUBindRenderGroup(pass, 0u, app->bindGroup, 0u, NULL);
+  dynamicOffset = 0u;
+  GPUBindRenderGroup(pass, 0u, app->bindGroup, 1u, &dynamicOffset);
   GPUDraw(pass, 3u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
   if (GPUFinishFrame(app->queue, cmdb, frame) != GPU_OK) {

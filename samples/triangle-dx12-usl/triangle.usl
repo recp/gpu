@@ -8,6 +8,7 @@ pub struct FragmentUniforms {
   tint: float4
 }
 
-frag tri_fs(uniforms: FragmentUniforms #buffer(0) #group(0)) -> float4 {
+frag tri_fs(uniforms: FragmentUniforms #buffer(0) #group(0)
+            #dynamic_offset) -> float4 {
   return uniforms.tint
 }
