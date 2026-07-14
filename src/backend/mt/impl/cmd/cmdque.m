@@ -418,7 +418,7 @@ mt_createCommandBufferState(GPUQueue *cmdb, MTCommandQueue *queue) {
         residencyDesc.label = @"gpu-command-residency";
       }
 #endif
-      residencyDesc.initialCapacity = 64u;
+      residencyDesc.initialCapacity = MT_RESIDENCY_CACHE_SIZE;
       error = nil;
       native->residency = [deviceMT->device
         newResidencySetWithDescriptor:residencyDesc

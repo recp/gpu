@@ -130,13 +130,27 @@ GPU_HIDE
 void
 mt_useAllocation(GPUCommandBuffer *cmdb, id allocation) {
   MTCommandBuffer *native;
+  uint32_t         count;
 
   native = mt_commandBuffer(cmdb);
-  if (!native || native->mode != MTCommandMode4 || !native->residency || !allocation) {
+  if (!native || native->mode != MTCommandMode4 ||
+      !native->residency || !allocation) {
     return;
   }
+
+  count = native->residencyAllocationCount;
+  for (uint32_t i = 0u; i < count; i++) {
+    if (native->residencyAllocations[i] == allocation) {
+      return;
+    }
+  }
+
   if (@available(macOS 26.0, iOS 26.0, *)) {
-    if (![native->residency containsAllocation:allocation]) {
+    if (count < MT_RESIDENCY_CACHE_SIZE) {
+      native->residencyAllocations[count] = allocation;
+      native->residencyAllocationCount    = count + 1u;
+      [native->residency addAllocation:allocation];
+    } else if (![native->residency containsAllocation:allocation]) {
       [native->residency addAllocation:allocation];
     }
   }
@@ -393,6 +407,7 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->allocator reset];
       [native->residency removeAllAllocations];
+      native->residencyAllocationCount = 0u;
     }
   }
 

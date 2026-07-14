@@ -61,7 +61,8 @@ typedef enum MTCommandMode {
 } MTCommandMode;
 
 enum {
-  MT_TRANSFER_SLOT_COUNT = 3u
+  MT_TRANSFER_SLOT_COUNT   = 3u,
+  MT_RESIDENCY_CACHE_SIZE = 64u
 };
 
 typedef struct GPUSwapchainMetal {
@@ -163,6 +164,7 @@ struct MTCommandBuffer {
   MTCommandBuffer       *next;
   MTCommandBuffer       *poolNext;
   MTUploadChunk         *uploads;
+  id                     residencyAllocations[MT_RESIDENCY_CACHE_SIZE];
   MTArgumentState        vertexArguments;
   MTArgumentState        fragmentArguments;
   MTArgumentState        computeArguments;
@@ -178,6 +180,7 @@ struct MTCommandBuffer {
   uint64_t                pendingAfterStages;
   uint64_t                pendingBeforeStages;
   uint64_t                pendingVisibility;
+  uint32_t                residencyAllocationCount;
   MTCommandMode           mode;
   atomic_bool             completionReady;
 };
