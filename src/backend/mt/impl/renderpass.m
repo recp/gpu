@@ -99,6 +99,8 @@ mt_resetRenderPass(MTRenderPass *pass) {
   }
 
   classic = pass->classic;
+  pass->width  = 0u;
+  pass->height = 0u;
   classic.visibilityResultBuffer = nil;
   for (uint32_t i = 0; i < GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS; i++) {
     classic.colorAttachments[i].texture = nil;
@@ -211,6 +213,10 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
                                             : mt_storeAction(color->storeOp);
     rpd.colorAttachments[i].clearColor =
       mt_clearColor(&color->clearColor, color->view->format);
+    if (nativePass->width == 0u) {
+      nativePass->width  = (uint32_t)rpd.colorAttachments[i].texture.width;
+      nativePass->height = (uint32_t)rpd.colorAttachments[i].texture.height;
+    }
 #if MT_HAS_METAL4
     if (rpd4) {
       if (@available(macOS 26.0, iOS 26.0, *)) {
@@ -231,6 +237,12 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
     GPUFormat format;
 
     format = depthStencil->view->format;
+    if (nativePass->width == 0u) {
+      id<MTLTexture> texture = (id<MTLTexture>)depthStencil->view->_priv;
+
+      nativePass->width  = (uint32_t)texture.width;
+      nativePass->height = (uint32_t)texture.height;
+    }
     if (format != GPU_FORMAT_STENCIL8) {
       rpd.depthAttachment.texture =
         (id<MTLTexture>)depthStencil->view->_priv;

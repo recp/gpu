@@ -59,8 +59,10 @@ submit_source_sampler_draw(GPUQueue            *queue,
   dynamicState.viewport.width    = 4.0f;
   dynamicState.viewport.height   = 4.0f;
   dynamicState.viewport.maxDepth = 1.0f;
-  dynamicState.scissor.width     = 4u;
-  dynamicState.scissor.height    = 4u;
+  dynamicState.scissor.x         = -1;
+  dynamicState.scissor.y         = -1;
+  dynamicState.scissor.width     = 5u;
+  dynamicState.scissor.height    = 5u;
   dynamicState.blendConstant[3]  = 1.0f;
   GPUApplyDynamicState(renderPass, &dynamicState);
   GPUApplyDynamicState(renderPass, &dynamicState);

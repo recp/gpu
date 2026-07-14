@@ -5,6 +5,8 @@
 #include "../../src/api/render/pipeline_internal.h"
 #include "../../src/api/texture_internal.h"
 
+#include <math.h>
+
 static int
 create_render_usl_library(GPUDevice *device,
                           const char *bytecodePath,
@@ -2349,6 +2351,7 @@ check_dynamic_state_validation_calls(GPUDevice *activeDevice) {
   GPURenderPassEncoder pass = {0};
   GPURenderPassEncoder endedPass = {0};
   GPUDynamicStateApplyInfo info = {0};
+  GPUViewport invalidViewport;
   int ok = 0;
 
   api = gpuDeviceApi(activeDevice);
@@ -2369,6 +2372,12 @@ check_dynamic_state_validation_calls(GPUDevice *activeDevice) {
   cmdb._queue                      = &queue;
   pass._cmdb                       = &cmdb;
 
+  info.viewport.width    = 640.0f;
+  info.viewport.height   = 480.0f;
+  info.viewport.maxDepth = 1.0f;
+  info.scissor.width     = 640u;
+  info.scissor.height    = 480u;
+
   gRenderViewportCalls = 0u;
   gRenderScissorCalls = 0u;
   gRenderBlendCalls = 0u;
@@ -2383,6 +2392,26 @@ check_dynamic_state_validation_calls(GPUDevice *activeDevice) {
   GPUSetBlendConstant(NULL, info.blendConstant);
   GPUSetBlendConstant(&pass, NULL);
   GPUSetStencilReference(NULL, 0u);
+
+#if GPU_BUILD_WITH_VALIDATION
+  invalidViewport       = info.viewport;
+  invalidViewport.width = 0.0f;
+  GPUSetViewport(&pass, &invalidViewport);
+  invalidViewport        = info.viewport;
+  invalidViewport.height = -1.0f;
+  GPUSetViewport(&pass, &invalidViewport);
+  invalidViewport          = info.viewport;
+  invalidViewport.minDepth = -0.1f;
+  GPUSetViewport(&pass, &invalidViewport);
+  invalidViewport          = info.viewport;
+  invalidViewport.maxDepth = 1.1f;
+  GPUSetViewport(&pass, &invalidViewport);
+  invalidViewport   = info.viewport;
+  invalidViewport.x = NAN;
+  GPUSetViewport(&pass, &invalidViewport);
+#else
+  (void)invalidViewport;
+#endif
 
   info.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   info.chain.structSize = sizeof(info);

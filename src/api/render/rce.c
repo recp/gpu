@@ -22,6 +22,10 @@
 #include "pipeline_internal.h"
 #include "rce_internal.h"
 
+#if GPU_BUILD_WITH_VALIDATION
+#  include <math.h>
+#endif
+
 static GPUDevice *
 gpu_renderPassDevice(const GPURenderPassEncoder *pass) {
   if (!pass || !pass->_cmdb || !pass->_cmdb->_queue) {
@@ -35,6 +39,25 @@ static GPUApi *
 gpu_renderPassApi(const GPURenderPassEncoder *pass) {
   return gpuDeviceApi(gpu_renderPassDevice(pass));
 }
+
+#if GPU_BUILD_WITH_VALIDATION
+static bool
+gpu_validViewport(const GPUViewport *viewport) {
+  return viewport &&
+         isfinite(viewport->x) &&
+         isfinite(viewport->y) &&
+         isfinite(viewport->width) &&
+         isfinite(viewport->height) &&
+         isfinite(viewport->minDepth) &&
+         isfinite(viewport->maxDepth) &&
+         viewport->width > 0.0f &&
+         viewport->height > 0.0f &&
+         viewport->minDepth >= 0.0f &&
+         viewport->minDepth <= 1.0f &&
+         viewport->maxDepth >= 0.0f &&
+         viewport->maxDepth <= 1.0f;
+}
+#endif
 
 #if GPU_BUILD_WITH_VALIDATION
 static void
@@ -363,6 +386,12 @@ GPUSetViewport(GPURenderPassEncoder *pass, const GPUViewport *viewport) {
 
   if (!pass || pass->_ended || !viewport)
     return;
+#if GPU_BUILD_WITH_VALIDATION
+  if (!gpu_validViewport(viewport)) {
+    gpu_renderValidationError(pass, "GPUSetViewport ignored invalid viewport");
+    return;
+  }
+#endif
   device = gpu_renderPassDevice(pass);
   gpuDeviceRecordStateRequest(device);
   if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_VIEWPORT_BIT) != 0u &&

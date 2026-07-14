@@ -89,6 +89,7 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   GPURenderPassColorAttachment     color          = {0};
   GPURenderPassCreateInfo          passInfo       = {0};
   GPUViewport                      viewport       = {0};
+  GPUScissorRect                   scissor        = {0};
   GPUBufferBinding                 vertexBinding  = {0};
   GPUTextureBarrier                textureBarrier = {0};
   GPUBarrierBatch                  barrierBatch   = {0};
@@ -348,7 +349,12 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   viewport.width    = (float)width;
   viewport.height   = (float)height;
   viewport.maxDepth = 1.0f;
+  scissor.x      = -2;
+  scissor.y      = -3;
+  scissor.width  = width + 2u;
+  scissor.height = height + 3u;
   GPUSetViewport(renderPass, &viewport);
+  GPUSetScissor(renderPass, &scissor);
   GPUDraw(renderPass, 6u, 1u, 0u, 0u);
   GPUEndRenderPass(renderPass);
   renderPass = NULL;

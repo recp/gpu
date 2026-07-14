@@ -108,6 +108,8 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   if (!nativeState->classic && !nativeState->modern) {
     return NULL;
   }
+  nativeState->width  = nativePass->width;
+  nativeState->height = nativePass->height;
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   if (gpuDeviceDebugMarkersEnabled(gpuCommandBufferDevice(cmdb)) &&
       pass->label && pass->label[0] != '\0') {
@@ -229,19 +231,27 @@ mt_viewport(GPURenderCommandEncoder *rce, const GPUViewport *viewport) {
 static void
 mt_scissorAxis(int32_t     origin,
                uint32_t    extent,
+               uint32_t    limit,
                NSUInteger *outOrigin,
                NSUInteger *outExtent) {
   uint64_t clipped;
 
-  if (origin >= 0) {
-    *outOrigin = (NSUInteger)origin;
-    *outExtent = (NSUInteger)extent;
+  if (origin < 0) {
+    clipped = (uint64_t)-(int64_t)origin;
+    extent  = clipped >= extent ? 0u : extent - (uint32_t)clipped;
+    origin  = 0;
+  }
+
+  *outOrigin = (NSUInteger)origin;
+  if ((uint32_t)origin >= limit) {
+    *outOrigin = limit;
+    *outExtent = 0u;
     return;
   }
 
-  clipped    = (uint64_t)-(int64_t)origin;
-  *outOrigin = 0u;
-  *outExtent = clipped >= extent ? 0u : (NSUInteger)(extent - clipped);
+  *outExtent = extent > limit - (uint32_t)origin
+                 ? limit - (uint32_t)origin
+                 : extent;
 }
 
 GPU_HIDE
@@ -250,13 +260,20 @@ mt_scissor(GPURenderCommandEncoder *rce, const GPUScissorRect *scissor) {
   MTRenderEncoder *native;
   MTLScissorRect   rect;
 
-  mt_scissorAxis(scissor->x, scissor->width, &rect.x, &rect.width);
-  mt_scissorAxis(scissor->y, scissor->height, &rect.y, &rect.height);
-
   native = mt_renderEncoder(rce);
   if (!native) {
     return;
   }
+  mt_scissorAxis(scissor->x,
+                 scissor->width,
+                 native->width,
+                 &rect.x,
+                 &rect.width);
+  mt_scissorAxis(scissor->y,
+                 scissor->height,
+                 native->height,
+                 &rect.y,
+                 &rect.height);
 #if MT_HAS_METAL4
   if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {

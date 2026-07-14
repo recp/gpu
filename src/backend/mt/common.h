@@ -120,6 +120,8 @@ typedef struct MTTransferSlot {
 typedef struct MTRenderPass {
   MTLRenderPassDescriptor *classic;
   id                       modern;
+  uint32_t                 width;
+  uint32_t                 height;
 } MTRenderPass;
 
 typedef struct MTRenderEncoder {
@@ -127,6 +129,8 @@ typedef struct MTRenderEncoder {
   id                          modern;
   MTArgumentState            *vertexArguments;
   MTArgumentState            *fragmentArguments;
+  uint32_t                    width;
+  uint32_t                    height;
 } MTRenderEncoder;
 
 typedef struct MTRenderPipelineState {

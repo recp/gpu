@@ -41,6 +41,32 @@ vk__viewport(float x,
   return viewport;
 }
 
+static void
+vk__scissorAxis(int32_t   origin,
+                 uint32_t  extent,
+                 uint32_t  limit,
+                 int32_t  *outOrigin,
+                 uint32_t *outExtent) {
+  uint64_t clipped;
+  uint64_t maxExtent;
+
+  if (origin < 0) {
+    clipped  = (uint64_t)-(int64_t)origin;
+    extent   = clipped >= extent ? 0u : extent - (uint32_t)clipped;
+    origin   = 0;
+  }
+
+  if ((uint32_t)origin >= limit) {
+    *outOrigin = (int32_t)limit;
+    *outExtent = 0u;
+    return;
+  }
+
+  maxExtent  = limit - (uint32_t)origin;
+  *outOrigin = origin;
+  *outExtent = extent > maxExtent ? (uint32_t)maxExtent : extent;
+}
+
 static bool
 vk__bindIndexBuffer(GPURenderCommandEncoder *encoder,
                     GPURenderEncoderVk      *native) {
@@ -205,10 +231,16 @@ vk_scissor(GPURenderCommandEncoder *encoder, const GPUScissorRect *value) {
     return;
   }
 
-  scissor.offset.x      = value->x;
-  scissor.offset.y      = value->y;
-  scissor.extent.width  = value->width;
-  scissor.extent.height = value->height;
+  vk__scissorAxis(value->x,
+                   value->width,
+                   native->extent.width,
+                   &scissor.offset.x,
+                   &scissor.extent.width);
+  vk__scissorAxis(value->y,
+                   value->height,
+                   native->extent.height,
+                   &scissor.offset.y,
+                   &scissor.extent.height);
   vkCmdSetScissor(native->command, 0u, 1u, &scissor);
 }
 

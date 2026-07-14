@@ -393,29 +393,59 @@ dx12_viewport(GPURenderCommandEncoder *encoder, const GPUViewport *value) {
                                                &viewport);
 }
 
+static void
+dx12__scissorAxis(int32_t  origin,
+                   uint32_t extent,
+                   uint32_t limit,
+                   LONG    *outStart,
+                   LONG    *outEnd) {
+  uint64_t clipped;
+  uint32_t start;
+
+  if (origin < 0) {
+    clipped = (uint64_t)-(int64_t)origin;
+    extent  = clipped >= extent ? 0u : extent - (uint32_t)clipped;
+    origin  = 0;
+  }
+
+  start = (uint32_t)origin;
+  if (start >= limit) {
+    *outStart = (LONG)limit;
+    *outEnd   = (LONG)limit;
+    return;
+  }
+  if (extent > limit - start) {
+    extent = limit - start;
+  }
+
+  *outStart = (LONG)start;
+  *outEnd   = (LONG)(start + extent);
+}
+
 GPU_HIDE
 void
 dx12_scissor(GPURenderCommandEncoder *encoder, const GPUScissorRect *value) {
   GPURenderEncoderDX12 *native;
   D3D12_RECT            scissor;
-  int64_t               right;
-  int64_t               bottom;
 
   native = encoder ? encoder->_priv : NULL;
   if (!native || !native->commandList || !value) {
     return;
   }
 
-  right  = (int64_t)value->x + value->width;
-  bottom = (int64_t)value->y + value->height;
-  if (right > LONG_MAX || bottom > LONG_MAX) {
+  if (!native->renderPass) {
     return;
   }
-
-  scissor.left   = (LONG)value->x;
-  scissor.top    = (LONG)value->y;
-  scissor.right  = (LONG)right;
-  scissor.bottom = (LONG)bottom;
+  dx12__scissorAxis(value->x,
+                    value->width,
+                    native->renderPass->width,
+                    &scissor.left,
+                    &scissor.right);
+  dx12__scissorAxis(value->y,
+                    value->height,
+                    native->renderPass->height,
+                    &scissor.top,
+                    &scissor.bottom);
   native->commandList->lpVtbl->RSSetScissorRects(native->commandList,
                                                   1u,
                                                   &scissor);
