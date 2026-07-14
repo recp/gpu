@@ -12,6 +12,8 @@
 enum {
   VULKAN_COMMAND_BATCH_SIZE       = 4u,
   VULKAN_TRANSFER_TEST_BYTES      = 64u * 1024u,
+  VULKAN_BUFFER_UPLOADS_PER_SLOT  = GPU_VK_BUFFER_TRANSFER_CAPACITY /
+                                    VULKAN_TRANSFER_TEST_BYTES,
   VULKAN_TEXTURE_UPLOADS_PER_SLOT = GPU_VK_TEXTURE_TRANSFER_CAPACITY /
                                     VULKAN_TRANSFER_TEST_BYTES,
   VULKAN_WARM_ITERATIONS          = 256u
@@ -145,7 +147,10 @@ buffer_transfers_reuse(GPUDevice       *device,
 
   bufferNative = buffer->_priv;
   ok = bufferNative && !bufferNative->mapped;
-  for (uint32_t i = 0u; ok && i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
+  for (uint32_t i = 0u;
+       ok && i < GPU_VK_TRANSFER_SLOT_COUNT *
+                  VULKAN_BUFFER_UPLOADS_PER_SLOT;
+       i++) {
     value = UINT32_C(0x12340000) + i;
     memcpy(upload, &value, sizeof(value));
     ok = GPUQueueWriteBuffer(queue,

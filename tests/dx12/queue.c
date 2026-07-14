@@ -5,8 +5,12 @@
 #include <string.h>
 
 enum {
-  DX12_FRAME_TIME_COPY_BYTES = 1024u * 1024u,
-  DX12_TRANSFER_TEST_BYTES   = 64u * 1024u
+  DX12_FRAME_TIME_COPY_BYTES     = 1024u * 1024u,
+  DX12_TRANSFER_TEST_BYTES       = 64u * 1024u,
+  DX12_BUFFER_UPLOADS_PER_SLOT   = GPU_DX12_BUFFER_TRANSFER_CAPACITY /
+                                   DX12_TRANSFER_TEST_BYTES,
+  DX12_TEXTURE_UPLOADS_PER_SLOT  = GPU_DX12_TEXTURE_TRANSFER_CAPACITY /
+                                   DX12_TRANSFER_TEST_BYTES
 };
 
 typedef struct CompletionProbe {
@@ -256,7 +260,10 @@ buffer_transfers_reuse(GPUQueue *queue,
   }
 
   ok = true;
-  for (uint32_t i = 0u; ok && i < GPU_DX12_TRANSFER_SLOT_COUNT; i++) {
+  for (uint32_t i = 0u;
+       ok && i < GPU_DX12_TRANSFER_SLOT_COUNT *
+                  DX12_BUFFER_UPLOADS_PER_SLOT;
+       i++) {
     value = UINT32_C(0x12340000) + i;
     memcpy(upload, &value, sizeof(value));
     ok = GPUQueueWriteBuffer(queue,
@@ -385,8 +392,7 @@ texture_transfers_reuse(GPUQueue *queue,
     return false;
   }
   warmupWrites = GPU_DX12_TRANSFER_SLOT_COUNT *
-                 (GPU_DX12_TEXTURE_TRANSFER_CAPACITY /
-                  DX12_TRANSFER_TEST_BYTES);
+                 DX12_TEXTURE_UPLOADS_PER_SLOT;
   ok = true;
   for (uint32_t i = 0u; ok && i < warmupWrites; i++) {
     pixels[0] = (uint8_t)i;
