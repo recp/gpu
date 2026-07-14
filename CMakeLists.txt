@@ -565,6 +565,9 @@ if(GPU_BUILD_BENCHMARKS)
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/render_mrt.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-usl/triangle.usl"
   )
+  set(GPU_BENCHMARK_BINDLESS_USL_SOURCE
+    "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/bindless_dispatch.usl"
+  )
   set(GPU_BENCHMARK_USL_FIXTURES)
 
   if(GPU_BUILD_METAL)
@@ -573,6 +576,17 @@ if(GPU_BUILD_BENCHMARKS)
       metal
       benchmarks
       ${GPU_BENCHMARK_USL_SOURCES}
+    )
+    set(GPU_USL_FIXTURE_TARGET_CAPS descriptor_indexing)
+    gpu_add_usl_fixtures(
+      GPU_BENCHMARK_METAL_BINDLESS_USL_FIXTURE
+      metal
+      benchmarks
+      ${GPU_BENCHMARK_BINDLESS_USL_SOURCE}
+    )
+    unset(GPU_USL_FIXTURE_TARGET_CAPS)
+    list(APPEND GPU_BENCHMARK_METAL_USL_FIXTURES
+      ${GPU_BENCHMARK_METAL_BINDLESS_USL_FIXTURE}
     )
     list(APPEND GPU_BENCHMARK_USL_FIXTURES
       ${GPU_BENCHMARK_METAL_USL_FIXTURES}
@@ -585,6 +599,17 @@ if(GPU_BUILD_BENCHMARKS)
       benchmarks
       ${GPU_BENCHMARK_USL_SOURCES}
     )
+    set(GPU_USL_FIXTURE_TARGET_CAPS descriptor_indexing)
+    gpu_add_usl_fixtures(
+      GPU_BENCHMARK_VULKAN_BINDLESS_USL_FIXTURE
+      vulkan
+      benchmarks
+      ${GPU_BENCHMARK_BINDLESS_USL_SOURCE}
+    )
+    unset(GPU_USL_FIXTURE_TARGET_CAPS)
+    list(APPEND GPU_BENCHMARK_VULKAN_USL_FIXTURES
+      ${GPU_BENCHMARK_VULKAN_BINDLESS_USL_FIXTURE}
+    )
     list(APPEND GPU_BENCHMARK_USL_FIXTURES
       ${GPU_BENCHMARK_VULKAN_USL_FIXTURES}
     )
@@ -595,6 +620,17 @@ if(GPU_BUILD_BENCHMARKS)
       dx12
       benchmarks
       ${GPU_BENCHMARK_USL_SOURCES}
+    )
+    set(GPU_USL_FIXTURE_TARGET_CAPS descriptor_indexing)
+    gpu_add_usl_fixtures(
+      GPU_BENCHMARK_DX12_BINDLESS_USL_FIXTURE
+      dx12
+      benchmarks
+      ${GPU_BENCHMARK_BINDLESS_USL_SOURCE}
+    )
+    unset(GPU_USL_FIXTURE_TARGET_CAPS)
+    list(APPEND GPU_BENCHMARK_DX12_USL_FIXTURES
+      ${GPU_BENCHMARK_DX12_BINDLESS_USL_FIXTURE}
     )
     list(APPEND GPU_BENCHMARK_USL_FIXTURES
       ${GPU_BENCHMARK_DX12_USL_FIXTURES}
@@ -624,6 +660,9 @@ if(GPU_BUILD_BENCHMARKS)
     list(GET GPU_BENCHMARK_SELECTED_USL_FIXTURES
          1
          GPU_BENCHMARK_TRIANGLE_US)
+    list(GET GPU_BENCHMARK_SELECTED_USL_FIXTURES
+         2
+         GPU_BENCHMARK_BINDLESS_DISPATCH_US)
   endif()
 
   add_custom_target(gpu-benchmark-fixtures
@@ -1393,6 +1432,25 @@ if(GPU_BUILD_BENCHMARKS)
     target_compile_options(gpu-bindless-update-bench PRIVATE -Wall -Wextra)
   endif()
 
+  add_executable(gpu-bindless-dispatch-bench
+    benchmarks/bench.c
+    benchmarks/bindless_dispatch.c
+  )
+  target_link_libraries(gpu-bindless-dispatch-bench PRIVATE gpu)
+  target_include_directories(gpu-bindless-dispatch-bench PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  set_target_properties(gpu-bindless-dispatch-bench PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_options(gpu-bindless-dispatch-bench PRIVATE /W3)
+  else()
+    target_compile_options(gpu-bindless-dispatch-bench PRIVATE -Wall -Wextra)
+  endif()
+
   add_executable(gpu-upload-heavy-bench
     benchmarks/bench.c
     benchmarks/render.c
@@ -1487,6 +1545,7 @@ if(GPU_BUILD_BENCHMARKS)
           gpu-static-scene-bench
           gpu-state-churn-bench
           gpu-binding-churn-bench
+          gpu-bindless-dispatch-bench
           gpu-upload-heavy-bench
           gpu-pipeline-stress-bench)
     add_dependencies(${benchmark_target} gpu-benchmark-fixtures)
@@ -1541,6 +1600,12 @@ if(GPU_BUILD_BENCHMARKS)
       ${GPU_BENCHMARK_BACKEND} 16 32 3
     )
     gpu_add_perf_smoke(
+      perf-smoke-bindless-dispatch
+      gpu-bindless-dispatch-bench
+      "${GPU_BENCHMARK_BINDLESS_DISPATCH_US}"
+      ${GPU_BENCHMARK_BACKEND} 32 3
+    )
+    gpu_add_perf_smoke(
       perf-smoke-upload-heavy
       gpu-upload-heavy-bench
       "${GPU_BENCHMARK_TRIANGLE_US}"
@@ -1563,6 +1628,7 @@ if(GPU_BUILD_BENCHMARKS)
               perf-smoke-state-churn
               perf-smoke-binding-churn
               perf-smoke-bindless-update
+              perf-smoke-bindless-dispatch
               perf-smoke-upload-heavy
               perf-smoke-pipeline-stress)
         set_property(TEST ${perfSmokeTest} APPEND PROPERTY ENVIRONMENT
@@ -1582,6 +1648,7 @@ if(GPU_BUILD_BENCHMARKS)
             gpu-state-churn-bench
             gpu-binding-churn-bench
             gpu-bindless-update-bench
+            gpu-bindless-dispatch-bench
             gpu-upload-heavy-bench
             gpu-pipeline-stress-bench
             gpu-validation-bench

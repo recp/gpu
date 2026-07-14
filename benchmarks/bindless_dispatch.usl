@@ -1,0 +1,10 @@
+kern(1, 1, 1) bindless_dispatch(
+  textures: [texture2d<float>; 16] #texture(0),
+  samplers: [sampler; 16] #sampler(1),
+  selection: uint #buffer(2),
+  inout output: [float4] #buffer(3)
+) {
+  let index = nonuniform(selection)
+  output[0] = textures[index].sample(
+    samplers[index], float2(0.5), level(0.0))
+}
