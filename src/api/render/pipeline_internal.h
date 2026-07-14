@@ -42,12 +42,16 @@ struct GPURenderPipeline {
   uint32_t              _pushConstantSizeBytes;
   GPUShaderStageFlags   _pushConstantStages;
   uint32_t              _refCount;
+  uint32_t              _taskWorkgroupSize[3];
+  uint32_t              _meshWorkgroupSize[3];
   bool                  _alphaToCoverageEnable;
+  bool                  _mesh;
+  bool                  _task;
 };
 
 GPU_HIDE
 GPURenderPipeline *
-gpuCreateRenderPipelineDesc(GPUApi *api, GPUFormat pixelFormat);
+gpuCreateRenderPipelineDesc(GPUApi *api, GPUFormat pixelFormat, bool mesh);
 
 GPU_HIDE
 GPURenderPipelineState *

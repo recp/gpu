@@ -190,6 +190,34 @@ mt_setRenderPipelineState(GPURenderCommandEncoder *rce,
 #if MT_HAS_METAL4
   if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
+      if (state->mesh && !native->meshArguments) {
+        MTCommandBuffer *commandState = mt_commandBuffer(rce->_cmdb);
+
+        if (!mt_prepareArgumentState(
+              rce->_cmdb,
+              &commandState->meshArguments,
+              gpuDeviceDebugLabel(gpuCommandBufferDevice(rce->_cmdb),
+                                  "gpu-metal4-mesh-arguments"))) {
+          return;
+        }
+        native->meshArguments = &commandState->meshArguments;
+        [native->modern setArgumentTable:native->meshArguments->table
+                                 atStages:MTLRenderStageMesh];
+      }
+      if (state->task && !native->taskArguments) {
+        MTCommandBuffer *commandState = mt_commandBuffer(rce->_cmdb);
+
+        if (!mt_prepareArgumentState(
+              rce->_cmdb,
+              &commandState->taskArguments,
+              gpuDeviceDebugLabel(gpuCommandBufferDevice(rce->_cmdb),
+                                  "gpu-metal4-task-arguments"))) {
+          return;
+        }
+        native->taskArguments = &commandState->taskArguments;
+        [native->modern setArgumentTable:native->taskArguments->table
+                                 atStages:MTLRenderStageObject];
+      }
       [native->modern setRenderPipelineState:state->render];
       [native->modern setDepthStencilState:state->depthStencil];
     }
@@ -370,6 +398,22 @@ mt_renderPushConstants(GPURenderCommandEncoder *rce,
       }
       native->fragmentArguments->bufferMask |= 1u << MT_PUSH_CONSTANT_INDEX;
     }
+    if ((stages & GPU_SHADER_STAGE_TASK_BIT) != 0u && native->taskArguments) {
+      if (@available(macOS 26.0, iOS 26.0, *)) {
+        [(id<MTL4ArgumentTable>)native->taskArguments->table
+          setAddress:address
+             atIndex:MT_PUSH_CONSTANT_INDEX];
+      }
+      native->taskArguments->bufferMask |= 1u << MT_PUSH_CONSTANT_INDEX;
+    }
+    if ((stages & GPU_SHADER_STAGE_MESH_BIT) != 0u && native->meshArguments) {
+      if (@available(macOS 26.0, iOS 26.0, *)) {
+        [(id<MTL4ArgumentTable>)native->meshArguments->table
+          setAddress:address
+             atIndex:MT_PUSH_CONSTANT_INDEX];
+      }
+      native->meshArguments->bufferMask |= 1u << MT_PUSH_CONSTANT_INDEX;
+    }
     return;
   }
 #endif
@@ -383,6 +427,18 @@ mt_renderPushConstants(GPURenderCommandEncoder *rce,
     [native->classic setFragmentBytes:data
                                length:(NSUInteger)sizeBytes
                               atIndex:MT_PUSH_CONSTANT_INDEX];
+  }
+  if (@available(macOS 13.0, iOS 16.0, *)) {
+    if ((stages & GPU_SHADER_STAGE_TASK_BIT) != 0u) {
+      [native->classic setObjectBytes:data
+                              length:(NSUInteger)sizeBytes
+                             atIndex:MT_PUSH_CONSTANT_INDEX];
+    }
+    if ((stages & GPU_SHADER_STAGE_MESH_BIT) != 0u) {
+      [native->classic setMeshBytes:data
+                            length:(NSUInteger)sizeBytes
+                           atIndex:MT_PUSH_CONSTANT_INDEX];
+    }
   }
 }
 
@@ -501,6 +557,164 @@ mt_rceSetVertexSampler(GPURenderCommandEncoder *rce,
   }
 #endif
   [native->classic setVertexSamplerState:samplerState atIndex:index];
+}
+
+GPU_HIDE
+void
+mt_taskBuffer(GPURenderCommandEncoder *rce,
+              GPUBuffer               *buffer,
+              uint64_t                 offset,
+              uint32_t                 index) {
+  MTRenderEncoder *native;
+  id<MTLBuffer>    nativeBuffer;
+
+  native = mt_renderEncoder(rce);
+  if (!native) {
+    return;
+  }
+  nativeBuffer = mt_nativeBuffer(buffer);
+#if MT_HAS_METAL4
+  if (native->modern) {
+    mt_setArgumentBuffer(rce->_cmdb,
+                         native->taskArguments,
+                         nativeBuffer,
+                         offset,
+                         index);
+    return;
+  }
+#endif
+  if (@available(macOS 13.0, iOS 16.0, *)) {
+    [native->classic setObjectBuffer:nativeBuffer
+                              offset:(NSUInteger)offset
+                             atIndex:index];
+  }
+}
+
+GPU_HIDE
+void
+mt_rceSetTaskTexture(GPURenderCommandEncoder *rce,
+                     GPUTextureView          *view,
+                     uint32_t                 index) {
+  MTRenderEncoder *native;
+  id<MTLTexture>   texture;
+
+  native  = mt_renderEncoder(rce);
+  texture = view ? (id<MTLTexture>)view->_priv : nil;
+  if (!native) {
+    return;
+  }
+#if MT_HAS_METAL4
+  if (native->modern) {
+    mt_setArgumentTexture(rce->_cmdb, native->taskArguments, texture, index);
+    return;
+  }
+#endif
+  if (@available(macOS 13.0, iOS 16.0, *)) {
+    [native->classic setObjectTexture:texture atIndex:index];
+  }
+}
+
+GPU_HIDE
+void
+mt_rceSetTaskSampler(GPURenderCommandEncoder *rce,
+                     GPUSampler              *sampler,
+                     uint32_t                 index) {
+  MTRenderEncoder     *native;
+  id<MTLSamplerState>  samplerState;
+
+  native       = mt_renderEncoder(rce);
+  samplerState = sampler ? (id<MTLSamplerState>)sampler->_priv : nil;
+  if (!native) {
+    return;
+  }
+#if MT_HAS_METAL4
+  if (native->modern) {
+    mt_setArgumentSampler(native->taskArguments, samplerState, index);
+    return;
+  }
+#endif
+  if (@available(macOS 13.0, iOS 16.0, *)) {
+    [native->classic setObjectSamplerState:samplerState atIndex:index];
+  }
+}
+
+GPU_HIDE
+void
+mt_meshBuffer(GPURenderCommandEncoder *rce,
+              GPUBuffer               *buffer,
+              uint64_t                 offset,
+              uint32_t                 index) {
+  MTRenderEncoder *native;
+  id<MTLBuffer>    nativeBuffer;
+
+  native = mt_renderEncoder(rce);
+  if (!native) {
+    return;
+  }
+  nativeBuffer = mt_nativeBuffer(buffer);
+#if MT_HAS_METAL4
+  if (native->modern) {
+    mt_setArgumentBuffer(rce->_cmdb,
+                         native->meshArguments,
+                         nativeBuffer,
+                         offset,
+                         index);
+    return;
+  }
+#endif
+  if (@available(macOS 13.0, iOS 16.0, *)) {
+    [native->classic setMeshBuffer:nativeBuffer
+                            offset:(NSUInteger)offset
+                           atIndex:index];
+  }
+}
+
+GPU_HIDE
+void
+mt_rceSetMeshTexture(GPURenderCommandEncoder *rce,
+                     GPUTextureView          *view,
+                     uint32_t                 index) {
+  MTRenderEncoder *native;
+  id<MTLTexture>   texture;
+
+  native  = mt_renderEncoder(rce);
+  texture = view ? (id<MTLTexture>)view->_priv : nil;
+  if (!native) {
+    return;
+  }
+#if MT_HAS_METAL4
+  if (native->modern) {
+    mt_setArgumentTexture(rce->_cmdb, native->meshArguments, texture, index);
+    return;
+  }
+#endif
+  if (@available(macOS 13.0, iOS 16.0, *)) {
+    [native->classic setMeshTexture:texture atIndex:index];
+  }
+}
+
+GPU_HIDE
+void
+mt_rceSetMeshSampler(GPURenderCommandEncoder *rce,
+                     GPUSampler              *sampler,
+                     uint32_t                 index) {
+  MTRenderEncoder     *native;
+  id<MTLSamplerState>  samplerState;
+
+  native       = mt_renderEncoder(rce);
+  samplerState = sampler ? (id<MTLSamplerState>)sampler->_priv : nil;
+  if (!native) {
+    return;
+  }
+#if MT_HAS_METAL4
+  if (native->modern) {
+    mt_setArgumentSampler(native->meshArguments, samplerState, index);
+    return;
+  }
+#endif
+  if (@available(macOS 13.0, iOS 16.0, *)) {
+    [native->classic setMeshSamplerState:samplerState atIndex:index];
+  }
 }
 
 GPU_HIDE
@@ -659,6 +873,48 @@ mt_drawIndexedPrims(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
+mt_drawMesh(GPURenderCommandEncoder *rce,
+            uint32_t                 groupCountX,
+            uint32_t                 groupCountY,
+            uint32_t                 groupCountZ,
+            const uint32_t           taskWorkgroupSize[3],
+            const uint32_t           meshWorkgroupSize[3]) {
+  MTRenderEncoder *native;
+  MTLSize          groups;
+  MTLSize          taskThreads;
+  MTLSize          meshThreads;
+
+  native = mt_renderEncoder(rce);
+  if (!native) {
+    return;
+  }
+
+  groups = MTLSizeMake(groupCountX, groupCountY, groupCountZ);
+  taskThreads = MTLSizeMake(taskWorkgroupSize[0],
+                            taskWorkgroupSize[1],
+                            taskWorkgroupSize[2]);
+  meshThreads = MTLSizeMake(meshWorkgroupSize[0],
+                            meshWorkgroupSize[1],
+                            meshWorkgroupSize[2]);
+#if MT_HAS_METAL4
+  if (native->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      [native->modern drawMeshThreadgroups:groups
+               threadsPerObjectThreadgroup:taskThreads
+                 threadsPerMeshThreadgroup:meshThreads];
+    }
+    return;
+  }
+#endif
+  if (@available(macOS 13.0, iOS 16.0, *)) {
+    [native->classic drawMeshThreadgroups:groups
+              threadsPerObjectThreadgroup:taskThreads
+                threadsPerMeshThreadgroup:meshThreads];
+  }
+}
+
+GPU_HIDE
+void
 mt_drawPrimitivesIndirect(GPURenderCommandEncoder *rce,
                           GPUPrimitiveType         type,
                           GPUBuffer               *argsBuffer,
@@ -766,11 +1022,18 @@ mt_initRCE(GPUApiRCE *api) {
   api->vertexInputBuffer        = mt_vertexInputBuffer;
   api->setVertexTexture         = mt_rceSetVertexTexture;
   api->setVertexSampler         = mt_rceSetVertexSampler;
+  api->taskBuffer               = mt_taskBuffer;
+  api->setTaskTexture           = mt_rceSetTaskTexture;
+  api->setTaskSampler           = mt_rceSetTaskSampler;
+  api->meshBuffer               = mt_meshBuffer;
+  api->setMeshTexture           = mt_rceSetMeshTexture;
+  api->setMeshSampler           = mt_rceSetMeshSampler;
   api->fragmentBuffer           = mt_fragmentBuffer;
   api->setFragmentTexture       = mt_rceSetFragmentTexture;
   api->setFragmentSampler       = mt_rceSetFragmentSampler;
   api->drawPrimitives           = mt_drawPrimitives;
   api->drawIndexedPrims         = mt_drawIndexedPrims;
+  api->drawMesh                 = mt_drawMesh;
   api->drawPrimitivesIndirect   = mt_drawPrimitivesIndirect;
   api->drawIndexedPrimsIndirect = mt_drawIndexedPrimsIndirect;
   api->endEncoding              = mt_endEncoding;

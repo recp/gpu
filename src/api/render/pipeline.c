@@ -320,12 +320,27 @@ gpu_frontFaceIsValid(GPUFrontFace face) {
 }
 
 static bool
-gpu_renderPipelineEntriesMatchStages(const GPURenderPipelineCreateInfo *info) {
+gpu_renderPipelineEntriesMatchStages(const GPURenderPipelineCreateInfo *info,
+                                     const GPUMeshPipelineEXT          *mesh) {
   GPUShaderStageFlags stage;
 
-  if (gpuGetShaderLibraryEntryStage(info->library, info->vertexEntry, &stage) &&
-      stage != GPU_SHADER_STAGE_VERTEX_BIT) {
-    return false;
+  if (mesh) {
+    if (mesh->taskEntry &&
+        gpuGetShaderLibraryEntryStage(info->library, mesh->taskEntry, &stage) &&
+        stage != GPU_SHADER_STAGE_TASK_BIT) {
+      return false;
+    }
+    if (gpuGetShaderLibraryEntryStage(info->library, mesh->meshEntry, &stage) &&
+        stage != GPU_SHADER_STAGE_MESH_BIT) {
+      return false;
+    }
+  } else {
+    if (gpuGetShaderLibraryEntryStage(info->library,
+                                      info->vertexEntry,
+                                      &stage) &&
+        stage != GPU_SHADER_STAGE_VERTEX_BIT) {
+      return false;
+    }
   }
   if (gpuGetShaderLibraryEntryStage(info->library, info->fragmentEntry, &stage) &&
       stage != GPU_SHADER_STAGE_FRAGMENT_BIT) {
@@ -335,8 +350,48 @@ gpu_renderPipelineEntriesMatchStages(const GPURenderPipelineCreateInfo *info) {
   return true;
 }
 
+static GPUResult
+gpu_meshPipelineInfo(GPUDevice                          *device,
+                     const GPURenderPipelineCreateInfo *info,
+                     const GPUMeshPipelineEXT         **outMesh) {
+  const GPUChainedStruct *chain;
+  const GPUMeshPipelineEXT *mesh;
+
+  if (!device || !info || !outMesh) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  chain = info->chain.pNext;
+  mesh  = NULL;
+  while (chain) {
+    if (chain->sType != GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT || mesh ||
+        (chain->structSize != 0u &&
+         chain->structSize < sizeof(GPUMeshPipelineEXT))) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    mesh  = (const GPUMeshPipelineEXT *)chain;
+    chain = chain->pNext;
+  }
+
+  if (mesh) {
+    if (!mesh->meshEntry || info->vertexEntry ||
+        info->vertex.bufferLayoutCount != 0u) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    if (!GPUIsFeatureEnabled(device, GPU_FEATURE_MESH_SHADER)) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+  } else if (!info->vertexEntry) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outMesh = mesh;
+  return GPU_OK;
+}
+
 static bool
-gpu_pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info) {
+gpu_pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info,
+                            bool                               mesh) {
   uint32_t i;
 
   if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
@@ -355,6 +410,11 @@ gpu_pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info) {
   if (!gpu_primitiveTopologyIsValid(info->primitiveTopology) ||
       !gpu_cullModeIsValid(info->cullMode) ||
       !gpu_frontFaceIsValid(info->frontFace))
+    return false;
+  if (mesh &&
+      info->primitiveTopology != GPU_PRIMITIVE_TOPOLOGY_POINT_LIST &&
+      info->primitiveTopology != GPU_PRIMITIVE_TOPOLOGY_LINE_LIST &&
+      info->primitiveTopology != GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
     return false;
   if (info->multisample.sampleCount != 0u &&
       info->multisample.sampleCount != 1u &&
@@ -386,9 +446,12 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   GPUApi                  *api;
   GPURenderPipelineState  *state;
   GPURenderPipeline       *pipeline;
+  const GPUMeshPipelineEXT *mesh;
   GPUVertexDescriptor     *vertexDesc;
   GPUShaderFunction       *vertexFunc;
   GPUShaderFunction       *fragmentFunc;
+  GPUShaderFunction       *taskFunc;
+  GPUShaderFunction       *meshFunc;
   GPUFormat                colorFormat;
   GPUResult                result;
   uint32_t                 i;
@@ -401,11 +464,14 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   *outPipeline = NULL;
 
   if (!device || !info || !info->layout || !info->library ||
-      !info->vertexEntry || !info->fragmentEntry)
+      !info->fragmentEntry)
     return GPU_ERROR_INVALID_ARGUMENT;
   if (info->cache && info->cache->device != device)
     return GPU_ERROR_INVALID_ARGUMENT;
-  if (!gpu_pipelineInfoIsSupported(info))
+  result = gpu_meshPipelineInfo(device, info, &mesh);
+  if (result != GPU_OK)
+    return result;
+  if (!gpu_pipelineInfoIsSupported(info, mesh != NULL))
     return GPU_ERROR_INVALID_ARGUMENT;
   result = gpu_validatePipelineFormats(device, info);
   if (result != GPU_OK)
@@ -413,9 +479,11 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   api = gpuDeviceApi(device);
   if (!api)
     return GPU_ERROR_BACKEND_FAILURE;
-  result = gpu_validateMetalVertexBindings(api, info);
-  if (result != GPU_OK)
-    return result;
+  if (!mesh) {
+    result = gpu_validateMetalVertexBindings(api, info);
+    if (result != GPU_OK)
+      return result;
+  }
   if (info->cache && !info->chain.pNext) {
     result = gpuPipelineCacheFindRender(info->cache, info, &pipeline);
     if (result != GPU_OK) {
@@ -426,9 +494,28 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
       return GPU_OK;
     }
   }
-  if (!gpu_renderPipelineEntriesMatchStages(info))
+  if (!gpu_renderPipelineEntriesMatchStages(info, mesh))
     return GPU_ERROR_INVALID_ARGUMENT;
-  {
+  if (mesh) {
+    const char *entries[3];
+    uint32_t    entryCount;
+
+    entryCount = 0u;
+    if (mesh->taskEntry) {
+      entries[entryCount++] = mesh->taskEntry;
+    }
+    entries[entryCount++] = mesh->meshEntry;
+    entries[entryCount++] = info->fragmentEntry;
+    if (!gpuPipelineLayoutMatchesShaderEntries(info->layout,
+                                               info->library,
+                                               entries,
+                                               entryCount,
+                                               GPU_SHADER_STAGE_TASK_BIT |
+                                                 GPU_SHADER_STAGE_MESH_BIT |
+                                                 GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                               &requiredBindGroupMask))
+      return GPU_ERROR_INVALID_ARGUMENT;
+  } else {
     const char *entries[] = {info->vertexEntry, info->fragmentEntry};
 
     if (!gpuPipelineLayoutMatchesShaderEntries(info->layout,
@@ -461,32 +548,65 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     goto ready;
   }
 
-  vertexFunc   = gpuShaderFunction(info->library, info->vertexEntry);
+  vertexFunc   = mesh ? NULL : gpuShaderFunction(info->library, info->vertexEntry);
   fragmentFunc = gpuShaderFunction(info->library, info->fragmentEntry);
-  if (!vertexFunc || !fragmentFunc)
+  taskFunc     = mesh && mesh->taskEntry
+                   ? gpuShaderFunction(info->library, mesh->taskEntry)
+                   : NULL;
+  meshFunc     = mesh ? gpuShaderFunction(info->library, mesh->meshEntry) : NULL;
+  if ((!mesh && !vertexFunc) || !fragmentFunc ||
+      (mesh && (!meshFunc || (mesh->taskEntry && !taskFunc))))
     return GPU_ERROR_INVALID_ARGUMENT;
 
   colorFormat = info->colorTargetCount > 0u
                   ? info->pColorTargets[0].format
                   : GPU_FORMAT_UNDEFINED;
-  pipeline = gpuCreateRenderPipelineDesc(api, colorFormat);
+  pipeline = gpuCreateRenderPipelineDesc(api, colorFormat, mesh != NULL);
   if (!pipeline)
     return GPU_ERROR_BACKEND_FAILURE;
 
   pipeline->_api      = api;
   pipeline->_refCount = 1u;
+  pipeline->_mesh     = mesh != NULL;
+  pipeline->_task     = mesh && mesh->taskEntry;
+  pipeline->_taskWorkgroupSize[0] = 1u;
+  pipeline->_taskWorkgroupSize[1] = 1u;
+  pipeline->_taskWorkgroupSize[2] = 1u;
+  pipeline->_meshWorkgroupSize[0] = 1u;
+  pipeline->_meshWorkgroupSize[1] = 1u;
+  pipeline->_meshWorkgroupSize[2] = 1u;
+  if (mesh) {
+    if (mesh->taskEntry) {
+      gpuGetShaderLibraryWorkgroupSize(info->library,
+                                       mesh->taskEntry,
+                                       GPU_SHADER_STAGE_TASK_BIT,
+                                       pipeline->_taskWorkgroupSize);
+    }
+    gpuGetShaderLibraryWorkgroupSize(info->library,
+                                     mesh->meshEntry,
+                                     GPU_SHADER_STAGE_MESH_BIT,
+                                     pipeline->_meshWorkgroupSize);
+  }
 
-  gpuPipelineSetFunction(pipeline, vertexFunc, GPU_FUNCTION_VERT);
+  if (mesh) {
+    if (taskFunc)
+      gpuPipelineSetFunction(pipeline, taskFunc, GPU_FUNCTION_TASK);
+    gpuPipelineSetFunction(pipeline, meshFunc, GPU_FUNCTION_MESH);
+  } else {
+    gpuPipelineSetFunction(pipeline, vertexFunc, GPU_FUNCTION_VERT);
+  }
   gpuPipelineSetFunction(pipeline, fragmentFunc, GPU_FUNCTION_FRAG);
 
-  vertexDesc = gpu_createVertexDescriptorFromState(api, &info->vertex);
-  if (info->vertex.bufferLayoutCount > 0 && !vertexDesc) {
-    GPUDestroyRenderPipeline(pipeline);
-    return GPU_ERROR_INVALID_ARGUMENT;
+  if (!mesh) {
+    vertexDesc = gpu_createVertexDescriptorFromState(api, &info->vertex);
+    if (info->vertex.bufferLayoutCount > 0 && !vertexDesc) {
+      GPUDestroyRenderPipeline(pipeline);
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    if (vertexDesc)
+      gpuPipelineSetVertexDesc(pipeline, vertexDesc);
+    gpuDestroyVertexDesc(api, vertexDesc);
   }
-  if (vertexDesc)
-    gpuPipelineSetVertexDesc(pipeline, vertexDesc);
-  gpuDestroyVertexDesc(api, vertexDesc);
 
   for (i = 0; i < info->colorTargetCount; i++)
     gpuPipelineSetColorFormat(pipeline, i, info->pColorTargets[i].format);
@@ -538,6 +658,26 @@ ready:
   pipeline->_primitiveTopology = info->primitiveTopology;
   pipeline->_cullMode = info->cullMode;
   pipeline->_frontFace = info->frontFace;
+  pipeline->_mesh = mesh != NULL;
+  pipeline->_task = mesh && mesh->taskEntry;
+  if (mesh && pipeline->_meshWorkgroupSize[0] == 0u) {
+    pipeline->_taskWorkgroupSize[0] = 1u;
+    pipeline->_taskWorkgroupSize[1] = 1u;
+    pipeline->_taskWorkgroupSize[2] = 1u;
+    pipeline->_meshWorkgroupSize[0] = 1u;
+    pipeline->_meshWorkgroupSize[1] = 1u;
+    pipeline->_meshWorkgroupSize[2] = 1u;
+    if (mesh->taskEntry) {
+      gpuGetShaderLibraryWorkgroupSize(info->library,
+                                       mesh->taskEntry,
+                                       GPU_SHADER_STAGE_TASK_BIT,
+                                       pipeline->_taskWorkgroupSize);
+    }
+    gpuGetShaderLibraryWorkgroupSize(info->library,
+                                     mesh->meshEntry,
+                                     GPU_SHADER_STAGE_MESH_BIT,
+                                     pipeline->_meshWorkgroupSize);
+  }
   gpuGetPipelineLayoutPushConstants(info->layout,
                                     &pipeline->_pushConstantSizeBytes,
                                     &pipeline->_pushConstantStages);
@@ -572,11 +712,11 @@ GPUDestroyRenderPipeline(GPURenderPipeline *pipeline) {
 
 GPU_HIDE
 GPURenderPipeline *
-gpuCreateRenderPipelineDesc(GPUApi *api, GPUFormat pixelFormat) {
+gpuCreateRenderPipelineDesc(GPUApi *api, GPUFormat pixelFormat, bool mesh) {
   if (!api || !api->render.newRenderPipeline)
     return NULL;
 
-  return api->render.newRenderPipeline(pixelFormat);
+  return api->render.newRenderPipeline(pixelFormat, mesh);
 }
 
 GPU_HIDE

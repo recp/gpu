@@ -106,6 +106,13 @@ GPUDrawIndexed(GPURenderPassEncoder *pass,
 
 GPU_EXPORT
 void
+GPUDrawMeshEXT(GPURenderPassEncoder *pass,
+               uint32_t              groupCountX,
+               uint32_t              groupCountY,
+               uint32_t              groupCountZ);
+
+GPU_EXPORT
+void
 GPUDrawIndirect(GPURenderPassEncoder *pass,
                 GPUBuffer            *argsBuffer,
                 uint64_t              argsOffset);

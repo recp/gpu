@@ -145,16 +145,35 @@ mt_fillStencilDescriptor(MTLStencilDescriptor      *desc,
 
 GPU_HIDE
 GPURenderPipeline*
-mt_newRenderPipeline(GPUFormat pixelFormat) {
-  GPURenderPipeline            *pipeline;
-  MTLRenderPipelineDescriptor *renderDesc;
+mt_newRenderPipeline(GPUFormat pixelFormat, bool mesh) {
+  GPURenderPipeline *pipeline;
+  id                 renderDesc;
 
-  renderDesc = [MTLRenderPipelineDescriptor new];
+  if (mesh) {
+    if (@available(macOS 13.0, iOS 16.0, *)) {
+      renderDesc = [MTLMeshRenderPipelineDescriptor new];
+    } else {
+      return NULL;
+    }
+  } else {
+    renderDesc = [MTLRenderPipelineDescriptor new];
+  }
   if (pixelFormat != GPU_FORMAT_UNDEFINED) {
-    renderDesc.colorAttachments[0].pixelFormat = mt_format(pixelFormat);
+    if (mesh) {
+      ((MTLMeshRenderPipelineDescriptor *)renderDesc)
+        .colorAttachments[0].pixelFormat = mt_format(pixelFormat);
+    } else {
+      ((MTLRenderPipelineDescriptor *)renderDesc)
+        .colorAttachments[0].pixelFormat = mt_format(pixelFormat);
+    }
   }
   pipeline = calloc(1, sizeof(*pipeline));
+  if (!pipeline) {
+    [renderDesc release];
+    return NULL;
+  }
   pipeline->_priv = renderDesc;
+  pipeline->_mesh = mesh;
   return pipeline;
 }
 
@@ -166,6 +185,7 @@ mt_newRenderState(GPUDevice         * __restrict device,
   GPURenderPipelineState      *renderPipeline;
   MTRenderPipelineState       *native;
   MTLRenderPipelineDescriptor *renderDesc;
+  MTLMeshRenderPipelineDescriptor *meshDesc;
   MTLDepthStencilDescriptor   *depthDesc;
   MTLStencilDescriptor        *frontDesc;
   MTLStencilDescriptor        *backDesc;
@@ -179,31 +199,58 @@ mt_newRenderState(GPUDevice         * __restrict device,
   if (!native) {
     return NULL;
   }
-  renderDesc = pipeline->_priv;
-  renderDesc.inputPrimitiveTopology =
-    mt_topologyClass(pipeline->_primitiveTopology);
-  renderDesc.alphaToCoverageEnabled = pipeline->_alphaToCoverageEnable;
-  for (i = 0u; i < pipeline->_colorTargetCount; i++) {
-    mt_fillBlendDescriptor(renderDesc.colorAttachments[i],
-                           &pipeline->_colorTargetBlends[i]);
-  }
-  usesArchive = mt_useRenderCache(pipeline->_cache, renderDesc);
-  if (usesArchive) {
-    native->render = [deviceMT->device
-      newRenderPipelineStateWithDescriptor:renderDesc
-                                   options:
-                                     MTLPipelineOptionFailOnBinaryArchiveMiss
-                                reflection:nil
-                                     error:&error];
-    if (!native->render) {
-      mt_addRenderCache(pipeline->_cache, renderDesc);
-      error = nil;
+  renderDesc  = pipeline->_mesh ? nil : pipeline->_priv;
+  meshDesc    = pipeline->_mesh ? pipeline->_priv : nil;
+  usesArchive = false;
+  if (meshDesc) {
+    if (@available(macOS 13.0, iOS 16.0, *)) {
+      meshDesc.alphaToCoverageEnabled = pipeline->_alphaToCoverageEnable;
+      meshDesc.maxTotalThreadsPerMeshThreadgroup =
+        pipeline->_meshWorkgroupSize[0] *
+        pipeline->_meshWorkgroupSize[1] *
+        pipeline->_meshWorkgroupSize[2];
+      if (pipeline->_task) {
+        meshDesc.maxTotalThreadsPerObjectThreadgroup =
+          pipeline->_taskWorkgroupSize[0] *
+          pipeline->_taskWorkgroupSize[1] *
+          pipeline->_taskWorkgroupSize[2];
+      }
+      for (i = 0u; i < pipeline->_colorTargetCount; i++) {
+        mt_fillBlendDescriptor(meshDesc.colorAttachments[i],
+                               &pipeline->_colorTargetBlends[i]);
+      }
+      native->render = [deviceMT->device
+        newRenderPipelineStateWithMeshDescriptor:meshDesc
+                                         options:MTLPipelineOptionNone
+                                      reflection:nil
+                                           error:&error];
     }
-  }
-  if (!native->render) {
-    native->render = [deviceMT->device
-      newRenderPipelineStateWithDescriptor:renderDesc
-                                     error:&error];
+  } else {
+    renderDesc.inputPrimitiveTopology =
+      mt_topologyClass(pipeline->_primitiveTopology);
+    renderDesc.alphaToCoverageEnabled = pipeline->_alphaToCoverageEnable;
+    for (i = 0u; i < pipeline->_colorTargetCount; i++) {
+      mt_fillBlendDescriptor(renderDesc.colorAttachments[i],
+                             &pipeline->_colorTargetBlends[i]);
+    }
+    usesArchive = mt_useRenderCache(pipeline->_cache, renderDesc);
+    if (usesArchive) {
+      native->render = [deviceMT->device
+        newRenderPipelineStateWithDescriptor:renderDesc
+                                     options:
+                                       MTLPipelineOptionFailOnBinaryArchiveMiss
+                                  reflection:nil
+                                       error:&error];
+      if (!native->render) {
+        mt_addRenderCache(pipeline->_cache, renderDesc);
+        error = nil;
+      }
+    }
+    if (!native->render) {
+      native->render = [deviceMT->device
+        newRenderPipelineStateWithDescriptor:renderDesc
+                                       error:&error];
+    }
   }
   if (!native->render) {
     NSLog(@"Failed to create render pipeline state: %@", error);
@@ -252,6 +299,8 @@ mt_newRenderState(GPUDevice         * __restrict device,
   }
 
   renderPipeline->_priv = native;
+  native->mesh          = pipeline->_mesh;
+  native->task          = pipeline->_task;
   pipeline->_state      = native;
   return renderPipeline;
 }
@@ -281,14 +330,27 @@ void
 mt_setFunction(GPURenderPipeline * __restrict pipline,
                GPUShaderFunction * __restrict func,
                GPUFunctionType                functype) {
-  MTLRenderPipelineDescriptor *desc;
-  desc = pipline->_priv;
+  MTLRenderPipelineDescriptor     *desc;
+  MTLMeshRenderPipelineDescriptor *meshDesc;
+
+  desc     = pipline->_mesh ? nil : pipline->_priv;
+  meshDesc = pipline->_mesh ? pipline->_priv : nil;
   switch (functype) {
     case GPU_FUNCTION_VERT:
       desc.vertexFunction = (id<MTLFunction>)func->_priv;
       break;
     case GPU_FUNCTION_FRAG:
-      desc.fragmentFunction = (id<MTLFunction>)func->_priv;
+      if (meshDesc) {
+        meshDesc.fragmentFunction = (id<MTLFunction>)func->_priv;
+      } else {
+        desc.fragmentFunction = (id<MTLFunction>)func->_priv;
+      }
+      break;
+    case GPU_FUNCTION_TASK:
+      meshDesc.objectFunction = (id<MTLFunction>)func->_priv;
+      break;
+    case GPU_FUNCTION_MESH:
+      meshDesc.meshFunction = (id<MTLFunction>)func->_priv;
       break;
   }
 }
@@ -298,32 +360,52 @@ void
 mt_colorFormat(GPURenderPipeline * __restrict pipline,
                uint32_t                       index,
                GPUFormat                      pixelFormat) {
-  ((MTLRenderPipelineDescriptor *)pipline->_priv)
-    .colorAttachments[index].pixelFormat = mt_format(pixelFormat);
+  if (pipline->_mesh) {
+    ((MTLMeshRenderPipelineDescriptor *)pipline->_priv)
+      .colorAttachments[index].pixelFormat = mt_format(pixelFormat);
+  } else {
+    ((MTLRenderPipelineDescriptor *)pipline->_priv)
+      .colorAttachments[index].pixelFormat = mt_format(pixelFormat);
+  }
 }
 
 GPU_HIDE
 void
 mt_depthFormat(GPURenderPipeline * __restrict pipline,
                GPUFormat                      pixelFormat) {
-  ((MTLRenderPipelineDescriptor *)pipline->_priv).depthAttachmentPixelFormat =
-    mt_format(pixelFormat);
+  if (pipline->_mesh) {
+    ((MTLMeshRenderPipelineDescriptor *)pipline->_priv)
+      .depthAttachmentPixelFormat = mt_format(pixelFormat);
+  } else {
+    ((MTLRenderPipelineDescriptor *)pipline->_priv)
+      .depthAttachmentPixelFormat = mt_format(pixelFormat);
+  }
 }
 
 GPU_HIDE
 void
 mt_stencilFormat(GPURenderPipeline * __restrict pipline,
                  GPUFormat                      pixelFormat) {
-  ((MTLRenderPipelineDescriptor *)pipline->_priv)
-    .stencilAttachmentPixelFormat = mt_format(pixelFormat);
+  if (pipline->_mesh) {
+    ((MTLMeshRenderPipelineDescriptor *)pipline->_priv)
+      .stencilAttachmentPixelFormat = mt_format(pixelFormat);
+  } else {
+    ((MTLRenderPipelineDescriptor *)pipline->_priv)
+      .stencilAttachmentPixelFormat = mt_format(pixelFormat);
+  }
 }
 
 GPU_HIDE
 void
 mt_sampleCount(GPURenderPipeline * __restrict pipline,
                uint32_t                 sampleCount) {
-  ((MTLRenderPipelineDescriptor *)pipline->_priv).rasterSampleCount =
-    sampleCount;
+  if (pipline->_mesh) {
+    ((MTLMeshRenderPipelineDescriptor *)pipline->_priv).rasterSampleCount =
+      sampleCount;
+  } else {
+    ((MTLRenderPipelineDescriptor *)pipline->_priv).rasterSampleCount =
+      sampleCount;
+  }
 }
 
 GPU_HIDE

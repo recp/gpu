@@ -129,6 +129,8 @@ typedef struct MTRenderEncoder {
   id                          modern;
   MTArgumentState            *vertexArguments;
   MTArgumentState            *fragmentArguments;
+  MTArgumentState            *taskArguments;
+  MTArgumentState            *meshArguments;
   uint32_t                    width;
   uint32_t                    height;
 } MTRenderEncoder;
@@ -136,6 +138,8 @@ typedef struct MTRenderEncoder {
 typedef struct MTRenderPipelineState {
   id<MTLRenderPipelineState> render;
   id<MTLDepthStencilState>   depthStencil;
+  bool                       mesh;
+  bool                       task;
 } MTRenderPipelineState;
 
 typedef struct MTComputeEncoder {
@@ -179,6 +183,8 @@ struct MTCommandBuffer {
   id                     residencyAllocations[MT_RESIDENCY_CACHE_SIZE];
   MTArgumentState        vertexArguments;
   MTArgumentState        fragmentArguments;
+  MTArgumentState        taskArguments;
+  MTArgumentState        meshArguments;
   MTArgumentState        computeArguments;
   GPURenderPassDesc       renderPass;
   MTRenderPass            renderPassState;

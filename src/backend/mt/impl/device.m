@@ -291,6 +291,13 @@ mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
     case GPU_FEATURE_DESCRIPTOR_INDEXING:
     case GPU_FEATURE_BINDLESS:
       return true;
+    case GPU_FEATURE_MESH_SHADER:
+      device = adapterMT->device;
+      if (@available(macOS 13.0, iOS 16.0, *)) {
+        return [device supportsFamily:MTLGPUFamilyApple7] ||
+               [device supportsFamily:MTLGPUFamilyMac2];
+      }
+      return false;
     case GPU_FEATURE_SUBGROUPS:
       mt_probeSubgroups(adapterMT);
       return adapterMT->subgroups;

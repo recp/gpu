@@ -557,6 +557,7 @@ if(GPU_BUILD_METAL AND GPU_BUILD_SAMPLES AND
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-usl/compute_buffer.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/usl-reflection-check/reflection.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/usl-reflection-check/reflection_storage.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/mesh-triangle-usl/mesh_triangle.usl"
   )
   list(GET GPU_METAL_USL_FIXTURES 0 GPU_METAL_TRIANGLE_US)
   list(GET GPU_METAL_USL_FIXTURES 1 GPU_METAL_TEXTURED_QUAD_US)
@@ -564,6 +565,7 @@ if(GPU_BUILD_METAL AND GPU_BUILD_SAMPLES AND
   list(GET GPU_METAL_USL_FIXTURES 3 GPU_METAL_COMPUTE_BUFFER_US)
   list(GET GPU_METAL_USL_FIXTURES 4 GPU_METAL_REFLECTION_US)
   list(GET GPU_METAL_USL_FIXTURES 5 GPU_METAL_REFLECTION_STORAGE_US)
+  list(GET GPU_METAL_USL_FIXTURES 6 GPU_METAL_MESH_TRIANGLE_US)
   add_custom_target(gpu-metal-fixtures DEPENDS ${GPU_METAL_USL_FIXTURES})
 endif()
 
@@ -1056,6 +1058,14 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
   gpu_attach_usl_sample(gpu-textured-quad-metal-usl
                         gpu-metal-fixtures
                         "${GPU_METAL_TEXTURED_QUAD_US}")
+
+  add_executable(gpu-mesh-triangle-metal-usl
+    samples/mesh-triangle-usl/main.m
+  )
+  gpu_configure_metal_sample(gpu-mesh-triangle-metal-usl)
+  gpu_attach_usl_sample(gpu-mesh-triangle-metal-usl
+                        gpu-metal-fixtures
+                        "${GPU_METAL_MESH_TRIANGLE_US}")
 
   add_executable(gpu-compute-metal-usl
     samples/compute-usl/main.m

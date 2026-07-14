@@ -409,6 +409,8 @@ mt_destroyCommandBufferState(MTCommandBuffer *native) {
 
   [native->vertexArguments.table release];
   [native->fragmentArguments.table release];
+  [native->taskArguments.table release];
+  [native->meshArguments.table release];
   [native->computeArguments.table release];
   [native->renderPassState.classic release];
   [native->renderPassState.modern release];

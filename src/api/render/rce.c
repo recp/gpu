@@ -278,7 +278,10 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
   pass->_pushConstantSizeBytes = pipeline->_pushConstantSizeBytes;
   pass->_pushConstantStages    = pipeline->_pushConstantStages &
                                  (GPU_SHADER_STAGE_VERTEX_BIT |
-                                  GPU_SHADER_STAGE_FRAGMENT_BIT);
+                                  GPU_SHADER_STAGE_FRAGMENT_BIT |
+                                  GPU_SHADER_STAGE_TASK_BIT |
+                                  GPU_SHADER_STAGE_MESH_BIT);
+  pass->_meshPipeline          = pipeline->_mesh;
   pass->_pushConstantsEmitted  = false;
   if (pass->_pushConstantSizeBytes > 0u) {
     memset(pass->_pushConstants, 0, pass->_pushConstantSizeBytes);
@@ -517,6 +520,92 @@ gpuSetRenderVertexSampler(GPURenderPassEncoder *pass,
 
 GPU_HIDE
 void
+gpuSetRenderTaskBuffer(GPURenderPassEncoder *pass,
+                       GPUBuffer            *buf,
+                       uint64_t              off,
+                       uint32_t              index) {
+  GPUApi *api;
+
+  if (!pass || pass->_ended || !buf ||
+      !(api = gpu_renderPassApi(pass)) || !api->rce.taskBuffer) {
+    return;
+  }
+  api->rce.taskBuffer(pass, buf, off, index);
+}
+
+GPU_HIDE
+void
+gpuSetRenderTaskTexture(GPURenderPassEncoder *pass,
+                        GPUTextureView       *view,
+                        uint32_t              index) {
+  GPUApi *api;
+
+  if (!pass || pass->_ended || !view ||
+      !(api = gpu_renderPassApi(pass)) || !api->rce.setTaskTexture) {
+    return;
+  }
+  api->rce.setTaskTexture(pass, view, index);
+}
+
+GPU_HIDE
+void
+gpuSetRenderTaskSampler(GPURenderPassEncoder *pass,
+                        GPUSampler           *sampler,
+                        uint32_t              index) {
+  GPUApi *api;
+
+  if (!pass || pass->_ended || !sampler ||
+      !(api = gpu_renderPassApi(pass)) || !api->rce.setTaskSampler) {
+    return;
+  }
+  api->rce.setTaskSampler(pass, sampler, index);
+}
+
+GPU_HIDE
+void
+gpuSetRenderMeshBuffer(GPURenderPassEncoder *pass,
+                       GPUBuffer            *buf,
+                       uint64_t              off,
+                       uint32_t              index) {
+  GPUApi *api;
+
+  if (!pass || pass->_ended || !buf ||
+      !(api = gpu_renderPassApi(pass)) || !api->rce.meshBuffer) {
+    return;
+  }
+  api->rce.meshBuffer(pass, buf, off, index);
+}
+
+GPU_HIDE
+void
+gpuSetRenderMeshTexture(GPURenderPassEncoder *pass,
+                        GPUTextureView       *view,
+                        uint32_t              index) {
+  GPUApi *api;
+
+  if (!pass || pass->_ended || !view ||
+      !(api = gpu_renderPassApi(pass)) || !api->rce.setMeshTexture) {
+    return;
+  }
+  api->rce.setMeshTexture(pass, view, index);
+}
+
+GPU_HIDE
+void
+gpuSetRenderMeshSampler(GPURenderPassEncoder *pass,
+                        GPUSampler           *sampler,
+                        uint32_t              index) {
+  GPUApi *api;
+
+  if (!pass || pass->_ended || !sampler ||
+      !(api = gpu_renderPassApi(pass)) || !api->rce.setMeshSampler) {
+    return;
+  }
+  api->rce.setMeshSampler(pass, sampler, index);
+}
+
+GPU_HIDE
+void
 gpuSetRenderFragmentBuffer(GPURenderPassEncoder *pass,
                            GPUBuffer            *buf,
                            uint64_t              off,
@@ -620,6 +709,10 @@ GPUDraw(GPURenderPassEncoder *pass,
     gpu_renderValidationError(pass, "GPUDraw skipped: no render pipeline bound");
     return;
   }
+  if (pass->_meshPipeline) {
+    gpu_renderValidationError(pass, "GPUDraw skipped: mesh pipeline bound");
+    return;
+  }
   if (!gpu_renderBindingsComplete(pass)) {
     gpu_renderValidationError(pass, "GPUDraw skipped: missing render bind group");
     return;
@@ -656,6 +749,11 @@ GPUDrawIndexed(GPURenderPassEncoder *pass,
     gpu_renderValidationError(pass, "GPUDrawIndexed skipped: no render pipeline bound");
     return;
   }
+  if (pass->_meshPipeline) {
+    gpu_renderValidationError(pass,
+                              "GPUDrawIndexed skipped: mesh pipeline bound");
+    return;
+  }
   if (!gpu_renderBindingsComplete(pass)) {
     gpu_renderValidationError(pass, "GPUDrawIndexed skipped: missing render bind group");
     return;
@@ -687,6 +785,47 @@ GPUDrawIndexed(GPURenderPassEncoder *pass,
 
 GPU_EXPORT
 void
+GPUDrawMeshEXT(GPURenderPassEncoder *pass,
+               uint32_t              groupCountX,
+               uint32_t              groupCountY,
+               uint32_t              groupCountZ) {
+  GPURenderPipeline *pipeline;
+  GPUApi            *api;
+
+  if (!pass || pass->_ended) {
+    return;
+  }
+  if (!pass->_hasPipeline || !pass->_meshPipeline) {
+    gpu_renderValidationError(pass,
+                              "GPUDrawMeshEXT skipped: no mesh pipeline bound");
+    return;
+  }
+  if (!gpu_renderBindingsComplete(pass)) {
+    gpu_renderValidationError(pass,
+                              "GPUDrawMeshEXT skipped: missing render bind group");
+    return;
+  }
+  if (groupCountX == 0u || groupCountY == 0u || groupCountZ == 0u) {
+    gpu_renderValidationError(pass,
+                              "GPUDrawMeshEXT skipped: zero group count");
+    return;
+  }
+  if (!(api = gpu_renderPassApi(pass)) || !api->rce.drawMesh) {
+    return;
+  }
+
+  pipeline = pass->_pipeline;
+  api->rce.drawMesh(pass,
+                    groupCountX,
+                    groupCountY,
+                    groupCountZ,
+                    pipeline->_taskWorkgroupSize,
+                    pipeline->_meshWorkgroupSize);
+  gpuDeviceRecordDraws(gpu_renderPassDevice(pass), 1u);
+}
+
+GPU_EXPORT
+void
 GPUDrawIndirect(GPURenderPassEncoder *pass,
                 GPUBuffer            *argsBuffer,
                 uint64_t              argsOffset) {
@@ -696,6 +835,11 @@ GPUDrawIndirect(GPURenderPassEncoder *pass,
     return;
   if (!pass->_hasPipeline) {
     gpu_renderValidationError(pass, "GPUDrawIndirect skipped: no render pipeline bound");
+    return;
+  }
+  if (pass->_meshPipeline) {
+    gpu_renderValidationError(pass,
+                              "GPUDrawIndirect skipped: mesh pipeline bound");
     return;
   }
   if (!gpu_renderBindingsComplete(pass)) {
@@ -729,6 +873,13 @@ GPUDrawIndexedIndirect(GPURenderPassEncoder *pass,
     return;
   if (!pass->_hasPipeline) {
     gpu_renderValidationError(pass, "GPUDrawIndexedIndirect skipped: no render pipeline bound");
+    return;
+  }
+  if (pass->_meshPipeline) {
+    gpu_renderValidationError(
+      pass,
+      "GPUDrawIndexedIndirect skipped: mesh pipeline bound"
+    );
     return;
   }
   if (!gpu_renderBindingsComplete(pass)) {
@@ -765,6 +916,13 @@ GPUMultiDrawIndirect(GPURenderPassEncoder *pass,
   if (!pass->_hasPipeline) {
     gpu_renderValidationError(pass,
                               "GPUMultiDrawIndirect skipped: no render pipeline bound");
+    return;
+  }
+  if (pass->_meshPipeline) {
+    gpu_renderValidationError(
+      pass,
+      "GPUMultiDrawIndirect skipped: mesh pipeline bound"
+    );
     return;
   }
   if (!gpu_renderBindingsComplete(pass)) {
@@ -826,6 +984,13 @@ GPUMultiDrawIndexedIndirect(GPURenderPassEncoder *pass,
     gpu_renderValidationError(
       pass,
       "GPUMultiDrawIndexedIndirect skipped: no render pipeline bound"
+    );
+    return;
+  }
+  if (pass->_meshPipeline) {
+    gpu_renderValidationError(
+      pass,
+      "GPUMultiDrawIndexedIndirect skipped: mesh pipeline bound"
     );
     return;
   }

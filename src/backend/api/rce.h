@@ -82,6 +82,7 @@ struct GPURenderCommandEncoder {
   bool                    _hasPipeline;
   bool                    _pushConstantsEmitted;
   bool                    _occlusionQueryActive;
+  bool                    _meshPipeline;
   bool                    _ended;
   uint8_t                 _pushConstants[4096];
 };
@@ -145,6 +146,38 @@ typedef struct GPUApiRCE {
   (*setVertexSampler)(GPURenderCommandEncoder *rce,
                       GPUSampler              *sampler,
                       uint32_t                 index);
+
+  void
+  (*taskBuffer)(GPURenderCommandEncoder *rce,
+                GPUBuffer               *buf,
+                uint64_t                 off,
+                uint32_t                 index);
+
+  void
+  (*setTaskTexture)(GPURenderCommandEncoder *rce,
+                    GPUTextureView          *view,
+                    uint32_t                 index);
+
+  void
+  (*setTaskSampler)(GPURenderCommandEncoder *rce,
+                    GPUSampler              *sampler,
+                    uint32_t                 index);
+
+  void
+  (*meshBuffer)(GPURenderCommandEncoder *rce,
+                GPUBuffer               *buf,
+                uint64_t                 off,
+                uint32_t                 index);
+
+  void
+  (*setMeshTexture)(GPURenderCommandEncoder *rce,
+                    GPUTextureView          *view,
+                    uint32_t                 index);
+
+  void
+  (*setMeshSampler)(GPURenderCommandEncoder *rce,
+                    GPUSampler              *sampler,
+                    uint32_t                 index);
   
   void
   (*fragmentBuffer)(GPURenderCommandEncoder *rce,
@@ -177,6 +210,14 @@ typedef struct GPUApiRCE {
                       uint32_t                 firstIndex,
                       int32_t                  vertexOffset,
                       uint32_t                 firstInstance);
+
+  void
+  (*drawMesh)(GPURenderCommandEncoder *rce,
+              uint32_t                 groupCountX,
+              uint32_t                 groupCountY,
+              uint32_t                 groupCountZ,
+              const uint32_t           taskWorkgroupSize[3],
+              const uint32_t           meshWorkgroupSize[3]);
 
   void
   (*drawPrimitivesIndirect)(GPURenderCommandEncoder *rce,

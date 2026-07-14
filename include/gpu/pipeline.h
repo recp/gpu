@@ -141,6 +141,13 @@ typedef struct GPURenderPipelineCreateInfo {
   GPUMultisampleState          multisample;
 } GPURenderPipelineCreateInfo;
 
+/* Replaces the vertex stage when chained to GPURenderPipelineCreateInfo. */
+typedef struct GPUMeshPipelineEXT {
+  GPUChainedStruct chain;
+  const char      *taskEntry;
+  const char      *meshEntry;
+} GPUMeshPipelineEXT;
+
 GPU_EXPORT
 GPUResult
 GPUCreateRenderPipeline(GPUDevice                          * __restrict device,

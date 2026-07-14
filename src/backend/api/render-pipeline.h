@@ -28,7 +28,9 @@ typedef struct GPURenderPipelineState GPURenderPipelineState;
 
 typedef enum GPUFunctionType {
   GPU_FUNCTION_VERT = 1,
-  GPU_FUNCTION_FRAG = 2
+  GPU_FUNCTION_FRAG = 2,
+  GPU_FUNCTION_TASK = 3,
+  GPU_FUNCTION_MESH = 4
 } GPUFunctionType;
 
 typedef struct GPUApiRender {
@@ -39,7 +41,7 @@ typedef struct GPUApiRender {
                     GPURenderPipeline                 * __restrict pipeline);
 
   GPURenderPipeline*
-  (*newRenderPipeline)(GPUFormat pixelFormat);
+  (*newRenderPipeline)(GPUFormat pixelFormat, bool mesh);
   
   GPURenderPipelineState*
   (*newRenderState)(GPUDevice         * __restrict device,

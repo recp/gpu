@@ -9,6 +9,7 @@ SMOKE_ARTIFACT_DIR="$BUILD_DIR/usl/metal/smoke"
 TRIANGLE_MANUAL_BIN="$BUILD_DIR/samples/gpu-triangle-manual/gpu-triangle-manual"
 TRIANGLE_USL_BIN="$BUILD_DIR/samples/gpu-triangle-metal-usl/gpu-triangle-metal-usl"
 TEXTURED_QUAD_BIN="$BUILD_DIR/samples/gpu-textured-quad-metal-usl/gpu-textured-quad-metal-usl"
+MESH_TRIANGLE_BIN="$BUILD_DIR/samples/gpu-mesh-triangle-metal-usl/gpu-mesh-triangle-metal-usl"
 COMPUTE_USL_BIN="$BUILD_DIR/samples/gpu-compute-metal-usl/gpu-compute-metal-usl"
 COMPUTE_BUFFER_BIN="$BUILD_DIR/samples/gpu-compute-buffer-metal-usl/gpu-compute-buffer-metal-usl"
 
@@ -117,6 +118,7 @@ run_step "build Metal samples" \
     gpu-triangle-manual \
     gpu-triangle-metal-usl \
     gpu-textured-quad-metal-usl \
+    gpu-mesh-triangle-metal-usl \
     gpu-compute-metal-usl \
     gpu-compute-buffer-metal-usl \
     gpu-usl-reflection-check \
@@ -156,6 +158,13 @@ restore_artifact gpu-textured-quad-metal-usl textured_quad
 run_step "textured-quad-usl warm-frame allocations" \
   env GPU_SAMPLE_EXIT_AFTER_FRAMES=96 GPU_SAMPLE_ASSERT_ZERO_ALLOC=1 \
       "$TEXTURED_QUAD_BIN"
+
+run_step "mesh-triangle-usl one-frame" \
+  env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 \
+      "$MESH_TRIANGLE_BIN"
+run_step "mesh-triangle-usl warm-frame allocations" \
+  env GPU_SAMPLE_EXIT_AFTER_FRAMES=96 GPU_SAMPLE_ASSERT_ZERO_ALLOC=1 \
+      "$MESH_TRIANGLE_BIN"
 
 run_step "compute-usl sidecar" \
   generate_artifact sidecar "$ROOT/samples/compute-usl/compute_visible.usl"

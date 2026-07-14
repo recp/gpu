@@ -1,0 +1,26 @@
+struct MeshVertex {
+  position: float4 #position
+  color: float4 #color(0)
+}
+
+@mesh_output(triangle, MeshVertex, 3, 1)
+mesh(3, 1, 1) mesh_main(tid: uint #local_index) {
+  mesh_set_primitive_count(1)
+  if (tid < 3) {
+    let position = float4(float(tid == 1) * 0.6 -
+                            float(tid == 0) * 0.6,
+                          float(tid == 2) * 1.2 - 0.6,
+                          0.0,
+                          1.0)
+    let color = float4(float(tid == 0),
+                       float(tid == 1),
+                       float(tid == 2),
+                       1.0)
+    mesh_set_vertex(tid, MeshVertex(position, color))
+    mesh_set_index(tid, tid)
+  }
+}
+
+frag fragment_main(input: MeshVertex #stage_in) -> float4 {
+  return input.color
+}

@@ -2076,6 +2076,24 @@ check_render_draw_validation_calls(GPUDevice *device) {
   gRenderDrawCalls = 0u;
   gRenderDrawIndirectCalls = 0u;
 
+  pass._meshPipeline = true;
+  GPUDraw(&pass, 3u, 1u, 0u, 0u);
+  GPUDrawIndexed(&pass, 3u, 1u, 0u, 0, 0u);
+  GPUDrawIndirect(&pass, &indirectBuffer, 0u);
+  GPUDrawIndexedIndirect(&pass, &indirectBuffer, 0u);
+  GPUMultiDrawIndirect(&pass, &indirectBuffer, 0u, 2u, 16u);
+  GPUMultiDrawIndexedIndirect(&pass, &indirectBuffer, 0u, 2u, 20u);
+  if (gRenderDrawCalls != 0u ||
+      gRenderDrawIndexedCalls != 0u ||
+      gRenderDrawIndirectCalls != 0u ||
+      gRenderDrawIndexedIndirectCalls != 0u ||
+      gRenderMultiDrawIndirectCalls != 0u ||
+      gRenderMultiDrawIndexedIndirectCalls != 0u) {
+    fprintf(stderr, "classic draw accepted a mesh pipeline\n");
+    goto cleanup;
+  }
+  pass._meshPipeline = false;
+
   drawCallsBeforeMissing = device->currentFrameStats.drawCalls;
   pass._requiredBindGroupMask = 1u;
   GPUDraw(&pass, 3u, 1u, 0u, 0u);

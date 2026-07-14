@@ -156,6 +156,12 @@ gpu_shaderVisibilityFromUSLStage(uint32_t stage, GPUShaderStageFlags *outVisibil
     case USL_RUNTIME_STAGE_COMPUTE:
       *outVisibility = GPU_SHADER_STAGE_COMPUTE_BIT;
       return 1;
+    case USL_RUNTIME_STAGE_TASK:
+      *outVisibility = GPU_SHADER_STAGE_TASK_BIT;
+      return 1;
+    case USL_RUNTIME_STAGE_MESH:
+      *outVisibility = GPU_SHADER_STAGE_MESH_BIT;
+      return 1;
     default:
       return 0;
   }
@@ -202,9 +208,10 @@ gpu_findShaderEntry(const GPUShaderLibrary *library, const char *entryPoint) {
 
 GPU_HIDE
 int
-gpuGetShaderLibraryComputeWorkgroupSize(const GPUShaderLibrary *library,
-                                        const char *entryPoint,
-                                        uint32_t outSize[3]) {
+gpuGetShaderLibraryWorkgroupSize(const GPUShaderLibrary *library,
+                                 const char               *entryPoint,
+                                 GPUShaderStageFlags       stage,
+                                 uint32_t                  outSize[3]) {
   const GPUShaderEntryInfo *entry;
 
   if (outSize) {
@@ -217,7 +224,7 @@ gpuGetShaderLibraryComputeWorkgroupSize(const GPUShaderLibrary *library,
   }
 
   entry = gpu_findShaderEntry(library, entryPoint);
-  if (!entry || entry->stage != GPU_SHADER_STAGE_COMPUTE_BIT) {
+  if (!entry || entry->stage != stage) {
     return 0;
   }
 
@@ -225,6 +232,17 @@ gpuGetShaderLibraryComputeWorkgroupSize(const GPUShaderLibrary *library,
   outSize[1] = entry->workgroupSize[1];
   outSize[2] = entry->workgroupSize[2];
   return 1;
+}
+
+GPU_HIDE
+int
+gpuGetShaderLibraryComputeWorkgroupSize(const GPUShaderLibrary *library,
+                                        const char *entryPoint,
+                                        uint32_t outSize[3]) {
+  return gpuGetShaderLibraryWorkgroupSize(library,
+                                          entryPoint,
+                                          GPU_SHADER_STAGE_COMPUTE_BIT,
+                                          outSize);
 }
 
 GPU_HIDE

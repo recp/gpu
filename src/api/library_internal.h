@@ -67,6 +67,13 @@ gpuShaderFunction(GPUShaderLibrary *library, const char *name);
 
 GPU_HIDE
 int
+gpuGetShaderLibraryWorkgroupSize(const GPUShaderLibrary *library,
+                                 const char               *entryPoint,
+                                 GPUShaderStageFlags       stage,
+                                 uint32_t                  outSize[3]);
+
+GPU_HIDE
+int
 gpuGetShaderLibraryComputeWorkgroupSize(const GPUShaderLibrary *library,
                                         const char *entryPoint,
                                         uint32_t outSize[3]);

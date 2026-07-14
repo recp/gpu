@@ -612,7 +612,9 @@ static int
 gpu_visibilityIsValid(GPUShaderStageFlags visibility) {
   const GPUShaderStageFlags knownStages = GPU_SHADER_STAGE_VERTEX_BIT |
                                          GPU_SHADER_STAGE_FRAGMENT_BIT |
-                                         GPU_SHADER_STAGE_COMPUTE_BIT;
+                                         GPU_SHADER_STAGE_COMPUTE_BIT |
+                                         GPU_SHADER_STAGE_TASK_BIT |
+                                         GPU_SHADER_STAGE_MESH_BIT;
 
   return visibility != 0u && (visibility & ~knownStages) == 0u;
 }
@@ -1375,7 +1377,9 @@ gpu_pipelineBindingsAreUnique(const GPUPipelineLayoutPriv *priv) {
   static const GPUShaderStageFlags stages[] = {
     GPU_SHADER_STAGE_VERTEX_BIT,
     GPU_SHADER_STAGE_FRAGMENT_BIT,
-    GPU_SHADER_STAGE_COMPUTE_BIT
+    GPU_SHADER_STAGE_COMPUTE_BIT,
+    GPU_SHADER_STAGE_TASK_BIT,
+    GPU_SHADER_STAGE_MESH_BIT
   };
 
   if (!priv || priv->bindGroupLayoutCount == 0u) {
@@ -2241,7 +2245,9 @@ GPUCreatePipelineLayoutFromReflection(GPUDevice *device,
   info.pushConstantStages = reflection->pushConstantSizeBytes > 0u
                                ? (GPU_SHADER_STAGE_VERTEX_BIT |
                                   GPU_SHADER_STAGE_FRAGMENT_BIT |
-                                  GPU_SHADER_STAGE_COMPUTE_BIT)
+                                  GPU_SHADER_STAGE_COMPUTE_BIT |
+                                  GPU_SHADER_STAGE_TASK_BIT |
+                                  GPU_SHADER_STAGE_MESH_BIT)
                                : 0u;
   return GPUCreatePipelineLayout(device, &info, outLayout);
 }
@@ -2823,6 +2829,40 @@ gpuBindRenderBinding(void *ctx, const GPUBindGroupBindingView *binding) {
       gpuSetRenderFragmentSampler(bindCtx->pass,
                                   binding->sampler,
                                   binding->binding + binding->arrayIndex);
+    }
+  }
+
+  if ((binding->visibility & GPU_SHADER_STAGE_TASK_BIT) != 0) {
+    if (binding->kind == GPUBindKindBuffer && binding->buffer) {
+      gpuSetRenderTaskBuffer(bindCtx->pass,
+                             binding->buffer,
+                             binding->offset,
+                             binding->binding + binding->arrayIndex);
+    } else if (binding->kind == GPUBindKindTexture && binding->textureView) {
+      gpuSetRenderTaskTexture(bindCtx->pass,
+                              binding->textureView,
+                              binding->binding + binding->arrayIndex);
+    } else if (binding->kind == GPUBindKindSampler && binding->sampler) {
+      gpuSetRenderTaskSampler(bindCtx->pass,
+                              binding->sampler,
+                              binding->binding + binding->arrayIndex);
+    }
+  }
+
+  if ((binding->visibility & GPU_SHADER_STAGE_MESH_BIT) != 0) {
+    if (binding->kind == GPUBindKindBuffer && binding->buffer) {
+      gpuSetRenderMeshBuffer(bindCtx->pass,
+                             binding->buffer,
+                             binding->offset,
+                             binding->binding + binding->arrayIndex);
+    } else if (binding->kind == GPUBindKindTexture && binding->textureView) {
+      gpuSetRenderMeshTexture(bindCtx->pass,
+                              binding->textureView,
+                              binding->binding + binding->arrayIndex);
+    } else if (binding->kind == GPUBindKindSampler && binding->sampler) {
+      gpuSetRenderMeshSampler(bindCtx->pass,
+                              binding->sampler,
+                              binding->binding + binding->arrayIndex);
     }
   }
 }

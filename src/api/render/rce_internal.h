@@ -40,6 +40,44 @@ gpuSetRenderVertexSampler(GPURenderPassEncoder *pass,
 
 GPU_HIDE
 void
+gpuSetRenderTaskBuffer(GPURenderPassEncoder *pass,
+                       GPUBuffer            *buf,
+                       uint64_t              off,
+                       uint32_t              index);
+
+GPU_HIDE
+void
+gpuSetRenderTaskTexture(GPURenderPassEncoder *pass,
+                        GPUTextureView       *view,
+                        uint32_t              index);
+
+GPU_HIDE
+void
+gpuSetRenderTaskSampler(GPURenderPassEncoder *pass,
+                        GPUSampler           *sampler,
+                        uint32_t              index);
+
+GPU_HIDE
+void
+gpuSetRenderMeshBuffer(GPURenderPassEncoder *pass,
+                       GPUBuffer            *buf,
+                       uint64_t              off,
+                       uint32_t              index);
+
+GPU_HIDE
+void
+gpuSetRenderMeshTexture(GPURenderPassEncoder *pass,
+                        GPUTextureView       *view,
+                        uint32_t              index);
+
+GPU_HIDE
+void
+gpuSetRenderMeshSampler(GPURenderPassEncoder *pass,
+                        GPUSampler           *sampler,
+                        uint32_t              index);
+
+GPU_HIDE
+void
 gpuSetRenderFragmentBuffer(GPURenderPassEncoder *pass,
                            GPUBuffer            *buf,
                            uint64_t              off,
