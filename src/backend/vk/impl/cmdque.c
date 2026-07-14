@@ -19,6 +19,7 @@
 
 enum {
   VK_COMPLETION_STACK_SIZE     = 64u * 1024u,
+  VK_SUBMIT_STACK_COUNT        = 64u,
   VK_TRANSFER_OFFSET_ALIGNMENT = 512u
 };
 
@@ -1120,6 +1121,113 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   return commitResult;
 }
 
+static GPUResult
+vk__commitCommandBuffers(uint32_t                  count,
+                         GPUCommandBuffer * const *buffers) {
+  GPUResult result;
+
+  result = GPU_OK;
+  for (uint32_t i = 0u; i < count; i++) {
+    GPUResult commitResult;
+
+    commitResult = vk_commitCommandBuffer(buffers[i]);
+    if (result == GPU_OK && commitResult != GPU_OK) {
+      result = commitResult;
+    }
+  }
+  return result;
+}
+
+static void
+vk__finishCommandBuffers(uint32_t                  count,
+                         GPUCommandBuffer * const *buffers,
+                         bool                      recycle) {
+  for (uint32_t i = 0u; i < count; i++) {
+    gpuFinishCommandBuffer(buffers[i],
+                           recycle ? vk__recycleCommandBuffer : NULL);
+  }
+}
+
+GPU_HIDE
+GPUResult
+vk_submitCommandBuffers(GPUQueue                  * __restrict queueHandle,
+                        uint32_t                                count,
+                        GPUCommandBuffer * const * __restrict buffers) {
+  GPUCommandBufferVk *natives[VK_SUBMIT_STACK_COUNT];
+  VkCommandBuffer     commands[VK_SUBMIT_STACK_COUNT];
+  GPUQueueVk         *queue;
+  GPUDeviceVk        *device;
+  VkFence             submitFence;
+  VkSubmitInfo        submitInfo = {0};
+  GPUResult           flushResult;
+  VkResult            result;
+
+  queue  = queueHandle ? queueHandle->_priv : NULL;
+  device = queueHandle && queueHandle->_device
+             ? queueHandle->_device->_priv
+             : NULL;
+  if (!queue || !device || !buffers || count < 2u) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  if (count > VK_SUBMIT_STACK_COUNT) {
+    return vk__commitCommandBuffers(count, buffers);
+  }
+
+  for (uint32_t i = 0u; i < count; i++) {
+    natives[i] = buffers[i] ? buffers[i]->_priv : NULL;
+    if (!natives[i] || natives[i]->owner != queue ||
+        !natives[i]->command || natives[i]->presentSwapchain) {
+      return vk__commitCommandBuffers(count, buffers);
+    }
+    commands[i] = natives[i]->command;
+  }
+
+  flushResult = vk__flushTransfers(queueHandle, false);
+  if (flushResult != GPU_OK) {
+    vk__finishCommandBuffers(count, buffers, true);
+    return flushResult;
+  }
+
+  for (uint32_t i = 0u; i < count; i++) {
+    result = vkEndCommandBuffer(commands[i]);
+    if (result != VK_SUCCESS) {
+      vk__reportQueueError(buffers[i], "command buffer end", result);
+      vk__finishCommandBuffers(count, buffers, true);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+
+  submitFence = natives[count - 1u]->fence;
+  result = vkResetFences(device->device, 1u, &submitFence);
+  if (result == VK_SUCCESS) {
+    submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = count;
+    submitInfo.pCommandBuffers    = commands;
+    result = vkQueueSubmit(queue->queRaw, 1u, &submitInfo, submitFence);
+  }
+  if (result != VK_SUCCESS) {
+    vk__reportQueueError(buffers[0], "queue batch submit", result);
+    vk__finishCommandBuffers(count, buffers, true);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  vk__queueLock(queue);
+  for (uint32_t i = 0u; i < count; i++) {
+    natives[i]->submitFence = submitFence;
+    natives[i]->pendingNext = NULL;
+    if (queue->pendingTail) {
+      queue->pendingTail->pendingNext = natives[i];
+    } else {
+      queue->pendingHead = natives[i];
+    }
+    queue->pendingTail = natives[i];
+  }
+  queue->inFlightCount += count;
+  vk__queueSignal(queue);
+  vk__queueUnlock(queue);
+  return GPU_OK;
+}
+
 GPU_HIDE
 void
 vk_initCmdQue(GPUApiCommandQueue *apiQue) {
@@ -1129,4 +1237,5 @@ vk_initCmdQue(GPUApiCommandQueue *apiQue) {
   apiQue->newCommandBuffer        = vk_newCommandBuffer;
   apiQue->commandBufferOnComplete = vk_commandBufferOnComplete;
   apiQue->commit                  = vk_commitCommandBuffer;
+  apiQue->submit                  = vk_submitCommandBuffers;
 }

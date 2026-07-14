@@ -20,6 +20,7 @@
 
 enum {
   DX12_COMPLETION_STACK_SIZE     = 64u * 1024u,
+  DX12_SUBMIT_STACK_COUNT        = 64u,
   DX12_TRANSFER_OFFSET_ALIGNMENT = 512u
 };
 
@@ -1359,6 +1360,108 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   return commitResult;
 }
 
+static GPUResult
+dx12__commitCommandBuffers(uint32_t                  count,
+                           GPUCommandBuffer * const *buffers) {
+  GPUResult result;
+
+  result = GPU_OK;
+  for (uint32_t i = 0u; i < count; i++) {
+    GPUResult commitResult;
+
+    commitResult = dx12_commitCommandBuffer(buffers[i]);
+    if (result == GPU_OK && commitResult != GPU_OK) {
+      result = commitResult;
+    }
+  }
+  return result;
+}
+
+static void
+dx12__finishCommandBuffers(uint32_t                  count,
+                           GPUCommandBuffer * const *buffers,
+                           bool                      recycle) {
+  for (uint32_t i = 0u; i < count; i++) {
+    gpuFinishCommandBuffer(buffers[i],
+                           recycle ? dx12__recycleCommandBuffer : NULL);
+  }
+}
+
+GPU_HIDE
+GPUResult
+dx12_submitCommandBuffers(GPUQueue                  * __restrict queueHandle,
+                          uint32_t                                count,
+                          GPUCommandBuffer * const * __restrict buffers) {
+  GPUCommandBufferDX12 *natives[DX12_SUBMIT_STACK_COUNT];
+  ID3D12CommandList    *commandLists[DX12_SUBMIT_STACK_COUNT];
+  GPUQueueDX12         *queue;
+  GPUResult             flushResult;
+  HRESULT               result;
+  UINT64                fenceValue;
+
+  queue = queueHandle ? queueHandle->_priv : NULL;
+  if (!queue || !buffers || count < 2u) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  if (count > DX12_SUBMIT_STACK_COUNT) {
+    return dx12__commitCommandBuffers(count, buffers);
+  }
+
+  for (uint32_t i = 0u; i < count; i++) {
+    natives[i] = buffers[i] ? buffers[i]->_priv : NULL;
+    if (!natives[i] || natives[i]->owner != queue ||
+        !natives[i]->commandList || natives[i]->presentSwapchain) {
+      return dx12__commitCommandBuffers(count, buffers);
+    }
+    commandLists[i] = (ID3D12CommandList *)natives[i]->commandList;
+  }
+
+  flushResult = dx12__flushTransfers(queueHandle, false);
+  if (flushResult != GPU_OK) {
+    dx12__finishCommandBuffers(count, buffers, true);
+    return flushResult;
+  }
+
+  for (uint32_t i = 0u; i < count; i++) {
+    result = natives[i]->commandList->lpVtbl->Close(natives[i]->commandList);
+    if (FAILED(result)) {
+      dx12__reportQueueError(queue, "command list close", result);
+      dx12__logDebugMessages(queue);
+      dx12__finishCommandBuffers(count, buffers, true);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+
+  queue->commandQueue->lpVtbl->ExecuteCommandLists(queue->commandQueue,
+                                                    count,
+                                                    commandLists);
+  fenceValue = queue->nextFenceValue++;
+  result = queue->commandQueue->lpVtbl->Signal(queue->commandQueue,
+                                                queue->completionFence,
+                                                fenceValue);
+  if (FAILED(result)) {
+    dx12__reportQueueError(queue, "queue batch signal", result);
+    dx12__finishCommandBuffers(count, buffers, false);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  dx12__queueLock(queue);
+  for (uint32_t i = 0u; i < count; i++) {
+    natives[i]->fenceValue  = fenceValue;
+    natives[i]->pendingNext = NULL;
+    if (queue->pendingTail) {
+      queue->pendingTail->pendingNext = natives[i];
+    } else {
+      queue->pendingHead = natives[i];
+    }
+    queue->pendingTail = natives[i];
+  }
+  queue->inFlightCount += count;
+  dx12__queueSignal(queue);
+  dx12__queueUnlock(queue);
+  return GPU_OK;
+}
+
 GPU_HIDE
 void
 dx12_initCmdQue(GPUApiCommandQueue *api) {
@@ -1368,4 +1471,5 @@ dx12_initCmdQue(GPUApiCommandQueue *api) {
   api->newCommandBuffer        = dx12_newCommandBuffer;
   api->commandBufferOnComplete = dx12_commandBufferOnComplete;
   api->commit                  = dx12_commitCommandBuffer;
+  api->submit                  = dx12_submitCommandBuffers;
 }

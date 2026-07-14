@@ -18,6 +18,7 @@
 
 enum {
   MT_TRANSFER_STAGING_CAPACITY = 4u * 1024u * 1024u,
+  MT_SUBMIT_STACK_COUNT        = 64u,
   MT_TRANSFER_OFFSET_ALIGNMENT = 256u
 };
 
@@ -609,6 +610,88 @@ mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
   return GPU_OK;
 }
 
+static GPUResult
+mt__commitCommandBuffers(uint32_t                  count,
+                         GPUCommandBuffer * const *buffers) {
+  GPUResult result;
+
+  result = GPU_OK;
+  for (uint32_t i = 0u; i < count; i++) {
+    GPUResult commitResult;
+
+    commitResult = mt_cmdbufCommit(buffers[i]);
+    if (result == GPU_OK && commitResult != GPU_OK) {
+      result = commitResult;
+    }
+  }
+  return result;
+}
+
+GPU_HIDE
+GPUResult
+mt_submitCommandBuffers(GPUQueue                  * __restrict queueHandle,
+                        uint32_t                                count,
+                        GPUCommandBuffer * const * __restrict buffers) {
+  MTCommandBuffer      *natives[MT_SUBMIT_STACK_COUNT];
+  id<MTL4CommandBuffer> modern[MT_SUBMIT_STACK_COUNT];
+  MTCommandQueue       *queue;
+  MTL4CommitOptions    *options;
+
+  queue = mt_commandQueue(queueHandle);
+  if (!queue || !buffers || count < 2u) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  if (count > MT_SUBMIT_STACK_COUNT) {
+    return mt__commitCommandBuffers(count, buffers);
+  }
+
+  for (uint32_t i = 0u; i < count; i++) {
+    natives[i] = mt_commandBuffer(buffers[i]);
+    if (!natives[i] || natives[i]->owner != queue ||
+        natives[i]->mode != MTCommandMode4 || !natives[i]->modern ||
+        natives[i]->drawable) {
+      return mt__commitCommandBuffers(count, buffers);
+    }
+    modern[i] = natives[i]->modern;
+  }
+
+  if (mt_flushTransfers(queueHandle, true) != GPU_OK) {
+    for (uint32_t i = 0u; i < count; i++) {
+      gpuFinishCommandBuffer(buffers[i], mt_recycleCommandBuffer);
+    }
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    options = [MTL4CommitOptions new];
+    if (!options) {
+      return mt__commitCommandBuffers(count, buffers);
+    }
+
+    for (uint32_t i = 0u; i < count; i++) {
+      GPUCommandBuffer *cmdb;
+      MTCommandBuffer  *native;
+
+      cmdb   = buffers[i];
+      native = natives[i];
+      [native->residency commit];
+      [native->modern endCommandBuffer];
+      [options addFeedbackHandler:^(id<MTL4CommitFeedback> feedback) {
+        gpu_cmdoncomplete4(cmdb, native, queue, feedback);
+      }];
+      dispatch_group_enter(queue->inFlightGroup);
+      atomic_store_explicit(&native->completionReady,
+                            true,
+                            memory_order_release);
+    }
+    [queue->modern commit:modern count:count options:options];
+    [options release];
+    return GPU_OK;
+  }
+
+  return mt__commitCommandBuffers(count, buffers);
+}
+
 static
 GPU_HIDE
 void
@@ -741,4 +824,5 @@ mt_initCmdQue(GPUApiCommandQueue *api) {
   api->newCommandBuffer        = mt_newCommandBuffer;
   api->commandBufferOnComplete = mt_ccmdbufOnComplete;
   api->commit                  = mt_cmdbufCommit;
+  api->submit                  = mt_submitCommandBuffers;
 }

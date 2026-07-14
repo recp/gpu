@@ -49,6 +49,11 @@ typedef struct GPUApiCommandQueue {
   
   GPUResult
   (*commit)(GPUCommandBuffer * __restrict cmdb);
+
+  GPUResult
+  (*submit)(GPUQueue                  * __restrict queue,
+            uint32_t                               count,
+            GPUCommandBuffer * const * __restrict buffers);
 } GPUApiCommandQueue;
 
 #ifdef __cplusplus

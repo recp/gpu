@@ -11,13 +11,15 @@ typedef struct QueueCompletionProbe {
   int               count;
 } QueueCompletionProbe;
 
-static GPUQueue  gScopedQueue;
+static GPUQueue         gScopedQueue;
 static GPUCommandBuffer gScopedCmdb;
 static GPUFrame         gScopedFrame;
 static uint32_t         gScopedQueueGetCalls;
 static uint32_t         gScopedCmdbNewCalls;
 static uint32_t         gScopedPresentCalls;
 static uint32_t         gScopedCommitCalls;
+static uint32_t         gScopedSubmitCalls;
+static uint32_t         gScopedSubmitCount;
 static uint32_t         gScopedFrameBeginCalls;
 static uint32_t         gScopedFrameEndCalls;
 
@@ -389,6 +391,17 @@ commit_scoped_cmdb(GPUCommandBuffer * __restrict cmdb) {
   return GPU_OK;
 }
 
+static GPUResult
+submit_scoped_cmdbs(GPUQueue                  * __restrict queue,
+                    uint32_t                               count,
+                    GPUCommandBuffer * const * __restrict buffers) {
+  (void)queue;
+  (void)buffers;
+  gScopedSubmitCalls++;
+  gScopedSubmitCount = count;
+  return GPU_OK;
+}
+
 static GPUFrame *
 begin_scoped_frame(GPUApi       * __restrict api,
                    GPUSwapchain * __restrict swapchain) {
@@ -410,13 +423,16 @@ end_scoped_frame(GPUApi   * __restrict api,
 
 static int
 check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
-  GPUApi           *api;
-  GPUQueue         *queue;
-  GPUCommandBuffer *cmdb;
-  GPUFrame         *frame;
-  GPUApi            scopedApi;
-  GPUDevice         device    = {0};
-  GPUSwapchain      swapchain = {0};
+  GPUApi             *api;
+  GPUQueue           *queue;
+  GPUCommandBuffer   *cmdb;
+  GPUCommandBuffer   *batchBuffers[2];
+  GPUFrame           *frame;
+  GPUCommandBuffer    batch[2]   = {0};
+  GPUQueueSubmitInfo  submitInfo = {0};
+  GPUApi              scopedApi;
+  GPUDevice           device    = {0};
+  GPUSwapchain        swapchain = {0};
 
   api = gpuDeviceApi(activeDevice);
   if (!api) {
@@ -428,6 +444,7 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   scopedApi.cmdque.getCommandQueue         = get_scoped_queue;
   scopedApi.cmdque.newCommandBuffer        = new_scoped_cmdb;
   scopedApi.cmdque.commit                  = commit_scoped_cmdb;
+  scopedApi.cmdque.submit                  = submit_scoped_cmdbs;
   scopedApi.cmdbuf.presentDrawable         = present_scoped_frame;
   scopedApi.frame.beginFrame               = begin_scoped_frame;
   scopedApi.frame.endFrame                 = end_scoped_frame;
@@ -437,6 +454,8 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   gScopedCmdbNewCalls                      = 0u;
   gScopedPresentCalls                      = 0u;
   gScopedCommitCalls                       = 0u;
+  gScopedSubmitCalls                       = 0u;
+  gScopedSubmitCount                       = 0u;
   gScopedFrameBeginCalls                   = 0u;
   gScopedFrameEndCalls                     = 0u;
 
@@ -451,10 +470,25 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
     return 0;
   }
 
+  batch[0]._queue = queue;
+  batch[1]._queue = queue;
+  batchBuffers[0] = &batch[0];
+  batchBuffers[1] = &batch[1];
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 2u;
+  submitInfo.ppCommandBuffers   = batchBuffers;
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK) {
+    fprintf(stderr, "queue batch dispatch failed\n");
+    return 0;
+  }
+
   if (gScopedQueueGetCalls != 1u ||
       gScopedCmdbNewCalls != 1u ||
       gScopedPresentCalls != 1u ||
       gScopedCommitCalls != 1u ||
+      gScopedSubmitCalls != 1u ||
+      gScopedSubmitCount != 2u ||
       gScopedFrameBeginCalls != 1u ||
       gScopedFrameEndCalls != 1u) {
     fprintf(stderr, "queue/frame device dispatch called wrong backend\n");

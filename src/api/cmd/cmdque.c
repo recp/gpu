@@ -312,6 +312,12 @@ GPUQueueSubmit(GPUQueue                 * __restrict cmdq,
     info->ppCommandBuffers[i]->_submitted = true;
   }
 
+  if (info->commandBufferCount > 1u && api->cmdque.submit) {
+    return api->cmdque.submit(cmdq,
+                              info->commandBufferCount,
+                              info->ppCommandBuffers);
+  }
+
   result = GPU_OK;
   for (uint32_t i = 0; i < info->commandBufferCount; i++) {
     GPUResult commitResult;
