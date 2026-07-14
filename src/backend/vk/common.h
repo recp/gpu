@@ -203,12 +203,14 @@ typedef struct GPUAdapterVk {
   bool                       shaderFloat16;
   bool                       descriptorIndexing;
   bool                       timelineSemaphore;
+  bool                       synchronization2;
 } GPUAdapterVk;
 
 typedef struct GPUDeviceVk {
   GPUQueue                  **createdQueues;
   PFN_vkCmdBeginRenderingKHR  beginRendering;
   PFN_vkCmdEndRenderingKHR    endRendering;
+  PFN_vkCmdPipelineBarrier2KHR pipelineBarrier2;
   VkDevice                   device;
   VkSampleCountFlags         colorSampleCounts;
   VkSampleCountFlags         depthSampleCounts;
@@ -218,6 +220,7 @@ typedef struct GPUDeviceVk {
   VkBool32                   independentBlend;
   bool                       dynamicRendering;
   bool                       timelineSemaphore;
+  bool                       synchronization2;
 } GPUDeviceVk;
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS

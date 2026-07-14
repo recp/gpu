@@ -183,6 +183,8 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkPhysicalDeviceFeatures2                  descriptorFeatures2 = {0};
   VkPhysicalDeviceTimelineSemaphoreFeatures  timelineFeatures = {0};
   VkPhysicalDeviceFeatures2                  timelineFeatures2 = {0};
+  VkPhysicalDeviceSynchronization2FeaturesKHR sync2Features = {0};
+  VkPhysicalDeviceFeatures2                  sync2Features2 = {0};
   VkResult                                  err;
   uint32_t                                  i, nExtensions;
   bool                                      incrementalPresentEnabled;
@@ -195,6 +197,8 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool                                      float16Core;
   bool                                      descriptorCore;
   bool                                      timelineCore;
+  bool                                      sync2Extension;
+  bool                                      sync2Core;
 
   nExtensions               = 0;
   incrementalPresentEnabled = true;
@@ -207,6 +211,8 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   float16Core               = false;
   descriptorCore            = false;
   timelineCore              = false;
+  sync2Extension            = false;
+  sync2Core                 = false;
 
   adapter                   = calloc(1, sizeof(*adapter));
   adapterVk                 = calloc(1, sizeof(*adapterVk));
@@ -272,6 +278,10 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                   extensions[i].extensionName)) {
         dynamicExtension = true;
       }
+      if (!strcmp(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        sync2Extension = true;
+      }
       if (!strcmp(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         subgroupSizeControl = true;
@@ -300,6 +310,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 
   dynamicCore = instanceVk && instanceVk->apiVersion >= VK_API_VERSION_1_3 &&
                 adapterVk->props.apiVersion >= VK_API_VERSION_1_3;
+  sync2Core = dynamicCore;
   getFeatures2 = instanceVk
                    ? (PFN_vkGetPhysicalDeviceFeatures2KHR)
                        vkGetInstanceProcAddr(instanceVk->inst,
@@ -344,6 +355,21 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     timelineFeatures2.pNext = &timelineFeatures;
     getFeatures2(raw, &timelineFeatures2);
     adapterVk->timelineSemaphore = timelineFeatures.timelineSemaphore;
+  }
+  if (getFeatures2 && (sync2Core || sync2Extension)) {
+    sync2Features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR;
+    sync2Features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    sync2Features2.pNext = &sync2Features;
+    getFeatures2(raw, &sync2Features2);
+    if (sync2Features.synchronization2) {
+      if (!sync2Core) {
+        adapterVk->extensionNames[adapterVk->nEnabledExtensions++] =
+          VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME;
+        assert(adapterVk->nEnabledExtensions < 64);
+      }
+      adapterVk->synchronization2 = true;
+    }
   }
   if (getFeatures2 &&
       (dynamicCore ||
@@ -742,6 +768,7 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
   VkPhysicalDeviceShaderFloat16Int8Features float16Features = {0};
   VkPhysicalDeviceDescriptorIndexingFeatures descriptorFeatures = {0};
   VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeatures = {0};
+  VkPhysicalDeviceSynchronization2FeaturesKHR sync2Features = {0};
   VkDeviceCreateInfo       deviceCI = {0};
   VkResult                 result;
   uint32_t                 familyIndex;
@@ -872,6 +899,13 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
     timelineFeatures.timelineSemaphore = VK_TRUE;
     deviceCI.pNext                      = &timelineFeatures;
   }
+  if (adapterVk->synchronization2) {
+    sync2Features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR;
+    sync2Features.pNext            = (void *)deviceCI.pNext;
+    sync2Features.synchronization2 = VK_TRUE;
+    deviceCI.pNext                 = &sync2Features;
+  }
 
   result = vkCreateDevice(adapterVk->physicalDevice,
                           &deviceCI,
@@ -893,6 +927,15 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
   deviceVk->multiDrawIndirect = coreFeatures.multiDrawIndirect;
   deviceVk->independentBlend  = coreFeatures.independentBlend;
   deviceVk->timelineSemaphore = adapterVk->timelineSemaphore;
+  if (adapterVk->synchronization2) {
+    deviceVk->pipelineBarrier2 = (PFN_vkCmdPipelineBarrier2KHR)
+      vkGetDeviceProcAddr(deviceVk->device, "vkCmdPipelineBarrier2");
+    if (!deviceVk->pipelineBarrier2) {
+      deviceVk->pipelineBarrier2 = (PFN_vkCmdPipelineBarrier2KHR)
+        vkGetDeviceProcAddr(deviceVk->device, "vkCmdPipelineBarrier2KHR");
+    }
+    deviceVk->synchronization2 = deviceVk->pipelineBarrier2 != NULL;
+  }
   if (adapterVk->dynamicRendering) {
     deviceVk->beginRendering = (PFN_vkCmdBeginRenderingKHR)
       vkGetDeviceProcAddr(deviceVk->device, "vkCmdBeginRendering");

@@ -295,6 +295,81 @@ vk__textureBarrierLayout(const GPUTexture *texture,
   return VK_IMAGE_LAYOUT_GENERAL;
 }
 
+static void
+vk__flushExplicitBarriers(GPUDeviceVk                    *device,
+                          VkCommandBuffer                 command,
+                          VkPipelineStageFlags            srcStages,
+                          VkPipelineStageFlags            dstStages,
+                          const VkBufferMemoryBarrier2KHR *bufferBarriers,
+                          uint32_t                        bufferBarrierCount,
+                          const VkImageMemoryBarrier2KHR  *imageBarriers,
+                          uint32_t                        imageBarrierCount) {
+  if (bufferBarrierCount == 0u && imageBarrierCount == 0u) {
+    return;
+  }
+
+  if (device->synchronization2) {
+    VkDependencyInfoKHR dependency = {0};
+
+    dependency.sType                    = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR;
+    dependency.bufferMemoryBarrierCount = bufferBarrierCount;
+    dependency.pBufferMemoryBarriers    = bufferBarriers;
+    dependency.imageMemoryBarrierCount  = imageBarrierCount;
+    dependency.pImageMemoryBarriers     = imageBarriers;
+    device->pipelineBarrier2(command, &dependency);
+    return;
+  }
+
+  {
+    VkBufferMemoryBarrier buffers[GPU_VK_BARRIER_CHUNK_SIZE];
+    VkImageMemoryBarrier  images[GPU_VK_BARRIER_CHUNK_SIZE];
+
+    for (uint32_t i = 0u; i < bufferBarrierCount; i++) {
+      const VkBufferMemoryBarrier2KHR *src;
+      VkBufferMemoryBarrier           *dst;
+
+      src                      = &bufferBarriers[i];
+      dst                      = &buffers[i];
+      memset(dst, 0, sizeof(*dst));
+      dst->sType               = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+      dst->srcAccessMask       = (VkAccessFlags)src->srcAccessMask;
+      dst->dstAccessMask       = (VkAccessFlags)src->dstAccessMask;
+      dst->srcQueueFamilyIndex = src->srcQueueFamilyIndex;
+      dst->dstQueueFamilyIndex = src->dstQueueFamilyIndex;
+      dst->buffer              = src->buffer;
+      dst->offset              = src->offset;
+      dst->size                = src->size;
+    }
+    for (uint32_t i = 0u; i < imageBarrierCount; i++) {
+      const VkImageMemoryBarrier2KHR *src;
+      VkImageMemoryBarrier           *dst;
+
+      src                        = &imageBarriers[i];
+      dst                        = &images[i];
+      memset(dst, 0, sizeof(*dst));
+      dst->sType                 = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+      dst->srcAccessMask         = (VkAccessFlags)src->srcAccessMask;
+      dst->dstAccessMask         = (VkAccessFlags)src->dstAccessMask;
+      dst->oldLayout             = src->oldLayout;
+      dst->newLayout             = src->newLayout;
+      dst->srcQueueFamilyIndex   = src->srcQueueFamilyIndex;
+      dst->dstQueueFamilyIndex   = src->dstQueueFamilyIndex;
+      dst->image                 = src->image;
+      dst->subresourceRange      = src->subresourceRange;
+    }
+    vkCmdPipelineBarrier(command,
+                         srcStages,
+                         dstStages,
+                         0u,
+                         0u,
+                         NULL,
+                         bufferBarrierCount,
+                         buffers,
+                         imageBarrierCount,
+                         images);
+  }
+}
+
 GPU_HIDE
 void
 vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
@@ -329,12 +404,12 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
   textureOffset = 0u;
   while (bufferOffset < barriers->bufferBarrierCount ||
          textureOffset < barriers->textureBarrierCount) {
-    VkBufferMemoryBarrier nativeBarriers[GPU_VK_BARRIER_CHUNK_SIZE];
-    VkImageMemoryBarrier  nativeImages[GPU_VK_BARRIER_CHUNK_SIZE];
-    uint32_t              nativeBarrierCount;
-    uint32_t              nativeImageCount;
-    uint32_t              bufferChunkCount;
-    uint32_t              textureChunkCount;
+    VkBufferMemoryBarrier2KHR nativeBarriers[GPU_VK_BARRIER_CHUNK_SIZE];
+    VkImageMemoryBarrier2KHR  nativeImages[GPU_VK_BARRIER_CHUNK_SIZE];
+    uint32_t                  nativeBarrierCount;
+    uint32_t                  nativeImageCount;
+    uint32_t                  bufferChunkCount;
+    uint32_t                  textureChunkCount;
 
     bufferChunkCount = barriers->bufferBarrierCount - bufferOffset;
     if (bufferChunkCount > GPU_VK_BARRIER_CHUNK_SIZE) {
@@ -349,7 +424,7 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
     for (uint32_t i = 0u; i < bufferChunkCount; i++) {
       const GPUBufferBarrier *barrier;
       GPUBufferVk            *buffer;
-      VkBufferMemoryBarrier  *native;
+      VkBufferMemoryBarrier2KHR *native;
 
       barrier = &barriers->pBufferBarriers[bufferOffset + i];
       buffer  = barrier->buffer ? barrier->buffer->_priv : NULL;
@@ -359,7 +434,10 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
 
       native                      = &nativeBarriers[nativeBarrierCount++];
       memset(native, 0, sizeof(*native));
-      native->sType               = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+      native->sType               =
+        VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2_KHR;
+      native->srcStageMask        = srcStages;
+      native->dstStageMask        = dstStages;
       native->srcAccessMask       = vk__bufferBarrierAccess(barrier->buffer,
                                                             barrier->srcAccess,
                                                             barriers->srcStages);
@@ -377,7 +455,7 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
     for (uint32_t i = 0u; i < textureChunkCount; i++) {
       const GPUTextureBarrier *barrier;
       GPUTextureVk            *texture;
-      VkImageMemoryBarrier    *native;
+      VkImageMemoryBarrier2KHR *native;
       VkImageLayout            newLayout;
 
       barrier = &barriers->pTextureBarriers[textureOffset + i];
@@ -403,16 +481,14 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
                                            false);
       if (!texture->layoutUniform) {
         if (nativeBarrierCount > 0u || nativeImageCount > 0u) {
-          vkCmdPipelineBarrier(command->command,
-                               srcStages,
-                               dstStages,
-                               0u,
-                               0u,
-                               NULL,
-                               nativeBarrierCount,
-                               nativeBarriers,
-                               nativeImageCount,
-                               nativeImages);
+          vk__flushExplicitBarriers(device,
+                                    command->command,
+                                    srcStages,
+                                    dstStages,
+                                    nativeBarriers,
+                                    nativeBarrierCount,
+                                    nativeImages,
+                                    nativeImageCount);
           nativeBarrierCount = 0u;
           nativeImageCount   = 0u;
         }
@@ -439,7 +515,10 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
 
       native                                = &nativeImages[nativeImageCount++];
       memset(native, 0, sizeof(*native));
-      native->sType                         = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+      native->sType                         =
+        VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR;
+      native->srcStageMask                  = srcStages;
+      native->dstStageMask                  = dstStages;
       native->srcAccessMask                 = vk__barrierAccess(barrier->srcAccess);
       native->dstAccessMask                 = vk__barrierAccess(barrier->dstAccess);
       native->oldLayout                     = texture->layout;
@@ -461,16 +540,14 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
     }
 
     if (nativeBarrierCount > 0u || nativeImageCount > 0u) {
-      vkCmdPipelineBarrier(command->command,
-                           srcStages,
-                           dstStages,
-                           0u,
-                           0u,
-                           NULL,
-                           nativeBarrierCount,
-                           nativeBarriers,
-                           nativeImageCount,
-                           nativeImages);
+      vk__flushExplicitBarriers(device,
+                                command->command,
+                                srcStages,
+                                dstStages,
+                                nativeBarriers,
+                                nativeBarrierCount,
+                                nativeImages,
+                                nativeImageCount);
     }
     bufferOffset  += bufferChunkCount;
     textureOffset += textureChunkCount;
