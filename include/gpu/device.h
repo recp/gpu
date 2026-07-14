@@ -79,6 +79,7 @@ typedef enum GPUFeature {
   GPU_FEATURE_MULTI_DRAW = 4,
   GPU_FEATURE_SUBGROUPS = 5,
   GPU_FEATURE_SHADER_F16 = 6,
+  /* Non-uniform indexing of fixed-size resource arrays. */
   GPU_FEATURE_DESCRIPTOR_INDEXING = 7,
   GPU_FEATURE_MESH_SHADER = 8,
   GPU_FEATURE_RAY_TRACING = 9,

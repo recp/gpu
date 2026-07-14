@@ -345,7 +345,9 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     descriptorFeatures2.pNext = &descriptorFeatures;
     getFeatures2(raw, &descriptorFeatures2);
     adapterVk->descriptorIndexing =
+      descriptorFeatures.shaderUniformBufferArrayNonUniformIndexing &&
       descriptorFeatures.shaderSampledImageArrayNonUniformIndexing &&
+      descriptorFeatures.shaderStorageBufferArrayNonUniformIndexing &&
       descriptorFeatures.shaderStorageImageArrayNonUniformIndexing;
   }
   if (getFeatures2 && timelineCore) {
@@ -888,7 +890,9 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
     descriptorFeatures.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
     descriptorFeatures.pNext = (void *)deviceCI.pNext;
+    descriptorFeatures.shaderUniformBufferArrayNonUniformIndexing = VK_TRUE;
     descriptorFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+    descriptorFeatures.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE;
     descriptorFeatures.shaderStorageImageArrayNonUniformIndexing = VK_TRUE;
     deviceCI.pNext = &descriptorFeatures;
   }
