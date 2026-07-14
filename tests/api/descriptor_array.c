@@ -2,7 +2,12 @@
 
 enum {
   GPU_DESCRIPTOR_ARRAY_UNIFORM_BYTES  = 256u,
-  GPU_DESCRIPTOR_ARRAY_READBACK_BYTES = 256u
+  GPU_DESCRIPTOR_ARRAY_READBACK_BYTES = 256u,
+  GPU_DESCRIPTOR_RENDER_WIDTH          = 4u,
+  GPU_DESCRIPTOR_RENDER_HEIGHT         = 4u,
+  GPU_DESCRIPTOR_RENDER_ROW_BYTES      = 256u,
+  GPU_DESCRIPTOR_RENDER_READBACK_BYTES =
+    GPU_DESCRIPTOR_RENDER_ROW_BYTES * GPU_DESCRIPTOR_RENDER_HEIGHT
 };
 
 static int
@@ -58,6 +63,226 @@ create_color_texture(GPUDevice       *device,
   viewInfo.arrayLayerCount  = 1u;
   return GPUCreateTextureView(*outTexture, &viewInfo, outView) == GPU_OK &&
          *outView;
+}
+
+static int
+render_descriptor_array(GPUDevice          *device,
+                        GPUQueue           *queue,
+                        GPUShaderLibrary   *library,
+                        GPUPipelineLayout  *pipelineLayout,
+                        GPUBindGroup       *group) {
+  GPURenderPipeline           *pipeline;
+  GPUTexture                  *target;
+  GPUTextureView              *targetView;
+  GPUBuffer                   *readback;
+  GPUCommandBuffer            *cmdb;
+  GPUCommandBuffer            *submitBuffers[1];
+  GPURenderPassEncoder        *renderPass;
+  GPUCopyPassEncoder          *copyPass;
+  GPUFence                    *fence;
+  GPURenderPipelineCreateInfo  pipelineInfo = {0};
+  GPUColorTargetState          colorTarget  = {0};
+  GPUTextureCreateInfo         textureInfo  = {0};
+  GPUTextureViewCreateInfo     viewInfo     = {0};
+  GPUBufferCreateInfo          bufferInfo   = {0};
+  GPURenderPassColorAttachment color        = {0};
+  GPURenderPassCreateInfo      passInfo     = {0};
+  GPUTextureBarrier            barrier      = {0};
+  GPUBarrierBatch              barrierBatch = {0};
+  GPUBufferTextureCopyRegion   copyRegion   = {0};
+  GPUQueueSubmitInfo           submitInfo   = {0};
+  uint8_t                      pixels[GPU_DESCRIPTOR_RENDER_READBACK_BYTES];
+  int                          ok;
+
+  pipeline   = NULL;
+  target     = NULL;
+  targetView = NULL;
+  readback   = NULL;
+  cmdb       = NULL;
+  renderPass = NULL;
+  copyPass   = NULL;
+  fence      = NULL;
+  ok         = 0;
+
+  colorTarget.format          = GPU_FORMAT_RGBA8_UNORM;
+  colorTarget.blend.writeMask = GPU_COLOR_WRITE_ALL;
+  pipelineInfo.chain.sType       = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  pipelineInfo.chain.structSize  = sizeof(pipelineInfo);
+  pipelineInfo.label             = "api-descriptor-array-render";
+  pipelineInfo.layout            = pipelineLayout;
+  pipelineInfo.library           = library;
+  pipelineInfo.vertexEntry       = "descriptor_array_vs";
+  pipelineInfo.fragmentEntry     = "descriptor_array_bindless_fs";
+  pipelineInfo.colorTargetCount  = 1u;
+  pipelineInfo.pColorTargets     = &colorTarget;
+  pipelineInfo.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  pipelineInfo.cullMode          = GPU_CULL_MODE_NONE;
+  pipelineInfo.frontFace         = GPU_FRONT_FACE_CCW;
+  pipelineInfo.multisample.sampleCount = 1u;
+  pipelineInfo.multisample.sampleMask  = 0xffffffffu;
+  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
+      !pipeline) {
+    fprintf(stderr, "descriptor array render pipeline failed\n");
+    goto cleanup;
+  }
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "api-descriptor-array-render-target";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = GPU_DESCRIPTOR_RENDER_WIDTH;
+  textureInfo.height           = GPU_DESCRIPTOR_RENDER_HEIGHT;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET |
+                                 GPU_TEXTURE_USAGE_COPY_SRC;
+  if (GPUCreateTexture(device, &textureInfo, &target) != GPU_OK || !target) {
+    fprintf(stderr, "descriptor array render target failed\n");
+    goto cleanup;
+  }
+
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.label            = "api-descriptor-array-render-view";
+  viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  viewInfo.mipLevelCount    = 1u;
+  viewInfo.arrayLayerCount  = 1u;
+  if (GPUCreateTextureView(target, &viewInfo, &targetView) != GPU_OK ||
+      !targetView) {
+    fprintf(stderr, "descriptor array render view failed\n");
+    goto cleanup;
+  }
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "api-descriptor-array-render-readback";
+  bufferInfo.sizeBytes        = sizeof(pixels);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
+                                GPU_BUFFER_USAGE_COPY_SRC;
+  if (GPUCreateBuffer(device, &bufferInfo, &readback) != GPU_OK || !readback) {
+    fprintf(stderr, "descriptor array render readback failed\n");
+    goto cleanup;
+  }
+
+  if (GPUAcquireCommandBuffer(queue,
+                              "api-descriptor-array-render",
+                              &cmdb) != GPU_OK ||
+      !cmdb) {
+    fprintf(stderr, "descriptor array render command buffer failed\n");
+    goto cleanup;
+  }
+
+  color.view                  = targetView;
+  color.loadOp                = GPU_LOAD_OP_CLEAR;
+  color.storeOp               = GPU_STORE_OP_STORE;
+  color.clearColor.float32[3] = 1.0f;
+  passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  passInfo.chain.structSize     = sizeof(passInfo);
+  passInfo.label                = "api-descriptor-array-render";
+  passInfo.colorAttachmentCount = 1u;
+  passInfo.pColorAttachments    = &color;
+  renderPass = GPUBeginRenderPass(cmdb, &passInfo);
+  if (!renderPass) {
+    fprintf(stderr, "descriptor array render pass failed\n");
+    goto cleanup;
+  }
+  GPUBindRenderPipeline(renderPass, pipeline);
+  GPUBindRenderGroup(renderPass, 1u, group, 0u, NULL);
+  GPUDraw(renderPass, 3u, 1u, 0u, 0u);
+  GPUEndRenderPass(renderPass);
+  renderPass = NULL;
+
+  barrier.texture    = target;
+  barrier.srcAccess  = GPU_ACCESS_COLOR_WRITE;
+  barrier.dstAccess  = GPU_ACCESS_TRANSFER_READ;
+  barrier.mipCount   = 1u;
+  barrier.layerCount = 1u;
+  barrierBatch.srcStages           = GPU_STAGE_FRAGMENT;
+  barrierBatch.dstStages           = GPU_STAGE_TRANSFER;
+  barrierBatch.textureBarrierCount = 1u;
+  barrierBatch.pTextureBarriers    = &barrier;
+  GPUEncodeBarriers(cmdb, &barrierBatch);
+
+  copyPass = GPUBeginCopyPass(cmdb, "api-descriptor-array-render-readback");
+  if (!copyPass) {
+    fprintf(stderr, "descriptor array render copy pass failed\n");
+    goto cleanup;
+  }
+  copyRegion.bytesPerRow        = GPU_DESCRIPTOR_RENDER_ROW_BYTES;
+  copyRegion.rowsPerImage       = GPU_DESCRIPTOR_RENDER_HEIGHT;
+  copyRegion.texture.width      = GPU_DESCRIPTOR_RENDER_WIDTH;
+  copyRegion.texture.height     = GPU_DESCRIPTOR_RENDER_HEIGHT;
+  copyRegion.texture.depth      = 1u;
+  copyRegion.texture.layerCount = 1u;
+  GPUCopyTextureToBuffer(copyPass, target, readback, &copyRegion);
+  GPUEndCopyPass(copyPass);
+  copyPass = NULL;
+
+  if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
+    fprintf(stderr, "descriptor array render fence failed\n");
+    goto cleanup;
+  }
+  submitBuffers[0]              = cmdb;
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.ppCommandBuffers   = submitBuffers;
+  submitInfo.fence              = fence;
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
+      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+    fprintf(stderr, "descriptor array render submission failed\n");
+    cmdb = NULL;
+    goto cleanup;
+  }
+  cmdb = NULL;
+
+  memset(pixels, 0, sizeof(pixels));
+  if (GPUQueueReadBuffer(queue,
+                         readback,
+                         0u,
+                         pixels,
+                         sizeof(pixels)) != GPU_OK) {
+    fprintf(stderr, "descriptor array render readback failed\n");
+    goto cleanup;
+  }
+  for (uint32_t y = 0u; y < GPU_DESCRIPTOR_RENDER_HEIGHT; y++) {
+    const uint8_t *row;
+
+    row = pixels + y * GPU_DESCRIPTOR_RENDER_ROW_BYTES;
+    for (uint32_t x = 0u; x < GPU_DESCRIPTOR_RENDER_WIDTH; x++) {
+      const uint8_t *pixel;
+
+      pixel = row + x * 4u;
+      if (pixel[0] != 0u || pixel[1] != 255u ||
+          pixel[2] != 0u || pixel[3] != 255u) {
+        fprintf(stderr,
+                "descriptor array render mismatch: %u,%u,%u,%u\n",
+                (unsigned)pixel[0],
+                (unsigned)pixel[1],
+                (unsigned)pixel[2],
+                (unsigned)pixel[3]);
+        goto cleanup;
+      }
+    }
+  }
+  ok = 1;
+
+cleanup:
+  if (copyPass) {
+    GPUEndCopyPass(copyPass);
+  }
+  if (renderPass) {
+    GPUEndRenderPass(renderPass);
+  }
+  GPUDestroyFence(fence);
+  GPUDestroyBuffer(readback);
+  GPUDestroyTextureView(targetView);
+  GPUDestroyTexture(target);
+  GPUDestroyRenderPipeline(pipeline);
+  return ok;
 }
 
 static int
@@ -465,6 +690,15 @@ gpu_testDescriptorArray(GPUDevice *device,
             output[1],
             output[2],
             output[3]);
+    ok = 0;
+    goto cleanup;
+  }
+
+  if (!render_descriptor_array(device,
+                               queue,
+                               library,
+                               activePipelineLayout,
+                               group)) {
     ok = 0;
     goto cleanup;
   }

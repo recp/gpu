@@ -2,6 +2,22 @@ struct DescriptorArrayInput {
   uv: float2 #attribute(0)
 }
 
+vert descriptor_array_vs(vertexId: uint #vertex_id) -> float4 {
+  let x = float(vertexId & 1) * 4.0 - 1.0
+  let y = float((vertexId >> 1) & 1) * 4.0 - 1.0
+  return float4(x, y, 0.0, 1.0)
+}
+
+frag descriptor_array_bindless_fs(
+  textures: [texture2d<float>; 2] #texture(0) #group(1),
+  samplers: [sampler; 2] #sampler(3) #group(1),
+  selection: uint #buffer(4) #group(1)
+) -> float4 {
+  let index = nonuniform(selection)
+  return textures[index].sample(
+    samplers[index], float2(0.5), level(0.0))
+}
+
 frag descriptor_array_fs(input: DescriptorArrayInput #stage_in,
                          textures: [texture2d<float>; 2] #texture(0) #group(1),
                          extra: texture2d<float> #texture(1) #group(1),

@@ -81,6 +81,29 @@ layout_has_typed_entry(const GPUBindGroupLayoutEntry *entries,
 }
 
 static int
+layout_has_array_entry(const GPUBindGroupLayoutEntry *entries,
+                       uint32_t count,
+                       GPUShaderStageFlags visibility,
+                       GPUBindingType bindingType,
+                       uint32_t binding,
+                       uint32_t arrayCount) {
+  if (!entries && count > 0u) {
+    return 0;
+  }
+
+  for (uint32_t i = 0u; i < count; i++) {
+    if (entries[i].visibility == visibility &&
+        entries[i].bindingType == bindingType &&
+        entries[i].binding == binding &&
+        entries[i].arrayCount == arrayCount) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+static int
 check_compute_pipeline_workgroup_size(GPUDevice *device,
                                       GPUShaderLibrary *library,
                                       GPUPipelineLayout *layout) {
@@ -1168,7 +1191,8 @@ check_descriptor_array_reflection(GPUDevice *device, const char *bytecodePath) {
                                             2u) &&
        shader_reflection_has_resource(&reflection,
                                       GPU_BINDING_UNIFORM_BUFFER,
-                                      GPU_SHADER_STAGE_COMPUTE_BIT,
+                                      GPU_SHADER_STAGE_FRAGMENT_BIT |
+                                        GPU_SHADER_STAGE_COMPUTE_BIT,
                                       1u,
                                       4u,
                                       0) &&
@@ -1205,19 +1229,45 @@ check_descriptor_array_reflection(GPUDevice *device, const char *bytecodePath) {
   entries = GPUGetBindGroupLayoutEntries(layouts[1], &entryCount);
   ok = entries &&
        entryCount == 6u &&
-       entries[0].binding == 0u &&
-       entries[0].arrayCount == 2u &&
-       entries[1].binding == 1u &&
-       entries[1].arrayCount == 1u &&
-       entries[2].binding == 3u &&
-       entries[2].arrayCount == 2u &&
-       entries[3].binding == 4u &&
-       entries[3].bindingType == GPU_BINDING_UNIFORM_BUFFER &&
-       entries[4].binding == 5u &&
-       entries[4].bindingType == GPU_BINDING_STORAGE_BUFFER &&
-       entries[5].binding == 6u &&
-       entries[5].bindingType == GPU_BINDING_STORAGE_TEXTURE &&
-       entries[5].arrayCount == 2u;
+       layout_has_array_entry(entries,
+                              entryCount,
+                              GPU_SHADER_STAGE_FRAGMENT_BIT |
+                                GPU_SHADER_STAGE_COMPUTE_BIT,
+                              GPU_BINDING_SAMPLED_TEXTURE,
+                              0u,
+                              2u) &&
+       layout_has_array_entry(entries,
+                              entryCount,
+                              GPU_SHADER_STAGE_FRAGMENT_BIT,
+                              GPU_BINDING_SAMPLED_TEXTURE,
+                              1u,
+                              1u) &&
+       layout_has_array_entry(entries,
+                              entryCount,
+                              GPU_SHADER_STAGE_FRAGMENT_BIT |
+                                GPU_SHADER_STAGE_COMPUTE_BIT,
+                              GPU_BINDING_SAMPLER,
+                              3u,
+                              2u) &&
+       layout_has_array_entry(entries,
+                              entryCount,
+                              GPU_SHADER_STAGE_FRAGMENT_BIT |
+                                GPU_SHADER_STAGE_COMPUTE_BIT,
+                              GPU_BINDING_UNIFORM_BUFFER,
+                              4u,
+                              1u) &&
+       layout_has_array_entry(entries,
+                              entryCount,
+                              GPU_SHADER_STAGE_COMPUTE_BIT,
+                              GPU_BINDING_STORAGE_BUFFER,
+                              5u,
+                              1u) &&
+       layout_has_array_entry(entries,
+                              entryCount,
+                              GPU_SHADER_STAGE_COMPUTE_BIT,
+                              GPU_BINDING_STORAGE_TEXTURE,
+                              6u,
+                              2u);
   if (!ok) {
     fprintf(stderr, "descriptor array layout contract mismatch\n");
   }
