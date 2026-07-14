@@ -293,6 +293,14 @@ vk_renderPushConstants(GPURenderCommandEncoder *encoder,
   if ((stages & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0u) {
     stageFlags |= VK_SHADER_STAGE_FRAGMENT_BIT;
   }
+#ifdef VK_EXT_mesh_shader
+  if ((stages & GPU_SHADER_STAGE_TASK_BIT) != 0u) {
+    stageFlags |= VK_SHADER_STAGE_TASK_BIT_EXT;
+  }
+  if ((stages & GPU_SHADER_STAGE_MESH_BIT) != 0u) {
+    stageFlags |= VK_SHADER_STAGE_MESH_BIT_EXT;
+  }
+#endif
   if (stageFlags != 0u) {
     vkCmdPushConstants(native->command,
                        native->pipelineLayout,
@@ -479,6 +487,38 @@ vk_multiDrawIndexedPrimsIndirect(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
+vk_drawMesh(GPURenderCommandEncoder *encoder,
+            uint32_t                 groupCountX,
+            uint32_t                 groupCountY,
+            uint32_t                 groupCountZ,
+            const uint32_t           taskWorkgroupSize[3],
+            const uint32_t           meshWorkgroupSize[3]) {
+#ifdef VK_EXT_mesh_shader
+  GPURenderEncoderVk *native;
+
+  GPU__UNUSED(taskWorkgroupSize);
+  GPU__UNUSED(meshWorkgroupSize);
+
+  native = vk__renderEncoder(encoder);
+  if (!native || !native->device || !native->device->drawMeshTasks) {
+    return;
+  }
+  native->device->drawMeshTasks(native->command,
+                                groupCountX,
+                                groupCountY,
+                                groupCountZ);
+#else
+  GPU__UNUSED(encoder);
+  GPU__UNUSED(groupCountX);
+  GPU__UNUSED(groupCountY);
+  GPU__UNUSED(groupCountZ);
+  GPU__UNUSED(taskWorkgroupSize);
+  GPU__UNUSED(meshWorkgroupSize);
+#endif
+}
+
+GPU_HIDE
+void
 vk_endRenderEncoding(GPURenderCommandEncoder *encoder) {
   GPURenderEncoderVk *native;
 
@@ -526,6 +566,7 @@ vk_initRCE(GPUApiRCE *api) {
   api->vertexInputBuffer        = vk_vertexBuffer;
   api->drawPrimitives           = vk_drawPrimitives;
   api->drawIndexedPrims         = vk_drawIndexedPrims;
+  api->drawMesh                 = vk_drawMesh;
   api->drawPrimitivesIndirect   = vk_drawPrimitivesIndirect;
   api->drawIndexedPrimsIndirect = vk_drawIndexedPrimsIndirect;
 

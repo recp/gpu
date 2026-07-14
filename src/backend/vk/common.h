@@ -204,6 +204,8 @@ typedef struct GPUAdapterVk {
   bool                       shaderFloat16;
   bool                       descriptorIndexing;
   bool                       bindless;
+  bool                       meshShader;
+  bool                       taskShader;
   bool                       timelineSemaphore;
   bool                       synchronization2;
   bool                       negativeViewport;
@@ -214,6 +216,9 @@ typedef struct GPUDeviceVk {
   PFN_vkCmdBeginRenderingKHR  beginRendering;
   PFN_vkCmdEndRenderingKHR    endRendering;
   PFN_vkCmdPipelineBarrier2KHR pipelineBarrier2;
+#ifdef VK_EXT_mesh_shader
+  PFN_vkCmdDrawMeshTasksEXT    drawMeshTasks;
+#endif
   VkDevice                   device;
   VkSampleCountFlags         colorSampleCounts;
   VkSampleCountFlags         depthSampleCounts;
@@ -222,6 +227,8 @@ typedef struct GPUDeviceVk {
   VkBool32                   multiDrawIndirect;
   VkBool32                   independentBlend;
   bool                       dynamicRendering;
+  bool                       meshShader;
+  bool                       taskShader;
   bool                       timelineSemaphore;
   bool                       synchronization2;
 } GPUDeviceVk;

@@ -225,6 +225,20 @@ vk__blendOp(GPUBlendOp op) {
            : VK_BLEND_OP_ADD;
 }
 
+static const GPUMeshPipelineEXT*
+vk__meshPipelineInfo(const GPURenderPipelineCreateInfo *info) {
+  const GPUChainedStruct *chain;
+
+  chain = info ? info->chain.pNext : NULL;
+  while (chain) {
+    if (chain->sType == GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT) {
+      return (const GPUMeshPipelineEXT *)chain;
+    }
+    chain = chain->pNext;
+  }
+  return NULL;
+}
+
 static void
 vk__fillBlendState(VkPipelineColorBlendAttachmentState *native,
                    const GPUBlendState                  *blend) {
@@ -291,13 +305,14 @@ vk_createRenderPipeline(GPUDevice                         *device,
   GPUShaderLibraryVk                      *library;
   GPUPipelineLayoutVk               *layout;
   GPURenderPipelineVk               *native;
+  const GPUMeshPipelineEXT          *mesh;
   const GPUDepthStencilState        *depthState;
   VkVertexInputBindingDescription   *vertexBindings;
   VkVertexInputAttributeDescription *vertexAttributes;
   VkFormat                           colorFormats[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   VkFormat                           depthFormat;
   VkFormat                           stencilFormat;
-  VkPipelineShaderStageCreateInfo    stages[2] = {{0}};
+  VkPipelineShaderStageCreateInfo    stages[3] = {{0}};
   VkPipelineVertexInputStateCreateInfo vertexInput = {0};
   VkPipelineInputAssemblyStateCreateInfo inputAssembly = {0};
   VkPipelineViewportStateCreateInfo viewport = {0};
@@ -313,6 +328,7 @@ vk_createRenderPipeline(GPUDevice                         *device,
   VkPipelineCache                   pipelineCache;
   VkResult                          result;
   uint32_t                          vertexAttributeCount;
+  uint32_t                          stageCount;
   VkSampleCountFlagBits             sampleCount;
 
   if (!device || !device->_priv || !info || !pipeline ||
@@ -321,6 +337,11 @@ vk_createRenderPipeline(GPUDevice                         *device,
     return GPU_ERROR_UNSUPPORTED;
   }
   deviceVk = device->_priv;
+  mesh     = vk__meshPipelineInfo(info);
+  if (mesh && (!deviceVk->meshShader ||
+               (mesh->taskEntry && !deviceVk->taskShader))) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
   if (!deviceVk->dynamicRendering && info->colorTargetCount != 1u) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -458,14 +479,45 @@ vk_createRenderPipeline(GPUDevice                         *device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  stages[0].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  stages[0].stage  = VK_SHADER_STAGE_VERTEX_BIT;
-  stages[0].module = library->module;
-  stages[0].pName  = info->vertexEntry;
-  stages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  stages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
-  stages[1].module = library->module;
-  stages[1].pName  = info->fragmentEntry;
+  stageCount = 0u;
+  if (mesh) {
+#ifdef VK_EXT_mesh_shader
+    if (mesh->taskEntry) {
+      stages[stageCount].sType =
+        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+      stages[stageCount].stage  = VK_SHADER_STAGE_TASK_BIT_EXT;
+      stages[stageCount].module = library->module;
+      stages[stageCount].pName  = mesh->taskEntry;
+      stageCount++;
+    }
+    stages[stageCount].sType =
+      VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[stageCount].stage  = VK_SHADER_STAGE_MESH_BIT_EXT;
+    stages[stageCount].module = library->module;
+    stages[stageCount].pName  = mesh->meshEntry;
+    stageCount++;
+#else
+    free(vertexAttributes);
+    free(vertexBindings);
+    vkDestroyRenderPass(native->device, native->renderPass, NULL);
+    vk_destroyShaderLayout(&native->shaderLayout);
+    free(native);
+    return GPU_ERROR_UNSUPPORTED;
+#endif
+  } else {
+    stages[stageCount].sType =
+      VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[stageCount].stage  = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[stageCount].module = library->module;
+    stages[stageCount].pName  = info->vertexEntry;
+    stageCount++;
+  }
+  stages[stageCount].sType =
+    VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  stages[stageCount].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+  stages[stageCount].module = library->module;
+  stages[stageCount].pName  = info->fragmentEntry;
+  stageCount++;
 
   vertexInput.sType                           =
     VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -541,10 +593,10 @@ vk_createRenderPipeline(GPUDevice                         *device,
   pipelineInfo.pNext               = deviceVk->dynamicRendering
                                        ? &rendering
                                        : NULL;
-  pipelineInfo.stageCount          = 2u;
+  pipelineInfo.stageCount          = stageCount;
   pipelineInfo.pStages             = stages;
-  pipelineInfo.pVertexInputState   = &vertexInput;
-  pipelineInfo.pInputAssemblyState = &inputAssembly;
+  pipelineInfo.pVertexInputState   = mesh ? NULL : &vertexInput;
+  pipelineInfo.pInputAssemblyState = mesh ? NULL : &inputAssembly;
   pipelineInfo.pViewportState      = &viewport;
   pipelineInfo.pRasterizationState = &raster;
   pipelineInfo.pMultisampleState   = &multisample;

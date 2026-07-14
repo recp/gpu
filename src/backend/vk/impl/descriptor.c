@@ -98,6 +98,14 @@ vk__descriptorStages(GPUShaderStageFlags visibility) {
   if ((visibility & GPU_SHADER_STAGE_COMPUTE_BIT) != 0u) {
     stages |= VK_SHADER_STAGE_COMPUTE_BIT;
   }
+#ifdef VK_EXT_mesh_shader
+  if ((visibility & GPU_SHADER_STAGE_TASK_BIT) != 0u) {
+    stages |= VK_SHADER_STAGE_TASK_BIT_EXT;
+  }
+  if ((visibility & GPU_SHADER_STAGE_MESH_BIT) != 0u) {
+    stages |= VK_SHADER_STAGE_MESH_BIT_EXT;
+  }
+#endif
   return stages;
 }
 

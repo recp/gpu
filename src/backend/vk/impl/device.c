@@ -185,6 +185,10 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkPhysicalDeviceFeatures2                  timelineFeatures2 = {0};
   VkPhysicalDeviceSynchronization2FeaturesKHR sync2Features = {0};
   VkPhysicalDeviceFeatures2                  sync2Features2 = {0};
+#ifdef VK_EXT_mesh_shader
+  VkPhysicalDeviceMeshShaderFeaturesEXT      meshFeatures = {0};
+  VkPhysicalDeviceFeatures2                  meshFeatures2 = {0};
+#endif
   VkResult                                  err;
   uint32_t                                  i, nExtensions;
   bool                                      incrementalPresentEnabled;
@@ -201,6 +205,13 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool                                      sync2Core;
   bool                                      maintenance1Extension;
   bool                                      maintenance1Core;
+#ifdef VK_EXT_mesh_shader
+  bool                                      meshExtension;
+  bool                                      spirv14Extension;
+  bool                                      shaderFloatControlsExtension;
+  bool                                      spirv14ExtensionUsable;
+  bool                                      spirv14Core;
+#endif
 
   nExtensions               = 0;
   incrementalPresentEnabled = true;
@@ -217,6 +228,13 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   sync2Core                 = false;
   maintenance1Extension     = false;
   maintenance1Core          = false;
+#ifdef VK_EXT_mesh_shader
+  meshExtension                 = false;
+  spirv14Extension              = false;
+  shaderFloatControlsExtension = false;
+  spirv14ExtensionUsable       = false;
+  spirv14Core                  = false;
+#endif
 
   adapter                   = calloc(1, sizeof(*adapter));
   adapterVk                 = calloc(1, sizeof(*adapterVk));
@@ -294,6 +312,20 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                   extensions[i].extensionName)) {
         maintenance1Extension = true;
       }
+#ifdef VK_EXT_mesh_shader
+      if (!strcmp(VK_EXT_MESH_SHADER_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        meshExtension = true;
+      }
+      if (!strcmp(VK_KHR_SPIRV_1_4_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        spirv14Extension = true;
+      }
+      if (!strcmp(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        shaderFloatControlsExtension = true;
+      }
+#endif
 
       if (incrementalPresentEnabled) {
         VK__ADD_EXT_IF(VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME,
@@ -347,6 +379,16 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   timelineCore = instanceVk &&
                  instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
                  adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
+#ifdef VK_EXT_mesh_shader
+  spirv14Core = instanceVk &&
+                instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
+                adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
+  spirv14ExtensionUsable = instanceVk &&
+                           instanceVk->apiVersion >= VK_API_VERSION_1_1 &&
+                           adapterVk->props.apiVersion >= VK_API_VERSION_1_1 &&
+                           spirv14Extension &&
+                           shaderFloatControlsExtension;
+#endif
   if (getFeatures2 && (float16Core || float16Extension)) {
     float16Features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES;
@@ -410,6 +452,31 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       adapterVk->dynamicRendering = true;
     }
   }
+#ifdef VK_EXT_mesh_shader
+  if (getFeatures2 && meshExtension &&
+      (spirv14Core || spirv14ExtensionUsable)) {
+    meshFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+    meshFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    meshFeatures2.pNext = &meshFeatures;
+    getFeatures2(raw, &meshFeatures2);
+    if (meshFeatures.meshShader) {
+      if (!spirv14Core) {
+        adapterVk->extensionNames[adapterVk->nEnabledExtensions++] =
+          VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME;
+        assert(adapterVk->nEnabledExtensions < 64);
+        adapterVk->extensionNames[adapterVk->nEnabledExtensions++] =
+          VK_KHR_SPIRV_1_4_EXTENSION_NAME;
+        assert(adapterVk->nEnabledExtensions < 64);
+      }
+      adapterVk->extensionNames[adapterVk->nEnabledExtensions++] =
+        VK_EXT_MESH_SHADER_EXTENSION_NAME;
+      assert(adapterVk->nEnabledExtensions < 64);
+      adapterVk->meshShader = true;
+      adapterVk->taskShader = meshFeatures.taskShader;
+    }
+  }
+#endif
 
 #undef VK__ADD_EXT_IF
 
@@ -466,6 +533,8 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       return adapterVk->descriptorIndexing;
     case GPU_FEATURE_BINDLESS:
       return adapterVk->bindless;
+    case GPU_FEATURE_MESH_SHADER:
+      return adapterVk->meshShader;
     default:
       return false;
   }
@@ -792,6 +861,9 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
   VkPhysicalDeviceDescriptorIndexingFeatures descriptorFeatures = {0};
   VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeatures = {0};
   VkPhysicalDeviceSynchronization2FeaturesKHR sync2Features = {0};
+#ifdef VK_EXT_mesh_shader
+  VkPhysicalDeviceMeshShaderFeaturesEXT meshFeatures = {0};
+#endif
   VkDeviceCreateInfo       deviceCI = {0};
   VkResult                 result;
   uint32_t                 familyIndex;
@@ -833,6 +905,10 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_BINDLESS)) != 0u &&
       !adapterVk->bindless) {
+    goto err;
+  }
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) != 0u &&
+      !adapterVk->meshShader) {
     goto err;
   }
   planCount       = 0u;
@@ -942,6 +1018,16 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
     sync2Features.synchronization2 = VK_TRUE;
     deviceCI.pNext                 = &sync2Features;
   }
+#ifdef VK_EXT_mesh_shader
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) != 0u) {
+    meshFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+    meshFeatures.pNext      = (void *)deviceCI.pNext;
+    meshFeatures.meshShader = VK_TRUE;
+    meshFeatures.taskShader = adapterVk->taskShader;
+    deviceCI.pNext           = &meshFeatures;
+  }
+#endif
 
   result = vkCreateDevice(adapterVk->physicalDevice,
                           &deviceCI,
@@ -963,6 +1049,17 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
   deviceVk->multiDrawIndirect = coreFeatures.multiDrawIndirect;
   deviceVk->independentBlend  = coreFeatures.independentBlend;
   deviceVk->timelineSemaphore = adapterVk->timelineSemaphore;
+#ifdef VK_EXT_mesh_shader
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) != 0u) {
+    deviceVk->drawMeshTasks  = (PFN_vkCmdDrawMeshTasksEXT)
+      vkGetDeviceProcAddr(deviceVk->device, "vkCmdDrawMeshTasksEXT");
+    if (!deviceVk->drawMeshTasks) {
+      goto err;
+    }
+    deviceVk->meshShader     = true;
+    deviceVk->taskShader     = adapterVk->taskShader;
+  }
+#endif
   if (adapterVk->synchronization2) {
     deviceVk->pipelineBarrier2 = (PFN_vkCmdPipelineBarrier2KHR)
       vkGetDeviceProcAddr(deviceVk->device, "vkCmdPipelineBarrier2");

@@ -1,0 +1,52 @@
+struct MeshVertex {
+  position: float4 #position
+  color: float4 #color(0)
+}
+
+pub struct TaskParams {
+  meshGroups: uint4
+  offset: float4
+  tint: float4
+}
+
+pub struct MeshPayload {
+  offset: float4
+  tint: float4
+}
+
+task(1, 1, 1) task_main(inout payload: MeshPayload #payload,
+                         params: TaskParams #buffer(0) #group(0),
+                         tid: uint #local_index) {
+  if (tid == 0) {
+    payload.offset = params.offset
+    payload.tint = params.tint
+    dispatch_mesh(params.meshGroups.x,
+                  params.meshGroups.y,
+                  params.meshGroups.z)
+  }
+}
+
+@mesh_output(triangle, MeshVertex, 3, 1)
+mesh(3, 1, 1) mesh_main(payload: MeshPayload #payload,
+                         tid: uint #local_index) {
+  mesh_set_primitive_count(1)
+  if (tid < 3) {
+    let position = float4(float(tid == 1) * 0.6 -
+                            float(tid == 0) * 0.6,
+                          float(tid == 2) * 1.2 - 0.6,
+                          0.0,
+                          1.0)
+    let color = float4(float(tid == 0),
+                       float(tid == 1),
+                       float(tid == 2),
+                       1.0)
+    mesh_set_vertex(tid,
+                    MeshVertex(position + payload.offset,
+                               color * payload.tint))
+    mesh_set_index(tid, tid)
+  }
+}
+
+frag fragment_main(input: MeshVertex #stage_in) -> float4 {
+  return input.color
+}
