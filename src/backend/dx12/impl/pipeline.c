@@ -151,7 +151,9 @@ dx12_freeShaderCode(DX12ShaderCode *code) {
     return;
   }
 
-  free(code->data);
+  if (code->owned) {
+    free(code->data);
+  }
   memset(code, 0, sizeof(*code));
 }
 
@@ -169,7 +171,91 @@ dx12__copyShaderBlob(const void       *data,
   }
 
   memcpy(outCode->data, data, size);
-  outCode->size = size;
+  outCode->size  = size;
+  outCode->owned = true;
+  return true;
+}
+
+static DX12ShaderCacheEntry *
+dx12__findShader(GPUShaderLibraryDX12 *library,
+                 const char           *entry,
+                 GPUShaderStageFlags   stage) {
+  DX12ShaderCacheEntry *cached;
+
+  for (cached = library->cache; cached; cached = cached->next) {
+    if (cached->stage == stage && strcmp(cached->entry, entry) == 0) {
+      return cached;
+    }
+  }
+  return NULL;
+}
+
+static bool
+dx12__getCachedShader(GPUShaderLibraryDX12 *library,
+                      const char           *entry,
+                      GPUShaderStageFlags   stage,
+                      DX12ShaderCode       *outCode) {
+  DX12ShaderCacheEntry *cached;
+
+  AcquireSRWLockShared(&library->cacheLock);
+  cached = dx12__findShader(library, entry, stage);
+  if (cached) {
+    outCode->data  = cached->data;
+    outCode->size  = cached->size;
+    outCode->owned = false;
+  }
+  ReleaseSRWLockShared(&library->cacheLock);
+  return cached != NULL;
+}
+
+static bool
+dx12__cacheShader(GPUShaderLibraryDX12 *library,
+                  const char           *entry,
+                  GPUShaderStageFlags   stage,
+                  DX12ShaderCode       *code,
+                  DX12ShaderCode       *outCode) {
+  DX12ShaderCacheEntry *cached;
+  DX12ShaderCacheEntry *newEntry;
+  size_t                entrySize;
+
+  entrySize = strlen(entry) + 1u;
+  newEntry  = calloc(1, sizeof(*newEntry));
+  if (newEntry) {
+    newEntry->entry = malloc(entrySize);
+  }
+  if (!newEntry || !newEntry->entry) {
+    if (newEntry) {
+      free(newEntry->entry);
+    }
+    free(newEntry);
+    *outCode = *code;
+    memset(code, 0, sizeof(*code));
+    return true;
+  }
+  memcpy(newEntry->entry, entry, entrySize);
+
+  AcquireSRWLockExclusive(&library->cacheLock);
+  cached = dx12__findShader(library, entry, stage);
+  if (!cached) {
+    newEntry->next  = library->cache;
+    newEntry->data  = code->data;
+    newEntry->size  = code->size;
+    newEntry->stage = stage;
+    library->cache  = newEntry;
+    cached          = newEntry;
+    newEntry        = NULL;
+    memset(code, 0, sizeof(*code));
+  }
+  outCode->data  = cached->data;
+  outCode->size  = cached->size;
+  outCode->owned = false;
+  ReleaseSRWLockExclusive(&library->cacheLock);
+
+  if (newEntry) {
+    free(newEntry->entry);
+    free(newEntry);
+    dx12_freeShaderCode(code);
+  }
   return true;
 }
 
@@ -375,6 +461,8 @@ dx12_compileShader(GPUDeviceDX12        *device,
     [GPU_SHADER_STAGE_COMPUTE_BIT]  = "cs_5_1"
   };
   const wchar_t *dxcProfile;
+  DX12ShaderCode compiled;
+  bool           success;
 
   if (!device || !library || !entry || !outCode ||
       stage >= GPU_ARRAY_LEN(dxcProfiles60) || !dxcProfiles60[stage] ||
@@ -382,25 +470,35 @@ dx12_compileShader(GPUDeviceDX12        *device,
       !legacyProfiles[stage]) {
     return false;
   }
+  memset(outCode, 0, sizeof(*outCode));
+  if (dx12__getCachedShader(library, entry, stage, outCode)) {
+    return true;
+  }
 
+  memset(&compiled, 0, sizeof(compiled));
   if (device->dxcAvailable) {
     dxcProfile = device->shaderF16Enabled
                    ? dxcProfiles62[stage]
                    : dxcProfiles60[stage];
-    return dx12__compileDXC(device,
-                            library->source,
-                            library->sourceSize,
-                            entry,
-                            dxcProfile,
-                            device->shaderF16Enabled,
-                            outCode);
+    success = dx12__compileDXC(device,
+                              library->source,
+                              library->sourceSize,
+                              entry,
+                              dxcProfile,
+                              device->shaderF16Enabled,
+                              &compiled);
+  } else {
+    success = dx12__compileLegacy(library->source,
+                                  library->sourceSize,
+                                  entry,
+                                  legacyProfiles[stage],
+                                  &compiled);
   }
-
-  return dx12__compileLegacy(library->source,
-                             library->sourceSize,
-                             entry,
-                             legacyProfiles[stage],
-                             outCode);
+  return success && dx12__cacheShader(library,
+                                      entry,
+                                      stage,
+                                      &compiled,
+                                      outCode);
 }
 
 static bool

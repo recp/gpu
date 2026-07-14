@@ -165,17 +165,28 @@ dx12_setCommandListName(GPUDevice                 *device,
 #  define dx12_setCommandListName(device, commandList, label) ((void)0)
 #endif
 
-typedef struct GPUQueueDX12 GPUQueueDX12;
-typedef struct GPUSwapchainDX12    GPUSwapchainDX12;
+typedef struct GPUQueueDX12     GPUQueueDX12;
+typedef struct GPUSwapchainDX12 GPUSwapchainDX12;
+
+typedef struct DX12ShaderCacheEntry {
+  struct DX12ShaderCacheEntry *next;
+  char                        *entry;
+  void                        *data;
+  SIZE_T                       size;
+  GPUShaderStageFlags          stage;
+} DX12ShaderCacheEntry;
 
 typedef struct GPUShaderLibraryDX12 {
-  char    *source;
-  uint64_t sourceSize;
+  DX12ShaderCacheEntry *cache;
+  char                 *source;
+  SRWLOCK               cacheLock;
+  uint64_t              sourceSize;
 } GPUShaderLibraryDX12;
 
 typedef struct DX12ShaderCode {
   void  *data;
   SIZE_T size;
+  bool   owned;
 } DX12ShaderCode;
 
 typedef struct GPURootBindingDX12 {

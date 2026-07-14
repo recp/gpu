@@ -47,6 +47,7 @@ dx12_newLibraryWithSource(GPUDevice *device,
   memcpy(native->source, source, (size_t)sourceSize);
   native->source[sourceSize] = '\0';
   native->sourceSize         = sourceSize;
+  InitializeSRWLock(&native->cacheLock);
   library->_priv             = native;
   return library;
 }
@@ -54,6 +55,8 @@ dx12_newLibraryWithSource(GPUDevice *device,
 GPU_HIDE
 void
 dx12_destroyLibrary(GPUShaderLibrary *library) {
+  DX12ShaderCacheEntry *entry;
+  DX12ShaderCacheEntry *next;
   GPUShaderLibraryDX12 *native;
 
   if (!library) {
@@ -62,6 +65,12 @@ dx12_destroyLibrary(GPUShaderLibrary *library) {
 
   native = library->_priv;
   if (native) {
+    for (entry = native->cache; entry; entry = next) {
+      next = entry->next;
+      free(entry->data);
+      free(entry->entry);
+      free(entry);
+    }
     free(native->source);
     free(native);
   }
