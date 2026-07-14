@@ -367,9 +367,13 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
       (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames)) {
     return;
   }
+  if (!GPUSampleRecoverSwapchain(_swapchain, _view)) {
+    return;
+  }
 
   frame = GPUBeginFrame(_swapchain);
   if (!frame) {
+    (void)GPUSampleRecoverSwapchain(_swapchain, _view);
     return;
   }
 

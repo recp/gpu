@@ -145,4 +145,33 @@ GPUSampleCreateDefaultSurfaceGPU(NSWindow        *window,
   return YES;
 }
 
+static inline BOOL
+GPUSampleRecoverSwapchain(GPUSwapchain *swapchain, NSView *view) {
+  GPUSwapchainStatus status;
+  uint32_t           width;
+  uint32_t           height;
+
+  if (!swapchain || !view) {
+    return NO;
+  }
+
+  status = GPUGetSwapchainStatus(swapchain);
+  switch (status) {
+    case GPU_SWAPCHAIN_STATUS_READY:
+    case GPU_SWAPCHAIN_STATUS_UNAVAILABLE:
+      return YES;
+    case GPU_SWAPCHAIN_STATUS_SUBOPTIMAL:
+    case GPU_SWAPCHAIN_STATUS_OUT_OF_DATE:
+      break;
+    case GPU_SWAPCHAIN_STATUS_SURFACE_LOST:
+    default:
+      return NO;
+  }
+
+  width  = (uint32_t)view.bounds.size.width;
+  height = (uint32_t)view.bounds.size.height;
+  return width > 0u && height > 0u &&
+         GPUResizeSwapchain(swapchain, width, height) == GPU_OK;
+}
+
 #endif
