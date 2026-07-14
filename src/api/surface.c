@@ -154,6 +154,7 @@ GPUGetSurfaceCapabilities(const GPUAdapter * __restrict adapter,
                           GPUSurfaceCapabilities * __restrict outCaps) {
   GPUApi    *api;
   GPUResult  result;
+  bool       fifoSupported;
 
   if (!adapter || !surface || !outCaps || adapter->inst != surface->inst) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -189,11 +190,19 @@ GPUGetSurfaceCapabilities(const GPUAdapter * __restrict adapter,
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
+  fifoSupported = false;
   for (uint32_t i = 0u; i < outCaps->presentModeCount; i++) {
     if (outCaps->pPresentModes[i] > GPU_PRESENT_MODE_IMMEDIATE) {
       memset(outCaps, 0, sizeof(*outCaps));
       return GPU_ERROR_BACKEND_FAILURE;
     }
+    if (outCaps->pPresentModes[i] == GPU_PRESENT_MODE_FIFO) {
+      fifoSupported = true;
+    }
+  }
+  if (!fifoSupported) {
+    memset(outCaps, 0, sizeof(*outCaps));
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
   return GPU_OK;

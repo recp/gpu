@@ -26,6 +26,34 @@ gpuIsPresentModeValid(GPUPresentMode mode) {
          mode == GPU_PRESENT_MODE_IMMEDIATE;
 }
 
+static bool
+gpuSurfaceSupportsFormat(const GPUSurfaceCapabilities *caps,
+                         GPUFormat                     format) {
+  for (uint32_t i = 0u; i < caps->formatCount; i++) {
+    if (caps->pFormats[i] == (uint32_t)format) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static GPUFormat
+gpuDefaultSwapchainFormat(const GPUSurfaceCapabilities *caps) {
+  static const GPUFormat preferred[] = {
+    GPU_FORMAT_BGRA8_UNORM,
+    GPU_FORMAT_RGBA8_UNORM,
+    GPU_FORMAT_BGRA8_UNORM_SRGB,
+    GPU_FORMAT_RGBA8_UNORM_SRGB
+  };
+
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(preferred); i++) {
+    if (gpuSurfaceSupportsFormat(caps, preferred[i])) {
+      return preferred[i];
+    }
+  }
+  return (GPUFormat)caps->pFormats[0];
+}
+
 static GPUSwapchain*
 gpuCreateSwapchainInternal(GPUDevice              * __restrict device,
                            struct GPUQueue * __restrict cmdQue,
@@ -99,13 +127,7 @@ GPUCreateSwapchain(GPUDevice                    * __restrict device,
   if (result != GPU_OK) {
     return result;
   }
-  formatSupported = false;
-  for (uint32_t i = 0u; i < surfaceCaps.formatCount; i++) {
-    if (surfaceCaps.pFormats[i] == (uint32_t)info->format) {
-      formatSupported = true;
-      break;
-    }
-  }
+  formatSupported = gpuSurfaceSupportsFormat(&surfaceCaps, info->format);
   if (!formatSupported) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -146,14 +168,21 @@ GPUCreateSwapchainDefault(GPUDevice         * __restrict device,
                           uint32_t                       width,
                           uint32_t                       height) {
   GPUSwapchainCreateInfo info = {0};
+  GPUSurfaceCapabilities surfaceCaps;
   GPUSwapchain          *swapchain;
+
+  if (!device || !device->adapter || !surface || width == 0u || height == 0u ||
+      GPUGetSurfaceCapabilities(device->adapter, surface, &surfaceCaps) !=
+        GPU_OK) {
+    return NULL;
+  }
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO;
   info.chain.structSize = sizeof(info);
   info.surface          = surface;
   info.width            = width;
   info.height           = height;
-  info.format           = GPU_FORMAT_BGRA8_UNORM;
+  info.format           = gpuDefaultSwapchainFormat(&surfaceCaps);
   info.imageCount       = 0;
   info.presentMode      = GPU_PRESENT_MODE_FIFO;
 

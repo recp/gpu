@@ -17,6 +17,9 @@ static GPUCommandBuffer gScopedCmdb;
 static GPUFrame         gScopedFrame;
 static GPUTexture       gScopedFrameTarget;
 static GPUTextureView   gScopedFrameTargetView;
+static GPUSwapchain     gValidationSwapchain;
+static GPUFormat        gValidationSwapchainFormat;
+static uint32_t         gValidationSwapchainImageCount;
 static uint32_t         gScopedQueueGetCalls;
 static uint32_t         gScopedCmdbNewCalls;
 static uint32_t         gScopedPresentCalls;
@@ -55,7 +58,7 @@ static const uint32_t gOwnershipPresentModes[] = {
 };
 
 static const uint32_t gValidationSurfaceFormats[] = {
-  GPU_FORMAT_BGRA8_UNORM
+  GPU_FORMAT_RGBA8_UNORM
 };
 
 static const uint32_t gValidationPresentModes[] = {
@@ -89,6 +92,22 @@ get_validation_surface_capabilities(
   outCaps->presentModeCount =
     (uint32_t)GPU_ARRAY_LEN(gValidationPresentModes);
   return GPU_OK;
+}
+
+static GPUSwapchain *
+create_validation_swapchain(
+  GPUApi                       * __restrict api,
+  GPUDevice                    * __restrict device,
+  GPUQueue                     * __restrict queue,
+  const GPUSwapchainCreateInfo * __restrict info) {
+  (void)api;
+  (void)device;
+  (void)queue;
+
+  memset(&gValidationSwapchain, 0, sizeof(gValidationSwapchain));
+  gValidationSwapchainFormat     = info->format;
+  gValidationSwapchainImageCount = info->imageCount;
+  return &gValidationSwapchain;
 }
 
 static GPUAdapter *
@@ -1088,17 +1107,19 @@ check_swapchain_create_validation(GPUDevice *device) {
     return 0;
   }
 
-  scopedApi                                  = *gpuDeviceApi(device);
-  scopedApi.device.getFormatCapabilities    =
+  scopedApi                                   = *gpuDeviceApi(device);
+  scopedApi.device.getFormatCapabilities     =
     get_validation_format_capabilities;
-  scopedApi.surface.getCapabilities          =
+  scopedApi.surface.getCapabilities           =
     get_validation_surface_capabilities;
-  scopedInstance._api                        = &scopedApi;
-  scopedAdapter.inst                         = &scopedInstance;
-  scopedDevice.inst                          = &scopedInstance;
-  scopedDevice.adapter                       = &scopedAdapter;
-  scopedDevice._api                          = &scopedApi;
-  scopedSurface.inst                         = &scopedInstance;
+  scopedApi.cmdque.getCommandQueue             = get_scoped_queue;
+  scopedApi.swapchain.createSwapchain          = create_validation_swapchain;
+  scopedInstance._api                          = &scopedApi;
+  scopedAdapter.inst                           = &scopedInstance;
+  scopedDevice.inst                            = &scopedInstance;
+  scopedDevice.adapter                         = &scopedAdapter;
+  scopedDevice._api                            = &scopedApi;
+  scopedSurface.inst                           = &scopedInstance;
 
   surface.inst          = device->inst;
   foreignSurface.inst   = &foreignInstance;
@@ -1170,6 +1191,7 @@ check_swapchain_create_validation(GPUDevice *device) {
   }
 
   info.surface     = &scopedSurface;
+  info.format      = GPU_FORMAT_RGBA8_UNORM;
   info.presentMode = GPU_PRESENT_MODE_FIFO;
   info.imageCount  = 1u;
   swapchain        = (GPUSwapchain *)(uintptr_t)1u;
@@ -1187,6 +1209,21 @@ check_swapchain_create_validation(GPUDevice *device) {
         GPU_ERROR_UNSUPPORTED ||
       swapchain != NULL) {
     fprintf(stderr, "swapchain create accepted unsupported present mode\n");
+    return 0;
+  }
+
+  gValidationSwapchainFormat     = GPU_FORMAT_UNDEFINED;
+  gValidationSwapchainImageCount = UINT32_MAX;
+  swapchain = GPUCreateSwapchainDefault(&scopedDevice,
+                                        &scopedSurface,
+                                        640u,
+                                        480u);
+  if (swapchain != &gValidationSwapchain ||
+      swapchain->device != &scopedDevice ||
+      swapchain->width != 640u || swapchain->height != 480u ||
+      gValidationSwapchainFormat != GPU_FORMAT_RGBA8_UNORM ||
+      gValidationSwapchainImageCount != 0u) {
+    fprintf(stderr, "default swapchain did not select surface format\n");
     return 0;
   }
 
