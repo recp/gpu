@@ -272,11 +272,12 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
     goto cleanup;
   }
   command = cmdb->_priv;
-  if (!command ||
-      (forceLegacy && command->commandList7) ||
-      (!forceLegacy && deviceDX12->enhancedBarriers &&
-       !command->commandList7)) {
-    fprintf(stderr, "DX12 barrier command path mismatch\n");
+  if (!command || (forceLegacy && command->commandList7)) {
+    fprintf(stderr,
+            "DX12 barrier command path mismatch: legacy=%u enhanced=%u list7=%p\n",
+            forceLegacy ? 1u : 0u,
+            deviceDX12->enhancedBarriers ? 1u : 0u,
+            (void *)command->commandList7);
     goto cleanup;
   }
 

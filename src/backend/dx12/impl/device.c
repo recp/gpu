@@ -35,9 +35,15 @@ dx12_fillAdapterName(GPUAdapterDX12 *adapterDX12) {
 }
 
 static bool
+dx12_isParallels(const GPUAdapterDX12 *adapterDX12) {
+  return adapterDX12 &&
+         strstr(adapterDX12->name, "Parallels Display Adapter") != NULL;
+}
+
+static bool
 dx12_queryResultsReliable(const GPUAdapterDX12 *adapterDX12) {
   return adapterDX12 &&
-         !strstr(adapterDX12->name, "Parallels Display Adapter");
+         !dx12_isParallels(adapterDX12);
 }
 
 static D3D_SHADER_MODEL
@@ -590,11 +596,14 @@ dx12_createDevice(GPUAdapter        * __restrict adapter,
     goto err;
   }
   /* Parallels removes or corrupts devices on combined stencil-plane copies. */
-  deviceDX12->stencilPlaneCopies =
-    !strstr(adapterDX12->name, "Parallels Display Adapter");
+  deviceDX12->stencilPlaneCopies = !dx12_isParallels(adapterDX12);
   /* Parallels accepts query commands but never writes resolved data. */
   deviceDX12->queryResultsReliable = dx12_queryResultsReliable(adapterDX12);
   dx12_queryDeviceCapabilities(deviceDX12);
+  /* Parallels advertises enhanced barriers but fails on Barrier calls. */
+  if (dx12_isParallels(adapterDX12)) {
+    deviceDX12->enhancedBarriers = false;
+  }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_SUBGROUPS)) != 0u &&
       !deviceDX12->subgroups) {
     goto err;
