@@ -1096,6 +1096,24 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
     gpu_attach_usl_sample(gpu-compute-render-vulkan-usl
                           gpu-vulkan-fixtures
                           "${GPU_VULKAN_COMPUTE_BUFFER_US}")
+
+    if(GPU_BUILD_TESTS)
+      add_test(NAME vulkan-triangle
+               COMMAND gpu-triangle-vulkan-usl)
+      add_test(NAME vulkan-textured-quad
+               COMMAND gpu-textured-quad-vulkan-usl)
+      add_test(NAME vulkan-compute-render
+               COMMAND gpu-compute-render-vulkan-usl)
+      set_tests_properties(
+        vulkan-triangle
+        vulkan-textured-quad
+        vulkan-compute-render
+        PROPERTIES
+          ENVIRONMENT
+            "GPU_SAMPLE_EXIT_AFTER_FRAMES=96;GPU_SAMPLE_ASSERT_ZERO_ALLOC=1"
+          TIMEOUT 30
+      )
+    endif()
   endif()
 endif()
 
@@ -1112,10 +1130,13 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_VULKAN AND APPLE)
             api-validation-vulkan
             vulkan-queue
             vulkan-shader
-            vulkan-compute-buffer)
+            vulkan-compute-buffer
+            vulkan-triangle
+            vulkan-textured-quad
+            vulkan-compute-render)
       if(TEST ${vulkanTest})
-        set_tests_properties(${vulkanTest} PROPERTIES
-          ENVIRONMENT "VK_ICD_FILENAMES=${GPU_VULKAN_ICD}"
+        set_property(TEST ${vulkanTest} APPEND PROPERTY ENVIRONMENT
+          "VK_ICD_FILENAMES=${GPU_VULKAN_ICD}"
         )
       endif()
     endforeach()
