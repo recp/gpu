@@ -9,6 +9,10 @@
 #import "../common/SampleStats.h"
 #import "../common/SampleUSL.h"
 
+typedef struct TaskParams {
+  uint32_t meshGroups[4];
+} TaskParams;
+
 @interface MeshTriangleApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
 @private
   NSWindow            *_window;
@@ -22,6 +26,8 @@
   GPUShaderLibrary    *_library;
   GPUShaderLayout     *_shaderLayout;
   GPURenderPipeline   *_pipeline;
+  GPUBuffer           *_taskUniformBuffer;
+  GPUBindGroup        *_taskGroup;
   NSTimer             *_timer;
   NSInteger            _exitAfterFrames;
   NSInteger            _submittedFrames;
@@ -51,8 +57,8 @@ MeshTriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (BOOL)setupGPU {
-  GPUFeature          requiredFeature;
-  GPUDeviceCreateInfo deviceInfo;
+  GPUFeature           requiredFeature;
+  GPUDeviceCreateInfo  deviceInfo;
 
   _instance = NULL;
   if (GPUCreateInstance(NULL, &_instance) != GPU_OK || !_instance) {
@@ -111,10 +117,39 @@ MeshTriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   if (!GPUSampleLoadUSL(_device,
                         @"mesh_triangle.us",
-                        0u,
+                        1u,
                         &_library,
                         &_shaderLayout)) {
     return NO;
+  }
+  if (!_shaderLayout ||
+      _shaderLayout->bindGroupLayoutCount != 1u ||
+      !_shaderLayout->bindGroupLayouts ||
+      !_shaderLayout->bindGroupLayouts[0]) {
+    NSLog(@"GPU: unexpected mesh shader layout");
+    return NO;
+  }
+  {
+    const GPUBindGroupLayoutEntry *entries;
+    uint32_t                       entryCount;
+    BOOL                           sawTaskUniform;
+
+    entryCount     = 0u;
+    sawTaskUniform = NO;
+    entries = GPUGetBindGroupLayoutEntries(_shaderLayout->bindGroupLayouts[0],
+                                           &entryCount);
+    for (uint32_t i = 0u; entries && i < entryCount; i++) {
+      if (entries[i].binding == 0u &&
+          entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER &&
+          entries[i].visibility == GPU_SHADER_STAGE_TASK_BIT) {
+        sawTaskUniform = YES;
+        break;
+      }
+    }
+    if (!sawTaskUniform) {
+      NSLog(@"GPU: task uniform reflection mismatch");
+      return NO;
+    }
   }
 
   GPUColorTargetState colorTarget = {
@@ -154,6 +189,53 @@ MeshTriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   };
   if (GPUCreateRenderPipeline(_device, &pipelineInfo, &_pipeline) != GPU_OK) {
     NSLog(@"GPU: failed to create mesh pipeline");
+    return NO;
+  }
+
+  TaskParams taskParams = {
+    .meshGroups = {1u, 1u, 1u, 0u}
+  };
+  GPUBufferCreateInfo taskBufferInfo = {
+    .chain = {
+      .sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .structSize = sizeof(GPUBufferCreateInfo)
+    },
+    .label = "mesh-task-params",
+    .sizeBytes = sizeof(taskParams),
+    .usage = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST
+  };
+  if (GPUCreateBuffer(_device,
+                      &taskBufferInfo,
+                      &_taskUniformBuffer) != GPU_OK ||
+      GPUQueueWriteBuffer(_queue,
+                          _taskUniformBuffer,
+                          0u,
+                          &taskParams,
+                          sizeof(taskParams)) != GPU_OK) {
+    NSLog(@"GPU: failed to create task uniform buffer");
+    return NO;
+  }
+
+  GPUBindGroupEntry taskEntry = {
+    .binding = 0u,
+    .buffer = {
+      .buffer = _taskUniformBuffer,
+      .offset = 0u,
+      .size = sizeof(taskParams)
+    }
+  };
+  GPUBindGroupCreateInfo taskGroupInfo = {
+    .chain = {
+      .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
+      .structSize = sizeof(GPUBindGroupCreateInfo)
+    },
+    .label = "mesh-task-group",
+    .layout = _shaderLayout->bindGroupLayouts[0],
+    .entryCount = 1u,
+    .pEntries = &taskEntry
+  };
+  if (GPUCreateBindGroup(_device, &taskGroupInfo, &_taskGroup) != GPU_OK) {
+    NSLog(@"GPU: failed to create task bind group");
     return NO;
   }
 
@@ -200,6 +282,7 @@ MeshTriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   if (!pass) goto cleanup;
 
   GPUBindRenderPipeline(pass, _pipeline);
+  GPUBindRenderGroup(pass, 0u, _taskGroup, 0u, NULL);
   GPUDrawMeshEXT(pass, 1, 1, 1);
   GPUEndRenderPass(pass);
   pass = NULL;
@@ -252,6 +335,8 @@ cleanup:
 }
 
 - (void)cleanupGPU {
+  if (_taskGroup) GPUDestroyBindGroup(_taskGroup);
+  if (_taskUniformBuffer) GPUDestroyBuffer(_taskUniformBuffer);
   if (_pipeline) GPUDestroyRenderPipeline(_pipeline);
   if (_shaderLayout) GPUDestroyShaderLayout(_shaderLayout);
   if (_library) GPUDestroyShaderLibrary(_library);
@@ -261,6 +346,8 @@ cleanup:
   if (_instance) GPUDestroyInstance(_instance);
 
   _pipeline = NULL;
+  _taskGroup = NULL;
+  _taskUniformBuffer = NULL;
   _shaderLayout = NULL;
   _library = NULL;
   _swapchain = NULL;

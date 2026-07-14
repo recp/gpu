@@ -3,9 +3,16 @@ struct MeshVertex {
   color: float4 #color(0)
 }
 
-task(1, 1, 1) task_main(tid: uint #local_index) {
+pub struct TaskParams {
+  meshGroups: uint4
+}
+
+task(1, 1, 1) task_main(params: TaskParams #buffer(0) #group(0),
+                         tid: uint #local_index) {
   if (tid == 0) {
-    dispatch_mesh(1, 1, 1)
+    dispatch_mesh(params.meshGroups.x,
+                  params.meshGroups.y,
+                  params.meshGroups.z)
   }
 }
 
