@@ -188,8 +188,13 @@ typedef struct GPUAdapterVk {
   char                      *extensionNames[64];
   VkQueueFamilyProperties   *queueFamilyProps;
   VkPhysicalDevice           physicalDevice;
+  VkSubgroupFeatureFlags     subgroupOperations;
+  VkShaderStageFlags         subgroupStages;
   uint32_t                   nQueFamilies;
   uint32_t                   nEnabledExtensions;
+  uint32_t                   subgroupSize;
+  uint32_t                   minSubgroupSize;
+  uint32_t                   maxSubgroupSize;
   VkPhysicalDeviceProperties props;
   VkPhysicalDeviceFeatures   features;
   uint32_t                   nDisplayProperties;

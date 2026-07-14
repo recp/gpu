@@ -210,19 +210,14 @@ gpu_enabledFeatureMaskForCreateInfo(const GPUAdapter *adapter,
 
 static uint64_t
 gpu_supportedFeatureMask(const GPUAdapter *adapter) {
-  static const GPUFeature queryableFeatures[] = {
-    GPU_FEATURE_COMPUTE,
-    GPU_FEATURE_TIMESTAMPS,
-    GPU_FEATURE_PIPELINE_STATISTICS,
-    GPU_FEATURE_INDIRECT_DRAW,
-    GPU_FEATURE_MULTI_DRAW
-  };
   uint64_t mask;
 
   mask = 0;
-  for (uint32_t i = 0; i < GPU_ARRAY_LEN(queryableFeatures); i++) {
-    if (gpu_adapterSupportsFeature(adapter, queryableFeatures[i])) {
-      mask |= gpu_featureBit(queryableFeatures[i]);
+  for (GPUFeature feature = GPU_FEATURE_COMPUTE;
+       feature <= GPU_FEATURE_VARIABLE_RATE_SHADING;
+       feature = (GPUFeature)(feature + 1)) {
+    if (gpu_adapterSupportsFeature(adapter, feature)) {
+      mask |= gpu_featureBit(feature);
     }
   }
 

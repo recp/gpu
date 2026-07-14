@@ -1,0 +1,5 @@
+kern(64, 1, 1) subgroup_cs(values: &[uint] #buffer(0) #group(0),
+                            output: &mut [uint] #buffer(1) #group(0),
+                            gid: uint #global_id) {
+  output[gid as usize] = simd_shuffle_xor(values[gid as usize], 1u)
+}

@@ -317,6 +317,12 @@ if(GPU_BUILD_TESTS OR (GPU_BUILD_SAMPLES AND GPU_BUILD_DX12))
   function(gpu_add_usl_fixtures outVar backend group)
     set(runtimeCommands)
     set(runtimeDependencies)
+    set(targetCapsEnvironment)
+    if(DEFINED GPU_USL_FIXTURE_TARGET_CAPS)
+      list(APPEND targetCapsEnvironment
+        "USL_TARGET_CAPS=${GPU_USL_FIXTURE_TARGET_CAPS}"
+      )
+    endif()
     foreach(runtimeTarget us ds)
       if(TARGET ${runtimeTarget})
         list(APPEND runtimeCommands
@@ -344,6 +350,7 @@ if(GPU_BUILD_TESTS OR (GPU_BUILD_SAMPLES AND GPU_BUILD_DX12))
         COMMAND ${CMAKE_COMMAND} -E env
                 USL_EMIT_BYTECODE=1
                 USL_NO_BACKEND_SIDECAR=1
+                ${targetCapsEnvironment}
                 $<TARGET_FILE:gpu-usl-fixture>
                 "${backend}"
                 "${fixtureSource}"
@@ -381,6 +388,15 @@ if(GPU_BUILD_TESTS)
     api
     ${GPU_API_USL_SOURCES}
   )
+  set(GPU_USL_FIXTURE_TARGET_CAPS subgroup)
+  gpu_add_usl_fixtures(
+    GPU_API_SUBGROUP_USL_FIXTURE
+    vulkan
+    api
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/subgroup.usl"
+  )
+  unset(GPU_USL_FIXTURE_TARGET_CAPS)
+  list(APPEND GPU_API_USL_FIXTURES ${GPU_API_SUBGROUP_USL_FIXTURE})
   add_custom_target(gpu-api-fixtures DEPENDS ${GPU_API_USL_FIXTURES})
 
   if(GPU_BUILD_VULKAN)
@@ -392,6 +408,9 @@ if(GPU_BUILD_TESTS)
         vulkan
         api
         ${GPU_API_USL_SOURCES}
+      )
+      list(APPEND GPU_API_VULKAN_USL_FIXTURES
+        ${GPU_API_SUBGROUP_USL_FIXTURE}
       )
       add_custom_target(
         gpu-api-vulkan-fixtures
@@ -439,6 +458,7 @@ if(GPU_BUILD_TESTS)
     tests/api/shader.c
     tests/api/shader_sampler.c
     tests/api/storage_texture.c
+    tests/api/subgroup.c
     tests/api/texture_integer_clear.c
     tests/api/texture_transfer.c
     tests/api/texture_view_render.c

@@ -111,6 +111,62 @@ vk_hasTimestampCapability(const GPUAdapterVk *adapter) {
   return adapter && adapter->props.limits.timestampComputeAndGraphics;
 }
 
+static bool
+vk_hasSubgroupCapability(const GPUAdapterVk *adapter) {
+  VkSubgroupFeatureFlags requiredOperations;
+
+  requiredOperations = VK_SUBGROUP_FEATURE_BASIC_BIT |
+                       VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
+                       VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT;
+  return adapter && adapter->subgroupSize > 0u &&
+         (adapter->subgroupStages & VK_SHADER_STAGE_COMPUTE_BIT) != 0u &&
+         (adapter->subgroupOperations & requiredOperations) ==
+           requiredOperations;
+}
+
+static void
+vk_querySubgroupCapabilities(GPUInstanceVk *instance,
+                             GPUAdapterVk  *adapter,
+                             bool           sizeControl) {
+  PFN_vkGetPhysicalDeviceProperties2 getProperties2;
+  VkPhysicalDeviceSubgroupSizeControlProperties sizeProperties = {0};
+  VkPhysicalDeviceSubgroupProperties            subgroup = {0};
+  VkPhysicalDeviceProperties2                   properties = {0};
+
+  if (!instance || !adapter ||
+      instance->apiVersion < VK_API_VERSION_1_1 ||
+      adapter->props.apiVersion < VK_API_VERSION_1_1) {
+    return;
+  }
+
+  getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+    vkGetInstanceProcAddr(instance->inst, "vkGetPhysicalDeviceProperties2");
+  if (!getProperties2) {
+    return;
+  }
+
+  subgroup.sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES;
+  properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+  properties.pNext = &subgroup;
+  if (sizeControl) {
+    sizeProperties.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES;
+    subgroup.pNext = &sizeProperties;
+  }
+  getProperties2(adapter->physicalDevice, &properties);
+
+  adapter->subgroupOperations = subgroup.supportedOperations;
+  adapter->subgroupStages     = subgroup.supportedStages;
+  adapter->subgroupSize       = subgroup.subgroupSize;
+  adapter->minSubgroupSize    = subgroup.subgroupSize;
+  adapter->maxSubgroupSize    = subgroup.subgroupSize;
+  if (sizeControl && sizeProperties.minSubgroupSize > 0u &&
+      sizeProperties.maxSubgroupSize >= sizeProperties.minSubgroupSize) {
+    adapter->minSubgroupSize = sizeProperties.minSubgroupSize;
+    adapter->maxSubgroupSize = sizeProperties.maxSubgroupSize;
+  }
+}
+
 GPU_HIDE
 GPUAdapter *
 vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
@@ -127,12 +183,14 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool                                      displayTimingEnabled;
   bool                                      dynamicExtension;
   bool                                      dynamicCore;
+  bool                                      subgroupSizeControl;
 
   nExtensions               = 0;
   incrementalPresentEnabled = true;
   displayTimingEnabled      = true;
   dynamicExtension          = false;
   dynamicCore               = false;
+  subgroupSizeControl       = false;
 
   adapter                   = calloc(1, sizeof(*adapter));
   adapterVk                 = calloc(1, sizeof(*adapterVk));
@@ -192,6 +250,10 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                   extensions[i].extensionName)) {
         dynamicExtension = true;
       }
+      if (!strcmp(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        subgroupSizeControl = true;
+      }
 
       if (incrementalPresentEnabled) {
         VK__ADD_EXT_IF(VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME,
@@ -205,6 +267,14 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     }
     free(extensions);
   }
+
+  if (instanceVk && instanceVk->apiVersion >= VK_API_VERSION_1_3 &&
+      adapterVk->props.apiVersion >= VK_API_VERSION_1_3) {
+    subgroupSizeControl = true;
+  }
+  vk_querySubgroupCapabilities(instanceVk,
+                               adapterVk,
+                               subgroupSizeControl);
 
   dynamicCore = instanceVk && instanceVk->apiVersion >= VK_API_VERSION_1_3 &&
                 adapterVk->props.apiVersion >= VK_API_VERSION_1_3;
@@ -284,6 +354,8 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
     case GPU_FEATURE_MULTI_DRAW:
       return adapterVk->features.multiDrawIndirect &&
              vk_hasQueueCapability(adapterVk, VK_QUEUE_GRAPHICS_BIT);
+    case GPU_FEATURE_SUBGROUPS:
+      return vk_hasSubgroupCapability(adapterVk);
     default:
       return false;
   }
@@ -333,6 +405,10 @@ vk_getLimits(const GPUAdapter * __restrict adapter,
   outLimits->maxComputeWorkgroupSizeX = native->maxComputeWorkGroupSize[0];
   outLimits->maxComputeWorkgroupSizeY = native->maxComputeWorkGroupSize[1];
   outLimits->maxComputeWorkgroupSizeZ = native->maxComputeWorkGroupSize[2];
+  if (vk_hasSubgroupCapability(adapterVk)) {
+    outLimits->minSubgroupSize = adapterVk->minSubgroupSize;
+    outLimits->maxSubgroupSize = adapterVk->maxSubgroupSize;
+  }
 }
 
 static void

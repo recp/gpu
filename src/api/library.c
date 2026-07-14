@@ -1020,6 +1020,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   GPUApi                   *api;
   USCompileOutput          *compileOutput;
   USLTargetSpec             target;
+  USLCapabilityAtomDesc     targetAtoms[1];
   USCompileInput            compileInput;
   GPUResult                 rc;
   uint32_t                  encoding;
@@ -1035,6 +1036,14 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
 
   if (!gpu_uslDefaultTarget(api->backend, &target)) {
     return GPU_ERROR_BACKEND_FAILURE;
+  }
+  if (api->backend == GPU_BACKEND_VULKAN &&
+      GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUPS)) {
+    target.profile = USL_TARGET_PROFILE_VULKAN_1_1;
+    if (us_cap_atom_text(&targetAtoms[0], "subgroup") != USLOk ||
+        us_target_extra_atoms(&target, targetAtoms, 1u) != USLOk) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
   }
 
   encoding   = target.backend == USL_BACKEND_SPIRV
