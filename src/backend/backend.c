@@ -43,21 +43,18 @@ GPUApi*
 gpuApiForBackend(GPUBackend backend) {
 #if GPU_BACKEND_METAL_ONLY
   if (backend == GPU_BACKEND_DEFAULT ||
-      backend == GPU_BACKEND_NULL ||
       backend == GPU_BACKEND_METAL) {
     return gpu__selectDefaultBackend();
   }
   return NULL;
 #elif GPU_BACKEND_VULKAN_ONLY
   if (backend == GPU_BACKEND_DEFAULT ||
-      backend == GPU_BACKEND_NULL ||
       backend == GPU_BACKEND_VULKAN) {
     return gpu__selectDefaultBackend();
   }
   return NULL;
 #elif GPU_BACKEND_DX12_ONLY
   if (backend == GPU_BACKEND_DEFAULT ||
-      backend == GPU_BACKEND_NULL ||
       backend == GPU_BACKEND_DX12) {
     return gpu__selectDefaultBackend();
   }
@@ -65,7 +62,7 @@ gpuApiForBackend(GPUBackend backend) {
 #else
   GPUApi *api;
 
-  if (backend == GPU_BACKEND_DEFAULT || backend == GPU_BACKEND_NULL) {
+  if (backend == GPU_BACKEND_DEFAULT) {
     return gpu__selectDefaultBackend();
   }
 
@@ -86,9 +83,6 @@ gpuApiForBackend(GPUBackend backend) {
       api = backend_dx12();
       break;
 #endif
-    case GPU_BACKEND_OPENGL:
-      api = backend_gl();
-      break;
     default:
       return NULL;
   }

@@ -91,7 +91,7 @@ check_pipeline_disk_cache(GPUDevice                  *device,
   result              = GPUCreatePipelineCache(device, &cacheInfo, &cache);
   if (api->backend != GPU_BACKEND_METAL &&
       api->backend != GPU_BACKEND_VULKAN &&
-      api->backend != GPU_BACKEND_DIRECTX12) {
+      api->backend != GPU_BACKEND_DX12) {
     if (result != GPU_ERROR_UNSUPPORTED || cache != NULL) {
       fprintf(stderr, "pipeline disk cache accepted unsupported backend\n");
       GPUDestroyPipelineCache(cache);

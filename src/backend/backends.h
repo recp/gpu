@@ -31,14 +31,6 @@ GPUApi*
 backend_dx12(void);
 #endif
 
-#if !GPU_BACKEND_METAL_ONLY && \
-    !GPU_BACKEND_VULKAN_ONLY && \
-    !GPU_BACKEND_DX12_ONLY
-GPU_HIDE
-GPUApi*
-backend_gl(void);
-#endif
-
 #if defined(GPU_ENABLE_VULKAN) && \
     !GPU_BACKEND_METAL_ONLY && \
     !GPU_BACKEND_DX12_ONLY

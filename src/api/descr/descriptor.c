@@ -1631,7 +1631,7 @@ GPUCreatePipelineLayout(GPUDevice *device,
   priv->bindGroupLayoutCount = info->bindGroupLayoutCount;
   api = gpuDeviceApi(device);
   result = gpu_compilePipelineBindings(priv,
-                                       api ? api->backend : GPU_BACKEND_NULL);
+                                       api ? api->backend : GPU_BACKEND_DEFAULT);
   if (result != GPU_OK) {
     free(priv->bindGroupLayouts);
     free(priv);

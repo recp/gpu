@@ -46,8 +46,6 @@ bench_backendName(GPUBackend backend) {
       return "vulkan";
     case GPU_BACKEND_DX12:
       return "dx12";
-    case GPU_BACKEND_OPENGL:
-      return "opengl";
     default:
       return "default";
   }

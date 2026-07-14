@@ -66,7 +66,7 @@ check_compute_disk_cache(GPUDevice                   *device,
   }
   if (api->backend != GPU_BACKEND_METAL &&
       api->backend != GPU_BACKEND_VULKAN &&
-      api->backend != GPU_BACKEND_DIRECTX12) {
+      api->backend != GPU_BACKEND_DX12) {
     return 1;
   }
 

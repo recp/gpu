@@ -696,7 +696,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
     return 0;
   }
 
-  backend = library->_api ? library->_api->backend : GPU_BACKEND_NULL;
+  backend = library->_api ? library->_api->backend : GPU_BACKEND_DEFAULT;
   for (uint32_t i = 0u; i < runtimeInfo->resource_count; i++) {
     const USLRuntimeResource *src;
     GPUShaderEntryInfo *shaderEntry;

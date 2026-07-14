@@ -27,11 +27,8 @@ gpu_backendName(GPUBackend backend) {
       return "Metal";
     case GPU_BACKEND_VULKAN:
       return "Vulkan";
-    case GPU_BACKEND_DIRECTX12:
+    case GPU_BACKEND_DX12:
       return "Direct3D 12";
-    case GPU_BACKEND_OPENGL:
-      return "OpenGL";
-    case GPU_BACKEND_NULL:
     default:
       return "Unknown GPU";
   }
@@ -812,7 +809,7 @@ GPUGetAdapterProperties(const GPUAdapter     *adapter,
     return api->device.getAdapterProperties(adapter, outProps);
   }
 
-  backend = api ? api->backend : GPU_BACKEND_NULL;
+  backend = api ? api->backend : GPU_BACKEND_DEFAULT;
 
   outProps->backend = backend;
   outProps->type = GPU_ADAPTER_TYPE_UNKNOWN;

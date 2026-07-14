@@ -159,7 +159,7 @@ pipeline_init(PipelineStress             *stress,
   stress->diskCacheSupported =
     stress->bench.adapterProperties.backend == GPU_BACKEND_METAL ||
     stress->bench.adapterProperties.backend == GPU_BACKEND_VULKAN ||
-    stress->bench.adapterProperties.backend == GPU_BACKEND_DIRECTX12;
+    stress->bench.adapterProperties.backend == GPU_BACKEND_DX12;
   snprintf(stress->cachePath,
            sizeof(stress->cachePath),
            ".gpu-pipeline-stress-%u-%p.bin",

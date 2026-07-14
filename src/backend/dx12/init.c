@@ -19,7 +19,7 @@
 
 GPUApi dx12 = {
   .initialized = false,
-  .backend     = GPU_BACKEND_DIRECTX12,
+  .backend     = GPU_BACKEND_DX12,
   .reserved    = &(GPU__DX12){0}
 };
 

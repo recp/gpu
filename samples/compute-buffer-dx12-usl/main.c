@@ -144,7 +144,7 @@ main(int argc, char **argv) {
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
-  instanceInfo.preferredBackend = GPU_BACKEND_DIRECTX12;
+  instanceInfo.preferredBackend = GPU_BACKEND_DX12;
   instanceInfo.enableValidation = true;
   if (GPUCreateInstance(&instanceInfo, &instance) != GPU_OK || !instance) {
     fprintf(stderr, "Direct3D 12 instance creation failed\n");

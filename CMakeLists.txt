@@ -45,7 +45,6 @@ endif()
 set(GPU_BUILD_METAL OFF)
 set(GPU_BUILD_VULKAN OFF)
 set(GPU_BUILD_DX12 OFF)
-set(GPU_BUILD_OPENGL OFF)
 
 if(GPU_BACKEND_METAL_ONLY)
   set(GPU_BUILD_METAL ON)
@@ -54,7 +53,6 @@ elseif(GPU_BACKEND_VULKAN_ONLY)
 elseif(GPU_BACKEND_DX12_ONLY)
   set(GPU_BUILD_DX12 ON)
 else()
-  set(GPU_BUILD_OPENGL ON)
   if(APPLE)
     set(GPU_BUILD_METAL ON)
   elseif(WIN32)
@@ -105,14 +103,6 @@ target_compile_definitions(gpu PRIVATE
   GPU_BACKEND_VULKAN_ONLY=$<BOOL:${GPU_BACKEND_VULKAN_ONLY}>
   GPU_BACKEND_DX12_ONLY=$<BOOL:${GPU_BACKEND_DX12_ONLY}>
 )
-
-if(GPU_BUILD_OPENGL)
-  target_sources(gpu PRIVATE
-    src/backend/gl/api.c
-    src/backend/gl/impl/device.c
-    src/backend/gl/impl/render/pipeline.c
-  )
-endif()
 
 if(NOT WIN32)
   find_package(Threads REQUIRED)

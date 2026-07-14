@@ -672,7 +672,7 @@ check_adapter_enumeration(GPUInstance *activeInstance) {
 
   memset(&props, 0, sizeof(props));
   if (GPUGetAdapterProperties(adapters[0], &props) != GPU_OK ||
-      props.backend == GPU_BACKEND_NULL ||
+      props.backend == GPU_BACKEND_DEFAULT ||
       !props.name) {
     fprintf(stderr, "adapter properties query failed\n");
     return 0;
