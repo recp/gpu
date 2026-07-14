@@ -114,6 +114,82 @@ wait_queue_writes(GPUDevice *device, GPUQueue *queue) {
   return ok;
 }
 
+static int
+check_format_texture_create(GPUDevice            *device,
+                            GPUFormat             format,
+                            GPUTextureUsageFlags  usage,
+                            const char           *capability) {
+  GPUTextureCreateInfo info = {0};
+  GPUTexture          *texture;
+  GPUResult            result;
+
+  info.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  info.format           = format;
+  info.width            = 16u;
+  info.height           = 16u;
+  info.depthOrLayers    = 1u;
+  info.mipLevelCount    = 1u;
+  info.sampleCount      = 1u;
+  info.usage            = usage;
+  texture               = NULL;
+  result                = GPUCreateTexture(device, &info, &texture);
+  if (result != GPU_OK || !texture) {
+    fprintf(stderr,
+            "format %u reports %s but texture creation returned %d\n",
+            (uint32_t)format,
+            capability,
+            result);
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+
+  GPUDestroyTexture(texture);
+  return 1;
+}
+
+static int
+check_format_capability_textures(GPUDevice *device) {
+  GPUFormatCapabilities caps;
+
+  for (GPUFormat format = GPU_FORMAT_R8_UNORM;
+       format < GPU_FORMAT_COUNT;
+       format = (GPUFormat)(format + 1)) {
+    if (GPUGetFormatCapabilities(device->adapter, format, &caps) != GPU_OK ||
+        (caps.filterable && !caps.sampled) ||
+        (caps.blendable && !caps.colorAttachment)) {
+      fprintf(stderr, "format %u reports inconsistent capabilities\n",
+              (uint32_t)format);
+      return 0;
+    }
+    if ((caps.sampled &&
+         !check_format_texture_create(device,
+                                      format,
+                                      GPU_TEXTURE_USAGE_SAMPLED,
+                                      "sampled")) ||
+        (caps.storage &&
+         !check_format_texture_create(device,
+                                      format,
+                                      GPU_TEXTURE_USAGE_STORAGE,
+                                      "storage")) ||
+        (caps.colorAttachment &&
+         !check_format_texture_create(device,
+                                      format,
+                                      GPU_TEXTURE_USAGE_COLOR_TARGET,
+                                      "color attachment")) ||
+        (caps.depthStencil &&
+         !check_format_texture_create(device,
+                                      format,
+                                      GPU_TEXTURE_USAGE_DEPTH_STENCIL,
+                                      "depth-stencil"))) {
+      return 0;
+    }
+  }
+
+  return 1;
+}
+
 static void
 destroy_scoped_texture_view(GPUTextureView * __restrict view) {
   (void)view;
@@ -1235,6 +1311,7 @@ int
 gpu_test_resources(GPUDevice *device) {
   return check_destroy_null_handles() &&
          check_buffer_device_dispatch(device) &&
+         check_format_capability_textures(device) &&
          check_texture_transfer_layout(device) &&
          check_texture_write_aspects(device) &&
          check_texture_view_format_validation(device) &&

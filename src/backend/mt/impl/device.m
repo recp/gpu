@@ -17,11 +17,17 @@
 #include "../common.h"
 
 typedef struct GPUAdapterMT {
-  id<MTLDevice>  device;
-  os_unfair_lock subgroupLock;
-  uint32_t       subgroupSize;
-  bool           subgroupProbed;
-  bool           subgroups;
+  id<MTLDevice>           device;
+  MTLReadWriteTextureTier storageTier;
+  os_unfair_lock          subgroupLock;
+  uint32_t                subgroupSize;
+  bool                    float32Filterable;
+  bool                    depth24Supported;
+  bool                    appleFamily1;
+  bool                    appleFamily2;
+  bool                    bcSupported;
+  bool                    subgroupProbed;
+  bool                    subgroups;
 } GPUAdapterMT;
 
 static GPUAdapterMT *
@@ -35,6 +41,35 @@ mt_adapterDevice(const GPUAdapter *adapter) {
 
   adapterMT = mt_adapter(adapter);
   return adapterMT ? adapterMT->device : nil;
+}
+
+static void
+mt_initFormatSupport(GPUAdapterMT *adapterMT) {
+  id<MTLDevice> device;
+
+  if (!adapterMT || !(device = adapterMT->device)) {
+    return;
+  }
+
+  adapterMT->storageTier = MTLReadWriteTextureTierNone;
+#if TARGET_OS_IOS
+  adapterMT->depth24Supported = false;
+#else
+  adapterMT->depth24Supported = device.depth24Stencil8PixelFormatSupported;
+#endif
+  if (@available(macOS 10.13, iOS 11.0, *)) {
+    adapterMT->storageTier = device.readWriteTextureSupport;
+  }
+  if (@available(macOS 11.0, iOS 14.0, *)) {
+    adapterMT->float32Filterable = device.supports32BitFloatFiltering;
+  }
+  if (@available(macOS 11.0, iOS 16.4, *)) {
+    adapterMT->bcSupported = device.supportsBCTextureCompression;
+  }
+  if (@available(macOS 10.15, iOS 13.0, *)) {
+    adapterMT->appleFamily1 = [device supportsFamily:MTLGPUFamilyApple1];
+    adapterMT->appleFamily2 = [device supportsFamily:MTLGPUFamilyApple2];
+  }
 }
 
 GPU_HIDE
@@ -58,8 +93,9 @@ mt_getAvailableAdapters(GPUInstance * __restrict inst,
       free(adapter);
       break;
     }
-    adapterMT->device                      = [device retain];
-    adapterMT->subgroupLock                = OS_UNFAIR_LOCK_INIT;
+    adapterMT->device       = [device retain];
+    adapterMT->subgroupLock = OS_UNFAIR_LOCK_INIT;
+    mt_initFormatSupport(adapterMT);
     adapter->separatePresentQueue       = 1;
     adapter->supportsDisplayTiming      = 1;
     adapter->supportsIncrementalPresent = 1; /* TODO: */
@@ -338,67 +374,35 @@ mt_getFormatCapabilities(
   const GPUAdapter      * __restrict adapter,
   GPUFormat              format,
   GPUFormatCapabilities * __restrict outCaps) {
-  id<MTLDevice>           device;
-  MTLReadWriteTextureTier storageTier;
-  bool                    depthSupported;
-  bool                    float32Filterable;
-  bool                    appleFamily1;
-  bool                    appleFamily2;
-  bool                    bcSupported;
+  GPUAdapterMT *adapterMT;
 
-  device = mt_adapterDevice(adapter);
-  if (!device || !outCaps) {
+  adapterMT = mt_adapter(adapter);
+  if (!adapterMT || !outCaps) {
     return;
-  }
-
-  storageTier       = MTLReadWriteTextureTierNone;
-  float32Filterable = false;
-  appleFamily1      = false;
-  appleFamily2      = false;
-  bcSupported       = false;
-  if (@available(macOS 10.13, iOS 11.0, *)) {
-    storageTier = device.readWriteTextureSupport;
-  }
-  if (@available(macOS 11.0, iOS 14.0, *)) {
-    float32Filterable = device.supports32BitFloatFiltering;
-  }
-  if (@available(macOS 11.0, iOS 16.4, *)) {
-    bcSupported = device.supportsBCTextureCompression;
-  }
-  if (@available(macOS 10.15, iOS 13.0, *)) {
-    appleFamily1 = [device supportsFamily:MTLGPUFamilyApple1];
-    appleFamily2 = [device supportsFamily:MTLGPUFamilyApple2];
   }
 
   if (mt_isBCFormat(format)) {
     memset(outCaps, 0, sizeof(*outCaps));
-    outCaps->sampled    = bcSupported;
-    outCaps->filterable = bcSupported;
+    outCaps->sampled    = adapterMT->bcSupported;
+    outCaps->filterable = adapterMT->bcSupported;
     return;
   }
   if (mt_isETCFormat(format)) {
     memset(outCaps, 0, sizeof(*outCaps));
-    outCaps->sampled    = appleFamily1;
-    outCaps->filterable = appleFamily1;
+    outCaps->sampled    = adapterMT->appleFamily1;
+    outCaps->filterable = adapterMT->appleFamily1;
     return;
   }
   if (mt_isASTCFormat(format)) {
     memset(outCaps, 0, sizeof(*outCaps));
-    outCaps->sampled    = appleFamily2;
-    outCaps->filterable = appleFamily2;
+    outCaps->sampled    = adapterMT->appleFamily2;
+    outCaps->filterable = adapterMT->appleFamily2;
     return;
   }
 
-  depthSupported = true;
-  if (format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8) {
-#if TARGET_OS_IOS
-    depthSupported = false;
-#else
-    depthSupported = device.depth24Stencil8PixelFormatSupported;
-#endif
-  }
   if (outCaps->depthStencil) {
-    if (!depthSupported) {
+    if (format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 &&
+        !adapterMT->depth24Supported) {
       memset(outCaps, 0, sizeof(*outCaps));
       return;
     }
@@ -408,12 +412,12 @@ mt_getFormatCapabilities(
   }
 
   outCaps->storage =
-    (storageTier >= MTLReadWriteTextureTier1 &&
+    (adapterMT->storageTier >= MTLReadWriteTextureTier1 &&
      mt_isTier1StorageFormat(format)) ||
-    (storageTier >= MTLReadWriteTextureTier2 &&
+    (adapterMT->storageTier >= MTLReadWriteTextureTier2 &&
      mt_isTier2StorageFormat(format));
   if (mt_isFloat32Format(format)) {
-    outCaps->filterable = float32Filterable;
+    outCaps->filterable = adapterMT->float32Filterable;
     outCaps->blendable  = false;
   }
 }
