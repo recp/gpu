@@ -76,7 +76,7 @@ dx12_endFrame(GPUApi   * __restrict api,
 }
 
 GPU_HIDE
-void
+bool
 dx12_schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   GPUCommandBufferDX12 *command;
   GPUSwapchainDX12     *swapchain;
@@ -86,11 +86,12 @@ dx12_schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   if (!command || !swapchain || !frame->drawable ||
       !swapchain->frameActive || swapchain->frameScheduled ||
       command->presentSwapchain || command->owner != swapchain->queue) {
-    return;
+    return false;
   }
 
   command->presentSwapchain  = swapchain;
   swapchain->frameScheduled  = true;
+  return true;
 }
 
 GPU_HIDE

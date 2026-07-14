@@ -22,6 +22,7 @@ static uint32_t         gScopedSubmitCalls;
 static uint32_t         gScopedSubmitCount;
 static uint32_t         gScopedFrameBeginCalls;
 static uint32_t         gScopedFrameEndCalls;
+static bool             gScopedPresentSucceeds;
 
 static GPUAdapter gOwnershipAdapter;
 static GPUDevice  gOwnershipDevice;
@@ -377,11 +378,12 @@ new_scoped_cmdb(GPUQueue * __restrict queue,
   return &gScopedCmdb;
 }
 
-static void
+static bool
 present_scoped_frame(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   (void)cmdb;
   (void)frame;
   gScopedPresentCalls++;
+  return gScopedPresentSucceeds;
 }
 
 static GPUResult
@@ -449,6 +451,7 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   scopedApi.frame.beginFrame               = begin_scoped_frame;
   scopedApi.frame.endFrame                 = end_scoped_frame;
   device._api                              = &scopedApi;
+  device.runtimeConfig.enableStats         = true;
   swapchain.device                         = &device;
   gScopedQueueGetCalls                     = 0u;
   gScopedCmdbNewCalls                      = 0u;
@@ -458,6 +461,7 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   gScopedSubmitCount                       = 0u;
   gScopedFrameBeginCalls                   = 0u;
   gScopedFrameEndCalls                     = 0u;
+  gScopedPresentSucceeds                   = false;
 
   queue = GPUGetQueue(&device, GPU_QUEUE_GRAPHICS, 0u);
   cmdb  = NULL;
@@ -470,6 +474,12 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
     return 0;
   }
   frame->cpuEncodeStartTicks -= frame->cpuEncodeFrequency / 1000u;
+  GPUSchedulePresent(cmdb, frame);
+  if (gScopedCmdb._recordsGPUFrameTime) {
+    fprintf(stderr, "rejected present enabled gpu frame timing\n");
+    return 0;
+  }
+  gScopedPresentSucceeds = true;
   if (GPUFinishFrame(queue, cmdb, frame) != GPU_OK) {
     fprintf(stderr, "queue/frame finish failed\n");
     return 0;
@@ -490,7 +500,7 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
 
   if (gScopedQueueGetCalls != 1u ||
       gScopedCmdbNewCalls != 1u ||
-      gScopedPresentCalls != 1u ||
+      gScopedPresentCalls != 2u ||
       gScopedCommitCalls != 1u ||
       gScopedSubmitCalls != 1u ||
       gScopedSubmitCount != 2u ||
@@ -501,6 +511,10 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   }
   if (!(device.lastFrameStats.cpuEncodeMs > 0.0)) {
     fprintf(stderr, "frame cpu encode time was not recorded\n");
+    return 0;
+  }
+  if (!gScopedCmdb._recordsGPUFrameTime) {
+    fprintf(stderr, "accepted present did not enable gpu frame timing\n");
     return 0;
   }
 

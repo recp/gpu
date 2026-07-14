@@ -27,7 +27,7 @@ typedef struct GPUQuerySet GPUQuerySet;
 typedef struct GPUQuerySetCreateInfo GPUQuerySetCreateInfo;
 
 typedef struct GPUApiCommandBuffer {
-  void (*presentDrawable)(GPUCommandBuffer *cmdb, GPUFrame *frame);
+  bool (*presentDrawable)(GPUCommandBuffer *cmdb, GPUFrame *frame);
   GPUResult (*createQuerySet)(GPUDevice *device,
                               const GPUQuerySetCreateInfo *info,
                               GPUQuerySet *set);

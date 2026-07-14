@@ -418,21 +418,22 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
 }
 
 GPU_HIDE
-void
+bool
 mt_cmdBufDrawable(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   MTCommandBuffer *native;
 
   native = mt_commandBuffer(cmdb);
   if (!native || !frame || !frame->drawable) {
-    return;
+    return false;
   }
   if (native->mode == MTCommandMode4) {
     [native->drawable release];
     native->drawable = [(id<CAMetalDrawable>)frame->drawable retain];
-    return;
+    return true;
   }
 
   [native->classic presentDrawable:(id<CAMetalDrawable>)frame->drawable];
+  return true;
 }
 
 static bool

@@ -161,7 +161,7 @@ vk_endFrame(GPUApi *api, GPUFrame *frame) {
 }
 
 GPU_HIDE
-void
+bool
 vk_schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   GPUCommandBufferVk *command;
   GPUSwapchainVk     *swapchain;
@@ -171,13 +171,14 @@ vk_schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   if (!command || !swapchain || !swapchain->frameActive ||
       swapchain->frameScheduled || command->presentSwapchain ||
       command->owner != swapchain->queue) {
-    return;
+    return false;
   }
 
   command->presentSwapchain = swapchain;
   command->presentImageIndex = swapchain->acquiredImageIndex;
   command->presentFrameIndex = swapchain->frameIndex;
   swapchain->frameScheduled  = true;
+  return true;
 }
 
 GPU_HIDE

@@ -33,7 +33,10 @@ GPUSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   if (!api->cmdbuf.presentDrawable)
     return;
 
-  api->cmdbuf.presentDrawable(cmdb, frame);
+  if (!api->cmdbuf.presentDrawable(cmdb, frame)) {
+    return;
+  }
+  cmdb->_recordsGPUFrameTime = frame->device->runtimeConfig.enableStats;
   if (frame->transientFrameActive) {
     cmdb->_transientFrameIndex  = frame->transientFrameIndex;
     cmdb->_transientFrameTagged = true;

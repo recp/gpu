@@ -245,6 +245,20 @@ void
 mt_reportCommandBufferError(GPUCommandBuffer * __restrict cmdb,
                             NSError          * __restrict error);
 
+static void
+mt_recordGPUFrameTime(GPUCommandBuffer *cmdb,
+                      CFTimeInterval    start,
+                      CFTimeInterval    end) {
+  GPUDevice *device;
+
+  if (!cmdb || !cmdb->_recordsGPUFrameTime || !(end > start)) {
+    return;
+  }
+
+  device = gpuCommandBufferDevice(cmdb);
+  gpuDeviceRecordGPUFrameTime(device, (end - start) * 1000.0);
+}
+
 GPU_HIDE
 void
 mt_ccmdbufOnComplete(GPUCommandBuffer * __restrict cmdb,
@@ -784,6 +798,13 @@ gpu_cmdoncomplete(GPUCommandBuffer * __restrict cmdb,
   if (mtlCmdb && mtlCmdb.status == MTLCommandBufferStatusError) {
     mt_reportCommandBufferError(cmdb, mtlCmdb.error);
   }
+  if (mtlCmdb) {
+    if (@available(macOS 10.15, iOS 10.3, *)) {
+      mt_recordGPUFrameTime(cmdb,
+                            mtlCmdb.GPUStartTime,
+                            mtlCmdb.GPUEndTime);
+    }
+  }
   gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
   dispatch_group_leave(queue->inFlightGroup);
 }
@@ -810,6 +831,9 @@ gpu_cmdoncomplete4(GPUCommandBuffer * __restrict cmdb,
     if (modernFeedback.error && device) {
       mt_reportCommandBufferError(cmdb, modernFeedback.error);
     }
+    mt_recordGPUFrameTime(cmdb,
+                          modernFeedback.GPUStartTime,
+                          modernFeedback.GPUEndTime);
   }
   gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
   dispatch_group_leave(queue->inFlightGroup);

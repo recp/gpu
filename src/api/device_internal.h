@@ -56,6 +56,7 @@ struct GPUDevice {
   uint64_t                     enabledFeatureMask;
   uint64_t                     transientFrameOffset;
   uint64_t                     _nextPipelineCompileId;
+  uint64_t                     _completedGPUFrameTimeBits;
   GPUQueueFlagBits             queueFamilies;
   GPUBufferUsageFlags          transientBufferUsage;
   uint32_t                     transientFrameIndex;
@@ -181,6 +182,10 @@ gpuDeviceRecordHotPathAlloc(GPUDevice *device, uint64_t sizeBytes);
 GPU_HIDE
 void
 gpuDeviceRecordHotPathFree(GPUDevice *device, uint64_t sizeBytes);
+
+GPU_HIDE
+void
+gpuDeviceRecordGPUFrameTime(GPUDevice *device, double milliseconds);
 
 GPU_HIDE
 void

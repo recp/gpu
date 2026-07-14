@@ -97,7 +97,8 @@ GPUBeginFrame(GPUSwapchain* swapchain) {
     }
     frame->transientFrameIndex  = device->transientFrameIndex;
     frame->transientFrameActive = device->transientConfigured;
-    if (!gpu_frameClockStart(&frame->cpuEncodeStartTicks,
+    if (!device->runtimeConfig.enableStats ||
+        !gpu_frameClockStart(&frame->cpuEncodeStartTicks,
                              &frame->cpuEncodeFrequency)) {
       frame->cpuEncodeStartTicks = 0u;
       frame->cpuEncodeFrequency  = 0u;
@@ -132,8 +133,10 @@ GPUEndFrame(GPUFrame* frame) {
     return;
 
   frame->transientFrameActive = false;
-  frame->device->currentFrameStats.cpuEncodeMs =
-    gpu_frameClockElapsedMs(frame);
+  if (frame->device->runtimeConfig.enableStats) {
+    frame->device->currentFrameStats.cpuEncodeMs =
+      gpu_frameClockElapsedMs(frame);
+  }
   gpuDeviceEndFrame(frame->device);
   api->frame.endFrame(api, frame);
 }

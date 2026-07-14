@@ -39,6 +39,7 @@ struct GPUCommandBuffer {
   bool                          _submitted;
   bool                          _activeEncoder;
   bool                          _transientFrameTagged;
+  bool                          _recordsGPUFrameTime;
 };
 
 static inline GPUDevice *

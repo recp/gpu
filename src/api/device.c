@@ -1025,11 +1025,28 @@ GPUAllocateTransientBuffer(GPUDevice *device,
 GPU_EXPORT
 GPUResult
 GPUGetLastFrameStats(GPUDevice *device, GPUFrameStats *outStats) {
+  uint64_t gpuFrameTimeBits;
+
   if (!device || !outStats) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   *outStats = device->lastFrameStats;
+  if (device->runtimeConfig.enableStats) {
+#if defined(_WIN32) || defined(WIN32)
+    gpuFrameTimeBits = (uint64_t)InterlockedCompareExchange64(
+      (volatile LONG64 *)&device->_completedGPUFrameTimeBits,
+      0,
+      0
+    );
+#else
+    gpuFrameTimeBits = __atomic_load_n(&device->_completedGPUFrameTimeBits,
+                                       __ATOMIC_ACQUIRE);
+#endif
+    memcpy(&outStats->gpuFrameMs,
+           &gpuFrameTimeBits,
+           sizeof(outStats->gpuFrameMs));
+  }
   return GPU_OK;
 }
 
@@ -1054,6 +1071,16 @@ GPUResetStats(GPUDevice *device) {
   memset(&device->cacheStats, 0, sizeof(device->cacheStats));
   memset(&device->currentFrameStats, 0, sizeof(device->currentFrameStats));
   memset(&device->lastFrameStats, 0, sizeof(device->lastFrameStats));
+#if defined(_WIN32) || defined(WIN32)
+  InterlockedExchange64(
+    (volatile LONG64 *)&device->_completedGPUFrameTimeBits,
+    0
+  );
+#else
+  __atomic_store_n(&device->_completedGPUFrameTimeBits,
+                   0u,
+                   __ATOMIC_RELEASE);
+#endif
   device->allocatorStats.ringUsedBytes = device->transientFrameOffset;
   device->allocatorStats.ringHighWaterBytes = device->transientFrameOffset;
   device->allocatorStats.ringWrapCount = 0;
@@ -1101,6 +1128,29 @@ gpuDeviceRecordHotPathFree(GPUDevice *device, uint64_t sizeBytes) {
 
   device->currentFrameStats.hotPathFreeCount++;
   device->currentFrameStats.hotPathFreeBytes += sizeBytes;
+}
+
+GPU_HIDE
+void
+gpuDeviceRecordGPUFrameTime(GPUDevice *device, double milliseconds) {
+  uint64_t bits;
+
+  if (!device || !device->runtimeConfig.enableStats ||
+      !(milliseconds > 0.0)) {
+    return;
+  }
+
+  memcpy(&bits, &milliseconds, sizeof(bits));
+#if defined(_WIN32) || defined(WIN32)
+  InterlockedExchange64(
+    (volatile LONG64 *)&device->_completedGPUFrameTimeBits,
+    (LONG64)bits
+  );
+#else
+  __atomic_store_n(&device->_completedGPUFrameTimeBits,
+                   bits,
+                   __ATOMIC_RELEASE);
+#endif
 }
 
 GPU_HIDE

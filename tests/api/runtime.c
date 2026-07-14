@@ -368,9 +368,11 @@ check_transient_fallback(GPUDevice *device) {
 
 static int
 check_stats_queries(GPUDevice *device) {
+  double gpuFrameMs;
   GPUFrameStats frameStats;
   GPUAllocatorStats allocatorStats;
   GPUCacheStats cacheStats;
+  uint64_t gpuFrameTimeBits;
 
   if (GPUGetLastFrameStats(NULL, &frameStats) != GPU_ERROR_INVALID_ARGUMENT ||
       GPUGetLastFrameStats(device, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
@@ -388,6 +390,20 @@ check_stats_queries(GPUDevice *device) {
       GPUGetLastFrameStats(device, &frameStats) != GPU_OK ||
       GPUGetAllocatorStats(device, &allocatorStats) != GPU_OK) {
     fprintf(stderr, "stats query after reset failed\n");
+    return 0;
+  }
+  gpuFrameMs = 1.25;
+  memcpy(&gpuFrameTimeBits, &gpuFrameMs, sizeof(gpuFrameTimeBits));
+  device->_completedGPUFrameTimeBits = gpuFrameTimeBits;
+  if (GPUGetLastFrameStats(device, &frameStats) != GPU_OK ||
+      frameStats.gpuFrameMs != gpuFrameMs) {
+    fprintf(stderr, "completed gpu frame time was not recorded\n");
+    return 0;
+  }
+  GPUResetStats(device);
+  if (GPUGetLastFrameStats(device, &frameStats) != GPU_OK ||
+      frameStats.gpuFrameMs != 0.0) {
+    fprintf(stderr, "completed gpu frame time was not reset\n");
     return 0;
   }
 
