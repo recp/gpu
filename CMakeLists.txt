@@ -611,14 +611,41 @@ if(GPU_BUILD_BENCHMARKS)
     )
   endif()
 
+  if(GPU_BUILD_METAL)
+    set(GPU_BENCHMARK_BACKEND metal)
+    set(GPU_BENCHMARK_SELECTED_USL_FIXTURES
+      ${GPU_BENCHMARK_METAL_USL_FIXTURES}
+    )
+  elseif(GPU_BUILD_DX12)
+    set(GPU_BENCHMARK_BACKEND dx12)
+    set(GPU_BENCHMARK_SELECTED_USL_FIXTURES
+      ${GPU_BENCHMARK_DX12_USL_FIXTURES}
+    )
+  elseif(GPU_BUILD_VULKAN)
+    set(GPU_BENCHMARK_BACKEND vulkan)
+    set(GPU_BENCHMARK_SELECTED_USL_FIXTURES
+      ${GPU_BENCHMARK_VULKAN_USL_FIXTURES}
+    )
+  endif()
+  if(GPU_BENCHMARK_SELECTED_USL_FIXTURES)
+    list(GET GPU_BENCHMARK_SELECTED_USL_FIXTURES
+         0
+         GPU_BENCHMARK_RENDER_MRT_US)
+    list(GET GPU_BENCHMARK_SELECTED_USL_FIXTURES
+         1
+         GPU_BENCHMARK_TRIANGLE_US)
+  endif()
+
   add_custom_target(gpu-benchmark-fixtures
     DEPENDS ${GPU_BENCHMARK_USL_FIXTURES}
   )
 endif()
 
-if(GPU_BUILD_TESTS)
+if(GPU_BUILD_TESTS OR GPU_BUILD_BENCHMARKS)
   enable_testing()
+endif()
 
+if(GPU_BUILD_TESTS)
   add_executable(gpu-api-test
     tests/api/barrier.c
     tests/api/bindgroup.c
@@ -1178,7 +1205,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
   endif()
 endif()
 
-if(GPU_BUILD_TESTS AND GPU_BUILD_VULKAN AND APPLE)
+if((GPU_BUILD_TESTS OR GPU_BUILD_BENCHMARKS) AND
+   GPU_BUILD_VULKAN AND APPLE)
   get_filename_component(GPU_VULKAN_LIBRARY_DIR "${Vulkan_LIBRARY}" DIRECTORY)
   get_filename_component(GPU_VULKAN_PLATFORM_DIR
                          "${GPU_VULKAN_LIBRARY_DIR}"
@@ -1454,6 +1482,80 @@ if(GPU_BUILD_BENCHMARKS)
           gpu-pipeline-stress-bench)
     add_dependencies(${benchmark_target} gpu-benchmark-fixtures)
   endforeach()
+
+  if(DEFINED GPU_BENCHMARK_BACKEND)
+    function(gpu_add_perf_smoke name target)
+      add_test(NAME ${name} COMMAND ${target} ${ARGN})
+      set_tests_properties(${name} PROPERTIES
+        LABELS perf-smoke
+        RUN_SERIAL TRUE
+        TIMEOUT 60
+      )
+    endfunction()
+
+    gpu_add_perf_smoke(
+      perf-smoke-queue-submit
+      gpu-queue-submit-bench
+      ${GPU_BENCHMARK_BACKEND} 4 8 1
+    )
+    gpu_add_perf_smoke(
+      perf-smoke-queue-upload
+      gpu-queue-upload-bench
+      ${GPU_BENCHMARK_BACKEND} 64 256
+    )
+    gpu_add_perf_smoke(
+      perf-smoke-texture-upload
+      gpu-texture-upload-bench
+      ${GPU_BENCHMARK_BACKEND} 8 16 16
+    )
+    gpu_add_perf_smoke(
+      perf-smoke-static-scene
+      gpu-static-scene-bench
+      "${GPU_BENCHMARK_RENDER_MRT_US}"
+      ${GPU_BENCHMARK_BACKEND} 32 4 12 1
+    )
+    gpu_add_perf_smoke(
+      perf-smoke-state-churn
+      gpu-state-churn-bench
+      "${GPU_BENCHMARK_RENDER_MRT_US}"
+      ${GPU_BENCHMARK_BACKEND} 32 4 12 1
+    )
+    gpu_add_perf_smoke(
+      perf-smoke-binding-churn
+      gpu-binding-churn-bench
+      "${GPU_BENCHMARK_TRIANGLE_US}"
+      ${GPU_BENCHMARK_BACKEND} 32 4 12 1
+    )
+    gpu_add_perf_smoke(
+      perf-smoke-upload-heavy
+      gpu-upload-heavy-bench
+      "${GPU_BENCHMARK_TRIANGLE_US}"
+      ${GPU_BENCHMARK_BACKEND} 32 4 12 1
+    )
+    gpu_add_perf_smoke(
+      perf-smoke-pipeline-stress
+      gpu-pipeline-stress-bench
+      "${GPU_BENCHMARK_RENDER_MRT_US}"
+      ${GPU_BENCHMARK_BACKEND} 12 1
+    )
+
+    if(GPU_BENCHMARK_BACKEND STREQUAL "vulkan" AND
+       DEFINED GPU_VULKAN_ICD AND EXISTS "${GPU_VULKAN_ICD}")
+      foreach(perfSmokeTest
+              perf-smoke-queue-submit
+              perf-smoke-queue-upload
+              perf-smoke-texture-upload
+              perf-smoke-static-scene
+              perf-smoke-state-churn
+              perf-smoke-binding-churn
+              perf-smoke-upload-heavy
+              perf-smoke-pipeline-stress)
+        set_property(TEST ${perfSmokeTest} APPEND PROPERTY ENVIRONMENT
+          "VK_ICD_FILENAMES=${GPU_VULKAN_ICD}"
+        )
+      endforeach()
+    endif()
+  endif()
 
   if(WIN32)
     foreach(benchmark_target
