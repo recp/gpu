@@ -15,6 +15,7 @@
  */
 
 #include "api/device_internal.h"
+#include "api/cmdqueue_internal.h"
 #include "bench.h"
 #include "render.h"
 
@@ -380,6 +381,7 @@ bench_renderFrame(BenchRender         *bench,
     return false;
   }
   GPUEndRenderPass(pass);
+  cmdb->_recordsGPUFrameTime = bench->device->runtimeConfig.enableStats;
 
   buffers[0]                    = cmdb;
   submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
@@ -393,7 +395,14 @@ bench_renderFrame(BenchRender         *bench,
     return false;
   }
 
-  *outStats    = bench->device->currentFrameStats;
+  *outStats = bench->device->currentFrameStats;
+  {
+    GPUFrameStats completedStats;
+
+    if (GPUGetLastFrameStats(bench->device, &completedStats) == GPU_OK) {
+      outStats->gpuFrameMs = completedStats.gpuFrameMs;
+    }
+  }
   *outEncodeNs = (end - begin) * 1e9;
   return true;
 }
@@ -438,12 +447,18 @@ bench_renderRun(BenchRender             *bench,
   metrics->samples       = calloc(sampleCount, sizeof(*metrics->samples));
   metrics->repeatMedians = calloc(config->repeats,
                                   sizeof(*metrics->repeatMedians));
+  metrics->gpuSamples       = calloc(sampleCount,
+                                     sizeof(*metrics->gpuSamples));
+  metrics->gpuRepeatMedians = calloc(config->repeats,
+                                     sizeof(*metrics->gpuRepeatMedians));
   metrics->sampleCount   = sampleCount;
-  if (!metrics->samples || !metrics->repeatMedians) {
+  if (!metrics->samples || !metrics->repeatMedians ||
+      !metrics->gpuSamples || !metrics->gpuRepeatMedians) {
     return false;
   }
 
   for (uint32_t repeat = 0u; repeat < config->repeats; repeat++) {
+    size_t gpuBase;
     size_t base;
 
     for (uint32_t frame = 0u; frame < config->warmupFrames; frame++) {
@@ -459,7 +474,8 @@ bench_renderRun(BenchRender             *bench,
       }
     }
 
-    base = (size_t)repeat * config->measuredFrames;
+    base    = (size_t)repeat * config->measuredFrames;
+    gpuBase = metrics->gpuSampleCount;
     for (uint32_t frame = 0u; frame < config->measuredFrames; frame++) {
       double *sample;
 
@@ -474,11 +490,21 @@ bench_renderRun(BenchRender             *bench,
         return false;
       }
       bench_accumulate(metrics, &stats);
+      if (stats.gpuFrameMs > 0.0) {
+        metrics->gpuSamples[metrics->gpuSampleCount++] =
+          stats.gpuFrameMs * 1e6;
+      }
     }
     metrics->repeatMedians[repeat] =
       bench_percentile(&metrics->samples[base],
                        config->measuredFrames,
                        0.5);
+    if (metrics->gpuSampleCount > gpuBase) {
+      metrics->gpuRepeatMedians[metrics->gpuRepeatCount++] =
+        bench_percentile(&metrics->gpuSamples[gpuBase],
+                         metrics->gpuSampleCount - gpuBase,
+                         0.5);
+    }
   }
   return true;
 }
@@ -491,6 +517,9 @@ bench_renderPrint(const char              *title,
   double median;
   double p95;
   double p99;
+  double gpuMedian;
+  double gpuP95;
+  double gpuP99;
   double frames;
 
   median = bench_percentile(metrics->repeatMedians, config->repeats, 0.5);
@@ -513,6 +542,23 @@ bench_renderPrint(const char              *title,
          p95 / 1e3,
          p99 / 1e3);
   printf("median per draw: %.3f ns\n", median / config->drawCount);
+  if (metrics->gpuSampleCount > 0u) {
+    gpuMedian = bench_percentile(metrics->gpuRepeatMedians,
+                                 metrics->gpuRepeatCount,
+                                 0.5);
+    gpuP95    = bench_percentile(metrics->gpuSamples,
+                                 metrics->gpuSampleCount,
+                                 0.95);
+    gpuP99    = bench_percentile(metrics->gpuSamples,
+                                 metrics->gpuSampleCount,
+                                 0.99);
+    printf("GPU frame: median %.3f us, p95 %.3f us, p99 %.3f us\n",
+           gpuMedian / 1e3,
+           gpuP95 / 1e3,
+           gpuP99 / 1e3);
+  } else {
+    printf("GPU frame: unavailable\n");
+  }
   printf("bind calls/frame: requested %.2f, emitted %.2f\n",
          metrics->requestedBindCalls / frames,
          metrics->emittedBindCalls / frames);
@@ -543,6 +589,8 @@ bench_renderFreeMetrics(BenchSceneMetrics *metrics) {
   }
   free(metrics->repeatMedians);
   free(metrics->samples);
+  free(metrics->gpuRepeatMedians);
+  free(metrics->gpuSamples);
 }
 
 void

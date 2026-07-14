@@ -60,6 +60,8 @@ typedef struct BenchPipelineInfo {
 typedef struct BenchSceneMetrics {
   double   *samples;
   double   *repeatMedians;
+  double   *gpuSamples;
+  double   *gpuRepeatMedians;
   uint64_t  requestedStateCalls;
   uint64_t  emittedStateCalls;
   uint64_t  requestedBindCalls;
@@ -70,6 +72,8 @@ typedef struct BenchSceneMetrics {
   uint64_t  maxFreeCount;
   uint64_t  maxFreeBytes;
   size_t    sampleCount;
+  size_t    gpuSampleCount;
+  size_t    gpuRepeatCount;
 } BenchSceneMetrics;
 
 typedef bool (*BenchRenderEncodeFn)(GPURenderPassEncoder *pass,
