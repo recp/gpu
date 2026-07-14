@@ -487,7 +487,7 @@ vk_createShaderLayout(GPUDevice              *device,
   for (uint32_t i = 0u; i < samplerCount; i++) {
     VkSamplerCreateInfo samplerInfo;
 
-    vk_fillUSLSamplerInfo(&samplers[i].desc, &samplerInfo);
+    vk_fillStaticSamplerInfo(&samplers[i].desc, &samplerInfo);
     if (vkCreateSampler(outLayout->device,
                         &samplerInfo,
                         NULL,

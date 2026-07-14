@@ -4,7 +4,6 @@
 
 static GPUSampler gScopedSampler;
 static uint32_t   gScopedSamplerCreateCalls;
-static uint32_t   gScopedUSLSamplerCreateCalls;
 static uint32_t   gScopedSamplerDestroyCalls;
 
 static GPUResult
@@ -20,22 +19,6 @@ create_scoped_sampler(GPUApi                    * __restrict api,
   memset(&gScopedSampler, 0, sizeof(gScopedSampler));
   *outSampler = &gScopedSampler;
   gScopedSamplerCreateCalls++;
-  return GPU_OK;
-}
-
-static GPUResult
-create_scoped_usl_sampler(GPUApi                        * __restrict api,
-                          GPUDevice                     * __restrict device,
-                          const GPUUSLStaticSamplerDesc *desc,
-                          bool                           staticIfSupported,
-                          GPUSampler                   **outSampler) {
-  (void)api;
-  (void)device;
-  (void)desc;
-  (void)staticIfSupported;
-  memset(&gScopedSampler, 0, sizeof(gScopedSampler));
-  *outSampler = &gScopedSampler;
-  gScopedUSLSamplerCreateCalls++;
   return GPU_OK;
 }
 
@@ -62,7 +45,6 @@ valid_sampler_desc(void) {
 static int
 check_sampler_device_dispatch(GPUDevice *activeDevice) {
   GPUSampler              *sampler;
-  GPUUSLStaticSamplerDesc uslDesc = {0};
   GPUSamplerCreateInfo    info = {0};
   GPUDevice               device = {0};
   GPUApi                  scopedApi;
@@ -74,12 +56,9 @@ check_sampler_device_dispatch(GPUDevice *activeDevice) {
 
   scopedApi = *gpuDeviceApi(activeDevice);
   scopedApi.sampler.createSampler = create_scoped_sampler;
-  scopedApi.sampler.createSamplerFromUSLStaticSampler =
-    create_scoped_usl_sampler;
   scopedApi.sampler.destroySampler = destroy_scoped_sampler;
   device._api                      = &scopedApi;
   gScopedSamplerCreateCalls        = 0u;
-  gScopedUSLSamplerCreateCalls     = 0u;
   gScopedSamplerDestroyCalls       = 0u;
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -93,20 +72,8 @@ check_sampler_device_dispatch(GPUDevice *activeDevice) {
   }
   GPUDestroySampler(sampler);
 
-  sampler = NULL;
-  if (GPUCreateSamplerFromUSLStaticSampler(&device,
-                                           &uslDesc,
-                                           true,
-                                           &sampler) != GPU_OK ||
-      sampler != &gScopedSampler || sampler->device != &device) {
-    fprintf(stderr, "USL sampler device dispatch failed\n");
-    return 0;
-  }
-  GPUDestroySampler(sampler);
-
   if (gScopedSamplerCreateCalls != 1u ||
-      gScopedUSLSamplerCreateCalls != 1u ||
-      gScopedSamplerDestroyCalls != 2u) {
+      gScopedSamplerDestroyCalls != 1u) {
     fprintf(stderr, "sampler dispatch called wrong backend\n");
     return 0;
   }

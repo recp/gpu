@@ -59,37 +59,37 @@ vk_fillSamplerInfo(const GPUSamplerDesc *desc, VkSamplerCreateInfo *outInfo) {
 static VkCompareOp
 vk__compareOp(uint32_t compare) {
   switch (compare) {
-    case GPUUSLSamplerCompareLess:
+    case USL_RUNTIME_COMPARE_LESS:
       return VK_COMPARE_OP_LESS;
-    case GPUUSLSamplerCompareEqual:
+    case USL_RUNTIME_COMPARE_EQUAL:
       return VK_COMPARE_OP_EQUAL;
-    case GPUUSLSamplerCompareLessEqual:
+    case USL_RUNTIME_COMPARE_LESS_EQUAL:
       return VK_COMPARE_OP_LESS_OR_EQUAL;
-    case GPUUSLSamplerCompareGreater:
+    case USL_RUNTIME_COMPARE_GREATER:
       return VK_COMPARE_OP_GREATER;
-    case GPUUSLSamplerCompareNotEqual:
+    case USL_RUNTIME_COMPARE_NOT_EQUAL:
       return VK_COMPARE_OP_NOT_EQUAL;
-    case GPUUSLSamplerCompareGreaterEqual:
+    case USL_RUNTIME_COMPARE_GREATER_EQUAL:
       return VK_COMPARE_OP_GREATER_OR_EQUAL;
-    case GPUUSLSamplerCompareAlways:
+    case USL_RUNTIME_COMPARE_ALWAYS:
       return VK_COMPARE_OP_ALWAYS;
-    case GPUUSLSamplerCompareNever:
+    case USL_RUNTIME_COMPARE_NEVER:
     default:
       return VK_COMPARE_OP_NEVER;
   }
 }
 
 static VkSamplerAddressMode
-vk__uslAddressMode(uint32_t mode) {
+vk__staticSamplerAddressMode(uint32_t mode) {
   switch (mode) {
-    case GPUUSLSamplerAddressRepeat:
+    case USL_RUNTIME_ADDRESS_REPEAT:
       return VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    case GPUUSLSamplerAddressMirroredRepeat:
+    case USL_RUNTIME_ADDRESS_MIRRORED_REPEAT:
       return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-    case GPUUSLSamplerAddressClampToZero:
-    case GPUUSLSamplerAddressClampToBorder:
+    case USL_RUNTIME_ADDRESS_CLAMP_TO_ZERO:
+    case USL_RUNTIME_ADDRESS_CLAMP_TO_BORDER:
       return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-    case GPUUSLSamplerAddressClampToEdge:
+    case USL_RUNTIME_ADDRESS_CLAMP_TO_EDGE:
     default:
       return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   }
@@ -97,23 +97,23 @@ vk__uslAddressMode(uint32_t mode) {
 
 GPU_HIDE
 void
-vk_fillUSLSamplerInfo(const GPUUSLStaticSamplerDesc *desc,
-                      VkSamplerCreateInfo           *outInfo) {
+vk_fillStaticSamplerInfo(const GPUStaticSamplerDesc *desc,
+                         VkSamplerCreateInfo        *outInfo) {
   VkFilter            minFilter;
   VkFilter            magFilter;
   VkSamplerMipmapMode  mipFilter;
   VkSamplerAddressMode addressMode;
 
-  minFilter   = desc->minFilter == GPUUSLSamplerFilterLinear
+  minFilter   = desc->minFilter == USL_RUNTIME_FILTER_LINEAR
                   ? VK_FILTER_LINEAR
                   : VK_FILTER_NEAREST;
-  magFilter   = desc->magFilter == GPUUSLSamplerFilterLinear
+  magFilter   = desc->magFilter == USL_RUNTIME_FILTER_LINEAR
                   ? VK_FILTER_LINEAR
                   : VK_FILTER_NEAREST;
-  mipFilter   = desc->mipFilter == GPUUSLSamplerFilterLinear
+  mipFilter   = desc->mipFilter == USL_RUNTIME_FILTER_LINEAR
                   ? VK_SAMPLER_MIPMAP_MODE_LINEAR
                   : VK_SAMPLER_MIPMAP_MODE_NEAREST;
-  addressMode = vk__uslAddressMode(desc->addressMode);
+  addressMode = vk__staticSamplerAddressMode(desc->addressMode);
 
   memset(outInfo, 0, sizeof(*outInfo));
   outInfo->sType                   = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -126,7 +126,7 @@ vk_fillUSLSamplerInfo(const GPUUSLStaticSamplerDesc *desc,
   outInfo->compareEnable           = desc->hasCompare ? VK_TRUE : VK_FALSE;
   outInfo->compareOp               = vk__compareOp(desc->compareFunc);
   outInfo->unnormalizedCoordinates =
-    desc->coordSpace == GPUUSLSamplerCoordPixel ? VK_TRUE : VK_FALSE;
+    desc->coordSpace == USL_RUNTIME_COORD_PIXEL ? VK_TRUE : VK_FALSE;
   outInfo->borderColor             =
     VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
   outInfo->maxLod                  = outInfo->unnormalizedCoordinates
@@ -188,33 +188,6 @@ vk_createSampler(GPUApi                    * __restrict api,
 }
 
 GPU_HIDE
-GPUResult
-vk_createSamplerFromUSL(GPUApi                        * __restrict api,
-                        GPUDevice                     * __restrict device,
-                        const GPUUSLStaticSamplerDesc *desc,
-                        bool                           staticIfSupported,
-                        GPUSampler                   **outSampler) {
-  VkSamplerCreateInfo samplerInfo = {0};
-  GPU__UNUSED(api);
-  GPU__UNUSED(staticIfSupported);
-  if (!desc || desc->maxAnisotropy > 1u) {
-    return GPU_ERROR_UNSUPPORTED;
-  }
-  if (desc->coordSpace == GPUUSLSamplerCoordPixel &&
-      (desc->minFilter != desc->magFilter ||
-       desc->mipFilter != GPUUSLSamplerFilterNearest ||
-       desc->hasCompare ||
-       (desc->addressMode != GPUUSLSamplerAddressClampToEdge &&
-        desc->addressMode != GPUUSLSamplerAddressClampToZero &&
-        desc->addressMode != GPUUSLSamplerAddressClampToBorder))) {
-    return GPU_ERROR_UNSUPPORTED;
-  }
-
-  vk_fillUSLSamplerInfo(desc, &samplerInfo);
-  return vk__createSampler(device, &samplerInfo, outSampler);
-}
-
-GPU_HIDE
 void
 vk_destroySampler(GPUSampler * __restrict sampler) {
   GPUSamplerVk *native;
@@ -233,7 +206,6 @@ vk_destroySampler(GPUSampler * __restrict sampler) {
 GPU_HIDE
 void
 vk_initSampler(GPUApiSampler *api) {
-  api->createSampler                     = vk_createSampler;
-  api->createSamplerFromUSLStaticSampler = vk_createSamplerFromUSL;
-  api->destroySampler                    = vk_destroySampler;
+  api->createSampler  = vk_createSampler;
+  api->destroySampler = vk_destroySampler;
 }

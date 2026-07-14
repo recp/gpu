@@ -18,7 +18,7 @@
 
 GPU_HIDE
 D3D12_FILTER
-dx12_uslSamplerFilter(const GPUUSLStaticSamplerDesc *desc) {
+dx12_staticSamplerFilter(const GPUStaticSamplerDesc *desc) {
   bool minLinear;
   bool magLinear;
   bool mipLinear;
@@ -33,9 +33,9 @@ dx12_uslSamplerFilter(const GPUUSLStaticSamplerDesc *desc) {
       D3D12_FILTER_ANISOTROPIC;
   }
 
-  minLinear = desc->minFilter == GPUUSLSamplerFilterLinear;
-  magLinear = desc->magFilter == GPUUSLSamplerFilterLinear;
-  mipLinear = desc->mipFilter == GPUUSLSamplerFilterLinear;
+  minLinear = desc->minFilter == USL_RUNTIME_FILTER_LINEAR;
+  magLinear = desc->magFilter == USL_RUNTIME_FILTER_LINEAR;
+  mipLinear = desc->mipFilter == USL_RUNTIME_FILTER_LINEAR;
 
   if (desc->hasCompare) {
     if (!minLinear && !magLinear && !mipLinear) return D3D12_FILTER_COMPARISON_MIN_MAG_MIP_POINT;
@@ -60,16 +60,16 @@ dx12_uslSamplerFilter(const GPUUSLStaticSamplerDesc *desc) {
 
 GPU_HIDE
 D3D12_TEXTURE_ADDRESS_MODE
-dx12_uslSamplerAddressMode(uint32_t mode) {
+dx12_staticSamplerAddressMode(uint32_t mode) {
   switch (mode) {
-    case GPUUSLSamplerAddressRepeat:
+    case USL_RUNTIME_ADDRESS_REPEAT:
       return D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-    case GPUUSLSamplerAddressMirroredRepeat:
+    case USL_RUNTIME_ADDRESS_MIRRORED_REPEAT:
       return D3D12_TEXTURE_ADDRESS_MODE_MIRROR;
-    case GPUUSLSamplerAddressClampToZero:
-    case GPUUSLSamplerAddressClampToBorder:
+    case USL_RUNTIME_ADDRESS_CLAMP_TO_ZERO:
+    case USL_RUNTIME_ADDRESS_CLAMP_TO_BORDER:
       return D3D12_TEXTURE_ADDRESS_MODE_BORDER;
-    case GPUUSLSamplerAddressClampToEdge:
+    case USL_RUNTIME_ADDRESS_CLAMP_TO_EDGE:
     default:
       return D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
   }
@@ -77,23 +77,23 @@ dx12_uslSamplerAddressMode(uint32_t mode) {
 
 GPU_HIDE
 D3D12_COMPARISON_FUNC
-dx12_uslSamplerCompareFunc(uint32_t func) {
+dx12_staticSamplerCompareFunc(uint32_t func) {
   switch (func) {
-    case GPUUSLSamplerCompareLess:
+    case USL_RUNTIME_COMPARE_LESS:
       return D3D12_COMPARISON_FUNC_LESS;
-    case GPUUSLSamplerCompareEqual:
+    case USL_RUNTIME_COMPARE_EQUAL:
       return D3D12_COMPARISON_FUNC_EQUAL;
-    case GPUUSLSamplerCompareLessEqual:
+    case USL_RUNTIME_COMPARE_LESS_EQUAL:
       return D3D12_COMPARISON_FUNC_LESS_EQUAL;
-    case GPUUSLSamplerCompareGreater:
+    case USL_RUNTIME_COMPARE_GREATER:
       return D3D12_COMPARISON_FUNC_GREATER;
-    case GPUUSLSamplerCompareNotEqual:
+    case USL_RUNTIME_COMPARE_NOT_EQUAL:
       return D3D12_COMPARISON_FUNC_NOT_EQUAL;
-    case GPUUSLSamplerCompareGreaterEqual:
+    case USL_RUNTIME_COMPARE_GREATER_EQUAL:
       return D3D12_COMPARISON_FUNC_GREATER_EQUAL;
-    case GPUUSLSamplerCompareAlways:
+    case USL_RUNTIME_COMPARE_ALWAYS:
       return D3D12_COMPARISON_FUNC_ALWAYS;
-    case GPUUSLSamplerCompareNever:
+    case USL_RUNTIME_COMPARE_NEVER:
     default:
       return D3D12_COMPARISON_FUNC_NEVER;
   }
@@ -101,36 +101,39 @@ dx12_uslSamplerCompareFunc(uint32_t func) {
 
 GPU_HIDE
 int
-dx12_fillStaticSamplerDescFromUSL(const GPUUSLStaticSamplerDesc *uslDesc,
-                                  uint32_t shaderRegister,
-                                  D3D12_SHADER_VISIBILITY visibility,
-                                  D3D12_STATIC_SAMPLER_DESC *outDesc) {
+dx12_fillSourceSamplerDesc(const GPUStaticSamplerDesc *sourceDesc,
+                           uint32_t                    shaderRegister,
+                           D3D12_SHADER_VISIBILITY     visibility,
+                           D3D12_STATIC_SAMPLER_DESC  *outDesc) {
   D3D12_TEXTURE_ADDRESS_MODE addressMode;
 
-  if (!outDesc || !GPUUSLStaticSamplerDescIsValid(uslDesc)) {
+  if (!outDesc || !gpuStaticSamplerDescIsValid(sourceDesc)) {
     return 0;
   }
 
+  addressMode = dx12_staticSamplerAddressMode(sourceDesc->addressMode);
+
   memset(outDesc, 0, sizeof(*outDesc));
-  outDesc->Filter = dx12_uslSamplerFilter(uslDesc);
-  addressMode = uslDesc ?
-    dx12_uslSamplerAddressMode(uslDesc->addressMode) :
-    D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-  outDesc->AddressU = addressMode;
-  outDesc->AddressV = addressMode;
-  outDesc->AddressW = addressMode;
-  outDesc->MipLODBias = 0.0f;
-  outDesc->MaxAnisotropy = uslDesc && uslDesc->maxAnisotropy > 1u ?
-    (uslDesc->maxAnisotropy > 16u ? 16u : uslDesc->maxAnisotropy) :
-    1u;
-  outDesc->ComparisonFunc = uslDesc && uslDesc->hasCompare ?
-    dx12_uslSamplerCompareFunc(uslDesc->compareFunc) :
-    D3D12_COMPARISON_FUNC_NEVER;
-  outDesc->BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
-  outDesc->MinLOD = 0.0f;
-  outDesc->MaxLOD = D3D12_FLOAT32_MAX;
-  outDesc->ShaderRegister = shaderRegister;
-  outDesc->RegisterSpace = 0;
+  outDesc->Filter           = dx12_staticSamplerFilter(sourceDesc);
+  outDesc->AddressU         = addressMode;
+  outDesc->AddressV         = addressMode;
+  outDesc->AddressW         = addressMode;
+  outDesc->MipLODBias       = 0.0f;
+  outDesc->MaxAnisotropy    = sourceDesc->maxAnisotropy > 1u
+                                ? (sourceDesc->maxAnisotropy > 16u
+                                     ? 16u
+                                     : sourceDesc->maxAnisotropy)
+                                : 1u;
+  outDesc->ComparisonFunc   = sourceDesc->hasCompare
+                                ? dx12_staticSamplerCompareFunc(
+                                    sourceDesc->compareFunc
+                                  )
+                                : D3D12_COMPARISON_FUNC_NEVER;
+  outDesc->BorderColor      = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+  outDesc->MinLOD           = 0.0f;
+  outDesc->MaxLOD           = D3D12_FLOAT32_MAX;
+  outDesc->ShaderRegister   = shaderRegister;
+  outDesc->RegisterSpace    = 0;
   outDesc->ShaderVisibility = visibility;
   return 1;
 }
@@ -180,25 +183,25 @@ dx12_fillStaticSamplerDesc(const GPUSamplerDesc       *desc,
                            uint32_t                    registerSpace,
                            D3D12_SHADER_VISIBILITY     visibility,
                            D3D12_STATIC_SAMPLER_DESC *outDesc) {
-  GPUUSLStaticSamplerDesc uslDesc = {0};
+  GPUStaticSamplerDesc staticDesc = {0};
 
   if (!desc || !outDesc) {
     return 0;
   }
 
-  uslDesc.minFilter = desc->minFilter == GPU_FILTER_LINEAR
-                        ? GPUUSLSamplerFilterLinear
-                        : GPUUSLSamplerFilterNearest;
-  uslDesc.magFilter = desc->magFilter == GPU_FILTER_LINEAR
-                        ? GPUUSLSamplerFilterLinear
-                        : GPUUSLSamplerFilterNearest;
-  uslDesc.mipFilter = desc->mipFilter == GPU_MIP_FILTER_LINEAR
-                        ? GPUUSLSamplerFilterLinear
-                        : GPUUSLSamplerFilterNearest;
-  uslDesc.maxAnisotropy = 1u;
+  staticDesc.minFilter     = desc->minFilter == GPU_FILTER_LINEAR
+                               ? USL_RUNTIME_FILTER_LINEAR
+                               : USL_RUNTIME_FILTER_NEAREST;
+  staticDesc.magFilter     = desc->magFilter == GPU_FILTER_LINEAR
+                               ? USL_RUNTIME_FILTER_LINEAR
+                               : USL_RUNTIME_FILTER_NEAREST;
+  staticDesc.mipFilter     = desc->mipFilter == GPU_MIP_FILTER_LINEAR
+                               ? USL_RUNTIME_FILTER_LINEAR
+                               : USL_RUNTIME_FILTER_NEAREST;
+  staticDesc.maxAnisotropy = 1u;
 
   memset(outDesc, 0, sizeof(*outDesc));
-  outDesc->Filter           = dx12_uslSamplerFilter(&uslDesc);
+  outDesc->Filter           = dx12_staticSamplerFilter(&staticDesc);
   outDesc->AddressU         = dx12__addressMode(desc->addressU);
   outDesc->AddressV         = dx12__addressMode(desc->addressV);
   outDesc->AddressW         = dx12__addressMode(desc->addressW);
@@ -220,8 +223,8 @@ dx12_createSampler(GPUApi                    * __restrict api,
                    const GPUSamplerCreateInfo *info,
                    bool                       staticIfSupported,
                    GPUSampler               **outSampler) {
-  GPUUSLStaticSamplerDesc uslDesc = {0};
-  D3D12_SAMPLER_DESC      desc = {0};
+  GPUStaticSamplerDesc staticDesc = {0};
+  D3D12_SAMPLER_DESC   desc       = {0};
 
   GPU__UNUSED(api);
   GPU__UNUSED(staticIfSupported);
@@ -229,59 +232,23 @@ dx12_createSampler(GPUApi                    * __restrict api,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  uslDesc.minFilter = info->desc.minFilter == GPU_FILTER_LINEAR
-                        ? GPUUSLSamplerFilterLinear
-                        : GPUUSLSamplerFilterNearest;
-  uslDesc.magFilter = info->desc.magFilter == GPU_FILTER_LINEAR
-                        ? GPUUSLSamplerFilterLinear
-                        : GPUUSLSamplerFilterNearest;
-  uslDesc.mipFilter = info->desc.mipFilter == GPU_MIP_FILTER_LINEAR
-                        ? GPUUSLSamplerFilterLinear
-                        : GPUUSLSamplerFilterNearest;
-  uslDesc.maxAnisotropy = 1u;
+  staticDesc.minFilter     = info->desc.minFilter == GPU_FILTER_LINEAR
+                               ? USL_RUNTIME_FILTER_LINEAR
+                               : USL_RUNTIME_FILTER_NEAREST;
+  staticDesc.magFilter     = info->desc.magFilter == GPU_FILTER_LINEAR
+                               ? USL_RUNTIME_FILTER_LINEAR
+                               : USL_RUNTIME_FILTER_NEAREST;
+  staticDesc.mipFilter     = info->desc.mipFilter == GPU_MIP_FILTER_LINEAR
+                               ? USL_RUNTIME_FILTER_LINEAR
+                               : USL_RUNTIME_FILTER_NEAREST;
+  staticDesc.maxAnisotropy = 1u;
 
-  desc.Filter         = dx12_uslSamplerFilter(&uslDesc);
+  desc.Filter         = dx12_staticSamplerFilter(&staticDesc);
   desc.AddressU       = dx12__addressMode(info->desc.addressU);
   desc.AddressV       = dx12__addressMode(info->desc.addressV);
   desc.AddressW       = dx12__addressMode(info->desc.addressW);
   desc.MaxAnisotropy  = 1u;
   desc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
-  desc.MaxLOD         = D3D12_FLOAT32_MAX;
-  return dx12__createSampler(device, &desc, outSampler);
-}
-
-GPU_HIDE
-GPUResult
-dx12_createSamplerFromUSL(GPUApi                        * __restrict api,
-                          GPUDevice                     * __restrict device,
-                          const GPUUSLStaticSamplerDesc *uslDesc,
-                          bool                           staticIfSupported,
-                          GPUSampler                   **outSampler) {
-  D3D12_SAMPLER_DESC desc = {0};
-  D3D12_TEXTURE_ADDRESS_MODE addressMode;
-
-  GPU__UNUSED(api);
-  GPU__UNUSED(staticIfSupported);
-  if (!GPUUSLStaticSamplerDescIsValid(uslDesc)) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  if (uslDesc->coordSpace == GPUUSLSamplerCoordPixel) {
-    return GPU_ERROR_UNSUPPORTED;
-  }
-
-  addressMode = dx12_uslSamplerAddressMode(uslDesc->addressMode);
-  desc.Filter         = dx12_uslSamplerFilter(uslDesc);
-  desc.AddressU       = addressMode;
-  desc.AddressV       = addressMode;
-  desc.AddressW       = addressMode;
-  desc.MaxAnisotropy  = uslDesc->maxAnisotropy > 1u
-                          ? (uslDesc->maxAnisotropy > 16u
-                               ? 16u
-                               : uslDesc->maxAnisotropy)
-                          : 1u;
-  desc.ComparisonFunc = uslDesc->hasCompare
-                          ? dx12_uslSamplerCompareFunc(uslDesc->compareFunc)
-                          : D3D12_COMPARISON_FUNC_NEVER;
   desc.MaxLOD         = D3D12_FLOAT32_MAX;
   return dx12__createSampler(device, &desc, outSampler);
 }
@@ -295,7 +262,6 @@ dx12_destroySampler(GPUSampler * __restrict sampler) {
 GPU_HIDE
 void
 dx12_initSampler(GPUApiSampler *api) {
-  api->createSampler                     = dx12_createSampler;
-  api->createSamplerFromUSLStaticSampler = dx12_createSamplerFromUSL;
-  api->destroySampler                    = dx12_destroySampler;
+  api->createSampler  = dx12_createSampler;
+  api->destroySampler = dx12_destroySampler;
 }

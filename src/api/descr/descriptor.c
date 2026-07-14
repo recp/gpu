@@ -708,30 +708,6 @@ gpu_validateLayoutEntries(const GPUBindGroupLayoutEntry *entries,
   return 1;
 }
 
-GPU_EXPORT
-int
-GPUUSLStaticSamplerDescIsValid(const GPUUSLStaticSamplerDesc *desc) {
-  if (!desc) {
-    return 0;
-  }
-
-  if (desc->minFilter > GPUUSLSamplerFilterLinear ||
-      desc->magFilter > GPUUSLSamplerFilterLinear ||
-      desc->mipFilter > GPUUSLSamplerFilterLinear) {
-    return 0;
-  }
-
-  if (desc->addressMode > GPUUSLSamplerAddressClampToBorder ||
-      desc->coordSpace > GPUUSLSamplerCoordPixel ||
-      desc->compareFunc > GPUUSLSamplerCompareAlways ||
-      desc->hasCompare > 1u ||
-      desc->maxAnisotropy > 255u) {
-    return 0;
-  }
-
-  return 1;
-}
-
 static int
 gpu_bindGroupEntryHasResource(const GPUBindGroupLayoutEntry *layoutEntry,
                               const GPUBindGroupEntry *entry) {

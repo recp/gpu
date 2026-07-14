@@ -19,12 +19,26 @@
 
 #include "../common.h"
 
+#include <us/compiler.h>
+
+typedef struct GPUStaticSamplerDesc {
+  uint32_t logicalIndex;
+  uint32_t minFilter;
+  uint32_t magFilter;
+  uint32_t mipFilter;
+  uint32_t addressMode;
+  uint32_t coordSpace;
+  uint32_t compareFunc;
+  uint32_t hasCompare;
+  uint32_t maxAnisotropy;
+} GPUStaticSamplerDesc;
+
 typedef struct GPUShaderStaticSamplerInfo {
-  GPUUSLStaticSamplerDesc desc;
-  GPUShaderStageFlags     visibility;
-  uint32_t                hlslIndex;
-  uint32_t                spirvGroup;
-  uint32_t                spirvBinding;
+  GPUStaticSamplerDesc desc;
+  GPUShaderStageFlags  visibility;
+  uint32_t             hlslIndex;
+  uint32_t             spirvGroup;
+  uint32_t             spirvBinding;
 } GPUShaderStaticSamplerInfo;
 
 typedef struct GPUShaderStaticSamplerInfoList {
@@ -88,5 +102,9 @@ GPU_HIDE
 const GPUShaderStaticSamplerInfo *
 gpuGetShaderLibraryStaticSamplers(const GPUShaderLibrary *library,
                                   uint32_t *outCount);
+
+GPU_HIDE
+int
+gpuStaticSamplerDescIsValid(const GPUStaticSamplerDesc *desc);
 
 #endif /* gpu_library_internal_h */

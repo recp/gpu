@@ -496,8 +496,8 @@ vk_fillSamplerInfo(const GPUSamplerDesc *desc, VkSamplerCreateInfo *outInfo);
 
 GPU_HIDE
 void
-vk_fillUSLSamplerInfo(const GPUUSLStaticSamplerDesc *desc,
-                      VkSamplerCreateInfo           *outInfo);
+vk_fillStaticSamplerInfo(const GPUStaticSamplerDesc *desc,
+                         VkSamplerCreateInfo        *outInfo);
 
 GPU_HIDE
 GPUResult

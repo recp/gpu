@@ -350,8 +350,8 @@ gpu_shaderBackendBindingFromUSLResource(GPUBackend backend,
 }
 
 static int
-gpu_staticSamplerDescEqual(const GPUUSLStaticSamplerDesc *a,
-                           const GPUUSLStaticSamplerDesc *b) {
+gpu_staticSamplerDescEqual(const GPUStaticSamplerDesc *a,
+                           const GPUStaticSamplerDesc *b) {
   return a && b &&
          a->minFilter == b->minFilter &&
          a->magFilter == b->magFilter &&
@@ -361,6 +361,30 @@ gpu_staticSamplerDescEqual(const GPUUSLStaticSamplerDesc *a,
          a->compareFunc == b->compareFunc &&
          a->hasCompare == b->hasCompare &&
          a->maxAnisotropy == b->maxAnisotropy;
+}
+
+GPU_HIDE
+int
+gpuStaticSamplerDescIsValid(const GPUStaticSamplerDesc *desc) {
+  if (!desc) {
+    return 0;
+  }
+
+  if (desc->minFilter > USL_RUNTIME_FILTER_LINEAR ||
+      desc->magFilter > USL_RUNTIME_FILTER_LINEAR ||
+      desc->mipFilter > USL_RUNTIME_FILTER_LINEAR) {
+    return 0;
+  }
+
+  if (desc->addressMode > USL_RUNTIME_ADDRESS_CLAMP_TO_BORDER ||
+      desc->coordSpace > USL_RUNTIME_COORD_PIXEL ||
+      desc->compareFunc > USL_RUNTIME_COMPARE_ALWAYS ||
+      desc->hasCompare > 1u ||
+      desc->maxAnisotropy > 255u) {
+    return 0;
+  }
+
+  return 1;
 }
 
 static int
@@ -760,7 +784,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
     item.spirvBinding = src->spirv_binding >= 0
                           ? (uint32_t)src->spirv_binding
                           : UINT32_MAX;
-    if (!GPUUSLStaticSamplerDescIsValid(&item.desc)) {
+    if (!gpuStaticSamplerDescIsValid(&item.desc)) {
       free(metadata);
       return 0;
     }

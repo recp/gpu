@@ -516,7 +516,7 @@ dx12__fillStaticSamplers(GPUPipelineLayout                 *layout,
   for (uint32_t i = 0u; i < sourceSamplerCount; i++) {
     if (cursor >= samplerCount ||
         sourceSamplers[i].hlslIndex == UINT32_MAX ||
-        !dx12_fillStaticSamplerDescFromUSL(
+        !dx12_fillSourceSamplerDesc(
           &sourceSamplers[i].desc,
           sourceSamplers[i].hlslIndex,
           dx12__shaderVisibility(sourceSamplers[i].visibility),

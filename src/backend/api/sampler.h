@@ -32,12 +32,6 @@ typedef struct GPUApiSampler {
                              bool staticIfSupported,
                              GPUSampler **outSampler);
 
-  GPUResult (*createSamplerFromUSLStaticSampler)(struct GPUApi *__restrict api,
-                                                 GPUDevice *__restrict device,
-                                                 const GPUUSLStaticSamplerDesc *desc,
-                                                 bool staticIfSupported,
-                                                 GPUSampler **outSampler);
-
   void (*destroySampler)(GPUSampler *__restrict sampler);
 } GPUApiSampler;
 

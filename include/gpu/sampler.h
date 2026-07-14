@@ -22,7 +22,6 @@ extern "C" {
 
 #include "common.h"
 #include "cmdqueue.h"
-#include "usl.h"
 
 typedef struct GPUDevice GPUDevice;
 
@@ -65,13 +64,6 @@ GPUCreateSampler(GPUDevice                  * __restrict device,
                  const GPUSamplerCreateInfo * __restrict info,
                  bool                                    staticIfSupported,
                  GPUSampler                ** __restrict outSampler);
-
-GPU_EXPORT
-GPUResult
-GPUCreateSamplerFromUSLStaticSampler(GPUDevice * __restrict device,
-                                     const GPUUSLStaticSamplerDesc *desc,
-                                     bool staticIfSupported,
-                                     GPUSampler ** __restrict outSampler);
 
 GPU_EXPORT
 void
