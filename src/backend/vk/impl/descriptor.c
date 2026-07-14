@@ -176,18 +176,22 @@ vk_createBindGroupLayout(GPUDevice          *device,
   const GPUBindGroupLayoutEntry     *entries;
   const uint32_t                    *backendBindings;
   VkDescriptorSetLayoutBinding      *bindings;
+  VkDescriptorBindingFlags          *bindingFlags;
   VkDescriptorSetLayoutCreateInfo    info = {0};
+  VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo = {0};
   VkDynamicBindingOrder              dynamicBindings[GPU_VK_MAX_DYNAMIC_OFFSETS];
   uint32_t                           backendBindingCount;
   uint32_t                           entryCount;
   uint32_t                           immutableSamplerCount;
   uint64_t                           poolDescriptorCount;
+  bool                               bindless;
 
   if (!device || !device->_priv || !layout) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   entries = GPUGetBindGroupLayoutEntries(layout, &entryCount);
+  bindless = gpuBindGroupLayoutIsBindless(layout);
   backendBindings = gpuGetBindGroupLayoutBackendBindings(
     layout,
     &backendBindingCount
@@ -373,18 +377,40 @@ vk_createBindGroupLayout(GPUDevice          *device,
     }
   }
 
+  bindingFlags = NULL;
+  if (bindless && entryCount > 0u) {
+    bindingFlags = calloc(entryCount, sizeof(*bindingFlags));
+    if (!bindingFlags) {
+      free(bindings);
+      vk__destroyBindGroupLayoutState(native);
+      return GPU_ERROR_OUT_OF_MEMORY;
+    }
+    for (uint32_t i = 0u; i < entryCount; i++) {
+      if (!entries[i].immutableSampler) {
+        bindingFlags[i] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+      }
+    }
+    bindingFlagsInfo.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+    bindingFlagsInfo.bindingCount  = entryCount;
+    bindingFlagsInfo.pBindingFlags = bindingFlags;
+  }
+
   info.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  info.pNext        = bindless ? &bindingFlagsInfo : NULL;
   info.bindingCount = entryCount;
   info.pBindings    = bindings;
   if (vkCreateDescriptorSetLayout(native->device,
                                   &info,
                                   NULL,
                                   &native->layout) != VK_SUCCESS) {
+    free(bindingFlags);
     free(bindings);
     vk__destroyBindGroupLayoutState(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
+  free(bindingFlags);
   free(bindings);
   layout->_native = native;
   return GPU_OK;
@@ -917,6 +943,11 @@ vk__writeDescriptor(void *context,
     }
     return;
   }
+  if ((binding->kind == GPUBindKindBuffer && !binding->buffer) ||
+      (binding->kind == GPUBindKindTexture && !binding->textureView) ||
+      (binding->kind == GPUBindKindSampler && !binding->sampler)) {
+    return;
+  }
 
   writeIndex = writeContext->writeCount;
   write      = &writeContext->writes[writeIndex];
@@ -1055,6 +1086,34 @@ vk_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
 }
 
 GPU_HIDE
+bool
+vk_updateBindGroup(GPUBindGroup            *group,
+                   uint32_t                 entryCount,
+                   const GPUBindGroupEntry *entries) {
+  GPUBindGroupVk        *native;
+  GPUDescriptorWriteVk   writeContext = {0};
+
+  native = group ? group->_native : NULL;
+  if (!native || !native->set || !native->device) {
+    return false;
+  }
+
+  writeContext.device = group->_device;
+  writeContext.group  = native;
+  writeContext.valid  = true;
+  if (!gpuForEachBindGroupEntry(group,
+                                entryCount,
+                                entries,
+                                vk__writeDescriptor,
+                                &writeContext) ||
+      !writeContext.valid) {
+    return false;
+  }
+  vk__flushDescriptorWrites(&writeContext);
+  return true;
+}
+
+GPU_HIDE
 void
 vk_destroyBindGroup(GPUBindGroup *group) {
   if (!group) {
@@ -1169,6 +1228,7 @@ vk_initDescriptor(GPUApiDescriptor *api) {
   api->createPipelineLayout   = vk_createPipelineLayout;
   api->destroyPipelineLayout  = vk_destroyPipelineLayout;
   api->createBindGroup        = vk_createBindGroup;
+  api->updateBindGroup        = vk_updateBindGroup;
   api->destroyBindGroup       = vk_destroyBindGroup;
   api->bindRenderGroup        = vk_bindRenderGroup;
   api->bindComputeGroup       = vk_bindComputeGroup;

@@ -61,13 +61,19 @@ create_color_texture(GPUDevice       *device,
 }
 
 static int
-gpu_testDescriptorArray(GPUDevice *device, const char *bytecodePath) {
+gpu_testDescriptorArray(GPUDevice *device,
+                        const char *bytecodePath,
+                        bool bindless) {
   static const uint8_t red[4]   = {255u, 0u, 0u, 255u};
   static const uint8_t green[4] = {0u, 255u, 0u, 255u};
   static const uint8_t black[4] = {0u, 0u, 0u, 255u};
   GPUQueue                         *queue;
   GPUShaderLibrary                 *library;
   GPUShaderLayout                  *shaderLayout;
+  GPUBindGroupLayout               *bindlessLayout;
+  GPUPipelineLayout                *bindlessPipelineLayout;
+  GPUBindGroupLayout               *activeGroupLayout;
+  GPUPipelineLayout                *activePipelineLayout;
   GPUComputePipeline               *pipeline;
   GPUBindGroup                     *group;
   GPUTexture                       *textures[2];
@@ -85,6 +91,10 @@ gpu_testDescriptorArray(GPUDevice *device, const char *bytecodePath) {
   GPUFence                         *fence;
   void                             *bytecode;
   const GPUBindGroupLayoutEntry    *layoutEntries;
+  GPUBindGroupLayout               *pipelineGroups[2];
+  GPUBindlessLayoutEXT              bindlessInfo      = {0};
+  GPUBindGroupLayoutCreateInfo      bindlessLayoutInfo = {0};
+  GPUPipelineLayoutCreateInfo       pipelineLayoutInfo = {0};
   GPUComputePipelineCreateInfo      pipelineInfo   = {0};
   GPUSamplerCreateInfo              samplerInfo    = {0};
   GPUBufferCreateInfo               bufferInfo     = {0};
@@ -109,8 +119,12 @@ gpu_testDescriptorArray(GPUDevice *device, const char *bytecodePath) {
   queue              = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   library            = NULL;
   shaderLayout       = NULL;
-  pipeline           = NULL;
-  group              = NULL;
+  bindlessLayout         = NULL;
+  bindlessPipelineLayout = NULL;
+  activeGroupLayout      = NULL;
+  activePipelineLayout   = NULL;
+  pipeline               = NULL;
+  group                  = NULL;
   textures[0]        = NULL;
   textures[1]        = NULL;
   views[0]           = NULL;
@@ -161,10 +175,50 @@ gpu_testDescriptorArray(GPUDevice *device, const char *bytecodePath) {
     goto cleanup;
   }
 
+  activeGroupLayout    = shaderLayout->bindGroupLayouts[1];
+  activePipelineLayout = shaderLayout->pipelineLayout;
+  if (bindless) {
+    bindlessInfo.chain.sType      = GPU_STRUCTURE_TYPE_BINDLESS_LAYOUT_EXT;
+    bindlessInfo.chain.structSize = sizeof(bindlessInfo);
+    bindlessInfo.sourceLayout     = shaderLayout->bindGroupLayouts[1];
+    bindlessLayoutInfo.chain.sType =
+      GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+    bindlessLayoutInfo.chain.structSize = sizeof(bindlessLayoutInfo);
+    bindlessLayoutInfo.chain.pNext      = &bindlessInfo;
+    bindlessLayoutInfo.label            = "api-bindless-descriptor-array";
+    if (GPUCreateBindGroupLayout(device,
+                                 &bindlessLayoutInfo,
+                                 &bindlessLayout) != GPU_OK ||
+        !bindlessLayout) {
+      fprintf(stderr, "bindless descriptor array layout creation failed\n");
+      ok = 0;
+      goto cleanup;
+    }
+
+    pipelineGroups[0] = shaderLayout->bindGroupLayouts[0];
+    pipelineGroups[1] = bindlessLayout;
+    pipelineLayoutInfo.chain.sType =
+      GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.chain.structSize   = sizeof(pipelineLayoutInfo);
+    pipelineLayoutInfo.label              = "api-bindless-descriptor-array";
+    pipelineLayoutInfo.bindGroupLayoutCount = 2u;
+    pipelineLayoutInfo.ppBindGroupLayouts = pipelineGroups;
+    if (GPUCreatePipelineLayout(device,
+                                &pipelineLayoutInfo,
+                                &bindlessPipelineLayout) != GPU_OK ||
+        !bindlessPipelineLayout) {
+      fprintf(stderr, "bindless descriptor pipeline layout creation failed\n");
+      ok = 0;
+      goto cleanup;
+    }
+    activeGroupLayout    = bindlessLayout;
+    activePipelineLayout = bindlessPipelineLayout;
+  }
+
   pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
   pipelineInfo.chain.structSize = sizeof(pipelineInfo);
   pipelineInfo.label            = "api-descriptor-array";
-  pipelineInfo.layout           = shaderLayout->pipelineLayout;
+  pipelineInfo.layout           = activePipelineLayout;
   pipelineInfo.library          = library;
   pipelineInfo.entryPoint       = "descriptor_array_cs";
   if (GPUCreateComputePipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
@@ -298,11 +352,21 @@ gpu_testDescriptorArray(GPUDevice *device, const char *bytecodePath) {
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "api-descriptor-array";
-  groupInfo.layout           = shaderLayout->bindGroupLayouts[1];
-  groupInfo.entryCount       = (uint32_t)GPU_ARRAY_LEN(groupEntries);
-  groupInfo.pEntries         = groupEntries;
+  groupInfo.layout           = activeGroupLayout;
+  groupInfo.entryCount       = bindless
+                                 ? 0u
+                                 : (uint32_t)GPU_ARRAY_LEN(groupEntries);
+  groupInfo.pEntries         = bindless ? NULL : groupEntries;
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "descriptor array bind group creation failed\n");
+    ok = 0;
+    goto cleanup;
+  }
+  if (bindless &&
+      GPUUpdateBindGroupEXT(group,
+                            (uint32_t)GPU_ARRAY_LEN(groupEntries),
+                            groupEntries) != GPU_OK) {
+    fprintf(stderr, "bindless descriptor array update failed\n");
     ok = 0;
     goto cleanup;
   }
@@ -430,6 +494,8 @@ cleanup:
   GPUDestroyTexture(storageTextures[1]);
   GPUDestroyTexture(storageTextures[0]);
   GPUDestroyComputePipeline(pipeline);
+  GPUDestroyPipelineLayout(bindlessPipelineLayout);
+  GPUDestroyBindGroupLayout(bindlessLayout);
   GPUDestroyShaderLayout(shaderLayout);
   GPUDestroyShaderLibrary(library);
   free(bytecode);
@@ -438,7 +504,13 @@ cleanup:
 
 int
 gpu_test_descriptor_array(GPUDevice *device, const char *bytecodePath) {
-  return gpu_testDescriptorArray(device, bytecodePath);
+  return gpu_testDescriptorArray(device, bytecodePath, false);
+}
+
+int
+gpu_test_bindless_descriptor_array(GPUDevice *device,
+                                   const char *bytecodePath) {
+  return gpu_testDescriptorArray(device, bytecodePath, true);
 }
 
 int
@@ -485,7 +557,7 @@ gpu_test_descriptor_indexing(GPUAdapter *adapter, const char *bytecodePath) {
     goto cleanup;
   }
 
-  ok = gpu_testDescriptorArray(device, bytecodePath);
+  ok = gpu_testDescriptorArray(device, bytecodePath, false);
 
 cleanup:
   GPUDestroyShaderLibrary(disabledLibrary);

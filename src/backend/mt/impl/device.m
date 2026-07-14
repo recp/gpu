@@ -289,6 +289,7 @@ mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
     case GPU_FEATURE_INDIRECT_DRAW:
     case GPU_FEATURE_SHADER_F16:
     case GPU_FEATURE_DESCRIPTOR_INDEXING:
+    case GPU_FEATURE_BINDLESS:
       return true;
     case GPU_FEATURE_SUBGROUPS:
       mt_probeSubgroups(adapterMT);

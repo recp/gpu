@@ -20,6 +20,14 @@ run_bindgroup(void *ctx) {
 }
 
 static int
+run_bindless(void *ctx) {
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_bindless(testCtx->adapter,
+                           testCtx->descriptorIndexingBytecodePath);
+}
+
+static int
 run_resources(void *ctx) {
   return gpu_test_resources(((GPUApiTestContext *)ctx)->device);
 }
@@ -191,7 +199,7 @@ main(int argc, char **argv) {
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUApiTestContext      ctx;
-  GPUApiTest             tests[21];
+  GPUApiTest             tests[22];
   int                    ok;
 
   if (argc != 13 && argc != 14) {
@@ -284,6 +292,7 @@ main(int argc, char **argv) {
   };
   tests[19] = (GPUApiTest){ "subgroup", run_subgroup, &ctx };
   tests[20] = (GPUApiTest){ "shader-f16", run_shader_f16, &ctx };
+  tests[21] = (GPUApiTest){ "bindless", run_bindless, &ctx };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 

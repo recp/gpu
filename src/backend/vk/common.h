@@ -203,6 +203,7 @@ typedef struct GPUAdapterVk {
   bool                       dynamicRendering;
   bool                       shaderFloat16;
   bool                       descriptorIndexing;
+  bool                       bindless;
   bool                       timelineSemaphore;
   bool                       synchronization2;
 } GPUAdapterVk;

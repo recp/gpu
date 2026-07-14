@@ -55,6 +55,7 @@ typedef struct GPUBindGroupBindingView {
   GPUBindingType  bindingType;
   uint32_t        binding;
   uint32_t        arrayIndex;
+  uint32_t        kindIndex;
   GPUBindKind     kind;
   bool            hasDynamicOffset;
 } GPUBindGroupBindingView;
@@ -113,6 +114,14 @@ gpuForEachBindGroupBinding(GPUBindGroup *group,
 
 GPU_HIDE
 int
+gpuForEachBindGroupEntry(GPUBindGroup            *group,
+                         uint32_t                 entryCount,
+                         const GPUBindGroupEntry *entries,
+                         GPUBindGroupBindingFn    fn,
+                         void                    *ctx);
+
+GPU_HIDE
+int
 gpuForEachBindGroupBindingWithDynamicOffsets(GPUPipelineLayout *pipelineLayout,
                                              uint32_t groupIndex,
                                              GPUBindGroup *group,
@@ -161,6 +170,10 @@ gpuBindGroupGetLayout(GPUBindGroup *group);
 GPU_HIDE
 GPUDevice *
 gpuBindGroupGetDevice(GPUBindGroup *group);
+
+GPU_HIDE
+bool
+gpuBindGroupLayoutIsBindless(GPUBindGroupLayout *layout);
 
 GPU_HIDE
 int

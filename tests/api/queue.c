@@ -554,7 +554,7 @@ static bool
 feature_set_matches_adapter(const GPUAdapter    *adapter,
                             const GPUFeatureSet *set) {
   for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_VARIABLE_RATE_SHADING;
+       feature <= GPU_FEATURE_BINDLESS;
        feature = (GPUFeature)(feature + 1)) {
     if (feature_set_contains(set, feature) !=
         GPUIsFeatureSupported(adapter, feature)) {
@@ -569,7 +569,7 @@ static bool
 feature_set_matches_device(const GPUDevice     *device,
                            const GPUFeatureSet *set) {
   for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_VARIABLE_RATE_SHADING;
+       feature <= GPU_FEATURE_BINDLESS;
        feature = (GPUFeature)(feature + 1)) {
     if (feature_set_contains(set, feature) !=
         GPUIsFeatureEnabled(device, feature)) {

@@ -30,7 +30,7 @@ struct GPUAdapter {
   bool               supportsIncrementalPresent;
   bool               separatePresentQueue;
   GPUFeature         supportedFeatureStorage[
-    GPU_FEATURE_VARIABLE_RATE_SHADING + 1u
+    GPU_FEATURE_BINDLESS + 1u
   ];
 };
 

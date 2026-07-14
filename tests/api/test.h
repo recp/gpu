@@ -56,6 +56,7 @@ int gpu_test_queue(GPUInstance *instance,
                    GPUDevice   *device);
 int gpu_test_sampler(GPUDevice *device);
 int gpu_test_bindgroup(GPUDevice *device);
+int gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath);
 int gpu_test_resources(GPUDevice *device);
 int gpu_test_copy(GPUDevice *device);
 int gpu_test_texture_transfer(GPUDevice *device);
@@ -76,6 +77,8 @@ int gpu_test_shader(GPUDevice *device,
                     const char *bytecodePath,
                     const char *descriptorArrayBytecodePath);
 int gpu_test_descriptor_array(GPUDevice *device, const char *bytecodePath);
+int gpu_test_bindless_descriptor_array(GPUDevice *device,
+                                       const char *bytecodePath);
 int gpu_test_descriptor_indexing(GPUAdapter *adapter, const char *bytecodePath);
 int gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath);
 int gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath);

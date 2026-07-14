@@ -1509,3 +1509,263 @@ gpu_test_bindgroup(GPUDevice *device) {
          check_bind_group_cache(device) &&
          check_metal_pipeline_binding_limits(device);
 }
+
+int
+gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath) {
+  GPUFeature                      feature       = GPU_FEATURE_BINDLESS;
+  GPUDeviceCreateInfo             deviceInfo    = {0};
+  GPUBindlessLayoutEXT            bindlessInfo  = {0};
+  GPUBindGroupLayoutEntry         layoutEntry   = {0};
+  GPUBindGroupLayoutCreateInfo    layoutInfo    = {0};
+  GPUBindGroupCreateInfo          groupInfo     = {0};
+  GPUBindGroupEntry               updateEntry   = {0};
+  GPUBindGroupEntry               duplicateEntries[2] = {{0}};
+  GPUTextureCreateInfo            textureInfo   = {0};
+  GPUTextureViewCreateInfo        viewInfo      = {0};
+  GPUDevice                      *disabled      = NULL;
+  GPUDevice                      *device        = NULL;
+  GPUBindGroupLayout             *layout        = NULL;
+  GPUBindGroupLayout             *bufferLayout  = NULL;
+  GPUBindGroupLayout             *regularLayout = NULL;
+  GPUPipelineLayout              *bufferPipeline = NULL;
+  GPUBindGroup                   *groups[2]      = {NULL, NULL};
+  GPUBindGroup                   *bufferGroup    = NULL;
+  GPUBindGroup                   *regularGroup   = NULL;
+  GPUTexture                     *texture       = NULL;
+  GPUTextureView                 *view          = NULL;
+  GPUBindGroupEntry               regularEntries[2] = {{0}};
+  GPUBindGroupLayout             *pipelineGroups[1] = {NULL};
+  GPUPipelineLayoutCreateInfo     pipelineInfo = {0};
+  GPURenderPassEncoder            renderPass = {0};
+  GPUApiDescriptor                savedDescriptor;
+  GPUApi                         *api;
+  int                             ok            = 0;
+
+  if (!adapter || !GPUIsFeatureSupported(adapter, feature)) {
+    return adapter != NULL;
+  }
+
+  deviceInfo.chain.sType      = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  deviceInfo.chain.structSize = sizeof(deviceInfo);
+  if (GPUCreateDevice(adapter, &deviceInfo, &disabled) != GPU_OK ||
+      !disabled || GPUGetProcAddr(disabled, "GPUUpdateBindGroupEXT")) {
+    fprintf(stderr, "bindless extension was enabled by default\n");
+    goto cleanup;
+  }
+
+  bindlessInfo.chain.sType      = GPU_STRUCTURE_TYPE_BINDLESS_LAYOUT_EXT;
+  bindlessInfo.chain.structSize = sizeof(bindlessInfo);
+  layoutEntry.binding           = 0u;
+  layoutEntry.bindingType       = GPU_BINDING_SAMPLED_TEXTURE;
+  layoutEntry.visibility        = GPU_SHADER_STAGE_COMPUTE_BIT;
+  layoutEntry.arrayCount        = 2u;
+  layoutInfo.chain.sType        = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize   = sizeof(layoutInfo);
+  layoutInfo.chain.pNext        = &bindlessInfo;
+  layoutInfo.label              = "api-bindless-layout";
+  layoutInfo.entryCount         = 1u;
+  layoutInfo.pEntries           = &layoutEntry;
+  if (GPUCreateBindGroupLayout(disabled, &layoutInfo, &layout) !=
+        GPU_ERROR_UNSUPPORTED ||
+      layout) {
+    fprintf(stderr, "bindless layout was accepted without feature enablement\n");
+    goto cleanup;
+  }
+  GPUDestroyDevice(disabled);
+  disabled = NULL;
+
+  deviceInfo.required.featureCount = 1u;
+  deviceInfo.required.pFeatures    = &feature;
+  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+      !GPUIsFeatureEnabled(device, GPU_FEATURE_BINDLESS) ||
+      !GPUIsFeatureEnabled(device, GPU_FEATURE_DESCRIPTOR_INDEXING) ||
+      !GPUGetProcAddr(device, "GPUUpdateBindGroupEXT")) {
+    fprintf(stderr, "bindless feature enablement failed\n");
+    goto cleanup;
+  }
+
+  layoutEntry.arrayCount = 1u;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      layout) {
+    fprintf(stderr, "bindless layout accepted without a resource array\n");
+    goto cleanup;
+  }
+  layoutEntry.bindingType      = GPU_BINDING_UNIFORM_BUFFER;
+  layoutEntry.arrayCount       = 2u;
+  layoutEntry.hasDynamicOffset = true;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      layout) {
+    fprintf(stderr, "bindless layout accepted a dynamic offset\n");
+    goto cleanup;
+  }
+  layoutEntry.bindingType      = GPU_BINDING_SAMPLED_TEXTURE;
+  layoutEntry.hasDynamicOffset = false;
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK ||
+      !layout) {
+    fprintf(stderr, "bindless layout creation failed\n");
+    goto cleanup;
+  }
+
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.label            = "api-bindless-group";
+  groupInfo.layout           = layout;
+  if (GPUCreateBindGroup(device, &groupInfo, &groups[0]) != GPU_OK ||
+      !groups[0] ||
+      GPUCreateBindGroup(device, &groupInfo, &groups[1]) != GPU_OK ||
+      !groups[1] || groups[0] == groups[1]) {
+    fprintf(stderr, "bindless sparse group creation or cache bypass failed\n");
+    goto cleanup;
+  }
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "api-bindless-texture";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = 1u;
+  textureInfo.height           = 1u;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED;
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
+    fprintf(stderr, "bindless texture creation failed\n");
+    goto cleanup;
+  }
+
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.label            = "api-bindless-view";
+  viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  viewInfo.mipLevelCount    = 1u;
+  viewInfo.arrayLayerCount  = 1u;
+  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK || !view) {
+    fprintf(stderr, "bindless texture view creation failed\n");
+    goto cleanup;
+  }
+
+  layoutInfo.chain.pNext = NULL;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &regularLayout) != GPU_OK ||
+      !regularLayout) {
+    fprintf(stderr, "regular comparison layout creation failed\n");
+    goto cleanup;
+  }
+  for (uint32_t i = 0u; i < 2u; i++) {
+    regularEntries[i].binding     = 0u;
+    regularEntries[i].arrayIndex  = i;
+    regularEntries[i].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+    regularEntries[i].textureView = view;
+  }
+  groupInfo.layout     = regularLayout;
+  groupInfo.entryCount = 2u;
+  groupInfo.pEntries   = regularEntries;
+  if (GPUCreateBindGroup(device, &groupInfo, &regularGroup) != GPU_OK ||
+      !regularGroup) {
+    fprintf(stderr, "regular comparison group creation failed\n");
+    goto cleanup;
+  }
+
+  updateEntry.binding     = 0u;
+  updateEntry.arrayIndex  = 1u;
+  updateEntry.bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+  updateEntry.textureView = view;
+  if (GPUUpdateBindGroupEXT(groups[0], 1u, &updateEntry) != GPU_OK) {
+    fprintf(stderr, "bindless group update failed\n");
+    goto cleanup;
+  }
+
+  duplicateEntries[0] = updateEntry;
+  duplicateEntries[1] = updateEntry;
+  if (GPUUpdateBindGroupEXT(groups[0],
+                            (uint32_t)GPU_ARRAY_LEN(duplicateEntries),
+                            duplicateEntries) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUUpdateBindGroupEXT(groups[0], 1u, &updateEntry) != GPU_OK) {
+    fprintf(stderr, "bindless duplicate update validation failed\n");
+    goto cleanup;
+  }
+
+  if (GPUUpdateBindGroupEXT(regularGroup, 1u, &updateEntry) !=
+        GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "bindless update accepted a regular group\n");
+    goto cleanup;
+  }
+
+  updateEntry.textureView = NULL;
+  if (GPUUpdateBindGroupEXT(groups[0], 1u, &updateEntry) !=
+        GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "bindless update accepted a null resource\n");
+    goto cleanup;
+  }
+  updateEntry.textureView = view;
+
+  updateEntry.arrayIndex = 2u;
+  if (GPUUpdateBindGroupEXT(groups[0], 1u, &updateEntry) !=
+        GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "bindless update accepted an out-of-range slot\n");
+    goto cleanup;
+  }
+
+  layoutEntry.bindingType = GPU_BINDING_STORAGE_BUFFER;
+  layoutInfo.chain.pNext   = &bindlessInfo;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &bufferLayout) != GPU_OK ||
+      !bufferLayout) {
+    fprintf(stderr, "bindless sparse buffer layout creation failed\n");
+    goto cleanup;
+  }
+  groupInfo.layout     = bufferLayout;
+  groupInfo.entryCount = 0u;
+  groupInfo.pEntries   = NULL;
+  if (GPUCreateBindGroup(device, &groupInfo, &bufferGroup) != GPU_OK ||
+      !bufferGroup) {
+    fprintf(stderr, "bindless sparse buffer group creation failed\n");
+    goto cleanup;
+  }
+  pipelineGroups[0] = bufferLayout;
+  pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
+  pipelineInfo.bindGroupLayoutCount = 1u;
+  pipelineInfo.ppBindGroupLayouts   = pipelineGroups;
+  if (GPUCreatePipelineLayout(device,
+                              &pipelineInfo,
+                              &bufferPipeline) != GPU_OK ||
+      !bufferPipeline) {
+    fprintf(stderr, "bindless sparse buffer validation failed\n");
+    goto cleanup;
+  }
+  api = gpuDeviceApi(device);
+  if (!api) {
+    fprintf(stderr, "bindless sparse buffer backend lookup failed\n");
+    goto cleanup;
+  }
+  savedDescriptor                  = api->descriptor;
+  api->descriptor.bindRenderGroup = NULL;
+  renderPass._pipelineLayout       = bufferPipeline;
+  GPUBindRenderGroup(&renderPass, 0u, bufferGroup, 0u, NULL);
+  api->descriptor = savedDescriptor;
+  if (renderPass._boundGroups[0] != bufferGroup) {
+    fprintf(stderr, "bindless sparse buffer bind failed\n");
+    goto cleanup;
+  }
+
+  ok = gpu_test_bindless_descriptor_array(device, bytecodePath);
+
+cleanup:
+  GPUDestroyPipelineLayout(bufferPipeline);
+  GPUDestroyBindGroup(bufferGroup);
+  GPUDestroyBindGroupLayout(bufferLayout);
+  GPUDestroyBindGroup(regularGroup);
+  GPUDestroyBindGroupLayout(regularLayout);
+  GPUDestroyTextureView(view);
+  GPUDestroyTexture(texture);
+  GPUDestroyBindGroup(groups[1]);
+  GPUDestroyBindGroup(groups[0]);
+  GPUDestroyBindGroupLayout(layout);
+  GPUDestroyDevice(device);
+  GPUDestroyDevice(disabled);
+  return ok;
+}

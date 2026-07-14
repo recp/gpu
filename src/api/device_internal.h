@@ -64,7 +64,7 @@ struct GPUDevice {
   bool                         transientConfigured;
   bool                         transientFrameBegun;
   GPUFeature                   enabledFeatureStorage[
-    GPU_FEATURE_VARIABLE_RATE_SHADING + 1u
+    GPU_FEATURE_BINDLESS + 1u
   ];
 };
 

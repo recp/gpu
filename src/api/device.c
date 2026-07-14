@@ -94,7 +94,7 @@ gpu_reportDeviceLostOnce(GPUDevice *device) {
 static bool
 gpu_knownFeature(GPUFeature feature) {
   return feature >= GPU_FEATURE_COMPUTE &&
-         feature <= GPU_FEATURE_VARIABLE_RATE_SHADING;
+         feature <= GPU_FEATURE_BINDLESS;
 }
 
 static uint64_t
@@ -202,6 +202,9 @@ gpu_enabledFeatureMaskForCreateInfo(const GPUAdapter *adapter,
 
   mask = gpu_collectEnabledFeatures(adapter, &info->required);
   mask |= gpu_collectEnabledFeatures(adapter, &info->optional);
+  if ((mask & gpu_featureBit(GPU_FEATURE_BINDLESS)) != 0u) {
+    mask |= gpu_featureBit(GPU_FEATURE_DESCRIPTOR_INDEXING);
+  }
   return mask;
 }
 
@@ -211,7 +214,7 @@ gpu_supportedFeatureMask(const GPUAdapter *adapter) {
 
   mask = 0;
   for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_VARIABLE_RATE_SHADING;
+       feature <= GPU_FEATURE_BINDLESS;
        feature = (GPUFeature)(feature + 1)) {
     if (gpu_adapterSupportsFeature(adapter, feature)) {
       mask |= gpu_featureBit(feature);
@@ -230,7 +233,7 @@ gpu_fillFeatureSet(uint64_t       mask,
 
   count = 0u;
   for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_VARIABLE_RATE_SHADING && count < capacity;
+       feature <= GPU_FEATURE_BINDLESS && count < capacity;
        feature = (GPUFeature)(feature + 1)) {
     if (mask & gpu_featureBit(feature)) {
       storage[count++] = feature;
@@ -1246,6 +1249,11 @@ GPUProc
 GPUGetProcAddr(GPUDevice *device, const char *name) {
   if (!gpuDeviceApi(device) || !name || name[0] == '\0') {
     return NULL;
+  }
+
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_BINDLESS) &&
+      strcmp(name, "GPUUpdateBindGroupEXT") == 0) {
+    return (GPUProc)GPUUpdateBindGroupEXT;
   }
 
   return NULL;

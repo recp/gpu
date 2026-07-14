@@ -1028,8 +1028,6 @@ dx12_createShaderRootSignature(GPUDevice             *device,
 
 typedef struct DX12BindGroupWriteContext {
   GPUBindGroupDX12 *group;
-  uint32_t          resourceIndex;
-  uint32_t          samplerIndex;
   bool              valid;
 } DX12BindGroupWriteContext;
 
@@ -1047,8 +1045,14 @@ dx12__writeBindGroup(void *context,
   switch (binding->bindingType) {
     case GPU_BINDING_UNIFORM_BUFFER:
     case GPU_BINDING_STORAGE_BUFFER:
-      if (binding->kind != GPUBindKindBuffer || !binding->buffer ||
-          !binding->buffer->device ||
+      if (binding->kind != GPUBindKindBuffer) {
+        writeContext->valid = false;
+        return;
+      }
+      if (!binding->buffer) {
+        return;
+      }
+      if (!binding->buffer->device ||
           binding->buffer->device->_priv != writeContext->group->device ||
           (binding->bindingType == GPU_BINDING_STORAGE_BUFFER &&
            !gpuBufferHasUsage(binding->buffer, GPU_BUFFER_USAGE_STORAGE))) {
@@ -1058,20 +1062,27 @@ dx12__writeBindGroup(void *context,
     case GPU_BINDING_SAMPLED_TEXTURE: {
       GPUTextureViewDX12 *view;
 
+      if (binding->kind != GPUBindKindTexture ||
+          binding->kindIndex >= writeContext->group->resourceCount) {
+        writeContext->valid = false;
+        return;
+      }
+      if (!binding->textureView) {
+        return;
+      }
       view = binding->textureView ? binding->textureView->_priv : NULL;
-      if (binding->kind != GPUBindKindTexture || !view || !view->resource ||
+      if (!view || !view->resource ||
           !view->hasSrv || !binding->textureView->_texture ||
           !binding->textureView->_texture->device ||
           binding->textureView->_texture->device->_priv !=
-            writeContext->group->device ||
-          writeContext->resourceIndex >= writeContext->group->resourceCount) {
+            writeContext->group->device) {
         writeContext->valid = false;
         return;
       }
 
       handle = dx12_cpuDescriptor(
         &writeContext->group->device->resourceDescriptors,
-        writeContext->group->resourceOffset + writeContext->resourceIndex++
+        writeContext->group->resourceOffset + binding->kindIndex
       );
       writeContext->group->device->d3dDevice->lpVtbl->CreateShaderResourceView(
         writeContext->group->device->d3dDevice,
@@ -1084,20 +1095,27 @@ dx12__writeBindGroup(void *context,
     case GPU_BINDING_STORAGE_TEXTURE: {
       GPUTextureViewDX12 *view;
 
+      if (binding->kind != GPUBindKindTexture ||
+          binding->kindIndex >= writeContext->group->resourceCount) {
+        writeContext->valid = false;
+        return;
+      }
+      if (!binding->textureView) {
+        return;
+      }
       view = binding->textureView ? binding->textureView->_priv : NULL;
-      if (binding->kind != GPUBindKindTexture || !view || !view->resource ||
+      if (!view || !view->resource ||
           !view->hasUav || !binding->textureView->_texture ||
           !binding->textureView->_texture->device ||
           binding->textureView->_texture->device->_priv !=
-            writeContext->group->device ||
-          writeContext->resourceIndex >= writeContext->group->resourceCount) {
+            writeContext->group->device) {
         writeContext->valid = false;
         return;
       }
 
       handle = dx12_cpuDescriptor(
         &writeContext->group->device->resourceDescriptors,
-        writeContext->group->resourceOffset + writeContext->resourceIndex++
+        writeContext->group->resourceOffset + binding->kindIndex
       );
       writeContext->group->device->d3dDevice->lpVtbl
         ->CreateUnorderedAccessView(writeContext->group->device->d3dDevice,
@@ -1110,17 +1128,23 @@ dx12__writeBindGroup(void *context,
     case GPU_BINDING_SAMPLER: {
       GPUSamplerDX12 *sampler;
 
+      if (binding->kind != GPUBindKindSampler ||
+          binding->kindIndex >= writeContext->group->samplerCount) {
+        writeContext->valid = false;
+        return;
+      }
+      if (!binding->sampler) {
+        return;
+      }
       sampler = binding->sampler ? binding->sampler->_priv : NULL;
-      if (binding->kind != GPUBindKindSampler || !sampler ||
-          sampler->device != writeContext->group->device ||
-          writeContext->samplerIndex >= writeContext->group->samplerCount) {
+      if (!sampler || sampler->device != writeContext->group->device) {
         writeContext->valid = false;
         return;
       }
 
       handle = dx12_cpuDescriptor(
         &writeContext->group->device->samplerDescriptors,
-        writeContext->group->samplerOffset + writeContext->samplerIndex++
+        writeContext->group->samplerOffset + binding->kindIndex
       );
       writeContext->group->device->d3dDevice->lpVtbl->CreateSampler(
         writeContext->group->device->d3dDevice,
@@ -1216,9 +1240,7 @@ dx12_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
   if (!gpuForEachBindGroupBinding(group,
                                   dx12__writeBindGroup,
                                   &writeContext) ||
-      !writeContext.valid ||
-      writeContext.resourceIndex != native->resourceCount ||
-      writeContext.samplerIndex != native->samplerCount) {
+      !writeContext.valid) {
     dx12_freeDescriptors(native->device,
                           D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
                           native->samplerOffset,
@@ -1233,6 +1255,24 @@ dx12_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
 
   group->_native = native;
   return GPU_OK;
+}
+
+GPU_HIDE
+bool
+dx12_updateBindGroup(GPUBindGroup            *group,
+                     uint32_t                 entryCount,
+                     const GPUBindGroupEntry *entries) {
+  DX12BindGroupWriteContext writeContext = {0};
+
+  writeContext.group = group ? group->_native : NULL;
+  writeContext.valid = writeContext.group != NULL;
+  return writeContext.valid &&
+         gpuForEachBindGroupEntry(group,
+                                  entryCount,
+                                  entries,
+                                  dx12__writeBindGroup,
+                                  &writeContext) &&
+         writeContext.valid;
 }
 
 GPU_HIDE
@@ -1411,8 +1451,15 @@ dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
                                           binding->binding +
                                             binding->arrayIndex);
       buffer = binding->buffer ? binding->buffer->_priv : NULL;
-      if (binding->kind != GPUBindKindBuffer || !binding->buffer ||
-          binding->buffer->device != bindContext->device || !rootBinding ||
+      if (binding->kind != GPUBindKindBuffer) {
+        bindContext->valid = false;
+        return;
+      }
+      if (!binding->buffer) {
+        bindContext->boundCount++;
+        return;
+      }
+      if (binding->buffer->device != bindContext->device || !rootBinding ||
           !buffer || !buffer->resource || buffer->gpuAddress == 0u ||
           !dx12_transitionBuffer(
             bindContext->commandList,
@@ -1452,8 +1499,15 @@ dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
                                           binding->binding +
                                             binding->arrayIndex);
       buffer = binding->buffer ? binding->buffer->_priv : NULL;
-      if (binding->kind != GPUBindKindBuffer || !binding->buffer ||
-          binding->buffer->device != bindContext->device || !rootBinding ||
+      if (binding->kind != GPUBindKindBuffer) {
+        bindContext->valid = false;
+        return;
+      }
+      if (!binding->buffer) {
+        bindContext->boundCount++;
+        return;
+      }
+      if (binding->buffer->device != bindContext->device || !rootBinding ||
           !gpuBufferHasUsage(binding->buffer, GPU_BUFFER_USAGE_STORAGE) ||
           !dx12__transitionStorageBuffer(bindContext->commandList, buffer) ||
           binding->offset > UINT64_MAX - buffer->gpuAddress) {
@@ -1480,8 +1534,16 @@ dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
     case GPU_BINDING_SAMPLED_TEXTURE: {
       GPUTextureViewDX12 *view;
 
+      if (binding->kind != GPUBindKindTexture) {
+        bindContext->valid = false;
+        return;
+      }
+      if (!binding->textureView) {
+        bindContext->boundCount++;
+        return;
+      }
       view = binding->textureView ? binding->textureView->_priv : NULL;
-      if (binding->kind != GPUBindKindTexture || !view || !view->hasSrv ||
+      if (!view || !view->hasSrv ||
           !binding->textureView->_texture ||
           binding->textureView->_texture->device != bindContext->device ||
           !dx12__transitionSampledTexture(bindContext->commandList, view)) {
@@ -1493,8 +1555,16 @@ dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
     case GPU_BINDING_STORAGE_TEXTURE: {
       GPUTextureViewDX12 *view;
 
+      if (binding->kind != GPUBindKindTexture) {
+        bindContext->valid = false;
+        return;
+      }
+      if (!binding->textureView) {
+        bindContext->boundCount++;
+        return;
+      }
       view = binding->textureView ? binding->textureView->_priv : NULL;
-      if (binding->kind != GPUBindKindTexture || !view || !view->hasUav ||
+      if (!view || !view->hasUav ||
           !binding->textureView->_texture ||
           binding->textureView->_texture->device != bindContext->device ||
           !dx12__transitionStorageTexture(bindContext->commandList, view)) {
@@ -1506,8 +1576,16 @@ dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
     case GPU_BINDING_SAMPLER: {
       GPUSamplerDX12 *sampler;
 
+      if (binding->kind != GPUBindKindSampler) {
+        bindContext->valid = false;
+        return;
+      }
+      if (!binding->sampler) {
+        bindContext->boundCount++;
+        return;
+      }
       sampler = binding->sampler ? binding->sampler->_priv : NULL;
-      if (binding->kind != GPUBindKindSampler || !sampler ||
+      if (!sampler ||
           sampler->device != bindContext->device->_priv) {
         bindContext->valid = false;
         return;
@@ -1713,6 +1791,7 @@ dx12_initDescriptor(GPUApiDescriptor *api) {
   api->createPipelineLayout  = dx12_createPipelineLayout;
   api->destroyPipelineLayout = dx12_destroyPipelineLayout;
   api->createBindGroup       = dx12_createBindGroup;
+  api->updateBindGroup       = dx12_updateBindGroup;
   api->destroyBindGroup      = dx12_destroyBindGroup;
   api->bindRenderGroup       = dx12_bindRenderGroup;
   api->bindComputeGroup      = dx12_bindComputeGroup;

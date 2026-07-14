@@ -88,6 +88,19 @@ dx12_supportsShaderF16(ID3D12Device    *device,
 }
 
 static bool
+dx12_supportsBindless(ID3D12Device *device) {
+  D3D12_FEATURE_DATA_D3D12_OPTIONS options = {0};
+
+  return device &&
+         SUCCEEDED(device->lpVtbl->CheckFeatureSupport(
+           device,
+           D3D12_FEATURE_D3D12_OPTIONS,
+           &options,
+           sizeof(options))) &&
+         options.ResourceBindingTier >= D3D12_RESOURCE_BINDING_TIER_2;
+}
+
+static bool
 dx12_querySubgroups(ID3D12Device *device,
                     uint32_t     *outMinSubgroupSize,
                     uint32_t     *outMaxSubgroupSize) {
@@ -158,6 +171,8 @@ dx12_probeAdapter(GPUAdapterDX12 *adapter) {
                        dx12_supportsShaderF16(device, shaderModel);
   adapter->descriptorIndexing =
     dxcModule && shaderModel >= D3D_SHADER_MODEL_6_0;
+  adapter->bindless = adapter->descriptorIndexing &&
+                      dx12_supportsBindless(device);
   if (dxcModule) {
     FreeLibrary(dxcModule);
   }
@@ -229,6 +244,8 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
                                                device->shaderModel);
   device->descriptorIndexing = device->dxcAvailable &&
                                device->shaderModel >= D3D_SHADER_MODEL_6_0;
+  device->bindless = device->descriptorIndexing &&
+                     dx12_supportsBindless(device->d3dDevice);
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   device->pixModule = LoadLibraryW(L"WinPixEventRuntime.dll");
   if (device->pixModule) {
@@ -529,6 +546,8 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
       return adapterDX12->shaderF16;
     case GPU_FEATURE_DESCRIPTOR_INDEXING:
       return adapterDX12->descriptorIndexing;
+    case GPU_FEATURE_BINDLESS:
+      return adapterDX12->bindless;
     case GPU_FEATURE_SUBGROUPS:
       return adapterDX12->subgroups;
     case GPU_FEATURE_TIMESTAMPS:
@@ -615,6 +634,10 @@ dx12_createDevice(GPUAdapter        * __restrict adapter,
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u &&
       !deviceDX12->descriptorIndexing) {
+    goto err;
+  }
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_BINDLESS)) != 0u &&
+      !deviceDX12->bindless) {
     goto err;
   }
   InitializeSRWLock(&deviceDX12->descriptorLock);

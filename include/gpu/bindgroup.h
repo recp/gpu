@@ -57,6 +57,12 @@ typedef struct GPUBindGroupLayoutCreateInfo {
   const GPUBindGroupLayoutEntry *pEntries;
 } GPUBindGroupLayoutCreateInfo;
 
+/* Makes fixed-capacity bindings sparse and mutable. */
+typedef struct GPUBindlessLayoutEXT {
+  GPUChainedStruct          chain;
+  const GPUBindGroupLayout *sourceLayout;
+} GPUBindlessLayoutEXT;
+
 typedef struct GPUBindGroupEntry {
   uint32_t binding;
   uint32_t arrayIndex; /* 0 for non-array. */
@@ -119,6 +125,12 @@ GPUResult
 GPUCreateBindGroup(GPUDevice *device,
                    const GPUBindGroupCreateInfo *info,
                    GPUBindGroup **outGroup);
+
+GPU_EXPORT
+GPUResult
+GPUUpdateBindGroupEXT(GPUBindGroup            *group,
+                      uint32_t                 entryCount,
+                      const GPUBindGroupEntry *pEntries);
 
 GPU_EXPORT
 void

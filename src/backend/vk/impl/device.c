@@ -349,6 +349,8 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       descriptorFeatures.shaderSampledImageArrayNonUniformIndexing &&
       descriptorFeatures.shaderStorageBufferArrayNonUniformIndexing &&
       descriptorFeatures.shaderStorageImageArrayNonUniformIndexing;
+    adapterVk->bindless = adapterVk->descriptorIndexing &&
+                          descriptorFeatures.descriptorBindingPartiallyBound;
   }
   if (getFeatures2 && timelineCore) {
     timelineFeatures.sType =
@@ -445,6 +447,8 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       return adapterVk->shaderFloat16;
     case GPU_FEATURE_DESCRIPTOR_INDEXING:
       return adapterVk->descriptorIndexing;
+    case GPU_FEATURE_BINDLESS:
+      return adapterVk->bindless;
     default:
       return false;
   }
@@ -807,6 +811,10 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
       !adapterVk->descriptorIndexing) {
     goto err;
   }
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_BINDLESS)) != 0u &&
+      !adapterVk->bindless) {
+    goto err;
+  }
   planCount       = 0u;
   maxQueueCount   = 0u;
   totalQueueCount = 0u;
@@ -886,7 +894,8 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
     float16Features.shaderFloat16 = VK_TRUE;
     deviceCI.pNext                = &float16Features;
   }
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u) {
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u ||
+      (enabledFeatureMask & (1ull << GPU_FEATURE_BINDLESS)) != 0u) {
     descriptorFeatures.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
     descriptorFeatures.pNext = (void *)deviceCI.pNext;
@@ -894,6 +903,9 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
     descriptorFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
     descriptorFeatures.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE;
     descriptorFeatures.shaderStorageImageArrayNonUniformIndexing = VK_TRUE;
+    if ((enabledFeatureMask & (1ull << GPU_FEATURE_BINDLESS)) != 0u) {
+      descriptorFeatures.descriptorBindingPartiallyBound = VK_TRUE;
+    }
     deviceCI.pNext = &descriptorFeatures;
   }
   if (adapterVk->timelineSemaphore) {

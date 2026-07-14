@@ -23,6 +23,7 @@ extern "C" {
 #include <gpu/common.h>
 
 struct GPUBindGroup;
+struct GPUBindGroupEntry;
 struct GPUBindGroupLayout;
 struct GPUComputePassEncoder;
 struct GPUDevice;
@@ -56,6 +57,11 @@ typedef struct GPUApiDescriptor {
   GPUResult
   (*createBindGroup)(struct GPUDevice    *device,
                      struct GPUBindGroup *group);
+
+  bool
+  (*updateBindGroup)(struct GPUBindGroup            *group,
+                     uint32_t                        entryCount,
+                     const struct GPUBindGroupEntry *entries);
 
   void
   (*destroyBindGroup)(struct GPUBindGroup *group);
