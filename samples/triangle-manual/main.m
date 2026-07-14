@@ -59,9 +59,15 @@ SelectAdapter(GPUInstance *instance) {
   NSInteger _exitAfterFrames;
   NSInteger _submittedFrames;
   NSInteger _completedFrames;
+  NSInteger _resizeAfterFrames;
   BOOL _terminating;
+  BOOL _resizeRequested;
+  BOOL _resizeReady;
+  BOOL _renderedAfterResize;
+  BOOL _testFailed;
 }
 - (void)frameCompleted;
+- (BOOL)testFailed;
 @end
 
 static void
@@ -416,9 +422,19 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   frame = NULL;
   if (submitResult != GPU_OK) {
     NSLog(@"GPUFinishFrame failed: %d", submitResult);
-  } else if (_exitAfterFrames > 0) {
+  } else {
     _submittedFrames++;
-    if (_submittedFrames >= _exitAfterFrames) {
+    if (_resizeReady) {
+      _renderedAfterResize = YES;
+    }
+    if (_resizeAfterFrames > 0 && !_resizeRequested &&
+        _submittedFrames >= _resizeAfterFrames) {
+      _resizeRequested = YES;
+      dispatch_async(dispatch_get_main_queue(), ^{
+        [self->_window setContentSize:NSMakeSize(800.0, 520.0)];
+      });
+    }
+    if (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) {
       [_timer invalidate];
       _timer = nil;
     }
@@ -437,6 +453,10 @@ cleanup:
     if (self->_exitAfterFrames > 0 &&
         self->_completedFrames >= self->_exitAfterFrames &&
         !self->_terminating) {
+      if (self->_resizeAfterFrames > 0 &&
+          (!self->_resizeReady || !self->_renderedAfterResize)) {
+        self->_testFailed = YES;
+      }
       self->_terminating = YES;
       [self->_timer invalidate];
       self->_timer = nil;
@@ -503,6 +523,9 @@ cleanup:
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
+  const char *exitAfterFrames;
+  const char *resizeAfterFrames;
+
   (void)notification;
 
   if (![self setupWindow]) {
@@ -515,11 +538,18 @@ cleanup:
     return;
   }
 
-  const char *exitAfterFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
+  exitAfterFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
   if (exitAfterFrames && exitAfterFrames[0] != '\0') {
     _exitAfterFrames = strtol(exitAfterFrames, NULL, 10);
     if (_exitAfterFrames < 1) {
       _exitAfterFrames = 1;
+    }
+  }
+  resizeAfterFrames = getenv("GPU_SAMPLE_RESIZE_AFTER_FRAMES");
+  if (resizeAfterFrames && resizeAfterFrames[0] != '\0') {
+    _resizeAfterFrames = strtol(resizeAfterFrames, NULL, 10);
+    if (_resizeAfterFrames < 1) {
+      _resizeAfterFrames = 1;
     }
   }
 
@@ -532,6 +562,10 @@ cleanup:
   [[NSRunLoop mainRunLoop] addTimer:_timer forMode:NSRunLoopCommonModes];
 
   [self renderFrame];
+}
+
+- (BOOL)testFailed {
+  return _testFailed;
 }
 
 - (void)applicationWillTerminate:(NSNotification *)notification {
@@ -547,6 +581,7 @@ cleanup:
 }
 
 - (void)windowDidResize:(NSNotification *)notification {
+  GPUResult result;
   uint32_t width;
   uint32_t height;
 
@@ -557,9 +592,25 @@ cleanup:
 
   width  = (uint32_t)_view.bounds.size.width;
   height = (uint32_t)_view.bounds.size.height;
-  if (width > 0u && height > 0u &&
-      GPUResizeSwapchain(_swapchain, width, height) == GPU_OK) {
+  result = width > 0u && height > 0u
+             ? GPUResizeSwapchain(_swapchain, width, height)
+             : GPU_ERROR_INVALID_ARGUMENT;
+  if (result == GPU_OK) {
+    if (_resizeRequested) {
+      _resizeReady = GPUGetSwapchainStatus(_swapchain) ==
+                     GPU_SWAPCHAIN_STATUS_READY;
+      if (!_resizeReady) {
+        _testFailed = YES;
+        _terminating = YES;
+        [NSApp terminate:nil];
+        return;
+      }
+    }
     [self renderFrame];
+  } else if (_resizeRequested) {
+    _testFailed = YES;
+    _terminating = YES;
+    [NSApp terminate:nil];
   }
 }
 
@@ -573,6 +624,9 @@ cleanup:
 @end
 
 int main(int argc, const char * argv[]) {
+  int result;
+
+  result = 0;
   @autoreleasepool {
     TriangleApp *delegate;
 
@@ -584,6 +638,7 @@ int main(int argc, const char * argv[]) {
     [NSApp setDelegate:delegate];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     [NSApp run];
+    result = [delegate testFailed] ? 1 : 0;
   }
-  return 0;
+  return result;
 }

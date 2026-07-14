@@ -1029,6 +1029,15 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
     DEPENDS "${GPU_TRIANGLE_MANUAL_ARTIFACT_STAMP}"
   )
   add_dependencies(gpu-triangle-manual gpu-triangle-manual-artifacts)
+  if(GPU_BUILD_TESTS)
+    add_test(NAME metal-resize-lifecycle
+             COMMAND gpu-triangle-manual)
+    set_tests_properties(metal-resize-lifecycle PROPERTIES
+      ENVIRONMENT
+        "GPU_SAMPLE_EXIT_AFTER_FRAMES=4;GPU_SAMPLE_RESIZE_AFTER_FRAMES=1"
+      TIMEOUT 30
+    )
+  endif()
 
   add_executable(gpu-triangle-metal-usl
     samples/triangle-usl/main.m
@@ -1354,6 +1363,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
                COMMAND gpu-textured-quad-vulkan-usl)
       add_test(NAME vulkan-compute-render
                COMMAND gpu-compute-render-vulkan-usl)
+      add_test(NAME vulkan-resize-lifecycle
+               COMMAND gpu-triangle-vulkan-usl)
       set_tests_properties(
         vulkan-triangle
         vulkan-textured-quad
@@ -1362,6 +1373,11 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
           ENVIRONMENT
             "GPU_SAMPLE_EXIT_AFTER_FRAMES=96;GPU_SAMPLE_ASSERT_ZERO_ALLOC=1"
           TIMEOUT 30
+      )
+      set_tests_properties(vulkan-resize-lifecycle PROPERTIES
+        ENVIRONMENT
+          "GPU_SAMPLE_EXIT_AFTER_FRAMES=4;GPU_SAMPLE_RESIZE_AFTER_FRAMES=1"
+        TIMEOUT 30
       )
     endif()
   endif()
@@ -1384,7 +1400,8 @@ if((GPU_BUILD_TESTS OR GPU_BUILD_BENCHMARKS) AND
             vulkan-compute-buffer
             vulkan-triangle
             vulkan-textured-quad
-            vulkan-compute-render)
+            vulkan-compute-render
+            vulkan-resize-lifecycle)
       if(TEST ${vulkanTest})
         set_property(TEST ${vulkanTest} APPEND PROPERTY ENVIRONMENT
           "VK_ICD_FILENAMES=${GPU_VULKAN_ICD}"
