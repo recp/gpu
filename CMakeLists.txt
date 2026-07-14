@@ -1023,6 +1023,21 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
       COMMAND gpu-compute-buffer-dx12-usl
               "${GPU_DX12_COMPUTE_BUFFER_US}"
     )
+    add_test(NAME dx12-triangle
+             COMMAND gpu-triangle-dx12-usl)
+    add_test(NAME dx12-textured-quad
+             COMMAND gpu-textured-quad-dx12-usl)
+    add_test(NAME dx12-compute-render
+             COMMAND gpu-compute-render-dx12-usl)
+    set_tests_properties(
+      dx12-triangle
+      dx12-textured-quad
+      dx12-compute-render
+      PROPERTIES
+        ENVIRONMENT
+          "GPU_SAMPLE_EXIT_AFTER_FRAMES=96;GPU_SAMPLE_ASSERT_ZERO_ALLOC=1"
+        TIMEOUT 30
+    )
   endif()
 endif()
 
