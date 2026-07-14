@@ -71,20 +71,17 @@ dx12__queueDevice(GPUQueueDX12 *queue) {
 GPU_HIDE
 GPUResult
 dx12_getTimestampPeriod(GPUQueue *queue,
-                        double          *outNanosecondsPerTick) {
-  GPUQueueDX12        *native;
-  UINT64               frequency;
+                        double   *outNanosecondsPerTick) {
+  GPUQueueDX12 *native;
 
   native = queue ? queue->_priv : NULL;
   if (!native || !native->commandQueue || !outNanosecondsPerTick ||
-      FAILED(native->commandQueue->lpVtbl->GetTimestampFrequency(
-        native->commandQueue,
-        &frequency
-      )) || frequency == 0u) {
+      native->timestampFrequency == 0u) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  *outNanosecondsPerTick = 1000000000.0 / (double)frequency;
+  *outNanosecondsPerTick = 1000000000.0 /
+                           (double)native->timestampFrequency;
   return GPU_OK;
 }
 
@@ -157,6 +154,27 @@ dx12__reportQueueError(GPUQueueDX12 *queue,
            operation,
            (unsigned long)result);
   gpuDeviceReportError(device, type, lostReason, gpuResult, message);
+}
+
+static void
+dx12__recordFrameTime(GPUCommandBufferDX12 *native) {
+  GPUQueueDX12 *queue;
+  GPUDevice    *device;
+  UINT64        elapsed;
+  double        milliseconds;
+
+  queue  = native ? native->owner : NULL;
+  device = dx12__queueDevice(queue);
+  if (!native || !native->frameTimeActive ||
+      !native->commandBuffer._recordsGPUFrameTime ||
+      !native->frameTimeMapped || !device || queue->timestampFrequency == 0u) {
+    return;
+  }
+
+  elapsed      = native->frameTimeMapped[1] - native->frameTimeMapped[0];
+  milliseconds = (double)elapsed * 1000.0 /
+                 (double)queue->timestampFrequency;
+  gpuDeviceRecordGPUFrameTime(device, milliseconds);
 }
 
 #if GPU_BUILD_WITH_VALIDATION
@@ -331,6 +349,9 @@ dx12__completionMain(LPVOID context) {
     completed  = dx12__waitForFence(queue,
                                     fenceValue,
                                     queue->completionEvent);
+    if (completed) {
+      dx12__recordFrameTime(native);
+    }
     gpuFinishCommandBuffer(cmdb,
                            completed ? dx12__recycleCommandBuffer : NULL);
 
@@ -455,6 +476,101 @@ dx12__createTransferStaging(GPUDeviceDX12 *device,
     (void **)&resource
   );
   return SUCCEEDED(result) ? resource : NULL;
+}
+
+static bool
+dx12__beginFrameTime(GPUCommandBufferDX12 *native) {
+  GPUQueueDX12          *queue;
+  GPUDevice             *device;
+  GPUDeviceDX12         *deviceDX12;
+  ID3D12QueryHeap       *queries;
+  ID3D12Resource        *readback;
+  UINT64                *mapped;
+  D3D12_QUERY_HEAP_DESC  queryDesc = {0};
+  D3D12_RANGE            readRange = {0};
+  HRESULT                result;
+
+  queue      = native ? native->owner : NULL;
+  device     = dx12__queueDevice(queue);
+  deviceDX12 = device ? device->_priv : NULL;
+  if (!native || !queue || !device || !deviceDX12 ||
+      !device->runtimeConfig.enableStats ||
+      !deviceDX12->queryResultsReliable ||
+      !(queue->queue->bits & GPU_QUEUE_GRAPHICS_BIT) ||
+      queue->timestampFrequency == 0u) {
+    return false;
+  }
+  if ((!native->frameTimeQueries) != (!native->frameTimeReadback) ||
+      (!native->frameTimeQueries) != (!native->frameTimeMapped)) {
+    return false;
+  }
+
+  if (!native->frameTimeQueries) {
+    queries            = NULL;
+    readback           = NULL;
+    mapped             = NULL;
+    queryDesc.Type     = D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
+    queryDesc.Count    = 2u;
+    queryDesc.NodeMask = 0u;
+    result = deviceDX12->d3dDevice->lpVtbl->CreateQueryHeap(
+      deviceDX12->d3dDevice,
+      &queryDesc,
+      &IID_ID3D12QueryHeap,
+      (void **)&queries
+    );
+    if (FAILED(result) || !queries) {
+      return false;
+    }
+
+    readback = dx12__createTransferStaging(deviceDX12,
+                                           2u * sizeof(UINT64),
+                                           D3D12_HEAP_TYPE_READBACK);
+    readRange.End = 2u * sizeof(UINT64);
+    if (!readback ||
+        FAILED(readback->lpVtbl->Map(readback,
+                                    0u,
+                                    &readRange,
+                                    (void **)&mapped)) ||
+        !mapped) {
+      if (readback) {
+        readback->lpVtbl->Release(readback);
+      }
+      queries->lpVtbl->Release(queries);
+      return false;
+    }
+
+    native->frameTimeQueries  = queries;
+    native->frameTimeReadback = readback;
+    native->frameTimeMapped   = mapped;
+  }
+
+  native->commandList->lpVtbl->EndQuery(native->commandList,
+                                         native->frameTimeQueries,
+                                         D3D12_QUERY_TYPE_TIMESTAMP,
+                                         0u);
+  return true;
+}
+
+static void
+dx12__endFrameTime(GPUCommandBufferDX12 *native) {
+  if (!native || !native->frameTimeActive ||
+      !native->commandBuffer._recordsGPUFrameTime) {
+    return;
+  }
+
+  native->commandList->lpVtbl->EndQuery(native->commandList,
+                                         native->frameTimeQueries,
+                                         D3D12_QUERY_TYPE_TIMESTAMP,
+                                         1u);
+  native->commandList->lpVtbl->ResolveQueryData(
+    native->commandList,
+    native->frameTimeQueries,
+    D3D12_QUERY_TYPE_TIMESTAMP,
+    0u,
+    2u,
+    native->frameTimeReadback,
+    0u
+  );
 }
 
 static uint64_t
@@ -912,6 +1028,13 @@ dx12_createCommandQueue(GPUDevice *device, GPUQueueFlagBits bits) {
   if (FAILED(result)) {
     goto fail;
   }
+  if (deviceDX12->queryResultsReliable &&
+      FAILED(native->commandQueue->lpVtbl->GetTimestampFrequency(
+        native->commandQueue,
+        &native->timestampFrequency
+      ))) {
+    native->timestampFrequency = 0u;
+  }
 
   result = deviceDX12->d3dDevice->lpVtbl->CreateFence(
     deviceDX12->d3dDevice,
@@ -944,6 +1067,7 @@ dx12_destroyCommandQueue(GPUQueue *queue) {
   GPUQueueDX12         *native;
   GPUCommandBufferDX12 *command;
   GPUCommandBufferDX12 *next;
+  D3D12_RANGE           noWrites = {0};
 
   if (!queue) {
     return;
@@ -961,6 +1085,23 @@ dx12_destroyCommandQueue(GPUQueue *queue) {
     command = native->commands;
     while (command) {
       next = command->next;
+      if (command->frameTimeReadback) {
+        if (command->frameTimeMapped) {
+          command->frameTimeReadback->lpVtbl->Unmap(
+            command->frameTimeReadback,
+            0u,
+            &noWrites
+          );
+        }
+        command->frameTimeReadback->lpVtbl->Release(
+          command->frameTimeReadback
+        );
+      }
+      if (command->frameTimeQueries) {
+        command->frameTimeQueries->lpVtbl->Release(
+          command->frameTimeQueries
+        );
+      }
       if (command->commandList7) {
         command->commandList7->lpVtbl->Release(command->commandList7);
       }
@@ -1257,9 +1398,11 @@ dx12_newCommandBuffer(GPUQueue  * __restrict queue,
   memset(&native->computeState, 0, sizeof(native->computeState));
   memset(&native->copyEncoder, 0, sizeof(native->copyEncoder));
   native->copyDebugEventActive = false;
-  native->presentSwapchain  = NULL;
-  native->pendingNext       = NULL;
-  native->fenceValue        = 0u;
+  native->presentSwapchain     = NULL;
+  native->pendingNext          = NULL;
+  native->fenceValue           = 0u;
+  native->frameTimeActive      = dx12__beginFrameTime(native);
+
   cmdb->_priv               = native;
   cmdb->_queue              = queue;
   cmdb->_onCompleteSender   = sender;
@@ -1305,6 +1448,7 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
     return commitResult;
   }
 
+  dx12__endFrameTime(native);
   result = native->commandList->lpVtbl->Close(native->commandList);
   if (FAILED(result)) {
     dx12__reportQueueError(queue, "command list close", result);
@@ -1423,6 +1567,7 @@ dx12_submitCommandBuffers(GPUQueue                  * __restrict queueHandle,
   }
 
   for (uint32_t i = 0u; i < count; i++) {
+    dx12__endFrameTime(natives[i]);
     result = natives[i]->commandList->lpVtbl->Close(natives[i]->commandList);
     if (FAILED(result)) {
       dx12__reportQueueError(queue, "command list close", result);

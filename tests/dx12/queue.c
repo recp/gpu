@@ -5,7 +5,8 @@
 #include <string.h>
 
 enum {
-  DX12_TRANSFER_TEST_BYTES = 64u * 1024u
+  DX12_FRAME_TIME_COPY_BYTES = 1024u * 1024u,
+  DX12_TRANSFER_TEST_BYTES   = 64u * 1024u
 };
 
 typedef struct CompletionProbe {
@@ -78,6 +79,121 @@ wait_queue(GPUQueue *queue, GPUFence *fence) {
 
   memset(&probe, 0, sizeof(probe));
   return submit_empty(queue, fence, &probe) != NULL && probe.count == 1u;
+}
+
+static bool
+frame_time_roundtrip(GPUDevice *device,
+                     GPUQueue  *queue,
+                     GPUFence  *fence) {
+  GPUCommandBufferDX12 *cmdbDX12;
+  GPUCopyPassEncoder   *copyPass;
+  GPUDeviceDX12        *deviceDX12;
+  GPUQueueDX12         *queueDX12;
+  GPUCommandBuffer     *cmdb;
+  GPUBuffer            *src;
+  GPUBuffer            *dst;
+  GPURuntimeConfig      config;
+  GPUFrameStats         stats;
+  GPUBufferCreateInfo   bufferInfo;
+  GPUBufferCopyRegion   copyRegion;
+  GPUQueueSubmitInfo    submitInfo;
+  GPUResult             submitResult;
+  GPUResult             waitResult;
+  GPUResult             statsResult;
+  bool                  ok;
+
+  deviceDX12 = device ? device->_priv : NULL;
+  queueDX12  = queue ? queue->_priv : NULL;
+  if (!deviceDX12 || !queueDX12) {
+    return false;
+  }
+  if (!deviceDX12->queryResultsReliable ||
+      queueDX12->timestampFrequency == 0u) {
+    return true;
+  }
+
+  memset(&config, 0, sizeof(config));
+  config.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
+  config.chain.structSize = sizeof(config);
+  config.validationMode   = GPU_VALIDATION_FULL;
+  config.enableStats      = true;
+  if (GPUConfigureRuntime(device, &config) != GPU_OK) {
+    return false;
+  }
+
+  memset(&stats, 0, sizeof(stats));
+  cmdb         = NULL;
+  cmdbDX12     = NULL;
+  copyPass     = NULL;
+  submitResult = GPU_ERROR_BACKEND_FAILURE;
+  waitResult   = GPU_ERROR_BACKEND_FAILURE;
+  statsResult  = GPU_ERROR_BACKEND_FAILURE;
+
+  memset(&bufferInfo, 0, sizeof(bufferInfo));
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.sizeBytes        = DX12_FRAME_TIME_COPY_BYTES;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
+                                GPU_BUFFER_USAGE_COPY_DST;
+  src = NULL;
+  dst = NULL;
+  if (GPUCreateBuffer(device, &bufferInfo, &src) != GPU_OK || !src ||
+      GPUCreateBuffer(device, &bufferInfo, &dst) != GPU_OK || !dst) {
+    ok = false;
+    goto cleanup;
+  }
+
+  GPUResetStats(device);
+  memset(&copyRegion, 0, sizeof(copyRegion));
+  if (GPUAcquireCommandBuffer(queue, "dx12-frame-time", &cmdb) != GPU_OK ||
+      !cmdb || !(cmdbDX12 = cmdb->_priv)) {
+    ok = false;
+    goto cleanup;
+  }
+  copyPass = GPUBeginCopyPass(cmdb, "dx12-frame-time-copy");
+  if (!copyPass) {
+    ok = false;
+    goto cleanup;
+  }
+  copyRegion.sizeBytes = DX12_FRAME_TIME_COPY_BYTES;
+  GPUCopyBufferToBuffer(copyPass, src, dst, &copyRegion);
+  GPUEndCopyPass(copyPass);
+
+  cmdb->_recordsGPUFrameTime = true;
+  memset(&submitInfo, 0, sizeof(submitInfo));
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.ppCommandBuffers   = &cmdb;
+  submitInfo.fence              = fence;
+  submitResult = GPUQueueSubmit(queue, &submitInfo);
+  waitResult   = submitResult == GPU_OK
+                   ? GPUWaitFence(fence, 5000000000ull)
+                   : GPU_ERROR_BACKEND_FAILURE;
+  statsResult  = waitResult == GPU_OK
+                   ? GPUGetLastFrameStats(device, &stats)
+                   : GPU_ERROR_BACKEND_FAILURE;
+  ok = submitResult == GPU_OK && waitResult == GPU_OK &&
+       statsResult == GPU_OK && stats.gpuFrameMs > 0.0;
+  if (!ok) {
+    fprintf(stderr,
+            "DX12 frame time details: submit=%d wait=%d stats=%d "
+            "active=%d freq=%llu ms=%.9f\n",
+            (int)submitResult,
+            (int)waitResult,
+            (int)statsResult,
+            cmdbDX12 && cmdbDX12->frameTimeActive ? 1 : 0,
+            (unsigned long long)queueDX12->timestampFrequency,
+            stats.gpuFrameMs);
+  }
+
+cleanup:
+  if (submitResult != GPU_OK || waitResult == GPU_OK) {
+    GPUDestroyBuffer(dst);
+    GPUDestroyBuffer(src);
+  }
+  config.enableStats = false;
+  return GPUConfigureRuntime(device, &config) == GPU_OK && ok;
 }
 
 static bool
@@ -421,6 +537,10 @@ main(void) {
     GPUDestroyDevice(device);
     GPUDestroyInstance(instance);
     return 1;
+  }
+  if (!frame_time_roundtrip(device, queue0, fence)) {
+    fprintf(stderr, "DX12 frame time roundtrip failed\n");
+    goto fail;
   }
   if (!buffer_transfers_reuse(queue0, device, fence)) {
     fprintf(stderr, "DX12 buffer transfer reuse failed\n");

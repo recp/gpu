@@ -331,6 +331,9 @@ typedef struct GPUCommandBufferDX12 {
   ID3D12CommandAllocator       *allocator;
   ID3D12GraphicsCommandList    *commandList;
   ID3D12GraphicsCommandList7   *commandList7;
+  ID3D12QueryHeap              *frameTimeQueries;
+  ID3D12Resource               *frameTimeReadback;
+  UINT64                       *frameTimeMapped;
   GPUSwapchainDX12             *presentSwapchain;
   struct GPUCommandBufferDX12  *next;
   struct GPUCommandBufferDX12  *poolNext;
@@ -344,6 +347,7 @@ typedef struct GPUCommandBufferDX12 {
   GPUComputePassEncoder         computeEncoder;
   GPUComputeEncoderDX12         computeState;
   GPUCopyPassEncoder            copyEncoder;
+  bool                          frameTimeActive;
   bool                          copyDebugEventActive;
 } GPUCommandBufferDX12;
 
@@ -381,6 +385,7 @@ struct GPUQueueDX12 {
   UINT64                       nextFenceValue;
   UINT64                       finishedFenceValue;
   UINT64                       transferFenceValue;
+  UINT64                       timestampFrequency;
   uint64_t                     readbackCapacity;
   D3D12_COMMAND_LIST_TYPE      type;
   uint32_t                     inFlightCount;
