@@ -398,6 +398,13 @@ if(GPU_BUILD_TESTS)
 
     add_executable(gpu-dx12-barrier-test tests/dx12/barrier.c)
     target_link_libraries(gpu-dx12-barrier-test PRIVATE gpu dxguid)
+    if(TARGET us)
+      target_link_libraries(gpu-dx12-queue-test PRIVATE us)
+      target_link_libraries(gpu-dx12-barrier-test PRIVATE us)
+    elseif(TARGET gpu_usl)
+      target_link_libraries(gpu-dx12-queue-test PRIVATE gpu_usl)
+      target_link_libraries(gpu-dx12-barrier-test PRIVATE gpu_usl)
+    endif()
     set_target_properties(gpu-dx12-barrier-test PROPERTIES
       C_STANDARD 11
       C_STANDARD_REQUIRED YES

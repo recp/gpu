@@ -640,6 +640,7 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
   GPUBarrierBatch            barrierBatch   = {0};
   GPUFormatCapabilities      formatCaps;
   GPUFormat                  format;
+  GPUResult                  writeResult;
   uint8_t                    depthUpload[VIEW_DS_ROW_PITCH *
                                          VIEW_FIRST_HEIGHT] = {0};
   uint8_t                    stencilUpload[VIEW_DS_ROW_PITCH *
@@ -742,23 +743,29 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
     writeRegion.layerCount     = 1u;
     writeRegion.bytesPerRow    = VIEW_DS_ROW_PITCH;
     writeRegion.rowsPerImage   = VIEW_FIRST_HEIGHT;
-    writeRegion.aspect         = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
+    writeRegion.aspect = GPU_TEXTURE_ASPECT_STENCIL_ONLY;
+    writeResult = GPUQueueWriteTexture(queue,
+                                       texture,
+                                       &writeRegion,
+                                       stencilUpload,
+                                       sizeof(stencilUpload));
+    if (writeResult == GPU_ERROR_UNSUPPORTED) {
+      printf("texture view depth-stencil skipped: stencil upload unsupported\n");
+      ok = 1;
+      goto cleanup;
+    }
+    if (writeResult != GPU_OK) {
+      fprintf(stderr, "texture view stencil write failed\n");
+      goto cleanup;
+    }
+
+    writeRegion.aspect = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
     if (GPUQueueWriteTexture(queue,
                              texture,
                              &writeRegion,
                              depthUpload,
                              sizeof(depthUpload)) != GPU_OK) {
       fprintf(stderr, "texture view depth write failed\n");
-      goto cleanup;
-    }
-
-    writeRegion.aspect = GPU_TEXTURE_ASPECT_STENCIL_ONLY;
-    if (GPUQueueWriteTexture(queue,
-                             texture,
-                             &writeRegion,
-                             stencilUpload,
-                             sizeof(stencilUpload)) != GPU_OK) {
-      fprintf(stderr, "texture view stencil write failed\n");
       goto cleanup;
     }
   }

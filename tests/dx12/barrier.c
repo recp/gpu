@@ -465,6 +465,7 @@ run_occlusion_case(GPUAdapter *adapter) {
   GPURenderPassCreateInfo      passInfo = {0};
   GPUFenceCreateInfo           fenceInfo = {0};
   GPUQueueSubmitInfo           submitInfo = {0};
+  GPUResult                    queryResult;
   uint64_t                     resultValue;
   bool                         ok;
 
@@ -542,6 +543,14 @@ run_occlusion_case(GPUAdapter *adapter) {
   bufferInfo.sizeBytes        = sizeof(resultValue);
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
                                 GPU_BUFFER_USAGE_COPY_SRC;
+  queryResult = GPUCreateQuerySet(device, &queryInfo, &querySet);
+  if (queryResult == GPU_ERROR_UNSUPPORTED && !querySet) {
+    ok = true;
+    goto cleanup;
+  }
+  if (queryResult != GPU_OK || !querySet) {
+    goto cleanup;
+  }
   if (GPUCreateTexture(device, &textureInfo, &target) != GPU_OK || !target ||
       GPUCreateTextureView(target, &viewInfo, &targetView) != GPU_OK ||
       !targetView ||
@@ -564,8 +573,6 @@ run_occlusion_case(GPUAdapter *adapter) {
       !depthTarget ||
       GPUCreateTextureView(depthTarget, &depthViewInfo, &depthView) != GPU_OK ||
       !depthView ||
-      GPUCreateQuerySet(device, &queryInfo, &querySet) != GPU_OK ||
-      !querySet ||
       GPUCreateBuffer(device, &bufferInfo, &resultBuffer) != GPU_OK ||
       !resultBuffer ||
       GPUAcquireCommandBuffer(queue, "dx12-occlusion", &cmdb) != GPU_OK ||

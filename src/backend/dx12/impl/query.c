@@ -83,6 +83,9 @@ dx12_createQuerySet(GPUDevice                  *device,
        info->type != GPU_QUERY_PIPELINE_STATISTICS)) {
     return GPU_ERROR_UNSUPPORTED;
   }
+  if (!deviceDX12->queryResultsReliable) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
 
   native = calloc(1, sizeof(*native));
   if (!native) {

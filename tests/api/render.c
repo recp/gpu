@@ -1033,6 +1033,7 @@ check_render_readback_case(GPUDevice *device,
   GPURenderPipelineCreateInfo pipelineInfo = {0};
   GPUBufferCreateInfo bufferInfo = {0};
   GPUQuerySetCreateInfo queryInfo = {0};
+  GPUResult queryResult;
   GPUTextureCreateInfo textureInfo = {0};
   GPUTextureViewCreateInfo viewInfo = {0};
   GPURenderPassColorAttachment colors[2] = {{0}};
@@ -1052,6 +1053,21 @@ check_render_readback_case(GPUDevice *device,
   if (!queue) {
     fprintf(stderr, "failed to get graphics queue for %s test\n", label);
     return 0;
+  }
+  if (occlusion) {
+    queryInfo.chain.sType      = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
+    queryInfo.chain.structSize = sizeof(queryInfo);
+    queryInfo.label            = label;
+    queryInfo.type             = GPU_QUERY_OCCLUSION;
+    queryInfo.count            = 1u;
+    queryResult = GPUCreateQuerySet(device, &queryInfo, &querySet);
+    if (queryResult == GPU_ERROR_UNSUPPORTED && !querySet) {
+      return 1;
+    }
+    if (queryResult != GPU_OK || !querySet) {
+      fprintf(stderr, "failed to create %s query set\n", label);
+      return 0;
+    }
   }
   if (!create_render_usl_library(device, mrtBytecodePath, &library)) {
     fprintf(stderr, "failed to create %s library\n", label);
@@ -1186,17 +1202,6 @@ check_render_readback_case(GPUDevice *device,
     goto cleanup;
   }
   if (occlusion) {
-    queryInfo.chain.sType      = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
-    queryInfo.chain.structSize = sizeof(queryInfo);
-    queryInfo.label            = label;
-    queryInfo.type             = GPU_QUERY_OCCLUSION;
-    queryInfo.count            = 1u;
-    if (GPUCreateQuerySet(device, &queryInfo, &querySet) != GPU_OK ||
-        !querySet) {
-      fprintf(stderr, "failed to create %s query set\n", label);
-      goto cleanup;
-    }
-
     bufferInfo.sizeBytes = sizeof(occlusionResult);
     bufferInfo.usage     = GPU_BUFFER_USAGE_COPY_DST |
                            GPU_BUFFER_USAGE_COPY_SRC;

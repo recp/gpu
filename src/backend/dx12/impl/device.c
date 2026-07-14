@@ -34,6 +34,12 @@ dx12_fillAdapterName(GPUAdapterDX12 *adapterDX12) {
                       NULL);
 }
 
+static bool
+dx12_queryResultsReliable(const GPUAdapterDX12 *adapterDX12) {
+  return adapterDX12 &&
+         !strstr(adapterDX12->name, "Parallels Display Adapter");
+}
+
 static GPUAdapterType
 dx12_adapterType(const GPUAdapterDX12 *adapterDX12) {
   const DXGI_ADAPTER_DESC1 *desc;
@@ -386,13 +392,12 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
 
   switch (feature) {
     case GPU_FEATURE_COMPUTE:
-    case GPU_FEATURE_TIMESTAMPS:
     case GPU_FEATURE_INDIRECT_DRAW:
     case GPU_FEATURE_MULTI_DRAW:
       return true;
+    case GPU_FEATURE_TIMESTAMPS:
     case GPU_FEATURE_PIPELINE_STATISTICS:
-      /* Parallels accepts these queries but resolves every counter to zero. */
-      return !strstr(adapterDX12->name, "Parallels Display Adapter");
+      return dx12_queryResultsReliable(adapterDX12);
     default:
       return false;
   }
@@ -452,6 +457,8 @@ dx12_createDevice(GPUAdapter        * __restrict adapter,
   /* Parallels removes or corrupts devices on combined stencil-plane copies. */
   deviceDX12->stencilPlaneCopies =
     !strstr(adapterDX12->name, "Parallels Display Adapter");
+  /* Parallels accepts query commands but never writes resolved data. */
+  deviceDX12->queryResultsReliable = dx12_queryResultsReliable(adapterDX12);
   dx12_queryDeviceCapabilities(deviceDX12);
   InitializeSRWLock(&deviceDX12->descriptorLock);
   if (!dx12__newSignatures(deviceDX12)) {

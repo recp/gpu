@@ -84,6 +84,7 @@ typedef struct GPUDeviceDX12 {
   uint32_t                    nCreatedQueues;
   bool                        enhancedBarriers;
   bool                        dxcAvailable;
+  bool                        queryResultsReliable;
   bool                        stencilPlaneCopies;
 } GPUDeviceDX12;
 

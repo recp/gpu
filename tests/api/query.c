@@ -9,6 +9,7 @@ check_query_set_create_validation(GPUDevice *device) {
   GPUQuerySetCreateInfo info = {0};
   GPUQueue             *queue;
   GPUQuerySet          *set;
+  GPUResult             result;
   double                timestampPeriod;
 
   info.chain.sType = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
@@ -89,11 +90,15 @@ check_query_set_create_validation(GPUDevice *device) {
 
   info.type = GPU_QUERY_OCCLUSION;
   set = NULL;
-  if (GPUCreateQuerySet(device, &info, &set) != GPU_OK || !set) {
+  result = GPUCreateQuerySet(device, &info, &set);
+  if ((result != GPU_OK && result != GPU_ERROR_UNSUPPORTED) ||
+      (result == GPU_OK) != (set != NULL)) {
     fprintf(stderr, "occlusion query set create failed\n");
     return 0;
   }
-  GPUDestroyQuerySet(set);
+  if (set) {
+    GPUDestroyQuerySet(set);
+  }
   set = NULL;
 
   info.type = GPU_QUERY_PIPELINE_STATISTICS;
@@ -294,7 +299,10 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
   }
   if (timestamps[0] == UINT64_MAX || timestamps[1] == UINT64_MAX ||
       timestamps[1] < timestamps[0]) {
-    fprintf(stderr, "timestamp query resolved error values\n");
+    fprintf(stderr,
+            "timestamp query resolved error values: %llu, %llu\n",
+            (unsigned long long)timestamps[0],
+            (unsigned long long)timestamps[1]);
     goto cleanup;
   }
 
