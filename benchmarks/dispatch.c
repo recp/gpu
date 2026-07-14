@@ -151,6 +151,8 @@ main(int argc, char *argv[]) {
   device._api            = &api;
   queue._device          = &device;
   cmdb._queue            = &queue;
+  pass._api              = &api;
+  pass._device           = &device;
   pass._cmdb             = &cmdb;
   pass._primitiveType    = GPUPrimitiveTypeTriangle;
   pass._hasPipeline      = true;

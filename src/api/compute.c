@@ -28,6 +28,9 @@ gpu_computePassDevice(const GPUComputePassEncoder *pass) {
   if (!pass) {
     return NULL;
   }
+  if (pass->_device) {
+    return pass->_device;
+  }
   if (pass->_cmdb && pass->_cmdb->_queue) {
     return pass->_cmdb->_queue->_device;
   }
@@ -37,6 +40,9 @@ gpu_computePassDevice(const GPUComputePassEncoder *pass) {
 
 static GPUApi *
 gpu_computePassApi(const GPUComputePassEncoder *pass) {
+  if (pass && pass->_api) {
+    return pass->_api;
+  }
   return gpuDeviceApi(gpu_computePassDevice(pass));
 }
 
@@ -292,7 +298,9 @@ GPUBeginComputePass(GPUCommandBuffer *cmdb, const char *label) {
     label = gpuDeviceDebugLabel(device, label);
     pass = api->compute.computeCommandEncoder(cmdb, label);
     if (pass) {
-      pass->_cmdb = cmdb;
+      pass->_api    = api;
+      pass->_device = device;
+      pass->_cmdb   = cmdb;
       cmdb->_activeEncoder = true;
     }
     return pass;

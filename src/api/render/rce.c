@@ -28,7 +28,13 @@
 
 static GPUDevice *
 gpu_renderPassDevice(const GPURenderPassEncoder *pass) {
-  if (!pass || !pass->_cmdb || !pass->_cmdb->_queue) {
+  if (!pass) {
+    return NULL;
+  }
+  if (pass->_device) {
+    return pass->_device;
+  }
+  if (!pass->_cmdb || !pass->_cmdb->_queue) {
     return NULL;
   }
 
@@ -37,6 +43,9 @@ gpu_renderPassDevice(const GPURenderPassEncoder *pass) {
 
 static GPUApi *
 gpu_renderPassApi(const GPURenderPassEncoder *pass) {
+  if (pass && pass->_api) {
+    return pass->_api;
+  }
   return gpuDeviceApi(gpu_renderPassDevice(pass));
 }
 

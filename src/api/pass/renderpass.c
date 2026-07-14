@@ -372,7 +372,9 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
   encoder = api->rce.renderCommandEncoder(cmdb, desc);
   gpu_destroyRenderPass(api, desc);
   if (encoder) {
-    encoder->_cmdb = cmdb;
+    encoder->_api    = api;
+    encoder->_device = device;
+    encoder->_cmdb   = cmdb;
     gpu_setRenderPassEncoderInfo(encoder, info);
     cmdb->_activeEncoder = true;
   }

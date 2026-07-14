@@ -163,9 +163,13 @@ validation_init(ValidationFixture *fixture) {
   fixture->device._api               = &fixture->api;
   fixture->queue._device             = &fixture->device;
   fixture->cmdb._queue               = &fixture->queue;
+  fixture->render._api               = &fixture->api;
+  fixture->render._device            = &fixture->device;
   fixture->render._cmdb              = &fixture->cmdb;
   fixture->render._primitiveType     = GPUPrimitiveTypeTriangle;
   fixture->render._hasPipeline       = true;
+  fixture->compute._api              = &fixture->api;
+  fixture->compute._device           = &fixture->device;
   fixture->compute._cmdb             = &fixture->cmdb;
   fixture->compute._hasPipeline      = true;
 
