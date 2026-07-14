@@ -59,6 +59,7 @@ vk__presentAcquiredFrame(GPUSwapchainVk *swapchain) {
   waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
   if (!sync->fence ||
       vkResetFences(swapchain->device, 1u, &sync->fence) != VK_SUCCESS) {
+    vk_setSwapchainStatus(swapchain, VK_ERROR_UNKNOWN);
     return false;
   }
 
@@ -68,10 +69,12 @@ vk__presentAcquiredFrame(GPUSwapchainVk *swapchain) {
   submitInfo.pWaitDstStageMask    = &waitStage;
   submitInfo.signalSemaphoreCount = 1u;
   submitInfo.pSignalSemaphores    = &sync->renderFinished;
-  if (vkQueueSubmit(swapchain->queue->queRaw,
-                    1u,
-                    &submitInfo,
-                    sync->fence) != VK_SUCCESS) {
+  result = vkQueueSubmit(swapchain->queue->queRaw,
+                         1u,
+                         &submitInfo,
+                         sync->fence);
+  if (result != VK_SUCCESS) {
+    vk_setSwapchainStatus(swapchain, result);
     (void)vk_restoreFrameFence(swapchain, sync);
     return false;
   }
@@ -83,6 +86,7 @@ vk__presentAcquiredFrame(GPUSwapchainVk *swapchain) {
   presentInfo.pSwapchains        = &swapchain->swapchain;
   presentInfo.pImageIndices      = &swapchain->acquiredImageIndex;
   result = vkQueuePresentKHR(swapchain->queue->queRaw, &presentInfo);
+  vk_setSwapchainStatus(swapchain, result);
   return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
 }
 
@@ -98,17 +102,26 @@ vk_beginFrame(GPUApi *api, GPUSwapchain *swapchainObj) {
   GPU__UNUSED(api);
 
   swapchain = swapchainObj ? swapchainObj->_priv : NULL;
-  if (!swapchain || swapchain->frameActive || swapchain->imageCount == 0u) {
+  if (!swapchain || swapchain->imageCount == 0u) {
+    gpuSwapchainSetStatus(swapchainObj, GPU_SWAPCHAIN_STATUS_SURFACE_LOST);
+    return NULL;
+  }
+  if (swapchain->frameActive) {
     return NULL;
   }
 
   sync = &swapchain->frameSync[swapchain->frameIndex];
-  if (!sync->fence ||
-      vkWaitForFences(swapchain->device,
-                      1u,
-                      &sync->fence,
-                      VK_TRUE,
-                      UINT64_MAX) != VK_SUCCESS) {
+  if (!sync->fence) {
+    vk_setSwapchainStatus(swapchain, VK_ERROR_UNKNOWN);
+    return NULL;
+  }
+  result = vkWaitForFences(swapchain->device,
+                           1u,
+                           &sync->fence,
+                           VK_TRUE,
+                           UINT64_MAX);
+  if (result != VK_SUCCESS) {
+    vk_setSwapchainStatus(swapchain, result);
     return NULL;
   }
 
@@ -119,6 +132,7 @@ vk_beginFrame(GPUApi *api, GPUSwapchain *swapchainObj) {
                                  sync->imageAvailable,
                                  VK_NULL_HANDLE,
                                  &imageIndex);
+  vk_setSwapchainStatus(swapchain, result);
   if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
     return NULL;
   }

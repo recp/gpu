@@ -572,34 +572,59 @@ typedef struct GPUComputePipelineVk {
 } GPUComputePipelineVk;
 
 struct GPUSwapchainVk {
-  GPUDevice         *gpuDevice;
-  GPUQueueVk        *queue;
-  GPUSurfaceVk      *surface;
-  VkImage           *images;
-  VkImageView       *imageViews;
-  VkFramebuffer     *framebuffers;
-  GPUTexture        *textures;
-  GPUTextureView    *textureViews;
-  GPUTextureViewVk  *nativeViews;
-  GPUFrameSyncVk    *frameSync;
-  VkDevice           device;
-  VkPhysicalDevice   physicalDevice;
-  VkSwapchainKHR     swapchain;
-  VkRenderPass       renderPasses[3][2];
-  GPUFrame           frame;
-  VkFormat           format;
-  VkExtent2D         extent;
-  uint32_t           imageCount;
-  uint32_t           requestedImageCount;
-  uint32_t           frameIndex;
-  uint32_t           acquiredImageIndex;
-  uint32_t           inFlightCommandCount;
-  GPUFormat          gpuFormat;
-  GPUPresentMode     presentMode;
-  bool               frameActive;
-  bool               frameScheduled;
-  bool               frameSubmitted;
+  GPUDevice        *gpuDevice;
+  GPUSwapchain     *gpuSwapchain;
+  GPUQueueVk       *queue;
+  GPUSurfaceVk     *surface;
+  VkImage          *images;
+  VkImageView      *imageViews;
+  VkFramebuffer    *framebuffers;
+  GPUTexture       *textures;
+  GPUTextureView   *textureViews;
+  GPUTextureViewVk *nativeViews;
+  GPUFrameSyncVk   *frameSync;
+  VkDevice          device;
+  VkPhysicalDevice  physicalDevice;
+  VkSwapchainKHR    swapchain;
+  VkRenderPass      renderPasses[3][2];
+  GPUFrame          frame;
+  VkFormat          format;
+  VkExtent2D        extent;
+  uint32_t          imageCount;
+  uint32_t          requestedImageCount;
+  uint32_t          frameIndex;
+  uint32_t          acquiredImageIndex;
+  uint32_t          inFlightCommandCount;
+  GPUFormat         gpuFormat;
+  GPUPresentMode    presentMode;
+  bool              frameActive;
+  bool              frameScheduled;
+  bool              frameSubmitted;
 };
+
+static inline void
+vk_setSwapchainStatus(GPUSwapchainVk *swapchain, VkResult result) {
+  GPUSwapchainStatus status;
+
+  switch (result) {
+    case VK_SUCCESS:
+      status = GPU_SWAPCHAIN_STATUS_READY;
+      break;
+    case VK_SUBOPTIMAL_KHR:
+      status = GPU_SWAPCHAIN_STATUS_SUBOPTIMAL;
+      break;
+    case VK_ERROR_OUT_OF_DATE_KHR:
+      status = GPU_SWAPCHAIN_STATUS_OUT_OF_DATE;
+      break;
+    case VK_ERROR_SURFACE_LOST_KHR:
+      status = GPU_SWAPCHAIN_STATUS_SURFACE_LOST;
+      break;
+    default:
+      status = GPU_SWAPCHAIN_STATUS_UNAVAILABLE;
+      break;
+  }
+  gpuSwapchainSetStatus(swapchain ? swapchain->gpuSwapchain : NULL, status);
+}
 
 typedef struct GPUShaderLibraryVk {
   VkDevice       device;

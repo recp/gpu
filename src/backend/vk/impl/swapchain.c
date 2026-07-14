@@ -576,6 +576,7 @@ vk_createSwapchain(GPUApi          * __restrict api,
   swapchainObj->_priv             = swapchain;
   swapchainObj->backingScaleFactor = info->surface->scale;
   swapchain->gpuDevice            = device;
+  swapchain->gpuSwapchain         = swapchainObj;
   swapchain->queue                = cmdQue->_priv;
   swapchain->surface              = surface;
   swapchain->device               = deviceVk->device;
@@ -620,6 +621,7 @@ vk_resizeSwapchain(GPUSwapchain *swapchainObj, GPUExtent2D size) {
 
   memset(&replacement, 0, sizeof(replacement));
   replacement.gpuDevice            = swapchain->gpuDevice;
+  replacement.gpuSwapchain         = swapchain->gpuSwapchain;
   replacement.queue                = swapchain->queue;
   replacement.surface              = swapchain->surface;
   replacement.device               = swapchain->device;

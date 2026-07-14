@@ -29,7 +29,11 @@ dx12_beginFrame(GPUApi       * __restrict api,
 
   native = swapchain ? swapchain->_priv : NULL;
   if (!native || !native->swapchain || !native->frames ||
-      native->imageCount == 0u || native->frameActive) {
+      native->imageCount == 0u) {
+    gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SURFACE_LOST);
+    return NULL;
+  }
+  if (native->frameActive) {
     return NULL;
   }
 
@@ -37,6 +41,7 @@ dx12_beginFrame(GPUApi       * __restrict api,
     native->swapchain
   );
   if (frameIndex >= native->imageCount) {
+    gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SURFACE_LOST);
     return NULL;
   }
 
@@ -44,8 +49,11 @@ dx12_beginFrame(GPUApi       * __restrict api,
   if (!dx12_waitQueueFence(native->queue,
                            frame->fenceValue,
                            native->frameEvent)) {
+    gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
     return NULL;
   }
+
+  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_READY);
 
   native->frameIndex     = frameIndex;
   native->frameActive    = true;

@@ -447,6 +447,7 @@ typedef struct GPUFrameDX12 {
 } GPUFrameDX12;
 
 struct GPUSwapchainDX12 {
+  GPUSwapchain         *gpuSwapchain;
   GPUQueueDX12         *queue;
   IDXGISwapChain3      *swapchain;
   ID3D12DescriptorHeap *rtvHeap;
@@ -462,6 +463,19 @@ struct GPUSwapchainDX12 {
   bool                  frameActive;
   bool                  frameScheduled;
 };
+
+static inline void
+dx12_setSwapchainStatus(GPUSwapchainDX12 *swapchain, HRESULT result) {
+  GPUSwapchainStatus status;
+
+  if (result == DXGI_STATUS_OCCLUDED) {
+    status = GPU_SWAPCHAIN_STATUS_UNAVAILABLE;
+  } else {
+    status = SUCCEEDED(result) ? GPU_SWAPCHAIN_STATUS_READY
+                               : GPU_SWAPCHAIN_STATUS_UNAVAILABLE;
+  }
+  gpuSwapchainSetStatus(swapchain ? swapchain->gpuSwapchain : NULL, status);
+}
 
 typedef struct GPU__DX12 {
   ID3D12Device  *d3dDevice;

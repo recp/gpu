@@ -34,6 +34,14 @@ typedef enum GPUPresentMode {
   GPU_PRESENT_MODE_IMMEDIATE = 2
 } GPUPresentMode;
 
+typedef enum GPUSwapchainStatus {
+  GPU_SWAPCHAIN_STATUS_READY = 0,
+  GPU_SWAPCHAIN_STATUS_UNAVAILABLE = 1,
+  GPU_SWAPCHAIN_STATUS_SUBOPTIMAL = 2,
+  GPU_SWAPCHAIN_STATUS_OUT_OF_DATE = 3,
+  GPU_SWAPCHAIN_STATUS_SURFACE_LOST = 4
+} GPUSwapchainStatus;
+
 typedef struct GPUSwapchainCreateInfo {
   GPUChainedStruct chain;
   const char      *label;
@@ -61,6 +69,10 @@ GPUCreateSwapchainDefault(GPUDevice          * __restrict device,
 GPU_EXPORT
 GPUFormat
 GPUGetSwapchainFormat(GPUSwapchain * __restrict swapchain);
+
+GPU_EXPORT
+GPUSwapchainStatus
+GPUGetSwapchainStatus(GPUSwapchain * __restrict swapchain);
 
 GPU_EXPORT
 void

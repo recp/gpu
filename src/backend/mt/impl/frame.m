@@ -27,13 +27,20 @@ mt_beginFrame(GPUApi       *__restrict api,
   id<CAMetalDrawable> drawable;
 
   swapchainMtl = swapchain->_priv;
-  if (!swapchainMtl || swapchainMtl->frameActive) {
+  if (!swapchainMtl || !swapchainMtl->layer) {
+    gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SURFACE_LOST);
+    return NULL;
+  }
+  if (swapchainMtl->frameActive) {
     return NULL;
   }
   drawable     = [swapchainMtl->layer nextDrawable];
   if (!drawable) {
+    gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
     return NULL;
   }
+
+  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_READY);
 
   [drawable retain];
   frame = &swapchainMtl->frame;

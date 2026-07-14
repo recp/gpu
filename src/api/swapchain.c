@@ -75,6 +75,7 @@ gpuCreateSwapchainInternal(GPUDevice              * __restrict device,
     swapchain->width  = info->width;
     swapchain->height = info->height;
     swapchain->format = info->format;
+    gpuSwapchainResetStatus(swapchain);
   }
 
   return swapchain;
@@ -200,6 +201,12 @@ GPUGetSwapchainFormat(GPUSwapchain * __restrict swapchain) {
 }
 
 GPU_EXPORT
+GPUSwapchainStatus
+GPUGetSwapchainStatus(GPUSwapchain * __restrict swapchain) {
+  return swapchain ? swapchain->status : GPU_SWAPCHAIN_STATUS_UNAVAILABLE;
+}
+
+GPU_EXPORT
 void
 GPUDestroySwapchain(GPUSwapchain * __restrict swapchain) {
   GPUApi *api;
@@ -241,6 +248,7 @@ GPUResizeSwapchain(GPUSwapchain * __restrict swapchain,
   if (result == GPU_OK) {
     swapchain->width  = width;
     swapchain->height = height;
+    gpuSwapchainResetStatus(swapchain);
   }
 
   return result;

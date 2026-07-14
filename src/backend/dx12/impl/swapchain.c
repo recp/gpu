@@ -293,6 +293,7 @@ dx12_createSwapchain(GPUApi                    * __restrict api,
     return NULL;
   }
 
+  native->gpuSwapchain      = swapchain;
   native->queue             = queueDX12;
   native->format            = format;
   native->imageCount        = imageCount;

@@ -1473,6 +1473,7 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
       swapchain->syncInterval,
       swapchain->presentFlags
     );
+    dx12_setSwapchainStatus(swapchain, presentResult);
     if (FAILED(presentResult)) {
       dx12__reportQueueError(queue, "present", presentResult);
       commitResult = GPU_ERROR_BACKEND_FAILURE;
@@ -1772,6 +1773,7 @@ dx12_submitEx(GPUQueue                   *queueHandle,
       swapchain->syncInterval,
       swapchain->presentFlags
     );
+    dx12_setSwapchainStatus(swapchain, presentResult);
     if (FAILED(presentResult)) {
       dx12__reportQueueError(queue, "advanced present", presentResult);
       submitResult = GPU_ERROR_BACKEND_FAILURE;

@@ -111,6 +111,13 @@ create_validation_swapchain(
   return &gValidationSwapchain;
 }
 
+static GPUResult
+resize_validation_swapchain(GPUSwapchain *swapchain, GPUExtent2D size) {
+  (void)size;
+  return swapchain == &gValidationSwapchain ? GPU_OK
+                                             : GPU_ERROR_INVALID_ARGUMENT;
+}
+
 static GPUAdapter *
 get_ownership_adapters(GPUInstance * __restrict instance,
                        uint32_t                   maxCount) {
@@ -1153,6 +1160,10 @@ check_swapchain_create_validation(GPUDevice *device) {
     fprintf(stderr, "null swapchain returned a format\n");
     return 0;
   }
+  if (GPUGetSwapchainStatus(NULL) != GPU_SWAPCHAIN_STATUS_UNAVAILABLE) {
+    fprintf(stderr, "null swapchain returned an invalid status\n");
+    return 0;
+  }
 
   scopedApi                                   = *gpuDeviceApi(device);
   scopedApi.device.getFormatCapabilities     =
@@ -1161,6 +1172,7 @@ check_swapchain_create_validation(GPUDevice *device) {
     get_validation_surface_capabilities;
   scopedApi.cmdque.getCommandQueue             = get_scoped_queue;
   scopedApi.swapchain.createSwapchain          = create_validation_swapchain;
+  scopedApi.swapchain.resizeSwapchain          = resize_validation_swapchain;
   scopedInstance._api                          = &scopedApi;
   scopedAdapter.inst                           = &scopedInstance;
   scopedDevice.inst                            = &scopedInstance;
@@ -1269,9 +1281,37 @@ check_swapchain_create_validation(GPUDevice *device) {
       swapchain->device != &scopedDevice ||
       swapchain->width != 640u || swapchain->height != 480u ||
       GPUGetSwapchainFormat(swapchain) != GPU_FORMAT_RGBA8_UNORM ||
+      GPUGetSwapchainStatus(swapchain) != GPU_SWAPCHAIN_STATUS_READY ||
       gValidationSwapchainFormat != GPU_FORMAT_RGBA8_UNORM ||
       gValidationSwapchainImageCount != 0u) {
     fprintf(stderr, "default swapchain did not select surface format\n");
+    return 0;
+  }
+
+  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
+  if (GPUGetSwapchainStatus(swapchain) != GPU_SWAPCHAIN_STATUS_UNAVAILABLE) {
+    fprintf(stderr, "temporary swapchain status was not recorded\n");
+    return 0;
+  }
+  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_READY);
+  if (GPUGetSwapchainStatus(swapchain) != GPU_SWAPCHAIN_STATUS_READY) {
+    fprintf(stderr, "temporary swapchain status did not clear\n");
+    return 0;
+  }
+  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SUBOPTIMAL);
+  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_READY);
+  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_OUT_OF_DATE);
+  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SUBOPTIMAL);
+  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SURFACE_LOST);
+  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_OUT_OF_DATE);
+  if (GPUGetSwapchainStatus(swapchain) != GPU_SWAPCHAIN_STATUS_SURFACE_LOST) {
+    fprintf(stderr, "sticky swapchain status was downgraded\n");
+    return 0;
+  }
+  if (GPUResizeSwapchain(swapchain, 800u, 600u) != GPU_OK ||
+      swapchain->width != 800u || swapchain->height != 600u ||
+      GPUGetSwapchainStatus(swapchain) != GPU_SWAPCHAIN_STATUS_READY) {
+    fprintf(stderr, "swapchain resize did not reset status\n");
     return 0;
   }
 

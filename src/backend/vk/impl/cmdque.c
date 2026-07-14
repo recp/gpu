@@ -1205,6 +1205,7 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
     presentInfo.pSwapchains        = &swapchain->swapchain;
     presentInfo.pImageIndices      = &native->presentImageIndex;
     presentResult = vkQueuePresentKHR(queue->queRaw, &presentInfo);
+    vk_setSwapchainStatus(swapchain, presentResult);
     if (presentResult != VK_SUCCESS && presentResult != VK_SUBOPTIMAL_KHR) {
       vk__reportQueueError(cmdb, "present", presentResult);
       commitResult = GPU_ERROR_BACKEND_FAILURE;
@@ -1596,6 +1597,7 @@ vk_submitEx(GPUQueue                   *queueHandle,
     presentInfo.pSwapchains        = &swapchain->swapchain;
     presentInfo.pImageIndices      = &presentNative->presentImageIndex;
     presentResult = vkQueuePresentKHR(queue->queRaw, &presentInfo);
+    vk_setSwapchainStatus(swapchain, presentResult);
     if (presentResult != VK_SUCCESS && presentResult != VK_SUBOPTIMAL_KHR) {
       vk__reportQueueError(info->ppCommandBuffers[0],
                            "advanced present",
