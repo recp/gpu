@@ -9,9 +9,11 @@
 #include <string.h>
 
 enum {
-  VULKAN_COMMAND_BATCH_SIZE  = 4u,
-  VULKAN_TRANSFER_TEST_BYTES = 64u * 1024u,
-  VULKAN_WARM_ITERATIONS     = 256u
+  VULKAN_COMMAND_BATCH_SIZE       = 4u,
+  VULKAN_TRANSFER_TEST_BYTES      = 64u * 1024u,
+  VULKAN_TEXTURE_UPLOADS_PER_SLOT = GPU_VK_TEXTURE_TRANSFER_CAPACITY /
+                                    VULKAN_TRANSFER_TEST_BYTES,
+  VULKAN_WARM_ITERATIONS          = 256u
 };
 
 typedef struct CompletionProbe {
@@ -21,6 +23,14 @@ typedef struct CompletionProbe {
 
 _Static_assert(sizeof(GPUPipelineStatisticsResult) == 11u * sizeof(uint64_t),
                "pipeline statistics result layout changed");
+
+#define VULKAN_CHECK(label, expression)                                      \
+  do {                                                                       \
+    if (ok && !(expression)) {                                               \
+      fprintf(stderr, "vulkan queue check failed: %s\n", label);            \
+      ok = 0;                                                                \
+    }                                                                        \
+  } while (0)
 
 static int
 feature_set_contains(const GPUFeatureSet *set, GPUFeature feature) {
@@ -236,7 +246,10 @@ texture_uploads_reuse(GPUDevice       *device,
   memset(pixels, 0, sizeof(pixels));
   pixels[3] = 255u;
   ok = 1;
-  for (uint32_t i = 0u; ok && i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
+  for (uint32_t i = 0u;
+       ok && i < GPU_VK_TRANSFER_SLOT_COUNT *
+                   VULKAN_TEXTURE_UPLOADS_PER_SLOT;
+       i++) {
     pixels[0] = (uint8_t)i;
     ok = GPUQueueWriteTexture(queue,
                               texture,
@@ -833,9 +846,9 @@ main(void) {
     return 1;
   }
 
-  runtimeConfig.chain.sType         = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
-  runtimeConfig.chain.structSize    = sizeof(runtimeConfig);
-  runtimeConfig.validationMode      = GPU_VALIDATION_FULL;
+  runtimeConfig.chain.sType       = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
+  runtimeConfig.chain.structSize  = sizeof(runtimeConfig);
+  runtimeConfig.validationMode    = GPU_VALIDATION_FULL;
   runtimeConfig.enableVerboseLogs = true;
   GPUConfigureRuntime(device, &runtimeConfig);
 
@@ -858,15 +871,24 @@ main(void) {
     return 1;
   }
 
-  ok = buffer_transfers_reuse(device, graphics, fence) &&
-       texture_uploads_reuse(device, graphics, fence) &&
-       timestamp_roundtrip(device, graphics, fence) &&
-       occlusion_roundtrip(device, graphics, fence) &&
-       (!pipelineStatsSupported ||
-        pipeline_statistics_roundtrip(device, graphics, fence)) &&
-       submit_empty_batch(graphics, fence, &probe) &&
-       submit_empty_compute(compute, fence) &&
-       probe.count == 1u && probe.cmdb != NULL;
+  ok = 1;
+  VULKAN_CHECK("buffer transfer reuse",
+               buffer_transfers_reuse(device, graphics, fence));
+  VULKAN_CHECK("texture upload reuse",
+               texture_uploads_reuse(device, graphics, fence));
+  VULKAN_CHECK("timestamp roundtrip",
+               timestamp_roundtrip(device, graphics, fence));
+  VULKAN_CHECK("occlusion roundtrip",
+               occlusion_roundtrip(device, graphics, fence));
+  if (pipelineStatsSupported) {
+    VULKAN_CHECK("pipeline statistics roundtrip",
+                 pipeline_statistics_roundtrip(device, graphics, fence));
+  }
+  VULKAN_CHECK("graphics batch submit",
+               submit_empty_batch(graphics, fence, &probe));
+  VULKAN_CHECK("compute submit", submit_empty_compute(compute, fence));
+  VULKAN_CHECK("completion callback",
+               probe.count == 1u && probe.cmdb != NULL);
   GPUResetStats(device);
   for (uint32_t i = 0; ok && i < VULKAN_WARM_ITERATIONS; i++) {
     ok = submit_empty_batch(graphics, fence, NULL) &&

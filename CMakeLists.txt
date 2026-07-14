@@ -519,7 +519,7 @@ if(GPU_BUILD_DX12 AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
   add_custom_target(gpu-dx12-fixtures DEPENDS ${GPU_DX12_USL_FIXTURES})
 endif()
 
-if(GPU_BUILD_VULKAN AND GPU_BUILD_SAMPLES)
+if(GPU_BUILD_VULKAN AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
   gpu_add_usl_fixtures(
     GPU_VULKAN_USL_FIXTURES
     vulkan
@@ -531,6 +531,16 @@ if(GPU_BUILD_VULKAN AND GPU_BUILD_SAMPLES)
   list(GET GPU_VULKAN_USL_FIXTURES 0 GPU_VULKAN_TRIANGLE_US)
   list(GET GPU_VULKAN_USL_FIXTURES 1 GPU_VULKAN_TEXTURED_QUAD_US)
   list(GET GPU_VULKAN_USL_FIXTURES 2 GPU_VULKAN_COMPUTE_BUFFER_US)
+  if(GPU_BUILD_TESTS)
+    gpu_add_usl_fixtures(
+      GPU_VULKAN_TEST_USL_FIXTURES
+      vulkan
+      tests
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-usl/triangle.usl"
+    )
+    list(GET GPU_VULKAN_TEST_USL_FIXTURES 0 GPU_VULKAN_DYNAMIC_TRIANGLE_US)
+    list(APPEND GPU_VULKAN_USL_FIXTURES ${GPU_VULKAN_TEST_USL_FIXTURES})
+  endif()
   add_custom_target(gpu-vulkan-fixtures DEPENDS ${GPU_VULKAN_USL_FIXTURES})
 endif()
 
@@ -600,6 +610,9 @@ if(GPU_BUILD_TESTS)
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
   )
+  if(NOT MSVC)
+    target_compile_options(gpu-api-test PRIVATE -Wall -Wextra -Werror)
+  endif()
 
   foreach(runtime_target us ds)
     if(TARGET ${runtime_target})
@@ -617,10 +630,70 @@ if(GPU_BUILD_TESTS)
   )
 
   if(GPU_BUILD_VULKAN)
+    list(GET GPU_API_VULKAN_USL_FIXTURES 1 GPU_VULKAN_RENDER_MRT_US)
+
     add_test(NAME api-validation-vulkan
       COMMAND gpu-api-test
               ${GPU_API_VULKAN_USL_FIXTURES}
               vulkan
+    )
+
+    add_executable(gpu-vulkan-queue-test
+      tests/vulkan/queue.c
+    )
+    target_include_directories(gpu-vulkan-queue-test PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(gpu-vulkan-queue-test PRIVATE gpu)
+    if(TARGET us)
+      target_link_libraries(gpu-vulkan-queue-test PRIVATE us)
+    elseif(TARGET gpu_usl)
+      target_link_libraries(gpu-vulkan-queue-test PRIVATE gpu_usl)
+    endif()
+    set_target_properties(gpu-vulkan-queue-test PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+    )
+
+    add_executable(gpu-vulkan-shader-test
+      tests/vulkan/shader.c
+      tests/vulkan/texture.c
+      tests/api/copy.c
+      tests/api/texture_transfer.c
+    )
+    target_include_directories(gpu-vulkan-shader-test PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(gpu-vulkan-shader-test PRIVATE gpu)
+    add_dependencies(gpu-vulkan-shader-test gpu-vulkan-fixtures)
+    set_target_properties(gpu-vulkan-shader-test PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+    )
+
+    if(NOT MSVC)
+      target_compile_options(gpu-vulkan-queue-test PRIVATE
+        -Wall
+        -Wextra
+        -Werror
+      )
+      target_compile_options(gpu-vulkan-shader-test PRIVATE
+        -Wall
+        -Wextra
+        -Werror
+      )
+    endif()
+
+    add_test(NAME vulkan-queue
+      COMMAND gpu-vulkan-queue-test
+    )
+    add_test(NAME vulkan-shader
+      COMMAND gpu-vulkan-shader-test
+              "${GPU_VULKAN_DYNAMIC_TRIANGLE_US}"
+              "${GPU_VULKAN_RENDER_MRT_US}"
+              "${GPU_VULKAN_TEXTURED_QUAD_US}"
     )
   endif()
 
@@ -947,6 +1020,29 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
     gpu_attach_usl_sample(gpu-compute-render-vulkan-usl
                           gpu-vulkan-fixtures
                           "${GPU_VULKAN_COMPUTE_BUFFER_US}")
+  endif()
+endif()
+
+if(GPU_BUILD_TESTS AND GPU_BUILD_VULKAN AND APPLE)
+  get_filename_component(GPU_VULKAN_LIBRARY_DIR "${Vulkan_LIBRARY}" DIRECTORY)
+  get_filename_component(GPU_VULKAN_PLATFORM_DIR
+                         "${GPU_VULKAN_LIBRARY_DIR}"
+                         DIRECTORY)
+  set(GPU_VULKAN_ICD
+    "${GPU_VULKAN_PLATFORM_DIR}/share/vulkan/icd.d/MoltenVK_icd.json"
+  )
+  if(EXISTS "${GPU_VULKAN_ICD}")
+    foreach(vulkanTest
+            api-validation-vulkan
+            vulkan-queue
+            vulkan-shader
+            vulkan-compute-buffer)
+      if(TEST ${vulkanTest})
+        set_tests_properties(${vulkanTest} PROPERTIES
+          ENVIRONMENT "VK_ICD_FILENAMES=${GPU_VULKAN_ICD}"
+        )
+      endif()
+    endforeach()
   endif()
 endif()
 
