@@ -1074,6 +1074,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   GPUShaderLibraryCreateInfo info = {0};
   GPUApi                   *api;
   USCompileOutput          *compileOutput;
+  USLCompileOptions         compileOptions;
   USLTargetSpec             target;
   USLCapabilityAtomDesc     targetAtoms[3];
   USCompileInput            compileInput;
@@ -1172,6 +1173,9 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
                             targetAtomCount) != USLOk) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
+  if (us_compile_options_from_env(&compileOptions) != USLOk) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
 
   encoding   = target.backend == USL_BACKEND_SPIRV
                  ? USL_RUNTIME_EMBEDDED_BLOB_ENCODING_BINARY
@@ -1186,6 +1190,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   compileInput.artifact      = bytecodeData;
   compileInput.artifact_size = (size_t)bytecodeSize;
   compileInput.target        = &target;
+  compileInput.options       = &compileOptions;
   if (us_compile(&compileInput, compileOutput) != USLOk ||
       compileOutput->backend != target.backend ||
       compileOutput->encoding != encoding ||
