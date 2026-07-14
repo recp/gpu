@@ -9,6 +9,18 @@ typedef volatile LONG GPUThreadGate;
 #  include <sched.h>
 typedef pthread_t GPUThreadHandle;
 typedef int       GPUThreadGate;
+
+#  if defined(__has_feature)
+#    if __has_feature(address_sanitizer)
+#      define GPU_THREADING_TEST_ASAN 1
+#    endif
+#  endif
+#  if defined(__SANITIZE_ADDRESS__)
+#    define GPU_THREADING_TEST_ASAN 1
+#  endif
+#  if !defined(GPU_THREADING_TEST_ASAN)
+#    define GPU_THREADING_TEST_ASAN 0
+#  endif
 #endif
 
 enum {
@@ -228,7 +240,24 @@ gpu_startThread(GPUThreadHandle  *thread,
   *thread = CreateThread(NULL, 0u, gpu_threadingMain, ctx, 0u, NULL);
   return *thread != NULL;
 #else
+#  if GPU_THREADING_TEST_ASAN
+  pthread_attr_t attr;
+  int            result;
+
+  /* ASan expands USL codegen frames beyond macOS' 512 KiB pthread default. */
+  if (pthread_attr_init(&attr) != 0) {
+    return false;
+  }
+  if (pthread_attr_setstacksize(&attr, 8u * 1024u * 1024u) != 0) {
+    pthread_attr_destroy(&attr);
+    return false;
+  }
+  result = pthread_create(thread, &attr, gpu_threadingMain, ctx);
+  pthread_attr_destroy(&attr);
+  return result == 0;
+#  else
   return pthread_create(thread, NULL, gpu_threadingMain, ctx) == 0;
+#  endif
 #endif
 }
 
