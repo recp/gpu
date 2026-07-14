@@ -118,6 +118,101 @@ vk__reportQueueError(GPUCommandBuffer *cmdb,
                        message);
 }
 
+static bool
+vk__beginFrameTime(GPUCommandBufferVk *native) {
+  GPUQueueVk           *queue;
+  GPUDevice            *device;
+  GPUDeviceVk          *deviceVk;
+  VkQueryPoolCreateInfo queryInfo = {0};
+
+  queue    = native ? native->owner : NULL;
+  device   = queue && queue->queue ? queue->queue->_device : NULL;
+  deviceVk = device ? device->_priv : NULL;
+  if (!native || !queue || !device || !deviceVk ||
+      !device->runtimeConfig.enableStats ||
+      !(queue->queue->bits & GPU_QUEUE_GRAPHICS_BIT) ||
+      queue->timestampValidBits == 0u ||
+      !(queue->timestampPeriodNs > 0.0)) {
+    return false;
+  }
+
+  if (!native->frameTimeQueries) {
+    queryInfo.sType      = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+    queryInfo.queryType  = VK_QUERY_TYPE_TIMESTAMP;
+    queryInfo.queryCount = 2u;
+    if (vkCreateQueryPool(deviceVk->device,
+                          &queryInfo,
+                          NULL,
+                          &native->frameTimeQueries) != VK_SUCCESS) {
+      return false;
+    }
+  }
+
+  vkCmdResetQueryPool(native->command, native->frameTimeQueries, 0u, 2u);
+  vkCmdWriteTimestamp(native->command,
+                      VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                      native->frameTimeQueries,
+                      0u);
+  return true;
+}
+
+static void
+vk__endFrameTime(GPUCommandBufferVk *native) {
+  if (!native || !native->frameTimeActive ||
+      !native->commandBuffer._recordsGPUFrameTime) {
+    return;
+  }
+
+  vkCmdWriteTimestamp(native->command,
+                      VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                      native->frameTimeQueries,
+                      1u);
+}
+
+static void
+vk__recordFrameTime(GPUCommandBufferVk *native) {
+  GPUQueueVk *queue;
+  GPUDevice  *device;
+  uint64_t    timestamps[2];
+  uint64_t    elapsed;
+  uint64_t    mask;
+  double      milliseconds;
+  VkResult    result;
+
+  queue  = native ? native->owner : NULL;
+  device = queue && queue->queue ? queue->queue->_device : NULL;
+  if (!native || !native->frameTimeActive ||
+      !native->commandBuffer._recordsGPUFrameTime ||
+      !native->frameTimeQueries || !device || !device->_priv) {
+    return;
+  }
+
+  result = vkGetQueryPoolResults(
+    ((GPUDeviceVk *)device->_priv)->device,
+    native->frameTimeQueries,
+    0u,
+    2u,
+    sizeof(timestamps),
+    timestamps,
+    sizeof(timestamps[0]),
+    VK_QUERY_RESULT_64_BIT
+  );
+  if (result != VK_SUCCESS) {
+    return;
+  }
+
+  if (queue->timestampValidBits < 64u) {
+    mask          = (1ull << queue->timestampValidBits) - 1ull;
+    timestamps[0] &= mask;
+    timestamps[1] &= mask;
+    elapsed       = (timestamps[1] - timestamps[0]) & mask;
+  } else {
+    elapsed = timestamps[1] - timestamps[0];
+  }
+  milliseconds = (double)elapsed * queue->timestampPeriodNs / 1000000.0;
+  gpuDeviceRecordGPUFrameTime(device, milliseconds);
+}
+
 static void
 vk__recycleCommandBuffer(GPUCommandBuffer *cmdb) {
   GPUCommandBufferVk *native;
@@ -184,6 +279,8 @@ vk__completionLoop(GPUQueueVk *queue) {
                              UINT64_MAX);
     if (result != VK_SUCCESS) {
       vk__reportQueueError(cmdb, "fence wait", result);
+    } else {
+      vk__recordFrameTime(native);
     }
 
     swapchain = native->presentSwapchain;
@@ -720,16 +817,21 @@ vk_createCommandQueue(GPUDevice       *device,
 
   deviceVk            = device->_priv;
   adapterVk           = device->adapter ? device->adapter->_priv : NULL;
+
   queue->_priv        = native;
   queue->_device      = device;
   queue->bits         = bits;
-  native->queue       = queue;
-  native->familyIndex = familyIndex;
-  native->queueIndex  = queueIndex;
+
+  native->queue              = queue;
+  native->familyIndex        = familyIndex;
+  native->queueIndex         = queueIndex;
   native->timestampValidBits = 0u;
+  native->timestampPeriodNs  = 0.0;
   if (adapterVk && familyIndex < adapterVk->nQueFamilies) {
     native->timestampValidBits =
       adapterVk->queueFamilyProps[familyIndex].timestampValidBits;
+    native->timestampPeriodNs =
+      (double)adapterVk->props.limits.timestampPeriod;
   }
   vkGetDeviceQueue(deviceVk->device, familyIndex, queueIndex, &native->queRaw);
   if (!native->queRaw) {
@@ -796,6 +898,11 @@ vk_destroyCommandQueue(GPUQueue *queue) {
       if (deviceVk && command->fence) {
         vkDestroyFence(deviceVk->device, command->fence, NULL);
       }
+      if (deviceVk && command->frameTimeQueries) {
+        vkDestroyQueryPool(deviceVk->device,
+                           command->frameTimeQueries,
+                           NULL);
+      }
       free(command);
       command = next;
     }
@@ -846,19 +953,15 @@ GPU_HIDE
 GPUResult
 vk_getTimestampPeriod(GPUQueue *queue,
                       double   *outNanosecondsPerTick) {
-  GPUAdapterVk        *adapterVk;
-  GPUQueueVk          *native;
-  GPUDevice           *device;
+  GPUQueueVk *native;
 
-  native    = queue ? queue->_priv : NULL;
-  device    = queue ? queue->_device : NULL;
-  adapterVk = device && device->adapter ? device->adapter->_priv : NULL;
-  if (!native || native->timestampValidBits == 0u || !adapterVk ||
-      !(adapterVk->props.limits.timestampPeriod > 0.0f)) {
+  native = queue ? queue->_priv : NULL;
+  if (!native || native->timestampValidBits == 0u ||
+      !(native->timestampPeriodNs > 0.0)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  *outNanosecondsPerTick = (double)adapterVk->props.limits.timestampPeriod;
+  *outNanosecondsPerTick = native->timestampPeriodNs;
   return GPU_OK;
 }
 
@@ -970,6 +1073,7 @@ vk_newCommandBuffer(GPUQueue  * __restrict queue,
   native->submitFence       = native->fence;
   native->presentImageIndex = 0u;
   native->presentFrameIndex = 0u;
+  native->frameTimeActive   = false;
   native->copyDebugLabelActive = false;
   cmdb->_priv               = native;
   cmdb->_queue              = queue;
@@ -985,6 +1089,7 @@ vk_newCommandBuffer(GPUQueue  * __restrict queue,
     vk__recycleCommandBuffer(cmdb);
     return NULL;
   }
+  native->frameTimeActive = vk__beginFrameTime(native);
 
   vk_setDebugName(queue->_device,
                   VK_OBJECT_TYPE_COMMAND_BUFFER,
@@ -1057,6 +1162,7 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
     submitFence = frameSync->fence;
   }
 
+  vk__endFrameTime(native);
   result = vkEndCommandBuffer(native->command);
   if (result == VK_SUCCESS) {
     result = vkResetFences(deviceVk->device, 1u, &submitFence);
@@ -1189,6 +1295,7 @@ vk_submitCommandBuffers(GPUQueue                  * __restrict queueHandle,
   }
 
   for (uint32_t i = 0u; i < count; i++) {
+    vk__endFrameTime(natives[i]);
     result = vkEndCommandBuffer(commands[i]);
     if (result != VK_SUCCESS) {
       vk__reportQueueError(buffers[i], "command buffer end", result);

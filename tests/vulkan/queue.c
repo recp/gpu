@@ -2,6 +2,7 @@
 
 #include "backend/vk/common.h"
 #include "api/buffer_internal.h"
+#include "api/cmdqueue_internal.h"
 #include "api/device_internal.h"
 
 #include <stdint.h>
@@ -74,6 +75,36 @@ wait_queue(GPUQueue *queue, GPUFence *fence) {
   submitInfo.fence              = fence;
   return GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
          GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+}
+
+static int
+frame_time_roundtrip(GPUDevice *device,
+                     GPUQueue  *queue,
+                     GPUFence  *fence) {
+  GPUFrameStats       stats;
+  GPUQueueSubmitInfo  submitInfo = {0};
+  GPUCommandBuffer   *cmdb;
+
+  GPUResetStats(device);
+  cmdb = NULL;
+  if (GPUAcquireCommandBuffer(queue, "vulkan-frame-time", &cmdb) != GPU_OK ||
+      !cmdb) {
+    return 0;
+  }
+
+  cmdb->_recordsGPUFrameTime    = true;
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.ppCommandBuffers   = &cmdb;
+  submitInfo.fence              = fence;
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
+      GPUWaitFence(fence, 5000000000ull) != GPU_OK ||
+      GPUGetLastFrameStats(device, &stats) != GPU_OK) {
+    return 0;
+  }
+
+  return stats.gpuFrameMs > 0.0;
 }
 
 static int
@@ -850,6 +881,7 @@ main(void) {
   runtimeConfig.chain.structSize  = sizeof(runtimeConfig);
   runtimeConfig.validationMode    = GPU_VALIDATION_FULL;
   runtimeConfig.enableVerboseLogs = true;
+  runtimeConfig.enableStats       = true;
   GPUConfigureRuntime(device, &runtimeConfig);
 
   graphics = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
@@ -878,6 +910,8 @@ main(void) {
                texture_uploads_reuse(device, graphics, fence));
   VULKAN_CHECK("timestamp roundtrip",
                timestamp_roundtrip(device, graphics, fence));
+  VULKAN_CHECK("frame time roundtrip",
+               frame_time_roundtrip(device, graphics, fence));
   VULKAN_CHECK("occlusion roundtrip",
                occlusion_roundtrip(device, graphics, fence));
   if (pipelineStatsSupported) {

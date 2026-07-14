@@ -391,6 +391,7 @@ struct GPUCommandBufferVk {
   VkCommandBuffer          command;
   VkFence                  fence;
   VkFence                  submitFence;
+  VkQueryPool              frameTimeQueries;
   GPURenderPassDesc         renderPass;
   GPURenderPassVk           renderPassState;
   GPURenderCommandEncoder   renderEncoder;
@@ -401,6 +402,7 @@ struct GPUCommandBufferVk {
   GPUCommandBuffer          commandBuffer;
   uint32_t                  presentImageIndex;
   uint32_t                  presentFrameIndex;
+  bool                      frameTimeActive;
   bool                      copyDebugLabelActive;
 };
 
@@ -445,6 +447,7 @@ struct GPUQueueVk {
   uint32_t            activeTransferSlot;
   uint32_t            nextTransferSlot;
   uint64_t            readbackCapacity;
+  double              timestampPeriodNs;
   bool                stopping;
   bool                workerStarted;
   bool                transferOpen;
