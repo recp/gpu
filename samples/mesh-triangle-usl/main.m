@@ -129,6 +129,7 @@ MeshTriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
       .sType = GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT,
       .structSize = sizeof(GPUMeshPipelineEXT)
     },
+    .taskEntry = "task_main",
     .meshEntry = "mesh_main"
   };
   GPURenderPipelineCreateInfo pipelineInfo = {

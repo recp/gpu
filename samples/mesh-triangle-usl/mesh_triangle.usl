@@ -3,6 +3,12 @@ struct MeshVertex {
   color: float4 #color(0)
 }
 
+task(1, 1, 1) task_main(tid: uint #local_index) {
+  if (tid == 0) {
+    dispatch_mesh(1, 1, 1)
+  }
+}
+
 @mesh_output(triangle, MeshVertex, 3, 1)
 mesh(3, 1, 1) mesh_main(tid: uint #local_index) {
   mesh_set_primitive_count(1)
