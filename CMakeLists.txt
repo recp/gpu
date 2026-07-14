@@ -314,6 +314,7 @@ if(GPU_BUILD_TESTS)
     tests/api/shader.c
     tests/api/shader_sampler.c
     tests/api/storage_texture.c
+    tests/api/texture_integer_clear.c
     tests/api/texture_transfer.c
     tests/api/texture_view_render.c
     tests/api/threading.c
