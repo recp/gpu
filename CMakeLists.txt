@@ -291,6 +291,131 @@ if(GPU_BUILD_VULKAN)
   target_link_libraries(gpu PRIVATE Vulkan::Vulkan)
 endif()
 
+if(GPU_BUILD_TESTS OR (GPU_BUILD_SAMPLES AND GPU_BUILD_DX12))
+  add_executable(gpu-usl-fixture tests/usl_fixture.c)
+  if(TARGET us)
+    target_link_libraries(gpu-usl-fixture PRIVATE us)
+  elseif(TARGET gpu_usl)
+    target_link_libraries(gpu-usl-fixture PRIVATE gpu_usl)
+  endif()
+  set_target_properties(gpu-usl-fixture PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+
+  foreach(runtime_target us ds)
+    if(TARGET ${runtime_target})
+      add_custom_command(TARGET gpu-usl-fixture POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:${runtime_target}>
+                $<TARGET_FILE_DIR:gpu-usl-fixture>
+      )
+    endif()
+  endforeach()
+
+  function(gpu_add_usl_fixtures outVar backend group)
+    set(runtimeCommands)
+    set(runtimeDependencies)
+    foreach(runtimeTarget us ds)
+      if(TARGET ${runtimeTarget})
+        list(APPEND runtimeCommands
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                  $<TARGET_FILE:${runtimeTarget}>
+                  $<TARGET_FILE_DIR:gpu-usl-fixture>
+        )
+        list(APPEND runtimeDependencies $<TARGET_FILE:${runtimeTarget}>)
+      endif()
+    endforeach()
+
+    set(outputs)
+    foreach(source IN ITEMS ${ARGN})
+      get_filename_component(name "${source}" NAME_WE)
+      set(outputDir "${CMAKE_CURRENT_BINARY_DIR}/usl/${backend}/${group}")
+      set(fixtureSource "${outputDir}/${name}.usl")
+      set(fixtureOutput "${outputDir}/${name}.us")
+      add_custom_command(
+        OUTPUT "${fixtureOutput}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${outputDir}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${source}"
+                "${fixtureSource}"
+        ${runtimeCommands}
+        COMMAND ${CMAKE_COMMAND} -E env
+                USL_EMIT_BYTECODE=1
+                USL_NO_BACKEND_SIDECAR=1
+                $<TARGET_FILE:gpu-usl-fixture>
+                "${backend}"
+                "${fixtureSource}"
+        DEPENDS gpu-usl-fixture "${source}" ${runtimeDependencies}
+        VERBATIM
+      )
+      list(APPEND outputs "${fixtureOutput}")
+    endforeach()
+    set(${outVar} "${outputs}" PARENT_SCOPE)
+  endfunction()
+endif()
+
+if(GPU_BUILD_TESTS)
+  set(GPU_API_USL_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/usl-reflection-check/reflection.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/render_mrt.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/compute.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/source_sampler.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/storage_texture.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/cube_texture.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/line_texture.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/volume_texture.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/descriptor_arrays.usl"
+  )
+  if(GPU_BUILD_METAL)
+    set(GPU_API_DEFAULT_BACKEND metal)
+  elseif(GPU_BUILD_DX12)
+    set(GPU_API_DEFAULT_BACKEND dx12)
+  else()
+    set(GPU_API_DEFAULT_BACKEND vulkan)
+  endif()
+  gpu_add_usl_fixtures(
+    GPU_API_USL_FIXTURES
+    "${GPU_API_DEFAULT_BACKEND}"
+    api
+    ${GPU_API_USL_SOURCES}
+  )
+  add_custom_target(gpu-api-fixtures DEPENDS ${GPU_API_USL_FIXTURES})
+
+  if(GPU_BUILD_VULKAN)
+    if(GPU_API_DEFAULT_BACKEND STREQUAL "vulkan")
+      set(GPU_API_VULKAN_USL_FIXTURES ${GPU_API_USL_FIXTURES})
+    else()
+      gpu_add_usl_fixtures(
+        GPU_API_VULKAN_USL_FIXTURES
+        vulkan
+        api
+        ${GPU_API_USL_SOURCES}
+      )
+      add_custom_target(
+        gpu-api-vulkan-fixtures
+        DEPENDS ${GPU_API_VULKAN_USL_FIXTURES}
+      )
+    endif()
+  endif()
+endif()
+
+if(GPU_BUILD_DX12 AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
+  gpu_add_usl_fixtures(
+    GPU_DX12_USL_FIXTURES
+    dx12
+    samples
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-dx12-usl/triangle.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-dx12-usl/textured_quad.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-dx12-usl/compute_buffer.usl"
+  )
+  list(GET GPU_DX12_USL_FIXTURES 0 GPU_DX12_TRIANGLE_US)
+  list(GET GPU_DX12_USL_FIXTURES 1 GPU_DX12_TEXTURED_QUAD_US)
+  list(GET GPU_DX12_USL_FIXTURES 2 GPU_DX12_COMPUTE_BUFFER_US)
+  add_custom_target(gpu-dx12-fixtures DEPENDS ${GPU_DX12_USL_FIXTURES})
+endif()
+
 if(GPU_BUILD_TESTS)
   enable_testing()
 
@@ -321,6 +446,10 @@ if(GPU_BUILD_TESTS)
     tests/api/volume_texture.c
   )
   target_link_libraries(gpu-api-test PRIVATE gpu)
+  add_dependencies(gpu-api-test gpu-api-fixtures)
+  if(TARGET gpu-api-vulkan-fixtures)
+    add_dependencies(gpu-api-test gpu-api-vulkan-fixtures)
+  endif()
   target_compile_definitions(gpu-api-test PRIVATE
     GPU_BUILD_WITH_VALIDATION=$<BOOL:${GPU_BUILD_WITH_VALIDATION}>
     GPU_BUILD_WITH_DEBUG_MARKERS=$<BOOL:${GPU_BUILD_WITH_DEBUG_MARKERS}>
@@ -343,29 +472,13 @@ if(GPU_BUILD_TESTS)
 
   add_test(NAME api-validation
     COMMAND gpu-api-test
-            "${CMAKE_CURRENT_SOURCE_DIR}/samples/usl-reflection-check/reflection.us"
-            "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/render_mrt.us"
-            "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/compute.us"
-            "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/source_sampler.us"
-            "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/storage_texture.us"
-            "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/cube_texture.us"
-            "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/line_texture.us"
-            "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/volume_texture.us"
-            "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/descriptor_arrays.us"
+            ${GPU_API_USL_FIXTURES}
   )
 
   if(GPU_BUILD_VULKAN)
     add_test(NAME api-validation-vulkan
       COMMAND gpu-api-test
-              "${CMAKE_CURRENT_SOURCE_DIR}/samples/usl-reflection-check/reflection.us"
-              "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/render_mrt.us"
-              "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/compute.us"
-              "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/source_sampler.us"
-              "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/storage_texture.us"
-              "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/cube_texture.us"
-              "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/line_texture.us"
-              "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/volume_texture.us"
-              "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/descriptor_arrays.us"
+              ${GPU_API_VULKAN_USL_FIXTURES}
               vulkan
     )
   endif()
@@ -425,6 +538,7 @@ if(GPU_BUILD_TESTS)
 
     add_executable(gpu-dx12-depth-test tests/dx12/depth.c)
     target_link_libraries(gpu-dx12-depth-test PRIVATE gpu)
+    add_dependencies(gpu-dx12-depth-test gpu-dx12-fixtures)
     set_target_properties(gpu-dx12-depth-test PROPERTIES
       C_STANDARD 11
       C_STANDARD_REQUIRED YES
@@ -443,11 +557,12 @@ if(GPU_BUILD_TESTS)
 
     add_test(NAME dx12-depth-pipeline
       COMMAND gpu-dx12-depth-test
-              "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-dx12-usl/triangle.us"
+              "${GPU_DX12_TRIANGLE_US}"
     )
 
     add_executable(gpu-dx12-texture-test tests/dx12/texture.c)
     target_link_libraries(gpu-dx12-texture-test PRIVATE gpu)
+    add_dependencies(gpu-dx12-texture-test gpu-dx12-fixtures)
     set_target_properties(gpu-dx12-texture-test PROPERTIES
       C_STANDARD 11
       C_STANDARD_REQUIRED YES
@@ -466,7 +581,7 @@ if(GPU_BUILD_TESTS)
 
     add_test(NAME dx12-texture
       COMMAND gpu-dx12-texture-test
-              "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-dx12-usl/textured_quad.us"
+              "${GPU_DX12_TEXTURED_QUAD_US}"
     )
   endif()
 endif()
@@ -476,6 +591,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
     samples/triangle-dx12-usl/main.c
   )
   target_link_libraries(gpu-triangle-dx12-usl PRIVATE gpu user32)
+  add_dependencies(gpu-triangle-dx12-usl gpu-dx12-fixtures)
   set_target_properties(gpu-triangle-dx12-usl PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED YES
@@ -492,18 +608,17 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
     endif()
   endforeach()
 
-  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-dx12-usl/triangle.us")
-    add_custom_command(TARGET gpu-triangle-dx12-usl POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different
-              "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-dx12-usl/triangle.us"
-              $<TARGET_FILE_DIR:gpu-triangle-dx12-usl>
-    )
-  endif()
+  add_custom_command(TARGET gpu-triangle-dx12-usl POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_DX12_TRIANGLE_US}"
+            $<TARGET_FILE_DIR:gpu-triangle-dx12-usl>
+  )
 
   add_executable(gpu-textured-quad-dx12-usl
     samples/textured-quad-dx12-usl/main.c
   )
   target_link_libraries(gpu-textured-quad-dx12-usl PRIVATE gpu user32)
+  add_dependencies(gpu-textured-quad-dx12-usl gpu-dx12-fixtures)
   set_target_properties(gpu-textured-quad-dx12-usl PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED YES
@@ -520,19 +635,17 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
     endif()
   endforeach()
 
-  if(EXISTS
-     "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-dx12-usl/textured_quad.us")
-    add_custom_command(TARGET gpu-textured-quad-dx12-usl POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different
-              "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-dx12-usl/textured_quad.us"
-              $<TARGET_FILE_DIR:gpu-textured-quad-dx12-usl>
-    )
-  endif()
+  add_custom_command(TARGET gpu-textured-quad-dx12-usl POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_DX12_TEXTURED_QUAD_US}"
+            $<TARGET_FILE_DIR:gpu-textured-quad-dx12-usl>
+  )
 
   add_executable(gpu-compute-buffer-dx12-usl
     samples/compute-buffer-dx12-usl/main.c
   )
   target_link_libraries(gpu-compute-buffer-dx12-usl PRIVATE gpu)
+  add_dependencies(gpu-compute-buffer-dx12-usl gpu-dx12-fixtures)
   set_target_properties(gpu-compute-buffer-dx12-usl PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED YES
@@ -549,19 +662,17 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
     endif()
   endforeach()
 
-  if(EXISTS
-     "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-dx12-usl/compute_buffer.us")
-    add_custom_command(TARGET gpu-compute-buffer-dx12-usl POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different
-              "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-dx12-usl/compute_buffer.us"
-      $<TARGET_FILE_DIR:gpu-compute-buffer-dx12-usl>
-    )
-  endif()
+  add_custom_command(TARGET gpu-compute-buffer-dx12-usl POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_DX12_COMPUTE_BUFFER_US}"
+            $<TARGET_FILE_DIR:gpu-compute-buffer-dx12-usl>
+  )
 
   add_executable(gpu-compute-render-dx12-usl
     samples/compute-buffer-dx12-usl/window.c
   )
   target_link_libraries(gpu-compute-render-dx12-usl PRIVATE gpu user32)
+  add_dependencies(gpu-compute-render-dx12-usl gpu-dx12-fixtures)
   set_target_properties(gpu-compute-render-dx12-usl PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED YES
@@ -578,20 +689,17 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
     endif()
   endforeach()
 
-  if(EXISTS
-     "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-dx12-usl/compute_buffer.us")
-    add_custom_command(TARGET gpu-compute-render-dx12-usl POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different
-              "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-dx12-usl/compute_buffer.us"
-              $<TARGET_FILE_DIR:gpu-compute-render-dx12-usl>
-    )
-  endif()
+  add_custom_command(TARGET gpu-compute-render-dx12-usl POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_DX12_COMPUTE_BUFFER_US}"
+            $<TARGET_FILE_DIR:gpu-compute-render-dx12-usl>
+  )
 
   if(GPU_BUILD_TESTS)
     add_test(
       NAME dx12-compute-buffer
       COMMAND gpu-compute-buffer-dx12-usl
-              "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-dx12-usl/compute_buffer.us"
+              "${GPU_DX12_COMPUTE_BUFFER_US}"
     )
   endif()
 endif()
