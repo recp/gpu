@@ -38,8 +38,10 @@ mt_textureUsage(GPUTextureUsageFlags usage) {
 static MTLPixelFormat
 mt_stencilCopyFormat(GPUFormat format) {
   switch (format) {
+#if !TARGET_OS_IOS
     case GPU_FORMAT_DEPTH24_UNORM_STENCIL8:
       return MTLPixelFormatX24_Stencil8;
+#endif
     case GPU_FORMAT_DEPTH32_FLOAT_STENCIL8:
       return MTLPixelFormatX32_Stencil8;
     default:

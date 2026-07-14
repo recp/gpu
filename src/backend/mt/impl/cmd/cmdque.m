@@ -649,7 +649,6 @@ mt_submitCommandBuffers(GPUQueue                  * __restrict queueHandle,
   MTCommandBuffer      *natives[MT_SUBMIT_STACK_COUNT];
   id<MTL4CommandBuffer> modern[MT_SUBMIT_STACK_COUNT];
   MTCommandQueue       *queue;
-  MTL4CommitOptions    *options;
 
   queue = mt_commandQueue(queueHandle);
   if (!queue || !buffers || count < 2u) {
@@ -677,6 +676,8 @@ mt_submitCommandBuffers(GPUQueue                  * __restrict queueHandle,
   }
 
   if (@available(macOS 26.0, iOS 26.0, *)) {
+    MTL4CommitOptions *options;
+
     options = [MTL4CommitOptions new];
     if (!options) {
       return mt__commitCommandBuffers(count, buffers);

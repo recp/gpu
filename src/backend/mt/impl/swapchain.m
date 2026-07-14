@@ -79,12 +79,8 @@ mt_swapchainAttachToView(GPUSwapchain * __restrict swapchain,
   _viewHandle  = (GPUViewHandle *)viewHandle;
 
 #if TARGET_OS_IOS
-  // Ensure the view's layer is a CAMetalLayer for iOS
-  if (replace || ![_viewHandle.layer isKindOfClass: [CAMetalLayer class]]) {
-    _viewHandle.layer = swapchainMtl->layer;
-  } else {
-    [_viewHandle.layer addSublayer:swapchainMtl->layer];
-  }
+  GPU__UNUSED(replace);
+  [_viewHandle.layer addSublayer:swapchainMtl->layer];
   swapchainMtl->layer.contentsScale = _viewHandle.contentScaleFactor;
 #elif TARGET_OS_MAC
   // Ensure the view's layer is a CAMetalLayer for macOS

@@ -79,11 +79,22 @@ mt_getAvailableAdapters(GPUInstance * __restrict inst,
   NSArray<id<MTLDevice>> *devices;
   GPUAdapterMT           *adapterMT;
   GPUAdapter             *firstAdapter, *lastAdapter, *adapter;
+#if TARGET_OS_IOS
+  id<MTLDevice>           defaultDevice;
+#endif
   uint32_t                i;
 
   i            = 0;
   firstAdapter = lastAdapter = NULL;
-  devices      = MTLCopyAllDevices();
+#if TARGET_OS_IOS
+  defaultDevice = MTLCreateSystemDefaultDevice();
+  devices       = defaultDevice
+                    ? [[NSArray alloc] initWithObjects:defaultDevice, nil]
+                    : nil;
+  [defaultDevice release];
+#else
+  devices = MTLCopyAllDevices();
+#endif
 
   for (id<MTLDevice> device in devices) {
     adapter   = calloc(1, sizeof(*adapter));

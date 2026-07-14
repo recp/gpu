@@ -60,6 +60,7 @@ static const MTLPixelFormat mt_formats[GPU_FORMAT_COUNT] = {
   [GPU_FORMAT_RGBA32_UINT]                 = MTLPixelFormatRGBA32Uint,
   [GPU_FORMAT_RGBA32_SINT]                 = MTLPixelFormatRGBA32Sint,
   [GPU_FORMAT_RGBA32_FLOAT]                = MTLPixelFormatRGBA32Float,
+#if !TARGET_OS_IOS
   [GPU_FORMAT_BC1_RGBA_UNORM]              = MTLPixelFormatBC1_RGBA,
   [GPU_FORMAT_BC1_RGBA_UNORM_SRGB]         = MTLPixelFormatBC1_RGBA_sRGB,
   [GPU_FORMAT_BC2_RGBA_UNORM]              = MTLPixelFormatBC2_RGBA,
@@ -74,6 +75,7 @@ static const MTLPixelFormat mt_formats[GPU_FORMAT_COUNT] = {
   [GPU_FORMAT_BC6H_RGB_UFLOAT]             = MTLPixelFormatBC6H_RGBUfloat,
   [GPU_FORMAT_BC7_RGBA_UNORM]              = MTLPixelFormatBC7_RGBAUnorm,
   [GPU_FORMAT_BC7_RGBA_UNORM_SRGB]         = MTLPixelFormatBC7_RGBAUnorm_sRGB,
+#endif
   [GPU_FORMAT_EAC_R11_UNORM]               = MTLPixelFormatEAC_R11Unorm,
   [GPU_FORMAT_EAC_R11_SNORM]               = MTLPixelFormatEAC_R11Snorm,
   [GPU_FORMAT_EAC_RG11_UNORM]              = MTLPixelFormatEAC_RG11Unorm,
@@ -114,10 +116,49 @@ static const MTLPixelFormat mt_formats[GPU_FORMAT_COUNT] = {
   [GPU_FORMAT_ASTC_12X12_UNORM_SRGB]       = MTLPixelFormatASTC_12x12_sRGB,
   [GPU_FORMAT_DEPTH16_UNORM]               = MTLPixelFormatDepth16Unorm,
   [GPU_FORMAT_STENCIL8]                    = MTLPixelFormatStencil8,
+#if !TARGET_OS_IOS
   [GPU_FORMAT_DEPTH24_UNORM_STENCIL8]      = MTLPixelFormatDepth24Unorm_Stencil8,
+#endif
   [GPU_FORMAT_DEPTH32_FLOAT]               = MTLPixelFormatDepth32Float,
   [GPU_FORMAT_DEPTH32_FLOAT_STENCIL8]      = MTLPixelFormatDepth32Float_Stencil8
 };
+
+#if TARGET_OS_IOS
+static MTLPixelFormat
+mt_bcFormat(GPUFormat format) {
+  if (format < GPU_FORMAT_BC1_RGBA_UNORM ||
+      format > GPU_FORMAT_BC7_RGBA_UNORM_SRGB) {
+    return MTLPixelFormatInvalid;
+  }
+
+  if (@available(iOS 16.4, *)) {
+    static const MTLPixelFormat formats[] = {
+      MTLPixelFormatBC1_RGBA,
+      MTLPixelFormatBC1_RGBA_sRGB,
+      MTLPixelFormatBC2_RGBA,
+      MTLPixelFormatBC2_RGBA_sRGB,
+      MTLPixelFormatBC3_RGBA,
+      MTLPixelFormatBC3_RGBA_sRGB,
+      MTLPixelFormatBC4_RUnorm,
+      MTLPixelFormatBC4_RSnorm,
+      MTLPixelFormatBC5_RGUnorm,
+      MTLPixelFormatBC5_RGSnorm,
+      MTLPixelFormatBC6H_RGBFloat,
+      MTLPixelFormatBC6H_RGBUfloat,
+      MTLPixelFormatBC7_RGBAUnorm,
+      MTLPixelFormatBC7_RGBAUnorm_sRGB
+    };
+    _Static_assert(GPU_ARRAY_LEN(formats) ==
+                     GPU_FORMAT_BC7_RGBA_UNORM_SRGB -
+                     GPU_FORMAT_BC1_RGBA_UNORM + 1u,
+                   "BC format table is incomplete");
+
+    return formats[format - GPU_FORMAT_BC1_RGBA_UNORM];
+  }
+
+  return MTLPixelFormatInvalid;
+}
+#endif
 
 GPU_HIDE
 MTLPixelFormat
@@ -125,14 +166,23 @@ mt_format(GPUFormat format) {
   if (format <= GPU_FORMAT_UNDEFINED || format >= GPU_FORMAT_COUNT) {
     return MTLPixelFormatInvalid;
   }
+#if TARGET_OS_IOS
+  if (format >= GPU_FORMAT_BC1_RGBA_UNORM &&
+      format <= GPU_FORMAT_BC7_RGBA_UNORM_SRGB) {
+    return mt_bcFormat(format);
+  }
+#endif
   return mt_formats[format];
 }
 
 GPU_HIDE
 GPUFormat
 mt_formatFromNative(MTLPixelFormat format) {
+  if (format == MTLPixelFormatInvalid) {
+    return GPU_FORMAT_UNDEFINED;
+  }
   for (uint32_t i = 1u; i < GPU_FORMAT_COUNT; i++) {
-    if (mt_formats[i] == format) {
+    if (mt_format((GPUFormat)i) == format) {
       return (GPUFormat)i;
     }
   }
