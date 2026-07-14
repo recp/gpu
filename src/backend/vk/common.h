@@ -486,6 +486,7 @@ typedef struct GPUSurfaceVk {
   void        *metalLayer;
   VkInstance   inst;
   VkSurfaceKHR surface;
+  uint32_t     formats[GPU_FORMAT_COUNT];
 } GPUSurfaceVk;
 
 typedef struct GPUFrameSyncVk {

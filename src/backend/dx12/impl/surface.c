@@ -16,6 +16,13 @@
 
 #include "../common.h"
 
+static const uint32_t dx12_surfaceFormats[] = {
+  GPU_FORMAT_RGBA16_FLOAT,
+  GPU_FORMAT_RGBA8_UNORM,
+  GPU_FORMAT_BGRA8_UNORM,
+  GPU_FORMAT_RGB10A2_UNORM
+};
+
 GPUSurface *
 dx12_createSurface(GPUApi            * __restrict api,
                    GPUInstance       * __restrict inst,
@@ -37,6 +44,25 @@ dx12_createSurface(GPUApi            * __restrict api,
   return surface;
 }
 
+static GPUResult
+dx12_getSurfaceCapabilities(const GPUAdapter       * __restrict adapter,
+                            GPUSurface             * __restrict surface,
+                            GPUSurfaceCapabilities * __restrict outCaps) {
+  GPU__UNUSED(adapter);
+
+  if (!surface || !outCaps ||
+      (surface->type != GPU_SURFACE_WINDOWS_HWND &&
+       surface->type != GPU_SURFACE_WINDOWS_COREWINDOW)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  outCaps->minImageCount = 2u;
+  outCaps->maxImageCount = 3u;
+  outCaps->formatCount   = (uint32_t)GPU_ARRAY_LEN(dx12_surfaceFormats);
+  outCaps->pFormats      = dx12_surfaceFormats;
+  return GPU_OK;
+}
+
 GPU_HIDE
 void
 dx12_destroySurface(GPUSurface * __restrict surface) {
@@ -46,6 +72,7 @@ dx12_destroySurface(GPUSurface * __restrict surface) {
 GPU_HIDE
 void
 dx12_initSurface(GPUApiSurface *apiDevice) {
-  apiDevice->createSurface  = dx12_createSurface;
-  apiDevice->destroySurface = dx12_destroySurface;
+  apiDevice->createSurface   = dx12_createSurface;
+  apiDevice->getCapabilities = dx12_getSurfaceCapabilities;
+  apiDevice->destroySurface  = dx12_destroySurface;
 }

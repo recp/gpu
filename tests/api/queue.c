@@ -42,8 +42,13 @@ static uint32_t   gOwnershipDeviceWaitCalls;
 static uint32_t   gOwnershipDeviceDestroyCalls;
 static bool       gOwnershipDeviceDestroyOrderValid;
 static uint32_t   gOwnershipSurfaceCreateCalls;
+static uint32_t   gOwnershipSurfaceCapabilityCalls;
 static uint32_t   gOwnershipSurfaceDestroyCalls;
 static uint32_t   gOwnershipInstanceDestroyCalls;
+
+static const uint32_t gOwnershipSurfaceFormats[] = {
+  GPU_FORMAT_BGRA8_UNORM
+};
 
 static GPUAdapter *
 get_ownership_adapters(GPUInstance * __restrict instance,
@@ -163,6 +168,22 @@ destroy_ownership_surface(GPUSurface * __restrict surface) {
   gOwnershipSurfaceDestroyCalls++;
 }
 
+static GPUResult
+get_ownership_surface_capabilities(
+  const GPUAdapter       * __restrict adapter,
+  GPUSurface             * __restrict surface,
+  GPUSurfaceCapabilities * __restrict outCaps) {
+  (void)adapter;
+  (void)surface;
+
+  outCaps->minImageCount = 2u;
+  outCaps->maxImageCount = 3u;
+  outCaps->formatCount   = (uint32_t)GPU_ARRAY_LEN(gOwnershipSurfaceFormats);
+  outCaps->pFormats      = gOwnershipSurfaceFormats;
+  gOwnershipSurfaceCapabilityCalls++;
+  return GPU_OK;
+}
+
 static void
 destroy_ownership_instance(GPUApi      * __restrict api,
                            GPUInstance * __restrict instance) {
@@ -179,6 +200,7 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   GPUAdapterCapabilities     adapterCaps;
   GPUDeviceCapabilities      deviceCaps;
   GPUFormatCapabilities      formatCaps;
+  GPUSurfaceCapabilities     surfaceCaps;
   GPUApi                    *activeApi;
   GPUAdapter                *adapter;
   GPUDevice                 *device;
@@ -207,6 +229,7 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   scopedApi.device.waitIdle             = wait_ownership_device;
   scopedApi.device.destroyDevice        = destroy_ownership_device;
   scopedApi.surface.createSurface       = create_ownership_surface;
+  scopedApi.surface.getCapabilities     = get_ownership_surface_capabilities;
   scopedApi.surface.destroySurface      = destroy_ownership_surface;
   scopedApi.instance.destroyInstance    = destroy_ownership_instance;
   instance._api                         = &scopedApi;
@@ -223,6 +246,7 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   gOwnershipDeviceDestroyCalls          = 0u;
   gOwnershipDeviceDestroyOrderValid     = true;
   gOwnershipSurfaceCreateCalls          = 0u;
+  gOwnershipSurfaceCapabilityCalls      = 0u;
   gOwnershipSurfaceDestroyCalls         = 0u;
   gOwnershipInstanceDestroyCalls        = 0u;
 
@@ -279,7 +303,12 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
         GPU_ERROR_INVALID_ARGUMENT ||
       surface ||
       GPUCreateSurface(&instance, &surfaceInfo, &surface) != GPU_OK ||
-      surface != &gOwnershipSurface || surface->inst != &instance) {
+      surface != &gOwnershipSurface || surface->inst != &instance ||
+      GPUGetSurfaceCapabilities(adapter, surface, &surfaceCaps) != GPU_OK ||
+      surfaceCaps.minImageCount != 2u ||
+      surfaceCaps.maxImageCount != 3u ||
+      surfaceCaps.formatCount != 1u ||
+      surfaceCaps.pFormats[0] != GPU_FORMAT_BGRA8_UNORM) {
     fprintf(stderr, "instance-scoped surface dispatch failed\n");
     return 0;
   }
@@ -305,6 +334,7 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
       gOwnershipDeviceDestroyCalls != 2u ||
       !gOwnershipDeviceDestroyOrderValid ||
       gOwnershipSurfaceCreateCalls != 1u ||
+      gOwnershipSurfaceCapabilityCalls != 1u ||
       gOwnershipSurfaceDestroyCalls != 1u ||
       gOwnershipInstanceDestroyCalls != 1u) {
     fprintf(stderr, "instance ownership called wrong backend\n");
@@ -604,12 +634,13 @@ check_adapter_enumeration(GPUInstance *activeInstance) {
   GPUAdapterProperties props;
   GPUInstance *fakeInstance;
   GPUInstance *instance;
+  GPUInstance foreignInstance = {0};
   GPUInstanceCreateInfo instanceInfo;
   GPUSurfaceCreateInfo surfaceInfo;
   GPUSurface *fakeSurface;
+  GPUSurface querySurface = {0};
   GPUSurfaceCapabilities surfaceCaps;
   uint32_t adapterCount;
-  bool hasBgra8;
 
   if (GPUCreateInstance(NULL, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "instance create accepted null out pointer\n");
@@ -747,28 +778,18 @@ check_adapter_enumeration(GPUInstance *activeInstance) {
     fprintf(stderr, "depth format capabilities query failed\n");
     return 0;
   }
-  fakeSurface = (GPUSurface *)(uintptr_t)1u;
-  if (GPUGetSurfaceCapabilities(adapters[0], fakeSurface, NULL) !=
+  querySurface.inst = activeInstance;
+  if (GPUGetSurfaceCapabilities(adapters[0], &querySurface, NULL) !=
         GPU_ERROR_INVALID_ARGUMENT ||
       GPUGetSurfaceCapabilities(adapters[0], NULL, &surfaceCaps) !=
-        GPU_ERROR_INVALID_ARGUMENT ||
-      GPUGetSurfaceCapabilities(adapters[0], fakeSurface, &surfaceCaps) !=
-        GPU_OK ||
-      surfaceCaps.minImageCount == 0 ||
-      surfaceCaps.maxImageCount < surfaceCaps.minImageCount ||
-      surfaceCaps.formatCount == 0 ||
-      !surfaceCaps.pFormats) {
+        GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "surface capabilities query failed\n");
     return 0;
   }
-  hasBgra8 = false;
-  for (uint32_t i = 0; i < surfaceCaps.formatCount; i++) {
-    if (surfaceCaps.pFormats[i] == GPU_FORMAT_BGRA8_UNORM) {
-      hasBgra8 = true;
-    }
-  }
-  if (!hasBgra8) {
-    fprintf(stderr, "surface capabilities missing BGRA8 format\n");
+  querySurface.inst = &foreignInstance;
+  if (GPUGetSurfaceCapabilities(adapters[0], &querySurface, &surfaceCaps) !=
+      GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "surface capabilities accepted another instance\n");
     return 0;
   }
   if (GPUCreateSurface(NULL, NULL, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
@@ -998,6 +1019,90 @@ check_queue_selection(GPUDevice *device) {
       caps.limits.maxBindGroups == 0 ||
       caps.limits.maxComputeWorkgroupSizeX == 0) {
     fprintf(stderr, "device capabilities query failed\n");
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
+check_swapchain_create_validation(GPUDevice *device) {
+  GPUInstance            foreignInstance = {0};
+  GPUSurface             foreignSurface  = {0};
+  GPUSurface             surface         = {0};
+  GPUSwapchain          *swapchain;
+  GPUSwapchainCreateInfo info            = {0};
+
+  if (!device) {
+    return 0;
+  }
+
+  surface.inst          = device->inst;
+  foreignSurface.inst   = &foreignInstance;
+  info.chain.sType      = GPU_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.surface          = &surface;
+  info.width            = 640u;
+  info.height           = 480u;
+  info.format           = GPU_FORMAT_BGRA8_UNORM;
+  info.imageCount       = 3u;
+  info.presentMode      = GPU_PRESENT_MODE_FIFO;
+
+  swapchain = (GPUSwapchain *)(uintptr_t)1u;
+  if (GPUCreateSwapchain(NULL, &info, &swapchain) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      swapchain != NULL ||
+      GPUCreateSwapchain(device, &info, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "swapchain create accepted null arguments\n");
+    return 0;
+  }
+
+  swapchain        = (GPUSwapchain *)(uintptr_t)1u;
+  info.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  if (GPUCreateSwapchain(device, &info, &swapchain) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      swapchain != NULL) {
+    fprintf(stderr, "swapchain create accepted wrong sType\n");
+    return 0;
+  }
+
+  swapchain            = (GPUSwapchain *)(uintptr_t)1u;
+  info.chain.sType      = GPU_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO;
+  info.chain.structSize = (uint32_t)(sizeof(info) - 1u);
+  if (GPUCreateSwapchain(device, &info, &swapchain) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      swapchain != NULL) {
+    fprintf(stderr, "swapchain create accepted short structSize\n");
+    return 0;
+  }
+
+  info.chain.structSize = sizeof(info);
+  info.surface          = &foreignSurface;
+  if (GPUCreateSwapchain(device, &info, &swapchain) !=
+      GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "swapchain create accepted another instance\n");
+    return 0;
+  }
+
+  info.surface = &surface;
+  info.format  = GPU_FORMAT_UNDEFINED;
+  if (GPUCreateSwapchain(device, &info, &swapchain) !=
+      GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "swapchain create accepted invalid format\n");
+    return 0;
+  }
+
+  info.format = GPU_FORMAT_DEPTH32_FLOAT;
+  if (GPUCreateSwapchain(device, &info, &swapchain) != GPU_ERROR_UNSUPPORTED) {
+    fprintf(stderr, "swapchain create accepted depth format\n");
+    return 0;
+  }
+
+  info.format      = GPU_FORMAT_BGRA8_UNORM;
+  info.presentMode = (GPUPresentMode)UINT32_MAX;
+  if (GPUCreateSwapchain(device, &info, &swapchain) !=
+      GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "swapchain create accepted invalid present mode\n");
     return 0;
   }
 
@@ -1578,6 +1683,7 @@ gpu_test_queue(GPUInstance *instance,
          check_device_queue_create_validation(adapter) &&
          check_device_destroy_waits_for_submission(adapter) &&
          check_queue_selection(device) &&
+         check_swapchain_create_validation(device) &&
          check_queue_submit_fence(device) &&
          check_queue_submit_ex_semaphore(device);
 }

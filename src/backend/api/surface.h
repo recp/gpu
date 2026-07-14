@@ -33,6 +33,10 @@ typedef struct GPUApiSurface {
                                GPUSurfaceType                        type,
                                float                                 scale);
 
+  GPUResult (*getCapabilities)(const GPUAdapter      * __restrict adapter,
+                               GPUSurface            * __restrict surface,
+                               GPUSurfaceCapabilities * __restrict outCaps);
+
   void (*destroySurface)(GPUSurface * __restrict surface);
 } GPUApiSurface;
 

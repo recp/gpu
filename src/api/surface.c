@@ -18,14 +18,6 @@
 #include "adapter_internal.h"
 #include "surface_internal.h"
 
-static const uint32_t GPU_SURFACE_DEFAULT_FORMATS[] = {
-  GPU_FORMAT_BGRA8_UNORM,
-  GPU_FORMAT_BGRA8_UNORM_SRGB,
-  GPU_FORMAT_RGBA8_UNORM,
-  GPU_FORMAT_RGBA8_UNORM_SRGB,
-  GPU_FORMAT_RGBA16_FLOAT
-};
-
 static bool
 gpuIsSurfaceTypeValid(GPUSurfaceType type) {
   return type == GPU_SURFACE_WINDOWS_HWND ||
@@ -160,15 +152,34 @@ GPUResult
 GPUGetSurfaceCapabilities(const GPUAdapter * __restrict adapter,
                           const GPUSurface * __restrict surface,
                           GPUSurfaceCapabilities * __restrict outCaps) {
-  if (!adapter || !surface || !outCaps) {
+  GPUApi    *api;
+  GPUResult  result;
+
+  if (!adapter || !surface || !outCaps || adapter->inst != surface->inst) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   memset(outCaps, 0, sizeof(*outCaps));
-  outCaps->minImageCount = 2;
-  outCaps->maxImageCount = 3;
-  outCaps->formatCount = (uint32_t)GPU_ARRAY_LEN(GPU_SURFACE_DEFAULT_FORMATS);
-  outCaps->pFormats = GPU_SURFACE_DEFAULT_FORMATS;
+  if (!(api = gpuSurfaceApi(surface))) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  if (!api->surface.getCapabilities) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  result = api->surface.getCapabilities(adapter,
+                                        (GPUSurface *)surface,
+                                        outCaps);
+  if (result != GPU_OK) {
+    memset(outCaps, 0, sizeof(*outCaps));
+    return result;
+  }
+  if (outCaps->minImageCount == 0u ||
+      outCaps->maxImageCount < outCaps->minImageCount ||
+      outCaps->formatCount == 0u || !outCaps->pFormats) {
+    memset(outCaps, 0, sizeof(*outCaps));
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
 
   return GPU_OK;
 }

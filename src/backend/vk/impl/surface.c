@@ -304,6 +304,100 @@ vk_createSurface(GPUApi            * __restrict api,
   return gpuSurface;
 }
 
+static void
+vk_appendSurfaceFormat(GPUSurfaceVk *surface,
+                       uint32_t     *count,
+                       GPUFormat     format) {
+  if (!surface || !count || format <= GPU_FORMAT_UNDEFINED ||
+      format >= GPU_FORMAT_COUNT || *count >= GPU_FORMAT_COUNT) {
+    return;
+  }
+
+  for (uint32_t i = 0u; i < *count; i++) {
+    if (surface->formats[i] == (uint32_t)format) {
+      return;
+    }
+  }
+
+  surface->formats[(*count)++] = (uint32_t)format;
+}
+
+static GPUResult
+vk_getSurfaceCapabilities(const GPUAdapter       * __restrict adapter,
+                          GPUSurface             * __restrict gpuSurface,
+                          GPUSurfaceCapabilities * __restrict outCaps) {
+  GPUAdapterVk            *adapterVk;
+  GPUSurfaceVk            *surface;
+  VkSurfaceCapabilitiesKHR caps;
+  VkSurfaceFormatKHR      *formats;
+  uint32_t                 formatCount;
+  uint32_t                 gpuFormatCount;
+
+  adapterVk = adapter ? adapter->_priv : NULL;
+  surface   = gpuSurface ? gpuSurface->_priv : NULL;
+  if (!adapterVk || !surface || !surface->surface || !outCaps) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  formatCount    = 0u;
+  gpuFormatCount = 0u;
+  if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(adapterVk->physicalDevice,
+                                                 surface->surface,
+                                                 &caps) != VK_SUCCESS ||
+      vkGetPhysicalDeviceSurfaceFormatsKHR(adapterVk->physicalDevice,
+                                           surface->surface,
+                                           &formatCount,
+                                           NULL) != VK_SUCCESS ||
+      formatCount == 0u) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  formats = malloc((size_t)formatCount * sizeof(*formats));
+  if (!formats) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  if (vkGetPhysicalDeviceSurfaceFormatsKHR(adapterVk->physicalDevice,
+                                           surface->surface,
+                                           &formatCount,
+                                           formats) != VK_SUCCESS) {
+    free(formats);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  if (formatCount == 1u && formats[0].format == VK_FORMAT_UNDEFINED) {
+    for (GPUFormat format = GPU_FORMAT_R8_UNORM;
+         format < GPU_FORMAT_COUNT;
+         format = (GPUFormat)(format + 1)) {
+      GPUFormatCapabilities formatCaps;
+      VkFormat              nativeFormat;
+
+      if (vk_formatFromGPU(format, &nativeFormat) &&
+          GPUGetFormatCapabilities(adapter, format, &formatCaps) == GPU_OK &&
+          formatCaps.colorAttachment) {
+        vk_appendSurfaceFormat(surface, &gpuFormatCount, format);
+      }
+    }
+  } else {
+    for (uint32_t i = 0u; i < formatCount; i++) {
+      vk_appendSurfaceFormat(surface,
+                             &gpuFormatCount,
+                             vk_formatToGPU(formats[i].format));
+    }
+  }
+  free(formats);
+
+  if (gpuFormatCount == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  outCaps->minImageCount = caps.minImageCount;
+  outCaps->maxImageCount = caps.maxImageCount > 0u ?
+    caps.maxImageCount : UINT32_MAX;
+  outCaps->formatCount = gpuFormatCount;
+  outCaps->pFormats    = surface->formats;
+  return GPU_OK;
+}
+
 GPU_HIDE
 void
 vk_destroySurface(GPUSurface * __restrict surface) {
@@ -330,6 +424,7 @@ vk_destroySurface(GPUSurface * __restrict surface) {
 GPU_HIDE
 void
 vk_initSurface(GPUApiSurface * apiDevice) {
-  apiDevice->createSurface  = vk_createSurface;
-  apiDevice->destroySurface = vk_destroySurface;
+  apiDevice->createSurface   = vk_createSurface;
+  apiDevice->getCapabilities = vk_getSurfaceCapabilities;
+  apiDevice->destroySurface  = vk_destroySurface;
 }

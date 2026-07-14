@@ -16,7 +16,15 @@
 
 #include "../common.h"
 #include "device_internal.h"
+#include "surface_internal.h"
 #include "swapchain_internal.h"
+
+static bool
+gpuIsPresentModeValid(GPUPresentMode mode) {
+  return mode == GPU_PRESENT_MODE_FIFO ||
+         mode == GPU_PRESENT_MODE_MAILBOX ||
+         mode == GPU_PRESENT_MODE_IMMEDIATE;
+}
 
 static GPUSwapchain*
 gpuCreateSwapchainInternal(GPUDevice              * __restrict device,
@@ -48,7 +56,11 @@ GPUResult
 GPUCreateSwapchain(GPUDevice                    * __restrict device,
                    const GPUSwapchainCreateInfo * __restrict info,
                    GPUSwapchain                ** __restrict outSwapchain) {
-  GPUQueue        *queue;
+  GPUFormatCapabilities formatCaps;
+  GPUSurfaceCapabilities surfaceCaps;
+  GPUQueue             *queue;
+  GPUResult             result;
+  bool                  formatSupported;
 
   if (!outSwapchain)
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -62,6 +74,40 @@ GPUCreateSwapchain(GPUDevice                    * __restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info))
     return GPU_ERROR_INVALID_ARGUMENT;
+  if (!device->adapter || !device->inst ||
+      info->surface->inst != device->inst ||
+      info->format <= GPU_FORMAT_UNDEFINED ||
+      info->format >= GPU_FORMAT_COUNT ||
+      !gpuIsPresentModeValid(info->presentMode)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  result = GPUGetFormatCapabilities(device->adapter,
+                                    info->format,
+                                    &formatCaps);
+  if (result != GPU_OK) {
+    return result;
+  }
+  if (!formatCaps.colorAttachment) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  result = GPUGetSurfaceCapabilities(device->adapter,
+                                     info->surface,
+                                     &surfaceCaps);
+  if (result != GPU_OK) {
+    return result;
+  }
+  formatSupported = false;
+  for (uint32_t i = 0u; i < surfaceCaps.formatCount; i++) {
+    if (surfaceCaps.pFormats[i] == (uint32_t)info->format) {
+      formatSupported = true;
+      break;
+    }
+  }
+  if (!formatSupported) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
 
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0);
   if (!queue)

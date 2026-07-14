@@ -16,6 +16,11 @@
 
 #include "../common.h"
 
+static const uint32_t mt_surfaceFormats[] = {
+  GPU_FORMAT_BGRA8_UNORM,
+  GPU_FORMAT_BGRA8_UNORM_SRGB
+};
+
 GPUSurface*
 mt_createSurface(GPUApi            * __restrict api,
                  GPUInstance       * __restrict inst,
@@ -37,6 +42,25 @@ mt_createSurface(GPUApi            * __restrict api,
   return surface;
 }
 
+static GPUResult
+mt_getSurfaceCapabilities(const GPUAdapter       * __restrict adapter,
+                          GPUSurface             * __restrict surface,
+                          GPUSurfaceCapabilities * __restrict outCaps) {
+  GPU__UNUSED(adapter);
+
+  if (!surface || !outCaps ||
+      (surface->type != GPU_SURFACE_APPLE_NSVIEW &&
+       surface->type != GPU_SURFACE_APPLE_UIVIEW)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  outCaps->minImageCount = 2u;
+  outCaps->maxImageCount = 3u;
+  outCaps->formatCount   = (uint32_t)GPU_ARRAY_LEN(mt_surfaceFormats);
+  outCaps->pFormats      = mt_surfaceFormats;
+  return GPU_OK;
+}
+
 GPU_HIDE
 void
 mt_destroySurface(GPUSurface * __restrict surface) {
@@ -46,6 +70,7 @@ mt_destroySurface(GPUSurface * __restrict surface) {
 GPU_HIDE
 void
 mt_initSurface(GPUApiSurface * apiDevice) {
-  apiDevice->createSurface = mt_createSurface;
-  apiDevice->destroySurface = mt_destroySurface;
+  apiDevice->createSurface   = mt_createSurface;
+  apiDevice->getCapabilities = mt_getSurfaceCapabilities;
+  apiDevice->destroySurface  = mt_destroySurface;
 }
