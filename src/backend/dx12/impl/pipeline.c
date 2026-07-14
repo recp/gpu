@@ -16,6 +16,7 @@
 
 #include "../common.h"
 #include "../impl.h"
+#include "pipeline_cache.h"
 
 #include <d3dcompiler.h>
 #include <limits.h>
@@ -607,6 +608,7 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {0};
   DX12ShaderCode                 vertexCode = {0};
   DX12ShaderCode                 fragmentCode = {0};
+  DX12PipelineKey                rootKey;
   uint32_t                       elementCount;
   HRESULT                        result;
 
@@ -640,7 +642,8 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   if (dx12_createShaderRootSignature(device,
                                      info->layout,
                                      info->library,
-                                     &rootSignature) != GPU_OK) {
+                                     &rootSignature,
+                                     rootKey.value) != GPU_OK) {
     free(elements);
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
@@ -771,12 +774,14 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
       writeMask;
   }
 
-  result = deviceDX12->d3dDevice->lpVtbl->CreateGraphicsPipelineState(
-    deviceDX12->d3dDevice,
-    &desc,
-    &IID_ID3D12PipelineState,
-    (void **)&native->pipelineState
-  );
+  result = dx12_createGraphicsPSO(info->cache,
+                                  deviceDX12,
+                                  &desc,
+                                  info,
+                                  &rootKey,
+                                  &native->pipelineState) == GPU_OK
+             ? S_OK
+             : E_FAIL;
 
 done:
   dx12_freeShaderCode(&vertexCode);

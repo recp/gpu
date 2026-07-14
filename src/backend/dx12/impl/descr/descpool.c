@@ -15,6 +15,7 @@
  */
 
 #include "../../common.h"
+#include "../pipeline_cache.h"
 
 enum {
   DX12_ROOT_SIGNATURE_DWORD_LIMIT       = 64u,
@@ -928,6 +929,16 @@ dx12__createPipelineLayout(GPUDevice                        *device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
+  {
+    DX12PipelineKey key;
+
+    dx12_keyInit(&key);
+    dx12_keyWrite(&key,
+                  serialized->lpVtbl->GetBufferPointer(serialized),
+                  serialized->lpVtbl->GetBufferSize(serialized));
+    memcpy(native->rootSignatureKey, key.value, sizeof(key.value));
+  }
+
   result = deviceDX12->d3dDevice->lpVtbl->CreateRootSignature(
     deviceDX12->d3dDevice,
     0u,
@@ -969,17 +980,20 @@ GPUResult
 dx12_createShaderRootSignature(GPUDevice             *device,
                                GPUPipelineLayout     *layout,
                                const GPUShaderLibrary *library,
-                               ID3D12RootSignature  **outRootSignature) {
+                               ID3D12RootSignature  **outRootSignature,
+                               uint64_t               outKey[2]) {
   const GPUShaderStaticSamplerInfo *sourceSamplers;
   GPUPipelineLayoutDX12            *base;
   GPUPipelineLayoutDX12            *derived;
   uint32_t                          sourceSamplerCount;
   GPUResult                         result;
 
-  if (!device || !layout || !library || !outRootSignature) {
+  if (!device || !layout || !library || !outRootSignature || !outKey) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   *outRootSignature = NULL;
+  outKey[0]          = 0u;
+  outKey[1]          = 0u;
 
   base = layout->_native;
   if (!base || !base->rootSignature) {
@@ -991,6 +1005,7 @@ dx12_createShaderRootSignature(GPUDevice             *device,
   if (sourceSamplerCount == 0u) {
     base->rootSignature->lpVtbl->AddRef(base->rootSignature);
     *outRootSignature = base->rootSignature;
+    memcpy(outKey, base->rootSignatureKey, sizeof(base->rootSignatureKey));
     return GPU_OK;
   }
 
@@ -1005,6 +1020,7 @@ dx12_createShaderRootSignature(GPUDevice             *device,
   }
 
   *outRootSignature = derived->rootSignature;
+  memcpy(outKey, derived->rootSignatureKey, sizeof(derived->rootSignatureKey));
   derived->rootSignature = NULL;
   free(derived);
   return GPU_OK;

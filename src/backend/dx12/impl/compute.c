@@ -17,6 +17,7 @@
 #include "../common.h"
 #include "../impl.h"
 #include "../../../api/compute_internal.h"
+#include "pipeline_cache.h"
 
 static GPUComputeEncoderDX12 *
 dx12__computeEncoder(GPUComputePassEncoder *encoder) {
@@ -36,6 +37,7 @@ dx12_createComputePipeline(GPUDevice                          *device,
   ID3D12RootSignature     *rootSignature;
   D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {0};
   DX12ShaderCode           shaderCode = {0};
+  DX12PipelineKey          rootKey;
   HRESULT                  result;
 
   deviceDX12 = device ? device->_priv : NULL;
@@ -56,7 +58,8 @@ dx12_createComputePipeline(GPUDevice                          *device,
   if (dx12_createShaderRootSignature(device,
                                      info->layout,
                                      info->library,
-                                     &rootSignature) != GPU_OK) {
+                                     &rootSignature,
+                                     rootKey.value) != GPU_OK) {
     free(state);
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -74,12 +77,13 @@ dx12_createComputePipeline(GPUDevice                          *device,
   desc.pRootSignature      = rootSignature;
   desc.CS.pShaderBytecode  = shaderCode.data;
   desc.CS.BytecodeLength   = shaderCode.size;
-  result = deviceDX12->d3dDevice->lpVtbl->CreateComputePipelineState(
-    deviceDX12->d3dDevice,
-    &desc,
-    &IID_ID3D12PipelineState,
-    (void **)&native->pipelineState
-  );
+  result = dx12_createComputePSO(info->cache,
+                                 deviceDX12,
+                                 &desc,
+                                 &rootKey,
+                                 &native->pipelineState) == GPU_OK
+             ? S_OK
+             : E_FAIL;
   dx12_freeShaderCode(&shaderCode);
   if (FAILED(result) || !native->pipelineState) {
     rootSignature->lpVtbl->Release(rootSignature);

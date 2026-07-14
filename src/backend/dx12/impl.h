@@ -38,6 +38,7 @@ GPU_HIDE void dx12_getFormatCapabilities(
 GPU_HIDE void dx12_initCmdbuf(GPUApiCommandBuffer *api);
 GPU_HIDE void dx12_initQuery(GPUApiCommandBuffer *api);
 GPU_HIDE void dx12_initLibrary(GPUApiLibrary *api);
+GPU_HIDE void dx12_initPipelineCache(GPUApiPipelineCache *api);
 GPU_HIDE void dx12_initRenderPipeline(GPUApiRender *api);
 GPU_HIDE void dx12_initCompute(GPUApiCompute *api);
 GPU_HIDE void dx12_initRenderPass(GPUApiRenderPass *api);

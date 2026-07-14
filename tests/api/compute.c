@@ -65,7 +65,8 @@ check_compute_disk_cache(GPUDevice                   *device,
     return 0;
   }
   if (api->backend != GPU_BACKEND_METAL &&
-      api->backend != GPU_BACKEND_VULKAN) {
+      api->backend != GPU_BACKEND_VULKAN &&
+      api->backend != GPU_BACKEND_DIRECTX12) {
     return 1;
   }
 
@@ -111,6 +112,16 @@ check_compute_disk_cache(GPUDevice                   *device,
   fclose(file);
   if (fileSize <= 0) {
     fprintf(stderr, "native compute pipeline cache file is empty\n");
+    goto cleanup;
+  }
+
+  if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {
+    fprintf(stderr, "native compute pipeline disk cache reopen failed\n");
+    goto cleanup;
+  }
+  info->cache = cache;
+  if (GPUCreateComputePipeline(device, info, &pipeline) != GPU_OK || !pipeline) {
+    fprintf(stderr, "native compute pipeline create from reopened cache failed\n");
     goto cleanup;
   }
   ok = 1;

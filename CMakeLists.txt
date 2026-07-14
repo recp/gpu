@@ -248,6 +248,7 @@ if(GPU_BUILD_DX12)
     src/backend/dx12/impl/instance.c
     src/backend/dx12/impl/library.c
     src/backend/dx12/impl/pipeline.c
+    src/backend/dx12/impl/pipeline_cache.c
     src/backend/dx12/impl/query.c
     src/backend/dx12/impl/renderpass.c
     src/backend/dx12/impl/rce.c

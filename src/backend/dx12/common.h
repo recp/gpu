@@ -197,6 +197,7 @@ typedef struct GPUDescriptorTableDX12 {
 typedef struct GPUPipelineLayoutDX12 {
   ID3D12RootSignature *rootSignature;
   GPURootBindingDX12  *bindings;
+  uint64_t             rootSignatureKey[2];
   uint32_t             bindingCount;
   uint32_t             rangeCount;
   uint32_t             rootParameterCount;
@@ -463,7 +464,8 @@ GPUResult
 dx12_createShaderRootSignature(GPUDevice              *device,
                                GPUPipelineLayout      *layout,
                                const GPUShaderLibrary *library,
-                               ID3D12RootSignature   **outRootSignature);
+                               ID3D12RootSignature   **outRootSignature,
+                               uint64_t                outKey[2]);
 
 GPU_HIDE
 void
