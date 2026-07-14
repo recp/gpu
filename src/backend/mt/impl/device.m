@@ -83,8 +83,20 @@ GPU_HIDE
 GPUAdapter *
 mt_selectAdapter(GPUInstance * __restrict inst,
                  GPUAdapter  * __restrict adapters) {
-  /* TODO: implement this later */
+  id<MTLDevice> preferred;
+  GPUAdapter   *adapter;
+
   GPU__UNUSED(inst);
+  preferred = MTLCreateSystemDefaultDevice();
+  adapter   = adapters;
+  while (preferred && adapter) {
+    if (mt_adapterDevice(adapter).registryID == preferred.registryID) {
+      [preferred release];
+      return adapter;
+    }
+    adapter = adapter->next;
+  }
+  [preferred release];
   return adapters;
 }
 
