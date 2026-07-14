@@ -963,7 +963,6 @@ gpu_createShaderLibraryFromBackendText(GPUDevice        *device,
                                        uint32_t          defineCount,
                                        GPUShaderLibrary **outLibrary) {
   GPUApi *api;
-  char *source;
 
   if (!(api = gpuDeviceApi(device))) {
     return GPU_ERROR_BACKEND_FAILURE;
@@ -973,20 +972,13 @@ gpu_createShaderLibraryFromBackendText(GPUDevice        *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (!sourceData || sourceSize == 0u ||
-      sourceSize > (uint64_t)SIZE_MAX - 1u) {
+      sourceSize > (uint64_t)SIZE_MAX) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  source = calloc(1, (size_t)sourceSize + 1u);
-  if (!source) {
-    return GPU_ERROR_BACKEND_FAILURE;
-  }
-
-  memcpy(source, sourceData, (size_t)sourceSize);
-  source[(size_t)sourceSize] = '\0';
-
-  *outLibrary = api->library.newLibraryWithSource(device, source, sourceSize);
-  free(source);
+  *outLibrary = api->library.newLibraryWithSource(device,
+                                                   sourceData,
+                                                   sourceSize);
 
   if (*outLibrary) {
     (*outLibrary)->_api = api;
@@ -1166,7 +1158,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   encoding   = target.backend == USL_BACKEND_SPIRV
                  ? USL_RUNTIME_EMBEDDED_BLOB_ENCODING_BINARY
                  : USL_RUNTIME_EMBEDDED_BLOB_ENCODING_TEXT;
-  compileOutput = calloc(1, sizeof(*compileOutput));
+  compileOutput = malloc(sizeof(*compileOutput));
   if (!compileOutput) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
