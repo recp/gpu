@@ -20,7 +20,9 @@
         "rhs": "Darwin"
       },
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "GPU_BUILD_TESTS": "ON",
+        "GPU_BUILD_SAMPLES": "ON"
       }
     },
     {

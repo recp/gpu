@@ -362,12 +362,25 @@ if(GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES)
     set(${outVar} "${outputs}" PARENT_SCOPE)
   endfunction()
 
-  function(gpu_attach_usl_sample target fixtureTarget artifact)
-    add_dependencies(${target} ${fixtureTarget})
+  function(gpu_attach_usl_sample target fixtureTarget)
+    set_target_properties(${target} PROPERTIES
+      RUNTIME_OUTPUT_DIRECTORY
+        "${CMAKE_CURRENT_BINARY_DIR}/samples/${target}"
+    )
+    set(artifactTarget "${target}-artifacts")
+    set(artifactStamp
+      "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${artifactTarget}.stamp"
+    )
+    set(artifactDependencies ${ARGN})
+    set(artifactCommands
+      COMMAND ${CMAKE_COMMAND} -E make_directory
+              $<TARGET_FILE_DIR:${target}>
+    )
     if(WIN32)
       foreach(runtimeTarget us ds)
         if(TARGET ${runtimeTarget})
-          add_custom_command(TARGET ${target} POST_BUILD
+          list(APPEND artifactDependencies $<TARGET_FILE:${runtimeTarget}>)
+          list(APPEND artifactCommands
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     $<TARGET_FILE:${runtimeTarget}>
                     $<TARGET_FILE_DIR:${target}>
@@ -375,11 +388,32 @@ if(GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES)
         endif()
       endforeach()
     endif()
-    add_custom_command(TARGET ${target} POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different
-              "${artifact}"
-              $<TARGET_FILE_DIR:${target}>
+    foreach(artifact IN ITEMS ${ARGN})
+      list(APPEND artifactCommands
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${artifact}"
+                $<TARGET_FILE_DIR:${target}>
+      )
+    endforeach()
+    list(APPEND artifactCommands
+      COMMAND ${CMAKE_COMMAND} -E touch "${artifactStamp}"
     )
+    add_custom_command(
+      OUTPUT "${artifactStamp}"
+      ${artifactCommands}
+      DEPENDS ${artifactDependencies}
+      VERBATIM
+    )
+    add_custom_target(${artifactTarget} DEPENDS "${artifactStamp}")
+    add_dependencies(${artifactTarget} ${fixtureTarget})
+    add_dependencies(${target} ${artifactTarget})
+    if(WIN32)
+      foreach(runtimeTarget us ds)
+        if(TARGET ${runtimeTarget})
+          add_dependencies(${artifactTarget} ${runtimeTarget})
+        endif()
+      endforeach()
+    endif()
   endfunction()
 endif()
 
@@ -498,6 +532,27 @@ if(GPU_BUILD_VULKAN AND GPU_BUILD_SAMPLES)
   list(GET GPU_VULKAN_USL_FIXTURES 1 GPU_VULKAN_TEXTURED_QUAD_US)
   list(GET GPU_VULKAN_USL_FIXTURES 2 GPU_VULKAN_COMPUTE_BUFFER_US)
   add_custom_target(gpu-vulkan-fixtures DEPENDS ${GPU_VULKAN_USL_FIXTURES})
+endif()
+
+if(GPU_BUILD_METAL AND GPU_BUILD_SAMPLES)
+  gpu_add_usl_fixtures(
+    GPU_METAL_USL_FIXTURES
+    metal
+    samples
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-usl/triangle.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-usl/textured_quad.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-usl/compute_visible.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-usl/compute_buffer.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/usl-reflection-check/reflection.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/usl-reflection-check/reflection_storage.usl"
+  )
+  list(GET GPU_METAL_USL_FIXTURES 0 GPU_METAL_TRIANGLE_US)
+  list(GET GPU_METAL_USL_FIXTURES 1 GPU_METAL_TEXTURED_QUAD_US)
+  list(GET GPU_METAL_USL_FIXTURES 2 GPU_METAL_COMPUTE_US)
+  list(GET GPU_METAL_USL_FIXTURES 3 GPU_METAL_COMPUTE_BUFFER_US)
+  list(GET GPU_METAL_USL_FIXTURES 4 GPU_METAL_REFLECTION_US)
+  list(GET GPU_METAL_USL_FIXTURES 5 GPU_METAL_REFLECTION_STORAGE_US)
+  add_custom_target(gpu-metal-fixtures DEPENDS ${GPU_METAL_USL_FIXTURES})
 endif()
 
 if(GPU_BUILD_TESTS)
@@ -670,6 +725,94 @@ if(GPU_BUILD_TESTS)
               "${GPU_DX12_TEXTURED_QUAD_US}"
     )
   endif()
+endif()
+
+if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL)
+  function(gpu_configure_metal_sample target)
+    target_compile_options(${target} PRIVATE -fobjc-arc)
+    target_link_libraries(${target} PRIVATE
+      gpu
+      ${GPU_FRAMEWORK_UI}
+      ${GPU_FRAMEWORK_METAL}
+      ${GPU_FRAMEWORK_FOUNDATION}
+      ${GPU_FRAMEWORK_QUARTZCORE}
+    )
+  endfunction()
+
+  add_executable(gpu-triangle-manual
+    samples/triangle-manual/main.m
+  )
+  gpu_configure_metal_sample(gpu-triangle-manual)
+  set_target_properties(gpu-triangle-manual PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY
+      "${CMAKE_CURRENT_BINARY_DIR}/samples/gpu-triangle-manual"
+  )
+  set(GPU_TRIANGLE_MANUAL_ARTIFACT_STAMP
+    "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/gpu-triangle-manual-artifacts.stamp"
+  )
+  add_custom_command(
+    OUTPUT "${GPU_TRIANGLE_MANUAL_ARTIFACT_STAMP}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            $<TARGET_FILE_DIR:gpu-triangle-manual>
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-manual/triangle.usl.metal"
+            $<TARGET_FILE_DIR:gpu-triangle-manual>
+    COMMAND ${CMAKE_COMMAND} -E touch
+            "${GPU_TRIANGLE_MANUAL_ARTIFACT_STAMP}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-manual/triangle.usl.metal"
+    VERBATIM
+  )
+  add_custom_target(gpu-triangle-manual-artifacts
+    DEPENDS "${GPU_TRIANGLE_MANUAL_ARTIFACT_STAMP}"
+  )
+  add_dependencies(gpu-triangle-manual gpu-triangle-manual-artifacts)
+
+  add_executable(gpu-triangle-metal-usl
+    samples/triangle-usl/main.m
+  )
+  gpu_configure_metal_sample(gpu-triangle-metal-usl)
+  gpu_attach_usl_sample(gpu-triangle-metal-usl
+                        gpu-metal-fixtures
+                        "${GPU_METAL_TRIANGLE_US}")
+
+  add_executable(gpu-textured-quad-metal-usl
+    samples/textured-quad-usl/main.m
+  )
+  gpu_configure_metal_sample(gpu-textured-quad-metal-usl)
+  gpu_attach_usl_sample(gpu-textured-quad-metal-usl
+                        gpu-metal-fixtures
+                        "${GPU_METAL_TEXTURED_QUAD_US}")
+
+  add_executable(gpu-compute-metal-usl
+    samples/compute-usl/main.m
+  )
+  gpu_configure_metal_sample(gpu-compute-metal-usl)
+  gpu_attach_usl_sample(gpu-compute-metal-usl
+                        gpu-metal-fixtures
+                        "${GPU_METAL_COMPUTE_US}")
+
+  add_executable(gpu-compute-buffer-metal-usl
+    samples/compute-buffer-usl/main.m
+  )
+  gpu_configure_metal_sample(gpu-compute-buffer-metal-usl)
+  gpu_attach_usl_sample(gpu-compute-buffer-metal-usl
+                        gpu-metal-fixtures
+                        "${GPU_METAL_COMPUTE_BUFFER_US}")
+
+  add_executable(gpu-usl-reflection-check
+    samples/usl-reflection-check/main.c
+  )
+  target_link_libraries(gpu-usl-reflection-check PRIVATE gpu)
+  gpu_attach_usl_sample(gpu-usl-reflection-check
+                        gpu-metal-fixtures
+                        "${GPU_METAL_REFLECTION_US}"
+                        "${GPU_METAL_REFLECTION_STORAGE_US}")
+  set_target_properties(gpu-usl-reflection-check PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
 endif()
 
 if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)

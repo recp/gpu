@@ -2,13 +2,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SAMPLE_DIR="$ROOT/samples/triangle-manual"
+BUILD_DIR="$ROOT/out/build/macos-debug"
+SAMPLE_BIN="$BUILD_DIR/samples/gpu-triangle-manual/gpu-triangle-manual"
 TIMEOUT_SECONDS="${GPU_LIFECYCLE_TIMEOUT_SECONDS:-10}"
 
-"$SAMPLE_DIR/build.sh"
+cmake --preset macos-debug
+cmake --build --preset macos-debug --target gpu-triangle-manual
 
-cd "$SAMPLE_DIR"
-GPU_SAMPLE_EXIT_AFTER_FRAMES="${GPU_SAMPLE_EXIT_AFTER_FRAMES:-1}" ./hello-triangle-manual &
+GPU_SAMPLE_EXIT_AFTER_FRAMES="${GPU_SAMPLE_EXIT_AFTER_FRAMES:-1}" \
+  "$SAMPLE_BIN" &
 pid=$!
 elapsed=0
 

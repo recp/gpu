@@ -2,6 +2,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+BUILD_DIR="$ROOT/out/build/macos-debug"
+FIXTURE="$BUILD_DIR/gpu-usl-fixture"
+DEFAULT_ARTIFACT_DIR="$BUILD_DIR/usl/metal/samples"
+SMOKE_ARTIFACT_DIR="$BUILD_DIR/usl/metal/smoke"
+TRIANGLE_MANUAL_BIN="$BUILD_DIR/samples/gpu-triangle-manual/gpu-triangle-manual"
+TRIANGLE_USL_BIN="$BUILD_DIR/samples/gpu-triangle-metal-usl/gpu-triangle-metal-usl"
+TEXTURED_QUAD_BIN="$BUILD_DIR/samples/gpu-textured-quad-metal-usl/gpu-textured-quad-metal-usl"
+COMPUTE_USL_BIN="$BUILD_DIR/samples/gpu-compute-metal-usl/gpu-compute-metal-usl"
+COMPUTE_BUFFER_BIN="$BUILD_DIR/samples/gpu-compute-buffer-metal-usl/gpu-compute-buffer-metal-usl"
 
 run_step() {
   local name="$1"
@@ -9,17 +18,6 @@ run_step() {
 
   echo "==> $name"
   "$@"
-}
-
-run_expect_fail() {
-  local name="$1"
-  shift
-
-  echo "==> $name"
-  if "$@"; then
-    echo "expected failure but command succeeded: $name" >&2
-    return 1
-  fi
 }
 
 run_expect_fail_with_output() {
@@ -42,91 +40,177 @@ run_expect_fail_with_output() {
   fi
 }
 
-run_sample() {
-  local name="$1"
+run_binary() {
+  local target="$1"
   shift
 
   (
-    cd "$ROOT/samples/$name"
-    "$@"
+    cd "$BUILD_DIR/samples/$target"
+    "./$target" "$@"
   )
 }
 
-run_api_test() {
-  (
-    cd "$ROOT/tests/api"
-    "$@"
-  )
+generate_artifact() {
+  local mode="$1"
+  local source="$2"
+  local name="${source:t:r}"
+  local outputDir="$SMOKE_ARTIFACT_DIR/$mode"
+  local fixtureSource="$outputDir/$name.usl"
+
+  mkdir -p "$outputDir"
+  rm -f "$outputDir/$name.us" "$outputDir/$name.usl.metal"
+  cp "$source" "$fixtureSource"
+
+  case "$mode" in
+    sidecar)
+      env USL_EMIT_BYTECODE=1 \
+          "$FIXTURE" metal "$fixtureSource"
+      if [[ ! -f "$outputDir/$name.usl.metal" ]]; then
+        echo "USL Metal sidecar was not generated: $name" >&2
+        return 1
+      fi
+      ;;
+    embedded)
+      env USL_EMIT_BYTECODE=1 \
+          USL_NO_BACKEND_SIDECAR=1 \
+          USL_EMBED_METAL_BLOB=1 \
+          "$FIXTURE" metal "$fixtureSource"
+      if [[ -f "$outputDir/$name.usl.metal" ]]; then
+        echo "unexpected USL Metal sidecar in embedded mode: $name" >&2
+        return 1
+      fi
+      ;;
+    *)
+      echo "unknown USL artifact mode: $mode" >&2
+      return 2
+      ;;
+  esac
+
+  if [[ ! -f "$outputDir/$name.us" ]]; then
+    echo "USL bytecode artifact was not generated: $name" >&2
+    return 1
+  fi
 }
 
-run_step "triangle-manual" \
-  run_sample triangle-manual ./build.sh
+install_artifact() {
+  local source="$1"
+  local target="$2"
+  local name="$3"
+  local targetDir="$BUILD_DIR/samples/$target"
+
+  rm -f "$targetDir/$name.usl.metal"
+  cp "$source" "$targetDir/$name.us"
+}
+
+restore_artifact() {
+  local target="$1"
+  local name="$2"
+
+  install_artifact "$DEFAULT_ARTIFACT_DIR/$name.us" "$target" "$name"
+}
+
+run_step "configure Metal samples" \
+  cmake --preset macos-debug
+
+run_step "build Metal samples" \
+  cmake --build --preset macos-debug --target \
+    gpu-triangle-manual \
+    gpu-triangle-metal-usl \
+    gpu-textured-quad-metal-usl \
+    gpu-compute-metal-usl \
+    gpu-compute-buffer-metal-usl \
+    gpu-usl-reflection-check \
+    gpu-api-test
 
 run_step "triangle-manual one-frame" \
-  run_sample triangle-manual env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 ./hello-triangle-manual
+  env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 \
+      "$TRIANGLE_MANUAL_BIN"
 
 run_step "triangle-usl sidecar" \
-  run_sample triangle-usl ./build.sh
-
-run_step "triangle-usl embedded no-sidecar" \
-  run_sample triangle-usl env GPU_USL_EMBED_METAL=1 GPU_USL_NO_SIDECAR=1 ./build.sh
-
-run_step "triangle-usl one-frame" \
-  run_sample triangle-usl env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 GPU_USL_NO_SIDECAR=1 ./hello-triangle-usl
-
+  generate_artifact sidecar "$ROOT/samples/triangle-usl/triangle.usl"
+run_step "triangle-usl embedded" \
+  generate_artifact embedded "$ROOT/samples/triangle-usl/triangle.usl"
+install_artifact "$SMOKE_ARTIFACT_DIR/embedded/triangle.us" \
+  gpu-triangle-metal-usl triangle
+run_step "triangle-usl embedded one-frame" \
+  env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 \
+      "$TRIANGLE_USL_BIN"
+restore_artifact gpu-triangle-metal-usl triangle
 run_step "triangle-usl warm-frame allocations" \
-  run_sample triangle-usl env GPU_SAMPLE_EXIT_AFTER_FRAMES=96 GPU_SAMPLE_ASSERT_ZERO_ALLOC=1 GPU_USL_NO_SIDECAR=1 ./hello-triangle-usl
+  env GPU_SAMPLE_EXIT_AFTER_FRAMES=96 GPU_SAMPLE_ASSERT_ZERO_ALLOC=1 \
+      "$TRIANGLE_USL_BIN"
 
 run_step "textured-quad-usl sidecar" \
-  run_sample textured-quad-usl ./build.sh
-
-run_step "textured-quad-usl embedded no-sidecar" \
-  run_sample textured-quad-usl env GPU_USL_EMBED_METAL=1 GPU_USL_NO_SIDECAR=1 ./build.sh
-
-run_step "textured-quad-usl one-frame" \
-  run_sample textured-quad-usl env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 GPU_USL_NO_SIDECAR=1 ./hello-textured-quad-usl
-
+  generate_artifact sidecar \
+    "$ROOT/samples/textured-quad-usl/textured_quad.usl"
+run_step "textured-quad-usl embedded" \
+  generate_artifact embedded \
+    "$ROOT/samples/textured-quad-usl/textured_quad.usl"
+install_artifact \
+  "$SMOKE_ARTIFACT_DIR/embedded/textured_quad.us" \
+  gpu-textured-quad-metal-usl textured_quad
+run_step "textured-quad-usl embedded one-frame" \
+  env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 \
+      "$TEXTURED_QUAD_BIN"
+restore_artifact gpu-textured-quad-metal-usl textured_quad
 run_step "textured-quad-usl warm-frame allocations" \
-  run_sample textured-quad-usl env GPU_SAMPLE_EXIT_AFTER_FRAMES=96 GPU_SAMPLE_ASSERT_ZERO_ALLOC=1 GPU_USL_NO_SIDECAR=1 ./hello-textured-quad-usl
+  env GPU_SAMPLE_EXIT_AFTER_FRAMES=96 GPU_SAMPLE_ASSERT_ZERO_ALLOC=1 \
+      "$TEXTURED_QUAD_BIN"
 
 run_step "compute-usl sidecar" \
-  run_sample compute-usl ./build.sh
-
-run_step "compute-usl embedded no-sidecar" \
-  run_sample compute-usl env GPU_USL_EMBED_METAL=1 GPU_USL_NO_SIDECAR=1 ./build.sh
-
-run_step "compute-usl readback" \
-  run_sample compute-usl env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 GPU_USL_NO_SIDECAR=1 ./hello-compute-usl
-
+  generate_artifact sidecar "$ROOT/samples/compute-usl/compute_visible.usl"
+run_step "compute-usl embedded" \
+  generate_artifact embedded "$ROOT/samples/compute-usl/compute_visible.usl"
+install_artifact \
+  "$SMOKE_ARTIFACT_DIR/embedded/compute_visible.us" \
+  gpu-compute-metal-usl compute_visible
+run_step "compute-usl embedded readback" \
+  env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 \
+      "$COMPUTE_USL_BIN"
+restore_artifact gpu-compute-metal-usl compute_visible
 run_step "compute-usl warm-frame allocations" \
-  run_sample compute-usl env GPU_SAMPLE_EXIT_AFTER_FRAMES=96 GPU_SAMPLE_ASSERT_ZERO_ALLOC=1 GPU_USL_NO_SIDECAR=1 ./hello-compute-usl
+  env GPU_SAMPLE_EXIT_AFTER_FRAMES=96 GPU_SAMPLE_ASSERT_ZERO_ALLOC=1 \
+      "$COMPUTE_USL_BIN"
 
 run_step "compute-buffer-usl sidecar" \
-  run_sample compute-buffer-usl ./build.sh
-
-run_step "compute-buffer-usl generated no-sidecar" \
-  run_sample compute-buffer-usl env GPU_USL_NO_SIDECAR=1 ./build.sh
-
-run_step "compute-buffer-usl readback" \
-  run_sample compute-buffer-usl env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 GPU_USL_NO_SIDECAR=1 ./hello-compute-buffer-usl
-
+  generate_artifact sidecar \
+    "$ROOT/samples/compute-buffer-usl/compute_buffer.usl"
+run_step "compute-buffer-usl embedded" \
+  generate_artifact embedded \
+    "$ROOT/samples/compute-buffer-usl/compute_buffer.usl"
+install_artifact \
+  "$SMOKE_ARTIFACT_DIR/embedded/compute_buffer.us" \
+  gpu-compute-buffer-metal-usl compute_buffer
+run_step "compute-buffer-usl embedded readback" \
+  env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 \
+      "$COMPUTE_BUFFER_BIN"
+restore_artifact gpu-compute-buffer-metal-usl compute_buffer
 run_step "compute-buffer-usl warm-frame allocations" \
-  run_sample compute-buffer-usl env GPU_SAMPLE_EXIT_AFTER_FRAMES=96 GPU_SAMPLE_ASSERT_ZERO_ALLOC=1 GPU_USL_NO_SIDECAR=1 ./hello-compute-buffer-usl
-
+  env GPU_SAMPLE_EXIT_AFTER_FRAMES=96 GPU_SAMPLE_ASSERT_ZERO_ALLOC=1 \
+      "$COMPUTE_BUFFER_BIN"
 run_expect_fail_with_output "compute-buffer-usl missing group 1 bind" \
   "GPU validation: GPUDispatchIndirect skipped: missing compute bind group" \
-  run_sample compute-buffer-usl env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 GPU_SAMPLE_VERBOSE_VALIDATION=1 GPU_SAMPLE_SKIP_COMPUTE_BIND=1 ./hello-compute-buffer-usl
-
-run_step "compute-buffer-usl embedded no-sidecar" \
-  run_sample compute-buffer-usl env GPU_USL_EMBED_METAL=1 GPU_USL_NO_SIDECAR=1 ./build.sh
+  env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 \
+      GPU_SAMPLE_VERBOSE_VALIDATION=1 \
+      GPU_SAMPLE_SKIP_COMPUTE_BIND=1 \
+      "$COMPUTE_BUFFER_BIN"
 
 run_step "api validation" \
-  run_api_test ./build.sh
+  ctest --test-dir "$BUILD_DIR" --output-on-failure -R '^api-validation$'
 
 run_step "usl-reflection-check generated" \
-  run_sample usl-reflection-check ./build.sh
-
+  run_binary gpu-usl-reflection-check \
+    "$DEFAULT_ARTIFACT_DIR/reflection.us" \
+    "$DEFAULT_ARTIFACT_DIR/reflection_storage.us"
+run_step "usl-reflection-check embedded reflection" \
+  generate_artifact embedded \
+    "$ROOT/samples/usl-reflection-check/reflection.usl"
+run_step "usl-reflection-check embedded storage" \
+  generate_artifact embedded \
+    "$ROOT/samples/usl-reflection-check/reflection_storage.usl"
 run_step "usl-reflection-check embedded" \
-  run_sample usl-reflection-check env GPU_USL_EMBED_METAL=1 ./build.sh
+  run_binary gpu-usl-reflection-check \
+    "$SMOKE_ARTIFACT_DIR/embedded/reflection.us" \
+    "$SMOKE_ARTIFACT_DIR/embedded/reflection_storage.us"
 
 echo "Smoke passed"
