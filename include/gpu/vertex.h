@@ -76,14 +76,6 @@ typedef enum GPUVertexStepMode {
   GPU_VERTEX_STEP_MODE_INSTANCE = 1
 } GPUVertexStepMode;
 
-typedef enum GPUVertexStepFunction {
-  GPUConstant             = 0,
-  GPUPerVertex            = 1,
-  GPUPerInstance          = 2,
-  GPUPerPatch             = 3,
-  GPUPerPatchControlPoint = 4,
-} GPUVertexStepFunction;
-
 typedef struct GPUVertexAttribute {
   uint32_t        shaderLocation;
   GPUVertexFormat format;

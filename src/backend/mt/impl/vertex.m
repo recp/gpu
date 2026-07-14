@@ -98,6 +98,18 @@ mt_vertexFormat(GPUVertexFormat format) {
            : MTLVertexFormatInvalid;
 }
 
+static MTLVertexStepFunction
+mt_vertexStepFunction(GPUVertexStepMode mode) {
+  static const MTLVertexStepFunction functions[] = {
+    [GPU_VERTEX_STEP_MODE_VERTEX]   = MTLVertexStepFunctionPerVertex,
+    [GPU_VERTEX_STEP_MODE_INSTANCE] = MTLVertexStepFunctionPerInstance
+  };
+
+  return (uint32_t)mode < GPU_ARRAY_LEN(functions)
+           ? functions[mode]
+           : MTLVertexStepFunctionPerVertex;
+}
+
 GPU_HIDE
 void
 mt_attrib(GPUVertexDescriptor * __restrict vert,
@@ -123,8 +135,7 @@ void
 mt_layout(GPUVertexDescriptor * __restrict vert,
           uint32_t                         layoutIndex,
           uint32_t                         stride,
-          uint32_t                         stepRate,
-          GPUVertexStepFunction            stepFunction) {
+          GPUVertexStepMode                stepMode) {
   MTLVertexDescriptor *desc;
   uint32_t              nativeIndex;
 
@@ -134,8 +145,8 @@ mt_layout(GPUVertexDescriptor * __restrict vert,
   }
   desc = vert->_priv;
   desc.layouts[nativeIndex].stride       = stride;
-  desc.layouts[nativeIndex].stepRate     = stepRate;
-  desc.layouts[nativeIndex].stepFunction = (MTLVertexStepFunction)stepFunction;
+  desc.layouts[nativeIndex].stepRate     = 1u;
+  desc.layouts[nativeIndex].stepFunction = mt_vertexStepFunction(stepMode);
 }
 
 GPU_HIDE

@@ -61,12 +61,11 @@ gpuVertexDescLayout(GPUApi             * __restrict api,
                     GPUVertexDescriptor * __restrict vert,
                     uint32_t                         layoutIndex,
                     uint32_t                         stride,
-                    uint32_t                         stepRate,
-                    GPUVertexStepFunction            stepFunction) {
+                    GPUVertexStepMode                stepMode) {
   if (!api || !vert || !api->vertex.layout)
     return;
   
-  api->vertex.layout(vert, layoutIndex, stride, stepRate, stepFunction);
+  api->vertex.layout(vert, layoutIndex, stride, stepMode);
 }
 
 GPU_HIDE

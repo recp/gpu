@@ -249,17 +249,6 @@ gpu_vertexStateIsValid(const GPUVertexState *state) {
   return true;
 }
 
-static GPUVertexStepFunction
-gpu_vertexStepFunction(GPUVertexStepMode mode) {
-  switch (mode) {
-    case GPU_VERTEX_STEP_MODE_INSTANCE:
-      return GPUPerInstance;
-    case GPU_VERTEX_STEP_MODE_VERTEX:
-    default:
-      return GPUPerVertex;
-  }
-}
-
 static GPUVertexDescriptor *
 gpu_createVertexDescriptorFromState(GPUApi              *api,
                                     const GPUVertexState *state) {
@@ -292,8 +281,7 @@ gpu_createVertexDescriptorFromState(GPUApi              *api,
                         desc,
                         i,
                         layout->strideBytes,
-                        1,
-                        gpu_vertexStepFunction(layout->stepMode));
+                        layout->stepMode);
     for (j = 0; j < layout->attributeCount; j++) {
       const GPUVertexAttribute *attr = &layout->pAttributes[j];
 

@@ -41,8 +41,7 @@ typedef struct GPUApiVertex {
   (*layout)(GPUVertexDescriptor * __restrict vert,
             uint32_t                         layoutIndex,
             uint32_t                         stride,
-            uint32_t                         stepRate,
-            GPUVertexStepFunction            stepFunction);
+            GPUVertexStepMode                stepMode);
   
   void
   (*vertexDesc)(GPURenderPipeline   * __restrict pipeline,
