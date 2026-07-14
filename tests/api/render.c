@@ -2277,6 +2277,13 @@ check_dynamic_state_validation_calls(GPUDevice *activeDevice) {
 
   GPUApplyDynamicState(NULL, &info);
   GPUApplyDynamicState(&pass, NULL);
+  GPUSetViewport(NULL, &info.viewport);
+  GPUSetViewport(&pass, NULL);
+  GPUSetScissor(NULL, &info.scissor);
+  GPUSetScissor(&pass, NULL);
+  GPUSetBlendConstant(NULL, info.blendConstant);
+  GPUSetBlendConstant(&pass, NULL);
+  GPUSetStencilReference(NULL, 0u);
 
   info.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   info.chain.structSize = sizeof(info);
@@ -2293,6 +2300,10 @@ check_dynamic_state_validation_calls(GPUDevice *activeDevice) {
   endedPass._ended = true;
   info.chain.structSize = sizeof(info);
   GPUApplyDynamicState(&endedPass, &info);
+  GPUSetViewport(&endedPass, &info.viewport);
+  GPUSetScissor(&endedPass, &info.scissor);
+  GPUSetBlendConstant(&endedPass, info.blendConstant);
+  GPUSetStencilReference(&endedPass, 0u);
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO;
   info.mask            |= 1ull << 63;
@@ -2351,6 +2362,40 @@ check_dynamic_state_validation_calls(GPUDevice *activeDevice) {
       device.currentFrameStats.requestedStateCalls != 9u ||
       device.currentFrameStats.emittedStateCalls != 5u) {
     fprintf(stderr, "dynamic state shadowing suppressed changed state\n");
+    goto cleanup;
+  }
+
+  GPUSetViewport(&pass, &info.viewport);
+  GPUSetScissor(&pass, &info.scissor);
+  GPUSetBlendConstant(&pass, info.blendConstant);
+  GPUSetStencilReference(&pass, info.stencilReference);
+  if (gRenderViewportCalls != 1u ||
+      gRenderScissorCalls != 1u ||
+      gRenderBlendCalls != 1u ||
+      gRenderStencilCalls != 2u ||
+      device.currentFrameStats.requestedStateCalls != 13u ||
+      device.currentFrameStats.emittedStateCalls != 5u) {
+    fprintf(stderr, "direct dynamic setters emitted redundant state\n");
+    goto cleanup;
+  }
+
+  info.viewport.x         = 1.0f;
+  info.scissor.width      = 1u;
+  info.blendConstant[0]   = 1.0f;
+  info.stencilReference   = 9u;
+  GPUSetViewport(&pass, &info.viewport);
+  GPUSetScissor(&pass, &info.scissor);
+  GPUSetBlendConstant(&pass, info.blendConstant);
+  GPUSetStencilReference(&pass, info.stencilReference);
+  if (gRenderViewportCalls != 2u ||
+      gRenderScissorCalls != 2u ||
+      gRenderBlendCalls != 2u ||
+      gRenderStencilCalls != 3u ||
+      device.currentFrameStats.requestedStateCalls != 17u ||
+      device.currentFrameStats.emittedStateCalls != 9u ||
+      device.currentFrameStats.hotPathAllocCount != 0u ||
+      device.currentFrameStats.hotPathFreeCount != 0u) {
+    fprintf(stderr, "direct dynamic setters suppressed changed state\n");
     goto cleanup;
   }
 
