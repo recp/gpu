@@ -61,13 +61,18 @@ check_compute_disk_cache(GPUDevice                   *device,
   int                       ok;
 
   api = gpuDeviceApi(device);
-  if (!api || api->backend != GPU_BACKEND_METAL) {
+  if (!api) {
+    return 0;
+  }
+  if (api->backend != GPU_BACKEND_METAL &&
+      api->backend != GPU_BACKEND_VULKAN) {
     return 1;
   }
 
   snprintf(path,
            sizeof(path),
-           ".gpu-api-metal-compute-cache-%p.bin",
+           ".gpu-api-compute-cache-%u-%p.bin",
+           (uint32_t)api->backend,
            (void *)device);
   snprintf(temporaryPath, sizeof(temporaryPath), "%s.tmp", path);
   remove(path);
@@ -79,7 +84,7 @@ check_compute_disk_cache(GPUDevice                   *device,
   cacheInfo.cachePath        = path;
   cache                      = NULL;
   if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {
-    fprintf(stderr, "failed to create Metal compute disk cache\n");
+    fprintf(stderr, "failed to create native compute disk cache\n");
     return 0;
   }
 
@@ -87,7 +92,7 @@ check_compute_disk_cache(GPUDevice                   *device,
   pipeline    = NULL;
   info->cache = cache;
   if (GPUCreateComputePipeline(device, info, &pipeline) != GPU_OK || !pipeline) {
-    fprintf(stderr, "Metal cached compute pipeline create failed\n");
+    fprintf(stderr, "native cached compute pipeline create failed\n");
     goto cleanup;
   }
   GPUDestroyComputePipeline(pipeline);
@@ -98,14 +103,14 @@ check_compute_disk_cache(GPUDevice                   *device,
 
   file = fopen(path, "rb");
   if (!file) {
-    fprintf(stderr, "Metal compute pipeline cache file was not written\n");
+    fprintf(stderr, "native compute pipeline cache file was not written\n");
     goto cleanup;
   }
   fseek(file, 0, SEEK_END);
   fileSize = ftell(file);
   fclose(file);
   if (fileSize <= 0) {
-    fprintf(stderr, "Metal compute pipeline cache file is empty\n");
+    fprintf(stderr, "native compute pipeline cache file is empty\n");
     goto cleanup;
   }
   ok = 1;

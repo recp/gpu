@@ -18,6 +18,7 @@
 #include "../../../api/descr/descriptor_internal.h"
 #include "../../../api/library_internal.h"
 #include "../../../api/render/pipeline_internal.h"
+#include "pipeline_cache.h"
 
 static VkCullModeFlags
 vk__cullMode(GPUCullMode mode) {
@@ -309,6 +310,8 @@ vk_createRenderPipeline(GPUDevice                         *device,
   VkPipelineDynamicStateCreateInfo  dynamic = {0};
   VkPipelineRenderingCreateInfoKHR  rendering = {0};
   VkGraphicsPipelineCreateInfo      pipelineInfo = {0};
+  VkPipelineCache                   pipelineCache;
+  VkResult                          result;
   uint32_t                          vertexAttributeCount;
   VkSampleCountFlagBits             sampleCount;
 
@@ -553,12 +556,15 @@ vk_createRenderPipeline(GPUDevice                         *device,
                                        ? VK_NULL_HANDLE
                                        : native->renderPass;
   pipelineInfo.subpass             = 0u;
-  if (vkCreateGraphicsPipelines(native->device,
-                                VK_NULL_HANDLE,
-                                1u,
-                                &pipelineInfo,
-                                NULL,
-                                &native->pipeline) != VK_SUCCESS) {
+  pipelineCache = vk_lockCache(info->cache);
+  result = vkCreateGraphicsPipelines(native->device,
+                                     pipelineCache,
+                                     1u,
+                                     &pipelineInfo,
+                                     NULL,
+                                     &native->pipeline);
+  vk_unlockCache(info->cache);
+  if (result != VK_SUCCESS) {
     free(vertexAttributes);
     free(vertexBindings);
     vkDestroyRenderPass(native->device, native->renderPass, NULL);

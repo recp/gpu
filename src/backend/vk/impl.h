@@ -34,6 +34,7 @@ GPU_HIDE void vk_initRenderPipeline(GPUApiRender *api);
 GPU_HIDE void vk_initRenderPass(GPUApiRenderPass *api);
 GPU_HIDE void vk_initRCE(GPUApiRCE *api);
 GPU_HIDE void vk_initCompute(GPUApiCompute *api);
+GPU_HIDE void vk_initPipelineCache(GPUApiPipelineCache *api);
 
 GPU_HIDE
 GPUQueue*

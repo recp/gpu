@@ -19,6 +19,7 @@
 #include "../../../api/compute_internal.h"
 #include "../../../api/descr/descriptor_internal.h"
 #include "../../../api/library_internal.h"
+#include "pipeline_cache.h"
 
 static GPUComputeEncoderVk*
 vk__computeEncoder(GPUComputePassEncoder *encoder) {
@@ -37,6 +38,8 @@ vk_createComputePipeline(GPUDevice                          *device,
   GPUComputePipelineVk           *native;
   VkPipelineShaderStageCreateInfo stage        = {0};
   VkComputePipelineCreateInfo     pipelineInfo = {0};
+  VkPipelineCache                 pipelineCache;
+  VkResult                        result;
 
   deviceVk = device ? device->_priv : NULL;
   library  = info && info->library ? info->library->_priv : NULL;
@@ -69,12 +72,15 @@ vk_createComputePipeline(GPUDevice                          *device,
   pipelineInfo.sType  = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
   pipelineInfo.stage  = stage;
   pipelineInfo.layout = native->shaderLayout.layout;
-  if (vkCreateComputePipelines(native->device,
-                               VK_NULL_HANDLE,
-                               1u,
-                               &pipelineInfo,
-                               NULL,
-                               &native->pipeline) != VK_SUCCESS) {
+  pipelineCache = vk_lockCache(info->cache);
+  result = vkCreateComputePipelines(native->device,
+                                    pipelineCache,
+                                    1u,
+                                    &pipelineInfo,
+                                    NULL,
+                                    &native->pipeline);
+  vk_unlockCache(info->cache);
+  if (result != VK_SUCCESS) {
     vk_destroyShaderLayout(&native->shaderLayout);
     free(state);
     return GPU_ERROR_BACKEND_FAILURE;

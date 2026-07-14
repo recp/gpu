@@ -80,7 +80,8 @@ check_pipeline_disk_cache(GPUDevice                  *device,
 
   snprintf(path,
            sizeof(path),
-           ".gpu-api-metal-cache-%p.bin",
+           ".gpu-api-pipeline-cache-%u-%p.bin",
+           (uint32_t)api->backend,
            (void *)device);
   snprintf(temporaryPath, sizeof(temporaryPath), "%s.tmp", path);
   remove(path);
@@ -88,7 +89,8 @@ check_pipeline_disk_cache(GPUDevice                  *device,
   cacheInfo.cachePath = path;
   cache               = NULL;
   result              = GPUCreatePipelineCache(device, &cacheInfo, &cache);
-  if (api->backend != GPU_BACKEND_METAL) {
+  if (api->backend != GPU_BACKEND_METAL &&
+      api->backend != GPU_BACKEND_VULKAN) {
     if (result != GPU_ERROR_UNSUPPORTED || cache != NULL) {
       fprintf(stderr, "pipeline disk cache accepted unsupported backend\n");
       GPUDestroyPipelineCache(cache);
@@ -97,7 +99,7 @@ check_pipeline_disk_cache(GPUDevice                  *device,
     return 1;
   }
   if (result != GPU_OK || !cache) {
-    fprintf(stderr, "Metal pipeline disk cache create failed\n");
+    fprintf(stderr, "native pipeline disk cache create failed\n");
     return 0;
   }
 
@@ -105,7 +107,7 @@ check_pipeline_disk_cache(GPUDevice                  *device,
   pipeline    = NULL;
   info->cache = cache;
   if (GPUCreateRenderPipeline(device, info, &pipeline) != GPU_OK || !pipeline) {
-    fprintf(stderr, "Metal cached render pipeline create failed\n");
+    fprintf(stderr, "native cached render pipeline create failed\n");
     goto cleanup;
   }
   GPUDestroyRenderPipeline(pipeline);
@@ -116,24 +118,24 @@ check_pipeline_disk_cache(GPUDevice                  *device,
 
   file = fopen(path, "rb");
   if (!file) {
-    fprintf(stderr, "Metal pipeline cache file was not written\n");
+    fprintf(stderr, "native pipeline cache file was not written\n");
     goto cleanup;
   }
   fseek(file, 0, SEEK_END);
   fileSize = ftell(file);
   fclose(file);
   if (fileSize <= 0) {
-    fprintf(stderr, "Metal pipeline cache file is empty\n");
+    fprintf(stderr, "native pipeline cache file is empty\n");
     goto cleanup;
   }
 
   if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {
-    fprintf(stderr, "Metal pipeline disk cache reopen failed\n");
+    fprintf(stderr, "native pipeline disk cache reopen failed\n");
     goto cleanup;
   }
   info->cache = cache;
   if (GPUCreateRenderPipeline(device, info, &pipeline) != GPU_OK || !pipeline) {
-    fprintf(stderr, "Metal pipeline create from reopened cache failed\n");
+    fprintf(stderr, "native pipeline create from reopened cache failed\n");
     goto cleanup;
   }
   ok = 1;
