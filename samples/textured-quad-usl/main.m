@@ -554,11 +554,20 @@ cleanup:
 }
 
 - (void)windowDidResize:(NSNotification *)notification {
+  uint32_t width;
+  uint32_t height;
+
   (void)notification;
-  if (_terminating) {
+  if (!_swapchain || _terminating) {
     return;
   }
-  [self renderFrame];
+
+  width  = (uint32_t)_view.bounds.size.width;
+  height = (uint32_t)_view.bounds.size.height;
+  if (width > 0u && height > 0u &&
+      GPUResizeSwapchain(_swapchain, width, height) == GPU_OK) {
+    [self renderFrame];
+  }
 }
 
 - (void)windowWillClose:(NSNotification *)notification {
