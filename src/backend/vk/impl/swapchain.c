@@ -400,9 +400,10 @@ vk__createImageState(GPUSwapchainVk *swapchain) {
 }
 
 static bool
-vk__createResources(GPUSwapchain *swapchainObj,
-                    uint32_t      width,
-                    uint32_t      height) {
+vk__createResources(GPUSwapchain  *swapchainObj,
+                    uint32_t       width,
+                    uint32_t       height,
+                    VkSwapchainKHR oldSwapchain) {
   GPUSwapchainVk          *swapchain;
   VkSurfaceCapabilitiesKHR caps;
   VkSurfaceFormatKHR      *formats;
@@ -507,6 +508,7 @@ vk__createResources(GPUSwapchain *swapchainObj,
   info.compositeAlpha   = vk__compositeAlpha(caps.supportedCompositeAlpha);
   info.presentMode      = presentMode;
   info.clipped          = VK_TRUE;
+  info.oldSwapchain     = oldSwapchain;
   if (vkCreateSwapchainKHR(swapchain->device,
                            &info,
                            NULL,
@@ -582,7 +584,10 @@ vk_createSwapchain(GPUApi          * __restrict api,
   swapchain->gpuFormat            = info->format;
   swapchain->presentMode          = info->presentMode;
   if (!vk_formatFromGPU(info->format, &swapchain->format) ||
-      !vk__createResources(swapchainObj, info->width, info->height)) {
+      !vk__createResources(swapchainObj,
+                           info->width,
+                           info->height,
+                           VK_NULL_HANDLE)) {
     free(swapchain);
     free(swapchainObj);
     return NULL;
@@ -595,6 +600,8 @@ GPU_HIDE
 GPUResult
 vk_resizeSwapchain(GPUSwapchain *swapchainObj, GPUExtent2D size) {
   GPUSwapchainVk *swapchain;
+  GPUSwapchainVk  replacement;
+  GPUSwapchain    replacementObj;
 
   if (!swapchainObj || !swapchainObj->_priv ||
       size.width == 0u || size.height == 0u) {
@@ -610,9 +617,32 @@ vk_resizeSwapchain(GPUSwapchain *swapchainObj, GPUExtent2D size) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
   vk_waitSwapchainIdle(swapchain);
+
+  memset(&replacement, 0, sizeof(replacement));
+  replacement.gpuDevice            = swapchain->gpuDevice;
+  replacement.queue                = swapchain->queue;
+  replacement.surface              = swapchain->surface;
+  replacement.device               = swapchain->device;
+  replacement.physicalDevice       = swapchain->physicalDevice;
+  replacement.format               = swapchain->format;
+  replacement.requestedImageCount  = swapchain->requestedImageCount;
+  replacement.gpuFormat            = swapchain->gpuFormat;
+  replacement.presentMode          = swapchain->presentMode;
+  replacementObj                   = *swapchainObj;
+  replacementObj._priv             = &replacement;
+  if (!vk__createResources(&replacementObj,
+                           size.width,
+                           size.height,
+                           swapchain->swapchain)) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
   vk__destroyResources(swapchain);
-  return vk__createResources(swapchainObj, size.width, size.height) ?
-    GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+  *swapchain = replacement;
+  for (uint32_t i = 0u; i < swapchain->imageCount; i++) {
+    swapchain->nativeViews[i].swapchain = swapchain;
+  }
+  return GPU_OK;
 }
 
 GPU_HIDE
