@@ -70,5 +70,6 @@ samples/usl-reflection-check/usl-reflection-check
 
 # Test build outputs
 tests/api/api-tests
+tests/**/*.us
 tests/**/vulkan-queue
 tests/**/vulkan-shader
