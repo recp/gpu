@@ -1102,25 +1102,44 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   if (api->backend == GPU_BACKEND_VULKAN) {
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
       target.profile = USL_TARGET_PROFILE_VULKAN_1_2;
-      if (us_cap_atom_text(&targetAtoms[targetAtomCount++],
-                           "shader_f16") != USLOk) {
+      if (us_cap_atom_init(
+            &targetAtoms[targetAtomCount++],
+            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+            USL_SEMANTIC_FEATURE_ID_SHADER_F16,
+            0u,
+            0u) != USLOk) {
         return GPU_ERROR_BACKEND_FAILURE;
       }
     } else if (GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUPS)) {
       target.profile = USL_TARGET_PROFILE_VULKAN_1_1;
     }
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUPS)) {
-      if (us_cap_atom_text(&targetAtoms[targetAtomCount++],
-                           "subgroup") != USLOk) {
+      if (us_cap_atom_init(
+            &targetAtoms[targetAtomCount++],
+            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+            USL_SEMANTIC_FEATURE_ID_SUBGROUP,
+            0u,
+            0u) != USLOk) {
         return GPU_ERROR_BACKEND_FAILURE;
       }
     }
-    if (targetAtomCount > 0u &&
-        us_target_extra_atoms(&target,
-                              targetAtoms,
-                              targetAtomCount) != USLOk) {
+  } else if (api->backend == GPU_BACKEND_DX12 &&
+             GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
+    target.profile = USL_TARGET_PROFILE_HLSL_SM_6_2;
+    if (us_cap_atom_init(
+          &targetAtoms[targetAtomCount++],
+          USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+          USL_SEMANTIC_FEATURE_ID_SHADER_F16,
+          0u,
+          0u) != USLOk) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
+  }
+  if (targetAtomCount > 0u &&
+      us_target_extra_atoms(&target,
+                            targetAtoms,
+                            targetAtomCount) != USLOk) {
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
   encoding   = target.backend == USL_BACKEND_SPIRV

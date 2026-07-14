@@ -55,11 +55,11 @@ GPU_HIDE void dx12_initFrame(GPUApiFrame *apiFrame);
 GPU_HIDE void dx12_initDescriptor(GPUApiDescriptor *apiDescriptor);
 GPU_HIDE void dx12_initInstance(GPUApiInstance *apiInstance);
 GPU_HIDE void dx12_initSurface(GPUApiSurface *apiDevice);
-GPU_HIDE bool dx12_compileShader(GPUDeviceDX12      *device,
-                                 GPUShaderLibraryDX12     *library,
-                                 const char         *entry,
-                                 GPUShaderStageFlags stage,
-                                 DX12ShaderCode     *outCode);
+GPU_HIDE bool dx12_compileShader(GPUDeviceDX12        *device,
+                                 GPUShaderLibraryDX12 *library,
+                                 const char           *entry,
+                                 GPUShaderStageFlags   stage,
+                                 DX12ShaderCode       *outCode);
 GPU_HIDE void dx12_freeShaderCode(DX12ShaderCode *code);
 
 #endif /* dx12_apis_h */

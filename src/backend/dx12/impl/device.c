@@ -40,6 +40,90 @@ dx12_queryResultsReliable(const GPUAdapterDX12 *adapterDX12) {
          !strstr(adapterDX12->name, "Parallels Display Adapter");
 }
 
+static D3D_SHADER_MODEL
+dx12_queryShaderModel(ID3D12Device *device) {
+  static const D3D_SHADER_MODEL models[] = {
+    D3D_SHADER_MODEL_6_2,
+    D3D_SHADER_MODEL_6_1,
+    D3D_SHADER_MODEL_6_0
+  };
+  D3D12_FEATURE_DATA_SHADER_MODEL shaderModel;
+
+  if (!device) {
+    return D3D_SHADER_MODEL_5_1;
+  }
+
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(models); i++) {
+    shaderModel.HighestShaderModel = models[i];
+    if (SUCCEEDED(device->lpVtbl->CheckFeatureSupport(
+          device,
+          D3D12_FEATURE_SHADER_MODEL,
+          &shaderModel,
+          sizeof(shaderModel)))) {
+      return shaderModel.HighestShaderModel;
+    }
+  }
+
+  return D3D_SHADER_MODEL_5_1;
+}
+
+static bool
+dx12_supportsShaderF16(ID3D12Device    *device,
+                       D3D_SHADER_MODEL shaderModel) {
+  D3D12_FEATURE_DATA_D3D12_OPTIONS4 options4 = {0};
+
+  return device && shaderModel >= D3D_SHADER_MODEL_6_2 &&
+         SUCCEEDED(device->lpVtbl->CheckFeatureSupport(
+           device,
+           D3D12_FEATURE_D3D12_OPTIONS4,
+           &options4,
+           sizeof(options4))) &&
+         options4.Native16BitShaderOpsSupported != FALSE;
+}
+
+static HMODULE
+dx12_loadDXCompiler(void) {
+  HMODULE module;
+
+  module = LoadLibraryW(L"dxcompiler.dll");
+  if (module && !GetProcAddress(module, "DxcCreateInstance")) {
+    FreeLibrary(module);
+    return NULL;
+  }
+  return module;
+}
+
+static bool
+dx12_probeAdapter(GPUAdapterDX12 *adapter) {
+  ID3D12Device    *device;
+  D3D_SHADER_MODEL shaderModel;
+  HMODULE          dxcModule;
+  HRESULT          result;
+
+  if (!adapter || !adapter->dxgiAdapter) {
+    return false;
+  }
+
+  device = NULL;
+  result = D3D12CreateDevice(adapter->dxgiAdapter,
+                             D3D_FEATURE_LEVEL_11_0,
+                             &IID_ID3D12Device,
+                             (void **)&device);
+  if (FAILED(result) || !device) {
+    return false;
+  }
+
+  shaderModel        = dx12_queryShaderModel(device);
+  dxcModule          = dx12_loadDXCompiler();
+  adapter->shaderF16 = dxcModule &&
+                       dx12_supportsShaderF16(device, shaderModel);
+  if (dxcModule) {
+    FreeLibrary(dxcModule);
+  }
+  device->lpVtbl->Release(device);
+  return true;
+}
+
 static GPUAdapterType
 dx12_adapterType(const GPUAdapterDX12 *adapterDX12) {
   const DXGI_ADAPTER_DESC1 *desc;
@@ -64,7 +148,6 @@ dx12_adapterType(const GPUAdapterDX12 *adapterDX12) {
 static void
 dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
   D3D12_FEATURE_DATA_ROOT_SIGNATURE rootSignature = {0};
-  D3D12_FEATURE_DATA_SHADER_MODEL   shaderModel = {0};
   D3D12_FEATURE_DATA_D3D12_OPTIONS12 options12 = {0};
 
   if (!device || !device->d3dDevice) {
@@ -81,15 +164,7 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
   }
   device->rootSignatureVersion = rootSignature.HighestVersion;
 
-  shaderModel.HighestShaderModel = D3D_SHADER_MODEL_6_0;
-  if (FAILED(device->d3dDevice->lpVtbl->CheckFeatureSupport(
-        device->d3dDevice,
-        D3D12_FEATURE_SHADER_MODEL,
-        &shaderModel,
-        sizeof(shaderModel)))) {
-    shaderModel.HighestShaderModel = D3D_SHADER_MODEL_5_1;
-  }
-  device->shaderModel = shaderModel.HighestShaderModel;
+  device->shaderModel = dx12_queryShaderModel(device->d3dDevice);
 
   if (SUCCEEDED(device->d3dDevice->lpVtbl->CheckFeatureSupport(
         device->d3dDevice,
@@ -99,9 +174,12 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
     device->enhancedBarriers = options12.EnhancedBarriersSupported != FALSE;
   }
 
-  device->dxcModule    = LoadLibraryW(L"dxcompiler.dll");
+  device->dxcModule    = dx12_loadDXCompiler();
   device->dxcAvailable = device->dxcModule != NULL &&
                          device->shaderModel >= D3D_SHADER_MODEL_6_0;
+  device->shaderF16    = device->dxcAvailable &&
+                         dx12_supportsShaderF16(device->d3dDevice,
+                                               device->shaderModel);
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   device->pixModule = LoadLibraryW(L"WinPixEventRuntime.dll");
   if (device->pixModule) {
@@ -224,11 +302,7 @@ dx12_getAvailableAdapters(GPUInstance * __restrict inst,
         goto nxt;
       }
 
-      /* Check to see if the adapter supports Direct3D 12, but don't create the
-         actual device yet.*/
-      if (FAILED(D3D12CreateDevice((IUnknown *)dxgiAdapter,
-                                   D3D_FEATURE_LEVEL_11_0,
-                                   &IID_ID3D12Device, NULL))) {
+      if (!dx12_probeAdapter(adapterDX12)) {
         dxgiAdapter->lpVtbl->Release(dxgiAdapter);
         free(adapterDX12);
         goto nxt;
@@ -267,6 +341,13 @@ dx12_getAvailableAdapters(GPUInstance * __restrict inst,
     adapterDX12->isWarp            = true;
     InitializeSRWLock(&adapterDX12->formatCapsLock);
     snprintf(adapterDX12->name, sizeof(adapterDX12->name), "WARP");
+    if (!dx12_probeAdapter(adapterDX12)) {
+      warpAdapter->lpVtbl->Release(warpAdapter);
+      free(adapterDX12);
+      free(adapter);
+      hr = E_FAIL;
+      goto err;
+    }
     adapter->_priv                      = adapterDX12;
     adapter->inst                       = inst;
     adapter->separatePresentQueue       = 1; /* builtin */
@@ -395,6 +476,8 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
     case GPU_FEATURE_INDIRECT_DRAW:
     case GPU_FEATURE_MULTI_DRAW:
       return true;
+    case GPU_FEATURE_SHADER_F16:
+      return adapterDX12->shaderF16;
     case GPU_FEATURE_TIMESTAMPS:
     case GPU_FEATURE_PIPELINE_STATISTICS:
       return dx12_queryResultsReliable(adapterDX12);
@@ -432,8 +515,6 @@ dx12_createDevice(GPUAdapter        * __restrict adapter,
   uint32_t               queueIndex;
   uint32_t               i, j;
 
-  (void)enabledFeatureMask;
-
   device     = NULL;
   deviceDX12 = NULL;
   if (!adapter ||
@@ -463,6 +544,11 @@ dx12_createDevice(GPUAdapter        * __restrict adapter,
   /* Parallels accepts query commands but never writes resolved data. */
   deviceDX12->queryResultsReliable = dx12_queryResultsReliable(adapterDX12);
   dx12_queryDeviceCapabilities(deviceDX12);
+  deviceDX12->shaderF16Enabled =
+    (enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u;
+  if (deviceDX12->shaderF16Enabled && !deviceDX12->shaderF16) {
+    goto err;
+  }
   InitializeSRWLock(&deviceDX12->descriptorLock);
   if (!dx12__newSignatures(deviceDX12)) {
     goto err;

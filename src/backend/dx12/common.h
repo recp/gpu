@@ -45,6 +45,7 @@ typedef struct GPUAdapterDX12 {
   char                  name[256];
   bool                  isWarp;
   bool                  formatCapsReady;
+  bool                  shaderF16;
   GPUFormatCapabilities formatCaps[GPU_FORMAT_COUNT];
 } GPUAdapterDX12;
 
@@ -84,6 +85,8 @@ typedef struct GPUDeviceDX12 {
   uint32_t                    nCreatedQueues;
   bool                        enhancedBarriers;
   bool                        dxcAvailable;
+  bool                        shaderF16;
+  bool                        shaderF16Enabled;
   bool                        queryResultsReliable;
   bool                        stencilPlaneCopies;
 } GPUDeviceDX12;

@@ -208,6 +208,7 @@ dx12__compileDXC(GPUDeviceDX12   *device,
                  uint64_t        sourceSize,
                  const char     *entry,
                  const wchar_t  *profile,
+                 bool            enable16BitTypes,
                  DX12ShaderCode *outCode) {
   DXCCreateInstanceFn createInstance;
   DXCCompiler3       *compiler;
@@ -216,7 +217,8 @@ dx12__compileDXC(GPUDeviceDX12   *device,
   DXCBlob            *errors;
   DXCBuffer           sourceBuffer;
   wchar_t             entryWide[256];
-  LPCWSTR             args[8];
+  LPCWSTR             args[9];
+  uint32_t            argCount;
   HRESULT             compileStatus;
   HRESULT             rc;
 
@@ -254,10 +256,14 @@ dx12__compileDXC(GPUDeviceDX12   *device,
   args[5]               = L"-Ges";
   args[6]               = L"-Qstrip_debug";
   args[7]               = L"-Qstrip_reflect";
+  argCount              = 8u;
+  if (enable16BitTypes) {
+    args[argCount++] = L"-enable-16bit-types";
+  }
   rc = compiler->lpVtbl->Compile(compiler,
                                   &sourceBuffer,
                                   args,
-                                  (UINT32)GPU_ARRAY_LEN(args),
+                                  argCount,
                                   NULL,
                                   &dx12_iidDxcResult,
                                   (void **)&result);
@@ -347,34 +353,45 @@ dx12__compileLegacy(const char     *source,
 
 GPU_HIDE
 bool
-dx12_compileShader(GPUDeviceDX12      *device,
-                   GPUShaderLibraryDX12     *library,
-                   const char         *entry,
-                   GPUShaderStageFlags stage,
-                   DX12ShaderCode     *outCode) {
-  static const wchar_t *dxcProfiles[GPU_SHADER_STAGE_COMPUTE_BIT + 1u] = {
+dx12_compileShader(GPUDeviceDX12        *device,
+                   GPUShaderLibraryDX12 *library,
+                   const char           *entry,
+                   GPUShaderStageFlags   stage,
+                   DX12ShaderCode       *outCode) {
+  static const wchar_t *dxcProfiles60[GPU_SHADER_STAGE_COMPUTE_BIT + 1u] = {
     [GPU_SHADER_STAGE_VERTEX_BIT]   = L"vs_6_0",
     [GPU_SHADER_STAGE_FRAGMENT_BIT] = L"ps_6_0",
     [GPU_SHADER_STAGE_COMPUTE_BIT]  = L"cs_6_0"
+  };
+  static const wchar_t *dxcProfiles62[GPU_SHADER_STAGE_COMPUTE_BIT + 1u] = {
+    [GPU_SHADER_STAGE_VERTEX_BIT]   = L"vs_6_2",
+    [GPU_SHADER_STAGE_FRAGMENT_BIT] = L"ps_6_2",
+    [GPU_SHADER_STAGE_COMPUTE_BIT]  = L"cs_6_2"
   };
   static const char *legacyProfiles[GPU_SHADER_STAGE_COMPUTE_BIT + 1u] = {
     [GPU_SHADER_STAGE_VERTEX_BIT]   = "vs_5_1",
     [GPU_SHADER_STAGE_FRAGMENT_BIT] = "ps_5_1",
     [GPU_SHADER_STAGE_COMPUTE_BIT]  = "cs_5_1"
   };
+  const wchar_t *dxcProfile;
 
   if (!device || !library || !entry || !outCode ||
-      stage >= GPU_ARRAY_LEN(dxcProfiles) || !dxcProfiles[stage] ||
+      stage >= GPU_ARRAY_LEN(dxcProfiles60) || !dxcProfiles60[stage] ||
+      !dxcProfiles62[stage] ||
       !legacyProfiles[stage]) {
     return false;
   }
 
   if (device->dxcAvailable) {
+    dxcProfile = device->shaderF16Enabled
+                   ? dxcProfiles62[stage]
+                   : dxcProfiles60[stage];
     return dx12__compileDXC(device,
                             library->source,
                             library->sourceSize,
                             entry,
-                            dxcProfiles[stage],
+                            dxcProfile,
+                            device->shaderF16Enabled,
                             outCode);
   }
 
