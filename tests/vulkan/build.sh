@@ -4,7 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TEST_DIR="$(cd "$(dirname "$0")" && pwd)"
 VULKAN_SDK="${VULKAN_SDK:-$HOME/Library/Developer/VulkanSDK/1.4.350.1}"
-USTEST="${USL_USTEST:-${USL_ROOT:-/Users/recp/Projects/recp/UniversalShading/us}/build/ustest}"
+US_ROOT="${USL_ROOT:-/Users/recp/Projects/recp/UniversalShading/us}"
+USTEST="${USL_USTEST:-$US_ROOT/build/ustest}"
 ICD="$VULKAN_SDK/macOS/share/vulkan/icd.d/MoltenVK_icd.json"
 SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
 
@@ -24,6 +25,7 @@ build_test() {
     -isysroot "$SDK_PATH" \
     -I"$ROOT/include" \
     -I"$ROOT/src" \
+    -I"$US_ROOT/us/include" \
     -I"$VULKAN_SDK/macOS/include" \
     "$source" \
     "$@" \
