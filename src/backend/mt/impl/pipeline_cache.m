@@ -160,8 +160,25 @@ mt_destroyCache(GPUPipelineCache *cache) {
 }
 
 GPU_HIDE
-void
+bool
 mt_useRenderCache(GPUPipelineCache            *cache,
+                  MTLRenderPipelineDescriptor *descriptor) {
+  MTPipelineCache *native;
+
+  native = mt_nativeCache(cache);
+  if (!native || !descriptor) {
+    return false;
+  }
+  if (@available(macOS 11.0, iOS 14.0, *)) {
+    descriptor.binaryArchives = native->archives;
+    return true;
+  }
+  return false;
+}
+
+GPU_HIDE
+bool
+mt_addRenderCache(GPUPipelineCache            *cache,
                   MTLRenderPipelineDescriptor *descriptor) {
   MTPipelineCache *native;
   NSError         *error;
@@ -169,7 +186,7 @@ mt_useRenderCache(GPUPipelineCache            *cache,
 
   native = mt_nativeCache(cache);
   if (!native || !descriptor) {
-    return;
+    return false;
   }
   if (@available(macOS 11.0, iOS 14.0, *)) {
     error = nil;
@@ -178,13 +195,31 @@ mt_useRenderCache(GPUPipelineCache            *cache,
                                                                  error:&error];
     native->dirty |= added;
     os_unfair_lock_unlock(&native->lock);
-    descriptor.binaryArchives = native->archives;
+    return added;
   }
+  return false;
 }
 
 GPU_HIDE
-void
+bool
 mt_useComputeCache(GPUPipelineCache             *cache,
+                   MTLComputePipelineDescriptor *descriptor) {
+  MTPipelineCache *native;
+
+  native = mt_nativeCache(cache);
+  if (!native || !descriptor) {
+    return false;
+  }
+  if (@available(macOS 11.0, iOS 14.0, *)) {
+    descriptor.binaryArchives = native->archives;
+    return true;
+  }
+  return false;
+}
+
+GPU_HIDE
+bool
+mt_addComputeCache(GPUPipelineCache             *cache,
                    MTLComputePipelineDescriptor *descriptor) {
   MTPipelineCache *native;
   NSError         *error;
@@ -192,7 +227,7 @@ mt_useComputeCache(GPUPipelineCache             *cache,
 
   native = mt_nativeCache(cache);
   if (!native || !descriptor) {
-    return;
+    return false;
   }
   if (@available(macOS 11.0, iOS 14.0, *)) {
     error = nil;
@@ -201,8 +236,9 @@ mt_useComputeCache(GPUPipelineCache             *cache,
                                                                   error:&error];
     native->dirty |= added;
     os_unfair_lock_unlock(&native->lock);
-    descriptor.binaryArchives = native->archives;
+    return added;
   }
+  return false;
 }
 
 GPU_HIDE

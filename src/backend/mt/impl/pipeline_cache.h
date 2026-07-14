@@ -18,13 +18,23 @@
 #define mt_pipeline_cache_h
 
 GPU_HIDE
-void
+bool
 mt_useRenderCache(GPUPipelineCache            *cache,
                   MTLRenderPipelineDescriptor *descriptor);
 
 GPU_HIDE
-void
+bool
+mt_addRenderCache(GPUPipelineCache            *cache,
+                  MTLRenderPipelineDescriptor *descriptor);
+
+GPU_HIDE
+bool
 mt_useComputeCache(GPUPipelineCache             *cache,
+                   MTLComputePipelineDescriptor *descriptor);
+
+GPU_HIDE
+bool
+mt_addComputeCache(GPUPipelineCache             *cache,
                    MTLComputePipelineDescriptor *descriptor);
 
 #endif /* mt_pipeline_cache_h */

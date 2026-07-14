@@ -72,6 +72,7 @@ mt_newComputeState(GPUDevice *device, GPUComputePipeline *pipeline) {
   MTComputePipelineDesc        *desc;
   GPUDeviceMT                  *deviceMT;
   NSError                      *error;
+  bool                          usesArchive;
 
   if (!device || !pipeline || !pipeline->_priv) {
     return NULL;
@@ -85,13 +86,28 @@ mt_newComputeState(GPUDevice *device, GPUComputePipeline *pipeline) {
 
   pipelineDesc = [MTLComputePipelineDescriptor new];
   pipelineDesc.computeFunction = desc->function;
-  mt_useComputeCache(pipeline->_cache, pipelineDesc);
-  error = nil;
-  mtState = [deviceMT->device
-    newComputePipelineStateWithDescriptor:pipelineDesc
-                                  options:MTLPipelineOptionNone
-                               reflection:nil
-                                    error:&error];
+  usesArchive = mt_useComputeCache(pipeline->_cache, pipelineDesc);
+  error       = nil;
+  mtState     = nil;
+  if (usesArchive) {
+    mtState = [deviceMT->device
+      newComputePipelineStateWithDescriptor:pipelineDesc
+                                    options:
+                                      MTLPipelineOptionFailOnBinaryArchiveMiss
+                                 reflection:nil
+                                      error:&error];
+    if (!mtState) {
+      mt_addComputeCache(pipeline->_cache, pipelineDesc);
+      error = nil;
+    }
+  }
+  if (!mtState) {
+    mtState = [deviceMT->device
+      newComputePipelineStateWithDescriptor:pipelineDesc
+                                    options:MTLPipelineOptionNone
+                                 reflection:nil
+                                      error:&error];
+  }
   [pipelineDesc release];
   if (!mtState) {
     NSLog(@"Failed to create compute pipeline state: %@", error);

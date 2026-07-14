@@ -171,6 +171,7 @@ mt_newRenderState(GPUDevice         * __restrict device,
   MTLStencilDescriptor        *backDesc;
   NSError                     *error;
   uint32_t                     i;
+  bool                         usesArchive;
   
   deviceMT = device->_priv;
   error    = nil;
@@ -186,10 +187,24 @@ mt_newRenderState(GPUDevice         * __restrict device,
     mt_fillBlendDescriptor(renderDesc.colorAttachments[i],
                            &pipeline->_colorTargetBlends[i]);
   }
-  mt_useRenderCache(pipeline->_cache, renderDesc);
-  native->render = [deviceMT->device
-    newRenderPipelineStateWithDescriptor:renderDesc
-                                   error:&error];
+  usesArchive = mt_useRenderCache(pipeline->_cache, renderDesc);
+  if (usesArchive) {
+    native->render = [deviceMT->device
+      newRenderPipelineStateWithDescriptor:renderDesc
+                                   options:
+                                     MTLPipelineOptionFailOnBinaryArchiveMiss
+                                reflection:nil
+                                     error:&error];
+    if (!native->render) {
+      mt_addRenderCache(pipeline->_cache, renderDesc);
+      error = nil;
+    }
+  }
+  if (!native->render) {
+    native->render = [deviceMT->device
+      newRenderPipelineStateWithDescriptor:renderDesc
+                                     error:&error];
+  }
   if (!native->render) {
     NSLog(@"Failed to create render pipeline state: %@", error);
     free(native);
