@@ -64,7 +64,8 @@
 #define APP_LONG_NAME  "libgpu"
 
 enum {
-  GPU_VK_MAX_DYNAMIC_OFFSETS = 64u
+  GPU_VK_MAX_DYNAMIC_OFFSETS          = 64u,
+  GPU_VK_DESCRIPTOR_POOL_TYPE_COUNT   = 7u
 };
 
 #if defined(NDEBUG) && defined(__GNUC__)
@@ -321,13 +322,28 @@ typedef struct GPUTextureVk {
   bool               layoutUniform;
 } GPUTextureVk;
 
+typedef struct GPUDescriptorPoolVk {
+  struct GPUDescriptorPoolVk *next;
+  VkDescriptorPool            pool;
+} GPUDescriptorPoolVk;
+
 typedef struct GPUBindGroupLayoutVk {
-  uint32_t              *dynamicOrder;
-  VkSampler             *immutableSamplers;
-  VkDevice               device;
-  VkDescriptorSetLayout  layout;
-  uint32_t                dynamicCount;
-  uint32_t                immutableSamplerCount;
+  GPUDescriptorPoolVk  *descriptorPools;
+  uint32_t             *dynamicOrder;
+  VkSampler            *immutableSamplers;
+  VkDevice              device;
+  VkDescriptorSetLayout layout;
+#if defined(_WIN32) || defined(WIN32)
+  CRITICAL_SECTION      poolLock;
+#else
+  pthread_mutex_t       poolLock;
+#endif
+  uint32_t              dynamicCount;
+  uint32_t              immutableSamplerCount;
+  uint32_t              poolSizeCount;
+  uint32_t              poolSetCapacity;
+  bool                  poolLockInitialized;
+  VkDescriptorPoolSize  poolSizes[GPU_VK_DESCRIPTOR_POOL_TYPE_COUNT];
 } GPUBindGroupLayoutVk;
 
 typedef struct GPUPipelineLayoutVk {
@@ -336,9 +352,10 @@ typedef struct GPUPipelineLayoutVk {
 } GPUPipelineLayoutVk;
 
 typedef struct GPUBindGroupVk {
-  VkDevice         device;
-  VkDescriptorPool pool;
-  VkDescriptorSet  set;
+  GPUBindGroupLayoutVk *layout;
+  GPUDescriptorPoolVk  *pool;
+  VkDevice               device;
+  VkDescriptorSet        set;
 } GPUBindGroupVk;
 
 typedef struct GPUSemaphoreVk {
