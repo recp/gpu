@@ -8,3 +8,19 @@ kern(1, 1, 1) bindless_dispatch(
   output[0] = textures[index].sample(
     samplers[index], float2(0.5), level(0.0))
 }
+
+vert bindless_render_vs(vertexId: uint #vertex_id) -> float4 {
+  let x = float(vertexId & 1) * 4.0 - 1.0
+  let y = float((vertexId >> 1) & 1) * 4.0 - 1.0
+  return float4(x, y, 0.0, 1.0)
+}
+
+frag bindless_render_fs(
+  textures: [texture2d<float>; 16] #texture(0),
+  samplers: [sampler; 16] #sampler(1),
+  selection: uint #buffer(2)
+) -> float4 {
+  let index = nonuniform(selection)
+  return textures[index].sample(
+    samplers[index], float2(0.5), level(0.0))
+}

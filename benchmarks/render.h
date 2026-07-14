@@ -25,6 +25,7 @@
 
 typedef struct BenchRenderConfig {
   const char *artifactPath;
+  GPUFeatureSet required;
   GPUBackend  backend;
   uint32_t    drawCount;
   uint32_t    warmupFrames;
@@ -44,6 +45,7 @@ typedef struct BenchRender {
   GPUTextureView       *targetView;
   GPUFence             *fence;
   GPUAdapterProperties  adapterProperties;
+  bool                  requiredUnsupported;
 } BenchRender;
 
 typedef struct BenchPipelineInfo {

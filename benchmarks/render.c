@@ -187,6 +187,7 @@ bench_renderInit(BenchRender             *bench,
                  uint32_t                 width,
                  uint32_t                 height) {
   GPUInstanceCreateInfo instanceInfo;
+  GPUDeviceCreateInfo   deviceInfo;
   GPURuntimeConfig      runtimeConfig;
 
   if (!bench || !config || width == 0u || height == 0u) {
@@ -194,6 +195,7 @@ bench_renderInit(BenchRender             *bench,
   }
   memset(bench, 0, sizeof(*bench));
   memset(&instanceInfo, 0, sizeof(instanceInfo));
+  memset(&deviceInfo, 0, sizeof(deviceInfo));
   memset(&runtimeConfig, 0, sizeof(runtimeConfig));
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -210,7 +212,29 @@ bench_renderInit(BenchRender             *bench,
     fprintf(stderr, "failed to select GPU adapter\n");
     return false;
   }
-  bench->device = GPUCreateDeviceWithDefaultQueues(bench->adapter);
+  if (config->required.featureCount > 0u) {
+    if (!config->required.pFeatures) {
+      fprintf(stderr, "required feature list is missing\n");
+      return false;
+    }
+    for (uint32_t i = 0u; i < config->required.featureCount; i++) {
+      if (!GPUIsFeatureSupported(bench->adapter,
+                                 config->required.pFeatures[i])) {
+        bench->requiredUnsupported = true;
+        return false;
+      }
+    }
+    deviceInfo.chain.sType      = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    deviceInfo.chain.structSize = sizeof(deviceInfo);
+    deviceInfo.required         = config->required;
+    if (GPUCreateDevice(bench->adapter,
+                        &deviceInfo,
+                        &bench->device) != GPU_OK) {
+      bench->device = NULL;
+    }
+  } else {
+    bench->device = GPUCreateDeviceWithDefaultQueues(bench->adapter);
+  }
   if (!bench->device) {
     fprintf(stderr, "failed to create GPU device\n");
     return false;

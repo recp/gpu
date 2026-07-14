@@ -1511,6 +1511,29 @@ if(GPU_BUILD_BENCHMARKS)
     target_compile_options(gpu-bindless-dispatch-bench PRIVATE -Wall -Wextra)
   endif()
 
+  add_executable(gpu-bindless-render-bench
+    benchmarks/bench.c
+    benchmarks/render.c
+    benchmarks/bindless_render.c
+  )
+  target_link_libraries(gpu-bindless-render-bench PRIVATE gpu)
+  target_include_directories(gpu-bindless-render-bench PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_compile_definitions(gpu-bindless-render-bench PRIVATE
+    GPU_BUILD_WITH_VALIDATION=$<BOOL:${GPU_BUILD_WITH_VALIDATION}>
+  )
+  set_target_properties(gpu-bindless-render-bench PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_options(gpu-bindless-render-bench PRIVATE /W3)
+  else()
+    target_compile_options(gpu-bindless-render-bench PRIVATE -Wall -Wextra)
+  endif()
+
   add_executable(gpu-upload-heavy-bench
     benchmarks/bench.c
     benchmarks/render.c
@@ -1606,6 +1629,7 @@ if(GPU_BUILD_BENCHMARKS)
           gpu-state-churn-bench
           gpu-binding-churn-bench
           gpu-bindless-dispatch-bench
+          gpu-bindless-render-bench
           gpu-upload-heavy-bench
           gpu-pipeline-stress-bench)
     add_dependencies(${benchmark_target} gpu-benchmark-fixtures)
@@ -1666,6 +1690,12 @@ if(GPU_BUILD_BENCHMARKS)
       ${GPU_BENCHMARK_BACKEND} 32 3
     )
     gpu_add_perf_smoke(
+      perf-smoke-bindless-render
+      gpu-bindless-render-bench
+      "${GPU_BENCHMARK_BINDLESS_DISPATCH_US}"
+      ${GPU_BENCHMARK_BACKEND} 32 4 12 1
+    )
+    gpu_add_perf_smoke(
       perf-smoke-upload-heavy
       gpu-upload-heavy-bench
       "${GPU_BENCHMARK_TRIANGLE_US}"
@@ -1689,6 +1719,7 @@ if(GPU_BUILD_BENCHMARKS)
               perf-smoke-binding-churn
               perf-smoke-bindless-update
               perf-smoke-bindless-dispatch
+              perf-smoke-bindless-render
               perf-smoke-upload-heavy
               perf-smoke-pipeline-stress)
         set_property(TEST ${perfSmokeTest} APPEND PROPERTY ENVIRONMENT
@@ -1709,6 +1740,7 @@ if(GPU_BUILD_BENCHMARKS)
             gpu-binding-churn-bench
             gpu-bindless-update-bench
             gpu-bindless-dispatch-bench
+            gpu-bindless-render-bench
             gpu-upload-heavy-bench
             gpu-pipeline-stress-bench
             gpu-validation-bench
