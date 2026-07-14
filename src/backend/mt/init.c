@@ -44,6 +44,7 @@ backend_metal(void) {
     mt_initFrame(&mt.frame);
     mt_initInstance(&mt.instance);
     mt_initSurface(&mt.surface);
+    mt_initPipelineCache(&mt.pipelineCache);
 
     mt.initialized = true;
   }

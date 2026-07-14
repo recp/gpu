@@ -34,5 +34,6 @@ GPU_HIDE void mt_initSwapchain(GPUApiSwapchain *api);
 GPU_HIDE void mt_initFrame(GPUApiFrame *api);
 GPU_HIDE void mt_initInstance(GPUApiInstance *api);
 GPU_HIDE void mt_initSurface(GPUApiSurface * apiDevice);
+GPU_HIDE void mt_initPipelineCache(GPUApiPipelineCache *api);
 
 #endif /* mt_apis_h */

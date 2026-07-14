@@ -16,6 +16,7 @@
 
 #include "../common.h"
 #include "../../../api/compute_internal.h"
+#include "pipeline_cache.h"
 
 typedef struct MTComputePipelineDesc {
   id<MTLFunction> function;
@@ -65,11 +66,12 @@ mt_setComputeFunction(GPUComputePipeline *pipeline, GPUShaderFunction *func) {
 GPU_HIDE
 GPUComputePipelineState*
 mt_newComputeState(GPUDevice *device, GPUComputePipeline *pipeline) {
-  GPUDeviceMT *deviceMT;
-  MTComputePipelineDesc *desc;
-  GPUComputePipelineState *state;
-  id<MTLComputePipelineState> mtState;
-  NSError *error;
+  MTLComputePipelineDescriptor *pipelineDesc;
+  id<MTLComputePipelineState>   mtState;
+  GPUComputePipelineState      *state;
+  MTComputePipelineDesc        *desc;
+  GPUDeviceMT                  *deviceMT;
+  NSError                      *error;
 
   if (!device || !pipeline || !pipeline->_priv) {
     return NULL;
@@ -81,9 +83,16 @@ mt_newComputeState(GPUDevice *device, GPUComputePipeline *pipeline) {
     return NULL;
   }
 
+  pipelineDesc = [MTLComputePipelineDescriptor new];
+  pipelineDesc.computeFunction = desc->function;
+  mt_useComputeCache(pipeline->_cache, pipelineDesc);
   error = nil;
-  mtState = [deviceMT->device newComputePipelineStateWithFunction:desc->function
-                                                            error:&error];
+  mtState = [deviceMT->device
+    newComputePipelineStateWithDescriptor:pipelineDesc
+                                  options:MTLPipelineOptionNone
+                               reflection:nil
+                                    error:&error];
+  [pipelineDesc release];
   if (!mtState) {
     NSLog(@"Failed to create compute pipeline state: %@", error);
     return NULL;

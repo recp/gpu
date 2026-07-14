@@ -25,6 +25,7 @@ typedef struct GPUPipelineCompileJob GPUPipelineCompileJob;
 struct GPUPipelineCache {
   GPUDevice             *device;
   void                  *_sync;
+  void                  *_priv;
   GPUPipelineCache      *deviceNext;
   GPUPipelineCacheEntry *head;
   GPUPipelineCacheEntry *tail;

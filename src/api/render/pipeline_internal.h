@@ -28,6 +28,7 @@ struct GPURenderPipeline {
   void                 *_priv;
   void                 *_state;
   GPUPipelineLayout    *_layout;
+  GPUPipelineCache     *_cache;
   GPUDepthStencilState  _depthStencilState;
   uint32_t              _requiredBindGroupMask;
   uint32_t              _colorTargetCount;

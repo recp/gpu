@@ -221,7 +221,9 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
     pipeline->_device   = device;
     pipeline->_refCount = 1u;
     api->compute.setFunction(pipeline, function);
-    state = gpuCompileComputePipelineState(device, pipeline);
+    pipeline->_cache = info->cache;
+    state            = gpuCompileComputePipelineState(device, pipeline);
+    pipeline->_cache = NULL;
     if (!state) {
       GPUDestroyComputePipeline(pipeline);
       return GPU_ERROR_BACKEND_FAILURE;

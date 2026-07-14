@@ -30,6 +30,7 @@ struct GPUComputePipeline {
   void                *_state;
   GPUDevice           *_device;
   GPUPipelineLayout   *_layout;
+  GPUPipelineCache    *_cache;
   uint32_t             _requiredBindGroupMask;
   uint32_t             _pushConstantSizeBytes;
   GPUShaderStageFlags  _pushConstantStages;

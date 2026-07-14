@@ -40,6 +40,7 @@ extern "C" {
 #include "sampler.h"
 #include "instance.h"
 #include "surface.h"
+#include "pipeline-cache.h"
 
 typedef struct GPUApi {
   GPUBackend          backend;
@@ -62,6 +63,7 @@ typedef struct GPUApi {
   GPUApiSampler       sampler;
   GPUApiInstance      instance;
   GPUApiSurface       surface;
+  GPUApiPipelineCache pipelineCache;
   void               *reserved;
 } GPUApi;
 

@@ -48,6 +48,104 @@ static uint32_t gRenderDrawIndirectCalls;
 static uint32_t gRenderDrawIndexedIndirectCalls;
 static uint32_t gRenderMultiDrawIndirectCalls;
 static uint32_t gRenderMultiDrawIndexedIndirectCalls;
+
+static int
+check_pipeline_disk_cache(GPUDevice                  *device,
+                          GPURenderPipelineCreateInfo *info) {
+  GPUPipelineCacheCreateInfo cacheInfo = {0};
+  GPUPipelineCache          *cache;
+  GPURenderPipeline         *pipeline;
+  GPUApi                    *api;
+  GPUResult                  result;
+  char                       path[160];
+  char                       temporaryPath[168];
+  FILE                      *file;
+  long                       fileSize;
+  int                        ok;
+
+  api = gpuDeviceApi(device);
+  if (!api) {
+    return 0;
+  }
+
+  cacheInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+  cacheInfo.chain.structSize = sizeof(cacheInfo);
+  cacheInfo.label            = "api-render-disk-cache";
+  cacheInfo.enableDiskCache  = true;
+  if (GPUCreatePipelineCache(device, &cacheInfo, &cache) !=
+        GPU_ERROR_INVALID_ARGUMENT || cache != NULL) {
+    fprintf(stderr, "pipeline disk cache accepted null path\n");
+    return 0;
+  }
+
+  snprintf(path,
+           sizeof(path),
+           ".gpu-api-metal-cache-%p.bin",
+           (void *)device);
+  snprintf(temporaryPath, sizeof(temporaryPath), "%s.tmp", path);
+  remove(path);
+  remove(temporaryPath);
+  cacheInfo.cachePath = path;
+  cache               = NULL;
+  result              = GPUCreatePipelineCache(device, &cacheInfo, &cache);
+  if (api->backend != GPU_BACKEND_METAL) {
+    if (result != GPU_ERROR_UNSUPPORTED || cache != NULL) {
+      fprintf(stderr, "pipeline disk cache accepted unsupported backend\n");
+      GPUDestroyPipelineCache(cache);
+      return 0;
+    }
+    return 1;
+  }
+  if (result != GPU_OK || !cache) {
+    fprintf(stderr, "Metal pipeline disk cache create failed\n");
+    return 0;
+  }
+
+  ok          = 0;
+  pipeline    = NULL;
+  info->cache = cache;
+  if (GPUCreateRenderPipeline(device, info, &pipeline) != GPU_OK || !pipeline) {
+    fprintf(stderr, "Metal cached render pipeline create failed\n");
+    goto cleanup;
+  }
+  GPUDestroyRenderPipeline(pipeline);
+  pipeline = NULL;
+  GPUDestroyPipelineCache(cache);
+  cache       = NULL;
+  info->cache = NULL;
+
+  file = fopen(path, "rb");
+  if (!file) {
+    fprintf(stderr, "Metal pipeline cache file was not written\n");
+    goto cleanup;
+  }
+  fseek(file, 0, SEEK_END);
+  fileSize = ftell(file);
+  fclose(file);
+  if (fileSize <= 0) {
+    fprintf(stderr, "Metal pipeline cache file is empty\n");
+    goto cleanup;
+  }
+
+  if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {
+    fprintf(stderr, "Metal pipeline disk cache reopen failed\n");
+    goto cleanup;
+  }
+  info->cache = cache;
+  if (GPUCreateRenderPipeline(device, info, &pipeline) != GPU_OK || !pipeline) {
+    fprintf(stderr, "Metal pipeline create from reopened cache failed\n");
+    goto cleanup;
+  }
+  ok = 1;
+
+cleanup:
+  GPUDestroyRenderPipeline(pipeline);
+  info->cache = NULL;
+  GPUDestroyPipelineCache(cache);
+  remove(path);
+  remove(temporaryPath);
+  return ok;
+}
 static uint32_t gRenderVertexBufferCalls;
 static uint32_t gRenderPushConstantCalls;
 static uint32_t gRenderViewportCalls;
@@ -248,7 +346,7 @@ check_pipeline_cache_validation(GPUDevice *device,
   GPUPipelineCacheCreateInfo cacheInfo = {0};
   GPUPipelineCache *cache = NULL;
   GPURenderPipeline *pipeline = NULL;
-  GPURenderPipeline *asyncPipeline = (GPURenderPipeline *)(uintptr_t)1u;
+  GPURenderPipeline *asyncPipeline = NULL;
   GPUPipelineCompileHandle handle = {0};
   GPUPipelineCompileStatus status = GPU_PIPELINE_COMPILE_PENDING;
   GPUCacheStats stats;
@@ -292,12 +390,10 @@ check_pipeline_cache_validation(GPUDevice *device,
   }
 
   cacheInfo.chain.structSize = sizeof(cacheInfo);
-  cacheInfo.enableDiskCache = true;
-  if (GPUCreatePipelineCache(device, &cacheInfo, &cache) !=
-        GPU_ERROR_UNSUPPORTED || cache != NULL) {
-    fprintf(stderr, "pipeline cache accepted unsupported disk cache\n");
+  if (!check_pipeline_disk_cache(device, info)) {
     return 0;
   }
+  GPUResetStats(device);
   cacheInfo.enableDiskCache = false;
   cacheInfo.maxEntries      = 1u;
   if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {

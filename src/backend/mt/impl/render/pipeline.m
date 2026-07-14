@@ -16,6 +16,7 @@
 
 #include "../../common.h"
 #include "../../../../api/render/pipeline_internal.h"
+#include "../pipeline_cache.h"
 
 static MTLCompareFunction
 mt_compareFunction(GPUCompareOp op) {
@@ -185,6 +186,7 @@ mt_newRenderState(GPUDevice         * __restrict device,
     mt_fillBlendDescriptor(renderDesc.colorAttachments[i],
                            &pipeline->_colorTargetBlends[i]);
   }
+  mt_useRenderCache(pipeline->_cache, renderDesc);
   native->render = [deviceMT->device
     newRenderPipelineStateWithDescriptor:renderDesc
                                    error:&error];

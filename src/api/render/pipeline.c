@@ -513,7 +513,9 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   }
   gpuPipelineSetSampleCount(pipeline, sampleCount);
 
-  state = gpuCompileRenderPipelineState(device, pipeline);
+  pipeline->_cache = info->cache;
+  state            = gpuCompileRenderPipelineState(device, pipeline);
+  pipeline->_cache = NULL;
   if (!state) {
     GPUDestroyRenderPipeline(pipeline);
     return GPU_ERROR_BACKEND_FAILURE;

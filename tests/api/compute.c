@@ -47,6 +47,78 @@ expect_compute_pipeline_error(GPUDevice *device,
   return 1;
 }
 
+static int
+check_compute_disk_cache(GPUDevice                   *device,
+                         GPUComputePipelineCreateInfo *info) {
+  GPUPipelineCacheCreateInfo cacheInfo = {0};
+  GPUComputePipeline       *pipeline;
+  GPUPipelineCache         *cache;
+  GPUApi                   *api;
+  char                      path[160];
+  char                      temporaryPath[168];
+  FILE                     *file;
+  long                      fileSize;
+  int                       ok;
+
+  api = gpuDeviceApi(device);
+  if (!api || api->backend != GPU_BACKEND_METAL) {
+    return 1;
+  }
+
+  snprintf(path,
+           sizeof(path),
+           ".gpu-api-metal-compute-cache-%p.bin",
+           (void *)device);
+  snprintf(temporaryPath, sizeof(temporaryPath), "%s.tmp", path);
+  remove(path);
+  remove(temporaryPath);
+  cacheInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+  cacheInfo.chain.structSize = sizeof(cacheInfo);
+  cacheInfo.label            = "api-compute-disk-cache";
+  cacheInfo.enableDiskCache  = true;
+  cacheInfo.cachePath        = path;
+  cache                      = NULL;
+  if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {
+    fprintf(stderr, "failed to create Metal compute disk cache\n");
+    return 0;
+  }
+
+  ok          = 0;
+  pipeline    = NULL;
+  info->cache = cache;
+  if (GPUCreateComputePipeline(device, info, &pipeline) != GPU_OK || !pipeline) {
+    fprintf(stderr, "Metal cached compute pipeline create failed\n");
+    goto cleanup;
+  }
+  GPUDestroyComputePipeline(pipeline);
+  pipeline    = NULL;
+  info->cache = NULL;
+  GPUDestroyPipelineCache(cache);
+  cache = NULL;
+
+  file = fopen(path, "rb");
+  if (!file) {
+    fprintf(stderr, "Metal compute pipeline cache file was not written\n");
+    goto cleanup;
+  }
+  fseek(file, 0, SEEK_END);
+  fileSize = ftell(file);
+  fclose(file);
+  if (fileSize <= 0) {
+    fprintf(stderr, "Metal compute pipeline cache file is empty\n");
+    goto cleanup;
+  }
+  ok = 1;
+
+cleanup:
+  GPUDestroyComputePipeline(pipeline);
+  info->cache = NULL;
+  GPUDestroyPipelineCache(cache);
+  remove(path);
+  remove(temporaryPath);
+  return ok;
+}
+
 static uint32_t gComputeDispatchCalls;
 static uint32_t gComputeDispatchIndirectCalls;
 static uint32_t gComputeMultiDispatchIndirectCalls;
@@ -272,6 +344,12 @@ check_compute_pipeline_validation(GPUDevice *device,
 
   GPUDestroyComputePipeline(pipeline);
   pipeline = NULL;
+
+  if (!check_compute_disk_cache(device, &info)) {
+    GPUDestroyPipelineLayout(pipelineLayout);
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
 
   cacheInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
   cacheInfo.chain.structSize = sizeof(cacheInfo);

@@ -933,6 +933,8 @@ GPUCreatePipelineCache(GPUDevice                         * __restrict device,
                        GPUPipelineCache                 ** __restrict outCache) {
   GPUPipelineCache     *cache;
   GPUPipelineCacheSync *sync;
+  GPUApi               *api;
+  GPUResult             result;
   uint64_t              maxEntries;
   size_t                bucketCount;
 
@@ -951,7 +953,12 @@ GPUCreatePipelineCache(GPUDevice                         * __restrict device,
   if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  if (info->enableDiskCache) {
+  if (info->enableDiskCache && (!info->cachePath || !info->cachePath[0])) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  api = gpuDeviceApi(device);
+  if (info->enableDiskCache &&
+      (!api || !api->pipelineCache.create || !api->pipelineCache.destroy)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -993,6 +1000,22 @@ GPUCreatePipelineCache(GPUDevice                         * __restrict device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 #endif
+
+  if (info->enableDiskCache) {
+    result = api->pipelineCache.create(device, info, cache);
+    if (result != GPU_OK) {
+#if defined(_WIN32) || defined(WIN32)
+      DeleteCriticalSection(&sync->lock);
+#else
+      pthread_cond_destroy(&sync->condition);
+      pthread_mutex_destroy(&sync->lock);
+#endif
+      free(sync);
+      free(cache->buckets);
+      free(cache);
+      return result;
+    }
+  }
 
   cache->device      = device;
   cache->_sync       = sync;
@@ -1039,6 +1062,15 @@ GPUDestroyPipelineCache(GPUPipelineCache *cache) {
 #else
     pthread_join(sync->worker, NULL);
 #endif
+  }
+
+  if (cache->_priv) {
+    GPUApi *api;
+
+    api = gpuDeviceApi(cache->device);
+    if (api && api->pipelineCache.destroy) {
+      api->pipelineCache.destroy(cache);
+    }
   }
 
   gpu_pipelineCacheLock(cache);
