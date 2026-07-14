@@ -21,6 +21,57 @@
 #include "swapchain_internal.h"
 #include "texture_internal.h"
 
+#if !defined(_WIN32) && !defined(WIN32)
+#  include <time.h>
+#endif
+
+static bool
+gpu_frameClockStart(uint64_t *ticks, uint64_t *frequency) {
+#if defined(_WIN32) || defined(WIN32)
+  LARGE_INTEGER counter;
+  LARGE_INTEGER timerFrequency;
+
+  if (!QueryPerformanceFrequency(&timerFrequency) ||
+      !QueryPerformanceCounter(&counter) ||
+      timerFrequency.QuadPart <= 0 || counter.QuadPart < 0) {
+    return false;
+  }
+
+  *ticks     = (uint64_t)counter.QuadPart;
+  *frequency = (uint64_t)timerFrequency.QuadPart;
+#else
+  struct timespec now;
+
+  if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+    return false;
+  }
+
+  *ticks     = (uint64_t)now.tv_sec * 1000000000ull +
+               (uint64_t)now.tv_nsec;
+  *frequency = 1000000000ull;
+#endif
+  return true;
+}
+
+static double
+gpu_frameClockElapsedMs(const GPUFrame *frame) {
+  uint64_t frequency;
+  uint64_t start;
+  uint64_t end;
+
+  if (!frame || frame->cpuEncodeFrequency == 0u ||
+      !gpu_frameClockStart(&end, &frequency) ||
+      frequency != frame->cpuEncodeFrequency) {
+    return 0.0;
+  }
+
+  start = frame->cpuEncodeStartTicks;
+  if (end < start) {
+    return 0.0;
+  }
+  return (double)(end - start) * 1000.0 / (double)frequency;
+}
+
 GPU_EXPORT
 GPUFrame*
 GPUBeginFrame(GPUSwapchain* swapchain) {
@@ -46,6 +97,11 @@ GPUBeginFrame(GPUSwapchain* swapchain) {
     }
     frame->transientFrameIndex  = device->transientFrameIndex;
     frame->transientFrameActive = device->transientConfigured;
+    if (!gpu_frameClockStart(&frame->cpuEncodeStartTicks,
+                             &frame->cpuEncodeFrequency)) {
+      frame->cpuEncodeStartTicks = 0u;
+      frame->cpuEncodeFrequency  = 0u;
+    }
   }
 
   return frame;
@@ -76,6 +132,8 @@ GPUEndFrame(GPUFrame* frame) {
     return;
 
   frame->transientFrameActive = false;
+  frame->device->currentFrameStats.cpuEncodeMs =
+    gpu_frameClockElapsedMs(frame);
   gpuDeviceEndFrame(frame->device);
   api->frame.endFrame(api, frame);
 }

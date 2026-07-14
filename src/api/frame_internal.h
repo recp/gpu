@@ -25,6 +25,8 @@ struct GPUFrame {
   GPUTexture     *target;
   GPUTextureView *targetView;
   void           *drawable;
+  uint64_t        cpuEncodeStartTicks;
+  uint64_t        cpuEncodeFrequency;
   uint32_t        transientFrameIndex;
   bool            transientFrameActive;
 };

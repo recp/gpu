@@ -464,9 +464,14 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   frame = GPUBeginFrame(&swapchain);
   if (queue != &gScopedQueue || !frame ||
       GPUAcquireCommandBuffer(queue, "device-scoped", &cmdb) != GPU_OK ||
-      cmdb != &gScopedCmdb ||
-      GPUFinishFrame(queue, cmdb, frame) != GPU_OK) {
+      cmdb != &gScopedCmdb || frame->cpuEncodeFrequency < 1000u ||
+      frame->cpuEncodeStartTicks < frame->cpuEncodeFrequency / 1000u) {
     fprintf(stderr, "queue/frame device dispatch failed\n");
+    return 0;
+  }
+  frame->cpuEncodeStartTicks -= frame->cpuEncodeFrequency / 1000u;
+  if (GPUFinishFrame(queue, cmdb, frame) != GPU_OK) {
+    fprintf(stderr, "queue/frame finish failed\n");
     return 0;
   }
 
@@ -492,6 +497,10 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
       gScopedFrameBeginCalls != 1u ||
       gScopedFrameEndCalls != 1u) {
     fprintf(stderr, "queue/frame device dispatch called wrong backend\n");
+    return 0;
+  }
+  if (!(device.lastFrameStats.cpuEncodeMs > 0.0)) {
+    fprintf(stderr, "frame cpu encode time was not recorded\n");
     return 0;
   }
 
