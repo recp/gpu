@@ -86,6 +86,14 @@ gpuGetShaderLibraryEntryStage(const GPUShaderLibrary *library,
 
 GPU_HIDE
 int
+gpuGetShaderLibraryPayloadInfo(const GPUShaderLibrary *library,
+                               const char               *entryPoint,
+                               GPUShaderStageFlags       stage,
+                               uint32_t                 *outSizeBytes,
+                               const char              **outType);
+
+GPU_HIDE
+int
 gpuShaderLibraryHasEntryResourceInfo(const GPUShaderLibrary *library);
 
 GPU_HIDE

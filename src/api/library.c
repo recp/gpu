@@ -20,13 +20,15 @@
 #include "usl_target.h"
 
 typedef struct GPUShaderEntryInfo {
-  char *name;
-  uint64_t nameHash;
-  uint32_t stage;
-  uint32_t workgroupSize[3];
-  uint32_t resourceStart;
-  uint32_t resourceCount;
-  uint32_t nameLength;
+  char     *name;
+  char     *payloadType;
+  uint64_t  nameHash;
+  uint32_t  stage;
+  uint32_t  workgroupSize[3];
+  uint32_t  resourceStart;
+  uint32_t  resourceCount;
+  uint32_t  payloadSizeBytes;
+  uint32_t  nameLength;
 } GPUShaderEntryInfo;
 
 typedef struct GPUShaderEntryInfoList {
@@ -265,6 +267,35 @@ gpuGetShaderLibraryEntryStage(const GPUShaderLibrary *library,
   }
 
   *outStage = entry->stage;
+  return 1;
+}
+
+GPU_HIDE
+int
+gpuGetShaderLibraryPayloadInfo(const GPUShaderLibrary *library,
+                               const char               *entryPoint,
+                               GPUShaderStageFlags       stage,
+                               uint32_t                 *outSizeBytes,
+                               const char              **outType) {
+  const GPUShaderEntryInfo *entry;
+
+  if (outSizeBytes) {
+    *outSizeBytes = 0u;
+  }
+  if (outType) {
+    *outType = NULL;
+  }
+  if (!outSizeBytes || !outType) {
+    return 0;
+  }
+
+  entry = gpu_findShaderEntry(library, entryPoint);
+  if (!entry || entry->stage != stage) {
+    return 0;
+  }
+
+  *outSizeBytes = entry->payloadSizeBytes;
+  *outType      = entry->payloadType;
   return 1;
 }
 
@@ -574,13 +605,23 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
   textSize          = 0u;
   usedResourceCount = 0u;
   for (uint32_t i = 0u; i < runtimeInfo->entry_point_count; i++) {
+    const USLRuntimeEntryPoint *entry;
+    size_t payloadTypeSize;
     size_t size;
 
-    if (!gpu_runtimeTextSize(runtimeInfo->entry_points[i].name, &size) ||
+    entry = &runtimeInfo->entry_points[i];
+    if (!gpu_runtimeTextSize(entry->name, &size) ||
         textSize > SIZE_MAX - size) {
       return 0;
     }
     textSize += size;
+    if (entry->payload_size_bytes > 0u) {
+      if (!gpu_runtimeTextSize(entry->payload_type, &payloadTypeSize) ||
+          textSize > SIZE_MAX - payloadTypeSize) {
+        return 0;
+      }
+      textSize += payloadTypeSize;
+    }
   }
   for (uint32_t i = 0u; i < runtimeInfo->resource_count; i++) {
     const USLRuntimeResource *resource;
@@ -686,6 +727,18 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
     dst->nameHash         = gpu_shaderNameHash(src->name, nameSize - 1u);
     dst->nameLength       = (uint32_t)(nameSize - 1u);
     dst->stage            = stage;
+    dst->payloadSizeBytes = src->payload_size_bytes;
+    if (src->payload_size_bytes > 0u) {
+      size_t payloadTypeSize;
+
+      if (!gpu_runtimeTextSize(src->payload_type, &payloadTypeSize)) {
+        free(metadata);
+        return 0;
+      }
+      dst->payloadType = gpu_storeMetadataText(&textCursor,
+                                               src->payload_type,
+                                               payloadTypeSize);
+    }
     dst->workgroupSize[0] = src->workgroup_size[0]
                               ? src->workgroup_size[0] : 1u;
     dst->workgroupSize[1] = src->workgroup_size[1]

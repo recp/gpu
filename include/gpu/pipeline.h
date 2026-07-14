@@ -146,6 +146,7 @@ typedef struct GPUMeshPipelineEXT {
   GPUChainedStruct chain;
   const char      *taskEntry;
   const char      *meshEntry;
+  uint32_t         payloadSizeBytes;
 } GPUMeshPipelineEXT;
 
 GPU_EXPORT

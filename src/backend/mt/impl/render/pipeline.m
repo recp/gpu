@@ -215,6 +215,7 @@ mt_newRenderState(GPUDevice         * __restrict device,
           pipeline->_taskWorkgroupSize[1] *
           pipeline->_taskWorkgroupSize[2];
       }
+      meshDesc.payloadMemoryLength = pipeline->_payloadSizeBytes;
       for (i = 0u; i < pipeline->_colorTargetCount; i++) {
         mt_fillBlendDescriptor(meshDesc.colorAttachments[i],
                                &pipeline->_colorTargetBlends[i]);

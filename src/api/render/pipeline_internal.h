@@ -44,6 +44,7 @@ struct GPURenderPipeline {
   uint32_t              _refCount;
   uint32_t              _taskWorkgroupSize[3];
   uint32_t              _meshWorkgroupSize[3];
+  uint32_t              _payloadSizeBytes;
   bool                  _alphaToCoverageEnable;
   bool                  _mesh;
   bool                  _task;

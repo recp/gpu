@@ -351,6 +351,107 @@ gpu_renderPipelineEntriesMatchStages(const GPURenderPipelineCreateInfo *info,
 }
 
 static GPUResult
+gpu_resolveMeshPayloadSize(const GPURenderPipelineCreateInfo *info,
+                           const GPUMeshPipelineEXT          *mesh,
+                           uint32_t                          *outSizeBytes) {
+  const char *taskType;
+  const char *meshType;
+  uint32_t    taskSize;
+  uint32_t    meshSize;
+  bool        taskKnown;
+  bool        meshKnown;
+
+  if (!info || !outSizeBytes) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outSizeBytes = 0u;
+  if (!mesh) {
+    return GPU_OK;
+  }
+
+  taskType = NULL;
+  meshType = NULL;
+  taskSize = 0u;
+  meshSize = 0u;
+  meshKnown = gpuGetShaderLibraryPayloadInfo(info->library,
+                                             mesh->meshEntry,
+                                             GPU_SHADER_STAGE_MESH_BIT,
+                                             &meshSize,
+                                             &meshType) != 0;
+  if (!mesh->taskEntry) {
+    return mesh->payloadSizeBytes == 0u && (!meshKnown || meshSize == 0u)
+             ? GPU_OK
+             : GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  taskKnown = gpuGetShaderLibraryPayloadInfo(info->library,
+                                             mesh->taskEntry,
+                                             GPU_SHADER_STAGE_TASK_BIT,
+                                             &taskSize,
+                                             &taskType) != 0;
+  if (taskKnown != meshKnown) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!taskKnown) {
+    *outSizeBytes = mesh->payloadSizeBytes;
+    return GPU_OK;
+  }
+  if ((taskSize == 0u) != (meshSize == 0u)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (taskSize == 0u) {
+    return mesh->payloadSizeBytes == 0u
+             ? GPU_OK
+             : GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!taskType || !meshType || taskSize != meshSize ||
+      strcmp(taskType, meshType) != 0 ||
+      (mesh->payloadSizeBytes > 0u &&
+       mesh->payloadSizeBytes < taskSize)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outSizeBytes = mesh->payloadSizeBytes > 0u
+                    ? mesh->payloadSizeBytes
+                    : taskSize;
+  return GPU_OK;
+}
+
+static void
+gpu_setMeshPipelineInfo(GPURenderPipeline         *pipeline,
+                        const GPUShaderLibrary    *library,
+                        const GPUMeshPipelineEXT  *mesh,
+                        uint32_t                  payloadSizeBytes) {
+  if (!pipeline) {
+    return;
+  }
+
+  pipeline->_mesh                 = mesh != NULL;
+  pipeline->_task                 = mesh && mesh->taskEntry;
+  pipeline->_payloadSizeBytes     = payloadSizeBytes;
+  pipeline->_taskWorkgroupSize[0] = 1u;
+  pipeline->_taskWorkgroupSize[1] = 1u;
+  pipeline->_taskWorkgroupSize[2] = 1u;
+  pipeline->_meshWorkgroupSize[0] = 1u;
+  pipeline->_meshWorkgroupSize[1] = 1u;
+  pipeline->_meshWorkgroupSize[2] = 1u;
+  if (!mesh) {
+    return;
+  }
+  if (mesh->taskEntry) {
+    gpuGetShaderLibraryWorkgroupSize(library,
+                                     mesh->taskEntry,
+                                     GPU_SHADER_STAGE_TASK_BIT,
+                                     pipeline->_taskWorkgroupSize);
+  }
+  gpuGetShaderLibraryWorkgroupSize(library,
+                                   mesh->meshEntry,
+                                   GPU_SHADER_STAGE_MESH_BIT,
+                                   pipeline->_meshWorkgroupSize);
+}
+
+static GPUResult
 gpu_meshPipelineInfo(GPUDevice                          *device,
                      const GPURenderPipelineCreateInfo *info,
                      const GPUMeshPipelineEXT         **outMesh) {
@@ -455,6 +556,7 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   GPUFormat                colorFormat;
   GPUResult                result;
   uint32_t                 i;
+  uint32_t                 payloadSizeBytes;
   uint32_t                 requiredBindGroupMask;
   uint32_t                 sampleCount;
 
@@ -496,6 +598,9 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   }
   if (!gpu_renderPipelineEntriesMatchStages(info, mesh))
     return GPU_ERROR_INVALID_ARGUMENT;
+  result = gpu_resolveMeshPayloadSize(info, mesh, &payloadSizeBytes);
+  if (result != GPU_OK)
+    return result;
   if (mesh) {
     const char *entries[3];
     uint32_t    entryCount;
@@ -537,6 +642,10 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
 
     pipeline->_api      = api;
     pipeline->_refCount = 1u;
+    gpu_setMeshPipelineInfo(pipeline,
+                            info->library,
+                            mesh,
+                            payloadSizeBytes);
     result = api->render.createPipeline(device,
                                         info,
                                         requiredBindGroupMask,
@@ -567,26 +676,10 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
 
   pipeline->_api      = api;
   pipeline->_refCount = 1u;
-  pipeline->_mesh     = mesh != NULL;
-  pipeline->_task     = mesh && mesh->taskEntry;
-  pipeline->_taskWorkgroupSize[0] = 1u;
-  pipeline->_taskWorkgroupSize[1] = 1u;
-  pipeline->_taskWorkgroupSize[2] = 1u;
-  pipeline->_meshWorkgroupSize[0] = 1u;
-  pipeline->_meshWorkgroupSize[1] = 1u;
-  pipeline->_meshWorkgroupSize[2] = 1u;
-  if (mesh) {
-    if (mesh->taskEntry) {
-      gpuGetShaderLibraryWorkgroupSize(info->library,
-                                       mesh->taskEntry,
-                                       GPU_SHADER_STAGE_TASK_BIT,
-                                       pipeline->_taskWorkgroupSize);
-    }
-    gpuGetShaderLibraryWorkgroupSize(info->library,
-                                     mesh->meshEntry,
-                                     GPU_SHADER_STAGE_MESH_BIT,
-                                     pipeline->_meshWorkgroupSize);
-  }
+  gpu_setMeshPipelineInfo(pipeline,
+                          info->library,
+                          mesh,
+                          payloadSizeBytes);
 
   if (mesh) {
     if (taskFunc)
@@ -658,26 +751,6 @@ ready:
   pipeline->_primitiveTopology = info->primitiveTopology;
   pipeline->_cullMode = info->cullMode;
   pipeline->_frontFace = info->frontFace;
-  pipeline->_mesh = mesh != NULL;
-  pipeline->_task = mesh && mesh->taskEntry;
-  if (mesh && pipeline->_meshWorkgroupSize[0] == 0u) {
-    pipeline->_taskWorkgroupSize[0] = 1u;
-    pipeline->_taskWorkgroupSize[1] = 1u;
-    pipeline->_taskWorkgroupSize[2] = 1u;
-    pipeline->_meshWorkgroupSize[0] = 1u;
-    pipeline->_meshWorkgroupSize[1] = 1u;
-    pipeline->_meshWorkgroupSize[2] = 1u;
-    if (mesh->taskEntry) {
-      gpuGetShaderLibraryWorkgroupSize(info->library,
-                                       mesh->taskEntry,
-                                       GPU_SHADER_STAGE_TASK_BIT,
-                                       pipeline->_taskWorkgroupSize);
-    }
-    gpuGetShaderLibraryWorkgroupSize(info->library,
-                                     mesh->meshEntry,
-                                     GPU_SHADER_STAGE_MESH_BIT,
-                                     pipeline->_meshWorkgroupSize);
-  }
   gpuGetPipelineLayoutPushConstants(info->layout,
                                     &pipeline->_pushConstantSizeBytes,
                                     &pipeline->_pushConstantStages);

@@ -11,6 +11,8 @@
 
 typedef struct TaskParams {
   uint32_t meshGroups[4];
+  float    offset[4];
+  float    tint[4];
 } TaskParams;
 
 @interface MeshTriangleApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
@@ -165,7 +167,8 @@ MeshTriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
       .structSize = sizeof(GPUMeshPipelineEXT)
     },
     .taskEntry = "task_main",
-    .meshEntry = "mesh_main"
+    .meshEntry = "mesh_main",
+    .payloadSizeBytes = 0u
   };
   GPURenderPipelineCreateInfo pipelineInfo = {
     .chain = {
@@ -193,7 +196,9 @@ MeshTriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
 
   TaskParams taskParams = {
-    .meshGroups = {1u, 1u, 1u, 0u}
+    .meshGroups = {1u, 1u, 1u, 0u},
+    .offset = {0.12f, 0.0f, 0.0f, 0.0f},
+    .tint = {1.0f, 0.75f, 0.5f, 1.0f}
   };
   GPUBufferCreateInfo taskBufferInfo = {
     .chain = {
