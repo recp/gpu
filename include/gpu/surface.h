@@ -16,6 +16,9 @@
 
 #ifndef gpu_surface_h
 #define gpu_surface_h
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "common.h"
 #include "device.h"
@@ -73,4 +76,7 @@ GPUGetSurfaceCapabilities(const GPUAdapter * __restrict adapter,
                           const GPUSurface * __restrict surface,
                           GPUSurfaceCapabilities * __restrict outCaps);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* gpu_surface */
