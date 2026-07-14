@@ -681,6 +681,79 @@ if(GPU_BUILD_TESTS OR GPU_BUILD_BENCHMARKS)
 endif()
 
 if(GPU_BUILD_TESTS)
+  file(GLOB GPU_PUBLIC_HEADERS CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/gpu/*.h"
+  )
+  set(GPU_PUBLIC_EXPORTS)
+  foreach(header IN LISTS GPU_PUBLIC_HEADERS)
+    file(READ "${header}" header_contents)
+    string(REGEX MATCHALL
+      "[\r\n]GPU_EXPORT[ \t\r\n]+[^;{}]+;"
+      export_declarations
+      "${header_contents}"
+    )
+    foreach(declaration IN LISTS export_declarations)
+      if(NOT declaration)
+        continue()
+      endif()
+      string(REGEX MATCH
+        "(GPU[A-Z][A-Za-z0-9_]*)[ \t\r\n]*\\("
+        export_match
+        "${declaration}"
+      )
+      if(NOT export_match)
+        message(FATAL_ERROR "Could not parse public export in ${header}")
+      endif()
+      list(APPEND GPU_PUBLIC_EXPORTS "${CMAKE_MATCH_1}")
+    endforeach()
+  endforeach()
+  list(REMOVE_DUPLICATES GPU_PUBLIC_EXPORTS)
+  list(SORT GPU_PUBLIC_EXPORTS)
+
+  set(GPU_EXPORT_LINKAGE_SOURCE
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/export_linkage.c")
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+  file(WRITE "${GPU_EXPORT_LINKAGE_SOURCE}"
+    "#include <gpu/gpu.h>\n\n"
+    "typedef void (*GPUExportSymbol)(void);\n\n"
+    "static GPUExportSymbol volatile gpuExportSymbols[] = {\n"
+  )
+  foreach(export_name IN LISTS GPU_PUBLIC_EXPORTS)
+    file(APPEND "${GPU_EXPORT_LINKAGE_SOURCE}"
+      "  (GPUExportSymbol)${export_name},\n"
+    )
+  endforeach()
+  file(APPEND "${GPU_EXPORT_LINKAGE_SOURCE}"
+    "};\n\n"
+    "int\n"
+    "main(void) {\n"
+    "  for (size_t i = 0u; i < GPU_ARRAY_LEN(gpuExportSymbols); i++) {\n"
+    "    if (!gpuExportSymbols[i]) {\n"
+    "      return 1;\n"
+    "    }\n"
+    "  }\n"
+    "  return 0;\n"
+    "}\n"
+  )
+
+  add_executable(gpu-export-linkage-test
+    "${GPU_EXPORT_LINKAGE_SOURCE}"
+  )
+  target_link_libraries(gpu-export-linkage-test PRIVATE gpu)
+  set_target_properties(gpu-export-linkage-test PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(NOT MSVC)
+    target_compile_options(gpu-export-linkage-test PRIVATE
+      -Wall
+      -Wextra
+      -Werror
+    )
+  endif()
+  add_test(NAME api-export-linkage COMMAND gpu-export-linkage-test)
+
   add_executable(gpu-api-test
     tests/api/barrier.c
     tests/api/bindgroup.c
