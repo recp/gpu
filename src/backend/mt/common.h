@@ -35,11 +35,19 @@
 #include <stdatomic.h>
 
 #if defined(__APPLE__) && defined(__OBJC__)
+#import <TargetConditionals.h>
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
 #import <QuartzCore/CAMetalLayer.h>
 #import <dispatch/dispatch.h>
 #import <os/lock.h>
+
+#if !TARGET_OS_SIMULATOR && \
+    defined(__MAC_26_0) && defined(__IPHONE_26_0)
+#  define MT_HAS_METAL4 1
+#else
+#  define MT_HAS_METAL4 0
+#endif
 
 typedef CALayer GPUViewLayer;
 

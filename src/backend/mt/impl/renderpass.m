@@ -63,6 +63,7 @@ mt_clearColor(const GPUClearColorValue *color, GPUFormat format) {
   }
 }
 
+#if MT_HAS_METAL4
 static uint64_t
 mt_stageMask(GPUPipelineStageMask stages) {
   uint64_t result;
@@ -87,6 +88,7 @@ mt_stageMask(GPUPipelineStageMask stages) {
   }
   return result;
 }
+#endif
 
 static void
 mt_resetRenderPass(MTRenderPass *pass) {
@@ -103,6 +105,7 @@ mt_resetRenderPass(MTRenderPass *pass) {
     classic.colorAttachments[i].resolveTexture = nil;
     classic.colorAttachments[i].loadAction = MTLLoadActionDontCare;
     classic.colorAttachments[i].storeAction = MTLStoreActionDontCare;
+#if MT_HAS_METAL4
     if (@available(macOS 26.0, iOS 26.0, *)) {
       MTL4RenderPassDescriptor *modern = pass->modern;
 
@@ -111,10 +114,12 @@ mt_resetRenderPass(MTRenderPass *pass) {
       modern.colorAttachments[i].loadAction = MTLLoadActionDontCare;
       modern.colorAttachments[i].storeAction = MTLStoreActionDontCare;
     }
+#endif
   }
 
   classic.depthAttachment.texture = nil;
   classic.stencilAttachment.texture = nil;
+#if MT_HAS_METAL4
   if (@available(macOS 26.0, iOS 26.0, *)) {
     MTL4RenderPassDescriptor *modern = pass->modern;
 
@@ -122,6 +127,7 @@ mt_resetRenderPass(MTRenderPass *pass) {
     modern.stencilAttachment.texture = nil;
     modern.visibilityResultBuffer = nil;
   }
+#endif
 }
 
 GPU_HIDE
@@ -135,7 +141,9 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
   MTRenderPass                              *nativePass;
   MTLRenderPassDescriptor                   *rpd;
   MTQuerySet                                *occlusion;
+#if MT_HAS_METAL4
   id                                         rpd4;
+#endif
   uint32_t                                   i;
 
   if (!cmdb || !info ||
@@ -152,24 +160,33 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
   if (!nativePass->classic) {
     nativePass->classic = [MTLRenderPassDescriptor new];
   }
+#if MT_HAS_METAL4
   if (commandState->mode == MTCommandMode4 && !nativePass->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       nativePass->modern = [MTL4RenderPassDescriptor new];
     }
   }
-  if (!nativePass->classic ||
-      (commandState->mode == MTCommandMode4 && !nativePass->modern)) {
+#endif
+  if (!nativePass->classic) {
     return NULL;
   }
+#if MT_HAS_METAL4
+  if (commandState->mode == MTCommandMode4 && !nativePass->modern) {
+    return NULL;
+  }
+#endif
 
   rpd = nativePass->classic;
+#if MT_HAS_METAL4
   rpd4 = nativePass->modern;
+#endif
   mt_resetRenderPass(nativePass);
   occlusion = info->occlusionQuerySet ? info->occlusionQuerySet->_priv : NULL;
   if (info->occlusionQuerySet && (!occlusion || !occlusion->visibility)) {
     return NULL;
   }
   rpd.visibilityResultBuffer = occlusion ? occlusion->visibility : nil;
+#if MT_HAS_METAL4
   if (rpd4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       MTL4RenderPassDescriptor *modern = rpd4;
@@ -178,6 +195,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
       modern.visibilityResultType   = MTLVisibilityResultTypeReset;
     }
   }
+#endif
 
   for (i = 0; i < info->colorAttachmentCount; i++) {
     color = &info->pColorAttachments[i];
@@ -193,6 +211,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
                                             : mt_storeAction(color->storeOp);
     rpd.colorAttachments[i].clearColor =
       mt_clearColor(&color->clearColor, color->view->format);
+#if MT_HAS_METAL4
     if (rpd4) {
       if (@available(macOS 26.0, iOS 26.0, *)) {
         MTL4RenderPassDescriptor *modern = rpd4;
@@ -204,6 +223,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
         modern.colorAttachments[i].clearColor = rpd.colorAttachments[i].clearColor;
       }
     }
+#endif
   }
 
   depthStencil = info->pDepthStencilAttachment;
@@ -231,6 +251,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
         mt_storeAction(depthStencil->stencilStoreOp);
       rpd.stencilAttachment.clearStencil = depthStencil->clearStencil;
     }
+#if MT_HAS_METAL4
     if (rpd4) {
       if (@available(macOS 26.0, iOS 26.0, *)) {
         MTL4RenderPassDescriptor *modern = rpd4;
@@ -239,6 +260,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
         modern.stencilAttachment = rpd.stencilAttachment;
       }
     }
+#endif
   }
 
   memset(renderPass, 0, sizeof(*renderPass));
@@ -345,12 +367,15 @@ mt_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
   memset(pass, 0, sizeof(*pass));
   memset(native, 0, sizeof(*native));
 
-  if (commandState && commandState->mode == MTCommandMode4) {
+#if MT_HAS_METAL4
+  if (commandState->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       native->modern = [commandState->modern computeCommandEncoder];
       mt_applyPendingBarrier(cmdb, native->modern);
     }
-  } else {
+  } else
+#endif
+  {
     native->classic = [mt_classicCommandBuffer(cmdb) blitCommandEncoder];
   }
   if (!native->classic && !native->modern) {
@@ -361,9 +386,11 @@ mt_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
     NSString *nativeLabel = [NSString stringWithUTF8String:label];
 
     native->classic.label = nativeLabel;
+#if MT_HAS_METAL4
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [(id<MTL4ComputeCommandEncoder>)native->modern setLabel:nativeLabel];
     }
+#endif
   }
 #else
   GPU__UNUSED(label);
@@ -391,6 +418,7 @@ mt_copyBufferToBuffer(GPUCopyPassEncoder        *pass,
     return;
   }
 
+#if MT_HAS_METAL4
   if (mt_copyEncoder(pass)->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       mt_useAllocation(pass->_cmdb, srcBuffer);
@@ -403,6 +431,7 @@ mt_copyBufferToBuffer(GPUCopyPassEncoder        *pass,
     }
     return;
   }
+#endif
   [mt_nativeCopyEncoder(pass) copyFromBuffer:srcBuffer
                                 sourceOffset:(NSUInteger)region->srcOffset
                                     toBuffer:dstBuffer
@@ -443,6 +472,7 @@ mt_copyBufferToTexture(GPUCopyPassEncoder               *pass,
     return;
   }
   texture3D = dst->dimension == GPU_TEXTURE_DIMENSION_3D;
+#if MT_HAS_METAL4
   if (mt_copyEncoder(pass)->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       mt_useAllocation(pass->_cmdb, srcBuffer);
@@ -476,6 +506,7 @@ mt_copyBufferToTexture(GPUCopyPassEncoder               *pass,
     }
     return;
   }
+#endif
   if (texture3D) {
     [mt_nativeCopyEncoder(pass) copyFromBuffer:srcBuffer
                                   sourceOffset:(NSUInteger)region->bufferOffset
@@ -538,6 +569,7 @@ mt_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
     return;
   }
   texture3D = src->dimension == GPU_TEXTURE_DIMENSION_3D;
+#if MT_HAS_METAL4
   if (mt_copyEncoder(pass)->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       mt_useAllocation(pass->_cmdb, srcTexture);
@@ -571,6 +603,7 @@ mt_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
     }
     return;
   }
+#endif
   if (texture3D) {
     [mt_nativeCopyEncoder(pass) copyFromTexture:srcTexture
                                     sourceSlice:0
@@ -649,6 +682,7 @@ mt_copyDepthStencilPlane(GPUCopyPassEncoder                  *pass,
   }
 
   size = MTLSizeMake(region->width, region->height, 1u);
+#if MT_HAS_METAL4
   if (mt_copyEncoder(pass)->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       id<MTL4ComputeCommandEncoder> modern;
@@ -688,6 +722,7 @@ mt_copyDepthStencilPlane(GPUCopyPassEncoder                  *pass,
     }
     return;
   }
+#endif
 
   for (uint32_t i = 0u; i < region->layerCount; i++) {
     [mt_nativeCopyEncoder(pass) copyFromTexture:srcTexture
@@ -746,6 +781,7 @@ mt_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
   }
   texture3D = src->dimension == GPU_TEXTURE_DIMENSION_3D;
   size = MTLSizeMake(region->width, region->height, texture3D ? region->depth : 1u);
+#if MT_HAS_METAL4
   if (mt_copyEncoder(pass)->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       mt_useAllocation(pass->_cmdb, srcTexture);
@@ -776,6 +812,7 @@ mt_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
     }
     return;
   }
+#endif
   if (texture3D) {
     [mt_nativeCopyEncoder(pass) copyFromTexture:srcTexture
                                     sourceSlice:0
@@ -812,11 +849,14 @@ mt_endCopyPass(GPUCopyPassEncoder *pass) {
   }
 
   native = mt_copyEncoder(pass);
+#if MT_HAS_METAL4
   if (native && native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->modern endEncoding];
     }
-  } else {
+  } else
+#endif
+  {
     [native->classic endEncoding];
   }
   native->classic = nil;
@@ -826,6 +866,7 @@ mt_endCopyPass(GPUCopyPassEncoder *pass) {
 GPU_HIDE
 void
 mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
+#if MT_HAS_METAL4
   MTCommandBuffer *native;
 
   if (!cmdb || !barriers || !mt_commandBufferIsModern(cmdb)) {
@@ -846,6 +887,10 @@ mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
     mt_useAllocation(cmdb,
                      mt_nativeTexture(barriers->pTextureBarriers[i].texture));
   }
+#else
+  GPU__UNUSED(cmdb);
+  GPU__UNUSED(barriers);
+#endif
 }
 
 GPU_HIDE

@@ -444,6 +444,7 @@ mt_destroyCommandQueue(GPUQueue * __restrict queue);
 
 static bool
 mt_supportsMetal4(id<MTLDevice> device) {
+#if MT_HAS_METAL4
   if (@available(macOS 26.0, iOS 26.0, *)) {
     return device &&
            [device respondsToSelector:@selector(newMTL4CommandQueue)] &&
@@ -452,6 +453,10 @@ mt_supportsMetal4(id<MTLDevice> device) {
   }
 
   return false;
+#else
+  GPU__UNUSED(device);
+  return false;
+#endif
 }
 
 static bool

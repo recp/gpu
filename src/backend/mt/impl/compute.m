@@ -153,7 +153,8 @@ mt_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
   memset(enc, 0, sizeof(*enc));
   memset(nativeState, 0, sizeof(*nativeState));
 
-  if (commandState && commandState->mode == MTCommandMode4) {
+#if MT_HAS_METAL4
+  if (commandState->mode == MTCommandMode4) {
     if (!mt_prepareArgumentState(cmdb,
                                  &commandState->computeArguments,
                                  gpuDeviceDebugLabel(
@@ -167,7 +168,9 @@ mt_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
       nativeState->arguments = &commandState->computeArguments;
       [nativeState->modern setArgumentTable:nativeState->arguments->table];
     }
-  } else {
+  } else
+#endif
+  {
     nativeState->classic = [mt_classicCommandBuffer(cmdb) computeCommandEncoder];
   }
 
@@ -179,9 +182,11 @@ mt_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
     NSString *nativeLabel = [NSString stringWithUTF8String:label];
 
     nativeState->classic.label = nativeLabel;
+#if MT_HAS_METAL4
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [(id<MTL4ComputeCommandEncoder>)nativeState->modern setLabel:nativeLabel];
     }
+#endif
   }
 #else
   GPU__UNUSED(label);
@@ -208,11 +213,14 @@ mt_setComputePipelineState(GPUComputePassEncoder *enc,
   if (!native) {
     return;
   }
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->modern setComputePipelineState:(id<MTLComputePipelineState>)state->_priv];
     }
-  } else {
+  } else
+#endif
+  {
     [native->classic setComputePipelineState:(id<MTLComputePipelineState>)state->_priv];
   }
   enc->_workgroupSize[0] = state->workgroupSize[0] ? state->workgroupSize[0] : 1u;
@@ -234,10 +242,12 @@ mt_computeBuffer(GPUComputePassEncoder *enc,
     return;
   }
   buffer = mt_nativeBuffer(buf);
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     mt_setArgumentBuffer(enc->_cmdb, native->arguments, buffer, off, index);
     return;
   }
+#endif
   [native->classic setBuffer:buffer offset:(NSUInteger)off atIndex:index];
 }
 
@@ -254,10 +264,12 @@ mt_computeTexture(GPUComputePassEncoder *enc,
     return;
   }
   texture = view ? (id<MTLTexture>)view->_priv : nil;
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     mt_setArgumentTexture(enc->_cmdb, native->arguments, texture, index);
     return;
   }
+#endif
   [native->classic setTexture:texture atIndex:index];
 }
 
@@ -274,10 +286,12 @@ mt_computeSampler(GPUComputePassEncoder *enc,
     return;
   }
   samplerState = sampler ? (id<MTLSamplerState>)sampler->_priv : nil;
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     mt_setArgumentSampler(native->arguments, samplerState, index);
     return;
   }
+#endif
   [native->classic setSamplerState:samplerState atIndex:index];
 }
 
@@ -296,7 +310,8 @@ mt_computePushConstants(GPUComputePassEncoder *enc,
   if (!native) {
     return;
   }
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     uint64_t address;
 
     if (mt_uploadConstants(enc->_cmdb, data, sizeBytes, &address)) {
@@ -309,6 +324,7 @@ mt_computePushConstants(GPUComputePassEncoder *enc,
     }
     return;
   }
+#endif
   [native->classic setBytes:data
                      length:(NSUInteger)sizeBytes
                     atIndex:MT_PUSH_CONSTANT_INDEX];
@@ -332,6 +348,7 @@ mt_dispatch(GPUComputePassEncoder *enc,
   if (!native) {
     return;
   }
+#if MT_HAS_METAL4
   if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->modern dispatchThreadgroups:groups
@@ -339,6 +356,7 @@ mt_dispatch(GPUComputePassEncoder *enc,
     }
     return;
   }
+#endif
   [native->classic dispatchThreadgroups:groups threadsPerThreadgroup:threads];
 }
 
@@ -359,7 +377,8 @@ mt_dispatchIndirect(GPUComputePassEncoder *enc,
   threads = MTLSizeMake(enc->_workgroupSize[0] ? enc->_workgroupSize[0] : 1u,
                         enc->_workgroupSize[1] ? enc->_workgroupSize[1] : 1u,
                         enc->_workgroupSize[2] ? enc->_workgroupSize[2] : 1u);
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       mt_useAllocation(enc->_cmdb, args);
       [native->modern dispatchThreadgroupsWithIndirectBuffer:args.gpuAddress + argsOffset
@@ -367,6 +386,7 @@ mt_dispatchIndirect(GPUComputePassEncoder *enc,
     }
     return;
   }
+#endif
   [native->classic dispatchThreadgroupsWithIndirectBuffer:args
                                       indirectBufferOffset:(NSUInteger)argsOffset
                                     threadsPerThreadgroup:threads];
@@ -384,11 +404,14 @@ mt_endComputeEncoding(GPUComputePassEncoder *enc) {
   if (!native) {
     return;
   }
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->modern endEncoding];
     }
-  } else {
+  } else
+#endif
+  {
     [native->classic endEncoding];
   }
   native->classic = nil;

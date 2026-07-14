@@ -27,6 +27,7 @@ mt_nativeBuffer(GPUBuffer *buffer) {
   return buffer ? (id<MTLBuffer>)buffer->_priv : nil;
 }
 
+#if MT_HAS_METAL4
 static void
 mt_useRenderPassAllocations(GPUCommandBuffer *cmdb, id pass) {
   if (!cmdb || !pass) {
@@ -45,6 +46,7 @@ mt_useRenderPassAllocations(GPUCommandBuffer *cmdb, id pass) {
     mt_useAllocation(cmdb, modern.visibilityResultBuffer);
   }
 }
+#endif
 
 GPU_HIDE
 GPURenderCommandEncoder *
@@ -68,6 +70,7 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   memset(enc, 0, sizeof(*enc));
   memset(nativeState, 0, sizeof(*nativeState));
 
+#if MT_HAS_METAL4
   if (mt_commandBufferIsModern(cmdb)) {
     if (!nativePass->modern ||
         !mt_prepareArgumentState(cmdb,
@@ -95,7 +98,9 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
                                    atStages:MTLRenderStageFragment];
       mt_useRenderPassAllocations(cmdb, nativePass->modern);
     }
-  } else {
+  } else
+#endif
+  {
     nativeState->classic = [mt_classicCommandBuffer(cmdb)
       renderCommandEncoderWithDescriptor:nativePass->classic];
   }
@@ -109,9 +114,11 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
     NSString *label = [NSString stringWithUTF8String:pass->label];
 
     nativeState->classic.label = label;
+#if MT_HAS_METAL4
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [(id<MTL4RenderCommandEncoder>)nativeState->modern setLabel:label];
     }
+#endif
   }
 #endif
 
@@ -132,12 +139,14 @@ mt_frontFace(GPURenderCommandEncoder *rce, GPUFrontFace frontFace) {
   }
   mtWinding = frontFace == GPU_FRONT_FACE_CW ?
     MTLWindingClockwise : MTLWindingCounterClockwise;
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->modern setFrontFacingWinding:mtWinding];
     }
     return;
   }
+#endif
   [native->classic setFrontFacingWinding:mtWinding];
 }
 
@@ -150,12 +159,14 @@ mt_cullMode(GPURenderCommandEncoder *rce, GPUCullMode mode) {
   if (!native) {
     return;
   }
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->modern setCullMode:(MTLCullMode)mode];
     }
     return;
   }
+#endif
   [native->classic setCullMode:(MTLCullMode)mode];
 }
 
@@ -174,13 +185,15 @@ mt_setRenderPipelineState(GPURenderCommandEncoder *rce,
   if (!state || !state->render || !state->depthStencil) {
     return;
   }
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->modern setRenderPipelineState:state->render];
       [native->modern setDepthStencilState:state->depthStencil];
     }
     return;
   }
+#endif
   [native->classic setRenderPipelineState:state->render];
   [native->classic setDepthStencilState:state->depthStencil];
 }
@@ -202,12 +215,14 @@ mt_viewport(GPURenderCommandEncoder *rce, const GPUViewport *viewport) {
   if (!native) {
     return;
   }
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->modern setViewport:vp];
     }
     return;
   }
+#endif
   [native->classic setViewport:vp];
 }
 
@@ -242,12 +257,14 @@ mt_scissor(GPURenderCommandEncoder *rce, const GPUScissorRect *scissor) {
   if (!native) {
     return;
   }
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->modern setScissorRect:rect];
     }
     return;
   }
+#endif
   [native->classic setScissorRect:rect];
 }
 
@@ -260,7 +277,8 @@ mt_blendConstant(GPURenderCommandEncoder *rce, const float rgba[4]) {
   if (!native) {
     return;
   }
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->modern setBlendColorRed:rgba[0]
                                  green:rgba[1]
@@ -269,6 +287,7 @@ mt_blendConstant(GPURenderCommandEncoder *rce, const float rgba[4]) {
     }
     return;
   }
+#endif
   [native->classic setBlendColorRed:rgba[0]
                               green:rgba[1]
                                blue:rgba[2]
@@ -284,12 +303,14 @@ mt_stencilReference(GPURenderCommandEncoder *rce, uint32_t reference) {
   if (!native) {
     return;
   }
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->modern setStencilReferenceValue:reference];
     }
     return;
   }
+#endif
   [native->classic setStencilReferenceValue:reference];
 }
 
@@ -309,7 +330,8 @@ mt_renderPushConstants(GPURenderCommandEncoder *rce,
   if (!native) {
     return;
   }
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     uint64_t address;
 
     if (!mt_uploadConstants(rce->_cmdb, data, sizeBytes, &address)) {
@@ -333,6 +355,7 @@ mt_renderPushConstants(GPURenderCommandEncoder *rce,
     }
     return;
   }
+#endif
 
   if ((stages & GPU_SHADER_STAGE_VERTEX_BIT) != 0u) {
     [native->classic setVertexBytes:data
@@ -358,7 +381,8 @@ mt_vertexBytes(GPURenderCommandEncoder *rce,
   if (!native) {
     return;
   }
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     uint64_t address;
 
     if (length <= UINT32_MAX &&
@@ -373,6 +397,7 @@ mt_vertexBytes(GPURenderCommandEncoder *rce,
     }
     return;
   }
+#endif
   [native->classic setVertexBytes:bytes length:length atIndex:index];
 }
 
@@ -390,7 +415,8 @@ mt_vertexBuffer(GPURenderCommandEncoder *rce,
     return;
   }
   nativeBuffer = mt_nativeBuffer(buffer);
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     mt_setArgumentBuffer(rce->_cmdb,
                          native->vertexArguments,
                          nativeBuffer,
@@ -398,6 +424,7 @@ mt_vertexBuffer(GPURenderCommandEncoder *rce,
                          index);
     return;
   }
+#endif
   [native->classic setVertexBuffer:nativeBuffer
                             offset:(NSUInteger)offset
                            atIndex:index];
@@ -428,10 +455,12 @@ mt_rceSetVertexTexture(GPURenderCommandEncoder *rce,
     return;
   }
   texture = view ? (id<MTLTexture>)view->_priv : nil;
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     mt_setArgumentTexture(rce->_cmdb, native->vertexArguments, texture, index);
     return;
   }
+#endif
   [native->classic setVertexTexture:texture atIndex:index];
 }
 
@@ -448,10 +477,12 @@ mt_rceSetVertexSampler(GPURenderCommandEncoder *rce,
     return;
   }
   samplerState = sampler ? (id<MTLSamplerState>)sampler->_priv : nil;
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     mt_setArgumentSampler(native->vertexArguments, samplerState, index);
     return;
   }
+#endif
   [native->classic setVertexSamplerState:samplerState atIndex:index];
 }
 
@@ -469,7 +500,8 @@ mt_fragmentBuffer(GPURenderCommandEncoder *rce,
     return;
   }
   nativeBuffer = mt_nativeBuffer(buffer);
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     mt_setArgumentBuffer(rce->_cmdb,
                          native->fragmentArguments,
                          nativeBuffer,
@@ -477,6 +509,7 @@ mt_fragmentBuffer(GPURenderCommandEncoder *rce,
                          index);
     return;
   }
+#endif
   [native->classic setFragmentBuffer:nativeBuffer
                               offset:(NSUInteger)offset
                              atIndex:index];
@@ -495,10 +528,12 @@ mt_rceSetFragmentTexture(GPURenderCommandEncoder *rce,
     return;
   }
   texture = view ? (id<MTLTexture>)view->_priv : nil;
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     mt_setArgumentTexture(rce->_cmdb, native->fragmentArguments, texture, index);
     return;
   }
+#endif
   [native->classic setFragmentTexture:texture atIndex:index];
 }
 
@@ -515,10 +550,12 @@ mt_rceSetFragmentSampler(GPURenderCommandEncoder *rce,
     return;
   }
   samplerState = sampler ? (id<MTLSamplerState>)sampler->_priv : nil;
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     mt_setArgumentSampler(native->fragmentArguments, samplerState, index);
     return;
   }
+#endif
   [native->classic setFragmentSamplerState:samplerState atIndex:index];
 }
 
@@ -536,7 +573,8 @@ mt_drawPrimitives(GPURenderCommandEncoder *rce,
   if (!native) {
     return;
   }
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->modern drawPrimitives:(MTLPrimitiveType)type
                          vertexStart:start
@@ -546,6 +584,7 @@ mt_drawPrimitives(GPURenderCommandEncoder *rce,
     }
     return;
   }
+#endif
   [native->classic drawPrimitives:(MTLPrimitiveType)type
                       vertexStart:start
                       vertexCount:count
@@ -575,7 +614,8 @@ mt_drawIndexedPrims(GPURenderCommandEncoder *rce,
                 ? 4u
                 : 2u;
   indexOffset = rce->_indexBufferOffset + (uint64_t)firstIndex * indexSize;
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       mt_useAllocation(rce->_cmdb, indexBuffer);
       [native->modern drawIndexedPrimitives:(MTLPrimitiveType)rce->_primitiveType
@@ -589,6 +629,7 @@ mt_drawIndexedPrims(GPURenderCommandEncoder *rce,
     }
     return;
   }
+#endif
   [native->classic drawIndexedPrimitives:(MTLPrimitiveType)rce->_primitiveType
                               indexCount:indexCount
                                indexType:(MTLIndexType)rce->_indexType
@@ -613,7 +654,8 @@ mt_drawPrimitivesIndirect(GPURenderCommandEncoder *rce,
     return;
   }
   args = mt_nativeBuffer(argsBuffer);
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       mt_useAllocation(rce->_cmdb, args);
       [native->modern drawPrimitives:(MTLPrimitiveType)type
@@ -621,6 +663,7 @@ mt_drawPrimitivesIndirect(GPURenderCommandEncoder *rce,
     }
     return;
   }
+#endif
   [native->classic drawPrimitives:(MTLPrimitiveType)type
                     indirectBuffer:args
               indirectBufferOffset:(NSUInteger)argsOffset];
@@ -641,7 +684,8 @@ mt_drawIndexedPrimsIndirect(GPURenderCommandEncoder *rce,
   }
   indexBuffer = mt_nativeBuffer(rce->_indexBuffer);
   args = mt_nativeBuffer(argsBuffer);
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       mt_useAllocation(rce->_cmdb, indexBuffer);
       mt_useAllocation(rce->_cmdb, args);
@@ -653,6 +697,7 @@ mt_drawIndexedPrimsIndirect(GPURenderCommandEncoder *rce,
     }
     return;
   }
+#endif
   [native->classic drawIndexedPrimitives:(MTLPrimitiveType)rce->_primitiveType
                                indexType:(MTLIndexType)rce->_indexType
                              indexBuffer:indexBuffer
@@ -673,11 +718,14 @@ mt_endEncoding(GPURenderCommandEncoder *rce) {
   if (!native) {
     return;
   }
-  if (native && native->modern) {
+#if MT_HAS_METAL4
+  if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->modern endEncoding];
     }
-  } else {
+  } else
+#endif
+  {
     [native->classic endEncoding];
   }
   native->classic = nil;

@@ -26,6 +26,7 @@ mt_alignUp(uint64_t value, uint64_t alignment) {
   return (value + alignment - 1u) & ~(alignment - 1u);
 }
 
+#if MT_HAS_METAL4
 static void
 mt_resetArgumentState(MTArgumentState *state) {
   if (!state || !state->table) {
@@ -70,12 +71,14 @@ mt_resetArgumentState(MTArgumentState *state) {
   state->bufferMask = 0u;
   state->samplerMask = 0u;
 }
+#endif
 
 GPU_HIDE
 bool
 mt_prepareArgumentState(GPUCommandBuffer *cmdb,
                         MTArgumentState  *state,
                         const char       *label) {
+#if MT_HAS_METAL4
   GPUDeviceMT *deviceMT;
   NSError     *error;
 
@@ -124,11 +127,18 @@ mt_prepareArgumentState(GPUCommandBuffer *cmdb,
   }
 
   return true;
+#else
+  GPU__UNUSED(cmdb);
+  GPU__UNUSED(state);
+  GPU__UNUSED(label);
+  return false;
+#endif
 }
 
 GPU_HIDE
 void
 mt_useAllocation(GPUCommandBuffer *cmdb, id allocation) {
+#if MT_HAS_METAL4
   MTCommandBuffer *native;
   uint32_t         count;
 
@@ -154,6 +164,10 @@ mt_useAllocation(GPUCommandBuffer *cmdb, id allocation) {
       [native->residency addAllocation:allocation];
     }
   }
+#else
+  GPU__UNUSED(cmdb);
+  GPU__UNUSED(allocation);
+#endif
 }
 
 GPU_HIDE
@@ -163,6 +177,7 @@ mt_setArgumentBuffer(GPUCommandBuffer *cmdb,
                      id<MTLBuffer>      buffer,
                      uint64_t           offset,
                      uint32_t           index) {
+#if MT_HAS_METAL4
   if (!state || !state->table || !buffer ||
       index >= MT_ARGUMENT_BUFFER_COUNT || offset > buffer.length) {
     return;
@@ -175,6 +190,13 @@ mt_setArgumentBuffer(GPUCommandBuffer *cmdb,
     state->bufferMask |= 1u << index;
     mt_useAllocation(cmdb, buffer);
   }
+#else
+  GPU__UNUSED(cmdb);
+  GPU__UNUSED(state);
+  GPU__UNUSED(buffer);
+  GPU__UNUSED(offset);
+  GPU__UNUSED(index);
+#endif
 }
 
 GPU_HIDE
@@ -183,6 +205,7 @@ mt_setArgumentTexture(GPUCommandBuffer *cmdb,
                       MTArgumentState  *state,
                       id<MTLTexture>     texture,
                       uint32_t           index) {
+#if MT_HAS_METAL4
   if (!state || !state->table || !texture || index >= MT_ARGUMENT_TEXTURE_COUNT) {
     return;
   }
@@ -194,6 +217,12 @@ mt_setArgumentTexture(GPUCommandBuffer *cmdb,
     state->textureMask[index / 64u] |= 1ull << (index % 64u);
     mt_useAllocation(cmdb, texture);
   }
+#else
+  GPU__UNUSED(cmdb);
+  GPU__UNUSED(state);
+  GPU__UNUSED(texture);
+  GPU__UNUSED(index);
+#endif
 }
 
 GPU_HIDE
@@ -201,6 +230,7 @@ void
 mt_setArgumentSampler(MTArgumentState    *state,
                       id<MTLSamplerState>  sampler,
                       uint32_t             index) {
+#if MT_HAS_METAL4
   if (!state || !state->table || !sampler || index >= MT_ARGUMENT_SAMPLER_COUNT) {
     return;
   }
@@ -211,6 +241,11 @@ mt_setArgumentSampler(MTArgumentState    *state,
               atIndex:index];
     state->samplerMask |= (uint16_t)(1u << index);
   }
+#else
+  GPU__UNUSED(state);
+  GPU__UNUSED(sampler);
+  GPU__UNUSED(index);
+#endif
 }
 
 GPU_HIDE
@@ -306,6 +341,7 @@ mt_uploadConstants(GPUCommandBuffer *cmdb,
                    const void       *data,
                    uint32_t          sizeBytes,
                    uint64_t         *outAddress) {
+#if MT_HAS_METAL4
   MTCommandBuffer *native;
   id<MTLBuffer>    buffer;
   uint64_t         offset;
@@ -327,11 +363,19 @@ mt_uploadConstants(GPUCommandBuffer *cmdb,
     return false;
   }
   return true;
+#else
+  GPU__UNUSED(cmdb);
+  GPU__UNUSED(data);
+  GPU__UNUSED(sizeBytes);
+  GPU__UNUSED(outAddress);
+  return false;
+#endif
 }
 
 GPU_HIDE
 void
 mt_applyPendingBarrier(GPUCommandBuffer *cmdb, id encoder) {
+#if MT_HAS_METAL4
   MTCommandBuffer *native;
 
   native = mt_commandBuffer(cmdb);
@@ -348,6 +392,10 @@ mt_applyPendingBarrier(GPUCommandBuffer *cmdb, id encoder) {
   native->pendingAfterStages = 0;
   native->pendingBeforeStages = 0;
   native->pendingVisibility = 0u;
+#else
+  GPU__UNUSED(cmdb);
+  GPU__UNUSED(encoder);
+#endif
 }
 
 GPU_HIDE
@@ -403,6 +451,7 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
     upload->offset = 0u;
   }
 
+#if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->allocator reset];
@@ -410,6 +459,7 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
       native->residencyAllocationCount = 0u;
     }
   }
+#endif
 
   os_unfair_lock_lock(&queue->poolLock);
   native->poolNext = queue->freeCommands;
@@ -426,11 +476,13 @@ mt_cmdBufDrawable(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   if (!native || !frame || !frame->drawable) {
     return false;
   }
+#if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {
     [native->drawable release];
     native->drawable = [(id<CAMetalDrawable>)frame->drawable retain];
     return true;
   }
+#endif
 
   [native->classic presentDrawable:(id<CAMetalDrawable>)frame->drawable];
   return true;
@@ -534,6 +586,7 @@ mt_createQuerySet(GPUDevice                  *device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
+#if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       MTL4CounterHeapDescriptor *heapDesc;
@@ -560,6 +613,7 @@ mt_createQuerySet(GPUDevice                  *device,
     set->_priv = native;
     return GPU_OK;
   }
+#endif
 
   if (!mt_supportsBlitCounterSampling(deviceMT->device)) {
     free(native);
@@ -629,6 +683,7 @@ mt_writeTimestamp(GPUCommandBuffer *cmdb, GPUQuerySet *set, uint32_t queryIndex)
   }
 
   native = set->_priv;
+#if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [mt_modernCommandBuffer(cmdb) writeTimestampIntoHeap:native->modern
@@ -636,6 +691,7 @@ mt_writeTimestamp(GPUCommandBuffer *cmdb, GPUQuerySet *set, uint32_t queryIndex)
     }
     return;
   }
+#endif
   if (!mt_supportsBlitCounterSampling(native->classic.device)) {
     return;
   }
@@ -667,6 +723,7 @@ mt_beginOcclusionQuery(GPURenderPassEncoder *pass,
   }
 
   offset = (NSUInteger)queryIndex * sizeof(uint64_t);
+#if MT_HAS_METAL4
   if (encoder->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [encoder->modern setVisibilityResultMode:MTLVisibilityResultModeBoolean
@@ -674,6 +731,7 @@ mt_beginOcclusionQuery(GPURenderPassEncoder *pass,
     }
     return;
   }
+#endif
   [encoder->classic setVisibilityResultMode:MTLVisibilityResultModeBoolean
                                      offset:offset];
 }
@@ -694,6 +752,7 @@ mt_endOcclusionQuery(GPURenderPassEncoder *pass,
   }
 
   offset = (NSUInteger)queryIndex * sizeof(uint64_t);
+#if MT_HAS_METAL4
   if (encoder->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [encoder->modern setVisibilityResultMode:MTLVisibilityResultModeDisabled
@@ -701,6 +760,7 @@ mt_endOcclusionQuery(GPURenderPassEncoder *pass,
     }
     return;
   }
+#endif
   [encoder->classic setVisibilityResultMode:MTLVisibilityResultModeDisabled
                                      offset:offset];
 }
@@ -739,6 +799,7 @@ mt_resolveQuerySet(GPUCommandBuffer *cmdb,
         resolveBytes > [native->visibility length] - sourceOffset) {
       return;
     }
+#if MT_HAS_METAL4
     if (native->mode == MTCommandMode4) {
       if (@available(macOS 26.0, iOS 26.0, *)) {
         id<MTL4ComputeCommandEncoder> copy;
@@ -762,6 +823,7 @@ mt_resolveQuerySet(GPUCommandBuffer *cmdb,
       }
       return;
     }
+#endif
 
     blit = [mt_classicCommandBuffer(cmdb) blitCommandEncoder];
     if (!blit) {
@@ -779,6 +841,7 @@ mt_resolveQuerySet(GPUCommandBuffer *cmdb,
     return;
   }
 
+#if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       MTL4BufferRange range;
@@ -793,6 +856,7 @@ mt_resolveQuerySet(GPUCommandBuffer *cmdb,
     }
     return;
   }
+#endif
 
   blit = [mt_classicCommandBuffer(cmdb) blitCommandEncoder];
   if (!blit) {

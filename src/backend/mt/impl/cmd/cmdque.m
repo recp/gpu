@@ -231,6 +231,7 @@ gpu_cmdoncomplete(GPUCommandBuffer * __restrict cmdb,
                   MTCommandQueue   * __restrict queue,
                   id<MTLCommandBuffer>        mtlCmdb);
 
+#if MT_HAS_METAL4
 static
 GPU_HIDE
 void
@@ -238,6 +239,7 @@ gpu_cmdoncomplete4(GPUCommandBuffer * __restrict cmdb,
                    MTCommandBuffer  * __restrict native,
                    MTCommandQueue   * __restrict queue,
                    id                        feedback);
+#endif
 
 static
 GPU_HIDE
@@ -283,17 +285,24 @@ mt_newCommandQueue(GPUDevice * __restrict device) {
 
   native->poolLock = OS_UNFAIR_LOCK_INIT;
   native->mode     = deviceMT->commandMode;
+#if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       native->modern = [deviceMT->device newMTL4CommandQueue];
       native->upload = [deviceMT->device newCommandQueue];
     }
-  } else {
+  } else
+#endif
+  {
     native->classic = [deviceMT->device newCommandQueue];
   }
   native->inFlightGroup = dispatch_group_create();
+#if MT_HAS_METAL4
   if ((!native->classic && (!native->modern || !native->upload)) ||
       !native->inFlightGroup) {
+#else
+  if (!native->classic || !native->inFlightGroup) {
+#endif
     [native->classic release];
     [native->upload release];
     [native->modern release];
@@ -376,6 +385,7 @@ GPU_HIDE
 GPUResult
 mt_getTimestampPeriod(GPUQueue *queue,
                       double          *outNanosecondsPerTick) {
+#if MT_HAS_METAL4
   GPUDeviceMT    *deviceMT;
   MTCommandQueue *native;
   uint64_t        frequency;
@@ -398,13 +408,20 @@ mt_getTimestampPeriod(GPUQueue *queue,
   }
 
   return GPU_ERROR_UNSUPPORTED;
+#else
+  GPU__UNUSED(queue);
+  GPU__UNUSED(outNanosecondsPerTick);
+  return GPU_ERROR_UNSUPPORTED;
+#endif
 }
 
 static MTCommandBuffer *
 mt_createCommandBufferState(GPUQueue *cmdb, MTCommandQueue *queue) {
   GPUCommandBuffer *cb;
   MTCommandBuffer  *native;
+#if MT_HAS_METAL4
   GPUDeviceMT      *deviceMT;
+#endif
 
   native = calloc(1, sizeof(*native));
   if (!native) {
@@ -419,6 +436,7 @@ mt_createCommandBufferState(GPUQueue *cmdb, MTCommandQueue *queue) {
   cb->_priv = native;
   cb->_queue = cmdb;
 
+#if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       MTLResidencySetDescriptor *residencyDesc;
@@ -446,6 +464,7 @@ mt_createCommandBufferState(GPUQueue *cmdb, MTCommandQueue *queue) {
       return NULL;
     }
   }
+#endif
 
   os_unfair_lock_lock(&queue->poolLock);
   native->next = queue->commands;
@@ -504,12 +523,15 @@ mt_newCommandBuffer(GPUQueue  * __restrict cmdb,
     upload->offset = 0u;
   }
 
+#if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->modern beginCommandBufferWithAllocator:native->allocator];
       [native->modern useResidencySet:native->residency];
     }
-  } else {
+  } else
+#endif
+  {
     native->classic = [queue->classic commandBuffer];
   }
   if (!native->classic && !native->modern) {
@@ -521,9 +543,11 @@ mt_newCommandBuffer(GPUQueue  * __restrict cmdb,
     NSString *nativeLabel = [NSString stringWithUTF8String:label];
 
     native->classic.label = nativeLabel;
+#if MT_HAS_METAL4
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [(id<MTL4CommandBuffer>)native->modern setLabel:nativeLabel];
     }
+#endif
   }
 #else
   GPU__UNUSED(label);
@@ -572,6 +596,7 @@ mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
+#if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       id<CAMetalDrawable> drawable;
@@ -606,6 +631,7 @@ mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
     gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
     return GPU_ERROR_BACKEND_FAILURE;
   }
+#endif
 
   mcb = native->classic;
   if (!mcb) {
@@ -646,6 +672,7 @@ GPUResult
 mt_submitCommandBuffers(GPUQueue                  * __restrict queueHandle,
                         uint32_t                                count,
                         GPUCommandBuffer * const * __restrict buffers) {
+#if MT_HAS_METAL4
   MTCommandBuffer      *natives[MT_SUBMIT_STACK_COUNT];
   id<MTL4CommandBuffer> modern[MT_SUBMIT_STACK_COUNT];
   MTCommandQueue       *queue;
@@ -705,6 +732,12 @@ mt_submitCommandBuffers(GPUQueue                  * __restrict queueHandle,
   }
 
   return mt__commitCommandBuffers(count, buffers);
+#else
+  if (!mt_commandQueue(queueHandle) || !buffers || count < 2u) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  return mt__commitCommandBuffers(count, buffers);
+#endif
 }
 
 static GPUResult
@@ -756,7 +789,9 @@ mt_submitEx(GPUQueue                   *queueHandle,
             const GPUQueueSubmitExInfo *info) {
   MTCommandQueue  *queue;
   MTCommandBuffer *last;
+#if MT_HAS_METAL4
   GPUResult        result;
+#endif
 
   queue = mt_commandQueue(queueHandle);
   last  = info && info->commandBufferCount > 0u
@@ -795,6 +830,7 @@ mt_submitEx(GPUQueue                   *queueHandle,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
+#if MT_HAS_METAL4
   if (queue->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       for (uint32_t i = 0u; i < info->waitCount; i++) {
@@ -827,6 +863,7 @@ mt_submitEx(GPUQueue                   *queueHandle,
     }
     return GPU_ERROR_UNSUPPORTED;
   }
+#endif
 
   if (info->waitCount > 0u) {
     id<MTLCommandBuffer> waitBuffer;
@@ -895,6 +932,7 @@ mt_reportCommandBufferError(GPUCommandBuffer * __restrict cmdb,
   type       = GPU_DEVICE_ERROR_BACKEND;
   lostReason = GPU_DEVICE_LOST_REASON_UNKNOWN;
   result     = GPU_ERROR_BACKEND_FAILURE;
+#if MT_HAS_METAL4
   if (@available(macOS 26.0, iOS 26.0, *)) {
     if ([error.domain isEqualToString:MTL4CommandQueueErrorDomain]) {
       switch ((MTL4CommandQueueError)error.code) {
@@ -915,6 +953,7 @@ mt_reportCommandBufferError(GPUCommandBuffer * __restrict cmdb,
       }
     }
   }
+#endif
   if ([error.domain isEqualToString:MTLCommandBufferErrorDomain]) {
     switch ((MTLCommandBufferError)error.code) {
       case MTLCommandBufferErrorOutOfMemory:
@@ -972,6 +1011,7 @@ gpu_cmdoncomplete(GPUCommandBuffer * __restrict cmdb,
   dispatch_group_leave(queue->inFlightGroup);
 }
 
+#if MT_HAS_METAL4
 static
 GPU_HIDE
 void
@@ -1001,6 +1041,7 @@ gpu_cmdoncomplete4(GPUCommandBuffer * __restrict cmdb,
   gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
   dispatch_group_leave(queue->inFlightGroup);
 }
+#endif
 
 GPU_HIDE
 void
