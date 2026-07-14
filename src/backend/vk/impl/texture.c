@@ -1053,6 +1053,7 @@ vk_writeTexture(GPUQueue             * __restrict queue,
   result = vk_beginTransfer(queue,
                             true,
                             sizeBytes,
+                            GPU_VK_TEXTURE_TRANSFER_CAPACITY,
                             &command,
                             &staging,
                             &stagingOffset);

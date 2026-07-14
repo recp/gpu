@@ -405,7 +405,9 @@ struct GPUCommandBufferVk {
 };
 
 enum {
-  GPU_VK_TRANSFER_SLOT_COUNT = 8
+  GPU_VK_BUFFER_TRANSFER_CAPACITY  = 64u * 1024u,
+  GPU_VK_TEXTURE_TRANSFER_CAPACITY = 512u * 1024u,
+  GPU_VK_TRANSFER_SLOT_COUNT       = 8
 };
 
 typedef struct GPUTransferSlotVk {
@@ -636,6 +638,7 @@ GPUResult
 vk_beginTransfer(GPUQueue *queue,
                  bool             upload,
                  uint64_t         sizeBytes,
+                 uint64_t         minimumCapacity,
                  VkCommandBuffer *outCommand,
                  GPUBuffer      **outStaging,
                  uint64_t        *outOffset);

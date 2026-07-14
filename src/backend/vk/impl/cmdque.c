@@ -19,7 +19,6 @@
 
 enum {
   VK_COMPLETION_STACK_SIZE     = 64u * 1024u,
-  VK_TRANSFER_STAGING_CAPACITY = 512u * 1024u,
   VK_TRANSFER_OFFSET_ALIGNMENT = 512u
 };
 
@@ -365,10 +364,12 @@ vk__stopWorker(GPUQueueVk *queue) {
 }
 
 static uint64_t
-vk__transferCapacity(uint64_t sizeBytes) {
+vk__transferCapacity(uint64_t sizeBytes, uint64_t minimumCapacity) {
   uint64_t capacity;
 
-  capacity = VK_TRANSFER_STAGING_CAPACITY;
+  capacity = minimumCapacity > GPU_VK_BUFFER_TRANSFER_CAPACITY
+               ? minimumCapacity
+               : GPU_VK_BUFFER_TRANSFER_CAPACITY;
   while (capacity < sizeBytes) {
     if (capacity > UINT64_MAX / 2u) {
       return sizeBytes;
@@ -428,7 +429,8 @@ static bool
 vk__ensureTransferBuffer(GPUQueueVk *queue,
                          GPUTransferSlotVk  *transfer,
                          bool               upload,
-                         uint64_t           sizeBytes) {
+                         uint64_t           sizeBytes,
+                         uint64_t           minimumCapacity) {
   GPUBufferCreateInfo  info = {0};
   GPUBuffer           **slot;
   GPUBuffer            *staging;
@@ -442,11 +444,12 @@ vk__ensureTransferBuffer(GPUQueueVk *queue,
                            : &queue->readbackStaging;
   currentCapacity = upload ? &transfer->uploadCapacity
                            : &queue->readbackCapacity;
-  if (*slot && *currentCapacity >= sizeBytes) {
+  if (*slot && *currentCapacity >= sizeBytes &&
+      *currentCapacity >= minimumCapacity) {
     return true;
   }
 
-  capacity = vk__transferCapacity(sizeBytes);
+  capacity = vk__transferCapacity(sizeBytes, minimumCapacity);
   info.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   info.chain.structSize = sizeof(info);
   info.label            = upload ? "vulkan-upload-staging"
@@ -511,6 +514,7 @@ GPUResult
 vk_beginTransfer(GPUQueue *queue,
                  bool             upload,
                  uint64_t         sizeBytes,
+                 uint64_t         minimumCapacity,
                  VkCommandBuffer *outCommand,
                  GPUBuffer      **outStaging,
                  uint64_t        *outOffset) {
@@ -541,7 +545,8 @@ vk_beginTransfer(GPUQueue *queue,
     }
     if (upload) {
       slot = &native->transferSlots[native->activeTransferSlot];
-      if (slot->uploadUsed <=
+      if (slot->uploadCapacity >= minimumCapacity &&
+          slot->uploadUsed <=
           UINT64_MAX - (VK_TRANSFER_OFFSET_ALIGNMENT - 1u)) {
         offset = (slot->uploadUsed + VK_TRANSFER_OFFSET_ALIGNMENT - 1u) &
                  ~(uint64_t)(VK_TRANSFER_OFFSET_ALIGNMENT - 1u);
@@ -566,7 +571,11 @@ vk_beginTransfer(GPUQueue *queue,
     return result;
   }
   if (!vk__ensureTransferContext(native, device, slot) ||
-      !vk__ensureTransferBuffer(native, slot, upload, sizeBytes)) {
+      !vk__ensureTransferBuffer(native,
+                                slot,
+                                upload,
+                                sizeBytes,
+                                minimumCapacity)) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
   if (vkResetCommandBuffer(slot->command, 0u) != VK_SUCCESS) {
