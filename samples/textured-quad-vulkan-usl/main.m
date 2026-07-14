@@ -326,7 +326,7 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   vertexLayout.stepMode          = GPU_VERTEX_STEP_MODE_VERTEX;
   vertexLayout.attributeCount    = 1u;
   vertexLayout.pAttributes       = &vertexAttribute;
-  colorTarget.format             = GPU_FORMAT_BGRA8_UNORM;
+  colorTarget.format             = GPUGetSwapchainFormat(_swapchain);
   colorTarget.blend.writeMask    = GPU_COLOR_WRITE_ALL;
 
   pipelineInfo.chain.sType        = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;

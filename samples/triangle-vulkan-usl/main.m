@@ -168,7 +168,7 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
 
   layout                      = _shaderLayout->pipelineLayout;
-  colorTarget.format          = GPU_FORMAT_BGRA8_UNORM;
+  colorTarget.format          = GPUGetSwapchainFormat(_swapchain);
   colorTarget.blend.writeMask = GPU_COLOR_WRITE_ALL;
 
   pipelineInfo.chain.sType        = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;

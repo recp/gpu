@@ -344,7 +344,7 @@ textured_quad_createGPU(TexturedQuadApp *app) {
     return false;
   }
 
-  colorTarget.format          = GPU_FORMAT_BGRA8_UNORM;
+  colorTarget.format          = GPUGetSwapchainFormat(app->swapchain);
   colorTarget.blend.writeMask = GPU_COLOR_WRITE_ALL;
   pipelineInfo.chain.sType       = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
   pipelineInfo.chain.structSize  = sizeof(pipelineInfo);

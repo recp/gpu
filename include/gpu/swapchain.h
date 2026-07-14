@@ -59,6 +59,10 @@ GPUCreateSwapchainDefault(GPUDevice          * __restrict device,
                           uint32_t                        height);
 
 GPU_EXPORT
+GPUFormat
+GPUGetSwapchainFormat(GPUSwapchain * __restrict swapchain);
+
+GPU_EXPORT
 void
 GPUDestroySwapchain(GPUSwapchain * __restrict swapchain);
 

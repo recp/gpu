@@ -1106,6 +1106,10 @@ check_swapchain_create_validation(GPUDevice *device) {
   if (!device) {
     return 0;
   }
+  if (GPUGetSwapchainFormat(NULL) != GPU_FORMAT_UNDEFINED) {
+    fprintf(stderr, "null swapchain returned a format\n");
+    return 0;
+  }
 
   scopedApi                                   = *gpuDeviceApi(device);
   scopedApi.device.getFormatCapabilities     =
@@ -1221,6 +1225,7 @@ check_swapchain_create_validation(GPUDevice *device) {
   if (swapchain != &gValidationSwapchain ||
       swapchain->device != &scopedDevice ||
       swapchain->width != 640u || swapchain->height != 480u ||
+      GPUGetSwapchainFormat(swapchain) != GPU_FORMAT_RGBA8_UNORM ||
       gValidationSwapchainFormat != GPU_FORMAT_RGBA8_UNORM ||
       gValidationSwapchainImageCount != 0u) {
     fprintf(stderr, "default swapchain did not select surface format\n");

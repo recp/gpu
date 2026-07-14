@@ -269,7 +269,7 @@ CreateTexture(GPUDevice       *device,
   GPURenderPipelineCreateInfo  pipelineInfo;
 
   memset(&colorTarget, 0, sizeof(colorTarget));
-  colorTarget.format          = GPU_FORMAT_BGRA8_UNORM;
+  colorTarget.format          = GPUGetSwapchainFormat(_swapchain);
   colorTarget.blend.enabled   = false;
   colorTarget.blend.writeMask = GPU_COLOR_WRITE_ALL;
 

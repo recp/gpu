@@ -26,6 +26,7 @@ struct GPUSwapchain {
   float backingScaleFactor;
   uint32_t width;
   uint32_t height;
+  GPUFormat format;
 };
 
 #endif /* gpu_swapchain_internal_h */

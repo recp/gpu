@@ -74,6 +74,7 @@ gpuCreateSwapchainInternal(GPUDevice              * __restrict device,
     swapchain->device = device;
     swapchain->width  = info->width;
     swapchain->height = info->height;
+    swapchain->format = info->format;
   }
 
   return swapchain;
@@ -190,6 +191,12 @@ GPUCreateSwapchainDefault(GPUDevice         * __restrict device,
     return NULL;
 
   return swapchain;
+}
+
+GPU_EXPORT
+GPUFormat
+GPUGetSwapchainFormat(GPUSwapchain * __restrict swapchain) {
+  return swapchain ? swapchain->format : GPU_FORMAT_UNDEFINED;
 }
 
 GPU_EXPORT

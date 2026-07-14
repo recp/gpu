@@ -132,7 +132,7 @@ SelectAdapter(GPUInstance *instance) {
   };
   GPUColorTargetState colorTargets[] = {
     {
-      .format = GPU_FORMAT_BGRA8_UNORM,
+      .format = GPUGetSwapchainFormat(_swapchain),
       .blend  = {
         .enabled   = false,
         .writeMask = GPU_COLOR_WRITE_ALL
