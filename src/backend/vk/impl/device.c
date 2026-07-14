@@ -781,6 +781,14 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
 
   coreFeatures.pipelineStatisticsQuery =
     adapterVk->features.pipelineStatisticsQuery;
+  coreFeatures.shaderUniformBufferArrayDynamicIndexing =
+    adapterVk->features.shaderUniformBufferArrayDynamicIndexing;
+  coreFeatures.shaderSampledImageArrayDynamicIndexing =
+    adapterVk->features.shaderSampledImageArrayDynamicIndexing;
+  coreFeatures.shaderStorageBufferArrayDynamicIndexing =
+    adapterVk->features.shaderStorageBufferArrayDynamicIndexing;
+  coreFeatures.shaderStorageImageArrayDynamicIndexing =
+    adapterVk->features.shaderStorageImageArrayDynamicIndexing;
   coreFeatures.multiDrawIndirect = adapterVk->features.multiDrawIndirect;
   coreFeatures.independentBlend   = adapterVk->features.independentBlend;
   coreFeatures.imageCubeArray     = adapterVk->features.imageCubeArray;
