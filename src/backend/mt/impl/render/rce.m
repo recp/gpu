@@ -571,7 +571,9 @@ mt_drawIndexedPrims(GPURenderCommandEncoder *rce,
     return;
   }
   indexBuffer = mt_nativeBuffer(rce->_indexBuffer);
-  indexSize = rce->_indexType == GPUIndexTypeUInt32 ? 4u : 2u;
+  indexSize = rce->_indexType == GPU_INDEX_TYPE_UINT32
+                ? 4u
+                : 2u;
   indexOffset = rce->_indexBufferOffset + (uint64_t)firstIndex * indexSize;
   if (native && native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {

@@ -12,8 +12,8 @@ extern "C" {
 #include "common.h"
 
 typedef enum GPUIndexType {
-  GPUIndexTypeUInt16 = 0,
-  GPUIndexTypeUInt32 = 1
+  GPU_INDEX_TYPE_UINT16 = 0,
+  GPU_INDEX_TYPE_UINT32 = 1
 } GPUIndexType;
 
 #ifdef __cplusplus

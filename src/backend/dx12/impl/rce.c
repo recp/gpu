@@ -86,7 +86,7 @@ dx12__bindIndexBuffer(GPURenderCommandEncoder *encoder,
   buffer       = encoder ? encoder->_indexBuffer : NULL;
   nativeBuffer = buffer ? buffer->_priv : NULL;
   offset       = encoder ? encoder->_indexBufferOffset : 0u;
-  indexSize    = encoder && encoder->_indexType == GPUIndexTypeUInt32
+  indexSize    = encoder && encoder->_indexType == GPU_INDEX_TYPE_UINT32
                    ? 4u
                    : 2u;
   if (!native || !native->commandList || !buffer || !nativeBuffer ||
@@ -121,7 +121,7 @@ dx12__bindIndexBuffer(GPURenderCommandEncoder *encoder,
 
   view.BufferLocation = nativeBuffer->gpuAddress + offset;
   view.SizeInBytes    = (UINT)viewSize;
-  view.Format         = encoder->_indexType == GPUIndexTypeUInt32
+  view.Format         = encoder->_indexType == GPU_INDEX_TYPE_UINT32
                           ? DXGI_FORMAT_R32_UINT
                           : DXGI_FORMAT_R16_UINT;
   native->commandList->lpVtbl->IASetIndexBuffer(native->commandList, &view);

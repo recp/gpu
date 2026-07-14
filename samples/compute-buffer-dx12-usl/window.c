@@ -462,7 +462,7 @@ compute_render_render(ComputeRenderApp *app) {
   GPUBindIndexBuffer(render,
                      app->indexBuffer,
                      0u,
-                     GPUIndexTypeUInt16);
+                     GPU_INDEX_TYPE_UINT16);
   GPUDrawIndexedIndirect(render, app->indirectBuffer, 0u);
   GPUEndRenderPass(render);
   if (GPUFinishFrame(app->queue, cmdb, frame) != GPU_OK) {

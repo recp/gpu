@@ -35,7 +35,9 @@ vk__bindIndexBuffer(GPURenderCommandEncoder *encoder,
   buffer    = encoder ? encoder->_indexBuffer : NULL;
   bufferVk  = buffer ? buffer->_priv : NULL;
   offset    = encoder ? encoder->_indexBufferOffset : 0u;
-  indexSize = encoder && encoder->_indexType == GPUIndexTypeUInt32 ? 4u : 2u;
+  indexSize = encoder && encoder->_indexType == GPU_INDEX_TYPE_UINT32
+                ? 4u
+                : 2u;
   indexType = indexSize == 4u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
   if (!native || !native->command || !buffer || !bufferVk ||
       !bufferVk->buffer || offset >= buffer->sizeBytes ||

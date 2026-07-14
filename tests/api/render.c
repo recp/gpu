@@ -1319,12 +1319,12 @@ check_render_readback_case(GPUDevice *device,
     }
   }
   if (mode == RENDER_READBACK_DRAW_INDEXED) {
-    GPUBindIndexBuffer(renderPass, indexBuffer, 0u, GPUIndexTypeUInt16);
+    GPUBindIndexBuffer(renderPass, indexBuffer, 0u, GPU_INDEX_TYPE_UINT16);
     GPUDrawIndexed(renderPass, 3u, 1u, 0u, 0, 0u);
   } else if (mode == RENDER_READBACK_DRAW_INDIRECT) {
     GPUDrawIndirect(renderPass, argsBuffer, 0u);
   } else if (mode == RENDER_READBACK_DRAW_INDEXED_INDIRECT) {
-    GPUBindIndexBuffer(renderPass, indexBuffer, 0u, GPUIndexTypeUInt16);
+    GPUBindIndexBuffer(renderPass, indexBuffer, 0u, GPU_INDEX_TYPE_UINT16);
     GPUDrawIndexedIndirect(renderPass, argsBuffer, 0u);
   } else if (mode == RENDER_READBACK_DRAW_MULTI_INDIRECT) {
     GPUMultiDrawIndirect(renderPass,
@@ -1333,7 +1333,7 @@ check_render_readback_case(GPUDevice *device,
                          2u,
                          (uint32_t)sizeof(RenderIndirectArgs));
   } else if (mode == RENDER_READBACK_DRAW_INDEXED_MULTI_INDIRECT) {
-    GPUBindIndexBuffer(renderPass, indexBuffer, 0u, GPUIndexTypeUInt16);
+    GPUBindIndexBuffer(renderPass, indexBuffer, 0u, GPU_INDEX_TYPE_UINT16);
     GPUMultiDrawIndexedIndirect(renderPass,
                                 argsBuffer,
                                 0u,
@@ -2054,7 +2054,7 @@ check_render_draw_validation_calls(GPUDevice *device) {
     goto cleanup;
   }
 
-  GPUBindIndexBuffer(&pass, &indirectBuffer, 0u, GPUIndexTypeUInt16);
+  GPUBindIndexBuffer(&pass, &indirectBuffer, 0u, GPU_INDEX_TYPE_UINT16);
   GPUDrawIndexedIndirect(&pass, &indirectBuffer, 2u);
   GPUMultiDrawIndexedIndirect(&pass, &indirectBuffer, 2u, 2u, 20u);
   GPUMultiDrawIndexedIndirect(&pass, &indirectBuffer, 0u, 2u, 16u);
@@ -2380,7 +2380,7 @@ check_render_encoder_validation(GPUDevice *device) {
 
   GPUBindRenderPipeline(NULL, NULL);
   GPUBindVertexBuffers(NULL, 0u, 0u, NULL);
-  GPUBindIndexBuffer(NULL, fakeBuffer, 0u, GPUIndexTypeUInt16);
+  GPUBindIndexBuffer(NULL, fakeBuffer, 0u, GPU_INDEX_TYPE_UINT16);
   GPUDraw(NULL, 1u, 1u, 0u, 0u);
   GPUDrawIndexed(NULL, 1u, 1u, 0u, 0, 0u);
   GPUDrawIndirect(NULL, fakeBuffer, 0u);
@@ -2469,10 +2469,10 @@ check_render_encoder_validation(GPUDevice *device) {
     return 0;
   }
 
-  GPUBindIndexBuffer(&pass, fakeBuffer, 0u, GPUIndexTypeUInt16);
+  GPUBindIndexBuffer(&pass, fakeBuffer, 0u, GPU_INDEX_TYPE_UINT16);
   if (!pass._hasIndexBuffer ||
       pass._indexBuffer != fakeBuffer ||
-      pass._indexType != GPUIndexTypeUInt16) {
+      pass._indexType != GPU_INDEX_TYPE_UINT16) {
     fprintf(stderr, "render encoder rejected valid index binding\n");
     return 0;
   }
@@ -2490,7 +2490,7 @@ check_render_encoder_validation(GPUDevice *device) {
   GPUApplyDynamicState(&pass, &dynamicState);
 
   endedPass._ended = true;
-  GPUBindIndexBuffer(&endedPass, fakeBuffer, 0u, GPUIndexTypeUInt16);
+  GPUBindIndexBuffer(&endedPass, fakeBuffer, 0u, GPU_INDEX_TYPE_UINT16);
   if (endedPass._hasIndexBuffer) {
     fprintf(stderr, "render encoder accepted index binding after end\n");
     return 0;

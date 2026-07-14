@@ -398,7 +398,7 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   GPUBindRenderPipeline(render, _renderPipeline);
   GPUBindVertexBuffers(render, 0, 1, &vertexBuffer);
-  GPUBindIndexBuffer(render, _indexBuffer, 0u, GPUIndexTypeUInt16);
+  GPUBindIndexBuffer(render, _indexBuffer, 0u, GPU_INDEX_TYPE_UINT16);
   GPUDrawIndexedIndirect(render, _indirectBuffer, 0u);
   GPUEndRenderPass(render);
   render = NULL;

@@ -78,8 +78,8 @@ gpu_primitiveTypeFromTopology(GPUPrimitiveTopology topology) {
 
 static bool
 gpu_validIndexType(GPUIndexType indexType) {
-  return indexType == GPUIndexTypeUInt16 ||
-         indexType == GPUIndexTypeUInt32;
+  return indexType == GPU_INDEX_TYPE_UINT16 ||
+         indexType == GPU_INDEX_TYPE_UINT32;
 }
 
 static bool
@@ -185,7 +185,7 @@ gpu_validIndexRange(GPUBuffer *buffer,
   uint64_t firstByte;
   uint64_t byteCount;
 
-  indexSize = indexType == GPUIndexTypeUInt32 ? 4u : 2u;
+  indexSize = indexType == GPU_INDEX_TYPE_UINT32 ? 4u : 2u;
   if (firstIndex > UINT64_MAX / indexSize ||
       indexCount > UINT64_MAX / indexSize) {
     return false;
