@@ -68,10 +68,10 @@ static const char       *markerCopyLabel;
 static volatile uint64_t markerSink;
 
 static GPUCommandBuffer *
-marker_newCommandBuffer(GPUQueue                *queue,
-                        const char                     *label,
-                        void                           *sender,
-                        GPUCommandBufferCompletionFn    oncomplete) {
+marker_newCommandBuffer(GPUQueue                    * __restrict queue,
+                        const char                  * __restrict label,
+                        void                        * __restrict sender,
+                        GPUCommandBufferCompletionFn             oncomplete) {
   static GPUCommandBuffer cmdb;
 
   GPU__UNUSED(sender);
