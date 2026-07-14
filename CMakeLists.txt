@@ -163,6 +163,12 @@ if(TARGET us)
   target_link_libraries(gpu PRIVATE us)
 elseif(GPU_USL_ROOT AND EXISTS "${GPU_USL_ROOT}/us/CMakeLists.txt")
   set(US_USE_TEST OFF CACHE BOOL "" FORCE)
+  if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(US_SHARED OFF CACHE BOOL "" FORCE)
+    set(US_STATIC ON CACHE BOOL "" FORCE)
+    set(DS_SHARED OFF CACHE BOOL "" FORCE)
+    set(DS_STATIC ON CACHE BOOL "" FORCE)
+  endif()
   add_subdirectory("${GPU_USL_ROOT}/us" "${CMAKE_BINARY_DIR}/_deps/us")
   target_link_libraries(gpu PRIVATE us)
 elseif(GPU_USL_INCLUDE_DIR AND GPU_USL_LIBRARY)
@@ -1062,6 +1068,54 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-ios-usl/Info.plist"
     XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER
       "com.recp.gpu.triangle-ios-usl"
+    XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
+  )
+
+  set(GPU_IOS_METAL4_BINDLESS_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/metal/ios-metal4-bindless")
+  set(GPU_IOS_METAL4_BINDLESS_SOURCE
+      "${GPU_IOS_METAL4_BINDLESS_DIR}/metal4_bindless.usl")
+  set(GPU_IOS_METAL4_BINDLESS_US
+      "${GPU_IOS_METAL4_BINDLESS_DIR}/metal4_bindless.us")
+  add_custom_command(
+    OUTPUT "${GPU_IOS_METAL4_BINDLESS_US}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${GPU_IOS_METAL4_BINDLESS_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/metal4-bindless-ios-usl/metal4_bindless.usl"
+            "${GPU_IOS_METAL4_BINDLESS_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            USL_NO_BACKEND_SIDECAR=1
+            USL_TARGET_CAPS=descriptor_indexing
+            "${GPU_USL_HOST_FIXTURE}"
+            metal
+            "${GPU_IOS_METAL4_BINDLESS_SOURCE}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/metal4-bindless-ios-usl/metal4_bindless.usl"
+      "${GPU_USL_HOST_FIXTURE}"
+    VERBATIM
+  )
+  set_source_files_properties("${GPU_IOS_METAL4_BINDLESS_US}" PROPERTIES
+    GENERATED TRUE
+    MACOSX_PACKAGE_LOCATION Resources
+  )
+
+  add_executable(gpu-metal4-bindless-ios-usl MACOSX_BUNDLE
+    samples/metal4-bindless-ios-usl/main.m
+    "${GPU_IOS_METAL4_BINDLESS_US}"
+  )
+  gpu_configure_metal_sample(gpu-metal4-bindless-ios-usl)
+  target_compile_options(gpu-metal4-bindless-ios-usl PRIVATE
+    -Wall
+    -Wextra
+    -Werror
+  )
+  set_target_properties(gpu-metal4-bindless-ios-usl PROPERTIES
+    MACOSX_BUNDLE_INFO_PLIST
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-ios-usl/Info.plist"
+    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER
+      "com.recp.gpu.metal4-bindless-ios-usl"
     XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
   )
 endif()

@@ -1,0 +1,47 @@
+pub struct VSOut {
+  position: float4 #position
+  uv: float2
+}
+
+fn quad_position(vertexId: uint) -> float4 {
+  switch (vertexId) {
+    case 0, 3:
+      return float4(-0.8, -0.8, 0.0, 1.0)
+    case 1:
+      return float4(-0.8, 0.8, 0.0, 1.0)
+    case 2, 4:
+      return float4(0.8, 0.8, 0.0, 1.0)
+    default:
+      return float4(0.8, -0.8, 0.0, 1.0)
+  }
+}
+
+fn quad_uv(vertexId: uint) -> float2 {
+  switch (vertexId) {
+    case 0, 3:
+      return float2(0.0, 1.0)
+    case 1:
+      return float2(0.0, 0.0)
+    case 2, 4:
+      return float2(1.0, 0.0)
+    default:
+      return float2(1.0, 1.0)
+  }
+}
+
+vert metal4_bindless_vs(vertexId: uint #vertex_id) -> VSOut {
+  var out: VSOut
+  out.position = quad_position(vertexId)
+  out.uv = quad_uv(vertexId)
+  return out
+}
+
+frag metal4_bindless_fs(
+  input: VSOut #stage_in,
+  textures: [texture2d<float>; 2] #texture(0),
+  samplers: [sampler; 2] #sampler(2),
+  selection: uint #buffer(4)
+) -> float4 {
+  let index = nonuniform(selection)
+  return textures[index].sample(samplers[index], input.uv)
+}
