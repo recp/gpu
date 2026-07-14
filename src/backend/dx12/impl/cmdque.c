@@ -457,10 +457,10 @@ dx12__createTransferStaging(GPUDeviceDX12 *device,
 }
 
 static uint64_t
-dx12__transferCapacity(uint64_t sizeBytes) {
+dx12__transferCapacity(uint64_t sizeBytes, uint64_t minimumCapacity) {
   uint64_t capacity;
 
-  capacity = 64u * 1024u;
+  capacity = minimumCapacity;
   while (capacity < sizeBytes) {
     if (capacity > UINT64_MAX / 2u) {
       return sizeBytes;
@@ -551,6 +551,7 @@ dx12__ensureTransferStaging(GPUQueueDX12 *queue,
                             GPUDeviceDX12       *device,
                             GPUTransferSlotDX12 *slot,
                             uint64_t              sizeBytes,
+                            uint64_t              minimumCapacity,
                             D3D12_HEAP_TYPE       heapType) {
   ID3D12Resource *resource;
   void           *mapped;
@@ -566,15 +567,17 @@ dx12__ensureTransferStaging(GPUQueueDX12 *queue,
 
   upload = heapType == D3D12_HEAP_TYPE_UPLOAD;
   if (upload && slot->uploadStaging &&
-      slot->uploadCapacity >= sizeBytes) {
+      slot->uploadCapacity >= sizeBytes &&
+      slot->uploadCapacity >= minimumCapacity) {
     return slot->uploadMapped != NULL;
   }
   if (!upload && queue->readbackStaging &&
-      queue->readbackCapacity >= sizeBytes) {
+      queue->readbackCapacity >= sizeBytes &&
+      queue->readbackCapacity >= minimumCapacity) {
     return true;
   }
 
-  capacity = dx12__transferCapacity(sizeBytes);
+  capacity = dx12__transferCapacity(sizeBytes, minimumCapacity);
   resource = dx12__createTransferStaging(device, capacity, heapType);
   mapped   = NULL;
   if (!resource ||
@@ -669,6 +672,7 @@ GPUResult
 dx12_beginTransfer(GPUQueue             *queue,
                    D3D12_HEAP_TYPE              heapType,
                    uint64_t                     stagingBytes,
+                   uint64_t                     minimumCapacity,
                    ID3D12GraphicsCommandList  **outCommandList,
                    ID3D12Resource             **outStaging,
                    void                       **outMapped,
@@ -705,7 +709,8 @@ dx12_beginTransfer(GPUQueue             *queue,
     }
     if (upload) {
       slot = &native->transferSlots[native->activeTransferSlot];
-      if (slot->uploadUsed <=
+      if (slot->uploadCapacity >= minimumCapacity &&
+          slot->uploadUsed <=
           UINT64_MAX - (DX12_TRANSFER_OFFSET_ALIGNMENT - 1u)) {
         offset = (slot->uploadUsed + DX12_TRANSFER_OFFSET_ALIGNMENT - 1u) &
                  ~(uint64_t)(DX12_TRANSFER_OFFSET_ALIGNMENT - 1u);
@@ -735,6 +740,7 @@ dx12_beginTransfer(GPUQueue             *queue,
                                    device,
                                    slot,
                                    stagingBytes,
+                                   minimumCapacity,
                                    heapType)) {
     return GPU_ERROR_BACKEND_FAILURE;
   }

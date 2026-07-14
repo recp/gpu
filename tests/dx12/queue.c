@@ -229,6 +229,7 @@ texture_transfers_reuse(GPUQueue *queue,
   ID3D12Fence          *fence;
   HANDLE                event;
   static uint8_t        pixels[DX12_TRANSFER_TEST_BYTES];
+  uint32_t              warmupWrites;
   bool                  ok;
 
   native  = queue ? queue->_priv : NULL;
@@ -263,8 +264,15 @@ texture_transfers_reuse(GPUQueue *queue,
   writeRegion.rowsPerImage = 128u;
   memset(pixels, 0, sizeof(pixels));
 
+  if (GPU_DX12_TEXTURE_TRANSFER_CAPACITY % DX12_TRANSFER_TEST_BYTES != 0u) {
+    GPUDestroyTexture(texture);
+    return false;
+  }
+  warmupWrites = GPU_DX12_TRANSFER_SLOT_COUNT *
+                 (GPU_DX12_TEXTURE_TRANSFER_CAPACITY /
+                  DX12_TRANSFER_TEST_BYTES);
   ok = true;
-  for (uint32_t i = 0u; ok && i < GPU_DX12_TRANSFER_SLOT_COUNT; i++) {
+  for (uint32_t i = 0u; ok && i < warmupWrites; i++) {
     pixels[0] = (uint8_t)i;
     pixels[1] = (uint8_t)(i + 1u);
     pixels[2] = (uint8_t)(i + 2u);
@@ -283,7 +291,7 @@ texture_transfers_reuse(GPUQueue *queue,
     slots[i] = native->transferSlots[i];
     ok = slots[i].allocator && slots[i].commandList &&
          slots[i].uploadStaging && slots[i].uploadMapped &&
-         slots[i].uploadCapacity >= sizeof(pixels);
+         slots[i].uploadCapacity >= GPU_DX12_TEXTURE_TRANSFER_CAPACITY;
   }
   fence = native->transferFence;
   event = native->transferEvent;

@@ -348,7 +348,9 @@ typedef struct GPUCommandBufferDX12 {
 } GPUCommandBufferDX12;
 
 enum {
-  GPU_DX12_TRANSFER_SLOT_COUNT = 8
+  GPU_DX12_BUFFER_TRANSFER_CAPACITY  = 64u * 1024u,
+  GPU_DX12_TEXTURE_TRANSFER_CAPACITY = 512u * 1024u,
+  GPU_DX12_TRANSFER_SLOT_COUNT       = 8
 };
 
 typedef struct GPUTransferSlotDX12 {
@@ -499,6 +501,7 @@ GPUResult
 dx12_beginTransfer(GPUQueue             *queue,
                    D3D12_HEAP_TYPE              heapType,
                    uint64_t                     stagingBytes,
+                   uint64_t                     minimumCapacity,
                    ID3D12GraphicsCommandList  **outCommandList,
                    ID3D12Resource             **outStaging,
                    void                       **outMapped,
