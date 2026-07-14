@@ -295,7 +295,7 @@ if(GPU_BUILD_VULKAN)
   target_link_libraries(gpu PRIVATE Vulkan::Vulkan)
 endif()
 
-if(GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES)
+if(GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS)
   add_executable(gpu-usl-fixture tests/usl_fixture.c)
   if(TARGET us)
     target_link_libraries(gpu-usl-fixture PRIVATE us)
@@ -568,6 +568,52 @@ if(GPU_BUILD_METAL AND GPU_BUILD_SAMPLES AND
   list(GET GPU_METAL_USL_FIXTURES 4 GPU_METAL_REFLECTION_US)
   list(GET GPU_METAL_USL_FIXTURES 5 GPU_METAL_REFLECTION_STORAGE_US)
   add_custom_target(gpu-metal-fixtures DEPENDS ${GPU_METAL_USL_FIXTURES})
+endif()
+
+if(GPU_BUILD_BENCHMARKS)
+  set(GPU_BENCHMARK_USL_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/render_mrt.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-usl/triangle.usl"
+  )
+  set(GPU_BENCHMARK_USL_FIXTURES)
+
+  if(GPU_BUILD_METAL)
+    gpu_add_usl_fixtures(
+      GPU_BENCHMARK_METAL_USL_FIXTURES
+      metal
+      benchmarks
+      ${GPU_BENCHMARK_USL_SOURCES}
+    )
+    list(APPEND GPU_BENCHMARK_USL_FIXTURES
+      ${GPU_BENCHMARK_METAL_USL_FIXTURES}
+    )
+  endif()
+  if(GPU_BUILD_VULKAN)
+    gpu_add_usl_fixtures(
+      GPU_BENCHMARK_VULKAN_USL_FIXTURES
+      vulkan
+      benchmarks
+      ${GPU_BENCHMARK_USL_SOURCES}
+    )
+    list(APPEND GPU_BENCHMARK_USL_FIXTURES
+      ${GPU_BENCHMARK_VULKAN_USL_FIXTURES}
+    )
+  endif()
+  if(GPU_BUILD_DX12)
+    gpu_add_usl_fixtures(
+      GPU_BENCHMARK_DX12_USL_FIXTURES
+      dx12
+      benchmarks
+      ${GPU_BENCHMARK_USL_SOURCES}
+    )
+    list(APPEND GPU_BENCHMARK_USL_FIXTURES
+      ${GPU_BENCHMARK_DX12_USL_FIXTURES}
+    )
+  endif()
+
+  add_custom_target(gpu-benchmark-fixtures
+    DEPENDS ${GPU_BENCHMARK_USL_FIXTURES}
+  )
 endif()
 
 if(GPU_BUILD_TESTS)
@@ -1399,6 +1445,15 @@ if(GPU_BUILD_BENCHMARKS)
   else()
     target_compile_options(gpu-marker-bench PRIVATE -Wall -Wextra)
   endif()
+
+  foreach(benchmark_target
+          gpu-static-scene-bench
+          gpu-state-churn-bench
+          gpu-binding-churn-bench
+          gpu-upload-heavy-bench
+          gpu-pipeline-stress-bench)
+    add_dependencies(${benchmark_target} gpu-benchmark-fixtures)
+  endforeach()
 
   if(WIN32)
     foreach(benchmark_target
