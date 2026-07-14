@@ -1,4 +1,5 @@
 #include "test.h"
+#include "../../src/api/device_internal.h"
 
 enum {
   GPU_DESCRIPTOR_ARRAY_UNIFORM_BYTES  = 256u,
@@ -6,6 +7,7 @@ enum {
   GPU_DESCRIPTOR_RENDER_WIDTH          = 4u,
   GPU_DESCRIPTOR_RENDER_HEIGHT         = 4u,
   GPU_DESCRIPTOR_RENDER_ROW_BYTES      = 256u,
+  GPU_DESCRIPTOR_RENDER_WARM_FRAMES    = 8u,
   GPU_DESCRIPTOR_RENDER_READBACK_BYTES =
     GPU_DESCRIPTOR_RENDER_ROW_BYTES * GPU_DESCRIPTOR_RENDER_HEIGHT
 };
@@ -66,6 +68,36 @@ create_color_texture(GPUDevice       *device,
 }
 
 static int
+encode_descriptor_render(GPUCommandBuffer     *cmdb,
+                         GPURenderPipeline    *pipeline,
+                         GPUBindGroup         *group,
+                         GPUTextureView       *targetView) {
+  GPURenderPassEncoder        *renderPass;
+  GPURenderPassColorAttachment color    = {0};
+  GPURenderPassCreateInfo      passInfo = {0};
+
+  color.view                    = targetView;
+  color.loadOp                  = GPU_LOAD_OP_CLEAR;
+  color.storeOp                 = GPU_STORE_OP_STORE;
+  color.clearColor.float32[3]   = 1.0f;
+  passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  passInfo.chain.structSize     = sizeof(passInfo);
+  passInfo.label                = "api-descriptor-array-render";
+  passInfo.colorAttachmentCount = 1u;
+  passInfo.pColorAttachments    = &color;
+  renderPass = GPUBeginRenderPass(cmdb, &passInfo);
+  if (!renderPass) {
+    return 0;
+  }
+
+  GPUBindRenderPipeline(renderPass, pipeline);
+  GPUBindRenderGroup(renderPass, 1u, group, 0u, NULL);
+  GPUDraw(renderPass, 3u, 1u, 0u, 0u);
+  GPUEndRenderPass(renderPass);
+  return 1;
+}
+
+static int
 render_descriptor_array(GPUDevice          *device,
                         GPUQueue           *queue,
                         GPUShaderLibrary   *library,
@@ -77,7 +109,6 @@ render_descriptor_array(GPUDevice          *device,
   GPUBuffer                   *readback;
   GPUCommandBuffer            *cmdb;
   GPUCommandBuffer            *submitBuffers[1];
-  GPURenderPassEncoder        *renderPass;
   GPUCopyPassEncoder          *copyPass;
   GPUFence                    *fence;
   GPURenderPipelineCreateInfo  pipelineInfo = {0};
@@ -85,21 +116,37 @@ render_descriptor_array(GPUDevice          *device,
   GPUTextureCreateInfo         textureInfo  = {0};
   GPUTextureViewCreateInfo     viewInfo     = {0};
   GPUBufferCreateInfo          bufferInfo   = {0};
-  GPURenderPassColorAttachment color        = {0};
-  GPURenderPassCreateInfo      passInfo     = {0};
   GPUTextureBarrier            barrier      = {0};
   GPUBarrierBatch              barrierBatch = {0};
   GPUBufferTextureCopyRegion   copyRegion   = {0};
   GPUQueueSubmitInfo           submitInfo   = {0};
+  GPURuntimeConfig             savedRuntime;
+  GPURuntimeConfig             statsRuntime;
   uint8_t                      pixels[GPU_DESCRIPTOR_RENDER_READBACK_BYTES];
+  bool                         restoreRuntime;
   int                          ok;
+
+  if (!device) {
+    return 0;
+  }
+
+  savedRuntime   = device->runtimeConfig;
+  statsRuntime   = savedRuntime;
+  restoreRuntime = !savedRuntime.enableStats;
+  if (restoreRuntime) {
+    statsRuntime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
+    statsRuntime.chain.structSize = sizeof(statsRuntime);
+    statsRuntime.enableStats      = true;
+    if (GPUConfigureRuntime(device, &statsRuntime) != GPU_OK) {
+      return 0;
+    }
+  }
 
   pipeline   = NULL;
   target     = NULL;
   targetView = NULL;
   readback   = NULL;
   cmdb       = NULL;
-  renderPass = NULL;
   copyPass   = NULL;
   fence      = NULL;
   ok         = 0;
@@ -175,25 +222,10 @@ render_descriptor_array(GPUDevice          *device,
     goto cleanup;
   }
 
-  color.view                  = targetView;
-  color.loadOp                = GPU_LOAD_OP_CLEAR;
-  color.storeOp               = GPU_STORE_OP_STORE;
-  color.clearColor.float32[3] = 1.0f;
-  passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  passInfo.chain.structSize     = sizeof(passInfo);
-  passInfo.label                = "api-descriptor-array-render";
-  passInfo.colorAttachmentCount = 1u;
-  passInfo.pColorAttachments    = &color;
-  renderPass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!renderPass) {
+  if (!encode_descriptor_render(cmdb, pipeline, group, targetView)) {
     fprintf(stderr, "descriptor array render pass failed\n");
     goto cleanup;
   }
-  GPUBindRenderPipeline(renderPass, pipeline);
-  GPUBindRenderGroup(renderPass, 1u, group, 0u, NULL);
-  GPUDraw(renderPass, 3u, 1u, 0u, 0u);
-  GPUEndRenderPass(renderPass);
-  renderPass = NULL;
 
   barrier.texture    = target;
   barrier.srcAccess  = GPU_ACCESS_COLOR_WRITE;
@@ -268,20 +300,59 @@ render_descriptor_array(GPUDevice          *device,
       }
     }
   }
+
+  GPUResetStats(device);
+  for (uint32_t frame = 0u;
+       frame < GPU_DESCRIPTOR_RENDER_WARM_FRAMES;
+       frame++) {
+    if (GPUAcquireCommandBuffer(queue,
+                                "api-descriptor-array-render-warm",
+                                &cmdb) != GPU_OK ||
+        !cmdb ||
+        !encode_descriptor_render(cmdb, pipeline, group, targetView)) {
+      fprintf(stderr, "descriptor array warm render encode failed\n");
+      goto cleanup;
+    }
+
+    submitBuffers[0]            = cmdb;
+    submitInfo.ppCommandBuffers = submitBuffers;
+    if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
+        GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+      fprintf(stderr, "descriptor array warm render submission failed\n");
+      cmdb = NULL;
+      goto cleanup;
+    }
+    cmdb = NULL;
+  }
+  if (device->currentFrameStats.drawCalls !=
+        GPU_DESCRIPTOR_RENDER_WARM_FRAMES ||
+      device->currentFrameStats.hotPathAllocCount != 0u ||
+      device->currentFrameStats.hotPathAllocBytes != 0u ||
+      device->currentFrameStats.hotPathFreeCount != 0u ||
+      device->currentFrameStats.hotPathFreeBytes != 0u) {
+    fprintf(stderr,
+            "descriptor array warm render stats mismatch: "
+            "%u draws, %llu allocations, %llu frees\n",
+            device->currentFrameStats.drawCalls,
+            (unsigned long long)device->currentFrameStats.hotPathAllocCount,
+            (unsigned long long)device->currentFrameStats.hotPathFreeCount);
+    goto cleanup;
+  }
   ok = 1;
 
 cleanup:
   if (copyPass) {
     GPUEndCopyPass(copyPass);
   }
-  if (renderPass) {
-    GPUEndRenderPass(renderPass);
-  }
   GPUDestroyFence(fence);
   GPUDestroyBuffer(readback);
   GPUDestroyTextureView(targetView);
   GPUDestroyTexture(target);
   GPUDestroyRenderPipeline(pipeline);
+  if (restoreRuntime &&
+      GPUConfigureRuntime(device, &savedRuntime) != GPU_OK) {
+    ok = 0;
+  }
   return ok;
 }
 
