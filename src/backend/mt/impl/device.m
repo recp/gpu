@@ -134,6 +134,7 @@ mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
   switch (feature) {
     case GPU_FEATURE_COMPUTE:
     case GPU_FEATURE_INDIRECT_DRAW:
+    case GPU_FEATURE_SHADER_F16:
       return true;
     case GPU_FEATURE_TIMESTAMPS:
       device = (id<MTLDevice>)adapter->_priv;

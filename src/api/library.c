@@ -78,6 +78,66 @@ gpu_uslRuntimeInfoIsUsable(const USLBytecodeRuntimeInfo *runtimeInfo) {
 }
 
 static int
+gpu_featureFromUSLSemantic(uint32_t semanticId, GPUFeature *outFeature) {
+  if (!outFeature) {
+    return 0;
+  }
+
+  switch (semanticId) {
+    case USL_SEMANTIC_FEATURE_ID_SUBGROUP:
+      *outFeature = GPU_FEATURE_SUBGROUPS;
+      return 1;
+    case USL_SEMANTIC_FEATURE_ID_SHADER_F16:
+      *outFeature = GPU_FEATURE_SHADER_F16;
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static int
+gpu_shaderRequirementsEnabled(const GPUDevice             *device,
+                              const USLBytecodeRuntimeInfo *runtimeInfo) {
+  uint32_t flags;
+
+  flags = USL_BYTECODE_RUNTIME_INFO_FLAG_CAPABILITY_REQUIREMENT_OVERFLOW;
+  if (!device || !gpu_uslRuntimeInfoIsUsable(runtimeInfo) ||
+      (runtimeInfo->flags & flags) != 0u ||
+      runtimeInfo->capability_requirement_count >
+        USL_RUNTIME_MAX_CAPABILITY_REQUIREMENTS) {
+    return 0;
+  }
+
+  for (uint32_t i = 0u;
+       i < runtimeInfo->capability_requirement_count;
+       i++) {
+    const USLRuntimeCapabilityRequirement *requirement;
+
+    requirement = &runtimeInfo->capability_requirements[i];
+    if ((requirement->flags &
+         USL_RUNTIME_CAPABILITY_REQUIREMENT_FLAG_ATOM_OVERFLOW) != 0u ||
+        requirement->atom_count >
+          USL_RUNTIME_MAX_CAPABILITY_REQUIREMENT_ATOMS) {
+      return 0;
+    }
+
+    for (uint32_t j = 0u; j < requirement->atom_count; j++) {
+      const USLCapabilityAtomDesc *atom;
+      GPUFeature                   feature;
+
+      atom = &requirement->atoms[j];
+      if (atom->family == USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE &&
+          gpu_featureFromUSLSemantic(atom->id, &feature) &&
+          !GPUIsFeatureEnabled(device, feature)) {
+        return 0;
+      }
+    }
+  }
+
+  return 1;
+}
+
+static int
 gpu_shaderVisibilityFromUSLStage(uint32_t stage, GPUShaderStageFlags *outVisibility) {
   if (!outVisibility) {
     return 0;
@@ -1086,6 +1146,11 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   }
   if (!compileOutput->reflection.target_info_valid) {
     rc = GPU_ERROR_BACKEND_FAILURE;
+    goto cleanup;
+  }
+  if (!gpu_shaderRequirementsEnabled(device,
+                                     &compileOutput->reflection.runtime)) {
+    rc = GPU_ERROR_UNSUPPORTED;
     goto cleanup;
   }
 
