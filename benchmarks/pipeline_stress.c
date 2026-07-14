@@ -51,6 +51,8 @@ typedef struct PipelineStress {
   GPUVertexAttribute           attribute;
   GPUVertexBufferLayout        vertexLayout;
   uint32_t                     pipelineCount;
+  bool                         diskCacheSupported;
+  char                         cachePath[192];
 } PipelineStress;
 
 typedef struct PipelineMetrics {
@@ -62,6 +64,8 @@ typedef struct PipelineMetrics {
   double *asyncEnqueue;
   double *asyncReady;
   double *asyncLookup;
+  double *diskCold;
+  double *diskWarm;
 } PipelineMetrics;
 
 static bool
@@ -152,6 +156,16 @@ pipeline_init(PipelineStress             *stress,
     return false;
   }
 
+  stress->diskCacheSupported =
+    stress->bench.adapterProperties.backend == GPU_BACKEND_METAL ||
+    stress->bench.adapterProperties.backend == GPU_BACKEND_VULKAN ||
+    stress->bench.adapterProperties.backend == GPU_BACKEND_DIRECTX12;
+  snprintf(stress->cachePath,
+           sizeof(stress->cachePath),
+           ".gpu-pipeline-stress-%u-%p.bin",
+           (uint32_t)stress->bench.adapterProperties.backend,
+           (void *)stress->bench.device);
+
   count                 = config->pipelineCount;
   stress->pipelineCount = config->pipelineCount;
   stress->infos         = calloc(count, sizeof(*stress->infos));
@@ -177,6 +191,18 @@ pipeline_init(PipelineStress             *stress,
 }
 
 static void
+pipeline_removeDiskCache(const PipelineStress *stress) {
+  char temporaryPath[sizeof(stress->cachePath) + sizeof(".tmp")];
+
+  if (!stress || !stress->cachePath[0]) {
+    return;
+  }
+  snprintf(temporaryPath, sizeof(temporaryPath), "%s.tmp", stress->cachePath);
+  remove(temporaryPath);
+  remove(stress->cachePath);
+}
+
+static void
 pipeline_cleanup(PipelineStress *stress) {
   if (!stress) {
     return;
@@ -191,12 +217,14 @@ pipeline_cleanup(PipelineStress *stress) {
   free(stress->pipelines);
   free(stress->targets);
   free(stress->infos);
+  pipeline_removeDiskCache(stress);
   bench_renderCleanup(&stress->bench);
 }
 
 static bool
 pipeline_createCache(PipelineStress   *stress,
                      uint32_t          pipelineCount,
+                     bool              disk,
                      GPUPipelineCache **outCache) {
   GPUPipelineCacheCreateInfo info;
 
@@ -204,6 +232,8 @@ pipeline_createCache(PipelineStress   *stress,
   info.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
   info.chain.structSize = sizeof(info);
   info.label            = "pipeline-stress-cache";
+  info.enableDiskCache  = disk;
+  info.cachePath        = disk ? stress->cachePath : NULL;
   info.maxEntries       = pipelineCount;
   return GPUCreatePipelineCache(stress->bench.device,
                                 &info,
@@ -365,7 +395,7 @@ pipeline_metricsInit(PipelineMetrics *metrics, uint32_t repeats) {
   size_t count;
 
   memset(metrics, 0, sizeof(*metrics));
-  count            = (size_t)repeats * 7u;
+  count            = (size_t)repeats * 9u;
   metrics->samples = calloc(count, sizeof(*metrics->samples));
   if (!metrics->samples) {
     return false;
@@ -377,6 +407,8 @@ pipeline_metricsInit(PipelineMetrics *metrics, uint32_t repeats) {
   metrics->asyncEnqueue  = metrics->prewarmLookup + repeats;
   metrics->asyncReady    = metrics->asyncEnqueue + repeats;
   metrics->asyncLookup   = metrics->asyncReady + repeats;
+  metrics->diskCold      = metrics->asyncLookup + repeats;
+  metrics->diskWarm      = metrics->diskCold + repeats;
   return true;
 }
 
@@ -389,9 +421,14 @@ pipeline_run(PipelineStress             *stress,
   count = config->pipelineCount;
   for (uint32_t repeat = 0u; repeat < config->repeats; repeat++) {
     GPUPipelineCache *cache;
+    double            cacheOpenNs;
+    double            cacheOpenStart;
 
     cache = NULL;
-    if (!pipeline_createCache(stress, config->pipelineCount, &cache)) {
+    if (!pipeline_createCache(stress,
+                              config->pipelineCount,
+                              false,
+                              &cache)) {
       return false;
     }
     GPUResetStats(stress->bench.device);
@@ -415,7 +452,10 @@ pipeline_run(PipelineStress             *stress,
     GPUDestroyPipelineCache(cache);
 
     cache = NULL;
-    if (!pipeline_createCache(stress, config->pipelineCount, &cache)) {
+    if (!pipeline_createCache(stress,
+                              config->pipelineCount,
+                              false,
+                              &cache)) {
       return false;
     }
     GPUResetStats(stress->bench.device);
@@ -439,7 +479,10 @@ pipeline_run(PipelineStress             *stress,
     GPUDestroyPipelineCache(cache);
 
     cache = NULL;
-    if (!pipeline_createCache(stress, config->pipelineCount, &cache)) {
+    if (!pipeline_createCache(stress,
+                              config->pipelineCount,
+                              false,
+                              &cache)) {
       return false;
     }
     GPUResetStats(stress->bench.device);
@@ -462,6 +505,52 @@ pipeline_run(PipelineStress             *stress,
       return false;
     }
     GPUDestroyPipelineCache(cache);
+
+    if (stress->diskCacheSupported) {
+      pipeline_removeDiskCache(stress);
+      cache          = NULL;
+      cacheOpenStart = bench_now();
+      if (!pipeline_createCache(stress,
+                                config->pipelineCount,
+                                true,
+                                &cache)) {
+        return false;
+      }
+      cacheOpenNs = (bench_now() - cacheOpenStart) * 1e9;
+      GPUResetStats(stress->bench.device);
+      if (!pipeline_createAll(stress,
+                              cache,
+                              config->pipelineCount,
+                              &metrics->diskCold[repeat]) ||
+          !pipeline_statsMatch(stress, 0u, count, count)) {
+        GPUDestroyPipelineCache(cache);
+        return false;
+      }
+      metrics->diskCold[repeat] += cacheOpenNs;
+      GPUDestroyPipelineCache(cache);
+
+      cache          = NULL;
+      cacheOpenStart = bench_now();
+      if (!pipeline_createCache(stress,
+                                config->pipelineCount,
+                                true,
+                                &cache)) {
+        return false;
+      }
+      cacheOpenNs = (bench_now() - cacheOpenStart) * 1e9;
+      GPUResetStats(stress->bench.device);
+      if (!pipeline_createAll(stress,
+                              cache,
+                              config->pipelineCount,
+                              &metrics->diskWarm[repeat]) ||
+          !pipeline_statsMatch(stress, 0u, count, count)) {
+        GPUDestroyPipelineCache(cache);
+        return false;
+      }
+      metrics->diskWarm[repeat] += cacheOpenNs;
+      GPUDestroyPipelineCache(cache);
+      pipeline_removeDiskCache(stress);
+    }
   }
   return true;
 }
@@ -478,6 +567,8 @@ pipeline_print(const PipelineStressConfig *config,
   double asyncEnqueue;
   double asyncReady;
   double asyncLookup;
+  double diskCold;
+  double diskWarm;
   double count;
 
   firstMiss     = metrics->cold[0];
@@ -494,6 +585,12 @@ pipeline_print(const PipelineStressConfig *config,
                                    config->repeats,
                                    0.5);
   asyncLookup   = bench_percentile(metrics->asyncLookup,
+                                   config->repeats,
+                                   0.5);
+  diskCold      = bench_percentile(metrics->diskCold,
+                                   config->repeats,
+                                   0.5);
+  diskWarm      = bench_percentile(metrics->diskWarm,
                                    config->repeats,
                                    0.5);
   count         = config->pipelineCount;
@@ -530,6 +627,16 @@ pipeline_print(const PipelineStressConfig *config,
   printf("async lookup : %.3f us total, %.3f us/pipeline\n",
          asyncLookup / 1e3,
          asyncLookup / count / 1e3);
+  if (stress->diskCacheSupported) {
+    printf("disk cold    : %.3f ms total, %.3f us/pipeline\n",
+           diskCold / 1e6,
+           diskCold / count / 1e3);
+    printf("disk reopen  : %.3f ms total, %.3f us/pipeline, "
+           "cold/reopen %.2fx\n",
+           diskWarm / 1e6,
+           diskWarm / count / 1e3,
+           diskWarm > 0.0 ? diskCold / diskWarm : 0.0);
+  }
   printf("cache checks : cold/prewarm/async misses=%" PRIu64
          ", warm hits=%" PRIu64 "\n",
          (uint64_t)config->pipelineCount,
