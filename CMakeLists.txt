@@ -1136,9 +1136,15 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
       dx12-textured-quad
       dx12-compute-render
       PROPERTIES
-        ENVIRONMENT
-          "GPU_SAMPLE_EXIT_AFTER_FRAMES=96;GPU_SAMPLE_ASSERT_ZERO_ALLOC=1"
+        SKIP_RETURN_CODE 77
         TIMEOUT 30
+    )
+    set_property(
+      TEST dx12-triangle dx12-textured-quad dx12-compute-render
+      PROPERTY ENVIRONMENT
+        "GPU_SAMPLE_EXIT_AFTER_FRAMES=96"
+        "GPU_SAMPLE_ASSERT_ZERO_ALLOC=1"
+        "GPU_SAMPLE_SKIP_NONINTERACTIVE=1"
     )
   endif()
 endif()

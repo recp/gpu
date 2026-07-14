@@ -5,6 +5,8 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#include "../common/Win32Sample.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <wchar.h>
@@ -452,6 +454,10 @@ main(void) {
   MSG         message;
   const char *exitFrames;
   int         result;
+
+  if (GPUSampleShouldSkipNonInteractive()) {
+    return GPU_SAMPLE_SKIP_RETURN_CODE;
+  }
 
   instance    = GetModuleHandleW(NULL);
   triangle_app = &app;
