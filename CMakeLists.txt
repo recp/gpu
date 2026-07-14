@@ -1374,6 +1374,25 @@ if(GPU_BUILD_BENCHMARKS)
     target_compile_options(gpu-binding-churn-bench PRIVATE -Wall -Wextra)
   endif()
 
+  add_executable(gpu-bindless-update-bench
+    benchmarks/bench.c
+    benchmarks/bindless_update.c
+  )
+  target_link_libraries(gpu-bindless-update-bench PRIVATE gpu)
+  target_include_directories(gpu-bindless-update-bench PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  set_target_properties(gpu-bindless-update-bench PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_options(gpu-bindless-update-bench PRIVATE /W3)
+  else()
+    target_compile_options(gpu-bindless-update-bench PRIVATE -Wall -Wextra)
+  endif()
+
   add_executable(gpu-upload-heavy-bench
     benchmarks/bench.c
     benchmarks/render.c
@@ -1517,6 +1536,11 @@ if(GPU_BUILD_BENCHMARKS)
       ${GPU_BENCHMARK_BACKEND} 32 4 12 1
     )
     gpu_add_perf_smoke(
+      perf-smoke-bindless-update
+      gpu-bindless-update-bench
+      ${GPU_BENCHMARK_BACKEND} 16 32 3
+    )
+    gpu_add_perf_smoke(
       perf-smoke-upload-heavy
       gpu-upload-heavy-bench
       "${GPU_BENCHMARK_TRIANGLE_US}"
@@ -1538,6 +1562,7 @@ if(GPU_BUILD_BENCHMARKS)
               perf-smoke-static-scene
               perf-smoke-state-churn
               perf-smoke-binding-churn
+              perf-smoke-bindless-update
               perf-smoke-upload-heavy
               perf-smoke-pipeline-stress)
         set_property(TEST ${perfSmokeTest} APPEND PROPERTY ENVIRONMENT
@@ -1556,6 +1581,7 @@ if(GPU_BUILD_BENCHMARKS)
             gpu-static-scene-bench
             gpu-state-churn-bench
             gpu-binding-churn-bench
+            gpu-bindless-update-bench
             gpu-upload-heavy-bench
             gpu-pipeline-stress-bench
             gpu-validation-bench
