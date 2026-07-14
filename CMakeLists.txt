@@ -428,6 +428,7 @@ if(GPU_BUILD_TESTS)
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/line_texture.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/volume_texture.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/descriptor_arrays.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/coordinate.usl"
   )
   if(GPU_BUILD_METAL)
     set(GPU_API_DEFAULT_BACKEND metal)
@@ -758,6 +759,7 @@ if(GPU_BUILD_TESTS)
     tests/api/barrier.c
     tests/api/bindgroup.c
     tests/api/compute.c
+    tests/api/coordinate.c
     tests/api/copy.c
     tests/api/cube_texture.c
     tests/api/descriptor_array.c

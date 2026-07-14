@@ -35,6 +35,7 @@ typedef struct GPUApiTestContext {
   const char  *lineTextureBytecodePath;
   const char  *volumeTextureBytecodePath;
   const char  *descriptorArrayBytecodePath;
+  const char  *coordinateBytecodePath;
   const char  *descriptorIndexingBytecodePath;
   const char  *subgroupBytecodePath;
   const char  *shaderF16BytecodePath;
@@ -59,6 +60,7 @@ int gpu_test_bindgroup(GPUDevice *device);
 int gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath);
 int gpu_test_resources(GPUDevice *device);
 int gpu_test_copy(GPUDevice *device);
+int gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath);
 int gpu_test_texture_transfer(GPUDevice *device);
 int gpu_test_texture_view_render(GPUDevice *device);
 int gpu_test_texture_integer_clear(GPUDevice *device);

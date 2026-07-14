@@ -38,6 +38,14 @@ run_copy(void *ctx) {
 }
 
 static int
+run_coordinate(void *ctx) {
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_coordinate_contract(testCtx->device,
+                                      testCtx->coordinateBytecodePath);
+}
+
+static int
 run_render(void *ctx) {
   GPUApiTestContext *testCtx = ctx;
 
@@ -199,15 +207,16 @@ main(int argc, char **argv) {
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUApiTestContext      ctx;
-  GPUApiTest             tests[22];
+  GPUApiTest             tests[23];
   int                    ok;
 
-  if (argc != 13 && argc != 14) {
+  if (argc != 14 && argc != 15) {
     fprintf(stderr,
             "usage: %s <reflection.us> <render_mrt.us> <compute.us> "
             "<source_sampler.us> <storage_texture.us> <cube_texture.us> "
             "<line_texture.us> <volume_texture.us> <descriptor_arrays.us> "
-            "<descriptor_indexing.us> <subgroup.us> <shader_f16.us> "
+            "<coordinate.us> <descriptor_indexing.us> <subgroup.us> "
+            "<shader_f16.us> "
             "[metal|vulkan|dx12]\n",
             argv[0]);
     return 2;
@@ -217,9 +226,9 @@ main(int argc, char **argv) {
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = GPU_BACKEND_DEFAULT;
   instanceInfo.enableValidation = true;
-  if (argc == 14 &&
-      !parse_backend(argv[13], &instanceInfo.preferredBackend)) {
-    fprintf(stderr, "unknown backend: %s\n", argv[13]);
+  if (argc == 15 &&
+      !parse_backend(argv[14], &instanceInfo.preferredBackend)) {
+    fprintf(stderr, "unknown backend: %s\n", argv[14]);
     return 2;
   }
   instance = NULL;
@@ -265,9 +274,10 @@ main(int argc, char **argv) {
   ctx.lineTextureBytecodePath     = argv[7];
   ctx.volumeTextureBytecodePath   = argv[8];
   ctx.descriptorArrayBytecodePath = argv[9];
-  ctx.descriptorIndexingBytecodePath = argv[10];
-  ctx.subgroupBytecodePath           = argv[11];
-  ctx.shaderF16BytecodePath          = argv[12];
+  ctx.coordinateBytecodePath         = argv[10];
+  ctx.descriptorIndexingBytecodePath = argv[11];
+  ctx.subgroupBytecodePath           = argv[12];
+  ctx.shaderF16BytecodePath          = argv[13];
 
   tests[0]  = (GPUApiTest){ "queue", run_queue, &ctx };
   tests[1]  = (GPUApiTest){ "sampler", run_sampler, &ctx };
@@ -293,6 +303,7 @@ main(int argc, char **argv) {
   tests[19] = (GPUApiTest){ "subgroup", run_subgroup, &ctx };
   tests[20] = (GPUApiTest){ "shader-f16", run_shader_f16, &ctx };
   tests[21] = (GPUApiTest){ "bindless", run_bindless, &ctx };
+  tests[22] = (GPUApiTest){ "coordinate", run_coordinate, &ctx };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 

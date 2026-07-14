@@ -1,0 +1,42 @@
+struct CoordinateTextureIn {
+  position: float4 #attribute(0)
+  uv: float2 #attribute(1)
+}
+
+struct CoordinateTextureOut {
+  position: float4 #position
+  uv: float2
+}
+
+struct CoordinatePositionIn {
+  position: float4 #attribute(0)
+}
+
+vert coordinate_texture_vs(input: CoordinateTextureIn #stage_in) -> CoordinateTextureOut {
+  var out: CoordinateTextureOut
+  out.position = input.position
+  out.uv = input.uv
+  return out
+}
+
+frag coordinate_texture_fs(input: CoordinateTextureOut #stage_in,
+                           image: texture2d<half> #texture(0),
+                           imageSampler: sampler #sampler(0) #group(1)) -> float4 {
+  return float4(image.sample(imageSampler, input.uv))
+}
+
+vert coordinate_position_vs(input: CoordinatePositionIn #stage_in) -> float4 {
+  return input.position
+}
+
+frag coordinate_red_fs() -> float4 {
+  return float4(1.0, 0.0, 0.0, 1.0)
+}
+
+frag coordinate_green_fs() -> float4 {
+  return float4(0.0, 1.0, 0.0, 1.0)
+}
+
+frag coordinate_blue_fs() -> float4 {
+  return float4(0.0, 0.0, 1.0, 1.0)
+}
