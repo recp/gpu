@@ -388,6 +388,17 @@ if(GPU_BUILD_TESTS)
     api
     ${GPU_API_USL_SOURCES}
   )
+  set(GPU_USL_FIXTURE_TARGET_CAPS descriptor_indexing)
+  gpu_add_usl_fixtures(
+    GPU_API_DESCRIPTOR_INDEXING_USL_FIXTURE
+    "${GPU_API_DEFAULT_BACKEND}"
+    api
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/descriptor_indexing.usl"
+  )
+  unset(GPU_USL_FIXTURE_TARGET_CAPS)
+  list(APPEND GPU_API_USL_FIXTURES
+    ${GPU_API_DESCRIPTOR_INDEXING_USL_FIXTURE}
+  )
   set(GPU_USL_FIXTURE_TARGET_CAPS subgroup)
   gpu_add_usl_fixtures(
     GPU_API_SUBGROUP_USL_FIXTURE
@@ -418,7 +429,16 @@ if(GPU_BUILD_TESTS)
         api
         ${GPU_API_USL_SOURCES}
       )
+      set(GPU_USL_FIXTURE_TARGET_CAPS descriptor_indexing)
+      gpu_add_usl_fixtures(
+        GPU_API_VULKAN_DESCRIPTOR_INDEXING_USL_FIXTURE
+        vulkan
+        api
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/descriptor_indexing.usl"
+      )
+      unset(GPU_USL_FIXTURE_TARGET_CAPS)
       list(APPEND GPU_API_VULKAN_USL_FIXTURES
+        ${GPU_API_VULKAN_DESCRIPTOR_INDEXING_USL_FIXTURE}
         ${GPU_API_SUBGROUP_USL_FIXTURE}
         ${GPU_API_SHADER_F16_USL_FIXTURE}
       )
