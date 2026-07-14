@@ -295,7 +295,8 @@ vk_setTextureLayout(GPUTextureVk *texture,
 }
 
 static void
-vk__flushTextureBarriers(VkCommandBuffer       command,
+vk__flushTextureBarriers(GPUDeviceVk          *device,
+                         VkCommandBuffer       command,
                          VkImageMemoryBarrier  *barriers,
                          uint32_t               barrierCount,
                          VkPipelineStageFlags   srcStages,
@@ -304,16 +305,14 @@ vk__flushTextureBarriers(VkCommandBuffer       command,
     return;
   }
 
-  vkCmdPipelineBarrier(command,
-                       srcStages,
-                       dstStages,
-                       0u,
-                       0u,
-                       NULL,
-                       0u,
-                       NULL,
-                       barrierCount,
-                       barriers);
+  vk_pipelineBarrier(device,
+                     command,
+                     srcStages,
+                     dstStages,
+                     0u,
+                     NULL,
+                     barrierCount,
+                     barriers);
 }
 
 static void
@@ -405,7 +404,8 @@ vk__transitionTexture(VkCommandBuffer      command,
                            layerCount,
                            srcAccess,
                            dstAccess);
-    vk__flushTextureBarriers(command,
+    vk__flushTextureBarriers(texture->gpuDevice,
+                             command,
                              barriers,
                              1u,
                              srcStages,
@@ -464,7 +464,8 @@ vk__transitionTexture(VkCommandBuffer      command,
                              dstAccess);
       texture->layouts[subresource] = nextLayout;
       if (barrierCount == VK_TEXTURE_BARRIER_CHUNK_SIZE) {
-        vk__flushTextureBarriers(command,
+        vk__flushTextureBarriers(texture->gpuDevice,
+                                 command,
                                  barriers,
                                  barrierCount,
                                  chunkSrcStages,
@@ -475,7 +476,8 @@ vk__transitionTexture(VkCommandBuffer      command,
     }
   }
   if (barrierCount > 0u) {
-    vk__flushTextureBarriers(command,
+    vk__flushTextureBarriers(texture->gpuDevice,
+                             command,
                              barriers,
                              barrierCount,
                              chunkSrcStages,

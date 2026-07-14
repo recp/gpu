@@ -605,6 +605,17 @@ vk_formatToGPU(VkFormat format);
 
 GPU_HIDE
 void
+vk_pipelineBarrier(GPUDeviceVk                *device,
+                   VkCommandBuffer             command,
+                   VkPipelineStageFlags        srcStages,
+                   VkPipelineStageFlags        dstStages,
+                   uint32_t                    bufferBarrierCount,
+                   const VkBufferMemoryBarrier *bufferBarriers,
+                   uint32_t                    imageBarrierCount,
+                   const VkImageMemoryBarrier  *imageBarriers);
+
+GPU_HIDE
+void
 vk_transitionView(VkCommandBuffer   command,
                   GPUTextureViewVk *view,
                   VkImageLayout     nextLayout);

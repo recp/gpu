@@ -254,7 +254,8 @@ vk_destroyBuffer(GPUBuffer * __restrict buffer) {
 }
 
 static void
-vk__bufferBarrier(VkCommandBuffer       command,
+vk__bufferBarrier(GPUDeviceVk          *device,
+                  VkCommandBuffer       command,
                   VkBuffer              buffer,
                   VkDeviceSize          offset,
                   VkDeviceSize          size,
@@ -272,16 +273,14 @@ vk__bufferBarrier(VkCommandBuffer       command,
   barrier.buffer              = buffer;
   barrier.offset              = offset;
   barrier.size                = size;
-  vkCmdPipelineBarrier(command,
-                       srcStages,
-                       dstStages,
-                       0u,
-                       0u,
-                       NULL,
-                       1u,
-                       &barrier,
-                       0u,
-                       NULL);
+  vk_pipelineBarrier(device,
+                     command,
+                     srcStages,
+                     dstStages,
+                     1u,
+                     &barrier,
+                     0u,
+                     NULL);
 }
 
 GPU_HIDE
@@ -351,7 +350,8 @@ vk_writeBuffer(GPUQueue * __restrict queue,
     }
   }
 
-  vk__bufferBarrier(command,
+  vk__bufferBarrier(queue->_device->_priv,
+                    command,
                     native->buffer,
                     dstOffset,
                     sizeBytes,
@@ -365,7 +365,8 @@ vk_writeBuffer(GPUQueue * __restrict queue,
   copy.size      = sizeBytes;
   vkCmdCopyBuffer(command, stagingVk->buffer, native->buffer, 1u, &copy);
 
-  vk__bufferBarrier(command,
+  vk__bufferBarrier(queue->_device->_priv,
+                    command,
                     native->buffer,
                     dstOffset,
                     sizeBytes,
@@ -433,7 +434,8 @@ vk_readBuffer(GPUQueue * __restrict queue,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  vk__bufferBarrier(command,
+  vk__bufferBarrier(queue->_device->_priv,
+                    command,
                     native->buffer,
                     srcOffset,
                     sizeBytes,
@@ -447,7 +449,8 @@ vk_readBuffer(GPUQueue * __restrict queue,
   copy.size      = sizeBytes;
   vkCmdCopyBuffer(command, native->buffer, stagingVk->buffer, 1u, &copy);
 
-  vk__bufferBarrier(command,
+  vk__bufferBarrier(queue->_device->_priv,
+                    command,
                     stagingVk->buffer,
                     stagingOffset,
                     sizeBytes,

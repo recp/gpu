@@ -281,6 +281,7 @@ if(GPU_BUILD_VULKAN)
     src/backend/vk/impl/rce.c
     src/backend/vk/impl/renderpass.c
     src/backend/vk/impl/sampler.c
+    src/backend/vk/impl/sync.c
     src/backend/vk/impl/surface.c
     src/backend/vk/impl/swapchain.c
     src/backend/vk/impl/texture.c
