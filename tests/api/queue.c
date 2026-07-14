@@ -628,6 +628,20 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
     return 0;
   }
 
+  frame = GPUBeginFrame(&swapchain);
+  cmdb  = NULL;
+  gScopedPresentSucceeds = false;
+  if (!frame ||
+      GPUAcquireCommandBuffer(queue, "rejected-present", &cmdb) != GPU_OK ||
+      !cmdb ||
+      GPUFinishFrame(queue, cmdb, frame) != GPU_ERROR_BACKEND_FAILURE ||
+      cmdb->_submitted || cmdb->_recordsGPUFrameTime ||
+      gScopedPresentCalls != 3u || gScopedSubmitCalls != 1u ||
+      gScopedFrameBeginCalls != 2u || gScopedFrameEndCalls != 2u) {
+    fprintf(stderr, "failed present was submitted\n");
+    return 0;
+  }
+
   return 1;
 }
 

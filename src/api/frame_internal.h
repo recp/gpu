@@ -31,4 +31,8 @@ struct GPUFrame {
   bool            transientFrameActive;
 };
 
+GPU_HIDE
+bool
+gpuSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame);
+
 #endif /* gpu_frame_internal_h */

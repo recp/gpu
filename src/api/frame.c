@@ -159,7 +159,10 @@ GPUFinishFrame(GPUQueue         * __restrict cmdq,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  GPUSchedulePresent(cmdb, frame);
+  if (!gpuSchedulePresent(cmdb, frame)) {
+    GPUEndFrame(frame);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
 
   buffers[0] = cmdb;
   submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;

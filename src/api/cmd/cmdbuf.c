@@ -18,29 +18,36 @@
 #include "../cmdqueue_internal.h"
 #include "../frame_internal.h"
 
-GPU_EXPORT
-void
-GPUSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
+GPU_HIDE
+bool
+gpuSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   GPUApi *api;
 
   if (!cmdb || cmdb->_submitted || !frame || !frame->drawable ||
       gpuCommandBufferDevice(cmdb) != frame->device) {
-    return;
+    return false;
   }
 
   if (!(api = gpuCommandBufferApi(cmdb)))
-    return;
+    return false;
   if (!api->cmdbuf.presentDrawable)
-    return;
+    return false;
 
   if (!api->cmdbuf.presentDrawable(cmdb, frame)) {
-    return;
+    return false;
   }
   cmdb->_recordsGPUFrameTime = frame->device->runtimeConfig.enableStats;
   if (frame->transientFrameActive) {
     cmdb->_transientFrameIndex  = frame->transientFrameIndex;
     cmdb->_transientFrameTagged = true;
   }
+  return true;
+}
+
+GPU_EXPORT
+void
+GPUSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
+  (void)gpuSchedulePresent(cmdb, frame);
 }
 
 GPU_EXPORT
