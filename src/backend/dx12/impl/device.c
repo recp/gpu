@@ -421,7 +421,8 @@ GPU_HIDE
 GPUDevice *
 dx12_createDevice(GPUAdapter        * __restrict adapter,
                   GPUQueueCreateInfo queCI[],
-                  uint32_t           nQueCI) {
+                  uint32_t           nQueCI,
+                  uint64_t           enabledFeatureMask) {
   GPUInstance           *inst;
   GPUAdapterDX12        *adapterDX12;
   GPUDevice             *device;
@@ -430,6 +431,8 @@ dx12_createDevice(GPUAdapter        * __restrict adapter,
   uint32_t               queueCount;
   uint32_t               queueIndex;
   uint32_t               i, j;
+
+  (void)enabledFeatureMask;
 
   device     = NULL;
   deviceDX12 = NULL;

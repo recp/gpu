@@ -1,0 +1,8 @@
+@require(shader_f16)
+kern(4, 1, 1) shader_f16_cs(values: &[uint] #buffer(0) #group(0),
+                             output: &mut [uint] #buffer(1) #group(0),
+                             gid: uint #global_id) {
+  let value: half = half(values[gid as usize])
+  let scaled: half = value * half(0.5)
+  output[gid as usize] = uint(scaled)
+}

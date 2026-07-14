@@ -133,6 +133,14 @@ run_subgroup(void *ctx) {
   return gpu_test_subgroup(testCtx->adapter, testCtx->subgroupBytecodePath);
 }
 
+static int
+run_shader_f16(void *ctx) {
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_shader_f16(testCtx->adapter,
+                             testCtx->shaderF16BytecodePath);
+}
+
 static GPUAdapter *
 select_adapter(GPUInstance *instance) {
   GPUAdapter *adapter = NULL;
@@ -173,15 +181,15 @@ main(int argc, char **argv) {
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUApiTestContext      ctx;
-  GPUApiTest             tests[19];
+  GPUApiTest             tests[20];
   int                    ok;
 
-  if (argc != 11 && argc != 12) {
+  if (argc != 12 && argc != 13) {
     fprintf(stderr,
             "usage: %s <reflection.us> <render_mrt.us> <compute.us> "
             "<source_sampler.us> <storage_texture.us> <cube_texture.us> "
             "<line_texture.us> <volume_texture.us> <descriptor_arrays.us> "
-            "<subgroup.us> "
+            "<subgroup.us> <shader_f16.us> "
             "[metal|vulkan|dx12]\n",
             argv[0]);
     return 2;
@@ -191,9 +199,9 @@ main(int argc, char **argv) {
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = GPU_BACKEND_DEFAULT;
   instanceInfo.enableValidation = true;
-  if (argc == 12 &&
-      !parse_backend(argv[11], &instanceInfo.preferredBackend)) {
-    fprintf(stderr, "unknown backend: %s\n", argv[11]);
+  if (argc == 13 &&
+      !parse_backend(argv[12], &instanceInfo.preferredBackend)) {
+    fprintf(stderr, "unknown backend: %s\n", argv[12]);
     return 2;
   }
   instance = NULL;
@@ -240,6 +248,7 @@ main(int argc, char **argv) {
   ctx.volumeTextureBytecodePath   = argv[8];
   ctx.descriptorArrayBytecodePath = argv[9];
   ctx.subgroupBytecodePath        = argv[10];
+  ctx.shaderF16BytecodePath       = argv[11];
 
   tests[0]  = (GPUApiTest){ "queue", run_queue, &ctx };
   tests[1]  = (GPUApiTest){ "sampler", run_sampler, &ctx };
@@ -260,6 +269,7 @@ main(int argc, char **argv) {
   tests[16] = (GPUApiTest){ "volume-texture", run_volume_texture, &ctx };
   tests[17] = (GPUApiTest){ "descriptor-array", run_descriptor_array, &ctx };
   tests[18] = (GPUApiTest){ "subgroup", run_subgroup, &ctx };
+  tests[19] = (GPUApiTest){ "shader-f16", run_shader_f16, &ctx };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 

@@ -36,6 +36,8 @@ cp "$TEST_DIR/cube_texture.usl" "$FIXTURE_DIR/cube_texture.usl"
 cp "$TEST_DIR/line_texture.usl" "$FIXTURE_DIR/line_texture.usl"
 cp "$TEST_DIR/volume_texture.usl" "$FIXTURE_DIR/volume_texture.usl"
 cp "$TEST_DIR/descriptor_arrays.usl" "$FIXTURE_DIR/descriptor_arrays.usl"
+cp "$TEST_DIR/subgroup.usl" "$FIXTURE_DIR/subgroup.usl"
+cp "$TEST_DIR/shader_f16.usl" "$FIXTURE_DIR/shader_f16.usl"
 
 shaders=(
   reflection
@@ -47,9 +49,22 @@ shaders=(
   line_texture
   volume_texture
   descriptor_arrays
+  subgroup
+  shader_f16
 )
 for shader in "${shaders[@]}"; do
-  ustest_cmd=("$USTEST" --shader "$FIXTURE_DIR/$shader.usl" --no-logs --no-sidecar)
+  target_env=()
+  case "$shader" in
+    subgroup)   target_env=(USL_TARGET_CAPS=subgroup) ;;
+    shader_f16) target_env=(USL_TARGET_CAPS=vulkan1_2,shader_f16) ;;
+  esac
+  ustest_cmd=(
+    env "${target_env[@]}"
+    "$USTEST"
+    --shader "$FIXTURE_DIR/$shader.usl"
+    --no-logs
+    --no-sidecar
+  )
   if [[ "$EMBED_METAL" == "1" ]]; then
     USL_EMBED_METAL_BLOB=1 "${ustest_cmd[@]}" \
       >"/tmp/gpu-api-tests-$shader-ustest.log" 2>&1
@@ -106,4 +121,6 @@ fi
   "$FIXTURE_DIR/line_texture.us" \
   "$FIXTURE_DIR/volume_texture.us" \
   "$FIXTURE_DIR/descriptor_arrays.us" \
+  "$FIXTURE_DIR/subgroup.us" \
+  "$FIXTURE_DIR/shader_f16.us" \
   "$BACKEND"

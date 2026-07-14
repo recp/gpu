@@ -177,6 +177,8 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   PFN_vkGetPhysicalDeviceFeatures2KHR       getFeatures2;
   VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamicFeatures = {0};
   VkPhysicalDeviceFeatures2KHR              features2 = {0};
+  VkPhysicalDeviceShaderFloat16Int8Features float16Features = {0};
+  VkPhysicalDeviceFeatures2KHR              float16Features2 = {0};
   VkResult                                  err;
   uint32_t                                  i, nExtensions;
   bool                                      incrementalPresentEnabled;
@@ -184,6 +186,8 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool                                      dynamicExtension;
   bool                                      dynamicCore;
   bool                                      subgroupSizeControl;
+  bool                                      float16Extension;
+  bool                                      float16Core;
 
   nExtensions               = 0;
   incrementalPresentEnabled = true;
@@ -191,6 +195,8 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   dynamicExtension          = false;
   dynamicCore               = false;
   subgroupSizeControl       = false;
+  float16Extension          = false;
+  float16Core               = false;
 
   adapter                   = calloc(1, sizeof(*adapter));
   adapterVk                 = calloc(1, sizeof(*adapterVk));
@@ -246,6 +252,9 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 
       VK__ADD_EXT_IF("VK_KHR_portability_subset", (void)NULL);
 
+      VK__ADD_EXT_IF(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,
+                     float16Extension = true);
+
       if (!strcmp(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         dynamicExtension = true;
@@ -287,6 +296,17 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     getFeatures2 = (PFN_vkGetPhysicalDeviceFeatures2KHR)
       vkGetInstanceProcAddr(instanceVk->inst,
                             "vkGetPhysicalDeviceFeatures2KHR");
+  }
+  float16Core = instanceVk &&
+                instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
+                adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
+  if (getFeatures2 && (float16Core || float16Extension)) {
+    float16Features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES;
+    float16Features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    float16Features2.pNext = &float16Features;
+    getFeatures2(raw, &float16Features2);
+    adapterVk->shaderFloat16 = float16Features.shaderFloat16;
   }
   if (getFeatures2 &&
       (dynamicCore ||
@@ -356,6 +376,8 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
              vk_hasQueueCapability(adapterVk, VK_QUEUE_GRAPHICS_BIT);
     case GPU_FEATURE_SUBGROUPS:
       return vk_hasSubgroupCapability(adapterVk);
+    case GPU_FEATURE_SHADER_F16:
+      return adapterVk->shaderFloat16;
     default:
       return false;
   }
@@ -667,7 +689,8 @@ GPU_HIDE
 GPUDevice *
 vk_createDevice(GPUAdapter        * __restrict adapter,
                 GPUQueueCreateInfo queCI[],
-                uint32_t           nQueCI) {
+                uint32_t           nQueCI,
+                uint64_t           enabledFeatureMask) {
   GPUDevice               *device;
   GPUDeviceVk             *deviceVk;
   GPUAdapterVk            *adapterVk;
@@ -675,8 +698,9 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
   GPUQueuePlanVk          *plan;
   VkDeviceQueueCreateInfo *queues;
   float                   *queuePriorities;
-  VkPhysicalDeviceFeatures enabledFeatures = {0};
+  VkPhysicalDeviceFeatures coreFeatures = {0};
   VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamicFeatures = {0};
+  VkPhysicalDeviceShaderFloat16Int8Features float16Features = {0};
   VkDeviceCreateInfo       deviceCI = {0};
   VkResult                 result;
   uint32_t                 familyIndex;
@@ -704,7 +728,11 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
     goto err;
   }
 
-  adapterVk       = adapter->_priv;
+  adapterVk = adapter->_priv;
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u &&
+      !adapterVk->shaderFloat16) {
+    goto err;
+  }
   planCount       = 0u;
   maxQueueCount   = 0u;
   totalQueueCount = 0u;
@@ -751,14 +779,14 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
     queues[i].pQueuePriorities = queuePriorities;
   }
 
-  enabledFeatures.pipelineStatisticsQuery =
+  coreFeatures.pipelineStatisticsQuery =
     adapterVk->features.pipelineStatisticsQuery;
-  enabledFeatures.multiDrawIndirect = adapterVk->features.multiDrawIndirect;
-  enabledFeatures.independentBlend   = adapterVk->features.independentBlend;
-  enabledFeatures.imageCubeArray     = adapterVk->features.imageCubeArray;
+  coreFeatures.multiDrawIndirect = adapterVk->features.multiDrawIndirect;
+  coreFeatures.independentBlend   = adapterVk->features.independentBlend;
+  coreFeatures.imageCubeArray     = adapterVk->features.imageCubeArray;
 
   deviceCI.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  deviceCI.pEnabledFeatures        = &enabledFeatures;
+  deviceCI.pEnabledFeatures        = &coreFeatures;
   deviceCI.queueCreateInfoCount    = planCount;
   deviceCI.pQueueCreateInfos       = queues;
   deviceCI.enabledExtensionCount   = adapterVk->nEnabledExtensions;
@@ -768,6 +796,13 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR;
     dynamicFeatures.dynamicRendering = VK_TRUE;
     deviceCI.pNext = &dynamicFeatures;
+  }
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u) {
+    float16Features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES;
+    float16Features.pNext         = (void *)deviceCI.pNext;
+    float16Features.shaderFloat16 = VK_TRUE;
+    deviceCI.pNext                = &float16Features;
   }
 
   result = vkCreateDevice(adapterVk->physicalDevice,
@@ -787,8 +822,8 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
     adapterVk->props.limits.framebufferColorSampleCounts;
   deviceVk->depthSampleCounts =
     adapterVk->props.limits.framebufferDepthSampleCounts;
-  deviceVk->multiDrawIndirect = enabledFeatures.multiDrawIndirect;
-  deviceVk->independentBlend  = enabledFeatures.independentBlend;
+  deviceVk->multiDrawIndirect = coreFeatures.multiDrawIndirect;
+  deviceVk->independentBlend  = coreFeatures.independentBlend;
   if (adapterVk->dynamicRendering) {
     deviceVk->beginRendering = (PFN_vkCmdBeginRenderingKHR)
       vkGetDeviceProcAddr(deviceVk->device, "vkCmdBeginRendering");

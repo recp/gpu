@@ -1020,9 +1020,10 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   GPUApi                   *api;
   USCompileOutput          *compileOutput;
   USLTargetSpec             target;
-  USLCapabilityAtomDesc     targetAtoms[1];
+  USLCapabilityAtomDesc     targetAtoms[2];
   USCompileInput            compileInput;
   GPUResult                 rc;
+  uint32_t                  targetAtomCount;
   uint32_t                  encoding;
 
   if (!device || !bytecodeData || !outLibrary) {
@@ -1037,11 +1038,27 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   if (!gpu_uslDefaultTarget(api->backend, &target)) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  if (api->backend == GPU_BACKEND_VULKAN &&
-      GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUPS)) {
-    target.profile = USL_TARGET_PROFILE_VULKAN_1_1;
-    if (us_cap_atom_text(&targetAtoms[0], "subgroup") != USLOk ||
-        us_target_extra_atoms(&target, targetAtoms, 1u) != USLOk) {
+  targetAtomCount = 0u;
+  if (api->backend == GPU_BACKEND_VULKAN) {
+    if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
+      target.profile = USL_TARGET_PROFILE_VULKAN_1_2;
+      if (us_cap_atom_text(&targetAtoms[targetAtomCount++],
+                           "shader_f16") != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    } else if (GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUPS)) {
+      target.profile = USL_TARGET_PROFILE_VULKAN_1_1;
+    }
+    if (GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUPS)) {
+      if (us_cap_atom_text(&targetAtoms[targetAtomCount++],
+                           "subgroup") != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+    if (targetAtomCount > 0u &&
+        us_target_extra_atoms(&target,
+                              targetAtoms,
+                              targetAtomCount) != USLOk) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }

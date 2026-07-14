@@ -397,6 +397,15 @@ if(GPU_BUILD_TESTS)
   )
   unset(GPU_USL_FIXTURE_TARGET_CAPS)
   list(APPEND GPU_API_USL_FIXTURES ${GPU_API_SUBGROUP_USL_FIXTURE})
+  set(GPU_USL_FIXTURE_TARGET_CAPS vulkan1_2,shader_f16)
+  gpu_add_usl_fixtures(
+    GPU_API_SHADER_F16_USL_FIXTURE
+    vulkan
+    api
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/shader_f16.usl"
+  )
+  unset(GPU_USL_FIXTURE_TARGET_CAPS)
+  list(APPEND GPU_API_USL_FIXTURES ${GPU_API_SHADER_F16_USL_FIXTURE})
   add_custom_target(gpu-api-fixtures DEPENDS ${GPU_API_USL_FIXTURES})
 
   if(GPU_BUILD_VULKAN)
@@ -411,6 +420,7 @@ if(GPU_BUILD_TESTS)
       )
       list(APPEND GPU_API_VULKAN_USL_FIXTURES
         ${GPU_API_SUBGROUP_USL_FIXTURE}
+        ${GPU_API_SHADER_F16_USL_FIXTURE}
       )
       add_custom_target(
         gpu-api-vulkan-fixtures
@@ -456,6 +466,7 @@ if(GPU_BUILD_TESTS)
     tests/api/runtime.c
     tests/api/sampler.c
     tests/api/shader.c
+    tests/api/shader_f16.c
     tests/api/shader_sampler.c
     tests/api/storage_texture.c
     tests/api/subgroup.c

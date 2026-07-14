@@ -359,11 +359,14 @@ GPU_HIDE
 GPUDevice *
 mt_createDevice(GPUAdapter        * __restrict adapter,
                 GPUQueueCreateInfo queCI[],
-                uint32_t           nQueCI) {
+                uint32_t           nQueCI,
+                uint64_t           enabledFeatureMask) {
   GPUDevice     *device;
   GPUDeviceMT   *deviceMT;
   MTCommandMode  commandMode;
   uint32_t       i, j, queueIndex, queueCount;
+
+  (void)enabledFeatureMask;
 
   GPU__DEFINE_DEFAULT_QUEUES_IF_NEEDED(nQueCI, queCI)
 

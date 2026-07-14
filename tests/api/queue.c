@@ -105,9 +105,11 @@ get_ownership_format_capabilities(
 static GPUDevice *
 create_ownership_device(GPUAdapter               * __restrict adapter,
                         GPUQueueCreateInfo *queueInfos,
-                        uint32_t                   queueInfoCount) {
+                        uint32_t                   queueInfoCount,
+                        uint64_t                   enabledFeatureMask) {
   (void)queueInfos;
   (void)queueInfoCount;
+  (void)enabledFeatureMask;
   memset(&gOwnershipDevice, 0, sizeof(gOwnershipDevice));
   gOwnershipDevice.inst      = adapter->inst;
   gOwnershipDevice.adapter = adapter;
@@ -933,7 +935,7 @@ check_queue_selection(GPUDevice *device) {
 static int
 check_device_queue_create_validation(GPUAdapter *adapter) {
   GPUDeviceCreateInfo createInfo = {0};
-  GPUFeature requiredFeature = GPU_FEATURE_SHADER_F16;
+  GPUFeature requiredFeature = GPU_FEATURE_VARIABLE_RATE_SHADING;
   GPUQueueRequest request = {0};
   GPUDevice *device;
   int ok;
@@ -981,11 +983,18 @@ check_device_queue_create_validation(GPUAdapter *adapter) {
   createInfo.optional.featureCount = 0;
   createInfo.required.featureCount = 1;
   createInfo.required.pFeatures = &requiredFeature;
-  device = (GPUDevice *)(uintptr_t)1u;
-  if (GPUCreateDevice(adapter, &createInfo, &device) != GPU_ERROR_UNSUPPORTED ||
-      device != NULL) {
-    fprintf(stderr, "device create accepted unsupported required feature\n");
-    return 0;
+  while (requiredFeature > GPU_FEATURE_COMPUTE &&
+         GPUIsFeatureSupported(adapter, requiredFeature)) {
+    requiredFeature = (GPUFeature)(requiredFeature - 1);
+  }
+  if (!GPUIsFeatureSupported(adapter, requiredFeature)) {
+    device = (GPUDevice *)(uintptr_t)1u;
+    if (GPUCreateDevice(adapter, &createInfo, &device) !=
+          GPU_ERROR_UNSUPPORTED ||
+        device != NULL) {
+      fprintf(stderr, "device create accepted unsupported required feature\n");
+      return 0;
+    }
   }
 
   requiredFeature = GPU_FEATURE_COMPUTE;

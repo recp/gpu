@@ -1228,6 +1228,7 @@ GPUCreateDevice(GPUAdapter                *adapter,
                 GPUDevice                **outDevice) {
   GPUQueueCreateInfo stackQueueInfos[8];
   GPUQueueCreateInfo *queueInfos;
+  uint64_t enabledFeatureMask;
   uint32_t queueInfoCount;
   GPUResult result;
   GPUResult featureResult;
@@ -1262,8 +1263,9 @@ GPUCreateDevice(GPUAdapter                *adapter,
   if (!(api = gpuAdapterApi(adapter)) || !api->device.createDevice)
     return GPU_ERROR_BACKEND_FAILURE;
 
-  queueInfos = NULL;
-  queueInfoCount = 0;
+  enabledFeatureMask = gpu_enabledFeatureMaskForCreateInfo(adapter, info);
+  queueInfos         = NULL;
+  queueInfoCount     = 0;
   result = gpu_buildQueueCreateInfos(info,
                                      stackQueueInfos,
                                      (uint32_t)GPU_ARRAY_LEN(stackQueueInfos),
@@ -1279,7 +1281,10 @@ GPUCreateDevice(GPUAdapter                *adapter,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  *outDevice = api->device.createDevice(adapter, queueInfos, queueInfoCount);
+  *outDevice = api->device.createDevice(adapter,
+                                        queueInfos,
+                                        queueInfoCount,
+                                        enabledFeatureMask);
   if (queueInfos != stackQueueInfos) {
     free(queueInfos);
   }
@@ -1300,7 +1305,7 @@ GPUCreateDevice(GPUAdapter                *adapter,
     *outDevice = NULL;
     return result;
   }
-  (*outDevice)->enabledFeatureMask = gpu_enabledFeatureMaskForCreateInfo(adapter, info);
+  (*outDevice)->enabledFeatureMask = enabledFeatureMask;
   gpu_fillFeatureSet((*outDevice)->enabledFeatureMask,
                      (*outDevice)->enabledFeatureStorage,
                      (uint32_t)GPU_ARRAY_LEN((*outDevice)->enabledFeatureStorage),
