@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../impl.h"
 
 #include <d3d12sdklayers.h>
 
@@ -1102,6 +1103,7 @@ dx12_destroyCommandQueue(GPUQueue *queue) {
           command->frameTimeQueries
         );
       }
+      dx12_destroyCopyScratch(command);
       if (command->commandList7) {
         command->commandList7->lpVtbl->Release(command->commandList7);
       }
@@ -1397,6 +1399,7 @@ dx12_newCommandBuffer(GPUQueue  * __restrict queue,
   memset(&native->computeEncoder, 0, sizeof(native->computeEncoder));
   memset(&native->computeState, 0, sizeof(native->computeState));
   memset(&native->copyEncoder, 0, sizeof(native->copyEncoder));
+  dx12_resetCopyScratch(native);
   native->copyDebugEventActive = false;
   native->presentSwapchain     = NULL;
   native->pendingNext          = NULL;

@@ -338,6 +338,14 @@ typedef struct GPUComputeEncoderDX12 {
   bool                       debugEventActive;
 } GPUComputeEncoderDX12;
 
+typedef struct GPUCopyScratchDX12 {
+  ID3D12Resource              *resource;
+  struct GPUCopyScratchDX12   *next;
+  uint64_t                     capacity;
+  uint64_t                     offset;
+  D3D12_RESOURCE_STATES        state;
+} GPUCopyScratchDX12;
+
 typedef struct GPUCommandBufferDX12 {
   GPUQueueDX12                 *owner;
   ID3D12CommandAllocator       *allocator;
@@ -347,6 +355,7 @@ typedef struct GPUCommandBufferDX12 {
   ID3D12Resource               *frameTimeReadback;
   UINT64                       *frameTimeMapped;
   GPUSwapchainDX12             *presentSwapchain;
+  GPUCopyScratchDX12           *copyScratch;
   struct GPUCommandBufferDX12  *next;
   struct GPUCommandBufferDX12  *poolNext;
   struct GPUCommandBufferDX12  *pendingNext;
@@ -366,6 +375,7 @@ typedef struct GPUCommandBufferDX12 {
 enum {
   GPU_DX12_BUFFER_TRANSFER_CAPACITY  = 256u * 1024u,
   GPU_DX12_TEXTURE_TRANSFER_CAPACITY = 1024u * 1024u,
+  GPU_DX12_COPY_SCRATCH_CAPACITY     = 1024u * 1024u,
   GPU_DX12_TRANSFER_SLOT_COUNT       = 8
 };
 

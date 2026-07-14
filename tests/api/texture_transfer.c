@@ -139,6 +139,148 @@ transfer_submit(GPUDevice        *device,
 }
 
 static int
+check_tight_texture_copies(GPUDevice *device) {
+  enum {
+    SOURCE_OFFSET      = 4u,
+    DESTINATION_OFFSET = 12u
+  };
+
+  GPUQueue                  *queue;
+  GPUCommandBuffer          *cmdb;
+  GPUCopyPassEncoder        *copyPass;
+  GPUBuffer                 *source;
+  GPUBuffer                 *destination;
+  GPUTexture                *texture;
+  GPUBufferCreateInfo        bufferInfo = {0};
+  GPUTextureCreateInfo       textureInfo = {0};
+  GPUBufferTextureCopyRegion region = {0};
+  uint8_t                    sourceBytes[SOURCE_OFFSET +
+                                         TRANSFER_IMAGE_BYTES] = {0};
+  uint8_t                    destinationBytes[DESTINATION_OFFSET +
+                                              TRANSFER_IMAGE_BYTES] = {0};
+  int                        ok;
+
+  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  if (!queue) {
+    fprintf(stderr, "tight texture copy has no graphics queue\n");
+    return 0;
+  }
+
+  for (uint32_t i = 0u; i < TRANSFER_IMAGE_BYTES; i++) {
+    sourceBytes[SOURCE_OFFSET + i] = (uint8_t)(0x31u + i * 9u);
+  }
+
+  cmdb        = NULL;
+  copyPass    = NULL;
+  source      = NULL;
+  destination = NULL;
+  texture     = NULL;
+  ok          = 0;
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "tight-copy-source";
+  bufferInfo.sizeBytes        = sizeof(sourceBytes);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
+                                GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(device, &bufferInfo, &source) != GPU_OK || !source ||
+      GPUQueueWriteBuffer(queue,
+                          source,
+                          0u,
+                          sourceBytes,
+                          sizeof(sourceBytes)) != GPU_OK) {
+    fprintf(stderr, "tight texture source setup failed\n");
+    goto cleanup;
+  }
+
+  bufferInfo.label     = "tight-copy-destination";
+  bufferInfo.sizeBytes = sizeof(destinationBytes);
+  if (GPUCreateBuffer(device, &bufferInfo, &destination) != GPU_OK ||
+      !destination) {
+    fprintf(stderr, "tight texture destination setup failed\n");
+    goto cleanup;
+  }
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "tight-copy-texture";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = TRANSFER_WIDTH * 2u;
+  textureInfo.height           = TRANSFER_HEIGHT * 2u;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_COPY_SRC |
+                                 GPU_TEXTURE_USAGE_COPY_DST;
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
+    fprintf(stderr, "tight texture setup failed\n");
+    goto cleanup;
+  }
+
+  region.bufferOffset       = SOURCE_OFFSET;
+  region.bytesPerRow        = TRANSFER_ROW_BYTES;
+  region.rowsPerImage       = TRANSFER_HEIGHT;
+  region.texture.texture.x  = 0u;
+  region.texture.texture.y  = 0u;
+  region.texture.width      = TRANSFER_WIDTH;
+  region.texture.height     = TRANSFER_HEIGHT;
+  region.texture.depth      = 1u;
+  region.texture.layerCount = 1u;
+  for (uint32_t iteration = 0u; iteration < 8u; iteration++) {
+    if (GPUAcquireCommandBuffer(queue,
+                                "tight-texture-copy",
+                                &cmdb) != GPU_OK ||
+        !cmdb || !(copyPass = GPUBeginCopyPass(cmdb, "tight-texture-copy"))) {
+      fprintf(stderr, "tight texture command setup failed\n");
+      goto cleanup;
+    }
+
+    region.bufferOffset = SOURCE_OFFSET;
+    GPUCopyBufferToTexture(copyPass, source, texture, &region);
+    region.bufferOffset = DESTINATION_OFFSET;
+    GPUCopyTextureToBuffer(copyPass, texture, destination, &region);
+    GPUEndCopyPass(copyPass);
+    copyPass = NULL;
+
+    ok   = transfer_submit(device, queue, cmdb);
+    cmdb = NULL;
+    if (!ok) {
+      goto cleanup;
+    }
+    if (iteration == 0u) {
+      GPUResetStats(device);
+    }
+  }
+  if (device->currentFrameStats.hotPathAllocCount != 0u ||
+      device->currentFrameStats.hotPathFreeCount != 0u) {
+    fprintf(stderr, "tight texture copy allocated after warm-up\n");
+    ok = 0;
+    goto cleanup;
+  }
+  if (GPUQueueReadBuffer(queue,
+                         destination,
+                         0u,
+                         destinationBytes,
+                         sizeof(destinationBytes)) != GPU_OK ||
+      memcmp(sourceBytes + SOURCE_OFFSET,
+             destinationBytes + DESTINATION_OFFSET,
+             TRANSFER_IMAGE_BYTES) != 0) {
+    fprintf(stderr, "tight texture copy readback mismatch\n");
+    ok = 0;
+  }
+
+cleanup:
+  if (copyPass) {
+    GPUEndCopyPass(copyPass);
+  }
+  GPUDestroyTexture(texture);
+  GPUDestroyBuffer(destination);
+  GPUDestroyBuffer(source);
+  return ok;
+}
+
+static int
 check_array_mip_transfers(GPUDevice *device) {
   GPUQueue                     *queue;
   GPUCommandBuffer             *cmdb;
@@ -950,7 +1092,8 @@ cleanup:
 
 int
 gpu_test_texture_transfer(GPUDevice *device) {
-  return check_array_mip_transfers(device) &&
+  return check_tight_texture_copies(device) &&
+         check_array_mip_transfers(device) &&
          check_3d_texture_transfers(device) &&
          check_same_texture_copies(device) &&
          check_depth_stencil_plane_copies(
