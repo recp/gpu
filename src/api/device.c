@@ -1089,13 +1089,23 @@ GPUResetStats(GPUDevice *device) {
 
 GPU_HIDE
 GPUResult
-gpuDeviceBeginFrame(GPUDevice *device) {
-  if (!device) {
+gpuDevicePrepareFrame(GPUDevice *device, uint32_t *outFrameIndex) {
+  if (!device || !outFrameIndex) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  return gpuDevicePrepareFrameSlot(device, outFrameIndex);
+}
+
+GPU_HIDE
+void
+gpuDeviceActivateFrame(GPUDevice *device, uint32_t frameIndex) {
+  if (!device) {
+    return;
+  }
+
   memset(&device->currentFrameStats, 0, sizeof(device->currentFrameStats));
-  return gpuDeviceAdvanceFrameSlot(device);
+  gpuDeviceActivateFrameSlot(device, frameIndex);
 }
 
 GPU_HIDE

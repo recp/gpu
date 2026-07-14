@@ -75,9 +75,10 @@ gpu_frameClockElapsedMs(const GPUFrame *frame) {
 GPU_EXPORT
 GPUFrame*
 GPUBeginFrame(GPUSwapchain* swapchain) {
-  GPUApi *api;
+  GPUApi    *api;
   GPUDevice *device;
-  GPUFrame *frame;
+  GPUFrame  *frame;
+  uint32_t   frameIndex;
 
   if (!swapchain)
     return NULL;
@@ -86,11 +87,12 @@ GPUBeginFrame(GPUSwapchain* swapchain) {
     return NULL;
   if (!api->frame.beginFrame)
     return NULL;
-  if (gpuDeviceBeginFrame(device) != GPU_OK)
+  if (gpuDevicePrepareFrame(device, &frameIndex) != GPU_OK)
     return NULL;
 
   frame = api->frame.beginFrame(api, swapchain);
   if (frame) {
+    gpuDeviceActivateFrame(device, frameIndex);
     frame->device = device;
     if (frame->target) {
       frame->target->device = frame->device;

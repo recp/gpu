@@ -126,13 +126,16 @@ gpuDeviceResetCacheStats(GPUDevice *device) {
 }
 
 static inline GPUResult
-gpuDeviceAdvanceFrameSlot(GPUDevice *device) {
-  GPUTransientChunk *chunk;
-  GPUFence          *fence;
-  GPUResult          result;
-  uint32_t           nextFrameIndex;
+gpuDevicePrepareFrameSlot(GPUDevice *device, uint32_t *outFrameIndex) {
+  GPUFence *fence;
+  GPUResult result;
+  uint32_t  nextFrameIndex;
 
-  if (!device || !device->transientConfigured) {
+  if (!device || !outFrameIndex) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!device->transientConfigured) {
+    *outFrameIndex = device->transientFrameIndex;
     return GPU_OK;
   }
 
@@ -151,21 +154,47 @@ gpuDeviceAdvanceFrameSlot(GPUDevice *device) {
       return result;
     }
   }
+
+  *outFrameIndex = nextFrameIndex;
+  return GPU_OK;
+}
+
+static inline void
+gpuDeviceActivateFrameSlot(GPUDevice *device, uint32_t frameIndex) {
+  GPUTransientChunk *chunk;
+
+  if (!device || !device->transientConfigured) {
+    return;
+  }
+
   if (device->transientFrameBegun &&
-      nextFrameIndex <= device->transientFrameIndex) {
+      frameIndex <= device->transientFrameIndex) {
     device->allocatorStats.ringWrapCount++;
   }
 
-  device->transientFrameIndex             = nextFrameIndex;
-  device->transientFrameOffset            = 0u;
-  device->transientFrameBegun             = true;
-  device->allocatorStats.ringUsedBytes    = 0u;
+  device->transientFrameIndex          = frameIndex;
+  device->transientFrameOffset         = 0u;
+  device->transientFrameBegun          = true;
+  device->allocatorStats.ringUsedBytes = 0u;
 
   for (chunk = device->transientChunks; chunk; chunk = chunk->next) {
-    if (chunk->frameIndex == nextFrameIndex) {
+    if (chunk->frameIndex == frameIndex) {
       chunk->offset = 0u;
     }
   }
+}
+
+static inline GPUResult
+gpuDeviceAdvanceFrameSlot(GPUDevice *device) {
+  GPUResult result;
+  uint32_t  frameIndex;
+
+  result = gpuDevicePrepareFrameSlot(device, &frameIndex);
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  gpuDeviceActivateFrameSlot(device, frameIndex);
   return GPU_OK;
 }
 
@@ -226,7 +255,11 @@ gpuDeviceRecordDraws(GPUDevice *device, uint32_t drawCount) {
 
 GPU_HIDE
 GPUResult
-gpuDeviceBeginFrame(GPUDevice *device);
+gpuDevicePrepareFrame(GPUDevice *device, uint32_t *outFrameIndex);
+
+GPU_HIDE
+void
+gpuDeviceActivateFrame(GPUDevice *device, uint32_t frameIndex);
 
 GPU_HIDE
 void

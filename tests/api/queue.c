@@ -28,6 +28,7 @@ static uint32_t         gScopedSubmitCalls;
 static uint32_t         gScopedSubmitCount;
 static uint32_t         gScopedFrameBeginCalls;
 static uint32_t         gScopedFrameEndCalls;
+static bool             gScopedFrameSucceeds;
 static bool             gScopedPresentSucceeds;
 
 static GPUAdapter gOwnershipAdapter;
@@ -507,13 +508,17 @@ begin_scoped_frame(GPUApi       * __restrict api,
                    GPUSwapchain * __restrict swapchain) {
   (void)api;
   (void)swapchain;
+  gScopedFrameBeginCalls++;
+  if (!gScopedFrameSucceeds) {
+    return NULL;
+  }
+
   memset(&gScopedFrame, 0, sizeof(gScopedFrame));
   memset(&gScopedFrameTarget, 0, sizeof(gScopedFrameTarget));
   memset(&gScopedFrameTargetView, 0, sizeof(gScopedFrameTargetView));
   gScopedFrame.drawable   = &gScopedFrame;
   gScopedFrame.target     = &gScopedFrameTarget;
   gScopedFrame.targetView = &gScopedFrameTargetView;
-  gScopedFrameBeginCalls++;
   return &gScopedFrame;
 }
 
@@ -535,6 +540,7 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   GPUCommandBuffer    aliasCmdb  = {0};
   GPUCommandBuffer    batch[2]   = {0};
   GPUQueueSubmitInfo  submitInfo = {0};
+  GPUTransientChunk   transientChunk = {0};
   GPUApi              scopedApi;
   GPUDevice           device    = {0};
   GPUSwapchain        swapchain = {0};
@@ -565,6 +571,7 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   gScopedFrameBeginCalls                   = 0u;
   gScopedFrameEndCalls                     = 0u;
   gScopedPresentSucceeds                   = false;
+  gScopedFrameSucceeds                     = true;
 
   queue = GPUGetQueue(&device, GPU_QUEUE_GRAPHICS, 0u);
   cmdb  = NULL;
@@ -639,6 +646,28 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
       gScopedPresentCalls != 3u || gScopedSubmitCalls != 1u ||
       gScopedFrameBeginCalls != 2u || gScopedFrameEndCalls != 2u) {
     fprintf(stderr, "failed present was submitted\n");
+    return 0;
+  }
+
+  transientChunk.offset                  = 512u;
+  transientChunk.frameIndex              = 2u;
+  device.transientChunks                 = &transientChunk;
+  device.transientConfig.framesInFlight = 3u;
+  device.transientFrameOffset            = 256u;
+  device.transientFrameIndex             = 1u;
+  device.allocatorStats.ringUsedBytes    = 256u;
+  device.transientConfigured             = true;
+  device.transientFrameBegun             = true;
+  gScopedFrameSucceeds                   = false;
+  device.currentFrameStats.requestedBindCalls = 7u;
+  if (GPUBeginFrame(&swapchain) != NULL ||
+      device.transientFrameIndex != 1u ||
+      device.transientFrameOffset != 256u ||
+      device.allocatorStats.ringUsedBytes != 256u ||
+      device.currentFrameStats.requestedBindCalls != 7u ||
+      transientChunk.offset != 512u ||
+      gScopedFrameBeginCalls != 3u || gScopedFrameEndCalls != 2u) {
+    fprintf(stderr, "failed frame acquire changed transient state\n");
     return 0;
   }
 
