@@ -150,6 +150,8 @@ dx12_probeAdapter(GPUAdapterDX12 *adapter) {
                                            &adapter->maxSubgroupSize);
   adapter->shaderF16 = dxcModule &&
                        dx12_supportsShaderF16(device, shaderModel);
+  adapter->descriptorIndexing =
+    dxcModule && shaderModel >= D3D_SHADER_MODEL_6_0;
   if (dxcModule) {
     FreeLibrary(dxcModule);
   }
@@ -219,6 +221,8 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
   device->shaderF16    = device->dxcAvailable &&
                          dx12_supportsShaderF16(device->d3dDevice,
                                                device->shaderModel);
+  device->descriptorIndexing = device->dxcAvailable &&
+                               device->shaderModel >= D3D_SHADER_MODEL_6_0;
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   device->pixModule = LoadLibraryW(L"WinPixEventRuntime.dll");
   if (device->pixModule) {
@@ -517,6 +521,8 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
       return true;
     case GPU_FEATURE_SHADER_F16:
       return adapterDX12->shaderF16;
+    case GPU_FEATURE_DESCRIPTOR_INDEXING:
+      return adapterDX12->descriptorIndexing;
     case GPU_FEATURE_SUBGROUPS:
       return adapterDX12->subgroups;
     case GPU_FEATURE_TIMESTAMPS:
@@ -596,6 +602,10 @@ dx12_createDevice(GPUAdapter        * __restrict adapter,
   deviceDX12->shaderF16Enabled =
     (enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u;
   if (deviceDX12->shaderF16Enabled && !deviceDX12->shaderF16) {
+    goto err;
+  }
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u &&
+      !deviceDX12->descriptorIndexing) {
     goto err;
   }
   InitializeSRWLock(&deviceDX12->descriptorLock);

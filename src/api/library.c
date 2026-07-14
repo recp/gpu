@@ -90,6 +90,9 @@ gpu_featureFromUSLSemantic(uint32_t semanticId, GPUFeature *outFeature) {
     case USL_SEMANTIC_FEATURE_ID_SHADER_F16:
       *outFeature = GPU_FEATURE_SHADER_F16;
       return 1;
+    case USL_SEMANTIC_FEATURE_ID_DESCRIPTOR_INDEXING:
+      *outFeature = GPU_FEATURE_DESCRIPTOR_INDEXING;
+      return 1;
     default:
       return 0;
   }
@@ -1072,7 +1075,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   GPUApi                   *api;
   USCompileOutput          *compileOutput;
   USLTargetSpec             target;
-  USLCapabilityAtomDesc     targetAtoms[2];
+  USLCapabilityAtomDesc     targetAtoms[3];
   USCompileInput            compileInput;
   GPUResult                 rc;
   uint32_t                  targetAtomCount;
@@ -1094,6 +1097,8 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   if (api->backend == GPU_BACKEND_VULKAN) {
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
       target.profile = USL_TARGET_PROFILE_VULKAN_1_2;
+    }
+    if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
       if (us_cap_atom_init(
             &targetAtoms[targetAtomCount++],
             USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
@@ -1126,6 +1131,9 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
             0u) != USLOk) {
         return GPU_ERROR_BACKEND_FAILURE;
       }
+    } else if (GPUIsFeatureEnabled(device,
+                                   GPU_FEATURE_DESCRIPTOR_INDEXING)) {
+      target.profile = USL_TARGET_PROFILE_HLSL_SM_6_0;
     }
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUPS)) {
       if (us_cap_atom_init(
@@ -1143,6 +1151,16 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
           &targetAtoms[targetAtomCount++],
           USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
           USL_SEMANTIC_FEATURE_ID_SUBGROUP,
+          0u,
+          0u) != USLOk) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_DESCRIPTOR_INDEXING)) {
+    if (us_cap_atom_init(
+          &targetAtoms[targetAtomCount++],
+          USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+          USL_SEMANTIC_FEATURE_ID_DESCRIPTOR_INDEXING,
           0u,
           0u) != USLOk) {
       return GPU_ERROR_BACKEND_FAILURE;

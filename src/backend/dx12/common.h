@@ -49,6 +49,7 @@ typedef struct GPUAdapterDX12 {
   bool                  formatCapsReady;
   bool                  subgroups;
   bool                  shaderF16;
+  bool                  descriptorIndexing;
   GPUFormatCapabilities formatCaps[GPU_FORMAT_COUNT];
 } GPUAdapterDX12;
 
@@ -91,6 +92,7 @@ typedef struct GPUDeviceDX12 {
   bool                        subgroups;
   bool                        shaderF16;
   bool                        shaderF16Enabled;
+  bool                        descriptorIndexing;
   bool                        queryResultsReliable;
   bool                        stencilPlaneCopies;
 } GPUDeviceDX12;

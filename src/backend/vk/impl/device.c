@@ -179,24 +179,30 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkPhysicalDeviceFeatures2KHR              features2 = {0};
   VkPhysicalDeviceShaderFloat16Int8Features float16Features = {0};
   VkPhysicalDeviceFeatures2KHR              float16Features2 = {0};
+  VkPhysicalDeviceDescriptorIndexingFeatures descriptorFeatures = {0};
+  VkPhysicalDeviceFeatures2                  descriptorFeatures2 = {0};
   VkResult                                  err;
   uint32_t                                  i, nExtensions;
   bool                                      incrementalPresentEnabled;
   bool                                      displayTimingEnabled;
   bool                                      dynamicExtension;
   bool                                      dynamicCore;
+  bool                                      descriptorExtension;
   bool                                      subgroupSizeControl;
   bool                                      float16Extension;
   bool                                      float16Core;
+  bool                                      descriptorCore;
 
   nExtensions               = 0;
   incrementalPresentEnabled = true;
   displayTimingEnabled      = true;
   dynamicExtension          = false;
   dynamicCore               = false;
+  descriptorExtension       = false;
   subgroupSizeControl       = false;
   float16Extension          = false;
   float16Core               = false;
+  descriptorCore            = false;
 
   adapter                   = calloc(1, sizeof(*adapter));
   adapterVk                 = calloc(1, sizeof(*adapterVk));
@@ -255,6 +261,9 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       VK__ADD_EXT_IF(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,
                      float16Extension = true);
 
+      VK__ADD_EXT_IF(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+                     descriptorExtension = true);
+
       if (!strcmp(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         dynamicExtension = true;
@@ -300,6 +309,9 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   float16Core = instanceVk &&
                 instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
                 adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
+  descriptorCore = instanceVk &&
+                   instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
+                   adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
   if (getFeatures2 && (float16Core || float16Extension)) {
     float16Features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES;
@@ -307,6 +319,16 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     float16Features2.pNext = &float16Features;
     getFeatures2(raw, &float16Features2);
     adapterVk->shaderFloat16 = float16Features.shaderFloat16;
+  }
+  if (getFeatures2 && (descriptorCore || descriptorExtension)) {
+    descriptorFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+    descriptorFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    descriptorFeatures2.pNext = &descriptorFeatures;
+    getFeatures2(raw, &descriptorFeatures2);
+    adapterVk->descriptorIndexing =
+      descriptorFeatures.shaderSampledImageArrayNonUniformIndexing &&
+      descriptorFeatures.shaderStorageImageArrayNonUniformIndexing;
   }
   if (getFeatures2 &&
       (dynamicCore ||
@@ -378,6 +400,8 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       return vk_hasSubgroupCapability(adapterVk);
     case GPU_FEATURE_SHADER_F16:
       return adapterVk->shaderFloat16;
+    case GPU_FEATURE_DESCRIPTOR_INDEXING:
+      return adapterVk->descriptorIndexing;
     default:
       return false;
   }
@@ -701,6 +725,7 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
   VkPhysicalDeviceFeatures coreFeatures = {0};
   VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamicFeatures = {0};
   VkPhysicalDeviceShaderFloat16Int8Features float16Features = {0};
+  VkPhysicalDeviceDescriptorIndexingFeatures descriptorFeatures = {0};
   VkDeviceCreateInfo       deviceCI = {0};
   VkResult                 result;
   uint32_t                 familyIndex;
@@ -731,6 +756,10 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
   adapterVk = adapter->_priv;
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u &&
       !adapterVk->shaderFloat16) {
+    goto err;
+  }
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u &&
+      !adapterVk->descriptorIndexing) {
     goto err;
   }
   planCount       = 0u;
@@ -811,6 +840,14 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
     float16Features.pNext         = (void *)deviceCI.pNext;
     float16Features.shaderFloat16 = VK_TRUE;
     deviceCI.pNext                = &float16Features;
+  }
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u) {
+    descriptorFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+    descriptorFeatures.pNext = (void *)deviceCI.pNext;
+    descriptorFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+    descriptorFeatures.shaderStorageImageArrayNonUniformIndexing = VK_TRUE;
+    deviceCI.pNext = &descriptorFeatures;
   }
 
   result = vkCreateDevice(adapterVk->physicalDevice,

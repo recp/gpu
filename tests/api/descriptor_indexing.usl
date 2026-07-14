@@ -1,0 +1,26 @@
+struct DescriptorArrayInput {
+  uv: float2 #attribute(0)
+}
+
+frag descriptor_array_fs(input: DescriptorArrayInput #stage_in,
+                         textures: [texture2d<float>; 2] #texture(0) #group(1),
+                         extra: texture2d<float> #texture(1) #group(1),
+                         samplers: [sampler; 2] #sampler(3) #group(1)) -> float4 {
+  return textures[0].sample(samplers[0], input.uv)
+       + extra.sample(samplers[1], input.uv)
+}
+
+kern(1, 1, 1) descriptor_array_cs(
+  textures: [texture2d<float>; 2] #texture(0) #group(1),
+  samplers: [sampler; 2] #sampler(3) #group(1),
+  selection: uint #buffer(4) #group(1),
+  inout output: [float4] #buffer(5) #group(1),
+  storageImages: [image2d<float, write>; 2] #texture(6) #group(1),
+  gid: uint3 #global_id
+) {
+  let index = nonuniform(selection)
+  let color = textures[index].sample(
+    samplers[index], float2(0.5), level(0.0))
+  output[0] = color
+  storageImages[index].write(color, gid.xy)
+}

@@ -201,6 +201,7 @@ typedef struct GPUAdapterVk {
   VkDisplayPropertiesKHR     displayProps;
   bool                       dynamicRendering;
   bool                       shaderFloat16;
+  bool                       descriptorIndexing;
 } GPUAdapterVk;
 
 typedef struct GPUDeviceVk {

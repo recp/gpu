@@ -60,8 +60,8 @@ create_color_texture(GPUDevice       *device,
          *outView;
 }
 
-int
-gpu_test_descriptor_array(GPUDevice *device, const char *bytecodePath) {
+static int
+gpu_testDescriptorArray(GPUDevice *device, const char *bytecodePath) {
   static const uint8_t red[4]   = {255u, 0u, 0u, 255u};
   static const uint8_t green[4] = {0u, 255u, 0u, 255u};
   static const uint8_t black[4] = {0u, 0u, 0u, 255u};
@@ -432,6 +432,65 @@ cleanup:
   GPUDestroyComputePipeline(pipeline);
   GPUDestroyShaderLayout(shaderLayout);
   GPUDestroyShaderLibrary(library);
+  free(bytecode);
+  return ok;
+}
+
+int
+gpu_test_descriptor_array(GPUDevice *device, const char *bytecodePath) {
+  return gpu_testDescriptorArray(device, bytecodePath);
+}
+
+int
+gpu_test_descriptor_indexing(GPUAdapter *adapter, const char *bytecodePath) {
+  GPUFeature          feature         = GPU_FEATURE_DESCRIPTOR_INDEXING;
+  GPUDeviceCreateInfo deviceInfo      = {0};
+  GPUDevice          *disabledDevice  = NULL;
+  GPUShaderLibrary   *disabledLibrary = NULL;
+  GPUDevice          *device          = NULL;
+  void               *bytecode        = NULL;
+  uint64_t            bytecodeSize    = 0u;
+  int                 ok              = 0;
+
+  if (!GPUIsFeatureSupported(adapter, feature)) {
+    return 1;
+  }
+  if (!bytecodePath ||
+      !(bytecode = gpu_test_read_file(bytecodePath, &bytecodeSize))) {
+    fprintf(stderr, "descriptor indexing artifact load failed\n");
+    goto cleanup;
+  }
+
+  deviceInfo.chain.sType      = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  deviceInfo.chain.structSize = sizeof(deviceInfo);
+  if (GPUCreateDevice(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
+      !disabledDevice || GPUIsFeatureEnabled(disabledDevice, feature) ||
+      GPUCreateShaderLibraryFromUSL(disabledDevice,
+                                    bytecode,
+                                    bytecodeSize,
+                                    &disabledLibrary) == GPU_OK ||
+      disabledLibrary) {
+    fprintf(stderr,
+            "descriptor indexing was accepted without feature enablement\n");
+    goto cleanup;
+  }
+  GPUDestroyDevice(disabledDevice);
+  disabledDevice = NULL;
+
+  deviceInfo.required.featureCount = 1u;
+  deviceInfo.required.pFeatures    = &feature;
+  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+      !GPUIsFeatureEnabled(device, feature)) {
+    fprintf(stderr, "descriptor indexing feature enablement failed\n");
+    goto cleanup;
+  }
+
+  ok = gpu_testDescriptorArray(device, bytecodePath);
+
+cleanup:
+  GPUDestroyShaderLibrary(disabledLibrary);
+  GPUDestroyDevice(disabledDevice);
+  GPUDestroyDevice(device);
   free(bytecode);
   return ok;
 }
