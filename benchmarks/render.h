@@ -17,6 +17,8 @@
 #ifndef gpu_bench_render_h
 #define gpu_bench_render_h
 
+#include "bench.h"
+
 #include <gpu/gpu.h>
 
 #include <stdbool.h>
@@ -45,6 +47,7 @@ typedef struct BenchRender {
   GPUTextureView       *targetView;
   GPUFence             *fence;
   GPUAdapterProperties  adapterProperties;
+  BenchProcessMemory    baselineMemory;
   bool                  requiredUnsupported;
 } BenchRender;
 

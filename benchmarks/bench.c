@@ -23,8 +23,14 @@
 
 #if defined(_WIN32) || defined(WIN32)
 #  include <windows.h>
+#  include <psapi.h>
 #else
+#  include <sys/resource.h>
 #  include <time.h>
+#  include <unistd.h>
+#  if defined(__APPLE__)
+#    include <mach/mach.h>
+#  endif
 #endif
 
 static int
@@ -120,6 +126,68 @@ bench_percentile(double *values, size_t count, double percentile) {
   qsort(values, count, sizeof(*values), bench_compare);
   index = (size_t)(percentile * (double)(count - 1u) + 0.5);
   return values[index];
+}
+
+bool
+bench_processMemory(BenchProcessMemory *outMemory) {
+  if (!outMemory) {
+    return false;
+  }
+  memset(outMemory, 0, sizeof(*outMemory));
+#if defined(_WIN32) || defined(WIN32)
+  PROCESS_MEMORY_COUNTERS counters;
+
+  memset(&counters, 0, sizeof(counters));
+  counters.cb = sizeof(counters);
+  if (!K32GetProcessMemoryInfo(GetCurrentProcess(),
+                               &counters,
+                               sizeof(counters))) {
+    return false;
+  }
+  outMemory->residentBytes     = (uint64_t)counters.WorkingSetSize;
+  outMemory->peakResidentBytes = (uint64_t)counters.PeakWorkingSetSize;
+  return true;
+#elif defined(__APPLE__)
+  mach_task_basic_info_data_t info;
+  mach_msg_type_number_t      count;
+  struct rusage               usage;
+
+  count = MACH_TASK_BASIC_INFO_COUNT;
+  if (task_info(mach_task_self(),
+                MACH_TASK_BASIC_INFO,
+                (task_info_t)&info,
+                &count) != KERN_SUCCESS ||
+      getrusage(RUSAGE_SELF, &usage) != 0) {
+    return false;
+  }
+  outMemory->residentBytes     = (uint64_t)info.resident_size;
+  outMemory->peakResidentBytes = (uint64_t)usage.ru_maxrss;
+  return true;
+#elif defined(__linux__)
+  struct rusage usage;
+  long          residentPages;
+  long          pageSize;
+  FILE         *statm;
+
+  statm = fopen("/proc/self/statm", "r");
+  if (!statm || fscanf(statm, "%*lu %ld", &residentPages) != 1) {
+    if (statm) {
+      fclose(statm);
+    }
+    return false;
+  }
+  fclose(statm);
+  pageSize = sysconf(_SC_PAGESIZE);
+  if (residentPages < 0 || pageSize <= 0 ||
+      getrusage(RUSAGE_SELF, &usage) != 0) {
+    return false;
+  }
+  outMemory->residentBytes = (uint64_t)residentPages * (uint64_t)pageSize;
+  outMemory->peakResidentBytes = (uint64_t)usage.ru_maxrss * 1024u;
+  return true;
+#else
+  return false;
+#endif
 }
 
 void *

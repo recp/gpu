@@ -195,6 +195,7 @@ bench_renderInit(BenchRender             *bench,
     return false;
   }
   memset(bench, 0, sizeof(*bench));
+  (void)bench_processMemory(&bench->baselineMemory);
   memset(&instanceInfo, 0, sizeof(instanceInfo));
   memset(&deviceInfo, 0, sizeof(deviceInfo));
   memset(&runtimeConfig, 0, sizeof(runtimeConfig));
@@ -521,6 +522,7 @@ bench_renderPrint(const char              *title,
   double gpuP95;
   double gpuP99;
   double frames;
+  BenchProcessMemory processMemory;
 
   median = bench_percentile(metrics->repeatMedians, config->repeats, 0.5);
   p95    = bench_percentile(metrics->samples, metrics->sampleCount, 0.95);
@@ -571,6 +573,30 @@ bench_renderPrint(const char              *title,
   printf("hot-path max free : %" PRIu64 " calls, %" PRIu64 " bytes\n",
          metrics->maxFreeCount,
          metrics->maxFreeBytes);
+  if (bench_processMemory(&processMemory) &&
+      bench->baselineMemory.residentBytes > 0u) {
+    double residentDelta;
+    double peakDelta;
+
+    residentDelta = processMemory.residentBytes >
+                      bench->baselineMemory.residentBytes
+                      ? (double)(processMemory.residentBytes -
+                                 bench->baselineMemory.residentBytes)
+                      : 0.0;
+    peakDelta = processMemory.peakResidentBytes >
+                  bench->baselineMemory.peakResidentBytes
+                  ? (double)(processMemory.peakResidentBytes -
+                             bench->baselineMemory.peakResidentBytes)
+                  : 0.0;
+    printf("process memory: resident %.2f MiB (+%.2f), peak %.2f MiB "
+           "(+%.2f)\n",
+           (double)processMemory.residentBytes / (1024.0 * 1024.0),
+           residentDelta / (1024.0 * 1024.0),
+           (double)processMemory.peakResidentBytes / (1024.0 * 1024.0),
+           peakDelta / (1024.0 * 1024.0));
+  } else {
+    printf("process memory: unavailable\n");
+  }
 }
 
 bool

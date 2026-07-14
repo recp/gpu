@@ -23,6 +23,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+typedef struct BenchProcessMemory {
+  uint64_t residentBytes;
+  uint64_t peakResidentBytes;
+} BenchProcessMemory;
+
 const char *
 bench_backendName(GPUBackend backend);
 
@@ -37,6 +42,9 @@ bench_now(void);
 
 double
 bench_percentile(double *values, size_t count, double percentile);
+
+bool
+bench_processMemory(BenchProcessMemory *outMemory);
 
 void *
 bench_read(const char *path, uint64_t *outSize);
