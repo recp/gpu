@@ -23,6 +23,11 @@
 #  include <time.h>
 #endif
 
+enum {
+  GPU_SUBMIT_EX_MAX_COMMAND_BUFFERS = 64u,
+  GPU_SUBMIT_EX_MAX_SEMAPHORES      = 64u
+};
+
 struct GPUFence {
 #if defined(_WIN32) || defined(WIN32)
   CRITICAL_SECTION lock;
@@ -32,10 +37,6 @@ struct GPUFence {
   pthread_cond_t  cond;
 #endif
   bool signaled;
-};
-
-struct GPUSemaphore {
-  uint64_t initialValue;
 };
 
 static void
@@ -226,26 +227,20 @@ GPUCommit(GPUCommandBuffer * __restrict cmdb) {
   (void)GPUQueueSubmit(cmdb->_queue, &submitInfo);
 }
 
-GPU_EXPORT
-GPUResult
-GPUQueueSubmit(GPUQueue                 * __restrict cmdq,
-               const GPUQueueSubmitInfo * __restrict info) {
+static GPUResult
+gpu_prepareQueueSubmit(GPUQueue                  *cmdq,
+                       uint32_t                   commandBufferCount,
+                       GPUCommandBuffer * const *commandBuffers,
+                       GPUFence                  *fence,
+                       GPUApi                   **outApi) {
   GPUApi           *api;
   GPUDevice        *device;
   GPUFence         *transientFence;
   GPUCommandBuffer *lastCmdb;
-  GPUResult         result;
   uint32_t          transientFrameIndex;
   bool              transientFrameTagged;
 
-  if (!cmdq || !info || info->commandBufferCount == 0 || !info->ppCommandBuffers) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
-      info->chain.sType != GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
+  if (!cmdq || commandBufferCount == 0u || !commandBuffers || !outApi) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -258,16 +253,16 @@ GPUQueueSubmit(GPUQueue                 * __restrict cmdq,
   transientFence       = NULL;
   transientFrameIndex  = 0u;
   transientFrameTagged = false;
-  for (uint32_t i = 0; i < info->commandBufferCount; i++) {
+  for (uint32_t i = 0; i < commandBufferCount; i++) {
     GPUCommandBuffer *cmdb;
 
-    cmdb = info->ppCommandBuffers[i];
+    cmdb = commandBuffers[i];
     if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder ||
         cmdb->_pipelineStatsQuery || cmdb->_queue != cmdq) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
     for (uint32_t j = 0; j < i; j++) {
-      if (info->ppCommandBuffers[j] == cmdb) {
+      if (commandBuffers[j] == cmdb) {
         return GPU_ERROR_INVALID_ARGUMENT;
       }
     }
@@ -285,7 +280,7 @@ GPUQueueSubmit(GPUQueue                 * __restrict cmdq,
     }
   }
 
-  lastCmdb = info->ppCommandBuffers[info->commandBufferCount - 1u];
+  lastCmdb = commandBuffers[commandBufferCount - 1u];
   if (transientFrameTagged) {
     if (!api->cmdque.commandBufferOnComplete) {
       return GPU_ERROR_UNSUPPORTED;
@@ -295,21 +290,54 @@ GPUQueueSubmit(GPUQueue                 * __restrict cmdq,
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   }
-  if (info->fence) {
+  if (fence) {
     if (!api->cmdque.commandBufferOnComplete) {
       return GPU_ERROR_UNSUPPORTED;
     }
 
-    gpu_resetFenceInternal(info->fence);
-    lastCmdb->_submitFence = info->fence;
+    gpu_resetFenceInternal(fence);
+    lastCmdb->_submitFence = fence;
   }
   if (transientFence) {
     GPUResetFence(transientFence);
     lastCmdb->_transientFence = transientFence;
   }
 
-  for (uint32_t i = 0; i < info->commandBufferCount; i++) {
-    info->ppCommandBuffers[i]->_submitted = true;
+  for (uint32_t i = 0; i < commandBufferCount; i++) {
+    commandBuffers[i]->_submitted = true;
+  }
+
+  *outApi = api;
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUQueueSubmit(GPUQueue                 * __restrict cmdq,
+               const GPUQueueSubmitInfo * __restrict info) {
+  GPUApi    *api;
+  GPUResult  result;
+
+  if (!cmdq || !info || info->commandBufferCount == 0u ||
+      !info->ppCommandBuffers) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+      info->chain.sType != GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->chain.structSize != 0u &&
+      info->chain.structSize < sizeof(*info)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  result = gpu_prepareQueueSubmit(cmdq,
+                                  info->commandBufferCount,
+                                  info->ppCommandBuffers,
+                                  info->fence,
+                                  &api);
+  if (result != GPU_OK) {
+    return result;
   }
 
   if (info->commandBufferCount > 1u && api->cmdque.submit) {
@@ -335,7 +363,9 @@ GPU_EXPORT
 GPUResult
 GPUQueueSubmitEx(GPUQueue                   * __restrict cmdq,
                  const GPUQueueSubmitExInfo * __restrict info) {
-  GPUQueueSubmitInfo baseInfo;
+  GPUApi            *api;
+  GPUPipelineStageMask validStages;
+  GPUResult          result;
 
   if (!cmdq || !info) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -351,30 +381,54 @@ GPUQueueSubmitEx(GPUQueue                   * __restrict cmdq,
       (info->signalCount > 0u && !info->pSignals)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  if (info->waitCount == 0u && info->signalCount == 0u) {
+    GPUQueueSubmitInfo baseInfo = {0};
 
+    baseInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+    baseInfo.chain.structSize   = sizeof(baseInfo);
+    baseInfo.commandBufferCount = info->commandBufferCount;
+    baseInfo.ppCommandBuffers   = info->ppCommandBuffers;
+    baseInfo.fence              = info->fence;
+    return GPUQueueSubmit(cmdq, &baseInfo);
+  }
+  if (info->commandBufferCount > GPU_SUBMIT_EX_MAX_COMMAND_BUFFERS ||
+      info->waitCount > GPU_SUBMIT_EX_MAX_SEMAPHORES ||
+      info->signalCount > GPU_SUBMIT_EX_MAX_SEMAPHORES) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  validStages = GPU_STAGE_TOP | GPU_STAGE_VERTEX | GPU_STAGE_FRAGMENT |
+                GPU_STAGE_COMPUTE | GPU_STAGE_TRANSFER | GPU_STAGE_BOTTOM;
   for (uint32_t i = 0; i < info->waitCount; i++) {
-    if (!info->pWaits[i].semaphore) {
+    GPUSemaphore *semaphore;
+
+    semaphore = info->pWaits[i].semaphore;
+    if (!semaphore || semaphore->_device != cmdq->_device ||
+        info->pWaits[i].waitStages == 0u ||
+        (info->pWaits[i].waitStages & ~validStages) != 0u) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   }
   for (uint32_t i = 0; i < info->signalCount; i++) {
-    if (!info->pSignals[i].semaphore) {
+    GPUSemaphore *semaphore;
+
+    semaphore = info->pSignals[i].semaphore;
+    if (!semaphore || semaphore->_device != cmdq->_device) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   }
 
-  if (info->waitCount > 0u || info->signalCount > 0u) {
+  api = gpuCommandQueueApi(cmdq);
+  if (!api || !api->cmdque.submitEx) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  memset(&baseInfo, 0, sizeof(baseInfo));
-  baseInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
-  baseInfo.chain.structSize = sizeof(baseInfo);
-  baseInfo.commandBufferCount = info->commandBufferCount;
-  baseInfo.ppCommandBuffers = info->ppCommandBuffers;
-  baseInfo.fence = info->fence;
-
-  return GPUQueueSubmit(cmdq, &baseInfo);
+  result = gpu_prepareQueueSubmit(cmdq,
+                                  info->commandBufferCount,
+                                  info->ppCommandBuffers,
+                                  info->fence,
+                                  &api);
+  return result == GPU_OK ? api->cmdque.submitEx(cmdq, info) : result;
 }
 
 GPU_EXPORT
@@ -536,7 +590,9 @@ GPUResult
 GPUCreateSemaphore(GPUDevice                 * __restrict device,
                    const GPUSemaphoreCreateInfo * __restrict info,
                    GPUSemaphore              ** __restrict outSemaphore) {
+  GPUApi       *api;
   GPUSemaphore *semaphore;
+  GPUResult     result;
 
   if (!outSemaphore) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -554,13 +610,23 @@ GPUCreateSemaphore(GPUDevice                 * __restrict device,
   if (info && info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  api = gpuDeviceApi(device);
+  if (!api || !api->cmdque.createSemaphore ||
+      !api->cmdque.destroySemaphore) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
 
   semaphore = calloc(1, sizeof(*semaphore));
   if (!semaphore) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  semaphore->initialValue = info ? info->initialValue : 0u;
+  semaphore->_device = device;
+  result = api->cmdque.createSemaphore(device, info, semaphore);
+  if (result != GPU_OK) {
+    free(semaphore);
+    return result;
+  }
   *outSemaphore = semaphore;
   return GPU_OK;
 }
@@ -568,5 +634,14 @@ GPUCreateSemaphore(GPUDevice                 * __restrict device,
 GPU_EXPORT
 void
 GPUDestroySemaphore(GPUSemaphore * __restrict semaphore) {
+  GPUApi *api;
+
+  if (!semaphore) {
+    return;
+  }
+  api = gpuDeviceApi(semaphore->_device);
+  if (api && api->cmdque.destroySemaphore) {
+    api->cmdque.destroySemaphore(semaphore);
+  }
   free(semaphore);
 }

@@ -1453,6 +1453,7 @@ check_queue_submit_ex_semaphore(GPUDevice *device) {
     return 0;
   }
 
+  GPUResetStats(device);
   cmdb = NULL;
   if (GPUAcquireCommandBuffer(queue, "submit-ex", &cmdb) != GPU_OK || !cmdb) {
     fprintf(stderr, "failed to acquire command buffer for submit ex\n");
@@ -1500,12 +1501,12 @@ check_queue_submit_ex_semaphore(GPUDevice *device) {
 
   wait.semaphore = semaphore;
   wait.value = 1u;
-  wait.waitStages = GPU_STAGE_TOP;
+  wait.waitStages = 0u;
   submitInfo.pWaits = &wait;
-  ok = ok && GPUQueueSubmitEx(queue, &submitInfo) == GPU_ERROR_UNSUPPORTED;
+  ok = ok && GPUQueueSubmitEx(queue, &submitInfo) == GPU_ERROR_INVALID_ARGUMENT;
 
-  submitInfo.waitCount = 0u;
-  submitInfo.pWaits = NULL;
+  wait.waitStages = GPU_STAGE_TOP;
+
   submitInfo.signalCount = 1u;
   submitInfo.pSignals = NULL;
   ok = ok && GPUQueueSubmitEx(queue, &submitInfo) == GPU_ERROR_INVALID_ARGUMENT;
@@ -1513,19 +1514,42 @@ check_queue_submit_ex_semaphore(GPUDevice *device) {
   signal.semaphore = semaphore;
   signal.value = 2u;
   submitInfo.pSignals = &signal;
-  ok = ok && GPUQueueSubmitEx(queue, &submitInfo) == GPU_ERROR_UNSUPPORTED;
-
-  submitInfo.signalCount = 0u;
-  submitInfo.pSignals = NULL;
   submitInfo.fence = fence;
-  ok = ok &&
-       GPUQueueSubmitEx(queue, &submitInfo) == GPU_OK &&
-       GPUWaitFence(fence, UINT64_MAX) == GPU_OK &&
-       GPUIsFenceSignaled(fence);
+  if (!ok || GPUQueueSubmitEx(queue, &submitInfo) != GPU_OK ||
+      GPUWaitFence(fence, UINT64_MAX) != GPU_OK ||
+      !GPUIsFenceSignaled(fence)) {
+    fprintf(stderr, "first timeline semaphore submit failed\n");
+    GPUDestroyFence(fence);
+    GPUDestroySemaphore(semaphore);
+    return 0;
+  }
+
+  cmdb = NULL;
+  if (GPUAcquireCommandBuffer(queue, "submit-ex-chain", &cmdb) != GPU_OK ||
+      !cmdb) {
+    fprintf(stderr, "failed to acquire chained submit command buffer\n");
+    GPUDestroyFence(fence);
+    GPUDestroySemaphore(semaphore);
+    return 0;
+  }
+
+  buffers[0]   = cmdb;
+  wait.value   = 2u;
+  signal.value = 3u;
+  if (GPUQueueSubmitEx(queue, &submitInfo) != GPU_OK ||
+      GPUWaitFence(fence, UINT64_MAX) != GPU_OK ||
+      !GPUIsFenceSignaled(fence) ||
+      device->currentFrameStats.hotPathAllocCount != 0u ||
+      device->currentFrameStats.hotPathFreeCount != 0u) {
+    fprintf(stderr, "chained timeline semaphore submit failed\n");
+    GPUDestroyFence(fence);
+    GPUDestroySemaphore(semaphore);
+    return 0;
+  }
 
   GPUDestroyFence(fence);
   GPUDestroySemaphore(semaphore);
-  return ok;
+  return 1;
 }
 
 int

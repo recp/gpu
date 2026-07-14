@@ -202,6 +202,7 @@ typedef struct GPUAdapterVk {
   bool                       dynamicRendering;
   bool                       shaderFloat16;
   bool                       descriptorIndexing;
+  bool                       timelineSemaphore;
 } GPUAdapterVk;
 
 typedef struct GPUDeviceVk {
@@ -216,6 +217,7 @@ typedef struct GPUDeviceVk {
   VkBool32                   multiDrawIndirect;
   VkBool32                   independentBlend;
   bool                       dynamicRendering;
+  bool                       timelineSemaphore;
 } GPUDeviceVk;
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
@@ -335,6 +337,11 @@ typedef struct GPUBindGroupVk {
   VkDescriptorPool pool;
   VkDescriptorSet  set;
 } GPUBindGroupVk;
+
+typedef struct GPUSemaphoreVk {
+  VkDevice    device;
+  VkSemaphore semaphore;
+} GPUSemaphoreVk;
 
 typedef struct GPUQueueVk         GPUQueueVk;
 typedef struct GPUCommandBufferVk GPUCommandBufferVk;

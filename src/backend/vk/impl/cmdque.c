@@ -1335,6 +1335,298 @@ vk_submitCommandBuffers(GPUQueue                  * __restrict queueHandle,
   return GPU_OK;
 }
 
+static VkPipelineStageFlags
+vk_submitWaitStages(GPUPipelineStageMask stages) {
+  VkPipelineStageFlags native;
+
+  native = 0u;
+  if (stages & GPU_STAGE_TOP)
+    native |= VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+  if (stages & GPU_STAGE_VERTEX)
+    native |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+  if (stages & GPU_STAGE_FRAGMENT)
+    native |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+  if (stages & GPU_STAGE_COMPUTE)
+    native |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+  if (stages & GPU_STAGE_TRANSFER)
+    native |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+  if (stages & GPU_STAGE_BOTTOM)
+    native |= VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+  return native;
+}
+
+static GPUResult
+vk_createSemaphore(GPUDevice                    *device,
+                   const GPUSemaphoreCreateInfo *info,
+                   GPUSemaphore                 *semaphore) {
+  GPUDeviceVk                       *deviceVk;
+  GPUSemaphoreVk                    *native;
+  VkSemaphoreTypeCreateInfo          typeInfo = {0};
+  VkSemaphoreCreateInfo              createInfo = {0};
+
+  deviceVk = device ? device->_priv : NULL;
+  if (!deviceVk || !deviceVk->device || !semaphore) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!deviceVk->timelineSemaphore) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  native = calloc(1, sizeof(*native));
+  if (!native) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  typeInfo.sType         = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
+  typeInfo.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+  typeInfo.initialValue  = info ? info->initialValue : 0u;
+  createInfo.sType       = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+  createInfo.pNext       = &typeInfo;
+  if (vkCreateSemaphore(deviceVk->device,
+                        &createInfo,
+                        NULL,
+                        &native->semaphore) != VK_SUCCESS) {
+    free(native);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  native->device  = deviceVk->device;
+  semaphore->_priv = native;
+  vk_setDebugName(device,
+                  VK_OBJECT_TYPE_SEMAPHORE,
+                  (uint64_t)(uintptr_t)native->semaphore,
+                  info ? gpuDeviceDebugLabel(device, info->label) : NULL);
+  return GPU_OK;
+}
+
+static void
+vk_destroySemaphore(GPUSemaphore *semaphore) {
+  GPUSemaphoreVk *native;
+
+  native = semaphore ? semaphore->_priv : NULL;
+  if (!native) {
+    return;
+  }
+  if (native->device && native->semaphore) {
+    vkDestroySemaphore(native->device, native->semaphore, NULL);
+  }
+  free(native);
+  semaphore->_priv = NULL;
+}
+
+static GPUResult
+vk_submitEx(GPUQueue                   *queueHandle,
+            const GPUQueueSubmitExInfo *info) {
+  GPUCommandBufferVk        *natives[VK_SUBMIT_STACK_COUNT];
+  VkCommandBuffer            commands[VK_SUBMIT_STACK_COUNT];
+  VkSemaphore                waits[VK_SUBMIT_STACK_COUNT + 1u];
+  VkSemaphore                signals[VK_SUBMIT_STACK_COUNT + 1u];
+  VkPipelineStageFlags       waitStages[VK_SUBMIT_STACK_COUNT + 1u];
+  uint64_t                   waitValues[VK_SUBMIT_STACK_COUNT + 1u];
+  uint64_t                   signalValues[VK_SUBMIT_STACK_COUNT + 1u];
+  GPUQueueVk                *queue;
+  GPUDeviceVk               *device;
+  GPUSwapchainVk            *swapchain;
+  GPUCommandBufferVk        *presentNative;
+  GPUFrameSyncVk            *frameSync;
+  VkFence                    submitFence;
+  VkTimelineSemaphoreSubmitInfo timelineInfo = {0};
+  VkSubmitInfo               submitInfo = {0};
+  VkPresentInfoKHR           presentInfo = {0};
+  GPUResult                  flushResult;
+  VkResult                   result;
+  VkResult                   presentResult;
+  uint32_t                   waitCount;
+  uint32_t                   signalCount;
+  bool                       frameFenceReset;
+
+  queue  = queueHandle ? queueHandle->_priv : NULL;
+  device = queueHandle && queueHandle->_device
+             ? queueHandle->_device->_priv
+             : NULL;
+  if (!queue || !device || !device->timelineSemaphore || !info ||
+      info->commandBufferCount == 0u ||
+      info->commandBufferCount > VK_SUBMIT_STACK_COUNT ||
+      info->waitCount > VK_SUBMIT_STACK_COUNT ||
+      info->signalCount > VK_SUBMIT_STACK_COUNT) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  swapchain     = NULL;
+  presentNative = NULL;
+  for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
+    natives[i] = info->ppCommandBuffers[i]
+                   ? info->ppCommandBuffers[i]->_priv
+                   : NULL;
+    if (!natives[i] || natives[i]->owner != queue || !natives[i]->command) {
+      vk__finishCommandBuffers(info->commandBufferCount,
+                               info->ppCommandBuffers,
+                               true);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    if (natives[i]->presentSwapchain) {
+      if (swapchain) {
+        vk__finishCommandBuffers(info->commandBufferCount,
+                                 info->ppCommandBuffers,
+                                 true);
+        return GPU_ERROR_INVALID_ARGUMENT;
+      }
+      swapchain     = natives[i]->presentSwapchain;
+      presentNative = natives[i];
+    }
+    commands[i] = natives[i]->command;
+  }
+
+  flushResult = vk__flushTransfers(queueHandle, false);
+  if (flushResult != GPU_OK) {
+    vk__finishCommandBuffers(info->commandBufferCount,
+                             info->ppCommandBuffers,
+                             true);
+    return flushResult;
+  }
+
+  frameSync       = NULL;
+  submitFence     = natives[info->commandBufferCount - 1u]->fence;
+  frameFenceReset = false;
+  if (swapchain) {
+    if (!swapchain->frameActive || !swapchain->frameScheduled ||
+        presentNative->presentFrameIndex >= swapchain->imageCount ||
+        presentNative->presentImageIndex >= swapchain->imageCount) {
+      vk__finishCommandBuffers(info->commandBufferCount,
+                               info->ppCommandBuffers,
+                               true);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    frameSync   = &swapchain->frameSync[presentNative->presentFrameIndex];
+    submitFence = frameSync->fence;
+  }
+
+  waitCount = info->waitCount;
+  for (uint32_t i = 0u; i < info->waitCount; i++) {
+    GPUSemaphoreVk *native;
+
+    native = info->pWaits[i].semaphore->_priv;
+    if (!native || native->device != device->device || !native->semaphore) {
+      vk__finishCommandBuffers(info->commandBufferCount,
+                               info->ppCommandBuffers,
+                               true);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    waits[i]      = native->semaphore;
+    waitValues[i] = info->pWaits[i].value;
+    waitStages[i] = vk_submitWaitStages(info->pWaits[i].waitStages);
+  }
+  if (frameSync) {
+    waits[waitCount]      = frameSync->imageAvailable;
+    waitValues[waitCount] = 0u;
+    waitStages[waitCount] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    waitCount++;
+  }
+
+  signalCount = info->signalCount;
+  for (uint32_t i = 0u; i < info->signalCount; i++) {
+    GPUSemaphoreVk *native;
+
+    native = info->pSignals[i].semaphore->_priv;
+    if (!native || native->device != device->device || !native->semaphore) {
+      vk__finishCommandBuffers(info->commandBufferCount,
+                               info->ppCommandBuffers,
+                               true);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    signals[i]      = native->semaphore;
+    signalValues[i] = info->pSignals[i].value;
+  }
+  if (frameSync) {
+    signals[signalCount]      = frameSync->renderFinished;
+    signalValues[signalCount] = 0u;
+    signalCount++;
+  }
+
+  result = VK_SUCCESS;
+  for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
+    vk__endFrameTime(natives[i]);
+    result = vkEndCommandBuffer(commands[i]);
+    if (result != VK_SUCCESS) {
+      break;
+    }
+  }
+  if (result == VK_SUCCESS) {
+    result = vkResetFences(device->device, 1u, &submitFence);
+    frameFenceReset = result == VK_SUCCESS && frameSync != NULL;
+  }
+  if (result == VK_SUCCESS) {
+    timelineInfo.sType =
+      VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
+    timelineInfo.waitSemaphoreValueCount   = waitCount;
+    timelineInfo.pWaitSemaphoreValues      = waitValues;
+    timelineInfo.signalSemaphoreValueCount = signalCount;
+    timelineInfo.pSignalSemaphoreValues    = signalValues;
+
+    submitInfo.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.pNext                = &timelineInfo;
+    submitInfo.waitSemaphoreCount   = waitCount;
+    submitInfo.pWaitSemaphores      = waits;
+    submitInfo.pWaitDstStageMask    = waitStages;
+    submitInfo.commandBufferCount   = info->commandBufferCount;
+    submitInfo.pCommandBuffers      = commands;
+    submitInfo.signalSemaphoreCount = signalCount;
+    submitInfo.pSignalSemaphores    = signals;
+    result = vkQueueSubmit(queue->queRaw, 1u, &submitInfo, submitFence);
+  }
+  if (result != VK_SUCCESS) {
+    if (frameFenceReset) {
+      (void)vk_restoreFrameFence(swapchain, frameSync);
+    }
+    vk__reportQueueError(info->ppCommandBuffers[0],
+                         "advanced queue submit",
+                         result);
+    vk__finishCommandBuffers(info->commandBufferCount,
+                             info->ppCommandBuffers,
+                             true);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  if (swapchain) {
+    swapchain->frameSubmitted = true;
+    presentInfo.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.waitSemaphoreCount = 1u;
+    presentInfo.pWaitSemaphores    = &frameSync->renderFinished;
+    presentInfo.swapchainCount     = 1u;
+    presentInfo.pSwapchains        = &swapchain->swapchain;
+    presentInfo.pImageIndices      = &presentNative->presentImageIndex;
+    presentResult = vkQueuePresentKHR(queue->queRaw, &presentInfo);
+    if (presentResult != VK_SUCCESS && presentResult != VK_SUBOPTIMAL_KHR) {
+      vk__reportQueueError(info->ppCommandBuffers[0],
+                           "advanced present",
+                           presentResult);
+    }
+  } else {
+    presentResult = VK_SUCCESS;
+  }
+
+  vk__queueLock(queue);
+  for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
+    natives[i]->submitFence = submitFence;
+    natives[i]->pendingNext = NULL;
+    if (queue->pendingTail) {
+      queue->pendingTail->pendingNext = natives[i];
+    } else {
+      queue->pendingHead = natives[i];
+    }
+    queue->pendingTail = natives[i];
+  }
+  queue->inFlightCount += info->commandBufferCount;
+  if (swapchain) {
+    swapchain->inFlightCommandCount++;
+  }
+  vk__queueSignal(queue);
+  vk__queueUnlock(queue);
+  return presentResult == VK_SUCCESS || presentResult == VK_SUBOPTIMAL_KHR
+           ? GPU_OK
+           : GPU_ERROR_BACKEND_FAILURE;
+}
+
 GPU_HIDE
 void
 vk_initCmdQue(GPUApiCommandQueue *apiQue) {
@@ -1345,4 +1637,7 @@ vk_initCmdQue(GPUApiCommandQueue *apiQue) {
   apiQue->commandBufferOnComplete = vk_commandBufferOnComplete;
   apiQue->commit                  = vk_commitCommandBuffer;
   apiQue->submit                  = vk_submitCommandBuffers;
+  apiQue->createSemaphore         = vk_createSemaphore;
+  apiQue->destroySemaphore        = vk_destroySemaphore;
+  apiQue->submitEx                = vk_submitEx;
 }

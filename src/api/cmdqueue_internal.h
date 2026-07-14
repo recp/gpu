@@ -26,6 +26,11 @@ struct GPUQueue {
   GPUQueueFlagBits bits;
 };
 
+struct GPUSemaphore {
+  void      *_priv;
+  GPUDevice *_device;
+};
+
 struct GPUCommandBuffer {
   void                         *_priv;
   GPUQueue                     *_queue;

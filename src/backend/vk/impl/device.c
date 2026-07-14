@@ -181,6 +181,8 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkPhysicalDeviceFeatures2KHR              float16Features2 = {0};
   VkPhysicalDeviceDescriptorIndexingFeatures descriptorFeatures = {0};
   VkPhysicalDeviceFeatures2                  descriptorFeatures2 = {0};
+  VkPhysicalDeviceTimelineSemaphoreFeatures  timelineFeatures = {0};
+  VkPhysicalDeviceFeatures2                  timelineFeatures2 = {0};
   VkResult                                  err;
   uint32_t                                  i, nExtensions;
   bool                                      incrementalPresentEnabled;
@@ -192,6 +194,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool                                      float16Extension;
   bool                                      float16Core;
   bool                                      descriptorCore;
+  bool                                      timelineCore;
 
   nExtensions               = 0;
   incrementalPresentEnabled = true;
@@ -203,6 +206,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   float16Extension          = false;
   float16Core               = false;
   descriptorCore            = false;
+  timelineCore              = false;
 
   adapter                   = calloc(1, sizeof(*adapter));
   adapterVk                 = calloc(1, sizeof(*adapterVk));
@@ -312,6 +316,9 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   descriptorCore = instanceVk &&
                    instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
                    adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
+  timelineCore = instanceVk &&
+                 instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
+                 adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
   if (getFeatures2 && (float16Core || float16Extension)) {
     float16Features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES;
@@ -329,6 +336,14 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     adapterVk->descriptorIndexing =
       descriptorFeatures.shaderSampledImageArrayNonUniformIndexing &&
       descriptorFeatures.shaderStorageImageArrayNonUniformIndexing;
+  }
+  if (getFeatures2 && timelineCore) {
+    timelineFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
+    timelineFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    timelineFeatures2.pNext = &timelineFeatures;
+    getFeatures2(raw, &timelineFeatures2);
+    adapterVk->timelineSemaphore = timelineFeatures.timelineSemaphore;
   }
   if (getFeatures2 &&
       (dynamicCore ||
@@ -726,6 +741,7 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
   VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamicFeatures = {0};
   VkPhysicalDeviceShaderFloat16Int8Features float16Features = {0};
   VkPhysicalDeviceDescriptorIndexingFeatures descriptorFeatures = {0};
+  VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeatures = {0};
   VkDeviceCreateInfo       deviceCI = {0};
   VkResult                 result;
   uint32_t                 familyIndex;
@@ -849,6 +865,13 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
     descriptorFeatures.shaderStorageImageArrayNonUniformIndexing = VK_TRUE;
     deviceCI.pNext = &descriptorFeatures;
   }
+  if (adapterVk->timelineSemaphore) {
+    timelineFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
+    timelineFeatures.pNext             = (void *)deviceCI.pNext;
+    timelineFeatures.timelineSemaphore = VK_TRUE;
+    deviceCI.pNext                      = &timelineFeatures;
+  }
 
   result = vkCreateDevice(adapterVk->physicalDevice,
                           &deviceCI,
@@ -869,6 +892,7 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
     adapterVk->props.limits.framebufferDepthSampleCounts;
   deviceVk->multiDrawIndirect = coreFeatures.multiDrawIndirect;
   deviceVk->independentBlend  = coreFeatures.independentBlend;
+  deviceVk->timelineSemaphore = adapterVk->timelineSemaphore;
   if (adapterVk->dynamicRendering) {
     deviceVk->beginRendering = (PFN_vkCmdBeginRenderingKHR)
       vkGetDeviceProcAddr(deviceVk->device, "vkCmdBeginRendering");

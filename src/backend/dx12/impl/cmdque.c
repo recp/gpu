@@ -1607,6 +1607,226 @@ dx12_submitCommandBuffers(GPUQueue                  * __restrict queueHandle,
   return GPU_OK;
 }
 
+static GPUResult
+dx12_createSemaphore(GPUDevice                    *device,
+                     const GPUSemaphoreCreateInfo *info,
+                     GPUSemaphore                 *semaphore) {
+  GPUDeviceDX12 *native;
+  ID3D12Fence   *fence;
+  HRESULT        result;
+
+  native = device ? device->_priv : NULL;
+  if (!native || !native->d3dDevice || !semaphore) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  fence = NULL;
+  result = native->d3dDevice->lpVtbl->CreateFence(
+    native->d3dDevice,
+    info ? info->initialValue : 0u,
+    D3D12_FENCE_FLAG_NONE,
+    &IID_ID3D12Fence,
+    (void **)&fence
+  );
+  if (FAILED(result)) {
+    return result == E_OUTOFMEMORY
+             ? GPU_ERROR_OUT_OF_MEMORY
+             : GPU_ERROR_BACKEND_FAILURE;
+  }
+
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  if (info && gpuDeviceDebugMarkersEnabled(device) &&
+      info->label && info->label[0] != '\0') {
+    wchar_t name[256];
+
+    if (MultiByteToWideChar(CP_UTF8,
+                            MB_ERR_INVALID_CHARS,
+                            info->label,
+                            -1,
+                            name,
+                            (int)GPU_ARRAY_LEN(name)) > 0) {
+      (void)fence->lpVtbl->SetName(fence, name);
+    }
+  }
+#endif
+
+  semaphore->_priv = fence;
+  return GPU_OK;
+}
+
+static void
+dx12_destroySemaphore(GPUSemaphore *semaphore) {
+  ID3D12Fence *fence;
+
+  fence = semaphore ? semaphore->_priv : NULL;
+  if (fence) {
+    fence->lpVtbl->Release(fence);
+  }
+  if (semaphore) {
+    semaphore->_priv = NULL;
+  }
+}
+
+static GPUResult
+dx12_submitEx(GPUQueue                   *queueHandle,
+              const GPUQueueSubmitExInfo *info) {
+  GPUCommandBufferDX12 *natives[DX12_SUBMIT_STACK_COUNT];
+  ID3D12CommandList    *commandLists[DX12_SUBMIT_STACK_COUNT];
+  GPUQueueDX12         *queue;
+  GPUSwapchainDX12     *swapchain;
+  GPUCommandBufferDX12 *presentNative;
+  GPUResult             submitResult;
+  GPUResult             flushResult;
+  HRESULT               result;
+  HRESULT               presentResult;
+  UINT64                fenceValue;
+
+  queue = queueHandle ? queueHandle->_priv : NULL;
+  if (!queue || !info || info->commandBufferCount == 0u ||
+      info->commandBufferCount > DX12_SUBMIT_STACK_COUNT) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  swapchain     = NULL;
+  presentNative = NULL;
+  for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
+    natives[i] = info->ppCommandBuffers[i]
+                   ? info->ppCommandBuffers[i]->_priv
+                   : NULL;
+    if (!natives[i] || natives[i]->owner != queue ||
+        !natives[i]->commandList) {
+      dx12__finishCommandBuffers(info->commandBufferCount,
+                                 info->ppCommandBuffers,
+                                 true);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    if (natives[i]->presentSwapchain) {
+      if (swapchain) {
+        dx12__finishCommandBuffers(info->commandBufferCount,
+                                   info->ppCommandBuffers,
+                                   true);
+        return GPU_ERROR_INVALID_ARGUMENT;
+      }
+      swapchain     = natives[i]->presentSwapchain;
+      presentNative = natives[i];
+    }
+    commandLists[i] = (ID3D12CommandList *)natives[i]->commandList;
+  }
+
+  flushResult = dx12__flushTransfers(queueHandle, false);
+  if (flushResult != GPU_OK) {
+    dx12__finishCommandBuffers(info->commandBufferCount,
+                               info->ppCommandBuffers,
+                               true);
+    return flushResult;
+  }
+
+  for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
+    dx12__endFrameTime(natives[i]);
+    result = natives[i]->commandList->lpVtbl->Close(natives[i]->commandList);
+    if (FAILED(result)) {
+      dx12__reportQueueError(queue, "advanced command list close", result);
+      dx12__logDebugMessages(queue);
+      dx12__finishCommandBuffers(info->commandBufferCount,
+                                 info->ppCommandBuffers,
+                                 true);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+
+  for (uint32_t i = 0u; i < info->waitCount; i++) {
+    ID3D12Fence *fence;
+
+    fence = info->pWaits[i].semaphore->_priv;
+    if (!fence) {
+      dx12__finishCommandBuffers(info->commandBufferCount,
+                                 info->ppCommandBuffers,
+                                 true);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    result = queue->commandQueue->lpVtbl->Wait(queue->commandQueue,
+                                               fence,
+                                               info->pWaits[i].value);
+    if (FAILED(result)) {
+      dx12__reportQueueError(queue, "advanced queue wait", result);
+      dx12__finishCommandBuffers(info->commandBufferCount,
+                                 info->ppCommandBuffers,
+                                 true);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+
+  queue->commandQueue->lpVtbl->ExecuteCommandLists(
+    queue->commandQueue,
+    info->commandBufferCount,
+    commandLists
+  );
+
+  submitResult = GPU_OK;
+  if (swapchain && swapchain->swapchain) {
+    presentResult = swapchain->swapchain->lpVtbl->Present(
+      swapchain->swapchain,
+      swapchain->syncInterval,
+      swapchain->presentFlags
+    );
+    if (FAILED(presentResult)) {
+      dx12__reportQueueError(queue, "advanced present", presentResult);
+      submitResult = GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+  if (swapchain) {
+    presentNative->presentSwapchain = NULL;
+  }
+
+  for (uint32_t i = 0u; i < info->signalCount; i++) {
+    ID3D12Fence *fence;
+
+    fence = info->pSignals[i].semaphore->_priv;
+    result = fence
+               ? queue->commandQueue->lpVtbl->Signal(
+                   queue->commandQueue,
+                   fence,
+                   info->pSignals[i].value
+                 )
+               : E_INVALIDARG;
+    if (FAILED(result)) {
+      dx12__reportQueueError(queue, "advanced queue signal", result);
+      submitResult = GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+
+  fenceValue = queue->nextFenceValue++;
+  result = queue->commandQueue->lpVtbl->Signal(queue->commandQueue,
+                                                queue->completionFence,
+                                                fenceValue);
+  if (FAILED(result)) {
+    dx12__reportQueueError(queue, "advanced completion signal", result);
+    dx12__finishCommandBuffers(info->commandBufferCount,
+                               info->ppCommandBuffers,
+                               false);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  if (swapchain && swapchain->frameIndex < swapchain->imageCount) {
+    swapchain->frames[swapchain->frameIndex].fenceValue = fenceValue;
+  }
+  dx12__queueLock(queue);
+  for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
+    natives[i]->fenceValue  = fenceValue;
+    natives[i]->pendingNext = NULL;
+    if (queue->pendingTail) {
+      queue->pendingTail->pendingNext = natives[i];
+    } else {
+      queue->pendingHead = natives[i];
+    }
+    queue->pendingTail = natives[i];
+  }
+  queue->inFlightCount += info->commandBufferCount;
+  dx12__queueSignal(queue);
+  dx12__queueUnlock(queue);
+  return submitResult;
+}
+
 GPU_HIDE
 void
 dx12_initCmdQue(GPUApiCommandQueue *api) {
@@ -1617,4 +1837,7 @@ dx12_initCmdQue(GPUApiCommandQueue *api) {
   api->commandBufferOnComplete = dx12_commandBufferOnComplete;
   api->commit                  = dx12_commitCommandBuffer;
   api->submit                  = dx12_submitCommandBuffers;
+  api->createSemaphore         = dx12_createSemaphore;
+  api->destroySemaphore        = dx12_destroySemaphore;
+  api->submitEx                = dx12_submitEx;
 }

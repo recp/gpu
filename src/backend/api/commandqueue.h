@@ -54,6 +54,18 @@ typedef struct GPUApiCommandQueue {
   (*submit)(GPUQueue                  * __restrict queue,
             uint32_t                               count,
             GPUCommandBuffer * const * __restrict buffers);
+
+  GPUResult
+  (*createSemaphore)(GPUDevice                       *device,
+                     const GPUSemaphoreCreateInfo    *info,
+                     GPUSemaphore                    *semaphore);
+
+  void
+  (*destroySemaphore)(GPUSemaphore *semaphore);
+
+  GPUResult
+  (*submitEx)(GPUQueue                   *queue,
+              const GPUQueueSubmitExInfo *info);
 } GPUApiCommandQueue;
 
 #ifdef __cplusplus

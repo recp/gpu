@@ -706,6 +706,168 @@ mt_submitCommandBuffers(GPUQueue                  * __restrict queueHandle,
   return mt__commitCommandBuffers(count, buffers);
 }
 
+static GPUResult
+mt_createSemaphore(GPUDevice                    *device,
+                   const GPUSemaphoreCreateInfo *info,
+                   GPUSemaphore                 *semaphore) {
+  GPUDeviceMT       *deviceMT;
+  id<MTLSharedEvent> event;
+
+  deviceMT = device ? device->_priv : NULL;
+  if (!deviceMT || !deviceMT->device || !semaphore) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (@available(macOS 10.14, iOS 12.0, *)) {
+    event = [deviceMT->device newSharedEvent];
+    if (!event) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    event.signaledValue = info ? info->initialValue : 0u;
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+    const char *label;
+
+    label = info ? gpuDeviceDebugLabel(device, info->label) : NULL;
+    if (label && label[0] != '\0') {
+      event.label = [NSString stringWithUTF8String:label];
+    }
+#endif
+    semaphore->_priv = event;
+    return GPU_OK;
+  }
+
+  return GPU_ERROR_UNSUPPORTED;
+}
+
+static void
+mt_destroySemaphore(GPUSemaphore *semaphore) {
+  id<MTLSharedEvent> event;
+
+  event = semaphore ? (id<MTLSharedEvent>)semaphore->_priv : nil;
+  [event release];
+  if (semaphore) {
+    semaphore->_priv = NULL;
+  }
+}
+
+static GPUResult
+mt_submitEx(GPUQueue                   *queueHandle,
+            const GPUQueueSubmitExInfo *info) {
+  MTCommandQueue  *queue;
+  MTCommandBuffer *last;
+  GPUResult        result;
+
+  queue = mt_commandQueue(queueHandle);
+  last  = info && info->commandBufferCount > 0u
+            ? mt_commandBuffer(
+                info->ppCommandBuffers[info->commandBufferCount - 1u]
+              )
+            : NULL;
+  if (!queue || !last || !info) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  for (uint32_t i = 0u; i < info->waitCount; i++) {
+    if (!info->pWaits[i].semaphore->_priv) {
+      for (uint32_t j = 0u; j < info->commandBufferCount; j++) {
+        gpuFinishCommandBuffer(info->ppCommandBuffers[j],
+                               mt_recycleCommandBuffer);
+      }
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+  for (uint32_t i = 0u; i < info->signalCount; i++) {
+    if (!info->pSignals[i].semaphore->_priv) {
+      for (uint32_t j = 0u; j < info->commandBufferCount; j++) {
+        gpuFinishCommandBuffer(info->ppCommandBuffers[j],
+                               mt_recycleCommandBuffer);
+      }
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+
+  if (mt_flushTransfers(queueHandle,
+                        queue->mode == MTCommandMode4) != GPU_OK) {
+    for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
+      gpuFinishCommandBuffer(info->ppCommandBuffers[i],
+                             mt_recycleCommandBuffer);
+    }
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  if (queue->mode == MTCommandMode4) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      for (uint32_t i = 0u; i < info->waitCount; i++) {
+        id<MTLEvent> event;
+
+        event = (id<MTLEvent>)info->pWaits[i].semaphore->_priv;
+        [queue->modern waitForEvent:event value:info->pWaits[i].value];
+      }
+
+      result = info->commandBufferCount > 1u
+                 ? mt_submitCommandBuffers(queueHandle,
+                                           info->commandBufferCount,
+                                           info->ppCommandBuffers)
+                 : mt_cmdbufCommit(info->ppCommandBuffers[0]);
+      if (result != GPU_OK) {
+        return result;
+      }
+
+      for (uint32_t i = 0u; i < info->signalCount; i++) {
+        id<MTLEvent> event;
+
+        event = (id<MTLEvent>)info->pSignals[i].semaphore->_priv;
+        [queue->modern signalEvent:event value:info->pSignals[i].value];
+      }
+      return GPU_OK;
+    }
+    for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
+      gpuFinishCommandBuffer(info->ppCommandBuffers[i],
+                             mt_recycleCommandBuffer);
+    }
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  if (info->waitCount > 0u) {
+    id<MTLCommandBuffer> waitBuffer;
+
+    waitBuffer = [queue->classic commandBuffer];
+    if (!waitBuffer) {
+      for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
+        gpuFinishCommandBuffer(info->ppCommandBuffers[i],
+                               mt_recycleCommandBuffer);
+      }
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    for (uint32_t i = 0u; i < info->waitCount; i++) {
+      id<MTLEvent> event;
+
+      event = (id<MTLEvent>)info->pWaits[i].semaphore->_priv;
+      [waitBuffer encodeWaitForEvent:event value:info->pWaits[i].value];
+    }
+    [waitBuffer commit];
+  }
+
+  if (!last->classic) {
+    for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
+      gpuFinishCommandBuffer(info->ppCommandBuffers[i],
+                             mt_recycleCommandBuffer);
+    }
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  for (uint32_t i = 0u; i < info->signalCount; i++) {
+    id<MTLEvent> event;
+
+    event = (id<MTLEvent>)info->pSignals[i].semaphore->_priv;
+    [last->classic encodeSignalEvent:event value:info->pSignals[i].value];
+  }
+
+  return info->commandBufferCount > 1u
+           ? mt_submitCommandBuffers(queueHandle,
+                                     info->commandBufferCount,
+                                     info->ppCommandBuffers)
+           : mt_cmdbufCommit(info->ppCommandBuffers[0]);
+}
+
 static
 GPU_HIDE
 void
@@ -849,4 +1011,7 @@ mt_initCmdQue(GPUApiCommandQueue *api) {
   api->commandBufferOnComplete = mt_ccmdbufOnComplete;
   api->commit                  = mt_cmdbufCommit;
   api->submit                  = mt_submitCommandBuffers;
+  api->createSemaphore         = mt_createSemaphore;
+  api->destroySemaphore        = mt_destroySemaphore;
+  api->submitEx                = mt_submitEx;
 }
