@@ -895,7 +895,7 @@ GPUGetCacheStats(GPUDevice *device, GPUCacheStats *outStats) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  *outStats = device->cacheStats;
+  gpuDeviceGetCacheStats(device, outStats);
   return GPU_OK;
 }
 
@@ -1068,7 +1068,7 @@ GPUResetStats(GPUDevice *device) {
     return;
   }
 
-  memset(&device->cacheStats, 0, sizeof(device->cacheStats));
+  gpuDeviceResetCacheStats(device);
   memset(&device->currentFrameStats, 0, sizeof(device->currentFrameStats));
   memset(&device->lastFrameStats, 0, sizeof(device->lastFrameStats));
 #if defined(_WIN32) || defined(WIN32)

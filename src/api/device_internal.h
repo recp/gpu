@@ -68,6 +68,63 @@ struct GPUDevice {
   ];
 };
 
+static inline void
+gpuDeviceCacheCounterAdd(uint64_t *counter, uint64_t value) {
+#if defined(_WIN32) || defined(WIN32)
+  InterlockedExchangeAdd64((volatile LONG64 *)counter, (LONG64)value);
+#else
+  __atomic_fetch_add(counter, value, __ATOMIC_RELAXED);
+#endif
+}
+
+static inline uint64_t
+gpuDeviceCacheCounterLoad(const uint64_t *counter) {
+#if defined(_WIN32) || defined(WIN32)
+  return (uint64_t)InterlockedCompareExchange64(
+    (volatile LONG64 *)counter,
+    0,
+    0
+  );
+#else
+  return __atomic_load_n(counter, __ATOMIC_RELAXED);
+#endif
+}
+
+static inline void
+gpuDeviceCacheCounterReset(uint64_t *counter) {
+#if defined(_WIN32) || defined(WIN32)
+  InterlockedExchange64((volatile LONG64 *)counter, 0);
+#else
+  __atomic_store_n(counter, 0u, __ATOMIC_RELAXED);
+#endif
+}
+
+static inline void
+gpuDeviceGetCacheStats(const GPUDevice *device, GPUCacheStats *stats) {
+  stats->bindGroupHits =
+    gpuDeviceCacheCounterLoad(&device->cacheStats.bindGroupHits);
+  stats->bindGroupMisses =
+    gpuDeviceCacheCounterLoad(&device->cacheStats.bindGroupMisses);
+  stats->bindGroupCollisions =
+    gpuDeviceCacheCounterLoad(&device->cacheStats.bindGroupCollisions);
+  stats->pipelineHits =
+    gpuDeviceCacheCounterLoad(&device->cacheStats.pipelineHits);
+  stats->pipelineMisses =
+    gpuDeviceCacheCounterLoad(&device->cacheStats.pipelineMisses);
+  stats->pipelineCompiles =
+    gpuDeviceCacheCounterLoad(&device->cacheStats.pipelineCompiles);
+}
+
+static inline void
+gpuDeviceResetCacheStats(GPUDevice *device) {
+  gpuDeviceCacheCounterReset(&device->cacheStats.bindGroupHits);
+  gpuDeviceCacheCounterReset(&device->cacheStats.bindGroupMisses);
+  gpuDeviceCacheCounterReset(&device->cacheStats.bindGroupCollisions);
+  gpuDeviceCacheCounterReset(&device->cacheStats.pipelineHits);
+  gpuDeviceCacheCounterReset(&device->cacheStats.pipelineMisses);
+  gpuDeviceCacheCounterReset(&device->cacheStats.pipelineCompiles);
+}
+
 static inline GPUResult
 gpuDeviceAdvanceFrameSlot(GPUDevice *device) {
   GPUTransientChunk *chunk;

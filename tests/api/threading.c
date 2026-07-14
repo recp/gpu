@@ -1,4 +1,5 @@
 #include "test.h"
+#include "../../src/api/device_internal.h"
 
 #if defined(_WIN32) || defined(WIN32)
 #  include <windows.h>
@@ -215,6 +216,7 @@ gpu_runThreadingTest(GPUThreadContext *ctx) {
       ctx->ok = false;
       break;
     }
+    gpuDeviceCacheCounterAdd(&ctx->device->cacheStats.pipelineCompiles, 1u);
   }
   GPUDestroyShaderLibrary(library);
 }
@@ -278,6 +280,7 @@ gpu_test_threading(GPUDevice *device, const char *artifactPath) {
   GPUBufferCreateInfo          bufferInfo = {0};
   GPUThreadContext             contexts[GPU_THREADING_TEST_THREAD_COUNT];
   GPUThreadHandle              threads[GPU_THREADING_TEST_THREAD_COUNT];
+  GPUCacheStats                stats;
   GPUBindGroupLayout          *layout;
   GPUBuffer                   *sharedBuffer;
   void                        *artifactData;
@@ -323,6 +326,7 @@ gpu_test_threading(GPUDevice *device, const char *artifactPath) {
     goto cleanup;
   }
 
+  GPUResetStats(device);
   for (uint32_t i = 0u; i < GPU_THREADING_TEST_THREAD_COUNT; i++) {
     contexts[i].artifactData = artifactData;
     contexts[i].device       = device;
@@ -345,6 +349,11 @@ gpu_test_threading(GPUDevice *device, const char *artifactPath) {
   ok = threadCount == GPU_THREADING_TEST_THREAD_COUNT;
   for (uint32_t i = 0u; i < threadCount; i++) {
     ok = contexts[i].ok && ok;
+  }
+  if (GPUGetCacheStats(device, &stats) != GPU_OK ||
+      stats.pipelineCompiles !=
+        GPU_THREADING_TEST_THREAD_COUNT * GPU_THREADING_TEST_ROUND_COUNT) {
+    ok = false;
   }
 
 cleanup:

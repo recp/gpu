@@ -301,7 +301,7 @@ gpu_bindGroupCacheFind(GPUDevice *device,
       gpu_bindGroupPrivsEqual(gpu_groupPriv(entry->group), candidate)) {
     result = entry->group;
     result->_refCount++;
-    device->cacheStats.bindGroupHits++;
+    gpuDeviceCacheCounterAdd(&device->cacheStats.bindGroupHits, 1u);
   }
   gpu_bindGroupCacheUnlock(cache);
   return result;
@@ -327,12 +327,12 @@ gpu_bindGroupCacheStore(GPUDevice *device, GPUBindGroup *candidate) {
       gpu_bindGroupPrivsEqual(gpu_groupPriv(entry->group), priv)) {
     result = entry->group;
     result->_refCount++;
-    device->cacheStats.bindGroupHits++;
+    gpuDeviceCacheCounterAdd(&device->cacheStats.bindGroupHits, 1u);
   } else {
     if (entry->group) {
-      device->cacheStats.bindGroupCollisions++;
+      gpuDeviceCacheCounterAdd(&device->cacheStats.bindGroupCollisions, 1u);
     }
-    device->cacheStats.bindGroupMisses++;
+    gpuDeviceCacheCounterAdd(&device->cacheStats.bindGroupMisses, 1u);
     entry->group = candidate;
   }
   gpu_bindGroupCacheUnlock(cache);

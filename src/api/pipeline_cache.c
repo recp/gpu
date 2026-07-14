@@ -460,7 +460,7 @@ gpu_pipelineCacheFind(GPUPipelineCache          *cache,
     pipeline = entry->pipeline;
     gpu_retainPipeline(type, pipeline);
     cache->stats.pipelineHits++;
-    cache->device->cacheStats.pipelineHits++;
+    gpuDeviceCacheCounterAdd(&cache->device->cacheStats.pipelineHits, 1u);
   }
   gpu_pipelineCacheUnlock(cache);
   return pipeline;
@@ -512,8 +512,8 @@ gpu_pipelineCacheStore(GPUPipelineCache    *cache,
       gpu_retainPipeline(type, result);
       cache->stats.pipelineHits++;
       cache->stats.pipelineCompiles++;
-      cache->device->cacheStats.pipelineHits++;
-      cache->device->cacheStats.pipelineCompiles++;
+      gpuDeviceCacheCounterAdd(&cache->device->cacheStats.pipelineHits, 1u);
+      gpuDeviceCacheCounterAdd(&cache->device->cacheStats.pipelineCompiles, 1u);
       gpu_pipelineCacheUnlock(cache);
       free(entry->keyData);
       free(entry);
@@ -546,8 +546,8 @@ gpu_pipelineCacheStore(GPUPipelineCache    *cache,
   cache->entryCount++;
   cache->stats.pipelineMisses++;
   cache->stats.pipelineCompiles++;
-  cache->device->cacheStats.pipelineMisses++;
-  cache->device->cacheStats.pipelineCompiles++;
+  gpuDeviceCacheCounterAdd(&cache->device->cacheStats.pipelineMisses, 1u);
+  gpuDeviceCacheCounterAdd(&cache->device->cacheStats.pipelineCompiles, 1u);
   gpu_pipelineCacheUnlock(cache);
 
   gpu_pipelineKeyRelease(key);
@@ -1262,7 +1262,7 @@ void
 gpuRecordPipelineCompile(GPUDevice *device, GPUPipelineCache *cache) {
   if (!cache) {
     if (device) {
-      device->cacheStats.pipelineCompiles++;
+      gpuDeviceCacheCounterAdd(&device->cacheStats.pipelineCompiles, 1u);
     }
     return;
   }
@@ -1271,8 +1271,8 @@ gpuRecordPipelineCompile(GPUDevice *device, GPUPipelineCache *cache) {
   cache->stats.pipelineMisses++;
   cache->stats.pipelineCompiles++;
   if (cache->device) {
-    cache->device->cacheStats.pipelineMisses++;
-    cache->device->cacheStats.pipelineCompiles++;
+    gpuDeviceCacheCounterAdd(&cache->device->cacheStats.pipelineMisses, 1u);
+    gpuDeviceCacheCounterAdd(&cache->device->cacheStats.pipelineCompiles, 1u);
   }
   gpu_pipelineCacheUnlock(cache);
 }
