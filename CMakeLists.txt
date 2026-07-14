@@ -548,7 +548,8 @@ if(GPU_BUILD_VULKAN AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
   add_custom_target(gpu-vulkan-fixtures DEPENDS ${GPU_VULKAN_USL_FIXTURES})
 endif()
 
-if(GPU_BUILD_METAL AND GPU_BUILD_SAMPLES)
+if(GPU_BUILD_METAL AND GPU_BUILD_SAMPLES AND
+   NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   gpu_add_usl_fixtures(
     GPU_METAL_USL_FIXTURES
     metal
@@ -815,7 +816,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL)
       ${GPU_FRAMEWORK_QUARTZCORE}
     )
   endfunction()
+endif()
 
+if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
+   NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   add_executable(gpu-triangle-manual
     samples/triangle-manual/main.m
   )
@@ -889,6 +893,74 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL)
     C_STANDARD 11
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
+  )
+endif()
+
+if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
+   CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  set(GPU_USL_HOST_FIXTURE "" CACHE FILEPATH
+      "Host gpu-usl-fixture executable used for cross-compiled samples")
+  if(NOT GPU_USL_HOST_FIXTURE)
+    find_program(GPU_USL_HOST_FIXTURE_AUTO
+      NAMES gpu-usl-fixture
+      HINTS
+        "${CMAKE_CURRENT_SOURCE_DIR}/out/build/macos-debug"
+        "${CMAKE_CURRENT_SOURCE_DIR}/out/build/macos-release"
+    )
+    if(GPU_USL_HOST_FIXTURE_AUTO)
+      set(GPU_USL_HOST_FIXTURE "${GPU_USL_HOST_FIXTURE_AUTO}")
+    endif()
+  endif()
+  if(NOT EXISTS "${GPU_USL_HOST_FIXTURE}")
+    message(FATAL_ERROR
+      "iOS samples require a host gpu-usl-fixture. Build the macOS sample "
+      "fixtures first or set GPU_USL_HOST_FIXTURE.")
+  endif()
+
+  set(GPU_IOS_TRIANGLE_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/metal/ios-triangle")
+  set(GPU_IOS_TRIANGLE_SOURCE
+      "${GPU_IOS_TRIANGLE_DIR}/triangle.usl")
+  set(GPU_IOS_TRIANGLE_US
+      "${GPU_IOS_TRIANGLE_DIR}/triangle.us")
+  add_custom_command(
+    OUTPUT "${GPU_IOS_TRIANGLE_US}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${GPU_IOS_TRIANGLE_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-usl/triangle.usl"
+            "${GPU_IOS_TRIANGLE_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            USL_NO_BACKEND_SIDECAR=1
+            "${GPU_USL_HOST_FIXTURE}"
+            metal
+            "${GPU_IOS_TRIANGLE_SOURCE}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-usl/triangle.usl"
+      "${GPU_USL_HOST_FIXTURE}"
+    VERBATIM
+  )
+  set_source_files_properties("${GPU_IOS_TRIANGLE_US}" PROPERTIES
+    GENERATED TRUE
+    MACOSX_PACKAGE_LOCATION Resources
+  )
+
+  add_executable(gpu-triangle-ios-usl MACOSX_BUNDLE
+    samples/triangle-ios-usl/main.m
+    "${GPU_IOS_TRIANGLE_US}"
+  )
+  gpu_configure_metal_sample(gpu-triangle-ios-usl)
+  target_compile_options(gpu-triangle-ios-usl PRIVATE
+    -Wall
+    -Wextra
+    -Werror
+  )
+  set_target_properties(gpu-triangle-ios-usl PROPERTIES
+    MACOSX_BUNDLE_INFO_PLIST
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-ios-usl/Info.plist"
+    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER
+      "com.recp.gpu.triangle-ios-usl"
+    XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
   )
 endif()
 
