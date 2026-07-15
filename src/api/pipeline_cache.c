@@ -36,10 +36,10 @@ struct GPUPipelineCacheEntry {
   GPUPipelineCacheEntry    *next;
   GPUPipelineCacheEntry    *hashNext;
   void                     *pipeline;
-  uint8_t                  *keyData;
   size_t                    keySize;
   uint64_t                  keyHash;
   GPUPipelineCacheEntryType type;
+  uint8_t                   keyData[];
 };
 
 typedef struct GPUPipelineKeyWriter {
@@ -486,31 +486,26 @@ gpu_pipelineCacheStore(GPUPipelineCache    *cache,
   void                   *result;
   size_t                  bucket;
 
-  entry = calloc(1, sizeof(*entry));
+  if (key->size > SIZE_MAX - sizeof(*entry)) {
+    gpuRecordPipelineCompile(cache->device, cache);
+    gpuPipelineCacheReleaseKey(key);
+    return pipeline;
+  }
+  entry = malloc(sizeof(*entry) + key->size);
   if (!entry) {
     gpuRecordPipelineCompile(cache->device, cache);
     gpuPipelineCacheReleaseKey(key);
     return pipeline;
   }
-  if (key->ownsData) {
-    entry->keyData = key->data;
-    key->ownsData  = false;
-  } else {
-    entry->keyData = malloc(key->size);
-    if (!entry->keyData) {
-      free(entry);
-      gpuRecordPipelineCompile(cache->device, cache);
-      gpuPipelineCacheReleaseKey(key);
-      return pipeline;
-    }
-    memcpy(entry->keyData, key->data, key->size);
-  }
+  entry->next     = NULL;
+  entry->hashNext = NULL;
   entry->pipeline = pipeline;
   entry->keySize  = key->size;
   entry->keyHash  = key->hash;
   entry->type     = type;
-  evicted         = NULL;
-  result          = pipeline;
+  memcpy(entry->keyData, key->data, key->size);
+  evicted = NULL;
+  result  = pipeline;
 
   gpu_pipelineCacheLock(cache);
   {
@@ -525,7 +520,6 @@ gpu_pipelineCacheStore(GPUPipelineCache    *cache,
       gpuDeviceCacheCounterAdd(&cache->device->cacheStats.pipelineHits, 1u);
       gpuDeviceCacheCounterAdd(&cache->device->cacheStats.pipelineCompiles, 1u);
       gpu_pipelineCacheUnlock(cache);
-      free(entry->keyData);
       free(entry);
       gpu_destroyPipeline(type, pipeline);
       gpuPipelineCacheReleaseKey(key);
@@ -563,7 +557,6 @@ gpu_pipelineCacheStore(GPUPipelineCache    *cache,
   gpuPipelineCacheReleaseKey(key);
   if (evicted) {
     gpu_destroyPipeline(evicted->type, evicted->pipeline);
-    free(evicted->keyData);
     free(evicted);
   }
   return result;
@@ -1092,7 +1085,6 @@ GPUDestroyPipelineCache(GPUPipelineCache *cache) {
 
     next = entry->next;
     gpu_destroyPipeline(entry->type, entry->pipeline);
-    free(entry->keyData);
     free(entry);
     entry = next;
   }
