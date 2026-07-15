@@ -208,6 +208,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
       modern.visibilityResultBuffer = rpd.visibilityResultBuffer;
       modern.visibilityResultType   = MTLVisibilityResultTypeReset;
       modern.rasterizationRateMap   = rpd.rasterizationRateMap;
+      mt_useAllocation(cmdb, modern.visibilityResultBuffer);
     }
   }
 #endif
@@ -240,6 +241,8 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
         modern.colorAttachments[i].loadAction = rpd.colorAttachments[i].loadAction;
         modern.colorAttachments[i].storeAction = rpd.colorAttachments[i].storeAction;
         modern.colorAttachments[i].clearColor = rpd.colorAttachments[i].clearColor;
+        mt_useAllocation(cmdb, modern.colorAttachments[i].texture);
+        mt_useAllocation(cmdb, modern.colorAttachments[i].resolveTexture);
       }
     }
 #endif
@@ -283,6 +286,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
 
         modern.depthAttachment = rpd.depthAttachment;
         modern.stencilAttachment = rpd.stencilAttachment;
+        mt_useAllocation(cmdb, depthStencil->view->_priv);
       }
     }
 #endif

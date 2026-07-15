@@ -27,27 +27,6 @@ mt_nativeBuffer(GPUBuffer *buffer) {
   return buffer ? (id<MTLBuffer>)buffer->_priv : nil;
 }
 
-#if MT_HAS_METAL4
-static void
-mt_useRenderPassAllocations(GPUCommandBuffer *cmdb, id pass) {
-  if (!cmdb || !pass) {
-    return;
-  }
-
-  if (@available(macOS 26.0, iOS 26.0, *)) {
-    MTL4RenderPassDescriptor *modern = pass;
-
-    for (uint32_t i = 0; i < GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS; i++) {
-      mt_useAllocation(cmdb, modern.colorAttachments[i].texture);
-      mt_useAllocation(cmdb, modern.colorAttachments[i].resolveTexture);
-    }
-    mt_useAllocation(cmdb, modern.depthAttachment.texture);
-    mt_useAllocation(cmdb, modern.stencilAttachment.texture);
-    mt_useAllocation(cmdb, modern.visibilityResultBuffer);
-  }
-}
-#endif
-
 GPU_HIDE
 GPURenderCommandEncoder *
 mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
@@ -96,7 +75,6 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
                                    atStages:MTLRenderStageVertex];
       [nativeState->modern setArgumentTable:nativeState->fragmentArguments->table
                                    atStages:MTLRenderStageFragment];
-      mt_useRenderPassAllocations(cmdb, nativePass->modern);
     }
   } else
 #endif
