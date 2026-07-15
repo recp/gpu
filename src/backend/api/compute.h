@@ -93,6 +93,11 @@ typedef struct GPUApiCompute {
              uint32_t               index);
 
   void
+  (*accelerationStructure)(GPUComputePassEncoder      *enc,
+                           GPUAccelerationStructureEXT *structure,
+                           uint32_t                     index);
+
+  void
   (*pushConstants)(GPUComputePassEncoder *enc,
                    const void            *data,
                    uint32_t               sizeBytes);

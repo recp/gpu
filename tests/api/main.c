@@ -174,6 +174,14 @@ run_vrs(void *ctx) {
   return gpu_test_vrs(testCtx->adapter, testCtx->device);
 }
 
+static int
+run_ray_query(void *ctx) {
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_ray_query(testCtx->adapter,
+                            testCtx->rayQueryBytecodePath);
+}
+
 static GPUAdapter *
 select_adapter(GPUInstance *instance) {
   GPUAdapter *adapter = NULL;
@@ -214,7 +222,7 @@ main(int argc, char **argv) {
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUApiTestContext      ctx;
-  GPUApiTest             tests[24];
+  GPUApiTest             tests[25];
   int                    ok;
 
   if (argc != 14 && argc != 15) {
@@ -285,6 +293,7 @@ main(int argc, char **argv) {
   ctx.descriptorIndexingBytecodePath = argv[11];
   ctx.subgroupBytecodePath           = argv[12];
   ctx.shaderF16BytecodePath          = argv[13];
+  ctx.rayQueryBytecodePath           = getenv("GPU_RAY_QUERY_USL_PATH");
 
   tests[0]  = (GPUApiTest){ "queue", run_queue, &ctx };
   tests[1]  = (GPUApiTest){ "sampler", run_sampler, &ctx };
@@ -312,6 +321,7 @@ main(int argc, char **argv) {
   tests[21] = (GPUApiTest){ "bindless", run_bindless, &ctx };
   tests[22] = (GPUApiTest){ "coordinate", run_coordinate, &ctx };
   tests[23] = (GPUApiTest){ "vrs", run_vrs, &ctx };
+  tests[24] = (GPUApiTest){ "ray-query", run_ray_query, &ctx };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 

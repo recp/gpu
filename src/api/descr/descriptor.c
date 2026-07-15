@@ -20,6 +20,7 @@
 #include "../device_internal.h"
 #include "../library_internal.h"
 #include "../render/rce_internal.h"
+#include "../ray_internal.h"
 #include "../sampler_internal.h"
 #include "../texture_internal.h"
 #include "descriptor_internal.h"
@@ -59,6 +60,7 @@ typedef struct GPUBindGroupBindingPriv {
 
     GPUTextureView *textureView;
     GPUSampler     *sampler;
+    GPUAccelerationStructureEXT *accelerationStructure;
   };
   uint32_t    binding;
   uint32_t    arrayIndex;
@@ -236,6 +238,10 @@ gpu_bindGroupHash(const GPUBindGroupPriv *priv) {
         resource = (uintptr_t)binding->sampler;
         hash     = GPU_BIND_GROUP_HASH(hash, resource);
         break;
+      case GPUBindKindAccelerationStructure:
+        resource = (uintptr_t)binding->accelerationStructure;
+        hash     = GPU_BIND_GROUP_HASH(hash, resource);
+        break;
       default:
         break;
     }
@@ -277,6 +283,12 @@ gpu_bindGroupPrivsEqual(const GPUBindGroupPriv *a,
         break;
       case GPUBindKindSampler:
         if (aBinding->sampler != bBinding->sampler) {
+          return false;
+        }
+        break;
+      case GPUBindKindAccelerationStructure:
+        if (aBinding->accelerationStructure !=
+            bBinding->accelerationStructure) {
           return false;
         }
         break;
@@ -384,6 +396,9 @@ gpu_pipelineLayoutPriv(GPUPipelineLayout *layout) {
 
 static GPUBindKind
 gpu_layoutEntryKind(const GPUBindGroupLayoutEntry *entry);
+
+static GPUBindKind
+gpu_metalSlotKind(GPUBindKind kind);
 
 GPU_HIDE
 void
@@ -647,6 +662,9 @@ gpu_kindFromBindingType(GPUBindingType type, GPUBindKind *outKind) {
     case GPU_BINDING_SAMPLER:
       *outKind = GPUBindKindSampler;
       return 1;
+    case GPU_BINDING_ACCELERATION_STRUCTURE:
+      *outKind = GPUBindKindAccelerationStructure;
+      return 1;
     default:
       return 0;
   }
@@ -743,6 +761,26 @@ gpu_validateLayoutEntries(const GPUBindGroupLayoutEntry *entries,
 }
 
 static GPUResult
+gpu_validateRayQueryLayout(GPUDevice                    *device,
+                           const GPUBindGroupLayoutEntry *entries,
+                           uint32_t                       count) {
+  for (uint32_t i = 0u; i < count; i++) {
+    if (entries[i].bindingType != GPU_BINDING_ACCELERATION_STRUCTURE) {
+      continue;
+    }
+    if (!GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_QUERY)) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+    if ((entries[i].visibility &
+         (GPU_SHADER_STAGE_TASK_BIT | GPU_SHADER_STAGE_MESH_BIT)) != 0u) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+  }
+
+  return GPU_OK;
+}
+
+static GPUResult
 gpu_bindlessLayoutEnabled(GPUDevice                           *device,
                           const GPUBindGroupLayoutCreateInfo  *info,
                           bool                                *outEnabled,
@@ -808,6 +846,8 @@ gpu_bindGroupEntryHasResource(const GPUBindGroupLayoutEntry *layoutEntry,
       return entry->textureView != NULL;
     case GPUBindKindSampler:
       return entry->sampler != NULL;
+    case GPUBindKindAccelerationStructure:
+      return entry->accelerationStructure != NULL;
     default:
       return 0;
   }
@@ -832,6 +872,9 @@ gpu_bindGroupEntryMatchesDevice(GPUDevice                     *device,
              entry->textureView->_texture->device == device;
     case GPUBindKindSampler:
       return entry->sampler && entry->sampler->device == device;
+    case GPUBindKindAccelerationStructure:
+      return entry->accelerationStructure &&
+             entry->accelerationStructure->device == device;
     default:
       return 0;
   }
@@ -1174,6 +1217,10 @@ gpu_createBindGroupLayout(GPUDevice *device,
   if (!gpu_validateLayoutEntries(entries, count, bindless)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  result = gpu_validateRayQueryLayout(device, entries, count);
+  if (result != GPU_OK) {
+    return result;
+  }
 
   layout = calloc(1, sizeof(*layout));
   priv = calloc(1, sizeof(*priv));
@@ -1331,7 +1378,9 @@ gpu_pipelineSlotIsUsed(const GPUPipelineLayoutPriv *priv,
       continue;
     }
     for (uint32_t entryIndex = 0; entryIndex < layout->count; entryIndex++) {
-      if (gpu_layoutEntryKind(&layout->entries[entryIndex]) == kind &&
+      if (gpu_metalSlotKind(
+            gpu_layoutEntryKind(&layout->entries[entryIndex])) ==
+            gpu_metalSlotKind(kind) &&
           (layout->entries[entryIndex].visibility & visibility) != 0u &&
           priv->backendBindings[groupIndex][entryIndex] <= slot) {
         uint32_t base;
@@ -1374,13 +1423,22 @@ gpu_metalBindingLimit(GPUBindKind kind) {
   static const uint32_t limits[] = {
     [GPUBindKindBuffer]  = MT_BIND_GROUP_BUFFER_COUNT,
     [GPUBindKindTexture] = MT_ARGUMENT_TEXTURE_COUNT,
-    [GPUBindKindSampler] = MT_ARGUMENT_SAMPLER_COUNT
+    [GPUBindKindSampler] = MT_ARGUMENT_SAMPLER_COUNT,
+    [GPUBindKindAccelerationStructure] = MT_BIND_GROUP_BUFFER_COUNT
   };
 
-  if (kind < GPUBindKindBuffer || kind > GPUBindKindSampler) {
+  if (kind < GPUBindKindBuffer ||
+      kind > GPUBindKindAccelerationStructure) {
     return 0u;
   }
   return limits[kind];
+}
+
+static GPUBindKind
+gpu_metalSlotKind(GPUBindKind kind) {
+  return kind == GPUBindKindAccelerationStructure
+           ? GPUBindKindBuffer
+           : kind;
 }
 
 static int
@@ -1424,7 +1482,8 @@ gpu_pipelineBindingsAreUnique(const GPUPipelineLayoutPriv *priv) {
           uint32_t endA;
           uint32_t endB;
 
-          if (gpu_layoutEntryKind(a) != gpu_layoutEntryKind(b)) {
+          if (gpu_metalSlotKind(gpu_layoutEntryKind(a)) !=
+              gpu_metalSlotKind(gpu_layoutEntryKind(b))) {
             continue;
           }
           if (backendA > UINT32_MAX - a->arrayCount ||
@@ -1456,7 +1515,8 @@ gpu_compileDX12PipelineBindings(GPUPipelineLayoutPriv *priv) {
   static const GPUBindKind kinds[] = {
     GPUBindKindBuffer,
     GPUBindKindTexture,
-    GPUBindKindSampler
+    GPUBindKindSampler,
+    GPUBindKindAccelerationStructure
   };
 
   for (uint32_t groupIndex = 0u;
@@ -1626,7 +1686,8 @@ gpu_compilePipelineBindings(GPUPipelineLayoutPriv *priv,
         for (uint32_t entryIndex = 0; layout && entryIndex < layout->count; entryIndex++) {
           const GPUBindGroupLayoutEntry *entry = &layout->entries[entryIndex];
 
-          if (gpu_layoutEntryKind(entry) != kinds[kindIndex] ||
+          if (gpu_metalSlotKind(gpu_layoutEntryKind(entry)) !=
+                kinds[kindIndex] ||
               priv->backendBindings[groupIndex][entryIndex] != UINT32_MAX) {
             continue;
           }
@@ -2507,6 +2568,9 @@ GPUCreateBindGroup(GPUDevice *device,
         case GPUBindKindSampler:
           binding->sampler = entry->sampler;
           break;
+        case GPUBindKindAccelerationStructure:
+          binding->accelerationStructure = entry->accelerationStructure;
+          break;
         default:
           if (heapCandidate) {
             free(candidateBindings);
@@ -2772,6 +2836,9 @@ GPUUpdateBindGroupEXT(GPUBindGroup            *group,
       case GPUBindKindSampler:
         binding->sampler = pEntries[i].sampler;
         break;
+      case GPUBindKindAccelerationStructure:
+        binding->accelerationStructure = pEntries[i].accelerationStructure;
+        break;
       default:
         return GPU_ERROR_BACKEND_FAILURE;
     }
@@ -2823,6 +2890,12 @@ gpuBindRenderBinding(void *ctx, const GPUBindGroupBindingView *binding) {
       gpuSetRenderVertexSampler(bindCtx->pass,
                                 binding->sampler,
                                 binding->binding + binding->arrayIndex);
+    } else if (binding->kind == GPUBindKindAccelerationStructure &&
+               binding->accelerationStructure) {
+      gpuSetRenderVertexAccelerationStructure(
+        bindCtx->pass,
+        binding->accelerationStructure,
+        binding->binding + binding->arrayIndex);
     }
   }
 
@@ -2840,6 +2913,12 @@ gpuBindRenderBinding(void *ctx, const GPUBindGroupBindingView *binding) {
       gpuSetRenderFragmentSampler(bindCtx->pass,
                                   binding->sampler,
                                   binding->binding + binding->arrayIndex);
+    } else if (binding->kind == GPUBindKindAccelerationStructure &&
+               binding->accelerationStructure) {
+      gpuSetRenderFragmentAccelerationStructure(
+        bindCtx->pass,
+        binding->accelerationStructure,
+        binding->binding + binding->arrayIndex);
     }
   }
 
@@ -3004,6 +3083,9 @@ gpuForEachBindGroupBinding(GPUBindGroup *group,
       case GPUBindKindSampler:
         view.sampler = binding->sampler;
         break;
+      case GPUBindKindAccelerationStructure:
+        view.accelerationStructure = binding->accelerationStructure;
+        break;
       default:
         return 0;
     }
@@ -3058,6 +3140,9 @@ gpuForEachBindGroupEntry(GPUBindGroup            *group,
         break;
       case GPUBindKindSampler:
         view.sampler = entries[i].sampler;
+        break;
+      case GPUBindKindAccelerationStructure:
+        view.accelerationStructure = entries[i].accelerationStructure;
         break;
       default:
         return 0;
@@ -3218,6 +3303,9 @@ gpu_bindGroupEachDynamic(GPUPipelineLayout      *pipelineLayout,
         break;
       case GPUBindKindSampler:
         view.sampler = binding->sampler;
+        break;
+      case GPUBindKindAccelerationStructure:
+        view.accelerationStructure = binding->accelerationStructure;
         break;
       default:
         return 0;

@@ -29,6 +29,7 @@ typedef struct GPUBuffer GPUBuffer;
 typedef struct GPUDevice GPUDevice;
 typedef struct GPUShaderLibrary GPUShaderLibrary;
 typedef struct GPUSampler GPUSampler;
+typedef struct GPUAccelerationStructureEXT GPUAccelerationStructureEXT;
 
 #ifndef GPU_RENDER_ENCODER_TYPES_DEFINED
 #define GPU_RENDER_ENCODER_TYPES_DEFINED
@@ -77,6 +78,7 @@ typedef struct GPUBindGroupEntry {
 
     GPUTextureView *textureView;
     GPUSampler     *sampler;
+    GPUAccelerationStructureEXT *accelerationStructure;
   };
 } GPUBindGroupEntry;
 

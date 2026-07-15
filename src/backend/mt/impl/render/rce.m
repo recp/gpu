@@ -539,6 +539,35 @@ mt_rceSetVertexSampler(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
+mt_rceSetVertexAccelerationStructure(
+  GPURenderCommandEncoder     *rce,
+  GPUAccelerationStructureEXT *structure,
+  uint32_t                     index) {
+  GPUAccelerationStructureMT *ray;
+  MTRenderEncoder             *native;
+
+  native = mt_renderEncoder(rce);
+  ray    = structure ? structure->_priv : NULL;
+  if (!native || !ray || !ray->structure) {
+    return;
+  }
+#if MT_HAS_METAL4
+  if (native->modern) {
+    mt_setArgumentAccelerationStructure(rce->_cmdb,
+                                        native->vertexArguments,
+                                        structure,
+                                        index);
+    return;
+  }
+#endif
+  if (@available(macOS 12.0, iOS 15.0, *)) {
+    [native->classic setVertexAccelerationStructure:ray->structure
+                                      atBufferIndex:index];
+  }
+}
+
+GPU_HIDE
+void
 mt_taskBuffer(GPURenderCommandEncoder *rce,
               GPUBuffer               *buffer,
               uint64_t                 offset,
@@ -766,6 +795,35 @@ mt_rceSetFragmentSampler(GPURenderCommandEncoder *rce,
   }
 #endif
   [native->classic setFragmentSamplerState:samplerState atIndex:index];
+}
+
+GPU_HIDE
+void
+mt_rceSetFragmentAccelerationStructure(
+  GPURenderCommandEncoder     *rce,
+  GPUAccelerationStructureEXT *structure,
+  uint32_t                     index) {
+  GPUAccelerationStructureMT *ray;
+  MTRenderEncoder             *native;
+
+  native = mt_renderEncoder(rce);
+  ray    = structure ? structure->_priv : NULL;
+  if (!native || !ray || !ray->structure) {
+    return;
+  }
+#if MT_HAS_METAL4
+  if (native->modern) {
+    mt_setArgumentAccelerationStructure(rce->_cmdb,
+                                        native->fragmentArguments,
+                                        structure,
+                                        index);
+    return;
+  }
+#endif
+  if (@available(macOS 12.0, iOS 15.0, *)) {
+    [native->classic setFragmentAccelerationStructure:ray->structure
+                                        atBufferIndex:index];
+  }
 }
 
 GPU_HIDE
@@ -1000,6 +1058,8 @@ mt_initRCE(GPUApiRCE *api) {
   api->vertexInputBuffer        = mt_vertexInputBuffer;
   api->setVertexTexture         = mt_rceSetVertexTexture;
   api->setVertexSampler         = mt_rceSetVertexSampler;
+  api->setVertexAccelerationStructure =
+    mt_rceSetVertexAccelerationStructure;
   api->taskBuffer               = mt_taskBuffer;
   api->setTaskTexture           = mt_rceSetTaskTexture;
   api->setTaskSampler           = mt_rceSetTaskSampler;
@@ -1009,6 +1069,8 @@ mt_initRCE(GPUApiRCE *api) {
   api->fragmentBuffer           = mt_fragmentBuffer;
   api->setFragmentTexture       = mt_rceSetFragmentTexture;
   api->setFragmentSampler       = mt_rceSetFragmentSampler;
+  api->setFragmentAccelerationStructure =
+    mt_rceSetFragmentAccelerationStructure;
   api->drawPrimitives           = mt_drawPrimitives;
   api->drawIndexedPrims         = mt_drawIndexedPrims;
   api->drawMesh                 = mt_drawMesh;

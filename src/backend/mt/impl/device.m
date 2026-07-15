@@ -290,6 +290,13 @@ mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
         return [device supportsRasterizationRateMapWithLayerCount:1u];
       }
       return false;
+    case GPU_FEATURE_RAY_QUERY:
+      device = adapterMT->device;
+      if (@available(macOS 12.0, iOS 15.0, *)) {
+        return device.supportsRaytracing &&
+               device.supportsRaytracingFromRender;
+      }
+      return false;
     case GPU_FEATURE_SUBGROUPS:
       mt_probeSubgroups(adapterMT);
       return adapterMT->subgroups;
@@ -460,15 +467,29 @@ mt_supportsMetal4(id<MTLDevice> device) {
 }
 
 static bool
-mt_selectCommandMode(id<MTLDevice> device, MTCommandMode *outMode) {
+mt_supportsMetal4RayQuery(id<MTLDevice> device) {
+  if (@available(macOS 14.0, iOS 17.0, *)) {
+    return device && [device supportsFamily:MTLGPUFamilyApple9];
+  }
+
+  return false;
+}
+
+static bool
+mt_selectCommandMode(id<MTLDevice>  device,
+                     uint64_t       enabledFeatureMask,
+                     MTCommandMode *outMode) {
   const char *mode;
-  bool supportsMetal4;
+  bool        rayQuery;
+  bool        supportsMetal4;
 
   if (!outMode) {
     return false;
   }
 
-  mode = getenv("GPU_METAL_MODE");
+  mode           = getenv("GPU_METAL_MODE");
+  rayQuery       = (enabledFeatureMask &
+                    (UINT64_C(1) << GPU_FEATURE_RAY_QUERY)) != 0u;
   supportsMetal4 = mt_supportsMetal4(device);
   if (mode && strcmp(mode, "classic") == 0) {
     *outMode = MTCommandModeClassic;
@@ -479,6 +500,10 @@ mt_selectCommandMode(id<MTLDevice> device, MTCommandMode *outMode) {
       NSLog(@"GPU_METAL_MODE=metal4 requested on an unsupported device or OS");
       return false;
     }
+    if (rayQuery && !mt_supportsMetal4RayQuery(device)) {
+      NSLog(@"GPU_METAL_MODE=metal4 does not support software ray tracing");
+      return false;
+    }
     *outMode = MTCommandMode4;
     return true;
   }
@@ -487,7 +512,10 @@ mt_selectCommandMode(id<MTLDevice> device, MTCommandMode *outMode) {
     return false;
   }
 
-  *outMode = supportsMetal4 ? MTCommandMode4 : MTCommandModeClassic;
+  *outMode = supportsMetal4 &&
+             (!rayQuery || mt_supportsMetal4RayQuery(device))
+               ? MTCommandMode4
+               : MTCommandModeClassic;
   return true;
 }
 
@@ -503,13 +531,13 @@ mt_createDevice(GPUAdapter        * __restrict adapter,
   MTCommandMode  commandMode;
   uint32_t       i, j, queueIndex, queueCount;
 
-  (void)enabledFeatureMask;
-
   GPU__DEFINE_DEFAULT_QUEUES_IF_NEEDED(nQueCI, queCI)
 
   adapterMT = mt_adapter(adapter);
   if (!adapterMT ||
-      !mt_selectCommandMode(adapterMT->device, &commandMode)) {
+      !mt_selectCommandMode(adapterMT->device,
+                            enabledFeatureMask,
+                            &commandMode)) {
     return NULL;
   }
 

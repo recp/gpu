@@ -22,6 +22,7 @@
 #include "device_internal.h"
 #include "library_internal.h"
 #include "pipeline_cache_internal.h"
+#include "ray_internal.h"
 
 static GPUDevice *
 gpu_computePassDevice(const GPUComputePassEncoder *pass) {
@@ -425,6 +426,25 @@ gpuSetComputeSampler(GPUComputePassEncoder *pass,
   api->compute.sampler(pass, sampler, index);
 }
 
+GPU_HIDE
+void
+gpuSetComputeAccelerationStructure(
+  GPUComputePassEncoder       *pass,
+  GPUAccelerationStructureEXT *structure,
+  uint32_t                     index) {
+  GPUApi *api;
+
+  if (!pass || pass->_ended || !structure) {
+    return;
+  }
+  if (!(api = gpu_computePassApi(pass)) ||
+      !api->compute.accelerationStructure) {
+    return;
+  }
+
+  api->compute.accelerationStructure(pass, structure, index);
+}
+
 typedef struct GPUBindComputeContext {
   GPUComputePassEncoder *pass;
 } GPUBindComputeContext;
@@ -452,6 +472,12 @@ gpuBindComputeBinding(void *ctx, const GPUBindGroupBindingView *binding) {
     gpuSetComputeSampler(bindCtx->pass,
                          binding->sampler,
                          binding->binding + binding->arrayIndex);
+  } else if (binding->kind == GPUBindKindAccelerationStructure &&
+             binding->accelerationStructure) {
+    gpuSetComputeAccelerationStructure(
+      bindCtx->pass,
+      binding->accelerationStructure,
+      binding->binding + binding->arrayIndex);
   }
 }
 

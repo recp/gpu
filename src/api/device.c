@@ -1294,6 +1294,26 @@ GPUGetProcAddr(GPUDevice *device, const char *name) {
       return (GPUProc)GPUSetFragmentShadingRateEXT;
     }
   }
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_QUERY)) {
+    if (strcmp(name, "GPUGetAccelerationStructureSizesEXT") == 0) {
+      return (GPUProc)GPUGetAccelerationStructureSizesEXT;
+    }
+    if (strcmp(name, "GPUCreateAccelerationStructureEXT") == 0) {
+      return (GPUProc)GPUCreateAccelerationStructureEXT;
+    }
+    if (strcmp(name, "GPUDestroyAccelerationStructureEXT") == 0) {
+      return (GPUProc)GPUDestroyAccelerationStructureEXT;
+    }
+    if (strcmp(name, "GPUBeginAccelerationStructurePassEXT") == 0) {
+      return (GPUProc)GPUBeginAccelerationStructurePassEXT;
+    }
+    if (strcmp(name, "GPUBuildAccelerationStructureEXT") == 0) {
+      return (GPUProc)GPUBuildAccelerationStructureEXT;
+    }
+    if (strcmp(name, "GPUEndAccelerationStructurePassEXT") == 0) {
+      return (GPUProc)GPUEndAccelerationStructurePassEXT;
+    }
+  }
 
   return NULL;
 }

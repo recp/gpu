@@ -1,0 +1,11 @@
+kern(1, 1, 1) ray_query_cs(
+  scene: acceleration_structure #acceleration(0),
+  inout result: [uint] #buffer(1)
+) {
+  result[0] = ray_intersects(scene,
+                             float3(0.0, 0.0, -1.0),
+                             float3(0.0, 0.0, 1.0),
+                             0.0,
+                             100.0,
+                             255u) ? 1u : 0u
+}

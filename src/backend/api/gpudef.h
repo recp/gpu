@@ -42,6 +42,7 @@ extern "C" {
 #include "surface.h"
 #include "pipeline-cache.h"
 #include "vrs.h"
+#include "ray.h"
 
 typedef struct GPUApi {
   GPUBackend          backend;
@@ -66,6 +67,7 @@ typedef struct GPUApi {
   GPUApiSurface       surface;
   GPUApiPipelineCache pipelineCache;
   GPUApiVRS           vrs;
+  GPUApiRayQuery      rayQuery;
   void               *reserved;
 } GPUApi;
 

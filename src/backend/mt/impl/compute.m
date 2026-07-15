@@ -313,6 +313,32 @@ mt_computeSampler(GPUComputePassEncoder *enc,
 
 GPU_HIDE
 void
+mt_computeAccelerationStructure(GPUComputePassEncoder       *enc,
+                                GPUAccelerationStructureEXT *structure,
+                                uint32_t                     index) {
+  GPUAccelerationStructureMT *ray;
+  MTComputeEncoder           *native;
+
+  native = mt_computeEncoder(enc);
+  ray    = structure ? structure->_priv : NULL;
+  if (!native || !ray || !ray->structure) {
+    return;
+  }
+#if MT_HAS_METAL4
+  if (native->modern) {
+    mt_setArgumentAccelerationStructure(enc->_cmdb,
+                                        native->arguments,
+                                        structure,
+                                        index);
+    return;
+  }
+#endif
+  [native->classic setAccelerationStructure:ray->structure
+                              atBufferIndex:index];
+}
+
+GPU_HIDE
+void
 mt_computePushConstants(GPUComputePassEncoder *enc,
                         const void            *data,
                         uint32_t               sizeBytes) {
@@ -446,6 +472,7 @@ mt_initCompute(GPUApiCompute *api) {
   api->buffer = mt_computeBuffer;
   api->texture = mt_computeTexture;
   api->sampler = mt_computeSampler;
+  api->accelerationStructure = mt_computeAccelerationStructure;
   api->pushConstants = mt_computePushConstants;
   api->dispatch = mt_dispatch;
   api->dispatchIndirect = mt_dispatchIndirect;

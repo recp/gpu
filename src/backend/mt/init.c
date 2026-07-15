@@ -46,6 +46,7 @@ backend_metal(void) {
     mt_initSurface(&mt.surface);
     mt_initPipelineCache(&mt.pipelineCache);
     mt_initVRS(&mt.vrs);
+    mt_initRayQuery(&mt.rayQuery);
 
     mt.initialized = true;
   }

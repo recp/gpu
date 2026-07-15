@@ -37,6 +37,7 @@ mt_resetArgumentState(MTArgumentState *state) {
     id<MTL4ArgumentTable> table = state->table;
     MTLResourceID empty = {0};
     uint32_t bufferMask;
+    uint32_t resourceMask;
     uint16_t samplerMask;
 
     bufferMask = state->bufferMask;
@@ -45,6 +46,14 @@ mt_resetArgumentState(MTArgumentState *state) {
 
       [table setAddress:0 atIndex:index];
       bufferMask &= bufferMask - 1u;
+    }
+
+    resourceMask = state->resourceMask;
+    while (resourceMask != 0u) {
+      uint32_t index = (uint32_t)__builtin_ctz(resourceMask);
+
+      [table setResource:empty atBufferIndex:index];
+      resourceMask &= resourceMask - 1u;
     }
 
     for (uint32_t word = 0; word < 2u; word++) {
@@ -69,6 +78,7 @@ mt_resetArgumentState(MTArgumentState *state) {
 
   memset(state->textureMask, 0, sizeof(state->textureMask));
   state->bufferMask = 0u;
+  state->resourceMask = 0u;
   state->samplerMask = 0u;
 }
 #endif
@@ -252,6 +262,39 @@ mt_setArgumentSampler(MTArgumentState *state,
 #else
   GPU__UNUSED(state);
   GPU__UNUSED(sampler);
+  GPU__UNUSED(index);
+#endif
+}
+
+GPU_HIDE
+void
+mt_setArgumentAccelerationStructure(
+  GPUCommandBuffer            *cmdb,
+  MTArgumentState             *state,
+  GPUAccelerationStructureEXT *structure,
+  uint32_t                     index) {
+#if MT_HAS_METAL4
+  GPUAccelerationStructureMT *native;
+
+  if (!state || !state->table || !structure ||
+      index >= MT_ARGUMENT_BUFFER_COUNT) {
+    return;
+  }
+  native = structure->_priv;
+  if (!native || !native->structure) {
+    return;
+  }
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    [(id<MTL4ArgumentTable>)state->table
+      setResource:native->structure.gpuResourceID
+    atBufferIndex:index];
+    state->resourceMask |= 1u << index;
+    mt_useAllocation(cmdb, native->structure);
+  }
+#else
+  GPU__UNUSED(cmdb);
+  GPU__UNUSED(state);
+  GPU__UNUSED(structure);
   GPU__UNUSED(index);
 #endif
 }

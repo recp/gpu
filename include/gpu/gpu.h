@@ -45,6 +45,7 @@ extern "C" {
 #include "instance.h"
 #include "surface.h"
 #include "vrs.h"
+#include "ray.h"
 
 #ifdef __cplusplus
 }

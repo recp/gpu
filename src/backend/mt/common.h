@@ -27,6 +27,7 @@
 #include "../../api/instance_internal.h"
 #include "../../api/library_internal.h"
 #include "../../api/query_internal.h"
+#include "../../api/ray_internal.h"
 #include "../../api/sampler_internal.h"
 #include "../../api/surface_internal.h"
 #include "../../api/swapchain_internal.h"
@@ -108,10 +109,22 @@ typedef struct GPUTextureMT {
   id<MTLTexture> stencilCopyView;
 } GPUTextureMT;
 
+typedef struct GPUAccelerationStructureMT {
+  id<MTLAccelerationStructure>  structure;
+  id<MTLBuffer>                 instanceBuffer;
+  NSMutableArray               *classicGeometry;
+  NSMutableArray               *modernGeometry;
+  NSMutableArray               *classicInstances;
+  MTLAccelerationStructureDescriptor *classicDescriptor;
+  id                            modernDescriptor;
+  uint64_t                      instanceCapacity;
+} GPUAccelerationStructureMT;
+
 typedef struct MTArgumentState {
   id       table;
   uint64_t textureMask[2];
   uint32_t bufferMask;
+  uint32_t resourceMask;
   uint16_t samplerMask;
 } MTArgumentState;
 
@@ -167,6 +180,11 @@ typedef struct MTCopyEncoder {
   id                       modern;
 } MTCopyEncoder;
 
+typedef struct MTRayQueryEncoder {
+  id<MTLAccelerationStructureCommandEncoder> classic;
+  id                                         modern;
+} MTRayQueryEncoder;
+
 typedef struct MTCommandBuffer MTCommandBuffer;
 
 typedef struct MTCommandQueue {
@@ -208,6 +226,8 @@ struct MTCommandBuffer {
   MTComputeEncoder        computeState;
   GPUCopyPassEncoder      copyEncoder;
   MTCopyEncoder           copyState;
+  GPUAccelerationStructurePassEncoderEXT rayQueryEncoder;
+  MTRayQueryEncoder       rayQueryState;
   GPUCommandBuffer        commandBuffer;
   uint64_t                pendingAfterStages;
   uint64_t                pendingBeforeStages;
@@ -292,6 +312,14 @@ void
 mt_setArgumentSampler(MTArgumentState *state,
                       GPUSampler      *sampler,
                       uint32_t         index);
+
+GPU_HIDE
+void
+mt_setArgumentAccelerationStructure(
+  GPUCommandBuffer           *cmdb,
+  MTArgumentState            *state,
+  GPUAccelerationStructureEXT *structure,
+  uint32_t                     index);
 
 GPU_HIDE
 void

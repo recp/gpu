@@ -83,6 +83,7 @@ set(GPU_CORE_SOURCES
   src/api/pass/renderpass.c
   src/api/pipeline_cache.c
   src/api/query.c
+  src/api/ray.c
   src/api/render/pipeline.c
   src/api/render/rce.c
   src/api/sampler.c
@@ -201,6 +202,7 @@ if(GPU_BUILD_METAL)
     src/backend/mt/impl/format.m
     src/backend/mt/impl/library.m
     src/backend/mt/impl/pipeline_cache.m
+    src/backend/mt/impl/ray.m
     src/backend/mt/impl/render/pipeline.m
     src/backend/mt/impl/render/rce.m
     src/backend/mt/impl/renderpass.m
@@ -477,6 +479,21 @@ if(GPU_BUILD_TESTS)
   unset(GPU_USL_FIXTURE_TARGET_CAPS)
   list(APPEND GPU_API_USL_FIXTURES ${GPU_API_SHADER_F16_USL_FIXTURE})
   add_custom_target(gpu-api-fixtures DEPENDS ${GPU_API_USL_FIXTURES})
+
+  if(GPU_BUILD_METAL)
+    set(GPU_USL_FIXTURE_TARGET_CAPS ray_query)
+    gpu_add_usl_fixtures(
+      GPU_API_RAY_QUERY_USL_FIXTURE
+      metal
+      api
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/ray_query.usl"
+    )
+    unset(GPU_USL_FIXTURE_TARGET_CAPS)
+    add_custom_target(
+      gpu-api-ray-query-fixture
+      DEPENDS ${GPU_API_RAY_QUERY_USL_FIXTURE}
+    )
+  endif()
 
   if(GPU_BUILD_VULKAN)
     if(GPU_API_DEFAULT_BACKEND STREQUAL "vulkan")
@@ -782,6 +799,7 @@ if(GPU_BUILD_TESTS)
     tests/api/metal_vertex_slots.c
     tests/api/query.c
     tests/api/queue.c
+    tests/api/ray.c
     tests/api/render.c
     tests/api/resources.c
     tests/api/runner.c
@@ -801,6 +819,9 @@ if(GPU_BUILD_TESTS)
   )
   target_link_libraries(gpu-api-test PRIVATE gpu)
   add_dependencies(gpu-api-test gpu-api-fixtures)
+  if(TARGET gpu-api-ray-query-fixture)
+    add_dependencies(gpu-api-test gpu-api-ray-query-fixture)
+  endif()
   if(TARGET gpu-api-vulkan-fixtures)
     add_dependencies(gpu-api-test gpu-api-vulkan-fixtures)
   endif()
@@ -831,6 +852,12 @@ if(GPU_BUILD_TESTS)
     COMMAND gpu-api-test
             ${GPU_API_USL_FIXTURES}
   )
+  if(GPU_API_RAY_QUERY_USL_FIXTURE)
+    set_tests_properties(api-validation PROPERTIES
+      ENVIRONMENT
+        "GPU_RAY_QUERY_USL_PATH=${GPU_API_RAY_QUERY_USL_FIXTURE}"
+    )
+  endif()
 
   if(GPU_BUILD_VULKAN)
     list(GET GPU_API_VULKAN_USL_FIXTURES 1 GPU_VULKAN_RENDER_MRT_US)

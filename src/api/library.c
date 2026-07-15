@@ -95,6 +95,9 @@ gpu_featureFromUSLSemantic(uint32_t semanticId, GPUFeature *outFeature) {
     case USL_SEMANTIC_FEATURE_ID_DESCRIPTOR_INDEXING:
       *outFeature = GPU_FEATURE_DESCRIPTOR_INDEXING;
       return 1;
+    case USL_SEMANTIC_FEATURE_ID_RAY_QUERY:
+      *outFeature = GPU_FEATURE_RAY_QUERY;
+      return 1;
     default:
       return 0;
   }
@@ -414,6 +417,9 @@ gpu_bindingTypeFromUSLResource(const USLRuntimeResource *resource,
       return 1;
     case USL_RUNTIME_RESOURCE_SAMPLER:
       *outType = GPU_BINDING_SAMPLER;
+      return 1;
+    case USL_RUNTIME_RESOURCE_ACCELERATION_STRUCTURE:
+      *outType = GPU_BINDING_ACCELERATION_STRUCTURE;
       return 1;
     default:
       return 0;
@@ -1150,7 +1156,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   USCompileOutput          *compileOutput;
   USLCompileOptions         compileOptions;
   USLTargetSpec             target;
-  USLCapabilityAtomDesc     targetAtoms[3];
+  USLCapabilityAtomDesc     targetAtoms[4];
   USCompileInput            compileInput;
   GPUResult                 rc;
   uint32_t                  targetAtomCount;
@@ -1236,6 +1242,16 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
           &targetAtoms[targetAtomCount++],
           USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
           USL_SEMANTIC_FEATURE_ID_DESCRIPTOR_INDEXING,
+          0u,
+          0u) != USLOk) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_QUERY)) {
+    if (us_cap_atom_init(
+          &targetAtoms[targetAtomCount++],
+          USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+          USL_SEMANTIC_FEATURE_ID_RAY_QUERY,
           0u,
           0u) != USLOk) {
       return GPU_ERROR_BACKEND_FAILURE;

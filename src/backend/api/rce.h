@@ -148,6 +148,12 @@ typedef struct GPUApiRCE {
                       uint32_t                 index);
 
   void
+  (*setVertexAccelerationStructure)(
+    GPURenderCommandEncoder      *rce,
+    GPUAccelerationStructureEXT  *structure,
+    uint32_t                      index);
+
+  void
   (*taskBuffer)(GPURenderCommandEncoder *rce,
                 GPUBuffer               *buf,
                 uint64_t                 off,
@@ -194,6 +200,12 @@ typedef struct GPUApiRCE {
   (*setFragmentSampler)(GPURenderCommandEncoder *rce,
                         GPUSampler              *sampler,
                         uint32_t                 index);
+
+  void
+  (*setFragmentAccelerationStructure)(
+    GPURenderCommandEncoder      *rce,
+    GPUAccelerationStructureEXT  *structure,
+    uint32_t                      index);
 
   void
   (*drawPrimitives)(GPURenderCommandEncoder *rce,

@@ -82,7 +82,7 @@ typedef enum GPUFeature {
   /* Non-uniform indexing of fixed-size resource arrays. */
   GPU_FEATURE_DESCRIPTOR_INDEXING = 7,
   GPU_FEATURE_MESH_SHADER = 8,
-  GPU_FEATURE_RAY_TRACING = 9,
+  GPU_FEATURE_RAY_QUERY = 9,
   GPU_FEATURE_VARIABLE_RATE_SHADING = 10,
   GPU_FEATURE_BINDLESS = 11
 } GPUFeature;

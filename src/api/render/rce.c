@@ -520,6 +520,22 @@ gpuSetRenderVertexSampler(GPURenderPassEncoder *pass,
 
 GPU_HIDE
 void
+gpuSetRenderVertexAccelerationStructure(
+  GPURenderPassEncoder        *pass,
+  GPUAccelerationStructureEXT *structure,
+  uint32_t                     index) {
+  GPUApi *api;
+
+  if (!pass || pass->_ended || !structure ||
+      !(api = gpu_renderPassApi(pass)) ||
+      !api->rce.setVertexAccelerationStructure) {
+    return;
+  }
+  api->rce.setVertexAccelerationStructure(pass, structure, index);
+}
+
+GPU_HIDE
+void
 gpuSetRenderTaskBuffer(GPURenderPassEncoder *pass,
                        GPUBuffer            *buf,
                        uint64_t              off,
@@ -650,6 +666,22 @@ gpuSetRenderFragmentSampler(GPURenderPassEncoder *pass,
   if (api->rce.setFragmentSampler) {
     api->rce.setFragmentSampler(pass, sampler, index);
   }
+}
+
+GPU_HIDE
+void
+gpuSetRenderFragmentAccelerationStructure(
+  GPURenderPassEncoder        *pass,
+  GPUAccelerationStructureEXT *structure,
+  uint32_t                     index) {
+  GPUApi *api;
+
+  if (!pass || pass->_ended || !structure ||
+      !(api = gpu_renderPassApi(pass)) ||
+      !api->rce.setFragmentAccelerationStructure) {
+    return;
+  }
+  api->rce.setFragmentAccelerationStructure(pass, structure, index);
 }
 
 GPU_EXPORT
