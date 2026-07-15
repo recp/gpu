@@ -279,6 +279,7 @@ if(GPU_BUILD_VULKAN)
     src/backend/vk/impl/pipeline.c
     src/backend/vk/impl/pipeline_cache.c
     src/backend/vk/impl/query.c
+    src/backend/vk/impl/ray.c
     src/backend/vk/impl/rce.c
     src/backend/vk/impl/renderpass.c
     src/backend/vk/impl/sampler.c
@@ -496,6 +497,19 @@ if(GPU_BUILD_TESTS)
   endif()
 
   if(GPU_BUILD_VULKAN)
+    set(GPU_USL_FIXTURE_TARGET_CAPS ray_query)
+    gpu_add_usl_fixtures(
+      GPU_API_VULKAN_RAY_QUERY_USL_FIXTURE
+      vulkan
+      api-ray-query
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/ray_query.usl"
+    )
+    unset(GPU_USL_FIXTURE_TARGET_CAPS)
+    add_custom_target(
+      gpu-api-vulkan-ray-query-fixture
+      DEPENDS ${GPU_API_VULKAN_RAY_QUERY_USL_FIXTURE}
+    )
+
     if(GPU_API_DEFAULT_BACKEND STREQUAL "vulkan")
       set(GPU_API_VULKAN_USL_FIXTURES ${GPU_API_USL_FIXTURES})
     else()
@@ -825,6 +839,9 @@ if(GPU_BUILD_TESTS)
   if(TARGET gpu-api-vulkan-fixtures)
     add_dependencies(gpu-api-test gpu-api-vulkan-fixtures)
   endif()
+  if(TARGET gpu-api-vulkan-ray-query-fixture)
+    add_dependencies(gpu-api-test gpu-api-vulkan-ray-query-fixture)
+  endif()
   target_compile_definitions(gpu-api-test PRIVATE
     GPU_BUILD_WITH_VALIDATION=$<BOOL:${GPU_BUILD_WITH_VALIDATION}>
     GPU_BUILD_WITH_DEBUG_MARKERS=$<BOOL:${GPU_BUILD_WITH_DEBUG_MARKERS}>
@@ -867,6 +884,12 @@ if(GPU_BUILD_TESTS)
               ${GPU_API_VULKAN_USL_FIXTURES}
               vulkan
     )
+    if(GPU_API_VULKAN_RAY_QUERY_USL_FIXTURE)
+      set_tests_properties(api-validation-vulkan PROPERTIES
+        ENVIRONMENT
+          "GPU_RAY_QUERY_USL_PATH=${GPU_API_VULKAN_RAY_QUERY_USL_FIXTURE}"
+      )
+    endif()
 
     add_executable(gpu-vulkan-queue-test
       tests/vulkan/queue.c

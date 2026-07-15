@@ -24,6 +24,7 @@
 #include "../../api/frame_internal.h"
 #include "../../api/instance_internal.h"
 #include "../../api/library_internal.h"
+#include "../../api/ray_internal.h"
 #include "../../api/surface_internal.h"
 #include "../../api/swapchain_internal.h"
 #include "../../api/texture_internal.h"
@@ -65,7 +66,7 @@
 
 enum {
   GPU_VK_MAX_DYNAMIC_OFFSETS          = 64u,
-  GPU_VK_DESCRIPTOR_POOL_TYPE_COUNT   = 7u
+  GPU_VK_DESCRIPTOR_POOL_TYPE_COUNT   = 8u
 };
 
 #if defined(NDEBUG) && defined(__GNUC__)
@@ -205,6 +206,7 @@ typedef struct GPUAdapterVk {
   uint32_t                      maxSubgroupSize;
   uint32_t                      nDisplayProperties;
   uint32_t                      maxVRSTexelAspectRatio;
+  uint32_t                      accelerationStructureScratchAlignment;
   bool                          dynamicRendering;
   bool                          shaderFloat16;
   bool                          descriptorIndexing;
@@ -215,6 +217,7 @@ typedef struct GPUAdapterVk {
   bool                          vrsAttachment;
   bool                          timelineSemaphore;
   bool                          synchronization2;
+  bool                          rayQuery;
   bool                          negativeViewport;
 } GPUAdapterVk;
 
@@ -223,6 +226,14 @@ typedef struct GPUDeviceVk {
   PFN_vkCmdBeginRenderingKHR  beginRendering;
   PFN_vkCmdEndRenderingKHR    endRendering;
   PFN_vkCmdPipelineBarrier2KHR pipelineBarrier2;
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
+  PFN_vkCreateAccelerationStructureKHR createAccelerationStructure;
+  PFN_vkDestroyAccelerationStructureKHR destroyAccelerationStructure;
+  PFN_vkGetAccelerationStructureBuildSizesKHR getAccelerationStructureBuildSizes;
+  PFN_vkCmdBuildAccelerationStructuresKHR buildAccelerationStructures;
+  PFN_vkGetAccelerationStructureDeviceAddressKHR getAccelerationStructureAddress;
+  PFN_vkGetBufferDeviceAddress getBufferDeviceAddress;
+#endif
 #ifdef VK_EXT_mesh_shader
   PFN_vkCmdDrawMeshTasksEXT    drawMeshTasks;
 #endif
@@ -239,6 +250,7 @@ typedef struct GPUDeviceVk {
   uint32_t                   nCreatedQueues;
   uint32_t                   maxDrawIndirectCount;
   uint32_t                   maxVRSTexelAspectRatio;
+  uint32_t                   accelerationStructureScratchAlignment;
   VkBool32                   multiDrawIndirect;
   VkBool32                   independentBlend;
   bool                       dynamicRendering;
@@ -248,6 +260,7 @@ typedef struct GPUDeviceVk {
   bool                       vrsAttachment;
   bool                       timelineSemaphore;
   bool                       synchronization2;
+  bool                       rayQuery;
 } GPUDeviceVk;
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
@@ -323,6 +336,27 @@ typedef struct GPUBufferVk {
   VkDeviceSize   allocationSize;
   bool           coherent;
 } GPUBufferVk;
+
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
+typedef struct GPUAccelerationStructureVk {
+  GPUDeviceVk                                *gpuDevice;
+  GPUBuffer                                  *instanceBuffer;
+  VkAccelerationStructureGeometryKHR        *geometries;
+  VkAccelerationStructureBuildRangeInfoKHR  *ranges;
+  VkDevice                                    device;
+  VkBuffer                                    buffer;
+  VkDeviceMemory                              memory;
+  VkAccelerationStructureKHR                  structure;
+  VkDeviceAddress                             address;
+  uint64_t                                    instanceCapacity;
+  uint32_t                                    geometryCapacity;
+} GPUAccelerationStructureVk;
+
+typedef struct GPUAccelerationStructureEncoderVk {
+  VkCommandBuffer command;
+  bool            debugLabelActive;
+} GPUAccelerationStructureEncoderVk;
+#endif
 
 #ifdef __APPLE__
 typedef struct GPUTransferChunkVk {
@@ -456,6 +490,10 @@ struct GPUCommandBufferVk {
   GPUComputePassEncoder     computeEncoder;
   GPUComputeEncoderVk       computeState;
   GPUCopyPassEncoder        copyEncoder;
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
+  GPUAccelerationStructurePassEncoderEXT rayQueryEncoder;
+  GPUAccelerationStructureEncoderVk      rayQueryState;
+#endif
   GPUCommandBuffer          commandBuffer;
   uint32_t                  presentImageIndex;
   uint32_t                  presentFrameIndex;

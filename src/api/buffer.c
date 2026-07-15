@@ -44,6 +44,12 @@ GPUCreateBuffer(GPUDevice                 * __restrict device,
   if (info->usage == 0) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  if ((info->usage &
+       (GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT |
+        GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT)) != 0u &&
+      !GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_QUERY)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
 
   if (!(api = gpuDeviceApi(device))) {
     return GPU_ERROR_BACKEND_FAILURE;

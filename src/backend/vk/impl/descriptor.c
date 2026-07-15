@@ -17,6 +17,7 @@
 #include "../common.h"
 #include "../../../api/buffer_internal.h"
 #include "../../../api/descr/descriptor_internal.h"
+#include "../../../api/ray_internal.h"
 #include "../../../api/sampler_internal.h"
 #include "../../../api/texture_internal.h"
 
@@ -34,6 +35,12 @@ typedef struct GPUDescriptorWriteVk {
   VkWriteDescriptorSet   writes[GPU_VK_DESCRIPTOR_WRITE_BATCH_COUNT];
   VkDescriptorBufferInfo bufferInfos[GPU_VK_DESCRIPTOR_WRITE_BATCH_COUNT];
   VkDescriptorImageInfo  imageInfos[GPU_VK_DESCRIPTOR_WRITE_BATCH_COUNT];
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
+  VkWriteDescriptorSetAccelerationStructureKHR
+    accelerationInfos[GPU_VK_DESCRIPTOR_WRITE_BATCH_COUNT];
+  VkAccelerationStructureKHR
+    accelerationStructures[GPU_VK_DESCRIPTOR_WRITE_BATCH_COUNT];
+#endif
 } GPUDescriptorWriteVk;
 
 static bool
@@ -77,6 +84,14 @@ vk__descriptorType(GPUBindingType type,
         *outType = VK_DESCRIPTOR_TYPE_SAMPLER;
         return true;
       }
+      break;
+    case GPU_BINDING_ACCELERATION_STRUCTURE:
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
+      if (!dynamic) {
+        *outType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+        return true;
+      }
+#endif
       break;
     default:
       break;
@@ -936,6 +951,10 @@ vk__writeDescriptor(void *context,
   GPUTextureVk           *texture;
   GPUTextureViewVk       *view;
   GPUSamplerVk           *sampler;
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
+  GPUAccelerationStructureVk *accelerationStructure;
+  VkWriteDescriptorSetAccelerationStructureKHR *accelerationInfo;
+#endif
   VkDescriptorBufferInfo *bufferInfo;
   VkDescriptorImageInfo  *imageInfo;
   VkWriteDescriptorSet   *write;
@@ -954,7 +973,9 @@ vk__writeDescriptor(void *context,
   }
   if ((binding->kind == GPUBindKindBuffer && !binding->buffer) ||
       (binding->kind == GPUBindKindTexture && !binding->textureView) ||
-      (binding->kind == GPUBindKindSampler && !binding->sampler)) {
+      (binding->kind == GPUBindKindSampler && !binding->sampler) ||
+      (binding->kind == GPUBindKindAccelerationStructure &&
+       !binding->accelerationStructure)) {
     return;
   }
 
@@ -1020,6 +1041,31 @@ vk__writeDescriptor(void *context,
       imageInfo->sampler = sampler->sampler;
       write->pImageInfo  = imageInfo;
       break;
+    case GPUBindKindAccelerationStructure:
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
+      accelerationStructure = binding->accelerationStructure
+                                ? binding->accelerationStructure->_priv
+                                : NULL;
+      if (!accelerationStructure || !accelerationStructure->structure ||
+          accelerationStructure->device != writeContext->group->device) {
+        writeContext->valid = false;
+        return;
+      }
+      accelerationInfo = &writeContext->accelerationInfos[writeIndex];
+      memset(accelerationInfo, 0, sizeof(*accelerationInfo));
+      writeContext->accelerationStructures[writeIndex] =
+        accelerationStructure->structure;
+      accelerationInfo->sType =
+        VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+      accelerationInfo->accelerationStructureCount = 1u;
+      accelerationInfo->pAccelerationStructures =
+        &writeContext->accelerationStructures[writeIndex];
+      write->pNext = accelerationInfo;
+      break;
+#else
+      writeContext->valid = false;
+      return;
+#endif
     default:
       writeContext->valid = false;
       return;

@@ -33,7 +33,6 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
     {0.0f, 1.0f, 0.0f, 0.0f},
     {0.0f, 0.0f, 1.0f, 0.0f}
   };
-  GPUAdapterProperties                         properties       = {0};
   GPUDeviceCreateInfo                          deviceInfo       = {0};
   GPUComputePipelineCreateInfo                 pipelineInfo     = {0};
   GPUAccelerationStructureTriangleGeometryEXT geometry         = {0};
@@ -73,12 +72,10 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   bool                                         sawResult;
   int                                          ok;
 
-  if (!adapter ||
-      GPUGetAdapterProperties(adapter, &properties) != GPU_OK) {
+  if (!adapter) {
     return 0;
   }
-  if (properties.backend != GPU_BACKEND_METAL ||
-      !GPUIsFeatureSupported(adapter, GPU_FEATURE_RAY_QUERY)) {
+  if (!GPUIsFeatureSupported(adapter, GPU_FEATURE_RAY_QUERY)) {
     return 1;
   }
 

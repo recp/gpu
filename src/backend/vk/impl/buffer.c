@@ -25,7 +25,9 @@ vk__bufferUsage(GPUBufferUsageFlags usage, VkBufferUsageFlags *outUsage) {
                                     GPU_BUFFER_USAGE_STORAGE |
                                     GPU_BUFFER_USAGE_COPY_SRC |
                                     GPU_BUFFER_USAGE_COPY_DST |
-                                    GPU_BUFFER_USAGE_INDIRECT;
+                                    GPU_BUFFER_USAGE_INDIRECT |
+                                    GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT |
+                                    GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT;
   VkBufferUsageFlags result;
 
   if (!outUsage || usage == 0u || (usage & ~known) != 0u) {
@@ -54,6 +56,23 @@ vk__bufferUsage(GPUBufferUsageFlags usage, VkBufferUsageFlags *outUsage) {
   if ((usage & GPU_BUFFER_USAGE_INDIRECT) != 0u) {
     result |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
   }
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
+  if ((usage & GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT) != 0u) {
+    result |=
+      VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
+      VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+  }
+  if ((usage & GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT) != 0u) {
+    result |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+              VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+  }
+#else
+  if ((usage &
+       (GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT |
+        GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT)) != 0u) {
+    return false;
+  }
+#endif
 
   *outUsage = result;
   return true;
@@ -132,6 +151,10 @@ vk__createBuffer(GPUDevice                 * __restrict device,
   GPUBufferVk              state = {0};
   VkBufferCreateInfo       bufferInfo = {0};
   VkMemoryAllocateInfo     allocationInfo = {0};
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
+  VkMemoryAllocateFlagsInfo allocationFlags = {0};
+  VkBufferDeviceAddressInfo addressInfo = {0};
+#endif
   VkMemoryRequirements     requirements;
   VkMemoryPropertyFlags    memoryFlags;
   VkMemoryPropertyFlags    preferredFlags;
@@ -174,6 +197,17 @@ vk__createBuffer(GPUDevice                 * __restrict device,
   allocationInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
   allocationInfo.allocationSize  = requirements.size;
   allocationInfo.memoryTypeIndex = memoryTypeIndex;
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
+  if ((bufferInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0u) {
+    if (!deviceVk->rayQuery || !deviceVk->getBufferDeviceAddress) {
+      vk__destroyBufferState(&state);
+      return GPU_ERROR_UNSUPPORTED;
+    }
+    allocationFlags.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+    allocationFlags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+    allocationInfo.pNext  = &allocationFlags;
+  }
+#endif
   if (vkAllocateMemory(state.device,
                        &allocationInfo,
                        NULL,
@@ -212,6 +246,19 @@ vk__createBuffer(GPUDevice                 * __restrict device,
   buffer->device    = device;
   buffer->sizeBytes = info->sizeBytes;
   buffer->usage     = info->usage;
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
+  if ((bufferInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0u) {
+    addressInfo.sType  = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    addressInfo.buffer = state.buffer;
+    buffer->_gpuAddress = deviceVk->getBufferDeviceAddress(deviceVk->device,
+                                                            &addressInfo);
+    if (buffer->_gpuAddress == 0u) {
+      vk__destroyBufferState(native);
+      free(buffer);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+#endif
   *outBuffer        = buffer;
   return GPU_OK;
 }
@@ -222,7 +269,8 @@ vk_createBuffer(GPUDevice                 * __restrict device,
                 const GPUBufferCreateInfo * __restrict info,
                 GPUBuffer                ** __restrict outBuffer) {
   const GPUBufferUsageFlags deviceLocal = GPU_BUFFER_USAGE_STORAGE |
-                                          GPU_BUFFER_USAGE_COPY_DST;
+                                          GPU_BUFFER_USAGE_COPY_DST |
+                                          GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT;
   GPUResult result;
   bool hostVisible;
 
