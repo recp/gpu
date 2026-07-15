@@ -525,22 +525,31 @@ gpuBindGroupLayoutIsBindless(GPUBindGroupLayout *layout) {
   return priv && priv->bindless;
 }
 
-GPU_HIDE
-int
-gpuPipelineLayoutAcceptsBindGroup(GPUPipelineLayout *pipelineLayout,
-                                  uint32_t groupIndex,
-                                  GPUBindGroup *group) {
+static GPU_INLINE int
+gpu_pipelineLayoutAcceptsBindGroup(GPUPipelineLayout *pipelineLayout,
+                                   uint32_t           groupIndex,
+                                   GPUBindGroup      *group) {
   GPUPipelineLayoutPriv *pipelinePriv;
-  GPUBindGroupLayout *groupLayout;
+  GPUBindGroupPriv      *groupPriv;
 
   pipelinePriv = gpu_pipelineLayoutPriv(pipelineLayout);
-  groupLayout = gpuBindGroupGetLayout(group);
-  if (!pipelinePriv || !groupLayout ||
+  groupPriv    = gpu_groupPriv(group);
+  if (!pipelinePriv || !groupPriv ||
       groupIndex >= pipelinePriv->bindGroupLayoutCount) {
     return 0;
   }
 
-  return pipelinePriv->bindGroupLayouts[groupIndex] == groupLayout;
+  return pipelinePriv->bindGroupLayouts[groupIndex] == groupPriv->layout;
+}
+
+GPU_HIDE
+int
+gpuPipelineLayoutAcceptsBindGroup(GPUPipelineLayout *pipelineLayout,
+                                  uint32_t           groupIndex,
+                                  GPUBindGroup      *group) {
+  return gpu_pipelineLayoutAcceptsBindGroup(pipelineLayout,
+                                            groupIndex,
+                                            group);
 }
 
 #if GPU_BUILD_WITH_VALIDATION
@@ -2891,7 +2900,9 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
 
   if (!pass || pass->_ended || !group ||
       groupIndex >= GPU_ENCODER_MAX_BIND_GROUPS ||
-      !gpuPipelineLayoutAcceptsBindGroup(pass->_pipelineLayout, groupIndex, group)) {
+      !gpu_pipelineLayoutAcceptsBindGroup(pass->_pipelineLayout,
+                                          groupIndex,
+                                          group)) {
     return;
   }
   device = gpuBindGroupGetDevice(group);
