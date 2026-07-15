@@ -16,6 +16,7 @@
 
 #include "../common.h"
 #include "../impl.h"
+#include "../../../api/vrs_internal.h"
 
 static void
 dx12__clearColor(float                    outColor[4],
@@ -252,8 +253,14 @@ dx12_beginRenderPass(GPUCommandBuffer             *cmdb,
   GPUCommandBufferDX12 *command;
   GPURenderPassDX12    *renderPass;
   GPURenderPassDesc    *desc;
+  GPUDeviceDX12        *device;
+  const GPUShadingRateAttachmentEXT          *shadingRate;
+  const GPURasterizationRateMapRenderPassEXT *rateMap;
 
   command = cmdb ? cmdb->_priv : NULL;
+  device  = cmdb && cmdb->_queue && cmdb->_queue->_device
+              ? cmdb->_queue->_device->_priv
+              : NULL;
   if (!command || !command->commandList || !info ||
       info->colorAttachmentCount > GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS ||
       (info->colorAttachmentCount > 0u && !info->pColorAttachments) ||
@@ -266,6 +273,9 @@ dx12_beginRenderPass(GPUCommandBuffer             *cmdb,
   desc       = &command->renderPassDesc;
   memset(renderPass, 0, sizeof(*renderPass));
   memset(desc, 0, sizeof(*desc));
+  if (!gpuRenderPassVRSExtensions(info, &shadingRate, &rateMap) || rateMap) {
+    return NULL;
+  }
 
   for (uint32_t i = 0u; i < info->colorAttachmentCount; i++) {
     const GPURenderPassColorAttachment *attachment;
@@ -329,6 +339,27 @@ dx12_beginRenderPass(GPUCommandBuffer             *cmdb,
       attachment->view->format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
     renderPass->width            = view->width;
     renderPass->height           = view->height;
+  }
+
+  if (shadingRate) {
+    GPUTextureViewDX12 *view;
+    uint32_t            minWidth;
+    uint32_t            minHeight;
+
+    view = shadingRate->view ? shadingRate->view->_priv : NULL;
+    if (!device || device->vrsTier < D3D12_VARIABLE_SHADING_RATE_TIER_2 ||
+        device->vrsTileSize == 0u || !view || !view->resource || !view->state ||
+        shadingRate->texelSize.width != device->vrsTileSize ||
+        shadingRate->texelSize.height != device->vrsTileSize) {
+      return NULL;
+    }
+    minWidth = (renderPass->width - 1u) / shadingRate->texelSize.width + 1u;
+    minHeight = (renderPass->height - 1u) /
+                shadingRate->texelSize.height + 1u;
+    if (view->width < minWidth || view->height < minHeight) {
+      return NULL;
+    }
+    renderPass->shadingRateView = view;
   }
 
   renderPass->colorCount = info->colorAttachmentCount;

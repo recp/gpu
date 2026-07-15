@@ -1265,6 +1265,23 @@ GPUGetProcAddr(GPUDevice *device, const char *name) {
       strcmp(name, "GPUUpdateBindGroupEXT") == 0) {
     return (GPUProc)GPUUpdateBindGroupEXT;
   }
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_VARIABLE_RATE_SHADING)) {
+    if (strcmp(name, "GPUGetVRSCapabilitiesEXT") == 0) {
+      return (GPUProc)GPUGetVRSCapabilitiesEXT;
+    }
+    if (strcmp(name, "GPUCreateRasterizationRateMapEXT") == 0) {
+      return (GPUProc)GPUCreateRasterizationRateMapEXT;
+    }
+    if (strcmp(name, "GPUDestroyRasterizationRateMapEXT") == 0) {
+      return (GPUProc)GPUDestroyRasterizationRateMapEXT;
+    }
+    if (strcmp(name, "GPUGetRasterizationRateMapPhysicalSizeEXT") == 0) {
+      return (GPUProc)GPUGetRasterizationRateMapPhysicalSizeEXT;
+    }
+    if (strcmp(name, "GPUSetFragmentShadingRateEXT") == 0) {
+      return (GPUProc)GPUSetFragmentShadingRateEXT;
+    }
+  }
 
   return NULL;
 }

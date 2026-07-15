@@ -16,20 +16,6 @@
 
 #include "../common.h"
 
-typedef struct GPUAdapterMT {
-  id<MTLDevice>           device;
-  MTLReadWriteTextureTier storageTier;
-  os_unfair_lock          subgroupLock;
-  uint32_t                subgroupSize;
-  bool                    float32Filterable;
-  bool                    depth24Supported;
-  bool                    appleFamily1;
-  bool                    appleFamily2;
-  bool                    bcSupported;
-  bool                    subgroupProbed;
-  bool                    subgroups;
-} GPUAdapterMT;
-
 static GPUAdapterMT *
 mt_adapter(const GPUAdapter *adapter) {
   return adapter ? adapter->_priv : NULL;
@@ -296,6 +282,12 @@ mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       if (@available(macOS 13.0, iOS 16.0, *)) {
         return [device supportsFamily:MTLGPUFamilyApple7] ||
                [device supportsFamily:MTLGPUFamilyMac2];
+      }
+      return false;
+    case GPU_FEATURE_VARIABLE_RATE_SHADING:
+      device = adapterMT->device;
+      if (@available(macOS 10.15.4, iOS 13.0, *)) {
+        return [device supportsRasterizationRateMapWithLayerCount:1u];
       }
       return false;
     case GPU_FEATURE_SUBGROUPS:

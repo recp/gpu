@@ -185,6 +185,12 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkPhysicalDeviceFeatures2                  timelineFeatures2 = {0};
   VkPhysicalDeviceSynchronization2FeaturesKHR sync2Features = {0};
   VkPhysicalDeviceFeatures2                  sync2Features2 = {0};
+#ifdef VK_KHR_fragment_shading_rate
+  VkPhysicalDeviceFragmentShadingRateFeaturesKHR vrsFeatures = {0};
+  VkPhysicalDeviceFeatures2                  vrsFeatures2 = {0};
+  VkPhysicalDeviceFragmentShadingRatePropertiesKHR vrsProps = {0};
+  VkPhysicalDeviceProperties2                vrsProps2 = {0};
+#endif
 #ifdef VK_EXT_mesh_shader
   VkPhysicalDeviceMeshShaderFeaturesEXT      meshFeatures = {0};
   VkPhysicalDeviceFeatures2                  meshFeatures2 = {0};
@@ -205,6 +211,9 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool                                      sync2Core;
   bool                                      maintenance1Extension;
   bool                                      maintenance1Core;
+#ifdef VK_KHR_fragment_shading_rate
+  bool                                      vrsExtension;
+#endif
 #ifdef VK_EXT_mesh_shader
   bool                                      meshExtension;
   bool                                      spirv14Extension;
@@ -228,6 +237,9 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   sync2Core                 = false;
   maintenance1Extension     = false;
   maintenance1Core          = false;
+#ifdef VK_KHR_fragment_shading_rate
+  vrsExtension              = false;
+#endif
 #ifdef VK_EXT_mesh_shader
   meshExtension                 = false;
   spirv14Extension              = false;
@@ -324,6 +336,12 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       if (!strcmp(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         shaderFloatControlsExtension = true;
+      }
+#endif
+#ifdef VK_KHR_fragment_shading_rate
+      if (!strcmp(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        vrsExtension = true;
       }
 #endif
 
@@ -452,6 +470,122 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       adapterVk->dynamicRendering = true;
     }
   }
+#ifdef VK_KHR_fragment_shading_rate
+  if (getFeatures2 && vrsExtension) {
+    PFN_vkGetPhysicalDeviceProperties2 getProperties2;
+    PFN_vkGetPhysicalDeviceFragmentShadingRatesKHR getRates;
+    VkPhysicalDeviceFragmentShadingRateKHR *rates;
+    VkFormatProperties formatProps;
+    uint32_t rateCount;
+
+    vrsFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
+    vrsFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    vrsFeatures2.pNext = &vrsFeatures;
+    getFeatures2(raw, &vrsFeatures2);
+    adapterVk->vrsDrawRate = vrsFeatures.pipelineFragmentShadingRate;
+    adapterVk->vrsAttachment =
+      vrsFeatures.attachmentFragmentShadingRate &&
+      adapterVk->dynamicRendering;
+    if (adapterVk->vrsDrawRate || adapterVk->vrsAttachment) {
+      adapterVk->vrsCombiners =
+        GPU_SHADING_RATE_COMBINER_KEEP_BIT_EXT |
+        GPU_SHADING_RATE_COMBINER_REPLACE_BIT_EXT;
+
+      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+        vkGetInstanceProcAddr(instanceVk->inst,
+                              "vkGetPhysicalDeviceProperties2");
+      if (!getProperties2) {
+        getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+          vkGetInstanceProcAddr(instanceVk->inst,
+                                "vkGetPhysicalDeviceProperties2KHR");
+      }
+      if (getProperties2) {
+        vrsProps.sType =
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR;
+        vrsProps2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        vrsProps2.pNext = &vrsProps;
+        getProperties2(raw, &vrsProps2);
+        adapterVk->minVRSTexelSize =
+          vrsProps.minFragmentShadingRateAttachmentTexelSize;
+        adapterVk->maxVRSTexelSize =
+          vrsProps.maxFragmentShadingRateAttachmentTexelSize;
+        adapterVk->maxVRSTexelAspectRatio =
+          vrsProps.maxFragmentShadingRateAttachmentTexelSizeAspectRatio;
+        if (vrsProps.fragmentShadingRateNonTrivialCombinerOps) {
+          adapterVk->vrsCombiners |=
+            GPU_SHADING_RATE_COMBINER_MIN_BIT_EXT |
+            GPU_SHADING_RATE_COMBINER_MAX_BIT_EXT;
+        }
+      } else {
+        adapterVk->vrsAttachment = false;
+      }
+      if (adapterVk->vrsAttachment) {
+        memset(&formatProps, 0, sizeof(formatProps));
+        vkGetPhysicalDeviceFormatProperties(raw,
+                                            VK_FORMAT_R8_UINT,
+                                            &formatProps);
+        if (adapterVk->minVRSTexelSize.width == 0u ||
+            adapterVk->minVRSTexelSize.height == 0u ||
+            adapterVk->maxVRSTexelSize.width <
+              adapterVk->minVRSTexelSize.width ||
+            adapterVk->maxVRSTexelSize.height <
+              adapterVk->minVRSTexelSize.height ||
+            (formatProps.optimalTilingFeatures &
+             VK_FORMAT_FEATURE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR) ==
+              0u) {
+          adapterVk->vrsAttachment = false;
+        }
+      }
+
+      getRates = (PFN_vkGetPhysicalDeviceFragmentShadingRatesKHR)
+        vkGetInstanceProcAddr(instanceVk->inst,
+                              "vkGetPhysicalDeviceFragmentShadingRatesKHR");
+      rateCount = 0u;
+      rates     = NULL;
+      if (getRates &&
+          getRates(raw, &rateCount, NULL) == VK_SUCCESS && rateCount > 0u) {
+        rates = calloc(rateCount, sizeof(*rates));
+      }
+      if (rates) {
+        for (i = 0u; i < rateCount; i++) {
+          rates[i].sType =
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_KHR;
+        }
+        if (getRates(raw, &rateCount, rates) == VK_SUCCESS) {
+          for (i = 0u; i < rateCount; i++) {
+            const VkExtent2D size = rates[i].fragmentSize;
+
+            if (size.width == 1u && size.height == 1u)
+              adapterVk->vrsRates |= GPU_SHADING_RATE_1X1_BIT_EXT;
+            else if (size.width == 1u && size.height == 2u)
+              adapterVk->vrsRates |= GPU_SHADING_RATE_1X2_BIT_EXT;
+            else if (size.width == 2u && size.height == 1u)
+              adapterVk->vrsRates |= GPU_SHADING_RATE_2X1_BIT_EXT;
+            else if (size.width == 2u && size.height == 2u)
+              adapterVk->vrsRates |= GPU_SHADING_RATE_2X2_BIT_EXT;
+            else if (size.width == 2u && size.height == 4u)
+              adapterVk->vrsRates |= GPU_SHADING_RATE_2X4_BIT_EXT;
+            else if (size.width == 4u && size.height == 2u)
+              adapterVk->vrsRates |= GPU_SHADING_RATE_4X2_BIT_EXT;
+            else if (size.width == 4u && size.height == 4u)
+              adapterVk->vrsRates |= GPU_SHADING_RATE_4X4_BIT_EXT;
+          }
+        }
+        free(rates);
+      }
+      if ((adapterVk->vrsRates & GPU_SHADING_RATE_1X1_BIT_EXT) == 0u) {
+        adapterVk->vrsDrawRate = false;
+        adapterVk->vrsAttachment = false;
+      }
+      if (adapterVk->vrsDrawRate || adapterVk->vrsAttachment) {
+        adapterVk->extensionNames[adapterVk->nEnabledExtensions++] =
+          VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME;
+        assert(adapterVk->nEnabledExtensions < 64);
+      }
+    }
+  }
+#endif
 #ifdef VK_EXT_mesh_shader
   if (getFeatures2 && meshExtension &&
       (spirv14Core || spirv14ExtensionUsable)) {
@@ -535,6 +669,8 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       return adapterVk->bindless;
     case GPU_FEATURE_MESH_SHADER:
       return adapterVk->meshShader;
+    case GPU_FEATURE_VARIABLE_RATE_SHADING:
+      return adapterVk->vrsDrawRate || adapterVk->vrsAttachment;
     default:
       return false;
   }
@@ -864,6 +1000,9 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
 #ifdef VK_EXT_mesh_shader
   VkPhysicalDeviceMeshShaderFeaturesEXT meshFeatures = {0};
 #endif
+#ifdef VK_KHR_fragment_shading_rate
+  VkPhysicalDeviceFragmentShadingRateFeaturesKHR vrsFeatures = {0};
+#endif
   VkDeviceCreateInfo       deviceCI = {0};
   VkResult                 result;
   uint32_t                 familyIndex;
@@ -909,6 +1048,11 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) != 0u &&
       !adapterVk->meshShader) {
+    goto err;
+  }
+  if ((enabledFeatureMask &
+       (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u &&
+      !adapterVk->vrsDrawRate && !adapterVk->vrsAttachment) {
     goto err;
   }
   planCount       = 0u;
@@ -1028,6 +1172,17 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
     deviceCI.pNext           = &meshFeatures;
   }
 #endif
+#ifdef VK_KHR_fragment_shading_rate
+  if ((enabledFeatureMask &
+       (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u) {
+    vrsFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
+    vrsFeatures.pNext = (void *)deviceCI.pNext;
+    vrsFeatures.pipelineFragmentShadingRate = adapterVk->vrsDrawRate;
+    vrsFeatures.attachmentFragmentShadingRate = adapterVk->vrsAttachment;
+    deviceCI.pNext = &vrsFeatures;
+  }
+#endif
 
   result = vkCreateDevice(adapterVk->physicalDevice,
                           &deviceCI,
@@ -1049,6 +1204,28 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
   deviceVk->multiDrawIndirect = coreFeatures.multiDrawIndirect;
   deviceVk->independentBlend  = coreFeatures.independentBlend;
   deviceVk->timelineSemaphore = adapterVk->timelineSemaphore;
+#ifdef VK_KHR_fragment_shading_rate
+  if ((enabledFeatureMask &
+       (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u) {
+    if (adapterVk->vrsDrawRate) {
+      deviceVk->setFragmentShadingRate =
+        (PFN_vkCmdSetFragmentShadingRateKHR)vkGetDeviceProcAddr(
+          deviceVk->device,
+          "vkCmdSetFragmentShadingRateKHR"
+        );
+      if (!deviceVk->setFragmentShadingRate) {
+        goto err;
+      }
+    }
+    deviceVk->vrsRates               = adapterVk->vrsRates;
+    deviceVk->vrsCombiners           = adapterVk->vrsCombiners;
+    deviceVk->minVRSTexelSize        = adapterVk->minVRSTexelSize;
+    deviceVk->maxVRSTexelSize        = adapterVk->maxVRSTexelSize;
+    deviceVk->maxVRSTexelAspectRatio = adapterVk->maxVRSTexelAspectRatio;
+    deviceVk->vrsDrawRate            = adapterVk->vrsDrawRate;
+    deviceVk->vrsAttachment          = adapterVk->vrsAttachment;
+  }
+#endif
 #ifdef VK_EXT_mesh_shader
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) != 0u) {
     deviceVk->drawMeshTasks  = (PFN_vkCmdDrawMeshTasksEXT)

@@ -20,6 +20,7 @@
 #include "../device_internal.h"
 #include "../query_internal.h"
 #include "../texture_internal.h"
+#include "../vrs_internal.h"
 
 #define GPU_RENDER_PASS_MAX_COLOR_ATTACHMENTS 8u
 
@@ -115,6 +116,8 @@ gpu_textureCopySubresourcesOverlap(
 static bool
 gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
                               const GPUDevice               *device) {
+  const GPUShadingRateAttachmentEXT          *shadingRate;
+  const GPURasterizationRateMapRenderPassEXT *rateMap;
   const GPURenderPassDepthStencilAttachment *depthStencil;
   uint32_t                                   sampleCount;
 
@@ -137,6 +140,32 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
   if (info->occlusionQuerySet &&
       (info->occlusionQuerySet->device != device ||
        info->occlusionQuerySet->type != GPU_QUERY_OCCLUSION)) {
+    return false;
+  }
+  if (!gpuRenderPassVRSExtensions(info, &shadingRate, &rateMap)) {
+    return false;
+  }
+  if ((shadingRate || rateMap) &&
+      !GPUIsFeatureEnabled(device, GPU_FEATURE_VARIABLE_RATE_SHADING)) {
+    return false;
+  }
+  if (shadingRate &&
+      (!shadingRate->view ||
+       !gpu_textureViewHasUsage(
+         shadingRate->view,
+         GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT
+       ) ||
+       shadingRate->view->_texture->device != device ||
+       shadingRate->view->format != GPU_FORMAT_R8_UINT ||
+       shadingRate->view->viewType != GPU_TEXTURE_VIEW_2D ||
+       shadingRate->view->mipLevelCount != 1u ||
+       shadingRate->view->arrayLayerCount != 1u ||
+       shadingRate->view->_texture->sampleCount != 1u ||
+       shadingRate->texelSize.width == 0u ||
+       shadingRate->texelSize.height == 0u)) {
+    return false;
+  }
+  if (rateMap && (!rateMap->map || rateMap->map->device != device)) {
     return false;
   }
 

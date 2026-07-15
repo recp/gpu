@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../../../api/vrs_internal.h"
 
 static MTLLoadAction
 mt_loadAction(GPULoadOp op) {
@@ -102,6 +103,7 @@ mt_resetRenderPass(MTRenderPass *pass) {
   pass->width  = 0u;
   pass->height = 0u;
   classic.visibilityResultBuffer = nil;
+  classic.rasterizationRateMap   = nil;
   for (uint32_t i = 0; i < GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS; i++) {
     classic.colorAttachments[i].texture = nil;
     classic.colorAttachments[i].resolveTexture = nil;
@@ -128,6 +130,7 @@ mt_resetRenderPass(MTRenderPass *pass) {
     modern.depthAttachment.texture = nil;
     modern.stencilAttachment.texture = nil;
     modern.visibilityResultBuffer = nil;
+    modern.rasterizationRateMap = nil;
   }
 #endif
 }
@@ -136,6 +139,8 @@ GPU_HIDE
 GPURenderPassDesc*
 mt_beginRenderPass(GPUCommandBuffer              *cmdb,
                    const GPURenderPassCreateInfo *info) {
+  const GPUShadingRateAttachmentEXT          *shadingRate;
+  const GPURasterizationRateMapRenderPassEXT *rateMap;
   const GPURenderPassColorAttachment        *color;
   const GPURenderPassDepthStencilAttachment *depthStencil;
   MTCommandBuffer                           *commandState;
@@ -151,6 +156,10 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
   if (!cmdb || !info ||
       (info->colorAttachmentCount > 0 && !info->pColorAttachments))
     return NULL;
+  if (!gpuRenderPassVRSExtensions(info, &shadingRate, &rateMap) ||
+      shadingRate) {
+    return NULL;
+  }
 
   commandState = mt_commandBuffer(cmdb);
   if (!commandState) {
@@ -183,6 +192,9 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
   rpd4 = nativePass->modern;
 #endif
   mt_resetRenderPass(nativePass);
+  rpd.rasterizationRateMap = rateMap
+                               ? (id<MTLRasterizationRateMap>)rateMap->map->_priv
+                               : nil;
   occlusion = info->occlusionQuerySet ? info->occlusionQuerySet->_priv : NULL;
   if (info->occlusionQuerySet && (!occlusion || !occlusion->visibility)) {
     return NULL;
@@ -195,6 +207,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
 
       modern.visibilityResultBuffer = rpd.visibilityResultBuffer;
       modern.visibilityResultType   = MTLVisibilityResultTypeReset;
+      modern.rasterizationRateMap   = rpd.rasterizationRateMap;
     }
   }
 #endif

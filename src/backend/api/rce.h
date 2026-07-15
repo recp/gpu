@@ -220,6 +220,14 @@ typedef struct GPUApiRCE {
               const uint32_t           meshWorkgroupSize[3]);
 
   void
+  (*setFragmentShadingRate)(
+    GPURenderCommandEncoder      *rce,
+    GPUShadingRateEXT             rate,
+    GPUShadingRateCombinerEXT     primitiveCombiner,
+    GPUShadingRateCombinerEXT     attachmentCombiner
+  );
+
+  void
   (*drawPrimitivesIndirect)(GPURenderCommandEncoder *rce,
                             GPUPrimitiveType         type,
                             GPUBuffer               *argsBuffer,

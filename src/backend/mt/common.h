@@ -68,6 +68,20 @@ typedef enum MTCommandMode {
   MTCommandMode4
 } MTCommandMode;
 
+typedef struct GPUAdapterMT {
+  id<MTLDevice>           device;
+  MTLReadWriteTextureTier storageTier;
+  os_unfair_lock          subgroupLock;
+  uint32_t                subgroupSize;
+  bool                    float32Filterable;
+  bool                    depth24Supported;
+  bool                    appleFamily1;
+  bool                    appleFamily2;
+  bool                    bcSupported;
+  bool                    subgroupProbed;
+  bool                    subgroups;
+} GPUAdapterMT;
+
 enum {
   MT_TRANSFER_SLOT_COUNT   = 3u,
   MT_RESIDENCY_CACHE_SIZE = 64u

@@ -90,6 +90,7 @@ set(GPU_CORE_SOURCES
   src/api/swapchain.c
   src/api/texture.c
   src/api/vertex.c
+  src/api/vrs.c
   src/backend/backend.c
 )
 
@@ -205,6 +206,7 @@ if(GPU_BUILD_METAL)
     src/backend/mt/impl/renderpass.m
     src/backend/mt/impl/swapchain.m
     src/backend/mt/impl/vertex.m
+    src/backend/mt/impl/vrs.m
   )
 
   find_library(GPU_FRAMEWORK_METAL Metal REQUIRED)
@@ -252,6 +254,7 @@ if(GPU_BUILD_DX12)
     src/backend/dx12/impl/surface.c
     src/backend/dx12/impl/swapchain.c
     src/backend/dx12/impl/texture.c
+    src/backend/dx12/impl/vrs.c
   )
   target_link_libraries(gpu PRIVATE d3d12 d3dcompiler dxgi dxguid)
 endif()
@@ -281,6 +284,7 @@ if(GPU_BUILD_VULKAN)
     src/backend/vk/impl/surface.c
     src/backend/vk/impl/swapchain.c
     src/backend/vk/impl/texture.c
+    src/backend/vk/impl/vrs.c
   )
   if(GPU_BUILD_WITH_VALIDATION)
     target_sources(gpu PRIVATE src/backend/vk/impl/debug.c)
@@ -789,6 +793,7 @@ if(GPU_BUILD_TESTS)
     tests/api/texture_view_render.c
     tests/api/threading.c
     tests/api/volume_texture.c
+    tests/api/vrs.c
   )
   target_link_libraries(gpu-api-test PRIVATE gpu)
   add_dependencies(gpu-api-test gpu-api-fixtures)

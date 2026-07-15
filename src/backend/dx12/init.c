@@ -48,6 +48,7 @@ backend_dx12(void) {
     dx12_initDescriptor(&dx12.descriptor);
     dx12_initInstance(&dx12.instance);
     dx12_initSurface(&dx12.surface);
+    dx12_initVRS(&dx12.vrs);
 
     dx12.initialized = true;
   }

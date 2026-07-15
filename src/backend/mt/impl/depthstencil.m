@@ -164,6 +164,9 @@ mt_createTexture(GPUDevice                  * __restrict device,
 
   deviceMT    = device->_priv;
   sampleCount = info->sampleCount ? info->sampleCount : 1u;
+  if ((info->usage & GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT) != 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
   if (sampleCount > 1u &&
       ![deviceMT->device supportsTextureSampleCount:sampleCount]) {
     return GPU_ERROR_UNSUPPORTED;

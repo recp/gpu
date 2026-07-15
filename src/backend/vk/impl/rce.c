@@ -159,6 +159,21 @@ vk_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
                          &beginInfo,
                          VK_SUBPASS_CONTENTS_INLINE);
   }
+#ifdef VK_KHR_fragment_shading_rate
+  if (native->device && native->device->vrsDrawRate &&
+      native->device->setFragmentShadingRate) {
+    const VkExtent2D rate = {1u, 1u};
+    VkFragmentShadingRateCombinerOpKHR combiners[2];
+
+    combiners[0] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
+    combiners[1] = renderPass->shadingRateView
+                     ? VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR
+                     : VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
+    native->device->setFragmentShadingRate(native->command,
+                                           &rate,
+                                           combiners);
+  }
+#endif
 
   viewport = vk__viewport(0.0f,
                           0.0f,
@@ -270,6 +285,70 @@ vk_stencilReference(GPURenderCommandEncoder *encoder, uint32_t reference) {
   vkCmdSetStencilReference(native->command,
                            VK_STENCIL_FACE_FRONT_AND_BACK,
                            reference);
+}
+
+GPU_HIDE
+void
+vk_setFragmentShadingRate(
+  GPURenderCommandEncoder      *encoder,
+  GPUShadingRateEXT             rate,
+  GPUShadingRateCombinerEXT     primitiveCombiner,
+  GPUShadingRateCombinerEXT     attachmentCombiner) {
+#ifdef VK_KHR_fragment_shading_rate
+  static const VkExtent2D rates[] = {
+    [GPU_SHADING_RATE_1X1_EXT] = {1u, 1u},
+    [GPU_SHADING_RATE_1X2_EXT] = {1u, 2u},
+    [GPU_SHADING_RATE_2X1_EXT] = {2u, 1u},
+    [GPU_SHADING_RATE_2X2_EXT] = {2u, 2u},
+    [GPU_SHADING_RATE_2X4_EXT] = {2u, 4u},
+    [GPU_SHADING_RATE_4X2_EXT] = {4u, 2u},
+    [GPU_SHADING_RATE_4X4_EXT] = {4u, 4u}
+  };
+  static const VkFragmentShadingRateCombinerOpKHR combiners[] = {
+    [GPU_SHADING_RATE_COMBINER_KEEP_EXT] =
+      VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR,
+    [GPU_SHADING_RATE_COMBINER_REPLACE_EXT] =
+      VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR,
+    [GPU_SHADING_RATE_COMBINER_MIN_EXT] =
+      VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MIN_KHR,
+    [GPU_SHADING_RATE_COMBINER_MAX_EXT] =
+      VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MAX_KHR
+  };
+  GPURenderEncoderVk                    *native;
+  VkFragmentShadingRateCombinerOpKHR     nativeCombiners[2];
+  GPUShadingRateFlagsEXT                 rateBit;
+  GPUShadingRateCombinerFlagsEXT         primitiveBit;
+  GPUShadingRateCombinerFlagsEXT         attachmentBit;
+
+  native = vk__renderEncoder(encoder);
+  if (!native || !native->device || !native->device->vrsDrawRate ||
+      !native->device->setFragmentShadingRate ||
+      (uint32_t)rate >= GPU_ARRAY_LEN(rates) ||
+      (uint32_t)primitiveCombiner >= GPU_ARRAY_LEN(combiners) ||
+      (uint32_t)attachmentCombiner >= GPU_ARRAY_LEN(combiners)) {
+    return;
+  }
+
+  rateBit       = 1u << rate;
+  primitiveBit  = 1u << primitiveCombiner;
+  attachmentBit = 1u << attachmentCombiner;
+  if ((native->device->vrsRates & rateBit) == 0u ||
+      (native->device->vrsCombiners & primitiveBit) == 0u ||
+      (native->device->vrsCombiners & attachmentBit) == 0u) {
+    return;
+  }
+
+  nativeCombiners[0] = combiners[primitiveCombiner];
+  nativeCombiners[1] = combiners[attachmentCombiner];
+  native->device->setFragmentShadingRate(native->command,
+                                         &rates[rate],
+                                         nativeCombiners);
+#else
+  GPU__UNUSED(encoder);
+  GPU__UNUSED(rate);
+  GPU__UNUSED(primitiveCombiner);
+  GPU__UNUSED(attachmentCombiner);
+#endif
 }
 
 GPU_HIDE
@@ -561,6 +640,7 @@ vk_initRCE(GPUApiRCE *api) {
   api->scissor                  = vk_scissor;
   api->blendConstant            = vk_blendConstant;
   api->stencilReference         = vk_stencilReference;
+  api->setFragmentShadingRate   = vk_setFragmentShadingRate;
   api->pushConstants            = vk_renderPushConstants;
   api->vertexBuffer             = vk_vertexBuffer;
   api->vertexInputBuffer        = vk_vertexBuffer;

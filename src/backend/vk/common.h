@@ -186,29 +186,36 @@ typedef struct GPUInstanceVk {
 } GPUInstanceVk;
 
 typedef struct GPUAdapterVk {
-  char                      *extensionNames[64];
-  VkQueueFamilyProperties   *queueFamilyProps;
-  VkPhysicalDevice           physicalDevice;
-  VkSubgroupFeatureFlags     subgroupOperations;
-  VkShaderStageFlags         subgroupStages;
-  uint32_t                   nQueFamilies;
-  uint32_t                   nEnabledExtensions;
-  uint32_t                   subgroupSize;
-  uint32_t                   minSubgroupSize;
-  uint32_t                   maxSubgroupSize;
-  VkPhysicalDeviceProperties props;
-  VkPhysicalDeviceFeatures   features;
-  uint32_t                   nDisplayProperties;
-  VkDisplayPropertiesKHR     displayProps;
-  bool                       dynamicRendering;
-  bool                       shaderFloat16;
-  bool                       descriptorIndexing;
-  bool                       bindless;
-  bool                       meshShader;
-  bool                       taskShader;
-  bool                       timelineSemaphore;
-  bool                       synchronization2;
-  bool                       negativeViewport;
+  char                         *extensionNames[64];
+  VkQueueFamilyProperties      *queueFamilyProps;
+  VkPhysicalDevice              physicalDevice;
+  VkSubgroupFeatureFlags        subgroupOperations;
+  VkShaderStageFlags            subgroupStages;
+  VkPhysicalDeviceProperties    props;
+  VkPhysicalDeviceFeatures      features;
+  VkDisplayPropertiesKHR        displayProps;
+  GPUShadingRateFlagsEXT         vrsRates;
+  GPUShadingRateCombinerFlagsEXT vrsCombiners;
+  VkExtent2D                    minVRSTexelSize;
+  VkExtent2D                    maxVRSTexelSize;
+  uint32_t                      nQueFamilies;
+  uint32_t                      nEnabledExtensions;
+  uint32_t                      subgroupSize;
+  uint32_t                      minSubgroupSize;
+  uint32_t                      maxSubgroupSize;
+  uint32_t                      nDisplayProperties;
+  uint32_t                      maxVRSTexelAspectRatio;
+  bool                          dynamicRendering;
+  bool                          shaderFloat16;
+  bool                          descriptorIndexing;
+  bool                          bindless;
+  bool                          meshShader;
+  bool                          taskShader;
+  bool                          vrsDrawRate;
+  bool                          vrsAttachment;
+  bool                          timelineSemaphore;
+  bool                          synchronization2;
+  bool                          negativeViewport;
 } GPUAdapterVk;
 
 typedef struct GPUDeviceVk {
@@ -219,16 +226,26 @@ typedef struct GPUDeviceVk {
 #ifdef VK_EXT_mesh_shader
   PFN_vkCmdDrawMeshTasksEXT    drawMeshTasks;
 #endif
+#ifdef VK_KHR_fragment_shading_rate
+  PFN_vkCmdSetFragmentShadingRateKHR setFragmentShadingRate;
+#endif
   VkDevice                   device;
   VkSampleCountFlags         colorSampleCounts;
   VkSampleCountFlags         depthSampleCounts;
+  GPUShadingRateFlagsEXT         vrsRates;
+  GPUShadingRateCombinerFlagsEXT vrsCombiners;
+  VkExtent2D                 minVRSTexelSize;
+  VkExtent2D                 maxVRSTexelSize;
   uint32_t                   nCreatedQueues;
   uint32_t                   maxDrawIndirectCount;
+  uint32_t                   maxVRSTexelAspectRatio;
   VkBool32                   multiDrawIndirect;
   VkBool32                   independentBlend;
   bool                       dynamicRendering;
   bool                       meshShader;
   bool                       taskShader;
+  bool                       vrsDrawRate;
+  bool                       vrsAttachment;
   bool                       timelineSemaphore;
   bool                       synchronization2;
 } GPUDeviceVk;
@@ -382,11 +399,15 @@ typedef struct GPURenderPassVk {
   GPUTextureViewVk            *colorViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   GPUTextureViewVk            *resolveViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   GPUTextureViewVk            *depthStencilView;
+  GPUTextureViewVk            *shadingRateView;
   VkRenderPass                 renderPass;
   VkFramebuffer                framebuffer;
   VkRenderingAttachmentInfoKHR colorAttachments[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   VkRenderingAttachmentInfoKHR depthAttachment;
   VkRenderingAttachmentInfoKHR stencilAttachment;
+#ifdef VK_KHR_fragment_shading_rate
+  VkRenderingFragmentShadingRateAttachmentInfoKHR shadingRateAttachment;
+#endif
   VkRenderingInfoKHR           renderingInfo;
   VkExtent2D                    extent;
   VkClearValue                 clearValue;

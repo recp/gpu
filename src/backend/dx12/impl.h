@@ -58,6 +58,7 @@ GPU_HIDE void dx12_initFrame(GPUApiFrame *apiFrame);
 GPU_HIDE void dx12_initDescriptor(GPUApiDescriptor *apiDescriptor);
 GPU_HIDE void dx12_initInstance(GPUApiInstance *apiInstance);
 GPU_HIDE void dx12_initSurface(GPUApiSurface *apiDevice);
+GPU_HIDE void dx12_initVRS(GPUApiVRS *api);
 GPU_HIDE bool dx12_compileShader(GPUDeviceDX12        *device,
                                  GPUShaderLibraryDX12 *library,
                                  const char           *entry,

@@ -207,6 +207,62 @@ dx12__transitionView(GPURenderEncoderDX12 *encoder,
   *view->state = nextState;
 }
 
+static bool
+dx12__setShadingRate(
+  GPURenderEncoderDX12      *encoder,
+  GPUShadingRateEXT          rate,
+  GPUShadingRateCombinerEXT  primitiveCombiner,
+  GPUShadingRateCombinerEXT  attachmentCombiner) {
+  static const D3D12_SHADING_RATE rates[] = {
+    [GPU_SHADING_RATE_1X1_EXT] = D3D12_SHADING_RATE_1X1,
+    [GPU_SHADING_RATE_1X2_EXT] = D3D12_SHADING_RATE_1X2,
+    [GPU_SHADING_RATE_2X1_EXT] = D3D12_SHADING_RATE_2X1,
+    [GPU_SHADING_RATE_2X2_EXT] = D3D12_SHADING_RATE_2X2,
+    [GPU_SHADING_RATE_2X4_EXT] = D3D12_SHADING_RATE_2X4,
+    [GPU_SHADING_RATE_4X2_EXT] = D3D12_SHADING_RATE_4X2,
+    [GPU_SHADING_RATE_4X4_EXT] = D3D12_SHADING_RATE_4X4
+  };
+  static const D3D12_SHADING_RATE_COMBINER combiners[] = {
+    [GPU_SHADING_RATE_COMBINER_KEEP_EXT] =
+      D3D12_SHADING_RATE_COMBINER_PASSTHROUGH,
+    [GPU_SHADING_RATE_COMBINER_REPLACE_EXT] =
+      D3D12_SHADING_RATE_COMBINER_OVERRIDE,
+    [GPU_SHADING_RATE_COMBINER_MIN_EXT] =
+      D3D12_SHADING_RATE_COMBINER_MAX,
+    [GPU_SHADING_RATE_COMBINER_MAX_EXT] =
+      D3D12_SHADING_RATE_COMBINER_MIN
+  };
+  D3D12_SHADING_RATE_COMBINER nativeCombiners[2];
+  GPUShadingRateFlagsEXT       rateBit;
+  GPUShadingRateCombinerFlagsEXT primitiveBit;
+  GPUShadingRateCombinerFlagsEXT attachmentBit;
+
+  if (!encoder || !encoder->device || !encoder->commandList5 ||
+      (uint32_t)rate >= GPU_ARRAY_LEN(rates) ||
+      (uint32_t)primitiveCombiner >= GPU_ARRAY_LEN(combiners) ||
+      (uint32_t)attachmentCombiner >= GPU_ARRAY_LEN(combiners)) {
+    return false;
+  }
+
+  rateBit       = 1u << rate;
+  primitiveBit  = 1u << primitiveCombiner;
+  attachmentBit = 1u << attachmentCombiner;
+  if ((encoder->device->vrsRates & rateBit) == 0u ||
+      (encoder->device->vrsCombiners & primitiveBit) == 0u ||
+      (encoder->device->vrsCombiners & attachmentBit) == 0u) {
+    return false;
+  }
+
+  nativeCombiners[0] = combiners[primitiveCombiner];
+  nativeCombiners[1] = combiners[attachmentCombiner];
+  encoder->commandList5->lpVtbl->RSSetShadingRate(
+    encoder->commandList5,
+    rates[rate],
+    nativeCombiners
+  );
+  return true;
+}
+
 GPU_HIDE
 GPURenderCommandEncoder*
 dx12_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
@@ -236,6 +292,7 @@ dx12_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   memset(native, 0, sizeof(*native));
   native->device           = device;
   native->commandList      = command->commandList;
+  native->commandList5     = command->commandList5;
   native->commandList6     = command->commandList6;
   native->commandList7     = command->commandList7;
   native->renderPass       = renderPass;
@@ -257,6 +314,25 @@ dx12_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
     dx12__transitionView(native,
                          renderPass->depthStencilView,
                          D3D12_RESOURCE_STATE_DEPTH_WRITE);
+  }
+  if (native->commandList5) {
+    (void)dx12__setShadingRate(
+      native,
+      GPU_SHADING_RATE_1X1_EXT,
+      GPU_SHADING_RATE_COMBINER_KEEP_EXT,
+      renderPass->shadingRateView
+        ? GPU_SHADING_RATE_COMBINER_REPLACE_EXT
+        : GPU_SHADING_RATE_COMBINER_KEEP_EXT
+    );
+    if (renderPass->shadingRateView) {
+      dx12__transitionView(native,
+                           renderPass->shadingRateView,
+                           D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE);
+      native->commandList5->lpVtbl->RSSetShadingRateImage(
+        native->commandList5,
+        renderPass->shadingRateView->resource
+      );
+    }
   }
 
   native->commandList->lpVtbl->OMSetRenderTargets(native->commandList,
@@ -581,6 +657,22 @@ dx12_drawMesh(GPURenderCommandEncoder *encoder,
                                               groupCountZ);
 }
 
+GPU_HIDE
+void
+dx12_setFragmentShadingRate(
+  GPURenderCommandEncoder      *encoder,
+  GPUShadingRateEXT             rate,
+  GPUShadingRateCombinerEXT     primitiveCombiner,
+  GPUShadingRateCombinerEXT     attachmentCombiner) {
+  GPURenderEncoderDX12 *native;
+
+  native = encoder ? encoder->_priv : NULL;
+  (void)dx12__setShadingRate(native,
+                             rate,
+                             primitiveCombiner,
+                             attachmentCombiner);
+}
+
 static bool
 dx12__drawIndirect(GPURenderCommandEncoder *encoder,
                    GPUBuffer               *argsBuffer,
@@ -732,6 +824,10 @@ dx12_endRenderEncoding(GPURenderCommandEncoder *encoder) {
       dx12__transitionView(native, view, D3D12_RESOURCE_STATE_PRESENT);
     }
   }
+  if (renderPass->shadingRateView && native->commandList5) {
+    native->commandList5->lpVtbl->RSSetShadingRateImage(native->commandList5,
+                                                        NULL);
+  }
   if (native->debugEventActive) {
     dx12_endDebugEvent(gpuCommandBufferDevice(encoder->_cmdb),
                        native->commandList);
@@ -754,6 +850,7 @@ dx12_initRCE(GPUApiRCE *api) {
   api->drawPrimitives           = dx12_drawPrimitives;
   api->drawIndexedPrims         = dx12_drawIndexedPrims;
   api->drawMesh                 = dx12_drawMesh;
+  api->setFragmentShadingRate   = dx12_setFragmentShadingRate;
   api->drawPrimitivesIndirect   = dx12_drawPrimitivesIndirect;
   api->drawIndexedPrimsIndirect = dx12_drawIndexedPrimsIndirect;
 

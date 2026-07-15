@@ -64,6 +64,9 @@ dx12__textureDimension(GPUTextureDimension dimension,
 
 static D3D12_RESOURCE_STATES
 dx12__textureFinalState(GPUTextureUsageFlags usage) {
+  if ((usage & GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT) != 0u) {
+    return D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE;
+  }
   if ((usage & GPU_TEXTURE_USAGE_SAMPLED) != 0u) {
     return D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE |
            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
@@ -397,12 +400,13 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   size_t                   allocationSize;
   uint32_t                 arrayLayerCount;
   uint32_t                 subresourceCount;
+  uint32_t                 mipLevelCount;
   uint32_t                 planeCount;
   uint32_t                 sampleCount;
   HRESULT                  result;
 
   if (!device || !device->_priv || !info || !outTexture ||
-      info->mipLevelCount == 0u || info->mipLevelCount > UINT16_MAX ||
+      info->mipLevelCount > UINT16_MAX ||
       info->depthOrLayers > UINT16_MAX ||
       !dx12__textureDimension(info->dimension, &dimension)) {
     return GPU_ERROR_UNSUPPORTED;
@@ -414,7 +418,9 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   }
 
   *outTexture = NULL;
-  format = dx12__textureResourceFormat(info->format);
+  deviceDX12    = device->_priv;
+  mipLevelCount = info->mipLevelCount ? info->mipLevelCount : 1u;
+  format        = dx12__textureResourceFormat(info->format);
   if (format == DXGI_FORMAT_UNKNOWN) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -433,15 +439,25 @@ dx12_createTexture(GPUDevice                  * __restrict device,
        info->dimension != GPU_TEXTURE_DIMENSION_2D)) {
     return GPU_ERROR_UNSUPPORTED;
   }
+  if ((info->usage & GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT) != 0u &&
+      (deviceDX12->vrsTier < D3D12_VARIABLE_SHADING_RATE_TIER_2 ||
+       info->format != GPU_FORMAT_R8_UINT ||
+       info->dimension != GPU_TEXTURE_DIMENSION_2D ||
+       info->depthOrLayers != 1u || mipLevelCount != 1u ||
+       (info->usage & (GPU_TEXTURE_USAGE_COLOR_TARGET |
+                       GPU_TEXTURE_USAGE_DEPTH_STENCIL)) != 0u ||
+       (info->sampleCount != 0u && info->sampleCount != 1u))) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
 
   arrayLayerCount = info->dimension == GPU_TEXTURE_DIMENSION_3D
                       ? 1u
                       : info->depthOrLayers;
   planeCount = dx12__texturePlaneCount(info->format);
-  if (info->mipLevelCount > UINT32_MAX / arrayLayerCount) {
+  if (mipLevelCount > UINT32_MAX / arrayLayerCount) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
-  subresourceCount = info->mipLevelCount * arrayLayerCount;
+  subresourceCount = mipLevelCount * arrayLayerCount;
   if (subresourceCount > UINT32_MAX / planeCount) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
@@ -458,7 +474,6 @@ dx12_createTexture(GPUDevice                  * __restrict device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  deviceDX12            = device->_priv;
   sampleCount           = info->sampleCount ? info->sampleCount : 1u;
   if (sampleCount > 1u) {
     D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS levels = {0};
@@ -484,7 +499,7 @@ dx12_createTexture(GPUDevice                  * __restrict device,
                             ? 1u
                             : info->height;
   desc.DepthOrArraySize = (UINT16)info->depthOrLayers;
-  desc.MipLevels        = (UINT16)info->mipLevelCount;
+  desc.MipLevels        = (UINT16)mipLevelCount;
   desc.Format           = format;
   desc.SampleDesc.Count = sampleCount;
   desc.Layout           = D3D12_TEXTURE_LAYOUT_UNKNOWN;
@@ -524,7 +539,7 @@ dx12_createTexture(GPUDevice                  * __restrict device,
 #endif
   native->states           = (D3D12_RESOURCE_STATES *)(native + 1);
   native->state            = initialState;
-  native->mipLevelCount    = info->mipLevelCount;
+  native->mipLevelCount    = mipLevelCount;
   native->arrayLayerCount  = arrayLayerCount;
   native->subresourceCount = subresourceCount;
   native->planeCount       = planeCount;
@@ -536,7 +551,7 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   texture->width          = info->width;
   texture->height         = info->height;
   texture->depthOrLayers  = info->depthOrLayers;
-  texture->mipLevelCount  = info->mipLevelCount;
+  texture->mipLevelCount  = mipLevelCount;
   texture->sampleCount    = sampleCount;
   texture->usage          = info->usage;
   texture->_ownsNative    = true;
@@ -765,6 +780,7 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
   bool                             storage;
   bool                             colorTarget;
   bool                             depthTarget;
+  bool                             shadingRate;
   bool                             hasRtv;
   bool                             hasDsv;
   bool                             hasUav;
@@ -805,6 +821,8 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
   storage     = (texture->usage & GPU_TEXTURE_USAGE_STORAGE) != 0u;
   colorTarget = (texture->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u;
   depthTarget = (texture->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u;
+  shadingRate =
+    (texture->usage & GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT) != 0u;
   if (sampled) {
     srv.Format                  = dx12__textureSrvFormat(info->format);
     srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -819,7 +837,7 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
                                                &dsv);
   hasUav = storage && texture->sampleCount == 1u &&
            dx12__fillTextureUav(info, format, &uav);
-  if ((!sampled && !hasRtv && !hasDsv && !hasUav) ||
+  if ((!sampled && !hasRtv && !hasDsv && !hasUav && !shadingRate) ||
       (sampled && !dx12__fillTextureSrv(info, &srv)) ||
       (storage && !hasUav)) {
     return GPU_ERROR_UNSUPPORTED;
@@ -836,6 +854,7 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
     return GPU_ERROR_BACKEND_FAILURE;
   }
   native = (GPUTextureViewDX12 *)(view + 1);
+  native->device = device;
   if (sampled) {
     native->srv    = srv;
     native->hasSrv = true;

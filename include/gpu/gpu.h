@@ -44,6 +44,7 @@ extern "C" {
 #include "sampler.h"
 #include "instance.h"
 #include "surface.h"
+#include "vrs.h"
 
 #ifdef __cplusplus
 }

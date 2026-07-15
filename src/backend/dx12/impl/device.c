@@ -113,6 +113,46 @@ dx12_queryMeshShader(ID3D12Device    *device,
 }
 
 static bool
+dx12_queryVRS(ID3D12Device                     *device,
+              D3D12_VARIABLE_SHADING_RATE_TIER *outTier,
+              uint32_t                         *outTileSize,
+              bool                             *outAdditionalRates) {
+  D3D12_FEATURE_DATA_D3D12_OPTIONS6 options6 = {0};
+
+  if (outTier) {
+    *outTier = D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED;
+  }
+  if (outTileSize) {
+    *outTileSize = 0u;
+  }
+  if (outAdditionalRates) {
+    *outAdditionalRates = false;
+  }
+  if (!device ||
+      FAILED(device->lpVtbl->CheckFeatureSupport(
+        device,
+        D3D12_FEATURE_D3D12_OPTIONS6,
+        &options6,
+        sizeof(options6))) ||
+      options6.VariableShadingRateTier ==
+        D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED) {
+    return false;
+  }
+
+  if (outTier) {
+    *outTier = options6.VariableShadingRateTier;
+  }
+  if (outTileSize &&
+      options6.VariableShadingRateTier >= D3D12_VARIABLE_SHADING_RATE_TIER_2) {
+    *outTileSize = options6.ShadingRateImageTileSize;
+  }
+  if (outAdditionalRates) {
+    *outAdditionalRates = options6.AdditionalShadingRatesSupported != FALSE;
+  }
+  return true;
+}
+
+static bool
 dx12_supportsShaderF16(ID3D12Device    *device,
                        D3D_SHADER_MODEL shaderModel) {
   D3D12_FEATURE_DATA_D3D12_OPTIONS4 options4 = {0};
@@ -186,6 +226,7 @@ dx12_probeAdapter(GPUAdapterDX12 *adapter) {
   D3D_SHADER_MODEL shaderModel;
   HMODULE          dxcModule;
   HRESULT          result;
+  bool             additionalRates;
 
   if (!adapter || !adapter->dxgiAdapter) {
     return false;
@@ -214,6 +255,27 @@ dx12_probeAdapter(GPUAdapterDX12 *adapter) {
                       dx12_supportsBindless(device);
   adapter->meshShader = dxcModule &&
                         dx12_queryMeshShader(device, shaderModel, NULL);
+  additionalRates = false;
+  if (dx12_queryVRS(device,
+                    &adapter->vrsTier,
+                    &adapter->vrsTileSize,
+                    &additionalRates)) {
+    adapter->vrsRates = GPU_SHADING_RATE_1X1_BIT_EXT |
+                        GPU_SHADING_RATE_1X2_BIT_EXT |
+                        GPU_SHADING_RATE_2X1_BIT_EXT |
+                        GPU_SHADING_RATE_2X2_BIT_EXT;
+    if (additionalRates) {
+      adapter->vrsRates |= GPU_SHADING_RATE_2X4_BIT_EXT |
+                           GPU_SHADING_RATE_4X2_BIT_EXT |
+                           GPU_SHADING_RATE_4X4_BIT_EXT;
+    }
+    adapter->vrsCombiners = GPU_SHADING_RATE_COMBINER_KEEP_BIT_EXT;
+    if (adapter->vrsTier >= D3D12_VARIABLE_SHADING_RATE_TIER_2) {
+      adapter->vrsCombiners |= GPU_SHADING_RATE_COMBINER_REPLACE_BIT_EXT |
+                               GPU_SHADING_RATE_COMBINER_MIN_BIT_EXT |
+                               GPU_SHADING_RATE_COMBINER_MAX_BIT_EXT;
+    }
+  }
   if (dxcModule) {
     FreeLibrary(dxcModule);
   }
@@ -248,6 +310,7 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
   D3D12_FEATURE_DATA_D3D12_OPTIONS12 options12 = {0};
   uint32_t minSubgroupSize;
   uint32_t maxSubgroupSize;
+  bool     additionalRates;
 
   if (!device || !device->d3dDevice) {
     return;
@@ -291,6 +354,27 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
                        dx12_queryMeshShader(device->d3dDevice,
                                             device->shaderModel,
                                             &device->d3dDevice2);
+  additionalRates = false;
+  if (dx12_queryVRS(device->d3dDevice,
+                    &device->vrsTier,
+                    &device->vrsTileSize,
+                    &additionalRates)) {
+    device->vrsRates = GPU_SHADING_RATE_1X1_BIT_EXT |
+                       GPU_SHADING_RATE_1X2_BIT_EXT |
+                       GPU_SHADING_RATE_2X1_BIT_EXT |
+                       GPU_SHADING_RATE_2X2_BIT_EXT;
+    if (additionalRates) {
+      device->vrsRates |= GPU_SHADING_RATE_2X4_BIT_EXT |
+                          GPU_SHADING_RATE_4X2_BIT_EXT |
+                          GPU_SHADING_RATE_4X4_BIT_EXT;
+    }
+    device->vrsCombiners = GPU_SHADING_RATE_COMBINER_KEEP_BIT_EXT;
+    if (device->vrsTier >= D3D12_VARIABLE_SHADING_RATE_TIER_2) {
+      device->vrsCombiners |= GPU_SHADING_RATE_COMBINER_REPLACE_BIT_EXT |
+                              GPU_SHADING_RATE_COMBINER_MIN_BIT_EXT |
+                              GPU_SHADING_RATE_COMBINER_MAX_BIT_EXT;
+    }
+  }
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   device->pixModule = LoadLibraryW(L"WinPixEventRuntime.dll");
   if (device->pixModule) {
@@ -595,6 +679,9 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
       return adapterDX12->bindless;
     case GPU_FEATURE_MESH_SHADER:
       return adapterDX12->meshShader;
+    case GPU_FEATURE_VARIABLE_RATE_SHADING:
+      return adapterDX12->vrsTier !=
+             D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED;
     case GPU_FEATURE_SUBGROUPS:
       return adapterDX12->subgroups;
     case GPU_FEATURE_TIMESTAMPS:
@@ -691,12 +778,25 @@ dx12_createDevice(GPUAdapter        * __restrict adapter,
       !deviceDX12->meshShader) {
     goto err;
   }
+  if ((enabledFeatureMask &
+       (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u &&
+      deviceDX12->vrsTier ==
+        D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED) {
+    goto err;
+  }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) == 0u) {
     deviceDX12->meshShader = false;
     if (deviceDX12->d3dDevice2) {
       deviceDX12->d3dDevice2->lpVtbl->Release(deviceDX12->d3dDevice2);
       deviceDX12->d3dDevice2 = NULL;
     }
+  }
+  if ((enabledFeatureMask &
+       (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) == 0u) {
+    deviceDX12->vrsTier = D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED;
+    deviceDX12->vrsRates = 0u;
+    deviceDX12->vrsCombiners = 0u;
+    deviceDX12->vrsTileSize = 0u;
   }
   InitializeSRWLock(&deviceDX12->descriptorLock);
   if (!dx12__newSignatures(deviceDX12)) {

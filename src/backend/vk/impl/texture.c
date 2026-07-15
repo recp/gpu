@@ -42,7 +42,12 @@ vk__textureUsage(GPUTextureUsageFlags usage, VkImageUsageFlags *outUsage) {
                                      GPU_TEXTURE_USAGE_COLOR_TARGET |
                                      GPU_TEXTURE_USAGE_DEPTH_STENCIL |
                                      GPU_TEXTURE_USAGE_COPY_SRC |
-                                     GPU_TEXTURE_USAGE_COPY_DST;
+                                     GPU_TEXTURE_USAGE_COPY_DST
+#ifdef VK_KHR_fragment_shading_rate
+                                     |
+                                     GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT
+#endif
+                                     ;
   VkImageUsageFlags result;
 
   if (!outUsage || usage == 0u || (usage & ~known) != 0u) {
@@ -68,6 +73,11 @@ vk__textureUsage(GPUTextureUsageFlags usage, VkImageUsageFlags *outUsage) {
   if ((usage & GPU_TEXTURE_USAGE_COPY_DST) != 0u) {
     result |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
   }
+#ifdef VK_KHR_fragment_shading_rate
+  if ((usage & GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT) != 0u) {
+    result |= VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+  }
+#endif
 
   *outUsage = result;
   return true;
@@ -205,6 +215,12 @@ vk__layoutSource(VkImageLayout layout,
       *outAccess = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
       break;
+#ifdef VK_KHR_fragment_shading_rate
+    case VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR:
+      *outStage  = VK_PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+      *outAccess = VK_ACCESS_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR;
+      break;
+#endif
     default:
       *outStage  = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
       *outAccess = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
@@ -543,6 +559,11 @@ vk_transitionTextureBarrier(VkCommandBuffer      command,
 
 static VkImageLayout
 vk__finalImageLayout(GPUTextureUsageFlags usage) {
+#ifdef VK_KHR_fragment_shading_rate
+  if ((usage & GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT) != 0u) {
+    return VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR;
+  }
+#endif
   if ((usage & GPU_TEXTURE_USAGE_STORAGE) != 0u) {
     return VK_IMAGE_LAYOUT_GENERAL;
   }
@@ -677,6 +698,14 @@ vk_createTexture(GPUDevice                  * __restrict device,
 
   *outTexture             = NULL;
   deviceVk                = device->_priv;
+  if ((info->usage & GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT) != 0u &&
+      (!deviceVk->vrsAttachment || info->format != GPU_FORMAT_R8_UINT ||
+       info->dimension != GPU_TEXTURE_DIMENSION_2D ||
+       info->depthOrLayers != 1u ||
+       (info->mipLevelCount != 0u && info->mipLevelCount != 1u) ||
+       (info->sampleCount != 0u && info->sampleCount != 1u))) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
   sampleCount             = vk__sampleCount(info->sampleCount
                                               ? info->sampleCount
                                               : 1u);
@@ -877,7 +906,8 @@ vk_createTextureView(GPUTexture                     * __restrict texture,
 
   attachmentView =
     (texture->usage & (GPU_TEXTURE_USAGE_COLOR_TARGET |
-                       GPU_TEXTURE_USAGE_DEPTH_STENCIL)) != 0u &&
+                       GPU_TEXTURE_USAGE_DEPTH_STENCIL |
+                       GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT)) != 0u &&
     info->mipLevelCount == 1u &&
     (info->viewType == GPU_TEXTURE_VIEW_2D ||
      info->viewType == GPU_TEXTURE_VIEW_2D_ARRAY);

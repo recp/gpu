@@ -45,6 +45,7 @@ backend_vk(void) {
     vk_initFrame(&vk.frame);
     vk_initDescriptor(&vk.descriptor);
     vk_initPipelineCache(&vk.pipelineCache);
+    vk_initVRS(&vk.vrs);
 
     vk.initialized = true;
   }

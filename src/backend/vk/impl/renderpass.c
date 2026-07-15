@@ -17,6 +17,7 @@
 #include "../common.h"
 #include "../../../api/buffer_internal.h"
 #include "../../../api/texture_internal.h"
+#include "../../../api/vrs_internal.h"
 
 enum {
   GPU_VK_BARRIER_CHUNK_SIZE  = 16u,
@@ -97,6 +98,12 @@ vk__layoutAccess(VkImageLayout        layout,
       *outStage  = VK_PIPELINE_STAGE_TRANSFER_BIT;
       *outAccess = VK_ACCESS_TRANSFER_WRITE_BIT;
       break;
+#ifdef VK_KHR_fragment_shading_rate
+    case VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR:
+      *outStage  = VK_PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+      *outAccess = VK_ACCESS_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR;
+      break;
+#endif
     default:
       *outStage  = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
       *outAccess = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
@@ -482,6 +489,8 @@ vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
                           GPUDeviceVk                   *device) {
   GPURenderPassDesc *pass;
   GPURenderPassVk   *native;
+  const GPUShadingRateAttachmentEXT          *shadingRate;
+  const GPURasterizationRateMapRenderPassEXT *rateMap;
   uint32_t           layerCount;
 
   if (!cmdb || !info || !command || !device || !device->dynamicRendering ||
@@ -494,6 +503,9 @@ vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
   layerCount = 0u;
   memset(pass, 0, sizeof(*pass));
   memset(native, 0, sizeof(*native));
+  if (!gpuRenderPassVRSExtensions(info, &shadingRate, &rateMap) || rateMap) {
+    return NULL;
+  }
 
   for (uint32_t i = 0u; i < info->colorAttachmentCount; i++) {
     const GPURenderPassColorAttachment *attachment;
@@ -622,6 +634,67 @@ vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
       layerCount == 0u) {
     return NULL;
   }
+#ifdef VK_KHR_fragment_shading_rate
+  if (shadingRate) {
+    GPUTextureViewVk *view;
+    uint32_t           minWidth;
+    uint32_t           minHeight;
+    uint32_t           maxAxis;
+    uint32_t           minAxis;
+
+    view = shadingRate->view ? shadingRate->view->_priv : NULL;
+    if (shadingRate->texelSize.width == 0u ||
+        shadingRate->texelSize.height == 0u ||
+        (shadingRate->texelSize.width &
+         (shadingRate->texelSize.width - 1u)) != 0u ||
+        (shadingRate->texelSize.height &
+         (shadingRate->texelSize.height - 1u)) != 0u) {
+      return NULL;
+    }
+    maxAxis = shadingRate->texelSize.width > shadingRate->texelSize.height
+                ? shadingRate->texelSize.width
+                : shadingRate->texelSize.height;
+    minAxis = shadingRate->texelSize.width < shadingRate->texelSize.height
+                ? shadingRate->texelSize.width
+                : shadingRate->texelSize.height;
+    minWidth  = (native->extent.width - 1u) /
+                shadingRate->texelSize.width + 1u;
+    minHeight = (native->extent.height - 1u) /
+                shadingRate->texelSize.height + 1u;
+    if (!device->vrsAttachment || !view || !view->view || !view->image ||
+        !view->layout ||
+        shadingRate->texelSize.width < device->minVRSTexelSize.width ||
+        shadingRate->texelSize.height < device->minVRSTexelSize.height ||
+        shadingRate->texelSize.width > device->maxVRSTexelSize.width ||
+        shadingRate->texelSize.height > device->maxVRSTexelSize.height ||
+        minAxis == 0u ||
+        (device->maxVRSTexelAspectRatio > 0u &&
+         maxAxis > device->maxVRSTexelAspectRatio * minAxis) ||
+        view->extent.width < minWidth || view->extent.height < minHeight) {
+      return NULL;
+    }
+
+    vk_transitionView(
+      command->command,
+      view,
+      VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR
+    );
+    native->shadingRateView = view;
+    native->shadingRateAttachment.sType =
+      VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR;
+    native->shadingRateAttachment.imageView = view->view;
+    native->shadingRateAttachment.imageLayout =
+      VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR;
+    native->shadingRateAttachment.shadingRateAttachmentTexelSize.width =
+      shadingRate->texelSize.width;
+    native->shadingRateAttachment.shadingRateAttachmentTexelSize.height =
+      shadingRate->texelSize.height;
+  }
+#else
+  if (shadingRate) {
+    return NULL;
+  }
+#endif
   if (info->occlusionQuerySet) {
     vk_resetQuerySet(cmdb, info->occlusionQuerySet);
   }
@@ -630,6 +703,9 @@ vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
   native->dynamic                            = true;
   native->renderingInfo.sType                =
     VK_STRUCTURE_TYPE_RENDERING_INFO_KHR;
+  native->renderingInfo.pNext                = shadingRate
+                                                  ? &native->shadingRateAttachment
+                                                  : NULL;
   native->renderingInfo.renderArea.extent    = native->extent;
   native->renderingInfo.layerCount           = layerCount;
   native->renderingInfo.colorAttachmentCount = native->colorCount;
@@ -658,12 +734,19 @@ vk_beginRenderPass(GPUCommandBuffer              *cmdb,
   GPURenderPassDesc                   *pass;
   GPURenderPassVk                     *native;
   GPUDeviceVk                         *device;
+  const GPUShadingRateAttachmentEXT          *shadingRate;
+  const GPURasterizationRateMapRenderPassEXT *rateMap;
 
   device = cmdb && cmdb->_queue && cmdb->_queue->_device
              ? cmdb->_queue->_device->_priv
              : NULL;
   if (device && device->dynamicRendering) {
     return vk_beginDynamicRenderPass(cmdb, info, cmdb->_priv, device);
+  }
+
+  if (!gpuRenderPassVRSExtensions(info, &shadingRate, &rateMap) ||
+      shadingRate || rateMap) {
+    return NULL;
   }
 
   if (!cmdb || !info || info->colorAttachmentCount != 1u ||

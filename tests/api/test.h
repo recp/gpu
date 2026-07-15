@@ -89,5 +89,6 @@ int gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath);
 int gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath);
 int gpu_test_subgroup(GPUAdapter *adapter, const char *bytecodePath);
 int gpu_test_shader_f16(GPUAdapter *adapter, const char *bytecodePath);
+int gpu_test_vrs(GPUAdapter *adapter, GPUDevice *defaultDevice);
 
 #endif /* gpu_tests_api_test_h */

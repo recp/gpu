@@ -321,9 +321,12 @@ vk_createRenderPipeline(GPUDevice                         *device,
   VkPipelineDepthStencilStateCreateInfo depthStencil = {0};
   VkPipelineColorBlendAttachmentState colorBlends[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS] = {{0}};
   VkPipelineColorBlendStateCreateInfo blend = {0};
-  VkDynamicState                    dynamicStates[4];
+  VkDynamicState                    dynamicStates[5];
   VkPipelineDynamicStateCreateInfo  dynamic = {0};
   VkPipelineRenderingCreateInfoKHR  rendering = {0};
+#ifdef VK_KHR_fragment_shading_rate
+  VkPipelineFragmentShadingRateStateCreateInfoKHR shadingRate = {0};
+#endif
   VkGraphicsPipelineCreateInfo      pipelineInfo = {0};
   VkPipelineCache                   pipelineCache;
   VkResult                          result;
@@ -581,6 +584,12 @@ vk_createRenderPipeline(GPUDevice                         *device,
   dynamicStates[3]          = VK_DYNAMIC_STATE_STENCIL_REFERENCE;
   dynamic.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
   dynamic.dynamicStateCount = 4u;
+#ifdef VK_KHR_fragment_shading_rate
+  if (deviceVk->vrsDrawRate) {
+    dynamicStates[dynamic.dynamicStateCount++] =
+      VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR;
+  }
+#endif
   dynamic.pDynamicStates    = dynamicStates;
 
   rendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
@@ -590,9 +599,30 @@ vk_createRenderPipeline(GPUDevice                         *device,
   rendering.stencilAttachmentFormat = stencilFormat;
 
   pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-  pipelineInfo.pNext               = deviceVk->dynamicRendering
-                                       ? &rendering
-                                       : NULL;
+  pipelineInfo.pNext               = NULL;
+  if (deviceVk->dynamicRendering) {
+    rendering.pNext    = pipelineInfo.pNext;
+    pipelineInfo.pNext = &rendering;
+#ifdef VK_KHR_fragment_shading_rate
+    if (deviceVk->vrsAttachment) {
+      pipelineInfo.flags |=
+        VK_PIPELINE_CREATE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+    }
+#endif
+  }
+#ifdef VK_KHR_fragment_shading_rate
+  if (deviceVk->vrsAttachment) {
+    shadingRate.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR;
+    shadingRate.pNext          = pipelineInfo.pNext;
+    shadingRate.fragmentSize   = (VkExtent2D){1u, 1u};
+    shadingRate.combinerOps[0] =
+      VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
+    shadingRate.combinerOps[1] =
+      VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR;
+    pipelineInfo.pNext         = &shadingRate;
+  }
+#endif
   pipelineInfo.stageCount          = stageCount;
   pipelineInfo.pStages             = stages;
   pipelineInfo.pVertexInputState   = mesh ? NULL : &vertexInput;

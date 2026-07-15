@@ -39,20 +39,24 @@
 
 typedef struct GPUAdapterDX12 {
   /* IDXGIAdapter1*dxgiAdapter; */
-  IUnknown             *dxgiAdapter;
-  DXGI_ADAPTER_DESC1    desc1;
-  SRWLOCK               formatCapsLock;
-  uint32_t              minSubgroupSize;
-  uint32_t              maxSubgroupSize;
-  char                  name[256];
-  bool                  isWarp;
-  bool                  formatCapsReady;
-  bool                  subgroups;
-  bool                  shaderF16;
-  bool                  descriptorIndexing;
-  bool                  bindless;
-  bool                  meshShader;
-  GPUFormatCapabilities formatCaps[GPU_FORMAT_COUNT];
+  IUnknown                          *dxgiAdapter;
+  DXGI_ADAPTER_DESC1                 desc1;
+  SRWLOCK                            formatCapsLock;
+  GPUShadingRateFlagsEXT             vrsRates;
+  GPUShadingRateCombinerFlagsEXT     vrsCombiners;
+  D3D12_VARIABLE_SHADING_RATE_TIER   vrsTier;
+  uint32_t                           minSubgroupSize;
+  uint32_t                           maxSubgroupSize;
+  uint32_t                           vrsTileSize;
+  char                               name[256];
+  bool                               isWarp;
+  bool                               formatCapsReady;
+  bool                               subgroups;
+  bool                               shaderF16;
+  bool                               descriptorIndexing;
+  bool                               bindless;
+  bool                               meshShader;
+  GPUFormatCapabilities              formatCaps[GPU_FORMAT_COUNT];
 } GPUAdapterDX12;
 
 typedef struct GPUDescriptorHeapDX12 {
@@ -70,36 +74,40 @@ typedef void (WINAPI *DX12PixEndEventFn)(ID3D12GraphicsCommandList *commandList)
 #endif
 
 typedef struct GPUDeviceDX12 {
-  ID3D12Device               *d3dDevice;
-  ID3D12Device2              *d3dDevice2;
-  ID3D12CommandSignature     *drawSignature;
-  ID3D12CommandSignature     *drawIndexedSignature;
-  ID3D12CommandSignature     *dispatchSignature;
-  GPUQueue                  **createdQueues;
-  HMODULE                     dxcModule;
+  ID3D12Device                      *d3dDevice;
+  ID3D12Device2                     *d3dDevice2;
+  ID3D12CommandSignature            *drawSignature;
+  ID3D12CommandSignature            *drawIndexedSignature;
+  ID3D12CommandSignature            *dispatchSignature;
+  GPUQueue                         **createdQueues;
+  HMODULE                            dxcModule;
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-  HMODULE                     pixModule;
-  DX12PixBeginEventFn         pixBeginEvent;
-  DX12PixEndEventFn           pixEndEvent;
+  HMODULE                            pixModule;
+  DX12PixBeginEventFn                pixBeginEvent;
+  DX12PixEndEventFn                  pixEndEvent;
 #endif
-  GPUDescriptorHeapDX12       resourceDescriptors;
-  GPUDescriptorHeapDX12       samplerDescriptors;
-  GPUDescriptorHeapDX12       rtvDescriptors;
-  GPUDescriptorHeapDX12       dsvDescriptors;
-  SRWLOCK                     descriptorLock;
-  D3D_ROOT_SIGNATURE_VERSION  rootSignatureVersion;
-  D3D_SHADER_MODEL            shaderModel;
-  uint32_t                    nCreatedQueues;
-  bool                        enhancedBarriers;
-  bool                        dxcAvailable;
-  bool                        subgroups;
-  bool                        shaderF16;
-  bool                        shaderF16Enabled;
-  bool                        descriptorIndexing;
-  bool                        bindless;
-  bool                        meshShader;
-  bool                        queryResultsReliable;
-  bool                        stencilPlaneCopies;
+  GPUDescriptorHeapDX12              resourceDescriptors;
+  GPUDescriptorHeapDX12              samplerDescriptors;
+  GPUDescriptorHeapDX12              rtvDescriptors;
+  GPUDescriptorHeapDX12              dsvDescriptors;
+  SRWLOCK                            descriptorLock;
+  D3D_ROOT_SIGNATURE_VERSION         rootSignatureVersion;
+  D3D_SHADER_MODEL                   shaderModel;
+  GPUShadingRateFlagsEXT             vrsRates;
+  GPUShadingRateCombinerFlagsEXT     vrsCombiners;
+  D3D12_VARIABLE_SHADING_RATE_TIER   vrsTier;
+  uint32_t                           nCreatedQueues;
+  uint32_t                           vrsTileSize;
+  bool                               enhancedBarriers;
+  bool                               dxcAvailable;
+  bool                               subgroups;
+  bool                               shaderF16;
+  bool                               shaderF16Enabled;
+  bool                               descriptorIndexing;
+  bool                               bindless;
+  bool                               meshShader;
+  bool                               queryResultsReliable;
+  bool                               stencilPlaneCopies;
 } GPUDeviceDX12;
 
 static inline bool
@@ -294,6 +302,7 @@ typedef struct GPUTextureViewDX12 {
 
 typedef struct GPURenderPassDX12 {
   GPUTextureViewDX12  *depthStencilView;
+  GPUTextureViewDX12  *shadingRateView;
   GPUTextureViewDX12  *colorViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   GPUTextureViewDX12  *resolveViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   DXGI_FORMAT          resolveFormats[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
@@ -315,6 +324,7 @@ typedef struct GPURenderPassDX12 {
 typedef struct GPURenderEncoderDX12 {
   GPUDeviceDX12             *device;
   ID3D12GraphicsCommandList  *commandList;
+  ID3D12GraphicsCommandList5 *commandList5;
   ID3D12GraphicsCommandList6 *commandList6;
   ID3D12GraphicsCommandList7 *commandList7;
   ID3D12RootSignature        *rootSignature;
@@ -357,6 +367,7 @@ typedef struct GPUCommandBufferDX12 {
   GPUQueueDX12                 *owner;
   ID3D12CommandAllocator       *allocator;
   ID3D12GraphicsCommandList    *commandList;
+  ID3D12GraphicsCommandList5   *commandList5;
   ID3D12GraphicsCommandList6   *commandList6;
   ID3D12GraphicsCommandList7   *commandList7;
   ID3D12QueryHeap              *frameTimeQueries;
