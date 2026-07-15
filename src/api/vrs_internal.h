@@ -20,9 +20,10 @@
 #include "common.h"
 
 struct GPURasterizationRateMapEXT {
-  void      *_priv;
-  GPUDevice *device;
-  uint32_t   layerCount;
+  void        *_priv;
+  GPUDevice   *device;
+  GPUExtent2D  screenSize;
+  uint32_t     layerCount;
 };
 
 static inline bool

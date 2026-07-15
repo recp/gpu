@@ -99,8 +99,94 @@ mt_createRateMap(GPUDevice                                  *device,
     }
     map->_priv      = native;
     map->device     = device;
+    map->screenSize = info->screenSize;
     map->layerCount = info->layerCount;
     *outMap         = map;
+    return GPU_OK;
+  }
+  return GPU_ERROR_UNSUPPORTED;
+}
+
+static GPUResult
+mt_mapRateMapScreenToPhysical(const GPURasterizationRateMapEXT *map,
+                              uint32_t                           layer,
+                              GPUCoordinate2D                    screen,
+                              GPUCoordinate2D                   *outPhysical) {
+  id<MTLRasterizationRateMap> native;
+  MTLCoordinate2D             mapped;
+
+  if (!map || !outPhysical || layer >= map->layerCount ||
+      !(native = map->_priv)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (@available(macOS 10.15.4, iOS 13.0, *)) {
+    mapped = [native
+      mapScreenToPhysicalCoordinates:MTLCoordinate2DMake(screen.x, screen.y)
+                             forLayer:layer];
+    outPhysical->x = mapped.x;
+    outPhysical->y = mapped.y;
+    return GPU_OK;
+  }
+  return GPU_ERROR_UNSUPPORTED;
+}
+
+static GPUResult
+mt_mapRateMapPhysicalToScreen(const GPURasterizationRateMapEXT *map,
+                              uint32_t                           layer,
+                              GPUCoordinate2D                    physical,
+                              GPUCoordinate2D                   *outScreen) {
+  id<MTLRasterizationRateMap> native;
+  MTLCoordinate2D             mapped;
+
+  if (!map || !outScreen || layer >= map->layerCount ||
+      !(native = map->_priv)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (@available(macOS 10.15.4, iOS 13.0, *)) {
+    mapped = [native
+      mapPhysicalToScreenCoordinates:
+        MTLCoordinate2DMake(physical.x, physical.y)
+                             forLayer:layer];
+    outScreen->x = mapped.x;
+    outScreen->y = mapped.y;
+    return GPU_OK;
+  }
+  return GPU_ERROR_UNSUPPORTED;
+}
+
+static GPUResult
+mt_getRateMapParameterInfo(
+  const GPURasterizationRateMapEXT         *map,
+  GPURasterizationRateMapParameterInfoEXT  *outInfo) {
+  id<MTLRasterizationRateMap> native;
+  MTLSizeAndAlign             nativeInfo;
+
+  if (!map || !outInfo || !(native = map->_priv)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (@available(macOS 10.15.4, iOS 13.0, *)) {
+    nativeInfo         = native.parameterBufferSizeAndAlign;
+    outInfo->sizeBytes = (uint64_t)nativeInfo.size;
+    outInfo->alignment = (uint64_t)nativeInfo.align;
+    return GPU_OK;
+  }
+  return GPU_ERROR_UNSUPPORTED;
+}
+
+static GPUResult
+mt_copyRateMapParameters(const GPURasterizationRateMapEXT *map,
+                         GPUBuffer                        *buffer,
+                         uint64_t                          offset) {
+  id<MTLRasterizationRateMap> native;
+  id<MTLBuffer>                nativeBuffer;
+
+  if (!map || !buffer || !(native = map->_priv) ||
+      !(nativeBuffer = buffer->_priv) || offset > NSUIntegerMax) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (@available(macOS 10.15.4, iOS 13.0, *)) {
+    [native copyParameterDataToBuffer:nativeBuffer
+                               offset:(NSUInteger)offset];
     return GPU_OK;
   }
   return GPU_ERROR_UNSUPPORTED;
@@ -138,8 +224,12 @@ mt_getRateMapPhysicalSize(const GPURasterizationRateMapEXT *map,
 GPU_HIDE
 void
 mt_initVRS(GPUApiVRS *api) {
-  api->getCapabilities        = mt_getVRSCapabilities;
-  api->createRateMap          = mt_createRateMap;
-  api->destroyRateMap         = mt_destroyRateMap;
-  api->getRateMapPhysicalSize = mt_getRateMapPhysicalSize;
+  api->getCapabilities                 = mt_getVRSCapabilities;
+  api->createRateMap                   = mt_createRateMap;
+  api->destroyRateMap                  = mt_destroyRateMap;
+  api->getRateMapPhysicalSize          = mt_getRateMapPhysicalSize;
+  api->mapRateMapScreenToPhysical      = mt_mapRateMapScreenToPhysical;
+  api->mapRateMapPhysicalToScreen      = mt_mapRateMapPhysicalToScreen;
+  api->getRateMapParameterInfo         = mt_getRateMapParameterInfo;
+  api->copyRateMapParameters           = mt_copyRateMapParameters;
 }

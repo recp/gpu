@@ -1,5 +1,7 @@
 #include "test.h"
 
+#include <math.h>
+
 static int
 gpu_vrsCapabilitiesValid(const GPUVRSCapabilitiesEXT *caps) {
   const GPUVRSModeFlagsEXT knownModes =
@@ -53,20 +55,26 @@ gpu_vrsCapabilitiesValid(const GPUVRSCapabilitiesEXT *caps) {
 
 int
 gpu_test_vrs(GPUAdapter *adapter, GPUDevice *defaultDevice) {
-  const float                           horizontal[2] = {1.0f, 0.5f};
-  const float                           vertical[2]   = {1.0f, 0.5f};
-  GPURasterizationRateLayerEXT          layer         = {0};
-  GPURasterizationRateMapCreateInfoEXT  mapInfo       = {0};
-  GPUDeviceCreateInfo                   deviceInfo    = {0};
-  GPUVRSCapabilitiesEXT                 caps          = {0};
-  GPURasterizationRateMapEXT           *map           = NULL;
-  GPUDevice                            *device        = NULL;
-  GPUExtent2D                           physicalSize  = {0};
-  GPUFeature                            feature       =
+  GPURasterizationRateMapEXT             *map             = NULL;
+  GPUBuffer                              *parameterBuffer = NULL;
+  GPUDevice                              *device          = NULL;
+  const float                             horizontal[2]   = {1.0f, 0.5f};
+  const float                             vertical[2]     = {1.0f, 0.5f};
+  GPURasterizationRateLayerEXT            layer           = {0};
+  GPURasterizationRateMapCreateInfoEXT    mapInfo         = {0};
+  GPURasterizationRateMapParameterInfoEXT parameterInfo   = {0};
+  GPUBufferCreateInfo                     bufferInfo      = {0};
+  GPUDeviceCreateInfo                     deviceInfo      = {0};
+  GPUVRSCapabilitiesEXT                   caps            = {0};
+  GPUExtent2D                             physicalSize    = {0};
+  GPUCoordinate2D                         physical        = {0};
+  GPUCoordinate2D                         roundTrip       = {0};
+  GPUCoordinate2D                         screen          = {32.0f, 32.0f};
+  GPUFeature                              feature         =
     GPU_FEATURE_VARIABLE_RATE_SHADING;
-  GPUResult                             result;
-  int                                   supported;
-  int                                   ok = 0;
+  GPUResult                               result;
+  int                                     supported;
+  int                                     ok = 0;
 
   if (!adapter || !defaultDevice ||
       GPU_SHADING_RATE_1X1_EXT != 0x0 ||
@@ -82,6 +90,20 @@ gpu_test_vrs(GPUAdapter *adapter, GPUDevice *defaultDevice) {
   if (GPUGetVRSCapabilitiesEXT(NULL, &caps) != GPU_ERROR_INVALID_ARGUMENT ||
       GPUGetVRSCapabilitiesEXT(adapter, NULL) != GPU_ERROR_INVALID_ARGUMENT ||
       GPUGetRasterizationRateMapPhysicalSizeEXT(NULL, 0u, &physicalSize) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      GPUMapRasterizationRateScreenToPhysicalEXT(NULL,
+                                                  0u,
+                                                  screen,
+                                                  &physical) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      GPUMapRasterizationRatePhysicalToScreenEXT(NULL,
+                                                  0u,
+                                                  physical,
+                                                  &roundTrip) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      GPUGetRasterizationRateMapParameterInfoEXT(NULL, &parameterInfo) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      GPUCopyRasterizationRateMapParametersEXT(NULL, NULL, 0u) !=
         GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "VRS query accepted invalid arguments\n");
     return 0;
@@ -111,7 +133,15 @@ gpu_test_vrs(GPUAdapter *adapter, GPUDevice *defaultDevice) {
   deviceInfo.required.pFeatures    = &feature;
   if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, feature) ||
-      !GPUGetProcAddr(device, "GPUSetFragmentShadingRateEXT")) {
+      !GPUGetProcAddr(device, "GPUSetFragmentShadingRateEXT") ||
+      !GPUGetProcAddr(device,
+                      "GPUMapRasterizationRateScreenToPhysicalEXT") ||
+      !GPUGetProcAddr(device,
+                      "GPUMapRasterizationRatePhysicalToScreenEXT") ||
+      !GPUGetProcAddr(device,
+                      "GPUGetRasterizationRateMapParameterInfoEXT") ||
+      !GPUGetProcAddr(device,
+                      "GPUCopyRasterizationRateMapParametersEXT")) {
     fprintf(stderr, "VRS feature enablement failed\n");
     goto cleanup;
   }
@@ -146,9 +176,57 @@ gpu_test_vrs(GPUAdapter *adapter, GPUDevice *defaultDevice) {
     fprintf(stderr, "VRS rate map validation failed\n");
     goto cleanup;
   }
+
+  if (GPUMapRasterizationRateScreenToPhysicalEXT(map,
+                                                  0u,
+                                                  screen,
+                                                  &physical) != GPU_OK ||
+      physical.x < 0.0f || physical.y < 0.0f ||
+      physical.x > screen.x || physical.y > screen.y ||
+      GPUMapRasterizationRatePhysicalToScreenEXT(map,
+                                                  0u,
+                                                  physical,
+                                                  &roundTrip) != GPU_OK ||
+      fabsf(roundTrip.x - screen.x) > 1.0f ||
+      fabsf(roundTrip.y - screen.y) > 1.0f ||
+      GPUMapRasterizationRateScreenToPhysicalEXT(
+        map,
+        0u,
+        (GPUCoordinate2D){65.0f, 0.0f},
+        &physical
+      ) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "VRS rate map coordinate mapping failed\n");
+    goto cleanup;
+  }
+
+  if (GPUGetRasterizationRateMapParameterInfoEXT(map, &parameterInfo) !=
+        GPU_OK ||
+      parameterInfo.sizeBytes == 0u || parameterInfo.alignment == 0u ||
+      (parameterInfo.alignment & (parameterInfo.alignment - 1u)) != 0u) {
+    fprintf(stderr, "VRS rate map parameter info failed\n");
+    goto cleanup;
+  }
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "api-vrs-rate-map-parameters";
+  bufferInfo.sizeBytes        = parameterInfo.sizeBytes;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM;
+  if (GPUCreateBuffer(device, &bufferInfo, &parameterBuffer) != GPU_OK ||
+      !parameterBuffer ||
+      GPUCopyRasterizationRateMapParametersEXT(map,
+                                                parameterBuffer,
+                                                0u) != GPU_OK ||
+      GPUCopyRasterizationRateMapParametersEXT(map,
+                                                parameterBuffer,
+                                                parameterInfo.alignment) !=
+        GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "VRS rate map parameter copy failed\n");
+    goto cleanup;
+  }
   ok = 1;
 
 cleanup:
+  GPUDestroyBuffer(parameterBuffer);
   GPUDestroyRasterizationRateMapEXT(map);
   GPUDestroyDevice(device);
   return ok;

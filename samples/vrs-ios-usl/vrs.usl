@@ -1,0 +1,33 @@
+pub struct VRSVertex {
+  position: float4 #attribute(0)
+  uv: float2 #attribute(1)
+}
+
+pub struct VRSVertexOut {
+  position: float4 #position
+  uv: float2
+}
+
+vert vrs_vs(v: VRSVertex #stage_in) -> VRSVertexOut {
+  var out: VRSVertexOut
+  out.position = v.position
+  out.uv = v.uv
+  return out
+}
+
+frag grid_fs(input: VRSVertexOut #stage_in) -> float4 {
+  let cells = input.uv * 96.0
+  let checker = step(1.0, mod(floor(cells.x) + floor(cells.y), 2.0))
+  let line = max(step(0.88, fract(cells.x)),
+                 step(0.88, fract(cells.y)))
+  let dark = float3(0.02, 0.08, 0.12)
+  let light = float3(0.04, 0.45, 0.70)
+  let base = mix(dark, light, checker)
+  return float4(mix(base, float3(1.0, 0.55, 0.08), line), 1.0)
+}
+
+frag present_fs(input: VRSVertexOut #stage_in,
+                source: texture2d<half> #texture(0),
+                linearSampler: sampler #sampler(0) #group(1)) -> float4 {
+  return float4(source.sample(linearSampler, input.uv))
+}

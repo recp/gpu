@@ -33,6 +33,11 @@ typedef struct GPUExtent3D {
   uint32_t depth;
 } GPUExtent3D;
 
+typedef struct GPUCoordinate2D {
+  float x;
+  float y;
+} GPUCoordinate2D;
+
 typedef struct GPUOffset2D {
   int32_t x;
   int32_t y;

@@ -1226,6 +1226,52 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
     XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
   )
 
+  set(GPU_IOS_VRS_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/metal/ios-vrs")
+  set(GPU_IOS_VRS_SOURCE
+      "${GPU_IOS_VRS_DIR}/vrs.usl")
+  set(GPU_IOS_VRS_US
+      "${GPU_IOS_VRS_DIR}/vrs.us")
+  add_custom_command(
+    OUTPUT "${GPU_IOS_VRS_US}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${GPU_IOS_VRS_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/vrs-ios-usl/vrs.usl"
+            "${GPU_IOS_VRS_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            USL_NO_BACKEND_SIDECAR=1
+            "${GPU_USL_HOST_FIXTURE}"
+            metal
+            "${GPU_IOS_VRS_SOURCE}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/vrs-ios-usl/vrs.usl"
+      "${GPU_USL_HOST_FIXTURE}"
+    VERBATIM
+  )
+  set_source_files_properties("${GPU_IOS_VRS_US}" PROPERTIES
+    GENERATED TRUE
+    MACOSX_PACKAGE_LOCATION Resources
+  )
+
+  add_executable(gpu-vrs-ios-usl MACOSX_BUNDLE
+    samples/vrs-ios-usl/main.m
+    "${GPU_IOS_VRS_US}"
+  )
+  gpu_configure_metal_sample(gpu-vrs-ios-usl)
+  target_compile_options(gpu-vrs-ios-usl PRIVATE
+    -Wall
+    -Wextra
+    -Werror
+  )
+  set_target_properties(gpu-vrs-ios-usl PROPERTIES
+    MACOSX_BUNDLE_INFO_PLIST
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-ios-usl/Info.plist"
+    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER
+      "com.recp.gpu.vrs-ios-usl"
+    XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
+  )
+
   set(GPU_IOS_METAL4_BINDLESS_DIR
       "${CMAKE_CURRENT_BINARY_DIR}/usl/metal/ios-metal4-bindless")
   set(GPU_IOS_METAL4_BINDLESS_SOURCE

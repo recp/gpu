@@ -1278,6 +1278,18 @@ GPUGetProcAddr(GPUDevice *device, const char *name) {
     if (strcmp(name, "GPUGetRasterizationRateMapPhysicalSizeEXT") == 0) {
       return (GPUProc)GPUGetRasterizationRateMapPhysicalSizeEXT;
     }
+    if (strcmp(name, "GPUMapRasterizationRateScreenToPhysicalEXT") == 0) {
+      return (GPUProc)GPUMapRasterizationRateScreenToPhysicalEXT;
+    }
+    if (strcmp(name, "GPUMapRasterizationRatePhysicalToScreenEXT") == 0) {
+      return (GPUProc)GPUMapRasterizationRatePhysicalToScreenEXT;
+    }
+    if (strcmp(name, "GPUGetRasterizationRateMapParameterInfoEXT") == 0) {
+      return (GPUProc)GPUGetRasterizationRateMapParameterInfoEXT;
+    }
+    if (strcmp(name, "GPUCopyRasterizationRateMapParametersEXT") == 0) {
+      return (GPUProc)GPUCopyRasterizationRateMapParametersEXT;
+    }
     if (strcmp(name, "GPUSetFragmentShadingRateEXT") == 0) {
       return (GPUProc)GPUSetFragmentShadingRateEXT;
     }

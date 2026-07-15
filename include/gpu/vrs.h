@@ -24,6 +24,7 @@ extern "C" {
 #include "geometric.h"
 
 typedef struct GPUAdapter                 GPUAdapter;
+typedef struct GPUBuffer                  GPUBuffer;
 typedef struct GPUDevice                  GPUDevice;
 typedef struct GPURenderCommandEncoder    GPURenderCommandEncoder;
 typedef struct GPUTextureView             GPUTextureView;
@@ -115,6 +116,11 @@ typedef struct GPURasterizationRateMapRenderPassEXT {
   GPURasterizationRateMapEXT  *map;
 } GPURasterizationRateMapRenderPassEXT;
 
+typedef struct GPURasterizationRateMapParameterInfoEXT {
+  uint64_t sizeBytes;
+  uint64_t alignment;
+} GPURasterizationRateMapParameterInfoEXT;
+
 GPU_EXPORT
 GPUResult
 GPUGetVRSCapabilitiesEXT(const GPUAdapter      *adapter,
@@ -138,6 +144,43 @@ GPUGetRasterizationRateMapPhysicalSizeEXT(
   const GPURasterizationRateMapEXT *map,
   uint32_t                           layer,
   GPUExtent2D                       *outSize
+);
+
+/* Maps logical screen coordinates into the physical intermediate target. */
+GPU_EXPORT
+GPUResult
+GPUMapRasterizationRateScreenToPhysicalEXT(
+  const GPURasterizationRateMapEXT *map,
+  uint32_t                           layer,
+  GPUCoordinate2D                    screen,
+  GPUCoordinate2D                   *outPhysical
+);
+
+/* Maps physical intermediate coordinates back into logical screen space. */
+GPU_EXPORT
+GPUResult
+GPUMapRasterizationRatePhysicalToScreenEXT(
+  const GPURasterizationRateMapEXT *map,
+  uint32_t                           layer,
+  GPUCoordinate2D                    physical,
+  GPUCoordinate2D                   *outScreen
+);
+
+/* Returns the size and alignment of shader-visible map parameters. */
+GPU_EXPORT
+GPUResult
+GPUGetRasterizationRateMapParameterInfoEXT(
+  const GPURasterizationRateMapEXT         *map,
+  GPURasterizationRateMapParameterInfoEXT  *outInfo
+);
+
+/* Copies parameters to an aligned GPU_BUFFER_USAGE_UNIFORM range. */
+GPU_EXPORT
+GPUResult
+GPUCopyRasterizationRateMapParametersEXT(
+  const GPURasterizationRateMapEXT *map,
+  GPUBuffer                        *buffer,
+  uint64_t                          offset
 );
 
 GPU_EXPORT
