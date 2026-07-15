@@ -132,6 +132,7 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
   GPUComputePipeline      *pipeline;
   GPUShaderFunction       *function;
   GPUApi                  *api;
+  GPUPipelineCacheKey      cacheKey;
   uint32_t                 requiredBindGroupMask;
 
   if (!outPipeline) {
@@ -139,6 +140,7 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
   }
 
   *outPipeline = NULL;
+  memset(&cacheKey, 0, sizeof(cacheKey));
   if (!device || !info || !info->layout || !info->library || !info->entryPoint) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -155,11 +157,15 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
   if (info->cache && !info->chain.pNext) {
     GPUResult result;
 
-    result = gpuPipelineCacheFindCompute(info->cache, info, &pipeline);
+    result = gpuPipelineCacheFindCompute(info->cache,
+                                         info,
+                                         &cacheKey,
+                                         &pipeline);
     if (result != GPU_OK) {
       return result;
     }
     if (pipeline) {
+      gpuPipelineCacheReleaseKey(&cacheKey);
       *outPipeline = pipeline;
       return GPU_OK;
     }
@@ -169,6 +175,7 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
 
     if (gpuGetShaderLibraryEntryStage(info->library, info->entryPoint, &stage) &&
         stage != GPU_SHADER_STAGE_COMPUTE_BIT) {
+      gpuPipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   }
@@ -181,11 +188,13 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
                                                (uint32_t)GPU_ARRAY_LEN(entries),
                                                GPU_SHADER_STAGE_COMPUTE_BIT,
                                                &requiredBindGroupMask)) {
+      gpuPipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   }
 
   if (!(api = gpuDeviceApi(device))) {
+    gpuPipelineCacheReleaseKey(&cacheKey);
     return GPU_ERROR_BACKEND_FAILURE;
   }
   if (api->compute.createPipeline) {
@@ -193,6 +202,7 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
 
     pipeline = calloc(1, sizeof(*pipeline));
     if (!pipeline) {
+      gpuPipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_OUT_OF_MEMORY;
     }
     pipeline->_api      = api;
@@ -201,25 +211,30 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
     result = api->compute.createPipeline(device, info, pipeline);
     if (result != GPU_OK) {
       free(pipeline);
+      gpuPipelineCacheReleaseKey(&cacheKey);
       return result;
     }
     state = pipeline->_state;
     if (!state) {
       GPUDestroyComputePipeline(pipeline);
+      gpuPipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_BACKEND_FAILURE;
     }
   } else {
     if (!api->compute.newComputePipeline || !api->compute.setFunction) {
+      gpuPipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
     function = gpuShaderFunction(info->library, info->entryPoint);
     if (!function) {
+      gpuPipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_INVALID_ARGUMENT;
     }
 
     pipeline = api->compute.newComputePipeline();
     if (!pipeline) {
+      gpuPipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
@@ -232,6 +247,7 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
     pipeline->_cache = NULL;
     if (!state) {
       GPUDestroyComputePipeline(pipeline);
+      gpuPipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
@@ -249,7 +265,7 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
                                     &pipeline->_pushConstantSizeBytes,
                                     &pipeline->_pushConstantStages);
   if (info->cache && !info->chain.pNext) {
-    pipeline = gpuPipelineCacheStoreCompute(info->cache, info, pipeline);
+    pipeline = gpuPipelineCacheStoreCompute(info->cache, &cacheKey, pipeline);
   } else {
     gpuRecordPipelineCompile(device, info->cache);
   }

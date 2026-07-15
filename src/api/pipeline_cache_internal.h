@@ -19,8 +19,18 @@
 
 #include "device_internal.h"
 
+#define GPU_PIPELINE_CACHE_INLINE_KEY_SIZE 256u
+
 typedef struct GPUPipelineCacheEntry GPUPipelineCacheEntry;
 typedef struct GPUPipelineCompileJob GPUPipelineCompileJob;
+
+typedef struct GPUPipelineCacheKey {
+  uint8_t *data;
+  size_t   size;
+  uint64_t hash;
+  bool     ownsData;
+  uint8_t  inlineData[GPU_PIPELINE_CACHE_INLINE_KEY_SIZE];
+} GPUPipelineCacheKey;
 
 struct GPUPipelineCache {
   GPUDevice             *device;
@@ -54,28 +64,34 @@ void
 gpuRecordPipelineCompile(GPUDevice *device, GPUPipelineCache *cache);
 
 GPU_HIDE
+void
+gpuPipelineCacheReleaseKey(GPUPipelineCacheKey *key);
+
+GPU_HIDE
 GPUResult
 gpuPipelineCacheFindRender(GPUPipelineCache                  *cache,
                            const GPURenderPipelineCreateInfo *info,
+                           GPUPipelineCacheKey               *outKey,
                            GPURenderPipeline                **outPipeline);
 
 GPU_HIDE
 GPURenderPipeline *
-gpuPipelineCacheStoreRender(GPUPipelineCache                  *cache,
-                            const GPURenderPipelineCreateInfo *info,
-                            GPURenderPipeline                 *pipeline);
+gpuPipelineCacheStoreRender(GPUPipelineCache    *cache,
+                            GPUPipelineCacheKey *key,
+                            GPURenderPipeline   *pipeline);
 
 GPU_HIDE
 GPUResult
 gpuPipelineCacheFindCompute(GPUPipelineCache                   *cache,
                             const GPUComputePipelineCreateInfo *info,
+                            GPUPipelineCacheKey                *outKey,
                             GPUComputePipeline                **outPipeline);
 
 GPU_HIDE
 GPUComputePipeline *
-gpuPipelineCacheStoreCompute(GPUPipelineCache                   *cache,
-                             const GPUComputePipelineCreateInfo *info,
-                             GPUComputePipeline                 *pipeline);
+gpuPipelineCacheStoreCompute(GPUPipelineCache    *cache,
+                             GPUPipelineCacheKey *key,
+                             GPUComputePipeline  *pipeline);
 
 GPU_HIDE
 bool

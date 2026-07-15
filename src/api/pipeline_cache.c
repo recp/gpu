@@ -24,17 +24,8 @@
 #endif
 
 #define GPU_PIPELINE_CACHE_DEFAULT_ENTRIES 256u
-#define GPU_PIPELINE_CACHE_INLINE_KEY_SIZE 256u
 #define GPU_PIPELINE_CACHE_MAX_BUCKETS     4096u
 #define GPU_PIPELINE_KEY_HASH_SEED         14695981039346656037ull
-
-typedef struct GPUPipelineCacheKey {
-  uint8_t *data;
-  size_t   size;
-  uint64_t hash;
-  bool     ownsData;
-  uint8_t  inlineData[GPU_PIPELINE_CACHE_INLINE_KEY_SIZE];
-} GPUPipelineCacheKey;
 
 typedef enum GPUPipelineCacheEntryType {
   GPU_PIPELINE_CACHE_RENDER = 0,
@@ -54,6 +45,7 @@ struct GPUPipelineCacheEntry {
 typedef struct GPUPipelineKeyWriter {
   uint8_t *data;
   size_t   offset;
+  size_t   capacity;
   uint64_t hash;
   bool     valid;
 } GPUPipelineKeyWriter;
@@ -199,7 +191,8 @@ gpu_pipelineKeyWrite(GPUPipelineKeyWriter *writer,
     writer->valid = false;
     return;
   }
-  if (writer->data && size > 0u) {
+  if (writer->data && writer->offset <= writer->capacity &&
+      size <= writer->capacity - writer->offset) {
     memcpy(writer->data + writer->offset, value, size);
     for (size_t i = 0u; i < size; i++) {
       writer->hash ^= ((const uint8_t *)value)[i];
@@ -323,8 +316,9 @@ gpu_pipelineKeyPrepare(GPUPipelineCacheKey *key, size_t size) {
   return true;
 }
 
-static void
-gpu_pipelineKeyRelease(GPUPipelineCacheKey *key) {
+GPU_HIDE
+void
+gpuPipelineCacheReleaseKey(GPUPipelineCacheKey *key) {
   if (!key) {
     return;
   }
@@ -350,25 +344,33 @@ gpu_buildRenderPipelineKey(const GPURenderPipelineCreateInfo *info,
     return false;
   }
 
-  writer.data   = NULL;
-  writer.offset = 0u;
-  writer.hash   = GPU_PIPELINE_KEY_HASH_SEED;
-  writer.valid  = true;
+  writer.data     = outKey->inlineData;
+  writer.offset   = 0u;
+  writer.capacity = sizeof(outKey->inlineData);
+  writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
+  writer.valid    = true;
   gpu_pipelineKeyWriteRenderInfo(&writer, info);
   if (!writer.valid || writer.offset == 0u) {
     return false;
+  }
+  if (writer.offset <= writer.capacity) {
+    outKey->data = outKey->inlineData;
+    outKey->size = writer.offset;
+    outKey->hash = writer.hash;
+    return true;
   }
 
   if (!gpu_pipelineKeyPrepare(outKey, writer.offset)) {
     return false;
   }
-  writer.data   = outKey->data;
-  writer.offset = 0u;
-  writer.hash   = GPU_PIPELINE_KEY_HASH_SEED;
-  writer.valid  = true;
+  writer.data     = outKey->data;
+  writer.offset   = 0u;
+  writer.capacity = outKey->size;
+  writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
+  writer.valid    = true;
   gpu_pipelineKeyWriteRenderInfo(&writer, info);
   if (!writer.valid || writer.offset != outKey->size) {
-    gpu_pipelineKeyRelease(outKey);
+    gpuPipelineCacheReleaseKey(outKey);
     return false;
   }
   outKey->hash = writer.hash;
@@ -388,25 +390,33 @@ gpu_buildComputePipelineKey(const GPUComputePipelineCreateInfo *info,
     return false;
   }
 
-  writer.data   = NULL;
-  writer.offset = 0u;
-  writer.hash   = GPU_PIPELINE_KEY_HASH_SEED;
-  writer.valid  = true;
+  writer.data     = outKey->inlineData;
+  writer.offset   = 0u;
+  writer.capacity = sizeof(outKey->inlineData);
+  writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
+  writer.valid    = true;
   gpu_pipelineKeyWriteComputeInfo(&writer, info);
   if (!writer.valid || writer.offset == 0u) {
     return false;
+  }
+  if (writer.offset <= writer.capacity) {
+    outKey->data = outKey->inlineData;
+    outKey->size = writer.offset;
+    outKey->hash = writer.hash;
+    return true;
   }
 
   if (!gpu_pipelineKeyPrepare(outKey, writer.offset)) {
     return false;
   }
-  writer.data   = outKey->data;
-  writer.offset = 0u;
-  writer.hash   = GPU_PIPELINE_KEY_HASH_SEED;
-  writer.valid  = true;
+  writer.data     = outKey->data;
+  writer.offset   = 0u;
+  writer.capacity = outKey->size;
+  writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
+  writer.valid    = true;
   gpu_pipelineKeyWriteComputeInfo(&writer, info);
   if (!writer.valid || writer.offset != outKey->size) {
-    gpu_pipelineKeyRelease(outKey);
+    gpuPipelineCacheReleaseKey(outKey);
     return false;
   }
   outKey->hash = writer.hash;
@@ -479,7 +489,7 @@ gpu_pipelineCacheStore(GPUPipelineCache    *cache,
   entry = calloc(1, sizeof(*entry));
   if (!entry) {
     gpuRecordPipelineCompile(cache->device, cache);
-    gpu_pipelineKeyRelease(key);
+    gpuPipelineCacheReleaseKey(key);
     return pipeline;
   }
   if (key->ownsData) {
@@ -490,7 +500,7 @@ gpu_pipelineCacheStore(GPUPipelineCache    *cache,
     if (!entry->keyData) {
       free(entry);
       gpuRecordPipelineCompile(cache->device, cache);
-      gpu_pipelineKeyRelease(key);
+      gpuPipelineCacheReleaseKey(key);
       return pipeline;
     }
     memcpy(entry->keyData, key->data, key->size);
@@ -518,7 +528,7 @@ gpu_pipelineCacheStore(GPUPipelineCache    *cache,
       free(entry->keyData);
       free(entry);
       gpu_destroyPipeline(type, pipeline);
-      gpu_pipelineKeyRelease(key);
+      gpuPipelineCacheReleaseKey(key);
       return result;
     }
   }
@@ -550,7 +560,7 @@ gpu_pipelineCacheStore(GPUPipelineCache    *cache,
   gpuDeviceCacheCounterAdd(&cache->device->cacheStats.pipelineCompiles, 1u);
   gpu_pipelineCacheUnlock(cache);
 
-  gpu_pipelineKeyRelease(key);
+  gpuPipelineCacheReleaseKey(key);
   if (evicted) {
     gpu_destroyPipeline(evicted->type, evicted->pipeline);
     free(evicted->keyData);
@@ -563,33 +573,25 @@ GPU_HIDE
 GPUResult
 gpuPipelineCacheFindRender(GPUPipelineCache                  *cache,
                            const GPURenderPipelineCreateInfo *info,
+                           GPUPipelineCacheKey               *outKey,
                            GPURenderPipeline                **outPipeline) {
-  GPUPipelineCacheKey key;
-
   *outPipeline = NULL;
-  if (!gpu_buildRenderPipelineKey(info, &key)) {
+  if (!gpu_buildRenderPipelineKey(info, outKey)) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
   *outPipeline = gpu_pipelineCacheFind(cache,
-                                       &key,
+                                       outKey,
                                        GPU_PIPELINE_CACHE_RENDER);
-  gpu_pipelineKeyRelease(&key);
   return GPU_OK;
 }
 
 GPU_HIDE
 GPURenderPipeline *
-gpuPipelineCacheStoreRender(GPUPipelineCache                  *cache,
-                            const GPURenderPipelineCreateInfo *info,
-                            GPURenderPipeline                 *pipeline) {
-  GPUPipelineCacheKey key;
-
-  if (!gpu_buildRenderPipelineKey(info, &key)) {
-    gpuRecordPipelineCompile(cache->device, cache);
-    return pipeline;
-  }
+gpuPipelineCacheStoreRender(GPUPipelineCache    *cache,
+                            GPUPipelineCacheKey *key,
+                            GPURenderPipeline   *pipeline) {
   return gpu_pipelineCacheStore(cache,
-                                &key,
+                                key,
                                 GPU_PIPELINE_CACHE_RENDER,
                                 pipeline);
 }
@@ -598,33 +600,25 @@ GPU_HIDE
 GPUResult
 gpuPipelineCacheFindCompute(GPUPipelineCache                   *cache,
                             const GPUComputePipelineCreateInfo *info,
+                            GPUPipelineCacheKey                *outKey,
                             GPUComputePipeline                **outPipeline) {
-  GPUPipelineCacheKey key;
-
   *outPipeline = NULL;
-  if (!gpu_buildComputePipelineKey(info, &key)) {
+  if (!gpu_buildComputePipelineKey(info, outKey)) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
   *outPipeline = gpu_pipelineCacheFind(cache,
-                                       &key,
+                                       outKey,
                                        GPU_PIPELINE_CACHE_COMPUTE);
-  gpu_pipelineKeyRelease(&key);
   return GPU_OK;
 }
 
 GPU_HIDE
 GPUComputePipeline *
-gpuPipelineCacheStoreCompute(GPUPipelineCache                   *cache,
-                             const GPUComputePipelineCreateInfo *info,
-                             GPUComputePipeline                 *pipeline) {
-  GPUPipelineCacheKey key;
-
-  if (!gpu_buildComputePipelineKey(info, &key)) {
-    gpuRecordPipelineCompile(cache->device, cache);
-    return pipeline;
-  }
+gpuPipelineCacheStoreCompute(GPUPipelineCache    *cache,
+                             GPUPipelineCacheKey *key,
+                             GPUComputePipeline  *pipeline) {
   return gpu_pipelineCacheStore(cache,
-                                &key,
+                                key,
                                 GPU_PIPELINE_CACHE_COMPUTE,
                                 pipeline);
 }
