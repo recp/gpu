@@ -363,6 +363,7 @@ main(int argc, char **argv) {
   GPUInstance          *instance;
   GPUAdapter           *adapter;
   GPUDevice            *device;
+  GPUResult             result;
   void                 *artifact;
   uint64_t              artifactSize;
   uint32_t              adapterCount;
@@ -402,7 +403,8 @@ main(int argc, char **argv) {
 
   adapter      = NULL;
   adapterCount = 1u;
-  if (GPUEnumerateAdapters(instance, &adapterCount, &adapter) != GPU_OK ||
+  result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
       !adapter) {
     fprintf(stderr, "mesh adapter failed\n");
     GPUDestroyInstance(instance);

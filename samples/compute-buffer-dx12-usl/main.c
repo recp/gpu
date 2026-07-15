@@ -105,11 +105,12 @@ main(int argc, char **argv) {
     GPU_FEATURE_PIPELINE_STATISTICS
   };
   const GPUBindGroupLayoutEntry *layoutEntries;
-  uint64_t               artifactSize;
-  uint32_t               adapterCount;
-  uint32_t               layoutEntryCount;
-  bool                   pipelineStatsEnabled;
-  int                    ok;
+  GPUResult                      result;
+  uint64_t                       artifactSize;
+  uint32_t                       adapterCount;
+  uint32_t                       layoutEntryCount;
+  bool                           pipelineStatsEnabled;
+  int                            ok;
 
   if (argc > 2) {
     fprintf(stderr, "usage: gpu-compute-buffer-dx12-usl [artifact.us]\n");
@@ -152,7 +153,8 @@ main(int argc, char **argv) {
   }
 
   adapterCount = 1u;
-  if (GPUEnumerateAdapters(instance, &adapterCount, &adapter) != GPU_OK ||
+  result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
       !adapter) {
     fprintf(stderr, "Direct3D 12 adapter enumeration failed\n");
     goto cleanup;

@@ -809,6 +809,7 @@ main(void) {
   GPUQueue              *graphics;
   GPUQueue              *compute;
   GPUFence              *fence;
+  GPUResult              result;
   GPUFeature             requiredFeatures[5];
   uint32_t               adapterCount;
   uint32_t               requiredFeatureCount;
@@ -827,7 +828,8 @@ main(void) {
 
   adapter      = NULL;
   adapterCount = 1u;
-  if (GPUEnumerateAdapters(instance, &adapterCount, &adapter) != GPU_OK ||
+  result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
       !adapter) {
     fprintf(stderr, "vulkan adapter failed\n");
     GPUDestroyInstance(instance);

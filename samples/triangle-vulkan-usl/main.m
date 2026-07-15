@@ -71,6 +71,7 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUColorTargetState     colorTarget = {0};
   GPURenderPipelineCreateInfo pipelineInfo = {0};
   FragmentUniforms        uniforms = {{0.15f, 0.78f, 0.34f, 1.0f}};
+  GPUResult               result;
   uint32_t adapterCount;
   uint32_t layoutEntryCount;
 
@@ -84,7 +85,8 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
 
   adapterCount = 1u;
-  if (GPUEnumerateAdapters(_instance, &adapterCount, &_adapter) != GPU_OK ||
+  result = GPUEnumerateAdapters(_instance, &adapterCount, &_adapter);
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
       !_adapter) {
     NSLog(@"GPU: failed to get Vulkan adapter");
     return NO;

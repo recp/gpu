@@ -88,7 +88,6 @@ vk_createInstance(GPUApi * __restrict api,
   uint32_t               nInstanceExtensions;
 #endif
   uint32_t               apiVersion;
-  VkBool32               surfaceExtFound, platformSurfaceExtFound;
 #if GPU_BUILD_WITH_VALIDATION
   VkBool32               validationFound;
   bool                   validate;
@@ -102,8 +101,6 @@ vk_createInstance(GPUApi * __restrict api,
 #endif
 
   portabilityEnum         = false;
-  surfaceExtFound         = 0;
-  platformSurfaceExtFound = 0;
   nInstanceExtensions     = 0;
 #if GPU_BUILD_WITH_VALIDATION
   nInstanceLayers         = 0;
@@ -170,47 +167,38 @@ vk_createInstance(GPUApi * __restrict api,
 
     for (i = 0; i < nInstanceExtensions; i++) {
       if (!strcmp(VK_KHR_SURFACE_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        surfaceExtFound = 1;
         gpuInstVk->extensionNames[nEnabledExtensions++] = VK_KHR_SURFACE_EXTENSION_NAME;
       }
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
       if (!strcmp(VK_KHR_WIN32_SURFACE_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        platformSurfaceExtFound = 1;
         gpuInstVk->extensionNames[nEnabledExtensions++] = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
       }
 #elif defined(VK_USE_PLATFORM_XLIB_KHR)
       if (!strcmp(VK_KHR_XLIB_SURFACE_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        platformSurfaceExtFound = 1;
         gpuInstVk->extensionNames[nEnabledExtensions++] = VK_KHR_XLIB_SURFACE_EXTENSION_NAME;
       }
 #elif defined(VK_USE_PLATFORM_XCB_KHR)
       if (!strcmp(VK_KHR_XCB_SURFACE_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        platformSurfaceExtFound = 1;
         gpuInstVk->extensionNames[nEnabledExtensions++] = VK_KHR_XCB_SURFACE_EXTENSION_NAME;
       }
 #elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
       if (!strcmp(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        platformSurfaceExtFound = 1;
         gpuInstVk->extensionNames[nEnabledExtensions++] = VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME;
       }
 #elif defined(VK_USE_PLATFORM_DIRECTFB_EXT)
       if (!strcmp(VK_EXT_DIRECTFB_SURFACE_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        platformSurfaceExtFound = 1;
         gpuInstVk->extensionNames[nEnabledExtensions++] = VK_EXT_DIRECTFB_SURFACE_EXTENSION_NAME;
       }
 #elif defined(VK_USE_PLATFORM_DISPLAY_KHR)
       if (!strcmp(VK_KHR_DISPLAY_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        platformSurfaceExtFound = 1;
         gpuInstVk->extensionNames[nEnabledExtensions++] = VK_KHR_DISPLAY_EXTENSION_NAME;
       }
 #elif defined(VK_USE_PLATFORM_ANDROID_KHR)
       if (!strcmp(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        platformSurfaceExtFound = 1;
         gpuInstVk->extensionNames[nEnabledExtensions++] = VK_KHR_ANDROID_SURFACE_EXTENSION_NAME;
       }
 #elif defined(VK_USE_PLATFORM_METAL_EXT)
       if (!strcmp(VK_EXT_METAL_SURFACE_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        platformSurfaceExtFound = 1;
         gpuInstVk->extensionNames[nEnabledExtensions++] = VK_EXT_METAL_SURFACE_EXTENSION_NAME;
       }
 #endif
@@ -242,18 +230,6 @@ vk_createInstance(GPUApi * __restrict api,
     }
 
     free(instanceExtensions);
-  }
-
-  if (!surfaceExtFound) {
-    ERR_EXIT("vkEnumerateInstanceExtensionProperties failed to find the " 
-             VK_KHR_SURFACE_EXTENSION_NAME
-             " extension.\n\n",
-             "vkCreateInstance Failure");
-  }
-
-  if (!platformSurfaceExtFound) {
-    ERR_EXIT("vkEnumerateInstanceExtensionProperties failed to find the platform surface extension.\n\n",
-             "vkCreateInstance Failure");
   }
 
   VkInstanceCreateInfo instCI = {

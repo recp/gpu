@@ -92,10 +92,11 @@ main(int argc, char **argv) {
   const uint32_t               expectedDrawArgs[5] = {3u, 1u, 0u, 0u, 0u};
   const uint32_t               dispatchArgs[3] = {3u, 1u, 1u};
   const GPUBindGroupLayoutEntry *layoutEntries;
-  uint64_t               artifactSize;
-  uint32_t               adapterCount;
-  uint32_t               layoutEntryCount;
-  int                    ok;
+  GPUResult                      result;
+  uint64_t                       artifactSize;
+  uint32_t                       adapterCount;
+  uint32_t                       layoutEntryCount;
+  int                            ok;
 
   if (argc != 2) {
     fprintf(stderr, "usage: hello-compute-buffer-vulkan-usl artifact.us\n");
@@ -134,7 +135,8 @@ main(int argc, char **argv) {
   }
 
   adapterCount = 1u;
-  if (GPUEnumerateAdapters(instance, &adapterCount, &adapter) != GPU_OK ||
+  result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
       !adapter) {
     fprintf(stderr, "Vulkan adapter enumeration failed\n");
     goto cleanup;

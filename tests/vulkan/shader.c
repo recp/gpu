@@ -487,6 +487,7 @@ main(int argc, char **argv) {
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUShaderLibrary     *library;
+  GPUResult             result;
   void                 *artifact;
   void                 *mrtArtifact;
   void                 *textureArtifact;
@@ -531,7 +532,8 @@ main(int argc, char **argv) {
 
   adapter      = NULL;
   adapterCount = 1u;
-  if (GPUEnumerateAdapters(instance, &adapterCount, &adapter) != GPU_OK ||
+  result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
       !adapter) {
     fprintf(stderr, "vulkan adapter failed\n");
     GPUDestroyInstance(instance);

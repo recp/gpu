@@ -62,6 +62,7 @@ MeshTriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUInstanceCreateInfo instanceInfo;
   GPUFeature            requiredFeature;
   GPUDeviceCreateInfo   deviceInfo;
+  GPUResult             result;
   uint32_t              adapterCount;
 
   instanceInfo = (GPUInstanceCreateInfo){
@@ -78,7 +79,8 @@ MeshTriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
 
   adapterCount = 1u;
-  if (GPUEnumerateAdapters(_instance, &adapterCount, &_adapter) != GPU_OK ||
+  result = GPUEnumerateAdapters(_instance, &adapterCount, &_adapter);
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
       !_adapter) {
     NSLog(@"GPU: failed to get Vulkan adapter");
     return NO;

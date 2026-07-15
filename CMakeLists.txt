@@ -106,6 +106,10 @@ target_compile_definitions(gpu PRIVATE
   GPU_BACKEND_DX12_ONLY=$<BOOL:${GPU_BACKEND_DX12_ONLY}>
 )
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  target_compile_definitions(gpu PRIVATE _POSIX_C_SOURCE=200809L)
+endif()
+
 if(NOT WIN32)
   find_package(Threads REQUIRED)
   target_link_libraries(gpu PRIVATE Threads::Threads)
@@ -904,7 +908,7 @@ if(GPU_BUILD_TESTS)
     target_include_directories(gpu-vulkan-queue-test PRIVATE
       ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
-    target_link_libraries(gpu-vulkan-queue-test PRIVATE gpu)
+    target_link_libraries(gpu-vulkan-queue-test PRIVATE gpu Vulkan::Vulkan)
     if(TARGET us)
       target_link_libraries(gpu-vulkan-queue-test PRIVATE us)
     elseif(TARGET gpu_usl)
@@ -925,7 +929,7 @@ if(GPU_BUILD_TESTS)
     target_include_directories(gpu-vulkan-shader-test PRIVATE
       ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
-    target_link_libraries(gpu-vulkan-shader-test PRIVATE gpu)
+    target_link_libraries(gpu-vulkan-shader-test PRIVATE gpu Vulkan::Vulkan)
     add_dependencies(gpu-vulkan-shader-test gpu-vulkan-fixtures)
     set_target_properties(gpu-vulkan-shader-test PROPERTIES
       C_STANDARD 11
@@ -936,7 +940,7 @@ if(GPU_BUILD_TESTS)
     add_executable(gpu-vulkan-mesh-test
       tests/api/mesh.c
     )
-    target_link_libraries(gpu-vulkan-mesh-test PRIVATE gpu)
+    target_link_libraries(gpu-vulkan-mesh-test PRIVATE gpu Vulkan::Vulkan)
     add_dependencies(gpu-vulkan-mesh-test gpu-vulkan-fixtures)
     set_target_properties(gpu-vulkan-mesh-test PROPERTIES
       C_STANDARD 11

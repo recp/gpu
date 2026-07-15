@@ -44,6 +44,7 @@ main(int argc, char **argv) {
   GPUShaderLayout               *layout;
   GPURenderPipeline             *pipeline;
   void                          *artifact;
+  GPUResult                      result;
   uint64_t                       artifactSize;
   uint32_t                       adapterCount;
   int                            ok;
@@ -71,7 +72,8 @@ main(int argc, char **argv) {
 
   adapter      = NULL;
   adapterCount = 1u;
-  if (GPUEnumerateAdapters(instance, &adapterCount, &adapter) != GPU_OK ||
+  result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
       !adapter || !(device = GPUCreateDeviceWithDefaultQueues(adapter))) {
     GPUDestroyInstance(instance);
     free(artifact);
