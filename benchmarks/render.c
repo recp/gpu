@@ -39,11 +39,13 @@ static const float benchVertices[] = {
 
 bool
 bench_renderConfig(int argc, char *argv[], BenchRenderConfig *config) {
-  if (!config || argc < 2 || argc > 7) {
+  uint32_t enableStats;
+
+  if (!config || argc < 2 || argc > 8) {
     if (argv && argv[0]) {
       fprintf(stderr,
               "usage: %s <shader.us> [default|metal|vulkan|dx12] "
-              "[draws] [warmup] [frames] [repeats]\n",
+              "[draws] [warmup] [frames] [repeats] [stats=0|1]\n",
               argv[0]);
     }
     return false;
@@ -56,14 +58,19 @@ bench_renderConfig(int argc, char *argv[], BenchRenderConfig *config) {
   config->warmupFrames   = BENCH_DEFAULT_WARMUP;
   config->measuredFrames = BENCH_DEFAULT_FRAMES;
   config->repeats        = BENCH_DEFAULT_REPEATS;
+  config->enableStats    = true;
+  enableStats            = 1u;
   if ((argc > 2 && !bench_parseBackend(argv[2], &config->backend)) ||
       (argc > 3 && !bench_parseU32(argv[3], 1u, &config->drawCount)) ||
       (argc > 4 && !bench_parseU32(argv[4], 0u, &config->warmupFrames)) ||
       (argc > 5 && !bench_parseU32(argv[5], 1u, &config->measuredFrames)) ||
-      (argc > 6 && !bench_parseU32(argv[6], 1u, &config->repeats))) {
+      (argc > 6 && !bench_parseU32(argv[6], 1u, &config->repeats)) ||
+      (argc > 7 && (!bench_parseU32(argv[7], 0u, &enableStats) ||
+                    enableStats > 1u))) {
     fprintf(stderr, "invalid render benchmark arguments\n");
     return false;
   }
+  config->enableStats = enableStats != 0u;
   return true;
 }
 
@@ -250,7 +257,7 @@ bench_renderInit(BenchRender             *bench,
   runtimeConfig.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtimeConfig.chain.structSize = sizeof(runtimeConfig);
   runtimeConfig.validationMode   = GPU_VALIDATION_OFF;
-  runtimeConfig.enableStats      = true;
+  runtimeConfig.enableStats      = config->enableStats;
   if (GPUConfigureRuntime(bench->device, &runtimeConfig) != GPU_OK ||
       GPUGetAdapterProperties(bench->adapter,
                               &bench->adapterProperties) != GPU_OK ||
@@ -487,7 +494,7 @@ bench_renderRun(BenchRender             *bench,
                              userData,
                              sample,
                              &stats) ||
-          stats.drawCalls != config->drawCount) {
+          (config->enableStats && stats.drawCalls != config->drawCount)) {
         return false;
       }
       bench_accumulate(metrics, &stats);
@@ -530,10 +537,11 @@ bench_renderPrint(const char              *title,
   frames = (double)metrics->sampleCount;
 
   printf("GPU %s benchmark\n", title);
-  printf("adapter: %s, backend: %s, validation: %s\n",
+  printf("adapter: %s, backend: %s, validation: %s, stats: %s\n",
          bench->adapterProperties.name ? bench->adapterProperties.name : "unknown",
          bench_backendName(bench->adapterProperties.backend),
-         GPU_BUILD_WITH_VALIDATION ? "compiled" : "removed");
+         GPU_BUILD_WITH_VALIDATION ? "compiled" : "removed",
+         config->enableStats ? "enabled" : "disabled");
   printf("draws/frame: %u, warmup: %u, frames: %u, repeats: %u\n",
          config->drawCount,
          config->warmupFrames,
@@ -561,12 +569,17 @@ bench_renderPrint(const char              *title,
   } else {
     printf("GPU frame: unavailable\n");
   }
-  printf("bind calls/frame: requested %.2f, emitted %.2f\n",
-         metrics->requestedBindCalls / frames,
-         metrics->emittedBindCalls / frames);
-  printf("state calls/frame: requested %.2f, emitted %.2f\n",
-         metrics->requestedStateCalls / frames,
-         metrics->emittedStateCalls / frames);
+  if (config->enableStats) {
+    printf("bind calls/frame: requested %.2f, emitted %.2f\n",
+           metrics->requestedBindCalls / frames,
+           metrics->emittedBindCalls / frames);
+    printf("state calls/frame: requested %.2f, emitted %.2f\n",
+           metrics->requestedStateCalls / frames,
+           metrics->emittedStateCalls / frames);
+  } else {
+    printf("bind calls/frame: unavailable\n");
+    printf("state calls/frame: unavailable\n");
+  }
   printf("hot-path max alloc: %" PRIu64 " calls, %" PRIu64 " bytes\n",
          metrics->maxAllocCount,
          metrics->maxAllocBytes);

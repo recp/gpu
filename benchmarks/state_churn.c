@@ -156,7 +156,7 @@ main(int argc, char *argv[]) {
   if (ok) {
     bench_renderPrint("state churn", &bench, &config, &metrics);
     ok = bench_renderMetricsPass(&metrics) &&
-         state_metricsMatch(&config, &metrics);
+         (!config.enableStats || state_metricsMatch(&config, &metrics));
   }
 
   bench_renderFreeMetrics(&metrics);

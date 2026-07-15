@@ -33,6 +33,7 @@ typedef struct BenchRenderConfig {
   uint32_t    warmupFrames;
   uint32_t    measuredFrames;
   uint32_t    repeats;
+  bool        enableStats;
 } BenchRenderConfig;
 
 typedef struct BenchRender {

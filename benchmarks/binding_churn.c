@@ -235,7 +235,7 @@ main(int argc, char *argv[]) {
            churn.setupCacheStats.bindGroupMisses,
            churn.setupCacheStats.bindGroupCollisions);
     ok = bench_renderMetricsPass(&metrics) &&
-         binding_metricsMatch(&config, &metrics);
+         (!config.enableStats || binding_metricsMatch(&config, &metrics));
   }
 
   bench_renderFreeMetrics(&metrics);
