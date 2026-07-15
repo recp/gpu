@@ -260,7 +260,7 @@ mt_computeBuffer(GPUComputePassEncoder *enc,
   buffer = mt_nativeBuffer(buf);
 #if MT_HAS_METAL4
   if (native->modern) {
-    mt_setArgumentBuffer(enc->_cmdb, native->arguments, buffer, off, index);
+    mt_setArgumentBuffer(enc->_cmdb, native->arguments, buf, off, index);
     return;
   }
 #endif

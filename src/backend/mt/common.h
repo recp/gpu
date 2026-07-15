@@ -276,7 +276,7 @@ GPU_HIDE
 void
 mt_setArgumentBuffer(GPUCommandBuffer *cmdb,
                      MTArgumentState  *state,
-                     id<MTLBuffer>      buffer,
+                     GPUBuffer        *buffer,
                      uint64_t           offset,
                      uint32_t           index);
 

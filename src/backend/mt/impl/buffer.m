@@ -54,10 +54,13 @@ mt_createBuffer(GPUDevice                 * __restrict device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  gpuBuffer->_priv = buffer;
-  gpuBuffer->device = device;
+  gpuBuffer->_priv     = buffer;
+  gpuBuffer->device    = device;
   gpuBuffer->sizeBytes = info->sizeBytes;
-  gpuBuffer->usage = info->usage;
+  gpuBuffer->usage     = info->usage;
+  if (@available(macOS 13.0, iOS 16.0, *)) {
+    gpuBuffer->_gpuAddress = buffer.gpuAddress;
+  }
   *outBuffer = gpuBuffer;
   return GPU_OK;
 }

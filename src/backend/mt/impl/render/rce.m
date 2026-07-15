@@ -492,7 +492,7 @@ mt_vertexBuffer(GPURenderCommandEncoder *rce,
   if (native->modern) {
     mt_setArgumentBuffer(rce->_cmdb,
                          native->vertexArguments,
-                         nativeBuffer,
+                         buffer,
                          offset,
                          index);
     return;
@@ -577,7 +577,7 @@ mt_taskBuffer(GPURenderCommandEncoder *rce,
   if (native->modern) {
     mt_setArgumentBuffer(rce->_cmdb,
                          native->taskArguments,
-                         nativeBuffer,
+                         buffer,
                          offset,
                          index);
     return;
@@ -656,7 +656,7 @@ mt_meshBuffer(GPURenderCommandEncoder *rce,
   if (native->modern) {
     mt_setArgumentBuffer(rce->_cmdb,
                          native->meshArguments,
-                         nativeBuffer,
+                         buffer,
                          offset,
                          index);
     return;
@@ -735,7 +735,7 @@ mt_fragmentBuffer(GPURenderCommandEncoder *rce,
   if (native->modern) {
     mt_setArgumentBuffer(rce->_cmdb,
                          native->fragmentArguments,
-                         nativeBuffer,
+                         buffer,
                          offset,
                          index);
     return;

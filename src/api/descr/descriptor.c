@@ -2791,7 +2791,7 @@ GPUDestroyBindGroup(GPUBindGroup *group) {
   free((GPUBindGroupStorage *)group);
 }
 
-static void
+static GPU_INLINE void
 gpuBindRenderBinding(void *ctx, const GPUBindGroupBindingView *binding) {
   GPUBindRenderContext *bindCtx;
 
@@ -2869,6 +2869,15 @@ gpuBindRenderBinding(void *ctx, const GPUBindGroupBindingView *binding) {
   }
 }
 
+static GPU_INLINE int
+gpu_bindGroupEachDynamic(GPUPipelineLayout      *pipelineLayout,
+                         uint32_t                groupIndex,
+                         GPUBindGroup           *group,
+                         uint32_t                dynamicOffsetCount,
+                         const uint32_t         *pDynamicOffsets,
+                         GPUBindGroupBindingFn   fn,
+                         void                   *ctx);
+
 GPU_EXPORT
 void
 GPUBindRenderGroup(GPURenderPassEncoder *pass,
@@ -2923,13 +2932,13 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
   }
 
   ctx.pass = pass;
-  if (gpuForEachBindGroupBindingWithDynamicOffsets(pass->_pipelineLayout,
-                                                   groupIndex,
-                                                   group,
-                                                   dynamicOffsetCount,
-                                                   pDynamicOffsets,
-                                                   gpuBindRenderBinding,
-                                                   &ctx)) {
+  if (gpu_bindGroupEachDynamic(pass->_pipelineLayout,
+                               groupIndex,
+                               group,
+                               dynamicOffsetCount,
+                               pDynamicOffsets,
+                               gpuBindRenderBinding,
+                               &ctx)) {
     pass->_boundGroups[groupIndex] = group;
     pass->_boundGroupLayouts[groupIndex] = gpuBindGroupGetLayout(group);
     gpuStoreBindGroupShadow(
@@ -3114,15 +3123,14 @@ gpuValidateBindGroupDynamicOffsets(GPUPipelineLayout *pipelineLayout,
   return dynamicIndex == dynamicOffsetCount;
 }
 
-GPU_HIDE
-int
-gpuForEachBindGroupBindingWithDynamicOffsets(GPUPipelineLayout *pipelineLayout,
-                                             uint32_t groupIndex,
-                                             GPUBindGroup *group,
-                                             uint32_t dynamicOffsetCount,
-                                             const uint32_t *pDynamicOffsets,
-                                             GPUBindGroupBindingFn fn,
-                                             void *ctx) {
+static GPU_INLINE int
+gpu_bindGroupEachDynamic(GPUPipelineLayout      *pipelineLayout,
+                         uint32_t                groupIndex,
+                         GPUBindGroup           *group,
+                         uint32_t                dynamicOffsetCount,
+                         const uint32_t         *pDynamicOffsets,
+                         GPUBindGroupBindingFn   fn,
+                         void                   *ctx) {
   GPUBindGroupPriv       *priv;
   GPUBindGroupLayoutPriv *layout;
   GPUPipelineLayoutPriv  *pipeline;
@@ -3215,4 +3223,22 @@ gpuForEachBindGroupBindingWithDynamicOffsets(GPUPipelineLayout *pipelineLayout,
   }
 
   return dynamicIndex == dynamicOffsetCount;
+}
+
+GPU_HIDE
+int
+gpuForEachBindGroupBindingWithDynamicOffsets(GPUPipelineLayout *pipelineLayout,
+                                             uint32_t groupIndex,
+                                             GPUBindGroup *group,
+                                             uint32_t dynamicOffsetCount,
+                                             const uint32_t *pDynamicOffsets,
+                                             GPUBindGroupBindingFn fn,
+                                             void *ctx) {
+  return gpu_bindGroupEachDynamic(pipelineLayout,
+                                  groupIndex,
+                                  group,
+                                  dynamicOffsetCount,
+                                  pDynamicOffsets,
+                                  fn,
+                                  ctx);
 }

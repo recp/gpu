@@ -23,6 +23,7 @@
 struct GPUBuffer {
   void                *_priv;
   GPUDevice           *device;
+  uint64_t             _gpuAddress;
   uint64_t             sizeBytes;
   GPUBufferUsageFlags  usage;
 };
