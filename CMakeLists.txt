@@ -2010,23 +2010,23 @@ if(GPU_BUILD_BENCHMARKS)
   endif()
 
   if(APPLE AND GPU_BUILD_METAL)
-    add_executable(gpu-native-metal-static-bench
+    add_executable(gpu-native-metal-render-bench
       benchmarks/bench.c
-      benchmarks/native_metal_static.m
+      benchmarks/native_metal_render.m
     )
-    target_include_directories(gpu-native-metal-static-bench PRIVATE
+    target_include_directories(gpu-native-metal-render-bench PRIVATE
       ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
-    target_link_libraries(gpu-native-metal-static-bench PRIVATE
+    target_link_libraries(gpu-native-metal-render-bench PRIVATE
       "-framework Foundation"
       "-framework Metal"
     )
-    set_target_properties(gpu-native-metal-static-bench PROPERTIES
+    set_target_properties(gpu-native-metal-render-bench PROPERTIES
       C_STANDARD 11
       C_STANDARD_REQUIRED YES
       C_EXTENSIONS NO
     )
-    target_compile_options(gpu-native-metal-static-bench PRIVATE
+    target_compile_options(gpu-native-metal-render-bench PRIVATE
       -Wall
       -Wextra
     )
@@ -2115,12 +2115,14 @@ if(GPU_BUILD_BENCHMARKS)
       "${GPU_BENCHMARK_RENDER_MRT_US}"
       ${GPU_BENCHMARK_BACKEND} 12 1
     )
-    if(TARGET gpu-native-metal-static-bench)
-      gpu_add_perf_smoke(
-        perf-smoke-native-metal-static
-        gpu-native-metal-static-bench
-        32 4 12 1
-      )
+    if(TARGET gpu-native-metal-render-bench)
+      foreach(native_mode static state binding upload)
+        gpu_add_perf_smoke(
+          perf-smoke-native-metal-${native_mode}
+          gpu-native-metal-render-bench
+          ${native_mode} 32 4 12 1
+        )
+      endforeach()
     endif()
 
     if(GPU_BENCHMARK_BACKEND STREQUAL "vulkan" AND
