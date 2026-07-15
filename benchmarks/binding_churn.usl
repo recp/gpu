@@ -1,0 +1,11 @@
+pub struct VSIn {
+  position: float2 #attribute(0)
+}
+
+vert tri_vs(v: VSIn #stage_in) -> float4 {
+  return float4(v.position, 0.0, 1.0)
+}
+
+frag tri_fs(colors: &[float4] #buffer(0) #group(0)) -> float4 {
+  return colors[0]
+}

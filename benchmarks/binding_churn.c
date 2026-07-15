@@ -32,7 +32,6 @@ typedef struct BindingChurn {
   GPUBindGroup       *groups[BINDING_GROUP_COUNT];
   GPUBindGroup       *aliases[BINDING_GROUP_COUNT];
   GPUCacheStats       setupCacheStats;
-  bool                dynamicOffset;
 } BindingChurn;
 
 static bool
@@ -62,12 +61,11 @@ binding_createLayout(BenchRender *bench, BindingChurn *churn) {
 
   entries = GPUGetBindGroupLayoutEntries(churn->layout, &entryCount);
   if (!entries || entryCount != 1u || entries[0].binding != 0u ||
-      entries[0].bindingType != GPU_BINDING_UNIFORM_BUFFER ||
+      entries[0].bindingType != GPU_BINDING_STORAGE_BUFFER ||
       entries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      entries[0].arrayCount != 1u) {
+      entries[0].arrayCount != 1u || entries[0].hasDynamicOffset) {
     return false;
   }
-  churn->dynamicOffset = entries[0].hasDynamicOffset;
 
   return GPUCreatePipelineLayoutFromReflection(bench->device,
                                                 bench->library,
@@ -93,7 +91,7 @@ binding_createGroups(BenchRender *bench, BindingChurn *churn) {
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.sizeBytes        = sizeof(colors[0]);
-  bufferInfo.usage = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
+  bufferInfo.usage = GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_DST;
   for (uint32_t i = 0u; i < BINDING_GROUP_COUNT; i++) {
     if (GPUCreateBuffer(bench->device,
                         &bufferInfo,
@@ -109,7 +107,7 @@ binding_createGroups(BenchRender *bench, BindingChurn *churn) {
   }
 
   entry.binding       = 0u;
-  entry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
+  entry.bindingType   = GPU_BINDING_STORAGE_BUFFER;
   entry.buffer.size   = sizeof(colors[0]);
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
@@ -150,15 +148,13 @@ binding_encode(GPURenderPassEncoder *pass,
   GPUBindRenderPipeline(pass, churn->pipeline);
   for (uint32_t draw = 0u; draw < drawCount; draw++) {
     uint32_t groupIndex;
-    uint32_t dynamicOffset;
 
-    groupIndex    = (draw >> 1u) & 1u;
-    dynamicOffset = 0u;
+    groupIndex = (draw >> 1u) & 1u;
     GPUBindRenderGroup(pass,
                        0u,
                        churn->groups[groupIndex],
-                       churn->dynamicOffset ? 1u : 0u,
-                       churn->dynamicOffset ? &dynamicOffset : NULL);
+                       0u,
+                       NULL);
     GPUDraw(pass, 3u, 1u, 0u, 0u);
   }
   return true;

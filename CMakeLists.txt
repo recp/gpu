@@ -581,6 +581,7 @@ if(GPU_BUILD_BENCHMARKS)
   set(GPU_BENCHMARK_USL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/render_mrt.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-usl/triangle.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/binding_churn.usl"
   )
   set(GPU_BENCHMARK_BINDLESS_USL_SOURCE
     "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/bindless_dispatch.usl"
@@ -679,6 +680,9 @@ if(GPU_BUILD_BENCHMARKS)
          GPU_BENCHMARK_TRIANGLE_US)
     list(GET GPU_BENCHMARK_SELECTED_USL_FIXTURES
          2
+         GPU_BENCHMARK_BINDING_US)
+    list(GET GPU_BENCHMARK_SELECTED_USL_FIXTURES
+         3
          GPU_BENCHMARK_BINDLESS_DISPATCH_US)
   endif()
 
@@ -1903,7 +1907,7 @@ if(GPU_BUILD_BENCHMARKS)
     gpu_add_perf_smoke(
       perf-smoke-binding-churn
       gpu-binding-churn-bench
-      "${GPU_BENCHMARK_TRIANGLE_US}"
+      "${GPU_BENCHMARK_BINDING_US}"
       ${GPU_BENCHMARK_BACKEND} 32 4 12 1
     )
     gpu_add_perf_smoke(
