@@ -603,10 +603,13 @@ mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
       id<MTL4CommandBuffer> buffers[1];
       MTL4CommitOptions *options;
 
+      drawable = native->drawable;
+      if (drawable) {
+        [native->modern useResidencySet:drawable.layer.residencySet];
+      }
       [native->residency commit];
       [native->modern endCommandBuffer];
       buffers[0] = native->modern;
-      drawable = native->drawable;
       native->drawable = nil;
 
       options = [MTL4CommitOptions new];
@@ -617,6 +620,9 @@ mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
       atomic_store_explicit(&native->completionReady,
                             true,
                             memory_order_release);
+      if (drawable) {
+        [queue->modern waitForDrawable:drawable];
+      }
       [queue->modern commit:buffers
                        count:1u
                      options:options];
