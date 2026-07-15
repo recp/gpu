@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 enum {
   MESH_TARGET_WIDTH  = 8u,
@@ -147,7 +148,7 @@ test_mesh_draw(GPUDevice  *device,
       !library ||
       GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
       !mesh_layout_matches(shaderLayout)) {
-    fprintf(stderr, "failed to create Vulkan mesh shader layout\n");
+    fprintf(stderr, "failed to create mesh shader layout\n");
     goto cleanup;
   }
 
@@ -160,7 +161,7 @@ test_mesh_draw(GPUDevice  *device,
   pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
   pipelineInfo.chain.structSize = sizeof(pipelineInfo);
   pipelineInfo.chain.pNext      = &meshInfo.chain;
-  pipelineInfo.label            = "vulkan-usl-mesh";
+  pipelineInfo.label            = "usl-mesh";
   pipelineInfo.layout           = shaderLayout->pipelineLayout;
   pipelineInfo.library          = library;
   pipelineInfo.fragmentEntry    = "fragment_main";
@@ -173,13 +174,13 @@ test_mesh_draw(GPUDevice  *device,
   pipelineInfo.multisample.sampleMask  = UINT32_MAX;
   if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
       !pipeline) {
-    fprintf(stderr, "failed to create Vulkan mesh pipeline\n");
+    fprintf(stderr, "failed to create mesh pipeline\n");
     goto cleanup;
   }
 
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
-  bufferInfo.label            = "vulkan-mesh-task-params";
+  bufferInfo.label            = "mesh-task-params";
   bufferInfo.sizeBytes        = sizeof(taskParams);
   bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM |
                                 GPU_BUFFER_USAGE_COPY_DST;
@@ -190,17 +191,17 @@ test_mesh_draw(GPUDevice  *device,
                           0u,
                           &taskParams,
                           sizeof(taskParams)) != GPU_OK) {
-    fprintf(stderr, "failed to create Vulkan mesh task buffer\n");
+    fprintf(stderr, "failed to create mesh task buffer\n");
     goto cleanup;
   }
 
-  bufferInfo.label     = "vulkan-mesh-readback";
+  bufferInfo.label     = "mesh-readback";
   bufferInfo.sizeBytes = sizeof(pixels);
   bufferInfo.usage     = GPU_BUFFER_USAGE_COPY_DST |
                          GPU_BUFFER_USAGE_COPY_SRC;
   if (GPUCreateBuffer(device, &bufferInfo, &readbackBuffer) != GPU_OK ||
       !readbackBuffer) {
-    fprintf(stderr, "failed to create Vulkan mesh readback buffer\n");
+    fprintf(stderr, "failed to create mesh readback buffer\n");
     goto cleanup;
   }
 
@@ -210,19 +211,19 @@ test_mesh_draw(GPUDevice  *device,
   taskEntry.buffer.size   = sizeof(taskParams);
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label            = "vulkan-mesh-task-group";
+  groupInfo.label            = "mesh-task-group";
   groupInfo.layout           = shaderLayout->bindGroupLayouts[0];
   groupInfo.entryCount       = 1u;
   groupInfo.pEntries         = &taskEntry;
   if (GPUCreateBindGroup(device, &groupInfo, &taskGroup) != GPU_OK ||
       !taskGroup) {
-    fprintf(stderr, "failed to create Vulkan mesh task group\n");
+    fprintf(stderr, "failed to create mesh task group\n");
     goto cleanup;
   }
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
-  textureInfo.label            = "vulkan-mesh-target";
+  textureInfo.label            = "mesh-target";
   textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
   textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   textureInfo.width            = MESH_TARGET_WIDTH;
@@ -233,26 +234,26 @@ test_mesh_draw(GPUDevice  *device,
   textureInfo.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET |
                                  GPU_TEXTURE_USAGE_COPY_SRC;
   if (GPUCreateTexture(device, &textureInfo, &target) != GPU_OK || !target) {
-    fprintf(stderr, "failed to create Vulkan mesh target\n");
+    fprintf(stderr, "failed to create mesh target\n");
     goto cleanup;
   }
 
   viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
   viewInfo.chain.structSize = sizeof(viewInfo);
-  viewInfo.label            = "vulkan-mesh-target-view";
+  viewInfo.label            = "mesh-target-view";
   viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
   if (GPUCreateTextureView(target, &viewInfo, &targetView) != GPU_OK ||
       !targetView) {
-    fprintf(stderr, "failed to create Vulkan mesh target view\n");
+    fprintf(stderr, "failed to create mesh target view\n");
     goto cleanup;
   }
 
-  if (GPUAcquireCommandBuffer(queue, "vulkan-usl-mesh", &cmdb) != GPU_OK ||
+  if (GPUAcquireCommandBuffer(queue, "usl-mesh", &cmdb) != GPU_OK ||
       !cmdb) {
-    fprintf(stderr, "failed to acquire Vulkan mesh command buffer\n");
+    fprintf(stderr, "failed to acquire mesh command buffer\n");
     goto cleanup;
   }
 
@@ -262,12 +263,12 @@ test_mesh_draw(GPUDevice  *device,
   color.clearColor.float32[3] = 1.0f;
   passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   passInfo.chain.structSize     = sizeof(passInfo);
-  passInfo.label                = "vulkan-usl-mesh";
+  passInfo.label                = "usl-mesh";
   passInfo.colorAttachmentCount = 1u;
   passInfo.pColorAttachments    = &color;
   renderPass = GPUBeginRenderPass(cmdb, &passInfo);
   if (!renderPass) {
-    fprintf(stderr, "failed to begin Vulkan mesh render pass\n");
+    fprintf(stderr, "failed to begin mesh render pass\n");
     goto cleanup;
   }
 
@@ -295,9 +296,9 @@ test_mesh_draw(GPUDevice  *device,
   barrierBatch.pTextureBarriers    = &textureBarrier;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, "vulkan-mesh-readback");
+  copyPass = GPUBeginCopyPass(cmdb, "mesh-readback");
   if (!copyPass) {
-    fprintf(stderr, "failed to begin Vulkan mesh copy pass\n");
+    fprintf(stderr, "failed to begin mesh copy pass\n");
     goto cleanup;
   }
   copyRegion.bytesPerRow        = MESH_TARGET_WIDTH * 4u;
@@ -311,7 +312,7 @@ test_mesh_draw(GPUDevice  *device,
   copyPass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
-    fprintf(stderr, "failed to create Vulkan mesh fence\n");
+    fprintf(stderr, "failed to create mesh fence\n");
     goto cleanup;
   }
   submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
@@ -321,7 +322,7 @@ test_mesh_draw(GPUDevice  *device,
   submitInfo.fence              = fence;
   if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
       GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
-    fprintf(stderr, "Vulkan mesh submit failed\n");
+    fprintf(stderr, "mesh submit failed\n");
     cmdb = NULL;
     goto cleanup;
   }
@@ -333,7 +334,7 @@ test_mesh_draw(GPUDevice  *device,
                          pixels,
                          sizeof(pixels)) != GPU_OK ||
       !mesh_pixels_match(pixels)) {
-    fprintf(stderr, "Vulkan mesh readback mismatch\n");
+    fprintf(stderr, "mesh readback mismatch\n");
     goto cleanup;
   }
   ok = 1;
@@ -358,6 +359,7 @@ main(int argc, char **argv) {
   GPUInstanceCreateInfo instanceInfo = {0};
   GPUDeviceCreateInfo   deviceInfo   = {0};
   GPUFeature            requiredFeature;
+  GPUBackend            backend;
   GPUInstance          *instance;
   GPUAdapter           *adapter;
   GPUDevice            *device;
@@ -366,25 +368,34 @@ main(int argc, char **argv) {
   uint32_t              adapterCount;
   int                   ok;
 
-  if (argc != 2) {
-    fprintf(stderr, "usage: vulkan-mesh mesh_triangle.us\n");
+  if (argc != 3) {
+    fprintf(stderr, "usage: mesh <vulkan|dx12> mesh_triangle.us\n");
+    return 1;
+  }
+
+  if (strcmp(argv[1], "vulkan") == 0) {
+    backend = GPU_BACKEND_VULKAN;
+  } else if (strcmp(argv[1], "dx12") == 0) {
+    backend = GPU_BACKEND_DX12;
+  } else {
+    fprintf(stderr, "mesh backend must be vulkan or dx12\n");
     return 1;
   }
 
   artifactSize = 0u;
-  artifact     = read_file(argv[1], &artifactSize);
+  artifact     = read_file(argv[2], &artifactSize);
   if (!artifact) {
-    fprintf(stderr, "Vulkan mesh artifact read failed\n");
+    fprintf(stderr, "mesh artifact read failed\n");
     return 1;
   }
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
-  instanceInfo.preferredBackend = GPU_BACKEND_VULKAN;
+  instanceInfo.preferredBackend = backend;
   instanceInfo.enableValidation = true;
   instance = NULL;
   if (GPUCreateInstance(&instanceInfo, &instance) != GPU_OK || !instance) {
-    fprintf(stderr, "Vulkan mesh instance failed\n");
+    fprintf(stderr, "mesh instance failed\n");
     free(artifact);
     return 1;
   }
@@ -393,13 +404,13 @@ main(int argc, char **argv) {
   adapterCount = 1u;
   if (GPUEnumerateAdapters(instance, &adapterCount, &adapter) != GPU_OK ||
       !adapter) {
-    fprintf(stderr, "Vulkan mesh adapter failed\n");
+    fprintf(stderr, "mesh adapter failed\n");
     GPUDestroyInstance(instance);
     free(artifact);
     return 1;
   }
   if (!GPUIsFeatureSupported(adapter, GPU_FEATURE_MESH_SHADER)) {
-    puts("Vulkan mesh shader test skipped: unsupported adapter");
+    puts("mesh shader test skipped: unsupported adapter");
     GPUDestroyInstance(instance);
     free(artifact);
     return 77;
@@ -408,12 +419,12 @@ main(int argc, char **argv) {
   requiredFeature = GPU_FEATURE_MESH_SHADER;
   deviceInfo.chain.sType      = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize = sizeof(deviceInfo);
-  deviceInfo.label            = "vulkan-mesh-test-device";
+  deviceInfo.label            = "mesh-test-device";
   deviceInfo.required.featureCount = 1u;
   deviceInfo.required.pFeatures    = &requiredFeature;
   device = NULL;
   if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device) {
-    fprintf(stderr, "Vulkan mesh device failed\n");
+    fprintf(stderr, "mesh device failed\n");
     GPUDestroyInstance(instance);
     free(artifact);
     return 1;
@@ -425,10 +436,10 @@ main(int argc, char **argv) {
   free(artifact);
 
   if (!ok) {
-    fprintf(stderr, "Vulkan mesh shader validation failed\n");
+    fprintf(stderr, "mesh shader validation failed\n");
     return 1;
   }
 
-  puts("Vulkan mesh shader validation passed");
+  puts("mesh shader validation passed");
   return 0;
 }

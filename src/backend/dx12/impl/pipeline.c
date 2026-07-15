@@ -79,6 +79,50 @@ struct DXCResult {
 
 typedef HRESULT (WINAPI *DXCCreateInstanceFn)(REFCLSID, REFIID, void **);
 
+typedef struct DX12RTFormatArray {
+  DXGI_FORMAT formats[D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT];
+  UINT        count;
+} DX12RTFormatArray;
+
+#define DX12_STREAM_SUBOBJECT(NAME, VALUE_TYPE) \
+  typedef union NAME {                          \
+    struct {                                    \
+      D3D12_PIPELINE_STATE_SUBOBJECT_TYPE type; \
+      VALUE_TYPE value;                         \
+    } data;                                     \
+    void *alignment;                            \
+  } NAME
+
+DX12_STREAM_SUBOBJECT(DX12StreamRootSignature, ID3D12RootSignature *);
+DX12_STREAM_SUBOBJECT(DX12StreamShader, D3D12_SHADER_BYTECODE);
+DX12_STREAM_SUBOBJECT(DX12StreamBlend, D3D12_BLEND_DESC);
+DX12_STREAM_SUBOBJECT(DX12StreamSampleMask, UINT);
+DX12_STREAM_SUBOBJECT(DX12StreamRasterizer, D3D12_RASTERIZER_DESC);
+DX12_STREAM_SUBOBJECT(DX12StreamDepthStencil, D3D12_DEPTH_STENCIL_DESC);
+DX12_STREAM_SUBOBJECT(DX12StreamTopology, D3D12_PRIMITIVE_TOPOLOGY_TYPE);
+DX12_STREAM_SUBOBJECT(DX12StreamRenderTargets, DX12RTFormatArray);
+DX12_STREAM_SUBOBJECT(DX12StreamDepthFormat, DXGI_FORMAT);
+DX12_STREAM_SUBOBJECT(DX12StreamSampleDesc, DXGI_SAMPLE_DESC);
+DX12_STREAM_SUBOBJECT(DX12StreamFlags, D3D12_PIPELINE_STATE_FLAGS);
+
+#undef DX12_STREAM_SUBOBJECT
+
+typedef struct DX12MeshPipelineStream {
+  DX12StreamRootSignature rootSignature;
+  DX12StreamShader        taskShader;
+  DX12StreamShader        meshShader;
+  DX12StreamShader        fragmentShader;
+  DX12StreamBlend         blend;
+  DX12StreamSampleMask    sampleMask;
+  DX12StreamRasterizer    rasterizer;
+  DX12StreamDepthStencil  depthStencil;
+  DX12StreamTopology      topology;
+  DX12StreamRenderTargets renderTargets;
+  DX12StreamDepthFormat   depthFormat;
+  DX12StreamSampleDesc    sampleDesc;
+  DX12StreamFlags         flags;
+} DX12MeshPipelineStream;
+
 static const CLSID dx12_clsidDxcCompiler = {
   0x73e22d93,
   0xe6ce,
@@ -445,17 +489,21 @@ dx12_compileShader(GPUDeviceDX12        *device,
                    const char           *entry,
                    GPUShaderStageFlags   stage,
                    DX12ShaderCode       *outCode) {
-  static const wchar_t *dxcProfiles60[GPU_SHADER_STAGE_COMPUTE_BIT + 1u] = {
+  static const wchar_t *dxcProfiles60[GPU_SHADER_STAGE_MESH_BIT + 1u] = {
     [GPU_SHADER_STAGE_VERTEX_BIT]   = L"vs_6_0",
     [GPU_SHADER_STAGE_FRAGMENT_BIT] = L"ps_6_0",
-    [GPU_SHADER_STAGE_COMPUTE_BIT]  = L"cs_6_0"
+    [GPU_SHADER_STAGE_COMPUTE_BIT]  = L"cs_6_0",
+    [GPU_SHADER_STAGE_TASK_BIT]     = L"as_6_5",
+    [GPU_SHADER_STAGE_MESH_BIT]     = L"ms_6_5"
   };
-  static const wchar_t *dxcProfiles62[GPU_SHADER_STAGE_COMPUTE_BIT + 1u] = {
+  static const wchar_t *dxcProfiles62[GPU_SHADER_STAGE_MESH_BIT + 1u] = {
     [GPU_SHADER_STAGE_VERTEX_BIT]   = L"vs_6_2",
     [GPU_SHADER_STAGE_FRAGMENT_BIT] = L"ps_6_2",
-    [GPU_SHADER_STAGE_COMPUTE_BIT]  = L"cs_6_2"
+    [GPU_SHADER_STAGE_COMPUTE_BIT]  = L"cs_6_2",
+    [GPU_SHADER_STAGE_TASK_BIT]     = L"as_6_5",
+    [GPU_SHADER_STAGE_MESH_BIT]     = L"ms_6_5"
   };
-  static const char *legacyProfiles[GPU_SHADER_STAGE_COMPUTE_BIT + 1u] = {
+  static const char *legacyProfiles[GPU_SHADER_STAGE_MESH_BIT + 1u] = {
     [GPU_SHADER_STAGE_VERTEX_BIT]   = "vs_5_1",
     [GPU_SHADER_STAGE_FRAGMENT_BIT] = "ps_5_1",
     [GPU_SHADER_STAGE_COMPUTE_BIT]  = "cs_5_1"
@@ -467,7 +515,7 @@ dx12_compileShader(GPUDeviceDX12        *device,
   if (!device || !library || !entry || !outCode ||
       stage >= GPU_ARRAY_LEN(dxcProfiles60) || !dxcProfiles60[stage] ||
       !dxcProfiles62[stage] ||
-      !legacyProfiles[stage]) {
+      (!device->dxcAvailable && !legacyProfiles[stage])) {
     return false;
   }
   memset(outCode, 0, sizeof(*outCode));
@@ -533,6 +581,74 @@ dx12__topology(GPUPrimitiveTopology             topology,
     default:
       return false;
   }
+}
+
+static const GPUMeshPipelineEXT*
+dx12__meshPipelineInfo(const GPURenderPipelineCreateInfo *info) {
+  const GPUChainedStruct *chain;
+
+  chain = info ? info->chain.pNext : NULL;
+  while (chain) {
+    if (chain->sType == GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT) {
+      return (const GPUMeshPipelineEXT *)chain;
+    }
+    chain = chain->pNext;
+  }
+  return NULL;
+}
+
+static void
+dx12__meshPipelineStream(
+  DX12MeshPipelineStream                   *stream,
+  const D3D12_GRAPHICS_PIPELINE_STATE_DESC *desc,
+  ID3D12RootSignature                      *rootSignature,
+  const DX12ShaderCode                     *taskCode,
+  const DX12ShaderCode                     *meshCode,
+  const DX12ShaderCode                     *fragmentCode) {
+  memset(stream, 0, sizeof(*stream));
+
+  stream->rootSignature.data.type =
+    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_ROOT_SIGNATURE;
+  stream->rootSignature.data.value = rootSignature;
+  stream->taskShader.data.type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_AS;
+  if (taskCode) {
+    stream->taskShader.data.value.pShaderBytecode = taskCode->data;
+    stream->taskShader.data.value.BytecodeLength  = taskCode->size;
+  }
+  stream->meshShader.data.type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_MS;
+  stream->meshShader.data.value.pShaderBytecode = meshCode->data;
+  stream->meshShader.data.value.BytecodeLength  = meshCode->size;
+  stream->fragmentShader.data.type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PS;
+  stream->fragmentShader.data.value.pShaderBytecode = fragmentCode->data;
+  stream->fragmentShader.data.value.BytecodeLength  = fragmentCode->size;
+  stream->blend.data.type  = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_BLEND;
+  stream->blend.data.value = desc->BlendState;
+  stream->sampleMask.data.type =
+    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_SAMPLE_MASK;
+  stream->sampleMask.data.value = desc->SampleMask;
+  stream->rasterizer.data.type =
+    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RASTERIZER;
+  stream->rasterizer.data.value = desc->RasterizerState;
+  stream->depthStencil.data.type =
+    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL;
+  stream->depthStencil.data.value = desc->DepthStencilState;
+  stream->topology.data.type =
+    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PRIMITIVE_TOPOLOGY;
+  stream->topology.data.value = desc->PrimitiveTopologyType;
+  stream->renderTargets.data.type =
+    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RENDER_TARGET_FORMATS;
+  stream->renderTargets.data.value.count = desc->NumRenderTargets;
+  memcpy(stream->renderTargets.data.value.formats,
+         desc->RTVFormats,
+         sizeof(desc->RTVFormats));
+  stream->depthFormat.data.type =
+    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL_FORMAT;
+  stream->depthFormat.data.value = desc->DSVFormat;
+  stream->sampleDesc.data.type =
+    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_SAMPLE_DESC;
+  stream->sampleDesc.data.value = desc->SampleDesc;
+  stream->flags.data.type  = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_FLAGS;
+  stream->flags.data.value = desc->Flags;
 }
 
 static D3D12_CULL_MODE
@@ -694,21 +810,26 @@ GPU_HIDE
 GPUResult
 dx12_createRenderPipeline(GPUDevice                         * __restrict device,
                           const GPURenderPipelineCreateInfo * __restrict info,
-                          uint32_t                                       requiredBindGroupMask,
+                          uint32_t                           requiredBindGroupMask,
                           GPURenderPipeline                 * __restrict pipeline) {
-  GPUDeviceDX12                  *deviceDX12;
-  GPUShaderLibraryDX12                 *library;
-  GPUPipelineLayoutDX12          *layout;
-  GPURenderPipelineDX12          *native;
-  ID3D12RootSignature            *rootSignature;
-  const GPUDepthStencilState     *depthStencil;
-  D3D12_INPUT_ELEMENT_DESC       *elements;
+  GPUDeviceDX12                      *deviceDX12;
+  GPUShaderLibraryDX12               *library;
+  GPUPipelineLayoutDX12              *layout;
+  GPURenderPipelineDX12              *native;
+  ID3D12RootSignature                *rootSignature;
+  const GPUMeshPipelineEXT           *mesh;
+  const GPUDepthStencilState         *depthStencil;
+  D3D12_INPUT_ELEMENT_DESC           *elements;
   D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {0};
-  DX12ShaderCode                 vertexCode = {0};
-  DX12ShaderCode                 fragmentCode = {0};
-  DX12PipelineKey                rootKey;
-  uint32_t                       elementCount;
-  HRESULT                        result;
+  D3D12_PIPELINE_STATE_STREAM_DESC   streamDesc = {0};
+  DX12MeshPipelineStream             meshStream;
+  DX12ShaderCode                     vertexCode = {0};
+  DX12ShaderCode                     taskCode = {0};
+  DX12ShaderCode                     meshCode = {0};
+  DX12ShaderCode                     fragmentCode = {0};
+  DX12PipelineKey                    rootKey;
+  uint32_t                           elementCount;
+  HRESULT                            result;
 
   if (!device || !device->_priv || !info || !info->library ||
       !info->layout || !pipeline) {
@@ -717,17 +838,23 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
 
   GPU__UNUSED(requiredBindGroupMask);
 
-  elements     = NULL;
-  elementCount = 0u;
+  elements      = NULL;
+  elementCount  = 0u;
   rootSignature = NULL;
-  deviceDX12 = device->_priv;
-  library    = info->library->_priv;
-  layout     = info->layout->_native;
-  depthStencil = info->pDepthStencilState;
+  deviceDX12    = device->_priv;
+  library       = info->library->_priv;
+  layout        = info->layout->_native;
+  mesh          = dx12__meshPipelineInfo(info);
+  depthStencil  = info->pDepthStencilState;
   if (!library || !library->source || !layout || !layout->rootSignature ||
       info->vertex.bufferLayoutCount >
         D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT ||
-      !dx12__inputLayout(&info->vertex, &elements, &elementCount)) {
+      (mesh && (!deviceDX12->meshShader || !deviceDX12->d3dDevice2)) ||
+      (!mesh && !dx12__inputLayout(&info->vertex,
+                                   &elements,
+                                   &elementCount)) ||
+      (mesh && info->primitiveTopology != GPU_PRIMITIVE_TOPOLOGY_LINE_LIST &&
+       info->primitiveTopology != GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)) {
     free(elements);
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -746,24 +873,40 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  native->vertexBufferCount = info->vertex.bufferLayoutCount;
-  for (uint32_t i = 0u; i < native->vertexBufferCount; i++) {
-    native->vertexStrides[i] = info->vertex.pBufferLayouts[i].strideBytes;
+  native->mesh = mesh != NULL;
+  if (!mesh) {
+    native->vertexBufferCount = info->vertex.bufferLayoutCount;
+    for (uint32_t i = 0u; i < native->vertexBufferCount; i++) {
+      native->vertexStrides[i] = info->vertex.pBufferLayouts[i].strideBytes;
+    }
   }
   if (!dx12__topology(info->primitiveTopology,
                       &desc.PrimitiveTopologyType,
                       &native->topology) ||
       !dx12_compileShader(deviceDX12,
                           library,
-                          info->vertexEntry,
-                          GPU_SHADER_STAGE_VERTEX_BIT,
-                          &vertexCode) ||
-      !dx12_compileShader(deviceDX12,
-                          library,
                           info->fragmentEntry,
                           GPU_SHADER_STAGE_FRAGMENT_BIT,
-                          &fragmentCode)) {
+                          &fragmentCode) ||
+      (!mesh && !dx12_compileShader(deviceDX12,
+                                    library,
+                                    info->vertexEntry,
+                                    GPU_SHADER_STAGE_VERTEX_BIT,
+                                    &vertexCode)) ||
+      (mesh && mesh->taskEntry &&
+       !dx12_compileShader(deviceDX12,
+                           library,
+                           mesh->taskEntry,
+                           GPU_SHADER_STAGE_TASK_BIT,
+                           &taskCode)) ||
+      (mesh && !dx12_compileShader(deviceDX12,
+                                   library,
+                                   mesh->meshEntry,
+                                   GPU_SHADER_STAGE_MESH_BIT,
+                                   &meshCode))) {
     dx12_freeShaderCode(&vertexCode);
+    dx12_freeShaderCode(&taskCode);
+    dx12_freeShaderCode(&meshCode);
     dx12_freeShaderCode(&fragmentCode);
     rootSignature->lpVtbl->Release(rootSignature);
     free(elements);
@@ -772,8 +915,10 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   }
 
   desc.pRootSignature        = rootSignature;
-  desc.VS.pShaderBytecode    = vertexCode.data;
-  desc.VS.BytecodeLength     = vertexCode.size;
+  if (!mesh) {
+    desc.VS.pShaderBytecode = vertexCode.data;
+    desc.VS.BytecodeLength  = vertexCode.size;
+  }
   desc.PS.pShaderBytecode    = fragmentCode.data;
   desc.PS.BytecodeLength     = fragmentCode.size;
   desc.BlendState.AlphaToCoverageEnable  =
@@ -872,17 +1017,41 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
       writeMask;
   }
 
-  result = dx12_createGraphicsPSO(info->cache,
-                                  deviceDX12,
-                                  &desc,
-                                  info,
-                                  &rootKey,
-                                  &native->pipelineState) == GPU_OK
-             ? S_OK
-             : E_FAIL;
+  if (mesh) {
+    dx12__meshPipelineStream(&meshStream,
+                             &desc,
+                             rootSignature,
+                             mesh->taskEntry ? &taskCode : NULL,
+                             &meshCode,
+                             &fragmentCode);
+    streamDesc.SizeInBytes                   = sizeof(meshStream);
+    streamDesc.pPipelineStateSubobjectStream = &meshStream;
+    result = dx12_createMeshPSO(info->cache,
+                                deviceDX12,
+                                &streamDesc,
+                                info,
+                                &rootKey,
+                                mesh->taskEntry ? &taskCode : NULL,
+                                &meshCode,
+                                &fragmentCode,
+                                &native->pipelineState) == GPU_OK
+               ? S_OK
+               : E_FAIL;
+  } else {
+    result = dx12_createGraphicsPSO(info->cache,
+                                    deviceDX12,
+                                    &desc,
+                                    info,
+                                    &rootKey,
+                                    &native->pipelineState) == GPU_OK
+               ? S_OK
+               : E_FAIL;
+  }
 
 done:
   dx12_freeShaderCode(&vertexCode);
+  dx12_freeShaderCode(&taskCode);
+  dx12_freeShaderCode(&meshCode);
   dx12_freeShaderCode(&fragmentCode);
   free(elements);
   if (FAILED(result)) {

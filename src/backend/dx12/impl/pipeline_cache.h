@@ -46,4 +46,16 @@ dx12_createComputePSO(GPUPipelineCache                        *cache,
                       const DX12PipelineKey                  *rootKey,
                       ID3D12PipelineState                   **outState);
 
+GPU_HIDE
+GPUResult
+dx12_createMeshPSO(GPUPipelineCache                        *cache,
+                   GPUDeviceDX12                          *device,
+                   const D3D12_PIPELINE_STATE_STREAM_DESC *desc,
+                   const GPURenderPipelineCreateInfo      *info,
+                   const DX12PipelineKey                  *rootKey,
+                   const DX12ShaderCode                   *taskCode,
+                   const DX12ShaderCode                   *meshCode,
+                   const DX12ShaderCode                   *fragmentCode,
+                   ID3D12PipelineState                   **outState);
+
 #endif /* dx12_pipeline_cache_h */

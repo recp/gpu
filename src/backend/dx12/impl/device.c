@@ -49,6 +49,7 @@ dx12_queryResultsReliable(const GPUAdapterDX12 *adapterDX12) {
 static D3D_SHADER_MODEL
 dx12_queryShaderModel(ID3D12Device *device) {
   static const D3D_SHADER_MODEL models[] = {
+    D3D_SHADER_MODEL_6_5,
     D3D_SHADER_MODEL_6_2,
     D3D_SHADER_MODEL_6_1,
     D3D_SHADER_MODEL_6_0
@@ -71,6 +72,44 @@ dx12_queryShaderModel(ID3D12Device *device) {
   }
 
   return D3D_SHADER_MODEL_5_1;
+}
+
+static bool
+dx12_queryMeshShader(ID3D12Device    *device,
+                     D3D_SHADER_MODEL shaderModel,
+                     ID3D12Device2  **outDevice2) {
+  D3D12_FEATURE_DATA_D3D12_OPTIONS7 options7 = {0};
+  ID3D12Device2                    *device2;
+  bool                              supported;
+
+  if (outDevice2) {
+    *outDevice2 = NULL;
+  }
+  if (!device || shaderModel < D3D_SHADER_MODEL_6_5 ||
+      FAILED(device->lpVtbl->CheckFeatureSupport(
+        device,
+        D3D12_FEATURE_D3D12_OPTIONS7,
+        &options7,
+        sizeof(options7))) ||
+      options7.MeshShaderTier == D3D12_MESH_SHADER_TIER_NOT_SUPPORTED) {
+    return false;
+  }
+
+  device2 = NULL;
+  supported = SUCCEEDED(device->lpVtbl->QueryInterface(
+    device,
+    &IID_ID3D12Device2,
+    (void **)&device2
+  )) && device2;
+  if (!supported) {
+    return false;
+  }
+  if (outDevice2) {
+    *outDevice2 = device2;
+  } else {
+    device2->lpVtbl->Release(device2);
+  }
+  return true;
 }
 
 static bool
@@ -173,6 +212,8 @@ dx12_probeAdapter(GPUAdapterDX12 *adapter) {
     dxcModule && shaderModel >= D3D_SHADER_MODEL_6_0;
   adapter->bindless = adapter->descriptorIndexing &&
                       dx12_supportsBindless(device);
+  adapter->meshShader = dxcModule &&
+                        dx12_queryMeshShader(device, shaderModel, NULL);
   if (dxcModule) {
     FreeLibrary(dxcModule);
   }
@@ -246,6 +287,10 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
                                device->shaderModel >= D3D_SHADER_MODEL_6_0;
   device->bindless = device->descriptorIndexing &&
                      dx12_supportsBindless(device->d3dDevice);
+  device->meshShader = device->dxcAvailable &&
+                       dx12_queryMeshShader(device->d3dDevice,
+                                            device->shaderModel,
+                                            &device->d3dDevice2);
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   device->pixModule = LoadLibraryW(L"WinPixEventRuntime.dll");
   if (device->pixModule) {
@@ -548,6 +593,8 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
       return adapterDX12->descriptorIndexing;
     case GPU_FEATURE_BINDLESS:
       return adapterDX12->bindless;
+    case GPU_FEATURE_MESH_SHADER:
+      return adapterDX12->meshShader;
     case GPU_FEATURE_SUBGROUPS:
       return adapterDX12->subgroups;
     case GPU_FEATURE_TIMESTAMPS:
@@ -640,6 +687,17 @@ dx12_createDevice(GPUAdapter        * __restrict adapter,
       !deviceDX12->bindless) {
     goto err;
   }
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) != 0u &&
+      !deviceDX12->meshShader) {
+    goto err;
+  }
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) == 0u) {
+    deviceDX12->meshShader = false;
+    if (deviceDX12->d3dDevice2) {
+      deviceDX12->d3dDevice2->lpVtbl->Release(deviceDX12->d3dDevice2);
+      deviceDX12->d3dDevice2 = NULL;
+    }
+  }
   InitializeSRWLock(&deviceDX12->descriptorLock);
   if (!dx12__newSignatures(deviceDX12)) {
     goto err;
@@ -689,6 +747,9 @@ err:
     if (deviceDX12->d3dDevice) {
       dx12__freeSignatures(deviceDX12);
       dx12_destroyDescriptorHeaps(deviceDX12);
+      if (deviceDX12->d3dDevice2) {
+        deviceDX12->d3dDevice2->lpVtbl->Release(deviceDX12->d3dDevice2);
+      }
       deviceDX12->d3dDevice->lpVtbl->Release(deviceDX12->d3dDevice);
     }
     if (deviceDX12->dxcModule) {
@@ -725,6 +786,9 @@ dx12_destroyDevice(GPUDevice * __restrict device) {
     if (deviceDX12->d3dDevice) {
       dx12__freeSignatures(deviceDX12);
       dx12_destroyDescriptorHeaps(deviceDX12);
+      if (deviceDX12->d3dDevice2) {
+        deviceDX12->d3dDevice2->lpVtbl->Release(deviceDX12->d3dDevice2);
+      }
       deviceDX12->d3dDevice->lpVtbl->Release(deviceDX12->d3dDevice);
     }
     if (deviceDX12->dxcModule) {

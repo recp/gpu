@@ -1107,6 +1107,9 @@ dx12_destroyCommandQueue(GPUQueue *queue) {
       if (command->commandList7) {
         command->commandList7->lpVtbl->Release(command->commandList7);
       }
+      if (command->commandList6) {
+        command->commandList6->lpVtbl->Release(command->commandList6);
+      }
       if (command->commandList) {
         command->commandList->lpVtbl->Release(command->commandList);
       }
@@ -1309,6 +1312,16 @@ dx12__createCommandBufferState(GPUQueue *queue) {
       (void **)&native->commandList7
     );
   }
+  if (deviceDX12->meshShader) {
+    (void)native->commandList->lpVtbl->QueryInterface(
+      native->commandList,
+      &IID_ID3D12GraphicsCommandList6,
+      (void **)&native->commandList6
+    );
+    if (!native->commandList6) {
+      goto fail;
+    }
+  }
 
   result = native->commandList->lpVtbl->Close(native->commandList);
   if (FAILED(result)) {
@@ -1329,6 +1342,9 @@ dx12__createCommandBufferState(GPUQueue *queue) {
 fail:
   if (native->commandList7) {
     native->commandList7->lpVtbl->Release(native->commandList7);
+  }
+  if (native->commandList6) {
+    native->commandList6->lpVtbl->Release(native->commandList6);
   }
   if (native->commandList) {
     native->commandList->lpVtbl->Release(native->commandList);

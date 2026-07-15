@@ -51,6 +51,7 @@ typedef struct GPUAdapterDX12 {
   bool                  shaderF16;
   bool                  descriptorIndexing;
   bool                  bindless;
+  bool                  meshShader;
   GPUFormatCapabilities formatCaps[GPU_FORMAT_COUNT];
 } GPUAdapterDX12;
 
@@ -70,6 +71,7 @@ typedef void (WINAPI *DX12PixEndEventFn)(ID3D12GraphicsCommandList *commandList)
 
 typedef struct GPUDeviceDX12 {
   ID3D12Device               *d3dDevice;
+  ID3D12Device2              *d3dDevice2;
   ID3D12CommandSignature     *drawSignature;
   ID3D12CommandSignature     *drawIndexedSignature;
   ID3D12CommandSignature     *dispatchSignature;
@@ -95,6 +97,7 @@ typedef struct GPUDeviceDX12 {
   bool                        shaderF16Enabled;
   bool                        descriptorIndexing;
   bool                        bindless;
+  bool                        meshShader;
   bool                        queryResultsReliable;
   bool                        stencilPlaneCopies;
 } GPUDeviceDX12;
@@ -254,6 +257,7 @@ typedef struct GPURenderPipelineDX12 {
   ID3D12RootSignature      *rootSignature;
   D3D12_PRIMITIVE_TOPOLOGY  topology;
   uint32_t                  vertexBufferCount;
+  bool                      mesh;
   uint32_t                  vertexStrides[
     D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT
   ];
@@ -311,6 +315,7 @@ typedef struct GPURenderPassDX12 {
 typedef struct GPURenderEncoderDX12 {
   GPUDeviceDX12             *device;
   ID3D12GraphicsCommandList  *commandList;
+  ID3D12GraphicsCommandList6 *commandList6;
   ID3D12GraphicsCommandList7 *commandList7;
   ID3D12RootSignature        *rootSignature;
   ID3D12DescriptorHeap       *resourceHeap;
@@ -352,6 +357,7 @@ typedef struct GPUCommandBufferDX12 {
   GPUQueueDX12                 *owner;
   ID3D12CommandAllocator       *allocator;
   ID3D12GraphicsCommandList    *commandList;
+  ID3D12GraphicsCommandList6   *commandList6;
   ID3D12GraphicsCommandList7   *commandList7;
   ID3D12QueryHeap              *frameTimeQueries;
   ID3D12Resource               *frameTimeReadback;

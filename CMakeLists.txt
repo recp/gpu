@@ -513,10 +513,12 @@ if(GPU_BUILD_DX12 AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-dx12-usl/triangle.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-dx12-usl/textured_quad.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-dx12-usl/compute_buffer.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/mesh-triangle-usl/mesh_triangle.usl"
   )
   list(GET GPU_DX12_USL_FIXTURES 0 GPU_DX12_TRIANGLE_US)
   list(GET GPU_DX12_USL_FIXTURES 1 GPU_DX12_TEXTURED_QUAD_US)
   list(GET GPU_DX12_USL_FIXTURES 2 GPU_DX12_COMPUTE_BUFFER_US)
+  list(GET GPU_DX12_USL_FIXTURES 3 GPU_DX12_MESH_TRIANGLE_US)
   add_custom_target(gpu-dx12-fixtures DEPENDS ${GPU_DX12_USL_FIXTURES})
 endif()
 
@@ -866,7 +868,7 @@ if(GPU_BUILD_TESTS)
     )
 
     add_executable(gpu-vulkan-mesh-test
-      tests/vulkan/mesh.c
+      tests/api/mesh.c
     )
     target_link_libraries(gpu-vulkan-mesh-test PRIVATE gpu)
     add_dependencies(gpu-vulkan-mesh-test gpu-vulkan-fixtures)
@@ -905,6 +907,7 @@ if(GPU_BUILD_TESTS)
     )
     add_test(NAME vulkan-mesh
       COMMAND gpu-vulkan-mesh-test
+              vulkan
               "${GPU_VULKAN_MESH_TRIANGLE_US}"
     )
     set_tests_properties(vulkan-mesh PROPERTIES
@@ -1011,6 +1014,34 @@ if(GPU_BUILD_TESTS)
     add_test(NAME dx12-texture
       COMMAND gpu-dx12-texture-test
               "${GPU_DX12_TEXTURED_QUAD_US}"
+    )
+
+    add_executable(gpu-dx12-mesh-test tests/api/mesh.c)
+    target_link_libraries(gpu-dx12-mesh-test PRIVATE gpu)
+    add_dependencies(gpu-dx12-mesh-test gpu-dx12-fixtures)
+    set_target_properties(gpu-dx12-mesh-test PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+    )
+
+    foreach(runtime_target us ds)
+      if(TARGET ${runtime_target})
+        add_custom_command(TARGET gpu-dx12-mesh-test POST_BUILD
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                  $<TARGET_FILE:${runtime_target}>
+                  $<TARGET_FILE_DIR:gpu-dx12-mesh-test>
+        )
+      endif()
+    endforeach()
+
+    add_test(NAME dx12-mesh
+      COMMAND gpu-dx12-mesh-test
+              dx12
+              "${GPU_DX12_MESH_TRIANGLE_US}"
+    )
+    set_tests_properties(dx12-mesh PROPERTIES
+      SKIP_RETURN_CODE 77
     )
   endif()
 endif()

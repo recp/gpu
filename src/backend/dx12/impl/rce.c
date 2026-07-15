@@ -236,6 +236,7 @@ dx12_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   memset(native, 0, sizeof(*native));
   native->device           = device;
   native->commandList      = command->commandList;
+  native->commandList6     = command->commandList6;
   native->commandList7     = command->commandList7;
   native->renderPass       = renderPass;
   native->debugEventActive = dx12_beginDebugEvent(
@@ -340,8 +341,10 @@ dx12_setRenderPipelineState(GPURenderCommandEncoder *encoder,
                                                          pipeline->rootSignature);
   native->commandList->lpVtbl->SetPipelineState(native->commandList,
                                                  pipeline->pipelineState);
-  native->commandList->lpVtbl->IASetPrimitiveTopology(native->commandList,
-                                                       pipeline->topology);
+  if (!pipeline->mesh) {
+    native->commandList->lpVtbl->IASetPrimitiveTopology(native->commandList,
+                                                         pipeline->topology);
+  }
   native->rootSignature = pipeline->rootSignature;
   native->pipeline      = pipeline;
 
@@ -554,6 +557,30 @@ dx12_drawIndexedPrims(GPURenderCommandEncoder *encoder,
                                                      firstInstance);
 }
 
+GPU_HIDE
+void
+dx12_drawMesh(GPURenderCommandEncoder *encoder,
+              uint32_t                 groupCountX,
+              uint32_t                 groupCountY,
+              uint32_t                 groupCountZ,
+              const uint32_t           taskWorkgroupSize[3],
+              const uint32_t           meshWorkgroupSize[3]) {
+  GPURenderEncoderDX12 *native;
+
+  GPU__UNUSED(taskWorkgroupSize);
+  GPU__UNUSED(meshWorkgroupSize);
+
+  native = encoder ? encoder->_priv : NULL;
+  if (!native || !native->commandList6 || !native->pipeline ||
+      !native->pipeline->mesh) {
+    return;
+  }
+  native->commandList6->lpVtbl->DispatchMesh(native->commandList6,
+                                              groupCountX,
+                                              groupCountY,
+                                              groupCountZ);
+}
+
 static bool
 dx12__drawIndirect(GPURenderCommandEncoder *encoder,
                    GPUBuffer               *argsBuffer,
@@ -726,6 +753,7 @@ dx12_initRCE(GPUApiRCE *api) {
   api->vertexInputBuffer        = dx12_vertexBuffer;
   api->drawPrimitives           = dx12_drawPrimitives;
   api->drawIndexedPrims         = dx12_drawIndexedPrims;
+  api->drawMesh                 = dx12_drawMesh;
   api->drawPrimitivesIndirect   = dx12_drawPrimitivesIndirect;
   api->drawIndexedPrimsIndirect = dx12_drawIndexedPrimsIndirect;
 

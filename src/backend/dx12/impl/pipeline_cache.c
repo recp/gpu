@@ -22,10 +22,11 @@
 #define DX12_PIPELINE_KEY_VERSION 1u
 
 typedef struct DX12PipelineCache {
-  ID3D12PipelineLibrary *library;
-  char                  *path;
-  SRWLOCK                lock;
-  bool                   dirty;
+  ID3D12PipelineLibrary  *library;
+  ID3D12PipelineLibrary1 *library1;
+  char                   *path;
+  SRWLOCK                 lock;
+  bool                    dirty;
 } DX12PipelineCache;
 
 static DX12PipelineCache *
@@ -192,6 +193,11 @@ dx12_createCache(GPUDevice                        *device,
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
+  (void)native->library->lpVtbl->QueryInterface(
+    native->library,
+    &IID_ID3D12PipelineLibrary1,
+    (void **)&native->library1
+  );
 
   cache->_priv = native;
   return GPU_OK;
@@ -269,6 +275,9 @@ dx12_destroyCache(GPUPipelineCache *cache) {
     return;
   }
   dx12__storeCache(native);
+  if (native->library1) {
+    native->library1->lpVtbl->Release(native->library1);
+  }
   native->library->lpVtbl->Release(native->library);
   free(native->path);
   free(native);
@@ -362,6 +371,24 @@ dx12__computeKey(const D3D12_COMPUTE_PIPELINE_STATE_DESC *desc,
   dx12_keyWrite(key, desc->CS.pShaderBytecode, desc->CS.BytecodeLength);
   DX12_KEY_WRITE(key, desc->NodeMask);
   DX12_KEY_WRITE(key, desc->Flags);
+}
+
+static void
+dx12__meshKey(const GPURenderPipelineCreateInfo *info,
+              const DX12PipelineKey             *rootKey,
+              const DX12ShaderCode              *taskCode,
+              const DX12ShaderCode              *meshCode,
+              const DX12ShaderCode              *fragmentCode,
+              DX12PipelineKey                   *key) {
+  D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {0};
+
+  desc.PS.pShaderBytecode = fragmentCode->data;
+  desc.PS.BytecodeLength  = fragmentCode->size;
+  dx12__graphicsKey(&desc, info, rootKey, key);
+  if (taskCode) {
+    dx12_keyWrite(key, taskCode->data, taskCode->size);
+  }
+  dx12_keyWrite(key, meshCode->data, meshCode->size);
 }
 
 GPU_HIDE
@@ -486,6 +513,80 @@ dx12_createComputePSO(GPUPipelineCache                         *cache,
   if (FAILED(result)) {
     fprintf(stderr,
             "GPU Direct3D 12 compute pipeline cache store failed: 0x%08lx\n",
+            (unsigned long)result);
+  }
+#endif
+  ReleaseSRWLockExclusive(&native->lock);
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
+dx12_createMeshPSO(GPUPipelineCache                        *cache,
+                   GPUDeviceDX12                          *device,
+                   const D3D12_PIPELINE_STATE_STREAM_DESC *desc,
+                   const GPURenderPipelineCreateInfo      *info,
+                   const DX12PipelineKey                  *rootKey,
+                   const DX12ShaderCode                   *taskCode,
+                   const DX12ShaderCode                   *meshCode,
+                   const DX12ShaderCode                   *fragmentCode,
+                   ID3D12PipelineState                   **outState) {
+  DX12PipelineCache *native;
+  DX12PipelineKey    key;
+  wchar_t            name[39];
+  HRESULT            result;
+
+  if (!device || !device->d3dDevice2 || !desc || !info || !rootKey ||
+      !meshCode || !fragmentCode || !outState) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outState = NULL;
+  native    = dx12__nativeCache(cache);
+  if (native && native->library1) {
+    dx12__meshKey(info,
+                  rootKey,
+                  taskCode,
+                  meshCode,
+                  fragmentCode,
+                  &key);
+    dx12__keyName(&key, L'm', name);
+    AcquireSRWLockExclusive(&native->lock);
+    result = native->library1->lpVtbl->LoadPipeline(
+      native->library1,
+      name,
+      desc,
+      &IID_ID3D12PipelineState,
+      (void **)outState
+    );
+    ReleaseSRWLockExclusive(&native->lock);
+    if (SUCCEEDED(result) && *outState) {
+      return GPU_OK;
+    }
+  }
+
+  result = device->d3dDevice2->lpVtbl->CreatePipelineState(
+    device->d3dDevice2,
+    desc,
+    &IID_ID3D12PipelineState,
+    (void **)outState
+  );
+  if (FAILED(result) || !*outState) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  if (!native || !native->library1) {
+    return GPU_OK;
+  }
+
+  AcquireSRWLockExclusive(&native->lock);
+  result = native->library->lpVtbl->StorePipeline(native->library,
+                                                   name,
+                                                   *outState);
+  native->dirty |= SUCCEEDED(result);
+#if GPU_BUILD_WITH_VALIDATION
+  if (FAILED(result)) {
+    fprintf(stderr,
+            "GPU Direct3D 12 mesh pipeline cache store failed: 0x%08lx\n",
             (unsigned long)result);
   }
 #endif
