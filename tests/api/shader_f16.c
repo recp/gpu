@@ -134,7 +134,7 @@ gpu_test_shader_f16(GPUAdapter *adapter, const char *bytecodePath) {
   }
 
   entries[0].binding       = 0u;
-  entries[0].bindingType   = GPU_BINDING_STORAGE_BUFFER;
+  entries[0].bindingType   = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
   entries[0].buffer.buffer = inputBuffer;
   entries[0].buffer.size   = sizeof(input);
   entries[1].binding       = 1u;

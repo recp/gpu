@@ -260,6 +260,19 @@ dx12__shaderVisibility(GPUShaderStageFlags visibility) {
   return D3D12_SHADER_VISIBILITY_ALL;
 }
 
+static D3D12_ROOT_PARAMETER_TYPE
+dx12__rootBufferType(GPUBindingType type) {
+  switch (type) {
+    case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
+      return D3D12_ROOT_PARAMETER_TYPE_SRV;
+    case GPU_BINDING_STORAGE_BUFFER:
+      return D3D12_ROOT_PARAMETER_TYPE_UAV;
+    case GPU_BINDING_UNIFORM_BUFFER:
+    default:
+      return D3D12_ROOT_PARAMETER_TYPE_CBV;
+  }
+}
+
 typedef struct DX12LayoutPlan {
   uint32_t bindingCount;
   uint32_t rangeCount;
@@ -331,6 +344,7 @@ dx12__makeLayoutPlan(GPUPipelineLayout         *layout,
 
       switch (entries[i].bindingType) {
         case GPU_BINDING_UNIFORM_BUFFER:
+        case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
         case GPU_BINDING_STORAGE_BUFFER:
           if (entries[i].arrayCount > UINT32_MAX - plan.bindingCount ||
               entries[i].arrayCount > UINT32_MAX - plan.rootParameterCount ||
@@ -411,6 +425,7 @@ dx12__fillLayoutPlan(GPUPipelineLayout         *layout,
 
     for (uint32_t i = 0u; i < entryCount; i++) {
       if (entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER ||
+          entries[i].bindingType == GPU_BINDING_READ_ONLY_STORAGE_BUFFER ||
           entries[i].bindingType == GPU_BINDING_STORAGE_BUFFER) {
         for (uint32_t arrayIndex = 0u;
              arrayIndex < entries[i].arrayCount;
@@ -538,9 +553,7 @@ dx12__fillRanges11(GPUPipelineLayout          *layout,
                    D3D12_DESCRIPTOR_RANGE1     *ranges) {
   for (uint32_t i = 0u; i < native->bindingCount; i++) {
     parameters[native->bindings[i].rootParameter].ParameterType =
-      native->bindings[i].bindingType == GPU_BINDING_STORAGE_BUFFER
-        ? D3D12_ROOT_PARAMETER_TYPE_UAV
-        : D3D12_ROOT_PARAMETER_TYPE_CBV;
+      dx12__rootBufferType(native->bindings[i].bindingType);
     parameters[native->bindings[i].rootParameter]
       .Descriptor.ShaderRegister = native->bindings[i].binding;
     parameters[native->bindings[i].rootParameter]
@@ -640,9 +653,7 @@ dx12__fillRanges10(GPUPipelineLayout          *layout,
                    D3D12_DESCRIPTOR_RANGE      *ranges) {
   for (uint32_t i = 0u; i < native->bindingCount; i++) {
     parameters[native->bindings[i].rootParameter].ParameterType =
-      native->bindings[i].bindingType == GPU_BINDING_STORAGE_BUFFER
-        ? D3D12_ROOT_PARAMETER_TYPE_UAV
-        : D3D12_ROOT_PARAMETER_TYPE_CBV;
+      dx12__rootBufferType(native->bindings[i].bindingType);
     parameters[native->bindings[i].rootParameter]
       .Descriptor.ShaderRegister = native->bindings[i].binding;
     parameters[native->bindings[i].rootParameter]
@@ -1044,6 +1055,7 @@ dx12__writeBindGroup(void *context,
 
   switch (binding->bindingType) {
     case GPU_BINDING_UNIFORM_BUFFER:
+    case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
     case GPU_BINDING_STORAGE_BUFFER:
       if (binding->kind != GPUBindKindBuffer) {
         writeContext->valid = false;
@@ -1054,7 +1066,8 @@ dx12__writeBindGroup(void *context,
       }
       if (!binding->buffer->device ||
           binding->buffer->device->_priv != writeContext->group->device ||
-          (binding->bindingType == GPU_BINDING_STORAGE_BUFFER &&
+          ((binding->bindingType == GPU_BINDING_READ_ONLY_STORAGE_BUFFER ||
+            binding->bindingType == GPU_BINDING_STORAGE_BUFFER) &&
            !gpuBufferHasUsage(binding->buffer, GPU_BUFFER_USAGE_STORAGE))) {
         writeContext->valid = false;
       }
@@ -1207,6 +1220,8 @@ dx12_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
       }
       native->samplerCount += entries[i].arrayCount;
     } else if (entries[i].bindingType != GPU_BINDING_UNIFORM_BUFFER &&
+               entries[i].bindingType !=
+                 GPU_BINDING_READ_ONLY_STORAGE_BUFFER &&
                entries[i].bindingType != GPU_BINDING_STORAGE_BUFFER) {
       free(native);
       return GPU_ERROR_UNSUPPORTED;
@@ -1405,6 +1420,16 @@ dx12__transitionSampledTexture(ID3D12GraphicsCommandList *commandList,
 }
 
 static bool
+dx12__transitionReadOnlyStorageBuffer(ID3D12GraphicsCommandList *commandList,
+                                      GPUBufferDX12             *buffer) {
+  const D3D12_RESOURCE_STATES requiredState =
+    D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE |
+    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+
+  return dx12_transitionBuffer(commandList, buffer, requiredState);
+}
+
+static bool
 dx12__transitionStorageBuffer(ID3D12GraphicsCommandList *commandList,
                               GPUBufferDX12             *buffer) {
   return dx12_transitionBuffer(commandList,
@@ -1482,6 +1507,49 @@ dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
         );
       } else {
         bindContext->commandList->lpVtbl->SetGraphicsRootConstantBufferView(
+          bindContext->commandList,
+          rootBinding->rootParameter,
+          address
+        );
+      }
+      break;
+    }
+    case GPU_BINDING_READ_ONLY_STORAGE_BUFFER: {
+      const GPURootBindingDX12 *rootBinding;
+      GPUBufferDX12            *buffer;
+      D3D12_GPU_VIRTUAL_ADDRESS address;
+
+      rootBinding = dx12__findRootBinding(bindContext->layout,
+                                          bindContext->groupIndex,
+                                          binding->binding +
+                                            binding->arrayIndex);
+      buffer = binding->buffer ? binding->buffer->_priv : NULL;
+      if (binding->kind != GPUBindKindBuffer) {
+        bindContext->valid = false;
+        return;
+      }
+      if (!binding->buffer) {
+        bindContext->boundCount++;
+        return;
+      }
+      if (binding->buffer->device != bindContext->device || !rootBinding ||
+          !gpuBufferHasUsage(binding->buffer, GPU_BUFFER_USAGE_STORAGE) ||
+          !dx12__transitionReadOnlyStorageBuffer(bindContext->commandList,
+                                                 buffer) ||
+          binding->offset > UINT64_MAX - buffer->gpuAddress) {
+        bindContext->valid = false;
+        return;
+      }
+
+      address = buffer->gpuAddress + binding->offset;
+      if (bindContext->compute) {
+        bindContext->commandList->lpVtbl->SetComputeRootShaderResourceView(
+          bindContext->commandList,
+          rootBinding->rootParameter,
+          address
+        );
+      } else {
+        bindContext->commandList->lpVtbl->SetGraphicsRootShaderResourceView(
           bindContext->commandList,
           rootBinding->rootParameter,
           address

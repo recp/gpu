@@ -136,11 +136,12 @@ typedef enum GPUPipelineStageMask {
 } GPUPipelineStageMask;
 
 typedef enum GPUBindingType {
-  GPU_BINDING_UNIFORM_BUFFER = 0,
-  GPU_BINDING_STORAGE_BUFFER = 1,
-  GPU_BINDING_SAMPLED_TEXTURE = 2,
-  GPU_BINDING_STORAGE_TEXTURE = 3,
-  GPU_BINDING_SAMPLER = 4
+  GPU_BINDING_UNIFORM_BUFFER           = 0,
+  GPU_BINDING_READ_ONLY_STORAGE_BUFFER = 1,
+  GPU_BINDING_STORAGE_BUFFER           = 2,
+  GPU_BINDING_SAMPLED_TEXTURE          = 3,
+  GPU_BINDING_STORAGE_TEXTURE          = 4,
+  GPU_BINDING_SAMPLER                  = 5
 } GPUBindingType;
 
 #if defined(__APPLE__) && defined(__OBJC__)

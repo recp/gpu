@@ -120,6 +120,7 @@ gpu_validatePipelineFormats(const GPUDevice                   *device,
 static bool
 gpu_bindingTypeIsBuffer(GPUBindingType type) {
   return type == GPU_BINDING_UNIFORM_BUFFER ||
+         type == GPU_BINDING_READ_ONLY_STORAGE_BUFFER ||
          type == GPU_BINDING_STORAGE_BUFFER;
 }
 

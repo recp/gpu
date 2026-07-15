@@ -627,6 +627,7 @@ gpu_kindFromBindingType(GPUBindingType type, GPUBindKind *outKind) {
 
   switch (type) {
     case GPU_BINDING_UNIFORM_BUFFER:
+    case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
     case GPU_BINDING_STORAGE_BUFFER:
       *outKind = GPUBindKindBuffer;
       return 1;
@@ -837,6 +838,7 @@ gpu_bindingBufferUsage(GPUBindingType bindingType, GPUBufferUsageFlags *outUsage
     case GPU_BINDING_UNIFORM_BUFFER:
       *outUsage = GPU_BUFFER_USAGE_UNIFORM;
       return 1;
+    case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
     case GPU_BINDING_STORAGE_BUFFER:
       *outUsage = GPU_BUFFER_USAGE_STORAGE;
       return 1;

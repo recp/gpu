@@ -55,6 +55,7 @@ vk__descriptorType(GPUBindingType type,
       *outType = dynamic ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC
                          : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
       return true;
+    case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
     case GPU_BINDING_STORAGE_BUFFER:
       *outType = dynamic ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC
                          : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;

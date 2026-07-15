@@ -61,7 +61,7 @@ binding_createLayout(BenchRender *bench, BindingChurn *churn) {
 
   entries = GPUGetBindGroupLayoutEntries(churn->layout, &entryCount);
   if (!entries || entryCount != 1u || entries[0].binding != 0u ||
-      entries[0].bindingType != GPU_BINDING_STORAGE_BUFFER ||
+      entries[0].bindingType != GPU_BINDING_READ_ONLY_STORAGE_BUFFER ||
       entries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
       entries[0].arrayCount != 1u || entries[0].hasDynamicOffset) {
     return false;
@@ -107,7 +107,7 @@ binding_createGroups(BenchRender *bench, BindingChurn *churn) {
   }
 
   entry.binding       = 0u;
-  entry.bindingType   = GPU_BINDING_STORAGE_BUFFER;
+  entry.bindingType   = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
   entry.buffer.size   = sizeof(colors[0]);
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);

@@ -396,10 +396,13 @@ gpu_bindingTypeFromUSLResource(const USLRuntimeResource *resource,
 
   switch (resource->kind) {
     case USL_RUNTIME_RESOURCE_BUFFER:
-      *outType = resource->access != USL_RUNTIME_IMAGE_ACCESS_READ ||
-                 resource->type.kind == USL_RUNTIME_TYPE_ARRAY ?
-        GPU_BINDING_STORAGE_BUFFER :
-        GPU_BINDING_UNIFORM_BUFFER;
+      if (resource->access != USL_RUNTIME_IMAGE_ACCESS_READ) {
+        *outType = GPU_BINDING_STORAGE_BUFFER;
+      } else if (resource->type.kind == USL_RUNTIME_TYPE_ARRAY) {
+        *outType = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
+      } else {
+        *outType = GPU_BINDING_UNIFORM_BUFFER;
+      }
       return 1;
     case USL_RUNTIME_RESOURCE_TEXTURE:
       *outType = GPU_BINDING_SAMPLED_TEXTURE;
