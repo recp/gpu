@@ -3248,15 +3248,6 @@ gpu_bindGroupEachDynamic(GPUPipelineLayout      *pipelineLayout,
       dynamicOffsetCount != priv->dynamicOffsetCount) {
     return 0;
   }
-  if (dynamicOffsetCount > 0u &&
-      !gpuValidateBindGroupDynamicOffsets(pipelineLayout,
-                                          groupIndex,
-                                          group,
-                                          dynamicOffsetCount,
-                                          pDynamicOffsets)) {
-    return 0;
-  }
-
   dynamicIndex = 0u;
   for (uint32_t i = 0u; i < priv->count; i++) {
     const GPUBindGroupLayoutEntry *layoutEntry;
