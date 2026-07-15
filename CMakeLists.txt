@@ -2009,6 +2009,29 @@ if(GPU_BUILD_BENCHMARKS)
     target_compile_options(gpu-marker-bench PRIVATE -Wall -Wextra)
   endif()
 
+  if(APPLE AND GPU_BUILD_METAL)
+    add_executable(gpu-native-metal-static-bench
+      benchmarks/bench.c
+      benchmarks/native_metal_static.m
+    )
+    target_include_directories(gpu-native-metal-static-bench PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    target_link_libraries(gpu-native-metal-static-bench PRIVATE
+      "-framework Foundation"
+      "-framework Metal"
+    )
+    set_target_properties(gpu-native-metal-static-bench PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+    )
+    target_compile_options(gpu-native-metal-static-bench PRIVATE
+      -Wall
+      -Wextra
+    )
+  endif()
+
   foreach(benchmark_target
           gpu-static-scene-bench
           gpu-state-churn-bench
@@ -2092,6 +2115,13 @@ if(GPU_BUILD_BENCHMARKS)
       "${GPU_BENCHMARK_RENDER_MRT_US}"
       ${GPU_BENCHMARK_BACKEND} 12 1
     )
+    if(TARGET gpu-native-metal-static-bench)
+      gpu_add_perf_smoke(
+        perf-smoke-native-metal-static
+        gpu-native-metal-static-bench
+        32 4 12 1
+      )
+    endif()
 
     if(GPU_BENCHMARK_BACKEND STREQUAL "vulkan" AND
        DEFINED GPU_VULKAN_ICD AND EXISTS "${GPU_VULKAN_ICD}")
