@@ -2036,6 +2036,7 @@ check_render_draw_validation_calls(GPUDevice *device) {
   savedStatsEnabled                 = device->runtimeConfig.enableStats;
   device->runtimeConfig.enableStats = true;
   device->currentFrameStats.drawCalls = 0u;
+  pass._stats                       = &device->currentFrameStats;
 
   gRenderDrawCalls = 0u;
   gRenderDrawIndexedCalls = 0u;
@@ -2246,6 +2247,7 @@ check_vertex_buffer_shadowing_calls(GPUDevice *activeDevice) {
   queue._device                       = &device;
   cmdb._queue                         = &queue;
   pass._cmdb                          = &cmdb;
+  pass._stats                         = &device.currentFrameStats;
   buffer.sizeBytes                    = 256u;
   buffer.usage                        = GPU_BUFFER_USAGE_VERTEX;
   binding.buffer                      = &buffer;
@@ -2319,6 +2321,7 @@ check_render_push_constant_shadowing_calls(GPUDevice *activeDevice) {
   queue._device                     = &device;
   cmdb._queue                       = &queue;
   pass._cmdb                        = &cmdb;
+  pass._stats                       = &device.currentFrameStats;
   pass._hasPipeline                 = true;
   pass._pushConstantSizeBytes       = 16u;
   pass._pushConstantStages          = GPU_SHADER_STAGE_VERTEX_BIT |
@@ -2389,6 +2392,7 @@ check_dynamic_state_validation_calls(GPUDevice *activeDevice) {
   queue._device                    = &device;
   cmdb._queue                      = &queue;
   pass._cmdb                       = &cmdb;
+  pass._stats                      = &device.currentFrameStats;
 
   info.viewport.width    = 640.0f;
   info.viewport.height   = 480.0f;

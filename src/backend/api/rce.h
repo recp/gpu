@@ -50,6 +50,7 @@ struct GPURenderCommandEncoder {
   struct GPUApi          *_api;
   GPUDevice              *_device;
   GPUCommandBuffer       *_cmdb;
+  GPUFrameStats          *_stats;
   GPUQuerySet            *_occlusionQuerySet;
   GPUBuffer              *_indexBuffer;
   GPUPipelineLayout      *_pipelineLayout;

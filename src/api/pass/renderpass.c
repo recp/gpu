@@ -404,6 +404,9 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
     encoder->_api    = api;
     encoder->_device = device;
     encoder->_cmdb   = cmdb;
+    encoder->_stats  = device->runtimeConfig.enableStats
+                         ? &device->currentFrameStats
+                         : NULL;
     gpu_setRenderPassEncoderInfo(encoder, info);
     cmdb->_activeEncoder = true;
   }

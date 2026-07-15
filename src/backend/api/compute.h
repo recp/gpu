@@ -36,6 +36,7 @@ struct GPUComputePassEncoder {
   struct GPUApi          *_api;
   GPUDevice              *_device;
   GPUCommandBuffer       *_cmdb;
+  GPUFrameStats          *_stats;
   GPUPipelineLayout      *_pipelineLayout;
   GPUBindGroup           *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUBindGroupLayout     *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];

@@ -2985,7 +2985,7 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
     return;
   }
   device = gpuBindGroupGetDevice(group);
-  gpuDeviceRecordBindRequest(device);
+  gpuFrameStatsRecordBindRequest(pass->_stats);
   if (gpuBindGroupShadowMatches(
         pass->_boundGroups[groupIndex],
         pass->_boundDynamicOffsetCounts[groupIndex],
@@ -3016,7 +3016,7 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
         pass->_boundDynamicOffsets[groupIndex],
         dynamicOffsetCount,
         pDynamicOffsets);
-      gpuDeviceRecordBindEmission(device);
+      gpuFrameStatsRecordBindEmission(pass->_stats);
     }
     return;
   }
@@ -3036,7 +3036,7 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
       pass->_boundDynamicOffsets[groupIndex],
       dynamicOffsetCount,
       pDynamicOffsets);
-    gpuDeviceRecordBindEmission(device);
+    gpuFrameStatsRecordBindEmission(pass->_stats);
   }
 }
 

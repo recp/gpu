@@ -318,6 +318,9 @@ GPUBeginComputePass(GPUCommandBuffer *cmdb, const char *label) {
       pass->_api    = api;
       pass->_device = device;
       pass->_cmdb   = cmdb;
+      pass->_stats  = device->runtimeConfig.enableStats
+                        ? &device->currentFrameStats
+                        : NULL;
       cmdb->_activeEncoder = true;
     }
     return pass;
@@ -345,7 +348,7 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
     return;
   }
 
-  gpuDeviceRecordBindRequest(pipeline->_device);
+  gpuFrameStatsRecordBindRequest(pass->_stats);
   if (pass->_pipeline == pipeline) {
     return;
   }
@@ -360,7 +363,7 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
 
   state = pipeline->_state;
   api->compute.setComputePipelineState(pass, state);
-  gpuDeviceRecordBindEmission(pipeline->_device);
+  gpuFrameStatsRecordBindEmission(pass->_stats);
   pass->_hasPipeline             = true;
   pass->_pipeline                = pipeline;
   pass->_pipelineLayout          = pipeline->_layout;
@@ -489,7 +492,6 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
                     uint32_t               dynamicOffsetCount,
                     const uint32_t        *pDynamicOffsets) {
   GPUBindComputeContext ctx;
-  GPUDevice            *device;
   GPUApi               *api;
 
   if (!pass || pass->_ended ||
@@ -499,8 +501,7 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
       !gpuPipelineLayoutAcceptsBindGroup(pass->_pipelineLayout, groupIndex, bindGroup)) {
     return;
   }
-  device = gpuBindGroupGetDevice(bindGroup);
-  gpuDeviceRecordBindRequest(device);
+  gpuFrameStatsRecordBindRequest(pass->_stats);
   if (gpuBindGroupShadowMatches(
         pass->_boundGroups[groupIndex],
         pass->_boundDynamicOffsetCounts[groupIndex],
@@ -531,7 +532,7 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
         pass->_boundDynamicOffsets[groupIndex],
         dynamicOffsetCount,
         pDynamicOffsets);
-      gpuDeviceRecordBindEmission(device);
+      gpuFrameStatsRecordBindEmission(pass->_stats);
     }
     return;
   }
@@ -551,7 +552,7 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
       pass->_boundDynamicOffsets[groupIndex],
       dynamicOffsetCount,
       pDynamicOffsets);
-    gpuDeviceRecordBindEmission(device);
+    gpuFrameStatsRecordBindEmission(pass->_stats);
   }
 }
 
@@ -561,7 +562,6 @@ GPUSetComputePushConstants(GPUComputePassEncoder *pass,
                            uint32_t               offset,
                            uint32_t               sizeBytes,
                            const void            *data) {
-  GPUDevice *device;
   GPUApi *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline ||
@@ -578,8 +578,7 @@ GPUSetComputePushConstants(GPUComputePassEncoder *pass,
   if (sizeBytes == 0u) {
     return;
   }
-  device = gpu_computePassDevice(pass);
-  gpuDeviceRecordStateRequest(device);
+  gpuFrameStatsRecordStateRequest(pass->_stats);
   if (pass->_pushConstantsEmitted &&
       memcmp(pass->_pushConstants + offset, data, sizeBytes) == 0) {
     return;
@@ -593,7 +592,7 @@ GPUSetComputePushConstants(GPUComputePassEncoder *pass,
                              pass->_pushConstants,
                              pass->_pushConstantSizeBytes);
   pass->_pushConstantsEmitted = true;
-  gpuDeviceRecordStateEmission(device);
+  gpuFrameStatsRecordStateEmission(pass->_stats);
 }
 
 GPU_EXPORT

@@ -255,7 +255,7 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
   if (!api->rce.setRenderPipelineState)
     return;
 
-  gpuDeviceRecordBindRequest(gpu_renderPassDevice(pass));
+  gpuFrameStatsRecordBindRequest(pass->_stats);
   if (pass->_pipeline == pipeline)
     return;
 
@@ -269,7 +269,7 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
 
   state._priv = pipeline->_state;
   api->rce.setRenderPipelineState(pass, &state);
-  gpuDeviceRecordBindEmission(gpu_renderPassDevice(pass));
+  gpuFrameStatsRecordBindEmission(pass->_stats);
   pass->_hasPipeline           = true;
   pass->_pipeline              = pipeline;
   pass->_pipelineLayout        = pipeline->_layout;
@@ -298,11 +298,9 @@ gpu_bindRenderVertexBuffer(GPURenderPassEncoder *pass,
                            GPUBuffer            *buf,
                            uint64_t              off,
                            uint32_t              index) {
-  GPUDevice *device;
   uint32_t slotBit;
 
-  device = gpu_renderPassDevice(pass);
-  gpuDeviceRecordBindRequest(device);
+  gpuFrameStatsRecordBindRequest(pass->_stats);
   if (index < GPU__RENDER_VERTEX_SHADOW_SLOT_COUNT) {
     slotBit = 1u << index;
     if ((pass->_vertexBufferMask & slotBit) != 0u &&
@@ -315,7 +313,7 @@ gpu_bindRenderVertexBuffer(GPURenderPassEncoder *pass,
   }
 
   api->rce.vertexInputBuffer(pass, buf, off, index);
-  gpuDeviceRecordBindEmission(device);
+  gpuFrameStatsRecordBindEmission(pass->_stats);
   if (slotBit != 0u) {
     pass->_vertexBuffers[index]       = buf;
     pass->_vertexBufferOffsets[index] = off;
@@ -393,7 +391,6 @@ GPUBindIndexBuffer(GPURenderPassEncoder *pass,
 GPU_EXPORT
 void
 GPUSetViewport(GPURenderPassEncoder *pass, const GPUViewport *viewport) {
-  GPUDevice *device;
   GPUApi *api;
 
   if (!pass || pass->_ended || !viewport)
@@ -404,8 +401,7 @@ GPUSetViewport(GPURenderPassEncoder *pass, const GPUViewport *viewport) {
     return;
   }
 #endif
-  device = gpu_renderPassDevice(pass);
-  gpuDeviceRecordStateRequest(device);
+  gpuFrameStatsRecordStateRequest(pass->_stats);
   if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_VIEWPORT_BIT) != 0u &&
       memcmp(&pass->_viewport, viewport, sizeof(*viewport)) == 0)
     return;
@@ -415,19 +411,17 @@ GPUSetViewport(GPURenderPassEncoder *pass, const GPUViewport *viewport) {
   api->rce.viewport(pass, viewport);
   pass->_viewport = *viewport;
   pass->_dynamicStateMask |= GPU_DYNAMIC_STATE_VIEWPORT_BIT;
-  gpuDeviceRecordStateEmission(device);
+  gpuFrameStatsRecordStateEmission(pass->_stats);
 }
 
 GPU_EXPORT
 void
 GPUSetScissor(GPURenderPassEncoder *pass, const GPUScissorRect *scissor) {
-  GPUDevice *device;
   GPUApi *api;
 
   if (!pass || pass->_ended || !scissor)
     return;
-  device = gpu_renderPassDevice(pass);
-  gpuDeviceRecordStateRequest(device);
+  gpuFrameStatsRecordStateRequest(pass->_stats);
   if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_SCISSOR_BIT) != 0u &&
       memcmp(&pass->_scissor, scissor, sizeof(*scissor)) == 0)
     return;
@@ -437,19 +431,17 @@ GPUSetScissor(GPURenderPassEncoder *pass, const GPUScissorRect *scissor) {
   api->rce.scissor(pass, scissor);
   pass->_scissor = *scissor;
   pass->_dynamicStateMask |= GPU_DYNAMIC_STATE_SCISSOR_BIT;
-  gpuDeviceRecordStateEmission(device);
+  gpuFrameStatsRecordStateEmission(pass->_stats);
 }
 
 GPU_EXPORT
 void
 GPUSetBlendConstant(GPURenderPassEncoder *pass, const float rgba[4]) {
-  GPUDevice *device;
   GPUApi *api;
 
   if (!pass || pass->_ended || !rgba)
     return;
-  device = gpu_renderPassDevice(pass);
-  gpuDeviceRecordStateRequest(device);
+  gpuFrameStatsRecordStateRequest(pass->_stats);
   if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT) != 0u &&
       memcmp(pass->_blendConstant, rgba, sizeof(pass->_blendConstant)) == 0)
     return;
@@ -459,19 +451,17 @@ GPUSetBlendConstant(GPURenderPassEncoder *pass, const float rgba[4]) {
   api->rce.blendConstant(pass, rgba);
   memcpy(pass->_blendConstant, rgba, sizeof(pass->_blendConstant));
   pass->_dynamicStateMask |= GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT;
-  gpuDeviceRecordStateEmission(device);
+  gpuFrameStatsRecordStateEmission(pass->_stats);
 }
 
 GPU_EXPORT
 void
 GPUSetStencilReference(GPURenderPassEncoder *pass, uint32_t reference) {
-  GPUDevice *device;
   GPUApi *api;
 
   if (!pass || pass->_ended)
     return;
-  device = gpu_renderPassDevice(pass);
-  gpuDeviceRecordStateRequest(device);
+  gpuFrameStatsRecordStateRequest(pass->_stats);
   if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT) != 0u &&
       pass->_stencilReference == reference)
     return;
@@ -481,7 +471,7 @@ GPUSetStencilReference(GPURenderPassEncoder *pass, uint32_t reference) {
   api->rce.stencilReference(pass, reference);
   pass->_stencilReference = reference;
   pass->_dynamicStateMask |= GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
-  gpuDeviceRecordStateEmission(device);
+  gpuFrameStatsRecordStateEmission(pass->_stats);
 }
 
 GPU_HIDE
@@ -690,7 +680,6 @@ GPUSetRenderPushConstants(GPURenderPassEncoder *pass,
                           uint32_t              offset,
                           uint32_t              sizeBytes,
                           const void           *data) {
-  GPUDevice *device;
   GPUApi *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline ||
@@ -707,8 +696,7 @@ GPUSetRenderPushConstants(GPURenderPassEncoder *pass,
   if (sizeBytes == 0u) {
     return;
   }
-  device = gpu_renderPassDevice(pass);
-  gpuDeviceRecordStateRequest(device);
+  gpuFrameStatsRecordStateRequest(pass->_stats);
   if (pass->_pushConstantsEmitted &&
       memcmp(pass->_pushConstants + offset, data, sizeBytes) == 0) {
     return;
@@ -723,7 +711,7 @@ GPUSetRenderPushConstants(GPURenderPassEncoder *pass,
                          pass->_pushConstants,
                          pass->_pushConstantSizeBytes);
   pass->_pushConstantsEmitted = true;
-  gpuDeviceRecordStateEmission(device);
+  gpuFrameStatsRecordStateEmission(pass->_stats);
 }
 
 GPU_EXPORT
@@ -762,7 +750,7 @@ GPUDraw(GPURenderPassEncoder *pass,
                           vertexCount,
                           instanceCount,
                           firstInstance);
-  gpuDeviceRecordDraws(gpu_renderPassDevice(pass), 1u);
+  gpuFrameStatsRecordDraws(pass->_stats, 1u);
 }
 
 GPU_EXPORT
@@ -812,7 +800,7 @@ GPUDrawIndexed(GPURenderPassEncoder *pass,
                             firstIndex,
                             vertexOffset,
                             firstInstance);
-  gpuDeviceRecordDraws(gpu_renderPassDevice(pass), 1u);
+  gpuFrameStatsRecordDraws(pass->_stats, 1u);
 }
 
 GPU_EXPORT
@@ -853,7 +841,7 @@ GPUDrawMeshEXT(GPURenderPassEncoder *pass,
                     groupCountZ,
                     pipeline->_taskWorkgroupSize,
                     pipeline->_meshWorkgroupSize);
-  gpuDeviceRecordDraws(gpu_renderPassDevice(pass), 1u);
+  gpuFrameStatsRecordDraws(pass->_stats, 1u);
 }
 
 GPU_EXPORT
@@ -891,7 +879,7 @@ GPUDrawIndirect(GPURenderPassEncoder *pass,
                                   pass->_primitiveType,
                                   argsBuffer,
                                   argsOffset);
-  gpuDeviceRecordDraws(gpu_renderPassDevice(pass), 1u);
+  gpuFrameStatsRecordDraws(pass->_stats, 1u);
 }
 
 GPU_EXPORT
@@ -929,7 +917,7 @@ GPUDrawIndexedIndirect(GPURenderPassEncoder *pass,
     return;
 
   api->rce.drawIndexedPrimsIndirect(pass, argsBuffer, argsOffset);
-  gpuDeviceRecordDraws(gpu_renderPassDevice(pass), 1u);
+  gpuFrameStatsRecordDraws(pass->_stats, 1u);
 }
 
 GPU_EXPORT
@@ -983,7 +971,7 @@ GPUMultiDrawIndirect(GPURenderPassEncoder *pass,
                                            argsOffset,
                                            drawCount,
                                            strideBytes)) {
-    gpuDeviceRecordDraws(device, drawCount);
+    gpuFrameStatsRecordDraws(pass->_stats, drawCount);
     return;
   }
   if (!api->rce.drawPrimitivesIndirect) {
@@ -996,7 +984,7 @@ GPUMultiDrawIndirect(GPURenderPassEncoder *pass,
                                     argsBuffer,
                                     argsOffset + (uint64_t)i * strideBytes);
   }
-  gpuDeviceRecordDraws(device, drawCount);
+  gpuFrameStatsRecordDraws(pass->_stats, drawCount);
 }
 
 GPU_EXPORT
@@ -1056,7 +1044,7 @@ GPUMultiDrawIndexedIndirect(GPURenderPassEncoder *pass,
                                              argsOffset,
                                              drawCount,
                                              strideBytes)) {
-    gpuDeviceRecordDraws(device, drawCount);
+    gpuFrameStatsRecordDraws(pass->_stats, drawCount);
     return;
   }
   if (!api->rce.drawIndexedPrimsIndirect) {
@@ -1070,7 +1058,7 @@ GPUMultiDrawIndexedIndirect(GPURenderPassEncoder *pass,
       argsOffset + (uint64_t)i * strideBytes
     );
   }
-  gpuDeviceRecordDraws(device, drawCount);
+  gpuFrameStatsRecordDraws(pass->_stats, drawCount);
 }
 
 GPU_EXPORT

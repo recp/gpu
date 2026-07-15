@@ -219,37 +219,37 @@ gpuDeviceDebugLabel(const GPUDevice *device, const char *label) {
 #endif
 
 static inline void
-gpuDeviceRecordBindRequest(GPUDevice *device) {
-  if (device && device->runtimeConfig.enableStats) {
-    device->currentFrameStats.requestedBindCalls++;
+gpuFrameStatsRecordBindRequest(GPUFrameStats *stats) {
+  if (stats) {
+    stats->requestedBindCalls++;
   }
 }
 
 static inline void
-gpuDeviceRecordBindEmission(GPUDevice *device) {
-  if (device && device->runtimeConfig.enableStats) {
-    device->currentFrameStats.emittedBindCalls++;
+gpuFrameStatsRecordBindEmission(GPUFrameStats *stats) {
+  if (stats) {
+    stats->emittedBindCalls++;
   }
 }
 
 static inline void
-gpuDeviceRecordStateRequest(GPUDevice *device) {
-  if (device && device->runtimeConfig.enableStats) {
-    device->currentFrameStats.requestedStateCalls++;
+gpuFrameStatsRecordStateRequest(GPUFrameStats *stats) {
+  if (stats) {
+    stats->requestedStateCalls++;
   }
 }
 
 static inline void
-gpuDeviceRecordStateEmission(GPUDevice *device) {
-  if (device && device->runtimeConfig.enableStats) {
-    device->currentFrameStats.emittedStateCalls++;
+gpuFrameStatsRecordStateEmission(GPUFrameStats *stats) {
+  if (stats) {
+    stats->emittedStateCalls++;
   }
 }
 
 static inline void
-gpuDeviceRecordDraws(GPUDevice *device, uint32_t drawCount) {
-  if (device && device->runtimeConfig.enableStats) {
-    device->currentFrameStats.drawCalls += drawCount;
+gpuFrameStatsRecordDraws(GPUFrameStats *stats, uint32_t drawCount) {
+  if (stats) {
+    stats->drawCalls += drawCount;
   }
 }
 

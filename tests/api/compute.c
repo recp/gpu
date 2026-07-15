@@ -213,6 +213,7 @@ check_compute_push_constant_shadowing_calls(GPUDevice *activeDevice) {
   queue._device                     = &device;
   cmdb._queue                       = &queue;
   pass._cmdb                        = &cmdb;
+  pass._stats                       = &device.currentFrameStats;
   pass._hasPipeline                 = true;
   pass._pushConstantSizeBytes       = 16u;
   pass._pushConstantStages          = GPU_SHADER_STAGE_COMPUTE_BIT;
