@@ -66,7 +66,7 @@ typedef struct GPUShaderLibraryCreateInfo {
   uint32_t defineCount;
   const GPUShaderDefine *pDefines;
   bool generateReflection;
-  bool enableDiskCache;
+  bool disableDiskCache;
 } GPUShaderLibraryCreateInfo;
 
 GPU_EXPORT

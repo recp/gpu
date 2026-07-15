@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="$ROOT/out/build/macos-debug"
 FIXTURE="$BUILD_DIR/gpu-usl-fixture"
+USLPACK="$BUILD_DIR/uslpack"
 DEFAULT_ARTIFACT_DIR="$BUILD_DIR/usl/metal/samples"
 SMOKE_ARTIFACT_DIR="$BUILD_DIR/usl/metal/smoke"
 TRIANGLE_MANUAL_BIN="$BUILD_DIR/samples/gpu-triangle-manual/gpu-triangle-manual"
@@ -31,6 +32,25 @@ run_expect_fail_with_output() {
   if output="$("$@" 2>&1)"; then
     echo "$output"
     echo "expected failure but command succeeded: $name" >&2
+    return 1
+  fi
+
+  echo "$output"
+  if ! printf "%s\n" "$output" | grep -Fq "$expected"; then
+    echo "expected output not found for $name: $expected" >&2
+    return 1
+  fi
+}
+
+run_expect_output() {
+  local name="$1"
+  local expected="$2"
+  shift 2
+
+  echo "==> $name"
+  local output
+  if ! output="$("$@" 2>&1)"; then
+    echo "$output"
     return 1
   fi
 
@@ -74,12 +94,24 @@ generate_artifact() {
     embedded)
       env USL_EMIT_BYTECODE=1 \
           USL_NO_BACKEND_SIDECAR=1 \
-          USL_EMBED_METAL_BLOB=1 \
           "$FIXTURE" metal "$fixtureSource"
       if [[ -f "$outputDir/$name.usl.metal" ]]; then
         echo "unexpected USL Metal sidecar in embedded mode: $name" >&2
         return 1
       fi
+
+      local platformMajor="$(sw_vers -productVersion | cut -d. -f1)"
+      local mask
+      for mask in {0..7}; do
+        local -a packArgs=(
+          --target metal msl2.0
+          --platform macos "$platformMajor"
+        )
+        if ((mask & 1)); then packArgs+=(--cap subgroup); fi
+        if ((mask & 2)); then packArgs+=(--cap descriptor_indexing); fi
+        if ((mask & 4)); then packArgs+=(--cap ray_query); fi
+        "$USLPACK" "${packArgs[@]}" "$outputDir/$name.us"
+      done
       ;;
     *)
       echo "unknown USL artifact mode: $mode" >&2
@@ -111,10 +143,11 @@ restore_artifact() {
 }
 
 run_step "configure Metal samples" \
-  cmake --preset macos-debug
+  cmake -S "$ROOT" --preset macos-debug
 
 run_step "build Metal samples" \
-  cmake --build --preset macos-debug --target \
+  cmake --build "$BUILD_DIR" --target \
+    gpu-uslpack \
     gpu-triangle-manual \
     gpu-triangle-metal-usl \
     gpu-textured-quad-metal-usl \
@@ -134,8 +167,9 @@ run_step "triangle-usl embedded" \
   generate_artifact embedded "$ROOT/samples/triangle-usl/triangle.usl"
 install_artifact "$SMOKE_ARTIFACT_DIR/embedded/triangle.us" \
   gpu-triangle-metal-usl triangle
-run_step "triangle-usl embedded one-frame" \
-  env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 \
+run_expect_output "triangle-usl embedded one-frame" \
+  "GPU: USL embedded payload" \
+  env GPU_SAMPLE_EXIT_AFTER_FRAMES=1 GPU_USL_LOG=1 \
       "$TRIANGLE_USL_BIN"
 restore_artifact gpu-triangle-metal-usl triangle
 run_step "triangle-usl warm-frame allocations" \

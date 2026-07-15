@@ -74,7 +74,7 @@ gpu_clearShaderReflection(GPUShaderReflection *reflection) {
 }
 
 static int
-gpu_uslRuntimeInfoIsUsable(const USLBytecodeRuntimeInfo *runtimeInfo) {
+gpu_uslRuntimeInfoIsUsable(const USRuntimeInfo *runtimeInfo) {
   return runtimeInfo &&
          runtimeInfo->abi_version == USL_RUNTIME_INFO_VERSION;
 }
@@ -104,8 +104,8 @@ gpu_featureFromUSLSemantic(uint32_t semanticId, GPUFeature *outFeature) {
 }
 
 static int
-gpu_shaderRequirementsEnabled(const GPUDevice             *device,
-                              const USLBytecodeRuntimeInfo *runtimeInfo) {
+gpu_shaderRequirementsEnabled(const GPUDevice      *device,
+                              const USRuntimeInfo *runtimeInfo) {
   uint32_t flags;
 
   flags = USL_BYTECODE_RUNTIME_INFO_FLAG_CAPABILITY_REQUIREMENT_OVERFLOW;
@@ -572,7 +572,7 @@ gpu_storeMetadataText(char **cursor, const char *text, size_t size) {
 static int
 gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
                              const USReflection *usReflection) {
-  const USLBytecodeRuntimeInfo *runtimeInfo;
+  const USRuntimeInfo *runtimeInfo;
   GPUShaderResourceReflection *entryResources;
   GPUShaderResourceBindingInfoList *resourceBindings;
   GPUShaderStaticSamplerInfoList *staticSamplers;
@@ -1037,6 +1037,7 @@ static GPUResult
 gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
                                    const void *bytecodeData,
                                    uint64_t bytecodeSize,
+                                   bool disableDiskCache,
                                    GPUShaderLibrary **outLibrary);
 
 static GPUResult
@@ -1136,6 +1137,7 @@ GPUCreateShaderLibrary(GPUDevice *device,
       return gpu_createShaderLibraryFromUSLImpl(device,
                                                 info->sourceData,
                                                 info->sourceSize,
+                                                info->disableDiskCache,
                                                 outLibrary);
     case GPU_SHADER_SOURCE_USL_TEXT:
       return GPU_ERROR_INVALID_ARGUMENT;
@@ -1150,6 +1152,7 @@ static GPUResult
 gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
                                    const void *bytecodeData,
                                    uint64_t bytecodeSize,
+                                   bool disableDiskCache,
                                    GPUShaderLibrary **outLibrary) {
   GPUShaderLibraryCreateInfo info = {0};
   GPUApi                   *api;
@@ -1158,6 +1161,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   USLTargetSpec             target;
   USLCapabilityAtomDesc     targetAtoms[4];
   USCompileInput            compileInput;
+  const char               *payloadSource;
   GPUResult                 rc;
   uint32_t                  targetAtomCount;
   uint32_t                  encoding;
@@ -1281,6 +1285,9 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   compileInput.artifact_size = (size_t)bytecodeSize;
   compileInput.target        = &target;
   compileInput.options       = &compileOptions;
+  if (disableDiskCache) {
+    compileInput.flags |= US_COMPILE_INPUT_FLAG_DISABLE_DISK_CACHE;
+  }
   if (us_compile(&compileInput, compileOutput) != USLOk ||
       compileOutput->backend != target.backend ||
       compileOutput->encoding != encoding ||
@@ -1288,6 +1295,17 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
       compileOutput->backend_size == 0) {
     rc = GPU_ERROR_BACKEND_FAILURE;
     goto cleanup;
+  }
+  if (getenv("GPU_USL_LOG")) {
+    payloadSource =
+      (compileOutput->flags & US_COMPILE_OUTPUT_FLAG_EMBEDDED_BLOB) != 0u
+        ? "embedded"
+        : (compileOutput->flags & US_COMPILE_OUTPUT_FLAG_DISK_CACHE) != 0u
+            ? "disk-cache"
+            : "generated";
+    fprintf(stderr,
+            "GPU: USL %s payload\n",
+            payloadSource);
   }
   if (!compileOutput->reflection.target_info_valid) {
     rc = GPU_ERROR_BACKEND_FAILURE;
@@ -1349,6 +1367,7 @@ GPUCreateShaderLibraryFromUSL(GPUDevice *device,
   return gpu_createShaderLibraryFromUSLImpl(device,
                                             artifactData,
                                             artifactSize,
+                                            false,
                                             outLibrary);
 }
 

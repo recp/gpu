@@ -316,6 +316,23 @@ if(GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS)
     C_EXTENSIONS NO
   )
 
+  if(GPU_USL_ROOT AND EXISTS "${GPU_USL_ROOT}/tools/uslpack.c")
+    add_executable(gpu-uslpack "${GPU_USL_ROOT}/tools/uslpack.c")
+    target_include_directories(gpu-uslpack PRIVATE "${GPU_USL_ROOT}/us/include")
+    if(TARGET us)
+      target_link_libraries(gpu-uslpack PRIVATE us)
+    elseif(TARGET gpu_usl)
+      target_link_libraries(gpu-uslpack PRIVATE gpu_usl)
+    endif()
+    set_target_properties(gpu-uslpack PROPERTIES
+      OUTPUT_NAME uslpack
+      RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+    )
+  endif()
+
   foreach(runtime_target us ds)
     if(TARGET ${runtime_target})
       add_custom_command(TARGET gpu-usl-fixture POST_BUILD
