@@ -370,16 +370,18 @@ main(int argc, char **argv) {
   int                   ok;
 
   if (argc != 3) {
-    fprintf(stderr, "usage: mesh <vulkan|dx12> mesh_triangle.us\n");
+    fprintf(stderr, "usage: mesh <metal|vulkan|dx12> mesh_triangle.us\n");
     return 1;
   }
 
-  if (strcmp(argv[1], "vulkan") == 0) {
+  if (strcmp(argv[1], "metal") == 0) {
+    backend = GPU_BACKEND_METAL;
+  } else if (strcmp(argv[1], "vulkan") == 0) {
     backend = GPU_BACKEND_VULKAN;
   } else if (strcmp(argv[1], "dx12") == 0) {
     backend = GPU_BACKEND_DX12;
   } else {
-    fprintf(stderr, "mesh backend must be vulkan or dx12\n");
+    fprintf(stderr, "mesh backend must be metal, vulkan, or dx12\n");
     return 1;
   }
 

@@ -524,6 +524,20 @@ if(GPU_BUILD_TESTS)
     )
   endif()
 
+  if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    gpu_add_usl_fixtures(
+      GPU_METAL_MESH_TEST_USL_FIXTURE
+      metal
+      mesh-test
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/mesh-triangle-usl/mesh_triangle.usl"
+    )
+    list(GET GPU_METAL_MESH_TEST_USL_FIXTURE 0 GPU_METAL_MESH_TEST_US)
+    add_custom_target(
+      gpu-metal-mesh-test-fixture
+      DEPENDS ${GPU_METAL_MESH_TEST_USL_FIXTURE}
+    )
+  endif()
+
   if(GPU_BUILD_VULKAN)
     set(GPU_USL_FIXTURE_TARGET_CAPS ray_query)
     gpu_add_usl_fixtures(
@@ -921,6 +935,32 @@ if(GPU_BUILD_TESTS)
     set_tests_properties(api-validation PROPERTIES
       ENVIRONMENT
         "GPU_RAY_QUERY_USL_PATH=${GPU_API_RAY_QUERY_USL_FIXTURE}"
+    )
+  endif()
+
+  if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    add_executable(gpu-metal-mesh-test tests/api/mesh.c)
+    target_link_libraries(gpu-metal-mesh-test PRIVATE gpu)
+    add_dependencies(gpu-metal-mesh-test gpu-metal-mesh-test-fixture)
+    set_target_properties(gpu-metal-mesh-test PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+    )
+    if(NOT MSVC)
+      target_compile_options(gpu-metal-mesh-test PRIVATE
+        -Wall
+        -Wextra
+        -Werror
+      )
+    endif()
+    add_test(NAME metal-mesh
+      COMMAND gpu-metal-mesh-test
+              metal
+              "${GPU_METAL_MESH_TEST_US}"
+    )
+    set_tests_properties(metal-mesh PROPERTIES
+      SKIP_RETURN_CODE 77
     )
   endif()
 
