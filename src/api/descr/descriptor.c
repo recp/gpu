@@ -3083,6 +3083,9 @@ gpuValidateBindGroupDynamicOffsets(GPUPipelineLayout *pipelineLayout,
       dynamicOffsetCount != priv->dynamicOffsetCount) {
     return 0;
   }
+  if (dynamicOffsetCount == 0u) {
+    return 1;
+  }
 
   dynamicIndex = 0u;
   for (uint32_t i = 0u; i < priv->count; i++) {

@@ -222,6 +222,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool                                      spirv14Core;
 #endif
 
+  extensions                = NULL;
   nExtensions               = 0;
   incrementalPresentEnabled = true;
   displayTimingEnabled      = true;
@@ -250,6 +251,9 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 
   adapter                   = calloc(1, sizeof(*adapter));
   adapterVk                 = calloc(1, sizeof(*adapterVk));
+  if (!adapter || !adapterVk) {
+    goto fail;
+  }
   adapterVk->physicalDevice = raw;
   adapter->_priv            = adapterVk;
   adapter->inst             = inst;
@@ -261,10 +265,15 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   vkGetPhysicalDeviceQueueFamilyProperties(adapterVk->physicalDevice,
                                            &adapterVk->nQueFamilies,
                                            NULL);
-  assert(adapterVk->nQueFamilies >= 1);
+  if (adapterVk->nQueFamilies == 0u) {
+    goto fail;
+  }
 
   adapterVk->queueFamilyProps = malloc(adapterVk->nQueFamilies *
                                        sizeof(*adapterVk->queueFamilyProps));
+  if (!adapterVk->queueFamilyProps) {
+    goto fail;
+  }
   vkGetPhysicalDeviceQueueFamilyProperties(adapterVk->physicalDevice,
                                            &adapterVk->nQueFamilies,
                                            adapterVk->queueFamilyProps);
@@ -273,12 +282,17 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   /* Look for device extensions */
   err = vkEnumerateDeviceExtensionProperties(adapterVk->physicalDevice, NULL,
                                              &nExtensions, NULL);
-  assert(!err);
+  if (err != VK_SUCCESS) {
+    goto fail;
+  }
 
 #if defined(VK_USE_PLATFORM_DISPLAY_KHR)
   err = vkGetPhysicalDeviceDisplayPropertiesKHR(adapterVk->physicalDevice,
                                                 &adapterVk->nDisplayProperties,
                                                 NULL);
+  if (err != VK_SUCCESS) {
+    adapterVk->nDisplayProperties = 0u;
+  }
 #endif
 
 #define VK__ADD_EXT_IF(X, R)                                                  \
@@ -290,11 +304,16 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 
   if (nExtensions > 0) {
     extensions = malloc(sizeof(*extensions) * nExtensions);
+    if (!extensions) {
+      goto fail;
+    }
     err = vkEnumerateDeviceExtensionProperties(adapterVk->physicalDevice,
                                                NULL,
                                                &nExtensions,
                                                extensions);
-    assert(!err);
+    if (err != VK_SUCCESS && err != VK_INCOMPLETE) {
+      goto fail;
+    }
 
     for (i = 0; i < nExtensions; i++) {
       VK__ADD_EXT_IF(VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -615,6 +634,15 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 #undef VK__ADD_EXT_IF
 
   return adapter;
+
+fail:
+  free(extensions);
+  if (adapterVk) {
+    free(adapterVk->queueFamilyProps);
+  }
+  free(adapterVk);
+  free(adapter);
+  return NULL;
 }
 
 GPU_HIDE
@@ -781,21 +809,27 @@ vk_getAvailableAdapters(GPUInstance * __restrict inst,
 
   gpuCount    = 0;
   err         = vkEnumeratePhysicalDevices(instRaw, &gpuCount, NULL);
-  assert(!err);
-
-  if (gpuCount <= 0) {
-    ERR_EXIT("vkEnumeratePhysicalDevices reported zero accessible devices.\n\n",
-             "vkEnumeratePhysicalDevices Failure");
+  if (err != VK_SUCCESS || gpuCount == 0u) {
+    return NULL;
   }
 
   physicalDevices = malloc(sizeof(VkPhysicalDevice) * gpuCount);
+  if (!physicalDevices) {
+    return NULL;
+  }
   err             = vkEnumeratePhysicalDevices(instRaw,
                                                &gpuCount,
                                                physicalDevices);
-  assert(!err);
+  if (err != VK_SUCCESS && err != VK_INCOMPLETE) {
+    free(physicalDevices);
+    return NULL;
+  }
 
   for (i = 0; i < gpuCount && i < maxNumberOfItems; i++) {
     adapter = vk_newAdapter(inst, physicalDevices[i]);
+    if (!adapter) {
+      continue;
+    }
 
     if (lastAdapter) { lastAdapter->next = adapter; }
     else             { firstAdapter      = adapter; }
