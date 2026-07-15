@@ -23,34 +23,33 @@ extern "C" {
 #include "common.h"
 #include "format.h"
 
-typedef struct GPUDevice GPUDevice;
 struct GPUSurface;
-
+typedef struct GPUDevice    GPUDevice;
 typedef struct GPUSwapchain GPUSwapchain;
 
 typedef enum GPUPresentMode {
-  GPU_PRESENT_MODE_FIFO = 0,
-  GPU_PRESENT_MODE_MAILBOX = 1,
+  GPU_PRESENT_MODE_FIFO      = 0,
+  GPU_PRESENT_MODE_MAILBOX   = 1,
   GPU_PRESENT_MODE_IMMEDIATE = 2
 } GPUPresentMode;
 
 typedef enum GPUSwapchainStatus {
-  GPU_SWAPCHAIN_STATUS_READY = 0,
-  GPU_SWAPCHAIN_STATUS_UNAVAILABLE = 1,
-  GPU_SWAPCHAIN_STATUS_SUBOPTIMAL = 2,
-  GPU_SWAPCHAIN_STATUS_OUT_OF_DATE = 3,
+  GPU_SWAPCHAIN_STATUS_READY        = 0,
+  GPU_SWAPCHAIN_STATUS_UNAVAILABLE  = 1,
+  GPU_SWAPCHAIN_STATUS_SUBOPTIMAL   = 2,
+  GPU_SWAPCHAIN_STATUS_OUT_OF_DATE  = 3,
   GPU_SWAPCHAIN_STATUS_SURFACE_LOST = 4
 } GPUSwapchainStatus;
 
 typedef struct GPUSwapchainCreateInfo {
-  GPUChainedStruct chain;
-  const char      *label;
+  GPUChainedStruct   chain;
+  const char        *label;
   struct GPUSurface *surface;
-  uint32_t         width;
-  uint32_t         height;
-  GPUFormat        format;
-  uint32_t         imageCount;
-  GPUPresentMode   presentMode;
+  uint32_t           width;
+  uint32_t           height;
+  GPUFormat          format;
+  uint32_t           imageCount;
+  GPUPresentMode     presentMode;
 } GPUSwapchainCreateInfo;
 
 GPU_EXPORT

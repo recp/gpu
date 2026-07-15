@@ -73,9 +73,9 @@ typedef struct GPUAccelerationStructureTriangleGeometryEXT {
 
 typedef struct GPUAccelerationStructureInstanceEXT {
   GPUAccelerationStructureEXT              *structure;
-  float                                      transform[3][4];
+  float                                     transform[3][4];
   GPUAccelerationStructureInstanceFlagsEXT  flags;
-  uint8_t                                    mask;
+  uint8_t                                   mask;
 } GPUAccelerationStructureInstanceEXT;
 
 typedef struct GPUAccelerationStructureBuildInfoEXT {
@@ -88,11 +88,11 @@ typedef struct GPUAccelerationStructureBuildInfoEXT {
   union {
     struct {
       const GPUAccelerationStructureTriangleGeometryEXT *pGeometries;
-      uint32_t                                            geometryCount;
+      uint32_t                                           geometryCount;
     } bottomLevel;
     struct {
       const GPUAccelerationStructureInstanceEXT *pInstances;
-      uint32_t                                    instanceCount;
+      uint32_t                                   instanceCount;
     } topLevel;
   };
 } GPUAccelerationStructureBuildInfoEXT;
@@ -139,13 +139,12 @@ GPUBuildAccelerationStructureEXT(
   GPUAccelerationStructurePassEncoderEXT     *pass,
   GPUAccelerationStructureEXT                *dst,
   const GPUAccelerationStructureBuildInfoEXT *info,
-  GPUBuffer                                   *scratchBuffer,
-  uint64_t                                     scratchOffset);
+  GPUBuffer                                  *scratchBuffer,
+  uint64_t                                    scratchOffset);
 
 GPU_EXPORT
 void
-GPUEndAccelerationStructurePassEXT(
-  GPUAccelerationStructurePassEncoderEXT *pass);
+GPUEndAccelerationStructurePassEXT(GPUAccelerationStructurePassEncoderEXT *pass);
 
 #ifdef __cplusplus
 }

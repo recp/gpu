@@ -24,7 +24,7 @@ extern "C" {
 
 typedef struct GPURenderPipeline GPURenderPipeline;
 
-/* Portable Metal, Vulkan, and Direct3D 12 vertex input formats. */
+/* portable Metal, Vulkan, and Direct3D 12 vertex input formats. */
 typedef enum GPUVertexFormat {
   GPU_VERTEX_FORMAT_UNDEFINED = 0,
   GPU_VERTEX_FORMAT_UINT8,
@@ -77,21 +77,21 @@ typedef enum GPUVertexStepMode {
 } GPUVertexStepMode;
 
 typedef struct GPUVertexAttribute {
-  uint32_t        shaderLocation;
   GPUVertexFormat format;
+  uint32_t        shaderLocation;
   uint32_t        offset;
 } GPUVertexAttribute;
 
 typedef struct GPUVertexBufferLayout {
+  const GPUVertexAttribute *pAttributes;
   uint32_t                  strideBytes;
   GPUVertexStepMode         stepMode;
   uint32_t                  attributeCount;
-  const GPUVertexAttribute *pAttributes;
 } GPUVertexBufferLayout;
 
 typedef struct GPUVertexState {
-  uint32_t                     bufferLayoutCount;
   const GPUVertexBufferLayout *pBufferLayouts;
+  uint32_t                     bufferLayoutCount;
 } GPUVertexState;
 
 #ifdef __cplusplus

@@ -755,6 +755,26 @@ if(GPU_BUILD_TESTS OR GPU_BUILD_BENCHMARKS)
 endif()
 
 if(GPU_BUILD_TESTS)
+  add_executable(gpu-public-layout-test
+    tests/api/layout.c
+  )
+  target_include_directories(gpu-public-layout-test PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  )
+  set_target_properties(gpu-public-layout-test PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(NOT MSVC)
+    target_compile_options(gpu-public-layout-test PRIVATE
+      -Wall
+      -Wextra
+      -Werror
+    )
+  endif()
+  add_test(NAME api-public-layout COMMAND gpu-public-layout-test)
+
   file(GLOB GPU_PUBLIC_HEADERS CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/gpu/*.h"
   )

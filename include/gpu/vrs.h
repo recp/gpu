@@ -29,18 +29,17 @@ typedef struct GPUDevice                  GPUDevice;
 typedef struct GPURenderCommandEncoder    GPURenderCommandEncoder;
 typedef struct GPUTextureView             GPUTextureView;
 typedef struct GPURasterizationRateMapEXT GPURasterizationRateMapEXT;
-
-typedef GPURenderCommandEncoder GPURenderPassEncoder;
+typedef        GPURenderCommandEncoder    GPURenderPassEncoder;
 
 typedef uint32_t GPUVRSModeFlagsEXT;
 enum {
   GPU_VRS_DRAW_RATE_BIT_EXT  = 1u << 0,
   GPU_VRS_ATTACHMENT_BIT_EXT = 1u << 1,
-  GPU_VRS_RATE_MAP_BIT_EXT    = 1u << 2
+  GPU_VRS_RATE_MAP_BIT_EXT   = 1u << 2
 };
 
 typedef enum GPUShadingRateEXT {
-  /* Values are the portable R8_UINT attachment encoding. */
+  /* values are the portable R8_UINT attachment encoding. */
   GPU_SHADING_RATE_1X1_EXT = 0x0,
   GPU_SHADING_RATE_1X2_EXT = 0x1,
   GPU_SHADING_RATE_2X1_EXT = 0x4,
@@ -71,14 +70,10 @@ typedef enum GPUShadingRateCombinerEXT {
 
 typedef uint32_t GPUShadingRateCombinerFlagsEXT;
 enum {
-  GPU_SHADING_RATE_COMBINER_KEEP_BIT_EXT =
-    1u << GPU_SHADING_RATE_COMBINER_KEEP_EXT,
-  GPU_SHADING_RATE_COMBINER_REPLACE_BIT_EXT =
-    1u << GPU_SHADING_RATE_COMBINER_REPLACE_EXT,
-  GPU_SHADING_RATE_COMBINER_MIN_BIT_EXT =
-    1u << GPU_SHADING_RATE_COMBINER_MIN_EXT,
-  GPU_SHADING_RATE_COMBINER_MAX_BIT_EXT =
-    1u << GPU_SHADING_RATE_COMBINER_MAX_EXT
+  GPU_SHADING_RATE_COMBINER_KEEP_BIT_EXT    = 1u << GPU_SHADING_RATE_COMBINER_KEEP_EXT,
+  GPU_SHADING_RATE_COMBINER_REPLACE_BIT_EXT = 1u << GPU_SHADING_RATE_COMBINER_REPLACE_EXT,
+  GPU_SHADING_RATE_COMBINER_MIN_BIT_EXT     = 1u << GPU_SHADING_RATE_COMBINER_MIN_EXT,
+  GPU_SHADING_RATE_COMBINER_MAX_BIT_EXT     = 1u << GPU_SHADING_RATE_COMBINER_MAX_EXT
 };
 
 typedef struct GPUVRSCapabilitiesEXT {
@@ -129,9 +124,9 @@ GPUGetVRSCapabilitiesEXT(const GPUAdapter      *adapter,
 GPU_EXPORT
 GPUResult
 GPUCreateRasterizationRateMapEXT(
-  GPUDevice                                      *device,
-  const GPURasterizationRateMapCreateInfoEXT     *info,
-  GPURasterizationRateMapEXT                    **outMap
+  GPUDevice                                  *device,
+  const GPURasterizationRateMapCreateInfoEXT *info,
+  GPURasterizationRateMapEXT                **outMap
 );
 
 GPU_EXPORT
@@ -142,31 +137,31 @@ GPU_EXPORT
 GPUResult
 GPUGetRasterizationRateMapPhysicalSizeEXT(
   const GPURasterizationRateMapEXT *map,
-  uint32_t                           layer,
-  GPUExtent2D                       *outSize
+  uint32_t                          layer,
+  GPUExtent2D                      *outSize
 );
 
-/* Maps logical screen coordinates into the physical intermediate target. */
+/* maps logical screen coordinates into the physical intermediate target. */
 GPU_EXPORT
 GPUResult
 GPUMapRasterizationRateScreenToPhysicalEXT(
   const GPURasterizationRateMapEXT *map,
-  uint32_t                           layer,
-  GPUCoordinate2D                    screen,
-  GPUCoordinate2D                   *outPhysical
+  uint32_t                          layer,
+  GPUCoordinate2D                   screen,
+  GPUCoordinate2D                  *outPhysical
 );
 
-/* Maps physical intermediate coordinates back into logical screen space. */
+/* maps physical intermediate coordinates back into logical screen space. */
 GPU_EXPORT
 GPUResult
 GPUMapRasterizationRatePhysicalToScreenEXT(
   const GPURasterizationRateMapEXT *map,
-  uint32_t                           layer,
-  GPUCoordinate2D                    physical,
-  GPUCoordinate2D                   *outScreen
+  uint32_t                          layer,
+  GPUCoordinate2D                   physical,
+  GPUCoordinate2D                  *outScreen
 );
 
-/* Returns the size and alignment of shader-visible map parameters. */
+/* returns the size and alignment of shader-visible map parameters. */
 GPU_EXPORT
 GPUResult
 GPUGetRasterizationRateMapParameterInfoEXT(
@@ -174,7 +169,7 @@ GPUGetRasterizationRateMapParameterInfoEXT(
   GPURasterizationRateMapParameterInfoEXT  *outInfo
 );
 
-/* Copies parameters to an aligned GPU_BUFFER_USAGE_UNIFORM range. */
+/* copies parameters to an aligned GPU_BUFFER_USAGE_UNIFORM range. */
 GPU_EXPORT
 GPUResult
 GPUCopyRasterizationRateMapParametersEXT(

@@ -24,14 +24,13 @@ extern "C" {
 #include "cmdqueue.h"
 
 typedef struct GPUSwapchain GPUSwapchain;
-
-typedef struct GPUFrame GPUFrame;
+typedef struct GPUFrame     GPUFrame;
 
 GPU_EXPORT
 GPUFrame*
 GPUBeginFrame(GPUSwapchain* swapchain);
 
-/* Returns the acquired render target for this frame. */
+/* returns the acquired render target for this frame. */
 GPU_EXPORT
 GPUTexture*
 GPUFrameGetTarget(GPUFrame *frame);
@@ -44,17 +43,17 @@ GPU_EXPORT
 void
 GPUEndFrame(GPUFrame* frame);
 
-/* Schedules frame presentation on the command buffer. */
+/* schedules frame presentation on the command buffer. */
 GPU_EXPORT
 void
 GPUSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame);
 
-/* Convenience alias for GPUSchedulePresent(). */
+/* convenience alias for GPUSchedulePresent(). */
 GPU_EXPORT
 void
 GPUPresent(GPUCommandBuffer *cmdb, GPUFrame *frame);
 
-/* Schedules, submits, and consumes a frame with one command buffer. */
+/* schedules, submits, and consumes a frame with one command buffer. */
 GPU_EXPORT
 GPUResult
 GPUFinishFrame(GPUQueue         * __restrict cmdq,

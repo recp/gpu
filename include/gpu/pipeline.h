@@ -28,54 +28,54 @@ extern "C" {
 #include "depthstencil.h"
 
 typedef struct GPUPipelineLayout GPUPipelineLayout;
-typedef struct GPUPipelineCache GPUPipelineCache;
-typedef struct GPUDevice GPUDevice;
+typedef struct GPUPipelineCache  GPUPipelineCache;
+typedef struct GPUDevice         GPUDevice;
 
 typedef enum GPUPrimitiveTopology {
-  GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST = 0,
+  GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST  = 0,
   GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP = 1,
-  GPU_PRIMITIVE_TOPOLOGY_LINE_LIST = 2,
-  GPU_PRIMITIVE_TOPOLOGY_LINE_STRIP = 3,
-  GPU_PRIMITIVE_TOPOLOGY_POINT_LIST = 4
+  GPU_PRIMITIVE_TOPOLOGY_LINE_LIST      = 2,
+  GPU_PRIMITIVE_TOPOLOGY_LINE_STRIP     = 3,
+  GPU_PRIMITIVE_TOPOLOGY_POINT_LIST     = 4
 } GPUPrimitiveTopology;
 
 typedef enum GPUCullMode {
-  GPU_CULL_MODE_NONE = 0,
+  GPU_CULL_MODE_NONE  = 0,
   GPU_CULL_MODE_FRONT = 1,
-  GPU_CULL_MODE_BACK = 2
+  GPU_CULL_MODE_BACK  = 2
 } GPUCullMode;
 
 typedef enum GPUFrontFace {
   GPU_FRONT_FACE_CCW = 0,
-  GPU_FRONT_FACE_CW = 1
+  GPU_FRONT_FACE_CW  = 1
 } GPUFrontFace;
 
 typedef enum GPUBlendFactor {
-  GPU_BLEND_FACTOR_ZERO = 0,
-  GPU_BLEND_FACTOR_ONE = 1,
-  GPU_BLEND_FACTOR_SRC_ALPHA = 2,
+  GPU_BLEND_FACTOR_ZERO                = 0,
+  GPU_BLEND_FACTOR_ONE                 = 1,
+  GPU_BLEND_FACTOR_SRC_ALPHA           = 2,
   GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA = 3
 } GPUBlendFactor;
 
 typedef enum GPUBlendOp {
-  GPU_BLEND_OP_ADD = 0,
-  GPU_BLEND_OP_SUBTRACT = 1,
+  GPU_BLEND_OP_ADD              = 0,
+  GPU_BLEND_OP_SUBTRACT         = 1,
   GPU_BLEND_OP_REVERSE_SUBTRACT = 2,
-  GPU_BLEND_OP_MIN = 3,
-  GPU_BLEND_OP_MAX = 4
+  GPU_BLEND_OP_MIN              = 3,
+  GPU_BLEND_OP_MAX              = 4
 } GPUBlendOp;
 
 typedef uint32_t GPUColorWriteMaskFlags;
-/* Zero-initialized masks write all channels; NONE must be used alone. */
+/* zero-initialized masks write all channels; NONE must be used alone. */
 enum {
   GPU_COLOR_WRITE_DEFAULT = 0u,
-  GPU_COLOR_WRITE_R = 1u << 0,
-  GPU_COLOR_WRITE_G = 1u << 1,
-  GPU_COLOR_WRITE_B = 1u << 2,
-  GPU_COLOR_WRITE_A = 1u << 3,
-  GPU_COLOR_WRITE_NONE = 1u << 4,
-  GPU_COLOR_WRITE_ALL = GPU_COLOR_WRITE_R | GPU_COLOR_WRITE_G |
-                        GPU_COLOR_WRITE_B | GPU_COLOR_WRITE_A
+  GPU_COLOR_WRITE_R       = 1u << 0,
+  GPU_COLOR_WRITE_G       = 1u << 1,
+  GPU_COLOR_WRITE_B       = 1u << 2,
+  GPU_COLOR_WRITE_A       = 1u << 3,
+  GPU_COLOR_WRITE_NONE    = 1u << 4,
+  GPU_COLOR_WRITE_ALL     = GPU_COLOR_WRITE_R | GPU_COLOR_WRITE_G |
+                            GPU_COLOR_WRITE_B | GPU_COLOR_WRITE_A
 };
 
 typedef struct GPUBlendComponent {
@@ -85,10 +85,10 @@ typedef struct GPUBlendComponent {
 } GPUBlendComponent;
 
 typedef struct GPUBlendState {
-  bool                   enabled;
   GPUBlendComponent      color;
   GPUBlendComponent      alpha;
   GPUColorWriteMaskFlags writeMask;
+  bool                   enabled;
 } GPUBlendState;
 
 typedef struct GPUColorTargetState {
@@ -99,9 +99,9 @@ typedef struct GPUColorTargetState {
 typedef struct GPUPipelineCacheCreateInfo {
   GPUChainedStruct chain;
   const char      *label;
-  bool             enableDiskCache;
   const char      *cachePath;
   uint64_t         maxEntries;
+  bool             enableDiskCache;
 } GPUPipelineCacheCreateInfo;
 
 typedef struct GPUPipelineCompileHandle {
@@ -110,8 +110,8 @@ typedef struct GPUPipelineCompileHandle {
 
 typedef enum GPUPipelineCompileStatus {
   GPU_PIPELINE_COMPILE_PENDING = 0,
-  GPU_PIPELINE_COMPILE_READY = 1,
-  GPU_PIPELINE_COMPILE_FAILED = 2
+  GPU_PIPELINE_COMPILE_READY   = 1,
+  GPU_PIPELINE_COMPILE_FAILED  = 2
 } GPUPipelineCompileStatus;
 
 typedef struct GPUMultisampleState {
@@ -123,25 +123,25 @@ typedef struct GPUMultisampleState {
 typedef struct GPURenderPipeline GPURenderPipeline;
 
 typedef struct GPURenderPipelineCreateInfo {
-  GPUChainedStruct             chain;
+  GPUChainedStruct            chain;
   const char                  *label;
   GPUPipelineLayout           *layout;
   GPUPipelineCache            *cache;
   GPUShaderLibrary            *library;
   const char                  *vertexEntry;
   const char                  *fragmentEntry;
+  const GPUColorTargetState   *pColorTargets;
+  const GPUDepthStencilState  *pDepthStencilState;
   GPUVertexState               vertex;
   uint32_t                     colorTargetCount;
-  const GPUColorTargetState   *pColorTargets;
   GPUFormat                    depthStencilFormat;
-  const GPUDepthStencilState  *pDepthStencilState;
   GPUPrimitiveTopology         primitiveTopology;
   GPUCullMode                  cullMode;
   GPUFrontFace                 frontFace;
   GPUMultisampleState          multisample;
 } GPURenderPipelineCreateInfo;
 
-/* Replaces the vertex stage when chained to GPURenderPipelineCreateInfo. */
+/* replaces the vertex stage when chained to GPURenderPipelineCreateInfo. */
 typedef struct GPUMeshPipelineEXT {
   GPUChainedStruct chain;
   const char      *taskEntry;

@@ -23,8 +23,10 @@ extern "C" {
 #include "common.h"
 
 struct GPUDevice;
-typedef struct GPUFence GPUFence;
-typedef struct GPUSemaphore GPUSemaphore;
+typedef struct GPUFence        GPUFence;
+typedef struct GPUSemaphore    GPUSemaphore;
+typedef struct GPUQueue         GPUQueue;
+typedef struct GPUCommandBuffer GPUCommandBuffer;
 
 typedef enum GPUQueueFlagBits {
   GPU_QUEUE_GRAPHICS_BIT = 0x00000001,
@@ -36,39 +38,36 @@ typedef enum GPUQueueFlagBits {
 #define GPU_QUEUE_COMPUTE  GPU_QUEUE_COMPUTE_BIT
 #define GPU_QUEUE_TRANSFER GPU_QUEUE_TRANSFER_BIT
 
-typedef struct GPUQueue GPUQueue;
-typedef struct GPUCommandBuffer GPUCommandBuffer;
-
 typedef void (*GPUCommandBufferCompletionFn)(void            *__restrict sender,
                                              GPUCommandBuffer*__restrict cmdb);
 
 typedef struct GPUQueueSubmitInfo {
-  GPUChainedStruct chain;
-  uint32_t commandBufferCount;
-  GPUCommandBuffer * const *ppCommandBuffers;
-  GPUFence *fence; /* optional; signaled after submitted buffers complete */
+  GPUChainedStruct  chain;
+  GPUCommandBuffer *const *ppCommandBuffers;
+  GPUFence         *fence; /* optional; signaled after submitted buffers complete */
+  uint32_t          commandBufferCount;
 } GPUQueueSubmitInfo;
 
 typedef struct GPUQueueSemaphoreWait {
-  GPUSemaphore *semaphore;
-  uint64_t value;
+  GPUSemaphore        *semaphore;
+  uint64_t             value;
   GPUPipelineStageMask waitStages;
 } GPUQueueSemaphoreWait;
 
 typedef struct GPUQueueSemaphoreSignal {
   GPUSemaphore *semaphore;
-  uint64_t value;
+  uint64_t      value;
 } GPUQueueSemaphoreSignal;
 
 typedef struct GPUQueueSubmitExInfo {
-  GPUChainedStruct chain;
-  uint32_t commandBufferCount;
-  GPUCommandBuffer * const *ppCommandBuffers;
-  uint32_t waitCount;
-  const GPUQueueSemaphoreWait *pWaits;
-  uint32_t signalCount;
+  GPUChainedStruct               chain;
+  GPUCommandBuffer              *const *ppCommandBuffers;
+  const GPUQueueSemaphoreWait   *pWaits;
   const GPUQueueSemaphoreSignal *pSignals;
-  GPUFence *fence;
+  GPUFence                      *fence;
+  uint32_t                       commandBufferCount;
+  uint32_t                       waitCount;
+  uint32_t                       signalCount;
 } GPUQueueSubmitExInfo;
 
 typedef struct GPUFenceCreateInfo {
@@ -83,7 +82,7 @@ typedef struct GPUSemaphoreCreateInfo {
   uint64_t         initialValue;
 } GPUSemaphoreCreateInfo;
 
-/* Convenience alias for GPUGetQueue(device, bits, 0). */
+/* convenience alias for GPUGetQueue(device, bits, 0). */
 GPU_EXPORT
 GPUQueue*
 GPUGetCommandQueue(struct GPUDevice * __restrict device, GPUQueueFlagBits bits);

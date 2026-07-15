@@ -26,17 +26,16 @@ extern "C" {
 #include "bindgroup.h"
 #include "buffer.h"
 
-typedef struct GPUComputePipeline GPUComputePipeline;
-
+typedef struct GPUComputePipeline    GPUComputePipeline;
 typedef struct GPUComputePassEncoder GPUComputePassEncoder;
 
 typedef struct GPUComputePipelineCreateInfo {
-  GPUChainedStruct  chain;
-  const char       *label;
+  GPUChainedStruct   chain;
+  const char        *label;
   GPUPipelineLayout *layout;
-  GPUPipelineCache *cache;
-  GPUShaderLibrary *library;
-  const char       *entryPoint;
+  GPUPipelineCache  *cache;
+  GPUShaderLibrary  *library;
+  const char        *entryPoint;
 } GPUComputePipelineCreateInfo;
 
 GPU_EXPORT

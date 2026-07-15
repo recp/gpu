@@ -26,28 +26,28 @@ extern "C" {
 #include "device.h"
 //#include <us/us.h>
 
+typedef struct GPUShaderLibrary GPUShaderLibrary;
+
 typedef struct GPUShaderResourceReflection {
-  const char *name;
-  uint32_t groupIndex;
-  uint32_t binding;
-  GPUBindingType bindingType;
+  const char         *name;
+  uint32_t            groupIndex;
+  uint32_t            binding;
+  GPUBindingType      bindingType;
   GPUShaderStageFlags visibility;
-  uint32_t arrayCount;
-  bool hasDynamicOffset;
+  uint32_t            arrayCount;
+  bool                hasDynamicOffset;
 } GPUShaderResourceReflection;
 
 typedef struct GPUShaderReflection {
-  uint32_t resourceCount;
   const GPUShaderResourceReflection *pResources;
-  uint32_t pushConstantSizeBytes;
+  uint32_t                           resourceCount;
+  uint32_t                           pushConstantSizeBytes;
 } GPUShaderReflection;
 
-typedef struct GPUShaderLibrary GPUShaderLibrary;
-
 typedef enum GPUShaderSourceKind {
-  GPU_SHADER_SOURCE_USL_TEXT = 0,
+  GPU_SHADER_SOURCE_USL_TEXT     = 0,
   GPU_SHADER_SOURCE_USL_BYTECODE = 1,
-  GPU_SHADER_SOURCE_MSL_TEXT = 2,
+  GPU_SHADER_SOURCE_MSL_TEXT     = 2,
   GPU_SHADER_SOURCE_SPIRV_BINARY = 3
 } GPUShaderSourceKind;
 
@@ -57,16 +57,16 @@ typedef struct GPUShaderDefine {
 } GPUShaderDefine;
 
 typedef struct GPUShaderLibraryCreateInfo {
-  GPUChainedStruct chain;
-  const char *label;
-  GPUShaderSourceKind sourceKind;
-  const void *sourceData;
-  uint64_t sourceSize;
-  const char *sourcePathHint;
-  uint32_t defineCount;
+  GPUChainedStruct       chain;
+  const char            *label;
+  const void            *sourceData;
+  const char            *sourcePathHint;
   const GPUShaderDefine *pDefines;
-  bool generateReflection;
-  bool disableDiskCache;
+  uint64_t               sourceSize;
+  GPUShaderSourceKind    sourceKind;
+  uint32_t               defineCount;
+  bool                   generateReflection;
+  bool                   disableDiskCache;
 } GPUShaderLibraryCreateInfo;
 
 GPU_EXPORT

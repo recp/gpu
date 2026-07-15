@@ -59,54 +59,54 @@ typedef enum GPUTextureViewType {
   GPU_TEXTURE_VIEW_3D          = 6
 } GPUTextureViewType;
 
-typedef struct GPUTexture GPUTexture;
+typedef struct GPUTexture     GPUTexture;
 typedef struct GPUTextureView GPUTextureView;
 
 typedef struct GPUTextureCreateInfo {
-  GPUChainedStruct chain;
-  const char *label;
-  GPUTextureDimension dimension;
-  GPUFormat format;
-  uint32_t width;
-  uint32_t height;
-  uint32_t depthOrLayers;
-  uint32_t mipLevelCount;
-  uint32_t sampleCount;
+  GPUChainedStruct     chain;
+  const char          *label;
+  GPUTextureDimension  dimension;
+  GPUFormat            format;
+  uint32_t             width;
+  uint32_t             height;
+  uint32_t             depthOrLayers;
+  uint32_t             mipLevelCount;
+  uint32_t             sampleCount;
   GPUTextureUsageFlags usage;
 } GPUTextureCreateInfo;
 
 typedef struct GPUTextureInfo {
-  GPUTextureDimension dimension;
-  GPUFormat format;
-  uint32_t width;
-  uint32_t height;
-  uint32_t depthOrLayers;
-  uint32_t mipLevelCount;
-  uint32_t sampleCount;
+  GPUTextureDimension  dimension;
+  GPUFormat            format;
+  uint32_t             width;
+  uint32_t             height;
+  uint32_t             depthOrLayers;
+  uint32_t             mipLevelCount;
+  uint32_t             sampleCount;
   GPUTextureUsageFlags usage;
 } GPUTextureInfo;
 
 typedef struct GPUTextureViewCreateInfo {
-  GPUChainedStruct chain;
-  const char *label;
-  GPUTextureViewType viewType;
-  GPUFormat format;
-  uint32_t baseMipLevel;
-  uint32_t mipLevelCount;
-  uint32_t baseArrayLayer;
-  uint32_t arrayLayerCount;
+  GPUChainedStruct    chain;
+  const char         *label;
+  GPUTextureViewType  viewType;
+  GPUFormat           format;
+  uint32_t            baseMipLevel;
+  uint32_t            mipLevelCount;
+  uint32_t            baseArrayLayer;
+  uint32_t            arrayLayerCount;
 } GPUTextureViewCreateInfo;
 
 typedef struct GPUTextureWriteRegion {
-  uint32_t width;
-  uint32_t height;
-  uint32_t depth;
-  uint32_t mipLevel;
-  uint32_t baseArrayLayer;
   GPUTextureAspect aspect;
-  uint32_t layerCount;
-  uint32_t bytesPerRow;
-  uint32_t rowsPerImage;
+  uint32_t         width;
+  uint32_t         height;
+  uint32_t         depth;
+  uint32_t         mipLevel;
+  uint32_t         baseArrayLayer;
+  uint32_t         layerCount;
+  uint32_t         bytesPerRow;
+  uint32_t         rowsPerImage;
 } GPUTextureWriteRegion;
 
 GPU_EXPORT

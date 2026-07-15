@@ -28,7 +28,7 @@ extern "C" {
 #ifndef GPU_RENDER_ENCODER_TYPES_DEFINED
 #define GPU_RENDER_ENCODER_TYPES_DEFINED
 typedef struct GPURenderCommandEncoder GPURenderCommandEncoder;
-typedef GPURenderCommandEncoder GPURenderPassEncoder;
+typedef        GPURenderCommandEncoder GPURenderPassEncoder;
 #endif
 
 typedef struct GPUCopyPassEncoder GPUCopyPassEncoder;
@@ -63,20 +63,53 @@ typedef struct GPURenderPassDepthStencilAttachment {
   GPUTextureView *view;
   GPULoadOp       depthLoadOp;
   GPUStoreOp      depthStoreOp;
-  float           clearDepth;
   GPULoadOp       stencilLoadOp;
   GPUStoreOp      stencilStoreOp;
   uint32_t        clearStencil;
+  float           clearDepth;
 } GPURenderPassDepthStencilAttachment;
 
 typedef struct GPURenderPassCreateInfo {
-  GPUChainedStruct                         chain;
+  GPUChainedStruct                           chain;
   const char                                *label;
   GPUQuerySet                               *occlusionQuerySet;
-  uint32_t                                   colorAttachmentCount;
   const GPURenderPassColorAttachment        *pColorAttachments;
   const GPURenderPassDepthStencilAttachment *pDepthStencilAttachment;
+  uint32_t                                   colorAttachmentCount;
 } GPURenderPassCreateInfo;
+
+typedef struct GPUBufferCopyRegion {
+  uint64_t srcOffset;
+  uint64_t dstOffset;
+  uint64_t sizeBytes;
+} GPUBufferCopyRegion;
+
+typedef struct GPUTextureLocation {
+  GPUTextureAspect aspect;
+  uint32_t         x, y, z;
+  uint32_t         mipLevel;
+  uint32_t         baseArrayLayer;
+} GPUTextureLocation;
+
+typedef struct GPUTextureSubresourceRegion {
+  GPUTextureLocation texture;
+  uint32_t           width, height, depth;
+  uint32_t           layerCount;
+} GPUTextureSubresourceRegion;
+
+typedef struct GPUBufferTextureCopyRegion {
+  GPUTextureSubresourceRegion texture;
+  uint64_t                    bufferOffset;
+  uint32_t                    bytesPerRow;
+  uint32_t                    rowsPerImage;
+} GPUBufferTextureCopyRegion;
+
+typedef struct GPUTextureToTextureCopyRegion {
+  GPUTextureLocation src;
+  GPUTextureLocation dst;
+  uint32_t           width, height, depth;
+  uint32_t           layerCount;
+} GPUTextureToTextureCopyRegion;
 
 GPU_EXPORT
 GPURenderPassEncoder*
@@ -92,39 +125,6 @@ GPUSetRenderPushConstants(GPURenderPassEncoder *pass,
                           uint32_t              offset,
                           uint32_t              sizeBytes,
                           const void           *data);
-
-typedef struct GPUBufferCopyRegion {
-  uint64_t srcOffset;
-  uint64_t dstOffset;
-  uint64_t sizeBytes;
-} GPUBufferCopyRegion;
-
-typedef struct GPUTextureLocation {
-  uint32_t x, y, z;
-  uint32_t mipLevel;
-  uint32_t baseArrayLayer;
-  GPUTextureAspect aspect;
-} GPUTextureLocation;
-
-typedef struct GPUTextureSubresourceRegion {
-  GPUTextureLocation texture;
-  uint32_t width, height, depth;
-  uint32_t layerCount;
-} GPUTextureSubresourceRegion;
-
-typedef struct GPUBufferTextureCopyRegion {
-  uint64_t bufferOffset;
-  uint32_t bytesPerRow;
-  uint32_t rowsPerImage;
-  GPUTextureSubresourceRegion texture;
-} GPUBufferTextureCopyRegion;
-
-typedef struct GPUTextureToTextureCopyRegion {
-  GPUTextureLocation src;
-  GPUTextureLocation dst;
-  uint32_t width, height, depth;
-  uint32_t layerCount;
-} GPUTextureToTextureCopyRegion;
 
 GPU_EXPORT
 GPUCopyPassEncoder*

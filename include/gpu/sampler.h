@@ -24,23 +24,22 @@ extern "C" {
 #include "cmdqueue.h"
 
 typedef struct GPUDevice GPUDevice;
-
 typedef struct GPUSampler GPUSampler;
 
 typedef enum GPUFilter {
   GPU_FILTER_NEAREST = 0,
-  GPU_FILTER_LINEAR = 1
+  GPU_FILTER_LINEAR  = 1
 } GPUFilter;
 
 typedef enum GPUMipFilter {
   GPU_MIP_FILTER_NEAREST = 0,
-  GPU_MIP_FILTER_LINEAR = 1
+  GPU_MIP_FILTER_LINEAR  = 1
 } GPUMipFilter;
 
 typedef enum GPUAddressMode {
-  GPU_ADDRESS_MODE_REPEAT = 0,
+  GPU_ADDRESS_MODE_REPEAT          = 0,
   GPU_ADDRESS_MODE_MIRRORED_REPEAT = 1,
-  GPU_ADDRESS_MODE_CLAMP_TO_EDGE = 2
+  GPU_ADDRESS_MODE_CLAMP_TO_EDGE   = 2
 } GPUAddressMode;
 
 typedef struct GPUSamplerDesc {

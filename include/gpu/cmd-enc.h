@@ -32,16 +32,16 @@ extern "C" {
 #ifndef GPU_RENDER_ENCODER_TYPES_DEFINED
 #define GPU_RENDER_ENCODER_TYPES_DEFINED
 typedef struct GPURenderCommandEncoder GPURenderCommandEncoder;
-typedef GPURenderCommandEncoder GPURenderPassEncoder;
+typedef        GPURenderCommandEncoder GPURenderPassEncoder;
 #endif
 
-/* Top-left scissor; the active render target clips the rectangle. */
+/* top-left scissor; the active render target clips the rectangle. */
 typedef struct GPUScissorRect {
   int32_t  x, y;
   uint32_t width, height;
 } GPUScissorRect;
 
-/* Top-left viewport; NDC has positive Y up and depth 0..1. */
+/* top-left viewport; NDC has positive Y up and depth 0..1. */
 typedef struct GPUViewport {
   float x, y;
   float width, height;

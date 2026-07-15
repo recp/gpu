@@ -25,72 +25,68 @@ extern "C" {
 #include "sampler.h"
 #include "texture.h"
 
-typedef struct GPUBuffer GPUBuffer;
-typedef struct GPUDevice GPUDevice;
-typedef struct GPUShaderLibrary GPUShaderLibrary;
-typedef struct GPUSampler GPUSampler;
+typedef struct GPUBuffer                   GPUBuffer;
+typedef struct GPUDevice                   GPUDevice;
+typedef struct GPUShaderLibrary            GPUShaderLibrary;
+typedef struct GPUSampler                  GPUSampler;
+typedef struct GPUBindGroupLayout          GPUBindGroupLayout;
+typedef struct GPUBindGroup                GPUBindGroup;
+typedef struct GPUPipelineLayout           GPUPipelineLayout;
+
 typedef struct GPUAccelerationStructureEXT GPUAccelerationStructureEXT;
 
 #ifndef GPU_RENDER_ENCODER_TYPES_DEFINED
 #define GPU_RENDER_ENCODER_TYPES_DEFINED
-typedef struct GPURenderCommandEncoder GPURenderCommandEncoder;
-typedef GPURenderCommandEncoder GPURenderPassEncoder;
+typedef struct GPURenderCommandEncoder     GPURenderCommandEncoder;
+typedef        GPURenderCommandEncoder     GPURenderPassEncoder;
 #endif
 
-typedef struct GPUBindGroupLayout GPUBindGroupLayout;
-
-typedef struct GPUBindGroup GPUBindGroup;
-
 typedef struct GPUBindGroupLayoutEntry {
-  uint32_t binding;
-  GPUBindingType bindingType;
+  GPUSamplerDesc      immutableSamplerDesc;
+  GPUBindingType      bindingType;
   GPUShaderStageFlags visibility;
-  uint32_t arrayCount;
-  bool hasDynamicOffset;
-  bool immutableSampler;
-  GPUSamplerDesc immutableSamplerDesc;
+  uint32_t            binding;
+  uint32_t            arrayCount;
+  bool                hasDynamicOffset;
+  bool                immutableSampler;
 } GPUBindGroupLayoutEntry;
 
 typedef struct GPUBindGroupLayoutCreateInfo {
-  GPUChainedStruct chain;
-  const char *label;
-  uint32_t entryCount;
+  GPUChainedStruct               chain;
+  const char                    *label;
   const GPUBindGroupLayoutEntry *pEntries;
+  uint32_t                       entryCount;
 } GPUBindGroupLayoutCreateInfo;
 
-/* Makes fixed-capacity bindings sparse and mutable. */
+/* makes fixed-capacity bindings sparse and mutable. */
 typedef struct GPUBindlessLayoutEXT {
   GPUChainedStruct          chain;
   const GPUBindGroupLayout *sourceLayout;
 } GPUBindlessLayoutEXT;
 
 typedef struct GPUBindGroupEntry {
-  uint32_t binding;
-  uint32_t arrayIndex; /* 0 for non-array. */
-  GPUBindingType bindingType;
-
   union {
+    GPUTextureView              *textureView;
+    GPUSampler                  *sampler;
+    GPUAccelerationStructureEXT *accelerationStructure;
     struct {
       GPUBuffer *buffer;
       uint64_t   offset;
       uint64_t   size;
-    } buffer;
-
-    GPUTextureView *textureView;
-    GPUSampler     *sampler;
-    GPUAccelerationStructureEXT *accelerationStructure;
+    }                            buffer;
   };
+  uint32_t                       binding;
+  uint32_t                       arrayIndex; /* 0 for non-array. */
+  GPUBindingType                 bindingType;
 } GPUBindGroupEntry;
 
 typedef struct GPUBindGroupCreateInfo {
-  GPUChainedStruct chain;
-  const char *label;
-  GPUBindGroupLayout *layout;
-  uint32_t entryCount;
+  GPUChainedStruct         chain;
+  const char              *label;
+  GPUBindGroupLayout      *layout;
   const GPUBindGroupEntry *pEntries;
+  uint32_t                 entryCount;
 } GPUBindGroupCreateInfo;
-
-typedef struct GPUPipelineLayout GPUPipelineLayout;
 
 typedef struct GPUShaderLayout {
   GPUPipelineLayout   *pipelineLayout;
@@ -99,11 +95,11 @@ typedef struct GPUShaderLayout {
 } GPUShaderLayout;
 
 typedef struct GPUPipelineLayoutCreateInfo {
-  GPUChainedStruct chain;
-  const char *label;
-  uint32_t bindGroupLayoutCount;
-  GPUBindGroupLayout * const *ppBindGroupLayouts;
-  uint32_t pushConstantSizeBytes;
+  GPUChainedStruct    chain;
+  const char         *label;
+  GPUBindGroupLayout *const *ppBindGroupLayouts;
+  uint32_t            bindGroupLayoutCount;
+  uint32_t            pushConstantSizeBytes;
   GPUShaderStageFlags pushConstantStages;
 } GPUPipelineLayoutCreateInfo;
 

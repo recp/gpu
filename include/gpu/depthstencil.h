@@ -23,25 +23,25 @@ extern "C" {
 #include "common.h"
 
 typedef enum GPUCompareOp {
-  GPU_COMPARE_NEVER = 0,
-  GPU_COMPARE_LESS = 1,
-  GPU_COMPARE_EQUAL = 2,
-  GPU_COMPARE_LESS_EQUAL = 3,
-  GPU_COMPARE_GREATER = 4,
-  GPU_COMPARE_NOT_EQUAL = 5,
+  GPU_COMPARE_NEVER         = 0,
+  GPU_COMPARE_LESS          = 1,
+  GPU_COMPARE_EQUAL         = 2,
+  GPU_COMPARE_LESS_EQUAL    = 3,
+  GPU_COMPARE_GREATER       = 4,
+  GPU_COMPARE_NOT_EQUAL     = 5,
   GPU_COMPARE_GREATER_EQUAL = 6,
-  GPU_COMPARE_ALWAYS = 7
+  GPU_COMPARE_ALWAYS        = 7
 } GPUCompareOp;
 
 typedef enum GPUStencilOp {
-  GPU_STENCIL_OP_KEEP = 0,
-  GPU_STENCIL_OP_ZERO = 1,
-  GPU_STENCIL_OP_REPLACE = 2,
+  GPU_STENCIL_OP_KEEP            = 0,
+  GPU_STENCIL_OP_ZERO            = 1,
+  GPU_STENCIL_OP_REPLACE         = 2,
   GPU_STENCIL_OP_INCREMENT_CLAMP = 3,
   GPU_STENCIL_OP_DECREMENT_CLAMP = 4,
-  GPU_STENCIL_OP_INVERT = 5,
-  GPU_STENCIL_OP_INCREMENT_WRAP = 6,
-  GPU_STENCIL_OP_DECREMENT_WRAP = 7
+  GPU_STENCIL_OP_INVERT          = 5,
+  GPU_STENCIL_OP_INCREMENT_WRAP  = 6,
+  GPU_STENCIL_OP_DECREMENT_WRAP  = 7
 } GPUStencilOp;
 
 typedef struct GPUStencilFaceState {
@@ -52,14 +52,14 @@ typedef struct GPUStencilFaceState {
 } GPUStencilFaceState;
 
 typedef struct GPUDepthStencilState {
-  bool                depthTestEnable;
-  bool                depthWriteEnable;
   GPUCompareOp        depthCompare;
-  bool                stencilTestEnable;
   GPUStencilFaceState front;
   GPUStencilFaceState back;
   uint32_t            stencilReadMask;
   uint32_t            stencilWriteMask;
+  bool                depthTestEnable;
+  bool                depthWriteEnable;
+  bool                stencilTestEnable;
 } GPUDepthStencilState;
 
 #ifdef __cplusplus

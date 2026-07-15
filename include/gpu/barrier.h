@@ -22,9 +22,9 @@ extern "C" {
 
 #include "common.h"
 
-typedef struct GPUBuffer GPUBuffer;
+typedef struct GPUBuffer        GPUBuffer;
 typedef struct GPUCommandBuffer GPUCommandBuffer;
-typedef struct GPUTexture GPUTexture;
+typedef struct GPUTexture       GPUTexture;
 
 typedef enum GPUAccessMask {
   GPU_ACCESS_NONE           = 0,
@@ -58,12 +58,12 @@ typedef struct GPUTextureBarrier {
 } GPUTextureBarrier;
 
 typedef struct GPUBarrierBatch {
-  GPUPipelineStageMask   srcStages;
-  GPUPipelineStageMask   dstStages;
-  uint32_t               bufferBarrierCount;
-  const GPUBufferBarrier *pBufferBarriers;
-  uint32_t               textureBarrierCount;
+  const GPUBufferBarrier  *pBufferBarriers;
   const GPUTextureBarrier *pTextureBarriers;
+  GPUPipelineStageMask     srcStages;
+  GPUPipelineStageMask     dstStages;
+  uint32_t                 bufferBarrierCount;
+  uint32_t                 textureBarrierCount;
 } GPUBarrierBatch;
 
 GPU_EXPORT

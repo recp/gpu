@@ -29,10 +29,10 @@ extern "C" {
 typedef struct GPUAdapter GPUAdapter;
 
 typedef enum GPUAdapterType {
-  GPU_ADAPTER_TYPE_UNKNOWN = 0,
+  GPU_ADAPTER_TYPE_UNKNOWN    = 0,
   GPU_ADAPTER_TYPE_INTEGRATED = 1,
-  GPU_ADAPTER_TYPE_DISCRETE = 2,
-  GPU_ADAPTER_TYPE_SOFTWARE = 3
+  GPU_ADAPTER_TYPE_DISCRETE   = 2,
+  GPU_ADAPTER_TYPE_SOFTWARE   = 3
 } GPUAdapterType;
 
 typedef struct GPUAdapterProperties {
@@ -72,24 +72,25 @@ typedef void (*GPUDeviceErrorCallback)(GPUDevice                *device,
 typedef void (*GPUProc)(void);
 
 typedef enum GPUFeature {
-  GPU_FEATURE_COMPUTE = 0,
-  GPU_FEATURE_TIMESTAMPS = 1,
-  GPU_FEATURE_PIPELINE_STATISTICS = 2,
-  GPU_FEATURE_INDIRECT_DRAW = 3,
-  GPU_FEATURE_MULTI_DRAW = 4,
-  GPU_FEATURE_SUBGROUPS = 5,
-  GPU_FEATURE_SHADER_F16 = 6,
-  /* Non-uniform indexing of fixed-size resource arrays. */
-  GPU_FEATURE_DESCRIPTOR_INDEXING = 7,
-  GPU_FEATURE_MESH_SHADER = 8,
-  GPU_FEATURE_RAY_QUERY = 9,
+  GPU_FEATURE_COMPUTE               = 0,
+  GPU_FEATURE_TIMESTAMPS            = 1,
+  GPU_FEATURE_PIPELINE_STATISTICS   = 2,
+  GPU_FEATURE_INDIRECT_DRAW         = 3,
+  GPU_FEATURE_MULTI_DRAW            = 4,
+  GPU_FEATURE_SUBGROUPS             = 5,
+  GPU_FEATURE_SHADER_F16            = 6,
+
+  /* non-uniform indexing of fixed-size resource arrays. */
+  GPU_FEATURE_DESCRIPTOR_INDEXING   = 7,
+  GPU_FEATURE_MESH_SHADER           = 8,
+  GPU_FEATURE_RAY_QUERY             = 9,
   GPU_FEATURE_VARIABLE_RATE_SHADING = 10,
-  GPU_FEATURE_BINDLESS = 11
+  GPU_FEATURE_BINDLESS              = 11
 } GPUFeature;
 
 typedef struct GPUFeatureSet {
-  uint32_t          featureCount;
   const GPUFeature *pFeatures;
+  uint32_t          featureCount;
 } GPUFeatureSet;
 
 typedef struct GPUQueueRequest {
@@ -98,9 +99,9 @@ typedef struct GPUQueueRequest {
 } GPUQueueRequest;
 
 typedef struct GPUDeviceQueueCreateInfo {
-  GPUChainedStruct      chain;
-  uint32_t              requestCount;
+  GPUChainedStruct       chain;
   const GPUQueueRequest *pRequests;
+  uint32_t               requestCount;
 } GPUDeviceQueueCreateInfo;
 
 typedef struct GPUDeviceCreateInfo {
@@ -155,37 +156,37 @@ typedef struct GPUCacheStats {
 } GPUCacheStats;
 
 typedef enum GPUValidationMode {
-  GPU_VALIDATION_OFF = 0,
+  GPU_VALIDATION_OFF   = 0,
   GPU_VALIDATION_BASIC = 1,
-  GPU_VALIDATION_FULL = 2
+  GPU_VALIDATION_FULL  = 2
 } GPUValidationMode;
 
 typedef struct GPURuntimeConfig {
-  GPUChainedStruct chain;
+  GPUChainedStruct  chain;
   GPUValidationMode validationMode;
-  bool enableDebugMarkers;
-  bool enableVerboseLogs;
-  bool enableStats;
+  bool              enableDebugMarkers;
+  bool              enableVerboseLogs;
+  bool              enableStats;
 } GPURuntimeConfig;
 
 typedef struct GPUTransientAllocatorConfig {
   GPUChainedStruct chain;
-  uint64_t ringBytesPerFrame;
-  uint32_t framesInFlight;
-  uint64_t chunkBytes;
-  bool allowChunkFallback;
+  uint64_t         ringBytesPerFrame;
+  uint64_t         chunkBytes;
+  uint32_t         framesInFlight;
+  bool             allowChunkFallback;
 } GPUTransientAllocatorConfig;
 
 typedef struct GPUTransientBufferSlice {
   GPUBuffer *buffer;
-  uint64_t offset;
-  uint64_t sizeBytes;
-  void *cpuPtr;
+  void      *cpuPtr;
+  uint64_t   offset;
+  uint64_t   sizeBytes;
 } GPUTransientBufferSlice;
 
 typedef struct GPUFrameStats {
-  double cpuEncodeMs;
-  double gpuFrameMs;
+  double   cpuEncodeMs;
+  double   gpuFrameMs;
   uint32_t drawCalls;
   uint32_t requestedStateCalls;
   uint32_t emittedStateCalls;

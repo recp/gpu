@@ -40,9 +40,9 @@ enum {
 };
 
 typedef struct GPUBufferCreateInfo {
-  GPUChainedStruct chain;
-  const char       *label;
-  uint64_t          sizeBytes;
+  GPUChainedStruct    chain;
+  const char         *label;
+  uint64_t            sizeBytes;
   GPUBufferUsageFlags usage;
 } GPUBufferCreateInfo;
 
