@@ -187,7 +187,10 @@ mt_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
   } else
 #endif
   {
-    nativeState->classic = [mt_classicCommandBuffer(cmdb) computeCommandEncoder];
+    @autoreleasepool {
+      nativeState->classic = [[mt_classicCommandBuffer(cmdb)
+        computeCommandEncoder] retain];
+    }
   }
 
   if (!nativeState->classic && !nativeState->modern) {
@@ -455,6 +458,7 @@ mt_endComputeEncoding(GPUComputePassEncoder *enc) {
 #endif
   {
     [native->classic endEncoding];
+    [native->classic release];
   }
   native->classic = nil;
   native->modern = nil;

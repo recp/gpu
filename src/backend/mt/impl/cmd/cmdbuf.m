@@ -463,8 +463,13 @@ mt_destroyCommandBufferState(MTCommandBuffer *native) {
   [native->taskArguments.table release];
   [native->meshArguments.table release];
   [native->computeArguments.table release];
+  [native->renderState.classic release];
+  [native->computeState.classic release];
+  [native->copyState.classic release];
+  [native->rayQueryState.classic release];
   [native->renderPassState.classic release];
   [native->renderPassState.modern release];
+  [native->classic release];
   [native->drawable release];
   [native->residency release];
   [native->allocator release];
@@ -494,6 +499,15 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
   }
 
   queue = native->owner;
+  [native->renderState.classic release];
+  native->renderState.classic = nil;
+  [native->computeState.classic release];
+  native->computeState.classic = nil;
+  [native->copyState.classic release];
+  native->copyState.classic = nil;
+  [native->rayQueryState.classic release];
+  native->rayQueryState.classic = nil;
+  [native->classic release];
   native->classic = nil;
   [native->drawable release];
   native->drawable = nil;
@@ -749,15 +763,17 @@ mt_writeTimestamp(GPUCommandBuffer *cmdb, GPUQuerySet *set, uint32_t queryIndex)
     return;
   }
 
-  blit = [mt_classicCommandBuffer(cmdb) blitCommandEncoder];
-  if (!blit) {
-    return;
-  }
+  @autoreleasepool {
+    blit = [mt_classicCommandBuffer(cmdb) blitCommandEncoder];
+    if (!blit) {
+      return;
+    }
 
-  [blit sampleCountersInBuffer:native->classic
-                  atSampleIndex:(NSUInteger)queryIndex
-                    withBarrier:YES];
-  [blit endEncoding];
+    [blit sampleCountersInBuffer:native->classic
+                    atSampleIndex:(NSUInteger)queryIndex
+                      withBarrier:YES];
+    [blit endEncoding];
+  }
 }
 
 GPU_HIDE
@@ -878,16 +894,18 @@ mt_resolveQuerySet(GPUCommandBuffer *cmdb,
     }
 #endif
 
-    blit = [mt_classicCommandBuffer(cmdb) blitCommandEncoder];
-    if (!blit) {
-      return;
+    @autoreleasepool {
+      blit = [mt_classicCommandBuffer(cmdb) blitCommandEncoder];
+      if (!blit) {
+        return;
+      }
+      [blit copyFromBuffer:native->visibility
+              sourceOffset:(NSUInteger)sourceOffset
+                  toBuffer:dst
+         destinationOffset:(NSUInteger)dstOffset
+                      size:(NSUInteger)resolveBytes];
+      [blit endEncoding];
     }
-    [blit copyFromBuffer:native->visibility
-            sourceOffset:(NSUInteger)sourceOffset
-                toBuffer:dst
-       destinationOffset:(NSUInteger)dstOffset
-                    size:(NSUInteger)resolveBytes];
-    [blit endEncoding];
     return;
   }
   if (!mt_counterApiAvailable()) {
@@ -911,16 +929,19 @@ mt_resolveQuerySet(GPUCommandBuffer *cmdb,
   }
 #endif
 
-  blit = [mt_classicCommandBuffer(cmdb) blitCommandEncoder];
-  if (!blit) {
-    return;
-  }
+  @autoreleasepool {
+    blit = [mt_classicCommandBuffer(cmdb) blitCommandEncoder];
+    if (!blit) {
+      return;
+    }
 
-  [blit resolveCounters:native->classic
-                inRange:NSMakeRange((NSUInteger)firstQuery, (NSUInteger)queryCount)
-      destinationBuffer:dst
-      destinationOffset:(NSUInteger)dstOffset];
-  [blit endEncoding];
+    [blit resolveCounters:native->classic
+                  inRange:NSMakeRange((NSUInteger)firstQuery,
+                                      (NSUInteger)queryCount)
+        destinationBuffer:dst
+        destinationOffset:(NSUInteger)dstOffset];
+    [blit endEncoding];
+  }
 }
 
 GPU_HIDE

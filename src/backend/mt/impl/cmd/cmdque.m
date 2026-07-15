@@ -162,8 +162,10 @@ mt_beginTransfer(GPUQueue           *queue,
   }
 
   commandQueue = native->classic ? native->classic : native->upload;
-  slot->command = [[commandQueue commandBuffer] retain];
-  slot->blit    = [[slot->command blitCommandEncoder] retain];
+  @autoreleasepool {
+    slot->command = [[commandQueue commandBuffer] retain];
+    slot->blit    = [[slot->command blitCommandEncoder] retain];
+  }
   if (!slot->command || !slot->blit) {
     [slot->blit release];
     [slot->command release];
@@ -532,7 +534,9 @@ mt_newCommandBuffer(GPUQueue  * __restrict cmdb,
   } else
 #endif
   {
-    native->classic = [queue->classic commandBuffer];
+    @autoreleasepool {
+      native->classic = [[queue->classic commandBuffer] retain];
+    }
   }
   if (!native->classic && !native->modern) {
     mt_recycleCommandBuffer(cb);
@@ -874,7 +878,9 @@ mt_submitEx(GPUQueue                   *queueHandle,
   if (info->waitCount > 0u) {
     id<MTLCommandBuffer> waitBuffer;
 
-    waitBuffer = [queue->classic commandBuffer];
+    @autoreleasepool {
+      waitBuffer = [[queue->classic commandBuffer] retain];
+    }
     if (!waitBuffer) {
       for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
         gpuFinishCommandBuffer(info->ppCommandBuffers[i],
@@ -889,6 +895,7 @@ mt_submitEx(GPUQueue                   *queueHandle,
       [waitBuffer encodeWaitForEvent:event value:info->pWaits[i].value];
     }
     [waitBuffer commit];
+    [waitBuffer release];
   }
 
   if (!last->classic) {

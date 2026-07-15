@@ -525,7 +525,10 @@ mt_beginAccelerationStructurePass(GPUCommandBuffer *cmdb, const char *label) {
   } else
 #endif
   {
-    native->classic = [command->classic accelerationStructureCommandEncoder];
+    @autoreleasepool {
+      native->classic = [[command->classic
+        accelerationStructureCommandEncoder] retain];
+    }
   }
   if (!native->classic && !native->modern) {
     return NULL;
@@ -679,6 +682,7 @@ mt_endAccelerationStructurePass(
 #endif
   {
     [native->classic endEncoding];
+    [native->classic release];
   }
   native->classic = nil;
   native->modern  = nil;

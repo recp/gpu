@@ -405,7 +405,10 @@ mt_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
   } else
 #endif
   {
-    native->classic = [mt_classicCommandBuffer(cmdb) blitCommandEncoder];
+    @autoreleasepool {
+      native->classic = [[mt_classicCommandBuffer(cmdb)
+        blitCommandEncoder] retain];
+    }
   }
   if (!native->classic && !native->modern) {
     return NULL;
@@ -887,6 +890,7 @@ mt_endCopyPass(GPUCopyPassEncoder *pass) {
 #endif
   {
     [native->classic endEncoding];
+    [native->classic release];
   }
   native->classic = nil;
   native->modern = nil;
