@@ -203,41 +203,49 @@ GPU_HIDE
 void
 mt_setArgumentTexture(GPUCommandBuffer *cmdb,
                       MTArgumentState  *state,
-                      id<MTLTexture>     texture,
+                      GPUTextureView   *view,
                       uint32_t           index) {
 #if MT_HAS_METAL4
-  if (!state || !state->table || !texture || index >= MT_ARGUMENT_TEXTURE_COUNT) {
+  if (!state || !state->table || !view || !view->_priv ||
+      index >= MT_ARGUMENT_TEXTURE_COUNT) {
     return;
   }
 
   if (@available(macOS 26.0, iOS 26.0, *)) {
+    MTLResourceID resourceID;
+
+    resourceID._impl = view->_gpuResourceID;
     [(id<MTL4ArgumentTable>)state->table
-      setTexture:texture.gpuResourceID
+      setTexture:resourceID
          atIndex:index];
     state->textureMask[index / 64u] |= 1ull << (index % 64u);
-    mt_useAllocation(cmdb, texture);
+    mt_useAllocation(cmdb, (id<MTLTexture>)view->_priv);
   }
 #else
   GPU__UNUSED(cmdb);
   GPU__UNUSED(state);
-  GPU__UNUSED(texture);
+  GPU__UNUSED(view);
   GPU__UNUSED(index);
 #endif
 }
 
 GPU_HIDE
 void
-mt_setArgumentSampler(MTArgumentState    *state,
-                      id<MTLSamplerState>  sampler,
-                      uint32_t             index) {
+mt_setArgumentSampler(MTArgumentState *state,
+                      GPUSampler      *sampler,
+                      uint32_t         index) {
 #if MT_HAS_METAL4
-  if (!state || !state->table || !sampler || index >= MT_ARGUMENT_SAMPLER_COUNT) {
+  if (!state || !state->table || !sampler || !sampler->_priv ||
+      index >= MT_ARGUMENT_SAMPLER_COUNT) {
     return;
   }
 
   if (@available(macOS 26.0, iOS 26.0, *)) {
+    MTLResourceID resourceID;
+
+    resourceID._impl = sampler->_gpuResourceID;
     [(id<MTL4ArgumentTable>)state->table
-      setSamplerState:sampler.gpuResourceID
+      setSamplerState:resourceID
               atIndex:index];
     state->samplerMask |= (uint16_t)(1u << index);
   }

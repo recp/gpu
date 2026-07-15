@@ -145,6 +145,9 @@ mt_createSampler(GPUApi * __restrict api,
   }
 
   sampler->_priv = state;
+  if (@available(macOS 13.0, iOS 16.0, *)) {
+    sampler->_gpuResourceID = state.gpuResourceID._impl;
+  }
   *outSampler = sampler;
   return GPU_OK;
 }

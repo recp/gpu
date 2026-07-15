@@ -530,7 +530,7 @@ mt_rceSetVertexTexture(GPURenderCommandEncoder *rce,
   texture = view ? (id<MTLTexture>)view->_priv : nil;
 #if MT_HAS_METAL4
   if (native->modern) {
-    mt_setArgumentTexture(rce->_cmdb, native->vertexArguments, texture, index);
+    mt_setArgumentTexture(rce->_cmdb, native->vertexArguments, view, index);
     return;
   }
 #endif
@@ -552,7 +552,7 @@ mt_rceSetVertexSampler(GPURenderCommandEncoder *rce,
   samplerState = sampler ? (id<MTLSamplerState>)sampler->_priv : nil;
 #if MT_HAS_METAL4
   if (native->modern) {
-    mt_setArgumentSampler(native->vertexArguments, samplerState, index);
+    mt_setArgumentSampler(native->vertexArguments, sampler, index);
     return;
   }
 #endif
@@ -605,7 +605,7 @@ mt_rceSetTaskTexture(GPURenderCommandEncoder *rce,
   }
 #if MT_HAS_METAL4
   if (native->modern) {
-    mt_setArgumentTexture(rce->_cmdb, native->taskArguments, texture, index);
+    mt_setArgumentTexture(rce->_cmdb, native->taskArguments, view, index);
     return;
   }
 #endif
@@ -629,7 +629,7 @@ mt_rceSetTaskSampler(GPURenderCommandEncoder *rce,
   }
 #if MT_HAS_METAL4
   if (native->modern) {
-    mt_setArgumentSampler(native->taskArguments, samplerState, index);
+    mt_setArgumentSampler(native->taskArguments, sampler, index);
     return;
   }
 #endif
@@ -684,7 +684,7 @@ mt_rceSetMeshTexture(GPURenderCommandEncoder *rce,
   }
 #if MT_HAS_METAL4
   if (native->modern) {
-    mt_setArgumentTexture(rce->_cmdb, native->meshArguments, texture, index);
+    mt_setArgumentTexture(rce->_cmdb, native->meshArguments, view, index);
     return;
   }
 #endif
@@ -708,7 +708,7 @@ mt_rceSetMeshSampler(GPURenderCommandEncoder *rce,
   }
 #if MT_HAS_METAL4
   if (native->modern) {
-    mt_setArgumentSampler(native->meshArguments, samplerState, index);
+    mt_setArgumentSampler(native->meshArguments, sampler, index);
     return;
   }
 #endif
@@ -761,7 +761,7 @@ mt_rceSetFragmentTexture(GPURenderCommandEncoder *rce,
   texture = view ? (id<MTLTexture>)view->_priv : nil;
 #if MT_HAS_METAL4
   if (native->modern) {
-    mt_setArgumentTexture(rce->_cmdb, native->fragmentArguments, texture, index);
+    mt_setArgumentTexture(rce->_cmdb, native->fragmentArguments, view, index);
     return;
   }
 #endif
@@ -783,7 +783,7 @@ mt_rceSetFragmentSampler(GPURenderCommandEncoder *rce,
   samplerState = sampler ? (id<MTLSamplerState>)sampler->_priv : nil;
 #if MT_HAS_METAL4
   if (native->modern) {
-    mt_setArgumentSampler(native->fragmentArguments, samplerState, index);
+    mt_setArgumentSampler(native->fragmentArguments, sampler, index);
     return;
   }
 #endif

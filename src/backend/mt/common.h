@@ -284,14 +284,14 @@ GPU_HIDE
 void
 mt_setArgumentTexture(GPUCommandBuffer *cmdb,
                       MTArgumentState  *state,
-                      id<MTLTexture>     texture,
+                      GPUTextureView   *view,
                       uint32_t           index);
 
 GPU_HIDE
 void
-mt_setArgumentSampler(MTArgumentState   *state,
-                      id<MTLSamplerState> sampler,
-                      uint32_t            index);
+mt_setArgumentSampler(MTArgumentState *state,
+                      GPUSampler      *sampler,
+                      uint32_t         index);
 
 GPU_HIDE
 void

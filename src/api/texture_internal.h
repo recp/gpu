@@ -36,6 +36,7 @@ struct GPUTexture {
 struct GPUTextureView {
   void              *_priv;
   GPUTexture        *_texture;
+  uint64_t           _gpuResourceID;
   GPUFormat          format;
   GPUTextureViewType viewType;
   uint32_t           baseMipLevel;

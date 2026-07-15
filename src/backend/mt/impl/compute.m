@@ -279,13 +279,13 @@ mt_computeTexture(GPUComputePassEncoder *enc,
   if (!native) {
     return;
   }
-  texture = view ? (id<MTLTexture>)view->_priv : nil;
 #if MT_HAS_METAL4
   if (native->modern) {
-    mt_setArgumentTexture(enc->_cmdb, native->arguments, texture, index);
+    mt_setArgumentTexture(enc->_cmdb, native->arguments, view, index);
     return;
   }
 #endif
+  texture = view ? (id<MTLTexture>)view->_priv : nil;
   [native->classic setTexture:texture atIndex:index];
 }
 
@@ -301,13 +301,13 @@ mt_computeSampler(GPUComputePassEncoder *enc,
   if (!native) {
     return;
   }
-  samplerState = sampler ? (id<MTLSamplerState>)sampler->_priv : nil;
 #if MT_HAS_METAL4
   if (native->modern) {
-    mt_setArgumentSampler(native->arguments, samplerState, index);
+    mt_setArgumentSampler(native->arguments, sampler, index);
     return;
   }
 #endif
+  samplerState = sampler ? (id<MTLSamplerState>)sampler->_priv : nil;
   [native->classic setSamplerState:samplerState atIndex:index];
 }
 

@@ -358,9 +358,12 @@ mt_createTextureView(GPUTexture                      * __restrict texture,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  view->_priv = nativeView;
-  view->_texture = texture;
+  view->_priv       = nativeView;
+  view->_texture    = texture;
   view->_ownsNative = true;
+  if (@available(macOS 13.0, iOS 16.0, *)) {
+    view->_gpuResourceID = nativeView.gpuResourceID._impl;
+  }
   *outView = view;
   return GPU_OK;
 }

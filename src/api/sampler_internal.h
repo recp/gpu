@@ -23,6 +23,7 @@
 struct GPUSampler {
   GPUDevice *device;
   void      *_priv;
+  uint64_t   _gpuResourceID;
 };
 
 static inline GPUApi *
