@@ -124,6 +124,7 @@ gpu_test_vrs(GPUAdapter *adapter, GPUDevice *defaultDevice) {
     return 0;
   }
   if (!supported) {
+    puts("VRS execution skipped: unsupported adapter");
     return 1;
   }
 

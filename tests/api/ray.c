@@ -76,6 +76,7 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
     return 0;
   }
   if (!GPUIsFeatureSupported(adapter, GPU_FEATURE_RAY_QUERY)) {
+    puts("ray-query execution skipped: unsupported adapter");
     return 1;
   }
 

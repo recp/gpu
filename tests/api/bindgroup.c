@@ -1542,6 +1542,9 @@ gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath) {
   int                             ok            = 0;
 
   if (!adapter || !GPUIsFeatureSupported(adapter, feature)) {
+    if (adapter) {
+      puts("bindless execution skipped: unsupported adapter");
+    }
     return adapter != NULL;
   }
 

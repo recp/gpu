@@ -830,6 +830,7 @@ gpu_test_descriptor_indexing(GPUAdapter *adapter, const char *bytecodePath) {
   int                 ok              = 0;
 
   if (!GPUIsFeatureSupported(adapter, feature)) {
+    puts("descriptor indexing execution skipped: unsupported adapter");
     return 1;
   }
   if (!bytecodePath ||
