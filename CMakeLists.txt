@@ -1937,7 +1937,7 @@ if(GPU_BUILD_BENCHMARKS)
     gpu_add_perf_smoke(
       perf-smoke-queue-submit
       gpu-queue-submit-bench
-      ${GPU_BENCHMARK_BACKEND} 4 8 1
+      ${GPU_BENCHMARK_BACKEND} 4 64 3
     )
     gpu_add_perf_smoke(
       perf-smoke-queue-upload
