@@ -24,7 +24,9 @@ dx12__validateBufferUsage(GPUBufferUsageFlags usage) {
                                     GPU_BUFFER_USAGE_STORAGE |
                                     GPU_BUFFER_USAGE_COPY_SRC |
                                     GPU_BUFFER_USAGE_COPY_DST |
-                                    GPU_BUFFER_USAGE_INDIRECT;
+                                    GPU_BUFFER_USAGE_INDIRECT |
+                                    GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT |
+                                    GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT;
 
   if (usage == 0u || (usage & ~known) != 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -50,7 +52,12 @@ dx12__bufferInitialState(GPUBufferUsageFlags usage, bool defaultHeap) {
   if (!defaultHeap) {
     return D3D12_RESOURCE_STATE_GENERIC_READ;
   }
-  GPU__UNUSED(usage);
+  if ((usage & GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT) != 0u) {
+    return D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+  }
+  if ((usage & GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT) != 0u) {
+    return D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+  }
   return D3D12_RESOURCE_STATE_COMMON;
 }
 
@@ -154,7 +161,10 @@ dx12_createBuffer(GPUDevice                 * __restrict device,
   GPUResult                usageResult;
   uint64_t                 allocationSize;
   bool                     defaultHeap;
+  bool                     rayInput;
+  bool                     rayScratch;
   bool                     storage;
+  bool                     unorderedAccess;
   HRESULT                  result;
 
   if (!device || !device->_priv || !info || !outBuffer ||
@@ -182,7 +192,12 @@ dx12_createBuffer(GPUDevice                 * __restrict device,
   deviceDX12              = device->_priv;
   native                  = (GPUBufferDX12 *)(buffer + 1);
   storage                 = (info->usage & GPU_BUFFER_USAGE_STORAGE) != 0u;
-  defaultHeap             = storage ||
+  rayInput                = (info->usage &
+                             GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT) != 0u;
+  rayScratch              = (info->usage &
+                             GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT) != 0u;
+  unorderedAccess         = storage || rayScratch;
+  defaultHeap             = unorderedAccess || rayInput ||
                             (info->usage & GPU_BUFFER_USAGE_COPY_DST) != 0u;
   heap.Type               = defaultHeap ? D3D12_HEAP_TYPE_DEFAULT
                                         : D3D12_HEAP_TYPE_UPLOAD;
@@ -195,7 +210,7 @@ dx12_createBuffer(GPUDevice                 * __restrict device,
   desc.MipLevels          = 1u;
   desc.SampleDesc.Count   = 1u;
   desc.Layout             = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-  desc.Flags              = storage
+  desc.Flags              = unorderedAccess
                               ? D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
                               : D3D12_RESOURCE_FLAG_NONE;
   initialState            = dx12__bufferInitialState(info->usage, defaultHeap);

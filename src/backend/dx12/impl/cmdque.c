@@ -1315,8 +1315,9 @@ dx12__createCommandBufferState(GPUQueue *queue) {
       (void **)&native->commandList7
     );
   }
-  if (deviceDX12->vrsTier !=
-      D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED) {
+  if (deviceDX12->rayQuery ||
+      deviceDX12->vrsTier !=
+        D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED) {
     (void)native->commandList->lpVtbl->QueryInterface(
       native->commandList,
       &IID_ID3D12GraphicsCommandList5,
@@ -1432,6 +1433,8 @@ dx12_newCommandBuffer(GPUQueue  * __restrict queue,
   memset(&native->computeEncoder, 0, sizeof(native->computeEncoder));
   memset(&native->computeState, 0, sizeof(native->computeState));
   memset(&native->copyEncoder, 0, sizeof(native->copyEncoder));
+  memset(&native->rayQueryEncoder, 0, sizeof(native->rayQueryEncoder));
+  memset(&native->rayQueryState, 0, sizeof(native->rayQueryState));
   dx12_resetCopyScratch(native);
   native->copyDebugEventActive = false;
   native->presentSwapchain     = NULL;

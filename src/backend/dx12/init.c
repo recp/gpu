@@ -49,6 +49,7 @@ backend_dx12(void) {
     dx12_initInstance(&dx12.instance);
     dx12_initSurface(&dx12.surface);
     dx12_initVRS(&dx12.vrs);
+    dx12_initRayQuery(&dx12.rayQuery);
 
     dx12.initialized = true;
   }

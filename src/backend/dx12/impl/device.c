@@ -113,6 +113,44 @@ dx12_queryMeshShader(ID3D12Device    *device,
 }
 
 static bool
+dx12_queryRayQuery(ID3D12Device    *device,
+                   D3D_SHADER_MODEL shaderModel,
+                   ID3D12Device5  **outDevice5) {
+  D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5 = {0};
+  ID3D12Device5                    *device5;
+  bool                              supported;
+
+  if (outDevice5) {
+    *outDevice5 = NULL;
+  }
+  if (!device || shaderModel < D3D_SHADER_MODEL_6_5 ||
+      FAILED(device->lpVtbl->CheckFeatureSupport(
+        device,
+        D3D12_FEATURE_D3D12_OPTIONS5,
+        &options5,
+        sizeof(options5))) ||
+      options5.RaytracingTier < D3D12_RAYTRACING_TIER_1_1) {
+    return false;
+  }
+
+  device5 = NULL;
+  supported = SUCCEEDED(device->lpVtbl->QueryInterface(
+    device,
+    &IID_ID3D12Device5,
+    (void **)&device5
+  )) && device5;
+  if (!supported) {
+    return false;
+  }
+  if (outDevice5) {
+    *outDevice5 = device5;
+  } else {
+    device5->lpVtbl->Release(device5);
+  }
+  return true;
+}
+
+static bool
 dx12_queryVRS(ID3D12Device                     *device,
               D3D12_VARIABLE_SHADING_RATE_TIER *outTier,
               uint32_t                         *outTileSize,
@@ -255,6 +293,8 @@ dx12_probeAdapter(GPUAdapterDX12 *adapter) {
                       dx12_supportsBindless(device);
   adapter->meshShader = dxcModule &&
                         dx12_queryMeshShader(device, shaderModel, NULL);
+  adapter->rayQuery = dxcModule &&
+                      dx12_queryRayQuery(device, shaderModel, NULL);
   additionalRates = false;
   if (dx12_queryVRS(device,
                     &adapter->vrsTier,
@@ -354,6 +394,10 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
                        dx12_queryMeshShader(device->d3dDevice,
                                             device->shaderModel,
                                             &device->d3dDevice2);
+  device->rayQuery = device->dxcAvailable &&
+                     dx12_queryRayQuery(device->d3dDevice,
+                                        device->shaderModel,
+                                        &device->d3dDevice5);
   additionalRates = false;
   if (dx12_queryVRS(device->d3dDevice,
                     &device->vrsTier,
@@ -679,6 +723,8 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
       return adapterDX12->bindless;
     case GPU_FEATURE_MESH_SHADER:
       return adapterDX12->meshShader;
+    case GPU_FEATURE_RAY_QUERY:
+      return adapterDX12->rayQuery;
     case GPU_FEATURE_VARIABLE_RATE_SHADING:
       return adapterDX12->vrsTier !=
              D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED;
@@ -778,6 +824,10 @@ dx12_createDevice(GPUAdapter        * __restrict adapter,
       !deviceDX12->meshShader) {
     goto err;
   }
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) != 0u &&
+      !deviceDX12->rayQuery) {
+    goto err;
+  }
   if ((enabledFeatureMask &
        (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u &&
       deviceDX12->vrsTier ==
@@ -789,6 +839,13 @@ dx12_createDevice(GPUAdapter        * __restrict adapter,
     if (deviceDX12->d3dDevice2) {
       deviceDX12->d3dDevice2->lpVtbl->Release(deviceDX12->d3dDevice2);
       deviceDX12->d3dDevice2 = NULL;
+    }
+  }
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) == 0u) {
+    deviceDX12->rayQuery = false;
+    if (deviceDX12->d3dDevice5) {
+      deviceDX12->d3dDevice5->lpVtbl->Release(deviceDX12->d3dDevice5);
+      deviceDX12->d3dDevice5 = NULL;
     }
   }
   if ((enabledFeatureMask &
@@ -850,6 +907,9 @@ err:
       if (deviceDX12->d3dDevice2) {
         deviceDX12->d3dDevice2->lpVtbl->Release(deviceDX12->d3dDevice2);
       }
+      if (deviceDX12->d3dDevice5) {
+        deviceDX12->d3dDevice5->lpVtbl->Release(deviceDX12->d3dDevice5);
+      }
       deviceDX12->d3dDevice->lpVtbl->Release(deviceDX12->d3dDevice);
     }
     if (deviceDX12->dxcModule) {
@@ -888,6 +948,9 @@ dx12_destroyDevice(GPUDevice * __restrict device) {
       dx12_destroyDescriptorHeaps(deviceDX12);
       if (deviceDX12->d3dDevice2) {
         deviceDX12->d3dDevice2->lpVtbl->Release(deviceDX12->d3dDevice2);
+      }
+      if (deviceDX12->d3dDevice5) {
+        deviceDX12->d3dDevice5->lpVtbl->Release(deviceDX12->d3dDevice5);
       }
       deviceDX12->d3dDevice->lpVtbl->Release(deviceDX12->d3dDevice);
     }

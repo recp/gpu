@@ -250,6 +250,7 @@ if(GPU_BUILD_DX12)
     src/backend/dx12/impl/pipeline.c
     src/backend/dx12/impl/pipeline_cache.c
     src/backend/dx12/impl/query.c
+    src/backend/dx12/impl/ray.c
     src/backend/dx12/impl/renderpass.c
     src/backend/dx12/impl/rce.c
     src/backend/dx12/impl/sampler.c
@@ -481,15 +482,21 @@ if(GPU_BUILD_TESTS)
   list(APPEND GPU_API_USL_FIXTURES ${GPU_API_SHADER_F16_USL_FIXTURE})
   add_custom_target(gpu-api-fixtures DEPENDS ${GPU_API_USL_FIXTURES})
 
-  if(GPU_BUILD_METAL)
+  if(GPU_BUILD_METAL OR GPU_BUILD_DX12)
+    if(GPU_BUILD_METAL)
+      set(GPU_API_RAY_QUERY_BACKEND metal)
+    else()
+      set(GPU_API_RAY_QUERY_BACKEND dx12)
+    endif()
     set(GPU_USL_FIXTURE_TARGET_CAPS ray_query)
     gpu_add_usl_fixtures(
       GPU_API_RAY_QUERY_USL_FIXTURE
-      metal
+      "${GPU_API_RAY_QUERY_BACKEND}"
       api
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/ray_query.usl"
     )
     unset(GPU_USL_FIXTURE_TARGET_CAPS)
+    unset(GPU_API_RAY_QUERY_BACKEND)
     add_custom_target(
       gpu-api-ray-query-fixture
       DEPENDS ${GPU_API_RAY_QUERY_USL_FIXTURE}

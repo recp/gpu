@@ -525,9 +525,13 @@ dx12_compileShader(GPUDeviceDX12        *device,
 
   memset(&compiled, 0, sizeof(compiled));
   if (device->dxcAvailable) {
-    dxcProfile = device->shaderF16Enabled
-                   ? dxcProfiles62[stage]
-                   : dxcProfiles60[stage];
+    if (device->rayQuery && stage == GPU_SHADER_STAGE_COMPUTE_BIT) {
+      dxcProfile = L"cs_6_5";
+    } else {
+      dxcProfile = device->shaderF16Enabled
+                     ? dxcProfiles62[stage]
+                     : dxcProfiles60[stage];
+    }
     success = dx12__compileDXC(device,
                               library->source,
                               library->sourceSize,

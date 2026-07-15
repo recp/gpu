@@ -26,6 +26,7 @@
 #include "../../api/frame_internal.h"
 #include "../../api/instance_internal.h"
 #include "../../api/library_internal.h"
+#include "../../api/ray_internal.h"
 #include "../../api/render/pipeline_internal.h"
 #include "../../api/sampler_internal.h"
 #include "../../api/surface_internal.h"
@@ -56,6 +57,7 @@ typedef struct GPUAdapterDX12 {
   bool                               descriptorIndexing;
   bool                               bindless;
   bool                               meshShader;
+  bool                               rayQuery;
   GPUFormatCapabilities              formatCaps[GPU_FORMAT_COUNT];
 } GPUAdapterDX12;
 
@@ -76,6 +78,7 @@ typedef void (WINAPI *DX12PixEndEventFn)(ID3D12GraphicsCommandList *commandList)
 typedef struct GPUDeviceDX12 {
   ID3D12Device                      *d3dDevice;
   ID3D12Device2                     *d3dDevice2;
+  ID3D12Device5                     *d3dDevice5;
   ID3D12CommandSignature            *drawSignature;
   ID3D12CommandSignature            *drawIndexedSignature;
   ID3D12CommandSignature            *dispatchSignature;
@@ -106,6 +109,7 @@ typedef struct GPUDeviceDX12 {
   bool                               descriptorIndexing;
   bool                               bindless;
   bool                               meshShader;
+  bool                               rayQuery;
   bool                               queryResultsReliable;
   bool                               stencilPlaneCopies;
 } GPUDeviceDX12;
@@ -215,6 +219,7 @@ typedef struct GPUDescriptorTableDX12 {
   uint32_t            descriptorCount;
   uint32_t            rangeCount;
   uint32_t            rangeOffset;
+  uint32_t            accelerationOffset;
   GPUShaderStageFlags visibility;
 } GPUDescriptorTableDX12;
 
@@ -237,6 +242,7 @@ typedef struct GPUBindGroupDX12 {
   GPUDeviceDX12 *device;
   uint32_t       resourceOffset;
   uint32_t       resourceCount;
+  uint32_t       accelerationOffset;
   uint32_t       samplerOffset;
   uint32_t       samplerCount;
 } GPUBindGroupDX12;
@@ -248,6 +254,24 @@ typedef struct GPUBufferDX12 {
   D3D12_RESOURCE_STATES      state;
   bool                       defaultHeap;
 } GPUBufferDX12;
+
+typedef struct GPUAccelerationStructureDX12 {
+  GPUDeviceDX12                    *device;
+  ID3D12Resource                   *resource;
+  ID3D12Resource                   *instanceBuffer;
+  D3D12_RAYTRACING_GEOMETRY_DESC  *geometries;
+  void                             *instanceMapped;
+  D3D12_GPU_VIRTUAL_ADDRESS        address;
+  D3D12_GPU_VIRTUAL_ADDRESS        instanceAddress;
+  uint64_t                         instanceCapacity;
+  uint32_t                         geometryCapacity;
+} GPUAccelerationStructureDX12;
+
+typedef struct GPUAccelerationStructureEncoderDX12 {
+  ID3D12GraphicsCommandList  *commandList;
+  ID3D12GraphicsCommandList5 *commandList5;
+  bool                        debugEventActive;
+} GPUAccelerationStructureEncoderDX12;
 
 typedef struct GPUTextureDX12 {
   ID3D12Resource         *resource;
@@ -387,6 +411,8 @@ typedef struct GPUCommandBufferDX12 {
   GPUComputePassEncoder         computeEncoder;
   GPUComputeEncoderDX12         computeState;
   GPUCopyPassEncoder            copyEncoder;
+  GPUAccelerationStructurePassEncoderEXT rayQueryEncoder;
+  GPUAccelerationStructureEncoderDX12     rayQueryState;
   bool                          frameTimeActive;
   bool                          copyDebugEventActive;
 } GPUCommandBufferDX12;
