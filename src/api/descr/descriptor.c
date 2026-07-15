@@ -3123,12 +3123,8 @@ gpuForEachBindGroupBindingWithDynamicOffsets(GPUPipelineLayout *pipelineLayout,
   GPUPipelineLayoutPriv  *pipeline;
   uint32_t                dynamicIndex;
 
-  if (!fn ||
-      !gpuValidateBindGroupDynamicOffsets(pipelineLayout,
-                                          groupIndex,
-                                          group,
-                                          dynamicOffsetCount,
-                                          pDynamicOffsets)) {
+  if (!fn || !pipelineLayout || !group ||
+      (dynamicOffsetCount > 0u && !pDynamicOffsets)) {
     return 0;
   }
 
@@ -3141,6 +3137,14 @@ gpuForEachBindGroupBindingWithDynamicOffsets(GPUPipelineLayout *pipelineLayout,
       (layout->count > 0u &&
        (!pipeline->backendBindings || !pipeline->backendBindings[groupIndex])) ||
       dynamicOffsetCount != priv->dynamicOffsetCount) {
+    return 0;
+  }
+  if (dynamicOffsetCount > 0u &&
+      !gpuValidateBindGroupDynamicOffsets(pipelineLayout,
+                                          groupIndex,
+                                          group,
+                                          dynamicOffsetCount,
+                                          pDynamicOffsets)) {
     return 0;
   }
 
