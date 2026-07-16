@@ -152,26 +152,21 @@ upload_encode(GPURenderPassEncoder *pass,
   }
   GPUBindRenderPipeline(pass, upload->pipeline);
   for (uint32_t draw = 0u; draw < drawCount; draw++) {
-    GPUTransientBufferSlice uniformSlice;
-    GPUTransientBufferSlice vertexSlice;
+    GPUTransientBufferSlice slice;
     GPUBufferBinding        vertexBinding;
     UploadUniforms          uniforms;
     uint64_t                frameOffset;
+    uint64_t                vertexOffset;
     uint32_t                dynamicOffset;
 
     if (GPUAllocateTransientBuffer(upload->bench->device,
-                                   GPU_BUFFER_USAGE_UNIFORM,
-                                   sizeof(uniforms),
+                                   GPU_BUFFER_USAGE_UNIFORM |
+                                     GPU_BUFFER_USAGE_VERTEX,
+                                   sizeof(uniforms) + sizeof(uploadVertices),
                                    UPLOAD_ALIGNMENT,
-                                   &uniformSlice) != GPU_OK ||
-        GPUAllocateTransientBuffer(upload->bench->device,
-                                   GPU_BUFFER_USAGE_VERTEX,
-                                   sizeof(uploadVertices),
-                                   16u,
-                                   &vertexSlice) != GPU_OK ||
-        uniformSlice.buffer != upload->transientBuffer ||
-        vertexSlice.buffer != upload->transientBuffer ||
-        uniformSlice.offset > UINT32_MAX) {
+                                   &slice) != GPU_OK ||
+        slice.buffer != upload->transientBuffer ||
+        slice.offset > UINT32_MAX) {
       return false;
     }
 
@@ -179,18 +174,21 @@ upload_encode(GPURenderPassEncoder *pass,
     uniforms.tint[1] = (draw & 2u) ? 1.0f : 0.3f;
     uniforms.tint[2] = (draw & 4u) ? 0.4f : 1.0f;
     uniforms.tint[3] = 1.0f;
-    memcpy(uniformSlice.cpuPtr, &uniforms, sizeof(uniforms));
-    memcpy(vertexSlice.cpuPtr, uploadVertices, sizeof(uploadVertices));
+    vertexOffset = slice.offset + sizeof(uniforms);
+    memcpy(slice.cpuPtr, &uniforms, sizeof(uniforms));
+    memcpy((uint8_t *)slice.cpuPtr + sizeof(uniforms),
+           uploadVertices,
+           sizeof(uploadVertices));
 
-    dynamicOffset        = (uint32_t)uniformSlice.offset;
-    vertexBinding.buffer = vertexSlice.buffer;
-    vertexBinding.offset = vertexSlice.offset;
+    dynamicOffset        = (uint32_t)slice.offset;
+    vertexBinding.buffer = slice.buffer;
+    vertexBinding.offset = vertexOffset;
     GPUBindVertexBuffers(pass, 0u, 1u, &vertexBinding);
     GPUBindRenderGroup(pass, 0u, upload->group, 1u, &dynamicOffset);
     GPUDraw(pass, 3u, 1u, 0u, 0u);
 
-    frameOffset = vertexSlice.offset % upload->ringBytesPerFrame;
-    upload->expectedUsedBytes = frameOffset + vertexSlice.sizeBytes;
+    frameOffset = slice.offset % upload->ringBytesPerFrame;
+    upload->expectedUsedBytes = frameOffset + slice.sizeBytes;
   }
   return true;
 }
