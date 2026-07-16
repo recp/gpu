@@ -205,6 +205,8 @@ typedef struct GPUAdapterVk {
   uint32_t                      accelerationStructureScratchAlignment;
   bool                          dynamicRendering;
   bool                          shaderFloat16;
+  bool                          storageBuffer16BitAccess;
+  bool                          vulkanMemoryModel;
   bool                          descriptorIndexing;
   bool                          bindless;
   bool                          meshShader;

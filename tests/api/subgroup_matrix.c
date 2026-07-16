@@ -58,7 +58,7 @@ gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath) {
   uint32_t                         lhsElementCount;
   uint32_t                         rhsElementCount;
   uint32_t                         outputElementCount;
-  GPUFeature                       feature;
+  GPUFeature                       features[2];
   GPUResult                        result;
   int                              supported;
   int                              profileSupported;
@@ -149,11 +149,12 @@ gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath) {
   }
 
   memset(&deviceInfo, 0, sizeof(deviceInfo));
-  feature                           = GPU_FEATURE_SUBGROUP_MATRIX;
+  features[0]                       = GPU_FEATURE_SUBGROUP_MATRIX;
+  features[1]                       = GPU_FEATURE_SHADER_F16;
   deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
-  deviceInfo.required.pFeatures    = &feature;
-  deviceInfo.required.featureCount = 1u;
+  deviceInfo.required.pFeatures    = features;
+  deviceInfo.required.featureCount = 2u;
   queue        = NULL;
   device       = NULL;
   library      = NULL;
@@ -171,6 +172,7 @@ gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath) {
   ok           = 0;
   if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUP_MATRIX) ||
+      !GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16) ||
       !GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUPS) ||
       !GPUGetProcAddr(device, "GPUGetSubgroupMatrixPropertiesEXT")) {
     fprintf(stderr, "subgroup matrix feature enablement failed\n");

@@ -538,7 +538,7 @@ vk_beginAccelerationStructurePass(GPUCommandBuffer *cmdb, const char *label) {
 }
 
 static void
-vk_rayBuildBarrier(VkCommandBuffer command) {
+vk_rayBuildBarrier(const GPUDeviceVk *deviceVk, VkCommandBuffer command) {
   VkMemoryBarrier barrier = {0};
   VkPipelineStageFlags dstStages;
 
@@ -551,8 +551,12 @@ vk_rayBuildBarrier(VkCommandBuffer command) {
               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
               VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 #ifdef VK_EXT_mesh_shader
-  dstStages |= VK_PIPELINE_STAGE_TASK_SHADER_BIT_EXT |
-               VK_PIPELINE_STAGE_MESH_SHADER_BIT_EXT;
+  if (deviceVk->taskShader) {
+    dstStages |= VK_PIPELINE_STAGE_TASK_SHADER_BIT_EXT;
+  }
+  if (deviceVk->meshShader) {
+    dstStages |= VK_PIPELINE_STAGE_MESH_SHADER_BIT_EXT;
+  }
 #endif
   vkCmdPipelineBarrier(
     command,
@@ -628,7 +632,7 @@ vk_buildAccelerationStructure(
                                         1u,
                                         &buildInfo,
                                         &ranges);
-  vk_rayBuildBarrier(encoder->command);
+  vk_rayBuildBarrier(deviceVk, encoder->command);
   return GPU_OK;
 }
 

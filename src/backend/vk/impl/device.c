@@ -419,6 +419,13 @@ vk_extensionEnabled(const char *name, uint64_t enabledFeatureMask) {
   if (strcmp(name, VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME) == 0) {
     return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16);
   }
+  if (strcmp(name, VK_KHR_16BIT_STORAGE_EXTENSION_NAME) == 0) {
+    return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16);
+  }
+  if (strcmp(name, VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME) == 0) {
+    return vk_featureEnabled(enabledFeatureMask,
+                             GPU_FEATURE_SUBGROUP_MATRIX);
+  }
   if (strcmp(name, VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME) == 0) {
     return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_ATOMIC64);
   }
@@ -534,6 +541,10 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkPhysicalDeviceFeatures2KHR              features2 = {0};
   VkPhysicalDeviceShaderFloat16Int8Features float16Features = {0};
   VkPhysicalDeviceFeatures2KHR              float16Features2 = {0};
+  VkPhysicalDevice16BitStorageFeatures      storage16Features = {0};
+  VkPhysicalDeviceFeatures2                 storage16Features2 = {0};
+  VkPhysicalDeviceVulkanMemoryModelFeatures memoryModelFeatures = {0};
+  VkPhysicalDeviceFeatures2                 memoryModelFeatures2 = {0};
   VkPhysicalDeviceShaderAtomicInt64Features atomic64Features = {0};
   VkPhysicalDeviceFeatures2                 atomic64Features2 = {0};
   VkPhysicalDeviceDescriptorIndexingFeatures descriptorFeatures = {0};
@@ -576,6 +587,10 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool                                      subgroupSizeControl;
   bool                                      float16Extension;
   bool                                      float16Core;
+  bool                                      storage16Extension;
+  bool                                      storage16Core;
+  bool                                      memoryModelExtension;
+  bool                                      memoryModelCore;
   bool                                      atomic64Extension;
   bool                                      atomic64Core;
   bool                                      descriptorCore;
@@ -615,6 +630,10 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   subgroupSizeControl       = false;
   float16Extension          = false;
   float16Core               = false;
+  storage16Extension        = false;
+  storage16Core             = false;
+  memoryModelExtension      = false;
+  memoryModelCore           = false;
   atomic64Extension         = false;
   atomic64Core              = false;
   descriptorCore            = false;
@@ -718,6 +737,15 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 
       VK__ADD_EXT_IF(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,
                      float16Extension = true);
+
+      if (!strcmp(VK_KHR_16BIT_STORAGE_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        storage16Extension = true;
+      }
+      if (!strcmp(VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        memoryModelExtension = true;
+      }
 
       if (!strcmp(VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME,
                   extensions[i].extensionName)) {
@@ -834,6 +862,12 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   float16Core = instanceVk &&
                 instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
                 adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
+  storage16Core = instanceVk &&
+                  instanceVk->apiVersion >= VK_API_VERSION_1_1 &&
+                  adapterVk->props.apiVersion >= VK_API_VERSION_1_1;
+  memoryModelCore = instanceVk &&
+                    instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
+                    adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
   atomic64Core = instanceVk &&
                  instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
                  adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
@@ -858,6 +892,33 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     float16Features2.pNext = &float16Features;
     getFeatures2(raw, &float16Features2);
     adapterVk->shaderFloat16 = float16Features.shaderFloat16;
+  }
+  if (getFeatures2 && (storage16Core || storage16Extension)) {
+    storage16Features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES;
+    storage16Features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    storage16Features2.pNext = &storage16Features;
+    getFeatures2(raw, &storage16Features2);
+    adapterVk->storageBuffer16BitAccess =
+      storage16Features.storageBuffer16BitAccess;
+    if (adapterVk->storageBuffer16BitAccess && !storage16Core &&
+        !vk_addDeviceExtension(adapterVk,
+                               VK_KHR_16BIT_STORAGE_EXTENSION_NAME)) {
+      goto fail;
+    }
+  }
+  if (getFeatures2 && (memoryModelCore || memoryModelExtension)) {
+    memoryModelFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES;
+    memoryModelFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    memoryModelFeatures2.pNext = &memoryModelFeatures;
+    getFeatures2(raw, &memoryModelFeatures2);
+    adapterVk->vulkanMemoryModel = memoryModelFeatures.vulkanMemoryModel;
+    if (adapterVk->vulkanMemoryModel && !memoryModelCore &&
+        !vk_addDeviceExtension(adapterVk,
+                               VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME)) {
+      goto fail;
+    }
   }
   if (getFeatures2 && (atomic64Core || atomic64Extension)) {
     atomic64Features.sType =
@@ -913,7 +974,8 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
           instanceVk->inst,
           "vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR"
         );
-    if (cooperativeFeatures.cooperativeMatrix && getProperties2 &&
+    if (cooperativeFeatures.cooperativeMatrix &&
+        adapterVk->vulkanMemoryModel && getProperties2 &&
         adapterVk->getCooperativeMatrixProperties) {
       cooperativeProperties.sType =
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_PROPERTIES_KHR;
@@ -1588,6 +1650,8 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   VkPhysicalDeviceFeatures coreFeatures = {0};
   VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamicFeatures = {0};
   VkPhysicalDeviceShaderFloat16Int8Features float16Features = {0};
+  VkPhysicalDevice16BitStorageFeatures storage16Features = {0};
+  VkPhysicalDeviceVulkanMemoryModelFeatures memoryModelFeatures = {0};
   VkPhysicalDeviceShaderAtomicInt64Features atomic64Features = {0};
   VkPhysicalDeviceDescriptorIndexingFeatures descriptorFeatures = {0};
   VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeatures = {0};
@@ -1769,6 +1833,13 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     float16Features.pNext         = (void *)deviceCI.pNext;
     float16Features.shaderFloat16 = VK_TRUE;
     deviceCI.pNext                = &float16Features;
+    if (adapterVk->storageBuffer16BitAccess) {
+      storage16Features.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES;
+      storage16Features.pNext = (void *)deviceCI.pNext;
+      storage16Features.storageBuffer16BitAccess = VK_TRUE;
+      deviceCI.pNext = &storage16Features;
+    }
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u) {
     atomic64Features.sType =
@@ -1846,6 +1917,11 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
 #ifdef VK_KHR_cooperative_matrix
   if ((enabledFeatureMask &
        (1ull << GPU_FEATURE_SUBGROUP_MATRIX)) != 0u) {
+    memoryModelFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES;
+    memoryModelFeatures.pNext = (void *)deviceCI.pNext;
+    memoryModelFeatures.vulkanMemoryModel = VK_TRUE;
+    deviceCI.pNext = &memoryModelFeatures;
     cooperativeFeatures.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR;
     cooperativeFeatures.pNext = (void *)deviceCI.pNext;
