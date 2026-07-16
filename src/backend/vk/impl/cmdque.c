@@ -209,6 +209,9 @@ vk__recordFrameTime(GPUCommandBufferVk *native) {
   } else {
     elapsed = timestamps[1] - timestamps[0];
   }
+  if (elapsed == 0u) {
+    elapsed = 1u;
+  }
   milliseconds = (double)elapsed * queue->timestampPeriodNs / 1000000.0;
   gpuDeviceRecordGPUFrameTime(device, milliseconds);
 }
