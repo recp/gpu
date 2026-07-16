@@ -241,6 +241,10 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
 
   if (!pass || pass->_ended || !pipeline || !pipeline->_state)
     return;
+  if (pass->_pipeline == pipeline) {
+    gpuFrameStatsRecordBindRequest(pass->_stats);
+    return;
+  }
   if (!gpu_renderPipelineMatchesPass(pass, pipeline))
     return;
   device = gpu_renderPassDevice(pass);
@@ -256,8 +260,6 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
     return;
 
   gpuFrameStatsRecordBindRequest(pass->_stats);
-  if (pass->_pipeline == pipeline)
-    return;
 
   if (pass->_pipelineLayout != pipeline->_layout) {
     memset(pass->_boundGroups, 0, sizeof(pass->_boundGroups));
