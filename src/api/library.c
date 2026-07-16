@@ -80,24 +80,19 @@ gpu_uslRuntimeInfoIsUsable(const USRuntimeInfo *runtimeInfo) {
 }
 
 static int
-gpu_featureFromUSLSemantic(uint32_t semanticId, GPUFeature *outFeature) {
-  if (!outFeature) {
-    return 0;
-  }
-
+gpu_uslSemanticEnabled(const GPUDevice *device, uint32_t semanticId) {
   switch (semanticId) {
+    case USL_SEMANTIC_FEATURE_ID_SEMANTIC_FAST_PATH:
+    case USL_SEMANTIC_FEATURE_ID_EXPLICIT_GRADIENT_SAMPLING:
+      return 1;
     case USL_SEMANTIC_FEATURE_ID_SUBGROUP:
-      *outFeature = GPU_FEATURE_SUBGROUPS;
-      return 1;
+      return GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUPS);
     case USL_SEMANTIC_FEATURE_ID_SHADER_F16:
-      *outFeature = GPU_FEATURE_SHADER_F16;
-      return 1;
+      return GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16);
     case USL_SEMANTIC_FEATURE_ID_DESCRIPTOR_INDEXING:
-      *outFeature = GPU_FEATURE_DESCRIPTOR_INDEXING;
-      return 1;
+      return GPUIsFeatureEnabled(device, GPU_FEATURE_DESCRIPTOR_INDEXING);
     case USL_SEMANTIC_FEATURE_ID_RAY_QUERY:
-      *outFeature = GPU_FEATURE_RAY_QUERY;
-      return 1;
+      return GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_QUERY);
     default:
       return 0;
   }
@@ -131,12 +126,10 @@ gpu_shaderRequirementsEnabled(const GPUDevice      *device,
 
     for (uint32_t j = 0u; j < requirement->atom_count; j++) {
       const USLCapabilityAtomDesc *atom;
-      GPUFeature                   feature;
 
       atom = &requirement->atoms[j];
       if (atom->family == USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE &&
-          gpu_featureFromUSLSemantic(atom->id, &feature) &&
-          !GPUIsFeatureEnabled(device, feature)) {
+          !gpu_uslSemanticEnabled(device, atom->id)) {
         return 0;
       }
     }
