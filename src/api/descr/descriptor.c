@@ -114,6 +114,7 @@ typedef struct GPUPipelineLayoutPriv {
 
 typedef struct GPUBindRenderContext {
   GPURenderPassEncoder *pass;
+  GPUApiRCE            *api;
 } GPUBindRenderContext;
 
 static GPUBindGroupLayoutPriv *
@@ -2870,91 +2871,133 @@ GPUDestroyBindGroup(GPUBindGroup *group) {
 static GPU_INLINE void
 gpuBindRenderBinding(void *ctx, const GPUBindGroupBindingView *binding) {
   GPUBindRenderContext *bindCtx;
+  GPUApiRCE            *api;
+  uint32_t              index;
 
   if (!ctx || !binding) {
     return;
   }
 
   bindCtx = ctx;
+  api     = bindCtx->api;
+  index   = binding->binding + binding->arrayIndex;
   if ((binding->visibility & GPU_SHADER_STAGE_VERTEX_BIT) != 0) {
-    if (binding->kind == GPUBindKindBuffer && binding->buffer) {
-      gpuSetRenderVertexBuffer(bindCtx->pass,
-                               binding->buffer,
-                               binding->offset,
-                               binding->binding + binding->arrayIndex);
-    } else if (binding->kind == GPUBindKindTexture && binding->textureView) {
-      gpuSetRenderVertexTexture(bindCtx->pass,
-                                binding->textureView,
-                                binding->binding + binding->arrayIndex);
-    } else if (binding->kind == GPUBindKindSampler && binding->sampler) {
-      gpuSetRenderVertexSampler(bindCtx->pass,
-                                binding->sampler,
-                                binding->binding + binding->arrayIndex);
+    if (binding->kind == GPUBindKindBuffer && binding->buffer &&
+        api->vertexBuffer) {
+      api->vertexBuffer(bindCtx->pass,
+                        binding->buffer,
+                        binding->offset,
+                        index);
+    } else if (binding->kind == GPUBindKindTexture && binding->textureView &&
+               api->setVertexTexture) {
+      api->setVertexTexture(bindCtx->pass, binding->textureView, index);
+    } else if (binding->kind == GPUBindKindSampler && binding->sampler &&
+               api->setVertexSampler) {
+      api->setVertexSampler(bindCtx->pass, binding->sampler, index);
     } else if (binding->kind == GPUBindKindAccelerationStructure &&
-               binding->accelerationStructure) {
-      gpuSetRenderVertexAccelerationStructure(
+               binding->accelerationStructure &&
+               api->setVertexAccelerationStructure) {
+      api->setVertexAccelerationStructure(
         bindCtx->pass,
         binding->accelerationStructure,
-        binding->binding + binding->arrayIndex);
+        index);
     }
   }
 
   if ((binding->visibility & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0) {
-    if (binding->kind == GPUBindKindBuffer && binding->buffer) {
-      gpuSetRenderFragmentBuffer(bindCtx->pass,
-                                 binding->buffer,
-                                 binding->offset,
-                                 binding->binding + binding->arrayIndex);
-    } else if (binding->kind == GPUBindKindTexture && binding->textureView) {
-      gpuSetRenderFragmentTexture(bindCtx->pass,
-                                  binding->textureView,
-                                  binding->binding + binding->arrayIndex);
-    } else if (binding->kind == GPUBindKindSampler && binding->sampler) {
-      gpuSetRenderFragmentSampler(bindCtx->pass,
-                                  binding->sampler,
-                                  binding->binding + binding->arrayIndex);
+    if (binding->kind == GPUBindKindBuffer && binding->buffer &&
+        api->fragmentBuffer) {
+      api->fragmentBuffer(bindCtx->pass,
+                          binding->buffer,
+                          binding->offset,
+                          index);
+    } else if (binding->kind == GPUBindKindTexture && binding->textureView &&
+               api->setFragmentTexture) {
+      api->setFragmentTexture(bindCtx->pass, binding->textureView, index);
+    } else if (binding->kind == GPUBindKindSampler && binding->sampler &&
+               api->setFragmentSampler) {
+      api->setFragmentSampler(bindCtx->pass, binding->sampler, index);
     } else if (binding->kind == GPUBindKindAccelerationStructure &&
-               binding->accelerationStructure) {
-      gpuSetRenderFragmentAccelerationStructure(
+               binding->accelerationStructure &&
+               api->setFragmentAccelerationStructure) {
+      api->setFragmentAccelerationStructure(
         bindCtx->pass,
         binding->accelerationStructure,
-        binding->binding + binding->arrayIndex);
+        index);
     }
   }
 
   if ((binding->visibility & GPU_SHADER_STAGE_TASK_BIT) != 0) {
-    if (binding->kind == GPUBindKindBuffer && binding->buffer) {
-      gpuSetRenderTaskBuffer(bindCtx->pass,
-                             binding->buffer,
-                             binding->offset,
-                             binding->binding + binding->arrayIndex);
-    } else if (binding->kind == GPUBindKindTexture && binding->textureView) {
-      gpuSetRenderTaskTexture(bindCtx->pass,
-                              binding->textureView,
-                              binding->binding + binding->arrayIndex);
-    } else if (binding->kind == GPUBindKindSampler && binding->sampler) {
-      gpuSetRenderTaskSampler(bindCtx->pass,
-                              binding->sampler,
-                              binding->binding + binding->arrayIndex);
+    if (binding->kind == GPUBindKindBuffer && binding->buffer &&
+        api->taskBuffer) {
+      api->taskBuffer(bindCtx->pass, binding->buffer, binding->offset, index);
+    } else if (binding->kind == GPUBindKindTexture && binding->textureView &&
+               api->setTaskTexture) {
+      api->setTaskTexture(bindCtx->pass, binding->textureView, index);
+    } else if (binding->kind == GPUBindKindSampler && binding->sampler &&
+               api->setTaskSampler) {
+      api->setTaskSampler(bindCtx->pass, binding->sampler, index);
     }
   }
 
   if ((binding->visibility & GPU_SHADER_STAGE_MESH_BIT) != 0) {
-    if (binding->kind == GPUBindKindBuffer && binding->buffer) {
-      gpuSetRenderMeshBuffer(bindCtx->pass,
-                             binding->buffer,
-                             binding->offset,
-                             binding->binding + binding->arrayIndex);
-    } else if (binding->kind == GPUBindKindTexture && binding->textureView) {
-      gpuSetRenderMeshTexture(bindCtx->pass,
-                              binding->textureView,
-                              binding->binding + binding->arrayIndex);
-    } else if (binding->kind == GPUBindKindSampler && binding->sampler) {
-      gpuSetRenderMeshSampler(bindCtx->pass,
-                              binding->sampler,
-                              binding->binding + binding->arrayIndex);
+    if (binding->kind == GPUBindKindBuffer && binding->buffer &&
+        api->meshBuffer) {
+      api->meshBuffer(bindCtx->pass, binding->buffer, binding->offset, index);
+    } else if (binding->kind == GPUBindKindTexture && binding->textureView &&
+               api->setMeshTexture) {
+      api->setMeshTexture(bindCtx->pass, binding->textureView, index);
+    } else if (binding->kind == GPUBindKindSampler && binding->sampler &&
+               api->setMeshSampler) {
+      api->setMeshSampler(bindCtx->pass, binding->sampler, index);
     }
   }
+}
+
+static GPU_INLINE int
+gpu_bindGroupEachStatic(GPUPipelineLayoutPriv  *pipeline,
+                        uint32_t                groupIndex,
+                        GPUBindGroupPriv       *priv,
+                        GPUBindGroupLayoutPriv *layout,
+                        GPUBindGroupBindingFn   fn,
+                        void                   *ctx) {
+  for (uint32_t i = 0u; i < priv->count; i++) {
+    const GPUBindGroupLayoutEntry *layoutEntry;
+    const GPUBindGroupBindingPriv *binding;
+    GPUBindGroupBindingView        view = {0};
+
+    binding     = &priv->bindings[i];
+    layoutEntry = &layout->entries[binding->layoutEntryIndex];
+    switch (binding->kind) {
+      case GPUBindKindBuffer:
+        view.buffer = binding->buffer;
+        view.offset = binding->offset;
+        view.size   = binding->size;
+        break;
+      case GPUBindKindTexture:
+        view.textureView = binding->textureView;
+        break;
+      case GPUBindKindSampler:
+        view.sampler = binding->sampler;
+        break;
+      case GPUBindKindAccelerationStructure:
+        view.accelerationStructure = binding->accelerationStructure;
+        break;
+      default:
+        return 0;
+    }
+    view.visibility       = layoutEntry->visibility;
+    view.bindingType      = layoutEntry->bindingType;
+    view.binding          = pipeline->backendBindings[groupIndex]
+                                                     [binding->layoutEntryIndex];
+    view.arrayIndex       = binding->arrayIndex;
+    view.kindIndex        = binding->kindIndex;
+    view.kind             = binding->kind;
+    view.hasDynamicOffset = false;
+    fn(ctx, &view);
+  }
+
+  return 1;
 }
 
 static GPU_INLINE int
@@ -3035,6 +3078,7 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
   }
 
   ctx.pass = pass;
+  ctx.api  = &api->rce;
   if (gpu_bindGroupEachDynamic(pass->_pipelineLayout,
                                groupIndex,
                                group,
@@ -3262,6 +3306,14 @@ gpu_bindGroupEachDynamic(GPUPipelineLayout      *pipelineLayout,
        (!pipeline->backendBindings || !pipeline->backendBindings[groupIndex])) ||
       dynamicOffsetCount != priv->dynamicOffsetCount) {
     return 0;
+  }
+  if (dynamicOffsetCount == 0u) {
+    return gpu_bindGroupEachStatic(pipeline,
+                                   groupIndex,
+                                   priv,
+                                   layout,
+                                   fn,
+                                   ctx);
   }
   dynamicIndex = 0u;
   for (uint32_t i = 0u; i < priv->count; i++) {

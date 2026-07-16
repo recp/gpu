@@ -47,10 +47,12 @@ typedef enum GPUBindKind {
 } GPUBindKind;
 
 typedef struct GPUBindGroupBindingView {
-  GPUBuffer      *buffer;
-  GPUTextureView *textureView;
-  GPUSampler     *sampler;
-  GPUAccelerationStructureEXT *accelerationStructure;
+  union {
+    GPUBuffer                       *buffer;
+    GPUTextureView                  *textureView;
+    GPUSampler                      *sampler;
+    GPUAccelerationStructureEXT     *accelerationStructure;
+  };
   uint64_t        offset;
   uint64_t        size;
   GPUShaderStageFlags visibility;
