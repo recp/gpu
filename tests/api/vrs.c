@@ -53,6 +53,189 @@ gpu_vrsCapabilitiesValid(const GPUVRSCapabilitiesEXT *caps) {
   return 1;
 }
 
+static GPUShadingRateEXT
+gpu_vrsExecutionRate(const GPUVRSCapabilitiesEXT *caps) {
+  static const GPUShadingRateEXT rates[] = {
+    GPU_SHADING_RATE_2X2_EXT,
+    GPU_SHADING_RATE_1X2_EXT,
+    GPU_SHADING_RATE_2X1_EXT,
+    GPU_SHADING_RATE_2X4_EXT,
+    GPU_SHADING_RATE_4X2_EXT,
+    GPU_SHADING_RATE_4X4_EXT,
+    GPU_SHADING_RATE_1X1_EXT
+  };
+
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(rates); i++) {
+    if ((caps->rates & (1u << rates[i])) != 0u) {
+      return rates[i];
+    }
+  }
+  return GPU_SHADING_RATE_1X1_EXT;
+}
+
+static int
+gpu_vrsExecutionSmoke(GPUDevice                    *device,
+                      const GPUVRSCapabilitiesEXT *caps) {
+  enum {
+    VRS_TARGET_WIDTH  = 64u,
+    VRS_TARGET_HEIGHT = 64u
+  };
+  GPUQueue                     *queue;
+  GPUTexture                   *target;
+  GPUTextureView               *targetView;
+  GPUTexture                   *rateTexture;
+  GPUTextureView               *rateView;
+  GPUCommandBuffer             *cmdb;
+  GPURenderPassEncoder         *renderPass;
+  GPUFence                     *fence;
+  GPUTextureCreateInfo          textureInfo = {0};
+  GPUTextureViewCreateInfo      viewInfo = {0};
+  GPUTextureWriteRegion         writeRegion = {0};
+  GPUShadingRateAttachmentEXT   shadingRate = {0};
+  GPURenderPassColorAttachment  color = {0};
+  GPURenderPassCreateInfo       passInfo = {0};
+  GPUQueueSubmitInfo            submitInfo = {0};
+  uint8_t                       rates[VRS_TARGET_WIDTH * VRS_TARGET_HEIGHT] = {0};
+  uint32_t                      rateWidth;
+  uint32_t                      rateHeight;
+  int                           ok;
+
+  if ((caps->modes & (GPU_VRS_DRAW_RATE_BIT_EXT |
+                      GPU_VRS_ATTACHMENT_BIT_EXT)) == 0u) {
+    return 1;
+  }
+
+  queue       = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  target      = NULL;
+  targetView  = NULL;
+  rateTexture = NULL;
+  rateView    = NULL;
+  cmdb        = NULL;
+  renderPass  = NULL;
+  fence       = NULL;
+  rateWidth   = 0u;
+  rateHeight  = 0u;
+  ok          = queue != NULL;
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "api-vrs-target";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = VRS_TARGET_WIDTH;
+  textureInfo.height           = VRS_TARGET_HEIGHT;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET;
+  ok = ok && GPUCreateTexture(device, &textureInfo, &target) == GPU_OK &&
+       target;
+
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.label            = "api-vrs-target-view";
+  viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  viewInfo.mipLevelCount    = 1u;
+  viewInfo.arrayLayerCount  = 1u;
+  ok = ok && GPUCreateTextureView(target, &viewInfo, &targetView) == GPU_OK &&
+       targetView;
+
+  if (ok && (caps->modes & GPU_VRS_ATTACHMENT_BIT_EXT) != 0u) {
+    shadingRate.chain.sType      =
+      GPU_STRUCTURE_TYPE_SHADING_RATE_ATTACHMENT_EXT;
+    shadingRate.chain.structSize = sizeof(shadingRate);
+    shadingRate.texelSize        = caps->minAttachmentTexelSize;
+    rateWidth = (VRS_TARGET_WIDTH - 1u) / shadingRate.texelSize.width + 1u;
+    rateHeight = (VRS_TARGET_HEIGHT - 1u) / shadingRate.texelSize.height + 1u;
+
+    textureInfo.label         = "api-vrs-rate-image";
+    textureInfo.format        = GPU_FORMAT_R8_UINT;
+    textureInfo.width         = rateWidth;
+    textureInfo.height        = rateHeight;
+    textureInfo.usage         = GPU_TEXTURE_USAGE_COPY_DST |
+                                GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT;
+    ok = GPUCreateTexture(device, &textureInfo, &rateTexture) == GPU_OK &&
+         rateTexture;
+
+    writeRegion.width        = rateWidth;
+    writeRegion.height       = rateHeight;
+    writeRegion.depth        = 1u;
+    writeRegion.layerCount   = 1u;
+    writeRegion.bytesPerRow  = rateWidth;
+    writeRegion.rowsPerImage = rateHeight;
+    ok = ok && GPUQueueWriteTexture(queue,
+                                    rateTexture,
+                                    &writeRegion,
+                                    rates,
+                                    (uint64_t)rateWidth * rateHeight) == GPU_OK;
+
+    viewInfo.label  = "api-vrs-rate-image-view";
+    viewInfo.format = GPU_FORMAT_R8_UINT;
+    ok = ok && GPUCreateTextureView(rateTexture,
+                                    &viewInfo,
+                                    &rateView) == GPU_OK &&
+         rateView;
+    shadingRate.view = rateView;
+  }
+
+  if (!ok || GPUAcquireCommandBuffer(queue, "api-vrs-execution", &cmdb) !=
+               GPU_OK ||
+      !cmdb) {
+    goto cleanup;
+  }
+
+  color.view                    = targetView;
+  color.loadOp                  = GPU_LOAD_OP_CLEAR;
+  color.storeOp                 = GPU_STORE_OP_STORE;
+  color.clearColor.float32[3]   = 1.0f;
+  passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  passInfo.chain.structSize     = sizeof(passInfo);
+  passInfo.chain.pNext          = rateView ? &shadingRate.chain : NULL;
+  passInfo.label                = "api-vrs-execution";
+  passInfo.colorAttachmentCount = 1u;
+  passInfo.pColorAttachments    = &color;
+  renderPass = GPUBeginRenderPass(cmdb, &passInfo);
+  if (!renderPass) {
+    ok = 0;
+    goto cleanup;
+  }
+
+  if ((caps->modes & GPU_VRS_DRAW_RATE_BIT_EXT) != 0u) {
+    GPUSetFragmentShadingRateEXT(
+      renderPass,
+      gpu_vrsExecutionRate(caps),
+      GPU_SHADING_RATE_COMBINER_KEEP_EXT,
+      rateView ? GPU_SHADING_RATE_COMBINER_REPLACE_EXT
+               : GPU_SHADING_RATE_COMBINER_KEEP_EXT
+    );
+  }
+  GPUEndRenderPass(renderPass);
+  renderPass = NULL;
+
+  if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
+    ok = 0;
+    goto cleanup;
+  }
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.ppCommandBuffers   = &cmdb;
+  submitInfo.fence              = fence;
+  ok = GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
+       GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+  cmdb = NULL;
+
+cleanup:
+  if (renderPass) GPUEndRenderPass(renderPass);
+  GPUDestroyFence(fence);
+  GPUDestroyTextureView(rateView);
+  GPUDestroyTexture(rateTexture);
+  GPUDestroyTextureView(targetView);
+  GPUDestroyTexture(target);
+  return ok;
+}
+
 int
 gpu_test_vrs(GPUAdapter *adapter, GPUDevice *defaultDevice) {
   GPURasterizationRateMapEXT             *map             = NULL;
@@ -144,6 +327,11 @@ gpu_test_vrs(GPUAdapter *adapter, GPUDevice *defaultDevice) {
       !GPUGetProcAddr(device,
                       "GPUCopyRasterizationRateMapParametersEXT")) {
     fprintf(stderr, "VRS feature enablement failed\n");
+    goto cleanup;
+  }
+
+  if (!gpu_vrsExecutionSmoke(device, &caps)) {
+    fprintf(stderr, "VRS execution smoke failed\n");
     goto cleanup;
   }
 
