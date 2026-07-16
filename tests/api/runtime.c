@@ -415,8 +415,9 @@ check_extension_lookup(GPUDevice *device) {
   if (GPUGetProcAddr(NULL, "GPUUnknownEXT") != NULL ||
       GPUGetProcAddr(device, NULL) != NULL ||
       GPUGetProcAddr(device, "") != NULL ||
-      GPUGetProcAddr(device, "GPUUnknownEXT") != NULL) {
-    fprintf(stderr, "extension lookup returned an unknown entry point\n");
+      GPUGetProcAddr(device, "GPUUnknownEXT") != NULL ||
+      GPUGetProcAddr(device, "GPUDrawMeshEXT") != NULL) {
+    fprintf(stderr, "extension lookup returned an unavailable entry point\n");
     return 0;
   }
 

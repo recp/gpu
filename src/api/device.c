@@ -1268,6 +1268,10 @@ GPUGetProcAddr(GPUDevice *device, const char *name) {
       strcmp(name, "GPUUpdateBindGroupEXT") == 0) {
     return (GPUProc)GPUUpdateBindGroupEXT;
   }
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_MESH_SHADER) &&
+      strcmp(name, "GPUDrawMeshEXT") == 0) {
+    return (GPUProc)GPUDrawMeshEXT;
+  }
   if (GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUP_MATRIX) &&
       strcmp(name, "GPUGetSubgroupMatrixPropertiesEXT") == 0) {
     return (GPUProc)GPUGetSubgroupMatrixPropertiesEXT;

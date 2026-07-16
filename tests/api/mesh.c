@@ -433,6 +433,13 @@ main(int argc, char **argv) {
     free(artifact);
     return 1;
   }
+  if (!GPUGetProcAddr(device, "GPUDrawMeshEXT")) {
+    fprintf(stderr, "mesh extension lookup failed\n");
+    GPUDestroyDevice(device);
+    GPUDestroyInstance(instance);
+    free(artifact);
+    return 1;
+  }
 
   ok = test_mesh_draw(device, artifact, artifactSize);
   GPUDestroyDevice(device);
