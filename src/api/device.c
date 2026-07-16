@@ -358,12 +358,6 @@ gpu_transientUploadUsageMask(void) {
          GPU_BUFFER_USAGE_INDIRECT;
 }
 
-static bool
-gpu_validTransientBufferUsage(GPUBufferUsageFlags usage) {
-  return usage != 0u &&
-         (usage & ~gpu_knownTransientBufferUsageMask()) == 0u;
-}
-
 static void*
 gpu_bufferContents(GPUBuffer *buffer) {
   GPUApi *api;
@@ -982,26 +976,29 @@ GPUAllocateTransientBuffer(GPUDevice *device,
   if (!outSlice) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  memset(outSlice, 0, sizeof(*outSlice));
 
   if (!device ||
       !device->transientConfigured ||
-      !gpu_validTransientBufferUsage(usage) ||
+      usage == 0u ||
       sizeBytes == 0u ||
-      !gpu_isPowerOfTwo(alignment)) {
+      alignment == 0u) {
+    memset(outSlice, 0, sizeof(*outSlice));
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (!device->transientBuffer ||
       (usage & ~device->transientBufferUsage) != 0u) {
+    memset(outSlice, 0, sizeof(*outSlice));
     return GPU_ERROR_UNSUPPORTED;
   }
 
   if (!gpu_alignUp(device->transientFrameOffset, alignment, &alignedOffset) ||
       gpu_u64AddOverflow(alignedOffset, sizeBytes, &endOffset)) {
+    memset(outSlice, 0, sizeof(*outSlice));
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   if (endOffset > device->transientConfig.ringBytesPerFrame) {
+    memset(outSlice, 0, sizeof(*outSlice));
     return gpu_allocateTransientChunk(device,
                                       usage,
                                       sizeBytes,
@@ -1017,7 +1014,6 @@ GPUAllocateTransientBuffer(GPUDevice *device,
   outSlice->cpuPtr = (uint8_t *)device->transientCpuPtr + outSlice->offset;
 
   device->transientFrameOffset = endOffset;
-  device->allocatorStats.ringUsedBytes = endOffset;
   if (endOffset > device->allocatorStats.ringHighWaterBytes) {
     device->allocatorStats.ringHighWaterBytes = endOffset;
   }
@@ -1061,6 +1057,7 @@ GPUGetAllocatorStats(GPUDevice *device, GPUAllocatorStats *outStats) {
   }
 
   *outStats = device->allocatorStats;
+  outStats->ringUsedBytes = device->transientFrameOffset;
   return GPU_OK;
 }
 

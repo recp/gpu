@@ -151,6 +151,7 @@ gpu_validPushConstantRange(uint32_t limit,
   return sizeBytes <= limit - offset;
 }
 
+#if GPU_BUILD_WITH_VALIDATION
 static bool
 gpu_renderPipelineMatchesPass(const GPURenderPassEncoder *pass,
                               const GPURenderPipeline *pipeline) {
@@ -178,6 +179,7 @@ gpu_renderPipelineMatchesPass(const GPURenderPassEncoder *pass,
 
   return true;
 }
+#endif
 
 static bool
 gpu_validIndirectBatch(GPUBuffer *argsBuffer,
@@ -235,28 +237,32 @@ gpu_validIndexRange(GPUBuffer *buffer,
 GPU_EXPORT
 void
 GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
-  GPUDevice             *device;
   GPUApi                *api;
   GPURenderPipelineState state;
+#if GPU_BUILD_WITH_VALIDATION
+  GPUDevice             *device;
+#endif
 
-  if (!pass || pass->_ended || !pipeline || !pipeline->_state)
+  if (!pass || pass->_ended || !pipeline || !pipeline->_state ||
+      !pipeline->_layout)
     return;
   if (pass->_pipeline == pipeline) {
     gpuFrameStatsRecordBindRequest(pass->_stats);
     return;
   }
+#if GPU_BUILD_WITH_VALIDATION
   if (!gpu_renderPipelineMatchesPass(pass, pipeline))
     return;
   device = gpu_renderPassDevice(pass);
-  if (!(api = gpuDeviceApi(device)))
-    return;
-  if (pipeline->_api != api || !pipeline->_layout ||
+  if (pipeline->_api != gpu_renderPassApi(pass) ||
       pipeline->_layout->_device != device) {
     gpu_renderValidationError(pass,
                               "GPUBindRenderPipeline skipped: device mismatch");
     return;
   }
-  if (!api->rce.setRenderPipelineState)
+#endif
+  api = gpu_renderPassApi(pass);
+  if (!api || !api->rce.setRenderPipelineState)
     return;
 
   gpuFrameStatsRecordBindRequest(pass->_stats);
@@ -358,15 +364,20 @@ GPUBindVertexBuffers(GPURenderPassEncoder   *pass,
     return;
 
   for (i = 0; i < count; i++) {
-    if (bindings[i].buffer &&
-        gpuBufferHasUsage(bindings[i].buffer, GPU_BUFFER_USAGE_VERTEX) &&
-        gpuBufferOffsetValid(bindings[i].buffer, bindings[i].offset)) {
-      gpu_bindRenderVertexBuffer(pass,
-                                 api,
-                                 bindings[i].buffer,
-                                 bindings[i].offset,
-                                 firstSlot + i);
+    if (!bindings[i].buffer) {
+      continue;
     }
+#if GPU_BUILD_WITH_VALIDATION
+    if (!gpuBufferHasUsage(bindings[i].buffer, GPU_BUFFER_USAGE_VERTEX) ||
+        !gpuBufferOffsetValid(bindings[i].buffer, bindings[i].offset)) {
+      continue;
+    }
+#endif
+    gpu_bindRenderVertexBuffer(pass,
+                               api,
+                               bindings[i].buffer,
+                               bindings[i].offset,
+                               firstSlot + i);
   }
 }
 
@@ -390,13 +401,10 @@ GPUBindIndexBuffer(GPURenderPassEncoder *pass,
   pass->_hasIndexBuffer    = true;
 }
 
-GPU_EXPORT
-void
-GPUSetViewport(GPURenderPassEncoder *pass, const GPUViewport *viewport) {
-  GPUApi *api;
-
-  if (!pass || pass->_ended || !viewport)
-    return;
+static GPU_INLINE void
+gpu_setViewport(GPURenderPassEncoder *pass,
+                GPUApi               *api,
+                const GPUViewport    *viewport) {
 #if GPU_BUILD_WITH_VALIDATION
   if (!gpu_validViewport(viewport)) {
     gpu_renderValidationError(pass, "GPUSetViewport ignored invalid viewport");
@@ -407,7 +415,7 @@ GPUSetViewport(GPURenderPassEncoder *pass, const GPUViewport *viewport) {
   if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_VIEWPORT_BIT) != 0u &&
       memcmp(&pass->_viewport, viewport, sizeof(*viewport)) == 0)
     return;
-  if (!(api = gpu_renderPassApi(pass)) || !api->rce.viewport)
+  if (!api || !api->rce.viewport)
     return;
 
   api->rce.viewport(pass, viewport);
@@ -416,18 +424,15 @@ GPUSetViewport(GPURenderPassEncoder *pass, const GPUViewport *viewport) {
   gpuFrameStatsRecordStateEmission(pass->_stats);
 }
 
-GPU_EXPORT
-void
-GPUSetScissor(GPURenderPassEncoder *pass, const GPUScissorRect *scissor) {
-  GPUApi *api;
-
-  if (!pass || pass->_ended || !scissor)
-    return;
+static GPU_INLINE void
+gpu_setScissor(GPURenderPassEncoder  *pass,
+               GPUApi                *api,
+               const GPUScissorRect  *scissor) {
   gpuFrameStatsRecordStateRequest(pass->_stats);
   if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_SCISSOR_BIT) != 0u &&
       memcmp(&pass->_scissor, scissor, sizeof(*scissor)) == 0)
     return;
-  if (!(api = gpu_renderPassApi(pass)) || !api->rce.scissor)
+  if (!api || !api->rce.scissor)
     return;
 
   api->rce.scissor(pass, scissor);
@@ -436,18 +441,15 @@ GPUSetScissor(GPURenderPassEncoder *pass, const GPUScissorRect *scissor) {
   gpuFrameStatsRecordStateEmission(pass->_stats);
 }
 
-GPU_EXPORT
-void
-GPUSetBlendConstant(GPURenderPassEncoder *pass, const float rgba[4]) {
-  GPUApi *api;
-
-  if (!pass || pass->_ended || !rgba)
-    return;
+static GPU_INLINE void
+gpu_setBlendConstant(GPURenderPassEncoder *pass,
+                     GPUApi               *api,
+                     const float           rgba[4]) {
   gpuFrameStatsRecordStateRequest(pass->_stats);
   if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT) != 0u &&
       memcmp(pass->_blendConstant, rgba, sizeof(pass->_blendConstant)) == 0)
     return;
-  if (!(api = gpu_renderPassApi(pass)) || !api->rce.blendConstant)
+  if (!api || !api->rce.blendConstant)
     return;
 
   api->rce.blendConstant(pass, rgba);
@@ -456,24 +458,53 @@ GPUSetBlendConstant(GPURenderPassEncoder *pass, const float rgba[4]) {
   gpuFrameStatsRecordStateEmission(pass->_stats);
 }
 
-GPU_EXPORT
-void
-GPUSetStencilReference(GPURenderPassEncoder *pass, uint32_t reference) {
-  GPUApi *api;
-
-  if (!pass || pass->_ended)
-    return;
+static GPU_INLINE void
+gpu_setStencilReference(GPURenderPassEncoder *pass,
+                        GPUApi               *api,
+                        uint32_t              reference) {
   gpuFrameStatsRecordStateRequest(pass->_stats);
   if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT) != 0u &&
       pass->_stencilReference == reference)
     return;
-  if (!(api = gpu_renderPassApi(pass)) || !api->rce.stencilReference)
+  if (!api || !api->rce.stencilReference)
     return;
 
   api->rce.stencilReference(pass, reference);
   pass->_stencilReference = reference;
   pass->_dynamicStateMask |= GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
   gpuFrameStatsRecordStateEmission(pass->_stats);
+}
+
+GPU_EXPORT
+void
+GPUSetViewport(GPURenderPassEncoder *pass, const GPUViewport *viewport) {
+  if (!pass || pass->_ended || !viewport)
+    return;
+  gpu_setViewport(pass, gpu_renderPassApi(pass), viewport);
+}
+
+GPU_EXPORT
+void
+GPUSetScissor(GPURenderPassEncoder *pass, const GPUScissorRect *scissor) {
+  if (!pass || pass->_ended || !scissor)
+    return;
+  gpu_setScissor(pass, gpu_renderPassApi(pass), scissor);
+}
+
+GPU_EXPORT
+void
+GPUSetBlendConstant(GPURenderPassEncoder *pass, const float rgba[4]) {
+  if (!pass || pass->_ended || !rgba)
+    return;
+  gpu_setBlendConstant(pass, gpu_renderPassApi(pass), rgba);
+}
+
+GPU_EXPORT
+void
+GPUSetStencilReference(GPURenderPassEncoder *pass, uint32_t reference) {
+  if (!pass || pass->_ended)
+    return;
+  gpu_setStencilReference(pass, gpu_renderPassApi(pass), reference);
 }
 
 GPU_HIDE
@@ -1067,15 +1098,18 @@ GPU_EXPORT
 void
 GPUApplyDynamicState(GPURenderPassEncoder *pass,
                      const GPUDynamicStateApplyInfo *info) {
+  GPUApi *api;
+
   if (!pass || pass->_ended || !gpu_validDynamicStateApplyInfo(info))
     return;
+  api = gpu_renderPassApi(pass);
 
   if (info->mask & GPU_DYNAMIC_STATE_VIEWPORT_BIT)
-    GPUSetViewport(pass, &info->viewport);
+    gpu_setViewport(pass, api, &info->viewport);
   if (info->mask & GPU_DYNAMIC_STATE_SCISSOR_BIT)
-    GPUSetScissor(pass, &info->scissor);
+    gpu_setScissor(pass, api, &info->scissor);
   if (info->mask & GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT)
-    GPUSetBlendConstant(pass, info->blendConstant);
+    gpu_setBlendConstant(pass, api, info->blendConstant);
   if (info->mask & GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT)
-    GPUSetStencilReference(pass, info->stencilReference);
+    gpu_setStencilReference(pass, api, info->stencilReference);
 }

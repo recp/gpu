@@ -955,8 +955,10 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
   GPUComputePassEncoder computePass = {0};
   uint32_t validOffset   = 256u;
   uint32_t changedOffset = 0u;
+#if GPU_BUILD_WITH_VALIDATION
   uint32_t invalidOffset = 497u;
   uint32_t extraOffsets[2] = {256u, 0u};
+#endif
   int      ok = 0;
 
   api = gpuDeviceApi(device);
@@ -1025,6 +1027,7 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
   }
 
   renderPass._pipelineLayout = pipelineLayout;
+#if GPU_BUILD_WITH_VALIDATION
   GPUBindRenderGroup(&renderPass, 0u, group, 1u, NULL);
   GPUBindRenderGroup(&renderPass, 0u, group, 0u, NULL);
   GPUBindRenderGroup(&renderPass, 0u, group, 2u, extraOffsets);
@@ -1033,6 +1036,7 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
     fprintf(stderr, "render bind accepted invalid dynamic offset\n");
     goto cleanup;
   }
+#endif
 
   GPUBindRenderGroup(&renderPass, 0u, group, 1u, &validOffset);
   if (renderPass._boundGroupLayouts[0] != layout) {
@@ -1049,6 +1053,7 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
   }
 
   computePass._pipelineLayout = pipelineLayout;
+#if GPU_BUILD_WITH_VALIDATION
   GPUBindComputeGroup(&computePass, 0u, group, 1u, NULL);
   GPUBindComputeGroup(&computePass, 0u, group, 0u, NULL);
   GPUBindComputeGroup(&computePass, 0u, group, 2u, extraOffsets);
@@ -1057,6 +1062,7 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
     fprintf(stderr, "compute bind accepted invalid dynamic offset\n");
     goto cleanup;
   }
+#endif
 
   GPUBindComputeGroup(&computePass, 0u, group, 1u, &validOffset);
   if (computePass._boundGroupLayouts[0] != layout) {

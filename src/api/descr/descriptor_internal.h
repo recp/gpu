@@ -77,10 +77,32 @@ gpuBindGroupShadowMatches(GPUBindGroup  *boundGroup,
     return false;
   }
 
-  return offsetCount == 0u ||
-         (offsets && memcmp(boundOffsets,
-                            offsets,
-                            offsetCount * sizeof(*offsets)) == 0);
+  if (offsetCount == 0u) {
+    return true;
+  }
+  if (!offsets) {
+    return false;
+  }
+  switch (offsetCount) {
+    case 1u:
+      return boundOffsets[0] == offsets[0];
+    case 2u:
+      return boundOffsets[0] == offsets[0] &&
+             boundOffsets[1] == offsets[1];
+    case 3u:
+      return boundOffsets[0] == offsets[0] &&
+             boundOffsets[1] == offsets[1] &&
+             boundOffsets[2] == offsets[2];
+    case 4u:
+      return boundOffsets[0] == offsets[0] &&
+             boundOffsets[1] == offsets[1] &&
+             boundOffsets[2] == offsets[2] &&
+             boundOffsets[3] == offsets[3];
+    default:
+      return memcmp(boundOffsets,
+                    offsets,
+                    offsetCount * sizeof(*offsets)) == 0;
+  }
 }
 
 static GPU_INLINE void
@@ -94,8 +116,30 @@ gpuStoreBindGroupShadow(uint32_t       *boundOffsetCount,
     return;
   }
 
-  if (offsetCount > 0u) {
-    memcpy(boundOffsets, offsets, offsetCount * sizeof(*offsets));
+  switch (offsetCount) {
+    case 0u:
+      break;
+    case 1u:
+      boundOffsets[0] = offsets[0];
+      break;
+    case 2u:
+      boundOffsets[0] = offsets[0];
+      boundOffsets[1] = offsets[1];
+      break;
+    case 3u:
+      boundOffsets[0] = offsets[0];
+      boundOffsets[1] = offsets[1];
+      boundOffsets[2] = offsets[2];
+      break;
+    case 4u:
+      boundOffsets[0] = offsets[0];
+      boundOffsets[1] = offsets[1];
+      boundOffsets[2] = offsets[2];
+      boundOffsets[3] = offsets[3];
+      break;
+    default:
+      memcpy(boundOffsets, offsets, offsetCount * sizeof(*offsets));
+      break;
   }
   *boundOffsetCount = offsetCount;
 }
