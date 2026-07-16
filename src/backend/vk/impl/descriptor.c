@@ -1191,14 +1191,12 @@ vk__bindGroup(VkCommandBuffer       command,
               uint32_t             *reorderedOffsets) {
   GPUPipelineLayoutVk   *pipeline;
   GPUBindGroupVk        *groupVk;
-  GPUBindGroupLayout    *layout;
   GPUBindGroupLayoutVk  *layoutVk;
   const uint32_t        *nativeOffsets;
 
   pipeline = pipelineLayout ? pipelineLayout->_native : NULL;
   groupVk  = group ? group->_native : NULL;
-  layout   = gpuBindGroupGetLayout(group);
-  layoutVk = layout ? layout->_native : NULL;
+  layoutVk = groupVk ? groupVk->layout : NULL;
   if (!command || !pipeline || !pipeline->layout || !encoderLayout ||
       !groupVk || !groupVk->set || !layoutVk ||
       groupVk->device != pipeline->device ||
