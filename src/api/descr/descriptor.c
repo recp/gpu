@@ -2978,14 +2978,9 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
   GPUApi              *api;
 
   if (!pass || pass->_ended || !group ||
-      groupIndex >= GPU_ENCODER_MAX_BIND_GROUPS ||
-      !gpu_pipelineLayoutAcceptsBindGroup(pass->_pipelineLayout,
-                                          groupIndex,
-                                          group)) {
+      groupIndex >= GPU_ENCODER_MAX_BIND_GROUPS) {
     return;
   }
-  device = gpuBindGroupGetDevice(group);
-  gpuFrameStatsRecordBindRequest(pass->_stats);
   if (gpuBindGroupShadowMatches(
         pass->_boundGroups[groupIndex],
         pass->_boundDynamicOffsetCounts[groupIndex],
@@ -2993,8 +2988,17 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
         group,
         dynamicOffsetCount,
         pDynamicOffsets)) {
+    gpuFrameStatsRecordBindRequest(pass->_stats);
     return;
   }
+  if (!gpu_pipelineLayoutAcceptsBindGroup(pass->_pipelineLayout,
+                                          groupIndex,
+                                          group)) {
+    return;
+  }
+
+  device = gpuBindGroupGetDevice(group);
+  gpuFrameStatsRecordBindRequest(pass->_stats);
 
   api = gpuDeviceApi(device);
   if (api && api->descriptor.bindRenderGroup) {
