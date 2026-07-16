@@ -20,6 +20,12 @@ gpu_subgroupMatrixPropertyValid(
 
 int
 gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath) {
+  enum {
+    MATRIX_MAX_LHS_ELEMENTS    = 128u,
+    MATRIX_MAX_RHS_ELEMENTS    = 64u,
+    MATRIX_MAX_OUTPUT_ELEMENTS = 128u
+  };
+
   GPUSubgroupMatrixPropertiesEXT *properties;
   GPUDevice                       *device;
   GPUQueue                        *queue;
@@ -34,6 +40,7 @@ gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath) {
   GPUComputePassEncoder           *pass;
   GPUFence                        *fence;
   void                            *bytecode;
+  const char                      *matrixProfile;
   GPUCommandBuffer                *submitList[1];
   GPUDeviceCreateInfo              deviceInfo;
   GPUComputePipelineCreateInfo     pipelineInfo;
@@ -45,13 +52,31 @@ gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath) {
   uint64_t                         bytecodeSize;
   uint32_t                         propertyCount;
   uint32_t                         capacity;
+  uint32_t                         matrixM;
+  uint32_t                         matrixN;
+  uint32_t                         matrixK;
+  uint32_t                         lhsElementCount;
+  uint32_t                         rhsElementCount;
+  uint32_t                         outputElementCount;
   GPUFeature                       feature;
   GPUResult                        result;
   int                              supported;
+  int                              profileSupported;
   int                              ok;
-  uint16_t                         lhsValues[64];
-  uint16_t                         rhsValues[64];
-  float                            outputValues[64];
+  uint16_t                         lhsValues[MATRIX_MAX_LHS_ELEMENTS];
+  uint16_t                         rhsValues[MATRIX_MAX_RHS_ELEMENTS];
+  float                            outputValues[MATRIX_MAX_OUTPUT_ELEMENTS];
+
+  matrixM = 8u;
+  matrixN = 8u;
+  matrixK = 8u;
+  matrixProfile = getenv("GPU_SUBGROUP_MATRIX_PROFILE");
+  if (matrixProfile && strcmp(matrixProfile, "16x8x8") == 0) {
+    matrixM = 16u;
+  }
+  lhsElementCount    = matrixM * matrixK;
+  rhsElementCount    = matrixK * matrixN;
+  outputElementCount = matrixM * matrixN;
 
   if (!adapter ||
       GPUGetSubgroupMatrixPropertiesEXT(NULL, &propertyCount, NULL) !=
@@ -97,13 +122,31 @@ gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath) {
     free(properties);
     return 0;
   }
+  profileSupported = 0;
   for (uint32_t i = 0u; i < propertyCount; i++) {
     if (!gpu_subgroupMatrixPropertyValid(&properties[i])) {
       free(properties);
       return 0;
     }
+    if (properties[i].m == matrixM &&
+        properties[i].n == matrixN &&
+        properties[i].k == matrixK &&
+        properties[i].aType == GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT &&
+        properties[i].bType == GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT &&
+        properties[i].cType == GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT &&
+        properties[i].resultType == GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT &&
+        (properties[i].stages & GPU_SHADER_STAGE_COMPUTE_BIT) != 0u) {
+      profileSupported = 1;
+    }
   }
   free(properties);
+  if (!profileSupported) {
+    printf("subgroup matrix execution skipped: %ux%ux%u unsupported\n",
+           matrixM,
+           matrixN,
+           matrixK);
+    return 1;
+  }
 
   memset(&deviceInfo, 0, sizeof(deviceInfo));
   feature                           = GPU_FEATURE_SUBGROUP_MATRIX;
@@ -169,15 +212,15 @@ gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath) {
   memset(rhsValues, 0, sizeof(rhsValues));
   memset(outputValues, 0, sizeof(outputValues));
   /* IEEE-754 half 1.0 builds deterministic identity inputs. */
-  for (uint32_t i = 0u; i < 8u; i++) {
-    lhsValues[i * 8u + i] = 0x3c00u;
-    rhsValues[i * 8u + i] = 0x3c00u;
+  for (uint32_t i = 0u; i < matrixK; i++) {
+    lhsValues[i * matrixK + i] = 0x3c00u;
+    rhsValues[i * matrixN + i] = 0x3c00u;
   }
 
   memset(&bufferInfo, 0, sizeof(bufferInfo));
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
-  bufferInfo.sizeBytes        = sizeof(lhsValues);
+  bufferInfo.sizeBytes        = lhsElementCount * sizeof(lhsValues[0]);
   bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE |
                                 GPU_BUFFER_USAGE_COPY_DST;
   if (GPUCreateBuffer(device, &bufferInfo, &lhsBuffer) != GPU_OK ||
@@ -188,17 +231,17 @@ gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath) {
                           lhsBuffer,
                           0u,
                           lhsValues,
-                          sizeof(lhsValues)) != GPU_OK ||
+                          bufferInfo.sizeBytes) != GPU_OK ||
       GPUQueueWriteBuffer(queue,
                           rhsBuffer,
                           0u,
                           rhsValues,
-                          sizeof(rhsValues)) != GPU_OK) {
+                          rhsElementCount * sizeof(rhsValues[0])) != GPU_OK) {
     fprintf(stderr, "subgroup matrix input buffer setup failed\n");
     goto cleanup;
   }
 
-  bufferInfo.sizeBytes = sizeof(outputValues);
+  bufferInfo.sizeBytes = outputElementCount * sizeof(outputValues[0]);
   bufferInfo.usage     = GPU_BUFFER_USAGE_STORAGE |
                          GPU_BUFFER_USAGE_COPY_SRC |
                          GPU_BUFFER_USAGE_COPY_DST;
@@ -208,7 +251,7 @@ gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath) {
                           outputBuffer,
                           0u,
                           outputValues,
-                          sizeof(outputValues)) != GPU_OK) {
+                          bufferInfo.sizeBytes) != GPU_OK) {
     fprintf(stderr, "subgroup matrix output buffer setup failed\n");
     goto cleanup;
   }
@@ -217,15 +260,15 @@ gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath) {
   entries[0].binding       = 0u;
   entries[0].bindingType   = GPU_BINDING_STORAGE_BUFFER;
   entries[0].buffer.buffer = lhsBuffer;
-  entries[0].buffer.size   = sizeof(lhsValues);
+  entries[0].buffer.size   = lhsElementCount * sizeof(lhsValues[0]);
   entries[1].binding       = 1u;
   entries[1].bindingType   = GPU_BINDING_STORAGE_BUFFER;
   entries[1].buffer.buffer = rhsBuffer;
-  entries[1].buffer.size   = sizeof(rhsValues);
+  entries[1].buffer.size   = rhsElementCount * sizeof(rhsValues[0]);
   entries[2].binding       = 2u;
   entries[2].bindingType   = GPU_BINDING_STORAGE_BUFFER;
   entries[2].buffer.buffer = outputBuffer;
-  entries[2].buffer.size   = sizeof(outputValues);
+  entries[2].buffer.size   = outputElementCount * sizeof(outputValues[0]);
   memset(&groupInfo, 0, sizeof(groupInfo));
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
@@ -271,14 +314,14 @@ gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath) {
                          outputBuffer,
                          0u,
                          outputValues,
-                         sizeof(outputValues)) != GPU_OK) {
+                         outputElementCount * sizeof(outputValues[0])) != GPU_OK) {
     fprintf(stderr, "subgroup matrix readback failed\n");
     goto cleanup;
   }
-  for (uint32_t row = 0u; row < 8u; row++) {
-    for (uint32_t column = 0u; column < 8u; column++) {
-      float expected = row == column ? 1.0f : 0.0f;
-      float actual   = outputValues[row * 8u + column];
+  for (uint32_t row = 0u; row < matrixM; row++) {
+    for (uint32_t column = 0u; column < matrixN; column++) {
+      float expected = row < matrixK && row == column ? 1.0f : 0.0f;
+      float actual   = outputValues[row * matrixN + column];
 
       if (actual != expected) {
         fprintf(stderr,

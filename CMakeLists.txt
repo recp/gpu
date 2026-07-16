@@ -494,12 +494,20 @@ if(GPU_BUILD_TESTS)
   unset(GPU_USL_FIXTURE_TARGET_CAPS)
   list(APPEND GPU_API_USL_FIXTURES ${GPU_API_SUBGROUP_USL_FIXTURE})
   if(NOT GPU_API_DEFAULT_BACKEND STREQUAL "dx12")
+    set(GPU_API_SUBGROUP_MATRIX_USL_SOURCE
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/subgroup_matrix.usl")
+    set(GPU_API_SUBGROUP_MATRIX_PROFILE "8x8x8")
+    if(GPU_API_DEFAULT_BACKEND STREQUAL "vulkan")
+      set(GPU_API_SUBGROUP_MATRIX_USL_SOURCE
+          "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/subgroup_matrix_vulkan.usl")
+      set(GPU_API_SUBGROUP_MATRIX_PROFILE "16x8x8")
+    endif()
     set(GPU_USL_FIXTURE_TARGET_CAPS subgroup_matrix)
     gpu_add_usl_fixtures(
       GPU_API_SUBGROUP_MATRIX_USL_FIXTURE
       "${GPU_API_DEFAULT_BACKEND}"
       api-subgroup-matrix
-      "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/subgroup_matrix.usl"
+      "${GPU_API_SUBGROUP_MATRIX_USL_SOURCE}"
     )
     unset(GPU_USL_FIXTURE_TARGET_CAPS)
     add_custom_target(
@@ -973,6 +981,7 @@ if(GPU_BUILD_TESTS)
   if(GPU_API_SUBGROUP_MATRIX_USL_FIXTURE)
     set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
       "GPU_SUBGROUP_MATRIX_USL_PATH=${GPU_API_SUBGROUP_MATRIX_USL_FIXTURE}"
+      "GPU_SUBGROUP_MATRIX_PROFILE=${GPU_API_SUBGROUP_MATRIX_PROFILE}"
     )
   endif()
   set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
@@ -1028,7 +1037,7 @@ if(GPU_BUILD_TESTS)
         GPU_API_VULKAN_SUBGROUP_MATRIX_USL_FIXTURE
         vulkan
         api-vulkan-subgroup-matrix
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/subgroup_matrix.usl"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/subgroup_matrix_vulkan.usl"
       )
       unset(GPU_USL_FIXTURE_TARGET_CAPS)
       add_custom_target(
@@ -1040,6 +1049,7 @@ if(GPU_BUILD_TESTS)
     endif()
     set_property(TEST api-validation-vulkan APPEND PROPERTY ENVIRONMENT
       "GPU_SUBGROUP_MATRIX_USL_PATH=${GPU_API_VULKAN_SUBGROUP_MATRIX_USL_FIXTURE}"
+      "GPU_SUBGROUP_MATRIX_PROFILE=16x8x8"
       "GPU_ATOMIC64_USL_PATH=${GPU_API_ATOMIC64_USL_FIXTURE}"
     )
 

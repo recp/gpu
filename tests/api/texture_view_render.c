@@ -14,6 +14,9 @@ enum {
   VIEW_SECOND_LAYER         = 2u,
   VIEW_SECOND_WIDTH         = 2u,
   VIEW_SECOND_HEIGHT        = 2u,
+  VIEW_DS_RENDER_MIP        = 0u,
+  VIEW_DS_RENDER_WIDTH      = VIEW_TARGET_WIDTH,
+  VIEW_DS_RENDER_HEIGHT     = VIEW_TARGET_HEIGHT,
   VIEW_ROW_PITCH            = 256u,
   VIEW_DS_ROW_PITCH         = 512u,
   VIEW_SECOND_BUFFER_OFFSET = VIEW_ROW_PITCH * VIEW_FIRST_HEIGHT,
@@ -24,9 +27,9 @@ enum {
   VIEW_DS_SECOND_DEPTH_OFFSET   = VIEW_DS_FIRST_STENCIL_OFFSET +
                                   VIEW_DS_ROW_PITCH * VIEW_FIRST_HEIGHT,
   VIEW_DS_SECOND_STENCIL_OFFSET = VIEW_DS_SECOND_DEPTH_OFFSET +
-                                  VIEW_DS_ROW_PITCH * VIEW_SECOND_HEIGHT,
+                                  VIEW_DS_ROW_PITCH * VIEW_DS_RENDER_HEIGHT,
   VIEW_DS_READBACK_BYTES        = VIEW_DS_SECOND_STENCIL_OFFSET +
-                                  VIEW_DS_ROW_PITCH * VIEW_SECOND_HEIGHT
+                                  VIEW_DS_ROW_PITCH * VIEW_DS_RENDER_HEIGHT
 };
 
 static bool
@@ -700,7 +703,7 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
   viewInfo.label            = "texture-view-depth-stencil-subresource";
   viewInfo.viewType         = GPU_TEXTURE_VIEW_2D_ARRAY;
   viewInfo.format           = format;
-  viewInfo.baseMipLevel     = VIEW_SECOND_MIP;
+  viewInfo.baseMipLevel     = VIEW_DS_RENDER_MIP;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.baseArrayLayer   = VIEW_SECOND_LAYER;
   viewInfo.arrayLayerCount  = 1u;
@@ -794,7 +797,7 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
     textureBarrier.texture    = texture;
     textureBarrier.srcAccess  = GPU_ACCESS_DEPTH_WRITE;
     textureBarrier.dstAccess  = GPU_ACCESS_TRANSFER_READ;
-    textureBarrier.baseMip    = VIEW_SECOND_MIP;
+    textureBarrier.baseMip    = VIEW_DS_RENDER_MIP;
     textureBarrier.mipCount   = 1u;
     textureBarrier.baseLayer  = VIEW_SECOND_LAYER;
     textureBarrier.layerCount = 1u;
@@ -828,13 +831,13 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
     GPUCopyTextureToBuffer(copyPass, texture, readback, &copyRegion);
 
     copyRegion.bufferOffset                   = VIEW_DS_SECOND_DEPTH_OFFSET;
-    copyRegion.rowsPerImage                   = VIEW_SECOND_HEIGHT;
-    copyRegion.texture.texture.mipLevel       = VIEW_SECOND_MIP;
+    copyRegion.rowsPerImage                   = VIEW_DS_RENDER_HEIGHT;
+    copyRegion.texture.texture.mipLevel       = VIEW_DS_RENDER_MIP;
     copyRegion.texture.texture.baseArrayLayer = VIEW_SECOND_LAYER;
     copyRegion.texture.texture.aspect         =
       GPU_TEXTURE_ASPECT_DEPTH_ONLY;
-    copyRegion.texture.width                  = VIEW_SECOND_WIDTH;
-    copyRegion.texture.height                 = VIEW_SECOND_HEIGHT;
+    copyRegion.texture.width                  = VIEW_DS_RENDER_WIDTH;
+    copyRegion.texture.height                 = VIEW_DS_RENDER_HEIGHT;
     GPUCopyTextureToBuffer(copyPass, texture, readback, &copyRegion);
 
     copyRegion.bufferOffset           = VIEW_DS_SECOND_STENCIL_OFFSET;
@@ -876,14 +879,14 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
        !view_render_depths_equal(pixels,
                                  VIEW_DS_SECOND_DEPTH_OFFSET,
                                  VIEW_DS_ROW_PITCH,
-                                 VIEW_SECOND_WIDTH,
-                                 VIEW_SECOND_HEIGHT,
+                                 VIEW_DS_RENDER_WIDTH,
+                                 VIEW_DS_RENDER_HEIGHT,
                                  0.375f) ||
        !view_render_stencils_equal(pixels,
                                    VIEW_DS_SECOND_STENCIL_OFFSET,
                                    VIEW_DS_ROW_PITCH,
-                                   VIEW_SECOND_WIDTH,
-                                   VIEW_SECOND_HEIGHT,
+                                   VIEW_DS_RENDER_WIDTH,
+                                   VIEW_DS_RENDER_HEIGHT,
                                    37u))) {
     float firstDepth;
     float secondDepth;

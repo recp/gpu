@@ -79,6 +79,10 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
     puts("ray-query execution skipped: unsupported adapter");
     return 1;
   }
+  if (!bytecodePath) {
+    puts("ray-query execution skipped: fixture unavailable");
+    return 1;
+  }
 
   feature         = GPU_FEATURE_RAY_QUERY;
   device          = NULL;
