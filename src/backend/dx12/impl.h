@@ -60,11 +60,21 @@ GPU_HIDE void dx12_initInstance(GPUApiInstance *apiInstance);
 GPU_HIDE void dx12_initSurface(GPUApiSurface *apiDevice);
 GPU_HIDE void dx12_initVRS(GPUApiVRS *api);
 GPU_HIDE void dx12_initRayQuery(GPUApiRayQuery *api);
+GPU_HIDE void dx12_initRayTracing(GPUApiRayTracing *api);
+GPU_HIDE bool dx12_bindRayTracingGroup(GPURayTracingPassEncoderEXT *pass,
+                                       GPUPipelineLayout           *pipelineLayout,
+                                       uint32_t                     groupIndex,
+                                       GPUBindGroup                *group,
+                                       uint32_t                     dynamicOffsetCount,
+                                       const uint32_t              *dynamicOffsets);
 GPU_HIDE bool dx12_compileShader(GPUDeviceDX12        *device,
                                  GPUShaderLibraryDX12 *library,
                                  const char           *entry,
                                  GPUShaderStageFlags   stage,
                                  DX12ShaderCode       *outCode);
+GPU_HIDE bool dx12_compileRayLibrary(GPUDeviceDX12        *device,
+                                     GPUShaderLibraryDX12 *library,
+                                     DX12ShaderCode       *outCode);
 GPU_HIDE void dx12_freeShaderCode(DX12ShaderCode *code);
 
 #endif /* dx12_apis_h */

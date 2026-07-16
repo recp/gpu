@@ -1860,16 +1860,17 @@ dx12_bindRenderGroup(GPURenderCommandEncoder *pass,
   return true;
 }
 
-GPU_HIDE
-bool
-dx12_bindComputeGroup(GPUComputePassEncoder *pass,
-                      GPUPipelineLayout     *pipelineLayout,
-                      uint32_t               groupIndex,
-                      GPUBindGroup          *group,
-                      uint32_t               dynamicOffsetCount,
-                      const uint32_t        *dynamicOffsets) {
+static bool
+dx12__bindComputeLikeGroup(ID3D12GraphicsCommandList *commandList,
+                           ID3D12RootSignature       *rootSignature,
+                           ID3D12DescriptorHeap     **resourceHeap,
+                           ID3D12DescriptorHeap     **samplerHeap,
+                           GPUPipelineLayout         *pipelineLayout,
+                           uint32_t                   groupIndex,
+                           GPUBindGroup              *group,
+                           uint32_t                   dynamicOffsetCount,
+                           const uint32_t            *dynamicOffsets) {
   DX12BindContext         context;
-  GPUComputeEncoderDX12  *encoder;
   GPUPipelineLayoutDX12  *layout;
   GPUBindGroupDX12       *nativeGroup;
   GPUDeviceDX12          *device;
@@ -1877,14 +1878,13 @@ dx12_bindComputeGroup(GPUComputePassEncoder *pass,
   uint32_t                expectedCount;
   bool                    valid;
 
-  encoder = pass ? pass->_priv : NULL;
   layout  = pipelineLayout ? pipelineLayout->_native : NULL;
   nativeGroup = group ? group->_native : NULL;
   device = pipelineLayout && pipelineLayout->_device
              ? pipelineLayout->_device->_priv
              : NULL;
-  if (!encoder || !encoder->commandList || !layout || !layout->rootSignature ||
-      pass->_pipelineLayout != pipelineLayout || !encoder->rootSignature ||
+  if (!commandList || !rootSignature || !resourceHeap || !samplerHeap ||
+      !layout || !layout->rootSignature ||
       !nativeGroup || nativeGroup->device != device ||
       groupIndex >= layout->groupCount) {
     return false;
@@ -1898,9 +1898,9 @@ dx12_bindComputeGroup(GPUComputePassEncoder *pass,
         layout->resourceTables[groupIndex].accelerationOffset ||
       nativeGroup->samplerCount !=
         layout->samplerTables[groupIndex].descriptorCount ||
-      !dx12__bindDescriptorHeaps(encoder->commandList,
-                                &encoder->resourceHeap,
-                                &encoder->samplerHeap,
+      !dx12__bindDescriptorHeaps(commandList,
+                                resourceHeap,
+                                samplerHeap,
                                 device,
                                 nativeGroup->resourceCount > 0u,
                                 nativeGroup->samplerCount > 0u)) {
@@ -1908,7 +1908,7 @@ dx12_bindComputeGroup(GPUComputePassEncoder *pass,
   }
 
   memset(&context, 0, sizeof(context));
-  context.commandList = encoder->commandList;
+  context.commandList = commandList;
   context.layout      = layout;
   context.device      = pipelineLayout->_device;
   context.groupIndex  = groupIndex;
@@ -1927,22 +1927,68 @@ dx12_bindComputeGroup(GPUComputePassEncoder *pass,
   }
 
   if (nativeGroup->resourceCount > 0u) {
-    encoder->commandList->lpVtbl->SetComputeRootDescriptorTable(
-      encoder->commandList,
+    commandList->lpVtbl->SetComputeRootDescriptorTable(
+      commandList,
       layout->resourceTables[groupIndex].rootParameter,
       dx12__gpuDescriptor(&device->resourceDescriptors,
                           nativeGroup->resourceOffset)
     );
   }
   if (nativeGroup->samplerCount > 0u) {
-    encoder->commandList->lpVtbl->SetComputeRootDescriptorTable(
-      encoder->commandList,
+    commandList->lpVtbl->SetComputeRootDescriptorTable(
+      commandList,
       layout->samplerTables[groupIndex].rootParameter,
       dx12__gpuDescriptor(&device->samplerDescriptors,
                           nativeGroup->samplerOffset)
     );
   }
   return true;
+}
+
+GPU_HIDE
+bool
+dx12_bindComputeGroup(GPUComputePassEncoder *pass,
+                      GPUPipelineLayout     *pipelineLayout,
+                      uint32_t               groupIndex,
+                      GPUBindGroup          *group,
+                      uint32_t               dynamicOffsetCount,
+                      const uint32_t        *dynamicOffsets) {
+  GPUComputeEncoderDX12 *encoder;
+
+  encoder = pass ? pass->_priv : NULL;
+  return encoder && pass->_pipelineLayout == pipelineLayout &&
+         dx12__bindComputeLikeGroup(encoder->commandList,
+                                    encoder->rootSignature,
+                                    &encoder->resourceHeap,
+                                    &encoder->samplerHeap,
+                                    pipelineLayout,
+                                    groupIndex,
+                                    group,
+                                    dynamicOffsetCount,
+                                    dynamicOffsets);
+}
+
+GPU_HIDE
+bool
+dx12_bindRayTracingGroup(GPURayTracingPassEncoderEXT *pass,
+                         GPUPipelineLayout           *pipelineLayout,
+                         uint32_t                     groupIndex,
+                         GPUBindGroup                *group,
+                         uint32_t                     dynamicOffsetCount,
+                         const uint32_t              *dynamicOffsets) {
+  GPURayTracingEncoderDX12 *encoder;
+
+  encoder = pass ? pass->_priv : NULL;
+  return encoder && pass->pipelineLayout == pipelineLayout &&
+         dx12__bindComputeLikeGroup(encoder->commandList,
+                                    encoder->rootSignature,
+                                    &encoder->resourceHeap,
+                                    &encoder->samplerHeap,
+                                    pipelineLayout,
+                                    groupIndex,
+                                    group,
+                                    dynamicOffsetCount,
+                                    dynamicOffsets);
 }
 
 GPU_HIDE

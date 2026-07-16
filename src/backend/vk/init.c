@@ -47,6 +47,7 @@ backend_vk(void) {
     vk_initPipelineCache(&vk.pipelineCache);
     vk_initVRS(&vk.vrs);
     vk_initRayQuery(&vk.rayQuery);
+    vk_initRayTracing(&vk.rayTracing);
 
     vk.initialized = true;
   }

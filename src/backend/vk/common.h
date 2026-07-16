@@ -203,6 +203,10 @@ typedef struct GPUAdapterVk {
   uint32_t                      nDisplayProperties;
   uint32_t                      maxVRSTexelAspectRatio;
   uint32_t                      accelerationStructureScratchAlignment;
+  uint32_t                      rayTracingShaderGroupHandleSize;
+  uint32_t                      rayTracingShaderGroupHandleAlignment;
+  uint32_t                      rayTracingShaderGroupBaseAlignment;
+  uint32_t                      rayTracingMaxRecursionDepth;
   bool                          dynamicRendering;
   bool                          shaderFloat16;
   bool                          storageBuffer16BitAccess;
@@ -216,6 +220,7 @@ typedef struct GPUAdapterVk {
   bool                          timelineSemaphore;
   bool                          synchronization2;
   bool                          rayQuery;
+  bool                          rayTracingPipeline;
   bool                          subgroupMatrix;
   bool                          atomic64;
   bool                          negativeViewport;
@@ -234,6 +239,12 @@ typedef struct GPUDeviceVk {
   PFN_vkGetAccelerationStructureDeviceAddressKHR getAccelerationStructureAddress;
   PFN_vkGetBufferDeviceAddress getBufferDeviceAddress;
 #endif
+#if defined(VK_KHR_acceleration_structure) && \
+    defined(VK_KHR_ray_tracing_pipeline)
+  PFN_vkCreateRayTracingPipelinesKHR createRayTracingPipelines;
+  PFN_vkGetRayTracingShaderGroupHandlesKHR getRayTracingShaderGroupHandles;
+  PFN_vkCmdTraceRaysKHR traceRays;
+#endif
 #ifdef VK_EXT_mesh_shader
   PFN_vkCmdDrawMeshTasksEXT    drawMeshTasks;
 #endif
@@ -251,6 +262,10 @@ typedef struct GPUDeviceVk {
   uint32_t                   maxDrawIndirectCount;
   uint32_t                   maxVRSTexelAspectRatio;
   uint32_t                   accelerationStructureScratchAlignment;
+  uint32_t                   rayTracingShaderGroupHandleSize;
+  uint32_t                   rayTracingShaderGroupHandleAlignment;
+  uint32_t                   rayTracingShaderGroupBaseAlignment;
+  uint32_t                   rayTracingMaxRecursionDepth;
   VkBool32                   multiDrawIndirect;
   VkBool32                   independentBlend;
   bool                       dynamicRendering;
@@ -261,6 +276,7 @@ typedef struct GPUDeviceVk {
   bool                       timelineSemaphore;
   bool                       synchronization2;
   bool                       rayQuery;
+  bool                       rayTracingPipeline;
 } GPUDeviceVk;
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
@@ -470,6 +486,26 @@ typedef struct GPUComputeEncoderVk {
   bool             debugLabelActive;
 } GPUComputeEncoderVk;
 
+#if defined(VK_KHR_acceleration_structure) && \
+    defined(VK_KHR_ray_tracing_pipeline)
+typedef struct GPUShaderTableVk {
+  VkDevice                        device;
+  VkBuffer                        buffer;
+  VkDeviceMemory                  memory;
+  VkStridedDeviceAddressRegionKHR rayGeneration;
+  VkStridedDeviceAddressRegionKHR miss;
+  VkStridedDeviceAddressRegionKHR hit;
+  VkStridedDeviceAddressRegionKHR callable;
+} GPUShaderTableVk;
+
+typedef struct GPURayTracingEncoderVk {
+  VkCommandBuffer  command;
+  VkPipelineLayout pipelineLayout;
+  uint32_t         dynamicOffsets[GPU_VK_MAX_DYNAMIC_OFFSETS];
+  bool             debugLabelActive;
+} GPURayTracingEncoderVk;
+#endif
+
 struct GPUCommandBufferVk {
   GPUQueueVk              *owner;
   GPUCommandBufferVk      *next;
@@ -490,6 +526,11 @@ struct GPUCommandBufferVk {
   GPUComputePassEncoder     computeEncoder;
   GPUComputeEncoderVk       computeState;
   GPUCopyPassEncoder        copyEncoder;
+#if defined(VK_KHR_acceleration_structure) && \
+    defined(VK_KHR_ray_tracing_pipeline)
+  GPURayTracingPassEncoderEXT rayTracingEncoder;
+  GPURayTracingEncoderVk      rayTracingState;
+#endif
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
   GPUAccelerationStructurePassEncoderEXT rayQueryEncoder;
   GPUAccelerationStructureEncoderVk      rayQueryState;
@@ -598,6 +639,18 @@ typedef struct GPUShaderLayoutVk {
   uint32_t               samplerGroup;
   bool                   ownsLayout;
 } GPUShaderLayoutVk;
+
+#if defined(VK_KHR_acceleration_structure) && \
+    defined(VK_KHR_ray_tracing_pipeline)
+typedef struct GPURayTracingPipelineVk {
+  GPUShaderLayoutVk shaderLayout;
+  VkDevice          device;
+  VkPipeline        pipeline;
+  uint32_t          groupHandleSize;
+  uint32_t          groupHandleAlignment;
+  uint32_t          groupBaseAlignment;
+} GPURayTracingPipelineVk;
+#endif
 
 GPU_HIDE
 void

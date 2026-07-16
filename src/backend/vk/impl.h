@@ -37,6 +37,16 @@ GPU_HIDE void vk_initCompute(GPUApiCompute *api);
 GPU_HIDE void vk_initPipelineCache(GPUApiPipelineCache *api);
 GPU_HIDE void vk_initVRS(GPUApiVRS *api);
 GPU_HIDE void vk_initRayQuery(GPUApiRayQuery *api);
+GPU_HIDE void vk_initRayTracing(GPUApiRayTracing *api);
+
+GPU_HIDE
+bool
+vk_bindRayTracingGroup(GPURayTracingPassEncoderEXT *pass,
+                       GPUPipelineLayout           *pipelineLayout,
+                       uint32_t                     groupIndex,
+                       GPUBindGroup                *group,
+                       uint32_t                     dynamicOffsetCount,
+                       const uint32_t              *dynamicOffsets);
 
 GPU_HIDE
 GPUQueue*

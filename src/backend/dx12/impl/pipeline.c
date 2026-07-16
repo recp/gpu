@@ -352,10 +352,13 @@ dx12__compileDXC(GPUDeviceDX12   *device,
   uint32_t            argCount;
   HRESULT             compileStatus;
   HRESULT             rc;
+  bool                hasEntry;
 
+  hasEntry = entry && entry[0] != '\0';
   if (!device || !device->dxcAvailable || !device->dxcModule ||
       !source || sourceSize == 0u || sourceSize > (uint64_t)SIZE_MAX ||
-      !profile || !outCode || !dx12__wideEntry(entry, entryWide)) {
+      !profile || !outCode ||
+      (hasEntry && !dx12__wideEntry(entry, entryWide))) {
     return false;
   }
 
@@ -379,15 +382,17 @@ dx12__compileDXC(GPUDeviceDX12   *device,
   sourceBuffer.ptr      = source;
   sourceBuffer.size     = (SIZE_T)sourceSize;
   sourceBuffer.encoding = CP_UTF8;
-  args[0]               = L"-E";
-  args[1]               = entryWide;
-  args[2]               = L"-T";
-  args[3]               = profile;
-  args[4]               = L"-O3";
-  args[5]               = L"-Ges";
-  args[6]               = L"-Qstrip_debug";
-  args[7]               = L"-Qstrip_reflect";
-  argCount              = 8u;
+  argCount              = 0u;
+  if (hasEntry) {
+    args[argCount++] = L"-E";
+    args[argCount++] = entryWide;
+  }
+  args[argCount++] = L"-T";
+  args[argCount++] = profile;
+  args[argCount++] = L"-O3";
+  args[argCount++] = L"-Ges";
+  args[argCount++] = L"-Qstrip_debug";
+  args[argCount++] = L"-Qstrip_reflect";
   if (enable16BitTypes) {
     args[argCount++] = L"-enable-16bit-types";
   }
@@ -559,6 +564,45 @@ dx12_compileShader(GPUDeviceDX12        *device,
   return success && dx12__cacheShader(library,
                                       entry,
                                       stage,
+                                      &compiled,
+                                      outCode);
+}
+
+GPU_HIDE
+bool
+dx12_compileRayLibrary(GPUDeviceDX12        *device,
+                       GPUShaderLibraryDX12 *library,
+                       DX12ShaderCode       *outCode) {
+  static const char cacheEntry[] = "$ray-library";
+  DX12ShaderCode    compiled;
+  const wchar_t    *profile;
+  bool              success;
+
+  if (!device || !device->rayTracingPipeline || !device->dxcAvailable ||
+      !library || !outCode) {
+    return false;
+  }
+  memset(outCode, 0, sizeof(*outCode));
+  if (dx12__getCachedShader(library,
+                            cacheEntry,
+                            GPU_SHADER_STAGE_RAY_GENERATION_BIT,
+                            outCode)) {
+    return true;
+  }
+
+  profile = device->shaderModel >= D3D_SHADER_MODEL_6_6 ? L"lib_6_6"
+                                                         : L"lib_6_5";
+  memset(&compiled, 0, sizeof(compiled));
+  success = dx12__compileDXC(device,
+                            library->source,
+                            library->sourceSize,
+                            NULL,
+                            profile,
+                            device->shaderF16Enabled,
+                            &compiled);
+  return success && dx12__cacheShader(library,
+                                      cacheEntry,
+                                      GPU_SHADER_STAGE_RAY_GENERATION_BIT,
                                       &compiled,
                                       outCode);
 }

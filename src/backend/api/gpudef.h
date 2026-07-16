@@ -68,6 +68,7 @@ typedef struct GPUApi {
   GPUApiPipelineCache pipelineCache;
   GPUApiVRS           vrs;
   GPUApiRayQuery      rayQuery;
+  GPUApiRayTracing    rayTracing;
   void               *reserved;
 } GPUApi;
 

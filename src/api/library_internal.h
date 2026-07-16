@@ -94,6 +94,15 @@ gpuGetShaderLibraryPayloadInfo(const GPUShaderLibrary *library,
 
 GPU_HIDE
 int
+gpuGetShaderLibraryRayInterfaceInfo(const GPUShaderLibrary *library,
+                                    const char               *entryPoint,
+                                    GPUShaderStageFlags       stage,
+                                    uint32_t                 *outPayloadSizeBytes,
+                                    uint32_t                 *outHitAttributeSizeBytes,
+                                    uint32_t                 *outCallableDataSizeBytes);
+
+GPU_HIDE
+int
 gpuShaderLibraryHasEntryResourceInfo(const GPUShaderLibrary *library);
 
 GPU_HIDE

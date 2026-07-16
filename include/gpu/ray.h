@@ -21,13 +21,19 @@ extern "C" {
 #endif
 
 #include "common.h"
+#include "bindgroup.h"
 #include "buffer.h"
 #include "cmdqueue.h"
+#include "library.h"
+#include "pipeline.h"
 #include "stage-io.h"
 #include "vertex.h"
 
 typedef struct GPUAccelerationStructureEXT            GPUAccelerationStructureEXT;
 typedef struct GPUAccelerationStructurePassEncoderEXT GPUAccelerationStructurePassEncoderEXT;
+typedef struct GPURayTracingPipelineEXT                GPURayTracingPipelineEXT;
+typedef struct GPUShaderTableEXT                       GPUShaderTableEXT;
+typedef struct GPURayTracingPassEncoderEXT             GPURayTracingPassEncoderEXT;
 
 typedef enum GPUAccelerationStructureTypeEXT {
   GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT = 0,
@@ -145,6 +151,100 @@ GPUBuildAccelerationStructureEXT(
 GPU_EXPORT
 void
 GPUEndAccelerationStructurePassEXT(GPUAccelerationStructurePassEncoderEXT *pass);
+
+typedef enum GPURayTracingShaderGroupTypeEXT {
+  GPU_RAY_TRACING_SHADER_GROUP_GENERAL_EXT          = 0,
+  GPU_RAY_TRACING_SHADER_GROUP_TRIANGLES_HIT_EXT    = 1,
+  GPU_RAY_TRACING_SHADER_GROUP_PROCEDURAL_HIT_EXT   = 2
+} GPURayTracingShaderGroupTypeEXT;
+
+typedef struct GPURayTracingShaderGroupEXT {
+  const char                       *generalEntry;
+  const char                       *closestHitEntry;
+  const char                       *anyHitEntry;
+  const char                       *intersectionEntry;
+  GPURayTracingShaderGroupTypeEXT   type;
+  GPUShaderStageFlags               generalStage;
+} GPURayTracingShaderGroupEXT;
+
+typedef struct GPURayTracingPipelineCreateInfoEXT {
+  GPUChainedStruct                    chain;
+  const char                         *label;
+  GPUShaderLibrary                   *library;
+  GPUPipelineLayout                  *layout;
+  GPUPipelineCache                   *cache;
+  const GPURayTracingShaderGroupEXT  *pGroups;
+  uint32_t                            groupCount;
+  uint32_t                            maxRecursionDepth;
+  uint32_t                            maxPayloadSizeBytes;      /* 0 = infer from shader metadata. */
+  uint32_t                            maxHitAttributeSizeBytes; /* 0 = infer from shader metadata. */
+} GPURayTracingPipelineCreateInfoEXT;
+
+typedef struct GPUShaderTableRecordEXT {
+  uint32_t groupIndex;
+} GPUShaderTableRecordEXT;
+
+typedef struct GPUShaderTableCreateInfoEXT {
+  GPUChainedStruct               chain;
+  const char                    *label;
+  GPURayTracingPipelineEXT      *pipeline;
+  const GPUShaderTableRecordEXT *pRayGenerationRecord;
+  const GPUShaderTableRecordEXT *pMissRecords;
+  const GPUShaderTableRecordEXT *pHitGroupRecords;
+  const GPUShaderTableRecordEXT *pCallableRecords;
+  uint32_t                       missRecordCount;
+  uint32_t                       hitGroupRecordCount;
+  uint32_t                       callableRecordCount;
+} GPUShaderTableCreateInfoEXT;
+
+GPU_EXPORT
+GPUResult
+GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
+                               const GPURayTracingPipelineCreateInfoEXT *info,
+                               GPURayTracingPipelineEXT                **outPipeline);
+
+GPU_EXPORT
+void
+GPUDestroyRayTracingPipelineEXT(GPURayTracingPipelineEXT *pipeline);
+
+GPU_EXPORT
+GPUResult
+GPUCreateShaderTableEXT(GPUDevice                         *device,
+                        const GPUShaderTableCreateInfoEXT *info,
+                        GPUShaderTableEXT                **outTable);
+
+GPU_EXPORT
+void
+GPUDestroyShaderTableEXT(GPUShaderTableEXT *table);
+
+GPU_EXPORT
+GPURayTracingPassEncoderEXT *
+GPUBeginRayTracingPassEXT(GPUCommandBuffer *cmdb, const char *label);
+
+GPU_EXPORT
+void
+GPUBindRayTracingPipelineEXT(GPURayTracingPassEncoderEXT *pass,
+                             GPURayTracingPipelineEXT    *pipeline);
+
+GPU_EXPORT
+void
+GPUBindRayTracingGroupEXT(GPURayTracingPassEncoderEXT *pass,
+                          uint32_t                      groupIndex,
+                          GPUBindGroup                 *group,
+                          uint32_t                      dynamicOffsetCount,
+                          const uint32_t               *pDynamicOffsets);
+
+GPU_EXPORT
+void
+GPUDispatchRaysEXT(GPURayTracingPassEncoderEXT *pass,
+                   GPUShaderTableEXT           *table,
+                   uint32_t                     width,
+                   uint32_t                     height,
+                   uint32_t                     depth);
+
+GPU_EXPORT
+void
+GPUEndRayTracingPassEXT(GPURayTracingPassEncoderEXT *pass);
 
 #ifdef __cplusplus
 }

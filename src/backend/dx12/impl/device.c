@@ -319,6 +319,7 @@ dx12_probeAdapter(GPUAdapterDX12 *adapter) {
                         dx12_queryMeshShader(device, shaderModel, NULL);
   adapter->rayQuery = dxcModule &&
                       dx12_queryRayQuery(device, shaderModel, NULL);
+  adapter->rayTracingPipeline = adapter->rayQuery;
   additionalRates = false;
   if (dx12_queryVRS(device,
                     &adapter->vrsTier,
@@ -425,6 +426,7 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
                      dx12_queryRayQuery(device->d3dDevice,
                                         device->shaderModel,
                                         &device->d3dDevice5);
+  device->rayTracingPipeline = device->rayQuery;
   additionalRates = false;
   if (dx12_queryVRS(device->d3dDevice,
                     &device->vrsTier,
@@ -754,6 +756,8 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
       return adapterDX12->meshShader;
     case GPU_FEATURE_RAY_QUERY:
       return adapterDX12->rayQuery;
+    case GPU_FEATURE_RAY_TRACING_PIPELINE:
+      return adapterDX12->rayTracingPipeline;
     case GPU_FEATURE_VARIABLE_RATE_SHADING:
       return adapterDX12->vrsTier !=
              D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED;
@@ -886,6 +890,11 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
     goto err;
   }
   if ((enabledFeatureMask &
+       (1ull << GPU_FEATURE_RAY_TRACING_PIPELINE)) != 0u &&
+      !deviceDX12->rayTracingPipeline) {
+    goto err;
+  }
+  if ((enabledFeatureMask &
        (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u &&
       deviceDX12->vrsTier ==
         D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED) {
@@ -898,12 +907,19 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
       deviceDX12->d3dDevice2 = NULL;
     }
   }
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) == 0u) {
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) == 0u &&
+      (enabledFeatureMask &
+       (1ull << GPU_FEATURE_RAY_TRACING_PIPELINE)) == 0u) {
     deviceDX12->rayQuery = false;
+    deviceDX12->rayTracingPipeline = false;
     if (deviceDX12->d3dDevice5) {
       deviceDX12->d3dDevice5->lpVtbl->Release(deviceDX12->d3dDevice5);
       deviceDX12->d3dDevice5 = NULL;
     }
+  }
+  if ((enabledFeatureMask &
+       (1ull << GPU_FEATURE_RAY_TRACING_PIPELINE)) == 0u) {
+    deviceDX12->rayTracingPipeline = false;
   }
   if ((enabledFeatureMask &
        (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) == 0u) {

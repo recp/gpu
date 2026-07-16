@@ -122,6 +122,26 @@ vk__descriptorStages(GPUShaderStageFlags visibility) {
     stages |= VK_SHADER_STAGE_MESH_BIT_EXT;
   }
 #endif
+#ifdef VK_KHR_ray_tracing_pipeline
+  if ((visibility & GPU_SHADER_STAGE_RAY_GENERATION_BIT) != 0u) {
+    stages |= VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+  }
+  if ((visibility & GPU_SHADER_STAGE_MISS_BIT) != 0u) {
+    stages |= VK_SHADER_STAGE_MISS_BIT_KHR;
+  }
+  if ((visibility & GPU_SHADER_STAGE_CLOSEST_HIT_BIT) != 0u) {
+    stages |= VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+  }
+  if ((visibility & GPU_SHADER_STAGE_ANY_HIT_BIT) != 0u) {
+    stages |= VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
+  }
+  if ((visibility & GPU_SHADER_STAGE_INTERSECTION_BIT) != 0u) {
+    stages |= VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+  }
+  if ((visibility & GPU_SHADER_STAGE_CALLABLE_BIT) != 0u) {
+    stages |= VK_SHADER_STAGE_CALLABLE_BIT_KHR;
+  }
+#endif
   return stages;
 }
 
@@ -1271,6 +1291,38 @@ vk_bindComputeGroup(GPUComputePassEncoder *pass,
                                   dynamicOffsetCount,
                                   dynamicOffsets,
                                   encoder->dynamicOffsets);
+}
+
+GPU_HIDE
+bool
+vk_bindRayTracingGroup(GPURayTracingPassEncoderEXT *pass,
+                       GPUPipelineLayout           *pipelineLayout,
+                       uint32_t                     groupIndex,
+                       GPUBindGroup                *group,
+                       uint32_t                     dynamicOffsetCount,
+                       const uint32_t              *dynamicOffsets) {
+#ifdef VK_KHR_ray_tracing_pipeline
+  GPURayTracingEncoderVk *encoder;
+
+  encoder = pass ? pass->_priv : NULL;
+  return encoder && vk__bindGroup(encoder->command,
+                                  VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+                                  encoder->pipelineLayout,
+                                  pipelineLayout,
+                                  groupIndex,
+                                  group,
+                                  dynamicOffsetCount,
+                                  dynamicOffsets,
+                                  encoder->dynamicOffsets);
+#else
+  (void)pass;
+  (void)pipelineLayout;
+  (void)groupIndex;
+  (void)group;
+  (void)dynamicOffsetCount;
+  (void)dynamicOffsets;
+  return false;
+#endif
 }
 
 GPU_HIDE

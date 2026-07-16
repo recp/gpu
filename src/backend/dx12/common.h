@@ -59,6 +59,7 @@ typedef struct GPUAdapterDX12 {
   bool                               bindless;
   bool                               meshShader;
   bool                               rayQuery;
+  bool                               rayTracingPipeline;
   GPUFormatCapabilities              formatCaps[GPU_FORMAT_COUNT];
 } GPUAdapterDX12;
 
@@ -113,6 +114,7 @@ typedef struct GPUDeviceDX12 {
   bool                               bindless;
   bool                               meshShader;
   bool                               rayQuery;
+  bool                               rayTracingPipeline;
   bool                               queryResultsReliable;
   bool                               stencilPlaneCopies;
 } GPUDeviceDX12;
@@ -276,6 +278,32 @@ typedef struct GPUAccelerationStructureEncoderDX12 {
   bool                        debugEventActive;
 } GPUAccelerationStructureEncoderDX12;
 
+typedef struct GPURayTracingPipelineDX12 {
+  ID3D12StateObject           *stateObject;
+  ID3D12StateObjectProperties *properties;
+  ID3D12RootSignature         *rootSignature;
+  wchar_t                    **groupExports;
+  uint32_t                     groupCount;
+} GPURayTracingPipelineDX12;
+
+typedef struct GPUShaderTableDX12 {
+  ID3D12Resource                 *resource;
+  D3D12_GPU_VIRTUAL_ADDRESS_RANGE rayGeneration;
+  D3D12_GPU_VIRTUAL_ADDRESS_RANGE_AND_STRIDE miss;
+  D3D12_GPU_VIRTUAL_ADDRESS_RANGE_AND_STRIDE hit;
+  D3D12_GPU_VIRTUAL_ADDRESS_RANGE_AND_STRIDE callable;
+} GPUShaderTableDX12;
+
+typedef struct GPURayTracingEncoderDX12 {
+  GPUDeviceDX12             *device;
+  ID3D12GraphicsCommandList *commandList;
+  ID3D12GraphicsCommandList5 *commandList5;
+  ID3D12RootSignature       *rootSignature;
+  ID3D12DescriptorHeap      *resourceHeap;
+  ID3D12DescriptorHeap      *samplerHeap;
+  bool                       debugEventActive;
+} GPURayTracingEncoderDX12;
+
 typedef struct GPUTextureDX12 {
   ID3D12Resource         *resource;
   D3D12_RESOURCE_STATES  *states;
@@ -416,6 +444,8 @@ typedef struct GPUCommandBufferDX12 {
   GPUCopyPassEncoder            copyEncoder;
   GPUAccelerationStructurePassEncoderEXT rayQueryEncoder;
   GPUAccelerationStructureEncoderDX12     rayQueryState;
+  GPURayTracingPassEncoderEXT              rayTracingEncoder;
+  GPURayTracingEncoderDX12                 rayTracingState;
   bool                          frameTimeActive;
   bool                          copyDebugEventActive;
 } GPUCommandBufferDX12;

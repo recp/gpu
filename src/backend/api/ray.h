@@ -50,6 +50,49 @@ typedef struct GPUApiRayQuery {
   (*endPass)(GPUAccelerationStructurePassEncoderEXT *pass);
 } GPUApiRayQuery;
 
+typedef struct GPUApiRayTracing {
+  GPUResult
+  (*createPipeline)(GPUDevice                                 *device,
+                    const GPURayTracingPipelineCreateInfoEXT  *info,
+                    GPURayTracingPipelineEXT                  *pipeline);
+
+  void
+  (*destroyPipeline)(GPURayTracingPipelineEXT *pipeline);
+
+  GPUResult
+  (*createShaderTable)(GPUDevice                         *device,
+                       const GPUShaderTableCreateInfoEXT *info,
+                       GPUShaderTableEXT                 *table);
+
+  void
+  (*destroyShaderTable)(GPUShaderTableEXT *table);
+
+  GPURayTracingPassEncoderEXT *
+  (*beginPass)(GPUCommandBuffer *cmdb, const char *label);
+
+  void
+  (*bindPipeline)(GPURayTracingPassEncoderEXT *pass,
+                  GPURayTracingPipelineEXT    *pipeline);
+
+  bool
+  (*bindGroup)(GPURayTracingPassEncoderEXT *pass,
+               GPUPipelineLayout           *pipelineLayout,
+               uint32_t                     groupIndex,
+               GPUBindGroup                *group,
+               uint32_t                     dynamicOffsetCount,
+               const uint32_t              *dynamicOffsets);
+
+  void
+  (*dispatch)(GPURayTracingPassEncoderEXT *pass,
+              GPUShaderTableEXT           *table,
+              uint32_t                     width,
+              uint32_t                     height,
+              uint32_t                     depth);
+
+  void
+  (*endPass)(GPURayTracingPassEncoderEXT *pass);
+} GPUApiRayTracing;
+
 #ifdef __cplusplus
 }
 #endif

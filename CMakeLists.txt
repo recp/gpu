@@ -559,6 +559,21 @@ if(GPU_BUILD_TESTS)
     )
   endif()
 
+  if(GPU_BUILD_DX12)
+    set(GPU_USL_FIXTURE_TARGET_CAPS sm_6_3,ray_tracing_pipeline)
+    gpu_add_usl_fixtures(
+      GPU_API_DX12_RAY_PIPELINE_USL_FIXTURE
+      dx12
+      api-ray-pipeline
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/ray_pipeline.usl"
+    )
+    unset(GPU_USL_FIXTURE_TARGET_CAPS)
+    add_custom_target(
+      gpu-api-dx12-ray-pipeline-fixture
+      DEPENDS ${GPU_API_DX12_RAY_PIPELINE_USL_FIXTURE}
+    )
+  endif()
+
   if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
     gpu_add_usl_fixtures(
       GPU_METAL_MESH_TEST_USL_FIXTURE
@@ -585,6 +600,19 @@ if(GPU_BUILD_TESTS)
     add_custom_target(
       gpu-api-vulkan-ray-query-fixture
       DEPENDS ${GPU_API_VULKAN_RAY_QUERY_USL_FIXTURE}
+    )
+
+    set(GPU_USL_FIXTURE_TARGET_CAPS vulkan1_2,ray_tracing_pipeline)
+    gpu_add_usl_fixtures(
+      GPU_API_VULKAN_RAY_PIPELINE_USL_FIXTURE
+      vulkan
+      api-ray-pipeline
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/ray_pipeline.usl"
+    )
+    unset(GPU_USL_FIXTURE_TARGET_CAPS)
+    add_custom_target(
+      gpu-api-vulkan-ray-pipeline-fixture
+      DEPENDS ${GPU_API_VULKAN_RAY_PIPELINE_USL_FIXTURE}
     )
 
     if(GPU_API_DEFAULT_BACKEND STREQUAL "vulkan")
@@ -945,6 +973,12 @@ if(GPU_BUILD_TESTS)
   if(TARGET gpu-api-vulkan-ray-query-fixture)
     add_dependencies(gpu-api-test gpu-api-vulkan-ray-query-fixture)
   endif()
+  if(TARGET gpu-api-dx12-ray-pipeline-fixture)
+    add_dependencies(gpu-api-test gpu-api-dx12-ray-pipeline-fixture)
+  endif()
+  if(TARGET gpu-api-vulkan-ray-pipeline-fixture)
+    add_dependencies(gpu-api-test gpu-api-vulkan-ray-pipeline-fixture)
+  endif()
   target_compile_definitions(gpu-api-test PRIVATE
     GPU_BUILD_WITH_VALIDATION=$<BOOL:${GPU_BUILD_WITH_VALIDATION}>
     GPU_BUILD_WITH_DEBUG_MARKERS=$<BOOL:${GPU_BUILD_WITH_DEBUG_MARKERS}>
@@ -976,6 +1010,17 @@ if(GPU_BUILD_TESTS)
     set_tests_properties(api-validation PROPERTIES
       ENVIRONMENT
         "GPU_RAY_QUERY_USL_PATH=${GPU_API_RAY_QUERY_USL_FIXTURE}"
+    )
+  endif()
+  if(GPU_API_DEFAULT_BACKEND STREQUAL "dx12" AND
+     GPU_API_DX12_RAY_PIPELINE_USL_FIXTURE)
+    set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
+      "GPU_RAY_PIPELINE_USL_PATH=${GPU_API_DX12_RAY_PIPELINE_USL_FIXTURE}"
+    )
+  elseif(GPU_API_DEFAULT_BACKEND STREQUAL "vulkan" AND
+         GPU_API_VULKAN_RAY_PIPELINE_USL_FIXTURE)
+    set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
+      "GPU_RAY_PIPELINE_USL_PATH=${GPU_API_VULKAN_RAY_PIPELINE_USL_FIXTURE}"
     )
   endif()
   if(GPU_API_SUBGROUP_MATRIX_USL_FIXTURE)
@@ -1026,6 +1071,11 @@ if(GPU_BUILD_TESTS)
       set_tests_properties(api-validation-vulkan PROPERTIES
         ENVIRONMENT
           "GPU_RAY_QUERY_USL_PATH=${GPU_API_VULKAN_RAY_QUERY_USL_FIXTURE}"
+      )
+    endif()
+    if(GPU_API_VULKAN_RAY_PIPELINE_USL_FIXTURE)
+      set_property(TEST api-validation-vulkan APPEND PROPERTY ENVIRONMENT
+        "GPU_RAY_PIPELINE_USL_PATH=${GPU_API_VULKAN_RAY_PIPELINE_USL_FIXTURE}"
       )
     endif()
     if(GPU_API_DEFAULT_BACKEND STREQUAL "vulkan")

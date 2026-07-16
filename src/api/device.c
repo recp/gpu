@@ -94,7 +94,7 @@ gpu_reportDeviceLostOnce(GPUDevice *device) {
 static bool
 gpu_knownFeature(GPUFeature feature) {
   return feature >= GPU_FEATURE_COMPUTE &&
-         feature <= GPU_FEATURE_ATOMIC64;
+         feature <= GPU_FEATURE_RAY_TRACING_PIPELINE;
 }
 
 static uint64_t
@@ -208,6 +208,9 @@ gpu_enabledFeatureMaskForCreateInfo(const GPUAdapter *adapter,
   if ((mask & gpu_featureBit(GPU_FEATURE_SUBGROUP_MATRIX)) != 0u) {
     mask |= gpu_featureBit(GPU_FEATURE_SUBGROUPS);
   }
+  if ((mask & gpu_featureBit(GPU_FEATURE_RAY_TRACING_PIPELINE)) != 0u) {
+    mask |= gpu_featureBit(GPU_FEATURE_RAY_QUERY);
+  }
   return mask;
 }
 
@@ -217,7 +220,7 @@ gpu_supportedFeatureMask(const GPUAdapter *adapter) {
 
   mask = 0;
   for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_ATOMIC64;
+       feature <= GPU_FEATURE_RAY_TRACING_PIPELINE;
        feature = (GPUFeature)(feature + 1)) {
     if (gpu_adapterSupportsFeature(adapter, feature)) {
       mask |= gpu_featureBit(feature);
@@ -236,7 +239,7 @@ gpu_fillFeatureSet(uint64_t       mask,
 
   count = 0u;
   for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_ATOMIC64 && count < capacity;
+       feature <= GPU_FEATURE_RAY_TRACING_PIPELINE && count < capacity;
        feature = (GPUFeature)(feature + 1)) {
     if (mask & gpu_featureBit(feature)) {
       storage[count++] = feature;
@@ -1320,6 +1323,35 @@ GPUGetProcAddr(GPUDevice *device, const char *name) {
     }
     if (strcmp(name, "GPUEndAccelerationStructurePassEXT") == 0) {
       return (GPUProc)GPUEndAccelerationStructurePassEXT;
+    }
+  }
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_TRACING_PIPELINE)) {
+    if (strcmp(name, "GPUCreateRayTracingPipelineEXT") == 0) {
+      return (GPUProc)GPUCreateRayTracingPipelineEXT;
+    }
+    if (strcmp(name, "GPUDestroyRayTracingPipelineEXT") == 0) {
+      return (GPUProc)GPUDestroyRayTracingPipelineEXT;
+    }
+    if (strcmp(name, "GPUCreateShaderTableEXT") == 0) {
+      return (GPUProc)GPUCreateShaderTableEXT;
+    }
+    if (strcmp(name, "GPUDestroyShaderTableEXT") == 0) {
+      return (GPUProc)GPUDestroyShaderTableEXT;
+    }
+    if (strcmp(name, "GPUBeginRayTracingPassEXT") == 0) {
+      return (GPUProc)GPUBeginRayTracingPassEXT;
+    }
+    if (strcmp(name, "GPUBindRayTracingPipelineEXT") == 0) {
+      return (GPUProc)GPUBindRayTracingPipelineEXT;
+    }
+    if (strcmp(name, "GPUBindRayTracingGroupEXT") == 0) {
+      return (GPUProc)GPUBindRayTracingGroupEXT;
+    }
+    if (strcmp(name, "GPUDispatchRaysEXT") == 0) {
+      return (GPUProc)GPUDispatchRaysEXT;
+    }
+    if (strcmp(name, "GPUEndRayTracingPassEXT") == 0) {
+      return (GPUProc)GPUEndRayTracingPassEXT;
     }
   }
 

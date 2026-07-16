@@ -1,0 +1,38 @@
+struct RayPayload {
+  value: float
+}
+
+struct HitAttributes {
+  barycentrics: float2
+}
+
+struct CallableData {
+  value: uint
+}
+
+raygen raygen_main(inout output: [uint] #buffer(0)) {
+  var data: CallableData = CallableData(1u)
+  call_shader(0u, data)
+  output[0] = data.value
+}
+
+miss miss_main(inout payload: RayPayload #ray_payload(0)) {
+  payload.value = 0.0
+}
+
+closest_hit closest_hit_main(inout payload: RayPayload #ray_payload(0),
+                             attributes: HitAttributes #hit_attribute) {
+  payload.value = attributes.barycentrics.x
+}
+
+any_hit any_hit_main(inout payload: RayPayload #ray_payload(0),
+                     attributes: HitAttributes #hit_attribute) {
+  payload.value = attributes.barycentrics.y
+}
+
+intersection intersection_main() {
+}
+
+callable callable_main(inout data: CallableData #callable_data(0)) {
+  data.value = data.value + 1u
+}

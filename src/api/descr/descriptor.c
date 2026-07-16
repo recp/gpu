@@ -639,7 +639,13 @@ gpu_visibilityIsValid(GPUShaderStageFlags visibility) {
                                          GPU_SHADER_STAGE_FRAGMENT_BIT |
                                          GPU_SHADER_STAGE_COMPUTE_BIT |
                                          GPU_SHADER_STAGE_TASK_BIT |
-                                         GPU_SHADER_STAGE_MESH_BIT;
+                                         GPU_SHADER_STAGE_MESH_BIT |
+                                         GPU_SHADER_STAGE_RAY_GENERATION_BIT |
+                                         GPU_SHADER_STAGE_MISS_BIT |
+                                         GPU_SHADER_STAGE_CLOSEST_HIT_BIT |
+                                         GPU_SHADER_STAGE_ANY_HIT_BIT |
+                                         GPU_SHADER_STAGE_INTERSECTION_BIT |
+                                         GPU_SHADER_STAGE_CALLABLE_BIT;
 
   return visibility != 0u && (visibility & ~knownStages) == 0u;
 }
@@ -766,6 +772,16 @@ gpu_validateRayQueryLayout(GPUDevice                    *device,
                            const GPUBindGroupLayoutEntry *entries,
                            uint32_t                       count) {
   for (uint32_t i = 0u; i < count; i++) {
+    if ((entries[i].visibility &
+         (GPU_SHADER_STAGE_RAY_GENERATION_BIT |
+          GPU_SHADER_STAGE_MISS_BIT |
+          GPU_SHADER_STAGE_CLOSEST_HIT_BIT |
+          GPU_SHADER_STAGE_ANY_HIT_BIT |
+          GPU_SHADER_STAGE_INTERSECTION_BIT |
+          GPU_SHADER_STAGE_CALLABLE_BIT)) != 0u &&
+        !GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_TRACING_PIPELINE)) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
     if (entries[i].bindingType != GPU_BINDING_ACCELERATION_STRUCTURE) {
       continue;
     }
@@ -1449,7 +1465,13 @@ gpu_pipelineBindingsAreUnique(const GPUPipelineLayoutPriv *priv) {
     GPU_SHADER_STAGE_FRAGMENT_BIT,
     GPU_SHADER_STAGE_COMPUTE_BIT,
     GPU_SHADER_STAGE_TASK_BIT,
-    GPU_SHADER_STAGE_MESH_BIT
+    GPU_SHADER_STAGE_MESH_BIT,
+    GPU_SHADER_STAGE_RAY_GENERATION_BIT,
+    GPU_SHADER_STAGE_MISS_BIT,
+    GPU_SHADER_STAGE_CLOSEST_HIT_BIT,
+    GPU_SHADER_STAGE_ANY_HIT_BIT,
+    GPU_SHADER_STAGE_INTERSECTION_BIT,
+    GPU_SHADER_STAGE_CALLABLE_BIT
   };
 
   if (!priv || priv->bindGroupLayoutCount == 0u) {
@@ -2320,7 +2342,13 @@ GPUCreatePipelineLayoutFromReflection(GPUDevice *device,
                                   GPU_SHADER_STAGE_FRAGMENT_BIT |
                                   GPU_SHADER_STAGE_COMPUTE_BIT |
                                   GPU_SHADER_STAGE_TASK_BIT |
-                                  GPU_SHADER_STAGE_MESH_BIT)
+                                  GPU_SHADER_STAGE_MESH_BIT |
+                                  GPU_SHADER_STAGE_RAY_GENERATION_BIT |
+                                  GPU_SHADER_STAGE_MISS_BIT |
+                                  GPU_SHADER_STAGE_CLOSEST_HIT_BIT |
+                                  GPU_SHADER_STAGE_ANY_HIT_BIT |
+                                  GPU_SHADER_STAGE_INTERSECTION_BIT |
+                                  GPU_SHADER_STAGE_CALLABLE_BIT)
                                : 0u;
   return GPUCreatePipelineLayout(device, &info, outLayout);
 }

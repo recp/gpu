@@ -616,3 +616,604 @@ dx12_initRayQuery(GPUApiRayQuery *api) {
   api->build     = dx12_buildAccelerationStructure;
   api->endPass   = dx12_endAccelerationStructurePass;
 }
+
+typedef struct DX12RayHitGroupNames {
+  wchar_t *closestHit;
+  wchar_t *anyHit;
+  wchar_t *intersection;
+} DX12RayHitGroupNames;
+
+static wchar_t *
+dx12_rayWide(const char *text) {
+  wchar_t *result;
+  int      count;
+
+  if (!text || !text[0]) {
+    return NULL;
+  }
+  count = MultiByteToWideChar(CP_UTF8,
+                              MB_ERR_INVALID_CHARS,
+                              text,
+                              -1,
+                              NULL,
+                              0);
+  if (count <= 0 || (size_t)count > SIZE_MAX / sizeof(*result)) {
+    return NULL;
+  }
+  result = malloc((size_t)count * sizeof(*result));
+  if (!result || MultiByteToWideChar(CP_UTF8,
+                                     MB_ERR_INVALID_CHARS,
+                                     text,
+                                     -1,
+                                     result,
+                                     count) != count) {
+    free(result);
+    return NULL;
+  }
+  return result;
+}
+
+static wchar_t *
+dx12_rayHitGroupName(uint32_t index) {
+  wchar_t name[64];
+  wchar_t *result;
+  int     count;
+
+  count = swprintf(name,
+                   GPU_ARRAY_LEN(name),
+                   L"gpu_hit_group_%u",
+                   index);
+  if (count <= 0 || count >= (int)GPU_ARRAY_LEN(name)) {
+    return NULL;
+  }
+  result = malloc(((size_t)count + 1u) * sizeof(*result));
+  if (result) {
+    memcpy(result, name, ((size_t)count + 1u) * sizeof(*result));
+  }
+  return result;
+}
+
+static void
+dx12_rayFreeHitNames(DX12RayHitGroupNames *names, uint32_t count) {
+  if (!names) {
+    return;
+  }
+  for (uint32_t i = 0u; i < count; i++) {
+    free(names[i].intersection);
+    free(names[i].anyHit);
+    free(names[i].closestHit);
+  }
+  free(names);
+}
+
+static void
+dx12_rayDestroyPipelineState(GPURayTracingPipelineDX12 *native) {
+  if (!native) {
+    return;
+  }
+  if (native->groupExports) {
+    for (uint32_t i = 0u; i < native->groupCount; i++) {
+      free(native->groupExports[i]);
+    }
+  }
+  if (native->properties) {
+    native->properties->lpVtbl->Release(native->properties);
+  }
+  if (native->stateObject) {
+    native->stateObject->lpVtbl->Release(native->stateObject);
+  }
+  if (native->rootSignature) {
+    native->rootSignature->lpVtbl->Release(native->rootSignature);
+  }
+  free(native->groupExports);
+  free(native);
+}
+
+static GPUResult
+dx12_createRayTracingPipeline(GPUDevice                                *device,
+                              const GPURayTracingPipelineCreateInfoEXT *info,
+                              GPURayTracingPipelineEXT                 *pipeline) {
+  GPUDeviceDX12                    *deviceDX12;
+  GPUShaderLibraryDX12             *library;
+  GPURayTracingPipelineDX12        *native;
+  DX12RayHitGroupNames             *hitNames;
+  D3D12_HIT_GROUP_DESC             *hitGroups;
+  D3D12_STATE_SUBOBJECT            *subobjects;
+  D3D12_DXIL_LIBRARY_DESC           libraryDesc = {0};
+  D3D12_SHADER_BYTECODE             bytecode = {0};
+  D3D12_RAYTRACING_SHADER_CONFIG    shaderConfig = {0};
+  D3D12_GLOBAL_ROOT_SIGNATURE       globalRoot = {0};
+  D3D12_RAYTRACING_PIPELINE_CONFIG  pipelineConfig = {0};
+  D3D12_STATE_OBJECT_DESC           stateDesc = {0};
+  DX12ShaderCode                    libraryCode = {0};
+  uint64_t                          rootKey[2];
+  uint32_t                          hitCount;
+  uint32_t                          subobjectCount;
+  uint32_t                          cursor;
+  HRESULT                           result;
+
+  deviceDX12 = device ? device->_priv : NULL;
+  library    = info && info->library ? info->library->_priv : NULL;
+  if (!deviceDX12 || !deviceDX12->rayTracingPipeline ||
+      !deviceDX12->d3dDevice5 || !library || !info || !pipeline ||
+      info->groupCount > UINT32_MAX - 4u ||
+      info->maxRecursionDepth >
+        D3D12_RAYTRACING_MAX_DECLARABLE_TRACE_RECURSION_DEPTH ||
+      info->maxHitAttributeSizeBytes >
+        D3D12_RAYTRACING_MAX_ATTRIBUTE_SIZE_IN_BYTES ||
+      info->groupCount > SIZE_MAX / sizeof(*native->groupExports) ||
+      !dx12_compileRayLibrary(deviceDX12, library, &libraryCode)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  hitCount = 0u;
+  for (uint32_t i = 0u; i < info->groupCount; i++) {
+    hitCount += info->pGroups[i].type !=
+                GPU_RAY_TRACING_SHADER_GROUP_GENERAL_EXT;
+  }
+  subobjectCount = hitCount + 4u;
+  native         = calloc(1, sizeof(*native));
+  hitNames       = calloc(hitCount, sizeof(*hitNames));
+  hitGroups      = calloc(hitCount, sizeof(*hitGroups));
+  subobjects     = calloc(subobjectCount, sizeof(*subobjects));
+  if (native) {
+    native->groupExports = calloc(info->groupCount,
+                                  sizeof(*native->groupExports));
+  }
+  if (!native || (hitCount > 0u && (!hitNames || !hitGroups)) ||
+      !subobjects || !native->groupExports) {
+    free(subobjects);
+    free(hitGroups);
+    dx12_rayFreeHitNames(hitNames, hitCount);
+    dx12_rayDestroyPipelineState(native);
+    dx12_freeShaderCode(&libraryCode);
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  native->groupCount = info->groupCount;
+
+  cursor = 0u;
+  for (uint32_t i = 0u; i < info->groupCount; i++) {
+    const GPURayTracingShaderGroupEXT *src;
+    D3D12_HIT_GROUP_DESC              *dst;
+
+    src = &info->pGroups[i];
+    if (src->type == GPU_RAY_TRACING_SHADER_GROUP_GENERAL_EXT) {
+      native->groupExports[i] = dx12_rayWide(src->generalEntry);
+      if (!native->groupExports[i]) {
+        goto out_of_memory;
+      }
+      continue;
+    }
+
+    dst = &hitGroups[cursor];
+    native->groupExports[i] = dx12_rayHitGroupName(i);
+    hitNames[cursor].closestHit = dx12_rayWide(src->closestHitEntry);
+    hitNames[cursor].anyHit = dx12_rayWide(src->anyHitEntry);
+    hitNames[cursor].intersection = dx12_rayWide(src->intersectionEntry);
+    if (!native->groupExports[i] ||
+        (src->closestHitEntry && !hitNames[cursor].closestHit) ||
+        (src->anyHitEntry && !hitNames[cursor].anyHit) ||
+        (src->intersectionEntry && !hitNames[cursor].intersection)) {
+      goto out_of_memory;
+    }
+    dst->HitGroupExport          = native->groupExports[i];
+    dst->ClosestHitShaderImport  = hitNames[cursor].closestHit;
+    dst->AnyHitShaderImport      = hitNames[cursor].anyHit;
+    dst->IntersectionShaderImport = hitNames[cursor].intersection;
+    dst->Type = src->type == GPU_RAY_TRACING_SHADER_GROUP_PROCEDURAL_HIT_EXT
+                  ? D3D12_HIT_GROUP_TYPE_PROCEDURAL_PRIMITIVE
+                  : D3D12_HIT_GROUP_TYPE_TRIANGLES;
+    cursor++;
+  }
+
+  if (dx12_createShaderRootSignature(device,
+                                     info->layout,
+                                     info->library,
+                                     &native->rootSignature,
+                                     rootKey) != GPU_OK) {
+    goto backend_failure;
+  }
+  GPU__UNUSED(rootKey);
+  bytecode.pShaderBytecode = libraryCode.data;
+  bytecode.BytecodeLength  = libraryCode.size;
+  libraryDesc.DXILLibrary  = bytecode;
+  libraryDesc.NumExports   = 0u;
+  libraryDesc.pExports     = NULL;
+
+  cursor = 0u;
+  subobjects[cursor].Type  = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY;
+  subobjects[cursor++].pDesc = &libraryDesc;
+  for (uint32_t i = 0u; i < hitCount; i++) {
+    subobjects[cursor].Type  = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP;
+    subobjects[cursor++].pDesc = &hitGroups[i];
+  }
+  shaderConfig.MaxPayloadSizeInBytes      = info->maxPayloadSizeBytes;
+  shaderConfig.MaxAttributeSizeInBytes    = info->maxHitAttributeSizeBytes;
+  subobjects[cursor].Type  = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG;
+  subobjects[cursor++].pDesc = &shaderConfig;
+  globalRoot.pGlobalRootSignature = native->rootSignature;
+  subobjects[cursor].Type  = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE;
+  subobjects[cursor++].pDesc = &globalRoot;
+  pipelineConfig.MaxTraceRecursionDepth = info->maxRecursionDepth;
+  subobjects[cursor].Type  = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG;
+  subobjects[cursor++].pDesc = &pipelineConfig;
+
+  stateDesc.Type          = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE;
+  stateDesc.NumSubobjects = cursor;
+  stateDesc.pSubobjects   = subobjects;
+  result = deviceDX12->d3dDevice5->lpVtbl->CreateStateObject(
+    deviceDX12->d3dDevice5,
+    &stateDesc,
+    &IID_ID3D12StateObject,
+    (void **)&native->stateObject
+  );
+  if (FAILED(result) || !native->stateObject ||
+      FAILED(native->stateObject->lpVtbl->QueryInterface(
+        native->stateObject,
+        &IID_ID3D12StateObjectProperties,
+        (void **)&native->properties
+      )) || !native->properties) {
+    goto backend_failure;
+  }
+
+  free(subobjects);
+  free(hitGroups);
+  dx12_rayFreeHitNames(hitNames, hitCount);
+  dx12_freeShaderCode(&libraryCode);
+  pipeline->_priv = native;
+  return GPU_OK;
+
+out_of_memory:
+  result = E_OUTOFMEMORY;
+  goto fail;
+backend_failure:
+  result = E_FAIL;
+fail:
+  free(subobjects);
+  free(hitGroups);
+  dx12_rayFreeHitNames(hitNames, hitCount);
+  dx12_rayDestroyPipelineState(native);
+  dx12_freeShaderCode(&libraryCode);
+  return result == E_OUTOFMEMORY ? GPU_ERROR_OUT_OF_MEMORY
+                                : GPU_ERROR_BACKEND_FAILURE;
+}
+
+static void
+dx12_destroyRayTracingPipeline(GPURayTracingPipelineEXT *pipeline) {
+  GPURayTracingPipelineDX12 *native;
+
+  native = pipeline ? pipeline->_priv : NULL;
+  dx12_rayDestroyPipelineState(native);
+  if (pipeline) {
+    pipeline->_priv = NULL;
+  }
+}
+
+static void
+dx12_rayDestroyShaderTableState(GPUShaderTableDX12 *native) {
+  if (!native) {
+    return;
+  }
+  if (native->resource) {
+    native->resource->lpVtbl->Release(native->resource);
+  }
+  free(native);
+}
+
+static bool
+dx12_rayTableSection(uint64_t *cursor,
+                     uint64_t  stride,
+                     uint32_t  count,
+                     uint64_t *outOffset,
+                     uint64_t *outSize) {
+  uint64_t offset;
+  uint64_t size;
+
+  offset = dx12_rayAlign(*cursor,
+                         D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
+  if ((*cursor != 0u && offset == 0u) ||
+      (count > 0u && stride > UINT64_MAX / count)) {
+    return false;
+  }
+  size = stride * count;
+  if (offset > UINT64_MAX - size) {
+    return false;
+  }
+  *outOffset = offset;
+  *outSize   = size;
+  *cursor    = offset + size;
+  return true;
+}
+
+static bool
+dx12_rayCopyIdentifiers(uint8_t                         *dst,
+                        ID3D12StateObjectProperties     *properties,
+                        wchar_t * const                 *groupExports,
+                        const GPUShaderTableRecordEXT   *records,
+                        uint32_t                         count,
+                        uint64_t                         stride) {
+  for (uint32_t i = 0u; i < count; i++) {
+    const void *identifier;
+
+    identifier = properties->lpVtbl->GetShaderIdentifier(
+      properties,
+      groupExports[records[i].groupIndex]
+    );
+    if (!identifier) {
+      return false;
+    }
+    memcpy(dst + stride * i,
+           identifier,
+           D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+  }
+  return true;
+}
+
+static GPUResult
+dx12_createShaderTable(GPUDevice                         *device,
+                       const GPUShaderTableCreateInfoEXT *info,
+                       GPUShaderTableEXT                 *table) {
+  GPUDeviceDX12              *deviceDX12;
+  GPURayTracingPipelineDX12  *pipeline;
+  GPUShaderTableDX12         *native;
+  D3D12_HEAP_PROPERTIES       heap = {0};
+  D3D12_RESOURCE_DESC         desc = {0};
+  D3D12_RANGE                 readRange = {0};
+  D3D12_GPU_VIRTUAL_ADDRESS   address;
+  uint8_t                    *mapped;
+  uint64_t                    rayGenerationOffset;
+  uint64_t                    missOffset;
+  uint64_t                    hitOffset;
+  uint64_t                    callableOffset;
+  uint64_t                    rayGenerationSize;
+  uint64_t                    missSize;
+  uint64_t                    hitSize;
+  uint64_t                    callableSize;
+  uint64_t                    tableSize;
+  uint64_t                    stride;
+  HRESULT                     result;
+
+  deviceDX12 = device ? device->_priv : NULL;
+  pipeline   = info && info->pipeline ? info->pipeline->_priv : NULL;
+  stride     = dx12_rayAlign(D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+                            D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT);
+  tableSize  = 0u;
+  if (!deviceDX12 || !deviceDX12->rayTracingPipeline || !pipeline || !table ||
+      !pipeline->properties || !stride ||
+      !dx12_rayTableSection(&tableSize,
+                            stride,
+                            1u,
+                            &rayGenerationOffset,
+                            &rayGenerationSize) ||
+      !dx12_rayTableSection(&tableSize,
+                            stride,
+                            info->missRecordCount,
+                            &missOffset,
+                            &missSize) ||
+      !dx12_rayTableSection(&tableSize,
+                            stride,
+                            info->hitGroupRecordCount,
+                            &hitOffset,
+                            &hitSize) ||
+      !dx12_rayTableSection(&tableSize,
+                            stride,
+                            info->callableRecordCount,
+                            &callableOffset,
+                            &callableSize)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  native = calloc(1, sizeof(*native));
+  if (!native) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  heap.Type             = D3D12_HEAP_TYPE_UPLOAD;
+  heap.CreationNodeMask = 1u;
+  heap.VisibleNodeMask  = 1u;
+  desc.Dimension        = D3D12_RESOURCE_DIMENSION_BUFFER;
+  desc.Width            = tableSize;
+  desc.Height           = 1u;
+  desc.DepthOrArraySize = 1u;
+  desc.MipLevels        = 1u;
+  desc.SampleDesc.Count = 1u;
+  desc.Layout           = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+  result = deviceDX12->d3dDevice->lpVtbl->CreateCommittedResource(
+    deviceDX12->d3dDevice,
+    &heap,
+    D3D12_HEAP_FLAG_NONE,
+    &desc,
+    D3D12_RESOURCE_STATE_GENERIC_READ,
+    NULL,
+    &IID_ID3D12Resource,
+    (void **)&native->resource
+  );
+  if (FAILED(result) || !native->resource ||
+      FAILED(native->resource->lpVtbl->Map(native->resource,
+                                           0u,
+                                           &readRange,
+                                           (void **)&mapped)) || !mapped) {
+    dx12_rayDestroyShaderTableState(native);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  memset(mapped, 0, (size_t)tableSize);
+  if (!dx12_rayCopyIdentifiers(mapped + rayGenerationOffset,
+                               pipeline->properties,
+                               pipeline->groupExports,
+                               info->pRayGenerationRecord,
+                               1u,
+                               stride) ||
+      !dx12_rayCopyIdentifiers(mapped + missOffset,
+                               pipeline->properties,
+                               pipeline->groupExports,
+                               info->pMissRecords,
+                               info->missRecordCount,
+                               stride) ||
+      !dx12_rayCopyIdentifiers(mapped + hitOffset,
+                               pipeline->properties,
+                               pipeline->groupExports,
+                               info->pHitGroupRecords,
+                               info->hitGroupRecordCount,
+                               stride) ||
+      !dx12_rayCopyIdentifiers(mapped + callableOffset,
+                               pipeline->properties,
+                               pipeline->groupExports,
+                               info->pCallableRecords,
+                               info->callableRecordCount,
+                               stride)) {
+    native->resource->lpVtbl->Unmap(native->resource, 0u, NULL);
+    dx12_rayDestroyShaderTableState(native);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  native->resource->lpVtbl->Unmap(native->resource, 0u, NULL);
+  address = native->resource->lpVtbl->GetGPUVirtualAddress(native->resource);
+  if (!address) {
+    dx12_rayDestroyShaderTableState(native);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  native->rayGeneration.StartAddress = address + rayGenerationOffset;
+  native->rayGeneration.SizeInBytes  = rayGenerationSize;
+  if (missSize > 0u) {
+    native->miss.StartAddress  = address + missOffset;
+    native->miss.SizeInBytes   = missSize;
+    native->miss.StrideInBytes = stride;
+  }
+  if (hitSize > 0u) {
+    native->hit.StartAddress  = address + hitOffset;
+    native->hit.SizeInBytes   = hitSize;
+    native->hit.StrideInBytes = stride;
+  }
+  if (callableSize > 0u) {
+    native->callable.StartAddress  = address + callableOffset;
+    native->callable.SizeInBytes   = callableSize;
+    native->callable.StrideInBytes = stride;
+  }
+  dx12_raySetName(native->resource, info->label);
+  table->_priv = native;
+  return GPU_OK;
+}
+
+static void
+dx12_destroyShaderTable(GPUShaderTableEXT *table) {
+  GPUShaderTableDX12 *native;
+
+  native = table ? table->_priv : NULL;
+  dx12_rayDestroyShaderTableState(native);
+  if (table) {
+    table->_priv = NULL;
+  }
+}
+
+static GPURayTracingPassEncoderEXT *
+dx12_beginRayTracingPass(GPUCommandBuffer *cmdb, const char *label) {
+  GPUCommandBufferDX12        *command;
+  GPURayTracingPassEncoderEXT *pass;
+  GPURayTracingEncoderDX12    *native;
+  GPUDevice                   *device;
+
+  command = cmdb ? cmdb->_priv : NULL;
+  device  = gpuCommandBufferDevice(cmdb);
+  if (!command || !command->owner || !command->commandList ||
+      !command->commandList5 || !device ||
+      (command->owner->type != D3D12_COMMAND_LIST_TYPE_DIRECT &&
+       command->owner->type != D3D12_COMMAND_LIST_TYPE_COMPUTE)) {
+    return NULL;
+  }
+
+  pass   = &command->rayTracingEncoder;
+  native = &command->rayTracingState;
+  memset(pass, 0, sizeof(*pass));
+  memset(native, 0, sizeof(*native));
+  native->device           = device->_priv;
+  native->commandList      = command->commandList;
+  native->commandList5     = command->commandList5;
+  native->debugEventActive = dx12_beginDebugEvent(device,
+                                                  native->commandList,
+                                                  label);
+  pass->_priv = native;
+  return pass;
+}
+
+static void
+dx12_bindRayTracingPipeline(GPURayTracingPassEncoderEXT *pass,
+                            GPURayTracingPipelineEXT    *pipeline) {
+  GPURayTracingEncoderDX12  *native;
+  GPURayTracingPipelineDX12 *pipelineDX12;
+
+  native       = pass ? pass->_priv : NULL;
+  pipelineDX12 = pipeline ? pipeline->_priv : NULL;
+  if (!native || !native->commandList || !native->commandList5 ||
+      !pipelineDX12 || !pipelineDX12->stateObject ||
+      !pipelineDX12->rootSignature) {
+    return;
+  }
+
+  native->commandList5->lpVtbl->SetPipelineState1(native->commandList5,
+                                                   pipelineDX12->stateObject);
+  native->commandList->lpVtbl->SetComputeRootSignature(
+    native->commandList,
+    pipelineDX12->rootSignature
+  );
+  native->rootSignature = pipelineDX12->rootSignature;
+}
+
+static void
+dx12_dispatchRays(GPURayTracingPassEncoderEXT *pass,
+                  GPUShaderTableEXT           *table,
+                  uint32_t                     width,
+                  uint32_t                     height,
+                  uint32_t                     depth) {
+  GPURayTracingEncoderDX12 *native;
+  GPUShaderTableDX12       *tableDX12;
+  D3D12_DISPATCH_RAYS_DESC  desc = {0};
+
+  native    = pass ? pass->_priv : NULL;
+  tableDX12 = table ? table->_priv : NULL;
+  if (!native || !native->commandList5 || !tableDX12) {
+    return;
+  }
+
+  desc.RayGenerationShaderRecord = tableDX12->rayGeneration;
+  desc.MissShaderTable            = tableDX12->miss;
+  desc.HitGroupTable              = tableDX12->hit;
+  desc.CallableShaderTable        = tableDX12->callable;
+  desc.Width                      = width;
+  desc.Height                     = height;
+  desc.Depth                      = depth;
+  native->commandList5->lpVtbl->DispatchRays(native->commandList5, &desc);
+}
+
+static void
+dx12_endRayTracingPass(GPURayTracingPassEncoderEXT *pass) {
+  GPURayTracingEncoderDX12 *native;
+
+  native = pass ? pass->_priv : NULL;
+  if (!native) {
+    return;
+  }
+  if (native->debugEventActive) {
+    dx12_endDebugEvent(pass->device, native->commandList);
+  }
+  native->device           = NULL;
+  native->commandList      = NULL;
+  native->commandList5     = NULL;
+  native->rootSignature    = NULL;
+  native->resourceHeap     = NULL;
+  native->samplerHeap      = NULL;
+  native->debugEventActive = false;
+}
+
+GPU_HIDE
+void
+dx12_initRayTracing(GPUApiRayTracing *api) {
+  api->createPipeline     = dx12_createRayTracingPipeline;
+  api->destroyPipeline    = dx12_destroyRayTracingPipeline;
+  api->createShaderTable  = dx12_createShaderTable;
+  api->destroyShaderTable = dx12_destroyShaderTable;
+  api->beginPass          = dx12_beginRayTracingPass;
+  api->bindPipeline       = dx12_bindRayTracingPipeline;
+  api->bindGroup          = dx12_bindRayTracingGroup;
+  api->dispatch           = dx12_dispatchRays;
+  api->endPass            = dx12_endRayTracingPass;
+}

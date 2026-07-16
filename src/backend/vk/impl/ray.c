@@ -17,6 +17,7 @@
 #include "../common.h"
 #include "../impl.h"
 #include "../../../api/buffer_internal.h"
+#include "pipeline_cache.h"
 
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
 
@@ -550,6 +551,11 @@ vk_rayBuildBarrier(const GPUDeviceVk *deviceVk, VkCommandBuffer command) {
               VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
               VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+#ifdef VK_KHR_ray_tracing_pipeline
+  if (deviceVk->rayTracingPipeline) {
+    dstStages |= VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR;
+  }
+#endif
 #ifdef VK_EXT_mesh_shader
   if (deviceVk->taskShader) {
     dstStages |= VK_PIPELINE_STAGE_TASK_SHADER_BIT_EXT;
@@ -558,6 +564,7 @@ vk_rayBuildBarrier(const GPUDeviceVk *deviceVk, VkCommandBuffer command) {
     dstStages |= VK_PIPELINE_STAGE_MESH_SHADER_BIT_EXT;
   }
 #endif
+
   vkCmdPipelineBarrier(
     command,
     VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
@@ -669,6 +676,676 @@ vk_initRayQuery(GPUApiRayQuery *api) {
 GPU_HIDE
 void
 vk_initRayQuery(GPUApiRayQuery *api) {
+  memset(api, 0, sizeof(*api));
+}
+
+#endif
+
+#if defined(VK_KHR_acceleration_structure) && \
+    defined(VK_KHR_ray_tracing_pipeline)
+
+static VkShaderStageFlagBits
+vk_rayTracingStage(GPUShaderStageFlags stage) {
+  static const VkShaderStageFlagBits stages[] = {
+    [5]  = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+    [6]  = VK_SHADER_STAGE_MISS_BIT_KHR,
+    [7]  = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
+    [8]  = VK_SHADER_STAGE_ANY_HIT_BIT_KHR,
+    [9]  = VK_SHADER_STAGE_INTERSECTION_BIT_KHR,
+    [10] = VK_SHADER_STAGE_CALLABLE_BIT_KHR
+  };
+  uint32_t index;
+
+  if (!stage || (stage & (stage - 1u)) != 0u) {
+    return 0;
+  }
+  index = 0u;
+  while ((stage >>= 1u) != 0u) {
+    index++;
+  }
+  return index < sizeof(stages) / sizeof(stages[0]) ? stages[index] : 0;
+}
+
+static bool
+vk_rayAlignUp(VkDeviceSize value,
+              VkDeviceSize alignment,
+              VkDeviceSize *outValue) {
+  VkDeviceSize remainder;
+  VkDeviceSize increment;
+
+  if (!outValue || alignment == 0u) {
+    return false;
+  }
+  remainder = value % alignment;
+  increment = remainder ? alignment - remainder : 0u;
+  if (value > UINT64_MAX - increment) {
+    return false;
+  }
+  *outValue = value + increment;
+  return true;
+}
+
+static bool
+vk_rayAddStage(VkPipelineShaderStageCreateInfo *stages,
+               uint32_t                        *stageCount,
+               VkShaderModule                   module,
+               VkShaderStageFlagBits            stage,
+               const char                      *entry,
+               uint32_t                        *outIndex) {
+  VkPipelineShaderStageCreateInfo *info;
+
+  if (!stages || !stageCount || !stage || !entry || !entry[0] || !outIndex) {
+    return false;
+  }
+  info         = &stages[*stageCount];
+  info->sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  info->stage  = stage;
+  info->module = module;
+  info->pName  = entry;
+  *outIndex    = (*stageCount)++;
+  return true;
+}
+
+static void
+vk_rayDestroyPipelineState(GPURayTracingPipelineVk *native) {
+  if (!native) {
+    return;
+  }
+  if (native->device && native->pipeline) {
+    vkDestroyPipeline(native->device, native->pipeline, NULL);
+  }
+  vk_destroyShaderLayout(&native->shaderLayout);
+  free(native);
+}
+
+static GPUResult
+vk_createRayTracingPipeline(GPUDevice                                *device,
+                            const GPURayTracingPipelineCreateInfoEXT *info,
+                            GPURayTracingPipelineEXT                 *pipeline) {
+  GPUDeviceVk                       *deviceVk;
+  GPUShaderLibraryVk                *library;
+  GPURayTracingPipelineVk           *native;
+  VkPipelineShaderStageCreateInfo   *stages;
+  VkRayTracingShaderGroupCreateInfoKHR *groups;
+  VkRayTracingPipelineCreateInfoKHR  pipelineInfo = {0};
+  VkPipelineCache                    pipelineCache;
+  VkResult                           result;
+  uint32_t                           stageCapacity;
+  uint32_t                           stageCount;
+
+  deviceVk = device ? device->_priv : NULL;
+  library  = info && info->library ? info->library->_priv : NULL;
+  if (!deviceVk || !deviceVk->rayTracingPipeline ||
+      !deviceVk->createRayTracingPipelines || !library || !library->module ||
+      library->device != deviceVk->device || !info || !pipeline ||
+      info->maxRecursionDepth > deviceVk->rayTracingMaxRecursionDepth ||
+      info->groupCount > UINT32_MAX / 3u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  stageCapacity = info->groupCount * 3u;
+  stages        = calloc(stageCapacity, sizeof(*stages));
+  groups        = calloc(info->groupCount, sizeof(*groups));
+  native        = calloc(1, sizeof(*native));
+  if (!stages || !groups || !native) {
+    free(native);
+    free(groups);
+    free(stages);
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  native->device               = deviceVk->device;
+  native->groupHandleSize      = deviceVk->rayTracingShaderGroupHandleSize;
+  native->groupHandleAlignment = deviceVk->rayTracingShaderGroupHandleAlignment;
+  native->groupBaseAlignment   = deviceVk->rayTracingShaderGroupBaseAlignment;
+  if (vk_createShaderLayout(device,
+                            info->layout,
+                            info->library,
+                            &native->shaderLayout) != GPU_OK) {
+    free(groups);
+    free(stages);
+    vk_rayDestroyPipelineState(native);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  stageCount = 0u;
+  for (uint32_t i = 0u; i < info->groupCount; i++) {
+    const GPURayTracingShaderGroupEXT *src;
+    VkRayTracingShaderGroupCreateInfoKHR *dst;
+    VkShaderStageFlagBits stage;
+
+    src = &info->pGroups[i];
+    dst = &groups[i];
+    dst->sType              = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+    dst->generalShader      = VK_SHADER_UNUSED_KHR;
+    dst->closestHitShader   = VK_SHADER_UNUSED_KHR;
+    dst->anyHitShader       = VK_SHADER_UNUSED_KHR;
+    dst->intersectionShader = VK_SHADER_UNUSED_KHR;
+
+    switch (src->type) {
+      case GPU_RAY_TRACING_SHADER_GROUP_GENERAL_EXT:
+        stage     = vk_rayTracingStage(pipeline->generalStages[i]);
+        dst->type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+        if (!vk_rayAddStage(stages,
+                            &stageCount,
+                            library->module,
+                            stage,
+                            src->generalEntry,
+                            &dst->generalShader)) {
+          goto invalid;
+        }
+        break;
+
+      case GPU_RAY_TRACING_SHADER_GROUP_TRIANGLES_HIT_EXT:
+        dst->type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+        if ((src->closestHitEntry &&
+             !vk_rayAddStage(stages,
+                             &stageCount,
+                             library->module,
+                             VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
+                             src->closestHitEntry,
+                             &dst->closestHitShader)) ||
+            (src->anyHitEntry &&
+             !vk_rayAddStage(stages,
+                             &stageCount,
+                             library->module,
+                             VK_SHADER_STAGE_ANY_HIT_BIT_KHR,
+                             src->anyHitEntry,
+                             &dst->anyHitShader))) {
+          goto invalid;
+        }
+        break;
+
+      case GPU_RAY_TRACING_SHADER_GROUP_PROCEDURAL_HIT_EXT:
+        dst->type = VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR;
+        if (!vk_rayAddStage(stages,
+                            &stageCount,
+                            library->module,
+                            VK_SHADER_STAGE_INTERSECTION_BIT_KHR,
+                            src->intersectionEntry,
+                            &dst->intersectionShader) ||
+            (src->closestHitEntry &&
+             !vk_rayAddStage(stages,
+                             &stageCount,
+                             library->module,
+                             VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
+                             src->closestHitEntry,
+                             &dst->closestHitShader)) ||
+            (src->anyHitEntry &&
+             !vk_rayAddStage(stages,
+                             &stageCount,
+                             library->module,
+                             VK_SHADER_STAGE_ANY_HIT_BIT_KHR,
+                             src->anyHitEntry,
+                             &dst->anyHitShader))) {
+          goto invalid;
+        }
+        break;
+
+      default:
+        goto invalid;
+    }
+  }
+
+  pipelineInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+  pipelineInfo.stageCount                   = stageCount;
+  pipelineInfo.pStages                      = stages;
+  pipelineInfo.groupCount                   = info->groupCount;
+  pipelineInfo.pGroups                      = groups;
+  pipelineInfo.maxPipelineRayRecursionDepth = info->maxRecursionDepth;
+  pipelineInfo.layout                       = native->shaderLayout.layout;
+  pipelineCache = vk_lockCache(info->cache);
+  result = deviceVk->createRayTracingPipelines(native->device,
+                                                VK_NULL_HANDLE,
+                                                pipelineCache,
+                                                1u,
+                                                &pipelineInfo,
+                                                NULL,
+                                                &native->pipeline);
+  vk_unlockCache(info->cache);
+  free(groups);
+  free(stages);
+  if (result != VK_SUCCESS) {
+    vk_rayDestroyPipelineState(native);
+    return result == VK_ERROR_OUT_OF_HOST_MEMORY ||
+           result == VK_ERROR_OUT_OF_DEVICE_MEMORY
+             ? GPU_ERROR_OUT_OF_MEMORY
+             : GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  vk_setDebugName(device,
+                  VK_OBJECT_TYPE_PIPELINE,
+                  (uint64_t)native->pipeline,
+                  info->label);
+  pipeline->_priv = native;
+  return GPU_OK;
+
+invalid:
+  free(groups);
+  free(stages);
+  vk_rayDestroyPipelineState(native);
+  return GPU_ERROR_INVALID_ARGUMENT;
+}
+
+static void
+vk_destroyRayTracingPipeline(GPURayTracingPipelineEXT *pipeline) {
+  GPURayTracingPipelineVk *native;
+
+  native = pipeline ? pipeline->_priv : NULL;
+  vk_rayDestroyPipelineState(native);
+  if (pipeline) {
+    pipeline->_priv = NULL;
+  }
+}
+
+static void
+vk_rayDestroyShaderTableState(GPUShaderTableVk *native) {
+  if (!native) {
+    return;
+  }
+  if (native->device && native->buffer) {
+    vkDestroyBuffer(native->device, native->buffer, NULL);
+  }
+  if (native->device && native->memory) {
+    vkFreeMemory(native->device, native->memory, NULL);
+  }
+  free(native);
+}
+
+static bool
+vk_rayTableSection(VkDeviceSize *cursor,
+                   VkDeviceSize  baseAlignment,
+                   VkDeviceSize  stride,
+                   uint32_t      count,
+                   VkDeviceSize *outOffset,
+                   VkDeviceSize *outSize) {
+  VkDeviceSize size;
+
+  if (!vk_rayAlignUp(*cursor, baseAlignment, outOffset) ||
+      (count > 0u && stride > UINT64_MAX / count)) {
+    return false;
+  }
+  size = stride * count;
+  if (*outOffset > UINT64_MAX - size) {
+    return false;
+  }
+  *outSize = size;
+  *cursor  = *outOffset + size;
+  return true;
+}
+
+static void
+vk_rayCopyTableRecords(uint8_t                       *dst,
+                       const uint8_t                 *handles,
+                       const GPUShaderTableRecordEXT *records,
+                       uint32_t                       count,
+                       uint32_t                       handleSize,
+                       VkDeviceSize                   stride) {
+  for (uint32_t i = 0u; i < count; i++) {
+    memcpy(dst + stride * i,
+           handles + (size_t)records[i].groupIndex * handleSize,
+           handleSize);
+  }
+}
+
+static GPUResult
+vk_createShaderTable(GPUDevice                         *device,
+                     const GPUShaderTableCreateInfoEXT *info,
+                     GPUShaderTableEXT                 *table) {
+  GPUDeviceVk             *deviceVk;
+  GPURayTracingPipelineVk *pipeline;
+  GPUShaderTableVk        *native;
+  VkBufferCreateInfo       bufferInfo = {0};
+  VkMemoryRequirements     requirements;
+  VkMemoryAllocateFlagsInfo allocationFlags = {0};
+  VkMemoryAllocateInfo     allocationInfo = {0};
+  VkBufferDeviceAddressInfo addressInfo = {0};
+  VkMappedMemoryRange      mappedRange = {0};
+  VkMemoryPropertyFlags    memoryFlags;
+  VkDeviceSize             rayGenerationOffset;
+  VkDeviceSize             missOffset;
+  VkDeviceSize             hitOffset;
+  VkDeviceSize             callableOffset;
+  VkDeviceSize             rayGenerationSize;
+  VkDeviceSize             missSize;
+  VkDeviceSize             hitSize;
+  VkDeviceSize             callableSize;
+  VkDeviceSize             tableSize;
+  VkDeviceSize             allocationSize;
+  VkDeviceSize             baseOffset;
+  VkDeviceAddress          address;
+  VkDeviceSize             stride;
+  uint8_t                 *handles;
+  uint8_t                 *mapped;
+  uint32_t                 memoryTypeIndex;
+  size_t                   handleBytes;
+  VkResult                 result;
+
+  deviceVk = device ? device->_priv : NULL;
+  pipeline = info && info->pipeline ? info->pipeline->_priv : NULL;
+  if (!deviceVk || !deviceVk->rayTracingPipeline ||
+      !deviceVk->getRayTracingShaderGroupHandles ||
+      !deviceVk->getBufferDeviceAddress || !pipeline || !table ||
+      pipeline->device != deviceVk->device ||
+      !vk_rayAlignUp(pipeline->groupHandleSize,
+                     pipeline->groupHandleAlignment,
+                     &stride)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  tableSize = 0u;
+  if (!vk_rayTableSection(&tableSize,
+                          pipeline->groupBaseAlignment,
+                          stride,
+                          1u,
+                          &rayGenerationOffset,
+                          &rayGenerationSize) ||
+      !vk_rayTableSection(&tableSize,
+                          pipeline->groupBaseAlignment,
+                          stride,
+                          info->missRecordCount,
+                          &missOffset,
+                          &missSize) ||
+      !vk_rayTableSection(&tableSize,
+                          pipeline->groupBaseAlignment,
+                          stride,
+                          info->hitGroupRecordCount,
+                          &hitOffset,
+                          &hitSize) ||
+      !vk_rayTableSection(&tableSize,
+                          pipeline->groupBaseAlignment,
+                          stride,
+                          info->callableRecordCount,
+                          &callableOffset,
+                          &callableSize) ||
+      tableSize > SIZE_MAX ||
+      tableSize > UINT64_MAX - (pipeline->groupBaseAlignment - 1u)) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  allocationSize = tableSize + pipeline->groupBaseAlignment - 1u;
+  if ((size_t)info->pipeline->groupCount >
+      SIZE_MAX / pipeline->groupHandleSize) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  handleBytes = (size_t)info->pipeline->groupCount * pipeline->groupHandleSize;
+  handles     = malloc(handleBytes);
+  native      = calloc(1, sizeof(*native));
+  if (!handles || !native) {
+    free(native);
+    free(handles);
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  native->device = deviceVk->device;
+
+  result = deviceVk->getRayTracingShaderGroupHandles(
+    native->device,
+    pipeline->pipeline,
+    0u,
+    info->pipeline->groupCount,
+    handleBytes,
+    handles
+  );
+  if (result != VK_SUCCESS) {
+    free(handles);
+    vk_rayDestroyShaderTableState(native);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  bufferInfo.sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.size        = allocationSize;
+  bufferInfo.usage       = VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR |
+                           VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+  bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  if (vkCreateBuffer(native->device,
+                     &bufferInfo,
+                     NULL,
+                     &native->buffer) != VK_SUCCESS) {
+    free(handles);
+    vk_rayDestroyShaderTableState(native);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  vkGetBufferMemoryRequirements(native->device,
+                                native->buffer,
+                                &requirements);
+  if (!vk_findMemoryType(device,
+                         requirements.memoryTypeBits,
+                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                         &memoryTypeIndex,
+                         &memoryFlags)) {
+    free(handles);
+    vk_rayDestroyShaderTableState(native);
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  allocationFlags.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+  allocationFlags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+  allocationInfo.sType  = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocationInfo.pNext  = &allocationFlags;
+  allocationInfo.allocationSize  = requirements.size;
+  allocationInfo.memoryTypeIndex = memoryTypeIndex;
+  if (vkAllocateMemory(native->device,
+                       &allocationInfo,
+                       NULL,
+                       &native->memory) != VK_SUCCESS ||
+      vkBindBufferMemory(native->device,
+                         native->buffer,
+                         native->memory,
+                         0u) != VK_SUCCESS) {
+    free(handles);
+    vk_rayDestroyShaderTableState(native);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  addressInfo.sType  = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+  addressInfo.buffer = native->buffer;
+  address = deviceVk->getBufferDeviceAddress(native->device, &addressInfo);
+  if (!address ||
+      !vk_rayAlignUp(address,
+                     pipeline->groupBaseAlignment,
+                     &baseOffset)) {
+    free(handles);
+    vk_rayDestroyShaderTableState(native);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  baseOffset -= address;
+  if (baseOffset > allocationSize - tableSize ||
+      vkMapMemory(native->device,
+                  native->memory,
+                  0u,
+                  VK_WHOLE_SIZE,
+                  0u,
+                  (void **)&mapped) != VK_SUCCESS) {
+    free(handles);
+    vk_rayDestroyShaderTableState(native);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  memset(mapped + baseOffset, 0, (size_t)tableSize);
+  vk_rayCopyTableRecords(mapped + baseOffset + rayGenerationOffset,
+                         handles,
+                         info->pRayGenerationRecord,
+                         1u,
+                         pipeline->groupHandleSize,
+                         stride);
+  vk_rayCopyTableRecords(mapped + baseOffset + missOffset,
+                         handles,
+                         info->pMissRecords,
+                         info->missRecordCount,
+                         pipeline->groupHandleSize,
+                         stride);
+  vk_rayCopyTableRecords(mapped + baseOffset + hitOffset,
+                         handles,
+                         info->pHitGroupRecords,
+                         info->hitGroupRecordCount,
+                         pipeline->groupHandleSize,
+                         stride);
+  vk_rayCopyTableRecords(mapped + baseOffset + callableOffset,
+                         handles,
+                         info->pCallableRecords,
+                         info->callableRecordCount,
+                         pipeline->groupHandleSize,
+                         stride);
+  free(handles);
+
+  if ((memoryFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0u) {
+    mappedRange.sType  = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+    mappedRange.memory = native->memory;
+    mappedRange.size   = VK_WHOLE_SIZE;
+    result = vkFlushMappedMemoryRanges(native->device, 1u, &mappedRange);
+  } else {
+    result = VK_SUCCESS;
+  }
+  vkUnmapMemory(native->device, native->memory);
+  if (result != VK_SUCCESS) {
+    vk_rayDestroyShaderTableState(native);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  address += baseOffset;
+  native->rayGeneration.deviceAddress = address + rayGenerationOffset;
+  native->rayGeneration.stride        = stride;
+  native->rayGeneration.size          = rayGenerationSize;
+  if (missSize > 0u) {
+    native->miss.deviceAddress = address + missOffset;
+    native->miss.stride        = stride;
+    native->miss.size          = missSize;
+  }
+  if (hitSize > 0u) {
+    native->hit.deviceAddress = address + hitOffset;
+    native->hit.stride        = stride;
+    native->hit.size          = hitSize;
+  }
+  if (callableSize > 0u) {
+    native->callable.deviceAddress = address + callableOffset;
+    native->callable.stride        = stride;
+    native->callable.size          = callableSize;
+  }
+  vk_setDebugName(device,
+                  VK_OBJECT_TYPE_BUFFER,
+                  (uint64_t)native->buffer,
+                  info->label);
+  table->_priv = native;
+  return GPU_OK;
+}
+
+static void
+vk_destroyShaderTable(GPUShaderTableEXT *table) {
+  GPUShaderTableVk *native;
+
+  native = table ? table->_priv : NULL;
+  vk_rayDestroyShaderTableState(native);
+  if (table) {
+    table->_priv = NULL;
+  }
+}
+
+static GPURayTracingPassEncoderEXT *
+vk_beginRayTracingPass(GPUCommandBuffer *cmdb, const char *label) {
+  GPUCommandBufferVk           *command;
+  GPURayTracingPassEncoderEXT  *pass;
+  GPURayTracingEncoderVk       *native;
+
+  command = cmdb ? cmdb->_priv : NULL;
+  if (!command || !command->command) {
+    return NULL;
+  }
+
+  pass   = &command->rayTracingEncoder;
+  native = &command->rayTracingState;
+  memset(pass, 0, sizeof(*pass));
+  memset(native, 0, sizeof(*native));
+  native->command          = command->command;
+  native->debugLabelActive = vk_beginDebugLabel(gpuCommandBufferDevice(cmdb),
+                                                 native->command,
+                                                 label);
+  pass->_priv = native;
+  return pass;
+}
+
+static void
+vk_bindRayTracingPipeline(GPURayTracingPassEncoderEXT *pass,
+                          GPURayTracingPipelineEXT    *pipeline) {
+  GPURayTracingEncoderVk  *native;
+  GPURayTracingPipelineVk *pipelineVk;
+
+  native     = pass ? pass->_priv : NULL;
+  pipelineVk = pipeline ? pipeline->_priv : NULL;
+  if (!native || !native->command || !pipelineVk || !pipelineVk->pipeline) {
+    return;
+  }
+
+  vkCmdBindPipeline(native->command,
+                    VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+                    pipelineVk->pipeline);
+  vk_bindShaderSamplers(native->command,
+                        VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+                        &pipelineVk->shaderLayout);
+  native->pipelineLayout = pipelineVk->shaderLayout.layout;
+}
+
+static void
+vk_dispatchRays(GPURayTracingPassEncoderEXT *pass,
+                GPUShaderTableEXT           *table,
+                uint32_t                     width,
+                uint32_t                     height,
+                uint32_t                     depth) {
+  GPURayTracingEncoderVk *native;
+  GPUShaderTableVk       *tableVk;
+  GPUDeviceVk            *deviceVk;
+
+  native   = pass ? pass->_priv : NULL;
+  tableVk  = table ? table->_priv : NULL;
+  deviceVk = pass && pass->device ? pass->device->_priv : NULL;
+  if (!native || !native->command || !tableVk || !deviceVk ||
+      !deviceVk->traceRays) {
+    return;
+  }
+
+  deviceVk->traceRays(native->command,
+                      &tableVk->rayGeneration,
+                      &tableVk->miss,
+                      &tableVk->hit,
+                      &tableVk->callable,
+                      width,
+                      height,
+                      depth);
+}
+
+static void
+vk_endRayTracingPass(GPURayTracingPassEncoderEXT *pass) {
+  GPURayTracingEncoderVk *native;
+
+  native = pass ? pass->_priv : NULL;
+  if (!native) {
+    return;
+  }
+  if (native->debugLabelActive) {
+    vk_endDebugLabel(pass->device, native->command);
+  }
+  native->command          = VK_NULL_HANDLE;
+  native->pipelineLayout   = VK_NULL_HANDLE;
+  native->debugLabelActive = false;
+}
+
+GPU_HIDE
+void
+vk_initRayTracing(GPUApiRayTracing *api) {
+  api->createPipeline    = vk_createRayTracingPipeline;
+  api->destroyPipeline   = vk_destroyRayTracingPipeline;
+  api->createShaderTable = vk_createShaderTable;
+  api->destroyShaderTable = vk_destroyShaderTable;
+  api->beginPass         = vk_beginRayTracingPass;
+  api->bindPipeline      = vk_bindRayTracingPipeline;
+  api->bindGroup         = vk_bindRayTracingGroup;
+  api->dispatch          = vk_dispatchRays;
+  api->endPass           = vk_endRayTracingPass;
+}
+
+#else
+
+GPU_HIDE
+void
+vk_initRayTracing(GPUApiRayTracing *api) {
   memset(api, 0, sizeof(*api));
 }
 

@@ -408,6 +408,7 @@ vk_extensionEnabled(const char *name, uint64_t enabledFeatureMask) {
   bool descriptorIndexing;
   bool meshShader;
   bool rayQuery;
+  bool rayTracingPipeline;
 
   descriptorIndexing =
     vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_DESCRIPTOR_INDEXING) ||
@@ -415,6 +416,10 @@ vk_extensionEnabled(const char *name, uint64_t enabledFeatureMask) {
   meshShader = vk_featureEnabled(enabledFeatureMask,
                                  GPU_FEATURE_MESH_SHADER);
   rayQuery = vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_RAY_QUERY);
+  rayTracingPipeline = vk_featureEnabled(
+    enabledFeatureMask,
+    GPU_FEATURE_RAY_TRACING_PIPELINE
+  );
 
   if (strcmp(name, VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME) == 0) {
     return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16);
@@ -437,7 +442,12 @@ vk_extensionEnabled(const char *name, uint64_t enabledFeatureMask) {
       strcmp(name, VK_KHR_RAY_QUERY_EXTENSION_NAME) == 0 ||
       strcmp(name, VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME) == 0 ||
       strcmp(name, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) == 0) {
-    return rayQuery;
+    return rayQuery || rayTracingPipeline;
+  }
+#endif
+#ifdef VK_KHR_ray_tracing_pipeline
+  if (strcmp(name, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME) == 0) {
+    return rayTracingPipeline;
   }
 #endif
 #ifdef VK_EXT_mesh_shader
@@ -459,7 +469,7 @@ vk_extensionEnabled(const char *name, uint64_t enabledFeatureMask) {
 #endif
   if (strcmp(name, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME) == 0 ||
       strcmp(name, VK_KHR_SPIRV_1_4_EXTENSION_NAME) == 0) {
-    return rayQuery || meshShader;
+    return rayQuery || rayTracingPipeline || meshShader;
   }
 
   return true;
@@ -561,6 +571,12 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationProperties = {0};
   VkPhysicalDeviceProperties2                  rayQueryProperties2 = {0};
 #endif
+#ifdef VK_KHR_ray_tracing_pipeline
+  VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayPipelineFeatures = {0};
+  VkPhysicalDeviceFeatures2                     rayPipelineFeatures2 = {0};
+  VkPhysicalDeviceRayTracingPipelinePropertiesKHR rayPipelineProperties = {0};
+  VkPhysicalDeviceProperties2                   rayPipelineProperties2 = {0};
+#endif
 #ifdef VK_KHR_fragment_shading_rate
   VkPhysicalDeviceFragmentShadingRateFeaturesKHR vrsFeatures = {0};
   VkPhysicalDeviceFeatures2                  vrsFeatures2 = {0};
@@ -609,6 +625,9 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool                                      bufferAddressExtension;
   bool                                      rayQueryDependencies;
 #endif
+#ifdef VK_KHR_ray_tracing_pipeline
+  bool                                      rayPipelineExtension;
+#endif
 #ifdef VK_KHR_fragment_shading_rate
   bool                                      vrsExtension;
 #endif
@@ -651,6 +670,9 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   deferredHostExtension     = false;
   bufferAddressExtension    = false;
   rayQueryDependencies      = false;
+#endif
+#ifdef VK_KHR_ray_tracing_pipeline
+  rayPipelineExtension      = false;
 #endif
 #ifdef VK_KHR_fragment_shading_rate
   vrsExtension              = false;
@@ -795,6 +817,12 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       if (!strcmp(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         bufferAddressExtension = true;
+      }
+#endif
+#ifdef VK_KHR_ray_tracing_pipeline
+      if (!strcmp(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        rayPipelineExtension = true;
       }
 #endif
 #ifdef VK_EXT_mesh_shader
@@ -1084,6 +1112,51 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       }
     }
   }
+#ifdef VK_KHR_ray_tracing_pipeline
+  if (getFeatures2 && adapterVk->rayQuery && rayPipelineExtension) {
+    PFN_vkGetPhysicalDeviceProperties2 getProperties2;
+
+    rayPipelineFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+    rayPipelineFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    rayPipelineFeatures2.pNext = &rayPipelineFeatures;
+    getFeatures2(raw, &rayPipelineFeatures2);
+    if (rayPipelineFeatures.rayTracingPipeline &&
+        vk_addDeviceExtension(
+          adapterVk,
+          VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) {
+      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+        vkGetInstanceProcAddr(instanceVk->inst,
+                              "vkGetPhysicalDeviceProperties2");
+      if (!getProperties2) {
+        getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+          vkGetInstanceProcAddr(instanceVk->inst,
+                                "vkGetPhysicalDeviceProperties2KHR");
+      }
+      if (getProperties2) {
+        rayPipelineProperties.sType =
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+        rayPipelineProperties2.sType =
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        rayPipelineProperties2.pNext = &rayPipelineProperties;
+        getProperties2(raw, &rayPipelineProperties2);
+        adapterVk->rayTracingShaderGroupHandleSize =
+          rayPipelineProperties.shaderGroupHandleSize;
+        adapterVk->rayTracingShaderGroupHandleAlignment =
+          rayPipelineProperties.shaderGroupHandleAlignment;
+        adapterVk->rayTracingShaderGroupBaseAlignment =
+          rayPipelineProperties.shaderGroupBaseAlignment;
+        adapterVk->rayTracingMaxRecursionDepth =
+          rayPipelineProperties.maxRayRecursionDepth;
+        adapterVk->rayTracingPipeline =
+          adapterVk->rayTracingShaderGroupHandleSize > 0u &&
+          adapterVk->rayTracingShaderGroupHandleAlignment > 0u &&
+          adapterVk->rayTracingShaderGroupBaseAlignment > 0u &&
+          adapterVk->rayTracingMaxRecursionDepth > 0u;
+      }
+    }
+  }
+#endif
 #endif
   if (getFeatures2 &&
       (dynamicCore ||
@@ -1316,6 +1389,8 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       return adapterVk->vrsDrawRate || adapterVk->vrsAttachment;
     case GPU_FEATURE_RAY_QUERY:
       return adapterVk->rayQuery;
+    case GPU_FEATURE_RAY_TRACING_PIPELINE:
+      return adapterVk->rayTracingPipeline;
     case GPU_FEATURE_SUBGROUP_MATRIX:
       return adapterVk->subgroupMatrix;
     case GPU_FEATURE_ATOMIC64:
@@ -1661,6 +1736,9 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationFeatures = {0};
   VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {0};
 #endif
+#ifdef VK_KHR_ray_tracing_pipeline
+  VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayPipelineFeatures = {0};
+#endif
 #ifdef VK_EXT_mesh_shader
   VkPhysicalDeviceMeshShaderFeaturesEXT meshFeatures = {0};
 #endif
@@ -1729,6 +1807,11 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) != 0u &&
       !adapterVk->rayQuery) {
+    goto err;
+  }
+  if ((enabledFeatureMask &
+       (1ull << GPU_FEATURE_RAY_TRACING_PIPELINE)) != 0u &&
+      !adapterVk->rayTracingPipeline) {
     goto err;
   }
   if ((enabledFeatureMask &
@@ -1893,6 +1976,16 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     deviceCI.pNext            = &rayQueryFeatures;
   }
 #endif
+#ifdef VK_KHR_ray_tracing_pipeline
+  if ((enabledFeatureMask &
+       (1ull << GPU_FEATURE_RAY_TRACING_PIPELINE)) != 0u) {
+    rayPipelineFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+    rayPipelineFeatures.pNext = (void *)deviceCI.pNext;
+    rayPipelineFeatures.rayTracingPipeline = VK_TRUE;
+    deviceCI.pNext = &rayPipelineFeatures;
+  }
+#endif
 #ifdef VK_EXT_mesh_shader
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) != 0u) {
     meshFeatures.sType =
@@ -2000,6 +2093,40 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     deviceVk->accelerationStructureScratchAlignment =
       adapterVk->accelerationStructureScratchAlignment;
     deviceVk->rayQuery = true;
+  }
+#endif
+#ifdef VK_KHR_ray_tracing_pipeline
+  if ((enabledFeatureMask &
+       (1ull << GPU_FEATURE_RAY_TRACING_PIPELINE)) != 0u) {
+    deviceVk->createRayTracingPipelines =
+      (PFN_vkCreateRayTracingPipelinesKHR)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkCreateRayTracingPipelinesKHR"
+      );
+    deviceVk->getRayTracingShaderGroupHandles =
+      (PFN_vkGetRayTracingShaderGroupHandlesKHR)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkGetRayTracingShaderGroupHandlesKHR"
+      );
+    deviceVk->traceRays =
+      (PFN_vkCmdTraceRaysKHR)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkCmdTraceRaysKHR"
+      );
+    if (!deviceVk->createRayTracingPipelines ||
+        !deviceVk->getRayTracingShaderGroupHandles ||
+        !deviceVk->traceRays) {
+      goto err;
+    }
+    deviceVk->rayTracingShaderGroupHandleSize =
+      adapterVk->rayTracingShaderGroupHandleSize;
+    deviceVk->rayTracingShaderGroupHandleAlignment =
+      adapterVk->rayTracingShaderGroupHandleAlignment;
+    deviceVk->rayTracingShaderGroupBaseAlignment =
+      adapterVk->rayTracingShaderGroupBaseAlignment;
+    deviceVk->rayTracingMaxRecursionDepth =
+      adapterVk->rayTracingMaxRecursionDepth;
+    deviceVk->rayTracingPipeline = true;
   }
 #endif
 #ifdef VK_KHR_fragment_shading_rate

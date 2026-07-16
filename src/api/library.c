@@ -28,6 +28,9 @@ typedef struct GPUShaderEntryInfo {
   uint32_t  resourceStart;
   uint32_t  resourceCount;
   uint32_t  payloadSizeBytes;
+  uint32_t  rayPayloadSizeBytes;
+  uint32_t  hitAttributeSizeBytes;
+  uint32_t  callableDataSizeBytes;
   uint32_t  nameLength;
 } GPUShaderEntryInfo;
 
@@ -128,6 +131,8 @@ gpu_uslSemanticEnabled(const GPUDevice *device, uint32_t semanticId) {
       return GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_QUERY);
     case USL_SEMANTIC_FEATURE_ID_SUBGROUP_MATRIX:
       return GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUP_MATRIX);
+    case USL_SEMANTIC_FEATURE_ID_RAY_TRACING_PIPELINE:
+      return GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_TRACING_PIPELINE);
     case USL_SEMANTIC_FEATURE_ID_ATOMIC64:
       return GPUIsFeatureEnabled(device, GPU_FEATURE_ATOMIC64);
     default:
@@ -409,6 +414,24 @@ gpu_shaderVisibilityFromUSLStage(uint32_t stage, GPUShaderStageFlags *outVisibil
     case USL_RUNTIME_STAGE_MESH:
       *outVisibility = GPU_SHADER_STAGE_MESH_BIT;
       return 1;
+    case USL_RUNTIME_STAGE_RAY_GENERATION:
+      *outVisibility = GPU_SHADER_STAGE_RAY_GENERATION_BIT;
+      return 1;
+    case USL_RUNTIME_STAGE_MISS:
+      *outVisibility = GPU_SHADER_STAGE_MISS_BIT;
+      return 1;
+    case USL_RUNTIME_STAGE_CLOSEST_HIT:
+      *outVisibility = GPU_SHADER_STAGE_CLOSEST_HIT_BIT;
+      return 1;
+    case USL_RUNTIME_STAGE_ANY_HIT:
+      *outVisibility = GPU_SHADER_STAGE_ANY_HIT_BIT;
+      return 1;
+    case USL_RUNTIME_STAGE_INTERSECTION:
+      *outVisibility = GPU_SHADER_STAGE_INTERSECTION_BIT;
+      return 1;
+    case USL_RUNTIME_STAGE_CALLABLE:
+      *outVisibility = GPU_SHADER_STAGE_CALLABLE_BIT;
+      return 1;
     default:
       return 0;
   }
@@ -541,6 +564,41 @@ gpuGetShaderLibraryPayloadInfo(const GPUShaderLibrary *library,
 
   *outSizeBytes = entry->payloadSizeBytes;
   *outType      = entry->payloadType;
+  return 1;
+}
+
+GPU_HIDE
+int
+gpuGetShaderLibraryRayInterfaceInfo(const GPUShaderLibrary *library,
+                                    const char               *entryPoint,
+                                    GPUShaderStageFlags       stage,
+                                    uint32_t                 *outPayloadSizeBytes,
+                                    uint32_t                 *outHitAttributeSizeBytes,
+                                    uint32_t                 *outCallableDataSizeBytes) {
+  const GPUShaderEntryInfo *entry;
+
+  if (outPayloadSizeBytes) {
+    *outPayloadSizeBytes = 0u;
+  }
+  if (outHitAttributeSizeBytes) {
+    *outHitAttributeSizeBytes = 0u;
+  }
+  if (outCallableDataSizeBytes) {
+    *outCallableDataSizeBytes = 0u;
+  }
+  if (!outPayloadSizeBytes || !outHitAttributeSizeBytes ||
+      !outCallableDataSizeBytes) {
+    return 0;
+  }
+
+  entry = gpu_findShaderEntry(library, entryPoint);
+  if (!entry || entry->stage != stage) {
+    return 0;
+  }
+
+  *outPayloadSizeBytes      = entry->rayPayloadSizeBytes;
+  *outHitAttributeSizeBytes = entry->hitAttributeSizeBytes;
+  *outCallableDataSizeBytes = entry->callableDataSizeBytes;
   return 1;
 }
 
@@ -977,8 +1035,11 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
                                                   nameSize);
     dst->nameHash         = gpu_shaderNameHash(src->name, nameSize - 1u);
     dst->nameLength       = (uint32_t)(nameSize - 1u);
-    dst->stage            = stage;
-    dst->payloadSizeBytes = src->payload_size_bytes;
+    dst->stage                 = stage;
+    dst->payloadSizeBytes      = src->payload_size_bytes;
+    dst->rayPayloadSizeBytes   = src->ray_payload_size_bytes;
+    dst->hitAttributeSizeBytes = src->hit_attribute_size_bytes;
+    dst->callableDataSizeBytes = src->callable_data_size_bytes;
     if (src->payload_size_bytes > 0u) {
       size_t payloadTypeSize;
 
@@ -1569,8 +1630,10 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
             ? "disk-cache"
             : "generated";
     fprintf(stderr,
-            "GPU: USL %s payload\n",
-            payloadSource);
+            "GPU: USL %s payload (%zu bytes, %016llx)\n",
+            payloadSource,
+            compileOutput->backend_size,
+            (unsigned long long)compileOutput->backend_hash);
   }
   if (!compileOutput->reflection.target_info_valid) {
     rc = GPU_ERROR_BACKEND_FAILURE;

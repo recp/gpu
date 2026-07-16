@@ -34,4 +34,42 @@ struct GPUAccelerationStructurePassEncoderEXT {
   bool               ended;
 };
 
+struct GPURayTracingPipelineEXT {
+  void                            *_priv;
+  GPUApi                          *_api;
+  GPUDevice                       *device;
+  GPUPipelineLayout               *layout;
+  GPURayTracingShaderGroupTypeEXT *groupTypes;
+  GPUShaderStageFlags             *generalStages;
+  uint32_t                         requiredBindGroupMask;
+  uint32_t                         groupCount;
+  uint32_t                         maxPayloadSizeBytes;
+  uint32_t                         maxHitAttributeSizeBytes;
+  uint32_t                         refCount;
+};
+
+struct GPUShaderTableEXT {
+  void                     *_priv;
+  GPUApi                   *_api;
+  GPUDevice                *device;
+  GPURayTracingPipelineEXT *pipeline;
+};
+
+struct GPURayTracingPassEncoderEXT {
+  void                   *_priv;
+  void                   *_pipeline;
+  GPUApi                 *_api;
+  GPUDevice              *device;
+  GPUCommandBuffer       *cmdb;
+  GPUFrameStats          *stats;
+  GPUPipelineLayout      *pipelineLayout;
+  GPUBindGroup           *boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
+  GPUBindGroupLayout     *boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
+  GPUDynamicOffsetShadow  boundDynamicOffsets[GPU_ENCODER_MAX_BIND_GROUPS];
+  uint32_t                boundDynamicOffsetCounts[GPU_ENCODER_MAX_BIND_GROUPS];
+  uint32_t                requiredBindGroupMask;
+  bool                    hasPipeline;
+  bool                    ended;
+};
+
 #endif /* gpu_ray_internal_h */
