@@ -59,6 +59,7 @@ GPU_ASSERT_64BIT_SIZE(GPUTransientAllocatorConfig, 40u);
 GPU_ASSERT_64BIT_SIZE(GPUShaderReflection, 16u);
 GPU_ASSERT_64BIT_SIZE(GPUShaderLibraryCreateInfo, 72u);
 GPU_ASSERT_64BIT_SIZE(GPURenderPipelineCreateInfo, 128u);
+GPU_ASSERT_64BIT_SIZE(GPUSubgroupMatrixPropertiesEXT, 40u);
 _Static_assert(
   offsetof(GPUQueueSubmitExInfo, ppCommandBuffers) <
     offsetof(GPUQueueSubmitExInfo, pWaits),

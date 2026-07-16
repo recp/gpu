@@ -61,6 +61,13 @@ typedef struct GPUApiDevice {
                            GPUFormat              format,
                            GPUFormatCapabilities * __restrict outCaps);
 
+  GPUResult
+  (*getSubgroupMatrixProperties)(
+    const GPUAdapter               * __restrict adapter,
+    uint32_t                       * __restrict inoutPropertyCount,
+    GPUSubgroupMatrixPropertiesEXT * __restrict outProperties
+  );
+
   GPUDevice* (*createDevice)(GPUAdapter             * __restrict adapter,
                              GPUQueueCreateInfo       queCI[],
                              uint32_t                 nQueCI,

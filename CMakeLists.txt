@@ -88,6 +88,7 @@ set(GPU_CORE_SOURCES
   src/api/render/rce.c
   src/api/sampler.c
   src/api/surface.c
+  src/api/subgroup.c
   src/api/swapchain.c
   src/api/texture.c
   src/api/vertex.c
@@ -492,6 +493,18 @@ if(GPU_BUILD_TESTS)
   )
   unset(GPU_USL_FIXTURE_TARGET_CAPS)
   list(APPEND GPU_API_USL_FIXTURES ${GPU_API_SUBGROUP_USL_FIXTURE})
+  set(GPU_USL_FIXTURE_TARGET_CAPS subgroup_matrix)
+  gpu_add_usl_fixtures(
+    GPU_API_SUBGROUP_MATRIX_USL_FIXTURE
+    "${GPU_API_DEFAULT_BACKEND}"
+    api-subgroup-matrix
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/subgroup_matrix.usl"
+  )
+  unset(GPU_USL_FIXTURE_TARGET_CAPS)
+  add_custom_target(
+    gpu-api-subgroup-matrix-fixture
+    DEPENDS ${GPU_API_SUBGROUP_MATRIX_USL_FIXTURE}
+  )
   set(GPU_USL_FIXTURE_TARGET_CAPS vulkan1_2,shader_f16)
   gpu_add_usl_fixtures(
     GPU_API_SHADER_F16_USL_FIXTURE
@@ -886,6 +899,7 @@ if(GPU_BUILD_TESTS)
     tests/api/shader_sampler.c
     tests/api/storage_texture.c
     tests/api/subgroup.c
+    tests/api/subgroup_matrix.c
     tests/api/texture_integer_clear.c
     tests/api/texture_transfer.c
     tests/api/texture_view_render.c
@@ -895,6 +909,7 @@ if(GPU_BUILD_TESTS)
   )
   target_link_libraries(gpu-api-test PRIVATE gpu)
   add_dependencies(gpu-api-test gpu-api-fixtures)
+  add_dependencies(gpu-api-test gpu-api-subgroup-matrix-fixture)
   if(TARGET gpu-api-ray-query-fixture)
     add_dependencies(gpu-api-test gpu-api-ray-query-fixture)
   endif()
@@ -937,6 +952,9 @@ if(GPU_BUILD_TESTS)
         "GPU_RAY_QUERY_USL_PATH=${GPU_API_RAY_QUERY_USL_FIXTURE}"
     )
   endif()
+  set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
+    "GPU_SUBGROUP_MATRIX_USL_PATH=${GPU_API_SUBGROUP_MATRIX_USL_FIXTURE}"
+  )
 
   if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
     add_executable(gpu-metal-mesh-test tests/api/mesh.c)
@@ -978,6 +996,28 @@ if(GPU_BUILD_TESTS)
           "GPU_RAY_QUERY_USL_PATH=${GPU_API_VULKAN_RAY_QUERY_USL_FIXTURE}"
       )
     endif()
+    if(GPU_API_DEFAULT_BACKEND STREQUAL "vulkan")
+      set(GPU_API_VULKAN_SUBGROUP_MATRIX_USL_FIXTURE
+          ${GPU_API_SUBGROUP_MATRIX_USL_FIXTURE})
+    else()
+      set(GPU_USL_FIXTURE_TARGET_CAPS subgroup_matrix)
+      gpu_add_usl_fixtures(
+        GPU_API_VULKAN_SUBGROUP_MATRIX_USL_FIXTURE
+        vulkan
+        api-vulkan-subgroup-matrix
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/subgroup_matrix.usl"
+      )
+      unset(GPU_USL_FIXTURE_TARGET_CAPS)
+      add_custom_target(
+        gpu-api-vulkan-subgroup-matrix-fixture
+        DEPENDS ${GPU_API_VULKAN_SUBGROUP_MATRIX_USL_FIXTURE}
+      )
+      add_dependencies(gpu-api-test
+                       gpu-api-vulkan-subgroup-matrix-fixture)
+    endif()
+    set_property(TEST api-validation-vulkan APPEND PROPERTY ENVIRONMENT
+      "GPU_SUBGROUP_MATRIX_USL_PATH=${GPU_API_VULKAN_SUBGROUP_MATRIX_USL_FIXTURE}"
+    )
 
     add_executable(gpu-vulkan-queue-test
       tests/vulkan/queue.c

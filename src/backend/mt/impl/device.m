@@ -260,6 +260,165 @@ mt_probeSubgroups(GPUAdapterMT *adapterMT) {
   os_unfair_lock_unlock(&adapterMT->subgroupLock);
 }
 
+enum {
+  MT_SUBGROUP_MATRIX_F16_F16_F16 = 1u << 0,
+  MT_SUBGROUP_MATRIX_F16_F16_F32 = 1u << 1,
+  MT_SUBGROUP_MATRIX_F32_F32_F32 = 1u << 2
+};
+
+static bool
+mt_probeSubgroupMatrixProfile(id<MTLDevice> device,
+                              NSString     *name,
+                              NSString     *abType,
+                              NSString     *cType) {
+  NSString                    *source;
+  id<MTLComputePipelineState>  pipeline;
+  id<MTLFunction>              function;
+  id<MTLLibrary>               library;
+
+  source = [NSString stringWithFormat:
+    @"#include <metal_stdlib>\n"
+     "using namespace metal;\n"
+     "kernel void %@(device %@ *ab [[buffer(0)]], "
+     "device %@ *out [[buffer(1)]]) {\n"
+     "  simdgroup_matrix<%@, 8, 8> a;\n"
+     "  simdgroup_matrix<%@, 8, 8> b;\n"
+     "  simdgroup_matrix<%@, 8, 8> c = "
+     "make_filled_simdgroup_matrix<%@, 8, 8>((%@)0);\n"
+     "  simdgroup_matrix<%@, 8, 8> r;\n"
+     "  simdgroup_load(a, ab, 8, ulong2(0), false);\n"
+     "  simdgroup_load(b, ab + 64, 8, ulong2(0), false);\n"
+     "  simdgroup_multiply_accumulate(r, a, b, c);\n"
+     "  simdgroup_store(r, out, 8, ulong2(0), false);\n"
+     "}\n",
+     name,
+     abType,
+     cType,
+     abType,
+     abType,
+     cType,
+     cType,
+     cType,
+     cType];
+  library  = [device newLibraryWithSource:source options:nil error:nil];
+  function = [library newFunctionWithName:name];
+  pipeline = function
+    ? [device newComputePipelineStateWithFunction:function error:nil]
+    : nil;
+
+  [pipeline release];
+  [function release];
+  [library release];
+  return pipeline != nil;
+}
+
+static void
+mt_probeSubgroupMatrices(GPUAdapterMT *adapterMT) {
+  id<MTLDevice> device;
+
+  if (!adapterMT) {
+    return;
+  }
+
+  mt_probeSubgroups(adapterMT);
+  os_unfair_lock_lock(&adapterMT->subgroupLock);
+  if (adapterMT->subgroupMatrixProbed) {
+    os_unfair_lock_unlock(&adapterMT->subgroupLock);
+    return;
+  }
+  adapterMT->subgroupMatrixProbed = true;
+  device = adapterMT->device;
+  if (!adapterMT->subgroups || !device) {
+    os_unfair_lock_unlock(&adapterMT->subgroupLock);
+    return;
+  }
+
+  if (mt_probeSubgroupMatrixProfile(device,
+                                    @"gpu_matrix_hh_h",
+                                    @"half",
+                                    @"half")) {
+    adapterMT->subgroupMatrixProfiles |= MT_SUBGROUP_MATRIX_F16_F16_F16;
+  }
+  if (mt_probeSubgroupMatrixProfile(device,
+                                    @"gpu_matrix_hh_f",
+                                    @"half",
+                                    @"float")) {
+    adapterMT->subgroupMatrixProfiles |= MT_SUBGROUP_MATRIX_F16_F16_F32;
+  }
+  if (mt_probeSubgroupMatrixProfile(device,
+                                    @"gpu_matrix_ff_f",
+                                    @"float",
+                                    @"float")) {
+    adapterMT->subgroupMatrixProfiles |= MT_SUBGROUP_MATRIX_F32_F32_F32;
+  }
+  os_unfair_lock_unlock(&adapterMT->subgroupLock);
+}
+
+static GPUResult
+mt_getSubgroupMatrixProperties(
+  const GPUAdapter               * __restrict adapter,
+  uint32_t                       * __restrict inoutPropertyCount,
+  GPUSubgroupMatrixPropertiesEXT * __restrict outProperties) {
+  static const struct {
+    uint32_t                          bit;
+    GPUSubgroupMatrixComponentTypeEXT abType;
+    GPUSubgroupMatrixComponentTypeEXT cType;
+  } profiles[] = {
+    {MT_SUBGROUP_MATRIX_F16_F16_F16,
+     GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT,
+     GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT},
+    {MT_SUBGROUP_MATRIX_F16_F16_F32,
+     GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT,
+     GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT},
+    {MT_SUBGROUP_MATRIX_F32_F32_F32,
+     GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT,
+     GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT}
+  };
+  GPUAdapterMT *adapterMT;
+  uint32_t      capacity;
+  uint32_t      count;
+  uint32_t      written;
+
+  if (!adapter || !inoutPropertyCount ||
+      !(adapterMT = mt_adapter(adapter))) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  mt_probeSubgroupMatrices(adapterMT);
+  capacity = *inoutPropertyCount;
+  count    = 0u;
+  written  = 0u;
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(profiles); i++) {
+    GPUSubgroupMatrixPropertiesEXT property;
+
+    if ((adapterMT->subgroupMatrixProfiles & profiles[i].bit) == 0u) {
+      continue;
+    }
+    memset(&property, 0, sizeof(property));
+    property.m          = 8u;
+    property.n          = 8u;
+    property.k          = 8u;
+    property.aType      = profiles[i].abType;
+    property.bType      = profiles[i].abType;
+    property.cType      = profiles[i].cType;
+    property.resultType = profiles[i].cType;
+    property.stages     = GPU_SHADER_STAGE_COMPUTE_BIT;
+    property.scope      = GPU_SUBGROUP_MATRIX_SCOPE_SUBGROUP_EXT;
+    if (outProperties && written < capacity) {
+      outProperties[written++] = property;
+    }
+    count++;
+  }
+
+  *inoutPropertyCount = count;
+  if (count == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  return outProperties && capacity < count
+           ? GPU_ERROR_INSUFFICIENT_CAPACITY
+           : GPU_OK;
+}
+
 GPU_HIDE
 bool
 mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
@@ -300,6 +459,9 @@ mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
     case GPU_FEATURE_SUBGROUPS:
       mt_probeSubgroups(adapterMT);
       return adapterMT->subgroups;
+    case GPU_FEATURE_SUBGROUP_MATRIX:
+      mt_probeSubgroupMatrices(adapterMT);
+      return adapterMT->subgroupMatrixProfiles != 0u;
     case GPU_FEATURE_TIMESTAMPS:
       device = adapterMT->device;
       return mt_hasCounterSet(device, MTLCommonCounterSetTimestamp) &&
@@ -550,6 +712,9 @@ mt_createDevice(GPUAdapter        * __restrict adapter,
 
   adapterMT = mt_adapter(adapter);
   if (!adapterMT ||
+      ((enabledFeatureMask &
+        (1ull << GPU_FEATURE_SUBGROUP_MATRIX)) != 0u &&
+       !mt_supportsFeature(adapter, GPU_FEATURE_SUBGROUP_MATRIX)) ||
       !mt_selectCommandMode(adapterMT->device,
                             enabledFeatureMask,
                             &commandMode)) {
@@ -664,6 +829,7 @@ mt_initDevice(GPUApiDevice *apiDevice) {
   apiDevice->supportsFeature           = mt_supportsFeature;
   apiDevice->getLimits                 = mt_getLimits;
   apiDevice->getFormatCapabilities     = mt_getFormatCapabilities;
+  apiDevice->getSubgroupMatrixProperties = mt_getSubgroupMatrixProperties;
   apiDevice->createDevice              = mt_createDevice;
   apiDevice->waitIdle                  = mt_waitDeviceIdle;
   apiDevice->destroyDevice             = mt_destroyDevice;

@@ -124,6 +124,191 @@ vk_hasSubgroupCapability(const GPUAdapterVk *adapter) {
            requiredOperations;
 }
 
+#ifdef VK_KHR_cooperative_matrix
+static bool
+vk_subgroupMatrixComponent(VkComponentTypeKHR                  native,
+                           GPUSubgroupMatrixComponentTypeEXT *outType) {
+  if (!outType) {
+    return false;
+  }
+
+  switch (native) {
+    case VK_COMPONENT_TYPE_FLOAT16_KHR:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT;
+      return true;
+    case VK_COMPONENT_TYPE_FLOAT32_KHR:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT;
+      return true;
+    case VK_COMPONENT_TYPE_FLOAT64_KHR:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_F64_EXT;
+      return true;
+    case VK_COMPONENT_TYPE_SINT8_KHR:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_I8_EXT;
+      return true;
+    case VK_COMPONENT_TYPE_SINT16_KHR:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_I16_EXT;
+      return true;
+    case VK_COMPONENT_TYPE_SINT32_KHR:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_I32_EXT;
+      return true;
+    case VK_COMPONENT_TYPE_SINT64_KHR:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_I64_EXT;
+      return true;
+    case VK_COMPONENT_TYPE_UINT8_KHR:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_U8_EXT;
+      return true;
+    case VK_COMPONENT_TYPE_UINT16_KHR:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_U16_EXT;
+      return true;
+    case VK_COMPONENT_TYPE_UINT32_KHR:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_U32_EXT;
+      return true;
+    case VK_COMPONENT_TYPE_UINT64_KHR:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_U64_EXT;
+      return true;
+    case VK_COMPONENT_TYPE_BFLOAT16_KHR:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_BF16_EXT;
+      return true;
+    default:
+      return false;
+  }
+}
+
+static GPUShaderStageFlags
+vk_subgroupMatrixStages(VkShaderStageFlags native) {
+  GPUShaderStageFlags stages;
+
+  stages = 0u;
+  if (native & VK_SHADER_STAGE_VERTEX_BIT) {
+    stages |= GPU_SHADER_STAGE_VERTEX_BIT;
+  }
+  if (native & VK_SHADER_STAGE_FRAGMENT_BIT) {
+    stages |= GPU_SHADER_STAGE_FRAGMENT_BIT;
+  }
+  if (native & VK_SHADER_STAGE_COMPUTE_BIT) {
+    stages |= GPU_SHADER_STAGE_COMPUTE_BIT;
+  }
+#ifdef VK_EXT_mesh_shader
+  if (native & VK_SHADER_STAGE_TASK_BIT_EXT) {
+    stages |= GPU_SHADER_STAGE_TASK_BIT;
+  }
+  if (native & VK_SHADER_STAGE_MESH_BIT_EXT) {
+    stages |= GPU_SHADER_STAGE_MESH_BIT;
+  }
+#endif
+  return stages;
+}
+
+static GPUResult
+vk_getSubgroupMatrixProperties(
+  const GPUAdapter               * __restrict adapter,
+  uint32_t                       * __restrict inoutPropertyCount,
+  GPUSubgroupMatrixPropertiesEXT * __restrict outProperties) {
+  GPUAdapterVk                  *adapterVk;
+  VkCooperativeMatrixPropertiesKHR *native;
+  VkResult                       result;
+  GPUShaderStageFlags            stages;
+  uint32_t                       capacity;
+  uint32_t                       nativeCount;
+  uint32_t                       count;
+  uint32_t                       written;
+
+  adapterVk = adapter ? adapter->_priv : NULL;
+  if (!adapterVk || !inoutPropertyCount) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!adapterVk->subgroupMatrix ||
+      !adapterVk->getCooperativeMatrixProperties) {
+    *inoutPropertyCount = 0u;
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  nativeCount = 0u;
+  result = adapterVk->getCooperativeMatrixProperties(
+    adapterVk->physicalDevice,
+    &nativeCount,
+    NULL
+  );
+  if (result != VK_SUCCESS || nativeCount == 0u) {
+    *inoutPropertyCount = 0u;
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  native = calloc(nativeCount, sizeof(*native));
+  if (!native) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  for (uint32_t i = 0u; i < nativeCount; i++) {
+    native[i].sType = VK_STRUCTURE_TYPE_COOPERATIVE_MATRIX_PROPERTIES_KHR;
+  }
+  result = adapterVk->getCooperativeMatrixProperties(
+    adapterVk->physicalDevice,
+    &nativeCount,
+    native
+  );
+  if (result != VK_SUCCESS) {
+    free(native);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  capacity = *inoutPropertyCount;
+  stages   = vk_subgroupMatrixStages(adapterVk->subgroupMatrixStages);
+  count    = 0u;
+  written  = 0u;
+  for (uint32_t i = 0u; i < nativeCount; i++) {
+    GPUSubgroupMatrixPropertiesEXT property;
+
+    memset(&property, 0, sizeof(property));
+    if (native[i].scope != VK_SCOPE_SUBGROUP_KHR || stages == 0u ||
+        !vk_subgroupMatrixComponent(native[i].AType, &property.aType) ||
+        !vk_subgroupMatrixComponent(native[i].BType, &property.bType) ||
+        !vk_subgroupMatrixComponent(native[i].CType, &property.cType) ||
+        !vk_subgroupMatrixComponent(native[i].ResultType,
+                                    &property.resultType)) {
+      continue;
+    }
+
+    property.m                      = native[i].MSize;
+    property.n                      = native[i].NSize;
+    property.k                      = native[i].KSize;
+    property.stages                 = stages;
+    property.scope                  = GPU_SUBGROUP_MATRIX_SCOPE_SUBGROUP_EXT;
+    property.saturatingAccumulation = native[i].saturatingAccumulation != 0u;
+    if (outProperties && written < capacity) {
+      outProperties[written++] = property;
+    }
+    count++;
+  }
+  free(native);
+
+  *inoutPropertyCount = count;
+  if (count == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  return outProperties && capacity < count
+           ? GPU_ERROR_INSUFFICIENT_CAPACITY
+           : GPU_OK;
+}
+
+static bool
+vk_hasSubgroupMatrixProperty(GPUAdapter *adapter) {
+  GPUAdapterVk *adapterVk;
+  GPUResult     result;
+  uint32_t      count;
+
+  adapterVk = adapter ? adapter->_priv : NULL;
+  if (!adapterVk || !vk_hasSubgroupCapability(adapterVk)) {
+    return false;
+  }
+
+  adapterVk->subgroupMatrix = true;
+  count = 0u;
+  result = vk_getSubgroupMatrixProperties(adapter, &count, NULL);
+  adapterVk->subgroupMatrix = result == GPU_OK && count > 0u;
+  return adapterVk->subgroupMatrix;
+}
+#endif
+
 static bool
 vk_addDeviceExtension(GPUAdapterVk *adapter, const char *name) {
   if (!adapter || !name) {
@@ -221,6 +406,12 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkPhysicalDeviceMeshShaderFeaturesEXT      meshFeatures = {0};
   VkPhysicalDeviceFeatures2                  meshFeatures2 = {0};
 #endif
+#ifdef VK_KHR_cooperative_matrix
+  VkPhysicalDeviceCooperativeMatrixFeaturesKHR cooperativeFeatures = {0};
+  VkPhysicalDeviceFeatures2                  cooperativeFeatures2 = {0};
+  VkPhysicalDeviceCooperativeMatrixPropertiesKHR cooperativeProperties = {0};
+  VkPhysicalDeviceProperties2                cooperativeProperties2 = {0};
+#endif
   VkResult                                  err;
   uint32_t                                  i, nExtensions;
   bool                                      incrementalPresentEnabled;
@@ -253,6 +444,9 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 #ifdef VK_EXT_mesh_shader
   bool                                      meshExtension;
   bool                                      spirv14ExtensionUsable;
+#endif
+#ifdef VK_KHR_cooperative_matrix
+  bool                                      cooperativeExtension;
 #endif
 
   extensions                = NULL;
@@ -287,6 +481,9 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 #ifdef VK_EXT_mesh_shader
   meshExtension                 = false;
   spirv14ExtensionUsable       = false;
+#endif
+#ifdef VK_KHR_cooperative_matrix
+  cooperativeExtension         = false;
 #endif
 
   adapter                   = calloc(1, sizeof(*adapter));
@@ -421,6 +618,12 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
         vrsExtension = true;
       }
 #endif
+#ifdef VK_KHR_cooperative_matrix
+      if (!strcmp(VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        cooperativeExtension = true;
+      }
+#endif
 
       if (incrementalPresentEnabled) {
         VK__ADD_EXT_IF(VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME,
@@ -504,6 +707,48 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     adapterVk->bindless = adapterVk->descriptorIndexing &&
                           descriptorFeatures.descriptorBindingPartiallyBound;
   }
+#ifdef VK_KHR_cooperative_matrix
+  if (getFeatures2 && cooperativeExtension) {
+    PFN_vkGetPhysicalDeviceProperties2 getProperties2;
+
+    cooperativeFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR;
+    cooperativeFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    cooperativeFeatures2.pNext = &cooperativeFeatures;
+    getFeatures2(raw, &cooperativeFeatures2);
+
+    getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+      vkGetInstanceProcAddr(instanceVk->inst,
+                            "vkGetPhysicalDeviceProperties2");
+    if (!getProperties2) {
+      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+        vkGetInstanceProcAddr(instanceVk->inst,
+                              "vkGetPhysicalDeviceProperties2KHR");
+    }
+    adapterVk->getCooperativeMatrixProperties =
+      (PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR)
+        vkGetInstanceProcAddr(
+          instanceVk->inst,
+          "vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR"
+        );
+    if (cooperativeFeatures.cooperativeMatrix && getProperties2 &&
+        adapterVk->getCooperativeMatrixProperties) {
+      cooperativeProperties.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_PROPERTIES_KHR;
+      cooperativeProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+      cooperativeProperties2.pNext = &cooperativeProperties;
+      getProperties2(raw, &cooperativeProperties2);
+      adapterVk->subgroupMatrixStages =
+        cooperativeProperties.cooperativeMatrixSupportedStages;
+      if ((adapterVk->subgroupMatrixStages & VK_SHADER_STAGE_COMPUTE_BIT) != 0u &&
+          vk_hasSubgroupMatrixProperty(adapter) &&
+          !vk_addDeviceExtension(adapterVk,
+                                 VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME)) {
+        goto fail;
+      }
+    }
+  }
+#endif
   if (getFeatures2 && timelineCore) {
     timelineFeatures.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
@@ -827,6 +1072,8 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       return adapterVk->vrsDrawRate || adapterVk->vrsAttachment;
     case GPU_FEATURE_RAY_QUERY:
       return adapterVk->rayQuery;
+    case GPU_FEATURE_SUBGROUP_MATRIX:
+      return adapterVk->subgroupMatrix;
     default:
       return false;
   }
@@ -1170,6 +1417,9 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
 #ifdef VK_KHR_fragment_shading_rate
   VkPhysicalDeviceFragmentShadingRateFeaturesKHR vrsFeatures = {0};
 #endif
+#ifdef VK_KHR_cooperative_matrix
+  VkPhysicalDeviceCooperativeMatrixFeaturesKHR cooperativeFeatures = {0};
+#endif
   VkDeviceCreateInfo       deviceCI = {0};
   VkResult                 result;
   uint32_t                 familyIndex;
@@ -1224,6 +1474,11 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) != 0u &&
       !adapterVk->rayQuery) {
+    goto err;
+  }
+  if ((enabledFeatureMask &
+       (1ull << GPU_FEATURE_SUBGROUP_MATRIX)) != 0u &&
+      !adapterVk->subgroupMatrix) {
     goto err;
   }
   planCount       = 0u;
@@ -1369,6 +1624,16 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
     vrsFeatures.pipelineFragmentShadingRate = adapterVk->vrsDrawRate;
     vrsFeatures.attachmentFragmentShadingRate = adapterVk->vrsAttachment;
     deviceCI.pNext = &vrsFeatures;
+  }
+#endif
+#ifdef VK_KHR_cooperative_matrix
+  if ((enabledFeatureMask &
+       (1ull << GPU_FEATURE_SUBGROUP_MATRIX)) != 0u) {
+    cooperativeFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR;
+    cooperativeFeatures.pNext = (void *)deviceCI.pNext;
+    cooperativeFeatures.cooperativeMatrix = VK_TRUE;
+    deviceCI.pNext = &cooperativeFeatures;
   }
 #endif
 
@@ -1596,6 +1861,9 @@ vk_initDevice(GPUApiDevice *apiDevice) {
   apiDevice->supportsFeature           = vk_supportsFeature;
   apiDevice->getLimits                 = vk_getLimits;
   apiDevice->getFormatCapabilities     = vk_getFormatCapabilities;
+#ifdef VK_KHR_cooperative_matrix
+  apiDevice->getSubgroupMatrixProperties = vk_getSubgroupMatrixProperties;
+#endif
   apiDevice->createDevice              = vk_createDevice;
   apiDevice->waitIdle                  = vk_waitDeviceIdle;
   apiDevice->destroyDevice             = vk_destroyDevice;

@@ -73,6 +73,7 @@ typedef struct GPUAdapterMT {
   id<MTLDevice>           device;
   MTLReadWriteTextureTier storageTier;
   os_unfair_lock          subgroupLock;
+  uint32_t                subgroupMatrixProfiles;
   uint32_t                subgroupSize;
   bool                    float32Filterable;
   bool                    depth24Supported;
@@ -80,6 +81,7 @@ typedef struct GPUAdapterMT {
   bool                    appleFamily2;
   bool                    bcSupported;
   bool                    subgroupProbed;
+  bool                    subgroupMatrixProbed;
   bool                    subgroups;
 } GPUAdapterMT;
 

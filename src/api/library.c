@@ -80,6 +80,10 @@ gpu_uslRuntimeInfoIsUsable(const USRuntimeInfo *runtimeInfo) {
 }
 
 static int
+gpu_shaderVisibilityFromUSLStage(uint32_t stage,
+                                 GPUShaderStageFlags *outVisibility);
+
+static int
 gpu_uslSemanticEnabled(const GPUDevice *device, uint32_t semanticId) {
   switch (semanticId) {
     case USL_SEMANTIC_FEATURE_ID_SEMANTIC_FAST_PATH:
@@ -93,9 +97,186 @@ gpu_uslSemanticEnabled(const GPUDevice *device, uint32_t semanticId) {
       return GPUIsFeatureEnabled(device, GPU_FEATURE_DESCRIPTOR_INDEXING);
     case USL_SEMANTIC_FEATURE_ID_RAY_QUERY:
       return GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_QUERY);
+    case USL_SEMANTIC_FEATURE_ID_SUBGROUP_MATRIX:
+      return GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUP_MATRIX);
     default:
       return 0;
   }
+}
+
+static int
+gpu_subgroupMatrixComponentFromUSL(
+  uint32_t                                elementKind,
+  GPUSubgroupMatrixComponentTypeEXT      *outType) {
+  if (!outType) {
+    return 0;
+  }
+
+  switch (elementKind) {
+    case USL_RUNTIME_ELEM_I8:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_I8_EXT;
+      return 1;
+    case USL_RUNTIME_ELEM_I16:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_I16_EXT;
+      return 1;
+    case USL_RUNTIME_ELEM_I32:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_I32_EXT;
+      return 1;
+    case USL_RUNTIME_ELEM_I64:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_I64_EXT;
+      return 1;
+    case USL_RUNTIME_ELEM_U8:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_U8_EXT;
+      return 1;
+    case USL_RUNTIME_ELEM_U16:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_U16_EXT;
+      return 1;
+    case USL_RUNTIME_ELEM_U32:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_U32_EXT;
+      return 1;
+    case USL_RUNTIME_ELEM_U64:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_U64_EXT;
+      return 1;
+    case USL_RUNTIME_ELEM_F16:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT;
+      return 1;
+    case USL_RUNTIME_ELEM_F32:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT;
+      return 1;
+    case USL_RUNTIME_ELEM_F64:
+      *outType = GPU_SUBGROUP_MATRIX_COMPONENT_F64_EXT;
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static int
+gpu_subgroupMatrixPropertyMatches(
+  const GPUSubgroupMatrixPropertiesEXT    *property,
+  const USLRuntimeSubgroupMatrixRequirement *requirement) {
+  GPUSubgroupMatrixComponentTypeEXT type;
+  GPUShaderStageFlags                stage;
+
+  if (!property || !requirement || requirement->flags != 0u ||
+      requirement->scope != USL_RUNTIME_SUBGROUP_MATRIX_SCOPE_SUBGROUP ||
+      property->scope != GPU_SUBGROUP_MATRIX_SCOPE_SUBGROUP_EXT ||
+      property->saturatingAccumulation ||
+      !gpu_shaderVisibilityFromUSLStage(requirement->stage, &stage) ||
+      (property->stages & stage) == 0u) {
+    return 0;
+  }
+
+  if (requirement->operation == USL_RUNTIME_SUBGROUP_MATRIX_OPERATION_MAD) {
+    GPUSubgroupMatrixComponentTypeEXT aType;
+    GPUSubgroupMatrixComponentTypeEXT bType;
+    GPUSubgroupMatrixComponentTypeEXT cType;
+    GPUSubgroupMatrixComponentTypeEXT resultType;
+
+    return gpu_subgroupMatrixComponentFromUSL(requirement->a_element_kind,
+                                              &aType) &&
+           gpu_subgroupMatrixComponentFromUSL(requirement->b_element_kind,
+                                              &bType) &&
+           gpu_subgroupMatrixComponentFromUSL(requirement->c_element_kind,
+                                              &cType) &&
+           gpu_subgroupMatrixComponentFromUSL(
+             requirement->result_element_kind,
+             &resultType) &&
+           property->m == requirement->m &&
+           property->n == requirement->n &&
+           property->k == requirement->k &&
+           property->aType == aType && property->bType == bType &&
+           property->cType == cType && property->resultType == resultType;
+  }
+
+  if (requirement->operation != USL_RUNTIME_SUBGROUP_MATRIX_OPERATION_LOAD &&
+      requirement->operation != USL_RUNTIME_SUBGROUP_MATRIX_OPERATION_STORE &&
+      requirement->operation != USL_RUNTIME_SUBGROUP_MATRIX_OPERATION_FILL) {
+    return 0;
+  }
+  if (!gpu_subgroupMatrixComponentFromUSL(requirement->element_kind, &type)) {
+    return 0;
+  }
+
+  switch (requirement->use) {
+    case USL_RUNTIME_SUBGROUP_MATRIX_USE_A:
+      return requirement->rows == property->m &&
+             requirement->cols == property->k && type == property->aType;
+    case USL_RUNTIME_SUBGROUP_MATRIX_USE_B:
+      return requirement->rows == property->k &&
+             requirement->cols == property->n && type == property->bType;
+    case USL_RUNTIME_SUBGROUP_MATRIX_USE_ACCUMULATOR:
+      return requirement->rows == property->m &&
+             requirement->cols == property->n &&
+             type == (requirement->operation ==
+                        USL_RUNTIME_SUBGROUP_MATRIX_OPERATION_STORE
+                       ? property->resultType
+                       : property->cType);
+    default:
+      return 0;
+  }
+}
+
+static int
+gpu_subgroupMatrixRequirementsEnabled(const GPUDevice      *device,
+                                      const USRuntimeInfo *runtimeInfo) {
+  GPUSubgroupMatrixPropertiesEXT *properties;
+  GPUResult                       result;
+  size_t                          propertyBytes;
+  uint32_t                        propertyCount;
+  int                             enabled;
+
+  if (!runtimeInfo || runtimeInfo->subgroup_matrix_requirement_count == 0u) {
+    return 1;
+  }
+  if (!device || !device->adapter ||
+      !GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUP_MATRIX) ||
+      runtimeInfo->subgroup_matrix_requirement_count >
+        USL_RUNTIME_MAX_SUBGROUP_MATRIX_REQUIREMENTS ||
+      !runtimeInfo->subgroup_matrix_requirements) {
+    return 0;
+  }
+
+  propertyCount = 0u;
+  if (GPUGetSubgroupMatrixPropertiesEXT(device->adapter,
+                                        &propertyCount,
+                                        NULL) != GPU_OK ||
+      propertyCount == 0u ||
+      SIZE_MAX / propertyCount < sizeof(*properties)) {
+    return 0;
+  }
+  propertyBytes = (size_t)propertyCount * sizeof(*properties);
+  properties = malloc(propertyBytes);
+  if (!properties) {
+    return 0;
+  }
+  result = GPUGetSubgroupMatrixPropertiesEXT(device->adapter,
+                                             &propertyCount,
+                                             properties);
+  if (result != GPU_OK) {
+    free(properties);
+    return 0;
+  }
+
+  enabled = 1;
+  for (uint32_t i = 0u;
+       enabled && i < runtimeInfo->subgroup_matrix_requirement_count;
+       i++) {
+    int matched;
+
+    matched = 0;
+    for (uint32_t j = 0u; j < propertyCount; j++) {
+      if (gpu_subgroupMatrixPropertyMatches(
+            &properties[j],
+            &runtimeInfo->subgroup_matrix_requirements[i])) {
+        matched = 1;
+        break;
+      }
+    }
+    enabled = matched;
+  }
+  free(properties);
+  return enabled;
 }
 
 static int
@@ -103,7 +284,8 @@ gpu_shaderRequirementsEnabled(const GPUDevice      *device,
                               const USRuntimeInfo *runtimeInfo) {
   uint32_t flags;
 
-  flags = USL_BYTECODE_RUNTIME_INFO_FLAG_CAPABILITY_REQUIREMENT_OVERFLOW;
+  flags = USL_BYTECODE_RUNTIME_INFO_FLAG_CAPABILITY_REQUIREMENT_OVERFLOW |
+          USL_BYTECODE_RUNTIME_INFO_FLAG_SUBGROUP_MATRIX_REQUIREMENT_OVERFLOW;
   if (!device || !gpu_uslRuntimeInfoIsUsable(runtimeInfo) ||
       (runtimeInfo->flags & flags) != 0u ||
       runtimeInfo->capability_requirement_count >
@@ -135,7 +317,7 @@ gpu_shaderRequirementsEnabled(const GPUDevice      *device,
     }
   }
 
-  return 1;
+  return gpu_subgroupMatrixRequirementsEnabled(device, runtimeInfo);
 }
 
 static int
@@ -1152,7 +1334,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   USCompileOutput          *compileOutput;
   USLCompileOptions         compileOptions;
   USLTargetSpec             target;
-  USLCapabilityAtomDesc     targetAtoms[4];
+  USLCapabilityAtomDesc     targetAtoms[8];
   USCompileInput            compileInput;
   const char               *payloadSource;
   GPUResult                 rc;
@@ -1249,6 +1431,16 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
           &targetAtoms[targetAtomCount++],
           USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
           USL_SEMANTIC_FEATURE_ID_RAY_QUERY,
+          0u,
+          0u) != USLOk) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUP_MATRIX)) {
+    if (us_cap_atom_init(
+          &targetAtoms[targetAtomCount++],
+          USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+          USL_SEMANTIC_FEATURE_ID_SUBGROUP_MATRIX,
           0u,
           0u) != USLOk) {
       return GPU_ERROR_BACKEND_FAILURE;

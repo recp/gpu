@@ -38,6 +38,7 @@ typedef struct GPUApiTestContext {
   const char  *coordinateBytecodePath;
   const char  *descriptorIndexingBytecodePath;
   const char  *subgroupBytecodePath;
+  const char  *subgroupMatrixBytecodePath;
   const char  *shaderF16BytecodePath;
   const char  *rayQueryBytecodePath;
 } GPUApiTestContext;
@@ -89,6 +90,7 @@ int gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath);
 int gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath);
 int gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath);
 int gpu_test_subgroup(GPUAdapter *adapter, const char *bytecodePath);
+int gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath);
 int gpu_test_shader_f16(GPUAdapter *adapter, const char *bytecodePath);
 int gpu_test_vrs(GPUAdapter *adapter, GPUDevice *defaultDevice);
 int gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath);

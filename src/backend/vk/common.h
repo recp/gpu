@@ -178,9 +178,16 @@ typedef struct GPUInstanceVk {
 typedef struct GPUAdapterVk {
   char                         *extensionNames[64];
   VkQueueFamilyProperties      *queueFamilyProps;
+#ifdef VK_KHR_cooperative_matrix
+  PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR
+                                getCooperativeMatrixProperties;
+#endif
   VkPhysicalDevice              physicalDevice;
   VkSubgroupFeatureFlags        subgroupOperations;
   VkShaderStageFlags            subgroupStages;
+#ifdef VK_KHR_cooperative_matrix
+  VkShaderStageFlags            subgroupMatrixStages;
+#endif
   VkPhysicalDeviceProperties    props;
   VkPhysicalDeviceFeatures      features;
   VkDisplayPropertiesKHR        displayProps;
@@ -207,6 +214,7 @@ typedef struct GPUAdapterVk {
   bool                          timelineSemaphore;
   bool                          synchronization2;
   bool                          rayQuery;
+  bool                          subgroupMatrix;
   bool                          negativeViewport;
 } GPUAdapterVk;
 

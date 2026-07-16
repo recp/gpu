@@ -1,0 +1,9 @@
+kern(32, 1, 1) subgroup_matrix_cs(inout lhs: [half] #buffer(0) #group(0),
+                                  inout rhs: [half] #buffer(1) #group(0),
+                                  inout output: [float] #buffer(2) #group(0)) {
+  let a = subgroup_matrix_load<half, 8, 8, a, row_major>(lhs, 0, 8)
+  let b = subgroup_matrix_load<half, 8, 8, b, row_major>(rhs, 0, 8)
+  let c = subgroup_matrix_fill<float, 8, 8, accumulator>(0.0)
+  let result = subgroup_matrix_mad(a, b, c)
+  subgroup_matrix_store<row_major>(result, output, 0, 8)
+}
