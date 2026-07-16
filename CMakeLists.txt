@@ -493,18 +493,20 @@ if(GPU_BUILD_TESTS)
   )
   unset(GPU_USL_FIXTURE_TARGET_CAPS)
   list(APPEND GPU_API_USL_FIXTURES ${GPU_API_SUBGROUP_USL_FIXTURE})
-  set(GPU_USL_FIXTURE_TARGET_CAPS subgroup_matrix)
-  gpu_add_usl_fixtures(
-    GPU_API_SUBGROUP_MATRIX_USL_FIXTURE
-    "${GPU_API_DEFAULT_BACKEND}"
-    api-subgroup-matrix
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/subgroup_matrix.usl"
-  )
-  unset(GPU_USL_FIXTURE_TARGET_CAPS)
-  add_custom_target(
-    gpu-api-subgroup-matrix-fixture
-    DEPENDS ${GPU_API_SUBGROUP_MATRIX_USL_FIXTURE}
-  )
+  if(NOT GPU_API_DEFAULT_BACKEND STREQUAL "dx12")
+    set(GPU_USL_FIXTURE_TARGET_CAPS subgroup_matrix)
+    gpu_add_usl_fixtures(
+      GPU_API_SUBGROUP_MATRIX_USL_FIXTURE
+      "${GPU_API_DEFAULT_BACKEND}"
+      api-subgroup-matrix
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/subgroup_matrix.usl"
+    )
+    unset(GPU_USL_FIXTURE_TARGET_CAPS)
+    add_custom_target(
+      gpu-api-subgroup-matrix-fixture
+      DEPENDS ${GPU_API_SUBGROUP_MATRIX_USL_FIXTURE}
+    )
+  endif()
   set(GPU_USL_FIXTURE_TARGET_CAPS vulkan1_2,shader_f16)
   gpu_add_usl_fixtures(
     GPU_API_SHADER_F16_USL_FIXTURE
@@ -923,7 +925,9 @@ if(GPU_BUILD_TESTS)
   target_link_libraries(gpu-api-test PRIVATE gpu)
   add_dependencies(gpu-api-test gpu-api-fixtures)
   add_dependencies(gpu-api-test gpu-api-atomic64-fixture)
-  add_dependencies(gpu-api-test gpu-api-subgroup-matrix-fixture)
+  if(TARGET gpu-api-subgroup-matrix-fixture)
+    add_dependencies(gpu-api-test gpu-api-subgroup-matrix-fixture)
+  endif()
   if(TARGET gpu-api-ray-query-fixture)
     add_dependencies(gpu-api-test gpu-api-ray-query-fixture)
   endif()
@@ -966,8 +970,12 @@ if(GPU_BUILD_TESTS)
         "GPU_RAY_QUERY_USL_PATH=${GPU_API_RAY_QUERY_USL_FIXTURE}"
     )
   endif()
+  if(GPU_API_SUBGROUP_MATRIX_USL_FIXTURE)
+    set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
+      "GPU_SUBGROUP_MATRIX_USL_PATH=${GPU_API_SUBGROUP_MATRIX_USL_FIXTURE}"
+    )
+  endif()
   set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
-    "GPU_SUBGROUP_MATRIX_USL_PATH=${GPU_API_SUBGROUP_MATRIX_USL_FIXTURE}"
     "GPU_ATOMIC64_USL_PATH=${GPU_API_ATOMIC64_USL_FIXTURE}"
   )
 
