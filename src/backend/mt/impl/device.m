@@ -219,7 +219,10 @@ mt_probeSubgroups(GPUAdapterMT *adapterMT) {
      "using namespace metal;\n"
      "kernel void gpu_subgroup_probe(device uint *output [[buffer(0)]],\n"
      "                               uint tid [[thread_position_in_grid]]) {\n"
-     "  output[tid] = simd_shuffle_xor(tid, 1u);\n"
+     "  uint x = simd_shuffle_xor(tid, 1u);\n"
+     "  uint y = simd_shuffle_down(tid, 1u);\n"
+     "  uint z = simd_shuffle_up(tid, 1u);\n"
+     "  output[tid] = x + y + z;\n"
      "}\n";
   id<MTLComputePipelineState> pipeline;
   id<MTLFunction>             function;
@@ -258,6 +261,30 @@ mt_probeSubgroups(GPUAdapterMT *adapterMT) {
   [function release];
   [library release];
   os_unfair_lock_unlock(&adapterMT->subgroupLock);
+}
+
+static bool
+mt_supportsSubgroupOperations(
+  const GPUAdapter                 * __restrict adapter,
+  GPUShaderStageFlags                           stage,
+  GPUBackendSubgroupOperationFlags              operations) {
+  const GPUShaderStageFlags supportedStages =
+    GPU_SHADER_STAGE_VERTEX_BIT |
+    GPU_SHADER_STAGE_FRAGMENT_BIT |
+    GPU_SHADER_STAGE_COMPUTE_BIT |
+    GPU_SHADER_STAGE_TASK_BIT |
+    GPU_SHADER_STAGE_MESH_BIT;
+  const GPUBackendSubgroupOperationFlags supportedOperations =
+    GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
+    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT |
+    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
+  GPUAdapterMT *adapterMT;
+
+  adapterMT = mt_adapter(adapter);
+  mt_probeSubgroups(adapterMT);
+  return adapterMT && adapterMT->subgroups &&
+         (supportedStages & stage) == stage &&
+         (supportedOperations & operations) == operations;
 }
 
 enum {
@@ -822,15 +849,16 @@ mt_destroyDevice(GPUDevice * __restrict device) {
 GPU_HIDE
 void
 mt_initDevice(GPUApiDevice *apiDevice) {
-  apiDevice->getAvailableAdapters      = mt_getAvailableAdapters;
-  apiDevice->selectAdapter             = mt_selectAdapter;
-  apiDevice->destroyAdapter            = mt_destroyAdapter;
-  apiDevice->getAdapterProperties      = mt_getAdapterProperties;
-  apiDevice->supportsFeature           = mt_supportsFeature;
-  apiDevice->getLimits                 = mt_getLimits;
-  apiDevice->getFormatCapabilities     = mt_getFormatCapabilities;
+  apiDevice->getAvailableAdapters        = mt_getAvailableAdapters;
+  apiDevice->selectAdapter               = mt_selectAdapter;
+  apiDevice->destroyAdapter              = mt_destroyAdapter;
+  apiDevice->getAdapterProperties        = mt_getAdapterProperties;
+  apiDevice->supportsFeature             = mt_supportsFeature;
+  apiDevice->supportsSubgroupOperations  = mt_supportsSubgroupOperations;
+  apiDevice->getLimits                   = mt_getLimits;
+  apiDevice->getFormatCapabilities       = mt_getFormatCapabilities;
   apiDevice->getSubgroupMatrixProperties = mt_getSubgroupMatrixProperties;
-  apiDevice->createDevice              = mt_createDevice;
-  apiDevice->waitIdle                  = mt_waitDeviceIdle;
-  apiDevice->destroyDevice             = mt_destroyDevice;
+  apiDevice->createDevice                = mt_createDevice;
+  apiDevice->waitIdle                    = mt_waitDeviceIdle;
+  apiDevice->destroyDevice               = mt_destroyDevice;
 }

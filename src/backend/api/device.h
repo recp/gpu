@@ -32,6 +32,14 @@ typedef struct GPUQueueCreateInfo {
   uint32_t         count;
 } GPUQueueCreateInfo;
 
+typedef enum GPUBackendSubgroupOperationFlagBits {
+  GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT            = 1u << 0,
+  GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT          = 1u << 1,
+  GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT = 1u << 2
+} GPUBackendSubgroupOperationFlagBits;
+
+typedef uint32_t GPUBackendSubgroupOperationFlags;
+
 typedef struct GPUApiDevice {
   GPUAdapter*
   (*getAvailableAdapters)(GPUInstance   * __restrict inst,
@@ -51,6 +59,13 @@ typedef struct GPUApiDevice {
   bool
   (*supportsFeature)(const GPUAdapter * __restrict adapter,
                      GPUFeature feature);
+
+  bool
+  (*supportsSubgroupOperations)(
+    const GPUAdapter                 * __restrict adapter,
+    GPUShaderStageFlags                           stage,
+    GPUBackendSubgroupOperationFlags              operations
+  );
 
   void
   (*getLimits)(const GPUAdapter * __restrict adapter,

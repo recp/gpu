@@ -112,16 +112,87 @@ vk_hasTimestampCapability(const GPUAdapterVk *adapter) {
 }
 
 static bool
-vk_hasSubgroupCapability(const GPUAdapterVk *adapter) {
-  VkSubgroupFeatureFlags requiredOperations;
+vk_subgroupStageFromGPU(GPUShaderStageFlags stage,
+                        VkShaderStageFlags  *outStage) {
+  if (!outStage) {
+    return false;
+  }
 
-  requiredOperations = VK_SUBGROUP_FEATURE_BASIC_BIT |
-                       VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
-                       VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT;
+  switch (stage) {
+    case GPU_SHADER_STAGE_VERTEX_BIT:
+      *outStage = VK_SHADER_STAGE_VERTEX_BIT;
+      return true;
+    case GPU_SHADER_STAGE_FRAGMENT_BIT:
+      *outStage = VK_SHADER_STAGE_FRAGMENT_BIT;
+      return true;
+    case GPU_SHADER_STAGE_COMPUTE_BIT:
+      *outStage = VK_SHADER_STAGE_COMPUTE_BIT;
+      return true;
+#ifdef VK_EXT_mesh_shader
+    case GPU_SHADER_STAGE_TASK_BIT:
+      *outStage = VK_SHADER_STAGE_TASK_BIT_EXT;
+      return true;
+    case GPU_SHADER_STAGE_MESH_BIT:
+      *outStage = VK_SHADER_STAGE_MESH_BIT_EXT;
+      return true;
+#endif
+    default:
+      return false;
+  }
+}
+
+static bool
+vk_subgroupOperationsFromGPU(
+  GPUBackendSubgroupOperationFlags operations,
+  VkSubgroupFeatureFlags          *outOperations) {
+  const GPUBackendSubgroupOperationFlags knownOperations =
+    GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
+    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT |
+    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
+  VkSubgroupFeatureFlags native;
+
+  if (!outOperations || (operations & ~knownOperations) != 0u) {
+    return false;
+  }
+
+  native = 0u;
+  if ((operations & GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT) != 0u) {
+    native |= VK_SUBGROUP_FEATURE_BASIC_BIT;
+  }
+  if ((operations & GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT) != 0u) {
+    native |= VK_SUBGROUP_FEATURE_SHUFFLE_BIT;
+  }
+  if ((operations &
+       GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT) != 0u) {
+    native |= VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT;
+  }
+  *outOperations = native;
+  return true;
+}
+
+static bool
+vk_supportsSubgroupOperations(
+  const GPUAdapter                 * __restrict adapter,
+  GPUShaderStageFlags                           stage,
+  GPUBackendSubgroupOperationFlags              operations) {
+  GPUAdapterVk          *adapterVk;
+  VkShaderStageFlags     nativeStage;
+  VkSubgroupFeatureFlags nativeOperations;
+
+  adapterVk = adapter ? adapter->_priv : NULL;
+  return adapterVk && adapterVk->subgroupSize > 0u &&
+         vk_subgroupStageFromGPU(stage, &nativeStage) &&
+         vk_subgroupOperationsFromGPU(operations, &nativeOperations) &&
+         (adapterVk->subgroupStages & nativeStage) == nativeStage &&
+         (adapterVk->subgroupOperations & nativeOperations) ==
+           nativeOperations;
+}
+
+static bool
+vk_hasSubgroupCapability(const GPUAdapterVk *adapter) {
   return adapter && adapter->subgroupSize > 0u &&
          (adapter->subgroupStages & VK_SHADER_STAGE_COMPUTE_BIT) != 0u &&
-         (adapter->subgroupOperations & requiredOperations) ==
-           requiredOperations;
+         (adapter->subgroupOperations & VK_SUBGROUP_FEATURE_BASIC_BIT) != 0u;
 }
 
 #ifdef VK_KHR_cooperative_matrix
@@ -1901,17 +1972,18 @@ vk_destroyDevice(GPUDevice * __restrict device) {
 GPU_HIDE
 void
 vk_initDevice(GPUApiDevice *apiDevice) {
-  apiDevice->getAvailableAdapters      = vk_getAvailableAdapters;
-  apiDevice->selectAdapter             = vk_selectAdapter;
-  apiDevice->destroyAdapter            = vk_destroyAdapter;
-  apiDevice->getAdapterProperties      = vk_getAdapterProperties;
-  apiDevice->supportsFeature           = vk_supportsFeature;
-  apiDevice->getLimits                 = vk_getLimits;
-  apiDevice->getFormatCapabilities     = vk_getFormatCapabilities;
+  apiDevice->getAvailableAdapters        = vk_getAvailableAdapters;
+  apiDevice->selectAdapter               = vk_selectAdapter;
+  apiDevice->destroyAdapter              = vk_destroyAdapter;
+  apiDevice->getAdapterProperties        = vk_getAdapterProperties;
+  apiDevice->supportsFeature             = vk_supportsFeature;
+  apiDevice->supportsSubgroupOperations  = vk_supportsSubgroupOperations;
+  apiDevice->getLimits                   = vk_getLimits;
+  apiDevice->getFormatCapabilities       = vk_getFormatCapabilities;
 #ifdef VK_KHR_cooperative_matrix
   apiDevice->getSubgroupMatrixProperties = vk_getSubgroupMatrixProperties;
 #endif
-  apiDevice->createDevice              = vk_createDevice;
-  apiDevice->waitIdle                  = vk_waitDeviceIdle;
-  apiDevice->destroyDevice             = vk_destroyDevice;
+  apiDevice->createDevice                = vk_createDevice;
+  apiDevice->waitIdle                    = vk_waitDeviceIdle;
+  apiDevice->destroyDevice               = vk_destroyDevice;
 }

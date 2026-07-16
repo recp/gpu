@@ -85,6 +85,29 @@ gpu_uslAppleTargetPlatform(void) {
   return USL_TARGET_PLATFORM_NONE;
 #  endif
 }
+
+static USLTargetProfile
+gpu_uslAppleMetalProfile(USLTargetPlatform platform, uint32_t platformMajor) {
+  if (platform == USL_TARGET_PLATFORM_MACOS) {
+    if (platformMajor >= 26u) return USL_TARGET_PROFILE_MSL_4_0;
+    if (platformMajor >= 15u) return USL_TARGET_PROFILE_MSL_3_2;
+    if (platformMajor >= 14u) return USL_TARGET_PROFILE_MSL_3_1;
+    if (platformMajor >= 13u) return USL_TARGET_PROFILE_MSL_3_0;
+    if (platformMajor >= 12u) return USL_TARGET_PROFILE_MSL_2_4;
+    if (platformMajor >= 11u) return USL_TARGET_PROFILE_MSL_2_3;
+  } else if (platform == USL_TARGET_PLATFORM_IOS) {
+    if (platformMajor >= 26u) return USL_TARGET_PROFILE_MSL_4_0;
+    if (platformMajor >= 18u) return USL_TARGET_PROFILE_MSL_3_2;
+    if (platformMajor >= 17u) return USL_TARGET_PROFILE_MSL_3_1;
+    if (platformMajor >= 16u) return USL_TARGET_PROFILE_MSL_3_0;
+    if (platformMajor >= 15u) return USL_TARGET_PROFILE_MSL_2_4;
+    if (platformMajor >= 14u) return USL_TARGET_PROFILE_MSL_2_3;
+    if (platformMajor >= 13u) return USL_TARGET_PROFILE_MSL_2_2;
+    if (platformMajor >= 12u) return USL_TARGET_PROFILE_MSL_2_1;
+  }
+
+  return USL_TARGET_PROFILE_MSL_2_0;
+}
 #endif
 
 static int
@@ -96,12 +119,13 @@ gpu_uslDefaultMetalTarget(USLTargetSpec *outTarget) {
 #if defined(__APPLE__)
   {
     USLTargetPlatform platform = gpu_uslAppleTargetPlatform();
-    uint32_t platformMajor = gpu_uslAppleRuntimePlatformMajor();
+    uint32_t          platformMajor = gpu_uslAppleRuntimePlatformMajor();
 
     if (platform != USL_TARGET_PLATFORM_NONE && platformMajor > 0) {
       return us_target_platform(outTarget,
                                 USL_BACKEND_METAL,
-                                USL_TARGET_PROFILE_MSL_2_0,
+                                gpu_uslAppleMetalProfile(platform,
+                                                        platformMajor),
                                 platform,
                                 platformMajor) == USLOk;
     }

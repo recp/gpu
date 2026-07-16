@@ -84,6 +84,35 @@ gpu_shaderVisibilityFromUSLStage(uint32_t stage,
                                  GPUShaderStageFlags *outVisibility);
 
 static int
+gpu_subgroupOperationsFromUSL(
+  uint32_t                          uslOperations,
+  GPUBackendSubgroupOperationFlags *outOperations) {
+  const uint32_t knownOperations =
+    USL_RUNTIME_SUBGROUP_OPERATION_BASIC |
+    USL_RUNTIME_SUBGROUP_OPERATION_SHUFFLE |
+    USL_RUNTIME_SUBGROUP_OPERATION_SHUFFLE_RELATIVE;
+  GPUBackendSubgroupOperationFlags operations;
+
+  if (!outOperations || (uslOperations & ~knownOperations) != 0u) {
+    return 0;
+  }
+
+  operations = 0u;
+  if ((uslOperations & USL_RUNTIME_SUBGROUP_OPERATION_BASIC) != 0u) {
+    operations |= GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT;
+  }
+  if ((uslOperations & USL_RUNTIME_SUBGROUP_OPERATION_SHUFFLE) != 0u) {
+    operations |= GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT;
+  }
+  if ((uslOperations &
+       USL_RUNTIME_SUBGROUP_OPERATION_SHUFFLE_RELATIVE) != 0u) {
+    operations |= GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
+  }
+  *outOperations = operations;
+  return 1;
+}
+
+static int
 gpu_uslSemanticEnabled(const GPUDevice *device, uint32_t semanticId) {
   switch (semanticId) {
     case USL_SEMANTIC_FEATURE_ID_SEMANTIC_FAST_PATH:
@@ -282,14 +311,49 @@ gpu_subgroupMatrixRequirementsEnabled(const GPUDevice      *device,
 }
 
 static int
+gpu_subgroupRequirementsEnabled(const GPUDevice      *device,
+                                const USRuntimeInfo *runtimeInfo) {
+  GPUBackendSubgroupOperationFlags operations;
+  GPUShaderStageFlags               stage;
+  GPUApi                            *api;
+
+  if (!device || !runtimeInfo || !(api = gpuDeviceApi(device))) {
+    return 0;
+  }
+
+  for (uint32_t i = 0u; i < runtimeInfo->entry_point_count; i++) {
+    const USLRuntimeEntryPoint *entry;
+
+    entry = &runtimeInfo->entry_points[i];
+    if (entry->subgroup_operation_flags ==
+        USL_RUNTIME_SUBGROUP_OPERATION_NONE) {
+      continue;
+    }
+    if (!api->device.supportsSubgroupOperations ||
+        !gpu_shaderVisibilityFromUSLStage(entry->stage, &stage) ||
+        !gpu_subgroupOperationsFromUSL(entry->subgroup_operation_flags,
+                                       &operations) ||
+        !api->device.supportsSubgroupOperations(device->adapter,
+                                                stage,
+                                                operations)) {
+      return 0;
+    }
+  }
+
+  return 1;
+}
+
+static int
 gpu_shaderRequirementsEnabled(const GPUDevice      *device,
                               const USRuntimeInfo *runtimeInfo) {
   uint32_t flags;
 
-  flags = USL_BYTECODE_RUNTIME_INFO_FLAG_CAPABILITY_REQUIREMENT_OVERFLOW |
+  flags = USL_BYTECODE_RUNTIME_INFO_FLAG_ENTRY_OVERFLOW |
+          USL_BYTECODE_RUNTIME_INFO_FLAG_CAPABILITY_REQUIREMENT_OVERFLOW |
           USL_BYTECODE_RUNTIME_INFO_FLAG_SUBGROUP_MATRIX_REQUIREMENT_OVERFLOW;
   if (!device || !gpu_uslRuntimeInfoIsUsable(runtimeInfo) ||
       (runtimeInfo->flags & flags) != 0u ||
+      runtimeInfo->entry_point_count > USL_RUNTIME_MAX_ENTRY_POINTS ||
       runtimeInfo->capability_requirement_count >
         USL_RUNTIME_MAX_CAPABILITY_REQUIREMENTS) {
     return 0;
@@ -319,7 +383,8 @@ gpu_shaderRequirementsEnabled(const GPUDevice      *device,
     }
   }
 
-  return gpu_subgroupMatrixRequirementsEnabled(device, runtimeInfo);
+  return gpu_subgroupRequirementsEnabled(device, runtimeInfo) &&
+         gpu_subgroupMatrixRequirementsEnabled(device, runtimeInfo);
 }
 
 static int

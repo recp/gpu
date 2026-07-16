@@ -767,6 +767,29 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
   }
 }
 
+static bool
+dx12_supportsSubgroupOperations(
+  const GPUAdapter                 * __restrict adapter,
+  GPUShaderStageFlags                           stage,
+  GPUBackendSubgroupOperationFlags              operations) {
+  const GPUShaderStageFlags supportedStages =
+    GPU_SHADER_STAGE_VERTEX_BIT |
+    GPU_SHADER_STAGE_FRAGMENT_BIT |
+    GPU_SHADER_STAGE_COMPUTE_BIT |
+    GPU_SHADER_STAGE_TASK_BIT |
+    GPU_SHADER_STAGE_MESH_BIT;
+  const GPUBackendSubgroupOperationFlags supportedOperations =
+    GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
+    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT |
+    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
+  GPUAdapterDX12 *adapterDX12;
+
+  adapterDX12 = adapter ? adapter->_priv : NULL;
+  return adapterDX12 && adapterDX12->subgroups &&
+         (supportedStages & stage) == stage &&
+         (supportedOperations & operations) == operations;
+}
+
 static void
 dx12_getLimits(const GPUAdapter * __restrict adapter,
                GPULimits       * __restrict outLimits) {
@@ -1004,14 +1027,15 @@ dx12_destroyDevice(GPUDevice * __restrict device) {
 GPU_HIDE
 void
 dx12_initDevice(GPUApiDevice* apiDevice) {
-  apiDevice->getAvailableAdapters      = dx12_getAvailableAdapters;
-  apiDevice->selectAdapter             = dx12_selectAdapter;
-  apiDevice->destroyAdapter            = dx12_destroyAdapter;
-  apiDevice->getAdapterProperties      = dx12_getAdapterProperties;
-  apiDevice->supportsFeature           = dx12_supportsFeature;
-  apiDevice->getLimits                 = dx12_getLimits;
-  apiDevice->getFormatCapabilities     = dx12_getFormatCapabilities;
-  apiDevice->createDevice              = dx12_createDevice;
-  apiDevice->waitIdle                  = dx12_waitDeviceIdle;
-  apiDevice->destroyDevice             = dx12_destroyDevice;
+  apiDevice->getAvailableAdapters       = dx12_getAvailableAdapters;
+  apiDevice->selectAdapter              = dx12_selectAdapter;
+  apiDevice->destroyAdapter             = dx12_destroyAdapter;
+  apiDevice->getAdapterProperties       = dx12_getAdapterProperties;
+  apiDevice->supportsFeature            = dx12_supportsFeature;
+  apiDevice->supportsSubgroupOperations = dx12_supportsSubgroupOperations;
+  apiDevice->getLimits                  = dx12_getLimits;
+  apiDevice->getFormatCapabilities      = dx12_getFormatCapabilities;
+  apiDevice->createDevice               = dx12_createDevice;
+  apiDevice->waitIdle                   = dx12_waitDeviceIdle;
+  apiDevice->destroyDevice              = dx12_destroyDevice;
 }
