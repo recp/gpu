@@ -503,6 +503,13 @@ dx12_compileShader(GPUDeviceDX12        *device,
     [GPU_SHADER_STAGE_TASK_BIT]     = L"as_6_5",
     [GPU_SHADER_STAGE_MESH_BIT]     = L"ms_6_5"
   };
+  static const wchar_t *dxcProfiles66[GPU_SHADER_STAGE_MESH_BIT + 1u] = {
+    [GPU_SHADER_STAGE_VERTEX_BIT]   = L"vs_6_6",
+    [GPU_SHADER_STAGE_FRAGMENT_BIT] = L"ps_6_6",
+    [GPU_SHADER_STAGE_COMPUTE_BIT]  = L"cs_6_6",
+    [GPU_SHADER_STAGE_TASK_BIT]     = L"as_6_6",
+    [GPU_SHADER_STAGE_MESH_BIT]     = L"ms_6_6"
+  };
   static const char *legacyProfiles[GPU_SHADER_STAGE_MESH_BIT + 1u] = {
     [GPU_SHADER_STAGE_VERTEX_BIT]   = "vs_5_1",
     [GPU_SHADER_STAGE_FRAGMENT_BIT] = "ps_5_1",
@@ -515,6 +522,7 @@ dx12_compileShader(GPUDeviceDX12        *device,
   if (!device || !library || !entry || !outCode ||
       stage >= GPU_ARRAY_LEN(dxcProfiles60) || !dxcProfiles60[stage] ||
       !dxcProfiles62[stage] ||
+      !dxcProfiles66[stage] ||
       (!device->dxcAvailable && !legacyProfiles[stage])) {
     return false;
   }
@@ -525,7 +533,9 @@ dx12_compileShader(GPUDeviceDX12        *device,
 
   memset(&compiled, 0, sizeof(compiled));
   if (device->dxcAvailable) {
-    if (device->rayQuery && stage == GPU_SHADER_STAGE_COMPUTE_BIT) {
+    if (device->atomic64Enabled) {
+      dxcProfile = dxcProfiles66[stage];
+    } else if (device->rayQuery && stage == GPU_SHADER_STAGE_COMPUTE_BIT) {
       dxcProfile = L"cs_6_5";
     } else {
       dxcProfile = device->shaderF16Enabled

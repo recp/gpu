@@ -86,7 +86,9 @@ typedef enum GPUFeature {
   GPU_FEATURE_RAY_QUERY             = 9,
   GPU_FEATURE_VARIABLE_RATE_SHADING = 10,
   GPU_FEATURE_BINDLESS              = 11,
-  GPU_FEATURE_SUBGROUP_MATRIX       = 12
+  GPU_FEATURE_SUBGROUP_MATRIX       = 12,
+  /* 64-bit storage-buffer add/min/max atomics. */
+  GPU_FEATURE_ATOMIC64              = 13
 } GPUFeature;
 
 typedef struct GPUFeatureSet {

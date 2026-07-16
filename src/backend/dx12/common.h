@@ -54,6 +54,7 @@ typedef struct GPUAdapterDX12 {
   bool                               formatCapsReady;
   bool                               subgroups;
   bool                               shaderF16;
+  bool                               atomic64;
   bool                               descriptorIndexing;
   bool                               bindless;
   bool                               meshShader;
@@ -106,6 +107,8 @@ typedef struct GPUDeviceDX12 {
   bool                               subgroups;
   bool                               shaderF16;
   bool                               shaderF16Enabled;
+  bool                               atomic64;
+  bool                               atomic64Enabled;
   bool                               descriptorIndexing;
   bool                               bindless;
   bool                               meshShader;

@@ -215,6 +215,7 @@ typedef struct GPUAdapterVk {
   bool                          synchronization2;
   bool                          rayQuery;
   bool                          subgroupMatrix;
+  bool                          atomic64;
   bool                          negativeViewport;
 } GPUAdapterVk;
 

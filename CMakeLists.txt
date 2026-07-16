@@ -514,6 +514,18 @@ if(GPU_BUILD_TESTS)
   )
   unset(GPU_USL_FIXTURE_TARGET_CAPS)
   list(APPEND GPU_API_USL_FIXTURES ${GPU_API_SHADER_F16_USL_FIXTURE})
+  set(GPU_USL_FIXTURE_TARGET_CAPS sm_6_6)
+  gpu_add_usl_fixtures(
+    GPU_API_ATOMIC64_USL_FIXTURE
+    dx12
+    api-atomic64
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/atomic64.usl"
+  )
+  unset(GPU_USL_FIXTURE_TARGET_CAPS)
+  add_custom_target(
+    gpu-api-atomic64-fixture
+    DEPENDS ${GPU_API_ATOMIC64_USL_FIXTURE}
+  )
   add_custom_target(gpu-api-fixtures DEPENDS ${GPU_API_USL_FIXTURES})
 
   if(GPU_BUILD_METAL OR GPU_BUILD_DX12)
@@ -876,6 +888,7 @@ if(GPU_BUILD_TESTS)
   add_test(NAME api-export-linkage COMMAND gpu-export-linkage-test)
 
   add_executable(gpu-api-test
+    tests/api/atomic64.c
     tests/api/barrier.c
     tests/api/bindgroup.c
     tests/api/compute.c
@@ -909,6 +922,7 @@ if(GPU_BUILD_TESTS)
   )
   target_link_libraries(gpu-api-test PRIVATE gpu)
   add_dependencies(gpu-api-test gpu-api-fixtures)
+  add_dependencies(gpu-api-test gpu-api-atomic64-fixture)
   add_dependencies(gpu-api-test gpu-api-subgroup-matrix-fixture)
   if(TARGET gpu-api-ray-query-fixture)
     add_dependencies(gpu-api-test gpu-api-ray-query-fixture)
@@ -954,6 +968,7 @@ if(GPU_BUILD_TESTS)
   endif()
   set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
     "GPU_SUBGROUP_MATRIX_USL_PATH=${GPU_API_SUBGROUP_MATRIX_USL_FIXTURE}"
+    "GPU_ATOMIC64_USL_PATH=${GPU_API_ATOMIC64_USL_FIXTURE}"
   )
 
   if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
@@ -1017,6 +1032,7 @@ if(GPU_BUILD_TESTS)
     endif()
     set_property(TEST api-validation-vulkan APPEND PROPERTY ENVIRONMENT
       "GPU_SUBGROUP_MATRIX_USL_PATH=${GPU_API_VULKAN_SUBGROUP_MATRIX_USL_FIXTURE}"
+      "GPU_ATOMIC64_USL_PATH=${GPU_API_ATOMIC64_USL_FIXTURE}"
     )
 
     add_executable(gpu-vulkan-queue-test

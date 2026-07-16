@@ -49,6 +49,7 @@ dx12_queryResultsReliable(const GPUAdapterDX12 *adapterDX12) {
 static D3D_SHADER_MODEL
 dx12_queryShaderModel(ID3D12Device *device) {
   static const D3D_SHADER_MODEL models[] = {
+    D3D_SHADER_MODEL_6_6,
     D3D_SHADER_MODEL_6_5,
     D3D_SHADER_MODEL_6_2,
     D3D_SHADER_MODEL_6_1,
@@ -205,6 +206,27 @@ dx12_supportsShaderF16(ID3D12Device    *device,
 }
 
 static bool
+dx12_supportsAtomic64(ID3D12Device    *device,
+                      D3D_SHADER_MODEL shaderModel) {
+  D3D12_FEATURE_DATA_D3D12_OPTIONS1 options1  = {0};
+  D3D12_FEATURE_DATA_D3D12_OPTIONS11 options11 = {0};
+
+  return device && shaderModel >= D3D_SHADER_MODEL_6_6 &&
+         SUCCEEDED(device->lpVtbl->CheckFeatureSupport(
+           device,
+           D3D12_FEATURE_D3D12_OPTIONS1,
+           &options1,
+           sizeof(options1))) &&
+         options1.Int64ShaderOps != FALSE &&
+         SUCCEEDED(device->lpVtbl->CheckFeatureSupport(
+           device,
+           D3D12_FEATURE_D3D12_OPTIONS11,
+           &options11,
+           sizeof(options11))) &&
+         options11.AtomicInt64OnDescriptorHeapResourceSupported != FALSE;
+}
+
+static bool
 dx12_supportsBindless(ID3D12Device *device) {
   D3D12_FEATURE_DATA_D3D12_OPTIONS options = {0};
 
@@ -287,6 +309,8 @@ dx12_probeAdapter(GPUAdapterDX12 *adapter) {
                                            &adapter->maxSubgroupSize);
   adapter->shaderF16 = dxcModule &&
                        dx12_supportsShaderF16(device, shaderModel);
+  adapter->atomic64 = dxcModule &&
+                      dx12_supportsAtomic64(device, shaderModel);
   adapter->descriptorIndexing =
     dxcModule && shaderModel >= D3D_SHADER_MODEL_6_0;
   adapter->bindless = adapter->descriptorIndexing &&
@@ -386,6 +410,9 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
   device->shaderF16    = device->dxcAvailable &&
                          dx12_supportsShaderF16(device->d3dDevice,
                                                device->shaderModel);
+  device->atomic64     = device->dxcAvailable &&
+                         dx12_supportsAtomic64(device->d3dDevice,
+                                              device->shaderModel);
   device->descriptorIndexing = device->dxcAvailable &&
                                device->shaderModel >= D3D_SHADER_MODEL_6_0;
   device->bindless = device->descriptorIndexing &&
@@ -717,6 +744,8 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
       return true;
     case GPU_FEATURE_SHADER_F16:
       return adapterDX12->shaderF16;
+    case GPU_FEATURE_ATOMIC64:
+      return adapterDX12->atomic64;
     case GPU_FEATURE_DESCRIPTOR_INDEXING:
       return adapterDX12->descriptorIndexing;
     case GPU_FEATURE_BINDLESS:
@@ -810,6 +839,11 @@ dx12_createDevice(GPUAdapter        * __restrict adapter,
   deviceDX12->shaderF16Enabled =
     (enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u;
   if (deviceDX12->shaderF16Enabled && !deviceDX12->shaderF16) {
+    goto err;
+  }
+  deviceDX12->atomic64Enabled =
+    (enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u;
+  if (deviceDX12->atomic64Enabled && !deviceDX12->atomic64) {
     goto err;
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u &&

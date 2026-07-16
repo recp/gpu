@@ -176,6 +176,14 @@ run_shader_f16(void *ctx) {
 }
 
 static int
+run_atomic64(void *ctx) {
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_atomic64(testCtx->adapter,
+                           testCtx->atomic64BytecodePath);
+}
+
+static int
 run_vrs(void *ctx) {
   GPUApiTestContext *testCtx = ctx;
 
@@ -230,7 +238,7 @@ main(int argc, char **argv) {
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUApiTestContext      ctx;
-  GPUApiTest             tests[26];
+  GPUApiTest             tests[27];
   int                    ok;
 
   if (argc != 14 && argc != 15) {
@@ -302,6 +310,7 @@ main(int argc, char **argv) {
   ctx.subgroupBytecodePath           = argv[12];
   ctx.subgroupMatrixBytecodePath     = getenv("GPU_SUBGROUP_MATRIX_USL_PATH");
   ctx.shaderF16BytecodePath          = argv[13];
+  ctx.atomic64BytecodePath           = getenv("GPU_ATOMIC64_USL_PATH");
   ctx.rayQueryBytecodePath           = getenv("GPU_RAY_QUERY_USL_PATH");
 
   tests[0]  = (GPUApiTest){ "queue", run_queue, &ctx };
@@ -334,6 +343,7 @@ main(int argc, char **argv) {
   tests[23] = (GPUApiTest){ "coordinate", run_coordinate, &ctx };
   tests[24] = (GPUApiTest){ "vrs", run_vrs, &ctx };
   tests[25] = (GPUApiTest){ "ray-query", run_ray_query, &ctx };
+  tests[26] = (GPUApiTest){ "atomic64", run_atomic64, &ctx };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 

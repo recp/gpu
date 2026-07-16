@@ -1,0 +1,13 @@
+kern(1, 1, 1) atomic64_cs(inout unsigned_values: [ulong] #buffer(0),
+                            inout signed_values: [long] #buffer(1),
+                            gid: uint3 #global_id) {
+  let unsigned_add = unsigned_values.atomic_add(gid.x, ulong(1))
+  let unsigned_min = unsigned_values.atomic_min(gid.x, ulong(2))
+  let unsigned_max = unsigned_values.atomic_max(gid.x, ulong(3))
+  unsigned_values[gid.x + uint(1)] = unsigned_add + unsigned_min + unsigned_max
+
+  let signed_add = signed_values.atomic_add(gid.x, long(1))
+  let signed_min = signed_values.atomic_min(gid.x, long(-12))
+  let signed_max = signed_values.atomic_max(gid.x, long(-3))
+  signed_values[gid.x + uint(1)] = signed_add + signed_min + signed_max
+}

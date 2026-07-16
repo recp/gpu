@@ -99,6 +99,8 @@ gpu_uslSemanticEnabled(const GPUDevice *device, uint32_t semanticId) {
       return GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_QUERY);
     case USL_SEMANTIC_FEATURE_ID_SUBGROUP_MATRIX:
       return GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUP_MATRIX);
+    case USL_SEMANTIC_FEATURE_ID_ATOMIC64:
+      return GPUIsFeatureEnabled(device, GPU_FEATURE_ATOMIC64);
     default:
       return 0;
   }
@@ -1355,7 +1357,8 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   }
   targetAtomCount = 0u;
   if (api->backend == GPU_BACKEND_VULKAN) {
-    if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
+    if (GPUIsFeatureEnabled(device, GPU_FEATURE_ATOMIC64) ||
+        GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
       target.profile = USL_TARGET_PROFILE_VULKAN_1_2;
     }
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
@@ -1381,7 +1384,9 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
       }
     }
   } else if (api->backend == GPU_BACKEND_DX12) {
-    if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
+    if (GPUIsFeatureEnabled(device, GPU_FEATURE_ATOMIC64)) {
+      target.profile = USL_TARGET_PROFILE_HLSL_SM_6_6;
+    } else if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
       target.profile = USL_TARGET_PROFILE_HLSL_SM_6_2;
       if (us_cap_atom_init(
             &targetAtoms[targetAtomCount++],
@@ -1441,6 +1446,16 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
           &targetAtoms[targetAtomCount++],
           USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
           USL_SEMANTIC_FEATURE_ID_SUBGROUP_MATRIX,
+          0u,
+          0u) != USLOk) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_ATOMIC64)) {
+    if (us_cap_atom_init(
+          &targetAtoms[targetAtomCount++],
+          USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+          USL_SEMANTIC_FEATURE_ID_ATOMIC64,
           0u,
           0u) != USLOk) {
       return GPU_ERROR_BACKEND_FAILURE;

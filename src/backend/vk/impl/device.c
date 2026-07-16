@@ -382,6 +382,8 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkPhysicalDeviceFeatures2KHR              features2 = {0};
   VkPhysicalDeviceShaderFloat16Int8Features float16Features = {0};
   VkPhysicalDeviceFeatures2KHR              float16Features2 = {0};
+  VkPhysicalDeviceShaderAtomicInt64Features atomic64Features = {0};
+  VkPhysicalDeviceFeatures2                 atomic64Features2 = {0};
   VkPhysicalDeviceDescriptorIndexingFeatures descriptorFeatures = {0};
   VkPhysicalDeviceFeatures2                  descriptorFeatures2 = {0};
   VkPhysicalDeviceTimelineSemaphoreFeatures  timelineFeatures = {0};
@@ -422,6 +424,8 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool                                      subgroupSizeControl;
   bool                                      float16Extension;
   bool                                      float16Core;
+  bool                                      atomic64Extension;
+  bool                                      atomic64Core;
   bool                                      descriptorCore;
   bool                                      timelineCore;
   bool                                      sync2Extension;
@@ -459,6 +463,8 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   subgroupSizeControl       = false;
   float16Extension          = false;
   float16Core               = false;
+  atomic64Extension         = false;
+  atomic64Core              = false;
   descriptorCore            = false;
   timelineCore              = false;
   sync2Extension            = false;
@@ -560,6 +566,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 
       VK__ADD_EXT_IF(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,
                      float16Extension = true);
+
+      if (!strcmp(VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        atomic64Extension = true;
+      }
 
       VK__ADD_EXT_IF(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
                      descriptorExtension = true);
@@ -671,6 +682,9 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   float16Core = instanceVk &&
                 instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
                 adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
+  atomic64Core = instanceVk &&
+                 instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
+                 adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
   descriptorCore = instanceVk &&
                    instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
                    adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
@@ -692,6 +706,22 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     float16Features2.pNext = &float16Features;
     getFeatures2(raw, &float16Features2);
     adapterVk->shaderFloat16 = float16Features.shaderFloat16;
+  }
+  if (getFeatures2 && (atomic64Core || atomic64Extension)) {
+    atomic64Features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES;
+    atomic64Features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    atomic64Features2.pNext = &atomic64Features;
+    getFeatures2(raw, &atomic64Features2);
+    if (adapterVk->features.shaderInt64 &&
+        atomic64Features.shaderBufferInt64Atomics) {
+      if (!atomic64Core &&
+          !vk_addDeviceExtension(adapterVk,
+                                 VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME)) {
+        goto fail;
+      }
+      adapterVk->atomic64 = true;
+    }
   }
   if (getFeatures2 && (descriptorCore || descriptorExtension)) {
     descriptorFeatures.sType =
@@ -1074,6 +1104,8 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       return adapterVk->rayQuery;
     case GPU_FEATURE_SUBGROUP_MATRIX:
       return adapterVk->subgroupMatrix;
+    case GPU_FEATURE_ATOMIC64:
+      return adapterVk->atomic64;
     default:
       return false;
   }
@@ -1403,6 +1435,7 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
   VkPhysicalDeviceFeatures coreFeatures = {0};
   VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamicFeatures = {0};
   VkPhysicalDeviceShaderFloat16Int8Features float16Features = {0};
+  VkPhysicalDeviceShaderAtomicInt64Features atomic64Features = {0};
   VkPhysicalDeviceDescriptorIndexingFeatures descriptorFeatures = {0};
   VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeatures = {0};
   VkPhysicalDeviceSynchronization2FeaturesKHR sync2Features = {0};
@@ -1453,6 +1486,10 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u &&
       !adapterVk->shaderFloat16) {
+    goto err;
+  }
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u &&
+      !adapterVk->atomic64) {
     goto err;
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u &&
@@ -1540,6 +1577,9 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
   coreFeatures.multiDrawIndirect = adapterVk->features.multiDrawIndirect;
   coreFeatures.independentBlend   = adapterVk->features.independentBlend;
   coreFeatures.imageCubeArray     = adapterVk->features.imageCubeArray;
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u) {
+    coreFeatures.shaderInt64 = VK_TRUE;
+  }
 
   deviceCI.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceCI.pEnabledFeatures        = &coreFeatures;
@@ -1559,6 +1599,13 @@ vk_createDevice(GPUAdapter        * __restrict adapter,
     float16Features.pNext         = (void *)deviceCI.pNext;
     float16Features.shaderFloat16 = VK_TRUE;
     deviceCI.pNext                = &float16Features;
+  }
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u) {
+    atomic64Features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES;
+    atomic64Features.pNext = (void *)deviceCI.pNext;
+    atomic64Features.shaderBufferInt64Atomics = VK_TRUE;
+    deviceCI.pNext = &atomic64Features;
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u ||
       (enabledFeatureMask & (1ull << GPU_FEATURE_BINDLESS)) != 0u) {
