@@ -183,7 +183,7 @@ get_ownership_format_capabilities(
 
 static GPUDevice *
 create_ownership_device(GPUAdapter               * __restrict adapter,
-                        GPUQueueCreateInfo *queueInfos,
+                        const GPUQueueCreateInfo  *queueInfos,
                         uint32_t                   queueInfoCount,
                         uint64_t                   enabledFeatureMask) {
   (void)queueInfos;

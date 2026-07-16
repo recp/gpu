@@ -83,7 +83,7 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   GPUTextureViewCreateInfo         viewInfo       = {0};
   GPUTextureWriteRegion            writeRegion    = {0};
   GPUSamplerCreateInfo             samplerInfo    = {0};
-  GPUBindGroupEntry                fragmentEntries[2] = {{0}};
+  GPUBindGroupEntry                fragmentEntries[2] = {0};
   GPUBindGroupEntry                samplerEntry   = {0};
   GPUBindGroupCreateInfo           groupInfo      = {0};
   GPURenderPassColorAttachment     color          = {0};

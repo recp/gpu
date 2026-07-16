@@ -725,10 +725,10 @@ mt_selectCommandMode(id<MTLDevice>  device,
 
 GPU_HIDE
 GPUDevice *
-mt_createDevice(GPUAdapter        * __restrict adapter,
-                GPUQueueCreateInfo queCI[],
-                uint32_t           nQueCI,
-                uint64_t           enabledFeatureMask) {
+mt_createDevice(GPUAdapter              * __restrict adapter,
+                const GPUQueueCreateInfo queCI[],
+                uint32_t                 nQueCI,
+                uint64_t                 enabledFeatureMask) {
   GPUAdapterMT *adapterMT;
   GPUDevice     *device;
   GPUDeviceMT   *deviceMT;

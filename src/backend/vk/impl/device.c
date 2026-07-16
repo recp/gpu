@@ -1492,10 +1492,10 @@ vk__findQueuePlan(GPUQueuePlanVk *plans,
 
 GPU_HIDE
 GPUDevice *
-vk_createDevice(GPUAdapter        * __restrict adapter,
-                GPUQueueCreateInfo queCI[],
-                uint32_t           nQueCI,
-                uint64_t           enabledFeatureMask) {
+vk_createDevice(GPUAdapter              * __restrict adapter,
+                const GPUQueueCreateInfo queCI[],
+                uint32_t                 nQueCI,
+                uint64_t                 enabledFeatureMask) {
   GPUDevice               *device;
   GPUDeviceVk             *deviceVk;
   GPUAdapterVk            *adapterVk;

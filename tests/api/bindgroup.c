@@ -1519,7 +1519,7 @@ gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath) {
   GPUBindGroupLayoutCreateInfo    layoutInfo    = {0};
   GPUBindGroupCreateInfo          groupInfo     = {0};
   GPUBindGroupEntry               updateEntry   = {0};
-  GPUBindGroupEntry               duplicateEntries[2] = {{0}};
+  GPUBindGroupEntry               duplicateEntries[2] = {0};
   GPUTextureCreateInfo            textureInfo   = {0};
   GPUTextureViewCreateInfo        viewInfo      = {0};
   GPUDevice                      *disabled      = NULL;
@@ -1533,7 +1533,7 @@ gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath) {
   GPUBindGroup                   *regularGroup   = NULL;
   GPUTexture                     *texture       = NULL;
   GPUTextureView                 *view          = NULL;
-  GPUBindGroupEntry               regularEntries[2] = {{0}};
+  GPUBindGroupEntry               regularEntries[2] = {0};
   GPUBindGroupLayout             *pipelineGroups[1] = {NULL};
   GPUPipelineLayoutCreateInfo     pipelineInfo = {0};
   GPURenderPassEncoder            renderPass = {0};

@@ -350,8 +350,8 @@ check_reflected_dynamic_offset_validation(GPUDevice *device,
                                           GPUShaderLibrary *library) {
   GPUBindGroupLayout *layouts[2] = {0};
   GPUBindGroupLayout *badLayouts[2] = {0};
-  GPUBindGroupLayoutEntry badGroup0Entries[2] = {{0}};
-  GPUBindGroupLayoutEntry badGroup1Entries[2] = {{0}};
+  GPUBindGroupLayoutEntry badGroup0Entries[2] = {0};
+  GPUBindGroupLayoutEntry badGroup1Entries[2] = {0};
   GPUBindGroupLayoutCreateInfo layoutInfo = {0};
   GPUPipelineLayoutCreateInfo pipelineInfo = {0};
   GPUPipelineLayout *pipelineLayout = NULL;

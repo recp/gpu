@@ -83,10 +83,10 @@ typedef struct GPUApiDevice {
     GPUSubgroupMatrixPropertiesEXT * __restrict outProperties
   );
 
-  GPUDevice* (*createDevice)(GPUAdapter             * __restrict adapter,
-                             GPUQueueCreateInfo       queCI[],
-                             uint32_t                 nQueCI,
-                             uint64_t                 enabledFeatureMask);
+  GPUDevice* (*createDevice)(GPUAdapter               * __restrict adapter,
+                             const GPUQueueCreateInfo   queCI[],
+                             uint32_t                   nQueCI,
+                             uint64_t                   enabledFeatureMask);
 
   GPUResult (*waitIdle)(GPUDevice * __restrict device);
   void (*destroyDevice)(GPUDevice * __restrict device);

@@ -37,8 +37,7 @@
 
 #define GPU__DEFINE_DEFAULT_QUEUES_IF_NEEDED(nQueCI, queCI)                   \
   if (queCI == NULL) {                                                        \
-    nQueCI = 3;                                                               \
-    queCI  = (GPUQueueCreateInfo[]){                                   \
+    static const GPUQueueCreateInfo gpuDefaultQueues[] = {                    \
       [0] = {                                                                 \
         .count = 1,                                                           \
         .flags = GPU_QUEUE_GRAPHICS_BIT | GPU_QUEUE_COMPUTE_BIT,              \
@@ -52,6 +51,8 @@
         .flags = GPU_QUEUE_COMPUTE_BIT                                        \
       }                                                                       \
     };                                                                        \
+    nQueCI = GPU_ARRAY_LEN(gpuDefaultQueues);                                  \
+    queCI  = gpuDefaultQueues;                                                 \
   }                                                                           \
 
 #endif /* backend_common_h */

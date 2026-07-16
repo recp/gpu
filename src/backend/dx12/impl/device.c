@@ -810,10 +810,10 @@ dx12_getLimits(const GPUAdapter * __restrict adapter,
 
 GPU_HIDE
 GPUDevice *
-dx12_createDevice(GPUAdapter        * __restrict adapter,
-                  GPUQueueCreateInfo queCI[],
-                  uint32_t           nQueCI,
-                  uint64_t           enabledFeatureMask) {
+dx12_createDevice(GPUAdapter              * __restrict adapter,
+                  const GPUQueueCreateInfo queCI[],
+                  uint32_t                 nQueCI,
+                  uint64_t                 enabledFeatureMask) {
   GPUInstance           *inst;
   GPUAdapterDX12        *adapterDX12;
   GPUDevice             *device;

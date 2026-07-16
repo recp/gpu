@@ -394,7 +394,7 @@ gpu_testDescriptorArray(GPUDevice *device,
   GPUComputePipelineCreateInfo      pipelineInfo   = {0};
   GPUSamplerCreateInfo              samplerInfo    = {0};
   GPUBufferCreateInfo               bufferInfo     = {0};
-  GPUBindGroupEntry                 groupEntries[9] = {{0}};
+  GPUBindGroupEntry                 groupEntries[9] = {0};
   GPUBindGroupCreateInfo            groupInfo      = {0};
   GPUBufferBarrier                  outputBarrier  = {0};
   GPUTextureBarrier                 textureBarrier = {0};

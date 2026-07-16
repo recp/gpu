@@ -232,6 +232,20 @@ vk_createInstance(GPUApi * __restrict api,
     free(instanceExtensions);
   }
 
+#if GPU_BUILD_WITH_VALIDATION
+  VkDebugUtilsMessengerCreateInfoEXT debugCI = {
+    .sType           = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+    .pNext           = NULL,
+    .flags           = 0,
+    .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+                     | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+    .messageType     = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
+                     | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
+                     | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+    .pfnUserCallback = vk__debug_messengercb,
+    .pUserData       = gpuInst
+  };
+#endif
   VkInstanceCreateInfo instCI = {
     .sType                   = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
     .pNext                   = NULL,
@@ -260,21 +274,9 @@ vk_createInstance(GPUApi * __restrict api,
    * This is info for a temp callback to use during CreateInstance.
    * After the instance is created, we use the instance-based
    * function to register the final callback.
-   */
+  */
   if (validate) {
-    // VK_EXT_debug_utils style
-    instCI.pNext = &(VkDebugUtilsMessengerCreateInfoEXT) {
-      .sType           = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-      .pNext           = NULL,
-      .flags           = 0,
-      .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT 
-                       | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
-      .messageType     = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
-                       | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
-                       | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-      .pfnUserCallback = vk__debug_messengercb,
-      .pUserData       = gpuInst
-    };
+    instCI.pNext = &debugCI;
   }
 #endif
 
