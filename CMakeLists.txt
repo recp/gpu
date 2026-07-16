@@ -2187,6 +2187,37 @@ if(GPU_BUILD_BENCHMARKS)
     )
   endif()
 
+  if(GPU_BUILD_VULKAN)
+    add_executable(gpu-native-vulkan-render-bench
+      benchmarks/bench.c
+      benchmarks/native_vulkan_render.c
+    )
+    target_include_directories(gpu-native-vulkan-render-bench PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    target_link_libraries(gpu-native-vulkan-render-bench PRIVATE
+      Vulkan::Vulkan
+    )
+    if(TARGET us)
+      target_link_libraries(gpu-native-vulkan-render-bench PRIVATE us)
+    elseif(TARGET gpu_usl)
+      target_link_libraries(gpu-native-vulkan-render-bench PRIVATE gpu_usl)
+    endif()
+    set_target_properties(gpu-native-vulkan-render-bench PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+    )
+    if(MSVC)
+      target_compile_options(gpu-native-vulkan-render-bench PRIVATE /W3)
+    else()
+      target_compile_options(gpu-native-vulkan-render-bench PRIVATE
+        -Wall
+        -Wextra
+      )
+    endif()
+  endif()
+
   foreach(benchmark_target
           gpu-static-scene-bench
           gpu-state-churn-bench
@@ -2197,6 +2228,9 @@ if(GPU_BUILD_BENCHMARKS)
           gpu-pipeline-stress-bench)
     add_dependencies(${benchmark_target} gpu-benchmark-fixtures)
   endforeach()
+  if(TARGET gpu-native-vulkan-render-bench)
+    add_dependencies(gpu-native-vulkan-render-bench gpu-benchmark-fixtures)
+  endif()
 
   if(DEFINED GPU_BENCHMARK_BACKEND)
     function(gpu_add_perf_smoke name target)
@@ -2279,6 +2313,28 @@ if(GPU_BUILD_BENCHMARKS)
         )
       endforeach()
     endif()
+    if(TARGET gpu-native-vulkan-render-bench)
+      gpu_add_perf_smoke(
+        perf-smoke-native-vulkan-static
+        gpu-native-vulkan-render-bench
+        static "${GPU_BENCHMARK_RENDER_MRT_US}" 32 4 12 1
+      )
+      gpu_add_perf_smoke(
+        perf-smoke-native-vulkan-state
+        gpu-native-vulkan-render-bench
+        state "${GPU_BENCHMARK_RENDER_MRT_US}" 32 4 12 1
+      )
+      gpu_add_perf_smoke(
+        perf-smoke-native-vulkan-binding
+        gpu-native-vulkan-render-bench
+        binding "${GPU_BENCHMARK_BINDING_US}" 32 4 12 1
+      )
+      gpu_add_perf_smoke(
+        perf-smoke-native-vulkan-upload
+        gpu-native-vulkan-render-bench
+        upload "${GPU_BENCHMARK_TRIANGLE_US}" 32 4 12 1
+      )
+    endif()
 
     if(GPU_BENCHMARK_BACKEND STREQUAL "vulkan" AND
        DEFINED GPU_VULKAN_ICD AND EXISTS "${GPU_VULKAN_ICD}")
@@ -2293,7 +2349,11 @@ if(GPU_BUILD_BENCHMARKS)
               perf-smoke-bindless-dispatch
               perf-smoke-bindless-render
               perf-smoke-upload-heavy
-              perf-smoke-pipeline-stress)
+              perf-smoke-pipeline-stress
+              perf-smoke-native-vulkan-static
+              perf-smoke-native-vulkan-state
+              perf-smoke-native-vulkan-binding
+              perf-smoke-native-vulkan-upload)
         set_property(TEST ${perfSmokeTest} APPEND PROPERTY ENVIRONMENT
           "VK_ICD_FILENAMES=${GPU_VULKAN_ICD}"
         )

@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+#if defined(__linux__) && !defined(_POSIX_C_SOURCE)
+#  define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "bench.h"
 
 #include <errno.h>
@@ -165,12 +169,13 @@ bench_processMemory(BenchProcessMemory *outMemory) {
   return true;
 #elif defined(__linux__)
   struct rusage usage;
+  unsigned long totalPages;
   long          residentPages;
   long          pageSize;
   FILE         *statm;
 
   statm = fopen("/proc/self/statm", "r");
-  if (!statm || fscanf(statm, "%*lu %ld", &residentPages) != 1) {
+  if (!statm || fscanf(statm, "%lu %ld", &totalPages, &residentPages) != 2) {
     if (statm) {
       fclose(statm);
     }
