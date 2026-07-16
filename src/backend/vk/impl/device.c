@@ -398,6 +398,87 @@ vk_addDeviceExtension(GPUAdapterVk *adapter, const char *name) {
   return true;
 }
 
+static bool
+vk_featureEnabled(uint64_t enabledFeatureMask, GPUFeature feature) {
+  return (enabledFeatureMask & (1ull << feature)) != 0u;
+}
+
+static bool
+vk_extensionEnabled(const char *name, uint64_t enabledFeatureMask) {
+  bool descriptorIndexing;
+  bool meshShader;
+  bool rayQuery;
+
+  descriptorIndexing =
+    vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_DESCRIPTOR_INDEXING) ||
+    vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_BINDLESS);
+  meshShader = vk_featureEnabled(enabledFeatureMask,
+                                 GPU_FEATURE_MESH_SHADER);
+  rayQuery = vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_RAY_QUERY);
+
+  if (strcmp(name, VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME) == 0) {
+    return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16);
+  }
+  if (strcmp(name, VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME) == 0) {
+    return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_ATOMIC64);
+  }
+  if (strcmp(name, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME) == 0) {
+    return descriptorIndexing || rayQuery;
+  }
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
+  if (strcmp(name, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) == 0 ||
+      strcmp(name, VK_KHR_RAY_QUERY_EXTENSION_NAME) == 0 ||
+      strcmp(name, VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME) == 0 ||
+      strcmp(name, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) == 0) {
+    return rayQuery;
+  }
+#endif
+#ifdef VK_EXT_mesh_shader
+  if (strcmp(name, VK_EXT_MESH_SHADER_EXTENSION_NAME) == 0) {
+    return meshShader;
+  }
+#endif
+#ifdef VK_KHR_fragment_shading_rate
+  if (strcmp(name, VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME) == 0) {
+    return vk_featureEnabled(enabledFeatureMask,
+                             GPU_FEATURE_VARIABLE_RATE_SHADING);
+  }
+#endif
+#ifdef VK_KHR_cooperative_matrix
+  if (strcmp(name, VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME) == 0) {
+    return vk_featureEnabled(enabledFeatureMask,
+                             GPU_FEATURE_SUBGROUP_MATRIX);
+  }
+#endif
+  if (strcmp(name, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME) == 0 ||
+      strcmp(name, VK_KHR_SPIRV_1_4_EXTENSION_NAME) == 0) {
+    return rayQuery || meshShader;
+  }
+
+  return true;
+}
+
+static uint32_t
+vk_collectDeviceExtensions(const GPUAdapterVk *adapter,
+                           uint64_t            enabledFeatureMask,
+                           const char         **extensions,
+                           uint32_t             capacity) {
+  uint32_t count;
+
+  count = 0u;
+  for (uint32_t i = 0u; i < adapter->nEnabledExtensions; i++) {
+    if (!vk_extensionEnabled(adapter->extensionNames[i],
+                             enabledFeatureMask)) {
+      continue;
+    }
+    if (count >= capacity) {
+      return 0u;
+    }
+    extensions[count++] = adapter->extensionNames[i];
+  }
+  return count;
+}
+
 static void
 vk_querySubgroupCapabilities(GPUInstanceVk *instance,
                              GPUAdapterVk  *adapter,
@@ -1502,6 +1583,7 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   GPUQueuePlanVk          *plans;
   GPUQueuePlanVk          *plan;
   VkDeviceQueueCreateInfo *queues;
+  const char              *deviceExtensions[64];
   float                   *queuePriorities;
   VkPhysicalDeviceFeatures coreFeatures = {0};
   VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamicFeatures = {0};
@@ -1527,6 +1609,7 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   VkDeviceCreateInfo       deviceCI = {0};
   VkResult                 result;
   uint32_t                 familyIndex;
+  uint32_t                 deviceExtensionCount;
   uint32_t                 maxQueueCount;
   uint32_t                 planCount;
   uint32_t                 totalQueueCount;
@@ -1635,17 +1718,33 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     queues[i].pQueuePriorities = queuePriorities;
   }
 
-  coreFeatures.pipelineStatisticsQuery =
-    adapterVk->features.pipelineStatisticsQuery;
-  coreFeatures.shaderUniformBufferArrayDynamicIndexing =
-    adapterVk->features.shaderUniformBufferArrayDynamicIndexing;
-  coreFeatures.shaderSampledImageArrayDynamicIndexing =
-    adapterVk->features.shaderSampledImageArrayDynamicIndexing;
-  coreFeatures.shaderStorageBufferArrayDynamicIndexing =
-    adapterVk->features.shaderStorageBufferArrayDynamicIndexing;
-  coreFeatures.shaderStorageImageArrayDynamicIndexing =
-    adapterVk->features.shaderStorageImageArrayDynamicIndexing;
-  coreFeatures.multiDrawIndirect = adapterVk->features.multiDrawIndirect;
+  deviceExtensionCount = vk_collectDeviceExtensions(
+    adapterVk,
+    enabledFeatureMask,
+    deviceExtensions,
+    (uint32_t)GPU_ARRAY_LEN(deviceExtensions)
+  );
+
+  if (vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_PIPELINE_STATISTICS)) {
+    coreFeatures.pipelineStatisticsQuery =
+      adapterVk->features.pipelineStatisticsQuery;
+  }
+  if (vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_DESCRIPTOR_INDEXING) ||
+      vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_BINDLESS)) {
+    coreFeatures.shaderUniformBufferArrayDynamicIndexing =
+      adapterVk->features.shaderUniformBufferArrayDynamicIndexing;
+    coreFeatures.shaderSampledImageArrayDynamicIndexing =
+      adapterVk->features.shaderSampledImageArrayDynamicIndexing;
+    coreFeatures.shaderStorageBufferArrayDynamicIndexing =
+      adapterVk->features.shaderStorageBufferArrayDynamicIndexing;
+    coreFeatures.shaderStorageImageArrayDynamicIndexing =
+      adapterVk->features.shaderStorageImageArrayDynamicIndexing;
+  }
+  if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_MULTI_DRAW)) {
+    coreFeatures.multiDrawIndirect = adapterVk->features.multiDrawIndirect;
+  }
   coreFeatures.independentBlend   = adapterVk->features.independentBlend;
   coreFeatures.imageCubeArray     = adapterVk->features.imageCubeArray;
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u) {
@@ -1656,8 +1755,8 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   deviceCI.pEnabledFeatures        = &coreFeatures;
   deviceCI.queueCreateInfoCount    = planCount;
   deviceCI.pQueueCreateInfos       = queues;
-  deviceCI.enabledExtensionCount   = adapterVk->nEnabledExtensions;
-  deviceCI.ppEnabledExtensionNames = (void *)adapterVk->extensionNames;
+  deviceCI.enabledExtensionCount   = deviceExtensionCount;
+  deviceCI.ppEnabledExtensionNames = deviceExtensions;
   if (adapterVk->dynamicRendering) {
     dynamicFeatures.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR;
