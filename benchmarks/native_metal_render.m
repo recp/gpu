@@ -23,6 +23,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(__MAC_26_0)
+#  define NATIVE_HAS_METAL4 1
+#else
+#  define NATIVE_HAS_METAL4 0
+#endif
+
 enum {
   NATIVE_DEFAULT_DRAWS    = 1000,
   NATIVE_DEFAULT_WARMUP   = 300,
@@ -48,6 +54,7 @@ typedef struct NativeMetalConfig {
   uint32_t        warmupFrames;
   uint32_t        measuredFrames;
   uint32_t        repeats;
+  bool            modern;
 } NativeMetalConfig;
 
 typedef struct NativeMetalBench {
@@ -61,11 +68,22 @@ typedef struct NativeMetalBench {
   id<MTLBuffer>              uploadBuffer;
   id<MTLTexture>             target;
   MTLRenderPassDescriptor   *renderPass;
+#if NATIVE_HAS_METAL4
+  id<MTL4CommandQueue>       queue4;
+  id<MTL4CommandBuffer>      commandBuffer4;
+  id<MTL4CommandAllocator>   allocator4;
+  id<MTL4ArgumentTable>      vertexArguments4;
+  id<MTL4ArgumentTable>      fragmentArguments4;
+  id<MTLResidencySet>        residency4;
+  MTL4RenderPassDescriptor  *renderPass4;
+  dispatch_semaphore_t       completion4;
+#endif
   BenchProcessMemory         baselineMemory;
   NativeMetalMode            mode;
   uint32_t                   targetSize;
   uint32_t                   frameIndex;
   uint64_t                   uploadBytesPerFrame;
+  bool                       modern;
 } NativeMetalBench;
 
 typedef struct NativeMetalMetrics {
@@ -143,6 +161,8 @@ native_parseMode(const char *text, NativeMetalMode *outMode) {
 
 static bool
 native_parseConfig(int argc, char *argv[], NativeMetalConfig *config) {
+  const char *api;
+
   if (!config || argc < 2 || argc > 6) {
     if (argv && argv[0]) {
       fprintf(stderr,
@@ -158,6 +178,13 @@ native_parseConfig(int argc, char *argv[], NativeMetalConfig *config) {
   config->warmupFrames   = NATIVE_DEFAULT_WARMUP;
   config->measuredFrames = NATIVE_DEFAULT_FRAMES;
   config->repeats        = NATIVE_DEFAULT_REPEATS;
+  api                    = getenv("GPU_NATIVE_METAL_MODE");
+  if (api && strcmp(api, "classic") != 0 && strcmp(api, "metal4") != 0) {
+    fprintf(stderr,
+            "GPU_NATIVE_METAL_MODE must be classic or metal4\n");
+    return false;
+  }
+  config->modern = api && strcmp(api, "metal4") == 0;
   return native_parseMode(argv[1], &config->mode) &&
          (argc <= 2 || bench_parseU32(argv[2], 1u, &config->drawCount)) &&
          (argc <= 3 || bench_parseU32(argv[3], 0u, &config->warmupFrames)) &&
@@ -288,6 +315,85 @@ native_createModeResources(NativeMetalBench        *bench,
   return true;
 }
 
+#if NATIVE_HAS_METAL4
+static id<MTL4ArgumentTable>
+native_createArgumentTable(id<MTLDevice> device) API_AVAILABLE(macos(26.0)) {
+  MTL4ArgumentTableDescriptor *desc;
+  id<MTL4ArgumentTable>        table;
+  NSError                     *error;
+
+  desc = [MTL4ArgumentTableDescriptor new];
+  desc.maxBufferBindCount = NATIVE_VERTEX_SLOT + 1u;
+  desc.initializeBindings = YES;
+  error = nil;
+  table = [device newArgumentTableWithDescriptor:desc error:&error];
+  [desc release];
+  if (!table && error) {
+    fprintf(stderr,
+            "native Metal 4 argument table error: %s\n",
+            error.localizedDescription.UTF8String);
+  }
+  return table;
+}
+
+static bool
+native_initModern(NativeMetalBench *bench) API_AVAILABLE(macos(26.0)) {
+  MTLResidencySetDescriptor *residencyDesc;
+  NSError                   *error;
+
+  if (![bench->device respondsToSelector:@selector(newMTL4CommandQueue)] ||
+      ![bench->device respondsToSelector:@selector(newCommandAllocator)] ||
+      ![bench->device respondsToSelector:
+        @selector(newArgumentTableWithDescriptor:error:)]) {
+    return false;
+  }
+
+  bench->queue4             = [bench->device newMTL4CommandQueue];
+  bench->commandBuffer4     = [bench->device newCommandBuffer];
+  bench->allocator4         = [bench->device newCommandAllocator];
+  bench->vertexArguments4   = native_createArgumentTable(bench->device);
+  bench->fragmentArguments4 = native_createArgumentTable(bench->device);
+  bench->renderPass4        = [MTL4RenderPassDescriptor new];
+  bench->completion4        = dispatch_semaphore_create(0);
+
+  residencyDesc = [MTLResidencySetDescriptor new];
+  residencyDesc.initialCapacity = 8u;
+  error = nil;
+  bench->residency4 = [bench->device
+    newResidencySetWithDescriptor:residencyDesc
+                             error:&error];
+  [residencyDesc release];
+  if (!bench->queue4 || !bench->commandBuffer4 || !bench->allocator4 ||
+      !bench->vertexArguments4 || !bench->fragmentArguments4 ||
+      !bench->renderPass4 || !bench->completion4 || !bench->residency4) {
+    if (!bench->residency4 && error) {
+      fprintf(stderr,
+              "native Metal 4 residency error: %s\n",
+              error.localizedDescription.UTF8String);
+    }
+    return false;
+  }
+
+  bench->renderPass4.colorAttachments[0].texture = bench->target;
+  bench->renderPass4.colorAttachments[0].loadAction = MTLLoadActionClear;
+  bench->renderPass4.colorAttachments[0].storeAction = MTLStoreActionStore;
+  bench->renderPass4.colorAttachments[0].clearColor =
+    MTLClearColorMake(0.0, 0.0, 0.0, 1.0);
+  [bench->residency4 addAllocation:bench->target];
+  [bench->residency4 addAllocation:bench->vertexBuffer];
+  if (bench->uploadBuffer) {
+    [bench->residency4 addAllocation:bench->uploadBuffer];
+  }
+  for (uint32_t i = 0u; i < NATIVE_BINDING_COUNT; i++) {
+    if (bench->bindingBuffers[i]) {
+      [bench->residency4 addAllocation:bench->bindingBuffers[i]];
+    }
+  }
+  [bench->residency4 commit];
+  return true;
+}
+#endif
+
 static bool
 native_init(NativeMetalBench        *bench,
             const NativeMetalConfig *config) {
@@ -297,16 +403,17 @@ native_init(NativeMetalBench        *bench,
   memset(bench, 0, sizeof(*bench));
   (void)bench_processMemory(&bench->baselineMemory);
   bench->mode       = config->mode;
+  bench->modern     = config->modern;
   bench->targetSize = config->mode == NativeMetalModeState
                         ? NATIVE_STATE_TARGET
                         : 1u;
   error             = nil;
   bench->device      = MTLCreateSystemDefaultDevice();
-  bench->queue       = [bench->device newCommandQueue];
+  bench->queue       = config->modern ? nil : [bench->device newCommandQueue];
   bench->library     = [bench->device newLibraryWithSource:nativeShaderSource
                                                    options:nil
                                                      error:&error];
-  if (!bench->device || !bench->queue || !bench->library) {
+  if (!bench->device || (!config->modern && !bench->queue) || !bench->library) {
     if (error) {
       fprintf(stderr, "native Metal shader error: %s\n",
               error.localizedDescription.UTF8String);
@@ -334,11 +441,35 @@ native_init(NativeMetalBench        *bench,
   bench->renderPass.colorAttachments[0].storeAction = MTLStoreActionStore;
   bench->renderPass.colorAttachments[0].clearColor  =
     MTLClearColorMake(0.0, 0.0, 0.0, 1.0);
-  return bench->vertexBuffer && bench->target && bench->renderPass;
+  if (!bench->vertexBuffer || !bench->target || !bench->renderPass) {
+    return false;
+  }
+  if (config->modern) {
+#if NATIVE_HAS_METAL4
+    if (@available(macOS 26.0, *)) {
+      return native_initModern(bench);
+    }
+#endif
+    fprintf(stderr, "native Metal 4 is unavailable\n");
+    return false;
+  }
+  return true;
 }
 
 static void
 native_destroy(NativeMetalBench *bench) {
+#if NATIVE_HAS_METAL4
+  if (bench->completion4) {
+    dispatch_release(bench->completion4);
+  }
+  [bench->renderPass4 release];
+  [bench->residency4 release];
+  [bench->fragmentArguments4 release];
+  [bench->vertexArguments4 release];
+  [bench->allocator4 release];
+  [bench->commandBuffer4 release];
+  [bench->queue4 release];
+#endif
   [bench->renderPass release];
   [bench->target release];
   [bench->uploadBuffer release];
@@ -515,6 +646,216 @@ native_encode(NativeMetalBench           *bench,
   return false;
 }
 
+#if NATIVE_HAS_METAL4
+static void
+native_bindPipeline4(NativeMetalBench           *bench,
+                     id<MTL4RenderCommandEncoder> encoder,
+                     uint32_t                    index) API_AVAILABLE(macos(26.0)) {
+  [encoder setRenderPipelineState:bench->pipelines[index]];
+  [encoder setDepthStencilState:bench->depthStates[index]];
+  [encoder setCullMode:MTLCullModeNone];
+  [encoder setFrontFacingWinding:index == 1u
+                                  ? MTLWindingClockwise
+                                  : MTLWindingCounterClockwise];
+}
+
+static void
+native_draw4(id<MTL4RenderCommandEncoder> encoder) API_AVAILABLE(macos(26.0)) {
+  [encoder drawPrimitives:MTLPrimitiveTypeTriangle
+              vertexStart:0u
+              vertexCount:3u
+            instanceCount:1u
+             baseInstance:0u];
+}
+
+static bool
+native_encodeState4(NativeMetalBench           *bench,
+                    id<MTL4RenderCommandEncoder> encoder,
+                    uint32_t                    drawCount) API_AVAILABLE(macos(26.0)) {
+  uint32_t previousState;
+
+  previousState = UINT32_MAX;
+  for (uint32_t draw = 0u; draw < drawCount; draw++) {
+    uint32_t stateIndex;
+
+    stateIndex = (draw >> 1u) & 1u;
+    if (stateIndex != previousState) {
+      double         inset;
+      double         size;
+      MTLScissorRect scissor;
+      MTLViewport    viewport;
+
+      inset             = stateIndex == 0u ? 0.0 : 1.0;
+      size              = stateIndex == 0u
+                            ? NATIVE_STATE_TARGET
+                            : NATIVE_STATE_TARGET - 2u;
+      viewport.originX  = inset;
+      viewport.originY  = inset;
+      viewport.width    = size;
+      viewport.height   = size;
+      viewport.znear    = 0.0;
+      viewport.zfar     = 1.0;
+      scissor.x         = (NSUInteger)inset;
+      scissor.y         = (NSUInteger)inset;
+      scissor.width     = (NSUInteger)size;
+      scissor.height    = (NSUInteger)size;
+
+      native_bindPipeline4(bench, encoder, stateIndex);
+      [encoder setViewport:viewport];
+      [encoder setScissorRect:scissor];
+      [encoder setBlendColorRed:stateIndex == 0u ? 0.0f : 1.0f
+                          green:stateIndex == 0u ? 0.0f : 0.5f
+                           blue:stateIndex == 0u ? 0.0f : 0.25f
+                          alpha:stateIndex == 0u ? 0.0f : 1.0f];
+      [encoder setStencilReferenceValue:stateIndex];
+      previousState = stateIndex;
+    }
+    native_draw4(encoder);
+  }
+  return true;
+}
+
+static bool
+native_encodeBinding4(NativeMetalBench           *bench,
+                      id<MTL4RenderCommandEncoder> encoder,
+                      uint32_t                    drawCount) API_AVAILABLE(macos(26.0)) {
+  uint32_t previousGroup;
+
+  native_bindPipeline4(bench, encoder, 0u);
+  previousGroup = UINT32_MAX;
+  for (uint32_t draw = 0u; draw < drawCount; draw++) {
+    uint32_t groupIndex;
+
+    groupIndex = (draw >> 1u) & 1u;
+    if (groupIndex != previousGroup) {
+      [bench->fragmentArguments4
+        setAddress:bench->bindingBuffers[groupIndex].gpuAddress
+           atIndex:0u];
+      previousGroup = groupIndex;
+    }
+    native_draw4(encoder);
+  }
+  return true;
+}
+
+static bool
+native_encodeUpload4(NativeMetalBench           *bench,
+                     id<MTL4RenderCommandEncoder> encoder,
+                     uint32_t                    drawCount) API_AVAILABLE(macos(26.0)) {
+  uint64_t frameBase;
+  uint8_t *bytes;
+
+  frameBase = (uint64_t)(bench->frameIndex % NATIVE_UPLOAD_FRAMES) *
+              bench->uploadBytesPerFrame;
+  bytes = bench->uploadBuffer.contents;
+  if (!bytes) {
+    return false;
+  }
+
+  native_bindPipeline4(bench, encoder, 0u);
+  for (uint32_t draw = 0u; draw < drawCount; draw++) {
+    float    tint[4];
+    uint64_t uniformOffset;
+    uint64_t vertexOffset;
+
+    tint[0]       = (draw & 1u) ? 0.2f : 1.0f;
+    tint[1]       = (draw & 2u) ? 1.0f : 0.3f;
+    tint[2]       = (draw & 4u) ? 0.4f : 1.0f;
+    tint[3]       = 1.0f;
+    uniformOffset = frameBase + (uint64_t)draw * NATIVE_UPLOAD_ALIGNMENT;
+    vertexOffset  = uniformOffset + sizeof(tint);
+    memcpy(bytes + uniformOffset, tint, sizeof(tint));
+    memcpy(bytes + vertexOffset, nativeVertices, sizeof(nativeVertices));
+    [bench->vertexArguments4
+      setAddress:bench->uploadBuffer.gpuAddress + vertexOffset
+         atIndex:NATIVE_VERTEX_SLOT];
+    [bench->fragmentArguments4
+      setAddress:bench->uploadBuffer.gpuAddress + uniformOffset
+         atIndex:0u];
+    native_draw4(encoder);
+  }
+  bench->frameIndex++;
+  return true;
+}
+
+static bool
+native_encode4(NativeMetalBench           *bench,
+               id<MTL4RenderCommandEncoder> encoder,
+               uint32_t                    drawCount) API_AVAILABLE(macos(26.0)) {
+  [encoder setArgumentTable:bench->vertexArguments4
+                   atStages:MTLRenderStageVertex];
+  [encoder setArgumentTable:bench->fragmentArguments4
+                   atStages:MTLRenderStageFragment];
+  [bench->vertexArguments4 setAddress:bench->vertexBuffer.gpuAddress
+                              atIndex:NATIVE_VERTEX_SLOT];
+
+  switch (bench->mode) {
+    case NativeMetalModeStatic:
+      native_bindPipeline4(bench, encoder, 0u);
+      for (uint32_t draw = 0u; draw < drawCount; draw++) {
+        native_draw4(encoder);
+      }
+      return true;
+    case NativeMetalModeState:
+      return native_encodeState4(bench, encoder, drawCount);
+    case NativeMetalModeBinding:
+      return native_encodeBinding4(bench, encoder, drawCount);
+    case NativeMetalModeUpload:
+      return native_encodeUpload4(bench, encoder, drawCount);
+  }
+  return false;
+}
+
+static bool
+native_frame4(NativeMetalBench *bench,
+              uint32_t          drawCount,
+              double           *outEncodeNs,
+              double           *outGpuNs) API_AVAILABLE(macos(26.0)) {
+  id<MTL4CommandBuffer>        buffers[1];
+  id<MTL4RenderCommandEncoder> encoder;
+  MTL4CommitOptions           *options;
+  __block CFTimeInterval       gpuStart;
+  __block CFTimeInterval       gpuEnd;
+  __block bool                 failed;
+  double                       begin;
+  double                       end;
+
+  gpuStart = 0.0;
+  gpuEnd   = 0.0;
+  failed   = false;
+  begin    = bench_now();
+  [bench->commandBuffer4 beginCommandBufferWithAllocator:bench->allocator4];
+  [bench->commandBuffer4 useResidencySet:bench->residency4];
+  encoder = [bench->commandBuffer4
+    renderCommandEncoderWithDescriptor:bench->renderPass4];
+  if (!encoder || !native_encode4(bench, encoder, drawCount)) {
+    return false;
+  }
+  [encoder endEncoding];
+  [bench->commandBuffer4 endCommandBuffer];
+
+  options = [MTL4CommitOptions new];
+  [options addFeedbackHandler:^(id<MTL4CommitFeedback> feedback) {
+    gpuStart = feedback.GPUStartTime;
+    gpuEnd   = feedback.GPUEndTime;
+    failed   = feedback.error != nil;
+    dispatch_semaphore_signal(bench->completion4);
+  }];
+  buffers[0] = bench->commandBuffer4;
+  [bench->queue4 commit:buffers count:1u options:options];
+  end = bench_now();
+  dispatch_semaphore_wait(bench->completion4, DISPATCH_TIME_FOREVER);
+  [options release];
+
+  if (failed || !(gpuEnd > gpuStart)) {
+    return false;
+  }
+  *outEncodeNs = (end - begin) * 1e9;
+  *outGpuNs    = (gpuEnd - gpuStart) * 1e9;
+  return true;
+}
+#endif
+
 static bool
 native_frame(NativeMetalBench *bench,
              uint32_t          drawCount,
@@ -526,6 +867,15 @@ native_frame(NativeMetalBench *bench,
   CFTimeInterval              gpuEnd;
   double                      begin;
   double                      end;
+
+#if NATIVE_HAS_METAL4
+  if (bench->modern) {
+    if (@available(macOS 26.0, *)) {
+      return native_frame4(bench, drawCount, outEncodeNs, outGpuNs);
+    }
+    return false;
+  }
+#endif
 
   @autoreleasepool {
     begin         = bench_now();
@@ -651,7 +1001,9 @@ native_print(const NativeMetalBench   *bench,
                             metrics->sampleCount,
                             0.99);
   printf("Native Metal %s benchmark\n", native_modeName(config->mode));
-  printf("adapter: %s\n", bench->device.name.UTF8String);
+  printf("adapter: %s, api: %s\n",
+         bench->device.name.UTF8String,
+         bench->modern ? "metal4" : "classic");
   printf("draws/frame: %u, warmup: %u, frames: %u, repeats: %u\n",
          config->drawCount,
          config->warmupFrames,
