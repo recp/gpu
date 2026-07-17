@@ -334,6 +334,40 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
       dstStages |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
     }
   }
+  if (barriers->aliasingBarrierCount > 0u) {
+    VkMemoryBarrier native = {0};
+
+    native.sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    native.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+    native.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT |
+                           VK_ACCESS_MEMORY_WRITE_BIT;
+    vkCmdPipelineBarrier(command->command,
+                         srcStages,
+                         dstStages,
+                         0u,
+                         1u,
+                         &native,
+                         0u,
+                         NULL,
+                         0u,
+                         NULL);
+
+    for (uint32_t i = 0u; i < barriers->aliasingBarrierCount; i++) {
+      GPUTexture *after;
+
+      after = barriers->pAliasingBarriers[i].afterTexture;
+      if (after && after->_priv) {
+        GPUTextureVk *texture = after->_priv;
+
+        vk_setTextureLayout(texture,
+                            0u,
+                            texture->mipLevelCount,
+                            0u,
+                            texture->arrayLayerCount,
+                            VK_IMAGE_LAYOUT_UNDEFINED);
+      }
+    }
+  }
   bufferOffset  = 0u;
   textureOffset = 0u;
   while (bufferOffset < barriers->bufferBarrierCount ||

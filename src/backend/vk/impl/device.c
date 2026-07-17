@@ -1527,6 +1527,8 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       return adapterVk->subgroupMatrix;
     case GPU_FEATURE_ATOMIC64:
       return adapterVk->atomic64;
+    case GPU_FEATURE_PLACED_RESOURCES:
+      return true;
     default:
       return false;
   }

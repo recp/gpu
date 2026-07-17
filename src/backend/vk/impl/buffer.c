@@ -17,6 +17,9 @@
 #include "../common.h"
 #include "../../../api/buffer_internal.h"
 
+static void
+vk__destroyBufferState(GPUBufferVk *native);
+
 static bool
 vk__bufferUsage(GPUBufferUsageFlags usage, VkBufferUsageFlags *outUsage) {
   const GPUBufferUsageFlags known = GPU_BUFFER_USAGE_VERTEX |
@@ -123,19 +126,166 @@ vk_findMemoryType(GPUDevice             *device,
   return false;
 }
 
+static GPUResult
+vk__bufferCreateInfo(GPUDevice                 *device,
+                     const GPUBufferCreateInfo *info,
+                     VkBufferCreateInfo        *outInfo) {
+  GPUDeviceVk *deviceVk;
+
+  if (!device || !(deviceVk = device->_priv) || !info || !outInfo ||
+      !vk__bufferUsage(info->usage, &outInfo->usage)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (deviceVk->descriptorBuffer &&
+      (info->usage & (GPU_BUFFER_USAGE_UNIFORM |
+                      GPU_BUFFER_USAGE_STORAGE)) != 0u) {
+    outInfo->usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+  }
+  outInfo->sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  outInfo->size        = info->sizeBytes;
+  outInfo->sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
+vk_getBufferMemoryRequirements(GPUDevice                 *device,
+                               const GPUBufferCreateInfo *info,
+                               GPUMemoryRequirements     *outRequirements) {
+  GPUDeviceVk         *deviceVk;
+  VkBufferCreateInfo   bufferInfo = {0};
+  VkMemoryRequirements requirements;
+  VkBuffer             buffer;
+  uint32_t             memoryTypes;
+  GPUResult            result;
+
+  if (!device || !(deviceVk = device->_priv) || !info || !outRequirements) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  result = vk__bufferCreateInfo(device, info, &bufferInfo);
+  if (result != GPU_OK) {
+    return result;
+  }
+  if (vkCreateBuffer(deviceVk->device,
+                     &bufferInfo,
+                     NULL,
+                     &buffer) != VK_SUCCESS) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  vkGetBufferMemoryRequirements(deviceVk->device, buffer, &requirements);
+  vkDestroyBuffer(deviceVk->device, buffer, NULL);
+
+  memoryTypes = vk_filterMemoryTypes(device, requirements.memoryTypeBits);
+  if (memoryTypes == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  outRequirements->sizeBytes         = requirements.size;
+  outRequirements->alignmentBytes    = requirements.alignment;
+  outRequirements->compatibilityMask = memoryTypes;
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
+vk_createPlacedBuffer(GPUDevice                 *device,
+                      const GPUBufferCreateInfo *info,
+                      GPUHeap                   *heap,
+                      uint64_t                   heapOffset,
+                      GPUBuffer                **outBuffer) {
+  GPUDeviceVk             *deviceVk;
+  GPUHeapVk               *heapVk;
+  GPUBuffer               *buffer;
+  GPUBufferVk             *native;
+  VkBufferCreateInfo       bufferInfo = {0};
+  VkBufferDeviceAddressInfo addressInfo = {0};
+  VkMemoryRequirements     requirements;
+  GPUResult                result;
+
+  if (!device || !(deviceVk = device->_priv) || !info || !heap ||
+      !(heapVk = heap->_priv) || !outBuffer) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  result = vk__bufferCreateInfo(device, info, &bufferInfo);
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  buffer = calloc(1, sizeof(*buffer) + sizeof(*native));
+  if (!buffer) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  native         = (GPUBufferVk *)(buffer + 1);
+  native->device = deviceVk->device;
+  if (vkCreateBuffer(native->device,
+                     &bufferInfo,
+                     NULL,
+                     &native->buffer) != VK_SUCCESS) {
+    free(buffer);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  vkGetBufferMemoryRequirements(native->device,
+                                native->buffer,
+                                &requirements);
+  if ((requirements.memoryTypeBits &
+       (1u << heapVk->memoryTypeIndex)) == 0u ||
+      vkBindBufferMemory(native->device,
+                         native->buffer,
+                         heapVk->memory,
+                         heapOffset) != VK_SUCCESS) {
+    vkDestroyBuffer(native->device, native->buffer, NULL);
+    free(buffer);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  native->memory         = heapVk->memory;
+  native->allocationSize = requirements.size;
+  native->mapped         = heapVk->mapped
+                             ? (uint8_t *)heapVk->mapped + heapOffset
+                             : NULL;
+  native->coherent       = heapVk->coherent;
+  native->ownsMemory     = false;
+  buffer->_priv          = native;
+  buffer->device         = device;
+  buffer->sizeBytes      = info->sizeBytes;
+  buffer->usage          = info->usage;
+  if ((bufferInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0u) {
+    if (!deviceVk->bufferDeviceAddress ||
+        !deviceVk->getBufferDeviceAddress) {
+      vk__destroyBufferState(native);
+      free(buffer);
+      return GPU_ERROR_UNSUPPORTED;
+    }
+    addressInfo.sType  = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    addressInfo.buffer = native->buffer;
+    buffer->_gpuAddress = deviceVk->getBufferDeviceAddress(deviceVk->device,
+                                                            &addressInfo);
+    if (buffer->_gpuAddress == 0u) {
+      vk__destroyBufferState(native);
+      free(buffer);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+  vk_setDebugName(device,
+                  VK_OBJECT_TYPE_BUFFER,
+                  (uint64_t)native->buffer,
+                  info->label);
+  *outBuffer = buffer;
+  return GPU_OK;
+}
+
 static void
 vk__destroyBufferState(GPUBufferVk *native) {
   if (!native || !native->device) {
     return;
   }
 
-  if (native->mapped && native->memory) {
+  if (native->ownsMemory && native->mapped && native->memory) {
     vkUnmapMemory(native->device, native->memory);
   }
   if (native->buffer) {
     vkDestroyBuffer(native->device, native->buffer, NULL);
   }
-  if (native->memory) {
+  if (native->ownsMemory && native->memory) {
     vkFreeMemory(native->device, native->memory, NULL);
   }
 }
@@ -160,22 +310,16 @@ vk__createBuffer(GPUDevice                 * __restrict device,
   uint32_t                 memoryTypeIndex;
 
   if (!device || !device->_priv || !info || !outBuffer ||
-      info->sizeBytes == 0u ||
-      !vk__bufferUsage(info->usage, &bufferInfo.usage)) {
+      info->sizeBytes == 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   *outBuffer                = NULL;
   deviceVk                  = device->_priv;
-  if (deviceVk->descriptorBuffer &&
-      (info->usage & (GPU_BUFFER_USAGE_UNIFORM |
-                      GPU_BUFFER_USAGE_STORAGE)) != 0u) {
-    bufferInfo.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+  if (vk__bufferCreateInfo(device, info, &bufferInfo) != GPU_OK) {
+    return GPU_ERROR_INVALID_ARGUMENT;
   }
   state.device              = deviceVk->device;
-  bufferInfo.sType          = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  bufferInfo.size           = info->sizeBytes;
-  bufferInfo.sharingMode    = VK_SHARING_MODE_EXCLUSIVE;
   if (vkCreateBuffer(state.device,
                      &bufferInfo,
                      NULL,
@@ -235,6 +379,7 @@ vk__createBuffer(GPUDevice                 * __restrict device,
   state.allocationSize = requirements.size;
   state.coherent       = hostVisible &&
                          (memoryFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0u;
+  state.ownsMemory     = true;
 
   buffer = calloc(1, sizeof(*buffer) + sizeof(*native));
   if (!buffer) {

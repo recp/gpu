@@ -145,22 +145,22 @@ mt_textureViewType(GPUTextureViewType viewType) {
 
 GPU_HIDE
 GPUResult
-mt_createTexture(GPUDevice                  * __restrict device,
-                 const GPUTextureCreateInfo * __restrict info,
-                 GPUTexture                ** __restrict outTexture) {
+mt_createTextureDescriptor(GPUDevice                  *device,
+                           const GPUTextureCreateInfo *info,
+                           MTLStorageMode              storageMode,
+                           MTLTextureDescriptor      **outDesc,
+                           MTLPixelFormat             *outStencilCopyFormat) {
   GPUDeviceMT          *deviceMT;
   MTLTextureDescriptor *desc;
-  id<MTLTexture>        nativeTexture;
-  id<MTLTexture>        stencilCopyView;
-  GPUTexture           *texture;
-  GPUTextureMT         *native;
   MTLPixelFormat        stencilCopyFormat;
   uint32_t              sampleCount;
 
-  if (!device || !info || !outTexture) {
+  if (!device || !device->_priv || !info || !outDesc ||
+      !outStencilCopyFormat) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  *outTexture = NULL;
+  *outDesc              = nil;
+  *outStencilCopyFormat = MTLPixelFormatInvalid;
 
   deviceMT    = device->_priv;
   sampleCount = info->sampleCount ? info->sampleCount : 1u;
@@ -171,37 +171,51 @@ mt_createTexture(GPUDevice                  * __restrict device,
       ![deviceMT->device supportsTextureSampleCount:sampleCount]) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  desc = [MTLTextureDescriptor new];
-  desc.textureType = sampleCount > 1u
-                       ? MTLTextureType2DMultisample
-                       : mt_textureType(info->dimension, info->depthOrLayers);
-  desc.pixelFormat = mt_format(info->format);
-  desc.width = info->width;
-  desc.height = info->height;
-  desc.depth = info->dimension == GPU_TEXTURE_DIMENSION_3D ? info->depthOrLayers : 1u;
-  desc.arrayLength = info->dimension == GPU_TEXTURE_DIMENSION_3D ? 1u : info->depthOrLayers;
+
+  desc                  = [MTLTextureDescriptor new];
+  desc.textureType      = sampleCount > 1u
+                            ? MTLTextureType2DMultisample
+                            : mt_textureType(info->dimension,
+                                             info->depthOrLayers);
+  desc.pixelFormat      = mt_format(info->format);
+  desc.width            = info->width;
+  desc.height           = info->height;
+  desc.depth            = info->dimension == GPU_TEXTURE_DIMENSION_3D
+                            ? info->depthOrLayers
+                            : 1u;
+  desc.arrayLength      = info->dimension == GPU_TEXTURE_DIMENSION_3D
+                            ? 1u
+                            : info->depthOrLayers;
   desc.mipmapLevelCount = info->mipLevelCount ? info->mipLevelCount : 1u;
-  desc.sampleCount = sampleCount;
-  desc.usage = mt_textureUsage(info->usage);
+  desc.sampleCount      = sampleCount;
+  desc.usage            = mt_textureUsage(info->usage);
+  desc.storageMode      = storageMode;
+
   stencilCopyFormat = mt_stencilCopyFormat(info->format);
   if (stencilCopyFormat != MTLPixelFormatInvalid &&
       (info->usage & (GPU_TEXTURE_USAGE_COPY_SRC |
                       GPU_TEXTURE_USAGE_COPY_DST)) != 0u) {
     desc.usage |= MTLTextureUsagePixelFormatView;
   }
-  desc.storageMode = MTLStorageModePrivate;
-  if ((info->usage & GPU_TEXTURE_USAGE_COPY_DST) != 0) {
-#if TARGET_OS_OSX
-    desc.storageMode = MTLStorageModeManaged;
-#else
-    desc.storageMode = MTLStorageModeShared;
-#endif
-  }
 
-  nativeTexture = [deviceMT->device newTextureWithDescriptor:desc];
-  [desc release];
-  if (!nativeTexture) {
-    return GPU_ERROR_BACKEND_FAILURE;
+  *outDesc              = desc;
+  *outStencilCopyFormat = stencilCopyFormat;
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
+mt_wrapTexture(GPUDevice                  *device,
+               const GPUTextureCreateInfo *info,
+               id<MTLTexture>              nativeTexture,
+               MTLPixelFormat              stencilCopyFormat,
+               GPUTexture                **outTexture) {
+  id<MTLTexture> stencilCopyView;
+  GPUTexture    *texture;
+  GPUTextureMT  *native;
+
+  if (!device || !info || !nativeTexture || !outTexture) {
+    return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   stencilCopyView = nil;
@@ -211,22 +225,28 @@ mt_createTexture(GPUDevice                  * __restrict device,
     stencilCopyView = [nativeTexture
       newTextureViewWithPixelFormat:stencilCopyFormat];
     if (!stencilCopyView) {
-      [nativeTexture release];
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
 
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  if (gpuDeviceDebugMarkersEnabled(device) &&
+      info->label && info->label[0] != '\0') {
+    nativeTexture.label = [NSString stringWithUTF8String:info->label];
+  }
+#endif
+
   texture = calloc(1, sizeof(*texture) + sizeof(*native));
   if (!texture) {
     [stencilCopyView release];
-    [nativeTexture release];
-    return GPU_ERROR_BACKEND_FAILURE;
+    return GPU_ERROR_OUT_OF_MEMORY;
   }
 
   native                  = (GPUTextureMT *)(texture + 1);
   native->texture         = nativeTexture;
   native->stencilCopyView = stencilCopyView;
   texture->_priv          = native;
+  texture->device         = device;
   texture->format         = info->format;
   texture->dimension      = info->dimension;
   texture->width          = info->width;
@@ -236,8 +256,61 @@ mt_createTexture(GPUDevice                  * __restrict device,
   texture->sampleCount    = info->sampleCount ? info->sampleCount : 1u;
   texture->usage          = info->usage;
   texture->_ownsNative    = true;
+  *outTexture             = texture;
+  return GPU_OK;
+}
 
-  *outTexture = texture;
+GPU_HIDE
+GPUResult
+mt_createTexture(GPUDevice                  * __restrict device,
+                 const GPUTextureCreateInfo * __restrict info,
+                 GPUTexture                ** __restrict outTexture) {
+  GPUDeviceMT          *deviceMT;
+  MTLTextureDescriptor *desc;
+  id<MTLTexture>        nativeTexture;
+  MTLPixelFormat        stencilCopyFormat;
+  MTLStorageMode        storageMode;
+  GPUResult             result;
+
+  if (!device || !info || !outTexture) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outTexture = NULL;
+
+  deviceMT    = device->_priv;
+  storageMode = MTLStorageModePrivate;
+  if ((info->usage & GPU_TEXTURE_USAGE_COPY_DST) != 0) {
+#if TARGET_OS_OSX
+    storageMode = MTLStorageModeManaged;
+#else
+    storageMode = MTLStorageModeShared;
+#endif
+  }
+
+  result = mt_createTextureDescriptor(device,
+                                      info,
+                                      storageMode,
+                                      &desc,
+                                      &stencilCopyFormat);
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  nativeTexture = [deviceMT->device newTextureWithDescriptor:desc];
+  [desc release];
+  if (!nativeTexture) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  result = mt_wrapTexture(device,
+                          info,
+                          nativeTexture,
+                          stencilCopyFormat,
+                          outTexture);
+  if (result != GPU_OK) {
+    [nativeTexture release];
+    return result;
+  }
   return GPU_OK;
 }
 

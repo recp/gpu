@@ -16,6 +16,7 @@ GPU_ASSERT_CHAIN_FIRST(GPUDeviceCreateInfo);
 GPU_ASSERT_CHAIN_FIRST(GPUBufferCreateInfo);
 GPU_ASSERT_CHAIN_FIRST(GPUTextureCreateInfo);
 GPU_ASSERT_CHAIN_FIRST(GPUTextureViewCreateInfo);
+GPU_ASSERT_CHAIN_FIRST(GPUHeapCreateInfo);
 GPU_ASSERT_CHAIN_FIRST(GPUSamplerCreateInfo);
 GPU_ASSERT_CHAIN_FIRST(GPUShaderLibraryCreateInfo);
 GPU_ASSERT_CHAIN_FIRST(GPUSwapchainCreateInfo);
@@ -52,7 +53,10 @@ _Static_assert(
     offsetof(GPUTransientAllocatorConfig, framesInFlight),
   "transient allocator 64-bit fields must stay packed"
 );
-GPU_ASSERT_64BIT_SIZE(GPUBarrierBatch, 32u);
+GPU_ASSERT_64BIT_SIZE(GPUMemoryRequirements, 24u);
+GPU_ASSERT_64BIT_SIZE(GPUHeapCreateInfo, 40u);
+GPU_ASSERT_64BIT_SIZE(GPUAliasingBarrier, 32u);
+GPU_ASSERT_64BIT_SIZE(GPUBarrierBatch, 48u);
 GPU_ASSERT_64BIT_SIZE(GPUQueueSubmitExInfo, 64u);
 GPU_ASSERT_64BIT_SIZE(GPUDepthStencilState, 48u);
 GPU_ASSERT_64BIT_SIZE(GPUTransientAllocatorConfig, 40u);

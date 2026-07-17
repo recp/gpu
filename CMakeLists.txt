@@ -80,6 +80,7 @@ set(GPU_CORE_SOURCES
   src/api/frame.c
   src/api/instance.c
   src/api/library.c
+  src/api/memory.c
   src/api/pass/renderpass.c
   src/api/pipeline_cache.c
   src/api/query.c
@@ -206,6 +207,7 @@ if(GPU_BUILD_METAL)
     src/backend/mt/impl/frame.m
     src/backend/mt/impl/format.m
     src/backend/mt/impl/library.m
+    src/backend/mt/impl/memory.m
     src/backend/mt/impl/pipeline_cache.m
     src/backend/mt/impl/ray.m
     src/backend/mt/impl/render/pipeline.m
@@ -252,6 +254,7 @@ if(GPU_BUILD_DX12)
     src/backend/dx12/impl/frame.c
     src/backend/dx12/impl/instance.c
     src/backend/dx12/impl/library.c
+    src/backend/dx12/impl/memory.c
     src/backend/dx12/impl/pipeline.c
     src/backend/dx12/impl/pipeline_cache.c
     src/backend/dx12/impl/query.c
@@ -282,6 +285,7 @@ if(GPU_BUILD_VULKAN)
     src/backend/vk/impl/frame.c
     src/backend/vk/impl/instance.c
     src/backend/vk/impl/library.c
+    src/backend/vk/impl/memory.c
     src/backend/vk/impl/pipeline.c
     src/backend/vk/impl/pipeline_cache.c
     src/backend/vk/impl/query.c
@@ -936,6 +940,7 @@ if(GPU_BUILD_TESTS)
     tests/api/descriptor_array.c
     tests/api/line_texture.c
     tests/api/main.c
+    tests/api/memory.c
     tests/api/metal_vertex_slots.c
     tests/api/query.c
     tests/api/queue.c

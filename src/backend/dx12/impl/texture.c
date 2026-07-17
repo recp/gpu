@@ -383,29 +383,28 @@ dx12_transitionTexturePlane(ID3D12GraphicsCommandList *commandList,
                                  state);
 }
 
-GPU_HIDE
-GPUResult
-dx12_createTexture(GPUDevice                  * __restrict device,
-                   const GPUTextureCreateInfo * __restrict info,
-                   GPUTexture                ** __restrict outTexture) {
-  GPUDeviceDX12           *deviceDX12;
-  GPUTexture              *texture;
-  GPUTextureDX12          *native;
-  D3D12_HEAP_PROPERTIES    heap = {0};
-  D3D12_RESOURCE_DESC      desc = {0};
-  D3D12_CLEAR_VALUE        clearValue = {0};
+static GPUResult
+dx12__textureDesc(GPUDevice                  *device,
+                  const GPUTextureCreateInfo *info,
+                  D3D12_RESOURCE_DESC        *outDesc,
+                  D3D12_CLEAR_VALUE          *outClearValue,
+                  D3D12_RESOURCE_STATES      *outInitialState,
+                  uint32_t                   *outMipLevelCount,
+                  uint32_t                   *outArrayLayerCount,
+                  uint32_t                   *outPlaneCount,
+                  uint32_t                   *outSubresourceCount) {
+  GPUDeviceDX12          *deviceDX12;
   D3D12_RESOURCE_DIMENSION dimension;
-  D3D12_RESOURCE_STATES    initialState;
-  DXGI_FORMAT              format;
-  size_t                   allocationSize;
-  uint32_t                 arrayLayerCount;
-  uint32_t                 subresourceCount;
-  uint32_t                 mipLevelCount;
-  uint32_t                 planeCount;
-  uint32_t                 sampleCount;
-  HRESULT                  result;
+  DXGI_FORMAT             format;
+  uint32_t                mipLevelCount;
+  uint32_t                arrayLayerCount;
+  uint32_t                planeCount;
+  uint32_t                subresourceCount;
+  uint32_t                sampleCount;
 
-  if (!device || !device->_priv || !info || !outTexture ||
+  if (!device || !(deviceDX12 = device->_priv) || !info || !outDesc ||
+      !outClearValue || !outInitialState || !outMipLevelCount ||
+      !outArrayLayerCount || !outPlaneCount || !outSubresourceCount ||
       info->mipLevelCount > UINT16_MAX ||
       info->depthOrLayers > UINT16_MAX ||
       !dx12__textureDimension(info->dimension, &dimension)) {
@@ -417,8 +416,6 @@ dx12_createTexture(GPUDevice                  * __restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  *outTexture = NULL;
-  deviceDX12    = device->_priv;
   mipLevelCount = info->mipLevelCount ? info->mipLevelCount : 1u;
   format        = dx12__textureResourceFormat(info->format);
   if (format == DXGI_FORMAT_UNKNOWN) {
@@ -434,7 +431,7 @@ dx12_createTexture(GPUDevice                  * __restrict device,
          GPU_TEXTURE_USAGE_DEPTH_STENCIL) ||
       ((info->usage & GPU_TEXTURE_USAGE_STORAGE) != 0u &&
        ((info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u ||
-        (info->sampleCount > 1u))) ||
+        info->sampleCount > 1u)) ||
       ((info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u &&
        info->dimension != GPU_TEXTURE_DIMENSION_2D)) {
     return GPU_ERROR_UNSUPPORTED;
@@ -453,7 +450,7 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   arrayLayerCount = info->dimension == GPU_TEXTURE_DIMENSION_3D
                       ? 1u
                       : info->depthOrLayers;
-  planeCount = dx12__texturePlaneCount(info->format);
+  planeCount      = dx12__texturePlaneCount(info->format);
   if (mipLevelCount > UINT32_MAX / arrayLayerCount) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
@@ -462,6 +459,69 @@ dx12_createTexture(GPUDevice                  * __restrict device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
   subresourceCount *= planeCount;
+
+  sampleCount = info->sampleCount ? info->sampleCount : 1u;
+  if (sampleCount > 1u) {
+    D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS levels = {0};
+
+    levels.Format      = dx12_format(info->format);
+    levels.SampleCount = sampleCount;
+    if (FAILED(deviceDX12->d3dDevice->lpVtbl->CheckFeatureSupport(
+          deviceDX12->d3dDevice,
+          D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,
+          &levels,
+          sizeof(levels))) || levels.NumQualityLevels == 0u) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+  }
+
+  outDesc->Dimension        = dimension;
+  outDesc->Width            = info->width;
+  outDesc->Height           = info->dimension == GPU_TEXTURE_DIMENSION_1D
+                                ? 1u
+                                : info->height;
+  outDesc->DepthOrArraySize = (UINT16)info->depthOrLayers;
+  outDesc->MipLevels        = (UINT16)mipLevelCount;
+  outDesc->Format           = format;
+  outDesc->SampleDesc.Count = sampleCount;
+  outDesc->Layout           = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+  if ((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u) {
+    outDesc->Flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+  }
+  if ((info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u) {
+    outDesc->Flags                     |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+    outClearValue->Format               = dx12_format(info->format);
+    outClearValue->DepthStencil.Depth   = 1.0f;
+    outClearValue->DepthStencil.Stencil = 0u;
+  }
+  if ((info->usage & GPU_TEXTURE_USAGE_STORAGE) != 0u) {
+    outDesc->Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+  }
+
+  *outInitialState = (info->usage & GPU_TEXTURE_USAGE_COPY_DST) != 0u
+                       ? D3D12_RESOURCE_STATE_COPY_DEST
+                       : D3D12_RESOURCE_STATE_COMMON;
+  *outMipLevelCount    = mipLevelCount;
+  *outArrayLayerCount  = arrayLayerCount;
+  *outPlaneCount       = planeCount;
+  *outSubresourceCount = subresourceCount;
+  return GPU_OK;
+}
+
+static GPUResult
+dx12__wrapTexture(GPUDevice                  *device,
+                  const GPUTextureCreateInfo *info,
+                  ID3D12Resource             *resource,
+                  D3D12_RESOURCE_STATES       initialState,
+                  uint32_t                    mipLevelCount,
+                  uint32_t                    arrayLayerCount,
+                  uint32_t                    planeCount,
+                  uint32_t                    subresourceCount,
+                  GPUTexture                **outTexture) {
+  GPUTexture     *texture;
+  GPUTextureDX12 *native;
+  size_t          allocationSize;
+
   if (subresourceCount >
       (SIZE_MAX - sizeof(*texture) - sizeof(*native)) /
         sizeof(*native->states)) {
@@ -474,69 +534,11 @@ dx12_createTexture(GPUDevice                  * __restrict device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  sampleCount           = info->sampleCount ? info->sampleCount : 1u;
-  if (sampleCount > 1u) {
-    D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS levels = {0};
-
-    levels.Format      = dx12_format(info->format);
-    levels.SampleCount = sampleCount;
-    if (FAILED(deviceDX12->d3dDevice->lpVtbl->CheckFeatureSupport(
-          deviceDX12->d3dDevice,
-          D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,
-          &levels,
-          sizeof(levels))) || levels.NumQualityLevels == 0u) {
-      free(texture);
-      return GPU_ERROR_UNSUPPORTED;
-    }
-  }
-  native                = (GPUTextureDX12 *)(texture + 1);
-  heap.Type             = D3D12_HEAP_TYPE_DEFAULT;
-  heap.CreationNodeMask = 1u;
-  heap.VisibleNodeMask  = 1u;
-  desc.Dimension        = dimension;
-  desc.Width            = info->width;
-  desc.Height           = info->dimension == GPU_TEXTURE_DIMENSION_1D
-                            ? 1u
-                            : info->height;
-  desc.DepthOrArraySize = (UINT16)info->depthOrLayers;
-  desc.MipLevels        = (UINT16)mipLevelCount;
-  desc.Format           = format;
-  desc.SampleDesc.Count = sampleCount;
-  desc.Layout           = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-  if ((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u) {
-    desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-  }
-  if ((info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u) {
-    desc.Flags              |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-    clearValue.Format        = dx12_format(info->format);
-    clearValue.DepthStencil.Depth   = 1.0f;
-    clearValue.DepthStencil.Stencil = 0u;
-  }
-  if ((info->usage & GPU_TEXTURE_USAGE_STORAGE) != 0u) {
-    desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-  }
-  initialState = (info->usage & GPU_TEXTURE_USAGE_COPY_DST) != 0u
-                   ? D3D12_RESOURCE_STATE_COPY_DEST
-                   : D3D12_RESOURCE_STATE_COMMON;
-  result = deviceDX12->d3dDevice->lpVtbl->CreateCommittedResource(
-    deviceDX12->d3dDevice,
-    &heap,
-    D3D12_HEAP_FLAG_NONE,
-    &desc,
-    initialState,
-    (info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u ? &clearValue : NULL,
-    &IID_ID3D12Resource,
-    (void **)&native->resource
-  );
-  if (FAILED(result) || !native->resource) {
-    free(texture);
-    return GPU_ERROR_BACKEND_FAILURE;
-  }
-
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-  dx12__setTextureName(native->resource,
-                       gpuDeviceDebugLabel(device, info->label));
+  dx12__setTextureName(resource, gpuDeviceDebugLabel(device, info->label));
 #endif
+  native                   = (GPUTextureDX12 *)(texture + 1);
+  native->resource         = resource;
   native->states           = (D3D12_RESOURCE_STATES *)(native + 1);
   native->state            = initialState;
   native->mipLevelCount    = mipLevelCount;
@@ -544,19 +546,210 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   native->subresourceCount = subresourceCount;
   native->planeCount       = planeCount;
   native->stateUniform     = true;
-  texture->_priv          = native;
-  texture->device         = device;
-  texture->format         = info->format;
-  texture->dimension      = info->dimension;
-  texture->width          = info->width;
-  texture->height         = info->height;
-  texture->depthOrLayers  = info->depthOrLayers;
-  texture->mipLevelCount  = mipLevelCount;
-  texture->sampleCount    = sampleCount;
-  texture->usage          = info->usage;
-  texture->_ownsNative    = true;
-  *outTexture             = texture;
+  texture->_priv           = native;
+  texture->device          = device;
+  texture->format          = info->format;
+  texture->dimension       = info->dimension;
+  texture->width           = info->width;
+  texture->height          = info->height;
+  texture->depthOrLayers   = info->depthOrLayers;
+  texture->mipLevelCount   = mipLevelCount;
+  texture->sampleCount     = info->sampleCount ? info->sampleCount : 1u;
+  texture->usage           = info->usage;
+  texture->_ownsNative     = true;
+  *outTexture              = texture;
   return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
+dx12_getTextureMemoryRequirements(GPUDevice                  *device,
+                                  const GPUTextureCreateInfo *info,
+                                  GPUMemoryRequirements      *outRequirements) {
+  GPUDeviceDX12                 *deviceDX12;
+  D3D12_RESOURCE_DESC            desc = {0};
+  D3D12_CLEAR_VALUE              clearValue = {0};
+  D3D12_RESOURCE_ALLOCATION_INFO allocationInfo;
+  D3D12_RESOURCE_STATES          initialState;
+  uint32_t                       mipLevelCount;
+  uint32_t                       arrayLayerCount;
+  uint32_t                       planeCount;
+  uint32_t                       subresourceCount;
+  GPUResult                      result;
+
+  if (!device || !(deviceDX12 = device->_priv) || !info || !outRequirements) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  result = dx12__textureDesc(device,
+                            info,
+                            &desc,
+                            &clearValue,
+                            &initialState,
+                            &mipLevelCount,
+                            &arrayLayerCount,
+                            &planeCount,
+                            &subresourceCount);
+  if (result != GPU_OK) {
+    return result;
+  }
+  GPU__UNUSED(clearValue);
+  GPU__UNUSED(initialState);
+  GPU__UNUSED(mipLevelCount);
+  GPU__UNUSED(arrayLayerCount);
+  GPU__UNUSED(planeCount);
+  GPU__UNUSED(subresourceCount);
+  deviceDX12->d3dDevice->lpVtbl->GetResourceAllocationInfo(
+    deviceDX12->d3dDevice,
+    &allocationInfo,
+    0u,
+    1u,
+    &desc
+  );
+  if (allocationInfo.SizeInBytes == UINT64_MAX ||
+      allocationInfo.Alignment == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  outRequirements->sizeBytes         = allocationInfo.SizeInBytes;
+  outRequirements->alignmentBytes    = allocationInfo.Alignment;
+  outRequirements->compatibilityMask = dx12_memoryCompatibility(device,
+                                                                 &desc);
+  if (outRequirements->compatibilityMask == 0u) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
+dx12_createPlacedTexture(GPUDevice                  *device,
+                         const GPUTextureCreateInfo *info,
+                         GPUHeap                    *heap,
+                         uint64_t                    heapOffset,
+                         GPUTexture                **outTexture) {
+  GPUDeviceDX12       *deviceDX12;
+  GPUHeapDX12         *heapDX12;
+  ID3D12Resource      *resource;
+  D3D12_RESOURCE_DESC  desc = {0};
+  D3D12_CLEAR_VALUE    clearValue = {0};
+  D3D12_RESOURCE_STATES initialState;
+  uint32_t             mipLevelCount;
+  uint32_t             arrayLayerCount;
+  uint32_t             planeCount;
+  uint32_t             subresourceCount;
+  GPUResult            result;
+  HRESULT              nativeResult;
+
+  if (!device || !(deviceDX12 = device->_priv) || !info || !heap ||
+      !(heapDX12 = heap->_priv) || !heapDX12->heap || !outTexture) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  result = dx12__textureDesc(device,
+                            info,
+                            &desc,
+                            &clearValue,
+                            &initialState,
+                            &mipLevelCount,
+                            &arrayLayerCount,
+                            &planeCount,
+                            &subresourceCount);
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  resource = NULL;
+  nativeResult = deviceDX12->d3dDevice->lpVtbl->CreatePlacedResource(
+    deviceDX12->d3dDevice,
+    heapDX12->heap,
+    heapOffset,
+    &desc,
+    initialState,
+    (info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u ? &clearValue : NULL,
+    &IID_ID3D12Resource,
+    (void **)&resource
+  );
+  if (FAILED(nativeResult) || !resource) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  result = dx12__wrapTexture(device,
+                             info,
+                             resource,
+                             initialState,
+                             mipLevelCount,
+                             arrayLayerCount,
+                             planeCount,
+                             subresourceCount,
+                             outTexture);
+  if (result != GPU_OK) {
+    resource->lpVtbl->Release(resource);
+  }
+  return result;
+}
+
+GPU_HIDE
+GPUResult
+dx12_createTexture(GPUDevice                  * __restrict device,
+                   const GPUTextureCreateInfo * __restrict info,
+                   GPUTexture                ** __restrict outTexture) {
+  GPUDeviceDX12        *deviceDX12;
+  ID3D12Resource       *resource;
+  D3D12_HEAP_PROPERTIES heap = {0};
+  D3D12_RESOURCE_DESC   desc = {0};
+  D3D12_CLEAR_VALUE     clearValue = {0};
+  D3D12_RESOURCE_STATES initialState;
+  uint32_t              mipLevelCount;
+  uint32_t              arrayLayerCount;
+  uint32_t              planeCount;
+  uint32_t              subresourceCount;
+  GPUResult             result;
+  HRESULT               nativeResult;
+
+  if (!device || !(deviceDX12 = device->_priv) || !info || !outTexture) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outTexture = NULL;
+  result = dx12__textureDesc(device,
+                            info,
+                            &desc,
+                            &clearValue,
+                            &initialState,
+                            &mipLevelCount,
+                            &arrayLayerCount,
+                            &planeCount,
+                            &subresourceCount);
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  heap.Type             = D3D12_HEAP_TYPE_DEFAULT;
+  heap.CreationNodeMask = 1u;
+  heap.VisibleNodeMask  = 1u;
+  resource              = NULL;
+  nativeResult = deviceDX12->d3dDevice->lpVtbl->CreateCommittedResource(
+    deviceDX12->d3dDevice,
+    &heap,
+    D3D12_HEAP_FLAG_NONE,
+    &desc,
+    initialState,
+    (info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u ? &clearValue : NULL,
+    &IID_ID3D12Resource,
+    (void **)&resource
+  );
+  if (FAILED(nativeResult) || !resource) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  result = dx12__wrapTexture(device,
+                             info,
+                             resource,
+                             initialState,
+                             mipLevelCount,
+                             arrayLayerCount,
+                             planeCount,
+                             subresourceCount,
+                             outTexture);
+  if (result != GPU_OK) {
+    resource->lpVtbl->Release(resource);
+  }
+  return result;
 }
 
 GPU_HIDE

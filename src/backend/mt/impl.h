@@ -24,6 +24,7 @@ GPU_HIDE void mt_initCompute(GPUApiCompute *api);
 GPU_HIDE void mt_initCmdBuff(GPUApiCommandBuffer *api);
 GPU_HIDE void mt_initCmdQue(GPUApiCommandQueue *api);
 GPU_HIDE void mt_initBuff(GPUApiBuffer *api);
+GPU_HIDE void mt_initMemory(GPUApiMemory *api);
 GPU_HIDE void mt_initTexture(GPUApiTexture *api);
 GPU_HIDE void mt_initRenderPass(GPUApiRenderPass *api);
 GPU_HIDE void mt_initDepthStencil(GPUApiDepthStencil *api);

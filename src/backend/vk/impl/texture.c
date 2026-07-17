@@ -600,7 +600,7 @@ vk__destroyTextureState(GPUTextureVk *native) {
   if (native->image) {
     vkDestroyImage(native->device, native->image, NULL);
   }
-  if (native->memory) {
+  if (native->ownsMemory && native->memory) {
     vkFreeMemory(native->device, native->memory, NULL);
   }
 }
@@ -670,34 +670,23 @@ vk__createColorRenderPass(VkDevice      device,
   return vkCreateRenderPass(device, &info, NULL, outRenderPass);
 }
 
-GPU_HIDE
-GPUResult
-vk_createTexture(GPUDevice                  * __restrict device,
-                 const GPUTextureCreateInfo * __restrict info,
-                 GPUTexture                ** __restrict outTexture) {
-  GPUDeviceVk           *deviceVk;
-  GPUTexture            *texture;
-  GPUTextureVk          *native;
-  GPUTextureVk           state = {0};
-  VkImageCreateInfo      imageInfo = {0};
-  VkMemoryRequirements   requirements;
-  VkMemoryAllocateInfo   allocationInfo = {0};
-  VkMemoryPropertyFlags  memoryFlags;
-  VkSampleCountFlagBits  sampleCount;
-  uint32_t               arrayLayerCount;
-  uint32_t               subresourceCount;
-  uint32_t               memoryTypeIndex;
+static GPUResult
+vk__textureCreateInfo(GPUDevice                  *device,
+                      const GPUTextureCreateInfo *info,
+                      VkImageCreateInfo          *outInfo,
+                      VkImageAspectFlags         *outAspect) {
+  GPUDeviceVk          *deviceVk;
+  VkSampleCountFlagBits sampleCount;
+  VkImageAspectFlags    aspect;
 
-  if (!device || !device->_priv || !info || !outTexture ||
-      !vk__imageType(info->dimension, &imageInfo.imageType) ||
-      !vk_formatFromGPU(info->format, &imageInfo.format) ||
-      !vk__textureUsage(info->usage, &imageInfo.usage) ||
+  if (!device || !(deviceVk = device->_priv) || !info || !outInfo ||
+      !outAspect ||
+      !vk__imageType(info->dimension, &outInfo->imageType) ||
+      !vk_formatFromGPU(info->format, &outInfo->format) ||
+      !vk__textureUsage(info->usage, &outInfo->usage) ||
       (info->dimension == GPU_TEXTURE_DIMENSION_1D && info->height != 1u)) {
     return GPU_ERROR_UNSUPPORTED;
   }
-
-  *outTexture             = NULL;
-  deviceVk                = device->_priv;
   if ((info->usage & GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT) != 0u &&
       (!deviceVk->vrsAttachment || info->format != GPU_FORMAT_R8_UINT ||
        info->dimension != GPU_TEXTURE_DIMENSION_2D ||
@@ -706,9 +695,8 @@ vk_createTexture(GPUDevice                  * __restrict device,
        (info->sampleCount != 0u && info->sampleCount != 1u))) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  sampleCount             = vk__sampleCount(info->sampleCount
-                                              ? info->sampleCount
-                                              : 1u);
+
+  sampleCount = vk__sampleCount(info->sampleCount ? info->sampleCount : 1u);
   if (!sampleCount ||
       (sampleCount > VK_SAMPLE_COUNT_1_BIT && !deviceVk->dynamicRendering) ||
       (((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u) &&
@@ -717,14 +705,12 @@ vk_createTexture(GPUDevice                  * __restrict device,
        (deviceVk->depthSampleCounts & sampleCount) == 0u)) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  state.gpuDevice         = deviceVk;
-  state.device            = deviceVk->device;
-  state.layout            = VK_IMAGE_LAYOUT_UNDEFINED;
-  state.aspect            = vk__imageAspect(info->format);
+
+  aspect = vk__imageAspect(info->format);
   if (((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u &&
-       state.aspect != VK_IMAGE_ASPECT_COLOR_BIT) ||
+       aspect != VK_IMAGE_ASPECT_COLOR_BIT) ||
       ((info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u &&
-       state.aspect == VK_IMAGE_ASPECT_COLOR_BIT) ||
+       aspect == VK_IMAGE_ASPECT_COLOR_BIT) ||
       (info->usage & (GPU_TEXTURE_USAGE_COLOR_TARGET |
                       GPU_TEXTURE_USAGE_DEPTH_STENCIL)) ==
         (GPU_TEXTURE_USAGE_COLOR_TARGET |
@@ -733,26 +719,218 @@ vk_createTexture(GPUDevice                  * __restrict device,
        info->dimension != GPU_TEXTURE_DIMENSION_2D)) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  imageInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-  imageInfo.extent.width  = info->width;
-  imageInfo.extent.height = info->dimension == GPU_TEXTURE_DIMENSION_1D
-                              ? 1u
-                              : info->height;
-  imageInfo.extent.depth  = info->dimension == GPU_TEXTURE_DIMENSION_3D
-                              ? info->depthOrLayers
-                              : 1u;
-  imageInfo.mipLevels     = info->mipLevelCount ? info->mipLevelCount : 1u;
-  imageInfo.arrayLayers   = info->dimension == GPU_TEXTURE_DIMENSION_3D
-                              ? 1u
-                              : info->depthOrLayers;
-  imageInfo.samples       = sampleCount;
-  imageInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
-  imageInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
-  imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+  outInfo->sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+  outInfo->extent.width  = info->width;
+  outInfo->extent.height = info->dimension == GPU_TEXTURE_DIMENSION_1D
+                             ? 1u
+                             : info->height;
+  outInfo->extent.depth  = info->dimension == GPU_TEXTURE_DIMENSION_3D
+                             ? info->depthOrLayers
+                             : 1u;
+  outInfo->mipLevels     = info->mipLevelCount ? info->mipLevelCount : 1u;
+  outInfo->arrayLayers   = info->dimension == GPU_TEXTURE_DIMENSION_3D
+                             ? 1u
+                             : info->depthOrLayers;
+  outInfo->samples       = sampleCount;
+  outInfo->tiling        = VK_IMAGE_TILING_OPTIMAL;
+  outInfo->sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+  outInfo->initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
   if (info->dimension == GPU_TEXTURE_DIMENSION_2D &&
       info->depthOrLayers >= 6u && info->depthOrLayers % 6u == 0u) {
-    imageInfo.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+    outInfo->flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
   }
+  *outAspect = aspect;
+  return GPU_OK;
+}
+
+static GPUResult
+vk__finishTexture(GPUDevice                  *device,
+                  const GPUTextureCreateInfo *info,
+                  const VkImageCreateInfo    *imageInfo,
+                  GPUTextureVk               *state,
+                  GPUTexture                **outTexture) {
+  GPUDeviceVk  *deviceVk;
+  GPUTexture   *texture;
+  GPUTextureVk *native;
+  uint32_t      subresourceCount;
+
+  deviceVk         = device->_priv;
+  subresourceCount = state->subresourceCount;
+  if ((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u &&
+      !deviceVk->dynamicRendering) {
+    for (uint32_t load = 0u; load < 3u; load++) {
+      for (uint32_t store = 0u; store < 2u; store++) {
+        if (vk__createColorRenderPass(
+              state->device,
+              imageInfo->format,
+              load,
+              store,
+              &state->renderPasses[load][store]
+            ) != VK_SUCCESS) {
+          vk__destroyTextureState(state);
+          return GPU_ERROR_BACKEND_FAILURE;
+        }
+      }
+    }
+  }
+
+  texture = calloc(1,
+                   sizeof(*texture) + sizeof(*native) +
+                     (size_t)subresourceCount * sizeof(*native->layouts));
+  if (!texture) {
+    vk__destroyTextureState(state);
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  native                 = (GPUTextureVk *)(texture + 1);
+  *native                = *state;
+  native->layouts        = (VkImageLayout *)(native + 1);
+  texture->_priv         = native;
+  texture->device        = device;
+  texture->format        = info->format;
+  texture->dimension     = info->dimension;
+  texture->width         = info->width;
+  texture->height        = info->height;
+  texture->depthOrLayers = info->depthOrLayers;
+  texture->mipLevelCount = imageInfo->mipLevels;
+  texture->sampleCount   = info->sampleCount ? info->sampleCount : 1u;
+  texture->usage         = info->usage;
+  texture->_ownsNative   = true;
+  vk_setDebugName(device,
+                  VK_OBJECT_TYPE_IMAGE,
+                  (uint64_t)native->image,
+                  info->label);
+  *outTexture = texture;
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
+vk_getTextureMemoryRequirements(GPUDevice                  *device,
+                                const GPUTextureCreateInfo *info,
+                                GPUMemoryRequirements      *outRequirements) {
+  GPUDeviceVk         *deviceVk;
+  VkImageCreateInfo    imageInfo = {0};
+  VkImageAspectFlags   aspect;
+  VkMemoryRequirements requirements;
+  VkImage              image;
+  uint32_t             memoryTypes;
+  GPUResult            result;
+
+  if (!device || !(deviceVk = device->_priv) || !info || !outRequirements) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  result = vk__textureCreateInfo(device, info, &imageInfo, &aspect);
+  if (result != GPU_OK) {
+    return result;
+  }
+  imageInfo.flags |= VK_IMAGE_CREATE_ALIAS_BIT;
+  GPU__UNUSED(aspect);
+  if (vkCreateImage(deviceVk->device, &imageInfo, NULL, &image) != VK_SUCCESS) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  vkGetImageMemoryRequirements(deviceVk->device, image, &requirements);
+  vkDestroyImage(deviceVk->device, image, NULL);
+
+  memoryTypes = vk_filterMemoryTypes(device, requirements.memoryTypeBits);
+  if (memoryTypes == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  outRequirements->sizeBytes         = requirements.size;
+  outRequirements->alignmentBytes    = requirements.alignment;
+  outRequirements->compatibilityMask = memoryTypes;
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
+vk_createPlacedTexture(GPUDevice                  *device,
+                       const GPUTextureCreateInfo *info,
+                       GPUHeap                    *heap,
+                       uint64_t                    heapOffset,
+                       GPUTexture                **outTexture) {
+  GPUDeviceVk         *deviceVk;
+  GPUHeapVk           *heapVk;
+  GPUTextureVk         state = {0};
+  VkImageCreateInfo    imageInfo = {0};
+  VkMemoryRequirements requirements;
+  uint32_t             arrayLayerCount;
+  GPUResult            result;
+
+  if (!device || !(deviceVk = device->_priv) || !info || !heap ||
+      !(heapVk = heap->_priv) || !outTexture) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  result = vk__textureCreateInfo(device, info, &imageInfo, &state.aspect);
+  if (result != GPU_OK) {
+    return result;
+  }
+  imageInfo.flags |= VK_IMAGE_CREATE_ALIAS_BIT;
+  arrayLayerCount = imageInfo.arrayLayers;
+  if (imageInfo.mipLevels > UINT32_MAX / arrayLayerCount) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  state.gpuDevice         = deviceVk;
+  state.device            = deviceVk->device;
+  state.layout            = VK_IMAGE_LAYOUT_UNDEFINED;
+  state.mipLevelCount     = imageInfo.mipLevels;
+  state.arrayLayerCount   = arrayLayerCount;
+  state.subresourceCount  = imageInfo.mipLevels * arrayLayerCount;
+  state.layoutUniform     = true;
+  state.ownsMemory        = false;
+  if (vkCreateImage(state.device,
+                    &imageInfo,
+                    NULL,
+                    &state.image) != VK_SUCCESS) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  vkGetImageMemoryRequirements(state.device, state.image, &requirements);
+  if ((requirements.memoryTypeBits & (1u << heapVk->memoryTypeIndex)) == 0u ||
+      vkBindImageMemory(state.device,
+                        state.image,
+                        heapVk->memory,
+                        heapOffset) != VK_SUCCESS) {
+    vkDestroyImage(state.device, state.image, NULL);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  state.memory = heapVk->memory;
+  return vk__finishTexture(device, info, &imageInfo, &state, outTexture);
+}
+
+GPU_HIDE
+GPUResult
+vk_createTexture(GPUDevice                  * __restrict device,
+                 const GPUTextureCreateInfo * __restrict info,
+                 GPUTexture                ** __restrict outTexture) {
+  GPUDeviceVk           *deviceVk;
+  GPUTextureVk           state = {0};
+  VkImageCreateInfo      imageInfo = {0};
+  VkMemoryRequirements   requirements;
+  VkMemoryAllocateInfo   allocationInfo = {0};
+  VkMemoryPropertyFlags  memoryFlags;
+  uint32_t               arrayLayerCount;
+  uint32_t               subresourceCount;
+  uint32_t               memoryTypeIndex;
+  GPUResult              createInfoResult;
+
+  if (!device || !device->_priv || !info || !outTexture) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outTexture             = NULL;
+  deviceVk                = device->_priv;
+  createInfoResult        = vk__textureCreateInfo(device,
+                                                  info,
+                                                  &imageInfo,
+                                                  &state.aspect);
+  if (createInfoResult != GPU_OK) {
+    return createInfoResult;
+  }
+  state.gpuDevice         = deviceVk;
+  state.device            = deviceVk->device;
+  state.layout            = VK_IMAGE_LAYOUT_UNDEFINED;
   arrayLayerCount = imageInfo.arrayLayers;
   if (imageInfo.mipLevels > UINT32_MAX / arrayLayerCount) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -796,48 +974,9 @@ vk_createTexture(GPUDevice                  * __restrict device,
     vk__destroyTextureState(&state);
     return GPU_ERROR_BACKEND_FAILURE;
   }
+  state.ownsMemory = true;
 
-  if ((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u &&
-      !deviceVk->dynamicRendering) {
-    for (uint32_t load = 0u; load < 3u; load++) {
-      for (uint32_t store = 0u; store < 2u; store++) {
-        if (vk__createColorRenderPass(
-              state.device,
-              imageInfo.format,
-              load,
-              store,
-              &state.renderPasses[load][store]
-            ) != VK_SUCCESS) {
-          vk__destroyTextureState(&state);
-          return GPU_ERROR_BACKEND_FAILURE;
-        }
-      }
-    }
-  }
-
-  texture = calloc(1,
-                   sizeof(*texture) + sizeof(*native) +
-                     (size_t)subresourceCount * sizeof(*native->layouts));
-  if (!texture) {
-    vk__destroyTextureState(&state);
-    return GPU_ERROR_OUT_OF_MEMORY;
-  }
-
-  native                 = (GPUTextureVk *)(texture + 1);
-  *native                = state;
-  native->layouts        = (VkImageLayout *)(native + 1);
-  texture->_priv         = native;
-  texture->format        = info->format;
-  texture->dimension     = info->dimension;
-  texture->width         = info->width;
-  texture->height        = info->height;
-  texture->depthOrLayers = info->depthOrLayers;
-  texture->mipLevelCount = imageInfo.mipLevels;
-  texture->sampleCount   = info->sampleCount ? info->sampleCount : 1u;
-  texture->usage         = info->usage;
-  texture->_ownsNative   = true;
-  *outTexture            = texture;
-  return GPU_OK;
+  return vk__finishTexture(device, info, &imageInfo, &state, outTexture);
 }
 
 GPU_HIDE

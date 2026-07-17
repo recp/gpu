@@ -40,7 +40,7 @@ typedef enum GPUAccessMask {
 } GPUAccessMask;
 
 typedef struct GPUBufferBarrier {
-  GPUBuffer    *buffer;
+  GPUBuffer     *buffer;
   GPUAccessMask srcAccess;
   GPUAccessMask dstAccess;
   uint64_t      offset;
@@ -48,7 +48,7 @@ typedef struct GPUBufferBarrier {
 } GPUBufferBarrier;
 
 typedef struct GPUTextureBarrier {
-  GPUTexture   *texture;
+  GPUTexture    *texture;
   GPUAccessMask srcAccess;
   GPUAccessMask dstAccess;
   uint32_t      baseMip;
@@ -57,13 +57,22 @@ typedef struct GPUTextureBarrier {
   uint32_t      layerCount;
 } GPUTextureBarrier;
 
+typedef struct GPUAliasingBarrier {
+  GPUBuffer  *beforeBuffer;
+  GPUTexture *beforeTexture;
+  GPUBuffer  *afterBuffer;
+  GPUTexture *afterTexture;
+} GPUAliasingBarrier;
+
 typedef struct GPUBarrierBatch {
-  const GPUBufferBarrier  *pBufferBarriers;
-  const GPUTextureBarrier *pTextureBarriers;
-  GPUPipelineStageMask     srcStages;
-  GPUPipelineStageMask     dstStages;
-  uint32_t                 bufferBarrierCount;
-  uint32_t                 textureBarrierCount;
+  const GPUBufferBarrier   *pBufferBarriers;
+  const GPUTextureBarrier  *pTextureBarriers;
+  const GPUAliasingBarrier *pAliasingBarriers;
+  GPUPipelineStageMask      srcStages;
+  GPUPipelineStageMask      dstStages;
+  uint32_t                  bufferBarrierCount;
+  uint32_t                  textureBarrierCount;
+  uint32_t                  aliasingBarrierCount;
 } GPUBarrierBatch;
 
 GPU_EXPORT

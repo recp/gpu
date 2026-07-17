@@ -74,6 +74,11 @@ run_barrier(void *ctx) {
 }
 
 static int
+run_memory(void *ctx) {
+  return gpu_test_memory(((GPUApiTestContext *)ctx)->adapter);
+}
+
+static int
 run_runtime(void *ctx) {
   return gpu_test_runtime(((GPUApiTestContext *)ctx)->device);
 }
@@ -246,7 +251,7 @@ main(int argc, char **argv) {
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUApiTestContext      ctx;
-  GPUApiTest             tests[28];
+  GPUApiTest             tests[29];
   int                    ok;
 
   if (argc != 14 && argc != 15) {
@@ -332,28 +337,29 @@ main(int argc, char **argv) {
   tests[7]  = (GPUApiTest){ "compute", run_compute, &ctx };
   tests[8]  = (GPUApiTest){ "query", run_query, &ctx };
   tests[9]  = (GPUApiTest){ "barrier", run_barrier, &ctx };
-  tests[10] = (GPUApiTest){ "runtime", run_runtime, &ctx };
-  tests[11] = (GPUApiTest){ "shader", run_shader, &ctx };
-  tests[12] = (GPUApiTest){ "source-sampler", run_source_sampler, &ctx };
-  tests[13] = (GPUApiTest){ "storage-texture", run_storage_texture, &ctx };
-  tests[14] = (GPUApiTest){ "cube-texture", run_cube_texture, &ctx };
-  tests[15] = (GPUApiTest){ "line-texture", run_line_texture, &ctx };
-  tests[16] = (GPUApiTest){ "volume-texture", run_volume_texture, &ctx };
-  tests[17] = (GPUApiTest){ "descriptor-array", run_descriptor_array, &ctx };
-  tests[18] = (GPUApiTest){
+  tests[10] = (GPUApiTest){ "memory", run_memory, &ctx };
+  tests[11] = (GPUApiTest){ "runtime", run_runtime, &ctx };
+  tests[12] = (GPUApiTest){ "shader", run_shader, &ctx };
+  tests[13] = (GPUApiTest){ "source-sampler", run_source_sampler, &ctx };
+  tests[14] = (GPUApiTest){ "storage-texture", run_storage_texture, &ctx };
+  tests[15] = (GPUApiTest){ "cube-texture", run_cube_texture, &ctx };
+  tests[16] = (GPUApiTest){ "line-texture", run_line_texture, &ctx };
+  tests[17] = (GPUApiTest){ "volume-texture", run_volume_texture, &ctx };
+  tests[18] = (GPUApiTest){ "descriptor-array", run_descriptor_array, &ctx };
+  tests[19] = (GPUApiTest){
     "descriptor-indexing", run_descriptor_indexing, &ctx
   };
-  tests[19] = (GPUApiTest){ "subgroup", run_subgroup, &ctx };
-  tests[20] = (GPUApiTest){
+  tests[20] = (GPUApiTest){ "subgroup", run_subgroup, &ctx };
+  tests[21] = (GPUApiTest){
     "subgroup-matrix", run_subgroup_matrix, &ctx
   };
-  tests[21] = (GPUApiTest){ "shader-f16", run_shader_f16, &ctx };
-  tests[22] = (GPUApiTest){ "bindless", run_bindless, &ctx };
-  tests[23] = (GPUApiTest){ "coordinate", run_coordinate, &ctx };
-  tests[24] = (GPUApiTest){ "vrs", run_vrs, &ctx };
-  tests[25] = (GPUApiTest){ "ray-query", run_ray_query, &ctx };
-  tests[26] = (GPUApiTest){ "atomic64", run_atomic64, &ctx };
-  tests[27] = (GPUApiTest){ "ray-pipeline", run_ray_pipeline, &ctx };
+  tests[22] = (GPUApiTest){ "shader-f16", run_shader_f16, &ctx };
+  tests[23] = (GPUApiTest){ "bindless", run_bindless, &ctx };
+  tests[24] = (GPUApiTest){ "coordinate", run_coordinate, &ctx };
+  tests[25] = (GPUApiTest){ "vrs", run_vrs, &ctx };
+  tests[26] = (GPUApiTest){ "ray-query", run_ray_query, &ctx };
+  tests[27] = (GPUApiTest){ "atomic64", run_atomic64, &ctx };
+  tests[28] = (GPUApiTest){ "ray-pipeline", run_ray_pipeline, &ctx };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 

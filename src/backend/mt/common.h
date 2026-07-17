@@ -26,6 +26,7 @@
 #include "../../api/frame_internal.h"
 #include "../../api/instance_internal.h"
 #include "../../api/library_internal.h"
+#include "../../api/memory_internal.h"
 #include "../../api/query_internal.h"
 #include "../../api/ray_internal.h"
 #include "../../api/sampler_internal.h"
@@ -110,6 +111,10 @@ typedef struct GPUTextureMT {
   id<MTLTexture> texture;
   id<MTLTexture> stencilCopyView;
 } GPUTextureMT;
+
+typedef struct GPUHeapMT {
+  id<MTLHeap> heap;
+} GPUHeapMT;
 
 typedef struct GPUAccelerationStructureMT {
   id<MTLAccelerationStructure>  structure;
@@ -247,6 +252,29 @@ typedef struct MTQuerySet {
 } MTQuerySet;
 
 GPU_HIDE MTLPixelFormat mt_format(GPUFormat format);
+
+GPU_HIDE
+GPUResult
+mt_wrapBuffer(GPUDevice                 *device,
+              const GPUBufferCreateInfo *info,
+              id<MTLBuffer>              nativeBuffer,
+              GPUBuffer                **outBuffer);
+
+GPU_HIDE
+GPUResult
+mt_createTextureDescriptor(GPUDevice                  *device,
+                           const GPUTextureCreateInfo *info,
+                           MTLStorageMode              storageMode,
+                           MTLTextureDescriptor      **outDesc,
+                           MTLPixelFormat             *outStencilCopyFormat);
+
+GPU_HIDE
+GPUResult
+mt_wrapTexture(GPUDevice                  *device,
+               const GPUTextureCreateInfo *info,
+               id<MTLTexture>              nativeTexture,
+               MTLPixelFormat              stencilCopyFormat,
+               GPUTexture                **outTexture);
 GPU_HIDE GPUFormat mt_formatFromNative(MTLPixelFormat format);
 GPU_HIDE id<MTLTexture> mt_nativeTexture(GPUTexture *texture);
 GPU_HIDE id<MTLTexture> mt_copyTexture(GPUTexture *texture,

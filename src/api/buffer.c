@@ -18,6 +18,30 @@
 #include "buffer_internal.h"
 #include "cmdqueue_internal.h"
 
+GPU_HIDE
+GPUResult
+gpuValidateBufferCreateInfo(const GPUDevice           *device,
+                            const GPUBufferCreateInfo *info) {
+  if (!device || !info || info->sizeBytes == 0u || info->usage == 0u) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+      info->chain.sType != GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->chain.structSize != 0u &&
+      info->chain.structSize < sizeof(*info)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if ((info->usage &
+       (GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT |
+        GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT)) != 0u &&
+      !GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_QUERY)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  return GPU_OK;
+}
+
 GPU_EXPORT
 GPUResult
 GPUCreateBuffer(GPUDevice                 * __restrict device,
@@ -31,24 +55,9 @@ GPUCreateBuffer(GPUDevice                 * __restrict device,
   }
   *outBuffer = NULL;
 
-  if (!device || !info || info->sizeBytes == 0) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
-      info->chain.sType != GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  if (info->usage == 0) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  if ((info->usage &
-       (GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT |
-        GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT)) != 0u &&
-      !GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_QUERY)) {
-    return GPU_ERROR_UNSUPPORTED;
+  result = gpuValidateBufferCreateInfo(device, info);
+  if (result != GPU_OK) {
+    return result;
   }
 
   if (!(api = gpuDeviceApi(device))) {

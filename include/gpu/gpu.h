@@ -32,6 +32,7 @@ extern "C" {
 #include "pass.h"
 #include "cmdqueue.h"
 #include "buffer.h"
+#include "memory.h"
 #include "cmd-enc.h"
 #include "query.h"
 #include "barrier.h"

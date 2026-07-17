@@ -94,7 +94,7 @@ gpu_reportDeviceLostOnce(GPUDevice *device) {
 static bool
 gpu_knownFeature(GPUFeature feature) {
   return feature >= GPU_FEATURE_COMPUTE &&
-         feature <= GPU_FEATURE_RAY_TRACING_PIPELINE;
+         feature <= GPU_FEATURE_SPARSE_RESOURCES;
 }
 
 static uint64_t
@@ -220,7 +220,7 @@ gpu_supportedFeatureMask(const GPUAdapter *adapter) {
 
   mask = 0;
   for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_RAY_TRACING_PIPELINE;
+       feature <= GPU_FEATURE_SPARSE_RESOURCES;
        feature = (GPUFeature)(feature + 1)) {
     if (gpu_adapterSupportsFeature(adapter, feature)) {
       mask |= gpu_featureBit(feature);
@@ -239,7 +239,7 @@ gpu_fillFeatureSet(uint64_t       mask,
 
   count = 0u;
   for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_RAY_TRACING_PIPELINE && count < capacity;
+       feature <= GPU_FEATURE_SPARSE_RESOURCES && count < capacity;
        feature = (GPUFeature)(feature + 1)) {
     if (mask & gpu_featureBit(feature)) {
       storage[count++] = feature;

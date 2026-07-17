@@ -23,10 +23,18 @@
 struct GPUBuffer {
   void                *_priv;
   GPUDevice           *device;
+  GPUHeap             *_heap;
   uint64_t             _gpuAddress;
+  uint64_t             _heapOffset;
+  uint64_t             _allocationSize;
   uint64_t             sizeBytes;
   GPUBufferUsageFlags  usage;
 };
+
+GPU_HIDE
+GPUResult
+gpuValidateBufferCreateInfo(const GPUDevice           *device,
+                            const GPUBufferCreateInfo *info);
 
 static inline GPUApi *
 gpuBufferApi(const GPUBuffer *buffer) {

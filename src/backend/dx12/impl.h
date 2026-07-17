@@ -46,7 +46,26 @@ GPU_HIDE void dx12_resetCopyScratch(GPUCommandBufferDX12 *command);
 GPU_HIDE void dx12_destroyCopyScratch(GPUCommandBufferDX12 *command);
 GPU_HIDE void dx12_initRCE(GPUApiRCE *api);
 GPU_HIDE void dx12_initBuff(GPUApiBuffer *api);
+GPU_HIDE void dx12_initMemory(GPUApiMemory *api);
 GPU_HIDE void dx12_initTexture(GPUApiTexture *api);
+GPU_HIDE GPUResult dx12_getBufferMemoryRequirements(
+  GPUDevice                 *device,
+  const GPUBufferCreateInfo *info,
+  GPUMemoryRequirements     *outRequirements);
+GPU_HIDE GPUResult dx12_createPlacedBuffer(GPUDevice                 *device,
+                                           const GPUBufferCreateInfo *info,
+                                           GPUHeap                   *heap,
+                                           uint64_t                   heapOffset,
+                                           GPUBuffer                **outBuffer);
+GPU_HIDE GPUResult dx12_getTextureMemoryRequirements(
+  GPUDevice                  *device,
+  const GPUTextureCreateInfo *info,
+  GPUMemoryRequirements      *outRequirements);
+GPU_HIDE GPUResult dx12_createPlacedTexture(GPUDevice                  *device,
+                                            const GPUTextureCreateInfo *info,
+                                            GPUHeap                    *heap,
+                                            uint64_t                    heapOffset,
+                                            GPUTexture                **outTexture);
 GPU_HIDE void dx12_initSampler(GPUApiSampler *api);
 GPU_HIDE void dx12_destroyDescriptorHeaps(GPUDeviceDX12 *device);
 // GPU_HIDE void dx12_initPass(GPUApiRenderPass* api);

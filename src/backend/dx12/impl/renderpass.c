@@ -221,6 +221,43 @@ dx12__encodeTextureBarrier(GPUCommandBufferDX12    *command,
   }
 }
 
+static ID3D12Resource *
+dx12__aliasResource(GPUBuffer *buffer, GPUTexture *texture) {
+  if (buffer && buffer->_priv) {
+    return ((GPUBufferDX12 *)buffer->_priv)->resource;
+  }
+  if (texture && texture->_priv) {
+    return ((GPUTextureDX12 *)texture->_priv)->resource;
+  }
+  return NULL;
+}
+
+static void
+dx12__encodeAliasingBarrier(GPUCommandBufferDX12     *command,
+                            const GPUAliasingBarrier *barrier) {
+  D3D12_RESOURCE_BARRIER native = {0};
+
+  if (!command || !command->commandList || !barrier) {
+    return;
+  }
+  native.Type                      = D3D12_RESOURCE_BARRIER_TYPE_ALIASING;
+  native.Aliasing.pResourceBefore = dx12__aliasResource(
+    barrier->beforeBuffer,
+    barrier->beforeTexture
+  );
+  native.Aliasing.pResourceAfter  = dx12__aliasResource(
+    barrier->afterBuffer,
+    barrier->afterTexture
+  );
+  if (!native.Aliasing.pResourceBefore ||
+      !native.Aliasing.pResourceAfter) {
+    return;
+  }
+  command->commandList->lpVtbl->ResourceBarrier(command->commandList,
+                                                 1u,
+                                                 &native);
+}
+
 GPU_HIDE
 void
 dx12_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
@@ -233,6 +270,10 @@ dx12_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
     return;
   }
 
+  for (uint32_t i = 0u; i < barriers->aliasingBarrierCount; i++) {
+    dx12__encodeAliasingBarrier(command,
+                                &barriers->pAliasingBarriers[i]);
+  }
   for (uint32_t i = 0u; i < barriers->bufferBarrierCount; i++) {
     dx12__encodeBufferBarrier(command,
                               &barriers->pBufferBarriers[i],

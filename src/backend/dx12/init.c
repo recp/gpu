@@ -36,6 +36,7 @@ backend_dx12(void) {
     dx12_initQuery(&dx12.cmdbuf);
     dx12_initCmdQue(&dx12.cmdque);
     dx12_initBuff(&dx12.buf);
+    dx12_initMemory(&dx12.memory);
     dx12_initTexture(&dx12.texture);
     dx12_initSampler(&dx12.sampler);
     // dx12_initDepthStencil(&dx12.depthStencil);

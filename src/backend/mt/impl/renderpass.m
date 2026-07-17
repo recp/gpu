@@ -920,6 +920,20 @@ mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
     mt_useAllocation(cmdb,
                      mt_nativeTexture(barriers->pTextureBarriers[i].texture));
   }
+  for (uint32_t i = 0; i < barriers->aliasingBarrierCount; i++) {
+    const GPUAliasingBarrier *barrier = &barriers->pAliasingBarriers[i];
+
+    if (barrier->beforeBuffer) {
+      mt_useAllocation(cmdb, (id<MTLBuffer>)barrier->beforeBuffer->_priv);
+    } else {
+      mt_useAllocation(cmdb, mt_nativeTexture(barrier->beforeTexture));
+    }
+    if (barrier->afterBuffer) {
+      mt_useAllocation(cmdb, (id<MTLBuffer>)barrier->afterBuffer->_priv);
+    } else {
+      mt_useAllocation(cmdb, mt_nativeTexture(barrier->afterTexture));
+    }
+  }
 #else
   GPU__UNUSED(cmdb);
   GPU__UNUSED(barriers);

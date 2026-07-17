@@ -26,6 +26,7 @@
 #include "../../api/frame_internal.h"
 #include "../../api/instance_internal.h"
 #include "../../api/library_internal.h"
+#include "../../api/memory_internal.h"
 #include "../../api/ray_internal.h"
 #include "../../api/render/pipeline_internal.h"
 #include "../../api/sampler_internal.h"
@@ -98,6 +99,7 @@ typedef struct GPUDeviceDX12 {
   SRWLOCK                            descriptorLock;
   D3D_ROOT_SIGNATURE_VERSION         rootSignatureVersion;
   D3D_SHADER_MODEL                   shaderModel;
+  D3D12_RESOURCE_HEAP_TIER           resourceHeapTier;
   GPUShadingRateFlagsEXT             vrsRates;
   GPUShadingRateCombinerFlagsEXT     vrsCombiners;
   D3D12_VARIABLE_SHADING_RATE_TIER   vrsTier;
@@ -259,6 +261,17 @@ typedef struct GPUBufferDX12 {
   D3D12_RESOURCE_STATES      state;
   bool                       defaultHeap;
 } GPUBufferDX12;
+
+typedef struct GPUHeapDX12 {
+  ID3D12Heap        *heap;
+  D3D12_HEAP_TYPE    type;
+  D3D12_HEAP_FLAGS   flags;
+} GPUHeapDX12;
+
+GPU_HIDE
+uint64_t
+dx12_memoryCompatibility(GPUDevice                 *device,
+                         const D3D12_RESOURCE_DESC *desc);
 
 typedef struct GPUAccelerationStructureDX12 {
   GPUDeviceDX12                    *device;

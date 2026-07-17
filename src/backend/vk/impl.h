@@ -20,6 +20,7 @@
 GPU_HIDE void vk_initInstance(GPUApiInstance *api);
 GPU_HIDE void vk_initDevice(GPUApiDevice *api);
 GPU_HIDE void vk_initBuff(GPUApiBuffer *api);
+GPU_HIDE void vk_initMemory(GPUApiMemory *api);
 GPU_HIDE void vk_initTexture(GPUApiTexture *api);
 GPU_HIDE void vk_initSampler(GPUApiSampler *api);
 GPU_HIDE void vk_initCmdQue(GPUApiCommandQueue *api);
@@ -74,6 +75,34 @@ GPUResult
 vk_createHostBuffer(GPUDevice                 * __restrict device,
                     const GPUBufferCreateInfo * __restrict info,
                     GPUBuffer                ** __restrict outBuffer);
+
+GPU_HIDE
+GPUResult
+vk_getBufferMemoryRequirements(GPUDevice                 *device,
+                               const GPUBufferCreateInfo *info,
+                               GPUMemoryRequirements     *outRequirements);
+
+GPU_HIDE
+GPUResult
+vk_createPlacedBuffer(GPUDevice                 *device,
+                      const GPUBufferCreateInfo *info,
+                      GPUHeap                   *heap,
+                      uint64_t                   heapOffset,
+                      GPUBuffer                **outBuffer);
+
+GPU_HIDE
+GPUResult
+vk_getTextureMemoryRequirements(GPUDevice                  *device,
+                                const GPUTextureCreateInfo *info,
+                                GPUMemoryRequirements      *outRequirements);
+
+GPU_HIDE
+GPUResult
+vk_createPlacedTexture(GPUDevice                  *device,
+                       const GPUTextureCreateInfo *info,
+                       GPUHeap                    *heap,
+                       uint64_t                    heapOffset,
+                       GPUTexture                **outTexture);
 
 GPU_HIDE
 void

@@ -378,6 +378,7 @@ dx12_adapterType(const GPUAdapterDX12 *adapterDX12) {
 
 static void
 dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
+  D3D12_FEATURE_DATA_D3D12_OPTIONS options = {0};
   D3D12_FEATURE_DATA_ROOT_SIGNATURE rootSignature = {0};
   D3D12_FEATURE_DATA_D3D12_OPTIONS12 options12 = {0};
   uint32_t minSubgroupSize;
@@ -397,6 +398,15 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
     rootSignature.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
   }
   device->rootSignatureVersion = rootSignature.HighestVersion;
+
+  device->resourceHeapTier = D3D12_RESOURCE_HEAP_TIER_1;
+  if (SUCCEEDED(device->d3dDevice->lpVtbl->CheckFeatureSupport(
+        device->d3dDevice,
+        D3D12_FEATURE_D3D12_OPTIONS,
+        &options,
+        sizeof(options)))) {
+    device->resourceHeapTier = options.ResourceHeapTier;
+  }
 
   device->shaderModel = dx12_queryShaderModel(device->d3dDevice);
 
@@ -750,6 +760,7 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
     case GPU_FEATURE_COMPUTE:
     case GPU_FEATURE_INDIRECT_DRAW:
     case GPU_FEATURE_MULTI_DRAW:
+    case GPU_FEATURE_PLACED_RESOURCES:
       return true;
     case GPU_FEATURE_SHADER_F16:
       return adapterDX12->shaderF16;

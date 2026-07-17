@@ -22,6 +22,9 @@
 struct GPUTexture {
   void                *_priv;
   GPUDevice           *device;
+  GPUHeap             *_heap;
+  uint64_t             _heapOffset;
+  uint64_t             _allocationSize;
   GPUFormat            format;
   GPUTextureDimension dimension;
   uint32_t             width;
@@ -45,6 +48,11 @@ struct GPUTextureView {
   uint32_t           arrayLayerCount;
   bool               _ownsNative;
 };
+
+GPU_HIDE
+GPUResult
+gpuValidateTextureCreateInfo(const GPUDevice            *device,
+                             const GPUTextureCreateInfo *info);
 
 static inline uint32_t
 gpuTextureArrayLayerCount(const GPUTexture *texture) {

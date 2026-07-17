@@ -24,6 +24,7 @@
 #include "../../api/frame_internal.h"
 #include "../../api/instance_internal.h"
 #include "../../api/library_internal.h"
+#include "../../api/memory_internal.h"
 #include "../../api/ray_internal.h"
 #include "../../api/surface_internal.h"
 #include "../../api/swapchain_internal.h"
@@ -367,7 +368,18 @@ typedef struct GPUBufferVk {
   VkDeviceMemory memory;
   VkDeviceSize   allocationSize;
   bool           coherent;
+  bool           ownsMemory;
 } GPUBufferVk;
+
+typedef struct GPUHeapVk {
+  void                  *mapped;
+  VkDevice               device;
+  VkDeviceMemory         memory;
+  VkDeviceSize           sizeBytes;
+  VkMemoryPropertyFlags  memoryFlags;
+  uint32_t               memoryTypeIndex;
+  bool                   coherent;
+} GPUHeapVk;
 
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
 typedef struct GPUAccelerationStructureVk {
@@ -412,6 +424,7 @@ typedef struct GPUTextureVk {
   uint32_t           arrayLayerCount;
   uint32_t           subresourceCount;
   bool               layoutUniform;
+  bool               ownsMemory;
 } GPUTextureVk;
 
 typedef struct GPUDescriptorPoolVk {
@@ -832,6 +845,10 @@ vk_findMemoryType(GPUDevice             *device,
                   VkMemoryPropertyFlags  preferred,
                   uint32_t              *outIndex,
                   VkMemoryPropertyFlags *outFlags);
+
+GPU_HIDE
+uint32_t
+vk_filterMemoryTypes(GPUDevice *device, uint32_t typeBits);
 
 GPU_HIDE
 GPUFormat

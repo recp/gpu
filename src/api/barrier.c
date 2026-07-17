@@ -18,6 +18,7 @@
 #include "buffer_internal.h"
 #include "cmdqueue_internal.h"
 #include "device_internal.h"
+#include "memory_internal.h"
 #include "texture_internal.h"
 
 static bool
@@ -87,6 +88,63 @@ gpu_validTextureAccess(const GPUTexture *texture, GPUAccessMask access) {
 }
 
 static bool
+gpu_validAliasingBarrier(GPUDevice               *device,
+                         const GPUAliasingBarrier *barrier) {
+  GPUHeap  *beforeHeap;
+  GPUHeap  *afterHeap;
+  uint64_t  beforeOffset;
+  uint64_t  beforeSize;
+  uint64_t  afterOffset;
+  uint64_t  afterSize;
+  uint32_t  beforeCount;
+  uint32_t  afterCount;
+
+  beforeCount = (barrier->beforeBuffer != NULL) +
+                (barrier->beforeTexture != NULL);
+  afterCount  = (barrier->afterBuffer != NULL) +
+                (barrier->afterTexture != NULL);
+  if (beforeCount != 1u || afterCount != 1u) {
+    return false;
+  }
+
+  if (barrier->beforeBuffer) {
+    if (barrier->beforeBuffer->device != device) {
+      return false;
+    }
+    beforeHeap   = barrier->beforeBuffer->_heap;
+    beforeOffset = barrier->beforeBuffer->_heapOffset;
+    beforeSize   = barrier->beforeBuffer->_allocationSize;
+  } else {
+    if (barrier->beforeTexture->device != device) {
+      return false;
+    }
+    beforeHeap   = barrier->beforeTexture->_heap;
+    beforeOffset = barrier->beforeTexture->_heapOffset;
+    beforeSize   = barrier->beforeTexture->_allocationSize;
+  }
+  if (barrier->afterBuffer) {
+    if (barrier->afterBuffer->device != device) {
+      return false;
+    }
+    afterHeap   = barrier->afterBuffer->_heap;
+    afterOffset = barrier->afterBuffer->_heapOffset;
+    afterSize   = barrier->afterBuffer->_allocationSize;
+  } else {
+    if (barrier->afterTexture->device != device) {
+      return false;
+    }
+    afterHeap   = barrier->afterTexture->_heap;
+    afterOffset = barrier->afterTexture->_heapOffset;
+    afterSize   = barrier->afterTexture->_allocationSize;
+  }
+
+  return beforeHeap && beforeHeap == afterHeap &&
+         beforeSize > 0u && afterSize > 0u &&
+         beforeOffset < afterOffset + afterSize &&
+         afterOffset < beforeOffset + beforeSize;
+}
+
+static bool
 gpu_validBarrierBatch(GPUDevice *device, const GPUBarrierBatch *barriers) {
   if (!barriers) {
     return false;
@@ -96,7 +154,8 @@ gpu_validBarrierBatch(GPUDevice *device, const GPUBarrierBatch *barriers) {
     return false;
   }
   if ((barriers->bufferBarrierCount > 0u && !barriers->pBufferBarriers) ||
-      (barriers->textureBarrierCount > 0u && !barriers->pTextureBarriers)) {
+      (barriers->textureBarrierCount > 0u && !barriers->pTextureBarriers) ||
+      (barriers->aliasingBarrierCount > 0u && !barriers->pAliasingBarriers)) {
     return false;
   }
 
@@ -128,7 +187,15 @@ gpu_validBarrierBatch(GPUDevice *device, const GPUBarrierBatch *barriers) {
     }
   }
 
-  return barriers->bufferBarrierCount > 0u || barriers->textureBarrierCount > 0u;
+  for (uint32_t i = 0; i < barriers->aliasingBarrierCount; i++) {
+    if (!gpu_validAliasingBarrier(device, &barriers->pAliasingBarriers[i])) {
+      return false;
+    }
+  }
+
+  return barriers->bufferBarrierCount > 0u ||
+         barriers->textureBarrierCount > 0u ||
+         barriers->aliasingBarrierCount > 0u;
 }
 
 GPU_EXPORT
