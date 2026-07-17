@@ -1131,10 +1131,10 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   GPUDeviceVk        *deviceVk;
   GPUSwapchainVk     *swapchain;
   GPUFrameSyncVk     *frameSync;
+  VkSemaphore         renderFinished;
   VkFence             submitFence;
   VkPipelineStageFlags waitStage;
   VkSubmitInfo        submitInfo = {0};
-  VkPresentInfoKHR    presentInfo = {0};
   VkResult            result;
   VkResult            presentResult;
   GPUResult           commitResult;
@@ -1157,6 +1157,7 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
 
   swapchain       = native->presentSwapchain;
   frameSync       = NULL;
+  renderFinished  = VK_NULL_HANDLE;
   submitFence     = native->fence;
   waitStage       = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
   frameFenceReset = false;
@@ -1167,8 +1168,13 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
       gpuFinishCommandBuffer(cmdb, vk__recycleCommandBuffer);
       return GPU_ERROR_BACKEND_FAILURE;
     }
-    frameSync   = &swapchain->frameSync[native->presentFrameIndex];
-    submitFence = frameSync->fence;
+    frameSync      = &swapchain->frameSync[native->presentFrameIndex];
+    submitFence    = frameSync->fence;
+    renderFinished = swapchain->renderFinished[native->presentImageIndex];
+    if (!renderFinished) {
+      gpuFinishCommandBuffer(cmdb, vk__recycleCommandBuffer);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
   }
 
   vk__endFrameTime(native);
@@ -1186,7 +1192,7 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
       submitInfo.pWaitSemaphores      = &frameSync->imageAvailable;
       submitInfo.pWaitDstStageMask    = &waitStage;
       submitInfo.signalSemaphoreCount = 1u;
-      submitInfo.pSignalSemaphores    = &frameSync->renderFinished;
+      submitInfo.pSignalSemaphores    = &renderFinished;
     }
     result = vkQueueSubmit(queue->queRaw,
                            1u,
@@ -1207,14 +1213,10 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   if (swapchain) {
     swapchain->frameSubmitted = true;
 
-    presentInfo.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.waitSemaphoreCount = 1u;
-    presentInfo.pWaitSemaphores    = &frameSync->renderFinished;
-    presentInfo.swapchainCount     = 1u;
-    presentInfo.pSwapchains        = &swapchain->swapchain;
-    presentInfo.pImageIndices      = &native->presentImageIndex;
-    presentResult = vkQueuePresentKHR(queue->queRaw, &presentInfo);
-    vk_setSwapchainStatus(swapchain, presentResult);
+    presentResult = vk_presentSwapchain(swapchain,
+                                        queue->queRaw,
+                                        renderFinished,
+                                        native->presentImageIndex);
     if (presentResult != VK_SUCCESS && presentResult != VK_SUBOPTIMAL_KHR) {
       vk__reportQueueError(cmdb, "present", presentResult);
       commitResult = GPU_ERROR_BACKEND_FAILURE;
@@ -1448,10 +1450,10 @@ vk_submitEx(GPUQueue                   *queueHandle,
   GPUSwapchainVk            *swapchain;
   GPUCommandBufferVk        *presentNative;
   GPUFrameSyncVk            *frameSync;
+  VkSemaphore                renderFinished;
   VkFence                    submitFence;
   VkTimelineSemaphoreSubmitInfo timelineInfo = {0};
   VkSubmitInfo               submitInfo = {0};
-  VkPresentInfoKHR           presentInfo = {0};
   GPUResult                  flushResult;
   VkResult                   result;
   VkResult                   presentResult;
@@ -1505,6 +1507,7 @@ vk_submitEx(GPUQueue                   *queueHandle,
   }
 
   frameSync       = NULL;
+  renderFinished  = VK_NULL_HANDLE;
   submitFence     = natives[info->commandBufferCount - 1u]->fence;
   frameFenceReset = false;
   if (swapchain) {
@@ -1516,8 +1519,16 @@ vk_submitEx(GPUQueue                   *queueHandle,
                                true);
       return GPU_ERROR_BACKEND_FAILURE;
     }
-    frameSync   = &swapchain->frameSync[presentNative->presentFrameIndex];
-    submitFence = frameSync->fence;
+    frameSync      = &swapchain->frameSync[presentNative->presentFrameIndex];
+    submitFence    = frameSync->fence;
+    renderFinished =
+      swapchain->renderFinished[presentNative->presentImageIndex];
+    if (!renderFinished) {
+      vk__finishCommandBuffers(info->commandBufferCount,
+                               info->ppCommandBuffers,
+                               true);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
   }
 
   waitCount = info->waitCount;
@@ -1557,7 +1568,7 @@ vk_submitEx(GPUQueue                   *queueHandle,
     signalValues[i] = info->pSignals[i].value;
   }
   if (frameSync) {
-    signals[signalCount]      = frameSync->renderFinished;
+    signals[signalCount]      = renderFinished;
     signalValues[signalCount] = 0u;
     signalCount++;
   }
@@ -1608,14 +1619,10 @@ vk_submitEx(GPUQueue                   *queueHandle,
 
   if (swapchain) {
     swapchain->frameSubmitted = true;
-    presentInfo.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.waitSemaphoreCount = 1u;
-    presentInfo.pWaitSemaphores    = &frameSync->renderFinished;
-    presentInfo.swapchainCount     = 1u;
-    presentInfo.pSwapchains        = &swapchain->swapchain;
-    presentInfo.pImageIndices      = &presentNative->presentImageIndex;
-    presentResult = vkQueuePresentKHR(queue->queRaw, &presentInfo);
-    vk_setSwapchainStatus(swapchain, presentResult);
+    presentResult = vk_presentSwapchain(swapchain,
+                                        queue->queRaw,
+                                        renderFinished,
+                                        presentNative->presentImageIndex);
     if (presentResult != VK_SUCCESS && presentResult != VK_SUBOPTIMAL_KHR) {
       vk__reportQueueError(info->ppCommandBuffers[0],
                            "advanced present",

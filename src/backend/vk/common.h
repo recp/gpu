@@ -224,6 +224,7 @@ typedef struct GPUAdapterVk {
   bool                          taskShader;
   bool                          vrsDrawRate;
   bool                          vrsAttachment;
+  bool                          presentWait;
   bool                          timelineSemaphore;
   bool                          synchronization2;
   bool                          rayQuery;
@@ -278,6 +279,9 @@ typedef struct GPUDeviceVk {
   PFN_vkGetPipelineBinaryDataKHR        getPipelineBinaryData;
   PFN_vkReleaseCapturedPipelineDataKHR releaseCapturedPipelineData;
 #endif
+#ifdef VK_KHR_present_wait
+  PFN_vkWaitForPresentKHR         waitForPresent;
+#endif
   VkDevice                   device;
   VkSampleCountFlags         colorSampleCounts;
   VkSampleCountFlags         depthSampleCounts;
@@ -300,6 +304,7 @@ typedef struct GPUDeviceVk {
   bool                       taskShader;
   bool                       vrsDrawRate;
   bool                       vrsAttachment;
+  bool                       presentWait;
   bool                       timelineSemaphore;
   bool                       synchronization2;
   bool                       bufferDeviceAddress;
@@ -706,7 +711,6 @@ typedef struct GPUSurfaceVk {
 
 typedef struct GPUFrameSyncVk {
   VkSemaphore imageAvailable;
-  VkSemaphore renderFinished;
   VkFence     fence;
 } GPUFrameSyncVk;
 
@@ -811,11 +815,14 @@ struct GPUSwapchainVk {
   GPUTextureView   *textureViews;
   GPUTextureViewVk *nativeViews;
   GPUFrameSyncVk   *frameSync;
+  VkSemaphore      *renderFinished;
   VkDevice          device;
   VkPhysicalDevice  physicalDevice;
   VkSwapchainKHR    swapchain;
   VkRenderPass      renderPasses[3][2];
   GPUFrame          frame;
+  uint64_t          nextPresentId;
+  uint64_t          lastPresentId;
   VkFormat          format;
   VkExtent2D        extent;
   uint32_t          imageCount;
@@ -933,6 +940,13 @@ vk_setTextureLayout(GPUTextureVk  *texture,
 GPU_HIDE
 bool
 vk_restoreFrameFence(GPUSwapchainVk *swapchain, GPUFrameSyncVk *sync);
+
+GPU_HIDE
+VkResult
+vk_presentSwapchain(GPUSwapchainVk *swapchain,
+                    VkQueue         queue,
+                    VkSemaphore     waitSemaphore,
+                    uint32_t        imageIndex);
 
 GPU_HIDE
 GPUResult

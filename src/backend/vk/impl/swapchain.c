@@ -114,14 +114,14 @@ vk__destroyResources(GPUSwapchainVk *swapchain) {
                            swapchain->frameSync[i].imageAvailable,
                            NULL);
       }
-      if (swapchain->frameSync[i].renderFinished) {
-        vkDestroySemaphore(swapchain->device,
-                           swapchain->frameSync[i].renderFinished,
-                           NULL);
-      }
       if (swapchain->frameSync[i].fence) {
         vkDestroyFence(swapchain->device, swapchain->frameSync[i].fence, NULL);
       }
+    }
+    if (swapchain->renderFinished && swapchain->renderFinished[i]) {
+      vkDestroySemaphore(swapchain->device,
+                         swapchain->renderFinished[i],
+                         NULL);
     }
   }
 
@@ -140,6 +140,7 @@ vk__destroyResources(GPUSwapchainVk *swapchain) {
   }
 
   free(swapchain->frameSync);
+  free(swapchain->renderFinished);
   free(swapchain->nativeViews);
   free(swapchain->textureViews);
   free(swapchain->textures);
@@ -147,15 +148,16 @@ vk__destroyResources(GPUSwapchainVk *swapchain) {
   free(swapchain->imageViews);
   free(swapchain->images);
 
-  swapchain->frameSync    = NULL;
-  swapchain->nativeViews  = NULL;
-  swapchain->textureViews = NULL;
-  swapchain->textures     = NULL;
-  swapchain->framebuffers = NULL;
-  swapchain->imageViews   = NULL;
-  swapchain->images       = NULL;
-  swapchain->swapchain    = VK_NULL_HANDLE;
-  swapchain->imageCount   = 0u;
+  swapchain->frameSync      = NULL;
+  swapchain->renderFinished = NULL;
+  swapchain->nativeViews    = NULL;
+  swapchain->textureViews   = NULL;
+  swapchain->textures       = NULL;
+  swapchain->framebuffers   = NULL;
+  swapchain->imageViews     = NULL;
+  swapchain->images         = NULL;
+  swapchain->swapchain      = VK_NULL_HANDLE;
+  swapchain->imageCount     = 0u;
   memset(swapchain->renderPasses, 0, sizeof(swapchain->renderPasses));
 }
 
@@ -255,13 +257,15 @@ vk__allocateArrays(GPUSwapchainVk *swapchain, uint32_t count) {
   swapchain->framebuffers = calloc(count, sizeof(*swapchain->framebuffers));
   swapchain->textures     = calloc(count, sizeof(*swapchain->textures));
   swapchain->textureViews = calloc(count, sizeof(*swapchain->textureViews));
-  swapchain->nativeViews  = calloc(count, sizeof(*swapchain->nativeViews));
-  swapchain->frameSync    = calloc(count, sizeof(*swapchain->frameSync));
+  swapchain->nativeViews    = calloc(count, sizeof(*swapchain->nativeViews));
+  swapchain->frameSync      = calloc(count, sizeof(*swapchain->frameSync));
+  swapchain->renderFinished = calloc(count,
+                                     sizeof(*swapchain->renderFinished));
 
   return swapchain->images && swapchain->imageViews &&
          swapchain->framebuffers && swapchain->textures &&
          swapchain->textureViews && swapchain->nativeViews &&
-         swapchain->frameSync;
+         swapchain->frameSync && swapchain->renderFinished;
 }
 
 static bool
@@ -354,7 +358,7 @@ vk__createImageState(GPUSwapchainVk *swapchain) {
         vkCreateSemaphore(swapchain->device,
                           &semaphoreInfo,
                           NULL,
-                          &swapchain->frameSync[i].renderFinished) != VK_SUCCESS ||
+                          &swapchain->renderFinished[i]) != VK_SUCCESS ||
         vkCreateFence(swapchain->device,
                       &fenceInfo,
                       NULL,
@@ -397,6 +401,91 @@ vk__createImageState(GPUSwapchainVk *swapchain) {
   }
 
   return true;
+}
+
+GPU_HIDE
+VkResult
+vk_presentSwapchain(GPUSwapchainVk *swapchain,
+                    VkQueue         queue,
+                    VkSemaphore     waitSemaphore,
+                    uint32_t        imageIndex) {
+  VkPresentInfoKHR info = {0};
+  VkResult         result;
+#if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
+  VkPresentIdKHR   idInfo = {0};
+  GPUDeviceVk     *device;
+  uint64_t         presentId;
+#endif
+
+  if (!swapchain || !queue || !waitSemaphore ||
+      imageIndex >= swapchain->imageCount) {
+    return VK_ERROR_INITIALIZATION_FAILED;
+  }
+
+  info.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+  info.waitSemaphoreCount = 1u;
+  info.pWaitSemaphores    = &waitSemaphore;
+  info.swapchainCount     = 1u;
+  info.pSwapchains        = &swapchain->swapchain;
+  info.pImageIndices      = &imageIndex;
+#if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
+  device    = swapchain->gpuDevice ? swapchain->gpuDevice->_priv : NULL;
+  presentId = swapchain->nextPresentId;
+  if (device && device->presentWait) {
+    idInfo.sType          = VK_STRUCTURE_TYPE_PRESENT_ID_KHR;
+    idInfo.swapchainCount = 1u;
+    idInfo.pPresentIds    = &presentId;
+    info.pNext            = &idInfo;
+  }
+#endif
+
+  result = vkQueuePresentKHR(queue, &info);
+  vk_setSwapchainStatus(swapchain, result);
+#if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
+  if (device && device->presentWait) {
+    if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
+      swapchain->lastPresentId = presentId;
+    }
+    swapchain->nextPresentId++;
+  }
+#endif
+  return result;
+}
+
+static bool
+vk__waitPresent(GPUSwapchainVk *swapchain) {
+#if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
+  GPUDeviceVk *device;
+  VkResult     result;
+
+  device = swapchain && swapchain->gpuDevice
+             ? swapchain->gpuDevice->_priv
+             : NULL;
+  if (device && device->presentWait && device->waitForPresent &&
+      swapchain->lastPresentId > 0u) {
+    result = device->waitForPresent(swapchain->device,
+                                    swapchain->swapchain,
+                                    swapchain->lastPresentId,
+                                    UINT64_MAX);
+    return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR ||
+           result == VK_ERROR_OUT_OF_DATE_KHR;
+  }
+  if (device && device->presentWait) {
+    return true;
+  }
+#endif
+  return false;
+}
+
+static bool
+vk__waitResourcesIdle(GPUSwapchainVk *swapchain) {
+  if (!swapchain || !swapchain->device) {
+    return false;
+  }
+
+  vk_waitSwapchainIdle(swapchain);
+  return vk__waitPresent(swapchain) ||
+         vkDeviceWaitIdle(swapchain->device) == VK_SUCCESS;
 }
 
 static bool
@@ -526,6 +615,8 @@ vk__createResources(GPUSwapchain  *swapchainObj,
   swapchain->frameIndex           = 0u;
   swapchain->acquiredImageIndex   = 0u;
   swapchain->inFlightCommandCount = 0u;
+  swapchain->nextPresentId        = 1u;
+  swapchain->lastPresentId        = 0u;
   swapchain->frameActive          = false;
   swapchain->frameScheduled       = false;
   swapchain->frameSubmitted       = false;
@@ -614,10 +705,9 @@ vk_resizeSwapchain(GPUSwapchain *swapchainObj, GPUExtent2D size) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (vkDeviceWaitIdle(swapchain->device) != VK_SUCCESS) {
+  if (!vk__waitResourcesIdle(swapchain)) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  vk_waitSwapchainIdle(swapchain);
 
   memset(&replacement, 0, sizeof(replacement));
   replacement.gpuDevice            = swapchain->gpuDevice;
@@ -658,10 +748,7 @@ vk_destroySwapchain(GPUSwapchain *swapchainObj) {
 
   swapchain = swapchainObj->_priv;
   if (swapchain) {
-    if (swapchain->device) {
-      (void)vkDeviceWaitIdle(swapchain->device);
-    }
-    vk_waitSwapchainIdle(swapchain);
+    (void)vk__waitResourcesIdle(swapchain);
     vk__destroyResources(swapchain);
     free(swapchain);
   }

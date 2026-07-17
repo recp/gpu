@@ -614,6 +614,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkPhysicalDeviceFeatures2                  timelineFeatures2 = {0};
   VkPhysicalDeviceSynchronization2FeaturesKHR sync2Features = {0};
   VkPhysicalDeviceFeatures2                  sync2Features2 = {0};
+#if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
+  VkPhysicalDevicePresentIdFeaturesKHR       presentIdFeatures = {0};
+  VkPhysicalDevicePresentWaitFeaturesKHR     presentWaitFeatures = {0};
+  VkPhysicalDeviceFeatures2                  presentFeatures2 = {0};
+#endif
   VkPhysicalDeviceBufferDeviceAddressFeatures bufferAddressFeatures = {0};
   VkPhysicalDeviceFeatures2                  bufferAddressFeatures2 = {0};
 #ifdef VK_EXT_descriptor_buffer
@@ -683,6 +688,10 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool                                      timelineCore;
   bool                                      sync2Extension;
   bool                                      sync2Core;
+#if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
+  bool                                      presentIdExtension;
+  bool                                      presentWaitExtension;
+#endif
   bool                                      maintenance1Extension;
   bool                                      maintenance1Core;
 #ifdef VK_KHR_pipeline_binary
@@ -738,6 +747,10 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   timelineCore              = false;
   sync2Extension            = false;
   sync2Core                 = false;
+#if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
+  presentIdExtension        = false;
+  presentWaitExtension      = false;
+#endif
   maintenance1Extension     = false;
   maintenance1Core          = false;
 #ifdef VK_KHR_pipeline_binary
@@ -881,6 +894,16 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                   extensions[i].extensionName)) {
         sync2Extension = true;
       }
+#if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
+      if (!strcmp(VK_KHR_PRESENT_ID_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        presentIdExtension = true;
+      }
+      if (!strcmp(VK_KHR_PRESENT_WAIT_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        presentWaitExtension = true;
+      }
+#endif
       if (!strcmp(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         subgroupSizeControl = true;
@@ -1257,6 +1280,25 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       adapterVk->synchronization2 = true;
     }
   }
+#if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
+  if (getFeatures2 && presentIdExtension && presentWaitExtension) {
+    presentIdFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR;
+    presentWaitFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR;
+    presentFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    presentWaitFeatures.pNext = &presentIdFeatures;
+    presentFeatures2.pNext    = &presentWaitFeatures;
+    getFeatures2(raw, &presentFeatures2);
+    if (presentIdFeatures.presentId && presentWaitFeatures.presentWait &&
+        vk_addDeviceExtension(adapterVk,
+                              VK_KHR_PRESENT_ID_EXTENSION_NAME) &&
+        vk_addDeviceExtension(adapterVk,
+                              VK_KHR_PRESENT_WAIT_EXTENSION_NAME)) {
+      adapterVk->presentWait = true;
+    }
+  }
+#endif
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
   rayQueryDependencies = instanceVk &&
                          instanceVk->apiVersion >= VK_API_VERSION_1_1 &&
@@ -1967,6 +2009,10 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   VkPhysicalDeviceDescriptorIndexingFeatures descriptorFeatures = {0};
   VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeatures = {0};
   VkPhysicalDeviceSynchronization2FeaturesKHR sync2Features = {0};
+#if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
+  VkPhysicalDevicePresentIdFeaturesKHR   presentIdFeatures = {0};
+  VkPhysicalDevicePresentWaitFeaturesKHR presentWaitFeatures = {0};
+#endif
   VkPhysicalDeviceBufferDeviceAddressFeatures bufferAddressFeatures = {0};
 #ifdef VK_EXT_descriptor_buffer
   VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptorBufferFeatures = {0};
@@ -2241,6 +2287,19 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     sync2Features.synchronization2 = VK_TRUE;
     deviceCI.pNext                 = &sync2Features;
   }
+#if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
+  if (adapterVk->presentWait) {
+    presentIdFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR;
+    presentIdFeatures.pNext     = (void *)deviceCI.pNext;
+    presentIdFeatures.presentId = VK_TRUE;
+    presentWaitFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR;
+    presentWaitFeatures.pNext       = &presentIdFeatures;
+    presentWaitFeatures.presentWait = VK_TRUE;
+    deviceCI.pNext                  = &presentWaitFeatures;
+  }
+#endif
   if (adapterVk->descriptorBuffer ||
       (enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) != 0u) {
     bufferAddressFeatures.sType =
@@ -2351,6 +2410,14 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   deviceVk->multiDrawIndirect = coreFeatures.multiDrawIndirect;
   deviceVk->independentBlend  = coreFeatures.independentBlend;
   deviceVk->timelineSemaphore = adapterVk->timelineSemaphore;
+#if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
+  if (adapterVk->presentWait) {
+    deviceVk->waitForPresent =
+      (PFN_vkWaitForPresentKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                   "vkWaitForPresentKHR");
+    deviceVk->presentWait    = deviceVk->waitForPresent != NULL;
+  }
+#endif
   if (adapterVk->bufferDeviceAddress &&
       (adapterVk->descriptorBuffer ||
        (enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) != 0u)) {

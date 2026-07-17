@@ -50,14 +50,15 @@ vk_restoreFrameFence(GPUSwapchainVk *swapchain, GPUFrameSyncVk *sync) {
 static bool
 vk__presentAcquiredFrame(GPUSwapchainVk *swapchain) {
   GPUFrameSyncVk      *sync;
+  VkSemaphore          renderFinished;
   VkPipelineStageFlags waitStage;
   VkSubmitInfo         submitInfo = {0};
-  VkPresentInfoKHR     presentInfo = {0};
   VkResult             result;
 
-  sync      = &swapchain->frameSync[swapchain->frameIndex];
-  waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  if (!sync->fence ||
+  sync           = &swapchain->frameSync[swapchain->frameIndex];
+  renderFinished = swapchain->renderFinished[swapchain->acquiredImageIndex];
+  waitStage      = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  if (!sync->fence || !renderFinished ||
       vkResetFences(swapchain->device, 1u, &sync->fence) != VK_SUCCESS) {
     vk_setSwapchainStatus(swapchain, VK_ERROR_UNKNOWN);
     return false;
@@ -68,7 +69,7 @@ vk__presentAcquiredFrame(GPUSwapchainVk *swapchain) {
   submitInfo.pWaitSemaphores      = &sync->imageAvailable;
   submitInfo.pWaitDstStageMask    = &waitStage;
   submitInfo.signalSemaphoreCount = 1u;
-  submitInfo.pSignalSemaphores    = &sync->renderFinished;
+  submitInfo.pSignalSemaphores    = &renderFinished;
   result = vkQueueSubmit(swapchain->queue->queRaw,
                          1u,
                          &submitInfo,
@@ -79,14 +80,10 @@ vk__presentAcquiredFrame(GPUSwapchainVk *swapchain) {
     return false;
   }
 
-  presentInfo.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-  presentInfo.waitSemaphoreCount = 1u;
-  presentInfo.pWaitSemaphores    = &sync->renderFinished;
-  presentInfo.swapchainCount     = 1u;
-  presentInfo.pSwapchains        = &swapchain->swapchain;
-  presentInfo.pImageIndices      = &swapchain->acquiredImageIndex;
-  result = vkQueuePresentKHR(swapchain->queue->queRaw, &presentInfo);
-  vk_setSwapchainStatus(swapchain, result);
+  result = vk_presentSwapchain(swapchain,
+                               swapchain->queue->queRaw,
+                               renderFinished,
+                               swapchain->acquiredImageIndex);
   return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
 }
 
