@@ -1567,6 +1567,16 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_TRACING_PIPELINE)) {
+    if (us_cap_atom_init(
+          &targetAtoms[targetAtomCount++],
+          USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+          USL_SEMANTIC_FEATURE_ID_RAY_TRACING_PIPELINE,
+          0u,
+          0u) != USLOk) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
   if (GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUP_MATRIX)) {
     if (us_cap_atom_init(
           &targetAtoms[targetAtomCount++],

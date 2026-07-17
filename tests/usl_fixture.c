@@ -85,7 +85,6 @@ main(int argc, char **argv) {
   }
   us_set_backend(backend);
   result = usl_compile(source, sourceSize, &library, argv[2]);
-  free(library);
   free(source);
   if (result != USLOk) {
     fprintf(stderr, "failed to compile USL source: %s\n", argv[2]);

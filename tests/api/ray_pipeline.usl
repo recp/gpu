@@ -31,6 +31,8 @@ any_hit any_hit_main(inout payload: RayPayload #ray_payload(0),
 }
 
 intersection intersection_main() {
+  var attributes: HitAttributes = HitAttributes(float2(0.25, 0.75))
+  var accepted: bool = report_hit(1.0, uint(0), attributes)
 }
 
 callable callable_main(inout data: CallableData #callable_data(0)) {
