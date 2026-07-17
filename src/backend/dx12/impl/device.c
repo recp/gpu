@@ -48,9 +48,16 @@ dx12_queryResultsReliable(const GPUAdapterDX12 *adapterDX12) {
 
 static D3D_SHADER_MODEL
 dx12_queryShaderModel(ID3D12Device *device) {
+  /* Shader-model enum values encode major/minor as hexadecimal nibbles. */
   static const D3D_SHADER_MODEL models[] = {
+    (D3D_SHADER_MODEL)0x6a,
+    (D3D_SHADER_MODEL)0x69,
+    (D3D_SHADER_MODEL)0x68,
+    (D3D_SHADER_MODEL)0x67,
     D3D_SHADER_MODEL_6_6,
     D3D_SHADER_MODEL_6_5,
+    (D3D_SHADER_MODEL)0x64,
+    (D3D_SHADER_MODEL)0x63,
     D3D_SHADER_MODEL_6_2,
     D3D_SHADER_MODEL_6_1,
     D3D_SHADER_MODEL_6_0
