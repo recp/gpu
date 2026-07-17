@@ -1282,15 +1282,15 @@ vk_bindRayTracingPipeline(GPURayTracingPassEncoderEXT *pass,
   vkCmdBindPipeline(native->command,
                     VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
                     pipelineVk->pipeline);
-  if (native->descriptorPipelineLayout !=
+  if (native->descriptors.pipelineLayout !=
       pipelineVk->shaderLayout.baseLayout) {
-    memset(native->descriptorGroups, 0, sizeof(native->descriptorGroups));
+    memset(native->descriptors.groups, 0, sizeof(native->descriptors.groups));
   }
   vk_bindShaderSamplers(native->command,
                         VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
                         &pipelineVk->shaderLayout);
-  native->pipelineLayout = pipelineVk->shaderLayout.layout;
-  native->descriptorPipelineLayout = pipelineVk->shaderLayout.baseLayout;
+  native->pipelineLayout             = pipelineVk->shaderLayout.layout;
+  native->descriptors.pipelineLayout = pipelineVk->shaderLayout.baseLayout;
 }
 
 static void

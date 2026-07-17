@@ -511,6 +511,18 @@ typedef struct GPUBindGroupVk {
 #endif
 } GPUBindGroupVk;
 
+typedef struct GPUDescriptorStateVk {
+  GPUPipelineLayoutVk        *pipelineLayout;
+  GPUBindGroupVk             *groups[GPU_ENCODER_MAX_BIND_GROUPS];
+#ifdef VK_EXT_descriptor_buffer
+  GPUDescriptorBufferChunkVk *chunks[GPU_ENCODER_MAX_BIND_GROUPS];
+#endif
+  uint32_t                    dynamicOffsets[GPU_VK_MAX_DYNAMIC_OFFSETS];
+#ifdef VK_EXT_descriptor_buffer
+  uint32_t                    chunkCount;
+#endif
+} GPUDescriptorStateVk;
+
 typedef struct GPUSemaphoreVk {
   VkDevice    device;
   VkSemaphore semaphore;
@@ -543,28 +555,24 @@ typedef struct GPURenderPassVk {
 } GPURenderPassVk;
 
 typedef struct GPURenderEncoderVk {
-  GPUDeviceVk     *device;
-  GPURenderPassVk *renderPass;
-  GPUBuffer       *indexBuffer;
-  GPUPipelineLayoutVk *descriptorPipelineLayout;
-  VkCommandBuffer  command;
-  VkPipelineLayout pipelineLayout;
-  VkDeviceSize     indexOffset;
-  VkExtent2D       extent;
-  GPUBindGroupVk  *descriptorGroups[GPU_ENCODER_MAX_BIND_GROUPS];
-  uint32_t         dynamicOffsets[GPU_VK_MAX_DYNAMIC_OFFSETS];
-  GPUIndexType     indexType;
-  bool             indexBound;
-  bool             debugLabelActive;
+  GPUDeviceVk          *device;
+  GPURenderPassVk      *renderPass;
+  GPUBuffer            *indexBuffer;
+  VkCommandBuffer       command;
+  VkPipelineLayout      pipelineLayout;
+  GPUDescriptorStateVk  descriptors;
+  VkDeviceSize          indexOffset;
+  VkExtent2D            extent;
+  GPUIndexType          indexType;
+  bool                  indexBound;
+  bool                  debugLabelActive;
 } GPURenderEncoderVk;
 
 typedef struct GPUComputeEncoderVk {
-  GPUPipelineLayoutVk *descriptorPipelineLayout;
-  VkCommandBuffer  command;
-  VkPipelineLayout pipelineLayout;
-  GPUBindGroupVk  *descriptorGroups[GPU_ENCODER_MAX_BIND_GROUPS];
-  uint32_t         dynamicOffsets[GPU_VK_MAX_DYNAMIC_OFFSETS];
-  bool             debugLabelActive;
+  VkCommandBuffer       command;
+  VkPipelineLayout      pipelineLayout;
+  GPUDescriptorStateVk  descriptors;
+  bool                  debugLabelActive;
 } GPUComputeEncoderVk;
 
 #if defined(VK_KHR_acceleration_structure) && \
@@ -580,12 +588,10 @@ typedef struct GPUShaderTableVk {
 } GPUShaderTableVk;
 
 typedef struct GPURayTracingEncoderVk {
-  GPUPipelineLayoutVk *descriptorPipelineLayout;
-  VkCommandBuffer  command;
-  VkPipelineLayout pipelineLayout;
-  GPUBindGroupVk  *descriptorGroups[GPU_ENCODER_MAX_BIND_GROUPS];
-  uint32_t         dynamicOffsets[GPU_VK_MAX_DYNAMIC_OFFSETS];
-  bool             debugLabelActive;
+  VkCommandBuffer       command;
+  VkPipelineLayout      pipelineLayout;
+  GPUDescriptorStateVk  descriptors;
+  bool                  debugLabelActive;
 } GPURayTracingEncoderVk;
 #endif
 

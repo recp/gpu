@@ -1825,17 +1825,130 @@ vk_destroyBindGroup(GPUBindGroup *group) {
   group->_native = NULL;
 }
 
+#ifdef VK_EXT_descriptor_buffer
+static uint32_t
+vk__descriptorChunkIndex(const GPUDescriptorStateVk       *state,
+                         const GPUDescriptorBufferChunkVk *chunk) {
+  for (uint32_t i = 0u; i < state->chunkCount; i++) {
+    if (state->chunks[i] == chunk) {
+      return i;
+    }
+  }
+
+  return UINT32_MAX;
+}
+
 static bool
-vk__bindGroup(VkCommandBuffer       command,
-              VkPipelineBindPoint   bindPoint,
-              VkPipelineLayout      encoderLayout,
-              GPUBindGroupVk      **descriptorGroups,
-              GPUPipelineLayout    *pipelineLayout,
-              uint32_t              groupIndex,
-              GPUBindGroup         *group,
-              uint32_t              dynamicOffsetCount,
-              const uint32_t       *dynamicOffsets,
-              uint32_t             *reorderedOffsets) {
+vk__rebindDescriptorBuffers(VkCommandBuffer       command,
+                            VkPipelineBindPoint   bindPoint,
+                            VkPipelineLayout      pipelineLayout,
+                            GPUDeviceVk          *device,
+                            GPUDescriptorStateVk *state) {
+  VkDescriptorBufferBindingInfoEXT bufferInfos[GPU_ENCODER_MAX_BIND_GROUPS];
+  GPUDescriptorBufferChunkVk      *chunks[GPU_ENCODER_MAX_BIND_GROUPS];
+  uint32_t                         bufferIndices[GPU_ENCODER_MAX_BIND_GROUPS];
+  VkDeviceSize                     offsets[GPU_ENCODER_MAX_BIND_GROUPS];
+  uint32_t                         chunkCount;
+  uint32_t                         groupIndex;
+
+  if (!device || !device->bindDescriptorBuffers ||
+      !device->setDescriptorBufferOffsets || !state) {
+    return false;
+  }
+
+  chunkCount = 0u;
+  for (uint32_t i = 0u; i < GPU_ENCODER_MAX_BIND_GROUPS; i++) {
+    GPUDescriptorBufferChunkVk *chunk;
+    uint32_t                    chunkIndex;
+
+    if (!state->groups[i]) {
+      continue;
+    }
+    chunk = state->groups[i]->descriptorChunk;
+    if (!chunk) {
+      return false;
+    }
+    chunkIndex = 0u;
+    while (chunkIndex < chunkCount && chunks[chunkIndex] != chunk) {
+      chunkIndex++;
+    }
+    if (chunkIndex < chunkCount) {
+      continue;
+    }
+    chunks[chunkCount]              = chunk;
+    bufferInfos[chunkCount].sType   =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
+    bufferInfos[chunkCount].pNext   = NULL;
+    bufferInfos[chunkCount].address = chunk->address;
+    bufferInfos[chunkCount].usage   =
+      VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+      VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT;
+    chunkCount++;
+  }
+  if (chunkCount == 0u) {
+    return false;
+  }
+
+  device->bindDescriptorBuffers(command, chunkCount, bufferInfos);
+  groupIndex = 0u;
+  while (groupIndex < GPU_ENCODER_MAX_BIND_GROUPS) {
+    uint32_t firstGroup;
+    uint32_t groupCount;
+
+    while (groupIndex < GPU_ENCODER_MAX_BIND_GROUPS &&
+           !state->groups[groupIndex]) {
+      groupIndex++;
+    }
+    firstGroup = groupIndex;
+    groupCount = 0u;
+    while (groupIndex < GPU_ENCODER_MAX_BIND_GROUPS &&
+           state->groups[groupIndex]) {
+      GPUDescriptorBufferChunkVk *chunk;
+      uint32_t                    chunkIndex;
+
+      chunk      = state->groups[groupIndex]->descriptorChunk;
+      chunkIndex = 0u;
+      while (chunkIndex < chunkCount && chunks[chunkIndex] != chunk) {
+        chunkIndex++;
+      }
+      if (chunkIndex == chunkCount) {
+        return false;
+      }
+      bufferIndices[groupCount] = chunkIndex;
+      offsets[groupCount]       = state->groups[groupIndex]->descriptorOffset;
+      groupCount++;
+      groupIndex++;
+    }
+    if (groupCount > 0u) {
+      device->setDescriptorBufferOffsets(command,
+                                         bindPoint,
+                                         pipelineLayout,
+                                         firstGroup,
+                                         groupCount,
+                                         bufferIndices,
+                                         offsets);
+    }
+  }
+
+  memcpy(state->chunks, chunks, chunkCount * sizeof(*chunks));
+  memset(state->chunks + chunkCount,
+         0,
+         (GPU_ENCODER_MAX_BIND_GROUPS - chunkCount) * sizeof(*chunks));
+  state->chunkCount = chunkCount;
+  return true;
+}
+#endif
+
+static bool
+vk__bindGroup(VkCommandBuffer        command,
+              VkPipelineBindPoint    bindPoint,
+              VkPipelineLayout       encoderLayout,
+              GPUDescriptorStateVk  *descriptorState,
+              GPUPipelineLayout     *pipelineLayout,
+              uint32_t               groupIndex,
+              GPUBindGroup          *group,
+              uint32_t               dynamicOffsetCount,
+              const uint32_t        *dynamicOffsets) {
   GPUPipelineLayoutVk   *pipeline;
   GPUBindGroupVk        *groupVk;
   GPUBindGroupLayoutVk  *layoutVk;
@@ -1845,21 +1958,20 @@ vk__bindGroup(VkCommandBuffer       command,
   groupVk  = group ? group->_native : NULL;
   layoutVk = groupVk ? groupVk->layout : NULL;
   if (!command || !pipeline || !pipeline->layout || !encoderLayout ||
-      !descriptorGroups || !groupVk || !layoutVk ||
+      !descriptorState || !groupVk || !layoutVk ||
       groupVk->device != pipeline->device ||
       layoutVk->device != pipeline->device ||
       dynamicOffsetCount != layoutVk->dynamicCount ||
       dynamicOffsetCount > GPU_VK_MAX_DYNAMIC_OFFSETS ||
-      (dynamicOffsetCount > 0u && (!dynamicOffsets || !reorderedOffsets))) {
+      (dynamicOffsetCount > 0u && !dynamicOffsets)) {
     return false;
   }
 
 #ifdef VK_EXT_descriptor_buffer
   if (pipeline->descriptorBuffer && encoderLayout == pipeline->layout) {
-    GPUDeviceVk                     *deviceVk;
-    VkDescriptorBufferBindingInfoEXT bufferInfos[GPU_ENCODER_MAX_BIND_GROUPS];
-    GPUDescriptorBufferChunkVk      *chunks[GPU_ENCODER_MAX_BIND_GROUPS];
-    uint32_t                         bufferCount;
+    GPUDeviceVk    *deviceVk;
+    GPUBindGroupVk *previousGroup;
+    uint32_t        bufferIndex;
 
     deviceVk = layoutVk->gpuDevice;
     if (!layoutVk->descriptorBuffer || !groupVk->descriptorChunk ||
@@ -1868,63 +1980,31 @@ vk__bindGroup(VkCommandBuffer       command,
         !deviceVk->setDescriptorBufferOffsets) {
       return false;
     }
-    descriptorGroups[groupIndex] = groupVk;
-    bufferCount = 0u;
-    for (uint32_t i = 0u; i < GPU_ENCODER_MAX_BIND_GROUPS; i++) {
-      GPUBindGroupVk              *boundGroup;
-      GPUDescriptorBufferChunkVk  *chunk;
-      bool                         found;
-
-      boundGroup = descriptorGroups[i];
-      chunk      = boundGroup ? boundGroup->descriptorChunk : NULL;
-      if (!chunk) {
-        continue;
-      }
-      found = false;
-      for (uint32_t j = 0u; j < bufferCount; j++) {
-        if (chunks[j] == chunk) {
-          found = true;
-          break;
-        }
-      }
-      if (found) {
-        continue;
-      }
-      chunks[bufferCount] = chunk;
-      memset(&bufferInfos[bufferCount], 0, sizeof(bufferInfos[bufferCount]));
-      bufferInfos[bufferCount].sType =
-        VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
-      bufferInfos[bufferCount].address = chunk->address;
-      bufferInfos[bufferCount].usage =
-        VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
-        VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT;
-      bufferCount++;
+    previousGroup = descriptorState->groups[groupIndex];
+    if (previousGroup == groupVk) {
+      return true;
     }
-    deviceVk->bindDescriptorBuffers(command, bufferCount, bufferInfos);
-    for (uint32_t i = 0u; i < GPU_ENCODER_MAX_BIND_GROUPS; i++) {
-      GPUBindGroupVk *boundGroup;
-      uint32_t        bufferIndex;
-
-      boundGroup = descriptorGroups[i];
-      if (!boundGroup || !boundGroup->descriptorChunk) {
-        continue;
-      }
-      bufferIndex = 0u;
-      while (bufferIndex < bufferCount &&
-             chunks[bufferIndex] != boundGroup->descriptorChunk) {
-        bufferIndex++;
-      }
-      if (bufferIndex == bufferCount) {
+    descriptorState->groups[groupIndex] = groupVk;
+    bufferIndex = vk__descriptorChunkIndex(descriptorState,
+                                           groupVk->descriptorChunk);
+    if (bufferIndex == UINT32_MAX) {
+      if (!vk__rebindDescriptorBuffers(command,
+                                       bindPoint,
+                                       encoderLayout,
+                                       deviceVk,
+                                       descriptorState)) {
+        descriptorState->groups[groupIndex] = previousGroup;
         return false;
       }
-      deviceVk->setDescriptorBufferOffsets(command,
-                                           bindPoint,
-                                           encoderLayout,
-                                           i,
-                                           1u,
-                                           &bufferIndex,
-                                           &boundGroup->descriptorOffset);
+      return true;
     }
+    deviceVk->setDescriptorBufferOffsets(command,
+                                         bindPoint,
+                                         encoderLayout,
+                                         groupIndex,
+                                         1u,
+                                         &bufferIndex,
+                                         &groupVk->descriptorOffset);
     return true;
   }
 #endif
@@ -1932,15 +2012,16 @@ vk__bindGroup(VkCommandBuffer       command,
   if (!groupVk->set) {
     return false;
   }
-  descriptorGroups[groupIndex] = NULL;
+  descriptorState->groups[groupIndex] = NULL;
 
   nativeOffsets = dynamicOffsets;
   for (uint32_t i = 0u; i < dynamicOffsetCount; i++) {
     if (layoutVk->dynamicOrder[i] != i) {
       for (uint32_t j = 0u; j < dynamicOffsetCount; j++) {
-        reorderedOffsets[j] = dynamicOffsets[layoutVk->dynamicOrder[j]];
+        descriptorState->dynamicOffsets[j] =
+          dynamicOffsets[layoutVk->dynamicOrder[j]];
       }
-      nativeOffsets = reorderedOffsets;
+      nativeOffsets = descriptorState->dynamicOffsets;
       break;
     }
   }
@@ -1970,13 +2051,12 @@ vk_bindRenderGroup(GPURenderCommandEncoder *pass,
   return encoder && vk__bindGroup(encoder->command,
                                   VK_PIPELINE_BIND_POINT_GRAPHICS,
                                   encoder->pipelineLayout,
-                                  encoder->descriptorGroups,
+                                  &encoder->descriptors,
                                   pipelineLayout,
                                   groupIndex,
                                   group,
                                   dynamicOffsetCount,
-                                  dynamicOffsets,
-                                  encoder->dynamicOffsets);
+                                  dynamicOffsets);
 }
 
 GPU_HIDE
@@ -1993,13 +2073,12 @@ vk_bindComputeGroup(GPUComputePassEncoder *pass,
   return encoder && vk__bindGroup(encoder->command,
                                   VK_PIPELINE_BIND_POINT_COMPUTE,
                                   encoder->pipelineLayout,
-                                  encoder->descriptorGroups,
+                                  &encoder->descriptors,
                                   pipelineLayout,
                                   groupIndex,
                                   group,
                                   dynamicOffsetCount,
-                                  dynamicOffsets,
-                                  encoder->dynamicOffsets);
+                                  dynamicOffsets);
 }
 
 GPU_HIDE
@@ -2017,13 +2096,12 @@ vk_bindRayTracingGroup(GPURayTracingPassEncoderEXT *pass,
   return encoder && vk__bindGroup(encoder->command,
                                   VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
                                   encoder->pipelineLayout,
-                                  encoder->descriptorGroups,
+                                  &encoder->descriptors,
                                   pipelineLayout,
                                   groupIndex,
                                   group,
                                   dynamicOffsetCount,
-                                  dynamicOffsets,
-                                  encoder->dynamicOffsets);
+                                  dynamicOffsets);
 #else
   (void)pass;
   (void)pipelineLayout;

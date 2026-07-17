@@ -167,14 +167,14 @@ vk_setComputePipelineState(GPUComputePassEncoder   *encoder,
   vkCmdBindPipeline(native->command,
                     VK_PIPELINE_BIND_POINT_COMPUTE,
                     pipeline->pipeline);
-  if (native->descriptorPipelineLayout != pipeline->shaderLayout.baseLayout) {
-    memset(native->descriptorGroups, 0, sizeof(native->descriptorGroups));
+  if (native->descriptors.pipelineLayout != pipeline->shaderLayout.baseLayout) {
+    memset(native->descriptors.groups, 0, sizeof(native->descriptors.groups));
   }
   vk_bindShaderSamplers(native->command,
                         VK_PIPELINE_BIND_POINT_COMPUTE,
                         &pipeline->shaderLayout);
-  native->pipelineLayout     = pipeline->shaderLayout.layout;
-  native->descriptorPipelineLayout = pipeline->shaderLayout.baseLayout;
+  native->pipelineLayout             = pipeline->shaderLayout.layout;
+  native->descriptors.pipelineLayout = pipeline->shaderLayout.baseLayout;
   encoder->_workgroupSize[0] = pipelineState->workgroupSize[0];
   encoder->_workgroupSize[1] = pipelineState->workgroupSize[1];
   encoder->_workgroupSize[2] = pipelineState->workgroupSize[2];

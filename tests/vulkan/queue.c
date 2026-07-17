@@ -25,6 +25,18 @@ typedef struct CompletionProbe {
   uint32_t          count;
 } CompletionProbe;
 
+#ifdef VK_EXT_descriptor_buffer
+typedef struct DescriptorBufferProbe {
+  uint32_t bindCallCount;
+  uint32_t offsetCallCount;
+  uint32_t boundBufferCount;
+  uint32_t offsetSetCount;
+  uint32_t lastFirstSet;
+  uint32_t lastSetCount;
+  bool     valid;
+} DescriptorBufferProbe;
+#endif
+
 _Static_assert(sizeof(GPUPipelineStatisticsResult) == 11u * sizeof(uint64_t),
                "pipeline statistics result layout changed");
 
@@ -58,6 +70,152 @@ on_complete(void *sender, GPUCommandBuffer *cmdb) {
   probe->cmdb = cmdb;
   probe->count++;
 }
+
+#ifdef VK_EXT_descriptor_buffer
+static VKAPI_ATTR void VKAPI_CALL
+descriptor_probe_bind(VkCommandBuffer                         command,
+                      uint32_t                                bufferCount,
+                      const VkDescriptorBufferBindingInfoEXT *bufferInfos) {
+  DescriptorBufferProbe *probe;
+
+  probe = (DescriptorBufferProbe *)(uintptr_t)command;
+  if (!probe) {
+    return;
+  }
+  probe->bindCallCount++;
+  probe->boundBufferCount = bufferCount;
+  probe->valid = probe->valid && bufferCount > 0u && bufferInfos;
+  for (uint32_t i = 0u; probe->valid && i < bufferCount; i++) {
+    probe->valid = bufferInfos[i].sType ==
+                     VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT &&
+                   bufferInfos[i].address != 0u;
+  }
+}
+
+static VKAPI_ATTR void VKAPI_CALL
+descriptor_probe_offsets(VkCommandBuffer     command,
+                         VkPipelineBindPoint bindPoint,
+                         VkPipelineLayout    layout,
+                         uint32_t            firstSet,
+                         uint32_t            setCount,
+                         const uint32_t     *bufferIndices,
+                         const VkDeviceSize *offsets) {
+  DescriptorBufferProbe *probe;
+
+  probe = (DescriptorBufferProbe *)(uintptr_t)command;
+  if (!probe) {
+    return;
+  }
+  probe->offsetCallCount++;
+  probe->offsetSetCount += setCount;
+  probe->lastFirstSet    = firstSet;
+  probe->lastSetCount    = setCount;
+  probe->valid = probe->valid &&
+                 bindPoint == VK_PIPELINE_BIND_POINT_COMPUTE && layout &&
+                 setCount > 0u && bufferIndices && offsets;
+  for (uint32_t i = 0u; probe->valid && i < setCount; i++) {
+    probe->valid = bufferIndices[i] < probe->boundBufferCount;
+  }
+}
+
+static bool
+descriptor_probe_group(GPUApi                *api,
+                       GPUComputePassEncoder *pass,
+                       GPUPipelineLayout     *pipeline,
+                       uint32_t               groupIndex,
+                       GPUBindGroup          *group) {
+  return api->descriptor.bindComputeGroup(pass,
+                                          pipeline,
+                                          groupIndex,
+                                          group,
+                                          0u,
+                                          NULL);
+}
+
+static int
+descriptor_buffer_state_shadow(GPUDevice *gpuDevice) {
+  GPUApi                     *api;
+  GPUDeviceVk                 device      = {0};
+  GPUBindGroupLayoutVk        layout      = {0};
+  GPUPipelineLayoutVk         pipelineVk  = {0};
+  GPUPipelineLayout           pipeline    = {0};
+  GPUDescriptorBufferChunkVk  chunks[3]   = {0};
+  GPUBindGroupVk              groupsVk[3] = {0};
+  GPUBindGroup                groups[3]   = {0};
+  GPUComputeEncoderVk         encoder     = {0};
+  GPUComputePassEncoder       pass        = {0};
+  DescriptorBufferProbe       probe       = {0};
+  VkDevice                    deviceHandle;
+  VkPipelineLayout            layoutHandle;
+
+  api = gpuDeviceApi(gpuDevice);
+  if (!api || !api->descriptor.bindComputeGroup) {
+    return 0;
+  }
+  probe.valid  = true;
+  deviceHandle = (VkDevice)(uintptr_t)1u;
+  layoutHandle = (VkPipelineLayout)(uintptr_t)2u;
+  device.bindDescriptorBuffers      = descriptor_probe_bind;
+  device.setDescriptorBufferOffsets = descriptor_probe_offsets;
+  device.descriptorBuffer           = true;
+  layout.gpuDevice                  = &device;
+  layout.device                     = deviceHandle;
+  layout.descriptorBuffer           = true;
+  pipelineVk.device                 = deviceHandle;
+  pipelineVk.layout                 = layoutHandle;
+  pipelineVk.descriptorBuffer       = true;
+  pipeline._native                  = &pipelineVk;
+  chunks[0].address                 = 0x1000u;
+  chunks[1].address                 = 0x2000u;
+  chunks[2].address                 = 0x3000u;
+  for (uint32_t i = 0u; i < 3u; i++) {
+    groupsVk[i].layout            = &layout;
+    groupsVk[i].descriptorChunk   = &chunks[i];
+    groupsVk[i].device            = deviceHandle;
+    groupsVk[i].descriptorOffset  = (VkDeviceSize)i * 64u;
+    groups[i]._native             = &groupsVk[i];
+  }
+  encoder.command        = (VkCommandBuffer)(uintptr_t)&probe;
+  encoder.pipelineLayout = layoutHandle;
+  pass._priv             = &encoder;
+
+  if (!descriptor_probe_group(api, &pass, &pipeline, 0u, &groups[0]) ||
+      probe.bindCallCount != 1u || probe.offsetCallCount != 1u ||
+      probe.offsetSetCount != 1u || encoder.descriptors.chunkCount != 1u ||
+      !descriptor_probe_group(api, &pass, &pipeline, 0u, &groups[0]) ||
+      probe.bindCallCount != 1u || probe.offsetCallCount != 1u ||
+      !descriptor_probe_group(api, &pass, &pipeline, 1u, &groups[0]) ||
+      probe.bindCallCount != 1u || probe.offsetCallCount != 2u ||
+      probe.offsetSetCount != 2u || probe.lastFirstSet != 1u ||
+      probe.lastSetCount != 1u ||
+      !descriptor_probe_group(api, &pass, &pipeline, 0u, &groups[1]) ||
+      probe.bindCallCount != 2u || probe.offsetCallCount != 3u ||
+      probe.offsetSetCount != 4u || probe.lastFirstSet != 0u ||
+      probe.lastSetCount != 2u || encoder.descriptors.chunkCount != 2u ||
+      !descriptor_probe_group(api, &pass, &pipeline, 1u, &groups[2]) ||
+      probe.bindCallCount != 3u || probe.offsetCallCount != 4u ||
+      probe.offsetSetCount != 6u || probe.lastSetCount != 2u ||
+      encoder.descriptors.chunkCount != 2u || !probe.valid) {
+    return 0;
+  }
+
+  memset(encoder.descriptors.groups, 0, sizeof(encoder.descriptors.groups));
+  if (!descriptor_probe_group(api, &pass, &pipeline, 0u, &groups[1]) ||
+      probe.bindCallCount != 3u || probe.offsetCallCount != 5u ||
+      probe.offsetSetCount != 7u || probe.lastFirstSet != 0u ||
+      probe.lastSetCount != 1u || !probe.valid) {
+    return 0;
+  }
+
+  return 1;
+}
+#else
+static int
+descriptor_buffer_state_shadow(GPUDevice *device) {
+  (void)device;
+  return 1;
+}
+#endif
 
 static int
 descriptor_binding_path(GPUDevice *device,
@@ -157,9 +315,9 @@ descriptor_binding_path(GPUDevice *device,
     GPUEndComputePass(pass);
     goto cleanup;
   }
-  pass->_pipelineLayout          = pipelineLayout;
-  passVk->pipelineLayout         = pipelineLayoutVk->layout;
-  passVk->descriptorPipelineLayout = pipelineLayoutVk;
+  pass->_pipelineLayout              = pipelineLayout;
+  passVk->pipelineLayout             = pipelineLayoutVk->layout;
+  passVk->descriptors.pipelineLayout = pipelineLayoutVk;
   GPUBindComputeGroup(pass, 0u, group, 0u, NULL);
   ok = pass->_boundGroups[0] == group;
   GPUEndComputePass(pass);
@@ -1053,6 +1211,8 @@ main(void) {
   }
 
   ok = 1;
+  VULKAN_CHECK("descriptor buffer state shadow",
+               descriptor_buffer_state_shadow(device));
   VULKAN_CHECK("descriptor binding path",
                descriptor_binding_path(device, compute, fence));
   VULKAN_CHECK("buffer transfer reuse",

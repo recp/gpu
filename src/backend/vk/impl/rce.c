@@ -209,14 +209,14 @@ vk_setRenderPipelineState(GPURenderCommandEncoder *encoder,
   vkCmdBindPipeline(native->command,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipeline->pipeline);
-  if (native->descriptorPipelineLayout != pipeline->shaderLayout.baseLayout) {
-    memset(native->descriptorGroups, 0, sizeof(native->descriptorGroups));
+  if (native->descriptors.pipelineLayout != pipeline->shaderLayout.baseLayout) {
+    memset(native->descriptors.groups, 0, sizeof(native->descriptors.groups));
   }
   vk_bindShaderSamplers(native->command,
                         VK_PIPELINE_BIND_POINT_GRAPHICS,
                         &pipeline->shaderLayout);
-  native->pipelineLayout = pipeline->shaderLayout.layout;
-  native->descriptorPipelineLayout = pipeline->shaderLayout.baseLayout;
+  native->pipelineLayout             = pipeline->shaderLayout.layout;
+  native->descriptors.pipelineLayout = pipeline->shaderLayout.baseLayout;
 }
 
 GPU_HIDE
