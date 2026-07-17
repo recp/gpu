@@ -600,6 +600,11 @@ vk_createRenderPipeline(GPUDevice                         *device,
 
   pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
   pipelineInfo.pNext               = NULL;
+#ifdef VK_EXT_descriptor_buffer
+  if (native->shaderLayout.descriptorBuffer) {
+    pipelineInfo.flags |= VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+  }
+#endif
   if (deviceVk->dynamicRendering) {
     rendering.pNext    = pipelineInfo.pNext;
     pipelineInfo.pNext = &rendering;

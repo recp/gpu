@@ -404,7 +404,9 @@ vk_featureEnabled(uint64_t enabledFeatureMask, GPUFeature feature) {
 }
 
 static bool
-vk_extensionEnabled(const char *name, uint64_t enabledFeatureMask) {
+vk_extensionEnabled(const GPUAdapterVk *adapter,
+                    const char         *name,
+                    uint64_t            enabledFeatureMask) {
   bool descriptorIndexing;
   bool meshShader;
   bool rayQuery;
@@ -437,11 +439,21 @@ vk_extensionEnabled(const char *name, uint64_t enabledFeatureMask) {
   if (strcmp(name, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME) == 0) {
     return descriptorIndexing || rayQuery;
   }
+#ifdef VK_EXT_descriptor_buffer
+  if (strcmp(name, VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME) == 0) {
+    return adapter && adapter->descriptorBuffer;
+  }
+#endif
+#ifdef VK_KHR_buffer_device_address
+  if (strcmp(name, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) == 0) {
+    return (adapter && adapter->descriptorBuffer) || rayQuery ||
+           rayTracingPipeline;
+  }
+#endif
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
   if (strcmp(name, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) == 0 ||
       strcmp(name, VK_KHR_RAY_QUERY_EXTENSION_NAME) == 0 ||
-      strcmp(name, VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME) == 0 ||
-      strcmp(name, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) == 0) {
+      strcmp(name, VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME) == 0) {
     return rayQuery || rayTracingPipeline;
   }
 #endif
@@ -484,7 +496,8 @@ vk_collectDeviceExtensions(const GPUAdapterVk *adapter,
 
   count = 0u;
   for (uint32_t i = 0u; i < adapter->nEnabledExtensions; i++) {
-    if (!vk_extensionEnabled(adapter->extensionNames[i],
+    if (!vk_extensionEnabled(adapter,
+                             adapter->extensionNames[i],
                              enabledFeatureMask)) {
       continue;
     }
@@ -495,6 +508,44 @@ vk_collectDeviceExtensions(const GPUAdapterVk *adapter,
   }
   return count;
 }
+
+#ifdef VK_EXT_descriptor_buffer
+static bool
+vk_hasHostVisibleDescriptorBufferMemory(VkPhysicalDevice physicalDevice,
+                                        VkDevice         device) {
+  VkPhysicalDeviceMemoryProperties memoryProperties;
+  VkBufferCreateInfo                info = {0};
+  VkMemoryRequirements              requirements;
+  VkBuffer                          buffer;
+  bool                              supported;
+
+  if (!physicalDevice || !device) {
+    return false;
+  }
+  info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  info.size  = 256u;
+  info.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+               VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT |
+               VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+  info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  if (vkCreateBuffer(device, &info, NULL, &buffer) != VK_SUCCESS) {
+    return false;
+  }
+  vkGetBufferMemoryRequirements(device, buffer, &requirements);
+  vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
+  supported = false;
+  for (uint32_t i = 0u; i < memoryProperties.memoryTypeCount; i++) {
+    if ((requirements.memoryTypeBits & (1u << i)) != 0u &&
+        (memoryProperties.memoryTypes[i].propertyFlags &
+         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u) {
+      supported = true;
+      break;
+    }
+  }
+  vkDestroyBuffer(device, buffer, NULL);
+  return supported;
+}
+#endif
 
 static void
 vk_querySubgroupCapabilities(GPUInstanceVk *instance,
@@ -563,8 +614,15 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkPhysicalDeviceFeatures2                  timelineFeatures2 = {0};
   VkPhysicalDeviceSynchronization2FeaturesKHR sync2Features = {0};
   VkPhysicalDeviceFeatures2                  sync2Features2 = {0};
-#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
   VkPhysicalDeviceBufferDeviceAddressFeatures bufferAddressFeatures = {0};
+  VkPhysicalDeviceFeatures2                  bufferAddressFeatures2 = {0};
+#ifdef VK_EXT_descriptor_buffer
+  VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptorBufferFeatures = {0};
+  VkPhysicalDeviceFeatures2                    descriptorBufferFeatures2 = {0};
+  VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptorBufferProperties = {0};
+  VkPhysicalDeviceProperties2                  descriptorBufferProperties2 = {0};
+#endif
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
   VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationFeatures = {0};
   VkPhysicalDeviceRayQueryFeaturesKHR          rayQueryFeatures = {0};
   VkPhysicalDeviceFeatures2                    rayQueryFeatures2 = {0};
@@ -610,6 +668,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool                                      atomic64Extension;
   bool                                      atomic64Core;
   bool                                      descriptorCore;
+  bool                                      bufferAddressExtension;
+  bool                                      bufferAddressCore;
+#ifdef VK_EXT_descriptor_buffer
+  bool                                      descriptorBufferExtension;
+#endif
   bool                                      timelineCore;
   bool                                      sync2Extension;
   bool                                      sync2Core;
@@ -622,7 +685,6 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool                                      accelerationExtension;
   bool                                      rayQueryExtension;
   bool                                      deferredHostExtension;
-  bool                                      bufferAddressExtension;
   bool                                      rayQueryDependencies;
 #endif
 #ifdef VK_KHR_ray_tracing_pipeline
@@ -656,6 +718,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   atomic64Extension         = false;
   atomic64Core              = false;
   descriptorCore            = false;
+  bufferAddressExtension    = false;
+  bufferAddressCore         = false;
+#ifdef VK_EXT_descriptor_buffer
+  descriptorBufferExtension = false;
+#endif
   timelineCore              = false;
   sync2Extension            = false;
   sync2Core                 = false;
@@ -668,7 +735,6 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   accelerationExtension     = false;
   rayQueryExtension         = false;
   deferredHostExtension     = false;
-  bufferAddressExtension    = false;
   rayQueryDependencies      = false;
 #endif
 #ifdef VK_KHR_ray_tracing_pipeline
@@ -777,6 +843,19 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       VK__ADD_EXT_IF(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
                      descriptorExtension = true);
 
+#ifdef VK_EXT_descriptor_buffer
+      if (!strcmp(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        descriptorBufferExtension = true;
+      }
+#endif
+#ifdef VK_KHR_buffer_device_address
+      if (!strcmp(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        bufferAddressExtension = true;
+      }
+#endif
+
       if (!strcmp(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         dynamicExtension = true;
@@ -813,10 +892,6 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       if (!strcmp(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         deferredHostExtension = true;
-      }
-      if (!strcmp(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
-                  extensions[i].extensionName)) {
-        bufferAddressExtension = true;
       }
 #endif
 #ifdef VK_KHR_ray_tracing_pipeline
@@ -902,6 +977,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   descriptorCore = instanceVk &&
                    instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
                    adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
+  bufferAddressCore = descriptorCore;
   timelineCore = instanceVk &&
                  instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
                  adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
@@ -964,6 +1040,62 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       adapterVk->atomic64 = true;
     }
   }
+  if (getFeatures2 && (bufferAddressCore || bufferAddressExtension)) {
+    bufferAddressFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+    bufferAddressFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    bufferAddressFeatures2.pNext = &bufferAddressFeatures;
+    getFeatures2(raw, &bufferAddressFeatures2);
+    adapterVk->bufferDeviceAddress =
+      bufferAddressFeatures.bufferDeviceAddress == VK_TRUE;
+  }
+#ifdef VK_EXT_descriptor_buffer
+  if (getFeatures2 && descriptorBufferExtension &&
+      adapterVk->bufferDeviceAddress) {
+    PFN_vkGetPhysicalDeviceProperties2 getProperties2;
+
+    descriptorBufferFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT;
+    descriptorBufferFeatures2.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    descriptorBufferFeatures2.pNext = &descriptorBufferFeatures;
+    getFeatures2(raw, &descriptorBufferFeatures2);
+
+    getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+      vkGetInstanceProcAddr(instanceVk->inst,
+                            "vkGetPhysicalDeviceProperties2");
+    if (!getProperties2) {
+      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+        vkGetInstanceProcAddr(instanceVk->inst,
+                              "vkGetPhysicalDeviceProperties2KHR");
+    }
+    if (descriptorBufferFeatures.descriptorBuffer && getProperties2) {
+      descriptorBufferProperties.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT;
+      descriptorBufferProperties2.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+      descriptorBufferProperties2.pNext = &descriptorBufferProperties;
+      getProperties2(raw, &descriptorBufferProperties2);
+      if (descriptorBufferProperties.descriptorBufferOffsetAlignment > 0u &&
+          descriptorBufferProperties.maxDescriptorBufferBindings >=
+            GPU_ENCODER_MAX_BIND_GROUPS &&
+          descriptorBufferProperties.maxResourceDescriptorBufferBindings >=
+            GPU_ENCODER_MAX_BIND_GROUPS &&
+          descriptorBufferProperties.maxSamplerDescriptorBufferBindings >=
+            GPU_ENCODER_MAX_BIND_GROUPS &&
+          descriptorBufferProperties.maxResourceDescriptorBufferRange > 0u &&
+          descriptorBufferProperties.maxSamplerDescriptorBufferRange > 0u &&
+          vk_addDeviceExtension(adapterVk,
+                                VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME) &&
+          (bufferAddressCore ||
+           vk_addDeviceExtension(adapterVk,
+                                 VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME))) {
+        adapterVk->descriptorBufferProperties = descriptorBufferProperties;
+        adapterVk->descriptorBuffer           = true;
+      }
+    }
+  }
+#endif
   if (getFeatures2 && (descriptorCore || descriptorExtension)) {
     descriptorFeatures.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
@@ -1731,8 +1863,11 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   VkPhysicalDeviceDescriptorIndexingFeatures descriptorFeatures = {0};
   VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeatures = {0};
   VkPhysicalDeviceSynchronization2FeaturesKHR sync2Features = {0};
-#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
   VkPhysicalDeviceBufferDeviceAddressFeatures bufferAddressFeatures = {0};
+#ifdef VK_EXT_descriptor_buffer
+  VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptorBufferFeatures = {0};
+#endif
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
   VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationFeatures = {0};
   VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {0};
 #endif
@@ -1959,17 +2094,30 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     sync2Features.synchronization2 = VK_TRUE;
     deviceCI.pNext                 = &sync2Features;
   }
-#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) != 0u) {
+  if (adapterVk->descriptorBuffer ||
+      (enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) != 0u) {
     bufferAddressFeatures.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+    bufferAddressFeatures.pNext = (void *)deviceCI.pNext;
+    bufferAddressFeatures.bufferDeviceAddress = VK_TRUE;
+    deviceCI.pNext = &bufferAddressFeatures;
+  }
+#ifdef VK_EXT_descriptor_buffer
+  if (adapterVk->descriptorBuffer) {
+    descriptorBufferFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT;
+    descriptorBufferFeatures.pNext = (void *)deviceCI.pNext;
+    descriptorBufferFeatures.descriptorBuffer = VK_TRUE;
+    deviceCI.pNext = &descriptorBufferFeatures;
+  }
+#endif
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) != 0u) {
     accelerationFeatures.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
     rayQueryFeatures.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
-    bufferAddressFeatures.pNext = (void *)deviceCI.pNext;
-    bufferAddressFeatures.bufferDeviceAddress = VK_TRUE;
-    accelerationFeatures.pNext = &bufferAddressFeatures;
+    accelerationFeatures.pNext = (void *)deviceCI.pNext;
     accelerationFeatures.accelerationStructure = VK_TRUE;
     rayQueryFeatures.pNext   = &accelerationFeatures;
     rayQueryFeatures.rayQuery = VK_TRUE;
@@ -2043,6 +2191,65 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   deviceVk->multiDrawIndirect = coreFeatures.multiDrawIndirect;
   deviceVk->independentBlend  = coreFeatures.independentBlend;
   deviceVk->timelineSemaphore = adapterVk->timelineSemaphore;
+  if (adapterVk->bufferDeviceAddress &&
+      (adapterVk->descriptorBuffer ||
+       (enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) != 0u)) {
+    deviceVk->getBufferDeviceAddress =
+      (PFN_vkGetBufferDeviceAddress)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkGetBufferDeviceAddress"
+      );
+    if (!deviceVk->getBufferDeviceAddress) {
+      deviceVk->getBufferDeviceAddress =
+        (PFN_vkGetBufferDeviceAddress)vkGetDeviceProcAddr(
+          deviceVk->device,
+          "vkGetBufferDeviceAddressKHR"
+        );
+    }
+    if (!deviceVk->getBufferDeviceAddress) {
+      goto err;
+    }
+    deviceVk->bufferDeviceAddress = true;
+  }
+#ifdef VK_EXT_descriptor_buffer
+  if (adapterVk->descriptorBuffer) {
+    deviceVk->getDescriptorSetLayoutSize =
+      (PFN_vkGetDescriptorSetLayoutSizeEXT)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkGetDescriptorSetLayoutSizeEXT"
+      );
+    deviceVk->getDescriptorSetLayoutBindingOffset =
+      (PFN_vkGetDescriptorSetLayoutBindingOffsetEXT)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkGetDescriptorSetLayoutBindingOffsetEXT"
+      );
+    deviceVk->getDescriptor =
+      (PFN_vkGetDescriptorEXT)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkGetDescriptorEXT"
+      );
+    deviceVk->bindDescriptorBuffers =
+      (PFN_vkCmdBindDescriptorBuffersEXT)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkCmdBindDescriptorBuffersEXT"
+      );
+    deviceVk->setDescriptorBufferOffsets =
+      (PFN_vkCmdSetDescriptorBufferOffsetsEXT)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkCmdSetDescriptorBufferOffsetsEXT"
+      );
+    if (deviceVk->getDescriptorSetLayoutSize &&
+        deviceVk->getDescriptorSetLayoutBindingOffset &&
+        deviceVk->getDescriptor && deviceVk->bindDescriptorBuffers &&
+        deviceVk->setDescriptorBufferOffsets &&
+        vk_hasHostVisibleDescriptorBufferMemory(adapterVk->physicalDevice,
+                                                deviceVk->device)) {
+      deviceVk->descriptorBufferProperties =
+        adapterVk->descriptorBufferProperties;
+      deviceVk->descriptorBuffer = true;
+    }
+  }
+#endif
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) != 0u) {
     deviceVk->createAccelerationStructure =
@@ -2070,24 +2277,11 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
         deviceVk->device,
         "vkGetAccelerationStructureDeviceAddressKHR"
       );
-    deviceVk->getBufferDeviceAddress =
-      (PFN_vkGetBufferDeviceAddress)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkGetBufferDeviceAddress"
-      );
-    if (!deviceVk->getBufferDeviceAddress) {
-      deviceVk->getBufferDeviceAddress =
-        (PFN_vkGetBufferDeviceAddress)vkGetDeviceProcAddr(
-          deviceVk->device,
-          "vkGetBufferDeviceAddressKHR"
-        );
-    }
     if (!deviceVk->createAccelerationStructure ||
         !deviceVk->destroyAccelerationStructure ||
         !deviceVk->getAccelerationStructureBuildSizes ||
         !deviceVk->buildAccelerationStructures ||
-        !deviceVk->getAccelerationStructureAddress ||
-        !deviceVk->getBufferDeviceAddress) {
+        !deviceVk->getAccelerationStructureAddress) {
       goto err;
     }
     deviceVk->accelerationStructureScratchAlignment =

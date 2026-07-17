@@ -3,6 +3,7 @@
 #include "backend/vk/common.h"
 #include "api/buffer_internal.h"
 #include "api/cmdqueue_internal.h"
+#include "api/descr/descriptor_internal.h"
 #include "api/device_internal.h"
 
 #include <stdint.h>
@@ -56,6 +57,147 @@ on_complete(void *sender, GPUCommandBuffer *cmdb) {
   probe       = sender;
   probe->cmdb = cmdb;
   probe->count++;
+}
+
+static int
+descriptor_binding_path(GPUDevice *device,
+                        GPUQueue  *queue,
+                        GPUFence  *fence) {
+  GPUDeviceVk                   *deviceVk;
+  GPUBindGroupLayoutEntry        layoutEntry = {0};
+  GPUBindGroupLayoutCreateInfo   layoutInfo = {0};
+  GPUBindGroupEntry              groupEntry = {0};
+  GPUBindGroupCreateInfo         groupInfo = {0};
+  GPUPipelineLayoutCreateInfo    pipelineInfo = {0};
+  GPUQueueSubmitInfo             submitInfo = {0};
+  GPUBufferCreateInfo            bufferInfo = {0};
+  GPUBindGroupLayout            *layouts[1];
+  GPUBindGroupLayout            *layout;
+  GPUBindGroupLayoutVk          *layoutVk;
+  GPUPipelineLayout             *pipelineLayout;
+  GPUPipelineLayoutVk           *pipelineLayoutVk;
+  GPUBindGroup                  *group;
+  GPUBindGroupVk                *groupVk;
+  GPUBuffer                     *buffer;
+  GPUCommandBuffer              *cmdb;
+  GPUComputePassEncoder         *pass;
+  GPUComputeEncoderVk           *passVk;
+  int                            ok;
+
+  deviceVk = device ? device->_priv : NULL;
+  layout   = NULL;
+  group    = NULL;
+  buffer   = NULL;
+  pipelineLayout = NULL;
+  cmdb     = NULL;
+  ok       = 0;
+  if (!deviceVk) {
+    return 0;
+  }
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "vulkan-descriptor-buffer";
+  bufferInfo.sizeBytes        = 256u;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM |
+                                GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
+    goto cleanup;
+  }
+
+  layoutEntry.binding      = 0u;
+  layoutEntry.bindingType  = GPU_BINDING_UNIFORM_BUFFER;
+  layoutEntry.visibility   = GPU_SHADER_STAGE_COMPUTE_BIT;
+  layoutEntry.arrayCount   = 1u;
+  layoutInfo.chain.sType      =
+    GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  layoutInfo.label            = "vulkan-descriptor-layout";
+  layoutInfo.entryCount       = 1u;
+  layoutInfo.pEntries         = &layoutEntry;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK ||
+      !layout) {
+    goto cleanup;
+  }
+
+  groupEntry.binding       = 0u;
+  groupEntry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
+  groupEntry.buffer.buffer = buffer;
+  groupEntry.buffer.size   = bufferInfo.sizeBytes;
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.label            = "vulkan-descriptor-group";
+  groupInfo.layout           = layout;
+  groupInfo.entryCount       = 1u;
+  groupInfo.pEntries         = &groupEntry;
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
+    goto cleanup;
+  }
+
+  layouts[0] = layout;
+  pipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
+  pipelineInfo.bindGroupLayoutCount = 1u;
+  pipelineInfo.ppBindGroupLayouts   = layouts;
+  if (GPUCreatePipelineLayout(device,
+                              &pipelineInfo,
+                              &pipelineLayout) != GPU_OK ||
+      !pipelineLayout ||
+      GPUAcquireCommandBuffer(queue,
+                              "vulkan-descriptor-bind",
+                              &cmdb) != GPU_OK ||
+      !cmdb || !(pass = GPUBeginComputePass(cmdb,
+                                            "vulkan-descriptor-bind"))) {
+    goto cleanup;
+  }
+
+  pipelineLayoutVk = pipelineLayout->_native;
+  passVk           = pass->_priv;
+  if (!pipelineLayoutVk || !passVk) {
+    GPUEndComputePass(pass);
+    goto cleanup;
+  }
+  pass->_pipelineLayout          = pipelineLayout;
+  passVk->pipelineLayout         = pipelineLayoutVk->layout;
+  passVk->descriptorPipelineLayout = pipelineLayoutVk;
+  GPUBindComputeGroup(pass, 0u, group, 0u, NULL);
+  ok = pass->_boundGroups[0] == group;
+  GPUEndComputePass(pass);
+  if (!ok) {
+    goto cleanup;
+  }
+
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.ppCommandBuffers   = &cmdb;
+  submitInfo.fence              = fence;
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
+      GPUWaitFence(fence, 5000000000ull) != GPU_OK) {
+    ok = 0;
+    goto cleanup;
+  }
+
+  layoutVk = layout->_native;
+  groupVk  = group->_native;
+  ok = layoutVk && groupVk &&
+       layoutVk->descriptorBuffer == deviceVk->descriptorBuffer;
+#ifdef VK_EXT_descriptor_buffer
+  if (ok && deviceVk->descriptorBuffer) {
+    ok = groupVk->descriptorChunk && !groupVk->set &&
+         buffer->_gpuAddress != 0u;
+  } else
+#endif
+  if (ok) {
+    ok = groupVk->set != VK_NULL_HANDLE;
+  }
+
+cleanup:
+  GPUDestroyBindGroup(group);
+  GPUDestroyPipelineLayout(pipelineLayout);
+  GPUDestroyBindGroupLayout(layout);
+  GPUDestroyBuffer(buffer);
+  return ok;
 }
 
 static int
@@ -911,6 +1053,8 @@ main(void) {
   }
 
   ok = 1;
+  VULKAN_CHECK("descriptor binding path",
+               descriptor_binding_path(device, compute, fence));
   VULKAN_CHECK("buffer transfer reuse",
                buffer_transfers_reuse(device, graphics, fence));
   VULKAN_CHECK("texture upload reuse",

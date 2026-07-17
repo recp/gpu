@@ -66,7 +66,8 @@
 
 enum {
   GPU_VK_MAX_DYNAMIC_OFFSETS          = 64u,
-  GPU_VK_DESCRIPTOR_POOL_TYPE_COUNT   = 8u
+  GPU_VK_DESCRIPTOR_POOL_TYPE_COUNT   = 8u,
+  GPU_VK_DESCRIPTOR_BUFFER_SLOT_COUNT = 64u
 };
 
 #if defined(NDEBUG) && defined(__GNUC__)
@@ -207,11 +208,16 @@ typedef struct GPUAdapterVk {
   uint32_t                      rayTracingShaderGroupHandleAlignment;
   uint32_t                      rayTracingShaderGroupBaseAlignment;
   uint32_t                      rayTracingMaxRecursionDepth;
+#ifdef VK_EXT_descriptor_buffer
+  VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptorBufferProperties;
+#endif
   bool                          dynamicRendering;
   bool                          shaderFloat16;
   bool                          storageBuffer16BitAccess;
   bool                          vulkanMemoryModel;
   bool                          descriptorIndexing;
+  bool                          bufferDeviceAddress;
+  bool                          descriptorBuffer;
   bool                          bindless;
   bool                          meshShader;
   bool                          taskShader;
@@ -231,13 +237,21 @@ typedef struct GPUDeviceVk {
   PFN_vkCmdBeginRenderingKHR  beginRendering;
   PFN_vkCmdEndRenderingKHR    endRendering;
   PFN_vkCmdPipelineBarrier2KHR pipelineBarrier2;
+  PFN_vkGetBufferDeviceAddress getBufferDeviceAddress;
+#ifdef VK_EXT_descriptor_buffer
+  PFN_vkGetDescriptorSetLayoutSizeEXT getDescriptorSetLayoutSize;
+  PFN_vkGetDescriptorSetLayoutBindingOffsetEXT getDescriptorSetLayoutBindingOffset;
+  PFN_vkGetDescriptorEXT getDescriptor;
+  PFN_vkCmdBindDescriptorBuffersEXT bindDescriptorBuffers;
+  PFN_vkCmdSetDescriptorBufferOffsetsEXT setDescriptorBufferOffsets;
+  VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptorBufferProperties;
+#endif
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
   PFN_vkCreateAccelerationStructureKHR createAccelerationStructure;
   PFN_vkDestroyAccelerationStructureKHR destroyAccelerationStructure;
   PFN_vkGetAccelerationStructureBuildSizesKHR getAccelerationStructureBuildSizes;
   PFN_vkCmdBuildAccelerationStructuresKHR buildAccelerationStructures;
   PFN_vkGetAccelerationStructureDeviceAddressKHR getAccelerationStructureAddress;
-  PFN_vkGetBufferDeviceAddress getBufferDeviceAddress;
 #endif
 #if defined(VK_KHR_acceleration_structure) && \
     defined(VK_KHR_ray_tracing_pipeline)
@@ -275,6 +289,8 @@ typedef struct GPUDeviceVk {
   bool                       vrsAttachment;
   bool                       timelineSemaphore;
   bool                       synchronization2;
+  bool                       bufferDeviceAddress;
+  bool                       descriptorBuffer;
   bool                       rayQuery;
   bool                       rayTracingPipeline;
 } GPUDeviceVk;
@@ -403,12 +419,43 @@ typedef struct GPUDescriptorPoolVk {
   VkDescriptorPool            pool;
 } GPUDescriptorPoolVk;
 
+#ifdef VK_EXT_descriptor_buffer
+typedef struct GPUDescriptorBufferChunkVk {
+  struct GPUDescriptorBufferChunkVk *next;
+  void                              *mapped;
+  VkBuffer                           buffer;
+  VkDeviceMemory                     memory;
+  VkDeviceAddress                    address;
+  VkDeviceSize                       allocationSize;
+  uint64_t                           usedSlots;
+  bool                               coherent;
+} GPUDescriptorBufferChunkVk;
+
+typedef struct GPUDescriptorBindingVk {
+  VkDeviceSize     offset;
+  VkDeviceSize     size;
+  VkDescriptorType type;
+  uint32_t         binding;
+  uint32_t         count;
+} GPUDescriptorBindingVk;
+#endif
+
 typedef struct GPUBindGroupLayoutVk {
   GPUDescriptorPoolVk  *descriptorPools;
+#ifdef VK_EXT_descriptor_buffer
+  GPUDescriptorBufferChunkVk *descriptorChunks;
+  GPUDescriptorBindingVk     *descriptorBindings;
+  GPUDeviceVk                *gpuDevice;
+#endif
   uint32_t             *dynamicOrder;
   VkSampler            *immutableSamplers;
   VkDevice              device;
   VkDescriptorSetLayout layout;
+#ifdef VK_EXT_descriptor_buffer
+  VkDeviceSize          descriptorSize;
+  VkDeviceSize          descriptorStride;
+  VkDeviceSize          nonCoherentAtomSize;
+#endif
 #if defined(_WIN32) || defined(WIN32)
   CRITICAL_SECTION      poolLock;
 #else
@@ -418,20 +465,33 @@ typedef struct GPUBindGroupLayoutVk {
   uint32_t              immutableSamplerCount;
   uint32_t              poolSizeCount;
   uint32_t              poolSetCapacity;
+#ifdef VK_EXT_descriptor_buffer
+  uint32_t              descriptorBindingCount;
+  uint32_t              descriptorSlotCapacity;
+#endif
   bool                  poolLockInitialized;
+  bool                  descriptorBuffer;
   VkDescriptorPoolSize  poolSizes[GPU_VK_DESCRIPTOR_POOL_TYPE_COUNT];
 } GPUBindGroupLayoutVk;
 
 typedef struct GPUPipelineLayoutVk {
   VkDevice         device;
   VkPipelineLayout layout;
+  bool             descriptorBuffer;
 } GPUPipelineLayoutVk;
 
 typedef struct GPUBindGroupVk {
   GPUBindGroupLayoutVk *layout;
   GPUDescriptorPoolVk  *pool;
+#ifdef VK_EXT_descriptor_buffer
+  GPUDescriptorBufferChunkVk *descriptorChunk;
+#endif
   VkDevice               device;
   VkDescriptorSet        set;
+#ifdef VK_EXT_descriptor_buffer
+  VkDeviceSize           descriptorOffset;
+  uint32_t               descriptorSlot;
+#endif
 } GPUBindGroupVk;
 
 typedef struct GPUSemaphoreVk {
@@ -469,10 +529,12 @@ typedef struct GPURenderEncoderVk {
   GPUDeviceVk     *device;
   GPURenderPassVk *renderPass;
   GPUBuffer       *indexBuffer;
+  GPUPipelineLayoutVk *descriptorPipelineLayout;
   VkCommandBuffer  command;
   VkPipelineLayout pipelineLayout;
   VkDeviceSize     indexOffset;
   VkExtent2D       extent;
+  GPUBindGroupVk  *descriptorGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   uint32_t         dynamicOffsets[GPU_VK_MAX_DYNAMIC_OFFSETS];
   GPUIndexType     indexType;
   bool             indexBound;
@@ -480,8 +542,10 @@ typedef struct GPURenderEncoderVk {
 } GPURenderEncoderVk;
 
 typedef struct GPUComputeEncoderVk {
+  GPUPipelineLayoutVk *descriptorPipelineLayout;
   VkCommandBuffer  command;
   VkPipelineLayout pipelineLayout;
+  GPUBindGroupVk  *descriptorGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   uint32_t         dynamicOffsets[GPU_VK_MAX_DYNAMIC_OFFSETS];
   bool             debugLabelActive;
 } GPUComputeEncoderVk;
@@ -499,8 +563,10 @@ typedef struct GPUShaderTableVk {
 } GPUShaderTableVk;
 
 typedef struct GPURayTracingEncoderVk {
+  GPUPipelineLayoutVk *descriptorPipelineLayout;
   VkCommandBuffer  command;
   VkPipelineLayout pipelineLayout;
+  GPUBindGroupVk  *descriptorGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   uint32_t         dynamicOffsets[GPU_VK_MAX_DYNAMIC_OFFSETS];
   bool             debugLabelActive;
 } GPURayTracingEncoderVk;
@@ -628,6 +694,7 @@ typedef struct GPUSamplerVk {
 } GPUSamplerVk;
 
 typedef struct GPUShaderLayoutVk {
+  GPUPipelineLayoutVk   *baseLayout;
   VkSampler             *samplers;
   VkDevice               device;
   VkPipelineLayout       layout;
@@ -638,6 +705,7 @@ typedef struct GPUShaderLayoutVk {
   uint32_t               samplerCount;
   uint32_t               samplerGroup;
   bool                   ownsLayout;
+  bool                   descriptorBuffer;
 } GPUShaderLayoutVk;
 
 #if defined(VK_KHR_acceleration_structure) && \

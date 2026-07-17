@@ -888,6 +888,11 @@ vk_createRayTracingPipeline(GPUDevice                                *device,
   }
 
   pipelineInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+#ifdef VK_EXT_descriptor_buffer
+  if (native->shaderLayout.descriptorBuffer) {
+    pipelineInfo.flags |= VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+  }
+#endif
   pipelineInfo.stageCount                   = stageCount;
   pipelineInfo.pStages                      = stages;
   pipelineInfo.groupCount                   = info->groupCount;
@@ -1277,10 +1282,15 @@ vk_bindRayTracingPipeline(GPURayTracingPassEncoderEXT *pass,
   vkCmdBindPipeline(native->command,
                     VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
                     pipelineVk->pipeline);
+  if (native->descriptorPipelineLayout !=
+      pipelineVk->shaderLayout.baseLayout) {
+    memset(native->descriptorGroups, 0, sizeof(native->descriptorGroups));
+  }
   vk_bindShaderSamplers(native->command,
                         VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
                         &pipelineVk->shaderLayout);
   native->pipelineLayout = pipelineVk->shaderLayout.layout;
+  native->descriptorPipelineLayout = pipelineVk->shaderLayout.baseLayout;
 }
 
 static void

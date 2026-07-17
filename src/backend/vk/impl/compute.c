@@ -72,6 +72,11 @@ vk_createComputePipeline(GPUDevice                          *device,
   pipelineInfo.sType  = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
   pipelineInfo.stage  = stage;
   pipelineInfo.layout = native->shaderLayout.layout;
+#ifdef VK_EXT_descriptor_buffer
+  if (native->shaderLayout.descriptorBuffer) {
+    pipelineInfo.flags |= VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+  }
+#endif
   pipelineCache = vk_lockCache(info->cache);
   result = vkCreateComputePipelines(native->device,
                                     pipelineCache,
@@ -162,10 +167,14 @@ vk_setComputePipelineState(GPUComputePassEncoder   *encoder,
   vkCmdBindPipeline(native->command,
                     VK_PIPELINE_BIND_POINT_COMPUTE,
                     pipeline->pipeline);
+  if (native->descriptorPipelineLayout != pipeline->shaderLayout.baseLayout) {
+    memset(native->descriptorGroups, 0, sizeof(native->descriptorGroups));
+  }
   vk_bindShaderSamplers(native->command,
                         VK_PIPELINE_BIND_POINT_COMPUTE,
                         &pipeline->shaderLayout);
   native->pipelineLayout     = pipeline->shaderLayout.layout;
+  native->descriptorPipelineLayout = pipeline->shaderLayout.baseLayout;
   encoder->_workgroupSize[0] = pipelineState->workgroupSize[0];
   encoder->_workgroupSize[1] = pipelineState->workgroupSize[1];
   encoder->_workgroupSize[2] = pipelineState->workgroupSize[2];

@@ -151,10 +151,8 @@ vk__createBuffer(GPUDevice                 * __restrict device,
   GPUBufferVk              state = {0};
   VkBufferCreateInfo       bufferInfo = {0};
   VkMemoryAllocateInfo     allocationInfo = {0};
-#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
   VkMemoryAllocateFlagsInfo allocationFlags = {0};
   VkBufferDeviceAddressInfo addressInfo = {0};
-#endif
   VkMemoryRequirements     requirements;
   VkMemoryPropertyFlags    memoryFlags;
   VkMemoryPropertyFlags    preferredFlags;
@@ -169,6 +167,11 @@ vk__createBuffer(GPUDevice                 * __restrict device,
 
   *outBuffer                = NULL;
   deviceVk                  = device->_priv;
+  if (deviceVk->descriptorBuffer &&
+      (info->usage & (GPU_BUFFER_USAGE_UNIFORM |
+                      GPU_BUFFER_USAGE_STORAGE)) != 0u) {
+    bufferInfo.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+  }
   state.device              = deviceVk->device;
   bufferInfo.sType          = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.size           = info->sizeBytes;
@@ -197,9 +200,9 @@ vk__createBuffer(GPUDevice                 * __restrict device,
   allocationInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
   allocationInfo.allocationSize  = requirements.size;
   allocationInfo.memoryTypeIndex = memoryTypeIndex;
-#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
   if ((bufferInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0u) {
-    if (!deviceVk->rayQuery || !deviceVk->getBufferDeviceAddress) {
+    if (!deviceVk->bufferDeviceAddress ||
+        !deviceVk->getBufferDeviceAddress) {
       vk__destroyBufferState(&state);
       return GPU_ERROR_UNSUPPORTED;
     }
@@ -207,7 +210,6 @@ vk__createBuffer(GPUDevice                 * __restrict device,
     allocationFlags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
     allocationInfo.pNext  = &allocationFlags;
   }
-#endif
   if (vkAllocateMemory(state.device,
                        &allocationInfo,
                        NULL,
@@ -246,7 +248,6 @@ vk__createBuffer(GPUDevice                 * __restrict device,
   buffer->device    = device;
   buffer->sizeBytes = info->sizeBytes;
   buffer->usage     = info->usage;
-#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
   if ((bufferInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0u) {
     addressInfo.sType  = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
     addressInfo.buffer = state.buffer;
@@ -258,7 +259,6 @@ vk__createBuffer(GPUDevice                 * __restrict device,
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
-#endif
   *outBuffer        = buffer;
   return GPU_OK;
 }

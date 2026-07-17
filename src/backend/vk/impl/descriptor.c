@@ -43,6 +43,16 @@ typedef struct GPUDescriptorWriteVk {
 #endif
 } GPUDescriptorWriteVk;
 
+#ifdef VK_EXT_descriptor_buffer
+typedef struct GPUDescriptorBufferWriteVk {
+  GPUDevice      *device;
+  GPUBindGroupVk *group;
+  VkDeviceSize    dirtyBegin;
+  VkDeviceSize    dirtyEnd;
+  bool            valid;
+} GPUDescriptorBufferWriteVk;
+#endif
+
 static bool
 vk__addPoolSize(VkDescriptorPoolSize *sizes,
                 uint32_t             *count,
@@ -99,6 +109,72 @@ vk__descriptorType(GPUBindingType type,
 
   return false;
 }
+
+#ifdef VK_EXT_descriptor_buffer
+static VkDeviceSize
+vk__descriptorByteSize(const GPUDeviceVk *device,
+                       VkDescriptorType   type) {
+  const VkPhysicalDeviceDescriptorBufferPropertiesEXT *properties;
+
+  if (!device) {
+    return 0u;
+  }
+  properties = &device->descriptorBufferProperties;
+  switch (type) {
+    case VK_DESCRIPTOR_TYPE_SAMPLER:
+      return properties->samplerDescriptorSize;
+    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+      return properties->sampledImageDescriptorSize;
+    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+      return properties->storageImageDescriptorSize;
+    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+      return properties->uniformBufferDescriptorSize;
+    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+      return properties->storageBufferDescriptorSize;
+#ifdef VK_KHR_acceleration_structure
+    case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+      return properties->accelerationStructureDescriptorSize;
+#endif
+    default:
+      return 0u;
+  }
+}
+
+static VkDeviceSize
+vk__alignDescriptorSize(VkDeviceSize value, VkDeviceSize alignment) {
+  VkDeviceSize remainder;
+
+  if (alignment == 0u) {
+    return 0u;
+  }
+  remainder = value % alignment;
+  if (remainder == 0u) {
+    return value;
+  }
+  if (value > UINT64_MAX - (alignment - remainder)) {
+    return 0u;
+  }
+  return value + alignment - remainder;
+}
+
+static void
+vk__destroyDescriptorChunk(VkDevice device,
+                           GPUDescriptorBufferChunkVk *chunk) {
+  if (!chunk) {
+    return;
+  }
+  if (device && chunk->memory && chunk->mapped) {
+    vkUnmapMemory(device, chunk->memory);
+  }
+  if (device && chunk->buffer) {
+    vkDestroyBuffer(device, chunk->buffer, NULL);
+  }
+  if (device && chunk->memory) {
+    vkFreeMemory(device, chunk->memory, NULL);
+  }
+  free(chunk);
+}
+#endif
 
 static VkShaderStageFlags
 vk__descriptorStages(GPUShaderStageFlags visibility) {
@@ -182,6 +258,15 @@ vk__destroyBindGroupLayoutState(GPUBindGroupLayoutVk *native) {
     free(pool);
     pool = next;
   }
+#ifdef VK_EXT_descriptor_buffer
+  while (native->descriptorChunks) {
+    GPUDescriptorBufferChunkVk *chunk;
+
+    chunk = native->descriptorChunks;
+    native->descriptorChunks = chunk->next;
+    vk__destroyDescriptorChunk(native->device, chunk);
+  }
+#endif
   if (native->device && native->layout) {
     vkDestroyDescriptorSetLayout(native->device, native->layout, NULL);
   }
@@ -194,6 +279,9 @@ vk__destroyBindGroupLayoutState(GPUBindGroupLayoutVk *native) {
   }
   free(native->dynamicOrder);
   free(native->immutableSamplers);
+#ifdef VK_EXT_descriptor_buffer
+  free(native->descriptorBindings);
+#endif
 #if defined(_WIN32) || defined(WIN32)
   if (native->poolLockInitialized) {
     DeleteCriticalSection(&native->poolLock);
@@ -217,6 +305,7 @@ vk_createBindGroupLayout(GPUDevice          *device,
   } VkDynamicBindingOrder;
 
   GPUBindGroupLayoutVk              *native;
+  GPUDeviceVk                       *deviceVk;
   const GPUBindGroupLayoutEntry     *entries;
   const uint32_t                    *backendBindings;
   VkDescriptorSetLayoutBinding      *bindings;
@@ -229,11 +318,13 @@ vk_createBindGroupLayout(GPUDevice          *device,
   uint32_t                           immutableSamplerCount;
   uint64_t                           poolDescriptorCount;
   bool                               bindless;
+  bool                               descriptorBuffer;
 
   if (!device || !device->_priv || !layout) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  deviceVk = device->_priv;
   entries = GPUGetBindGroupLayoutEntries(layout, &entryCount);
   bindless = gpuBindGroupLayoutIsBindless(layout);
   backendBindings = gpuGetBindGroupLayoutBackendBindings(
@@ -246,12 +337,16 @@ vk_createBindGroupLayout(GPUDevice          *device,
   }
 
   immutableSamplerCount = 0u;
+  descriptorBuffer = deviceVk->descriptorBuffer && !bindless && entryCount > 0u;
   for (uint32_t i = 0u; i < entryCount; i++) {
     if (entries[i].immutableSampler) {
       if (entries[i].arrayCount > UINT32_MAX - immutableSamplerCount) {
         return GPU_ERROR_UNSUPPORTED;
       }
       immutableSamplerCount += entries[i].arrayCount;
+    }
+    if (entries[i].immutableSampler || entries[i].hasDynamicOffset) {
+      descriptorBuffer = false;
     }
   }
 
@@ -263,7 +358,9 @@ vk_createBindGroupLayout(GPUDevice          *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native->device          = ((GPUDeviceVk *)device->_priv)->device;
+  native->gpuDevice       = deviceVk;
+  native->device          = deviceVk->device;
+  native->descriptorBuffer = descriptorBuffer;
   native->poolSetCapacity = GPU_VK_DESCRIPTOR_POOL_SET_COUNT;
 #if defined(_WIN32) || defined(WIN32)
   InitializeCriticalSection(&native->poolLock);
@@ -444,6 +541,13 @@ vk_createBindGroupLayout(GPUDevice          *device,
   info.pNext        = bindless ? &bindingFlagsInfo : NULL;
   info.bindingCount = entryCount;
   info.pBindings    = bindings;
+#ifdef VK_EXT_descriptor_buffer
+  if (native->descriptorBuffer) {
+    info.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+  }
+#else
+  native->descriptorBuffer = false;
+#endif
   if (vkCreateDescriptorSetLayout(native->device,
                                   &info,
                                   NULL,
@@ -453,6 +557,72 @@ vk_createBindGroupLayout(GPUDevice          *device,
     vk__destroyBindGroupLayoutState(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
+#ifdef VK_EXT_descriptor_buffer
+  if (native->descriptorBuffer) {
+    const VkPhysicalDeviceDescriptorBufferPropertiesEXT *properties;
+    VkDeviceSize                                         maxRange;
+
+    properties = &deviceVk->descriptorBufferProperties;
+    deviceVk->getDescriptorSetLayoutSize(native->device,
+                                         native->layout,
+                                         &native->descriptorSize);
+    native->descriptorStride = vk__alignDescriptorSize(
+      native->descriptorSize,
+      properties->descriptorBufferOffsetAlignment
+    );
+    maxRange = properties->maxResourceDescriptorBufferRange;
+    if (properties->maxSamplerDescriptorBufferRange < maxRange) {
+      maxRange = properties->maxSamplerDescriptorBufferRange;
+    }
+    if (native->descriptorSize == 0u || native->descriptorStride == 0u ||
+        native->descriptorStride > maxRange) {
+      free(bindingFlags);
+      free(bindings);
+      vk__destroyBindGroupLayoutState(native);
+      return GPU_ERROR_UNSUPPORTED;
+    }
+    native->descriptorSlotCapacity = (uint32_t)(maxRange /
+                                                native->descriptorStride);
+    if (native->descriptorSlotCapacity > GPU_VK_DESCRIPTOR_BUFFER_SLOT_COUNT) {
+      native->descriptorSlotCapacity = GPU_VK_DESCRIPTOR_BUFFER_SLOT_COUNT;
+    }
+    native->descriptorBindings = calloc(entryCount,
+                                         sizeof(*native->descriptorBindings));
+    if (native->descriptorSlotCapacity == 0u ||
+        !native->descriptorBindings) {
+      free(bindingFlags);
+      free(bindings);
+      vk__destroyBindGroupLayoutState(native);
+      return GPU_ERROR_OUT_OF_MEMORY;
+    }
+    native->descriptorBindingCount = entryCount;
+    native->nonCoherentAtomSize = device->adapter && device->adapter->_priv
+      ? ((GPUAdapterVk *)device->adapter->_priv)->props.limits.nonCoherentAtomSize
+      : 1u;
+    for (uint32_t i = 0u; i < entryCount; i++) {
+      GPUDescriptorBindingVk *binding;
+
+      binding          = &native->descriptorBindings[i];
+      binding->binding = bindings[i].binding;
+      binding->type    = bindings[i].descriptorType;
+      binding->size    = vk__descriptorByteSize(deviceVk, binding->type);
+      binding->count   = bindings[i].descriptorCount;
+      deviceVk->getDescriptorSetLayoutBindingOffset(native->device,
+                                                    native->layout,
+                                                    binding->binding,
+                                                    &binding->offset);
+      if (binding->size == 0u || binding->offset > native->descriptorSize ||
+          bindings[i].descriptorCount >
+            (native->descriptorSize - binding->offset) / binding->size) {
+        free(bindingFlags);
+        free(bindings);
+        vk__destroyBindGroupLayoutState(native);
+        return GPU_ERROR_UNSUPPORTED;
+      }
+    }
+  }
+#endif
 
   free(bindingFlags);
   free(bindings);
@@ -483,12 +653,14 @@ vk_createPipelineLayout(GPUDevice         *device,
   GPUShaderStageFlags          pushStages;
   uint32_t                     groupCount;
   uint32_t                     pushSize;
+  bool                         descriptorBuffer;
 
   if (!device || !device->_priv || !layout) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   groups = gpuGetPipelineLayoutGroups(layout, &groupCount);
+  descriptorBuffer = false;
   if (groupCount > GPU_ENCODER_MAX_BIND_GROUPS ||
       (groupCount > 0u && !groups)) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -501,6 +673,7 @@ vk_createPipelineLayout(GPUDevice         *device,
       return GPU_ERROR_BACKEND_FAILURE;
     }
     setLayouts[i] = group->layout;
+    descriptorBuffer |= group->descriptorBuffer;
   }
 
   gpuGetPipelineLayoutPushConstants(layout, &pushSize, &pushStages);
@@ -518,6 +691,7 @@ vk_createPipelineLayout(GPUDevice         *device,
   }
 
   native->device                  = ((GPUDeviceVk *)device->_priv)->device;
+  native->descriptorBuffer        = descriptorBuffer;
   info.sType                      = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   info.setLayoutCount             = groupCount;
   info.pSetLayouts                = groupCount > 0u ? setLayouts : NULL;
@@ -620,7 +794,9 @@ vk_createShaderLayout(GPUDevice              *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  outLayout->device = base->device;
+  outLayout->baseLayout       = base;
+  outLayout->device           = base->device;
+  outLayout->descriptorBuffer = base->descriptorBuffer;
   if (samplerCount == 0u) {
     outLayout->layout = base->layout;
     return GPU_OK;
@@ -948,6 +1124,222 @@ vk__freeDescriptorSet(GPUBindGroupVk *group) {
   group->pool = NULL;
 }
 
+#ifdef VK_EXT_descriptor_buffer
+static GPUResult
+vk__createDescriptorChunk(GPUDevice                    *device,
+                          GPUBindGroupLayoutVk          *layout,
+                          GPUDescriptorBufferChunkVk  **outChunk) {
+  GPUDescriptorBufferChunkVk *chunk;
+  VkBufferCreateInfo           bufferInfo = {0};
+  VkMemoryAllocateFlagsInfo    allocationFlags = {0};
+  VkMemoryAllocateInfo         allocationInfo = {0};
+  VkBufferDeviceAddressInfo    addressInfo = {0};
+  VkMemoryRequirements         requirements;
+  VkMemoryPropertyFlags        memoryFlags;
+  uint32_t                     memoryTypeIndex;
+
+  if (!device || !layout || !layout->gpuDevice || !outChunk ||
+      layout->descriptorStride == 0u ||
+      layout->descriptorSlotCapacity == 0u) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outChunk = NULL;
+  chunk = calloc(1, sizeof(*chunk));
+  if (!chunk) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.size  = layout->descriptorStride *
+                     layout->descriptorSlotCapacity;
+  bufferInfo.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+                     VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT |
+                     VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+  bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  if (vkCreateBuffer(layout->device,
+                     &bufferInfo,
+                     NULL,
+                     &chunk->buffer) != VK_SUCCESS) {
+    vk__destroyDescriptorChunk(layout->device, chunk);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  vkGetBufferMemoryRequirements(layout->device,
+                                chunk->buffer,
+                                &requirements);
+  if (!vk_findMemoryType(device,
+                         requirements.memoryTypeBits,
+                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                         &memoryTypeIndex,
+                         &memoryFlags)) {
+    vk__destroyDescriptorChunk(layout->device, chunk);
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  allocationFlags.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+  allocationFlags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+  allocationInfo.sType  = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocationInfo.pNext  = &allocationFlags;
+  allocationInfo.allocationSize  = requirements.size;
+  allocationInfo.memoryTypeIndex = memoryTypeIndex;
+  if (vkAllocateMemory(layout->device,
+                       &allocationInfo,
+                       NULL,
+                       &chunk->memory) != VK_SUCCESS ||
+      vkBindBufferMemory(layout->device,
+                         chunk->buffer,
+                         chunk->memory,
+                         0u) != VK_SUCCESS ||
+      vkMapMemory(layout->device,
+                  chunk->memory,
+                  0u,
+                  VK_WHOLE_SIZE,
+                  0u,
+                  &chunk->mapped) != VK_SUCCESS) {
+    vk__destroyDescriptorChunk(layout->device, chunk);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  addressInfo.sType  = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+  addressInfo.buffer = chunk->buffer;
+  chunk->address = layout->gpuDevice->getBufferDeviceAddress(
+    layout->device,
+    &addressInfo
+  );
+  if (chunk->address == 0u) {
+    vk__destroyDescriptorChunk(layout->device, chunk);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  chunk->allocationSize = requirements.size;
+  chunk->coherent =
+    (memoryFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0u;
+  *outChunk = chunk;
+  return GPU_OK;
+}
+
+static GPUResult
+vk__allocateDescriptorSlot(GPUDevice            *device,
+                           GPUBindGroupLayoutVk  *layout,
+                           GPUBindGroupVk        *group) {
+  GPUDescriptorBufferChunkVk *chunk;
+  GPUResult                    result;
+  uint32_t                     slot;
+
+  if (!device || !layout || !group || !layout->descriptorBuffer) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  vk__descriptorPoolLock(layout);
+  chunk = layout->descriptorChunks;
+  while (chunk) {
+    if (chunk->usedSlots !=
+        (layout->descriptorSlotCapacity == 64u
+           ? UINT64_MAX
+           : ((1ull << layout->descriptorSlotCapacity) - 1ull))) {
+      break;
+    }
+    chunk = chunk->next;
+  }
+  if (!chunk) {
+    result = vk__createDescriptorChunk(device, layout, &chunk);
+    if (result != GPU_OK) {
+      vk__descriptorPoolUnlock(layout);
+      return result;
+    }
+    chunk->next              = layout->descriptorChunks;
+    layout->descriptorChunks = chunk;
+  }
+
+  slot = 0u;
+  while ((chunk->usedSlots & (1ull << slot)) != 0u) {
+    slot++;
+  }
+  chunk->usedSlots |= 1ull << slot;
+  vk__descriptorPoolUnlock(layout);
+
+  group->descriptorChunk  = chunk;
+  group->descriptorSlot   = slot;
+  group->descriptorOffset = layout->descriptorStride * slot;
+  memset((uint8_t *)chunk->mapped + group->descriptorOffset,
+         0,
+         layout->descriptorSize);
+  return GPU_OK;
+}
+
+static void
+vk__freeDescriptorSlot(GPUBindGroupVk *group) {
+  GPUBindGroupLayoutVk *layout;
+
+  layout = group ? group->layout : NULL;
+  if (!layout || !group->descriptorChunk ||
+      group->descriptorSlot >= layout->descriptorSlotCapacity) {
+    return;
+  }
+  vk__descriptorPoolLock(layout);
+  group->descriptorChunk->usedSlots &= ~(1ull << group->descriptorSlot);
+  vk__descriptorPoolUnlock(layout);
+  group->descriptorChunk  = NULL;
+  group->descriptorOffset = 0u;
+  group->descriptorSlot   = 0u;
+}
+
+static const GPUDescriptorBindingVk *
+vk__findDescriptorBinding(const GPUBindGroupLayoutVk *layout,
+                          uint32_t                    binding,
+                          VkDescriptorType            type) {
+  if (!layout) {
+    return NULL;
+  }
+  for (uint32_t i = 0u; i < layout->descriptorBindingCount; i++) {
+    const GPUDescriptorBindingVk *candidate;
+
+    candidate = &layout->descriptorBindings[i];
+    if (candidate->binding == binding && candidate->type == type) {
+      return candidate;
+    }
+  }
+  return NULL;
+}
+
+static void
+vk__flushDescriptorBuffer(GPUDescriptorBufferWriteVk *context) {
+  GPUBindGroupVk              *group;
+  GPUBindGroupLayoutVk        *layout;
+  GPUDescriptorBufferChunkVk  *chunk;
+  VkMappedMemoryRange          range = {0};
+  VkDeviceSize                 begin;
+  VkDeviceSize                 end;
+  VkDeviceSize                 atom;
+
+  if (!context || !context->valid ||
+      context->dirtyBegin == UINT64_MAX) {
+    return;
+  }
+  group  = context->group;
+  layout = group ? group->layout : NULL;
+  chunk  = group ? group->descriptorChunk : NULL;
+  if (!layout || !chunk || chunk->coherent) {
+    return;
+  }
+
+  atom  = layout->nonCoherentAtomSize ? layout->nonCoherentAtomSize : 1u;
+  begin = group->descriptorOffset + context->dirtyBegin;
+  end   = group->descriptorOffset + context->dirtyEnd;
+  begin -= begin % atom;
+  end = vk__alignDescriptorSize(end, atom);
+  range.sType  = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+  range.memory = chunk->memory;
+  range.offset = begin;
+  range.size   = end >= chunk->allocationSize
+                   ? VK_WHOLE_SIZE
+                   : end - begin;
+  if (vkFlushMappedMemoryRanges(group->device, 1u, &range) != VK_SUCCESS) {
+    context->valid = false;
+  }
+}
+#endif
+
 static void
 vk__flushDescriptorWrites(GPUDescriptorWriteVk *context) {
   if (!context || !context->valid || context->writeCount == 0u) {
@@ -1097,6 +1489,153 @@ vk__writeDescriptor(void *context,
   }
 }
 
+#ifdef VK_EXT_descriptor_buffer
+static void
+vk__writeDescriptorBuffer(void                          *context,
+                          const GPUBindGroupBindingView *binding) {
+  GPUDescriptorBufferWriteVk  *writeContext;
+  GPUBindGroupVk              *group;
+  GPUBindGroupLayoutVk        *layout;
+  const GPUDescriptorBindingVk *descriptorBinding;
+  GPUBufferVk                 *buffer;
+  GPUTexture                  *gpuTexture;
+  GPUTextureVk                *texture;
+  GPUTextureViewVk            *view;
+  GPUSamplerVk                *sampler;
+  VkDescriptorAddressInfoEXT   addressInfo = {0};
+  VkDescriptorImageInfo        imageInfo = {0};
+  VkDescriptorGetInfoEXT       getInfo = {0};
+  VkDescriptorType             type;
+  VkDeviceSize                 offset;
+  uint8_t                     *destination;
+  VkSampler                    samplerHandle;
+
+  writeContext = context;
+  group        = writeContext ? writeContext->group : NULL;
+  layout       = group ? group->layout : NULL;
+  if (!writeContext || !writeContext->valid || !binding || !layout ||
+      !layout->gpuDevice || !layout->gpuDevice->getDescriptor ||
+      !vk__descriptorType(binding->bindingType,
+                          binding->hasDynamicOffset,
+                          &type)) {
+    if (writeContext) {
+      writeContext->valid = false;
+    }
+    return;
+  }
+  if ((binding->kind == GPUBindKindBuffer && !binding->buffer) ||
+      (binding->kind == GPUBindKindTexture && !binding->textureView) ||
+      (binding->kind == GPUBindKindSampler && !binding->sampler) ||
+      (binding->kind == GPUBindKindAccelerationStructure &&
+       !binding->accelerationStructure)) {
+    return;
+  }
+
+  descriptorBinding = vk__findDescriptorBinding(layout,
+                                                 binding->binding,
+                                                 type);
+  if (!descriptorBinding || binding->arrayIndex >= descriptorBinding->count) {
+    writeContext->valid = false;
+    return;
+  }
+  offset = descriptorBinding->offset +
+           descriptorBinding->size * binding->arrayIndex;
+  if (offset > layout->descriptorSize ||
+      descriptorBinding->size > layout->descriptorSize - offset) {
+    writeContext->valid = false;
+    return;
+  }
+  destination = (uint8_t *)group->descriptorChunk->mapped +
+                group->descriptorOffset + offset;
+  getInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+  getInfo.type  = type;
+
+  switch (binding->kind) {
+    case GPUBindKindBuffer:
+      buffer = binding->buffer ? binding->buffer->_priv : NULL;
+      if (!buffer || !buffer->buffer || binding->buffer->_gpuAddress == 0u ||
+          binding->buffer->device != writeContext->device) {
+        writeContext->valid = false;
+        return;
+      }
+      addressInfo.sType   = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT;
+      addressInfo.address = binding->buffer->_gpuAddress + binding->offset;
+      addressInfo.range   = binding->size;
+      addressInfo.format  = VK_FORMAT_UNDEFINED;
+      if (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) {
+        getInfo.data.pUniformBuffer = &addressInfo;
+      } else {
+        getInfo.data.pStorageBuffer = &addressInfo;
+      }
+      break;
+    case GPUBindKindTexture:
+      view       = binding->textureView ? binding->textureView->_priv : NULL;
+      gpuTexture = binding->textureView ? binding->textureView->_texture : NULL;
+      texture    = gpuTexture ? gpuTexture->_priv : NULL;
+      if (!view || !view->view || !texture || !texture->image ||
+          view->device != group->device || texture->device != group->device) {
+        writeContext->valid = false;
+        return;
+      }
+      imageInfo.imageView = view->view;
+      imageInfo.imageLayout =
+        binding->bindingType == GPU_BINDING_STORAGE_TEXTURE ||
+        (gpuTexture->usage & GPU_TEXTURE_USAGE_STORAGE) != 0u
+          ? VK_IMAGE_LAYOUT_GENERAL
+          : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+      if (type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) {
+        getInfo.data.pStorageImage = &imageInfo;
+      } else {
+        getInfo.data.pSampledImage = &imageInfo;
+      }
+      break;
+    case GPUBindKindSampler:
+      sampler = binding->sampler ? binding->sampler->_priv : NULL;
+      if (!sampler || !sampler->sampler || sampler->device != group->device) {
+        writeContext->valid = false;
+        return;
+      }
+      samplerHandle         = sampler->sampler;
+      getInfo.data.pSampler = &samplerHandle;
+      break;
+    case GPUBindKindAccelerationStructure:
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
+      {
+        GPUAccelerationStructureVk *accelerationStructure;
+
+        accelerationStructure = binding->accelerationStructure
+                                  ? binding->accelerationStructure->_priv
+                                  : NULL;
+        if (!accelerationStructure || accelerationStructure->address == 0u ||
+            accelerationStructure->device != group->device) {
+          writeContext->valid = false;
+          return;
+        }
+        getInfo.data.accelerationStructure = accelerationStructure->address;
+      }
+      break;
+#else
+      writeContext->valid = false;
+      return;
+#endif
+    default:
+      writeContext->valid = false;
+      return;
+  }
+
+  layout->gpuDevice->getDescriptor(group->device,
+                                   &getInfo,
+                                   descriptorBinding->size,
+                                   destination);
+  if (offset < writeContext->dirtyBegin) {
+    writeContext->dirtyBegin = offset;
+  }
+  if (offset + descriptorBinding->size > writeContext->dirtyEnd) {
+    writeContext->dirtyEnd = offset + descriptorBinding->size;
+  }
+}
+#endif
+
 static void
 vk__destroyBindGroupState(GPUBindGroupVk *native) {
   if (!native) {
@@ -1104,6 +1643,9 @@ vk__destroyBindGroupState(GPUBindGroupVk *native) {
   }
 
   vk__freeDescriptorSet(native);
+#ifdef VK_EXT_descriptor_buffer
+  vk__freeDescriptorSlot(native);
+#endif
   free(native);
 }
 
@@ -1115,6 +1657,9 @@ vk_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
   GPUBindGroupVk       *native;
   GPUDeviceVk          *deviceVk;
   GPUDescriptorWriteVk  writeContext = {0};
+#ifdef VK_EXT_descriptor_buffer
+  GPUDescriptorBufferWriteVk bufferWriteContext = {0};
+#endif
   GPUResult              result;
 
   if (!device || !device->_priv || !group) {
@@ -1136,6 +1681,33 @@ vk_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
 
   native->layout = layoutVk;
   native->device = deviceVk->device;
+#ifdef VK_EXT_descriptor_buffer
+  if (layoutVk->descriptorBuffer) {
+    result = vk__allocateDescriptorSlot(device, layoutVk, native);
+    if (result != GPU_OK) {
+      vk__destroyBindGroupState(native);
+      return result;
+    }
+    bufferWriteContext.device     = device;
+    bufferWriteContext.group      = native;
+    bufferWriteContext.dirtyBegin = UINT64_MAX;
+    bufferWriteContext.valid      = true;
+    if (!gpuForEachBindGroupBinding(group,
+                                    vk__writeDescriptorBuffer,
+                                    &bufferWriteContext) ||
+        !bufferWriteContext.valid) {
+      vk__destroyBindGroupState(native);
+      return GPU_ERROR_UNSUPPORTED;
+    }
+    vk__flushDescriptorBuffer(&bufferWriteContext);
+    if (!bufferWriteContext.valid) {
+      vk__destroyBindGroupState(native);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    group->_native = native;
+    return GPU_OK;
+  }
+#endif
   result = vk__allocateDescriptorSet(layoutVk,
                                      &native->pool,
                                      &native->set);
@@ -1167,9 +1739,37 @@ vk_updateBindGroup(GPUBindGroup            *group,
                    const GPUBindGroupEntry *entries) {
   GPUBindGroupVk        *native;
   GPUDescriptorWriteVk   writeContext = {0};
+#ifdef VK_EXT_descriptor_buffer
+  GPUDescriptorBufferWriteVk bufferWriteContext = {0};
+#endif
 
   native = group ? group->_native : NULL;
-  if (!native || !native->set || !native->device) {
+  if (!native || !native->device) {
+    return false;
+  }
+
+#ifdef VK_EXT_descriptor_buffer
+  if (native->layout && native->layout->descriptorBuffer) {
+    if (!native->descriptorChunk) {
+      return false;
+    }
+    bufferWriteContext.device     = group->_device;
+    bufferWriteContext.group      = native;
+    bufferWriteContext.dirtyBegin = UINT64_MAX;
+    bufferWriteContext.valid      = true;
+    if (!gpuForEachBindGroupEntry(group,
+                                  entryCount,
+                                  entries,
+                                  vk__writeDescriptorBuffer,
+                                  &bufferWriteContext) ||
+        !bufferWriteContext.valid) {
+      return false;
+    }
+    vk__flushDescriptorBuffer(&bufferWriteContext);
+    return bufferWriteContext.valid;
+  }
+#endif
+  if (!native->set) {
     return false;
   }
 
@@ -1203,6 +1803,7 @@ static bool
 vk__bindGroup(VkCommandBuffer       command,
               VkPipelineBindPoint   bindPoint,
               VkPipelineLayout      encoderLayout,
+              GPUBindGroupVk      **descriptorGroups,
               GPUPipelineLayout    *pipelineLayout,
               uint32_t              groupIndex,
               GPUBindGroup         *group,
@@ -1218,7 +1819,7 @@ vk__bindGroup(VkCommandBuffer       command,
   groupVk  = group ? group->_native : NULL;
   layoutVk = groupVk ? groupVk->layout : NULL;
   if (!command || !pipeline || !pipeline->layout || !encoderLayout ||
-      !groupVk || !groupVk->set || !layoutVk ||
+      !descriptorGroups || !groupVk || !layoutVk ||
       groupVk->device != pipeline->device ||
       layoutVk->device != pipeline->device ||
       dynamicOffsetCount != layoutVk->dynamicCount ||
@@ -1226,6 +1827,86 @@ vk__bindGroup(VkCommandBuffer       command,
       (dynamicOffsetCount > 0u && (!dynamicOffsets || !reorderedOffsets))) {
     return false;
   }
+
+#ifdef VK_EXT_descriptor_buffer
+  if (layoutVk->descriptorBuffer) {
+    GPUDeviceVk                     *deviceVk;
+    VkDescriptorBufferBindingInfoEXT bufferInfos[GPU_ENCODER_MAX_BIND_GROUPS];
+    GPUDescriptorBufferChunkVk      *chunks[GPU_ENCODER_MAX_BIND_GROUPS];
+    uint32_t                         bufferCount;
+
+    deviceVk = layoutVk->gpuDevice;
+    if (!pipeline->descriptorBuffer || !groupVk->descriptorChunk ||
+        dynamicOffsetCount != 0u || !deviceVk ||
+        !deviceVk->bindDescriptorBuffers ||
+        !deviceVk->setDescriptorBufferOffsets) {
+      return false;
+    }
+    descriptorGroups[groupIndex] = groupVk;
+    bufferCount = 0u;
+    for (uint32_t i = 0u; i < GPU_ENCODER_MAX_BIND_GROUPS; i++) {
+      GPUBindGroupVk              *boundGroup;
+      GPUDescriptorBufferChunkVk  *chunk;
+      bool                         found;
+
+      boundGroup = descriptorGroups[i];
+      chunk      = boundGroup ? boundGroup->descriptorChunk : NULL;
+      if (!chunk) {
+        continue;
+      }
+      found = false;
+      for (uint32_t j = 0u; j < bufferCount; j++) {
+        if (chunks[j] == chunk) {
+          found = true;
+          break;
+        }
+      }
+      if (found) {
+        continue;
+      }
+      chunks[bufferCount] = chunk;
+      memset(&bufferInfos[bufferCount], 0, sizeof(bufferInfos[bufferCount]));
+      bufferInfos[bufferCount].sType =
+        VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
+      bufferInfos[bufferCount].address = chunk->address;
+      bufferInfos[bufferCount].usage =
+        VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+        VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT;
+      bufferCount++;
+    }
+    deviceVk->bindDescriptorBuffers(command, bufferCount, bufferInfos);
+    for (uint32_t i = 0u; i < GPU_ENCODER_MAX_BIND_GROUPS; i++) {
+      GPUBindGroupVk *boundGroup;
+      uint32_t        bufferIndex;
+
+      boundGroup = descriptorGroups[i];
+      if (!boundGroup || !boundGroup->descriptorChunk) {
+        continue;
+      }
+      bufferIndex = 0u;
+      while (bufferIndex < bufferCount &&
+             chunks[bufferIndex] != boundGroup->descriptorChunk) {
+        bufferIndex++;
+      }
+      if (bufferIndex == bufferCount) {
+        return false;
+      }
+      deviceVk->setDescriptorBufferOffsets(command,
+                                           bindPoint,
+                                           encoderLayout,
+                                           i,
+                                           1u,
+                                           &bufferIndex,
+                                           &boundGroup->descriptorOffset);
+    }
+    return true;
+  }
+#endif
+
+  if (!groupVk->set) {
+    return false;
+  }
+  descriptorGroups[groupIndex] = NULL;
 
   nativeOffsets = dynamicOffsets;
   for (uint32_t i = 0u; i < dynamicOffsetCount; i++) {
@@ -1263,6 +1944,7 @@ vk_bindRenderGroup(GPURenderCommandEncoder *pass,
   return encoder && vk__bindGroup(encoder->command,
                                   VK_PIPELINE_BIND_POINT_GRAPHICS,
                                   encoder->pipelineLayout,
+                                  encoder->descriptorGroups,
                                   pipelineLayout,
                                   groupIndex,
                                   group,
@@ -1285,6 +1967,7 @@ vk_bindComputeGroup(GPUComputePassEncoder *pass,
   return encoder && vk__bindGroup(encoder->command,
                                   VK_PIPELINE_BIND_POINT_COMPUTE,
                                   encoder->pipelineLayout,
+                                  encoder->descriptorGroups,
                                   pipelineLayout,
                                   groupIndex,
                                   group,
@@ -1308,6 +1991,7 @@ vk_bindRayTracingGroup(GPURayTracingPassEncoderEXT *pass,
   return encoder && vk__bindGroup(encoder->command,
                                   VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
                                   encoder->pipelineLayout,
+                                  encoder->descriptorGroups,
                                   pipelineLayout,
                                   groupIndex,
                                   group,
