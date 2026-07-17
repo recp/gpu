@@ -228,6 +228,11 @@ typedef struct GPUAdapterVk {
   bool                          synchronization2;
   bool                          rayQuery;
   bool                          rayTracingPipeline;
+#ifdef VK_KHR_pipeline_binary
+  bool                          pipelineBinary;
+  bool                          pipelineBinaryInternalCache;
+  bool                          pipelineBinaryPrefersInternalCache;
+#endif
   bool                          subgroupMatrix;
   bool                          atomic64;
   bool                          negativeViewport;
@@ -266,6 +271,13 @@ typedef struct GPUDeviceVk {
 #ifdef VK_KHR_fragment_shading_rate
   PFN_vkCmdSetFragmentShadingRateKHR setFragmentShadingRate;
 #endif
+#ifdef VK_KHR_pipeline_binary
+  PFN_vkCreatePipelineBinariesKHR       createPipelineBinaries;
+  PFN_vkDestroyPipelineBinaryKHR        destroyPipelineBinary;
+  PFN_vkGetPipelineKeyKHR               getPipelineKey;
+  PFN_vkGetPipelineBinaryDataKHR        getPipelineBinaryData;
+  PFN_vkReleaseCapturedPipelineDataKHR releaseCapturedPipelineData;
+#endif
   VkDevice                   device;
   VkSampleCountFlags         colorSampleCounts;
   VkSampleCountFlags         depthSampleCounts;
@@ -294,6 +306,11 @@ typedef struct GPUDeviceVk {
   bool                       descriptorBuffer;
   bool                       rayQuery;
   bool                       rayTracingPipeline;
+#ifdef VK_KHR_pipeline_binary
+  bool                       pipelineBinary;
+  bool                       pipelineBinaryInternalCache;
+  bool                       pipelineBinaryPrefersInternalCache;
+#endif
 } GPUDeviceVk;
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS

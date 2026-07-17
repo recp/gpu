@@ -38,7 +38,6 @@ vk_createComputePipeline(GPUDevice                          *device,
   GPUComputePipelineVk           *native;
   VkPipelineShaderStageCreateInfo stage        = {0};
   VkComputePipelineCreateInfo     pipelineInfo = {0};
-  VkPipelineCache                 pipelineCache;
   VkResult                        result;
 
   deviceVk = device ? device->_priv : NULL;
@@ -77,14 +76,10 @@ vk_createComputePipeline(GPUDevice                          *device,
     pipelineInfo.flags |= VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
   }
 #endif
-  pipelineCache = vk_lockCache(info->cache);
-  result = vkCreateComputePipelines(native->device,
-                                    pipelineCache,
-                                    1u,
-                                    &pipelineInfo,
-                                    NULL,
-                                    &native->pipeline);
-  vk_unlockCache(info->cache);
+  result = vk_createComputePipelineCached(deviceVk,
+                                           info->cache,
+                                           &pipelineInfo,
+                                           &native->pipeline);
   if (result != VK_SUCCESS) {
     vk_destroyShaderLayout(&native->shaderLayout);
     free(state);

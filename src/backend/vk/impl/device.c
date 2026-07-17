@@ -651,6 +651,13 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkPhysicalDeviceCooperativeMatrixPropertiesKHR cooperativeProperties = {0};
   VkPhysicalDeviceProperties2                cooperativeProperties2 = {0};
 #endif
+#ifdef VK_KHR_pipeline_binary
+  VkPhysicalDeviceMaintenance5FeaturesKHR    maintenance5Features = {0};
+  VkPhysicalDevicePipelineBinaryFeaturesKHR  pipelineBinaryFeatures = {0};
+  VkPhysicalDeviceFeatures2                  pipelineBinaryFeatures2 = {0};
+  VkPhysicalDevicePipelineBinaryPropertiesKHR pipelineBinaryProperties = {0};
+  VkPhysicalDeviceProperties2                pipelineBinaryProperties2 = {0};
+#endif
   VkResult                                  err;
   uint32_t                                  i, nExtensions;
   bool                                      incrementalPresentEnabled;
@@ -678,6 +685,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool                                      sync2Core;
   bool                                      maintenance1Extension;
   bool                                      maintenance1Core;
+#ifdef VK_KHR_pipeline_binary
+  bool                                      maintenance5Extension;
+  bool                                      maintenance5Core;
+  bool                                      pipelineBinaryExtension;
+#endif
   bool                                      spirv14Extension;
   bool                                      shaderFloatControlsExtension;
   bool                                      spirv14Core;
@@ -728,6 +740,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   sync2Core                 = false;
   maintenance1Extension     = false;
   maintenance1Core          = false;
+#ifdef VK_KHR_pipeline_binary
+  maintenance5Extension     = false;
+  maintenance5Core          = false;
+  pipelineBinaryExtension   = false;
+#endif
   spirv14Extension          = false;
   shaderFloatControlsExtension = false;
   spirv14Core               = false;
@@ -872,6 +889,16 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                   extensions[i].extensionName)) {
         maintenance1Extension = true;
       }
+#ifdef VK_KHR_pipeline_binary
+      if (!strcmp(VK_KHR_MAINTENANCE_5_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        maintenance5Extension = true;
+      }
+      if (!strcmp(VK_KHR_PIPELINE_BINARY_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        pipelineBinaryExtension = true;
+      }
+#endif
       if (!strcmp(VK_KHR_SPIRV_1_4_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         spirv14Extension = true;
@@ -982,6 +1009,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                  instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
                  adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
   spirv14Core = timelineCore;
+#ifdef VK_KHR_pipeline_binary
+  maintenance5Core = instanceVk &&
+                     instanceVk->apiVersion >= VK_API_VERSION_1_4 &&
+                     adapterVk->props.apiVersion >= VK_API_VERSION_1_4;
+#endif
 #ifdef VK_EXT_mesh_shader
   spirv14ExtensionUsable = instanceVk &&
                            instanceVk->apiVersion >= VK_API_VERSION_1_1 &&
@@ -1024,6 +1056,55 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       goto fail;
     }
   }
+#ifdef VK_KHR_pipeline_binary
+  if (getFeatures2 && pipelineBinaryExtension &&
+      (maintenance5Core || maintenance5Extension)) {
+    PFN_vkGetPhysicalDeviceProperties2 getProperties2;
+
+    maintenance5Features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR;
+    pipelineBinaryFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_FEATURES_KHR;
+    maintenance5Features.pNext    = &pipelineBinaryFeatures;
+    pipelineBinaryFeatures2.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    pipelineBinaryFeatures2.pNext = &maintenance5Features;
+    getFeatures2(raw, &pipelineBinaryFeatures2);
+    if (maintenance5Features.maintenance5 &&
+        pipelineBinaryFeatures.pipelineBinaries) {
+      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+        vkGetInstanceProcAddr(instanceVk->inst,
+                              "vkGetPhysicalDeviceProperties2");
+      if (!getProperties2) {
+        getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+          vkGetInstanceProcAddr(instanceVk->inst,
+                                "vkGetPhysicalDeviceProperties2KHR");
+      }
+      if (getProperties2) {
+        pipelineBinaryProperties.sType =
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_PROPERTIES_KHR;
+        pipelineBinaryProperties2.sType =
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        pipelineBinaryProperties2.pNext = &pipelineBinaryProperties;
+        getProperties2(raw, &pipelineBinaryProperties2);
+        adapterVk->pipelineBinaryInternalCache =
+          pipelineBinaryProperties.pipelineBinaryInternalCache;
+        adapterVk->pipelineBinaryPrefersInternalCache =
+          pipelineBinaryProperties.pipelineBinaryPrefersInternalCache;
+        if (!maintenance5Core &&
+            !vk_addDeviceExtension(adapterVk,
+                                   VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
+          goto fail;
+        }
+        if (!vk_addDeviceExtension(adapterVk,
+                                   VK_KHR_PIPELINE_BINARY_EXTENSION_NAME)) {
+          goto fail;
+        }
+        adapterVk->pipelineBinary = true;
+      }
+    }
+  }
+#endif
   if (getFeatures2 && (atomic64Core || atomic64Extension)) {
     atomic64Features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES;
@@ -1906,6 +1987,10 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
 #ifdef VK_KHR_cooperative_matrix
   VkPhysicalDeviceCooperativeMatrixFeaturesKHR cooperativeFeatures = {0};
 #endif
+#ifdef VK_KHR_pipeline_binary
+  VkPhysicalDeviceMaintenance5FeaturesKHR maintenance5Features = {0};
+  VkPhysicalDevicePipelineBinaryFeaturesKHR pipelineBinaryFeatures = {0};
+#endif
   VkDeviceCreateInfo       deviceCI = {0};
   VkResult                 result;
   uint32_t                 familyIndex;
@@ -2232,6 +2317,19 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     deviceCI.pNext = &cooperativeFeatures;
   }
 #endif
+#ifdef VK_KHR_pipeline_binary
+  if (adapterVk->pipelineBinary) {
+    maintenance5Features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR;
+    maintenance5Features.pNext       = (void *)deviceCI.pNext;
+    maintenance5Features.maintenance5 = VK_TRUE;
+    pipelineBinaryFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_FEATURES_KHR;
+    pipelineBinaryFeatures.pNext = &maintenance5Features;
+    pipelineBinaryFeatures.pipelineBinaries = VK_TRUE;
+    deviceCI.pNext = &pipelineBinaryFeatures;
+  }
+#endif
 
   result = vkCreateDevice(adapterVk->physicalDevice,
                           &deviceCI,
@@ -2309,6 +2407,45 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
       deviceVk->descriptorBufferProperties =
         adapterVk->descriptorBufferProperties;
       deviceVk->descriptorBuffer = true;
+    }
+  }
+#endif
+#ifdef VK_KHR_pipeline_binary
+  if (adapterVk->pipelineBinary) {
+    deviceVk->createPipelineBinaries =
+      (PFN_vkCreatePipelineBinariesKHR)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkCreatePipelineBinariesKHR"
+      );
+    deviceVk->destroyPipelineBinary =
+      (PFN_vkDestroyPipelineBinaryKHR)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkDestroyPipelineBinaryKHR"
+      );
+    deviceVk->getPipelineKey =
+      (PFN_vkGetPipelineKeyKHR)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkGetPipelineKeyKHR"
+      );
+    deviceVk->getPipelineBinaryData =
+      (PFN_vkGetPipelineBinaryDataKHR)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkGetPipelineBinaryDataKHR"
+      );
+    deviceVk->releaseCapturedPipelineData =
+      (PFN_vkReleaseCapturedPipelineDataKHR)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkReleaseCapturedPipelineDataKHR"
+      );
+    if (deviceVk->createPipelineBinaries &&
+        deviceVk->destroyPipelineBinary && deviceVk->getPipelineKey &&
+        deviceVk->getPipelineBinaryData &&
+        deviceVk->releaseCapturedPipelineData) {
+      deviceVk->pipelineBinary = true;
+      deviceVk->pipelineBinaryInternalCache =
+        adapterVk->pipelineBinaryInternalCache;
+      deviceVk->pipelineBinaryPrefersInternalCache =
+        adapterVk->pipelineBinaryPrefersInternalCache;
     }
   }
 #endif

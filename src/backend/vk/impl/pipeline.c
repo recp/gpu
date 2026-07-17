@@ -328,7 +328,6 @@ vk_createRenderPipeline(GPUDevice                         *device,
   VkPipelineFragmentShadingRateStateCreateInfoKHR shadingRate = {0};
 #endif
   VkGraphicsPipelineCreateInfo      pipelineInfo = {0};
-  VkPipelineCache                   pipelineCache;
   VkResult                          result;
   uint32_t                          vertexAttributeCount;
   uint32_t                          stageCount;
@@ -643,14 +642,10 @@ vk_createRenderPipeline(GPUDevice                         *device,
                                        ? VK_NULL_HANDLE
                                        : native->renderPass;
   pipelineInfo.subpass             = 0u;
-  pipelineCache = vk_lockCache(info->cache);
-  result = vkCreateGraphicsPipelines(native->device,
-                                     pipelineCache,
-                                     1u,
-                                     &pipelineInfo,
-                                     NULL,
-                                     &native->pipeline);
-  vk_unlockCache(info->cache);
+  result = vk_createGraphicsPipelineCached(deviceVk,
+                                            info->cache,
+                                            &pipelineInfo,
+                                            &native->pipeline);
   if (result != VK_SUCCESS) {
     free(vertexAttributes);
     free(vertexBindings);

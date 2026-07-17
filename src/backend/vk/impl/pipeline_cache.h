@@ -25,4 +25,27 @@ GPU_HIDE
 void
 vk_unlockCache(GPUPipelineCache *cache);
 
+GPU_HIDE
+VkResult
+vk_createGraphicsPipelineCached(GPUDeviceVk                        *device,
+                                GPUPipelineCache                   *cache,
+                                const VkGraphicsPipelineCreateInfo *info,
+                                VkPipeline                         *pipeline);
+
+GPU_HIDE
+VkResult
+vk_createComputePipelineCached(GPUDeviceVk                       *device,
+                               GPUPipelineCache                  *cache,
+                               const VkComputePipelineCreateInfo *info,
+                               VkPipeline                        *pipeline);
+
+#ifdef VK_KHR_ray_tracing_pipeline
+GPU_HIDE
+VkResult
+vk_createRayPipelineCached(GPUDeviceVk                            *device,
+                           GPUPipelineCache                       *cache,
+                           const VkRayTracingPipelineCreateInfoKHR *info,
+                           VkPipeline                             *pipeline);
+#endif
+
 #endif /* vk_pipeline_cache_h */

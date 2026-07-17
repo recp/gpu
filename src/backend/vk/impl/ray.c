@@ -768,7 +768,6 @@ vk_createRayTracingPipeline(GPUDevice                                *device,
   VkPipelineShaderStageCreateInfo   *stages;
   VkRayTracingShaderGroupCreateInfoKHR *groups;
   VkRayTracingPipelineCreateInfoKHR  pipelineInfo = {0};
-  VkPipelineCache                    pipelineCache;
   VkResult                           result;
   uint32_t                           stageCapacity;
   uint32_t                           stageCount;
@@ -899,15 +898,10 @@ vk_createRayTracingPipeline(GPUDevice                                *device,
   pipelineInfo.pGroups                      = groups;
   pipelineInfo.maxPipelineRayRecursionDepth = info->maxRecursionDepth;
   pipelineInfo.layout                       = native->shaderLayout.layout;
-  pipelineCache = vk_lockCache(info->cache);
-  result = deviceVk->createRayTracingPipelines(native->device,
-                                                VK_NULL_HANDLE,
-                                                pipelineCache,
-                                                1u,
-                                                &pipelineInfo,
-                                                NULL,
-                                                &native->pipeline);
-  vk_unlockCache(info->cache);
+  result = vk_createRayPipelineCached(deviceVk,
+                                      info->cache,
+                                      &pipelineInfo,
+                                      &native->pipeline);
   free(groups);
   free(stages);
   if (result != VK_SUCCESS) {
