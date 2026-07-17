@@ -215,6 +215,7 @@ typedef struct MTCopyEncoder {
 typedef struct MTRayQueryEncoder {
   id<MTLAccelerationStructureCommandEncoder> classic;
   id                                         modern;
+  bool                                       hasBuild;
 } MTRayQueryEncoder;
 
 typedef struct MTCommandBuffer MTCommandBuffer;

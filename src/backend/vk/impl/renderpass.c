@@ -170,7 +170,7 @@ vk_transitionView(VkCommandBuffer   command,
 }
 
 static VkPipelineStageFlags
-vk__barrierStages(GPUPipelineStageMask stages) {
+vk__barrierStages(const GPUDeviceVk *device, GPUPipelineStageMask stages) {
   VkPipelineStageFlags result;
 
   result = 0u;
@@ -180,6 +180,14 @@ vk__barrierStages(GPUPipelineStageMask stages) {
   if ((stages & GPU_STAGE_VERTEX) != 0u) {
     result |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
               VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+#ifdef VK_EXT_mesh_shader
+    if (device && device->taskShader) {
+      result |= VK_PIPELINE_STAGE_TASK_SHADER_BIT_EXT;
+    }
+    if (device && device->meshShader) {
+      result |= VK_PIPELINE_STAGE_MESH_SHADER_BIT_EXT;
+    }
+#endif
   }
   if ((stages & GPU_STAGE_FRAGMENT) != 0u) {
     result |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
@@ -322,8 +330,8 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
     return;
   }
 
-  srcStages     = vk__barrierStages(barriers->srcStages);
-  dstStages     = vk__barrierStages(barriers->dstStages);
+  srcStages     = vk__barrierStages(device, barriers->srcStages);
+  dstStages     = vk__barrierStages(device, barriers->dstStages);
   for (uint32_t i = 0u; i < barriers->bufferBarrierCount; i++) {
     const GPUBufferBarrier *barrier = &barriers->pBufferBarriers[i];
 

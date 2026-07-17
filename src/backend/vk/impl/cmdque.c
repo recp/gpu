@@ -1346,14 +1346,23 @@ vk_submitCommandBuffers(GPUQueue                  * __restrict queueHandle,
 }
 
 static VkPipelineStageFlags
-vk_submitWaitStages(GPUPipelineStageMask stages) {
+vk_submitWaitStages(const GPUDeviceVk *device, GPUPipelineStageMask stages) {
   VkPipelineStageFlags native;
 
   native = 0u;
   if (stages & GPU_STAGE_TOP)
     native |= VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-  if (stages & GPU_STAGE_VERTEX)
+  if (stages & GPU_STAGE_VERTEX) {
     native |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+#ifdef VK_EXT_mesh_shader
+    if (device && device->taskShader) {
+      native |= VK_PIPELINE_STAGE_TASK_SHADER_BIT_EXT;
+    }
+    if (device && device->meshShader) {
+      native |= VK_PIPELINE_STAGE_MESH_SHADER_BIT_EXT;
+    }
+#endif
+  }
   if (stages & GPU_STAGE_FRAGMENT)
     native |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
   if (stages & GPU_STAGE_COMPUTE)
@@ -1524,7 +1533,7 @@ vk_submitEx(GPUQueue                   *queueHandle,
     }
     waits[i]      = native->semaphore;
     waitValues[i] = info->pWaits[i].value;
-    waitStages[i] = vk_submitWaitStages(info->pWaits[i].waitStages);
+    waitStages[i] = vk_submitWaitStages(device, info->pWaits[i].waitStages);
   }
   if (frameSync) {
     waits[waitCount]      = frameSync->imageAvailable;

@@ -72,7 +72,7 @@ mt_stageMask(GPUPipelineStageMask stages) {
   result = 0;
   if (@available(macOS 26.0, iOS 26.0, *)) {
     if ((stages & GPU_STAGE_VERTEX) != 0u) {
-      result |= MTLStageVertex;
+      result |= MTLStageVertex | MTLStageObject | MTLStageMesh;
     }
     if ((stages & GPU_STAGE_FRAGMENT) != 0u) {
       result |= MTLStageFragment;
@@ -911,6 +911,9 @@ mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
   native->pendingBeforeStages |= mt_stageMask(barriers->dstStages);
   if (@available(macOS 26.0, iOS 26.0, *)) {
     native->pendingVisibility |= MTL4VisibilityOptionDevice;
+    if (barriers->aliasingBarrierCount > 0u) {
+      native->pendingVisibility |= MTL4VisibilityOptionResourceAlias;
+    }
   }
 
   for (uint32_t i = 0; i < barriers->bufferBarrierCount; i++) {

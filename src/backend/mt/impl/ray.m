@@ -619,6 +619,12 @@ mt_buildAccelerationStructure(
       descriptor = native->modernDescriptor;
       scratch    = mt_rayRange(scratchBuffer, scratchOffset);
       mt_rayUseBuildResources(pass, dst, info, scratchBuffer);
+      if (encoder->hasBuild) {
+        [(id<MTL4ComputeCommandEncoder>)encoder->modern
+          barrierAfterEncoderStages:MTLStageAccelerationStructure
+                  beforeEncoderStages:MTLStageAccelerationStructure
+                    visibilityOptions:MTL4VisibilityOptionDevice];
+      }
       if (info->mode == GPU_ACCELERATION_STRUCTURE_UPDATE_EXT) {
         [(id<MTL4ComputeCommandEncoder>)encoder->modern
           refitAccelerationStructure:mt_rayNativeStructure(info->source)
@@ -631,6 +637,7 @@ mt_buildAccelerationStructure(
                           descriptor:descriptor
                        scratchBuffer:scratch];
       }
+      encoder->hasBuild = true;
       return GPU_OK;
     }
   }
@@ -676,6 +683,12 @@ mt_endAccelerationStructurePass(
 #if MT_HAS_METAL4
   if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
+      if (native->hasBuild) {
+        [(id<MTL4ComputeCommandEncoder>)native->modern
+          barrierAfterStages:MTLStageAccelerationStructure
+           beforeQueueStages:MTLStageAll
+           visibilityOptions:MTL4VisibilityOptionDevice];
+      }
       [(id<MTL4ComputeCommandEncoder>)native->modern endEncoding];
     }
   } else
