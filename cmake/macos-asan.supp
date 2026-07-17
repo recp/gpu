@@ -1,0 +1,2 @@
+# macOS CoreUI scans a system PDF asset one byte past its temporary buffer.
+interceptor_via_fun:pdf_lexer_scan

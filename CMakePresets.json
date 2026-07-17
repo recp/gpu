@@ -34,6 +34,29 @@
       }
     },
     {
+      "name": "macos-asan",
+      "displayName": "macOS Address/Undefined Sanitizers",
+      "inherits": "macos-debug",
+      "cacheVariables": {
+        "CMAKE_C_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
+        "CMAKE_OBJC_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=address,undefined"
+      }
+    },
+    {
+      "name": "macos-tsan",
+      "displayName": "macOS Thread Sanitizer",
+      "inherits": "macos-debug",
+      "cacheVariables": {
+        "GPU_BUILD_SAMPLES": "OFF",
+        "CMAKE_C_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer",
+        "CMAKE_OBJC_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=thread",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=thread"
+      }
+    },
+    {
       "name": "windows-debug",
       "displayName": "Windows Debug",
       "inherits": "base",
@@ -73,12 +96,51 @@
       "configurePreset": "macos-vulkan-debug"
     },
     {
+      "name": "macos-asan",
+      "configurePreset": "macos-asan"
+    },
+    {
+      "name": "macos-tsan",
+      "configurePreset": "macos-tsan"
+    },
+    {
       "name": "windows-debug",
       "configurePreset": "windows-debug"
     },
     {
       "name": "linux-vulkan-debug",
       "configurePreset": "linux-vulkan-debug"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "macos-asan",
+      "configurePreset": "macos-asan",
+      "environment": {
+        "ASAN_OPTIONS": "halt_on_error=1:strict_string_checks=1:suppressions=${sourceDir}/cmake/macos-asan.supp",
+        "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+      },
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 1,
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "macos-tsan",
+      "configurePreset": "macos-tsan",
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1"
+      },
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 1,
+        "noTestsAction": "error"
+      }
     }
   ]
 }
