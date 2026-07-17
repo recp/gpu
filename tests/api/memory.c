@@ -236,7 +236,9 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   GPUDevice                    *disabledDevice  = NULL;
   GPUQueue                     *queue           = NULL;
   GPUHeap                      *heap            = NULL;
+  GPUHeap                      *bufferHeap      = NULL;
   GPUTexture                   *texture         = NULL;
+  GPUBuffer                    *sparseBuffer    = NULL;
   GPUBuffer                    *readback        = NULL;
   GPUFence                     *fence           = NULL;
   GPUSemaphore                 *semaphore       = NULL;
@@ -244,23 +246,30 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   GPUCopyPassEncoder           *copyPass        = NULL;
   uint8_t                      *pixels          = NULL;
   GPUCommandBuffer             *submitList[1]   = {0};
-  GPUSparseTextureRequirements  requirements    = {0};
-  GPUDeviceCreateInfo           deviceInfo      = {0};
-  GPUTextureCreateInfo          textureInfo     = {0};
-  GPUBufferCreateInfo           bufferInfo      = {0};
-  GPUHeapCreateInfo             heapInfo        = {0};
-  GPUSparseTextureMapping       mappings[3]     = {0};
-  GPUBufferTextureCopyRegion    copyRegion      = {0};
-  GPUQueueSemaphoreWait         wait            = {0};
-  GPUQueueSemaphoreSignal       signal          = {0};
-  GPUQueueSparseSubmitInfo      submitInfo      = {0};
-  GPUQueueSubmitInfo            copySubmitInfo  = {0};
-  GPUTextureWriteRegion         writeRegion     = {0};
+  uint32_t                      bufferInput[4]     = {1u, 3u, 5u, 7u};
+  uint32_t                      bufferOutput[4]    = {0};
+  GPUSparseTextureRequirements  requirements       = {0};
+  GPUSparseBufferRequirements   bufferRequirements = {0};
+  GPUDeviceCreateInfo           deviceInfo         = {0};
+  GPUTextureCreateInfo          textureInfo        = {0};
+  GPUBufferCreateInfo           bufferInfo         = {0};
+  GPUBufferCreateInfo           sparseBufferInfo   = {0};
+  GPUHeapCreateInfo             heapInfo           = {0};
+  GPUHeapCreateInfo             bufferHeapInfo     = {0};
+  GPUSparseTextureMapping       mappings[3]        = {0};
+  GPUSparseBufferMapping        bufferMapping      = {0};
+  GPUBufferTextureCopyRegion    copyRegion         = {0};
+  GPUQueueSemaphoreWait         wait               = {0};
+  GPUQueueSemaphoreSignal       signal             = {0};
+  GPUQueueSparseSubmitInfo      submitInfo         = {0};
+  GPUQueueSubmitInfo            copySubmitInfo     = {0};
+  GPUTextureWriteRegion         writeRegion        = {0};
   uint64_t                      heapTileCount;
   uint64_t                      heapSize;
   uint64_t                      pixelSize;
   uint32_t                      mappingCount;
   GPUFeature                    feature         = GPU_FEATURE_SPARSE_TEXTURES;
+  GPUFeature                    bufferFeature   = GPU_FEATURE_SPARSE_BUFFERS;
   GPUResult                     result;
   bool                          explicitPlacement;
   int                           ok              = 0;
@@ -308,6 +317,8 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
 
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
+  deviceInfo.optional.pFeatures    = &bufferFeature;
+  deviceInfo.optional.featureCount = 1u;
   if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, feature)) {
     fprintf(stderr, "sparse feature enablement failed\n");
@@ -395,6 +406,51 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
     goto cleanup;
   }
 
+  if (GPUIsFeatureEnabled(device, bufferFeature)) {
+    sparseBufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    sparseBufferInfo.chain.structSize = sizeof(sparseBufferInfo);
+    sparseBufferInfo.label            = "api-sparse-mixed-buffer";
+    sparseBufferInfo.sizeBytes        = sizeof(bufferInput);
+    sparseBufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
+                                        GPU_BUFFER_USAGE_COPY_DST;
+    if (GPUGetSparseBufferRequirements(device,
+                                       &sparseBufferInfo,
+                                       &bufferRequirements) != GPU_OK ||
+        bufferRequirements.pageSizeBytes == 0u ||
+        bufferRequirements.tileCount == 0u ||
+        bufferRequirements.tileCount >
+          UINT64_MAX / bufferRequirements.pageSizeBytes) {
+      fprintf(stderr, "mixed sparse buffer requirements failed\n");
+      goto cleanup;
+    }
+
+    bufferHeapInfo.chain.sType       = GPU_STRUCTURE_TYPE_HEAP_CREATE_INFO;
+    bufferHeapInfo.chain.structSize  = sizeof(bufferHeapInfo);
+    bufferHeapInfo.label             = "api-sparse-mixed-buffer-heap";
+    bufferHeapInfo.sizeBytes         = bufferRequirements.tileCount *
+                                       bufferRequirements.pageSizeBytes;
+    bufferHeapInfo.compatibilityMask = bufferRequirements.compatibilityMask;
+    bufferHeapInfo.pageSizeBytes     = bufferRequirements.pageSizeBytes;
+    bufferHeapInfo.usage             = GPU_HEAP_USAGE_SPARSE;
+    if (GPUCreateHeap(device, &bufferHeapInfo, &bufferHeap) != GPU_OK ||
+        !bufferHeap ||
+        GPUCreateSparseBuffer(device,
+                              &sparseBufferInfo,
+                              bufferHeap,
+                              &sparseBuffer) != GPU_OK ||
+        !sparseBuffer) {
+      fprintf(stderr, "mixed sparse buffer setup failed\n");
+      goto cleanup;
+    }
+
+    bufferMapping.buffer          = sparseBuffer;
+    bufferMapping.heap            = bufferHeap;
+    bufferMapping.tileCount       = bufferRequirements.tileCount;
+    bufferMapping.mode            = GPU_SPARSE_MAPPING_MAP;
+    submitInfo.pBufferMappings    = &bufferMapping;
+    submitInfo.bufferMappingCount = 1u;
+  }
+
   explicitPlacement      = GPUIsFeatureEnabled(
     device,
     GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT
@@ -436,6 +492,21 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK ||
       GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     fprintf(stderr, "sparse map submit failed\n");
+    goto cleanup;
+  }
+  if (sparseBuffer &&
+      (GPUQueueWriteBuffer(queue,
+                           sparseBuffer,
+                           0u,
+                           bufferInput,
+                           sizeof(bufferInput)) != GPU_OK ||
+       GPUQueueReadBuffer(queue,
+                          sparseBuffer,
+                          0u,
+                          bufferOutput,
+                          sizeof(bufferOutput)) != GPU_OK ||
+       memcmp(bufferInput, bufferOutput, sizeof(bufferInput)) != 0)) {
+    fprintf(stderr, "mixed sparse buffer readback failed\n");
     goto cleanup;
   }
 
@@ -502,6 +573,7 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
     goto cleanup;
   }
   cmdb = NULL;
+  memset(pixels, 0, (size_t)pixelSize);
   if (GPUQueueReadBuffer(queue, readback, 0u, pixels, pixelSize) != GPU_OK) {
     fprintf(stderr, "sparse texture readback failed\n");
     goto cleanup;
@@ -516,6 +588,9 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   GPUResetFence(fence);
   for (uint32_t i = 0u; i < mappingCount; i++) {
     mappings[i].mode = GPU_SPARSE_MAPPING_UNMAP;
+  }
+  if (sparseBuffer) {
+    bufferMapping.mode = GPU_SPARSE_MAPPING_UNMAP;
   }
   wait.semaphore         = semaphore;
   wait.value             = 1u;
@@ -536,7 +611,9 @@ cleanup:
   GPUDestroySemaphore(semaphore);
   GPUDestroyFence(fence);
   GPUDestroyBuffer(readback);
+  GPUDestroyBuffer(sparseBuffer);
   GPUDestroyTexture(texture);
+  GPUDestroyHeap(bufferHeap);
   GPUDestroyHeap(heap);
   GPUDestroyDevice(device);
   GPUDestroyDevice(disabledDevice);
@@ -562,6 +639,8 @@ gpu_test_sparse_buffer_memory(GPUAdapter *adapter) {
   GPUFeature                   feature        = GPU_FEATURE_SPARSE_BUFFERS;
   GPUResult                    result;
   uint64_t                     heapSize;
+  uint64_t                     partialByteOffset;
+  uint64_t                     partialByteSize;
   int                          ok             = 0;
 
   deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -696,6 +775,50 @@ gpu_test_sparse_buffer_memory(GPUAdapter *adapter) {
   if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK ||
       GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     fprintf(stderr, "sparse buffer unmap submit failed\n");
+    goto cleanup;
+  }
+
+  mapping.bufferTileOffset = requirements.tileCount > 2u ? 1u : 0u;
+  mapping.heapTileOffset   = requirements.tileCount > 2u ? 1u : 0u;
+  mapping.tileCount        = requirements.tileCount > 2u
+                               ? requirements.tileCount - 2u
+                               : requirements.tileCount;
+  mapping.mode             = GPU_SPARSE_MAPPING_MAP;
+  partialByteOffset        = mapping.bufferTileOffset *
+                             requirements.pageSizeBytes;
+  partialByteSize          = mapping.tileCount * requirements.pageSizeBytes;
+  if (partialByteOffset >= bufferInfo.sizeBytes) {
+    fprintf(stderr, "sparse buffer partial range is invalid\n");
+    goto cleanup;
+  }
+  if (partialByteSize > bufferInfo.sizeBytes - partialByteOffset) {
+    partialByteSize = bufferInfo.sizeBytes - partialByteOffset;
+  }
+
+  memset(output, 0, (size_t)partialByteSize);
+  GPUResetFence(fence);
+  if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK ||
+      GPUWaitFence(fence, UINT64_MAX) != GPU_OK ||
+      GPUQueueWriteBuffer(queue,
+                          buffer,
+                          partialByteOffset,
+                          input,
+                          partialByteSize) != GPU_OK ||
+      GPUQueueReadBuffer(queue,
+                         buffer,
+                         partialByteOffset,
+                         output,
+                         partialByteSize) != GPU_OK ||
+      memcmp(input, output, (size_t)partialByteSize) != 0) {
+    fprintf(stderr, "sparse buffer partial mapping failed\n");
+    goto cleanup;
+  }
+
+  GPUResetFence(fence);
+  mapping.mode = GPU_SPARSE_MAPPING_UNMAP;
+  if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK ||
+      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+    fprintf(stderr, "sparse buffer partial unmap failed\n");
     goto cleanup;
   }
   ok = 1;
