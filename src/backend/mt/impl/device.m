@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "pipeline_cache.h"
 
 static GPUAdapterMT *
 mt_adapter(const GPUAdapter *adapter) {
@@ -680,7 +681,8 @@ mt_supportsMetal4(id<MTLDevice> device) {
     return device &&
            [device respondsToSelector:@selector(newMTL4CommandQueue)] &&
            [device respondsToSelector:@selector(newCommandAllocator)] &&
-           [device respondsToSelector:@selector(newArgumentTableWithDescriptor:error:)];
+           [device respondsToSelector:@selector(newArgumentTableWithDescriptor:error:)] &&
+           [device respondsToSelector:@selector(newCompilerWithDescriptor:error:)];
   }
 
   return false;
@@ -800,6 +802,11 @@ mt_createDevice(GPUAdapter              * __restrict adapter,
 
   deviceMT->device      = adapterMT->device;
   deviceMT->commandMode = commandMode;
+  if (mt_initPipelineCompiler(deviceMT) != GPU_OK) {
+    free(deviceMT);
+    free(device);
+    return NULL;
+  }
   queueCount            = 0;
   for (i = 0; i < nQueCI; i++) {
     queueCount += queCI[i].count;
@@ -809,6 +816,7 @@ mt_createDevice(GPUAdapter              * __restrict adapter,
   if (queueCount) {
     deviceMT->createdQueues = calloc(queueCount, sizeof(void*));
     if (!deviceMT->createdQueues) {
+      mt_destroyPipelineCompiler(deviceMT);
       free(deviceMT);
       free(device);
       return NULL;
@@ -828,6 +836,7 @@ mt_createDevice(GPUAdapter              * __restrict adapter,
           mt_destroyCommandQueue(deviceMT->createdQueues[k]);
         }
         free(deviceMT->createdQueues);
+        mt_destroyPipelineCompiler(deviceMT);
         free(deviceMT);
         free(device);
         return NULL;
@@ -882,6 +891,7 @@ mt_destroyDevice(GPUDevice * __restrict device) {
       }
       free(deviceMT->createdQueues);
     }
+    mt_destroyPipelineCompiler(deviceMT);
     free(deviceMT);
   }
 

@@ -683,6 +683,10 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   meshFunc     = mesh ? gpuShaderFunction(info->library, mesh->meshEntry) : NULL;
   if ((!mesh && !vertexFunc) || !fragmentFunc ||
       (mesh && (!meshFunc || (mesh->taskEntry && !taskFunc)))) {
+    gpuDestroyShaderFunction(info->library, vertexFunc);
+    gpuDestroyShaderFunction(info->library, fragmentFunc);
+    gpuDestroyShaderFunction(info->library, taskFunc);
+    gpuDestroyShaderFunction(info->library, meshFunc);
     gpuPipelineCacheReleaseKey(&cacheKey);
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -692,6 +696,10 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
                   : GPU_FORMAT_UNDEFINED;
   pipeline = gpuCreateRenderPipelineDesc(api, colorFormat, mesh != NULL);
   if (!pipeline) {
+    gpuDestroyShaderFunction(info->library, vertexFunc);
+    gpuDestroyShaderFunction(info->library, fragmentFunc);
+    gpuDestroyShaderFunction(info->library, taskFunc);
+    gpuDestroyShaderFunction(info->library, meshFunc);
     gpuPipelineCacheReleaseKey(&cacheKey);
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -711,6 +719,10 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     gpuPipelineSetFunction(pipeline, vertexFunc, GPU_FUNCTION_VERT);
   }
   gpuPipelineSetFunction(pipeline, fragmentFunc, GPU_FUNCTION_FRAG);
+  gpuDestroyShaderFunction(info->library, vertexFunc);
+  gpuDestroyShaderFunction(info->library, fragmentFunc);
+  gpuDestroyShaderFunction(info->library, taskFunc);
+  gpuDestroyShaderFunction(info->library, meshFunc);
 
   if (!mesh) {
     vertexDesc = gpu_createVertexDescriptorFromState(api, &info->vertex);

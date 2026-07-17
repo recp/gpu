@@ -235,6 +235,7 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
 
     pipeline = api->compute.newComputePipeline();
     if (!pipeline) {
+      gpuDestroyShaderFunction(info->library, function);
       gpuPipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_BACKEND_FAILURE;
     }
@@ -243,6 +244,7 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
     pipeline->_device   = device;
     pipeline->_refCount = 1u;
     api->compute.setFunction(pipeline, function);
+    gpuDestroyShaderFunction(info->library, function);
     pipeline->_cache = info->cache;
     state            = gpuCompileComputePipelineState(device, pipeline);
     pipeline->_cache = NULL;

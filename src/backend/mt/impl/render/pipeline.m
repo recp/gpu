@@ -130,6 +130,107 @@ mt_fillBlendDescriptor(MTLRenderPipelineColorAttachmentDescriptor *desc,
   desc.writeMask                   = mt_colorWriteMask(blend->writeMask);
 }
 
+#if MT_HAS_METAL4
+static void
+mt_fillBlendDescriptor4(MTL4RenderPipelineColorAttachmentDescriptor *desc,
+                        const GPUBlendState                          *blend) {
+  desc.blendingState             = blend->enabled
+                                     ? MTL4BlendStateEnabled
+                                     : MTL4BlendStateDisabled;
+  desc.sourceRGBBlendFactor      = mt_blendFactor(blend->color.srcFactor);
+  desc.destinationRGBBlendFactor = mt_blendFactor(blend->color.dstFactor);
+  desc.rgbBlendOperation         = mt_blendOperation(blend->color.op);
+  desc.sourceAlphaBlendFactor    = mt_blendFactor(blend->alpha.srcFactor);
+  desc.destinationAlphaBlendFactor = mt_blendFactor(blend->alpha.dstFactor);
+  desc.alphaBlendOperation         = mt_blendOperation(blend->alpha.op);
+  desc.writeMask                   = mt_colorWriteMask(blend->writeMask);
+}
+
+static MTL4LibraryFunctionDescriptor *
+mt_functionDescriptor4(const MTShaderFunction *function) {
+  if (!function || !function->library || !function->name) {
+    return nil;
+  }
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    MTL4LibraryFunctionDescriptor *descriptor;
+
+    descriptor         = [MTL4LibraryFunctionDescriptor new];
+    descriptor.library = function->library;
+    descriptor.name    = function->name;
+    return descriptor;
+  }
+  return nil;
+}
+
+static id
+mt_renderDescriptor4(const GPURenderPipeline    *pipeline,
+                     const MTRenderPipelineDesc *native) {
+  uint32_t i;
+
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    if (pipeline->_mesh) {
+      MTL4MeshRenderPipelineDescriptor *descriptor;
+
+      descriptor                            = [MTL4MeshRenderPipelineDescriptor new];
+      descriptor.objectFunctionDescriptor   = native->taskFunction;
+      descriptor.meshFunctionDescriptor     = native->meshFunction;
+      descriptor.fragmentFunctionDescriptor = native->fragmentFunction;
+      descriptor.rasterSampleCount          = pipeline->_sampleCount;
+      descriptor.alphaToCoverageState       =
+        pipeline->_alphaToCoverageEnable
+          ? MTL4AlphaToCoverageStateEnabled
+          : MTL4AlphaToCoverageStateDisabled;
+      descriptor.maxTotalThreadsPerMeshThreadgroup =
+        pipeline->_meshWorkgroupSize[0] *
+        pipeline->_meshWorkgroupSize[1] *
+        pipeline->_meshWorkgroupSize[2];
+      if (pipeline->_task) {
+        descriptor.maxTotalThreadsPerObjectThreadgroup =
+          pipeline->_taskWorkgroupSize[0] *
+          pipeline->_taskWorkgroupSize[1] *
+          pipeline->_taskWorkgroupSize[2];
+      }
+      descriptor.payloadMemoryLength = pipeline->_payloadSizeBytes;
+      for (i = 0u; i < pipeline->_colorTargetCount; i++) {
+        MTL4RenderPipelineColorAttachmentDescriptor *attachment;
+
+        attachment             = descriptor.colorAttachments[i];
+        attachment.pixelFormat = mt_format(pipeline->_colorTargetFormats[i]);
+        mt_fillBlendDescriptor4(attachment,
+                                &pipeline->_colorTargetBlends[i]);
+      }
+      return descriptor;
+    } else {
+      MTL4RenderPipelineDescriptor *descriptor;
+      MTLRenderPipelineDescriptor  *classic;
+
+      classic                               = native->classic;
+      descriptor                            = [MTL4RenderPipelineDescriptor new];
+      descriptor.vertexFunctionDescriptor   = native->vertexFunction;
+      descriptor.fragmentFunctionDescriptor = native->fragmentFunction;
+      descriptor.vertexDescriptor           = classic.vertexDescriptor;
+      descriptor.rasterSampleCount          = pipeline->_sampleCount;
+      descriptor.inputPrimitiveTopology     =
+        mt_topologyClass(pipeline->_primitiveTopology);
+      descriptor.alphaToCoverageState       =
+        pipeline->_alphaToCoverageEnable
+          ? MTL4AlphaToCoverageStateEnabled
+          : MTL4AlphaToCoverageStateDisabled;
+      for (i = 0u; i < pipeline->_colorTargetCount; i++) {
+        MTL4RenderPipelineColorAttachmentDescriptor *attachment;
+
+        attachment             = descriptor.colorAttachments[i];
+        attachment.pixelFormat = mt_format(pipeline->_colorTargetFormats[i]);
+        mt_fillBlendDescriptor4(attachment,
+                                &pipeline->_colorTargetBlends[i]);
+      }
+      return descriptor;
+    }
+  }
+  return nil;
+}
+#endif
+
 static void
 mt_fillStencilDescriptor(MTLStencilDescriptor      *desc,
                          const GPUStencilFaceState *state,
@@ -146,8 +247,9 @@ mt_fillStencilDescriptor(MTLStencilDescriptor      *desc,
 GPU_HIDE
 GPURenderPipeline*
 mt_newRenderPipeline(GPUFormat pixelFormat, bool mesh) {
-  GPURenderPipeline *pipeline;
-  id                 renderDesc;
+  MTRenderPipelineDesc *native;
+  GPURenderPipeline    *pipeline;
+  id                    renderDesc;
 
   if (mesh) {
     if (@available(macOS 13.0, iOS 16.0, *)) {
@@ -167,12 +269,16 @@ mt_newRenderPipeline(GPUFormat pixelFormat, bool mesh) {
         .colorAttachments[0].pixelFormat = mt_format(pixelFormat);
     }
   }
+  native   = calloc(1, sizeof(*native));
   pipeline = calloc(1, sizeof(*pipeline));
-  if (!pipeline) {
+  if (!native || !pipeline) {
+    free(native);
+    free(pipeline);
     [renderDesc release];
     return NULL;
   }
-  pipeline->_priv = renderDesc;
+  native->classic  = renderDesc;
+  pipeline->_priv = native;
   pipeline->_mesh = mesh;
   return pipeline;
 }
@@ -184,6 +290,7 @@ mt_newRenderState(GPUDevice         * __restrict device,
   GPUDeviceMT                 *deviceMT;
   GPURenderPipelineState      *renderPipeline;
   MTRenderPipelineState       *native;
+  MTRenderPipelineDesc        *pipelineDesc;
   MTLRenderPipelineDescriptor *renderDesc;
   MTLMeshRenderPipelineDescriptor *meshDesc;
   MTLDepthStencilDescriptor   *depthDesc;
@@ -192,6 +299,9 @@ mt_newRenderState(GPUDevice         * __restrict device,
   NSError                     *error;
   uint32_t                     i;
   bool                         usesArchive;
+#if MT_HAS_METAL4
+  id                           renderDesc4;
+#endif
   
   deviceMT = device->_priv;
   error    = nil;
@@ -199,10 +309,24 @@ mt_newRenderState(GPUDevice         * __restrict device,
   if (!native) {
     return NULL;
   }
-  renderDesc  = pipeline->_mesh ? nil : pipeline->_priv;
-  meshDesc    = pipeline->_mesh ? pipeline->_priv : nil;
+  pipelineDesc = pipeline->_priv;
+  if (!deviceMT || !pipelineDesc) {
+    free(native);
+    return NULL;
+  }
+  renderDesc  = pipeline->_mesh ? nil : pipelineDesc->classic;
+  meshDesc    = pipeline->_mesh ? pipelineDesc->classic : nil;
   usesArchive = false;
-  if (meshDesc) {
+  if (deviceMT->commandMode == MTCommandMode4) {
+#if MT_HAS_METAL4
+    renderDesc4 = mt_renderDescriptor4(pipeline, pipelineDesc);
+    native->render = mt_compileRenderPipeline4(pipeline->_cache,
+                                                deviceMT,
+                                                renderDesc4,
+                                                &error);
+    [renderDesc4 release];
+#endif
+  } else if (meshDesc) {
     if (@available(macOS 13.0, iOS 16.0, *)) {
       meshDesc.alphaToCoverageEnabled = pipeline->_alphaToCoverageEnable;
       meshDesc.maxTotalThreadsPerMeshThreadgroup =
@@ -321,7 +445,15 @@ mt_destroyRenderPipeline(GPURenderPipeline *pipeline) {
     free(native);
   }
   if (pipeline->_priv) {
-    [(id)pipeline->_priv release];
+    MTRenderPipelineDesc *native;
+
+    native = pipeline->_priv;
+    [native->meshFunction release];
+    [native->taskFunction release];
+    [native->fragmentFunction release];
+    [native->vertexFunction release];
+    [native->classic release];
+    free(native);
   }
   free(pipeline);
 }
@@ -331,27 +463,47 @@ void
 mt_setFunction(GPURenderPipeline * __restrict pipline,
                GPUShaderFunction * __restrict func,
                GPUFunctionType                functype) {
+  MTRenderPipelineDesc            *native;
+  MTShaderFunction                *function;
   MTLRenderPipelineDescriptor     *desc;
   MTLMeshRenderPipelineDescriptor *meshDesc;
 
-  desc     = pipline->_mesh ? nil : pipline->_priv;
-  meshDesc = pipline->_mesh ? pipline->_priv : nil;
+  native   = pipline->_priv;
+  function = func->_priv;
+  desc     = pipline->_mesh ? nil : native->classic;
+  meshDesc = pipline->_mesh ? native->classic : nil;
   switch (functype) {
     case GPU_FUNCTION_VERT:
-      desc.vertexFunction = (id<MTLFunction>)func->_priv;
+      desc.vertexFunction = function->function;
+#if MT_HAS_METAL4
+      [native->vertexFunction release];
+      native->vertexFunction = mt_functionDescriptor4(function);
+#endif
       break;
     case GPU_FUNCTION_FRAG:
       if (meshDesc) {
-        meshDesc.fragmentFunction = (id<MTLFunction>)func->_priv;
+        meshDesc.fragmentFunction = function->function;
       } else {
-        desc.fragmentFunction = (id<MTLFunction>)func->_priv;
+        desc.fragmentFunction = function->function;
       }
+#if MT_HAS_METAL4
+      [native->fragmentFunction release];
+      native->fragmentFunction = mt_functionDescriptor4(function);
+#endif
       break;
     case GPU_FUNCTION_TASK:
-      meshDesc.objectFunction = (id<MTLFunction>)func->_priv;
+      meshDesc.objectFunction = function->function;
+#if MT_HAS_METAL4
+      [native->taskFunction release];
+      native->taskFunction = mt_functionDescriptor4(function);
+#endif
       break;
     case GPU_FUNCTION_MESH:
-      meshDesc.meshFunction = (id<MTLFunction>)func->_priv;
+      meshDesc.meshFunction = function->function;
+#if MT_HAS_METAL4
+      [native->meshFunction release];
+      native->meshFunction = mt_functionDescriptor4(function);
+#endif
       break;
   }
 }
@@ -361,11 +513,14 @@ void
 mt_colorFormat(GPURenderPipeline * __restrict pipline,
                uint32_t                       index,
                GPUFormat                      pixelFormat) {
+  MTRenderPipelineDesc *native;
+
+  native = pipline->_priv;
   if (pipline->_mesh) {
-    ((MTLMeshRenderPipelineDescriptor *)pipline->_priv)
+    ((MTLMeshRenderPipelineDescriptor *)native->classic)
       .colorAttachments[index].pixelFormat = mt_format(pixelFormat);
   } else {
-    ((MTLRenderPipelineDescriptor *)pipline->_priv)
+    ((MTLRenderPipelineDescriptor *)native->classic)
       .colorAttachments[index].pixelFormat = mt_format(pixelFormat);
   }
 }
@@ -374,11 +529,14 @@ GPU_HIDE
 void
 mt_depthFormat(GPURenderPipeline * __restrict pipline,
                GPUFormat                      pixelFormat) {
+  MTRenderPipelineDesc *native;
+
+  native = pipline->_priv;
   if (pipline->_mesh) {
-    ((MTLMeshRenderPipelineDescriptor *)pipline->_priv)
+    ((MTLMeshRenderPipelineDescriptor *)native->classic)
       .depthAttachmentPixelFormat = mt_format(pixelFormat);
   } else {
-    ((MTLRenderPipelineDescriptor *)pipline->_priv)
+    ((MTLRenderPipelineDescriptor *)native->classic)
       .depthAttachmentPixelFormat = mt_format(pixelFormat);
   }
 }
@@ -387,11 +545,14 @@ GPU_HIDE
 void
 mt_stencilFormat(GPURenderPipeline * __restrict pipline,
                  GPUFormat                      pixelFormat) {
+  MTRenderPipelineDesc *native;
+
+  native = pipline->_priv;
   if (pipline->_mesh) {
-    ((MTLMeshRenderPipelineDescriptor *)pipline->_priv)
+    ((MTLMeshRenderPipelineDescriptor *)native->classic)
       .stencilAttachmentPixelFormat = mt_format(pixelFormat);
   } else {
-    ((MTLRenderPipelineDescriptor *)pipline->_priv)
+    ((MTLRenderPipelineDescriptor *)native->classic)
       .stencilAttachmentPixelFormat = mt_format(pixelFormat);
   }
 }
@@ -400,11 +561,14 @@ GPU_HIDE
 void
 mt_sampleCount(GPURenderPipeline * __restrict pipline,
                uint32_t                 sampleCount) {
+  MTRenderPipelineDesc *native;
+
+  native = pipline->_priv;
   if (pipline->_mesh) {
-    ((MTLMeshRenderPipelineDescriptor *)pipline->_priv).rasterSampleCount =
+    ((MTLMeshRenderPipelineDescriptor *)native->classic).rasterSampleCount =
       sampleCount;
   } else {
-    ((MTLRenderPipelineDescriptor *)pipline->_priv).rasterSampleCount =
+    ((MTLRenderPipelineDescriptor *)native->classic).rasterSampleCount =
       sampleCount;
   }
 }

@@ -153,7 +153,10 @@ GPU_HIDE
 void
 mt_vertexDesc(GPURenderPipeline         * __restrict pipeline,
               GPUVertexDescriptor * __restrict vert) {
-  ((MTLRenderPipelineDescriptor *)pipeline->_priv).vertexDescriptor = vert->_priv;
+  MTRenderPipelineDesc *native;
+
+  native = pipeline->_priv;
+  ((MTLRenderPipelineDescriptor *)native->classic).vertexDescriptor = vert->_priv;
 }
 
 GPU_HIDE

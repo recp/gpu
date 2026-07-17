@@ -18,6 +18,28 @@
 #define mt_pipeline_cache_h
 
 GPU_HIDE
+GPUResult
+mt_initPipelineCompiler(GPUDeviceMT *device);
+
+GPU_HIDE
+void
+mt_destroyPipelineCompiler(GPUDeviceMT *device);
+
+GPU_HIDE
+id
+mt_compileRenderPipeline4(GPUPipelineCache *cache,
+                          GPUDeviceMT      *device,
+                          id                descriptor,
+                          NSError         **error);
+
+GPU_HIDE
+id
+mt_compileComputePipeline4(GPUPipelineCache *cache,
+                           GPUDeviceMT      *device,
+                           id                descriptor,
+                           NSError         **error);
+
+GPU_HIDE
 bool
 mt_useRenderCache(GPUPipelineCache            *cache,
                   MTLRenderPipelineDescriptor *descriptor);

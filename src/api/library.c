@@ -1336,6 +1336,19 @@ gpuShaderFunction(GPUShaderLibrary *lib, const char *name) {
   return api->library.newFunction(lib, name);
 }
 
+GPU_HIDE
+void
+gpuDestroyShaderFunction(GPUShaderLibrary  *library,
+                         GPUShaderFunction *function) {
+  GPUApi *api;
+
+  if (!library || !function || !(api = library->_api) ||
+      !api->library.destroyFunction) {
+    return;
+  }
+  api->library.destroyFunction(function);
+}
+
 static GPUResult
 gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
                                    const void *bytecodeData,

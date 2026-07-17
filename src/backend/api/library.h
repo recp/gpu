@@ -40,6 +40,9 @@ typedef struct GPUApiLibrary {
   (*newFunction)(GPUShaderLibrary *lib, const char *name);
 
   void
+  (*destroyFunction)(GPUShaderFunction *function);
+
+  void
   (*destroyLibrary)(GPUShaderLibrary *lib);
 } GPUApiLibrary;
 

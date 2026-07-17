@@ -66,6 +66,11 @@ GPUShaderFunction *
 gpuShaderFunction(GPUShaderLibrary *library, const char *name);
 
 GPU_HIDE
+void
+gpuDestroyShaderFunction(GPUShaderLibrary  *library,
+                         GPUShaderFunction *function);
+
+GPU_HIDE
 int
 gpuGetShaderLibraryWorkgroupSize(const GPUShaderLibrary *library,
                                  const char               *entryPoint,

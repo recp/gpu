@@ -55,22 +55,56 @@ GPU_HIDE
 GPUShaderFunction*
 mt_newFunction(GPUShaderLibrary *lib, const char *name) {
   GPUShaderFunction *func;
-  id<MTLFunction> mtFunc;
+  MTShaderFunction *native;
+  id<MTLFunction>   mtFunc;
+  NSString         *mtName;
 
-  mtFunc = [(id<MTLLibrary>)lib->_priv newFunctionWithName:[NSString stringWithUTF8String:name]];
+  mtName = [NSString stringWithUTF8String:name];
+  mtFunc = [(id<MTLLibrary>)lib->_priv newFunctionWithName:mtName];
   if (!mtFunc) {
     return NULL;
   }
 
   func   = calloc(1, sizeof(*func));
-  if (!func) {
+  native = calloc(1, sizeof(*native));
+  if (!func || !native) {
+    free(native);
+    free(func);
     [mtFunc release];
     return NULL;
   }
 
-  func->_priv = mtFunc;
+  native->function = mtFunc;
+  native->library  = [(id<MTLLibrary>)lib->_priv retain];
+  native->name     = [mtName copy];
+  if (!native->library || !native->name) {
+    [native->name release];
+    [native->library release];
+    [native->function release];
+    free(native);
+    free(func);
+    return NULL;
+  }
+  func->_priv      = native;
 
   return func;
+}
+
+static void
+mt_destroyFunction(GPUShaderFunction *function) {
+  MTShaderFunction *native;
+
+  if (!function) {
+    return;
+  }
+  native = function->_priv;
+  if (native) {
+    [native->name release];
+    [native->library release];
+    [native->function release];
+    free(native);
+  }
+  free(function);
 }
 
 GPU_HIDE
@@ -183,8 +217,9 @@ GPU_HIDE
 void
 mt_initLibrary(GPUApiLibrary *api) {
   api->newLibraryWithSource = mt_newLibraryWithSource;
-  api->newFunction         = mt_newFunction;
-  api->destroyLibrary      = mt_destroyLibrary;
+  api->newFunction          = mt_newFunction;
+  api->destroyFunction      = mt_destroyFunction;
+  api->destroyLibrary       = mt_destroyLibrary;
 }
 
 GPU_HIDE

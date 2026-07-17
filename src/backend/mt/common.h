@@ -101,11 +101,26 @@ typedef struct GPUSwapchainMetal {
 } GPUSwapchainMetal;
 
 typedef struct GPUDeviceMT {
-  id<MTLDevice>     device;
-  GPUQueue        **createdQueues;
-  uint32_t          nCreatedQueues;
-  MTCommandMode     commandMode;
+  id<MTLDevice>  device;
+  id             compiler;
+  GPUQueue     **createdQueues;
+  uint32_t       nCreatedQueues;
+  MTCommandMode  commandMode;
 } GPUDeviceMT;
+
+typedef struct MTShaderFunction {
+  id<MTLFunction> function;
+  id<MTLLibrary>  library;
+  NSString       *name;
+} MTShaderFunction;
+
+typedef struct MTRenderPipelineDesc {
+  id classic;
+  id vertexFunction;
+  id fragmentFunction;
+  id taskFunction;
+  id meshFunction;
+} MTRenderPipelineDesc;
 
 typedef struct GPUTextureMT {
   id<MTLTexture> texture;

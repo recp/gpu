@@ -20,6 +20,7 @@
 
 typedef struct MTComputePipelineDesc {
   id<MTLFunction> function;
+  id              function4;
 } MTComputePipelineDesc;
 
 static MTComputeEncoder *
@@ -54,13 +55,27 @@ GPU_HIDE
 void
 mt_setComputeFunction(GPUComputePipeline *pipeline, GPUShaderFunction *func) {
   MTComputePipelineDesc *desc;
+  MTShaderFunction      *function;
 
   if (!pipeline || !pipeline->_priv || !func) {
     return;
   }
 
-  desc = pipeline->_priv;
-  desc->function = (id<MTLFunction>)func->_priv;
+  desc     = pipeline->_priv;
+  function = func->_priv;
+  [desc->function release];
+  desc->function = [function->function retain];
+#if MT_HAS_METAL4
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    MTL4LibraryFunctionDescriptor *function4;
+
+    function4         = [MTL4LibraryFunctionDescriptor new];
+    function4.library = function->library;
+    function4.name    = function->name;
+    [desc->function4 release];
+    desc->function4 = function4;
+  }
+#endif
 }
 
 GPU_HIDE
@@ -73,6 +88,9 @@ mt_newComputeState(GPUDevice *device, GPUComputePipeline *pipeline) {
   GPUDeviceMT                  *deviceMT;
   NSError                      *error;
   bool                          usesArchive;
+#if MT_HAS_METAL4
+  MTL4ComputePipelineDescriptor *pipelineDesc4;
+#endif
 
   if (!device || !pipeline || !pipeline->_priv) {
     return NULL;
@@ -84,29 +102,45 @@ mt_newComputeState(GPUDevice *device, GPUComputePipeline *pipeline) {
     return NULL;
   }
 
-  pipelineDesc = [MTLComputePipelineDescriptor new];
-  pipelineDesc.computeFunction = desc->function;
-  usesArchive = mt_useComputeCache(pipeline->_cache, pipelineDesc);
-  error       = nil;
-  mtState     = nil;
-  if (usesArchive) {
-    mtState = [deviceMT->device
-      newComputePipelineStateWithDescriptor:pipelineDesc
-                                    options:
-                                      MTLPipelineOptionFailOnBinaryArchiveMiss
-                                 reflection:nil
-                                      error:&error];
-    if (!mtState) {
-      mt_addComputeCache(pipeline->_cache, pipelineDesc);
-      error = nil;
+  pipelineDesc = nil;
+  usesArchive  = false;
+  error        = nil;
+  mtState      = nil;
+  if (deviceMT->commandMode == MTCommandMode4) {
+#if MT_HAS_METAL4
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      pipelineDesc4                           = [MTL4ComputePipelineDescriptor new];
+      pipelineDesc4.computeFunctionDescriptor = desc->function4;
+      mtState = mt_compileComputePipeline4(pipeline->_cache,
+                                            deviceMT,
+                                            pipelineDesc4,
+                                            &error);
+      [pipelineDesc4 release];
     }
-  }
-  if (!mtState) {
-    mtState = [deviceMT->device
-      newComputePipelineStateWithDescriptor:pipelineDesc
-                                    options:MTLPipelineOptionNone
-                                 reflection:nil
-                                      error:&error];
+#endif
+  } else {
+    pipelineDesc                 = [MTLComputePipelineDescriptor new];
+    pipelineDesc.computeFunction = desc->function;
+    usesArchive = mt_useComputeCache(pipeline->_cache, pipelineDesc);
+    if (usesArchive) {
+      mtState = [deviceMT->device
+        newComputePipelineStateWithDescriptor:pipelineDesc
+                                      options:
+                                        MTLPipelineOptionFailOnBinaryArchiveMiss
+                                   reflection:nil
+                                        error:&error];
+      if (!mtState) {
+        mt_addComputeCache(pipeline->_cache, pipelineDesc);
+        error = nil;
+      }
+    }
+    if (!mtState) {
+      mtState = [deviceMT->device
+        newComputePipelineStateWithDescriptor:pipelineDesc
+                                      options:MTLPipelineOptionNone
+                                   reflection:nil
+                                        error:&error];
+    }
   }
   [pipelineDesc release];
   if (!mtState) {
@@ -145,6 +179,8 @@ mt_destroyComputePipeline(GPUComputePipeline *pipeline) {
     }
     free(state);
   }
+  [desc->function4 release];
+  [desc->function release];
   free(desc);
   free(pipeline);
 }
