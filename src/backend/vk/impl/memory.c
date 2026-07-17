@@ -131,13 +131,244 @@ vk_destroyHeap(GPUHeap *heap) {
   free(heap);
 }
 
+static uint32_t
+vk_sparseMipExtent(uint32_t extent, uint32_t mipLevel) {
+  extent >>= mipLevel < 32u ? mipLevel : 31u;
+  return extent ? extent : 1u;
+}
+
+static GPUResult
+vk_submitSparse(GPUQueue                       *queueHandle,
+                const GPUQueueSparseSubmitInfo *info) {
+  GPUQueueVk                       *queue;
+  GPUDeviceVk                      *device;
+  VkSparseImageMemoryBind          *imageBinds;
+  VkSparseImageMemoryBindInfo      *imageInfos;
+  VkSparseMemoryBind               *opaqueBinds;
+  VkSparseImageOpaqueMemoryBindInfo *opaqueInfos;
+  VkSemaphore                      *waits;
+  VkSemaphore                      *signals;
+  uint64_t                         *waitValues;
+  uint64_t                         *signalValues;
+  VkTimelineSemaphoreSubmitInfo     timelineInfo = {0};
+  VkBindSparseInfo                  bindInfo = {0};
+  uint8_t                          *storage;
+  size_t                            storageSize;
+  uint32_t                          imageBindCount;
+  uint32_t                          opaqueBindCount;
+  VkResult                          result;
+
+  queue  = queueHandle ? queueHandle->_priv : NULL;
+  device = queueHandle && queueHandle->_device
+             ? queueHandle->_device->_priv
+             : NULL;
+  if (!queue || !device || !info ||
+      (queueHandle->bits & (GPU_QUEUE_GRAPHICS_BIT |
+                            GPU_QUEUE_COMPUTE_BIT |
+                            GPU_QUEUE_TRANSFER_BIT)) == 0u ||
+      !queue->queRaw) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!queueHandle->_device->adapter ||
+      queue->familyIndex >=
+        ((GPUAdapterVk *)queueHandle->_device->adapter->_priv)->nQueFamilies ||
+      ((((GPUAdapterVk *)queueHandle->_device->adapter->_priv)
+          ->queueFamilyProps[queue->familyIndex].queueFlags &
+         VK_QUEUE_SPARSE_BINDING_BIT) == 0u)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  if ((info->waitCount > 0u || info->signalCount > 0u) &&
+      !device->timelineSemaphore) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  if (vk_flushTransfers(queueHandle) != GPU_OK) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  storageSize = (size_t)info->textureMappingCount *
+                  (sizeof(*imageBinds) + sizeof(*imageInfos) +
+                   sizeof(*opaqueBinds) + sizeof(*opaqueInfos)) +
+                (size_t)info->waitCount *
+                  (sizeof(*waits) + sizeof(*waitValues)) +
+                (size_t)info->signalCount *
+                  (sizeof(*signals) + sizeof(*signalValues));
+  storage = calloc(1u, storageSize);
+  if (!storage) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  imageBinds = (VkSparseImageMemoryBind *)storage;
+  imageInfos = (VkSparseImageMemoryBindInfo *)(
+    imageBinds + info->textureMappingCount
+  );
+  opaqueBinds = (VkSparseMemoryBind *)(
+    imageInfos + info->textureMappingCount
+  );
+  opaqueInfos = (VkSparseImageOpaqueMemoryBindInfo *)(
+    opaqueBinds + info->textureMappingCount
+  );
+  waits = (VkSemaphore *)(opaqueInfos + info->textureMappingCount);
+  waitValues = (uint64_t *)(waits + info->waitCount);
+  signals = (VkSemaphore *)(waitValues + info->waitCount);
+  signalValues = (uint64_t *)(signals + info->signalCount);
+
+  imageBindCount  = 0u;
+  opaqueBindCount = 0u;
+  for (uint32_t i = 0u; i < info->textureMappingCount; i++) {
+    const GPUSparseTextureMapping *mapping;
+    GPUTextureVk                  *texture;
+    GPUHeapVk                     *heap;
+    VkDeviceSize                   memoryOffset;
+
+    mapping = &info->pTextureMappings[i];
+    texture = mapping->texture->_priv;
+    heap    = mapping->heap->_priv;
+    if (!texture || !texture->sparse || !heap || !heap->memory) {
+      free(storage);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    memoryOffset = mapping->mode == GPU_SPARSE_MAPPING_MAP
+                     ? mapping->heapTileOffset *
+                         mapping->heap->pageSizeBytes
+                     : 0u;
+    if (mapping->mipLevel ==
+        mapping->texture->_sparseRequirements.firstMipInTail) {
+      VkSparseMemoryBind               *bind;
+      VkSparseImageOpaqueMemoryBindInfo *bindInfo;
+
+      bind     = &opaqueBinds[opaqueBindCount];
+      bindInfo = &opaqueInfos[opaqueBindCount++];
+      bind->resourceOffset =
+        texture->sparseRequirements.imageMipTailOffset +
+        (texture->sparseRequirements.formatProperties.flags &
+         VK_SPARSE_IMAGE_FORMAT_SINGLE_MIPTAIL_BIT
+           ? 0u
+           : (VkDeviceSize)mapping->arrayLayer *
+               texture->sparseRequirements.imageMipTailStride);
+      bind->size         = texture->sparseRequirements.imageMipTailSize;
+      bind->memory       = mapping->mode == GPU_SPARSE_MAPPING_MAP
+                             ? heap->memory
+                             : VK_NULL_HANDLE;
+      bind->memoryOffset = memoryOffset;
+      bindInfo->image    = texture->image;
+      bindInfo->bindCount = 1u;
+      bindInfo->pBinds    = bind;
+    } else {
+      VkSparseImageMemoryBind     *bind;
+      VkSparseImageMemoryBindInfo *bindInfo;
+      VkExtent3D                   granularity;
+      uint32_t                     mipWidth;
+      uint32_t                     mipHeight;
+      uint32_t                     mipDepth;
+      uint32_t                     offsetX;
+      uint32_t                     offsetY;
+      uint32_t                     offsetZ;
+
+      bind        = &imageBinds[imageBindCount];
+      bindInfo    = &imageInfos[imageBindCount++];
+      granularity = texture->sparseRequirements.formatProperties
+                       .imageGranularity;
+      mipWidth  = vk_sparseMipExtent(mapping->texture->width,
+                                     mapping->mipLevel);
+      mipHeight = vk_sparseMipExtent(mapping->texture->height,
+                                     mapping->mipLevel);
+      mipDepth  = mapping->texture->dimension == GPU_TEXTURE_DIMENSION_3D
+                    ? vk_sparseMipExtent(mapping->texture->depthOrLayers,
+                                         mapping->mipLevel)
+                    : 1u;
+      offsetX = mapping->tileX * granularity.width;
+      offsetY = mapping->tileY * granularity.height;
+      offsetZ = mapping->tileZ * granularity.depth;
+      bind->subresource.aspectMask =
+        texture->sparseRequirements.formatProperties.aspectMask;
+      bind->subresource.mipLevel   = mapping->mipLevel;
+      bind->subresource.arrayLayer = mapping->arrayLayer;
+      bind->offset.x = (int32_t)offsetX;
+      bind->offset.y = (int32_t)offsetY;
+      bind->offset.z = (int32_t)offsetZ;
+      bind->extent.width =
+        mapping->tileWidth * granularity.width < mipWidth - offsetX
+          ? mapping->tileWidth * granularity.width
+          : mipWidth - offsetX;
+      bind->extent.height =
+        mapping->tileHeight * granularity.height < mipHeight - offsetY
+          ? mapping->tileHeight * granularity.height
+          : mipHeight - offsetY;
+      bind->extent.depth =
+        mapping->tileDepth * granularity.depth < mipDepth - offsetZ
+          ? mapping->tileDepth * granularity.depth
+          : mipDepth - offsetZ;
+      bind->memory       = mapping->mode == GPU_SPARSE_MAPPING_MAP
+                             ? heap->memory
+                             : VK_NULL_HANDLE;
+      bind->memoryOffset = memoryOffset;
+      bindInfo->image     = texture->image;
+      bindInfo->bindCount = 1u;
+      bindInfo->pBinds    = bind;
+    }
+  }
+
+  for (uint32_t i = 0u; i < info->waitCount; i++) {
+    GPUSemaphoreVk *semaphore;
+
+    semaphore = info->pWaits[i].semaphore->_priv;
+    if (!semaphore || semaphore->device != device->device ||
+        !semaphore->semaphore) {
+      free(storage);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    waits[i]      = semaphore->semaphore;
+    waitValues[i] = info->pWaits[i].value;
+  }
+  for (uint32_t i = 0u; i < info->signalCount; i++) {
+    GPUSemaphoreVk *semaphore;
+
+    semaphore = info->pSignals[i].semaphore->_priv;
+    if (!semaphore || semaphore->device != device->device ||
+        !semaphore->semaphore) {
+      free(storage);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    signals[i]      = semaphore->semaphore;
+    signalValues[i] = info->pSignals[i].value;
+  }
+
+  timelineInfo.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
+  timelineInfo.waitSemaphoreValueCount   = info->waitCount;
+  timelineInfo.pWaitSemaphoreValues      = waitValues;
+  timelineInfo.signalSemaphoreValueCount = info->signalCount;
+  timelineInfo.pSignalSemaphoreValues    = signalValues;
+  bindInfo.sType                = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;
+  bindInfo.pNext                = info->waitCount > 0u ||
+                                  info->signalCount > 0u
+                                    ? &timelineInfo
+                                    : NULL;
+  bindInfo.waitSemaphoreCount   = info->waitCount;
+  bindInfo.pWaitSemaphores      = waits;
+  bindInfo.bufferBindCount      = 0u;
+  bindInfo.imageOpaqueBindCount = opaqueBindCount;
+  bindInfo.pImageOpaqueBinds    = opaqueInfos;
+  bindInfo.imageBindCount       = imageBindCount;
+  bindInfo.pImageBinds          = imageInfos;
+  bindInfo.signalSemaphoreCount = info->signalCount;
+  bindInfo.pSignalSemaphores    = signals;
+  result = vkQueueBindSparse(queue->queRaw,
+                             1u,
+                             &bindInfo,
+                             VK_NULL_HANDLE);
+  free(storage);
+  return result == VK_SUCCESS ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+}
+
 GPU_HIDE
 void
 vk_initMemory(GPUApiMemory *api) {
   api->getBufferRequirements  = vk_getBufferMemoryRequirements;
   api->getTextureRequirements = vk_getTextureMemoryRequirements;
+  api->getSparseTextureRequirements = vk_getSparseTextureRequirements;
   api->createHeap             = vk_createHeap;
   api->destroyHeap            = vk_destroyHeap;
   api->createPlacedBuffer     = vk_createPlacedBuffer;
   api->createPlacedTexture    = vk_createPlacedTexture;
+  api->createSparseTexture    = vk_createSparseTexture;
+  api->submitSparse           = vk_submitSparse;
 }

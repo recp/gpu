@@ -1529,6 +1529,18 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       return adapterVk->atomic64;
     case GPU_FEATURE_PLACED_RESOURCES:
       return true;
+    case GPU_FEATURE_SPARSE_TEXTURES:
+      return adapterVk->features.sparseBinding &&
+             (adapterVk->features.sparseResidencyImage2D ||
+              adapterVk->features.sparseResidencyImage3D) &&
+             vk_hasQueueCapability(adapterVk,
+                                   VK_QUEUE_SPARSE_BINDING_BIT);
+    case GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT:
+      return adapterVk->features.sparseBinding &&
+             (adapterVk->features.sparseResidencyImage2D ||
+              adapterVk->features.sparseResidencyImage3D) &&
+             vk_hasQueueCapability(adapterVk,
+                                   VK_QUEUE_SPARSE_BINDING_BIT);
     default:
       return false;
   }
@@ -1786,7 +1798,8 @@ static uint32_t
 vk__findQueueFamily(const GPUAdapterVk *adapterVk,
                     GPUQueueFlagBits    requiredBits,
                     GPUQueueFlagBits    optionalBits,
-                    uint32_t            count) {
+                    uint32_t            count,
+                    VkQueueFlags        nativeRequiredFlags) {
   VkQueueFlags requiredFlags;
   VkQueueFlags optionalFlags;
   VkQueueFlags commonFlags;
@@ -1798,10 +1811,12 @@ vk__findQueueFamily(const GPUAdapterVk *adapterVk,
   if (!vk__queueFlags(requiredBits, &requiredFlags)) {
     return UINT32_MAX;
   }
+  requiredFlags |= nativeRequiredFlags;
   (void)vk__queueFlags(optionalBits, &optionalFlags);
   commonFlags   = VK_QUEUE_GRAPHICS_BIT |
                   VK_QUEUE_COMPUTE_BIT |
-                  VK_QUEUE_TRANSFER_BIT;
+                  VK_QUEUE_TRANSFER_BIT |
+                  VK_QUEUE_SPARSE_BINDING_BIT;
   bestIndex     = UINT32_MAX;
   bestScore     = UINT32_MAX;
 
@@ -1964,7 +1979,13 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     familyIndex = vk__findQueueFamily(adapterVk,
                                       queCI[i].flags,
                                       queCI[i].optionalFlags,
-                                      queCI[i].count);
+                                      queCI[i].count,
+                                      i == 0u && vk_featureEnabled(
+                                        enabledFeatureMask,
+                                        GPU_FEATURE_SPARSE_TEXTURES
+                                      )
+                                        ? VK_QUEUE_SPARSE_BINDING_BIT
+                                        : 0u);
     if (familyIndex == UINT32_MAX) {
       goto err;
     }
@@ -1985,6 +2006,22 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
       maxQueueCount = plans[i].count;
     }
     totalQueueCount += plans[i].count;
+  }
+
+  if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SPARSE_TEXTURES)) {
+    bool sparseQueue;
+
+    sparseQueue = false;
+    for (uint32_t i = 0u; i < planCount; i++) {
+      if ((adapterVk->queueFamilyProps[plans[i].familyIndex].queueFlags &
+           VK_QUEUE_SPARSE_BINDING_BIT) != 0u) {
+        sparseQueue = true;
+        break;
+      }
+    }
+    if (!sparseQueue) {
+      goto err;
+    }
   }
 
   queuePriorities = calloc(maxQueueCount, sizeof(*queuePriorities));
@@ -2028,6 +2065,13 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   }
   if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_MULTI_DRAW)) {
     coreFeatures.multiDrawIndirect = adapterVk->features.multiDrawIndirect;
+  }
+  if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SPARSE_TEXTURES)) {
+    coreFeatures.sparseBinding          = VK_TRUE;
+    coreFeatures.sparseResidencyImage2D =
+      adapterVk->features.sparseResidencyImage2D;
+    coreFeatures.sparseResidencyImage3D =
+      adapterVk->features.sparseResidencyImage3D;
   }
   coreFeatures.independentBlend   = adapterVk->features.independentBlend;
   coreFeatures.imageCubeArray     = adapterVk->features.imageCubeArray;

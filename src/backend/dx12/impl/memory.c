@@ -61,6 +61,10 @@ dx12_createHeap(GPUDevice               *device,
   if (!device || !(deviceDX12 = device->_priv) || !info || !outHeap) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  if (info->usage == GPU_HEAP_USAGE_SPARSE &&
+      info->pageSizeBytes != D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
   if (deviceDX12->resourceHeapTier >= D3D12_RESOURCE_HEAP_TIER_2 &&
       (info->compatibilityMask & DX12_MEMORY_COMPAT_ALL) != 0u) {
     compatibility = DX12_MEMORY_COMPAT_ALL;
@@ -128,13 +132,129 @@ dx12_destroyHeap(GPUHeap *heap) {
   free(heap);
 }
 
+static GPUResult
+dx12_submitSparse(GPUQueue                       *queueHandle,
+                  const GPUQueueSparseSubmitInfo *info) {
+  GPUQueueDX12 *queue;
+  HRESULT       result;
+
+  queue = queueHandle ? queueHandle->_priv : NULL;
+  if (!queue || !queue->commandQueue || !info) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (dx12_flushTransfers(queueHandle) != GPU_OK) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  for (uint32_t i = 0u; i < info->waitCount; i++) {
+    ID3D12Fence *fence;
+
+    fence = info->pWaits[i].semaphore->_priv;
+    if (!fence) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    result = queue->commandQueue->lpVtbl->Wait(queue->commandQueue,
+                                               fence,
+                                               info->pWaits[i].value);
+    if (FAILED(result)) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+
+  for (uint32_t i = 0u; i < info->textureMappingCount; i++) {
+    const GPUSparseTextureMapping *mapping;
+    GPUTextureDX12                *texture;
+    GPUHeapDX12                   *heap;
+    D3D12_TILED_RESOURCE_COORDINATE coordinate = {0};
+    D3D12_TILE_REGION_SIZE          region = {0};
+    D3D12_TILE_RANGE_FLAGS          rangeFlag;
+    UINT                            heapOffset;
+    UINT                            tileCount;
+    uint64_t                        tileCount64;
+
+    mapping = &info->pTextureMappings[i];
+    texture = mapping->texture->_priv;
+    heap    = mapping->heap->_priv;
+    if (!texture || !texture->sparse || !texture->resource || !heap ||
+        !heap->heap ||
+        (mapping->mode == GPU_SPARSE_MAPPING_MAP &&
+         mapping->heapTileOffset > UINT_MAX)) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+
+    coordinate.Subresource = mapping->mipLevel +
+                             mapping->arrayLayer *
+                               texture->mipLevelCount;
+    if (mapping->mipLevel ==
+        mapping->texture->_sparseRequirements.firstMipInTail) {
+      region.UseBox  = FALSE;
+      region.NumTiles = texture->packedMipInfo.NumTilesForPackedMips;
+      tileCount64     = region.NumTiles;
+    } else {
+      coordinate.X     = mapping->tileX;
+      coordinate.Y     = mapping->tileY;
+      coordinate.Z     = mapping->tileZ;
+      region.UseBox    = TRUE;
+      region.Width     = mapping->tileWidth;
+      region.Height    = (UINT16)mapping->tileHeight;
+      region.Depth     = (UINT16)mapping->tileDepth;
+      tileCount64      = (uint64_t)mapping->tileWidth *
+                         mapping->tileHeight * mapping->tileDepth;
+    }
+    if (tileCount64 == 0u || tileCount64 > UINT_MAX) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+
+    rangeFlag = mapping->mode == GPU_SPARSE_MAPPING_MAP
+                  ? D3D12_TILE_RANGE_FLAG_NONE
+                  : D3D12_TILE_RANGE_FLAG_NULL;
+    heapOffset = mapping->mode == GPU_SPARSE_MAPPING_MAP
+                   ? (UINT)mapping->heapTileOffset
+                   : 0u;
+    tileCount = (UINT)tileCount64;
+    queue->commandQueue->lpVtbl->UpdateTileMappings(
+      queue->commandQueue,
+      texture->resource,
+      1u,
+      &coordinate,
+      &region,
+      mapping->mode == GPU_SPARSE_MAPPING_MAP ? heap->heap : NULL,
+      1u,
+      &rangeFlag,
+      &heapOffset,
+      &tileCount,
+      D3D12_TILE_MAPPING_FLAG_NONE
+    );
+  }
+
+  for (uint32_t i = 0u; i < info->signalCount; i++) {
+    ID3D12Fence *fence;
+
+    fence = info->pSignals[i].semaphore->_priv;
+    result = fence
+               ? queue->commandQueue->lpVtbl->Signal(
+                   queue->commandQueue,
+                   fence,
+                   info->pSignals[i].value
+                 )
+               : E_INVALIDARG;
+    if (FAILED(result)) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+  return GPU_OK;
+}
+
 GPU_HIDE
 void
 dx12_initMemory(GPUApiMemory *api) {
   api->getBufferRequirements  = dx12_getBufferMemoryRequirements;
   api->getTextureRequirements = dx12_getTextureMemoryRequirements;
+  api->getSparseTextureRequirements = dx12_getSparseTextureRequirements;
   api->createHeap             = dx12_createHeap;
   api->destroyHeap            = dx12_destroyHeap;
   api->createPlacedBuffer     = dx12_createPlacedBuffer;
   api->createPlacedTexture    = dx12_createPlacedTexture;
+  api->createSparseTexture    = dx12_createSparseTexture;
+  api->submitSparse           = dx12_submitSparse;
 }

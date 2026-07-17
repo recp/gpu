@@ -31,6 +31,13 @@ typedef struct GPUApiMemory {
                             GPUMemoryRequirements      *outRequirements);
 
   GPUResult
+  (*getSparseTextureRequirements)(
+    GPUDevice                    *device,
+    const GPUTextureCreateInfo   *info,
+    GPUSparseTextureRequirements *outRequirements
+  );
+
+  GPUResult
   (*createHeap)(GPUDevice               *device,
                 const GPUHeapCreateInfo *info,
                 GPUHeap                **outHeap);
@@ -51,6 +58,16 @@ typedef struct GPUApiMemory {
                          GPUHeap                    *heap,
                          uint64_t                    heapOffset,
                          GPUTexture                **outTexture);
+
+  GPUResult
+  (*createSparseTexture)(GPUDevice                  *device,
+                         const GPUTextureCreateInfo *info,
+                         GPUHeap                    *heap,
+                         GPUTexture                **outTexture);
+
+  GPUResult
+  (*submitSparse)(GPUQueue                       *queue,
+                  const GPUQueueSparseSubmitInfo *info);
 } GPUApiMemory;
 
 #endif /* gpu_gpudef_memory_h */

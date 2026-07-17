@@ -20,20 +20,22 @@
 #include "../common.h"
 
 struct GPUTexture {
-  void                *_priv;
-  GPUDevice           *device;
-  GPUHeap             *_heap;
-  uint64_t             _heapOffset;
-  uint64_t             _allocationSize;
-  GPUFormat            format;
-  GPUTextureDimension dimension;
-  uint32_t             width;
-  uint32_t             height;
-  uint32_t             depthOrLayers;
-  uint32_t             mipLevelCount;
-  uint32_t             sampleCount;
-  GPUTextureUsageFlags usage;
-  bool                 _ownsNative;
+  void                         *_priv;
+  GPUDevice                    *device;
+  GPUHeap                      *_heap;
+  uint64_t                      _heapOffset;
+  uint64_t                      _allocationSize;
+  GPUSparseTextureRequirements _sparseRequirements;
+  GPUFormat                     format;
+  GPUTextureDimension           dimension;
+  uint32_t                      width;
+  uint32_t                      height;
+  uint32_t                      depthOrLayers;
+  uint32_t                      mipLevelCount;
+  uint32_t                      sampleCount;
+  GPUTextureUsageFlags          usage;
+  bool                          _sparse;
+  bool                          _ownsNative;
 };
 
 struct GPUTextureView {

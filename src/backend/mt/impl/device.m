@@ -451,6 +451,7 @@ bool
 mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
   GPUAdapterMT *adapterMT;
   id<MTLDevice> device;
+  const char   *mode;
 
   if (!(adapterMT = mt_adapter(adapter))) {
     return false;
@@ -467,6 +468,34 @@ mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       if (@available(macOS 10.15, iOS 13.0, *)) {
         return true;
       }
+      return false;
+    case GPU_FEATURE_SPARSE_TEXTURES:
+#if TARGET_OS_OSX
+      device = adapterMT->device;
+      if (@available(macOS 11.0, *)) {
+        return [device supportsFamily:MTLGPUFamilyApple6] ||
+               [device supportsFamily:MTLGPUFamilyMac2];
+      }
+#endif
+#if MT_HAS_METAL4
+      device = adapterMT->device;
+      if (@available(macOS 26.0, iOS 26.0, *)) {
+        return [device respondsToSelector:@selector(newMTL4CommandQueue)];
+      }
+#endif
+      return false;
+    case GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT:
+#if MT_HAS_METAL4
+      mode = getenv("GPU_METAL_MODE");
+      if (mode && strcmp(mode, "classic") == 0) {
+        return false;
+      }
+      device = adapterMT->device;
+      if (@available(macOS 26.0, iOS 26.0, *)) {
+        return [device respondsToSelector:@selector(newMTL4CommandQueue)] &&
+               [device respondsToSelector:@selector(newCommandAllocator)];
+      }
+#endif
       return false;
     case GPU_FEATURE_MESH_SHADER:
       device = adapterMT->device;
@@ -689,6 +718,7 @@ mt_selectCommandMode(id<MTLDevice>  device,
                      uint64_t       enabledFeatureMask,
                      MTCommandMode *outMode) {
   const char *mode;
+  bool        explicitSparse;
   bool        rayQuery;
   bool        supportsMetal4;
 
@@ -697,10 +727,16 @@ mt_selectCommandMode(id<MTLDevice>  device,
   }
 
   mode           = getenv("GPU_METAL_MODE");
+  explicitSparse = (enabledFeatureMask &
+                    (UINT64_C(1) <<
+                     GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT)) != 0u;
   rayQuery       = (enabledFeatureMask &
                     (UINT64_C(1) << GPU_FEATURE_RAY_QUERY)) != 0u;
   supportsMetal4 = mt_supportsMetal4(device);
   if (mode && strcmp(mode, "classic") == 0) {
+    if (explicitSparse) {
+      return false;
+    }
     *outMode = MTCommandModeClassic;
     return true;
   }
@@ -721,7 +757,7 @@ mt_selectCommandMode(id<MTLDevice>  device,
     return false;
   }
 
-  *outMode = supportsMetal4 && mt_metal4AutoSafe() &&
+  *outMode = supportsMetal4 && (explicitSparse || mt_metal4AutoSafe()) &&
              (!rayQuery || mt_supportsMetal4RayQuery(device))
                ? MTCommandMode4
                : MTCommandModeClassic;

@@ -54,7 +54,10 @@ _Static_assert(
   "transient allocator 64-bit fields must stay packed"
 );
 GPU_ASSERT_64BIT_SIZE(GPUMemoryRequirements, 24u);
-GPU_ASSERT_64BIT_SIZE(GPUHeapCreateInfo, 40u);
+GPU_ASSERT_64BIT_SIZE(GPUHeapCreateInfo, 56u);
+GPU_ASSERT_64BIT_SIZE(GPUSparseTextureRequirements, 48u);
+GPU_ASSERT_64BIT_SIZE(GPUSparseTextureMapping, 64u);
+GPU_ASSERT_64BIT_SIZE(GPUQueueSparseSubmitInfo, 64u);
 GPU_ASSERT_64BIT_SIZE(GPUAliasingBarrier, 32u);
 GPU_ASSERT_64BIT_SIZE(GPUBarrierBatch, 48u);
 GPU_ASSERT_64BIT_SIZE(GPUQueueSubmitExInfo, 64u);

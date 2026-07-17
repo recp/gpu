@@ -290,6 +290,7 @@ dx12_loadDXCompiler(void) {
 static bool
 dx12_probeAdapter(GPUAdapterDX12 *adapter) {
   ID3D12Device    *device;
+  D3D12_FEATURE_DATA_D3D12_OPTIONS options = {0};
   D3D_SHADER_MODEL shaderModel;
   HMODULE          dxcModule;
   HRESULT          result;
@@ -327,6 +328,14 @@ dx12_probeAdapter(GPUAdapterDX12 *adapter) {
   adapter->rayQuery = dxcModule &&
                       dx12_queryRayQuery(device, shaderModel, NULL);
   adapter->rayTracingPipeline = adapter->rayQuery;
+  adapter->tiledResourcesTier = D3D12_TILED_RESOURCES_TIER_NOT_SUPPORTED;
+  if (SUCCEEDED(device->lpVtbl->CheckFeatureSupport(
+        device,
+        D3D12_FEATURE_D3D12_OPTIONS,
+        &options,
+        sizeof(options)))) {
+    adapter->tiledResourcesTier = options.TiledResourcesTier;
+  }
   additionalRates = false;
   if (dx12_queryVRS(device,
                     &adapter->vrsTier,
@@ -400,12 +409,14 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
   device->rootSignatureVersion = rootSignature.HighestVersion;
 
   device->resourceHeapTier = D3D12_RESOURCE_HEAP_TIER_1;
+  device->tiledResourcesTier = D3D12_TILED_RESOURCES_TIER_NOT_SUPPORTED;
   if (SUCCEEDED(device->d3dDevice->lpVtbl->CheckFeatureSupport(
         device->d3dDevice,
         D3D12_FEATURE_D3D12_OPTIONS,
         &options,
         sizeof(options)))) {
     device->resourceHeapTier = options.ResourceHeapTier;
+    device->tiledResourcesTier = options.TiledResourcesTier;
   }
 
   device->shaderModel = dx12_queryShaderModel(device->d3dDevice);
@@ -762,6 +773,10 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
     case GPU_FEATURE_MULTI_DRAW:
     case GPU_FEATURE_PLACED_RESOURCES:
       return true;
+    case GPU_FEATURE_SPARSE_TEXTURES:
+    case GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT:
+      return adapterDX12->tiledResourcesTier >=
+             D3D12_TILED_RESOURCES_TIER_1;
     case GPU_FEATURE_SHADER_F16:
       return adapterDX12->shaderF16;
     case GPU_FEATURE_ATOMIC64:

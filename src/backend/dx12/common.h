@@ -47,6 +47,7 @@ typedef struct GPUAdapterDX12 {
   GPUShadingRateFlagsEXT             vrsRates;
   GPUShadingRateCombinerFlagsEXT     vrsCombiners;
   D3D12_VARIABLE_SHADING_RATE_TIER   vrsTier;
+  D3D12_TILED_RESOURCES_TIER         tiledResourcesTier;
   uint32_t                           minSubgroupSize;
   uint32_t                           maxSubgroupSize;
   uint32_t                           vrsTileSize;
@@ -100,6 +101,7 @@ typedef struct GPUDeviceDX12 {
   D3D_ROOT_SIGNATURE_VERSION         rootSignatureVersion;
   D3D_SHADER_MODEL                   shaderModel;
   D3D12_RESOURCE_HEAP_TIER           resourceHeapTier;
+  D3D12_TILED_RESOURCES_TIER         tiledResourcesTier;
   GPUShadingRateFlagsEXT             vrsRates;
   GPUShadingRateCombinerFlagsEXT     vrsCombiners;
   D3D12_VARIABLE_SHADING_RATE_TIER   vrsTier;
@@ -320,12 +322,15 @@ typedef struct GPURayTracingEncoderDX12 {
 typedef struct GPUTextureDX12 {
   ID3D12Resource         *resource;
   D3D12_RESOURCE_STATES  *states;
+  D3D12_PACKED_MIP_INFO   packedMipInfo;
+  D3D12_TILE_SHAPE        tileShape;
   D3D12_RESOURCE_STATES   state;
   uint32_t                mipLevelCount;
   uint32_t                arrayLayerCount;
   uint32_t                subresourceCount;
   uint32_t                planeCount;
   bool                    stateUniform;
+  bool                    sparse;
 } GPUTextureDX12;
 
 typedef struct GPURenderPipelineDX12 {

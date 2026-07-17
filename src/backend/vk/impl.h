@@ -105,6 +105,25 @@ vk_createPlacedTexture(GPUDevice                  *device,
                        GPUTexture                **outTexture);
 
 GPU_HIDE
+GPUResult
+vk_getSparseTextureRequirements(
+  GPUDevice                    *device,
+  const GPUTextureCreateInfo   *info,
+  GPUSparseTextureRequirements *outRequirements
+);
+
+GPU_HIDE
+GPUResult
+vk_createSparseTexture(GPUDevice                  *device,
+                       const GPUTextureCreateInfo *info,
+                       GPUHeap                    *heap,
+                       GPUTexture                **outTexture);
+
+GPU_HIDE
+GPUResult
+vk_flushTransfers(GPUQueue *queue);
+
+GPU_HIDE
 void
 vk_destroyBuffer(GPUBuffer * __restrict buffer);
 

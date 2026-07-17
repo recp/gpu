@@ -94,7 +94,7 @@ gpu_reportDeviceLostOnce(GPUDevice *device) {
 static bool
 gpu_knownFeature(GPUFeature feature) {
   return feature >= GPU_FEATURE_COMPUTE &&
-         feature <= GPU_FEATURE_SPARSE_RESOURCES;
+         feature <= GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT;
 }
 
 static uint64_t
@@ -211,6 +211,17 @@ gpu_enabledFeatureMaskForCreateInfo(const GPUAdapter *adapter,
   if ((mask & gpu_featureBit(GPU_FEATURE_RAY_TRACING_PIPELINE)) != 0u) {
     mask |= gpu_featureBit(GPU_FEATURE_RAY_QUERY);
   }
+  if ((mask &
+       gpu_featureBit(GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT)) != 0u) {
+    mask |= gpu_featureBit(GPU_FEATURE_SPARSE_TEXTURES);
+  }
+  if ((mask & gpu_featureBit(GPU_FEATURE_SPARSE_TEXTURES)) != 0u &&
+      GPUIsFeatureSupported(
+        (GPUAdapter *)adapter,
+        GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT
+      )) {
+    mask |= gpu_featureBit(GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT);
+  }
   return mask;
 }
 
@@ -220,7 +231,7 @@ gpu_supportedFeatureMask(const GPUAdapter *adapter) {
 
   mask = 0;
   for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_SPARSE_RESOURCES;
+       feature <= GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT;
        feature = (GPUFeature)(feature + 1)) {
     if (gpu_adapterSupportsFeature(adapter, feature)) {
       mask |= gpu_featureBit(feature);
@@ -239,7 +250,7 @@ gpu_fillFeatureSet(uint64_t       mask,
 
   count = 0u;
   for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_SPARSE_RESOURCES && count < capacity;
+       feature <= GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT && count < capacity;
        feature = (GPUFeature)(feature + 1)) {
     if (mask & gpu_featureBit(feature)) {
       storage[count++] = feature;

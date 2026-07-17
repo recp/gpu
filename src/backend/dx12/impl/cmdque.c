@@ -955,6 +955,12 @@ dx12__flushTransfers(GPUQueue *queue, bool wait) {
 
 GPU_HIDE
 GPUResult
+dx12_flushTransfers(GPUQueue *queue) {
+  return dx12__flushTransfers(queue, false);
+}
+
+GPU_HIDE
+GPUResult
 dx12_submitTransfer(GPUQueue *queue, bool wait) {
   GPUQueueDX12        *native;
 

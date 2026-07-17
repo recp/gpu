@@ -619,6 +619,215 @@ dx12_getTextureMemoryRequirements(GPUDevice                  *device,
   return GPU_OK;
 }
 
+static GPUResult
+dx12__sparseTextureRequirements(
+  GPUDevice                    *device,
+  ID3D12Resource              *resource,
+  const D3D12_RESOURCE_DESC   *desc,
+  uint32_t                     mipLevelCount,
+  GPUSparseTextureRequirements *outRequirements,
+  D3D12_PACKED_MIP_INFO       *outPackedMipInfo,
+  D3D12_TILE_SHAPE            *outTileShape
+) {
+  GPUDeviceDX12           *deviceDX12;
+  D3D12_PACKED_MIP_INFO    packedMipInfo = {0};
+  D3D12_TILE_SHAPE         tileShape = {0};
+  UINT                     tileCount;
+  UINT                     subresourceTilingCount;
+
+  if (!device || !(deviceDX12 = device->_priv) || !resource || !desc ||
+      !outRequirements) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  tileCount               = 0u;
+  subresourceTilingCount  = 0u;
+  deviceDX12->d3dDevice->lpVtbl->GetResourceTiling(
+    deviceDX12->d3dDevice,
+    resource,
+    &tileCount,
+    &packedMipInfo,
+    &tileShape,
+    &subresourceTilingCount,
+    0u,
+    NULL
+  );
+  if (tileCount == 0u || tileShape.WidthInTexels == 0u ||
+      tileShape.HeightInTexels == 0u || tileShape.DepthInTexels == 0u ||
+      packedMipInfo.NumStandardMips > mipLevelCount) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  outRequirements->compatibilityMask = dx12_memoryCompatibility(device, desc);
+  outRequirements->pageSizeBytes     = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+  outRequirements->mipTailTileCount  = packedMipInfo.NumTilesForPackedMips;
+  outRequirements->mipTailLayerStrideTiles = 0u;
+  outRequirements->tileWidth         = tileShape.WidthInTexels;
+  outRequirements->tileHeight        = tileShape.HeightInTexels;
+  outRequirements->tileDepth         = tileShape.DepthInTexels;
+  outRequirements->firstMipInTail    = packedMipInfo.NumPackedMips > 0u
+                                         ? packedMipInfo.NumStandardMips
+                                         : mipLevelCount;
+  if (outPackedMipInfo) {
+    *outPackedMipInfo = packedMipInfo;
+  }
+  if (outTileShape) {
+    *outTileShape = tileShape;
+  }
+  return outRequirements->compatibilityMask != 0u
+           ? GPU_OK
+           : GPU_ERROR_BACKEND_FAILURE;
+}
+
+GPU_HIDE
+GPUResult
+dx12_getSparseTextureRequirements(
+  GPUDevice                    *device,
+  const GPUTextureCreateInfo   *info,
+  GPUSparseTextureRequirements *outRequirements
+) {
+  GPUDeviceDX12       *deviceDX12;
+  ID3D12Resource      *resource;
+  D3D12_RESOURCE_DESC  desc = {0};
+  D3D12_CLEAR_VALUE    clearValue = {0};
+  D3D12_RESOURCE_STATES initialState;
+  uint32_t             mipLevelCount;
+  uint32_t             arrayLayerCount;
+  uint32_t             planeCount;
+  uint32_t             subresourceCount;
+  GPUResult            result;
+  HRESULT              nativeResult;
+
+  if (!device || !(deviceDX12 = device->_priv) || !info ||
+      !outRequirements ||
+      deviceDX12->tiledResourcesTier < D3D12_TILED_RESOURCES_TIER_1 ||
+      info->dimension == GPU_TEXTURE_DIMENSION_1D ||
+      (info->dimension != GPU_TEXTURE_DIMENSION_3D &&
+       info->depthOrLayers != 1u) ||
+      (info->sampleCount != 0u && info->sampleCount != 1u) ||
+      (info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  result = dx12__textureDesc(device,
+                            info,
+                            &desc,
+                            &clearValue,
+                            &initialState,
+                            &mipLevelCount,
+                            &arrayLayerCount,
+                            &planeCount,
+                            &subresourceCount);
+  if (result != GPU_OK) {
+    return result;
+  }
+  GPU__UNUSED(clearValue);
+  GPU__UNUSED(initialState);
+  GPU__UNUSED(arrayLayerCount);
+  GPU__UNUSED(planeCount);
+  GPU__UNUSED(subresourceCount);
+
+  resource = NULL;
+  nativeResult = deviceDX12->d3dDevice->lpVtbl->CreateReservedResource(
+    deviceDX12->d3dDevice,
+    &desc,
+    D3D12_RESOURCE_STATE_COMMON,
+    NULL,
+    &IID_ID3D12Resource,
+    (void **)&resource
+  );
+  if (FAILED(nativeResult) || !resource) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  result = dx12__sparseTextureRequirements(device,
+                                            resource,
+                                            &desc,
+                                            mipLevelCount,
+                                            outRequirements,
+                                            NULL,
+                                            NULL);
+  resource->lpVtbl->Release(resource);
+  return result;
+}
+
+GPU_HIDE
+GPUResult
+dx12_createSparseTexture(GPUDevice                  *device,
+                         const GPUTextureCreateInfo *info,
+                         GPUHeap                    *heap,
+                         GPUTexture                **outTexture) {
+  GPUDeviceDX12       *deviceDX12;
+  ID3D12Resource      *resource;
+  D3D12_RESOURCE_DESC  desc = {0};
+  D3D12_CLEAR_VALUE    clearValue = {0};
+  D3D12_RESOURCE_STATES initialState;
+  GPUSparseTextureRequirements requirements;
+  D3D12_PACKED_MIP_INFO packedMipInfo;
+  D3D12_TILE_SHAPE      tileShape;
+  uint32_t             mipLevelCount;
+  uint32_t             arrayLayerCount;
+  uint32_t             planeCount;
+  uint32_t             subresourceCount;
+  GPUResult            result;
+  HRESULT              nativeResult;
+
+  if (!device || !(deviceDX12 = device->_priv) || !info || !heap ||
+      !outTexture) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  result = dx12__textureDesc(device,
+                            info,
+                            &desc,
+                            &clearValue,
+                            &initialState,
+                            &mipLevelCount,
+                            &arrayLayerCount,
+                            &planeCount,
+                            &subresourceCount);
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  resource = NULL;
+  nativeResult = deviceDX12->d3dDevice->lpVtbl->CreateReservedResource(
+    deviceDX12->d3dDevice,
+    &desc,
+    D3D12_RESOURCE_STATE_COMMON,
+    NULL,
+    &IID_ID3D12Resource,
+    (void **)&resource
+  );
+  if (FAILED(nativeResult) || !resource) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  result = dx12__sparseTextureRequirements(device,
+                                            resource,
+                                            &desc,
+                                            mipLevelCount,
+                                            &requirements,
+                                            &packedMipInfo,
+                                            &tileShape);
+  if (result == GPU_OK) {
+    result = dx12__wrapTexture(device,
+                               info,
+                               resource,
+                               D3D12_RESOURCE_STATE_COMMON,
+                               mipLevelCount,
+                               arrayLayerCount,
+                               planeCount,
+                               subresourceCount,
+                               outTexture);
+  }
+  if (result != GPU_OK) {
+    resource->lpVtbl->Release(resource);
+    return result;
+  }
+  ((GPUTextureDX12 *)(*outTexture)->_priv)->packedMipInfo = packedMipInfo;
+  ((GPUTextureDX12 *)(*outTexture)->_priv)->tileShape     = tileShape;
+  ((GPUTextureDX12 *)(*outTexture)->_priv)->sparse       = true;
+  GPU__UNUSED(heap);
+  return GPU_OK;
+}
+
 GPU_HIDE
 GPUResult
 dx12_createPlacedTexture(GPUDevice                  *device,

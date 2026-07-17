@@ -428,10 +428,25 @@ void
 mt_applyPendingBarrier(GPUCommandBuffer *cmdb, id encoder) {
 #if MT_HAS_METAL4
   MTCommandBuffer *native;
+  MTCommandQueue  *queue;
+  bool             sparseBarrier;
 
   native = mt_commandBuffer(cmdb);
-  if (!native || !encoder || native->mode != MTCommandMode4 ||
-      native->pendingAfterStages == 0 || native->pendingBeforeStages == 0) {
+  queue  = native ? native->owner : NULL;
+  if (!native || !queue || !encoder || native->mode != MTCommandMode4) {
+    return;
+  }
+
+  os_unfair_lock_lock(&queue->poolLock);
+  sparseBarrier = queue->pendingSparseBarrier;
+  queue->pendingSparseBarrier = false;
+  os_unfair_lock_unlock(&queue->poolLock);
+  if (sparseBarrier) {
+    native->pendingAfterStages  |= MTLStageResourceState;
+    native->pendingBeforeStages |= MTLStageAll;
+    native->pendingVisibility   |= MTL4VisibilityOptionDevice;
+  }
+  if (native->pendingAfterStages == 0 || native->pendingBeforeStages == 0) {
     return;
   }
 

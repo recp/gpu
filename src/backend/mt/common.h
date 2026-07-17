@@ -207,6 +207,7 @@ typedef struct MTCommandQueue {
   uint32_t              activeTransferSlot;
   uint32_t              nextTransferSlot;
   bool                  transferOpen;
+  bool                  pendingSparseBarrier;
 } MTCommandQueue;
 
 struct MTCommandBuffer {

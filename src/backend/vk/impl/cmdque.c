@@ -761,6 +761,12 @@ vk__flushTransfers(GPUQueue *queue, bool wait) {
 
 GPU_HIDE
 GPUResult
+vk_flushTransfers(GPUQueue *queue) {
+  return vk__flushTransfers(queue, false);
+}
+
+GPU_HIDE
+GPUResult
 vk_submitTransfer(GPUQueue *queue, bool wait) {
   GPUQueueVk        *native;
 

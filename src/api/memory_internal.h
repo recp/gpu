@@ -24,6 +24,8 @@ struct GPUHeap {
   GPUDevice          *device;
   uint64_t            sizeBytes;
   uint64_t            compatibilityMask;
+  uint64_t            pageSizeBytes;
+  GPUHeapUsage        usage;
 };
 
 static inline bool

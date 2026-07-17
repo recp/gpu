@@ -72,26 +72,28 @@ typedef void (*GPUDeviceErrorCallback)(GPUDevice                *device,
 typedef void (*GPUProc)(void);
 
 typedef enum GPUFeature {
-  GPU_FEATURE_COMPUTE               = 0,
-  GPU_FEATURE_TIMESTAMPS            = 1,
-  GPU_FEATURE_PIPELINE_STATISTICS   = 2,
-  GPU_FEATURE_INDIRECT_DRAW         = 3,
-  GPU_FEATURE_MULTI_DRAW            = 4,
-  GPU_FEATURE_SUBGROUPS             = 5,
-  GPU_FEATURE_SHADER_F16            = 6,
+  GPU_FEATURE_COMPUTE                   = 0,
+  GPU_FEATURE_TIMESTAMPS                = 1,
+  GPU_FEATURE_PIPELINE_STATISTICS       = 2,
+  GPU_FEATURE_INDIRECT_DRAW             = 3,
+  GPU_FEATURE_MULTI_DRAW                = 4,
+  GPU_FEATURE_SUBGROUPS                 = 5,
+  GPU_FEATURE_SHADER_F16                = 6,
 
   /* non-uniform indexing of fixed-size resource arrays. */
-  GPU_FEATURE_DESCRIPTOR_INDEXING   = 7,
-  GPU_FEATURE_MESH_SHADER           = 8,
-  GPU_FEATURE_RAY_QUERY             = 9,
-  GPU_FEATURE_VARIABLE_RATE_SHADING = 10,
-  GPU_FEATURE_BINDLESS              = 11,
-  GPU_FEATURE_SUBGROUP_MATRIX       = 12,
+  GPU_FEATURE_DESCRIPTOR_INDEXING       = 7,
+  GPU_FEATURE_MESH_SHADER               = 8,
+  GPU_FEATURE_RAY_QUERY                 = 9,
+  GPU_FEATURE_VARIABLE_RATE_SHADING     = 10,
+  GPU_FEATURE_BINDLESS                  = 11,
+  GPU_FEATURE_SUBGROUP_MATRIX           = 12,
   /* 64-bit storage-buffer add/min/max atomics. */
-  GPU_FEATURE_ATOMIC64              = 13,
-  GPU_FEATURE_RAY_TRACING_PIPELINE  = 14,
-  GPU_FEATURE_PLACED_RESOURCES      = 15,
-  GPU_FEATURE_SPARSE_RESOURCES      = 16
+  GPU_FEATURE_ATOMIC64                  = 13,
+  GPU_FEATURE_RAY_TRACING_PIPELINE      = 14,
+  GPU_FEATURE_PLACED_RESOURCES          = 15,
+  GPU_FEATURE_SPARSE_TEXTURES           = 16,
+  GPU_FEATURE_SPARSE_BUFFERS            = 17,
+  GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT = 18
 } GPUFeature;
 
 typedef struct GPUFeatureSet {

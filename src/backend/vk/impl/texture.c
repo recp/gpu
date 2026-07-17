@@ -843,6 +843,216 @@ vk_getTextureMemoryRequirements(GPUDevice                  *device,
   return GPU_OK;
 }
 
+static GPUResult
+vk__getSparseTextureRequirements(
+  GPUDevice                       *device,
+  VkImage                          image,
+  VkImageAspectFlags               aspect,
+  uint32_t                         mipLevelCount,
+  GPUSparseTextureRequirements    *outRequirements,
+  VkSparseImageMemoryRequirements *outNativeRequirements
+) {
+  GPUDeviceVk                    *deviceVk;
+  VkSparseImageMemoryRequirements stackRequirements[4];
+  VkSparseImageMemoryRequirements *requirements;
+  VkSparseImageMemoryRequirements *selected;
+  VkMemoryRequirements             memoryRequirements;
+  uint32_t                         count;
+  uint32_t                         memoryTypes;
+
+  deviceVk = device ? device->_priv : NULL;
+  if (!deviceVk || !image || !outRequirements) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  count = 0u;
+  vkGetImageSparseMemoryRequirements(deviceVk->device,
+                                     image,
+                                     &count,
+                                     NULL);
+  if (count == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  requirements = stackRequirements;
+  if (count > GPU_ARRAY_LEN(stackRequirements)) {
+    requirements = calloc(count, sizeof(*requirements));
+    if (!requirements) {
+      return GPU_ERROR_OUT_OF_MEMORY;
+    }
+  }
+  vkGetImageSparseMemoryRequirements(deviceVk->device,
+                                     image,
+                                     &count,
+                                     requirements);
+  selected = NULL;
+  for (uint32_t i = 0u; i < count; i++) {
+    if ((requirements[i].formatProperties.aspectMask & aspect) != 0u &&
+        (requirements[i].formatProperties.aspectMask &
+         VK_IMAGE_ASPECT_METADATA_BIT) == 0u) {
+      selected = &requirements[i];
+      break;
+    }
+  }
+  if (!selected) {
+    if (requirements != stackRequirements) {
+      free(requirements);
+    }
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  vkGetImageMemoryRequirements(deviceVk->device,
+                               image,
+                               &memoryRequirements);
+  memoryTypes = vk_filterMemoryTypes(device,
+                                     memoryRequirements.memoryTypeBits);
+  if (memoryTypes == 0u || memoryRequirements.alignment == 0u ||
+      selected->formatProperties.imageGranularity.width == 0u ||
+      selected->formatProperties.imageGranularity.height == 0u ||
+      selected->formatProperties.imageGranularity.depth == 0u ||
+      selected->imageMipTailFirstLod > mipLevelCount) {
+    if (requirements != stackRequirements) {
+      free(requirements);
+    }
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  outRequirements->compatibilityMask = memoryTypes;
+  outRequirements->pageSizeBytes     = memoryRequirements.alignment;
+  outRequirements->mipTailTileCount  =
+    (selected->imageMipTailSize + memoryRequirements.alignment - 1u) /
+    memoryRequirements.alignment;
+  outRequirements->mipTailLayerStrideTiles =
+    (selected->formatProperties.flags &
+     VK_SPARSE_IMAGE_FORMAT_SINGLE_MIPTAIL_BIT) != 0u
+      ? 0u
+      : selected->imageMipTailStride / memoryRequirements.alignment;
+  outRequirements->tileWidth =
+    selected->formatProperties.imageGranularity.width;
+  outRequirements->tileHeight =
+    selected->formatProperties.imageGranularity.height;
+  outRequirements->tileDepth =
+    selected->formatProperties.imageGranularity.depth;
+  outRequirements->firstMipInTail = selected->imageMipTailFirstLod;
+  if (outNativeRequirements) {
+    *outNativeRequirements = *selected;
+  }
+  if (requirements != stackRequirements) {
+    free(requirements);
+  }
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
+vk_getSparseTextureRequirements(
+  GPUDevice                    *device,
+  const GPUTextureCreateInfo   *info,
+  GPUSparseTextureRequirements *outRequirements
+) {
+  GPUDeviceVk       *deviceVk;
+  GPUAdapterVk      *adapterVk;
+  VkImageCreateInfo  imageInfo = {0};
+  VkImageAspectFlags aspect;
+  VkImage            image;
+  GPUResult          result;
+
+  adapterVk = device && device->adapter ? device->adapter->_priv : NULL;
+  if (!device || !(deviceVk = device->_priv) || !adapterVk || !info ||
+      !outRequirements ||
+      info->dimension == GPU_TEXTURE_DIMENSION_1D ||
+      (info->sampleCount != 0u && info->sampleCount != 1u) ||
+      vk__imageAspect(info->format) != VK_IMAGE_ASPECT_COLOR_BIT) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  if ((info->dimension == GPU_TEXTURE_DIMENSION_2D &&
+       !adapterVk->features.sparseResidencyImage2D) ||
+      (info->dimension == GPU_TEXTURE_DIMENSION_3D &&
+       !adapterVk->features.sparseResidencyImage3D)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  result = vk__textureCreateInfo(device, info, &imageInfo, &aspect);
+  if (result != GPU_OK) {
+    return result;
+  }
+  imageInfo.flags |= VK_IMAGE_CREATE_SPARSE_BINDING_BIT |
+                     VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT;
+  image = VK_NULL_HANDLE;
+  if (vkCreateImage(deviceVk->device,
+                    &imageInfo,
+                    NULL,
+                    &image) != VK_SUCCESS) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  result = vk__getSparseTextureRequirements(device,
+                                             image,
+                                             aspect,
+                                             imageInfo.mipLevels,
+                                             outRequirements,
+                                             NULL);
+  vkDestroyImage(deviceVk->device, image, NULL);
+  return result;
+}
+
+GPU_HIDE
+GPUResult
+vk_createSparseTexture(GPUDevice                  *device,
+                       const GPUTextureCreateInfo *info,
+                       GPUHeap                    *heap,
+                       GPUTexture                **outTexture) {
+  GPUDeviceVk         *deviceVk;
+  GPUTextureVk         state = {0};
+  VkImageCreateInfo    imageInfo = {0};
+  GPUSparseTextureRequirements requirements;
+  uint32_t             arrayLayerCount;
+  GPUResult            result;
+
+  if (!device || !(deviceVk = device->_priv) || !info || !heap ||
+      !outTexture) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  result = vk__textureCreateInfo(device, info, &imageInfo, &state.aspect);
+  if (result != GPU_OK) {
+    return result;
+  }
+  imageInfo.flags |= VK_IMAGE_CREATE_SPARSE_BINDING_BIT |
+                     VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT;
+  arrayLayerCount = imageInfo.arrayLayers;
+  if (imageInfo.mipLevels > UINT32_MAX / arrayLayerCount) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  state.gpuDevice        = deviceVk;
+  state.device           = deviceVk->device;
+  state.layout           = VK_IMAGE_LAYOUT_UNDEFINED;
+  state.mipLevelCount    = imageInfo.mipLevels;
+  state.arrayLayerCount  = arrayLayerCount;
+  state.subresourceCount = imageInfo.mipLevels * arrayLayerCount;
+  state.layoutUniform    = true;
+  state.ownsMemory       = false;
+  state.sparse           = true;
+  if (vkCreateImage(state.device,
+                    &imageInfo,
+                    NULL,
+                    &state.image) != VK_SUCCESS) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  result = vk__getSparseTextureRequirements(
+    device,
+    state.image,
+    state.aspect,
+    imageInfo.mipLevels,
+    &requirements,
+    &state.sparseRequirements
+  );
+  if (result != GPU_OK) {
+    vkDestroyImage(state.device, state.image, NULL);
+    return result;
+  }
+  GPU__UNUSED(heap);
+  return vk__finishTexture(device, info, &imageInfo, &state, outTexture);
+}
+
 GPU_HIDE
 GPUResult
 vk_createPlacedTexture(GPUDevice                  *device,

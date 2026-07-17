@@ -64,7 +64,7 @@ struct GPUDevice {
   bool                         transientConfigured;
   bool                         transientFrameBegun;
   GPUFeature                   enabledFeatureStorage[
-    GPU_FEATURE_SPARSE_RESOURCES + 1u
+    GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT + 1u
   ];
 };
 

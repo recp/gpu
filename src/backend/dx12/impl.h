@@ -66,6 +66,16 @@ GPU_HIDE GPUResult dx12_createPlacedTexture(GPUDevice                  *device,
                                             GPUHeap                    *heap,
                                             uint64_t                    heapOffset,
                                             GPUTexture                **outTexture);
+GPU_HIDE GPUResult dx12_getSparseTextureRequirements(
+  GPUDevice                    *device,
+  const GPUTextureCreateInfo   *info,
+  GPUSparseTextureRequirements *outRequirements);
+GPU_HIDE GPUResult dx12_createSparseTexture(
+  GPUDevice                  *device,
+  const GPUTextureCreateInfo *info,
+  GPUHeap                    *heap,
+  GPUTexture                **outTexture);
+GPU_HIDE GPUResult dx12_flushTransfers(GPUQueue *queue);
 GPU_HIDE void dx12_initSampler(GPUApiSampler *api);
 GPU_HIDE void dx12_destroyDescriptorHeaps(GPUDeviceDX12 *device);
 // GPU_HIDE void dx12_initPass(GPUApiRenderPass* api);

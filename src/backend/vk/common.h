@@ -418,6 +418,7 @@ typedef struct GPUTextureVk {
   VkImage            image;
   VkDeviceMemory     memory;
   VkRenderPass       renderPasses[3][2];
+  VkSparseImageMemoryRequirements sparseRequirements;
   VkImageLayout      layout;
   VkImageAspectFlags aspect;
   uint32_t           mipLevelCount;
@@ -425,6 +426,7 @@ typedef struct GPUTextureVk {
   uint32_t           subresourceCount;
   bool               layoutUniform;
   bool               ownsMemory;
+  bool               sparse;
 } GPUTextureVk;
 
 typedef struct GPUDescriptorPoolVk {
