@@ -214,6 +214,7 @@ if(GPU_BUILD_METAL)
     src/backend/mt/impl/render/rce.m
     src/backend/mt/impl/renderpass.m
     src/backend/mt/impl/swapchain.m
+    src/backend/mt/impl/texture_view_pool.m
     src/backend/mt/impl/vertex.m
     src/backend/mt/impl/vrs.m
   )

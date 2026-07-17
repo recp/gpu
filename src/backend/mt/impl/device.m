@@ -16,6 +16,7 @@
 
 #include "../common.h"
 #include "pipeline_cache.h"
+#include "texture_view_pool.h"
 
 static GPUAdapterMT *
 mt_adapter(const GPUAdapter *adapter) {
@@ -802,6 +803,7 @@ mt_createDevice(GPUAdapter              * __restrict adapter,
 
   deviceMT->device      = adapterMT->device;
   deviceMT->commandMode = commandMode;
+  deviceMT->textureViewPoolLock = OS_UNFAIR_LOCK_INIT;
   if (mt_initPipelineCompiler(deviceMT) != GPU_OK) {
     free(deviceMT);
     free(device);
@@ -891,6 +893,7 @@ mt_destroyDevice(GPUDevice * __restrict device) {
       }
       free(deviceMT->createdQueues);
     }
+    mt_destroyTextureViewPools(deviceMT);
     mt_destroyPipelineCompiler(deviceMT);
     free(deviceMT);
   }

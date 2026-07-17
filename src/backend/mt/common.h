@@ -70,6 +70,8 @@ typedef enum MTCommandMode {
   MTCommandMode4
 } MTCommandMode;
 
+typedef struct MTTextureViewPoolPage MTTextureViewPoolPage;
+
 typedef struct GPUAdapterMT {
   id<MTLDevice>           device;
   MTLReadWriteTextureTier storageTier;
@@ -101,11 +103,14 @@ typedef struct GPUSwapchainMetal {
 } GPUSwapchainMetal;
 
 typedef struct GPUDeviceMT {
-  id<MTLDevice>  device;
-  id             compiler;
-  GPUQueue     **createdQueues;
-  uint32_t       nCreatedQueues;
-  MTCommandMode  commandMode;
+  id<MTLDevice>          device;
+  id                     compiler;
+  id                     textureViewPlaceholder;
+  MTTextureViewPoolPage *textureViewPools;
+  GPUQueue             **createdQueues;
+  os_unfair_lock         textureViewPoolLock;
+  uint32_t               nCreatedQueues;
+  MTCommandMode          commandMode;
 } GPUDeviceMT;
 
 typedef struct MTShaderFunction {
@@ -126,6 +131,11 @@ typedef struct GPUTextureMT {
   id<MTLTexture> texture;
   id<MTLTexture> stencilCopyView;
 } GPUTextureMT;
+
+typedef struct MTTextureViewSlot {
+  MTTextureViewPoolPage *page;
+  uint32_t               index;
+} MTTextureViewSlot;
 
 typedef struct GPUHeapMT {
   id<MTLHeap> heap;

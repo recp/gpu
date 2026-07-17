@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "texture_view_pool.h"
 #include <string.h>
 
 GPU_INLINE
@@ -123,14 +124,16 @@ mt_textureType(GPUTextureDimension dimension, uint32_t depthOrLayers) {
 
 GPU_INLINE
 MTLTextureType
-mt_textureViewType(GPUTextureViewType viewType) {
+mt_textureViewType(GPUTextureViewType viewType, uint32_t sampleCount) {
   switch (viewType) {
     case GPU_TEXTURE_VIEW_1D:
       return MTLTextureType1D;
     case GPU_TEXTURE_VIEW_1D_ARRAY:
       return MTLTextureType1DArray;
     case GPU_TEXTURE_VIEW_2D_ARRAY:
-      return MTLTextureType2DArray;
+      return sampleCount > 1u
+               ? MTLTextureType2DMultisampleArray
+               : MTLTextureType2DArray;
     case GPU_TEXTURE_VIEW_CUBE:
       return MTLTextureTypeCube;
     case GPU_TEXTURE_VIEW_CUBE_ARRAY:
@@ -139,7 +142,9 @@ mt_textureViewType(GPUTextureViewType viewType) {
       return MTLTextureType3D;
     case GPU_TEXTURE_VIEW_2D:
     default:
-      return MTLTextureType2D;
+      return sampleCount > 1u
+               ? MTLTextureType2DMultisample
+               : MTLTextureType2D;
   }
 }
 
@@ -509,7 +514,9 @@ mt_createTextureView(GPUTexture                      * __restrict texture,
                      GPUTextureView                 ** __restrict outView) {
   id<MTLTexture> nativeTexture;
   id<MTLTexture> nativeView;
+  MTTextureViewSlot *slot;
   GPUTextureView *view;
+  MTLTextureType nativeViewType;
   NSRange levels;
   NSRange slices;
   bool fullView;
@@ -521,37 +528,81 @@ mt_createTextureView(GPUTexture                      * __restrict texture,
   *outView = NULL;
 
   nativeTexture = mt_nativeTexture(texture);
+  nativeViewType = mt_textureViewType(info->viewType, texture->sampleCount);
+  nativeView     = nil;
   fullView = info->format == texture->format &&
+             nativeTexture.textureType == nativeViewType &&
              info->baseMipLevel == 0 &&
              info->mipLevelCount == texture->mipLevelCount &&
              info->baseArrayLayer == 0 &&
-             info->arrayLayerCount == texture->depthOrLayers;
-  if (fullView) {
+             info->arrayLayerCount == gpuTextureArrayLayerCount(texture);
+  view = calloc(1, sizeof(*view) + sizeof(*slot));
+  if (!view) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  slot = (MTTextureViewSlot *)(view + 1);
+
+#if MT_HAS_METAL4
+  if (!fullView &&
+      (texture->usage & (GPU_TEXTURE_USAGE_COLOR_TARGET |
+                         GPU_TEXTURE_USAGE_DEPTH_STENCIL |
+                         GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT)) == 0u) {
+    GPUDeviceMT             *deviceMT;
+    MTLTextureViewDescriptor *descriptor;
+    GPUResult                result;
+
+    deviceMT = texture->device->_priv;
+    if (deviceMT && deviceMT->commandMode == MTCommandMode4) {
+      if (@available(macOS 26.0, iOS 26.0, *)) {
+        descriptor             = [MTLTextureViewDescriptor new];
+        descriptor.pixelFormat = mt_format(info->format);
+        descriptor.textureType = nativeViewType;
+        descriptor.levelRange  = NSMakeRange(info->baseMipLevel,
+                                             info->mipLevelCount);
+        descriptor.sliceRange  = NSMakeRange(info->baseArrayLayer,
+                                             info->arrayLayerCount);
+        result = mt_acquireTextureView(deviceMT,
+                                       nativeTexture,
+                                       descriptor,
+                                       slot,
+                                       &view->_gpuResourceID);
+        [descriptor release];
+        if (result != GPU_OK) {
+          free(view);
+          return result;
+        }
+        nativeView = [nativeTexture retain];
+      }
+    }
+  }
+#endif
+
+  if (!nativeView && fullView) {
     nativeView = nativeTexture;
     [nativeView retain];
-  } else {
+  } else if (!nativeView) {
     levels = NSMakeRange(info->baseMipLevel, info->mipLevelCount);
     slices = NSMakeRange(info->baseArrayLayer, info->arrayLayerCount);
     nativeView = [nativeTexture newTextureViewWithPixelFormat:mt_format(info->format)
-                                                  textureType:mt_textureViewType(info->viewType)
+                                                  textureType:nativeViewType
                                                        levels:levels
                                                        slices:slices];
   }
   if (!nativeView) {
-    return GPU_ERROR_BACKEND_FAILURE;
-  }
-
-  view = calloc(1, sizeof(*view));
-  if (!view) {
-    [nativeView release];
+    if (slot->page) {
+      mt_releaseTextureView(texture->device->_priv, slot);
+    }
+    free(view);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   view->_priv       = nativeView;
   view->_texture    = texture;
   view->_ownsNative = true;
-  if (@available(macOS 13.0, iOS 16.0, *)) {
-    view->_gpuResourceID = nativeView.gpuResourceID._impl;
+  if (view->_gpuResourceID == 0u) {
+    if (@available(macOS 13.0, iOS 16.0, *)) {
+      view->_gpuResourceID = nativeView.gpuResourceID._impl;
+    }
   }
   *outView = view;
   return GPU_OK;
@@ -560,10 +611,16 @@ mt_createTextureView(GPUTexture                      * __restrict texture,
 GPU_HIDE
 void
 mt_destroyTextureView(GPUTextureView * __restrict view) {
+  MTTextureViewSlot *slot;
+
   if (!view) {
     return;
   }
 
+  slot = (MTTextureViewSlot *)(view + 1);
+  if (slot->page && view->_texture && view->_texture->device) {
+    mt_releaseTextureView(view->_texture->device->_priv, slot);
+  }
   if (view->_ownsNative && view->_priv) {
     [(id<MTLTexture>)view->_priv release];
   }
