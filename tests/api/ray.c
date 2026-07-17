@@ -24,6 +24,16 @@ ray_create_buffer(GPUDevice           *device,
 int
 gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
                               const char *bytecodePath) {
+  static const float vertices[] = {
+    -0.5f, -0.5f, 0.0f,
+     0.5f, -0.5f, 0.0f,
+     0.0f,  0.5f, 0.0f
+  };
+  static const float identity[3][4] = {
+    {1.0f, 0.0f, 0.0f, 0.0f},
+    {0.0f, 1.0f, 0.0f, 0.0f},
+    {0.0f, 0.0f, 1.0f, 0.0f}
+  };
   static const char * const entries[] = {
     "GPUCreateRayTracingPipelineEXT",
     "GPUDestroyRayTracingPipelineEXT",
@@ -35,64 +45,87 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
     "GPUDispatchRaysEXT",
     "GPUEndRayTracingPassEXT"
   };
-  GPUDeviceCreateInfo                  deviceInfo      = {0};
-  GPUBindGroupEntry                    groupEntry      = {0};
-  GPUBindGroupCreateInfo               groupInfo       = {0};
-  GPUQueueSubmitInfo                   submitInfo      = {0};
-  GPUShaderReflection                  reflection      = {0};
-  GPURayTracingShaderGroupEXT          groups[5]       = {0};
-  GPURayTracingPipelineCreateInfoEXT   pipelineInfo    = {0};
-  GPUShaderTableRecordEXT              raygenRecord    = {0};
-  GPUShaderTableRecordEXT              missRecord      = {0};
-  GPUShaderTableRecordEXT              hitRecords[2]   = {0};
-  GPUShaderTableRecordEXT              callableRecord  = {0};
-  GPUShaderTableCreateInfoEXT          tableInfo       = {0};
-  GPUDevice                           *disabled;
-  GPUDevice                           *enabled;
-  GPUQueue                            *queue;
-  GPUShaderLibrary                    *library;
-  GPUBindGroupLayout                  *groupLayout;
-  GPUPipelineLayout                   *layout;
-  GPUBuffer                           *outputBuffer;
-  GPUBindGroup                        *group;
-  GPURayTracingPipelineEXT            *pipeline;
-  GPUShaderTableEXT                   *table;
-  GPUCommandBuffer                    *cmdb;
-  GPURayTracingPassEncoderEXT         *rayPass;
-  GPUFence                            *fence;
-  void                                *bytecode;
-  uint64_t                             bytecodeSize;
-  uint32_t                             layoutCount;
-  uint32_t                             resultValue;
-  GPUFeature                           feature;
-  GPUResult                            result;
-  bool                                 sawOutput;
-  int                                  ok;
+  GPUDeviceCreateInfo                          deviceInfo      = {0};
+  GPUAccelerationStructureTriangleGeometryEXT geometry        = {0};
+  GPUAccelerationStructureBuildInfoEXT         blasBuild       = {0};
+  GPUAccelerationStructureBuildInfoEXT         tlasBuild       = {0};
+  GPUAccelerationStructureSizesEXT             blasSizes       = {0};
+  GPUAccelerationStructureSizesEXT             tlasSizes       = {0};
+  GPUAccelerationStructureCreateInfoEXT        structureInfo   = {0};
+  GPUAccelerationStructureInstanceEXT          instance        = {0};
+  GPUBindGroupEntry                            groupEntries[2]  = {0};
+  GPUBindGroupCreateInfo                       groupInfo        = {0};
+  GPUQueueSubmitInfo                           submitInfo       = {0};
+  GPUShaderReflection                          reflection       = {0};
+  GPURayTracingShaderGroupEXT                  groups[5]        = {0};
+  GPURayTracingPipelineCreateInfoEXT           pipelineInfo     = {0};
+  GPUShaderTableRecordEXT                      raygenRecord     = {0};
+  GPUShaderTableRecordEXT                      missRecord       = {0};
+  GPUShaderTableRecordEXT                      hitRecords[2]    = {0};
+  GPUShaderTableRecordEXT                      callableRecord   = {0};
+  GPUShaderTableCreateInfoEXT                  tableInfo        = {0};
+  GPUDevice                               *disabled;
+  GPUDevice                               *enabled;
+  GPUQueue                                *queue;
+  GPUShaderLibrary                        *library;
+  GPUBindGroupLayout                      *groupLayout;
+  GPUPipelineLayout                       *layout;
+  GPUBuffer                               *vertexBuffer;
+  GPUBuffer                               *scratchBuffer;
+  GPUBuffer                               *outputBuffer;
+  GPUAccelerationStructureEXT             *blas;
+  GPUAccelerationStructureEXT             *tlas;
+  GPUBindGroup                            *group;
+  GPURayTracingPipelineEXT                *pipeline;
+  GPUShaderTableEXT                       *table;
+  GPUCommandBuffer                        *cmdb;
+  GPUAccelerationStructurePassEncoderEXT *buildPass;
+  GPURayTracingPassEncoderEXT             *rayPass;
+  GPUFence                                *fence;
+  void                                    *bytecode;
+  uint64_t                                 bytecodeSize;
+  uint64_t                                 scratchSize;
+  uint32_t                                 layoutCount;
+  uint32_t                                 resultValues[2];
+  GPUFeature                               feature;
+  GPUResult                                result;
+  bool                                     sawScene;
+  bool                                     sawOutput;
+  int                                      ok;
 
   if (!adapter) {
     return 0;
   }
 
-  disabled     = NULL;
-  enabled      = NULL;
-  queue        = NULL;
-  library      = NULL;
-  groupLayout  = NULL;
-  layout       = NULL;
-  outputBuffer = NULL;
-  group        = NULL;
-  pipeline     = NULL;
-  table        = NULL;
-  cmdb         = NULL;
-  rayPass      = NULL;
-  fence        = NULL;
-  bytecode     = NULL;
-  bytecodeSize = 0u;
-  layoutCount  = 0u;
-  resultValue  = 0u;
-  sawOutput    = false;
-  ok           = 0;
-  feature      = GPU_FEATURE_RAY_TRACING_PIPELINE;
+  disabled      = NULL;
+  enabled       = NULL;
+  queue         = NULL;
+  library       = NULL;
+  groupLayout   = NULL;
+  layout        = NULL;
+  vertexBuffer  = NULL;
+  scratchBuffer = NULL;
+  outputBuffer  = NULL;
+  blas          = NULL;
+  tlas          = NULL;
+  group         = NULL;
+  pipeline      = NULL;
+  table         = NULL;
+  cmdb          = NULL;
+  buildPass     = NULL;
+  rayPass       = NULL;
+  fence         = NULL;
+  bytecode      = NULL;
+  bytecodeSize  = 0u;
+  scratchSize   = 0u;
+  layoutCount   = 0u;
+  sawScene      = false;
+  sawOutput     = false;
+  ok            = 0;
+  feature       = GPU_FEATURE_RAY_TRACING_PIPELINE;
+
+  resultValues[0] = 0u;
+  resultValues[1] = 0u;
   deviceInfo.chain.sType      = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize = sizeof(deviceInfo);
   if (!GPUIsFeatureSupported(adapter, feature)) {
@@ -166,7 +199,7 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
     fprintf(stderr, "ray pipeline USL compile/reflection failed\n");
     goto cleanup;
   }
-  if (reflection.resourceCount != 1u) {
+  if (reflection.resourceCount != 2u) {
     fprintf(stderr,
             "ray pipeline reflection resource mismatch: %u\n",
             reflection.resourceCount);
@@ -176,14 +209,19 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
     const GPUShaderResourceReflection *resource;
 
     resource = &reflection.pResources[i];
-    if (resource->groupIndex == 0u &&
-        resource->binding == 0u &&
-        resource->bindingType == GPU_BINDING_STORAGE_BUFFER &&
-        resource->visibility == GPU_SHADER_STAGE_RAY_GENERATION_BIT) {
+    if (resource->groupIndex != 0u ||
+        resource->visibility != GPU_SHADER_STAGE_RAY_GENERATION_BIT) {
+      continue;
+    }
+    if (resource->binding == 0u &&
+        resource->bindingType == GPU_BINDING_ACCELERATION_STRUCTURE) {
+      sawScene = true;
+    } else if (resource->binding == 1u &&
+               resource->bindingType == GPU_BINDING_STORAGE_BUFFER) {
       sawOutput = true;
     }
   }
-  if (!sawOutput) {
+  if (!sawScene || !sawOutput) {
     fprintf(stderr, "ray pipeline reflection binding mismatch\n");
     goto cleanup;
   }
@@ -202,9 +240,98 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
     fprintf(stderr, "ray pipeline reflected layout creation failed\n");
     goto cleanup;
   }
-  if (!ray_create_buffer(enabled,
+  if (!ray_create_buffer(
+        enabled,
+        "ray-pipeline-vertices",
+        sizeof(vertices),
+        GPU_BUFFER_USAGE_COPY_DST |
+          GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT,
+        &vertexBuffer) ||
+      GPUQueueWriteBuffer(queue,
+                          vertexBuffer,
+                          0u,
+                          vertices,
+                          sizeof(vertices)) != GPU_OK) {
+    fprintf(stderr, "ray pipeline vertex setup failed\n");
+    goto cleanup;
+  }
+
+  geometry.vertexBuffer = vertexBuffer;
+  geometry.vertexCount  = 3u;
+  geometry.vertexStride = sizeof(float) * 3u;
+  geometry.vertexFormat = GPU_VERTEX_FORMAT_FLOAT32X3;
+  geometry.flags        =
+    GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT;
+  blasBuild.chain.sType      =
+    GPU_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_INFO_EXT;
+  blasBuild.chain.structSize          = sizeof(blasBuild);
+  blasBuild.label                     = "ray-pipeline-blas";
+  blasBuild.type                      =
+    GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT;
+  blasBuild.mode                      = GPU_ACCELERATION_STRUCTURE_BUILD_EXT;
+  blasBuild.bottomLevel.pGeometries   = &geometry;
+  blasBuild.bottomLevel.geometryCount = 1u;
+  if (GPUGetAccelerationStructureSizesEXT(enabled,
+                                          &blasBuild,
+                                          &blasSizes) != GPU_OK) {
+    fprintf(stderr, "ray pipeline BLAS size query failed\n");
+    goto cleanup;
+  }
+
+  structureInfo.chain.sType      =
+    GPU_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_EXT;
+  structureInfo.chain.structSize = sizeof(structureInfo);
+  structureInfo.label            = "ray-pipeline-blas";
+  structureInfo.type             =
+    GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT;
+  structureInfo.sizeBytes        = blasSizes.accelerationStructureSize;
+  if (GPUCreateAccelerationStructureEXT(enabled,
+                                        &structureInfo,
+                                        &blas) != GPU_OK || !blas) {
+    fprintf(stderr, "ray pipeline BLAS create failed\n");
+    goto cleanup;
+  }
+
+  instance.structure = blas;
+  instance.flags     = GPU_ACCELERATION_STRUCTURE_INSTANCE_DISABLE_CULL_BIT_EXT;
+  memcpy(instance.transform, identity, sizeof(identity));
+  tlasBuild.chain.sType      =
+    GPU_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_INFO_EXT;
+  tlasBuild.chain.structSize        = sizeof(tlasBuild);
+  tlasBuild.label                   = "ray-pipeline-tlas";
+  tlasBuild.type                    =
+    GPU_ACCELERATION_STRUCTURE_TOP_LEVEL_EXT;
+  tlasBuild.mode                    = GPU_ACCELERATION_STRUCTURE_BUILD_EXT;
+  tlasBuild.topLevel.pInstances     = &instance;
+  tlasBuild.topLevel.instanceCount  = 1u;
+  if (GPUGetAccelerationStructureSizesEXT(enabled,
+                                          &tlasBuild,
+                                          &tlasSizes) != GPU_OK) {
+    fprintf(stderr, "ray pipeline TLAS size query failed\n");
+    goto cleanup;
+  }
+
+  structureInfo.label     = "ray-pipeline-tlas";
+  structureInfo.type      = GPU_ACCELERATION_STRUCTURE_TOP_LEVEL_EXT;
+  structureInfo.sizeBytes = tlasSizes.accelerationStructureSize;
+  if (GPUCreateAccelerationStructureEXT(enabled,
+                                        &structureInfo,
+                                        &tlas) != GPU_OK || !tlas) {
+    fprintf(stderr, "ray pipeline TLAS create failed\n");
+    goto cleanup;
+  }
+
+  scratchSize = ray_max_u64(blasSizes.buildScratchSize,
+                            tlasSizes.buildScratchSize);
+  if (!ray_create_buffer(
+        enabled,
+        "ray-pipeline-scratch",
+        scratchSize,
+        GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT,
+        &scratchBuffer) ||
+      !ray_create_buffer(enabled,
                          "ray-pipeline-output",
-                         sizeof(resultValue),
+                         sizeof(resultValues),
                          GPU_BUFFER_USAGE_STORAGE |
                            GPU_BUFFER_USAGE_COPY_SRC |
                            GPU_BUFFER_USAGE_COPY_DST,
@@ -212,22 +339,25 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
       GPUQueueWriteBuffer(queue,
                           outputBuffer,
                           0u,
-                          &resultValue,
-                          sizeof(resultValue)) != GPU_OK) {
-    fprintf(stderr, "ray pipeline output setup failed\n");
+                          resultValues,
+                          sizeof(resultValues)) != GPU_OK) {
+    fprintf(stderr, "ray pipeline scratch/output setup failed\n");
     goto cleanup;
   }
 
-  groupEntry.buffer.buffer = outputBuffer;
-  groupEntry.buffer.size   = sizeof(resultValue);
-  groupEntry.binding       = 0u;
-  groupEntry.bindingType   = GPU_BINDING_STORAGE_BUFFER;
+  groupEntries[0].binding               = 0u;
+  groupEntries[0].bindingType           = GPU_BINDING_ACCELERATION_STRUCTURE;
+  groupEntries[0].accelerationStructure = tlas;
+  groupEntries[1].buffer.buffer         = outputBuffer;
+  groupEntries[1].buffer.size           = sizeof(resultValues);
+  groupEntries[1].binding               = 1u;
+  groupEntries[1].bindingType           = GPU_BINDING_STORAGE_BUFFER;
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "ray-pipeline-group";
   groupInfo.layout           = groupLayout;
-  groupInfo.pEntries         = &groupEntry;
-  groupInfo.entryCount       = 1u;
+  groupInfo.pEntries         = groupEntries;
+  groupInfo.entryCount       = GPU_ARRAY_LEN(groupEntries);
   if (GPUCreateBindGroup(enabled, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "ray pipeline bind group failed\n");
     goto cleanup;
@@ -297,16 +427,35 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
     goto cleanup;
   }
 
-  result = GPUAcquireCommandBuffer(queue, "ray-pipeline-dispatch", &cmdb);
+  result = GPUAcquireCommandBuffer(queue, "ray-pipeline", &cmdb);
   if (result != GPU_OK || !cmdb ||
-      !(rayPass = GPUBeginRayTracingPassEXT(cmdb,
-                                            "ray-pipeline-dispatch"))) {
+      !(buildPass = GPUBeginAccelerationStructurePassEXT(
+          cmdb,
+          "ray-pipeline-build")) ||
+      GPUBuildAccelerationStructureEXT(buildPass,
+                                       blas,
+                                       &blasBuild,
+                                       scratchBuffer,
+                                       0u) != GPU_OK ||
+      GPUBuildAccelerationStructureEXT(buildPass,
+                                       tlas,
+                                       &tlasBuild,
+                                       scratchBuffer,
+                                       0u) != GPU_OK) {
+    fprintf(stderr, "ray pipeline build encoding failed\n");
+    goto cleanup;
+  }
+  GPUEndAccelerationStructurePassEXT(buildPass);
+  buildPass = NULL;
+
+  rayPass = GPUBeginRayTracingPassEXT(cmdb, "ray-pipeline-dispatch");
+  if (!rayPass) {
     fprintf(stderr, "ray pipeline pass creation failed\n");
     goto cleanup;
   }
   GPUBindRayTracingPipelineEXT(rayPass, pipeline);
   GPUBindRayTracingGroupEXT(rayPass, 0u, group, 0u, NULL);
-  GPUDispatchRaysEXT(rayPass, table, 1u, 1u, 1u);
+  GPUDispatchRaysEXT(rayPass, table, GPU_ARRAY_LEN(resultValues), 1u, 1u);
   GPUEndRayTracingPassEXT(rayPass);
   rayPass = NULL;
 
@@ -330,10 +479,13 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
   if (GPUQueueReadBuffer(queue,
                          outputBuffer,
                          0u,
-                         &resultValue,
-                         sizeof(resultValue)) != GPU_OK ||
-      resultValue != 2u) {
-    fprintf(stderr, "ray pipeline callable mismatch: %u\n", resultValue);
+                         resultValues,
+                         sizeof(resultValues)) != GPU_OK ||
+      resultValues[0] != 13u || resultValues[1] != 22u) {
+    fprintf(stderr,
+            "ray pipeline traversal mismatch: %u, %u\n",
+            resultValues[0],
+            resultValues[1]);
     goto cleanup;
   }
 
@@ -341,11 +493,16 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
 
 cleanup:
   if (rayPass) GPUEndRayTracingPassEXT(rayPass);
+  if (buildPass) GPUEndAccelerationStructurePassEXT(buildPass);
   GPUDestroyFence(fence);
   GPUDestroyShaderTableEXT(table);
   GPUDestroyRayTracingPipelineEXT(pipeline);
   GPUDestroyBindGroup(group);
+  GPUDestroyAccelerationStructureEXT(tlas);
+  GPUDestroyAccelerationStructureEXT(blas);
   GPUDestroyBuffer(outputBuffer);
+  GPUDestroyBuffer(scratchBuffer);
+  GPUDestroyBuffer(vertexBuffer);
   GPUDestroyPipelineLayout(layout);
   GPUDestroyBindGroupLayout(groupLayout);
   GPUFreeShaderReflection(&reflection);

@@ -10,24 +10,36 @@ struct CallableData {
   value: uint
 }
 
-raygen raygen_main(inout output: [uint] #buffer(0)) {
+raygen raygen_main(scene: acceleration_structure #acceleration(0),
+                   inout output: [uint] #buffer(1),
+                   launchId: uint3 #launch_id) {
+  var payload: RayPayload = RayPayload(0.0)
   var data: CallableData = CallableData(1u)
+  var direction: float3 = float3(0.0, 1.0, 0.0)
+  if (launchId.x == 0u) {
+    direction = float3(0.0, 0.0, 1.0)
+  }
+  trace_ray(scene,
+            uint(0), uint(255), uint(0), uint(1), uint(0),
+            float3(0.0, 0.0, -1.0), 0.001,
+            direction, 100.0,
+            payload)
   call_shader(0u, data)
-  output[0] = data.value
+  output[launchId.x] = uint(payload.value) + data.value
 }
 
 miss miss_main(inout payload: RayPayload #ray_payload(0)) {
-  payload.value = 0.0
+  payload.value = 20.0
 }
 
 closest_hit closest_hit_main(inout payload: RayPayload #ray_payload(0),
                              attributes: HitAttributes #hit_attribute) {
-  payload.value = attributes.barycentrics.x
+  payload.value = payload.value + 10.0 + attributes.barycentrics.x * 0.0
 }
 
 any_hit any_hit_main(inout payload: RayPayload #ray_payload(0),
                      attributes: HitAttributes #hit_attribute) {
-  payload.value = attributes.barycentrics.y
+  payload.value = 1.0 + attributes.barycentrics.y * 0.0
 }
 
 intersection intersection_main() {
