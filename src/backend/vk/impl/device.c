@@ -1535,9 +1535,15 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
               adapterVk->features.sparseResidencyImage3D) &&
              vk_hasQueueCapability(adapterVk,
                                    VK_QUEUE_SPARSE_BINDING_BIT);
+    case GPU_FEATURE_SPARSE_BUFFERS:
+      return adapterVk->features.sparseBinding &&
+             adapterVk->features.sparseResidencyBuffer &&
+             vk_hasQueueCapability(adapterVk,
+                                   VK_QUEUE_SPARSE_BINDING_BIT);
     case GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT:
       return adapterVk->features.sparseBinding &&
-             (adapterVk->features.sparseResidencyImage2D ||
+             (adapterVk->features.sparseResidencyBuffer ||
+              adapterVk->features.sparseResidencyImage2D ||
               adapterVk->features.sparseResidencyImage3D) &&
              vk_hasQueueCapability(adapterVk,
                                    VK_QUEUE_SPARSE_BINDING_BIT);
@@ -1980,10 +1986,15 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
                                       queCI[i].flags,
                                       queCI[i].optionalFlags,
                                       queCI[i].count,
-                                      i == 0u && vk_featureEnabled(
-                                        enabledFeatureMask,
-                                        GPU_FEATURE_SPARSE_TEXTURES
-                                      )
+                                      i == 0u &&
+                                      (vk_featureEnabled(
+                                         enabledFeatureMask,
+                                         GPU_FEATURE_SPARSE_TEXTURES
+                                       ) ||
+                                       vk_featureEnabled(
+                                         enabledFeatureMask,
+                                         GPU_FEATURE_SPARSE_BUFFERS
+                                       ))
                                         ? VK_QUEUE_SPARSE_BINDING_BIT
                                         : 0u);
     if (familyIndex == UINT32_MAX) {
@@ -2008,7 +2019,8 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     totalQueueCount += plans[i].count;
   }
 
-  if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SPARSE_TEXTURES)) {
+  if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SPARSE_TEXTURES) ||
+      vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SPARSE_BUFFERS)) {
     bool sparseQueue;
 
     sparseQueue = false;
@@ -2072,6 +2084,10 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
       adapterVk->features.sparseResidencyImage2D;
     coreFeatures.sparseResidencyImage3D =
       adapterVk->features.sparseResidencyImage3D;
+  }
+  if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SPARSE_BUFFERS)) {
+    coreFeatures.sparseBinding         = VK_TRUE;
+    coreFeatures.sparseResidencyBuffer = VK_TRUE;
   }
   coreFeatures.independentBlend   = adapterVk->features.independentBlend;
   coreFeatures.imageCubeArray     = adapterVk->features.imageCubeArray;

@@ -138,6 +138,125 @@ dx12_getBufferMemoryRequirements(GPUDevice                 *device,
 
 GPU_HIDE
 GPUResult
+dx12_getSparseBufferRequirements(
+  GPUDevice                   *device,
+  const GPUBufferCreateInfo   *info,
+  GPUSparseBufferRequirements *outRequirements
+) {
+  GPUDeviceDX12       *deviceDX12;
+  ID3D12Resource      *resource;
+  D3D12_RESOURCE_DESC  desc = {0};
+  UINT                 tileCount;
+  GPUResult            result;
+  HRESULT              nativeResult;
+
+  if (!device || !(deviceDX12 = device->_priv) || !info ||
+      !outRequirements ||
+      deviceDX12->tiledResourcesTier < D3D12_TILED_RESOURCES_TIER_1) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  result = dx12__bufferDesc(info, &desc);
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  resource = NULL;
+  nativeResult = deviceDX12->d3dDevice->lpVtbl->CreateReservedResource(
+    deviceDX12->d3dDevice,
+    &desc,
+    D3D12_RESOURCE_STATE_COMMON,
+    NULL,
+    &IID_ID3D12Resource,
+    (void **)&resource
+  );
+  if (FAILED(nativeResult) || !resource) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  tileCount = 0u;
+  deviceDX12->d3dDevice->lpVtbl->GetResourceTiling(deviceDX12->d3dDevice,
+                                                    resource,
+                                                    &tileCount,
+                                                    NULL,
+                                                    NULL,
+                                                    NULL,
+                                                    0u,
+                                                    NULL);
+  resource->lpVtbl->Release(resource);
+  if (tileCount == 0u) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  outRequirements->compatibilityMask = dx12_memoryCompatibility(device,
+                                                                 &desc);
+  outRequirements->pageSizeBytes =
+    D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+  outRequirements->tileCount = tileCount;
+  return outRequirements->compatibilityMask != 0u
+           ? GPU_OK
+           : GPU_ERROR_BACKEND_FAILURE;
+}
+
+GPU_HIDE
+GPUResult
+dx12_createSparseBuffer(GPUDevice                 *device,
+                        const GPUBufferCreateInfo *info,
+                        GPUHeap                   *heap,
+                        GPUBuffer                **outBuffer) {
+  GPUDeviceDX12       *deviceDX12;
+  GPUBuffer           *buffer;
+  GPUBufferDX12       *native;
+  D3D12_RESOURCE_DESC  desc = {0};
+  GPUResult            result;
+  HRESULT              nativeResult;
+
+  if (!device || !(deviceDX12 = device->_priv) || !info || !heap ||
+      !outBuffer) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  result = dx12__bufferDesc(info, &desc);
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  buffer = calloc(1, sizeof(*buffer) + sizeof(*native));
+  if (!buffer) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  native = (GPUBufferDX12 *)(buffer + 1);
+  nativeResult = deviceDX12->d3dDevice->lpVtbl->CreateReservedResource(
+    deviceDX12->d3dDevice,
+    &desc,
+    D3D12_RESOURCE_STATE_COMMON,
+    NULL,
+    &IID_ID3D12Resource,
+    (void **)&native->resource
+  );
+  if (FAILED(nativeResult) || !native->resource) {
+    free(buffer);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  dx12__setBufferName(native->resource,
+                      gpuDeviceDebugLabel(device, info->label));
+#endif
+  native->gpuAddress  = native->resource->lpVtbl->GetGPUVirtualAddress(
+    native->resource
+  );
+  native->state       = D3D12_RESOURCE_STATE_COMMON;
+  native->defaultHeap = true;
+  native->sparse      = true;
+  buffer->_priv       = native;
+  buffer->device      = device;
+  buffer->sizeBytes   = info->sizeBytes;
+  buffer->usage       = info->usage;
+  buffer->_gpuAddress = native->gpuAddress;
+  *outBuffer          = buffer;
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
 dx12_createPlacedBuffer(GPUDevice                 *device,
                         const GPUBufferCreateInfo *info,
                         GPUHeap                   *heap,

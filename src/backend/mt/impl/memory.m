@@ -173,6 +173,40 @@ mt_getTextureMemoryRequirements(GPUDevice                  *device,
 }
 
 static GPUResult
+mt_getSparseBufferRequirements(
+  GPUDevice                   *device,
+  const GPUBufferCreateInfo   *info,
+  GPUSparseBufferRequirements *outRequirements
+) {
+  GPUDeviceMT      *deviceMT;
+  MTLSparsePageSize pageSize;
+  uint64_t          pageSizeBytes;
+
+  if (!device || !(deviceMT = device->_priv) || !info || !outRequirements ||
+      info->sizeBytes > NSUIntegerMax ||
+      deviceMT->commandMode != MTCommandMode4 ||
+      !mt_sparsePageSize(64u * 1024u, &pageSize)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+#if MT_HAS_METAL4
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    pageSizeBytes = [deviceMT->device
+      sparseTileSizeInBytesForSparsePageSize:pageSize];
+    if (pageSizeBytes == 0u) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    outRequirements->compatibilityMask = UINT64_C(1);
+    outRequirements->pageSizeBytes     = pageSizeBytes;
+    outRequirements->tileCount         =
+      info->sizeBytes / pageSizeBytes +
+      (info->sizeBytes % pageSizeBytes != 0u);
+    return GPU_OK;
+  }
+#endif
+  return GPU_ERROR_UNSUPPORTED;
+}
+
+static GPUResult
 mt_getSparseTextureRequirements(
   GPUDevice                    *device,
   const GPUTextureCreateInfo   *info,
@@ -418,6 +452,42 @@ mt_createPlacedTexture(GPUDevice                  *device,
 }
 
 static GPUResult
+mt_createSparseBuffer(GPUDevice                 *device,
+                      const GPUBufferCreateInfo *info,
+                      GPUHeap                   *heap,
+                      GPUBuffer                **outBuffer) {
+  GPUDeviceMT      *deviceMT;
+  id<MTLBuffer>     nativeBuffer;
+  MTLSparsePageSize pageSize;
+  GPUResult         result;
+
+  if (!device || !(deviceMT = device->_priv) || !info || !heap ||
+      !outBuffer || info->sizeBytes > NSUIntegerMax ||
+      deviceMT->commandMode != MTCommandMode4 ||
+      !mt_sparsePageSize(heap->pageSizeBytes, &pageSize)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  nativeBuffer = nil;
+#if MT_HAS_METAL4
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    nativeBuffer = [deviceMT->device
+      newBufferWithLength:(NSUInteger)info->sizeBytes
+                  options:MTLResourceStorageModePrivate
+  placementSparsePageSize:pageSize];
+  }
+#endif
+  if (!nativeBuffer) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  result = mt_wrapBuffer(device, info, nativeBuffer, outBuffer);
+  if (result != GPU_OK) {
+    [nativeBuffer release];
+  }
+  return result;
+}
+
+static GPUResult
 mt_createSparseTexture(GPUDevice                  *device,
                        const GPUTextureCreateInfo *info,
                        GPUHeap                    *heap,
@@ -549,6 +619,38 @@ mt_submitSparse(GPUQueue                       *queueHandle,
         }
         [queue->modern waitForEvent:event value:info->pWaits[i].value];
       }
+      for (uint32_t i = 0u; i < info->bufferMappingCount; i++) {
+        const GPUSparseBufferMapping *mapping;
+        GPUHeapMT                    *heap;
+        MTL4UpdateSparseBufferMappingOperation operation = {0};
+
+        mapping = &info->pBufferMappings[i];
+        heap    = mapping->heap->_priv;
+        if (!heap || !heap->heap ||
+            mapping->bufferTileOffset > NSUIntegerMax ||
+            mapping->tileCount > NSUIntegerMax ||
+            (mapping->mode == GPU_SPARSE_MAPPING_MAP &&
+             mapping->heapTileOffset > NSUIntegerMax)) {
+          return GPU_ERROR_BACKEND_FAILURE;
+        }
+        operation.mode = mapping->mode == GPU_SPARSE_MAPPING_MAP
+                           ? MTLSparseTextureMappingModeMap
+                           : MTLSparseTextureMappingModeUnmap;
+        operation.bufferRange = NSMakeRange(
+          (NSUInteger)mapping->bufferTileOffset,
+          (NSUInteger)mapping->tileCount
+        );
+        operation.heapOffset = mapping->mode == GPU_SPARSE_MAPPING_MAP
+                                 ? (NSUInteger)mapping->heapTileOffset
+                                 : 0u;
+        [queue->modern
+          updateBufferMappings:(id<MTLBuffer>)mapping->buffer->_priv
+                           heap:mapping->mode == GPU_SPARSE_MAPPING_MAP
+                                  ? heap->heap
+                                  : nil
+                     operations:&operation
+                          count:1u];
+      }
       for (uint32_t i = 0u; i < info->textureMappingCount; i++) {
         const GPUSparseTextureMapping *mapping;
         GPUHeapMT                     *heap;
@@ -600,19 +702,24 @@ mt_submitSparse(GPUQueue                       *queueHandle,
     return GPU_ERROR_UNSUPPORTED;
   }
 #endif
+  if (info->bufferMappingCount > 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
   return mt_submitSparseClassic(queueHandle, info);
 }
 
 GPU_HIDE
 void
 mt_initMemory(GPUApiMemory *api) {
-  api->getBufferRequirements  = mt_getBufferMemoryRequirements;
-  api->getTextureRequirements = mt_getTextureMemoryRequirements;
+  api->getBufferRequirements        = mt_getBufferMemoryRequirements;
+  api->getTextureRequirements       = mt_getTextureMemoryRequirements;
+  api->getSparseBufferRequirements  = mt_getSparseBufferRequirements;
   api->getSparseTextureRequirements = mt_getSparseTextureRequirements;
-  api->createHeap             = mt_createHeap;
-  api->destroyHeap            = mt_destroyHeap;
-  api->createPlacedBuffer     = mt_createPlacedBuffer;
-  api->createPlacedTexture    = mt_createPlacedTexture;
-  api->createSparseTexture    = mt_createSparseTexture;
-  api->submitSparse           = mt_submitSparse;
+  api->createHeap                   = mt_createHeap;
+  api->destroyHeap                  = mt_destroyHeap;
+  api->createPlacedBuffer           = mt_createPlacedBuffer;
+  api->createPlacedTexture          = mt_createPlacedTexture;
+  api->createSparseBuffer           = mt_createSparseBuffer;
+  api->createSparseTexture          = mt_createSparseTexture;
+  api->submitSparse                 = mt_submitSparse;
 }

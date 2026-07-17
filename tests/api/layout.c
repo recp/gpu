@@ -56,8 +56,10 @@ _Static_assert(
 GPU_ASSERT_64BIT_SIZE(GPUMemoryRequirements, 24u);
 GPU_ASSERT_64BIT_SIZE(GPUHeapCreateInfo, 56u);
 GPU_ASSERT_64BIT_SIZE(GPUSparseTextureRequirements, 48u);
+GPU_ASSERT_64BIT_SIZE(GPUSparseBufferRequirements, 24u);
+GPU_ASSERT_64BIT_SIZE(GPUSparseBufferMapping, 48u);
 GPU_ASSERT_64BIT_SIZE(GPUSparseTextureMapping, 64u);
-GPU_ASSERT_64BIT_SIZE(GPUQueueSparseSubmitInfo, 64u);
+GPU_ASSERT_64BIT_SIZE(GPUQueueSparseSubmitInfo, 72u);
 GPU_ASSERT_64BIT_SIZE(GPUAliasingBarrier, 32u);
 GPU_ASSERT_64BIT_SIZE(GPUBarrierBatch, 48u);
 GPU_ASSERT_64BIT_SIZE(GPUQueueSubmitExInfo, 64u);

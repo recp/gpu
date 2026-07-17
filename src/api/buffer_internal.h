@@ -21,14 +21,16 @@
 #include "device_internal.h"
 
 struct GPUBuffer {
-  void                *_priv;
-  GPUDevice           *device;
-  GPUHeap             *_heap;
-  uint64_t             _gpuAddress;
-  uint64_t             _heapOffset;
-  uint64_t             _allocationSize;
-  uint64_t             sizeBytes;
-  GPUBufferUsageFlags  usage;
+  void                        *_priv;
+  GPUDevice                   *device;
+  GPUHeap                     *_heap;
+  uint64_t                     _gpuAddress;
+  uint64_t                     _heapOffset;
+  uint64_t                     _allocationSize;
+  uint64_t                     sizeBytes;
+  GPUSparseBufferRequirements  _sparseRequirements;
+  GPUBufferUsageFlags          usage;
+  bool                         _sparse;
 };
 
 GPU_HIDE

@@ -63,6 +63,21 @@ typedef struct GPUSparseTextureRequirements {
   uint32_t firstMipInTail;
 } GPUSparseTextureRequirements;
 
+typedef struct GPUSparseBufferRequirements {
+  uint64_t compatibilityMask;
+  uint64_t pageSizeBytes;
+  uint64_t tileCount;
+} GPUSparseBufferRequirements;
+
+typedef struct GPUSparseBufferMapping {
+  GPUBuffer           *buffer;
+  GPUHeap             *heap;
+  uint64_t             bufferTileOffset;
+  uint64_t             heapTileOffset;
+  uint64_t             tileCount;
+  GPUSparseMappingMode mode;
+} GPUSparseBufferMapping;
+
 typedef struct GPUSparseTextureMapping {
   GPUTexture          *texture;
   GPUHeap             *heap;
@@ -80,10 +95,12 @@ typedef struct GPUSparseTextureMapping {
 
 typedef struct GPUQueueSparseSubmitInfo {
   GPUChainedStruct               chain;
+  const GPUSparseBufferMapping  *pBufferMappings;
   const GPUSparseTextureMapping *pTextureMappings;
   const GPUQueueSemaphoreWait   *pWaits;
   const GPUQueueSemaphoreSignal *pSignals;
   GPUFence                      *fence;
+  uint32_t                       bufferMappingCount;
   uint32_t                       textureMappingCount;
   uint32_t                       waitCount;
   uint32_t                       signalCount;
@@ -100,6 +117,12 @@ GPUResult
 GPUGetTextureMemoryRequirements(GPUDevice                  * __restrict device,
                                 const GPUTextureCreateInfo * __restrict info,
                                 GPUMemoryRequirements      * __restrict outRequirements);
+
+GPU_EXPORT
+GPUResult
+GPUGetSparseBufferRequirements(GPUDevice                   * __restrict device,
+                               const GPUBufferCreateInfo   * __restrict info,
+                               GPUSparseBufferRequirements * __restrict outRequirements);
 
 GPU_EXPORT
 GPUResult
@@ -132,6 +155,13 @@ GPUCreatePlacedTexture(GPUDevice                  * __restrict device,
                        GPUHeap                    * __restrict heap,
                        uint64_t                                heapOffset,
                        GPUTexture                ** __restrict outTexture);
+
+GPU_EXPORT
+GPUResult
+GPUCreateSparseBuffer(GPUDevice                 * __restrict device,
+                      const GPUBufferCreateInfo * __restrict info,
+                      GPUHeap                   * __restrict heap,
+                      GPUBuffer                ** __restrict outBuffer);
 
 GPU_EXPORT
 GPUResult

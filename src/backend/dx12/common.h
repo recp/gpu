@@ -262,6 +262,7 @@ typedef struct GPUBufferDX12 {
   D3D12_GPU_VIRTUAL_ADDRESS  gpuAddress;
   D3D12_RESOURCE_STATES      state;
   bool                       defaultHeap;
+  bool                       sparse;
 } GPUBufferDX12;
 
 typedef struct GPUHeapDX12 {

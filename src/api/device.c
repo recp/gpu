@@ -211,15 +211,14 @@ gpu_enabledFeatureMaskForCreateInfo(const GPUAdapter *adapter,
   if ((mask & gpu_featureBit(GPU_FEATURE_RAY_TRACING_PIPELINE)) != 0u) {
     mask |= gpu_featureBit(GPU_FEATURE_RAY_QUERY);
   }
-  if ((mask &
-       gpu_featureBit(GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT)) != 0u) {
-    mask |= gpu_featureBit(GPU_FEATURE_SPARSE_TEXTURES);
-  }
   if ((mask & gpu_featureBit(GPU_FEATURE_SPARSE_TEXTURES)) != 0u &&
       GPUIsFeatureSupported(
         (GPUAdapter *)adapter,
         GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT
       )) {
+    mask |= gpu_featureBit(GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT);
+  }
+  if ((mask & gpu_featureBit(GPU_FEATURE_SPARSE_BUFFERS)) != 0u) {
     mask |= gpu_featureBit(GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT);
   }
   return mask;

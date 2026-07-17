@@ -161,6 +161,53 @@ dx12_submitSparse(GPUQueue                       *queueHandle,
     }
   }
 
+  for (uint32_t i = 0u; i < info->bufferMappingCount; i++) {
+    const GPUSparseBufferMapping *mapping;
+    GPUBufferDX12                *buffer;
+    GPUHeapDX12                  *heap;
+    D3D12_TILED_RESOURCE_COORDINATE coordinate = {0};
+    D3D12_TILE_REGION_SIZE          region = {0};
+    D3D12_TILE_RANGE_FLAGS          rangeFlag;
+    UINT                            heapOffset;
+    UINT                            tileCount;
+
+    mapping = &info->pBufferMappings[i];
+    buffer  = mapping->buffer->_priv;
+    heap    = mapping->heap->_priv;
+    if (!buffer || !buffer->sparse || !buffer->resource ||
+        !heap || !heap->heap ||
+        mapping->bufferTileOffset > UINT_MAX ||
+        mapping->tileCount > UINT_MAX ||
+        (mapping->mode == GPU_SPARSE_MAPPING_MAP &&
+         mapping->heapTileOffset > UINT_MAX)) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+
+    coordinate.X = (UINT)mapping->bufferTileOffset;
+    region.UseBox = FALSE;
+    region.NumTiles = (UINT)mapping->tileCount;
+    rangeFlag = mapping->mode == GPU_SPARSE_MAPPING_MAP
+                  ? D3D12_TILE_RANGE_FLAG_NONE
+                  : D3D12_TILE_RANGE_FLAG_NULL;
+    heapOffset = mapping->mode == GPU_SPARSE_MAPPING_MAP
+                   ? (UINT)mapping->heapTileOffset
+                   : 0u;
+    tileCount = (UINT)mapping->tileCount;
+    queue->commandQueue->lpVtbl->UpdateTileMappings(
+      queue->commandQueue,
+      buffer->resource,
+      1u,
+      &coordinate,
+      &region,
+      mapping->mode == GPU_SPARSE_MAPPING_MAP ? heap->heap : NULL,
+      1u,
+      &rangeFlag,
+      &heapOffset,
+      &tileCount,
+      D3D12_TILE_MAPPING_FLAG_NONE
+    );
+  }
+
   for (uint32_t i = 0u; i < info->textureMappingCount; i++) {
     const GPUSparseTextureMapping *mapping;
     GPUTextureDX12                *texture;
@@ -248,13 +295,15 @@ dx12_submitSparse(GPUQueue                       *queueHandle,
 GPU_HIDE
 void
 dx12_initMemory(GPUApiMemory *api) {
-  api->getBufferRequirements  = dx12_getBufferMemoryRequirements;
-  api->getTextureRequirements = dx12_getTextureMemoryRequirements;
+  api->getBufferRequirements        = dx12_getBufferMemoryRequirements;
+  api->getTextureRequirements       = dx12_getTextureMemoryRequirements;
+  api->getSparseBufferRequirements  = dx12_getSparseBufferRequirements;
   api->getSparseTextureRequirements = dx12_getSparseTextureRequirements;
-  api->createHeap             = dx12_createHeap;
-  api->destroyHeap            = dx12_destroyHeap;
-  api->createPlacedBuffer     = dx12_createPlacedBuffer;
-  api->createPlacedTexture    = dx12_createPlacedTexture;
-  api->createSparseTexture    = dx12_createSparseTexture;
-  api->submitSparse           = dx12_submitSparse;
+  api->createHeap                   = dx12_createHeap;
+  api->destroyHeap                  = dx12_destroyHeap;
+  api->createPlacedBuffer           = dx12_createPlacedBuffer;
+  api->createPlacedTexture          = dx12_createPlacedTexture;
+  api->createSparseBuffer           = dx12_createSparseBuffer;
+  api->createSparseTexture          = dx12_createSparseTexture;
+  api->submitSparse                 = dx12_submitSparse;
 }

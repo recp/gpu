@@ -16,6 +16,7 @@
 
 #include "../common.h"
 #include "../impl.h"
+#include "../../../api/buffer_internal.h"
 
 GPU_HIDE
 uint32_t
@@ -142,6 +143,8 @@ vk_submitSparse(GPUQueue                       *queueHandle,
                 const GPUQueueSparseSubmitInfo *info) {
   GPUQueueVk                       *queue;
   GPUDeviceVk                      *device;
+  VkSparseMemoryBind               *bufferBinds;
+  VkSparseBufferMemoryBindInfo     *bufferInfos;
   VkSparseImageMemoryBind          *imageBinds;
   VkSparseImageMemoryBindInfo      *imageInfos;
   VkSparseMemoryBind               *opaqueBinds;
@@ -185,7 +188,9 @@ vk_submitSparse(GPUQueue                       *queueHandle,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  storageSize = (size_t)info->textureMappingCount *
+  storageSize = (size_t)info->bufferMappingCount *
+                  (sizeof(*bufferBinds) + sizeof(*bufferInfos)) +
+                (size_t)info->textureMappingCount *
                   (sizeof(*imageBinds) + sizeof(*imageInfos) +
                    sizeof(*opaqueBinds) + sizeof(*opaqueInfos)) +
                 (size_t)info->waitCount *
@@ -196,7 +201,13 @@ vk_submitSparse(GPUQueue                       *queueHandle,
   if (!storage) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
-  imageBinds = (VkSparseImageMemoryBind *)storage;
+  bufferBinds = (VkSparseMemoryBind *)storage;
+  bufferInfos = (VkSparseBufferMemoryBindInfo *)(
+    bufferBinds + info->bufferMappingCount
+  );
+  imageBinds = (VkSparseImageMemoryBind *)(
+    bufferInfos + info->bufferMappingCount
+  );
   imageInfos = (VkSparseImageMemoryBindInfo *)(
     imageBinds + info->textureMappingCount
   );
@@ -213,6 +224,38 @@ vk_submitSparse(GPUQueue                       *queueHandle,
 
   imageBindCount  = 0u;
   opaqueBindCount = 0u;
+  for (uint32_t i = 0u; i < info->bufferMappingCount; i++) {
+    const GPUSparseBufferMapping *mapping;
+    GPUBufferVk                  *buffer;
+    GPUHeapVk                    *heap;
+    VkSparseMemoryBind           *bind;
+    VkSparseBufferMemoryBindInfo *bufferInfo;
+
+    mapping    = &info->pBufferMappings[i];
+    buffer     = mapping->buffer->_priv;
+    heap       = mapping->heap->_priv;
+    bind       = &bufferBinds[i];
+    bufferInfo = &bufferInfos[i];
+    if (!buffer || !buffer->sparse || !buffer->buffer ||
+        !heap || !heap->memory) {
+      free(storage);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    bind->resourceOffset = mapping->bufferTileOffset *
+                           mapping->buffer->_sparseRequirements.pageSizeBytes;
+    bind->size           = mapping->tileCount *
+                           mapping->buffer->_sparseRequirements.pageSizeBytes;
+    bind->memory         = mapping->mode == GPU_SPARSE_MAPPING_MAP
+                             ? heap->memory
+                             : VK_NULL_HANDLE;
+    bind->memoryOffset   = mapping->mode == GPU_SPARSE_MAPPING_MAP
+                             ? mapping->heapTileOffset *
+                                 mapping->heap->pageSizeBytes
+                             : 0u;
+    bufferInfo->buffer    = buffer->buffer;
+    bufferInfo->bindCount = 1u;
+    bufferInfo->pBinds    = bind;
+  }
   for (uint32_t i = 0u; i < info->textureMappingCount; i++) {
     const GPUSparseTextureMapping *mapping;
     GPUTextureVk                  *texture;
@@ -344,7 +387,8 @@ vk_submitSparse(GPUQueue                       *queueHandle,
                                     : NULL;
   bindInfo.waitSemaphoreCount   = info->waitCount;
   bindInfo.pWaitSemaphores      = waits;
-  bindInfo.bufferBindCount      = 0u;
+  bindInfo.bufferBindCount      = info->bufferMappingCount;
+  bindInfo.pBufferBinds         = bufferInfos;
   bindInfo.imageOpaqueBindCount = opaqueBindCount;
   bindInfo.pImageOpaqueBinds    = opaqueInfos;
   bindInfo.imageBindCount       = imageBindCount;
@@ -362,13 +406,15 @@ vk_submitSparse(GPUQueue                       *queueHandle,
 GPU_HIDE
 void
 vk_initMemory(GPUApiMemory *api) {
-  api->getBufferRequirements  = vk_getBufferMemoryRequirements;
-  api->getTextureRequirements = vk_getTextureMemoryRequirements;
+  api->getBufferRequirements        = vk_getBufferMemoryRequirements;
+  api->getTextureRequirements       = vk_getTextureMemoryRequirements;
+  api->getSparseBufferRequirements  = vk_getSparseBufferRequirements;
   api->getSparseTextureRequirements = vk_getSparseTextureRequirements;
-  api->createHeap             = vk_createHeap;
-  api->destroyHeap            = vk_destroyHeap;
-  api->createPlacedBuffer     = vk_createPlacedBuffer;
-  api->createPlacedTexture    = vk_createPlacedTexture;
-  api->createSparseTexture    = vk_createSparseTexture;
-  api->submitSparse           = vk_submitSparse;
+  api->createHeap                   = vk_createHeap;
+  api->destroyHeap                  = vk_destroyHeap;
+  api->createPlacedBuffer           = vk_createPlacedBuffer;
+  api->createPlacedTexture          = vk_createPlacedTexture;
+  api->createSparseBuffer           = vk_createSparseBuffer;
+  api->createSparseTexture          = vk_createSparseTexture;
+  api->submitSparse                 = vk_submitSparse;
 }

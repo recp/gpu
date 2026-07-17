@@ -369,6 +369,7 @@ typedef struct GPUBufferVk {
   VkDeviceSize   allocationSize;
   bool           coherent;
   bool           ownsMemory;
+  bool           sparse;
 } GPUBufferVk;
 
 typedef struct GPUHeapVk {

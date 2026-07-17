@@ -84,6 +84,21 @@ vk_getBufferMemoryRequirements(GPUDevice                 *device,
 
 GPU_HIDE
 GPUResult
+vk_getSparseBufferRequirements(
+  GPUDevice                   *device,
+  const GPUBufferCreateInfo   *info,
+  GPUSparseBufferRequirements *outRequirements
+);
+
+GPU_HIDE
+GPUResult
+vk_createSparseBuffer(GPUDevice                 *device,
+                      const GPUBufferCreateInfo *info,
+                      GPUHeap                   *heap,
+                      GPUBuffer                **outBuffer);
+
+GPU_HIDE
+GPUResult
 vk_createPlacedBuffer(GPUDevice                 *device,
                       const GPUBufferCreateInfo *info,
                       GPUHeap                   *heap,

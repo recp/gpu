@@ -484,6 +484,7 @@ mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       }
 #endif
       return false;
+    case GPU_FEATURE_SPARSE_BUFFERS:
     case GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT:
 #if MT_HAS_METAL4
       mode = getenv("GPU_METAL_MODE");

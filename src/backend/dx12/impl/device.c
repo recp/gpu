@@ -774,6 +774,7 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
     case GPU_FEATURE_PLACED_RESOURCES:
       return true;
     case GPU_FEATURE_SPARSE_TEXTURES:
+    case GPU_FEATURE_SPARSE_BUFFERS:
     case GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT:
       return adapterDX12->tiledResourcesTier >=
              D3D12_TILED_RESOURCES_TIER_1;

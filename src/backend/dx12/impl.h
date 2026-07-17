@@ -52,6 +52,14 @@ GPU_HIDE GPUResult dx12_getBufferMemoryRequirements(
   GPUDevice                 *device,
   const GPUBufferCreateInfo *info,
   GPUMemoryRequirements     *outRequirements);
+GPU_HIDE GPUResult dx12_getSparseBufferRequirements(
+  GPUDevice                   *device,
+  const GPUBufferCreateInfo   *info,
+  GPUSparseBufferRequirements *outRequirements);
+GPU_HIDE GPUResult dx12_createSparseBuffer(GPUDevice                 *device,
+                                           const GPUBufferCreateInfo *info,
+                                           GPUHeap                   *heap,
+                                           GPUBuffer                **outBuffer);
 GPU_HIDE GPUResult dx12_createPlacedBuffer(GPUDevice                 *device,
                                            const GPUBufferCreateInfo *info,
                                            GPUHeap                   *heap,
