@@ -249,16 +249,17 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   GPUTextureCreateInfo          textureInfo     = {0};
   GPUBufferCreateInfo           bufferInfo      = {0};
   GPUHeapCreateInfo             heapInfo        = {0};
-  GPUSparseTextureMapping       mapping         = {0};
+  GPUSparseTextureMapping       mappings[3]     = {0};
   GPUBufferTextureCopyRegion    copyRegion      = {0};
   GPUQueueSemaphoreWait         wait            = {0};
   GPUQueueSemaphoreSignal       signal          = {0};
   GPUQueueSparseSubmitInfo      submitInfo      = {0};
   GPUQueueSubmitInfo            copySubmitInfo  = {0};
   GPUTextureWriteRegion         writeRegion     = {0};
-  uint64_t                      mappingTileCount;
+  uint64_t                      heapTileCount;
   uint64_t                      heapSize;
   uint64_t                      pixelSize;
+  uint32_t                      mappingCount;
   GPUFeature                    feature         = GPU_FEATURE_SPARSE_TEXTURES;
   GPUResult                     result;
   bool                          explicitPlacement;
@@ -287,10 +288,10 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   textureInfo.label            = "api-sparse-texture";
   textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
   textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
-  textureInfo.width            = 256u;
-  textureInfo.height           = 256u;
-  textureInfo.depthOrLayers    = 1u;
-  textureInfo.mipLevelCount    = 1u;
+  textureInfo.width            = 1024u;
+  textureInfo.height           = 1024u;
+  textureInfo.depthOrLayers    = 2u;
+  textureInfo.mipLevelCount    = 11u;
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
                                  GPU_TEXTURE_USAGE_COPY_SRC |
@@ -324,27 +325,57 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
     goto cleanup;
   }
 
-  if (requirements.firstMipInTail == 0u) {
-    mapping.tileWidth  = (uint32_t)requirements.mipTailTileCount;
-    mapping.tileHeight = 1u;
-    mapping.tileDepth  = 1u;
-  } else {
-    mapping.tileWidth =
+  mappingCount = 0u;
+  heapTileCount = 0u;
+  if (requirements.firstMipInTail > 0u) {
+    GPUSparseTextureMapping *mapping;
+
+    mapping = &mappings[mappingCount++];
+    mapping->tileWidth =
       textureInfo.width / requirements.tileWidth +
       (textureInfo.width % requirements.tileWidth != 0u);
-    mapping.tileHeight =
+    mapping->tileHeight =
       textureInfo.height / requirements.tileHeight +
       (textureInfo.height % requirements.tileHeight != 0u);
-    mapping.tileDepth = 1u;
+    mapping->tileDepth  = 1u;
+    mapping->arrayLayer = 1u;
+    heapTileCount = (uint64_t)mapping->tileWidth *
+                    mapping->tileHeight * mapping->tileDepth;
   }
-  mappingTileCount = (uint64_t)mapping.tileWidth *
-                     mapping.tileHeight * mapping.tileDepth;
-  if (mappingTileCount == 0u ||
-      mappingTileCount > UINT64_MAX / requirements.pageSizeBytes) {
+  if (requirements.firstMipInTail < textureInfo.mipLevelCount) {
+    uint32_t tailCount;
+
+    tailCount = requirements.mipTailLayerStrideTiles != 0u
+                  ? textureInfo.depthOrLayers
+                  : 1u;
+    if (tailCount > GPU_ARRAY_LEN(mappings) - mappingCount ||
+        requirements.mipTailTileCount == 0u ||
+        requirements.mipTailTileCount > UINT32_MAX) {
+      fprintf(stderr, "sparse mip-tail layout is invalid\n");
+      goto cleanup;
+    }
+    for (uint32_t i = 0u; i < tailCount; i++) {
+      GPUSparseTextureMapping *mapping;
+
+      mapping = &mappings[mappingCount++];
+      mapping->tileWidth  = (uint32_t)requirements.mipTailTileCount;
+      mapping->tileHeight = 1u;
+      mapping->tileDepth  = 1u;
+      mapping->mipLevel   = requirements.firstMipInTail;
+      mapping->arrayLayer = i;
+      if (heapTileCount > UINT64_MAX - requirements.mipTailTileCount) {
+        fprintf(stderr, "sparse mip-tail size overflow\n");
+        goto cleanup;
+      }
+      heapTileCount += requirements.mipTailTileCount;
+    }
+  }
+  if (mappingCount == 0u || heapTileCount == 0u ||
+      heapTileCount > UINT64_MAX / requirements.pageSizeBytes) {
     fprintf(stderr, "sparse mapping size is invalid\n");
     goto cleanup;
   }
-  heapSize = mappingTileCount * requirements.pageSizeBytes;
+  heapSize = heapTileCount * requirements.pageSizeBytes;
 
   heapInfo.chain.sType       = GPU_STRUCTURE_TYPE_HEAP_CREATE_INFO;
   heapInfo.chain.structSize  = sizeof(heapInfo);
@@ -364,33 +395,44 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
     goto cleanup;
   }
 
-  mapping.texture        = texture;
-  mapping.heap           = heap;
   explicitPlacement      = GPUIsFeatureEnabled(
     device,
     GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT
   );
-  mapping.heapTileOffset = explicitPlacement
-                             ? GPU_SPARSE_HEAP_TILE_AUTO
-                             : 0u;
-  mapping.mode           = GPU_SPARSE_MAPPING_MAP;
+  heapTileCount = 0u;
+  for (uint32_t i = 0u; i < mappingCount; i++) {
+    uint64_t tileCount;
+
+    tileCount = (uint64_t)mappings[i].tileWidth *
+                mappings[i].tileHeight * mappings[i].tileDepth;
+    mappings[i].texture        = texture;
+    mappings[i].heap           = heap;
+    mappings[i].heapTileOffset = explicitPlacement
+                                   ? heapTileCount
+                                   : GPU_SPARSE_HEAP_TILE_AUTO;
+    mappings[i].mode           = GPU_SPARSE_MAPPING_MAP;
+    heapTileCount += tileCount;
+  }
   signal.semaphore       = semaphore;
   signal.value           = 1u;
   submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SPARSE_SUBMIT_INFO;
   submitInfo.chain.structSize    = sizeof(submitInfo);
-  submitInfo.pTextureMappings    = &mapping;
+  submitInfo.pTextureMappings    = mappings;
   submitInfo.pSignals            = &signal;
   submitInfo.fence               = fence;
-  submitInfo.textureMappingCount = 1u;
+  submitInfo.textureMappingCount = mappingCount;
   submitInfo.signalCount         = 1u;
+  mappings[0].heapTileOffset = explicitPlacement
+                                 ? GPU_SPARSE_HEAP_TILE_AUTO
+                                 : 0u;
   if (GPUQueueSubmitSparse(queue, &submitInfo) !=
       GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "sparse placement mode validation failed\n");
     goto cleanup;
   }
-  mapping.heapTileOffset = explicitPlacement
-                             ? 0u
-                             : GPU_SPARSE_HEAP_TILE_AUTO;
+  mappings[0].heapTileOffset = explicitPlacement
+                                 ? 0u
+                                 : GPU_SPARSE_HEAP_TILE_AUTO;
   if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK ||
       GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     fprintf(stderr, "sparse map submit failed\n");
@@ -405,13 +447,14 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   for (uint64_t i = 0u; i < pixelSize; i++) {
     pixels[i] = (uint8_t)(i * 17u + 3u);
   }
-  writeRegion.aspect       = GPU_TEXTURE_ASPECT_ALL;
-  writeRegion.width        = textureInfo.width;
-  writeRegion.height       = textureInfo.height;
-  writeRegion.depth        = 1u;
-  writeRegion.layerCount   = 1u;
-  writeRegion.bytesPerRow  = textureInfo.width * 4u;
-  writeRegion.rowsPerImage = textureInfo.height;
+  writeRegion.aspect         = GPU_TEXTURE_ASPECT_ALL;
+  writeRegion.width          = textureInfo.width;
+  writeRegion.height         = textureInfo.height;
+  writeRegion.depth          = 1u;
+  writeRegion.baseArrayLayer = 1u;
+  writeRegion.layerCount     = 1u;
+  writeRegion.bytesPerRow    = textureInfo.width * 4u;
+  writeRegion.rowsPerImage   = textureInfo.height;
   if (GPUQueueWriteTexture(queue,
                            texture,
                            &writeRegion,
@@ -434,12 +477,13 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
     fprintf(stderr, "sparse texture readback setup failed\n");
     goto cleanup;
   }
-  copyRegion.texture.width      = textureInfo.width;
-  copyRegion.texture.height     = textureInfo.height;
-  copyRegion.texture.depth      = 1u;
-  copyRegion.texture.layerCount = 1u;
-  copyRegion.bytesPerRow        = textureInfo.width * 4u;
-  copyRegion.rowsPerImage       = textureInfo.height;
+  copyRegion.texture.texture.baseArrayLayer = 1u;
+  copyRegion.texture.width                  = textureInfo.width;
+  copyRegion.texture.height                 = textureInfo.height;
+  copyRegion.texture.depth                  = 1u;
+  copyRegion.texture.layerCount             = 1u;
+  copyRegion.bytesPerRow                    = textureInfo.width * 4u;
+  copyRegion.rowsPerImage                   = textureInfo.height;
   GPUCopyTextureToBuffer(copyPass, texture, readback, &copyRegion);
   GPUEndCopyPass(copyPass);
   copyPass = NULL;
@@ -470,7 +514,9 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   }
 
   GPUResetFence(fence);
-  mapping.mode           = GPU_SPARSE_MAPPING_UNMAP;
+  for (uint32_t i = 0u; i < mappingCount; i++) {
+    mappings[i].mode = GPU_SPARSE_MAPPING_UNMAP;
+  }
   wait.semaphore         = semaphore;
   wait.value             = 1u;
   wait.waitStages        = GPU_STAGE_TRANSFER;

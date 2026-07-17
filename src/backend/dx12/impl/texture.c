@@ -633,6 +633,7 @@ dx12__sparseTextureRequirements(
   D3D12_PACKED_MIP_INFO    packedMipInfo = {0};
   D3D12_TILE_SHAPE         tileShape = {0};
   UINT                     tileCount;
+  UINT                     arrayLayerCount;
   UINT                     subresourceTilingCount;
 
   if (!device || !(deviceDX12 = device->_priv) || !resource || !desc ||
@@ -652,7 +653,12 @@ dx12__sparseTextureRequirements(
     0u,
     NULL
   );
-  if (tileCount == 0u || tileShape.WidthInTexels == 0u ||
+  arrayLayerCount = desc->Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D
+                      ? 1u
+                      : desc->DepthOrArraySize;
+  if (tileCount == 0u || arrayLayerCount == 0u ||
+      tileCount % arrayLayerCount != 0u ||
+      tileShape.WidthInTexels == 0u ||
       tileShape.HeightInTexels == 0u || tileShape.DepthInTexels == 0u ||
       packedMipInfo.NumStandardMips > mipLevelCount) {
     return GPU_ERROR_UNSUPPORTED;
@@ -661,7 +667,10 @@ dx12__sparseTextureRequirements(
   outRequirements->compatibilityMask = dx12_memoryCompatibility(device, desc);
   outRequirements->pageSizeBytes     = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
   outRequirements->mipTailTileCount  = packedMipInfo.NumTilesForPackedMips;
-  outRequirements->mipTailLayerStrideTiles = 0u;
+  outRequirements->mipTailLayerStrideTiles =
+    packedMipInfo.NumPackedMips > 0u
+      ? tileCount / arrayLayerCount
+      : 0u;
   outRequirements->tileWidth         = tileShape.WidthInTexels;
   outRequirements->tileHeight        = tileShape.HeightInTexels;
   outRequirements->tileDepth         = tileShape.DepthInTexels;
@@ -702,8 +711,6 @@ dx12_getSparseTextureRequirements(
       !outRequirements ||
       deviceDX12->tiledResourcesTier < D3D12_TILED_RESOURCES_TIER_1 ||
       info->dimension == GPU_TEXTURE_DIMENSION_1D ||
-      (info->dimension != GPU_TEXTURE_DIMENSION_3D &&
-       info->depthOrLayers != 1u) ||
       (info->sampleCount != 0u && info->sampleCount != 1u) ||
       (info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u) {
     return GPU_ERROR_UNSUPPORTED;
