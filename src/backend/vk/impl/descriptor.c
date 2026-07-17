@@ -266,6 +266,11 @@ vk__destroyBindGroupLayoutState(GPUBindGroupLayoutVk *native) {
     native->descriptorChunks = chunk->next;
     vk__destroyDescriptorChunk(native->device, chunk);
   }
+  if (native->device && native->descriptorLayout) {
+    vkDestroyDescriptorSetLayout(native->device,
+                                 native->descriptorLayout,
+                                 NULL);
+  }
 #endif
   if (native->device && native->layout) {
     vkDestroyDescriptorSetLayout(native->device, native->layout, NULL);
@@ -541,13 +546,6 @@ vk_createBindGroupLayout(GPUDevice          *device,
   info.pNext        = bindless ? &bindingFlagsInfo : NULL;
   info.bindingCount = entryCount;
   info.pBindings    = bindings;
-#ifdef VK_EXT_descriptor_buffer
-  if (native->descriptorBuffer) {
-    info.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
-  }
-#else
-  native->descriptorBuffer = false;
-#endif
   if (vkCreateDescriptorSetLayout(native->device,
                                   &info,
                                   NULL,
@@ -560,12 +558,22 @@ vk_createBindGroupLayout(GPUDevice          *device,
 
 #ifdef VK_EXT_descriptor_buffer
   if (native->descriptorBuffer) {
+    info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+    if (vkCreateDescriptorSetLayout(native->device,
+                                    &info,
+                                    NULL,
+                                    &native->descriptorLayout) != VK_SUCCESS) {
+      native->descriptorBuffer = false;
+    }
+  }
+  if (native->descriptorBuffer) {
     const VkPhysicalDeviceDescriptorBufferPropertiesEXT *properties;
+    VkDeviceSize                                         slotCapacity;
     VkDeviceSize                                         maxRange;
 
     properties = &deviceVk->descriptorBufferProperties;
     deviceVk->getDescriptorSetLayoutSize(native->device,
-                                         native->layout,
+                                         native->descriptorLayout,
                                          &native->descriptorSize);
     native->descriptorStride = vk__alignDescriptorSize(
       native->descriptorSize,
@@ -582,11 +590,11 @@ vk_createBindGroupLayout(GPUDevice          *device,
       vk__destroyBindGroupLayoutState(native);
       return GPU_ERROR_UNSUPPORTED;
     }
-    native->descriptorSlotCapacity = (uint32_t)(maxRange /
-                                                native->descriptorStride);
-    if (native->descriptorSlotCapacity > GPU_VK_DESCRIPTOR_BUFFER_SLOT_COUNT) {
-      native->descriptorSlotCapacity = GPU_VK_DESCRIPTOR_BUFFER_SLOT_COUNT;
+    slotCapacity = maxRange / native->descriptorStride;
+    if (slotCapacity > GPU_VK_DESCRIPTOR_BUFFER_SLOT_COUNT) {
+      slotCapacity = GPU_VK_DESCRIPTOR_BUFFER_SLOT_COUNT;
     }
+    native->descriptorSlotCapacity = (uint32_t)slotCapacity;
     native->descriptorBindings = calloc(entryCount,
                                          sizeof(*native->descriptorBindings));
     if (native->descriptorSlotCapacity == 0u ||
@@ -609,7 +617,7 @@ vk_createBindGroupLayout(GPUDevice          *device,
       binding->size    = vk__descriptorByteSize(deviceVk, binding->type);
       binding->count   = bindings[i].descriptorCount;
       deviceVk->getDescriptorSetLayoutBindingOffset(native->device,
-                                                    native->layout,
+                                                    native->descriptorLayout,
                                                     binding->binding,
                                                     &binding->offset);
       if (binding->size == 0u || binding->offset > native->descriptorSize ||
@@ -660,7 +668,7 @@ vk_createPipelineLayout(GPUDevice         *device,
   }
 
   groups = gpuGetPipelineLayoutGroups(layout, &groupCount);
-  descriptorBuffer = false;
+  descriptorBuffer = groupCount > 0u;
   if (groupCount > GPU_ENCODER_MAX_BIND_GROUPS ||
       (groupCount > 0u && !groups)) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -673,8 +681,23 @@ vk_createPipelineLayout(GPUDevice         *device,
       return GPU_ERROR_BACKEND_FAILURE;
     }
     setLayouts[i] = group->layout;
-    descriptorBuffer |= group->descriptorBuffer;
+#ifdef VK_EXT_descriptor_buffer
+    descriptorBuffer = descriptorBuffer && group->descriptorBuffer &&
+                       group->descriptorLayout;
+#else
+    descriptorBuffer = false;
+#endif
   }
+#ifdef VK_EXT_descriptor_buffer
+  if (descriptorBuffer) {
+    for (uint32_t i = 0u; i < groupCount; i++) {
+      GPUBindGroupLayoutVk *group;
+
+      group         = groups[i]->_native;
+      setLayouts[i] = group->descriptorLayout;
+    }
+  }
+#endif
 
   gpuGetPipelineLayoutPushConstants(layout, &pushSize, &pushStages);
   if (pushSize > 0u) {
@@ -794,11 +817,11 @@ vk_createShaderLayout(GPUDevice              *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  outLayout->baseLayout       = base;
-  outLayout->device           = base->device;
-  outLayout->descriptorBuffer = base->descriptorBuffer;
+  outLayout->baseLayout = base;
+  outLayout->device     = base->device;
   if (samplerCount == 0u) {
-    outLayout->layout = base->layout;
+    outLayout->layout           = base->layout;
+    outLayout->descriptorBuffer = base->descriptorBuffer;
     return GPU_OK;
   }
 
@@ -1681,6 +1704,26 @@ vk_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
 
   native->layout = layoutVk;
   native->device = deviceVk->device;
+  result = vk__allocateDescriptorSet(layoutVk,
+                                     &native->pool,
+                                     &native->set);
+  if (result != GPU_OK) {
+    vk__destroyBindGroupState(native);
+    return result;
+  }
+
+  writeContext.device = device;
+  writeContext.group  = native;
+  writeContext.valid  = true;
+  if (!gpuForEachBindGroupBinding(group,
+                                  vk__writeDescriptor,
+                                  &writeContext) ||
+      !writeContext.valid) {
+    vk__destroyBindGroupState(native);
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  vk__flushDescriptorWrites(&writeContext);
+
 #ifdef VK_EXT_descriptor_buffer
   if (layoutVk->descriptorBuffer) {
     result = vk__allocateDescriptorSlot(device, layoutVk, native);
@@ -1704,29 +1747,8 @@ vk_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
       vk__destroyBindGroupState(native);
       return GPU_ERROR_BACKEND_FAILURE;
     }
-    group->_native = native;
-    return GPU_OK;
   }
 #endif
-  result = vk__allocateDescriptorSet(layoutVk,
-                                     &native->pool,
-                                     &native->set);
-  if (result != GPU_OK) {
-    vk__destroyBindGroupState(native);
-    return result;
-  }
-
-  writeContext.device = device;
-  writeContext.group  = native;
-  writeContext.valid  = true;
-  if (!gpuForEachBindGroupBinding(group,
-                                  vk__writeDescriptor,
-                                  &writeContext) ||
-      !writeContext.valid) {
-    vk__destroyBindGroupState(native);
-    return GPU_ERROR_UNSUPPORTED;
-  }
-  vk__flushDescriptorWrites(&writeContext);
 
   group->_native = native;
   return GPU_OK;
@@ -1748,6 +1770,23 @@ vk_updateBindGroup(GPUBindGroup            *group,
     return false;
   }
 
+  if (!native->set) {
+    return false;
+  }
+
+  writeContext.device = group->_device;
+  writeContext.group  = native;
+  writeContext.valid  = true;
+  if (!gpuForEachBindGroupEntry(group,
+                                entryCount,
+                                entries,
+                                vk__writeDescriptor,
+                                &writeContext) ||
+      !writeContext.valid) {
+    return false;
+  }
+  vk__flushDescriptorWrites(&writeContext);
+
 #ifdef VK_EXT_descriptor_buffer
   if (native->layout && native->layout->descriptorBuffer) {
     if (!native->descriptorChunk) {
@@ -1766,25 +1805,12 @@ vk_updateBindGroup(GPUBindGroup            *group,
       return false;
     }
     vk__flushDescriptorBuffer(&bufferWriteContext);
-    return bufferWriteContext.valid;
+    if (!bufferWriteContext.valid) {
+      return false;
+    }
   }
 #endif
-  if (!native->set) {
-    return false;
-  }
 
-  writeContext.device = group->_device;
-  writeContext.group  = native;
-  writeContext.valid  = true;
-  if (!gpuForEachBindGroupEntry(group,
-                                entryCount,
-                                entries,
-                                vk__writeDescriptor,
-                                &writeContext) ||
-      !writeContext.valid) {
-    return false;
-  }
-  vk__flushDescriptorWrites(&writeContext);
   return true;
 }
 
@@ -1829,14 +1855,14 @@ vk__bindGroup(VkCommandBuffer       command,
   }
 
 #ifdef VK_EXT_descriptor_buffer
-  if (layoutVk->descriptorBuffer) {
+  if (pipeline->descriptorBuffer && encoderLayout == pipeline->layout) {
     GPUDeviceVk                     *deviceVk;
     VkDescriptorBufferBindingInfoEXT bufferInfos[GPU_ENCODER_MAX_BIND_GROUPS];
     GPUDescriptorBufferChunkVk      *chunks[GPU_ENCODER_MAX_BIND_GROUPS];
     uint32_t                         bufferCount;
 
     deviceVk = layoutVk->gpuDevice;
-    if (!pipeline->descriptorBuffer || !groupVk->descriptorChunk ||
+    if (!layoutVk->descriptorBuffer || !groupVk->descriptorChunk ||
         dynamicOffsetCount != 0u || !deviceVk ||
         !deviceVk->bindDescriptorBuffers ||
         !deviceVk->setDescriptorBufferOffsets) {

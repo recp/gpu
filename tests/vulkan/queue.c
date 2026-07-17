@@ -184,8 +184,8 @@ descriptor_binding_path(GPUDevice *device,
        layoutVk->descriptorBuffer == deviceVk->descriptorBuffer;
 #ifdef VK_EXT_descriptor_buffer
   if (ok && deviceVk->descriptorBuffer) {
-    ok = groupVk->descriptorChunk && !groupVk->set &&
-         buffer->_gpuAddress != 0u;
+    ok = pipelineLayoutVk->descriptorBuffer && groupVk->descriptorChunk &&
+         groupVk->set && buffer->_gpuAddress != 0u;
   } else
 #endif
   if (ok) {

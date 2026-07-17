@@ -452,6 +452,7 @@ typedef struct GPUBindGroupLayoutVk {
   VkDevice              device;
   VkDescriptorSetLayout layout;
 #ifdef VK_EXT_descriptor_buffer
+  VkDescriptorSetLayout descriptorLayout;
   VkDeviceSize          descriptorSize;
   VkDeviceSize          descriptorStride;
   VkDeviceSize          nonCoherentAtomSize;
