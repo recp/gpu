@@ -21,12 +21,15 @@ GPUShaderLibrary*
 mt_newLibraryWithSource(GPUDevice *device,
                         const char *source,
                         uint64_t sourceSize) {
-  GPUDeviceMT       *deviceMT;
-  GPUShaderLibrary  *library;
-  id<MTLLibrary>     mtLibrary;
-  NSError           *error;
-  NSString          *nsSource;
-  MTLCompileOptions *options;
+  GPUDeviceMT          *deviceMT;
+  GPUShaderLibrary     *library;
+  id<MTLLibrary>        mtLibrary;
+  NSError              *error;
+  NSString             *nsSource;
+  MTLCompileOptions    *options;
+#if MT_HAS_METAL4
+  MTL4LibraryDescriptor *descriptor;
+#endif
 
   deviceMT  = device->_priv;
   error     = nil;
@@ -34,7 +37,33 @@ mt_newLibraryWithSource(GPUDevice *device,
                                        length:(NSUInteger)sourceSize
                                      encoding:NSUTF8StringEncoding];
   options   = [MTLCompileOptions new];
-  mtLibrary = [deviceMT->device newLibraryWithSource:nsSource options:options error:&error];
+  mtLibrary = nil;
+  if (!deviceMT || !nsSource || !options) {
+    [options release];
+    [nsSource release];
+    return NULL;
+  }
+
+#if MT_HAS_METAL4
+  if (deviceMT->commandMode == MTCommandMode4) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      descriptor         = [MTL4LibraryDescriptor new];
+      descriptor.source  = nsSource;
+      descriptor.options = options;
+      mtLibrary = [(id<MTL4Compiler>)deviceMT->compiler
+        newLibraryWithDescriptor:descriptor
+                           error:&error];
+      [descriptor release];
+    }
+  } else
+#endif
+  {
+    mtLibrary = [deviceMT->device newLibraryWithSource:nsSource
+                                               options:options
+                                                 error:&error];
+  }
+  [options release];
+  [nsSource release];
   if (!mtLibrary) {
     if (error) {
       NSLog(@"GPU mt_newLibraryWithSource failed: %@", error);
@@ -44,6 +73,7 @@ mt_newLibraryWithSource(GPUDevice *device,
 
   library = calloc(1, sizeof(*library));
   if (!library) {
+    [mtLibrary release];
     return NULL;
   }
 
