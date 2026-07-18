@@ -264,6 +264,35 @@ vk_createCache(GPUDevice                        *device,
 }
 
 static void
+vk__mergeStoredCache(VKPipelineCache *native) {
+  VkPipelineCacheCreateInfo createInfo = {0};
+  VkPipelineCache           storedCache;
+  void                     *data;
+  size_t                    dataSize;
+
+  data = vk__readCache(native->path, &dataSize);
+  if (!data) {
+    return;
+  }
+  createInfo.sType           = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+  createInfo.initialDataSize = dataSize;
+  createInfo.pInitialData    = data;
+  storedCache                = VK_NULL_HANDLE;
+  if (vkCreatePipelineCache(native->device,
+                            &createInfo,
+                            NULL,
+                            &storedCache) == VK_SUCCESS &&
+      storedCache) {
+    (void)vkMergePipelineCaches(native->device,
+                                native->cache,
+                                1u,
+                                &storedCache);
+    vkDestroyPipelineCache(native->device, storedCache, NULL);
+  }
+  free(data);
+}
+
+static void
 vk__storeCache(VKPipelineCache *native) {
   GPUCacheFileGuard guard;
   void    *data;
@@ -276,16 +305,22 @@ vk__storeCache(VKPipelineCache *native) {
   if (!native || !native->used) {
     return;
   }
+  if (!gpuCacheFileBegin(native->path, &guard)) {
+    return;
+  }
+  vk__mergeStoredCache(native);
   dataSize = 0u;
   result   = vkGetPipelineCacheData(native->device,
                                     native->cache,
                                     &dataSize,
                                     NULL);
   if (result != VK_SUCCESS || dataSize == 0u) {
+    gpuCacheFileEnd(&guard);
     return;
   }
   data = malloc(dataSize);
   if (!data) {
+    gpuCacheFileEnd(&guard);
     return;
   }
   result = vkGetPipelineCacheData(native->device,
@@ -294,13 +329,10 @@ vk__storeCache(VKPipelineCache *native) {
                                   data);
   if (result != VK_SUCCESS) {
     free(data);
+    gpuCacheFileEnd(&guard);
     return;
   }
 
-  if (!gpuCacheFileBegin(native->path, &guard)) {
-    free(data);
-    return;
-  }
   temporaryPath = gpuCacheFileTemporaryPath(native->path, native);
   if (!temporaryPath) {
     gpuCacheFileEnd(&guard);

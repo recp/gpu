@@ -55,6 +55,9 @@ dx12__nativeCache(GPUPipelineCache *cache) {
   return cache ? cache->_priv : NULL;
 }
 
+static void
+dx12__mergeStoredCache(DX12PipelineCache *native);
+
 GPU_HIDE
 void
 dx12_keyInit(DX12PipelineKey *key) {
@@ -257,6 +260,10 @@ dx12__storeCache(DX12PipelineCache *native) {
   if (!native || !native->dirty) {
     return;
   }
+  if (!gpuCacheFileBegin(native->path, &guard)) {
+    return;
+  }
+  dx12__mergeStoredCache(native);
 
   AcquireSRWLockExclusive(&native->lock);
   dataSize   = sizeof(DX12PipelineCacheHeader);
@@ -300,13 +307,10 @@ dx12__storeCache(DX12PipelineCache *native) {
   ReleaseSRWLockExclusive(&native->lock);
   if (!valid) {
     free(data);
+    gpuCacheFileEnd(&guard);
     return;
   }
 
-  if (!gpuCacheFileBegin(native->path, &guard)) {
-    free(data);
-    return;
-  }
   temporaryPath = gpuCacheFileTemporaryPath(native->path, native);
   if (!temporaryPath) {
     gpuCacheFileEnd(&guard);
@@ -458,6 +462,41 @@ dx12__findEntry(DX12PipelineCache     *native,
     }
   }
   return link;
+}
+
+static void
+dx12__mergeStoredCache(DX12PipelineCache *native) {
+  DX12PipelineCacheEntry *entry;
+  DX12PipelineCache       stored = {0};
+  void                   *data;
+  size_t                  dataSize;
+
+  data = dx12__readCache(native->path, &dataSize);
+  if (!dx12__loadCache(&stored, data, dataSize)) {
+    free(data);
+    return;
+  }
+  free(data);
+
+  AcquireSRWLockExclusive(&native->lock);
+  entry          = stored.entries;
+  stored.entries = NULL;
+  while (entry) {
+    DX12PipelineCacheEntry **link;
+    DX12PipelineCacheEntry  *next;
+
+    next = entry->next;
+    link = dx12__findEntry(native, &entry->key);
+    if (*link) {
+      free(entry);
+    } else {
+      entry->next = NULL;
+      *link       = entry;
+      native->entryCount++;
+    }
+    entry = next;
+  }
+  ReleaseSRWLockExclusive(&native->lock);
 }
 
 static void
