@@ -162,6 +162,7 @@ GPUFinishFrame(GPUQueue         * __restrict cmdq,
   }
 
   if (!gpuSchedulePresent(cmdb, frame)) {
+    (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return GPU_ERROR_BACKEND_FAILURE;
   }

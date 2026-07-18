@@ -99,6 +99,11 @@ GPUAcquireCommandBuffer(GPUQueue          * __restrict cmdq,
                         const char        * __restrict label,
                         GPUCommandBuffer ** __restrict outCmdb);
 
+/* Discards recorded commands and consumes the command buffer. */
+GPU_EXPORT
+GPUResult
+GPUDiscardCommandBuffer(GPUCommandBuffer * __restrict cmdb);
+
 GPU_EXPORT
 void
 GPUSetCommandBufferCompletionHandler(GPUCommandBuffer * __restrict cmdb,

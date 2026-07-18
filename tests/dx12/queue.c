@@ -86,6 +86,31 @@ wait_queue(GPUQueue *queue, GPUFence *fence) {
 }
 
 static bool
+discard_reuses(GPUQueue *queue) {
+  CompletionProbe   probe;
+  GPUCommandBuffer *first;
+  GPUCommandBuffer *second;
+
+  memset(&probe, 0, sizeof(probe));
+  first = NULL;
+  if (GPUAcquireCommandBuffer(queue, "dx12-discard", &first) != GPU_OK ||
+      !first) {
+    return false;
+  }
+  GPUSetCommandBufferCompletionHandler(first, &probe, on_complete);
+  if (GPUDiscardCommandBuffer(first) != GPU_OK || probe.count != 0u) {
+    return false;
+  }
+
+  second = NULL;
+  if (GPUAcquireCommandBuffer(queue, "dx12-discard-reuse", &second) != GPU_OK ||
+      !second || second != first) {
+    return false;
+  }
+  return GPUDiscardCommandBuffer(second) == GPU_OK && probe.count == 0u;
+}
+
+static bool
 frame_time_roundtrip(GPUDevice *device,
                      GPUQueue  *queue,
                      GPUFence  *fence) {
@@ -550,6 +575,10 @@ main(void) {
   }
   if (!frame_time_roundtrip(device, queue0, fence)) {
     fprintf(stderr, "DX12 frame time roundtrip failed\n");
+    goto fail;
+  }
+  if (!discard_reuses(queue0)) {
+    fprintf(stderr, "DX12 command-buffer discard failed\n");
     goto fail;
   }
   if (!buffer_transfers_reuse(queue0, device, fence)) {

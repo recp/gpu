@@ -1128,6 +1128,40 @@ vk_commandBufferOnComplete(GPUCommandBuffer * __restrict cmdb,
 
 GPU_HIDE
 GPUResult
+vk_discardCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
+  GPUCommandBufferVk *native;
+  GPUSwapchainVk     *swapchain;
+  VkResult            result;
+
+  native = cmdb ? cmdb->_priv : NULL;
+  if (!native || !native->command) {
+    gpuDiscardCommandBufferState(cmdb, NULL);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  swapchain = native->presentSwapchain;
+  if (swapchain) {
+    swapchain->frameScheduled = false;
+  }
+  native->presentSwapchain  = NULL;
+  native->presentImageIndex = 0u;
+  native->presentFrameIndex = 0u;
+  native->frameTimeActive   = false;
+  vk_resetGraphInitializations(native);
+
+  result = vkResetCommandBuffer(native->command, 0u);
+  if (result != VK_SUCCESS) {
+    vk__reportQueueError(cmdb, "command buffer discard", result);
+    gpuDiscardCommandBufferState(cmdb, NULL);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  gpuDiscardCommandBufferState(cmdb, vk__recycleCommandBuffer);
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
 vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   GPUCommandBufferVk *native;
   GPUQueueVk         *queue;
@@ -1672,6 +1706,7 @@ vk_initCmdQue(GPUApiCommandQueue *apiQue) {
   apiQue->newCommandQueue         = vk_newCommandQueue;
   apiQue->newCommandBuffer        = vk_newCommandBuffer;
   apiQue->commandBufferOnComplete = vk_commandBufferOnComplete;
+  apiQue->discard                 = vk_discardCommandBuffer;
   apiQue->commit                  = vk_commitCommandBuffer;
   apiQue->submit                  = vk_submitCommandBuffers;
   apiQue->createSemaphore         = vk_createSemaphore;

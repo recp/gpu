@@ -108,6 +108,24 @@ gpuFinishCommandBuffer(GPUCommandBuffer          *cmdb,
   gpu_signalFence(fence);
 }
 
+GPU_HIDE
+void
+gpuDiscardCommandBufferState(GPUCommandBuffer          *cmdb,
+                             GPUCommandBufferRecycleFn  recycle) {
+  if (!cmdb) {
+    return;
+  }
+
+  cmdb->_submitFence      = NULL;
+  cmdb->_transientFence   = NULL;
+  cmdb->_onCompleteSender = NULL;
+  cmdb->_onComplete       = NULL;
+
+  if (recycle) {
+    recycle(cmdb);
+  }
+}
+
 #if !defined(_WIN32) && !defined(WIN32)
 static void
 gpu_timeoutFromNow(uint64_t timeoutNs, struct timespec *outTime) {
@@ -191,6 +209,23 @@ GPUAcquireCommandBuffer(GPUQueue          * __restrict cmdq,
 
   *outCmdb = gpu_newCommandBuffer(cmdq, label, NULL, NULL);
   return *outCmdb ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+}
+
+GPU_EXPORT
+GPUResult
+GPUDiscardCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
+  GPUApi *api;
+
+  if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder ||
+      cmdb->_pipelineStatsQuery) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!(api = gpuCommandBufferApi(cmdb)) || !api->cmdque.discard) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  cmdb->_submitted = true;
+  return api->cmdque.discard(cmdb);
 }
 
 GPU_EXPORT

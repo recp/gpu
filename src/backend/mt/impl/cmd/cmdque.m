@@ -578,6 +578,32 @@ mt_ccmdbufOnComplete(GPUCommandBuffer * __restrict cmdb,
 
 GPU_HIDE
 GPUResult
+mt_discardCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
+  MTCommandBuffer *native;
+
+  native = mt_commandBuffer(cmdb);
+  if (!native) {
+    gpuDiscardCommandBufferState(cmdb, NULL);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+#if MT_HAS_METAL4
+  if (native->mode == MTCommandMode4) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      [native->modern endCommandBuffer];
+    } else {
+      gpuDiscardCommandBufferState(cmdb, NULL);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+#endif
+
+  gpuDiscardCommandBufferState(cmdb, mt_recycleCommandBuffer);
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
 mt_cmdbufCommit(GPUCommandBuffer * __restrict cmdb) {
   MTCommandBuffer      *native;
   MTCommandQueue       *queue;
@@ -1064,6 +1090,7 @@ mt_initCmdQue(GPUApiCommandQueue *api) {
   api->getTimestampPeriod      = mt_getTimestampPeriod;
   api->newCommandBuffer        = mt_newCommandBuffer;
   api->commandBufferOnComplete = mt_ccmdbufOnComplete;
+  api->discard                 = mt_discardCommandBuffer;
   api->commit                  = mt_cmdbufCommit;
   api->submit                  = mt_submitCommandBuffers;
   api->createSemaphore         = mt_createSemaphore;

@@ -74,4 +74,9 @@ void
 gpuFinishCommandBuffer(GPUCommandBuffer          *cmdb,
                        GPUCommandBufferRecycleFn  recycle);
 
+GPU_HIDE
+void
+gpuDiscardCommandBufferState(GPUCommandBuffer          *cmdb,
+                             GPUCommandBufferRecycleFn  recycle);
+
 #endif /* gpu_cmdqueue_internal_h */

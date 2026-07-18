@@ -27,6 +27,7 @@ static uint32_t         gScopedCommitCalls;
 static uint32_t         gScopedSubmitCalls;
 static uint32_t         gScopedSubmitCount;
 static uint32_t         gScopedCompletionHandlerCalls;
+static uint32_t         gScopedDiscardCalls;
 static uint32_t         gScopedFrameBeginCalls;
 static uint32_t         gScopedFrameEndCalls;
 static bool             gScopedFrameSucceeds;
@@ -510,6 +511,14 @@ set_scoped_cmdb_completion(GPUCommandBuffer * __restrict cmdb,
 }
 
 static GPUResult
+discard_scoped_cmdb(GPUCommandBuffer * __restrict cmdb) {
+  gScopedDiscardCalls++;
+  cmdb->_onCompleteSender = NULL;
+  cmdb->_onComplete       = NULL;
+  return GPU_OK;
+}
+
+static GPUResult
 submit_scoped_cmdbs(GPUQueue                  * __restrict queue,
                     uint32_t                               count,
                     GPUCommandBuffer * const * __restrict buffers) {
@@ -572,6 +581,7 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   scopedApi.cmdque.getCommandQueue         = get_scoped_queue;
   scopedApi.cmdque.newCommandBuffer        = new_scoped_cmdb;
   scopedApi.cmdque.commandBufferOnComplete = set_scoped_cmdb_completion;
+  scopedApi.cmdque.discard                 = discard_scoped_cmdb;
   scopedApi.cmdque.commit                  = commit_scoped_cmdb;
   scopedApi.cmdque.submit                  = submit_scoped_cmdbs;
   scopedApi.cmdbuf.presentDrawable         = present_scoped_frame;
@@ -587,6 +597,7 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   gScopedSubmitCalls                       = 0u;
   gScopedSubmitCount                       = 0u;
   gScopedCompletionHandlerCalls            = 0u;
+  gScopedDiscardCalls                      = 0u;
   gScopedFrameBeginCalls                   = 0u;
   gScopedFrameEndCalls                     = 0u;
   gScopedPresentSucceeds                   = false;
@@ -664,10 +675,11 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
       GPUAcquireCommandBuffer(queue, "rejected-present", &cmdb) != GPU_OK ||
       !cmdb ||
       GPUFinishFrame(queue, cmdb, frame) != GPU_ERROR_BACKEND_FAILURE ||
-      cmdb->_submitted || cmdb->_recordsGPUFrameTime ||
+      !cmdb->_submitted || cmdb->_recordsGPUFrameTime ||
       gScopedPresentCalls != 3u || gScopedSubmitCalls != 1u ||
+      gScopedDiscardCalls != 1u ||
       gScopedFrameBeginCalls != 2u || gScopedFrameEndCalls != 2u) {
-    fprintf(stderr, "failed present was submitted\n");
+    fprintf(stderr, "failed present was not discarded\n");
     return 0;
   }
 
@@ -708,6 +720,61 @@ queue_completion_probe(void            * __restrict sender,
   probe->count++;
   probe->sender = sender;
   probe->cmdb = cmdb;
+}
+
+static int
+check_queue_discard(GPUDevice *device) {
+  QueueCompletionProbe probe = {0};
+  GPUCommandBuffer    *cmdb;
+  GPUCommandBuffer    *replacement;
+  GPUQueue            *queue;
+
+  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  if (!queue || GPUDiscardCommandBuffer(NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "command buffer discard validation failed\n");
+    return 0;
+  }
+
+  cmdb = NULL;
+  if (GPUAcquireCommandBuffer(queue, "discard", &cmdb) != GPU_OK || !cmdb) {
+    fprintf(stderr, "failed to acquire command buffer for discard\n");
+    return 0;
+  }
+
+  GPUSetCommandBufferCompletionHandler(cmdb, &probe, queue_completion_probe);
+  cmdb->_activeEncoder = true;
+  if (GPUDiscardCommandBuffer(cmdb) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "discard accepted active encoder\n");
+    return 0;
+  }
+  cmdb->_activeEncoder = false;
+  cmdb->_pipelineStatsQuery = (GPUQuerySet *)(uintptr_t)1u;
+  if (GPUDiscardCommandBuffer(cmdb) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "discard accepted active pipeline stats query\n");
+    return 0;
+  }
+  cmdb->_pipelineStatsQuery = NULL;
+
+  if (GPUDiscardCommandBuffer(cmdb) != GPU_OK || !cmdb->_submitted ||
+      probe.count != 0 ||
+      GPUDiscardCommandBuffer(cmdb) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "command buffer discard failed\n");
+    return 0;
+  }
+
+  GPUResetStats(device);
+  replacement = NULL;
+  if (GPUAcquireCommandBuffer(queue,
+                              "discard-reuse",
+                              &replacement) != GPU_OK ||
+      !replacement || GPUDiscardCommandBuffer(replacement) != GPU_OK ||
+      probe.count != 0 ||
+      device->currentFrameStats.hotPathAllocCount != 0u ||
+      device->currentFrameStats.hotPathFreeCount != 0u) {
+    fprintf(stderr, "discarded command buffer was not reusable\n");
+    return 0;
+  }
+  return 1;
 }
 
 static bool
@@ -1991,6 +2058,7 @@ gpu_test_queue(GPUInstance *instance,
          check_device_destroy_waits_for_submission(adapter) &&
          check_queue_selection(device) &&
          check_swapchain_create_validation(device) &&
+         check_queue_discard(device) &&
          check_queue_submit_fence(device) &&
          check_queue_submit_ex_semaphore(device);
 }

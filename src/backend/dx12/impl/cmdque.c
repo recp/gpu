@@ -1517,6 +1517,38 @@ dx12_commandBufferOnComplete(GPUCommandBuffer * __restrict cmdb,
 
 GPU_HIDE
 GPUResult
+dx12_discardCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
+  GPUCommandBufferDX12 *native;
+  GPUSwapchainDX12     *swapchain;
+  HRESULT               result;
+
+  native = cmdb ? cmdb->_priv : NULL;
+  if (!native || !native->commandList) {
+    gpuDiscardCommandBufferState(cmdb, NULL);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  swapchain = native->presentSwapchain;
+  if (swapchain) {
+    swapchain->frameScheduled = false;
+  }
+  native->presentSwapchain = NULL;
+  dx12_resetGraphInitializations(native);
+
+  result = native->commandList->lpVtbl->Close(native->commandList);
+  if (FAILED(result)) {
+    dx12__reportQueueError(native->owner, "command buffer discard", result);
+    dx12__logDebugMessages(native->owner);
+    gpuDiscardCommandBufferState(cmdb, NULL);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  gpuDiscardCommandBufferState(cmdb, dx12__recycleCommandBuffer);
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
 dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   GPUCommandBufferDX12 *native;
   GPUQueueDX12         *queue;
@@ -1936,6 +1968,7 @@ dx12_initCmdQue(GPUApiCommandQueue *api) {
   api->getTimestampPeriod      = dx12_getTimestampPeriod;
   api->newCommandBuffer        = dx12_newCommandBuffer;
   api->commandBufferOnComplete = dx12_commandBufferOnComplete;
+  api->discard                 = dx12_discardCommandBuffer;
   api->commit                  = dx12_commitCommandBuffer;
   api->submit                  = dx12_submitCommandBuffers;
   api->createSemaphore         = dx12_createSemaphore;
