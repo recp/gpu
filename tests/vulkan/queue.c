@@ -176,6 +176,7 @@ descriptor_buffer_state_shadow(GPUDevice *gpuDevice) {
     groups[i]._native             = &groupsVk[i];
   }
   encoder.command        = (VkCommandBuffer)(uintptr_t)&probe;
+  encoder.bindPoint      = VK_PIPELINE_BIND_POINT_COMPUTE;
   encoder.pipelineLayout = layoutHandle;
   pass._priv             = &encoder;
 
