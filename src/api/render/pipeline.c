@@ -688,7 +688,7 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     if (result != GPU_OK)
       return result;
   }
-  if (info->cache && !info->chain.pNext) {
+  if (info->cache) {
     result = gpuPipelineCacheFindRender(info->cache,
                                         info,
                                         &cacheKey,
@@ -897,7 +897,7 @@ ready:
   gpuGetPipelineLayoutPushConstants(info->layout,
                                     &pipeline->_pushConstantSizeBytes,
                                     &pipeline->_pushConstantStages);
-  if (info->cache && !info->chain.pNext) {
+  if (info->cache) {
     pipeline = gpuPipelineCacheStoreRender(info->cache, &cacheKey, pipeline);
   } else {
     gpuRecordPipelineCompile(device, info->cache);

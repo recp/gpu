@@ -99,6 +99,7 @@ test_mesh_draw(GPUDevice  *device,
   GPUPipelineCache             *pipelineCache;
   GPURenderPipeline            *pipeline;
   GPURenderPipeline            *asyncPipeline;
+  GPURenderPipeline            *cachedPipeline;
   GPUBuffer                    *taskBuffer;
   GPUBuffer                    *readbackBuffer;
   GPUBindGroup                 *taskGroup;
@@ -112,6 +113,7 @@ test_mesh_draw(GPUDevice  *device,
   GPUPipelineCacheCreateInfo    cacheInfo     = {0};
   GPUPipelineCompileHandle      compileHandle = {0};
   GPUPipelineCompileStatus      compileStatus = GPU_PIPELINE_COMPILE_PENDING;
+  GPUCacheStats                 cacheStats     = {0};
   GPUColorTargetState           colorTarget   = {0};
   GPURenderPipelineCreateInfo   pipelineInfo  = {0};
   GPUBufferCreateInfo           bufferInfo    = {0};
@@ -136,6 +138,7 @@ test_mesh_draw(GPUDevice  *device,
   pipelineCache  = NULL;
   pipeline       = NULL;
   asyncPipeline  = NULL;
+  cachedPipeline = NULL;
   taskBuffer     = NULL;
   readbackBuffer = NULL;
   taskGroup      = NULL;
@@ -195,6 +198,7 @@ test_mesh_draw(GPUDevice  *device,
   cacheInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
   cacheInfo.chain.structSize = sizeof(cacheInfo);
   cacheInfo.label            = "usl-mesh-async";
+  GPUResetStats(device);
   if (GPUCreatePipelineCache(device, &cacheInfo, &pipelineCache) != GPU_OK ||
       !pipelineCache ||
       GPUCompileRenderPipelineAsync(device,
@@ -221,6 +225,17 @@ test_mesh_draw(GPUDevice  *device,
     fprintf(stderr, "async mesh pipeline did not become ready\n");
     goto cleanup;
   }
+  pipelineInfo.cache = pipelineCache;
+  if (GPUCreateRenderPipeline(device, &pipelineInfo, &cachedPipeline) != GPU_OK ||
+      !cachedPipeline ||
+      GPUGetCacheStats(device, &cacheStats) != GPU_OK ||
+      cacheStats.pipelineMisses != 1u || cacheStats.pipelineHits != 1u) {
+    fprintf(stderr, "mesh pipeline cache did not produce a hit\n");
+    goto cleanup;
+  }
+  GPUDestroyRenderPipeline(cachedPipeline);
+  cachedPipeline     = NULL;
+  pipelineInfo.cache = NULL;
   GPUDestroyRenderPipeline(pipeline);
   pipeline      = asyncPipeline;
   asyncPipeline = NULL;
@@ -395,6 +410,7 @@ cleanup:
   GPUDestroyBindGroup(taskGroup);
   GPUDestroyBuffer(readbackBuffer);
   GPUDestroyBuffer(taskBuffer);
+  GPUDestroyRenderPipeline(cachedPipeline);
   GPUDestroyRenderPipeline(asyncPipeline);
   GPUDestroyRenderPipeline(pipeline);
   GPUDestroyPipelineCache(pipelineCache);

@@ -241,14 +241,28 @@ gpu_pipelineKeyWriteDepthStencil(GPUPipelineKeyWriter       *writer,
 static void
 gpu_pipelineKeyWriteRenderInfo(GPUPipelineKeyWriter              *writer,
                                const GPURenderPipelineCreateInfo *info) {
+  const GPUMeshPipelineEXT *mesh;
   uintptr_t layout;
   uintptr_t library;
+  uint32_t pipelineType;
 
-  layout  = (uintptr_t)info->layout;
-  library = (uintptr_t)info->library;
+  layout       = (uintptr_t)info->layout;
+  library      = (uintptr_t)info->library;
+  mesh         = info->chain.pNext
+                   ? (const GPUMeshPipelineEXT *)info->chain.pNext
+                   : NULL;
+  pipelineType = mesh ? GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT
+                      : GPU_STRUCTURE_TYPE_NONE;
   GPU_PIPELINE_KEY_WRITE(writer, layout);
   GPU_PIPELINE_KEY_WRITE(writer, library);
-  gpu_pipelineKeyWriteString(writer, info->vertexEntry);
+  GPU_PIPELINE_KEY_WRITE(writer, pipelineType);
+  if (mesh) {
+    gpu_pipelineKeyWriteString(writer, mesh->taskEntry ? mesh->taskEntry : "");
+    gpu_pipelineKeyWriteString(writer, mesh->meshEntry);
+    GPU_PIPELINE_KEY_WRITE(writer, mesh->payloadSizeBytes);
+  } else {
+    gpu_pipelineKeyWriteString(writer, info->vertexEntry);
+  }
   gpu_pipelineKeyWriteString(writer, info->fragmentEntry);
   GPU_PIPELINE_KEY_WRITE(writer, info->vertex.bufferLayoutCount);
   for (uint32_t i = 0u; i < info->vertex.bufferLayoutCount; i++) {
@@ -345,9 +359,6 @@ gpu_buildRenderPipelineKey(const GPURenderPipelineCreateInfo *info,
   outKey->size     = 0u;
   outKey->hash     = 0u;
   outKey->ownsData = false;
-  if (info->chain.pNext) {
-    return false;
-  }
 
   writer.data     = outKey->inlineData;
   writer.offset   = 0u;
