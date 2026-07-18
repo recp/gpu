@@ -518,28 +518,28 @@ if(GPU_BUILD_TESTS)
   )
   unset(GPU_USL_FIXTURE_TARGET_CAPS)
   list(APPEND GPU_API_USL_FIXTURES ${GPU_API_SUBGROUP_USL_FIXTURE})
-  if(NOT GPU_API_DEFAULT_BACKEND STREQUAL "dx12")
+  set(GPU_API_SUBGROUP_MATRIX_USL_SOURCE
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/subgroup_matrix.usl")
+  set(GPU_API_SUBGROUP_MATRIX_PROFILE "8x8x8")
+  set(GPU_USL_FIXTURE_TARGET_CAPS subgroup_matrix)
+  if(GPU_API_DEFAULT_BACKEND STREQUAL "vulkan")
     set(GPU_API_SUBGROUP_MATRIX_USL_SOURCE
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/subgroup_matrix.usl")
-    set(GPU_API_SUBGROUP_MATRIX_PROFILE "8x8x8")
-    if(GPU_API_DEFAULT_BACKEND STREQUAL "vulkan")
-      set(GPU_API_SUBGROUP_MATRIX_USL_SOURCE
-          "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/subgroup_matrix_vulkan.usl")
-      set(GPU_API_SUBGROUP_MATRIX_PROFILE "16x8x8")
-    endif()
-    set(GPU_USL_FIXTURE_TARGET_CAPS subgroup_matrix)
-    gpu_add_usl_fixtures(
-      GPU_API_SUBGROUP_MATRIX_USL_FIXTURE
-      "${GPU_API_DEFAULT_BACKEND}"
-      api-subgroup-matrix
-      "${GPU_API_SUBGROUP_MATRIX_USL_SOURCE}"
-    )
-    unset(GPU_USL_FIXTURE_TARGET_CAPS)
-    add_custom_target(
-      gpu-api-subgroup-matrix-fixture
-      DEPENDS ${GPU_API_SUBGROUP_MATRIX_USL_FIXTURE}
-    )
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/subgroup_matrix_vulkan.usl")
+    set(GPU_API_SUBGROUP_MATRIX_PROFILE "16x8x8")
+  elseif(GPU_API_DEFAULT_BACKEND STREQUAL "dx12")
+    set(GPU_USL_FIXTURE_TARGET_CAPS sm_6_10,subgroup_matrix)
   endif()
+  gpu_add_usl_fixtures(
+    GPU_API_SUBGROUP_MATRIX_USL_FIXTURE
+    "${GPU_API_DEFAULT_BACKEND}"
+    api-subgroup-matrix
+    "${GPU_API_SUBGROUP_MATRIX_USL_SOURCE}"
+  )
+  unset(GPU_USL_FIXTURE_TARGET_CAPS)
+  add_custom_target(
+    gpu-api-subgroup-matrix-fixture
+    DEPENDS ${GPU_API_SUBGROUP_MATRIX_USL_FIXTURE}
+  )
   set(GPU_USL_FIXTURE_TARGET_CAPS vulkan1_2,shader_f16)
   gpu_add_usl_fixtures(
     GPU_API_SHADER_F16_USL_FIXTURE

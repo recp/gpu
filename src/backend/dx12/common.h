@@ -42,6 +42,7 @@
 typedef struct GPUAdapterDX12 {
   /* IDXGIAdapter1*dxgiAdapter; */
   IUnknown                          *dxgiAdapter;
+  GPUSubgroupMatrixPropertiesEXT   *subgroupMatrixProperties;
   DXGI_ADAPTER_DESC1                 desc1;
   SRWLOCK                            formatCapsLock;
   GPUShadingRateFlagsEXT             vrsRates;
@@ -50,6 +51,7 @@ typedef struct GPUAdapterDX12 {
   D3D12_TILED_RESOURCES_TIER         tiledResourcesTier;
   uint32_t                           minSubgroupSize;
   uint32_t                           maxSubgroupSize;
+  uint32_t                           subgroupMatrixPropertyCount;
   uint32_t                           vrsTileSize;
   char                               name[256];
   bool                               isWarp;
@@ -119,6 +121,8 @@ typedef struct GPUDeviceDX12 {
   bool                               meshShader;
   bool                               rayQuery;
   bool                               rayTracingPipeline;
+  bool                               subgroupMatrix;
+  bool                               subgroupMatrixEnabled;
   bool                               queryResultsReliable;
   bool                               stencilPlaneCopies;
 } GPUDeviceDX12;
@@ -662,6 +666,10 @@ dx12_allocateDescriptors(GPUDeviceDX12             *device,
                          D3D12_DESCRIPTOR_HEAP_TYPE type,
                          uint32_t                    count,
                          uint32_t                   *outOffset);
+
+GPU_HIDE
+bool
+dx12_hasLinearAlgebraCompiler(HMODULE module);
 
 GPU_HIDE
 void

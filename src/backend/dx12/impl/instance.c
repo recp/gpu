@@ -16,6 +16,37 @@
 
 #include "../common.h"
 
+#if defined(DIRECT3D_LINEAR_ALGEBRA)
+static INIT_ONCE dx12_linearAlgebraOnce = INIT_ONCE_STATIC_INIT;
+
+static BOOL CALLBACK
+dx12_enableLinearAlgebraOnce(PINIT_ONCE once, PVOID parameter, PVOID *context) {
+  GPU__UNUSED(once);
+  GPU__UNUSED(parameter);
+  GPU__UNUSED(context);
+
+  D3D12EnableExperimentalFeatures(
+    1u,
+    &D3D12ExperimentalShaderModels,
+    NULL,
+    NULL
+  );
+  return TRUE;
+}
+
+static void
+dx12_enableLinearAlgebra(void) {
+  InitOnceExecuteOnce(&dx12_linearAlgebraOnce,
+                      dx12_enableLinearAlgebraOnce,
+                      NULL,
+                      NULL);
+}
+#else
+static void
+dx12_enableLinearAlgebra(void) {
+}
+#endif
+
 GPU_HIDE
 GPUInstance *
 dx12_createInstance(struct GPUApi * __restrict api,
@@ -35,6 +66,8 @@ dx12_createInstance(struct GPUApi * __restrict api,
     if (instDX12) { free(instDX12); }
     return NULL;
   }
+
+  dx12_enableLinearAlgebra();
 
 #if GPU_BUILD_WITH_VALIDATION && defined(_DEBUG)
   /* Enable the debug layer (requires the Graphics Tools "optional feature").

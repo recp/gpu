@@ -275,6 +275,190 @@ dx12_querySubgroups(ID3D12Device *device,
   return true;
 }
 
+#if defined(DIRECT3D_LINEAR_ALGEBRA)
+typedef struct DX12SubgroupMatrixProfile {
+  D3D12_LINEAR_ALGEBRA_DATATYPE         aType;
+  D3D12_LINEAR_ALGEBRA_DATATYPE         bType;
+  D3D12_LINEAR_ALGEBRA_DATATYPE         cType;
+  GPUSubgroupMatrixComponentTypeEXT     gpuAType;
+  GPUSubgroupMatrixComponentTypeEXT     gpuBType;
+  GPUSubgroupMatrixComponentTypeEXT     gpuCType;
+} DX12SubgroupMatrixProfile;
+
+static bool
+dx12_supportsMatrixConstruction(ID3D12Device                 *device,
+                                D3D12_LINEAR_ALGEBRA_DATATYPE type) {
+  D3D12_FEATURE_DATA_LINEAR_ALGEBRA_MATRIX_OPERATION_SUPPORT query = {0};
+
+  query.OperationType =
+    D3D12_LINEAR_ALGEBRA_OPERATION_TYPE_MATRIX_CONSTRUCTION;
+  query.MatrixConstruction.ComponentType = type;
+  query.MatrixConstruction.WaveSize       = 0u;
+  return SUCCEEDED(device->lpVtbl->CheckFeatureSupport(
+           device,
+           D3D12_FEATURE_LINEAR_ALGEBRA_LINEAR_ALGEBRA_MATRIX_OPERATION_SUPPORT,
+           &query,
+           sizeof(query)
+         )) &&
+         query.MatrixConstruction.MinM > 0u &&
+         query.MatrixConstruction.MinK > 0u &&
+         query.MatrixConstruction.MinN > 0u;
+}
+
+static void
+dx12_appendSubgroupMatrixProfile(GPUAdapterDX12                 *adapter,
+                                 ID3D12Device                   *device,
+                                 const DX12SubgroupMatrixProfile *profile) {
+  D3D12_FEATURE_DATA_LINEAR_ALGEBRA_MATRIX_OPERATION_SUPPORT query = {0};
+  D3D12_LINEAR_ALGEBRA_MATRIX_MULTIPLY_SHAPE                 *shapes;
+  GPUSubgroupMatrixPropertiesEXT                             *properties;
+  uint32_t                                                    validCount;
+  uint32_t                                                    oldCount;
+  UINT                                                        shapeCount;
+
+  if (!adapter || !device || !profile ||
+      !dx12_supportsMatrixConstruction(device, profile->aType) ||
+      !dx12_supportsMatrixConstruction(device, profile->bType) ||
+      !dx12_supportsMatrixConstruction(device, profile->cType)) {
+    return;
+  }
+
+  query.OperationType =
+    D3D12_LINEAR_ALGEBRA_OPERATION_TYPE_WAVE_MATRIX_MULTIPLY;
+  query.WaveMatrixMultiply.Inputs.WaveSize = 0u;
+  query.WaveMatrixMultiply.Inputs.MatrixAComponentType = profile->aType;
+  query.WaveMatrixMultiply.Inputs.MatrixBComponentType = profile->bType;
+  query.WaveMatrixMultiply.Inputs.AccumulatorComponentType = profile->cType;
+  if (FAILED(device->lpVtbl->CheckFeatureSupport(
+        device,
+        D3D12_FEATURE_LINEAR_ALGEBRA_LINEAR_ALGEBRA_MATRIX_OPERATION_SUPPORT,
+        &query,
+        sizeof(query)
+      )) ||
+      (query.WaveMatrixMultiply.SupportFlags &
+       D3D12_LINEAR_ALGEBRA_MULTIPLICATION_SUPPORT_FLAG_SUPPORTED) == 0u ||
+      query.WaveMatrixMultiply.NumShapes == 0u) {
+    return;
+  }
+
+  shapeCount = query.WaveMatrixMultiply.NumShapes;
+  if ((size_t)shapeCount > SIZE_MAX / sizeof(*shapes)) {
+    return;
+  }
+  shapes = calloc((size_t)shapeCount, sizeof(*shapes));
+  if (!shapes) {
+    return;
+  }
+
+  query.WaveMatrixMultiply.NumShapes = shapeCount;
+  query.WaveMatrixMultiply.Shapes    = shapes;
+  if (FAILED(device->lpVtbl->CheckFeatureSupport(
+        device,
+        D3D12_FEATURE_LINEAR_ALGEBRA_LINEAR_ALGEBRA_MATRIX_OPERATION_SUPPORT,
+        &query,
+        sizeof(query)
+      ))) {
+    free(shapes);
+    return;
+  }
+
+  shapeCount = query.WaveMatrixMultiply.NumShapes < shapeCount
+                 ? query.WaveMatrixMultiply.NumShapes
+                 : shapeCount;
+  validCount = 0u;
+  for (UINT i = 0u; i < shapeCount; i++) {
+    validCount += shapes[i].M > 0u && shapes[i].N > 0u && shapes[i].K > 0u;
+  }
+  oldCount = adapter->subgroupMatrixPropertyCount;
+  if (validCount == 0u || oldCount > UINT32_MAX - validCount ||
+      (size_t)(oldCount + validCount) > SIZE_MAX / sizeof(*properties)) {
+    free(shapes);
+    return;
+  }
+
+  properties = realloc(
+    adapter->subgroupMatrixProperties,
+    (size_t)(oldCount + validCount) * sizeof(*properties)
+  );
+  if (!properties) {
+    free(shapes);
+    return;
+  }
+  adapter->subgroupMatrixProperties = properties;
+  for (UINT i = 0u; i < shapeCount; i++) {
+    GPUSubgroupMatrixPropertiesEXT property = {0};
+
+    if (shapes[i].M == 0u || shapes[i].N == 0u || shapes[i].K == 0u) {
+      continue;
+    }
+    property.m          = shapes[i].M;
+    property.n          = shapes[i].N;
+    property.k          = shapes[i].K;
+    property.aType      = profile->gpuAType;
+    property.bType      = profile->gpuBType;
+    property.cType      = profile->gpuCType;
+    property.resultType = profile->gpuCType;
+    property.stages     = GPU_SHADER_STAGE_COMPUTE_BIT;
+    property.scope      = GPU_SUBGROUP_MATRIX_SCOPE_SUBGROUP_EXT;
+    properties[oldCount++] = property;
+  }
+  adapter->subgroupMatrixPropertyCount = oldCount;
+  free(shapes);
+}
+
+static void
+dx12_querySubgroupMatrices(GPUAdapterDX12 *adapter, ID3D12Device *device) {
+  static const DX12SubgroupMatrixProfile profiles[] = {
+    {
+      D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT16,
+      D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT16,
+      D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT16,
+      GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT,
+      GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT,
+      GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT
+    },
+    {
+      D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT16,
+      D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT16,
+      D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT32,
+      GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT,
+      GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT,
+      GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT
+    },
+    {
+      D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT32,
+      D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT32,
+      D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT32,
+      GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT,
+      GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT,
+      GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT
+    }
+  };
+  D3D12_FEATURE_DATA_LINEAR_ALGEBRA_SUPPORT support = {0};
+
+  if (!adapter || !device ||
+      FAILED(device->lpVtbl->CheckFeatureSupport(
+        device,
+        D3D12_FEATURE_LINEAR_ALGEBRA_SUPPORT,
+        &support,
+        sizeof(support)
+      )) ||
+      support.LinearAlgebraTier < D3D12_LINEAR_ALGEBRA_TIER_1_0) {
+    return;
+  }
+
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(profiles); i++) {
+    dx12_appendSubgroupMatrixProfile(adapter, device, &profiles[i]);
+  }
+}
+#else
+static void
+dx12_querySubgroupMatrices(GPUAdapterDX12 *adapter, ID3D12Device *device) {
+  GPU__UNUSED(adapter);
+  GPU__UNUSED(device);
+}
+#endif
+
 static HMODULE
 dx12_loadDXCompiler(void) {
   HMODULE module;
@@ -328,6 +512,11 @@ dx12_probeAdapter(GPUAdapterDX12 *adapter) {
   adapter->rayQuery = dxcModule &&
                       dx12_queryRayQuery(device, shaderModel, NULL);
   adapter->rayTracingPipeline = adapter->rayQuery;
+  if (dxcModule &&
+      dx12_hasLinearAlgebraCompiler(dxcModule) &&
+      shaderModel >= (D3D_SHADER_MODEL)0x6a) {
+    dx12_querySubgroupMatrices(adapter, device);
+  }
   adapter->tiledResourcesTier = D3D12_TILED_RESOURCES_TIER_NOT_SUPPORTED;
   if (SUCCEEDED(device->lpVtbl->CheckFeatureSupport(
         device,
@@ -730,6 +919,7 @@ dx12_destroyAdapter(GPUAdapter * __restrict adapter) {
     if (adapterDX12->dxgiAdapter) {
       adapterDX12->dxgiAdapter->lpVtbl->Release(adapterDX12->dxgiAdapter);
     }
+    free(adapterDX12->subgroupMatrixProperties);
     free(adapterDX12);
   }
   free(adapter);
@@ -798,6 +988,8 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
              D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED;
     case GPU_FEATURE_SUBGROUPS:
       return adapterDX12->subgroups;
+    case GPU_FEATURE_SUBGROUP_MATRIX:
+      return adapterDX12->subgroupMatrixPropertyCount > 0u;
     case GPU_FEATURE_TIMESTAMPS:
     case GPU_FEATURE_PIPELINE_STATISTICS:
       return dx12_queryResultsReliable(adapterDX12);
@@ -827,6 +1019,38 @@ dx12_supportsSubgroupOperations(
   return adapterDX12 && adapterDX12->subgroups &&
          (supportedStages & stage) == stage &&
          (supportedOperations & operations) == operations;
+}
+
+static GPUResult
+dx12_getSubgroupMatrixProperties(
+  const GPUAdapter               * __restrict adapter,
+  uint32_t                       * __restrict inoutPropertyCount,
+  GPUSubgroupMatrixPropertiesEXT * __restrict outProperties) {
+  GPUAdapterDX12 *adapterDX12;
+  uint32_t        capacity;
+  uint32_t        count;
+
+  adapterDX12 = adapter ? adapter->_priv : NULL;
+  if (!adapterDX12 || !inoutPropertyCount) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  capacity = *inoutPropertyCount;
+  count    = adapterDX12->subgroupMatrixPropertyCount;
+  *inoutPropertyCount = count;
+  if (count == 0u || !adapterDX12->subgroupMatrixProperties) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  if (outProperties && capacity > 0u) {
+    uint32_t copyCount = capacity < count ? capacity : count;
+
+    memcpy(outProperties,
+           adapterDX12->subgroupMatrixProperties,
+           (size_t)copyCount * sizeof(*outProperties));
+  }
+  return outProperties && capacity < count
+           ? GPU_ERROR_INSUFFICIENT_CAPACITY
+           : GPU_OK;
 }
 
 static void
@@ -890,12 +1114,21 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
   /* Parallels accepts query commands but never writes resolved data. */
   deviceDX12->queryResultsReliable = dx12_queryResultsReliable(adapterDX12);
   dx12_queryDeviceCapabilities(deviceDX12);
+  deviceDX12->subgroupMatrix =
+    adapterDX12->subgroupMatrixPropertyCount > 0u &&
+    deviceDX12->dxcAvailable &&
+    deviceDX12->shaderModel >= (D3D_SHADER_MODEL)0x6a;
   /* Parallels advertises enhanced barriers but fails on Barrier calls. */
   if (dx12_isParallels(adapterDX12)) {
     deviceDX12->enhancedBarriers = false;
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_SUBGROUPS)) != 0u &&
       !deviceDX12->subgroups) {
+    goto err;
+  }
+  deviceDX12->subgroupMatrixEnabled =
+    (enabledFeatureMask & (1ull << GPU_FEATURE_SUBGROUP_MATRIX)) != 0u;
+  if (deviceDX12->subgroupMatrixEnabled && !deviceDX12->subgroupMatrix) {
     goto err;
   }
   deviceDX12->shaderF16Enabled =
@@ -1086,6 +1319,8 @@ dx12_initDevice(GPUApiDevice* apiDevice) {
   apiDevice->supportsSubgroupOperations = dx12_supportsSubgroupOperations;
   apiDevice->getLimits                  = dx12_getLimits;
   apiDevice->getFormatCapabilities      = dx12_getFormatCapabilities;
+  apiDevice->getSubgroupMatrixProperties =
+    dx12_getSubgroupMatrixProperties;
   apiDevice->createDevice               = dx12_createDevice;
   apiDevice->waitIdle                   = dx12_waitDeviceIdle;
   apiDevice->destroyDevice              = dx12_destroyDevice;

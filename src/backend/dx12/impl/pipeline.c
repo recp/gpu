@@ -27,9 +27,11 @@ typedef struct DXCBuffer {
   UINT        encoding;
 } DXCBuffer;
 
-typedef struct DXCBlob       DXCBlob;
-typedef struct DXCCompiler3  DXCCompiler3;
-typedef struct DXCResult     DXCResult;
+typedef struct DXCBlob        DXCBlob;
+typedef struct DXCCompiler3   DXCCompiler3;
+typedef struct DXCResult      DXCResult;
+typedef struct DXCUtils       DXCUtils;
+typedef struct DXCVersionInfo DXCVersionInfo;
 
 typedef struct DXCBlobVtbl {
   HRESULT (STDMETHODCALLTYPE *QueryInterface)(DXCBlob *, REFIID, void **);
@@ -75,6 +77,36 @@ typedef struct DXCResultVtbl {
 
 struct DXCResult {
   DXCResultVtbl *lpVtbl;
+};
+
+typedef struct DXCUtilsVtbl {
+  HRESULT (STDMETHODCALLTYPE *QueryInterface)(DXCUtils *, REFIID, void **);
+  ULONG   (STDMETHODCALLTYPE *AddRef)(DXCUtils *);
+  ULONG   (STDMETHODCALLTYPE *Release)(DXCUtils *);
+  void                            *CreateBlobFromBlob;
+  void                            *CreateBlobFromPinned;
+  void                            *MoveToBlob;
+  void                            *CreateBlob;
+  void                            *LoadFile;
+  void                            *CreateReadOnlyStreamFromBlob;
+  HRESULT (STDMETHODCALLTYPE *CreateDefaultIncludeHandler)(DXCUtils *,
+                                                            IUnknown **);
+} DXCUtilsVtbl;
+
+struct DXCUtils {
+  DXCUtilsVtbl *lpVtbl;
+};
+
+typedef struct DXCVersionInfoVtbl {
+  HRESULT (STDMETHODCALLTYPE *QueryInterface)(DXCVersionInfo *, REFIID, void **);
+  ULONG   (STDMETHODCALLTYPE *AddRef)(DXCVersionInfo *);
+  ULONG   (STDMETHODCALLTYPE *Release)(DXCVersionInfo *);
+  HRESULT (STDMETHODCALLTYPE *GetVersion)(DXCVersionInfo *, UINT32 *, UINT32 *);
+  HRESULT (STDMETHODCALLTYPE *GetFlags)(DXCVersionInfo *, UINT32 *);
+} DXCVersionInfoVtbl;
+
+struct DXCVersionInfo {
+  DXCVersionInfoVtbl *lpVtbl;
 };
 
 typedef HRESULT (WINAPI *DXCCreateInstanceFn)(REFCLSID, REFIID, void **);
@@ -130,6 +162,13 @@ static const CLSID dx12_clsidDxcCompiler = {
   {0xb5, 0xbf, 0xf0, 0x66, 0x4f, 0x39, 0xc1, 0xb0}
 };
 
+static const CLSID dx12_clsidDxcUtils = {
+  0x6245d6af,
+  0x66e0,
+  0x48fd,
+  {0x80, 0xb4, 0x4d, 0x27, 0x17, 0x96, 0x74, 0x8c}
+};
+
 static const IID dx12_iidDxcCompiler3 = {
   0x228b4687,
   0x5a6a,
@@ -142,6 +181,20 @@ static const IID dx12_iidDxcResult = {
   0xdde7,
   0x4497,
   {0x94, 0x61, 0x6f, 0x87, 0xaf, 0x5e, 0x06, 0x59}
+};
+
+static const IID dx12_iidDxcUtils = {
+  0x4605c4cb,
+  0x2019,
+  0x492a,
+  {0xad, 0xa4, 0x65, 0xf2, 0x0b, 0xb7, 0xd6, 0x7f}
+};
+
+static const IID dx12_iidDxcVersionInfo = {
+  0xb04f5b50,
+  0x2059,
+  0x4f12,
+  {0xa8, 0xff, 0xa1, 0xe0, 0xcd, 0xe1, 0xcc, 0x7e}
 };
 
 static const DXGI_FORMAT dx12_vertexFormats[GPU_VERTEX_FORMAT_COUNT] = {
@@ -333,6 +386,141 @@ dx12__wideEntry(const char *entry, wchar_t outEntry[256]) {
   return count > 0;
 }
 
+static IUnknown *
+dx12__newIncludeHandler(DXCCreateInstanceFn createInstance) {
+  DXCUtils *utils;
+  IUnknown *handler;
+  HRESULT   result;
+
+  if (!createInstance) {
+    return NULL;
+  }
+
+  utils   = NULL;
+  handler = NULL;
+  result  = createInstance(&dx12_clsidDxcUtils,
+                           &dx12_iidDxcUtils,
+                           (void **)&utils);
+  if (SUCCEEDED(result) && utils) {
+    result = utils->lpVtbl->CreateDefaultIncludeHandler(utils, &handler);
+    utils->lpVtbl->Release(utils);
+  }
+  return SUCCEEDED(result) ? handler : NULL;
+}
+
+static bool
+dx12__findDXCIncludePath(HMODULE module, wchar_t outPath[4096]) {
+  static const wchar_t *suffixes[] = {
+    L"\\include\\hlsl",
+    L"\\..\\include\\hlsl",
+    L"\\..\\..\\include\\hlsl",
+    L"\\..\\..\\inc\\hlsl"
+  };
+  wchar_t modulePath[4096];
+  wchar_t headerPath[4096];
+  wchar_t *separator;
+  DWORD    modulePathLength;
+
+  if (!module || !outPath) {
+    return false;
+  }
+
+  modulePathLength = GetModuleFileNameW(module,
+                                        modulePath,
+                                        (DWORD)GPU_ARRAY_LEN(modulePath));
+  if (modulePathLength == 0u ||
+      modulePathLength >= GPU_ARRAY_LEN(modulePath)) {
+    return false;
+  }
+  separator = wcsrchr(modulePath, L'\\');
+  if (!separator) {
+    separator = wcsrchr(modulePath, L'/');
+  }
+  if (!separator) {
+    return false;
+  }
+  *separator = L'\0';
+
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(suffixes); i++) {
+    int pathLength;
+    int headerLength;
+
+    pathLength = swprintf(outPath,
+                          4096,
+                          L"%ls%ls",
+                          modulePath,
+                          suffixes[i]);
+    if (pathLength <= 0 || pathLength >= 4096) {
+      continue;
+    }
+    headerLength = swprintf(headerPath,
+                            GPU_ARRAY_LEN(headerPath),
+                            L"%ls\\dx\\linalg.h",
+                            outPath);
+    if (headerLength <= 0 || headerLength >= GPU_ARRAY_LEN(headerPath)) {
+      continue;
+    }
+    if (GetFileAttributesW(headerPath) != INVALID_FILE_ATTRIBUTES) {
+      return true;
+    }
+  }
+  outPath[0] = L'\0';
+  return false;
+}
+
+GPU_HIDE
+bool
+dx12_hasLinearAlgebraCompiler(HMODULE module) {
+  DXCCreateInstanceFn createInstance;
+  DXCCompiler3       *compiler;
+  DXCVersionInfo     *versionInfo;
+  IUnknown           *includeHandler;
+  wchar_t             includePath[4096];
+  UINT32              major;
+  UINT32              minor;
+  bool                available;
+
+  if (!module ||
+      !(createInstance = (DXCCreateInstanceFn)GetProcAddress(
+          module,
+          "DxcCreateInstance"
+        ))) {
+    return false;
+  }
+
+  compiler       = NULL;
+  versionInfo    = NULL;
+  includeHandler = dx12__newIncludeHandler(createInstance);
+  major          = 0u;
+  minor          = 0u;
+  available      = SUCCEEDED(createInstance(&dx12_clsidDxcCompiler,
+                                             &dx12_iidDxcCompiler3,
+                                             (void **)&compiler)) &&
+                   compiler &&
+                   SUCCEEDED(compiler->lpVtbl->QueryInterface(
+                     compiler,
+                     &dx12_iidDxcVersionInfo,
+                     (void **)&versionInfo
+                   )) &&
+                   versionInfo &&
+                   SUCCEEDED(versionInfo->lpVtbl->GetVersion(versionInfo,
+                                                              &major,
+                                                              &minor)) &&
+                   (major > 1u || (major == 1u && minor >= 10u)) &&
+                   includeHandler != NULL &&
+                   dx12__findDXCIncludePath(module, includePath);
+  if (versionInfo) {
+    versionInfo->lpVtbl->Release(versionInfo);
+  }
+  if (compiler) {
+    compiler->lpVtbl->Release(compiler);
+  }
+  if (includeHandler) {
+    includeHandler->lpVtbl->Release(includeHandler);
+  }
+  return available;
+}
+
 static bool
 dx12__compileDXC(GPUDeviceDX12   *device,
                  const char     *source,
@@ -346,9 +534,11 @@ dx12__compileDXC(GPUDeviceDX12   *device,
   DXCResult          *result;
   DXCBlob            *blob;
   DXCBlob            *errors;
+  IUnknown           *includeHandler;
   DXCBuffer           sourceBuffer;
   wchar_t             entryWide[256];
-  LPCWSTR             args[9];
+  wchar_t             includePath[4096];
+  LPCWSTR             args[11];
   uint32_t            argCount;
   HRESULT             compileStatus;
   HRESULT             rc;
@@ -372,12 +562,15 @@ dx12__compileDXC(GPUDeviceDX12   *device,
   result   = NULL;
   blob     = NULL;
   errors   = NULL;
+  includeHandler = NULL;
   rc = createInstance(&dx12_clsidDxcCompiler,
                       &dx12_iidDxcCompiler3,
                       (void **)&compiler);
   if (FAILED(rc) || !compiler) {
     return false;
   }
+
+  includeHandler = dx12__newIncludeHandler(createInstance);
 
   sourceBuffer.ptr      = source;
   sourceBuffer.size     = (SIZE_T)sourceSize;
@@ -396,13 +589,20 @@ dx12__compileDXC(GPUDeviceDX12   *device,
   if (enable16BitTypes) {
     args[argCount++] = L"-enable-16bit-types";
   }
+  if (dx12__findDXCIncludePath(device->dxcModule, includePath)) {
+    args[argCount++] = L"-I";
+    args[argCount++] = includePath;
+  }
   rc = compiler->lpVtbl->Compile(compiler,
                                   &sourceBuffer,
                                   args,
                                   argCount,
-                                  NULL,
+                                  includeHandler,
                                   &dx12_iidDxcResult,
                                   (void **)&result);
+  if (includeHandler) {
+    includeHandler->lpVtbl->Release(includeHandler);
+  }
   compiler->lpVtbl->Release(compiler);
   if (FAILED(rc) || !result) {
     return false;
@@ -515,6 +715,13 @@ dx12_compileShader(GPUDeviceDX12        *device,
     [GPU_SHADER_STAGE_TASK_BIT]     = L"as_6_6",
     [GPU_SHADER_STAGE_MESH_BIT]     = L"ms_6_6"
   };
+  static const wchar_t *dxcProfiles610[GPU_SHADER_STAGE_MESH_BIT + 1u] = {
+    [GPU_SHADER_STAGE_VERTEX_BIT]   = L"vs_6_10",
+    [GPU_SHADER_STAGE_FRAGMENT_BIT] = L"ps_6_10",
+    [GPU_SHADER_STAGE_COMPUTE_BIT]  = L"cs_6_10",
+    [GPU_SHADER_STAGE_TASK_BIT]     = L"as_6_10",
+    [GPU_SHADER_STAGE_MESH_BIT]     = L"ms_6_10"
+  };
   static const char *legacyProfiles[GPU_SHADER_STAGE_MESH_BIT + 1u] = {
     [GPU_SHADER_STAGE_VERTEX_BIT]   = "vs_5_1",
     [GPU_SHADER_STAGE_FRAGMENT_BIT] = "ps_5_1",
@@ -528,6 +735,7 @@ dx12_compileShader(GPUDeviceDX12        *device,
       stage >= GPU_ARRAY_LEN(dxcProfiles60) || !dxcProfiles60[stage] ||
       !dxcProfiles62[stage] ||
       !dxcProfiles66[stage] ||
+      !dxcProfiles610[stage] ||
       (!device->dxcAvailable && !legacyProfiles[stage])) {
     return false;
   }
@@ -538,7 +746,9 @@ dx12_compileShader(GPUDeviceDX12        *device,
 
   memset(&compiled, 0, sizeof(compiled));
   if (device->dxcAvailable) {
-    if (device->atomic64Enabled) {
+    if (device->subgroupMatrixEnabled) {
+      dxcProfile = dxcProfiles610[stage];
+    } else if (device->atomic64Enabled) {
       dxcProfile = dxcProfiles66[stage];
     } else if (device->rayQuery && stage == GPU_SHADER_STAGE_COMPUTE_BIT) {
       dxcProfile = L"cs_6_5";
@@ -552,7 +762,8 @@ dx12_compileShader(GPUDeviceDX12        *device,
                               library->sourceSize,
                               entry,
                               dxcProfile,
-                              device->shaderF16Enabled,
+                              device->shaderF16Enabled ||
+                                device->subgroupMatrixEnabled,
                               &compiled);
   } else {
     success = dx12__compileLegacy(library->source,
@@ -590,15 +801,20 @@ dx12_compileRayLibrary(GPUDeviceDX12        *device,
     return true;
   }
 
-  profile = device->shaderModel >= D3D_SHADER_MODEL_6_6 ? L"lib_6_6"
-                                                         : L"lib_6_5";
+  if (device->subgroupMatrixEnabled) {
+    profile = L"lib_6_10";
+  } else {
+    profile = device->shaderModel >= D3D_SHADER_MODEL_6_6 ? L"lib_6_6"
+                                                           : L"lib_6_5";
+  }
   memset(&compiled, 0, sizeof(compiled));
   success = dx12__compileDXC(device,
                             library->source,
                             library->sourceSize,
                             NULL,
                             profile,
-                            device->shaderF16Enabled,
+                            device->shaderF16Enabled ||
+                              device->subgroupMatrixEnabled,
                             &compiled);
   return success && dx12__cacheShader(library,
                                       cacheEntry,
