@@ -197,6 +197,7 @@ typedef struct GPUAdapterVk {
   VkPhysicalDeviceProperties    props;
   VkPhysicalDeviceFeatures      features;
   VkDisplayPropertiesKHR        displayProps;
+  GPUMeshLimits                 meshLimits;
   GPUShadingRateFlagsEXT         vrsRates;
   GPUShadingRateCombinerFlagsEXT vrsCombiners;
   VkExtent2D                    minVRSTexelSize;

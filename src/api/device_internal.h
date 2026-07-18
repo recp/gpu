@@ -32,6 +32,16 @@ typedef struct GPUTransientChunk {
 
 typedef struct GPUPipelineCache GPUPipelineCache;
 
+typedef struct GPUMeshLimits {
+  uint32_t taskWorkgroupSize[3];
+  uint32_t meshWorkgroupSize[3];
+  uint32_t maxTaskWorkgroupInvocations;
+  uint32_t maxMeshWorkgroupInvocations;
+  uint32_t maxPayloadSizeBytes;
+  uint32_t maxOutputVertices;
+  uint32_t maxOutputPrimitives;
+} GPUMeshLimits;
+
 struct GPUDevice {
   GPUInstance                 *inst;
   GPUAdapter                  *adapter;
@@ -48,6 +58,7 @@ struct GPUDevice {
   void                        *errorUserData;
   GPUFeatureSet                enabledFeatures;
   GPUCacheStats                cacheStats;
+  GPUMeshLimits                meshLimits;
   GPURuntimeConfig             runtimeConfig;
   GPUFrameStats                currentFrameStats;
   GPUFrameStats                lastFrameStats;

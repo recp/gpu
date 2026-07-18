@@ -840,6 +840,22 @@ mt_createDevice(GPUAdapter              * __restrict adapter,
   device->_priv            = deviceMT;
   device->inst             = adapter->inst;
   device->adapter          = adapter;
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) != 0u) {
+    MTLSize workgroupSize;
+
+    workgroupSize = adapterMT->device.maxThreadsPerThreadgroup;
+    device->meshLimits.taskWorkgroupSize[0] = (uint32_t)workgroupSize.width;
+    device->meshLimits.taskWorkgroupSize[1] = (uint32_t)workgroupSize.height;
+    device->meshLimits.taskWorkgroupSize[2] = (uint32_t)workgroupSize.depth;
+    device->meshLimits.meshWorkgroupSize[0] = (uint32_t)workgroupSize.width;
+    device->meshLimits.meshWorkgroupSize[1] = (uint32_t)workgroupSize.height;
+    device->meshLimits.meshWorkgroupSize[2] = (uint32_t)workgroupSize.depth;
+    device->meshLimits.maxTaskWorkgroupInvocations = 1024u;
+    device->meshLimits.maxMeshWorkgroupInvocations = 1024u;
+    device->meshLimits.maxPayloadSizeBytes          = 16u * 1024u;
+    device->meshLimits.maxOutputVertices            = 256u;
+    device->meshLimits.maxOutputPrimitives          = 512u;
+  }
 
   queueIndex = 0;
   for (i = 0; i < nQueCI; i++) {

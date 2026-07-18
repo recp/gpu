@@ -1346,6 +1346,19 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
   device->inst      = inst;
   device->_priv     = deviceDX12;
   device->adapter   = adapter;
+  if (deviceDX12->meshShader) {
+    device->meshLimits.taskWorkgroupSize[0] = 128u;
+    device->meshLimits.taskWorkgroupSize[1] = 128u;
+    device->meshLimits.taskWorkgroupSize[2] = 64u;
+    device->meshLimits.meshWorkgroupSize[0] = 128u;
+    device->meshLimits.meshWorkgroupSize[1] = 128u;
+    device->meshLimits.meshWorkgroupSize[2] = 64u;
+    device->meshLimits.maxTaskWorkgroupInvocations = 128u;
+    device->meshLimits.maxMeshWorkgroupInvocations = 128u;
+    device->meshLimits.maxPayloadSizeBytes          = 16u * 1024u;
+    device->meshLimits.maxOutputVertices            = 256u;
+    device->meshLimits.maxOutputPrimitives          = 256u;
+  }
 
   queueCount = 0u;
   for (i = 0u; i < nQueCI; i++) {

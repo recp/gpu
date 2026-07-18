@@ -707,6 +707,8 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 #ifdef VK_EXT_mesh_shader
   VkPhysicalDeviceMeshShaderFeaturesEXT      meshFeatures = {0};
   VkPhysicalDeviceFeatures2                  meshFeatures2 = {0};
+  VkPhysicalDeviceMeshShaderPropertiesEXT    meshProperties = {0};
+  VkPhysicalDeviceProperties2                meshProperties2 = {0};
 #endif
 #ifdef VK_KHR_cooperative_matrix
   VkPhysicalDeviceCooperativeMatrixFeaturesKHR cooperativeFeatures = {0};
@@ -1908,12 +1910,27 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 #ifdef VK_EXT_mesh_shader
   if (getFeatures2 && meshExtension &&
       (spirv14Core || spirv14ExtensionUsable)) {
+    PFN_vkGetPhysicalDeviceProperties2 getProperties2;
+
     meshFeatures.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
     meshFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     meshFeatures2.pNext = &meshFeatures;
     getFeatures2(raw, &meshFeatures2);
-    if (meshFeatures.meshShader) {
+    getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+      vkGetInstanceProcAddr(instanceVk->inst,
+                            "vkGetPhysicalDeviceProperties2");
+    if (!getProperties2) {
+      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+        vkGetInstanceProcAddr(instanceVk->inst,
+                              "vkGetPhysicalDeviceProperties2KHR");
+    }
+    if (meshFeatures.meshShader && getProperties2) {
+      meshProperties.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT;
+      meshProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+      meshProperties2.pNext = &meshProperties;
+      getProperties2(raw, &meshProperties2);
       if (!spirv14Core) {
         if (!vk_addDeviceExtension(
               adapterVk,
@@ -1928,6 +1945,24 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       assert(adapterVk->nEnabledExtensions < 64);
       adapterVk->meshShader = true;
       adapterVk->taskShader = meshFeatures.taskShader;
+      memcpy(adapterVk->meshLimits.taskWorkgroupSize,
+             meshProperties.maxTaskWorkGroupSize,
+             sizeof(adapterVk->meshLimits.taskWorkgroupSize));
+      memcpy(adapterVk->meshLimits.meshWorkgroupSize,
+             meshProperties.maxMeshWorkGroupSize,
+             sizeof(adapterVk->meshLimits.meshWorkgroupSize));
+      adapterVk->meshLimits.maxTaskWorkgroupInvocations =
+        meshFeatures.taskShader
+          ? meshProperties.maxTaskWorkGroupInvocations
+          : 0u;
+      adapterVk->meshLimits.maxMeshWorkgroupInvocations =
+        meshProperties.maxMeshWorkGroupInvocations;
+      adapterVk->meshLimits.maxPayloadSizeBytes =
+        meshFeatures.taskShader ? meshProperties.maxTaskPayloadSize : 0u;
+      adapterVk->meshLimits.maxOutputVertices =
+        meshProperties.maxMeshOutputVertices;
+      adapterVk->meshLimits.maxOutputPrimitives =
+        meshProperties.maxMeshOutputPrimitives;
     }
   }
 #endif
@@ -3233,6 +3268,7 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     }
     deviceVk->meshShader     = true;
     deviceVk->taskShader     = adapterVk->taskShader;
+    device->meshLimits       = adapterVk->meshLimits;
   }
 #endif
   if (adapterVk->synchronization2) {

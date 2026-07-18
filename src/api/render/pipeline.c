@@ -420,33 +420,98 @@ gpu_resolveMeshPayloadSize(const GPURenderPipelineCreateInfo *info,
 }
 
 static bool
-gpu_meshOutputMatches(const GPURenderPipelineCreateInfo *info,
-                      const GPUMeshPipelineEXT          *mesh) {
+gpu_workgroupFits(const uint32_t size[3],
+                  const uint32_t limit[3],
+                  uint32_t       maxInvocations) {
+  uint64_t invocations;
+
+  if (!size[0] || !size[1] || !size[2]) {
+    return false;
+  }
+  for (uint32_t i = 0u; i < 3u; i++) {
+    if (limit[i] && size[i] > limit[i]) {
+      return false;
+    }
+  }
+
+  invocations = (uint64_t)size[0] * size[1] * size[2];
+  return !maxInvocations || invocations <= maxInvocations;
+}
+
+static GPUResult
+gpu_validateMeshInterface(const GPUDevice                   *device,
+                          const GPURenderPipelineCreateInfo *info,
+                          const GPUMeshPipelineEXT          *mesh,
+                          uint32_t                           payloadSizeBytes) {
+  const GPUMeshLimits *limits;
+  uint32_t             workgroupSize[3];
   uint32_t topology;
   uint32_t maxVertices;
   uint32_t maxPrimitives;
 
-  if (!mesh ||
-      !gpuGetShaderLibraryMeshOutputInfo(info->library,
+  if (!device || !mesh) {
+    return GPU_OK;
+  }
+
+  limits = &device->meshLimits;
+  if (mesh->taskEntry &&
+      gpuGetShaderLibraryWorkgroupSize(info->library,
+                                       mesh->taskEntry,
+                                       GPU_SHADER_STAGE_TASK_BIT,
+                                       workgroupSize)) {
+    if (!limits->maxTaskWorkgroupInvocations ||
+        !gpu_workgroupFits(workgroupSize,
+                           limits->taskWorkgroupSize,
+                           limits->maxTaskWorkgroupInvocations)) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+  }
+  if (gpuGetShaderLibraryWorkgroupSize(info->library,
+                                       mesh->meshEntry,
+                                       GPU_SHADER_STAGE_MESH_BIT,
+                                       workgroupSize) &&
+      !gpu_workgroupFits(workgroupSize,
+                         limits->meshWorkgroupSize,
+                         limits->maxMeshWorkgroupInvocations)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  if (limits->maxPayloadSizeBytes &&
+      payloadSizeBytes > limits->maxPayloadSizeBytes) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  if (!gpuGetShaderLibraryMeshOutputInfo(info->library,
                                          mesh->meshEntry,
                                          &topology,
                                          &maxVertices,
                                          &maxPrimitives)) {
-    return true;
+    return GPU_OK;
   }
   if (maxVertices == 0u || maxPrimitives == 0u) {
-    return false;
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if ((limits->maxOutputVertices &&
+       maxVertices > limits->maxOutputVertices) ||
+      (limits->maxOutputPrimitives &&
+       maxPrimitives > limits->maxOutputPrimitives)) {
+    return GPU_ERROR_UNSUPPORTED;
   }
 
   switch (topology) {
     case USL_RUNTIME_MESH_TOPOLOGY_POINT:
-      return info->primitiveTopology == GPU_PRIMITIVE_TOPOLOGY_POINT_LIST;
+      return info->primitiveTopology == GPU_PRIMITIVE_TOPOLOGY_POINT_LIST
+               ? GPU_OK
+               : GPU_ERROR_INVALID_ARGUMENT;
     case USL_RUNTIME_MESH_TOPOLOGY_LINE:
-      return info->primitiveTopology == GPU_PRIMITIVE_TOPOLOGY_LINE_LIST;
+      return info->primitiveTopology == GPU_PRIMITIVE_TOPOLOGY_LINE_LIST
+               ? GPU_OK
+               : GPU_ERROR_INVALID_ARGUMENT;
     case USL_RUNTIME_MESH_TOPOLOGY_TRIANGLE:
-      return info->primitiveTopology == GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+      return info->primitiveTopology == GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+               ? GPU_OK
+               : GPU_ERROR_INVALID_ARGUMENT;
     default:
-      return false;
+      return GPU_ERROR_INVALID_ARGUMENT;
   }
 }
 
@@ -638,11 +703,15 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     gpuPipelineCacheReleaseKey(&cacheKey);
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  if (!gpu_meshOutputMatches(info, mesh)) {
-    gpuPipelineCacheReleaseKey(&cacheKey);
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
   result = gpu_resolveMeshPayloadSize(info, mesh, &payloadSizeBytes);
+  if (result != GPU_OK) {
+    gpuPipelineCacheReleaseKey(&cacheKey);
+    return result;
+  }
+  result = gpu_validateMeshInterface(device,
+                                     info,
+                                     mesh,
+                                     payloadSizeBytes);
   if (result != GPU_OK) {
     gpuPipelineCacheReleaseKey(&cacheKey);
     return result;
