@@ -984,6 +984,43 @@ cleanup:
 }
 
 static int
+check_shader_create_info_validation(GPUDevice *device,
+                                    const void *bytecode,
+                                    uint64_t    bytecodeSize) {
+  GPUShaderLibraryCreateInfo info = {0};
+  GPUShaderLibrary          *library;
+
+  info.chain.sType      = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.sourceKind       = GPU_SHADER_SOURCE_USL_BYTECODE;
+  info.sourceData       = bytecode;
+  info.sourceSize       = bytecodeSize;
+
+  library         = (GPUShaderLibrary *)(uintptr_t)1u;
+  info.chain.sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  if (GPUCreateShaderLibrary(device, &info, &library) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      library != NULL) {
+    fprintf(stderr, "shader library accepted wrong sType\n");
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+
+  library              = (GPUShaderLibrary *)(uintptr_t)1u;
+  info.chain.sType      = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
+  info.chain.structSize = (uint32_t)(sizeof(info) - 1u);
+  if (GPUCreateShaderLibrary(device, &info, &library) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      library != NULL) {
+    fprintf(stderr, "shader library accepted short structSize\n");
+    GPUDestroyShaderLibrary(library);
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
 check_canonical_shader_library(GPUDevice *device,
                                const void *bytecode,
                                uint64_t bytecodeSize) {
@@ -1316,7 +1353,10 @@ gpu_test_shader(GPUDevice *device,
     return 0;
   }
 
-  ok = check_canonical_shader_library(device,
+  ok = check_shader_create_info_validation(device,
+                                           bytecode,
+                                           bytecodeSize) &&
+       check_canonical_shader_library(device,
                                       bytecode,
                                       bytecodeSize) &&
        check_usl_shader_library_helper(device,

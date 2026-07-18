@@ -1564,6 +1564,10 @@ GPUCreateShaderLibrary(GPUDevice *device,
       info->chain.sType != GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  if (info->chain.structSize != 0u &&
+      info->chain.structSize < sizeof(*info)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
 
   switch (info->sourceKind) {
     case GPU_SHADER_SOURCE_MSL_TEXT:
