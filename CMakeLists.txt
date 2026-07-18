@@ -7,6 +7,7 @@ else()
 endif()
 
 include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(GPU_ENABLE_VULKAN "Build the Vulkan backend" OFF)
@@ -121,10 +122,17 @@ set_target_properties(gpu PROPERTIES
   C_STANDARD 11
   C_STANDARD_REQUIRED YES
   C_EXTENSIONS NO
+  C_VISIBILITY_PRESET hidden
   POSITION_INDEPENDENT_CODE ON
   VERSION ${PROJECT_VERSION}
   SOVERSION ${PROJECT_VERSION_MAJOR}
 )
+
+if(APPLE)
+  set_target_properties(gpu PROPERTIES
+    OBJC_VISIBILITY_PRESET hidden
+  )
+endif()
 
 target_include_directories(gpu
   PUBLIC
@@ -2553,8 +2561,28 @@ install(TARGETS gpu
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
-install(DIRECTORY include/gpu DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY include/gpu
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+  PATTERN ".DS_Store" EXCLUDE
+)
 install(EXPORT gpuTargets
   NAMESPACE gpu::
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/gpu
+)
+
+configure_package_config_file(
+  cmake/gpuConfig.cmake.in
+  "${CMAKE_CURRENT_BINARY_DIR}/gpuConfig.cmake"
+  INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/gpu
+  PATH_VARS CMAKE_INSTALL_LIBDIR
+)
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/gpuConfigVersion.cmake"
+  VERSION ${PROJECT_VERSION}
+  COMPATIBILITY SameMinorVersion
+)
+install(FILES
+  "${CMAKE_CURRENT_BINARY_DIR}/gpuConfig.cmake"
+  "${CMAKE_CURRENT_BINARY_DIR}/gpuConfigVersion.cmake"
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/gpu
 )

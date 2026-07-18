@@ -1,0 +1,14 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(Threads)
+
+if(NOT TARGET ds::ds)
+  include("${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/ds/cmake/ds.cmake")
+endif()
+if(NOT TARGET us::us)
+  include("${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/us/cmake/us.cmake")
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/gpuTargets.cmake")
+check_required_components(gpu)
