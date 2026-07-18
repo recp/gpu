@@ -200,7 +200,7 @@ GPUSetCommandBufferCompletionHandler(GPUCommandBuffer * __restrict cmdb,
                                      GPUCommandBufferCompletionFn  oncomplete) {
   GPUApi *api;
 
-  if (!cmdb)
+  if (!cmdb || cmdb->_submitted)
     return;
   if (!(api = gpuCommandBufferApi(cmdb)))
     return;

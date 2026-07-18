@@ -47,6 +47,7 @@ typedef struct GPUApiCommandQueue {
                              void             * __restrict sender,
                              GPUCommandBufferCompletionFn  oncomplete);
   
+  /* Every prepared buffer must reach gpuFinishCommandBuffer exactly once. */
   GPUResult
   (*commit)(GPUCommandBuffer * __restrict cmdb);
 

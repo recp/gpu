@@ -26,6 +26,7 @@ static uint32_t         gScopedPresentCalls;
 static uint32_t         gScopedCommitCalls;
 static uint32_t         gScopedSubmitCalls;
 static uint32_t         gScopedSubmitCount;
+static uint32_t         gScopedCompletionHandlerCalls;
 static uint32_t         gScopedFrameBeginCalls;
 static uint32_t         gScopedFrameEndCalls;
 static bool             gScopedFrameSucceeds;
@@ -499,6 +500,15 @@ commit_scoped_cmdb(GPUCommandBuffer * __restrict cmdb) {
   return GPU_OK;
 }
 
+static void
+set_scoped_cmdb_completion(GPUCommandBuffer * __restrict cmdb,
+                           void             * __restrict sender,
+                           GPUCommandBufferCompletionFn  onComplete) {
+  cmdb->_onCompleteSender = sender;
+  cmdb->_onComplete       = onComplete;
+  gScopedCompletionHandlerCalls++;
+}
+
 static GPUResult
 submit_scoped_cmdbs(GPUQueue                  * __restrict queue,
                     uint32_t                               count,
@@ -561,6 +571,7 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   scopedApi                                = *api;
   scopedApi.cmdque.getCommandQueue         = get_scoped_queue;
   scopedApi.cmdque.newCommandBuffer        = new_scoped_cmdb;
+  scopedApi.cmdque.commandBufferOnComplete = set_scoped_cmdb_completion;
   scopedApi.cmdque.commit                  = commit_scoped_cmdb;
   scopedApi.cmdque.submit                  = submit_scoped_cmdbs;
   scopedApi.cmdbuf.presentDrawable         = present_scoped_frame;
@@ -575,6 +586,7 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   gScopedCommitCalls                       = 0u;
   gScopedSubmitCalls                       = 0u;
   gScopedSubmitCount                       = 0u;
+  gScopedCompletionHandlerCalls            = 0u;
   gScopedFrameBeginCalls                   = 0u;
   gScopedFrameEndCalls                     = 0u;
   gScopedPresentSucceeds                   = false;
@@ -618,7 +630,9 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   }
 
   aliasCmdb._queue = queue;
+  GPUSetCommandBufferCompletionHandler(&aliasCmdb, NULL, NULL);
   GPUCommit(&aliasCmdb);
+  GPUSetCommandBufferCompletionHandler(&aliasCmdb, NULL, NULL);
   GPUCommit(&aliasCmdb);
 
   if (gScopedQueueGetCalls != 1u ||
@@ -627,6 +641,7 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
       gScopedCommitCalls != 2u ||
       gScopedSubmitCalls != 1u ||
       gScopedSubmitCount != 2u ||
+      gScopedCompletionHandlerCalls != 1u ||
       gScopedFrameBeginCalls != 1u ||
       gScopedFrameEndCalls != 1u ||
       !aliasCmdb._submitted) {
@@ -1706,6 +1721,10 @@ check_queue_submit_fence(GPUDevice *device) {
       fprintf(stderr, "queue submit completion handler did not run\n");
       ok = 0;
     }
+    if (ok && GPUQueueSubmit(queue, &submitInfo) != GPU_ERROR_INVALID_ARGUMENT) {
+      fprintf(stderr, "queue submit accepted completed command buffer\n");
+      ok = 0;
+    }
   }
 
   GPUDestroyFence(fence);
@@ -1717,7 +1736,9 @@ check_device_destroy_waits_for_submission(GPUAdapter *adapter) {
   enum { submitCount = 8 };
 
   QueueCompletionProbe  completionProbes[submitCount] = {0};
+  QueueCompletionProbe  unsubmittedProbe = {0};
   GPUCommandBuffer     *buffers[submitCount];
+  GPUCommandBuffer     *unsubmitted;
   GPUQueue             *queue;
   GPUDevice            *device;
   GPUQueueSubmitInfo    submitInfo = {0};
@@ -1734,6 +1755,19 @@ check_device_destroy_waits_for_submission(GPUAdapter *adapter) {
     GPUDestroyDevice(device);
     return 0;
   }
+
+  unsubmitted = NULL;
+  if (GPUAcquireCommandBuffer(queue,
+                              "destroy-unsubmitted",
+                              &unsubmitted) != GPU_OK ||
+      !unsubmitted) {
+    fprintf(stderr, "failed to acquire unsubmitted command buffer\n");
+    GPUDestroyDevice(device);
+    return 0;
+  }
+  GPUSetCommandBufferCompletionHandler(unsubmitted,
+                                       &unsubmittedProbe,
+                                       queue_completion_probe);
 
   for (uint32_t i = 0u; i < submitCount; i++) {
     buffers[i] = NULL;
@@ -1761,6 +1795,10 @@ check_device_destroy_waits_for_submission(GPUAdapter *adapter) {
   }
 
   GPUDestroyDevice(device);
+  if (unsubmittedProbe.count != 0) {
+    fprintf(stderr, "device destroy completed unsubmitted command buffer\n");
+    return 0;
+  }
   for (uint32_t i = 0u; i < submitCount; i++) {
     if (completionProbes[i].count != 1 ||
         completionProbes[i].sender != &completionProbes[i] ||

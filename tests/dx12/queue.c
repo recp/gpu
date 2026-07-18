@@ -202,11 +202,13 @@ cleanup:
 
 static bool
 submit_error_propagates(GPUQueue *queue) {
+  CompletionProbe       probe;
   GPUCommandBuffer     *cmdb;
   GPUCommandBuffer     *buffers[1];
   GPUCommandBufferDX12 *native;
   GPUQueueSubmitInfo    submitInfo;
 
+  memset(&probe, 0, sizeof(probe));
   cmdb = NULL;
   if (GPUAcquireCommandBuffer(queue, "dx12-submit-error", &cmdb) != GPU_OK ||
       !cmdb || !(native = cmdb->_priv) || !native->commandList) {
@@ -216,13 +218,15 @@ submit_error_propagates(GPUQueue *queue) {
     return false;
   }
 
+  GPUSetCommandBufferCompletionHandler(cmdb, &probe, on_complete);
   buffers[0] = cmdb;
   memset(&submitInfo, 0, sizeof(submitInfo));
   submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   submitInfo.chain.structSize   = sizeof(submitInfo);
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = buffers;
-  return GPUQueueSubmit(queue, &submitInfo) == GPU_ERROR_BACKEND_FAILURE;
+  return GPUQueueSubmit(queue, &submitInfo) == GPU_ERROR_BACKEND_FAILURE &&
+         probe.count == 1u && probe.cmdb == cmdb;
 }
 
 static bool
