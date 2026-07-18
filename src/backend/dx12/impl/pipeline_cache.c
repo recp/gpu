@@ -16,6 +16,7 @@
 
 #include "../common.h"
 #include "../impl.h"
+#include "../../cache_file.h"
 #include "../../../api/pipeline_cache_internal.h"
 #include "pipeline_cache.h"
 
@@ -242,12 +243,12 @@ dx12_createCache(GPUDevice                        *device,
 
 static void
 dx12__storeCache(DX12PipelineCache *native) {
+  GPUCacheFileGuard        guard;
   DX12PipelineCacheEntry *entry;
   uint8_t                *data;
   char                   *temporaryPath;
   FILE                   *file;
   size_t                  dataSize;
-  size_t                  pathLength;
   size_t                  cursor;
   uint64_t                entryCount;
   bool                    valid;
@@ -302,23 +303,23 @@ dx12__storeCache(DX12PipelineCache *native) {
     return;
   }
 
-  pathLength    = strlen(native->path);
-  temporaryPath = malloc(pathLength + sizeof(".tmp"));
-  if (!temporaryPath) {
+  if (!gpuCacheFileBegin(native->path, &guard)) {
     free(data);
     return;
   }
-  memcpy(temporaryPath, native->path, pathLength);
-  memcpy(temporaryPath + pathLength, ".tmp", sizeof(".tmp"));
+  temporaryPath = gpuCacheFileTemporaryPath(native->path, native);
+  if (!temporaryPath) {
+    gpuCacheFileEnd(&guard);
+    free(data);
+    return;
+  }
   file    = fopen(temporaryPath, "wb");
   written = file && fwrite(data, 1u, dataSize, file) == dataSize;
   if (file && fclose(file) != 0) {
     written = false;
   }
   if (written) {
-    if (!MoveFileExA(temporaryPath,
-                     native->path,
-                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+    if (!gpuCacheFileReplace(temporaryPath, native->path)) {
       remove(temporaryPath);
     }
   } else {
@@ -326,6 +327,7 @@ dx12__storeCache(DX12PipelineCache *native) {
   }
   free(temporaryPath);
   free(data);
+  gpuCacheFileEnd(&guard);
 }
 
 static void

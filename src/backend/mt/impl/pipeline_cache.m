@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../../cache_file.h"
 #include "../../../api/pipeline_cache_internal.h"
 #include "pipeline_cache.h"
 
@@ -300,6 +301,7 @@ static GPUResult
 mt_createCache(GPUDevice                        *device,
                const GPUPipelineCacheCreateInfo *info,
                GPUPipelineCache                 *cache) {
+  GPUCacheFileGuard          guard;
   MTLBinaryArchiveDescriptor *descriptor;
   id<MTLBinaryArchive>        archive;
   NSFileManager              *fileManager;
@@ -332,9 +334,13 @@ mt_createCache(GPUDevice                        *device,
       NSLog(@"Failed to create Metal pipeline cache directory: %@", error);
       return GPU_ERROR_BACKEND_FAILURE;
     }
+    if (!gpuCacheFileBegin(url.fileSystemRepresentation, &guard)) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
 
     native = calloc(1, sizeof(*native));
     if (!native) {
+      gpuCacheFileEnd(&guard);
       return GPU_ERROR_OUT_OF_MEMORY;
     }
     native->lock = OS_UNFAIR_LOCK_INIT;
@@ -353,9 +359,11 @@ mt_createCache(GPUDevice                        *device,
         [native->compiler release];
         [native->url release];
         free(native);
+        gpuCacheFileEnd(&guard);
         return result;
       }
       cache->_priv = native;
+      gpuCacheFileEnd(&guard);
       return GPU_OK;
     }
 #endif
@@ -387,6 +395,7 @@ mt_createCache(GPUDevice                        *device,
     if (!archive) {
       NSLog(@"Failed to create Metal pipeline cache: %@", error);
       free(native);
+      gpuCacheFileEnd(&guard);
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
@@ -398,12 +407,14 @@ mt_createCache(GPUDevice                        *device,
       [native->url release];
       [archive release];
       free(native);
+      gpuCacheFileEnd(&guard);
       return GPU_ERROR_OUT_OF_MEMORY;
     }
     if (info->label) {
       archive.label = [NSString stringWithUTF8String:info->label];
     }
     cache->_priv = native;
+    gpuCacheFileEnd(&guard);
     return GPU_OK;
   }
 
@@ -412,66 +423,95 @@ mt_createCache(GPUDevice                        *device,
 
 static void
 mt_storeCache(MTPipelineCache *native) {
-  NSFileManager *fileManager;
-  NSString      *metadataPath;
-  NSString      *metadataTemporaryPath;
-  NSString      *temporaryPath;
-  NSURL         *metadataURL;
-  NSURL         *temporaryURL;
-  NSError       *error;
+  GPUCacheFileGuard guard;
+  char             *metadataTemporaryBytes;
+  char             *temporaryBytes;
+  NSFileManager    *fileManager;
+  NSString         *metadataPath;
+  NSString         *metadataTemporaryPath;
+  NSString         *temporaryPath;
+  NSURL            *metadataURL;
+  NSURL            *temporaryURL;
+  NSError          *error;
+  bool              serialized;
 
   if (!native || !native->dirty) {
     return;
   }
 
-  temporaryPath = [native->url.path stringByAppendingString:@".tmp"];
-  temporaryURL  = [NSURL fileURLWithPath:temporaryPath];
-  metadataPath  = mt_metadataPath(native->url.path);
-  metadataTemporaryPath = [metadataPath stringByAppendingString:@".tmp"];
-  metadataURL   = [NSURL fileURLWithPath:metadataTemporaryPath];
-  fileManager   = [NSFileManager defaultManager];
+  if (!gpuCacheFileBegin(native->url.fileSystemRepresentation, &guard)) {
+    return;
+  }
+  metadataPath          = mt_metadataPath(native->url.path);
+  temporaryBytes        = gpuCacheFileTemporaryPath(
+                            native->url.fileSystemRepresentation,
+                            native);
+  metadataTemporaryBytes = gpuCacheFileTemporaryPath(
+                             metadataPath.fileSystemRepresentation,
+                             native);
+  temporaryPath = temporaryBytes
+                    ? [NSString stringWithUTF8String:temporaryBytes]
+                    : nil;
+  metadataTemporaryPath = metadataTemporaryBytes
+                            ? [NSString stringWithUTF8String:
+                                metadataTemporaryBytes]
+                            : nil;
+  if (!temporaryPath || !metadataTemporaryPath) {
+    free(metadataTemporaryBytes);
+    free(temporaryBytes);
+    gpuCacheFileEnd(&guard);
+    return;
+  }
+
+  temporaryURL = [NSURL fileURLWithPath:temporaryPath];
+  metadataURL  = [NSURL fileURLWithPath:metadataTemporaryPath];
+  fileManager  = [NSFileManager defaultManager];
   [fileManager removeItemAtURL:temporaryURL error:nil];
   [fileManager removeItemAtURL:metadataURL error:nil];
-  error = nil;
+  error      = nil;
+  serialized = false;
   if (native->modern) {
 #if MT_HAS_METAL4
     if (@available(macOS 26.0, iOS 26.0, *)) {
-      if (![(id<MTL4PipelineDataSetSerializer>)native->serializer
-            serializeAsArchiveAndFlushToURL:temporaryURL
-                                       error:&error]) {
+      serialized = [(id<MTL4PipelineDataSetSerializer>)native->serializer
+        serializeAsArchiveAndFlushToURL:temporaryURL
+                                 error:&error];
+      if (!serialized) {
         NSLog(@"Failed to serialize Metal 4 pipeline cache: %@", error);
-        return;
       }
-    } else {
-      return;
     }
-#else
-    return;
 #endif
-  } else if (![native->archive serializeToURL:temporaryURL error:&error]) {
-    NSLog(@"Failed to serialize Metal pipeline cache: %@", error);
-    return;
+  } else {
+    serialized = [native->archive serializeToURL:temporaryURL error:&error];
+    if (!serialized) {
+      NSLog(@"Failed to serialize Metal pipeline cache: %@", error);
+    }
   }
-  if (!mt_writeCacheMetadata(native, temporaryPath, metadataTemporaryPath)) {
+  if (serialized &&
+      !mt_writeCacheMetadata(native, temporaryPath, metadataTemporaryPath)) {
     NSLog(@"Failed to write Metal pipeline cache metadata at %@", metadataPath);
-    [fileManager removeItemAtURL:temporaryURL error:nil];
-    [fileManager removeItemAtURL:metadataURL error:nil];
-    return;
+    serialized = false;
   }
-  if (rename(temporaryURL.fileSystemRepresentation,
-             native->url.fileSystemRepresentation) != 0) {
+  if (serialized &&
+      !gpuCacheFileReplace(temporaryURL.fileSystemRepresentation,
+                           native->url.fileSystemRepresentation)) {
     NSLog(@"Failed to replace Metal pipeline cache at %@", native->url.path);
-    [fileManager removeItemAtURL:temporaryURL error:nil];
-    [fileManager removeItemAtURL:metadataURL error:nil];
-    return;
+    serialized = false;
   }
-  if (rename(metadataURL.fileSystemRepresentation,
-             [NSURL fileURLWithPath:metadataPath].fileSystemRepresentation) != 0) {
+  if (serialized &&
+      !gpuCacheFileReplace(metadataURL.fileSystemRepresentation,
+                           metadataPath.fileSystemRepresentation)) {
     NSLog(@"Failed to replace Metal pipeline cache metadata at %@", metadataPath);
-    [fileManager removeItemAtURL:metadataURL error:nil];
-    return;
+    serialized = false;
   }
-  native->dirty = false;
+  [fileManager removeItemAtURL:temporaryURL error:nil];
+  [fileManager removeItemAtURL:metadataURL error:nil];
+  if (serialized) {
+    native->dirty = false;
+  }
+  free(metadataTemporaryBytes);
+  free(temporaryBytes);
+  gpuCacheFileEnd(&guard);
 }
 
 static void

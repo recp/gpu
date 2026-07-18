@@ -98,6 +98,7 @@ set(GPU_CORE_SOURCES
   src/api/vertex.c
   src/api/vrs.c
   src/backend/backend.c
+  src/backend/cache_file.c
 )
 
 add_library(gpu ${GPU_CORE_SOURCES})

@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../../cache_file.h"
 #include "../../../api/pipeline_cache_internal.h"
 #include "pipeline_cache.h"
 
@@ -262,24 +263,13 @@ vk_createCache(GPUDevice                        *device,
   return GPU_OK;
 }
 
-static bool
-vk__replaceFile(const char *source, const char *destination) {
-#if defined(_WIN32) || defined(WIN32)
-  return MoveFileExA(source,
-                     destination,
-                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
-#else
-  return rename(source, destination) == 0;
-#endif
-}
-
 static void
 vk__storeCache(VKPipelineCache *native) {
+  GPUCacheFileGuard guard;
   void    *data;
   char    *temporaryPath;
   FILE    *file;
   size_t   dataSize;
-  size_t   pathLength;
   VkResult result;
   bool     written;
 
@@ -307,21 +297,23 @@ vk__storeCache(VKPipelineCache *native) {
     return;
   }
 
-  pathLength    = strlen(native->path);
-  temporaryPath = malloc(pathLength + sizeof(".tmp"));
-  if (!temporaryPath) {
+  if (!gpuCacheFileBegin(native->path, &guard)) {
     free(data);
     return;
   }
-  memcpy(temporaryPath, native->path, pathLength);
-  memcpy(temporaryPath + pathLength, ".tmp", sizeof(".tmp"));
+  temporaryPath = gpuCacheFileTemporaryPath(native->path, native);
+  if (!temporaryPath) {
+    gpuCacheFileEnd(&guard);
+    free(data);
+    return;
+  }
   file    = fopen(temporaryPath, "wb");
   written = file && fwrite(data, 1u, dataSize, file) == dataSize;
   if (file && fclose(file) != 0) {
     written = false;
   }
   if (written) {
-    if (!vk__replaceFile(temporaryPath, native->path)) {
+    if (!gpuCacheFileReplace(temporaryPath, native->path)) {
       remove(temporaryPath);
     }
   } else {
@@ -329,6 +321,7 @@ vk__storeCache(VKPipelineCache *native) {
   }
   free(temporaryPath);
   free(data);
+  gpuCacheFileEnd(&guard);
 }
 
 static void
@@ -731,7 +724,7 @@ vk__writeStoredBinaries(const VKPipelineCache       *native,
     written = false;
   }
   if (written) {
-    written = vk__replaceFile(temporaryPath, path);
+    written = gpuCacheFileReplace(temporaryPath, path);
   }
   if (!written) {
     remove(temporaryPath);

@@ -63,6 +63,7 @@ check_pipeline_disk_cache(GPUDevice                  *device,
   char                       metadataPath[168];
   char                       metadataTemporaryPath[176];
   char                       temporaryPath[168];
+  char                       lockPath[168];
   FILE                      *file;
   long                       fileSize;
   int                        ok;
@@ -88,6 +89,7 @@ check_pipeline_disk_cache(GPUDevice                  *device,
            (uint32_t)api->backend,
            (void *)device);
   snprintf(temporaryPath, sizeof(temporaryPath), "%s.tmp", path);
+  snprintf(lockPath, sizeof(lockPath), "%s.lock", path);
   snprintf(metadataPath, sizeof(metadataPath), "%s.meta", path);
   snprintf(metadataTemporaryPath,
            sizeof(metadataTemporaryPath),
@@ -97,6 +99,7 @@ check_pipeline_disk_cache(GPUDevice                  *device,
   remove(temporaryPath);
   remove(metadataPath);
   remove(metadataTemporaryPath);
+  remove(lockPath);
   cacheInfo.cachePath = path;
   cache               = NULL;
   result              = GPUCreatePipelineCache(device, &cacheInfo, &cache);
@@ -112,6 +115,7 @@ check_pipeline_disk_cache(GPUDevice                  *device,
   }
   if (result != GPU_OK || !cache) {
     fprintf(stderr, "native pipeline disk cache create failed\n");
+    remove(lockPath);
     return 0;
   }
 
@@ -203,6 +207,7 @@ cleanup:
   remove(temporaryPath);
   remove(metadataPath);
   remove(metadataTemporaryPath);
+  remove(lockPath);
   return ok;
 }
 static uint32_t gRenderVertexBufferCalls;

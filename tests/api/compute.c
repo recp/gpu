@@ -58,6 +58,7 @@ check_compute_disk_cache(GPUDevice                   *device,
   char                      metadataPath[168];
   char                      metadataTemporaryPath[176];
   char                      temporaryPath[168];
+  char                      lockPath[168];
   FILE                     *file;
   long                      fileSize;
   int                       ok;
@@ -78,6 +79,7 @@ check_compute_disk_cache(GPUDevice                   *device,
            (uint32_t)api->backend,
            (void *)device);
   snprintf(temporaryPath, sizeof(temporaryPath), "%s.tmp", path);
+  snprintf(lockPath, sizeof(lockPath), "%s.lock", path);
   snprintf(metadataPath, sizeof(metadataPath), "%s.meta", path);
   snprintf(metadataTemporaryPath,
            sizeof(metadataTemporaryPath),
@@ -87,6 +89,7 @@ check_compute_disk_cache(GPUDevice                   *device,
   remove(temporaryPath);
   remove(metadataPath);
   remove(metadataTemporaryPath);
+  remove(lockPath);
   cacheInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
   cacheInfo.chain.structSize = sizeof(cacheInfo);
   cacheInfo.label            = "api-compute-disk-cache";
@@ -95,6 +98,7 @@ check_compute_disk_cache(GPUDevice                   *device,
   cache                      = NULL;
   if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {
     fprintf(stderr, "failed to create native compute disk cache\n");
+    remove(lockPath);
     return 0;
   }
 
@@ -143,6 +147,7 @@ cleanup:
   remove(temporaryPath);
   remove(metadataPath);
   remove(metadataTemporaryPath);
+  remove(lockPath);
   return ok;
 }
 
