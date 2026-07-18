@@ -16,6 +16,8 @@
 
 #include "../common.h"
 #include "compute_internal.h"
+#include "descr/descriptor_internal.h"
+#include "library_internal.h"
 #include "pipeline_cache_internal.h"
 #include "render/pipeline_internal.h"
 
@@ -1138,7 +1140,8 @@ GPUCompileRenderPipelineAsync(GPUDevice                         * __restrict dev
 
   outHandle->id = 0;
   if (!device || !cache || cache->device != device ||
-      !gpu_pipelineInfoCanCopy(info)) {
+      !gpu_pipelineInfoCanCopy(info) || info->layout->_device != device ||
+      info->library->_device != device) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 

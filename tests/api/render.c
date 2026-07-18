@@ -1,7 +1,9 @@
 #include "test.h"
 #include "../../src/api/buffer_internal.h"
 #include "../../src/api/cmdqueue_internal.h"
+#include "../../src/api/descr/descriptor_internal.h"
 #include "../../src/api/device_internal.h"
+#include "../../src/api/library_internal.h"
 #include "../../src/api/render/pipeline_internal.h"
 #include "../../src/api/texture_internal.h"
 
@@ -407,15 +409,17 @@ cleanup:
 static int
 check_pipeline_cache_validation(GPUDevice *device,
                                 GPURenderPipelineCreateInfo *info) {
-  GPUPipelineCacheCreateInfo cacheInfo = {0};
-  GPUPipelineCache *cache = NULL;
-  GPURenderPipeline *pipeline = NULL;
-  GPURenderPipeline *asyncPipeline = NULL;
-  GPUPipelineCompileHandle handle = {0};
-  GPUPipelineCompileStatus status = GPU_PIPELINE_COMPILE_PENDING;
-  GPUCacheStats stats;
-  GPUCullMode originalCull;
-  GPUCullMode alternateCull;
+  GPUPipelineCache            *cache         = NULL;
+  GPURenderPipeline           *pipeline      = NULL;
+  GPURenderPipeline           *asyncPipeline = NULL;
+  GPUDevice                   *libraryDevice;
+  GPUDevice                   *layoutDevice;
+  GPUPipelineCacheCreateInfo   cacheInfo     = {0};
+  GPUPipelineCompileHandle     handle        = {0};
+  GPUPipelineCompileStatus     status        = GPU_PIPELINE_COMPILE_PENDING;
+  GPUCacheStats                stats;
+  GPUCullMode                  originalCull;
+  GPUCullMode                  alternateCull;
 
   if (GPUGetCacheStats(NULL, &stats) != GPU_ERROR_INVALID_ARGUMENT ||
       GPUGetCacheStats(device, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
@@ -530,6 +534,31 @@ check_pipeline_cache_validation(GPUDevice *device,
     fprintf(stderr, "async pipeline compile accepted null handle\n");
     goto fail;
   }
+
+  libraryDevice          = info->library->_device;
+  info->library->_device = NULL;
+  handle.id              = 1u;
+  if (GPUCompileRenderPipelineAsync(device, cache, info, &handle) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      handle.id != 0u) {
+    info->library->_device = libraryDevice;
+    fprintf(stderr, "async pipeline compile accepted a foreign library\n");
+    goto fail;
+  }
+  info->library->_device = libraryDevice;
+
+  layoutDevice          = info->layout->_device;
+  info->layout->_device = NULL;
+  handle.id             = 1u;
+  if (GPUCompileRenderPipelineAsync(device, cache, info, &handle) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      handle.id != 0u) {
+    info->layout->_device = layoutDevice;
+    fprintf(stderr, "async pipeline compile accepted a foreign layout\n");
+    goto fail;
+  }
+  info->layout->_device = layoutDevice;
+
   if (GPUCompileRenderPipelineAsync(device, cache, info, &handle) != GPU_OK ||
       handle.id == 0u) {
     fprintf(stderr, "async pipeline compile enqueue failed\n");
