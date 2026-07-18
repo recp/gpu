@@ -13,7 +13,6 @@ TEXTURED_QUAD_BIN="$BUILD_DIR/samples/gpu-textured-quad-metal-usl/gpu-textured-q
 MESH_TRIANGLE_BIN="$BUILD_DIR/samples/gpu-mesh-triangle-metal-usl/gpu-mesh-triangle-metal-usl"
 COMPUTE_USL_BIN="$BUILD_DIR/samples/gpu-compute-metal-usl/gpu-compute-metal-usl"
 COMPUTE_BUFFER_BIN="$BUILD_DIR/samples/gpu-compute-buffer-metal-usl/gpu-compute-buffer-metal-usl"
-COMPUTE_ATOMICS_BIN="$BUILD_DIR/samples/gpu-compute-atomics-metal-usl/gpu-compute-atomics-metal-usl"
 
 run_step() {
   local name="$1"
@@ -102,17 +101,24 @@ generate_artifact() {
       fi
 
       local platformMajor="$(sw_vers -productVersion | cut -d. -f1)"
-      local mask
-      for mask in {0..7}; do
-        local -a packArgs=(
-          --target metal msl2.0
-          --platform macos "$platformMajor"
-        )
-        if ((mask & 1)); then packArgs+=(--cap subgroup); fi
-        if ((mask & 2)); then packArgs+=(--cap descriptor_indexing); fi
-        if ((mask & 4)); then packArgs+=(--cap ray_query); fi
-        "$USLPACK" "${packArgs[@]}" "$outputDir/$name.us"
-      done
+      local metalProfile="msl2.0"
+      if ((platformMajor >= 26)); then
+        metalProfile="msl4.0"
+      elif ((platformMajor >= 15)); then
+        metalProfile="msl3.2"
+      elif ((platformMajor >= 14)); then
+        metalProfile="msl3.1"
+      elif ((platformMajor >= 13)); then
+        metalProfile="msl3.0"
+      elif ((platformMajor >= 12)); then
+        metalProfile="msl2.4"
+      elif ((platformMajor >= 11)); then
+        metalProfile="msl2.3"
+      fi
+      "$USLPACK" \
+        --target metal "$metalProfile" \
+        --platform macos "$platformMajor" \
+        "$outputDir/$name.us"
       ;;
     *)
       echo "unknown USL artifact mode: $mode" >&2
@@ -241,7 +247,7 @@ run_expect_fail_with_output "compute-buffer-usl missing group 1 bind" \
       "$COMPUTE_BUFFER_BIN"
 
 run_step "compute-atomics-usl readback" \
-  "$COMPUTE_ATOMICS_BIN"
+  run_binary gpu-compute-atomics-metal-usl
 
 run_step "api validation" \
   ctest --test-dir "$BUILD_DIR" --output-on-failure -R '^api-validation$'
