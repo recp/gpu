@@ -1199,6 +1199,19 @@ if(GPU_BUILD_TESTS)
       C_EXTENSIONS NO
     )
 
+    add_executable(gpu-vulkan-indirect-copy-test
+      tests/vulkan/indirect_copy.c
+    )
+    target_link_libraries(gpu-vulkan-indirect-copy-test PRIVATE
+      gpu
+      Vulkan::Vulkan
+    )
+    set_target_properties(gpu-vulkan-indirect-copy-test PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+    )
+
     if(NOT MSVC)
       target_compile_options(gpu-vulkan-queue-test PRIVATE
         -Wall
@@ -1211,6 +1224,11 @@ if(GPU_BUILD_TESTS)
         -Werror
       )
       target_compile_options(gpu-vulkan-mesh-test PRIVATE
+        -Wall
+        -Wextra
+        -Werror
+      )
+      target_compile_options(gpu-vulkan-indirect-copy-test PRIVATE
         -Wall
         -Wextra
         -Werror
@@ -1232,6 +1250,12 @@ if(GPU_BUILD_TESTS)
               "${GPU_VULKAN_MESH_TRIANGLE_US}"
     )
     set_tests_properties(vulkan-mesh PROPERTIES
+      SKIP_RETURN_CODE 77
+    )
+    add_test(NAME vulkan-indirect-copy
+      COMMAND gpu-vulkan-indirect-copy-test
+    )
+    set_tests_properties(vulkan-indirect-copy PROPERTIES
       SKIP_RETURN_CODE 77
     )
   endif()
@@ -2004,6 +2028,7 @@ if((GPU_BUILD_TESTS OR GPU_BUILD_BENCHMARKS) AND
             vulkan-queue
             vulkan-shader
             vulkan-mesh
+            vulkan-indirect-copy
             vulkan-compute-buffer
             vulkan-triangle
             vulkan-textured-quad
