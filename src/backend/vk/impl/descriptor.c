@@ -342,7 +342,7 @@ vk_createBindGroupLayout(GPUDevice          *device,
   }
 
   immutableSamplerCount = 0u;
-  descriptorBuffer = deviceVk->descriptorBuffer && !bindless && entryCount > 0u;
+  descriptorBuffer = deviceVk->descriptorBuffer && entryCount > 0u;
   for (uint32_t i = 0u; i < entryCount; i++) {
     if (entries[i].immutableSampler) {
       if (entries[i].arrayCount > UINT32_MAX - immutableSamplerCount) {

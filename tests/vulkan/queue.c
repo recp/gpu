@@ -221,8 +221,10 @@ descriptor_buffer_state_shadow(GPUDevice *device) {
 static int
 descriptor_binding_path(GPUDevice *device,
                         GPUQueue  *queue,
-                        GPUFence  *fence) {
+                        GPUFence  *fence,
+                        bool       bindless) {
   GPUDeviceVk                   *deviceVk;
+  GPUBindlessLayoutEXT           bindlessInfo = {0};
   GPUBindGroupLayoutEntry        layoutEntry = {0};
   GPUBindGroupLayoutCreateInfo   layoutInfo = {0};
   GPUBindGroupEntry              groupEntry = {0};
@@ -267,10 +269,15 @@ descriptor_binding_path(GPUDevice *device,
   layoutEntry.binding      = 0u;
   layoutEntry.bindingType  = GPU_BINDING_UNIFORM_BUFFER;
   layoutEntry.visibility   = GPU_SHADER_STAGE_COMPUTE_BIT;
-  layoutEntry.arrayCount   = 1u;
+  layoutEntry.arrayCount   = bindless ? 2u : 1u;
+
+  bindlessInfo.chain.sType      = GPU_STRUCTURE_TYPE_BINDLESS_LAYOUT_EXT;
+  bindlessInfo.chain.structSize = sizeof(bindlessInfo);
+
   layoutInfo.chain.sType      =
     GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
   layoutInfo.chain.structSize = sizeof(layoutInfo);
+  layoutInfo.chain.pNext      = bindless ? &bindlessInfo.chain : NULL;
   layoutInfo.label            = "vulkan-descriptor-layout";
   layoutInfo.entryCount       = 1u;
   layoutInfo.pEntries         = &layoutEntry;
@@ -280,6 +287,7 @@ descriptor_binding_path(GPUDevice *device,
   }
 
   groupEntry.binding       = 0u;
+  groupEntry.arrayIndex    = bindless ? 1u : 0u;
   groupEntry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
   groupEntry.buffer.buffer = buffer;
   groupEntry.buffer.size   = bufferInfo.sizeBytes;
@@ -287,9 +295,13 @@ descriptor_binding_path(GPUDevice *device,
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "vulkan-descriptor-group";
   groupInfo.layout           = layout;
-  groupInfo.entryCount       = 1u;
-  groupInfo.pEntries         = &groupEntry;
+  groupInfo.entryCount       = bindless ? 0u : 1u;
+  groupInfo.pEntries         = bindless ? NULL : &groupEntry;
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
+    goto cleanup;
+  }
+  if (bindless &&
+      GPUUpdateBindGroupEXT(group, 1u, &groupEntry) != GPU_OK) {
     goto cleanup;
   }
 
@@ -1111,10 +1123,11 @@ main(void) {
   GPUQueue              *compute;
   GPUFence              *fence;
   GPUResult              result;
-  GPUFeature             requiredFeatures[5];
+  GPUFeature             requiredFeatures[6];
   uint32_t               adapterCount;
   uint32_t               requiredFeatureCount;
   bool                   pipelineStatsSupported;
+  bool                   bindlessSupported;
   int                    ok;
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -1138,6 +1151,8 @@ main(void) {
   }
   pipelineStatsSupported =
     GPUIsFeatureSupported(adapter, GPU_FEATURE_PIPELINE_STATISTICS);
+  bindlessSupported      =
+    GPUIsFeatureSupported(adapter, GPU_FEATURE_BINDLESS);
   if (!GPUIsFeatureSupported(adapter, GPU_FEATURE_COMPUTE) ||
       !GPUIsFeatureSupported(adapter, GPU_FEATURE_TIMESTAMPS) ||
       !GPUIsFeatureSupported(adapter, GPU_FEATURE_INDIRECT_DRAW) ||
@@ -1160,6 +1175,9 @@ main(void) {
     requiredFeatures[requiredFeatureCount++] =
       GPU_FEATURE_PIPELINE_STATISTICS;
   }
+  if (bindlessSupported) {
+    requiredFeatures[requiredFeatureCount++] = GPU_FEATURE_BINDLESS;
+  }
   deviceInfo.chain.sType             = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize        = sizeof(deviceInfo);
   deviceInfo.required.featureCount   = requiredFeatureCount;
@@ -1173,12 +1191,16 @@ main(void) {
       !GPUIsFeatureEnabled(device, GPU_FEATURE_TIMESTAMPS) ||
       !GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_DRAW) ||
       !GPUIsFeatureEnabled(device, GPU_FEATURE_MULTI_DRAW) ||
+      GPUIsFeatureEnabled(device, GPU_FEATURE_BINDLESS) !=
+        bindlessSupported ||
       GPUIsFeatureEnabled(device, GPU_FEATURE_PIPELINE_STATISTICS) !=
         pipelineStatsSupported ||
       GPUGetDeviceCapabilities(device, &deviceCaps) != GPU_OK ||
       feature_set_contains(&deviceCaps.enabled,
                            GPU_FEATURE_PIPELINE_STATISTICS) !=
-        pipelineStatsSupported) {
+        pipelineStatsSupported ||
+      feature_set_contains(&deviceCaps.enabled, GPU_FEATURE_BINDLESS) !=
+        bindlessSupported) {
     fprintf(stderr, "vulkan enabled feature reporting failed\n");
     GPUDestroyDevice(device);
     GPUDestroyInstance(instance);
@@ -1215,7 +1237,10 @@ main(void) {
   VULKAN_CHECK("descriptor buffer state shadow",
                descriptor_buffer_state_shadow(device));
   VULKAN_CHECK("descriptor binding path",
-               descriptor_binding_path(device, compute, fence));
+               descriptor_binding_path(device, compute, fence, false));
+  VULKAN_CHECK("bindless descriptor binding path",
+               !bindlessSupported ||
+                 descriptor_binding_path(device, compute, fence, true));
   VULKAN_CHECK("buffer transfer reuse",
                buffer_transfers_reuse(device, graphics, fence));
   VULKAN_CHECK("texture upload reuse",
