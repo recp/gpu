@@ -34,6 +34,25 @@
       }
     },
     {
+      "name": "macos-static-release",
+      "displayName": "macOS Static Release",
+      "inherits": "base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_SHARED_LIBS": "OFF",
+        "GPU_BACKEND_METAL_ONLY": "ON",
+        "GPU_BUILD_TESTS": "ON",
+        "GPU_BUILD_SAMPLES": "OFF",
+        "GPU_BUILD_WITH_VALIDATION": "OFF",
+        "GPU_BUILD_WITH_DEBUG_MARKERS": "OFF"
+      }
+    },
+    {
       "name": "macos-asan",
       "displayName": "macOS Address/Undefined Sanitizers",
       "inherits": "macos-debug",
@@ -96,6 +115,10 @@
       "configurePreset": "macos-vulkan-debug"
     },
     {
+      "name": "macos-static-release",
+      "configurePreset": "macos-static-release"
+    },
+    {
       "name": "macos-asan",
       "configurePreset": "macos-asan"
     },
@@ -113,6 +136,17 @@
     }
   ],
   "testPresets": [
+    {
+      "name": "macos-static-release",
+      "configurePreset": "macos-static-release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 1,
+        "noTestsAction": "error"
+      }
+    },
     {
       "name": "macos-vulkan-debug",
       "configurePreset": "macos-vulkan-debug",

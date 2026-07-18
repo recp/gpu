@@ -2,6 +2,9 @@
 
 include(CMakeFindDependencyMacro)
 find_dependency(Threads)
+if(@GPU_CONFIG_NEEDS_VULKAN@)
+  find_dependency(Vulkan)
+endif()
 
 if(NOT TARGET ds::ds)
   include("${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/ds/cmake/ds.cmake")

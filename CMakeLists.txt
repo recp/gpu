@@ -64,6 +64,11 @@ else()
   endif()
 endif()
 
+set(GPU_CONFIG_NEEDS_VULKAN OFF)
+if(NOT BUILD_SHARED_LIBS AND GPU_BUILD_VULKAN)
+  set(GPU_CONFIG_NEEDS_VULKAN ON)
+endif()
+
 set(GPU_USL_ROOT "" CACHE PATH "UniversalShading/us checkout")
 set(GPU_USL_INCLUDE_DIR "" CACHE PATH "USL public include directory")
 set(GPU_USL_LIBRARY "" CACHE FILEPATH "Prebuilt USL library")
@@ -145,6 +150,10 @@ target_include_directories(gpu
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+file(GLOB GPU_PUBLIC_HEADERS CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/include/gpu/*.h"
+)
+
 if(BUILD_SHARED_LIBS)
   target_compile_definitions(gpu PRIVATE GPU_EXPORTS)
 else()
@@ -203,6 +212,14 @@ else()
   )
 endif()
 
+if(APPLE)
+  function(gpu_link_apple_framework target name path)
+    set(link_item "$<BUILD_INTERFACE:${path}>")
+    string(APPEND link_item "$<INSTALL_INTERFACE:-framework ${name}>")
+    target_link_libraries(${target} PRIVATE "${link_item}")
+  endfunction()
+endif()
+
 if(GPU_BUILD_METAL)
   target_sources(gpu PRIVATE
     src/backend/mt/init.c
@@ -232,10 +249,8 @@ if(GPU_BUILD_METAL)
 
   find_library(GPU_FRAMEWORK_METAL Metal REQUIRED)
   find_library(GPU_FRAMEWORK_METALKIT MetalKit REQUIRED)
-  target_link_libraries(gpu PRIVATE
-    ${GPU_FRAMEWORK_METAL}
-    ${GPU_FRAMEWORK_METALKIT}
-  )
+  gpu_link_apple_framework(gpu Metal "${GPU_FRAMEWORK_METAL}")
+  gpu_link_apple_framework(gpu MetalKit "${GPU_FRAMEWORK_METALKIT}")
 endif()
 
 if(APPLE AND (GPU_BUILD_METAL OR GPU_BUILD_VULKAN))
@@ -243,15 +258,17 @@ if(APPLE AND (GPU_BUILD_METAL OR GPU_BUILD_VULKAN))
   find_library(GPU_FRAMEWORK_QUARTZCORE QuartzCore REQUIRED)
   if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     find_library(GPU_FRAMEWORK_UI UIKit REQUIRED)
+    set(GPU_FRAMEWORK_UI_NAME UIKit)
   else()
     find_library(GPU_FRAMEWORK_UI AppKit REQUIRED)
+    set(GPU_FRAMEWORK_UI_NAME AppKit)
   endif()
 
-  target_link_libraries(gpu PRIVATE
-    ${GPU_FRAMEWORK_FOUNDATION}
-    ${GPU_FRAMEWORK_QUARTZCORE}
-    ${GPU_FRAMEWORK_UI}
-  )
+  gpu_link_apple_framework(gpu Foundation "${GPU_FRAMEWORK_FOUNDATION}")
+  gpu_link_apple_framework(gpu QuartzCore "${GPU_FRAMEWORK_QUARTZCORE}")
+  gpu_link_apple_framework(gpu
+                           "${GPU_FRAMEWORK_UI_NAME}"
+                           "${GPU_FRAMEWORK_UI}")
 endif()
 
 if(GPU_BUILD_DX12)
@@ -955,9 +972,6 @@ if(GPU_BUILD_TESTS)
   endif()
   add_test(NAME api-public-layout COMMAND gpu-public-layout-test)
 
-  file(GLOB GPU_PUBLIC_HEADERS CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/gpu/*.h"
-  )
   set(GPU_PUBLIC_EXPORTS)
   foreach(header IN LISTS GPU_PUBLIC_HEADERS)
     file(READ "${header}" header_contents)
@@ -2726,9 +2740,8 @@ install(TARGETS gpu
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
-install(DIRECTORY include/gpu
-  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-  PATTERN ".DS_Store" EXCLUDE
+install(FILES ${GPU_PUBLIC_HEADERS}
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/gpu
 )
 install(EXPORT gpuTargets
   NAMESPACE gpu::
