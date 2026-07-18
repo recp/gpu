@@ -343,6 +343,7 @@ typedef struct GPUDeviceVk {
   bool                       timelineSemaphore;
   bool                       synchronization2;
   bool                       bufferDeviceAddress;
+  bool                       shaderUntypedPointers;
   bool                       indirectMemoryCopy;
   bool                       indirectMemoryToTextureCopy;
   bool                       executionGraph;

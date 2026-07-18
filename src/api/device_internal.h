@@ -63,6 +63,7 @@ struct GPUDevice {
   uint32_t                     deviceLostReported;
   bool                         transientConfigured;
   bool                         transientFrameBegun;
+  bool                         uslUntypedPointers;
   GPUFeature                   enabledFeatureStorage[
     GPU_FEATURE_SAMPLER_FEEDBACK + 1u
   ];

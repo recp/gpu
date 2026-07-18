@@ -154,6 +154,8 @@ gpu_uslSemanticEnabled(const GPUDevice *device, uint32_t semanticId) {
       return GPUIsFeatureEnabled(device, GPU_FEATURE_EXECUTION_GRAPH);
     case USL_SEMANTIC_FEATURE_ID_SAMPLER_FEEDBACK:
       return GPUIsFeatureEnabled(device, GPU_FEATURE_SAMPLER_FEEDBACK);
+    case USL_SEMANTIC_FEATURE_ID_UNTYPED_POINTERS:
+      return device && device->uslUntypedPointers;
     default:
       return 0;
   }
@@ -1601,7 +1603,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   USCompileOutput          *compileOutput;
   USLCompileOptions         compileOptions;
   USLTargetSpec             target;
-  USLCapabilityAtomDesc     targetAtoms[12];
+  USLCapabilityAtomDesc     targetAtoms[13];
   USCompileInput            compileInput;
   const char               *payloadSource;
   GPUResult                 rc;
@@ -1622,7 +1624,9 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   }
   targetAtomCount = 0u;
   if (api->backend == GPU_BACKEND_VULKAN) {
-    if (GPUIsFeatureEnabled(device, GPU_FEATURE_EXECUTION_GRAPH)) {
+    if (device->uslUntypedPointers) {
+      target.profile = USL_TARGET_PROFILE_VULKAN_1_4;
+    } else if (GPUIsFeatureEnabled(device, GPU_FEATURE_EXECUTION_GRAPH)) {
       target.profile = USL_TARGET_PROFILE_VULKAN_1_3;
     } else if (GPUIsFeatureEnabled(device, GPU_FEATURE_ATOMIC64) ||
         GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
@@ -1687,6 +1691,16 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
             &targetAtoms[targetAtomCount++],
             USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
             USL_SEMANTIC_FEATURE_ID_COMPUTE_DERIVATIVES_LINEAR,
+            0u,
+            0u) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+    if (device->uslUntypedPointers) {
+      if (us_cap_atom_init(
+            &targetAtoms[targetAtomCount++],
+            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+            USL_SEMANTIC_FEATURE_ID_UNTYPED_POINTERS,
             0u,
             0u) != USLOk) {
         return GPU_ERROR_BACKEND_FAILURE;

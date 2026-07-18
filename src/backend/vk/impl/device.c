@@ -514,6 +514,11 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
                              GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR);
   }
 #endif
+#ifdef VK_KHR_shader_untyped_pointers
+  if (strcmp(name, VK_KHR_SHADER_UNTYPED_POINTERS_EXTENSION_NAME) == 0) {
+    return adapter && adapter->shaderUntypedPointers;
+  }
+#endif
 #ifdef VK_KHR_copy_memory_indirect
   if (strcmp(name, VK_KHR_COPY_MEMORY_INDIRECT_EXTENSION_NAME) == 0) {
     return vk_featureEnabled(enabledFeatureMask,
@@ -1367,6 +1372,12 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     getFeatures2(raw, &untypedPointerFeatures2);
     adapterVk->shaderUntypedPointers =
       untypedPointerFeatures.shaderUntypedPointers == VK_TRUE;
+    if (adapterVk->shaderUntypedPointers &&
+        !vk_addDeviceExtension(
+          adapterVk,
+          VK_KHR_SHADER_UNTYPED_POINTERS_EXTENSION_NAME)) {
+      goto fail;
+    }
   }
 #endif
   if (getFeatures2 && (bufferAddressCore || bufferAddressExtension)) {
@@ -2410,6 +2421,10 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR
     derivativeFeatures = {0};
 #endif
+#ifdef VK_KHR_shader_untyped_pointers
+  VkPhysicalDeviceShaderUntypedPointersFeaturesKHR
+    untypedPointerFeatures = {0};
+#endif
 #ifdef VK_KHR_copy_memory_indirect
   VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR indirectCopyFeatures = {0};
 #endif
@@ -2716,6 +2731,15 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     deviceCI.pNext = &derivativeFeatures;
   }
 #endif
+#ifdef VK_KHR_shader_untyped_pointers
+  if (adapterVk->shaderUntypedPointers) {
+    untypedPointerFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_UNTYPED_POINTERS_FEATURES_KHR;
+    untypedPointerFeatures.pNext = (void *)deviceCI.pNext;
+    untypedPointerFeatures.shaderUntypedPointers = VK_TRUE;
+    deviceCI.pNext = &untypedPointerFeatures;
+  }
+#endif
 #ifdef VK_KHR_copy_memory_indirect
   if (vk_featureEnabled(enabledFeatureMask,
                         GPU_FEATURE_INDIRECT_MEMORY_COPY) ||
@@ -2914,6 +2938,10 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   deviceVk->multiDrawIndirect = coreFeatures.multiDrawIndirect;
   deviceVk->independentBlend  = coreFeatures.independentBlend;
   deviceVk->timelineSemaphore = adapterVk->timelineSemaphore;
+#ifdef VK_KHR_shader_untyped_pointers
+  deviceVk->shaderUntypedPointers = adapterVk->shaderUntypedPointers;
+  device->uslUntypedPointers      = deviceVk->shaderUntypedPointers;
+#endif
 #if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
   if (adapterVk->presentWait) {
     deviceVk->waitForPresent =
