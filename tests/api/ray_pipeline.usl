@@ -10,6 +10,14 @@ struct CallableData {
   value: uint
 }
 
+struct LargeRayPayload {
+  value: float4
+}
+
+struct LargeHitAttributes {
+  value: float4
+}
+
 raygen raygen_main(scene: acceleration_structure #acceleration(0),
                    inout output: [uint] #buffer(1),
                    launchId: uint3 #launch_id) {
@@ -28,6 +36,15 @@ raygen raygen_main(scene: acceleration_structure #acceleration(0),
   output[launchId.x] = uint(payload.value) + data.value
 }
 
+raygen raygen_large(scene: acceleration_structure #acceleration(0)) {
+  var payload: LargeRayPayload = LargeRayPayload(float4(0.0))
+  trace_ray(scene,
+            uint(0), uint(255), uint(0), uint(1), uint(0),
+            float3(0.0, 0.0, -1.0), 0.001,
+            float3(0.0, 0.0, 1.0), 100.0,
+            payload)
+}
+
 miss miss_main(inout payload: RayPayload #ray_payload(0)) {
   payload.value = 20.0
 }
@@ -44,6 +61,11 @@ any_hit any_hit_main(inout payload: RayPayload #ray_payload(0),
 
 intersection intersection_main() {
   var attributes: HitAttributes = HitAttributes(float2(0.25, 0.75))
+  var accepted: bool = report_hit(1.0, uint(0), attributes)
+}
+
+intersection intersection_large() {
+  var attributes: LargeHitAttributes = LargeHitAttributes(float4(0.25))
   var accepted: bool = report_hit(1.0, uint(0), attributes)
 }
 

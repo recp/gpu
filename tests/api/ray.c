@@ -1,5 +1,6 @@
 #include "test.h"
 #include "../../src/api/device_internal.h"
+#include "../../src/api/ray_internal.h"
 
 enum {
   GPU_RAY_PIPELINE_WARM_ITERATIONS = 8u
@@ -62,7 +63,7 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
   GPUBindGroupCreateInfo                       groupInfo        = {0};
   GPUQueueSubmitInfo                           submitInfo       = {0};
   GPUShaderReflection                          reflection       = {0};
-  GPURayTracingShaderGroupEXT                  groups[5]        = {0};
+  GPURayTracingShaderGroupEXT                  groups[7]        = {0};
   GPURayTracingPipelineCreateInfoEXT           pipelineInfo     = {0};
   GPUShaderTableRecordEXT                      raygenRecord     = {0};
   GPUShaderTableRecordEXT                      missRecord       = {0};
@@ -380,6 +381,10 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
   groups[3].type              = GPU_RAY_TRACING_SHADER_GROUP_PROCEDURAL_HIT_EXT;
   groups[4].generalEntry      = "callable_main";
   groups[4].type              = GPU_RAY_TRACING_SHADER_GROUP_GENERAL_EXT;
+  groups[5].generalEntry      = "raygen_large";
+  groups[5].type              = GPU_RAY_TRACING_SHADER_GROUP_GENERAL_EXT;
+  groups[6].intersectionEntry = "intersection_large";
+  groups[6].type              = GPU_RAY_TRACING_SHADER_GROUP_PROCEDURAL_HIT_EXT;
 
   pipelineInfo.chain.sType =
     GPU_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_EXT;
@@ -401,6 +406,16 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
     goto cleanup;
   }
 
+  pipelineInfo.maxPayloadSizeBytes      = sizeof(float);
+  pipelineInfo.maxHitAttributeSizeBytes = sizeof(float) * 2u;
+  result = GPUCreateRayTracingPipelineEXT(enabled,
+                                          &pipelineInfo,
+                                          &pipeline);
+  if (result != GPU_ERROR_INVALID_ARGUMENT || pipeline) {
+    fprintf(stderr, "ray pipeline ignored wider reflected interfaces\n");
+    goto cleanup;
+  }
+
   pipelineInfo.maxPayloadSizeBytes      = 0u;
   pipelineInfo.maxHitAttributeSizeBytes = 0u;
   if (GPUCreateRayTracingPipelineEXT(enabled,
@@ -408,6 +423,14 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
                                      &pipeline) != GPU_OK ||
       !pipeline) {
     fprintf(stderr, "ray pipeline reflection-limit inference failed\n");
+    goto cleanup;
+  }
+  if (pipeline->maxPayloadSizeBytes != sizeof(float) * 4u ||
+      pipeline->maxHitAttributeSizeBytes != sizeof(float) * 4u) {
+    fprintf(stderr,
+            "ray pipeline reflection-limit mismatch: %u/%u\n",
+            pipeline->maxPayloadSizeBytes,
+            pipeline->maxHitAttributeSizeBytes);
     goto cleanup;
   }
 
