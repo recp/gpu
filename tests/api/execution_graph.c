@@ -1,7 +1,9 @@
 #include "test.h"
 #include "../../src/api/buffer_internal.h"
+#include "../../src/api/descr/descriptor_internal.h"
 #include "../../src/api/device_internal.h"
 #include "../../src/api/execution_graph_internal.h"
+#include "../../src/api/library_internal.h"
 
 static uint32_t gGraphCpuDispatches;
 static uint32_t gGraphBufferDispatches;
@@ -32,15 +34,20 @@ graph_dispatch_buffer(GPUComputePassEncoder                 *pass,
 
 int
 gpu_test_execution_graph_validation(void) {
-  GPUApi                            api      = {0};
-  GPUDevice                         device   = {0};
-  GPUBuffer                         buffer   = {0};
-  GPUExecutionGraphEXT              graph    = {0};
-  GPUExecutionGraphInstanceEXT      instance = {0};
-  GPUComputePassEncoder             pass     = {0};
-  GPUExecutionGraphInputEXT         cpuInput = {0};
-  GPUExecutionGraphBufferInputEXT   bufferInput = {0};
-  _Alignas(16) uint8_t              records[48] = {0};
+  GPUApi                           api           = {0};
+  GPUDevice                        device        = {0};
+  GPUDevice                        foreignDevice = {0};
+  GPUBuffer                        buffer        = {0};
+  GPUExecutionGraphEXT             graph         = {0};
+  GPUExecutionGraphInstanceEXT     instance      = {0};
+  GPUExecutionGraphCreateInfoEXT   graphInfo     = {0};
+  GPUComputePassEncoder            pass          = {0};
+  GPUPipelineLayout                layout        = {0};
+  GPUShaderLibrary                 library       = {0};
+  GPUExecutionGraphInputEXT        cpuInput      = {0};
+  GPUExecutionGraphBufferInputEXT  bufferInput   = {0};
+  GPUExecutionGraphEXT            *createdGraph  = NULL;
+  _Alignas(16) uint8_t             records[48]   = {0};
 
   api.executionGraph.dispatch       = graph_dispatch;
   api.executionGraph.dispatchBuffer = graph_dispatch_buffer;
@@ -55,6 +62,20 @@ gpu_test_execution_graph_validation(void) {
   pass._pipeline                    = &graph;
   pass._hasPipeline                 = true;
   pass._executionGraph              = true;
+
+  graphInfo.chain.sType      =
+    GPU_STRUCTURE_TYPE_EXECUTION_GRAPH_CREATE_INFO_EXT;
+  graphInfo.chain.structSize = sizeof(graphInfo);
+  graphInfo.library          = &library;
+  graphInfo.layout           = &layout;
+  library._device            = &foreignDevice;
+  layout._device             = &device;
+  if (GPUCreateExecutionGraphEXT(&device, &graphInfo, &createdGraph) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      createdGraph) {
+    fprintf(stderr, "execution graph accepted a foreign shader library\n");
+    return 0;
+  }
 
   cpuInput.pRecords                   = records;
   cpuInput.entry.recordSizeBytes      = 16u;
