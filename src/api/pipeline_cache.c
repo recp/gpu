@@ -79,10 +79,13 @@ struct GPUPipelineCompileJob {
   char                        *label;
   char                        *vertexEntry;
   char                        *fragmentEntry;
+  char                        *taskEntry;
+  char                        *meshEntry;
   GPUColorTargetState         *colorTargets;
   GPUVertexBufferLayout       *bufferLayouts;
   GPUVertexAttribute          *attributes;
   GPUDepthStencilState         depthStencil;
+  GPUMeshPipelineEXT           mesh;
   GPURenderPipelineCreateInfo  info;
   uint64_t                     id;
   GPUPipelineCompileJobState   state;
@@ -705,6 +708,8 @@ gpu_destroyPipelineJob(GPUPipelineCompileJob *job) {
   free(job->attributes);
   free(job->bufferLayouts);
   free(job->colorTargets);
+  free(job->meshEntry);
+  free(job->taskEntry);
   free(job->fragmentEntry);
   free(job->vertexEntry);
   free(job->label);
@@ -725,10 +730,26 @@ gpu_createPipelineJob(GPUPipelineCache                  *cache,
   job->label         = gpu_pipelineCacheDupString(info->label);
   job->vertexEntry   = gpu_pipelineCacheDupString(info->vertexEntry);
   job->fragmentEntry = gpu_pipelineCacheDupString(info->fragmentEntry);
-  if ((info->label && !job->label) || !job->vertexEntry ||
-      !job->fragmentEntry) {
+  if ((info->label && !job->label) ||
+      (info->vertexEntry && !job->vertexEntry) || !job->fragmentEntry) {
     gpu_destroyPipelineJob(job);
     return NULL;
+  }
+
+  if (info->chain.pNext) {
+    const GPUMeshPipelineEXT *mesh;
+
+    mesh = (const GPUMeshPipelineEXT *)info->chain.pNext;
+    job->taskEntry = gpu_pipelineCacheDupString(mesh->taskEntry);
+    job->meshEntry = gpu_pipelineCacheDupString(mesh->meshEntry);
+    if ((mesh->taskEntry && !job->taskEntry) || !job->meshEntry) {
+      gpu_destroyPipelineJob(job);
+      return NULL;
+    }
+    job->mesh             = *mesh;
+    job->mesh.chain.pNext = NULL;
+    job->mesh.taskEntry   = job->taskEntry;
+    job->mesh.meshEntry   = job->meshEntry;
   }
 
   if (info->colorTargetCount > 0u) {
@@ -791,6 +812,9 @@ gpu_createPipelineJob(GPUPipelineCache                  *cache,
   job->info.fragmentEntry         = job->fragmentEntry;
   job->info.pColorTargets         = job->colorTargets;
   job->info.vertex.pBufferLayouts = job->bufferLayouts;
+  job->info.chain.pNext            = info->chain.pNext
+                                       ? &job->mesh.chain
+                                       : NULL;
   if (info->pDepthStencilState) {
     job->depthStencil            = *info->pDepthStencilState;
     job->info.pDepthStencilState = &job->depthStencil;
@@ -801,11 +825,29 @@ gpu_createPipelineJob(GPUPipelineCache                  *cache,
 
 static bool
 gpu_pipelineInfoCanCopy(const GPURenderPipelineCreateInfo *info) {
-  if (!info || !info->layout || !info->library || !info->vertexEntry ||
-      !info->fragmentEntry || info->chain.pNext ||
+  const GPUChainedStruct *extension;
+
+  if (!info || !info->layout || !info->library || !info->fragmentEntry ||
       (info->colorTargetCount > 0u && !info->pColorTargets) ||
       (info->vertex.bufferLayoutCount > 0u &&
        !info->vertex.pBufferLayouts)) {
+    return false;
+  }
+  extension = info->chain.pNext;
+  if (extension) {
+    const GPUMeshPipelineEXT *mesh;
+
+    if (extension->sType != GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT ||
+        (extension->structSize != 0u &&
+         extension->structSize < sizeof(GPUMeshPipelineEXT)) ||
+        extension->pNext) {
+      return false;
+    }
+    mesh = (const GPUMeshPipelineEXT *)extension;
+    if (!mesh->meshEntry) {
+      return false;
+    }
+  } else if (!info->vertexEntry) {
     return false;
   }
   for (uint32_t i = 0u; i < info->vertex.bufferLayoutCount; i++) {

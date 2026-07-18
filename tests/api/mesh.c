@@ -96,7 +96,9 @@ test_mesh_draw(GPUDevice  *device,
   GPUQueue                     *queue;
   GPUShaderLibrary             *library;
   GPUShaderLayout              *shaderLayout;
+  GPUPipelineCache             *pipelineCache;
   GPURenderPipeline            *pipeline;
+  GPURenderPipeline            *asyncPipeline;
   GPUBuffer                    *taskBuffer;
   GPUBuffer                    *readbackBuffer;
   GPUBindGroup                 *taskGroup;
@@ -107,6 +109,9 @@ test_mesh_draw(GPUDevice  *device,
   GPUCopyPassEncoder           *copyPass;
   GPUFence                     *fence;
   GPUMeshPipelineEXT            meshInfo      = {0};
+  GPUPipelineCacheCreateInfo    cacheInfo     = {0};
+  GPUPipelineCompileHandle      compileHandle = {0};
+  GPUPipelineCompileStatus      compileStatus = GPU_PIPELINE_COMPILE_PENDING;
   GPUColorTargetState           colorTarget   = {0};
   GPURenderPipelineCreateInfo   pipelineInfo  = {0};
   GPUBufferCreateInfo           bufferInfo    = {0};
@@ -128,7 +133,9 @@ test_mesh_draw(GPUDevice  *device,
   queue          = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   library        = NULL;
   shaderLayout   = NULL;
+  pipelineCache  = NULL;
   pipeline       = NULL;
+  asyncPipeline  = NULL;
   taskBuffer     = NULL;
   readbackBuffer = NULL;
   taskGroup      = NULL;
@@ -184,6 +191,39 @@ test_mesh_draw(GPUDevice  *device,
     fprintf(stderr, "failed to create mesh pipeline\n");
     goto cleanup;
   }
+
+  cacheInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+  cacheInfo.chain.structSize = sizeof(cacheInfo);
+  cacheInfo.label            = "usl-mesh-async";
+  if (GPUCreatePipelineCache(device, &cacheInfo, &pipelineCache) != GPU_OK ||
+      !pipelineCache ||
+      GPUCompileRenderPipelineAsync(device,
+                                    pipelineCache,
+                                    &pipelineInfo,
+                                    &compileHandle) != GPU_OK ||
+      compileHandle.id == 0u) {
+    fprintf(stderr, "failed to enqueue async mesh pipeline\n");
+    goto cleanup;
+  }
+  for (uint32_t i = 0u; i < 1000000u; i++) {
+    if (GPUPollRenderPipelineCompile(device,
+                                     compileHandle,
+                                     &compileStatus,
+                                     &asyncPipeline) != GPU_OK) {
+      fprintf(stderr, "failed to poll async mesh pipeline\n");
+      goto cleanup;
+    }
+    if (compileStatus != GPU_PIPELINE_COMPILE_PENDING) {
+      break;
+    }
+  }
+  if (compileStatus != GPU_PIPELINE_COMPILE_READY || !asyncPipeline) {
+    fprintf(stderr, "async mesh pipeline did not become ready\n");
+    goto cleanup;
+  }
+  GPUDestroyRenderPipeline(pipeline);
+  pipeline      = asyncPipeline;
+  asyncPipeline = NULL;
 
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
@@ -355,7 +395,9 @@ cleanup:
   GPUDestroyBindGroup(taskGroup);
   GPUDestroyBuffer(readbackBuffer);
   GPUDestroyBuffer(taskBuffer);
+  GPUDestroyRenderPipeline(asyncPipeline);
   GPUDestroyRenderPipeline(pipeline);
+  GPUDestroyPipelineCache(pipelineCache);
   GPUDestroyShaderLayout(shaderLayout);
   GPUDestroyShaderLibrary(library);
   return ok;
