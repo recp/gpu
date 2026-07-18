@@ -1304,6 +1304,16 @@ vk_dispatchRays(GPURayTracingPassEncoderEXT *pass,
       !deviceVk->traceRays) {
     return;
   }
+  if (!gpuRayDispatchFits(width,
+                          height,
+                          depth,
+                          deviceVk->rayTracingMaxDispatchSize,
+                          deviceVk->rayTracingMaxDispatchCount)) {
+    gpuDeviceRecordValidationError(
+      pass->device,
+      "GPUDispatchRaysEXT skipped: dispatch exceeds Vulkan limits");
+    return;
+  }
 
   deviceVk->traceRays(native->command,
                       &tableVk->rayGeneration,

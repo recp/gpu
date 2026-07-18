@@ -12,6 +12,18 @@ ray_max_u64(uint64_t a, uint64_t b) {
 }
 
 static int
+ray_dispatch_limits(void) {
+  static const uint32_t maxSize[3] = {1024u, 1024u, 64u};
+
+  return gpuRayDispatchFits(1024u, 1024u, 1u, maxSize, 1u << 20u) &&
+         !gpuRayDispatchFits(1025u, 1u, 1u, maxSize, 1u << 20u) &&
+         !gpuRayDispatchFits(1024u, 1024u, 2u, maxSize, 1u << 20u) &&
+         !gpuRayDispatchFits(0u, 1u, 1u, maxSize, 1u << 20u) &&
+         gpuRayDispatchFits(1024u, 1024u, 1024u, NULL, 1ull << 30u) &&
+         !gpuRayDispatchFits(1024u, 1024u, 1025u, NULL, 1ull << 30u);
+}
+
+static int
 ray_create_buffer(GPUDevice           *device,
                   const char          *label,
                   uint64_t             sizeBytes,
@@ -100,6 +112,10 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
   int                                      ok;
 
   if (!adapter) {
+    return 0;
+  }
+  if (!ray_dispatch_limits()) {
+    fprintf(stderr, "ray dispatch limit validation failed\n");
     return 0;
   }
 

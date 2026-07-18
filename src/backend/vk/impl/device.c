@@ -1634,11 +1634,26 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
           rayPipelineProperties.shaderGroupBaseAlignment;
         adapterVk->rayTracingMaxRecursionDepth =
           rayPipelineProperties.maxRayRecursionDepth;
+        adapterVk->rayTracingMaxDispatchCount =
+          rayPipelineProperties.maxRayDispatchInvocationCount;
+        for (uint32_t i = 0u; i < 3u; i++) {
+          uint64_t maxSize;
+
+          maxSize =
+            (uint64_t)adapterVk->props.limits.maxComputeWorkGroupCount[i] *
+            adapterVk->props.limits.maxComputeWorkGroupSize[i];
+          adapterVk->rayTracingMaxDispatchSize[i] =
+            maxSize > UINT32_MAX ? UINT32_MAX : (uint32_t)maxSize;
+        }
         adapterVk->rayTracingPipeline =
           adapterVk->rayTracingShaderGroupHandleSize > 0u &&
           adapterVk->rayTracingShaderGroupHandleAlignment > 0u &&
           adapterVk->rayTracingShaderGroupBaseAlignment > 0u &&
-          adapterVk->rayTracingMaxRecursionDepth > 0u;
+          adapterVk->rayTracingMaxRecursionDepth > 0u &&
+          adapterVk->rayTracingMaxDispatchCount > 0u &&
+          adapterVk->rayTracingMaxDispatchSize[0] > 0u &&
+          adapterVk->rayTracingMaxDispatchSize[1] > 0u &&
+          adapterVk->rayTracingMaxDispatchSize[2] > 0u;
       }
     }
   }
@@ -2964,6 +2979,11 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
       adapterVk->rayTracingShaderGroupBaseAlignment;
     deviceVk->rayTracingMaxRecursionDepth =
       adapterVk->rayTracingMaxRecursionDepth;
+    deviceVk->rayTracingMaxDispatchCount =
+      adapterVk->rayTracingMaxDispatchCount;
+    memcpy(deviceVk->rayTracingMaxDispatchSize,
+           adapterVk->rayTracingMaxDispatchSize,
+           sizeof(deviceVk->rayTracingMaxDispatchSize));
     deviceVk->rayTracingPipeline = true;
   }
 #endif

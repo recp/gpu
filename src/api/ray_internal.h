@@ -72,4 +72,20 @@ struct GPURayTracingPassEncoderEXT {
   bool                    ended;
 };
 
+static inline bool
+gpuRayDispatchFits(uint32_t        width,
+                   uint32_t        height,
+                   uint32_t        depth,
+                   const uint32_t  maxSize[3],
+                   uint64_t        maxCount) {
+  if (width == 0u || height == 0u || depth == 0u || maxCount == 0u ||
+      (maxSize && (width > maxSize[0] ||
+                   height > maxSize[1] ||
+                   depth > maxSize[2]))) {
+    return false;
+  }
+
+  return (uint64_t)width * height <= maxCount / depth;
+}
+
 #endif /* gpu_ray_internal_h */

@@ -1173,6 +1173,12 @@ dx12_dispatchRays(GPURayTracingPassEncoderEXT *pass,
   if (!native || !native->commandList5 || !tableDX12) {
     return;
   }
+  if (!gpuRayDispatchFits(width, height, depth, NULL, 1ull << 30u)) {
+    gpuDeviceRecordValidationError(
+      pass->device,
+      "GPUDispatchRaysEXT skipped: dispatch exceeds Direct3D 12 limits");
+    return;
+  }
 
   desc.RayGenerationShaderRecord = tableDX12->rayGeneration;
   desc.MissShaderTable            = tableDX12->miss;

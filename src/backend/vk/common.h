@@ -209,6 +209,8 @@ typedef struct GPUAdapterVk {
   uint32_t                      rayTracingShaderGroupHandleAlignment;
   uint32_t                      rayTracingShaderGroupBaseAlignment;
   uint32_t                      rayTracingMaxRecursionDepth;
+  uint32_t                      rayTracingMaxDispatchCount;
+  uint32_t                      rayTracingMaxDispatchSize[3];
 #ifdef VK_EXT_descriptor_buffer
   VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptorBufferProperties;
 #endif
@@ -309,6 +311,8 @@ typedef struct GPUDeviceVk {
   uint32_t                   rayTracingShaderGroupHandleAlignment;
   uint32_t                   rayTracingShaderGroupBaseAlignment;
   uint32_t                   rayTracingMaxRecursionDepth;
+  uint32_t                   rayTracingMaxDispatchCount;
+  uint32_t                   rayTracingMaxDispatchSize[3];
   VkBool32                   multiDrawIndirect;
   VkBool32                   independentBlend;
   bool                       dynamicRendering;
