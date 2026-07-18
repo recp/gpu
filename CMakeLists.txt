@@ -659,11 +659,13 @@ if(GPU_BUILD_DX12 AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-dx12-usl/textured_quad.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-dx12-usl/compute_buffer.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/mesh-triangle-usl/mesh_triangle.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-atomics-usl/compute_atomics.usl"
   )
   list(GET GPU_DX12_USL_FIXTURES 0 GPU_DX12_TRIANGLE_US)
   list(GET GPU_DX12_USL_FIXTURES 1 GPU_DX12_TEXTURED_QUAD_US)
   list(GET GPU_DX12_USL_FIXTURES 2 GPU_DX12_COMPUTE_BUFFER_US)
   list(GET GPU_DX12_USL_FIXTURES 3 GPU_DX12_MESH_TRIANGLE_US)
+  list(GET GPU_DX12_USL_FIXTURES 4 GPU_DX12_COMPUTE_ATOMICS_US)
   add_custom_target(gpu-dx12-fixtures DEPENDS ${GPU_DX12_USL_FIXTURES})
 endif()
 
@@ -676,11 +678,13 @@ if(GPU_BUILD_VULKAN AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-vulkan-usl/textured_quad.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-vulkan-usl/compute_buffer.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/mesh-triangle-vulkan-usl/mesh_triangle.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-atomics-usl/compute_atomics.usl"
   )
   list(GET GPU_VULKAN_USL_FIXTURES 0 GPU_VULKAN_TRIANGLE_US)
   list(GET GPU_VULKAN_USL_FIXTURES 1 GPU_VULKAN_TEXTURED_QUAD_US)
   list(GET GPU_VULKAN_USL_FIXTURES 2 GPU_VULKAN_COMPUTE_BUFFER_US)
   list(GET GPU_VULKAN_USL_FIXTURES 3 GPU_VULKAN_MESH_TRIANGLE_US)
+  list(GET GPU_VULKAN_USL_FIXTURES 4 GPU_VULKAN_COMPUTE_ATOMICS_US)
   if(GPU_BUILD_TESTS)
     gpu_add_usl_fixtures(
       GPU_VULKAN_TEST_USL_FIXTURES
@@ -707,6 +711,7 @@ if(GPU_BUILD_METAL AND GPU_BUILD_SAMPLES AND
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/usl-reflection-check/reflection.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/usl-reflection-check/reflection_storage.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/mesh-triangle-usl/mesh_triangle.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-atomics-usl/compute_atomics.usl"
   )
   list(GET GPU_METAL_USL_FIXTURES 0 GPU_METAL_TRIANGLE_US)
   list(GET GPU_METAL_USL_FIXTURES 1 GPU_METAL_TEXTURED_QUAD_US)
@@ -715,6 +720,7 @@ if(GPU_BUILD_METAL AND GPU_BUILD_SAMPLES AND
   list(GET GPU_METAL_USL_FIXTURES 4 GPU_METAL_REFLECTION_US)
   list(GET GPU_METAL_USL_FIXTURES 5 GPU_METAL_REFLECTION_STORAGE_US)
   list(GET GPU_METAL_USL_FIXTURES 6 GPU_METAL_MESH_TRIANGLE_US)
+  list(GET GPU_METAL_USL_FIXTURES 7 GPU_METAL_COMPUTE_ATOMICS_US)
   add_custom_target(gpu-metal-fixtures DEPENDS ${GPU_METAL_USL_FIXTURES})
 endif()
 
@@ -1416,6 +1422,29 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
                         gpu-metal-fixtures
                         "${GPU_METAL_COMPUTE_BUFFER_US}")
 
+  add_executable(gpu-compute-atomics-metal-usl
+    samples/compute-atomics-usl/main.c
+  )
+  target_compile_definitions(gpu-compute-atomics-metal-usl PRIVATE
+    GPU_SAMPLE_BACKEND=GPU_BACKEND_METAL
+  )
+  target_link_libraries(gpu-compute-atomics-metal-usl PRIVATE gpu)
+  gpu_attach_usl_sample(gpu-compute-atomics-metal-usl
+                        gpu-metal-fixtures
+                        "${GPU_METAL_COMPUTE_ATOMICS_US}")
+  set_target_properties(gpu-compute-atomics-metal-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(GPU_BUILD_TESTS)
+    add_test(
+      NAME metal-compute-atomics
+      COMMAND gpu-compute-atomics-metal-usl
+              "${GPU_METAL_COMPUTE_ATOMICS_US}"
+    )
+  endif()
+
   add_executable(gpu-usl-reflection-check
     samples/usl-reflection-check/main.c
   )
@@ -1729,6 +1758,22 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
     C_EXTENSIONS NO
   )
 
+  add_executable(gpu-compute-atomics-dx12-usl
+    samples/compute-atomics-usl/main.c
+  )
+  target_compile_definitions(gpu-compute-atomics-dx12-usl PRIVATE
+    GPU_SAMPLE_BACKEND=GPU_BACKEND_DX12
+  )
+  target_link_libraries(gpu-compute-atomics-dx12-usl PRIVATE gpu)
+  gpu_attach_usl_sample(gpu-compute-atomics-dx12-usl
+                        gpu-dx12-fixtures
+                        "${GPU_DX12_COMPUTE_ATOMICS_US}")
+  set_target_properties(gpu-compute-atomics-dx12-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+
   add_executable(gpu-compute-render-dx12-usl
     samples/compute-buffer-dx12-usl/window.c
   )
@@ -1743,6 +1788,11 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
   )
 
   if(GPU_BUILD_TESTS)
+    add_test(
+      NAME dx12-compute-atomics
+      COMMAND gpu-compute-atomics-dx12-usl
+              "${GPU_DX12_COMPUTE_ATOMICS_US}"
+    )
     add_test(
       NAME dx12-compute-buffer
       COMMAND gpu-compute-buffer-dx12-usl
@@ -1789,7 +1839,28 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
     C_EXTENSIONS NO
   )
 
+  add_executable(gpu-compute-atomics-vulkan-usl
+    samples/compute-atomics-usl/main.c
+  )
+  target_compile_definitions(gpu-compute-atomics-vulkan-usl PRIVATE
+    GPU_SAMPLE_BACKEND=GPU_BACKEND_VULKAN
+  )
+  target_link_libraries(gpu-compute-atomics-vulkan-usl PRIVATE gpu)
+  gpu_attach_usl_sample(gpu-compute-atomics-vulkan-usl
+                        gpu-vulkan-fixtures
+                        "${GPU_VULKAN_COMPUTE_ATOMICS_US}")
+  set_target_properties(gpu-compute-atomics-vulkan-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+
   if(GPU_BUILD_TESTS)
+    add_test(
+      NAME vulkan-compute-atomics
+      COMMAND gpu-compute-atomics-vulkan-usl
+              "${GPU_VULKAN_COMPUTE_ATOMICS_US}"
+    )
     add_test(
       NAME vulkan-compute-buffer
       COMMAND gpu-compute-buffer-vulkan-usl

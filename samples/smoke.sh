@@ -13,6 +13,7 @@ TEXTURED_QUAD_BIN="$BUILD_DIR/samples/gpu-textured-quad-metal-usl/gpu-textured-q
 MESH_TRIANGLE_BIN="$BUILD_DIR/samples/gpu-mesh-triangle-metal-usl/gpu-mesh-triangle-metal-usl"
 COMPUTE_USL_BIN="$BUILD_DIR/samples/gpu-compute-metal-usl/gpu-compute-metal-usl"
 COMPUTE_BUFFER_BIN="$BUILD_DIR/samples/gpu-compute-buffer-metal-usl/gpu-compute-buffer-metal-usl"
+COMPUTE_ATOMICS_BIN="$BUILD_DIR/samples/gpu-compute-atomics-metal-usl/gpu-compute-atomics-metal-usl"
 
 run_step() {
   local name="$1"
@@ -154,6 +155,7 @@ run_step "build Metal samples" \
     gpu-mesh-triangle-metal-usl \
     gpu-compute-metal-usl \
     gpu-compute-buffer-metal-usl \
+    gpu-compute-atomics-metal-usl \
     gpu-usl-reflection-check \
     gpu-api-test
 
@@ -237,6 +239,9 @@ run_expect_fail_with_output "compute-buffer-usl missing group 1 bind" \
       GPU_SAMPLE_VERBOSE_VALIDATION=1 \
       GPU_SAMPLE_SKIP_COMPUTE_BIND=1 \
       "$COMPUTE_BUFFER_BIN"
+
+run_step "compute-atomics-usl readback" \
+  "$COMPUTE_ATOMICS_BIN"
 
 run_step "api validation" \
   ctest --test-dir "$BUILD_DIR" --output-on-failure -R '^api-validation$'

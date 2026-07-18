@@ -1,0 +1,45 @@
+// Cross-backend runtime validation for storage and workgroup atomics.
+
+kern(64, 1, 1) verify_atomics(
+    inout values: [uint] #buffer(0),
+    local_index: uint #local_index
+) {
+  workgroup var shared: [uint; 128]
+
+  shared.atomic_store(local_index, uint(0))
+  shared.atomic_store(local_index + uint(64), uint(0))
+  workgroup_barrier()
+
+  let shared_old = shared.atomic_add(0, uint(1))
+  let old_min = shared.atomic_min(1, local_index)
+  let old_max = shared.atomic_max(2, local_index)
+  let shared_exchange = shared.atomic_exchange(local_index + uint(64), uint(7))
+  let shared_compare = shared.atomic_compare_exchange(local_index + uint(64),
+                                                       uint(7),
+                                                       uint(9))
+  let storage_old = values.atomic_add(0, uint(1))
+  let storage_exchange = values.atomic_exchange(local_index + uint(144), uint(13))
+  let storage_compare = values.atomic_compare_exchange(local_index + uint(144),
+                                                        uint(13),
+                                                        uint(17))
+
+  workgroup_barrier()
+  storage_barrier()
+
+  if (local_index == 0) {
+    values[1] = shared.atomic_load(0)
+    values[2] = shared.atomic_load(1)
+    values[3] = shared.atomic_load(2)
+    values[4] = shared.atomic_load(64)
+    values[5] = shared_exchange
+    values[6] = shared_compare
+    values[7] = values.atomic_load(144)
+    values[8] = storage_exchange
+    values[9] = storage_compare
+    values[16] = storage_old
+    values[80] = shared_old
+  } else {
+    values[local_index + uint(16)] = storage_old
+    values[local_index + uint(80)] = shared_old
+  }
+}
