@@ -34,6 +34,7 @@ typedef struct GPUBindGroup                GPUBindGroup;
 typedef struct GPUPipelineLayout           GPUPipelineLayout;
 
 typedef struct GPUAccelerationStructureEXT GPUAccelerationStructureEXT;
+typedef struct GPUSamplerFeedbackMapEXT     GPUSamplerFeedbackMapEXT;
 
 #ifndef GPU_RENDER_ENCODER_TYPES_DEFINED
 #define GPU_RENDER_ENCODER_TYPES_DEFINED
@@ -69,6 +70,7 @@ typedef struct GPUBindGroupEntry {
     GPUTextureView              *textureView;
     GPUSampler                  *sampler;
     GPUAccelerationStructureEXT *accelerationStructure;
+    GPUSamplerFeedbackMapEXT    *samplerFeedback;
     struct {
       GPUBuffer *buffer;
       uint64_t   offset;

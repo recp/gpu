@@ -94,7 +94,7 @@ gpu_reportDeviceLostOnce(GPUDevice *device) {
 static bool
 gpu_knownFeature(GPUFeature feature) {
   return feature >= GPU_FEATURE_COMPUTE &&
-         feature <= GPU_FEATURE_EXECUTION_GRAPH;
+         feature <= GPU_FEATURE_SAMPLER_FEEDBACK;
 }
 
 static uint64_t
@@ -239,7 +239,7 @@ gpu_supportedFeatureMask(const GPUAdapter *adapter) {
 
   mask = 0;
   for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_EXECUTION_GRAPH;
+       feature <= GPU_FEATURE_SAMPLER_FEEDBACK;
        feature = (GPUFeature)(feature + 1)) {
     if (gpu_adapterSupportsFeature(adapter, feature)) {
       mask |= gpu_featureBit(feature);
@@ -258,7 +258,7 @@ gpu_fillFeatureSet(uint64_t       mask,
 
   count = 0u;
   for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_EXECUTION_GRAPH &&
+       feature <= GPU_FEATURE_SAMPLER_FEEDBACK &&
          count < capacity;
        feature = (GPUFeature)(feature + 1)) {
     if (mask & gpu_featureBit(feature)) {
@@ -1416,6 +1416,26 @@ GPUGetProcAddr(GPUDevice *device, const char *name) {
     }
     if (strcmp(name, "GPUDispatchExecutionGraphBufferEXT") == 0) {
       return (GPUProc)GPUDispatchExecutionGraphBufferEXT;
+    }
+  }
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_SAMPLER_FEEDBACK)) {
+    if (strcmp(name, "GPUCreateSamplerFeedbackMapEXT") == 0) {
+      return (GPUProc)GPUCreateSamplerFeedbackMapEXT;
+    }
+    if (strcmp(name, "GPUDestroySamplerFeedbackMapEXT") == 0) {
+      return (GPUProc)GPUDestroySamplerFeedbackMapEXT;
+    }
+    if (strcmp(name, "GPUGetSamplerFeedbackDecodeInfoEXT") == 0) {
+      return (GPUProc)GPUGetSamplerFeedbackDecodeInfoEXT;
+    }
+    if (strcmp(name, "GPUClearSamplerFeedbackEXT") == 0) {
+      return (GPUProc)GPUClearSamplerFeedbackEXT;
+    }
+    if (strcmp(name, "GPUDecodeSamplerFeedbackEXT") == 0) {
+      return (GPUProc)GPUDecodeSamplerFeedbackEXT;
+    }
+    if (strcmp(name, "GPUEncodeSamplerFeedbackEXT") == 0) {
+      return (GPUProc)GPUEncodeSamplerFeedbackEXT;
     }
   }
 

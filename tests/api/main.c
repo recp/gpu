@@ -205,6 +205,13 @@ run_vrs(void *ctx) {
 }
 
 static int
+run_sampler_feedback(void *ctx) {
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_sampler_feedback(testCtx->adapter, testCtx->device);
+}
+
+static int
 run_ray_query(void *ctx) {
   GPUApiTestContext *testCtx = ctx;
 
@@ -260,7 +267,7 @@ main(int argc, char **argv) {
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUApiTestContext      ctx;
-  GPUApiTest             tests[30];
+  GPUApiTest             tests[31];
   int                    ok;
 
   if (argc != 14 && argc != 15) {
@@ -371,6 +378,9 @@ main(int argc, char **argv) {
   tests[27] = (GPUApiTest){ "atomic64", run_atomic64, &ctx };
   tests[28] = (GPUApiTest){ "ray-pipeline", run_ray_pipeline, &ctx };
   tests[29] = (GPUApiTest){ "execution-graph", run_execution_graph, &ctx };
+  tests[30] = (GPUApiTest){
+    "sampler-feedback", run_sampler_feedback, &ctx
+  };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 

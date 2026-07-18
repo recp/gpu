@@ -152,6 +152,8 @@ gpu_uslSemanticEnabled(const GPUDevice *device, uint32_t semanticId) {
                                  GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR);
     case USL_SEMANTIC_FEATURE_ID_EXECUTION_GRAPH:
       return GPUIsFeatureEnabled(device, GPU_FEATURE_EXECUTION_GRAPH);
+    case USL_SEMANTIC_FEATURE_ID_SAMPLER_FEEDBACK:
+      return GPUIsFeatureEnabled(device, GPU_FEATURE_SAMPLER_FEEDBACK);
     default:
       return 0;
   }
@@ -818,6 +820,9 @@ gpu_bindingTypeFromUSLResource(const USLRuntimeResource *resource,
       return 1;
     case USL_RUNTIME_RESOURCE_ACCELERATION_STRUCTURE:
       *outType = GPU_BINDING_ACCELERATION_STRUCTURE;
+      return 1;
+    case USL_RUNTIME_RESOURCE_SAMPLER_FEEDBACK:
+      *outType = GPU_BINDING_SAMPLER_FEEDBACK_EXT;
       return 1;
     default:
       return 0;

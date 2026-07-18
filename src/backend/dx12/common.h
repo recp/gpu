@@ -31,6 +31,7 @@
 #include "../../api/ray_internal.h"
 #include "../../api/render/pipeline_internal.h"
 #include "../../api/sampler_internal.h"
+#include "../../api/sampler_feedback_internal.h"
 #include "../../api/surface_internal.h"
 #include "../../api/swapchain_internal.h"
 #include "../../api/texture_internal.h"
@@ -46,6 +47,12 @@
 #  define GPU_DX12_HAS_EXECUTION_GRAPHS 0
 #endif
 
+#if defined(__ID3D12Device8_INTERFACE_DEFINED__)
+#  define GPU_DX12_HAS_SAMPLER_FEEDBACK 1
+#else
+#  define GPU_DX12_HAS_SAMPLER_FEEDBACK 0
+#endif
+
 #define DXCHECK(D) hr = D; if (FAILED(hr)) { goto err; }
 
 typedef struct GPUAdapterDX12 {
@@ -58,6 +65,7 @@ typedef struct GPUAdapterDX12 {
   GPUShadingRateCombinerFlagsEXT     vrsCombiners;
   D3D12_VARIABLE_SHADING_RATE_TIER   vrsTier;
   D3D12_TILED_RESOURCES_TIER         tiledResourcesTier;
+  uint32_t                           samplerFeedbackTier;
   uint32_t                           minSubgroupSize;
   uint32_t                           maxSubgroupSize;
   uint32_t                           subgroupMatrixPropertyCount;
@@ -95,6 +103,9 @@ typedef struct GPUDeviceDX12 {
   ID3D12Device                      *d3dDevice;
   ID3D12Device2                     *d3dDevice2;
   ID3D12Device5                     *d3dDevice5;
+#if GPU_DX12_HAS_SAMPLER_FEEDBACK
+  ID3D12Device8                     *d3dDevice8;
+#endif
   ID3D12CommandSignature            *drawSignature;
   ID3D12CommandSignature            *drawIndexedSignature;
   ID3D12CommandSignature            *dispatchSignature;
@@ -114,6 +125,7 @@ typedef struct GPUDeviceDX12 {
   D3D_SHADER_MODEL                   shaderModel;
   D3D12_RESOURCE_HEAP_TIER           resourceHeapTier;
   D3D12_TILED_RESOURCES_TIER         tiledResourcesTier;
+  uint32_t                           samplerFeedbackTier;
   GPUShadingRateFlagsEXT             vrsRates;
   GPUShadingRateCombinerFlagsEXT     vrsCombiners;
   D3D12_VARIABLE_SHADING_RATE_TIER   vrsTier;
@@ -243,6 +255,7 @@ typedef struct GPUDescriptorTableDX12 {
   uint32_t            descriptorCount;
   uint32_t            rangeCount;
   uint32_t            rangeOffset;
+  uint32_t            feedbackOffset;
   uint32_t            accelerationOffset;
   GPUShaderStageFlags visibility;
 } GPUDescriptorTableDX12;
@@ -266,10 +279,18 @@ typedef struct GPUBindGroupDX12 {
   GPUDeviceDX12 *device;
   uint32_t       resourceOffset;
   uint32_t       resourceCount;
+  uint32_t       feedbackOffset;
   uint32_t       accelerationOffset;
   uint32_t       samplerOffset;
   uint32_t       samplerCount;
 } GPUBindGroupDX12;
+
+typedef struct GPUSamplerFeedbackMapDX12 {
+  GPUDeviceDX12        *device;
+  ID3D12Resource       *resource;
+  D3D12_RESOURCE_STATES state;
+  uint32_t              descriptorOffset;
+} GPUSamplerFeedbackMapDX12;
 
 typedef struct GPUBufferDX12 {
   ID3D12Resource            *resource;
@@ -467,6 +488,9 @@ typedef struct GPUCommandBufferDX12 {
   GPUQueueDX12                 *owner;
   ID3D12CommandAllocator       *allocator;
   ID3D12GraphicsCommandList    *commandList;
+#if GPU_DX12_HAS_SAMPLER_FEEDBACK
+  ID3D12GraphicsCommandList1   *commandList1;
+#endif
   ID3D12GraphicsCommandList5   *commandList5;
   ID3D12GraphicsCommandList6   *commandList6;
   ID3D12GraphicsCommandList7   *commandList7;
@@ -672,6 +696,12 @@ dx12_transitionTexturePlane(ID3D12GraphicsCommandList *commandList,
                             D3D12_RESOURCE_STATES      state);
 
 GPU_HIDE
+bool
+dx12_transitionSamplerFeedback(ID3D12GraphicsCommandList *commandList,
+                                GPUSamplerFeedbackMapDX12 *map,
+                                D3D12_RESOURCE_STATES      state);
+
+GPU_HIDE
 GPUResult
 dx12_beginTransfer(GPUQueue             *queue,
                    D3D12_HEAP_TYPE              heapType,
@@ -711,6 +741,10 @@ dx12_freeDescriptors(GPUDeviceDX12             *device,
 GPU_HIDE
 D3D12_CPU_DESCRIPTOR_HANDLE
 dx12_cpuDescriptor(const GPUDescriptorHeapDX12 *heap, uint32_t offset);
+
+GPU_HIDE
+D3D12_GPU_DESCRIPTOR_HANDLE
+dx12_gpuDescriptor(const GPUDescriptorHeapDX12 *heap, uint32_t offset);
 
 GPU_INLINE
 void

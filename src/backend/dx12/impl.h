@@ -99,6 +99,7 @@ GPU_HIDE void dx12_initVRS(GPUApiVRS *api);
 GPU_HIDE void dx12_initRayQuery(GPUApiRayQuery *api);
 GPU_HIDE void dx12_initRayTracing(GPUApiRayTracing *api);
 GPU_HIDE void dx12_initExecutionGraph(GPUApiExecutionGraph *api);
+GPU_HIDE void dx12_initSamplerFeedback(GPUApiSamplerFeedback *api);
 GPU_HIDE void dx12_resetGraphInitializations(GPUCommandBufferDX12 *command);
 GPU_HIDE void dx12_submitGraphInitializations(GPUCommandBufferDX12 *command);
 GPU_HIDE void dx12_destroyGraphInputScratch(GPUCommandBufferDX12 *command);

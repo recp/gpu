@@ -120,6 +120,54 @@ dx12_queryMeshShader(ID3D12Device    *device,
   return true;
 }
 
+static uint32_t
+dx12_querySamplerFeedback(ID3D12Device    *device,
+                          D3D_SHADER_MODEL shaderModel,
+#if GPU_DX12_HAS_SAMPLER_FEEDBACK
+                          ID3D12Device8  **outDevice8
+#else
+                          void           *outDevice8
+#endif
+                          ) {
+#if GPU_DX12_HAS_SAMPLER_FEEDBACK
+  D3D12_FEATURE_DATA_D3D12_OPTIONS7 options7 = {0};
+  ID3D12Device8                    *device8;
+
+  if (outDevice8) {
+    *outDevice8 = NULL;
+  }
+  if (!device || shaderModel < D3D_SHADER_MODEL_6_5 ||
+      FAILED(device->lpVtbl->CheckFeatureSupport(
+        device,
+        D3D12_FEATURE_D3D12_OPTIONS7,
+        &options7,
+        sizeof(options7))) ||
+      options7.SamplerFeedbackTier ==
+        D3D12_SAMPLER_FEEDBACK_TIER_NOT_SUPPORTED) {
+    return 0u;
+  }
+
+  device8 = NULL;
+  if (FAILED(device->lpVtbl->QueryInterface(device,
+                                             &IID_ID3D12Device8,
+                                             (void **)&device8)) ||
+      !device8) {
+    return 0u;
+  }
+  if (outDevice8) {
+    *outDevice8 = device8;
+  } else {
+    device8->lpVtbl->Release(device8);
+  }
+  return (uint32_t)options7.SamplerFeedbackTier;
+#else
+  GPU__UNUSED(device);
+  GPU__UNUSED(shaderModel);
+  GPU__UNUSED(outDevice8);
+  return 0u;
+#endif
+}
+
 static bool
 dx12_queryRayQuery(ID3D12Device    *device,
                    D3D_SHADER_MODEL shaderModel,
@@ -561,6 +609,9 @@ dx12_probeAdapter(GPUAdapterDX12 *adapter) {
                             dx12_queryExecutionGraphs(device,
                                                       shaderModel,
                                                       NULL);
+  adapter->samplerFeedbackTier = dxcModule
+    ? dx12_querySamplerFeedback(device, shaderModel, NULL)
+    : 0u;
   if (dxcModule &&
       dx12_hasLinearAlgebraCompiler(dxcModule) &&
       shaderModel >= (D3D_SHADER_MODEL)0x6a) {
@@ -699,6 +750,16 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
                              device->shaderModel,
                              device->d3dDevice5 ? NULL : &device->d3dDevice5
                            );
+  device->samplerFeedbackTier = device->dxcAvailable
+    ? dx12_querySamplerFeedback(device->d3dDevice,
+                                device->shaderModel,
+#if GPU_DX12_HAS_SAMPLER_FEEDBACK
+                                &device->d3dDevice8
+#else
+                                NULL
+#endif
+                                )
+    : 0u;
   additionalRates = false;
   if (dx12_queryVRS(device->d3dDevice,
                     &device->vrsTier,
@@ -1040,6 +1101,8 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
       return adapterDX12->rayTracingPipeline;
     case GPU_FEATURE_EXECUTION_GRAPH:
       return adapterDX12->executionGraph;
+    case GPU_FEATURE_SAMPLER_FEEDBACK:
+      return adapterDX12->samplerFeedbackTier != 0u;
     case GPU_FEATURE_VARIABLE_RATE_SHADING:
       return adapterDX12->vrsTier !=
              D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED;
@@ -1223,6 +1286,10 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
       !deviceDX12->executionGraph) {
     goto err;
   }
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_SAMPLER_FEEDBACK)) != 0u &&
+      deviceDX12->samplerFeedbackTier == 0u) {
+    goto err;
+  }
   if ((enabledFeatureMask &
        (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u &&
       deviceDX12->vrsTier ==
@@ -1254,6 +1321,15 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_EXECUTION_GRAPH)) == 0u) {
     deviceDX12->executionGraph = false;
+  }
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_SAMPLER_FEEDBACK)) == 0u) {
+    deviceDX12->samplerFeedbackTier = 0u;
+#if GPU_DX12_HAS_SAMPLER_FEEDBACK
+    if (deviceDX12->d3dDevice8) {
+      deviceDX12->d3dDevice8->lpVtbl->Release(deviceDX12->d3dDevice8);
+      deviceDX12->d3dDevice8 = NULL;
+    }
+#endif
   }
   if ((enabledFeatureMask &
        (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) == 0u) {
@@ -1317,6 +1393,11 @@ err:
       if (deviceDX12->d3dDevice5) {
         deviceDX12->d3dDevice5->lpVtbl->Release(deviceDX12->d3dDevice5);
       }
+#if GPU_DX12_HAS_SAMPLER_FEEDBACK
+      if (deviceDX12->d3dDevice8) {
+        deviceDX12->d3dDevice8->lpVtbl->Release(deviceDX12->d3dDevice8);
+      }
+#endif
       deviceDX12->d3dDevice->lpVtbl->Release(deviceDX12->d3dDevice);
     }
     if (deviceDX12->dxcModule) {
@@ -1359,6 +1440,11 @@ dx12_destroyDevice(GPUDevice * __restrict device) {
       if (deviceDX12->d3dDevice5) {
         deviceDX12->d3dDevice5->lpVtbl->Release(deviceDX12->d3dDevice5);
       }
+#if GPU_DX12_HAS_SAMPLER_FEEDBACK
+      if (deviceDX12->d3dDevice8) {
+        deviceDX12->d3dDevice8->lpVtbl->Release(deviceDX12->d3dDevice8);
+      }
+#endif
       deviceDX12->d3dDevice->lpVtbl->Release(deviceDX12->d3dDevice);
     }
     if (deviceDX12->dxcModule) {

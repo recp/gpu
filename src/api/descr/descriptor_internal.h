@@ -39,10 +39,11 @@ struct GPUPipelineLayout {
 };
 
 typedef enum GPUBindKind {
-  GPUBindKindBuffer  = 0,
-  GPUBindKindTexture = 1,
-  GPUBindKindSampler = 2,
-  GPUBindKindAccelerationStructure = 3,
+  GPUBindKindBuffer                = 0,
+  GPUBindKindTexture               = 1,
+  GPUBindKindSampler               = 2,
+  GPUBindKindSamplerFeedback       = 3,
+  GPUBindKindAccelerationStructure = 4,
   GPUBindKindCount
 } GPUBindKind;
 
@@ -51,6 +52,7 @@ typedef struct GPUBindGroupBindingView {
     GPUBuffer                       *buffer;
     GPUTextureView                  *textureView;
     GPUSampler                      *sampler;
+    GPUSamplerFeedbackMapEXT        *samplerFeedback;
     GPUAccelerationStructureEXT     *accelerationStructure;
   };
   uint64_t        offset;

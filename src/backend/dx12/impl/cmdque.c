@@ -1112,6 +1112,11 @@ dx12_destroyCommandQueue(GPUQueue *queue) {
         );
       }
       dx12_destroyCopyScratch(command);
+#if GPU_DX12_HAS_SAMPLER_FEEDBACK
+      if (command->commandList1) {
+        command->commandList1->lpVtbl->Release(command->commandList1);
+      }
+#endif
 #if GPU_DX12_HAS_EXECUTION_GRAPHS
       if (command->commandList10) {
         command->commandList10->lpVtbl->Release(command->commandList10);
@@ -1328,6 +1333,18 @@ dx12__createCommandBufferState(GPUQueue *queue) {
       (void **)&native->commandList7
     );
   }
+#if GPU_DX12_HAS_SAMPLER_FEEDBACK
+  if (deviceDX12->samplerFeedbackTier != 0u) {
+    (void)native->commandList->lpVtbl->QueryInterface(
+      native->commandList,
+      &IID_ID3D12GraphicsCommandList1,
+      (void **)&native->commandList1
+    );
+    if (!native->commandList1) {
+      goto fail;
+    }
+  }
+#endif
   if (deviceDX12->rayQuery ||
       deviceDX12->vrsTier !=
         D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED) {
@@ -1380,6 +1397,11 @@ dx12__createCommandBufferState(GPUQueue *queue) {
   return native;
 
 fail:
+#if GPU_DX12_HAS_SAMPLER_FEEDBACK
+  if (native->commandList1) {
+    native->commandList1->lpVtbl->Release(native->commandList1);
+  }
+#endif
 #if GPU_DX12_HAS_EXECUTION_GRAPHS
   if (native->commandList10) {
     native->commandList10->lpVtbl->Release(native->commandList10);

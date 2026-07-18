@@ -22,6 +22,7 @@
 #include "../render/rce_internal.h"
 #include "../ray_internal.h"
 #include "../sampler_internal.h"
+#include "../sampler_feedback_internal.h"
 #include "../texture_internal.h"
 #include "descriptor_internal.h"
 
@@ -58,9 +59,10 @@ typedef struct GPUBindGroupBindingPriv {
       uint64_t   size;
     };
 
-    GPUTextureView *textureView;
-    GPUSampler     *sampler;
-    GPUAccelerationStructureEXT *accelerationStructure;
+    GPUTextureView                  *textureView;
+    GPUSampler                      *sampler;
+    GPUSamplerFeedbackMapEXT        *samplerFeedback;
+    GPUAccelerationStructureEXT     *accelerationStructure;
   };
   uint32_t    binding;
   uint32_t    arrayIndex;
@@ -239,6 +241,10 @@ gpu_bindGroupHash(const GPUBindGroupPriv *priv) {
         resource = (uintptr_t)binding->sampler;
         hash     = GPU_BIND_GROUP_HASH(hash, resource);
         break;
+      case GPUBindKindSamplerFeedback:
+        resource = (uintptr_t)binding->samplerFeedback;
+        hash     = GPU_BIND_GROUP_HASH(hash, resource);
+        break;
       case GPUBindKindAccelerationStructure:
         resource = (uintptr_t)binding->accelerationStructure;
         hash     = GPU_BIND_GROUP_HASH(hash, resource);
@@ -284,6 +290,11 @@ gpu_bindGroupPrivsEqual(const GPUBindGroupPriv *a,
         break;
       case GPUBindKindSampler:
         if (aBinding->sampler != bBinding->sampler) {
+          return false;
+        }
+        break;
+      case GPUBindKindSamplerFeedback:
+        if (aBinding->samplerFeedback != bBinding->samplerFeedback) {
           return false;
         }
         break;
@@ -669,6 +680,9 @@ gpu_kindFromBindingType(GPUBindingType type, GPUBindKind *outKind) {
     case GPU_BINDING_SAMPLER:
       *outKind = GPUBindKindSampler;
       return 1;
+    case GPU_BINDING_SAMPLER_FEEDBACK_EXT:
+      *outKind = GPUBindKindSamplerFeedback;
+      return 1;
     case GPU_BINDING_ACCELERATION_STRUCTURE:
       *outKind = GPUBindKindAccelerationStructure;
       return 1;
@@ -768,9 +782,9 @@ gpu_validateLayoutEntries(const GPUBindGroupLayoutEntry *entries,
 }
 
 static GPUResult
-gpu_validateRayQueryLayout(GPUDevice                    *device,
-                           const GPUBindGroupLayoutEntry *entries,
-                           uint32_t                       count) {
+gpu_validateFeatureLayout(GPUDevice                     *device,
+                          const GPUBindGroupLayoutEntry *entries,
+                          uint32_t                       count) {
   for (uint32_t i = 0u; i < count; i++) {
     if ((entries[i].visibility &
          (GPU_SHADER_STAGE_RAY_GENERATION_BIT |
@@ -780,6 +794,10 @@ gpu_validateRayQueryLayout(GPUDevice                    *device,
           GPU_SHADER_STAGE_INTERSECTION_BIT |
           GPU_SHADER_STAGE_CALLABLE_BIT)) != 0u &&
         !GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_TRACING_PIPELINE)) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+    if (entries[i].bindingType == GPU_BINDING_SAMPLER_FEEDBACK_EXT &&
+        !GPUIsFeatureEnabled(device, GPU_FEATURE_SAMPLER_FEEDBACK)) {
       return GPU_ERROR_UNSUPPORTED;
     }
     if (entries[i].bindingType != GPU_BINDING_ACCELERATION_STRUCTURE) {
@@ -863,6 +881,8 @@ gpu_bindGroupEntryHasResource(const GPUBindGroupLayoutEntry *layoutEntry,
       return entry->textureView != NULL;
     case GPUBindKindSampler:
       return entry->sampler != NULL;
+    case GPUBindKindSamplerFeedback:
+      return entry->samplerFeedback != NULL;
     case GPUBindKindAccelerationStructure:
       return entry->accelerationStructure != NULL;
     default:
@@ -889,6 +909,9 @@ gpu_bindGroupEntryMatchesDevice(GPUDevice                     *device,
              entry->textureView->_texture->device == device;
     case GPUBindKindSampler:
       return entry->sampler && entry->sampler->device == device;
+    case GPUBindKindSamplerFeedback:
+      return entry->samplerFeedback &&
+             entry->samplerFeedback->device == device;
     case GPUBindKindAccelerationStructure:
       return entry->accelerationStructure &&
              entry->accelerationStructure->device == device;
@@ -1234,7 +1257,7 @@ gpu_createBindGroupLayout(GPUDevice *device,
   if (!gpu_validateLayoutEntries(entries, count, bindless)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  result = gpu_validateRayQueryLayout(device, entries, count);
+  result = gpu_validateFeatureLayout(device, entries, count);
   if (result != GPU_OK) {
     return result;
   }
@@ -1539,6 +1562,7 @@ gpu_compileDX12PipelineBindings(GPUPipelineLayoutPriv *priv) {
     GPUBindKindBuffer,
     GPUBindKindTexture,
     GPUBindKindSampler,
+    GPUBindKindSamplerFeedback,
     GPUBindKindAccelerationStructure
   };
 
@@ -2597,6 +2621,9 @@ GPUCreateBindGroup(GPUDevice *device,
         case GPUBindKindSampler:
           binding->sampler = entry->sampler;
           break;
+        case GPUBindKindSamplerFeedback:
+          binding->samplerFeedback = entry->samplerFeedback;
+          break;
         case GPUBindKindAccelerationStructure:
           binding->accelerationStructure = entry->accelerationStructure;
           break;
@@ -2865,6 +2892,9 @@ GPUUpdateBindGroupEXT(GPUBindGroup            *group,
       case GPUBindKindSampler:
         binding->sampler = pEntries[i].sampler;
         break;
+      case GPUBindKindSamplerFeedback:
+        binding->samplerFeedback = pEntries[i].samplerFeedback;
+        break;
       case GPUBindKindAccelerationStructure:
         binding->accelerationStructure = pEntries[i].accelerationStructure;
         break;
@@ -3007,6 +3037,9 @@ gpu_bindGroupEachStatic(GPUPipelineLayoutPriv  *pipeline,
         break;
       case GPUBindKindSampler:
         view.sampler = binding->sampler;
+        break;
+      case GPUBindKindSamplerFeedback:
+        view.samplerFeedback = binding->samplerFeedback;
         break;
       case GPUBindKindAccelerationStructure:
         view.accelerationStructure = binding->accelerationStructure;
@@ -3170,6 +3203,9 @@ gpuForEachBindGroupBinding(GPUBindGroup *group,
       case GPUBindKindSampler:
         view.sampler = binding->sampler;
         break;
+      case GPUBindKindSamplerFeedback:
+        view.samplerFeedback = binding->samplerFeedback;
+        break;
       case GPUBindKindAccelerationStructure:
         view.accelerationStructure = binding->accelerationStructure;
         break;
@@ -3227,6 +3263,9 @@ gpuForEachBindGroupEntry(GPUBindGroup            *group,
         break;
       case GPUBindKindSampler:
         view.sampler = entries[i].sampler;
+        break;
+      case GPUBindKindSamplerFeedback:
+        view.samplerFeedback = entries[i].samplerFeedback;
         break;
       case GPUBindKindAccelerationStructure:
         view.accelerationStructure = entries[i].accelerationStructure;
@@ -3389,6 +3428,9 @@ gpu_bindGroupEachDynamic(GPUPipelineLayout      *pipelineLayout,
         break;
       case GPUBindKindSampler:
         view.sampler = binding->sampler;
+        break;
+      case GPUBindKindSamplerFeedback:
+        view.samplerFeedback = binding->samplerFeedback;
         break;
       case GPUBindKindAccelerationStructure:
         view.accelerationStructure = binding->accelerationStructure;

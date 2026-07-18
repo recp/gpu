@@ -45,35 +45,37 @@ extern "C" {
 #include "vrs.h"
 #include "ray.h"
 #include "execution-graph.h"
+#include "sampler-feedback.h"
 
 typedef struct GPUApi {
-  GPUBackend          backend;
-  bool                initialized;
-  GPUApiDevice        device;
-  GPUApiRender        render;
-  GPUApiRCE           rce;
-  GPUApiCompute       compute;
-  GPUApiBuffer        buf;
-  GPUApiMemory        memory;
-  GPUApiTexture       texture;
-  GPUApiCommandBuffer cmdbuf;
-  GPUApiCommandQueue  cmdque;
-  GPUApiRenderPass    renderPass;
-  GPUApiDepthStencil  depthStencil;
-  GPUApiVertex        vertex;
-  GPUApiLibrary       library;
-  GPUApiSwapchain     swapchain;
-  GPUApiFrame         frame;
-  GPUApiDescriptor    descriptor;
-  GPUApiSampler       sampler;
-  GPUApiInstance      instance;
-  GPUApiSurface       surface;
-  GPUApiPipelineCache pipelineCache;
-  GPUApiVRS           vrs;
-  GPUApiRayQuery      rayQuery;
-  GPUApiRayTracing    rayTracing;
-  GPUApiExecutionGraph executionGraph;
-  void               *reserved;
+  GPUBackend            backend;
+  bool                  initialized;
+  GPUApiDevice          device;
+  GPUApiRender          render;
+  GPUApiRCE             rce;
+  GPUApiCompute         compute;
+  GPUApiBuffer          buf;
+  GPUApiMemory          memory;
+  GPUApiTexture         texture;
+  GPUApiCommandBuffer   cmdbuf;
+  GPUApiCommandQueue    cmdque;
+  GPUApiRenderPass      renderPass;
+  GPUApiDepthStencil    depthStencil;
+  GPUApiVertex          vertex;
+  GPUApiLibrary         library;
+  GPUApiSwapchain       swapchain;
+  GPUApiFrame           frame;
+  GPUApiDescriptor      descriptor;
+  GPUApiSampler         sampler;
+  GPUApiInstance        instance;
+  GPUApiSurface         surface;
+  GPUApiPipelineCache   pipelineCache;
+  GPUApiVRS             vrs;
+  GPUApiRayQuery        rayQuery;
+  GPUApiRayTracing      rayTracing;
+  GPUApiExecutionGraph  executionGraph;
+  GPUApiSamplerFeedback samplerFeedback;
+  void                  *reserved;
 } GPUApi;
 
 #ifdef __cplusplus

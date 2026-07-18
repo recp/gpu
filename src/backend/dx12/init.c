@@ -53,6 +53,7 @@ backend_dx12(void) {
     dx12_initRayQuery(&dx12.rayQuery);
     dx12_initRayTracing(&dx12.rayTracing);
     dx12_initExecutionGraph(&dx12.executionGraph);
+    dx12_initSamplerFeedback(&dx12.samplerFeedback);
 
     dx12.initialized = true;
   }

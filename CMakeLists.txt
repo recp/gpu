@@ -78,6 +78,7 @@ set(GPU_CORE_SOURCES
   src/api/descr/descriptor.c
   src/api/device.c
   src/api/execution_graph.c
+  src/api/sampler_feedback.c
   src/api/format.c
   src/api/frame.c
   src/api/instance.c
@@ -273,6 +274,7 @@ if(GPU_BUILD_DX12)
     src/backend/dx12/impl/renderpass.c
     src/backend/dx12/impl/rce.c
     src/backend/dx12/impl/sampler.c
+    src/backend/dx12/impl/sampler_feedback.c
     src/backend/dx12/impl/surface.c
     src/backend/dx12/impl/swapchain.c
     src/backend/dx12/impl/texture.c
@@ -1025,6 +1027,7 @@ if(GPU_BUILD_TESTS)
     tests/api/runner.c
     tests/api/runtime.c
     tests/api/sampler.c
+    tests/api/sampler_feedback.c
     tests/api/shader.c
     tests/api/shader_f16.c
     tests/api/shader_sampler.c
