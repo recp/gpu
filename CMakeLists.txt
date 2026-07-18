@@ -2014,6 +2014,31 @@ if(GPU_BUILD_BENCHMARKS)
     target_compile_options(gpu-dispatch-bench PRIVATE -Wall -Wextra)
   endif()
 
+  add_executable(gpu-ray-dispatch-bench
+    benchmarks/bench.c
+    benchmarks/ray_dispatch.c
+  )
+  target_link_libraries(gpu-ray-dispatch-bench PRIVATE gpu)
+  target_include_directories(gpu-ray-dispatch-bench PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_compile_definitions(gpu-ray-dispatch-bench PRIVATE
+    GPU_BUILD_WITH_VALIDATION=$<BOOL:${GPU_BUILD_WITH_VALIDATION}>
+    GPU_BACKEND_METAL_ONLY=$<BOOL:${GPU_BACKEND_METAL_ONLY}>
+    GPU_BACKEND_VULKAN_ONLY=$<BOOL:${GPU_BACKEND_VULKAN_ONLY}>
+    GPU_BACKEND_DX12_ONLY=$<BOOL:${GPU_BACKEND_DX12_ONLY}>
+  )
+  set_target_properties(gpu-ray-dispatch-bench PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_options(gpu-ray-dispatch-bench PRIVATE /W3)
+  else()
+    target_compile_options(gpu-ray-dispatch-bench PRIVATE -Wall -Wextra)
+  endif()
+
   add_executable(gpu-queue-upload-bench
     benchmarks/bench.c
     benchmarks/queue_upload.c
@@ -2373,6 +2398,11 @@ if(GPU_BUILD_BENCHMARKS)
       perf-smoke-queue-submit
       gpu-queue-submit-bench
       ${GPU_BENCHMARK_BACKEND} 4 64 3
+    )
+    gpu_add_perf_smoke(
+      perf-smoke-ray-dispatch
+      gpu-ray-dispatch-bench
+      100000
     )
     gpu_add_perf_smoke(
       perf-smoke-queue-upload
