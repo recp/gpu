@@ -18,6 +18,25 @@
 #include "../../../api/pipeline_cache_internal.h"
 #include "pipeline_cache.h"
 
+#define MT_PIPELINE_CACHE_META_MAGIC   UINT64_C(0x4750554d544c4348)
+#define MT_PIPELINE_CACHE_META_VERSION 1u
+#define MT_PIPELINE_CACHE_HASH_SEED    UINT64_C(14695981039346656037)
+
+typedef enum MTPipelineCacheKind {
+  MT_PIPELINE_CACHE_CLASSIC = 1,
+  MT_PIPELINE_CACHE_MODERN
+} MTPipelineCacheKind;
+
+typedef struct MTPipelineCacheMetadata {
+  uint64_t magic;
+  uint64_t archiveSize;
+  uint64_t archiveHash;
+  uint64_t deviceKey;
+  uint64_t systemKey;
+  uint32_t version;
+  uint32_t kind;
+} MTPipelineCacheMetadata;
+
 typedef struct MTPipelineCache {
   id<MTLBinaryArchive> archive;
   id                   compiler;
@@ -26,10 +45,129 @@ typedef struct MTPipelineCache {
   id                   lookupArchive;
   NSArray             *archives;
   NSURL               *url;
+  uint64_t              deviceKey;
+  uint64_t              systemKey;
+  uint32_t              kind;
   os_unfair_lock       lock;
   bool                 dirty;
   bool                 modern;
 } MTPipelineCache;
+
+static uint64_t
+mt_hashBytes(uint64_t hash, const void *data, size_t size) {
+  const uint8_t *bytes;
+
+  bytes = data;
+  for (size_t i = 0u; i < size; i++) {
+    hash ^= bytes[i];
+    hash *= UINT64_C(1099511628211);
+  }
+  return hash;
+}
+
+static bool
+mt_hashFile(NSString *path, uint64_t *outSize, uint64_t *outHash) {
+  uint8_t  bytes[16384];
+  uint64_t fileSize;
+  uint64_t hash;
+  size_t   readSize;
+  FILE    *file;
+
+  file = fopen(path.fileSystemRepresentation, "rb");
+  if (!file) {
+    return false;
+  }
+
+  fileSize = 0u;
+  hash     = MT_PIPELINE_CACHE_HASH_SEED;
+  while ((readSize = fread(bytes, 1u, sizeof(bytes), file)) != 0u) {
+    fileSize += readSize;
+    hash      = mt_hashBytes(hash, bytes, readSize);
+  }
+  if (ferror(file)) {
+    fclose(file);
+    return false;
+  }
+  fclose(file);
+
+  *outSize = fileSize;
+  *outHash = hash;
+  return true;
+}
+
+static uint64_t
+mt_systemKey(void) {
+  NSString   *version;
+  const char *string;
+
+  version = [NSProcessInfo processInfo].operatingSystemVersionString;
+  string  = version.UTF8String;
+  return string
+           ? mt_hashBytes(MT_PIPELINE_CACHE_HASH_SEED, string, strlen(string))
+           : 0u;
+}
+
+static NSString *
+mt_metadataPath(NSString *path) {
+  return [path stringByAppendingString:@".meta"];
+}
+
+static bool
+mt_cacheMetadataMatches(MTPipelineCache *native, NSString *path) {
+  MTPipelineCacheMetadata metadata;
+  uint64_t                archiveSize;
+  uint64_t                archiveHash;
+  FILE                   *file;
+  bool                    valid;
+
+  file = fopen(mt_metadataPath(path).fileSystemRepresentation, "rb");
+  if (!file) {
+    return false;
+  }
+  valid = fread(&metadata, sizeof(metadata), 1u, file) == 1u &&
+          fgetc(file) == EOF && !ferror(file);
+  fclose(file);
+  if (!valid || metadata.magic != MT_PIPELINE_CACHE_META_MAGIC ||
+      metadata.version != MT_PIPELINE_CACHE_META_VERSION ||
+      metadata.kind != native->kind ||
+      metadata.deviceKey != native->deviceKey ||
+      metadata.systemKey != native->systemKey ||
+      !mt_hashFile(path, &archiveSize, &archiveHash)) {
+    return false;
+  }
+  return metadata.archiveSize == archiveSize &&
+         metadata.archiveHash == archiveHash;
+}
+
+static bool
+mt_writeCacheMetadata(MTPipelineCache *native,
+                      NSString        *archivePath,
+                      NSString        *metadataPath) {
+  MTPipelineCacheMetadata metadata;
+  FILE                   *file;
+  bool                    written;
+
+  if (!mt_hashFile(archivePath, &metadata.archiveSize, &metadata.archiveHash)) {
+    return false;
+  }
+  metadata.magic     = MT_PIPELINE_CACHE_META_MAGIC;
+  metadata.deviceKey = native->deviceKey;
+  metadata.systemKey = native->systemKey;
+  metadata.version   = MT_PIPELINE_CACHE_META_VERSION;
+  metadata.kind      = native->kind;
+
+  file = fopen(metadataPath.fileSystemRepresentation, "wb");
+  if (!file) {
+    return false;
+  }
+  written = fwrite(&metadata, sizeof(metadata), 1u, file) == 1u &&
+            fflush(file) == 0;
+  if (written) {
+    written = fsync(fileno(file)) == 0;
+  }
+  written &= fclose(file) == 0;
+  return written;
+}
 
 static MTPipelineCache *
 mt_nativeCache(GPUPipelineCache *cache) {
@@ -94,13 +232,18 @@ mt_createCache4(GPUDeviceMT                    *device,
   if (@available(macOS 26.0, iOS 26.0, *)) {
     url         = [NSURL fileURLWithPath:path];
     fileManager = [NSFileManager defaultManager];
-    exists      = [fileManager fileExistsAtPath:path];
+    exists      = [fileManager fileExistsAtPath:path] &&
+                  mt_cacheMetadataMatches(native, path);
     error       = nil;
-    lookupArchive = exists
-                      ? [device->device newArchiveWithURL:url error:&error]
-                      : nil;
-    if (exists && !lookupArchive) {
-      [fileManager removeItemAtURL:url error:nil];
+    lookupArchive = nil;
+    if (exists) {
+      @try {
+        lookupArchive = [device->device newArchiveWithURL:url error:&error];
+      } @catch (NSException *exception) {
+#if GPU_BUILD_WITH_VALIDATION
+        NSLog(@"Failed to open Metal 4 pipeline cache: %@", exception);
+#endif
+      }
     }
 
     serializerDesc = [MTL4PipelineDataSetSerializerDescriptor new];
@@ -195,10 +338,13 @@ mt_createCache(GPUDevice                        *device,
       return GPU_ERROR_OUT_OF_MEMORY;
     }
     native->lock = OS_UNFAIR_LOCK_INIT;
+    native->deviceKey = deviceMT->device.registryID;
+    native->systemKey = mt_systemKey();
 #if MT_HAS_METAL4
     if (deviceMT->commandMode == MTCommandMode4) {
       GPUResult result;
 
+      native->kind = MT_PIPELINE_CACHE_MODERN;
       result = mt_createCache4(deviceMT, info, path, native);
       if (result != GPU_OK) {
         [native->taskOptions release];
@@ -214,13 +360,22 @@ mt_createCache(GPUDevice                        *device,
     }
 #endif
 
-    exists        = [fileManager fileExistsAtPath:url.path];
+    native->kind  = MT_PIPELINE_CACHE_CLASSIC;
+    exists        = [fileManager fileExistsAtPath:url.path] &&
+                    mt_cacheMetadataMatches(native, path);
     descriptor    = [MTLBinaryArchiveDescriptor new];
     descriptor.url = exists ? url : nil;
     error         = nil;
-    archive       = [deviceMT->device
-      newBinaryArchiveWithDescriptor:descriptor
-                                  error:&error];
+    archive       = nil;
+    @try {
+      archive = [deviceMT->device
+        newBinaryArchiveWithDescriptor:descriptor
+                                    error:&error];
+    } @catch (NSException *exception) {
+#if GPU_BUILD_WITH_VALIDATION
+      NSLog(@"Failed to open Metal pipeline cache: %@", exception);
+#endif
+    }
     if (!archive && exists) {
       descriptor.url = nil;
       error           = nil;
@@ -258,7 +413,10 @@ mt_createCache(GPUDevice                        *device,
 static void
 mt_storeCache(MTPipelineCache *native) {
   NSFileManager *fileManager;
+  NSString      *metadataPath;
+  NSString      *metadataTemporaryPath;
   NSString      *temporaryPath;
+  NSURL         *metadataURL;
   NSURL         *temporaryURL;
   NSError       *error;
 
@@ -268,8 +426,12 @@ mt_storeCache(MTPipelineCache *native) {
 
   temporaryPath = [native->url.path stringByAppendingString:@".tmp"];
   temporaryURL  = [NSURL fileURLWithPath:temporaryPath];
+  metadataPath  = mt_metadataPath(native->url.path);
+  metadataTemporaryPath = [metadataPath stringByAppendingString:@".tmp"];
+  metadataURL   = [NSURL fileURLWithPath:metadataTemporaryPath];
   fileManager   = [NSFileManager defaultManager];
   [fileManager removeItemAtURL:temporaryURL error:nil];
+  [fileManager removeItemAtURL:metadataURL error:nil];
   error = nil;
   if (native->modern) {
 #if MT_HAS_METAL4
@@ -290,11 +452,26 @@ mt_storeCache(MTPipelineCache *native) {
     NSLog(@"Failed to serialize Metal pipeline cache: %@", error);
     return;
   }
+  if (!mt_writeCacheMetadata(native, temporaryPath, metadataTemporaryPath)) {
+    NSLog(@"Failed to write Metal pipeline cache metadata at %@", metadataPath);
+    [fileManager removeItemAtURL:temporaryURL error:nil];
+    [fileManager removeItemAtURL:metadataURL error:nil];
+    return;
+  }
   if (rename(temporaryURL.fileSystemRepresentation,
              native->url.fileSystemRepresentation) != 0) {
     NSLog(@"Failed to replace Metal pipeline cache at %@", native->url.path);
     [fileManager removeItemAtURL:temporaryURL error:nil];
+    [fileManager removeItemAtURL:metadataURL error:nil];
+    return;
   }
+  if (rename(metadataURL.fileSystemRepresentation,
+             [NSURL fileURLWithPath:metadataPath].fileSystemRepresentation) != 0) {
+    NSLog(@"Failed to replace Metal pipeline cache metadata at %@", metadataPath);
+    [fileManager removeItemAtURL:metadataURL error:nil];
+    return;
+  }
+  native->dirty = false;
 }
 
 static void

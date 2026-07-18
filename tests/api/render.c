@@ -60,6 +60,8 @@ check_pipeline_disk_cache(GPUDevice                  *device,
   GPUApi                    *api;
   GPUResult                  result;
   char                       path[160];
+  char                       metadataPath[168];
+  char                       metadataTemporaryPath[176];
   char                       temporaryPath[168];
   FILE                      *file;
   long                       fileSize;
@@ -86,8 +88,15 @@ check_pipeline_disk_cache(GPUDevice                  *device,
            (uint32_t)api->backend,
            (void *)device);
   snprintf(temporaryPath, sizeof(temporaryPath), "%s.tmp", path);
+  snprintf(metadataPath, sizeof(metadataPath), "%s.meta", path);
+  snprintf(metadataTemporaryPath,
+           sizeof(metadataTemporaryPath),
+           "%s.meta.tmp",
+           path);
   remove(path);
   remove(temporaryPath);
+  remove(metadataPath);
+  remove(metadataTemporaryPath);
   cacheInfo.cachePath = path;
   cache               = NULL;
   result              = GPUCreatePipelineCache(device, &cacheInfo, &cache);
@@ -131,6 +140,20 @@ check_pipeline_disk_cache(GPUDevice                  *device,
     fprintf(stderr, "native pipeline cache file is empty\n");
     goto cleanup;
   }
+  if (api->backend == GPU_BACKEND_METAL) {
+    file = fopen(metadataPath, "rb");
+    if (!file) {
+      fprintf(stderr, "Metal pipeline cache metadata was not written\n");
+      goto cleanup;
+    }
+    fseek(file, 0, SEEK_END);
+    fileSize = ftell(file);
+    fclose(file);
+    if (fileSize <= 0) {
+      fprintf(stderr, "Metal pipeline cache metadata is empty\n");
+      goto cleanup;
+    }
+  }
 
   if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {
     fprintf(stderr, "native pipeline disk cache reopen failed\n");
@@ -141,6 +164,35 @@ check_pipeline_disk_cache(GPUDevice                  *device,
     fprintf(stderr, "native pipeline create from reopened cache failed\n");
     goto cleanup;
   }
+  GPUDestroyRenderPipeline(pipeline);
+  pipeline = NULL;
+  GPUDestroyPipelineCache(cache);
+  cache       = NULL;
+  info->cache = NULL;
+
+  file = fopen(path, "wb");
+  if (!file) {
+    fprintf(stderr, "native pipeline cache corruption setup failed\n");
+    goto cleanup;
+  }
+  if (fwrite("invalid-cache", 1u, 13u, file) != 13u) {
+    fclose(file);
+    fprintf(stderr, "native pipeline cache corruption setup failed\n");
+    goto cleanup;
+  }
+  if (fclose(file) != 0) {
+    fprintf(stderr, "native pipeline cache corruption setup failed\n");
+    goto cleanup;
+  }
+  if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {
+    fprintf(stderr, "native pipeline cache corruption recovery failed\n");
+    goto cleanup;
+  }
+  info->cache = cache;
+  if (GPUCreateRenderPipeline(device, info, &pipeline) != GPU_OK || !pipeline) {
+    fprintf(stderr, "native pipeline create after cache recovery failed\n");
+    goto cleanup;
+  }
   ok = 1;
 
 cleanup:
@@ -149,6 +201,8 @@ cleanup:
   GPUDestroyPipelineCache(cache);
   remove(path);
   remove(temporaryPath);
+  remove(metadataPath);
+  remove(metadataTemporaryPath);
   return ok;
 }
 static uint32_t gRenderVertexBufferCalls;

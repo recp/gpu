@@ -55,6 +55,8 @@ check_compute_disk_cache(GPUDevice                   *device,
   GPUPipelineCache         *cache;
   GPUApi                   *api;
   char                      path[160];
+  char                      metadataPath[168];
+  char                      metadataTemporaryPath[176];
   char                      temporaryPath[168];
   FILE                     *file;
   long                      fileSize;
@@ -76,8 +78,15 @@ check_compute_disk_cache(GPUDevice                   *device,
            (uint32_t)api->backend,
            (void *)device);
   snprintf(temporaryPath, sizeof(temporaryPath), "%s.tmp", path);
+  snprintf(metadataPath, sizeof(metadataPath), "%s.meta", path);
+  snprintf(metadataTemporaryPath,
+           sizeof(metadataTemporaryPath),
+           "%s.meta.tmp",
+           path);
   remove(path);
   remove(temporaryPath);
+  remove(metadataPath);
+  remove(metadataTemporaryPath);
   cacheInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
   cacheInfo.chain.structSize = sizeof(cacheInfo);
   cacheInfo.label            = "api-compute-disk-cache";
@@ -132,6 +141,8 @@ cleanup:
   GPUDestroyPipelineCache(cache);
   remove(path);
   remove(temporaryPath);
+  remove(metadataPath);
+  remove(metadataTemporaryPath);
   return ok;
 }
 
