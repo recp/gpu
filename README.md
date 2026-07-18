@@ -1,120 +1,103 @@
-# 🔭 GPU - Cross platform GPU library (based on Metal API)
+# GPU
 
-This is cross platform GPU library based on Apple's Metal API. 
-Library is written in C language and it provides and will provide C API.
-Since this is C API, language bindings can be written for any language.
+GPU is a cross-platform C library for explicit graphics and compute workloads.
+Its API keeps common rendering paths close to Metal while preserving the
+control required by Vulkan and Direct3D 12.
 
-## Platforms ( In Progress )
+The project is under active development. The public API is not yet stable.
 
-- [ ] Metal
-- [ ] DirectX 12
-- [ ] Vulkan
-- [ ] WebGPU
-- [ ] ...
+## Backends
 
-## Status (In Progress)
+- Metal: active development and the primary implementation target
+- Vulkan: active development
+- Direct3D 12: active development
+- WebGPU: planned
 
-I'll announce after first release is ready.
+Backend selection is scoped to instance and device creation. There is no
+mutable global backend switch.
 
-## Shading Language
+## Shaders
 
-I'll try to create new shading language that called ("Universal Shading Language") (https://github.com/UniversalShading).
-GPU library will use that high level language for shading. Shading language will be translated/compiled into GLSL, HLSL or Metal Shaders...
-Since GPU library will be cross platform, this will also make shading language cross platform... 
+GPU integrates with the
+[Universal Shading Language](https://github.com/UniversalShading/us) compiler.
+USL owns source parsing, reflection, target compilation, and persistent shader
+artifact caching. GPU consumes USL artifacts and creates native backend shader
+objects.
 
-## Design (TODO)
+## Build
 
-GPU library provides `GPUApi` structure and headers. In theory any GPU API e.g. Metal, Vulkan, DirectX, OpenGL... could be bind this GPU library.
+Metal debug build on macOS:
 
-~~Switching between GPU APIs will be easy: `GPUSwitchGPUApi(GPU_BACKEND_METAL);` or auto select `GPUSwitchGPUApiAuto()`.~~
+```sh
+cmake --preset macos-debug
+cmake --build --preset macos-debug
+ctest --test-dir out/build/macos-debug --output-on-failure
+```
 
-  > Backend selection should happen through instance/device creation and convenience helpers, not a mutable global runtime switch.
+Vulkan debug build on macOS:
 
-This section and others will be documented in detail later...
+```sh
+cmake --preset macos-vulkan-debug
+cmake --build --preset macos-vulkan-debug
+ctest --test-dir out/build/macos-vulkan-debug --output-on-failure
+```
 
-## Naming Conventions
+## Frame Flow
 
-**TODO:** `GPUSetFrontFace()` vs `gpuSetFrontFace()` vs `gpu_set_frontface()`, [feedbacks](https://github.com/recp/gpu/issues/1)
+The common render path uses an acquired frame, one command buffer, explicit
+render-pass commands, and a single submit/present helper:
+
+```c
+GPUFrame         *frame = GPUBeginFrame(swapchain);
+GPUCommandBuffer *cmdb  = NULL;
+
+if (!frame) {
+  return;
+}
+if (GPUAcquireCommandBuffer(queue, "frame", &cmdb) != GPU_OK) {
+  GPUEndFrame(frame);
+  return;
+}
+
+GPURenderPassColorAttachment color = {0};
+color.view                         = GPUFrameGetTargetView(frame);
+color.loadOp                       = GPU_LOAD_OP_CLEAR;
+color.storeOp                      = GPU_STORE_OP_STORE;
+color.clearColor.float32[3]        = 1.0f;
+
+GPURenderPassCreateInfo passInfo = {0};
+passInfo.colorAttachmentCount    = 1;
+passInfo.pColorAttachments       = &color;
+
+GPURenderPassEncoder *pass = GPUBeginRenderPass(cmdb, &passInfo);
+GPUBindRenderPipeline(pass, pipeline);
+GPUDraw(pass, 3, 1, 0, 0);
+GPUEndRenderPass(pass);
+
+GPUResult result = GPUFinishFrame(queue, cmdb, frame);
+```
+
+Use `GPUSchedulePresent`, `GPUQueueSubmit`, and `GPUEndFrame` separately when
+manual submit control is required.
 
 ## Samples
 
-Coming Soon.
+- `samples/triangle-usl`: Metal triangle using a USL artifact
+- `samples/triangle-vulkan-usl`: Vulkan triangle using the same USL source
+- `samples/triangle-dx12-usl`: Direct3D 12 triangle using the same USL source
+- `samples/textured-quad-usl`: Metal texture and sampler binding
+- `samples/compute-buffer-usl`: compute-to-render buffer flow
+- `samples/usl-reflection-check`: reflection and binding metadata validation
 
-#### - (void)viewDidLoad
-```C
+The Metal triangle executable is generated at:
 
-  device   = GPUCreateSystemDefaultDevice();
-  pipeline = GPUNewPipeline(GPUPixelFormatBGRA8Unorm_sRGB);
-  library  = GPUDefaultLibrary(device);
-
-  vertFunc = GPUShaderFunction(library, "vertexShader");
-  fragFunc = GPUShaderFunction(library, "fragmentShader");
-  vert     = GPUNewVertexDesc();
-
-  GPUAttrib(vert, VertexAttributePosition, GPUFloat3, 0, BufferIndexMeshPositions);
-  GPUAttrib(vert, VertexAttributeTexcoord, GPUFloat2, 0, BufferIndexMeshGenerics);
-
-  GPULayout(vert, BufferIndexMeshPositions, 12, 1, GPUPerVertex);
-  GPULayout(vert, BufferIndexMeshGenerics,  8,  1, GPUPerVertex);
-
-  GPUSetFunction(pipeline, vertFunc, GPU_FUNCTION_VERT);
-  GPUSetFunction(pipeline, fragFunc, GPU_FUNCTION_FRAG);
-  GPUSetVertexDesc(pipeline, vert);
-
-  GPUColorFormat(pipeline, 0, (GPUPixelFormat)_view.colorPixelFormat);
-  GPUDepthFormat(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
-  GPUStencilFormat(pipeline, (GPUPixelFormat)_view.depthStencilPixelFormat);
-  GPUSampleCount(pipeline, (uint32_t)_view.sampleCount);
-
-  renderState          = GPUNewRenderState(device, pipeline);
-  depthStencil         = GPUNewDepthStencil(GPUCompareFunctionLess, true);
-  depthStencilState    = GPUNewDepthStencilState(device, depthStencil);
-
-  dynamicUniformBuffer = GPUNewBuffer(device, uniformBufferSize, GPUResourceStorageModeShared);
-  commandQueue         = GPUNewCommandQueue(device);
+```sh
+./out/build/macos-debug/samples/gpu-triangle-metal-usl/gpu-triangle-metal-usl
 ```
 
-#### - drawInMTKView
+## License
 
-```C
+GPU is licensed under the Apache License 2.0.
 
-- (void)drawInMTKView:(nonnull MTKView *)view {
-  dispatch_semaphore_wait(_inFlightSemaphore, DISPATCH_TIME_FOREVER);
-  
-  cmdb = GPUNewCommandBuffer(commandQueue, _inFlightSemaphore, cmdOnComplete);
-  
-  [self _updateDynamicBufferState];
-  [self _updateGameState];
-  
-  if ((pass = GPUPassFromMTKView(view))) {
-    GPURenderCommandEncoder *rce;
-
-    rce = GPUNewRenderCommandEncoder(cmdb, pass);
-    {
-      GPUSetFrontFace(rce, GPUWindingCounterClockwise);
-      GPUSetCullMode(rce, GPUCullModeBack);
-      GPUSetRenderState(rce, renderState);
-      GPUSetDepthStencil(rce, depthStencilState);
-
-      GPUSetVertexBuffer(rce, dynamicUniformBuffer, uniformBufferOffset, BufferIndexUniforms);
-      GPUSetFragmentBuffer(rce, dynamicUniformBuffer, uniformBufferOffset, BufferIndexUniforms);
-      GPUSetFragmentTexture(rce, _colorMap, TextureIndexColor);
-      
-      GPULoadAndDrawMTKMesh(rce, _mesh);
-    }
-
-    GPUEndEncoding(rce);
-    GPUPresent(cmdb, view.currentDrawable);
-  }
-
-  GPUCommit(cmdb);
-}
-```
-
-<p align="center">
-   <img alt="" src="sample.png"  />
-</p>
-
-### Trademarks
-
-Apple name/logo and Metal are trademarks of Apple Inc. Vulkan and OpeenGL are trademarks of Khronos Group. DirectX is trademark of Microsoft Corp.
+Apple, Metal, DirectX, Vulkan, and other product names are trademarks of their
+respective owners.
