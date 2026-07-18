@@ -281,6 +281,15 @@ endif()
 
 if(GPU_BUILD_VULKAN)
   find_package(Vulkan REQUIRED)
+  get_filename_component(GPU_VULKAN_LIBRARY_DIR "${Vulkan_LIBRARY}" DIRECTORY)
+  if(APPLE)
+    get_filename_component(GPU_VULKAN_PLATFORM_DIR
+                           "${GPU_VULKAN_LIBRARY_DIR}"
+                           DIRECTORY)
+    set(GPU_VULKAN_ICD
+      "${GPU_VULKAN_PLATFORM_DIR}/share/vulkan/icd.d/MoltenVK_icd.json"
+    )
+  endif()
   target_compile_definitions(gpu PRIVATE GPU_ENABLE_VULKAN=1)
   target_sources(gpu PRIVATE
     src/backend/vk/init.c
@@ -959,6 +968,8 @@ if(GPU_BUILD_TESTS)
       -DGPU_PACKAGE_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}
       -DGPU_PACKAGE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}
       -DGPU_PACKAGE_MULTI_CONFIG=${GPU_GENERATOR_IS_MULTI_CONFIG}
+      -DGPU_PACKAGE_RUNTIME_DIR=${GPU_VULKAN_LIBRARY_DIR}
+      -DGPU_PACKAGE_VULKAN_ICD=${GPU_VULKAN_ICD}
       -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_test.cmake
   )
   set_tests_properties(package-consumer PROPERTIES LABELS package)
@@ -1987,13 +1998,6 @@ endif()
 
 if((GPU_BUILD_TESTS OR GPU_BUILD_BENCHMARKS) AND
    GPU_BUILD_VULKAN AND APPLE)
-  get_filename_component(GPU_VULKAN_LIBRARY_DIR "${Vulkan_LIBRARY}" DIRECTORY)
-  get_filename_component(GPU_VULKAN_PLATFORM_DIR
-                         "${GPU_VULKAN_LIBRARY_DIR}"
-                         DIRECTORY)
-  set(GPU_VULKAN_ICD
-    "${GPU_VULKAN_PLATFORM_DIR}/share/vulkan/icd.d/MoltenVK_icd.json"
-  )
   if(EXISTS "${GPU_VULKAN_ICD}")
     foreach(vulkanTest
             api-validation-vulkan

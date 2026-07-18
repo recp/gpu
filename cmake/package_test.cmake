@@ -84,6 +84,16 @@ else()
   set(ENV{PATH}
       "${package_prefix}/bin:${package_prefix}/lib:$ENV{PATH}")
 endif()
+if(APPLE AND GPU_PACKAGE_RUNTIME_DIR)
+  set(ENV{DYLD_LIBRARY_PATH}
+      "${GPU_PACKAGE_RUNTIME_DIR}:$ENV{DYLD_LIBRARY_PATH}")
+elseif(UNIX AND GPU_PACKAGE_RUNTIME_DIR)
+  set(ENV{LD_LIBRARY_PATH}
+      "${GPU_PACKAGE_RUNTIME_DIR}:$ENV{LD_LIBRARY_PATH}")
+endif()
+if(GPU_PACKAGE_VULKAN_ICD AND EXISTS "${GPU_PACKAGE_VULKAN_ICD}")
+  set(ENV{VK_ICD_FILENAMES} "${GPU_PACKAGE_VULKAN_ICD}")
+endif()
 execute_process(
   COMMAND "${consumer}"
   RESULT_VARIABLE result
