@@ -17,6 +17,7 @@
 #include "../common.h"
 #include "compute_internal.h"
 #include "descr/descriptor_internal.h"
+#include "execution_graph_internal.h"
 #include "library_internal.h"
 #include "pipeline_cache_internal.h"
 #include "ray_internal.h"
@@ -33,7 +34,8 @@
 typedef enum GPUPipelineCacheEntryType {
   GPU_PIPELINE_CACHE_RENDER = 0,
   GPU_PIPELINE_CACHE_COMPUTE,
-  GPU_PIPELINE_CACHE_RAY
+  GPU_PIPELINE_CACHE_RAY,
+  GPU_PIPELINE_CACHE_GRAPH
 } GPUPipelineCacheEntryType;
 
 struct GPUPipelineCacheEntry {
@@ -184,6 +186,9 @@ gpu_retainPipeline(GPUPipelineCacheEntryType type, void *pipeline) {
     case GPU_PIPELINE_CACHE_RAY:
       gpuRetainRayTracingPipeline(pipeline);
       break;
+    case GPU_PIPELINE_CACHE_GRAPH:
+      gpuRetainExecutionGraph(pipeline);
+      break;
   }
 }
 
@@ -198,6 +203,9 @@ gpu_destroyPipeline(GPUPipelineCacheEntryType type, void *pipeline) {
       break;
     case GPU_PIPELINE_CACHE_RAY:
       GPUDestroyRayTracingPipelineEXT(pipeline);
+      break;
+    case GPU_PIPELINE_CACHE_GRAPH:
+      GPUDestroyExecutionGraphEXT(pipeline);
       break;
   }
 }
@@ -373,6 +381,19 @@ gpu_pipelineKeyWriteRayInfo(
   GPU_PIPELINE_KEY_WRITE(writer, info->maxHitAttributeSizeBytes);
 }
 
+static void
+gpu_pipelineKeyWriteGraphInfo(GPUPipelineKeyWriter                 *writer,
+                              const GPUExecutionGraphCreateInfoEXT *info) {
+  uintptr_t layout;
+  uintptr_t library;
+
+  layout  = (uintptr_t)info->layout;
+  library = (uintptr_t)info->library;
+  GPU_PIPELINE_KEY_WRITE(writer, layout);
+  GPU_PIPELINE_KEY_WRITE(writer, library);
+  gpu_pipelineKeyWriteOptionalString(writer, info->graphName);
+}
+
 static bool
 gpu_pipelineKeyPrepare(GPUPipelineCacheKey *key, size_t size) {
   key->size = size;
@@ -531,6 +552,52 @@ gpu_buildRayPipelineKey(const GPURayTracingPipelineCreateInfoEXT *info,
   writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
   writer.valid    = true;
   gpu_pipelineKeyWriteRayInfo(&writer, info);
+  if (!writer.valid || writer.offset != outKey->size) {
+    gpuPipelineCacheReleaseKey(outKey);
+    return false;
+  }
+  outKey->hash = writer.hash;
+  return true;
+}
+
+static bool
+gpu_buildGraphPipelineKey(const GPUExecutionGraphCreateInfoEXT *info,
+                          GPUPipelineCacheKey                  *outKey) {
+  GPUPipelineKeyWriter writer;
+
+  outKey->data     = NULL;
+  outKey->size     = 0u;
+  outKey->hash     = 0u;
+  outKey->ownsData = false;
+  if (info->chain.pNext) {
+    return false;
+  }
+
+  writer.data     = outKey->inlineData;
+  writer.offset   = 0u;
+  writer.capacity = sizeof(outKey->inlineData);
+  writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
+  writer.valid    = true;
+  gpu_pipelineKeyWriteGraphInfo(&writer, info);
+  if (!writer.valid || writer.offset == 0u) {
+    return false;
+  }
+  if (writer.offset <= writer.capacity) {
+    outKey->data = outKey->inlineData;
+    outKey->size = writer.offset;
+    outKey->hash = writer.hash;
+    return true;
+  }
+
+  if (!gpu_pipelineKeyPrepare(outKey, writer.offset)) {
+    return false;
+  }
+  writer.data     = outKey->data;
+  writer.offset   = 0u;
+  writer.capacity = outKey->size;
+  writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
+  writer.valid    = true;
+  gpu_pipelineKeyWriteGraphInfo(&writer, info);
   if (!writer.valid || writer.offset != outKey->size) {
     gpuPipelineCacheReleaseKey(outKey);
     return false;
@@ -757,6 +824,33 @@ gpuPipelineCacheStoreRay(GPUPipelineCache         *cache,
                                 key,
                                 GPU_PIPELINE_CACHE_RAY,
                                 pipeline);
+}
+
+GPU_HIDE
+GPUResult
+gpuPipelineCacheFindGraph(GPUPipelineCache                      *cache,
+                          const GPUExecutionGraphCreateInfoEXT  *info,
+                          GPUPipelineCacheKey                   *outKey,
+                          GPUExecutionGraphEXT                 **outGraph) {
+  *outGraph = NULL;
+  if (!gpu_buildGraphPipelineKey(info, outKey)) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  *outGraph = gpu_pipelineCacheFind(cache,
+                                    outKey,
+                                    GPU_PIPELINE_CACHE_GRAPH);
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUExecutionGraphEXT *
+gpuPipelineCacheStoreGraph(GPUPipelineCache     *cache,
+                           GPUPipelineCacheKey  *key,
+                           GPUExecutionGraphEXT *graph) {
+  return gpu_pipelineCacheStore(cache,
+                                key,
+                                GPU_PIPELINE_CACHE_GRAPH,
+                                graph);
 }
 
 static void

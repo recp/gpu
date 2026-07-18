@@ -107,6 +107,19 @@ gpuPipelineCacheStoreRay(GPUPipelineCache         *cache,
                          GPURayTracingPipelineEXT *pipeline);
 
 GPU_HIDE
+GPUResult
+gpuPipelineCacheFindGraph(GPUPipelineCache                      *cache,
+                          const GPUExecutionGraphCreateInfoEXT  *info,
+                          GPUPipelineCacheKey                   *outKey,
+                          GPUExecutionGraphEXT                 **outGraph);
+
+GPU_HIDE
+GPUExecutionGraphEXT *
+gpuPipelineCacheStoreGraph(GPUPipelineCache     *cache,
+                           GPUPipelineCacheKey  *key,
+                           GPUExecutionGraphEXT *graph);
+
+GPU_HIDE
 bool
 gpuReleaseRenderPipeline(GPURenderPipeline *pipeline);
 

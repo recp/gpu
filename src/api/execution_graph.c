@@ -34,13 +34,35 @@ gpu_graphChainValid(const GPUChainedStruct *chain,
          (chain->structSize == 0u || chain->structSize >= size);
 }
 
+GPU_HIDE
+void
+gpuRetainExecutionGraph(GPUExecutionGraphEXT *graph) {
+  if (!graph) {
+    return;
+  }
+#if defined(_WIN32) || defined(WIN32)
+  InterlockedIncrement((volatile LONG *)&graph->refCount);
+#else
+  __atomic_add_fetch(&graph->refCount, 1u, __ATOMIC_RELAXED);
+#endif
+}
+
 static void
 gpu_releaseExecutionGraph(GPUExecutionGraphEXT *graph) {
   GPUApi *api;
 
-  if (!graph || graph->refCount == 0u || --graph->refCount != 0u) {
+  if (!graph) {
     return;
   }
+#if defined(_WIN32) || defined(WIN32)
+  if (InterlockedDecrement((volatile LONG *)&graph->refCount) != 0) {
+    return;
+  }
+#else
+  if (__atomic_sub_fetch(&graph->refCount, 1u, __ATOMIC_ACQ_REL) != 0u) {
+    return;
+  }
+#endif
   api = graph->_api;
   if (api && api->executionGraph.destroy) {
     api->executionGraph.destroy(graph);
@@ -178,7 +200,9 @@ GPUCreateExecutionGraphEXT(GPUDevice                            *device,
                            const GPUExecutionGraphCreateInfoEXT *info,
                            GPUExecutionGraphEXT                **outGraph) {
   GPUExecutionGraphEXT *graph;
+  GPUExecutionGraphEXT *cachedGraph;
   GPUApi               *api;
+  GPUPipelineCacheKey   cacheKey;
   const char           *entryPoints[USL_RUNTIME_MAX_ENTRY_POINTS];
   uint32_t              entryCount;
   GPUResult             result;
@@ -187,6 +211,7 @@ GPUCreateExecutionGraphEXT(GPUDevice                            *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   *outGraph = NULL;
+  memset(&cacheKey, 0, sizeof(cacheKey));
   if (!device || !info || !info->library || !info->layout ||
       (info->graphName && info->graphName[0] == '\0') ||
       !gpu_graphChainValid(&info->chain,
@@ -239,13 +264,37 @@ GPUCreateExecutionGraphEXT(GPUDevice                            *device,
                                     &graph->pushConstantSizeBytes,
                                     &graph->pushConstantStages);
 
+  if (info->cache && !info->chain.pNext) {
+    cachedGraph = NULL;
+    result = gpuPipelineCacheFindGraph(info->cache,
+                                       info,
+                                       &cacheKey,
+                                       &cachedGraph);
+    if (result != GPU_OK) {
+      free(graph);
+      return result;
+    }
+    if (cachedGraph) {
+      gpuPipelineCacheReleaseKey(&cacheKey);
+      free(graph);
+      *outGraph = cachedGraph;
+      return GPU_OK;
+    }
+  }
+
   result = api->executionGraph.create(device, info, graph);
   if (result != GPU_OK ||
       !gpu_graphRequirementsValid(&graph->memoryRequirements)) {
+    gpuPipelineCacheReleaseKey(&cacheKey);
     gpu_releaseExecutionGraph(graph);
     return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
   }
 
+  if (info->cache && !info->chain.pNext) {
+    graph = gpuPipelineCacheStoreGraph(info->cache, &cacheKey, graph);
+  } else {
+    gpuRecordPipelineCompile(device, info->cache);
+  }
   *outGraph = graph;
   return GPU_OK;
 }
@@ -323,7 +372,7 @@ GPUCreateExecutionGraphInstanceEXT(
     free(instance);
     return result;
   }
-  info->graph->refCount++;
+  gpuRetainExecutionGraph(info->graph);
   *outInstance = instance;
   return GPU_OK;
 }

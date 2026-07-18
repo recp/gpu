@@ -40,4 +40,8 @@ struct GPUExecutionGraphInstanceEXT {
   uint64_t                  memorySizeBytes;
 };
 
+GPU_HIDE
+void
+gpuRetainExecutionGraph(GPUExecutionGraphEXT *graph);
+
 #endif /* gpu_execution_graph_internal_h */
