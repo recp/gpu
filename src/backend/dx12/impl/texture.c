@@ -732,6 +732,7 @@ dx12_getSparseTextureRequirements(
   GPU__UNUSED(arrayLayerCount);
   GPU__UNUSED(planeCount);
   GPU__UNUSED(subresourceCount);
+  desc.Layout = D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE;
 
   resource = NULL;
   nativeResult = deviceDX12->d3dDevice->lpVtbl->CreateReservedResource(
@@ -793,6 +794,7 @@ dx12_createSparseTexture(GPUDevice                  *device,
   if (result != GPU_OK) {
     return result;
   }
+  desc.Layout = D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE;
 
   resource = NULL;
   nativeResult = deviceDX12->d3dDevice->lpVtbl->CreateReservedResource(

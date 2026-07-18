@@ -409,9 +409,16 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
     fprintf(stderr, "sparse queue unavailable\n");
     goto cleanup;
   }
-  if (GPUGetSparseTextureRequirements(device,
-                                      &textureInfo,
-                                      &requirements) != GPU_OK) {
+  result = GPUGetSparseTextureRequirements(device,
+                                            &textureInfo,
+                                            &requirements);
+  if (result == GPU_ERROR_UNSUPPORTED && textureInfo.depthOrLayers > 1u) {
+    textureInfo.depthOrLayers = 1u;
+    result = GPUGetSparseTextureRequirements(device,
+                                              &textureInfo,
+                                              &requirements);
+  }
+  if (result != GPU_OK) {
     fprintf(stderr, "sparse texture requirements query failed\n");
     goto cleanup;
   }
@@ -429,7 +436,7 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
       textureInfo.height / requirements.tileHeight +
       (textureInfo.height % requirements.tileHeight != 0u);
     mapping->tileDepth  = 1u;
-    mapping->arrayLayer = 1u;
+    mapping->arrayLayer = textureInfo.depthOrLayers > 1u ? 1u : 0u;
     heapTileCount = (uint64_t)mapping->tileWidth *
                     mapping->tileHeight * mapping->tileDepth;
   }
@@ -602,7 +609,7 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   writeRegion.width          = textureInfo.width;
   writeRegion.height         = textureInfo.height;
   writeRegion.depth          = 1u;
-  writeRegion.baseArrayLayer = 1u;
+  writeRegion.baseArrayLayer = textureInfo.depthOrLayers > 1u ? 1u : 0u;
   writeRegion.layerCount     = 1u;
   writeRegion.bytesPerRow    = textureInfo.width * 4u;
   writeRegion.rowsPerImage   = textureInfo.height;
@@ -628,7 +635,8 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
     fprintf(stderr, "sparse texture readback setup failed\n");
     goto cleanup;
   }
-  copyRegion.texture.texture.baseArrayLayer = 1u;
+  copyRegion.texture.texture.baseArrayLayer =
+    textureInfo.depthOrLayers > 1u ? 1u : 0u;
   copyRegion.texture.width                  = textureInfo.width;
   copyRegion.texture.height                 = textureInfo.height;
   copyRegion.texture.depth                  = 1u;

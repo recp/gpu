@@ -513,6 +513,7 @@ dx12_createBuffer(GPUDevice                 * __restrict device,
   buffer->device         = device;
   buffer->sizeBytes      = info->sizeBytes;
   buffer->usage          = info->usage;
+  buffer->_gpuAddress    = native->gpuAddress;
   *outBuffer             = buffer;
   return GPU_OK;
 }

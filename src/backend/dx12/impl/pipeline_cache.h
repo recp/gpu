@@ -51,6 +51,7 @@ GPUResult
 dx12_createMeshPSO(GPUPipelineCache                        *cache,
                    GPUDeviceDX12                          *device,
                    const D3D12_PIPELINE_STATE_STREAM_DESC *desc,
+                   D3D12_CACHED_PIPELINE_STATE            *cachedPSO,
                    const GPURenderPipelineCreateInfo      *info,
                    const DX12PipelineKey                  *rootKey,
                    const DX12ShaderCode                   *taskCode,

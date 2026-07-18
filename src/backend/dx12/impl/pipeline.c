@@ -135,6 +135,7 @@ DX12_STREAM_SUBOBJECT(DX12StreamTopology, D3D12_PRIMITIVE_TOPOLOGY_TYPE);
 DX12_STREAM_SUBOBJECT(DX12StreamRenderTargets, DX12RTFormatArray);
 DX12_STREAM_SUBOBJECT(DX12StreamDepthFormat, DXGI_FORMAT);
 DX12_STREAM_SUBOBJECT(DX12StreamSampleDesc, DXGI_SAMPLE_DESC);
+DX12_STREAM_SUBOBJECT(DX12StreamCachedPSO, D3D12_CACHED_PIPELINE_STATE);
 DX12_STREAM_SUBOBJECT(DX12StreamFlags, D3D12_PIPELINE_STATE_FLAGS);
 
 #undef DX12_STREAM_SUBOBJECT
@@ -152,6 +153,7 @@ typedef struct DX12MeshPipelineStream {
   DX12StreamRenderTargets renderTargets;
   DX12StreamDepthFormat   depthFormat;
   DX12StreamSampleDesc    sampleDesc;
+  DX12StreamCachedPSO     cachedPSO;
   DX12StreamFlags         flags;
 } DX12MeshPipelineStream;
 
@@ -960,6 +962,8 @@ dx12__meshPipelineStream(
   stream->sampleDesc.data.type =
     D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_SAMPLE_DESC;
   stream->sampleDesc.data.value = desc->SampleDesc;
+  stream->cachedPSO.data.type =
+    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_CACHED_PSO;
   stream->flags.data.type  = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_FLAGS;
   stream->flags.data.value = desc->Flags;
 }
@@ -1342,6 +1346,7 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
     result = dx12_createMeshPSO(info->cache,
                                 deviceDX12,
                                 &streamDesc,
+                                &meshStream.cachedPSO.data.value,
                                 info,
                                 &rootKey,
                                 mesh->taskEntry ? &taskCode : NULL,
