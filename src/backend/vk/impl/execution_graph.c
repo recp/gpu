@@ -37,19 +37,20 @@ typedef struct GPUExecutionGraphVk {
 } GPUExecutionGraphVk;
 
 typedef struct GPUExecutionGraphInstanceVk {
-  VkDispatchGraphInfoAMDX *hostInfos;
-  VkDispatchGraphInfoAMDX *gpuInfos;
-  VkDevice                 device;
-  VkBuffer                 scratchBuffer;
-  VkDeviceMemory           scratchMemory;
-  VkBuffer                 inputBuffer;
-  VkDeviceMemory           inputMemory;
-  VkDeviceAddress          scratchAddress;
-  VkDeviceAddress          inputAddress;
-  uint64_t                 scratchOffset;
-  uint64_t                 inputOffset;
-  uint32_t                 inputCapacity;
-  bool                     initialized;
+  GPUCommandBufferVk       *recordingCommandBuffer;
+  VkDispatchGraphInfoAMDX  *hostInfos;
+  VkDispatchGraphInfoAMDX  *gpuInfos;
+  VkDevice                  device;
+  VkBuffer                  scratchBuffer;
+  VkDeviceMemory            scratchMemory;
+  VkBuffer                  inputBuffer;
+  VkDeviceMemory            inputMemory;
+  VkDeviceAddress           scratchAddress;
+  VkDeviceAddress           inputAddress;
+  uint64_t                  scratchOffset;
+  uint64_t                  inputOffset;
+  uint32_t                  inputCapacity;
+  bool                      initialized;
 } GPUExecutionGraphInstanceVk;
 
 static uint64_t
@@ -568,6 +569,32 @@ vk_executionGraphEntryMatches(const GPUExecutionGraphVk       *graph,
 }
 
 static bool
+vk_trackGraphInitialization(GPUComputePassEncoder        *pass,
+                            GPUExecutionGraphInstanceEXT *instance,
+                            GPUExecutionGraphInstanceVk  *native) {
+  GPUCommandBufferVk *command;
+
+  if (!pass || !instance || !native || native->initialized) {
+    return false;
+  }
+  command = pass->_cmdb ? pass->_cmdb->_priv : NULL;
+  if (!command) {
+    return true;
+  }
+  if (native->recordingCommandBuffer == command) {
+    return false;
+  }
+  if (command->graphInitializationCount >=
+      GPU_VK_GRAPH_INIT_TRACK_COUNT) {
+    return true;
+  }
+
+  command->graphInitializations[command->graphInitializationCount++] = instance;
+  native->recordingCommandBuffer = command;
+  return true;
+}
+
+static bool
 vk_prepareExecutionGraphInstance(GPUComputePassEncoder        *pass,
                                  GPUExecutionGraphInstanceEXT *instance) {
   GPUComputeEncoderVk         *encoder;
@@ -581,7 +608,7 @@ vk_prepareExecutionGraphInstance(GPUComputePassEncoder        *pass,
       encoder->executionGraph != instance->graph) {
     return false;
   }
-  if (!native->initialized) {
+  if (vk_trackGraphInitialization(pass, instance, native)) {
     VkMemoryBarrier barrier = {0};
 
     graph->gpuDevice->initializeGraphScratchMemory(
@@ -604,7 +631,6 @@ vk_prepareExecutionGraphInstance(GPUComputePassEncoder        *pass,
                          NULL,
                          0u,
                          NULL);
-    native->initialized = true;
   }
   encoder->executionGraphInstance = instance;
   return true;
@@ -696,6 +722,55 @@ vk_dispatchExecutionGraphBuffer(
 }
 
 #endif
+
+GPU_HIDE
+void
+vk_resetGraphInitializations(GPUCommandBufferVk *command) {
+#ifdef VK_AMDX_shader_enqueue
+  if (!command) {
+    return;
+  }
+  for (uint32_t i = 0u; i < command->graphInitializationCount; i++) {
+    GPUExecutionGraphInstanceEXT *instance;
+    GPUExecutionGraphInstanceVk  *native;
+
+    instance = command->graphInitializations[i];
+    native   = instance ? instance->_priv : NULL;
+    if (native && native->recordingCommandBuffer == command) {
+      native->recordingCommandBuffer = NULL;
+    }
+    command->graphInitializations[i] = NULL;
+  }
+  command->graphInitializationCount = 0u;
+#else
+  GPU__UNUSED(command);
+#endif
+}
+
+GPU_HIDE
+void
+vk_submitGraphInitializations(GPUCommandBufferVk *command) {
+#ifdef VK_AMDX_shader_enqueue
+  if (!command) {
+    return;
+  }
+  for (uint32_t i = 0u; i < command->graphInitializationCount; i++) {
+    GPUExecutionGraphInstanceEXT *instance;
+    GPUExecutionGraphInstanceVk  *native;
+
+    instance = command->graphInitializations[i];
+    native   = instance ? instance->_priv : NULL;
+    if (native && native->recordingCommandBuffer == command) {
+      native->recordingCommandBuffer = NULL;
+      native->initialized            = true;
+    }
+    command->graphInitializations[i] = NULL;
+  }
+  command->graphInitializationCount = 0u;
+#else
+  GPU__UNUSED(command);
+#endif
+}
 
 GPU_HIDE
 void

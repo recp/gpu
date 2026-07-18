@@ -1092,6 +1092,7 @@ dx12_destroyCommandQueue(GPUQueue *queue) {
     command = native->commands;
     while (command) {
       next = command->next;
+      dx12_resetGraphInitializations(command);
       if (command->frameTimeReadback) {
         if (command->frameTimeMapped) {
           command->frameTimeReadback->lpVtbl->Unmap(
@@ -1438,6 +1439,7 @@ dx12_newCommandBuffer(GPUQueue  * __restrict queue,
     return NULL;
   }
 
+  dx12_resetGraphInitializations(native);
   result = native->allocator->lpVtbl->Reset(native->allocator);
   if (SUCCEEDED(result)) {
     result = native->commandList->lpVtbl->Reset(native->commandList,
@@ -1528,6 +1530,7 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   queue->commandQueue->lpVtbl->ExecuteCommandLists(queue->commandQueue,
                                                     1u,
                                                     commandLists);
+  dx12_submitGraphInitializations(native);
 
   commitResult = GPU_OK;
   swapchain    = native->presentSwapchain;
@@ -1648,6 +1651,9 @@ dx12_submitCommandBuffers(GPUQueue                  * __restrict queueHandle,
   queue->commandQueue->lpVtbl->ExecuteCommandLists(queue->commandQueue,
                                                     count,
                                                     commandLists);
+  for (uint32_t i = 0u; i < count; i++) {
+    dx12_submitGraphInitializations(natives[i]);
+  }
   fenceValue = queue->nextFenceValue++;
   result = queue->commandQueue->lpVtbl->Signal(queue->commandQueue,
                                                 queue->completionFence,
@@ -1829,6 +1835,9 @@ dx12_submitEx(GPUQueue                   *queueHandle,
     info->commandBufferCount,
     commandLists
   );
+  for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
+    dx12_submitGraphInitializations(natives[i]);
+  }
 
   submitResult = GPU_OK;
   if (swapchain && swapchain->swapchain) {

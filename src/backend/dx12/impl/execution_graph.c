@@ -31,14 +31,15 @@ typedef struct GPUExecutionGraphDX12 {
 } GPUExecutionGraphDX12;
 
 typedef struct GPUExecutionGraphInstanceDX12 {
+  GPUCommandBufferDX12      *recordingCommandBuffer;
   ID3D12Resource            *backingMemory;
   ID3D12Resource            *inputTable;
   D3D12_NODE_CPU_INPUT      *cpuInputs;
   D3D12_NODE_GPU_INPUT      *gpuInputs;
   D3D12_GPU_VIRTUAL_ADDRESS  backingAddress;
   D3D12_GPU_VIRTUAL_ADDRESS  inputTableAddress;
-  LONG                       initialized;
   uint32_t                   inputCapacity;
+  bool                       initialized;
 } GPUExecutionGraphInstanceDX12;
 
 static bool
@@ -444,6 +445,32 @@ dx12_executionGraphEntryMatches(const GPUExecutionGraphDX12       *graph,
 }
 
 static bool
+dx12_trackGraphInitialization(GPUComputePassEncoder         *pass,
+                              GPUExecutionGraphInstanceEXT  *instance,
+                              GPUExecutionGraphInstanceDX12 *native) {
+  GPUCommandBufferDX12 *command;
+
+  if (!pass || !instance || !native || native->initialized) {
+    return false;
+  }
+  command = pass->_cmdb ? pass->_cmdb->_priv : NULL;
+  if (!command) {
+    return true;
+  }
+  if (native->recordingCommandBuffer == command) {
+    return false;
+  }
+  if (command->graphInitializationCount >=
+      GPU_DX12_GRAPH_INIT_TRACK_COUNT) {
+    return true;
+  }
+
+  command->graphInitializations[command->graphInitializationCount++] = instance;
+  native->recordingCommandBuffer = command;
+  return true;
+}
+
+static bool
 dx12_setExecutionGraphInstance(GPUComputePassEncoder        *pass,
                                GPUExecutionGraphInstanceEXT *instance) {
   GPUComputeEncoderDX12          *encoder;
@@ -465,7 +492,7 @@ dx12_setExecutionGraphInstance(GPUComputePassEncoder        *pass,
   setProgram.Type = D3D12_PROGRAM_TYPE_WORK_GRAPH;
   setProgram.WorkGraph.ProgramIdentifier = graph->programIdentifier;
   setProgram.WorkGraph.Flags =
-    InterlockedCompareExchange(&native->initialized, 1, 0) == 0
+    dx12_trackGraphInitialization(pass, instance, native)
       ? D3D12_SET_WORK_GRAPH_FLAG_INITIALIZE
       : D3D12_SET_WORK_GRAPH_FLAG_NONE;
   setProgram.WorkGraph.BackingMemory.StartAddress = native->backingAddress;
@@ -573,6 +600,55 @@ dx12_dispatchExecutionGraphBuffer(
 }
 
 #endif
+
+GPU_HIDE
+void
+dx12_resetGraphInitializations(GPUCommandBufferDX12 *command) {
+#if GPU_DX12_HAS_EXECUTION_GRAPHS
+  if (!command) {
+    return;
+  }
+  for (uint32_t i = 0u; i < command->graphInitializationCount; i++) {
+    GPUExecutionGraphInstanceEXT  *instance;
+    GPUExecutionGraphInstanceDX12 *native;
+
+    instance = command->graphInitializations[i];
+    native   = instance ? instance->_priv : NULL;
+    if (native && native->recordingCommandBuffer == command) {
+      native->recordingCommandBuffer = NULL;
+    }
+    command->graphInitializations[i] = NULL;
+  }
+  command->graphInitializationCount = 0u;
+#else
+  GPU__UNUSED(command);
+#endif
+}
+
+GPU_HIDE
+void
+dx12_submitGraphInitializations(GPUCommandBufferDX12 *command) {
+#if GPU_DX12_HAS_EXECUTION_GRAPHS
+  if (!command) {
+    return;
+  }
+  for (uint32_t i = 0u; i < command->graphInitializationCount; i++) {
+    GPUExecutionGraphInstanceEXT  *instance;
+    GPUExecutionGraphInstanceDX12 *native;
+
+    instance = command->graphInitializations[i];
+    native   = instance ? instance->_priv : NULL;
+    if (native && native->recordingCommandBuffer == command) {
+      native->recordingCommandBuffer = NULL;
+      native->initialized            = true;
+    }
+    command->graphInitializations[i] = NULL;
+  }
+  command->graphInitializationCount = 0u;
+#else
+  GPU__UNUSED(command);
+#endif
+}
 
 GPU_HIDE
 void

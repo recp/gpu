@@ -894,6 +894,7 @@ vk_destroyCommandQueue(GPUQueue *queue) {
     command = native->commands;
     while (command) {
       next = command->next;
+      vk_resetGraphInitializations(command);
 #ifdef __APPLE__
       while (command->transferChunks) {
         GPUTransferChunkVk *chunk;
@@ -1076,6 +1077,7 @@ vk_newCommandBuffer(GPUQueue  * __restrict queue,
     return NULL;
   }
 
+  vk_resetGraphInitializations(native);
   cmdb = &native->commandBuffer;
   memset(cmdb, 0, sizeof(*cmdb));
   native->presentSwapchain  = NULL;
@@ -1207,6 +1209,7 @@ vk_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
     gpuFinishCommandBuffer(cmdb, vk__recycleCommandBuffer);
     return GPU_ERROR_BACKEND_FAILURE;
   }
+  vk_submitGraphInitializations(native);
 
   commitResult        = GPU_OK;
   native->submitFence = submitFence;
@@ -1328,6 +1331,9 @@ vk_submitCommandBuffers(GPUQueue                  * __restrict queueHandle,
     vk__reportQueueError(buffers[0], "queue batch submit", result);
     vk__finishCommandBuffers(count, buffers, true);
     return GPU_ERROR_BACKEND_FAILURE;
+  }
+  for (uint32_t i = 0u; i < count; i++) {
+    vk_submitGraphInitializations(natives[i]);
   }
 
   vk__queueLock(queue);
@@ -1615,6 +1621,9 @@ vk_submitEx(GPUQueue                   *queueHandle,
                              info->ppCommandBuffers,
                              true);
     return GPU_ERROR_BACKEND_FAILURE;
+  }
+  for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
+    vk_submitGraphInitializations(natives[i]);
   }
 
   if (swapchain) {

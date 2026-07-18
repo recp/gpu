@@ -597,6 +597,10 @@ typedef struct GPUCommandBufferVk GPUCommandBufferVk;
 typedef struct GPUSwapchainVk     GPUSwapchainVk;
 typedef struct GPUTextureViewVk   GPUTextureViewVk;
 
+enum {
+  GPU_VK_GRAPH_INIT_TRACK_COUNT = 8u
+};
+
 typedef struct GPURenderPassVk {
   GPUSwapchainVk              *swapchain;
   GPUTextureViewVk            *colorViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
@@ -663,13 +667,16 @@ typedef struct GPURayTracingEncoderVk {
 #endif
 
 struct GPUCommandBufferVk {
-  GPUQueueVk              *owner;
-  GPUCommandBufferVk      *next;
-  GPUCommandBufferVk      *poolNext;
-  GPUCommandBufferVk      *pendingNext;
-  GPUSwapchainVk          *presentSwapchain;
+  GPUQueueVk                     *owner;
+  GPUCommandBufferVk             *next;
+  GPUCommandBufferVk             *poolNext;
+  GPUCommandBufferVk             *pendingNext;
+  GPUSwapchainVk                 *presentSwapchain;
+  GPUExecutionGraphInstanceEXT   *graphInitializations[
+    GPU_VK_GRAPH_INIT_TRACK_COUNT
+  ];
 #ifdef __APPLE__
-  GPUTransferChunkVk      *transferChunks;
+  GPUTransferChunkVk             *transferChunks;
 #endif
   VkCommandBuffer          command;
   VkFence                  fence;
@@ -692,6 +699,7 @@ struct GPUCommandBufferVk {
   GPUAccelerationStructureEncoderVk      rayQueryState;
 #endif
   GPUCommandBuffer          commandBuffer;
+  uint32_t                  graphInitializationCount;
   uint32_t                  presentImageIndex;
   uint32_t                  presentFrameIndex;
   bool                      frameTimeActive;
