@@ -31,18 +31,26 @@ typedef struct GPUExecutionGraphDX12 {
 } GPUExecutionGraphDX12;
 
 typedef struct GPUExecutionGraphInstanceDX12 {
-  GPUCommandBufferDX12       *recordingCommandBuffer;
-  ID3D12Resource             *backingMemory;
-  ID3D12Resource             *inputTable;
-  D3D12_NODE_CPU_INPUT       *cpuInputs;
-  D3D12_MULTI_NODE_GPU_INPUT *multiGpuInput;
-  D3D12_NODE_GPU_INPUT       *gpuInputs;
-  D3D12_GPU_VIRTUAL_ADDRESS   backingAddress;
-  D3D12_GPU_VIRTUAL_ADDRESS   multiGpuInputAddress;
-  D3D12_GPU_VIRTUAL_ADDRESS   inputTableAddress;
-  uint32_t                    inputCapacity;
-  bool                        initialized;
+  GPUCommandBufferDX12      *recordingCommandBuffer;
+  ID3D12Resource            *backingMemory;
+  D3D12_NODE_CPU_INPUT      *cpuInputs;
+  D3D12_GPU_VIRTUAL_ADDRESS  backingAddress;
+  uint32_t                   inputCapacity;
+  bool                       initialized;
 } GPUExecutionGraphInstanceDX12;
+
+struct GPUExecutionGraphInputChunkDX12 {
+  ID3D12Resource                         *resource;
+  struct GPUExecutionGraphInputChunkDX12 *next;
+  uint8_t                                *mapped;
+  D3D12_GPU_VIRTUAL_ADDRESS               address;
+  uint64_t                                capacity;
+  uint64_t                                offset;
+};
+
+enum {
+  GPU_DX12_GRAPH_INPUT_CHUNK_CAPACITY = 4096u
+};
 
 static bool
 dx12_graphWideName(const char *name, wchar_t outName[256]) {
@@ -274,17 +282,119 @@ dx12_createGraphBuffer(GPUDeviceDX12       *device,
            : GPU_ERROR_BACKEND_FAILURE;
 }
 
+static bool
+dx12_graphInputOffset(GPUExecutionGraphInputChunkDX12 *chunk,
+                      uint64_t                          alignment,
+                      uint64_t                         sizeBytes,
+                      uint64_t                        *outOffset) {
+  uint64_t address;
+  uint64_t padding;
+  uint64_t offset;
+
+  if (!chunk || !outOffset || alignment == 0u ||
+      (alignment & (alignment - 1u)) != 0u ||
+      chunk->offset > UINT64_MAX - chunk->address) {
+    return false;
+  }
+  address = chunk->address + chunk->offset;
+  padding = (alignment - address % alignment) % alignment;
+  if (chunk->offset > UINT64_MAX - padding) {
+    return false;
+  }
+  offset = chunk->offset + padding;
+  if (offset > chunk->capacity || sizeBytes > chunk->capacity - offset) {
+    return false;
+  }
+  *outOffset = offset;
+  return true;
+}
+
+static bool
+dx12_reserveGraphInput(GPUComputePassEncoder        *pass,
+                       uint64_t                      sizeBytes,
+                       uint64_t                      alignment,
+                       void                        **outMapped,
+                       D3D12_GPU_VIRTUAL_ADDRESS    *outAddress) {
+  GPUCommandBufferDX12             *command;
+  GPUDevice                        *device;
+  GPUDeviceDX12                    *deviceDX12;
+  GPUExecutionGraphInputChunkDX12  *chunk;
+  D3D12_RANGE                       noRead = {0};
+  uint64_t                          capacity;
+  uint64_t                          offset;
+  GPUResult                         result;
+
+  command  = pass && pass->_cmdb ? pass->_cmdb->_priv : NULL;
+  device   = pass ? pass->_device : NULL;
+  deviceDX12 = device ? device->_priv : NULL;
+  if (!command || !deviceDX12 || sizeBytes == 0u || alignment == 0u ||
+      (alignment & (alignment - 1u)) != 0u || !outMapped || !outAddress) {
+    return false;
+  }
+
+  for (chunk = command->graphInputChunks; chunk; chunk = chunk->next) {
+    if (dx12_graphInputOffset(chunk, alignment, sizeBytes, &offset)) {
+      chunk->offset = offset + sizeBytes;
+      *outMapped    = chunk->mapped + offset;
+      *outAddress   = chunk->address + offset;
+      return true;
+    }
+  }
+
+  if (sizeBytes > UINT64_MAX - (alignment - 1u)) {
+    return false;
+  }
+  capacity = sizeBytes + alignment - 1u;
+  if (capacity < GPU_DX12_GRAPH_INPUT_CHUNK_CAPACITY) {
+    capacity = GPU_DX12_GRAPH_INPUT_CHUNK_CAPACITY;
+  }
+  chunk = calloc(1, sizeof(*chunk));
+  if (!chunk) {
+    return false;
+  }
+  result = dx12_createGraphBuffer(deviceDX12,
+                                  capacity,
+                                  D3D12_HEAP_TYPE_UPLOAD,
+                                  D3D12_RESOURCE_FLAG_NONE,
+                                  D3D12_RESOURCE_STATE_GENERIC_READ,
+                                  &chunk->resource);
+  if (result != GPU_OK ||
+      FAILED(chunk->resource->lpVtbl->Map(chunk->resource,
+                                          0u,
+                                          &noRead,
+                                          (void **)&chunk->mapped)) ||
+      !chunk->mapped) {
+    if (chunk->resource) {
+      chunk->resource->lpVtbl->Release(chunk->resource);
+    }
+    free(chunk);
+    return false;
+  }
+  chunk->address = chunk->resource->lpVtbl
+    ->GetGPUVirtualAddress(chunk->resource);
+  chunk->capacity = capacity;
+  if (!chunk->address ||
+      !dx12_graphInputOffset(chunk, alignment, sizeBytes, &offset)) {
+    chunk->resource->lpVtbl->Unmap(chunk->resource, 0u, NULL);
+    chunk->resource->lpVtbl->Release(chunk->resource);
+    free(chunk);
+    return false;
+  }
+
+  chunk->offset             = offset + sizeBytes;
+  chunk->next               = command->graphInputChunks;
+  command->graphInputChunks = chunk;
+  gpuDeviceRecordHotPathAlloc(device, sizeof(*chunk) + capacity);
+  *outMapped  = chunk->mapped + offset;
+  *outAddress = chunk->address + offset;
+  return true;
+}
+
 static void
 dx12_destroyExecutionGraphInstanceState(
   GPUExecutionGraphInstanceDX12 *native) {
   if (!native) {
     return;
-  }
-  if (native->inputTable) {
-    if (native->multiGpuInput) {
-      native->inputTable->lpVtbl->Unmap(native->inputTable, 0u, NULL);
-    }
-    native->inputTable->lpVtbl->Release(native->inputTable);
   }
   if (native->backingMemory) {
     native->backingMemory->lpVtbl->Release(native->backingMemory);
@@ -301,9 +411,6 @@ dx12_createExecutionGraphInstance(
   GPUDeviceDX12                  *deviceDX12;
   GPUExecutionGraphDX12          *graph;
   GPUExecutionGraphInstanceDX12  *native;
-  D3D12_RANGE                     noRead = {0};
-  uint64_t                        inputOffset;
-  uint64_t                        tableSize;
   GPUResult                       result;
 
   deviceDX12 = device ? device->_priv : NULL;
@@ -343,42 +450,6 @@ dx12_createExecutionGraphInstance(
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
-
-  inputOffset = (sizeof(*native->multiGpuInput) + 15u) & ~UINT64_C(15);
-  if (graph->entryCount >
-      (UINT64_MAX - inputOffset) / sizeof(*native->gpuInputs)) {
-    dx12_destroyExecutionGraphInstanceState(native);
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  tableSize = inputOffset +
-              (uint64_t)graph->entryCount * sizeof(*native->gpuInputs);
-  result = dx12_createGraphBuffer(deviceDX12,
-                                  tableSize,
-                                  D3D12_HEAP_TYPE_UPLOAD,
-                                  D3D12_RESOURCE_FLAG_NONE,
-                                  D3D12_RESOURCE_STATE_GENERIC_READ,
-                                  &native->inputTable);
-  if (result != GPU_OK ||
-      FAILED(native->inputTable->lpVtbl->Map(native->inputTable,
-                                             0u,
-                                             &noRead,
-                                             (void **)&native->multiGpuInput)) ||
-      !native->multiGpuInput) {
-    dx12_destroyExecutionGraphInstanceState(native);
-    return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
-  }
-  native->multiGpuInputAddress = native->inputTable->lpVtbl
-    ->GetGPUVirtualAddress(native->inputTable);
-  if (!native->multiGpuInputAddress) {
-    dx12_destroyExecutionGraphInstanceState(native);
-    return GPU_ERROR_BACKEND_FAILURE;
-  }
-  native->gpuInputs = (D3D12_NODE_GPU_INPUT *)(
-    (uint8_t *)native->multiGpuInput + inputOffset
-  );
-  native->inputTableAddress = native->multiGpuInputAddress + inputOffset;
-  native->multiGpuInput->NodeInputs.StartAddress = native->inputTableAddress;
-  native->multiGpuInput->NodeInputs.StrideInBytes = sizeof(*native->gpuInputs);
 
   instance->_priv = native;
   return GPU_OK;
@@ -572,14 +643,18 @@ dx12_dispatchExecutionGraphBuffer(
   GPUComputeEncoderDX12          *encoder;
   GPUExecutionGraphDX12          *graph;
   GPUExecutionGraphInstanceDX12  *native;
+  D3D12_MULTI_NODE_GPU_INPUT     *multiInput;
+  D3D12_NODE_GPU_INPUT           *gpuInputs;
   D3D12_DISPATCH_GRAPH_DESC       desc = {0};
+  D3D12_GPU_VIRTUAL_ADDRESS       inputAddress;
+  uint64_t                        entryOffset;
+  uint64_t                        tableSize;
 
   encoder = pass ? pass->_priv : NULL;
   graph   = instance && instance->graph ? instance->graph->_priv : NULL;
   native  = instance ? instance->_priv : NULL;
   if (!encoder || !graph || !native || !inputs || inputCount == 0u ||
-      inputCount > native->inputCapacity ||
-      !dx12_setExecutionGraphInstance(pass, instance)) {
+      inputCount > native->inputCapacity) {
     return;
   }
 
@@ -591,22 +666,41 @@ dx12_dispatchExecutionGraphBuffer(
         !dx12_executionGraphEntryMatches(graph, &inputs[i].entry)) {
       return;
     }
-    native->gpuInputs[i].EntrypointIndex = inputs[i].entry.index;
-    native->gpuInputs[i].NumRecords      = inputs[i].recordCount;
-    native->gpuInputs[i].Records.StartAddress =
+  }
+
+  entryOffset = (sizeof(*multiInput) + 15u) & ~UINT64_C(15);
+  tableSize = entryOffset + (uint64_t)inputCount * sizeof(*gpuInputs);
+  if (!dx12_reserveGraphInput(pass,
+                              tableSize,
+                              16u,
+                              (void **)&multiInput,
+                              &inputAddress) ||
+      !dx12_setExecutionGraphInstance(pass, instance)) {
+    return;
+  }
+  gpuInputs = (D3D12_NODE_GPU_INPUT *)((uint8_t *)multiInput + entryOffset);
+  for (uint32_t i = 0u; i < inputCount; i++) {
+    GPUBufferDX12 *buffer;
+
+    buffer = inputs[i].records->_priv;
+    gpuInputs[i].EntrypointIndex = inputs[i].entry.index;
+    gpuInputs[i].NumRecords      = inputs[i].recordCount;
+    gpuInputs[i].Records.StartAddress =
       buffer->gpuAddress + inputs[i].recordOffset;
-    native->gpuInputs[i].Records.StrideInBytes =
+    gpuInputs[i].Records.StrideInBytes =
       inputs[i].recordStrideBytes
         ? inputs[i].recordStrideBytes
         : inputs[i].entry.recordSizeBytes;
   }
   if (inputCount == 1u) {
     desc.Mode         = D3D12_DISPATCH_MODE_NODE_GPU_INPUT;
-    desc.NodeGPUInput = native->inputTableAddress;
+    desc.NodeGPUInput = inputAddress + entryOffset;
   } else {
-    native->multiGpuInput->NumNodeInputs = inputCount;
+    multiInput->NumNodeInputs            = inputCount;
+    multiInput->NodeInputs.StartAddress  = inputAddress + entryOffset;
+    multiInput->NodeInputs.StrideInBytes = sizeof(*gpuInputs);
     desc.Mode              = D3D12_DISPATCH_MODE_MULTI_NODE_GPU_INPUT;
-    desc.MultiNodeGPUInput = native->multiGpuInputAddress;
+    desc.MultiNodeGPUInput = inputAddress;
   }
   encoder->commandList10->lpVtbl->DispatchGraph(encoder->commandList10,
                                                  &desc);
@@ -633,6 +727,39 @@ dx12_resetGraphInitializations(GPUCommandBufferDX12 *command) {
     command->graphInitializations[i] = NULL;
   }
   command->graphInitializationCount = 0u;
+  for (GPUExecutionGraphInputChunkDX12 *chunk = command->graphInputChunks;
+       chunk;
+       chunk = chunk->next) {
+    chunk->offset = 0u;
+  }
+#else
+  GPU__UNUSED(command);
+#endif
+}
+
+GPU_HIDE
+void
+dx12_destroyGraphInputScratch(GPUCommandBufferDX12 *command) {
+#if GPU_DX12_HAS_EXECUTION_GRAPHS
+  GPUExecutionGraphInputChunkDX12 *chunk;
+
+  chunk = command ? command->graphInputChunks : NULL;
+  while (chunk) {
+    GPUExecutionGraphInputChunkDX12 *next;
+
+    next = chunk->next;
+    if (chunk->resource) {
+      if (chunk->mapped) {
+        chunk->resource->lpVtbl->Unmap(chunk->resource, 0u, NULL);
+      }
+      chunk->resource->lpVtbl->Release(chunk->resource);
+    }
+    free(chunk);
+    chunk = next;
+  }
+  if (command) {
+    command->graphInputChunks = NULL;
+  }
 #else
   GPU__UNUSED(command);
 #endif

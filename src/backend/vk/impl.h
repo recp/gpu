@@ -42,6 +42,7 @@ GPU_HIDE void vk_initRayTracing(GPUApiRayTracing *api);
 GPU_HIDE void vk_initExecutionGraph(GPUApiExecutionGraph *api);
 GPU_HIDE void vk_resetGraphInitializations(GPUCommandBufferVk *command);
 GPU_HIDE void vk_submitGraphInitializations(GPUCommandBufferVk *command);
+GPU_HIDE void vk_destroyGraphInputScratch(GPUCommandBufferVk *command);
 
 GPU_HIDE
 bool

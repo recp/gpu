@@ -1093,6 +1093,7 @@ dx12_destroyCommandQueue(GPUQueue *queue) {
     while (command) {
       next = command->next;
       dx12_resetGraphInitializations(command);
+      dx12_destroyGraphInputScratch(command);
       if (command->frameTimeReadback) {
         if (command->frameTimeMapped) {
           command->frameTimeReadback->lpVtbl->Unmap(

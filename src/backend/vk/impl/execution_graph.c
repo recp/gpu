@@ -39,19 +39,29 @@ typedef struct GPUExecutionGraphVk {
 typedef struct GPUExecutionGraphInstanceVk {
   GPUCommandBufferVk       *recordingCommandBuffer;
   VkDispatchGraphInfoAMDX  *hostInfos;
-  VkDispatchGraphInfoAMDX  *gpuInfos;
   VkDevice                  device;
   VkBuffer                  scratchBuffer;
   VkDeviceMemory            scratchMemory;
-  VkBuffer                  inputBuffer;
-  VkDeviceMemory            inputMemory;
   VkDeviceAddress           scratchAddress;
-  VkDeviceAddress           inputAddress;
   uint64_t                  scratchOffset;
-  uint64_t                  inputOffset;
   uint32_t                  inputCapacity;
   bool                      initialized;
 } GPUExecutionGraphInstanceVk;
+
+struct GPUExecutionGraphInputChunkVk {
+  struct GPUExecutionGraphInputChunkVk *next;
+  uint8_t                              *mapped;
+  VkDevice                              device;
+  VkBuffer                              buffer;
+  VkDeviceMemory                        memory;
+  VkDeviceAddress                       address;
+  uint64_t                              capacity;
+  uint64_t                              offset;
+};
+
+enum {
+  GPU_VK_GRAPH_INPUT_CHUNK_CAPACITY = 4096u
+};
 
 static uint64_t
 vk_graphNameHash(const char *name, size_t length) {
@@ -380,19 +390,115 @@ vk_createGraphBuffer(GPUDevice            *device,
   return GPU_OK;
 }
 
+static bool
+vk_graphInputOffset(GPUExecutionGraphInputChunkVk *chunk,
+                    uint64_t                       alignment,
+                    uint64_t                       sizeBytes,
+                    uint64_t                      *outOffset) {
+  uint64_t address;
+  uint64_t padding;
+  uint64_t offset;
+
+  if (!chunk || !outOffset || alignment == 0u ||
+      chunk->offset > UINT64_MAX - chunk->address) {
+    return false;
+  }
+  address = chunk->address + chunk->offset;
+  padding = (alignment - address % alignment) % alignment;
+  if (chunk->offset > UINT64_MAX - padding) {
+    return false;
+  }
+  offset = chunk->offset + padding;
+  if (offset > chunk->capacity || sizeBytes > chunk->capacity - offset) {
+    return false;
+  }
+  *outOffset = offset;
+  return true;
+}
+
+static bool
+vk_reserveGraphInput(GPUComputePassEncoder *pass,
+                     uint64_t               sizeBytes,
+                     uint64_t               alignment,
+                     void                 **outMapped,
+                     VkDeviceAddress       *outAddress) {
+  GPUCommandBufferVk            *command;
+  GPUDevice                     *device;
+  GPUDeviceVk                   *deviceVk;
+  GPUExecutionGraphInputChunkVk *chunk;
+  VkDeviceAddress                address;
+  void                          *mapped;
+  uint64_t                       capacity;
+  uint64_t                       offset;
+  GPUResult                      result;
+
+  command  = pass && pass->_cmdb ? pass->_cmdb->_priv : NULL;
+  device   = pass ? pass->_device : NULL;
+  deviceVk = device ? device->_priv : NULL;
+  if (!command || !deviceVk || sizeBytes == 0u || alignment == 0u ||
+      !outMapped || !outAddress) {
+    return false;
+  }
+
+  for (chunk = command->graphInputChunks; chunk; chunk = chunk->next) {
+    if (vk_graphInputOffset(chunk, alignment, sizeBytes, &offset)) {
+      chunk->offset = offset + sizeBytes;
+      *outMapped    = chunk->mapped + offset;
+      *outAddress   = chunk->address + offset;
+      return true;
+    }
+  }
+
+  if (sizeBytes > UINT64_MAX - (alignment - 1u)) {
+    return false;
+  }
+  capacity = sizeBytes + alignment - 1u;
+  if (capacity < GPU_VK_GRAPH_INPUT_CHUNK_CAPACITY) {
+    capacity = GPU_VK_GRAPH_INPUT_CHUNK_CAPACITY;
+  }
+  chunk = calloc(1, sizeof(*chunk));
+  if (!chunk) {
+    return false;
+  }
+  mapped = NULL;
+  result = vk_createGraphBuffer(device,
+                                capacity,
+                                VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                                &chunk->buffer,
+                                &chunk->memory,
+                                &address,
+                                &mapped);
+  if (result != GPU_OK) {
+    free(chunk);
+    return false;
+  }
+  chunk->device   = deviceVk->device;
+  chunk->mapped   = mapped;
+  chunk->address  = address;
+  chunk->capacity = capacity;
+  if (!vk_graphInputOffset(chunk, alignment, sizeBytes, &offset)) {
+    vkUnmapMemory(chunk->device, chunk->memory);
+    vkDestroyBuffer(chunk->device, chunk->buffer, NULL);
+    vkFreeMemory(chunk->device, chunk->memory, NULL);
+    free(chunk);
+    return false;
+  }
+
+  chunk->offset             = offset + sizeBytes;
+  chunk->next               = command->graphInputChunks;
+  command->graphInputChunks = chunk;
+  gpuDeviceRecordHotPathAlloc(device, sizeof(*chunk) + capacity);
+  *outMapped  = chunk->mapped + offset;
+  *outAddress = chunk->address + offset;
+  return true;
+}
+
 static void
 vk_destroyExecutionGraphInstanceState(GPUExecutionGraphInstanceVk *native) {
   if (!native) {
     return;
-  }
-  if (native->device && native->inputMemory && native->gpuInfos) {
-    vkUnmapMemory(native->device, native->inputMemory);
-  }
-  if (native->device && native->inputBuffer) {
-    vkDestroyBuffer(native->device, native->inputBuffer, NULL);
-  }
-  if (native->device && native->inputMemory) {
-    vkFreeMemory(native->device, native->inputMemory, NULL);
   }
   if (native->device && native->scratchBuffer) {
     vkDestroyBuffer(native->device, native->scratchBuffer, NULL);
@@ -412,9 +518,6 @@ vk_createExecutionGraphInstance(
   GPUExecutionGraphInstanceVk *native;
   GPUDeviceVk                 *deviceVk;
   VkDeviceAddress              address;
-  void                        *mapped;
-  uint64_t                     inputAlignment;
-  uint64_t                     inputSize;
   uint64_t                     scratchSize;
   GPUResult                    result;
 
@@ -453,31 +556,6 @@ vk_createExecutionGraphInstance(
   native->scratchOffset  = vk_graphAlignedOffset(address, 64u);
   native->scratchAddress = address + native->scratchOffset;
 
-  inputAlignment = deviceVk->executionGraphDispatchAddressAlignment;
-  inputSize = (uint64_t)graph->entryCount * sizeof(*native->gpuInfos);
-  if (inputAlignment == 0u || inputSize > UINT64_MAX - (inputAlignment - 1u)) {
-    vk_destroyExecutionGraphInstanceState(native);
-    return GPU_ERROR_BACKEND_FAILURE;
-  }
-  inputSize += inputAlignment - 1u;
-  mapped = NULL;
-  result = vk_createGraphBuffer(device,
-                                inputSize,
-                                VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                                &native->inputBuffer,
-                                &native->inputMemory,
-                                &address,
-                                &mapped);
-  if (result != GPU_OK) {
-    vk_destroyExecutionGraphInstanceState(native);
-    return result;
-  }
-  native->inputOffset  = vk_graphAlignedOffset(address, inputAlignment);
-  native->inputAddress = address + native->inputOffset;
-  native->gpuInfos = (VkDispatchGraphInfoAMDX *)((uint8_t *)mapped +
-                                                  native->inputOffset);
   instance->_priv = native;
   return GPU_OK;
 }
@@ -683,15 +761,17 @@ vk_dispatchExecutionGraphBuffer(
   GPUComputeEncoderVk         *encoder;
   GPUExecutionGraphVk         *graph;
   GPUExecutionGraphInstanceVk *native;
+  VkDispatchGraphInfoAMDX     *gpuInfos;
   VkDispatchGraphCountInfoAMDX countInfo = {0};
+  VkDeviceAddress              inputAddress;
   uint64_t                     alignment;
+  uint64_t                     tableSize;
 
   encoder = pass ? pass->_priv : NULL;
   graph   = instance && instance->graph ? instance->graph->_priv : NULL;
   native  = instance ? instance->_priv : NULL;
   if (!encoder || !graph || !native || !inputs || inputCount == 0u ||
-      inputCount > native->inputCapacity ||
-      !vk_prepareExecutionGraphInstance(pass, instance)) {
+      inputCount > native->inputCapacity) {
     return;
   }
   alignment = graph->gpuDevice->executionGraphDispatchAddressAlignment;
@@ -705,16 +785,31 @@ vk_dispatchExecutionGraphBuffer(
         !vk_executionGraphEntryMatches(graph, &inputs[i].entry)) {
       return;
     }
-    native->gpuInfos[i].nodeIndex      = inputs[i].entry.index;
-    native->gpuInfos[i].payloadCount   = inputs[i].recordCount;
-    native->gpuInfos[i].payloads.deviceAddress = address;
-    native->gpuInfos[i].payloadStride = inputs[i].recordStrideBytes
-                                          ? inputs[i].recordStrideBytes
-                                          : inputs[i].entry.recordSizeBytes;
+  }
+
+  tableSize = (uint64_t)inputCount * sizeof(*gpuInfos);
+  if (!vk_reserveGraphInput(pass,
+                            tableSize,
+                            alignment,
+                            (void **)&gpuInfos,
+                            &inputAddress) ||
+      !vk_prepareExecutionGraphInstance(pass, instance)) {
+    return;
+  }
+  for (uint32_t i = 0u; i < inputCount; i++) {
+    VkDeviceAddress address;
+
+    address = inputs[i].records->_gpuAddress + inputs[i].recordOffset;
+    gpuInfos[i].nodeIndex      = inputs[i].entry.index;
+    gpuInfos[i].payloadCount   = inputs[i].recordCount;
+    gpuInfos[i].payloads.deviceAddress = address;
+    gpuInfos[i].payloadStride = inputs[i].recordStrideBytes
+                                  ? inputs[i].recordStrideBytes
+                                  : inputs[i].entry.recordSizeBytes;
   }
   countInfo.count               = inputCount;
-  countInfo.infos.deviceAddress = native->inputAddress;
-  countInfo.stride              = sizeof(*native->gpuInfos);
+  countInfo.infos.deviceAddress = inputAddress;
+  countInfo.stride              = sizeof(*gpuInfos);
   graph->gpuDevice->dispatchGraphIndirect(encoder->command,
                                           native->scratchAddress,
                                           instance->memorySizeBytes,
@@ -742,6 +837,42 @@ vk_resetGraphInitializations(GPUCommandBufferVk *command) {
     command->graphInitializations[i] = NULL;
   }
   command->graphInitializationCount = 0u;
+  for (GPUExecutionGraphInputChunkVk *chunk = command->graphInputChunks;
+       chunk;
+       chunk = chunk->next) {
+    chunk->offset = 0u;
+  }
+#else
+  GPU__UNUSED(command);
+#endif
+}
+
+GPU_HIDE
+void
+vk_destroyGraphInputScratch(GPUCommandBufferVk *command) {
+#ifdef VK_AMDX_shader_enqueue
+  GPUExecutionGraphInputChunkVk *chunk;
+
+  chunk = command ? command->graphInputChunks : NULL;
+  while (chunk) {
+    GPUExecutionGraphInputChunkVk *next;
+
+    next = chunk->next;
+    if (chunk->device && chunk->memory && chunk->mapped) {
+      vkUnmapMemory(chunk->device, chunk->memory);
+    }
+    if (chunk->device && chunk->buffer) {
+      vkDestroyBuffer(chunk->device, chunk->buffer, NULL);
+    }
+    if (chunk->device && chunk->memory) {
+      vkFreeMemory(chunk->device, chunk->memory, NULL);
+    }
+    free(chunk);
+    chunk = next;
+  }
+  if (command) {
+    command->graphInputChunks = NULL;
+  }
 #else
   GPU__UNUSED(command);
 #endif

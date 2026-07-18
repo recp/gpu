@@ -457,6 +457,8 @@ typedef struct GPUCopyScratchDX12 {
   D3D12_RESOURCE_STATES        state;
 } GPUCopyScratchDX12;
 
+typedef struct GPUExecutionGraphInputChunkDX12 GPUExecutionGraphInputChunkDX12;
+
 enum {
   GPU_DX12_GRAPH_INIT_TRACK_COUNT = 8u
 };
@@ -476,7 +478,8 @@ typedef struct GPUCommandBufferDX12 {
   UINT64                       *frameTimeMapped;
   GPUSwapchainDX12             *presentSwapchain;
   GPUCopyScratchDX12           *copyScratch;
-  GPUExecutionGraphInstanceEXT *graphInitializations[
+  GPUExecutionGraphInputChunkDX12 *graphInputChunks;
+  GPUExecutionGraphInstanceEXT    *graphInitializations[
     GPU_DX12_GRAPH_INIT_TRACK_COUNT
   ];
   struct GPUCommandBufferDX12  *next;

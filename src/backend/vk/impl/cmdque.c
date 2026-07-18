@@ -895,6 +895,7 @@ vk_destroyCommandQueue(GPUQueue *queue) {
     while (command) {
       next = command->next;
       vk_resetGraphInitializations(command);
+      vk_destroyGraphInputScratch(command);
 #ifdef __APPLE__
       while (command->transferChunks) {
         GPUTransferChunkVk *chunk;

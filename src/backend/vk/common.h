@@ -601,6 +601,8 @@ enum {
   GPU_VK_GRAPH_INIT_TRACK_COUNT = 8u
 };
 
+typedef struct GPUExecutionGraphInputChunkVk GPUExecutionGraphInputChunkVk;
+
 typedef struct GPURenderPassVk {
   GPUSwapchainVk              *swapchain;
   GPUTextureViewVk            *colorViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
@@ -672,6 +674,7 @@ struct GPUCommandBufferVk {
   GPUCommandBufferVk             *poolNext;
   GPUCommandBufferVk             *pendingNext;
   GPUSwapchainVk                 *presentSwapchain;
+  GPUExecutionGraphInputChunkVk  *graphInputChunks;
   GPUExecutionGraphInstanceEXT   *graphInitializations[
     GPU_VK_GRAPH_INIT_TRACK_COUNT
   ];

@@ -101,6 +101,7 @@ GPU_HIDE void dx12_initRayTracing(GPUApiRayTracing *api);
 GPU_HIDE void dx12_initExecutionGraph(GPUApiExecutionGraph *api);
 GPU_HIDE void dx12_resetGraphInitializations(GPUCommandBufferDX12 *command);
 GPU_HIDE void dx12_submitGraphInitializations(GPUCommandBufferDX12 *command);
+GPU_HIDE void dx12_destroyGraphInputScratch(GPUCommandBufferDX12 *command);
 GPU_HIDE bool dx12_bindRayTracingGroup(GPURayTracingPassEncoderEXT *pass,
                                        GPUPipelineLayout           *pipelineLayout,
                                        uint32_t                     groupIndex,
