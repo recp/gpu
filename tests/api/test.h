@@ -43,6 +43,7 @@ typedef struct GPUApiTestContext {
   const char  *atomic64BytecodePath;
   const char  *rayQueryBytecodePath;
   const char  *rayPipelineBytecodePath;
+  const char  *executionGraphBytecodePath;
 } GPUApiTestContext;
 
 typedef int (*GPUApiTestRunFn)(void *ctx);
@@ -74,6 +75,7 @@ int gpu_test_render(GPUDevice *device, const char *mrtBytecodePath);
 int gpu_test_metal_vertex_slots(GPUDevice *device, const char *bytecodePath);
 int gpu_test_compute(GPUDevice *device, const char *bytecodePath);
 int gpu_test_execution_graph_validation(void);
+int gpu_test_execution_graph(GPUAdapter *adapter, const char *bytecodePath);
 int gpu_test_query(GPUAdapter *adapter,
                    GPUDevice  *device,
                    const char *computeBytecodePath);

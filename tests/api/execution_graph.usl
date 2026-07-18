@@ -1,0 +1,6 @@
+@node_entry
+@node_launch(broadcasting)
+@node_dispatch_grid(1, 1, 1)
+node(1, 1, 1) graph_entry(inout output: [uint] #buffer(0)) {
+  output[0] = 0x47524150u
+}

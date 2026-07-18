@@ -61,8 +61,11 @@ run_compute(void *ctx) {
 
 static int
 run_execution_graph(void *ctx) {
-  (void)ctx;
-  return gpu_test_execution_graph_validation();
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_execution_graph_validation() &&
+         gpu_test_execution_graph(testCtx->adapter,
+                                  testCtx->executionGraphBytecodePath);
 }
 
 static int
@@ -332,6 +335,7 @@ main(int argc, char **argv) {
   ctx.atomic64BytecodePath           = getenv("GPU_ATOMIC64_USL_PATH");
   ctx.rayQueryBytecodePath           = getenv("GPU_RAY_QUERY_USL_PATH");
   ctx.rayPipelineBytecodePath        = getenv("GPU_RAY_PIPELINE_USL_PATH");
+  ctx.executionGraphBytecodePath     = getenv("GPU_EXECUTION_GRAPH_USL_PATH");
 
   tests[0]  = (GPUApiTest){ "queue", run_queue, &ctx };
   tests[1]  = (GPUApiTest){ "sampler", run_sampler, &ctx };
