@@ -172,6 +172,13 @@ test_mesh_draw(GPUDevice  *device,
   pipelineInfo.frontFace         = GPU_FRONT_FACE_CCW;
   pipelineInfo.multisample.sampleCount = 1u;
   pipelineInfo.multisample.sampleMask  = UINT32_MAX;
+  pipelineInfo.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_LINE_LIST;
+  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) !=
+        GPU_ERROR_INVALID_ARGUMENT || pipeline) {
+    fprintf(stderr, "mesh pipeline accepted mismatched output topology\n");
+    goto cleanup;
+  }
+  pipelineInfo.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
   if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
       !pipeline) {
     fprintf(stderr, "failed to create mesh pipeline\n");

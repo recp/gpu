@@ -419,6 +419,37 @@ gpu_resolveMeshPayloadSize(const GPURenderPipelineCreateInfo *info,
   return GPU_OK;
 }
 
+static bool
+gpu_meshOutputMatches(const GPURenderPipelineCreateInfo *info,
+                      const GPUMeshPipelineEXT          *mesh) {
+  uint32_t topology;
+  uint32_t maxVertices;
+  uint32_t maxPrimitives;
+
+  if (!mesh ||
+      !gpuGetShaderLibraryMeshOutputInfo(info->library,
+                                         mesh->meshEntry,
+                                         &topology,
+                                         &maxVertices,
+                                         &maxPrimitives)) {
+    return true;
+  }
+  if (maxVertices == 0u || maxPrimitives == 0u) {
+    return false;
+  }
+
+  switch (topology) {
+    case USL_RUNTIME_MESH_TOPOLOGY_POINT:
+      return info->primitiveTopology == GPU_PRIMITIVE_TOPOLOGY_POINT_LIST;
+    case USL_RUNTIME_MESH_TOPOLOGY_LINE:
+      return info->primitiveTopology == GPU_PRIMITIVE_TOPOLOGY_LINE_LIST;
+    case USL_RUNTIME_MESH_TOPOLOGY_TRIANGLE:
+      return info->primitiveTopology == GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    default:
+      return false;
+  }
+}
+
 static void
 gpu_setMeshPipelineInfo(GPURenderPipeline         *pipeline,
                         const GPUShaderLibrary    *library,
@@ -604,6 +635,10 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     }
   }
   if (!gpu_renderPipelineEntriesMatchStages(info, mesh)) {
+    gpuPipelineCacheReleaseKey(&cacheKey);
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!gpu_meshOutputMatches(info, mesh)) {
     gpuPipelineCacheReleaseKey(&cacheKey);
     return GPU_ERROR_INVALID_ARGUMENT;
   }

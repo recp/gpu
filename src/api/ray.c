@@ -506,20 +506,28 @@ static void
 gpu_accumulateRayInterface(const GPUShaderLibrary *library,
                            const char             *entry,
                            GPUShaderStageFlags     stage,
-                           bool                    requirePayload,
-                           bool                    requireHitAttribute,
                            uint32_t               *maxPayloadSizeBytes,
                            uint32_t               *maxHitAttributeSizeBytes,
                            bool                   *payloadMetadataMissing,
-                           bool                   *hitMetadataMissing) {
+                           bool                   *hitMetadataMissing,
+                           bool                   *callableMetadataMissing) {
   uint32_t payloadSizeBytes;
   uint32_t hitAttributeSizeBytes;
   uint32_t callableDataSizeBytes;
+  bool     requirePayload;
+  bool     requireHitAttribute;
+  bool     requireCallableData;
   bool     reflected;
 
   if (!entry) {
     return;
   }
+  requirePayload = stage == GPU_SHADER_STAGE_MISS_BIT ||
+                   stage == GPU_SHADER_STAGE_CLOSEST_HIT_BIT ||
+                   stage == GPU_SHADER_STAGE_ANY_HIT_BIT;
+  requireHitAttribute = stage == GPU_SHADER_STAGE_CLOSEST_HIT_BIT ||
+                        stage == GPU_SHADER_STAGE_ANY_HIT_BIT;
+  requireCallableData = stage == GPU_SHADER_STAGE_CALLABLE_BIT;
   reflected = gpuGetShaderLibraryRayInterfaceInfo(
     library,
     entry,
@@ -528,8 +536,6 @@ gpu_accumulateRayInterface(const GPUShaderLibrary *library,
     &hitAttributeSizeBytes,
     &callableDataSizeBytes
   ) != 0;
-  GPU__UNUSED(callableDataSizeBytes);
-
   if (requirePayload && (!reflected || payloadSizeBytes == 0u)) {
     *payloadMetadataMissing = true;
   } else if (reflected && payloadSizeBytes > *maxPayloadSizeBytes) {
@@ -540,6 +546,9 @@ gpu_accumulateRayInterface(const GPUShaderLibrary *library,
   } else if (reflected &&
              hitAttributeSizeBytes > *maxHitAttributeSizeBytes) {
     *maxHitAttributeSizeBytes = hitAttributeSizeBytes;
+  }
+  if (requireCallableData && reflected && callableDataSizeBytes == 0u) {
+    *callableMetadataMissing = true;
   }
 }
 
@@ -557,11 +566,13 @@ gpu_resolveRayInterfaceLimits(
   uint32_t reflectedHitAttributeSizeBytes;
   bool     payloadMetadataMissing;
   bool     hitMetadataMissing;
+  bool     callableMetadataMissing;
 
   reflectedPayloadSizeBytes      = 0u;
   reflectedHitAttributeSizeBytes = 0u;
   payloadMetadataMissing         = false;
   hitMetadataMissing             = false;
+  callableMetadataMissing        = false;
 
   for (uint32_t i = 0u; i < groupCount; i++) {
     const GPURayTracingShaderGroupEXT *group;
@@ -574,46 +585,43 @@ gpu_resolveRayInterfaceLimits(
       gpu_accumulateRayInterface(library,
                                  group->generalEntry,
                                  stage,
-                                 stage == GPU_SHADER_STAGE_MISS_BIT,
-                                 false,
                                  &reflectedPayloadSizeBytes,
                                  &reflectedHitAttributeSizeBytes,
                                  &payloadMetadataMissing,
-                                 &hitMetadataMissing);
+                                 &hitMetadataMissing,
+                                 &callableMetadataMissing);
       continue;
     }
 
     gpu_accumulateRayInterface(library,
                                group->closestHitEntry,
                                GPU_SHADER_STAGE_CLOSEST_HIT_BIT,
-                               group->closestHitEntry != NULL,
-                               group->closestHitEntry != NULL,
                                &reflectedPayloadSizeBytes,
                                &reflectedHitAttributeSizeBytes,
                                &payloadMetadataMissing,
-                               &hitMetadataMissing);
+                               &hitMetadataMissing,
+                               &callableMetadataMissing);
     gpu_accumulateRayInterface(library,
                                group->anyHitEntry,
                                GPU_SHADER_STAGE_ANY_HIT_BIT,
-                               group->anyHitEntry != NULL,
-                               group->anyHitEntry != NULL,
                                &reflectedPayloadSizeBytes,
                                &reflectedHitAttributeSizeBytes,
                                &payloadMetadataMissing,
-                               &hitMetadataMissing);
+                               &hitMetadataMissing,
+                               &callableMetadataMissing);
     gpu_accumulateRayInterface(library,
                                group->intersectionEntry,
                                GPU_SHADER_STAGE_INTERSECTION_BIT,
-                               false,
-                               false,
                                &reflectedPayloadSizeBytes,
                                &reflectedHitAttributeSizeBytes,
                                &payloadMetadataMissing,
-                               &hitMetadataMissing);
+                               &hitMetadataMissing,
+                               &callableMetadataMissing);
   }
 
   if ((requestedPayloadSizeBytes == 0u && payloadMetadataMissing) ||
       (requestedHitAttributeSizeBytes == 0u && hitMetadataMissing) ||
+      callableMetadataMissing ||
       (requestedPayloadSizeBytes > 0u &&
        requestedPayloadSizeBytes < reflectedPayloadSizeBytes) ||
       (requestedHitAttributeSizeBytes > 0u &&

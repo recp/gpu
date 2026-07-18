@@ -94,6 +94,14 @@ gpuGetShaderLibraryComputeWorkgroupSize(const GPUShaderLibrary *library,
 
 GPU_HIDE
 int
+gpuGetShaderLibraryMeshOutputInfo(const GPUShaderLibrary *library,
+                                  const char               *entryPoint,
+                                  uint32_t                 *outTopology,
+                                  uint32_t                 *outMaxVertices,
+                                  uint32_t                 *outMaxPrimitives);
+
+GPU_HIDE
+int
 gpuGetShaderLibraryEntryStage(const GPUShaderLibrary *library,
                               const char *entryPoint,
                               GPUShaderStageFlags *outStage);

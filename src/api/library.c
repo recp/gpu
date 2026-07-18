@@ -27,6 +27,9 @@ typedef struct GPUShaderEntryInfo {
   uint32_t  stage;
   uint32_t  runtimeStage;
   uint32_t  workgroupSize[3];
+  uint32_t  meshTopology;
+  uint32_t  meshMaxVertices;
+  uint32_t  meshMaxPrimitives;
   uint32_t  resourceStart;
   uint32_t  resourceCount;
   uint32_t  payloadSizeBytes;
@@ -487,6 +490,39 @@ gpuGetShaderLibraryComputeWorkgroupSize(const GPUShaderLibrary *library,
                                           entryPoint,
                                           GPU_SHADER_STAGE_COMPUTE_BIT,
                                           outSize);
+}
+
+GPU_HIDE
+int
+gpuGetShaderLibraryMeshOutputInfo(const GPUShaderLibrary *library,
+                                  const char               *entryPoint,
+                                  uint32_t                 *outTopology,
+                                  uint32_t                 *outMaxVertices,
+                                  uint32_t                 *outMaxPrimitives) {
+  const GPUShaderEntryInfo *entry;
+
+  if (outTopology) {
+    *outTopology = USL_RUNTIME_MESH_TOPOLOGY_UNKNOWN;
+  }
+  if (outMaxVertices) {
+    *outMaxVertices = 0u;
+  }
+  if (outMaxPrimitives) {
+    *outMaxPrimitives = 0u;
+  }
+  if (!outTopology || !outMaxVertices || !outMaxPrimitives) {
+    return 0;
+  }
+
+  entry = gpu_findShaderEntry(library, entryPoint);
+  if (!entry || entry->stage != GPU_SHADER_STAGE_MESH_BIT) {
+    return 0;
+  }
+
+  *outTopology      = entry->meshTopology;
+  *outMaxVertices   = entry->meshMaxVertices;
+  *outMaxPrimitives = entry->meshMaxPrimitives;
+  return 1;
 }
 
 GPU_HIDE
@@ -1092,14 +1128,17 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
       return 0;
     }
 
-    dst                   = &entryInfo->entries[entryInfo->count++];
-    dst->name             = gpu_storeMetadataText(&textCursor,
-                                                  src->name,
-                                                  nameSize);
-    dst->nameHash         = gpu_shaderNameHash(src->name, nameSize - 1u);
-    dst->nameLength       = (uint32_t)(nameSize - 1u);
+    dst                       = &entryInfo->entries[entryInfo->count++];
+    dst->name                 = gpu_storeMetadataText(&textCursor,
+                                                      src->name,
+                                                      nameSize);
+    dst->nameHash             = gpu_shaderNameHash(src->name, nameSize - 1u);
+    dst->nameLength           = (uint32_t)(nameSize - 1u);
     dst->stage                 = stage;
     dst->runtimeStage          = src->stage;
+    dst->meshTopology          = src->mesh_topology;
+    dst->meshMaxVertices       = src->mesh_max_vertices;
+    dst->meshMaxPrimitives     = src->mesh_max_primitives;
     dst->payloadSizeBytes      = src->payload_size_bytes;
     dst->rayPayloadSizeBytes   = src->ray_payload_size_bytes;
     dst->hitAttributeSizeBytes = src->hit_attribute_size_bytes;
