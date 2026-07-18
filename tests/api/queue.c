@@ -1319,6 +1319,65 @@ check_swapchain_create_validation(GPUDevice *device) {
 }
 
 static int
+check_execution_graph_feature_contract(GPUAdapter *adapter) {
+  GPUFeature          feature = GPU_FEATURE_EXECUTION_GRAPH;
+  GPUQueueRequest     request = {0};
+  GPUDeviceCreateInfo createInfo = {0};
+  GPUCommandBuffer   *cmdb;
+  GPUDevice          *device;
+  GPUQueue           *queue;
+  GPUResult           result;
+
+  createInfo.chain.sType            = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  createInfo.chain.structSize       = sizeof(createInfo);
+  createInfo.required.featureCount  = 1u;
+  createInfo.required.pFeatures     = &feature;
+
+  if (!GPUIsFeatureSupported(adapter, feature)) {
+    device = (GPUDevice *)(uintptr_t)1u;
+    result = GPUCreateDevice(adapter, &createInfo, &device);
+    if (result != GPU_ERROR_UNSUPPORTED || device != NULL) {
+      fprintf(stderr, "device accepted unsupported execution graph feature\n");
+      return 0;
+    }
+    return 1;
+  }
+
+  request.type                         = GPU_QUEUE_COMPUTE;
+  request.count                        = 1u;
+  createInfo.queues.chain.sType        =
+    GPU_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  createInfo.queues.chain.structSize = sizeof(createInfo.queues);
+  createInfo.queues.requestCount       = 1u;
+  createInfo.queues.pRequests          = &request;
+
+  device = NULL;
+  if (GPUCreateDevice(adapter, &createInfo, &device) != GPU_OK || !device ||
+      !GPUIsFeatureEnabled(device, feature) ||
+      !GPUIsFeatureEnabled(device, GPU_FEATURE_BUFFER_DEVICE_ADDRESS) ||
+      !GPUGetProcAddr(device, "GPUCreateExecutionGraphEXT")) {
+    fprintf(stderr, "execution graph feature contract failed\n");
+    if (device) {
+      GPUDestroyDevice(device);
+    }
+    return 0;
+  }
+
+  queue = GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0u);
+  cmdb  = NULL;
+  if (!queue ||
+      GPUAcquireCommandBuffer(queue, "execution-graph-probe", &cmdb) != GPU_OK ||
+      !cmdb) {
+    fprintf(stderr, "execution graph command-list probe failed\n");
+    GPUDestroyDevice(device);
+    return 0;
+  }
+
+  GPUDestroyDevice(device);
+  return 1;
+}
+
+static int
 check_device_queue_create_validation(GPUAdapter *adapter) {
   GPUDeviceCreateInfo createInfo = {0};
   GPUFeature requiredFeature = GPU_FEATURE_VARIABLE_RATE_SHADING;
@@ -1889,6 +1948,7 @@ gpu_test_queue(GPUInstance *instance,
          check_secondary_backend_instance(instance) &&
          check_queue_frame_device_dispatch(device) &&
          check_adapter_enumeration(instance) &&
+         check_execution_graph_feature_contract(adapter) &&
          check_device_queue_create_validation(adapter) &&
          check_device_destroy_waits_for_submission(adapter) &&
          check_queue_selection(device) &&
