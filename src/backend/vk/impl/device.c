@@ -1324,8 +1324,10 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     shaderClockFeatures2.pNext = &shaderClockFeatures;
     getFeatures2(raw, &shaderClockFeatures2);
     adapterVk->shaderSubgroupClock =
+      adapterVk->features.shaderInt64 &&
       shaderClockFeatures.shaderSubgroupClock == VK_TRUE;
     adapterVk->shaderDeviceClock =
+      adapterVk->features.shaderInt64 &&
       shaderClockFeatures.shaderDeviceClock == VK_TRUE;
     if ((adapterVk->shaderSubgroupClock || adapterVk->shaderDeviceClock) &&
         !vk_addDeviceExtension(adapterVk,
@@ -2639,7 +2641,11 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   }
   coreFeatures.independentBlend   = adapterVk->features.independentBlend;
   coreFeatures.imageCubeArray     = adapterVk->features.imageCubeArray;
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u) {
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u ||
+      vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_SHADER_SUBGROUP_CLOCK) ||
+      vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_SHADER_DEVICE_CLOCK)) {
     coreFeatures.shaderInt64 = VK_TRUE;
   }
 

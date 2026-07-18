@@ -44,6 +44,10 @@ typedef struct GPUApiTestContext {
   const char  *rayQueryBytecodePath;
   const char  *rayPipelineBytecodePath;
   const char  *executionGraphBytecodePath;
+  const char  *shaderSubgroupClockBytecodePath;
+  const char  *shaderDeviceClockBytecodePath;
+  const char  *computeDerivativeQuadsBytecodePath;
+  const char  *computeDerivativeLinearBytecodePath;
 } GPUApiTestContext;
 
 typedef int (*GPUApiTestRunFn)(void *ctx);
@@ -104,5 +108,10 @@ int gpu_test_sampler_feedback(GPUAdapter *adapter, GPUDevice *defaultDevice);
 int gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath);
 int gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
                                   const char *bytecodePath);
+int gpu_test_clock_derivatives(GPUAdapter *adapter,
+                               const char *subgroupClockPath,
+                               const char *deviceClockPath,
+                               const char *derivativeQuadsPath,
+                               const char *derivativeLinearPath);
 
 #endif /* gpu_tests_api_test_h */

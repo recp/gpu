@@ -1,0 +1,8 @@
+@require(compute_derivatives_quads)
+kern(2, 2, 1) compute_derivatives_quads_cs(
+  inout output: [float] #buffer(0),
+  gid: uint3 #global_id
+) {
+  output[gid.x + gid.y * uint(2)] =
+    dfdx(float(gid.x)) + dfdy(float(gid.y))
+}

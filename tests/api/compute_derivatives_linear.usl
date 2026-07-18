@@ -1,0 +1,7 @@
+@require(compute_derivatives_linear)
+kern(4, 1, 1) compute_derivatives_linear_cs(
+  inout output: [float] #buffer(0),
+  gid: uint3 #global_id
+) {
+  output[gid.x] = fwidth(float(gid.x))
+}

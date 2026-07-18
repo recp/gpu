@@ -632,6 +632,46 @@ if(GPU_BUILD_TESTS)
   endif()
 
   if(GPU_BUILD_VULKAN)
+    set(GPU_USL_FIXTURE_TARGET_CAPS vulkan1_2,shader_subgroup_clock)
+    gpu_add_usl_fixtures(
+      GPU_API_VULKAN_SUBGROUP_CLOCK_USL_FIXTURE
+      vulkan
+      api-clock-derivatives
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/shader_subgroup_clock.usl"
+    )
+    set(GPU_USL_FIXTURE_TARGET_CAPS vulkan1_2,shader_device_clock)
+    gpu_add_usl_fixtures(
+      GPU_API_VULKAN_DEVICE_CLOCK_USL_FIXTURE
+      vulkan
+      api-clock-derivatives
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/shader_device_clock.usl"
+    )
+    set(GPU_USL_FIXTURE_TARGET_CAPS vulkan1_2,compute_derivatives_quads)
+    gpu_add_usl_fixtures(
+      GPU_API_VULKAN_DERIVATIVE_QUADS_USL_FIXTURE
+      vulkan
+      api-clock-derivatives
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/compute_derivatives_quads.usl"
+    )
+    set(GPU_USL_FIXTURE_TARGET_CAPS vulkan1_2,compute_derivatives_linear)
+    gpu_add_usl_fixtures(
+      GPU_API_VULKAN_DERIVATIVE_LINEAR_USL_FIXTURE
+      vulkan
+      api-clock-derivatives
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/compute_derivatives_linear.usl"
+    )
+    unset(GPU_USL_FIXTURE_TARGET_CAPS)
+    set(GPU_API_VULKAN_CLOCK_DERIVATIVE_USL_FIXTURES
+      ${GPU_API_VULKAN_SUBGROUP_CLOCK_USL_FIXTURE}
+      ${GPU_API_VULKAN_DEVICE_CLOCK_USL_FIXTURE}
+      ${GPU_API_VULKAN_DERIVATIVE_QUADS_USL_FIXTURE}
+      ${GPU_API_VULKAN_DERIVATIVE_LINEAR_USL_FIXTURE}
+    )
+    add_custom_target(
+      gpu-api-vulkan-clock-derivative-fixtures
+      DEPENDS ${GPU_API_VULKAN_CLOCK_DERIVATIVE_USL_FIXTURES}
+    )
+
     set(GPU_USL_FIXTURE_TARGET_CAPS ray_query)
     gpu_add_usl_fixtures(
       GPU_API_VULKAN_RAY_QUERY_USL_FIXTURE
@@ -1010,6 +1050,7 @@ if(GPU_BUILD_TESTS)
     tests/api/barrier.c
     tests/api/bindgroup.c
     tests/api/compute.c
+    tests/api/clock_derivative.c
     tests/api/coordinate.c
     tests/api/copy.c
     tests/api/cube_texture.c
@@ -1068,6 +1109,9 @@ if(GPU_BUILD_TESTS)
   if(TARGET gpu-api-vulkan-execution-graph-fixture)
     add_dependencies(gpu-api-test gpu-api-vulkan-execution-graph-fixture)
   endif()
+  if(TARGET gpu-api-vulkan-clock-derivative-fixtures)
+    add_dependencies(gpu-api-test gpu-api-vulkan-clock-derivative-fixtures)
+  endif()
   target_compile_definitions(gpu-api-test PRIVATE
     GPU_BUILD_WITH_VALIDATION=$<BOOL:${GPU_BUILD_WITH_VALIDATION}>
     GPU_BUILD_WITH_DEBUG_MARKERS=$<BOOL:${GPU_BUILD_WITH_DEBUG_MARKERS}>
@@ -1121,6 +1165,15 @@ if(GPU_BUILD_TESTS)
          GPU_API_VULKAN_EXECUTION_GRAPH_USL_FIXTURE)
     set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
       "GPU_EXECUTION_GRAPH_USL_PATH=${GPU_API_VULKAN_EXECUTION_GRAPH_USL_FIXTURE}"
+    )
+  endif()
+  if(GPU_API_DEFAULT_BACKEND STREQUAL "vulkan" AND
+     GPU_API_VULKAN_CLOCK_DERIVATIVE_USL_FIXTURES)
+    set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
+      "GPU_SHADER_SUBGROUP_CLOCK_USL_PATH=${GPU_API_VULKAN_SUBGROUP_CLOCK_USL_FIXTURE}"
+      "GPU_SHADER_DEVICE_CLOCK_USL_PATH=${GPU_API_VULKAN_DEVICE_CLOCK_USL_FIXTURE}"
+      "GPU_COMPUTE_DERIVATIVE_QUADS_USL_PATH=${GPU_API_VULKAN_DERIVATIVE_QUADS_USL_FIXTURE}"
+      "GPU_COMPUTE_DERIVATIVE_LINEAR_USL_PATH=${GPU_API_VULKAN_DERIVATIVE_LINEAR_USL_FIXTURE}"
     )
   endif()
   if(GPU_API_SUBGROUP_MATRIX_USL_FIXTURE)
@@ -1181,6 +1234,14 @@ if(GPU_BUILD_TESTS)
     if(GPU_API_VULKAN_EXECUTION_GRAPH_USL_FIXTURE)
       set_property(TEST api-validation-vulkan APPEND PROPERTY ENVIRONMENT
         "GPU_EXECUTION_GRAPH_USL_PATH=${GPU_API_VULKAN_EXECUTION_GRAPH_USL_FIXTURE}"
+      )
+    endif()
+    if(GPU_API_VULKAN_CLOCK_DERIVATIVE_USL_FIXTURES)
+      set_property(TEST api-validation-vulkan APPEND PROPERTY ENVIRONMENT
+        "GPU_SHADER_SUBGROUP_CLOCK_USL_PATH=${GPU_API_VULKAN_SUBGROUP_CLOCK_USL_FIXTURE}"
+        "GPU_SHADER_DEVICE_CLOCK_USL_PATH=${GPU_API_VULKAN_DEVICE_CLOCK_USL_FIXTURE}"
+        "GPU_COMPUTE_DERIVATIVE_QUADS_USL_PATH=${GPU_API_VULKAN_DERIVATIVE_QUADS_USL_FIXTURE}"
+        "GPU_COMPUTE_DERIVATIVE_LINEAR_USL_PATH=${GPU_API_VULKAN_DERIVATIVE_LINEAR_USL_FIXTURE}"
       )
     endif()
     if(GPU_API_DEFAULT_BACKEND STREQUAL "vulkan")

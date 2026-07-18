@@ -1,0 +1,7 @@
+@require(shader_subgroup_clock)
+kern(1, 1, 1) shader_subgroup_clock_cs(
+  inout output: [ulong] #buffer(0)
+) {
+  output[0] = subgroup_clock()
+  output[1] = ulong(123456789)
+}

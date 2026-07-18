@@ -227,6 +227,19 @@ run_ray_pipeline(void *ctx) {
                                        testCtx->rayPipelineBytecodePath);
 }
 
+static int
+run_clock_derivatives(void *ctx) {
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_clock_derivatives(
+    testCtx->adapter,
+    testCtx->shaderSubgroupClockBytecodePath,
+    testCtx->shaderDeviceClockBytecodePath,
+    testCtx->computeDerivativeQuadsBytecodePath,
+    testCtx->computeDerivativeLinearBytecodePath
+  );
+}
+
 static GPUAdapter *
 select_adapter(GPUInstance *instance) {
   GPUAdapter *adapter = NULL;
@@ -267,7 +280,7 @@ main(int argc, char **argv) {
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUApiTestContext      ctx;
-  GPUApiTest             tests[31];
+  GPUApiTest             tests[32];
   int                    ok;
 
   if (argc != 14 && argc != 15) {
@@ -343,6 +356,14 @@ main(int argc, char **argv) {
   ctx.rayQueryBytecodePath           = getenv("GPU_RAY_QUERY_USL_PATH");
   ctx.rayPipelineBytecodePath        = getenv("GPU_RAY_PIPELINE_USL_PATH");
   ctx.executionGraphBytecodePath     = getenv("GPU_EXECUTION_GRAPH_USL_PATH");
+  ctx.shaderSubgroupClockBytecodePath =
+    getenv("GPU_SHADER_SUBGROUP_CLOCK_USL_PATH");
+  ctx.shaderDeviceClockBytecodePath =
+    getenv("GPU_SHADER_DEVICE_CLOCK_USL_PATH");
+  ctx.computeDerivativeQuadsBytecodePath =
+    getenv("GPU_COMPUTE_DERIVATIVE_QUADS_USL_PATH");
+  ctx.computeDerivativeLinearBytecodePath =
+    getenv("GPU_COMPUTE_DERIVATIVE_LINEAR_USL_PATH");
 
   tests[0]  = (GPUApiTest){ "queue", run_queue, &ctx };
   tests[1]  = (GPUApiTest){ "sampler", run_sampler, &ctx };
@@ -380,6 +401,9 @@ main(int argc, char **argv) {
   tests[29] = (GPUApiTest){ "execution-graph", run_execution_graph, &ctx };
   tests[30] = (GPUApiTest){
     "sampler-feedback", run_sampler_feedback, &ctx
+  };
+  tests[31] = (GPUApiTest){
+    "clock-derivatives", run_clock_derivatives, &ctx
   };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
