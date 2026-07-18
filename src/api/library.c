@@ -135,6 +135,16 @@ gpu_uslSemanticEnabled(const GPUDevice *device, uint32_t semanticId) {
       return GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_TRACING_PIPELINE);
     case USL_SEMANTIC_FEATURE_ID_ATOMIC64:
       return GPUIsFeatureEnabled(device, GPU_FEATURE_ATOMIC64);
+    case USL_SEMANTIC_FEATURE_ID_SHADER_SUBGROUP_CLOCK:
+      return GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_SUBGROUP_CLOCK);
+    case USL_SEMANTIC_FEATURE_ID_SHADER_DEVICE_CLOCK:
+      return GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_DEVICE_CLOCK);
+    case USL_SEMANTIC_FEATURE_ID_COMPUTE_DERIVATIVES_QUADS:
+      return GPUIsFeatureEnabled(device,
+                                 GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS);
+    case USL_SEMANTIC_FEATURE_ID_COMPUTE_DERIVATIVES_LINEAR:
+      return GPUIsFeatureEnabled(device,
+                                 GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR);
     default:
       return 0;
   }
@@ -1475,7 +1485,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   USCompileOutput          *compileOutput;
   USLCompileOptions         compileOptions;
   USLTargetSpec             target;
-  USLCapabilityAtomDesc     targetAtoms[8];
+  USLCapabilityAtomDesc     targetAtoms[12];
   USCompileInput            compileInput;
   const char               *payloadSource;
   GPUResult                 rc;
@@ -1517,6 +1527,48 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
             &targetAtoms[targetAtomCount++],
             USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
             USL_SEMANTIC_FEATURE_ID_SUBGROUP,
+            0u,
+            0u) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+    if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_SUBGROUP_CLOCK)) {
+      if (us_cap_atom_init(
+            &targetAtoms[targetAtomCount++],
+            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+            USL_SEMANTIC_FEATURE_ID_SHADER_SUBGROUP_CLOCK,
+            0u,
+            0u) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+    if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_DEVICE_CLOCK)) {
+      if (us_cap_atom_init(
+            &targetAtoms[targetAtomCount++],
+            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+            USL_SEMANTIC_FEATURE_ID_SHADER_DEVICE_CLOCK,
+            0u,
+            0u) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+    if (GPUIsFeatureEnabled(device,
+                            GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS)) {
+      if (us_cap_atom_init(
+            &targetAtoms[targetAtomCount++],
+            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+            USL_SEMANTIC_FEATURE_ID_COMPUTE_DERIVATIVES_QUADS,
+            0u,
+            0u) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+    if (GPUIsFeatureEnabled(device,
+                            GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR)) {
+      if (us_cap_atom_init(
+            &targetAtoms[targetAtomCount++],
+            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+            USL_SEMANTIC_FEATURE_ID_COMPUTE_DERIVATIVES_LINEAR,
             0u,
             0u) != USLOk) {
         return GPU_ERROR_BACKEND_FAILURE;

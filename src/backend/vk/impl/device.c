@@ -479,6 +479,23 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
                              GPU_FEATURE_SUBGROUP_MATRIX);
   }
 #endif
+#ifdef VK_KHR_shader_clock
+  if (strcmp(name, VK_KHR_SHADER_CLOCK_EXTENSION_NAME) == 0) {
+    return vk_featureEnabled(enabledFeatureMask,
+                             GPU_FEATURE_SHADER_SUBGROUP_CLOCK) ||
+           vk_featureEnabled(enabledFeatureMask,
+                             GPU_FEATURE_SHADER_DEVICE_CLOCK);
+  }
+#endif
+#ifdef VK_KHR_compute_shader_derivatives
+  if (strcmp(name,
+             VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME) == 0) {
+    return vk_featureEnabled(enabledFeatureMask,
+                             GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS) ||
+           vk_featureEnabled(enabledFeatureMask,
+                             GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR);
+  }
+#endif
   if (strcmp(name, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME) == 0 ||
       strcmp(name, VK_KHR_SPIRV_1_4_EXTENSION_NAME) == 0) {
     return rayQuery || rayTracingPipeline || meshShader;
@@ -663,6 +680,20 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkPhysicalDevicePipelineBinaryPropertiesKHR pipelineBinaryProperties = {0};
   VkPhysicalDeviceProperties2                pipelineBinaryProperties2 = {0};
 #endif
+#ifdef VK_KHR_shader_clock
+  VkPhysicalDeviceShaderClockFeaturesKHR     shaderClockFeatures = {0};
+  VkPhysicalDeviceFeatures2                  shaderClockFeatures2 = {0};
+#endif
+#ifdef VK_KHR_compute_shader_derivatives
+  VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR
+                                                derivativeFeatures = {0};
+  VkPhysicalDeviceFeatures2                     derivativeFeatures2 = {0};
+#endif
+#ifdef VK_KHR_shader_untyped_pointers
+  VkPhysicalDeviceShaderUntypedPointersFeaturesKHR
+                                                untypedPointerFeatures = {0};
+  VkPhysicalDeviceFeatures2                     untypedPointerFeatures2 = {0};
+#endif
   VkResult                                  err;
   uint32_t                                  i, nExtensions;
   bool                                      incrementalPresentEnabled;
@@ -720,6 +751,15 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 #endif
 #ifdef VK_KHR_cooperative_matrix
   bool                                      cooperativeExtension;
+#endif
+#ifdef VK_KHR_shader_clock
+  bool                                      shaderClockExtension;
+#endif
+#ifdef VK_KHR_compute_shader_derivatives
+  bool                                      derivativeExtension;
+#endif
+#ifdef VK_KHR_shader_untyped_pointers
+  bool                                      untypedPointerExtension;
 #endif
 
   extensions                = NULL;
@@ -779,6 +819,15 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 #endif
 #ifdef VK_KHR_cooperative_matrix
   cooperativeExtension         = false;
+#endif
+#ifdef VK_KHR_shader_clock
+  shaderClockExtension          = false;
+#endif
+#ifdef VK_KHR_compute_shader_derivatives
+  derivativeExtension           = false;
+#endif
+#ifdef VK_KHR_shader_untyped_pointers
+  untypedPointerExtension       = false;
 #endif
 
   adapter                   = calloc(1, sizeof(*adapter));
@@ -968,6 +1017,24 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
         cooperativeExtension = true;
       }
 #endif
+#ifdef VK_KHR_shader_clock
+      if (!strcmp(VK_KHR_SHADER_CLOCK_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        shaderClockExtension = true;
+      }
+#endif
+#ifdef VK_KHR_compute_shader_derivatives
+      if (!strcmp(VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        derivativeExtension = true;
+      }
+#endif
+#ifdef VK_KHR_shader_untyped_pointers
+      if (!strcmp(VK_KHR_SHADER_UNTYPED_POINTERS_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        untypedPointerExtension = true;
+      }
+#endif
 
       if (incrementalPresentEnabled) {
         VK__ADD_EXT_IF(VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME,
@@ -1144,6 +1211,58 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       adapterVk->atomic64 = true;
     }
   }
+#ifdef VK_KHR_shader_clock
+  if (getFeatures2 && shaderClockExtension) {
+    shaderClockFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR;
+    shaderClockFeatures2.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    shaderClockFeatures2.pNext = &shaderClockFeatures;
+    getFeatures2(raw, &shaderClockFeatures2);
+    adapterVk->shaderSubgroupClock =
+      shaderClockFeatures.shaderSubgroupClock == VK_TRUE;
+    adapterVk->shaderDeviceClock =
+      shaderClockFeatures.shaderDeviceClock == VK_TRUE;
+    if ((adapterVk->shaderSubgroupClock || adapterVk->shaderDeviceClock) &&
+        !vk_addDeviceExtension(adapterVk,
+                               VK_KHR_SHADER_CLOCK_EXTENSION_NAME)) {
+      goto fail;
+    }
+  }
+#endif
+#ifdef VK_KHR_compute_shader_derivatives
+  if (getFeatures2 && derivativeExtension) {
+    derivativeFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR;
+    derivativeFeatures2.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    derivativeFeatures2.pNext = &derivativeFeatures;
+    getFeatures2(raw, &derivativeFeatures2);
+    adapterVk->computeDerivativeQuads =
+      derivativeFeatures.computeDerivativeGroupQuads == VK_TRUE;
+    adapterVk->computeDerivativeLinear =
+      derivativeFeatures.computeDerivativeGroupLinear == VK_TRUE;
+    if ((adapterVk->computeDerivativeQuads ||
+         adapterVk->computeDerivativeLinear) &&
+        !vk_addDeviceExtension(
+          adapterVk,
+          VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME)) {
+      goto fail;
+    }
+  }
+#endif
+#ifdef VK_KHR_shader_untyped_pointers
+  if (getFeatures2 && untypedPointerExtension) {
+    untypedPointerFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_UNTYPED_POINTERS_FEATURES_KHR;
+    untypedPointerFeatures2.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    untypedPointerFeatures2.pNext = &untypedPointerFeatures;
+    getFeatures2(raw, &untypedPointerFeatures2);
+    adapterVk->shaderUntypedPointers =
+      untypedPointerFeatures.shaderUntypedPointers == VK_TRUE;
+  }
+#endif
   if (getFeatures2 && (bufferAddressCore || bufferAddressExtension)) {
     bufferAddressFeatures.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
@@ -1650,6 +1769,14 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       return adapterVk->subgroupMatrix;
     case GPU_FEATURE_ATOMIC64:
       return adapterVk->atomic64;
+    case GPU_FEATURE_SHADER_SUBGROUP_CLOCK:
+      return adapterVk->shaderSubgroupClock;
+    case GPU_FEATURE_SHADER_DEVICE_CLOCK:
+      return adapterVk->shaderDeviceClock;
+    case GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS:
+      return adapterVk->computeDerivativeQuads;
+    case GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR:
+      return adapterVk->computeDerivativeLinear;
     case GPU_FEATURE_PLACED_RESOURCES:
       return true;
     case GPU_FEATURE_SPARSE_TEXTURES:
@@ -2037,6 +2164,13 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   VkPhysicalDeviceMaintenance5FeaturesKHR maintenance5Features = {0};
   VkPhysicalDevicePipelineBinaryFeaturesKHR pipelineBinaryFeatures = {0};
 #endif
+#ifdef VK_KHR_shader_clock
+  VkPhysicalDeviceShaderClockFeaturesKHR shaderClockFeatures = {0};
+#endif
+#ifdef VK_KHR_compute_shader_derivatives
+  VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR
+    derivativeFeatures = {0};
+#endif
   VkDeviceCreateInfo       deviceCI = {0};
   VkResult                 result;
   uint32_t                 familyIndex;
@@ -2075,6 +2209,26 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u &&
       !adapterVk->atomic64) {
+    goto err;
+  }
+  if (vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_SHADER_SUBGROUP_CLOCK) &&
+      !adapterVk->shaderSubgroupClock) {
+    goto err;
+  }
+  if (vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_SHADER_DEVICE_CLOCK) &&
+      !adapterVk->shaderDeviceClock) {
+    goto err;
+  }
+  if (vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS) &&
+      !adapterVk->computeDerivativeQuads) {
+    goto err;
+  }
+  if (vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR) &&
+      !adapterVk->computeDerivativeLinear) {
     goto err;
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u &&
@@ -2259,6 +2413,40 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     atomic64Features.shaderBufferInt64Atomics = VK_TRUE;
     deviceCI.pNext = &atomic64Features;
   }
+#ifdef VK_KHR_shader_clock
+  if (vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_SHADER_SUBGROUP_CLOCK) ||
+      vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_SHADER_DEVICE_CLOCK)) {
+    shaderClockFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR;
+    shaderClockFeatures.pNext = (void *)deviceCI.pNext;
+    shaderClockFeatures.shaderSubgroupClock =
+      vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_SHADER_SUBGROUP_CLOCK);
+    shaderClockFeatures.shaderDeviceClock =
+      vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_SHADER_DEVICE_CLOCK);
+    deviceCI.pNext = &shaderClockFeatures;
+  }
+#endif
+#ifdef VK_KHR_compute_shader_derivatives
+  if (vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS) ||
+      vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR)) {
+    derivativeFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR;
+    derivativeFeatures.pNext = (void *)deviceCI.pNext;
+    derivativeFeatures.computeDerivativeGroupQuads =
+      vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS);
+    derivativeFeatures.computeDerivativeGroupLinear =
+      vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR);
+    deviceCI.pNext = &derivativeFeatures;
+  }
+#endif
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u ||
       (enabledFeatureMask & (1ull << GPU_FEATURE_BINDLESS)) != 0u) {
     descriptorFeatures.sType =

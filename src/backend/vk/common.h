@@ -236,6 +236,11 @@ typedef struct GPUAdapterVk {
 #endif
   bool                          subgroupMatrix;
   bool                          atomic64;
+  bool                          shaderSubgroupClock;
+  bool                          shaderDeviceClock;
+  bool                          computeDerivativeQuads;
+  bool                          computeDerivativeLinear;
+  bool                          shaderUntypedPointers;
   bool                          negativeViewport;
 } GPUAdapterVk;
 
