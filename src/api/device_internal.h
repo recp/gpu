@@ -65,6 +65,7 @@ struct GPUDevice {
   void                        *errorUserData;
   GPUFeatureSet                enabledFeatures;
   GPUCacheStats                cacheStats;
+  GPUVRSCapabilitiesEXT         vrsCapabilities;
   GPURayTracingLimits          rayTracingLimits;
   GPUMeshLimits                meshLimits;
   GPURuntimeConfig             runtimeConfig;

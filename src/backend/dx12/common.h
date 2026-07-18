@@ -126,8 +126,6 @@ typedef struct GPUDeviceDX12 {
   D3D12_RESOURCE_HEAP_TIER           resourceHeapTier;
   D3D12_TILED_RESOURCES_TIER         tiledResourcesTier;
   uint32_t                           samplerFeedbackTier;
-  GPUShadingRateFlagsEXT             vrsRates;
-  GPUShadingRateCombinerFlagsEXT     vrsCombiners;
   D3D12_VARIABLE_SHADING_RATE_TIER   vrsTier;
   uint32_t                           nCreatedQueues;
   uint32_t                           vrsTileSize;

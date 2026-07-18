@@ -319,8 +319,6 @@ typedef struct GPUDeviceVk {
   VkDevice                   device;
   VkSampleCountFlags         colorSampleCounts;
   VkSampleCountFlags         depthSampleCounts;
-  GPUShadingRateFlagsEXT         vrsRates;
-  GPUShadingRateCombinerFlagsEXT vrsCombiners;
   VkExtent2D                 minVRSTexelSize;
   VkExtent2D                 maxVRSTexelSize;
   uint32_t                   nCreatedQueues;

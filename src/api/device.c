@@ -1530,6 +1530,14 @@ GPUCreateDevice(GPUAdapter                *adapter,
     return GPU_ERROR_BACKEND_FAILURE;
   }
   (*outDevice)->_api = api;
+  if ((enabledFeatureMask &
+       (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u &&
+      GPUGetVRSCapabilitiesEXT(adapter,
+                               &(*outDevice)->vrsCapabilities) != GPU_OK) {
+    api->device.destroyDevice(*outDevice);
+    *outDevice = NULL;
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
   result = gpuInitPipelineCacheDevice(*outDevice);
   if (result != GPU_OK) {
     api->device.destroyDevice(*outDevice);

@@ -681,7 +681,6 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
   D3D12_FEATURE_DATA_D3D12_OPTIONS12 options12 = {0};
   uint32_t minSubgroupSize;
   uint32_t maxSubgroupSize;
-  bool     additionalRates;
 
   if (!device || !device->d3dDevice) {
     return;
@@ -760,27 +759,10 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
 #endif
                                 )
     : 0u;
-  additionalRates = false;
-  if (dx12_queryVRS(device->d3dDevice,
-                    &device->vrsTier,
-                    &device->vrsTileSize,
-                    &additionalRates)) {
-    device->vrsRates = GPU_SHADING_RATE_1X1_BIT_EXT |
-                       GPU_SHADING_RATE_1X2_BIT_EXT |
-                       GPU_SHADING_RATE_2X1_BIT_EXT |
-                       GPU_SHADING_RATE_2X2_BIT_EXT;
-    if (additionalRates) {
-      device->vrsRates |= GPU_SHADING_RATE_2X4_BIT_EXT |
-                          GPU_SHADING_RATE_4X2_BIT_EXT |
-                          GPU_SHADING_RATE_4X4_BIT_EXT;
-    }
-    device->vrsCombiners = GPU_SHADING_RATE_COMBINER_KEEP_BIT_EXT;
-    if (device->vrsTier >= D3D12_VARIABLE_SHADING_RATE_TIER_2) {
-      device->vrsCombiners |= GPU_SHADING_RATE_COMBINER_REPLACE_BIT_EXT |
-                              GPU_SHADING_RATE_COMBINER_MIN_BIT_EXT |
-                              GPU_SHADING_RATE_COMBINER_MAX_BIT_EXT;
-    }
-  }
+  (void)dx12_queryVRS(device->d3dDevice,
+                      &device->vrsTier,
+                      &device->vrsTileSize,
+                      NULL);
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   device->pixModule = LoadLibraryW(L"WinPixEventRuntime.dll");
   if (device->pixModule) {
@@ -1334,8 +1316,6 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
   if ((enabledFeatureMask &
        (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) == 0u) {
     deviceDX12->vrsTier = D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED;
-    deviceDX12->vrsRates = 0u;
-    deviceDX12->vrsCombiners = 0u;
     deviceDX12->vrsTileSize = 0u;
   }
   InitializeSRWLock(&deviceDX12->descriptorLock);

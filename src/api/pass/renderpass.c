@@ -232,6 +232,12 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
       !GPUIsFeatureEnabled(device, GPU_FEATURE_VARIABLE_RATE_SHADING)) {
     return false;
   }
+  if ((shadingRate &&
+       (device->vrsCapabilities.modes & GPU_VRS_ATTACHMENT_BIT_EXT) == 0u) ||
+      (rateMap &&
+       (device->vrsCapabilities.modes & GPU_VRS_RATE_MAP_BIT_EXT) == 0u)) {
+    return false;
+  }
   if (shadingRate &&
       (!shadingRate->view ||
        !gpu_textureViewHasUsage(
@@ -246,6 +252,17 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
        shadingRate->view->_texture->sampleCount != 1u ||
        shadingRate->texelSize.width == 0u ||
        shadingRate->texelSize.height == 0u)) {
+    return false;
+  }
+  if (shadingRate &&
+      (shadingRate->texelSize.width <
+         device->vrsCapabilities.minAttachmentTexelSize.width ||
+       shadingRate->texelSize.height <
+         device->vrsCapabilities.minAttachmentTexelSize.height ||
+       shadingRate->texelSize.width >
+         device->vrsCapabilities.maxAttachmentTexelSize.width ||
+       shadingRate->texelSize.height >
+         device->vrsCapabilities.maxAttachmentTexelSize.height)) {
     return false;
   }
   if (rateMap && (!rateMap->map || rateMap->map->device != device)) {

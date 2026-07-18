@@ -233,23 +233,8 @@ dx12__setShadingRate(
       D3D12_SHADING_RATE_COMBINER_MIN
   };
   D3D12_SHADING_RATE_COMBINER nativeCombiners[2];
-  GPUShadingRateFlagsEXT       rateBit;
-  GPUShadingRateCombinerFlagsEXT primitiveBit;
-  GPUShadingRateCombinerFlagsEXT attachmentBit;
 
-  if (!encoder || !encoder->device || !encoder->commandList5 ||
-      (uint32_t)rate >= GPU_ARRAY_LEN(rates) ||
-      (uint32_t)primitiveCombiner >= GPU_ARRAY_LEN(combiners) ||
-      (uint32_t)attachmentCombiner >= GPU_ARRAY_LEN(combiners)) {
-    return false;
-  }
-
-  rateBit       = 1u << rate;
-  primitiveBit  = 1u << primitiveCombiner;
-  attachmentBit = 1u << attachmentCombiner;
-  if ((encoder->device->vrsRates & rateBit) == 0u ||
-      (encoder->device->vrsCombiners & primitiveBit) == 0u ||
-      (encoder->device->vrsCombiners & attachmentBit) == 0u) {
+  if (!encoder || !encoder->device || !encoder->commandList5) {
     return false;
   }
 

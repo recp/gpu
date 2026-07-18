@@ -3255,8 +3255,6 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
         goto err;
       }
     }
-    deviceVk->vrsRates               = adapterVk->vrsRates;
-    deviceVk->vrsCombiners           = adapterVk->vrsCombiners;
     deviceVk->minVRSTexelSize        = adapterVk->minVRSTexelSize;
     deviceVk->maxVRSTexelSize        = adapterVk->maxVRSTexelSize;
     deviceVk->maxVRSTexelAspectRatio = adapterVk->maxVRSTexelAspectRatio;

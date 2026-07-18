@@ -115,6 +115,10 @@ GPUCreateRasterizationRateMapEXT(
   if (!GPUIsFeatureEnabled(device, GPU_FEATURE_VARIABLE_RATE_SHADING)) {
     return GPU_ERROR_UNSUPPORTED;
   }
+  if ((device->vrsCapabilities.modes & GPU_VRS_RATE_MAP_BIT_EXT) == 0u ||
+      info->layerCount > device->vrsCapabilities.maxRateMapLayers) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
 
   api = gpuDeviceApi(device);
   if (!api || !api->vrs.createRateMap) {
@@ -287,8 +291,11 @@ GPUSetFragmentShadingRateEXT(
   GPUShadingRateEXT          rate,
   GPUShadingRateCombinerEXT  primitiveCombiner,
   GPUShadingRateCombinerEXT  attachmentCombiner) {
-  GPUDevice *device;
-  GPUApi    *api;
+  GPUDevice                       *device;
+  GPUApi                          *api;
+  GPUShadingRateFlagsEXT           rateBit;
+  GPUShadingRateCombinerFlagsEXT   primitiveBit;
+  GPUShadingRateCombinerFlagsEXT   attachmentBit;
 
   if (!pass || pass->_ended || !gpu_validShadingRate(rate) ||
       primitiveCombiner < GPU_SHADING_RATE_COMBINER_KEEP_EXT ||
@@ -299,6 +306,19 @@ GPUSetFragmentShadingRateEXT(
   }
   device = pass->_device;
   if (!GPUIsFeatureEnabled(device, GPU_FEATURE_VARIABLE_RATE_SHADING)) {
+    return;
+  }
+  rateBit       = 1u << rate;
+  primitiveBit  = 1u << primitiveCombiner;
+  attachmentBit = 1u << attachmentCombiner;
+  if ((device->vrsCapabilities.modes & GPU_VRS_DRAW_RATE_BIT_EXT) == 0u ||
+      (device->vrsCapabilities.rates & rateBit) == 0u ||
+      (device->vrsCapabilities.combiners & primitiveBit) == 0u ||
+      (device->vrsCapabilities.combiners & attachmentBit) == 0u) {
+    gpuDeviceRecordValidationError(
+      device,
+      "GPUSetFragmentShadingRateEXT skipped: state exceeds device capabilities"
+    );
     return;
   }
   api = gpuDeviceApi(device);

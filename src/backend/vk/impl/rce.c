@@ -320,25 +320,10 @@ vk_setFragmentShadingRate(
   };
   GPURenderEncoderVk                    *native;
   VkFragmentShadingRateCombinerOpKHR     nativeCombiners[2];
-  GPUShadingRateFlagsEXT                 rateBit;
-  GPUShadingRateCombinerFlagsEXT         primitiveBit;
-  GPUShadingRateCombinerFlagsEXT         attachmentBit;
 
   native = vk__renderEncoder(encoder);
   if (!native || !native->device || !native->device->vrsDrawRate ||
-      !native->device->setFragmentShadingRate ||
-      (uint32_t)rate >= GPU_ARRAY_LEN(rates) ||
-      (uint32_t)primitiveCombiner >= GPU_ARRAY_LEN(combiners) ||
-      (uint32_t)attachmentCombiner >= GPU_ARRAY_LEN(combiners)) {
-    return;
-  }
-
-  rateBit       = 1u << rate;
-  primitiveBit  = 1u << primitiveCombiner;
-  attachmentBit = 1u << attachmentCombiner;
-  if ((native->device->vrsRates & rateBit) == 0u ||
-      (native->device->vrsCombiners & primitiveBit) == 0u ||
-      (native->device->vrsCombiners & attachmentBit) == 0u) {
+      !native->device->setFragmentShadingRate) {
     return;
   }
 
