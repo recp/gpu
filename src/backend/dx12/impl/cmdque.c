@@ -1110,6 +1110,11 @@ dx12_destroyCommandQueue(GPUQueue *queue) {
         );
       }
       dx12_destroyCopyScratch(command);
+#if GPU_DX12_HAS_EXECUTION_GRAPHS
+      if (command->commandList10) {
+        command->commandList10->lpVtbl->Release(command->commandList10);
+      }
+#endif
       if (command->commandList7) {
         command->commandList7->lpVtbl->Release(command->commandList7);
       }
@@ -1343,6 +1348,18 @@ dx12__createCommandBufferState(GPUQueue *queue) {
       goto fail;
     }
   }
+#if GPU_DX12_HAS_EXECUTION_GRAPHS
+  if (deviceDX12->executionGraph) {
+    (void)native->commandList->lpVtbl->QueryInterface(
+      native->commandList,
+      &IID_ID3D12GraphicsCommandList10,
+      (void **)&native->commandList10
+    );
+    if (!native->commandList10) {
+      goto fail;
+    }
+  }
+#endif
 
   result = native->commandList->lpVtbl->Close(native->commandList);
   if (FAILED(result)) {
@@ -1361,6 +1378,11 @@ dx12__createCommandBufferState(GPUQueue *queue) {
   return native;
 
 fail:
+#if GPU_DX12_HAS_EXECUTION_GRAPHS
+  if (native->commandList10) {
+    native->commandList10->lpVtbl->Release(native->commandList10);
+  }
+#endif
   if (native->commandList7) {
     native->commandList7->lpVtbl->Release(native->commandList7);
   }

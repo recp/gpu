@@ -823,6 +823,45 @@ dx12_compileRayLibrary(GPUDeviceDX12        *device,
                                       outCode);
 }
 
+GPU_HIDE
+bool
+dx12_compileExecutionGraphLibrary(GPUDeviceDX12        *device,
+                                   GPUShaderLibraryDX12 *library,
+                                   DX12ShaderCode       *outCode) {
+  static const char cacheEntry[] = "$execution-graph-library";
+  DX12ShaderCode    compiled;
+  const wchar_t    *profile;
+  bool              success;
+
+  if (!device || !device->executionGraph || !device->dxcAvailable ||
+      device->shaderModel < (D3D_SHADER_MODEL)0x68 || !library || !outCode) {
+    return false;
+  }
+  memset(outCode, 0, sizeof(*outCode));
+  if (dx12__getCachedShader(library,
+                            cacheEntry,
+                            GPU_SHADER_STAGE_COMPUTE_BIT,
+                            outCode)) {
+    return true;
+  }
+
+  profile = device->subgroupMatrixEnabled ? L"lib_6_10" : L"lib_6_8";
+  memset(&compiled, 0, sizeof(compiled));
+  success = dx12__compileDXC(device,
+                            library->source,
+                            library->sourceSize,
+                            NULL,
+                            profile,
+                            device->shaderF16Enabled ||
+                              device->subgroupMatrixEnabled,
+                            &compiled);
+  return success && dx12__cacheShader(library,
+                                      cacheEntry,
+                                      GPU_SHADER_STAGE_COMPUTE_BIT,
+                                      &compiled,
+                                      outCode);
+}
+
 static bool
 dx12__topology(GPUPrimitiveTopology             topology,
                D3D12_PRIMITIVE_TOPOLOGY_TYPE *outType,

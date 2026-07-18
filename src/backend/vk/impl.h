@@ -39,6 +39,7 @@ GPU_HIDE void vk_initPipelineCache(GPUApiPipelineCache *api);
 GPU_HIDE void vk_initVRS(GPUApiVRS *api);
 GPU_HIDE void vk_initRayQuery(GPUApiRayQuery *api);
 GPU_HIDE void vk_initRayTracing(GPUApiRayTracing *api);
+GPU_HIDE void vk_initExecutionGraph(GPUApiExecutionGraph *api);
 
 GPU_HIDE
 bool

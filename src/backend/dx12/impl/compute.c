@@ -147,6 +147,9 @@ dx12_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
   memset(native, 0, sizeof(*native));
   native->device           = device;
   native->commandList      = command->commandList;
+#if GPU_DX12_HAS_EXECUTION_GRAPHS
+  native->commandList10    = command->commandList10;
+#endif
   native->debugEventActive = dx12_beginDebugEvent(
     gpuCommandBufferDevice(cmdb),
     native->commandList,
@@ -301,9 +304,14 @@ dx12_endComputeEncoding(GPUComputePassEncoder *encoder) {
 
   native->device           = NULL;
   native->commandList      = NULL;
+#if GPU_DX12_HAS_EXECUTION_GRAPHS
+  native->commandList10    = NULL;
+#endif
   native->rootSignature    = NULL;
   native->resourceHeap     = NULL;
   native->samplerHeap      = NULL;
+  native->executionGraph   = NULL;
+  native->executionGraphInstance = NULL;
   native->debugEventActive = false;
 }
 

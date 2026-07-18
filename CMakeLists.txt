@@ -77,6 +77,7 @@ set(GPU_CORE_SOURCES
   src/api/compute.c
   src/api/descr/descriptor.c
   src/api/device.c
+  src/api/execution_graph.c
   src/api/format.c
   src/api/frame.c
   src/api/instance.c
@@ -259,6 +260,7 @@ if(GPU_BUILD_DX12)
     src/backend/dx12/impl/compute.c
     src/backend/dx12/impl/descr/descpool.c
     src/backend/dx12/impl/device.c
+    src/backend/dx12/impl/execution_graph.c
     src/backend/dx12/impl/format.c
     src/backend/dx12/impl/frame.c
     src/backend/dx12/impl/instance.c
@@ -298,6 +300,7 @@ if(GPU_BUILD_VULKAN)
     src/backend/vk/impl/compute.c
     src/backend/vk/impl/descriptor.c
     src/backend/vk/impl/device.c
+    src/backend/vk/impl/execution_graph.c
     src/backend/vk/impl/display.c
     src/backend/vk/impl/format.c
     src/backend/vk/impl/frame.c
@@ -983,6 +986,7 @@ if(GPU_BUILD_TESTS)
     tests/api/copy.c
     tests/api/cube_texture.c
     tests/api/descriptor_array.c
+    tests/api/execution_graph.c
     tests/api/line_texture.c
     tests/api/main.c
     tests/api/memory.c

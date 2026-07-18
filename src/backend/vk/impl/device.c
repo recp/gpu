@@ -411,6 +411,7 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
   bool meshShader;
   bool rayQuery;
   bool rayTracingPipeline;
+  bool executionGraph;
 
   descriptorIndexing =
     vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_DESCRIPTOR_INDEXING) ||
@@ -422,6 +423,8 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
     enabledFeatureMask,
     GPU_FEATURE_RAY_TRACING_PIPELINE
   );
+  executionGraph = vk_featureEnabled(enabledFeatureMask,
+                                     GPU_FEATURE_EXECUTION_GRAPH);
 
   if (strcmp(name, VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME) == 0) {
     return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16);
@@ -447,9 +450,22 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
 #ifdef VK_KHR_buffer_device_address
   if (strcmp(name, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) == 0) {
     return (adapter && adapter->descriptorBuffer) || rayQuery ||
-           rayTracingPipeline ||
+           rayTracingPipeline || executionGraph ||
            vk_featureEnabled(enabledFeatureMask,
                              GPU_FEATURE_BUFFER_DEVICE_ADDRESS);
+  }
+#endif
+#ifdef VK_AMDX_shader_enqueue
+  if (strcmp(name, VK_AMDX_SHADER_ENQUEUE_EXTENSION_NAME) == 0 ||
+      strcmp(name, VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME) == 0) {
+    return executionGraph;
+  }
+  if (strcmp(name, VK_KHR_MAINTENANCE_5_EXTENSION_NAME) == 0) {
+    return executionGraph
+#ifdef VK_KHR_pipeline_binary
+           || (adapter && adapter->pipelineBinary)
+#endif
+           ;
   }
 #endif
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
@@ -722,6 +738,16 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                                                 indirectCopyProperties = {0};
   VkPhysicalDeviceProperties2                   indirectCopyProperties2 = {0};
 #endif
+#ifdef VK_AMDX_shader_enqueue
+  VkPhysicalDeviceShaderEnqueueFeaturesAMDX executionGraphFeatures = {0};
+  VkPhysicalDeviceFeatures2                 executionGraphFeatures2 = {0};
+  VkPhysicalDeviceMaintenance5FeaturesKHR   executionGraphMaintenance5 = {0};
+#endif
+#ifdef VK_AMDX_shader_enqueue
+  bool                                      executionGraphExtension;
+  bool                                      executionGraphMaintenance5Extension;
+  bool                                      pipelineLibraryExtension;
+#endif
   VkResult                                  err;
   uint32_t                                  i, nExtensions;
   bool                                      incrementalPresentEnabled;
@@ -755,8 +781,10 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool                                      maintenance1Core;
 #ifdef VK_KHR_pipeline_binary
   bool                                      maintenance5Extension;
-  bool                                      maintenance5Core;
   bool                                      pipelineBinaryExtension;
+#endif
+#if defined(VK_KHR_pipeline_binary) || defined(VK_AMDX_shader_enqueue)
+  bool                                      maintenance5Core;
 #endif
   bool                                      spirv14Extension;
   bool                                      shaderFloatControlsExtension;
@@ -794,6 +822,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool                                      formatFeatureFlags2Extension;
   bool                                      formatFeatureFlags2Core;
 #endif
+#ifdef VK_AMDX_shader_enqueue
+  executionGraphExtension             = false;
+  executionGraphMaintenance5Extension = false;
+  pipelineLibraryExtension            = false;
+#endif
 
   extensions                = NULL;
   nExtensions               = 0;
@@ -828,8 +861,10 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   maintenance1Core          = false;
 #ifdef VK_KHR_pipeline_binary
   maintenance5Extension     = false;
-  maintenance5Core          = false;
   pipelineBinaryExtension   = false;
+#endif
+#if defined(VK_KHR_pipeline_binary) || defined(VK_AMDX_shader_enqueue)
+  maintenance5Core          = false;
 #endif
   spirv14Extension          = false;
   shaderFloatControlsExtension = false;
@@ -1049,6 +1084,20 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
         rayPipelineExtension = true;
       }
 #endif
+#ifdef VK_AMDX_shader_enqueue
+      if (!strcmp(VK_AMDX_SHADER_ENQUEUE_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        executionGraphExtension = true;
+      }
+      if (!strcmp(VK_KHR_MAINTENANCE_5_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        executionGraphMaintenance5Extension = true;
+      }
+      if (!strcmp(VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        pipelineLibraryExtension = true;
+      }
+#endif
 #ifdef VK_EXT_mesh_shader
       if (!strcmp(VK_EXT_MESH_SHADER_EXTENSION_NAME,
                   extensions[i].extensionName)) {
@@ -1154,7 +1203,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                  instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
                  adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
   spirv14Core = timelineCore;
-#ifdef VK_KHR_pipeline_binary
+#if defined(VK_KHR_pipeline_binary) || defined(VK_AMDX_shader_enqueue)
   maintenance5Core = instanceVk &&
                      instanceVk->apiVersion >= VK_API_VERSION_1_4 &&
                      adapterVk->props.apiVersion >= VK_API_VERSION_1_4;
@@ -1334,6 +1383,56 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     }
 #endif
   }
+#ifdef VK_AMDX_shader_enqueue
+  if (getFeatures2 && executionGraphExtension &&
+      pipelineLibraryExtension && adapterVk->bufferDeviceAddress &&
+      instanceVk && instanceVk->apiVersion >= VK_API_VERSION_1_3 &&
+      adapterVk->props.apiVersion >= VK_API_VERSION_1_3 &&
+      (maintenance5Core || executionGraphMaintenance5Extension)) {
+    executionGraphFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ENQUEUE_FEATURES_AMDX;
+    executionGraphMaintenance5.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR;
+    executionGraphFeatures.pNext = &executionGraphMaintenance5;
+    executionGraphFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    executionGraphFeatures2.pNext = &executionGraphFeatures;
+    getFeatures2(raw, &executionGraphFeatures2);
+    if (executionGraphFeatures.shaderEnqueue &&
+        executionGraphMaintenance5.maintenance5) {
+      PFN_vkGetPhysicalDeviceProperties2 getProperties2;
+      VkPhysicalDeviceShaderEnqueuePropertiesAMDX graphProperties = {0};
+      VkPhysicalDeviceProperties2                 properties2 = {0};
+
+      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+        vkGetInstanceProcAddr(instanceVk->inst,
+                              "vkGetPhysicalDeviceProperties2");
+      if (!getProperties2) {
+        getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+          vkGetInstanceProcAddr(instanceVk->inst,
+                                "vkGetPhysicalDeviceProperties2KHR");
+      }
+      graphProperties.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ENQUEUE_PROPERTIES_AMDX;
+      properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+      properties2.pNext = &graphProperties;
+      if (getProperties2) {
+        getProperties2(raw, &properties2);
+      }
+      if (graphProperties.executionGraphDispatchAddressAlignment > 0u &&
+          vk_addDeviceExtension(adapterVk,
+                                VK_AMDX_SHADER_ENQUEUE_EXTENSION_NAME) &&
+          vk_addDeviceExtension(adapterVk,
+                                VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME) &&
+          (maintenance5Core ||
+           vk_addDeviceExtension(adapterVk,
+                                 VK_KHR_MAINTENANCE_5_EXTENSION_NAME))) {
+        adapterVk->executionGraphDispatchAddressAlignment =
+          graphProperties.executionGraphDispatchAddressAlignment;
+        adapterVk->executionGraph = true;
+      }
+    }
+  }
+#endif
 #ifdef VK_KHR_copy_memory_indirect
   if (getFeatures2 && indirectCopyExtension &&
       adapterVk->bufferDeviceAddress) {
@@ -1892,6 +1991,8 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       return adapterVk->rayQuery;
     case GPU_FEATURE_RAY_TRACING_PIPELINE:
       return adapterVk->rayTracingPipeline;
+    case GPU_FEATURE_EXECUTION_GRAPH:
+      return adapterVk->executionGraph;
     case GPU_FEATURE_SUBGROUP_MATRIX:
       return adapterVk->subgroupMatrix;
     case GPU_FEATURE_ATOMIC64:
@@ -2293,8 +2394,11 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
 #ifdef VK_KHR_cooperative_matrix
   VkPhysicalDeviceCooperativeMatrixFeaturesKHR cooperativeFeatures = {0};
 #endif
-#ifdef VK_KHR_pipeline_binary
+#if defined(VK_KHR_pipeline_binary) || defined(VK_AMDX_shader_enqueue)
   VkPhysicalDeviceMaintenance5FeaturesKHR maintenance5Features = {0};
+  bool                                    maintenance5Required;
+#endif
+#ifdef VK_KHR_pipeline_binary
   VkPhysicalDevicePipelineBinaryFeaturesKHR pipelineBinaryFeatures = {0};
 #endif
 #ifdef VK_KHR_shader_clock
@@ -2306,6 +2410,9 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
 #endif
 #ifdef VK_KHR_copy_memory_indirect
   VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR indirectCopyFeatures = {0};
+#endif
+#ifdef VK_AMDX_shader_enqueue
+  VkPhysicalDeviceShaderEnqueueFeaturesAMDX executionGraphFeatures = {0};
 #endif
   VkDeviceCreateInfo       deviceCI = {0};
   VkResult                 result;
@@ -2407,6 +2514,10 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   if ((enabledFeatureMask &
        (1ull << GPU_FEATURE_RAY_TRACING_PIPELINE)) != 0u &&
       !adapterVk->rayTracingPipeline) {
+    goto err;
+  }
+  if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_EXECUTION_GRAPH) &&
+      !adapterVk->executionGraph) {
     goto err;
   }
   if ((enabledFeatureMask &
@@ -2663,6 +2774,7 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
 #endif
   if (adapterVk->descriptorBuffer ||
       vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_RAY_QUERY) ||
+      vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_EXECUTION_GRAPH) ||
       vk_featureEnabled(enabledFeatureMask,
                         GPU_FEATURE_BUFFER_DEVICE_ADDRESS)) {
     bufferAddressFeatures.sType =
@@ -2739,17 +2851,40 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     deviceCI.pNext = &cooperativeFeatures;
   }
 #endif
+#if defined(VK_KHR_pipeline_binary) || defined(VK_AMDX_shader_enqueue)
+  maintenance5Required = false;
 #ifdef VK_KHR_pipeline_binary
-  if (adapterVk->pipelineBinary) {
+  maintenance5Required = adapterVk->pipelineBinary;
+#endif
+#ifdef VK_AMDX_shader_enqueue
+  maintenance5Required = maintenance5Required ||
+                         vk_featureEnabled(enabledFeatureMask,
+                                           GPU_FEATURE_EXECUTION_GRAPH);
+#endif
+  if (maintenance5Required) {
     maintenance5Features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR;
     maintenance5Features.pNext       = (void *)deviceCI.pNext;
     maintenance5Features.maintenance5 = VK_TRUE;
+    deviceCI.pNext = &maintenance5Features;
+  }
+#endif
+#ifdef VK_KHR_pipeline_binary
+  if (adapterVk->pipelineBinary) {
     pipelineBinaryFeatures.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_FEATURES_KHR;
-    pipelineBinaryFeatures.pNext = &maintenance5Features;
+    pipelineBinaryFeatures.pNext = (void *)deviceCI.pNext;
     pipelineBinaryFeatures.pipelineBinaries = VK_TRUE;
     deviceCI.pNext = &pipelineBinaryFeatures;
+  }
+#endif
+#ifdef VK_AMDX_shader_enqueue
+  if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_EXECUTION_GRAPH)) {
+    executionGraphFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ENQUEUE_FEATURES_AMDX;
+    executionGraphFeatures.pNext = (void *)deviceCI.pNext;
+    executionGraphFeatures.shaderEnqueue = VK_TRUE;
+    deviceCI.pNext = &executionGraphFeatures;
   }
 #endif
 
@@ -2784,6 +2919,7 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   if (adapterVk->bufferDeviceAddress &&
       (adapterVk->descriptorBuffer ||
        vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_RAY_QUERY) ||
+       vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_EXECUTION_GRAPH) ||
        vk_featureEnabled(enabledFeatureMask,
                          GPU_FEATURE_BUFFER_DEVICE_ADDRESS))) {
     deviceVk->getBufferDeviceAddress =
@@ -2803,6 +2939,51 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     }
     deviceVk->bufferDeviceAddress = true;
   }
+#ifdef VK_AMDX_shader_enqueue
+  if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_EXECUTION_GRAPH)) {
+    deviceVk->createExecutionGraphPipelines =
+      (PFN_vkCreateExecutionGraphPipelinesAMDX)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkCreateExecutionGraphPipelinesAMDX"
+      );
+    deviceVk->getExecutionGraphPipelineScratchSize =
+      (PFN_vkGetExecutionGraphPipelineScratchSizeAMDX)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkGetExecutionGraphPipelineScratchSizeAMDX"
+      );
+    deviceVk->getExecutionGraphPipelineNodeIndex =
+      (PFN_vkGetExecutionGraphPipelineNodeIndexAMDX)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkGetExecutionGraphPipelineNodeIndexAMDX"
+      );
+    deviceVk->initializeGraphScratchMemory =
+      (PFN_vkCmdInitializeGraphScratchMemoryAMDX)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkCmdInitializeGraphScratchMemoryAMDX"
+      );
+    deviceVk->dispatchGraph =
+      (PFN_vkCmdDispatchGraphAMDX)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkCmdDispatchGraphAMDX"
+      );
+    deviceVk->dispatchGraphIndirect =
+      (PFN_vkCmdDispatchGraphIndirectAMDX)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkCmdDispatchGraphIndirectAMDX"
+      );
+    if (!deviceVk->createExecutionGraphPipelines ||
+        !deviceVk->getExecutionGraphPipelineScratchSize ||
+        !deviceVk->getExecutionGraphPipelineNodeIndex ||
+        !deviceVk->initializeGraphScratchMemory ||
+        !deviceVk->dispatchGraph || !deviceVk->dispatchGraphIndirect ||
+        !deviceVk->getBufferDeviceAddress) {
+      goto err;
+    }
+    deviceVk->executionGraphDispatchAddressAlignment =
+      adapterVk->executionGraphDispatchAddressAlignment;
+    deviceVk->executionGraph = true;
+  }
+#endif
 #ifdef VK_KHR_copy_memory_indirect
   if (vk_featureEnabled(enabledFeatureMask,
                         GPU_FEATURE_INDIRECT_MEMORY_COPY)) {

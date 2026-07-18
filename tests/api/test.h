@@ -73,6 +73,7 @@ int gpu_test_texture_view_depth_stencil(GPUDevice *device);
 int gpu_test_render(GPUDevice *device, const char *mrtBytecodePath);
 int gpu_test_metal_vertex_slots(GPUDevice *device, const char *bytecodePath);
 int gpu_test_compute(GPUDevice *device, const char *bytecodePath);
+int gpu_test_execution_graph_validation(void);
 int gpu_test_query(GPUAdapter *adapter,
                    GPUDevice  *device,
                    const char *computeBytecodePath);

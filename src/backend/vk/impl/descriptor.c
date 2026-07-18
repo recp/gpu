@@ -2071,7 +2071,7 @@ vk_bindComputeGroup(GPUComputePassEncoder *pass,
 
   encoder = pass ? pass->_priv : NULL;
   return encoder && vk__bindGroup(encoder->command,
-                                  VK_PIPELINE_BIND_POINT_COMPUTE,
+                                  encoder->bindPoint,
                                   encoder->pipelineLayout,
                                   &encoder->descriptors,
                                   pipelineLayout,

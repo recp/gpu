@@ -21,6 +21,7 @@
 #include "../../api/adapter_internal.h"
 #include "../../api/cmdqueue_internal.h"
 #include "../../api/device_internal.h"
+#include "../../api/execution_graph_internal.h"
 #include "../../api/frame_internal.h"
 #include "../../api/instance_internal.h"
 #include "../../api/library_internal.h"
@@ -33,11 +34,14 @@
 #include <assert.h>
 #include <inttypes.h>
 
+#ifndef VK_ENABLE_BETA_EXTENSIONS
+#  define VK_ENABLE_BETA_EXTENSIONS 1
+#endif
+
 /* MoltenVK */
 #ifdef __APPLE__
 #  include <Availability.h>
 #  define VK_USE_PLATFORM_METAL_EXT        1
-#  define VK_ENABLE_BETA_EXTENSIONS        1    // VK_KHR_portability_subset
 #  ifdef __IPHONE_OS_VERSION_MAX_ALLOWED
 #    define VK_USE_PLATFORM_IOS_MVK        1
 #  endif
@@ -211,6 +215,7 @@ typedef struct GPUAdapterVk {
   uint32_t                      rayTracingMaxRecursionDepth;
   uint32_t                      rayTracingMaxDispatchCount;
   uint32_t                      rayTracingMaxDispatchSize[3];
+  uint32_t                      executionGraphDispatchAddressAlignment;
 #ifdef VK_EXT_descriptor_buffer
   VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptorBufferProperties;
 #endif
@@ -245,6 +250,7 @@ typedef struct GPUAdapterVk {
   bool                          shaderUntypedPointers;
   bool                          indirectMemoryCopy;
   bool                          indirectMemoryToTextureCopy;
+  bool                          executionGraph;
   VkQueueFlags                  indirectCopyQueues;
   bool                          negativeViewport;
 } GPUAdapterVk;
@@ -296,6 +302,18 @@ typedef struct GPUDeviceVk {
   PFN_vkCmdCopyMemoryIndirectKHR        copyMemoryIndirect;
   PFN_vkCmdCopyMemoryToImageIndirectKHR copyMemoryToImageIndirect;
 #endif
+#ifdef VK_AMDX_shader_enqueue
+  PFN_vkCreateExecutionGraphPipelinesAMDX
+    createExecutionGraphPipelines;
+  PFN_vkGetExecutionGraphPipelineScratchSizeAMDX
+    getExecutionGraphPipelineScratchSize;
+  PFN_vkGetExecutionGraphPipelineNodeIndexAMDX
+    getExecutionGraphPipelineNodeIndex;
+  PFN_vkCmdInitializeGraphScratchMemoryAMDX
+    initializeGraphScratchMemory;
+  PFN_vkCmdDispatchGraphAMDX dispatchGraph;
+  PFN_vkCmdDispatchGraphIndirectAMDX dispatchGraphIndirect;
+#endif
   VkDevice                   device;
   VkSampleCountFlags         colorSampleCounts;
   VkSampleCountFlags         depthSampleCounts;
@@ -313,6 +331,7 @@ typedef struct GPUDeviceVk {
   uint32_t                   rayTracingMaxRecursionDepth;
   uint32_t                   rayTracingMaxDispatchCount;
   uint32_t                   rayTracingMaxDispatchSize[3];
+  uint32_t                   executionGraphDispatchAddressAlignment;
   VkBool32                   multiDrawIndirect;
   VkBool32                   independentBlend;
   bool                       dynamicRendering;
@@ -326,6 +345,7 @@ typedef struct GPUDeviceVk {
   bool                       bufferDeviceAddress;
   bool                       indirectMemoryCopy;
   bool                       indirectMemoryToTextureCopy;
+  bool                       executionGraph;
   bool                       descriptorBuffer;
   bool                       rayQuery;
   bool                       rayTracingPipeline;
@@ -613,10 +633,13 @@ typedef struct GPURenderEncoderVk {
 } GPURenderEncoderVk;
 
 typedef struct GPUComputeEncoderVk {
-  VkCommandBuffer       command;
-  VkPipelineLayout      pipelineLayout;
-  GPUDescriptorStateVk  descriptors;
-  bool                  debugLabelActive;
+  GPUExecutionGraphEXT         *executionGraph;
+  GPUExecutionGraphInstanceEXT *executionGraphInstance;
+  VkCommandBuffer               command;
+  VkPipelineLayout              pipelineLayout;
+  GPUDescriptorStateVk          descriptors;
+  VkPipelineBindPoint           bindPoint;
+  bool                          debugLabelActive;
 } GPUComputeEncoderVk;
 
 #if defined(VK_KHR_acceleration_structure) && \

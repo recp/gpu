@@ -94,7 +94,7 @@ gpu_reportDeviceLostOnce(GPUDevice *device) {
 static bool
 gpu_knownFeature(GPUFeature feature) {
   return feature >= GPU_FEATURE_COMPUTE &&
-         feature <= GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY;
+         feature <= GPU_FEATURE_EXECUTION_GRAPH;
 }
 
 static uint64_t
@@ -217,6 +217,9 @@ gpu_enabledFeatureMaskForCreateInfo(const GPUAdapter *adapter,
                ))) != 0u) {
     mask |= gpu_featureBit(GPU_FEATURE_BUFFER_DEVICE_ADDRESS);
   }
+  if ((mask & gpu_featureBit(GPU_FEATURE_EXECUTION_GRAPH)) != 0u) {
+    mask |= gpu_featureBit(GPU_FEATURE_BUFFER_DEVICE_ADDRESS);
+  }
   if ((mask & gpu_featureBit(GPU_FEATURE_SPARSE_TEXTURES)) != 0u &&
       GPUIsFeatureSupported(
         (GPUAdapter *)adapter,
@@ -236,7 +239,7 @@ gpu_supportedFeatureMask(const GPUAdapter *adapter) {
 
   mask = 0;
   for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY;
+       feature <= GPU_FEATURE_EXECUTION_GRAPH;
        feature = (GPUFeature)(feature + 1)) {
     if (gpu_adapterSupportsFeature(adapter, feature)) {
       mask |= gpu_featureBit(feature);
@@ -255,7 +258,7 @@ gpu_fillFeatureSet(uint64_t       mask,
 
   count = 0u;
   for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY &&
+       feature <= GPU_FEATURE_EXECUTION_GRAPH &&
          count < capacity;
        feature = (GPUFeature)(feature + 1)) {
     if (mask & gpu_featureBit(feature)) {
@@ -1384,6 +1387,35 @@ GPUGetProcAddr(GPUDevice *device, const char *name) {
     }
     if (strcmp(name, "GPUEndRayTracingPassEXT") == 0) {
       return (GPUProc)GPUEndRayTracingPassEXT;
+    }
+  }
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_EXECUTION_GRAPH)) {
+    if (strcmp(name, "GPUCreateExecutionGraphEXT") == 0) {
+      return (GPUProc)GPUCreateExecutionGraphEXT;
+    }
+    if (strcmp(name, "GPUDestroyExecutionGraphEXT") == 0) {
+      return (GPUProc)GPUDestroyExecutionGraphEXT;
+    }
+    if (strcmp(name, "GPUGetExecutionGraphMemoryRequirementsEXT") == 0) {
+      return (GPUProc)GPUGetExecutionGraphMemoryRequirementsEXT;
+    }
+    if (strcmp(name, "GPUCreateExecutionGraphInstanceEXT") == 0) {
+      return (GPUProc)GPUCreateExecutionGraphInstanceEXT;
+    }
+    if (strcmp(name, "GPUDestroyExecutionGraphInstanceEXT") == 0) {
+      return (GPUProc)GPUDestroyExecutionGraphInstanceEXT;
+    }
+    if (strcmp(name, "GPUGetExecutionGraphEntryEXT") == 0) {
+      return (GPUProc)GPUGetExecutionGraphEntryEXT;
+    }
+    if (strcmp(name, "GPUBindExecutionGraphEXT") == 0) {
+      return (GPUProc)GPUBindExecutionGraphEXT;
+    }
+    if (strcmp(name, "GPUDispatchExecutionGraphEXT") == 0) {
+      return (GPUProc)GPUDispatchExecutionGraphEXT;
+    }
+    if (strcmp(name, "GPUDispatchExecutionGraphBufferEXT") == 0) {
+      return (GPUProc)GPUDispatchExecutionGraphBufferEXT;
     }
   }
 

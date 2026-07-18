@@ -37,6 +37,7 @@ extern "C" {
 #include "query.h"
 #include "barrier.h"
 #include "compute.h"
+#include "execution-graph.h"
 #include "subgroup.h"
 #include "stage-io.h"
 #include "texture.h"

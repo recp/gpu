@@ -134,6 +134,7 @@ vk_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
   memset(encoder, 0, sizeof(*encoder));
   memset(native, 0, sizeof(*native));
   native->command          = command->command;
+  native->bindPoint        = VK_PIPELINE_BIND_POINT_COMPUTE;
   native->debugLabelActive = vk_beginDebugLabel(
     gpuCommandBufferDevice(cmdb),
     native->command,
@@ -170,6 +171,9 @@ vk_setComputePipelineState(GPUComputePassEncoder   *encoder,
                         &pipeline->shaderLayout);
   native->pipelineLayout             = pipeline->shaderLayout.layout;
   native->descriptors.pipelineLayout = pipeline->shaderLayout.baseLayout;
+  native->bindPoint                  = VK_PIPELINE_BIND_POINT_COMPUTE;
+  native->executionGraph             = NULL;
+  native->executionGraphInstance     = NULL;
   encoder->_workgroupSize[0] = pipelineState->workgroupSize[0];
   encoder->_workgroupSize[1] = pipelineState->workgroupSize[1];
   encoder->_workgroupSize[2] = pipelineState->workgroupSize[2];
@@ -245,6 +249,9 @@ vk_endComputeEncoding(GPUComputePassEncoder *encoder) {
 
   native->command        = VK_NULL_HANDLE;
   native->pipelineLayout = VK_NULL_HANDLE;
+  native->executionGraph = NULL;
+  native->executionGraphInstance = NULL;
+  native->bindPoint      = VK_PIPELINE_BIND_POINT_COMPUTE;
   native->debugLabelActive = false;
 }
 

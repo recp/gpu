@@ -52,6 +52,7 @@ backend_dx12(void) {
     dx12_initVRS(&dx12.vrs);
     dx12_initRayQuery(&dx12.rayQuery);
     dx12_initRayTracing(&dx12.rayTracing);
+    dx12_initExecutionGraph(&dx12.executionGraph);
 
     dx12.initialized = true;
   }

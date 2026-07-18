@@ -46,6 +46,15 @@ typedef struct GPUShaderStaticSamplerInfoList {
   GPUShaderStaticSamplerInfo items[];
 } GPUShaderStaticSamplerInfoList;
 
+typedef struct GPUShaderExecutionGraphEntryInfo {
+  const char *entryPoint;
+  const char *nodeName;
+  uint32_t    nodeIndex;
+  uint32_t    recordSizeBytes;
+  uint32_t    nodeLaunch;
+  bool        programEntry;
+} GPUShaderExecutionGraphEntryInfo;
+
 struct GPUShaderLibrary {
   GPUApi                         *_api;
   void                           *_priv;
@@ -88,6 +97,26 @@ int
 gpuGetShaderLibraryEntryStage(const GPUShaderLibrary *library,
                               const char *entryPoint,
                               GPUShaderStageFlags *outStage);
+
+GPU_HIDE
+int
+gpuGetShaderLibraryExecutionGraphEntry(
+  const GPUShaderLibrary                 *library,
+  const char                             *entryPoint,
+  GPUShaderExecutionGraphEntryInfo       *outEntry
+);
+
+GPU_HIDE
+uint32_t
+gpuGetShaderLibraryExecutionGraphEntryCount(const GPUShaderLibrary *library);
+
+GPU_HIDE
+int
+gpuGetShaderLibraryExecutionGraphEntryAt(
+  const GPUShaderLibrary                 *library,
+  uint32_t                                index,
+  GPUShaderExecutionGraphEntryInfo       *outEntry
+);
 
 GPU_HIDE
 int

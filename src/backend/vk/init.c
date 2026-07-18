@@ -49,6 +49,7 @@ backend_vk(void) {
     vk_initVRS(&vk.vrs);
     vk_initRayQuery(&vk.rayQuery);
     vk_initRayTracing(&vk.rayTracing);
+    vk_initExecutionGraph(&vk.executionGraph);
 
     vk.initialized = true;
   }

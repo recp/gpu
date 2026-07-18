@@ -47,6 +47,7 @@ struct GPUComputePassEncoder {
   uint32_t                _pushConstantSizeBytes;
   GPUShaderStageFlags     _pushConstantStages;
   bool                    _hasPipeline;
+  bool                    _executionGraph;
   bool                    _pushConstantsEmitted;
   bool                    _ended;
   uint8_t                 _pushConstants[4096];

@@ -23,6 +23,7 @@
 #include "../../api/cmdqueue_internal.h"
 #include "../../api/descr/descriptor_internal.h"
 #include "../../api/device_internal.h"
+#include "../../api/execution_graph_internal.h"
 #include "../../api/frame_internal.h"
 #include "../../api/instance_internal.h"
 #include "../../api/library_internal.h"
@@ -36,6 +37,14 @@
 
 #include <dxgi1_5.h>
 #include <d3d12.h>
+
+#if defined(__ID3D12GraphicsCommandList10_INTERFACE_DEFINED__) && \
+    defined(__ID3D12StateObjectProperties1_INTERFACE_DEFINED__) && \
+    defined(__ID3D12WorkGraphProperties_INTERFACE_DEFINED__)
+#  define GPU_DX12_HAS_EXECUTION_GRAPHS 1
+#else
+#  define GPU_DX12_HAS_EXECUTION_GRAPHS 0
+#endif
 
 #define DXCHECK(D) hr = D; if (FAILED(hr)) { goto err; }
 
@@ -64,6 +73,7 @@ typedef struct GPUAdapterDX12 {
   bool                               meshShader;
   bool                               rayQuery;
   bool                               rayTracingPipeline;
+  bool                               executionGraph;
   GPUFormatCapabilities              formatCaps[GPU_FORMAT_COUNT];
 } GPUAdapterDX12;
 
@@ -121,6 +131,7 @@ typedef struct GPUDeviceDX12 {
   bool                               meshShader;
   bool                               rayQuery;
   bool                               rayTracingPipeline;
+  bool                               executionGraph;
   bool                               subgroupMatrix;
   bool                               subgroupMatrixEnabled;
   bool                               queryResultsReliable;
@@ -425,12 +436,17 @@ typedef struct GPURenderEncoderDX12 {
 } GPURenderEncoderDX12;
 
 typedef struct GPUComputeEncoderDX12 {
-  GPUDeviceDX12             *device;
-  ID3D12GraphicsCommandList *commandList;
-  ID3D12RootSignature       *rootSignature;
-  ID3D12DescriptorHeap      *resourceHeap;
-  ID3D12DescriptorHeap      *samplerHeap;
-  bool                       debugEventActive;
+  GPUDeviceDX12                    *device;
+  ID3D12GraphicsCommandList        *commandList;
+#if GPU_DX12_HAS_EXECUTION_GRAPHS
+  ID3D12GraphicsCommandList10      *commandList10;
+#endif
+  ID3D12RootSignature              *rootSignature;
+  ID3D12DescriptorHeap             *resourceHeap;
+  ID3D12DescriptorHeap             *samplerHeap;
+  GPUExecutionGraphEXT             *executionGraph;
+  GPUExecutionGraphInstanceEXT     *executionGraphInstance;
+  bool                              debugEventActive;
 } GPUComputeEncoderDX12;
 
 typedef struct GPUCopyScratchDX12 {
@@ -448,6 +464,9 @@ typedef struct GPUCommandBufferDX12 {
   ID3D12GraphicsCommandList5   *commandList5;
   ID3D12GraphicsCommandList6   *commandList6;
   ID3D12GraphicsCommandList7   *commandList7;
+#if GPU_DX12_HAS_EXECUTION_GRAPHS
+  ID3D12GraphicsCommandList10  *commandList10;
+#endif
   ID3D12QueryHeap              *frameTimeQueries;
   ID3D12Resource               *frameTimeReadback;
   UINT64                       *frameTimeMapped;

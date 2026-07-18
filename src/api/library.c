@@ -21,9 +21,11 @@
 
 typedef struct GPUShaderEntryInfo {
   char     *name;
+  char     *nodeName;
   char     *payloadType;
   uint64_t  nameHash;
   uint32_t  stage;
+  uint32_t  runtimeStage;
   uint32_t  workgroupSize[3];
   uint32_t  resourceStart;
   uint32_t  resourceCount;
@@ -31,7 +33,10 @@ typedef struct GPUShaderEntryInfo {
   uint32_t  rayPayloadSizeBytes;
   uint32_t  hitAttributeSizeBytes;
   uint32_t  callableDataSizeBytes;
+  uint32_t  nodeIndex;
+  uint32_t  nodeLaunch;
   uint32_t  nameLength;
+  bool      nodeProgramEntry;
 } GPUShaderEntryInfo;
 
 typedef struct GPUShaderEntryInfoList {
@@ -145,6 +150,8 @@ gpu_uslSemanticEnabled(const GPUDevice *device, uint32_t semanticId) {
     case USL_SEMANTIC_FEATURE_ID_COMPUTE_DERIVATIVES_LINEAR:
       return GPUIsFeatureEnabled(device,
                                  GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR);
+    case USL_SEMANTIC_FEATURE_ID_EXECUTION_GRAPH:
+      return GPUIsFeatureEnabled(device, GPU_FEATURE_EXECUTION_GRAPH);
     default:
       return 0;
   }
@@ -416,6 +423,7 @@ gpu_shaderVisibilityFromUSLStage(uint32_t stage, GPUShaderStageFlags *outVisibil
       *outVisibility = GPU_SHADER_STAGE_FRAGMENT_BIT;
       return 1;
     case USL_RUNTIME_STAGE_COMPUTE:
+    case USL_RUNTIME_STAGE_NODE:
       *outVisibility = GPU_SHADER_STAGE_COMPUTE_BIT;
       return 1;
     case USL_RUNTIME_STAGE_TASK:
@@ -504,7 +512,9 @@ gpuGetShaderLibraryWorkgroupSize(const GPUShaderLibrary *library,
   }
 
   entry = gpu_findShaderEntry(library, entryPoint);
-  if (!entry || entry->stage != stage) {
+  if (!entry || entry->stage != stage ||
+      (stage == GPU_SHADER_STAGE_COMPUTE_BIT &&
+       entry->runtimeStage != USL_RUNTIME_STAGE_COMPUTE)) {
     return 0;
   }
 
@@ -546,6 +556,84 @@ gpuGetShaderLibraryEntryStage(const GPUShaderLibrary *library,
 
   *outStage = entry->stage;
   return 1;
+}
+
+static int
+gpu_executionGraphEntryInfo(const GPUShaderEntryInfo             *entry,
+                            GPUShaderExecutionGraphEntryInfo     *outEntry) {
+  if (!entry || !outEntry || entry->runtimeStage != USL_RUNTIME_STAGE_NODE) {
+    return 0;
+  }
+
+  outEntry->entryPoint      = entry->name;
+  outEntry->nodeName        = entry->nodeName ? entry->nodeName : entry->name;
+  outEntry->nodeIndex       = entry->nodeIndex;
+  outEntry->recordSizeBytes = entry->payloadSizeBytes;
+  outEntry->nodeLaunch      = entry->nodeLaunch;
+  outEntry->programEntry    = entry->nodeProgramEntry;
+  return 1;
+}
+
+GPU_HIDE
+int
+gpuGetShaderLibraryExecutionGraphEntry(
+  const GPUShaderLibrary                 *library,
+  const char                             *entryPoint,
+  GPUShaderExecutionGraphEntryInfo       *outEntry) {
+  if (outEntry) {
+    memset(outEntry, 0, sizeof(*outEntry));
+  }
+  return outEntry && gpu_executionGraphEntryInfo(
+                       gpu_findShaderEntry(library, entryPoint),
+                       outEntry
+                     );
+}
+
+GPU_HIDE
+uint32_t
+gpuGetShaderLibraryExecutionGraphEntryCount(const GPUShaderLibrary *library) {
+  const GPUShaderEntryInfoList *list;
+  uint32_t                      count;
+
+  list = library ? library->_entryInfo : NULL;
+  if (!list) {
+    return 0u;
+  }
+  count = 0u;
+  for (uint32_t i = 0u; i < list->count; i++) {
+    count += list->entries[i].runtimeStage == USL_RUNTIME_STAGE_NODE;
+  }
+  return count;
+}
+
+GPU_HIDE
+int
+gpuGetShaderLibraryExecutionGraphEntryAt(
+  const GPUShaderLibrary                 *library,
+  uint32_t                                index,
+  GPUShaderExecutionGraphEntryInfo       *outEntry) {
+  const GPUShaderEntryInfoList *list;
+
+  if (outEntry) {
+    memset(outEntry, 0, sizeof(*outEntry));
+  }
+  list = library ? library->_entryInfo : NULL;
+  if (!list || !outEntry) {
+    return 0;
+  }
+  for (uint32_t i = 0u; i < list->count; i++) {
+    const GPUShaderEntryInfo *entry;
+
+    entry = &list->entries[i];
+    if (entry->runtimeStage != USL_RUNTIME_STAGE_NODE) {
+      continue;
+    }
+    if (index == 0u) {
+      return gpu_executionGraphEntryInfo(entry, outEntry);
+    }
+    index--;
+  }
+  return 0;
 }
 
 GPU_HIDE
@@ -925,6 +1013,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
   usedResourceCount = 0u;
   for (uint32_t i = 0u; i < runtimeInfo->entry_point_count; i++) {
     const USLRuntimeEntryPoint *entry;
+    size_t nodeNameSize;
     size_t payloadTypeSize;
     size_t size;
 
@@ -934,6 +1023,13 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
       return 0;
     }
     textSize += size;
+    if (entry->stage == USL_RUNTIME_STAGE_NODE && entry->node_id[0] != '\0') {
+      if (!gpu_runtimeTextSize(entry->node_id, &nodeNameSize) ||
+          textSize > SIZE_MAX - nodeNameSize) {
+        return 0;
+      }
+      textSize += nodeNameSize;
+    }
     if (entry->payload_size_bytes > 0u) {
       if (!gpu_runtimeTextSize(entry->payload_type, &payloadTypeSize) ||
           textSize > SIZE_MAX - payloadTypeSize) {
@@ -1046,10 +1142,25 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
     dst->nameHash         = gpu_shaderNameHash(src->name, nameSize - 1u);
     dst->nameLength       = (uint32_t)(nameSize - 1u);
     dst->stage                 = stage;
+    dst->runtimeStage          = src->stage;
     dst->payloadSizeBytes      = src->payload_size_bytes;
     dst->rayPayloadSizeBytes   = src->ray_payload_size_bytes;
     dst->hitAttributeSizeBytes = src->hit_attribute_size_bytes;
     dst->callableDataSizeBytes = src->callable_data_size_bytes;
+    dst->nodeIndex             = src->node_index;
+    dst->nodeLaunch            = src->node_launch;
+    dst->nodeProgramEntry      = src->node_is_program_entry != 0u;
+    if (src->stage == USL_RUNTIME_STAGE_NODE && src->node_id[0] != '\0') {
+      size_t nodeNameSize;
+
+      if (!gpu_runtimeTextSize(src->node_id, &nodeNameSize)) {
+        free(metadata);
+        return 0;
+      }
+      dst->nodeName = gpu_storeMetadataText(&textCursor,
+                                            src->node_id,
+                                            nodeNameSize);
+    }
     if (src->payload_size_bytes > 0u) {
       size_t payloadTypeSize;
 
@@ -1506,7 +1617,9 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   }
   targetAtomCount = 0u;
   if (api->backend == GPU_BACKEND_VULKAN) {
-    if (GPUIsFeatureEnabled(device, GPU_FEATURE_ATOMIC64) ||
+    if (GPUIsFeatureEnabled(device, GPU_FEATURE_EXECUTION_GRAPH)) {
+      target.profile = USL_TARGET_PROFILE_VULKAN_1_3;
+    } else if (GPUIsFeatureEnabled(device, GPU_FEATURE_ATOMIC64) ||
         GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
       target.profile = USL_TARGET_PROFILE_VULKAN_1_2;
     }
@@ -1577,6 +1690,8 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   } else if (api->backend == GPU_BACKEND_DX12) {
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUP_MATRIX)) {
       target.profile = USL_TARGET_PROFILE_HLSL_SM_6_10;
+    } else if (GPUIsFeatureEnabled(device, GPU_FEATURE_EXECUTION_GRAPH)) {
+      target.profile = USL_TARGET_PROFILE_HLSL_SM_6_8;
     } else if (GPUIsFeatureEnabled(device, GPU_FEATURE_ATOMIC64)) {
       target.profile = USL_TARGET_PROFILE_HLSL_SM_6_6;
     } else if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
@@ -1661,6 +1776,16 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
           &targetAtoms[targetAtomCount++],
           USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
           USL_SEMANTIC_FEATURE_ID_ATOMIC64,
+          0u,
+          0u) != USLOk) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_EXECUTION_GRAPH)) {
+    if (us_cap_atom_init(
+          &targetAtoms[targetAtomCount++],
+          USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+          USL_SEMANTIC_FEATURE_ID_EXECUTION_GRAPH,
           0u,
           0u) != USLOk) {
       return GPU_ERROR_BACKEND_FAILURE;

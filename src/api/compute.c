@@ -173,9 +173,16 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
   }
   {
     GPUShaderStageFlags stage;
+    GPUShaderExecutionGraphEntryInfo graphEntry;
 
     if (gpuGetShaderLibraryEntryStage(info->library, info->entryPoint, &stage) &&
         stage != GPU_SHADER_STAGE_COMPUTE_BIT) {
+      gpuPipelineCacheReleaseKey(&cacheKey);
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    if (gpuGetShaderLibraryExecutionGraphEntry(info->library,
+                                               info->entryPoint,
+                                               &graphEntry)) {
       gpuPipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_INVALID_ARGUMENT;
     }
@@ -367,6 +374,7 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
   api->compute.setComputePipelineState(pass, state);
   gpuFrameStatsRecordBindEmission(pass->_stats);
   pass->_hasPipeline             = true;
+  pass->_executionGraph          = false;
   pass->_pipeline                = pipeline;
   pass->_pipelineLayout          = pipeline->_layout;
   pass->_requiredBindGroupMask   = pipeline->_requiredBindGroupMask;
@@ -622,7 +630,7 @@ GPUDispatch(GPUComputePassEncoder *pass,
   if (!pass || pass->_ended) {
     return;
   }
-  if (!pass->_hasPipeline) {
+  if (!pass->_hasPipeline || pass->_executionGraph) {
     gpu_computeValidationError(pass, "GPUDispatch skipped: no compute pipeline bound");
     return;
   }
@@ -651,7 +659,7 @@ GPUDispatchIndirect(GPUComputePassEncoder *pass,
   if (!pass || pass->_ended) {
     return;
   }
-  if (!pass->_hasPipeline) {
+  if (!pass->_hasPipeline || pass->_executionGraph) {
     gpu_computeValidationError(pass, "GPUDispatchIndirect skipped: no compute pipeline bound");
     return;
   }
@@ -684,7 +692,7 @@ GPUMultiDispatchIndirect(GPUComputePassEncoder *pass,
   if (!pass || pass->_ended) {
     return;
   }
-  if (!pass->_hasPipeline) {
+  if (!pass->_hasPipeline || pass->_executionGraph) {
     gpu_computeValidationError(
       pass,
       "GPUMultiDispatchIndirect skipped: no compute pipeline bound"

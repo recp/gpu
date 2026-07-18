@@ -42,6 +42,8 @@ GPU_ASSERT_CHAIN_FIRST(GPURasterizationRateMapCreateInfoEXT);
 GPU_ASSERT_CHAIN_FIRST(GPURasterizationRateMapRenderPassEXT);
 GPU_ASSERT_CHAIN_FIRST(GPUAccelerationStructureBuildInfoEXT);
 GPU_ASSERT_CHAIN_FIRST(GPUAccelerationStructureCreateInfoEXT);
+GPU_ASSERT_CHAIN_FIRST(GPUExecutionGraphCreateInfoEXT);
+GPU_ASSERT_CHAIN_FIRST(GPUExecutionGraphInstanceCreateInfoEXT);
 
 _Static_assert(
   offsetof(GPUTransientAllocatorConfig, ringBytesPerFrame) <
@@ -75,6 +77,12 @@ GPU_ASSERT_64BIT_SIZE(GPUIndirectMemoryToTextureCommandEXT, 56u);
 GPU_ASSERT_64BIT_SIZE(GPUIndirectCommandRangeEXT, 32u);
 GPU_ASSERT_64BIT_SIZE(GPUIndirectMemoryCopyInfoEXT, 48u);
 GPU_ASSERT_64BIT_SIZE(GPUIndirectMemoryToTextureCopyInfoEXT, 56u);
+GPU_ASSERT_64BIT_SIZE(GPUExecutionGraphCreateInfoEXT, 56u);
+GPU_ASSERT_64BIT_SIZE(GPUExecutionGraphMemoryRequirementsEXT, 24u);
+GPU_ASSERT_64BIT_SIZE(GPUExecutionGraphInstanceCreateInfoEXT, 40u);
+GPU_ASSERT_64BIT_SIZE(GPUExecutionGraphEntryEXT, 12u);
+GPU_ASSERT_64BIT_SIZE(GPUExecutionGraphInputEXT, 32u);
+GPU_ASSERT_64BIT_SIZE(GPUExecutionGraphBufferInputEXT, 40u);
 _Static_assert(
   offsetof(GPUQueueSubmitExInfo, ppCommandBuffers) <
     offsetof(GPUQueueSubmitExInfo, pWaits),

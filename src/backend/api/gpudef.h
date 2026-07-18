@@ -44,6 +44,7 @@ extern "C" {
 #include "pipeline-cache.h"
 #include "vrs.h"
 #include "ray.h"
+#include "execution-graph.h"
 
 typedef struct GPUApi {
   GPUBackend          backend;
@@ -71,6 +72,7 @@ typedef struct GPUApi {
   GPUApiVRS           vrs;
   GPUApiRayQuery      rayQuery;
   GPUApiRayTracing    rayTracing;
+  GPUApiExecutionGraph executionGraph;
   void               *reserved;
 } GPUApi;
 
