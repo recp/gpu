@@ -114,6 +114,17 @@
   ],
   "testPresets": [
     {
+      "name": "macos-vulkan-debug",
+      "configurePreset": "macos-vulkan-debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 1,
+        "noTestsAction": "error"
+      }
+    },
+    {
       "name": "macos-asan",
       "configurePreset": "macos-asan",
       "environment": {
