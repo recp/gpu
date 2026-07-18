@@ -1359,6 +1359,16 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
     device->meshLimits.maxOutputVertices            = 256u;
     device->meshLimits.maxOutputPrimitives          = 256u;
   }
+  if (deviceDX12->rayTracingPipeline) {
+    device->rayTracingLimits.maxDispatchCount             = 1ull << 30u;
+    device->rayTracingLimits.maxDispatchSize[0]           = UINT32_MAX;
+    device->rayTracingLimits.maxDispatchSize[1]           = UINT32_MAX;
+    device->rayTracingLimits.maxDispatchSize[2]           = UINT32_MAX;
+    device->rayTracingLimits.maxRecursionDepth            =
+      D3D12_RAYTRACING_MAX_DECLARABLE_TRACE_RECURSION_DEPTH;
+    device->rayTracingLimits.maxHitAttributeSizeBytes     =
+      D3D12_RAYTRACING_MAX_ATTRIBUTE_SIZE_IN_BYTES;
+  }
 
   queueCount = 0u;
   for (i = 0u; i < nQueCI; i++) {

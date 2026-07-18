@@ -737,10 +737,6 @@ dx12_createRayTracingPipeline(GPUDevice                                *device,
   if (!deviceDX12 || !deviceDX12->rayTracingPipeline ||
       !deviceDX12->d3dDevice5 || !library || !info || !pipeline ||
       info->groupCount > UINT32_MAX - 4u ||
-      info->maxRecursionDepth >
-        D3D12_RAYTRACING_MAX_DECLARABLE_TRACE_RECURSION_DEPTH ||
-      info->maxHitAttributeSizeBytes >
-        D3D12_RAYTRACING_MAX_ATTRIBUTE_SIZE_IN_BYTES ||
       info->groupCount > SIZE_MAX / sizeof(*native->groupExports) ||
       !dx12_compileRayLibrary(deviceDX12, library, &libraryCode)) {
     return GPU_ERROR_UNSUPPORTED;
@@ -1173,13 +1169,6 @@ dx12_dispatchRays(GPURayTracingPassEncoderEXT *pass,
   if (!native || !native->commandList5 || !tableDX12) {
     return;
   }
-  if (!gpuRayDispatchFits(width, height, depth, NULL, 1ull << 30u)) {
-    gpuDeviceRecordValidationError(
-      pass->device,
-      "GPUDispatchRaysEXT skipped: dispatch exceeds Direct3D 12 limits");
-    return;
-  }
-
   desc.RayGenerationShaderRecord = tableDX12->rayGeneration;
   desc.MissShaderTable            = tableDX12->miss;
   desc.HitGroupTable              = tableDX12->hit;

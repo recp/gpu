@@ -42,6 +42,13 @@ typedef struct GPUMeshLimits {
   uint32_t maxOutputPrimitives;
 } GPUMeshLimits;
 
+typedef struct GPURayTracingLimits {
+  uint64_t maxDispatchCount;
+  uint32_t maxDispatchSize[3];
+  uint32_t maxRecursionDepth;
+  uint32_t maxHitAttributeSizeBytes;
+} GPURayTracingLimits;
+
 struct GPUDevice {
   GPUInstance                 *inst;
   GPUAdapter                  *adapter;
@@ -58,6 +65,7 @@ struct GPUDevice {
   void                        *errorUserData;
   GPUFeatureSet                enabledFeatures;
   GPUCacheStats                cacheStats;
+  GPURayTracingLimits          rayTracingLimits;
   GPUMeshLimits                meshLimits;
   GPURuntimeConfig             runtimeConfig;
   GPUFrameStats                currentFrameStats;

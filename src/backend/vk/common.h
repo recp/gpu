@@ -214,6 +214,7 @@ typedef struct GPUAdapterVk {
   uint32_t                      rayTracingShaderGroupHandleAlignment;
   uint32_t                      rayTracingShaderGroupBaseAlignment;
   uint32_t                      rayTracingMaxRecursionDepth;
+  uint32_t                      rayTracingMaxHitAttributeSizeBytes;
   uint32_t                      rayTracingMaxDispatchCount;
   uint32_t                      rayTracingMaxDispatchSize[3];
   uint32_t                      executionGraphDispatchAddressAlignment;
@@ -329,9 +330,6 @@ typedef struct GPUDeviceVk {
   uint32_t                   rayTracingShaderGroupHandleSize;
   uint32_t                   rayTracingShaderGroupHandleAlignment;
   uint32_t                   rayTracingShaderGroupBaseAlignment;
-  uint32_t                   rayTracingMaxRecursionDepth;
-  uint32_t                   rayTracingMaxDispatchCount;
-  uint32_t                   rayTracingMaxDispatchSize[3];
   uint32_t                   executionGraphDispatchAddressAlignment;
   VkBool32                   multiDrawIndirect;
   VkBool32                   independentBlend;

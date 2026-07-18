@@ -1748,6 +1748,8 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
           rayPipelineProperties.shaderGroupBaseAlignment;
         adapterVk->rayTracingMaxRecursionDepth =
           rayPipelineProperties.maxRayRecursionDepth;
+        adapterVk->rayTracingMaxHitAttributeSizeBytes =
+          rayPipelineProperties.maxRayHitAttributeSize;
         adapterVk->rayTracingMaxDispatchCount =
           rayPipelineProperties.maxRayDispatchInvocationCount;
         for (uint32_t i = 0u; i < 3u; i++) {
@@ -1764,6 +1766,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
           adapterVk->rayTracingShaderGroupHandleAlignment > 0u &&
           adapterVk->rayTracingShaderGroupBaseAlignment > 0u &&
           adapterVk->rayTracingMaxRecursionDepth > 0u &&
+          adapterVk->rayTracingMaxHitAttributeSizeBytes > 0u &&
           adapterVk->rayTracingMaxDispatchCount > 0u &&
           adapterVk->rayTracingMaxDispatchSize[0] > 0u &&
           adapterVk->rayTracingMaxDispatchSize[1] > 0u &&
@@ -3227,13 +3230,15 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
       adapterVk->rayTracingShaderGroupHandleAlignment;
     deviceVk->rayTracingShaderGroupBaseAlignment =
       adapterVk->rayTracingShaderGroupBaseAlignment;
-    deviceVk->rayTracingMaxRecursionDepth =
-      adapterVk->rayTracingMaxRecursionDepth;
-    deviceVk->rayTracingMaxDispatchCount =
+    device->rayTracingLimits.maxDispatchCount =
       adapterVk->rayTracingMaxDispatchCount;
-    memcpy(deviceVk->rayTracingMaxDispatchSize,
+    memcpy(device->rayTracingLimits.maxDispatchSize,
            adapterVk->rayTracingMaxDispatchSize,
-           sizeof(deviceVk->rayTracingMaxDispatchSize));
+           sizeof(device->rayTracingLimits.maxDispatchSize));
+    device->rayTracingLimits.maxRecursionDepth =
+      adapterVk->rayTracingMaxRecursionDepth;
+    device->rayTracingLimits.maxHitAttributeSizeBytes =
+      adapterVk->rayTracingMaxHitAttributeSizeBytes;
     deviceVk->rayTracingPipeline = true;
   }
 #endif

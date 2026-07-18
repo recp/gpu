@@ -777,7 +777,6 @@ vk_createRayTracingPipeline(GPUDevice                                *device,
   if (!deviceVk || !deviceVk->rayTracingPipeline ||
       !deviceVk->createRayTracingPipelines || !library || !library->module ||
       library->device != deviceVk->device || !info || !pipeline ||
-      info->maxRecursionDepth > deviceVk->rayTracingMaxRecursionDepth ||
       info->groupCount > UINT32_MAX / 3u) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -1304,17 +1303,6 @@ vk_dispatchRays(GPURayTracingPassEncoderEXT *pass,
       !deviceVk->traceRays) {
     return;
   }
-  if (!gpuRayDispatchFits(width,
-                          height,
-                          depth,
-                          deviceVk->rayTracingMaxDispatchSize,
-                          deviceVk->rayTracingMaxDispatchCount)) {
-    gpuDeviceRecordValidationError(
-      pass->device,
-      "GPUDispatchRaysEXT skipped: dispatch exceeds Vulkan limits");
-    return;
-  }
-
   deviceVk->traceRays(native->command,
                       &tableVk->rayGeneration,
                       &tableVk->miss,

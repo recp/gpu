@@ -691,6 +691,10 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
   if (!GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_TRACING_PIPELINE)) {
     return GPU_ERROR_UNSUPPORTED;
   }
+  if (!device->rayTracingLimits.maxRecursionDepth ||
+      info->maxRecursionDepth > device->rayTracingLimits.maxRecursionDepth) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
   api = gpuDeviceApi(device);
   if (!api || !api->rayTracing.createPipeline) {
     return GPU_ERROR_UNSUPPORTED;
@@ -762,6 +766,14 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
     free(generalStages);
     free(entries);
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (device->rayTracingLimits.maxHitAttributeSizeBytes &&
+      maxHitAttributeSizeBytes >
+        device->rayTracingLimits.maxHitAttributeSizeBytes) {
+    free(groupTypes);
+    free(generalStages);
+    free(entries);
+    return GPU_ERROR_UNSUPPORTED;
   }
   free(entries);
 
@@ -1043,6 +1055,16 @@ GPUDispatchRaysEXT(GPURayTracingPassEncoderEXT *pass,
       table->device != pass->device || table->pipeline != pass->_pipeline ||
       width == 0u || height == 0u || depth == 0u ||
       !(api = pass->_api) || !api->rayTracing.dispatch) {
+    return;
+  }
+  if (!gpuRayDispatchFits(width,
+                          height,
+                          depth,
+                          pass->device->rayTracingLimits.maxDispatchSize,
+                          pass->device->rayTracingLimits.maxDispatchCount)) {
+    gpuDeviceRecordValidationError(
+      pass->device,
+      "GPUDispatchRaysEXT skipped: dispatch exceeds device limits");
     return;
   }
 #if GPU_BUILD_WITH_VALIDATION
