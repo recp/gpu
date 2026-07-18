@@ -18,7 +18,7 @@
 #include "../../../../api/render/pipeline_internal.h"
 
 static MTRenderEncoder *
-mt_renderEncoder(GPURenderCommandEncoder *rce) {
+mt_renderEncoder(GPURenderPassEncoder *rce) {
   return rce ? rce->_priv : NULL;
 }
 
@@ -28,10 +28,10 @@ mt_nativeBuffer(GPUBuffer *buffer) {
 }
 
 GPU_HIDE
-GPURenderCommandEncoder *
+GPURenderPassEncoder *
 mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   MTCommandBuffer         *commandState;
-  GPURenderCommandEncoder *enc;
+  GPURenderPassEncoder *enc;
   MTRenderEncoder         *nativeState;
   MTRenderPass            *nativePass;
 
@@ -111,7 +111,7 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
 
 GPU_HIDE
 void
-mt_frontFace(GPURenderCommandEncoder *rce, GPUFrontFace frontFace) {
+mt_frontFace(GPURenderPassEncoder *rce, GPUFrontFace frontFace) {
   MTRenderEncoder *native;
   MTLWinding       mtWinding;
 
@@ -134,7 +134,7 @@ mt_frontFace(GPURenderCommandEncoder *rce, GPUFrontFace frontFace) {
 
 GPU_HIDE
 void
-mt_cullMode(GPURenderCommandEncoder *rce, GPUCullMode mode) {
+mt_cullMode(GPURenderPassEncoder *rce, GPUCullMode mode) {
   MTRenderEncoder *native;
 
   native = mt_renderEncoder(rce);
@@ -154,7 +154,7 @@ mt_cullMode(GPURenderCommandEncoder *rce, GPUCullMode mode) {
 
 GPU_HIDE
 void
-mt_setRenderPipelineState(GPURenderCommandEncoder *rce,
+mt_setRenderPipelineState(GPURenderPassEncoder *rce,
                           GPURenderPipelineState  *pipelineState) {
   MTRenderEncoder       *native;
   MTRenderPipelineState *state;
@@ -210,7 +210,7 @@ mt_setRenderPipelineState(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_viewport(GPURenderCommandEncoder *rce, const GPUViewport *viewport) {
+mt_viewport(GPURenderPassEncoder *rce, const GPUViewport *viewport) {
   MTRenderEncoder *native;
   MTLViewport      vp;
 
@@ -264,7 +264,7 @@ mt_scissorAxis(int32_t     origin,
 
 GPU_HIDE
 void
-mt_scissor(GPURenderCommandEncoder *rce, const GPUScissorRect *scissor) {
+mt_scissor(GPURenderPassEncoder *rce, const GPUScissorRect *scissor) {
   MTRenderEncoder *native;
   MTLScissorRect   rect;
 
@@ -295,7 +295,7 @@ mt_scissor(GPURenderCommandEncoder *rce, const GPUScissorRect *scissor) {
 
 GPU_HIDE
 void
-mt_blendConstant(GPURenderCommandEncoder *rce, const float rgba[4]) {
+mt_blendConstant(GPURenderPassEncoder *rce, const float rgba[4]) {
   MTRenderEncoder *native;
 
   native = mt_renderEncoder(rce);
@@ -321,7 +321,7 @@ mt_blendConstant(GPURenderCommandEncoder *rce, const float rgba[4]) {
 
 GPU_HIDE
 void
-mt_stencilReference(GPURenderCommandEncoder *rce, uint32_t reference) {
+mt_stencilReference(GPURenderPassEncoder *rce, uint32_t reference) {
   MTRenderEncoder *native;
 
   native = mt_renderEncoder(rce);
@@ -341,7 +341,7 @@ mt_stencilReference(GPURenderCommandEncoder *rce, uint32_t reference) {
 
 GPU_HIDE
 void
-mt_renderPushConstants(GPURenderCommandEncoder *rce,
+mt_renderPushConstants(GPURenderPassEncoder *rce,
                        GPUShaderStageFlags       stages,
                        const void               *data,
                        uint32_t                  sizeBytes) {
@@ -424,7 +424,7 @@ mt_renderPushConstants(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_vertexBytes(GPURenderCommandEncoder *rce,
+mt_vertexBytes(GPURenderPassEncoder *rce,
                void                    *bytes,
                size_t                   length,
                uint32_t                 index) {
@@ -456,7 +456,7 @@ mt_vertexBytes(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_vertexBuffer(GPURenderCommandEncoder *rce,
+mt_vertexBuffer(GPURenderPassEncoder *rce,
                 GPUBuffer               *buffer,
                 uint64_t                 offset,
                 uint32_t                 index) {
@@ -485,7 +485,7 @@ mt_vertexBuffer(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_vertexInputBuffer(GPURenderCommandEncoder *rce,
+mt_vertexInputBuffer(GPURenderPassEncoder *rce,
                      GPUBuffer               *buffer,
                      uint64_t                 offset,
                      uint32_t                 index) {
@@ -497,7 +497,7 @@ mt_vertexInputBuffer(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_rceSetVertexTexture(GPURenderCommandEncoder *rce,
+mt_rceSetVertexTexture(GPURenderPassEncoder *rce,
                        GPUTextureView          *view,
                        uint32_t                 index) {
   MTRenderEncoder *native;
@@ -519,7 +519,7 @@ mt_rceSetVertexTexture(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_rceSetVertexSampler(GPURenderCommandEncoder *rce,
+mt_rceSetVertexSampler(GPURenderPassEncoder *rce,
                        GPUSampler              *sampler,
                        uint32_t                 index) {
   MTRenderEncoder    *native;
@@ -542,7 +542,7 @@ mt_rceSetVertexSampler(GPURenderCommandEncoder *rce,
 GPU_HIDE
 void
 mt_rceSetVertexAccelerationStructure(
-  GPURenderCommandEncoder     *rce,
+  GPURenderPassEncoder     *rce,
   GPUAccelerationStructureEXT *structure,
   uint32_t                     index) {
   GPUAccelerationStructureMT *ray;
@@ -570,7 +570,7 @@ mt_rceSetVertexAccelerationStructure(
 
 GPU_HIDE
 void
-mt_taskBuffer(GPURenderCommandEncoder *rce,
+mt_taskBuffer(GPURenderPassEncoder *rce,
               GPUBuffer               *buffer,
               uint64_t                 offset,
               uint32_t                 index) {
@@ -601,7 +601,7 @@ mt_taskBuffer(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_rceSetTaskTexture(GPURenderCommandEncoder *rce,
+mt_rceSetTaskTexture(GPURenderPassEncoder *rce,
                      GPUTextureView          *view,
                      uint32_t                 index) {
   MTRenderEncoder *native;
@@ -625,7 +625,7 @@ mt_rceSetTaskTexture(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_rceSetTaskSampler(GPURenderCommandEncoder *rce,
+mt_rceSetTaskSampler(GPURenderPassEncoder *rce,
                      GPUSampler              *sampler,
                      uint32_t                 index) {
   MTRenderEncoder     *native;
@@ -649,7 +649,7 @@ mt_rceSetTaskSampler(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_meshBuffer(GPURenderCommandEncoder *rce,
+mt_meshBuffer(GPURenderPassEncoder *rce,
               GPUBuffer               *buffer,
               uint64_t                 offset,
               uint32_t                 index) {
@@ -680,7 +680,7 @@ mt_meshBuffer(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_rceSetMeshTexture(GPURenderCommandEncoder *rce,
+mt_rceSetMeshTexture(GPURenderPassEncoder *rce,
                      GPUTextureView          *view,
                      uint32_t                 index) {
   MTRenderEncoder *native;
@@ -704,7 +704,7 @@ mt_rceSetMeshTexture(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_rceSetMeshSampler(GPURenderCommandEncoder *rce,
+mt_rceSetMeshSampler(GPURenderPassEncoder *rce,
                      GPUSampler              *sampler,
                      uint32_t                 index) {
   MTRenderEncoder     *native;
@@ -728,7 +728,7 @@ mt_rceSetMeshSampler(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_fragmentBuffer(GPURenderCommandEncoder *rce,
+mt_fragmentBuffer(GPURenderPassEncoder *rce,
                   GPUBuffer               *buffer,
                   uint64_t                 offset,
                   uint32_t                 index) {
@@ -757,7 +757,7 @@ mt_fragmentBuffer(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_rceSetFragmentTexture(GPURenderCommandEncoder *rce,
+mt_rceSetFragmentTexture(GPURenderPassEncoder *rce,
                          GPUTextureView           *view,
                          uint32_t                 index) {
   MTRenderEncoder *native;
@@ -779,7 +779,7 @@ mt_rceSetFragmentTexture(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_rceSetFragmentSampler(GPURenderCommandEncoder *rce,
+mt_rceSetFragmentSampler(GPURenderPassEncoder *rce,
                          GPUSampler              *sampler,
                          uint32_t                 index) {
   MTRenderEncoder     *native;
@@ -802,7 +802,7 @@ mt_rceSetFragmentSampler(GPURenderCommandEncoder *rce,
 GPU_HIDE
 void
 mt_rceSetFragmentAccelerationStructure(
-  GPURenderCommandEncoder     *rce,
+  GPURenderPassEncoder     *rce,
   GPUAccelerationStructureEXT *structure,
   uint32_t                     index) {
   GPUAccelerationStructureMT *ray;
@@ -830,7 +830,7 @@ mt_rceSetFragmentAccelerationStructure(
 
 GPU_HIDE
 void
-mt_drawPrimitives(GPURenderCommandEncoder *rce,
+mt_drawPrimitives(GPURenderPassEncoder *rce,
                   GPUPrimitiveType         type,
                   size_t                   start,
                   size_t                   count,
@@ -863,7 +863,7 @@ mt_drawPrimitives(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_drawIndexedPrims(GPURenderCommandEncoder *rce,
+mt_drawIndexedPrims(GPURenderPassEncoder *rce,
                     uint32_t                 indexCount,
                     uint32_t                 instanceCount,
                     uint32_t                 firstIndex,
@@ -911,7 +911,7 @@ mt_drawIndexedPrims(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_drawMesh(GPURenderCommandEncoder *rce,
+mt_drawMesh(GPURenderPassEncoder *rce,
             uint32_t                 groupCountX,
             uint32_t                 groupCountY,
             uint32_t                 groupCountZ,
@@ -953,7 +953,7 @@ mt_drawMesh(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_drawPrimitivesIndirect(GPURenderCommandEncoder *rce,
+mt_drawPrimitivesIndirect(GPURenderPassEncoder *rce,
                           GPUPrimitiveType         type,
                           GPUBuffer               *argsBuffer,
                           uint64_t                 argsOffset) {
@@ -982,7 +982,7 @@ mt_drawPrimitivesIndirect(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_drawIndexedPrimsIndirect(GPURenderCommandEncoder *rce,
+mt_drawIndexedPrimsIndirect(GPURenderPassEncoder *rce,
                             GPUBuffer               *argsBuffer,
                             uint64_t                 argsOffset) {
   MTRenderEncoder *native;
@@ -1019,7 +1019,7 @@ mt_drawIndexedPrimsIndirect(GPURenderCommandEncoder *rce,
 
 GPU_HIDE
 void
-mt_endEncoding(GPURenderCommandEncoder *rce) {
+mt_endEncoding(GPURenderPassEncoder *rce) {
   MTRenderEncoder *native;
 
   if (!rce) {

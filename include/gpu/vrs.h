@@ -26,10 +26,13 @@ extern "C" {
 typedef struct GPUAdapter                 GPUAdapter;
 typedef struct GPUBuffer                  GPUBuffer;
 typedef struct GPUDevice                  GPUDevice;
-typedef struct GPURenderCommandEncoder    GPURenderCommandEncoder;
 typedef struct GPUTextureView             GPUTextureView;
 typedef struct GPURasterizationRateMapEXT GPURasterizationRateMapEXT;
-typedef        GPURenderCommandEncoder    GPURenderPassEncoder;
+
+#ifndef GPU_RENDER_ENCODER_TYPES_DEFINED
+#define GPU_RENDER_ENCODER_TYPES_DEFINED
+typedef struct GPURenderPassEncoder GPURenderPassEncoder;
+#endif
 
 typedef uint32_t GPUVRSModeFlagsEXT;
 enum {

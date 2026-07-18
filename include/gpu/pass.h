@@ -27,8 +27,7 @@ extern "C" {
 
 #ifndef GPU_RENDER_ENCODER_TYPES_DEFINED
 #define GPU_RENDER_ENCODER_TYPES_DEFINED
-typedef struct GPURenderCommandEncoder GPURenderCommandEncoder;
-typedef        GPURenderCommandEncoder GPURenderPassEncoder;
+typedef struct GPURenderPassEncoder GPURenderPassEncoder;
 #endif
 
 typedef struct GPUCopyPassEncoder GPUCopyPassEncoder;

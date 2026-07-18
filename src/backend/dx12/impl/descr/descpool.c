@@ -1913,7 +1913,7 @@ dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
 
 GPU_HIDE
 bool
-dx12_bindRenderGroup(GPURenderCommandEncoder *pass,
+dx12_bindRenderGroup(GPURenderPassEncoder *pass,
                      GPUPipelineLayout       *pipelineLayout,
                      uint32_t                 groupIndex,
                      GPUBindGroup            *group,

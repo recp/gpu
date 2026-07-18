@@ -44,7 +44,7 @@ enum {
   GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS = 8u
 };
 
-struct GPURenderCommandEncoder {
+struct GPURenderPassEncoder {
   void                   *_priv;
   void                   *_pipeline;
   struct GPUApi          *_api;
@@ -89,127 +89,127 @@ struct GPURenderCommandEncoder {
 };
 
 typedef struct GPUApiRCE {
-  GPURenderCommandEncoder*
+  GPURenderPassEncoder*
   (*renderCommandEncoder)(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass);
   
   void
-  (*frontFace)(GPURenderCommandEncoder *rce, GPUFrontFace frontFace);
+  (*frontFace)(GPURenderPassEncoder *rce, GPUFrontFace frontFace);
   
   void
-  (*cullMode)(GPURenderCommandEncoder *rce, GPUCullMode mode);
+  (*cullMode)(GPURenderPassEncoder *rce, GPUCullMode mode);
   
   void
-  (*setRenderPipelineState)(GPURenderCommandEncoder *rce,
+  (*setRenderPipelineState)(GPURenderPassEncoder *rce,
                             GPURenderPipelineState  *piplineState);
   
   void
-  (*viewport)(GPURenderCommandEncoder *enc, const GPUViewport *viewport);
+  (*viewport)(GPURenderPassEncoder *enc, const GPUViewport *viewport);
 
   void
-  (*scissor)(GPURenderCommandEncoder *enc, const GPUScissorRect *scissor);
+  (*scissor)(GPURenderPassEncoder *enc, const GPUScissorRect *scissor);
 
   void
-  (*blendConstant)(GPURenderCommandEncoder *enc, const float rgba[4]);
+  (*blendConstant)(GPURenderPassEncoder *enc, const float rgba[4]);
 
   void
-  (*stencilReference)(GPURenderCommandEncoder *enc, uint32_t reference);
+  (*stencilReference)(GPURenderPassEncoder *enc, uint32_t reference);
 
   void
-  (*pushConstants)(GPURenderCommandEncoder *enc,
+  (*pushConstants)(GPURenderPassEncoder *enc,
                    GPUShaderStageFlags     stages,
                    const void             *data,
                    uint32_t                sizeBytes);
   
   void
-  (*vertexBytes)(GPURenderCommandEncoder *enc,
+  (*vertexBytes)(GPURenderPassEncoder *enc,
                  void                    *bytes,
                  size_t                   legth,
                  uint32_t                 atIndex);
   
   void
-  (*vertexBuffer)(GPURenderCommandEncoder *rce,
+  (*vertexBuffer)(GPURenderPassEncoder *rce,
                   GPUBuffer               *buf,
                   uint64_t                 off,
                   uint32_t                 index);
 
   void
-  (*vertexInputBuffer)(GPURenderCommandEncoder *rce,
+  (*vertexInputBuffer)(GPURenderPassEncoder *rce,
                        GPUBuffer               *buf,
                        uint64_t                 off,
                        uint32_t                 index);
 
   void
-  (*setVertexTexture)(GPURenderCommandEncoder *rce,
+  (*setVertexTexture)(GPURenderPassEncoder *rce,
                       GPUTextureView          *view,
                       uint32_t                 index);
 
   void
-  (*setVertexSampler)(GPURenderCommandEncoder *rce,
+  (*setVertexSampler)(GPURenderPassEncoder *rce,
                       GPUSampler              *sampler,
                       uint32_t                 index);
 
   void
   (*setVertexAccelerationStructure)(
-    GPURenderCommandEncoder      *rce,
+    GPURenderPassEncoder      *rce,
     GPUAccelerationStructureEXT  *structure,
     uint32_t                      index);
 
   void
-  (*taskBuffer)(GPURenderCommandEncoder *rce,
+  (*taskBuffer)(GPURenderPassEncoder *rce,
                 GPUBuffer               *buf,
                 uint64_t                 off,
                 uint32_t                 index);
 
   void
-  (*setTaskTexture)(GPURenderCommandEncoder *rce,
+  (*setTaskTexture)(GPURenderPassEncoder *rce,
                     GPUTextureView          *view,
                     uint32_t                 index);
 
   void
-  (*setTaskSampler)(GPURenderCommandEncoder *rce,
+  (*setTaskSampler)(GPURenderPassEncoder *rce,
                     GPUSampler              *sampler,
                     uint32_t                 index);
 
   void
-  (*meshBuffer)(GPURenderCommandEncoder *rce,
+  (*meshBuffer)(GPURenderPassEncoder *rce,
                 GPUBuffer               *buf,
                 uint64_t                 off,
                 uint32_t                 index);
 
   void
-  (*setMeshTexture)(GPURenderCommandEncoder *rce,
+  (*setMeshTexture)(GPURenderPassEncoder *rce,
                     GPUTextureView          *view,
                     uint32_t                 index);
 
   void
-  (*setMeshSampler)(GPURenderCommandEncoder *rce,
+  (*setMeshSampler)(GPURenderPassEncoder *rce,
                     GPUSampler              *sampler,
                     uint32_t                 index);
   
   void
-  (*fragmentBuffer)(GPURenderCommandEncoder *rce,
+  (*fragmentBuffer)(GPURenderPassEncoder *rce,
                     GPUBuffer               *buf,
                     uint64_t                 off,
                     uint32_t                 index);
   
   void
-  (*setFragmentTexture)(GPURenderCommandEncoder *rce,
+  (*setFragmentTexture)(GPURenderPassEncoder *rce,
                         GPUTextureView           *view,
                         uint32_t                 index);
 
   void
-  (*setFragmentSampler)(GPURenderCommandEncoder *rce,
+  (*setFragmentSampler)(GPURenderPassEncoder *rce,
                         GPUSampler              *sampler,
                         uint32_t                 index);
 
   void
   (*setFragmentAccelerationStructure)(
-    GPURenderCommandEncoder      *rce,
+    GPURenderPassEncoder      *rce,
     GPUAccelerationStructureEXT  *structure,
     uint32_t                      index);
 
   void
-  (*drawPrimitives)(GPURenderCommandEncoder *rce,
+  (*drawPrimitives)(GPURenderPassEncoder *rce,
                     GPUPrimitiveType         type,
                     size_t                   start,
                     size_t                   count,
@@ -217,7 +217,7 @@ typedef struct GPUApiRCE {
                     uint32_t                 firstInstance);
 
   void
-  (*drawIndexedPrims)(GPURenderCommandEncoder *rce,
+  (*drawIndexedPrims)(GPURenderPassEncoder *rce,
                       uint32_t                 indexCount,
                       uint32_t                 instanceCount,
                       uint32_t                 firstIndex,
@@ -225,7 +225,7 @@ typedef struct GPUApiRCE {
                       uint32_t                 firstInstance);
 
   void
-  (*drawMesh)(GPURenderCommandEncoder *rce,
+  (*drawMesh)(GPURenderPassEncoder *rce,
               uint32_t                 groupCountX,
               uint32_t                 groupCountY,
               uint32_t                 groupCountZ,
@@ -234,25 +234,25 @@ typedef struct GPUApiRCE {
 
   void
   (*setFragmentShadingRate)(
-    GPURenderCommandEncoder      *rce,
+    GPURenderPassEncoder      *rce,
     GPUShadingRateEXT             rate,
     GPUShadingRateCombinerEXT     primitiveCombiner,
     GPUShadingRateCombinerEXT     attachmentCombiner
   );
 
   void
-  (*drawPrimitivesIndirect)(GPURenderCommandEncoder *rce,
+  (*drawPrimitivesIndirect)(GPURenderPassEncoder *rce,
                             GPUPrimitiveType         type,
                             GPUBuffer               *argsBuffer,
                             uint64_t                 argsOffset);
 
   void
-  (*drawIndexedPrimsIndirect)(GPURenderCommandEncoder *rce,
+  (*drawIndexedPrimsIndirect)(GPURenderPassEncoder *rce,
                               GPUBuffer               *argsBuffer,
                               uint64_t                 argsOffset);
 
   bool
-  (*multiDrawPrimitivesIndirect)(GPURenderCommandEncoder *rce,
+  (*multiDrawPrimitivesIndirect)(GPURenderPassEncoder *rce,
                                  GPUPrimitiveType         type,
                                  GPUBuffer               *argsBuffer,
                                  uint64_t                 argsOffset,
@@ -260,14 +260,14 @@ typedef struct GPUApiRCE {
                                  uint32_t                 strideBytes);
 
   bool
-  (*multiDrawIndexedPrimsIndirect)(GPURenderCommandEncoder *rce,
+  (*multiDrawIndexedPrimsIndirect)(GPURenderPassEncoder *rce,
                                    GPUBuffer               *argsBuffer,
                                    uint64_t                 argsOffset,
                                    uint32_t                 drawCount,
                                    uint32_t                 strideBytes);
 
   void
-  (*endEncoding)(GPURenderCommandEncoder *rce);
+  (*endEncoding)(GPURenderPassEncoder *rce);
 } GPUApiRCE;
 
 #ifdef __cplusplus

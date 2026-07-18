@@ -685,7 +685,7 @@ struct GPUCommandBufferVk {
   VkQueryPool              frameTimeQueries;
   GPURenderPassDesc         renderPass;
   GPURenderPassVk           renderPassState;
-  GPURenderCommandEncoder   renderEncoder;
+  GPURenderPassEncoder   renderEncoder;
   GPURenderEncoderVk        renderState;
   GPUComputePassEncoder     computeEncoder;
   GPUComputeEncoderVk       computeState;

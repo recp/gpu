@@ -220,7 +220,7 @@ static uint32_t gRenderBlendCalls;
 static uint32_t gRenderStencilCalls;
 
 static void
-count_draw_primitives(GPURenderCommandEncoder *rce,
+count_draw_primitives(GPURenderPassEncoder *rce,
                       GPUPrimitiveType type,
                       size_t start,
                       size_t count,
@@ -236,7 +236,7 @@ count_draw_primitives(GPURenderCommandEncoder *rce,
 }
 
 static void
-count_draw_indexed(GPURenderCommandEncoder *rce,
+count_draw_indexed(GPURenderPassEncoder *rce,
                    uint32_t indexCount,
                    uint32_t instanceCount,
                    uint32_t firstIndex,
@@ -252,7 +252,7 @@ count_draw_indexed(GPURenderCommandEncoder *rce,
 }
 
 static void
-count_draw_indirect(GPURenderCommandEncoder *rce,
+count_draw_indirect(GPURenderPassEncoder *rce,
                     GPUPrimitiveType type,
                     GPUBuffer *argsBuffer,
                     uint64_t argsOffset) {
@@ -264,7 +264,7 @@ count_draw_indirect(GPURenderCommandEncoder *rce,
 }
 
 static void
-count_draw_indexed_indirect(GPURenderCommandEncoder *rce,
+count_draw_indexed_indirect(GPURenderPassEncoder *rce,
                             GPUBuffer *argsBuffer,
                             uint64_t argsOffset) {
   (void)rce;
@@ -274,7 +274,7 @@ count_draw_indexed_indirect(GPURenderCommandEncoder *rce,
 }
 
 static bool
-count_multi_draw_indirect(GPURenderCommandEncoder *rce,
+count_multi_draw_indirect(GPURenderPassEncoder *rce,
                           GPUPrimitiveType type,
                           GPUBuffer *argsBuffer,
                           uint64_t argsOffset,
@@ -291,7 +291,7 @@ count_multi_draw_indirect(GPURenderCommandEncoder *rce,
 }
 
 static bool
-count_multi_draw_indexed_indirect(GPURenderCommandEncoder *rce,
+count_multi_draw_indexed_indirect(GPURenderPassEncoder *rce,
                                   GPUBuffer *argsBuffer,
                                   uint64_t argsOffset,
                                   uint32_t drawCount,
@@ -306,7 +306,7 @@ count_multi_draw_indexed_indirect(GPURenderCommandEncoder *rce,
 }
 
 static void
-count_vertex_buffer(GPURenderCommandEncoder *rce,
+count_vertex_buffer(GPURenderPassEncoder *rce,
                     GPUBuffer               *buffer,
                     uint64_t                 offset,
                     uint32_t                 index) {
@@ -318,7 +318,7 @@ count_vertex_buffer(GPURenderCommandEncoder *rce,
 }
 
 static void
-count_render_push_constants(GPURenderCommandEncoder *rce,
+count_render_push_constants(GPURenderPassEncoder *rce,
                             GPUShaderStageFlags       stages,
                             const void               *data,
                             uint32_t                  sizeBytes) {
@@ -330,28 +330,28 @@ count_render_push_constants(GPURenderCommandEncoder *rce,
 }
 
 static void
-count_viewport(GPURenderCommandEncoder *rce, const GPUViewport *viewport) {
+count_viewport(GPURenderPassEncoder *rce, const GPUViewport *viewport) {
   (void)rce;
   (void)viewport;
   gRenderViewportCalls++;
 }
 
 static void
-count_scissor(GPURenderCommandEncoder *rce, const GPUScissorRect *scissor) {
+count_scissor(GPURenderPassEncoder *rce, const GPUScissorRect *scissor) {
   (void)rce;
   (void)scissor;
   gRenderScissorCalls++;
 }
 
 static void
-count_blend_constant(GPURenderCommandEncoder *rce, const float rgba[4]) {
+count_blend_constant(GPURenderPassEncoder *rce, const float rgba[4]) {
   (void)rce;
   (void)rgba;
   gRenderBlendCalls++;
 }
 
 static void
-count_stencil_reference(GPURenderCommandEncoder *rce, uint32_t reference) {
+count_stencil_reference(GPURenderPassEncoder *rce, uint32_t reference) {
   (void)rce;
   (void)reference;
   gRenderStencilCalls++;
@@ -2023,32 +2023,32 @@ check_render_pass_validation(void) {
 static int
 check_render_draw_validation_calls(GPUDevice *device) {
   GPUApi *api;
-  void (*oldDraw)(GPURenderCommandEncoder *,
+  void (*oldDraw)(GPURenderPassEncoder *,
                   GPUPrimitiveType,
                   size_t,
                   size_t,
                   uint32_t,
                   uint32_t);
-  void (*oldDrawIndexed)(GPURenderCommandEncoder *,
+  void (*oldDrawIndexed)(GPURenderPassEncoder *,
                          uint32_t,
                          uint32_t,
                          uint32_t,
                          int32_t,
                          uint32_t);
-  void (*oldDrawIndirect)(GPURenderCommandEncoder *,
+  void (*oldDrawIndirect)(GPURenderPassEncoder *,
                           GPUPrimitiveType,
                           GPUBuffer *,
                           uint64_t);
-  void (*oldDrawIndexedIndirect)(GPURenderCommandEncoder *,
+  void (*oldDrawIndexedIndirect)(GPURenderPassEncoder *,
                                  GPUBuffer *,
                                  uint64_t);
-  bool (*oldMultiDrawIndirect)(GPURenderCommandEncoder *,
+  bool (*oldMultiDrawIndirect)(GPURenderPassEncoder *,
                                GPUPrimitiveType,
                                GPUBuffer *,
                                uint64_t,
                                uint32_t,
                                uint32_t);
-  bool (*oldMultiDrawIndexedIndirect)(GPURenderCommandEncoder *,
+  bool (*oldMultiDrawIndexedIndirect)(GPURenderPassEncoder *,
                                       GPUBuffer *,
                                       uint64_t,
                                       uint32_t,
@@ -2310,7 +2310,7 @@ cleanup:
 static int
 check_vertex_buffer_shadowing_calls(GPUDevice *activeDevice) {
   GPUApi *api;
-  void (*oldVertexBuffer)(GPURenderCommandEncoder *,
+  void (*oldVertexBuffer)(GPURenderPassEncoder *,
                           GPUBuffer *,
                           uint64_t,
                           uint32_t);
@@ -2385,7 +2385,7 @@ cleanup:
 static int
 check_render_push_constant_shadowing_calls(GPUDevice *activeDevice) {
   GPUApi *api;
-  void (*oldPushConstants)(GPURenderCommandEncoder *,
+  void (*oldPushConstants)(GPURenderPassEncoder *,
                            GPUShaderStageFlags,
                            const void *,
                            uint32_t);

@@ -28,7 +28,7 @@ struct GPUBindGroupLayout;
 struct GPUComputePassEncoder;
 struct GPUDevice;
 struct GPUPipelineLayout;
-struct GPURenderCommandEncoder;
+struct GPURenderPassEncoder;
 
 /* Covers the portable v1 dynamic-buffer limits without heap storage. */
 enum {
@@ -67,7 +67,7 @@ typedef struct GPUApiDescriptor {
   (*destroyBindGroup)(struct GPUBindGroup *group);
 
   bool
-  (*bindRenderGroup)(struct GPURenderCommandEncoder *pass,
+  (*bindRenderGroup)(struct GPURenderPassEncoder *pass,
                      struct GPUPipelineLayout       *pipelineLayout,
                      uint32_t                        groupIndex,
                      struct GPUBindGroup            *group,

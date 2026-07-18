@@ -2039,7 +2039,7 @@ vk__bindGroup(VkCommandBuffer        command,
 
 GPU_HIDE
 bool
-vk_bindRenderGroup(GPURenderCommandEncoder *pass,
+vk_bindRenderGroup(GPURenderPassEncoder *pass,
                    GPUPipelineLayout       *pipelineLayout,
                    uint32_t                 groupIndex,
                    GPUBindGroup            *group,

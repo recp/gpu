@@ -19,7 +19,7 @@
 #include "../../../api/render/pipeline_internal.h"
 
 static GPURenderEncoderVk*
-vk__renderEncoder(GPURenderCommandEncoder *encoder) {
+vk__renderEncoder(GPURenderPassEncoder *encoder) {
   return encoder ? encoder->_priv : NULL;
 }
 
@@ -68,7 +68,7 @@ vk__scissorAxis(int32_t   origin,
 }
 
 static bool
-vk__bindIndexBuffer(GPURenderCommandEncoder *encoder,
+vk__bindIndexBuffer(GPURenderPassEncoder *encoder,
                     GPURenderEncoderVk      *native) {
   GPUBuffer    *buffer;
   GPUBufferVk  *bufferVk;
@@ -105,11 +105,11 @@ vk__bindIndexBuffer(GPURenderCommandEncoder *encoder,
 }
 
 GPU_HIDE
-GPURenderCommandEncoder*
+GPURenderPassEncoder*
 vk_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   GPUCommandBufferVk     *command;
   GPURenderPassVk        *renderPass;
-  GPURenderCommandEncoder *encoder;
+  GPURenderPassEncoder *encoder;
   GPURenderEncoderVk     *native;
   VkRenderPassBeginInfo   beginInfo = {0};
   VkViewport              viewport = {0};
@@ -195,7 +195,7 @@ vk_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
 
 GPU_HIDE
 void
-vk_setRenderPipelineState(GPURenderCommandEncoder *encoder,
+vk_setRenderPipelineState(GPURenderPassEncoder *encoder,
                           GPURenderPipelineState  *pipelineState) {
   GPURenderEncoderVk  *native;
   GPURenderPipelineVk *pipeline;
@@ -221,7 +221,7 @@ vk_setRenderPipelineState(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
-vk_viewport(GPURenderCommandEncoder *encoder, const GPUViewport *value) {
+vk_viewport(GPURenderPassEncoder *encoder, const GPUViewport *value) {
   GPURenderEncoderVk *native;
   VkViewport          viewport;
 
@@ -241,7 +241,7 @@ vk_viewport(GPURenderCommandEncoder *encoder, const GPUViewport *value) {
 
 GPU_HIDE
 void
-vk_scissor(GPURenderCommandEncoder *encoder, const GPUScissorRect *value) {
+vk_scissor(GPURenderPassEncoder *encoder, const GPUScissorRect *value) {
   GPURenderEncoderVk *native;
   VkRect2D            scissor;
 
@@ -265,7 +265,7 @@ vk_scissor(GPURenderCommandEncoder *encoder, const GPUScissorRect *value) {
 
 GPU_HIDE
 void
-vk_blendConstant(GPURenderCommandEncoder *encoder, const float rgba[4]) {
+vk_blendConstant(GPURenderPassEncoder *encoder, const float rgba[4]) {
   GPURenderEncoderVk *native;
 
   native = vk__renderEncoder(encoder);
@@ -278,7 +278,7 @@ vk_blendConstant(GPURenderCommandEncoder *encoder, const float rgba[4]) {
 
 GPU_HIDE
 void
-vk_stencilReference(GPURenderCommandEncoder *encoder, uint32_t reference) {
+vk_stencilReference(GPURenderPassEncoder *encoder, uint32_t reference) {
   GPURenderEncoderVk *native;
 
   native = vk__renderEncoder(encoder);
@@ -294,7 +294,7 @@ vk_stencilReference(GPURenderCommandEncoder *encoder, uint32_t reference) {
 GPU_HIDE
 void
 vk_setFragmentShadingRate(
-  GPURenderCommandEncoder      *encoder,
+  GPURenderPassEncoder      *encoder,
   GPUShadingRateEXT             rate,
   GPUShadingRateCombinerEXT     primitiveCombiner,
   GPUShadingRateCombinerEXT     attachmentCombiner) {
@@ -342,7 +342,7 @@ vk_setFragmentShadingRate(
 
 GPU_HIDE
 void
-vk_renderPushConstants(GPURenderCommandEncoder *encoder,
+vk_renderPushConstants(GPURenderPassEncoder *encoder,
                        GPUShaderStageFlags       stages,
                        const void               *data,
                        uint32_t                  sizeBytes) {
@@ -381,7 +381,7 @@ vk_renderPushConstants(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
-vk_vertexBuffer(GPURenderCommandEncoder *encoder,
+vk_vertexBuffer(GPURenderPassEncoder *encoder,
                 GPUBuffer               *buffer,
                 uint64_t                 offset,
                 uint32_t                 index) {
@@ -405,7 +405,7 @@ vk_vertexBuffer(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
-vk_drawPrimitives(GPURenderCommandEncoder *encoder,
+vk_drawPrimitives(GPURenderPassEncoder *encoder,
                   GPUPrimitiveType         type,
                   size_t                   start,
                   size_t                   count,
@@ -429,7 +429,7 @@ vk_drawPrimitives(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
-vk_drawIndexedPrims(GPURenderCommandEncoder *encoder,
+vk_drawIndexedPrims(GPURenderPassEncoder *encoder,
                     uint32_t                 indexCount,
                     uint32_t                 instanceCount,
                     uint32_t                 firstIndex,
@@ -452,7 +452,7 @@ vk_drawIndexedPrims(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
-vk_drawPrimitivesIndirect(GPURenderCommandEncoder *encoder,
+vk_drawPrimitivesIndirect(GPURenderPassEncoder *encoder,
                           GPUPrimitiveType         type,
                           GPUBuffer               *argsBuffer,
                           uint64_t                 argsOffset) {
@@ -476,7 +476,7 @@ vk_drawPrimitivesIndirect(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
-vk_drawIndexedPrimsIndirect(GPURenderCommandEncoder *encoder,
+vk_drawIndexedPrimsIndirect(GPURenderPassEncoder *encoder,
                             GPUBuffer               *argsBuffer,
                             uint64_t                 argsOffset) {
   GPURenderEncoderVk *native;
@@ -497,7 +497,7 @@ vk_drawIndexedPrimsIndirect(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 bool
-vk_multiDrawPrimitivesIndirect(GPURenderCommandEncoder *encoder,
+vk_multiDrawPrimitivesIndirect(GPURenderPassEncoder *encoder,
                                GPUPrimitiveType         type,
                                GPUBuffer               *argsBuffer,
                                uint64_t                 argsOffset,
@@ -527,7 +527,7 @@ vk_multiDrawPrimitivesIndirect(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 bool
-vk_multiDrawIndexedPrimsIndirect(GPURenderCommandEncoder *encoder,
+vk_multiDrawIndexedPrimsIndirect(GPURenderPassEncoder *encoder,
                                  GPUBuffer               *argsBuffer,
                                  uint64_t                 argsOffset,
                                  uint32_t                 drawCount,
@@ -555,7 +555,7 @@ vk_multiDrawIndexedPrimsIndirect(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
-vk_drawMesh(GPURenderCommandEncoder *encoder,
+vk_drawMesh(GPURenderPassEncoder *encoder,
             uint32_t                 groupCountX,
             uint32_t                 groupCountY,
             uint32_t                 groupCountZ,
@@ -587,7 +587,7 @@ vk_drawMesh(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
-vk_endRenderEncoding(GPURenderCommandEncoder *encoder) {
+vk_endRenderEncoding(GPURenderPassEncoder *encoder) {
   GPURenderEncoderVk *native;
 
   native = vk__renderEncoder(encoder);

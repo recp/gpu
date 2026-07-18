@@ -69,7 +69,7 @@ dx12__emitVertexBuffer(GPURenderEncoderDX12 *encoder, uint32_t index) {
 }
 
 static bool
-dx12__bindIndexBuffer(GPURenderCommandEncoder *encoder,
+dx12__bindIndexBuffer(GPURenderPassEncoder *encoder,
                       GPURenderEncoderDX12     *native,
                       uint32_t                  firstIndex,
                       uint32_t                  indexCount) {
@@ -249,12 +249,12 @@ dx12__setShadingRate(
 }
 
 GPU_HIDE
-GPURenderCommandEncoder*
+GPURenderPassEncoder*
 dx12_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   GPUDeviceDX12          *device;
   GPUCommandBufferDX12   *command;
   GPURenderPassDX12      *renderPass;
-  GPURenderCommandEncoder *encoder;
+  GPURenderPassEncoder *encoder;
   GPURenderEncoderDX12   *native;
   D3D12_CPU_DESCRIPTOR_HANDLE rtvs[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   D3D12_CPU_DESCRIPTOR_HANDLE dsv = {0};
@@ -386,7 +386,7 @@ dx12_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
 
 GPU_HIDE
 void
-dx12_setRenderPipelineState(GPURenderCommandEncoder *encoder,
+dx12_setRenderPipelineState(GPURenderPassEncoder *encoder,
                             GPURenderPipelineState  *pipelineState) {
   GPURenderEncoderDX12  *native;
   GPURenderPipelineDX12 *pipeline;
@@ -418,7 +418,7 @@ dx12_setRenderPipelineState(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
-dx12_vertexBuffer(GPURenderCommandEncoder *encoder,
+dx12_vertexBuffer(GPURenderPassEncoder *encoder,
                   GPUBuffer               *buffer,
                   uint64_t                 offset,
                   uint32_t                 index) {
@@ -437,7 +437,7 @@ dx12_vertexBuffer(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
-dx12_viewport(GPURenderCommandEncoder *encoder, const GPUViewport *value) {
+dx12_viewport(GPURenderPassEncoder *encoder, const GPUViewport *value) {
   GPURenderEncoderDX12 *native;
   D3D12_VIEWPORT        viewport;
 
@@ -488,7 +488,7 @@ dx12__scissorAxis(int32_t  origin,
 
 GPU_HIDE
 void
-dx12_scissor(GPURenderCommandEncoder *encoder, const GPUScissorRect *value) {
+dx12_scissor(GPURenderPassEncoder *encoder, const GPUScissorRect *value) {
   GPURenderEncoderDX12 *native;
   D3D12_RECT            scissor;
 
@@ -517,7 +517,7 @@ dx12_scissor(GPURenderCommandEncoder *encoder, const GPUScissorRect *value) {
 
 GPU_HIDE
 void
-dx12_blendConstant(GPURenderCommandEncoder *encoder, const float rgba[4]) {
+dx12_blendConstant(GPURenderPassEncoder *encoder, const float rgba[4]) {
   GPURenderEncoderDX12 *native;
 
   native = encoder ? encoder->_priv : NULL;
@@ -528,7 +528,7 @@ dx12_blendConstant(GPURenderCommandEncoder *encoder, const float rgba[4]) {
 
 GPU_HIDE
 void
-dx12_stencilReference(GPURenderCommandEncoder *encoder, uint32_t reference) {
+dx12_stencilReference(GPURenderPassEncoder *encoder, uint32_t reference) {
   GPURenderEncoderDX12 *native;
 
   native = encoder ? encoder->_priv : NULL;
@@ -539,7 +539,7 @@ dx12_stencilReference(GPURenderCommandEncoder *encoder, uint32_t reference) {
 
 GPU_HIDE
 void
-dx12_renderPushConstants(GPURenderCommandEncoder *encoder,
+dx12_renderPushConstants(GPURenderPassEncoder *encoder,
                          GPUShaderStageFlags       stages,
                          const void               *data,
                          uint32_t                  sizeBytes) {
@@ -569,7 +569,7 @@ dx12_renderPushConstants(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
-dx12_drawPrimitives(GPURenderCommandEncoder *encoder,
+dx12_drawPrimitives(GPURenderPassEncoder *encoder,
                     GPUPrimitiveType         type,
                     size_t                   start,
                     size_t                   count,
@@ -594,7 +594,7 @@ dx12_drawPrimitives(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
-dx12_drawIndexedPrims(GPURenderCommandEncoder *encoder,
+dx12_drawIndexedPrims(GPURenderPassEncoder *encoder,
                       uint32_t                 indexCount,
                       uint32_t                 instanceCount,
                       uint32_t                 firstIndex,
@@ -620,7 +620,7 @@ dx12_drawIndexedPrims(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
-dx12_drawMesh(GPURenderCommandEncoder *encoder,
+dx12_drawMesh(GPURenderPassEncoder *encoder,
               uint32_t                 groupCountX,
               uint32_t                 groupCountY,
               uint32_t                 groupCountZ,
@@ -645,7 +645,7 @@ dx12_drawMesh(GPURenderCommandEncoder *encoder,
 GPU_HIDE
 void
 dx12_setFragmentShadingRate(
-  GPURenderCommandEncoder      *encoder,
+  GPURenderPassEncoder      *encoder,
   GPUShadingRateEXT             rate,
   GPUShadingRateCombinerEXT     primitiveCombiner,
   GPUShadingRateCombinerEXT     attachmentCombiner) {
@@ -659,7 +659,7 @@ dx12_setFragmentShadingRate(
 }
 
 static bool
-dx12__drawIndirect(GPURenderCommandEncoder *encoder,
+dx12__drawIndirect(GPURenderPassEncoder *encoder,
                    GPUBuffer               *argsBuffer,
                    uint64_t                 argsOffset,
                    uint32_t                 drawCount,
@@ -705,7 +705,7 @@ dx12__drawIndirect(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
-dx12_drawPrimitivesIndirect(GPURenderCommandEncoder *encoder,
+dx12_drawPrimitivesIndirect(GPURenderPassEncoder *encoder,
                             GPUPrimitiveType         type,
                             GPUBuffer               *argsBuffer,
                             uint64_t                 argsOffset) {
@@ -721,7 +721,7 @@ dx12_drawPrimitivesIndirect(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
-dx12_drawIndexedPrimsIndirect(GPURenderCommandEncoder *encoder,
+dx12_drawIndexedPrimsIndirect(GPURenderPassEncoder *encoder,
                               GPUBuffer               *argsBuffer,
                               uint64_t                 argsOffset) {
   (void)dx12__drawIndirect(encoder,
@@ -734,7 +734,7 @@ dx12_drawIndexedPrimsIndirect(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 bool
-dx12_multiDrawPrimitivesIndirect(GPURenderCommandEncoder *encoder,
+dx12_multiDrawPrimitivesIndirect(GPURenderPassEncoder *encoder,
                                  GPUPrimitiveType         type,
                                  GPUBuffer               *argsBuffer,
                                  uint64_t                 argsOffset,
@@ -752,7 +752,7 @@ dx12_multiDrawPrimitivesIndirect(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 bool
-dx12_multiDrawIndexedPrimsIndirect(GPURenderCommandEncoder *encoder,
+dx12_multiDrawIndexedPrimsIndirect(GPURenderPassEncoder *encoder,
                                    GPUBuffer               *argsBuffer,
                                    uint64_t                 argsOffset,
                                    uint32_t                 drawCount,
@@ -767,7 +767,7 @@ dx12_multiDrawIndexedPrimsIndirect(GPURenderCommandEncoder *encoder,
 
 GPU_HIDE
 void
-dx12_endRenderEncoding(GPURenderCommandEncoder *encoder) {
+dx12_endRenderEncoding(GPURenderPassEncoder *encoder) {
   GPURenderEncoderDX12 *native;
   GPURenderPassDX12    *renderPass;
 

@@ -254,7 +254,7 @@ struct MTCommandBuffer {
   MTArgumentState        computeArguments;
   GPURenderPassDesc       renderPass;
   MTRenderPass            renderPassState;
-  GPURenderCommandEncoder renderEncoder;
+  GPURenderPassEncoder renderEncoder;
   MTRenderEncoder         renderState;
   GPUComputePassEncoder   computeEncoder;
   MTComputeEncoder        computeState;
