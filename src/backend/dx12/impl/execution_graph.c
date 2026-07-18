@@ -31,15 +31,17 @@ typedef struct GPUExecutionGraphDX12 {
 } GPUExecutionGraphDX12;
 
 typedef struct GPUExecutionGraphInstanceDX12 {
-  GPUCommandBufferDX12      *recordingCommandBuffer;
-  ID3D12Resource            *backingMemory;
-  ID3D12Resource            *inputTable;
-  D3D12_NODE_CPU_INPUT      *cpuInputs;
-  D3D12_NODE_GPU_INPUT      *gpuInputs;
-  D3D12_GPU_VIRTUAL_ADDRESS  backingAddress;
-  D3D12_GPU_VIRTUAL_ADDRESS  inputTableAddress;
-  uint32_t                   inputCapacity;
-  bool                       initialized;
+  GPUCommandBufferDX12       *recordingCommandBuffer;
+  ID3D12Resource             *backingMemory;
+  ID3D12Resource             *inputTable;
+  D3D12_NODE_CPU_INPUT       *cpuInputs;
+  D3D12_MULTI_NODE_GPU_INPUT *multiGpuInput;
+  D3D12_NODE_GPU_INPUT       *gpuInputs;
+  D3D12_GPU_VIRTUAL_ADDRESS   backingAddress;
+  D3D12_GPU_VIRTUAL_ADDRESS   multiGpuInputAddress;
+  D3D12_GPU_VIRTUAL_ADDRESS   inputTableAddress;
+  uint32_t                    inputCapacity;
+  bool                        initialized;
 } GPUExecutionGraphInstanceDX12;
 
 static bool
@@ -279,7 +281,7 @@ dx12_destroyExecutionGraphInstanceState(
     return;
   }
   if (native->inputTable) {
-    if (native->gpuInputs) {
+    if (native->multiGpuInput) {
       native->inputTable->lpVtbl->Unmap(native->inputTable, 0u, NULL);
     }
     native->inputTable->lpVtbl->Release(native->inputTable);
@@ -300,14 +302,14 @@ dx12_createExecutionGraphInstance(
   GPUExecutionGraphDX12          *graph;
   GPUExecutionGraphInstanceDX12  *native;
   D3D12_RANGE                     noRead = {0};
+  uint64_t                        inputOffset;
   uint64_t                        tableSize;
   GPUResult                       result;
 
   deviceDX12 = device ? device->_priv : NULL;
   graph      = info && info->graph ? info->graph->_priv : NULL;
   if (!deviceDX12 || !deviceDX12->executionGraph || !graph || !instance ||
-      graph->entryCount > SIZE_MAX / sizeof(*native->cpuInputs) ||
-      graph->entryCount > UINT64_MAX / sizeof(*native->gpuInputs)) {
+      graph->entryCount > SIZE_MAX / sizeof(*native->cpuInputs)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   native = calloc(1, sizeof(*native));
@@ -342,7 +344,14 @@ dx12_createExecutionGraphInstance(
     }
   }
 
-  tableSize = (uint64_t)graph->entryCount * sizeof(*native->gpuInputs);
+  inputOffset = (sizeof(*native->multiGpuInput) + 15u) & ~UINT64_C(15);
+  if (graph->entryCount >
+      (UINT64_MAX - inputOffset) / sizeof(*native->gpuInputs)) {
+    dx12_destroyExecutionGraphInstanceState(native);
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  tableSize = inputOffset +
+              (uint64_t)graph->entryCount * sizeof(*native->gpuInputs);
   result = dx12_createGraphBuffer(deviceDX12,
                                   tableSize,
                                   D3D12_HEAP_TYPE_UPLOAD,
@@ -353,17 +362,23 @@ dx12_createExecutionGraphInstance(
       FAILED(native->inputTable->lpVtbl->Map(native->inputTable,
                                              0u,
                                              &noRead,
-                                             (void **)&native->gpuInputs)) ||
-      !native->gpuInputs) {
+                                             (void **)&native->multiGpuInput)) ||
+      !native->multiGpuInput) {
     dx12_destroyExecutionGraphInstanceState(native);
     return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
   }
-  native->inputTableAddress = native->inputTable->lpVtbl
+  native->multiGpuInputAddress = native->inputTable->lpVtbl
     ->GetGPUVirtualAddress(native->inputTable);
-  if (!native->inputTableAddress) {
+  if (!native->multiGpuInputAddress) {
     dx12_destroyExecutionGraphInstanceState(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
+  native->gpuInputs = (D3D12_NODE_GPU_INPUT *)(
+    (uint8_t *)native->multiGpuInput + inputOffset
+  );
+  native->inputTableAddress = native->multiGpuInputAddress + inputOffset;
+  native->multiGpuInput->NodeInputs.StartAddress = native->inputTableAddress;
+  native->multiGpuInput->NodeInputs.StrideInBytes = sizeof(*native->gpuInputs);
 
   instance->_priv = native;
   return GPU_OK;
@@ -589,11 +604,9 @@ dx12_dispatchExecutionGraphBuffer(
     desc.Mode         = D3D12_DISPATCH_MODE_NODE_GPU_INPUT;
     desc.NodeGPUInput = native->inputTableAddress;
   } else {
-    desc.Mode = D3D12_DISPATCH_MODE_MULTI_NODE_GPU_INPUT;
-    desc.MultiNodeGPUInput.NumNodeInputs = inputCount;
-    desc.MultiNodeGPUInput.NodeInputs.StartAddress = native->inputTableAddress;
-    desc.MultiNodeGPUInput.NodeInputs.StrideInBytes =
-      sizeof(*native->gpuInputs);
+    native->multiGpuInput->NumNodeInputs = inputCount;
+    desc.Mode              = D3D12_DISPATCH_MODE_MULTI_NODE_GPU_INPUT;
+    desc.MultiNodeGPUInput = native->multiGpuInputAddress;
   }
   encoder->commandList10->lpVtbl->DispatchGraph(encoder->commandList10,
                                                  &desc);
