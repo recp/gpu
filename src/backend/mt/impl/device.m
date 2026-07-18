@@ -520,6 +520,13 @@ mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       return false;
     case GPU_FEATURE_RAY_QUERY:
       device = adapterMT->device;
+      mode   = getenv("GPU_METAL_MODE");
+      if (mode && strcmp(mode, "metal4") == 0) {
+        if (@available(macOS 14.0, iOS 17.0, *)) {
+          return [device supportsFamily:MTLGPUFamilyApple9];
+        }
+        return false;
+      }
       if (@available(macOS 12.0, iOS 15.0, *)) {
         return device.supportsRaytracing &&
                device.supportsRaytracingFromRender;
