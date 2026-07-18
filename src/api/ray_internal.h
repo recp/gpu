@@ -72,6 +72,10 @@ struct GPURayTracingPassEncoderEXT {
   bool                    ended;
 };
 
+GPU_HIDE
+void
+gpuRetainRayTracingPipeline(GPURayTracingPipelineEXT *pipeline);
+
 static inline bool
 gpuRayDispatchFits(uint32_t        width,
                    uint32_t        height,

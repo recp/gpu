@@ -19,6 +19,7 @@
 #include "descr/descriptor_internal.h"
 #include "library_internal.h"
 #include "pipeline_cache_internal.h"
+#include "ray_internal.h"
 #include "render/pipeline_internal.h"
 
 #if !defined(_WIN32) && !defined(WIN32)
@@ -31,7 +32,8 @@
 
 typedef enum GPUPipelineCacheEntryType {
   GPU_PIPELINE_CACHE_RENDER = 0,
-  GPU_PIPELINE_CACHE_COMPUTE
+  GPU_PIPELINE_CACHE_COMPUTE,
+  GPU_PIPELINE_CACHE_RAY
 } GPUPipelineCacheEntryType;
 
 struct GPUPipelineCacheEntry {
@@ -172,19 +174,31 @@ gpuReleaseComputePipeline(GPUComputePipeline *pipeline) {
 
 static void
 gpu_retainPipeline(GPUPipelineCacheEntryType type, void *pipeline) {
-  if (type == GPU_PIPELINE_CACHE_RENDER) {
-    gpu_retainRenderPipeline(pipeline);
-  } else {
-    gpu_retainComputePipeline(pipeline);
+  switch (type) {
+    case GPU_PIPELINE_CACHE_RENDER:
+      gpu_retainRenderPipeline(pipeline);
+      break;
+    case GPU_PIPELINE_CACHE_COMPUTE:
+      gpu_retainComputePipeline(pipeline);
+      break;
+    case GPU_PIPELINE_CACHE_RAY:
+      gpuRetainRayTracingPipeline(pipeline);
+      break;
   }
 }
 
 static void
 gpu_destroyPipeline(GPUPipelineCacheEntryType type, void *pipeline) {
-  if (type == GPU_PIPELINE_CACHE_RENDER) {
-    GPUDestroyRenderPipeline(pipeline);
-  } else {
-    GPUDestroyComputePipeline(pipeline);
+  switch (type) {
+    case GPU_PIPELINE_CACHE_RENDER:
+      GPUDestroyRenderPipeline(pipeline);
+      break;
+    case GPU_PIPELINE_CACHE_COMPUTE:
+      GPUDestroyComputePipeline(pipeline);
+      break;
+    case GPU_PIPELINE_CACHE_RAY:
+      GPUDestroyRayTracingPipelineEXT(pipeline);
+      break;
   }
 }
 
@@ -213,6 +227,18 @@ gpu_pipelineKeyWrite(GPUPipelineKeyWriter *writer,
 static void
 gpu_pipelineKeyWriteString(GPUPipelineKeyWriter *writer, const char *value) {
   gpu_pipelineKeyWrite(writer, value, strlen(value) + 1u);
+}
+
+static void
+gpu_pipelineKeyWriteOptionalString(GPUPipelineKeyWriter *writer,
+                                   const char           *value) {
+  bool present;
+
+  present = value != NULL;
+  GPU_PIPELINE_KEY_WRITE(writer, present);
+  if (present) {
+    gpu_pipelineKeyWriteString(writer, value);
+  }
 }
 
 static void
@@ -317,6 +343,34 @@ gpu_pipelineKeyWriteComputeInfo(GPUPipelineKeyWriter               *writer,
   GPU_PIPELINE_KEY_WRITE(writer, layout);
   GPU_PIPELINE_KEY_WRITE(writer, library);
   gpu_pipelineKeyWriteString(writer, info->entryPoint);
+}
+
+static void
+gpu_pipelineKeyWriteRayInfo(
+  GPUPipelineKeyWriter                     *writer,
+  const GPURayTracingPipelineCreateInfoEXT *info) {
+  uintptr_t layout;
+  uintptr_t library;
+
+  layout  = (uintptr_t)info->layout;
+  library = (uintptr_t)info->library;
+  GPU_PIPELINE_KEY_WRITE(writer, layout);
+  GPU_PIPELINE_KEY_WRITE(writer, library);
+  GPU_PIPELINE_KEY_WRITE(writer, info->groupCount);
+  for (uint32_t i = 0u; i < info->groupCount; i++) {
+    const GPURayTracingShaderGroupEXT *group;
+
+    group = &info->pGroups[i];
+    GPU_PIPELINE_KEY_WRITE(writer, group->type);
+    GPU_PIPELINE_KEY_WRITE(writer, group->generalStage);
+    gpu_pipelineKeyWriteOptionalString(writer, group->generalEntry);
+    gpu_pipelineKeyWriteOptionalString(writer, group->closestHitEntry);
+    gpu_pipelineKeyWriteOptionalString(writer, group->anyHitEntry);
+    gpu_pipelineKeyWriteOptionalString(writer, group->intersectionEntry);
+  }
+  GPU_PIPELINE_KEY_WRITE(writer, info->maxRecursionDepth);
+  GPU_PIPELINE_KEY_WRITE(writer, info->maxPayloadSizeBytes);
+  GPU_PIPELINE_KEY_WRITE(writer, info->maxHitAttributeSizeBytes);
 }
 
 static bool
@@ -431,6 +485,52 @@ gpu_buildComputePipelineKey(const GPUComputePipelineCreateInfo *info,
   writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
   writer.valid    = true;
   gpu_pipelineKeyWriteComputeInfo(&writer, info);
+  if (!writer.valid || writer.offset != outKey->size) {
+    gpuPipelineCacheReleaseKey(outKey);
+    return false;
+  }
+  outKey->hash = writer.hash;
+  return true;
+}
+
+static bool
+gpu_buildRayPipelineKey(const GPURayTracingPipelineCreateInfoEXT *info,
+                        GPUPipelineCacheKey                      *outKey) {
+  GPUPipelineKeyWriter writer;
+
+  outKey->data     = NULL;
+  outKey->size     = 0u;
+  outKey->hash     = 0u;
+  outKey->ownsData = false;
+  if (info->chain.pNext) {
+    return false;
+  }
+
+  writer.data     = outKey->inlineData;
+  writer.offset   = 0u;
+  writer.capacity = sizeof(outKey->inlineData);
+  writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
+  writer.valid    = true;
+  gpu_pipelineKeyWriteRayInfo(&writer, info);
+  if (!writer.valid || writer.offset == 0u) {
+    return false;
+  }
+  if (writer.offset <= writer.capacity) {
+    outKey->data = outKey->inlineData;
+    outKey->size = writer.offset;
+    outKey->hash = writer.hash;
+    return true;
+  }
+
+  if (!gpu_pipelineKeyPrepare(outKey, writer.offset)) {
+    return false;
+  }
+  writer.data     = outKey->data;
+  writer.offset   = 0u;
+  writer.capacity = outKey->size;
+  writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
+  writer.valid    = true;
+  gpu_pipelineKeyWriteRayInfo(&writer, info);
   if (!writer.valid || writer.offset != outKey->size) {
     gpuPipelineCacheReleaseKey(outKey);
     return false;
@@ -629,6 +729,33 @@ gpuPipelineCacheStoreCompute(GPUPipelineCache    *cache,
   return gpu_pipelineCacheStore(cache,
                                 key,
                                 GPU_PIPELINE_CACHE_COMPUTE,
+                                pipeline);
+}
+
+GPU_HIDE
+GPUResult
+gpuPipelineCacheFindRay(GPUPipelineCache                         *cache,
+                        const GPURayTracingPipelineCreateInfoEXT *info,
+                        GPUPipelineCacheKey                      *outKey,
+                        GPURayTracingPipelineEXT                **outPipeline) {
+  *outPipeline = NULL;
+  if (!gpu_buildRayPipelineKey(info, outKey)) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  *outPipeline = gpu_pipelineCacheFind(cache,
+                                       outKey,
+                                       GPU_PIPELINE_CACHE_RAY);
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPURayTracingPipelineEXT *
+gpuPipelineCacheStoreRay(GPUPipelineCache         *cache,
+                         GPUPipelineCacheKey      *key,
+                         GPURayTracingPipelineEXT *pipeline) {
+  return gpu_pipelineCacheStore(cache,
+                                key,
+                                GPU_PIPELINE_CACHE_RAY,
                                 pipeline);
 }
 

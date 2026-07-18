@@ -638,13 +638,35 @@ gpu_resolveRayInterfaceLimits(
   return true;
 }
 
+GPU_HIDE
+void
+gpuRetainRayTracingPipeline(GPURayTracingPipelineEXT *pipeline) {
+  if (!pipeline) {
+    return;
+  }
+#if defined(_WIN32) || defined(WIN32)
+  InterlockedIncrement((volatile LONG *)&pipeline->refCount);
+#else
+  __atomic_add_fetch(&pipeline->refCount, 1u, __ATOMIC_RELAXED);
+#endif
+}
+
 static void
 gpu_releaseRayTracingPipeline(GPURayTracingPipelineEXT *pipeline) {
   GPUApi *api;
 
-  if (!pipeline || pipeline->refCount == 0u || --pipeline->refCount != 0u) {
+  if (!pipeline) {
     return;
   }
+#if defined(_WIN32) || defined(WIN32)
+  if (InterlockedDecrement((volatile LONG *)&pipeline->refCount) != 0) {
+    return;
+  }
+#else
+  if (__atomic_sub_fetch(&pipeline->refCount, 1u, __ATOMIC_ACQ_REL) != 0u) {
+    return;
+  }
+#endif
   api = pipeline->_api;
   if (api && api->rayTracing.destroyPipeline) {
     api->rayTracing.destroyPipeline(pipeline);
@@ -665,6 +687,7 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
   const char                        **entries;
   GPUApi                             *api;
   GPURayTracingPipelineCreateInfoEXT resolvedInfo;
+  GPUPipelineCacheKey                 cacheKey;
   uint32_t                           entryCount;
   uint32_t                           entryIndex;
   uint32_t                           requiredBindGroupMask;
@@ -677,6 +700,7 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   *outPipeline = NULL;
+  memset(&cacheKey, 0, sizeof(cacheKey));
   if (!device || !info || !info->library || !info->layout ||
       !info->pGroups || info->groupCount == 0u ||
       info->maxRecursionDepth == 0u ||
@@ -776,10 +800,31 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
     free(entries);
     return GPU_ERROR_UNSUPPORTED;
   }
+  if (info->cache && !info->chain.pNext) {
+    result = gpuPipelineCacheFindRay(info->cache,
+                                     info,
+                                     &cacheKey,
+                                     &pipeline);
+    if (result != GPU_OK) {
+      free(groupTypes);
+      free(generalStages);
+      free(entries);
+      return result;
+    }
+    if (pipeline) {
+      gpuPipelineCacheReleaseKey(&cacheKey);
+      free(groupTypes);
+      free(generalStages);
+      free(entries);
+      *outPipeline = pipeline;
+      return GPU_OK;
+    }
+  }
   free(entries);
 
   pipeline = calloc(1, sizeof(*pipeline));
   if (!pipeline) {
+    gpuPipelineCacheReleaseKey(&cacheKey);
     free(groupTypes);
     free(generalStages);
     return GPU_ERROR_OUT_OF_MEMORY;
@@ -799,10 +844,16 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
   resolvedInfo.maxHitAttributeSizeBytes = maxHitAttributeSizeBytes;
   result = api->rayTracing.createPipeline(device, &resolvedInfo, pipeline);
   if (result != GPU_OK) {
+    gpuPipelineCacheReleaseKey(&cacheKey);
     gpu_releaseRayTracingPipeline(pipeline);
     return result;
   }
 
+  if (info->cache && !info->chain.pNext) {
+    pipeline = gpuPipelineCacheStoreRay(info->cache, &cacheKey, pipeline);
+  } else {
+    gpuRecordPipelineCompile(device, info->cache);
+  }
   *outPipeline = pipeline;
   return GPU_OK;
 }
@@ -901,7 +952,7 @@ GPUCreateShaderTableEXT(GPUDevice                         *device,
     free(table);
     return result;
   }
-  info->pipeline->refCount++;
+  gpuRetainRayTracingPipeline(info->pipeline);
   *outTable = table;
   return GPU_OK;
 }
