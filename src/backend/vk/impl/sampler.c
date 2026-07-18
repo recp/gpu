@@ -17,6 +17,8 @@
 #include "../common.h"
 #include "../../../api/sampler_internal.h"
 
+#include <us/compiler.h>
+
 static VkFilter
 vk__samplerFilter(GPUFilter filter) {
   return filter == GPU_FILTER_LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;

@@ -23,6 +23,8 @@
 #include "library_internal.h"
 #include "pipeline_cache_internal.h"
 
+#include <us/compiler.h>
+
 static bool
 gpu_graphChainValid(const GPUChainedStruct *chain,
                     GPUStructureType        type,

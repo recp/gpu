@@ -22,6 +22,8 @@
 #include "../pipeline_cache_internal.h"
 #include "../vertex_internal.h"
 
+#include <us/compiler.h>
+
 #define GPU_RENDER_PIPELINE_MAX_COLOR_TARGETS 8u
 
 static bool
@@ -665,7 +667,8 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   memset(&cacheKey, 0, sizeof(cacheKey));
 
   if (!device || !info || !info->layout || !info->library ||
-      !info->fragmentEntry)
+      !info->fragmentEntry || info->layout->_device != device ||
+      info->library->_device != device)
     return GPU_ERROR_INVALID_ARGUMENT;
   if (info->cache && info->cache->device != device)
     return GPU_ERROR_INVALID_ARGUMENT;

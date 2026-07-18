@@ -16,6 +16,8 @@
 
 #include "../common.h"
 
+#include <us/compiler.h>
+
 GPU_HIDE
 D3D12_FILTER
 dx12_staticSamplerFilter(const GPUStaticSamplerDesc *desc) {

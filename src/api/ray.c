@@ -684,6 +684,7 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
         &info->chain,
         GPU_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_EXT,
         sizeof(*info)) ||
+      info->library->_device != device ||
       info->layout->_device != device ||
       (info->cache && info->cache->device != device)) {
     return GPU_ERROR_INVALID_ARGUMENT;

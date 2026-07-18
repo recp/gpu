@@ -2,6 +2,7 @@
 #include "../../src/backend/api/gpudef.h"
 #include "../../src/api/buffer_internal.h"
 #include "../../src/api/compute_internal.h"
+#include "../../src/api/library_internal.h"
 #include "../../src/api/render/pipeline_internal.h"
 #include "../../src/api/texture_internal.h"
 
@@ -187,6 +188,7 @@ check_reflected_pipeline_entry_stages(GPUDevice *device,
   GPUPipelineLayoutCreateInfo emptyLayoutInfo = {0};
   GPURenderPipeline *pipeline = NULL;
   GPUPipelineLayout *emptyLayout = NULL;
+  GPUDevice *libraryDevice;
   GPUColorTargetState colorTarget = {0};
   GPUVertexAttribute attrs[2] = {{0}};
   GPUVertexBufferLayout vertexLayout = {0};
@@ -240,6 +242,22 @@ check_reflected_pipeline_entry_stages(GPUDevice *device,
   renderInfo.cullMode = GPU_CULL_MODE_NONE;
   renderInfo.frontFace = GPU_FRONT_FACE_CCW;
   renderInfo.multisample.sampleCount = 1u;
+
+  libraryDevice    = library->_device;
+  library->_device = NULL;
+  computeInfo.entryPoint = "reflect_cs";
+  if (!expect_reflected_compute_pipeline_error(
+        device,
+        &computeInfo,
+        "compute pipeline accepted a foreign shader library") ||
+      !expect_reflected_render_pipeline_error(
+        device,
+        &renderInfo,
+        "render pipeline accepted a foreign shader library")) {
+    library->_device = libraryDevice;
+    return 0;
+  }
+  library->_device = libraryDevice;
 
   emptyLayoutInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   emptyLayoutInfo.chain.structSize = sizeof(emptyLayoutInfo);
@@ -803,7 +821,9 @@ check_reflection_layout_api(GPUDevice *device, GPUShaderLibrary *library) {
   int                            ok;
 
   count = 0u;
-  if (GPUCreateBindGroupLayoutsFromReflection(device, NULL, &count, NULL) !=
+  if (GPUCreateBindGroupLayoutsFromReflection(NULL, library, &count, NULL) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      GPUCreateBindGroupLayoutsFromReflection(device, NULL, &count, NULL) !=
         GPU_ERROR_INVALID_ARGUMENT ||
       GPUCreateBindGroupLayoutsFromReflection(device, library, NULL, NULL) !=
         GPU_ERROR_INVALID_ARGUMENT) {

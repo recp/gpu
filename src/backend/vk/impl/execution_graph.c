@@ -19,6 +19,8 @@
 #include "../../../api/buffer_internal.h"
 #include "pipeline_cache.h"
 
+#include <us/compiler.h>
+
 #ifdef VK_AMDX_shader_enqueue
 
 typedef struct GPUExecutionGraphEntryVk {

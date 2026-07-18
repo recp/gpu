@@ -19,8 +19,6 @@
 
 #include "../common.h"
 
-#include <us/compiler.h>
-
 typedef struct GPUStaticSamplerDesc {
   uint32_t logicalIndex;
   uint32_t minFilter;
@@ -57,6 +55,7 @@ typedef struct GPUShaderExecutionGraphEntryInfo {
 
 struct GPUShaderLibrary {
   GPUApi                         *_api;
+  GPUDevice                      *_device;
   void                           *_priv;
   void                           *_metadata;
   GPUShaderStaticSamplerInfoList *_staticSamplers;

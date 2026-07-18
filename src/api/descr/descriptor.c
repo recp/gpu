@@ -2278,7 +2278,8 @@ GPUCreateBindGroupLayoutsFromReflection(GPUDevice *device,
   uint32_t requiredCount;
   GPUResult rc;
 
-  if (!library || !inoutLayoutCount) {
+  if (!device || !library || library->_device != device ||
+      !inoutLayoutCount) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -2336,7 +2337,8 @@ GPUCreatePipelineLayoutFromReflection(GPUDevice *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   *outLayout = NULL;
-  if (!library || (bindGroupLayoutCount > 0u && !ppLayouts)) {
+  if (!device || !library || library->_device != device ||
+      (bindGroupLayoutCount > 0u && !ppLayouts)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -2391,7 +2393,7 @@ GPUCreateShaderLayout(GPUDevice *device,
   }
 
   *outLayout = NULL;
-  if (!device || !library) {
+  if (!device || !library || library->_device != device) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 

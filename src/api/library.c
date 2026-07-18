@@ -1498,7 +1498,8 @@ gpu_createShaderLibraryFromBackendText(GPUDevice        *device,
                                                    sourceSize);
 
   if (*outLibrary) {
-    (*outLibrary)->_api = api;
+    (*outLibrary)->_api    = api;
+    (*outLibrary)->_device = device;
   }
 
   return *outLibrary ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
@@ -1540,7 +1541,8 @@ gpu_createShaderLibraryFromBinary(GPUDevice *device,
                                                    info->sourceData,
                                                    info->sourceSize);
   if (*outLibrary) {
-    (*outLibrary)->_api = api;
+    (*outLibrary)->_api    = api;
+    (*outLibrary)->_device = device;
   }
   return *outLibrary ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
 }
