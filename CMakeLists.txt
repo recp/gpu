@@ -461,6 +461,9 @@ if(GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS)
 endif()
 
 if(GPU_BUILD_TESTS)
+  get_property(GPU_GENERATOR_IS_MULTI_CONFIG GLOBAL
+               PROPERTY GENERATOR_IS_MULTI_CONFIG)
+
   set(GPU_API_USL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/usl-reflection-check/reflection.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/render_mrt.usl"
@@ -943,6 +946,22 @@ if(GPU_BUILD_TESTS)
     )
   endif()
   add_test(NAME api-export-linkage COMMAND gpu-export-linkage-test)
+
+  add_test(
+    NAME package-consumer
+    COMMAND ${CMAKE_COMMAND}
+      -DGPU_PACKAGE_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
+      -DGPU_PACKAGE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+      -DGPU_PACKAGE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}/package-consumer-test
+      -DGPU_PACKAGE_CONFIG=$<CONFIG>
+      -DGPU_PACKAGE_GENERATOR=${CMAKE_GENERATOR}
+      -DGPU_PACKAGE_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}
+      -DGPU_PACKAGE_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}
+      -DGPU_PACKAGE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}
+      -DGPU_PACKAGE_MULTI_CONFIG=${GPU_GENERATOR_IS_MULTI_CONFIG}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_test.cmake
+  )
+  set_tests_properties(package-consumer PROPERTIES LABELS package)
 
   add_executable(gpu-api-test
     tests/api/atomic64.c
