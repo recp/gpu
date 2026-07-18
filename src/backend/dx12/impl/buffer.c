@@ -31,7 +31,8 @@ dx12__validateBufferUsage(GPUBufferUsageFlags usage) {
                                     GPU_BUFFER_USAGE_COPY_DST |
                                     GPU_BUFFER_USAGE_INDIRECT |
                                     GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT |
-                                    GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT;
+                                    GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT |
+                                    GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT;
 
   if (usage == 0u || (usage & ~known) != 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;

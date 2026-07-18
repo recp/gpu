@@ -334,12 +334,32 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
   dstStages     = vk__barrierStages(device, barriers->dstStages);
   for (uint32_t i = 0u; i < barriers->bufferBarrierCount; i++) {
     const GPUBufferBarrier *barrier = &barriers->pBufferBarriers[i];
+    bool                    addressedIndirect;
+
+    addressedIndirect =
+      gpuBufferHasUsage(barrier->buffer,
+                        GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT) &&
+      (device->indirectMemoryCopy || device->indirectMemoryToTextureCopy);
 
     if ((barrier->srcAccess & GPU_ACCESS_INDIRECT_READ) != 0u) {
-      srcStages |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+      srcStages |= addressedIndirect
+                     ? VK_PIPELINE_STAGE_ALL_COMMANDS_BIT
+                     : VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
     }
     if ((barrier->dstAccess & GPU_ACCESS_INDIRECT_READ) != 0u) {
-      dstStages |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+      dstStages |= addressedIndirect
+                     ? VK_PIPELINE_STAGE_ALL_COMMANDS_BIT
+                     : VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+    }
+    if (addressedIndirect &&
+        (barrier->srcAccess &
+         (GPU_ACCESS_TRANSFER_READ | GPU_ACCESS_TRANSFER_WRITE)) != 0u) {
+      srcStages |= VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    }
+    if (addressedIndirect &&
+        (barrier->dstAccess &
+         (GPU_ACCESS_TRANSFER_READ | GPU_ACCESS_TRANSFER_WRITE)) != 0u) {
+      dstStages |= VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     }
   }
   if (barriers->aliasingBarrierCount > 0u) {
@@ -1355,6 +1375,183 @@ vk_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
                  &copy);
 }
 
+#ifdef VK_KHR_copy_memory_indirect
+_Static_assert(
+  sizeof(GPUIndirectMemoryCopyCommandEXT) ==
+    sizeof(VkCopyMemoryIndirectCommandKHR),
+  "indirect memory-copy command ABI mismatch"
+);
+_Static_assert(
+  offsetof(GPUIndirectMemoryCopyCommandEXT, srcAddress) ==
+    offsetof(VkCopyMemoryIndirectCommandKHR, srcAddress) &&
+  offsetof(GPUIndirectMemoryCopyCommandEXT, dstAddress) ==
+    offsetof(VkCopyMemoryIndirectCommandKHR, dstAddress) &&
+  offsetof(GPUIndirectMemoryCopyCommandEXT, sizeBytes) ==
+    offsetof(VkCopyMemoryIndirectCommandKHR, size),
+  "indirect memory-copy command layout mismatch"
+);
+_Static_assert(
+  sizeof(GPUIndirectTextureSubresourceEXT) ==
+    sizeof(VkImageSubresourceLayers),
+  "indirect texture subresource ABI mismatch"
+);
+_Static_assert(
+  offsetof(GPUIndirectTextureSubresourceEXT, aspectMask) ==
+    offsetof(VkImageSubresourceLayers, aspectMask) &&
+  offsetof(GPUIndirectTextureSubresourceEXT, mipLevel) ==
+    offsetof(VkImageSubresourceLayers, mipLevel) &&
+  offsetof(GPUIndirectTextureSubresourceEXT, baseArrayLayer) ==
+    offsetof(VkImageSubresourceLayers, baseArrayLayer) &&
+  offsetof(GPUIndirectTextureSubresourceEXT, layerCount) ==
+    offsetof(VkImageSubresourceLayers, layerCount),
+  "indirect texture subresource layout mismatch"
+);
+_Static_assert(
+  sizeof(GPUIndirectMemoryToTextureCommandEXT) ==
+    sizeof(VkCopyMemoryToImageIndirectCommandKHR),
+  "indirect memory-to-texture command ABI mismatch"
+);
+_Static_assert(
+  offsetof(GPUIndirectMemoryToTextureCommandEXT, srcAddress) ==
+    offsetof(VkCopyMemoryToImageIndirectCommandKHR, srcAddress) &&
+  offsetof(GPUIndirectMemoryToTextureCommandEXT, bufferRowLength) ==
+    offsetof(VkCopyMemoryToImageIndirectCommandKHR, bufferRowLength) &&
+  offsetof(GPUIndirectMemoryToTextureCommandEXT, bufferImageHeight) ==
+    offsetof(VkCopyMemoryToImageIndirectCommandKHR, bufferImageHeight) &&
+  offsetof(GPUIndirectMemoryToTextureCommandEXT, texture) ==
+    offsetof(VkCopyMemoryToImageIndirectCommandKHR, imageSubresource) &&
+  offsetof(GPUIndirectMemoryToTextureCommandEXT, x) ==
+    offsetof(VkCopyMemoryToImageIndirectCommandKHR, imageOffset) &&
+  offsetof(GPUIndirectMemoryToTextureCommandEXT, width) ==
+    offsetof(VkCopyMemoryToImageIndirectCommandKHR, imageExtent),
+  "indirect memory-to-texture command layout mismatch"
+);
+_Static_assert(
+  GPU_ADDRESS_COPY_DEVICE_LOCAL_BIT_EXT ==
+    VK_ADDRESS_COPY_DEVICE_LOCAL_BIT_KHR &&
+  GPU_ADDRESS_COPY_SPARSE_BIT_EXT == VK_ADDRESS_COPY_SPARSE_BIT_KHR &&
+  GPU_ADDRESS_COPY_PROTECTED_BIT_EXT == VK_ADDRESS_COPY_PROTECTED_BIT_KHR,
+  "indirect address-copy flags mismatch"
+);
+_Static_assert(
+  GPU_INDIRECT_TEXTURE_ASPECT_COLOR_BIT_EXT == VK_IMAGE_ASPECT_COLOR_BIT &&
+  GPU_INDIRECT_TEXTURE_ASPECT_DEPTH_BIT_EXT == VK_IMAGE_ASPECT_DEPTH_BIT &&
+  GPU_INDIRECT_TEXTURE_ASPECT_STENCIL_BIT_EXT == VK_IMAGE_ASPECT_STENCIL_BIT,
+  "indirect texture aspect flags mismatch"
+);
+
+static bool
+vk__indirectCopyState(GPUCopyPassEncoder *pass,
+                      GPUCommandBufferVk **outCommand,
+                      GPUDeviceVk        **outDevice,
+                      VkQueueFlags        *outQueueFlags) {
+  GPUCommandBufferVk *command;
+  GPUAdapterVk       *adapter;
+  GPUDevice          *device;
+  GPUDeviceVk        *deviceVk;
+
+  command  = vk__copyCommand(pass);
+  device   = pass && pass->_cmdb ? gpuCommandBufferDevice(pass->_cmdb) : NULL;
+  deviceVk = device ? device->_priv : NULL;
+  adapter  = device && device->adapter ? device->adapter->_priv : NULL;
+  if (!command || !command->owner || !deviceVk || !adapter ||
+      command->owner->familyIndex >= adapter->nQueFamilies ||
+      (adapter->queueFamilyProps[command->owner->familyIndex].queueFlags &
+       adapter->indirectCopyQueues) == 0u) {
+    return false;
+  }
+
+  *outCommand = command;
+  *outDevice  = deviceVk;
+  if (outQueueFlags) {
+    *outQueueFlags =
+      adapter->queueFamilyProps[command->owner->familyIndex].queueFlags;
+  }
+  return true;
+}
+
+static void
+vk_copyMemoryIndirect(GPUCopyPassEncoder                  *pass,
+                      const GPUIndirectMemoryCopyInfoEXT *info) {
+  GPUCommandBufferVk       *command;
+  GPUDeviceVk              *device;
+  VkCopyMemoryIndirectInfoKHR native = {0};
+
+  if (!info ||
+      !vk__indirectCopyState(pass, &command, &device, NULL) ||
+      !device->indirectMemoryCopy || !device->copyMemoryIndirect) {
+    return;
+  }
+
+  native.sType        = VK_STRUCTURE_TYPE_COPY_MEMORY_INDIRECT_INFO_KHR;
+  native.srcCopyFlags = (VkAddressCopyFlagsKHR)info->srcFlags;
+  native.dstCopyFlags = (VkAddressCopyFlagsKHR)info->dstFlags;
+  native.copyCount    = info->commandCount;
+  native.copyAddressRange.address =
+    info->commands.buffer->_gpuAddress + info->commands.offset;
+  native.copyAddressRange.size   = info->commands.sizeBytes;
+  native.copyAddressRange.stride = info->commands.strideBytes;
+  device->copyMemoryIndirect(command->command, &native);
+}
+
+static void
+vk_copyMemoryToTextureIndirect(GPUCopyPassEncoder                          *pass,
+                               const GPUIndirectMemoryToTextureCopyInfoEXT *info) {
+  GPUCommandBufferVk                 *command;
+  GPUDeviceVk                        *device;
+  GPUTextureVk                       *texture;
+  VkCopyMemoryToImageIndirectInfoKHR  native = {0};
+  VkQueueFlags                        queueFlags;
+
+  texture = info && info->dst ? info->dst->_priv : NULL;
+  if (!texture || !texture->indirectCopyDst ||
+      !vk__indirectCopyState(pass, &command, &device, &queueFlags) ||
+      !device->indirectMemoryToTextureCopy ||
+      !device->copyMemoryToImageIndirect) {
+    return;
+  }
+
+  for (uint32_t i = 0u; i < info->commandCount; i++) {
+    const GPUIndirectTextureSubresourceEXT *subresource;
+
+    subresource = &info->pTextureSubresources[i];
+    if ((subresource->aspectMask &
+         (GPU_INDIRECT_TEXTURE_ASPECT_DEPTH_BIT_EXT |
+          GPU_INDIRECT_TEXTURE_ASPECT_STENCIL_BIT_EXT)) != 0u &&
+        (queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0u) {
+      return;
+    }
+    (void)vk_transitionTextureIndirectCopy(
+      command->command,
+      texture,
+      subresource->mipLevel,
+      1u,
+      info->dst->dimension == GPU_TEXTURE_DIMENSION_3D
+        ? 0u
+        : subresource->baseArrayLayer,
+      info->dst->dimension == GPU_TEXTURE_DIMENSION_3D
+        ? 1u
+        : subresource->layerCount
+    );
+  }
+
+  native.sType =
+    VK_STRUCTURE_TYPE_COPY_MEMORY_TO_IMAGE_INDIRECT_INFO_KHR;
+  native.srcCopyFlags = (VkAddressCopyFlagsKHR)info->srcFlags;
+  native.copyCount    = info->commandCount;
+  native.copyAddressRange.address =
+    info->commands.buffer->_gpuAddress + info->commands.offset;
+  native.copyAddressRange.size   = info->commands.sizeBytes;
+  native.copyAddressRange.stride = info->commands.strideBytes;
+  native.dstImage                = texture->image;
+  native.dstImageLayout          = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  native.pImageSubresources =
+    (const VkImageSubresourceLayers *)info->pTextureSubresources;
+  device->copyMemoryToImageIndirect(command->command, &native);
+  texture->indirectCopyPending = true;
+}
+#endif
+
 static void
 vk_endCopyPass(GPUCopyPassEncoder *pass) {
   GPUCommandBufferVk *command;
@@ -1376,6 +1573,10 @@ vk_initRenderPass(GPUApiRenderPass *api) {
   api->copyBufferToTexture  = vk_copyBufferToTexture;
   api->copyTextureToBuffer  = vk_copyTextureToBuffer;
   api->copyTextureToTexture = vk_copyTextureToTexture;
+#ifdef VK_KHR_copy_memory_indirect
+  api->copyMemoryIndirect          = vk_copyMemoryIndirect;
+  api->copyMemoryToTextureIndirect = vk_copyMemoryToTextureIndirect;
+#endif
   api->endCopyPass          = vk_endCopyPass;
   api->encodeBarriers       = vk_encodeBarriers;
 }

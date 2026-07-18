@@ -241,6 +241,9 @@ typedef struct GPUAdapterVk {
   bool                          computeDerivativeQuads;
   bool                          computeDerivativeLinear;
   bool                          shaderUntypedPointers;
+  bool                          indirectMemoryCopy;
+  bool                          indirectMemoryToTextureCopy;
+  VkQueueFlags                  indirectCopyQueues;
   bool                          negativeViewport;
 } GPUAdapterVk;
 
@@ -287,6 +290,10 @@ typedef struct GPUDeviceVk {
 #ifdef VK_KHR_present_wait
   PFN_vkWaitForPresentKHR         waitForPresent;
 #endif
+#ifdef VK_KHR_copy_memory_indirect
+  PFN_vkCmdCopyMemoryIndirectKHR        copyMemoryIndirect;
+  PFN_vkCmdCopyMemoryToImageIndirectKHR copyMemoryToImageIndirect;
+#endif
   VkDevice                   device;
   VkSampleCountFlags         colorSampleCounts;
   VkSampleCountFlags         depthSampleCounts;
@@ -313,6 +320,8 @@ typedef struct GPUDeviceVk {
   bool                       timelineSemaphore;
   bool                       synchronization2;
   bool                       bufferDeviceAddress;
+  bool                       indirectMemoryCopy;
+  bool                       indirectMemoryToTextureCopy;
   bool                       descriptorBuffer;
   bool                       rayQuery;
   bool                       rayTracingPipeline;
@@ -455,6 +464,10 @@ typedef struct GPUTextureVk {
   bool               layoutUniform;
   bool               ownsMemory;
   bool               sparse;
+#ifdef VK_KHR_copy_memory_indirect
+  bool               indirectCopyDst;
+  bool               indirectCopyPending;
+#endif
 } GPUTextureVk;
 
 typedef struct GPUDescriptorPoolVk {
@@ -918,6 +931,17 @@ vk_transitionTexture(VkCommandBuffer command,
                      uint32_t        baseLayer,
                      uint32_t        layerCount,
                      VkImageLayout   nextLayout);
+
+#ifdef VK_KHR_copy_memory_indirect
+GPU_HIDE
+bool
+vk_transitionTextureIndirectCopy(VkCommandBuffer command,
+                                 GPUTextureVk   *texture,
+                                 uint32_t        baseMip,
+                                 uint32_t        mipCount,
+                                 uint32_t        baseLayer,
+                                 uint32_t        layerCount);
+#endif
 
 GPU_HIDE
 bool

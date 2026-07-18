@@ -58,6 +58,10 @@ typedef struct GPUApiRenderPass {
                                GPUTexture                          *src,
                                GPUTexture                          *dst,
                                const GPUTextureToTextureCopyRegion *region);
+  void (*copyMemoryIndirect)(GPUCopyPassEncoder                  *pass,
+                             const GPUIndirectMemoryCopyInfoEXT *info);
+  void (*copyMemoryToTextureIndirect)(GPUCopyPassEncoder                          *pass,
+                                      const GPUIndirectMemoryToTextureCopyInfoEXT *info);
   void (*endCopyPass)(GPUCopyPassEncoder *pass);
   void (*encodeBarriers)(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers);
 } GPUApiRenderPass;

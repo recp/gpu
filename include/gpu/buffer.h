@@ -36,7 +36,8 @@ enum {
   GPU_BUFFER_USAGE_COPY_DST  = 1u << 5,
   GPU_BUFFER_USAGE_INDIRECT  = 1u << 6,
   GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT = 1u << 7,
-  GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT = 1u << 8
+  GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT = 1u << 8,
+  GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT = 1u << 9
 };
 
 typedef struct GPUBufferCreateInfo {
@@ -55,6 +56,11 @@ GPUCreateBuffer(GPUDevice                 * __restrict device,
 GPU_EXPORT
 void
 GPUDestroyBuffer(GPUBuffer * __restrict buff);
+
+/*! Returns zero unless device-address support and usage were enabled. */
+GPU_EXPORT
+uint64_t
+GPUGetBufferDeviceAddressEXT(const GPUBuffer * __restrict buff);
 
 GPU_EXPORT
 GPUResult

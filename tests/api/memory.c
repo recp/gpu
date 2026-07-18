@@ -1,6 +1,86 @@
 #include "test.h"
 
 static int
+gpu_test_buffer_device_address(GPUAdapter *adapter) {
+  GPUFeature          feature        = GPU_FEATURE_BUFFER_DEVICE_ADDRESS;
+  GPUDeviceCreateInfo deviceInfo     = {0};
+  GPUBufferCreateInfo bufferInfo     = {0};
+  GPUDevice          *disabledDevice = NULL;
+  GPUDevice          *device         = NULL;
+  GPUBuffer          *buffer         = NULL;
+  GPUBuffer          *plainBuffer    = NULL;
+  GPUResult           result;
+  int                 ok             = 0;
+
+  if (!adapter) {
+    return 0;
+  }
+
+  deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  deviceInfo.chain.structSize      = sizeof(deviceInfo);
+  deviceInfo.required.pFeatures    = &feature;
+  deviceInfo.required.featureCount = 1u;
+  if (!GPUIsFeatureSupported(adapter, feature)) {
+    result = GPUCreateDevice(adapter, &deviceInfo, &device);
+    GPUDestroyDevice(device);
+    return result == GPU_ERROR_UNSUPPORTED && !device;
+  }
+
+  deviceInfo.required.pFeatures    = NULL;
+  deviceInfo.required.featureCount = 0u;
+  if (GPUCreateDevice(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
+      !disabledDevice) {
+    fprintf(stderr, "device-address disabled-device setup failed\n");
+    goto cleanup;
+  }
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "api-device-address";
+  bufferInfo.sizeBytes        = 256u;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE |
+                                GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT;
+  result = GPUCreateBuffer(disabledDevice, &bufferInfo, &buffer);
+  if (result != GPU_ERROR_UNSUPPORTED || buffer) {
+    fprintf(stderr, "device-address usage accepted without feature\n");
+    goto cleanup;
+  }
+  GPUDestroyDevice(disabledDevice);
+  disabledDevice = NULL;
+
+  deviceInfo.required.pFeatures    = &feature;
+  deviceInfo.required.featureCount = 1u;
+  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+      !GPUIsFeatureEnabled(device, feature)) {
+    fprintf(stderr, "device-address feature enablement failed\n");
+    goto cleanup;
+  }
+
+  bufferInfo.usage = GPU_BUFFER_USAGE_STORAGE;
+  if (GPUCreateBuffer(device, &bufferInfo, &plainBuffer) != GPU_OK ||
+      !plainBuffer || GPUGetBufferDeviceAddressEXT(plainBuffer) != 0u) {
+    fprintf(stderr, "plain buffer exposed a device address\n");
+    goto cleanup;
+  }
+
+  bufferInfo.usage = GPU_BUFFER_USAGE_STORAGE |
+                     GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT;
+  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer ||
+      GPUGetBufferDeviceAddressEXT(buffer) == 0u) {
+    fprintf(stderr, "device-address buffer did not expose an address\n");
+    goto cleanup;
+  }
+  ok = 1;
+
+cleanup:
+  GPUDestroyBuffer(buffer);
+  GPUDestroyBuffer(plainBuffer);
+  GPUDestroyDevice(device);
+  GPUDestroyDevice(disabledDevice);
+  return ok;
+}
+
+static int
 gpu_test_placed_memory(GPUAdapter *adapter) {
   GPUFeature                feature         = GPU_FEATURE_PLACED_RESOURCES;
   GPUDeviceCreateInfo       deviceInfo      = {0};
@@ -836,7 +916,8 @@ cleanup:
 
 int
 gpu_test_memory(GPUAdapter *adapter) {
-  return gpu_test_placed_memory(adapter) &&
+  return gpu_test_buffer_device_address(adapter) &&
+         gpu_test_placed_memory(adapter) &&
          gpu_test_sparse_memory(adapter) &&
          gpu_test_sparse_buffer_memory(adapter);
 }

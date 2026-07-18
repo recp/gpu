@@ -447,7 +447,9 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
 #ifdef VK_KHR_buffer_device_address
   if (strcmp(name, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) == 0) {
     return (adapter && adapter->descriptorBuffer) || rayQuery ||
-           rayTracingPipeline;
+           rayTracingPipeline ||
+           vk_featureEnabled(enabledFeatureMask,
+                             GPU_FEATURE_BUFFER_DEVICE_ADDRESS);
   }
 #endif
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
@@ -495,6 +497,24 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
            vk_featureEnabled(enabledFeatureMask,
                              GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR);
   }
+#endif
+#ifdef VK_KHR_copy_memory_indirect
+  if (strcmp(name, VK_KHR_COPY_MEMORY_INDIRECT_EXTENSION_NAME) == 0) {
+    return vk_featureEnabled(enabledFeatureMask,
+                             GPU_FEATURE_INDIRECT_MEMORY_COPY) ||
+           vk_featureEnabled(
+             enabledFeatureMask,
+             GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY
+           );
+  }
+#ifdef VK_KHR_format_feature_flags2
+  if (strcmp(name, VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME) == 0) {
+    return vk_featureEnabled(
+      enabledFeatureMask,
+      GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY
+    );
+  }
+#endif
 #endif
   if (strcmp(name, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME) == 0 ||
       strcmp(name, VK_KHR_SPIRV_1_4_EXTENSION_NAME) == 0) {
@@ -694,6 +714,14 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                                                 untypedPointerFeatures = {0};
   VkPhysicalDeviceFeatures2                     untypedPointerFeatures2 = {0};
 #endif
+#ifdef VK_KHR_copy_memory_indirect
+  VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR
+                                                indirectCopyFeatures = {0};
+  VkPhysicalDeviceFeatures2                     indirectCopyFeatures2 = {0};
+  VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR
+                                                indirectCopyProperties = {0};
+  VkPhysicalDeviceProperties2                   indirectCopyProperties2 = {0};
+#endif
   VkResult                                  err;
   uint32_t                                  i, nExtensions;
   bool                                      incrementalPresentEnabled;
@@ -760,6 +788,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 #endif
 #ifdef VK_KHR_shader_untyped_pointers
   bool                                      untypedPointerExtension;
+#endif
+#ifdef VK_KHR_copy_memory_indirect
+  bool                                      indirectCopyExtension;
+  bool                                      formatFeatureFlags2Extension;
+  bool                                      formatFeatureFlags2Core;
 #endif
 
   extensions                = NULL;
@@ -828,6 +861,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 #endif
 #ifdef VK_KHR_shader_untyped_pointers
   untypedPointerExtension       = false;
+#endif
+#ifdef VK_KHR_copy_memory_indirect
+  indirectCopyExtension         = false;
+  formatFeatureFlags2Extension  = false;
+  formatFeatureFlags2Core       = false;
 #endif
 
   adapter                   = calloc(1, sizeof(*adapter));
@@ -933,6 +971,18 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                   extensions[i].extensionName)) {
         bufferAddressExtension = true;
       }
+#endif
+#ifdef VK_KHR_copy_memory_indirect
+      if (!strcmp(VK_KHR_COPY_MEMORY_INDIRECT_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        indirectCopyExtension = true;
+      }
+#ifdef VK_KHR_format_feature_flags2
+      if (!strcmp(VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        formatFeatureFlags2Extension = true;
+      }
+#endif
 #endif
 
       if (!strcmp(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
@@ -1095,6 +1145,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                    instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
                    adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
   bufferAddressCore = descriptorCore;
+#ifdef VK_KHR_copy_memory_indirect
+  formatFeatureFlags2Core = instanceVk &&
+                            instanceVk->apiVersion >= VK_API_VERSION_1_3 &&
+                            adapterVk->props.apiVersion >= VK_API_VERSION_1_3;
+#endif
   timelineCore = instanceVk &&
                  instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
                  adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
@@ -1271,7 +1326,64 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     getFeatures2(raw, &bufferAddressFeatures2);
     adapterVk->bufferDeviceAddress =
       bufferAddressFeatures.bufferDeviceAddress == VK_TRUE;
+#ifdef VK_KHR_buffer_device_address
+    if (adapterVk->bufferDeviceAddress && !bufferAddressCore &&
+        !vk_addDeviceExtension(adapterVk,
+                               VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)) {
+      goto fail;
+    }
+#endif
   }
+#ifdef VK_KHR_copy_memory_indirect
+  if (getFeatures2 && indirectCopyExtension &&
+      adapterVk->bufferDeviceAddress) {
+    PFN_vkGetPhysicalDeviceProperties2 getProperties2;
+    bool                               memoryCopy;
+    bool                               textureCopy;
+
+    indirectCopyFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_FEATURES_KHR;
+    indirectCopyFeatures2.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    indirectCopyFeatures2.pNext = &indirectCopyFeatures;
+    getFeatures2(raw, &indirectCopyFeatures2);
+
+    memoryCopy = indirectCopyFeatures.indirectMemoryCopy == VK_TRUE;
+    textureCopy =
+      indirectCopyFeatures.indirectMemoryToImageCopy == VK_TRUE &&
+      (formatFeatureFlags2Core || formatFeatureFlags2Extension);
+
+    getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+      vkGetInstanceProcAddr(instanceVk->inst,
+                            "vkGetPhysicalDeviceProperties2");
+    if (!getProperties2) {
+      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+        vkGetInstanceProcAddr(instanceVk->inst,
+                              "vkGetPhysicalDeviceProperties2KHR");
+    }
+    if ((memoryCopy || textureCopy) && getProperties2) {
+      indirectCopyProperties.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_PROPERTIES_KHR;
+      indirectCopyProperties2.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+      indirectCopyProperties2.pNext = &indirectCopyProperties;
+      getProperties2(raw, &indirectCopyProperties2);
+      if (indirectCopyProperties.supportedQueues != 0u &&
+          vk_addDeviceExtension(adapterVk,
+                                VK_KHR_COPY_MEMORY_INDIRECT_EXTENSION_NAME) &&
+          (!textureCopy || formatFeatureFlags2Core ||
+           vk_addDeviceExtension(
+             adapterVk,
+             VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME
+           ))) {
+        adapterVk->indirectMemoryCopy          = memoryCopy;
+        adapterVk->indirectMemoryToTextureCopy = textureCopy;
+        adapterVk->indirectCopyQueues =
+          indirectCopyProperties.supportedQueues;
+      }
+    }
+  }
+#endif
 #ifdef VK_EXT_descriptor_buffer
   if (getFeatures2 && descriptorBufferExtension &&
       adapterVk->bufferDeviceAddress) {
@@ -1777,6 +1889,12 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       return adapterVk->computeDerivativeQuads;
     case GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR:
       return adapterVk->computeDerivativeLinear;
+    case GPU_FEATURE_BUFFER_DEVICE_ADDRESS:
+      return adapterVk->bufferDeviceAddress;
+    case GPU_FEATURE_INDIRECT_MEMORY_COPY:
+      return adapterVk->indirectMemoryCopy;
+    case GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY:
+      return adapterVk->indirectMemoryToTextureCopy;
     case GPU_FEATURE_PLACED_RESOURCES:
       return true;
     case GPU_FEATURE_SPARSE_TEXTURES:
@@ -2171,6 +2289,9 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR
     derivativeFeatures = {0};
 #endif
+#ifdef VK_KHR_copy_memory_indirect
+  VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR indirectCopyFeatures = {0};
+#endif
   VkDeviceCreateInfo       deviceCI = {0};
   VkResult                 result;
   uint32_t                 familyIndex;
@@ -2229,6 +2350,22 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   if (vk_featureEnabled(enabledFeatureMask,
                         GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR) &&
       !adapterVk->computeDerivativeLinear) {
+    goto err;
+  }
+  if (vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_BUFFER_DEVICE_ADDRESS) &&
+      !adapterVk->bufferDeviceAddress) {
+    goto err;
+  }
+  if (vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_INDIRECT_MEMORY_COPY) &&
+      !adapterVk->indirectMemoryCopy) {
+    goto err;
+  }
+  if (vk_featureEnabled(
+        enabledFeatureMask,
+        GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY
+      ) && !adapterVk->indirectMemoryToTextureCopy) {
     goto err;
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u &&
@@ -2447,6 +2584,27 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     deviceCI.pNext = &derivativeFeatures;
   }
 #endif
+#ifdef VK_KHR_copy_memory_indirect
+  if (vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_INDIRECT_MEMORY_COPY) ||
+      vk_featureEnabled(
+        enabledFeatureMask,
+        GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY
+      )) {
+    indirectCopyFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_FEATURES_KHR;
+    indirectCopyFeatures.pNext = (void *)deviceCI.pNext;
+    indirectCopyFeatures.indirectMemoryCopy =
+      vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_INDIRECT_MEMORY_COPY);
+    indirectCopyFeatures.indirectMemoryToImageCopy =
+      vk_featureEnabled(
+        enabledFeatureMask,
+        GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY
+      );
+    deviceCI.pNext = &indirectCopyFeatures;
+  }
+#endif
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u ||
       (enabledFeatureMask & (1ull << GPU_FEATURE_BINDLESS)) != 0u) {
     descriptorFeatures.sType =
@@ -2489,7 +2647,9 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   }
 #endif
   if (adapterVk->descriptorBuffer ||
-      (enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) != 0u) {
+      vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_RAY_QUERY) ||
+      vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_BUFFER_DEVICE_ADDRESS)) {
     bufferAddressFeatures.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
     bufferAddressFeatures.pNext = (void *)deviceCI.pNext;
@@ -2608,7 +2768,9 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
 #endif
   if (adapterVk->bufferDeviceAddress &&
       (adapterVk->descriptorBuffer ||
-       (enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) != 0u)) {
+       vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_RAY_QUERY) ||
+       vk_featureEnabled(enabledFeatureMask,
+                         GPU_FEATURE_BUFFER_DEVICE_ADDRESS))) {
     deviceVk->getBufferDeviceAddress =
       (PFN_vkGetBufferDeviceAddress)vkGetDeviceProcAddr(
         deviceVk->device,
@@ -2626,6 +2788,34 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     }
     deviceVk->bufferDeviceAddress = true;
   }
+#ifdef VK_KHR_copy_memory_indirect
+  if (vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_INDIRECT_MEMORY_COPY)) {
+    deviceVk->copyMemoryIndirect =
+      (PFN_vkCmdCopyMemoryIndirectKHR)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkCmdCopyMemoryIndirectKHR"
+      );
+    if (!deviceVk->copyMemoryIndirect) {
+      goto err;
+    }
+    deviceVk->indirectMemoryCopy = true;
+  }
+  if (vk_featureEnabled(
+        enabledFeatureMask,
+        GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY
+      )) {
+    deviceVk->copyMemoryToImageIndirect =
+      (PFN_vkCmdCopyMemoryToImageIndirectKHR)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkCmdCopyMemoryToImageIndirectKHR"
+      );
+    if (!deviceVk->copyMemoryToImageIndirect) {
+      goto err;
+    }
+    deviceVk->indirectMemoryToTextureCopy = true;
+  }
+#endif
 #ifdef VK_EXT_descriptor_buffer
   if (adapterVk->descriptorBuffer) {
     deviceVk->getDescriptorSetLayoutSize =

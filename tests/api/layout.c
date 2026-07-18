@@ -69,6 +69,12 @@ GPU_ASSERT_64BIT_SIZE(GPUShaderReflection, 16u);
 GPU_ASSERT_64BIT_SIZE(GPUShaderLibraryCreateInfo, 72u);
 GPU_ASSERT_64BIT_SIZE(GPURenderPipelineCreateInfo, 128u);
 GPU_ASSERT_64BIT_SIZE(GPUSubgroupMatrixPropertiesEXT, 40u);
+GPU_ASSERT_64BIT_SIZE(GPUIndirectMemoryCopyCommandEXT, 24u);
+GPU_ASSERT_64BIT_SIZE(GPUIndirectTextureSubresourceEXT, 16u);
+GPU_ASSERT_64BIT_SIZE(GPUIndirectMemoryToTextureCommandEXT, 56u);
+GPU_ASSERT_64BIT_SIZE(GPUIndirectCommandRangeEXT, 32u);
+GPU_ASSERT_64BIT_SIZE(GPUIndirectMemoryCopyInfoEXT, 48u);
+GPU_ASSERT_64BIT_SIZE(GPUIndirectMemoryToTextureCopyInfoEXT, 56u);
 _Static_assert(
   offsetof(GPUQueueSubmitExInfo, ppCommandBuffers) <
     offsetof(GPUQueueSubmitExInfo, pWaits),

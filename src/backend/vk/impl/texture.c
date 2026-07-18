@@ -292,6 +292,9 @@ vk_setTextureLayout(GPUTextureVk *texture,
                            layerCount)) {
     texture->layout        = layout;
     texture->layoutUniform = true;
+#ifdef VK_KHR_copy_memory_indirect
+    texture->indirectCopyPending = false;
+#endif
     return;
   }
   if (texture->layoutUniform && texture->layout == layout) {
@@ -371,7 +374,8 @@ vk__transitionTexture(VkCommandBuffer      command,
                       VkPipelineStageFlags explicitDstStages,
                       VkAccessFlags        explicitSrcAccess,
                       VkAccessFlags        explicitDstAccess,
-                      bool                 explicitSync) {
+                      bool                 explicitSrcSync,
+                      bool                 explicitDstSync) {
   VkImageMemoryBarrier barriers[VK_TEXTURE_BARRIER_CHUNK_SIZE];
   VkPipelineStageFlags chunkSrcStages;
   VkPipelineStageFlags dstStages;
@@ -397,17 +401,26 @@ vk__transitionTexture(VkCommandBuffer      command,
     VkPipelineStageFlags srcStages;
     VkAccessFlags        srcAccess;
 
-    if (!explicitSync && texture->layout == nextLayout) {
+    if (!explicitSrcSync && !explicitDstSync &&
+        texture->layout == nextLayout) {
       return true;
     }
 
-    if (explicitSync) {
+    if (explicitSrcSync) {
       srcStages = explicitSrcStages;
-      dstStages = explicitDstStages;
       srcAccess = explicitSrcAccess;
-      dstAccess = explicitDstAccess;
     } else {
       vk__layoutSource(texture->layout, &srcStages, &srcAccess);
+    }
+#ifdef VK_KHR_copy_memory_indirect
+    if (texture->indirectCopyPending) {
+      srcStages |= VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    }
+#endif
+    if (explicitDstSync) {
+      dstStages = explicitDstStages;
+      dstAccess = explicitDstAccess;
+    } else {
       vk__layoutSource(nextLayout, &dstStages, &dstAccess);
     }
     vk__fillTextureBarrier(&barriers[0],
@@ -429,6 +442,9 @@ vk__transitionTexture(VkCommandBuffer      command,
     if (fullRange) {
       texture->layout        = nextLayout;
       texture->layoutUniform = true;
+#ifdef VK_KHR_copy_memory_indirect
+      texture->indirectCopyPending = false;
+#endif
     } else {
       vk_setTextureLayout(texture,
                           baseMip,
@@ -440,14 +456,14 @@ vk__transitionTexture(VkCommandBuffer      command,
     return true;
   }
 
-  if (explicitSync) {
+  if (explicitDstSync) {
     dstStages = explicitDstStages;
     dstAccess = explicitDstAccess;
   } else {
     vk__layoutSource(nextLayout, &dstStages, &dstAccess);
   }
   barrierCount   = 0u;
-  chunkSrcStages = explicitSync ? explicitSrcStages : 0u;
+  chunkSrcStages = explicitSrcSync ? explicitSrcStages : 0u;
   for (uint32_t layer = baseLayer; layer < baseLayer + layerCount; layer++) {
     for (uint32_t mip = baseMip; mip < baseMip + mipCount; mip++) {
       VkPipelineStageFlags srcStages;
@@ -457,17 +473,23 @@ vk__transitionTexture(VkCommandBuffer      command,
 
       subresource = vk__textureSubresource(texture, mip, layer);
       oldLayout   = texture->layouts[subresource];
-      if (!explicitSync && oldLayout == nextLayout) {
+      if (!explicitSrcSync && !explicitDstSync && oldLayout == nextLayout) {
         continue;
       }
 
-      if (explicitSync) {
+      if (explicitSrcSync) {
         srcStages = explicitSrcStages;
         srcAccess = explicitSrcAccess;
       } else {
         vk__layoutSource(oldLayout, &srcStages, &srcAccess);
         chunkSrcStages |= srcStages;
       }
+#ifdef VK_KHR_copy_memory_indirect
+      if (texture->indirectCopyPending) {
+        srcStages      |= VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+        chunkSrcStages |= VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+      }
+#endif
       vk__fillTextureBarrier(&barriers[barrierCount++],
                              texture,
                              oldLayout,
@@ -487,7 +509,7 @@ vk__transitionTexture(VkCommandBuffer      command,
                                  chunkSrcStages,
                                  dstStages);
         barrierCount   = 0u;
-        chunkSrcStages = explicitSync ? explicitSrcStages : 0u;
+        chunkSrcStages = explicitSrcSync ? explicitSrcStages : 0u;
       }
     }
   }
@@ -503,6 +525,9 @@ vk__transitionTexture(VkCommandBuffer      command,
   if (fullRange) {
     texture->layout        = nextLayout;
     texture->layoutUniform = true;
+#ifdef VK_KHR_copy_memory_indirect
+    texture->indirectCopyPending = false;
+#endif
   }
   return true;
 }
@@ -527,8 +552,34 @@ vk_transitionTexture(VkCommandBuffer command,
                                0u,
                                0u,
                                0u,
+                               false,
                                false);
 }
+
+#ifdef VK_KHR_copy_memory_indirect
+GPU_HIDE
+bool
+vk_transitionTextureIndirectCopy(VkCommandBuffer command,
+                                 GPUTextureVk   *texture,
+                                 uint32_t        baseMip,
+                                 uint32_t        mipCount,
+                                 uint32_t        baseLayer,
+                                 uint32_t        layerCount) {
+  return vk__transitionTexture(command,
+                               texture,
+                               baseMip,
+                               mipCount,
+                               baseLayer,
+                               layerCount,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               0u,
+                               VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                               0u,
+                               VK_ACCESS_TRANSFER_WRITE_BIT,
+                               false,
+                               true);
+}
+#endif
 
 GPU_HIDE
 bool
@@ -554,6 +605,7 @@ vk_transitionTextureBarrier(VkCommandBuffer      command,
                                dstStages,
                                srcAccess,
                                dstAccess,
+                               true,
                                true);
 }
 
@@ -756,6 +808,25 @@ vk__finishTexture(GPUDevice                  *device,
   uint32_t      subresourceCount;
 
   deviceVk         = device->_priv;
+#ifdef VK_KHR_copy_memory_indirect
+  if (deviceVk->indirectMemoryToTextureCopy && device->adapter &&
+      device->adapter->_priv) {
+    GPUAdapterVk        *adapterVk;
+    VkFormatProperties2  properties2 = {0};
+    VkFormatProperties3  properties3 = {0};
+
+    adapterVk         = device->adapter->_priv;
+    properties2.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
+    properties2.pNext = &properties3;
+    properties3.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3;
+    vkGetPhysicalDeviceFormatProperties2(adapterVk->physicalDevice,
+                                          imageInfo->format,
+                                          &properties2);
+    state->indirectCopyDst =
+      (properties3.optimalTilingFeatures &
+       VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR) != 0u;
+  }
+#endif
   subresourceCount = state->subresourceCount;
   if ((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u &&
       !deviceVk->dynamicRendering) {

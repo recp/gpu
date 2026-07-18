@@ -30,7 +30,8 @@ vk__bufferUsage(GPUBufferUsageFlags usage, VkBufferUsageFlags *outUsage) {
                                     GPU_BUFFER_USAGE_COPY_DST |
                                     GPU_BUFFER_USAGE_INDIRECT |
                                     GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT |
-                                    GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT;
+                                    GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT |
+                                    GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT;
   VkBufferUsageFlags result;
 
   if (!outUsage || usage == 0u || (usage & ~known) != 0u) {
@@ -58,6 +59,9 @@ vk__bufferUsage(GPUBufferUsageFlags usage, VkBufferUsageFlags *outUsage) {
   }
   if ((usage & GPU_BUFFER_USAGE_INDIRECT) != 0u) {
     result |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+  }
+  if ((usage & GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT) != 0u) {
+    result |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
   }
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
   if ((usage & GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT) != 0u) {

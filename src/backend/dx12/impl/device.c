@@ -772,6 +772,7 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
     case GPU_FEATURE_INDIRECT_DRAW:
     case GPU_FEATURE_MULTI_DRAW:
     case GPU_FEATURE_PLACED_RESOURCES:
+    case GPU_FEATURE_BUFFER_DEVICE_ADDRESS:
       return true;
     case GPU_FEATURE_SPARSE_TEXTURES:
     case GPU_FEATURE_SPARSE_BUFFERS:

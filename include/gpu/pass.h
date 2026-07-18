@@ -111,6 +111,64 @@ typedef struct GPUTextureToTextureCopyRegion {
   uint32_t           layerCount;
 } GPUTextureToTextureCopyRegion;
 
+typedef uint32_t GPUAddressCopyFlagsEXT;
+enum {
+  GPU_ADDRESS_COPY_DEVICE_LOCAL_BIT_EXT = 1u << 0,
+  GPU_ADDRESS_COPY_SPARSE_BIT_EXT       = 1u << 1,
+  GPU_ADDRESS_COPY_PROTECTED_BIT_EXT    = 1u << 2
+};
+
+typedef uint32_t GPUIndirectTextureAspectFlagsEXT;
+enum {
+  GPU_INDIRECT_TEXTURE_ASPECT_COLOR_BIT_EXT   = 1u << 0,
+  GPU_INDIRECT_TEXTURE_ASPECT_DEPTH_BIT_EXT   = 1u << 1,
+  GPU_INDIRECT_TEXTURE_ASPECT_STENCIL_BIT_EXT = 1u << 2
+};
+
+typedef struct GPUIndirectMemoryCopyCommandEXT {
+  uint64_t srcAddress;
+  uint64_t dstAddress;
+  uint64_t sizeBytes;
+} GPUIndirectMemoryCopyCommandEXT;
+
+typedef struct GPUIndirectTextureSubresourceEXT {
+  GPUIndirectTextureAspectFlagsEXT aspectMask;
+  uint32_t                         mipLevel;
+  uint32_t                         baseArrayLayer;
+  uint32_t                         layerCount;
+} GPUIndirectTextureSubresourceEXT;
+
+typedef struct GPUIndirectMemoryToTextureCommandEXT {
+  uint64_t                         srcAddress;
+  uint32_t                         bufferRowLength;
+  uint32_t                         bufferImageHeight;
+  GPUIndirectTextureSubresourceEXT texture;
+  int32_t                          x, y, z;
+  uint32_t                         width, height, depth;
+} GPUIndirectMemoryToTextureCommandEXT;
+
+typedef struct GPUIndirectCommandRangeEXT {
+  GPUBuffer *buffer;
+  uint64_t   offset;
+  uint64_t   sizeBytes;
+  uint64_t   strideBytes;
+} GPUIndirectCommandRangeEXT;
+
+typedef struct GPUIndirectMemoryCopyInfoEXT {
+  GPUIndirectCommandRangeEXT commands;
+  GPUAddressCopyFlagsEXT     srcFlags;
+  GPUAddressCopyFlagsEXT     dstFlags;
+  uint32_t                   commandCount;
+} GPUIndirectMemoryCopyInfoEXT;
+
+typedef struct GPUIndirectMemoryToTextureCopyInfoEXT {
+  GPUTexture                                  *dst;
+  const GPUIndirectTextureSubresourceEXT      *pTextureSubresources;
+  GPUIndirectCommandRangeEXT                   commands;
+  GPUAddressCopyFlagsEXT                       srcFlags;
+  uint32_t                                     commandCount;
+} GPUIndirectMemoryToTextureCopyInfoEXT;
+
 GPU_EXPORT
 GPURenderPassEncoder*
 GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info);
@@ -157,6 +215,16 @@ GPUCopyTextureToTexture(GPUCopyPassEncoder                  *pass,
                         GPUTexture                          *src,
                         GPUTexture                          *dst,
                         const GPUTextureToTextureCopyRegion *region);
+
+GPU_EXPORT
+void
+GPUCopyMemoryIndirectEXT(GPUCopyPassEncoder                  *pass,
+                         const GPUIndirectMemoryCopyInfoEXT *info);
+
+GPU_EXPORT
+void
+GPUCopyMemoryToTextureIndirectEXT(GPUCopyPassEncoder                          *pass,
+                                  const GPUIndirectMemoryToTextureCopyInfoEXT *info);
 
 GPU_EXPORT
 void

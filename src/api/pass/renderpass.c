@@ -43,6 +43,89 @@ gpu_validStoreOp(GPUStoreOp op) {
 }
 
 static bool
+gpu_validIndirectCommandRange(const GPUIndirectCommandRangeEXT *range,
+                              GPUDevice                        *device,
+                              uint32_t                          commandCount,
+                              uint64_t                          commandSize) {
+  uint64_t address;
+
+  if (!range || !range->buffer || !device || commandCount == 0u ||
+      range->buffer->device != device ||
+      !gpuBufferHasUsage(range->buffer,
+                         GPU_BUFFER_USAGE_INDIRECT |
+                           GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT) ||
+      range->buffer->_gpuAddress == 0u ||
+      range->offset > UINT64_MAX - range->buffer->_gpuAddress ||
+      !gpuBufferRangeValid(range->buffer, range->offset, range->sizeBytes) ||
+      range->strideBytes < commandSize ||
+      (range->strideBytes & 3u) != 0u ||
+      commandCount > range->sizeBytes / range->strideBytes) {
+    return false;
+  }
+
+  address = range->buffer->_gpuAddress + range->offset;
+  return (address & 3u) == 0u;
+}
+
+static bool
+gpu_validAddressCopyFlags(GPUAddressCopyFlagsEXT flags) {
+  const GPUAddressCopyFlagsEXT known =
+    GPU_ADDRESS_COPY_DEVICE_LOCAL_BIT_EXT |
+    GPU_ADDRESS_COPY_SPARSE_BIT_EXT |
+    GPU_ADDRESS_COPY_PROTECTED_BIT_EXT;
+
+  return (flags & ~known) == 0u &&
+         (flags & GPU_ADDRESS_COPY_PROTECTED_BIT_EXT) == 0u;
+}
+
+static bool
+gpu_indirectTextureAspect(GPUIndirectTextureAspectFlagsEXT aspect,
+                          GPUTextureAspect                *outAspect) {
+  if (!outAspect || aspect == 0u || (aspect & (aspect - 1u)) != 0u) {
+    return false;
+  }
+
+  switch (aspect) {
+    case GPU_INDIRECT_TEXTURE_ASPECT_COLOR_BIT_EXT:
+      *outAspect = GPU_TEXTURE_ASPECT_ALL;
+      return true;
+    case GPU_INDIRECT_TEXTURE_ASPECT_DEPTH_BIT_EXT:
+      *outAspect = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
+      return true;
+    case GPU_INDIRECT_TEXTURE_ASPECT_STENCIL_BIT_EXT:
+      *outAspect = GPU_TEXTURE_ASPECT_STENCIL_ONLY;
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool
+gpu_validIndirectTextureSubresource(
+  const GPUIndirectTextureSubresourceEXT *subresource,
+  const GPUTexture                       *texture) {
+  GPUTextureAspect resolved;
+  GPUTextureAspect aspect;
+  uint32_t         layers;
+
+  if (!subresource || !texture || subresource->layerCount == 0u ||
+      subresource->mipLevel >= texture->mipLevelCount ||
+      !gpu_indirectTextureAspect(subresource->aspectMask, &aspect) ||
+      !gpuFormatResolveCopyAspect(texture->format, aspect, &resolved)) {
+    return false;
+  }
+
+  layers = texture->dimension == GPU_TEXTURE_DIMENSION_3D
+             ? texture->depthOrLayers >> subresource->mipLevel
+             : texture->depthOrLayers;
+  if (layers == 0u) {
+    layers = 1u;
+  }
+  return subresource->baseArrayLayer < layers &&
+         subresource->layerCount <= layers - subresource->baseArrayLayer;
+}
+
+static bool
 gpu_textureViewHasUsage(const GPUTextureView *view, GPUTextureUsageFlags usage) {
   const GPUTexture *texture;
 
@@ -596,6 +679,76 @@ GPUCopyTextureToTexture(GPUCopyPassEncoder                  *pass,
   }
 
   api->renderPass.copyTextureToTexture(pass, src, dst, region);
+}
+
+GPU_EXPORT
+void
+GPUCopyMemoryIndirectEXT(GPUCopyPassEncoder                  *pass,
+                         const GPUIndirectMemoryCopyInfoEXT *info) {
+  GPUDevice *device;
+  GPUApi    *api;
+
+  device = pass && pass->_cmdb ? gpuCommandBufferDevice(pass->_cmdb) : NULL;
+  if (!pass || pass->_ended || !info ||
+      !GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_MEMORY_COPY) ||
+      !gpu_validIndirectCommandRange(
+        &info->commands,
+        device,
+        info->commandCount,
+        sizeof(GPUIndirectMemoryCopyCommandEXT)
+      ) ||
+      !gpu_validAddressCopyFlags(info->srcFlags) ||
+      !gpu_validAddressCopyFlags(info->dstFlags)) {
+    return;
+  }
+  if (!(api = gpu_copyPassApi(pass)) ||
+      !api->renderPass.copyMemoryIndirect) {
+    return;
+  }
+
+  api->renderPass.copyMemoryIndirect(pass, info);
+}
+
+GPU_EXPORT
+void
+GPUCopyMemoryToTextureIndirectEXT(GPUCopyPassEncoder                          *pass,
+                                  const GPUIndirectMemoryToTextureCopyInfoEXT *info) {
+  GPUDevice *device;
+  GPUApi    *api;
+
+  device = pass && pass->_cmdb ? gpuCommandBufferDevice(pass->_cmdb) : NULL;
+  if (!pass || pass->_ended || !info || !info->dst ||
+      !info->pTextureSubresources || info->dst->device != device ||
+      (info->dst->usage & GPU_TEXTURE_USAGE_COPY_DST) == 0u ||
+      info->dst->sampleCount != 1u ||
+      !GPUIsFeatureEnabled(
+        device,
+        GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY
+      ) ||
+      !gpu_validIndirectCommandRange(
+        &info->commands,
+        device,
+        info->commandCount,
+        sizeof(GPUIndirectMemoryToTextureCommandEXT)
+      ) ||
+      !gpu_validAddressCopyFlags(info->srcFlags)) {
+    return;
+  }
+
+  for (uint32_t i = 0u; i < info->commandCount; i++) {
+    if (!gpu_validIndirectTextureSubresource(
+          &info->pTextureSubresources[i],
+          info->dst
+        )) {
+      return;
+    }
+  }
+  if (!(api = gpu_copyPassApi(pass)) ||
+      !api->renderPass.copyMemoryToTextureIndirect) {
+    return;
+  }
+
+  api->renderPass.copyMemoryToTextureIndirect(pass, info);
 }
 
 GPU_EXPORT

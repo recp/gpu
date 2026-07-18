@@ -94,7 +94,7 @@ gpu_reportDeviceLostOnce(GPUDevice *device) {
 static bool
 gpu_knownFeature(GPUFeature feature) {
   return feature >= GPU_FEATURE_COMPUTE &&
-         feature <= GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR;
+         feature <= GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY;
 }
 
 static uint64_t
@@ -211,6 +211,12 @@ gpu_enabledFeatureMaskForCreateInfo(const GPUAdapter *adapter,
   if ((mask & gpu_featureBit(GPU_FEATURE_RAY_TRACING_PIPELINE)) != 0u) {
     mask |= gpu_featureBit(GPU_FEATURE_RAY_QUERY);
   }
+  if ((mask & (gpu_featureBit(GPU_FEATURE_INDIRECT_MEMORY_COPY) |
+               gpu_featureBit(
+                 GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY
+               ))) != 0u) {
+    mask |= gpu_featureBit(GPU_FEATURE_BUFFER_DEVICE_ADDRESS);
+  }
   if ((mask & gpu_featureBit(GPU_FEATURE_SPARSE_TEXTURES)) != 0u &&
       GPUIsFeatureSupported(
         (GPUAdapter *)adapter,
@@ -230,7 +236,7 @@ gpu_supportedFeatureMask(const GPUAdapter *adapter) {
 
   mask = 0;
   for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR;
+       feature <= GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY;
        feature = (GPUFeature)(feature + 1)) {
     if (gpu_adapterSupportsFeature(adapter, feature)) {
       mask |= gpu_featureBit(feature);
@@ -249,7 +255,8 @@ gpu_fillFeatureSet(uint64_t       mask,
 
   count = 0u;
   for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR && count < capacity;
+       feature <= GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY &&
+         count < capacity;
        feature = (GPUFeature)(feature + 1)) {
     if (mask & gpu_featureBit(feature)) {
       storage[count++] = feature;
@@ -1285,6 +1292,21 @@ GPUGetProcAddr(GPUDevice *device, const char *name) {
   if (GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUP_MATRIX) &&
       strcmp(name, "GPUGetSubgroupMatrixPropertiesEXT") == 0) {
     return (GPUProc)GPUGetSubgroupMatrixPropertiesEXT;
+  }
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_BUFFER_DEVICE_ADDRESS) &&
+      strcmp(name, "GPUGetBufferDeviceAddressEXT") == 0) {
+    return (GPUProc)GPUGetBufferDeviceAddressEXT;
+  }
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_MEMORY_COPY) &&
+      strcmp(name, "GPUCopyMemoryIndirectEXT") == 0) {
+    return (GPUProc)GPUCopyMemoryIndirectEXT;
+  }
+  if (GPUIsFeatureEnabled(
+        device,
+        GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY
+      ) &&
+      strcmp(name, "GPUCopyMemoryToTextureIndirectEXT") == 0) {
+    return (GPUProc)GPUCopyMemoryToTextureIndirectEXT;
   }
   if (GPUIsFeatureEnabled(device, GPU_FEATURE_VARIABLE_RATE_SHADING)) {
     if (strcmp(name, "GPUGetVRSCapabilitiesEXT") == 0) {

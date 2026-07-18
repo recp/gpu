@@ -1,6 +1,8 @@
 #include "test.h"
+#include "../../src/api/buffer_internal.h"
 #include "../../src/api/cmdqueue_internal.h"
 #include "../../src/api/device_internal.h"
+#include "../../src/api/texture_internal.h"
 
 enum {
   COPY_TEST_WIDTH      = 4u,
@@ -13,6 +15,8 @@ enum {
 static GPUCopyPassEncoder gScopedCopyPass;
 static uint32_t           gScopedCopyBeginCalls;
 static uint32_t           gScopedCopyEndCalls;
+static uint32_t           gScopedIndirectCopyCalls;
+static uint32_t           gScopedIndirectTextureCopyCalls;
 
 static GPUCopyPassEncoder *
 begin_scoped_copy_pass(GPUCommandBuffer *cmdb, const char *label) {
@@ -29,6 +33,23 @@ end_scoped_copy_pass(GPUCopyPassEncoder *pass) {
   gScopedCopyEndCalls++;
 }
 
+static void
+copy_scoped_memory_indirect(GPUCopyPassEncoder                  *pass,
+                            const GPUIndirectMemoryCopyInfoEXT *info) {
+  (void)pass;
+  (void)info;
+  gScopedIndirectCopyCalls++;
+}
+
+static void
+copy_scoped_memory_to_texture_indirect(
+  GPUCopyPassEncoder                           *pass,
+  const GPUIndirectMemoryToTextureCopyInfoEXT *info) {
+  (void)pass;
+  (void)info;
+  gScopedIndirectTextureCopyCalls++;
+}
+
 static int
 check_copy_pass_device_dispatch(GPUDevice *activeDevice) {
   GPUApi             *api;
@@ -37,6 +58,11 @@ check_copy_pass_device_dispatch(GPUDevice *activeDevice) {
   GPUDevice           device = {0};
   GPUQueue            queue  = {0};
   GPUCommandBuffer    cmdb   = {0};
+  GPUBuffer           commandBuffer = {0};
+  GPUTexture          texture = {0};
+  GPUIndirectTextureSubresourceEXT subresource = {0};
+  GPUIndirectMemoryCopyInfoEXT indirectInfo = {0};
+  GPUIndirectMemoryToTextureCopyInfoEXT indirectTextureInfo = {0};
 
   api = gpuDeviceApi(activeDevice);
   if (!api) {
@@ -47,17 +73,69 @@ check_copy_pass_device_dispatch(GPUDevice *activeDevice) {
   scopedApi                          = *api;
   scopedApi.renderPass.beginCopyPass = begin_scoped_copy_pass;
   scopedApi.renderPass.endCopyPass   = end_scoped_copy_pass;
+  scopedApi.renderPass.copyMemoryIndirect = copy_scoped_memory_indirect;
+  scopedApi.renderPass.copyMemoryToTextureIndirect =
+    copy_scoped_memory_to_texture_indirect;
   device._api                        = &scopedApi;
+  device.enabledFeatureMask          =
+    (1ull << GPU_FEATURE_BUFFER_DEVICE_ADDRESS) |
+    (1ull << GPU_FEATURE_INDIRECT_MEMORY_COPY) |
+    (1ull << GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY);
   queue._device                      = &device;
   cmdb._queue                        = &queue;
   gScopedCopyBeginCalls              = 0u;
   gScopedCopyEndCalls                = 0u;
+  gScopedIndirectCopyCalls           = 0u;
+  gScopedIndirectTextureCopyCalls    = 0u;
 
   pass = GPUBeginCopyPass(&cmdb, "device-scoped-copy");
   if (pass != &gScopedCopyPass ||
       gScopedCopyBeginCalls != 1u ||
       !cmdb._activeEncoder) {
     fprintf(stderr, "copy pass did not use device dispatch\n");
+    return 0;
+  }
+
+  commandBuffer.device      = &device;
+  commandBuffer._gpuAddress = 0x1000u;
+  commandBuffer.sizeBytes   = 128u;
+  commandBuffer.usage       = GPU_BUFFER_USAGE_INDIRECT |
+                              GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT;
+  texture.device            = &device;
+  texture.format            = GPU_FORMAT_RGBA8_UNORM;
+  texture.dimension         = GPU_TEXTURE_DIMENSION_2D;
+  texture.width             = 4u;
+  texture.height            = 4u;
+  texture.depthOrLayers     = 1u;
+  texture.mipLevelCount     = 1u;
+  texture.sampleCount       = 1u;
+  texture.usage             = GPU_TEXTURE_USAGE_COPY_DST;
+
+  indirectInfo.commands.buffer      = &commandBuffer;
+  indirectInfo.commands.sizeBytes   = 48u;
+  indirectInfo.commands.strideBytes =
+    sizeof(GPUIndirectMemoryCopyCommandEXT);
+  indirectInfo.commandCount = 2u;
+  GPUCopyMemoryIndirectEXT(pass, &indirectInfo);
+
+  subresource.aspectMask = GPU_INDIRECT_TEXTURE_ASPECT_COLOR_BIT_EXT;
+  subresource.layerCount = 1u;
+  indirectTextureInfo.dst                  = &texture;
+  indirectTextureInfo.pTextureSubresources = &subresource;
+  indirectTextureInfo.commands.buffer      = &commandBuffer;
+  indirectTextureInfo.commands.sizeBytes   =
+    sizeof(GPUIndirectMemoryToTextureCommandEXT);
+  indirectTextureInfo.commands.strideBytes =
+    sizeof(GPUIndirectMemoryToTextureCommandEXT);
+  indirectTextureInfo.commandCount = 1u;
+  GPUCopyMemoryToTextureIndirectEXT(pass, &indirectTextureInfo);
+
+  indirectInfo.commands.strideBytes = 4u;
+  GPUCopyMemoryIndirectEXT(pass, &indirectInfo);
+  if (gScopedIndirectCopyCalls != 1u ||
+      gScopedIndirectTextureCopyCalls != 1u ||
+      GPUGetBufferDeviceAddressEXT(&commandBuffer) != 0x1000u) {
+    fprintf(stderr, "indirect copy did not validate or use device dispatch\n");
     return 0;
   }
 

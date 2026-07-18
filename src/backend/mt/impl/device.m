@@ -466,6 +466,11 @@ mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
     case GPU_FEATURE_DESCRIPTOR_INDEXING:
     case GPU_FEATURE_BINDLESS:
       return true;
+    case GPU_FEATURE_BUFFER_DEVICE_ADDRESS:
+      if (@available(macOS 13.0, iOS 16.0, *)) {
+        return true;
+      }
+      return false;
     case GPU_FEATURE_PLACED_RESOURCES:
       if (@available(macOS 10.15, iOS 13.0, *)) {
         return true;

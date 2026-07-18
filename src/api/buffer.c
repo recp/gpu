@@ -22,7 +22,22 @@ GPU_HIDE
 GPUResult
 gpuValidateBufferCreateInfo(const GPUDevice           *device,
                             const GPUBufferCreateInfo *info) {
+  const GPUBufferUsageFlags known =
+    GPU_BUFFER_USAGE_VERTEX |
+    GPU_BUFFER_USAGE_INDEX |
+    GPU_BUFFER_USAGE_UNIFORM |
+    GPU_BUFFER_USAGE_STORAGE |
+    GPU_BUFFER_USAGE_COPY_SRC |
+    GPU_BUFFER_USAGE_COPY_DST |
+    GPU_BUFFER_USAGE_INDIRECT |
+    GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT |
+    GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT |
+    GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT;
+
   if (!device || !info || info->sizeBytes == 0u || info->usage == 0u) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if ((info->usage & ~known) != 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
@@ -37,6 +52,10 @@ gpuValidateBufferCreateInfo(const GPUDevice           *device,
        (GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT |
         GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT)) != 0u &&
       !GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_QUERY)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  if ((info->usage & GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT) != 0u &&
+      !GPUIsFeatureEnabled(device, GPU_FEATURE_BUFFER_DEVICE_ADDRESS)) {
     return GPU_ERROR_UNSUPPORTED;
   }
   return GPU_OK;
@@ -97,6 +116,18 @@ GPUDestroyBuffer(GPUBuffer * __restrict buff) {
   if (api->buf.destroy) {
     api->buf.destroy(buff);
   }
+}
+
+GPU_EXPORT
+uint64_t
+GPUGetBufferDeviceAddressEXT(const GPUBuffer * __restrict buff) {
+  if (!gpuBufferHasUsage(buff, GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT) ||
+      !GPUIsFeatureEnabled(buff->device,
+                           GPU_FEATURE_BUFFER_DEVICE_ADDRESS)) {
+    return 0u;
+  }
+
+  return buff->_gpuAddress;
 }
 
 GPU_EXPORT
