@@ -1,4 +1,9 @@
 #include "test.h"
+#include "../../src/api/device_internal.h"
+
+enum {
+  GPU_RAY_PIPELINE_WARM_ITERATIONS = 8u
+};
 
 static uint64_t
 ray_max_u64(uint64_t a, uint64_t b) {
@@ -177,6 +182,7 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
     fprintf(stderr, "ray pipeline did not enable ray-query dependency\n");
     goto cleanup;
   }
+  enabled->runtimeConfig.enableStats = true;
   queue = GPUGetQueue(enabled, GPU_QUEUE_GRAPHICS, 0u);
   if (!queue) {
     fprintf(stderr, "ray pipeline queue unavailable\n");
@@ -475,6 +481,54 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
     goto cleanup;
   }
   cmdb = NULL;
+
+  GPUResetStats(enabled);
+  for (uint32_t i = 0u; i < GPU_RAY_PIPELINE_WARM_ITERATIONS; i++) {
+    if (GPUAcquireCommandBuffer(queue, "ray-pipeline-warm", &cmdb) != GPU_OK ||
+        !cmdb ||
+        !(rayPass = GPUBeginRayTracingPassEXT(cmdb, "ray-pipeline-warm"))) {
+      fprintf(stderr, "ray pipeline warm pass creation failed\n");
+      goto cleanup;
+    }
+    GPUBindRayTracingPipelineEXT(rayPass, pipeline);
+    GPUBindRayTracingPipelineEXT(rayPass, pipeline);
+    GPUBindRayTracingGroupEXT(rayPass, 0u, group, 0u, NULL);
+    GPUBindRayTracingGroupEXT(rayPass, 0u, group, 0u, NULL);
+    GPUDispatchRaysEXT(rayPass,
+                       table,
+                       GPU_ARRAY_LEN(resultValues),
+                       1u,
+                       1u);
+    GPUEndRayTracingPassEXT(rayPass);
+    rayPass = NULL;
+
+    if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
+        GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+      cmdb = NULL;
+      fprintf(stderr, "ray pipeline warm submission failed\n");
+      goto cleanup;
+    }
+    cmdb = NULL;
+  }
+  if (enabled->currentFrameStats.hotPathAllocCount != 0u ||
+      enabled->currentFrameStats.hotPathAllocBytes != 0u ||
+      enabled->currentFrameStats.hotPathFreeCount != 0u ||
+      enabled->currentFrameStats.hotPathFreeBytes != 0u ||
+      enabled->currentFrameStats.requestedBindCalls !=
+        GPU_RAY_PIPELINE_WARM_ITERATIONS * 4u ||
+      enabled->currentFrameStats.emittedBindCalls !=
+        GPU_RAY_PIPELINE_WARM_ITERATIONS * 2u) {
+    fprintf(stderr,
+            "ray pipeline warm path mismatch: %llu allocations, "
+            "%llu frees, binds %u/%u\n",
+            (unsigned long long)
+              enabled->currentFrameStats.hotPathAllocCount,
+            (unsigned long long)
+              enabled->currentFrameStats.hotPathFreeCount,
+            enabled->currentFrameStats.requestedBindCalls,
+            enabled->currentFrameStats.emittedBindCalls);
+    goto cleanup;
+  }
 
   if (GPUQueueReadBuffer(queue,
                          outputBuffer,
