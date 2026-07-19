@@ -649,8 +649,10 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   static const float vertices[] = {
     -0.5f, -0.5f, 0.0f,
      0.5f, -0.5f, 0.0f,
-     0.0f,  0.5f, 0.0f
+     0.5f,  0.5f, 0.0f,
+    -0.5f,  0.5f, 0.0f
   };
+  static const uint16_t indices[] = {0u, 1u, 2u, 0u, 2u, 3u};
   static const float identity[3][4] = {
     {1.0f, 0.0f, 0.0f, 0.0f},
     {0.0f, 1.0f, 0.0f, 0.0f},
@@ -677,6 +679,7 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   GPUPipelineLayout                           *pipelineLayout;
   GPUComputePipeline                          *pipeline;
   GPUBuffer                                   *vertexBuffer;
+  GPUBuffer                                   *indexBuffer;
   GPUBuffer                                   *scratchBuffer;
   GPUBuffer                                   *outputBuffer;
   GPUAccelerationStructureEXT                 *blas;
@@ -716,6 +719,7 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   pipelineLayout  = NULL;
   pipeline        = NULL;
   vertexBuffer    = NULL;
+  indexBuffer     = NULL;
   scratchBuffer   = NULL;
   outputBuffer    = NULL;
   blas            = NULL;
@@ -760,15 +764,30 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
                           vertexBuffer,
                           0u,
                           vertices,
-                          sizeof(vertices)) != GPU_OK) {
-    fprintf(stderr, "ray-query vertex buffer setup failed\n");
+                          sizeof(vertices)) != GPU_OK ||
+      !ray_create_buffer(
+        device,
+        "ray-query-indices",
+        sizeof(indices),
+        GPU_BUFFER_USAGE_COPY_DST |
+          GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT,
+        &indexBuffer) ||
+      GPUQueueWriteBuffer(queue,
+                          indexBuffer,
+                          0u,
+                          indices,
+                          sizeof(indices)) != GPU_OK) {
+    fprintf(stderr, "ray-query geometry buffer setup failed\n");
     goto cleanup;
   }
 
   geometry.vertexBuffer = vertexBuffer;
-  geometry.vertexCount  = 3u;
+  geometry.indexBuffer  = indexBuffer;
+  geometry.vertexCount  = 4u;
   geometry.vertexStride = sizeof(float) * 3u;
   geometry.vertexFormat = GPU_VERTEX_FORMAT_FLOAT32X3;
+  geometry.indexCount   = GPU_ARRAY_LEN(indices);
+  geometry.indexType    = GPU_INDEX_TYPE_UINT16;
   blasBuild.chain.sType      =
     GPU_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_INFO_EXT;
   blasBuild.chain.structSize            = sizeof(blasBuild);
@@ -778,6 +797,17 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   blasBuild.mode                        = GPU_ACCELERATION_STRUCTURE_BUILD_EXT;
   blasBuild.bottomLevel.pGeometries     = &geometry;
   blasBuild.bottomLevel.geometryCount   = 1u;
+  geometry.indexBuffer = NULL;
+  geometry.indexCount  = 0u;
+  if (GPUGetAccelerationStructureSizesEXT(device,
+                                          &blasBuild,
+                                          &blasSizes) !=
+      GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "ray-query accepted incomplete non-indexed geometry\n");
+    goto cleanup;
+  }
+  geometry.indexBuffer = indexBuffer;
+  geometry.indexCount  = GPU_ARRAY_LEN(indices);
   if (GPUGetAccelerationStructureSizesEXT(device,
                                           &blasBuild,
                                           &blasSizes) != GPU_OK) {
@@ -1008,6 +1038,7 @@ cleanup:
   GPUDestroyAccelerationStructureEXT(blas);
   GPUDestroyBuffer(outputBuffer);
   GPUDestroyBuffer(scratchBuffer);
+  GPUDestroyBuffer(indexBuffer);
   GPUDestroyBuffer(vertexBuffer);
   GPUDestroyDevice(device);
   free(bytecode);

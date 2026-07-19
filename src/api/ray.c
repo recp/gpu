@@ -93,7 +93,7 @@ gpu_rayTriangleValid(GPUDevice *device,
         geometry->vertexBuffer,
         GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT) ||
       geometry->vertexFormat != GPU_VERTEX_FORMAT_FLOAT32X3 ||
-      geometry->vertexCount < 3u || geometry->vertexCount % 3u != 0u ||
+      geometry->vertexCount == 0u ||
       geometry->vertexStride < 12u ||
       (geometry->flags & ~GPU_ACCELERATION_STRUCTURE_GEOMETRY_FLAGS_EXT) != 0u ||
       !gpu_rayRangeValid(geometry->vertexBuffer,
@@ -105,7 +105,9 @@ gpu_rayTriangleValid(GPUDevice *device,
   }
 
   if (!geometry->indexBuffer) {
-    return geometry->indexCount == 0u && geometry->indexOffset == 0u;
+    return geometry->vertexCount >= 3u &&
+           geometry->vertexCount % 3u == 0u &&
+           geometry->indexCount == 0u && geometry->indexOffset == 0u;
   }
   if (geometry->indexBuffer->device != device ||
       !gpuBufferHasUsage(
