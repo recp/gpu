@@ -240,6 +240,14 @@ run_clock_derivatives(void *ctx) {
   );
 }
 
+static int
+run_untyped_pointer(void *ctx) {
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_untyped_pointer(testCtx->device,
+                                  testCtx->untypedPointerBytecodePath);
+}
+
 static GPUAdapter *
 select_adapter(GPUInstance *instance) {
   GPUAdapter *adapter = NULL;
@@ -280,7 +288,7 @@ main(int argc, char **argv) {
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUApiTestContext      ctx;
-  GPUApiTest             tests[32];
+  GPUApiTest             tests[33];
   int                    ok;
 
   if (argc != 14 && argc != 15) {
@@ -364,6 +372,8 @@ main(int argc, char **argv) {
     getenv("GPU_COMPUTE_DERIVATIVE_QUADS_USL_PATH");
   ctx.computeDerivativeLinearBytecodePath =
     getenv("GPU_COMPUTE_DERIVATIVE_LINEAR_USL_PATH");
+  ctx.untypedPointerBytecodePath =
+    getenv("GPU_UNTYPED_POINTER_USL_PATH");
 
   tests[0]  = (GPUApiTest){ "queue", run_queue, &ctx };
   tests[1]  = (GPUApiTest){ "sampler", run_sampler, &ctx };
@@ -404,6 +414,9 @@ main(int argc, char **argv) {
   };
   tests[31] = (GPUApiTest){
     "clock-derivatives", run_clock_derivatives, &ctx
+  };
+  tests[32] = (GPUApiTest){
+    "untyped-pointer", run_untyped_pointer, &ctx
   };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));

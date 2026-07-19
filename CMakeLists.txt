@@ -690,6 +690,17 @@ if(GPU_BUILD_TESTS)
       DEPENDS ${GPU_API_VULKAN_CLOCK_DERIVATIVE_USL_FIXTURES}
     )
 
+    gpu_add_usl_fixtures(
+      GPU_API_VULKAN_UNTYPED_POINTER_USL_FIXTURE
+      vulkan
+      api-untyped-pointer
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/untyped_pointer.usl"
+    )
+    add_custom_target(
+      gpu-api-vulkan-untyped-pointer-fixture
+      DEPENDS ${GPU_API_VULKAN_UNTYPED_POINTER_USL_FIXTURE}
+    )
+
     set(GPU_USL_FIXTURE_TARGET_CAPS ray_query)
     gpu_add_usl_fixtures(
       GPU_API_VULKAN_RAY_QUERY_USL_FIXTURE
@@ -1094,6 +1105,7 @@ if(GPU_BUILD_TESTS)
     tests/api/texture_transfer.c
     tests/api/texture_view_render.c
     tests/api/threading.c
+    tests/api/untyped_pointer.c
     tests/api/volume_texture.c
     tests/api/vrs.c
   )
@@ -1126,6 +1138,9 @@ if(GPU_BUILD_TESTS)
   endif()
   if(TARGET gpu-api-vulkan-clock-derivative-fixtures)
     add_dependencies(gpu-api-test gpu-api-vulkan-clock-derivative-fixtures)
+  endif()
+  if(TARGET gpu-api-vulkan-untyped-pointer-fixture)
+    add_dependencies(gpu-api-test gpu-api-vulkan-untyped-pointer-fixture)
   endif()
   target_compile_definitions(gpu-api-test PRIVATE
     GPU_BUILD_WITH_VALIDATION=$<BOOL:${GPU_BUILD_WITH_VALIDATION}>
@@ -1189,6 +1204,12 @@ if(GPU_BUILD_TESTS)
       "GPU_SHADER_DEVICE_CLOCK_USL_PATH=${GPU_API_VULKAN_DEVICE_CLOCK_USL_FIXTURE}"
       "GPU_COMPUTE_DERIVATIVE_QUADS_USL_PATH=${GPU_API_VULKAN_DERIVATIVE_QUADS_USL_FIXTURE}"
       "GPU_COMPUTE_DERIVATIVE_LINEAR_USL_PATH=${GPU_API_VULKAN_DERIVATIVE_LINEAR_USL_FIXTURE}"
+    )
+  endif()
+  if(GPU_API_DEFAULT_BACKEND STREQUAL "vulkan" AND
+     GPU_API_VULKAN_UNTYPED_POINTER_USL_FIXTURE)
+    set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
+      "GPU_UNTYPED_POINTER_USL_PATH=${GPU_API_VULKAN_UNTYPED_POINTER_USL_FIXTURE}"
     )
   endif()
   if(GPU_API_SUBGROUP_MATRIX_USL_FIXTURE)
@@ -1257,6 +1278,11 @@ if(GPU_BUILD_TESTS)
         "GPU_SHADER_DEVICE_CLOCK_USL_PATH=${GPU_API_VULKAN_DEVICE_CLOCK_USL_FIXTURE}"
         "GPU_COMPUTE_DERIVATIVE_QUADS_USL_PATH=${GPU_API_VULKAN_DERIVATIVE_QUADS_USL_FIXTURE}"
         "GPU_COMPUTE_DERIVATIVE_LINEAR_USL_PATH=${GPU_API_VULKAN_DERIVATIVE_LINEAR_USL_FIXTURE}"
+      )
+    endif()
+    if(GPU_API_VULKAN_UNTYPED_POINTER_USL_FIXTURE)
+      set_property(TEST api-validation-vulkan APPEND PROPERTY ENVIRONMENT
+        "GPU_UNTYPED_POINTER_USL_PATH=${GPU_API_VULKAN_UNTYPED_POINTER_USL_FIXTURE}"
       )
     endif()
     if(GPU_API_DEFAULT_BACKEND STREQUAL "vulkan")

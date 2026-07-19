@@ -1,0 +1,4 @@
+kern(1, 1, 1) untyped_pointer_cs(inout output: [uint] #buffer(0),
+                                        gid: uint3 #global_id) {
+  output[gid.x] = gid.x * 3u + 7u
+}
