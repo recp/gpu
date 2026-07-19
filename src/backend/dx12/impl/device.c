@@ -565,7 +565,7 @@ dx12_loadDXCompiler(void) {
 }
 
 static bool
-dx12_probeAdapter(GPUAdapterDX12 *adapter) {
+dx12_probeAdapter(GPUAdapterDX12 *adapter, bool linearAlgebra) {
   ID3D12Device    *device;
   D3D12_FEATURE_DATA_D3D12_OPTIONS options = {0};
   D3D_SHADER_MODEL shaderModel;
@@ -612,7 +612,7 @@ dx12_probeAdapter(GPUAdapterDX12 *adapter) {
   adapter->samplerFeedbackTier = dxcModule
     ? dx12_querySamplerFeedback(device, shaderModel, NULL)
     : 0u;
-  if (dxcModule &&
+  if (linearAlgebra && dxcModule &&
       dx12_hasLinearAlgebraCompiler(dxcModule) &&
       shaderModel >= (D3D_SHADER_MODEL)0x6a) {
     dx12_querySubgroupMatrices(adapter, device);
@@ -885,7 +885,7 @@ dx12_getAvailableAdapters(GPUInstance * __restrict inst,
         goto nxt;
       }
 
-      if (!dx12_probeAdapter(adapterDX12)) {
+      if (!dx12_probeAdapter(adapterDX12, instDX12->linearAlgebra)) {
         dxgiAdapter->lpVtbl->Release(dxgiAdapter);
         free(adapterDX12);
         goto nxt;
@@ -924,7 +924,7 @@ dx12_getAvailableAdapters(GPUInstance * __restrict inst,
     adapterDX12->isWarp            = true;
     InitializeSRWLock(&adapterDX12->formatCapsLock);
     snprintf(adapterDX12->name, sizeof(adapterDX12->name), "WARP");
-    if (!dx12_probeAdapter(adapterDX12)) {
+    if (!dx12_probeAdapter(adapterDX12, instDX12->linearAlgebra)) {
       warpAdapter->lpVtbl->Release(warpAdapter);
       free(adapterDX12);
       free(adapter);

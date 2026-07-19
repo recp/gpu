@@ -578,6 +578,7 @@ typedef struct GPUInstanceDX12 {
   IDXGIFactory4 *dxgiFactory;
   UINT           dxgiFactoryFlags;
   bool           allowTearing;
+  bool           linearAlgebra;
 } GPUInstanceDX12;
 
 typedef struct GPUSamplerDX12 {

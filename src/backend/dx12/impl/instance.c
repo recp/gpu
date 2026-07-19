@@ -18,6 +18,7 @@
 
 #if defined(DIRECT3D_LINEAR_ALGEBRA)
 static INIT_ONCE dx12_linearAlgebraOnce = INIT_ONCE_STATIC_INIT;
+static HRESULT   dx12_linearAlgebraResult = E_FAIL;
 
 static BOOL CALLBACK
 dx12_enableLinearAlgebraOnce(PINIT_ONCE once, PVOID parameter, PVOID *context) {
@@ -25,7 +26,7 @@ dx12_enableLinearAlgebraOnce(PINIT_ONCE once, PVOID parameter, PVOID *context) {
   GPU__UNUSED(parameter);
   GPU__UNUSED(context);
 
-  D3D12EnableExperimentalFeatures(
+  dx12_linearAlgebraResult = D3D12EnableExperimentalFeatures(
     1u,
     &D3D12ExperimentalShaderModels,
     NULL,
@@ -34,16 +35,18 @@ dx12_enableLinearAlgebraOnce(PINIT_ONCE once, PVOID parameter, PVOID *context) {
   return TRUE;
 }
 
-static void
+static bool
 dx12_enableLinearAlgebra(void) {
-  InitOnceExecuteOnce(&dx12_linearAlgebraOnce,
-                      dx12_enableLinearAlgebraOnce,
-                      NULL,
-                      NULL);
+  return InitOnceExecuteOnce(&dx12_linearAlgebraOnce,
+                             dx12_enableLinearAlgebraOnce,
+                             NULL,
+                             NULL) &&
+         SUCCEEDED(dx12_linearAlgebraResult);
 }
 #else
-static void
+static bool
 dx12_enableLinearAlgebra(void) {
+  return false;
 }
 #endif
 
@@ -67,7 +70,7 @@ dx12_createInstance(struct GPUApi * __restrict api,
     return NULL;
   }
 
-  dx12_enableLinearAlgebra();
+  instDX12->linearAlgebra = dx12_enableLinearAlgebra();
 
 #if GPU_BUILD_WITH_VALIDATION && defined(_DEBUG)
   /* Enable the debug layer (requires the Graphics Tools "optional feature").
