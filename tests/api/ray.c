@@ -109,6 +109,7 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
   GPUResult                                result;
   bool                                     sawScene;
   bool                                     sawOutput;
+  bool                                     submitAttempted;
   int                                      ok;
 
   if (!adapter) {
@@ -119,32 +120,33 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
     return 0;
   }
 
-  disabled      = NULL;
-  enabled       = NULL;
-  queue         = NULL;
-  library       = NULL;
-  groupLayout   = NULL;
-  layout        = NULL;
-  vertexBuffer  = NULL;
-  scratchBuffer = NULL;
-  outputBuffer  = NULL;
-  blas          = NULL;
-  tlas          = NULL;
-  group         = NULL;
-  pipeline      = NULL;
-  table         = NULL;
-  cmdb          = NULL;
-  buildPass     = NULL;
-  rayPass       = NULL;
-  fence         = NULL;
-  bytecode      = NULL;
-  bytecodeSize  = 0u;
-  scratchSize   = 0u;
-  layoutCount   = 0u;
-  sawScene      = false;
-  sawOutput     = false;
-  ok            = 0;
-  feature       = GPU_FEATURE_RAY_TRACING_PIPELINE;
+  disabled        = NULL;
+  enabled         = NULL;
+  queue           = NULL;
+  library         = NULL;
+  groupLayout     = NULL;
+  layout          = NULL;
+  vertexBuffer    = NULL;
+  scratchBuffer   = NULL;
+  outputBuffer    = NULL;
+  blas            = NULL;
+  tlas            = NULL;
+  group           = NULL;
+  pipeline        = NULL;
+  table           = NULL;
+  cmdb            = NULL;
+  buildPass       = NULL;
+  rayPass         = NULL;
+  fence           = NULL;
+  bytecode        = NULL;
+  bytecodeSize    = 0u;
+  scratchSize     = 0u;
+  layoutCount     = 0u;
+  sawScene        = false;
+  sawOutput       = false;
+  submitAttempted = false;
+  ok              = 0;
+  feature         = GPU_FEATURE_RAY_TRACING_PIPELINE;
 
   resultValues[0] = 0u;
   resultValues[1] = 0u;
@@ -546,6 +548,7 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
   submitInfo.ppCommandBuffers   = &cmdb;
   submitInfo.fence              = fence;
   submitInfo.commandBufferCount = 1u;
+  submitAttempted                    = true;
   if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
       GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     cmdb = NULL;
@@ -556,6 +559,7 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
 
   GPUResetStats(enabled);
   for (uint32_t i = 0u; i < GPU_RAY_PIPELINE_WARM_ITERATIONS; i++) {
+    submitAttempted = false;
     if (GPUAcquireCommandBuffer(queue, "ray-pipeline-warm", &cmdb) != GPU_OK ||
         !cmdb ||
         !(rayPass = GPUBeginRayTracingPassEXT(cmdb, "ray-pipeline-warm"))) {
@@ -574,6 +578,7 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
     GPUEndRayTracingPassEXT(rayPass);
     rayPass = NULL;
 
+    submitAttempted = true;
     if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
         GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
       cmdb = NULL;
@@ -620,6 +625,7 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
 cleanup:
   if (rayPass) GPUEndRayTracingPassEXT(rayPass);
   if (buildPass) GPUEndAccelerationStructurePassEXT(buildPass);
+  if (cmdb && !submitAttempted) GPUDiscardCommandBuffer(cmdb);
   GPUDestroyFence(fence);
   GPUDestroyShaderTableEXT(table);
   GPUDestroyRayTracingPipelineEXT(pipeline);
@@ -687,6 +693,7 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   uint32_t                                     resultValue;
   bool                                         sawScene;
   bool                                         sawResult;
+  bool                                         submitAttempted;
   int                                          ok;
 
   if (!adapter) {
@@ -723,6 +730,7 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   resultValue     = 0u;
   sawScene        = false;
   sawResult       = false;
+  submitAttempted = false;
   ok              = 0;
 
   deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -965,6 +973,7 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = &cmdb;
   submitInfo.fence              = fence;
+  submitAttempted                    = true;
   if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
       GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     cmdb = NULL;
@@ -987,6 +996,7 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
 cleanup:
   if (computePass) GPUEndComputePass(computePass);
   if (buildPass) GPUEndAccelerationStructurePassEXT(buildPass);
+  if (cmdb && !submitAttempted) GPUDiscardCommandBuffer(cmdb);
   GPUDestroyFence(fence);
   GPUDestroyBindGroup(group);
   GPUDestroyComputePipeline(pipeline);

@@ -27,6 +27,7 @@ gpu_test_untyped_pointer(GPUDevice *device, const char *bytecodePath) {
   void                         *bytecode      = NULL;
   uint64_t                      bytecodeSize  = 0u;
   GPUResult                     submitResult;
+  bool                          submitAttempted = false;
   int                           ok            = 0;
 
   api = gpuDeviceApi(device);
@@ -116,7 +117,8 @@ gpu_test_untyped_pointer(GPUDevice *device, const char *bytecodePath) {
   submitInfo.ppCommandBuffers   = submitList;
   submitInfo.commandBufferCount = 1u;
   submitInfo.fence              = fence;
-  submitResult = GPUQueueSubmit(queue, &submitInfo);
+  submitAttempted                  = true;
+  submitResult                     = GPUQueueSubmit(queue, &submitInfo);
   if (submitResult != GPU_OK) {
     fprintf(stderr, "untyped-pointer submit failed\n");
     goto cleanup;
@@ -154,7 +156,7 @@ cleanup:
   if (pass) {
     GPUEndComputePass(pass);
   }
-  if (cmdb) {
+  if (cmdb && !submitAttempted) {
     GPUDiscardCommandBuffer(cmdb);
   }
   GPUDestroyFence(fence);
