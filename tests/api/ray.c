@@ -466,6 +466,39 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
   tableInfo.missRecordCount       = 1u;
   tableInfo.hitGroupRecordCount   = GPU_ARRAY_LEN(hitRecords);
   tableInfo.callableRecordCount   = 1u;
+
+  raygenRecord.groupIndex = 1u;
+  result = GPUCreateShaderTableEXT(enabled, &tableInfo, &table);
+  if (result != GPU_ERROR_INVALID_ARGUMENT || table) {
+    fprintf(stderr, "ray table accepted a miss record as ray generation\n");
+    goto cleanup;
+  }
+  raygenRecord.groupIndex = 0u;
+
+  missRecord.groupIndex = 0u;
+  result = GPUCreateShaderTableEXT(enabled, &tableInfo, &table);
+  if (result != GPU_ERROR_INVALID_ARGUMENT || table) {
+    fprintf(stderr, "ray table accepted a ray-generation record as miss\n");
+    goto cleanup;
+  }
+  missRecord.groupIndex = 1u;
+
+  hitRecords[0].groupIndex = 1u;
+  result = GPUCreateShaderTableEXT(enabled, &tableInfo, &table);
+  if (result != GPU_ERROR_INVALID_ARGUMENT || table) {
+    fprintf(stderr, "ray table accepted a general group as hit group\n");
+    goto cleanup;
+  }
+  hitRecords[0].groupIndex = 2u;
+
+  callableRecord.groupIndex = 1u;
+  result = GPUCreateShaderTableEXT(enabled, &tableInfo, &table);
+  if (result != GPU_ERROR_INVALID_ARGUMENT || table) {
+    fprintf(stderr, "ray table accepted a miss record as callable\n");
+    goto cleanup;
+  }
+  callableRecord.groupIndex = 4u;
+
   if (GPUCreateShaderTableEXT(enabled, &tableInfo, &table) != GPU_OK ||
       !table) {
     fprintf(stderr, "ray pipeline shader table creation failed\n");
