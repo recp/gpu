@@ -576,6 +576,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
+  set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
   file(MAKE_DIRECTORY
        "${GPU_WEBGPU_GALLERY_DIR}"
        "${GPU_WEBGPU_GALLERY_DIR}/sources")
@@ -646,6 +648,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
 
   add_executable(gpu-triangle-webgpu-usl
     samples/triangle-webgpu-usl/main.c
+    ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
   )
   target_link_libraries(gpu-triangle-webgpu-usl PRIVATE gpu)
   target_link_options(gpu-triangle-webgpu-usl PRIVATE
@@ -718,6 +721,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
 
   add_executable(gpu-textured-quad-webgpu-usl
     samples/textured-quad-webgpu-usl/main.c
+    ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
   )
   target_link_libraries(gpu-textured-quad-webgpu-usl PRIVATE gpu)
   target_link_options(gpu-textured-quad-webgpu-usl PRIVATE
@@ -790,6 +794,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
 
   add_executable(gpu-compute-webgpu-usl
     samples/compute-webgpu-usl/main.c
+    ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
   )
   target_link_libraries(gpu-compute-webgpu-usl PRIVATE gpu)
   target_link_options(gpu-compute-webgpu-usl PRIVATE

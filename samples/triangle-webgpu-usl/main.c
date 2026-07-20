@@ -3,6 +3,8 @@
 
 #include <gpu/gpu.h>
 
+#include "../common/webgpu.h"
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,54 +24,6 @@ typedef struct WebGPUTriangle {
 } WebGPUTriangle;
 
 static WebGPUTriangle app;
-
-static void
-set_status(const char *message, int failed) {
-  char script[512];
-
-  snprintf(script,
-           sizeof(script),
-           "document.getElementById('status').textContent='%s';"
-           "document.getElementById('status').dataset.failed='%s';",
-           message,
-           failed ? "true" : "false");
-  emscripten_run_script(script);
-  if (failed) {
-    fprintf(stderr, "%s\n", message);
-  } else {
-    puts(message);
-  }
-}
-
-static int
-read_file(const char *path, void **outData, uint64_t *outSize) {
-  void *data;
-  long  size;
-  FILE *file;
-
-  file = fopen(path, "rb");
-  if (!file ||
-      fseek(file, 0, SEEK_END) != 0 ||
-      (size = ftell(file)) <= 0 ||
-      fseek(file, 0, SEEK_SET) != 0) {
-    if (file) {
-      fclose(file);
-    }
-    return 0;
-  }
-
-  data = malloc((size_t)size);
-  if (!data || fread(data, 1u, (size_t)size, file) != (size_t)size) {
-    free(data);
-    fclose(file);
-    return 0;
-  }
-
-  fclose(file);
-  *outData = data;
-  *outSize = (uint64_t)size;
-  return 1;
-}
 
 static int
 resize_canvas(WebGPUTriangle *state) {
