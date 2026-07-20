@@ -1,0 +1,27 @@
+pub struct VSIn {
+  position: float4 #attribute(0)
+  uv: float2 #attribute(1)
+}
+
+pub struct VSOut {
+  position: float4 #position
+  uv: float2
+}
+
+pub struct FragmentUniforms {
+  tint: float4
+}
+
+vert quad_vs(v: VSIn #stage_in) -> VSOut {
+  var out: VSOut
+  out.position = v.position
+  out.uv = v.uv
+  return out
+}
+
+frag quad_fs(input: VSOut #stage_in,
+             colorTex: texture2d<float> #texture(0),
+             colorSampler: sampler #sampler(0) #group(1),
+             uniforms: FragmentUniforms #buffer(1)) -> float4 {
+  return colorTex.sample(colorSampler, input.uv) * uniforms.tint
+}

@@ -22,6 +22,11 @@ option(GPU_BACKEND_VULKAN_ONLY "Build only the Vulkan backend" OFF)
 option(GPU_BACKEND_DX12_ONLY "Build only the Direct3D 12 backend" OFF)
 option(GPU_BACKEND_WEBGPU_ONLY "Build only the WebGPU backend" OFF)
 
+if(EMSCRIPTEN AND BUILD_SHARED_LIBS)
+  message(STATUS "Building GPU statically for browser WebAssembly")
+  set(BUILD_SHARED_LIBS OFF)
+endif()
+
 set(GPU_SINGLE_BACKEND_COUNT 0)
 foreach(_gpu_backend_only
         GPU_BACKEND_METAL_ONLY
@@ -204,7 +209,7 @@ if(TARGET us)
   target_link_libraries(gpu PRIVATE us)
 elseif(GPU_USL_ROOT AND EXISTS "${GPU_USL_ROOT}/us/CMakeLists.txt")
   set(US_USE_TEST OFF CACHE BOOL "" FORCE)
-  if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  if(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR EMSCRIPTEN)
     set(US_SHARED OFF CACHE BOOL "" FORCE)
     set(US_STATIC ON CACHE BOOL "" FORCE)
     set(DS_SHARED OFF CACHE BOOL "" FORCE)
@@ -372,6 +377,9 @@ if(GPU_BUILD_WEBGPU)
     src/backend/webgpu/impl/swapchain.c
     src/backend/webgpu/impl/frame.c
     src/backend/webgpu/impl/cmdque.c
+    src/backend/webgpu/impl/buffer.c
+    src/backend/webgpu/impl/texture.c
+    src/backend/webgpu/impl/sampler.c
     src/backend/webgpu/impl/library.c
     src/backend/webgpu/impl/descriptor.c
     src/backend/webgpu/impl/pipeline.c
@@ -610,6 +618,57 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
       "${CMAKE_CURRENT_BINARY_DIR}/samples/gpu-triangle-webgpu-usl"
+  )
+
+  set(GPU_WEBGPU_TEXTURED_QUAD_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+  set(GPU_WEBGPU_TEXTURED_QUAD_SOURCE
+      "${GPU_WEBGPU_TEXTURED_QUAD_DIR}/textured_quad.usl")
+  set(GPU_WEBGPU_TEXTURED_QUAD_US
+      "${GPU_WEBGPU_TEXTURED_QUAD_DIR}/textured_quad.us")
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_TEXTURED_QUAD_US}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${GPU_WEBGPU_TEXTURED_QUAD_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-webgpu-usl/textured_quad.usl"
+            "${GPU_WEBGPU_TEXTURED_QUAD_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            USL_NO_BACKEND_SIDECAR=1
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_TEXTURED_QUAD_SOURCE}"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-webgpu-usl/textured_quad.usl"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-textured-quad-artifact
+    DEPENDS "${GPU_WEBGPU_TEXTURED_QUAD_US}"
+  )
+
+  add_executable(gpu-textured-quad-webgpu-usl
+    samples/textured-quad-webgpu-usl/main.c
+  )
+  target_link_libraries(gpu-textured-quad-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-textured-quad-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_TEXTURED_QUAD_US}@/textured_quad.us"
+    "--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-webgpu-usl/shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-textured-quad-webgpu-usl
+                   gpu-webgpu-textured-quad-artifact)
+  set_target_properties(gpu-textured-quad-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-webgpu-usl/shell.html"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${CMAKE_CURRENT_BINARY_DIR}/samples/gpu-textured-quad-webgpu-usl"
   )
 endif()
 

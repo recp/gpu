@@ -41,6 +41,55 @@ webgpu_frontFace(GPUFrontFace face) {
   return face == GPU_FRONT_FACE_CW ? WGPUFrontFace_CW : WGPUFrontFace_CCW;
 }
 
+static WGPUVertexFormat
+webgpu_vertexFormat(GPUVertexFormat format) {
+  static const WGPUVertexFormat formats[GPU_VERTEX_FORMAT_COUNT] = {
+    [GPU_VERTEX_FORMAT_UINT8]             = WGPUVertexFormat_Uint8,
+    [GPU_VERTEX_FORMAT_UINT8X2]           = WGPUVertexFormat_Uint8x2,
+    [GPU_VERTEX_FORMAT_UINT8X4]           = WGPUVertexFormat_Uint8x4,
+    [GPU_VERTEX_FORMAT_SINT8]             = WGPUVertexFormat_Sint8,
+    [GPU_VERTEX_FORMAT_SINT8X2]           = WGPUVertexFormat_Sint8x2,
+    [GPU_VERTEX_FORMAT_SINT8X4]           = WGPUVertexFormat_Sint8x4,
+    [GPU_VERTEX_FORMAT_UNORM8]            = WGPUVertexFormat_Unorm8,
+    [GPU_VERTEX_FORMAT_UNORM8X2]          = WGPUVertexFormat_Unorm8x2,
+    [GPU_VERTEX_FORMAT_UNORM8X4]          = WGPUVertexFormat_Unorm8x4,
+    [GPU_VERTEX_FORMAT_SNORM8]            = WGPUVertexFormat_Snorm8,
+    [GPU_VERTEX_FORMAT_SNORM8X2]          = WGPUVertexFormat_Snorm8x2,
+    [GPU_VERTEX_FORMAT_SNORM8X4]          = WGPUVertexFormat_Snorm8x4,
+    [GPU_VERTEX_FORMAT_UINT16]            = WGPUVertexFormat_Uint16,
+    [GPU_VERTEX_FORMAT_UINT16X2]          = WGPUVertexFormat_Uint16x2,
+    [GPU_VERTEX_FORMAT_UINT16X4]          = WGPUVertexFormat_Uint16x4,
+    [GPU_VERTEX_FORMAT_SINT16]            = WGPUVertexFormat_Sint16,
+    [GPU_VERTEX_FORMAT_SINT16X2]          = WGPUVertexFormat_Sint16x2,
+    [GPU_VERTEX_FORMAT_SINT16X4]          = WGPUVertexFormat_Sint16x4,
+    [GPU_VERTEX_FORMAT_UNORM16]           = WGPUVertexFormat_Unorm16,
+    [GPU_VERTEX_FORMAT_UNORM16X2]         = WGPUVertexFormat_Unorm16x2,
+    [GPU_VERTEX_FORMAT_UNORM16X4]         = WGPUVertexFormat_Unorm16x4,
+    [GPU_VERTEX_FORMAT_SNORM16]           = WGPUVertexFormat_Snorm16,
+    [GPU_VERTEX_FORMAT_SNORM16X2]         = WGPUVertexFormat_Snorm16x2,
+    [GPU_VERTEX_FORMAT_SNORM16X4]         = WGPUVertexFormat_Snorm16x4,
+    [GPU_VERTEX_FORMAT_FLOAT16]           = WGPUVertexFormat_Float16,
+    [GPU_VERTEX_FORMAT_FLOAT16X2]         = WGPUVertexFormat_Float16x2,
+    [GPU_VERTEX_FORMAT_FLOAT16X4]         = WGPUVertexFormat_Float16x4,
+    [GPU_VERTEX_FORMAT_FLOAT32]           = WGPUVertexFormat_Float32,
+    [GPU_VERTEX_FORMAT_FLOAT32X2]         = WGPUVertexFormat_Float32x2,
+    [GPU_VERTEX_FORMAT_FLOAT32X3]         = WGPUVertexFormat_Float32x3,
+    [GPU_VERTEX_FORMAT_FLOAT32X4]         = WGPUVertexFormat_Float32x4,
+    [GPU_VERTEX_FORMAT_SINT32]            = WGPUVertexFormat_Sint32,
+    [GPU_VERTEX_FORMAT_SINT32X2]          = WGPUVertexFormat_Sint32x2,
+    [GPU_VERTEX_FORMAT_SINT32X3]          = WGPUVertexFormat_Sint32x3,
+    [GPU_VERTEX_FORMAT_SINT32X4]          = WGPUVertexFormat_Sint32x4,
+    [GPU_VERTEX_FORMAT_UINT32]            = WGPUVertexFormat_Uint32,
+    [GPU_VERTEX_FORMAT_UINT32X2]          = WGPUVertexFormat_Uint32x2,
+    [GPU_VERTEX_FORMAT_UINT32X3]          = WGPUVertexFormat_Uint32x3,
+    [GPU_VERTEX_FORMAT_UINT32X4]          = WGPUVertexFormat_Uint32x4,
+    [GPU_VERTEX_FORMAT_UNORM10_10_10_2]   = WGPUVertexFormat_Unorm10_10_10_2,
+    [GPU_VERTEX_FORMAT_UNORM8X4_BGRA]     = WGPUVertexFormat_Unorm8x4BGRA
+  };
+
+  return (uint32_t)format < GPU_ARRAY_LEN(formats) ? formats[format] : 0;
+}
+
 static WGPUBlendFactor
 webgpu_blendFactor(GPUBlendFactor factor) {
   static const WGPUBlendFactor factors[] = {
@@ -108,17 +157,73 @@ webgpu_createPipeline(GPUDevice                         *device,
   WGPUFragmentState            fragment = WGPU_FRAGMENT_STATE_INIT;
   WGPUColorTargetState         targets[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   WGPUBlendState               blends[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  WGPUVertexBufferLayout      *vertexBuffers;
+  WGPUVertexAttribute         *vertexAttributes;
   GPUDeviceWebGPU             *native;
   WGPUShaderModule             module;
+  uint32_t                     attributeCount;
+  uint32_t                     attributeCursor;
 
   GPU__UNUSED(requiredBindGroupMask);
   native = gpu_webgpuDevice(device);
   module = info && info->library ? info->library->_priv : NULL;
-  if (!native || !native->device || !module || !info->layout->_native ||
-      info->vertex.bufferLayoutCount != 0u ||
+  if (!native || !native->device || !info || !module || !info->layout ||
+      !info->layout->_native ||
       info->depthStencilFormat != GPU_FORMAT_UNDEFINED ||
       info->pDepthStencilState) {
     return GPU_ERROR_UNSUPPORTED;
+  }
+
+  attributeCount = 0u;
+  for (uint32_t i = 0u; i < info->vertex.bufferLayoutCount; i++) {
+    if (info->vertex.pBufferLayouts[i].attributeCount >
+        UINT32_MAX - attributeCount) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    attributeCount += info->vertex.pBufferLayouts[i].attributeCount;
+  }
+  vertexBuffers = info->vertex.bufferLayoutCount
+                    ? calloc(info->vertex.bufferLayoutCount,
+                             sizeof(*vertexBuffers))
+                    : NULL;
+  vertexAttributes = attributeCount
+                       ? calloc(attributeCount, sizeof(*vertexAttributes))
+                       : NULL;
+  if ((info->vertex.bufferLayoutCount && !vertexBuffers) ||
+      (attributeCount && !vertexAttributes)) {
+    free(vertexBuffers);
+    free(vertexAttributes);
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  attributeCursor = 0u;
+  for (uint32_t i = 0u; i < info->vertex.bufferLayoutCount; i++) {
+    const GPUVertexBufferLayout *source;
+
+    source = &info->vertex.pBufferLayouts[i];
+    vertexBuffers[i] = (WGPUVertexBufferLayout)
+                         WGPU_VERTEX_BUFFER_LAYOUT_INIT;
+    vertexBuffers[i].arrayStride    = source->strideBytes;
+    vertexBuffers[i].stepMode       = source->stepMode ==
+                                        GPU_VERTEX_STEP_MODE_INSTANCE
+                                          ? WGPUVertexStepMode_Instance
+                                          : WGPUVertexStepMode_Vertex;
+    vertexBuffers[i].attributeCount = source->attributeCount;
+    vertexBuffers[i].attributes     = &vertexAttributes[attributeCursor];
+    for (uint32_t j = 0u; j < source->attributeCount; j++) {
+      WGPUVertexAttribute *attribute;
+
+      attribute = &vertexAttributes[attributeCursor++];
+      *attribute = (WGPUVertexAttribute)WGPU_VERTEX_ATTRIBUTE_INIT;
+      attribute->format = webgpu_vertexFormat(source->pAttributes[j].format);
+      attribute->offset = source->pAttributes[j].offset;
+      attribute->shaderLocation = source->pAttributes[j].shaderLocation;
+      if (!attribute->format) {
+        free(vertexBuffers);
+        free(vertexAttributes);
+        return GPU_ERROR_UNSUPPORTED;
+      }
+    }
   }
 
   memset(targets, 0, sizeof(targets));
@@ -129,6 +234,8 @@ webgpu_createPipeline(GPUDevice                         *device,
     targets[i].writeMask =
       webgpu_colorWriteMask(info->pColorTargets[i].blend.writeMask);
     if (targets[i].format == WGPUTextureFormat_Undefined) {
+      free(vertexBuffers);
+      free(vertexAttributes);
       return GPU_ERROR_UNSUPPORTED;
     }
     if (info->pColorTargets[i].blend.enabled) {
@@ -141,6 +248,8 @@ webgpu_createPipeline(GPUDevice                         *device,
   descriptor.layout             = info->layout->_native;
   descriptor.vertex.module      = module;
   descriptor.vertex.entryPoint  = gpu_webgpuString(info->vertexEntry);
+  descriptor.vertex.bufferCount = info->vertex.bufferLayoutCount;
+  descriptor.vertex.buffers     = vertexBuffers;
   descriptor.primitive.topology = webgpu_topology(info->primitiveTopology);
   descriptor.primitive.frontFace = webgpu_frontFace(info->frontFace);
   descriptor.primitive.cullMode  = webgpu_cullMode(info->cullMode);
@@ -161,6 +270,8 @@ webgpu_createPipeline(GPUDevice                         *device,
 
   pipeline->_priv = wgpuDeviceCreateRenderPipeline(native->device,
                                                     &descriptor);
+  free(vertexBuffers);
+  free(vertexAttributes);
   pipeline->_state = pipeline->_priv;
   return pipeline->_priv ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
 }

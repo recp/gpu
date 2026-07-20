@@ -23,6 +23,9 @@ backend_webgpu(void) {
     webgpu_initFrame(&webgpu.frame);
     webgpu_initCommandQueue(&webgpu.cmdque);
     webgpu_initCommandBuffer(&webgpu.cmdbuf);
+    webgpu_initBuffer(&webgpu.buf);
+    webgpu_initTexture(&webgpu.texture);
+    webgpu_initSampler(&webgpu.sampler);
     webgpu_initLibrary(&webgpu.library);
     webgpu_initDescriptor(&webgpu.descriptor);
     webgpu_initPipeline(&webgpu.render);

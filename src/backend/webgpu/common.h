@@ -19,6 +19,7 @@
 
 #include "../../common.h"
 #include "../../api/adapter_internal.h"
+#include "../../api/buffer_internal.h"
 #include "../../api/cmdqueue_internal.h"
 #include "../../api/descr/descriptor_internal.h"
 #include "../../api/device_internal.h"
@@ -26,6 +27,7 @@
 #include "../../api/instance_internal.h"
 #include "../../api/library_internal.h"
 #include "../../api/render/pipeline_internal.h"
+#include "../../api/sampler_internal.h"
 #include "../../api/surface_internal.h"
 #include "../../api/swapchain_internal.h"
 #include "../../api/texture_internal.h"

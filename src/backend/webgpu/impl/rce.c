@@ -104,6 +104,25 @@ webgpu_stencilReference(GPURenderPassEncoder *encoder, uint32_t reference) {
 }
 
 static void
+webgpu_vertexInputBuffer(GPURenderPassEncoder *encoder,
+                         GPUBuffer            *buffer,
+                         uint64_t              offset,
+                         uint32_t              index) {
+  GPUCommandWebGPU *command;
+
+  command = webgpu_renderCommand(encoder);
+  if (!command || !command->renderEncoder || !buffer || !buffer->_priv ||
+      offset > buffer->sizeBytes) {
+    return;
+  }
+  wgpuRenderPassEncoderSetVertexBuffer(command->renderEncoder,
+                                       index,
+                                       buffer->_priv,
+                                       offset,
+                                       buffer->sizeBytes - offset);
+}
+
+static void
 webgpu_draw(GPURenderPassEncoder *encoder,
             GPUPrimitiveType      primitive,
             size_t                firstVertex,
@@ -146,6 +165,7 @@ webgpu_initRenderEncoder(GPUApiRCE *api) {
   api->scissor                = webgpu_scissor;
   api->blendConstant          = webgpu_blendConstant;
   api->stencilReference       = webgpu_stencilReference;
+  api->vertexInputBuffer      = webgpu_vertexInputBuffer;
   api->drawPrimitives         = webgpu_draw;
   api->endEncoding            = webgpu_endEncoding;
 }
