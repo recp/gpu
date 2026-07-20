@@ -556,6 +556,23 @@ if((GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS) AND
   endfunction()
 endif()
 
+if(GPU_BUILD_SAMPLES AND
+   ((GPU_BUILD_WEBGPU AND EMSCRIPTEN) OR
+    (GPU_BUILD_METAL AND APPLE AND
+     NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")))
+  find_path(GPU_CGLM_INCLUDE_DIR
+    NAMES cglm/cglm.h
+    HINTS
+      "${CMAKE_CURRENT_SOURCE_DIR}/../glm/include"
+      /opt/homebrew/include
+  )
+  if(NOT GPU_CGLM_INCLUDE_DIR)
+    message(FATAL_ERROR
+      "The textured cube samples require cglm headers. Set "
+      "GPU_CGLM_INCLUDE_DIR.")
+  endif()
+endif()
+
 if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   set(GPU_USL_HOST_FIXTURE "" CACHE FILEPATH
       "Host gpu-usl-fixture executable used for WebGPU samples")
@@ -962,17 +979,6 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${GPU_WEBGPU_GALLERY_DIR}"
   )
 
-  find_path(GPU_CGLM_INCLUDE_DIR
-    NAMES cglm/cglm.h
-    HINTS
-      "${CMAKE_CURRENT_SOURCE_DIR}/../glm/include"
-      /opt/homebrew/include
-  )
-  if(NOT GPU_CGLM_INCLUDE_DIR)
-    message(FATAL_ERROR
-      "The textured cube WebGPU sample requires cglm headers. Set GPU_CGLM_INCLUDE_DIR.")
-  endif()
-
   set(GPU_WEBGPU_TEXTURED_CUBE_DIR
       "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
   set(GPU_WEBGPU_TEXTURED_CUBE_SOURCE
@@ -982,7 +988,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   set(GPU_WEBGPU_SAMPLE_TITLE "Rotating cube")
   set(GPU_WEBGPU_SAMPLE_KIND "Render / cglm + texture")
   set(GPU_WEBGPU_SAMPLE_DESCRIPTION
-      "cglm drives a rotating model-view-projection matrix through an indexed, depth-tested textured draw.")
+      "<a class=\"project-link\" href=\"https://github.com/recp/cglm\" target=\"_blank\" rel=\"noreferrer\">cglm</a> drives a rotating model-view-projection matrix through an indexed, depth-tested textured draw.")
   set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/textured-cube.c")
   set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/textured-cube.usl")
   set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/textured-cube.wgsl")
@@ -997,7 +1003,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     COMMAND ${CMAKE_COMMAND} -E make_directory
             "${GPU_WEBGPU_TEXTURED_CUBE_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-cube-webgpu-usl/textured_cube.usl"
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-cube-usl/textured_cube.usl"
             "${GPU_WEBGPU_TEXTURED_CUBE_SOURCE}"
     COMMAND ${CMAKE_COMMAND} -E env
             USL_EMIT_BYTECODE=1
@@ -1015,7 +1021,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/textured-cube.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-cube-webgpu-usl/textured_cube.usl"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-cube-usl/textured_cube.usl"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-cube-webgpu-usl/main.c"
     VERBATIM
   )
@@ -1391,6 +1397,7 @@ if(GPU_BUILD_METAL AND GPU_BUILD_SAMPLES AND
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/usl-reflection-check/reflection_storage.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/mesh-triangle-usl/mesh_triangle.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-atomics-usl/compute_atomics.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-cube-usl/textured_cube.usl"
   )
   list(GET GPU_METAL_USL_FIXTURES 0 GPU_METAL_TRIANGLE_US)
   list(GET GPU_METAL_USL_FIXTURES 1 GPU_METAL_TEXTURED_QUAD_US)
@@ -1400,6 +1407,7 @@ if(GPU_BUILD_METAL AND GPU_BUILD_SAMPLES AND
   list(GET GPU_METAL_USL_FIXTURES 5 GPU_METAL_REFLECTION_STORAGE_US)
   list(GET GPU_METAL_USL_FIXTURES 6 GPU_METAL_MESH_TRIANGLE_US)
   list(GET GPU_METAL_USL_FIXTURES 7 GPU_METAL_COMPUTE_ATOMICS_US)
+  list(GET GPU_METAL_USL_FIXTURES 8 GPU_METAL_TEXTURED_CUBE_US)
   add_custom_target(gpu-metal-fixtures DEPENDS ${GPU_METAL_USL_FIXTURES})
 endif()
 
@@ -2175,6 +2183,17 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
   gpu_attach_usl_sample(gpu-textured-quad-metal-usl
                         gpu-metal-fixtures
                         "${GPU_METAL_TEXTURED_QUAD_US}")
+
+  add_executable(gpu-textured-cube-metal-usl
+    samples/textured-cube-usl/main.m
+  )
+  target_include_directories(gpu-textured-cube-metal-usl PRIVATE
+    "${GPU_CGLM_INCLUDE_DIR}"
+  )
+  gpu_configure_metal_sample(gpu-textured-cube-metal-usl)
+  gpu_attach_usl_sample(gpu-textured-cube-metal-usl
+                        gpu-metal-fixtures
+                        "${GPU_METAL_TEXTURED_CUBE_US}")
 
   add_executable(gpu-mesh-triangle-metal-usl
     samples/mesh-triangle-usl/main.m
