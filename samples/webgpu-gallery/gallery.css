@@ -28,7 +28,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 a { color: inherit; text-decoration: none; }
-.project-link { color: var(--link-blue); }
 .project-link:hover { text-decoration: underline; }
 a:focus-visible, button:focus-visible { outline: 2px solid var(--copper-bright); outline-offset: 4px; }
 .shell { width: min(1440px, calc(100% - 72px)); margin-inline: auto; }
@@ -76,15 +75,16 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--copper-bright);
   text-transform: uppercase;
 }
 .sample-section { width: min(1180px, calc(100% - 72px)); padding-block: 82px 154px; }
-.sample-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 38px 24px; align-items: start; }
+.sample-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 38px 24px; align-items: start; }
 .sample-card { min-width: 0; align-self: start; }
-.sample-preview { display: block; height: 280px; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: #030817; }
+.sample-preview { display: block; aspect-ratio: 16 / 10; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: #030817; }
 .sample-preview iframe { display: block; width: 100%; height: 100%; border: 0; pointer-events: none; }
 .sample-card > div { padding: 15px 2px 0; }
 .sample-card small { color: var(--copper); font: 10px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
 .sample-card h3 { margin: 9px 0 7px; font-size: 16px; font-weight: 550; letter-spacing: -.015em; }
 .sample-card h3 a:hover { color: var(--copper-bright); }
 .sample-card p { margin: 0; color: var(--stone-dark); font-size: 12px; line-height: 1.5; }
+.sample-card p .project-link { color: var(--link-blue); }
 
 /* Sample detail */
 .sample-page { min-height: 100vh; }
@@ -109,6 +109,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--copper-bright);
 .stage canvas { display: block; width: 100%; height: min(68vh, 720px); min-height: 480px; border: 1px solid var(--line); border-radius: 10px; }
 .stage-meta { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 14px 10px 0; }
 .stage-meta p { max-width: 760px; margin: 0; color: var(--stone); font-size: 13px; line-height: 1.5; }
+.stage-meta p .project-link { color: var(--link-blue); }
 #status { color: var(--stone-dark); font: 10px/1.4 var(--mono); }
 #status[data-failed="true"] { color: #ff765f; }
 
@@ -153,7 +154,6 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--copper-bright);
   .source-panel { margin-top: 48px; }
   .source-tabs { overflow-x: auto; }
   .sample-grid { grid-template-columns: 1fr; }
-  .sample-preview { height: min(62vw, 360px); }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
