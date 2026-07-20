@@ -33,6 +33,9 @@ webgpu_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
 
   command->render._priv          = command;
   command->render._primitiveType = GPUPrimitiveTypeTriangle;
+  command->boundIndexBuffer      = NULL;
+  command->boundIndexOffset      = 0u;
+  command->boundIndexFormat      = WGPUIndexFormat_Undefined;
   return &command->render;
 }
 
@@ -145,6 +148,50 @@ webgpu_draw(GPURenderPassEncoder *encoder,
 }
 
 static void
+webgpu_drawIndexed(GPURenderPassEncoder *encoder,
+                   uint32_t              indexCount,
+                   uint32_t              instanceCount,
+                   uint32_t              firstIndex,
+                   int32_t               vertexOffset,
+                   uint32_t              firstInstance) {
+  GPUCommandWebGPU *command;
+  GPUBuffer        *buffer;
+  WGPUIndexFormat   format;
+
+  command = webgpu_renderCommand(encoder);
+  buffer  = encoder ? encoder->_indexBuffer : NULL;
+  format  = encoder && encoder->_indexType == GPU_INDEX_TYPE_UINT32
+              ? WGPUIndexFormat_Uint32
+              : WGPUIndexFormat_Uint16;
+  if (!command || !command->renderEncoder || !buffer || !buffer->_priv ||
+      encoder->_indexBufferOffset >= buffer->sizeBytes) {
+    return;
+  }
+
+  if (command->boundIndexBuffer != buffer->_priv ||
+      command->boundIndexOffset != encoder->_indexBufferOffset ||
+      command->boundIndexFormat != format) {
+    wgpuRenderPassEncoderSetIndexBuffer(
+      command->renderEncoder,
+      buffer->_priv,
+      format,
+      encoder->_indexBufferOffset,
+      buffer->sizeBytes - encoder->_indexBufferOffset
+    );
+    command->boundIndexBuffer = buffer->_priv;
+    command->boundIndexOffset = encoder->_indexBufferOffset;
+    command->boundIndexFormat = format;
+  }
+
+  wgpuRenderPassEncoderDrawIndexed(command->renderEncoder,
+                                   indexCount,
+                                   instanceCount,
+                                   firstIndex,
+                                   vertexOffset,
+                                   firstInstance);
+}
+
+static void
 webgpu_endEncoding(GPURenderPassEncoder *encoder) {
   GPUCommandWebGPU *command;
 
@@ -167,5 +214,6 @@ webgpu_initRenderEncoder(GPUApiRCE *api) {
   api->stencilReference       = webgpu_stencilReference;
   api->vertexInputBuffer      = webgpu_vertexInputBuffer;
   api->drawPrimitives         = webgpu_draw;
+  api->drawIndexedPrims       = webgpu_drawIndexed;
   api->endEncoding            = webgpu_endEncoding;
 }

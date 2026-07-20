@@ -814,6 +814,80 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"
   )
+
+  set(GPU_WEBGPU_INDEXED_DEPTH_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+  set(GPU_WEBGPU_INDEXED_DEPTH_SOURCE
+      "${GPU_WEBGPU_INDEXED_DEPTH_DIR}/indexed_depth.usl")
+  set(GPU_WEBGPU_INDEXED_DEPTH_US
+      "${GPU_WEBGPU_INDEXED_DEPTH_DIR}/indexed_depth.us")
+  set(GPU_WEBGPU_SAMPLE_TITLE "Indexed depth")
+  set(GPU_WEBGPU_SAMPLE_KIND "Render / index + depth")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "One indexed draw validates the depth texture, pipeline, attachment, and occlusion path.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/indexed-depth.c")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/indexed-depth.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/indexed-depth.wgsl")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-indexed-depth-webgpu-usl-shell.html"
+    @ONLY
+  )
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_INDEXED_DEPTH_US}"
+    BYPRODUCTS "${GPU_WEBGPU_INDEXED_DEPTH_SOURCE}.wgsl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${GPU_WEBGPU_INDEXED_DEPTH_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/indexed-depth-webgpu-usl/indexed_depth.usl"
+            "${GPU_WEBGPU_INDEXED_DEPTH_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_INDEXED_DEPTH_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/indexed-depth-webgpu-usl/main.c"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/indexed-depth.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_INDEXED_DEPTH_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/indexed-depth.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_INDEXED_DEPTH_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/indexed-depth.wgsl"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/indexed-depth-webgpu-usl/indexed_depth.usl"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/indexed-depth-webgpu-usl/main.c"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-indexed-depth-artifact
+    DEPENDS "${GPU_WEBGPU_INDEXED_DEPTH_US}"
+  )
+
+  add_executable(gpu-indexed-depth-webgpu-usl
+    samples/indexed-depth-webgpu-usl/main.c
+    ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
+  )
+  target_link_libraries(gpu-indexed-depth-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-indexed-depth-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_INDEXED_DEPTH_US}@/indexed_depth.us"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-indexed-depth-webgpu-usl-shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-indexed-depth-webgpu-usl
+                   gpu-webgpu-indexed-depth-artifact)
+  set_target_properties(gpu-indexed-depth-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-indexed-depth-webgpu-usl-shell.html"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${GPU_WEBGPU_GALLERY_DIR}"
+  )
 endif()
 
 if(GPU_BUILD_TESTS)

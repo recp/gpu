@@ -63,20 +63,24 @@ typedef struct GPUSurfaceWebGPU {
 typedef struct GPUSwapchainWebGPU GPUSwapchainWebGPU;
 
 typedef struct GPUCommandWebGPU {
-  WGPUCommandEncoder    encoder;
-  WGPUCommandBuffer     submitted;
-  WGPURenderPassEncoder renderEncoder;
-  WGPUComputePassEncoder computeEncoder;
-  GPUSwapchainWebGPU   *present;
-  GPUCommandBuffer      command;
-  GPURenderPassDesc     renderPass;
-  GPURenderPassEncoder  render;
-  GPUComputePassEncoder compute;
-  WGPURenderPassDescriptor renderPassDesc;
-  WGPURenderPassColorAttachment colorAttachments[
+  WGPUCommandEncoder                   encoder;
+  WGPUCommandBuffer                    submitted;
+  WGPURenderPassEncoder                renderEncoder;
+  WGPUComputePassEncoder               computeEncoder;
+  WGPUBuffer                           boundIndexBuffer;
+  GPUSwapchainWebGPU                  *present;
+  GPUCommandBuffer                     command;
+  GPURenderPassDesc                    renderPass;
+  GPURenderPassEncoder                 render;
+  GPUComputePassEncoder                compute;
+  WGPURenderPassDescriptor             renderPassDesc;
+  uint64_t                             boundIndexOffset;
+  WGPUIndexFormat                      boundIndexFormat;
+  atomic_bool                          inUse;
+  WGPURenderPassColorAttachment        colorAttachments[
     GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS
   ];
-  atomic_bool           inUse;
+  WGPURenderPassDepthStencilAttachment depthStencilAttachment;
 } GPUCommandWebGPU;
 
 typedef struct GPUDeviceWebGPU {

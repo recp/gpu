@@ -14,7 +14,14 @@ gpu_webgpuFormat(GPUFormat format) {
     [GPU_FORMAT_RGBA8_UNORM]      = WGPUTextureFormat_RGBA8Unorm,
     [GPU_FORMAT_RGBA8_UNORM_SRGB] = WGPUTextureFormat_RGBA8UnormSrgb,
     [GPU_FORMAT_BGRA8_UNORM]      = WGPUTextureFormat_BGRA8Unorm,
-    [GPU_FORMAT_BGRA8_UNORM_SRGB] = WGPUTextureFormat_BGRA8UnormSrgb
+    [GPU_FORMAT_BGRA8_UNORM_SRGB] = WGPUTextureFormat_BGRA8UnormSrgb,
+    [GPU_FORMAT_DEPTH16_UNORM]    = WGPUTextureFormat_Depth16Unorm,
+    [GPU_FORMAT_STENCIL8]         = WGPUTextureFormat_Stencil8,
+    [GPU_FORMAT_DEPTH24_UNORM_STENCIL8] =
+      WGPUTextureFormat_Depth24PlusStencil8,
+    [GPU_FORMAT_DEPTH32_FLOAT] = WGPUTextureFormat_Depth32Float,
+    [GPU_FORMAT_DEPTH32_FLOAT_STENCIL8] =
+      WGPUTextureFormat_Depth32FloatStencil8
   };
 
   return (uint32_t)format < GPU_ARRAY_LEN(formats)

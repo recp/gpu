@@ -28,6 +28,21 @@ webgpu_storeOp(GPUStoreOp op) {
            : WGPUStoreOp_Store;
 }
 
+static bool
+webgpu_formatHasDepth(GPUFormat format) {
+  return format == GPU_FORMAT_DEPTH16_UNORM ||
+         format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+         format == GPU_FORMAT_DEPTH32_FLOAT ||
+         format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+}
+
+static bool
+webgpu_formatHasStencil(GPUFormat format) {
+  return format == GPU_FORMAT_STENCIL8 ||
+         format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+         format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+}
+
 static GPURenderPassDesc *
 webgpu_beginRenderPass(GPUCommandBuffer              *cmdb,
                        const GPURenderPassCreateInfo *info) {
@@ -35,8 +50,7 @@ webgpu_beginRenderPass(GPUCommandBuffer              *cmdb,
 
   command = gpu_webgpuCommand(cmdb);
   if (!command || !command->encoder ||
-      info->colorAttachmentCount > GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS ||
-      info->pDepthStencilAttachment) {
+      info->colorAttachmentCount > GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS) {
     return NULL;
   }
 
@@ -66,6 +80,29 @@ webgpu_beginRenderPass(GPUCommandBuffer              *cmdb,
   command->renderPassDesc.label = gpu_webgpuString(info->label);
   command->renderPassDesc.colorAttachmentCount = info->colorAttachmentCount;
   command->renderPassDesc.colorAttachments = command->colorAttachments;
+  if (info->pDepthStencilAttachment) {
+    const GPURenderPassDepthStencilAttachment *source;
+    WGPURenderPassDepthStencilAttachment      *target;
+    GPUFormat                                  format;
+
+    source  = info->pDepthStencilAttachment;
+    target  = &command->depthStencilAttachment;
+    format  = source->view->format;
+    *target = (WGPURenderPassDepthStencilAttachment)
+      WGPU_RENDER_PASS_DEPTH_STENCIL_ATTACHMENT_INIT;
+    target->view = source->view->_priv;
+    if (webgpu_formatHasDepth(format)) {
+      target->depthLoadOp     = webgpu_loadOp(source->depthLoadOp);
+      target->depthStoreOp    = webgpu_storeOp(source->depthStoreOp);
+      target->depthClearValue = source->clearDepth;
+    }
+    if (webgpu_formatHasStencil(format)) {
+      target->stencilLoadOp     = webgpu_loadOp(source->stencilLoadOp);
+      target->stencilStoreOp    = webgpu_storeOp(source->stencilStoreOp);
+      target->stencilClearValue = source->clearStencil;
+    }
+    command->renderPassDesc.depthStencilAttachment = target;
+  }
   command->renderPass._priv = command;
   command->renderPass.label = info->label;
   return &command->renderPass;

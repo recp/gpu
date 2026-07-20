@@ -148,6 +148,51 @@ webgpu_fillBlend(WGPUBlendState *outBlend, const GPUBlendState *blend) {
   outBlend->alpha.operation = webgpu_blendOperation(blend->alpha.op);
 }
 
+static WGPUCompareFunction
+webgpu_compareFunction(GPUCompareOp op) {
+  static const WGPUCompareFunction functions[] = {
+    [GPU_COMPARE_NEVER]         = WGPUCompareFunction_Never,
+    [GPU_COMPARE_LESS]          = WGPUCompareFunction_Less,
+    [GPU_COMPARE_EQUAL]         = WGPUCompareFunction_Equal,
+    [GPU_COMPARE_LESS_EQUAL]    = WGPUCompareFunction_LessEqual,
+    [GPU_COMPARE_GREATER]       = WGPUCompareFunction_Greater,
+    [GPU_COMPARE_NOT_EQUAL]     = WGPUCompareFunction_NotEqual,
+    [GPU_COMPARE_GREATER_EQUAL] = WGPUCompareFunction_GreaterEqual,
+    [GPU_COMPARE_ALWAYS]        = WGPUCompareFunction_Always
+  };
+
+  return (uint32_t)op < GPU_ARRAY_LEN(functions)
+           ? functions[op]
+           : WGPUCompareFunction_Always;
+}
+
+static WGPUStencilOperation
+webgpu_stencilOperation(GPUStencilOp op) {
+  static const WGPUStencilOperation operations[] = {
+    [GPU_STENCIL_OP_KEEP]            = WGPUStencilOperation_Keep,
+    [GPU_STENCIL_OP_ZERO]            = WGPUStencilOperation_Zero,
+    [GPU_STENCIL_OP_REPLACE]         = WGPUStencilOperation_Replace,
+    [GPU_STENCIL_OP_INCREMENT_CLAMP] = WGPUStencilOperation_IncrementClamp,
+    [GPU_STENCIL_OP_DECREMENT_CLAMP] = WGPUStencilOperation_DecrementClamp,
+    [GPU_STENCIL_OP_INVERT]          = WGPUStencilOperation_Invert,
+    [GPU_STENCIL_OP_INCREMENT_WRAP]  = WGPUStencilOperation_IncrementWrap,
+    [GPU_STENCIL_OP_DECREMENT_WRAP]  = WGPUStencilOperation_DecrementWrap
+  };
+
+  return (uint32_t)op < GPU_ARRAY_LEN(operations)
+           ? operations[op]
+           : WGPUStencilOperation_Keep;
+}
+
+static void
+webgpu_fillStencilFace(WGPUStencilFaceState       *target,
+                       const GPUStencilFaceState  *source) {
+  target->compare     = webgpu_compareFunction(source->compare);
+  target->failOp      = webgpu_stencilOperation(source->failOp);
+  target->depthFailOp = webgpu_stencilOperation(source->depthFailOp);
+  target->passOp      = webgpu_stencilOperation(source->passOp);
+}
+
 static GPUResult
 webgpu_createPipeline(GPUDevice                         *device,
                       const GPURenderPipelineCreateInfo *info,
@@ -157,6 +202,7 @@ webgpu_createPipeline(GPUDevice                         *device,
   WGPUFragmentState            fragment = WGPU_FRAGMENT_STATE_INIT;
   WGPUColorTargetState         targets[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   WGPUBlendState               blends[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  WGPUDepthStencilState        depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
   WGPUVertexBufferLayout      *vertexBuffers;
   WGPUVertexAttribute         *vertexAttributes;
   GPUDeviceWebGPU             *native;
@@ -168,9 +214,7 @@ webgpu_createPipeline(GPUDevice                         *device,
   native = gpu_webgpuDevice(device);
   module = info && info->library ? info->library->_priv : NULL;
   if (!native || !native->device || !info || !module || !info->layout ||
-      !info->layout->_native ||
-      info->depthStencilFormat != GPU_FORMAT_UNDEFINED ||
-      info->pDepthStencilState) {
+      !info->layout->_native) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -261,6 +305,37 @@ webgpu_createPipeline(GPUDevice                         *device,
                                      : UINT32_MAX;
   descriptor.multisample.alphaToCoverageEnabled =
     info->multisample.alphaToCoverageEnable;
+
+  if (info->depthStencilFormat != GPU_FORMAT_UNDEFINED) {
+    const GPUDepthStencilState *source;
+
+    depthStencil.format = gpu_webgpuFormat(info->depthStencilFormat);
+    if (depthStencil.format == WGPUTextureFormat_Undefined) {
+      free(vertexBuffers);
+      free(vertexAttributes);
+      return GPU_ERROR_UNSUPPORTED;
+    }
+    source = info->pDepthStencilState;
+    depthStencil.depthWriteEnabled = source && source->depthWriteEnable
+                                       ? WGPUOptionalBool_True
+                                       : WGPUOptionalBool_False;
+    depthStencil.depthCompare = source && source->depthTestEnable
+                                  ? webgpu_compareFunction(source->depthCompare)
+                                  : WGPUCompareFunction_Always;
+    if (source && source->stencilTestEnable) {
+      webgpu_fillStencilFace(&depthStencil.stencilFront, &source->front);
+      webgpu_fillStencilFace(&depthStencil.stencilBack, &source->back);
+      depthStencil.stencilReadMask  = source->stencilReadMask;
+      depthStencil.stencilWriteMask = source->stencilWriteMask;
+    } else {
+      depthStencil.stencilFront.compare     = WGPUCompareFunction_Always;
+      depthStencil.stencilFront.failOp      = WGPUStencilOperation_Keep;
+      depthStencil.stencilFront.depthFailOp = WGPUStencilOperation_Keep;
+      depthStencil.stencilFront.passOp      = WGPUStencilOperation_Keep;
+      depthStencil.stencilBack              = depthStencil.stencilFront;
+    }
+    descriptor.depthStencil = &depthStencil;
+  }
 
   fragment.module     = module;
   fragment.entryPoint = gpu_webgpuString(info->fragmentEntry);
