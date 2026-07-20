@@ -1,14 +1,5 @@
-#include <emscripten/emscripten.h>
-#include <emscripten/html5.h>
-
-#include <gpu/gpu.h>
-
 #include "../common/webgpu.h"
 #include "../textured-cube-usl/CubeData.h"
-
-#include <stddef.h>
-#include <stdint.h>
-#include <stdlib.h>
 
 typedef struct WebGPUTexturedCube {
   GPUInstance       *instance;

@@ -16,7 +16,10 @@ typedef struct WebGPUAdapterRequest {
 
 typedef struct WebGPUDeviceRequest {
   GPUBackendDeviceRequestCallback  callback;
+  GPUDevice                       *device;
+  GPUDeviceWebGPU                 *native;
   void                            *userData;
+  bool                             ready;
 } WebGPUDeviceRequest;
 
 static GPUAdapterType
@@ -51,6 +54,77 @@ webgpu_copyString(char *dst, size_t capacity, WGPUStringView src) {
     memcpy(dst, src.data, size);
   }
   dst[size] = '\0';
+}
+
+static void
+webgpu_uncapturedError(WGPUDevice const *nativeDevice,
+                       WGPUErrorType      type,
+                       WGPUStringView     message,
+                       void              *userData,
+                       void              *unused) {
+  WebGPUDeviceRequest *request;
+  GPUDeviceErrorType   errorType;
+  GPUResult            result;
+  char                 text[512];
+
+  GPU__UNUSED(nativeDevice);
+  GPU__UNUSED(unused);
+  request = userData;
+  if (!request || !request->ready || !request->device ||
+      type == WGPUErrorType_NoError) {
+    return;
+  }
+
+  switch (type) {
+    case WGPUErrorType_Validation:
+      errorType = GPU_DEVICE_ERROR_VALIDATION;
+      result    = GPU_ERROR_INVALID_ARGUMENT;
+      break;
+    case WGPUErrorType_OutOfMemory:
+      errorType = GPU_DEVICE_ERROR_OUT_OF_MEMORY;
+      result    = GPU_ERROR_OUT_OF_MEMORY;
+      break;
+    default:
+      errorType = GPU_DEVICE_ERROR_BACKEND;
+      result    = GPU_ERROR_BACKEND_FAILURE;
+      break;
+  }
+  webgpu_copyString(text, sizeof(text), message);
+  gpuDeviceReportError(request->device,
+                       errorType,
+                       GPU_DEVICE_LOST_REASON_UNKNOWN,
+                       result,
+                       text[0] ? text : "WebGPU uncaptured device error");
+}
+
+static void
+webgpu_deviceLost(WGPUDevice const    *nativeDevice,
+                  WGPUDeviceLostReason reason,
+                  WGPUStringView       message,
+                  void                *userData,
+                  void                *unused) {
+  WebGPUDeviceRequest *request;
+  GPUDeviceLostReason  lostReason;
+  char                 text[512];
+
+  GPU__UNUSED(nativeDevice);
+  GPU__UNUSED(unused);
+  request = userData;
+  if (!request || !request->ready || !request->device ||
+      reason == WGPUDeviceLostReason_Destroyed ||
+      reason == WGPUDeviceLostReason_CallbackCancelled) {
+    return;
+  }
+
+  lostReason = reason == WGPUDeviceLostReason_FailedCreation
+                 ? GPU_DEVICE_LOST_REASON_DRIVER_ERROR
+                 : GPU_DEVICE_LOST_REASON_UNKNOWN;
+  webgpu_copyString(text, sizeof(text), message);
+  gpuDeviceReportError(request->device,
+                       GPU_DEVICE_ERROR_LOST,
+                       lostReason,
+                       GPU_ERROR_BACKEND_FAILURE,
+                       text[0] ? text : "WebGPU device lost");
 }
 
 static void
@@ -216,12 +290,10 @@ webgpu_deviceReady(WGPURequestDeviceStatus status,
   GPU__UNUSED(message);
   GPU__UNUSED(unused);
   request = userData;
-  device  = NULL;
-  native  = NULL;
+  device  = request->device;
+  native  = request->native;
 
   if (status == WGPURequestDeviceStatus_Success && nativeDevice) {
-    device = calloc(1, sizeof(*device));
-    native = calloc(1, sizeof(*native));
     if (device && native) {
       native->device = nativeDevice;
       native->queue  = wgpuDeviceGetQueue(nativeDevice);
@@ -237,25 +309,29 @@ webgpu_deviceReady(WGPURequestDeviceStatus status,
         device->_priv         = native;
         device->queueFamilies = native->queueHandle.bits;
       } else {
-        free(native);
-        free(device);
         device = NULL;
-        native = NULL;
       }
-    } else {
-      free(native);
-      free(device);
-      device = NULL;
     }
+  } else {
+    device = NULL;
   }
 
   if (!device && nativeDevice) {
     wgpuDeviceRelease(nativeDevice);
   }
+  if (!device) {
+    free(request->native);
+    free(request->device);
+  } else {
+    native->errorContext = request;
+    request->ready       = true;
+  }
   request->callback(device ? GPU_OK : GPU_ERROR_BACKEND_FAILURE,
                     device,
                     request->userData);
-  free(request);
+  if (!device) {
+    free(request);
+  }
 }
 
 static GPUResult
@@ -282,13 +358,23 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   }
 
   request = calloc(1, sizeof(*request));
-  if (!request) {
+  if (!request ||
+      !(request->device = calloc(1, sizeof(*request->device))) ||
+      !(request->native = calloc(1, sizeof(*request->native)))) {
+    free(request ? request->native : NULL);
+    free(request ? request->device : NULL);
+    free(request);
     return GPU_ERROR_OUT_OF_MEMORY;
   }
   request->callback = callback;
   request->userData = userData;
 
-  descriptor.label       = gpu_webgpuString("gpu-webgpu-device");
+  descriptor.label = gpu_webgpuString("gpu-webgpu-device");
+  descriptor.deviceLostCallbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
+  descriptor.deviceLostCallbackInfo.callback = webgpu_deviceLost;
+  descriptor.deviceLostCallbackInfo.userdata1 = request;
+  descriptor.uncapturedErrorCallbackInfo.callback = webgpu_uncapturedError;
+  descriptor.uncapturedErrorCallbackInfo.userdata1 = request;
   callbackInfo.mode      = WGPUCallbackMode_AllowSpontaneous;
   callbackInfo.callback  = webgpu_deviceReady;
   callbackInfo.userdata1 = request;
@@ -302,12 +388,20 @@ webgpu_destroyDevice(GPUDevice *device) {
 
   native = gpu_webgpuDevice(device);
   if (native) {
+    WebGPUDeviceRequest *request;
+
+    request = native->errorContext;
+    if (request) {
+      request->device = NULL;
+      request->ready  = false;
+    }
     if (native->queue) {
       wgpuQueueRelease(native->queue);
     }
     if (native->device) {
       wgpuDeviceRelease(native->device);
     }
+    free(request);
     free(native);
   }
   free(device);

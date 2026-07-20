@@ -86,9 +86,27 @@ typedef struct GPUCommandWebGPU {
 typedef struct GPUDeviceWebGPU {
   WGPUDevice       device;
   WGPUQueue        queue;
+  void            *errorContext;
   GPUQueue         queueHandle;
   GPUCommandWebGPU commands[GPU_WEBGPU_COMMAND_SLOT_COUNT];
 } GPUDeviceWebGPU;
+
+typedef struct GPUPipelineLayoutWebGPU {
+  WGPUPipelineLayout layout;
+  WGPUBindGroup      emptyGroups[GPU_ENCODER_MAX_BIND_GROUPS];
+  uint32_t           emptyGroupMask;
+} GPUPipelineLayoutWebGPU;
+
+typedef struct GPURenderPipelineWebGPU {
+  WGPURenderPipeline      pipeline;
+  GPUPipelineLayoutWebGPU layout;
+} GPURenderPipelineWebGPU;
+
+typedef struct GPUComputePipelineWebGPU {
+  GPUComputePipelineState base;
+  WGPUComputePipeline     pipeline;
+  GPUPipelineLayoutWebGPU layout;
+} GPUComputePipelineWebGPU;
 
 struct GPUSwapchainWebGPU {
   WGPUSurface      surface;
@@ -156,5 +174,22 @@ gpu_webgpuCommand(const GPUCommandBuffer *cmdb) {
 WGPUTextureFormat gpu_webgpuFormat(GPUFormat format);
 GPUFormat gpu_webgpuGPUFormat(WGPUTextureFormat format);
 WGPUPresentMode gpu_webgpuPresentMode(GPUPresentMode mode);
+
+GPUResult
+gpu_webgpuCreatePipelineLayout(GPUDevice               *device,
+                               GPUPipelineLayout       *logicalLayout,
+                               uint32_t                 requiredGroupMask,
+                               GPUPipelineLayoutWebGPU *outLayout);
+
+void
+gpu_webgpuDestroyPipelineLayout(GPUPipelineLayoutWebGPU *layout);
+
+void
+gpu_webgpuBindRenderEmptyGroups(GPURenderPassEncoder          *pass,
+                                const GPUPipelineLayoutWebGPU *layout);
+
+void
+gpu_webgpuBindComputeEmptyGroups(GPUComputePassEncoder         *pass,
+                                 const GPUPipelineLayoutWebGPU *layout);
 
 #endif /* webgpu_common_h */

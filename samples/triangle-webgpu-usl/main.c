@@ -1,13 +1,6 @@
-#include <emscripten/emscripten.h>
-#include <emscripten/html5.h>
-
-#include <gpu/gpu.h>
-
 #include "../common/webgpu.h"
 
-#include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
 
 typedef struct WebGPUTriangle {
   GPUInstance       *instance;

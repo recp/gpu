@@ -217,6 +217,7 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
     pipeline->_api      = api;
     pipeline->_device   = device;
     pipeline->_refCount = 1u;
+    pipeline->_requiredBindGroupMask = requiredBindGroupMask;
     result = api->compute.createPipeline(device, info, pipeline);
     if (result != GPU_OK) {
       free(pipeline);

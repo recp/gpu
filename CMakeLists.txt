@@ -681,7 +681,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
     LINK_DEPENDS
-      "${GPU_WEBGPU_GALLERY_DIR}/gpu-triangle-webgpu-usl-shell.html"
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-triangle-webgpu-usl-shell.html;${GPU_WEBGPU_TRIANGLE_US}"
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"
@@ -755,7 +755,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
     LINK_DEPENDS
-      "${GPU_WEBGPU_GALLERY_DIR}/gpu-textured-quad-webgpu-usl-shell.html"
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-textured-quad-webgpu-usl-shell.html;${GPU_WEBGPU_TEXTURED_QUAD_US}"
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"
@@ -827,7 +827,81 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
     LINK_DEPENDS
-      "${GPU_WEBGPU_GALLERY_DIR}/gpu-compute-webgpu-usl-shell.html"
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-compute-webgpu-usl-shell.html;${GPU_WEBGPU_COMPUTE_US}"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${GPU_WEBGPU_GALLERY_DIR}"
+  )
+
+  set(GPU_WEBGPU_STORAGE_TEXTURE_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+  set(GPU_WEBGPU_STORAGE_TEXTURE_SOURCE
+      "${GPU_WEBGPU_STORAGE_TEXTURE_DIR}/storage_texture.usl")
+  set(GPU_WEBGPU_STORAGE_TEXTURE_US
+      "${GPU_WEBGPU_STORAGE_TEXTURE_DIR}/storage_texture.us")
+  set(GPU_WEBGPU_SAMPLE_TITLE "Storage texture")
+  set(GPU_WEBGPU_SAMPLE_KIND "Compute / typed storage texture")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "Compute writes a typed RGBA8 texture; render samples it in the same command buffer.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/storage-texture.c")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/storage-texture.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/storage-texture.wgsl")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-storage-texture-webgpu-usl-shell.html"
+    @ONLY
+  )
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_STORAGE_TEXTURE_US}"
+    BYPRODUCTS "${GPU_WEBGPU_STORAGE_TEXTURE_SOURCE}.wgsl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${GPU_WEBGPU_STORAGE_TEXTURE_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/storage-texture-webgpu-usl/storage_texture.usl"
+            "${GPU_WEBGPU_STORAGE_TEXTURE_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_STORAGE_TEXTURE_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/storage-texture-webgpu-usl/main.c"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/storage-texture.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_STORAGE_TEXTURE_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/storage-texture.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_STORAGE_TEXTURE_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/storage-texture.wgsl"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/storage-texture-webgpu-usl/storage_texture.usl"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/storage-texture-webgpu-usl/main.c"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-storage-texture-artifact
+    DEPENDS "${GPU_WEBGPU_STORAGE_TEXTURE_US}"
+  )
+
+  add_executable(gpu-storage-texture-webgpu-usl
+    samples/storage-texture-webgpu-usl/main.c
+    ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
+  )
+  target_link_libraries(gpu-storage-texture-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-storage-texture-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_STORAGE_TEXTURE_US}@/storage_texture.us"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-storage-texture-webgpu-usl-shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-storage-texture-webgpu-usl
+                   gpu-webgpu-storage-texture-artifact)
+  set_target_properties(gpu-storage-texture-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-storage-texture-webgpu-usl-shell.html;${GPU_WEBGPU_STORAGE_TEXTURE_US}"
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"
@@ -901,7 +975,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
     LINK_DEPENDS
-      "${GPU_WEBGPU_GALLERY_DIR}/gpu-indexed-depth-webgpu-usl-shell.html"
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-indexed-depth-webgpu-usl-shell.html;${GPU_WEBGPU_INDEXED_DEPTH_US}"
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"
@@ -974,7 +1048,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
     LINK_DEPENDS
-      "${GPU_WEBGPU_GALLERY_DIR}/gpu-instancing-webgpu-usl-shell.html"
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-instancing-webgpu-usl-shell.html;${GPU_WEBGPU_INSTANCING_US}"
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"
@@ -1051,7 +1125,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
     LINK_DEPENDS
-      "${GPU_WEBGPU_GALLERY_DIR}/gpu-textured-cube-webgpu-usl-shell.html"
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-textured-cube-webgpu-usl-shell.html;${GPU_WEBGPU_TEXTURED_CUBE_US}"
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"

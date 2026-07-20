@@ -19,10 +19,10 @@ webgpu_createComputePipeline(GPUDevice                          *device,
                              GPUComputePipeline                 *pipeline) {
   WGPUComputePipelineDescriptor descriptor =
     WGPU_COMPUTE_PIPELINE_DESCRIPTOR_INIT;
-  GPUComputePipelineState *state;
-  GPUDeviceWebGPU         *native;
-  uint32_t                 pushConstantSize;
-  GPUShaderStageFlags      pushConstantStages;
+  GPUComputePipelineWebGPU *state;
+  GPUDeviceWebGPU          *native;
+  uint32_t                  pushConstantSize;
+  GPUShaderStageFlags       pushConstantStages;
 
   native = gpu_webgpuDevice(device);
   if (!native || !native->device || !info || !info->library ||
@@ -44,34 +44,47 @@ webgpu_createComputePipeline(GPUDevice                          *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  descriptor.label              = gpu_webgpuString(info->label);
-  descriptor.layout             = info->layout->_native;
-  descriptor.compute.module     = info->library->_priv;
-  descriptor.compute.entryPoint = gpu_webgpuString(info->entryPoint);
-  state->_priv = wgpuDeviceCreateComputePipeline(native->device, &descriptor);
-  if (!state->_priv) {
+  if (gpu_webgpuCreatePipelineLayout(device,
+                                     info->layout,
+                                     pipeline->_requiredBindGroupMask,
+                                     &state->layout) != GPU_OK) {
     free(state);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  state->workgroupSize[0] = 1u;
-  state->workgroupSize[1] = 1u;
-  state->workgroupSize[2] = 1u;
-  pipeline->_priv         = state->_priv;
-  pipeline->_state        = state;
+  descriptor.label              = gpu_webgpuString(info->label);
+  descriptor.layout             = state->layout.layout;
+  descriptor.compute.module     = info->library->_priv;
+  descriptor.compute.entryPoint = gpu_webgpuString(info->entryPoint);
+  state->pipeline = wgpuDeviceCreateComputePipeline(native->device, &descriptor);
+  if (!state->pipeline) {
+    gpu_webgpuDestroyPipelineLayout(&state->layout);
+    free(state);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  state->base._priv            = state->pipeline;
+  state->base.workgroupSize[0] = 1u;
+  state->base.workgroupSize[1] = 1u;
+  state->base.workgroupSize[2] = 1u;
+  pipeline->_priv              = state->pipeline;
+  pipeline->_state             = &state->base;
   return GPU_OK;
 }
 
 static void
 webgpu_destroyComputePipeline(GPUComputePipeline *pipeline) {
-  GPUComputePipelineState *state;
+  GPUComputePipelineWebGPU *state;
 
   if (!pipeline) {
     return;
   }
   state = pipeline->_state;
-  if (state && state->_priv) {
-    wgpuComputePipelineRelease(state->_priv);
+  if (state) {
+    if (state->pipeline) {
+      wgpuComputePipelineRelease(state->pipeline);
+    }
+    gpu_webgpuDestroyPipelineLayout(&state->layout);
   }
   free(state);
   free(pipeline);
@@ -105,14 +118,19 @@ webgpu_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
 static void
 webgpu_setComputePipeline(GPUComputePassEncoder   *encoder,
                           GPUComputePipelineState *state) {
-  GPUCommandWebGPU *command;
+  GPUComputePipelineWebGPU *nativeState;
+  GPUCommandWebGPU         *command;
 
-  command = webgpu_computeCommand(encoder);
-  if (!command || !command->computeEncoder || !state || !state->_priv) {
+  command     = webgpu_computeCommand(encoder);
+  nativeState = (GPUComputePipelineWebGPU *)state;
+  if (!command || !command->computeEncoder || !nativeState ||
+      !nativeState->pipeline) {
     return;
   }
 
-  wgpuComputePassEncoderSetPipeline(command->computeEncoder, state->_priv);
+  wgpuComputePassEncoderSetPipeline(command->computeEncoder,
+                                    nativeState->pipeline);
+  gpu_webgpuBindComputeEmptyGroups(encoder, &nativeState->layout);
   encoder->_workgroupSize[0] = state->workgroupSize[0];
   encoder->_workgroupSize[1] = state->workgroupSize[1];
   encoder->_workgroupSize[2] = state->workgroupSize[2];

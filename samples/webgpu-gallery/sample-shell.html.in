@@ -59,11 +59,11 @@
     </section>
   </main>
 
-  <script src="sample.js?v=8" defer></script>
+  <script src="sample.js?v=9" defer></script>
   <script>
     var Module = {
       locateFile(path, prefix) {
-        return `${prefix}${path}?v=8`;
+        return `${prefix}${path}?v=9`;
       }
     };
   </script>
@@ -75,7 +75,7 @@
       .getAttribute("src");
     const runtime = document.createElement("script");
 
-    runtime.src = `${runtimeSource}?v=8`;
+    runtime.src = `${runtimeSource}?v=9`;
     runtime.async = true;
     document.body.appendChild(runtime);
   </script>

@@ -1,9 +1,14 @@
 #ifndef GPU_SAMPLE_WEBGPU_H
 #define GPU_SAMPLE_WEBGPU_H
 
+#include <emscripten/emscripten.h>
+#include <emscripten/html5.h>
+
 #include <gpu/gpu.h>
 
+#include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 void
 set_status(const char *message, int failed);

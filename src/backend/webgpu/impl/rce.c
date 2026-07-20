@@ -42,11 +42,14 @@ webgpu_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
 static void
 webgpu_setPipeline(GPURenderPassEncoder *encoder,
                    GPURenderPipelineState *pipeline) {
-  GPUCommandWebGPU *command;
+  GPURenderPipelineWebGPU *state;
+  GPUCommandWebGPU        *command;
 
   command = webgpu_renderCommand(encoder);
-  if (command && command->renderEncoder && pipeline && pipeline->_priv) {
-    wgpuRenderPassEncoderSetPipeline(command->renderEncoder, pipeline->_priv);
+  state   = pipeline ? pipeline->_priv : NULL;
+  if (command && command->renderEncoder && state && state->pipeline) {
+    wgpuRenderPassEncoderSetPipeline(command->renderEncoder, state->pipeline);
+    gpu_webgpuBindRenderEmptyGroups(encoder, &state->layout);
   }
 }
 

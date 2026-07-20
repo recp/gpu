@@ -1,13 +1,4 @@
-#include <emscripten/emscripten.h>
-#include <emscripten/html5.h>
-
-#include <gpu/gpu.h>
-
 #include "../common/webgpu.h"
-
-#include <stddef.h>
-#include <stdint.h>
-#include <stdlib.h>
 
 typedef struct TriangleVertex {
   float position[2];

@@ -206,11 +206,11 @@ webgpu_createPipeline(GPUDevice                         *device,
   WGPUVertexBufferLayout      *vertexBuffers;
   WGPUVertexAttribute         *vertexAttributes;
   GPUDeviceWebGPU             *native;
+  GPURenderPipelineWebGPU     *state;
   WGPUShaderModule             module;
   uint32_t                     attributeCount;
   uint32_t                     attributeCursor;
 
-  GPU__UNUSED(requiredBindGroupMask);
   native = gpu_webgpuDevice(device);
   module = info && info->library ? info->library->_priv : NULL;
   if (!native || !native->device || !info || !module || !info->layout ||
@@ -288,8 +288,24 @@ webgpu_createPipeline(GPUDevice                         *device,
     }
   }
 
+  state = calloc(1, sizeof(*state));
+  if (!state) {
+    free(vertexBuffers);
+    free(vertexAttributes);
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  if (gpu_webgpuCreatePipelineLayout(device,
+                                     info->layout,
+                                     requiredBindGroupMask,
+                                     &state->layout) != GPU_OK) {
+    free(state);
+    free(vertexBuffers);
+    free(vertexAttributes);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
   descriptor.label              = gpu_webgpuString(info->label);
-  descriptor.layout             = info->layout->_native;
+  descriptor.layout             = state->layout.layout;
   descriptor.vertex.module      = module;
   descriptor.vertex.entryPoint  = gpu_webgpuString(info->vertexEntry);
   descriptor.vertex.bufferCount = info->vertex.bufferLayoutCount;
@@ -343,18 +359,30 @@ webgpu_createPipeline(GPUDevice                         *device,
   fragment.targets     = targets;
   descriptor.fragment  = &fragment;
 
-  pipeline->_priv = wgpuDeviceCreateRenderPipeline(native->device,
-                                                    &descriptor);
+  state->pipeline = wgpuDeviceCreateRenderPipeline(native->device, &descriptor);
   free(vertexBuffers);
   free(vertexAttributes);
-  pipeline->_state = pipeline->_priv;
-  return pipeline->_priv ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+  if (!state->pipeline) {
+    gpu_webgpuDestroyPipelineLayout(&state->layout);
+    free(state);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  pipeline->_priv  = state->pipeline;
+  pipeline->_state = state;
+  return GPU_OK;
 }
 
 static void
 webgpu_destroyPipeline(GPURenderPipeline *pipeline) {
-  if (pipeline && pipeline->_priv) {
-    wgpuRenderPipelineRelease(pipeline->_priv);
+  GPURenderPipelineWebGPU *state;
+
+  state = pipeline ? pipeline->_state : NULL;
+  if (state) {
+    if (state->pipeline) {
+      wgpuRenderPipelineRelease(state->pipeline);
+    }
+    gpu_webgpuDestroyPipelineLayout(&state->layout);
+    free(state);
   }
   free(pipeline);
 }
