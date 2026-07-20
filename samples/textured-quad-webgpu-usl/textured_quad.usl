@@ -13,10 +13,7 @@ pub struct FragmentUniforms {
 }
 
 vert quad_vs(v: VSIn #stage_in) -> VSOut {
-  var out: VSOut
-  out.position = v.position
-  out.uv = v.uv
-  return out
+  v.position, v.uv
 }
 
 frag quad_fs(input: VSOut #stage_in,

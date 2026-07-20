@@ -30,10 +30,7 @@ fn quad_uv(vertexId: uint) -> float2 {
 }
 
 vert quad_vs(vertexId: uint #vertex_id) -> VSOut {
-  var out: VSOut
-  out.position = quad_position(vertexId)
-  out.uv = quad_uv(vertexId)
-  return out
+  quad_position(vertexId), quad_uv(vertexId)
 }
 
 frag quad_fs(input: VSOut #stage_in,
