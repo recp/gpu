@@ -79,6 +79,8 @@ manual submit control is required.
 
 ## Samples
 
+See live WebGPU samples at: [https://recp.github.io/gpu/](https://recp.github.io/gpu/)
+
 - `samples/triangle-usl`: Metal triangle using a USL artifact
 - `samples/triangle-vulkan-usl`: Vulkan triangle using the same USL source
 - `samples/triangle-dx12-usl`: Direct3D 12 triangle using the same USL source
