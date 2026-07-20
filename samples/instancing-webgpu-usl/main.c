@@ -79,35 +79,9 @@ static WebGPUInstancing app;
 
 static int
 resize_canvas(WebGPUInstancing *state) {
-  double   cssWidth;
-  double   cssHeight;
-  double   scale;
-  uint32_t width;
-  uint32_t height;
-
-  if (emscripten_get_element_css_size("#canvas", &cssWidth, &cssHeight) !=
-      EMSCRIPTEN_RESULT_SUCCESS) {
-    return 0;
-  }
-
-  scale  = emscripten_get_device_pixel_ratio();
-  width  = (uint32_t)(cssWidth * scale + 0.5);
-  height = (uint32_t)(cssHeight * scale + 0.5);
-  if (width == 0u || height == 0u) {
-    return 0;
-  }
-  if (width == state->width && height == state->height) {
-    return 1;
-  }
-
-  emscripten_set_canvas_element_size("#canvas", (int)width, (int)height);
-  if (state->swapchain &&
-      GPUResizeSwapchain(state->swapchain, width, height) != GPU_OK) {
-    return 0;
-  }
-  state->width  = width;
-  state->height = height;
-  return 1;
+  return resize_webgpu_canvas(state->swapchain,
+                              &state->width,
+                              &state->height);
 }
 
 static int

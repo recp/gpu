@@ -1,6 +1,7 @@
 #include "webgpu.h"
 
 #include <emscripten/emscripten.h>
+#include <emscripten/html5.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,6 +10,30 @@ EM_JS(void, set_status_js, (const char *message, int failed), {
   const status = document.getElementById("status");
   status.textContent = UTF8ToString(message);
   status.dataset.failed = failed ? "true" : "false";
+});
+
+EM_JS(int, prepare_canvas_layout_js, (), {
+  const canvas = document.getElementById("canvas");
+  const root = document.documentElement;
+  const scale = window.devicePixelRatio || 1;
+
+  if (!canvas) return -1;
+  if (canvas.gpuInnerWidth === window.innerWidth &&
+      canvas.gpuInnerHeight === window.innerHeight &&
+      canvas.gpuClientWidth === root.clientWidth &&
+      canvas.gpuClientHeight === root.clientHeight &&
+      canvas.gpuPixelRatio === scale) {
+    return 0;
+  }
+
+  canvas.style.width = "";
+  canvas.style.height = "";
+  canvas.gpuInnerWidth = window.innerWidth;
+  canvas.gpuInnerHeight = window.innerHeight;
+  canvas.gpuClientWidth = root.clientWidth;
+  canvas.gpuClientHeight = root.clientHeight;
+  canvas.gpuPixelRatio = scale;
+  return 1;
 });
 
 void
@@ -48,5 +73,65 @@ read_file(const char *path, void **outData, uint64_t *outSize) {
   fclose(file);
   *outData = data;
   *outSize = (uint64_t)size;
+  return 1;
+}
+
+int
+resize_webgpu_canvas(GPUSwapchain *swapchain,
+                     uint32_t     *width,
+                     uint32_t     *height) {
+  double   cssWidth;
+  double   cssHeight;
+  double   scale;
+  uint32_t nextWidth;
+  uint32_t nextHeight;
+  int      layoutChanged;
+
+  layoutChanged = prepare_canvas_layout_js();
+  if (layoutChanged < 0) {
+    return 0;
+  }
+  if (!layoutChanged && *width != 0u && *height != 0u) {
+    return 1;
+  }
+  if (emscripten_get_element_css_size("#canvas", &cssWidth, &cssHeight) !=
+      EMSCRIPTEN_RESULT_SUCCESS) {
+    return 0;
+  }
+
+  scale = emscripten_get_device_pixel_ratio();
+  if (scale <= 0.0) {
+    scale = 1.0;
+  }
+  nextWidth  = (uint32_t)(cssWidth * scale + 0.5);
+  nextHeight = (uint32_t)(cssHeight * scale + 0.5);
+  if (nextWidth == 0u || nextHeight == 0u) {
+    return 0;
+  }
+
+  if ((layoutChanged || nextWidth != *width || nextHeight != *height) &&
+      emscripten_set_element_css_size("#canvas",
+                                      (double)nextWidth / scale,
+                                      (double)nextHeight / scale) !=
+        EMSCRIPTEN_RESULT_SUCCESS) {
+    return 0;
+  }
+  if (nextWidth == *width && nextHeight == *height) {
+    return 1;
+  }
+
+  if (emscripten_set_canvas_element_size("#canvas",
+                                         (int)nextWidth,
+                                         (int)nextHeight) !=
+      EMSCRIPTEN_RESULT_SUCCESS) {
+    return 0;
+  }
+  if (swapchain &&
+      GPUResizeSwapchain(swapchain, nextWidth, nextHeight) != GPU_OK) {
+    return 0;
+  }
+
+  *width  = nextWidth;
+  *height = nextHeight;
   return 1;
 }

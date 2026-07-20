@@ -89,32 +89,28 @@ create_depth_target(WebGPUTexturedCube *state,
 
 static int
 resize_canvas(WebGPUTexturedCube *state) {
-  double   cssWidth;
-  double   cssHeight;
-  double   scale;
-  uint32_t width;
-  uint32_t height;
+  uint32_t oldWidth;
+  uint32_t oldHeight;
 
-  if (emscripten_get_element_css_size("#canvas", &cssWidth, &cssHeight) !=
-      EMSCRIPTEN_RESULT_SUCCESS) {
+  oldWidth  = state->width;
+  oldHeight = state->height;
+  if (!resize_webgpu_canvas(state->swapchain,
+                            &state->width,
+                            &state->height)) {
     return 0;
   }
-
-  scale  = emscripten_get_device_pixel_ratio();
-  width  = (uint32_t)(cssWidth * scale + 0.5);
-  height = (uint32_t)(cssHeight * scale + 0.5);
-  if (width == 0u || height == 0u) return 0;
-  if (width == state->width && height == state->height) return 1;
-
-  emscripten_set_canvas_element_size("#canvas", (int)width, (int)height);
+  if (oldWidth == state->width && oldHeight == state->height) {
+    return 1;
+  }
   if (state->swapchain &&
-      (GPUResizeSwapchain(state->swapchain, width, height) != GPU_OK ||
-       !create_depth_target(state, width, height))) {
+      !create_depth_target(state, state->width, state->height)) {
+    state->width  = 0u;
+    state->height = 0u;
     return 0;
   }
-  state->width  = width;
-  state->height = height;
-  CubeBuildViewProjection(width, height, state->viewProjection);
+  CubeBuildViewProjection(state->width,
+                          state->height,
+                          state->viewProjection);
   return 1;
 }
 
