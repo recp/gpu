@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="gallery.css?v=3">
+  <link rel="stylesheet" href="gallery.css?v=4">
   <title>@GPU_WEBGPU_SAMPLE_TITLE@ · GPU + USL</title>
 </head>
 <body class="sample-page"
@@ -23,6 +23,7 @@
   <main class="sample-workbench">
     <section class="stage" aria-label="Live WebGPU output">
       <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+      <aside class="debug-overlay" hidden aria-live="off"></aside>
       <div class="stage-meta">
         <p>@GPU_WEBGPU_SAMPLE_DESCRIPTION@</p>
         <div id="status">GPU: loading sample</div>
@@ -46,11 +47,11 @@
                 aria-controls="source-code" data-source="wgsl">Generated WGSL</button>
       </div>
       <pre id="source-code" role="tabpanel" aria-labelledby="tab-c"
-           tabindex="0"><code>Loading source…</code></pre>
+           tabindex="0"><span class="line-numbers" aria-hidden="true"></span><code>Loading source…</code></pre>
     </section>
   </main>
 
-  <script src="sample.js?v=2" defer></script>
+  <script src="sample.js?v=3" defer></script>
   {{{ SCRIPT }}}
 </body>
 </html>
