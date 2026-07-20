@@ -39,8 +39,8 @@ resize_canvas(WebGPUTriangle *state) {
   }
 
   scale  = emscripten_get_device_pixel_ratio();
-  width  = (uint32_t)(cssWidth * scale);
-  height = (uint32_t)(cssHeight * scale);
+  width  = (uint32_t)(cssWidth * scale + 0.5);
+  height = (uint32_t)(cssHeight * scale + 0.5);
   if (width == 0u || height == 0u) {
     return 0;
   }
