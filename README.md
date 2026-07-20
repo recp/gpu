@@ -11,7 +11,7 @@ The project is under active development. The public API is not yet stable.
 - Metal: active development and the primary implementation target
 - Vulkan: active development
 - Direct3D 12: active development
-- WebGPU: planned
+- WebGPU: active browser-first development through Emscripten/Emdawnwebgpu
 
 Backend selection is scoped to instance and device creation. There is no
 mutable global backend switch.
@@ -87,6 +87,7 @@ manual submit control is required.
 - `samples/triangle-dx12-usl`: Direct3D 12 triangle using the same USL source
 - `samples/textured-quad-usl`: Metal texture and sampler binding
 - `samples/compute-buffer-usl`: compute-to-render buffer flow
+- `samples/*-webgpu-usl`: browser WebGPU render, compute, storage, and binding flows
 - `samples/usl-reflection-check`: reflection and binding metadata validation
 
 The Metal triangle executable is generated at:
