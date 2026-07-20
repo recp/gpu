@@ -1,0 +1,20 @@
+struct VSIn {
+  position: float4 #attribute(0)
+  color:    float4 #attribute(1)
+}
+
+struct VSOut {
+  position: float4 #position
+  color:    float4
+}
+
+vert cube_vs(v: VSIn #stage_in) -> VSOut {
+  var o: VSOut
+  o.position = v.position
+  o.color    = v.color
+  return o
+}
+
+frag cube_fs(i: VSOut #stage_in) -> float4 {
+  return i.color
+}

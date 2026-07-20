@@ -12,7 +12,7 @@ struct VSIn {
 
 struct VSOut {
     @builtin(position) position: vec4<f32>,
-    @location(1) color: vec4<f32>,
+    @location(0) color: vec4<f32>,
 }
 
 struct usl_buffer_g0_b0 {
