@@ -558,6 +558,7 @@ endif()
 
 if(GPU_BUILD_SAMPLES AND
    ((GPU_BUILD_WEBGPU AND EMSCRIPTEN) OR
+    (WIN32 AND GPU_BUILD_DX12) OR
     (APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" AND
      (GPU_BUILD_METAL OR GPU_BUILD_VULKAN))))
   find_path(GPU_CGLM_INCLUDE_DIR
@@ -1345,12 +1346,14 @@ if(GPU_BUILD_DX12 AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-dx12-usl/compute_buffer.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/mesh-triangle-usl/mesh_triangle.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-atomics-usl/compute_atomics.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-cube-usl/textured_cube.usl"
   )
   list(GET GPU_DX12_USL_FIXTURES 0 GPU_DX12_TRIANGLE_US)
   list(GET GPU_DX12_USL_FIXTURES 1 GPU_DX12_TEXTURED_QUAD_US)
   list(GET GPU_DX12_USL_FIXTURES 2 GPU_DX12_COMPUTE_BUFFER_US)
   list(GET GPU_DX12_USL_FIXTURES 3 GPU_DX12_MESH_TRIANGLE_US)
   list(GET GPU_DX12_USL_FIXTURES 4 GPU_DX12_COMPUTE_ATOMICS_US)
+  list(GET GPU_DX12_USL_FIXTURES 5 GPU_DX12_TEXTURED_CUBE_US)
   add_custom_target(gpu-dx12-fixtures DEPENDS ${GPU_DX12_USL_FIXTURES})
 endif()
 
@@ -2544,6 +2547,22 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
     C_EXTENSIONS NO
   )
 
+  add_executable(gpu-textured-cube-dx12-usl
+    samples/textured-cube-dx12-usl/main.c
+  )
+  target_include_directories(gpu-textured-cube-dx12-usl PRIVATE
+    "${GPU_CGLM_INCLUDE_DIR}"
+  )
+  target_link_libraries(gpu-textured-cube-dx12-usl PRIVATE gpu user32)
+  gpu_attach_usl_sample(gpu-textured-cube-dx12-usl
+                        gpu-dx12-fixtures
+                        "${GPU_DX12_TEXTURED_CUBE_US}")
+  set_target_properties(gpu-textured-cube-dx12-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+
   add_executable(gpu-compute-buffer-dx12-usl
     samples/compute-buffer-dx12-usl/main.c
   )
@@ -2601,18 +2620,22 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
              COMMAND gpu-triangle-dx12-usl)
     add_test(NAME dx12-textured-quad
              COMMAND gpu-textured-quad-dx12-usl)
+    add_test(NAME dx12-textured-cube
+             COMMAND gpu-textured-cube-dx12-usl)
     add_test(NAME dx12-compute-render
              COMMAND gpu-compute-render-dx12-usl)
     set_tests_properties(
       dx12-triangle
       dx12-textured-quad
+      dx12-textured-cube
       dx12-compute-render
       PROPERTIES
         SKIP_RETURN_CODE 77
         TIMEOUT 30
     )
     set_property(
-      TEST dx12-triangle dx12-textured-quad dx12-compute-render
+      TEST dx12-triangle dx12-textured-quad dx12-textured-cube
+           dx12-compute-render
       PROPERTY ENVIRONMENT
         "GPU_SAMPLE_EXIT_AFTER_FRAMES=96"
         "GPU_SAMPLE_ASSERT_ZERO_ALLOC=1"
