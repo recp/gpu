@@ -961,6 +961,94 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"
   )
+
+  find_path(GPU_CGLM_INCLUDE_DIR
+    NAMES cglm/cglm.h
+    HINTS
+      "${CMAKE_CURRENT_SOURCE_DIR}/../glm/include"
+      /opt/homebrew/include
+  )
+  if(NOT GPU_CGLM_INCLUDE_DIR)
+    message(FATAL_ERROR
+      "The textured cube WebGPU sample requires cglm headers. Set GPU_CGLM_INCLUDE_DIR.")
+  endif()
+
+  set(GPU_WEBGPU_TEXTURED_CUBE_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+  set(GPU_WEBGPU_TEXTURED_CUBE_SOURCE
+      "${GPU_WEBGPU_TEXTURED_CUBE_DIR}/textured_cube.usl")
+  set(GPU_WEBGPU_TEXTURED_CUBE_US
+      "${GPU_WEBGPU_TEXTURED_CUBE_DIR}/textured_cube.us")
+  set(GPU_WEBGPU_SAMPLE_TITLE "Rotating cube")
+  set(GPU_WEBGPU_SAMPLE_KIND "Render / cglm + texture")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "cglm drives a rotating model-view-projection matrix through an indexed, depth-tested textured draw.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/textured-cube.c")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/textured-cube.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/textured-cube.wgsl")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-textured-cube-webgpu-usl-shell.html"
+    @ONLY
+  )
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_TEXTURED_CUBE_US}"
+    BYPRODUCTS "${GPU_WEBGPU_TEXTURED_CUBE_SOURCE}.wgsl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${GPU_WEBGPU_TEXTURED_CUBE_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-cube-webgpu-usl/textured_cube.usl"
+            "${GPU_WEBGPU_TEXTURED_CUBE_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_TEXTURED_CUBE_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-cube-webgpu-usl/main.c"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/textured-cube.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_TEXTURED_CUBE_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/textured-cube.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_TEXTURED_CUBE_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/textured-cube.wgsl"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-cube-webgpu-usl/textured_cube.usl"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-cube-webgpu-usl/main.c"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-textured-cube-artifact
+    DEPENDS "${GPU_WEBGPU_TEXTURED_CUBE_US}"
+  )
+
+  add_executable(gpu-textured-cube-webgpu-usl
+    samples/textured-cube-webgpu-usl/main.c
+    ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
+  )
+  target_include_directories(gpu-textured-cube-webgpu-usl PRIVATE
+    "${GPU_CGLM_INCLUDE_DIR}"
+  )
+  target_link_libraries(gpu-textured-cube-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-textured-cube-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_TEXTURED_CUBE_US}@/textured_cube.us"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-textured-cube-webgpu-usl-shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-textured-cube-webgpu-usl
+                   gpu-webgpu-textured-cube-artifact)
+  set_target_properties(gpu-textured-cube-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-textured-cube-webgpu-usl-shell.html"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${GPU_WEBGPU_GALLERY_DIR}"
+  )
 endif()
 
 if(GPU_BUILD_TESTS)
