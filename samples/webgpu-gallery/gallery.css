@@ -129,9 +129,9 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--copper-bright);
   font: 600 11px/1 var(--mono);
   cursor: pointer;
 }
-.debug-toggle svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+.debug-toggle svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; transform: rotate(180deg); }
 .debug-overlay[data-expanded="false"] { width: 88px; }
-.debug-overlay[data-expanded="false"] .debug-toggle svg { transform: rotate(180deg); }
+.debug-overlay[data-expanded="false"] .debug-toggle svg { transform: none; }
 .debug-overlay[data-expanded="false"] .debug-metrics { display: none; }
 .debug-metrics { padding: 0 13px 13px; display: grid; gap: 5px; }
 .debug-metrics b { color: var(--paper); font-size: 13px; font-weight: 600; }
