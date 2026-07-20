@@ -30,6 +30,5 @@ fn quad_vs(v: VSIn) -> VSOut {
 
 @fragment
 fn quad_fs(input: VSOut) -> @location(0) vec4<f32> {
-    let r16: vec4<f32> = textureSample(usl_g0_b0, usl_g1_b0, input.uv);
-    return (r16 * usl_g0_b1.value.tint);
+    return (textureSample(usl_g0_b0, usl_g1_b0, input.uv) * usl_g0_b1.value.tint);
 }

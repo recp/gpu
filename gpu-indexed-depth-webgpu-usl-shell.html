@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="gallery.css?v=4">
-  <title>Instancing · GPU + USL</title>
+  <title>Indexed depth · GPU + USL</title>
 </head>
 <body class="sample-page"
-      data-c-source="sources/instancing.c"
-      data-usl-source="sources/instancing.usl"
-      data-wgsl-source="sources/instancing.wgsl">
+      data-c-source="sources/indexed-depth.c"
+      data-usl-source="sources/indexed-depth.usl"
+      data-wgsl-source="sources/indexed-depth.wgsl">
   <header class="sample-head">
     <a class="back-link" href="index.html"><span>←</span> Sample index</a>
     <div class="sample-heading">
-      <p>Render / instances + offsets</p>
-      <h1>Instancing</h1>
+      <p>Render / index + depth</p>
+      <h1>Indexed depth</h1>
     </div>
     <div class="runtime-badge"><i></i> WebGPU live</div>
   </header>
@@ -25,7 +25,7 @@
       <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
       <aside class="debug-overlay" hidden aria-live="off"></aside>
       <div class="stage-meta">
-        <p>Two dynamic uniform slices drive eight instances without rebuilding the bind group.</p>
+        <p>One indexed draw validates the depth texture, pipeline, attachment, and occlusion path.</p>
         <div id="status">GPU: loading sample</div>
       </div>
     </section>

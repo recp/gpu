@@ -1,7 +1,9 @@
 const params = new URLSearchParams(window.location.search);
 const code = document.querySelector("#source-code code");
 const panel = document.querySelector("#source-code");
+const lineNumbers = document.querySelector(".line-numbers");
 const copy = document.querySelector(".copy-button");
+const debugOverlay = document.querySelector(".debug-overlay");
 const tabs = [...document.querySelectorAll("[data-source]")];
 const sources = {
   c: document.body.dataset.cSource,
@@ -9,6 +11,10 @@ const sources = {
   wgsl: document.body.dataset.wgslSource
 };
 const cache = new Map();
+let debugVisible = params.has("debug") && params.get("debug") !== "0";
+let debugLoopRunning = false;
+let debugLastTime = 0;
+let debugFrames = 0;
 
 const keywords = {
   c: new Set([
@@ -166,6 +172,59 @@ if (params.has("embed")) {
   document.body.classList.add("embed");
 }
 
+function formatBytes(bytes) {
+  const units = ["B", "KiB", "MiB", "GiB"];
+  let value = bytes;
+  let unit = 0;
+
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return `${value.toFixed(unit > 1 ? 1 : 0)} ${units[unit]}`;
+}
+
+function debugFrame(now) {
+  if (!debugVisible) {
+    debugLoopRunning = false;
+    return;
+  }
+
+  debugFrames++;
+  if (debugLastTime === 0) debugLastTime = now;
+  const elapsed = now - debugLastTime;
+  if (elapsed >= 500) {
+    const fps = debugFrames * 1000 / elapsed;
+    const frameMs = elapsed / debugFrames;
+    const canvas = document.querySelector("#canvas");
+    const heapBytes = typeof HEAP8 !== "undefined" && HEAP8.buffer
+      ? HEAP8.buffer.byteLength
+      : 0;
+
+    debugOverlay.innerHTML = [
+      `<b>${fps.toFixed(1)} FPS</b>`,
+      `<span>${frameMs.toFixed(2)} ms frame</span>`,
+      `<span>${heapBytes ? formatBytes(heapBytes) : "n/a"} Wasm heap</span>`,
+      `<span>${canvas.width} × ${canvas.height} px</span>`,
+      `<small>D to close</small>`
+    ].join("");
+    debugFrames = 0;
+    debugLastTime = now;
+  }
+  requestAnimationFrame(debugFrame);
+}
+
+function setDebugVisible(visible) {
+  debugVisible = visible;
+  debugOverlay.hidden = !visible;
+  if (visible && !debugLoopRunning) {
+    debugLoopRunning = true;
+    debugLastTime = 0;
+    debugFrames = 0;
+    requestAnimationFrame(debugFrame);
+  }
+}
+
 async function showSource(kind) {
   tabs.forEach((tab) => {
     const active = tab.dataset.source === kind;
@@ -174,6 +233,7 @@ async function showSource(kind) {
   });
   panel.setAttribute("aria-labelledby", `tab-${kind}`);
   code.textContent = "Loading source…";
+  lineNumbers.textContent = "";
 
   try {
     if (!cache.has(kind)) {
@@ -181,11 +241,17 @@ async function showSource(kind) {
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
       cache.set(kind, await response.text());
     }
+    const source = cache.get(kind);
     code.className = `language-${kind}`;
-    code.innerHTML = highlightSource(cache.get(kind), kind);
+    code.innerHTML = highlightSource(source, kind);
+    lineNumbers.textContent = Array.from(
+      { length: source.split("\n").length },
+      (_, index) => index + 1
+    ).join("\n");
     panel.scrollTop = 0;
   } catch (error) {
     code.textContent = `Source unavailable: ${error.message}`;
+    lineNumbers.textContent = "";
   }
 }
 
@@ -207,4 +273,12 @@ copy?.addEventListener("click", async () => {
   setTimeout(() => { copy.textContent = "Copy"; }, 1200);
 });
 
+document.addEventListener("keydown", (event) => {
+  const interactive = event.target instanceof Element &&
+    event.target.closest("button, input, textarea");
+  if (event.key.toLowerCase() !== "d" || interactive) return;
+  setDebugVisible(!debugVisible);
+});
+
+setDebugVisible(debugVisible);
 if (!params.has("embed")) showSource("c");

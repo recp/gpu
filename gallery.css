@@ -106,7 +106,28 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--copper-bright);
 .runtime-badge i { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
 
 .sample-workbench { width: min(1440px, calc(100% - 72px)); margin-inline: auto; padding: 72px 0 150px; }
+.stage { position: relative; }
 .stage canvas { display: block; width: 100%; height: min(68vh, 720px); min-height: 480px; border: 1px solid var(--line); border-radius: 10px; }
+.debug-overlay {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  min-width: 154px;
+  padding: 13px 14px;
+  display: grid;
+  gap: 5px;
+  color: var(--stone);
+  background: rgba(11, 11, 10, .86);
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 9px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, .28);
+  backdrop-filter: blur(12px);
+  font: 10px/1.3 var(--mono);
+  pointer-events: none;
+}
+.debug-overlay[hidden] { display: none; }
+.debug-overlay b { color: var(--paper); font-size: 13px; font-weight: 600; }
+.debug-overlay small { margin-top: 3px; color: var(--stone-dark); }
 .stage-meta { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 14px 10px 0; }
 .stage-meta p { max-width: 760px; margin: 0; color: var(--stone); font-size: 13px; line-height: 1.5; }
 .stage-meta p .project-link { color: var(--link-blue); }
@@ -122,7 +143,9 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--copper-bright);
 .source-tabs { display: flex; padding: 0 22px; border-bottom: 1px solid var(--line); }
 .source-tabs button { padding: 16px 14px 14px; color: var(--stone-dark); background: none; border: 0; border-bottom: 2px solid transparent; font: 10px/1 var(--mono); cursor: pointer; }
 .source-tabs button[aria-selected="true"] { color: var(--copper-bright); border-bottom-color: var(--copper); }
-#source-code { max-height: 760px; overflow: auto; margin: 0; padding: 34px 24px 48px; color: #d8d1c6; background: #0e0e0c; font: 12px/1.75 var(--mono); tab-size: 2; }
+#source-code { max-height: 760px; overflow: auto; display: grid; grid-template-columns: max-content minmax(0, 1fr); margin: 0; padding: 0; color: #d8d1c6; background: #0e0e0c; font: 12px/1.75 var(--mono); tab-size: 2; }
+#source-code code { min-width: max-content; padding: 34px 24px 48px; white-space: pre; }
+.line-numbers { position: sticky; left: 0; z-index: 1; padding: 34px 14px 48px 18px; color: #4c4b46; background: #0b0b09; border-right: 1px solid #20201c; text-align: right; user-select: none; }
 .syntax-comment { color: #686860; font-style: italic; }
 .syntax-keyword { color: #ef7c32; }
 .syntax-type { color: #e9b979; }
