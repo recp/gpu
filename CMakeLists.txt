@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
 
-if(APPLE)
-  project(gpu VERSION 0.1.0 LANGUAGES C OBJC)
-else()
-  project(gpu VERSION 0.1.0 LANGUAGES C)
+project(gpu VERSION 0.1.0 LANGUAGES C)
+
+if(APPLE AND NOT EMSCRIPTEN)
+  enable_language(OBJC)
 endif()
 
 include(GNUInstallDirs)
@@ -11,6 +11,7 @@ include(CMakePackageConfigHelpers)
 
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(GPU_ENABLE_VULKAN "Build the Vulkan backend" OFF)
+option(GPU_ENABLE_WEBGPU "Build the WebGPU backend" OFF)
 option(GPU_BUILD_TESTS "Build GPU validation tests" OFF)
 option(GPU_BUILD_SAMPLES "Build GPU samples" OFF)
 option(GPU_BUILD_BENCHMARKS "Build GPU microbenchmarks" OFF)
@@ -19,12 +20,14 @@ option(GPU_BUILD_WITH_DEBUG_MARKERS "Build debug marker support" ON)
 option(GPU_BACKEND_METAL_ONLY "Build only the Metal backend" OFF)
 option(GPU_BACKEND_VULKAN_ONLY "Build only the Vulkan backend" OFF)
 option(GPU_BACKEND_DX12_ONLY "Build only the Direct3D 12 backend" OFF)
+option(GPU_BACKEND_WEBGPU_ONLY "Build only the WebGPU backend" OFF)
 
 set(GPU_SINGLE_BACKEND_COUNT 0)
 foreach(_gpu_backend_only
         GPU_BACKEND_METAL_ONLY
         GPU_BACKEND_VULKAN_ONLY
-        GPU_BACKEND_DX12_ONLY)
+        GPU_BACKEND_DX12_ONLY
+        GPU_BACKEND_WEBGPU_ONLY)
   if(${_gpu_backend_only})
     math(EXPR GPU_SINGLE_BACKEND_COUNT "${GPU_SINGLE_BACKEND_COUNT} + 1")
   endif()
@@ -42,10 +45,14 @@ endif()
 if(GPU_BACKEND_VULKAN_ONLY)
   set(GPU_ENABLE_VULKAN ON)
 endif()
+if(GPU_BACKEND_WEBGPU_ONLY)
+  set(GPU_ENABLE_WEBGPU ON)
+endif()
 
 set(GPU_BUILD_METAL OFF)
 set(GPU_BUILD_VULKAN OFF)
 set(GPU_BUILD_DX12 OFF)
+set(GPU_BUILD_WEBGPU OFF)
 
 if(GPU_BACKEND_METAL_ONLY)
   set(GPU_BUILD_METAL ON)
@@ -53,6 +60,8 @@ elseif(GPU_BACKEND_VULKAN_ONLY)
   set(GPU_BUILD_VULKAN ON)
 elseif(GPU_BACKEND_DX12_ONLY)
   set(GPU_BUILD_DX12 ON)
+elseif(GPU_BACKEND_WEBGPU_ONLY)
+  set(GPU_BUILD_WEBGPU ON)
 else()
   if(APPLE)
     set(GPU_BUILD_METAL ON)
@@ -61,6 +70,9 @@ else()
   endif()
   if(GPU_ENABLE_VULKAN)
     set(GPU_BUILD_VULKAN ON)
+  endif()
+  if(GPU_ENABLE_WEBGPU)
+    set(GPU_BUILD_WEBGPU ON)
   endif()
 endif()
 
@@ -115,9 +127,10 @@ target_compile_definitions(gpu PRIVATE
   GPU_BACKEND_METAL_ONLY=$<BOOL:${GPU_BACKEND_METAL_ONLY}>
   GPU_BACKEND_VULKAN_ONLY=$<BOOL:${GPU_BACKEND_VULKAN_ONLY}>
   GPU_BACKEND_DX12_ONLY=$<BOOL:${GPU_BACKEND_DX12_ONLY}>
+  GPU_BACKEND_WEBGPU_ONLY=$<BOOL:${GPU_BACKEND_WEBGPU_ONLY}>
 )
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR EMSCRIPTEN)
   target_compile_definitions(gpu PRIVATE _POSIX_C_SOURCE=200809L)
 endif()
 
@@ -349,7 +362,49 @@ if(GPU_BUILD_VULKAN)
   target_link_libraries(gpu PRIVATE Vulkan::Vulkan)
 endif()
 
-if(GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS)
+if(GPU_BUILD_WEBGPU)
+  target_compile_definitions(gpu PRIVATE GPU_ENABLE_WEBGPU=1)
+  target_sources(gpu PRIVATE
+    src/backend/webgpu/init.c
+    src/backend/webgpu/impl/device.c
+    src/backend/webgpu/impl/instance.c
+    src/backend/webgpu/impl/surface.c
+    src/backend/webgpu/impl/swapchain.c
+    src/backend/webgpu/impl/frame.c
+    src/backend/webgpu/impl/cmdque.c
+    src/backend/webgpu/impl/library.c
+    src/backend/webgpu/impl/descriptor.c
+    src/backend/webgpu/impl/pipeline.c
+    src/backend/webgpu/impl/renderpass.c
+    src/backend/webgpu/impl/rce.c
+  )
+
+  if(EMSCRIPTEN)
+    target_compile_options(gpu PRIVATE --use-port=emdawnwebgpu)
+    target_link_options(gpu PRIVATE --use-port=emdawnwebgpu)
+  else()
+    set(GPU_WEBGPU_INCLUDE_DIR "" CACHE PATH
+        "Directory containing webgpu/webgpu.h")
+    set(GPU_WEBGPU_LIBRARY "" CACHE FILEPATH
+        "Native Dawn or wgpu-native WebGPU library")
+    if(NOT GPU_WEBGPU_INCLUDE_DIR)
+      find_path(GPU_WEBGPU_INCLUDE_DIR webgpu/webgpu.h)
+    endif()
+    if(NOT GPU_WEBGPU_LIBRARY)
+      find_library(GPU_WEBGPU_LIBRARY NAMES webgpu_dawn wgpu_native webgpu)
+    endif()
+    if(NOT GPU_WEBGPU_INCLUDE_DIR OR NOT GPU_WEBGPU_LIBRARY)
+      message(FATAL_ERROR
+        "GPU_ENABLE_WEBGPU requires webgpu/webgpu.h and a native WebGPU "
+        "provider. Set GPU_WEBGPU_INCLUDE_DIR and GPU_WEBGPU_LIBRARY.")
+    endif()
+    target_include_directories(gpu PRIVATE "${GPU_WEBGPU_INCLUDE_DIR}")
+    target_link_libraries(gpu PRIVATE "${GPU_WEBGPU_LIBRARY}")
+  endif()
+endif()
+
+if((GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS) AND
+   NOT EMSCRIPTEN)
   add_executable(gpu-usl-fixture tests/usl_fixture.c)
   if(TARGET us)
     target_link_libraries(gpu-usl-fixture PRIVATE us)
@@ -490,6 +545,72 @@ if(GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS)
       endforeach()
     endif()
   endfunction()
+endif()
+
+if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
+  set(GPU_USL_HOST_FIXTURE "" CACHE FILEPATH
+      "Host gpu-usl-fixture executable used for WebGPU samples")
+  if(NOT GPU_USL_HOST_FIXTURE)
+    set(_gpu_usl_host_fixture
+        "${CMAKE_CURRENT_SOURCE_DIR}/out/build/release-check/gpu-usl-fixture")
+    if(EXISTS "${_gpu_usl_host_fixture}")
+      set(GPU_USL_HOST_FIXTURE "${_gpu_usl_host_fixture}")
+    endif()
+  endif()
+  if(NOT EXISTS "${GPU_USL_HOST_FIXTURE}")
+    message(FATAL_ERROR
+      "WebGPU samples require a host gpu-usl-fixture executable. Set "
+      "GPU_USL_HOST_FIXTURE to a native build of that target.")
+  endif()
+
+  set(GPU_WEBGPU_TRIANGLE_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+  set(GPU_WEBGPU_TRIANGLE_SOURCE
+      "${GPU_WEBGPU_TRIANGLE_DIR}/triangle.usl")
+  set(GPU_WEBGPU_TRIANGLE_US
+      "${GPU_WEBGPU_TRIANGLE_DIR}/triangle.us")
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_TRIANGLE_US}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${GPU_WEBGPU_TRIANGLE_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-webgpu-usl/triangle.usl"
+            "${GPU_WEBGPU_TRIANGLE_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            USL_NO_BACKEND_SIDECAR=1
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_TRIANGLE_SOURCE}"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-webgpu-usl/triangle.usl"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-triangle-artifact
+    DEPENDS "${GPU_WEBGPU_TRIANGLE_US}"
+  )
+
+  add_executable(gpu-triangle-webgpu-usl
+    samples/triangle-webgpu-usl/main.c
+  )
+  target_link_libraries(gpu-triangle-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-triangle-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_TRIANGLE_US}@/triangle.us"
+    "--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-webgpu-usl/shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-triangle-webgpu-usl gpu-webgpu-triangle-artifact)
+  set_target_properties(gpu-triangle-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-webgpu-usl/shell.html"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${CMAKE_CURRENT_BINARY_DIR}/samples/gpu-triangle-webgpu-usl"
+  )
 endif()
 
 if(GPU_BUILD_TESTS)

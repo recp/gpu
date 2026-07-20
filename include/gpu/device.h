@@ -43,6 +43,14 @@ typedef struct GPUAdapterProperties {
 
 typedef struct GPUDevice GPUDevice;
 
+typedef void (*GPUAdapterRequestCallback)(GPUResult  result,
+                                          GPUAdapter *adapter,
+                                          void       *userData);
+
+typedef void (*GPUDeviceRequestCallback)(GPUResult result,
+                                         GPUDevice *device,
+                                         void      *userData);
+
 typedef enum GPUDeviceErrorType {
   GPU_DEVICE_ERROR_VALIDATION = 0,
   GPU_DEVICE_ERROR_OUT_OF_MEMORY,
@@ -231,6 +239,12 @@ GPUEnumerateAdapters(GPUInstance *inst,
 
 GPU_EXPORT
 GPUResult
+GPURequestAdapter(GPUInstance               *inst,
+                  GPUAdapterRequestCallback  callback,
+                  void                      *userData);
+
+GPU_EXPORT
+GPUResult
 GPUGetAdapterProperties(const GPUAdapter     *adapter,
                         GPUAdapterProperties *outProps);
 
@@ -306,6 +320,13 @@ GPUResult
 GPUCreateDevice(GPUAdapter               *adapter,
                 const GPUDeviceCreateInfo *info,
                 GPUDevice                **outDevice);
+
+GPU_EXPORT
+GPUResult
+GPURequestDevice(GPUAdapter              *adapter,
+                 const GPUDeviceCreateInfo *info,
+                 GPUDeviceRequestCallback  callback,
+                 void                     *userData);
 
 /*! Returns an instance-owned adapter selected for general use. */
 GPU_EXPORT

@@ -28,6 +28,7 @@ typedef enum GPUSurfaceType {
   GPU_SURFACE_WINDOWS_COREWINDOW,
   GPU_SURFACE_APPLE_NSVIEW,
   GPU_SURFACE_APPLE_UIVIEW,
+  GPU_SURFACE_WEB_CANVAS,
 } GPUSurfaceType;
 
 typedef struct GPUSurface GPUSurface;

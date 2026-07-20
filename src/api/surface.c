@@ -23,7 +23,8 @@ gpuIsSurfaceTypeValid(GPUSurfaceType type) {
   return type == GPU_SURFACE_WINDOWS_HWND ||
          type == GPU_SURFACE_WINDOWS_COREWINDOW ||
          type == GPU_SURFACE_APPLE_NSVIEW ||
-         type == GPU_SURFACE_APPLE_UIVIEW;
+         type == GPU_SURFACE_APPLE_UIVIEW ||
+         type == GPU_SURFACE_WEB_CANVAS;
 }
 
 static const GPUNativeSurfaceCreateInfo*

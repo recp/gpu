@@ -18,5 +18,134 @@
 #define webgpu_common_h
 
 #include "../../common.h"
+#include "../../api/adapter_internal.h"
+#include "../../api/cmdqueue_internal.h"
+#include "../../api/descr/descriptor_internal.h"
+#include "../../api/device_internal.h"
+#include "../../api/frame_internal.h"
+#include "../../api/instance_internal.h"
+#include "../../api/library_internal.h"
+#include "../../api/render/pipeline_internal.h"
+#include "../../api/surface_internal.h"
+#include "../../api/swapchain_internal.h"
+#include "../../api/texture_internal.h"
+
+#include <webgpu/webgpu.h>
+
+#include <stdatomic.h>
+
+enum {
+  GPU_WEBGPU_COMMAND_SLOT_COUNT      = 8u,
+  GPU_WEBGPU_MAX_SURFACE_FORMATS     = 16u,
+  GPU_WEBGPU_MAX_PRESENT_MODES       = 4u
+};
+
+typedef struct GPUInstanceWebGPU {
+  WGPUInstance instance;
+} GPUInstanceWebGPU;
+
+typedef struct GPUAdapterWebGPU {
+  WGPUAdapter adapter;
+  char        name[128];
+} GPUAdapterWebGPU;
+
+typedef struct GPUSurfaceWebGPU {
+  WGPUSurface surface;
+  uint32_t    formats[GPU_WEBGPU_MAX_SURFACE_FORMATS];
+  uint32_t    presentModes[GPU_WEBGPU_MAX_PRESENT_MODES];
+  uint32_t    formatCount;
+  uint32_t    presentModeCount;
+} GPUSurfaceWebGPU;
+
+typedef struct GPUSwapchainWebGPU GPUSwapchainWebGPU;
+
+typedef struct GPUCommandWebGPU {
+  WGPUCommandEncoder    encoder;
+  WGPUCommandBuffer     submitted;
+  WGPURenderPassEncoder renderEncoder;
+  GPUSwapchainWebGPU   *present;
+  GPUCommandBuffer      command;
+  GPURenderPassDesc     renderPass;
+  GPURenderPassEncoder  render;
+  WGPURenderPassDescriptor renderPassDesc;
+  WGPURenderPassColorAttachment colorAttachments[
+    GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS
+  ];
+  atomic_bool           inUse;
+} GPUCommandWebGPU;
+
+typedef struct GPUDeviceWebGPU {
+  WGPUDevice       device;
+  WGPUQueue        queue;
+  GPUQueue         queueHandle;
+  GPUCommandWebGPU commands[GPU_WEBGPU_COMMAND_SLOT_COUNT];
+} GPUDeviceWebGPU;
+
+struct GPUSwapchainWebGPU {
+  WGPUSurface      surface;
+  WGPUDevice       device;
+  WGPUTexture      currentTexture;
+  WGPUTextureView  currentView;
+  GPUFrame         frame;
+  GPUTexture       texture;
+  GPUTextureView   view;
+  WGPUTextureFormat format;
+  WGPUPresentMode   presentMode;
+  bool              acquired;
+};
+
+static GPU_INLINE WGPUStringView
+gpu_webgpuString(const char *text) {
+  WGPUStringView result = WGPU_STRING_VIEW_INIT;
+
+  if (text) {
+    result.data   = text;
+    result.length = WGPU_STRLEN;
+  }
+  return result;
+}
+
+static GPU_INLINE WGPUStringView
+gpu_webgpuStringSize(const void *text, uint64_t size) {
+  WGPUStringView result = WGPU_STRING_VIEW_INIT;
+
+  result.data   = text;
+  result.length = (size_t)size;
+  return result;
+}
+
+static GPU_INLINE GPUInstanceWebGPU *
+gpu_webgpuInstance(const GPUInstance *instance) {
+  return instance ? instance->_priv : NULL;
+}
+
+static GPU_INLINE GPUAdapterWebGPU *
+gpu_webgpuAdapter(const GPUAdapter *adapter) {
+  return adapter ? adapter->_priv : NULL;
+}
+
+static GPU_INLINE GPUDeviceWebGPU *
+gpu_webgpuDevice(const GPUDevice *device) {
+  return device ? device->_priv : NULL;
+}
+
+static GPU_INLINE GPUSurfaceWebGPU *
+gpu_webgpuSurface(const GPUSurface *surface) {
+  return surface ? surface->_priv : NULL;
+}
+
+static GPU_INLINE GPUSwapchainWebGPU *
+gpu_webgpuSwapchain(const GPUSwapchain *swapchain) {
+  return swapchain ? swapchain->_priv : NULL;
+}
+
+static GPU_INLINE GPUCommandWebGPU *
+gpu_webgpuCommand(const GPUCommandBuffer *cmdb) {
+  return cmdb ? cmdb->_priv : NULL;
+}
+
+WGPUTextureFormat gpu_webgpuFormat(GPUFormat format);
+GPUFormat gpu_webgpuGPUFormat(WGPUTextureFormat format);
+WGPUPresentMode gpu_webgpuPresentMode(GPUPresentMode mode);
 
 #endif /* webgpu_common_h */

@@ -26,6 +26,14 @@ extern "C" {
 struct GPUApi;
 struct GPUInstance;
 
+typedef void (*GPUBackendAdapterRequestCallback)(GPUResult  result,
+                                                 GPUAdapter *adapter,
+                                                 void       *userData);
+
+typedef void (*GPUBackendDeviceRequestCallback)(GPUResult result,
+                                                GPUDevice *device,
+                                                void      *userData);
+
 typedef struct GPUQueueCreateInfo {
   GPUQueueFlagBits flags;
   GPUQueueFlagBits optionalFlags;
@@ -41,6 +49,11 @@ typedef enum GPUBackendSubgroupOperationFlagBits {
 typedef uint32_t GPUBackendSubgroupOperationFlags;
 
 typedef struct GPUApiDevice {
+  GPUResult
+  (*requestAdapter)(GPUInstance                      *inst,
+                    GPUBackendAdapterRequestCallback  callback,
+                    void                             *userData);
+
   GPUAdapter*
   (*getAvailableAdapters)(GPUInstance   * __restrict inst,
                           uint32_t maxNumberOfItems);
@@ -87,6 +100,14 @@ typedef struct GPUApiDevice {
                              const GPUQueueCreateInfo   queCI[],
                              uint32_t                   nQueCI,
                              uint64_t                   enabledFeatureMask);
+
+  GPUResult
+  (*requestDevice)(GPUAdapter                     *adapter,
+                   const GPUQueueCreateInfo        queCI[],
+                   uint32_t                        nQueCI,
+                   uint64_t                        enabledFeatureMask,
+                   GPUBackendDeviceRequestCallback callback,
+                   void                           *userData);
 
   GPUResult (*waitIdle)(GPUDevice * __restrict device);
   void (*destroyDevice)(GPUDevice * __restrict device);

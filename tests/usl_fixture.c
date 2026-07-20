@@ -12,7 +12,8 @@ typedef struct GPUUSLBackendName {
 static const GPUUSLBackendName gpuUSLBackends[] = {
   {"metal",  USL_BACKEND_METAL},
   {"vulkan", USL_BACKEND_SPIRV},
-  {"dx12",   USL_BACKEND_HLSL}
+  {"dx12",   USL_BACKEND_HLSL},
+  {"webgpu", USL_BACKEND_WGSL}
 };
 
 static int
@@ -68,7 +69,9 @@ main(int argc, char **argv) {
   USResult    result;
 
   if (argc != 3 || !gpu_usl_backend(argv[1], &backend)) {
-    fprintf(stderr, "usage: %s <metal|vulkan|dx12> <source.usl>\n", argv[0]);
+    fprintf(stderr,
+            "usage: %s <metal|vulkan|dx12|webgpu> <source.usl>\n",
+            argv[0]);
     return 2;
   }
   if (!gpu_usl_read(argv[2], &source, &sourceSize)) {

@@ -1524,6 +1524,24 @@ gpu_createShaderLibraryFromMSLText(GPUDevice *device,
 }
 
 static GPUResult
+gpu_createShaderLibraryFromWGSLText(GPUDevice *device,
+                                    const GPUShaderLibraryCreateInfo *info,
+                                    GPUShaderLibrary **outLibrary) {
+  GPUApi *api;
+
+  api = gpuDeviceApi(device);
+  if (!api || api->backend != GPU_BACKEND_WEBGPU) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  return gpu_createShaderLibraryFromBackendText(device,
+                                                info->sourceData,
+                                                info->sourceSize,
+                                                info->defineCount,
+                                                outLibrary);
+}
+
+static GPUResult
 gpu_createShaderLibraryFromBinary(GPUDevice *device,
                                   const GPUShaderLibraryCreateInfo *info,
                                   GPUShaderLibrary **outLibrary) {
@@ -1572,6 +1590,8 @@ GPUCreateShaderLibrary(GPUDevice *device,
   switch (info->sourceKind) {
     case GPU_SHADER_SOURCE_MSL_TEXT:
       return gpu_createShaderLibraryFromMSLText(device, info, outLibrary);
+    case GPU_SHADER_SOURCE_WGSL_TEXT:
+      return gpu_createShaderLibraryFromWGSLText(device, info, outLibrary);
     case GPU_SHADER_SOURCE_USL_BYTECODE:
       return gpu_createShaderLibraryFromUSLImpl(device,
                                                 info->sourceData,
@@ -1898,7 +1918,8 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
     info.sourceSize       = compileOutput->backend_size;
     rc = gpu_createShaderLibraryFromBinary(device, &info, outLibrary);
   } else if (target.backend == USL_BACKEND_METAL ||
-             target.backend == USL_BACKEND_HLSL) {
+             target.backend == USL_BACKEND_HLSL ||
+             target.backend == USL_BACKEND_WGSL) {
     rc = gpu_createShaderLibraryFromBackendText(device,
                                                 compileOutput->backend_data,
                                                 compileOutput->backend_size,

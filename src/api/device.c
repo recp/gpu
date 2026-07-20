@@ -29,6 +29,8 @@ gpu_backendName(GPUBackend backend) {
       return "Vulkan";
     case GPU_BACKEND_DX12:
       return "Direct3D 12";
+    case GPU_BACKEND_WEBGPU:
+      return "WebGPU";
     default:
       return "Unknown GPU";
   }
@@ -758,11 +760,11 @@ gpu_getInstanceAdapters(GPUInstance *inst) {
   GPUApi     *api;
   uint32_t    count;
 
-  if (!(api = gpuInstanceApi(inst)) || !api->device.getAvailableAdapters) {
-    return NULL;
-  }
   if (inst->_adaptersEnumerated) {
     return inst->_adapters;
+  }
+  if (!(api = gpuInstanceApi(inst)) || !api->device.getAvailableAdapters) {
+    return NULL;
   }
 
   inst->_adaptersEnumerated = true;
@@ -779,6 +781,42 @@ gpu_getInstanceAdapters(GPUInstance *inst) {
   inst->_adapterCount = count;
 
   return inst->_adapters;
+}
+
+typedef struct GPUAdapterRequestContext {
+  GPUInstance               *instance;
+  GPUAdapterRequestCallback  callback;
+  void                      *userData;
+} GPUAdapterRequestContext;
+
+static void
+gpu_completeAdapterRequest(GPUResult  result,
+                           GPUAdapter *adapter,
+                           void       *userData) {
+  GPUAdapterRequestContext *request;
+  GPUInstance              *instance;
+
+  request  = userData;
+  instance = request->instance;
+  if (result == GPU_OK && adapter) {
+    adapter->inst = instance;
+    gpu_fillFeatureSet(gpu_supportedFeatureMask(adapter),
+                       adapter->supportedFeatureStorage,
+                       (uint32_t)GPU_ARRAY_LEN(adapter->supportedFeatureStorage),
+                       &adapter->supportedFeatures);
+    adapter->next                  = instance->_adapters;
+    instance->_adapters            = adapter;
+    instance->_adapterCount++;
+    instance->_adaptersEnumerated  = true;
+  } else {
+    adapter = NULL;
+    if (result == GPU_OK) {
+      result = GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+
+  request->callback(result, adapter, request->userData);
+  free(request);
 }
 
 GPU_EXPORT
@@ -813,6 +851,49 @@ GPUEnumerateAdapters(GPUInstance *inst,
   }
 
   return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPURequestAdapter(GPUInstance               *inst,
+                  GPUAdapterRequestCallback  callback,
+                  void                      *userData) {
+  GPUAdapterRequestContext *request;
+  GPUAdapter               *adapter;
+  GPUApi                   *api;
+  GPUResult                 result;
+
+  if (!inst || !callback || !(api = gpuInstanceApi(inst))) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (inst->_adapters) {
+    callback(GPU_OK, inst->_adapters, userData);
+    return GPU_OK;
+  }
+
+  if (!api->device.requestAdapter) {
+    adapter = GPUGetAutoSelectedAdapter(inst);
+    result  = adapter ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+    callback(result, adapter, userData);
+    return result;
+  }
+
+  request = calloc(1, sizeof(*request));
+  if (!request) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  request->instance = inst;
+  request->callback = callback;
+  request->userData = userData;
+
+  result = api->device.requestAdapter(inst,
+                                      gpu_completeAdapterRequest,
+                                      request);
+  if (result != GPU_OK) {
+    free(request);
+  }
+  return result;
 }
 
 GPU_EXPORT
@@ -1459,6 +1540,47 @@ GPUGetAutoSelectedAdapter(GPUInstance *inst) {
   return adapter;
 }
 
+static GPUResult
+gpu_finalizeDevice(GPUAdapter *adapter,
+                   GPUDevice  *device,
+                   uint64_t    enabledFeatureMask) {
+  GPUApi    *api;
+  GPUResult  result;
+
+  api = gpuAdapterApi(adapter);
+  if (!api || !device) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  device->inst    = adapter->inst;
+  device->adapter = adapter;
+  device->_api    = api;
+  if ((enabledFeatureMask &
+       (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u &&
+      GPUGetVRSCapabilitiesEXT(adapter, &device->vrsCapabilities) != GPU_OK) {
+    api->device.destroyDevice(device);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  result = gpuInitPipelineCacheDevice(device);
+  if (result != GPU_OK) {
+    api->device.destroyDevice(device);
+    return result;
+  }
+  result = gpuInitBindGroupCacheDevice(device);
+  if (result != GPU_OK) {
+    gpuDestroyPipelineCacheDevice(device);
+    api->device.destroyDevice(device);
+    return result;
+  }
+
+  device->enabledFeatureMask = enabledFeatureMask;
+  gpu_fillFeatureSet(device->enabledFeatureMask,
+                     device->enabledFeatureStorage,
+                     (uint32_t)GPU_ARRAY_LEN(device->enabledFeatureStorage),
+                     &device->enabledFeatures);
+  return GPU_OK;
+}
+
 GPU_EXPORT
 GPUResult
 GPUCreateDevice(GPUAdapter                *adapter,
@@ -1529,35 +1651,128 @@ GPUCreateDevice(GPUAdapter                *adapter,
   if (!*outDevice) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  (*outDevice)->_api = api;
-  if ((enabledFeatureMask &
-       (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u &&
-      GPUGetVRSCapabilitiesEXT(adapter,
-                               &(*outDevice)->vrsCapabilities) != GPU_OK) {
-    api->device.destroyDevice(*outDevice);
-    *outDevice = NULL;
-    return GPU_ERROR_BACKEND_FAILURE;
-  }
-  result = gpuInitPipelineCacheDevice(*outDevice);
+  result = gpu_finalizeDevice(adapter, *outDevice, enabledFeatureMask);
   if (result != GPU_OK) {
-    api->device.destroyDevice(*outDevice);
     *outDevice = NULL;
-    return result;
   }
-  result = gpuInitBindGroupCacheDevice(*outDevice);
-  if (result != GPU_OK) {
-    gpuDestroyPipelineCacheDevice(*outDevice);
-    api->device.destroyDevice(*outDevice);
-    *outDevice = NULL;
-    return result;
-  }
-  (*outDevice)->enabledFeatureMask = enabledFeatureMask;
-  gpu_fillFeatureSet((*outDevice)->enabledFeatureMask,
-                     (*outDevice)->enabledFeatureStorage,
-                     (uint32_t)GPU_ARRAY_LEN((*outDevice)->enabledFeatureStorage),
-                     &(*outDevice)->enabledFeatures);
+  return result;
+}
 
-  return GPU_OK;
+typedef struct GPUDeviceRequestContext {
+  GPUAdapter              *adapter;
+  GPUDeviceRequestCallback callback;
+  void                    *userData;
+  uint64_t                 enabledFeatureMask;
+} GPUDeviceRequestContext;
+
+static void
+gpu_completeDeviceRequest(GPUResult result,
+                          GPUDevice *device,
+                          void      *userData) {
+  GPUDeviceRequestContext *request;
+
+  request = userData;
+  if (result == GPU_OK && device) {
+    result = gpu_finalizeDevice(request->adapter,
+                                device,
+                                request->enabledFeatureMask);
+  } else if (result == GPU_OK) {
+    result = GPU_ERROR_BACKEND_FAILURE;
+  }
+  if (result != GPU_OK) {
+    device = NULL;
+  }
+
+  request->callback(result, device, request->userData);
+  free(request);
+}
+
+GPU_EXPORT
+GPUResult
+GPURequestDevice(GPUAdapter               *adapter,
+                 const GPUDeviceCreateInfo *info,
+                 GPUDeviceRequestCallback  callback,
+                 void                     *userData) {
+  GPUQueueCreateInfo      stackQueueInfos[8];
+  GPUQueueCreateInfo     *queueInfos;
+  GPUDeviceRequestContext *request;
+  GPUDevice              *device;
+  GPUApi                 *api;
+  GPUResult               result;
+  uint64_t                enabledFeatureMask;
+  uint32_t                queueInfoCount;
+
+  if (!adapter || !callback || !(api = gpuAdapterApi(adapter))) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (!api->device.requestDevice) {
+    device = NULL;
+    result = GPUCreateDevice(adapter, info, &device);
+    callback(result, device, userData);
+    return result;
+  }
+
+  if (info) {
+    if ((info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+         info->chain.sType != GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO) ||
+        (info->chain.structSize != 0u &&
+         info->chain.structSize < sizeof(*info))) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    result = gpu_validateFeatureSet(adapter, &info->required, true);
+    if (result != GPU_OK) {
+      return result;
+    }
+    result = gpu_validateFeatureSet(adapter, &info->optional, false);
+    if (result != GPU_OK) {
+      return result;
+    }
+  }
+
+  enabledFeatureMask = gpu_enabledFeatureMaskForCreateInfo(adapter, info);
+  queueInfos         = NULL;
+  queueInfoCount     = 0u;
+  result = gpu_buildQueueCreateInfos(info,
+                                     stackQueueInfos,
+                                     (uint32_t)GPU_ARRAY_LEN(stackQueueInfos),
+                                     &queueInfos,
+                                     &queueInfoCount);
+  if (result != GPU_OK) {
+    return result;
+  }
+  if (!gpu_validQueueCreateInfos(queueInfos, queueInfoCount)) {
+    if (queueInfos != stackQueueInfos) {
+      free(queueInfos);
+    }
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  request = calloc(1, sizeof(*request));
+  if (!request) {
+    if (queueInfos != stackQueueInfos) {
+      free(queueInfos);
+    }
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  request->adapter            = adapter;
+  request->callback           = callback;
+  request->userData           = userData;
+  request->enabledFeatureMask = enabledFeatureMask;
+
+  result = api->device.requestDevice(adapter,
+                                     queueInfos,
+                                     queueInfoCount,
+                                     enabledFeatureMask,
+                                     gpu_completeDeviceRequest,
+                                     request);
+  if (queueInfos != stackQueueInfos) {
+    free(queueInfos);
+  }
+  if (result != GPU_OK) {
+    free(request);
+  }
+  return result;
 }
 
 GPU_EXPORT
