@@ -179,18 +179,6 @@ if (params.has("embed")) {
   document.body.classList.add("embed");
 }
 
-function formatBytes(bytes) {
-  const units = ["B", "KiB", "MiB", "GiB"];
-  let value = bytes;
-  let unit = 0;
-
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit++;
-  }
-  return `${value.toFixed(unit > 1 ? 1 : 0)} ${units[unit]}`;
-}
-
 function debugFrame(now) {
   if (!debugExpanded) {
     debugLoopRunning = false;
@@ -204,13 +192,9 @@ function debugFrame(now) {
     const fps = debugFrames * 1000 / elapsed;
     const frameMs = elapsed / debugFrames;
     const canvas = document.querySelector("#canvas");
-    const heapBytes = typeof HEAP8 !== "undefined" && HEAP8.buffer
-      ? HEAP8.buffer.byteLength
-      : 0;
 
     debugValues.fps.textContent = `${fps.toFixed(1)} FPS`;
     debugValues.frame.textContent = `${frameMs.toFixed(2)} ms frame`;
-    debugValues.heap.textContent = `${heapBytes ? formatBytes(heapBytes) : "n/a"} Wasm capacity`;
     debugValues.canvas.textContent = `${canvas.width} × ${canvas.height} px`;
     debugFrames = 0;
     debugLastTime = now;
