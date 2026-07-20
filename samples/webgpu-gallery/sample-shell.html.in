@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="gallery.css?v=5">
+  <link rel="stylesheet" href="gallery.css?v=6">
   <title>@GPU_WEBGPU_SAMPLE_TITLE@ · GPU + USL</title>
 </head>
 <body class="sample-page"
@@ -59,11 +59,11 @@
     </section>
   </main>
 
-  <script src="sample.js?v=4" defer></script>
+  <script src="sample.js?v=6" defer></script>
   <script>
     var Module = {
       locateFile(path, prefix) {
-        return `${prefix}${path}?v=5`;
+        return `${prefix}${path}?v=6`;
       }
     };
   </script>
@@ -75,7 +75,7 @@
       .getAttribute("src");
     const runtime = document.createElement("script");
 
-    runtime.src = `${runtimeSource}?v=5`;
+    runtime.src = `${runtimeSource}?v=6`;
     runtime.async = true;
     document.body.appendChild(runtime);
   </script>
