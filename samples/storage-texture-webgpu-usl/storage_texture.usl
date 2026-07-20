@@ -1,11 +1,11 @@
-pub struct StorageVertexIn {
-  position: float4 #attribute(0)
-  uv: float2 #attribute(1)
+vertex StorageVertexIn {
+  position: float4
+  uv:       float2
 }
 
-pub struct StorageVertexOut {
+struct StorageVertexOut {
   position: float4 #position
-  uv: float2
+  uv:       float2
 }
 
 kern(8, 8, 1) paint_cs(outputImage: image2d<rgba8unorm, write> #texture(0),
@@ -18,7 +18,7 @@ kern(8, 8, 1) paint_cs(outputImage: image2d<rgba8unorm, write> #texture(0),
 }
 
 vert storage_vs(input: StorageVertexIn #stage_in) -> StorageVertexOut {
-  return StorageVertexOut(input.position, input.uv)
+  input.position, input.uv
 }
 
 frag storage_fs(input: StorageVertexOut #stage_in,

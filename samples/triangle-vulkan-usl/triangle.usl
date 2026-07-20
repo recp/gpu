@@ -4,7 +4,7 @@ vert tri_vs(vertexId: uint #vertex_id) -> float4 {
   return float4(0.7, -0.65, 0.0, 1.0)
 }
 
-pub struct FragmentUniforms {
+struct FragmentUniforms {
   tint: float4
 }
 

@@ -1,6 +1,6 @@
-pub struct VSOut {
+struct VSOut {
   position: float4 #position
-  uv: float2
+  uv:       float2
 }
 
 fn quad_position(vertexId: uint) -> float4 {

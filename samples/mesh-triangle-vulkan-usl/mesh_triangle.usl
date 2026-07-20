@@ -1,17 +1,17 @@
 struct MeshVertex {
   position: float4 #position
-  color: float4 #color(0)
+  color:    float4 #color(0)
 }
 
-pub struct TaskParams {
+struct TaskParams {
   meshGroups: uint4
-  offset: float4
-  tint: float4
+  offset:     float4
+  tint:       float4
 }
 
-pub struct MeshPayload {
+struct MeshPayload {
   offset: float4
-  tint: float4
+  tint:   float4
 }
 
 task(1, 1, 1) task_main(inout payload: MeshPayload #payload,

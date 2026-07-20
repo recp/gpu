@@ -1,8 +1,8 @@
-pub struct VSIn {
-  position: float2 #attribute(0)
+vertex VSIn {
+  position: float2
 }
 
-pub struct FragmentUniforms {
+struct FragmentUniforms {
   tint: float4
 }
 

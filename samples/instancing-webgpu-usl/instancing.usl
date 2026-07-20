@@ -1,12 +1,12 @@
-pub struct DrawUniforms {
+struct DrawUniforms {
   transform: float4
   tint:      float4
 }
 
-struct VSIn {
-  position:       float2 #attribute(0)
-  instanceOffset: float2 #attribute(1)
-  instanceColor:  float4 #attribute(2)
+vertex VSIn {
+  position:       float2
+  instanceOffset: float2
+  instanceColor:  float4
 }
 
 struct VSOut {

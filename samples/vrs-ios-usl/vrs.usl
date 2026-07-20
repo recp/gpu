@@ -1,11 +1,11 @@
-pub struct VRSVertex {
-  position: float4 #attribute(0)
-  uv: float2 #attribute(1)
+vertex VRSVertex {
+  position: float4
+  uv:       float2
 }
 
-pub struct VRSVertexOut {
+struct VRSVertexOut {
   position: float4 #position
-  uv: float2
+  uv:       float2
 }
 
 vert vrs_vs(v: VRSVertex #stage_in) -> VRSVertexOut {

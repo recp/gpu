@@ -1,15 +1,15 @@
-pub struct CubeUniforms {
+struct CubeUniforms {
   mvp:   float4x4
   model: float4x4
 }
 
-pub struct CubeIn {
-  position: float3 #attribute(0)
-  normal:   float3 #attribute(1)
-  uv:       float2 #attribute(2)
+vertex CubeIn {
+  position: float3
+  normal:   float3
+  uv:       float2
 }
 
-pub struct CubeOut {
+struct CubeOut {
   position: float4 #position
   normal:   float3
   uv:       float2

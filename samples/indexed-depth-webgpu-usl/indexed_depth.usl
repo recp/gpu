@@ -1,6 +1,6 @@
-struct VSIn {
-  position: float4 #attribute(0)
-  color:    float4 #attribute(1)
+vertex VSIn {
+  position: float4
+  color:    float4
 }
 
 struct VSOut {

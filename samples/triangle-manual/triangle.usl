@@ -1,14 +1,14 @@
-pub struct VSIn {
-  position: float2 #attribute(0)
-  color: float4 #attribute(1)
+vertex VSIn {
+  position: float2
+  color:    float4
 }
 
-pub struct VSOut {
+struct VSOut {
   position: float4 #position
-  color: float4
+  color:    float4
 }
 
-pub struct FragmentUniforms {
+struct FragmentUniforms {
   tint: float4
 }
 
