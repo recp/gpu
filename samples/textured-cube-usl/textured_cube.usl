@@ -17,11 +17,9 @@ pub struct CubeOut {
 
 vert cube_vs(v: CubeIn #stage_in,
              frame: CubeUniforms #buffer(0)) -> CubeOut {
-  var o: CubeOut
-  o.position = frame.mvp * float4(v.position, 1.0)
-  o.normal   = normalize((frame.model * float4(v.normal, 0.0)).xyz)
-  o.uv       = v.uv
-  return o
+  frame.mvp * float4(v.position, 1.0),
+  normalize((frame.model * float4(v.normal, 0.0)).xyz),
+  v.uv
 }
 
 frag cube_fs(input: CubeOut #stage_in,

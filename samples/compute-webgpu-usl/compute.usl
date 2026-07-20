@@ -28,10 +28,7 @@ kern(1, 1, 1) fill_vertices(inout vertices: [GeneratedVertex] #buffer(0),
 }
 
 vert tri_vs(v: VSIn #stage_in) -> VSOut {
-  var o: VSOut
-  o.position = v.position
-  o.color    = v.color
-  return o
+  v.position, v.color
 }
 
 frag tri_fs(i: VSOut #stage_in) -> float4 {

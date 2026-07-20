@@ -13,10 +13,7 @@ pub struct FragmentUniforms {
 }
 
 vert tri_vs(v: VSIn #stage_in) -> VSOut {
-  var o: VSOut
-  o.position = float4(v.position, 0.0, 1.0)
-  o.color = v.color
-  return o
+  float4(v.position, 0.0, 1.0), v.color
 }
 
 frag tri_fs(i: VSOut #stage_in, uniforms: FragmentUniforms #buffer(0)) -> float4 {

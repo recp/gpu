@@ -9,10 +9,7 @@ struct VSOut {
 }
 
 vert cube_vs(v: VSIn #stage_in) -> VSOut {
-  var o: VSOut
-  o.position = v.position
-  o.color    = v.color
-  return o
+  v.position, v.color
 }
 
 frag cube_fs(i: VSOut #stage_in) -> float4 {

@@ -16,11 +16,8 @@ struct VSOut {
 
 vert instanced_vs(v:    VSIn #stage_in,
                   draw: DrawUniforms #buffer(0) #group(0) #dynamic_offset) -> VSOut {
-  var o: VSOut
-  let p      = v.position * draw.transform.z + v.instanceOffset + draw.transform.xy
-  o.position = float4(p, 0.0, 1.0)
-  o.color    = v.instanceColor * draw.tint
-  return o
+  let p = v.position * draw.transform.z + v.instanceOffset + draw.transform.xy
+  return VSOut { float4(p, 0.0, 1.0), v.instanceColor * draw.tint }
 }
 
 frag instanced_fs(i: VSOut #stage_in) -> float4 {

@@ -20,10 +20,7 @@ kern(8, 8, 1) fill_image(outputImage: texture2d<float, write> #texture(0),
 }
 
 vert quad_vs(v: VSIn #stage_in) -> VSOut {
-  var o: VSOut
-  o.position = v.position
-  o.uv = v.uv
-  return o
+  v.position, v.uv
 }
 
 frag quad_fs(in: VSOut #stage_in,

@@ -9,10 +9,7 @@ pub struct VRSVertexOut {
 }
 
 vert vrs_vs(v: VRSVertex #stage_in) -> VRSVertexOut {
-  var out: VRSVertexOut
-  out.position = v.position
-  out.uv = v.uv
-  return out
+  v.position, v.uv
 }
 
 frag grid_fs(input: VRSVertexOut #stage_in) -> float4 {
