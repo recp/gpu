@@ -1,25 +1,21 @@
-# GPU
+# 🔭 GPU - Modern Cross platform GPU library
 
 GPU is a cross-platform C library for explicit graphics and compute workloads.
-Its API keeps common rendering paths close to Metal while preserving the
-control required by Vulkan and Direct3D 12.
+Since it inspired from Metal, its API keeps common rendering paths close to Metal while preserving the
+control required by Vulkan and DirectX 12.
 
-The project is under active development. The public API is not yet stable.
+!! The project is under active development. The public API may not yet stable.
 
 ## Backends
 
-- Metal: active development and the primary implementation target
-- Vulkan: active development
-- Direct3D 12: active development
-- WebGPU: active browser-first development through Emscripten/Emdawnwebgpu
-
-Backend selection is scoped to instance and device creation. There is no
-mutable global backend switch.
+- [x] Metal
+- [x] Vulkan
+- [x] DirectX 12
+- [x] WebGPU
 
 ## Shaders
 
-GPU integrates with the
-[Universal Shading Language](https://github.com/UniversalShading/us) compiler.
+GPU integrates with the [Universal Shading](https://github.com/UniversalShading/us). 
 USL owns source parsing, reflection, target compilation, and persistent shader
 artifact caching. GPU consumes USL artifacts and creates native backend shader
 objects.
@@ -54,6 +50,7 @@ GPUCommandBuffer *cmdb  = NULL;
 if (!frame) {
   return;
 }
+
 if (GPUAcquireCommandBuffer(queue, "frame", &cmdb) != GPU_OK) {
   GPUEndFrame(frame);
   return;
@@ -99,6 +96,8 @@ The Metal triangle executable is generated at:
 ## License
 
 GPU is licensed under the Apache License 2.0.
+
+# Trademarks
 
 Apple, Metal, DirectX, Vulkan, and other product names are trademarks of their
 respective owners.
