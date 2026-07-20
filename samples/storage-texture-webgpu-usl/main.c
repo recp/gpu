@@ -30,6 +30,7 @@ typedef struct WebGPUStorageTexture {
   GPUSampler         *sampler;
   GPUBindGroup       *storageGroup;
   GPUBindGroup       *sampleGroup;
+  WebGPURequest       request;
   uint32_t            width;
   uint32_t            height;
   uint32_t            frameCount;
@@ -431,18 +432,24 @@ render_frame(void *userData) {
 }
 
 static void
-device_ready(GPUResult result, GPUDevice *device, void *userData) {
+webgpu_ready(GPUResult  result,
+             GPUAdapter *adapter,
+             GPUDevice  *device,
+             void       *userData) {
   WebGPUStorageTexture *state;
   GPURuntimeConfig      runtime = {0};
 
   state = userData;
-  if (result != GPU_OK || !device) {
-    set_status("GPU: failed to request WebGPU device", 1);
+  if (result != GPU_OK || !adapter || !device) {
+    set_status(!adapter ? "GPU: failed to request WebGPU adapter"
+                        : "GPU: failed to request WebGPU device",
+               1);
     return;
   }
 
-  state->device = device;
-  state->queue  = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  state->adapter = adapter;
+  state->device  = device;
+  state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;
@@ -481,25 +488,6 @@ device_ready(GPUResult result, GPUDevice *device, void *userData) {
   emscripten_set_main_loop_arg(render_frame, state, 0, true);
 }
 
-static void
-adapter_ready(GPUResult result, GPUAdapter *adapter, void *userData) {
-  WebGPUStorageTexture *state;
-
-  state = userData;
-  if (result != GPU_OK || !adapter) {
-    set_status("GPU: failed to request WebGPU adapter", 1);
-    return;
-  }
-
-  state->adapter = adapter;
-  set_status("GPU: WebGPU adapter ready", 0);
-  result = GPURequestDevice(adapter, NULL, device_ready, state);
-  if (result != GPU_OK) {
-    fprintf(stderr, "GPU: failed to start WebGPU device request (%d)\n",
-            result);
-  }
-}
-
 int
 main(void) {
   GPUInstanceCreateInfo info = {0};
@@ -516,11 +504,12 @@ main(void) {
     return 1;
   }
 
-  set_status("GPU: requesting WebGPU adapter", 0);
-  result = GPURequestAdapter(app.instance, adapter_ready, &app);
+  set_status("GPU: requesting WebGPU device", 0);
+  result = request_webgpu_device(app.instance,
+                                 &app.request,
+                                 webgpu_ready,
+                                 &app);
   if (result != GPU_OK) {
-    fprintf(stderr, "GPU: failed to start WebGPU adapter request (%d)\n",
-            result);
     return 1;
   }
   return 0;

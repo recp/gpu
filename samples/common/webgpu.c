@@ -76,6 +76,75 @@ read_file(const char *path, void **outData, uint64_t *outSize) {
   return 1;
 }
 
+static void
+finish_webgpu_request(WebGPURequest *request,
+                      GPUResult      result,
+                      GPUAdapter    *adapter,
+                      GPUDevice     *device) {
+  if (request->completed) {
+    return;
+  }
+
+  request->result    = result;
+  request->completed = true;
+  request->callback(result, adapter, device, request->userData);
+}
+
+static void
+webgpu_device_ready(GPUResult result, GPUDevice *device, void *userData) {
+  WebGPURequest *request;
+
+  request = userData;
+  if (result == GPU_OK && !device) {
+    result = GPU_ERROR_BACKEND_FAILURE;
+  }
+  finish_webgpu_request(request, result, request->adapter, device);
+}
+
+static void
+webgpu_adapter_ready(GPUResult result, GPUAdapter *adapter, void *userData) {
+  WebGPURequest *request;
+
+  request = userData;
+  if (result != GPU_OK || !adapter) {
+    if (result == GPU_OK) {
+      result = GPU_ERROR_BACKEND_FAILURE;
+    }
+    finish_webgpu_request(request, result, NULL, NULL);
+    return;
+  }
+
+  request->adapter = adapter;
+  result = GPURequestDevice(adapter, NULL, webgpu_device_ready, request);
+  if (result != GPU_OK && !request->completed) {
+    finish_webgpu_request(request, result, adapter, NULL);
+  }
+}
+
+GPUResult
+request_webgpu_device(GPUInstance        *instance,
+                      WebGPURequest      *request,
+                      WebGPUReadyCallback callback,
+                      void               *userData) {
+  GPUResult result;
+
+  if (!instance || !request || !callback) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  request->callback  = callback;
+  request->adapter   = NULL;
+  request->userData  = userData;
+  request->result    = GPU_OK;
+  request->completed = false;
+
+  result = GPURequestAdapter(instance, webgpu_adapter_ready, request);
+  if (result != GPU_OK && !request->completed) {
+    finish_webgpu_request(request, result, NULL, NULL);
+  }
+  return request->completed ? request->result : result;
+}
+
 int
 resize_webgpu_canvas(GPUSwapchain *swapchain,
                      uint32_t     *width,
