@@ -1,4 +1,5 @@
 const params = new URLSearchParams(window.location.search);
+const assetVersion = params.get("v") || "10";
 const code = document.querySelector("#source-code code");
 const panel = document.querySelector("#source-code");
 const lineNumbers = document.querySelector(".line-numbers");
@@ -33,8 +34,8 @@ const keywords = {
   ]),
   usl: new Set([
     "break", "case", "const", "continue", "discard", "else", "false", "for",
-    "frag", "if", "in", "inout", "kern", "let", "out", "return", "struct",
-    "switch", "true", "var", "vert", "while"
+    "frag", "if", "in", "inout", "kern", "let", "out", "pub", "return",
+    "struct", "switch", "true", "var", "vert", "vertex", "while"
   ]),
   wgsl: new Set([
     "alias", "break", "case", "const", "const_assert", "continue", "continuing",
@@ -226,7 +227,9 @@ async function showSource(kind) {
 
   try {
     if (!cache.has(kind)) {
-      const response = await fetch(sources[kind]);
+      const sourceURL = new URL(sources[kind], window.location.href);
+      sourceURL.searchParams.set("v", assetVersion);
+      const response = await fetch(sourceURL, { cache: "no-store" });
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
       cache.set(kind, await response.text());
     }

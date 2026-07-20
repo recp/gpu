@@ -1,0 +1,28 @@
+vertex StorageVertexIn {
+  position: float4
+  uv:       float2
+}
+
+struct StorageVertexOut {
+  position: float4 #position
+  uv:       float2
+}
+
+kern(8, 8, 1) paint_cs(outputImage: image2d<rgba8unorm, write> #texture(0),
+                        gid: uint3 #global_id) {
+  let color = float4(float(gid.x) / 255.0,
+                     float(gid.y) / 255.0,
+                     0.25 + float(gid.x + gid.y) / 1024.0,
+                     1.0)
+  outputImage.write(color, gid.xy)
+}
+
+vert storage_vs(input: StorageVertexIn #stage_in) -> StorageVertexOut {
+  input.position, input.uv
+}
+
+frag storage_fs(input: StorageVertexOut #stage_in,
+                colorTex: texture2d<float> #texture(0) #group(1),
+                colorSampler: sampler #sampler(1) #group(1)) -> float4 {
+  return colorTex.sample(colorSampler, input.uv)
+}

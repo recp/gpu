@@ -23,7 +23,7 @@ struct usl_buffer_g0_b0 {
 
 @vertex
 fn instanced_vs(v: VSIn) -> VSOut {
-    return VSOut(vec4<f32>((fma(v.position, vec2<f32>(usl_g0_b0.value.transform.z), v.instanceOffset) + usl_g0_b0.value.transform.xy), 0.0, 1.0), (v.instanceColor * usl_g0_b0.value.tint));
+    return VSOut(vec4<f32>((usl_g0_b0.value.transform.xy + fma(v.position, vec2<f32>(usl_g0_b0.value.transform.z), v.instanceOffset)), 0.0, 1.0), (v.instanceColor * usl_g0_b0.value.tint));
 }
 
 @fragment

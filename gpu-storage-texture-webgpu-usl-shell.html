@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="gallery.css?v=7">
-  <title>Indexed depth · GPU + USL</title>
+  <title>Storage texture · GPU + USL</title>
 </head>
 <body class="sample-page"
-      data-c-source="sources/indexed-depth.c"
-      data-usl-source="sources/indexed-depth.usl"
-      data-wgsl-source="sources/indexed-depth.wgsl">
+      data-c-source="sources/storage-texture.c"
+      data-usl-source="sources/storage-texture.usl"
+      data-wgsl-source="sources/storage-texture.wgsl">
   <header class="sample-head">
     <a class="back-link" href="index.html"><span>←</span> Sample index</a>
     <div class="sample-heading">
-      <p>Render / index + depth</p>
-      <h1>Indexed depth</h1>
+      <p>Compute / typed storage texture</p>
+      <h1>Storage texture</h1>
     </div>
     <div class="runtime-badge"><i></i> WebGPU live</div>
   </header>
@@ -37,7 +37,7 @@
         </div>
       </aside>
       <div class="stage-meta">
-        <p>One indexed draw validates the depth texture, pipeline, attachment, and occlusion path.</p>
+        <p>Compute writes a typed RGBA8 texture; render samples it in the same command buffer.</p>
         <div id="status">GPU: loading sample</div>
       </div>
     </section>

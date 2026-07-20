@@ -1,6 +1,6 @@
-struct VSIn {
-  position: float4 #attribute(0)
-  color:    float4 #attribute(1)
+vertex VSIn {
+  position: float4
+  color:    float4
 }
 
 struct VSOut {
@@ -9,10 +9,7 @@ struct VSOut {
 }
 
 vert cube_vs(v: VSIn #stage_in) -> VSOut {
-  var o: VSOut
-  o.position = v.position
-  o.color    = v.color
-  return o
+  v.position, v.color
 }
 
 frag cube_fs(i: VSOut #stage_in) -> float4 {
