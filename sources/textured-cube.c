@@ -1,27 +1,14 @@
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
 
-#define CGLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <cglm/cglm.h>
-
 #include <gpu/gpu.h>
 
 #include "../common/webgpu.h"
+#include "../textured-cube-usl/CubeData.h"
 
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
-
-typedef struct CubeVertex {
-  float position[3];
-  float normal[3];
-  float uv[2];
-} CubeVertex;
-
-typedef struct CubeUniforms {
-  mat4 mvp;
-  mat4 model;
-} CubeUniforms;
 
 typedef struct WebGPUTexturedCube {
   GPUInstance       *instance;
@@ -50,86 +37,10 @@ typedef struct WebGPUTexturedCube {
 } WebGPUTexturedCube;
 
 enum {
-  CHECKER_SIZE     = 16u,
-  INDEX_COUNT      = 36u,
   WARM_FRAME_COUNT = 8u
 };
 
-_Static_assert(sizeof(CubeUniforms) == 128u,
-               "cube uniform layout must match two float4x4 matrices");
-_Static_assert(sizeof(CubeVertex) == 32u,
-               "cube vertex layout must match the pipeline stride");
-
-#define CUBE_VERTEX(px, py, pz, nx, ny, nz, u, v) \
-  {{px, py, pz}, {nx, ny, nz}, {u, v}}
-
-static const CubeVertex kCubeVertices[] = {
-  CUBE_VERTEX(-1, -1,  1,  0,  0,  1, 0, 1),
-  CUBE_VERTEX( 1, -1,  1,  0,  0,  1, 1, 1),
-  CUBE_VERTEX( 1,  1,  1,  0,  0,  1, 1, 0),
-  CUBE_VERTEX(-1,  1,  1,  0,  0,  1, 0, 0),
-
-  CUBE_VERTEX( 1, -1, -1,  0,  0, -1, 0, 1),
-  CUBE_VERTEX(-1, -1, -1,  0,  0, -1, 1, 1),
-  CUBE_VERTEX(-1,  1, -1,  0,  0, -1, 1, 0),
-  CUBE_VERTEX( 1,  1, -1,  0,  0, -1, 0, 0),
-
-  CUBE_VERTEX( 1, -1,  1,  1,  0,  0, 0, 1),
-  CUBE_VERTEX( 1, -1, -1,  1,  0,  0, 1, 1),
-  CUBE_VERTEX( 1,  1, -1,  1,  0,  0, 1, 0),
-  CUBE_VERTEX( 1,  1,  1,  1,  0,  0, 0, 0),
-
-  CUBE_VERTEX(-1, -1, -1, -1,  0,  0, 0, 1),
-  CUBE_VERTEX(-1, -1,  1, -1,  0,  0, 1, 1),
-  CUBE_VERTEX(-1,  1,  1, -1,  0,  0, 1, 0),
-  CUBE_VERTEX(-1,  1, -1, -1,  0,  0, 0, 0),
-
-  CUBE_VERTEX(-1,  1,  1,  0,  1,  0, 0, 1),
-  CUBE_VERTEX( 1,  1,  1,  0,  1,  0, 1, 1),
-  CUBE_VERTEX( 1,  1, -1,  0,  1,  0, 1, 0),
-  CUBE_VERTEX(-1,  1, -1,  0,  1,  0, 0, 0),
-
-  CUBE_VERTEX(-1, -1, -1,  0, -1,  0, 0, 1),
-  CUBE_VERTEX( 1, -1, -1,  0, -1,  0, 1, 1),
-  CUBE_VERTEX( 1, -1,  1,  0, -1,  0, 1, 0),
-  CUBE_VERTEX(-1, -1,  1,  0, -1,  0, 0, 0)
-};
-
-#undef CUBE_VERTEX
-
-static const uint16_t kCubeIndices[] = {
-   0u,  1u,  2u,  0u,  2u,  3u,
-   4u,  5u,  6u,  4u,  6u,  7u,
-   8u,  9u, 10u,  8u, 10u, 11u,
-  12u, 13u, 14u, 12u, 14u, 15u,
-  16u, 17u, 18u, 16u, 18u, 19u,
-  20u, 21u, 22u, 20u, 22u, 23u
-};
-
-_Static_assert(sizeof(kCubeIndices) / sizeof(kCubeIndices[0]) == INDEX_COUNT,
-               "cube index count must match the draw call");
-
-static const uint8_t kCheckerOrange[] = {255u, 122u, 18u, 255u};
-static const uint8_t kCheckerBlue[]   = {18u, 154u, 230u, 255u};
-
 static WebGPUTexturedCube app;
-
-static void
-update_camera(WebGPUTexturedCube *state) {
-  vec3 eye    = {0.0f, 0.0f, 4.5f};
-  vec3 center = {0.0f, 0.0f, 0.0f};
-  vec3 up     = {0.0f, 1.0f, 0.0f};
-  mat4 view;
-  mat4 projection;
-  float aspect;
-
-  aspect = state->height > 0u
-             ? (float)state->width / (float)state->height
-             : 1.0f;
-  glm_lookat(eye, center, up, view);
-  glm_perspective(glm_rad(48.0f), aspect, 0.1f, 100.0f, projection);
-  glm_mat4_mul(projection, view, state->viewProjection);
-}
 
 static int
 create_depth_target(WebGPUTexturedCube *state,
@@ -203,7 +114,7 @@ resize_canvas(WebGPUTexturedCube *state) {
   }
   state->width  = width;
   state->height = height;
-  update_camera(state);
+  CubeBuildViewProjection(width, height, state->viewProjection);
   return 1;
 }
 
@@ -296,8 +207,7 @@ create_geometry(WebGPUTexturedCube *state) {
   CubeUniforms        uniforms;
   GPUBufferCreateInfo info = {0};
 
-  glm_mat4_identity(uniforms.mvp);
-  glm_mat4_identity(uniforms.model);
+  CubeBuildUniforms(0.0f, state->viewProjection, &uniforms);
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   info.chain.structSize = sizeof(info);
@@ -339,28 +249,10 @@ create_geometry(WebGPUTexturedCube *state) {
   return 1;
 }
 
-static void
-fill_checker(uint8_t *pixels) {
-  for (uint32_t y = 0u; y < CHECKER_SIZE; y++) {
-    for (uint32_t x = 0u; x < CHECKER_SIZE; x++) {
-      const uint8_t *color;
-      uint32_t       offset;
-
-      color  = (((x / 4u) ^ (y / 4u)) & 1u)
-                 ? kCheckerOrange
-                 : kCheckerBlue;
-      offset = (y * CHECKER_SIZE + x) * 4u;
-      pixels[offset + 0u] = color[0];
-      pixels[offset + 1u] = color[1];
-      pixels[offset + 2u] = color[2];
-      pixels[offset + 3u] = color[3];
-    }
-  }
-}
-
 static int
 create_material(WebGPUTexturedCube *state) {
-  uint8_t                       pixels[CHECKER_SIZE * CHECKER_SIZE * 4u];
+  uint8_t                       pixels[CUBE_CHECKER_SIZE *
+                                       CUBE_CHECKER_SIZE * 4u];
   GPUTextureCreateInfo          textureInfo       = {0};
   GPUTextureWriteRegion         writeRegion       = {0};
   GPUTextureViewCreateInfo      viewInfo          = {0};
@@ -370,14 +262,14 @@ create_material(WebGPUTexturedCube *state) {
   GPUBindGroupCreateInfo        materialInfo      = {0};
   GPUBindGroupCreateInfo        samplerGroupInfo  = {0};
 
-  fill_checker(pixels);
+  CubeFillChecker(pixels);
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
   textureInfo.label            = "textured-cube-checker";
   textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
   textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
-  textureInfo.width            = CHECKER_SIZE;
-  textureInfo.height           = CHECKER_SIZE;
+  textureInfo.width            = CUBE_CHECKER_SIZE;
+  textureInfo.height           = CUBE_CHECKER_SIZE;
   textureInfo.depthOrLayers    = 1u;
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
@@ -390,12 +282,12 @@ create_material(WebGPUTexturedCube *state) {
   }
 
   writeRegion.aspect       = GPU_TEXTURE_ASPECT_ALL;
-  writeRegion.width        = CHECKER_SIZE;
-  writeRegion.height       = CHECKER_SIZE;
+  writeRegion.width        = CUBE_CHECKER_SIZE;
+  writeRegion.height       = CUBE_CHECKER_SIZE;
   writeRegion.depth        = 1u;
   writeRegion.layerCount   = 1u;
-  writeRegion.bytesPerRow  = CHECKER_SIZE * 4u;
-  writeRegion.rowsPerImage = CHECKER_SIZE;
+  writeRegion.bytesPerRow  = CUBE_CHECKER_SIZE * 4u;
+  writeRegion.rowsPerImage = CUBE_CHECKER_SIZE;
   if (GPUQueueWriteTexture(state->queue,
                            state->texture,
                            &writeRegion,
@@ -472,15 +364,10 @@ create_material(WebGPUTexturedCube *state) {
 static int
 update_uniforms(WebGPUTexturedCube *state) {
   CubeUniforms uniforms;
-  vec3         axisX = {1.0f, 0.0f, 0.0f};
-  vec3         axisY = {0.0f, 1.0f, 0.0f};
-  float        angle;
+  float        seconds;
 
-  angle = (float)(emscripten_get_now() * 0.001);
-  glm_mat4_identity(uniforms.model);
-  glm_rotate(uniforms.model, angle * 0.72f, axisY);
-  glm_rotate(uniforms.model, angle * 0.43f, axisX);
-  glm_mat4_mul(state->viewProjection, uniforms.model, uniforms.mvp);
+  seconds = (float)(emscripten_get_now() * 0.001);
+  CubeBuildUniforms(seconds, state->viewProjection, &uniforms);
   return GPUQueueWriteBuffer(state->queue,
                              state->uniformBuffer,
                              0u,
@@ -548,7 +435,7 @@ render_frame(void *userData) {
   GPUBindRenderGroup(pass, 1u, state->samplerGroup, 0u, NULL);
   GPUBindVertexBuffers(pass, 0u, 1u, &vertexBuffer);
   GPUBindIndexBuffer(pass, state->indexBuffer, 0u, GPU_INDEX_TYPE_UINT16);
-  GPUDrawIndexed(pass, INDEX_COUNT, 1u, 0u, 0, 0u);
+  GPUDrawIndexed(pass, CUBE_INDEX_COUNT, 1u, 0u, 0, 0u);
   GPUEndRenderPass(pass);
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
     set_status("GPU: failed to finish the textured cube frame", 1);
