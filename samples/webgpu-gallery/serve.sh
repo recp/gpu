@@ -46,6 +46,7 @@ cat > "$DEV_DIR/Caddyfile" <<'EOF'
 https://:{$GPU_WEBGPU_PORT} {
   tls {$GPU_WEBGPU_CERT} {$GPU_WEBGPU_KEY}
   root * {$GPU_WEBGPU_ROOT}
+  header Cache-Control "no-store"
   encode zstd gzip
   file_server
 }
