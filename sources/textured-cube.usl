@@ -1,0 +1,33 @@
+pub struct CubeUniforms {
+  mvp:   float4x4
+  model: float4x4
+}
+
+pub struct CubeIn {
+  position: float3 #attribute(0)
+  normal:   float3 #attribute(1)
+  uv:       float2 #attribute(2)
+}
+
+pub struct CubeOut {
+  position: float4 #position
+  normal:   float3
+  uv:       float2
+}
+
+vert cube_vs(v: CubeIn #stage_in,
+             frame: CubeUniforms #buffer(0)) -> CubeOut {
+  var o: CubeOut
+  o.position = frame.mvp * float4(v.position, 1.0)
+  o.normal   = normalize((frame.model * float4(v.normal, 0.0)).xyz)
+  o.uv       = v.uv
+  return o
+}
+
+frag cube_fs(input: CubeOut #stage_in,
+             colorTex: texture2d<float> #texture(1),
+             colorSampler: sampler #sampler(0) #group(1)) -> float4 {
+  let light = normalize(float3(0.45, 0.75, 0.55))
+  let shade = 0.28 + 0.72 * max(dot(normalize(input.normal), light), 0.0)
+  return colorTex.sample(colorSampler, input.uv) * float4(float3(shade), 1.0)
+}
