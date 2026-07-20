@@ -888,6 +888,79 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"
   )
+
+  set(GPU_WEBGPU_INSTANCING_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+  set(GPU_WEBGPU_INSTANCING_SOURCE
+      "${GPU_WEBGPU_INSTANCING_DIR}/instancing.usl")
+  set(GPU_WEBGPU_INSTANCING_US
+      "${GPU_WEBGPU_INSTANCING_DIR}/instancing.us")
+  set(GPU_WEBGPU_SAMPLE_TITLE "Instancing")
+  set(GPU_WEBGPU_SAMPLE_KIND "Render / instances + offsets")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "Two dynamic uniform slices drive eight instances without rebuilding the bind group.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/instancing.c")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/instancing.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/instancing.wgsl")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-instancing-webgpu-usl-shell.html"
+    @ONLY
+  )
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_INSTANCING_US}"
+    BYPRODUCTS "${GPU_WEBGPU_INSTANCING_SOURCE}.wgsl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${GPU_WEBGPU_INSTANCING_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/instancing-webgpu-usl/instancing.usl"
+            "${GPU_WEBGPU_INSTANCING_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_INSTANCING_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/instancing-webgpu-usl/main.c"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/instancing.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_INSTANCING_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/instancing.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_INSTANCING_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/instancing.wgsl"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/instancing-webgpu-usl/instancing.usl"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/instancing-webgpu-usl/main.c"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-instancing-artifact
+    DEPENDS "${GPU_WEBGPU_INSTANCING_US}"
+  )
+
+  add_executable(gpu-instancing-webgpu-usl
+    samples/instancing-webgpu-usl/main.c
+    ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
+  )
+  target_link_libraries(gpu-instancing-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-instancing-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_INSTANCING_US}@/instancing.us"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-instancing-webgpu-usl-shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-instancing-webgpu-usl gpu-webgpu-instancing-artifact)
+  set_target_properties(gpu-instancing-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-instancing-webgpu-usl-shell.html"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${GPU_WEBGPU_GALLERY_DIR}"
+  )
 endif()
 
 if(GPU_BUILD_TESTS)
