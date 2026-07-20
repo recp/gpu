@@ -558,8 +558,8 @@ endif()
 
 if(GPU_BUILD_SAMPLES AND
    ((GPU_BUILD_WEBGPU AND EMSCRIPTEN) OR
-    (GPU_BUILD_METAL AND APPLE AND
-     NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")))
+    (APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" AND
+     (GPU_BUILD_METAL OR GPU_BUILD_VULKAN))))
   find_path(GPU_CGLM_INCLUDE_DIR
     NAMES cglm/cglm.h
     HINTS
@@ -1364,12 +1364,14 @@ if(GPU_BUILD_VULKAN AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-vulkan-usl/compute_buffer.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/mesh-triangle-vulkan-usl/mesh_triangle.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-atomics-usl/compute_atomics.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-cube-usl/textured_cube.usl"
   )
   list(GET GPU_VULKAN_USL_FIXTURES 0 GPU_VULKAN_TRIANGLE_US)
   list(GET GPU_VULKAN_USL_FIXTURES 1 GPU_VULKAN_TEXTURED_QUAD_US)
   list(GET GPU_VULKAN_USL_FIXTURES 2 GPU_VULKAN_COMPUTE_BUFFER_US)
   list(GET GPU_VULKAN_USL_FIXTURES 3 GPU_VULKAN_MESH_TRIANGLE_US)
   list(GET GPU_VULKAN_USL_FIXTURES 4 GPU_VULKAN_COMPUTE_ATOMICS_US)
+  list(GET GPU_VULKAN_USL_FIXTURES 5 GPU_VULKAN_TEXTURED_CUBE_US)
   if(GPU_BUILD_TESTS)
     gpu_add_usl_fixtures(
       GPU_VULKAN_TEST_USL_FIXTURES
@@ -2694,6 +2696,26 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
                           gpu-vulkan-fixtures
                           "${GPU_VULKAN_TEXTURED_QUAD_US}")
 
+    add_executable(gpu-textured-cube-vulkan-usl
+      samples/textured-cube-usl/main.m
+    )
+    target_compile_options(gpu-textured-cube-vulkan-usl PRIVATE -fobjc-arc)
+    target_compile_definitions(gpu-textured-cube-vulkan-usl PRIVATE
+      GPU_SAMPLE_BACKEND=GPU_BACKEND_VULKAN
+    )
+    target_include_directories(gpu-textured-cube-vulkan-usl PRIVATE
+      "${GPU_CGLM_INCLUDE_DIR}"
+    )
+    target_link_libraries(gpu-textured-cube-vulkan-usl PRIVATE
+      gpu
+      "-framework AppKit"
+      "-framework Foundation"
+      "-framework QuartzCore"
+    )
+    gpu_attach_usl_sample(gpu-textured-cube-vulkan-usl
+                          gpu-vulkan-fixtures
+                          "${GPU_VULKAN_TEXTURED_CUBE_US}")
+
     add_executable(gpu-mesh-triangle-vulkan-usl
       samples/mesh-triangle-vulkan-usl/main.m
     )
@@ -2730,6 +2752,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
                COMMAND gpu-triangle-vulkan-usl)
       add_test(NAME vulkan-textured-quad
                COMMAND gpu-textured-quad-vulkan-usl)
+      add_test(NAME vulkan-textured-cube
+               COMMAND gpu-textured-cube-vulkan-usl)
       add_test(NAME vulkan-mesh-triangle
                COMMAND gpu-mesh-triangle-vulkan-usl)
       add_test(NAME vulkan-compute-render
@@ -2739,6 +2763,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
       set_tests_properties(
         vulkan-triangle
         vulkan-textured-quad
+        vulkan-textured-cube
         vulkan-mesh-triangle
         vulkan-compute-render
         PROPERTIES
@@ -2767,6 +2792,7 @@ if((GPU_BUILD_TESTS OR GPU_BUILD_BENCHMARKS) AND
             vulkan-compute-buffer
             vulkan-triangle
             vulkan-textured-quad
+            vulkan-textured-cube
             vulkan-mesh-triangle
             vulkan-compute-render
             vulkan-resize-lifecycle)

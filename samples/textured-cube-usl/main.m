@@ -10,6 +10,24 @@
 #import "../common/SampleUSL.h"
 #import "CubeData.h"
 
+#ifndef GPU_SAMPLE_BACKEND
+#  define GPU_SAMPLE_BACKEND GPU_BACKEND_METAL
+#endif
+
+static NSString *
+CubeWindowTitle(void) {
+  return GPU_SAMPLE_BACKEND == GPU_BACKEND_VULKAN
+           ? @"GPU Vulkan USL Rotating Cube"
+           : @"GPU Metal USL Rotating Cube";
+}
+
+static const char *
+CubeStatsLabel(void) {
+  return GPU_SAMPLE_BACKEND == GPU_BACKEND_VULKAN
+           ? "GPU Vulkan textured cube"
+           : "GPU Metal textured cube";
+}
+
 @interface TexturedCubeApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
 @private
   NSWindow          *_window;
@@ -61,7 +79,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 @implementation TexturedCubeApp
 
 - (BOOL)setupWindow {
-  return GPUSampleCreateWindow(@"GPU USL Rotating Cube",
+  return GPUSampleCreateWindow(CubeWindowTitle(),
                                self,
                                &_window,
                                &_view);
@@ -93,7 +111,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   view    = NULL;
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
-  textureInfo.label            = "textured-cube-metal-depth";
+  textureInfo.label            = "textured-cube-depth";
   textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
   textureInfo.format           = GPU_FORMAT_DEPTH32_FLOAT;
   textureInfo.width            = _drawableWidth;
@@ -108,7 +126,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
   viewInfo.chain.structSize = sizeof(viewInfo);
-  viewInfo.label            = "textured-cube-metal-depth-view";
+  viewInfo.label            = "textured-cube-depth-view";
   viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
   viewInfo.format           = GPU_FORMAT_DEPTH32_FLOAT;
   viewInfo.mipLevelCount    = 1u;
@@ -154,7 +172,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   info.chain.sType              = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
   info.chain.structSize         = sizeof(info);
-  info.label                    = "textured-cube-metal-usl-pipeline";
+  info.label                    = "textured-cube-usl-pipeline";
   info.layout                   = _shaderLayout->pipelineLayout;
   info.library                  = _library;
   info.vertexEntry              = "cube_vs";
@@ -181,7 +199,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   info.chain.structSize = sizeof(info);
-  info.label            = "textured-cube-metal-vertices";
+  info.label            = "textured-cube-vertices";
   info.sizeBytes        = sizeof(kCubeVertices);
   info.usage            = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST;
   if (GPUCreateBuffer(_device, &info, &_vertexBuffer) != GPU_OK ||
@@ -193,7 +211,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     return NO;
   }
 
-  info.label     = "textured-cube-metal-indices";
+  info.label     = "textured-cube-indices";
   info.sizeBytes = sizeof(kCubeIndices);
   info.usage     = GPU_BUFFER_USAGE_INDEX | GPU_BUFFER_USAGE_COPY_DST;
   if (GPUCreateBuffer(_device, &info, &_indexBuffer) != GPU_OK ||
@@ -205,7 +223,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     return NO;
   }
 
-  info.label     = "textured-cube-metal-uniforms";
+  info.label     = "textured-cube-uniforms";
   info.sizeBytes = sizeof(uniforms);
   info.usage     = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
   if (GPUCreateBuffer(_device, &info, &_uniformBuffer) != GPU_OK ||
@@ -234,7 +252,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   CubeFillChecker(pixels);
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
-  textureInfo.label            = "textured-cube-metal-checker";
+  textureInfo.label            = "textured-cube-checker";
   textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
   textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   textureInfo.width            = CUBE_CHECKER_SIZE;
@@ -265,7 +283,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
   viewInfo.chain.structSize = sizeof(viewInfo);
-  viewInfo.label            = "textured-cube-metal-checker-view";
+  viewInfo.label            = "textured-cube-checker-view";
   viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
@@ -276,7 +294,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   samplerInfo.chain.sType      = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
   samplerInfo.chain.structSize = sizeof(samplerInfo);
-  samplerInfo.label            = "textured-cube-metal-sampler";
+  samplerInfo.label            = "textured-cube-sampler";
   samplerInfo.desc.minFilter   = GPU_FILTER_NEAREST;
   samplerInfo.desc.magFilter   = GPU_FILTER_NEAREST;
   samplerInfo.desc.mipFilter   = GPU_MIP_FILTER_NEAREST;
@@ -299,7 +317,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   materialEntries[1].bindingType   = GPU_BINDING_SAMPLED_TEXTURE;
   materialInfo.chain.sType         = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   materialInfo.chain.structSize    = sizeof(materialInfo);
-  materialInfo.label               = "textured-cube-metal-group0";
+  materialInfo.label               = "textured-cube-group0";
   materialInfo.layout              = _shaderLayout->bindGroupLayouts[0];
   materialInfo.pEntries            = materialEntries;
   materialInfo.entryCount          = 2u;
@@ -314,7 +332,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   samplerEntry.bindingType          = GPU_BINDING_SAMPLER;
   samplerGroupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   samplerGroupInfo.chain.structSize = sizeof(samplerGroupInfo);
-  samplerGroupInfo.label            = "textured-cube-metal-group1";
+  samplerGroupInfo.label            = "textured-cube-group1";
   samplerGroupInfo.layout           = _shaderLayout->bindGroupLayouts[1];
   samplerGroupInfo.pEntries         = &samplerEntry;
   samplerGroupInfo.entryCount       = 1u;
@@ -324,14 +342,51 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (BOOL)setupGPU {
-  if (!GPUSampleCreateDefaultSurfaceGPU(_window,
-                                        _view,
-                                        &_instance,
-                                        &_adapter,
-                                        &_device,
-                                        &_queue,
-                                        &_surface,
-                                        &_swapchain)) {
+  GPUInstanceCreateInfo instanceInfo = {0};
+
+  instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  instanceInfo.chain.structSize = sizeof(instanceInfo);
+  instanceInfo.preferredBackend = GPU_SAMPLE_BACKEND;
+  instanceInfo.enableValidation = GPU_SAMPLE_BACKEND == GPU_BACKEND_VULKAN;
+  if (GPUCreateInstance(&instanceInfo, &_instance) != GPU_OK || !_instance) {
+    NSLog(@"GPU: failed to create cube instance");
+    return NO;
+  }
+
+  _adapter = GPUSampleSelectAdapter(_instance);
+  if (!_adapter) {
+    NSLog(@"GPU: failed to get cube adapter");
+    return NO;
+  }
+
+  _device = GPUCreateDeviceWithDefaultQueues(_adapter);
+  if (!_device) {
+    NSLog(@"GPU: failed to create cube device");
+    return NO;
+  }
+
+  _queue = GPUGetQueue(_device, GPU_QUEUE_GRAPHICS, 0u);
+  if (!_queue) {
+    NSLog(@"GPU: failed to get cube queue");
+    return NO;
+  }
+
+  _surface = GPUCreateSurfaceFromNative(_instance,
+                                        _adapter,
+                                        (__bridge void *)_view,
+                                        GPU_SURFACE_APPLE_NSVIEW,
+                                        _window.backingScaleFactor ?: 1.0f);
+  if (!_surface) {
+    NSLog(@"GPU: failed to create cube surface");
+    return NO;
+  }
+
+  _swapchain = GPUCreateSwapchainDefault(_device,
+                                         _surface,
+                                         (uint32_t)_view.bounds.size.width,
+                                         (uint32_t)_view.bounds.size.height);
+  if (!_swapchain) {
+    NSLog(@"GPU: failed to create cube swapchain");
     return NO;
   }
   if (!GPUSampleLoadUSL(_device,
@@ -391,7 +446,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   cmdb = NULL;
   pass = NULL;
   if (GPUAcquireCommandBuffer(_queue,
-                              "textured-cube-metal-frame",
+                              "textured-cube-frame",
                               &cmdb) != GPU_OK || !cmdb) {
     goto cleanup;
   }
@@ -416,7 +471,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   depth.clearDepth            = 1.0f;
   passInfo.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   passInfo.chain.structSize        = sizeof(passInfo);
-  passInfo.label                   = "textured-cube-metal-pass";
+  passInfo.label                   = "textured-cube-pass";
   passInfo.pColorAttachments       = &color;
   passInfo.pDepthStencilAttachment = &depth;
   passInfo.colorAttachmentCount    = 1u;
@@ -445,7 +500,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   if (!GPUSampleCheckZeroAlloc(_device,
                                (uint32_t)_submittedFrames,
                                _assertZeroAlloc,
-                               "GPU Metal textured cube")) {
+                               CubeStatsLabel())) {
     _statsFailed = YES;
     _terminating = YES;
     [_timer invalidate];
