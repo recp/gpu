@@ -41,8 +41,49 @@ typedef struct GPUSamplerFeedbackMapEXT     GPUSamplerFeedbackMapEXT;
 typedef struct GPURenderPassEncoder GPURenderPassEncoder;
 #endif
 
+typedef enum GPUTextureSampleType {
+  GPU_TEXTURE_SAMPLE_TYPE_FLOAT              = 0,
+  GPU_TEXTURE_SAMPLE_TYPE_UNFILTERABLE_FLOAT = 1,
+  GPU_TEXTURE_SAMPLE_TYPE_DEPTH              = 2,
+  GPU_TEXTURE_SAMPLE_TYPE_SINT               = 3,
+  GPU_TEXTURE_SAMPLE_TYPE_UINT               = 4
+} GPUTextureSampleType;
+
+typedef enum GPUStorageTextureAccess {
+  GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY = 0,
+  GPU_STORAGE_TEXTURE_ACCESS_READ_ONLY  = 1,
+  GPU_STORAGE_TEXTURE_ACCESS_READ_WRITE = 2
+} GPUStorageTextureAccess;
+
+typedef enum GPUSamplerBindingType {
+  GPU_SAMPLER_BINDING_FILTERING     = 0,
+  GPU_SAMPLER_BINDING_NON_FILTERING = 1,
+  GPU_SAMPLER_BINDING_COMPARISON    = 2
+} GPUSamplerBindingType;
+
+typedef struct GPUTextureBindingLayout {
+  GPUTextureViewType   viewType;
+  GPUTextureSampleType sampleType;
+  bool                 multisampled;
+} GPUTextureBindingLayout;
+
+typedef struct GPUStorageTextureBindingLayout {
+  GPUTextureViewType      viewType;
+  GPUFormat               format;
+  GPUStorageTextureAccess access;
+} GPUStorageTextureBindingLayout;
+
+typedef struct GPUSamplerBindingLayout {
+  GPUSamplerBindingType type;
+} GPUSamplerBindingLayout;
+
 typedef struct GPUBindGroupLayoutEntry {
   GPUSamplerDesc      immutableSamplerDesc;
+  union {
+    GPUTextureBindingLayout        sampledTexture;
+    GPUStorageTextureBindingLayout storageTexture;
+    GPUSamplerBindingLayout        sampler;
+  };
   GPUBindingType      bindingType;
   GPUShaderStageFlags visibility;
   uint32_t            binding;

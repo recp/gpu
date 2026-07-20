@@ -29,6 +29,7 @@ backend_webgpu(void) {
     webgpu_initLibrary(&webgpu.library);
     webgpu_initDescriptor(&webgpu.descriptor);
     webgpu_initPipeline(&webgpu.render);
+    webgpu_initCompute(&webgpu.compute);
     webgpu_initRenderPass(&webgpu.renderPass);
     webgpu_initRenderEncoder(&webgpu.rce);
     webgpu.initialized = true;

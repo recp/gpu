@@ -603,6 +603,9 @@ check_bind_group_layout_validation(GPUDevice *device) {
 
   entry.bindingType = GPU_BINDING_SAMPLED_TEXTURE;
   entry.hasDynamicOffset = false;
+  entry.sampledTexture.viewType = GPU_TEXTURE_VIEW_2D;
+  entry.sampledTexture.sampleType = GPU_TEXTURE_SAMPLE_TYPE_FLOAT;
+  entry.sampledTexture.multisampled = false;
   layout = NULL;
   if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK || !layout) {
     fprintf(stderr, "bind group layout rejected valid sampled texture entry\n");
@@ -708,6 +711,10 @@ check_bind_group_layout_validation(GPUDevice *device) {
   textureLayoutEntries[1] = entry;
   textureLayoutEntries[1].binding = 1u;
   textureLayoutEntries[1].bindingType = GPU_BINDING_STORAGE_TEXTURE;
+  textureLayoutEntries[1].storageTexture.viewType = GPU_TEXTURE_VIEW_2D;
+  textureLayoutEntries[1].storageTexture.format = GPU_FORMAT_RGBA8_UNORM;
+  textureLayoutEntries[1].storageTexture.access =
+    GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY;
   textureLayoutEntries[1].visibility = GPU_SHADER_STAGE_COMPUTE_BIT;
   layoutInfo.entryCount = 2u;
   layoutInfo.pEntries = textureLayoutEntries;
@@ -773,6 +780,7 @@ check_bind_group_layout_validation(GPUDevice *device) {
   layoutInfo.entryCount = 1u;
   layoutInfo.pEntries = &entry;
   entry.bindingType = GPU_BINDING_SAMPLER;
+  entry.sampler.type = GPU_SAMPLER_BINDING_FILTERING;
   entry.hasDynamicOffset = false;
   entry.immutableSampler = true;
   entry.immutableSamplerDesc = valid_sampler_desc();
@@ -1566,6 +1574,8 @@ gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath) {
   bindlessInfo.chain.structSize = sizeof(bindlessInfo);
   layoutEntry.binding           = 0u;
   layoutEntry.bindingType       = GPU_BINDING_SAMPLED_TEXTURE;
+  layoutEntry.sampledTexture.viewType = GPU_TEXTURE_VIEW_2D;
+  layoutEntry.sampledTexture.sampleType = GPU_TEXTURE_SAMPLE_TYPE_FLOAT;
   layoutEntry.visibility        = GPU_SHADER_STAGE_COMPUTE_BIT;
   layoutEntry.arrayCount        = 2u;
   layoutInfo.chain.sType        = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;

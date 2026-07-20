@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="gallery.css?v=2">
+  <title>@GPU_WEBGPU_SAMPLE_TITLE@ · GPU + USL</title>
+</head>
+<body class="sample-page"
+      data-c-source="@GPU_WEBGPU_SAMPLE_C_SOURCE@"
+      data-usl-source="@GPU_WEBGPU_SAMPLE_USL_SOURCE@"
+      data-wgsl-source="@GPU_WEBGPU_SAMPLE_WGSL_SOURCE@">
+  <header class="sample-head">
+    <a class="back-link" href="index.html"><span>←</span> Sample index</a>
+    <div class="sample-heading">
+      <p>@GPU_WEBGPU_SAMPLE_KIND@</p>
+      <h1>@GPU_WEBGPU_SAMPLE_TITLE@</h1>
+    </div>
+    <div class="runtime-badge"><i></i> WebGPU live</div>
+  </header>
+
+  <main class="sample-workbench">
+    <section class="stage" aria-label="Live WebGPU output">
+      <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+      <div class="stage-meta">
+        <p>@GPU_WEBGPU_SAMPLE_DESCRIPTION@</p>
+        <div id="status">GPU: loading sample</div>
+      </div>
+    </section>
+
+    <section class="source-panel" aria-labelledby="source-title">
+      <header class="source-head">
+        <div>
+          <p class="eyebrow">Artifact inspection</p>
+          <h2 id="source-title">Source path</h2>
+        </div>
+        <button class="copy-button" type="button">Copy</button>
+      </header>
+      <div class="source-tabs" role="tablist" aria-label="Source language">
+        <button id="tab-c" role="tab" aria-selected="true"
+                aria-controls="source-code" data-source="c">GPU C</button>
+        <button id="tab-usl" role="tab" aria-selected="false"
+                aria-controls="source-code" data-source="usl">USL</button>
+        <button id="tab-wgsl" role="tab" aria-selected="false"
+                aria-controls="source-code" data-source="wgsl">Generated WGSL</button>
+      </div>
+      <pre id="source-code" role="tabpanel" aria-labelledby="tab-c"
+           tabindex="0"><code>Loading source…</code></pre>
+    </section>
+  </main>
+
+  <script src="sample.js?v=2" defer></script>
+  {{{ SCRIPT }}}
+</body>
+</html>

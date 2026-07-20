@@ -73,9 +73,15 @@ check_volume_layout(GPUShaderLayout *shaderLayout) {
     if (entries[i].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
         entries[i].binding > 1u ||
         (entries[i].binding == 0u &&
-         entries[i].bindingType != GPU_BINDING_SAMPLED_TEXTURE) ||
+         (entries[i].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
+          entries[i].sampledTexture.viewType != GPU_TEXTURE_VIEW_3D ||
+          entries[i].sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT ||
+          entries[i].sampledTexture.multisampled)) ||
         (entries[i].binding == 1u &&
-         entries[i].bindingType != GPU_BINDING_STORAGE_TEXTURE)) {
+         (entries[i].bindingType != GPU_BINDING_STORAGE_TEXTURE ||
+          entries[i].storageTexture.viewType != GPU_TEXTURE_VIEW_3D ||
+          entries[i].storageTexture.access !=
+            GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY))) {
       return 0;
     }
     seen |= 1u << entries[i].binding;

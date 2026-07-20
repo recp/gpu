@@ -719,6 +719,30 @@ gpu_normalizeLayoutEntry(const GPUBindGroupLayoutEntry *src,
   if (src->arrayCount == 0) {
     dst->arrayCount = 1;
   }
+  switch (src->bindingType) {
+    case GPU_BINDING_SAMPLED_TEXTURE:
+      if ((uint32_t)src->sampledTexture.viewType > GPU_TEXTURE_VIEW_3D ||
+          (uint32_t)src->sampledTexture.sampleType >
+            GPU_TEXTURE_SAMPLE_TYPE_UINT) {
+        return 0;
+      }
+      break;
+    case GPU_BINDING_STORAGE_TEXTURE:
+      if ((uint32_t)src->storageTexture.viewType > GPU_TEXTURE_VIEW_3D ||
+          (uint32_t)src->storageTexture.format >= GPU_FORMAT_COUNT ||
+          (uint32_t)src->storageTexture.access >
+            GPU_STORAGE_TEXTURE_ACCESS_READ_WRITE) {
+        return 0;
+      }
+      break;
+    case GPU_BINDING_SAMPLER:
+      if ((uint32_t)src->sampler.type > GPU_SAMPLER_BINDING_COMPARISON) {
+        return 0;
+      }
+      break;
+    default:
+      break;
+  }
   return 1;
 }
 
@@ -991,7 +1015,70 @@ gpu_bindGroupTextureViewValid(const GPUBindGroupLayoutEntry *layoutEntry,
   }
 
   texture = entry->textureView ? entry->textureView->_texture : NULL;
-  return texture && (texture->usage & usage) == usage;
+  if (!texture || (texture->usage & usage) != usage) {
+    return 0;
+  }
+
+  if (layoutEntry->bindingType == GPU_BINDING_SAMPLED_TEXTURE) {
+    GPUTextureView *view = entry->textureView;
+    GPUTextureSampleType sampleType;
+
+    if (view->viewType != layoutEntry->sampledTexture.viewType ||
+        (texture->sampleCount > 1u) !=
+          layoutEntry->sampledTexture.multisampled) {
+      return 0;
+    }
+    switch (view->format) {
+      case GPU_FORMAT_DEPTH16_UNORM:
+      case GPU_FORMAT_DEPTH24_UNORM_STENCIL8:
+      case GPU_FORMAT_DEPTH32_FLOAT:
+      case GPU_FORMAT_DEPTH32_FLOAT_STENCIL8:
+        sampleType = GPU_TEXTURE_SAMPLE_TYPE_DEPTH;
+        break;
+      case GPU_FORMAT_R8_SINT:
+      case GPU_FORMAT_R16_SINT:
+      case GPU_FORMAT_RG8_SINT:
+      case GPU_FORMAT_R32_SINT:
+      case GPU_FORMAT_RG16_SINT:
+      case GPU_FORMAT_RGBA8_SINT:
+      case GPU_FORMAT_RG32_SINT:
+      case GPU_FORMAT_RGBA16_SINT:
+      case GPU_FORMAT_RGBA32_SINT:
+        sampleType = GPU_TEXTURE_SAMPLE_TYPE_SINT;
+        break;
+      case GPU_FORMAT_R8_UINT:
+      case GPU_FORMAT_R16_UINT:
+      case GPU_FORMAT_RG8_UINT:
+      case GPU_FORMAT_R32_UINT:
+      case GPU_FORMAT_RG16_UINT:
+      case GPU_FORMAT_RGBA8_UINT:
+      case GPU_FORMAT_RGB10A2_UINT:
+      case GPU_FORMAT_RG32_UINT:
+      case GPU_FORMAT_RGBA16_UINT:
+      case GPU_FORMAT_RGBA32_UINT:
+        sampleType = GPU_TEXTURE_SAMPLE_TYPE_UINT;
+        break;
+      default:
+        sampleType = GPU_TEXTURE_SAMPLE_TYPE_FLOAT;
+        break;
+    }
+    if (layoutEntry->sampledTexture.sampleType != sampleType &&
+        !(sampleType == GPU_TEXTURE_SAMPLE_TYPE_FLOAT &&
+          layoutEntry->sampledTexture.sampleType ==
+            GPU_TEXTURE_SAMPLE_TYPE_UNFILTERABLE_FLOAT)) {
+      return 0;
+    }
+  } else {
+    GPUTextureView *view = entry->textureView;
+
+    if (view->viewType != layoutEntry->storageTexture.viewType ||
+        (layoutEntry->storageTexture.format != GPU_FORMAT_UNDEFINED &&
+         view->format != layoutEntry->storageTexture.format)) {
+      return 0;
+    }
+  }
+
+  return 1;
 }
 
 static int
@@ -1993,6 +2080,19 @@ gpu_createLayoutForReflectionGroup(GPUDevice *device,
 
     entries[cursor].binding = resource->binding;
     entries[cursor].bindingType = resource->bindingType;
+    switch (resource->bindingType) {
+      case GPU_BINDING_SAMPLED_TEXTURE:
+        entries[cursor].sampledTexture = resource->sampledTexture;
+        break;
+      case GPU_BINDING_STORAGE_TEXTURE:
+        entries[cursor].storageTexture = resource->storageTexture;
+        break;
+      case GPU_BINDING_SAMPLER:
+        entries[cursor].sampler = resource->sampler;
+        break;
+      default:
+        break;
+    }
     entries[cursor].visibility = resource->visibility;
     entries[cursor].arrayCount = resource->arrayCount ? resource->arrayCount : 1u;
     entries[cursor].hasDynamicOffset = resource->hasDynamicOffset;
@@ -2016,6 +2116,33 @@ gpu_createLayoutForReflectionGroup(GPUDevice *device,
 }
 
 static int
+gpu_layoutResourceTypeMatches(const GPUBindGroupLayoutEntry     *entry,
+                              const GPUShaderResourceReflection *resource) {
+  if (!entry || !resource || entry->bindingType != resource->bindingType) {
+    return 0;
+  }
+
+  switch (entry->bindingType) {
+    case GPU_BINDING_SAMPLED_TEXTURE:
+      return entry->sampledTexture.viewType ==
+               resource->sampledTexture.viewType &&
+             entry->sampledTexture.sampleType ==
+               resource->sampledTexture.sampleType &&
+             entry->sampledTexture.multisampled ==
+               resource->sampledTexture.multisampled;
+    case GPU_BINDING_STORAGE_TEXTURE:
+      return entry->storageTexture.viewType ==
+               resource->storageTexture.viewType &&
+             entry->storageTexture.format == resource->storageTexture.format &&
+             entry->storageTexture.access == resource->storageTexture.access;
+    case GPU_BINDING_SAMPLER:
+      return entry->sampler.type == resource->sampler.type;
+    default:
+      return 1;
+  }
+}
+
+static int
 gpu_layoutMatchesReflectionResource(const GPUBindGroupLayoutEntry *entry,
                                     const GPUShaderResourceReflection *resource) {
   uint32_t resourceArrayCount;
@@ -2026,7 +2153,7 @@ gpu_layoutMatchesReflectionResource(const GPUBindGroupLayoutEntry *entry,
 
   resourceArrayCount = resource->arrayCount ? resource->arrayCount : 1u;
   return entry->binding == resource->binding &&
-         entry->bindingType == resource->bindingType &&
+         gpu_layoutResourceTypeMatches(entry, resource) &&
          entry->visibility == resource->visibility &&
          entry->arrayCount == resourceArrayCount &&
          entry->hasDynamicOffset == resource->hasDynamicOffset;
@@ -2058,7 +2185,7 @@ gpu_layoutContainsStageReflectionResource(const GPUBindGroupLayoutPriv *priv,
 
     entry = &priv->entries[i];
     if (entry->binding == resource->binding &&
-        entry->bindingType == resource->bindingType &&
+        gpu_layoutResourceTypeMatches(entry, resource) &&
         (entry->visibility & requiredVisibility) == requiredVisibility &&
         entry->arrayCount == resourceArrayCount &&
         entry->hasDynamicOffset == resource->hasDynamicOffset) {

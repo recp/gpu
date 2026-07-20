@@ -400,6 +400,9 @@ check_reflected_dynamic_offset_validation(GPUDevice *device,
 
   badGroup0Entries[1].binding = 1u;
   badGroup0Entries[1].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+  badGroup0Entries[1].sampledTexture.viewType = GPU_TEXTURE_VIEW_2D;
+  badGroup0Entries[1].sampledTexture.sampleType =
+    GPU_TEXTURE_SAMPLE_TYPE_FLOAT;
   badGroup0Entries[1].visibility = GPU_SHADER_STAGE_FRAGMENT_BIT |
                                    GPU_SHADER_STAGE_COMPUTE_BIT;
   badGroup0Entries[1].arrayCount = 1u;
@@ -423,6 +426,10 @@ check_reflected_dynamic_offset_validation(GPUDevice *device,
 
   badGroup1Entries[1].binding = 1u;
   badGroup1Entries[1].bindingType = GPU_BINDING_STORAGE_TEXTURE;
+  badGroup1Entries[1].storageTexture.viewType = GPU_TEXTURE_VIEW_2D;
+  badGroup1Entries[1].storageTexture.format = GPU_FORMAT_UNDEFINED;
+  badGroup1Entries[1].storageTexture.access =
+    GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY;
   badGroup1Entries[1].visibility = GPU_SHADER_STAGE_COMPUTE_BIT;
   badGroup1Entries[1].arrayCount = 1u;
 
@@ -595,10 +602,18 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
   memset(&fakeComputeTextureView, 0, sizeof(fakeComputeTextureView));
   fakeBufferStorage.sizeBytes = 16u;
   fakeBufferStorage.usage = GPU_BUFFER_USAGE_UNIFORM;
+  fakeFragmentTextureStorage.format = GPU_FORMAT_RGBA16_FLOAT;
+  fakeFragmentTextureStorage.sampleCount = 1u;
   fakeFragmentTextureStorage.usage = GPU_TEXTURE_USAGE_SAMPLED;
+  fakeComputeTextureStorage.format = GPU_FORMAT_RGBA32_FLOAT;
+  fakeComputeTextureStorage.sampleCount = 1u;
   fakeComputeTextureStorage.usage = GPU_TEXTURE_USAGE_STORAGE;
   fakeFragmentTextureView._texture = &fakeFragmentTextureStorage;
+  fakeFragmentTextureView.viewType = GPU_TEXTURE_VIEW_2D;
+  fakeFragmentTextureView.format = GPU_FORMAT_RGBA16_FLOAT;
   fakeComputeTextureView._texture = &fakeComputeTextureStorage;
+  fakeComputeTextureView.viewType = GPU_TEXTURE_VIEW_2D;
+  fakeComputeTextureView.format = GPU_FORMAT_RGBA32_FLOAT;
 
   group0Entries[0].binding = 0u;
   group0Entries[0].bindingType = GPU_BINDING_UNIFORM_BUFFER;
@@ -747,10 +762,18 @@ check_reflection_objects_after_library_destroy(GPUDevice *device,
 
   fakeBufferStorage.sizeBytes = 16u;
   fakeBufferStorage.usage = GPU_BUFFER_USAGE_UNIFORM;
+  fakeFragmentTextureStorage.format = GPU_FORMAT_RGBA16_FLOAT;
+  fakeFragmentTextureStorage.sampleCount = 1u;
   fakeFragmentTextureStorage.usage = GPU_TEXTURE_USAGE_SAMPLED;
+  fakeComputeTextureStorage.format = GPU_FORMAT_RGBA32_FLOAT;
+  fakeComputeTextureStorage.sampleCount = 1u;
   fakeComputeTextureStorage.usage = GPU_TEXTURE_USAGE_STORAGE;
   fakeFragmentTextureView._texture = &fakeFragmentTextureStorage;
+  fakeFragmentTextureView.viewType = GPU_TEXTURE_VIEW_2D;
+  fakeFragmentTextureView.format = GPU_FORMAT_RGBA16_FLOAT;
   fakeComputeTextureView._texture = &fakeComputeTextureStorage;
+  fakeComputeTextureView.viewType = GPU_TEXTURE_VIEW_2D;
+  fakeComputeTextureView.format = GPU_FORMAT_RGBA32_FLOAT;
 
   group0Entries[0].binding = 0u;
   group0Entries[0].bindingType = GPU_BINDING_UNIFORM_BUFFER;

@@ -65,6 +65,7 @@ samples/**/*.us
 samples/**/*.usl.metal
 samples/**/*.usl.logs
 samples/**/.build.lock/
+samples/webgpu-gallery/.dev/
 samples/usl-reflection-check/usl-reflection-check
 !samples/triangle-manual/triangle.usl.metal
 

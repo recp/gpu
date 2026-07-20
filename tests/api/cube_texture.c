@@ -58,9 +58,17 @@ check_cube_layout(GPUShaderLayout *shaderLayout) {
         entries[i].binding > 2u) {
       return 0;
     }
-    if (entries[i].binding < 2u &&
-        entries[i].bindingType != GPU_BINDING_SAMPLED_TEXTURE) {
-      return 0;
+    if (entries[i].binding < 2u) {
+      GPUTextureViewType expectedViewType = entries[i].binding == 0u
+                                              ? GPU_TEXTURE_VIEW_CUBE
+                                              : GPU_TEXTURE_VIEW_CUBE_ARRAY;
+
+      if (entries[i].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
+          entries[i].sampledTexture.viewType != expectedViewType ||
+          entries[i].sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT ||
+          entries[i].sampledTexture.multisampled) {
+        return 0;
+      }
     }
     if (entries[i].binding == 2u &&
         entries[i].bindingType != GPU_BINDING_STORAGE_BUFFER) {

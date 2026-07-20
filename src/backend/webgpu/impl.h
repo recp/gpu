@@ -23,6 +23,7 @@ void webgpu_initSampler(GPUApiSampler *api);
 void webgpu_initLibrary(GPUApiLibrary *api);
 void webgpu_initDescriptor(GPUApiDescriptor *api);
 void webgpu_initPipeline(GPUApiRender *api);
+void webgpu_initCompute(GPUApiCompute *api);
 void webgpu_initRenderPass(GPUApiRenderPass *api);
 void webgpu_initRenderEncoder(GPUApiRCE *api);
 

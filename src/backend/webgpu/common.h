@@ -21,6 +21,7 @@
 #include "../../api/adapter_internal.h"
 #include "../../api/buffer_internal.h"
 #include "../../api/cmdqueue_internal.h"
+#include "../../api/compute_internal.h"
 #include "../../api/descr/descriptor_internal.h"
 #include "../../api/device_internal.h"
 #include "../../api/frame_internal.h"
@@ -65,10 +66,12 @@ typedef struct GPUCommandWebGPU {
   WGPUCommandEncoder    encoder;
   WGPUCommandBuffer     submitted;
   WGPURenderPassEncoder renderEncoder;
+  WGPUComputePassEncoder computeEncoder;
   GPUSwapchainWebGPU   *present;
   GPUCommandBuffer      command;
   GPURenderPassDesc     renderPass;
   GPURenderPassEncoder  render;
+  GPUComputePassEncoder compute;
   WGPURenderPassDescriptor renderPassDesc;
   WGPURenderPassColorAttachment colorAttachments[
     GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS

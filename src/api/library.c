@@ -781,9 +781,15 @@ gpuGetShaderLibraryStaticSamplers(const GPUShaderLibrary *library,
 static int
 gpu_bindingTypeFromUSLResource(const USLRuntimeResource *resource,
                                GPUBindingType *outType) {
+  uint32_t typeKind;
+
   if (!resource || !outType) {
     return 0;
   }
+
+  typeKind = resource->type.kind == USL_RUNTIME_TYPE_ARRAY
+               ? resource->type.array_element_kind
+               : resource->type.kind;
 
   switch (resource->kind) {
     case USL_RUNTIME_RESOURCE_BUFFER:
@@ -799,9 +805,10 @@ gpu_bindingTypeFromUSLResource(const USLRuntimeResource *resource,
       *outType = GPU_BINDING_SAMPLED_TEXTURE;
       return 1;
     case USL_RUNTIME_RESOURCE_IMAGE:
-      *outType = resource->access == USL_RUNTIME_IMAGE_ACCESS_READ ?
-        GPU_BINDING_SAMPLED_TEXTURE :
-        GPU_BINDING_STORAGE_TEXTURE;
+      *outType = resource->access == USL_RUNTIME_IMAGE_ACCESS_READ &&
+                 typeKind == USL_RUNTIME_TYPE_TEXTURE
+                   ? GPU_BINDING_SAMPLED_TEXTURE
+                   : GPU_BINDING_STORAGE_TEXTURE;
       return 1;
     case USL_RUNTIME_RESOURCE_SAMPLER:
       *outType = GPU_BINDING_SAMPLER;
@@ -814,6 +821,191 @@ gpu_bindingTypeFromUSLResource(const USLRuntimeResource *resource,
       return 1;
     default:
       return 0;
+  }
+}
+
+static int
+gpu_textureViewTypeFromUSL(uint32_t source, GPUTextureViewType *outType) {
+  if (!outType) {
+    return 0;
+  }
+
+  switch (source) {
+    case USL_RUNTIME_TEXTURE_DIM_1D:
+      *outType = GPU_TEXTURE_VIEW_1D;
+      return 1;
+    case USL_RUNTIME_TEXTURE_DIM_1D_ARRAY:
+      *outType = GPU_TEXTURE_VIEW_1D_ARRAY;
+      return 1;
+    case USL_RUNTIME_TEXTURE_DIM_2D:
+    case USL_RUNTIME_TEXTURE_DIM_2D_MS:
+      *outType = GPU_TEXTURE_VIEW_2D;
+      return 1;
+    case USL_RUNTIME_TEXTURE_DIM_2D_ARRAY:
+    case USL_RUNTIME_TEXTURE_DIM_2D_MS_ARRAY:
+      *outType = GPU_TEXTURE_VIEW_2D_ARRAY;
+      return 1;
+    case USL_RUNTIME_TEXTURE_DIM_CUBE:
+      *outType = GPU_TEXTURE_VIEW_CUBE;
+      return 1;
+    case USL_RUNTIME_TEXTURE_DIM_CUBE_ARRAY:
+      *outType = GPU_TEXTURE_VIEW_CUBE_ARRAY;
+      return 1;
+    case USL_RUNTIME_TEXTURE_DIM_3D:
+      *outType = GPU_TEXTURE_VIEW_3D;
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static GPUTextureSampleType
+gpu_textureSampleTypeFromUSL(const USLRuntimeTypeDesc *type) {
+  if (type &&
+      (type->texture_content == USL_RUNTIME_TEXTURE_CONTENT_DEPTH ||
+       type->texture_content == USL_RUNTIME_TEXTURE_CONTENT_DEPTH_STENCIL)) {
+    return GPU_TEXTURE_SAMPLE_TYPE_DEPTH;
+  }
+
+  switch (type ? type->elem_kind : USL_RUNTIME_ELEM_UNKNOWN) {
+    case USL_RUNTIME_ELEM_I8:
+    case USL_RUNTIME_ELEM_I16:
+    case USL_RUNTIME_ELEM_I32:
+    case USL_RUNTIME_ELEM_I64:
+      return GPU_TEXTURE_SAMPLE_TYPE_SINT;
+    case USL_RUNTIME_ELEM_BOOL:
+    case USL_RUNTIME_ELEM_U8:
+    case USL_RUNTIME_ELEM_U16:
+    case USL_RUNTIME_ELEM_U32:
+    case USL_RUNTIME_ELEM_U64:
+      return GPU_TEXTURE_SAMPLE_TYPE_UINT;
+    default:
+      return GPU_TEXTURE_SAMPLE_TYPE_FLOAT;
+  }
+}
+
+static GPUStorageTextureAccess
+gpu_storageTextureAccessFromUSL(uint32_t access) {
+  switch (access) {
+    case USL_RUNTIME_IMAGE_ACCESS_READ:
+      return GPU_STORAGE_TEXTURE_ACCESS_READ_ONLY;
+    case USL_RUNTIME_IMAGE_ACCESS_READ_WRITE:
+      return GPU_STORAGE_TEXTURE_ACCESS_READ_WRITE;
+    default:
+      return GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY;
+  }
+}
+
+static GPUFormat
+gpu_storageTextureFormatFromUSL(uint32_t format) {
+  static const GPUFormat formats[USL_RUNTIME_TEXEL_FORMAT_COUNT] = {
+    [USL_RUNTIME_TEXEL_FORMAT_UNKNOWN]       = GPU_FORMAT_UNDEFINED,
+    [USL_RUNTIME_TEXEL_FORMAT_R8_UNORM]      = GPU_FORMAT_R8_UNORM,
+    [USL_RUNTIME_TEXEL_FORMAT_R8_SNORM]      = GPU_FORMAT_R8_SNORM,
+    [USL_RUNTIME_TEXEL_FORMAT_R8_UINT]       = GPU_FORMAT_R8_UINT,
+    [USL_RUNTIME_TEXEL_FORMAT_R8_SINT]       = GPU_FORMAT_R8_SINT,
+    [USL_RUNTIME_TEXEL_FORMAT_R16_UNORM]     = GPU_FORMAT_R16_UNORM,
+    [USL_RUNTIME_TEXEL_FORMAT_R16_SNORM]     = GPU_FORMAT_R16_SNORM,
+    [USL_RUNTIME_TEXEL_FORMAT_R16_UINT]      = GPU_FORMAT_R16_UINT,
+    [USL_RUNTIME_TEXEL_FORMAT_R16_SINT]      = GPU_FORMAT_R16_SINT,
+    [USL_RUNTIME_TEXEL_FORMAT_R16_FLOAT]     = GPU_FORMAT_R16_FLOAT,
+    [USL_RUNTIME_TEXEL_FORMAT_R32_UINT]      = GPU_FORMAT_R32_UINT,
+    [USL_RUNTIME_TEXEL_FORMAT_R32_SINT]      = GPU_FORMAT_R32_SINT,
+    [USL_RUNTIME_TEXEL_FORMAT_R32_FLOAT]     = GPU_FORMAT_R32_FLOAT,
+    [USL_RUNTIME_TEXEL_FORMAT_RG8_UNORM]     = GPU_FORMAT_RG8_UNORM,
+    [USL_RUNTIME_TEXEL_FORMAT_RG8_SNORM]     = GPU_FORMAT_RG8_SNORM,
+    [USL_RUNTIME_TEXEL_FORMAT_RG8_UINT]      = GPU_FORMAT_RG8_UINT,
+    [USL_RUNTIME_TEXEL_FORMAT_RG8_SINT]      = GPU_FORMAT_RG8_SINT,
+    [USL_RUNTIME_TEXEL_FORMAT_RG16_UNORM]    = GPU_FORMAT_RG16_UNORM,
+    [USL_RUNTIME_TEXEL_FORMAT_RG16_SNORM]    = GPU_FORMAT_RG16_SNORM,
+    [USL_RUNTIME_TEXEL_FORMAT_RG16_UINT]     = GPU_FORMAT_RG16_UINT,
+    [USL_RUNTIME_TEXEL_FORMAT_RG16_SINT]     = GPU_FORMAT_RG16_SINT,
+    [USL_RUNTIME_TEXEL_FORMAT_RG16_FLOAT]    = GPU_FORMAT_RG16_FLOAT,
+    [USL_RUNTIME_TEXEL_FORMAT_RG32_UINT]     = GPU_FORMAT_RG32_UINT,
+    [USL_RUNTIME_TEXEL_FORMAT_RG32_SINT]     = GPU_FORMAT_RG32_SINT,
+    [USL_RUNTIME_TEXEL_FORMAT_RG32_FLOAT]    = GPU_FORMAT_RG32_FLOAT,
+    [USL_RUNTIME_TEXEL_FORMAT_RGBA8_UNORM]   = GPU_FORMAT_RGBA8_UNORM,
+    [USL_RUNTIME_TEXEL_FORMAT_RGBA8_SNORM]   = GPU_FORMAT_RGBA8_SNORM,
+    [USL_RUNTIME_TEXEL_FORMAT_RGBA8_UINT]    = GPU_FORMAT_RGBA8_UINT,
+    [USL_RUNTIME_TEXEL_FORMAT_RGBA8_SINT]    = GPU_FORMAT_RGBA8_SINT,
+    [USL_RUNTIME_TEXEL_FORMAT_BGRA8_UNORM]   = GPU_FORMAT_BGRA8_UNORM,
+    [USL_RUNTIME_TEXEL_FORMAT_RGB10A2_UNORM] = GPU_FORMAT_RGB10A2_UNORM,
+    [USL_RUNTIME_TEXEL_FORMAT_RGB10A2_UINT]  = GPU_FORMAT_RGB10A2_UINT,
+    [USL_RUNTIME_TEXEL_FORMAT_RG11B10_UFLOAT] = GPU_FORMAT_RG11B10_UFLOAT,
+    [USL_RUNTIME_TEXEL_FORMAT_RGBA16_UNORM]  = GPU_FORMAT_RGBA16_UNORM,
+    [USL_RUNTIME_TEXEL_FORMAT_RGBA16_SNORM]  = GPU_FORMAT_RGBA16_SNORM,
+    [USL_RUNTIME_TEXEL_FORMAT_RGBA16_UINT]   = GPU_FORMAT_RGBA16_UINT,
+    [USL_RUNTIME_TEXEL_FORMAT_RGBA16_SINT]   = GPU_FORMAT_RGBA16_SINT,
+    [USL_RUNTIME_TEXEL_FORMAT_RGBA16_FLOAT]  = GPU_FORMAT_RGBA16_FLOAT,
+    [USL_RUNTIME_TEXEL_FORMAT_RGBA32_UINT]   = GPU_FORMAT_RGBA32_UINT,
+    [USL_RUNTIME_TEXEL_FORMAT_RGBA32_SINT]   = GPU_FORMAT_RGBA32_SINT,
+    [USL_RUNTIME_TEXEL_FORMAT_RGBA32_FLOAT]  = GPU_FORMAT_RGBA32_FLOAT
+  };
+
+  return format < GPU_ARRAY_LEN(formats)
+           ? formats[format]
+           : GPU_FORMAT_UNDEFINED;
+}
+
+static int
+gpu_bindingLayoutFromUSLResource(const USLRuntimeResource     *resource,
+                                 GPUBindingType                bindingType,
+                                 GPUShaderResourceReflection  *out) {
+  if (!resource || !out) {
+    return 0;
+  }
+
+  switch (bindingType) {
+    case GPU_BINDING_SAMPLED_TEXTURE:
+      if (!gpu_textureViewTypeFromUSL(resource->type.texture_dim,
+                                      &out->sampledTexture.viewType)) {
+        return 0;
+      }
+      out->sampledTexture.sampleType =
+        gpu_textureSampleTypeFromUSL(&resource->type);
+      out->sampledTexture.multisampled = resource->type.is_multisampled != 0u;
+      return 1;
+    case GPU_BINDING_STORAGE_TEXTURE:
+      if (!gpu_textureViewTypeFromUSL(resource->type.texture_dim,
+                                      &out->storageTexture.viewType)) {
+        return 0;
+      }
+      out->storageTexture.format =
+        gpu_storageTextureFormatFromUSL(resource->type.texel_format);
+      out->storageTexture.access =
+        gpu_storageTextureAccessFromUSL(resource->type.image_access);
+      return 1;
+    case GPU_BINDING_SAMPLER:
+      out->sampler.type = resource->type.sampler_kind ==
+                            USL_RUNTIME_SAMPLER_COMPARISON
+                            ? GPU_SAMPLER_BINDING_COMPARISON
+                            : GPU_SAMPLER_BINDING_FILTERING;
+      return 1;
+    default:
+      return 1;
+  }
+}
+
+static int
+gpu_shaderResourceLayoutEqual(const GPUShaderResourceReflection *a,
+                              const GPUShaderResourceReflection *b) {
+  if (!a || !b || a->bindingType != b->bindingType) {
+    return 0;
+  }
+
+  switch (a->bindingType) {
+    case GPU_BINDING_SAMPLED_TEXTURE:
+      return a->sampledTexture.viewType == b->sampledTexture.viewType &&
+             a->sampledTexture.sampleType == b->sampledTexture.sampleType &&
+             a->sampledTexture.multisampled == b->sampledTexture.multisampled;
+    case GPU_BINDING_STORAGE_TEXTURE:
+      return a->storageTexture.viewType == b->storageTexture.viewType &&
+             a->storageTexture.format == b->storageTexture.format &&
+             a->storageTexture.access == b->storageTexture.access;
+    case GPU_BINDING_SAMPLER:
+      return a->sampler.type == b->sampler.type;
+    default:
+      return 1;
   }
 }
 
@@ -1202,6 +1394,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
     GPUShaderEntryInfo *shaderEntry;
     GPUShaderResourceReflection *canonical;
     GPUShaderResourceReflection *entryResource;
+    GPUShaderResourceReflection resourceLayout;
     GPUShaderResourceBindingInfo *bindingInfo;
     GPUShaderStageFlags visibility;
     GPUBindingType bindingType;
@@ -1217,6 +1410,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
     }
     shaderEntry = &entryInfo->entries[src->entry_index];
     arrayCount  = src->descriptor_count;
+    memset(&resourceLayout, 0, sizeof(resourceLayout));
     if (arrayCount == 0u ||
         !gpu_shaderVisibilityFromUSLStage(src->stage, &visibility) ||
         visibility != shaderEntry->stage ||
@@ -1228,6 +1422,13 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
                                                  src,
                                                  &backendBinding) ||
         !gpu_runtimeTextSize(src->param, &paramSize)) {
+      free(metadata);
+      return 0;
+    }
+    resourceLayout.bindingType = bindingType;
+    if (!gpu_bindingLayoutFromUSLResource(src,
+                                          bindingType,
+                                          &resourceLayout)) {
       free(metadata);
       return 0;
     }
@@ -1268,7 +1469,8 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
       }
     }
     if (canonical) {
-      if (canonical->arrayCount != arrayCount) {
+      if (canonical->arrayCount != arrayCount ||
+          !gpu_shaderResourceLayoutEqual(canonical, &resourceLayout)) {
         free(metadata);
         return 0;
       }
@@ -1277,6 +1479,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
                                      src->dynamic_offset != 0u;
     } else {
       canonical = &resources[resourceCount++];
+      *canonical = resourceLayout;
       canonical->name = gpu_storeMetadataText(&textCursor,
                                               src->param,
                                               paramSize);

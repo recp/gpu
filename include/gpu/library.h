@@ -24,12 +24,18 @@ extern "C" {
 #include "cmdqueue.h"
 #include "format.h"
 #include "device.h"
+#include "bindgroup.h"
 //#include <us/us.h>
 
 typedef struct GPUShaderLibrary GPUShaderLibrary;
 
 typedef struct GPUShaderResourceReflection {
   const char         *name;
+  union {
+    GPUTextureBindingLayout        sampledTexture;
+    GPUStorageTextureBindingLayout storageTexture;
+    GPUSamplerBindingLayout        sampler;
+  };
   uint32_t            groupIndex;
   uint32_t            binding;
   GPUBindingType      bindingType;

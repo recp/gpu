@@ -383,6 +383,7 @@ if(GPU_BUILD_WEBGPU)
     src/backend/webgpu/impl/library.c
     src/backend/webgpu/impl/descriptor.c
     src/backend/webgpu/impl/pipeline.c
+    src/backend/webgpu/impl/compute.c
     src/backend/webgpu/impl/renderpass.c
     src/backend/webgpu/impl/rce.c
   )
@@ -571,27 +572,72 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "GPU_USL_HOST_FIXTURE to a native build of that target.")
   endif()
 
+  set(GPU_WEBGPU_GALLERY_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
+  set(GPU_WEBGPU_GALLERY_SOURCE_DIR
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
+  file(MAKE_DIRECTORY
+       "${GPU_WEBGPU_GALLERY_DIR}"
+       "${GPU_WEBGPU_GALLERY_DIR}/sources")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/index.html"
+    "${GPU_WEBGPU_GALLERY_DIR}/index.html"
+    COPYONLY
+  )
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/gallery.css"
+    "${GPU_WEBGPU_GALLERY_DIR}/gallery.css"
+    COPYONLY
+  )
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample.js"
+    "${GPU_WEBGPU_GALLERY_DIR}/sample.js"
+    COPYONLY
+  )
+
   set(GPU_WEBGPU_TRIANGLE_DIR
       "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
   set(GPU_WEBGPU_TRIANGLE_SOURCE
       "${GPU_WEBGPU_TRIANGLE_DIR}/triangle.usl")
   set(GPU_WEBGPU_TRIANGLE_US
       "${GPU_WEBGPU_TRIANGLE_DIR}/triangle.us")
+  set(GPU_WEBGPU_SAMPLE_TITLE "First pixel")
+  set(GPU_WEBGPU_SAMPLE_KIND "Render / vertex-generated")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "A bufferless triangle compiled from USL and drawn through the portable render path.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/triangle.c")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/triangle.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/triangle.wgsl")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-triangle-webgpu-usl-shell.html"
+    @ONLY
+  )
   add_custom_command(
     OUTPUT "${GPU_WEBGPU_TRIANGLE_US}"
+    BYPRODUCTS "${GPU_WEBGPU_TRIANGLE_SOURCE}.wgsl"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${GPU_WEBGPU_TRIANGLE_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-webgpu-usl/triangle.usl"
             "${GPU_WEBGPU_TRIANGLE_SOURCE}"
     COMMAND ${CMAKE_COMMAND} -E env
             USL_EMIT_BYTECODE=1
-            USL_NO_BACKEND_SIDECAR=1
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_TRIANGLE_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-webgpu-usl/main.c"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/triangle.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_TRIANGLE_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/triangle.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_TRIANGLE_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/triangle.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-webgpu-usl/triangle.usl"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-webgpu-usl/main.c"
     VERBATIM
   )
   add_custom_target(gpu-webgpu-triangle-artifact
@@ -605,7 +651,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   target_link_options(gpu-triangle-webgpu-usl PRIVATE
     --use-port=emdawnwebgpu
     "--preload-file=${GPU_WEBGPU_TRIANGLE_US}@/triangle.us"
-    "--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-webgpu-usl/shell.html"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-triangle-webgpu-usl-shell.html"
     -sALLOW_MEMORY_GROWTH=1
   )
   add_dependencies(gpu-triangle-webgpu-usl gpu-webgpu-triangle-artifact)
@@ -614,10 +660,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
     LINK_DEPENDS
-      "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-webgpu-usl/shell.html"
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-triangle-webgpu-usl-shell.html"
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
-      "${CMAKE_CURRENT_BINARY_DIR}/samples/gpu-triangle-webgpu-usl"
+      "${GPU_WEBGPU_GALLERY_DIR}"
   )
 
   set(GPU_WEBGPU_TEXTURED_QUAD_DIR
@@ -626,8 +672,21 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${GPU_WEBGPU_TEXTURED_QUAD_DIR}/textured_quad.usl")
   set(GPU_WEBGPU_TEXTURED_QUAD_US
       "${GPU_WEBGPU_TEXTURED_QUAD_DIR}/textured_quad.us")
+  set(GPU_WEBGPU_SAMPLE_TITLE "Texture path")
+  set(GPU_WEBGPU_SAMPLE_KIND "Render / texture + sampler")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "A sampled checkerboard validating USL reflection, typed texture layouts, and bind groups.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/textured-quad.c")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/textured-quad.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/textured-quad.wgsl")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-textured-quad-webgpu-usl-shell.html"
+    @ONLY
+  )
   add_custom_command(
     OUTPUT "${GPU_WEBGPU_TEXTURED_QUAD_US}"
+    BYPRODUCTS "${GPU_WEBGPU_TEXTURED_QUAD_SOURCE}.wgsl"
     COMMAND ${CMAKE_COMMAND} -E make_directory
             "${GPU_WEBGPU_TEXTURED_QUAD_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -635,13 +694,22 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_TEXTURED_QUAD_SOURCE}"
     COMMAND ${CMAKE_COMMAND} -E env
             USL_EMIT_BYTECODE=1
-            USL_NO_BACKEND_SIDECAR=1
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_TEXTURED_QUAD_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-webgpu-usl/main.c"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/textured-quad.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_TEXTURED_QUAD_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/textured-quad.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_TEXTURED_QUAD_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/textured-quad.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-webgpu-usl/textured_quad.usl"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-webgpu-usl/main.c"
     VERBATIM
   )
   add_custom_target(gpu-webgpu-textured-quad-artifact
@@ -655,7 +723,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   target_link_options(gpu-textured-quad-webgpu-usl PRIVATE
     --use-port=emdawnwebgpu
     "--preload-file=${GPU_WEBGPU_TEXTURED_QUAD_US}@/textured_quad.us"
-    "--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-webgpu-usl/shell.html"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-textured-quad-webgpu-usl-shell.html"
     -sALLOW_MEMORY_GROWTH=1
   )
   add_dependencies(gpu-textured-quad-webgpu-usl
@@ -665,10 +733,81 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
     LINK_DEPENDS
-      "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-webgpu-usl/shell.html"
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-textured-quad-webgpu-usl-shell.html"
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
-      "${CMAKE_CURRENT_BINARY_DIR}/samples/gpu-textured-quad-webgpu-usl"
+      "${GPU_WEBGPU_GALLERY_DIR}"
+  )
+
+  set(GPU_WEBGPU_COMPUTE_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+  set(GPU_WEBGPU_COMPUTE_SOURCE
+      "${GPU_WEBGPU_COMPUTE_DIR}/compute.usl")
+  set(GPU_WEBGPU_COMPUTE_US
+      "${GPU_WEBGPU_COMPUTE_DIR}/compute.us")
+  set(GPU_WEBGPU_SAMPLE_TITLE "Compute handoff")
+  set(GPU_WEBGPU_SAMPLE_KIND "Compute / storage buffer")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "Compute writes the vertex stream; render consumes it in the same command buffer without readback.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/compute.c")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/compute.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/compute.wgsl")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-compute-webgpu-usl-shell.html"
+    @ONLY
+  )
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_COMPUTE_US}"
+    BYPRODUCTS "${GPU_WEBGPU_COMPUTE_SOURCE}.wgsl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${GPU_WEBGPU_COMPUTE_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-webgpu-usl/compute.usl"
+            "${GPU_WEBGPU_COMPUTE_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_COMPUTE_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-webgpu-usl/main.c"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/compute.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_COMPUTE_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/compute.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_COMPUTE_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/compute.wgsl"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-webgpu-usl/compute.usl"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-webgpu-usl/main.c"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-compute-artifact
+    DEPENDS "${GPU_WEBGPU_COMPUTE_US}"
+  )
+
+  add_executable(gpu-compute-webgpu-usl
+    samples/compute-webgpu-usl/main.c
+  )
+  target_link_libraries(gpu-compute-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-compute-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_COMPUTE_US}@/compute.us"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-compute-webgpu-usl-shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-compute-webgpu-usl gpu-webgpu-compute-artifact)
+  set_target_properties(gpu-compute-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-compute-webgpu-usl-shell.html"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${GPU_WEBGPU_GALLERY_DIR}"
   )
 endif()
 

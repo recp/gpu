@@ -36,6 +36,69 @@ webgpu_shaderStages(GPUShaderStageFlags stages) {
   return result;
 }
 
+static WGPUTextureViewDimension
+webgpu_bindingViewDimension(GPUTextureViewType type) {
+  static const WGPUTextureViewDimension dimensions[] = {
+    [GPU_TEXTURE_VIEW_1D]         = WGPUTextureViewDimension_1D,
+    [GPU_TEXTURE_VIEW_1D_ARRAY]   = WGPUTextureViewDimension_Undefined,
+    [GPU_TEXTURE_VIEW_2D]         = WGPUTextureViewDimension_2D,
+    [GPU_TEXTURE_VIEW_2D_ARRAY]   = WGPUTextureViewDimension_2DArray,
+    [GPU_TEXTURE_VIEW_CUBE]       = WGPUTextureViewDimension_Cube,
+    [GPU_TEXTURE_VIEW_CUBE_ARRAY] = WGPUTextureViewDimension_CubeArray,
+    [GPU_TEXTURE_VIEW_3D]         = WGPUTextureViewDimension_3D
+  };
+
+  return (uint32_t)type < GPU_ARRAY_LEN(dimensions)
+           ? dimensions[type]
+           : WGPUTextureViewDimension_Undefined;
+}
+
+static WGPUTextureSampleType
+webgpu_textureSampleType(GPUTextureSampleType type) {
+  static const WGPUTextureSampleType types[] = {
+    [GPU_TEXTURE_SAMPLE_TYPE_FLOAT] = WGPUTextureSampleType_Float,
+    [GPU_TEXTURE_SAMPLE_TYPE_UNFILTERABLE_FLOAT] =
+      WGPUTextureSampleType_UnfilterableFloat,
+    [GPU_TEXTURE_SAMPLE_TYPE_DEPTH] = WGPUTextureSampleType_Depth,
+    [GPU_TEXTURE_SAMPLE_TYPE_SINT]  = WGPUTextureSampleType_Sint,
+    [GPU_TEXTURE_SAMPLE_TYPE_UINT]  = WGPUTextureSampleType_Uint
+  };
+
+  return (uint32_t)type < GPU_ARRAY_LEN(types)
+           ? types[type]
+           : WGPUTextureSampleType_Undefined;
+}
+
+static WGPUStorageTextureAccess
+webgpu_storageTextureAccess(GPUStorageTextureAccess access) {
+  static const WGPUStorageTextureAccess values[] = {
+    [GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY] =
+      WGPUStorageTextureAccess_WriteOnly,
+    [GPU_STORAGE_TEXTURE_ACCESS_READ_ONLY] =
+      WGPUStorageTextureAccess_ReadOnly,
+    [GPU_STORAGE_TEXTURE_ACCESS_READ_WRITE] =
+      WGPUStorageTextureAccess_ReadWrite
+  };
+
+  return (uint32_t)access < GPU_ARRAY_LEN(values)
+           ? values[access]
+           : WGPUStorageTextureAccess_Undefined;
+}
+
+static WGPUSamplerBindingType
+webgpu_samplerBindingType(GPUSamplerBindingType type) {
+  static const WGPUSamplerBindingType types[] = {
+    [GPU_SAMPLER_BINDING_FILTERING] = WGPUSamplerBindingType_Filtering,
+    [GPU_SAMPLER_BINDING_NON_FILTERING] =
+      WGPUSamplerBindingType_NonFiltering,
+    [GPU_SAMPLER_BINDING_COMPARISON] = WGPUSamplerBindingType_Comparison
+  };
+
+  return (uint32_t)type < GPU_ARRAY_LEN(types)
+           ? types[type]
+           : WGPUSamplerBindingType_Undefined;
+}
+
 static GPUResult
 webgpu_createBindGroupLayout(GPUDevice          *device,
                              GPUBindGroupLayout *layout) {
@@ -97,13 +160,44 @@ webgpu_createBindGroupLayout(GPUDevice          *device,
       case GPU_BINDING_SAMPLED_TEXTURE:
         entry->texture = (WGPUTextureBindingLayout)
                            WGPU_TEXTURE_BINDING_LAYOUT_INIT;
-        entry->texture.sampleType    = WGPUTextureSampleType_Float;
-        entry->texture.viewDimension = WGPUTextureViewDimension_2D;
+        entry->texture.sampleType =
+          webgpu_textureSampleType(entries[i].sampledTexture.sampleType);
+        entry->texture.viewDimension =
+          webgpu_bindingViewDimension(entries[i].sampledTexture.viewType);
+        entry->texture.multisampled = entries[i].sampledTexture.multisampled;
+        if (entry->texture.sampleType == WGPUTextureSampleType_Undefined ||
+            entry->texture.viewDimension ==
+              WGPUTextureViewDimension_Undefined) {
+          free(nativeEntries);
+          return GPU_ERROR_UNSUPPORTED;
+        }
+        break;
+      case GPU_BINDING_STORAGE_TEXTURE:
+        entry->storageTexture = (WGPUStorageTextureBindingLayout)
+                                  WGPU_STORAGE_TEXTURE_BINDING_LAYOUT_INIT;
+        entry->storageTexture.access =
+          webgpu_storageTextureAccess(entries[i].storageTexture.access);
+        entry->storageTexture.format =
+          gpu_webgpuFormat(entries[i].storageTexture.format);
+        entry->storageTexture.viewDimension =
+          webgpu_bindingViewDimension(entries[i].storageTexture.viewType);
+        if (entry->storageTexture.access ==
+              WGPUStorageTextureAccess_Undefined ||
+            entry->storageTexture.format == WGPUTextureFormat_Undefined ||
+            entry->storageTexture.viewDimension ==
+              WGPUTextureViewDimension_Undefined) {
+          free(nativeEntries);
+          return GPU_ERROR_UNSUPPORTED;
+        }
         break;
       case GPU_BINDING_SAMPLER:
         entry->sampler = (WGPUSamplerBindingLayout)
                            WGPU_SAMPLER_BINDING_LAYOUT_INIT;
-        entry->sampler.type = WGPUSamplerBindingType_Filtering;
+        entry->sampler.type = webgpu_samplerBindingType(entries[i].sampler.type);
+        if (entry->sampler.type == WGPUSamplerBindingType_Undefined) {
+          free(nativeEntries);
+          return GPU_ERROR_UNSUPPORTED;
+        }
         break;
       default:
         free(nativeEntries);
@@ -297,6 +391,29 @@ webgpu_bindRenderGroup(GPURenderPassEncoder *pass,
   return true;
 }
 
+static bool
+webgpu_bindComputeGroup(GPUComputePassEncoder *pass,
+                        GPUPipelineLayout      *pipelineLayout,
+                        uint32_t                groupIndex,
+                        GPUBindGroup           *group,
+                        uint32_t                dynamicOffsetCount,
+                        const uint32_t         *dynamicOffsets) {
+  GPUCommandWebGPU *command;
+
+  GPU__UNUSED(pipelineLayout);
+  command = pass ? pass->_priv : NULL;
+  if (!command || !command->computeEncoder || !group || !group->_native) {
+    return false;
+  }
+
+  wgpuComputePassEncoderSetBindGroup(command->computeEncoder,
+                                     groupIndex,
+                                     group->_native,
+                                     dynamicOffsetCount,
+                                     dynamicOffsets);
+  return true;
+}
+
 void
 webgpu_initDescriptor(GPUApiDescriptor *api) {
   api->createBindGroupLayout  = webgpu_createBindGroupLayout;
@@ -307,4 +424,5 @@ webgpu_initDescriptor(GPUApiDescriptor *api) {
   api->updateBindGroup        = webgpu_updateBindGroup;
   api->destroyBindGroup       = webgpu_destroyBindGroup;
   api->bindRenderGroup        = webgpu_bindRenderGroup;
+  api->bindComputeGroup       = webgpu_bindComputeGroup;
 }

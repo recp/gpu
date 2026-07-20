@@ -166,6 +166,9 @@ gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath) {
   if (!layoutEntries || layoutEntryCount != 1u ||
       layoutEntries[0].binding != 0u ||
       layoutEntries[0].bindingType != GPU_BINDING_STORAGE_TEXTURE ||
+      layoutEntries[0].storageTexture.viewType != GPU_TEXTURE_VIEW_2D_ARRAY ||
+      layoutEntries[0].storageTexture.access !=
+        GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY ||
       layoutEntries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT) {
     fprintf(stderr, "storage texture reflection mismatch\n");
     ok = 0;
