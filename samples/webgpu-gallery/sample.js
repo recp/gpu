@@ -210,7 +210,7 @@ function debugFrame(now) {
 
     debugValues.fps.textContent = `${fps.toFixed(1)} FPS`;
     debugValues.frame.textContent = `${frameMs.toFixed(2)} ms frame`;
-    debugValues.heap.textContent = `${heapBytes ? formatBytes(heapBytes) : "n/a"} Wasm heap`;
+    debugValues.heap.textContent = `${heapBytes ? formatBytes(heapBytes) : "n/a"} Wasm capacity`;
     debugValues.canvas.textContent = `${canvas.width} × ${canvas.height} px`;
     debugFrames = 0;
     debugLastTime = now;
