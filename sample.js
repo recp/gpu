@@ -4,6 +4,13 @@ const panel = document.querySelector("#source-code");
 const lineNumbers = document.querySelector(".line-numbers");
 const copy = document.querySelector(".copy-button");
 const debugOverlay = document.querySelector(".debug-overlay");
+const debugToggle = document.querySelector(".debug-toggle");
+const debugValues = Object.fromEntries(
+  [...document.querySelectorAll("[data-debug]")].map((item) => [
+    item.dataset.debug,
+    item
+  ])
+);
 const tabs = [...document.querySelectorAll("[data-source]")];
 const sources = {
   c: document.body.dataset.cSource,
@@ -11,7 +18,7 @@ const sources = {
   wgsl: document.body.dataset.wgslSource
 };
 const cache = new Map();
-let debugVisible = params.has("debug") && params.get("debug") !== "0";
+let debugExpanded = !params.has("embed") && params.get("debug") !== "0";
 let debugLoopRunning = false;
 let debugLastTime = 0;
 let debugFrames = 0;
@@ -185,7 +192,7 @@ function formatBytes(bytes) {
 }
 
 function debugFrame(now) {
-  if (!debugVisible) {
+  if (!debugExpanded) {
     debugLoopRunning = false;
     return;
   }
@@ -201,23 +208,21 @@ function debugFrame(now) {
       ? HEAP8.buffer.byteLength
       : 0;
 
-    debugOverlay.innerHTML = [
-      `<b>${fps.toFixed(1)} FPS</b>`,
-      `<span>${frameMs.toFixed(2)} ms frame</span>`,
-      `<span>${heapBytes ? formatBytes(heapBytes) : "n/a"} Wasm heap</span>`,
-      `<span>${canvas.width} × ${canvas.height} px</span>`,
-      `<small>D to close</small>`
-    ].join("");
+    debugValues.fps.textContent = `${fps.toFixed(1)} FPS`;
+    debugValues.frame.textContent = `${frameMs.toFixed(2)} ms frame`;
+    debugValues.heap.textContent = `${heapBytes ? formatBytes(heapBytes) : "n/a"} Wasm heap`;
+    debugValues.canvas.textContent = `${canvas.width} × ${canvas.height} px`;
     debugFrames = 0;
     debugLastTime = now;
   }
   requestAnimationFrame(debugFrame);
 }
 
-function setDebugVisible(visible) {
-  debugVisible = visible;
-  debugOverlay.hidden = !visible;
-  if (visible && !debugLoopRunning) {
+function setDebugExpanded(expanded) {
+  debugExpanded = expanded;
+  debugOverlay.dataset.expanded = String(expanded);
+  debugToggle.setAttribute("aria-expanded", String(expanded));
+  if (expanded && !debugLoopRunning) {
     debugLoopRunning = true;
     debugLastTime = 0;
     debugFrames = 0;
@@ -273,12 +278,16 @@ copy?.addEventListener("click", async () => {
   setTimeout(() => { copy.textContent = "Copy"; }, 1200);
 });
 
+debugToggle?.addEventListener("click", () => {
+  setDebugExpanded(!debugExpanded);
+});
+
 document.addEventListener("keydown", (event) => {
   const interactive = event.target instanceof Element &&
     event.target.closest("button, input, textarea");
   if (event.key.toLowerCase() !== "d" || interactive) return;
-  setDebugVisible(!debugVisible);
+  setDebugExpanded(!debugExpanded);
 });
 
-setDebugVisible(debugVisible);
+setDebugExpanded(debugExpanded);
 if (!params.has("embed")) showSource("c");

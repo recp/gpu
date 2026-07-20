@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="gallery.css?v=4">
+  <link rel="stylesheet" href="gallery.css?v=5">
   <title>Instancing · GPU + USL</title>
 </head>
 <body class="sample-page"
@@ -23,35 +23,44 @@
   <main class="sample-workbench">
     <section class="stage" aria-label="Live WebGPU output">
       <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
-      <aside class="debug-overlay" hidden aria-live="off"></aside>
+      <aside class="debug-overlay" aria-label="Debug metrics">
+        <button class="debug-toggle" type="button" aria-expanded="true">
+          <span>Debug</span>
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="m4 6 4 4 4-4"/>
+          </svg>
+        </button>
+        <div class="debug-metrics" aria-live="off">
+          <b data-debug="fps">-- FPS</b>
+          <span data-debug="frame">-- ms frame</span>
+          <span data-debug="heap">-- Wasm heap</span>
+          <span data-debug="canvas">-- × -- px</span>
+        </div>
+      </aside>
       <div class="stage-meta">
         <p>Two dynamic uniform slices drive eight instances without rebuilding the bind group.</p>
         <div id="status">GPU: loading sample</div>
       </div>
     </section>
 
-    <section class="source-panel" aria-labelledby="source-title">
-      <header class="source-head">
-        <div>
-          <p class="eyebrow">Artifact inspection</p>
-          <h2 id="source-title">Source path</h2>
+    <section class="source-panel" aria-label="Source">
+      <div class="source-toolbar">
+        <div class="source-tabs" role="tablist" aria-label="Source language">
+          <button id="tab-c" role="tab" aria-selected="true"
+                  aria-controls="source-code" data-source="c">GPU C</button>
+          <button id="tab-usl" role="tab" aria-selected="false"
+                  aria-controls="source-code" data-source="usl">USL</button>
+          <button id="tab-wgsl" role="tab" aria-selected="false"
+                  aria-controls="source-code" data-source="wgsl">Generated WGSL</button>
         </div>
         <button class="copy-button" type="button">Copy</button>
-      </header>
-      <div class="source-tabs" role="tablist" aria-label="Source language">
-        <button id="tab-c" role="tab" aria-selected="true"
-                aria-controls="source-code" data-source="c">GPU C</button>
-        <button id="tab-usl" role="tab" aria-selected="false"
-                aria-controls="source-code" data-source="usl">USL</button>
-        <button id="tab-wgsl" role="tab" aria-selected="false"
-                aria-controls="source-code" data-source="wgsl">Generated WGSL</button>
       </div>
       <pre id="source-code" role="tabpanel" aria-labelledby="tab-c"
            tabindex="0"><span class="line-numbers" aria-hidden="true"></span><code>Loading source…</code></pre>
     </section>
   </main>
 
-  <script src="sample.js?v=3" defer></script>
+  <script src="sample.js?v=4" defer></script>
   {{{ SCRIPT }}}
 </body>
 </html>
