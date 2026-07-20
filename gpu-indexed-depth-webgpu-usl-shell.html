@@ -33,7 +33,7 @@
         <div class="debug-metrics" aria-live="off">
           <b data-debug="fps">-- FPS</b>
           <span data-debug="frame">-- ms frame</span>
-          <span data-debug="heap">-- Wasm heap</span>
+          <span data-debug="heap">-- Wasm capacity</span>
           <span data-debug="canvas">-- × -- px</span>
         </div>
       </aside>
@@ -61,6 +61,24 @@
   </main>
 
   <script src="sample.js?v=4" defer></script>
-  {{{ SCRIPT }}}
+  <script>
+    var Module = {
+      locateFile(path, prefix) {
+        return `${prefix}${path}?v=5`;
+      }
+    };
+  </script>
+  <template id="runtime-script">{{{ SCRIPT }}}</template>
+  <script>
+    const runtimeTemplate = document.querySelector("#runtime-script");
+    const runtimeSource = runtimeTemplate.content
+      .querySelector("script")
+      .getAttribute("src");
+    const runtime = document.createElement("script");
+
+    runtime.src = `${runtimeSource}?v=5`;
+    runtime.async = true;
+    document.body.appendChild(runtime);
+  </script>
 </body>
 </html>
