@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Live WebGPU samples built with GPU and USL.">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="gallery.css?v=2">
+  <title>GPU + USL WebGPU Samples</title>
+</head>
+<body class="gallery-page">
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="GPU samples home">
+      <span class="brand-mark" aria-hidden="true">G</span>
+      <span class="brand-copy"><strong>GPU</strong><small>WebGPU samples</small></span>
+    </a>
+    <nav class="main-nav" aria-label="Main navigation">
+      <a href="#samples">Samples</a>
+      <a href="https://github.com/recp/gpu">Source</a>
+    </nav>
+    <a class="header-link" href="https://github.com/recp/gpu">GitHub <span>↗</span></a>
+  </header>
+
+  <main>
+    <section class="sample-section shell" id="samples">
+      <div class="sample-grid">
+        <article class="sample-card">
+          <a class="sample-preview" href="gpu-triangle-webgpu-usl.html">
+            <iframe title="First pixel preview"
+                    src="gpu-triangle-webgpu-usl.html?embed=1"
+                    loading="eager" tabindex="-1"></iframe>
+          </a>
+          <div>
+            <small>Render / 01</small>
+            <h3><a href="gpu-triangle-webgpu-usl.html">First pixel</a></h3>
+            <p>A bufferless triangle through the portable render path.</p>
+          </div>
+        </article>
+
+        <article class="sample-card">
+          <a class="sample-preview" href="gpu-textured-quad-webgpu-usl.html">
+            <iframe title="Texture path preview"
+                    src="gpu-textured-quad-webgpu-usl.html?embed=1"
+                    loading="eager" tabindex="-1"></iframe>
+          </a>
+          <div>
+            <small>Binding / 02</small>
+            <h3><a href="gpu-textured-quad-webgpu-usl.html">Texture path</a></h3>
+            <p>Texture, sampler, reflection, and bind-group lowering.</p>
+          </div>
+        </article>
+
+        <article class="sample-card">
+          <a class="sample-preview" href="gpu-compute-webgpu-usl.html">
+            <iframe title="Compute handoff preview"
+                    src="gpu-compute-webgpu-usl.html?embed=1"
+                    loading="eager" tabindex="-1"></iframe>
+          </a>
+          <div>
+            <small>Compute / 03</small>
+            <h3><a href="gpu-compute-webgpu-usl.html">Compute handoff</a></h3>
+            <p>Compute writes the vertex stream; render consumes it directly.</p>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
