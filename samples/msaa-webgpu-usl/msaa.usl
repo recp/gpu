@@ -1,0 +1,18 @@
+struct VSOut {
+  position: float4 #position
+  color:    float3
+}
+
+vert msaa_vs(vertexId: uint #vertex_id) -> VSOut {
+  if (vertexId == 0) {
+    return VSOut { float4(0.0, 0.76, 0.0, 1.0), float3(1.0, 0.28, 0.04) }
+  }
+  if (vertexId == 1) {
+    return VSOut { float4(-0.78, -0.68, 0.0, 1.0), float3(1.0, 0.76, 0.08) }
+  }
+  return VSOut { float4(0.78, -0.68, 0.0, 1.0), float3(0.08, 0.64, 1.0) }
+}
+
+frag msaa_fs(input: VSOut #stage_in) -> float4 {
+  return float4(input.color, 1.0)
+}
