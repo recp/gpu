@@ -2,9 +2,10 @@
 #include "../../src/api/device_internal.h"
 #include "../../src/api/sampler_internal.h"
 
-static GPUSampler gScopedSampler;
-static uint32_t   gScopedSamplerCreateCalls;
-static uint32_t   gScopedSamplerDestroyCalls;
+static GPUSampler     gScopedSampler;
+static GPUSamplerDesc gScopedSamplerDesc;
+static uint32_t       gScopedSamplerCreateCalls;
+static uint32_t       gScopedSamplerDestroyCalls;
 
 static GPUResult
 create_scoped_sampler(GPUApi                    * __restrict api,
@@ -14,9 +15,9 @@ create_scoped_sampler(GPUApi                    * __restrict api,
                       GPUSampler               **outSampler) {
   (void)api;
   (void)device;
-  (void)info;
   (void)staticIfSupported;
   memset(&gScopedSampler, 0, sizeof(gScopedSampler));
+  gScopedSamplerDesc = info->desc;
   *outSampler = &gScopedSampler;
   gScopedSamplerCreateCalls++;
   return GPU_OK;
@@ -61,12 +62,18 @@ check_sampler_device_dispatch(GPUDevice *activeDevice) {
   gScopedSamplerCreateCalls        = 0u;
   gScopedSamplerDestroyCalls       = 0u;
 
-  info.chain.sType      = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-  info.chain.structSize = sizeof(info);
-  info.desc             = valid_sampler_desc();
+  info.chain.sType        = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  info.chain.structSize   = sizeof(info);
+  info.desc               = valid_sampler_desc();
+  info.desc.compare       = GPU_COMPARE_LESS_EQUAL;
+  info.desc.compareEnable = true;
   sampler = NULL;
   if (GPUCreateSampler(&device, &info, false, &sampler) != GPU_OK ||
-      sampler != &gScopedSampler || sampler->device != &device) {
+      sampler != &gScopedSampler || sampler->device != &device ||
+      !sampler->desc.compareEnable ||
+      sampler->desc.compare != GPU_COMPARE_LESS_EQUAL ||
+      !gScopedSamplerDesc.compareEnable ||
+      gScopedSamplerDesc.compare != GPU_COMPARE_LESS_EQUAL) {
     fprintf(stderr, "sampler device dispatch failed\n");
     return 0;
   }
@@ -142,6 +149,29 @@ check_sampler_validation(GPUDevice *device) {
     GPUDestroySampler(sampler);
     return 0;
   }
+
+  info.desc = valid_sampler_desc();
+  info.desc.compare = (GPUCompareOp)99;
+  sampler = (GPUSampler *)(uintptr_t)1u;
+  if (GPUCreateSampler(device, &info, false, &sampler) != GPU_ERROR_INVALID_ARGUMENT ||
+      sampler != NULL) {
+    fprintf(stderr, "sampler create accepted invalid compare op\n");
+    GPUDestroySampler(sampler);
+    return 0;
+  }
+
+  info.desc               = valid_sampler_desc();
+  info.desc.compare       = GPU_COMPARE_LESS_EQUAL;
+  info.desc.compareEnable = true;
+  sampler = NULL;
+  if (GPUCreateSampler(device, &info, false, &sampler) != GPU_OK || !sampler ||
+      !sampler->desc.compareEnable ||
+      sampler->desc.compare != GPU_COMPARE_LESS_EQUAL) {
+    fprintf(stderr, "sampler create rejected valid comparison sampler\n");
+    GPUDestroySampler(sampler);
+    return 0;
+  }
+  GPUDestroySampler(sampler);
 
   info.desc = valid_sampler_desc();
   sampler = NULL;

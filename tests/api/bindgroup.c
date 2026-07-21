@@ -451,6 +451,28 @@ check_bind_group_layout_validation(GPUDevice *device) {
   }
 
   entry.immutableSamplerDesc = valid_sampler_desc();
+  entry.sampler.type = GPU_SAMPLER_BINDING_COMPARISON;
+  layout = (GPUBindGroupLayout *)(uintptr_t)1u;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      layout != NULL) {
+    fprintf(stderr, "bind group layout accepted normal sampler as comparison\n");
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+
+  entry.immutableSamplerDesc.compare       = GPU_COMPARE_LESS_EQUAL;
+  entry.immutableSamplerDesc.compareEnable = true;
+  layout = NULL;
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK ||
+      !layout) {
+    fprintf(stderr, "bind group layout rejected valid comparison sampler\n");
+    return 0;
+  }
+  GPUDestroyBindGroupLayout(layout);
+
+  entry.sampler.type = GPU_SAMPLER_BINDING_FILTERING;
+  entry.immutableSamplerDesc = valid_sampler_desc();
   entry.hasDynamicOffset = true;
   layout = (GPUBindGroupLayout *)(uintptr_t)1u;
   if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT ||

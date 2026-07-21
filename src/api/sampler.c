@@ -38,7 +38,8 @@ gpu_samplerDescIsValid(const GPUSamplerDesc *desc) {
           desc->addressV == GPU_ADDRESS_MODE_CLAMP_TO_EDGE) &&
          (desc->addressW == GPU_ADDRESS_MODE_REPEAT ||
           desc->addressW == GPU_ADDRESS_MODE_MIRRORED_REPEAT ||
-          desc->addressW == GPU_ADDRESS_MODE_CLAMP_TO_EDGE);
+          desc->addressW == GPU_ADDRESS_MODE_CLAMP_TO_EDGE) &&
+         (uint32_t)desc->compare <= GPU_COMPARE_ALWAYS;
 }
 
 GPU_EXPORT
@@ -89,6 +90,7 @@ GPUCreateSampler(GPUDevice                  *__restrict device,
   }
 
   (*outSampler)->device = device;
+  (*outSampler)->desc   = info->desc;
   return GPU_OK;
 }
 

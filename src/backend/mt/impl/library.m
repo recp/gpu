@@ -167,6 +167,24 @@ mt_samplerAddressMode(GPUAddressMode mode) {
   }
 }
 
+static MTLCompareFunction
+mt_samplerCompareFunction(GPUCompareOp op) {
+  static const MTLCompareFunction functions[] = {
+    [GPU_COMPARE_NEVER]         = MTLCompareFunctionNever,
+    [GPU_COMPARE_LESS]          = MTLCompareFunctionLess,
+    [GPU_COMPARE_EQUAL]         = MTLCompareFunctionEqual,
+    [GPU_COMPARE_LESS_EQUAL]    = MTLCompareFunctionLessEqual,
+    [GPU_COMPARE_GREATER]       = MTLCompareFunctionGreater,
+    [GPU_COMPARE_NOT_EQUAL]     = MTLCompareFunctionNotEqual,
+    [GPU_COMPARE_GREATER_EQUAL] = MTLCompareFunctionGreaterEqual,
+    [GPU_COMPARE_ALWAYS]        = MTLCompareFunctionAlways
+  };
+
+  return (uint32_t)op < GPU_ARRAY_LEN(functions)
+           ? functions[op]
+           : MTLCompareFunctionNever;
+}
+
 GPU_HIDE
 GPUResult
 mt_createSampler(GPUApi * __restrict api,
@@ -195,6 +213,9 @@ mt_createSampler(GPUApi * __restrict api,
   desc.sAddressMode = mt_samplerAddressMode(info->desc.addressU);
   desc.tAddressMode = mt_samplerAddressMode(info->desc.addressV);
   desc.rAddressMode = mt_samplerAddressMode(info->desc.addressW);
+  desc.compareFunction = info->desc.compareEnable
+                           ? mt_samplerCompareFunction(info->desc.compare)
+                           : MTLCompareFunctionNever;
 
   state = [deviceMT->device newSamplerStateWithDescriptor:desc];
   [desc release];

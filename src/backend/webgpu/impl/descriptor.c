@@ -337,9 +337,6 @@ webgpu_createBindGroupLayout(GPUDevice          *device,
         if (entries[i].immutableSampler) {
           WGPUSampler sampler;
 
-          if (entry->sampler.type == WGPUSamplerBindingType_Comparison) {
-            goto unsupported;
-          }
           sampler = gpu_webgpuCreateSampler(device,
                                             &entries[i].immutableSamplerDesc,
                                             NULL);

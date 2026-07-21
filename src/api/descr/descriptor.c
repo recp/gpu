@@ -641,7 +641,8 @@ gpu_samplerDescIsValid(const GPUSamplerDesc *desc) {
           desc->addressV == GPU_ADDRESS_MODE_CLAMP_TO_EDGE) &&
          (desc->addressW == GPU_ADDRESS_MODE_REPEAT ||
           desc->addressW == GPU_ADDRESS_MODE_MIRRORED_REPEAT ||
-          desc->addressW == GPU_ADDRESS_MODE_CLAMP_TO_EDGE);
+          desc->addressW == GPU_ADDRESS_MODE_CLAMP_TO_EDGE) &&
+         (uint32_t)desc->compare <= GPU_COMPARE_ALWAYS;
 }
 
 static int
@@ -789,7 +790,9 @@ gpu_validateLayoutEntries(const GPUBindGroupLayoutEntry *entries,
         (entry.hasDynamicOffset && kind != GPUBindKindBuffer) ||
         (entry.immutableSampler &&
          (kind != GPUBindKindSampler ||
-          !gpu_samplerDescIsValid(&entry.immutableSamplerDesc))) ||
+          !gpu_samplerDescIsValid(&entry.immutableSamplerDesc) ||
+          ((entry.sampler.type == GPU_SAMPLER_BINDING_COMPARISON) !=
+           entry.immutableSamplerDesc.compareEnable))) ||
         (bindless && entry.hasDynamicOffset) ||
         gpu_layoutEntryDuplicateExists(entries,
                                        i,
@@ -1096,6 +1099,11 @@ gpu_bindGroupEntryMatchesLayout(const GPUBindGroupLayoutEntry *layoutEntry,
   layoutKind = gpu_layoutEntryKind(layoutEntry);
   if (layoutEntry->immutableSampler &&
       layoutKind == GPUBindKindSampler) {
+    return 0;
+  }
+  if (layoutKind == GPUBindKindSampler && entry->sampler &&
+      ((layoutEntry->sampler.type == GPU_SAMPLER_BINDING_COMPARISON) !=
+       entry->sampler->desc.compareEnable)) {
     return 0;
   }
   if (!gpu_bindGroupBufferRangeValid(layoutEntry, entry)) {

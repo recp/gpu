@@ -44,6 +44,24 @@ vk__addressMode(GPUAddressMode mode) {
   }
 }
 
+static VkCompareOp
+vk__gpuCompareOp(GPUCompareOp op) {
+  static const VkCompareOp operations[] = {
+    [GPU_COMPARE_NEVER]         = VK_COMPARE_OP_NEVER,
+    [GPU_COMPARE_LESS]          = VK_COMPARE_OP_LESS,
+    [GPU_COMPARE_EQUAL]         = VK_COMPARE_OP_EQUAL,
+    [GPU_COMPARE_LESS_EQUAL]    = VK_COMPARE_OP_LESS_OR_EQUAL,
+    [GPU_COMPARE_GREATER]       = VK_COMPARE_OP_GREATER,
+    [GPU_COMPARE_NOT_EQUAL]     = VK_COMPARE_OP_NOT_EQUAL,
+    [GPU_COMPARE_GREATER_EQUAL] = VK_COMPARE_OP_GREATER_OR_EQUAL,
+    [GPU_COMPARE_ALWAYS]        = VK_COMPARE_OP_ALWAYS
+  };
+
+  return (uint32_t)op < GPU_ARRAY_LEN(operations)
+           ? operations[op]
+           : VK_COMPARE_OP_NEVER;
+}
+
 GPU_HIDE
 void
 vk_fillSamplerInfo(const GPUSamplerDesc *desc, VkSamplerCreateInfo *outInfo) {
@@ -55,6 +73,8 @@ vk_fillSamplerInfo(const GPUSamplerDesc *desc, VkSamplerCreateInfo *outInfo) {
   outInfo->addressModeU = vk__addressMode(desc->addressU);
   outInfo->addressModeV = vk__addressMode(desc->addressV);
   outInfo->addressModeW = vk__addressMode(desc->addressW);
+  outInfo->compareEnable = desc->compareEnable ? VK_TRUE : VK_FALSE;
+  outInfo->compareOp     = vk__gpuCompareOp(desc->compare);
   outInfo->maxLod       = VK_LOD_CLAMP_NONE;
 }
 

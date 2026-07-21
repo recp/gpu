@@ -178,6 +178,24 @@ dx12__addressMode(GPUAddressMode mode) {
            : D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 }
 
+static D3D12_COMPARISON_FUNC
+dx12__compareFunction(GPUCompareOp op) {
+  static const D3D12_COMPARISON_FUNC functions[] = {
+    [GPU_COMPARE_NEVER]         = D3D12_COMPARISON_FUNC_NEVER,
+    [GPU_COMPARE_LESS]          = D3D12_COMPARISON_FUNC_LESS,
+    [GPU_COMPARE_EQUAL]         = D3D12_COMPARISON_FUNC_EQUAL,
+    [GPU_COMPARE_LESS_EQUAL]    = D3D12_COMPARISON_FUNC_LESS_EQUAL,
+    [GPU_COMPARE_GREATER]       = D3D12_COMPARISON_FUNC_GREATER,
+    [GPU_COMPARE_NOT_EQUAL]     = D3D12_COMPARISON_FUNC_NOT_EQUAL,
+    [GPU_COMPARE_GREATER_EQUAL] = D3D12_COMPARISON_FUNC_GREATER_EQUAL,
+    [GPU_COMPARE_ALWAYS]        = D3D12_COMPARISON_FUNC_ALWAYS
+  };
+
+  return (uint32_t)op < GPU_ARRAY_LEN(functions)
+           ? functions[op]
+           : D3D12_COMPARISON_FUNC_NEVER;
+}
+
 GPU_HIDE
 int
 dx12_fillStaticSamplerDesc(const GPUSamplerDesc       *desc,
@@ -200,6 +218,7 @@ dx12_fillStaticSamplerDesc(const GPUSamplerDesc       *desc,
   staticDesc.mipFilter     = desc->mipFilter == GPU_MIP_FILTER_LINEAR
                                ? USL_RUNTIME_FILTER_LINEAR
                                : USL_RUNTIME_FILTER_NEAREST;
+  staticDesc.hasCompare    = desc->compareEnable;
   staticDesc.maxAnisotropy = 1u;
 
   memset(outDesc, 0, sizeof(*outDesc));
@@ -208,7 +227,9 @@ dx12_fillStaticSamplerDesc(const GPUSamplerDesc       *desc,
   outDesc->AddressV         = dx12__addressMode(desc->addressV);
   outDesc->AddressW         = dx12__addressMode(desc->addressW);
   outDesc->MaxAnisotropy    = 1u;
-  outDesc->ComparisonFunc   = D3D12_COMPARISON_FUNC_NEVER;
+  outDesc->ComparisonFunc   = desc->compareEnable
+                                ? dx12__compareFunction(desc->compare)
+                                : D3D12_COMPARISON_FUNC_NEVER;
   outDesc->BorderColor      = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
   outDesc->MinLOD           = 0.0f;
   outDesc->MaxLOD           = D3D12_FLOAT32_MAX;
@@ -243,6 +264,7 @@ dx12_createSampler(GPUApi                    * __restrict api,
   staticDesc.mipFilter     = info->desc.mipFilter == GPU_MIP_FILTER_LINEAR
                                ? USL_RUNTIME_FILTER_LINEAR
                                : USL_RUNTIME_FILTER_NEAREST;
+  staticDesc.hasCompare    = info->desc.compareEnable;
   staticDesc.maxAnisotropy = 1u;
 
   desc.Filter         = dx12_staticSamplerFilter(&staticDesc);
@@ -250,7 +272,9 @@ dx12_createSampler(GPUApi                    * __restrict api,
   desc.AddressV       = dx12__addressMode(info->desc.addressV);
   desc.AddressW       = dx12__addressMode(info->desc.addressW);
   desc.MaxAnisotropy  = 1u;
-  desc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+  desc.ComparisonFunc = info->desc.compareEnable
+                          ? dx12__compareFunction(info->desc.compare)
+                          : D3D12_COMPARISON_FUNC_NEVER;
   desc.MaxLOD         = D3D12_FLOAT32_MAX;
   return dx12__createSampler(device, &desc, outSampler);
 }

@@ -22,6 +22,7 @@ extern "C" {
 
 #include "common.h"
 #include "cmdqueue.h"
+#include "depthstencil.h"
 
 typedef struct GPUDevice GPUDevice;
 typedef struct GPUSampler GPUSampler;
@@ -49,6 +50,8 @@ typedef struct GPUSamplerDesc {
   GPUAddressMode addressU;
   GPUAddressMode addressV;
   GPUAddressMode addressW;
+  GPUCompareOp   compare;
+  bool           compareEnable;
 } GPUSamplerDesc;
 
 typedef struct GPUSamplerCreateInfo {

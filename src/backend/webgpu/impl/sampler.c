@@ -35,6 +35,24 @@ webgpu_addressMode(GPUAddressMode mode) {
            : WGPUAddressMode_Undefined;
 }
 
+static WGPUCompareFunction
+webgpu_compareFunction(GPUCompareOp op) {
+  static const WGPUCompareFunction functions[] = {
+    [GPU_COMPARE_NEVER]         = WGPUCompareFunction_Never,
+    [GPU_COMPARE_LESS]          = WGPUCompareFunction_Less,
+    [GPU_COMPARE_EQUAL]         = WGPUCompareFunction_Equal,
+    [GPU_COMPARE_LESS_EQUAL]    = WGPUCompareFunction_LessEqual,
+    [GPU_COMPARE_GREATER]       = WGPUCompareFunction_Greater,
+    [GPU_COMPARE_NOT_EQUAL]     = WGPUCompareFunction_NotEqual,
+    [GPU_COMPARE_GREATER_EQUAL] = WGPUCompareFunction_GreaterEqual,
+    [GPU_COMPARE_ALWAYS]        = WGPUCompareFunction_Always
+  };
+
+  return (uint32_t)op < GPU_ARRAY_LEN(functions)
+           ? functions[op]
+           : WGPUCompareFunction_Undefined;
+}
+
 WGPUSampler
 gpu_webgpuCreateSampler(GPUDevice           *device,
                         const GPUSamplerDesc *desc,
@@ -54,6 +72,9 @@ gpu_webgpuCreateSampler(GPUDevice           *device,
   descriptor.minFilter    = webgpu_filter(desc->minFilter);
   descriptor.magFilter    = webgpu_filter(desc->magFilter);
   descriptor.mipmapFilter = webgpu_mipFilter(desc->mipFilter);
+  descriptor.compare      = desc->compareEnable
+                              ? webgpu_compareFunction(desc->compare)
+                              : WGPUCompareFunction_Undefined;
   return wgpuDeviceCreateSampler(native->device, &descriptor);
 }
 
