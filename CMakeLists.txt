@@ -1277,6 +1277,79 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"
   )
+
+  set(GPU_WEBGPU_MRT_BLEND_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+  set(GPU_WEBGPU_MRT_BLEND_SOURCE
+      "${GPU_WEBGPU_MRT_BLEND_DIR}/mrt_blend.usl")
+  set(GPU_WEBGPU_MRT_BLEND_US
+      "${GPU_WEBGPU_MRT_BLEND_DIR}/mrt_blend.us")
+  set(GPU_WEBGPU_SAMPLE_TITLE "MRT blend")
+  set(GPU_WEBGPU_SAMPLE_KIND "Render / MRT + blending")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "Two offscreen color targets use independent alpha and additive blend state, then composite into the swapchain.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/mrt-blend.c")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/mrt-blend.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/mrt-blend.wgsl")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-mrt-blend-webgpu-usl-shell.html"
+    @ONLY
+  )
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_MRT_BLEND_US}"
+    BYPRODUCTS "${GPU_WEBGPU_MRT_BLEND_SOURCE}.wgsl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${GPU_WEBGPU_MRT_BLEND_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/mrt-blend-webgpu-usl/mrt_blend.usl"
+            "${GPU_WEBGPU_MRT_BLEND_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_MRT_BLEND_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/mrt-blend-webgpu-usl/main.c"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/mrt-blend.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_MRT_BLEND_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/mrt-blend.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_MRT_BLEND_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/mrt-blend.wgsl"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/mrt-blend-webgpu-usl/mrt_blend.usl"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/mrt-blend-webgpu-usl/main.c"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-mrt-blend-artifact
+    DEPENDS "${GPU_WEBGPU_MRT_BLEND_US}"
+  )
+
+  add_executable(gpu-mrt-blend-webgpu-usl
+    samples/mrt-blend-webgpu-usl/main.c
+    ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
+  )
+  target_link_libraries(gpu-mrt-blend-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-mrt-blend-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_MRT_BLEND_US}@/mrt_blend.us"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-mrt-blend-webgpu-usl-shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-mrt-blend-webgpu-usl
+                   gpu-webgpu-mrt-blend-artifact)
+  set_target_properties(gpu-mrt-blend-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-mrt-blend-webgpu-usl-shell.html;${GPU_WEBGPU_MRT_BLEND_US}"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${GPU_WEBGPU_GALLERY_DIR}"
+  )
 endif()
 
 if(GPU_BUILD_TESTS)
