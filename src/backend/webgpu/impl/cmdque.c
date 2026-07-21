@@ -54,6 +54,17 @@ webgpu_getCommandQueue(GPUDevice *device,
   return &native->queueHandle;
 }
 
+static GPUResult
+webgpu_getTimestampPeriod(GPUQueue *queue,
+                          double   *outNanosecondsPerTick) {
+  if (!queue || !outNanosecondsPerTick) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outNanosecondsPerTick = 1.0;
+  return GPU_OK;
+}
+
 static GPUCommandBuffer *
 webgpu_newCommandBuffer(GPUQueue                    *queue,
                         const char                  *label,
@@ -180,6 +191,7 @@ webgpu_presentDrawable(GPUCommandBuffer *cmdb, GPUFrame *frame) {
 void
 webgpu_initCommandQueue(GPUApiCommandQueue *api) {
   api->getCommandQueue         = webgpu_getCommandQueue;
+  api->getTimestampPeriod      = webgpu_getTimestampPeriod;
   api->newCommandBuffer        = webgpu_newCommandBuffer;
   api->commandBufferOnComplete = webgpu_commandBufferOnComplete;
   api->discard                 = webgpu_discard;

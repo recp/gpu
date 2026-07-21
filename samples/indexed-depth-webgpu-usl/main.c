@@ -19,12 +19,15 @@ typedef struct WebGPUIndexedDepth {
   GPURenderPipeline *pipeline;
   GPUBuffer         *vertexBuffer;
   GPUBuffer         *indexBuffer;
+  GPUBuffer         *occlusionBuffer;
+  GPUQuerySet       *occlusionQuery;
   GPUTexture        *depthTexture;
   GPUTextureView    *depthView;
   WebGPURequest      request;
   uint32_t           width;
   uint32_t           height;
   uint32_t           frameCount;
+  bool               occlusionRecorded;
 } WebGPUIndexedDepth;
 
 enum {
@@ -201,7 +204,8 @@ create_pipeline(WebGPUIndexedDepth *state) {
 
 static int
 create_geometry(WebGPUIndexedDepth *state) {
-  GPUBufferCreateInfo info = {0};
+  GPUBufferCreateInfo   info = {0};
+  GPUQuerySetCreateInfo queryInfo = {0};
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   info.chain.structSize = sizeof(info);
@@ -226,6 +230,23 @@ create_geometry(WebGPUIndexedDepth *state) {
                           0u,
                           kCubeIndices,
                           sizeof(kCubeIndices)) != GPU_OK) {
+    return 0;
+  }
+
+  queryInfo.chain.sType      = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
+  queryInfo.chain.structSize = sizeof(queryInfo);
+  queryInfo.label            = "indexed-depth-webgpu-occlusion";
+  queryInfo.type             = GPU_QUERY_OCCLUSION;
+  queryInfo.count            = 1u;
+  info.label                 = "indexed-depth-webgpu-occlusion-result";
+  info.sizeBytes             = 16u;
+  info.usage                 = GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateQuerySet(state->device,
+                        &queryInfo,
+                        &state->occlusionQuery) != GPU_OK ||
+      GPUCreateBuffer(state->device,
+                      &info,
+                      &state->occlusionBuffer) != GPU_OK) {
     return 0;
   }
   return 1;
@@ -277,6 +298,7 @@ render_frame(void *userData) {
   passInfo.label                   = "indexed-depth-webgpu-pass";
   passInfo.pColorAttachments       = &color;
   passInfo.pDepthStencilAttachment = &depth;
+  passInfo.occlusionQuerySet        = state->occlusionQuery;
   passInfo.colorAttachmentCount    = 1u;
   pass = GPUBeginRenderPass(cmdb, &passInfo);
   if (!pass) {
@@ -289,13 +311,28 @@ render_frame(void *userData) {
   GPUBindRenderPipeline(pass, state->pipeline);
   GPUBindVertexBuffers(pass, 0u, 1u, &vertexBuffer);
   GPUBindIndexBuffer(pass, state->indexBuffer, 0u, GPU_INDEX_TYPE_UINT16);
+  if (!state->occlusionRecorded) {
+    GPUBeginOcclusionQuery(pass, state->occlusionQuery, 0u);
+  }
   GPUDrawIndexed(pass,
                  (uint32_t)(sizeof(kCubeIndices) / sizeof(kCubeIndices[0])),
                  1u,
                  0u,
                  0,
                  0u);
+  if (!state->occlusionRecorded) {
+    GPUEndOcclusionQuery(pass);
+  }
   GPUEndRenderPass(pass);
+  if (!state->occlusionRecorded) {
+    GPUResolveQuerySet(cmdb,
+                       state->occlusionQuery,
+                       0u,
+                       1u,
+                       state->occlusionBuffer,
+                       8u);
+    state->occlusionRecorded = true;
+  }
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
     set_status("GPU: failed to finish indexed-depth frame", 1);
   } else {

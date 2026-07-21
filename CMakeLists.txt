@@ -384,6 +384,7 @@ if(GPU_BUILD_WEBGPU)
     src/backend/webgpu/impl/descriptor.c
     src/backend/webgpu/impl/pipeline.c
     src/backend/webgpu/impl/compute.c
+    src/backend/webgpu/impl/query.c
     src/backend/webgpu/impl/renderpass.c
     src/backend/webgpu/impl/rce.c
   )

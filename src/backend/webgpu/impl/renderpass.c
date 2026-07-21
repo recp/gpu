@@ -216,6 +216,9 @@ webgpu_beginRenderPass(GPUCommandBuffer              *cmdb,
   command->renderPassDesc.label = gpu_webgpuString(info->label);
   command->renderPassDesc.colorAttachmentCount = info->colorAttachmentCount;
   command->renderPassDesc.colorAttachments = command->colorAttachments;
+  command->renderPassDesc.occlusionQuerySet = info->occlusionQuerySet
+                                                ? info->occlusionQuerySet->_priv
+                                                : NULL;
   if (info->pDepthStencilAttachment) {
     const GPURenderPassDepthStencilAttachment *source;
     WGPURenderPassDepthStencilAttachment      *target;

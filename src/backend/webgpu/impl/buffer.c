@@ -18,7 +18,9 @@ webgpu_bufferUsage(GPUBufferUsageFlags usage) {
   if (usage & GPU_BUFFER_USAGE_UNIFORM)  result |= WGPUBufferUsage_Uniform;
   if (usage & GPU_BUFFER_USAGE_STORAGE)  result |= WGPUBufferUsage_Storage;
   if (usage & GPU_BUFFER_USAGE_COPY_SRC) result |= WGPUBufferUsage_CopySrc;
-  if (usage & GPU_BUFFER_USAGE_COPY_DST) result |= WGPUBufferUsage_CopyDst;
+  if (usage & GPU_BUFFER_USAGE_COPY_DST) {
+    result |= WGPUBufferUsage_CopyDst | WGPUBufferUsage_QueryResolve;
+  }
   if (usage & GPU_BUFFER_USAGE_INDIRECT) result |= WGPUBufferUsage_Indirect;
   return result;
 }

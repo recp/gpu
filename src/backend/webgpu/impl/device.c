@@ -245,9 +245,22 @@ webgpu_getAdapterProperties(const GPUAdapter     *adapter,
 
 static bool
 webgpu_supportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
-  GPU__UNUSED(adapter);
-  GPU__UNUSED(feature);
-  return false;
+  GPUAdapterWebGPU *native;
+
+  native = gpu_webgpuAdapter(adapter);
+  if (!native || !native->adapter) {
+    return false;
+  }
+
+  switch (feature) {
+    case GPU_FEATURE_COMPUTE:
+      return true;
+    case GPU_FEATURE_TIMESTAMPS:
+      return wgpuAdapterHasFeature(native->adapter,
+                                   WGPUFeatureName_TimestampQuery);
+    default:
+      return false;
+  }
 }
 
 static void
@@ -344,17 +357,25 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   WGPURequestDeviceCallbackInfo callbackInfo =
     WGPU_REQUEST_DEVICE_CALLBACK_INFO_INIT;
   WGPUDeviceDescriptor descriptor = WGPU_DEVICE_DESCRIPTOR_INIT;
+  WGPUFeatureName       requiredFeatures[1];
   GPUAdapterWebGPU    *native;
   WebGPUDeviceRequest *request;
+  uint64_t             supportedMask;
 
   GPU__UNUSED(queueInfos);
   GPU__UNUSED(queueInfoCount);
-  if (enabledFeatureMask != 0u) {
-    return GPU_ERROR_UNSUPPORTED;
-  }
   native = gpu_webgpuAdapter(adapter);
   if (!native || !native->adapter || !callback) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  supportedMask = 1ull << GPU_FEATURE_COMPUTE;
+  if (wgpuAdapterHasFeature(native->adapter,
+                            WGPUFeatureName_TimestampQuery)) {
+    supportedMask |= 1ull << GPU_FEATURE_TIMESTAMPS;
+  }
+  if ((enabledFeatureMask & ~supportedMask) != 0u) {
+    return GPU_ERROR_UNSUPPORTED;
   }
 
   request = calloc(1, sizeof(*request));
@@ -370,6 +391,11 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   request->userData = userData;
 
   descriptor.label = gpu_webgpuString("gpu-webgpu-device");
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_TIMESTAMPS)) != 0u) {
+    requiredFeatures[descriptor.requiredFeatureCount++] =
+      WGPUFeatureName_TimestampQuery;
+    descriptor.requiredFeatures = requiredFeatures;
+  }
   descriptor.deviceLostCallbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
   descriptor.deviceLostCallbackInfo.callback = webgpu_deviceLost;
   descriptor.deviceLostCallbackInfo.userdata1 = request;
@@ -397,6 +423,12 @@ webgpu_destroyDevice(GPUDevice *device) {
     }
     if (native->queue) {
       wgpuQueueRelease(native->queue);
+    }
+    for (uint32_t i = 0u; i < GPU_WEBGPU_COMMAND_SLOT_COUNT; i++) {
+      if (native->commands[i].queryResolveScratch) {
+        wgpuBufferDestroy(native->commands[i].queryResolveScratch);
+        wgpuBufferRelease(native->commands[i].queryResolveScratch);
+      }
     }
     if (native->device) {
       wgpuDeviceRelease(native->device);

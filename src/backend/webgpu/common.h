@@ -27,6 +27,7 @@
 #include "../../api/frame_internal.h"
 #include "../../api/instance_internal.h"
 #include "../../api/library_internal.h"
+#include "../../api/query_internal.h"
 #include "../../api/render/pipeline_internal.h"
 #include "../../api/sampler_internal.h"
 #include "../../api/surface_internal.h"
@@ -40,7 +41,8 @@
 enum {
   GPU_WEBGPU_COMMAND_SLOT_COUNT      = 8u,
   GPU_WEBGPU_MAX_SURFACE_FORMATS     = 16u,
-  GPU_WEBGPU_MAX_PRESENT_MODES       = 4u
+  GPU_WEBGPU_MAX_PRESENT_MODES       = 4u,
+  GPU_WEBGPU_QUERY_RESOLVE_CAPACITY  = 64u * 1024u
 };
 
 typedef struct GPUInstanceWebGPU {
@@ -68,6 +70,7 @@ typedef struct GPUCommandWebGPU {
   WGPURenderPassEncoder                renderEncoder;
   WGPUComputePassEncoder               computeEncoder;
   WGPUBuffer                           boundIndexBuffer;
+  WGPUBuffer                           queryResolveScratch;
   GPUSwapchainWebGPU                  *present;
   GPUCommandBuffer                     command;
   GPURenderPassDesc                    renderPass;
