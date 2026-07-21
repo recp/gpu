@@ -1,0 +1,21 @@
+struct VSOut {
+  position: float4 #position
+  uv:       float2
+}
+
+vert array_vs(vertexId: uint #vertex_id) -> VSOut {
+  if (vertexId == 0) { return VSOut { float4(-0.88, -0.76, 0.0, 1.0), float2(0.0, 1.0) } }
+  if (vertexId == 1) { return VSOut { float4( 0.88, -0.76, 0.0, 1.0), float2(1.0, 1.0) } }
+  if (vertexId == 2) { return VSOut { float4(-0.88,  0.76, 0.0, 1.0), float2(0.0, 0.0) } }
+  if (vertexId == 3) { return VSOut { float4(-0.88,  0.76, 0.0, 1.0), float2(0.0, 0.0) } }
+  if (vertexId == 4) { return VSOut { float4( 0.88, -0.76, 0.0, 1.0), float2(1.0, 1.0) } }
+  return VSOut { float4(0.88, 0.76, 0.0, 1.0), float2(1.0, 0.0) }
+}
+
+frag array_fs(input: VSOut #stage_in,
+              colorLayers: texture2d_array<float> #texture(0),
+              colorSampler: sampler #sampler(1)) -> float4 {
+  let layer = step(0.5, input.uv.x)
+  let uv    = float2(input.uv.x * 2.0 - layer, input.uv.y)
+  return colorLayers.sample(colorSampler, float3(uv, layer))
+}

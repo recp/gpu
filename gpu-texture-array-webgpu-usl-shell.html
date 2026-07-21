@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="gallery.css?v=20">
-  <title>Rotating cube · GPU + USL</title>
+  <title>Texture array · GPU + USL</title>
 </head>
 <body class="sample-page"
-      data-c-source="sources/textured-cube.c"
-      data-usl-source="sources/textured-cube.usl"
-      data-wgsl-source="sources/textured-cube.wgsl">
+      data-c-source="sources/texture-array.c"
+      data-usl-source="sources/texture-array.usl"
+      data-wgsl-source="sources/texture-array.wgsl">
   <header class="sample-head">
     <a class="back-link" href="index.html"><span>←</span> Sample index</a>
     <div class="sample-heading">
-      <p>Render / cglm + texture</p>
-      <h1>Rotating cube</h1>
+      <p>Binding / 2D array layers</p>
+      <h1>Texture array</h1>
     </div>
     <div class="runtime-badge"><i></i> WebGPU live</div>
   </header>
@@ -37,7 +37,7 @@
         </div>
       </aside>
       <div class="stage-meta">
-        <p><a class="project-link" href="https://github.com/recp/cglm" target="_blank" rel="noreferrer">cglm</a> drives a rotating model-view-projection matrix through an indexed, depth-tested textured draw.</p>
+        <p>One reflected 2D-array view selects two independently uploaded layers in a single draw.</p>
         <div id="status">GPU: loading sample</div>
       </div>
     </section>
