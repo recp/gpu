@@ -1300,6 +1300,60 @@ invalid:
 }
 
 static GPUResult
+gpu_compileWebGPULayoutBindings(const GPUBindGroupLayoutEntry *entries,
+                                uint32_t                       count,
+                                uint32_t                      *bindings) {
+  uint32_t cursor;
+
+  if (count > 0u && (!entries || !bindings)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  for (uint32_t i = 0u; i < count; i++) {
+    bindings[i] = UINT32_MAX;
+  }
+
+  cursor = 0u;
+  for (uint32_t assigned = 0u; assigned < count; assigned++) {
+    uint32_t selectedBinding;
+    uint32_t selectedEntry;
+
+    selectedBinding = UINT32_MAX;
+    selectedEntry   = UINT32_MAX;
+    for (uint32_t i = 0u; i < count; i++) {
+      if (bindings[i] == UINT32_MAX &&
+          (selectedEntry == UINT32_MAX ||
+           entries[i].binding < selectedBinding)) {
+        selectedBinding = entries[i].binding;
+        selectedEntry   = i;
+      }
+    }
+    if (selectedEntry == UINT32_MAX ||
+        entries[selectedEntry].arrayCount > UINT32_MAX - cursor) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+    bindings[selectedEntry] = cursor;
+    cursor += entries[selectedEntry].arrayCount;
+  }
+
+  return GPU_OK;
+}
+
+static bool
+gpu_layoutHasDescriptorArrays(const GPUBindGroupLayoutEntry *entries,
+                              uint32_t                       count) {
+  if (count > 0u && !entries) {
+    return false;
+  }
+  for (uint32_t i = 0u; i < count; i++) {
+    if (entries[i].arrayCount > 1u) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static GPUResult
 gpu_createBindGroupLayout(GPUDevice *device,
                           const GPUBindGroupLayoutCreateInfo *info,
                           const uint32_t *backendBindings,
@@ -1312,6 +1366,7 @@ gpu_createBindGroupLayout(GPUDevice *device,
   GPUApi *api;
   GPUResult result;
   uint32_t count;
+  bool hasBackendBindings;
   bool bindless;
 
   if (!outLayout) {
@@ -1338,16 +1393,18 @@ gpu_createBindGroupLayout(GPUDevice *device,
     return result;
   }
 
-  entries    = info->pEntries;
-  count      = info->entryCount;
-  sourcePriv = sourceLayout ? gpu_layoutPriv(sourceLayout) : NULL;
+  entries            = info->pEntries;
+  count              = info->entryCount;
+  hasBackendBindings = backendBindings != NULL;
+  sourcePriv         = sourceLayout ? gpu_layoutPriv(sourceLayout) : NULL;
   if (sourceLayout) {
     if (!sourcePriv || backendBindings || count != 0u || entries) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
-    entries         = sourcePriv->entries;
-    count           = sourcePriv->count;
-    backendBindings = sourcePriv->backendBindings;
+    entries            = sourcePriv->entries;
+    count              = sourcePriv->count;
+    backendBindings    = sourcePriv->backendBindings;
+    hasBackendBindings = sourcePriv->hasBackendBindings;
   }
   if (!gpu_validateLayoutEntries(entries, count, bindless)) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -1403,13 +1460,28 @@ gpu_createBindGroupLayout(GPUDevice *device,
     }
   }
 
-  priv->count               = count;
-  priv->hasBackendBindings = backendBindings != NULL;
-  priv->bindless            = bindless;
-  layout->_device           = device;
-  layout->_priv             = priv;
-
   api = gpuDeviceApi(device);
+  if (!hasBackendBindings && api && api->backend == GPU_BACKEND_WEBGPU &&
+      gpu_layoutHasDescriptorArrays(priv->entries, count)) {
+    result = gpu_compileWebGPULayoutBindings(priv->entries,
+                                             count,
+                                             priv->backendBindings);
+    if (result != GPU_OK) {
+      free(priv->backendBindings);
+      free(priv->entries);
+      free(priv);
+      free(layout);
+      return result;
+    }
+    hasBackendBindings = true;
+  }
+
+  priv->count              = count;
+  priv->hasBackendBindings = hasBackendBindings;
+  priv->bindless           = bindless;
+  layout->_device          = device;
+  layout->_priv            = priv;
+
   if (api && api->descriptor.createBindGroupLayout) {
     result = api->descriptor.createBindGroupLayout(device, layout);
     if (result != GPU_OK) {

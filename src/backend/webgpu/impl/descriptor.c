@@ -222,29 +222,116 @@ webgpu_samplerBindingType(GPUSamplerBindingType type) {
            : WGPUSamplerBindingType_Undefined;
 }
 
+static bool
+webgpu_initLayoutEntry(WGPUBindGroupLayoutEntry      *entry,
+                       const GPUBindGroupLayoutEntry *source,
+                       uint32_t                       binding) {
+  if (!entry || !source) {
+    return false;
+  }
+
+  *entry            = (WGPUBindGroupLayoutEntry)
+                        WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT;
+  entry->binding    = binding;
+  entry->visibility = webgpu_shaderStages(source->visibility);
+  if (entry->visibility == WGPUShaderStage_None) {
+    return false;
+  }
+
+  switch (source->bindingType) {
+    case GPU_BINDING_UNIFORM_BUFFER:
+      entry->buffer = (WGPUBufferBindingLayout)
+                        WGPU_BUFFER_BINDING_LAYOUT_INIT;
+      entry->buffer.type             = WGPUBufferBindingType_Uniform;
+      entry->buffer.hasDynamicOffset = source->hasDynamicOffset;
+      return true;
+    case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
+      entry->buffer = (WGPUBufferBindingLayout)
+                        WGPU_BUFFER_BINDING_LAYOUT_INIT;
+      entry->buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
+      entry->buffer.hasDynamicOffset = source->hasDynamicOffset;
+      return true;
+    case GPU_BINDING_STORAGE_BUFFER:
+      entry->buffer = (WGPUBufferBindingLayout)
+                        WGPU_BUFFER_BINDING_LAYOUT_INIT;
+      entry->buffer.type             = WGPUBufferBindingType_Storage;
+      entry->buffer.hasDynamicOffset = source->hasDynamicOffset;
+      return true;
+    case GPU_BINDING_SAMPLED_TEXTURE:
+      entry->texture = (WGPUTextureBindingLayout)
+                         WGPU_TEXTURE_BINDING_LAYOUT_INIT;
+      entry->texture.sampleType =
+        webgpu_textureSampleType(source->sampledTexture.sampleType);
+      entry->texture.viewDimension =
+        webgpu_bindingViewDimension(source->sampledTexture.viewType);
+      entry->texture.multisampled = source->sampledTexture.multisampled;
+      return entry->texture.sampleType != WGPUTextureSampleType_Undefined &&
+             entry->texture.viewDimension !=
+               WGPUTextureViewDimension_Undefined;
+    case GPU_BINDING_STORAGE_TEXTURE:
+      entry->storageTexture = (WGPUStorageTextureBindingLayout)
+                                WGPU_STORAGE_TEXTURE_BINDING_LAYOUT_INIT;
+      entry->storageTexture.access =
+        webgpu_storageTextureAccess(source->storageTexture.access);
+      entry->storageTexture.format =
+        gpu_webgpuFormat(source->storageTexture.format);
+      entry->storageTexture.viewDimension =
+        webgpu_bindingViewDimension(source->storageTexture.viewType);
+      return entry->storageTexture.access !=
+               WGPUStorageTextureAccess_Undefined &&
+             entry->storageTexture.format != WGPUTextureFormat_Undefined &&
+             entry->storageTexture.viewDimension !=
+               WGPUTextureViewDimension_Undefined;
+    case GPU_BINDING_SAMPLER:
+      entry->sampler = (WGPUSamplerBindingLayout)
+                         WGPU_SAMPLER_BINDING_LAYOUT_INIT;
+      entry->sampler.type = webgpu_samplerBindingType(source->sampler.type);
+      return entry->sampler.type != WGPUSamplerBindingType_Undefined;
+    default:
+      return false;
+  }
+}
+
 static GPUResult
 webgpu_createBindGroupLayout(GPUDevice          *device,
                              GPUBindGroupLayout *layout) {
   WGPUBindGroupLayoutDescriptor descriptor =
     WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
-  WGPUBindGroupLayoutEntry *nativeEntries;
+  WGPUBindGroupLayoutEntry      *nativeEntries;
   const GPUBindGroupLayoutEntry *entries;
+  const uint32_t                *backendBindings;
   GPUBindGroupLayoutWebGPU      *state;
   GPUDeviceWebGPU               *native;
   GPUResult                      result;
   size_t                         stateSize;
   uint32_t                       count;
+  uint32_t                       backendBindingCount;
   uint32_t                       immutableCount;
+  uint32_t                       nativeCount;
 
-  native  = gpu_webgpuDevice(device);
-  entries = GPUGetBindGroupLayoutEntries(layout, &count);
+  native          = gpu_webgpuDevice(device);
+  entries         = GPUGetBindGroupLayoutEntries(layout, &count);
+  backendBindings = gpuGetBindGroupLayoutBackendBindings(layout,
+                                                          &backendBindingCount);
   if (!native || !native->device || (count > 0u && !entries)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (count != backendBindingCount || (count > 0u && !backendBindings)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   immutableCount = 0u;
+  nativeCount    = 0u;
   for (uint32_t i = 0u; i < count; i++) {
-    immutableCount += entries[i].immutableSampler ? 1u : 0u;
+    if (entries[i].arrayCount > UINT32_MAX - nativeCount ||
+        (entries[i].immutableSampler &&
+         entries[i].arrayCount > UINT32_MAX - immutableCount)) {
+      return GPU_ERROR_OUT_OF_MEMORY;
+    }
+    nativeCount += entries[i].arrayCount;
+    if (entries[i].immutableSampler) {
+      immutableCount += entries[i].arrayCount;
+    }
   }
   if ((size_t)immutableCount >
       (SIZE_MAX - sizeof(*state)) / sizeof(*state->immutableSamplers)) {
@@ -253,105 +340,50 @@ webgpu_createBindGroupLayout(GPUDevice          *device,
   stateSize     = sizeof(*state) +
                   (size_t)immutableCount * sizeof(*state->immutableSamplers);
   state         = calloc(1, stateSize);
-  nativeEntries = count ? calloc(count, sizeof(*nativeEntries)) : NULL;
+  nativeEntries = nativeCount
+                    ? calloc(nativeCount, sizeof(*nativeEntries))
+                    : NULL;
   result        = GPU_ERROR_BACKEND_FAILURE;
-  if (!state || (count > 0u && !nativeEntries)) {
+  if (!state || (nativeCount > 0u && !nativeEntries)) {
     free(state);
     return GPU_ERROR_OUT_OF_MEMORY;
   }
   state->immutableSamplers = immutableCount ? (WGPUSampler *)(state + 1) : NULL;
+  state->nativeEntryCount  = nativeCount;
 
+  nativeCount = 0u;
   for (uint32_t i = 0u; i < count; i++) {
-    WGPUBindGroupLayoutEntry *entry;
+    for (uint32_t ai = 0u; ai < entries[i].arrayCount; ai++) {
+      uint32_t nativeBinding;
 
-    if (entries[i].arrayCount != 1u) {
-      goto unsupported;
-    }
-
-    entry             = &nativeEntries[i];
-    *entry            = (WGPUBindGroupLayoutEntry)
-                          WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT;
-    entry->binding    = entries[i].binding;
-    entry->visibility = webgpu_shaderStages(entries[i].visibility);
-    if (entry->visibility == WGPUShaderStage_None) {
-      goto unsupported;
-    }
-
-    switch (entries[i].bindingType) {
-      case GPU_BINDING_UNIFORM_BUFFER:
-        entry->buffer = (WGPUBufferBindingLayout)
-                          WGPU_BUFFER_BINDING_LAYOUT_INIT;
-        entry->buffer.type = WGPUBufferBindingType_Uniform;
-        entry->buffer.hasDynamicOffset = entries[i].hasDynamicOffset;
-        break;
-      case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
-        entry->buffer = (WGPUBufferBindingLayout)
-                          WGPU_BUFFER_BINDING_LAYOUT_INIT;
-        entry->buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
-        entry->buffer.hasDynamicOffset = entries[i].hasDynamicOffset;
-        break;
-      case GPU_BINDING_STORAGE_BUFFER:
-        entry->buffer = (WGPUBufferBindingLayout)
-                          WGPU_BUFFER_BINDING_LAYOUT_INIT;
-        entry->buffer.type = WGPUBufferBindingType_Storage;
-        entry->buffer.hasDynamicOffset = entries[i].hasDynamicOffset;
-        break;
-      case GPU_BINDING_SAMPLED_TEXTURE:
-        entry->texture = (WGPUTextureBindingLayout)
-                           WGPU_TEXTURE_BINDING_LAYOUT_INIT;
-        entry->texture.sampleType =
-          webgpu_textureSampleType(entries[i].sampledTexture.sampleType);
-        entry->texture.viewDimension =
-          webgpu_bindingViewDimension(entries[i].sampledTexture.viewType);
-        entry->texture.multisampled = entries[i].sampledTexture.multisampled;
-        if (entry->texture.sampleType == WGPUTextureSampleType_Undefined ||
-            entry->texture.viewDimension ==
-              WGPUTextureViewDimension_Undefined) {
-          goto unsupported;
-        }
-        break;
-      case GPU_BINDING_STORAGE_TEXTURE:
-        entry->storageTexture = (WGPUStorageTextureBindingLayout)
-                                  WGPU_STORAGE_TEXTURE_BINDING_LAYOUT_INIT;
-        entry->storageTexture.access =
-          webgpu_storageTextureAccess(entries[i].storageTexture.access);
-        entry->storageTexture.format =
-          gpu_webgpuFormat(entries[i].storageTexture.format);
-        entry->storageTexture.viewDimension =
-          webgpu_bindingViewDimension(entries[i].storageTexture.viewType);
-        if (entry->storageTexture.access ==
-              WGPUStorageTextureAccess_Undefined ||
-            entry->storageTexture.format == WGPUTextureFormat_Undefined ||
-            entry->storageTexture.viewDimension ==
-              WGPUTextureViewDimension_Undefined) {
-          goto unsupported;
-        }
-        break;
-      case GPU_BINDING_SAMPLER:
-        entry->sampler = (WGPUSamplerBindingLayout)
-                           WGPU_SAMPLER_BINDING_LAYOUT_INIT;
-        entry->sampler.type = webgpu_samplerBindingType(entries[i].sampler.type);
-        if (entry->sampler.type == WGPUSamplerBindingType_Undefined) {
-          goto unsupported;
-        }
-        if (entries[i].immutableSampler) {
-          WGPUSampler sampler;
-
-          sampler = gpu_webgpuCreateSampler(device,
-                                            &entries[i].immutableSamplerDesc,
-                                            NULL);
-          if (!sampler) {
-            goto fail;
-          }
-          state->immutableSamplers[state->immutableSamplerCount++] = sampler;
-        }
-        break;
-      default:
+      if (backendBindings[i] > UINT32_MAX - ai) {
         goto unsupported;
+      }
+      nativeBinding = backendBindings[i] + ai;
+      if (!webgpu_initLayoutEntry(&nativeEntries[nativeCount++],
+                                  &entries[i],
+                                  nativeBinding)) {
+        goto unsupported;
+      }
+      if (entries[i].immutableSampler) {
+        WGPUSampler sampler;
+
+        if (entries[i].bindingType != GPU_BINDING_SAMPLER) {
+          goto unsupported;
+        }
+
+        sampler = gpu_webgpuCreateSampler(device,
+                                          &entries[i].immutableSamplerDesc,
+                                          NULL);
+        if (!sampler) {
+          goto fail;
+        }
+        state->immutableSamplers[state->immutableSamplerCount++] = sampler;
+      }
     }
   }
 
-  descriptor.entryCount = count;
+  descriptor.entryCount = nativeCount;
   descriptor.entries    = nativeEntries;
   state->layout = wgpuDeviceCreateBindGroupLayout(native->device,
                                                    &descriptor);
@@ -608,7 +640,8 @@ webgpu_writeBindGroupEntry(void *context,
 
   write = context;
   if (!write || !binding || !write->valid ||
-      write->count >= write->capacity || binding->arrayIndex != 0u) {
+      write->count >= write->capacity ||
+      binding->binding > UINT32_MAX - binding->arrayIndex) {
     if (write) {
       write->valid = false;
     }
@@ -617,7 +650,7 @@ webgpu_writeBindGroupEntry(void *context,
 
   entry          = &write->entries[write->count++];
   *entry         = (WGPUBindGroupEntry)WGPU_BIND_GROUP_ENTRY_INIT;
-  entry->binding = binding->binding;
+  entry->binding = binding->binding + binding->arrayIndex;
   switch (binding->kind) {
     case GPUBindKindBuffer:
       if (!binding->buffer || !binding->buffer->_priv) {
@@ -650,55 +683,68 @@ webgpu_writeBindGroupEntry(void *context,
 
 static GPUResult
 webgpu_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
-  WGPUBindGroupDescriptor descriptor = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
-  WebGPUBindGroupWrite    write;
-  WGPUBindGroupEntry     *entries;
-  GPUBindGroupLayout     *layout;
-  GPUBindGroupLayoutWebGPU *layoutState;
+  WGPUBindGroupDescriptor        descriptor = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
+  WebGPUBindGroupWrite           write;
+  WGPUBindGroupEntry            *entries;
+  GPUBindGroupLayout            *layout;
+  GPUBindGroupLayoutWebGPU      *layoutState;
   const GPUBindGroupLayoutEntry *layoutEntries;
-  GPUDeviceWebGPU        *native;
-  uint32_t                count;
-  uint32_t                immutableCursor;
+  const uint32_t                *backendBindings;
+  GPUDeviceWebGPU               *native;
+  uint32_t                       count;
+  uint32_t                       backendBindingCount;
+  uint32_t                       nativeCount;
+  uint32_t                       immutableCursor;
 
-  native = gpu_webgpuDevice(device);
-  layout = gpuBindGroupGetLayout(group);
-  layoutEntries = GPUGetBindGroupLayoutEntries(layout, &count);
-  layoutState   = layout ? layout->_native : NULL;
+  native          = gpu_webgpuDevice(device);
+  layout          = gpuBindGroupGetLayout(group);
+  layoutEntries   = GPUGetBindGroupLayoutEntries(layout, &count);
+  backendBindings = gpuGetBindGroupLayoutBackendBindings(layout,
+                                                          &backendBindingCount);
+  layoutState     = layout ? layout->_native : NULL;
   if (!native || !native->device || !layout || !layoutState ||
       !layoutState->layout || (count > 0u && !layoutEntries)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  if (count != backendBindingCount || (count > 0u && !backendBindings)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
 
-  entries = count ? calloc(count, sizeof(*entries)) : NULL;
-  if (count > 0u && !entries) {
+  nativeCount = layoutState->nativeEntryCount;
+  entries = nativeCount ? calloc(nativeCount, sizeof(*entries)) : NULL;
+  if (nativeCount > 0u && !entries) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
   write.entries  = entries;
-  write.capacity = count;
+  write.capacity = nativeCount;
   write.count    = 0u;
   write.valid    = true;
   immutableCursor = 0u;
   for (uint32_t i = 0u; i < count; i++) {
-    WGPUBindGroupEntry *entry;
-
     if (!layoutEntries[i].immutableSampler) {
       continue;
     }
-    if (immutableCursor >= layoutState->immutableSamplerCount ||
-        write.count >= write.capacity) {
-      write.valid = false;
-      break;
+    for (uint32_t ai = 0u; ai < layoutEntries[i].arrayCount; ai++) {
+      WGPUBindGroupEntry *entry;
+
+      if (immutableCursor >= layoutState->immutableSamplerCount ||
+          write.count >= write.capacity ||
+          backendBindings[i] > UINT32_MAX - ai) {
+        write.valid = false;
+        break;
+      }
+      entry          = &write.entries[write.count++];
+      *entry         = (WGPUBindGroupEntry)WGPU_BIND_GROUP_ENTRY_INIT;
+      entry->binding = backendBindings[i] + ai;
+      entry->sampler = layoutState->immutableSamplers[immutableCursor++];
     }
-    entry          = &write.entries[write.count++];
-    *entry         = (WGPUBindGroupEntry)WGPU_BIND_GROUP_ENTRY_INIT;
-    entry->binding = layoutEntries[i].binding;
-    entry->sampler = layoutState->immutableSamplers[immutableCursor++];
+    if (!write.valid) break;
   }
   if (!gpuForEachBindGroupBinding(group,
                                   webgpu_writeBindGroupEntry,
                                   &write) ||
-      !write.valid || write.count != count ||
+      !write.valid || write.count != nativeCount ||
       immutableCursor != layoutState->immutableSamplerCount) {
     free(entries);
     return GPU_ERROR_UNSUPPORTED;

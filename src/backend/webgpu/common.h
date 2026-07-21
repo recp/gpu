@@ -115,6 +115,7 @@ typedef struct GPUBindGroupLayoutWebGPU {
   WGPUBindGroupLayout layout;
   WGPUSampler        *immutableSamplers;
   uint32_t            immutableSamplerCount;
+  uint32_t            nativeEntryCount;
 } GPUBindGroupLayoutWebGPU;
 
 typedef struct GPURenderPipelineWebGPU {

@@ -1050,6 +1050,11 @@ gpu_shaderBackendBindingFromUSLResource(GPUBackend backend,
                       ? (uint32_t)resource->hlsl_index
                       : (uint32_t)resource->binding;
       break;
+    case GPU_BACKEND_WEBGPU:
+      *outBinding = resource->wgsl_index >= 0
+                      ? (uint32_t)resource->wgsl_index
+                      : (uint32_t)resource->binding;
+      break;
     default:
       *outBinding = (uint32_t)resource->binding;
       break;
