@@ -31,7 +31,7 @@ fn fullscreen_vs(@builtin(vertex_index) vertexId: u32) -> FullscreenOut {
 
 @fragment
 fn mrt_fs(input: FullscreenOut) -> MRTOut {
-    let r28: f32 = saturate(fma(-2.4, length((input.uv - vec2<f32>(0.5))), 1.2));
+    let r28 = saturate(fma(-2.4, length((input.uv - vec2<f32>(0.5))), 1.2));
     return MRTOut(vec4<f32>(1.0, 0.18, 0.03, (0.88 * r28)), vec4<f32>(0.02, 0.42, 1.0, (0.72 * r28)));
 }
 
