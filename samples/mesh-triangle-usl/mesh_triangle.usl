@@ -15,15 +15,12 @@ struct MeshPayload {
 }
 
 task(1, 1, 1) task_main(inout payload: MeshPayload #payload,
-                         params: TaskParams #buffer(0) #group(0),
-                         tid: uint #local_index) {
-  if (tid == 0) {
-    payload.offset = params.offset
-    payload.tint = params.tint
-    dispatch_mesh(params.meshGroups.x,
-                  params.meshGroups.y,
-                  params.meshGroups.z)
-  }
+                         params: TaskParams #buffer(0) #group(0)) {
+  payload.offset = params.offset
+  payload.tint = params.tint
+  dispatch_mesh(params.meshGroups.x,
+                params.meshGroups.y,
+                params.meshGroups.z)
 }
 
 @mesh_output(triangle, MeshVertex, 3, 1)

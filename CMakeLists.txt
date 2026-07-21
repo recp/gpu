@@ -1671,7 +1671,7 @@ if(GPU_BUILD_VULKAN AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-vulkan-usl/triangle.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-vulkan-usl/textured_quad.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-buffer-vulkan-usl/compute_buffer.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/samples/mesh-triangle-vulkan-usl/mesh_triangle.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/mesh-triangle-usl/mesh_triangle.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-atomics-usl/compute_atomics.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-cube-usl/textured_cube.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/mrt-blend-usl/mrt_blend.usl"
@@ -2569,11 +2569,22 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
 
   add_executable(gpu-mesh-triangle-metal-usl
     samples/mesh-triangle-usl/main.m
+    samples/common/MeshTriangle.c
   )
   gpu_configure_metal_sample(gpu-mesh-triangle-metal-usl)
   gpu_attach_usl_sample(gpu-mesh-triangle-metal-usl
                         gpu-metal-fixtures
                         "${GPU_METAL_MESH_TRIANGLE_US}")
+  if(GPU_BUILD_TESTS)
+    add_test(NAME metal-mesh-triangle
+             COMMAND gpu-mesh-triangle-metal-usl)
+    set_tests_properties(metal-mesh-triangle PROPERTIES
+      ENVIRONMENT
+        "GPU_SAMPLE_EXIT_AFTER_FRAMES=96;GPU_SAMPLE_ASSERT_ZERO_ALLOC=1"
+      SKIP_RETURN_CODE 77
+      TIMEOUT 30
+    )
+  endif()
 
   add_executable(gpu-compute-metal-usl
     samples/compute-usl/main.m
@@ -2958,6 +2969,20 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
     C_EXTENSIONS NO
   )
 
+  add_executable(gpu-mesh-triangle-dx12-usl
+    samples/mesh-triangle-dx12-usl/main.c
+    samples/common/MeshTriangle.c
+  )
+  target_link_libraries(gpu-mesh-triangle-dx12-usl PRIVATE gpu user32)
+  gpu_attach_usl_sample(gpu-mesh-triangle-dx12-usl
+                        gpu-dx12-fixtures
+                        "${GPU_DX12_MESH_TRIANGLE_US}")
+  set_target_properties(gpu-mesh-triangle-dx12-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+
   add_executable(gpu-compute-buffer-dx12-usl
     samples/compute-buffer-dx12-usl/main.c
   )
@@ -3021,6 +3046,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
              COMMAND gpu-mrt-blend-dx12-usl)
     add_test(NAME dx12-bindless
              COMMAND gpu-bindless-dx12-usl)
+    add_test(NAME dx12-mesh-triangle
+             COMMAND gpu-mesh-triangle-dx12-usl)
     add_test(NAME dx12-compute-render
              COMMAND gpu-compute-render-dx12-usl)
     set_tests_properties(
@@ -3029,6 +3056,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
       dx12-textured-cube
       dx12-mrt-blend
       dx12-bindless
+      dx12-mesh-triangle
       dx12-compute-render
       PROPERTIES
         SKIP_RETURN_CODE 77
@@ -3036,7 +3064,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
     )
     set_property(
       TEST dx12-triangle dx12-textured-quad dx12-textured-cube
-           dx12-mrt-blend dx12-bindless dx12-compute-render
+           dx12-mrt-blend dx12-bindless dx12-mesh-triangle
+           dx12-compute-render
       PROPERTY ENVIRONMENT
         "GPU_SAMPLE_EXIT_AFTER_FRAMES=96"
         "GPU_SAMPLE_ASSERT_ZERO_ALLOC=1"
@@ -3177,9 +3206,13 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
                           "${GPU_VULKAN_BINDLESS_US}")
 
     add_executable(gpu-mesh-triangle-vulkan-usl
-      samples/mesh-triangle-vulkan-usl/main.m
+      samples/mesh-triangle-usl/main.m
+      samples/common/MeshTriangle.c
     )
     target_compile_options(gpu-mesh-triangle-vulkan-usl PRIVATE -fobjc-arc)
+    target_compile_definitions(gpu-mesh-triangle-vulkan-usl PRIVATE
+      GPU_SAMPLE_BACKEND=GPU_BACKEND_VULKAN
+    )
     target_link_libraries(gpu-mesh-triangle-vulkan-usl PRIVATE
       gpu
       "-framework AppKit"
@@ -3235,6 +3268,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
         PROPERTIES
           ENVIRONMENT
             "GPU_SAMPLE_EXIT_AFTER_FRAMES=96;GPU_SAMPLE_ASSERT_ZERO_ALLOC=1"
+          SKIP_RETURN_CODE 77
           TIMEOUT 30
       )
       set_tests_properties(vulkan-resize-lifecycle PROPERTIES

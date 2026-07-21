@@ -1,100 +1,155 @@
 #import <AppKit/AppKit.h>
 #import <dispatch/dispatch.h>
-#include <stdint.h>
+
 #include <stdlib.h>
-#import <QuartzCore/QuartzCore.h>
 
 #import "../../include/gpu/gpu.h"
+#import "../common/MeshTriangle.h"
 #import "../common/SampleApp.h"
 #import "../common/SampleStats.h"
 #import "../common/SampleUSL.h"
 
-typedef struct TaskParams {
-  uint32_t meshGroups[4];
-  float    offset[4];
-  float    tint[4];
-} TaskParams;
+#ifndef GPU_SAMPLE_BACKEND
+#  define GPU_SAMPLE_BACKEND GPU_BACKEND_METAL
+#endif
+
+enum {
+  kSkipReturnCode = 77
+};
+
+static NSString *
+MeshTriangleWindowTitle(void) {
+  return GPU_SAMPLE_BACKEND == GPU_BACKEND_VULKAN
+           ? @"GPU Vulkan USL Mesh Triangle"
+           : @"GPU Metal USL Mesh Triangle";
+}
+
+static const char *
+MeshTriangleStatsLabel(void) {
+  return GPU_SAMPLE_BACKEND == GPU_BACKEND_VULKAN
+           ? "GPU Vulkan mesh triangle"
+           : "GPU Metal mesh triangle";
+}
 
 @interface MeshTriangleApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
 @private
-  NSWindow            *_window;
-  NSView              *_view;
-  GPUInstance         *_instance;
-  GPUAdapter          *_adapter;
-  GPUDevice           *_device;
-  GPUQueue            *_queue;
-  GPUSurface          *_surface;
-  GPUSwapchain        *_swapchain;
-  GPUShaderLibrary    *_library;
-  GPUShaderLayout     *_shaderLayout;
-  GPURenderPipeline   *_pipeline;
-  GPUBuffer           *_taskUniformBuffer;
-  GPUBindGroup        *_taskGroup;
-  NSTimer             *_timer;
-  NSInteger            _exitAfterFrames;
-  NSInteger            _submittedFrames;
-  NSInteger            _completedFrames;
-  BOOL                 _assertZeroAlloc;
-  BOOL                 _statsFailed;
-  BOOL                 _terminating;
+  NSWindow                 *_window;
+  NSView                   *_view;
+  GPUInstance              *_instance;
+  GPUAdapter               *_adapter;
+  GPUDevice                *_device;
+  GPUQueue                 *_queue;
+  GPUSurface               *_surface;
+  GPUSwapchain             *_swapchain;
+  NSTimer                  *_timer;
+  GPUSampleMeshTriangle    _renderer;
+  NSInteger                 _exitAfterFrames;
+  NSInteger                 _submittedFrames;
+  NSInteger                 _completedFrames;
+  BOOL                      _assertZeroAlloc;
+  BOOL                      _failed;
+  BOOL                      _skipped;
+  BOOL                      _terminating;
 }
 - (void)frameCompleted;
-- (BOOL)statsFailed;
+- (void)cleanupGPU;
+- (void)failAndStop;
+- (void)stopApplication;
+- (int)exitCode;
 @end
 
 static void
 MeshTriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
+  MeshTriangleApp *app;
+
   (void)cmdb;
-  MeshTriangleApp *app = (__bridge MeshTriangleApp *)sender;
+  app = (__bridge MeshTriangleApp *)sender;
   [app frameCompleted];
+}
+
+static void
+MeshTriangleDeviceError(GPUDevice                *device,
+                        const GPUDeviceErrorInfo *error,
+                        void                     *userData) {
+  MeshTriangleApp *app;
+  const char      *message;
+
+  (void)device;
+  app     = (__bridge MeshTriangleApp *)userData;
+  message = error && error->message ? error->message : "unknown error";
+  NSLog(@"GPU mesh triangle error: %s", message);
+  if (app) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [app failAndStop];
+    });
+  }
 }
 
 @implementation MeshTriangleApp
 
-- (BOOL)setupWindow {
-  return GPUSampleCreateWindow(@"GPU USL Mesh Triangle",
-                               self,
-                               &_window,
-                               &_view);
+- (BOOL)drawableSizeWidth:(uint32_t *)outWidth height:(uint32_t *)outHeight {
+  CGFloat scale;
+
+  if (!outWidth || !outHeight) {
+    return NO;
+  }
+  scale      = _window.backingScaleFactor ?: 1.0f;
+  *outWidth  = (uint32_t)(_view.bounds.size.width * scale);
+  *outHeight = (uint32_t)(_view.bounds.size.height * scale);
+  return *outWidth > 0u && *outHeight > 0u;
 }
 
 - (BOOL)setupGPU {
-  GPUFeature           requiredFeature;
-  GPUDeviceCreateInfo  deviceInfo;
+  GPUInstanceCreateInfo instanceInfo = {0};
+  GPUDeviceCreateInfo   deviceInfo   = {0};
+  GPURuntimeConfig      runtime      = {0};
+  GPUShaderLibrary     *library;
+  GPUShaderLayout      *shaderLayout;
+  GPUFeature            feature;
+  uint32_t              width;
+  uint32_t              height;
 
-  _instance = NULL;
-  if (GPUCreateInstance(NULL, &_instance) != GPU_OK || !_instance) {
-    NSLog(@"GPU: failed to create instance");
+  instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  instanceInfo.chain.structSize = sizeof(instanceInfo);
+  instanceInfo.label            = "mesh-triangle-native-usl";
+  instanceInfo.preferredBackend = GPU_SAMPLE_BACKEND;
+  instanceInfo.enableValidation = true;
+  if (GPUCreateInstance(&instanceInfo, &_instance) != GPU_OK || !_instance) {
     return NO;
   }
 
   _adapter = GPUSampleSelectAdapter(_instance);
-  if (!_adapter ||
-      !GPUIsFeatureSupported(_adapter, GPU_FEATURE_MESH_SHADER)) {
-    NSLog(@"GPU: mesh shaders are not supported");
+  if (!_adapter) {
     return NO;
   }
-
-  requiredFeature = GPU_FEATURE_MESH_SHADER;
-  deviceInfo = (GPUDeviceCreateInfo){
-    .chain = {
-      .sType = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-      .structSize = sizeof(GPUDeviceCreateInfo)
-    },
-    .label = "mesh-triangle-device",
-    .required = {
-      .featureCount = 1,
-      .pFeatures = &requiredFeature
-    }
-  };
-  if (GPUCreateDevice(_adapter, &deviceInfo, &_device) != GPU_OK || !_device) {
-    NSLog(@"GPU: failed to create mesh device");
+  if (!GPUIsFeatureSupported(_adapter, GPU_FEATURE_MESH_SHADER)) {
+    _skipped = YES;
     return NO;
   }
-
-  _queue = GPUGetQueue(_device, GPU_QUEUE_GRAPHICS, 0);
+  feature                           = GPU_FEATURE_MESH_SHADER;
+  deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  deviceInfo.chain.structSize      = sizeof(deviceInfo);
+  deviceInfo.label                 = "mesh-triangle-native-device";
+  deviceInfo.required.pFeatures    = &feature;
+  deviceInfo.required.featureCount = 1u;
+  if (GPUCreateDevice(_adapter, &deviceInfo, &_device) != GPU_OK ||
+      !_device || !GPUIsFeatureEnabled(_device, GPU_FEATURE_MESH_SHADER)) {
+    return NO;
+  }
+  _queue = GPUGetQueue(_device, GPU_QUEUE_GRAPHICS, 0u);
   if (!_queue) {
-    NSLog(@"GPU: failed to get graphics queue");
+    return NO;
+  }
+  if (GPUSetDeviceErrorCallback(_device,
+                                MeshTriangleDeviceError,
+                                (__bridge void *)self) != GPU_OK) {
+    return NO;
+  }
+  runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
+  runtime.chain.structSize = sizeof(runtime);
+  runtime.validationMode   = GPU_VALIDATION_FULL;
+  runtime.enableStats      = true;
+  if (GPUConfigureRuntime(_device, &runtime) != GPU_OK) {
     return NO;
   }
 
@@ -104,198 +159,59 @@ MeshTriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                                         GPU_SURFACE_APPLE_NSVIEW,
                                         _window.backingScaleFactor ?: 1.0f);
   if (!_surface) {
-    NSLog(@"GPU: failed to create surface");
     return NO;
   }
-
   _swapchain = GPUCreateSwapchainDefault(_device,
                                          _surface,
                                          (uint32_t)_view.bounds.size.width,
                                          (uint32_t)_view.bounds.size.height);
-  if (!_swapchain) {
-    NSLog(@"GPU: failed to create swapchain");
+  if (!_swapchain || ![self drawableSizeWidth:&width height:&height]) {
     return NO;
   }
 
+  library      = NULL;
+  shaderLayout = NULL;
   if (!GPUSampleLoadUSL(_device,
                         @"mesh_triangle.us",
                         1u,
-                        &_library,
-                        &_shaderLayout)) {
+                        &library,
+                        &shaderLayout)) {
     return NO;
   }
-  if (!_shaderLayout ||
-      _shaderLayout->bindGroupLayoutCount != 1u ||
-      !_shaderLayout->bindGroupLayouts ||
-      !_shaderLayout->bindGroupLayouts[0]) {
-    NSLog(@"GPU: unexpected mesh shader layout");
-    return NO;
-  }
-  {
-    const GPUBindGroupLayoutEntry *entries;
-    uint32_t                       entryCount;
-    BOOL                           sawTaskUniform;
-
-    entryCount     = 0u;
-    sawTaskUniform = NO;
-    entries = GPUGetBindGroupLayoutEntries(_shaderLayout->bindGroupLayouts[0],
-                                           &entryCount);
-    for (uint32_t i = 0u; entries && i < entryCount; i++) {
-      if (entries[i].binding == 0u &&
-          entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER &&
-          entries[i].visibility == GPU_SHADER_STAGE_TASK_BIT) {
-        sawTaskUniform = YES;
-        break;
-      }
-    }
-    if (!sawTaskUniform) {
-      NSLog(@"GPU: task uniform reflection mismatch");
-      return NO;
-    }
-  }
-
-  GPUColorTargetState colorTarget = {
-    .format = GPUGetSwapchainFormat(_swapchain),
-    .blend = {
-      .enabled = false,
-      .writeMask = GPU_COLOR_WRITE_ALL
-    }
-  };
-  GPUMeshPipelineEXT meshInfo = {
-    .chain = {
-      .sType = GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT,
-      .structSize = sizeof(GPUMeshPipelineEXT)
-    },
-    .taskEntry = "task_main",
-    .meshEntry = "mesh_main",
-    .payloadSizeBytes = 0u
-  };
-  GPURenderPipelineCreateInfo pipelineInfo = {
-    .chain = {
-      .sType = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO,
-      .structSize = sizeof(GPURenderPipelineCreateInfo),
-      .pNext = &meshInfo.chain
-    },
-    .label = "mesh-triangle-pipeline",
-    .layout = _shaderLayout->pipelineLayout,
-    .library = _library,
-    .fragmentEntry = "fragment_main",
-    .colorTargetCount = 1,
-    .pColorTargets = &colorTarget,
-    .primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-    .cullMode = GPU_CULL_MODE_NONE,
-    .frontFace = GPU_FRONT_FACE_CCW,
-    .multisample = {
-      .sampleCount = 1,
-      .sampleMask = UINT32_MAX
-    }
-  };
-  if (GPUCreateRenderPipeline(_device, &pipelineInfo, &_pipeline) != GPU_OK) {
-    NSLog(@"GPU: failed to create mesh pipeline");
-    return NO;
-  }
-
-  TaskParams taskParams = {
-    .meshGroups = {1u, 1u, 1u, 0u},
-    .offset = {0.12f, 0.0f, 0.0f, 0.0f},
-    .tint = {1.0f, 0.75f, 0.5f, 1.0f}
-  };
-  GPUBufferCreateInfo taskBufferInfo = {
-    .chain = {
-      .sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .structSize = sizeof(GPUBufferCreateInfo)
-    },
-    .label = "mesh-task-params",
-    .sizeBytes = sizeof(taskParams),
-    .usage = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST
-  };
-  if (GPUCreateBuffer(_device,
-                      &taskBufferInfo,
-                      &_taskUniformBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(_queue,
-                          _taskUniformBuffer,
-                          0u,
-                          &taskParams,
-                          sizeof(taskParams)) != GPU_OK) {
-    NSLog(@"GPU: failed to create task uniform buffer");
-    return NO;
-  }
-
-  GPUBindGroupEntry taskEntry = {
-    .binding = 0u,
-    .buffer = {
-      .buffer = _taskUniformBuffer,
-      .offset = 0u,
-      .size = sizeof(taskParams)
-    }
-  };
-  GPUBindGroupCreateInfo taskGroupInfo = {
-    .chain = {
-      .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
-      .structSize = sizeof(GPUBindGroupCreateInfo)
-    },
-    .label = "mesh-task-group",
-    .layout = _shaderLayout->bindGroupLayouts[0],
-    .entryCount = 1u,
-    .pEntries = &taskEntry
-  };
-  if (GPUCreateBindGroup(_device, &taskGroupInfo, &_taskGroup) != GPU_OK) {
-    NSLog(@"GPU: failed to create task bind group");
-    return NO;
-  }
-
-  return YES;
+  return GPUSampleMeshTriangleInit(&_renderer,
+                                   _device,
+                                   _queue,
+                                   _swapchain,
+                                   library,
+                                   shaderLayout,
+                                   width,
+                                   height) == GPU_OK;
 }
 
 - (void)renderFrame {
-  GPUFrame                     *frame;
-  GPUCommandBuffer             *cmdb;
-  GPURenderPassEncoder         *pass;
-  GPURenderPassColorAttachment color;
-  GPURenderPassCreateInfo      passInfo;
+  GPUCommandBufferCompletionFn completion;
   GPUResult                    result;
+  uint32_t                     width;
+  uint32_t                     height;
 
-  if (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) return;
-  if (!GPUSampleRecoverSwapchain(_swapchain, _view)) return;
-
-  frame = GPUBeginFrame(_swapchain);
-  if (!frame) return;
-
-  cmdb = NULL;
-  pass = NULL;
-  result = GPU_OK;
-  if (GPUAcquireCommandBuffer(_queue, "mesh-frame", &cmdb) != GPU_OK || !cmdb)
-    goto cleanup;
-  if (_exitAfterFrames > 0) {
-    GPUSetCommandBufferCompletionHandler(cmdb,
-                                         (__bridge void *)self,
-                                         MeshTriangleFrameComplete);
+  if (_terminating ||
+      (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) ||
+      !GPUSampleRecoverSwapchain(_swapchain, _view) ||
+      ![self drawableSizeWidth:&width height:&height]) {
+    return;
+  }
+  if (GPUSampleMeshTriangleResize(&_renderer, width, height) != GPU_OK) {
+    [self failAndStop];
+    return;
   }
 
-  color = (GPURenderPassColorAttachment){
-    .view = GPUFrameGetTargetView(frame),
-    .loadOp = GPU_LOAD_OP_CLEAR,
-    .storeOp = GPU_STORE_OP_STORE,
-    .clearColor.float32 = {0.02f, 0.02f, 0.025f, 1.0f}
-  };
-  passInfo = (GPURenderPassCreateInfo){
-    .label = "mesh-triangle-pass",
-    .colorAttachmentCount = 1,
-    .pColorAttachments = &color
-  };
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) goto cleanup;
-
-  GPUBindRenderPipeline(pass, _pipeline);
-  GPUBindRenderGroup(pass, 0u, _taskGroup, 0u, NULL);
-  GPUDrawMeshEXT(pass, 1, 1, 1);
-  GPUEndRenderPass(pass);
-  pass = NULL;
-
-  result = GPUFinishFrame(_queue, cmdb, frame);
-  frame = NULL;
+  completion = _exitAfterFrames > 0 ? MeshTriangleFrameComplete : NULL;
+  result = GPUSampleMeshTriangleRender(&_renderer,
+                                       (__bridge void *)self,
+                                       completion);
   if (result != GPU_OK) {
-    NSLog(@"GPUFinishFrame failed: %d", result);
+    NSLog(@"GPU mesh triangle frame failed: %d", result);
+    [self failAndStop];
     return;
   }
 
@@ -303,21 +219,35 @@ MeshTriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   if (!GPUSampleCheckZeroAlloc(_device,
                                (uint32_t)_submittedFrames,
                                _assertZeroAlloc,
-                               "GPU Metal mesh triangle")) {
-    _statsFailed = YES;
-    _terminating = YES;
-    [NSApp terminate:nil];
-    return;
-  }
-  if (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) {
+                               MeshTriangleStatsLabel())) {
+    [self failAndStop];
+  } else if (_exitAfterFrames > 0 &&
+             _submittedFrames >= _exitAfterFrames) {
     [_timer invalidate];
     _timer = nil;
   }
-  return;
+}
 
-cleanup:
-  if (pass) GPUEndRenderPass(pass);
-  GPUEndFrame(frame);
+- (void)failAndStop {
+  _failed      = YES;
+  _terminating = YES;
+  [self stopApplication];
+}
+
+- (void)stopApplication {
+  NSEvent *event;
+
+  [NSApp stop:nil];
+  event = [NSEvent otherEventWithType:NSEventTypeApplicationDefined
+                             location:NSZeroPoint
+                        modifierFlags:0
+                            timestamp:0
+                         windowNumber:0
+                              context:nil
+                              subtype:0
+                                data1:0
+                                data2:0];
+  [NSApp postEvent:event atStart:YES];
 }
 
 - (void)frameCompleted {
@@ -327,57 +257,48 @@ cleanup:
         self->_completedFrames >= self->_exitAfterFrames &&
         !self->_terminating) {
       self->_terminating = YES;
-      [self->_timer invalidate];
-      self->_timer = nil;
-      [NSApp terminate:nil];
+      [self stopApplication];
     }
   });
 }
 
 - (void)tick:(NSTimer *)timer {
   (void)timer;
-  if (!_terminating) [self renderFrame];
+  [self renderFrame];
 }
 
 - (void)cleanupGPU {
-  if (_taskGroup) GPUDestroyBindGroup(_taskGroup);
-  if (_taskUniformBuffer) GPUDestroyBuffer(_taskUniformBuffer);
-  if (_pipeline) GPUDestroyRenderPipeline(_pipeline);
-  if (_shaderLayout) GPUDestroyShaderLayout(_shaderLayout);
-  if (_library) GPUDestroyShaderLibrary(_library);
-  if (_swapchain) GPUDestroySwapchain(_swapchain);
-  if (_surface) GPUDestroySurface(_surface);
-  if (_device) GPUDestroyDevice(_device);
-  if (_instance) GPUDestroyInstance(_instance);
-
-  _pipeline = NULL;
-  _taskGroup = NULL;
-  _taskUniformBuffer = NULL;
-  _shaderLayout = NULL;
-  _library = NULL;
+  GPUSampleMeshTriangleDestroy(&_renderer);
+  GPUDestroySwapchain(_swapchain);
+  GPUDestroySurface(_surface);
+  GPUDestroyDevice(_device);
+  GPUDestroyInstance(_instance);
   _swapchain = NULL;
-  _surface = NULL;
-  _device = NULL;
-  _queue = NULL;
-  _adapter = NULL;
-  _instance = NULL;
+  _surface   = NULL;
+  _queue     = NULL;
+  _device    = NULL;
+  _adapter   = NULL;
+  _instance  = NULL;
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
   const char *exitAfterFrames;
 
   (void)notification;
-  if (![self setupWindow] || ![self setupGPU]) {
-    [NSApp terminate:nil];
+  if (!GPUSampleCreateWindow(MeshTriangleWindowTitle(), self, &_window, &_view) ||
+      ![self setupGPU]) {
+    if (!_skipped) {
+      _failed = YES;
+    }
+    [self stopApplication];
     return;
   }
 
   exitAfterFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
-  if (exitAfterFrames && exitAfterFrames[0]) {
-    _exitAfterFrames = MAX(1, strtol(exitAfterFrames, NULL, 10));
+  if (exitAfterFrames) {
+    _exitAfterFrames = strtol(exitAfterFrames, NULL, 10);
   }
   _assertZeroAlloc = GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
-
   _timer = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
                                    target:self
                                  selector:@selector(tick:)
@@ -385,10 +306,6 @@ cleanup:
                                   repeats:YES];
   [[NSRunLoop mainRunLoop] addTimer:_timer forMode:NSRunLoopCommonModes];
   [self renderFrame];
-}
-
-- (BOOL)statsFailed {
-  return _statsFailed;
 }
 
 - (void)applicationWillTerminate:(NSNotification *)notification {
@@ -403,26 +320,8 @@ cleanup:
   return YES;
 }
 
-- (void)windowDidResize:(NSNotification *)notification {
-  uint32_t width;
-  uint32_t height;
-
-  (void)notification;
-  if (!_swapchain || _terminating) return;
-
-  width  = (uint32_t)_view.bounds.size.width;
-  height = (uint32_t)_view.bounds.size.height;
-  if (width > 0u && height > 0u &&
-      GPUResizeSwapchain(_swapchain, width, height) == GPU_OK) {
-    [self renderFrame];
-  }
-}
-
-- (void)windowWillClose:(NSNotification *)notification {
-  (void)notification;
-  [_timer invalidate];
-  _timer = nil;
-  [self cleanupGPU];
+- (int)exitCode {
+  return _skipped ? kSkipReturnCode : (_failed ? 1 : 0);
 }
 
 @end
@@ -442,7 +341,8 @@ main(int argc, const char *argv[]) {
     [NSApp setDelegate:delegate];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     [NSApp run];
-    result = [delegate statsFailed] ? 1 : 0;
+    result = [delegate exitCode];
+    [delegate cleanupGPU];
   }
   return result;
 }
