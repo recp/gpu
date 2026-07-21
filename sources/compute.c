@@ -1,11 +1,16 @@
 #include "../common/webgpu.h"
 
+#include <math.h>
 #include <stdio.h>
 
 typedef struct GeneratedVertex {
   float position[4];
   float color[4];
 } GeneratedVertex;
+
+typedef struct ComputeConstants {
+  float tint[4];
+} ComputeConstants;
 
 typedef struct WebGPUCompute {
   GPUInstance        *instance;
@@ -20,10 +25,13 @@ typedef struct WebGPUCompute {
   GPUComputePipeline *computePipeline;
   GPURenderPipeline  *renderPipeline;
   GPUBuffer          *vertexBuffer;
+  GPUBuffer          *timestampBuffer;
+  GPUQuerySet        *timestampQuery;
   GPUBindGroup       *computeGroup;
   WebGPURequest       request;
   uint32_t            width;
   uint32_t            height;
+  bool                timestampRecorded;
 } WebGPUCompute;
 
 static WebGPUCompute app;
@@ -39,13 +47,15 @@ static int
 create_resources(WebGPUCompute *state) {
   GPUComputePipelineCreateInfo computeInfo = {0};
   GPURenderPipelineCreateInfo  renderInfo = {0};
+  GPUShaderReflection          reflection = {0};
   GPUVertexAttribute           attributes[2] = {0};
   GPUVertexBufferLayout        vertexLayout = {0};
   GPUColorTargetState          color = {0};
   GPUPipelineLayoutCreateInfo  renderLayoutInfo = {0};
-  GPUBufferCreateInfo          bufferInfo = {0};
-  GPUBindGroupEntry            groupEntry = {0};
-  GPUBindGroupCreateInfo       groupInfo = {0};
+  GPUBufferCreateInfo           bufferInfo = {0};
+  GPUQuerySetCreateInfo         queryInfo = {0};
+  GPUBindGroupEntry             groupEntry = {0};
+  GPUBindGroupCreateInfo        groupInfo = {0};
   const GPUBindGroupLayoutEntry *layoutEntries;
   void                         *artifact;
   uint64_t                      artifactSize;
@@ -65,7 +75,16 @@ create_resources(WebGPUCompute *state) {
                                          &state->library);
   free(artifact);
   if (result != GPU_OK || !state->library ||
-      GPUCreateShaderLayout(state->device,
+      GPUGetShaderReflection(state->library, &reflection) != GPU_OK ||
+      reflection.pushConstantSizeBytes != sizeof(ComputeConstants) ||
+      reflection.pushConstantStages != GPU_SHADER_STAGE_COMPUTE_BIT) {
+    GPUFreeShaderReflection(&reflection);
+    set_status("GPU: unexpected compute push-constant reflection", 1);
+    return 0;
+  }
+  GPUFreeShaderReflection(&reflection);
+
+  if (GPUCreateShaderLayout(state->device,
                             state->library,
                             &state->shaderLayout) != GPU_OK ||
       !state->shaderLayout ||
@@ -174,6 +193,30 @@ create_resources(WebGPUCompute *state) {
     set_status("GPU: failed to create WebGPU compute group", 1);
     return 0;
   }
+
+  if (GPUIsFeatureEnabled(state->device, GPU_FEATURE_TIMESTAMPS)) {
+    double timestampPeriod;
+
+    queryInfo.chain.sType      = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
+    queryInfo.chain.structSize = sizeof(queryInfo);
+    queryInfo.label            = "compute-webgpu-timestamps";
+    queryInfo.type             = GPU_QUERY_TIMESTAMP;
+    queryInfo.count            = 2u;
+    bufferInfo.label           = "compute-webgpu-timestamp-results";
+    bufferInfo.sizeBytes       = 272u;
+    bufferInfo.usage           = GPU_BUFFER_USAGE_COPY_DST;
+    if (GPUCreateQuerySet(state->device,
+                          &queryInfo,
+                          &state->timestampQuery) != GPU_OK ||
+        GPUCreateBuffer(state->device,
+                        &bufferInfo,
+                        &state->timestampBuffer) != GPU_OK ||
+        GPUGetTimestampPeriod(state->queue, &timestampPeriod) != GPU_OK ||
+        timestampPeriod != 1.0) {
+      set_status("GPU: failed to initialize WebGPU timestamps", 1);
+      return 0;
+    }
+  }
   return 1;
 }
 
@@ -189,6 +232,8 @@ render_frame(void *userData) {
   GPUBufferBinding             vertex = {0};
   GPUBufferBarrier             barrier = {0};
   GPUBarrierBatch              barriers = {0};
+  ComputeConstants             constants;
+  float                        phase;
 
   state = userData;
   if (!resize_canvas(state)) {
@@ -207,6 +252,10 @@ render_frame(void *userData) {
     return;
   }
 
+  if (state->timestampQuery && !state->timestampRecorded) {
+    GPUWriteTimestamp(cmdb, state->timestampQuery, 0u);
+  }
+
   compute = GPUBeginComputePass(cmdb, "compute-webgpu-fill");
   if (!compute) {
     (void)GPUDiscardCommandBuffer(cmdb);
@@ -215,6 +264,15 @@ render_frame(void *userData) {
   }
   GPUBindComputePipeline(compute, state->computePipeline);
   GPUBindComputeGroup(compute, 0u, state->computeGroup, 0u, NULL);
+  phase             = (float)(emscripten_get_now() * 0.001);
+  constants.tint[0] = 0.60f + 0.40f * sinf(phase);
+  constants.tint[1] = 0.60f + 0.40f * sinf(phase + 2.0943951f);
+  constants.tint[2] = 0.60f + 0.40f * sinf(phase + 4.1887902f);
+  constants.tint[3] = 1.0f;
+  GPUSetComputePushConstants(compute,
+                             0u,
+                             (uint32_t)sizeof(constants),
+                             &constants);
   GPUDispatch(compute, 3u, 1u, 1u);
   GPUEndComputePass(compute);
 
@@ -250,6 +308,16 @@ render_frame(void *userData) {
   GPUBindVertexBuffers(render, 0u, 1u, &vertex);
   GPUDraw(render, 3u, 1u, 0u, 0u);
   GPUEndRenderPass(render);
+  if (state->timestampQuery && !state->timestampRecorded) {
+    GPUWriteTimestamp(cmdb, state->timestampQuery, 1u);
+    GPUResolveQuerySet(cmdb,
+                       state->timestampQuery,
+                       0u,
+                       2u,
+                       state->timestampBuffer,
+                       256u);
+    state->timestampRecorded = true;
+  }
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
     fprintf(stderr, "GPU: failed to finish WebGPU compute frame\n");
   }
@@ -291,7 +359,7 @@ webgpu_ready(GPUResult  result,
     return;
   }
 
-  set_status("GPU: WebGPU USL compute/storage ready", 0);
+  set_status("GPU: WebGPU USL compute push constants ready", 0);
   emscripten_set_main_loop_arg(render_frame, state, 0, true);
 }
 

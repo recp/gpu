@@ -43,7 +43,7 @@
           <div>
             <small>Binding / 02</small>
             <h3><a href="gpu-textured-quad-webgpu-usl.html?v=10">Texture path</a></h3>
-            <p>Texture, sampler, reflection, and bind-group lowering.</p>
+            <p>Transfer, texture, sampler, reflection, and bind-group lowering.</p>
           </div>
         </article>
 
@@ -55,21 +55,21 @@
           </a>
           <div>
             <small>Compute / 03</small>
-            <h3><a href="gpu-compute-webgpu-usl.html?v=10">Compute handoff</a></h3>
-            <p>Compute writes the vertex stream; render consumes it directly.</p>
+            <h3><a href="gpu-compute-webgpu-usl.html?v=13">Compute handoff</a></h3>
+            <p>Per-dispatch constants animate a compute-generated vertex stream.</p>
           </div>
         </article>
 
         <article class="sample-card">
-          <a class="sample-preview" href="gpu-indexed-depth-webgpu-usl.html?v=10">
+          <a class="sample-preview" href="gpu-indexed-depth-webgpu-usl.html?v=12">
             <iframe title="Indexed depth preview"
-                    src="gpu-indexed-depth-webgpu-usl.html?embed=1&amp;v=10"
+                    src="gpu-indexed-depth-webgpu-usl.html?embed=1&amp;v=12"
                     loading="eager" tabindex="-1"></iframe>
           </a>
           <div>
             <small>Render / 04</small>
-            <h3><a href="gpu-indexed-depth-webgpu-usl.html?v=10">Indexed depth</a></h3>
-            <p>Index buffers, depth testing, and hidden-surface ordering.</p>
+            <h3><a href="gpu-indexed-depth-webgpu-usl.html?v=12">Indexed depth</a></h3>
+            <p>Indexed depth, occlusion, barriers, and sampled-depth visualization.</p>
           </div>
         </article>
 
@@ -111,6 +111,45 @@
             <small>Compute / 07</small>
             <h3><a href="gpu-storage-texture-webgpu-usl.html?v=10">Storage texture</a></h3>
             <p>Compute writes typed RGBA8 pixels; render samples them directly.</p>
+          </div>
+        </article>
+
+        <article class="sample-card">
+          <a class="sample-preview" href="gpu-push-constants-webgpu-usl.html?v=10">
+            <iframe title="Push constants preview"
+                    src="gpu-push-constants-webgpu-usl.html?embed=1&amp;v=10"
+                    loading="eager" tabindex="-1"></iframe>
+          </a>
+          <div>
+            <small>Render / 08</small>
+            <h3><a href="gpu-push-constants-webgpu-usl.html?v=10">Push constants</a></h3>
+            <p>Per-draw constants with native lowering and WebGPU dynamic slices.</p>
+          </div>
+        </article>
+
+        <article class="sample-card">
+          <a class="sample-preview" href="gpu-msaa-webgpu-usl.html?v=1">
+            <iframe title="MSAA resolve preview"
+                    src="gpu-msaa-webgpu-usl.html?embed=1&amp;v=1"
+                    loading="eager" tabindex="-1"></iframe>
+          </a>
+          <div>
+            <small>Render / 09</small>
+            <h3><a href="gpu-msaa-webgpu-usl.html?v=1">MSAA resolve</a></h3>
+            <p>Four-sample rasterization resolved directly into the swapchain.</p>
+          </div>
+        </article>
+
+        <article class="sample-card">
+          <a class="sample-preview" href="gpu-mrt-blend-webgpu-usl.html?v=1">
+            <iframe title="MRT blend preview"
+                    src="gpu-mrt-blend-webgpu-usl.html?embed=1&amp;v=1"
+                    loading="eager" tabindex="-1"></iframe>
+          </a>
+          <div>
+            <small>Render / 10</small>
+            <h3><a href="gpu-mrt-blend-webgpu-usl.html?v=1">MRT blend</a></h3>
+            <p>Two color targets use independent alpha and additive blending.</p>
           </div>
         </article>
       </div>

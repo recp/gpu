@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="gallery.css?v=7">
-  <title>Texture path · GPU + USL</title>
+  <title>MRT blend · GPU + USL</title>
 </head>
 <body class="sample-page"
-      data-c-source="sources/textured-quad.c"
-      data-usl-source="sources/textured-quad.usl"
-      data-wgsl-source="sources/textured-quad.wgsl">
+      data-c-source="sources/mrt-blend.c"
+      data-usl-source="sources/mrt-blend.usl"
+      data-wgsl-source="sources/mrt-blend.wgsl">
   <header class="sample-head">
     <a class="back-link" href="index.html"><span>←</span> Sample index</a>
     <div class="sample-heading">
-      <p>Render / texture + sampler</p>
-      <h1>Texture path</h1>
+      <p>Render / MRT + blending</p>
+      <h1>MRT blend</h1>
     </div>
     <div class="runtime-badge"><i></i> WebGPU live</div>
   </header>
@@ -37,7 +37,7 @@
         </div>
       </aside>
       <div class="stage-meta">
-        <p>A copied checkerboard validating transfer, USL reflection, typed texture layouts, and bind groups.</p>
+        <p>Two offscreen color targets use independent alpha and additive blend state, then composite into the swapchain.</p>
         <div id="status">GPU: loading sample</div>
       </div>
     </section>

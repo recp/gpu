@@ -8,10 +8,33 @@ struct VSOut {
   color:    float4
 }
 
+struct PreviewOut {
+  position: float4 #position
+  uv:       float2
+}
+
 vert cube_vs(v: VSIn #stage_in) -> VSOut {
   v.position, v.color
 }
 
 frag cube_fs(i: VSOut #stage_in) -> float4 {
   return i.color
+}
+
+vert depth_preview_vs(vertexId: uint #vertex_id) -> PreviewOut {
+  if (vertexId == 0) {
+    return PreviewOut { float4(-1.0, -1.0, 0.0, 1.0), float2(0.0, 1.0) }
+  }
+  if (vertexId == 1) {
+    return PreviewOut { float4(3.0, -1.0, 0.0, 1.0), float2(2.0, 1.0) }
+  }
+  return PreviewOut { float4(-1.0, 3.0, 0.0, 1.0), float2(0.0, -1.0) }
+}
+
+frag depth_preview_fs(input: PreviewOut #stage_in,
+                      depthTex: depth2d<float> #texture(0)) -> float4 {
+  let size  = float2(float(depthTex.get_width(0)),
+                     float(depthTex.get_height(0)))
+  let depth = depthTex.read(uint2(input.uv * (size - float2(1.0))))
+  return float4(depth, depth, depth, 1.0)
 }

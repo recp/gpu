@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="gallery.css?v=7">
-  <title>Texture path · GPU + USL</title>
+  <title>MSAA resolve · GPU + USL</title>
 </head>
 <body class="sample-page"
-      data-c-source="sources/textured-quad.c"
-      data-usl-source="sources/textured-quad.usl"
-      data-wgsl-source="sources/textured-quad.wgsl">
+      data-c-source="sources/msaa.c"
+      data-usl-source="sources/msaa.usl"
+      data-wgsl-source="sources/msaa.wgsl">
   <header class="sample-head">
     <a class="back-link" href="index.html"><span>←</span> Sample index</a>
     <div class="sample-heading">
-      <p>Render / texture + sampler</p>
-      <h1>Texture path</h1>
+      <p>Render / 4x MSAA</p>
+      <h1>MSAA resolve</h1>
     </div>
     <div class="runtime-badge"><i></i> WebGPU live</div>
   </header>
@@ -37,7 +37,7 @@
         </div>
       </aside>
       <div class="stage-meta">
-        <p>A copied checkerboard validating transfer, USL reflection, typed texture layouts, and bind groups.</p>
+        <p>Four-sample rasterization resolves directly into the swapchain and discards the multisample attachment contents.</p>
         <div id="status">GPU: loading sample</div>
       </div>
     </section>

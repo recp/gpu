@@ -1,0 +1,34 @@
+struct FullscreenOut {
+  position: float4 #position
+  uv:       float2
+}
+
+struct MRTOut {
+  alphaBlend: float4 #color(0)
+  additive:   float4 #color(1)
+}
+
+vert fullscreen_vs(vertexId: uint #vertex_id) -> FullscreenOut {
+  if (vertexId == 0) {
+    return FullscreenOut { float4(-1.0, -1.0, 0.0, 1.0), float2(0.0, 1.0) }
+  }
+  if (vertexId == 1) {
+    return FullscreenOut { float4(3.0, -1.0, 0.0, 1.0), float2(2.0, 1.0) }
+  }
+  return FullscreenOut { float4(-1.0, 3.0, 0.0, 1.0), float2(0.0, -1.0) }
+}
+
+frag mrt_fs(input: FullscreenOut #stage_in) -> MRTOut {
+  let center = input.uv - float2(0.5)
+  let alpha  = saturate(1.2 - length(center) * 2.4)
+  return MRTOut {
+    float4(1.0, 0.18, 0.03, alpha * 0.88),
+    float4(0.02, 0.42, 1.0, alpha * 0.72)
+  }
+}
+
+frag composite_fs(input: FullscreenOut #stage_in,
+                  colorTarget: texture2d<float> #texture(0),
+                  linearSampler: sampler #sampler(1)) -> float4 {
+  return colorTarget.sample(linearSampler, input.uv)
+}
