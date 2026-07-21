@@ -36,6 +36,129 @@ webgpu_shaderStages(GPUShaderStageFlags stages) {
   return result;
 }
 
+GPUResult
+gpu_webgpuInitPushConstants(GPUDeviceWebGPU *device) {
+  WGPUBindGroupLayoutDescriptor descriptor =
+    WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
+  WGPUBindGroupLayoutEntry entry = WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT;
+
+  if (!device || !device->device) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (device->pushConstantLayout) {
+    return GPU_OK;
+  }
+
+  entry.binding    = GPU_WEBGPU_PUSH_CONSTANT_BINDING;
+  entry.visibility = WGPUShaderStage_Vertex |
+                     WGPUShaderStage_Fragment |
+                     WGPUShaderStage_Compute;
+  entry.buffer = (WGPUBufferBindingLayout)WGPU_BUFFER_BINDING_LAYOUT_INIT;
+  entry.buffer.type             = WGPUBufferBindingType_Uniform;
+  entry.buffer.hasDynamicOffset = true;
+  entry.buffer.minBindingSize   = GPU_WEBGPU_PUSH_CONSTANT_ALIGNMENT;
+  descriptor.label      = gpu_webgpuString("gpu-push-constants");
+  descriptor.entryCount = 1u;
+  descriptor.entries    = &entry;
+  device->pushConstantLayout =
+    wgpuDeviceCreateBindGroupLayout(device->device, &descriptor);
+  return device->pushConstantLayout ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+}
+
+void
+gpu_webgpuDestroyPushConstants(GPUDeviceWebGPU *device) {
+  if (!device) {
+    return;
+  }
+  for (uint32_t i = 0u; i < GPU_WEBGPU_COMMAND_SLOT_COUNT; i++) {
+    GPUCommandWebGPU *command = &device->commands[i];
+
+    if (command->pushConstantGroup) {
+      wgpuBindGroupRelease(command->pushConstantGroup);
+      command->pushConstantGroup = NULL;
+    }
+    if (command->pushConstantBuffer) {
+      wgpuBufferDestroy(command->pushConstantBuffer);
+      wgpuBufferRelease(command->pushConstantBuffer);
+      command->pushConstantBuffer = NULL;
+    }
+    command->pushConstantCursor = 0u;
+  }
+  if (device->pushConstantLayout) {
+    wgpuBindGroupLayoutRelease(device->pushConstantLayout);
+    device->pushConstantLayout = NULL;
+  }
+}
+
+bool
+gpu_webgpuUploadPushConstants(GPUCommandWebGPU *command,
+                              const void        *data,
+                              uint32_t           sizeBytes,
+                              uint32_t          *outDynamicOffset) {
+  WGPUBufferDescriptor bufferInfo = WGPU_BUFFER_DESCRIPTOR_INIT;
+  WGPUBindGroupDescriptor groupInfo = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
+  WGPUBindGroupEntry entry = WGPU_BIND_GROUP_ENTRY_INIT;
+  GPUDeviceWebGPU *device;
+  uint32_t offset;
+
+  device = gpu_webgpuDevice(gpuCommandBufferDevice(
+    command ? &command->command : NULL
+  ));
+  if (!command || !device || !device->device || !device->queue ||
+      !device->pushConstantLayout || !data || !outDynamicOffset ||
+      sizeBytes == 0u ||
+      sizeBytes > GPU_WEBGPU_PUSH_CONSTANT_ALIGNMENT) {
+    return false;
+  }
+
+  if (!command->pushConstantBuffer) {
+    bufferInfo.label = gpu_webgpuString("gpu-push-constant-upload");
+    bufferInfo.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+    bufferInfo.size  = GPU_WEBGPU_PUSH_CONSTANT_CAPACITY;
+    command->pushConstantBuffer =
+      wgpuDeviceCreateBuffer(device->device, &bufferInfo);
+    if (!command->pushConstantBuffer) {
+      return false;
+    }
+
+    entry.binding = GPU_WEBGPU_PUSH_CONSTANT_BINDING;
+    entry.buffer  = command->pushConstantBuffer;
+    entry.offset  = 0u;
+    entry.size    = GPU_WEBGPU_PUSH_CONSTANT_ALIGNMENT;
+    groupInfo.label      = gpu_webgpuString("gpu-push-constant-group");
+    groupInfo.layout     = device->pushConstantLayout;
+    groupInfo.entryCount = 1u;
+    groupInfo.entries    = &entry;
+    command->pushConstantGroup =
+      wgpuDeviceCreateBindGroup(device->device, &groupInfo);
+    if (!command->pushConstantGroup) {
+      wgpuBufferDestroy(command->pushConstantBuffer);
+      wgpuBufferRelease(command->pushConstantBuffer);
+      command->pushConstantBuffer = NULL;
+      return false;
+    }
+  }
+
+  offset = command->pushConstantCursor;
+  if (offset > GPU_WEBGPU_PUSH_CONSTANT_CAPACITY -
+                 GPU_WEBGPU_PUSH_CONSTANT_ALIGNMENT) {
+    gpuDeviceReportError(gpuCommandBufferDevice(&command->command),
+                         GPU_DEVICE_ERROR_OUT_OF_MEMORY,
+                         GPU_DEVICE_LOST_REASON_UNKNOWN,
+                         GPU_ERROR_OUT_OF_MEMORY,
+                         "WebGPU push-constant upload ring exhausted");
+    return false;
+  }
+  wgpuQueueWriteBuffer(device->queue,
+                       command->pushConstantBuffer,
+                       offset,
+                       data,
+                       sizeBytes);
+  command->pushConstantCursor += GPU_WEBGPU_PUSH_CONSTANT_ALIGNMENT;
+  *outDynamicOffset = offset;
+  return true;
+}
+
 static WGPUTextureViewDimension
 webgpu_bindingViewDimension(GPUTextureViewType type) {
   static const WGPUTextureViewDimension dimensions[] = {
@@ -274,37 +397,24 @@ webgpu_destroyBindGroupLayout(GPUBindGroupLayout *layout) {
 
 static GPUResult
 webgpu_createPipelineLayout(GPUDevice *device, GPUPipelineLayout *layout) {
-  WGPUPipelineLayoutDescriptor descriptor = WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT;
-  WGPUBindGroupLayout           nativeGroups[GPU_ENCODER_MAX_BIND_GROUPS];
-  GPUBindGroupLayout *const    *groups;
-  GPUDeviceWebGPU              *native;
-  uint32_t                      groupCount;
-  uint32_t                      pushConstantSize;
+  GPUPipelineLayoutWebGPU state;
+  uint32_t                groupCount;
+  uint32_t                requiredGroupMask;
+  GPUResult               result;
 
-  native = gpu_webgpuDevice(device);
-  groups = gpuGetPipelineLayoutGroups(layout, &groupCount);
-  gpuGetPipelineLayoutPushConstants(layout, &pushConstantSize, NULL);
-  if (!native || !native->device ||
-      groupCount > GPU_ARRAY_LEN(nativeGroups) ||
-      (groupCount > 0u && !groups) || pushConstantSize != 0u) {
-    return GPU_ERROR_UNSUPPORTED;
+  gpuGetPipelineLayoutGroups(layout, &groupCount);
+  requiredGroupMask = groupCount > 0u ? (1u << groupCount) - 1u : 0u;
+  result = gpu_webgpuCreatePipelineLayout(device,
+                                          layout,
+                                          requiredGroupMask,
+                                          &state);
+  if (result != GPU_OK) {
+    return result;
   }
-
-  for (uint32_t i = 0u; i < groupCount; i++) {
-    GPUBindGroupLayoutWebGPU *group;
-
-    group = groups[i] ? groups[i]->_native : NULL;
-    nativeGroups[i] = group ? group->layout : NULL;
-    if (!nativeGroups[i]) {
-      return GPU_ERROR_BACKEND_FAILURE;
-    }
-  }
-
-  descriptor.bindGroupLayoutCount = groupCount;
-  descriptor.bindGroupLayouts     = groupCount ? nativeGroups : NULL;
-  layout->_native = wgpuDeviceCreatePipelineLayout(native->device,
-                                                    &descriptor);
-  return layout->_native ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+  layout->_native = state.layout;
+  state.layout    = NULL;
+  gpu_webgpuDestroyPipelineLayout(&state);
+  return GPU_OK;
 }
 
 static void
@@ -330,6 +440,8 @@ gpu_webgpuCreatePipelineLayout(GPUDevice               *device,
   GPUDeviceWebGPU    *native;
   uint32_t            groupCount;
   uint32_t            logicalGroupCount;
+  uint32_t            pushConstantSize;
+  GPUShaderStageFlags pushConstantStages;
 
   if (!outLayout) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -339,6 +451,9 @@ gpu_webgpuCreatePipelineLayout(GPUDevice               *device,
   memset(emptyLayouts, 0, sizeof(emptyLayouts));
   native = gpu_webgpuDevice(device);
   groups = gpuGetPipelineLayoutGroups(logicalLayout, &logicalGroupCount);
+  gpuGetPipelineLayoutPushConstants(logicalLayout,
+                                    &pushConstantSize,
+                                    &pushConstantStages);
   if (!native || !native->device || !logicalLayout ||
       (logicalGroupCount > 0u && !groups) ||
       (requiredGroupMask >> GPU_ENCODER_MAX_BIND_GROUPS) != 0u) {
@@ -354,8 +469,30 @@ gpu_webgpuCreatePipelineLayout(GPUDevice               *device,
   if (groupCount > logicalGroupCount) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  if (pushConstantSize > 0u) {
+    const GPUShaderStageFlags supportedStages =
+      GPU_SHADER_STAGE_VERTEX_BIT |
+      GPU_SHADER_STAGE_FRAGMENT_BIT |
+      GPU_SHADER_STAGE_COMPUTE_BIT;
+
+    if (!native->pushConstantLayout ||
+        pushConstantSize > GPU_WEBGPU_PUSH_CONSTANT_ALIGNMENT ||
+        (pushConstantStages & ~supportedStages) != 0u ||
+        logicalGroupCount > GPU_WEBGPU_PUSH_CONSTANT_GROUP ||
+        (requiredGroupMask &
+          (1u << GPU_WEBGPU_PUSH_CONSTANT_GROUP)) != 0u) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+    groupCount = GPU_WEBGPU_PUSH_CONSTANT_GROUP + 1u;
+    outLayout->pushConstantSizeBytes = pushConstantSize;
+  }
 
   for (uint32_t i = 0u; i < groupCount; i++) {
+    if (pushConstantSize > 0u &&
+        i == GPU_WEBGPU_PUSH_CONSTANT_GROUP) {
+      nativeGroups[i] = native->pushConstantLayout;
+      continue;
+    }
     if ((requiredGroupMask & (1u << i)) != 0u) {
       GPUBindGroupLayoutWebGPU *group;
 

@@ -78,7 +78,7 @@ gpu_validPushConstantRange(uint32_t limit,
   if (sizeBytes == 0u) {
     return true;
   }
-  if (!data || offset > limit) {
+  if (!data || offset > limit || ((offset | sizeBytes) & 3u) != 0u) {
     return false;
   }
 

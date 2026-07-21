@@ -511,6 +511,7 @@ webgpu_getLimits(const GPUAdapter *adapter, GPULimits *limits) {
     limits->maxComputeWorkgroupSizeX = webLimits.maxComputeWorkgroupSizeX;
     limits->maxComputeWorkgroupSizeY = webLimits.maxComputeWorkgroupSizeY;
     limits->maxComputeWorkgroupSizeZ = webLimits.maxComputeWorkgroupSizeZ;
+    limits->maxPushConstantSizeBytes = 256u;
   }
   if (wgpuAdapterGetInfo(native->adapter, &info) == WGPUStatus_Success) {
     limits->minSubgroupSize = info.subgroupMinSize;
@@ -539,7 +540,8 @@ webgpu_deviceReady(WGPURequestDeviceStatus status,
     if (device && native) {
       native->device = nativeDevice;
       native->queue  = wgpuDeviceGetQueue(nativeDevice);
-      if (native->queue) {
+      if (native->queue &&
+          gpu_webgpuInitPushConstants(native) == GPU_OK) {
         native->queueHandle._priv   = native->queue;
         native->queueHandle._device = device;
         native->queueHandle.bits    = GPU_QUEUE_GRAPHICS_BIT |
@@ -551,6 +553,11 @@ webgpu_deviceReady(WGPURequestDeviceStatus status,
         device->_priv         = native;
         device->queueFamilies = native->queueHandle.bits;
       } else {
+        if (native->queue) {
+          wgpuQueueRelease(native->queue);
+          native->queue = NULL;
+        }
+        gpu_webgpuDestroyPushConstants(native);
         device = NULL;
       }
     }
@@ -711,6 +718,7 @@ webgpu_destroyDevice(GPUDevice *device) {
     if (native->queue) {
       wgpuQueueRelease(native->queue);
     }
+    gpu_webgpuDestroyPushConstants(native);
     for (uint32_t i = 0u; i < GPU_WEBGPU_COMMAND_SLOT_COUNT; i++) {
       if (native->commands[i].queryResolveScratch) {
         wgpuBufferDestroy(native->commands[i].queryResolveScratch);

@@ -1885,6 +1885,7 @@ GPUCreatePipelineLayout(GPUDevice *device,
                         GPUPipelineLayout **outLayout) {
   GPUPipelineLayout *layout;
   GPUPipelineLayoutPriv *priv;
+  GPUDeviceCapabilities capabilities;
   GPUApi *api;
   GPUResult result;
 
@@ -1912,7 +1913,11 @@ GPUCreatePipelineLayout(GPUDevice *device,
   if (info->pushConstantSizeBytes > 0 && info->pushConstantStages == 0) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  if (info->pushConstantSizeBytes > GPU_PUSH_CONSTANT_MAX_SIZE_BYTES) {
+  if ((info->pushConstantSizeBytes & 3u) != 0u ||
+      GPUGetDeviceCapabilities(device, &capabilities) != GPU_OK ||
+      info->pushConstantSizeBytes >
+        capabilities.limits.maxPushConstantSizeBytes ||
+      info->pushConstantSizeBytes > GPU_PUSH_CONSTANT_MAX_SIZE_BYTES) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -2490,19 +2495,7 @@ GPUCreatePipelineLayoutFromReflection(GPUDevice *device,
   info.bindGroupLayoutCount = bindGroupLayoutCount;
   info.ppBindGroupLayouts = ppLayouts;
   info.pushConstantSizeBytes = reflection->pushConstantSizeBytes;
-  info.pushConstantStages = reflection->pushConstantSizeBytes > 0u
-                               ? (GPU_SHADER_STAGE_VERTEX_BIT |
-                                  GPU_SHADER_STAGE_FRAGMENT_BIT |
-                                  GPU_SHADER_STAGE_COMPUTE_BIT |
-                                  GPU_SHADER_STAGE_TASK_BIT |
-                                  GPU_SHADER_STAGE_MESH_BIT |
-                                  GPU_SHADER_STAGE_RAY_GENERATION_BIT |
-                                  GPU_SHADER_STAGE_MISS_BIT |
-                                  GPU_SHADER_STAGE_CLOSEST_HIT_BIT |
-                                  GPU_SHADER_STAGE_ANY_HIT_BIT |
-                                  GPU_SHADER_STAGE_INTERSECTION_BIT |
-                                  GPU_SHADER_STAGE_CALLABLE_BIT)
-                               : 0u;
+  info.pushConstantStages    = reflection->pushConstantStages;
   return GPUCreatePipelineLayout(device, &info, outLayout);
 }
 

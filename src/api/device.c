@@ -307,6 +307,7 @@ gpu_fillDefaultLimits(GPULimits *limits) {
   limits->maxComputeWorkgroupSizeX          = 1024u;
   limits->maxComputeWorkgroupSizeY          = 1024u;
   limits->maxComputeWorkgroupSizeZ          = 64u;
+  limits->maxPushConstantSizeBytes           = 256u;
 }
 
 static void

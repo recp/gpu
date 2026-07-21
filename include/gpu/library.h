@@ -48,6 +48,7 @@ typedef struct GPUShaderReflection {
   const GPUShaderResourceReflection *pResources;
   uint32_t                           resourceCount;
   uint32_t                           pushConstantSizeBytes;
+  GPUShaderStageFlags                pushConstantStages;
 } GPUShaderReflection;
 
 typedef enum GPUShaderSourceKind {

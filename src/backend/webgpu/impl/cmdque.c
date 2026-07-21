@@ -103,6 +103,7 @@ webgpu_newCommandBuffer(GPUQueue                    *queue,
   command->command._onCompleteSender = sender;
   command->command._onComplete       = onComplete;
   command->present                   = NULL;
+  command->pushConstantCursor        = 0u;
   descriptor.label                   = gpu_webgpuString(label);
   command->encoder = wgpuDeviceCreateCommandEncoder(device->device,
                                                      &descriptor);

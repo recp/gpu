@@ -42,7 +42,11 @@ enum {
   GPU_WEBGPU_COMMAND_SLOT_COUNT      = 8u,
   GPU_WEBGPU_MAX_SURFACE_FORMATS     = 16u,
   GPU_WEBGPU_MAX_PRESENT_MODES       = 4u,
-  GPU_WEBGPU_QUERY_RESOLVE_CAPACITY  = 64u * 1024u
+  GPU_WEBGPU_QUERY_RESOLVE_CAPACITY  = 64u * 1024u,
+  GPU_WEBGPU_PUSH_CONSTANT_GROUP     = 3u,
+  GPU_WEBGPU_PUSH_CONSTANT_BINDING   = 0u,
+  GPU_WEBGPU_PUSH_CONSTANT_ALIGNMENT = 256u,
+  GPU_WEBGPU_PUSH_CONSTANT_CAPACITY  = 1024u * 1024u
 };
 
 typedef struct GPUInstanceWebGPU {
@@ -71,6 +75,8 @@ typedef struct GPUCommandWebGPU {
   WGPUComputePassEncoder               computeEncoder;
   WGPUBuffer                           boundIndexBuffer;
   WGPUBuffer                           queryResolveScratch;
+  WGPUBuffer                           pushConstantBuffer;
+  WGPUBindGroup                        pushConstantGroup;
   GPUSwapchainWebGPU                  *present;
   GPUCommandBuffer                     command;
   GPURenderPassDesc                    renderPass;
@@ -80,6 +86,7 @@ typedef struct GPUCommandWebGPU {
   WGPURenderPassDescriptor             renderPassDesc;
   uint64_t                             boundIndexOffset;
   WGPUIndexFormat                      boundIndexFormat;
+  uint32_t                             pushConstantCursor;
   atomic_bool                          inUse;
   bool                                 copyDebugGroup;
   WGPURenderPassColorAttachment        colorAttachments[
@@ -89,17 +96,19 @@ typedef struct GPUCommandWebGPU {
 } GPUCommandWebGPU;
 
 typedef struct GPUDeviceWebGPU {
-  WGPUDevice       device;
-  WGPUQueue        queue;
-  void            *errorContext;
-  GPUQueue         queueHandle;
-  GPUCommandWebGPU commands[GPU_WEBGPU_COMMAND_SLOT_COUNT];
+  WGPUDevice          device;
+  WGPUQueue           queue;
+  WGPUBindGroupLayout pushConstantLayout;
+  void               *errorContext;
+  GPUQueue            queueHandle;
+  GPUCommandWebGPU    commands[GPU_WEBGPU_COMMAND_SLOT_COUNT];
 } GPUDeviceWebGPU;
 
 typedef struct GPUPipelineLayoutWebGPU {
   WGPUPipelineLayout layout;
   WGPUBindGroup      emptyGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   uint32_t           emptyGroupMask;
+  uint32_t           pushConstantSizeBytes;
 } GPUPipelineLayoutWebGPU;
 
 typedef struct GPUBindGroupLayoutWebGPU {
@@ -196,6 +205,18 @@ gpu_webgpuCreatePipelineLayout(GPUDevice               *device,
                                GPUPipelineLayout       *logicalLayout,
                                uint32_t                 requiredGroupMask,
                                GPUPipelineLayoutWebGPU *outLayout);
+
+GPUResult
+gpu_webgpuInitPushConstants(GPUDeviceWebGPU *device);
+
+void
+gpu_webgpuDestroyPushConstants(GPUDeviceWebGPU *device);
+
+bool
+gpu_webgpuUploadPushConstants(GPUCommandWebGPU *command,
+                              const void        *data,
+                              uint32_t           sizeBytes,
+                              uint32_t          *outDynamicOffset);
 
 void
 gpu_webgpuDestroyPipelineLayout(GPUPipelineLayoutWebGPU *layout);

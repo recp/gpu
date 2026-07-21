@@ -36,6 +36,7 @@ typedef struct GPUShaderEntryInfo {
   uint32_t  rayPayloadSizeBytes;
   uint32_t  hitAttributeSizeBytes;
   uint32_t  callableDataSizeBytes;
+  uint32_t  pushConstantSizeBytes;
   uint32_t  nodeIndex;
   uint32_t  nodeLaunch;
   uint32_t  nameLength;
@@ -730,7 +731,10 @@ gpuShaderEntryView(const GPUShaderLibrary *library,
                                 ? resources + entry->resourceStart
                                 : NULL;
   outReflection->pushConstantSizeBytes =
-    library->_reflection.pushConstantSizeBytes;
+    entry->pushConstantSizeBytes;
+  outReflection->pushConstantStages = entry->pushConstantSizeBytes > 0u
+                                        ? entry->stage
+                                        : 0u;
   return 1;
 }
 
@@ -1175,6 +1179,8 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
   uint32_t usedResourceCount;
   uint32_t entryResourceCount;
   uint32_t resourceCount;
+  uint32_t pushConstantSizeBytes;
+  GPUShaderStageFlags pushConstantStages;
   uint32_t flags;
 
   if (!library || !usReflection ||
@@ -1306,6 +1312,8 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
   textCursor = textOffset != SIZE_MAX ? (char *)(metadata + textOffset) : NULL;
   entryResourceCount = 0u;
   resourceCount      = 0u;
+  pushConstantSizeBytes = 0u;
+  pushConstantStages    = 0u;
 
   for (uint32_t i = 0u; i < runtimeInfo->entry_point_count; i++) {
     const USLRuntimeEntryPoint *src;
@@ -1335,9 +1343,16 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
     dst->rayPayloadSizeBytes   = src->ray_payload_size_bytes;
     dst->hitAttributeSizeBytes = src->hit_attribute_size_bytes;
     dst->callableDataSizeBytes = src->callable_data_size_bytes;
+    dst->pushConstantSizeBytes = src->push_constant_size_bytes;
     dst->nodeIndex             = src->node_index;
     dst->nodeLaunch            = src->node_launch;
     dst->nodeProgramEntry      = src->node_is_program_entry != 0u;
+    if (src->push_constant_size_bytes > 0u) {
+      if (src->push_constant_size_bytes > pushConstantSizeBytes) {
+        pushConstantSizeBytes = src->push_constant_size_bytes;
+      }
+      pushConstantStages |= stage;
+    }
     if (src->stage == USL_RUNTIME_STAGE_NODE && src->node_id[0] != '\0') {
       size_t nodeNameSize;
 
@@ -1581,6 +1596,8 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
   library->_staticSamplers   = staticSamplers;
   library->_reflection.resourceCount = resourceCount;
   library->_reflection.pResources = resources;
+  library->_reflection.pushConstantSizeBytes = pushConstantSizeBytes;
+  library->_reflection.pushConstantStages    = pushConstantStages;
   return 1;
 }
 
@@ -1600,6 +1617,7 @@ gpu_copyShaderReflection(const GPUShaderReflection *src,
 
   memset(dst, 0, sizeof(*dst));
   dst->pushConstantSizeBytes = src->pushConstantSizeBytes;
+  dst->pushConstantStages    = src->pushConstantStages;
   if (src->resourceCount == 0u) {
     return GPU_OK;
   }

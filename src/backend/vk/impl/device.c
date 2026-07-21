@@ -2131,6 +2131,7 @@ vk_getLimits(const GPUAdapter * __restrict adapter,
   outLimits->maxComputeWorkgroupSizeX = native->maxComputeWorkGroupSize[0];
   outLimits->maxComputeWorkgroupSizeY = native->maxComputeWorkGroupSize[1];
   outLimits->maxComputeWorkgroupSizeZ = native->maxComputeWorkGroupSize[2];
+  outLimits->maxPushConstantSizeBytes  = native->maxPushConstantsSize;
   if (vk_hasSubgroupCapability(adapterVk)) {
     outLimits->minSubgroupSize = adapterVk->minSubgroupSize;
     outLimits->maxSubgroupSize = adapterVk->maxSubgroupSize;

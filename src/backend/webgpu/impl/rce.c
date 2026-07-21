@@ -13,6 +13,30 @@ webgpu_renderCommand(GPURenderPassEncoder *encoder) {
   return encoder ? encoder->_priv : NULL;
 }
 
+static void
+webgpu_renderPushConstants(GPURenderPassEncoder *encoder,
+                           GPUShaderStageFlags    stages,
+                           const void            *data,
+                           uint32_t               sizeBytes) {
+  GPUCommandWebGPU *command;
+  uint32_t          dynamicOffset;
+
+  GPU__UNUSED(stages);
+  command = webgpu_renderCommand(encoder);
+  if (!command || !command->renderEncoder ||
+      !gpu_webgpuUploadPushConstants(command,
+                                     data,
+                                     sizeBytes,
+                                     &dynamicOffset)) {
+    return;
+  }
+  wgpuRenderPassEncoderSetBindGroup(command->renderEncoder,
+                                    GPU_WEBGPU_PUSH_CONSTANT_GROUP,
+                                    command->pushConstantGroup,
+                                    1u,
+                                    &dynamicOffset);
+}
+
 static GPURenderPassEncoder *
 webgpu_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   GPUCommandWebGPU *command;
@@ -48,8 +72,16 @@ webgpu_setPipeline(GPURenderPassEncoder *encoder,
   command = webgpu_renderCommand(encoder);
   state   = pipeline ? pipeline->_priv : NULL;
   if (command && command->renderEncoder && state && state->pipeline) {
+    static const uint8_t zero[GPU_WEBGPU_PUSH_CONSTANT_ALIGNMENT];
+
     wgpuRenderPassEncoderSetPipeline(command->renderEncoder, state->pipeline);
     gpu_webgpuBindRenderEmptyGroups(encoder, &state->layout);
+    if (state->layout.pushConstantSizeBytes > 0u) {
+      webgpu_renderPushConstants(encoder,
+                                 0u,
+                                 zero,
+                                 state->layout.pushConstantSizeBytes);
+    }
   }
 }
 
@@ -327,6 +359,7 @@ webgpu_initRenderEncoder(GPUApiRCE *api) {
   api->scissor                       = webgpu_scissor;
   api->blendConstant                 = webgpu_blendConstant;
   api->stencilReference              = webgpu_stencilReference;
+  api->pushConstants                 = webgpu_renderPushConstants;
   api->vertexInputBuffer             = webgpu_vertexInputBuffer;
   api->drawPrimitives                = webgpu_draw;
   api->drawIndexedPrims              = webgpu_drawIndexed;

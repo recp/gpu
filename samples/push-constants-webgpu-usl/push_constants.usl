@@ -1,0 +1,13 @@
+struct DrawConstants {
+  tint: float4
+}
+
+vert push_vs(vertexId: uint #vertex_id) -> float4 {
+  if (vertexId == 0) { return float4( 0.0,  0.68, 0.0, 1.0) }
+  if (vertexId == 1) { return float4(-0.72, -0.62, 0.0, 1.0) }
+  return float4(0.72, -0.62, 0.0, 1.0)
+}
+
+frag push_fs(draw: DrawConstants #push_constant) -> float4 {
+  return draw.tint
+}

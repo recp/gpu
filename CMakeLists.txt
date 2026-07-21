@@ -688,6 +688,80 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${GPU_WEBGPU_GALLERY_DIR}"
   )
 
+  set(GPU_WEBGPU_PUSH_CONSTANTS_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+  set(GPU_WEBGPU_PUSH_CONSTANTS_SOURCE
+      "${GPU_WEBGPU_PUSH_CONSTANTS_DIR}/push_constants.usl")
+  set(GPU_WEBGPU_PUSH_CONSTANTS_US
+      "${GPU_WEBGPU_PUSH_CONSTANTS_DIR}/push_constants.us")
+  set(GPU_WEBGPU_SAMPLE_TITLE "Push constants")
+  set(GPU_WEBGPU_SAMPLE_KIND "Render / dynamic constants")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "Per-draw constants lowered to a native fast path or a WebGPU dynamic uniform slice.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/push-constants.c")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/push-constants.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/push-constants.wgsl")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-push-constants-webgpu-usl-shell.html"
+    @ONLY
+  )
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_PUSH_CONSTANTS_US}"
+    BYPRODUCTS "${GPU_WEBGPU_PUSH_CONSTANTS_SOURCE}.wgsl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${GPU_WEBGPU_PUSH_CONSTANTS_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/push-constants-webgpu-usl/push_constants.usl"
+            "${GPU_WEBGPU_PUSH_CONSTANTS_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_PUSH_CONSTANTS_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/push-constants-webgpu-usl/main.c"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/push-constants.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_PUSH_CONSTANTS_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/push-constants.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_PUSH_CONSTANTS_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/push-constants.wgsl"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/push-constants-webgpu-usl/push_constants.usl"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/push-constants-webgpu-usl/main.c"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-push-constants-artifact
+    DEPENDS "${GPU_WEBGPU_PUSH_CONSTANTS_US}"
+  )
+
+  add_executable(gpu-push-constants-webgpu-usl
+    samples/push-constants-webgpu-usl/main.c
+    ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
+  )
+  target_link_libraries(gpu-push-constants-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-push-constants-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_PUSH_CONSTANTS_US}@/push_constants.us"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-push-constants-webgpu-usl-shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-push-constants-webgpu-usl
+                   gpu-webgpu-push-constants-artifact)
+  set_target_properties(gpu-push-constants-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-push-constants-webgpu-usl-shell.html;${GPU_WEBGPU_PUSH_CONSTANTS_US}"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${GPU_WEBGPU_GALLERY_DIR}"
+  )
+
   set(GPU_WEBGPU_TEXTURED_QUAD_DIR
       "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
   set(GPU_WEBGPU_TEXTURED_QUAD_SOURCE
