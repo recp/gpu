@@ -328,6 +328,8 @@ render_frame(void *userData) {
   GPURenderPassColorAttachment  compositeColor   = {0};
   GPURenderPassCreateInfo       mrtPassInfo       = {0};
   GPURenderPassCreateInfo       compositePassInfo = {0};
+  GPUTextureBarrier             targetBarriers[2] = {0};
+  GPUBarrierBatch               barrierBatch      = {0};
 
   state = userData;
   if (!resize_canvas(state)) {
@@ -373,6 +375,19 @@ render_frame(void *userData) {
   GPUBindRenderPipeline(pass, state->mrtPipeline);
   GPUDraw(pass, 3u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
+
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(targetBarriers); i++) {
+    targetBarriers[i].texture    = state->targets[i];
+    targetBarriers[i].srcAccess  = GPU_ACCESS_COLOR_WRITE;
+    targetBarriers[i].dstAccess  = GPU_ACCESS_SHADER_READ;
+    targetBarriers[i].mipCount   = 1u;
+    targetBarriers[i].layerCount = 1u;
+  }
+  barrierBatch.pTextureBarriers    = targetBarriers;
+  barrierBatch.srcStages           = GPU_STAGE_FRAGMENT;
+  barrierBatch.dstStages           = GPU_STAGE_FRAGMENT;
+  barrierBatch.textureBarrierCount = GPU_ARRAY_LEN(targetBarriers);
+  GPUEncodeBarriers(cmdb, &barrierBatch);
 
   compositeColor.view                  = GPUFrameGetTargetView(frame);
   compositeColor.loadOp                = GPU_LOAD_OP_CLEAR;
