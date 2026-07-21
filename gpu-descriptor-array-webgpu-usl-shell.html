@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="gallery.css?v=22">
-  <title>Instancing · GPU + USL</title>
+  <title>Descriptor arrays · GPU + USL</title>
 </head>
 <body class="sample-page"
-      data-c-source="sources/instancing.c"
-      data-usl-source="sources/instancing.usl"
-      data-wgsl-source="sources/instancing.wgsl">
+      data-c-source="sources/descriptor-array.c"
+      data-usl-source="sources/descriptor-array.usl"
+      data-wgsl-source="sources/descriptor-array.wgsl">
   <header class="sample-head">
     <a class="back-link" href="index.html"><span>←</span> Sample index</a>
     <div class="sample-heading">
-      <p>Render / instances + offsets</p>
-      <h1>Instancing</h1>
+      <p>Binding / fixed descriptor arrays</p>
+      <h1>Descriptor arrays</h1>
     </div>
     <div class="runtime-badge"><i></i> WebGPU live</div>
   </header>
@@ -37,7 +37,7 @@
         </div>
       </aside>
       <div class="stage-meta">
-        <p>Two dynamic uniform slices drive eight instances without rebuilding the bind group.</p>
+        <p>Four reflected textures and samplers use compile-time array indices through deterministic WebGPU binding ranges.</p>
         <div id="status">GPU: loading sample</div>
       </div>
     </section>
