@@ -412,6 +412,17 @@ gpu_layoutEntryKind(const GPUBindGroupLayoutEntry *entry);
 static GPUBindKind
 gpu_metalSlotKind(GPUBindKind kind);
 
+static uint32_t
+gpu_metalEntrySlotCount(const GPUBindGroupLayoutEntry *entry) {
+  if (!entry) {
+    return 0u;
+  }
+  return gpu_layoutEntryKind(entry) == GPUBindKindBuffer &&
+         entry->arrayCount > 1u
+           ? 1u
+           : entry->arrayCount;
+}
+
 GPU_HIDE
 void
 gpuGetPipelineLayoutPushConstants(GPUPipelineLayout *layout,
@@ -447,9 +458,11 @@ gpuPipelineLayoutBackendSlotMask(GPUPipelineLayout  *layout,
                                  GPUBindKind         kind,
                                  GPUShaderStageFlags stages) {
   GPUPipelineLayoutPriv *priv;
+  GPUApi                *api;
   uint32_t               mask;
 
   priv = gpu_pipelineLayoutPriv(layout);
+  api  = layout ? gpuDeviceApi(layout->_device) : NULL;
   mask = 0u;
   if (!priv || !priv->backendBindings) {
     return 0u;
@@ -473,8 +486,13 @@ gpuPipelineLayoutBackendSlotMask(GPUPipelineLayout  *layout,
       if (gpu_layoutEntryKind(entry) == kind &&
           (entry->visibility & stages) != 0u &&
           binding != UINT32_MAX) {
+        uint32_t slotCount;
+
+        slotCount = api && api->backend == GPU_BACKEND_METAL
+                      ? gpu_metalEntrySlotCount(entry)
+                      : entry->arrayCount;
         for (uint32_t arrayIndex = 0u;
-             arrayIndex < entry->arrayCount &&
+             arrayIndex < slotCount &&
              binding <= UINT32_MAX - arrayIndex;
              arrayIndex++) {
           uint32_t slot;
@@ -1593,7 +1611,8 @@ gpu_pipelineSlotIsUsed(const GPUPipelineLayoutPriv *priv,
         uint32_t base;
 
         base = priv->backendBindings[groupIndex][entryIndex];
-        if (slot - base < layout->entries[entryIndex].arrayCount) {
+        if (slot - base <
+              gpu_metalEntrySlotCount(&layout->entries[entryIndex])) {
           return 1;
         }
       }
@@ -1699,12 +1718,17 @@ gpu_pipelineBindingsAreUnique(const GPUPipelineLayoutPriv *priv) {
               gpu_metalSlotKind(gpu_layoutEntryKind(b))) {
             continue;
           }
-          if (backendA > UINT32_MAX - a->arrayCount ||
-              backendB > UINT32_MAX - b->arrayCount) {
+          uint32_t countA;
+          uint32_t countB;
+
+          countA = gpu_metalEntrySlotCount(a);
+          countB = gpu_metalEntrySlotCount(b);
+          if (backendA > UINT32_MAX - countA ||
+              backendB > UINT32_MAX - countB) {
             return 0;
           }
-          endA = backendA + a->arrayCount;
-          endB = backendB + b->arrayCount;
+          endA = backendA + countA;
+          endB = backendB + countB;
           if (backendA >= endB || backendB >= endA) {
             continue;
           }
@@ -1848,11 +1872,11 @@ gpu_compilePipelineBindings(GPUPipelineLayoutPriv *priv,
           return GPU_ERROR_INVALID_ARGUMENT;
         }
         if (backend == GPU_BACKEND_METAL &&
-            (entry->arrayCount >
+            (gpu_metalEntrySlotCount(entry) >
                gpu_metalBindingLimit(gpu_layoutEntryKind(entry)) ||
              backendBinding >
                gpu_metalBindingLimit(gpu_layoutEntryKind(entry)) -
-                 entry->arrayCount)) {
+                 gpu_metalEntrySlotCount(entry))) {
           gpu_clearPipelineBindings(priv);
           return GPU_ERROR_UNSUPPORTED;
         }
@@ -1919,8 +1943,10 @@ gpu_compilePipelineBindings(GPUPipelineLayoutPriv *priv,
       if (selectedGroup == UINT32_MAX) {
         break;
       }
-      selectedCount = gpu_layoutPriv(priv->bindGroupLayouts[selectedGroup])
-                        ->entries[selectedEntry].arrayCount;
+      selectedCount = gpu_metalEntrySlotCount(
+        &gpu_layoutPriv(priv->bindGroupLayouts[selectedGroup])
+           ->entries[selectedEntry]
+      );
 
       while (gpu_pipelineRangeIsUsed(priv,
                                      kinds[kindIndex],
@@ -3254,6 +3280,8 @@ gpu_bindGroupEachStatic(GPUPipelineLayoutPriv  *pipeline,
     view.binding          = pipeline->backendBindings[groupIndex]
                                                      [binding->layoutEntryIndex];
     view.arrayIndex       = binding->arrayIndex;
+    view.arrayCount       = layoutEntry->arrayCount;
+    view.layoutEntryIndex = binding->layoutEntryIndex;
     view.kindIndex        = binding->kindIndex;
     view.kind             = binding->kind;
     view.hasDynamicOffset = false;
@@ -3418,6 +3446,8 @@ gpuForEachBindGroupBinding(GPUBindGroup *group,
     view.bindingType      = layoutEntry->bindingType;
     view.binding          = layout->backendBindings[binding->layoutEntryIndex];
     view.arrayIndex       = binding->arrayIndex;
+    view.arrayCount       = layoutEntry->arrayCount;
+    view.layoutEntryIndex = binding->layoutEntryIndex;
     view.kindIndex        = binding->kindIndex;
     view.kind             = binding->kind;
     view.hasDynamicOffset = layoutEntry->hasDynamicOffset;
@@ -3479,6 +3509,8 @@ gpuForEachBindGroupEntry(GPUBindGroup            *group,
     view.bindingType      = layout->entries[layoutEntryIndex].bindingType;
     view.binding          = layout->backendBindings[layoutEntryIndex];
     view.arrayIndex       = binding->arrayIndex;
+    view.arrayCount       = layout->entries[layoutEntryIndex].arrayCount;
+    view.layoutEntryIndex = layoutEntryIndex;
     view.kindIndex        = binding->kindIndex;
     view.kind             = binding->kind;
     view.hasDynamicOffset = false;
@@ -3645,6 +3677,8 @@ gpu_bindGroupEachDynamic(GPUPipelineLayout      *pipelineLayout,
     view.binding          = pipeline->backendBindings[groupIndex]
                                                      [binding->layoutEntryIndex];
     view.arrayIndex       = binding->arrayIndex;
+    view.arrayCount       = layoutEntry->arrayCount;
+    view.layoutEntryIndex = binding->layoutEntryIndex;
     view.kindIndex        = binding->kindIndex;
     view.kind             = binding->kind;
     view.hasDynamicOffset = layoutEntry->hasDynamicOffset;

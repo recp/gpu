@@ -48,6 +48,7 @@ backend_metal(void) {
     mt_initPipelineCache(&mt.pipelineCache);
     mt_initVRS(&mt.vrs);
     mt_initRayQuery(&mt.rayQuery);
+    mt_initDescriptor(&mt.descriptor);
 
     mt.initialized = true;
   }

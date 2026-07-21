@@ -135,6 +135,17 @@ run_descriptor_indexing(void *ctx) {
 }
 
 static int
+run_buffer_descriptor_array(void *ctx) {
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_buffer_descriptor_array(
+    testCtx->adapter,
+    testCtx->bufferDescriptorArrayBytecodePath,
+    testCtx->bufferDescriptorArrayDynamicBytecodePath
+  );
+}
+
+static int
 run_storage_texture(void *ctx) {
   GPUApiTestContext *testCtx = ctx;
 
@@ -288,7 +299,7 @@ main(int argc, char **argv) {
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUApiTestContext      ctx;
-  GPUApiTest             tests[33];
+  GPUApiTest             tests[34];
   int                    ok;
 
   if (argc != 14 && argc != 15) {
@@ -357,6 +368,10 @@ main(int argc, char **argv) {
   ctx.descriptorArrayBytecodePath = argv[9];
   ctx.coordinateBytecodePath         = argv[10];
   ctx.descriptorIndexingBytecodePath = argv[11];
+  ctx.bufferDescriptorArrayBytecodePath =
+    getenv("GPU_BUFFER_DESCRIPTOR_ARRAY_USL_PATH");
+  ctx.bufferDescriptorArrayDynamicBytecodePath =
+    getenv("GPU_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_USL_PATH");
   ctx.subgroupBytecodePath           = argv[12];
   ctx.subgroupMatrixBytecodePath     = getenv("GPU_SUBGROUP_MATRIX_USL_PATH");
   ctx.shaderF16BytecodePath          = argv[13];
@@ -417,6 +432,9 @@ main(int argc, char **argv) {
   };
   tests[32] = (GPUApiTest){
     "untyped-pointer", run_untyped_pointer, &ctx
+  };
+  tests[33] = (GPUApiTest){
+    "buffer-descriptor-array", run_buffer_descriptor_array, &ctx
   };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));

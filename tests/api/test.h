@@ -37,6 +37,8 @@ typedef struct GPUApiTestContext {
   const char  *descriptorArrayBytecodePath;
   const char  *coordinateBytecodePath;
   const char  *descriptorIndexingBytecodePath;
+  const char  *bufferDescriptorArrayBytecodePath;
+  const char  *bufferDescriptorArrayDynamicBytecodePath;
   const char  *subgroupBytecodePath;
   const char  *subgroupMatrixBytecodePath;
   const char  *shaderF16BytecodePath;
@@ -95,6 +97,9 @@ int gpu_test_descriptor_array(GPUDevice *device, const char *bytecodePath);
 int gpu_test_bindless_descriptor_array(GPUDevice *device,
                                        const char *bytecodePath);
 int gpu_test_descriptor_indexing(GPUAdapter *adapter, const char *bytecodePath);
+int gpu_test_buffer_descriptor_array(GPUAdapter *adapter,
+                                     const char *bytecodePath,
+                                     const char *dynamicBytecodePath);
 int gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath);
 int gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath);
 int gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath);

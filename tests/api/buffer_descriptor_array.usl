@@ -1,0 +1,8 @@
+@require(descriptor_indexing)
+
+kern(1, 1, 1) buffer_descriptor_array_cs(
+  buffers: [buffer_view<float4>; 2] #buffer(0) #group(1),
+  selection: uint #buffer(2) #group(1),
+  inout output: [float4] #buffer(3) #group(1)) {
+  output[0] = buffers[nonuniform(selection)][0]
+}

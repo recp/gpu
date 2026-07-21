@@ -61,6 +61,8 @@ typedef struct GPUBindGroupBindingView {
   GPUBindingType  bindingType;
   uint32_t        binding;
   uint32_t        arrayIndex;
+  uint32_t        arrayCount;
+  uint32_t        layoutEntryIndex;
   uint32_t        kindIndex;
   GPUBindKind     kind;
   bool            hasDynamicOffset;

@@ -463,9 +463,14 @@ mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
     case GPU_FEATURE_COMPUTE:
     case GPU_FEATURE_INDIRECT_DRAW:
     case GPU_FEATURE_SHADER_F16:
+      return true;
     case GPU_FEATURE_DESCRIPTOR_INDEXING:
     case GPU_FEATURE_BINDLESS:
-      return true;
+      device = adapterMT->device;
+      if (@available(macOS 13.0, iOS 16.0, *)) {
+        return device.argumentBuffersSupport == MTLArgumentBuffersTier2;
+      }
+      return false;
     case GPU_FEATURE_BUFFER_DEVICE_ADDRESS:
       if (@available(macOS 13.0, iOS 16.0, *)) {
         return true;

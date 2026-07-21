@@ -38,5 +38,6 @@ GPU_HIDE void mt_initSurface(GPUApiSurface * apiDevice);
 GPU_HIDE void mt_initPipelineCache(GPUApiPipelineCache *api);
 GPU_HIDE void mt_initVRS(GPUApiVRS *api);
 GPU_HIDE void mt_initRayQuery(GPUApiRayQuery *api);
+GPU_HIDE void mt_initDescriptor(GPUApiDescriptor *api);
 
 #endif /* mt_apis_h */

@@ -1,0 +1,10 @@
+@require(descriptor_indexing)
+
+kern(1, 1, 1) buffer_descriptor_array_cs(
+  inout buffers: [buffer_view<float4>; 2] #buffer(0) #group(1) #dynamic_offset,
+  selection: uint #buffer(2) #group(1),
+  inout output: [float4] #buffer(3) #group(1)) {
+  let selected = nonuniform(selection)
+  output[0] = buffers[selected][0]
+  buffers[selected][0] = float4(0.25, 0.5, 0.75, 1.0)
+}
