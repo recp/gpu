@@ -29,6 +29,7 @@ gpu_copyPassApi(const GPUCopyPassEncoder *pass) {
   return pass ? gpuCommandBufferApi(pass->_cmdb) : NULL;
 }
 
+#if GPU_BUILD_WITH_VALIDATION
 static bool
 gpu_validLoadOp(GPULoadOp op) {
   return op == GPU_LOAD_OP_LOAD ||
@@ -41,6 +42,7 @@ gpu_validStoreOp(GPUStoreOp op) {
   return op == GPU_STORE_OP_STORE ||
          op == GPU_STORE_OP_DONT_CARE;
 }
+#endif
 
 static bool
 gpu_validIndirectCommandRange(const GPUIndirectCommandRangeEXT *range,
@@ -125,6 +127,7 @@ gpu_validIndirectTextureSubresource(
          subresource->layerCount <= layers - subresource->baseArrayLayer;
 }
 
+#if GPU_BUILD_WITH_VALIDATION
 static bool
 gpu_textureViewHasUsage(const GPUTextureView *view, GPUTextureUsageFlags usage) {
   const GPUTexture *texture;
@@ -175,6 +178,7 @@ gpu_formatHasStencil(GPUFormat format) {
          format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
          format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
 }
+#endif
 
 static bool
 gpu_textureCopySubresourcesOverlap(
@@ -199,6 +203,7 @@ gpu_textureCopySubresourcesOverlap(
 static bool
 gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
                               const GPUDevice               *device) {
+#if GPU_BUILD_WITH_VALIDATION
   const GPUShadingRateAttachmentEXT          *shadingRate;
   const GPURasterizationRateMapRenderPassEXT *rateMap;
   const GPURenderPassDepthStencilAttachment *depthStencil;
@@ -333,14 +338,28 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
   }
 
   return info->colorAttachmentCount > 0 || depthStencil != NULL;
+#else
+  GPU__UNUSED(device);
+  return info &&
+         (info->chain.sType == GPU_STRUCTURE_TYPE_NONE ||
+          info->chain.sType == GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO) &&
+         (info->chain.structSize == 0u ||
+          info->chain.structSize >= sizeof(*info)) &&
+         info->colorAttachmentCount <= GPU_RENDER_PASS_MAX_COLOR_ATTACHMENTS &&
+         (info->colorAttachmentCount == 0u || info->pColorAttachments) &&
+         (info->colorAttachmentCount > 0u || info->pDepthStencilAttachment);
+#endif
 }
 
 static void
 gpu_setRenderPassEncoderInfo(GPURenderPassEncoder *encoder,
                              const GPURenderPassCreateInfo *info) {
+#if GPU_BUILD_WITH_VALIDATION
   const GPURenderPassDepthStencilAttachment *depthStencil;
+#endif
 
-  encoder->_occlusionQuerySet    = info->occlusionQuerySet;
+  encoder->_occlusionQuerySet = info->occlusionQuerySet;
+#if GPU_BUILD_WITH_VALIDATION
   encoder->_colorAttachmentCount = info->colorAttachmentCount;
   for (uint32_t i = 0; i < info->colorAttachmentCount; i++) {
     const GPURenderPassColorAttachment *color;
@@ -359,6 +378,7 @@ gpu_setRenderPassEncoderInfo(GPURenderPassEncoder *encoder,
     encoder->_depthStencilFormat = GPU_FORMAT_UNDEFINED;
     encoder->_depthStencilSampleCount = 0u;
   }
+#endif
 }
 
 static uint32_t

@@ -94,43 +94,44 @@ mt_stageMask(GPUPipelineStageMask stages) {
 static void
 mt_resetRenderPass(MTRenderPass *pass) {
   MTLRenderPassDescriptor *classic;
+  uint32_t                 colorAttachmentCount;
 
   if (!pass || !pass->classic) {
     return;
   }
 
-  classic = pass->classic;
-  pass->width  = 0u;
-  pass->height = 0u;
+  classic                    = pass->classic;
+  colorAttachmentCount       = pass->colorAttachmentCount;
+  pass->width                = 0u;
+  pass->height               = 0u;
+  pass->colorAttachmentCount = 0u;
   classic.visibilityResultBuffer = nil;
   classic.rasterizationRateMap   = nil;
-  for (uint32_t i = 0; i < GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS; i++) {
+  for (uint32_t i = 0u; i < colorAttachmentCount; i++) {
     classic.colorAttachments[i].texture = nil;
     classic.colorAttachments[i].resolveTexture = nil;
     classic.colorAttachments[i].loadAction = MTLLoadActionDontCare;
     classic.colorAttachments[i].storeAction = MTLStoreActionDontCare;
-#if MT_HAS_METAL4
-    if (@available(macOS 26.0, iOS 26.0, *)) {
-      MTL4RenderPassDescriptor *modern = pass->modern;
-
-      modern.colorAttachments[i].texture = nil;
-      modern.colorAttachments[i].resolveTexture = nil;
-      modern.colorAttachments[i].loadAction = MTLLoadActionDontCare;
-      modern.colorAttachments[i].storeAction = MTLStoreActionDontCare;
-    }
-#endif
   }
 
   classic.depthAttachment.texture = nil;
   classic.stencilAttachment.texture = nil;
 #if MT_HAS_METAL4
-  if (@available(macOS 26.0, iOS 26.0, *)) {
-    MTL4RenderPassDescriptor *modern = pass->modern;
+  if (pass->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      MTL4RenderPassDescriptor *modern = pass->modern;
 
-    modern.depthAttachment.texture = nil;
-    modern.stencilAttachment.texture = nil;
-    modern.visibilityResultBuffer = nil;
-    modern.rasterizationRateMap = nil;
+      for (uint32_t i = 0u; i < colorAttachmentCount; i++) {
+        modern.colorAttachments[i].texture = nil;
+        modern.colorAttachments[i].resolveTexture = nil;
+        modern.colorAttachments[i].loadAction = MTLLoadActionDontCare;
+        modern.colorAttachments[i].storeAction = MTLStoreActionDontCare;
+      }
+      modern.depthAttachment.texture = nil;
+      modern.stencilAttachment.texture = nil;
+      modern.visibilityResultBuffer = nil;
+      modern.rasterizationRateMap = nil;
+    }
   }
 #endif
 }
@@ -192,6 +193,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
   rpd4 = nativePass->modern;
 #endif
   mt_resetRenderPass(nativePass);
+  nativePass->colorAttachmentCount = info->colorAttachmentCount;
   rpd.rasterizationRateMap = rateMap
                                ? (id<MTLRasterizationRateMap>)rateMap->map->_priv
                                : nil;

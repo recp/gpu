@@ -181,6 +181,7 @@ typedef struct MTRenderPass {
   id                       modern;
   uint32_t                 width;
   uint32_t                 height;
+  uint32_t                 colorAttachmentCount;
 } MTRenderPass;
 
 typedef struct MTRenderEncoder {
