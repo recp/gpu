@@ -991,7 +991,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   set(GPU_WEBGPU_SAMPLE_TITLE "Indexed depth")
   set(GPU_WEBGPU_SAMPLE_KIND "Render / index + depth")
   set(GPU_WEBGPU_SAMPLE_DESCRIPTION
-      "One indexed draw validates the depth texture, pipeline, attachment, and occlusion path.")
+      "Indexed depth, occlusion, barriers, and sampled-depth visualization in two render passes.")
   set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/indexed-depth.c")
   set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/indexed-depth.usl")
   set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/indexed-depth.wgsl")
