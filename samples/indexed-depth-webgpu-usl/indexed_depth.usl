@@ -35,6 +35,6 @@ frag depth_preview_fs(input: PreviewOut #stage_in,
                       depthTex: depth2d<float> #texture(0)) -> float4 {
   let size  = float2(float(depthTex.get_width(0)),
                      float(depthTex.get_height(0)))
-  let depth = depthTex.read(uint2(input.uv * (size - float2(1.0))))
+  let depth = depthTex.read(int2(input.uv * (size - float2(1.0))))
   return float4(depth, depth, depth, 1.0)
 }
