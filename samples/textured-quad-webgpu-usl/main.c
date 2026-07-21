@@ -20,30 +20,31 @@ enum {
 };
 
 typedef struct WebGPUTexturedQuad {
-  GPUInstance       *instance;
-  GPUAdapter        *adapter;
-  GPUDevice         *device;
-  GPUQueue          *queue;
-  GPUSurface        *surface;
-  GPUSwapchain      *swapchain;
-  GPUShaderLibrary  *library;
-  GPUShaderLayout   *shaderLayout;
-  GPURenderPipeline *pipeline;
-  GPUBuffer         *vertexBuffer;
-  GPUBuffer         *uniformBuffer;
-  GPUBuffer         *copySourceBuffer;
-  GPUBuffer         *copyStagingBuffer;
-  GPUBuffer         *copyReadbackBuffer;
-  GPUTexture        *texture;
-  GPUTexture        *copySourceTexture;
-  GPUTextureView    *textureView;
-  GPUSampler        *sampler;
-  GPUBindGroup      *fragmentGroup;
-  GPUBindGroup      *samplerGroup;
-  WebGPURequest      request;
-  uint32_t           width;
-  uint32_t           height;
-  uint32_t           frameCount;
+  GPUInstance        *instance;
+  GPUAdapter         *adapter;
+  GPUDevice          *device;
+  GPUQueue           *queue;
+  GPUSurface         *surface;
+  GPUSwapchain       *swapchain;
+  GPUShaderLibrary   *library;
+  GPUShaderLayout    *shaderLayout;
+  GPUBindGroupLayout *samplerLayout;
+  GPUPipelineLayout  *pipelineLayout;
+  GPURenderPipeline  *pipeline;
+  GPUBuffer          *vertexBuffer;
+  GPUBuffer          *uniformBuffer;
+  GPUBuffer          *copySourceBuffer;
+  GPUBuffer          *copyStagingBuffer;
+  GPUBuffer          *copyReadbackBuffer;
+  GPUTexture         *texture;
+  GPUTexture         *copySourceTexture;
+  GPUTextureView     *textureView;
+  GPUBindGroup       *fragmentGroup;
+  GPUBindGroup       *samplerGroup;
+  WebGPURequest       request;
+  uint32_t            width;
+  uint32_t            height;
+  uint32_t            frameCount;
 } WebGPUTexturedQuad;
 
 static const QuadVertex kQuadVertices[] = {
@@ -71,9 +72,15 @@ resize_canvas(WebGPUTexturedQuad *state) {
 
 static int
 create_shader(WebGPUTexturedQuad *state) {
-  void      *artifact;
-  uint64_t   artifactSize;
-  GPUResult  result;
+  const GPUBindGroupLayoutEntry *samplerEntries;
+  GPUBindGroupLayout           *layouts[2];
+  void                         *artifact;
+  GPUBindGroupLayoutEntry       samplerEntry;
+  GPUBindGroupLayoutCreateInfo  samplerInfo = {0};
+  GPUPipelineLayoutCreateInfo   pipelineInfo = {0};
+  uint64_t                      artifactSize;
+  uint32_t                      samplerEntryCount;
+  GPUResult                     result;
 
   artifact     = NULL;
   artifactSize = 0u;
@@ -102,6 +109,50 @@ create_shader(WebGPUTexturedQuad *state) {
     set_status("GPU: unexpected WebGPU shader reflection", 1);
     return 0;
   }
+
+  samplerEntries = GPUGetBindGroupLayoutEntries(
+    state->shaderLayout->bindGroupLayouts[1],
+    &samplerEntryCount
+  );
+  if (!samplerEntries || samplerEntryCount != 1u ||
+      samplerEntries[0].bindingType != GPU_BINDING_SAMPLER) {
+    set_status("GPU: unexpected reflected sampler layout", 1);
+    return 0;
+  }
+
+  samplerEntry = samplerEntries[0];
+  samplerEntry.immutableSampler               = true;
+  samplerEntry.immutableSamplerDesc.minFilter = GPU_FILTER_NEAREST;
+  samplerEntry.immutableSamplerDesc.magFilter = GPU_FILTER_NEAREST;
+  samplerEntry.immutableSamplerDesc.mipFilter = GPU_MIP_FILTER_NEAREST;
+  samplerEntry.immutableSamplerDesc.addressU  = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
+  samplerEntry.immutableSamplerDesc.addressV  = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
+  samplerEntry.immutableSamplerDesc.addressW  = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
+  samplerInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  samplerInfo.chain.structSize = sizeof(samplerInfo);
+  samplerInfo.label            = "textured-quad-webgpu-usl-immutable-sampler";
+  samplerInfo.pEntries         = &samplerEntry;
+  samplerInfo.entryCount       = 1u;
+  if (GPUCreateBindGroupLayout(state->device,
+                               &samplerInfo,
+                               &state->samplerLayout) != GPU_OK) {
+    set_status("GPU: failed to create the immutable sampler layout", 1);
+    return 0;
+  }
+
+  layouts[0] = state->shaderLayout->bindGroupLayouts[0];
+  layouts[1] = state->samplerLayout;
+  pipelineInfo.chain.sType          = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize     = sizeof(pipelineInfo);
+  pipelineInfo.label                = "textured-quad-webgpu-usl-pipeline-layout";
+  pipelineInfo.ppBindGroupLayouts   = layouts;
+  pipelineInfo.bindGroupLayoutCount = GPU_ARRAY_LEN(layouts);
+  if (GPUCreatePipelineLayout(state->device,
+                              &pipelineInfo,
+                              &state->pipelineLayout) != GPU_OK) {
+    set_status("GPU: failed to create the immutable sampler pipeline layout", 1);
+    return 0;
+  }
   return 1;
 }
 
@@ -126,7 +177,7 @@ create_pipeline(WebGPUTexturedQuad *state) {
   info.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
   info.chain.structSize     = sizeof(info);
   info.label                = "textured-quad-webgpu-usl-pipeline";
-  info.layout               = state->shaderLayout->pipelineLayout;
+  info.layout               = state->pipelineLayout;
   info.library              = state->library;
   info.vertexEntry          = "quad_vs";
   info.fragmentEntry        = "quad_fs";
@@ -280,9 +331,7 @@ create_resources(WebGPUTexturedQuad *state) {
   GPUBufferCreateInfo vertexInfo = {0};
   GPUBufferCreateInfo uniformInfo = {0};
   GPUTextureViewCreateInfo viewInfo = {0};
-  GPUSamplerCreateInfo samplerInfo = {0};
   GPUBindGroupEntry fragmentEntries[2] = {0};
-  GPUBindGroupEntry samplerEntry = {0};
   GPUBindGroupCreateInfo fragmentGroupInfo = {0};
   GPUBindGroupCreateInfo samplerGroupInfo = {0};
 
@@ -339,23 +388,6 @@ create_resources(WebGPUTexturedQuad *state) {
     return 0;
   }
 
-  samplerInfo.chain.sType      = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-  samplerInfo.chain.structSize = sizeof(samplerInfo);
-  samplerInfo.label            = "textured-quad-webgpu-usl-sampler";
-  samplerInfo.desc.minFilter   = GPU_FILTER_NEAREST;
-  samplerInfo.desc.magFilter   = GPU_FILTER_NEAREST;
-  samplerInfo.desc.mipFilter   = GPU_MIP_FILTER_NEAREST;
-  samplerInfo.desc.addressU    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  samplerInfo.desc.addressV    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  samplerInfo.desc.addressW    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  if (GPUCreateSampler(state->device,
-                       &samplerInfo,
-                       false,
-                       &state->sampler) != GPU_OK) {
-    set_status("GPU: failed to create the checker sampler", 1);
-    return 0;
-  }
-
   fragmentEntries[0].textureView = state->textureView;
   fragmentEntries[0].binding     = 0u;
   fragmentEntries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
@@ -363,12 +395,12 @@ create_resources(WebGPUTexturedQuad *state) {
   fragmentEntries[1].buffer.size   = sizeof(uniforms);
   fragmentEntries[1].binding       = 1u;
   fragmentEntries[1].bindingType   = GPU_BINDING_UNIFORM_BUFFER;
-  fragmentGroupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  fragmentGroupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   fragmentGroupInfo.chain.structSize = sizeof(fragmentGroupInfo);
-  fragmentGroupInfo.label        = "textured-quad-webgpu-usl-group0";
-  fragmentGroupInfo.layout       = state->shaderLayout->bindGroupLayouts[0];
-  fragmentGroupInfo.pEntries     = fragmentEntries;
-  fragmentGroupInfo.entryCount   = 2u;
+  fragmentGroupInfo.label            = "textured-quad-webgpu-usl-group0";
+  fragmentGroupInfo.layout           = state->shaderLayout->bindGroupLayouts[0];
+  fragmentGroupInfo.pEntries         = fragmentEntries;
+  fragmentGroupInfo.entryCount       = 2u;
   if (GPUCreateBindGroup(state->device,
                          &fragmentGroupInfo,
                          &state->fragmentGroup) != GPU_OK) {
@@ -376,15 +408,10 @@ create_resources(WebGPUTexturedQuad *state) {
     return 0;
   }
 
-  samplerEntry.sampler     = state->sampler;
-  samplerEntry.binding     = 0u;
-  samplerEntry.bindingType = GPU_BINDING_SAMPLER;
-  samplerGroupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  samplerGroupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   samplerGroupInfo.chain.structSize = sizeof(samplerGroupInfo);
-  samplerGroupInfo.label      = "textured-quad-webgpu-usl-group1";
-  samplerGroupInfo.layout     = state->shaderLayout->bindGroupLayouts[1];
-  samplerGroupInfo.pEntries   = &samplerEntry;
-  samplerGroupInfo.entryCount = 1u;
+  samplerGroupInfo.label            = "textured-quad-webgpu-usl-group1";
+  samplerGroupInfo.layout           = state->samplerLayout;
   if (GPUCreateBindGroup(state->device,
                          &samplerGroupInfo,
                          &state->samplerGroup) != GPU_OK) {

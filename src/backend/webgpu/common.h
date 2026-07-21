@@ -102,6 +102,12 @@ typedef struct GPUPipelineLayoutWebGPU {
   uint32_t           emptyGroupMask;
 } GPUPipelineLayoutWebGPU;
 
+typedef struct GPUBindGroupLayoutWebGPU {
+  WGPUBindGroupLayout layout;
+  WGPUSampler        *immutableSamplers;
+  uint32_t            immutableSamplerCount;
+} GPUBindGroupLayoutWebGPU;
+
 typedef struct GPURenderPipelineWebGPU {
   WGPURenderPipeline      pipeline;
   GPUPipelineLayoutWebGPU layout;
@@ -179,6 +185,11 @@ gpu_webgpuCommand(const GPUCommandBuffer *cmdb) {
 WGPUTextureFormat gpu_webgpuFormat(GPUFormat format);
 GPUFormat gpu_webgpuGPUFormat(WGPUTextureFormat format);
 WGPUPresentMode gpu_webgpuPresentMode(GPUPresentMode mode);
+
+WGPUSampler
+gpu_webgpuCreateSampler(GPUDevice           *device,
+                        const GPUSamplerDesc *desc,
+                        const char           *label);
 
 GPUResult
 gpu_webgpuCreatePipelineLayout(GPUDevice               *device,

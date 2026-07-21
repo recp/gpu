@@ -106,8 +106,12 @@ webgpu_createBindGroupLayout(GPUDevice          *device,
     WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
   WGPUBindGroupLayoutEntry *nativeEntries;
   const GPUBindGroupLayoutEntry *entries;
+  GPUBindGroupLayoutWebGPU      *state;
   GPUDeviceWebGPU               *native;
+  GPUResult                      result;
+  size_t                         stateSize;
   uint32_t                       count;
+  uint32_t                       immutableCount;
 
   native  = gpu_webgpuDevice(device);
   entries = GPUGetBindGroupLayoutEntries(layout, &count);
@@ -115,17 +119,30 @@ webgpu_createBindGroupLayout(GPUDevice          *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  nativeEntries = count ? calloc(count, sizeof(*nativeEntries)) : NULL;
-  if (count > 0u && !nativeEntries) {
+  immutableCount = 0u;
+  for (uint32_t i = 0u; i < count; i++) {
+    immutableCount += entries[i].immutableSampler ? 1u : 0u;
+  }
+  if ((size_t)immutableCount >
+      (SIZE_MAX - sizeof(*state)) / sizeof(*state->immutableSamplers)) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
+  stateSize     = sizeof(*state) +
+                  (size_t)immutableCount * sizeof(*state->immutableSamplers);
+  state         = calloc(1, stateSize);
+  nativeEntries = count ? calloc(count, sizeof(*nativeEntries)) : NULL;
+  result        = GPU_ERROR_BACKEND_FAILURE;
+  if (!state || (count > 0u && !nativeEntries)) {
+    free(state);
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  state->immutableSamplers = immutableCount ? (WGPUSampler *)(state + 1) : NULL;
 
   for (uint32_t i = 0u; i < count; i++) {
     WGPUBindGroupLayoutEntry *entry;
 
-    if (entries[i].arrayCount != 1u || entries[i].immutableSampler) {
-      free(nativeEntries);
-      return GPU_ERROR_UNSUPPORTED;
+    if (entries[i].arrayCount != 1u) {
+      goto unsupported;
     }
 
     entry             = &nativeEntries[i];
@@ -134,8 +151,7 @@ webgpu_createBindGroupLayout(GPUDevice          *device,
     entry->binding    = entries[i].binding;
     entry->visibility = webgpu_shaderStages(entries[i].visibility);
     if (entry->visibility == WGPUShaderStage_None) {
-      free(nativeEntries);
-      return GPU_ERROR_UNSUPPORTED;
+      goto unsupported;
     }
 
     switch (entries[i].bindingType) {
@@ -168,8 +184,7 @@ webgpu_createBindGroupLayout(GPUDevice          *device,
         if (entry->texture.sampleType == WGPUTextureSampleType_Undefined ||
             entry->texture.viewDimension ==
               WGPUTextureViewDimension_Undefined) {
-          free(nativeEntries);
-          return GPU_ERROR_UNSUPPORTED;
+          goto unsupported;
         }
         break;
       case GPU_BINDING_STORAGE_TEXTURE:
@@ -186,8 +201,7 @@ webgpu_createBindGroupLayout(GPUDevice          *device,
             entry->storageTexture.format == WGPUTextureFormat_Undefined ||
             entry->storageTexture.viewDimension ==
               WGPUTextureViewDimension_Undefined) {
-          free(nativeEntries);
-          return GPU_ERROR_UNSUPPORTED;
+          goto unsupported;
         }
         break;
       case GPU_BINDING_SAMPLER:
@@ -195,30 +209,67 @@ webgpu_createBindGroupLayout(GPUDevice          *device,
                            WGPU_SAMPLER_BINDING_LAYOUT_INIT;
         entry->sampler.type = webgpu_samplerBindingType(entries[i].sampler.type);
         if (entry->sampler.type == WGPUSamplerBindingType_Undefined) {
-          free(nativeEntries);
-          return GPU_ERROR_UNSUPPORTED;
+          goto unsupported;
+        }
+        if (entries[i].immutableSampler) {
+          WGPUSampler sampler;
+
+          if (entry->sampler.type == WGPUSamplerBindingType_Comparison) {
+            goto unsupported;
+          }
+          sampler = gpu_webgpuCreateSampler(device,
+                                            &entries[i].immutableSamplerDesc,
+                                            NULL);
+          if (!sampler) {
+            goto fail;
+          }
+          state->immutableSamplers[state->immutableSamplerCount++] = sampler;
         }
         break;
       default:
-        free(nativeEntries);
-        return GPU_ERROR_UNSUPPORTED;
+        goto unsupported;
     }
   }
 
   descriptor.entryCount = count;
   descriptor.entries    = nativeEntries;
-  layout->_native = wgpuDeviceCreateBindGroupLayout(native->device,
-                                                     &descriptor);
+  state->layout = wgpuDeviceCreateBindGroupLayout(native->device,
+                                                   &descriptor);
+  if (!state->layout) {
+    goto fail;
+  }
   free(nativeEntries);
-  return layout->_native ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+  layout->_native = state;
+  return GPU_OK;
+
+unsupported:
+  result = GPU_ERROR_UNSUPPORTED;
+
+fail:
+  for (uint32_t i = 0u; i < state->immutableSamplerCount; i++) {
+    wgpuSamplerRelease(state->immutableSamplers[i]);
+  }
+  free(nativeEntries);
+  free(state);
+  return result;
 }
 
 static void
 webgpu_destroyBindGroupLayout(GPUBindGroupLayout *layout) {
-  if (layout && layout->_native) {
-    wgpuBindGroupLayoutRelease(layout->_native);
-    layout->_native = NULL;
+  GPUBindGroupLayoutWebGPU *state;
+
+  state = layout ? layout->_native : NULL;
+  if (!state) {
+    return;
   }
+  for (uint32_t i = 0u; i < state->immutableSamplerCount; i++) {
+    wgpuSamplerRelease(state->immutableSamplers[i]);
+  }
+  if (state->layout) {
+    wgpuBindGroupLayoutRelease(state->layout);
+  }
+  free(state);
+  layout->_native = NULL;
 }
 
 static GPUResult
@@ -240,7 +291,10 @@ webgpu_createPipelineLayout(GPUDevice *device, GPUPipelineLayout *layout) {
   }
 
   for (uint32_t i = 0u; i < groupCount; i++) {
-    nativeGroups[i] = groups[i] ? groups[i]->_native : NULL;
+    GPUBindGroupLayoutWebGPU *group;
+
+    group = groups[i] ? groups[i]->_native : NULL;
+    nativeGroups[i] = group ? group->layout : NULL;
     if (!nativeGroups[i]) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
@@ -303,7 +357,10 @@ gpu_webgpuCreatePipelineLayout(GPUDevice               *device,
 
   for (uint32_t i = 0u; i < groupCount; i++) {
     if ((requiredGroupMask & (1u << i)) != 0u) {
-      nativeGroups[i] = groups[i] ? groups[i]->_native : NULL;
+      GPUBindGroupLayoutWebGPU *group;
+
+      group = groups[i] ? groups[i]->_native : NULL;
+      nativeGroups[i] = group ? group->layout : NULL;
       if (!nativeGroups[i]) {
         goto fail;
       }
@@ -463,13 +520,18 @@ webgpu_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
   WebGPUBindGroupWrite    write;
   WGPUBindGroupEntry     *entries;
   GPUBindGroupLayout     *layout;
+  GPUBindGroupLayoutWebGPU *layoutState;
+  const GPUBindGroupLayoutEntry *layoutEntries;
   GPUDeviceWebGPU        *native;
   uint32_t                count;
+  uint32_t                immutableCursor;
 
   native = gpu_webgpuDevice(device);
   layout = gpuBindGroupGetLayout(group);
-  (void)GPUGetBindGroupLayoutEntries(layout, &count);
-  if (!native || !native->device || !layout || !layout->_native) {
+  layoutEntries = GPUGetBindGroupLayoutEntries(layout, &count);
+  layoutState   = layout ? layout->_native : NULL;
+  if (!native || !native->device || !layout || !layoutState ||
+      !layoutState->layout || (count > 0u && !layoutEntries)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -482,15 +544,33 @@ webgpu_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
   write.capacity = count;
   write.count    = 0u;
   write.valid    = true;
+  immutableCursor = 0u;
+  for (uint32_t i = 0u; i < count; i++) {
+    WGPUBindGroupEntry *entry;
+
+    if (!layoutEntries[i].immutableSampler) {
+      continue;
+    }
+    if (immutableCursor >= layoutState->immutableSamplerCount ||
+        write.count >= write.capacity) {
+      write.valid = false;
+      break;
+    }
+    entry          = &write.entries[write.count++];
+    *entry         = (WGPUBindGroupEntry)WGPU_BIND_GROUP_ENTRY_INIT;
+    entry->binding = layoutEntries[i].binding;
+    entry->sampler = layoutState->immutableSamplers[immutableCursor++];
+  }
   if (!gpuForEachBindGroupBinding(group,
                                   webgpu_writeBindGroupEntry,
                                   &write) ||
-      !write.valid || write.count != count) {
+      !write.valid || write.count != count ||
+      immutableCursor != layoutState->immutableSamplerCount) {
     free(entries);
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  descriptor.layout     = layout->_native;
+  descriptor.layout     = layoutState->layout;
   descriptor.entryCount = write.count;
   descriptor.entries    = entries;
   group->_native = wgpuDeviceCreateBindGroup(native->device, &descriptor);

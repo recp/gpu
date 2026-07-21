@@ -35,20 +35,39 @@ webgpu_addressMode(GPUAddressMode mode) {
            : WGPUAddressMode_Undefined;
 }
 
+WGPUSampler
+gpu_webgpuCreateSampler(GPUDevice           *device,
+                        const GPUSamplerDesc *desc,
+                        const char           *label) {
+  WGPUSamplerDescriptor descriptor = WGPU_SAMPLER_DESCRIPTOR_INIT;
+  GPUDeviceWebGPU      *native;
+
+  native = gpu_webgpuDevice(device);
+  if (!native || !native->device || !desc) {
+    return NULL;
+  }
+
+  descriptor.label        = gpu_webgpuString(label);
+  descriptor.addressModeU = webgpu_addressMode(desc->addressU);
+  descriptor.addressModeV = webgpu_addressMode(desc->addressV);
+  descriptor.addressModeW = webgpu_addressMode(desc->addressW);
+  descriptor.minFilter    = webgpu_filter(desc->minFilter);
+  descriptor.magFilter    = webgpu_filter(desc->magFilter);
+  descriptor.mipmapFilter = webgpu_mipFilter(desc->mipFilter);
+  return wgpuDeviceCreateSampler(native->device, &descriptor);
+}
+
 static GPUResult
 webgpu_createSampler(GPUApi                    * __restrict api,
                      GPUDevice                 * __restrict device,
                      const GPUSamplerCreateInfo *info,
                      bool                       staticIfSupported,
                      GPUSampler                **outSampler) {
-  WGPUSamplerDescriptor descriptor = WGPU_SAMPLER_DESCRIPTOR_INIT;
-  GPUDeviceWebGPU      *native;
-  GPUSampler           *sampler;
+  GPUSampler *sampler;
 
   GPU__UNUSED(api);
   GPU__UNUSED(staticIfSupported);
-  native = gpu_webgpuDevice(device);
-  if (!native || !native->device || !info || !outSampler) {
+  if (!device || !info || !outSampler) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -57,14 +76,7 @@ webgpu_createSampler(GPUApi                    * __restrict api,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  descriptor.label         = gpu_webgpuString(info->label);
-  descriptor.addressModeU  = webgpu_addressMode(info->desc.addressU);
-  descriptor.addressModeV  = webgpu_addressMode(info->desc.addressV);
-  descriptor.addressModeW  = webgpu_addressMode(info->desc.addressW);
-  descriptor.minFilter     = webgpu_filter(info->desc.minFilter);
-  descriptor.magFilter     = webgpu_filter(info->desc.magFilter);
-  descriptor.mipmapFilter  = webgpu_mipFilter(info->desc.mipFilter);
-  sampler->_priv = wgpuDeviceCreateSampler(native->device, &descriptor);
+  sampler->_priv = gpu_webgpuCreateSampler(device, &info->desc, info->label);
   if (!sampler->_priv) {
     free(sampler);
     return GPU_ERROR_BACKEND_FAILURE;
