@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="gallery.css?v=21">
-  <title>Indexed depth · GPU + USL</title>
+  <title>Texture shapes · GPU + USL</title>
 </head>
 <body class="sample-page"
-      data-c-source="sources/indexed-depth.c"
-      data-usl-source="sources/indexed-depth.usl"
-      data-wgsl-source="sources/indexed-depth.wgsl">
+      data-c-source="sources/texture-shapes.c"
+      data-usl-source="sources/texture-shapes.usl"
+      data-wgsl-source="sources/texture-shapes.wgsl">
   <header class="sample-head">
     <a class="back-link" href="index.html"><span>←</span> Sample index</a>
     <div class="sample-heading">
-      <p>Render / index + depth</p>
-      <h1>Indexed depth</h1>
+      <p>Binding / cube + 3D</p>
+      <h1>Texture shapes</h1>
     </div>
     <div class="runtime-badge"><i></i> WebGPU live</div>
   </header>
@@ -37,7 +37,7 @@
         </div>
       </aside>
       <div class="stage-meta">
-        <p>Indexed depth, occlusion, barriers, and sampled-depth visualization in two render passes.</p>
+        <p>A reflected cubemap and 3D volume share one bind group and one draw.</p>
         <div id="status">GPU: loading sample</div>
       </div>
     </section>
