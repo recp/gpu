@@ -924,7 +924,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   set(GPU_WEBGPU_SAMPLE_TITLE "Storage texture")
   set(GPU_WEBGPU_SAMPLE_KIND "Compute / typed storage texture")
   set(GPU_WEBGPU_SAMPLE_DESCRIPTION
-      "Compute writes a typed RGBA8 texture; render samples it in the same command buffer.")
+      "Compute writes two typed RGBA8 textures; render samples their reflected fixed arrays in the same command buffer.")
   set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/storage-texture.c")
   set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/storage-texture.usl")
   set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/storage-texture.wgsl")
