@@ -1984,6 +1984,27 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
         return GPU_ERROR_BACKEND_FAILURE;
       }
     }
+  } else if (api->backend == GPU_BACKEND_WEBGPU) {
+    if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
+      if (us_cap_atom_init(
+            &targetAtoms[targetAtomCount++],
+            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+            USL_SEMANTIC_FEATURE_ID_SHADER_F16,
+            0u,
+            0u) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+    if (GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUPS)) {
+      if (us_cap_atom_init(
+            &targetAtoms[targetAtomCount++],
+            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+            USL_SEMANTIC_FEATURE_ID_SUBGROUP,
+            0u,
+            0u) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
   }
   if (GPUIsFeatureEnabled(device, GPU_FEATURE_DESCRIPTOR_INDEXING)) {
     if (us_cap_atom_init(

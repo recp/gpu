@@ -451,6 +451,9 @@ webgpu_supportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
     case GPU_FEATURE_SHADER_F16:
       return wgpuAdapterHasFeature(native->adapter,
                                    WGPUFeatureName_ShaderF16);
+    case GPU_FEATURE_SUBGROUPS:
+      return wgpuAdapterHasFeature(native->adapter,
+                                   WGPUFeatureName_Subgroups);
     case GPU_FEATURE_INDIRECT_DRAW:
       return wgpuAdapterHasFeature(native->adapter,
                                    WGPUFeatureName_IndirectFirstInstance);
@@ -464,31 +467,56 @@ webgpu_supportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
   }
 }
 
+static bool
+webgpu_supportsSubgroupOperations(
+  const GPUAdapter                 * __restrict adapter,
+  GPUShaderStageFlags                           stage,
+  GPUBackendSubgroupOperationFlags              operations) {
+  const GPUShaderStageFlags supportedStages =
+    GPU_SHADER_STAGE_FRAGMENT_BIT |
+    GPU_SHADER_STAGE_COMPUTE_BIT;
+  const GPUBackendSubgroupOperationFlags supportedOperations =
+    GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
+    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT |
+    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
+
+  return webgpu_hasAdapterFeature(adapter, WGPUFeatureName_Subgroups) &&
+         (supportedStages & stage) == stage &&
+         (supportedOperations & operations) == operations;
+}
+
 static void
 webgpu_getLimits(const GPUAdapter *adapter, GPULimits *limits) {
   GPUAdapterWebGPU *native;
+  WGPUAdapterInfo   info = WGPU_ADAPTER_INFO_INIT;
   WGPULimits        webLimits = WGPU_LIMITS_INIT;
 
   native = gpu_webgpuAdapter(adapter);
-  if (!native || !native->adapter || !limits ||
-      wgpuAdapterGetLimits(native->adapter, &webLimits) != WGPUStatus_Success) {
+  if (!native || !native->adapter || !limits) {
     return;
   }
-
-  limits->maxBindGroups            = webLimits.maxBindGroups;
-  limits->maxBindingsPerGroup      = webLimits.maxBindingsPerBindGroup;
-  limits->maxDynamicUniformBuffers =
-    webLimits.maxDynamicUniformBuffersPerPipelineLayout;
-  limits->maxDynamicStorageBuffers =
-    webLimits.maxDynamicStorageBuffersPerPipelineLayout;
-  limits->minUniformBufferOffsetAlignment =
-    webLimits.minUniformBufferOffsetAlignment;
-  limits->minStorageBufferOffsetAlignment =
-    webLimits.minStorageBufferOffsetAlignment;
-  limits->maxColorAttachments      = webLimits.maxColorAttachments;
-  limits->maxComputeWorkgroupSizeX = webLimits.maxComputeWorkgroupSizeX;
-  limits->maxComputeWorkgroupSizeY = webLimits.maxComputeWorkgroupSizeY;
-  limits->maxComputeWorkgroupSizeZ = webLimits.maxComputeWorkgroupSizeZ;
+  if (wgpuAdapterGetLimits(native->adapter, &webLimits) ==
+      WGPUStatus_Success) {
+    limits->maxBindGroups            = webLimits.maxBindGroups;
+    limits->maxBindingsPerGroup      = webLimits.maxBindingsPerBindGroup;
+    limits->maxDynamicUniformBuffers =
+      webLimits.maxDynamicUniformBuffersPerPipelineLayout;
+    limits->maxDynamicStorageBuffers =
+      webLimits.maxDynamicStorageBuffersPerPipelineLayout;
+    limits->minUniformBufferOffsetAlignment =
+      webLimits.minUniformBufferOffsetAlignment;
+    limits->minStorageBufferOffsetAlignment =
+      webLimits.minStorageBufferOffsetAlignment;
+    limits->maxColorAttachments      = webLimits.maxColorAttachments;
+    limits->maxComputeWorkgroupSizeX = webLimits.maxComputeWorkgroupSizeX;
+    limits->maxComputeWorkgroupSizeY = webLimits.maxComputeWorkgroupSizeY;
+    limits->maxComputeWorkgroupSizeZ = webLimits.maxComputeWorkgroupSizeZ;
+  }
+  if (wgpuAdapterGetInfo(native->adapter, &info) == WGPUStatus_Success) {
+    limits->minSubgroupSize = info.subgroupMinSize;
+    limits->maxSubgroupSize = info.subgroupMaxSize;
+    wgpuAdapterInfoFreeMembers(info);
+  }
 }
 
 static void
@@ -578,7 +606,7 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   WebGPUDeviceRequest *request;
   uint64_t             supportedMask;
 
-  _Static_assert(GPU_ARRAY_LEN(formatFeatures) + 4u <=
+  _Static_assert(GPU_ARRAY_LEN(formatFeatures) + 5u <=
                    GPU_ARRAY_LEN(requiredFeatures),
                  "WebGPU device feature storage is too small");
 
@@ -596,6 +624,9 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   }
   if (wgpuAdapterHasFeature(native->adapter, WGPUFeatureName_ShaderF16)) {
     supportedMask |= 1ull << GPU_FEATURE_SHADER_F16;
+  }
+  if (wgpuAdapterHasFeature(native->adapter, WGPUFeatureName_Subgroups)) {
+    supportedMask |= 1ull << GPU_FEATURE_SUBGROUPS;
   }
   if (wgpuAdapterHasFeature(native->adapter,
                             WGPUFeatureName_IndirectFirstInstance)) {
@@ -629,6 +660,10 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u) {
     requiredFeatures[descriptor.requiredFeatureCount++] =
       WGPUFeatureName_ShaderF16;
+  }
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_SUBGROUPS)) != 0u) {
+    requiredFeatures[descriptor.requiredFeatureCount++] =
+      WGPUFeatureName_Subgroups;
   }
   if ((enabledFeatureMask &
        ((1ull << GPU_FEATURE_INDIRECT_DRAW) |
@@ -693,12 +728,13 @@ webgpu_destroyDevice(GPUDevice *device) {
 
 void
 webgpu_initDevice(GPUApiDevice *api) {
-  api->requestAdapter       = webgpu_requestAdapter;
-  api->destroyAdapter       = webgpu_destroyAdapter;
-  api->getAdapterProperties = webgpu_getAdapterProperties;
-  api->supportsFeature      = webgpu_supportsFeature;
-  api->getLimits            = webgpu_getLimits;
-  api->getFormatCapabilities = webgpu_getFormatCapabilities;
-  api->requestDevice        = webgpu_requestDevice;
-  api->destroyDevice        = webgpu_destroyDevice;
+  api->requestAdapter              = webgpu_requestAdapter;
+  api->destroyAdapter              = webgpu_destroyAdapter;
+  api->getAdapterProperties        = webgpu_getAdapterProperties;
+  api->supportsFeature             = webgpu_supportsFeature;
+  api->supportsSubgroupOperations = webgpu_supportsSubgroupOperations;
+  api->getLimits                   = webgpu_getLimits;
+  api->getFormatCapabilities       = webgpu_getFormatCapabilities;
+  api->requestDevice               = webgpu_requestDevice;
+  api->destroyDevice               = webgpu_destroyDevice;
 }
