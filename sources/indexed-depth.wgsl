@@ -44,9 +44,7 @@ fn depth_preview_vs(@builtin(vertex_index) vertexId: u32) -> PreviewOut {
 
 @fragment
 fn depth_preview_fs(input: PreviewOut) -> @location(0) vec4<f32> {
-    let r36: vec2<f32> = (vec2<f32>(f32(i32(textureDimensions(usl_g0_b0, 0u).x)), f32(i32(textureDimensions(usl_g0_b0, 0u).y))) - vec2<f32>(1.0));
-    let r37: vec2<f32> = (input.uv * r36);
-    let r38: vec2<u32> = vec2<u32>(r37);
-    let r39: f32 = textureLoad(usl_g0_b0, vec2<i32>(r38), i32(0));
+    let usl_dims_r27 = textureDimensions(usl_g0_b0, 0u);
+    let r39: f32 = textureLoad(usl_g0_b0, vec2<i32>(vec2<u32>((input.uv * (vec2<f32>(f32(i32(usl_dims_r27.x)), f32(i32(usl_dims_r27.y))) - vec2<f32>(1.0))))), 0);
     return vec4<f32>(r39, r39, r39, 1.0);
 }

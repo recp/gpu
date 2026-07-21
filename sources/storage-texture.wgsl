@@ -19,7 +19,6 @@ struct StorageVertexOut {
 @compute @workgroup_size(8, 8, 1)
 fn paint_cs(@builtin(global_invocation_id) gid: vec3<u32>) {
     textureStore(usl_g0_b0, vec2<i32>(gid.xy), vec4<f32>((0.003921569 * f32(gid.x)), (0.003921569 * f32(gid.y)), fma(0.0009765625, f32((gid.x + gid.y)), 0.25), 1.0));
-    return;
 }
 
 @vertex
