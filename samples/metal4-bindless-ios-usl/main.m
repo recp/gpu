@@ -172,7 +172,7 @@ CreateTexture(GPUDevice       *device,
                                         _adapter,
                                         (__bridge void *)self.view,
                                         GPU_SURFACE_APPLE_UIVIEW,
-                                        UIScreen.mainScreen.scale);
+                                        self.view.traitCollection.displayScale);
   if (!_surface) {
     NSLog(@"GPU: failed to create UIKit surface");
     return NO;
@@ -279,8 +279,8 @@ CreateTexture(GPUDevice       *device,
   pipelineInfo.label                  = "metal4-bindless-ios-pipeline";
   pipelineInfo.layout                 = _pipelineLayout;
   pipelineInfo.library                = _library;
-  pipelineInfo.vertexEntry            = "metal4_bindless_vs";
-  pipelineInfo.fragmentEntry          = "metal4_bindless_fs";
+  pipelineInfo.vertexEntry            = "bindless_vs";
+  pipelineInfo.fragmentEntry          = "bindless_fs";
   pipelineInfo.colorTargetCount       = 1u;
   pipelineInfo.pColorTargets          = &colorTarget;
   pipelineInfo.depthStencilFormat     = GPU_FORMAT_UNDEFINED;
@@ -520,35 +520,46 @@ CreateTexture(GPUDevice       *device,
 
 @end
 
-@interface Metal4BindlessAppDelegate : UIResponder <UIApplicationDelegate>
-@property(nonatomic, strong) UIWindow                         *window;
-@property(nonatomic, strong) Metal4BindlessViewController    *controller;
+@interface Metal4BindlessSceneDelegate : UIResponder <UIWindowSceneDelegate>
+@property(nonatomic, strong) UIWindow                      *window;
+@property(nonatomic, strong) Metal4BindlessViewController *controller;
 @end
 
-@implementation Metal4BindlessAppDelegate
+@implementation Metal4BindlessSceneDelegate
 
-- (BOOL)application:(UIApplication *)application
-    didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-  (void)application;
-  (void)launchOptions;
+- (void)scene:(UIScene *)scene
+    willConnectToSession:(UISceneSession *)session
+                 options:(UISceneConnectionOptions *)connectionOptions {
+  UIWindowScene *windowScene;
 
+  (void)session;
+  (void)connectionOptions;
+  if (![scene isKindOfClass:UIWindowScene.class]) {
+    return;
+  }
+  windowScene     = (UIWindowScene *)scene;
   self.controller = [Metal4BindlessViewController new];
-  self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
+  self.window = [[UIWindow alloc] initWithWindowScene:windowScene];
   self.window.rootViewController = self.controller;
   [self.window makeKeyAndVisible];
-  return YES;
 }
 
-- (void)applicationWillResignActive:(UIApplication *)application {
-  (void)application;
+- (void)sceneWillResignActive:(UIScene *)scene {
+  (void)scene;
   [self.controller setRenderingPaused:YES];
 }
 
-- (void)applicationDidBecomeActive:(UIApplication *)application {
-  (void)application;
+- (void)sceneDidBecomeActive:(UIScene *)scene {
+  (void)scene;
   [self.controller setRenderingPaused:NO];
 }
 
+@end
+
+@interface Metal4BindlessAppDelegate : UIResponder <UIApplicationDelegate>
+@end
+
+@implementation Metal4BindlessAppDelegate
 @end
 
 int

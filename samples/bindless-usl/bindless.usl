@@ -29,11 +29,11 @@ fn quad_uv(vertexId: uint) -> float2 {
   }
 }
 
-vert metal4_bindless_vs(vertexId: uint #vertex_id) -> VSOut {
+vert bindless_vs(vertexId: uint #vertex_id) -> VSOut {
   quad_position(vertexId), quad_uv(vertexId)
 }
 
-frag metal4_bindless_fs(
+frag bindless_fs(
   input: VSOut #stage_in,
   textures: [texture2d<float>; 2] #texture(0),
   samplers: [sampler; 2] #sampler(2),
