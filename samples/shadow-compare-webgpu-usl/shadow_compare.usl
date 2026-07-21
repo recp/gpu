@@ -1,0 +1,36 @@
+struct ShadowOut {
+  position: float4 #position
+  uv:       float2
+}
+
+vert shadow_depth_vs(vertexId: uint #vertex_id) -> float4 {
+  if (vertexId == 0) {
+    return float4(0.0, 0.72, 0.32, 1.0)
+  }
+  if (vertexId == 1) {
+    return float4(-0.76, -0.62, 0.32, 1.0)
+  }
+  return float4(0.76, -0.62, 0.32, 1.0)
+}
+
+frag shadow_depth_fs() -> float4 {
+  return float4(0.08, 0.12, 0.20, 1.0)
+}
+
+vert shadow_preview_vs(vertexId: uint #vertex_id) -> ShadowOut {
+  if (vertexId == 0) {
+    return ShadowOut { float4(-1.0, -1.0, 0.0, 1.0), float2(0.0, 1.0) }
+  }
+  if (vertexId == 1) {
+    return ShadowOut { float4(3.0, -1.0, 0.0, 1.0), float2(2.0, 1.0) }
+  }
+  return ShadowOut { float4(-1.0, 3.0, 0.0, 1.0), float2(0.0, -1.0) }
+}
+
+frag shadow_preview_fs(input: ShadowOut #stage_in,
+                       shadowMap: depth2d<float> #texture(0),
+                       shadowSampler: sampler_comparison #sampler(1)) -> float4 {
+  let visibility = shadowMap.sample_compare(shadowSampler, input.uv, 0.52)
+  return float4(0.04, 0.07, 0.12, 1.0)
+       + float4(0.96, 0.45, 0.06, 0.0) * visibility
+}

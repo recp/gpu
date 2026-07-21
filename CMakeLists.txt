@@ -595,7 +595,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
-  set(GPU_WEBGPU_GALLERY_VERSION "17")
+  set(GPU_WEBGPU_GALLERY_VERSION "18")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
   file(MAKE_DIRECTORY
@@ -1052,6 +1052,80 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     C_EXTENSIONS NO
     LINK_DEPENDS
       "${GPU_WEBGPU_GALLERY_DIR}/gpu-indexed-depth-webgpu-usl-shell.html;${GPU_WEBGPU_INDEXED_DEPTH_US}"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${GPU_WEBGPU_GALLERY_DIR}"
+  )
+
+  set(GPU_WEBGPU_SHADOW_COMPARE_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+  set(GPU_WEBGPU_SHADOW_COMPARE_SOURCE
+      "${GPU_WEBGPU_SHADOW_COMPARE_DIR}/shadow_compare.usl")
+  set(GPU_WEBGPU_SHADOW_COMPARE_US
+      "${GPU_WEBGPU_SHADOW_COMPARE_DIR}/shadow_compare.us")
+  set(GPU_WEBGPU_SAMPLE_TITLE "Comparison shadow")
+  set(GPU_WEBGPU_SAMPLE_KIND "Binding / depth comparison")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "A reflected depth texture and comparison sampler produce a filtered shadow in two render passes.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/shadow-compare.c")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/shadow-compare.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/shadow-compare.wgsl")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-shadow-compare-webgpu-usl-shell.html"
+    @ONLY
+  )
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_SHADOW_COMPARE_US}"
+    BYPRODUCTS "${GPU_WEBGPU_SHADOW_COMPARE_SOURCE}.wgsl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${GPU_WEBGPU_SHADOW_COMPARE_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/shadow-compare-webgpu-usl/shadow_compare.usl"
+            "${GPU_WEBGPU_SHADOW_COMPARE_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_SHADOW_COMPARE_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/shadow-compare-webgpu-usl/main.c"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/shadow-compare.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_SHADOW_COMPARE_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/shadow-compare.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_SHADOW_COMPARE_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/shadow-compare.wgsl"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/shadow-compare-webgpu-usl/shadow_compare.usl"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/shadow-compare-webgpu-usl/main.c"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-shadow-compare-artifact
+    DEPENDS "${GPU_WEBGPU_SHADOW_COMPARE_US}"
+  )
+
+  add_executable(gpu-shadow-compare-webgpu-usl
+    samples/shadow-compare-webgpu-usl/main.c
+    ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
+  )
+  target_link_libraries(gpu-shadow-compare-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-shadow-compare-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_SHADOW_COMPARE_US}@/shadow_compare.us"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-shadow-compare-webgpu-usl-shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-shadow-compare-webgpu-usl
+                   gpu-webgpu-shadow-compare-artifact)
+  set_target_properties(gpu-shadow-compare-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-shadow-compare-webgpu-usl-shell.html;${GPU_WEBGPU_SHADOW_COMPARE_US}"
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"
