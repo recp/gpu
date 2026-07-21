@@ -595,6 +595,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
+  set(GPU_WEBGPU_GALLERY_VERSION "14")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
   file(MAKE_DIRECTORY
@@ -603,7 +604,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   configure_file(
     "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/index.html"
     "${GPU_WEBGPU_GALLERY_DIR}/index.html"
-    COPYONLY
+    @ONLY
   )
   configure_file(
     "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/gallery.css"
