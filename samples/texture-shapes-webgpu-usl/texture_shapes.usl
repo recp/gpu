@@ -1,0 +1,27 @@
+struct VSOut {
+  position: float4 #position
+  uv:       float2
+}
+
+vert shapes_vs(vertexId: uint #vertex_id) -> VSOut {
+  if (vertexId == 0) { return VSOut { float4(-0.88, -0.76, 0.0, 1.0), float2(0.0, 1.0) } }
+  if (vertexId == 1) { return VSOut { float4( 0.88, -0.76, 0.0, 1.0), float2(1.0, 1.0) } }
+  if (vertexId == 2) { return VSOut { float4(-0.88,  0.76, 0.0, 1.0), float2(0.0, 0.0) } }
+  if (vertexId == 3) { return VSOut { float4(-0.88,  0.76, 0.0, 1.0), float2(0.0, 0.0) } }
+  if (vertexId == 4) { return VSOut { float4( 0.88, -0.76, 0.0, 1.0), float2(1.0, 1.0) } }
+  return VSOut { float4(0.88, 0.76, 0.0, 1.0), float2(1.0, 0.0) }
+}
+
+frag shapes_fs(input: VSOut #stage_in,
+               environment: texturecube<float> #texture(0),
+               volume: texture3d<float> #texture(1),
+               shapeSampler: sampler #sampler(2)) -> float4 {
+  let localX    = fract(input.uv.x * 2.0)
+  let longitude = (localX * 2.0 - 1.0) * 3.14159265
+  let latitude  = (0.5 - input.uv.y) * 3.14159265
+  let ring      = cos(latitude)
+  let direction = float3(sin(longitude) * ring, sin(latitude), cos(longitude) * ring)
+  let cubeColor   = environment.sample(shapeSampler, direction)
+  let volumeColor = volume.sample(shapeSampler, float3(localX, input.uv.y, localX))
+  return mix(cubeColor, volumeColor, step(0.5, input.uv.x))
+}

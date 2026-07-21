@@ -595,7 +595,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
-  set(GPU_WEBGPU_GALLERY_VERSION "20")
+  set(GPU_WEBGPU_GALLERY_VERSION "21")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
   file(MAKE_DIRECTORY
@@ -1497,6 +1497,80 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     C_EXTENSIONS NO
     LINK_DEPENDS
       "${GPU_WEBGPU_GALLERY_DIR}/gpu-texture-array-webgpu-usl-shell.html;${GPU_WEBGPU_TEXTURE_ARRAY_US}"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${GPU_WEBGPU_GALLERY_DIR}"
+  )
+
+  set(GPU_WEBGPU_TEXTURE_SHAPES_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+  set(GPU_WEBGPU_TEXTURE_SHAPES_SOURCE
+      "${GPU_WEBGPU_TEXTURE_SHAPES_DIR}/texture_shapes.usl")
+  set(GPU_WEBGPU_TEXTURE_SHAPES_US
+      "${GPU_WEBGPU_TEXTURE_SHAPES_DIR}/texture_shapes.us")
+  set(GPU_WEBGPU_SAMPLE_TITLE "Texture shapes")
+  set(GPU_WEBGPU_SAMPLE_KIND "Binding / cube + 3D")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "A reflected cubemap and 3D volume share one bind group and one draw.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/texture-shapes.c")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/texture-shapes.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/texture-shapes.wgsl")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-texture-shapes-webgpu-usl-shell.html"
+    @ONLY
+  )
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_TEXTURE_SHAPES_US}"
+    BYPRODUCTS "${GPU_WEBGPU_TEXTURE_SHAPES_SOURCE}.wgsl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${GPU_WEBGPU_TEXTURE_SHAPES_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/texture-shapes-webgpu-usl/texture_shapes.usl"
+            "${GPU_WEBGPU_TEXTURE_SHAPES_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_TEXTURE_SHAPES_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/texture-shapes-webgpu-usl/main.c"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/texture-shapes.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_TEXTURE_SHAPES_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/texture-shapes.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_TEXTURE_SHAPES_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/texture-shapes.wgsl"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/texture-shapes-webgpu-usl/texture_shapes.usl"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/texture-shapes-webgpu-usl/main.c"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-texture-shapes-artifact
+    DEPENDS "${GPU_WEBGPU_TEXTURE_SHAPES_US}"
+  )
+
+  add_executable(gpu-texture-shapes-webgpu-usl
+    samples/texture-shapes-webgpu-usl/main.c
+    ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
+  )
+  target_link_libraries(gpu-texture-shapes-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-texture-shapes-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_TEXTURE_SHAPES_US}@/texture_shapes.us"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-texture-shapes-webgpu-usl-shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-texture-shapes-webgpu-usl
+                   gpu-webgpu-texture-shapes-artifact)
+  set_target_properties(gpu-texture-shapes-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-texture-shapes-webgpu-usl-shell.html;${GPU_WEBGPU_TEXTURE_SHAPES_US}"
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"
