@@ -201,10 +201,12 @@ bindless_init(BindlessUpdateBench        *bench,
 
   bindlessInfo.chain.sType      = GPU_STRUCTURE_TYPE_BINDLESS_LAYOUT_EXT;
   bindlessInfo.chain.structSize = sizeof(bindlessInfo);
-  layoutEntry.binding           = 0u;
-  layoutEntry.bindingType       = GPU_BINDING_SAMPLED_TEXTURE;
-  layoutEntry.visibility        = GPU_SHADER_STAGE_COMPUTE_BIT;
-  layoutEntry.arrayCount        = config->capacity;
+  layoutEntry.binding                   = 0u;
+  layoutEntry.bindingType               = GPU_BINDING_SAMPLED_TEXTURE;
+  layoutEntry.sampledTexture.viewType   = GPU_TEXTURE_VIEW_2D;
+  layoutEntry.sampledTexture.sampleType = GPU_TEXTURE_SAMPLE_TYPE_FLOAT;
+  layoutEntry.visibility                = GPU_SHADER_STAGE_COMPUTE_BIT;
+  layoutEntry.arrayCount                = config->capacity;
   layoutInfo.chain.sType        = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
   layoutInfo.chain.structSize   = sizeof(layoutInfo);
   layoutInfo.chain.pNext        = &bindlessInfo;
@@ -282,12 +284,19 @@ bindless_run(BindlessUpdateBench *bench,
     const GPUBindGroupEntry *entries;
     double                   begin;
     double                   elapsed;
+    GPUResult                result;
 
     entries = path == BINDLESS_UPDATE_SINGLE
                 ? &bench->singleEntries[i & 1u]
                 : bench->batchEntries[i & 1u];
     begin   = bench_now();
-    if (GPUUpdateBindGroupEXT(bench->group, entryCount, entries) != GPU_OK) {
+    result = GPUUpdateBindGroupEXT(bench->group, entryCount, entries);
+    if (result != GPU_OK) {
+      fprintf(stderr,
+              "bindless-update path %u failed at iteration %u: %d\n",
+              (uint32_t)path,
+              i,
+              result);
       return false;
     }
     elapsed = bench_now() - begin;
