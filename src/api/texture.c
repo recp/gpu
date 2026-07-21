@@ -104,6 +104,10 @@ gpuValidateTextureFormatUsage(const GPUDevice       *device,
   if (result != GPU_OK) {
     return result;
   }
+  if (!caps.sampled && !caps.filterable && !caps.storage &&
+      !caps.colorAttachment && !caps.blendable && !caps.depthStencil) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
   if (((usage & GPU_TEXTURE_USAGE_SAMPLED) && !caps.sampled) ||
       ((usage & GPU_TEXTURE_USAGE_STORAGE) && !caps.storage) ||
       ((usage & GPU_TEXTURE_USAGE_COLOR_TARGET) && !caps.colorAttachment) ||

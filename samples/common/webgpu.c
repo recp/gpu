@@ -105,6 +105,7 @@ static void
 webgpu_adapter_ready(GPUResult result, GPUAdapter *adapter, void *userData) {
   static const GPUFeature optionalFeatures[] = {
     GPU_FEATURE_COMPUTE,
+    GPU_FEATURE_SHADER_F16,
     GPU_FEATURE_TIMESTAMPS,
     GPU_FEATURE_INDIRECT_DRAW,
     GPU_FEATURE_MULTI_DRAW

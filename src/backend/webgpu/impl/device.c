@@ -244,6 +244,196 @@ webgpu_getAdapterProperties(const GPUAdapter     *adapter,
 }
 
 static bool
+webgpu_isBCFormat(GPUFormat format) {
+  return format >= GPU_FORMAT_BC1_RGBA_UNORM &&
+         format <= GPU_FORMAT_BC7_RGBA_UNORM_SRGB;
+}
+
+static bool
+webgpu_isETC2Format(GPUFormat format) {
+  return format >= GPU_FORMAT_EAC_R11_UNORM &&
+         format <= GPU_FORMAT_ETC2_RGB8A1_UNORM_SRGB;
+}
+
+static bool
+webgpu_isASTCFormat(GPUFormat format) {
+  return format >= GPU_FORMAT_ASTC_4X4_UNORM &&
+         format <= GPU_FORMAT_ASTC_12X12_UNORM_SRGB;
+}
+
+static bool
+webgpu_isWideNormFormat(GPUFormat format) {
+  switch (format) {
+    case GPU_FORMAT_R16_UNORM:
+    case GPU_FORMAT_R16_SNORM:
+    case GPU_FORMAT_RG16_UNORM:
+    case GPU_FORMAT_RG16_SNORM:
+    case GPU_FORMAT_RGBA16_UNORM:
+    case GPU_FORMAT_RGBA16_SNORM:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool
+webgpu_isSRGBFormat(GPUFormat format) {
+  return format == GPU_FORMAT_RGBA8_UNORM_SRGB ||
+         format == GPU_FORMAT_BGRA8_UNORM_SRGB;
+}
+
+static bool
+webgpu_isFloat32Format(GPUFormat format) {
+  return format == GPU_FORMAT_R32_FLOAT ||
+         format == GPU_FORMAT_RG32_FLOAT ||
+         format == GPU_FORMAT_RGBA32_FLOAT;
+}
+
+static bool
+webgpu_hasCoreStorage(GPUFormat format) {
+  switch (format) {
+    case GPU_FORMAT_R32_UINT:
+    case GPU_FORMAT_R32_SINT:
+    case GPU_FORMAT_R32_FLOAT:
+    case GPU_FORMAT_RGBA8_UNORM:
+    case GPU_FORMAT_RGBA8_UINT:
+    case GPU_FORMAT_RGBA8_SINT:
+    case GPU_FORMAT_RG32_UINT:
+    case GPU_FORMAT_RG32_SINT:
+    case GPU_FORMAT_RG32_FLOAT:
+    case GPU_FORMAT_RGBA16_UINT:
+    case GPU_FORMAT_RGBA16_SINT:
+    case GPU_FORMAT_RGBA16_FLOAT:
+    case GPU_FORMAT_RGBA32_UINT:
+    case GPU_FORMAT_RGBA32_SINT:
+    case GPU_FORMAT_RGBA32_FLOAT:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool
+webgpu_hasAdapterFeature(const GPUAdapter *adapter, WGPUFeatureName feature) {
+  GPUAdapterWebGPU *native;
+
+  native = gpu_webgpuAdapter(adapter);
+  return native && native->adapter &&
+         wgpuAdapterHasFeature(native->adapter, feature);
+}
+
+static void
+webgpu_getFormatCapabilities(
+  const GPUAdapter      * __restrict adapter,
+  GPUFormat                          format,
+  GPUFormatCapabilities * __restrict outCaps) {
+  bool float32Blendable;
+  bool float32Filterable;
+  bool tier1;
+  bool wideNorm;
+
+  if (!outCaps) {
+    return;
+  }
+  memset(outCaps, 0, sizeof(*outCaps));
+  if (gpu_webgpuFormat(format) == WGPUTextureFormat_Undefined) {
+    return;
+  }
+
+  if (webgpu_isBCFormat(format)) {
+    outCaps->sampled = outCaps->filterable =
+      webgpu_hasAdapterFeature(adapter, WGPUFeatureName_TextureCompressionBC);
+    return;
+  }
+  if (webgpu_isETC2Format(format)) {
+    outCaps->sampled = outCaps->filterable = webgpu_hasAdapterFeature(
+      adapter,
+      WGPUFeatureName_TextureCompressionETC2
+    );
+    return;
+  }
+  if (webgpu_isASTCFormat(format)) {
+    outCaps->sampled = outCaps->filterable = webgpu_hasAdapterFeature(
+      adapter,
+      WGPUFeatureName_TextureCompressionASTC
+    );
+    return;
+  }
+
+  switch (format) {
+    case GPU_FORMAT_DEPTH16_UNORM:
+    case GPU_FORMAT_STENCIL8:
+    case GPU_FORMAT_DEPTH24_UNORM_STENCIL8:
+    case GPU_FORMAT_DEPTH32_FLOAT:
+      outCaps->sampled      = true;
+      outCaps->depthStencil = true;
+      return;
+    case GPU_FORMAT_DEPTH32_FLOAT_STENCIL8:
+      outCaps->sampled = outCaps->depthStencil = webgpu_hasAdapterFeature(
+        adapter,
+        WGPUFeatureName_Depth32FloatStencil8
+      );
+      return;
+    case GPU_FORMAT_RGB9E5_UFLOAT:
+      outCaps->sampled    = true;
+      outCaps->filterable = true;
+      return;
+    default:
+      break;
+  }
+
+  tier1 = webgpu_hasAdapterFeature(adapter,
+                                   WGPUFeatureName_TextureFormatsTier1);
+  wideNorm = webgpu_isWideNormFormat(format);
+  if (wideNorm &&
+      !tier1 &&
+      !webgpu_hasAdapterFeature(adapter,
+                                WGPUFeatureName_Unorm16TextureFormats)) {
+    return;
+  }
+
+  float32Filterable = webgpu_hasAdapterFeature(
+    adapter,
+    WGPUFeatureName_Float32Filterable
+  );
+  float32Blendable = webgpu_hasAdapterFeature(
+    adapter,
+    WGPUFeatureName_Float32Blendable
+  );
+  outCaps->sampled = true;
+  outCaps->filterable =
+    gpuFormatNumericType(format) == GPU_FORMAT_NUMERIC_FLOAT &&
+    !wideNorm &&
+    (!webgpu_isFloat32Format(format) || float32Filterable);
+
+  outCaps->colorAttachment = !wideNorm || tier1;
+  if (format == GPU_FORMAT_R8_SNORM ||
+      format == GPU_FORMAT_RG8_SNORM ||
+      format == GPU_FORMAT_RGBA8_SNORM) {
+    outCaps->colorAttachment = tier1;
+  } else if (format == GPU_FORMAT_RG11B10_UFLOAT) {
+    outCaps->colorAttachment = webgpu_hasAdapterFeature(
+      adapter,
+      WGPUFeatureName_RG11B10UfloatRenderable
+    );
+  }
+
+  outCaps->blendable = outCaps->colorAttachment &&
+                       gpuFormatNumericType(format) ==
+                         GPU_FORMAT_NUMERIC_FLOAT &&
+                       (!webgpu_isFloat32Format(format) ||
+                        float32Blendable);
+  outCaps->storage = !webgpu_isSRGBFormat(format) &&
+                     (webgpu_hasCoreStorage(format) || tier1);
+  if (format == GPU_FORMAT_BGRA8_UNORM) {
+    outCaps->storage = webgpu_hasAdapterFeature(
+      adapter,
+      WGPUFeatureName_BGRA8UnormStorage
+    );
+  }
+}
+
+static bool
 webgpu_supportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
   GPUAdapterWebGPU *native;
 
@@ -258,6 +448,9 @@ webgpu_supportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
     case GPU_FEATURE_TIMESTAMPS:
       return wgpuAdapterHasFeature(native->adapter,
                                    WGPUFeatureName_TimestampQuery);
+    case GPU_FEATURE_SHADER_F16:
+      return wgpuAdapterHasFeature(native->adapter,
+                                   WGPUFeatureName_ShaderF16);
     case GPU_FEATURE_INDIRECT_DRAW:
       return wgpuAdapterHasFeature(native->adapter,
                                    WGPUFeatureName_IndirectFirstInstance);
@@ -365,10 +558,29 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   WGPURequestDeviceCallbackInfo callbackInfo =
     WGPU_REQUEST_DEVICE_CALLBACK_INFO_INIT;
   WGPUDeviceDescriptor descriptor = WGPU_DEVICE_DESCRIPTOR_INIT;
-  WGPUFeatureName       requiredFeatures[3];
+  static const WGPUFeatureName formatFeatures[] = {
+    WGPUFeatureName_Depth32FloatStencil8,
+    WGPUFeatureName_TextureCompressionBC,
+    WGPUFeatureName_TextureCompressionBCSliced3D,
+    WGPUFeatureName_TextureCompressionETC2,
+    WGPUFeatureName_TextureCompressionASTC,
+    WGPUFeatureName_TextureCompressionASTCSliced3D,
+    WGPUFeatureName_RG11B10UfloatRenderable,
+    WGPUFeatureName_BGRA8UnormStorage,
+    WGPUFeatureName_Float32Filterable,
+    WGPUFeatureName_Float32Blendable,
+    WGPUFeatureName_TextureFormatsTier1,
+    WGPUFeatureName_TextureFormatsTier2,
+    WGPUFeatureName_Unorm16TextureFormats
+  };
+  WGPUFeatureName       requiredFeatures[20];
   GPUAdapterWebGPU    *native;
   WebGPUDeviceRequest *request;
   uint64_t             supportedMask;
+
+  _Static_assert(GPU_ARRAY_LEN(formatFeatures) + 4u <=
+                   GPU_ARRAY_LEN(requiredFeatures),
+                 "WebGPU device feature storage is too small");
 
   GPU__UNUSED(queueInfos);
   GPU__UNUSED(queueInfoCount);
@@ -381,6 +593,9 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   if (wgpuAdapterHasFeature(native->adapter,
                             WGPUFeatureName_TimestampQuery)) {
     supportedMask |= 1ull << GPU_FEATURE_TIMESTAMPS;
+  }
+  if (wgpuAdapterHasFeature(native->adapter, WGPUFeatureName_ShaderF16)) {
+    supportedMask |= 1ull << GPU_FEATURE_SHADER_F16;
   }
   if (wgpuAdapterHasFeature(native->adapter,
                             WGPUFeatureName_IndirectFirstInstance)) {
@@ -410,7 +625,10 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_TIMESTAMPS)) != 0u) {
     requiredFeatures[descriptor.requiredFeatureCount++] =
       WGPUFeatureName_TimestampQuery;
-    descriptor.requiredFeatures = requiredFeatures;
+  }
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u) {
+    requiredFeatures[descriptor.requiredFeatureCount++] =
+      WGPUFeatureName_ShaderF16;
   }
   if ((enabledFeatureMask &
        ((1ull << GPU_FEATURE_INDIRECT_DRAW) |
@@ -422,6 +640,14 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
     requiredFeatures[descriptor.requiredFeatureCount++] =
       WGPUFeatureName_MultiDrawIndirect;
   }
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(formatFeatures); i++) {
+    if (wgpuAdapterHasFeature(native->adapter, formatFeatures[i])) {
+      requiredFeatures[descriptor.requiredFeatureCount++] = formatFeatures[i];
+    }
+  }
+  descriptor.requiredFeatures = descriptor.requiredFeatureCount
+                                  ? requiredFeatures
+                                  : NULL;
   descriptor.deviceLostCallbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
   descriptor.deviceLostCallbackInfo.callback = webgpu_deviceLost;
   descriptor.deviceLostCallbackInfo.userdata1 = request;
@@ -472,6 +698,7 @@ webgpu_initDevice(GPUApiDevice *api) {
   api->getAdapterProperties = webgpu_getAdapterProperties;
   api->supportsFeature      = webgpu_supportsFeature;
   api->getLimits            = webgpu_getLimits;
+  api->getFormatCapabilities = webgpu_getFormatCapabilities;
   api->requestDevice        = webgpu_requestDevice;
   api->destroyDevice        = webgpu_destroyDevice;
 }
