@@ -19,6 +19,7 @@ typedef struct WebGPUIndexedDepth {
   GPURenderPipeline *pipeline;
   GPUBuffer         *vertexBuffer;
   GPUBuffer         *indexBuffer;
+  GPUBuffer         *indirectBuffer;
   GPUBuffer         *occlusionBuffer;
   GPUQuerySet       *occlusionQuery;
   GPUTexture        *depthTexture;
@@ -52,6 +53,14 @@ static const uint16_t kCubeIndices[] = {
   0u, 3u, 7u, 0u, 7u, 4u,
   0u, 4u, 5u, 0u, 5u, 1u,
   4u, 7u, 6u, 4u, 6u, 5u
+};
+
+static const uint32_t kIndexedDraw[] = {
+  (uint32_t)(sizeof(kCubeIndices) / sizeof(kCubeIndices[0])),
+  1u,
+  0u,
+  0u,
+  0u
 };
 
 static WebGPUIndexedDepth app;
@@ -249,6 +258,21 @@ create_geometry(WebGPUIndexedDepth *state) {
                       &state->occlusionBuffer) != GPU_OK) {
     return 0;
   }
+  if (GPUIsFeatureEnabled(state->device, GPU_FEATURE_INDIRECT_DRAW)) {
+    info.label     = "indexed-depth-webgpu-indirect";
+    info.sizeBytes = sizeof(kIndexedDraw);
+    info.usage     = GPU_BUFFER_USAGE_INDIRECT | GPU_BUFFER_USAGE_COPY_DST;
+    if (GPUCreateBuffer(state->device,
+                        &info,
+                        &state->indirectBuffer) != GPU_OK ||
+        GPUQueueWriteBuffer(state->queue,
+                            state->indirectBuffer,
+                            0u,
+                            kIndexedDraw,
+                            sizeof(kIndexedDraw)) != GPU_OK) {
+      return 0;
+    }
+  }
   return 1;
 }
 
@@ -314,12 +338,16 @@ render_frame(void *userData) {
   if (!state->occlusionRecorded) {
     GPUBeginOcclusionQuery(pass, state->occlusionQuery, 0u);
   }
-  GPUDrawIndexed(pass,
-                 (uint32_t)(sizeof(kCubeIndices) / sizeof(kCubeIndices[0])),
-                 1u,
-                 0u,
-                 0,
-                 0u);
+  if (state->indirectBuffer) {
+    GPUDrawIndexedIndirect(pass, state->indirectBuffer, 0u);
+  } else {
+    GPUDrawIndexed(pass,
+                   (uint32_t)(sizeof(kCubeIndices) / sizeof(kCubeIndices[0])),
+                   1u,
+                   0u,
+                   0,
+                   0u);
+  }
   if (!state->occlusionRecorded) {
     GPUEndOcclusionQuery(pass);
   }

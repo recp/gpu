@@ -104,7 +104,10 @@ webgpu_device_ready(GPUResult result, GPUDevice *device, void *userData) {
 static void
 webgpu_adapter_ready(GPUResult result, GPUAdapter *adapter, void *userData) {
   static const GPUFeature optionalFeatures[] = {
-    GPU_FEATURE_TIMESTAMPS
+    GPU_FEATURE_COMPUTE,
+    GPU_FEATURE_TIMESTAMPS,
+    GPU_FEATURE_INDIRECT_DRAW,
+    GPU_FEATURE_MULTI_DRAW
   };
   GPUDeviceCreateInfo info = {0};
   WebGPURequest *request;
@@ -119,9 +122,9 @@ webgpu_adapter_ready(GPUResult result, GPUAdapter *adapter, void *userData) {
   }
 
   request->adapter = adapter;
-  info.chain.sType          = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  info.chain.structSize     = sizeof(info);
-  info.optional.pFeatures   = optionalFeatures;
+  info.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  info.chain.structSize      = sizeof(info);
+  info.optional.pFeatures    = optionalFeatures;
   info.optional.featureCount = GPU_ARRAY_LEN(optionalFeatures);
   result = GPURequestDevice(adapter, &info, webgpu_device_ready, request);
   if (result != GPU_OK && !request->completed) {

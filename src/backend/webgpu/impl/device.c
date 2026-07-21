@@ -258,6 +258,14 @@ webgpu_supportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
     case GPU_FEATURE_TIMESTAMPS:
       return wgpuAdapterHasFeature(native->adapter,
                                    WGPUFeatureName_TimestampQuery);
+    case GPU_FEATURE_INDIRECT_DRAW:
+      return wgpuAdapterHasFeature(native->adapter,
+                                   WGPUFeatureName_IndirectFirstInstance);
+    case GPU_FEATURE_MULTI_DRAW:
+      return wgpuAdapterHasFeature(native->adapter,
+                                   WGPUFeatureName_IndirectFirstInstance) &&
+             wgpuAdapterHasFeature(native->adapter,
+                                   WGPUFeatureName_MultiDrawIndirect);
     default:
       return false;
   }
@@ -357,7 +365,7 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   WGPURequestDeviceCallbackInfo callbackInfo =
     WGPU_REQUEST_DEVICE_CALLBACK_INFO_INIT;
   WGPUDeviceDescriptor descriptor = WGPU_DEVICE_DESCRIPTOR_INIT;
-  WGPUFeatureName       requiredFeatures[1];
+  WGPUFeatureName       requiredFeatures[3];
   GPUAdapterWebGPU    *native;
   WebGPUDeviceRequest *request;
   uint64_t             supportedMask;
@@ -373,6 +381,14 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   if (wgpuAdapterHasFeature(native->adapter,
                             WGPUFeatureName_TimestampQuery)) {
     supportedMask |= 1ull << GPU_FEATURE_TIMESTAMPS;
+  }
+  if (wgpuAdapterHasFeature(native->adapter,
+                            WGPUFeatureName_IndirectFirstInstance)) {
+    supportedMask |= 1ull << GPU_FEATURE_INDIRECT_DRAW;
+    if (wgpuAdapterHasFeature(native->adapter,
+                              WGPUFeatureName_MultiDrawIndirect)) {
+      supportedMask |= 1ull << GPU_FEATURE_MULTI_DRAW;
+    }
   }
   if ((enabledFeatureMask & ~supportedMask) != 0u) {
     return GPU_ERROR_UNSUPPORTED;
@@ -395,6 +411,16 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
     requiredFeatures[descriptor.requiredFeatureCount++] =
       WGPUFeatureName_TimestampQuery;
     descriptor.requiredFeatures = requiredFeatures;
+  }
+  if ((enabledFeatureMask &
+       ((1ull << GPU_FEATURE_INDIRECT_DRAW) |
+        (1ull << GPU_FEATURE_MULTI_DRAW))) != 0u) {
+    requiredFeatures[descriptor.requiredFeatureCount++] =
+      WGPUFeatureName_IndirectFirstInstance;
+  }
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_MULTI_DRAW)) != 0u) {
+    requiredFeatures[descriptor.requiredFeatureCount++] =
+      WGPUFeatureName_MultiDrawIndirect;
   }
   descriptor.deviceLostCallbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
   descriptor.deviceLostCallbackInfo.callback = webgpu_deviceLost;
