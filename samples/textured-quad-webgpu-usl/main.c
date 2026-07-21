@@ -12,7 +12,11 @@ typedef struct FragmentUniforms {
 } FragmentUniforms;
 
 enum {
-  WARM_FRAME_COUNT = 8u
+  TRANSFER_ROW_PITCH = 8u,
+  TRANSFER_SIZE      = TRANSFER_ROW_PITCH * 2u,
+  READBACK_ROW_PITCH = 256u,
+  READBACK_SIZE      = READBACK_ROW_PITCH * 2u,
+  WARM_FRAME_COUNT   = 8u
 };
 
 typedef struct WebGPUTexturedQuad {
@@ -27,7 +31,11 @@ typedef struct WebGPUTexturedQuad {
   GPURenderPipeline *pipeline;
   GPUBuffer         *vertexBuffer;
   GPUBuffer         *uniformBuffer;
+  GPUBuffer         *copySourceBuffer;
+  GPUBuffer         *copyStagingBuffer;
+  GPUBuffer         *copyReadbackBuffer;
   GPUTexture        *texture;
+  GPUTexture        *copySourceTexture;
   GPUTextureView    *textureView;
   GPUSampler        *sampler;
   GPUBindGroup      *fragmentGroup;
@@ -47,7 +55,7 @@ static const QuadVertex kQuadVertices[] = {
   { {  0.8f,  0.8f, 0.0f, 1.0f }, { 1.0f, 0.0f } }
 };
 
-static const uint8_t kCheckerPixels[] = {
+static const uint8_t kCheckerUpload[TRANSFER_SIZE] = {
   255,   0,   0, 255,    0, 255,   0, 255,
     0,   0, 255, 255,  255, 255, 255, 255
 };
@@ -144,12 +152,133 @@ create_pipeline(WebGPUTexturedQuad *state) {
 }
 
 static int
+create_transfer_texture(WebGPUTexturedQuad *state) {
+  GPUCommandBuffer              *cmdb;
+  GPUCopyPassEncoder            *copy;
+  GPUCommandBuffer              *submitBuffers[1];
+  GPUBufferCreateInfo            bufferInfo = {0};
+  GPUTextureCreateInfo           textureInfo = {0};
+  GPUBufferCopyRegion            bufferCopy = {0};
+  GPUBufferTextureCopyRegion     bufferTextureCopy = {0};
+  GPUTextureToTextureCopyRegion  textureCopy = {0};
+  GPUQueueSubmitInfo             submit = {0};
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "textured-quad-webgpu-copy-source";
+  bufferInfo.sizeBytes        = TRANSFER_SIZE;
+  bufferInfo.usage = GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(state->device,
+                      &bufferInfo,
+                      &state->copySourceBuffer) != GPU_OK ||
+      GPUQueueWriteBuffer(state->queue,
+                          state->copySourceBuffer,
+                          0u,
+                          kCheckerUpload,
+                          sizeof(kCheckerUpload)) != GPU_OK) {
+    return 0;
+  }
+
+  bufferInfo.label = "textured-quad-webgpu-copy-staging";
+  if (GPUCreateBuffer(state->device,
+                      &bufferInfo,
+                      &state->copyStagingBuffer) != GPU_OK) {
+    return 0;
+  }
+  bufferInfo.label = "textured-quad-webgpu-copy-readback";
+  bufferInfo.sizeBytes = READBACK_SIZE;
+  bufferInfo.usage = GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(state->device,
+                      &bufferInfo,
+                      &state->copyReadbackBuffer) != GPU_OK) {
+    return 0;
+  }
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "textured-quad-webgpu-copy-source-texture";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = 2u;
+  textureInfo.height           = 2u;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage = GPU_TEXTURE_USAGE_COPY_SRC | GPU_TEXTURE_USAGE_COPY_DST;
+  if (GPUCreateTexture(state->device,
+                       &textureInfo,
+                       &state->copySourceTexture) != GPU_OK) {
+    return 0;
+  }
+  textureInfo.label = "textured-quad-webgpu-usl-texture";
+  textureInfo.usage = GPU_TEXTURE_USAGE_SAMPLED |
+                      GPU_TEXTURE_USAGE_COPY_SRC |
+                      GPU_TEXTURE_USAGE_COPY_DST;
+  if (GPUCreateTexture(state->device,
+                       &textureInfo,
+                       &state->texture) != GPU_OK) {
+    return 0;
+  }
+
+  cmdb = NULL;
+  if (GPUAcquireCommandBuffer(state->queue,
+                              "textured-quad-webgpu-transfer",
+                              &cmdb) != GPU_OK ||
+      !cmdb || !(copy = GPUBeginCopyPass(cmdb, "checker-transfer"))) {
+    if (cmdb) {
+      (void)GPUDiscardCommandBuffer(cmdb);
+    }
+    return 0;
+  }
+
+  bufferCopy.sizeBytes = TRANSFER_SIZE;
+  GPUCopyBufferToBuffer(copy,
+                        state->copySourceBuffer,
+                        state->copyStagingBuffer,
+                        &bufferCopy);
+
+  bufferTextureCopy.texture.texture.aspect = GPU_TEXTURE_ASPECT_ALL;
+  bufferTextureCopy.texture.width           = 2u;
+  bufferTextureCopy.texture.height          = 2u;
+  bufferTextureCopy.texture.depth           = 1u;
+  bufferTextureCopy.texture.layerCount      = 1u;
+  bufferTextureCopy.bytesPerRow             = TRANSFER_ROW_PITCH;
+  bufferTextureCopy.rowsPerImage            = 2u;
+  GPUCopyBufferToTexture(copy,
+                         state->copyStagingBuffer,
+                         state->copySourceTexture,
+                         &bufferTextureCopy);
+
+  textureCopy.src.aspect = GPU_TEXTURE_ASPECT_ALL;
+  textureCopy.dst.aspect = GPU_TEXTURE_ASPECT_ALL;
+  textureCopy.width       = 2u;
+  textureCopy.height      = 2u;
+  textureCopy.depth       = 1u;
+  textureCopy.layerCount  = 1u;
+  GPUCopyTextureToTexture(copy,
+                          state->copySourceTexture,
+                          state->texture,
+                          &textureCopy);
+  bufferTextureCopy.bytesPerRow = READBACK_ROW_PITCH;
+  GPUCopyTextureToBuffer(copy,
+                         state->texture,
+                         state->copyReadbackBuffer,
+                         &bufferTextureCopy);
+  GPUEndCopyPass(copy);
+
+  submitBuffers[0]          = cmdb;
+  submit.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submit.chain.structSize   = sizeof(submit);
+  submit.ppCommandBuffers   = submitBuffers;
+  submit.commandBufferCount = 1u;
+  return GPUQueueSubmit(state->queue, &submit) == GPU_OK;
+}
+
+static int
 create_resources(WebGPUTexturedQuad *state) {
   const FragmentUniforms uniforms = { { 1.0f, 0.86f, 0.72f, 1.0f } };
   GPUBufferCreateInfo vertexInfo = {0};
   GPUBufferCreateInfo uniformInfo = {0};
-  GPUTextureCreateInfo textureInfo = {0};
-  GPUTextureWriteRegion writeRegion = {0};
   GPUTextureViewCreateInfo viewInfo = {0};
   GPUSamplerCreateInfo samplerInfo = {0};
   GPUBindGroupEntry fragmentEntries[2] = {0};
@@ -191,37 +320,8 @@ create_resources(WebGPUTexturedQuad *state) {
     return 0;
   }
 
-  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
-  textureInfo.chain.structSize = sizeof(textureInfo);
-  textureInfo.label            = "textured-quad-webgpu-usl-texture";
-  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
-  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
-  textureInfo.width            = 2u;
-  textureInfo.height           = 2u;
-  textureInfo.depthOrLayers    = 1u;
-  textureInfo.mipLevelCount    = 1u;
-  textureInfo.sampleCount      = 1u;
-  textureInfo.usage = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
-  if (GPUCreateTexture(state->device,
-                       &textureInfo,
-                       &state->texture) != GPU_OK) {
-    set_status("GPU: failed to create the checker texture", 1);
-    return 0;
-  }
-
-  writeRegion.aspect         = GPU_TEXTURE_ASPECT_ALL;
-  writeRegion.width          = 2u;
-  writeRegion.height         = 2u;
-  writeRegion.depth          = 1u;
-  writeRegion.layerCount     = 1u;
-  writeRegion.bytesPerRow    = 8u;
-  writeRegion.rowsPerImage   = 2u;
-  if (GPUQueueWriteTexture(state->queue,
-                           state->texture,
-                           &writeRegion,
-                           kCheckerPixels,
-                           sizeof(kCheckerPixels)) != GPU_OK) {
-    set_status("GPU: failed to upload the checker texture", 1);
+  if (!create_transfer_texture(state)) {
+    set_status("GPU: failed to create the checker transfer chain", 1);
     return 0;
   }
 

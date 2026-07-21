@@ -696,7 +696,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   set(GPU_WEBGPU_SAMPLE_TITLE "Texture path")
   set(GPU_WEBGPU_SAMPLE_KIND "Render / texture + sampler")
   set(GPU_WEBGPU_SAMPLE_DESCRIPTION
-      "A sampled checkerboard validating USL reflection, typed texture layouts, and bind groups.")
+      "A copied checkerboard validating transfer, USL reflection, typed texture layouts, and bind groups.")
   set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/textured-quad.c")
   set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/textured-quad.usl")
   set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/textured-quad.wgsl")

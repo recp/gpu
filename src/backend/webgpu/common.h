@@ -73,10 +73,12 @@ typedef struct GPUCommandWebGPU {
   GPURenderPassDesc                    renderPass;
   GPURenderPassEncoder                 render;
   GPUComputePassEncoder                compute;
+  GPUCopyPassEncoder                   copy;
   WGPURenderPassDescriptor             renderPassDesc;
   uint64_t                             boundIndexOffset;
   WGPUIndexFormat                      boundIndexFormat;
   atomic_bool                          inUse;
+  bool                                 copyDebugGroup;
   WGPURenderPassColorAttachment        colorAttachments[
     GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS
   ];
