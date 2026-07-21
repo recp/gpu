@@ -1515,7 +1515,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   set(GPU_WEBGPU_SAMPLE_TITLE "Descriptor arrays")
   set(GPU_WEBGPU_SAMPLE_KIND "Binding / fixed descriptor arrays")
   set(GPU_WEBGPU_SAMPLE_DESCRIPTION
-      "Four reflected textures and samplers use compile-time array indices through deterministic WebGPU binding ranges.")
+      "Reflected texture, sampler, and buffer arrays use compile-time indices through deterministic WebGPU binding ranges.")
   set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/descriptor-array.c")
   set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/descriptor-array.usl")
   set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/descriptor-array.wgsl")
