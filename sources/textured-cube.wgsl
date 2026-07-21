@@ -28,7 +28,7 @@ struct usl_buffer_g0_b0 {
 
 @vertex
 fn cube_vs(v: CubeIn) -> CubeOut {
-    return CubeOut((vec4<f32>(usl_g0_b0.value.mvp) * vec4<f32>(v.position, 1.0)), normalize((vec4<f32>(usl_g0_b0.value.model) * vec4<f32>(v.normal, 0.0)).xyz), v.uv);
+    return CubeOut((usl_g0_b0.value.mvp * vec4<f32>(v.position, 1.0)), normalize((usl_g0_b0.value.model * vec4<f32>(v.normal, 0.0)).xyz), v.uv);
 }
 
 @fragment

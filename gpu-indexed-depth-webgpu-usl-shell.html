@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="gallery.css?v=7">
+  <link rel="stylesheet" href="gallery.css?v=14">
   <title>Indexed depth · GPU + USL</title>
 </head>
 <body class="sample-page"
@@ -59,13 +59,22 @@
     </section>
   </main>
 
-  <script src="sample.js?v=10" defer></script>
   <script>
+    const gpuPageParams = new URLSearchParams(window.location.search);
+    const gpuAssetVersion = encodeURIComponent(
+      gpuPageParams.get("v") || "14"
+    );
     var Module = {
       locateFile(path, prefix) {
-        return `${prefix}${path}?v=10`;
+        return `${prefix}${path}?v=${gpuAssetVersion}`;
       }
     };
+
+    const sampleRuntime = document.createElement("script");
+
+    sampleRuntime.src = `sample.js?v=${gpuAssetVersion}`;
+    sampleRuntime.async = false;
+    document.body.appendChild(sampleRuntime);
   </script>
   <template id="runtime-script">{{{ SCRIPT }}}</template>
   <script>
@@ -75,8 +84,8 @@
       .getAttribute("src");
     const runtime = document.createElement("script");
 
-    runtime.src = `${runtimeSource}?v=10`;
-    runtime.async = true;
+    runtime.src = `${runtimeSource}?v=${gpuAssetVersion}`;
+    runtime.async = false;
     document.body.appendChild(runtime);
   </script>
 </body>
