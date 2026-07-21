@@ -1,11 +1,16 @@
 #include "../common/webgpu.h"
 
+#include <math.h>
 #include <stdio.h>
 
 typedef struct GeneratedVertex {
   float position[4];
   float color[4];
 } GeneratedVertex;
+
+typedef struct ComputeConstants {
+  float tint[4];
+} ComputeConstants;
 
 typedef struct WebGPUCompute {
   GPUInstance        *instance;
@@ -42,6 +47,7 @@ static int
 create_resources(WebGPUCompute *state) {
   GPUComputePipelineCreateInfo computeInfo = {0};
   GPURenderPipelineCreateInfo  renderInfo = {0};
+  GPUShaderReflection          reflection = {0};
   GPUVertexAttribute           attributes[2] = {0};
   GPUVertexBufferLayout        vertexLayout = {0};
   GPUColorTargetState          color = {0};
@@ -69,7 +75,16 @@ create_resources(WebGPUCompute *state) {
                                          &state->library);
   free(artifact);
   if (result != GPU_OK || !state->library ||
-      GPUCreateShaderLayout(state->device,
+      GPUGetShaderReflection(state->library, &reflection) != GPU_OK ||
+      reflection.pushConstantSizeBytes != sizeof(ComputeConstants) ||
+      reflection.pushConstantStages != GPU_SHADER_STAGE_COMPUTE_BIT) {
+    GPUFreeShaderReflection(&reflection);
+    set_status("GPU: unexpected compute push-constant reflection", 1);
+    return 0;
+  }
+  GPUFreeShaderReflection(&reflection);
+
+  if (GPUCreateShaderLayout(state->device,
                             state->library,
                             &state->shaderLayout) != GPU_OK ||
       !state->shaderLayout ||
@@ -217,6 +232,8 @@ render_frame(void *userData) {
   GPUBufferBinding             vertex = {0};
   GPUBufferBarrier             barrier = {0};
   GPUBarrierBatch              barriers = {0};
+  ComputeConstants             constants;
+  float                        phase;
 
   state = userData;
   if (!resize_canvas(state)) {
@@ -247,6 +264,15 @@ render_frame(void *userData) {
   }
   GPUBindComputePipeline(compute, state->computePipeline);
   GPUBindComputeGroup(compute, 0u, state->computeGroup, 0u, NULL);
+  phase             = (float)(emscripten_get_now() * 0.001);
+  constants.tint[0] = 0.60f + 0.40f * sinf(phase);
+  constants.tint[1] = 0.60f + 0.40f * sinf(phase + 2.0943951f);
+  constants.tint[2] = 0.60f + 0.40f * sinf(phase + 4.1887902f);
+  constants.tint[3] = 1.0f;
+  GPUSetComputePushConstants(compute,
+                             0u,
+                             (uint32_t)sizeof(constants),
+                             &constants);
   GPUDispatch(compute, 3u, 1u, 1u);
   GPUEndComputePass(compute);
 
@@ -333,7 +359,7 @@ webgpu_ready(GPUResult  result,
     return;
   }
 
-  set_status("GPU: WebGPU USL compute/storage ready", 0);
+  set_status("GPU: WebGPU USL compute push constants ready", 0);
   emscripten_set_main_loop_arg(render_frame, state, 0, true);
 }
 

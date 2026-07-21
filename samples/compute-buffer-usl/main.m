@@ -19,6 +19,10 @@ typedef struct GeneratedVertex {
   float color[4];
 } GeneratedVertex;
 
+typedef struct ComputeConstants {
+  float tint[4];
+} ComputeConstants;
+
 @interface ComputeBufferUSLApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
 @private
   NSWindow           *_window;
@@ -60,6 +64,7 @@ static const GeneratedVertex kExpectedVertices[] = {
 static const uint16_t kIndices[] = {0u, 1u, 2u};
 static const uint32_t kDispatchArgs[] = {3u, 1u, 1u};
 static const uint32_t kExpectedDrawArgs[] = {3u, 1u, 0u, 0u, 0u};
+static const ComputeConstants kComputeConstants = {{1.0f, 1.0f, 1.0f, 1.0f}};
 
 static volatile int gComputeBufferValidationFailed = 0;
 
@@ -364,6 +369,10 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   if (!_skipComputeBind) {
     GPUBindComputeGroup(compute, 1, _computeBindGroup, 0, NULL);
   }
+  GPUSetComputePushConstants(compute,
+                             0u,
+                             (uint32_t)sizeof(kComputeConstants),
+                             &kComputeConstants);
   GPUDispatchIndirect(compute, _dispatchBuffer, 0u);
   GPUEndComputePass(compute);
   compute = NULL;

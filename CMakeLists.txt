@@ -845,7 +845,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   set(GPU_WEBGPU_SAMPLE_TITLE "Compute handoff")
   set(GPU_WEBGPU_SAMPLE_KIND "Compute / storage buffer")
   set(GPU_WEBGPU_SAMPLE_DESCRIPTION
-      "Compute writes the vertex stream; render consumes it in the same command buffer without readback.")
+      "Compute uses per-dispatch constants to write the vertex stream; render consumes it without readback.")
   set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/compute.c")
   set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/compute.usl")
   set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/compute.wgsl")

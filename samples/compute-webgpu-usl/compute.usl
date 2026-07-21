@@ -3,6 +3,10 @@ struct GeneratedVertex {
   color:    float4
 }
 
+struct ComputeConstants {
+  tint: float4
+}
+
 vertex VSIn {
   position: float4
   color:    float4
@@ -14,16 +18,17 @@ struct VSOut {
 }
 
 kern(1, 1, 1) fill_vertices(inout vertices: [GeneratedVertex] #buffer(0),
+                            draw: ComputeConstants #push_constant,
                             gid: uint3 #global_id) {
   if (gid.x == 0) {
     vertices[gid.x].position = float4(-0.68, -0.62, 0.0, 1.0)
-    vertices[gid.x].color    = float4( 1.0,  0.18, 0.08, 1.0)
+    vertices[gid.x].color    = float4( 1.0,  0.18, 0.08, 1.0) * draw.tint
   } else if (gid.x == 1) {
     vertices[gid.x].position = float4( 0.68, -0.62, 0.0, 1.0)
-    vertices[gid.x].color    = float4( 0.12, 1.0, 0.32, 1.0)
+    vertices[gid.x].color    = float4( 0.12, 1.0, 0.32, 1.0) * draw.tint
   } else {
     vertices[gid.x].position = float4( 0.0,  0.70, 0.0, 1.0)
-    vertices[gid.x].color    = float4( 0.12, 0.38, 1.0, 1.0)
+    vertices[gid.x].color    = float4( 0.12, 0.38, 1.0, 1.0) * draw.tint
   }
 }
 

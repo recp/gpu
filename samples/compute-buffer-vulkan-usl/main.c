@@ -11,6 +11,10 @@ typedef struct GeneratedVertex {
   float color[4];
 } GeneratedVertex;
 
+typedef struct ComputeConstants {
+  float tint[4];
+} ComputeConstants;
+
 static const GeneratedVertex kExpectedVertices[] = {
   {{-0.6f, -0.6f, 0.0f, 1.0f}, {1.0f, 0.2f, 0.1f, 1.0f}},
   {{ 0.6f, -0.6f, 0.0f, 1.0f}, {0.1f, 1.0f, 0.3f, 1.0f}},
@@ -91,6 +95,7 @@ main(int argc, char **argv) {
   uint32_t                     drawArgs[5] = {0};
   const uint32_t               expectedDrawArgs[5] = {3u, 1u, 0u, 0u, 0u};
   const uint32_t               dispatchArgs[3] = {3u, 1u, 1u};
+  const ComputeConstants       constants = {{1.0f, 1.0f, 1.0f, 1.0f}};
   const GPUBindGroupLayoutEntry *layoutEntries;
   GPUResult                      result;
   uint64_t                       artifactSize;
@@ -271,6 +276,10 @@ main(int argc, char **argv) {
   }
   GPUBindComputePipeline(pass, pipeline);
   GPUBindComputeGroup(pass, 1u, bindGroup, 0u, NULL);
+  GPUSetComputePushConstants(pass,
+                             0u,
+                             (uint32_t)sizeof(constants),
+                             &constants);
   GPUDispatchIndirect(pass, dispatchBuffer, 0u);
   GPUEndComputePass(pass);
   pass = NULL;
