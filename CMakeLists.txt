@@ -1581,6 +1581,80 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${GPU_WEBGPU_GALLERY_DIR}"
   )
 
+  set(GPU_WEBGPU_MSAA_SAMPLES_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+  set(GPU_WEBGPU_MSAA_SAMPLES_SOURCE
+      "${GPU_WEBGPU_MSAA_SAMPLES_DIR}/msaa_samples.usl")
+  set(GPU_WEBGPU_MSAA_SAMPLES_US
+      "${GPU_WEBGPU_MSAA_SAMPLES_DIR}/msaa_samples.us")
+  set(GPU_WEBGPU_SAMPLE_TITLE "MSAA samples")
+  set(GPU_WEBGPU_SAMPLE_KIND "Render + binding / per-sample read")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "A 4x color target is rebound and each multisample value is read explicitly in a second render pass.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/msaa-samples.c")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/msaa-samples.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/msaa-samples.wgsl")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-msaa-samples-webgpu-usl-shell.html"
+    @ONLY
+  )
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_MSAA_SAMPLES_US}"
+    BYPRODUCTS "${GPU_WEBGPU_MSAA_SAMPLES_SOURCE}.wgsl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${GPU_WEBGPU_MSAA_SAMPLES_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/msaa-samples-webgpu-usl/msaa_samples.usl"
+            "${GPU_WEBGPU_MSAA_SAMPLES_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_MSAA_SAMPLES_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/msaa-samples-webgpu-usl/main.c"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/msaa-samples.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_MSAA_SAMPLES_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/msaa-samples.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_MSAA_SAMPLES_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/msaa-samples.wgsl"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/msaa-samples-webgpu-usl/msaa_samples.usl"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/msaa-samples-webgpu-usl/main.c"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-msaa-samples-artifact
+    DEPENDS "${GPU_WEBGPU_MSAA_SAMPLES_US}"
+  )
+
+  add_executable(gpu-msaa-samples-webgpu-usl
+    samples/msaa-samples-webgpu-usl/main.c
+    ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
+  )
+  target_link_libraries(gpu-msaa-samples-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-msaa-samples-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_MSAA_SAMPLES_US}@/msaa_samples.us"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-msaa-samples-webgpu-usl-shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-msaa-samples-webgpu-usl
+                   gpu-webgpu-msaa-samples-artifact)
+  set_target_properties(gpu-msaa-samples-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-msaa-samples-webgpu-usl-shell.html;${GPU_WEBGPU_MSAA_SAMPLES_US}"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${GPU_WEBGPU_GALLERY_DIR}"
+  )
+
   set(GPU_WEBGPU_DESCRIPTOR_ARRAY_DIR
       "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
   set(GPU_WEBGPU_DESCRIPTOR_ARRAY_SOURCE

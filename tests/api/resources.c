@@ -712,7 +712,16 @@ check_resource_validation(GPUDevice *device) {
     fprintf(stderr, "texture create accepted multisampled copy texture\n");
     return 0;
   }
+  textureInfo.usage = GPU_TEXTURE_USAGE_COLOR_TARGET |
+                      GPU_TEXTURE_USAGE_SAMPLED;
+  texture = NULL;
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
+    fprintf(stderr, "texture create rejected multisampled sampled texture\n");
+    return 0;
+  }
+  GPUDestroyTexture(texture);
   textureInfo.sampleCount = 1u;
+  textureInfo.usage = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
 
   textureInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   texture = (GPUTexture *)(uintptr_t)1u;

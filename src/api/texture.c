@@ -152,7 +152,6 @@ gpuValidateTextureCreateInfo(const GPUDevice            *device,
                         GPU_TEXTURE_USAGE_DEPTH_STENCIL)) == 0u ||
         (info->usage & (GPU_TEXTURE_USAGE_COPY_SRC |
                         GPU_TEXTURE_USAGE_COPY_DST |
-                        GPU_TEXTURE_USAGE_SAMPLED |
                         GPU_TEXTURE_USAGE_STORAGE)) != 0u))) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }

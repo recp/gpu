@@ -884,7 +884,9 @@ gpu_textureSampleTypeFromUSL(const USLRuntimeTypeDesc *type) {
     case USL_RUNTIME_ELEM_U64:
       return GPU_TEXTURE_SAMPLE_TYPE_UINT;
     default:
-      return GPU_TEXTURE_SAMPLE_TYPE_FLOAT;
+      return type && type->is_multisampled
+               ? GPU_TEXTURE_SAMPLE_TYPE_UNFILTERABLE_FLOAT
+               : GPU_TEXTURE_SAMPLE_TYPE_FLOAT;
   }
 }
 

@@ -1,0 +1,50 @@
+struct SourceOut {
+  position: float4 #position
+  color:    float3
+}
+
+struct PreviewOut {
+  position: float4 #position
+  uv:       float2
+}
+
+vert sample_source_vs(vertexId: uint #vertex_id) -> SourceOut {
+  if (vertexId == 0) {
+    return SourceOut { float4(0.0, 0.82, 0.0, 1.0), float3(1.0, 0.24, 0.04) }
+  }
+  if (vertexId == 1) {
+    return SourceOut { float4(-0.84, -0.72, 0.0, 1.0), float3(0.08, 0.68, 1.0) }
+  }
+  return SourceOut { float4(0.84, -0.72, 0.0, 1.0), float3(0.24, 1.0, 0.38) }
+}
+
+frag sample_source_fs(input: SourceOut #stage_in) -> float4 {
+  return float4(input.color, 1.0)
+}
+
+vert sample_preview_vs(vertexId: uint #vertex_id) -> PreviewOut {
+  if (vertexId == 0) { return PreviewOut { float4(-1.0, -1.0, 0.0, 1.0), float2(0.0, 1.0) } }
+  if (vertexId == 1) { return PreviewOut { float4( 1.0, -1.0, 0.0, 1.0), float2(1.0, 1.0) } }
+  if (vertexId == 2) { return PreviewOut { float4(-1.0,  1.0, 0.0, 1.0), float2(0.0, 0.0) } }
+  if (vertexId == 3) { return PreviewOut { float4(-1.0,  1.0, 0.0, 1.0), float2(0.0, 0.0) } }
+  if (vertexId == 4) { return PreviewOut { float4( 1.0, -1.0, 0.0, 1.0), float2(1.0, 1.0) } }
+  return PreviewOut { float4(1.0, 1.0, 0.0, 1.0), float2(1.0, 0.0) }
+}
+
+frag sample_preview_fs(input: PreviewOut #stage_in,
+                       colorSamples: texture2d_ms<float> #texture(0)) -> float4 {
+  let size        = float2(float(colorSamples.get_width()),
+                           float(colorSamples.get_height()))
+  let sampleCount = colorSamples.get_num_samples()
+  let sampleX     = input.uv.x * float(sampleCount)
+  let sampleIndex = min(uint(sampleX), sampleCount - 1)
+  let sampleUV    = float2(sampleX - float(sampleIndex), input.uv.y)
+  let coord       = int2(sampleUV * (size - float2(1.0)))
+  let color       = colorSamples.read(coord, sampleIndex)
+  let xBit        = float(sampleIndex & 1)
+  let yBit        = float((sampleIndex >> 1) & 1)
+  let tint        = float3(0.25 + 0.75 * xBit,
+                           0.25 + 0.75 * yBit,
+                           1.0 - 0.6 * xBit * yBit)
+  return color * float4(tint, 1.0) + float4(tint * 0.035, 0.0)
+}
