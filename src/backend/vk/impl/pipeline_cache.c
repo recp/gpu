@@ -23,10 +23,8 @@
 #include <stdint.h>
 #if defined(_WIN32) || defined(WIN32)
 # include <direct.h>
-# include <process.h>
 #else
 # include <sys/stat.h>
-# include <unistd.h>
 #endif
 
 #ifdef VK_KHR_pipeline_binary
@@ -690,9 +688,7 @@ vk__writeStoredBinaries(const VKPipelineCache       *native,
   char                       *path;
   char                       *temporaryPath;
   FILE                       *file;
-  size_t                      pathLength;
   bool                        written;
-  int                         processId;
 
   if (!native || !native->diskBinary || !vk__keyValid(pipelineKey) ||
       !set || set->count == 0u ||
@@ -722,23 +718,11 @@ vk__writeStoredBinaries(const VKPipelineCache       *native,
   if (!path) {
     return false;
   }
-  pathLength = strlen(path);
-#if defined(_WIN32) || defined(WIN32)
-  processId = _getpid();
-#else
-  processId = (int)getpid();
-#endif
-  temporaryPath = malloc(pathLength + 64u);
+  temporaryPath = gpuCacheFileTemporaryPath(path, native);
   if (!temporaryPath) {
     free(path);
     return false;
   }
-  snprintf(temporaryPath,
-           pathLength + 64u,
-           "%s.tmp.%d.%p",
-           path,
-           processId,
-           (const void *)native);
   file    = fopen(temporaryPath, "wb");
   written = file && fwrite(&header, sizeof(header), 1u, file) == 1u;
   for (uint32_t i = 0u; written && i < set->count; i++) {
@@ -1007,7 +991,9 @@ vk__createPipelineCached(GPUDeviceVk      *device,
   VKPipelineCache       *native;
   VKPipelineBinarySet    binaries = {0};
   VkPipelineBinaryKeyKHR pipelineKey = {0};
+  GPUCacheFileGuard      binaryGuard = {0};
   VkPipelineCache        classicCache;
+  char                  *binaryPath;
   VkResult               result;
   bool                   havePipelineKey;
 
@@ -1036,6 +1022,17 @@ vk__createPipelineCached(GPUDeviceVk      *device,
                     vk__getPipelineKey(device,
                                        info,
                                        &pipelineKey);
+  if (havePipelineKey && !vk__ensureDirectory(native->binaryPath)) {
+    havePipelineKey = false;
+  }
+  binaryPath = havePipelineKey
+    ? vk__binaryFilePath(native, &pipelineKey)
+    : NULL;
+  if (havePipelineKey &&
+      (!binaryPath || !gpuCacheFileBegin(binaryPath, &binaryGuard))) {
+    havePipelineKey = false;
+  }
+  free(binaryPath);
   if (havePipelineKey &&
       vk__readStoredBinaries(native, &pipelineKey, &binaries)) {
     if (vk__createStoredBinaryHandles(device, &binaries)) {
@@ -1046,6 +1043,7 @@ vk__createPipelineCached(GPUDeviceVk      *device,
                                                pipeline);
       if (result == VK_SUCCESS) {
         vk__destroyBinarySet(device, &binaries);
+        gpuCacheFileEnd(&binaryGuard);
         vk_unlockCache(cache);
         return VK_SUCCESS;
       }
@@ -1083,6 +1081,7 @@ vk__createPipelineCached(GPUDeviceVk      *device,
         vk__writeStoredBinaries(native, &pipelineKey, &binaries);
         vk__destroyBinarySet(device, &binaries);
       }
+      gpuCacheFileEnd(&binaryGuard);
       vk_unlockCache(cache);
       return VK_SUCCESS;
     }
@@ -1092,6 +1091,7 @@ vk__createPipelineCached(GPUDeviceVk      *device,
     }
   }
 
+  gpuCacheFileEnd(&binaryGuard);
   result = vk__createNativePipeline(device,
                                     kind,
                                     classicCache,
