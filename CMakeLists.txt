@@ -2074,6 +2074,7 @@ if(GPU_BUILD_METAL AND GPU_BUILD_SAMPLES AND
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-atomics-usl/compute_atomics.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-cube-usl/textured_cube.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/samples/mrt-blend-usl/mrt_blend.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/shadow-compare-usl/shadow_compare.usl"
   )
   list(GET GPU_METAL_USL_FIXTURES 0 GPU_METAL_TRIANGLE_US)
   list(GET GPU_METAL_USL_FIXTURES 1 GPU_METAL_TEXTURED_QUAD_US)
@@ -2085,6 +2086,7 @@ if(GPU_BUILD_METAL AND GPU_BUILD_SAMPLES AND
   list(GET GPU_METAL_USL_FIXTURES 7 GPU_METAL_COMPUTE_ATOMICS_US)
   list(GET GPU_METAL_USL_FIXTURES 8 GPU_METAL_TEXTURED_CUBE_US)
   list(GET GPU_METAL_USL_FIXTURES 9 GPU_METAL_MRT_BLEND_US)
+  list(GET GPU_METAL_USL_FIXTURES 10 GPU_METAL_SHADOW_COMPARE_US)
   set(GPU_USL_FIXTURE_TARGET_CAPS descriptor_indexing)
   gpu_add_usl_fixtures(
     GPU_METAL_BINDLESS_USL_FIXTURE
@@ -2904,6 +2906,24 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
     add_test(NAME metal-mrt-blend
              COMMAND gpu-mrt-blend-metal-usl)
     set_tests_properties(metal-mrt-blend PROPERTIES
+      ENVIRONMENT
+        "GPU_SAMPLE_EXIT_AFTER_FRAMES=96;GPU_SAMPLE_ASSERT_ZERO_ALLOC=1"
+      TIMEOUT 30
+    )
+  endif()
+
+  add_executable(gpu-shadow-compare-metal-usl
+    samples/shadow-compare-usl/main.m
+    samples/common/ShadowCompare.c
+  )
+  gpu_configure_metal_sample(gpu-shadow-compare-metal-usl)
+  gpu_attach_usl_sample(gpu-shadow-compare-metal-usl
+                        gpu-metal-fixtures
+                        "${GPU_METAL_SHADOW_COMPARE_US}")
+  if(GPU_BUILD_TESTS)
+    add_test(NAME metal-shadow-compare
+             COMMAND gpu-shadow-compare-metal-usl)
+    set_tests_properties(metal-shadow-compare PROPERTIES
       ENVIRONMENT
         "GPU_SAMPLE_EXIT_AFTER_FRAMES=96;GPU_SAMPLE_ASSERT_ZERO_ALLOC=1"
       TIMEOUT 30
