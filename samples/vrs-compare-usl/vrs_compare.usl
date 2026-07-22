@@ -1,0 +1,37 @@
+vertex VRSCompareVertex {
+  position: float4
+  uv:       float2
+}
+
+struct VRSCompareOut {
+  position: float4 #position
+  uv:       float2
+}
+
+vert vrs_compare_vs(v: VRSCompareVertex #stage_in) -> VRSCompareOut {
+  v.position, v.uv
+}
+
+func vrs_grid(uv: float2, dark: float3, light: float3,
+              accent: float3) -> float4 {
+  let cells    = uv * 192.0
+  let fraction = fract(cells)
+  let checker  = float((uint(cells.x) + uint(cells.y)) & 1)
+  let line     = max(step(0.82, fraction.x),
+                     step(0.82, fraction.y))
+  return float4(mix(mix(dark, light, checker), accent, line), 1.0)
+}
+
+frag vrs_fine_fs(input: VRSCompareOut #stage_in) -> float4 {
+  return vrs_grid(input.uv,
+                  float3(0.08, 0.02, 0.01),
+                  float3(0.72, 0.16, 0.03),
+                  float3(1.0, 0.58, 0.10))
+}
+
+frag vrs_coarse_fs(input: VRSCompareOut #stage_in) -> float4 {
+  return vrs_grid(input.uv,
+                  float3(0.01, 0.04, 0.08),
+                  float3(0.02, 0.34, 0.62),
+                  float3(0.08, 0.82, 1.0))
+}
