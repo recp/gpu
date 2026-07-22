@@ -28,9 +28,8 @@ vert shadow_preview_vs(vertexId: uint #vertex_id) -> ShadowOut {
 }
 
 frag shadow_preview_fs(input: ShadowOut #stage_in,
-                       shadowMap: depth2d<float> #texture(0),
-                       shadowSampler: sampler_comparison #sampler(1)) -> float4 {
-  let visibility = shadowMap.sample_compare(shadowSampler, input.uv, 0.52)
+                       shadowMap: depth2d<float> #texture(0)) -> float4 {
+  let visibility = shadowMap.sample_compare(.linear, input.uv, 0.52)
   return float4(0.04, 0.07, 0.12, 1.0)
        + float4(0.96, 0.45, 0.06, 0.0) * visibility
 }

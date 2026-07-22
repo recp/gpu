@@ -17,7 +17,6 @@ typedef struct WebGPUShadowCompare {
   GPURenderPipeline *previewPipeline;
   GPUTexture        *depthTexture;
   GPUTextureView    *depthView;
-  GPUSampler        *shadowSampler;
   GPUBindGroup      *shadowGroup;
   WebGPURequest      request;
   uint32_t           width;
@@ -31,29 +30,25 @@ static int
 create_shadow_group(WebGPUShadowCompare *state,
                     GPUTextureView      *view,
                     GPUBindGroup       **outGroup) {
-  GPUBindGroupEntry      entries[2] = {0};
+  GPUBindGroupEntry      entry = {0};
   GPUBindGroupCreateInfo info       = {0};
 
-  if (!state || !view || !outGroup || !state->shadowSampler ||
-      !state->shaderLayout ||
+  if (!state || !view || !outGroup || !state->shaderLayout ||
       state->shaderLayout->bindGroupLayoutCount != 1u ||
       !state->shaderLayout->bindGroupLayouts ||
       !state->shaderLayout->bindGroupLayouts[0]) {
     return 0;
   }
 
-  entries[0].textureView = view;
-  entries[0].binding     = 0u;
-  entries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
-  entries[1].sampler     = state->shadowSampler;
-  entries[1].binding     = 1u;
-  entries[1].bindingType = GPU_BINDING_SAMPLER;
+  entry.textureView      = view;
+  entry.binding          = 0u;
+  entry.bindingType      = GPU_BINDING_SAMPLED_TEXTURE;
   info.chain.sType       = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   info.chain.structSize  = sizeof(info);
   info.label             = "shadow-compare-webgpu-group";
   info.layout            = state->shaderLayout->bindGroupLayouts[0];
-  info.pEntries          = entries;
-  info.entryCount        = GPU_ARRAY_LEN(entries);
+  info.pEntries          = &entry;
+  info.entryCount        = 1u;
   return GPUCreateBindGroup(state->device, &info, outGroup) == GPU_OK &&
          *outGroup;
 }
@@ -184,7 +179,9 @@ create_shader(WebGPUShadowCompare *state) {
     }
     if (entries[i].binding == 1u &&
         entries[i].bindingType == GPU_BINDING_SAMPLER &&
-        entries[i].sampler.type == GPU_SAMPLER_BINDING_COMPARISON) {
+        entries[i].sampler.type == GPU_SAMPLER_BINDING_COMPARISON &&
+        entries[i].immutableSampler &&
+        entries[i].immutableSamplerDesc.compareEnable) {
       foundComparison = true;
     }
   }
@@ -249,25 +246,7 @@ create_pipelines(WebGPUShadowCompare *state) {
 
 static int
 create_resources(WebGPUShadowCompare *state) {
-  GPUSamplerCreateInfo info = {0};
-
-  info.chain.sType        = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-  info.chain.structSize   = sizeof(info);
-  info.label              = "shadow-compare-webgpu-sampler";
-  info.desc.minFilter     = GPU_FILTER_LINEAR;
-  info.desc.magFilter     = GPU_FILTER_LINEAR;
-  info.desc.mipFilter     = GPU_MIP_FILTER_NEAREST;
-  info.desc.addressU      = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  info.desc.addressV      = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  info.desc.addressW      = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  info.desc.compare       = GPU_COMPARE_LESS_EQUAL;
-  info.desc.compareEnable = true;
-  if (GPUCreateSampler(state->device,
-                       &info,
-                       false,
-                       &state->shadowSampler) != GPU_OK ||
-      !state->shadowSampler ||
-      !create_depth_target(state, state->width, state->height)) {
+  if (!create_depth_target(state, state->width, state->height)) {
     set_status("GPU: failed to create shadow comparison resources", 1);
     return 0;
   }
