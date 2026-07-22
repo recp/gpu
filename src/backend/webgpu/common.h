@@ -106,8 +106,8 @@ typedef struct GPUDeviceWebGPU {
 
 typedef struct GPUPipelineLayoutWebGPU {
   WGPUPipelineLayout layout;
-  WGPUBindGroup      emptyGroups[GPU_ENCODER_MAX_BIND_GROUPS];
-  uint32_t           emptyGroupMask;
+  WGPUBindGroup      automaticGroups[GPU_ENCODER_MAX_BIND_GROUPS];
+  uint32_t           automaticGroupMask;
   uint32_t           pushConstantSizeBytes;
 } GPUPipelineLayoutWebGPU;
 
@@ -223,11 +223,11 @@ void
 gpu_webgpuDestroyPipelineLayout(GPUPipelineLayoutWebGPU *layout);
 
 void
-gpu_webgpuBindRenderEmptyGroups(GPURenderPassEncoder          *pass,
-                                const GPUPipelineLayoutWebGPU *layout);
+gpu_webgpuBindRenderAutomaticGroups(GPURenderPassEncoder          *pass,
+                                    const GPUPipelineLayoutWebGPU *layout);
 
 void
-gpu_webgpuBindComputeEmptyGroups(GPUComputePassEncoder         *pass,
-                                 const GPUPipelineLayoutWebGPU *layout);
+gpu_webgpuBindComputeAutomaticGroups(GPUComputePassEncoder         *pass,
+                                     const GPUPipelineLayoutWebGPU *layout);
 
 #endif /* webgpu_common_h */

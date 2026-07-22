@@ -2112,22 +2112,73 @@ GPUDestroyPipelineLayout(GPUPipelineLayout *layout) {
   free(layout);
 }
 
-static uint32_t
-gpu_reflectionLayoutCount(const GPUShaderReflection *reflection) {
-  uint32_t maxGroup;
+static int
+gpu_libraryUsesWGSLStaticSamplers(const GPUShaderLibrary *library) {
+  GPUApi *api;
 
-  if (!reflection || reflection->resourceCount == 0u || !reflection->pResources) {
+  api = library ? gpuDeviceApi(library->_device) : NULL;
+  return api && api->backend == GPU_BACKEND_WEBGPU;
+}
+
+static uint32_t
+gpu_reflectionStaticSamplerCountForGroup(const GPUShaderLibrary *library,
+                                         uint32_t groupIndex) {
+  const GPUShaderStaticSamplerInfo *samplers;
+  uint32_t                          samplerCount;
+  uint32_t                          count;
+
+  if (!gpu_libraryUsesWGSLStaticSamplers(library)) {
+    return 0u;
+  }
+  samplers = gpuGetShaderLibraryStaticSamplers(library, &samplerCount);
+  count    = 0u;
+  for (uint32_t i = 0u; samplers && i < samplerCount; i++) {
+    if (samplers[i].wgslGroup == groupIndex &&
+        samplers[i].wgslBinding != UINT32_MAX) {
+      count++;
+    }
+  }
+  return count;
+}
+
+static uint32_t
+gpu_reflectionLayoutCount(const GPUShaderReflection *reflection,
+                          const GPUShaderLibrary    *library) {
+  const GPUShaderStaticSamplerInfo *samplers;
+  uint32_t                          samplerCount;
+  uint32_t                          maxGroup;
+  int                               hasGroup;
+
+  if (!reflection ||
+      (reflection->resourceCount > 0u && !reflection->pResources)) {
     return 0u;
   }
 
   maxGroup = 0u;
+  hasGroup = 0;
   for (uint32_t i = 0; i < reflection->resourceCount; i++) {
-    if (reflection->pResources[i].groupIndex > maxGroup) {
+    if (!hasGroup || reflection->pResources[i].groupIndex > maxGroup) {
       maxGroup = reflection->pResources[i].groupIndex;
     }
+    hasGroup = 1;
   }
 
-  return maxGroup + 1u;
+  samplerCount = 0u;
+  samplers = gpu_libraryUsesWGSLStaticSamplers(library)
+               ? gpuGetShaderLibraryStaticSamplers(library, &samplerCount)
+               : NULL;
+  for (uint32_t i = 0u; samplers && i < samplerCount; i++) {
+    if (samplers[i].wgslGroup == UINT32_MAX ||
+        samplers[i].wgslBinding == UINT32_MAX) {
+      continue;
+    }
+    if (!hasGroup || samplers[i].wgslGroup > maxGroup) {
+      maxGroup = samplers[i].wgslGroup;
+    }
+    hasGroup = 1;
+  }
+
+  return hasGroup ? maxGroup + 1u : 0u;
 }
 
 static uint32_t
@@ -2149,6 +2200,23 @@ gpu_reflectionResourceCountForGroup(const GPUShaderReflection *reflection,
   return count;
 }
 
+static uint32_t
+gpu_reflectionSyntheticBindingBase(const GPUShaderReflection *reflection,
+                                   uint32_t groupIndex) {
+  uint32_t base;
+
+  base = 0u;
+  for (uint32_t i = 0u; reflection && i < reflection->resourceCount; i++) {
+    const GPUShaderResourceReflection *resource = &reflection->pResources[i];
+
+    if (resource->groupIndex == groupIndex && resource->binding >= base) {
+      if (resource->binding == UINT32_MAX) return UINT32_MAX;
+      base = resource->binding + 1u;
+    }
+  }
+  return base;
+}
+
 static GPUResult
 gpu_createLayoutForReflectionGroup(GPUDevice *device,
                                    const GPUShaderLibrary *library,
@@ -2157,8 +2225,12 @@ gpu_createLayoutForReflectionGroup(GPUDevice *device,
                                    GPUBindGroupLayout **outLayout) {
   GPUBindGroupLayoutCreateInfo info;
   GPUBindGroupLayoutEntry *entries;
+  const GPUShaderStaticSamplerInfo *samplers;
   uint32_t *backendBindings;
   uint32_t entryCount;
+  uint32_t resourceCount;
+  uint32_t samplerCount;
+  uint32_t syntheticBinding;
   uint32_t cursor;
   GPUResult rc;
 
@@ -2167,7 +2239,13 @@ gpu_createLayoutForReflectionGroup(GPUDevice *device,
   }
 
   *outLayout = NULL;
-  entryCount = gpu_reflectionResourceCountForGroup(reflection, groupIndex);
+  resourceCount = gpu_reflectionResourceCountForGroup(reflection, groupIndex);
+  samplerCount = 0u;
+  samplers = gpu_libraryUsesWGSLStaticSamplers(library)
+               ? gpuGetShaderLibraryStaticSamplers(library, &samplerCount)
+               : NULL;
+  entryCount = resourceCount +
+               gpu_reflectionStaticSamplerCountForGroup(library, groupIndex);
   entries = NULL;
   backendBindings = NULL;
   if (entryCount > 0u) {
@@ -2210,6 +2288,35 @@ gpu_createLayoutForReflectionGroup(GPUDevice *device,
     backendBindings[cursor] = resource->binding;
     gpuGetShaderResourceBackendBinding(library, resource, &backendBindings[cursor]);
     cursor++;
+  }
+  syntheticBinding = gpu_reflectionSyntheticBindingBase(reflection, groupIndex);
+  for (uint32_t i = 0u; samplers && i < samplerCount; i++) {
+    if (samplers[i].wgslGroup != groupIndex ||
+        samplers[i].wgslBinding == UINT32_MAX) {
+      continue;
+    }
+    if (cursor >= entryCount || syntheticBinding == UINT32_MAX ||
+        !gpuStaticSamplerToSamplerDesc(
+          &samplers[i].desc, &entries[cursor].immutableSamplerDesc)) {
+      free(entries);
+      free(backendBindings);
+      return GPU_ERROR_UNSUPPORTED;
+    }
+    entries[cursor].binding          = syntheticBinding++;
+    entries[cursor].bindingType      = GPU_BINDING_SAMPLER;
+    entries[cursor].sampler.type     = samplers[i].desc.hasCompare
+                                         ? GPU_SAMPLER_BINDING_COMPARISON
+                                         : GPU_SAMPLER_BINDING_FILTERING;
+    entries[cursor].visibility       = samplers[i].visibility;
+    entries[cursor].arrayCount       = 1u;
+    entries[cursor].immutableSampler = true;
+    backendBindings[cursor]          = samplers[i].wgslBinding;
+    cursor++;
+  }
+  if (cursor != entryCount) {
+    free(entries);
+    free(backendBindings);
+    return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   memset(&info, 0, sizeof(info));
@@ -2311,15 +2418,34 @@ gpu_layoutContainsStageReflectionResource(const GPUBindGroupLayoutPriv *priv,
 }
 
 static int
-gpu_layoutMatchesReflectionGroup(GPUBindGroupLayout *layout,
+gpu_samplerDescsEqual(const GPUSamplerDesc *a, const GPUSamplerDesc *b) {
+  return a && b &&
+         a->minFilter == b->minFilter &&
+         a->magFilter == b->magFilter &&
+         a->mipFilter == b->mipFilter &&
+         a->addressU == b->addressU &&
+         a->addressV == b->addressV &&
+         a->addressW == b->addressW &&
+         a->compare == b->compare &&
+         a->compareEnable == b->compareEnable;
+}
+
+static int
+gpu_layoutMatchesReflectionGroup(GPUBindGroupLayout       *layout,
+                                 const GPUShaderLibrary  *library,
                                  const GPUShaderReflection *reflection,
                                  uint32_t groupIndex) {
   GPUBindGroupLayoutPriv *priv;
+  const GPUShaderStaticSamplerInfo *samplers;
   uint64_t matchedMask;
   uint32_t expectedCount;
+  uint32_t samplerCount;
+  uint32_t syntheticBinding;
 
   priv = gpu_layoutPriv(layout);
-  expectedCount = gpu_reflectionResourceCountForGroup(reflection, groupIndex);
+  expectedCount = gpu_reflectionResourceCountForGroup(reflection, groupIndex) +
+                  gpu_reflectionStaticSamplerCountForGroup(library,
+                                                           groupIndex);
   if (!priv || priv->count != expectedCount ||
       expectedCount > sizeof(matchedMask) * CHAR_BIT) {
     return 0;
@@ -2356,6 +2482,47 @@ gpu_layoutMatchesReflectionGroup(GPUBindGroupLayout *layout,
     }
   }
 
+  samplerCount = 0u;
+  samplers = gpu_libraryUsesWGSLStaticSamplers(library)
+               ? gpuGetShaderLibraryStaticSamplers(library, &samplerCount)
+               : NULL;
+  syntheticBinding = gpu_reflectionSyntheticBindingBase(reflection, groupIndex);
+  for (uint32_t i = 0u; samplers && i < samplerCount; i++) {
+    GPUSamplerDesc expectedDesc;
+    int            found;
+
+    if (samplers[i].wgslGroup != groupIndex ||
+        samplers[i].wgslBinding == UINT32_MAX) {
+      continue;
+    }
+    if (syntheticBinding == UINT32_MAX ||
+        !gpuStaticSamplerToSamplerDesc(&samplers[i].desc, &expectedDesc)) {
+      return 0;
+    }
+    found = 0;
+    for (uint32_t j = 0u; j < priv->count; j++) {
+      const GPUBindGroupLayoutEntry *entry = &priv->entries[j];
+      uint64_t bit = UINT64_C(1) << j;
+
+      if ((matchedMask & bit) == 0u &&
+          entry->binding == syntheticBinding &&
+          entry->bindingType == GPU_BINDING_SAMPLER &&
+          entry->arrayCount == 1u && entry->immutableSampler &&
+          (entry->visibility & samplers[i].visibility) ==
+            samplers[i].visibility &&
+          gpu_samplerDescsEqual(&entry->immutableSamplerDesc,
+                                &expectedDesc) &&
+          priv->backendBindings &&
+          priv->backendBindings[j] == samplers[i].wgslBinding) {
+        matchedMask |= bit;
+        found        = 1;
+        break;
+      }
+    }
+    if (!found) return 0;
+    syntheticBinding++;
+  }
+
   return 1;
 }
 
@@ -2366,13 +2533,18 @@ gpu_pipelineLayoutMatchesShaderResources(GPUPipelineLayout *pipelineLayout,
                                          GPUShaderStageFlags stages,
                                          uint32_t *outRequiredGroupMask) {
   GPUPipelineLayoutPriv *pipelinePriv;
+  const GPUShaderReflection *fullReflection;
+  const GPUShaderStaticSamplerInfo *samplers;
+  uint32_t samplerOrdinals[GPU_ENCODER_MAX_BIND_GROUPS] = {0};
   uint32_t requiredGroupMask;
   uint32_t requiredCount;
+  uint32_t samplerCount;
 
   if (outRequiredGroupMask) {
     *outRequiredGroupMask = 0u;
   }
   pipelinePriv = gpu_pipelineLayoutPriv(pipelineLayout);
+  fullReflection = gpuShaderReflectionView(library);
   if (!pipelinePriv) {
     return 0;
   }
@@ -2427,6 +2599,60 @@ gpu_pipelineLayoutMatchesShaderResources(GPUPipelineLayout *pipelineLayout,
       return 0;
     }
     requiredGroupMask |= 1u << resource->groupIndex;
+  }
+
+  samplerCount = 0u;
+  samplers = gpu_libraryUsesWGSLStaticSamplers(library)
+               ? gpuGetShaderLibraryStaticSamplers(library, &samplerCount)
+               : NULL;
+  for (uint32_t i = 0u; samplers && i < samplerCount; i++) {
+    const GPUShaderStaticSamplerInfo *sampler = &samplers[i];
+    GPUBindGroupLayoutPriv           *layoutPriv;
+    GPUSamplerDesc                    expectedDesc;
+    uint32_t                          logicalBinding;
+    uint32_t                          groupIndex;
+    int                               found;
+
+    groupIndex = sampler->wgslGroup;
+    if (groupIndex >= GPU_ENCODER_MAX_BIND_GROUPS ||
+        sampler->wgslBinding == UINT32_MAX) {
+      return 0;
+    }
+    logicalBinding = gpu_reflectionSyntheticBindingBase(fullReflection,
+                                                        groupIndex);
+    if (logicalBinding == UINT32_MAX ||
+        samplerOrdinals[groupIndex] > UINT32_MAX - logicalBinding) {
+      return 0;
+    }
+    logicalBinding += samplerOrdinals[groupIndex]++;
+    if ((sampler->visibility & stages) == 0u) {
+      continue;
+    }
+    if (groupIndex >= pipelinePriv->bindGroupLayoutCount ||
+        !gpuStaticSamplerToSamplerDesc(&sampler->desc, &expectedDesc)) {
+      return 0;
+    }
+    layoutPriv = gpu_layoutPriv(pipelinePriv->bindGroupLayouts[groupIndex]);
+    found      = 0;
+    for (uint32_t j = 0u; layoutPriv && j < layoutPriv->count; j++) {
+      const GPUBindGroupLayoutEntry *entry = &layoutPriv->entries[j];
+
+      if (entry->binding == logicalBinding && entry->immutableSampler &&
+          entry->bindingType == GPU_BINDING_SAMPLER &&
+          entry->arrayCount == 1u &&
+          (entry->visibility & sampler->visibility) == sampler->visibility &&
+          gpu_samplerDescsEqual(&entry->immutableSamplerDesc,
+                                &expectedDesc) &&
+          pipelinePriv->backendBindings &&
+          pipelinePriv->backendBindings[groupIndex] &&
+          pipelinePriv->backendBindings[groupIndex][j] ==
+            sampler->wgslBinding) {
+        found = 1;
+        break;
+      }
+    }
+    if (!found) return 0;
+    if (groupIndex >= requiredCount) requiredCount = groupIndex + 1u;
   }
 
   if (outRequiredGroupMask) {
@@ -2526,7 +2752,7 @@ GPUCreateBindGroupLayoutsFromReflection(GPUDevice *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  requiredCount = gpu_reflectionLayoutCount(reflection);
+  requiredCount = gpu_reflectionLayoutCount(reflection, library);
   if (!outLayouts) {
     *inoutLayoutCount = requiredCount;
     return GPU_OK;
@@ -2585,12 +2811,15 @@ GPUCreatePipelineLayoutFromReflection(GPUDevice *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  requiredCount = gpu_reflectionLayoutCount(reflection);
+  requiredCount = gpu_reflectionLayoutCount(reflection, library);
   if (bindGroupLayoutCount < requiredCount) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   for (uint32_t i = 0u; i < requiredCount; i++) {
-    if (!gpu_layoutMatchesReflectionGroup(ppLayouts[i], reflection, i)) {
+    if (!gpu_layoutMatchesReflectionGroup(ppLayouts[i],
+                                          library,
+                                          reflection,
+                                          i)) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   }

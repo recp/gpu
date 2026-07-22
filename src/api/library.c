@@ -1100,6 +1100,49 @@ gpuStaticSamplerDescIsValid(const GPUStaticSamplerDesc *desc) {
   return 1;
 }
 
+GPU_HIDE
+int
+gpuStaticSamplerToSamplerDesc(const GPUStaticSamplerDesc *source,
+                              GPUSamplerDesc             *outDesc) {
+  GPUAddressMode addressMode;
+
+  if (!source || !outDesc || !gpuStaticSamplerDescIsValid(source) ||
+      source->coordSpace != USL_RUNTIME_COORD_NORMALIZED ||
+      source->maxAnisotropy > 1u) {
+    return 0;
+  }
+  switch (source->addressMode) {
+    case USL_RUNTIME_ADDRESS_REPEAT:
+      addressMode = GPU_ADDRESS_MODE_REPEAT;
+      break;
+    case USL_RUNTIME_ADDRESS_MIRRORED_REPEAT:
+      addressMode = GPU_ADDRESS_MODE_MIRRORED_REPEAT;
+      break;
+    case USL_RUNTIME_ADDRESS_CLAMP_TO_EDGE:
+      addressMode = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
+      break;
+    default:
+      return 0;
+  }
+
+  memset(outDesc, 0, sizeof(*outDesc));
+  outDesc->minFilter = source->minFilter == USL_RUNTIME_FILTER_LINEAR
+                         ? GPU_FILTER_LINEAR
+                         : GPU_FILTER_NEAREST;
+  outDesc->magFilter = source->magFilter == USL_RUNTIME_FILTER_LINEAR
+                         ? GPU_FILTER_LINEAR
+                         : GPU_FILTER_NEAREST;
+  outDesc->mipFilter = source->mipFilter == USL_RUNTIME_FILTER_LINEAR
+                         ? GPU_MIP_FILTER_LINEAR
+                         : GPU_MIP_FILTER_NEAREST;
+  outDesc->addressU      = addressMode;
+  outDesc->addressV      = addressMode;
+  outDesc->addressW      = addressMode;
+  outDesc->compare       = (GPUCompareOp)source->compareFunc;
+  outDesc->compareEnable = source->hasCompare != 0u;
+  return 1;
+}
+
 static int
 gpu_reserveMetadata(size_t *totalSize,
                     size_t alignment,
@@ -1570,6 +1613,12 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
     item.spirvBinding = src->spirv_binding >= 0
                           ? (uint32_t)src->spirv_binding
                           : UINT32_MAX;
+    item.wgslGroup = src->wgsl_group >= 0
+                       ? (uint32_t)src->wgsl_group
+                       : UINT32_MAX;
+    item.wgslBinding = src->wgsl_binding >= 0
+                         ? (uint32_t)src->wgsl_binding
+                         : UINT32_MAX;
     if (!gpuStaticSamplerDescIsValid(&item.desc)) {
       free(metadata);
       return 0;
@@ -1580,6 +1629,8 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
       if (staticSamplers->items[j].hlslIndex == item.hlslIndex &&
           staticSamplers->items[j].spirvGroup == item.spirvGroup &&
           staticSamplers->items[j].spirvBinding == item.spirvBinding &&
+          staticSamplers->items[j].wgslGroup == item.wgslGroup &&
+          staticSamplers->items[j].wgslBinding == item.wgslBinding &&
           gpu_staticSamplerDescEqual(&staticSamplers->items[j].desc,
                                      &item.desc)) {
         duplicate = j;

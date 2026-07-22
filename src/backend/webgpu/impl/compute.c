@@ -142,7 +142,7 @@ webgpu_setComputePipeline(GPUComputePassEncoder   *encoder,
 
   wgpuComputePassEncoderSetPipeline(command->computeEncoder,
                                     nativeState->pipeline);
-  gpu_webgpuBindComputeEmptyGroups(encoder, &nativeState->layout);
+  gpu_webgpuBindComputeAutomaticGroups(encoder, &nativeState->layout);
   if (nativeState->layout.pushConstantSizeBytes > 0u) {
     static const uint8_t zero[GPU_WEBGPU_PUSH_CONSTANT_ALIGNMENT];
 

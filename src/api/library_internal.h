@@ -37,6 +37,8 @@ typedef struct GPUShaderStaticSamplerInfo {
   uint32_t             hlslIndex;
   uint32_t             spirvGroup;
   uint32_t             spirvBinding;
+  uint32_t             wgslGroup;
+  uint32_t             wgslBinding;
 } GPUShaderStaticSamplerInfo;
 
 typedef struct GPUShaderStaticSamplerInfoList {
@@ -171,5 +173,10 @@ gpuGetShaderLibraryStaticSamplers(const GPUShaderLibrary *library,
 GPU_HIDE
 int
 gpuStaticSamplerDescIsValid(const GPUStaticSamplerDesc *desc);
+
+GPU_HIDE
+int
+gpuStaticSamplerToSamplerDesc(const GPUStaticSamplerDesc *source,
+                              GPUSamplerDesc             *outDesc);
 
 #endif /* gpu_library_internal_h */

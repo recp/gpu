@@ -75,7 +75,7 @@ webgpu_setPipeline(GPURenderPassEncoder *encoder,
     static const uint8_t zero[GPU_WEBGPU_PUSH_CONSTANT_ALIGNMENT];
 
     wgpuRenderPassEncoderSetPipeline(command->renderEncoder, state->pipeline);
-    gpu_webgpuBindRenderEmptyGroups(encoder, &state->layout);
+    gpu_webgpuBindRenderAutomaticGroups(encoder, &state->layout);
     if (state->layout.pushConstantSizeBytes > 0u) {
       webgpu_renderPushConstants(encoder,
                                  0u,

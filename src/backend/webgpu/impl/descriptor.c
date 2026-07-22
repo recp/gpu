@@ -454,6 +454,84 @@ webgpu_destroyPipelineLayout(GPUPipelineLayout *layout) {
   }
 }
 
+static bool
+webgpu_layoutIsImmutableOnly(GPUBindGroupLayout *layout) {
+  const GPUBindGroupLayoutEntry *entries;
+  uint32_t                       count;
+
+  entries = GPUGetBindGroupLayoutEntries(layout, &count);
+  if (!entries || count == 0u) {
+    return false;
+  }
+  for (uint32_t i = 0u; i < count; i++) {
+    if (!entries[i].immutableSampler ||
+        entries[i].bindingType != GPU_BINDING_SAMPLER) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static WGPUBindGroup
+webgpu_createImmutableOnlyGroup(GPUDevice          *device,
+                                GPUBindGroupLayout *layout) {
+  WGPUBindGroupDescriptor descriptor = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
+  const GPUBindGroupLayoutEntry *entries;
+  const uint32_t                *backendBindings;
+  GPUBindGroupLayoutWebGPU      *state;
+  GPUDeviceWebGPU               *native;
+  WGPUBindGroupEntry            *nativeEntries;
+  WGPUBindGroup                  result;
+  uint32_t                       backendBindingCount;
+  uint32_t                       count;
+  uint32_t                       cursor;
+
+  native          = gpu_webgpuDevice(device);
+  state           = layout ? layout->_native : NULL;
+  entries         = GPUGetBindGroupLayoutEntries(layout, &count);
+  backendBindings = gpuGetBindGroupLayoutBackendBindings(
+    layout, &backendBindingCount);
+  if (!native || !native->device || !state || !state->layout ||
+      !webgpu_layoutIsImmutableOnly(layout) ||
+      count != backendBindingCount ||
+      state->nativeEntryCount != state->immutableSamplerCount) {
+    return NULL;
+  }
+
+  nativeEntries = state->nativeEntryCount
+                    ? calloc(state->nativeEntryCount, sizeof(*nativeEntries))
+                    : NULL;
+  if (state->nativeEntryCount > 0u && !nativeEntries) {
+    return NULL;
+  }
+  cursor = 0u;
+  for (uint32_t i = 0u; i < count; i++) {
+    for (uint32_t ai = 0u; ai < entries[i].arrayCount; ai++) {
+      if (cursor >= state->nativeEntryCount ||
+          backendBindings[i] > UINT32_MAX - ai) {
+        free(nativeEntries);
+        return NULL;
+      }
+      nativeEntries[cursor] =
+        (WGPUBindGroupEntry)WGPU_BIND_GROUP_ENTRY_INIT;
+      nativeEntries[cursor].binding = backendBindings[i] + ai;
+      nativeEntries[cursor].sampler = state->immutableSamplers[cursor];
+      cursor++;
+    }
+  }
+  if (cursor != state->nativeEntryCount) {
+    free(nativeEntries);
+    return NULL;
+  }
+
+  descriptor.layout     = state->layout;
+  descriptor.entryCount = cursor;
+  descriptor.entries    = nativeEntries;
+  result = wgpuDeviceCreateBindGroup(native->device, &descriptor);
+  free(nativeEntries);
+  return result;
+}
+
 GPUResult
 gpu_webgpuCreatePipelineLayout(GPUDevice               *device,
                                GPUPipelineLayout       *logicalLayout,
@@ -498,6 +576,12 @@ gpu_webgpuCreatePipelineLayout(GPUDevice               *device,
   if (groupCount > logicalGroupCount) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  for (uint32_t i = 0u; i < logicalGroupCount; i++) {
+    if (groups[i] && webgpu_layoutIsImmutableOnly(groups[i]) &&
+        groupCount <= i) {
+      groupCount = i + 1u;
+    }
+  }
   if (pushConstantSize > 0u) {
     const GPUShaderStageFlags supportedStages =
       GPU_SHADER_STAGE_VERTEX_BIT |
@@ -533,6 +617,20 @@ gpu_webgpuCreatePipelineLayout(GPUDevice               *device,
       continue;
     }
 
+    if (i < logicalGroupCount && groups[i] &&
+        webgpu_layoutIsImmutableOnly(groups[i])) {
+      GPUBindGroupLayoutWebGPU *group = groups[i]->_native;
+
+      nativeGroups[i] = group ? group->layout : NULL;
+      outLayout->automaticGroups[i] =
+        webgpu_createImmutableOnlyGroup(device, groups[i]);
+      if (!nativeGroups[i] || !outLayout->automaticGroups[i]) {
+        goto fail;
+      }
+      outLayout->automaticGroupMask |= 1u << i;
+      continue;
+    }
+
     emptyLayouts[i] = wgpuDeviceCreateBindGroupLayout(native->device,
                                                        &emptyLayoutInfo);
     if (!emptyLayouts[i]) {
@@ -540,12 +638,12 @@ gpu_webgpuCreatePipelineLayout(GPUDevice               *device,
     }
     nativeGroups[i]       = emptyLayouts[i];
     emptyGroupInfo.layout = emptyLayouts[i];
-    outLayout->emptyGroups[i] = wgpuDeviceCreateBindGroup(native->device,
-                                                           &emptyGroupInfo);
-    if (!outLayout->emptyGroups[i]) {
+    outLayout->automaticGroups[i] = wgpuDeviceCreateBindGroup(
+      native->device, &emptyGroupInfo);
+    if (!outLayout->automaticGroups[i]) {
       goto fail;
     }
-    outLayout->emptyGroupMask |= 1u << i;
+    outLayout->automaticGroupMask |= 1u << i;
   }
 
   descriptor.bindGroupLayoutCount = groupCount;
@@ -565,8 +663,8 @@ gpu_webgpuCreatePipelineLayout(GPUDevice               *device,
 
 fail:
   for (uint32_t i = 0u; i < groupCount; i++) {
-    if (outLayout->emptyGroups[i]) {
-      wgpuBindGroupRelease(outLayout->emptyGroups[i]);
+    if (outLayout->automaticGroups[i]) {
+      wgpuBindGroupRelease(outLayout->automaticGroups[i]);
     }
     if (emptyLayouts[i]) {
       wgpuBindGroupLayoutRelease(emptyLayouts[i]);
@@ -582,8 +680,8 @@ gpu_webgpuDestroyPipelineLayout(GPUPipelineLayoutWebGPU *layout) {
     return;
   }
   for (uint32_t i = 0u; i < GPU_ENCODER_MAX_BIND_GROUPS; i++) {
-    if (layout->emptyGroups[i]) {
-      wgpuBindGroupRelease(layout->emptyGroups[i]);
+    if (layout->automaticGroups[i]) {
+      wgpuBindGroupRelease(layout->automaticGroups[i]);
     }
   }
   if (layout->layout) {
@@ -593,8 +691,8 @@ gpu_webgpuDestroyPipelineLayout(GPUPipelineLayoutWebGPU *layout) {
 }
 
 void
-gpu_webgpuBindRenderEmptyGroups(GPURenderPassEncoder          *pass,
-                                const GPUPipelineLayoutWebGPU *layout) {
+gpu_webgpuBindRenderAutomaticGroups(GPURenderPassEncoder          *pass,
+                                    const GPUPipelineLayoutWebGPU *layout) {
   GPUCommandWebGPU *command;
 
   command = gpu_webgpuCommand(pass ? pass->_cmdb : NULL);
@@ -602,10 +700,10 @@ gpu_webgpuBindRenderEmptyGroups(GPURenderPassEncoder          *pass,
     return;
   }
   for (uint32_t i = 0u; i < GPU_ENCODER_MAX_BIND_GROUPS; i++) {
-    if ((layout->emptyGroupMask & (1u << i)) != 0u) {
+    if ((layout->automaticGroupMask & (1u << i)) != 0u) {
       wgpuRenderPassEncoderSetBindGroup(command->renderEncoder,
                                         i,
-                                        layout->emptyGroups[i],
+                                        layout->automaticGroups[i],
                                         0u,
                                         NULL);
     }
@@ -613,8 +711,8 @@ gpu_webgpuBindRenderEmptyGroups(GPURenderPassEncoder          *pass,
 }
 
 void
-gpu_webgpuBindComputeEmptyGroups(GPUComputePassEncoder         *pass,
-                                 const GPUPipelineLayoutWebGPU *layout) {
+gpu_webgpuBindComputeAutomaticGroups(GPUComputePassEncoder         *pass,
+                                     const GPUPipelineLayoutWebGPU *layout) {
   GPUCommandWebGPU *command;
 
   command = gpu_webgpuCommand(pass ? pass->_cmdb : NULL);
@@ -622,10 +720,10 @@ gpu_webgpuBindComputeEmptyGroups(GPUComputePassEncoder         *pass,
     return;
   }
   for (uint32_t i = 0u; i < GPU_ENCODER_MAX_BIND_GROUPS; i++) {
-    if ((layout->emptyGroupMask & (1u << i)) != 0u) {
+    if ((layout->automaticGroupMask & (1u << i)) != 0u) {
       wgpuComputePassEncoderSetBindGroup(command->computeEncoder,
                                          i,
-                                         layout->emptyGroups[i],
+                                         layout->automaticGroups[i],
                                          0u,
                                          NULL);
     }
