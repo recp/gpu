@@ -1507,6 +1507,80 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${GPU_WEBGPU_GALLERY_DIR}"
   )
 
+  set(GPU_WEBGPU_TEXTURE_LINE_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+  set(GPU_WEBGPU_TEXTURE_LINE_SOURCE
+      "${GPU_WEBGPU_TEXTURE_LINE_DIR}/texture_line.usl")
+  set(GPU_WEBGPU_TEXTURE_LINE_US
+      "${GPU_WEBGPU_TEXTURE_LINE_DIR}/texture_line.us")
+  set(GPU_WEBGPU_SAMPLE_TITLE "Texture line")
+  set(GPU_WEBGPU_SAMPLE_KIND "Compute + binding / 1D texture")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "Compute transforms a logical 1D texture before render reads the result beside the uploaded source line.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/texture-line.c")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/texture-line.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/texture-line.wgsl")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-texture-line-webgpu-usl-shell.html"
+    @ONLY
+  )
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_TEXTURE_LINE_US}"
+    BYPRODUCTS "${GPU_WEBGPU_TEXTURE_LINE_SOURCE}.wgsl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${GPU_WEBGPU_TEXTURE_LINE_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/texture-line-webgpu-usl/texture_line.usl"
+            "${GPU_WEBGPU_TEXTURE_LINE_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_TEXTURE_LINE_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/texture-line-webgpu-usl/main.c"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/texture-line.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_TEXTURE_LINE_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/texture-line.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_TEXTURE_LINE_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/texture-line.wgsl"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/texture-line-webgpu-usl/texture_line.usl"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/texture-line-webgpu-usl/main.c"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-texture-line-artifact
+    DEPENDS "${GPU_WEBGPU_TEXTURE_LINE_US}"
+  )
+
+  add_executable(gpu-texture-line-webgpu-usl
+    samples/texture-line-webgpu-usl/main.c
+    ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
+  )
+  target_link_libraries(gpu-texture-line-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-texture-line-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_TEXTURE_LINE_US}@/texture_line.us"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-texture-line-webgpu-usl-shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-texture-line-webgpu-usl
+                   gpu-webgpu-texture-line-artifact)
+  set_target_properties(gpu-texture-line-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-texture-line-webgpu-usl-shell.html;${GPU_WEBGPU_TEXTURE_LINE_US}"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${GPU_WEBGPU_GALLERY_DIR}"
+  )
+
   set(GPU_WEBGPU_DESCRIPTOR_ARRAY_DIR
       "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
   set(GPU_WEBGPU_DESCRIPTOR_ARRAY_SOURCE
