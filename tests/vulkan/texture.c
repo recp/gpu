@@ -66,9 +66,7 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   GPUTexture                      *target         = NULL;
   GPUTextureView                  *sampleView     = NULL;
   GPUTextureView                  *targetView     = NULL;
-  GPUSampler                      *sampler        = NULL;
   GPUBindGroup                    *fragmentGroup  = NULL;
-  GPUBindGroup                    *samplerGroup   = NULL;
   GPUCommandBuffer                *cmdb           = NULL;
   GPUCommandBuffer                *buffers[1];
   GPURenderPassEncoder            *renderPass     = NULL;
@@ -82,9 +80,7 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   GPUTextureCreateInfo             textureInfo    = {0};
   GPUTextureViewCreateInfo         viewInfo       = {0};
   GPUTextureWriteRegion            writeRegion    = {0};
-  GPUSamplerCreateInfo             samplerInfo    = {0};
   GPUBindGroupEntry                fragmentEntries[2] = {0};
-  GPUBindGroupEntry                samplerEntry   = {0};
   GPUBindGroupCreateInfo           groupInfo      = {0};
   GPURenderPassColorAttachment     color          = {0};
   GPURenderPassCreateInfo          passInfo       = {0};
@@ -98,7 +94,6 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   uint8_t                          pixels[4u * 4u * 4u] = {0};
   const GPUBindGroupLayoutEntry   *textureEntry;
   const GPUBindGroupLayoutEntry   *uniformEntry;
-  const GPUBindGroupLayoutEntry   *samplerLayoutEntry;
   size_t                           bottomLeftOffset;
   size_t                           bottomRightOffset;
   size_t                           topLeftOffset;
@@ -113,10 +108,9 @@ gpu_test_vulkan_texture(GPUDevice  *device,
                                     &library) != GPU_OK ||
       !library ||
       GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
-      !shaderLayout || shaderLayout->bindGroupLayoutCount != 2u ||
+      !shaderLayout || shaderLayout->bindGroupLayoutCount != 1u ||
       !shaderLayout->bindGroupLayouts ||
       !shaderLayout->bindGroupLayouts[0] ||
-      !shaderLayout->bindGroupLayouts[1] ||
       !shaderLayout->pipelineLayout) {
     fprintf(stderr, "failed to create Vulkan texture shader layout\n");
     goto cleanup;
@@ -128,13 +122,9 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   uniformEntry = find_layout_entry(shaderLayout->bindGroupLayouts[0],
                                    1u,
                                    GPU_BINDING_UNIFORM_BUFFER);
-  samplerLayoutEntry = find_layout_entry(shaderLayout->bindGroupLayouts[1],
-                                         0u,
-                                         GPU_BINDING_SAMPLER);
-  if (!textureEntry || !uniformEntry || !samplerLayoutEntry ||
+  if (!textureEntry || !uniformEntry ||
       textureEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      uniformEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      samplerLayoutEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
+      uniformEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
     fprintf(stderr, "Vulkan texture reflection layout mismatch\n");
     goto cleanup;
   }
@@ -258,21 +248,6 @@ gpu_test_vulkan_texture(GPUDevice  *device,
     goto cleanup;
   }
 
-  samplerInfo.chain.sType      = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-  samplerInfo.chain.structSize = sizeof(samplerInfo);
-  samplerInfo.label            = "vulkan-usl-texture-sampler";
-  samplerInfo.desc.minFilter   = GPU_FILTER_NEAREST;
-  samplerInfo.desc.magFilter   = GPU_FILTER_NEAREST;
-  samplerInfo.desc.mipFilter   = GPU_MIP_FILTER_NEAREST;
-  samplerInfo.desc.addressU    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  samplerInfo.desc.addressV    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  samplerInfo.desc.addressW    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  if (GPUCreateSampler(device, &samplerInfo, false, &sampler) != GPU_OK ||
-      !sampler) {
-    fprintf(stderr, "failed to create Vulkan texture sampler\n");
-    goto cleanup;
-  }
-
   fragmentEntries[0].binding       = 0u;
   fragmentEntries[0].bindingType   = GPU_BINDING_SAMPLED_TEXTURE;
   fragmentEntries[0].textureView   = sampleView;
@@ -289,19 +264,6 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   if (GPUCreateBindGroup(device, &groupInfo, &fragmentGroup) != GPU_OK ||
       !fragmentGroup) {
     fprintf(stderr, "failed to create Vulkan texture group 0\n");
-    goto cleanup;
-  }
-
-  samplerEntry.binding     = 0u;
-  samplerEntry.bindingType = GPU_BINDING_SAMPLER;
-  samplerEntry.sampler     = sampler;
-  groupInfo.label          = "vulkan-usl-texture-group1";
-  groupInfo.layout         = shaderLayout->bindGroupLayouts[1];
-  groupInfo.entryCount     = 1u;
-  groupInfo.pEntries       = &samplerEntry;
-  if (GPUCreateBindGroup(device, &groupInfo, &samplerGroup) != GPU_OK ||
-      !samplerGroup) {
-    fprintf(stderr, "failed to create Vulkan texture group 1\n");
     goto cleanup;
   }
 
@@ -345,7 +307,6 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   GPUBindRenderPipeline(renderPass, pipeline);
   GPUBindVertexBuffers(renderPass, 0u, 1u, &vertexBinding);
   GPUBindRenderGroup(renderPass, 0u, fragmentGroup, 0u, NULL);
-  GPUBindRenderGroup(renderPass, 1u, samplerGroup, 0u, NULL);
   viewport.width    = (float)width;
   viewport.height   = (float)height;
   viewport.maxDepth = 1.0f;
@@ -450,9 +411,7 @@ cleanup:
   GPUDestroyFence(fence);
   GPUDestroyTextureView(targetView);
   GPUDestroyTexture(target);
-  GPUDestroyBindGroup(samplerGroup);
   GPUDestroyBindGroup(fragmentGroup);
-  GPUDestroySampler(sampler);
   GPUDestroyTextureView(sampleView);
   GPUDestroyTexture(sampleTexture);
   GPUDestroyBuffer(readbackBuffer);
