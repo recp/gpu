@@ -63,9 +63,7 @@ FindLayoutEntry(GPUBindGroupLayout *layout,
   GPUBuffer         *_uniformBuffer;
   GPUTexture        *_texture;
   GPUTextureView    *_textureView;
-  GPUSampler        *_sampler;
   GPUBindGroup      *_fragmentGroup;
-  GPUBindGroup      *_samplerGroup;
   NSTimer           *_timer;
   NSInteger          _exitAfterFrames;
   NSInteger          _submittedFrames;
@@ -102,9 +100,7 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUTextureCreateInfo     textureInfo = {0};
   GPUTextureWriteRegion    writeRegion = {0};
   GPUTextureViewCreateInfo viewInfo = {0};
-  GPUSamplerCreateInfo     samplerInfo = {0};
   GPUBindGroupEntry        fragmentEntries[2] = {{0}};
-  GPUBindGroupEntry        samplerEntry = {0};
   GPUBindGroupCreateInfo   groupInfo = {0};
   FragmentUniforms         uniforms = {{0.9f, 0.95f, 1.0f, 1.0f}};
 
@@ -184,23 +180,6 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     return NO;
   }
 
-  samplerInfo.chain.sType      = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-  samplerInfo.chain.structSize = sizeof(samplerInfo);
-  samplerInfo.label            = "textured-quad-vulkan-sampler";
-  samplerInfo.desc.minFilter   = GPU_FILTER_NEAREST;
-  samplerInfo.desc.magFilter   = GPU_FILTER_NEAREST;
-  samplerInfo.desc.mipFilter   = GPU_MIP_FILTER_NEAREST;
-  samplerInfo.desc.addressU    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  samplerInfo.desc.addressV    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  samplerInfo.desc.addressW    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  if (GPUCreateSampler(_device,
-                       &samplerInfo,
-                       false,
-                       &_sampler) != GPU_OK) {
-    NSLog(@"GPU: failed to create Vulkan checker sampler");
-    return NO;
-  }
-
   fragmentEntries[0].binding       = 0u;
   fragmentEntries[0].bindingType   = GPU_BINDING_SAMPLED_TEXTURE;
   fragmentEntries[0].textureView   = _textureView;
@@ -222,20 +201,6 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     return NO;
   }
 
-  samplerEntry.binding     = 0u;
-  samplerEntry.bindingType = GPU_BINDING_SAMPLER;
-  samplerEntry.sampler     = _sampler;
-  groupInfo.label          = "textured-quad-vulkan-group1";
-  groupInfo.layout         = _shaderLayout->bindGroupLayouts[1];
-  groupInfo.entryCount     = 1u;
-  groupInfo.pEntries       = &samplerEntry;
-  if (GPUCreateBindGroup(_device,
-                         &groupInfo,
-                         &_samplerGroup) != GPU_OK) {
-    NSLog(@"GPU: failed to create Vulkan sampler group");
-    return NO;
-  }
-
   return YES;
 }
 
@@ -247,7 +212,6 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPURenderPipelineCreateInfo pipelineInfo = {0};
   const GPUBindGroupLayoutEntry *textureEntry;
   const GPUBindGroupLayoutEntry *uniformEntry;
-  const GPUBindGroupLayoutEntry *samplerEntry;
   GPUResult                      result;
   uint32_t adapterCount;
 
@@ -296,7 +260,7 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   if (!GPUSampleLoadUSL(_device,
                         @"textured_quad.us",
-                        2u,
+                        1u,
                         &_library,
                         &_shaderLayout)) {
     return NO;
@@ -308,13 +272,10 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   uniformEntry = FindLayoutEntry(_shaderLayout->bindGroupLayouts[0],
                                  1u,
                                  GPU_BINDING_UNIFORM_BUFFER);
-  samplerEntry = FindLayoutEntry(_shaderLayout->bindGroupLayouts[1],
-                                 0u,
-                                 GPU_BINDING_SAMPLER);
-  if (!textureEntry || !uniformEntry || !samplerEntry ||
+  if (_shaderLayout->bindGroupLayoutCount != 1u ||
+      !textureEntry || !uniformEntry ||
       textureEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      uniformEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      samplerEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
+      uniformEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
     NSLog(@"GPU: unexpected Vulkan textured quad reflection layout");
     return NO;
   }
@@ -422,7 +383,6 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUBindRenderPipeline(pass, _pipeline);
   GPUBindVertexBuffers(pass, 0u, 1u, &vertexBinding);
   GPUBindRenderGroup(pass, 0u, _fragmentGroup, 0u, NULL);
-  GPUBindRenderGroup(pass, 1u, _samplerGroup, 0u, NULL);
   GPUDraw(pass, 6u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
 
@@ -468,17 +428,9 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     GPUDestroyRenderPipeline(_pipeline);
     _pipeline = NULL;
   }
-  if (_samplerGroup) {
-    GPUDestroyBindGroup(_samplerGroup);
-    _samplerGroup = NULL;
-  }
   if (_fragmentGroup) {
     GPUDestroyBindGroup(_fragmentGroup);
     _fragmentGroup = NULL;
-  }
-  if (_sampler) {
-    GPUDestroySampler(_sampler);
-    _sampler = NULL;
   }
   if (_textureView) {
     GPUDestroyTextureView(_textureView);
@@ -528,6 +480,7 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   (void)notification;
   if (![self setupWindow] || ![self setupGPU]) {
+    _statsFailed = YES;
     [NSApp terminate:nil];
     return;
   }

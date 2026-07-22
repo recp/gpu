@@ -18,7 +18,6 @@ vert quad_vs(v: VSIn #stage_in) -> VSOut {
 
 frag quad_fs(input: VSOut #stage_in,
              colorTex: texture2d<half> #texture(0),
-             colorSampler: sampler #sampler(0) #group(1),
              uniforms: FragmentUniforms #buffer(1)) -> float4 {
-  return float4(colorTex.sample(colorSampler, input.uv)) * uniforms.tint
+  return float4(colorTex.sample(.nearest, input.uv)) * uniforms.tint
 }
