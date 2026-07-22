@@ -512,7 +512,7 @@ vk__createResources(GPUSwapchain  *swapchainObj,
   modeCount   = 0u;
 
 #if defined(__APPLE__)
-  vk_resizeMetalLayer(swapchain->surface->metalLayer,
+  gpuResizeMetalLayer(swapchain->surface->metalLayer,
                       width,
                       height,
                       swapchainObj->backingScaleFactor);

@@ -3,20 +3,12 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
 
-#include "../common.h"
+#include "surface_apple.h"
 
 #import <QuartzCore/CAMetalLayer.h>
+#import <TargetConditionals.h>
 
 #if TARGET_OS_IOS
 #  import <UIKit/UIKit.h>
@@ -25,8 +17,8 @@
 #endif
 
 GPU_HIDE
-void*
-vk_createMetalLayer(void *nativeHandle, GPUSurfaceType type, float scale) {
+void *
+gpuCreateMetalLayer(void *nativeHandle, GPUSurfaceType type, float scale) {
   CAMetalLayer *layer;
   CALayer      *rootLayer;
   CGRect        bounds;
@@ -58,12 +50,12 @@ vk_createMetalLayer(void *nativeHandle, GPUSurfaceType type, float scale) {
     return NULL;
   }
 
-  layer                 = [[CAMetalLayer alloc] init];
-  layer.frame           = bounds;
-  layer.contentsScale   = scale;
-  layer.drawableSize    = CGSizeMake(bounds.size.width * scale,
-                                     bounds.size.height * scale);
-  layer.opaque          = YES;
+  layer                  = [[CAMetalLayer alloc] init];
+  layer.frame            = bounds;
+  layer.contentsScale    = scale;
+  layer.drawableSize     = CGSizeMake(bounds.size.width * scale,
+                                      bounds.size.height * scale);
+  layer.opaque           = YES;
   layer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
   [rootLayer addSublayer:layer];
   return layer;
@@ -71,7 +63,7 @@ vk_createMetalLayer(void *nativeHandle, GPUSurfaceType type, float scale) {
 
 GPU_HIDE
 void
-vk_resizeMetalLayer(void *metalLayer,
+gpuResizeMetalLayer(void *metalLayer,
                     uint32_t width,
                     uint32_t height,
                     float scale) {
@@ -82,15 +74,15 @@ vk_resizeMetalLayer(void *metalLayer,
     return;
   }
 
-  layer.frame        = CGRectMake(0.0, 0.0, width, height);
+  layer.frame         = CGRectMake(0.0, 0.0, width, height);
   layer.contentsScale = scale;
-  layer.drawableSize = CGSizeMake((CGFloat)width * scale,
-                                  (CGFloat)height * scale);
+  layer.drawableSize  = CGSizeMake((CGFloat)width * scale,
+                                   (CGFloat)height * scale);
 }
 
 GPU_HIDE
 void
-vk_destroyMetalLayer(void *metalLayer) {
+gpuDestroyMetalLayer(void *metalLayer) {
   CAMetalLayer *layer;
 
   layer = (CAMetalLayer *)metalLayer;

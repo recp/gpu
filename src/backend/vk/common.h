@@ -30,6 +30,9 @@
 #include "../../api/surface_internal.h"
 #include "../../api/swapchain_internal.h"
 #include "../../api/texture_internal.h"
+#if defined(__APPLE__)
+#  include "../surface_apple.h"
+#endif
 #include <stdarg.h>
 #include <assert.h>
 #include <inttypes.h>
@@ -1039,22 +1042,5 @@ vk_waitSwapchainIdle(GPUSwapchainVk *swapchain);
 GPU_HIDE
 void
 vk_resetQuerySet(GPUCommandBuffer *cmdb, GPUQuerySet *set);
-
-#if defined(__APPLE__)
-GPU_HIDE
-void*
-vk_createMetalLayer(void *nativeHandle, GPUSurfaceType type, float scale);
-
-GPU_HIDE
-void
-vk_resizeMetalLayer(void *metalLayer,
-                    uint32_t width,
-                    uint32_t height,
-                    float scale);
-
-GPU_HIDE
-void
-vk_destroyMetalLayer(void *metalLayer);
-#endif
 
 #endif /* vk_common_h */

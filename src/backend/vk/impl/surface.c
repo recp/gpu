@@ -275,7 +275,7 @@ vk_createSurface(GPUApi            * __restrict api,
   err = vk_createDisplaySurface(instVk, adapterVk, surface->surface);
 #elif defined(VK_USE_PLATFORM_METAL_EXT)
   VkMetalSurfaceCreateInfoEXT createInfo = {0};
-  surface->metalLayer = vk_createMetalLayer(nativeHandle, type, scale);
+  surface->metalLayer = gpuCreateMetalLayer(nativeHandle, type, scale);
   if (!surface->metalLayer) {
     free(surface);
     free(gpuSurface);
@@ -292,7 +292,7 @@ vk_createSurface(GPUApi            * __restrict api,
 
   if (err != VK_SUCCESS) {
 #if defined(__APPLE__)
-    vk_destroyMetalLayer(surface->metalLayer);
+    gpuDestroyMetalLayer(surface->metalLayer);
 #endif
     free(surface);
     free(gpuSurface);
@@ -474,7 +474,7 @@ vk_destroySurface(GPUSurface * __restrict surface) {
       vkDestroySurfaceKHR(surfaceVk->inst, surfaceVk->surface, NULL);
     }
 #if defined(__APPLE__)
-    vk_destroyMetalLayer(surfaceVk->metalLayer);
+    gpuDestroyMetalLayer(surfaceVk->metalLayer);
 #endif
     free(surfaceVk);
   }

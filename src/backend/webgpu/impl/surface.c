@@ -8,6 +8,10 @@
 #include "../common.h"
 #include "../impl.h"
 
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+#  include "../../surface_apple.h"
+#endif
+
 WGPUTextureFormat
 gpu_webgpuFormat(GPUFormat format) {
   static const WGPUTextureFormat formats[] = {
@@ -238,12 +242,18 @@ webgpu_createSurface(GPUApi        *api,
   GPUInstanceWebGPU    *instanceNative;
   GPUSurfaceWebGPU     *native;
   GPUSurface           *surface;
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+  WGPUSurfaceSourceMetalLayer metalLayer =
+    WGPU_SURFACE_SOURCE_METAL_LAYER_INIT;
+#elif defined(_WIN32) || defined(WIN32)
+  WGPUSurfaceSourceWindowsHWND window =
+    WGPU_SURFACE_SOURCE_WINDOWS_HWND_INIT;
+#endif
 
   GPU__UNUSED(api);
   GPU__UNUSED(adapter);
   instanceNative = gpu_webgpuInstance(instance);
-  if (!instanceNative || !instanceNative->instance || !nativeHandle ||
-      type != GPU_SURFACE_WEB_CANVAS) {
+  if (!instanceNative || !instanceNative->instance || !nativeHandle) {
     return NULL;
   }
 
@@ -251,8 +261,28 @@ webgpu_createSurface(GPUApi        *api,
   WGPUEmscriptenSurfaceSourceCanvasHTMLSelector canvas =
     WGPU_EMSCRIPTEN_SURFACE_SOURCE_CANVAS_HTML_SELECTOR_INIT;
 
+  if (type != GPU_SURFACE_WEB_CANVAS) {
+    return NULL;
+  }
   canvas.selector          = gpu_webgpuString(nativeHandle);
   descriptor.nextInChain   = &canvas.chain;
+#elif defined(__APPLE__)
+  if (type != GPU_SURFACE_APPLE_NSVIEW &&
+      type != GPU_SURFACE_APPLE_UIVIEW) {
+    return NULL;
+  }
+  metalLayer.layer = gpuCreateMetalLayer(nativeHandle, type, scale);
+  if (!metalLayer.layer) {
+    return NULL;
+  }
+  descriptor.nextInChain = &metalLayer.chain;
+#elif defined(_WIN32) || defined(WIN32)
+  if (type != GPU_SURFACE_WINDOWS_HWND) {
+    return NULL;
+  }
+  window.hinstance       = GetModuleHandleW(NULL);
+  window.hwnd            = nativeHandle;
+  descriptor.nextInChain = &window.chain;
 #else
   return NULL;
 #endif
@@ -262,16 +292,25 @@ webgpu_createSurface(GPUApi        *api,
   if (!surface || !native) {
     free(native);
     free(surface);
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+    gpuDestroyMetalLayer(metalLayer.layer);
+#endif
     return NULL;
   }
 
   native->surface = wgpuInstanceCreateSurface(instanceNative->instance,
                                                &descriptor);
   if (!native->surface) {
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+    gpuDestroyMetalLayer(metalLayer.layer);
+#endif
     free(native);
     free(surface);
     return NULL;
   }
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+  native->ownedPlatformHandle = metalLayer.layer;
+#endif
 
   surface->_priv = native;
   surface->type  = type;
@@ -288,6 +327,9 @@ webgpu_destroySurface(GPUSurface *surface) {
     if (native->surface) {
       wgpuSurfaceRelease(native->surface);
     }
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+    gpuDestroyMetalLayer(native->ownedPlatformHandle);
+#endif
     free(native);
   }
   free(surface);

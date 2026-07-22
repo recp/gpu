@@ -60,6 +60,7 @@ typedef struct GPUAdapterWebGPU {
 
 typedef struct GPUSurfaceWebGPU {
   WGPUSurface surface;
+  void       *ownedPlatformHandle;
   uint32_t    formats[GPU_WEBGPU_MAX_SURFACE_FORMATS];
   uint32_t    presentModes[GPU_WEBGPU_MAX_PRESENT_MODES];
   uint32_t    formatCount;
