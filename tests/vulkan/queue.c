@@ -226,17 +226,23 @@ descriptor_binding_path(GPUDevice *device,
   GPUDeviceVk                   *deviceVk;
   GPUBindlessLayoutEXT           bindlessInfo = {0};
   GPUBindGroupLayoutEntry        layoutEntry = {0};
+  GPUBindGroupLayoutEntry        dynamicEntry = {0};
   GPUBindGroupLayoutCreateInfo   layoutInfo = {0};
+  GPUBindGroupLayoutCreateInfo   dynamicInfo = {0};
   GPUBindGroupEntry              groupEntry = {0};
   GPUBindGroupCreateInfo         groupInfo = {0};
   GPUPipelineLayoutCreateInfo    pipelineInfo = {0};
   GPUQueueSubmitInfo             submitInfo = {0};
   GPUBufferCreateInfo            bufferInfo = {0};
-  GPUBindGroupLayout            *layouts[1];
+  GPUBindGroupLayout            *layouts[2];
   GPUBindGroupLayout            *layout;
+  GPUBindGroupLayout            *dynamicLayout;
   GPUBindGroupLayoutVk          *layoutVk;
+  GPUBindGroupLayoutVk          *dynamicLayoutVk;
   GPUPipelineLayout             *pipelineLayout;
+  GPUPipelineLayout             *mixedPipelineLayout;
   GPUPipelineLayoutVk           *pipelineLayoutVk;
+  GPUPipelineLayoutVk           *mixedPipelineLayoutVk;
   GPUBindGroup                  *group;
   GPUBindGroupVk                *groupVk;
   GPUBuffer                     *buffer;
@@ -246,12 +252,14 @@ descriptor_binding_path(GPUDevice *device,
   int                            ok;
 
   deviceVk = device ? device->_priv : NULL;
-  layout   = NULL;
-  group    = NULL;
-  buffer   = NULL;
-  pipelineLayout = NULL;
-  cmdb     = NULL;
-  ok       = 0;
+  layout              = NULL;
+  dynamicLayout       = NULL;
+  pipelineLayout      = NULL;
+  mixedPipelineLayout = NULL;
+  group               = NULL;
+  buffer              = NULL;
+  cmdb                = NULL;
+  ok                  = 0;
   if (!deviceVk) {
     return 0;
   }
@@ -286,6 +294,24 @@ descriptor_binding_path(GPUDevice *device,
     goto cleanup;
   }
 
+  dynamicEntry.binding          = 0u;
+  dynamicEntry.bindingType      = GPU_BINDING_UNIFORM_BUFFER;
+  dynamicEntry.visibility       = GPU_SHADER_STAGE_COMPUTE_BIT;
+  dynamicEntry.arrayCount       = 1u;
+  dynamicEntry.hasDynamicOffset = true;
+  dynamicInfo.chain.sType      =
+    GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  dynamicInfo.chain.structSize = sizeof(dynamicInfo);
+  dynamicInfo.label            = "vulkan-dynamic-descriptor-layout";
+  dynamicInfo.entryCount       = 1u;
+  dynamicInfo.pEntries         = &dynamicEntry;
+  if (GPUCreateBindGroupLayout(device,
+                               &dynamicInfo,
+                               &dynamicLayout) != GPU_OK ||
+      !dynamicLayout) {
+    goto cleanup;
+  }
+
   groupEntry.binding       = 0u;
   groupEntry.arrayIndex    = bindless ? 1u : 0u;
   groupEntry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
@@ -313,7 +339,17 @@ descriptor_binding_path(GPUDevice *device,
   if (GPUCreatePipelineLayout(device,
                               &pipelineInfo,
                               &pipelineLayout) != GPU_OK ||
-      !pipelineLayout ||
+      !pipelineLayout) {
+    goto cleanup;
+  }
+
+  layouts[1]                         = dynamicLayout;
+  pipelineInfo.label                 = "vulkan-mixed-descriptor-pipeline";
+  pipelineInfo.bindGroupLayoutCount  = 2u;
+  if (GPUCreatePipelineLayout(device,
+                              &pipelineInfo,
+                              &mixedPipelineLayout) != GPU_OK ||
+      !mixedPipelineLayout ||
       GPUAcquireCommandBuffer(queue,
                               "vulkan-descriptor-bind",
                               &cmdb) != GPU_OK ||
@@ -338,6 +374,28 @@ descriptor_binding_path(GPUDevice *device,
     goto cleanup;
   }
 
+  pass = GPUBeginComputePass(cmdb, "vulkan-descriptor-set-fallback");
+  if (!pass) {
+    ok = 0;
+    goto cleanup;
+  }
+  mixedPipelineLayoutVk = mixedPipelineLayout->_native;
+  passVk                = pass->_priv;
+  if (!mixedPipelineLayoutVk || !passVk) {
+    GPUEndComputePass(pass);
+    ok = 0;
+    goto cleanup;
+  }
+  pass->_pipelineLayout              = mixedPipelineLayout;
+  passVk->pipelineLayout             = mixedPipelineLayoutVk->layout;
+  passVk->descriptors.pipelineLayout = mixedPipelineLayoutVk;
+  GPUBindComputeGroup(pass, 0u, group, 0u, NULL);
+  ok = pass->_boundGroups[0] == group;
+  GPUEndComputePass(pass);
+  if (!ok) {
+    goto cleanup;
+  }
+
   submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   submitInfo.chain.structSize   = sizeof(submitInfo);
   submitInfo.commandBufferCount = 1u;
@@ -350,9 +408,12 @@ descriptor_binding_path(GPUDevice *device,
   }
 
   layoutVk = layout->_native;
+  dynamicLayoutVk = dynamicLayout->_native;
   groupVk  = group->_native;
-  ok = layoutVk && groupVk &&
-       layoutVk->descriptorBuffer == deviceVk->descriptorBuffer;
+  ok = layoutVk && dynamicLayoutVk && groupVk && mixedPipelineLayoutVk &&
+       layoutVk->descriptorBuffer == deviceVk->descriptorBuffer &&
+       !dynamicLayoutVk->descriptorBuffer &&
+       !mixedPipelineLayoutVk->descriptorBuffer;
 #ifdef VK_EXT_descriptor_buffer
   if (ok && deviceVk->descriptorBuffer) {
     ok = pipelineLayoutVk->descriptorBuffer && groupVk->descriptorChunk &&
@@ -365,7 +426,9 @@ descriptor_binding_path(GPUDevice *device,
 
 cleanup:
   GPUDestroyBindGroup(group);
+  GPUDestroyPipelineLayout(mixedPipelineLayout);
   GPUDestroyPipelineLayout(pipelineLayout);
+  GPUDestroyBindGroupLayout(dynamicLayout);
   GPUDestroyBindGroupLayout(layout);
   GPUDestroyBuffer(buffer);
   return ok;
