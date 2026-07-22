@@ -35,3 +35,14 @@ frag vrs_coarse_fs(input: VRSCompareOut #stage_in) -> float4 {
                   float3(0.02, 0.34, 0.62),
                   float3(0.08, 0.82, 1.0))
 }
+
+frag vrs_attachment_fs(input: VRSCompareOut #stage_in) -> float4 {
+  let side = step(0.5, input.uv.x)
+  return vrs_grid(input.uv,
+                  mix(float3(0.08, 0.02, 0.01),
+                      float3(0.01, 0.04, 0.08), side),
+                  mix(float3(0.72, 0.16, 0.03),
+                      float3(0.02, 0.34, 0.62), side),
+                  mix(float3(1.0, 0.58, 0.10),
+                      float3(0.08, 0.82, 1.0), side))
+}

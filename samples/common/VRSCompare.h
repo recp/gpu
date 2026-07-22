@@ -14,6 +14,10 @@ typedef struct GPUSampleVRSCompare {
   GPURenderPipeline  *finePipeline;
   GPURenderPipeline  *coarsePipeline;
   GPUBuffer          *vertexBuffer;
+  GPUTexture         *rateTexture;
+  GPUTextureView     *rateView;
+  GPUExtent2D         attachmentTexelSize;
+  GPUVRSModeFlagsEXT  mode;
   GPUShadingRateEXT   coarseRate;
   uint32_t            width;
   uint32_t            height;
@@ -25,13 +29,20 @@ GPUSampleChooseVRSRate(const GPUAdapter *adapter,
                        GPUShadingRateEXT *outRate);
 
 GPUResult
+GPUSampleChooseVRSAttachment(const GPUAdapter *adapter,
+                             GPUShadingRateEXT *outRate,
+                             GPUExtent2D       *outTexelSize);
+
+GPUResult
 GPUSampleVRSCompareInit(GPUSampleVRSCompare *state,
                         GPUDevice           *device,
                         GPUQueue            *queue,
                         GPUSwapchain        *swapchain,
                         GPUShaderLibrary    *library,
                         GPUShaderLayout     *shaderLayout,
+                        GPUVRSModeFlagsEXT   mode,
                         GPUShadingRateEXT    coarseRate,
+                        GPUExtent2D          attachmentTexelSize,
                         uint32_t             width,
                         uint32_t             height);
 

@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #import "../../include/gpu/gpu.h"
 #import "../common/VRSCompare.h"
@@ -14,14 +15,26 @@
 #  define GPU_SAMPLE_BACKEND GPU_BACKEND_VULKAN
 #endif
 
+#ifndef GPU_SAMPLE_VRS_ATTACHMENT
+#  define GPU_SAMPLE_VRS_ATTACHMENT 0
+#endif
+
 static NSString *
 VRSCompareWindowTitle(void) {
+#if GPU_SAMPLE_VRS_ATTACHMENT
+  return @"GPU Vulkan USL VRS Attachment Compare";
+#else
   return @"GPU Vulkan USL VRS Compare";
+#endif
 }
 
 static const char *
 VRSCompareStatsLabel(void) {
+#if GPU_SAMPLE_VRS_ATTACHMENT
+  return "GPU Vulkan VRS attachment compare";
+#else
   return "GPU Vulkan VRS compare";
+#endif
 }
 
 @interface VRSCompareApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
@@ -99,13 +112,17 @@ VRSCompareDeviceError(GPUDevice                *device,
   GPUShaderLibrary     *library;
   GPUShaderLayout      *shaderLayout;
   GPUShadingRateEXT     coarseRate;
+  GPUExtent2D           attachmentTexelSize;
+  GPUVRSModeFlagsEXT    mode;
   GPUFeature            feature;
   uint32_t              width;
   uint32_t              height;
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
-  instanceInfo.label            = "vrs-compare-native-usl";
+  instanceInfo.label            = GPU_SAMPLE_VRS_ATTACHMENT
+                                    ? "vrs-attachment-native-usl"
+                                    : "vrs-compare-native-usl";
   instanceInfo.preferredBackend = GPU_SAMPLE_BACKEND;
   instanceInfo.enableValidation = true;
   if (GPUCreateInstance(&instanceInfo, &_instance) != GPU_OK || !_instance) {
@@ -116,11 +133,26 @@ VRSCompareDeviceError(GPUDevice                *device,
   if (!_adapter) {
     return NO;
   }
-  if (GPUSampleChooseVRSRate(_adapter, &coarseRate) != GPU_OK) {
-    fprintf(stderr, "GPU Vulkan VRS compare: draw-rate VRS unavailable\n");
+  memset(&attachmentTexelSize, 0, sizeof(attachmentTexelSize));
+#if GPU_SAMPLE_VRS_ATTACHMENT
+  mode = GPU_VRS_ATTACHMENT_BIT_EXT;
+  if (GPUSampleChooseVRSAttachment(_adapter,
+                                   &coarseRate,
+                                   &attachmentTexelSize) != GPU_OK) {
+    fprintf(stderr,
+            "GPU Vulkan VRS attachment compare: attachment VRS unavailable\n");
     _skipped = YES;
     return NO;
   }
+#else
+  mode = GPU_VRS_DRAW_RATE_BIT_EXT;
+  if (GPUSampleChooseVRSRate(_adapter, &coarseRate) != GPU_OK) {
+    fprintf(stderr,
+            "GPU Vulkan VRS compare: draw-rate VRS unavailable\n");
+    _skipped = YES;
+    return NO;
+  }
+#endif
 
   feature                          = GPU_FEATURE_VARIABLE_RATE_SHADING;
   deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -178,7 +210,9 @@ VRSCompareDeviceError(GPUDevice                *device,
                                  _swapchain,
                                  library,
                                  shaderLayout,
+                                 mode,
                                  coarseRate,
+                                 attachmentTexelSize,
                                  width,
                                  height) == GPU_OK;
 }

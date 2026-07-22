@@ -3339,6 +3339,23 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
     C_EXTENSIONS NO
   )
 
+  add_executable(gpu-vrs-attachment-dx12-usl
+    samples/vrs-compare-dx12-usl/main.c
+    samples/common/VRSCompare.c
+  )
+  target_compile_definitions(gpu-vrs-attachment-dx12-usl PRIVATE
+    GPU_SAMPLE_VRS_ATTACHMENT=1
+  )
+  target_link_libraries(gpu-vrs-attachment-dx12-usl PRIVATE gpu user32)
+  gpu_attach_usl_sample(gpu-vrs-attachment-dx12-usl
+                        gpu-dx12-fixtures
+                        "${GPU_DX12_VRS_COMPARE_US}")
+  set_target_properties(gpu-vrs-attachment-dx12-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+
   add_executable(gpu-textured-cube-dx12-usl
     samples/textured-cube-dx12-usl/main.c
   )
@@ -3458,6 +3475,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
              COMMAND gpu-shadow-compare-dx12-usl)
     add_test(NAME dx12-vrs-compare
              COMMAND gpu-vrs-compare-dx12-usl)
+    add_test(NAME dx12-vrs-attachment
+             COMMAND gpu-vrs-attachment-dx12-usl)
     add_test(NAME dx12-textured-cube
              COMMAND gpu-textured-cube-dx12-usl)
     add_test(NAME dx12-mrt-blend
@@ -3473,6 +3492,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
       dx12-textured-quad
       dx12-shadow-compare
       dx12-vrs-compare
+      dx12-vrs-attachment
       dx12-textured-cube
       dx12-mrt-blend
       dx12-bindless
@@ -3484,7 +3504,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
     )
     set_property(
       TEST dx12-triangle dx12-textured-quad dx12-shadow-compare
-           dx12-vrs-compare
+           dx12-vrs-compare dx12-vrs-attachment
            dx12-textured-cube
            dx12-mrt-blend dx12-bindless dx12-mesh-triangle
            dx12-compute-render
@@ -3607,6 +3627,25 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
                           gpu-vulkan-fixtures
                           "${GPU_VULKAN_VRS_COMPARE_US}")
 
+    add_executable(gpu-vrs-attachment-vulkan-usl
+      samples/vrs-compare-usl/main.m
+      samples/common/VRSCompare.c
+    )
+    target_compile_options(gpu-vrs-attachment-vulkan-usl PRIVATE -fobjc-arc)
+    target_compile_definitions(gpu-vrs-attachment-vulkan-usl PRIVATE
+      GPU_SAMPLE_BACKEND=GPU_BACKEND_VULKAN
+      GPU_SAMPLE_VRS_ATTACHMENT=1
+    )
+    target_link_libraries(gpu-vrs-attachment-vulkan-usl PRIVATE
+      gpu
+      "-framework AppKit"
+      "-framework Foundation"
+      "-framework QuartzCore"
+    )
+    gpu_attach_usl_sample(gpu-vrs-attachment-vulkan-usl
+                          gpu-vulkan-fixtures
+                          "${GPU_VULKAN_VRS_COMPARE_US}")
+
     add_executable(gpu-textured-cube-vulkan-usl
       samples/textured-cube-usl/main.m
     )
@@ -3707,6 +3746,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
                COMMAND gpu-shadow-compare-vulkan-usl)
       add_test(NAME vulkan-vrs-compare
                COMMAND gpu-vrs-compare-vulkan-usl)
+      add_test(NAME vulkan-vrs-attachment
+               COMMAND gpu-vrs-attachment-vulkan-usl)
       add_test(NAME vulkan-textured-cube
                COMMAND gpu-textured-cube-vulkan-usl)
       add_test(NAME vulkan-mrt-blend
@@ -3724,6 +3765,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
         vulkan-textured-quad
         vulkan-shadow-compare
         vulkan-vrs-compare
+        vulkan-vrs-attachment
         vulkan-textured-cube
         vulkan-mrt-blend
         vulkan-bindless
@@ -3758,6 +3800,7 @@ if((GPU_BUILD_TESTS OR GPU_BUILD_BENCHMARKS) AND
             vulkan-textured-quad
             vulkan-shadow-compare
             vulkan-vrs-compare
+            vulkan-vrs-attachment
             vulkan-textured-cube
             vulkan-mrt-blend
             vulkan-bindless

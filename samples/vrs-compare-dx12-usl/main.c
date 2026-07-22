@@ -11,7 +11,20 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <wchar.h>
+
+#ifndef GPU_SAMPLE_VRS_ATTACHMENT
+#  define GPU_SAMPLE_VRS_ATTACHMENT 0
+#endif
+
+#if GPU_SAMPLE_VRS_ATTACHMENT
+#  define GPU_VRS_COMPARE_LABEL "GPU DX12 VRS attachment compare"
+#  define GPU_VRS_COMPARE_TITLE L"GPU + USL Direct3D 12 VRS Attachment Compare"
+#else
+#  define GPU_VRS_COMPARE_LABEL "GPU DX12 VRS compare"
+#  define GPU_VRS_COMPARE_TITLE L"GPU + USL Direct3D 12 VRS Compare"
+#endif
 
 typedef struct VRSCompareApp {
   GPUInstance        *instance;
@@ -40,7 +53,7 @@ static VRSCompareApp *vrs_compare_app;
 
 static void
 vrs_compare_log(const char *message) {
-  fprintf(stderr, "GPU DX12 VRS compare: %s\n", message);
+  fprintf(stderr, "%s: %s\n", GPU_VRS_COMPARE_LABEL, message);
 }
 
 static bool
@@ -109,7 +122,7 @@ vrs_compare_createWindow(VRSCompareApp *app, HINSTANCE instance) {
   AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE);
   app->window = CreateWindowExW(0,
                                 windowClass.lpszClassName,
-                                L"GPU + USL Direct3D 12 VRS Compare",
+                                GPU_VRS_COMPARE_TITLE,
                                 WS_OVERLAPPEDWINDOW,
                                 CW_USEDEFAULT,
                                 CW_USEDEFAULT,
@@ -138,6 +151,8 @@ vrs_compare_createGPU(VRSCompareApp *app) {
   GPUShaderLibrary     *library;
   GPUShaderLayout      *shaderLayout;
   GPUShadingRateEXT     coarseRate;
+  GPUExtent2D           attachmentTexelSize;
+  GPUVRSModeFlagsEXT    mode;
   GPUFeature            feature;
   GPUResult             result;
   void                 *artifact;
@@ -146,7 +161,9 @@ vrs_compare_createGPU(VRSCompareApp *app) {
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
-  instanceInfo.label            = "vrs-compare-dx12-usl";
+  instanceInfo.label            = GPU_SAMPLE_VRS_ATTACHMENT
+                                    ? "vrs-attachment-dx12-usl"
+                                    : "vrs-compare-dx12-usl";
   instanceInfo.preferredBackend = GPU_BACKEND_DX12;
   instanceInfo.enableValidation = true;
   if (GPUCreateInstance(&instanceInfo, &app->instance) != GPU_OK ||
@@ -163,10 +180,22 @@ vrs_compare_createGPU(VRSCompareApp *app) {
     return VRS_COMPARE_SETUP_FAILED;
   }
 
+  memset(&attachmentTexelSize, 0, sizeof(attachmentTexelSize));
+#if GPU_SAMPLE_VRS_ATTACHMENT
+  mode = GPU_VRS_ATTACHMENT_BIT_EXT;
+  if (GPUSampleChooseVRSAttachment(app->adapter,
+                                   &coarseRate,
+                                   &attachmentTexelSize) != GPU_OK) {
+    vrs_compare_log("attachment VRS unavailable");
+    return VRS_COMPARE_SETUP_SKIPPED;
+  }
+#else
+  mode = GPU_VRS_DRAW_RATE_BIT_EXT;
   if (GPUSampleChooseVRSRate(app->adapter, &coarseRate) != GPU_OK) {
     vrs_compare_log("draw-rate VRS unavailable");
     return VRS_COMPARE_SETUP_SKIPPED;
   }
+#endif
 
   feature                          = GPU_FEATURE_VARIABLE_RATE_SHADING;
   deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -233,7 +262,9 @@ vrs_compare_createGPU(VRSCompareApp *app) {
                                    app->swapchain,
                                    library,
                                    shaderLayout,
+                                   mode,
                                    coarseRate,
+                                   attachmentTexelSize,
                                    app->width,
                                    app->height);
   app->ready = result == GPU_OK;
@@ -251,7 +282,7 @@ vrs_compare_render(VRSCompareApp *app) {
   if (!GPUSampleCheckZeroAlloc(app->device,
                                app->renderer.frameCount,
                                app->assertZeroAlloc,
-                               "GPU DX12 VRS compare")) {
+                               GPU_VRS_COMPARE_LABEL)) {
     return false;
   }
   if (app->exitAfterFrames > 0u &&
