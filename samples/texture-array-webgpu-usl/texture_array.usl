@@ -3,6 +3,20 @@ struct VSOut {
   uv:       float2
 }
 
+kern(4, 1, 1) line_copy_cs(
+  inputLines:  texture1d_array<float> #texture(0),
+  outputLines: image1d_array<rgba8unorm, write> #texture(1),
+  gid:         uint3 #global_id
+) {
+  let width      = inputLines.get_width()
+  let layers     = inputLines.get_array_size()
+  let coord      = uint2(gid.x, gid.y)
+  let color      = inputLines.read(coord)
+  let queryScale = float4(1.0, float(width) / 8.0,
+                               float(layers) / 2.0, 1.0)
+  outputLines.write(color * queryScale, coord)
+}
+
 vert array_vs(vertexId: uint #vertex_id) -> VSOut {
   if (vertexId == 0) { return VSOut { float4(-0.88, -0.76, 0.0, 1.0), float2(0.0, 1.0) } }
   if (vertexId == 1) { return VSOut { float4( 0.88, -0.76, 0.0, 1.0), float2(1.0, 1.0) } }
@@ -13,9 +27,9 @@ vert array_vs(vertexId: uint #vertex_id) -> VSOut {
 }
 
 frag array_fs(input: VSOut #stage_in,
-              colorLayers:  texture2d_array<float> #texture(0),
-              lineLayers:   texture1d_array<float> #texture(1),
-              colorSampler: sampler #sampler(2)) -> float4 {
+              colorLayers:  texture2d_array<float> #texture(0) #group(1),
+              lineLayers:   texture1d_array<float> #texture(1) #group(1),
+              colorSampler: sampler #sampler(2) #group(1)) -> float4 {
   let layer  = step(0.5, input.uv.x)
   let localX = input.uv.x * 2.0 - layer
   if (input.uv.y < 0.5) {
@@ -24,5 +38,6 @@ frag array_fs(input: VSOut #stage_in,
                               float3(localX, localY, layer),
                               level(0.0))
   }
-  return lineLayers.sample(colorSampler, float2(localX, layer), level(0.0))
+  let lineX = int(localX * float(lineLayers.get_width()))
+  return lineLayers.read(int2(lineX, int(layer)))
 }

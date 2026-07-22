@@ -20,13 +20,17 @@ typedef struct WebGPUTextureArray {
   GPUSwapchain       *swapchain;
   GPUShaderLibrary   *library;
   GPUShaderLayout    *shaderLayout;
-  GPURenderPipeline  *pipeline;
+  GPUComputePipeline *computePipeline;
+  GPURenderPipeline  *renderPipeline;
   GPUTexture         *texture2D;
-  GPUTexture         *lineTexture;
+  GPUTexture         *lineInputTexture;
+  GPUTexture         *lineOutputTexture;
   GPUTextureView     *texture2DView;
-  GPUTextureView     *lineView;
+  GPUTextureView     *lineInputView;
+  GPUTextureView     *lineOutputView;
   GPUSampler         *sampler;
-  GPUBindGroup       *bindGroup;
+  GPUBindGroup       *computeGroup;
+  GPUBindGroup       *renderGroup;
   WebGPURequest       request;
   uint32_t            width;
   uint32_t            height;
@@ -98,12 +102,15 @@ fill_line_layer(uint8_t *pixels, uint32_t layer) {
 
 static int
 create_shader(WebGPUTextureArray *state) {
-  const GPUBindGroupLayoutEntry *entries;
-  GPUColorTargetState            color = {0};
-  GPURenderPipelineCreateInfo    info  = {0};
+  const GPUBindGroupLayoutEntry *computeEntries;
+  const GPUBindGroupLayoutEntry *renderEntries;
+  GPUComputePipelineCreateInfo   computeInfo = {0};
+  GPURenderPipelineCreateInfo    renderInfo  = {0};
+  GPUColorTargetState            color       = {0};
   void                          *artifact;
   uint64_t                       artifactSize;
-  uint32_t                       entryCount;
+  uint32_t                       computeCount;
+  uint32_t                       renderCount;
   GPUResult                      result;
 
   artifact     = NULL;
@@ -126,52 +133,92 @@ create_shader(WebGPUTextureArray *state) {
                             state->library,
                             &state->shaderLayout) != GPU_OK ||
       !state->shaderLayout ||
-      state->shaderLayout->bindGroupLayoutCount != 1u ||
+      state->shaderLayout->bindGroupLayoutCount != 2u ||
       !state->shaderLayout->bindGroupLayouts ||
-      !state->shaderLayout->bindGroupLayouts[0]) {
+      !state->shaderLayout->bindGroupLayouts[0] ||
+      !state->shaderLayout->bindGroupLayouts[1]) {
     set_status("GPU: unexpected texture-array reflection", 1);
     return 0;
   }
 
-  entries = GPUGetBindGroupLayoutEntries(
+  computeEntries = GPUGetBindGroupLayoutEntries(
     state->shaderLayout->bindGroupLayouts[0],
-    &entryCount
+    &computeCount
   );
-  if (!entries || entryCount != 3u ||
-      entries[0].binding != 0u ||
-      entries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-      entries[0].sampledTexture.viewType != GPU_TEXTURE_VIEW_2D_ARRAY ||
-      entries[0].sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT ||
-      entries[1].binding != 1u ||
-      entries[1].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-      entries[1].sampledTexture.viewType != GPU_TEXTURE_VIEW_1D_ARRAY ||
-      entries[1].sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT ||
-      entries[2].binding != 2u ||
-      entries[2].bindingType != GPU_BINDING_SAMPLER) {
+  renderEntries = GPUGetBindGroupLayoutEntries(
+    state->shaderLayout->bindGroupLayouts[1],
+    &renderCount
+  );
+  if (!computeEntries || computeCount != 2u ||
+      computeEntries[0].binding != 0u ||
+      computeEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
+      computeEntries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
+      computeEntries[0].sampledTexture.viewType != GPU_TEXTURE_VIEW_1D_ARRAY ||
+      computeEntries[0].sampledTexture.sampleType !=
+        GPU_TEXTURE_SAMPLE_TYPE_FLOAT ||
+      computeEntries[1].binding != 1u ||
+      computeEntries[1].bindingType != GPU_BINDING_STORAGE_TEXTURE ||
+      computeEntries[1].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
+      computeEntries[1].storageTexture.viewType != GPU_TEXTURE_VIEW_1D_ARRAY ||
+      computeEntries[1].storageTexture.format != GPU_FORMAT_RGBA8_UNORM ||
+      computeEntries[1].storageTexture.access !=
+        GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY ||
+      !renderEntries || renderCount != 3u ||
+      renderEntries[0].binding != 0u ||
+      renderEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
+      renderEntries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
+      renderEntries[0].sampledTexture.viewType != GPU_TEXTURE_VIEW_2D_ARRAY ||
+      renderEntries[0].sampledTexture.sampleType !=
+        GPU_TEXTURE_SAMPLE_TYPE_FLOAT ||
+      renderEntries[1].binding != 1u ||
+      renderEntries[1].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
+      renderEntries[1].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
+      renderEntries[1].sampledTexture.viewType != GPU_TEXTURE_VIEW_1D_ARRAY ||
+      renderEntries[1].sampledTexture.sampleType !=
+        GPU_TEXTURE_SAMPLE_TYPE_FLOAT ||
+      renderEntries[2].binding != 2u ||
+      renderEntries[2].bindingType != GPU_BINDING_SAMPLER ||
+      renderEntries[2].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
     set_status("GPU: texture-array reflection lost its typed layout", 1);
+    return 0;
+  }
+
+  computeInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  computeInfo.chain.structSize = sizeof(computeInfo);
+  computeInfo.label            = "texture-array-webgpu-usl-compute";
+  computeInfo.layout           = state->shaderLayout->pipelineLayout;
+  computeInfo.library          = state->library;
+  computeInfo.entryPoint       = "line_copy_cs";
+  result = GPUCreateComputePipeline(state->device,
+                                    &computeInfo,
+                                    &state->computePipeline);
+  if (result != GPU_OK || !state->computePipeline) {
+    set_status("GPU: failed to create the texture-array compute pipeline", 1);
     return 0;
   }
 
   color.format          = GPUGetSwapchainFormat(state->swapchain);
   color.blend.writeMask = GPU_COLOR_WRITE_ALL;
 
-  info.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
-  info.chain.structSize        = sizeof(info);
-  info.label                   = "texture-array-webgpu-usl-pipeline";
-  info.layout                  = state->shaderLayout->pipelineLayout;
-  info.library                 = state->library;
-  info.vertexEntry             = "array_vs";
-  info.fragmentEntry           = "array_fs";
-  info.pColorTargets           = &color;
-  info.colorTargetCount        = 1u;
-  info.primitiveTopology       = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  info.cullMode                = GPU_CULL_MODE_NONE;
-  info.frontFace               = GPU_FRONT_FACE_CCW;
-  info.multisample.sampleCount = 1u;
-  info.multisample.sampleMask  = UINT32_MAX;
-  result = GPUCreateRenderPipeline(state->device, &info, &state->pipeline);
-  if (result != GPU_OK || !state->pipeline) {
-    set_status("GPU: failed to create the texture-array pipeline", 1);
+  renderInfo.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  renderInfo.chain.structSize        = sizeof(renderInfo);
+  renderInfo.label                   = "texture-array-webgpu-usl-render";
+  renderInfo.layout                  = state->shaderLayout->pipelineLayout;
+  renderInfo.library                 = state->library;
+  renderInfo.vertexEntry             = "array_vs";
+  renderInfo.fragmentEntry           = "array_fs";
+  renderInfo.pColorTargets           = &color;
+  renderInfo.colorTargetCount        = 1u;
+  renderInfo.primitiveTopology       = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  renderInfo.cullMode                = GPU_CULL_MODE_NONE;
+  renderInfo.frontFace               = GPU_FRONT_FACE_CCW;
+  renderInfo.multisample.sampleCount = 1u;
+  renderInfo.multisample.sampleMask  = UINT32_MAX;
+  result = GPUCreateRenderPipeline(state->device,
+                                   &renderInfo,
+                                   &state->renderPipeline);
+  if (result != GPU_OK || !state->renderPipeline) {
+    set_status("GPU: failed to create the texture-array render pipeline", 1);
     return 0;
   }
   return 1;
@@ -181,12 +228,14 @@ static int
 create_resources(WebGPUTextureArray *state) {
   uint8_t                  pixels2D[ARRAY_LAYER_COUNT][ARRAY_LAYER_SIZE];
   uint8_t                  linePixels[ARRAY_LAYER_COUNT][LINE_LAYER_SIZE];
-  GPUTextureCreateInfo     textureInfo = {0};
-  GPUTextureWriteRegion    writeRegion = {0};
-  GPUTextureViewCreateInfo viewInfo    = {0};
-  GPUSamplerCreateInfo     samplerInfo = {0};
-  GPUBindGroupEntry        entries[3]  = {0};
-  GPUBindGroupCreateInfo   groupInfo   = {0};
+  GPUTextureCreateInfo     textureInfo       = {0};
+  GPUTextureWriteRegion    writeRegion       = {0};
+  GPUTextureViewCreateInfo viewInfo          = {0};
+  GPUSamplerCreateInfo     samplerInfo        = {0};
+  GPUBindGroupEntry        computeEntries[2] = {0};
+  GPUBindGroupEntry        renderEntries[3]  = {0};
+  GPUBindGroupCreateInfo   computeGroupInfo  = {0};
+  GPUBindGroupCreateInfo   renderGroupInfo   = {0};
 
   fill_2d_layer(pixels2D[0], 0u);
   fill_2d_layer(pixels2D[1], 1u);
@@ -245,14 +294,14 @@ create_resources(WebGPUTextureArray *state) {
     return 0;
   }
 
-  textureInfo.label         = "texture-array-webgpu-usl-1d";
+  textureInfo.label         = "texture-array-webgpu-usl-1d-input";
   textureInfo.dimension     = GPU_TEXTURE_DIMENSION_1D;
   textureInfo.height        = 1u;
   textureInfo.depthOrLayers = ARRAY_LAYER_COUNT;
   if (GPUCreateTexture(state->device,
                        &textureInfo,
-                       &state->lineTexture) != GPU_OK) {
-    set_status("GPU: failed to create the 1D texture array", 1);
+                       &state->lineInputTexture) != GPU_OK) {
+    set_status("GPU: failed to create the input 1D texture array", 1);
     return 0;
   }
 
@@ -262,7 +311,7 @@ create_resources(WebGPUTextureArray *state) {
   for (uint32_t layer = 0u; layer < ARRAY_LAYER_COUNT; layer++) {
     writeRegion.baseArrayLayer = layer;
     if (GPUQueueWriteTexture(state->queue,
-                             state->lineTexture,
+                             state->lineInputTexture,
                              &writeRegion,
                              linePixels[layer],
                              LINE_LAYER_SIZE) != GPU_OK) {
@@ -271,13 +320,31 @@ create_resources(WebGPUTextureArray *state) {
     }
   }
 
-  viewInfo.label           = "texture-array-webgpu-usl-1d-view";
+  viewInfo.label           = "texture-array-webgpu-usl-1d-input-view";
   viewInfo.viewType        = GPU_TEXTURE_VIEW_1D_ARRAY;
   viewInfo.arrayLayerCount = ARRAY_LAYER_COUNT;
-  if (GPUCreateTextureView(state->lineTexture,
+  if (GPUCreateTextureView(state->lineInputTexture,
                            &viewInfo,
-                           &state->lineView) != GPU_OK) {
-    set_status("GPU: failed to create the 1D texture-array view", 1);
+                           &state->lineInputView) != GPU_OK) {
+    set_status("GPU: failed to create the input 1D texture-array view", 1);
+    return 0;
+  }
+
+  textureInfo.label = "texture-array-webgpu-usl-1d-output";
+  textureInfo.usage = GPU_TEXTURE_USAGE_STORAGE |
+                      GPU_TEXTURE_USAGE_SAMPLED;
+  if (GPUCreateTexture(state->device,
+                       &textureInfo,
+                       &state->lineOutputTexture) != GPU_OK) {
+    set_status("GPU: failed to create the output 1D texture array", 1);
+    return 0;
+  }
+
+  viewInfo.label = "texture-array-webgpu-usl-1d-output-view";
+  if (GPUCreateTextureView(state->lineOutputTexture,
+                           &viewInfo,
+                           &state->lineOutputView) != GPU_OK) {
+    set_status("GPU: failed to create the output 1D texture-array view", 1);
     return 0;
   }
 
@@ -298,25 +365,44 @@ create_resources(WebGPUTextureArray *state) {
     return 0;
   }
 
-  entries[0].textureView = state->texture2DView;
-  entries[0].binding     = 0u;
-  entries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
-  entries[1].textureView = state->lineView;
-  entries[1].binding     = 1u;
-  entries[1].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
-  entries[2].sampler     = state->sampler;
-  entries[2].binding     = 2u;
-  entries[2].bindingType = GPU_BINDING_SAMPLER;
-  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
-  groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label            = "texture-array-webgpu-usl-group0";
-  groupInfo.layout           = state->shaderLayout->bindGroupLayouts[0];
-  groupInfo.pEntries         = entries;
-  groupInfo.entryCount       = GPU_ARRAY_LEN(entries);
+  computeEntries[0].textureView = state->lineInputView;
+  computeEntries[0].binding     = 0u;
+  computeEntries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+  computeEntries[1].textureView = state->lineOutputView;
+  computeEntries[1].binding     = 1u;
+  computeEntries[1].bindingType = GPU_BINDING_STORAGE_TEXTURE;
+  computeGroupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  computeGroupInfo.chain.structSize = sizeof(computeGroupInfo);
+  computeGroupInfo.label            = "texture-array-webgpu-usl-compute-group";
+  computeGroupInfo.layout           = state->shaderLayout->bindGroupLayouts[0];
+  computeGroupInfo.pEntries         = computeEntries;
+  computeGroupInfo.entryCount       = GPU_ARRAY_LEN(computeEntries);
   if (GPUCreateBindGroup(state->device,
-                         &groupInfo,
-                         &state->bindGroup) != GPU_OK) {
-    set_status("GPU: failed to create the texture-array bind group", 1);
+                         &computeGroupInfo,
+                         &state->computeGroup) != GPU_OK) {
+    set_status("GPU: failed to create the texture-array compute group", 1);
+    return 0;
+  }
+
+  renderEntries[0].textureView = state->texture2DView;
+  renderEntries[0].binding     = 0u;
+  renderEntries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+  renderEntries[1].textureView = state->lineOutputView;
+  renderEntries[1].binding     = 1u;
+  renderEntries[1].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+  renderEntries[2].sampler     = state->sampler;
+  renderEntries[2].binding     = 2u;
+  renderEntries[2].bindingType = GPU_BINDING_SAMPLER;
+  renderGroupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  renderGroupInfo.chain.structSize = sizeof(renderGroupInfo);
+  renderGroupInfo.label            = "texture-array-webgpu-usl-render-group";
+  renderGroupInfo.layout           = state->shaderLayout->bindGroupLayouts[1];
+  renderGroupInfo.pEntries         = renderEntries;
+  renderGroupInfo.entryCount       = GPU_ARRAY_LEN(renderEntries);
+  if (GPUCreateBindGroup(state->device,
+                         &renderGroupInfo,
+                         &state->renderGroup) != GPU_OK) {
+    set_status("GPU: failed to create the texture-array render group", 1);
     return 0;
   }
   return 1;
@@ -327,9 +413,12 @@ render_frame(void *userData) {
   WebGPUTextureArray            *state;
   GPUFrame                      *frame;
   GPUCommandBuffer              *cmdb;
-  GPURenderPassEncoder          *pass;
-  GPURenderPassColorAttachment   color    = {0};
-  GPURenderPassCreateInfo        passInfo = {0};
+  GPUComputePassEncoder         *compute;
+  GPURenderPassEncoder          *render;
+  GPUTextureBarrier             textureBarrier = {0};
+  GPUBarrierBatch               barrier        = {0};
+  GPURenderPassColorAttachment  color          = {0};
+  GPURenderPassCreateInfo       passInfo       = {0};
 
   state = userData;
   if (!resize_canvas(state)) return;
@@ -345,6 +434,31 @@ render_frame(void *userData) {
     return;
   }
 
+  compute = GPUBeginComputePass(cmdb, "texture-array-webgpu-copy-lines");
+  if (!compute) {
+    (void)GPUDiscardCommandBuffer(cmdb);
+    GPUEndFrame(frame);
+    return;
+  }
+  GPUBindComputePipeline(compute, state->computePipeline);
+  GPUBindComputeGroup(compute, 0u, state->computeGroup, 0u, NULL);
+  GPUDispatch(compute,
+              ARRAY_SIZE / 4u,
+              ARRAY_LAYER_COUNT,
+              1u);
+  GPUEndComputePass(compute);
+
+  textureBarrier.texture    = state->lineOutputTexture;
+  textureBarrier.srcAccess  = GPU_ACCESS_SHADER_WRITE;
+  textureBarrier.dstAccess  = GPU_ACCESS_SHADER_READ;
+  textureBarrier.mipCount   = 1u;
+  textureBarrier.layerCount = ARRAY_LAYER_COUNT;
+  barrier.pTextureBarriers    = &textureBarrier;
+  barrier.srcStages           = GPU_STAGE_COMPUTE;
+  barrier.dstStages           = GPU_STAGE_FRAGMENT;
+  barrier.textureBarrierCount = 1u;
+  GPUEncodeBarriers(cmdb, &barrier);
+
   color.view                  = GPUFrameGetTargetView(frame);
   color.loadOp                = GPU_LOAD_OP_CLEAR;
   color.storeOp               = GPU_STORE_OP_STORE;
@@ -355,17 +469,17 @@ render_frame(void *userData) {
   passInfo.label                = "texture-array-webgpu-pass";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+  render = GPUBeginRenderPass(cmdb, &passInfo);
+  if (!render) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
   }
 
-  GPUBindRenderPipeline(pass, state->pipeline);
-  GPUBindRenderGroup(pass, 0u, state->bindGroup, 0u, NULL);
-  GPUDraw(pass, 6u, 1u, 0u, 0u);
-  GPUEndRenderPass(pass);
+  GPUBindRenderPipeline(render, state->renderPipeline);
+  GPUBindRenderGroup(render, 1u, state->renderGroup, 0u, NULL);
+  GPUDraw(render, 6u, 1u, 0u, 0u);
+  GPUEndRenderPass(render);
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
     fprintf(stderr, "GPU: failed to finish WebGPU texture-array frame\n");
   } else {
@@ -428,7 +542,7 @@ webgpu_ready(GPUResult  result,
     return;
   }
 
-  set_status("GPU: WebGPU USL texture array ready", 0);
+  set_status("GPU: WebGPU USL 1D compute + texture arrays ready", 0);
   emscripten_set_main_loop_arg(render_frame, state, 0, true);
 }
 
