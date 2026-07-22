@@ -13,9 +13,16 @@ vert array_vs(vertexId: uint #vertex_id) -> VSOut {
 }
 
 frag array_fs(input: VSOut #stage_in,
-              colorLayers: texture2d_array<float> #texture(0),
-              colorSampler: sampler #sampler(1)) -> float4 {
-  let layer = step(0.5, input.uv.x)
-  let uv    = float2(input.uv.x * 2.0 - layer, input.uv.y)
-  return colorLayers.sample(colorSampler, float3(uv, layer))
+              colorLayers:  texture2d_array<float> #texture(0),
+              lineLayers:   texture1d_array<float> #texture(1),
+              colorSampler: sampler #sampler(2)) -> float4 {
+  let layer  = step(0.5, input.uv.x)
+  let localX = input.uv.x * 2.0 - layer
+  if (input.uv.y < 0.5) {
+    let localY = fract(input.uv.y * 2.0)
+    return colorLayers.sample(colorSampler,
+                              float3(localX, localY, layer),
+                              level(0.0))
+  }
+  return lineLayers.sample(colorSampler, float2(localX, layer), level(0.0))
 }

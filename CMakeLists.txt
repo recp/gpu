@@ -1440,9 +1440,9 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   set(GPU_WEBGPU_TEXTURE_ARRAY_US
       "${GPU_WEBGPU_TEXTURE_ARRAY_DIR}/texture_array.us")
   set(GPU_WEBGPU_SAMPLE_TITLE "Texture array")
-  set(GPU_WEBGPU_SAMPLE_KIND "Binding / 2D array layers")
+  set(GPU_WEBGPU_SAMPLE_KIND "Binding / 1D + 2D arrays")
   set(GPU_WEBGPU_SAMPLE_DESCRIPTION
-      "One reflected 2D-array view selects two independently uploaded layers in a single draw.")
+      "Reflected 1D- and 2D-array views select independently uploaded layers in one draw.")
   set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/texture-array.c")
   set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/texture-array.usl")
   set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/texture-array.wgsl")

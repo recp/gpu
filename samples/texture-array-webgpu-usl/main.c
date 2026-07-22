@@ -6,6 +6,7 @@ enum {
   ARRAY_SIZE        = 8u,
   ARRAY_ROW_PITCH   = ARRAY_SIZE * 4u,
   ARRAY_LAYER_SIZE  = ARRAY_ROW_PITCH * ARRAY_SIZE,
+  LINE_LAYER_SIZE   = ARRAY_ROW_PITCH,
   ARRAY_LAYER_COUNT = 2u,
   WARM_FRAME_COUNT  = 8u
 };
@@ -20,8 +21,10 @@ typedef struct WebGPUTextureArray {
   GPUShaderLibrary   *library;
   GPUShaderLayout    *shaderLayout;
   GPURenderPipeline  *pipeline;
-  GPUTexture         *texture;
-  GPUTextureView     *textureView;
+  GPUTexture         *texture2D;
+  GPUTexture         *lineTexture;
+  GPUTextureView     *texture2DView;
+  GPUTextureView     *lineView;
   GPUSampler         *sampler;
   GPUBindGroup       *bindGroup;
   WebGPURequest       request;
@@ -40,7 +43,7 @@ resize_canvas(WebGPUTextureArray *state) {
 }
 
 static void
-fill_layer(uint8_t *pixels, uint32_t layer) {
+fill_2d_layer(uint8_t *pixels, uint32_t layer) {
   static const uint8_t colors[2][2][4] = {
     {
       { 255u,  88u,  18u, 255u },
@@ -64,6 +67,32 @@ fill_layer(uint8_t *pixels, uint32_t layer) {
       pixels[offset + 2u] = color[2];
       pixels[offset + 3u] = color[3];
     }
+  }
+}
+
+static void
+fill_line_layer(uint8_t *pixels, uint32_t layer) {
+  static const uint8_t colors[2][2][4] = {
+    {
+      { 236u,  44u, 122u, 255u },
+      { 255u, 220u,  42u, 255u }
+    },
+    {
+      {  15u, 202u, 184u, 255u },
+      { 112u,  58u, 238u, 255u }
+    }
+  };
+
+  for (uint32_t x = 0u; x < ARRAY_SIZE; x++) {
+    const uint8_t *color;
+    uint32_t       offset;
+
+    color  = colors[layer][(x >> 1u) & 1u];
+    offset = x * 4u;
+    pixels[offset + 0u] = color[0];
+    pixels[offset + 1u] = color[1];
+    pixels[offset + 2u] = color[2];
+    pixels[offset + 3u] = color[3];
   }
 }
 
@@ -108,13 +137,17 @@ create_shader(WebGPUTextureArray *state) {
     state->shaderLayout->bindGroupLayouts[0],
     &entryCount
   );
-  if (!entries || entryCount != 2u ||
+  if (!entries || entryCount != 3u ||
       entries[0].binding != 0u ||
       entries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
       entries[0].sampledTexture.viewType != GPU_TEXTURE_VIEW_2D_ARRAY ||
       entries[0].sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT ||
       entries[1].binding != 1u ||
-      entries[1].bindingType != GPU_BINDING_SAMPLER) {
+      entries[1].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
+      entries[1].sampledTexture.viewType != GPU_TEXTURE_VIEW_1D_ARRAY ||
+      entries[1].sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT ||
+      entries[2].binding != 2u ||
+      entries[2].bindingType != GPU_BINDING_SAMPLER) {
     set_status("GPU: texture-array reflection lost its typed layout", 1);
     return 0;
   }
@@ -146,20 +179,23 @@ create_shader(WebGPUTextureArray *state) {
 
 static int
 create_resources(WebGPUTextureArray *state) {
-  uint8_t                  pixels[ARRAY_LAYER_COUNT][ARRAY_LAYER_SIZE];
+  uint8_t                  pixels2D[ARRAY_LAYER_COUNT][ARRAY_LAYER_SIZE];
+  uint8_t                  linePixels[ARRAY_LAYER_COUNT][LINE_LAYER_SIZE];
   GPUTextureCreateInfo     textureInfo = {0};
   GPUTextureWriteRegion    writeRegion = {0};
   GPUTextureViewCreateInfo viewInfo    = {0};
   GPUSamplerCreateInfo     samplerInfo = {0};
-  GPUBindGroupEntry        entries[2]  = {0};
+  GPUBindGroupEntry        entries[3]  = {0};
   GPUBindGroupCreateInfo   groupInfo   = {0};
 
-  fill_layer(pixels[0], 0u);
-  fill_layer(pixels[1], 1u);
+  fill_2d_layer(pixels2D[0], 0u);
+  fill_2d_layer(pixels2D[1], 1u);
+  fill_line_layer(linePixels[0], 0u);
+  fill_line_layer(linePixels[1], 1u);
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
-  textureInfo.label            = "texture-array-webgpu-usl-texture";
+  textureInfo.label            = "texture-array-webgpu-usl-2d";
   textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
   textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   textureInfo.width            = ARRAY_SIZE;
@@ -171,8 +207,8 @@ create_resources(WebGPUTextureArray *state) {
                                  GPU_TEXTURE_USAGE_COPY_DST;
   if (GPUCreateTexture(state->device,
                        &textureInfo,
-                       &state->texture) != GPU_OK) {
-    set_status("GPU: failed to create the texture array", 1);
+                       &state->texture2D) != GPU_OK) {
+    set_status("GPU: failed to create the 2D texture array", 1);
     return 0;
   }
 
@@ -186,26 +222,62 @@ create_resources(WebGPUTextureArray *state) {
   for (uint32_t layer = 0u; layer < ARRAY_LAYER_COUNT; layer++) {
     writeRegion.baseArrayLayer = layer;
     if (GPUQueueWriteTexture(state->queue,
-                             state->texture,
+                             state->texture2D,
                              &writeRegion,
-                             pixels[layer],
+                             pixels2D[layer],
                              ARRAY_LAYER_SIZE) != GPU_OK) {
-      set_status("GPU: failed to upload a texture-array layer", 1);
+      set_status("GPU: failed to upload a 2D texture-array layer", 1);
       return 0;
     }
   }
 
   viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
   viewInfo.chain.structSize = sizeof(viewInfo);
-  viewInfo.label            = "texture-array-webgpu-usl-view";
+  viewInfo.label            = "texture-array-webgpu-usl-2d-view";
   viewInfo.viewType         = GPU_TEXTURE_VIEW_2D_ARRAY;
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = ARRAY_LAYER_COUNT;
-  if (GPUCreateTextureView(state->texture,
+  if (GPUCreateTextureView(state->texture2D,
                            &viewInfo,
-                           &state->textureView) != GPU_OK) {
-    set_status("GPU: failed to create the texture-array view", 1);
+                           &state->texture2DView) != GPU_OK) {
+    set_status("GPU: failed to create the 2D texture-array view", 1);
+    return 0;
+  }
+
+  textureInfo.label         = "texture-array-webgpu-usl-1d";
+  textureInfo.dimension     = GPU_TEXTURE_DIMENSION_1D;
+  textureInfo.height        = 1u;
+  textureInfo.depthOrLayers = ARRAY_LAYER_COUNT;
+  if (GPUCreateTexture(state->device,
+                       &textureInfo,
+                       &state->lineTexture) != GPU_OK) {
+    set_status("GPU: failed to create the 1D texture array", 1);
+    return 0;
+  }
+
+  writeRegion.height       = 1u;
+  writeRegion.bytesPerRow  = ARRAY_ROW_PITCH;
+  writeRegion.rowsPerImage = 1u;
+  for (uint32_t layer = 0u; layer < ARRAY_LAYER_COUNT; layer++) {
+    writeRegion.baseArrayLayer = layer;
+    if (GPUQueueWriteTexture(state->queue,
+                             state->lineTexture,
+                             &writeRegion,
+                             linePixels[layer],
+                             LINE_LAYER_SIZE) != GPU_OK) {
+      set_status("GPU: failed to upload a 1D texture-array layer", 1);
+      return 0;
+    }
+  }
+
+  viewInfo.label           = "texture-array-webgpu-usl-1d-view";
+  viewInfo.viewType        = GPU_TEXTURE_VIEW_1D_ARRAY;
+  viewInfo.arrayLayerCount = ARRAY_LAYER_COUNT;
+  if (GPUCreateTextureView(state->lineTexture,
+                           &viewInfo,
+                           &state->lineView) != GPU_OK) {
+    set_status("GPU: failed to create the 1D texture-array view", 1);
     return 0;
   }
 
@@ -226,12 +298,15 @@ create_resources(WebGPUTextureArray *state) {
     return 0;
   }
 
-  entries[0].textureView = state->textureView;
+  entries[0].textureView = state->texture2DView;
   entries[0].binding     = 0u;
   entries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
-  entries[1].sampler     = state->sampler;
+  entries[1].textureView = state->lineView;
   entries[1].binding     = 1u;
-  entries[1].bindingType = GPU_BINDING_SAMPLER;
+  entries[1].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+  entries[2].sampler     = state->sampler;
+  entries[2].binding     = 2u;
+  entries[2].bindingType = GPU_BINDING_SAMPLER;
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "texture-array-webgpu-usl-group0";
