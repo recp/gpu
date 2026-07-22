@@ -34,7 +34,6 @@ vert quad_vs(vertexId: uint #vertex_id) -> VSOut {
 }
 
 frag quad_fs(input: VSOut #stage_in,
-             colorTex: texture2d<float> #texture(0),
-             colorSampler: sampler #sampler(0) #group(1)) -> float4 {
-  return colorTex.sample(colorSampler, input.uv)
+             colorTex: texture2d<float> #texture(0)) -> float4 {
+  return colorTex.sample(.nearest, input.uv)
 }

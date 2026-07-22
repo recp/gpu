@@ -22,9 +22,8 @@ typedef struct TexturedQuadApp {
   GPUShaderLayout   *shaderLayout;
   GPUTexture        *texture;
   GPUTextureView    *textureView;
-  GPUSampler        *sampler;
   GPURenderPipeline *pipeline;
-  GPUBindGroup      *bindGroups[2];
+  GPUBindGroup      *bindGroup;
   HWND               window;
   uint32_t           width;
   uint32_t           height;
@@ -132,13 +131,12 @@ textured_quad_createWindow(TexturedQuadApp *app, HINSTANCE instance) {
 static bool
 textured_quad_createGPU(TexturedQuadApp *app) {
   GPUInstanceCreateInfo          instanceInfo = {0};
-  GPUBindGroupLayout            *groupLayouts[2];
+  GPUBindGroupLayout            *groupLayout;
   const GPUBindGroupLayoutEntry *layoutEntries;
   GPUTextureCreateInfo           textureInfo = {0};
   GPUTextureViewCreateInfo       viewInfo = {0};
   GPUTextureWriteRegion          writeRegion = {0};
-  GPUSamplerCreateInfo           samplerInfo = {0};
-  GPUBindGroupEntry              groupEntries[2] = {0};
+  GPUBindGroupEntry              groupEntry = {0};
   GPUBindGroupCreateInfo         groupInfo = {0};
   GPUColorTargetState            colorTarget = {0};
   GPURenderPipelineCreateInfo    pipelineInfo = {0};
@@ -216,15 +214,14 @@ textured_quad_createGPU(TexturedQuadApp *app) {
   if (GPUCreateShaderLayout(app->device,
                             app->library,
                             &app->shaderLayout) != GPU_OK ||
-      !app->shaderLayout || app->shaderLayout->bindGroupLayoutCount != 2u ||
+      !app->shaderLayout || app->shaderLayout->bindGroupLayoutCount != 1u ||
       !app->shaderLayout->pipelineLayout) {
     textured_quad_log("shader layout creation failed");
     return false;
   }
 
-  groupLayouts[0] = app->shaderLayout->bindGroupLayouts[0];
-  groupLayouts[1] = app->shaderLayout->bindGroupLayouts[1];
-  layoutEntries = GPUGetBindGroupLayoutEntries(groupLayouts[0],
+  groupLayout   = app->shaderLayout->bindGroupLayouts[0];
+  layoutEntries = GPUGetBindGroupLayoutEntries(groupLayout,
                                                 &layoutEntryCount);
   if (!layoutEntries || layoutEntryCount != 1u ||
       layoutEntries[0].binding != 0u ||
@@ -235,18 +232,6 @@ textured_quad_createGPU(TexturedQuadApp *app) {
     textured_quad_log("unexpected texture reflection layout");
     return false;
   }
-  layoutEntries = GPUGetBindGroupLayoutEntries(groupLayouts[1],
-                                                &layoutEntryCount);
-  if (!layoutEntries || layoutEntryCount != 1u ||
-      layoutEntries[0].binding != 0u ||
-      layoutEntries[0].bindingType != GPU_BINDING_SAMPLER ||
-      layoutEntries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      layoutEntries[0].arrayCount != 1u ||
-      layoutEntries[0].hasDynamicOffset) {
-    textured_quad_log("unexpected sampler reflection layout");
-    return false;
-  }
-
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
   textureInfo.label            = "textured-quad-dx12-texture";
@@ -295,52 +280,20 @@ textured_quad_createGPU(TexturedQuadApp *app) {
     return false;
   }
 
-  samplerInfo.chain.sType      = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-  samplerInfo.chain.structSize = sizeof(samplerInfo);
-  samplerInfo.label            = "textured-quad-dx12-sampler";
-  samplerInfo.desc.minFilter   = GPU_FILTER_NEAREST;
-  samplerInfo.desc.magFilter   = GPU_FILTER_NEAREST;
-  samplerInfo.desc.mipFilter   = GPU_MIP_FILTER_NEAREST;
-  samplerInfo.desc.addressU    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  samplerInfo.desc.addressV    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  samplerInfo.desc.addressW    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  if (GPUCreateSampler(app->device,
-                       &samplerInfo,
-                       false,
-                       &app->sampler) != GPU_OK ||
-      !app->sampler) {
-    textured_quad_log("sampler creation failed");
-    return false;
-  }
-
-  groupEntries[0].binding     = 0u;
-  groupEntries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
-  groupEntries[0].textureView = app->textureView;
+  groupEntry.binding     = 0u;
+  groupEntry.bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+  groupEntry.textureView = app->textureView;
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "textured-quad-dx12-texture-group";
-  groupInfo.layout           = groupLayouts[0];
+  groupInfo.layout           = groupLayout;
   groupInfo.entryCount       = 1u;
-  groupInfo.pEntries         = &groupEntries[0];
+  groupInfo.pEntries         = &groupEntry;
   if (GPUCreateBindGroup(app->device,
                          &groupInfo,
-                         &app->bindGroups[0]) != GPU_OK ||
-      !app->bindGroups[0]) {
+                         &app->bindGroup) != GPU_OK ||
+      !app->bindGroup) {
     textured_quad_log("texture bind group creation failed");
-    return false;
-  }
-
-  groupEntries[1].binding     = 0u;
-  groupEntries[1].bindingType = GPU_BINDING_SAMPLER;
-  groupEntries[1].sampler     = app->sampler;
-  groupInfo.label             = "textured-quad-dx12-sampler-group";
-  groupInfo.layout            = groupLayouts[1];
-  groupInfo.pEntries          = &groupEntries[1];
-  if (GPUCreateBindGroup(app->device,
-                         &groupInfo,
-                         &app->bindGroups[1]) != GPU_OK ||
-      !app->bindGroups[1]) {
-    textured_quad_log("sampler bind group creation failed");
     return false;
   }
 
@@ -413,8 +366,7 @@ textured_quad_render(TexturedQuadApp *app) {
   }
 
   GPUBindRenderPipeline(pass, app->pipeline);
-  GPUBindRenderGroup(pass, 0u, app->bindGroups[0], 0u, NULL);
-  GPUBindRenderGroup(pass, 1u, app->bindGroups[1], 0u, NULL);
+  GPUBindRenderGroup(pass, 0u, app->bindGroup, 0u, NULL);
   GPUDraw(pass, 6u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
   if (GPUFinishFrame(app->queue, cmdb, frame) != GPU_OK) {
@@ -438,9 +390,7 @@ textured_quad_render(TexturedQuadApp *app) {
 static void
 textured_quad_destroyGPU(TexturedQuadApp *app) {
   GPUDestroyRenderPipeline(app->pipeline);
-  GPUDestroyBindGroup(app->bindGroups[1]);
-  GPUDestroyBindGroup(app->bindGroups[0]);
-  GPUDestroySampler(app->sampler);
+  GPUDestroyBindGroup(app->bindGroup);
   GPUDestroyTextureView(app->textureView);
   GPUDestroyTexture(app->texture);
   GPUDestroyShaderLayout(app->shaderLayout);
