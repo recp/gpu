@@ -25,6 +25,7 @@ static WGPUTextureViewDimension
 webgpu_textureViewDimension(GPUTextureViewType type) {
   static const WGPUTextureViewDimension dimensions[] = {
     [GPU_TEXTURE_VIEW_1D]         = WGPUTextureViewDimension_1D,
+    [GPU_TEXTURE_VIEW_1D_ARRAY]   = WGPUTextureViewDimension_2DArray,
     [GPU_TEXTURE_VIEW_2D]         = WGPUTextureViewDimension_2D,
     [GPU_TEXTURE_VIEW_2D_ARRAY]   = WGPUTextureViewDimension_2DArray,
     [GPU_TEXTURE_VIEW_CUBE]       = WGPUTextureViewDimension_Cube,
@@ -85,7 +86,10 @@ webgpu_createTexture(GPUDevice                  * __restrict device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  descriptor.dimension = webgpu_textureDimension(info->dimension);
+  descriptor.dimension = info->dimension == GPU_TEXTURE_DIMENSION_1D &&
+                         info->depthOrLayers > 1u
+                           ? WGPUTextureDimension_2D
+                           : webgpu_textureDimension(info->dimension);
   descriptor.format    = gpu_webgpuFormat(info->format);
   descriptor.usage     = webgpu_textureUsage(info->usage);
   if (descriptor.dimension == WGPUTextureDimension_Undefined ||
@@ -101,7 +105,10 @@ webgpu_createTexture(GPUDevice                  * __restrict device,
 
   descriptor.label                   = gpu_webgpuString(info->label);
   descriptor.size.width              = info->width;
-  descriptor.size.height             = info->height;
+  descriptor.size.height             = info->dimension == GPU_TEXTURE_DIMENSION_1D &&
+                                       info->depthOrLayers > 1u
+                                         ? 1u
+                                         : info->height;
   descriptor.size.depthOrArrayLayers = info->depthOrLayers;
   descriptor.mipLevelCount           = info->mipLevelCount
                                          ? info->mipLevelCount

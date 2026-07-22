@@ -163,7 +163,7 @@ static WGPUTextureViewDimension
 webgpu_bindingViewDimension(GPUTextureViewType type) {
   static const WGPUTextureViewDimension dimensions[] = {
     [GPU_TEXTURE_VIEW_1D]         = WGPUTextureViewDimension_1D,
-    [GPU_TEXTURE_VIEW_1D_ARRAY]   = WGPUTextureViewDimension_Undefined,
+    [GPU_TEXTURE_VIEW_1D_ARRAY]   = WGPUTextureViewDimension_2DArray,
     [GPU_TEXTURE_VIEW_2D]         = WGPUTextureViewDimension_2D,
     [GPU_TEXTURE_VIEW_2D_ARRAY]   = WGPUTextureViewDimension_2DArray,
     [GPU_TEXTURE_VIEW_CUBE]       = WGPUTextureViewDimension_Cube,
