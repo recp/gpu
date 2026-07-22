@@ -15,6 +15,7 @@ typedef struct WebGPUShadowCompare {
   GPUShaderLayout   *shaderLayout;
   GPURenderPipeline *depthPipeline;
   GPURenderPipeline *previewPipeline;
+  GPURenderPipeline *previewCoolPipeline;
   GPUTexture        *depthTexture;
   GPUTextureView    *depthView;
   GPUBindGroup      *shadowGroup;
@@ -241,6 +242,16 @@ create_pipelines(WebGPUShadowCompare *state) {
     set_status("GPU: failed to create shadow comparison pipeline", 1);
     return 0;
   }
+
+  info.label         = "shadow-compare-webgpu-preview-cool-pipeline";
+  info.fragmentEntry = "shadow_preview_cool_fs";
+  result = GPUCreateRenderPipeline(state->device,
+                                   &info,
+                                   &state->previewCoolPipeline);
+  if (result != GPU_OK || !state->previewCoolPipeline) {
+    set_status("GPU: failed to create second shadow comparison pipeline", 1);
+    return 0;
+  }
   return 1;
 }
 
@@ -264,6 +275,10 @@ render_frame(void *userData) {
   GPURenderPassCreateInfo             passInfo     = {0};
   GPUTextureBarrier                   depthBarrier = {0};
   GPUBarrierBatch                     barriers     = {0};
+  GPUViewport                         viewport     = {0};
+  GPUScissorRect                      scissor      = {0};
+  uint32_t                            leftWidth;
+  uint32_t                            rightWidth;
 
   state = userData;
   if (!resize_canvas(state)) {
@@ -333,8 +348,27 @@ render_frame(void *userData) {
     return;
   }
 
+  leftWidth         = state->width / 2u;
+  rightWidth        = state->width - leftWidth;
+  viewport.width    = (float)leftWidth;
+  viewport.height   = (float)state->height;
+  viewport.minDepth = 0.0f;
+  viewport.maxDepth = 1.0f;
+  scissor.width     = leftWidth;
+  scissor.height    = state->height;
+  GPUSetViewport(pass, &viewport);
+  GPUSetScissor(pass, &scissor);
   GPUBindRenderPipeline(pass, state->previewPipeline);
   GPUBindRenderGroup(pass, 0u, state->shadowGroup, 0u, NULL);
+  GPUDraw(pass, 3u, 1u, 0u, 0u);
+
+  viewport.x     = (float)leftWidth;
+  viewport.width = (float)rightWidth;
+  scissor.x      = (int32_t)leftWidth;
+  scissor.width  = rightWidth;
+  GPUSetViewport(pass, &viewport);
+  GPUSetScissor(pass, &scissor);
+  GPUBindRenderPipeline(pass, state->previewCoolPipeline);
   GPUDraw(pass, 3u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
 
@@ -346,10 +380,10 @@ render_frame(void *userData) {
     state->frameCount++;
     if (state->frameCount > WARM_FRAME_COUNT &&
         GPUGetLastFrameStats(state->device, &stats) == GPU_OK &&
-        (stats.drawCalls != 2u || stats.hotPathAllocCount != 0u ||
+        (stats.drawCalls != 3u || stats.hotPathAllocCount != 0u ||
          stats.hotPathFreeCount != 0u)) {
-      set_status(stats.drawCalls != 2u
-                   ? "GPU: shadow comparison did not encode both draws"
+      set_status(stats.drawCalls != 3u
+                   ? "GPU: shadow comparison did not encode all draws"
                    : "GPU: warm shadow frame allocated wrapper memory",
                  1);
       emscripten_cancel_main_loop();
@@ -407,7 +441,7 @@ webgpu_ready(GPUResult  result,
     return;
   }
 
-  set_status("GPU: WebGPU USL comparison shadow ready", 0);
+  set_status("GPU: WebGPU USL multi-entry comparison shadow ready", 0);
   emscripten_set_main_loop_arg(render_frame, state, 0, true);
 }
 
