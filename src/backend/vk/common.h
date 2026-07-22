@@ -510,6 +510,7 @@ typedef struct GPUDescriptorBufferChunkVk {
 } GPUDescriptorBufferChunkVk;
 
 typedef struct GPUDescriptorBindingVk {
+  VkSampler        *immutableSamplers;
   VkDeviceSize     offset;
   VkDeviceSize     size;
   VkDescriptorType type;

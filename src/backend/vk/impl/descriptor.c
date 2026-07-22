@@ -350,7 +350,7 @@ vk_createBindGroupLayout(GPUDevice          *device,
       }
       immutableSamplerCount += entries[i].arrayCount;
     }
-    if (entries[i].immutableSampler || entries[i].hasDynamicOffset) {
+    if (entries[i].hasDynamicOffset) {
       descriptorBuffer = false;
     }
   }
@@ -570,6 +570,7 @@ vk_createBindGroupLayout(GPUDevice          *device,
     const VkPhysicalDeviceDescriptorBufferPropertiesEXT *properties;
     VkDeviceSize                                         slotCapacity;
     VkDeviceSize                                         maxRange;
+    uint32_t                                             immutableOffset;
 
     properties = &deviceVk->descriptorBufferProperties;
     deviceVk->getDescriptorSetLayoutSize(native->device,
@@ -608,14 +609,22 @@ vk_createBindGroupLayout(GPUDevice          *device,
     native->nonCoherentAtomSize = device->adapter && device->adapter->_priv
       ? ((GPUAdapterVk *)device->adapter->_priv)->props.limits.nonCoherentAtomSize
       : 1u;
+    immutableOffset = 0u;
     for (uint32_t i = 0u; i < entryCount; i++) {
       GPUDescriptorBindingVk *binding;
 
-      binding          = &native->descriptorBindings[i];
-      binding->binding = bindings[i].binding;
-      binding->type    = bindings[i].descriptorType;
-      binding->size    = vk__descriptorByteSize(deviceVk, binding->type);
-      binding->count   = bindings[i].descriptorCount;
+      binding                    = &native->descriptorBindings[i];
+      binding->binding           = bindings[i].binding;
+      binding->type              = bindings[i].descriptorType;
+      binding->size              = vk__descriptorByteSize(deviceVk,
+                                                           binding->type);
+      binding->count             = bindings[i].descriptorCount;
+      binding->immutableSamplers = entries[i].immutableSampler
+        ? &native->immutableSamplers[immutableOffset]
+        : NULL;
+      if (entries[i].immutableSampler) {
+        immutableOffset += entries[i].arrayCount;
+      }
       deviceVk->getDescriptorSetLayoutBindingOffset(native->device,
                                                     native->descriptorLayout,
                                                     binding->binding,
@@ -628,6 +637,12 @@ vk_createBindGroupLayout(GPUDevice          *device,
         vk__destroyBindGroupLayoutState(native);
         return GPU_ERROR_UNSUPPORTED;
       }
+    }
+    if (immutableOffset != native->immutableSamplerCount) {
+      free(bindingFlags);
+      free(bindings);
+      vk__destroyBindGroupLayoutState(native);
+      return GPU_ERROR_BACKEND_FAILURE;
     }
   }
 #endif
@@ -1657,6 +1672,64 @@ vk__writeDescriptorBuffer(void                          *context,
     writeContext->dirtyEnd = offset + descriptorBinding->size;
   }
 }
+
+static void
+vk__writeImmutableDescriptorBuffer(GPUDescriptorBufferWriteVk *context) {
+  GPUBindGroupVk             *group;
+  GPUBindGroupLayoutVk       *layout;
+  VkDescriptorGetInfoEXT      getInfo = {0};
+
+  group  = context ? context->group : NULL;
+  layout = group ? group->layout : NULL;
+  if (!context || !context->valid || !layout ||
+      !layout->gpuDevice || !layout->gpuDevice->getDescriptor ||
+      !group->descriptorChunk || !group->descriptorChunk->mapped) {
+    if (context) {
+      context->valid = false;
+    }
+    return;
+  }
+
+  getInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+  getInfo.type  = VK_DESCRIPTOR_TYPE_SAMPLER;
+  for (uint32_t i = 0u; i < layout->descriptorBindingCount; i++) {
+    const GPUDescriptorBindingVk *binding;
+
+    binding = &layout->descriptorBindings[i];
+    if (!binding->immutableSamplers) {
+      continue;
+    }
+    if (binding->type != VK_DESCRIPTOR_TYPE_SAMPLER ||
+        binding->size == 0u || binding->offset > layout->descriptorSize ||
+        binding->count >
+          (layout->descriptorSize - binding->offset) / binding->size) {
+      context->valid = false;
+      return;
+    }
+
+    for (uint32_t arrayIndex = 0u;
+         arrayIndex < binding->count;
+         arrayIndex++) {
+      VkDeviceSize offset;
+      uint8_t     *destination;
+
+      offset      = binding->offset + binding->size * arrayIndex;
+      destination = (uint8_t *)group->descriptorChunk->mapped +
+                    group->descriptorOffset + offset;
+      getInfo.data.pSampler = &binding->immutableSamplers[arrayIndex];
+      layout->gpuDevice->getDescriptor(group->device,
+                                       &getInfo,
+                                       binding->size,
+                                       destination);
+      if (offset < context->dirtyBegin) {
+        context->dirtyBegin = offset;
+      }
+      if (offset + binding->size > context->dirtyEnd) {
+        context->dirtyEnd = offset + binding->size;
+      }
+    }
+  }
+}
 #endif
 
 static void
@@ -1735,6 +1808,7 @@ vk_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
     bufferWriteContext.group      = native;
     bufferWriteContext.dirtyBegin = UINT64_MAX;
     bufferWriteContext.valid      = true;
+    vk__writeImmutableDescriptorBuffer(&bufferWriteContext);
     if (!gpuForEachBindGroupBinding(group,
                                     vk__writeDescriptorBuffer,
                                     &bufferWriteContext) ||

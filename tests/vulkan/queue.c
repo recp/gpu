@@ -225,7 +225,7 @@ descriptor_binding_path(GPUDevice *device,
                         bool       bindless) {
   GPUDeviceVk                   *deviceVk;
   GPUBindlessLayoutEXT           bindlessInfo = {0};
-  GPUBindGroupLayoutEntry        layoutEntry = {0};
+  GPUBindGroupLayoutEntry        layoutEntries[2] = {0};
   GPUBindGroupLayoutEntry        dynamicEntry = {0};
   GPUBindGroupLayoutCreateInfo   layoutInfo = {0};
   GPUBindGroupLayoutCreateInfo   dynamicInfo = {0};
@@ -249,6 +249,13 @@ descriptor_binding_path(GPUDevice *device,
   GPUCommandBuffer              *cmdb;
   GPUComputePassEncoder         *pass;
   GPUComputeEncoderVk           *passVk;
+#ifdef VK_EXT_descriptor_buffer
+  const GPUDescriptorBindingVk  *samplerBinding;
+  VkDescriptorGetInfoEXT         samplerGetInfo = {0};
+  VkSampler                      sampler;
+  uint8_t                       *expectedSampler;
+  const uint8_t                 *actualSampler;
+#endif
   int                            ok;
 
   deviceVk = device ? device->_priv : NULL;
@@ -259,6 +266,9 @@ descriptor_binding_path(GPUDevice *device,
   group               = NULL;
   buffer              = NULL;
   cmdb                = NULL;
+#ifdef VK_EXT_descriptor_buffer
+  expectedSampler     = NULL;
+#endif
   ok                  = 0;
   if (!deviceVk) {
     return 0;
@@ -274,10 +284,21 @@ descriptor_binding_path(GPUDevice *device,
     goto cleanup;
   }
 
-  layoutEntry.binding      = 0u;
-  layoutEntry.bindingType  = GPU_BINDING_UNIFORM_BUFFER;
-  layoutEntry.visibility   = GPU_SHADER_STAGE_COMPUTE_BIT;
-  layoutEntry.arrayCount   = bindless ? 2u : 1u;
+  layoutEntries[0].binding      = 0u;
+  layoutEntries[0].bindingType  = GPU_BINDING_UNIFORM_BUFFER;
+  layoutEntries[0].visibility   = GPU_SHADER_STAGE_COMPUTE_BIT;
+  layoutEntries[0].arrayCount   = bindless ? 2u : 1u;
+  layoutEntries[1].binding      = 1u;
+  layoutEntries[1].bindingType  = GPU_BINDING_SAMPLER;
+  layoutEntries[1].visibility   = GPU_SHADER_STAGE_COMPUTE_BIT;
+  layoutEntries[1].arrayCount   = 2u;
+  layoutEntries[1].immutableSampler = true;
+  layoutEntries[1].immutableSamplerDesc.minFilter = GPU_FILTER_LINEAR;
+  layoutEntries[1].immutableSamplerDesc.magFilter = GPU_FILTER_LINEAR;
+  layoutEntries[1].immutableSamplerDesc.mipFilter = GPU_MIP_FILTER_LINEAR;
+  layoutEntries[1].immutableSamplerDesc.addressU = GPU_ADDRESS_MODE_REPEAT;
+  layoutEntries[1].immutableSamplerDesc.addressV = GPU_ADDRESS_MODE_REPEAT;
+  layoutEntries[1].immutableSamplerDesc.addressW = GPU_ADDRESS_MODE_REPEAT;
 
   bindlessInfo.chain.sType      = GPU_STRUCTURE_TYPE_BINDLESS_LAYOUT_EXT;
   bindlessInfo.chain.structSize = sizeof(bindlessInfo);
@@ -287,8 +308,8 @@ descriptor_binding_path(GPUDevice *device,
   layoutInfo.chain.structSize = sizeof(layoutInfo);
   layoutInfo.chain.pNext      = bindless ? &bindlessInfo.chain : NULL;
   layoutInfo.label            = "vulkan-descriptor-layout";
-  layoutInfo.entryCount       = 1u;
-  layoutInfo.pEntries         = &layoutEntry;
+  layoutInfo.entryCount       = 2u;
+  layoutInfo.pEntries         = layoutEntries;
   if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK ||
       !layout) {
     goto cleanup;
@@ -416,8 +437,38 @@ descriptor_binding_path(GPUDevice *device,
        !mixedPipelineLayoutVk->descriptorBuffer;
 #ifdef VK_EXT_descriptor_buffer
   if (ok && deviceVk->descriptorBuffer) {
+    samplerBinding = NULL;
+    for (uint32_t i = 0u; i < layoutVk->descriptorBindingCount; i++) {
+      if (layoutVk->descriptorBindings[i].binding == 1u) {
+        samplerBinding = &layoutVk->descriptorBindings[i];
+        break;
+      }
+    }
     ok = pipelineLayoutVk->descriptorBuffer && groupVk->descriptorChunk &&
-         groupVk->set && buffer->_gpuAddress != 0u;
+         groupVk->set && buffer->_gpuAddress != 0u && samplerBinding &&
+         samplerBinding->immutableSamplers && samplerBinding->count == 2u &&
+         samplerBinding->size > 0u;
+    if (ok) {
+      expectedSampler = malloc((size_t)samplerBinding->size);
+      ok = expectedSampler != NULL;
+    }
+    for (uint32_t i = 0u; ok && i < samplerBinding->count; i++) {
+      sampler                      = samplerBinding->immutableSamplers[i];
+      samplerGetInfo.sType         =
+        VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+      samplerGetInfo.type          = VK_DESCRIPTOR_TYPE_SAMPLER;
+      samplerGetInfo.data.pSampler = &sampler;
+      deviceVk->getDescriptor(deviceVk->device,
+                              &samplerGetInfo,
+                              samplerBinding->size,
+                              expectedSampler);
+      actualSampler = (const uint8_t *)groupVk->descriptorChunk->mapped +
+                      groupVk->descriptorOffset + samplerBinding->offset +
+                      samplerBinding->size * i;
+      ok = memcmp(actualSampler,
+                  expectedSampler,
+                  samplerBinding->size) == 0;
+    }
   } else
 #endif
   if (ok) {
@@ -425,6 +476,9 @@ descriptor_binding_path(GPUDevice *device,
   }
 
 cleanup:
+#ifdef VK_EXT_descriptor_buffer
+  free(expectedSampler);
+#endif
   GPUDestroyBindGroup(group);
   GPUDestroyPipelineLayout(mixedPipelineLayout);
   GPUDestroyPipelineLayout(pipelineLayout);
