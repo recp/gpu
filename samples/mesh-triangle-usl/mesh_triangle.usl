@@ -3,6 +3,11 @@ struct MeshVertex {
   color:    float4 #color(0)
 }
 
+struct MeshPrimitive {
+  shade:  float
+  culled: bool #primitive_culled
+}
+
 struct TaskParams {
   meshGroups: uint4
   offset:     float4
@@ -25,10 +30,13 @@ task(1, 1, 1) task_main(inout payload: MeshPayload #payload,
                 params.meshGroups.z)
 }
 
-@mesh_output(triangle, MeshVertex, 6, 2)
+@mesh_output(triangle, MeshVertex, MeshPrimitive, 6, 2)
 mesh(6, 1, 1) mesh_main(payload: MeshPayload #payload,
                          tid: uint #local_index) {
   mesh_set_primitive_count(2)
+  if (tid < 2) {
+    mesh_set_primitive(tid, MeshPrimitive(1.0, tid == 1))
+  }
   if (tid < 6) {
     let primitive = tid / 3
     let lane      = tid % 3

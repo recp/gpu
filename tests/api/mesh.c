@@ -92,7 +92,7 @@ mesh_pixels_match(const uint8_t pixels[MESH_PIXEL_BYTES]) {
       }
     }
   }
-  return coloredPixels >= 4u && leftPixels > 0u && rightPixels > 0u;
+  return coloredPixels >= 2u && leftPixels > 0u && rightPixels == 0u;
 }
 
 static int
