@@ -69,19 +69,30 @@ mesh_layout_matches(GPUShaderLayout *layout) {
 static int
 mesh_pixels_match(const uint8_t pixels[MESH_PIXEL_BYTES]) {
   uint32_t coloredPixels;
+  uint32_t leftPixels;
+  uint32_t rightPixels;
 
   coloredPixels = 0u;
+  leftPixels    = 0u;
+  rightPixels   = 0u;
   for (uint32_t i = 0u; i < MESH_TARGET_WIDTH * MESH_TARGET_HEIGHT; i++) {
     const uint8_t *pixel;
     uint32_t       rgb;
+    uint32_t       x;
 
     pixel = &pixels[i * 4u];
     rgb   = (uint32_t)pixel[0] + pixel[1] + pixel[2];
     if (rgb > 48u && pixel[3] > 240u) {
       coloredPixels++;
+      x = i % MESH_TARGET_WIDTH;
+      if (x < MESH_TARGET_WIDTH / 2u) {
+        leftPixels++;
+      } else {
+        rightPixels++;
+      }
     }
   }
-  return coloredPixels >= 4u;
+  return coloredPixels >= 4u && leftPixels > 0u && rightPixels > 0u;
 }
 
 static int
@@ -90,7 +101,7 @@ test_mesh_draw(GPUDevice  *device,
                uint64_t    artifactSize) {
   const TaskParams taskParams = {
     .meshGroups = {1u, 1u, 1u, 0u},
-    .offset     = {0.08f, 0.0f, 0.0f, 0.0f},
+    .offset     = {0.0f, 0.0f, 0.0f, 0.0f},
     .tint       = {1.0f, 0.75f, 0.5f, 1.0f}
   };
   GPUQueue                     *queue;

@@ -10,36 +10,40 @@ struct TaskParams {
 }
 
 struct MeshPayload {
-  offset: float4
-  tint:   float4
+  offsets: [float4; 2]
+  tints:   [float4; 2]
 }
 
 task(1, 1, 1) task_main(inout payload: MeshPayload #payload,
                          params: TaskParams #buffer(0) #group(0)) {
-  payload.offset = params.offset
-  payload.tint = params.tint
+  payload.offsets[0] = params.offset + float4(-0.42, 0.0, 0.0, 0.0)
+  payload.offsets[1] = params.offset + float4( 0.42, 0.0, 0.0, 0.0)
+  payload.tints[0]   = params.tint
+  payload.tints[1]   = params.tint.wzyx
   dispatch_mesh(params.meshGroups.x,
                 params.meshGroups.y,
                 params.meshGroups.z)
 }
 
-@mesh_output(triangle, MeshVertex, 3, 1)
-mesh(3, 1, 1) mesh_main(payload: MeshPayload #payload,
+@mesh_output(triangle, MeshVertex, 6, 2)
+mesh(6, 1, 1) mesh_main(payload: MeshPayload #payload,
                          tid: uint #local_index) {
-  mesh_set_primitive_count(1)
-  if (tid < 3) {
-    let position = float4(float(tid == 1) * 0.6 -
-                            float(tid == 0) * 0.6,
-                          float(tid == 2) * 1.2 - 0.6,
+  mesh_set_primitive_count(2)
+  if (tid < 6) {
+    let primitive = tid / 3
+    let lane      = tid % 3
+    let position  = float4(float(lane == 1) * 0.34 -
+                             float(lane == 0) * 0.34,
+                           float(lane == 2) * 0.68 - 0.34,
                           0.0,
                           1.0)
-    let color = float4(float(tid == 0),
-                       float(tid == 1),
-                       float(tid == 2),
+    let color = float4(float(lane == 0),
+                       float(lane == 1),
+                       float(lane == 2),
                        1.0)
     mesh_set_vertex(tid,
-                    MeshVertex(position + payload.offset,
-                               color * payload.tint))
+                    MeshVertex(position + payload.offsets[primitive],
+                               color * payload.tints[primitive]))
     mesh_set_index(tid, tid)
   }
 }
