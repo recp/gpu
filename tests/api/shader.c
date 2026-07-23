@@ -403,8 +403,7 @@ check_reflected_dynamic_offset_validation(GPUDevice *device,
   badGroup0Entries[1].sampledTexture.viewType = GPU_TEXTURE_VIEW_2D;
   badGroup0Entries[1].sampledTexture.sampleType =
     GPU_TEXTURE_SAMPLE_TYPE_FLOAT;
-  badGroup0Entries[1].visibility = GPU_SHADER_STAGE_FRAGMENT_BIT |
-                                   GPU_SHADER_STAGE_COMPUTE_BIT;
+  badGroup0Entries[1].visibility = GPU_SHADER_STAGE_FRAGMENT_BIT;
   badGroup0Entries[1].arrayCount = 1u;
 
   layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
@@ -427,7 +426,7 @@ check_reflected_dynamic_offset_validation(GPUDevice *device,
   badGroup1Entries[1].binding = 1u;
   badGroup1Entries[1].bindingType = GPU_BINDING_STORAGE_TEXTURE;
   badGroup1Entries[1].storageTexture.viewType = GPU_TEXTURE_VIEW_2D;
-  badGroup1Entries[1].storageTexture.format = GPU_FORMAT_UNDEFINED;
+  badGroup1Entries[1].storageTexture.format = GPU_FORMAT_RGBA32_FLOAT;
   badGroup1Entries[1].storageTexture.access =
     GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY;
   badGroup1Entries[1].visibility = GPU_SHADER_STAGE_COMPUTE_BIT;
@@ -1217,10 +1216,16 @@ check_usl_shader_library_helper(GPUDevice *device,
 static int
 check_descriptor_array_reflection(GPUDevice *device, const char *bytecodePath) {
   GPUBindGroupLayout              *layouts[2] = {0};
+  GPUBindGroupLayout              *manualLayouts[2] = {0};
   const GPUBindGroupLayoutEntry   *entries;
   GPUPipelineLayout               *pipelineLayout;
+  GPUPipelineLayout               *manualPipelineLayout;
+  GPUComputePipeline              *manualPipeline;
   GPUShaderLibrary                *library;
   GPUShaderReflection              reflection;
+  GPUBindGroupLayoutCreateInfo     layoutInfo = {0};
+  GPUPipelineLayoutCreateInfo      pipelineInfo = {0};
+  GPUComputePipelineCreateInfo     computeInfo = {0};
   uint64_t                         bytecodeSize;
   uint32_t                         entryCount;
   uint32_t                         layoutCount;
@@ -1233,8 +1238,10 @@ check_descriptor_array_reflection(GPUDevice *device, const char *bytecodePath) {
     return 0;
   }
 
-  library       = NULL;
-  pipelineLayout = NULL;
+  library              = NULL;
+  pipelineLayout       = NULL;
+  manualPipelineLayout = NULL;
+  manualPipeline       = NULL;
   memset(&reflection, 0, sizeof(reflection));
   if (GPUCreateShaderLibraryFromUSL(device,
                                     bytecode,
@@ -1350,9 +1357,68 @@ check_descriptor_array_reflection(GPUDevice *device, const char *bytecodePath) {
                               2u);
   if (!ok) {
     fprintf(stderr, "descriptor array layout contract mismatch\n");
+    goto cleanup;
+  }
+
+  layoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  layoutInfo.label            = "api-descriptor-array-manual-group0";
+  if (GPUCreateBindGroupLayout(device,
+                               &layoutInfo,
+                               &manualLayouts[0]) != GPU_OK ||
+      !manualLayouts[0]) {
+    fprintf(stderr, "descriptor array manual group 0 layout failed\n");
+    ok = 0;
+    goto cleanup;
+  }
+
+  layoutInfo.label      = "api-descriptor-array-manual-group1";
+  layoutInfo.entryCount = entryCount;
+  layoutInfo.pEntries   = entries;
+  if (GPUCreateBindGroupLayout(device,
+                               &layoutInfo,
+                               &manualLayouts[1]) != GPU_OK ||
+      !manualLayouts[1]) {
+    fprintf(stderr, "descriptor array manual group 1 layout failed\n");
+    ok = 0;
+    goto cleanup;
+  }
+
+  pipelineInfo.chain.sType          =
+    GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize     = sizeof(pipelineInfo);
+  pipelineInfo.label                = "api-descriptor-array-manual";
+  pipelineInfo.bindGroupLayoutCount = (uint32_t)GPU_ARRAY_LEN(manualLayouts);
+  pipelineInfo.ppBindGroupLayouts   = manualLayouts;
+  if (GPUCreatePipelineLayout(device,
+                              &pipelineInfo,
+                              &manualPipelineLayout) != GPU_OK ||
+      !manualPipelineLayout) {
+    fprintf(stderr, "descriptor array manual pipeline layout failed\n");
+    ok = 0;
+    goto cleanup;
+  }
+
+  computeInfo.chain.sType      =
+    GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  computeInfo.chain.structSize = sizeof(computeInfo);
+  computeInfo.label            = "api-descriptor-array-manual";
+  computeInfo.layout           = manualPipelineLayout;
+  computeInfo.library          = library;
+  computeInfo.entryPoint       = "descriptor_array_cs";
+  if (GPUCreateComputePipeline(device,
+                               &computeInfo,
+                               &manualPipeline) != GPU_OK ||
+      !manualPipeline) {
+    fprintf(stderr, "descriptor array manual binding plan mismatch\n");
+    ok = 0;
   }
 
 cleanup:
+  GPUDestroyComputePipeline(manualPipeline);
+  GPUDestroyPipelineLayout(manualPipelineLayout);
+  GPUDestroyBindGroupLayout(manualLayouts[1]);
+  GPUDestroyBindGroupLayout(manualLayouts[0]);
   GPUDestroyPipelineLayout(pipelineLayout);
   GPUDestroyBindGroupLayout(layouts[1]);
   GPUDestroyBindGroupLayout(layouts[0]);

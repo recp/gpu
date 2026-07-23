@@ -1,6 +1,6 @@
 kern(1, 1, 1) volume_view_cs(
   inputVolume: texture3d<float> #texture(0),
-  outputVolume: texture3d<float, write> #texture(1)
+  outputVolume: image3d<rgba8unorm, write> #texture(1)
 ) {
   let nearestSampler = sampler(.nearest, .nearest, .nearest, .clampToEdge)
   let sampledColor = inputVolume.sample(nearestSampler,

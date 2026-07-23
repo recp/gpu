@@ -1749,12 +1749,12 @@ gpu_pipelineBindingsAreUnique(const GPUPipelineLayoutPriv *priv) {
 
 static GPUResult
 gpu_compileDX12PipelineBindings(GPUPipelineLayoutPriv *priv) {
-  static const GPUBindKind kinds[] = {
-    GPUBindKindBuffer,
-    GPUBindKindTexture,
-    GPUBindKindSampler,
-    GPUBindKindSamplerFeedback,
-    GPUBindKindAccelerationStructure
+  enum {
+    GPU_DX12_REGISTER_CBV,
+    GPU_DX12_REGISTER_SRV,
+    GPU_DX12_REGISTER_UAV,
+    GPU_DX12_REGISTER_SAMPLER,
+    GPU_DX12_REGISTER_CLASS_COUNT
   };
 
   for (uint32_t groupIndex = 0u;
@@ -1767,9 +1767,9 @@ gpu_compileDX12PipelineBindings(GPUPipelineLayoutPriv *priv) {
       continue;
     }
 
-    for (uint32_t kindIndex = 0u;
-         kindIndex < GPU_ARRAY_LEN(kinds);
-         kindIndex++) {
+    for (uint32_t registerClass = 0u;
+         registerClass < GPU_DX12_REGISTER_CLASS_COUNT;
+         registerClass++) {
       uint32_t cursor;
 
       cursor = 0u;
@@ -1784,9 +1784,30 @@ gpu_compileDX12PipelineBindings(GPUPipelineLayoutPriv *priv) {
              entryIndex < layout->count;
              entryIndex++) {
           const GPUBindGroupLayoutEntry *entry;
+          uint32_t                       entryClass;
 
           entry = &layout->entries[entryIndex];
-          if (gpu_layoutEntryKind(entry) != kinds[kindIndex] ||
+          switch (entry->bindingType) {
+            case GPU_BINDING_UNIFORM_BUFFER:
+              entryClass = GPU_DX12_REGISTER_CBV;
+              break;
+            case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
+            case GPU_BINDING_SAMPLED_TEXTURE:
+            case GPU_BINDING_ACCELERATION_STRUCTURE:
+              entryClass = GPU_DX12_REGISTER_SRV;
+              break;
+            case GPU_BINDING_STORAGE_BUFFER:
+            case GPU_BINDING_STORAGE_TEXTURE:
+            case GPU_BINDING_SAMPLER_FEEDBACK_EXT:
+              entryClass = GPU_DX12_REGISTER_UAV;
+              break;
+            case GPU_BINDING_SAMPLER:
+              entryClass = GPU_DX12_REGISTER_SAMPLER;
+              break;
+            default:
+              return GPU_ERROR_UNSUPPORTED;
+          }
+          if (entryClass != registerClass ||
               priv->backendBindings[groupIndex][entryIndex] != UINT32_MAX) {
             continue;
           }

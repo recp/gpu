@@ -491,7 +491,8 @@ dx12__fillLayoutPlan(GPUPipelineLayout         *layout,
 static const GPURootBindingDX12 *
 dx12__findRootBinding(const GPUPipelineLayoutDX12 *layout,
                       uint32_t                     groupIndex,
-                      uint32_t                     binding) {
+                      uint32_t                     binding,
+                      GPUBindingType               bindingType) {
   uint32_t begin;
   uint32_t end;
 
@@ -502,7 +503,8 @@ dx12__findRootBinding(const GPUPipelineLayoutDX12 *layout,
   begin = layout->groupOffsets[groupIndex];
   end   = layout->groupOffsets[groupIndex + 1u];
   for (uint32_t i = begin; i < end; i++) {
-    if (layout->bindings[i].binding == binding) {
+    if (layout->bindings[i].binding == binding &&
+        layout->bindings[i].bindingType == bindingType) {
       return &layout->bindings[i];
     }
   }
@@ -1672,7 +1674,8 @@ dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
       rootBinding = dx12__findRootBinding(bindContext->layout,
                                           bindContext->groupIndex,
                                           binding->binding +
-                                            binding->arrayIndex);
+                                            binding->arrayIndex,
+                                          binding->bindingType);
       buffer = binding->buffer ? binding->buffer->_priv : NULL;
       if (binding->kind != GPUBindKindBuffer) {
         bindContext->valid = false;
@@ -1720,7 +1723,8 @@ dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
       rootBinding = dx12__findRootBinding(bindContext->layout,
                                           bindContext->groupIndex,
                                           binding->binding +
-                                            binding->arrayIndex);
+                                            binding->arrayIndex,
+                                          binding->bindingType);
       buffer = binding->buffer ? binding->buffer->_priv : NULL;
       if (binding->kind != GPUBindKindBuffer) {
         bindContext->valid = false;
@@ -1763,7 +1767,8 @@ dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
       rootBinding = dx12__findRootBinding(bindContext->layout,
                                           bindContext->groupIndex,
                                           binding->binding +
-                                            binding->arrayIndex);
+                                            binding->arrayIndex,
+                                          binding->bindingType);
       buffer = binding->buffer ? binding->buffer->_priv : NULL;
       if (binding->kind != GPUBindKindBuffer) {
         bindContext->valid = false;
