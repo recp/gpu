@@ -121,6 +121,7 @@ gpu_test_msaa_resolve_sample(GPUDevice *device, const char *bytecodePath) {
   GPUBarrierBatch                 barrierBatch       = {0};
   GPUBufferTextureCopyRegion      copyRegion         = {0};
   GPUQueueSubmitInfo              submitInfo         = {0};
+  GPUResult                       acquireResult;
   uint8_t                         pixels[2u * MSAA_ROW_PITCH * MSAA_HEIGHT] = {0};
   int                             ok                 = 0;
 
@@ -281,9 +282,13 @@ gpu_test_msaa_resolve_sample(GPUDevice *device, const char *bytecodePath) {
     goto cleanup;
   }
 
-  if (GPUAcquireCommandBuffer(queue, "api-msaa-conformance", &cmdb) != GPU_OK ||
-      !cmdb) {
-    fprintf(stderr, "failed to acquire MSAA command buffer\n");
+  acquireResult = GPUAcquireCommandBuffer(queue,
+                                          "api-msaa-conformance",
+                                          &cmdb);
+  if (acquireResult != GPU_OK || !cmdb) {
+    fprintf(stderr,
+            "failed to acquire MSAA command buffer: result=%d\n",
+            (int)acquireResult);
     goto cleanup;
   }
 

@@ -988,6 +988,7 @@ dx12_destroyTexture(GPUTexture * __restrict texture) {
 
 static bool
 dx12__fillTextureSrv(const GPUTextureViewCreateInfo *info,
+                     bool                            multisampled,
                      D3D12_SHADER_RESOURCE_VIEW_DESC *srv) {
   switch (info->viewType) {
     case GPU_TEXTURE_VIEW_1D:
@@ -1011,6 +1012,10 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo *info,
     case GPU_TEXTURE_VIEW_2D:
       if (info->arrayLayerCount != 1u) {
         return false;
+      }
+      if (multisampled) {
+        srv->ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
+        return info->baseMipLevel == 0u && info->mipLevelCount == 1u;
       }
       srv->ViewDimension                 = D3D12_SRV_DIMENSION_TEXTURE2D;
       srv->Texture2D.MostDetailedMip     = info->baseMipLevel;
@@ -1249,7 +1254,8 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
   hasUav = storage && texture->sampleCount == 1u &&
            dx12__fillTextureUav(info, format, &uav);
   if ((!sampled && !hasRtv && !hasDsv && !hasUav && !shadingRate) ||
-      (sampled && !dx12__fillTextureSrv(info, &srv)) ||
+      (sampled &&
+       !dx12__fillTextureSrv(info, texture->sampleCount > 1u, &srv)) ||
       (storage && !hasUav)) {
     return GPU_ERROR_UNSUPPORTED;
   }
