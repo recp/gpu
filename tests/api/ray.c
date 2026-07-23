@@ -224,7 +224,7 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
     fprintf(stderr, "ray pipeline USL compile/reflection failed\n");
     goto cleanup;
   }
-  if (reflection.resourceCount != 2u) {
+  if (reflection.resourceCount != 3u) {
     fprintf(stderr,
             "ray pipeline reflection resource mismatch: %u\n",
             reflection.resourceCount);
@@ -667,8 +667,10 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   GPUAccelerationStructureSizesEXT             tlasSizes        = {0};
   GPUAccelerationStructureCreateInfoEXT        structureInfo    = {0};
   GPUAccelerationStructureInstanceEXT          instance         = {0};
-  GPUBindGroupEntry                            groupEntries[2]   = {0};
+  GPUBindGroupEntry                            groupEntries[3]   = {0};
   GPUBindGroupCreateInfo                       groupInfo         = {0};
+  GPUBindGroupLayoutCreateInfo                 manualGroupInfo   = {0};
+  GPUPipelineLayoutCreateInfo                  manualLayoutInfo  = {0};
   GPUQueueSubmitInfo                           submitInfo        = {0};
   GPUShaderReflection                          reflection        = {0};
   GPUFeature                                   feature;
@@ -676,11 +678,15 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   GPUQueue                                    *queue;
   GPUShaderLibrary                            *library;
   GPUBindGroupLayout                          *groupLayout;
+  GPUBindGroupLayout                          *manualGroupLayout;
   GPUPipelineLayout                           *pipelineLayout;
+  GPUPipelineLayout                           *manualPipelineLayout;
   GPUComputePipeline                          *pipeline;
+  GPUComputePipeline                          *manualPipeline;
   GPUBuffer                                   *vertexBuffer;
   GPUBuffer                                   *indexBuffer;
   GPUBuffer                                   *scratchBuffer;
+  GPUBuffer                                   *inputBuffer;
   GPUBuffer                                   *outputBuffer;
   GPUAccelerationStructureEXT                 *blas;
   GPUAccelerationStructureEXT                 *tlas;
@@ -689,12 +695,16 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   GPUAccelerationStructurePassEncoderEXT      *buildPass;
   GPUComputePassEncoder                       *computePass;
   GPUFence                                    *fence;
+  const GPUBindGroupLayoutEntry               *layoutEntries;
   void                                        *bytecode;
   uint64_t                                     bytecodeSize;
   uint64_t                                     scratchSize;
+  uint32_t                                     layoutEntryCount;
   uint32_t                                     layoutCount;
+  uint32_t                                     inputValue;
   uint32_t                                     resultValue;
   bool                                         sawScene;
+  bool                                         sawInput;
   bool                                         sawResult;
   bool                                         submitAttempted;
   int                                          ok;
@@ -711,31 +721,38 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
     return 1;
   }
 
-  feature         = GPU_FEATURE_RAY_QUERY;
-  device          = NULL;
-  queue           = NULL;
-  library         = NULL;
-  groupLayout     = NULL;
-  pipelineLayout  = NULL;
-  pipeline        = NULL;
-  vertexBuffer    = NULL;
-  indexBuffer     = NULL;
-  scratchBuffer   = NULL;
-  outputBuffer    = NULL;
-  blas            = NULL;
-  tlas            = NULL;
-  group           = NULL;
-  cmdb            = NULL;
-  buildPass       = NULL;
-  computePass     = NULL;
-  fence           = NULL;
-  bytecode        = NULL;
-  bytecodeSize    = 0u;
-  resultValue     = 0u;
-  sawScene        = false;
-  sawResult       = false;
-  submitAttempted = false;
-  ok              = 0;
+  feature              = GPU_FEATURE_RAY_QUERY;
+  device               = NULL;
+  queue                = NULL;
+  library              = NULL;
+  groupLayout          = NULL;
+  manualGroupLayout    = NULL;
+  pipelineLayout       = NULL;
+  manualPipelineLayout = NULL;
+  pipeline             = NULL;
+  manualPipeline       = NULL;
+  vertexBuffer         = NULL;
+  indexBuffer          = NULL;
+  scratchBuffer        = NULL;
+  inputBuffer          = NULL;
+  outputBuffer         = NULL;
+  blas                 = NULL;
+  tlas                 = NULL;
+  group                = NULL;
+  cmdb                 = NULL;
+  buildPass            = NULL;
+  computePass          = NULL;
+  fence                = NULL;
+  bytecode             = NULL;
+  bytecodeSize         = 0u;
+  layoutEntryCount     = 0u;
+  inputValue           = 0u;
+  resultValue          = 0u;
+  sawScene             = false;
+  sawInput             = false;
+  sawResult            = false;
+  submitAttempted      = false;
+  ok                   = 0;
 
   deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
@@ -871,12 +888,23 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
                            GPU_BUFFER_USAGE_COPY_SRC |
                            GPU_BUFFER_USAGE_COPY_DST,
                          &outputBuffer) ||
+      !ray_create_buffer(device,
+                         "ray-query-input",
+                         sizeof(inputValue),
+                         GPU_BUFFER_USAGE_STORAGE |
+                           GPU_BUFFER_USAGE_COPY_DST,
+                         &inputBuffer) ||
+      GPUQueueWriteBuffer(queue,
+                          inputBuffer,
+                          0u,
+                          &inputValue,
+                          sizeof(inputValue)) != GPU_OK ||
       GPUQueueWriteBuffer(queue,
                           outputBuffer,
                           0u,
                           &resultValue,
                           sizeof(resultValue)) != GPU_OK) {
-    fprintf(stderr, "ray-query scratch/output setup failed\n");
+    fprintf(stderr, "ray-query scratch/input/output setup failed\n");
     goto cleanup;
   }
 
@@ -891,7 +919,7 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
     fprintf(stderr, "ray-query USL compile/reflection failed\n");
     goto cleanup;
   }
-  if (reflection.resourceCount != 2u) {
+  if (reflection.resourceCount != 3u) {
     fprintf(stderr,
             "ray-query reflection resource mismatch: %u\n",
             reflection.resourceCount);
@@ -909,11 +937,15 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
         resource->bindingType == GPU_BINDING_ACCELERATION_STRUCTURE) {
       sawScene = true;
     } else if (resource->binding == 1u &&
+               resource->bindingType ==
+                 GPU_BINDING_READ_ONLY_STORAGE_BUFFER) {
+      sawInput = true;
+    } else if (resource->binding == 2u &&
                resource->bindingType == GPU_BINDING_STORAGE_BUFFER) {
       sawResult = true;
     }
   }
-  if (!sawScene || !sawResult) {
+  if (!sawScene || !sawInput || !sawResult) {
     fprintf(stderr, "ray-query reflection binding mismatch\n");
     goto cleanup;
   }
@@ -933,6 +965,37 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
     goto cleanup;
   }
 
+  layoutEntries = GPUGetBindGroupLayoutEntries(groupLayout,
+                                                &layoutEntryCount);
+  manualGroupInfo.chain.sType =
+    GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  manualGroupInfo.chain.structSize = sizeof(manualGroupInfo);
+  manualGroupInfo.label            = "ray-query-manual-group";
+  manualGroupInfo.entryCount       = layoutEntryCount;
+  manualGroupInfo.pEntries         = layoutEntries;
+  if (!layoutEntries || layoutEntryCount != 3u ||
+      GPUCreateBindGroupLayout(device,
+                               &manualGroupInfo,
+                               &manualGroupLayout) != GPU_OK ||
+      !manualGroupLayout) {
+    fprintf(stderr, "ray-query manual layout creation failed\n");
+    goto cleanup;
+  }
+
+  manualLayoutInfo.chain.sType =
+    GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  manualLayoutInfo.chain.structSize     = sizeof(manualLayoutInfo);
+  manualLayoutInfo.label                = "ray-query-manual-pipeline";
+  manualLayoutInfo.bindGroupLayoutCount = 1u;
+  manualLayoutInfo.ppBindGroupLayouts   = &manualGroupLayout;
+  if (GPUCreatePipelineLayout(device,
+                              &manualLayoutInfo,
+                              &manualPipelineLayout) != GPU_OK ||
+      !manualPipelineLayout) {
+    fprintf(stderr, "ray-query manual pipeline layout failed\n");
+    goto cleanup;
+  }
+
   pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
   pipelineInfo.chain.structSize = sizeof(pipelineInfo);
   pipelineInfo.label            = "ray-query-pipeline";
@@ -944,19 +1007,32 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
     fprintf(stderr, "ray-query compute pipeline failed\n");
     goto cleanup;
   }
+  pipelineInfo.label  = "ray-query-manual-pipeline";
+  pipelineInfo.layout = manualPipelineLayout;
+  if (GPUCreateComputePipeline(device,
+                               &pipelineInfo,
+                               &manualPipeline) != GPU_OK ||
+      !manualPipeline) {
+    fprintf(stderr, "ray-query manual binding plan mismatch\n");
+    goto cleanup;
+  }
 
   groupEntries[0].binding               = 0u;
   groupEntries[0].bindingType           = GPU_BINDING_ACCELERATION_STRUCTURE;
   groupEntries[0].accelerationStructure = tlas;
   groupEntries[1].binding               = 1u;
-  groupEntries[1].bindingType           = GPU_BINDING_STORAGE_BUFFER;
-  groupEntries[1].buffer.buffer         = outputBuffer;
-  groupEntries[1].buffer.size           = sizeof(resultValue);
+  groupEntries[1].bindingType           = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
+  groupEntries[1].buffer.buffer         = inputBuffer;
+  groupEntries[1].buffer.size           = sizeof(inputValue);
+  groupEntries[2].binding               = 2u;
+  groupEntries[2].bindingType           = GPU_BINDING_STORAGE_BUFFER;
+  groupEntries[2].buffer.buffer         = outputBuffer;
+  groupEntries[2].buffer.size           = sizeof(resultValue);
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "ray-query-group";
   groupInfo.layout           = groupLayout;
-  groupInfo.entryCount       = 2u;
+  groupInfo.entryCount       = GPU_ARRAY_LEN(groupEntries);
   groupInfo.pEntries         = groupEntries;
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "ray-query bind group failed\n");
@@ -1003,7 +1079,7 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = &cmdb;
   submitInfo.fence              = fence;
-  submitAttempted                    = true;
+  submitAttempted               = true;
   if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
       GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     cmdb = NULL;
@@ -1029,14 +1105,18 @@ cleanup:
   if (cmdb && !submitAttempted) GPUDiscardCommandBuffer(cmdb);
   GPUDestroyFence(fence);
   GPUDestroyBindGroup(group);
+  GPUDestroyComputePipeline(manualPipeline);
   GPUDestroyComputePipeline(pipeline);
+  GPUDestroyPipelineLayout(manualPipelineLayout);
   GPUDestroyPipelineLayout(pipelineLayout);
+  GPUDestroyBindGroupLayout(manualGroupLayout);
   GPUDestroyBindGroupLayout(groupLayout);
   GPUFreeShaderReflection(&reflection);
   GPUDestroyShaderLibrary(library);
   GPUDestroyAccelerationStructureEXT(tlas);
   GPUDestroyAccelerationStructureEXT(blas);
   GPUDestroyBuffer(outputBuffer);
+  GPUDestroyBuffer(inputBuffer);
   GPUDestroyBuffer(scratchBuffer);
   GPUDestroyBuffer(indexBuffer);
   GPUDestroyBuffer(vertexBuffer);
