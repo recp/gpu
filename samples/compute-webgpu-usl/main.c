@@ -19,8 +19,13 @@
 #define GPU_COMPUTE_VERTEX_CAPACITY 3u
 #endif
 
-#ifndef GPU_COMPUTE_REQUIRES_SUBGROUPS
-#define GPU_COMPUTE_REQUIRES_SUBGROUPS 0
+#ifndef GPU_COMPUTE_REQUIRED_FEATURE
+#define GPU_COMPUTE_REQUIRED_FEATURE GPU_FEATURE_COMPUTE
+#endif
+
+#ifndef GPU_COMPUTE_UNSUPPORTED_STATUS
+#define GPU_COMPUTE_UNSUPPORTED_STATUS \
+  "GPU: required WebGPU compute feature unsupported by this adapter"
 #endif
 
 #ifndef GPU_COMPUTE_READY_STATUS
@@ -367,12 +372,10 @@ webgpu_ready(GPUResult  result,
 
   state->adapter = adapter;
   state->device  = device;
-#if GPU_COMPUTE_REQUIRES_SUBGROUPS
-  if (!GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUPS)) {
-    set_status("GPU: WebGPU subgroups unsupported by this adapter", 1);
+  if (!GPUIsFeatureEnabled(device, GPU_COMPUTE_REQUIRED_FEATURE)) {
+    set_status(GPU_COMPUTE_UNSUPPORTED_STATUS, 1);
     return;
   }
-#endif
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   state->surface = GPUCreateSurfaceFromNative(state->instance,
                                                state->adapter,

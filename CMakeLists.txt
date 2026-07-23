@@ -597,7 +597,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
-  set(GPU_WEBGPU_GALLERY_VERSION "23")
+  set(GPU_WEBGPU_GALLERY_VERSION "24")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
   file(GLOB GPU_WEBGPU_GALLERY_PREVIEWS CONFIGURE_DEPENDS
@@ -937,7 +937,9 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     "#define GPU_COMPUTE_ENTRY_POINT \"fill_subgroup_vertices\"\n"
     "#define GPU_COMPUTE_DISPATCH_X 1u\n"
     "#define GPU_COMPUTE_VERTEX_CAPACITY 32u\n"
-    "#define GPU_COMPUTE_REQUIRES_SUBGROUPS 1\n"
+    "#define GPU_COMPUTE_REQUIRED_FEATURE GPU_FEATURE_SUBGROUPS\n"
+    "#define GPU_COMPUTE_UNSUPPORTED_STATUS "
+    "\"GPU: WebGPU subgroups unsupported by this adapter\"\n"
     "#define GPU_COMPUTE_READY_STATUS "
     "\"GPU: WebGPU USL subgroup shuffle ready\"\n\n"
     "${GPU_WEBGPU_COMPUTE_MAIN_SOURCE}"
@@ -1008,6 +1010,174 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     C_EXTENSIONS NO
     LINK_DEPENDS
       "${GPU_WEBGPU_GALLERY_DIR}/gpu-subgroup-webgpu-usl-shell.html;${GPU_WEBGPU_SUBGROUP_US}"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${GPU_WEBGPU_GALLERY_DIR}"
+  )
+
+  set(GPU_WEBGPU_SHADER_F16_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+  set(GPU_WEBGPU_SHADER_F16_SOURCE
+      "${GPU_WEBGPU_SHADER_F16_DIR}/shader_f16.usl")
+  set(GPU_WEBGPU_SHADER_F16_US
+      "${GPU_WEBGPU_SHADER_F16_DIR}/shader_f16.us")
+  set(GPU_WEBGPU_SHADER_F16_MAIN
+      "${GPU_WEBGPU_SHADER_F16_DIR}/shader_f16.c")
+  file(MAKE_DIRECTORY "${GPU_WEBGPU_SHADER_F16_DIR}")
+  file(READ
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-webgpu-usl/main.c"
+    GPU_WEBGPU_COMPUTE_MAIN_SOURCE
+  )
+  file(WRITE "${GPU_WEBGPU_SHADER_F16_MAIN}"
+    "#define GPU_COMPUTE_ARTIFACT_PATH \"/shader_f16.us\"\n"
+    "#define GPU_COMPUTE_ENTRY_POINT \"fill_f16_vertices\"\n"
+    "#define GPU_COMPUTE_REQUIRED_FEATURE GPU_FEATURE_SHADER_F16\n"
+    "#define GPU_COMPUTE_UNSUPPORTED_STATUS "
+    "\"GPU: WebGPU shader-f16 unsupported by this adapter\"\n"
+    "#define GPU_COMPUTE_READY_STATUS "
+    "\"GPU: WebGPU USL shader-f16 ready\"\n\n"
+    "${GPU_WEBGPU_COMPUTE_MAIN_SOURCE}"
+  )
+  unset(GPU_WEBGPU_COMPUTE_MAIN_SOURCE)
+  set(GPU_WEBGPU_SAMPLE_TITLE "Half precision")
+  set(GPU_WEBGPU_SAMPLE_KIND "Compute / shader f16")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "Native half-precision arithmetic colors a compute-generated vertex stream.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/shader-f16.c")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/shader-f16.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/shader-f16.wgsl")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-shader-f16-webgpu-usl-shell.html"
+    @ONLY
+  )
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_SHADER_F16_US}"
+    BYPRODUCTS "${GPU_WEBGPU_SHADER_F16_SOURCE}.wgsl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${GPU_WEBGPU_SHADER_F16_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/shader-f16-webgpu-usl/shader_f16.usl"
+            "${GPU_WEBGPU_SHADER_F16_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            USL_TARGET_CAPS=shader_f16
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_SHADER_F16_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_SHADER_F16_MAIN}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/shader-f16.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_SHADER_F16_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/shader-f16.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_SHADER_F16_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/shader-f16.wgsl"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/shader-f16-webgpu-usl/shader_f16.usl"
+      "${GPU_WEBGPU_SHADER_F16_MAIN}"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-shader-f16-artifact
+    DEPENDS "${GPU_WEBGPU_SHADER_F16_US}"
+  )
+
+  add_executable(gpu-shader-f16-webgpu-usl
+    "${GPU_WEBGPU_SHADER_F16_MAIN}"
+    ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
+  )
+  target_include_directories(gpu-shader-f16-webgpu-usl PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-webgpu-usl"
+  )
+  target_link_libraries(gpu-shader-f16-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-shader-f16-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_SHADER_F16_US}@/shader_f16.us"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-shader-f16-webgpu-usl-shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-shader-f16-webgpu-usl
+                   gpu-webgpu-shader-f16-artifact)
+  set_target_properties(gpu-shader-f16-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-shader-f16-webgpu-usl-shell.html;${GPU_WEBGPU_SHADER_F16_US}"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${GPU_WEBGPU_GALLERY_DIR}"
+  )
+
+  set(GPU_WEBGPU_MULTI_DRAW_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+  set(GPU_WEBGPU_MULTI_DRAW_SOURCE
+      "${GPU_WEBGPU_MULTI_DRAW_DIR}/multi_draw.usl")
+  set(GPU_WEBGPU_MULTI_DRAW_US
+      "${GPU_WEBGPU_MULTI_DRAW_DIR}/multi_draw.us")
+  set(GPU_WEBGPU_SAMPLE_TITLE "Multi-draw batch")
+  set(GPU_WEBGPU_SAMPLE_KIND "Render / indirect batch")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "One multi-draw command consumes two packed indirect records, using the native extension when available.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/multi-draw.c")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/multi-draw.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/multi-draw.wgsl")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-multi-draw-webgpu-usl-shell.html"
+    @ONLY
+  )
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_MULTI_DRAW_US}"
+    BYPRODUCTS "${GPU_WEBGPU_MULTI_DRAW_SOURCE}.wgsl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${GPU_WEBGPU_MULTI_DRAW_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/multi-draw-webgpu-usl/multi_draw.usl"
+            "${GPU_WEBGPU_MULTI_DRAW_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_MULTI_DRAW_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/multi-draw-webgpu-usl/main.c"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/multi-draw.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_MULTI_DRAW_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/multi-draw.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_MULTI_DRAW_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/multi-draw.wgsl"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/multi-draw-webgpu-usl/main.c"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/multi-draw-webgpu-usl/multi_draw.usl"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-multi-draw-artifact
+    DEPENDS "${GPU_WEBGPU_MULTI_DRAW_US}"
+  )
+
+  add_executable(gpu-multi-draw-webgpu-usl
+    samples/multi-draw-webgpu-usl/main.c
+    ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
+  )
+  target_link_libraries(gpu-multi-draw-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-multi-draw-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_MULTI_DRAW_US}@/multi_draw.us"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-multi-draw-webgpu-usl-shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-multi-draw-webgpu-usl
+                   gpu-webgpu-multi-draw-artifact)
+  set_target_properties(gpu-multi-draw-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-multi-draw-webgpu-usl-shell.html;${GPU_WEBGPU_MULTI_DRAW_US}"
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"
