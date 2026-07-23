@@ -3,6 +3,31 @@
 #include <math.h>
 #include <stdio.h>
 
+#ifndef GPU_COMPUTE_ARTIFACT_PATH
+#define GPU_COMPUTE_ARTIFACT_PATH "/compute.us"
+#endif
+
+#ifndef GPU_COMPUTE_ENTRY_POINT
+#define GPU_COMPUTE_ENTRY_POINT "fill_vertices"
+#endif
+
+#ifndef GPU_COMPUTE_DISPATCH_X
+#define GPU_COMPUTE_DISPATCH_X 3u
+#endif
+
+#ifndef GPU_COMPUTE_VERTEX_CAPACITY
+#define GPU_COMPUTE_VERTEX_CAPACITY 3u
+#endif
+
+#ifndef GPU_COMPUTE_REQUIRES_SUBGROUPS
+#define GPU_COMPUTE_REQUIRES_SUBGROUPS 0
+#endif
+
+#ifndef GPU_COMPUTE_READY_STATUS
+#define GPU_COMPUTE_READY_STATUS \
+  "GPU: WebGPU USL compute push constants ready"
+#endif
+
 typedef struct GeneratedVertex {
   float position[4];
   float color[4];
@@ -64,8 +89,8 @@ create_resources(WebGPUCompute *state) {
 
   artifact     = NULL;
   artifactSize = 0u;
-  if (!read_file("/compute.us", &artifact, &artifactSize)) {
-    set_status("GPU: failed to read /compute.us", 1);
+  if (!read_file(GPU_COMPUTE_ARTIFACT_PATH, &artifact, &artifactSize)) {
+    set_status("GPU: failed to read compute artifact", 1);
     return 0;
   }
 
@@ -110,7 +135,7 @@ create_resources(WebGPUCompute *state) {
   computeInfo.label            = "compute-webgpu-usl-fill";
   computeInfo.layout           = state->shaderLayout->pipelineLayout;
   computeInfo.library          = state->library;
-  computeInfo.entryPoint       = "fill_vertices";
+  computeInfo.entryPoint       = GPU_COMPUTE_ENTRY_POINT;
   if (GPUCreateComputePipeline(state->device,
                                &computeInfo,
                                &state->computePipeline) != GPU_OK) {
@@ -167,7 +192,8 @@ create_resources(WebGPUCompute *state) {
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.label            = "compute-webgpu-usl-vertices";
-  bufferInfo.sizeBytes        = sizeof(GeneratedVertex) * 3u;
+  bufferInfo.sizeBytes        = sizeof(GeneratedVertex) *
+                                GPU_COMPUTE_VERTEX_CAPACITY;
   bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE |
                                 GPU_BUFFER_USAGE_VERTEX;
   if (GPUCreateBuffer(state->device,
@@ -273,13 +299,14 @@ render_frame(void *userData) {
                              0u,
                              (uint32_t)sizeof(constants),
                              &constants);
-  GPUDispatch(compute, 3u, 1u, 1u);
+  GPUDispatch(compute, GPU_COMPUTE_DISPATCH_X, 1u, 1u);
   GPUEndComputePass(compute);
 
   barrier.buffer    = state->vertexBuffer;
   barrier.srcAccess = GPU_ACCESS_SHADER_WRITE;
   barrier.dstAccess = GPU_ACCESS_SHADER_READ;
-  barrier.sizeBytes = sizeof(GeneratedVertex) * 3u;
+  barrier.sizeBytes = sizeof(GeneratedVertex) *
+                      GPU_COMPUTE_VERTEX_CAPACITY;
   barriers.srcStages          = GPU_STAGE_COMPUTE;
   barriers.dstStages          = GPU_STAGE_VERTEX;
   barriers.pBufferBarriers    = &barrier;
@@ -340,6 +367,12 @@ webgpu_ready(GPUResult  result,
 
   state->adapter = adapter;
   state->device  = device;
+#if GPU_COMPUTE_REQUIRES_SUBGROUPS
+  if (!GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUPS)) {
+    set_status("GPU: WebGPU subgroups unsupported by this adapter", 1);
+    return;
+  }
+#endif
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   state->surface = GPUCreateSurfaceFromNative(state->instance,
                                                state->adapter,
@@ -359,7 +392,7 @@ webgpu_ready(GPUResult  result,
     return;
   }
 
-  set_status("GPU: WebGPU USL compute push constants ready", 0);
+  set_status(GPU_COMPUTE_READY_STATUS, 0);
   emscripten_set_main_loop_arg(render_frame, state, 0, true);
 }
 

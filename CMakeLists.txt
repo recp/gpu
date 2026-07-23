@@ -597,7 +597,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
-  set(GPU_WEBGPU_GALLERY_VERSION "22")
+  set(GPU_WEBGPU_GALLERY_VERSION "23")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
   file(GLOB GPU_WEBGPU_GALLERY_PREVIEWS CONFIGURE_DEPENDS
@@ -911,6 +911,103 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     C_EXTENSIONS NO
     LINK_DEPENDS
       "${GPU_WEBGPU_GALLERY_DIR}/gpu-compute-webgpu-usl-shell.html;${GPU_WEBGPU_COMPUTE_US}"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${GPU_WEBGPU_GALLERY_DIR}"
+  )
+
+  set(GPU_WEBGPU_SUBGROUP_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+  set(GPU_WEBGPU_SUBGROUP_SOURCE
+      "${GPU_WEBGPU_SUBGROUP_DIR}/subgroup.usl")
+  set(GPU_WEBGPU_SUBGROUP_US
+      "${GPU_WEBGPU_SUBGROUP_DIR}/subgroup.us")
+  set(GPU_WEBGPU_SUBGROUP_MAIN
+      "${GPU_WEBGPU_SUBGROUP_DIR}/subgroup.c")
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-webgpu-usl/main.c"
+  )
+  file(MAKE_DIRECTORY "${GPU_WEBGPU_SUBGROUP_DIR}")
+  file(READ
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-webgpu-usl/main.c"
+    GPU_WEBGPU_COMPUTE_MAIN_SOURCE
+  )
+  file(WRITE "${GPU_WEBGPU_SUBGROUP_MAIN}"
+    "#define GPU_COMPUTE_ARTIFACT_PATH \"/subgroup.us\"\n"
+    "#define GPU_COMPUTE_ENTRY_POINT \"fill_subgroup_vertices\"\n"
+    "#define GPU_COMPUTE_DISPATCH_X 1u\n"
+    "#define GPU_COMPUTE_VERTEX_CAPACITY 32u\n"
+    "#define GPU_COMPUTE_REQUIRES_SUBGROUPS 1\n"
+    "#define GPU_COMPUTE_READY_STATUS "
+    "\"GPU: WebGPU USL subgroup shuffle ready\"\n\n"
+    "${GPU_WEBGPU_COMPUTE_MAIN_SOURCE}"
+  )
+  unset(GPU_WEBGPU_COMPUTE_MAIN_SOURCE)
+  set(GPU_WEBGPU_SAMPLE_TITLE "Subgroup exchange")
+  set(GPU_WEBGPU_SAMPLE_KIND "Compute / subgroup shuffle")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "A native subgroup shuffle changes the compute-generated vertex colors before render consumes the buffer.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/subgroup.c")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/subgroup.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/subgroup.wgsl")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-subgroup-webgpu-usl-shell.html"
+    @ONLY
+  )
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_SUBGROUP_US}"
+    BYPRODUCTS "${GPU_WEBGPU_SUBGROUP_SOURCE}.wgsl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${GPU_WEBGPU_SUBGROUP_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/subgroup-webgpu-usl/subgroup.usl"
+            "${GPU_WEBGPU_SUBGROUP_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            USL_TARGET_CAPS=subgroup
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_SUBGROUP_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_SUBGROUP_MAIN}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/subgroup.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_SUBGROUP_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/subgroup.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_SUBGROUP_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/subgroup.wgsl"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/subgroup-webgpu-usl/subgroup.usl"
+      "${GPU_WEBGPU_SUBGROUP_MAIN}"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-subgroup-artifact
+    DEPENDS "${GPU_WEBGPU_SUBGROUP_US}"
+  )
+
+  add_executable(gpu-subgroup-webgpu-usl
+    "${GPU_WEBGPU_SUBGROUP_MAIN}"
+    ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
+  )
+  target_include_directories(gpu-subgroup-webgpu-usl PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-webgpu-usl"
+  )
+  target_link_libraries(gpu-subgroup-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-subgroup-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_SUBGROUP_US}@/subgroup.us"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-subgroup-webgpu-usl-shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-subgroup-webgpu-usl gpu-webgpu-subgroup-artifact)
+  set_target_properties(gpu-subgroup-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-subgroup-webgpu-usl-shell.html;${GPU_WEBGPU_SUBGROUP_US}"
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"

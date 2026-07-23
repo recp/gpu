@@ -1,0 +1,44 @@
+struct GeneratedVertex {
+  position: float4
+  color:    float4
+}
+
+struct ComputeConstants {
+  tint: float4
+}
+
+vertex VSIn {
+  position: float4
+  color:    float4
+}
+
+struct VSOut {
+  position: float4 #position
+  color:    float4
+}
+
+kern(32, 1, 1) fill_subgroup_vertices(inout vertices: [GeneratedVertex] #buffer(0),
+                                      draw: ComputeConstants #push_constant,
+                                      gid: uint3 #global_id) {
+  let lane = gid.x
+  let value = 0.28 + float(lane & 3u) * 0.18
+  let peer = simd_shuffle_xor(value, 1u)
+  let x = lane == 0u ? -0.68 : (lane == 1u ? 0.68 : 0.0)
+  let y = lane == 2u ? 0.70 : -0.62
+  let color = lane == 0u
+    ? float4(1.0, peer, 0.08, 1.0)
+    : (lane == 1u
+       ? float4(peer, 1.0, 0.30, 1.0)
+       : float4(0.12, peer, 1.0, 1.0))
+
+  vertices[lane].position = float4(x, y, 0.0, 1.0)
+  vertices[lane].color    = color * draw.tint
+}
+
+vert tri_vs(v: VSIn #stage_in) -> VSOut {
+  v.position, v.color
+}
+
+frag tri_fs(i: VSOut #stage_in) -> float4 {
+  return i.color
+}
