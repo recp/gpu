@@ -1833,6 +1833,16 @@ if(GPU_BUILD_TESTS)
     api
     ${GPU_API_USL_SOURCES}
   )
+  gpu_add_usl_fixtures(
+    GPU_API_MSAA_USL_FIXTURE
+    "${GPU_API_DEFAULT_BACKEND}"
+    api-msaa
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/msaa.usl"
+  )
+  add_custom_target(
+    gpu-api-msaa-fixture
+    DEPENDS ${GPU_API_MSAA_USL_FIXTURE}
+  )
   set(GPU_USL_FIXTURE_TARGET_CAPS descriptor_indexing)
   gpu_add_usl_fixtures(
     GPU_API_DESCRIPTOR_INDEXING_USL_FIXTURE
@@ -2078,6 +2088,8 @@ if(GPU_BUILD_TESTS)
 
     if(GPU_API_DEFAULT_BACKEND STREQUAL "vulkan")
       set(GPU_API_VULKAN_USL_FIXTURES ${GPU_API_USL_FIXTURES})
+      set(GPU_API_VULKAN_MSAA_USL_FIXTURE
+          ${GPU_API_MSAA_USL_FIXTURE})
       set(GPU_API_VULKAN_BUFFER_DESCRIPTOR_ARRAY_USL_FIXTURE
           ${GPU_API_BUFFER_DESCRIPTOR_ARRAY_USL_FIXTURE})
       set(GPU_API_VULKAN_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_USL_FIXTURE
@@ -2088,6 +2100,16 @@ if(GPU_BUILD_TESTS)
         vulkan
         api
         ${GPU_API_USL_SOURCES}
+      )
+      gpu_add_usl_fixtures(
+        GPU_API_VULKAN_MSAA_USL_FIXTURE
+        vulkan
+        api-vulkan-msaa
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/msaa.usl"
+      )
+      add_custom_target(
+        gpu-api-vulkan-msaa-fixture
+        DEPENDS ${GPU_API_VULKAN_MSAA_USL_FIXTURE}
       )
       set(GPU_USL_FIXTURE_TARGET_CAPS descriptor_indexing)
       gpu_add_usl_fixtures(
@@ -2496,6 +2518,7 @@ if(GPU_BUILD_TESTS)
     tests/api/main.c
     tests/api/memory.c
     tests/api/metal_vertex_slots.c
+    tests/api/msaa.c
     tests/api/query.c
     tests/api/queue.c
     tests/api/ray.c
@@ -2521,6 +2544,7 @@ if(GPU_BUILD_TESTS)
   )
   target_link_libraries(gpu-api-test PRIVATE gpu)
   add_dependencies(gpu-api-test gpu-api-fixtures)
+  add_dependencies(gpu-api-test gpu-api-msaa-fixture)
   add_dependencies(gpu-api-test gpu-api-atomic64-fixture)
   add_dependencies(gpu-api-test gpu-api-buffer-descriptor-array-fixture)
   add_dependencies(gpu-api-test
@@ -2533,6 +2557,9 @@ if(GPU_BUILD_TESTS)
   endif()
   if(TARGET gpu-api-vulkan-fixtures)
     add_dependencies(gpu-api-test gpu-api-vulkan-fixtures)
+  endif()
+  if(TARGET gpu-api-vulkan-msaa-fixture)
+    add_dependencies(gpu-api-test gpu-api-vulkan-msaa-fixture)
   endif()
   if(TARGET gpu-api-vulkan-ray-query-fixture)
     add_dependencies(gpu-api-test gpu-api-vulkan-ray-query-fixture)
@@ -2583,6 +2610,7 @@ if(GPU_BUILD_TESTS)
             ${GPU_API_USL_FIXTURES}
   )
   set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
+    "GPU_MSAA_USL_PATH=${GPU_API_MSAA_USL_FIXTURE}"
     "GPU_BUFFER_DESCRIPTOR_ARRAY_USL_PATH=${GPU_API_BUFFER_DESCRIPTOR_ARRAY_USL_FIXTURE}"
     "GPU_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_USL_PATH=${GPU_API_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_USL_FIXTURE}"
   )
@@ -2673,6 +2701,7 @@ if(GPU_BUILD_TESTS)
               vulkan
     )
     set_property(TEST api-validation-vulkan APPEND PROPERTY ENVIRONMENT
+      "GPU_MSAA_USL_PATH=${GPU_API_VULKAN_MSAA_USL_FIXTURE}"
       "GPU_BUFFER_DESCRIPTOR_ARRAY_USL_PATH=${GPU_API_VULKAN_BUFFER_DESCRIPTOR_ARRAY_USL_FIXTURE}"
       "GPU_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_USL_PATH=${GPU_API_VULKAN_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_USL_FIXTURE}"
     )

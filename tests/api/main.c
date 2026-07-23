@@ -53,6 +53,14 @@ run_render(void *ctx) {
 }
 
 static int
+run_msaa(void *ctx) {
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_msaa_resolve_sample(testCtx->device,
+                                      testCtx->msaaBytecodePath);
+}
+
+static int
 run_compute(void *ctx) {
   GPUApiTestContext *testCtx = ctx;
 
@@ -299,7 +307,7 @@ main(int argc, char **argv) {
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUApiTestContext      ctx;
-  GPUApiTest             tests[34];
+  GPUApiTest             tests[35];
   int                    ok;
 
   if (argc != 14 && argc != 15) {
@@ -359,6 +367,7 @@ main(int argc, char **argv) {
   ctx.device                      = device;
   ctx.uslBytecodePath             = argv[1];
   ctx.mrtBytecodePath             = argv[2];
+  ctx.msaaBytecodePath            = getenv("GPU_MSAA_USL_PATH");
   ctx.computeBytecodePath         = argv[3];
   ctx.sourceSamplerBytecodePath   = argv[4];
   ctx.storageTextureBytecodePath  = argv[5];
@@ -436,6 +445,7 @@ main(int argc, char **argv) {
   tests[33] = (GPUApiTest){
     "buffer-descriptor-array", run_buffer_descriptor_array, &ctx
   };
+  tests[34] = (GPUApiTest){ "msaa", run_msaa, &ctx };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 

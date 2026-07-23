@@ -1,0 +1,35 @@
+struct MSAAVertexIn {
+  position: float2 #attribute(0)
+}
+
+struct MSAAPreviewOut {
+  position: float4 #position
+}
+
+struct MSAACompareOut {
+  manual:   float4
+  resolved: float4
+}
+
+vert msaa_source_vs(input: MSAAVertexIn #stage_in) -> float4 {
+  return float4(input.position, 0.0, 1.0)
+}
+
+vert msaa_preview_vs(input: MSAAVertexIn #stage_in) -> MSAAPreviewOut {
+  return MSAAPreviewOut { float4(input.position, 0.0, 1.0) }
+}
+
+frag msaa_alpha_fs() -> float4 {
+  return float4(1.0, 0.0, 0.0, 0.5)
+}
+
+frag msaa_compare_fs(input: MSAAPreviewOut #stage_in,
+                     colorSamples: texture2d_ms<float> #texture(0),
+                     resolvedColor: texture2d<float> #texture(1)) -> MSAACompareOut {
+  let coord  = int2(input.position.xy)
+  let manual = (colorSamples.read(coord, 0u)
+              + colorSamples.read(coord, 1u)
+              + colorSamples.read(coord, 2u)
+              + colorSamples.read(coord, 3u)) * 0.25
+  return MSAACompareOut { manual, resolvedColor.read(coord) }
+}

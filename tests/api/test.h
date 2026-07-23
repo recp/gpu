@@ -28,6 +28,7 @@ typedef struct GPUApiTestContext {
   GPUDevice   *device;
   const char  *uslBytecodePath;
   const char  *mrtBytecodePath;
+  const char  *msaaBytecodePath;
   const char  *computeBytecodePath;
   const char  *sourceSamplerBytecodePath;
   const char  *storageTextureBytecodePath;
@@ -79,6 +80,8 @@ int gpu_test_texture_integer_clear(GPUDevice *device);
 int gpu_test_texture_view_depth(GPUDevice *device);
 int gpu_test_texture_view_depth_stencil(GPUDevice *device);
 int gpu_test_render(GPUDevice *device, const char *mrtBytecodePath);
+int gpu_test_msaa_resolve_sample(GPUDevice *device,
+                                 const char *bytecodePath);
 int gpu_test_metal_vertex_slots(GPUDevice *device, const char *bytecodePath);
 int gpu_test_compute(GPUDevice *device, const char *bytecodePath);
 int gpu_test_execution_graph_validation(void);
