@@ -38,6 +38,7 @@ struct GPUComputePassEncoder {
   GPUCommandBuffer       *_cmdb;
   GPUFrameStats          *_stats;
   GPUPipelineLayout      *_pipelineLayout;
+  GPUQuerySet            *_timestampQuerySet;
   GPUBindGroup           *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUBindGroupLayout     *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUDynamicOffsetShadow  _boundDynamicOffsets[GPU_ENCODER_MAX_BIND_GROUPS];
@@ -45,6 +46,7 @@ struct GPUComputePassEncoder {
   uint32_t                _workgroupSize[3];
   uint32_t                _requiredBindGroupMask;
   uint32_t                _pushConstantSizeBytes;
+  uint32_t                _timestampEndIndex;
   GPUShaderStageFlags     _pushConstantStages;
   bool                    _hasPipeline;
   bool                    _executionGraph;
@@ -72,7 +74,8 @@ typedef struct GPUApiCompute {
   (*destroyComputePipeline)(GPUComputePipeline *pipeline);
 
   GPUComputePassEncoder*
-  (*computeCommandEncoder)(GPUCommandBuffer *cmdb, const char *label);
+  (*computeCommandEncoder)(GPUCommandBuffer               *cmdb,
+                           const GPUComputePassCreateInfo *info);
 
   void
   (*setComputePipelineState)(GPUComputePassEncoder *enc,

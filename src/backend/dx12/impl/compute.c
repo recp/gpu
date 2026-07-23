@@ -127,7 +127,8 @@ dx12_destroyComputePipeline(GPUComputePipeline *pipeline) {
 
 GPU_HIDE
 GPUComputePassEncoder *
-dx12_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
+dx12_computeCommandEncoder(GPUCommandBuffer               *cmdb,
+                           const GPUComputePassCreateInfo *info) {
   GPUDeviceDX12           *device;
   GPUCommandBufferDX12    *command;
   GPUComputePassEncoder   *encoder;
@@ -153,7 +154,7 @@ dx12_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
   native->debugEventActive = dx12_beginDebugEvent(
     gpuCommandBufferDevice(cmdb),
     native->commandList,
-    label
+    info->label
   );
   encoder->_priv             = native;
   encoder->_workgroupSize[0] = 1u;

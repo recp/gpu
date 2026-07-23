@@ -187,7 +187,8 @@ mt_destroyComputePipeline(GPUComputePipeline *pipeline) {
 
 GPU_HIDE
 GPUComputePassEncoder*
-mt_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
+mt_computeCommandEncoder(GPUCommandBuffer               *cmdb,
+                         const GPUComputePassCreateInfo *info) {
   MTCommandBuffer       *commandState;
   MTComputeEncoder      *nativeState;
   GPUComputePassEncoder *enc;
@@ -233,8 +234,8 @@ mt_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
     return NULL;
   }
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-  if (label && label[0] != '\0') {
-    NSString *nativeLabel = [NSString stringWithUTF8String:label];
+  if (info->label && info->label[0] != '\0') {
+    NSString *nativeLabel = [NSString stringWithUTF8String:info->label];
 
     nativeState->classic.label = nativeLabel;
 #if MT_HAS_METAL4
@@ -244,7 +245,7 @@ mt_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
 #endif
   }
 #else
-  GPU__UNUSED(label);
+  GPU__UNUSED(info);
 #endif
 
   enc->_priv = nativeState;

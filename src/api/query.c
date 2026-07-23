@@ -173,27 +173,6 @@ GPUGetTimestampPeriod(GPUQueue *queue,
 
 GPU_EXPORT
 void
-GPUWriteTimestamp(GPUCommandBuffer *cmdb,
-                  GPUQuerySet      *set,
-                  uint32_t          queryIndex) {
-  GPUDevice *device;
-  GPUApi    *api;
-
-  device = cmdb && cmdb->_queue ? cmdb->_queue->_device : NULL;
-  if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder ||
-      !set || set->device != device || set->type != GPU_QUERY_TIMESTAMP ||
-      queryIndex >= set->count) {
-    return;
-  }
-  if (!(api = gpuDeviceApi(device)) || !api->cmdbuf.writeTimestamp) {
-    return;
-  }
-
-  api->cmdbuf.writeTimestamp(cmdb, set, queryIndex);
-}
-
-GPU_EXPORT
-void
 GPUBeginOcclusionQuery(GPURenderPassEncoder *pass,
                        GPUQuerySet          *set,
                        uint32_t              queryIndex) {

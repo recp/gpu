@@ -83,11 +83,12 @@ marker_newCommandBuffer(GPUQueue                    * __restrict queue,
 }
 
 static BENCH_NOINLINE GPUComputePassEncoder *
-marker_beginCompute(GPUCommandBuffer *cmdb, const char *label) {
+marker_beginCompute(GPUCommandBuffer               *cmdb,
+                    const GPUComputePassCreateInfo *info) {
   static GPUComputePassEncoder pass;
 
-  markerComputeLabel = label;
-  markerSink += (uint64_t)(cmdb != NULL) + (uint64_t)(label != NULL);
+  markerComputeLabel = info->label;
+  markerSink += (uint64_t)(cmdb != NULL) + (uint64_t)(info->label != NULL);
   return &pass;
 }
 
@@ -104,15 +105,15 @@ static double
 marker_runDirect(MarkerFixture *fixture,
                  bool           enabled,
                  uint64_t       iterations) {
-  const char *label;
-  double      begin;
+  GPUComputePassCreateInfo info = {0};
+  double                   begin;
 
-  label = enabled ? "marker-benchmark" : NULL;
-  begin = bench_now();
+  info.label = enabled ? "marker-benchmark" : NULL;
+  begin      = bench_now();
   for (uint64_t i = 0u; i < iterations; i++) {
     GPUComputePassEncoder *pass;
 
-    pass = marker_beginCompute(&fixture->cmdb, label);
+    pass = marker_beginCompute(&fixture->cmdb, &info);
     pass->_cmdb = &fixture->cmdb;
     fixture->cmdb._activeEncoder = true;
     fixture->cmdb._activeEncoder = false;

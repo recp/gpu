@@ -119,7 +119,8 @@ vk_destroyComputePipeline(GPUComputePipeline *pipeline) {
 
 GPU_HIDE
 GPUComputePassEncoder*
-vk_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
+vk_computeCommandEncoder(GPUCommandBuffer               *cmdb,
+                         const GPUComputePassCreateInfo *info) {
   GPUCommandBufferVk     *command;
   GPUComputePassEncoder  *encoder;
   GPUComputeEncoderVk    *native;
@@ -138,7 +139,7 @@ vk_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
   native->debugLabelActive = vk_beginDebugLabel(
     gpuCommandBufferDevice(cmdb),
     native->command,
-    label
+    info->label
   );
   encoder->_priv             = native;
   encoder->_workgroupSize[0] = 1u;

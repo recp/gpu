@@ -446,12 +446,8 @@ webgpu_supportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
     case GPU_FEATURE_COMPUTE:
       return true;
     case GPU_FEATURE_TIMESTAMPS:
-#if defined(__EMSCRIPTEN__)
-      return false;
-#else
       return wgpuAdapterHasFeature(native->adapter,
                                    WGPUFeatureName_TimestampQuery);
-#endif
     case GPU_FEATURE_SHADER_F16:
       return wgpuAdapterHasFeature(native->adapter,
                                    WGPUFeatureName_ShaderF16);
@@ -629,11 +625,9 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   }
 
   supportedMask = 1ull << GPU_FEATURE_COMPUTE;
-#if !defined(__EMSCRIPTEN__)
   if (webgpu_supportsFeature(adapter, GPU_FEATURE_TIMESTAMPS)) {
     supportedMask |= 1ull << GPU_FEATURE_TIMESTAMPS;
   }
-#endif
   if (wgpuAdapterHasFeature(native->adapter, WGPUFeatureName_ShaderF16)) {
     supportedMask |= 1ull << GPU_FEATURE_SHADER_F16;
   }
@@ -665,12 +659,10 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   request->userData = userData;
 
   descriptor.label = gpu_webgpuString("gpu-webgpu-device");
-#if !defined(__EMSCRIPTEN__)
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_TIMESTAMPS)) != 0u) {
     requiredFeatures[descriptor.requiredFeatureCount++] =
       WGPUFeatureName_TimestampQuery;
   }
-#endif
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u) {
     requiredFeatures[descriptor.requiredFeatureCount++] =
       WGPUFeatureName_ShaderF16;

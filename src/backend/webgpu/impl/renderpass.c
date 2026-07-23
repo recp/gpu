@@ -219,6 +219,17 @@ webgpu_beginRenderPass(GPUCommandBuffer              *cmdb,
   command->renderPassDesc.occlusionQuerySet = info->occlusionQuerySet
                                                 ? info->occlusionQuerySet->_priv
                                                 : NULL;
+  if (info->timestampWrites) {
+    command->timestampWrites =
+      (WGPUPassTimestampWrites)WGPU_PASS_TIMESTAMP_WRITES_INIT;
+    command->timestampWrites.querySet =
+      info->timestampWrites->querySet->_priv;
+    command->timestampWrites.beginningOfPassWriteIndex =
+      info->timestampWrites->beginIndex;
+    command->timestampWrites.endOfPassWriteIndex =
+      info->timestampWrites->endIndex;
+    command->renderPassDesc.timestampWrites = &command->timestampWrites;
+  }
   if (info->pDepthStencilAttachment) {
     const GPURenderPassDepthStencilAttachment *source;
     WGPURenderPassDepthStencilAttachment      *target;

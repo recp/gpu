@@ -90,12 +90,6 @@ GPUGetTimestampPeriod(GPUQueue *queue,
 
 GPU_EXPORT
 void
-GPUWriteTimestamp(GPUCommandBuffer *cmdb,
-                  GPUQuerySet      *set,
-                  uint32_t          queryIndex);
-
-GPU_EXPORT
-void
 GPUBeginOcclusionQuery(GPURenderPassEncoder *pass,
                        GPUQuerySet          *set,
                        uint32_t              queryIndex);

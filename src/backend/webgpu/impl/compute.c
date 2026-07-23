@@ -81,7 +81,8 @@ webgpu_destroyComputePipeline(GPUComputePipeline *pipeline) {
 }
 
 static GPUComputePassEncoder *
-webgpu_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
+webgpu_computeCommandEncoder(GPUCommandBuffer               *cmdb,
+                             const GPUComputePassCreateInfo *info) {
   WGPUComputePassDescriptor descriptor = WGPU_COMPUTE_PASS_DESCRIPTOR_INIT;
   GPUCommandWebGPU         *command;
 
@@ -91,7 +92,18 @@ webgpu_computeCommandEncoder(GPUCommandBuffer *cmdb, const char *label) {
   }
 
   memset(&command->compute, 0, sizeof(command->compute));
-  descriptor.label = gpu_webgpuString(label);
+  descriptor.label = gpu_webgpuString(info->label);
+  if (info->timestampWrites) {
+    command->timestampWrites =
+      (WGPUPassTimestampWrites)WGPU_PASS_TIMESTAMP_WRITES_INIT;
+    command->timestampWrites.querySet =
+      info->timestampWrites->querySet->_priv;
+    command->timestampWrites.beginningOfPassWriteIndex =
+      info->timestampWrites->beginIndex;
+    command->timestampWrites.endOfPassWriteIndex =
+      info->timestampWrites->endIndex;
+    descriptor.timestampWrites = &command->timestampWrites;
+  }
   command->computeEncoder = wgpuCommandEncoderBeginComputePass(command->encoder,
                                                                 &descriptor);
   if (!command->computeEncoder) {

@@ -230,6 +230,9 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
        info->occlusionQuerySet->type != GPU_QUERY_OCCLUSION)) {
     return false;
   }
+  if (!gpuValidPassTimestampWrites(info->timestampWrites, device)) {
+    return false;
+  }
   if (!gpuRenderPassVRSExtensions(info, &shadingRate, &rateMap)) {
     return false;
   }
@@ -339,7 +342,6 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
 
   return info->colorAttachmentCount > 0 || depthStencil != NULL;
 #else
-  GPU__UNUSED(device);
   return info &&
          (info->chain.sType == GPU_STRUCTURE_TYPE_NONE ||
           info->chain.sType == GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO) &&
@@ -347,7 +349,8 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
           info->chain.structSize >= sizeof(*info)) &&
          info->colorAttachmentCount <= GPU_RENDER_PASS_MAX_COLOR_ATTACHMENTS &&
          (info->colorAttachmentCount == 0u || info->pColorAttachments) &&
-         (info->colorAttachmentCount > 0u || info->pDepthStencilAttachment);
+         (info->colorAttachmentCount > 0u || info->pDepthStencilAttachment) &&
+         gpuValidPassTimestampWrites(info->timestampWrites, device);
 #endif
 }
 
@@ -359,6 +362,12 @@ gpu_setRenderPassEncoderInfo(GPURenderPassEncoder *encoder,
 #endif
 
   encoder->_occlusionQuerySet = info->occlusionQuerySet;
+  encoder->_timestampQuerySet = info->timestampWrites
+                                  ? info->timestampWrites->querySet
+                                  : NULL;
+  encoder->_timestampEndIndex = info->timestampWrites
+                                  ? info->timestampWrites->endIndex
+                                  : 0u;
 #if GPU_BUILD_WITH_VALIDATION
   encoder->_colorAttachmentCount = info->colorAttachmentCount;
   for (uint32_t i = 0; i < info->colorAttachmentCount; i++) {
@@ -504,6 +513,7 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
   GPURenderPassEncoder *encoder;
   GPUDevice            *device;
   GPUApi               *api;
+  bool                  wroteBeginTimestamp;
 
   device = gpuCommandBufferDevice(cmdb);
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder ||
@@ -514,9 +524,23 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
   if (!api->renderPass.beginRenderPass || !api->rce.renderCommandEncoder)
     return NULL;
 
+  wroteBeginTimestamp = false;
+  if (info->timestampWrites && api->cmdbuf.writeTimestamp) {
+    api->cmdbuf.writeTimestamp(cmdb,
+                               info->timestampWrites->querySet,
+                               info->timestampWrites->beginIndex);
+    wroteBeginTimestamp = true;
+  }
+
   desc = api->renderPass.beginRenderPass(cmdb, info);
-  if (!desc)
+  if (!desc) {
+    if (wroteBeginTimestamp) {
+      api->cmdbuf.writeTimestamp(cmdb,
+                                 info->timestampWrites->querySet,
+                                 info->timestampWrites->endIndex);
+    }
     return NULL;
+  }
 
   encoder = api->rce.renderCommandEncoder(cmdb, desc);
   gpu_destroyRenderPass(api, desc);
@@ -529,6 +553,10 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
                          : NULL;
     gpu_setRenderPassEncoderInfo(encoder, info);
     cmdb->_activeEncoder = true;
+  } else if (wroteBeginTimestamp) {
+    api->cmdbuf.writeTimestamp(cmdb,
+                               info->timestampWrites->querySet,
+                               info->timestampWrites->endIndex);
   }
 
   return encoder;
@@ -564,6 +592,11 @@ GPUEndRenderPass(GPURenderPassEncoder *pass) {
     return;
 
   api->rce.endEncoding(pass);
+  if (pass->_timestampQuerySet && api->cmdbuf.writeTimestamp) {
+    api->cmdbuf.writeTimestamp(pass->_cmdb,
+                               pass->_timestampQuerySet,
+                               pass->_timestampEndIndex);
+  }
 }
 
 GPU_EXPORT

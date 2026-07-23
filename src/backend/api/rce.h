@@ -52,6 +52,7 @@ struct GPURenderPassEncoder {
   GPUCommandBuffer       *_cmdb;
   GPUFrameStats          *_stats;
   GPUQuerySet            *_occlusionQuerySet;
+  GPUQuerySet            *_timestampQuerySet;
   GPUBuffer              *_indexBuffer;
   GPUPipelineLayout      *_pipelineLayout;
   GPUBindGroup           *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
@@ -67,6 +68,7 @@ struct GPURenderPassEncoder {
   GPUIndexType            _indexType;
   GPUScissorRect          _scissor;
   uint32_t                _occlusionQueryIndex;
+  uint32_t                _timestampEndIndex;
   uint32_t                _requiredBindGroupMask;
   uint32_t                _colorAttachmentCount;
   GPUFormat               _colorAttachmentFormats[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];

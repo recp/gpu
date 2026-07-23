@@ -1,0 +1,48 @@
+struct GeneratedVertex {
+  position: float4
+  color:    float4
+}
+
+struct ComputeConstants {
+  tint: float4
+}
+
+vertex VSIn {
+  position: float4
+  color:    float4
+}
+
+struct VSOut {
+  position: float4 #position
+  color:    float4
+}
+
+kern(1, 1, 1) fill_timestamp_vertices(
+  inout vertices: [GeneratedVertex] #buffer(0),
+  timestamps: [uint] #buffer(1),
+  draw: ComputeConstants #push_constant,
+  gid: uint3 #global_id
+) {
+  let lane    = gid.x
+  let elapsed = timestamps[0] != timestamps[2] ||
+                timestamps[1] != timestamps[3]
+  let x       = lane == 0u ? -0.68 : (lane == 1u ? 0.68 : 0.0)
+  let y       = lane == 2u ? 0.70 : -0.62
+  let pending = float4(1.0, 0.06, 0.02, 1.0)
+  let ready   = lane == 0u
+    ? float4(0.06, 1.0, 0.42, 1.0)
+    : (lane == 1u
+       ? float4(0.10, 0.72, 1.0, 1.0)
+       : float4(0.74, 1.0, 0.10, 1.0))
+
+  vertices[lane].position = float4(x, y, 0.0, 1.0)
+  vertices[lane].color    = (elapsed ? ready : pending) * draw.tint
+}
+
+vert tri_vs(v: VSIn #stage_in) -> VSOut {
+  v.position, v.color
+}
+
+frag tri_fs(i: VSOut #stage_in) -> float4 {
+  return i.color
+}

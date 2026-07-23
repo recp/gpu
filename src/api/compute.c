@@ -22,6 +22,7 @@
 #include "device_internal.h"
 #include "library_internal.h"
 #include "pipeline_cache_internal.h"
+#include "query_internal.h"
 #include "ray_internal.h"
 
 static GPUDevice *
@@ -309,33 +310,69 @@ GPUDestroyComputePipeline(GPUComputePipeline *pipeline) {
 GPU_EXPORT
 GPUComputePassEncoder*
 GPUBeginComputePass(GPUCommandBuffer *cmdb, const char *label) {
+  GPUComputePassCreateInfo info = {0};
+
+  info.label = label;
+  return GPUBeginComputePassWithInfo(cmdb, &info);
+}
+
+GPU_EXPORT
+GPUComputePassEncoder*
+GPUBeginComputePassWithInfo(GPUCommandBuffer               *cmdb,
+                            const GPUComputePassCreateInfo *info) {
+  GPUComputePassCreateInfo backendInfo;
+  GPUComputePassEncoder   *pass;
   GPUDevice *device;
   GPUApi    *api;
+  bool       wroteBeginTimestamp;
 
-  if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder) {
+  if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder || !info ||
+      (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+       info->chain.sType != GPU_STRUCTURE_TYPE_COMPUTE_PASS_CREATE_INFO) ||
+      (info->chain.structSize != 0u &&
+       info->chain.structSize < sizeof(*info))) {
     return NULL;
   }
   device = cmdb->_queue ? cmdb->_queue->_device : NULL;
-  if (!(api = gpuDeviceApi(device)) || !api->compute.computeCommandEncoder) {
+  if (!gpuValidPassTimestampWrites(info->timestampWrites, device) ||
+      !(api = gpuDeviceApi(device)) || !api->compute.computeCommandEncoder) {
     return NULL;
   }
 
-  {
-    GPUComputePassEncoder *pass;
-
-    label = gpuDeviceDebugLabel(device, label);
-    pass = api->compute.computeCommandEncoder(cmdb, label);
-    if (pass) {
-      pass->_api    = api;
-      pass->_device = device;
-      pass->_cmdb   = cmdb;
-      pass->_stats  = device->runtimeConfig.enableStats
-                        ? &device->currentFrameStats
-                        : NULL;
-      cmdb->_activeEncoder = true;
-    }
-    return pass;
+  backendInfo       = *info;
+  backendInfo.label = gpuDeviceDebugLabel(device, info->label);
+  wroteBeginTimestamp = false;
+  if (info->timestampWrites && api->cmdbuf.writeTimestamp) {
+    api->cmdbuf.writeTimestamp(cmdb,
+                               info->timestampWrites->querySet,
+                               info->timestampWrites->beginIndex);
+    wroteBeginTimestamp = true;
   }
+
+  pass = api->compute.computeCommandEncoder(cmdb, &backendInfo);
+  if (!pass) {
+    if (wroteBeginTimestamp) {
+      api->cmdbuf.writeTimestamp(cmdb,
+                                 info->timestampWrites->querySet,
+                                 info->timestampWrites->endIndex);
+    }
+    return NULL;
+  }
+
+  pass->_api               = api;
+  pass->_device            = device;
+  pass->_cmdb              = cmdb;
+  pass->_stats             = device->runtimeConfig.enableStats
+                               ? &device->currentFrameStats
+                               : NULL;
+  pass->_timestampQuerySet = info->timestampWrites
+                               ? info->timestampWrites->querySet
+                               : NULL;
+  pass->_timestampEndIndex = info->timestampWrites
+                               ? info->timestampWrites->endIndex
+                               : 0u;
+  cmdb->_activeEncoder = true;
+  return pass;
 }
 
 GPU_EXPORT
@@ -758,4 +795,9 @@ GPUEndComputePass(GPUComputePassEncoder *pass) {
   }
 
   api->compute.endEncoding(pass);
+  if (pass->_timestampQuerySet && api->cmdbuf.writeTimestamp) {
+    api->cmdbuf.writeTimestamp(pass->_cmdb,
+                               pass->_timestampQuerySet,
+                               pass->_timestampEndIndex);
+  }
 }

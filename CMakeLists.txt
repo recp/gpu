@@ -597,7 +597,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
-  set(GPU_WEBGPU_GALLERY_VERSION "25")
+  set(GPU_WEBGPU_GALLERY_VERSION "26")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
   file(GLOB GPU_WEBGPU_GALLERY_PREVIEWS CONFIGURE_DEPENDS
@@ -911,6 +911,108 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     C_EXTENSIONS NO
     LINK_DEPENDS
       "${GPU_WEBGPU_GALLERY_DIR}/gpu-compute-webgpu-usl-shell.html;${GPU_WEBGPU_COMPUTE_US}"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${GPU_WEBGPU_GALLERY_DIR}"
+  )
+
+  set(GPU_WEBGPU_TIMESTAMP_QUERY_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+  set(GPU_WEBGPU_TIMESTAMP_QUERY_SOURCE
+      "${GPU_WEBGPU_TIMESTAMP_QUERY_DIR}/timestamp_query.usl")
+  set(GPU_WEBGPU_TIMESTAMP_QUERY_US
+      "${GPU_WEBGPU_TIMESTAMP_QUERY_DIR}/timestamp_query.us")
+  set(GPU_WEBGPU_TIMESTAMP_QUERY_MAIN
+      "${GPU_WEBGPU_TIMESTAMP_QUERY_DIR}/timestamp_query.c")
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-webgpu-usl/main.c"
+  )
+  file(MAKE_DIRECTORY "${GPU_WEBGPU_TIMESTAMP_QUERY_DIR}")
+  file(READ
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-webgpu-usl/main.c"
+    GPU_WEBGPU_COMPUTE_MAIN_SOURCE
+  )
+  file(WRITE "${GPU_WEBGPU_TIMESTAMP_QUERY_MAIN}"
+    "#define GPU_COMPUTE_ARTIFACT_PATH \"/timestamp_query.us\"\n"
+    "#define GPU_COMPUTE_ENTRY_POINT \"fill_timestamp_vertices\"\n"
+    "#define GPU_COMPUTE_USE_TIMESTAMPS 1\n"
+    "#define GPU_COMPUTE_TIMESTAMP_DISPATCH_COUNT 256u\n"
+    "#define GPU_COMPUTE_REQUIRED_FEATURE GPU_FEATURE_TIMESTAMPS\n"
+    "#define GPU_COMPUTE_UNSUPPORTED_STATUS "
+    "\"GPU: WebGPU timestamp queries unsupported by this adapter\"\n"
+    "#define GPU_COMPUTE_READY_STATUS "
+    "\"GPU: WebGPU USL timestamp query recording\"\n"
+    "#define GPU_COMPUTE_TIMESTAMP_RESOLVED_STATUS "
+    "\"GPU: WebGPU USL timestamp query resolved\"\n\n"
+    "${GPU_WEBGPU_COMPUTE_MAIN_SOURCE}"
+  )
+  unset(GPU_WEBGPU_COMPUTE_MAIN_SOURCE)
+  set(GPU_WEBGPU_SAMPLE_TITLE "Pass timestamps")
+  set(GPU_WEBGPU_SAMPLE_KIND "Compute / timestamp query")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "One compute pass records portable begin and end timestamps, then consumes the resolved pair on the next frame.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/timestamp-query.c")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/timestamp-query.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/timestamp-query.wgsl")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-timestamp-query-webgpu-usl-shell.html"
+    @ONLY
+  )
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_TIMESTAMP_QUERY_US}"
+    BYPRODUCTS "${GPU_WEBGPU_TIMESTAMP_QUERY_SOURCE}.wgsl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${GPU_WEBGPU_TIMESTAMP_QUERY_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/timestamp-query-webgpu-usl/timestamp_query.usl"
+            "${GPU_WEBGPU_TIMESTAMP_QUERY_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_TIMESTAMP_QUERY_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_TIMESTAMP_QUERY_MAIN}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/timestamp-query.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_TIMESTAMP_QUERY_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/timestamp-query.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_TIMESTAMP_QUERY_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/timestamp-query.wgsl"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/timestamp-query-webgpu-usl/timestamp_query.usl"
+      "${GPU_WEBGPU_TIMESTAMP_QUERY_MAIN}"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-timestamp-query-artifact
+    DEPENDS "${GPU_WEBGPU_TIMESTAMP_QUERY_US}"
+  )
+
+  add_executable(gpu-timestamp-query-webgpu-usl
+    "${GPU_WEBGPU_TIMESTAMP_QUERY_MAIN}"
+    ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
+  )
+  target_include_directories(gpu-timestamp-query-webgpu-usl PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-webgpu-usl"
+  )
+  target_link_libraries(gpu-timestamp-query-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-timestamp-query-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_TIMESTAMP_QUERY_US}@/timestamp_query.us"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-timestamp-query-webgpu-usl-shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-timestamp-query-webgpu-usl
+                   gpu-webgpu-timestamp-query-artifact)
+  set_target_properties(gpu-timestamp-query-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-timestamp-query-webgpu-usl-shell.html;${GPU_WEBGPU_TIMESTAMP_QUERY_US}"
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"

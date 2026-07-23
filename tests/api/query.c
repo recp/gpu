@@ -140,8 +140,6 @@ check_query_commands_are_safe_noops(void) {
   endedPass._ended = true;
   submittedCmdb._submitted = true;
 
-  GPUWriteTimestamp(NULL, NULL, 0u);
-  GPUWriteTimestamp(&submittedCmdb, NULL, 0u);
   GPUBeginOcclusionQuery(NULL, NULL, 0u);
   GPUBeginOcclusionQuery(&endedPass, NULL, 0u);
   GPUEndOcclusionQuery(NULL);
@@ -166,25 +164,28 @@ check_query_commands_are_safe_noops(void) {
 
 static int
 check_timestamp_query_roundtrip(GPUAdapter *adapter) {
-  GPUFeature timestampFeature = GPU_FEATURE_TIMESTAMPS;
-  GPUDeviceCreateInfo deviceInfo = {0};
-  GPUQuerySetCreateInfo queryInfo = {0};
-  GPUBufferCreateInfo bufferInfo = {0};
-  GPUFenceCreateInfo fenceInfo = {0};
-  GPUQueueSubmitInfo submitInfo = {0};
-  GPUDeviceCapabilities caps = {0};
-  GPUDevice *device = NULL;
-  GPUQueue        *queue = NULL;
-  GPUCommandBuffer *cmdb = NULL;
-  GPUQuerySet *set = NULL;
-  GPUBuffer *buffer = NULL;
-  GPUFence *fence = NULL;
-  const char *metalMode;
-  GPUCommandBuffer *buffers[1];
-  uint64_t timestamps[2] = {UINT64_MAX, UINT64_MAX};
-  double timestampPeriod;
-  GPUResult periodResult;
-  int ok = 0;
+  GPUDevice                 *device = NULL;
+  GPUQueue                  *queue = NULL;
+  GPUCommandBuffer          *cmdb = NULL;
+  GPUQuerySet               *set = NULL;
+  GPUBuffer                 *buffer = NULL;
+  GPUFence                  *fence = NULL;
+  GPUComputePassEncoder     *pass = NULL;
+  GPUCommandBuffer          *buffers[1];
+  const char                *metalMode;
+  GPUDeviceCreateInfo        deviceInfo = {0};
+  GPUQuerySetCreateInfo      queryInfo = {0};
+  GPUBufferCreateInfo        bufferInfo = {0};
+  GPUFenceCreateInfo         fenceInfo = {0};
+  GPUQueueSubmitInfo         submitInfo = {0};
+  GPUComputePassCreateInfo   passInfo = {0};
+  GPUPassTimestampWrites     timestampWrites = {0};
+  GPUDeviceCapabilities      caps = {0};
+  GPUFeature                 timestampFeature = GPU_FEATURE_TIMESTAMPS;
+  GPUResult                  periodResult;
+  uint64_t                   timestamps[2] = {UINT64_MAX, UINT64_MAX};
+  double                     timestampPeriod;
+  int                        ok = 0;
 
   if (!GPUIsFeatureSupported(adapter, GPU_FEATURE_TIMESTAMPS)) {
     return 1;
@@ -265,8 +266,29 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
     goto cleanup;
   }
 
-  GPUWriteTimestamp(cmdb, set, 0u);
-  GPUWriteTimestamp(cmdb, set, 1u);
+  timestampWrites.querySet   = set;
+  timestampWrites.beginIndex = 0u;
+  timestampWrites.endIndex   = 0u;
+  passInfo.chain.sType       = GPU_STRUCTURE_TYPE_COMPUTE_PASS_CREATE_INFO;
+  passInfo.chain.structSize  = sizeof(passInfo);
+  passInfo.label             = "timestamp-query-pass";
+  passInfo.timestampWrites   = &timestampWrites;
+  pass = GPUBeginComputePassWithInfo(cmdb, &passInfo);
+  if (pass) {
+    GPUEndComputePass(pass);
+    pass = NULL;
+    fprintf(stderr, "timestamp query accepted identical pass indices\n");
+    goto cleanup;
+  }
+
+  timestampWrites.endIndex = 1u;
+  pass = GPUBeginComputePassWithInfo(cmdb, &passInfo);
+  if (!pass) {
+    fprintf(stderr, "timestamp query compute pass begin failed\n");
+    goto cleanup;
+  }
+  GPUEndComputePass(pass);
+  pass = NULL;
   GPUResolveQuerySet(cmdb, set, 0u, 2u, buffer, 0u);
 
   fenceInfo.chain.sType = GPU_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -309,6 +331,12 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
   ok = 1;
 
 cleanup:
+  if (pass) {
+    GPUEndComputePass(pass);
+  }
+  if (cmdb) {
+    (void)GPUDiscardCommandBuffer(cmdb);
+  }
   GPUDestroyFence(fence);
   GPUDestroyBuffer(buffer);
   GPUDestroyQuerySet(set);

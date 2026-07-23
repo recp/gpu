@@ -821,19 +821,23 @@ static int
 timestamp_roundtrip(GPUDevice       *device,
                     GPUQueue        *queue,
                     GPUFence        *fence) {
-  GPUQuerySetCreateInfo queryInfo = {0};
-  GPUBufferCreateInfo   bufferInfo = {0};
-  GPUQueueSubmitInfo    submitInfo = {0};
-  GPUCommandBuffer     *cmdb;
-  GPUQuerySet          *set;
-  GPUBuffer            *buffer;
-  uint64_t              timestamps[2] = {UINT64_MAX, UINT64_MAX};
-  double                timestampPeriod;
-  int                   ok;
+  GPUCommandBuffer         *cmdb;
+  GPUComputePassEncoder    *pass;
+  GPUQuerySet              *set;
+  GPUBuffer                *buffer;
+  GPUQuerySetCreateInfo     queryInfo = {0};
+  GPUBufferCreateInfo       bufferInfo = {0};
+  GPUQueueSubmitInfo        submitInfo = {0};
+  GPUComputePassCreateInfo  passInfo = {0};
+  GPUPassTimestampWrites    timestampWrites = {0};
+  uint64_t                  timestamps[2] = {UINT64_MAX, UINT64_MAX};
+  double                    timestampPeriod;
+  int                       ok;
 
   set    = NULL;
   buffer = NULL;
   cmdb   = NULL;
+  pass   = NULL;
   ok     = 0;
 
   timestampPeriod = 0.0;
@@ -873,8 +877,27 @@ timestamp_roundtrip(GPUDevice       *device,
     goto cleanup;
   }
 
-  GPUWriteTimestamp(cmdb, set, 0u);
-  GPUWriteTimestamp(cmdb, set, 1u);
+  timestampWrites.querySet   = set;
+  timestampWrites.beginIndex = 0u;
+  timestampWrites.endIndex   = 0u;
+  passInfo.chain.sType       = GPU_STRUCTURE_TYPE_COMPUTE_PASS_CREATE_INFO;
+  passInfo.chain.structSize  = sizeof(passInfo);
+  passInfo.label             = "vulkan-timestamp-pass";
+  passInfo.timestampWrites   = &timestampWrites;
+  pass = GPUBeginComputePassWithInfo(cmdb, &passInfo);
+  if (pass) {
+    GPUEndComputePass(pass);
+    pass = NULL;
+    goto cleanup;
+  }
+
+  timestampWrites.endIndex = 1u;
+  pass = GPUBeginComputePassWithInfo(cmdb, &passInfo);
+  if (!pass) {
+    goto cleanup;
+  }
+  GPUEndComputePass(pass);
+  pass = NULL;
   GPUResolveQuerySet(cmdb, set, 0u, 2u, buffer, 0u);
 
   submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
@@ -901,6 +924,12 @@ timestamp_roundtrip(GPUDevice       *device,
   ok = 1;
 
 cleanup:
+  if (pass) {
+    GPUEndComputePass(pass);
+  }
+  if (cmdb) {
+    (void)GPUDiscardCommandBuffer(cmdb);
+  }
   GPUDestroyBuffer(buffer);
   GPUDestroyQuerySet(set);
   return ok;

@@ -25,6 +25,7 @@ extern "C" {
 #include "pipeline.h"
 #include "bindgroup.h"
 #include "buffer.h"
+#include "pass.h"
 
 typedef struct GPUComputePipeline    GPUComputePipeline;
 typedef struct GPUComputePassEncoder GPUComputePassEncoder;
@@ -37,6 +38,12 @@ typedef struct GPUComputePipelineCreateInfo {
   GPUShaderLibrary  *library;
   const char        *entryPoint;
 } GPUComputePipelineCreateInfo;
+
+typedef struct GPUComputePassCreateInfo {
+  GPUChainedStruct              chain;
+  const char                   *label;
+  const GPUPassTimestampWrites *timestampWrites;
+} GPUComputePassCreateInfo;
 
 GPU_EXPORT
 GPUResult
@@ -51,6 +58,11 @@ GPUDestroyComputePipeline(GPUComputePipeline *pipeline);
 GPU_EXPORT
 GPUComputePassEncoder*
 GPUBeginComputePass(GPUCommandBuffer *cmdb, const char *label);
+
+GPU_EXPORT
+GPUComputePassEncoder*
+GPUBeginComputePassWithInfo(GPUCommandBuffer               *cmdb,
+                            const GPUComputePassCreateInfo *info);
 
 GPU_EXPORT
 void

@@ -68,10 +68,18 @@ typedef struct GPURenderPassDepthStencilAttachment {
   float           clearDepth;
 } GPURenderPassDepthStencilAttachment;
 
+/* Writes one timestamp at pass begin and one at pass end. */
+typedef struct GPUPassTimestampWrites {
+  GPUQuerySet *querySet;
+  uint32_t     beginIndex;
+  uint32_t     endIndex;
+} GPUPassTimestampWrites;
+
 typedef struct GPURenderPassCreateInfo {
   GPUChainedStruct                           chain;
   const char                                *label;
   GPUQuerySet                               *occlusionQuerySet;
+  const GPUPassTimestampWrites              *timestampWrites;
   const GPURenderPassColorAttachment        *pColorAttachments;
   const GPURenderPassDepthStencilAttachment *pDepthStencilAttachment;
   uint32_t                                   colorAttachmentCount;

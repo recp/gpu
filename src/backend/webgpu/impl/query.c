@@ -54,22 +54,6 @@ webgpu_destroyQuerySet(GPUQuerySet *set) {
   }
 }
 
-#if !defined(__EMSCRIPTEN__)
-static void
-webgpu_writeTimestamp(GPUCommandBuffer *cmdb,
-                      GPUQuerySet      *set,
-                      uint32_t          queryIndex) {
-  GPUCommandWebGPU *command;
-
-  command = gpu_webgpuCommand(cmdb);
-  if (command && command->encoder && set && set->_priv) {
-    wgpuCommandEncoderWriteTimestamp(command->encoder,
-                                     set->_priv,
-                                     queryIndex);
-  }
-}
-#endif
-
 static void
 webgpu_beginOcclusionQuery(GPURenderPassEncoder *pass,
                            GPUQuerySet          *set,
@@ -170,11 +154,7 @@ void
 webgpu_initQuery(GPUApiCommandBuffer *api) {
   api->createQuerySet      = webgpu_createQuerySet;
   api->destroyQuerySet     = webgpu_destroyQuerySet;
-#if !defined(__EMSCRIPTEN__)
-  api->writeTimestamp      = webgpu_writeTimestamp;
-#else
   api->writeTimestamp      = NULL;
-#endif
   api->beginOcclusionQuery = webgpu_beginOcclusionQuery;
   api->endOcclusionQuery   = webgpu_endOcclusionQuery;
   api->resolveQuerySet     = webgpu_resolveQuerySet;
