@@ -111,7 +111,7 @@ gpu_test_msaa_resolve_sample(GPUDevice *device, const char *bytecodePath) {
   GPURenderPipelineCreateInfo     sourceInfo         = {0};
   GPURenderPipelineCreateInfo     compareInfo        = {0};
   GPUBufferCreateInfo             bufferInfo         = {0};
-  GPUBindGroupEntry               groupEntries[2]    = {{0}};
+  GPUBindGroupEntry               groupEntries[2]    = {0};
   GPUBindGroupCreateInfo          groupInfo          = {0};
   GPURenderPassColorAttachment    sourceColorPass    = {0};
   GPURenderPassColorAttachment    compareColorPass[2] = {{0}};

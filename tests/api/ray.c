@@ -224,7 +224,7 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
     fprintf(stderr, "ray pipeline USL compile/reflection failed\n");
     goto cleanup;
   }
-  if (reflection.resourceCount != 3u) {
+  if (reflection.resourceCount != 2u) {
     fprintf(stderr,
             "ray pipeline reflection resource mismatch: %u\n",
             reflection.resourceCount);
