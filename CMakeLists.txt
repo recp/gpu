@@ -597,7 +597,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
-  set(GPU_WEBGPU_GALLERY_VERSION "24")
+  set(GPU_WEBGPU_GALLERY_VERSION "25")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
   file(GLOB GPU_WEBGPU_GALLERY_PREVIEWS CONFIGURE_DEPENDS
@@ -1105,6 +1105,99 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     C_EXTENSIONS NO
     LINK_DEPENDS
       "${GPU_WEBGPU_GALLERY_DIR}/gpu-shader-f16-webgpu-usl-shell.html;${GPU_WEBGPU_SHADER_F16_US}"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${GPU_WEBGPU_GALLERY_DIR}"
+  )
+
+  set(GPU_WEBGPU_DISPATCH_INDIRECT_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+  set(GPU_WEBGPU_DISPATCH_INDIRECT_SOURCE
+      "${GPU_WEBGPU_DISPATCH_INDIRECT_DIR}/dispatch_indirect.usl")
+  set(GPU_WEBGPU_DISPATCH_INDIRECT_US
+      "${GPU_WEBGPU_DISPATCH_INDIRECT_DIR}/dispatch_indirect.us")
+  set(GPU_WEBGPU_DISPATCH_INDIRECT_MAIN
+      "${GPU_WEBGPU_DISPATCH_INDIRECT_DIR}/dispatch_indirect.c")
+  file(MAKE_DIRECTORY "${GPU_WEBGPU_DISPATCH_INDIRECT_DIR}")
+  file(READ
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-webgpu-usl/main.c"
+    GPU_WEBGPU_COMPUTE_MAIN_SOURCE
+  )
+  file(WRITE "${GPU_WEBGPU_DISPATCH_INDIRECT_MAIN}"
+    "#define GPU_COMPUTE_ARTIFACT_PATH \"/dispatch_indirect.us\"\n"
+    "#define GPU_COMPUTE_ENTRY_POINT \"fill_indirect_vertices\"\n"
+    "#define GPU_COMPUTE_USE_INDIRECT 1\n"
+    "#define GPU_COMPUTE_READY_STATUS "
+    "\"GPU: WebGPU USL indirect dispatch ready\"\n\n"
+    "${GPU_WEBGPU_COMPUTE_MAIN_SOURCE}"
+  )
+  unset(GPU_WEBGPU_COMPUTE_MAIN_SOURCE)
+  set(GPU_WEBGPU_SAMPLE_TITLE "Indirect dispatch")
+  set(GPU_WEBGPU_SAMPLE_KIND "Compute / indirect command")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "One packed dispatch record launches compute; render consumes the generated vertex stream.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/dispatch-indirect.c")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/dispatch-indirect.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/dispatch-indirect.wgsl")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-dispatch-indirect-webgpu-usl-shell.html"
+    @ONLY
+  )
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_DISPATCH_INDIRECT_US}"
+    BYPRODUCTS "${GPU_WEBGPU_DISPATCH_INDIRECT_SOURCE}.wgsl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${GPU_WEBGPU_DISPATCH_INDIRECT_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/dispatch-indirect-webgpu-usl/dispatch_indirect.usl"
+            "${GPU_WEBGPU_DISPATCH_INDIRECT_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_DISPATCH_INDIRECT_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_DISPATCH_INDIRECT_MAIN}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/dispatch-indirect.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_DISPATCH_INDIRECT_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/dispatch-indirect.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_DISPATCH_INDIRECT_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/dispatch-indirect.wgsl"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/dispatch-indirect-webgpu-usl/dispatch_indirect.usl"
+      "${GPU_WEBGPU_DISPATCH_INDIRECT_MAIN}"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-dispatch-indirect-artifact
+    DEPENDS "${GPU_WEBGPU_DISPATCH_INDIRECT_US}"
+  )
+
+  add_executable(gpu-dispatch-indirect-webgpu-usl
+    "${GPU_WEBGPU_DISPATCH_INDIRECT_MAIN}"
+    ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
+  )
+  target_include_directories(gpu-dispatch-indirect-webgpu-usl PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-webgpu-usl"
+  )
+  target_link_libraries(gpu-dispatch-indirect-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-dispatch-indirect-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_DISPATCH_INDIRECT_US}@/dispatch_indirect.us"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-dispatch-indirect-webgpu-usl-shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-dispatch-indirect-webgpu-usl
+                   gpu-webgpu-dispatch-indirect-artifact)
+  set_target_properties(gpu-dispatch-indirect-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-dispatch-indirect-webgpu-usl-shell.html;${GPU_WEBGPU_DISPATCH_INDIRECT_US}"
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"

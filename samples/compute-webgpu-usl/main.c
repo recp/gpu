@@ -19,6 +19,10 @@
 #define GPU_COMPUTE_VERTEX_CAPACITY 3u
 #endif
 
+#ifndef GPU_COMPUTE_USE_INDIRECT
+#define GPU_COMPUTE_USE_INDIRECT 0
+#endif
+
 #ifndef GPU_COMPUTE_REQUIRED_FEATURE
 #define GPU_COMPUTE_REQUIRED_FEATURE GPU_FEATURE_COMPUTE
 #endif
@@ -55,6 +59,7 @@ typedef struct WebGPUCompute {
   GPUComputePipeline *computePipeline;
   GPURenderPipeline  *renderPipeline;
   GPUBuffer          *vertexBuffer;
+  GPUBuffer          *dispatchBuffer;
   GPUBuffer          *timestampBuffer;
   GPUQuerySet        *timestampQuery;
   GPUBindGroup       *computeGroup;
@@ -225,6 +230,30 @@ create_resources(WebGPUCompute *state) {
     return 0;
   }
 
+#if GPU_COMPUTE_USE_INDIRECT
+  {
+    static const uint32_t dispatchArgs[] = {
+      GPU_COMPUTE_DISPATCH_X, 1u, 1u
+    };
+
+    bufferInfo.label     = "compute-webgpu-indirect-args";
+    bufferInfo.sizeBytes = sizeof(dispatchArgs);
+    bufferInfo.usage     = GPU_BUFFER_USAGE_INDIRECT |
+                           GPU_BUFFER_USAGE_COPY_DST;
+    if (GPUCreateBuffer(state->device,
+                        &bufferInfo,
+                        &state->dispatchBuffer) != GPU_OK ||
+        GPUQueueWriteBuffer(state->queue,
+                            state->dispatchBuffer,
+                            0u,
+                            dispatchArgs,
+                            sizeof(dispatchArgs)) != GPU_OK) {
+      set_status("GPU: failed to create WebGPU indirect dispatch buffer", 1);
+      return 0;
+    }
+  }
+#endif
+
   if (GPUIsFeatureEnabled(state->device, GPU_FEATURE_TIMESTAMPS)) {
     double timestampPeriod;
 
@@ -304,7 +333,11 @@ render_frame(void *userData) {
                              0u,
                              (uint32_t)sizeof(constants),
                              &constants);
+#if GPU_COMPUTE_USE_INDIRECT
+  GPUDispatchIndirect(compute, state->dispatchBuffer, 0u);
+#else
   GPUDispatch(compute, GPU_COMPUTE_DISPATCH_X, 1u, 1u);
+#endif
   GPUEndComputePass(compute);
 
   barrier.buffer    = state->vertexBuffer;

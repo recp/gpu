@@ -8,24 +8,6 @@
 #include "../common.h"
 #include "../impl.h"
 
-#if defined(__EMSCRIPTEN__)
-#  include <emscripten/emscripten.h>
-
-EM_JS(void,
-      webgpu_writeTimestampJS,
-      (uintptr_t encoderHandle, uintptr_t querySetHandle, uint32_t queryIndex), {
-  const encoder = WebGPU.getJsObject(encoderHandle);
-  const querySet = WebGPU.getJsObject(querySetHandle);
-  const pass = encoder.beginComputePass({
-    timestampWrites: {
-      querySet,
-      beginningOfPassWriteIndex: queryIndex
-    }
-  });
-  pass.end();
-});
-#endif
-
 static WGPUQueryType
 webgpu_queryType(GPUQueryType type) {
   static const WGPUQueryType types[] = {
@@ -72,6 +54,7 @@ webgpu_destroyQuerySet(GPUQuerySet *set) {
   }
 }
 
+#if !defined(__EMSCRIPTEN__)
 static void
 webgpu_writeTimestamp(GPUCommandBuffer *cmdb,
                       GPUQuerySet      *set,
@@ -80,17 +63,12 @@ webgpu_writeTimestamp(GPUCommandBuffer *cmdb,
 
   command = gpu_webgpuCommand(cmdb);
   if (command && command->encoder && set && set->_priv) {
-#if defined(__EMSCRIPTEN__)
-    webgpu_writeTimestampJS((uintptr_t)command->encoder,
-                            (uintptr_t)set->_priv,
-                            queryIndex);
-#else
     wgpuCommandEncoderWriteTimestamp(command->encoder,
                                      set->_priv,
                                      queryIndex);
-#endif
   }
 }
+#endif
 
 static void
 webgpu_beginOcclusionQuery(GPURenderPassEncoder *pass,
@@ -192,7 +170,11 @@ void
 webgpu_initQuery(GPUApiCommandBuffer *api) {
   api->createQuerySet      = webgpu_createQuerySet;
   api->destroyQuerySet     = webgpu_destroyQuerySet;
+#if !defined(__EMSCRIPTEN__)
   api->writeTimestamp      = webgpu_writeTimestamp;
+#else
+  api->writeTimestamp      = NULL;
+#endif
   api->beginOcclusionQuery = webgpu_beginOcclusionQuery;
   api->endOcclusionQuery   = webgpu_endOcclusionQuery;
   api->resolveQuerySet     = webgpu_resolveQuerySet;
