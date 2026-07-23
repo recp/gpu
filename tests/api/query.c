@@ -164,37 +164,46 @@ check_query_commands_are_safe_noops(void) {
 
 static int
 check_timestamp_query_roundtrip(GPUAdapter *adapter) {
-  GPUDevice                 *device = NULL;
-  GPUQueue                  *queue = NULL;
-  GPUCommandBuffer          *cmdb = NULL;
-  GPUQuerySet               *set = NULL;
-  GPUBuffer                 *buffer = NULL;
-  GPUFence                  *fence = NULL;
-  GPUComputePassEncoder     *pass = NULL;
-  GPUCommandBuffer          *buffers[1];
-  const char                *metalMode;
-  GPUDeviceCreateInfo        deviceInfo = {0};
-  GPUQuerySetCreateInfo      queryInfo = {0};
-  GPUBufferCreateInfo        bufferInfo = {0};
-  GPUFenceCreateInfo         fenceInfo = {0};
-  GPUQueueSubmitInfo         submitInfo = {0};
-  GPUComputePassCreateInfo   passInfo = {0};
-  GPUPassTimestampWrites     timestampWrites = {0};
-  GPUDeviceCapabilities      caps = {0};
-  GPUFeature                 timestampFeature = GPU_FEATURE_TIMESTAMPS;
-  GPUResult                  periodResult;
-  uint64_t                   timestamps[2] = {UINT64_MAX, UINT64_MAX};
-  double                     timestampPeriod;
-  int                        ok = 0;
+  GPUDevice                         *device      = NULL;
+  GPUQueue                          *queue       = NULL;
+  GPUCommandBuffer                  *cmdb        = NULL;
+  GPUQuerySet                       *set         = NULL;
+  GPUBuffer                         *buffer      = NULL;
+  GPUTexture                        *target      = NULL;
+  GPUTextureView                    *targetView  = NULL;
+  GPUFence                          *fence       = NULL;
+  GPUComputePassEncoder             *computePass = NULL;
+  GPURenderPassEncoder              *renderPass  = NULL;
+  GPUCommandBuffer                  *buffers[1];
+  const char                        *metalMode;
+  GPUDeviceCreateInfo                deviceInfo      = {0};
+  GPUQuerySetCreateInfo              queryInfo       = {0};
+  GPUBufferCreateInfo                bufferInfo      = {0};
+  GPUTextureCreateInfo               textureInfo     = {0};
+  GPUTextureViewCreateInfo           viewInfo        = {0};
+  GPUFenceCreateInfo                 fenceInfo       = {0};
+  GPUQueueSubmitInfo                 submitInfo      = {0};
+  GPUComputePassCreateInfo           computeInfo     = {0};
+  GPURenderPassColorAttachment       color           = {0};
+  GPURenderPassCreateInfo            renderInfo      = {0};
+  GPUPassTimestampWrites             timestampWrites = {0};
+  GPUDeviceCapabilities              caps            = {0};
+  GPUFeature                         timestampFeature = GPU_FEATURE_TIMESTAMPS;
+  GPUResult                          periodResult;
+  uint64_t                           timestamps[4] = {
+    UINT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX
+  };
+  double                             timestampPeriod;
+  int                                ok = 0;
 
   if (!GPUIsFeatureSupported(adapter, GPU_FEATURE_TIMESTAMPS)) {
     return 1;
   }
 
-  deviceInfo.chain.sType = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  deviceInfo.chain.structSize = sizeof(deviceInfo);
+  deviceInfo.chain.sType            = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  deviceInfo.chain.structSize       = sizeof(deviceInfo);
   deviceInfo.required.featureCount = 1;
-  deviceInfo.required.pFeatures = &timestampFeature;
+  deviceInfo.required.pFeatures    = &timestampFeature;
   if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device) {
     fprintf(stderr, "timestamp feature device create failed\n");
     return 0;
@@ -234,20 +243,21 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
     goto cleanup;
   }
 
-  queryInfo.chain.sType = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
+  queryInfo.chain.sType      = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
   queryInfo.chain.structSize = sizeof(queryInfo);
-  queryInfo.label = "api-test-timestamps";
-  queryInfo.type = GPU_QUERY_TIMESTAMP;
-  queryInfo.count = 2u;
+  queryInfo.label            = "api-test-timestamps";
+  queryInfo.type             = GPU_QUERY_TIMESTAMP;
+  queryInfo.count            = 4u;
   if (GPUCreateQuerySet(device, &queryInfo, &set) != GPU_OK || !set) {
     fprintf(stderr, "timestamp query set create failed\n");
     goto cleanup;
   }
 
-  bufferInfo.chain.sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
-  bufferInfo.sizeBytes = sizeof(timestamps);
-  bufferInfo.usage = GPU_BUFFER_USAGE_COPY_DST | GPU_BUFFER_USAGE_COPY_SRC;
+  bufferInfo.sizeBytes        = sizeof(timestamps);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
+                                GPU_BUFFER_USAGE_COPY_SRC;
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
     fprintf(stderr, "timestamp resolve buffer create failed\n");
     goto cleanup;
@@ -261,37 +271,91 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
     goto cleanup;
   }
 
-  if (GPUAcquireCommandBuffer(queue, "timestamp-query-test", &cmdb) != GPU_OK || !cmdb) {
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "timestamp-query-render-target";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = 4u;
+  textureInfo.height           = 4u;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET;
+  if (GPUCreateTexture(device, &textureInfo, &target) != GPU_OK || !target) {
+    fprintf(stderr, "timestamp render target create failed\n");
+    goto cleanup;
+  }
+
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.label            = "timestamp-query-render-target-view";
+  viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  viewInfo.mipLevelCount    = 1u;
+  viewInfo.arrayLayerCount  = 1u;
+  if (GPUCreateTextureView(target, &viewInfo, &targetView) != GPU_OK ||
+      !targetView) {
+    fprintf(stderr, "timestamp render target view create failed\n");
+    goto cleanup;
+  }
+
+  if (GPUAcquireCommandBuffer(queue,
+                              "timestamp-query-test",
+                              &cmdb) != GPU_OK ||
+      !cmdb) {
     fprintf(stderr, "timestamp query command buffer acquire failed\n");
     goto cleanup;
   }
 
-  timestampWrites.querySet   = set;
-  timestampWrites.beginIndex = 0u;
-  timestampWrites.endIndex   = 0u;
-  passInfo.chain.sType       = GPU_STRUCTURE_TYPE_COMPUTE_PASS_CREATE_INFO;
-  passInfo.chain.structSize  = sizeof(passInfo);
-  passInfo.label             = "timestamp-query-pass";
-  passInfo.timestampWrites   = &timestampWrites;
-  pass = GPUBeginComputePassWithInfo(cmdb, &passInfo);
-  if (pass) {
-    GPUEndComputePass(pass);
-    pass = NULL;
+  timestampWrites.querySet     = set;
+  timestampWrites.beginIndex   = 0u;
+  timestampWrites.endIndex     = 0u;
+  computeInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PASS_CREATE_INFO;
+  computeInfo.chain.structSize = sizeof(computeInfo);
+  computeInfo.label            = "timestamp-query-compute-pass";
+  computeInfo.timestampWrites  = &timestampWrites;
+  computePass = GPUBeginComputePassWithInfo(cmdb, &computeInfo);
+  if (computePass) {
+    GPUEndComputePass(computePass);
+    computePass = NULL;
     fprintf(stderr, "timestamp query accepted identical pass indices\n");
     goto cleanup;
   }
 
   timestampWrites.endIndex = 1u;
-  pass = GPUBeginComputePassWithInfo(cmdb, &passInfo);
-  if (!pass) {
+  computePass = GPUBeginComputePassWithInfo(cmdb, &computeInfo);
+  if (!computePass) {
     fprintf(stderr, "timestamp query compute pass begin failed\n");
     goto cleanup;
   }
-  GPUEndComputePass(pass);
-  pass = NULL;
-  GPUResolveQuerySet(cmdb, set, 0u, 2u, buffer, 0u);
+  GPUEndComputePass(computePass);
+  computePass = NULL;
 
-  fenceInfo.chain.sType = GPU_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  timestampWrites.beginIndex = 2u;
+  timestampWrites.endIndex   = 3u;
+
+  color.view                  = targetView;
+  color.loadOp                = GPU_LOAD_OP_CLEAR;
+  color.storeOp               = GPU_STORE_OP_STORE;
+  color.clearColor.float32[3] = 1.0f;
+
+  renderInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  renderInfo.chain.structSize     = sizeof(renderInfo);
+  renderInfo.label                = "timestamp-query-render-pass";
+  renderInfo.timestampWrites      = &timestampWrites;
+  renderInfo.pColorAttachments    = &color;
+  renderInfo.colorAttachmentCount = 1u;
+  renderPass = GPUBeginRenderPass(cmdb, &renderInfo);
+  if (!renderPass) {
+    fprintf(stderr, "timestamp query render pass begin failed\n");
+    goto cleanup;
+  }
+  GPUEndRenderPass(renderPass);
+  renderPass = NULL;
+  GPUResolveQuerySet(cmdb, set, 0u, 4u, buffer, 0u);
+
+  fenceInfo.chain.sType      = GPU_STRUCTURE_TYPE_FENCE_CREATE_INFO;
   fenceInfo.chain.structSize = sizeof(fenceInfo);
   if (GPUCreateFence(device, &fenceInfo, &fence) != GPU_OK || !fence) {
     fprintf(stderr, "timestamp query fence create failed\n");
@@ -299,11 +363,11 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
   }
 
   buffers[0] = cmdb;
-  submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
-  submitInfo.chain.structSize = sizeof(submitInfo);
+  submitInfo.chain.sType         = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize    = sizeof(submitInfo);
   submitInfo.commandBufferCount = 1u;
-  submitInfo.ppCommandBuffers = buffers;
-  submitInfo.fence = fence;
+  submitInfo.ppCommandBuffers   = buffers;
+  submitInfo.fence              = fence;
   if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK) {
     fprintf(stderr, "timestamp query submit failed\n");
     cmdb = NULL;
@@ -315,29 +379,42 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
     fprintf(stderr, "timestamp query fence wait failed\n");
     goto cleanup;
   }
-  if (GPUQueueReadBuffer(queue, buffer, 0u, timestamps, sizeof(timestamps)) != GPU_OK) {
+  if (GPUQueueReadBuffer(queue,
+                         buffer,
+                         0u,
+                         timestamps,
+                         sizeof(timestamps)) != GPU_OK) {
     fprintf(stderr, "timestamp query readback failed\n");
     goto cleanup;
   }
   if (timestamps[0] == UINT64_MAX || timestamps[1] == UINT64_MAX ||
-      timestamps[1] < timestamps[0]) {
+      timestamps[2] == UINT64_MAX || timestamps[3] == UINT64_MAX ||
+      timestamps[1] < timestamps[0] ||
+      timestamps[3] < timestamps[2]) {
     fprintf(stderr,
-            "timestamp query resolved error values: %llu, %llu\n",
+            "timestamp query resolved error values: %llu, %llu, %llu, %llu\n",
             (unsigned long long)timestamps[0],
-            (unsigned long long)timestamps[1]);
+            (unsigned long long)timestamps[1],
+            (unsigned long long)timestamps[2],
+            (unsigned long long)timestamps[3]);
     goto cleanup;
   }
 
   ok = 1;
 
 cleanup:
-  if (pass) {
-    GPUEndComputePass(pass);
+  if (computePass) {
+    GPUEndComputePass(computePass);
+  }
+  if (renderPass) {
+    GPUEndRenderPass(renderPass);
   }
   if (cmdb) {
     (void)GPUDiscardCommandBuffer(cmdb);
   }
   GPUDestroyFence(fence);
+  GPUDestroyTextureView(targetView);
+  GPUDestroyTexture(target);
   GPUDestroyBuffer(buffer);
   GPUDestroyQuerySet(set);
   GPUDestroyDevice(device);

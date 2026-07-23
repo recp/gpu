@@ -752,10 +752,14 @@ mt_destroyQuerySet(GPUQuerySet *set) {
 
 GPU_HIDE
 void
-mt_writeTimestamp(GPUCommandBuffer *cmdb, GPUQuerySet *set, uint32_t queryIndex) {
+mt_writeTimestamp(GPUCommandBuffer *cmdb,
+                  GPUQuerySet      *set,
+                  uint32_t          queryIndex,
+                  bool              beginningOfPass) {
   MTQuerySet *native;
   id<MTLBlitCommandEncoder> blit;
 
+  GPU__UNUSED(beginningOfPass);
   if (!cmdb || !cmdb->_priv || !set || !set->_priv || queryIndex >= set->count) {
     return;
   }

@@ -211,9 +211,11 @@ GPU_HIDE
 void
 vk_writeTimestamp(GPUCommandBuffer *cmdb,
                   GPUQuerySet      *set,
-                  uint32_t          queryIndex) {
+                  uint32_t          queryIndex,
+                  bool              beginningOfPass) {
   GPUCommandBufferVk *command;
   GPUQuerySetVk      *native;
+  VkPipelineStageFlagBits stage;
 
   command = cmdb ? cmdb->_priv : NULL;
   native  = set ? set->_priv : NULL;
@@ -223,9 +225,11 @@ vk_writeTimestamp(GPUCommandBuffer *cmdb,
     return;
   }
 
+  stage = beginningOfPass ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+                          : VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
   vkCmdResetQueryPool(command->command, native->pool, queryIndex, 1u);
   vkCmdWriteTimestamp(command->command,
-                      VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                      stage,
                       native->pool,
                       queryIndex);
 }

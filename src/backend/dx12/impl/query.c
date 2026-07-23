@@ -124,10 +124,12 @@ GPU_HIDE
 void
 dx12_writeTimestamp(GPUCommandBuffer *cmdb,
                     GPUQuerySet      *set,
-                    uint32_t          queryIndex) {
+                    uint32_t          queryIndex,
+                    bool              beginningOfPass) {
   GPUCommandBufferDX12 *command;
   GPUQuerySetDX12      *native;
 
+  GPU__UNUSED(beginningOfPass);
   command = cmdb ? cmdb->_priv : NULL;
   native  = set ? set->_priv : NULL;
   if (!command || !command->commandList || !native || !native->heap) {

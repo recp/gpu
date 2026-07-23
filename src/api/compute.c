@@ -345,7 +345,8 @@ GPUBeginComputePassWithInfo(GPUCommandBuffer               *cmdb,
   if (info->timestampWrites && api->cmdbuf.writeTimestamp) {
     api->cmdbuf.writeTimestamp(cmdb,
                                info->timestampWrites->querySet,
-                               info->timestampWrites->beginIndex);
+                               info->timestampWrites->beginIndex,
+                               true);
     wroteBeginTimestamp = true;
   }
 
@@ -354,7 +355,8 @@ GPUBeginComputePassWithInfo(GPUCommandBuffer               *cmdb,
     if (wroteBeginTimestamp) {
       api->cmdbuf.writeTimestamp(cmdb,
                                  info->timestampWrites->querySet,
-                                 info->timestampWrites->endIndex);
+                                 info->timestampWrites->endIndex,
+                                 false);
     }
     return NULL;
   }
@@ -798,6 +800,7 @@ GPUEndComputePass(GPUComputePassEncoder *pass) {
   if (pass->_timestampQuerySet && api->cmdbuf.writeTimestamp) {
     api->cmdbuf.writeTimestamp(pass->_cmdb,
                                pass->_timestampQuerySet,
-                               pass->_timestampEndIndex);
+                               pass->_timestampEndIndex,
+                               false);
   }
 }

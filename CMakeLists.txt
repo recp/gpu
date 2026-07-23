@@ -936,21 +936,20 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     "#define GPU_COMPUTE_ARTIFACT_PATH \"/timestamp_query.us\"\n"
     "#define GPU_COMPUTE_ENTRY_POINT \"fill_timestamp_vertices\"\n"
     "#define GPU_COMPUTE_USE_TIMESTAMPS 1\n"
-    "#define GPU_COMPUTE_TIMESTAMP_DISPATCH_COUNT 256u\n"
     "#define GPU_COMPUTE_REQUIRED_FEATURE GPU_FEATURE_TIMESTAMPS\n"
     "#define GPU_COMPUTE_UNSUPPORTED_STATUS "
     "\"GPU: WebGPU timestamp queries unsupported by this adapter\"\n"
     "#define GPU_COMPUTE_READY_STATUS "
-    "\"GPU: WebGPU USL timestamp query recording\"\n"
+    "\"GPU: WebGPU USL render timestamp query recording\"\n"
     "#define GPU_COMPUTE_TIMESTAMP_RESOLVED_STATUS "
     "\"GPU: WebGPU USL timestamp query resolved\"\n\n"
     "${GPU_WEBGPU_COMPUTE_MAIN_SOURCE}"
   )
   unset(GPU_WEBGPU_COMPUTE_MAIN_SOURCE)
   set(GPU_WEBGPU_SAMPLE_TITLE "Pass timestamps")
-  set(GPU_WEBGPU_SAMPLE_KIND "Compute / timestamp query")
+  set(GPU_WEBGPU_SAMPLE_KIND "Render / timestamp query")
   set(GPU_WEBGPU_SAMPLE_DESCRIPTION
-      "One compute pass records portable begin and end timestamps, then consumes the resolved pair on the next frame.")
+      "One render pass records portable begin and end timestamps, then consumes the resolved pair on the next frame.")
   set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/timestamp-query.c")
   set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/timestamp-query.usl")
   set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/timestamp-query.wgsl")

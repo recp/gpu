@@ -27,10 +27,6 @@
 #define GPU_COMPUTE_USE_TIMESTAMPS 0
 #endif
 
-#ifndef GPU_COMPUTE_TIMESTAMP_DISPATCH_COUNT
-#define GPU_COMPUTE_TIMESTAMP_DISPATCH_COUNT 1u
-#endif
-
 #ifndef GPU_COMPUTE_REQUIRED_FEATURE
 #define GPU_COMPUTE_REQUIRED_FEATURE GPU_FEATURE_COMPUTE
 #endif
@@ -326,7 +322,6 @@ render_frame(void *userData) {
   GPUCommandBuffer            *cmdb;
   GPUComputePassEncoder       *compute;
 #if GPU_COMPUTE_USE_TIMESTAMPS
-  GPUComputePassCreateInfo     computeInfo = {0};
   GPUPassTimestampWrites       timestampWrites = {0};
 #endif
   GPURenderPassEncoder        *render;
@@ -357,22 +352,7 @@ render_frame(void *userData) {
     return;
   }
 
-#if GPU_COMPUTE_USE_TIMESTAMPS
-  if (!state->timestampRecorded) {
-    timestampWrites.querySet   = state->timestampQuery;
-    timestampWrites.beginIndex = 0u;
-    timestampWrites.endIndex   = 1u;
-    computeInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PASS_CREATE_INFO;
-    computeInfo.chain.structSize = sizeof(computeInfo);
-    computeInfo.label            = "compute-webgpu-fill";
-    computeInfo.timestampWrites  = &timestampWrites;
-    compute = GPUBeginComputePassWithInfo(cmdb, &computeInfo);
-  } else {
-    compute = GPUBeginComputePass(cmdb, "compute-webgpu-fill");
-  }
-#else
   compute = GPUBeginComputePass(cmdb, "compute-webgpu-fill");
-#endif
   if (!compute) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
@@ -398,17 +378,7 @@ render_frame(void *userData) {
 #if GPU_COMPUTE_USE_INDIRECT
   GPUDispatchIndirect(compute, state->dispatchBuffer, 0u);
 #else
-#if GPU_COMPUTE_USE_TIMESTAMPS
-  if (!state->timestampRecorded) {
-    for (uint32_t i = 0u; i < GPU_COMPUTE_TIMESTAMP_DISPATCH_COUNT; i++) {
-      GPUDispatch(compute, GPU_COMPUTE_DISPATCH_X, 1u, 1u);
-    }
-  } else {
-    GPUDispatch(compute, GPU_COMPUTE_DISPATCH_X, 1u, 1u);
-  }
-#else
   GPUDispatch(compute, GPU_COMPUTE_DISPATCH_X, 1u, 1u);
-#endif
 #endif
   GPUEndComputePass(compute);
 
@@ -433,6 +403,14 @@ render_frame(void *userData) {
   passInfo.label                = "compute-webgpu-render";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
+#if GPU_COMPUTE_USE_TIMESTAMPS
+  if (!state->timestampRecorded) {
+    timestampWrites.querySet   = state->timestampQuery;
+    timestampWrites.beginIndex = 0u;
+    timestampWrites.endIndex   = 1u;
+    passInfo.timestampWrites   = &timestampWrites;
+  }
+#endif
   render = GPUBeginRenderPass(cmdb, &passInfo);
   if (!render) {
     (void)GPUDiscardCommandBuffer(cmdb);
