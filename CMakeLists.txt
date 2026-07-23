@@ -1587,10 +1587,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${GPU_WEBGPU_MSAA_SAMPLES_DIR}/msaa_samples.usl")
   set(GPU_WEBGPU_MSAA_SAMPLES_US
       "${GPU_WEBGPU_MSAA_SAMPLES_DIR}/msaa_samples.us")
-  set(GPU_WEBGPU_SAMPLE_TITLE "MSAA samples")
-  set(GPU_WEBGPU_SAMPLE_KIND "Render + binding / per-sample read")
+  set(GPU_WEBGPU_SAMPLE_TITLE "MSAA resolve + samples")
+  set(GPU_WEBGPU_SAMPLE_KIND "Render + binding / resolve + per-sample read")
   set(GPU_WEBGPU_SAMPLE_DESCRIPTION
-      "A 4x color target is rebound and each multisample value is read explicitly in a second render pass.")
+      "One 4x color target is stored, resolved, and rebound so the hardware resolve can be compared with each explicit sample read.")
   set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/msaa-samples.c")
   set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/msaa-samples.usl")
   set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/msaa-samples.wgsl")

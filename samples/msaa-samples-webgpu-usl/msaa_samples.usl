@@ -31,6 +31,14 @@ vert sample_preview_vs(vertexId: uint #vertex_id) -> PreviewOut {
   return PreviewOut { float4(1.0, 1.0, 0.0, 1.0), float2(1.0, 0.0) }
 }
 
+frag resolve_preview_fs(input: PreviewOut #stage_in,
+                        resolvedColor: texture2d<float> #texture(1)) -> float4 {
+  let size  = float2(float(resolvedColor.get_width()),
+                     float(resolvedColor.get_height()))
+  let coord = int2(input.uv * (size - float2(1.0)))
+  return resolvedColor.read(coord)
+}
+
 frag sample_preview_fs(input: PreviewOut #stage_in,
                        colorSamples: texture2d_ms<float> #texture(0)) -> float4 {
   let size        = float2(float(colorSamples.get_width()),
