@@ -20,7 +20,6 @@
 #include <d3d12sdklayers.h>
 
 enum {
-  DX12_COMPLETION_STACK_SIZE     = 64u * 1024u,
   DX12_SUBMIT_STACK_COUNT        = 64u,
   DX12_TRANSFER_OFFSET_ALIGNMENT = 512u
 };
@@ -381,7 +380,7 @@ dx12__startWorker(GPUQueueDX12 *queue) {
   }
 
   queue->worker = CreateThread(NULL,
-                               DX12_COMPLETION_STACK_SIZE,
+                               0,
                                dx12__completionMain,
                                queue,
                                0,

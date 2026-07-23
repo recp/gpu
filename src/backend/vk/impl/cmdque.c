@@ -18,7 +18,6 @@
 #include "../impl.h"
 
 enum {
-  VK_COMPLETION_STACK_SIZE     = 64u * 1024u,
   VK_SUBMIT_STACK_COUNT        = 64u,
   VK_TRANSFER_OFFSET_ALIGNMENT = 512u
 };
@@ -403,7 +402,7 @@ vk__startWorker(GPUQueueVk *queue) {
   InitializeCriticalSection(&queue->poolLock);
   InitializeConditionVariable(&queue->pendingCondition);
   queue->worker = CreateThread(NULL,
-                               VK_COMPLETION_STACK_SIZE,
+                               0,
                                vk__completionMain,
                                queue,
                                0,
@@ -413,8 +412,6 @@ vk__startWorker(GPUQueueVk *queue) {
     DeleteCriticalSection(&queue->poolLock);
   }
 #else
-  pthread_attr_t attr;
-
   if (pthread_mutex_init(&queue->poolLock, NULL) != 0) {
     return false;
   }
@@ -422,17 +419,10 @@ vk__startWorker(GPUQueueVk *queue) {
     pthread_mutex_destroy(&queue->poolLock);
     return false;
   }
-  if (pthread_attr_init(&attr) != 0) {
-    pthread_cond_destroy(&queue->pendingCondition);
-    pthread_mutex_destroy(&queue->poolLock);
-    return false;
-  }
-  (void)pthread_attr_setstacksize(&attr, VK_COMPLETION_STACK_SIZE);
   queue->workerStarted = pthread_create(&queue->worker,
-                                        &attr,
+                                        NULL,
                                         vk__completionMain,
                                         queue) == 0;
-  pthread_attr_destroy(&attr);
   if (!queue->workerStarted) {
     pthread_cond_destroy(&queue->pendingCondition);
     pthread_mutex_destroy(&queue->poolLock);
