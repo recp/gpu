@@ -426,38 +426,54 @@ mt_uploadConstants(GPUCommandBuffer *cmdb,
 GPU_HIDE
 void
 mt_applyPendingBarrier(GPUCommandBuffer *cmdb, id encoder) {
-#if MT_HAS_METAL4
+#if MT_HAS_COMMAND_BARRIERS
   MTCommandBuffer *native;
+#if MT_HAS_METAL4
   MTCommandQueue  *queue;
   bool             sparseBarrier;
+#endif
 
   native = mt_commandBuffer(cmdb);
-  queue  = native ? native->owner : NULL;
-  if (!native || !queue || !encoder || native->mode != MTCommandMode4) {
+  if (!native || !encoder) {
     return;
   }
 
-  os_unfair_lock_lock(&queue->poolLock);
-  sparseBarrier = queue->pendingSparseBarrier;
-  queue->pendingSparseBarrier = false;
-  os_unfair_lock_unlock(&queue->poolLock);
-  if (sparseBarrier) {
-    native->pendingAfterStages  |= MTLStageResourceState;
-    native->pendingBeforeStages |= MTLStageAll;
-    native->pendingVisibility   |= MTL4VisibilityOptionDevice;
+#if MT_HAS_METAL4
+  queue = native->owner;
+  if (native->mode == MTCommandMode4 && queue) {
+    os_unfair_lock_lock(&queue->poolLock);
+    sparseBarrier = queue->pendingSparseBarrier;
+    queue->pendingSparseBarrier = false;
+    os_unfair_lock_unlock(&queue->poolLock);
+    if (sparseBarrier) {
+      native->pendingAfterStages  |= MTLStageResourceState;
+      native->pendingBeforeStages |= MTLStageAll;
+      native->pendingVisibility   |= MTL4VisibilityOptionDevice;
+    }
   }
+#endif
   if (native->pendingAfterStages == 0 || native->pendingBeforeStages == 0) {
     return;
   }
 
   if (@available(macOS 26.0, iOS 26.0, *)) {
-    [encoder barrierAfterQueueStages:native->pendingAfterStages
-                         beforeStages:native->pendingBeforeStages
-                    visibilityOptions:native->pendingVisibility];
+#if MT_HAS_METAL4
+    if (native->mode == MTCommandMode4) {
+      [(id<MTL4CommandEncoder>)encoder
+        barrierAfterQueueStages:native->pendingAfterStages
+                   beforeStages:native->pendingBeforeStages
+              visibilityOptions:native->pendingVisibility];
+    } else
+#endif
+    {
+      [(id<MTLCommandEncoder>)encoder
+        barrierAfterQueueStages:native->pendingAfterStages
+                   beforeStages:native->pendingBeforeStages];
+    }
   }
-  native->pendingAfterStages = 0;
+  native->pendingAfterStages  = 0;
   native->pendingBeforeStages = 0;
-  native->pendingVisibility = 0u;
+  native->pendingVisibility   = 0u;
 #else
   GPU__UNUSED(cmdb);
   GPU__UNUSED(encoder);
@@ -787,6 +803,7 @@ mt_writeTimestamp(GPUCommandBuffer *cmdb,
     if (!blit) {
       return;
     }
+    mt_applyPendingBarrier(cmdb, blit);
 
     [blit sampleCountersInBuffer:native->classic
                     atSampleIndex:(NSUInteger)queryIndex
@@ -897,6 +914,7 @@ mt_resolveQuerySet(GPUCommandBuffer *cmdb,
         if (!copy) {
           return;
         }
+        mt_applyPendingBarrier(cmdb, copy);
         [copy barrierAfterQueueStages:MTLStageVertex | MTLStageFragment
                          beforeStages:MTLStageBlit
                     visibilityOptions:MTL4VisibilityOptionDevice];
@@ -918,6 +936,7 @@ mt_resolveQuerySet(GPUCommandBuffer *cmdb,
       if (!blit) {
         return;
       }
+      mt_applyPendingBarrier(cmdb, blit);
       [blit copyFromBuffer:native->visibility
               sourceOffset:(NSUInteger)sourceOffset
                   toBuffer:dst
@@ -953,6 +972,7 @@ mt_resolveQuerySet(GPUCommandBuffer *cmdb,
     if (!blit) {
       return;
     }
+    mt_applyPendingBarrier(cmdb, blit);
 
     [blit resolveCounters:native->classic
                   inRange:NSMakeRange((NSUInteger)firstQuery,

@@ -64,7 +64,7 @@ mt_clearColor(const GPUClearColorValue *color, GPUFormat format) {
   }
 }
 
-#if MT_HAS_METAL4
+#if MT_HAS_COMMAND_BARRIERS
 static uint64_t
 mt_stageMask(GPUPipelineStageMask stages) {
   uint64_t result;
@@ -411,6 +411,7 @@ mt_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
       native->classic = [[mt_classicCommandBuffer(cmdb)
         blitCommandEncoder] retain];
     }
+    mt_applyPendingBarrier(cmdb, native->classic);
   }
   if (!native->classic && !native->modern) {
     return NULL;
@@ -901,43 +902,56 @@ mt_endCopyPass(GPUCopyPassEncoder *pass) {
 GPU_HIDE
 void
 mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
-#if MT_HAS_METAL4
+#if MT_HAS_COMMAND_BARRIERS
   MTCommandBuffer *native;
 
-  if (!cmdb || !barriers || !mt_commandBufferIsModern(cmdb)) {
+  if (!cmdb || !barriers) {
     return;
   }
 
   native = mt_commandBuffer(cmdb);
-  native->pendingAfterStages |= mt_stageMask(barriers->srcStages);
-  native->pendingBeforeStages |= mt_stageMask(barriers->dstStages);
+  if (!native) {
+    return;
+  }
   if (@available(macOS 26.0, iOS 26.0, *)) {
-    native->pendingVisibility |= MTL4VisibilityOptionDevice;
-    if (barriers->aliasingBarrierCount > 0u) {
-      native->pendingVisibility |= MTL4VisibilityOptionResourceAlias;
-    }
-  }
+    native->pendingAfterStages  |= mt_stageMask(barriers->srcStages);
+    native->pendingBeforeStages |= mt_stageMask(barriers->dstStages);
+#if MT_HAS_METAL4
+    if (native->mode == MTCommandMode4) {
+      native->pendingVisibility |= MTL4VisibilityOptionDevice;
+      if (barriers->aliasingBarrierCount > 0u) {
+        native->pendingVisibility |= MTL4VisibilityOptionResourceAlias;
+      }
 
-  for (uint32_t i = 0; i < barriers->bufferBarrierCount; i++) {
-    mt_useAllocation(cmdb, (id<MTLBuffer>)barriers->pBufferBarriers[i].buffer->_priv);
-  }
-  for (uint32_t i = 0; i < barriers->textureBarrierCount; i++) {
-    mt_useAllocation(cmdb,
-                     mt_nativeTexture(barriers->pTextureBarriers[i].texture));
-  }
-  for (uint32_t i = 0; i < barriers->aliasingBarrierCount; i++) {
-    const GPUAliasingBarrier *barrier = &barriers->pAliasingBarriers[i];
+      for (uint32_t i = 0; i < barriers->bufferBarrierCount; i++) {
+        mt_useAllocation(
+          cmdb,
+          (id<MTLBuffer>)barriers->pBufferBarriers[i].buffer->_priv);
+      }
+      for (uint32_t i = 0; i < barriers->textureBarrierCount; i++) {
+        mt_useAllocation(cmdb,
+                         mt_nativeTexture(
+                           barriers->pTextureBarriers[i].texture));
+      }
+      for (uint32_t i = 0; i < barriers->aliasingBarrierCount; i++) {
+        const GPUAliasingBarrier *barrier;
 
-    if (barrier->beforeBuffer) {
-      mt_useAllocation(cmdb, (id<MTLBuffer>)barrier->beforeBuffer->_priv);
-    } else {
-      mt_useAllocation(cmdb, mt_nativeTexture(barrier->beforeTexture));
+        barrier = &barriers->pAliasingBarriers[i];
+        if (barrier->beforeBuffer) {
+          mt_useAllocation(cmdb,
+                           (id<MTLBuffer>)barrier->beforeBuffer->_priv);
+        } else {
+          mt_useAllocation(cmdb, mt_nativeTexture(barrier->beforeTexture));
+        }
+        if (barrier->afterBuffer) {
+          mt_useAllocation(cmdb,
+                           (id<MTLBuffer>)barrier->afterBuffer->_priv);
+        } else {
+          mt_useAllocation(cmdb, mt_nativeTexture(barrier->afterTexture));
+        }
+      }
     }
-    if (barrier->afterBuffer) {
-      mt_useAllocation(cmdb, (id<MTLBuffer>)barrier->afterBuffer->_priv);
-    } else {
-      mt_useAllocation(cmdb, mt_nativeTexture(barrier->afterTexture));
-    }
+#endif
   }
 #else
   GPU__UNUSED(cmdb);

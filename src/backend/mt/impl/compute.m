@@ -228,6 +228,7 @@ mt_computeCommandEncoder(GPUCommandBuffer               *cmdb,
       nativeState->classic = [[mt_classicCommandBuffer(cmdb)
         computeCommandEncoder] retain];
     }
+    mt_applyPendingBarrier(cmdb, nativeState->classic);
   }
 
   if (!nativeState->classic && !nativeState->modern) {

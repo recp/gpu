@@ -83,6 +83,7 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
       nativeState->classic = [[mt_classicCommandBuffer(cmdb)
         renderCommandEncoderWithDescriptor:nativePass->classic] retain];
     }
+    mt_applyPendingBarrier(cmdb, nativeState->classic);
   }
 
   if (!nativeState->classic && !nativeState->modern) {

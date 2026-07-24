@@ -51,6 +51,12 @@
 #  define MT_HAS_METAL4 0
 #endif
 
+#if defined(__MAC_26_0) && defined(__IPHONE_26_0)
+#  define MT_HAS_COMMAND_BARRIERS 1
+#else
+#  define MT_HAS_COMMAND_BARRIERS 0
+#endif
+
 typedef CALayer GPUViewLayer;
 
 #if TARGET_OS_IOS

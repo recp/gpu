@@ -529,6 +529,7 @@ mt_beginAccelerationStructurePass(GPUCommandBuffer *cmdb, const char *label) {
       native->classic = [[command->classic
         accelerationStructureCommandEncoder] retain];
     }
+    mt_applyPendingBarrier(cmdb, native->classic);
   }
   if (!native->classic && !native->modern) {
     return NULL;
