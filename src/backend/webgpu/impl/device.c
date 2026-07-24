@@ -200,6 +200,7 @@ webgpu_requestAdapter(GPUInstance                      *instance,
   request->callback = callback;
   request->userData = userData;
 
+  options.featureLevel    = WGPUFeatureLevel_Core;
   options.powerPreference = WGPUPowerPreference_HighPerformance;
   callbackInfo.mode       = WGPUCallbackMode_AllowSpontaneous;
   callbackInfo.callback   = webgpu_adapterReady;
@@ -337,6 +338,11 @@ webgpu_getFormatCapabilities(
   }
   memset(outCaps, 0, sizeof(*outCaps));
   if (gpu_webgpuFormat(format) == WGPUTextureFormat_Undefined) {
+    return;
+  }
+  if (format == GPU_FORMAT_BGRA8_UNORM_SRGB &&
+      !webgpu_hasAdapterFeature(adapter,
+                                WGPUFeatureName_CoreFeaturesAndLimits)) {
     return;
   }
 
@@ -592,8 +598,10 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
                      void                           *userData) {
   WGPURequestDeviceCallbackInfo callbackInfo =
     WGPU_REQUEST_DEVICE_CALLBACK_INFO_INIT;
-  WGPUDeviceDescriptor descriptor = WGPU_DEVICE_DESCRIPTOR_INIT;
-  static const WGPUFeatureName formatFeatures[] = {
+  WGPUDeviceDescriptor descriptor     = WGPU_DEVICE_DESCRIPTOR_INIT;
+  WGPULimits           requiredLimits = WGPU_LIMITS_INIT;
+  static const WGPUFeatureName optionalFeatures[] = {
+    WGPUFeatureName_CoreFeaturesAndLimits,
     WGPUFeatureName_Depth32FloatStencil8,
     WGPUFeatureName_TextureCompressionBC,
     WGPUFeatureName_TextureCompressionBCSliced3D,
@@ -613,7 +621,7 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   WebGPUDeviceRequest *request;
   uint64_t             supportedMask;
 
-  _Static_assert(GPU_ARRAY_LEN(formatFeatures) + 5u <=
+  _Static_assert(GPU_ARRAY_LEN(optionalFeatures) + 5u <=
                    GPU_ARRAY_LEN(requiredFeatures),
                  "WebGPU device feature storage is too small");
 
@@ -622,6 +630,10 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   native = gpu_webgpuAdapter(adapter);
   if (!native || !native->adapter || !callback) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (wgpuAdapterGetLimits(native->adapter, &requiredLimits) !=
+      WGPUStatus_Success) {
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
   supportedMask = 1ull << GPU_FEATURE_COMPUTE;
@@ -681,14 +693,16 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
     requiredFeatures[descriptor.requiredFeatureCount++] =
       WGPUFeatureName_MultiDrawIndirect;
   }
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(formatFeatures); i++) {
-    if (wgpuAdapterHasFeature(native->adapter, formatFeatures[i])) {
-      requiredFeatures[descriptor.requiredFeatureCount++] = formatFeatures[i];
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(optionalFeatures); i++) {
+    if (wgpuAdapterHasFeature(native->adapter, optionalFeatures[i])) {
+      requiredFeatures[descriptor.requiredFeatureCount++] =
+        optionalFeatures[i];
     }
   }
   descriptor.requiredFeatures = descriptor.requiredFeatureCount
                                   ? requiredFeatures
                                   : NULL;
+  descriptor.requiredLimits = &requiredLimits;
   descriptor.deviceLostCallbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
   descriptor.deviceLostCallbackInfo.callback = webgpu_deviceLost;
   descriptor.deviceLostCallbackInfo.userdata1 = request;
