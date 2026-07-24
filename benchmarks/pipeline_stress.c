@@ -196,13 +196,17 @@ pipeline_init(PipelineStress             *stress,
 
 static void
 pipeline_removeDiskCache(const PipelineStress *stress) {
-  char temporaryPath[sizeof(stress->cachePath) + sizeof(".tmp")];
+  char sidecarPath[sizeof(stress->cachePath) + sizeof(".meta")];
 
   if (!stress || !stress->cachePath[0]) {
     return;
   }
-  snprintf(temporaryPath, sizeof(temporaryPath), "%s.tmp", stress->cachePath);
-  remove(temporaryPath);
+  snprintf(sidecarPath, sizeof(sidecarPath), "%s.tmp", stress->cachePath);
+  remove(sidecarPath);
+  snprintf(sidecarPath, sizeof(sidecarPath), "%s.lock", stress->cachePath);
+  remove(sidecarPath);
+  snprintf(sidecarPath, sizeof(sidecarPath), "%s.meta", stress->cachePath);
+  remove(sidecarPath);
   remove(stress->cachePath);
 }
 
