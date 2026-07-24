@@ -566,6 +566,7 @@ mt_rceSetVertexAccelerationStructure(
   if (@available(macOS 12.0, iOS 15.0, *)) {
     [native->classic setVertexAccelerationStructure:ray->structure
                                       atBufferIndex:index];
+    mt_useRenderRayResources(native->classic, ray, MTLRenderStageVertex);
   }
 }
 
@@ -826,6 +827,7 @@ mt_rceSetFragmentAccelerationStructure(
   if (@available(macOS 12.0, iOS 15.0, *)) {
     [native->classic setFragmentAccelerationStructure:ray->structure
                                         atBufferIndex:index];
+    mt_useRenderRayResources(native->classic, ray, MTLRenderStageFragment);
   }
 }
 

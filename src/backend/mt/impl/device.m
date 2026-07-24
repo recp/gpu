@@ -731,21 +731,6 @@ mt_supportsMetal4RayQuery(id<MTLDevice> device) {
 }
 
 static bool
-mt_metal4AutoSafe(void) {
-#if TARGET_OS_IOS
-  NSOperatingSystemVersion version;
-
-  /* Metal 4 screen capture crashes the compositor on iOS 26.5.2. */
-  version = NSProcessInfo.processInfo.operatingSystemVersion;
-  return version.majorVersion != 26 ||
-         version.minorVersion != 5 ||
-         version.patchVersion != 2;
-#else
-  return true;
-#endif
-}
-
-static bool
 mt_selectCommandMode(id<MTLDevice>  device,
                      uint64_t       enabledFeatureMask,
                      MTCommandMode *outMode) {
@@ -789,7 +774,7 @@ mt_selectCommandMode(id<MTLDevice>  device,
     return false;
   }
 
-  *outMode = supportsMetal4 && (explicitSparse || mt_metal4AutoSafe()) &&
+  *outMode = supportsMetal4 &&
              (!rayQuery || mt_supportsMetal4RayQuery(device))
                ? MTCommandMode4
                : MTCommandModeClassic;

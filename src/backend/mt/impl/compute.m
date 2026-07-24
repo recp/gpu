@@ -444,6 +444,7 @@ mt_computeAccelerationStructure(GPUComputePassEncoder       *enc,
 #endif
   [native->classic setAccelerationStructure:ray->structure
                               atBufferIndex:index];
+  mt_useComputeRayResources(native->classic, ray);
 }
 
 GPU_HIDE

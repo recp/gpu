@@ -41,6 +41,82 @@ mt_rayNativeStructure(GPUAccelerationStructureEXT *structure) {
   return native ? native->structure : nil;
 }
 
+static void
+mt_useModernTableBuffers(GPUCommandBuffer            *cmdb,
+                         MTIntersectionFunctionTable *table) {
+  uint32_t mask;
+
+  mask = table->bufferMask;
+  while (mask != 0u) {
+    uint32_t index;
+
+    index = (uint32_t)__builtin_ctz(mask);
+    mask &= mask - 1u;
+    mt_useAllocation(cmdb, table->buffers[index]);
+  }
+}
+
+static void
+mt_useComputeTableBuffers(id<MTLComputeCommandEncoder>  encoder,
+                          MTIntersectionFunctionTable  *table) {
+  uint32_t mask;
+
+  mask = table->bufferMask;
+  while (mask != 0u) {
+    uint32_t index;
+
+    index = (uint32_t)__builtin_ctz(mask);
+    mask &= mask - 1u;
+    [encoder useResource:table->buffers[index]
+                   usage:MTLResourceUsageRead | MTLResourceUsageWrite];
+  }
+}
+
+static void
+mt_useRenderTableBuffers(id<MTLRenderCommandEncoder>  encoder,
+                         MTIntersectionFunctionTable *table,
+                         MTLRenderStages              stages) {
+  uint32_t mask;
+
+  mask = table->bufferMask;
+  while (mask != 0u) {
+    uint32_t index;
+
+    index = (uint32_t)__builtin_ctz(mask);
+    mask &= mask - 1u;
+    [encoder useResource:table->buffers[index]
+                   usage:MTLResourceUsageRead | MTLResourceUsageWrite
+                  stages:stages];
+  }
+}
+
+GPU_HIDE
+void
+mt_useComputeRayResources(id<MTLComputeCommandEncoder> encoder,
+                          GPUAccelerationStructureMT   *structure) {
+  if (!encoder || !structure || !structure->classicInstances) {
+    return;
+  }
+  for (id<MTLAccelerationStructure> child in structure->classicInstances) {
+    [encoder useResource:child usage:MTLResourceUsageRead];
+  }
+}
+
+GPU_HIDE
+void
+mt_useRenderRayResources(id<MTLRenderCommandEncoder> encoder,
+                         GPUAccelerationStructureMT  *structure,
+                         MTLRenderStages              stages) {
+  if (!encoder || !structure || !structure->classicInstances) {
+    return;
+  }
+  for (id<MTLAccelerationStructure> child in structure->classicInstances) {
+    [encoder useResource:child
+                   usage:MTLResourceUsageRead
+                  stages:stages];
+  }
+}
+
 static MTLAccelerationStructureUsage
 mt_rayUsage(GPUAccelerationStructureBuildFlagsEXT flags) {
   MTLAccelerationStructureUsage usage;
@@ -911,10 +987,19 @@ mt_createIntersectionFunctionTable(
 static void
 mt_destroyIntersectionFunctionTable(GPUIntersectionFunctionTableEXT *table) {
   MTIntersectionFunctionTable *native;
+  uint32_t                     mask;
 
   native = table ? table->_priv : NULL;
   if (!native) {
     return;
+  }
+  mask = native->bufferMask;
+  while (mask != 0u) {
+    uint32_t index;
+
+    index = (uint32_t)__builtin_ctz(mask);
+    mask &= mask - 1u;
+    [native->buffers[index] release];
   }
   [native->table release];
   free(native);
@@ -936,6 +1021,13 @@ mt_setIntersectionFunctionTableBuffer(
   [native->table setBuffer:mt_rayBuffer(buffer)
                     offset:(NSUInteger)offset
                    atIndex:index];
+  [native->buffers[index] release];
+  native->buffers[index] = [mt_rayBuffer(buffer) retain];
+  if (buffer) {
+    native->bufferMask |= 1u << index;
+  } else {
+    native->bufferMask &= ~(1u << index);
+  }
   return GPU_OK;
 }
 
@@ -968,12 +1060,14 @@ mt_bindComputeIntersectionFunctionTable(
       atBufferIndex:index];
       native->arguments->resourceMask |= slotBit;
       mt_useAllocation(pass->_cmdb, nativeTable->table);
+      mt_useModernTableBuffers(pass->_cmdb, nativeTable);
     }
   } else
 #endif
   {
     [native->classic setIntersectionFunctionTable:nativeTable->table
                                      atBufferIndex:index];
+    mt_useComputeTableBuffers(native->classic, nativeTable);
   }
   native->intersectionTables[index] = nativeTable->table;
   native->intersectionTableMask    |= slotBit;
@@ -1020,6 +1114,7 @@ mt_bindRenderIntersectionFunctionTable(
       atBufferIndex:index];
       arguments->resourceMask |= slotBit;
       mt_useAllocation(pass->_cmdb, nativeTable->table);
+      mt_useModernTableBuffers(pass->_cmdb, nativeTable);
     }
   } else
 #endif
@@ -1029,6 +1124,14 @@ mt_bindRenderIntersectionFunctionTable(
   } else {
     [native->classic setFragmentIntersectionFunctionTable:nativeTable->table
                                             atBufferIndex:index];
+  }
+  if (native->classic) {
+    MTLRenderStages stages;
+
+    stages = nativeTable->stage == GPU_SHADER_STAGE_VERTEX_BIT
+               ? MTLRenderStageVertex
+               : MTLRenderStageFragment;
+    mt_useRenderTableBuffers(native->classic, nativeTable, stages);
   }
   tables[index] = nativeTable->table;
   *mask        |= slotBit;

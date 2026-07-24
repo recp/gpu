@@ -3809,12 +3809,21 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
       "${GPU_IOS_RAY_QUERY_DIR}/ray_query.usl")
   set(GPU_IOS_RAY_QUERY_US
       "${GPU_IOS_RAY_QUERY_DIR}/ray_query.us")
+  set(GPU_IOS_INTERSECTION_FUNCTION_SOURCE
+      "${GPU_IOS_RAY_QUERY_DIR}/intersection_function.usl")
+  set(GPU_IOS_INTERSECTION_FUNCTION_US
+      "${GPU_IOS_RAY_QUERY_DIR}/intersection_function.us")
   add_custom_command(
-    OUTPUT "${GPU_IOS_RAY_QUERY_US}"
+    OUTPUT
+      "${GPU_IOS_RAY_QUERY_US}"
+      "${GPU_IOS_INTERSECTION_FUNCTION_US}"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${GPU_IOS_RAY_QUERY_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/ray_query.usl"
             "${GPU_IOS_RAY_QUERY_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/intersection_function.usl"
+            "${GPU_IOS_INTERSECTION_FUNCTION_SOURCE}"
     COMMAND ${CMAKE_COMMAND} -E env
             USL_EMIT_BYTECODE=1
             USL_NO_BACKEND_SIDECAR=1
@@ -3822,21 +3831,33 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
             "${GPU_USL_HOST_FIXTURE}"
             metal
             "${GPU_IOS_RAY_QUERY_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            USL_NO_BACKEND_SIDECAR=1
+            USL_TARGET_CAPS=ray_query,intersection_function_table
+            "${GPU_USL_HOST_FIXTURE}"
+            metal
+            "${GPU_IOS_INTERSECTION_FUNCTION_SOURCE}"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/ray_query.usl"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/intersection_function.usl"
       "${GPU_USL_HOST_FIXTURE}"
     VERBATIM
   )
-  set_source_files_properties("${GPU_IOS_RAY_QUERY_US}" PROPERTIES
-    GENERATED TRUE
-    MACOSX_PACKAGE_LOCATION Resources
-  )
+  set_source_files_properties(
+    "${GPU_IOS_RAY_QUERY_US}"
+    "${GPU_IOS_INTERSECTION_FUNCTION_US}"
+    PROPERTIES
+      GENERATED TRUE
+      MACOSX_PACKAGE_LOCATION Resources
+    )
 
   add_executable(gpu-ray-query-ios-usl MACOSX_BUNDLE
     samples/ray-query-ios-usl/main.m
     tests/api/ray.c
     tests/api/runner.c
     "${GPU_IOS_RAY_QUERY_US}"
+    "${GPU_IOS_INTERSECTION_FUNCTION_US}"
   )
   gpu_configure_metal_sample(gpu-ray-query-ios-usl)
   target_compile_options(gpu-ray-query-ios-usl PRIVATE

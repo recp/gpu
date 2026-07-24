@@ -430,9 +430,9 @@ gpu_intersectionFunctionListValid(
         !gpu_intersectionFunctionStageValid(function->stage, allowedStages)) {
       return false;
     }
-    if (!gpuGetShaderLibraryEntryStage(library,
-                                       function->entryPoint,
-                                       &reflectedStage) ||
+    if (gpuGetShaderLibraryEntryStage(library,
+                                      function->entryPoint,
+                                      &reflectedStage) &&
         reflectedStage != GPU_SHADER_STAGE_INTERSECTION_BIT) {
       return false;
     }

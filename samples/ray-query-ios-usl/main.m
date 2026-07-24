@@ -5,6 +5,8 @@
 #import "../../include/gpu/gpu.h"
 
 int gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath);
+int gpu_test_intersection_function_table(GPUAdapter *adapter,
+                                         const char *bytecodePath);
 
 static GPUAdapter *
 SelectAdapter(GPUInstance *instance) {
@@ -37,48 +39,65 @@ SelectAdapter(GPUInstance *instance) {
 }
 
 - (void)runCheck {
-  NSURL *artifactURL;
+  NSURL *intersectionURL;
+  NSURL *rayQueryURL;
 
-  artifactURL = [NSBundle.mainBundle URLForResource:@"ray_query"
-                                      withExtension:@"us"];
-  if (!artifactURL) {
-    [self setStatus:@"RAY QUERY ARTIFACT MISSING" color:UIColor.redColor];
+  rayQueryURL = [NSBundle.mainBundle URLForResource:@"ray_query"
+                                     withExtension:@"us"];
+  intersectionURL =
+    [NSBundle.mainBundle URLForResource:@"intersection_function"
+                          withExtension:@"us"];
+  if (!rayQueryURL || !intersectionURL) {
+    [self setStatus:@"RAY ARTIFACT MISSING" color:UIColor.redColor];
     return;
   }
 
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
     GPUInstance *instance;
     GPUAdapter  *adapter;
+    BOOL         intersectionSupported;
+    BOOL         intersectionPassed;
+    BOOL         rayQueryPassed;
     BOOL         supported;
-    int          passed;
 
-    instance = NULL;
-    adapter  = NULL;
-    supported = NO;
-    passed    = 0;
+    instance              = NULL;
+    adapter               = NULL;
+    supported             = NO;
+    intersectionSupported = NO;
+    intersectionPassed    = NO;
+    rayQueryPassed        = NO;
     if (GPUCreateInstance(NULL, &instance) == GPU_OK && instance) {
-      adapter   = SelectAdapter(instance);
-      supported = adapter &&
+      adapter               = SelectAdapter(instance);
+      supported             = adapter &&
         GPUIsFeatureSupported(adapter, GPU_FEATURE_RAY_QUERY);
-      if (supported) {
-        passed = gpu_test_ray_query(adapter,
-                                    artifactURL.fileSystemRepresentation);
+      intersectionSupported = adapter &&
+        GPUIsFeatureSupported(adapter,
+                              GPU_FEATURE_INTERSECTION_FUNCTION_TABLE);
+      if (supported && intersectionSupported) {
+        rayQueryPassed = gpu_test_ray_query(
+          adapter,
+          rayQueryURL.fileSystemRepresentation
+        );
+        intersectionPassed = gpu_test_intersection_function_table(
+          adapter,
+          intersectionURL.fileSystemRepresentation
+        );
       }
     }
     GPUDestroyInstance(instance);
 
     dispatch_async(dispatch_get_main_queue(), ^{
-      if (!supported) {
-        NSLog(@"GPU: iOS ray query unsupported");
-        [self setStatus:@"RAY QUERY UNSUPPORTED"
+      if (!supported || !intersectionSupported) {
+        NSLog(@"GPU: iOS ray query or intersection function unsupported");
+        [self setStatus:@"RAY FEATURES UNSUPPORTED"
                   color:UIColor.systemYellowColor];
-      } else if (passed) {
-        NSLog(@"GPU: iOS ray query passed");
-        [self setStatus:@"RAY QUERY PASS"
+      } else if (rayQueryPassed && intersectionPassed) {
+        NSLog(@"GPU: iOS Metal ray query and intersection function passed");
+        [self setStatus:@"RAY + IFT PASS"
                   color:UIColor.systemGreenColor];
       } else {
-        NSLog(@"GPU: iOS ray query failed");
-        [self setStatus:@"RAY QUERY FAIL" color:UIColor.systemRedColor];
+        NSLog(@"GPU: iOS Metal ray query or intersection function failed");
+        [self setStatus:@"RAY + IFT FAIL" color:UIColor.systemRedColor];
       }
     });
   });
@@ -92,7 +111,7 @@ SelectAdapter(GPUInstance *instance) {
   _statusLabel.translatesAutoresizingMaskIntoConstraints = NO;
   _statusLabel.font          = [UIFont monospacedSystemFontOfSize:24.0
                                                           weight:UIFontWeightBold];
-  _statusLabel.text          = @"RAY QUERY RUNNING";
+  _statusLabel.text          = @"RAY + IFT RUNNING";
   _statusLabel.textColor     = UIColor.blackColor;
   _statusLabel.textAlignment = NSTextAlignmentCenter;
   [self.view addSubview:_statusLabel];

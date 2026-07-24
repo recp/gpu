@@ -171,6 +171,8 @@ typedef struct GPUAccelerationStructureMT {
 
 typedef struct MTIntersectionFunctionTable {
   id<MTLIntersectionFunctionTable> table;
+  id<MTLBuffer>                    buffers[MT_BIND_GROUP_BUFFER_COUNT];
+  uint32_t                         bufferMask;
   GPUShaderStageFlags              stage;
 } MTIntersectionFunctionTable;
 
@@ -410,6 +412,17 @@ mt_setArgumentAccelerationStructure(
 GPU_HIDE
 void
 mt_useAllocation(GPUCommandBuffer *cmdb, id allocation);
+
+GPU_HIDE
+void
+mt_useComputeRayResources(id<MTLComputeCommandEncoder> encoder,
+                          GPUAccelerationStructureMT   *structure);
+
+GPU_HIDE
+void
+mt_useRenderRayResources(id<MTLRenderCommandEncoder> encoder,
+                         GPUAccelerationStructureMT  *structure,
+                         MTLRenderStages              stages);
 
 GPU_HIDE
 bool

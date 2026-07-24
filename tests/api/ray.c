@@ -649,6 +649,48 @@ cleanup:
 int
 gpu_test_intersection_function_table(GPUAdapter *adapter,
                                      const char *bytecodePath) {
+  static const float aabbs[] = {
+    -0.5f, -0.5f, -0.1f,
+     0.5f,  0.5f,  0.1f
+  };
+  static const float identity[3][4] = {
+    {1.0f, 0.0f, 0.0f, 0.0f},
+    {0.0f, 1.0f, 0.0f, 0.0f},
+    {0.0f, 0.0f, 1.0f, 0.0f}
+  };
+  static const char traversalMSL[] =
+    "#include <metal_stdlib>\n"
+    "using namespace metal;\n"
+    "using namespace raytracing;\n"
+    "\n"
+    "struct IFTResult {\n"
+    "  bool  accept   [[accept_intersection]];\n"
+    "  float distance [[distance]];\n"
+    "};\n"
+    "\n"
+    "[[intersection(bounding_box, triangle_data, instancing)]]\n"
+    "IFTResult constant_hit(device const float *distance [[buffer(0)]]) {\n"
+    "  return {true, distance[0]};\n"
+    "}\n"
+    "\n"
+    "kernel void intersection_table_cs(\n"
+    "  device uint *result [[buffer(0)]],\n"
+    "  instance_acceleration_structure scene [[buffer(1)]],\n"
+    "  intersection_function_table<triangle_data, instancing> table "
+      "[[buffer(2)]]) {\n"
+    "  ray value;\n"
+    "  value.origin       = float3(0.0, 0.0, -1.0);\n"
+    "  value.direction    = float3(0.0, 0.0, 1.0);\n"
+    "  value.min_distance = 0.0;\n"
+    "  value.max_distance = 100.0;\n"
+    "  intersector<triangle_data, instancing> tracer;\n"
+    "  auto hit = tracer.intersect(value, scene, 0xff, table);\n"
+    "  if (hit.type == intersection_type::none) {\n"
+    "    result[0] = 2u;\n"
+    "  } else {\n"
+    "    result[0] = abs(hit.distance - 1.0) < 0.0001 ? 1u : 3u;\n"
+    "  }\n"
+    "}\n";
   static const char * const entries[] = {
     "GPUCreateIntersectionFunctionTableEXT",
     "GPUDestroyIntersectionFunctionTableEXT",
@@ -656,45 +698,71 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
     "GPUBindComputeIntersectionFunctionTableEXT",
     "GPUBindRenderIntersectionFunctionTableEXT"
   };
-  GPUDeviceCreateInfo                         deviceInfo          = {0};
-  GPUIntersectionFunctionEXT                 computeFunction     = {0};
-  GPUIntersectionFunctionEXT                 renderFunction      = {0};
-  GPUIntersectionFunctionPipelineEXT         computeFunctionInfo = {0};
-  GPUIntersectionFunctionPipelineEXT         renderFunctionInfo  = {0};
-  GPUComputePipelineCreateInfo                computePipelineInfo = {0};
-  GPURenderPipelineCreateInfo                 renderPipelineInfo  = {0};
-  GPUIntersectionFunctionTableCreateInfoEXT  computeTableInfo    = {0};
-  GPUIntersectionFunctionTableCreateInfoEXT  renderTableInfo     = {0};
-  GPUColorTargetState                         colorTarget         = {0};
-  GPUBufferCreateInfo                         bufferInfo          = {0};
-  GPUTextureCreateInfo                        textureInfo         = {0};
-  GPUTextureViewCreateInfo                    viewInfo            = {0};
-  GPURenderPassColorAttachment                colorAttachment     = {0};
-  GPURenderPassCreateInfo                     renderPassInfo      = {0};
-  GPUViewport                                 viewport            = {0};
-  GPUScissorRect                              scissor             = {0};
-  GPUQueueSubmitInfo                          submitInfo          = {0};
+  GPUDeviceCreateInfo                         deviceInfo                = {0};
+  GPUShaderLibraryCreateInfo                  traversalLibraryInfo      = {0};
+  GPUBindGroupLayoutEntry                     traversalLayoutEntries[2] = {0};
+  GPUBindGroupLayoutCreateInfo                traversalGroupInfo        = {0};
+  GPUPipelineLayoutCreateInfo                 traversalLayoutInfo       = {0};
+  GPUBindGroupEntry                           traversalEntries[2]        = {0};
+  GPUBindGroupCreateInfo                      traversalBindInfo          = {0};
+  GPUAccelerationStructureGeometryEXT         aabbGeometry              = {0};
+  GPUAccelerationStructureBuildInfoEXT        aabbBuild                 = {0};
+  GPUAccelerationStructureBuildInfoEXT        tlasBuild                 = {0};
+  GPUAccelerationStructureSizesEXT            aabbSizes                 = {0};
+  GPUAccelerationStructureSizesEXT            tlasSizes                 = {0};
+  GPUAccelerationStructureCreateInfoEXT       structureInfo             = {0};
+  GPUAccelerationStructureInstanceEXT         instance                  = {0};
+  GPUIntersectionFunctionEXT                  computeFunction           = {0};
+  GPUIntersectionFunctionEXT                  renderFunction            = {0};
+  GPUIntersectionFunctionPipelineEXT          computeFunctionInfo       = {0};
+  GPUIntersectionFunctionPipelineEXT          renderFunctionInfo        = {0};
+  GPUComputePipelineCreateInfo                computePipelineInfo       = {0};
+  GPURenderPipelineCreateInfo                 renderPipelineInfo        = {0};
+  GPUIntersectionFunctionTableCreateInfoEXT   computeTableInfo          = {0};
+  GPUIntersectionFunctionTableCreateInfoEXT   renderTableInfo           = {0};
+  GPUColorTargetState                         colorTarget               = {0};
+  GPUBufferCreateInfo                         bufferInfo                = {0};
+  GPUTextureCreateInfo                        textureInfo               = {0};
+  GPUTextureViewCreateInfo                    viewInfo                  = {0};
+  GPURenderPassColorAttachment                colorAttachment           = {0};
+  GPURenderPassCreateInfo                     renderPassInfo            = {0};
+  GPUViewport                                 viewport                  = {0};
+  GPUScissorRect                              scissor                   = {0};
+  GPUQueueSubmitInfo                          submitInfo                = {0};
   GPUFeature                                  feature;
   GPUDevice                                  *device;
   GPUQueue                                   *computeQueue;
   GPUQueue                                   *graphicsQueue;
   GPUShaderLibrary                           *library;
+  GPUShaderLibrary                           *traversalLibrary;
   GPUShaderLayout                            *shaderLayout;
+  GPUBindGroupLayout                         *traversalGroupLayout;
+  GPUPipelineLayout                          *traversalPipelineLayout;
+  GPUBindGroup                               *traversalGroup;
   GPUComputePipeline                         *computePipeline;
   GPURenderPipeline                          *renderPipeline;
   GPUIntersectionFunctionTableEXT            *computeTable;
   GPUIntersectionFunctionTableEXT            *renderTable;
   GPUBuffer                                  *buffer;
+  GPUBuffer                                  *tableBuffer;
+  GPUBuffer                                  *aabbBuffer;
+  GPUBuffer                                  *scratchBuffer;
+  GPUAccelerationStructureEXT                *aabbBlas;
+  GPUAccelerationStructureEXT                *tlas;
   GPUTexture                                 *target;
   GPUTextureView                             *targetView;
   GPUCommandBuffer                           *computeCmdb;
   GPUCommandBuffer                           *renderCmdb;
   GPUComputePassEncoder                      *computePass;
+  GPUAccelerationStructurePassEncoderEXT     *buildPass;
   GPURenderPassEncoder                       *renderPass;
   GPUFence                                   *computeFence;
   GPUFence                                   *renderFence;
   void                                       *bytecode;
   uint64_t                                    bytecodeSize;
+  uint64_t                                    scratchSize;
+  float                                       tableDistance;
+  uint32_t                                    resultValue;
   bool                                        computeSubmitted;
   bool                                        renderSubmitted;
   int                                         ok;
@@ -714,30 +782,43 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
     return 1;
   }
 
-  feature          = GPU_FEATURE_INTERSECTION_FUNCTION_TABLE;
-  device           = NULL;
-  computeQueue     = NULL;
-  graphicsQueue    = NULL;
-  library          = NULL;
-  shaderLayout     = NULL;
-  computePipeline  = NULL;
-  renderPipeline   = NULL;
-  computeTable     = NULL;
-  renderTable      = NULL;
-  buffer           = NULL;
-  target           = NULL;
-  targetView       = NULL;
-  computeCmdb      = NULL;
-  renderCmdb       = NULL;
-  computePass      = NULL;
-  renderPass       = NULL;
-  computeFence     = NULL;
-  renderFence      = NULL;
-  bytecode         = NULL;
-  bytecodeSize     = 0u;
-  computeSubmitted = false;
-  renderSubmitted  = false;
-  ok               = 0;
+  feature                 = GPU_FEATURE_INTERSECTION_FUNCTION_TABLE;
+  device                  = NULL;
+  computeQueue            = NULL;
+  graphicsQueue           = NULL;
+  library                 = NULL;
+  traversalLibrary        = NULL;
+  shaderLayout            = NULL;
+  traversalGroupLayout    = NULL;
+  traversalPipelineLayout = NULL;
+  traversalGroup          = NULL;
+  computePipeline         = NULL;
+  renderPipeline          = NULL;
+  computeTable            = NULL;
+  renderTable             = NULL;
+  buffer                  = NULL;
+  tableBuffer             = NULL;
+  aabbBuffer              = NULL;
+  scratchBuffer           = NULL;
+  aabbBlas                = NULL;
+  tlas                    = NULL;
+  target                  = NULL;
+  targetView              = NULL;
+  computeCmdb             = NULL;
+  renderCmdb              = NULL;
+  computePass             = NULL;
+  buildPass               = NULL;
+  renderPass              = NULL;
+  computeFence            = NULL;
+  renderFence             = NULL;
+  bytecode                = NULL;
+  bytecodeSize            = 0u;
+  scratchSize             = 0u;
+  tableDistance           = 1.0f;
+  resultValue             = 0u;
+  computeSubmitted        = false;
+  renderSubmitted         = false;
+  ok                      = 0;
 
   deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
@@ -777,6 +858,58 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
     goto cleanup;
   }
 
+  traversalLibraryInfo.chain.sType =
+    GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
+  traversalLibraryInfo.chain.structSize = sizeof(traversalLibraryInfo);
+  traversalLibraryInfo.label            = "intersection-function-traversal";
+  traversalLibraryInfo.sourceKind       = GPU_SHADER_SOURCE_MSL_TEXT;
+  traversalLibraryInfo.sourceData       = traversalMSL;
+  traversalLibraryInfo.sourceSize       = sizeof(traversalMSL) - 1u;
+  if (GPUCreateShaderLibrary(device,
+                             &traversalLibraryInfo,
+                             &traversalLibrary) != GPU_OK ||
+      !traversalLibrary) {
+    fprintf(stderr, "intersection-function traversal library failed\n");
+    goto cleanup;
+  }
+
+  traversalLayoutEntries[0].binding     = 0u;
+  traversalLayoutEntries[0].bindingType = GPU_BINDING_STORAGE_BUFFER;
+  traversalLayoutEntries[0].visibility  = GPU_SHADER_STAGE_COMPUTE_BIT;
+  traversalLayoutEntries[0].arrayCount  = 1u;
+  traversalLayoutEntries[1].binding     = 1u;
+  traversalLayoutEntries[1].bindingType =
+    GPU_BINDING_ACCELERATION_STRUCTURE;
+  traversalLayoutEntries[1].visibility = GPU_SHADER_STAGE_COMPUTE_BIT;
+  traversalLayoutEntries[1].arrayCount = 1u;
+  traversalGroupInfo.chain.sType =
+    GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  traversalGroupInfo.chain.structSize = sizeof(traversalGroupInfo);
+  traversalGroupInfo.label            = "intersection-function-traversal";
+  traversalGroupInfo.pEntries         = traversalLayoutEntries;
+  traversalGroupInfo.entryCount       = GPU_ARRAY_LEN(traversalLayoutEntries);
+  if (GPUCreateBindGroupLayout(device,
+                               &traversalGroupInfo,
+                               &traversalGroupLayout) != GPU_OK ||
+      !traversalGroupLayout) {
+    fprintf(stderr, "intersection-function traversal group layout failed\n");
+    goto cleanup;
+  }
+
+  traversalLayoutInfo.chain.sType =
+    GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  traversalLayoutInfo.chain.structSize     = sizeof(traversalLayoutInfo);
+  traversalLayoutInfo.label                = "intersection-function-traversal";
+  traversalLayoutInfo.ppBindGroupLayouts   = &traversalGroupLayout;
+  traversalLayoutInfo.bindGroupLayoutCount = 1u;
+  if (GPUCreatePipelineLayout(device,
+                              &traversalLayoutInfo,
+                              &traversalPipelineLayout) != GPU_OK ||
+      !traversalPipelineLayout) {
+    fprintf(stderr, "intersection-function traversal pipeline layout failed\n");
+    goto cleanup;
+  }
+
   computeFunction.entryPoint      = "constant_hit";
   computeFunction.stage           = GPU_SHADER_STAGE_COMPUTE_BIT;
   computeFunctionInfo.chain.sType =
@@ -789,8 +922,8 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
   computePipelineInfo.chain.structSize = sizeof(computePipelineInfo);
   computePipelineInfo.chain.pNext      = &computeFunctionInfo;
   computePipelineInfo.label            = "intersection-function-table-compute";
-  computePipelineInfo.layout           = shaderLayout->pipelineLayout;
-  computePipelineInfo.library          = library;
+  computePipelineInfo.layout           = traversalPipelineLayout;
+  computePipelineInfo.library          = traversalLibrary;
   computePipelineInfo.entryPoint       = "intersection_table_cs";
   if (GPUCreateComputePipeline(device,
                                &computePipelineInfo,
@@ -865,13 +998,31 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
 
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
-  bufferInfo.label            = "intersection-function-table-buffer";
-  bufferInfo.sizeBytes        = 256u;
-  bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE;
+  bufferInfo.label            = "intersection-function-result";
+  bufferInfo.sizeBytes        = sizeof(resultValue);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE |
+                                GPU_BUFFER_USAGE_COPY_SRC |
+                                GPU_BUFFER_USAGE_COPY_DST;
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer ||
+      GPUQueueWriteBuffer(computeQueue,
+                          buffer,
+                          0u,
+                          &resultValue,
+                          sizeof(resultValue)) != GPU_OK ||
+      !ray_create_buffer(device,
+                         "intersection-function-table-buffer",
+                         sizeof(tableDistance),
+                         GPU_BUFFER_USAGE_STORAGE |
+                           GPU_BUFFER_USAGE_COPY_DST,
+                         &tableBuffer) ||
+      GPUQueueWriteBuffer(computeQueue,
+                          tableBuffer,
+                          0u,
+                          &tableDistance,
+                          sizeof(tableDistance)) != GPU_OK ||
       GPUSetIntersectionFunctionTableBufferEXT(computeTable,
-                                               1u,
-                                               buffer,
+                                               0u,
+                                               tableBuffer,
                                                0u) != GPU_OK ||
       GPUSetIntersectionFunctionTableBufferEXT(renderTable,
                                                2u,
@@ -881,17 +1032,155 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
     goto cleanup;
   }
 
+  if (!ray_create_buffer(
+        device,
+        "intersection-function-aabb",
+        sizeof(aabbs),
+        GPU_BUFFER_USAGE_COPY_DST |
+          GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT,
+        &aabbBuffer) ||
+      GPUQueueWriteBuffer(computeQueue,
+                          aabbBuffer,
+                          0u,
+                          aabbs,
+                          sizeof(aabbs)) != GPU_OK) {
+    fprintf(stderr, "intersection-function AABB buffer setup failed\n");
+    goto cleanup;
+  }
+
+  aabbGeometry.type         = GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT;
+  aabbGeometry.aabbs.buffer = aabbBuffer;
+  aabbGeometry.aabbs.count  = 1u;
+  aabbGeometry.aabbs.stride = sizeof(aabbs);
+  aabbGeometry.aabbs.flags  =
+    GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT;
+  aabbBuild.chain.sType =
+    GPU_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_INFO_EXT;
+  aabbBuild.chain.structSize          = sizeof(aabbBuild);
+  aabbBuild.label                     = "intersection-function-aabb-blas";
+  aabbBuild.type                      =
+    GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT;
+  aabbBuild.mode                      = GPU_ACCELERATION_STRUCTURE_BUILD_EXT;
+  aabbBuild.bottomLevel.pGeometries   = &aabbGeometry;
+  aabbBuild.bottomLevel.geometryCount = 1u;
+  if (GPUGetAccelerationStructureSizesEXT(device,
+                                          &aabbBuild,
+                                          &aabbSizes) != GPU_OK) {
+    fprintf(stderr, "intersection-function AABB BLAS size query failed\n");
+    goto cleanup;
+  }
+
+  structureInfo.chain.sType =
+    GPU_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_EXT;
+  structureInfo.chain.structSize = sizeof(structureInfo);
+  structureInfo.label            = "intersection-function-aabb-blas";
+  structureInfo.type             =
+    GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT;
+  structureInfo.sizeBytes = aabbSizes.accelerationStructureSize;
+  if (GPUCreateAccelerationStructureEXT(device,
+                                        &structureInfo,
+                                        &aabbBlas) != GPU_OK ||
+      !aabbBlas) {
+    fprintf(stderr, "intersection-function AABB BLAS create failed\n");
+    goto cleanup;
+  }
+
+  instance.structure = aabbBlas;
+  memcpy(instance.transform, identity, sizeof(identity));
+  instance.flags = GPU_ACCELERATION_STRUCTURE_INSTANCE_DISABLE_CULL_BIT_EXT;
+  tlasBuild.chain.sType =
+    GPU_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_INFO_EXT;
+  tlasBuild.chain.structSize        = sizeof(tlasBuild);
+  tlasBuild.label                   = "intersection-function-tlas";
+  tlasBuild.type                    = GPU_ACCELERATION_STRUCTURE_TOP_LEVEL_EXT;
+  tlasBuild.mode                    = GPU_ACCELERATION_STRUCTURE_BUILD_EXT;
+  tlasBuild.topLevel.pInstances     = &instance;
+  tlasBuild.topLevel.instanceCount  = 1u;
+  if (GPUGetAccelerationStructureSizesEXT(device,
+                                          &tlasBuild,
+                                          &tlasSizes) != GPU_OK) {
+    fprintf(stderr, "intersection-function TLAS size query failed\n");
+    goto cleanup;
+  }
+
+  structureInfo.label     = "intersection-function-tlas";
+  structureInfo.type      = GPU_ACCELERATION_STRUCTURE_TOP_LEVEL_EXT;
+  structureInfo.sizeBytes = tlasSizes.accelerationStructureSize;
+  if (GPUCreateAccelerationStructureEXT(device,
+                                        &structureInfo,
+                                        &tlas) != GPU_OK ||
+      !tlas) {
+    fprintf(stderr, "intersection-function TLAS create failed\n");
+    goto cleanup;
+  }
+
+  scratchSize = ray_max_u64(aabbSizes.buildScratchSize,
+                            tlasSizes.buildScratchSize);
+  if (!ray_create_buffer(
+        device,
+        "intersection-function-scratch",
+        scratchSize,
+        GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT,
+        &scratchBuffer)) {
+    fprintf(stderr, "intersection-function scratch buffer setup failed\n");
+    goto cleanup;
+  }
+
+  traversalEntries[0].binding           = 0u;
+  traversalEntries[0].bindingType       = GPU_BINDING_STORAGE_BUFFER;
+  traversalEntries[0].buffer.buffer     = buffer;
+  traversalEntries[0].buffer.size       = sizeof(resultValue);
+  traversalEntries[1].binding           = 1u;
+  traversalEntries[1].bindingType       = GPU_BINDING_ACCELERATION_STRUCTURE;
+  traversalEntries[1].accelerationStructure = tlas;
+  traversalBindInfo.chain.sType         =
+    GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  traversalBindInfo.chain.structSize = sizeof(traversalBindInfo);
+  traversalBindInfo.label            = "intersection-function-traversal";
+  traversalBindInfo.layout           = traversalGroupLayout;
+  traversalBindInfo.pEntries         = traversalEntries;
+  traversalBindInfo.entryCount       = GPU_ARRAY_LEN(traversalEntries);
+  if (GPUCreateBindGroup(device,
+                         &traversalBindInfo,
+                         &traversalGroup) != GPU_OK ||
+      !traversalGroup) {
+    fprintf(stderr, "intersection-function traversal bind group failed\n");
+    goto cleanup;
+  }
+
   if (GPUAcquireCommandBuffer(computeQueue,
                               "intersection-function-table",
                               &computeCmdb) != GPU_OK ||
       !computeCmdb ||
-      !(computePass = GPUBeginComputePass(computeCmdb,
-                                          "intersection-function-table"))) {
+      !(buildPass = GPUBeginAccelerationStructurePassEXT(
+          computeCmdb,
+          "intersection-function-build"
+        )) ||
+      GPUBuildAccelerationStructureEXT(buildPass,
+                                       aabbBlas,
+                                       &aabbBuild,
+                                       scratchBuffer,
+                                       0u) != GPU_OK ||
+      GPUBuildAccelerationStructureEXT(buildPass,
+                                       tlas,
+                                       &tlasBuild,
+                                       scratchBuffer,
+                                       0u) != GPU_OK) {
+    fprintf(stderr, "intersection-function acceleration build failed\n");
+    goto cleanup;
+  }
+  GPUEndAccelerationStructurePassEXT(buildPass);
+  buildPass = NULL;
+
+  computePass = GPUBeginComputePass(computeCmdb,
+                                    "intersection-function-traversal");
+  if (!computePass) {
     fprintf(stderr, "intersection-function-table compute pass failed\n");
     goto cleanup;
   }
   GPUBindComputePipeline(computePass, computePipeline);
-  GPUBindComputeIntersectionFunctionTableEXT(computePass, 1u, computeTable);
+  GPUBindComputeGroup(computePass, 0u, traversalGroup, 0u, NULL);
+  GPUBindComputeIntersectionFunctionTableEXT(computePass, 2u, computeTable);
   GPUDispatch(computePass, 1u, 1u, 1u);
   GPUEndComputePass(computePass);
   computePass = NULL;
@@ -913,6 +1202,17 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
     goto cleanup;
   }
   computeCmdb = NULL;
+  if (GPUQueueReadBuffer(computeQueue,
+                         buffer,
+                         0u,
+                         &resultValue,
+                         sizeof(resultValue)) != GPU_OK ||
+      resultValue != 1u) {
+    fprintf(stderr,
+            "intersection-function traversal mismatch: %u\n",
+            resultValue);
+    goto cleanup;
+  }
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
@@ -992,18 +1292,28 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
 cleanup:
   if (renderPass) GPUEndRenderPass(renderPass);
   if (computePass) GPUEndComputePass(computePass);
+  if (buildPass) GPUEndAccelerationStructurePassEXT(buildPass);
   if (renderCmdb && !renderSubmitted) GPUDiscardCommandBuffer(renderCmdb);
   if (computeCmdb && !computeSubmitted) GPUDiscardCommandBuffer(computeCmdb);
   GPUDestroyFence(renderFence);
   GPUDestroyFence(computeFence);
   GPUDestroyTextureView(targetView);
   GPUDestroyTexture(target);
-  GPUDestroyBuffer(buffer);
+  GPUDestroyBindGroup(traversalGroup);
   GPUDestroyIntersectionFunctionTableEXT(renderTable);
   GPUDestroyIntersectionFunctionTableEXT(computeTable);
+  GPUDestroyBuffer(tableBuffer);
+  GPUDestroyBuffer(buffer);
+  GPUDestroyBuffer(scratchBuffer);
+  GPUDestroyBuffer(aabbBuffer);
+  GPUDestroyAccelerationStructureEXT(tlas);
+  GPUDestroyAccelerationStructureEXT(aabbBlas);
   GPUDestroyRenderPipeline(renderPipeline);
   GPUDestroyComputePipeline(computePipeline);
+  GPUDestroyPipelineLayout(traversalPipelineLayout);
+  GPUDestroyBindGroupLayout(traversalGroupLayout);
   GPUDestroyShaderLayout(shaderLayout);
+  GPUDestroyShaderLibrary(traversalLibrary);
   GPUDestroyShaderLibrary(library);
   free(bytecode);
   GPUDestroyDevice(device);
