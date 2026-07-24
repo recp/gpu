@@ -183,21 +183,21 @@ static int
 check_reflected_pipeline_entry_stages(GPUDevice *device,
                                       GPUShaderLibrary *library,
                                       GPUPipelineLayout *layout) {
-  GPUComputePipelineCreateInfo computeInfo = {0};
-  GPURenderPipelineCreateInfo renderInfo = {0};
-  GPUPipelineLayoutCreateInfo emptyLayoutInfo = {0};
-  GPURenderPipeline *pipeline = NULL;
-  GPUPipelineLayout *emptyLayout = NULL;
-  GPUDevice *libraryDevice;
-  GPUColorTargetState colorTarget = {0};
-  GPUVertexAttribute attrs[2] = {{0}};
-  GPUVertexBufferLayout vertexLayout = {0};
+  GPURenderPipeline            *pipeline       = NULL;
+  GPUPipelineLayout            *emptyLayout    = NULL;
+  GPUDevice                    *libraryDevice;
+  GPUComputePipelineCreateInfo  computeInfo    = {0};
+  GPURenderPipelineCreateInfo   renderInfo     = {0};
+  GPUPipelineLayoutCreateInfo   emptyLayoutInfo = {0};
+  GPUColorTargetState           colorTarget    = {0};
+  GPUVertexAttribute            attr           = {0};
+  GPUVertexBufferLayout         vertexLayout   = {0};
 
-  computeInfo.chain.sType = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  computeInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
   computeInfo.chain.structSize = sizeof(computeInfo);
-  computeInfo.label = "api-reflection-compute-stage";
-  computeInfo.layout = layout;
-  computeInfo.library = library;
+  computeInfo.label            = "api-reflection-compute-stage";
+  computeInfo.layout           = layout;
+  computeInfo.library          = library;
 
   computeInfo.entryPoint = "reflect_vs";
   if (!expect_reflected_compute_pipeline_error(
@@ -215,33 +215,31 @@ check_reflected_pipeline_entry_stages(GPUDevice *device,
     return 0;
   }
 
-  colorTarget.format = GPU_FORMAT_BGRA8_UNORM;
-  attrs[0].shaderLocation = 0u;
-  attrs[0].format = GPU_VERTEX_FORMAT_FLOAT32X2;
-  attrs[0].offset = 0u;
-  attrs[1].shaderLocation = 1u;
-  attrs[1].format = GPU_VERTEX_FORMAT_FLOAT32X2;
-  attrs[1].offset = 8u;
-  vertexLayout.strideBytes = 16u;
-  vertexLayout.stepMode = GPU_VERTEX_STEP_MODE_VERTEX;
-  vertexLayout.attributeCount = (uint32_t)GPU_ARRAY_LEN(attrs);
-  vertexLayout.pAttributes = attrs;
+  colorTarget.format              = GPU_FORMAT_BGRA8_UNORM;
+  attr.shaderLocation            = 0u;
+  attr.format                    = GPU_VERTEX_FORMAT_FLOAT32X2;
+  attr.offset                    = 0u;
+  vertexLayout.strideBytes       = 16u;
+  vertexLayout.stepMode          = GPU_VERTEX_STEP_MODE_VERTEX;
+  vertexLayout.attributeCount    = 1u;
+  vertexLayout.pAttributes       = &attr;
 
-  renderInfo.chain.sType = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
-  renderInfo.chain.structSize = sizeof(renderInfo);
-  renderInfo.label = "api-reflection-render-stage";
-  renderInfo.layout = layout;
-  renderInfo.library = library;
-  renderInfo.vertexEntry = "reflect_vs";
-  renderInfo.fragmentEntry = "reflect_fs";
+  renderInfo.chain.sType              =
+    GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  renderInfo.chain.structSize         = sizeof(renderInfo);
+  renderInfo.label                    = "api-reflection-render-stage";
+  renderInfo.layout                   = layout;
+  renderInfo.library                  = library;
+  renderInfo.vertexEntry              = "reflect_vs";
+  renderInfo.fragmentEntry            = "reflect_fs";
   renderInfo.vertex.bufferLayoutCount = 1u;
-  renderInfo.vertex.pBufferLayouts = &vertexLayout;
-  renderInfo.colorTargetCount = 1u;
-  renderInfo.pColorTargets = &colorTarget;
-  renderInfo.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  renderInfo.cullMode = GPU_CULL_MODE_NONE;
-  renderInfo.frontFace = GPU_FRONT_FACE_CCW;
-  renderInfo.multisample.sampleCount = 1u;
+  renderInfo.vertex.pBufferLayouts    = &vertexLayout;
+  renderInfo.colorTargetCount         = 1u;
+  renderInfo.pColorTargets            = &colorTarget;
+  renderInfo.primitiveTopology        = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  renderInfo.cullMode                 = GPU_CULL_MODE_NONE;
+  renderInfo.frontFace                = GPU_FRONT_FACE_CCW;
+  renderInfo.multisample.sampleCount  = 1u;
 
   libraryDevice    = library->_device;
   library->_device = NULL;
