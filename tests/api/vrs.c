@@ -74,18 +74,21 @@ gpu_vrsExecutionRate(const GPUVRSCapabilitiesEXT *caps) {
 }
 
 static int
-gpu_vrsPixelsMatch(const uint8_t *pixels, uint32_t width) {
-  static const uint32_t points[][2] = {
-    {16u, 16u},
-    {48u, 16u},
-    {16u, 48u},
-    {48u, 48u}
+gpu_vrsPixelsMatch(const uint8_t *pixels,
+                   uint32_t       width,
+                   uint32_t       height,
+                   uint32_t       bytesPerRow) {
+  uint32_t points[][2] = {
+    {width / 4u,       height / 4u},
+    {width * 3u / 4u, height / 4u},
+    {width / 4u,       height * 3u / 4u},
+    {width * 3u / 4u, height * 3u / 4u}
   };
 
   for (uint32_t i = 0u; i < GPU_ARRAY_LEN(points); i++) {
     const uint8_t *pixel;
 
-    pixel = &pixels[(points[i][1] * width + points[i][0]) * 4u];
+    pixel = &pixels[points[i][1] * bytesPerRow + points[i][0] * 4u];
     if (pixel[0] < 250u || pixel[1] > 4u ||
         pixel[2] > 4u || pixel[3] < 250u) {
       return 0;
@@ -95,9 +98,10 @@ gpu_vrsPixelsMatch(const uint8_t *pixels, uint32_t width) {
 }
 
 static int
-gpu_vrsExecutionSmoke(GPUDevice                    *device,
-                      const GPUVRSCapabilitiesEXT *caps,
-                      const char                  *bytecodePath) {
+gpu_vrsExecutionSmoke(GPUDevice                      *device,
+                      const GPUVRSCapabilitiesEXT   *caps,
+                      GPURasterizationRateMapEXT    *rateMap,
+                      const char                    *bytecodePath) {
   enum {
     VRS_TARGET_WIDTH  = 64u,
     VRS_TARGET_HEIGHT = 64u,
@@ -129,6 +133,7 @@ gpu_vrsExecutionSmoke(GPUDevice                    *device,
   GPUBufferCreateInfo           bufferInfo     = {0};
   GPUTextureCreateInfo          textureInfo    = {0};
   GPUTextureViewCreateInfo      viewInfo       = {0};
+  GPURasterizationRateMapRenderPassEXT rateMapPass = {0};
   GPUTextureWriteRegion         writeRegion    = {0};
   GPUShadingRateAttachmentEXT   shadingRate    = {0};
   GPURenderPassColorAttachment  color          = {0};
@@ -146,10 +151,14 @@ gpu_vrsExecutionSmoke(GPUDevice                    *device,
   uint64_t                      bytecodeSize;
   uint32_t                      rateWidth;
   uint32_t                      rateHeight;
+  uint32_t                      targetWidth;
+  uint32_t                      targetHeight;
+  uint32_t                      targetBytesPerRow;
+  uint64_t                      targetBytes;
   int                           ok;
 
   if ((caps->modes & (GPU_VRS_DRAW_RATE_BIT_EXT |
-                      GPU_VRS_ATTACHMENT_BIT_EXT)) == 0u) {
+                      GPU_VRS_ATTACHMENT_BIT_EXT)) == 0u && !rateMap) {
     return 1;
   }
 
@@ -167,10 +176,32 @@ gpu_vrsExecutionSmoke(GPUDevice                    *device,
   renderPass     = NULL;
   copyPass       = NULL;
   fence          = NULL;
+  bytecode       = NULL;
   bytecodeSize   = 0u;
-  bytecode       = gpu_test_read_file(bytecodePath, &bytecodeSize);
   rateWidth      = 0u;
   rateHeight     = 0u;
+  targetWidth    = VRS_TARGET_WIDTH;
+  targetHeight   = VRS_TARGET_HEIGHT;
+  if (rateMap) {
+    GPUExtent2D physicalSize;
+
+    physicalSize = (GPUExtent2D){0};
+    if (GPUGetRasterizationRateMapPhysicalSizeEXT(rateMap,
+                                                   0u,
+                                                   &physicalSize) != GPU_OK ||
+        physicalSize.width == 0u ||
+        physicalSize.height == 0u ||
+        physicalSize.width > VRS_TARGET_WIDTH ||
+        physicalSize.height > VRS_TARGET_HEIGHT) {
+      return 0;
+    }
+    targetWidth  = physicalSize.width;
+    targetHeight = physicalSize.height;
+  }
+  targetBytesPerRow = (targetWidth * 4u + 255u) & ~255u;
+  targetBytes       = (uint64_t)targetBytesPerRow * (targetHeight - 1u) +
+                      targetWidth * 4u;
+  bytecode = gpu_test_read_file(bytecodePath, &bytecodeSize);
   ok = queue && bytecode &&
        GPUCreateShaderLibraryFromUSL(device,
                                      bytecode,
@@ -237,8 +268,8 @@ gpu_vrsExecutionSmoke(GPUDevice                    *device,
   textureInfo.label            = "api-vrs-target";
   textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
   textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
-  textureInfo.width            = VRS_TARGET_WIDTH;
-  textureInfo.height           = VRS_TARGET_HEIGHT;
+  textureInfo.width            = targetWidth;
+  textureInfo.height           = targetHeight;
   textureInfo.depthOrLayers    = 1u;
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
@@ -307,10 +338,26 @@ gpu_vrsExecutionSmoke(GPUDevice                    *device,
   color.clearColor.float32[3]   = 1.0f;
   passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   passInfo.chain.structSize     = sizeof(passInfo);
-  passInfo.chain.pNext          = rateView ? &shadingRate.chain : NULL;
+  rateMapPass.chain.sType =
+    GPU_STRUCTURE_TYPE_RASTERIZATION_RATE_MAP_RENDER_PASS_EXT;
+  rateMapPass.chain.structSize = sizeof(rateMapPass);
+  rateMapPass.map              = rateMap;
+  passInfo.chain.pNext         = rateView
+                                   ? &shadingRate.chain
+                                   : rateMap
+                                       ? &rateMapPass.chain
+                                       : NULL;
   passInfo.label                = "api-vrs-execution";
   passInfo.colorAttachmentCount = 1u;
   passInfo.pColorAttachments    = &color;
+  if (rateMap) {
+    rateMapPass.map = NULL;
+    if (GPUBeginRenderPass(cmdb, &passInfo)) {
+      ok = 0;
+      goto cleanup;
+    }
+    rateMapPass.map = rateMap;
+  }
   renderPass = GPUBeginRenderPass(cmdb, &passInfo);
   if (!renderPass) {
     ok = 0;
@@ -356,10 +403,10 @@ gpu_vrsExecutionSmoke(GPUDevice                    *device,
     ok = 0;
     goto cleanup;
   }
-  copyRegion.bytesPerRow        = VRS_TARGET_WIDTH * 4u;
-  copyRegion.rowsPerImage       = VRS_TARGET_HEIGHT;
-  copyRegion.texture.width      = VRS_TARGET_WIDTH;
-  copyRegion.texture.height     = VRS_TARGET_HEIGHT;
+  copyRegion.bytesPerRow        = targetBytesPerRow;
+  copyRegion.rowsPerImage       = targetHeight;
+  copyRegion.texture.width      = targetWidth;
+  copyRegion.texture.height     = targetHeight;
   copyRegion.texture.depth      = 1u;
   copyRegion.texture.layerCount = 1u;
   GPUCopyTextureToBuffer(copyPass, target, readbackBuffer, &copyRegion);
@@ -382,8 +429,11 @@ gpu_vrsExecutionSmoke(GPUDevice                    *device,
                                 readbackBuffer,
                                 0u,
                                 pixels,
-                                sizeof(pixels)) == GPU_OK &&
-       gpu_vrsPixelsMatch(pixels, VRS_TARGET_WIDTH);
+                                targetBytes) == GPU_OK &&
+       gpu_vrsPixelsMatch(pixels,
+                          targetWidth,
+                          targetHeight,
+                          targetBytesPerRow);
 
 cleanup:
   if (copyPass) GPUEndCopyPass(copyPass);
@@ -498,11 +548,6 @@ gpu_test_vrs(GPUAdapter *adapter,
     goto cleanup;
   }
 
-  if (!gpu_vrsExecutionSmoke(device, &caps, bytecodePath)) {
-    fprintf(stderr, "VRS execution smoke failed\n");
-    goto cleanup;
-  }
-
   layer.pHorizontal     = horizontal;
   layer.pVertical       = vertical;
   layer.horizontalCount = (uint32_t)GPU_ARRAY_LEN(horizontal);
@@ -521,7 +566,10 @@ gpu_test_vrs(GPUAdapter *adapter,
       fprintf(stderr, "VRS rate map accepted by a different native mode\n");
       goto cleanup;
     }
-    ok = 1;
+    ok = gpu_vrsExecutionSmoke(device, &caps, NULL, bytecodePath);
+    if (!ok) {
+      fprintf(stderr, "VRS execution smoke failed\n");
+    }
     goto cleanup;
   }
   if (result != GPU_OK || !map ||
@@ -580,7 +628,10 @@ gpu_test_vrs(GPUAdapter *adapter,
     fprintf(stderr, "VRS rate map parameter copy failed\n");
     goto cleanup;
   }
-  ok = 1;
+  ok = gpu_vrsExecutionSmoke(device, &caps, map, bytecodePath);
+  if (!ok) {
+    fprintf(stderr, "VRS rate-map execution smoke failed\n");
+  }
 
 cleanup:
   GPUDestroyBuffer(parameterBuffer);

@@ -161,6 +161,12 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
       shadingRate) {
     return NULL;
   }
+  if (rateMap &&
+      (!rateMap->map ||
+       rateMap->map->device != gpuCommandBufferDevice(cmdb) ||
+       !rateMap->map->_priv)) {
+    return NULL;
+  }
 
   commandState = mt_commandBuffer(cmdb);
   if (!commandState) {
