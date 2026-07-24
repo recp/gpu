@@ -1,0 +1,29 @@
+struct SamplerFeedbackOut {
+  position: float4 #position
+  uv:       float2
+}
+
+vert sampler_feedback_vs(vertexId: uint #vertex_id) -> SamplerFeedbackOut {
+  var out: SamplerFeedbackOut
+
+  if (vertexId == 0) {
+    out.position = float4(-1.0, -1.0, 0.0, 1.0)
+    out.uv       = float2(0.0, 1.0)
+  } else if (vertexId == 1) {
+    out.position = float4(3.0, -1.0, 0.0, 1.0)
+    out.uv       = float2(2.0, 1.0)
+  } else {
+    out.position = float4(-1.0, 3.0, 0.0, 1.0)
+    out.uv       = float2(0.0, -1.0)
+  }
+  return out
+}
+
+frag sampler_feedback_fs(
+    input:        SamplerFeedbackOut #stage_in,
+    colorTex:     texture2d<float> #texture(0) #group(1),
+    colorSampler: sampler #sampler(1) #group(1),
+    feedback:     feedback2d<min_mip> #feedback(2) #group(1)) -> float4 {
+  feedback.write_level(colorTex, colorSampler, input.uv, 1.0)
+  return colorTex.sample(colorSampler, input.uv)
+}

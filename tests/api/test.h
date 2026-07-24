@@ -48,6 +48,7 @@ typedef struct GPUApiTestContext {
   const char  *intersectionFunctionBytecodePath;
   const char  *rayPipelineBytecodePath;
   const char  *executionGraphBytecodePath;
+  const char  *samplerFeedbackBytecodePath;
   const char  *shaderSubgroupClockBytecodePath;
   const char  *shaderDeviceClockBytecodePath;
   const char  *computeDerivativeQuadsBytecodePath;
@@ -116,7 +117,9 @@ int gpu_test_atomic64(GPUAdapter *adapter, const char *bytecodePath);
 int gpu_test_vrs(GPUAdapter *adapter,
                  GPUDevice  *defaultDevice,
                  const char *bytecodePath);
-int gpu_test_sampler_feedback(GPUAdapter *adapter, GPUDevice *defaultDevice);
+int gpu_test_sampler_feedback(GPUAdapter *adapter,
+                              GPUDevice  *defaultDevice,
+                              const char *bytecodePath);
 int gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath);
 int gpu_test_intersection_function_table(GPUAdapter *adapter,
                                          const char *bytecodePath);

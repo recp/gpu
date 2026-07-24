@@ -229,7 +229,9 @@ static int
 run_sampler_feedback(void *ctx) {
   GPUApiTestContext *testCtx = ctx;
 
-  return gpu_test_sampler_feedback(testCtx->adapter, testCtx->device);
+  return gpu_test_sampler_feedback(testCtx->adapter,
+                                   testCtx->device,
+                                   testCtx->samplerFeedbackBytecodePath);
 }
 
 static int
@@ -402,6 +404,8 @@ main(int argc, char **argv) {
     getenv("GPU_INTERSECTION_FUNCTION_USL_PATH");
   ctx.rayPipelineBytecodePath        = getenv("GPU_RAY_PIPELINE_USL_PATH");
   ctx.executionGraphBytecodePath     = getenv("GPU_EXECUTION_GRAPH_USL_PATH");
+  ctx.samplerFeedbackBytecodePath    =
+    getenv("GPU_SAMPLER_FEEDBACK_USL_PATH");
   ctx.shaderSubgroupClockBytecodePath =
     getenv("GPU_SHADER_SUBGROUP_CLOCK_USL_PATH");
   ctx.shaderDeviceClockBytecodePath =
