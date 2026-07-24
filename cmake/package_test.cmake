@@ -42,6 +42,9 @@ execute_process(
 if(result)
   message(FATAL_ERROR "GPU package installation failed: ${result}")
 endif()
+if(NOT EXISTS "${package_prefix}/share/gpu/LICENSE")
+  message(FATAL_ERROR "GPU package license was not installed")
+endif()
 
 execute_process(
   COMMAND "${CMAKE_COMMAND}"
