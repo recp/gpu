@@ -135,6 +135,7 @@ gpu_test_execution_graph(GPUAdapter *adapter, const char *bytecodePath) {
   GPUExecutionGraphMemoryRequirementsEXT      requirements = {0};
   GPUExecutionGraphEntryEXT                   entry        = {0};
   GPUExecutionGraphInputEXT                   input        = {0};
+  GPUExecutionGraphBufferInputEXT             bufferInput  = {0};
   GPUBufferCreateInfo                         bufferInfo   = {0};
   GPUBindGroupEntry                           groupEntry   = {0};
   GPUBindGroupCreateInfo                      groupInfo    = {0};
@@ -147,12 +148,15 @@ gpu_test_execution_graph(GPUAdapter *adapter, const char *bytecodePath) {
   GPUExecutionGraphEXT                       *graph        = NULL;
   GPUExecutionGraphInstanceEXT               *instance     = NULL;
   GPUBuffer                                  *outputBuffer = NULL;
+  GPUBuffer                                  *inputBuffer  = NULL;
   GPUBindGroup                               *group        = NULL;
   GPUCommandBuffer                           *cmdb         = NULL;
   GPUComputePassEncoder                      *pass         = NULL;
   GPUFence                                   *fence        = NULL;
   void                                       *bytecode     = NULL;
+  void                                       *recordData   = NULL;
   uint64_t                                    bytecodeSize = 0u;
+  uint64_t                                    recordSize   = 0u;
   uint32_t                                    output       = 0u;
   int                                         ok           = 0;
 
@@ -256,6 +260,34 @@ gpu_test_execution_graph(GPUAdapter *adapter, const char *bytecodePath) {
     goto cleanup;
   }
 
+  recordSize = entry.recordSizeBytes;
+  if (recordSize < entry.recordAlignmentBytes) {
+    recordSize = entry.recordAlignmentBytes;
+  }
+  if (recordSize == 0u) {
+    recordSize = 1u;
+  }
+  if (recordSize > SIZE_MAX ||
+      !(recordData = calloc(1u, (size_t)recordSize))) {
+    fprintf(stderr, "execution-graph input record allocation failed\n");
+    goto cleanup;
+  }
+  bufferInfo.label     = "execution-graph-input";
+  bufferInfo.sizeBytes = recordSize;
+  bufferInfo.usage     = GPU_BUFFER_USAGE_COPY_DST |
+                         GPU_BUFFER_USAGE_INDIRECT |
+                         GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT;
+  if (GPUCreateBuffer(device, &bufferInfo, &inputBuffer) != GPU_OK ||
+      !inputBuffer ||
+      GPUQueueWriteBuffer(queue,
+                          inputBuffer,
+                          0u,
+                          recordData,
+                          recordSize) != GPU_OK) {
+    fprintf(stderr, "execution-graph input buffer setup failed\n");
+    goto cleanup;
+  }
+
   if (GPUAcquireCommandBuffer(queue, "execution-graph", &cmdb) != GPU_OK ||
       !cmdb || !(pass = GPUBeginComputePass(cmdb, "execution-graph"))) {
     fprintf(stderr, "execution-graph command setup failed\n");
@@ -296,6 +328,51 @@ gpu_test_execution_graph(GPUAdapter *adapter, const char *bytecodePath) {
     fprintf(stderr, "execution-graph output mismatch: 0x%08x\n", output);
     goto cleanup;
   }
+
+  output = 0u;
+  if (GPUQueueWriteBuffer(queue,
+                          outputBuffer,
+                          0u,
+                          &output,
+                          sizeof(output)) != GPU_OK ||
+      GPUAcquireCommandBuffer(queue,
+                              "execution-graph-buffer-input",
+                              &cmdb) != GPU_OK ||
+      !cmdb ||
+      !(pass = GPUBeginComputePass(cmdb,
+                                   "execution-graph-buffer-input"))) {
+    fprintf(stderr, "execution-graph buffer command setup failed\n");
+    goto cleanup;
+  }
+  GPUBindExecutionGraphEXT(pass, graph);
+  GPUBindComputeGroup(pass, 0u, group, 0u, NULL);
+  bufferInput.records     = inputBuffer;
+  bufferInput.entry       = entry;
+  bufferInput.recordCount = 1u;
+  GPUDispatchExecutionGraphBufferEXT(pass, instance, 1u, &bufferInput);
+  GPUEndComputePass(pass);
+  pass = NULL;
+
+  submitList[0] = cmdb;
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
+      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+    cmdb = NULL;
+    fprintf(stderr, "execution-graph buffer submit failed\n");
+    goto cleanup;
+  }
+  cmdb = NULL;
+
+  if (GPUQueueReadBuffer(queue,
+                         outputBuffer,
+                         0u,
+                         &output,
+                         sizeof(output)) != GPU_OK ||
+      output != expected) {
+    fprintf(stderr,
+            "execution-graph buffer output mismatch: 0x%08x\n",
+            output);
+    goto cleanup;
+  }
   ok = 1;
 
 cleanup:
@@ -303,8 +380,10 @@ cleanup:
     GPUEndComputePass(pass);
   }
   free(bytecode);
+  free(recordData);
   GPUDestroyFence(fence);
   GPUDestroyBindGroup(group);
+  GPUDestroyBuffer(inputBuffer);
   GPUDestroyBuffer(outputBuffer);
   GPUDestroyExecutionGraphInstanceEXT(instance);
   GPUDestroyExecutionGraphEXT(graph);
