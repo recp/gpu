@@ -465,9 +465,33 @@ gpuShaderEntryBit(const GPUShaderLibrary *library, const char *entryPoint) {
     return 0u;
   }
   index = entry - list->entries;
-  return index >= 0 && index < USL_RUNTIME_MAX_ENTRY_POINTS
-           ? UINT64_C(1) << (uint32_t)index
-           : 0u;
+  if (index < 0 ||
+      index >= (ptrdiff_t)USL_RUNTIME_MAX_ENTRY_POINTS) {
+    return 0u;
+  }
+  return UINT64_C(1) << (uint32_t)index;
+}
+
+GPU_HIDE
+uint32_t
+gpuShaderWGSLStaticGroups(const GPUShaderLibrary *library,
+                          uint64_t                entryMask) {
+  const GPUShaderStaticSamplerInfo *samplers;
+  uint32_t                          samplerCount;
+  uint32_t                          groupMask;
+
+  samplers  = gpuGetShaderLibraryStaticSamplers(library, &samplerCount);
+  groupMask = 0u;
+  for (uint32_t i = 0u; samplers && i < samplerCount; i++) {
+    if ((samplers[i].entryMask & entryMask) == 0u) {
+      continue;
+    }
+    if (samplers[i].wgslGroup >= GPU_ENCODER_MAX_BIND_GROUPS) {
+      return UINT32_MAX;
+    }
+    groupMask |= 1u << samplers[i].wgslGroup;
+  }
+  return groupMask;
 }
 
 GPU_HIDE

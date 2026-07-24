@@ -210,6 +210,7 @@ GPUResult
 gpu_webgpuCreatePipelineLayout(GPUDevice               *device,
                                GPUPipelineLayout       *logicalLayout,
                                uint32_t                 requiredGroupMask,
+                               uint32_t                 automaticGroupMask,
                                GPUPipelineLayoutWebGPU *outLayout);
 
 GPUResult

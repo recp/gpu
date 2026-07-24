@@ -208,8 +208,12 @@ webgpu_createPipeline(GPUDevice                         *device,
   GPUDeviceWebGPU             *native;
   GPURenderPipelineWebGPU     *state;
   WGPUShaderModule             module;
+  uint64_t                     entryMask;
+  uint64_t                     fragmentEntryMask;
+  uint64_t                     vertexEntryMask;
   uint32_t                     attributeCount;
   uint32_t                     attributeCursor;
+  uint32_t                     automaticGroupMask;
 
   native = gpu_webgpuDevice(device);
   module = info && info->library ? info->library->_priv : NULL;
@@ -299,9 +303,22 @@ webgpu_createPipeline(GPUDevice                         *device,
     free(vertexAttributes);
     return GPU_ERROR_OUT_OF_MEMORY;
   }
+  vertexEntryMask   = gpuShaderEntryBit(info->library, info->vertexEntry);
+  fragmentEntryMask = gpuShaderEntryBit(info->library, info->fragmentEntry);
+  entryMask          = vertexEntryMask | fragmentEntryMask;
+  automaticGroupMask = gpuShaderWGSLStaticGroups(info->library, entryMask);
+  if (vertexEntryMask == 0u || fragmentEntryMask == 0u ||
+      automaticGroupMask == UINT32_MAX) {
+    free(state);
+    free(vertexBuffers);
+    free(vertexAttributes);
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  automaticGroupMask &= ~requiredBindGroupMask;
   if (gpu_webgpuCreatePipelineLayout(device,
                                      info->layout,
                                      requiredBindGroupMask,
+                                     automaticGroupMask,
                                      &state->layout) != GPU_OK) {
     free(state);
     free(vertexBuffers);

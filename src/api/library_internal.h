@@ -176,6 +176,11 @@ uint64_t
 gpuShaderEntryBit(const GPUShaderLibrary *library, const char *entryPoint);
 
 GPU_HIDE
+uint32_t
+gpuShaderWGSLStaticGroups(const GPUShaderLibrary *library,
+                          uint64_t                entryMask);
+
+GPU_HIDE
 int
 gpuStaticSamplerDescIsValid(const GPUStaticSamplerDesc *desc);
 

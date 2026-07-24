@@ -21,6 +21,8 @@ webgpu_createComputePipeline(GPUDevice                          *device,
     WGPU_COMPUTE_PIPELINE_DESCRIPTOR_INIT;
   GPUComputePipelineWebGPU *state;
   GPUDeviceWebGPU          *native;
+  uint64_t                  entryMask;
+  uint32_t                  automaticGroupMask;
 
   native = gpu_webgpuDevice(device);
   if (!native || !native->device || !info || !info->library ||
@@ -34,9 +36,17 @@ webgpu_createComputePipeline(GPUDevice                          *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
+  entryMask = gpuShaderEntryBit(info->library, info->entryPoint);
+  automaticGroupMask = gpuShaderWGSLStaticGroups(info->library, entryMask);
+  if (entryMask == 0u || automaticGroupMask == UINT32_MAX) {
+    free(state);
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  automaticGroupMask &= ~pipeline->_requiredBindGroupMask;
   if (gpu_webgpuCreatePipelineLayout(device,
                                      info->layout,
                                      pipeline->_requiredBindGroupMask,
+                                     automaticGroupMask,
                                      &state->layout) != GPU_OK) {
     free(state);
     return GPU_ERROR_BACKEND_FAILURE;
