@@ -190,7 +190,7 @@ check_reflected_pipeline_entry_stages(GPUDevice *device,
   GPURenderPipelineCreateInfo   renderInfo     = {0};
   GPUPipelineLayoutCreateInfo   emptyLayoutInfo = {0};
   GPUColorTargetState           colorTarget    = {0};
-  GPUVertexAttribute            attr           = {0};
+  GPUVertexAttribute            attrs[2]       = {{0}};
   GPUVertexBufferLayout         vertexLayout   = {0};
 
   computeInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
@@ -216,13 +216,16 @@ check_reflected_pipeline_entry_stages(GPUDevice *device,
   }
 
   colorTarget.format              = GPU_FORMAT_BGRA8_UNORM;
-  attr.shaderLocation            = 0u;
-  attr.format                    = GPU_VERTEX_FORMAT_FLOAT32X2;
-  attr.offset                    = 0u;
+  attrs[0].shaderLocation        = 0u;
+  attrs[0].format                = GPU_VERTEX_FORMAT_FLOAT32X2;
+  attrs[0].offset                = 0u;
+  attrs[1].shaderLocation        = 1u;
+  attrs[1].format                = GPU_VERTEX_FORMAT_FLOAT32X2;
+  attrs[1].offset                = 8u;
   vertexLayout.strideBytes       = 16u;
   vertexLayout.stepMode          = GPU_VERTEX_STEP_MODE_VERTEX;
-  vertexLayout.attributeCount    = 1u;
-  vertexLayout.pAttributes       = &attr;
+  vertexLayout.attributeCount    = (uint32_t)GPU_ARRAY_LEN(attrs);
+  vertexLayout.pAttributes       = attrs;
 
   renderInfo.chain.sType              =
     GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
@@ -1045,13 +1048,13 @@ check_canonical_shader_library(GPUDevice *device,
                                const void *bytecode,
                                uint64_t bytecodeSize) {
   GPUShaderLibraryCreateInfo createInfo = {0};
-  GPUShaderReflection reflection;
-  GPUBindGroupLayout *reflectionLayouts[2] = {0};
-  GPUShaderLayout *shaderLayout;
-  GPUPipelineLayout *reflectionPipelineLayout;
-  GPUShaderLibrary *library;
-  uint32_t reflectionLayoutCount;
-  int ok;
+  GPUShaderReflection        reflection;
+  GPUBindGroupLayout        *reflectionLayouts[2] = {0};
+  GPUShaderLayout           *shaderLayout;
+  GPUPipelineLayout         *reflectionPipelineLayout;
+  GPUShaderLibrary          *library;
+  uint32_t                   reflectionLayoutCount;
+  int                        ok;
 
   createInfo.chain.sType = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
   createInfo.chain.structSize = sizeof(createInfo);
@@ -1068,9 +1071,9 @@ check_canonical_shader_library(GPUDevice *device,
   }
 
   memset(&reflection, 0, sizeof(reflection));
-  shaderLayout = NULL;
+  shaderLayout             = NULL;
   reflectionPipelineLayout = NULL;
-  reflectionLayoutCount = (uint32_t)GPU_ARRAY_LEN(reflectionLayouts);
+  reflectionLayoutCount    = (uint32_t)GPU_ARRAY_LEN(reflectionLayouts);
   ok = GPUGetShaderReflection(library, &reflection) == GPU_OK &&
        reflection.resourceCount == 4u &&
        shader_reflection_has_resource(&reflection,

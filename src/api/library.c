@@ -453,6 +453,24 @@ gpu_findShaderEntry(const GPUShaderLibrary *library, const char *entryPoint) {
 }
 
 GPU_HIDE
+uint64_t
+gpuShaderEntryBit(const GPUShaderLibrary *library, const char *entryPoint) {
+  const GPUShaderEntryInfoList *list;
+  const GPUShaderEntryInfo     *entry;
+  ptrdiff_t                     index;
+
+  list  = library ? library->_entryInfo : NULL;
+  entry = gpu_findShaderEntry(library, entryPoint);
+  if (!list || !entry) {
+    return 0u;
+  }
+  index = entry - list->entries;
+  return index >= 0 && index < USL_RUNTIME_MAX_ENTRY_POINTS
+           ? UINT64_C(1) << (uint32_t)index
+           : 0u;
+}
+
+GPU_HIDE
 int
 gpuGetShaderLibraryWorkgroupSize(const GPUShaderLibrary *library,
                                  const char               *entryPoint,
@@ -1589,10 +1607,23 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
     const USLRuntimeStaticSampler *src;
     GPUShaderStaticSamplerInfo item;
     GPUShaderStageFlags visibility;
+    uint64_t entryMask;
     uint32_t duplicate;
 
     src = &runtimeInfo->static_samplers[i];
     if (!gpu_shaderVisibilityFromUSLStage(src->stage, &visibility)) {
+      free(metadata);
+      return 0;
+    }
+    entryMask = 0u;
+    for (uint32_t j = 0u; j < entryInfo->count; j++) {
+      if (entryInfo->entries[j].stage == visibility &&
+          strcmp(entryInfo->entries[j].name, src->entry) == 0) {
+        entryMask = UINT64_C(1) << j;
+        break;
+      }
+    }
+    if (entryMask == 0u) {
       free(metadata);
       return 0;
     }
@@ -1607,6 +1638,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
     item.desc.compareFunc   = src->compare_func;
     item.desc.hasCompare    = src->has_compare;
     item.desc.maxAnisotropy = src->max_anisotropy;
+    item.entryMask          = entryMask;
     item.visibility         = visibility;
     item.hlslIndex          = src->hlsl_index >= 0
                                 ? (uint32_t)src->hlsl_index
@@ -1640,6 +1672,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
       }
     }
     if (duplicate != UINT32_MAX) {
+      staticSamplers->items[duplicate].entryMask  |= entryMask;
       staticSamplers->items[duplicate].visibility |= visibility;
       continue;
     }

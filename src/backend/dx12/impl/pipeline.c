@@ -1145,6 +1145,7 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   DX12ShaderCode                     meshCode = {0};
   DX12ShaderCode                     fragmentCode = {0};
   DX12PipelineKey                    rootKey;
+  uint64_t                           entryMask;
   uint32_t                           elementCount;
   HRESULT                            result;
 
@@ -1181,9 +1182,22 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
     free(elements);
     return GPU_ERROR_OUT_OF_MEMORY;
   }
+  entryMask = gpuShaderEntryBit(info->library, info->fragmentEntry);
+  if (mesh) {
+    entryMask |= gpuShaderEntryBit(info->library, mesh->taskEntry);
+    entryMask |= gpuShaderEntryBit(info->library, mesh->meshEntry);
+  } else {
+    entryMask |= gpuShaderEntryBit(info->library, info->vertexEntry);
+  }
+  if (entryMask == 0u) {
+    free(elements);
+    free(native);
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
   if (dx12_createShaderRootSignature(device,
                                      info->layout,
                                      info->library,
+                                     entryMask,
                                      &rootSignature,
                                      rootKey.value) != GPU_OK) {
     free(elements);

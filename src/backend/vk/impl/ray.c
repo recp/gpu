@@ -806,6 +806,7 @@ vk_createRayTracingPipeline(GPUDevice                                *device,
   VkPipelineShaderStageCreateInfo   *stages;
   VkRayTracingShaderGroupCreateInfoKHR *groups;
   VkRayTracingPipelineCreateInfoKHR  pipelineInfo = {0};
+  uint64_t                           entryMask;
   VkResult                           result;
   uint32_t                           stageCapacity;
   uint32_t                           stageCount;
@@ -834,9 +835,26 @@ vk_createRayTracingPipeline(GPUDevice                                *device,
   native->groupHandleSize      = deviceVk->rayTracingShaderGroupHandleSize;
   native->groupHandleAlignment = deviceVk->rayTracingShaderGroupHandleAlignment;
   native->groupBaseAlignment   = deviceVk->rayTracingShaderGroupBaseAlignment;
+  entryMask = 0u;
+  for (uint32_t i = 0u; i < info->groupCount; i++) {
+    const GPURayTracingShaderGroupEXT *group;
+
+    group      = &info->pGroups[i];
+    entryMask |= gpuShaderEntryBit(info->library, group->generalEntry);
+    entryMask |= gpuShaderEntryBit(info->library, group->closestHitEntry);
+    entryMask |= gpuShaderEntryBit(info->library, group->anyHitEntry);
+    entryMask |= gpuShaderEntryBit(info->library, group->intersectionEntry);
+  }
+  if (entryMask == 0u) {
+    free(groups);
+    free(stages);
+    vk_rayDestroyPipelineState(native);
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
   if (vk_createShaderLayout(device,
                             info->layout,
                             info->library,
+                            entryMask,
                             &native->shaderLayout) != GPU_OK) {
     free(groups);
     free(stages);

@@ -655,6 +655,7 @@ GPUResult
 dx12_createShaderRootSignature(GPUDevice              *device,
                                GPUPipelineLayout      *layout,
                                const GPUShaderLibrary *library,
+                               uint64_t                entryMask,
                                ID3D12RootSignature   **outRootSignature,
                                uint64_t                outKey[2]);
 

@@ -774,6 +774,7 @@ dx12_createRayTracingPipeline(GPUDevice                                *device,
   D3D12_STATE_OBJECT_DESC           stateDesc = {0};
   DX12ShaderCode                    libraryCode = {0};
   uint64_t                          rootKey[2];
+  uint64_t                          entryMask;
   uint32_t                          hitCount;
   uint32_t                          subobjectCount;
   uint32_t                          cursor;
@@ -814,12 +815,17 @@ dx12_createRayTracingPipeline(GPUDevice                                *device,
   }
   native->groupCount = info->groupCount;
 
-  cursor = 0u;
+  entryMask = 0u;
+  cursor    = 0u;
   for (uint32_t i = 0u; i < info->groupCount; i++) {
     const GPURayTracingShaderGroupEXT *src;
     D3D12_HIT_GROUP_DESC              *dst;
 
     src = &info->pGroups[i];
+    entryMask |= gpuShaderEntryBit(info->library, src->generalEntry);
+    entryMask |= gpuShaderEntryBit(info->library, src->closestHitEntry);
+    entryMask |= gpuShaderEntryBit(info->library, src->anyHitEntry);
+    entryMask |= gpuShaderEntryBit(info->library, src->intersectionEntry);
     if (src->type == GPU_RAY_TRACING_SHADER_GROUP_GENERAL_EXT) {
       native->groupExports[i] = dx12_rayWide(src->generalEntry);
       if (!native->groupExports[i]) {
@@ -849,9 +855,13 @@ dx12_createRayTracingPipeline(GPUDevice                                *device,
     cursor++;
   }
 
+  if (entryMask == 0u) {
+    goto backend_failure;
+  }
   if (dx12_createShaderRootSignature(device,
                                      info->layout,
                                      info->library,
+                                     entryMask,
                                      &native->rootSignature,
                                      rootKey) != GPU_OK) {
     goto backend_failure;

@@ -38,6 +38,7 @@ dx12_createComputePipeline(GPUDevice                          *device,
   D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {0};
   DX12ShaderCode           shaderCode = {0};
   DX12PipelineKey          rootKey;
+  uint64_t                 entryMask;
   HRESULT                  result;
 
   deviceDX12 = device ? device->_priv : NULL;
@@ -55,9 +56,15 @@ dx12_createComputePipeline(GPUDevice                          *device,
   }
   native = (GPUComputePipelineDX12 *)(state + 1);
   rootSignature = NULL;
+  entryMask = gpuShaderEntryBit(info->library, info->entryPoint);
+  if (entryMask == 0u) {
+    free(state);
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
   if (dx12_createShaderRootSignature(device,
                                      info->layout,
                                      info->library,
+                                     entryMask,
                                      &rootSignature,
                                      rootKey.value) != GPU_OK) {
     free(state);

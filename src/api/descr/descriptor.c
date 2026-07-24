@@ -2552,6 +2552,7 @@ gpu_pipelineLayoutMatchesShaderResources(GPUPipelineLayout *pipelineLayout,
                                          const GPUShaderLibrary *library,
                                          const GPUShaderReflection *reflection,
                                          GPUShaderStageFlags stages,
+                                         uint64_t entryMask,
                                          uint32_t *outRequiredGroupMask) {
   GPUPipelineLayoutPriv *pipelinePriv;
   const GPUShaderReflection *fullReflection;
@@ -2646,7 +2647,8 @@ gpu_pipelineLayoutMatchesShaderResources(GPUPipelineLayout *pipelineLayout,
       return 0;
     }
     logicalBinding += samplerOrdinals[groupIndex]++;
-    if ((sampler->visibility & stages) == 0u) {
+    if ((sampler->visibility & stages) == 0u ||
+        (sampler->entryMask & entryMask) == 0u) {
       continue;
     }
     if (groupIndex >= pipelinePriv->bindGroupLayoutCount ||
@@ -2707,6 +2709,7 @@ gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout *pipelineLayout,
     for (uint32_t i = 0u; i < entryPointCount; i++) {
       GPUShaderReflection entryReflection;
       GPUShaderStageFlags entryStage;
+      uint64_t entryMask;
       uint32_t entryGroupMask;
 
       if (!entryPoints[i]) {
@@ -2719,11 +2722,16 @@ gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout *pipelineLayout,
                               &entryReflection)) {
         return 0;
       }
+      entryMask = gpuShaderEntryBit(library, entryPoints[i]);
+      if (entryMask == 0u) {
+        return 0;
+      }
 
       ok = gpu_pipelineLayoutMatchesShaderResources(pipelineLayout,
                                                     library,
                                                     &entryReflection,
                                                     entryStage,
+                                                    entryMask,
                                                     &entryGroupMask);
       if (!ok) {
         return 0;
@@ -2746,6 +2754,7 @@ gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout *pipelineLayout,
                                                 library,
                                                 reflection,
                                                 fallbackStages,
+                                                UINT64_MAX,
                                                 &combinedGroupMask);
   if (ok && outRequiredGroupMask) {
     *outRequiredGroupMask = combinedGroupMask;

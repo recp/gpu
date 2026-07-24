@@ -107,8 +107,11 @@ dx12_createExecutionGraph(GPUDevice                            *device,
   D3D12_STATE_OBJECT_DESC     stateDesc = {0};
   D3D12_WORK_GRAPH_MEMORY_REQUIREMENTS requirements = {0};
   DX12ShaderCode              libraryCode = {0};
+  GPUShaderExecutionGraphEntryInfo entry;
   wchar_t                     graphName[256];
   uint64_t                    rootKey[2];
+  uint64_t                    entryMask;
+  uint32_t                    entryCount;
   HRESULT                     result;
 
   deviceDX12 = device ? device->_priv : NULL;
@@ -127,9 +130,24 @@ dx12_createExecutionGraph(GPUDevice                            *device,
     dx12_freeShaderCode(&libraryCode);
     return GPU_ERROR_OUT_OF_MEMORY;
   }
+  entryMask  = 0u;
+  entryCount = gpuGetShaderLibraryExecutionGraphEntryCount(info->library);
+  for (uint32_t i = 0u; i < entryCount; i++) {
+    if (!gpuGetShaderLibraryExecutionGraphEntryAt(info->library, i, &entry)) {
+      entryMask = 0u;
+      break;
+    }
+    entryMask |= gpuShaderEntryBit(info->library, entry.entryPoint);
+  }
+  if (entryMask == 0u) {
+    dx12_destroyExecutionGraphState(native);
+    dx12_freeShaderCode(&libraryCode);
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
   if (dx12_createShaderRootSignature(device,
                                      info->layout,
                                      info->library,
+                                     entryMask,
                                      &native->rootSignature,
                                      rootKey) != GPU_OK) {
     dx12_destroyExecutionGraphState(native);

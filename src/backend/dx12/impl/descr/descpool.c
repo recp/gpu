@@ -518,6 +518,7 @@ dx12__fillStaticSamplers(GPUPipelineLayout                 *layout,
                          uint32_t                          groupCount,
                          const GPUShaderStaticSamplerInfo *sourceSamplers,
                          uint32_t                          sourceSamplerCount,
+                         uint64_t                          entryMask,
                          D3D12_STATIC_SAMPLER_DESC        *samplers,
                          uint32_t                          samplerCount) {
   uint32_t cursor;
@@ -555,6 +556,9 @@ dx12__fillStaticSamplers(GPUPipelineLayout                 *layout,
   }
 
   for (uint32_t i = 0u; i < sourceSamplerCount; i++) {
+    if ((sourceSamplers[i].entryMask & entryMask) == 0u) {
+      continue;
+    }
     if (cursor >= samplerCount ||
         sourceSamplers[i].hlslIndex == UINT32_MAX ||
         !dx12_fillSourceSamplerDesc(
@@ -803,6 +807,7 @@ dx12__createPipelineLayout(GPUDevice                        *device,
                            GPUPipelineLayout                *layout,
                            const GPUShaderStaticSamplerInfo *sourceSamplers,
                            uint32_t                          sourceSamplerCount,
+                           uint64_t                          entryMask,
                            GPUPipelineLayoutDX12           **outNative) {
   GPUPipelineLayoutDX12      *native;
   GPUBindGroupLayout * const *groups;
@@ -815,6 +820,7 @@ dx12__createPipelineLayout(GPUDevice                        *device,
   uint32_t                    pushSize;
   uint32_t                    pushDwordCount;
   uint32_t                    pushRootParameter;
+  uint32_t                    selectedSamplerCount;
   GPUShaderStageFlags         pushStages;
   HRESULT                     result;
 
@@ -834,10 +840,15 @@ dx12__createPipelineLayout(GPUDevice                        *device,
   if (planResult != GPU_OK) {
     return planResult;
   }
-  if (sourceSamplerCount > UINT32_MAX - plan.staticSamplerCount) {
+  selectedSamplerCount = 0u;
+  for (uint32_t i = 0u; i < sourceSamplerCount; i++) {
+    selectedSamplerCount +=
+      (sourceSamplers[i].entryMask & entryMask) != 0u;
+  }
+  if (selectedSamplerCount > UINT32_MAX - plan.staticSamplerCount) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  plan.staticSamplerCount += sourceSamplerCount;
+  plan.staticSamplerCount += selectedSamplerCount;
   pushDwordCount   = pushSize / 4u;
   pushRootParameter = UINT32_MAX;
   if (pushDwordCount > 0u) {
@@ -894,6 +905,7 @@ dx12__createPipelineLayout(GPUDevice                        *device,
                                   groupCount,
                                   sourceSamplers,
                                   sourceSamplerCount,
+                                  entryMask,
                                   staticSamplers,
                                   plan.staticSamplerCount)) {
       free(staticSamplers);
@@ -953,6 +965,7 @@ dx12__createPipelineLayout(GPUDevice                        *device,
                                   groupCount,
                                   sourceSamplers,
                                   sourceSamplerCount,
+                                  entryMask,
                                   staticSamplers,
                                   plan.staticSamplerCount)) {
       free(staticSamplers);
@@ -1038,7 +1051,12 @@ dx12_createPipelineLayout(GPUDevice         *device,
   GPUResult              result;
 
   native = NULL;
-  result = dx12__createPipelineLayout(device, layout, NULL, 0u, &native);
+  result = dx12__createPipelineLayout(device,
+                                      layout,
+                                      NULL,
+                                      0u,
+                                      0u,
+                                      &native);
   if (result == GPU_OK) {
     layout->_native = native;
   }
@@ -1050,6 +1068,7 @@ GPUResult
 dx12_createShaderRootSignature(GPUDevice             *device,
                                GPUPipelineLayout     *layout,
                                const GPUShaderLibrary *library,
+                               uint64_t               entryMask,
                                ID3D12RootSignature  **outRootSignature,
                                uint64_t               outKey[2]) {
   const GPUShaderStaticSamplerInfo *sourceSamplers;
@@ -1058,7 +1077,8 @@ dx12_createShaderRootSignature(GPUDevice             *device,
   uint32_t                          sourceSamplerCount;
   GPUResult                         result;
 
-  if (!device || !layout || !library || !outRootSignature || !outKey) {
+  if (!device || !layout || !library || entryMask == 0u ||
+      !outRootSignature || !outKey) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   *outRootSignature = NULL;
@@ -1072,11 +1092,20 @@ dx12_createShaderRootSignature(GPUDevice             *device,
 
   sourceSamplers = gpuGetShaderLibraryStaticSamplers(library,
                                                       &sourceSamplerCount);
-  if (sourceSamplerCount == 0u) {
-    base->rootSignature->lpVtbl->AddRef(base->rootSignature);
-    *outRootSignature = base->rootSignature;
-    memcpy(outKey, base->rootSignatureKey, sizeof(base->rootSignatureKey));
-    return GPU_OK;
+  {
+    uint32_t selectedSamplerCount;
+
+    selectedSamplerCount = 0u;
+    for (uint32_t i = 0u; i < sourceSamplerCount; i++) {
+      selectedSamplerCount +=
+        (sourceSamplers[i].entryMask & entryMask) != 0u;
+    }
+    if (selectedSamplerCount == 0u) {
+      base->rootSignature->lpVtbl->AddRef(base->rootSignature);
+      *outRootSignature = base->rootSignature;
+      memcpy(outKey, base->rootSignatureKey, sizeof(base->rootSignatureKey));
+      return GPU_OK;
+    }
   }
 
   derived = NULL;
@@ -1084,6 +1113,7 @@ dx12_createShaderRootSignature(GPUDevice             *device,
                                       layout,
                                       sourceSamplers,
                                       sourceSamplerCount,
+                                      entryMask,
                                       &derived);
   if (result != GPU_OK) {
     return result;

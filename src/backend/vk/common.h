@@ -836,6 +836,7 @@ GPUResult
 vk_createShaderLayout(GPUDevice             *device,
                       GPUPipelineLayout      *layout,
                       const GPUShaderLibrary *library,
+                      uint64_t                entryMask,
                       GPUShaderLayoutVk      *outLayout);
 
 GPU_HIDE

@@ -328,6 +328,7 @@ vk_createRenderPipeline(GPUDevice                         *device,
   VkPipelineFragmentShadingRateStateCreateInfoKHR shadingRate = {0};
 #endif
   VkGraphicsPipelineCreateInfo      pipelineInfo = {0};
+  uint64_t                          entryMask;
   VkResult                          result;
   uint32_t                          vertexAttributeCount;
   uint32_t                          stageCount;
@@ -461,9 +462,23 @@ vk_createRenderPipeline(GPUDevice                         *device,
 
   GPU__UNUSED(requiredBindGroupMask);
   native->device = deviceVk->device;
+  entryMask = gpuShaderEntryBit(info->library, info->fragmentEntry);
+  if (mesh) {
+    entryMask |= gpuShaderEntryBit(info->library, mesh->taskEntry);
+    entryMask |= gpuShaderEntryBit(info->library, mesh->meshEntry);
+  } else {
+    entryMask |= gpuShaderEntryBit(info->library, info->vertexEntry);
+  }
+  if (entryMask == 0u) {
+    free(vertexAttributes);
+    free(vertexBindings);
+    free(native);
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
   if (vk_createShaderLayout(device,
                             info->layout,
                             info->library,
+                            entryMask,
                             &native->shaderLayout) != GPU_OK) {
     free(vertexAttributes);
     free(vertexBindings);

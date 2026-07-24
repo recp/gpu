@@ -112,6 +112,7 @@ vk_createExecutionGraph(GPUDevice                            *device,
   uint8_t                       *storage;
   size_t                         allocationSize;
   size_t                         namesSize;
+  uint64_t                       entryMask;
   uint32_t                       entryCount;
   uint32_t                       programEntryCount;
   VkResult                       result;
@@ -128,6 +129,7 @@ vk_createExecutionGraph(GPUDevice                            *device,
   }
 
   namesSize         = 0u;
+  entryMask         = 0u;
   programEntryCount = 0u;
   for (uint32_t i = 0u; i < entryCount; i++) {
     size_t nameSize;
@@ -140,6 +142,7 @@ vk_createExecutionGraph(GPUDevice                            *device,
         reflected[i].recordSizeBytes != 0u) {
       return GPU_ERROR_UNSUPPORTED;
     }
+    entryMask |= gpuShaderEntryBit(info->library, reflected[i].entryPoint);
     nameSize = strlen(reflected[i].entryPoint) + 1u;
     if (namesSize > SIZE_MAX - nameSize) {
       return GPU_ERROR_OUT_OF_MEMORY;
@@ -147,7 +150,7 @@ vk_createExecutionGraph(GPUDevice                            *device,
     namesSize += nameSize;
     programEntryCount += reflected[i].programEntry;
   }
-  if (programEntryCount == 0u ||
+  if (entryMask == 0u || programEntryCount == 0u ||
       entryCount > (SIZE_MAX - sizeof(*native) - namesSize) /
                      sizeof(*native->entries)) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -169,6 +172,7 @@ vk_createExecutionGraph(GPUDevice                            *device,
       vk_createShaderLayout(device,
                             info->layout,
                             info->library,
+                            entryMask,
                             &native->shaderLayout) != GPU_OK) {
     vk_destroyExecutionGraphState(native);
     return GPU_ERROR_UNSUPPORTED;

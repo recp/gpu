@@ -801,6 +801,7 @@ GPUResult
 vk_createShaderLayout(GPUDevice              *device,
                       GPUPipelineLayout       *layout,
                       const GPUShaderLibrary *library,
+                      uint64_t                entryMask,
                       GPUShaderLayoutVk       *outLayout) {
   const GPUShaderStaticSamplerInfo *samplers;
   GPUBindGroupLayout * const        *groups;
@@ -818,8 +819,11 @@ vk_createShaderLayout(GPUDevice              *device,
   uint32_t                           pushSize;
   uint32_t                           samplerCount;
   uint32_t                           samplerGroup;
+  uint32_t                           selectedSamplerCount;
+  uint32_t                           cursor;
 
-  if (!device || !device->_priv || !layout || !library || !outLayout) {
+  if (!device || !device->_priv || !layout || !library ||
+      entryMask == 0u || !outLayout) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   memset(outLayout, 0, sizeof(*outLayout));
@@ -834,13 +838,23 @@ vk_createShaderLayout(GPUDevice              *device,
 
   outLayout->baseLayout = base;
   outLayout->device     = base->device;
-  if (samplerCount == 0u) {
+  selectedSamplerCount  = 0u;
+  samplerGroup          = UINT32_MAX;
+  for (uint32_t i = 0u; i < samplerCount; i++) {
+    if ((samplers[i].entryMask & entryMask) == 0u) {
+      continue;
+    }
+    if (samplerGroup == UINT32_MAX) {
+      samplerGroup = samplers[i].spirvGroup;
+    }
+    selectedSamplerCount++;
+  }
+  if (selectedSamplerCount == 0u) {
     outLayout->layout           = base->layout;
     outLayout->descriptorBuffer = base->descriptorBuffer;
     return GPU_OK;
   }
 
-  samplerGroup = samplers[0].spirvGroup;
   groups = gpuGetPipelineLayoutGroups(layout, &groupCount);
   if (samplerGroup < groupCount ||
       samplerGroup > GPU_ENCODER_MAX_BIND_GROUPS ||
@@ -848,50 +862,59 @@ vk_createShaderLayout(GPUDevice              *device,
     return GPU_ERROR_UNSUPPORTED;
   }
   for (uint32_t i = 0u; i < samplerCount; i++) {
+    if ((samplers[i].entryMask & entryMask) == 0u) {
+      continue;
+    }
     if (samplers[i].spirvGroup != samplerGroup ||
         samplers[i].spirvBinding == UINT32_MAX) {
       return GPU_ERROR_UNSUPPORTED;
     }
   }
 
-  bindings = calloc(samplerCount, sizeof(*bindings));
-  outLayout->samplers = calloc(samplerCount, sizeof(*outLayout->samplers));
+  bindings = calloc(selectedSamplerCount, sizeof(*bindings));
+  outLayout->samplers = calloc(selectedSamplerCount,
+                               sizeof(*outLayout->samplers));
   if (!bindings || !outLayout->samplers) {
     free(bindings);
     vk_destroyShaderLayout(outLayout);
     return GPU_ERROR_OUT_OF_MEMORY;
   }
-  outLayout->samplerCount = samplerCount;
+  outLayout->samplerCount = selectedSamplerCount;
   outLayout->samplerGroup = samplerGroup;
 
+  cursor = 0u;
   for (uint32_t i = 0u; i < samplerCount; i++) {
     VkSamplerCreateInfo samplerInfo;
 
+    if ((samplers[i].entryMask & entryMask) == 0u) {
+      continue;
+    }
     vk_fillStaticSamplerInfo(&samplers[i].desc, &samplerInfo);
     if (vkCreateSampler(outLayout->device,
                         &samplerInfo,
                         NULL,
-                        &outLayout->samplers[i]) != VK_SUCCESS) {
+                        &outLayout->samplers[cursor]) != VK_SUCCESS) {
       free(bindings);
       vk_destroyShaderLayout(outLayout);
       return GPU_ERROR_BACKEND_FAILURE;
     }
-    bindings[i].binding            = samplers[i].spirvBinding;
-    bindings[i].descriptorType     = VK_DESCRIPTOR_TYPE_SAMPLER;
-    bindings[i].descriptorCount    = 1u;
-    bindings[i].stageFlags         = vk__descriptorStages(
+    bindings[cursor].binding            = samplers[i].spirvBinding;
+    bindings[cursor].descriptorType     = VK_DESCRIPTOR_TYPE_SAMPLER;
+    bindings[cursor].descriptorCount    = 1u;
+    bindings[cursor].stageFlags         = vk__descriptorStages(
       samplers[i].visibility
     );
-    bindings[i].pImmutableSamplers = &outLayout->samplers[i];
-    if (bindings[i].stageFlags == 0u) {
+    bindings[cursor].pImmutableSamplers = &outLayout->samplers[cursor];
+    if (bindings[cursor].stageFlags == 0u) {
       free(bindings);
       vk_destroyShaderLayout(outLayout);
       return GPU_ERROR_UNSUPPORTED;
     }
+    cursor++;
   }
 
   setInfo.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  setInfo.bindingCount = samplerCount;
+  setInfo.bindingCount = selectedSamplerCount;
   setInfo.pBindings    = bindings;
   if (vkCreateDescriptorSetLayout(outLayout->device,
                                   &setInfo,
@@ -951,7 +974,7 @@ vk_createShaderLayout(GPUDevice              *device,
   outLayout->ownsLayout = true;
 
   poolSize.type            = VK_DESCRIPTOR_TYPE_SAMPLER;
-  poolSize.descriptorCount = samplerCount;
+  poolSize.descriptorCount = selectedSamplerCount;
   poolInfo.sType           = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   poolInfo.maxSets         = 1u;
   poolInfo.poolSizeCount   = 1u;

@@ -38,6 +38,7 @@ vk_createComputePipeline(GPUDevice                          *device,
   GPUComputePipelineVk           *native;
   VkPipelineShaderStageCreateInfo stage        = {0};
   VkComputePipelineCreateInfo     pipelineInfo = {0};
+  uint64_t                        entryMask;
   VkResult                        result;
 
   deviceVk = device ? device->_priv : NULL;
@@ -57,9 +58,15 @@ vk_createComputePipeline(GPUDevice                          *device,
 
   native           = (GPUComputePipelineVk *)(state + 1);
   native->device   = deviceVk->device;
+  entryMask        = gpuShaderEntryBit(info->library, info->entryPoint);
+  if (entryMask == 0u) {
+    free(state);
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
   if (vk_createShaderLayout(device,
                             info->layout,
                             info->library,
+                            entryMask,
                             &native->shaderLayout) != GPU_OK) {
     free(state);
     return GPU_ERROR_BACKEND_FAILURE;

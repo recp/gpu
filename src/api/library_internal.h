@@ -32,6 +32,7 @@ typedef struct GPUStaticSamplerDesc {
 } GPUStaticSamplerDesc;
 
 typedef struct GPUShaderStaticSamplerInfo {
+  uint64_t             entryMask;
   GPUStaticSamplerDesc desc;
   GPUShaderStageFlags  visibility;
   uint32_t             hlslIndex;
@@ -169,6 +170,10 @@ GPU_HIDE
 const GPUShaderStaticSamplerInfo *
 gpuGetShaderLibraryStaticSamplers(const GPUShaderLibrary *library,
                                   uint32_t *outCount);
+
+GPU_HIDE
+uint64_t
+gpuShaderEntryBit(const GPUShaderLibrary *library, const char *entryPoint);
 
 GPU_HIDE
 int
