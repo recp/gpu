@@ -278,6 +278,13 @@ webgpu_isWideNormFormat(GPUFormat format) {
 }
 
 static bool
+webgpu_isUnorm16Format(GPUFormat format) {
+  return format == GPU_FORMAT_R16_UNORM ||
+         format == GPU_FORMAT_RG16_UNORM ||
+         format == GPU_FORMAT_RGBA16_UNORM;
+}
+
+static bool
 webgpu_isSRGBFormat(GPUFormat format) {
   return format == GPU_FORMAT_RGBA8_UNORM_SRGB ||
          format == GPU_FORMAT_BGRA8_UNORM_SRGB;
@@ -297,6 +304,7 @@ webgpu_hasCoreStorage(GPUFormat format) {
     case GPU_FORMAT_R32_SINT:
     case GPU_FORMAT_R32_FLOAT:
     case GPU_FORMAT_RGBA8_UNORM:
+    case GPU_FORMAT_RGBA8_SNORM:
     case GPU_FORMAT_RGBA8_UINT:
     case GPU_FORMAT_RGBA8_SINT:
     case GPU_FORMAT_RG32_UINT:
@@ -330,6 +338,7 @@ webgpu_getFormatCapabilities(
   GPUFormatCapabilities * __restrict outCaps) {
   bool float32Blendable;
   bool float32Filterable;
+  bool legacyUnorm16;
   bool tier1;
   bool wideNorm;
 
@@ -391,10 +400,12 @@ webgpu_getFormatCapabilities(
   tier1 = webgpu_hasAdapterFeature(adapter,
                                    WGPUFeatureName_TextureFormatsTier1);
   wideNorm = webgpu_isWideNormFormat(format);
-  if (wideNorm &&
-      !tier1 &&
-      !webgpu_hasAdapterFeature(adapter,
-                                WGPUFeatureName_Unorm16TextureFormats)) {
+  legacyUnorm16 =
+    !tier1 &&
+    webgpu_isUnorm16Format(format) &&
+    webgpu_hasAdapterFeature(adapter,
+                             WGPUFeatureName_Unorm16TextureFormats);
+  if (wideNorm && !tier1 && !legacyUnorm16) {
     return;
   }
 
@@ -412,7 +423,7 @@ webgpu_getFormatCapabilities(
     !wideNorm &&
     (!webgpu_isFloat32Format(format) || float32Filterable);
 
-  outCaps->colorAttachment = !wideNorm || tier1;
+  outCaps->colorAttachment = !wideNorm || tier1 || legacyUnorm16;
   if (format == GPU_FORMAT_R8_SNORM ||
       format == GPU_FORMAT_RG8_SNORM ||
       format == GPU_FORMAT_RGBA8_SNORM) {
@@ -427,6 +438,7 @@ webgpu_getFormatCapabilities(
   outCaps->blendable = outCaps->colorAttachment &&
                        gpuFormatNumericType(format) ==
                          GPU_FORMAT_NUMERIC_FLOAT &&
+                       (!wideNorm || tier1) &&
                        (!webgpu_isFloat32Format(format) ||
                         float32Blendable);
   outCaps->storage = !webgpu_isSRGBFormat(format) &&
