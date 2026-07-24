@@ -46,6 +46,13 @@
   "GPU: WebGPU USL timestamp query resolved"
 #endif
 
+#if GPU_COMPUTE_USE_TIMESTAMPS
+enum {
+  GPU_COMPUTE_TIMESTAMP_QUERY_COUNT = 4u,
+  GPU_COMPUTE_TIMESTAMP_OFFSET      = 256u
+};
+#endif
+
 typedef struct GeneratedVertex {
   float position[4];
   float color[4];
@@ -263,15 +270,23 @@ create_resources(WebGPUCompute *state) {
 
 #if GPU_COMPUTE_USE_TIMESTAMPS
   {
-    double timestampPeriod;
+    static const uint64_t timestampSentinel[GPU_COMPUTE_TIMESTAMP_QUERY_COUNT] = {
+      UINT64_MAX,
+      UINT64_MAX,
+      UINT64_MAX,
+      UINT64_MAX
+    };
+    double                timestampPeriod;
 
     queryInfo.chain.sType      = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
     queryInfo.chain.structSize = sizeof(queryInfo);
     queryInfo.label            = "compute-webgpu-timestamps";
     queryInfo.type             = GPU_QUERY_TIMESTAMP;
-    queryInfo.count            = 2u;
+    queryInfo.count            = GPU_COMPUTE_TIMESTAMP_QUERY_COUNT;
     bufferInfo.label           = "compute-webgpu-timestamp-results";
-    bufferInfo.sizeBytes       = 272u;
+    bufferInfo.sizeBytes       = GPU_COMPUTE_TIMESTAMP_OFFSET +
+                                 GPU_COMPUTE_TIMESTAMP_QUERY_COUNT *
+                                   sizeof(uint64_t);
     bufferInfo.usage           = GPU_BUFFER_USAGE_COPY_DST |
                                  GPU_BUFFER_USAGE_STORAGE;
     if (GPUCreateQuerySet(state->device,
@@ -281,6 +296,11 @@ create_resources(WebGPUCompute *state) {
                         &bufferInfo,
                         &state->timestampBuffer) != GPU_OK ||
         GPUGetTimestampPeriod(state->queue, &timestampPeriod) != GPU_OK ||
+        GPUQueueWriteBuffer(state->queue,
+                            state->timestampBuffer,
+                            GPU_COMPUTE_TIMESTAMP_OFFSET,
+                            timestampSentinel,
+                            sizeof(timestampSentinel)) != GPU_OK ||
         timestampPeriod != 1.0) {
       set_status("GPU: failed to initialize WebGPU timestamps", 1);
       return 0;
@@ -297,8 +317,9 @@ create_resources(WebGPUCompute *state) {
   groupEntries[1].binding       = 1u;
   groupEntries[1].bindingType   = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
   groupEntries[1].buffer.buffer = state->timestampBuffer;
-  groupEntries[1].buffer.offset = 256u;
-  groupEntries[1].buffer.size   = 2u * sizeof(uint64_t);
+  groupEntries[1].buffer.offset = GPU_COMPUTE_TIMESTAMP_OFFSET;
+  groupEntries[1].buffer.size   = GPU_COMPUTE_TIMESTAMP_QUERY_COUNT *
+                                  sizeof(uint64_t);
 #endif
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
@@ -321,10 +342,12 @@ render_frame(void *userData) {
   GPUFrame                    *frame;
   GPUCommandBuffer            *cmdb;
   GPUComputePassEncoder       *compute;
-#if GPU_COMPUTE_USE_TIMESTAMPS
-  GPUPassTimestampWrites       timestampWrites = {0};
-#endif
   GPURenderPassEncoder        *render;
+#if GPU_COMPUTE_USE_TIMESTAMPS
+  GPUComputePassCreateInfo     computeInfo = {0};
+  GPUPassTimestampWrites       computeTimestamps = {0};
+  GPUPassTimestampWrites       renderTimestamps = {0};
+#endif
   GPURenderPassColorAttachment color = {0};
   GPURenderPassCreateInfo      passInfo = {0};
   GPUBufferBinding             vertex = {0};
@@ -352,7 +375,22 @@ render_frame(void *userData) {
     return;
   }
 
+#if GPU_COMPUTE_USE_TIMESTAMPS
+  if (!state->timestampRecorded) {
+    computeTimestamps.querySet   = state->timestampQuery;
+    computeTimestamps.beginIndex = 0u;
+    computeTimestamps.endIndex   = 1u;
+    computeInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PASS_CREATE_INFO;
+    computeInfo.chain.structSize = sizeof(computeInfo);
+    computeInfo.label            = "compute-webgpu-fill";
+    computeInfo.timestampWrites  = &computeTimestamps;
+    compute = GPUBeginComputePassWithInfo(cmdb, &computeInfo);
+  } else {
+    compute = GPUBeginComputePass(cmdb, "compute-webgpu-fill");
+  }
+#else
   compute = GPUBeginComputePass(cmdb, "compute-webgpu-fill");
+#endif
   if (!compute) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
@@ -405,10 +443,10 @@ render_frame(void *userData) {
   passInfo.colorAttachmentCount = 1u;
 #if GPU_COMPUTE_USE_TIMESTAMPS
   if (!state->timestampRecorded) {
-    timestampWrites.querySet   = state->timestampQuery;
-    timestampWrites.beginIndex = 0u;
-    timestampWrites.endIndex   = 1u;
-    passInfo.timestampWrites   = &timestampWrites;
+    renderTimestamps.querySet   = state->timestampQuery;
+    renderTimestamps.beginIndex = 2u;
+    renderTimestamps.endIndex   = 3u;
+    passInfo.timestampWrites    = &renderTimestamps;
   }
 #endif
   render = GPUBeginRenderPass(cmdb, &passInfo);
@@ -428,9 +466,9 @@ render_frame(void *userData) {
     GPUResolveQuerySet(cmdb,
                        state->timestampQuery,
                        0u,
-                       2u,
+                       GPU_COMPUTE_TIMESTAMP_QUERY_COUNT,
                        state->timestampBuffer,
-                       256u);
+                       GPU_COMPUTE_TIMESTAMP_OFFSET);
   }
 #endif
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
