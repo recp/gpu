@@ -390,6 +390,7 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
   if (timestamps[0] == UINT64_MAX || timestamps[1] == UINT64_MAX ||
       timestamps[2] == UINT64_MAX || timestamps[3] == UINT64_MAX ||
       timestamps[1] < timestamps[0] ||
+      timestamps[2] < timestamps[1] ||
       timestamps[3] < timestamps[2]) {
     fprintf(stderr,
             "timestamp query resolved error values: %llu, %llu, %llu, %llu\n",
