@@ -190,8 +190,8 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
   GPUDeviceCapabilities              caps            = {0};
   GPUFeature                         timestampFeature = GPU_FEATURE_TIMESTAMPS;
   GPUResult                          periodResult;
-  uint64_t                           timestamps[4] = {
-    UINT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX
+  uint64_t                           queryResults[5] = {
+    UINT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX
   };
   double                             timestampPeriod;
   int                                ok = 0;
@@ -255,7 +255,7 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
 
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
-  bufferInfo.sizeBytes        = sizeof(timestamps);
+  bufferInfo.sizeBytes        = sizeof(queryResults);
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
                                 GPU_BUFFER_USAGE_COPY_SRC;
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
@@ -265,8 +265,8 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
   if (GPUQueueWriteBuffer(queue,
                           buffer,
                           0u,
-                          timestamps,
-                          sizeof(timestamps)) != GPU_OK) {
+                          queryResults,
+                          sizeof(queryResults)) != GPU_OK) {
     fprintf(stderr, "timestamp resolve buffer initialize failed\n");
     goto cleanup;
   }
@@ -353,7 +353,7 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
   }
   GPUEndRenderPass(renderPass);
   renderPass = NULL;
-  GPUResolveQuerySet(cmdb, set, 0u, 4u, buffer, 0u);
+  GPUResolveQuerySet(cmdb, set, 0u, 4u, buffer, sizeof(uint64_t));
 
   fenceInfo.chain.sType      = GPU_STRUCTURE_TYPE_FENCE_CREATE_INFO;
   fenceInfo.chain.structSize = sizeof(fenceInfo);
@@ -382,22 +382,25 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
   if (GPUQueueReadBuffer(queue,
                          buffer,
                          0u,
-                         timestamps,
-                         sizeof(timestamps)) != GPU_OK) {
+                         queryResults,
+                         sizeof(queryResults)) != GPU_OK) {
     fprintf(stderr, "timestamp query readback failed\n");
     goto cleanup;
   }
-  if (timestamps[0] == UINT64_MAX || timestamps[1] == UINT64_MAX ||
-      timestamps[2] == UINT64_MAX || timestamps[3] == UINT64_MAX ||
-      timestamps[1] < timestamps[0] ||
-      timestamps[2] < timestamps[1] ||
-      timestamps[3] < timestamps[2]) {
+  if (queryResults[0] != UINT64_MAX ||
+      queryResults[1] == UINT64_MAX || queryResults[2] == UINT64_MAX ||
+      queryResults[3] == UINT64_MAX || queryResults[4] == UINT64_MAX ||
+      queryResults[2] < queryResults[1] ||
+      queryResults[3] < queryResults[2] ||
+      queryResults[4] < queryResults[3]) {
     fprintf(stderr,
-            "timestamp query resolved error values: %llu, %llu, %llu, %llu\n",
-            (unsigned long long)timestamps[0],
-            (unsigned long long)timestamps[1],
-            (unsigned long long)timestamps[2],
-            (unsigned long long)timestamps[3]);
+            "timestamp query resolved error values: "
+            "%llu, %llu, %llu, %llu, %llu\n",
+            (unsigned long long)queryResults[0],
+            (unsigned long long)queryResults[1],
+            (unsigned long long)queryResults[2],
+            (unsigned long long)queryResults[3],
+            (unsigned long long)queryResults[4]);
     goto cleanup;
   }
 

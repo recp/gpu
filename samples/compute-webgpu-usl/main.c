@@ -48,8 +48,10 @@
 
 #if GPU_COMPUTE_USE_TIMESTAMPS
 enum {
-  GPU_COMPUTE_TIMESTAMP_QUERY_COUNT = 4u,
-  GPU_COMPUTE_TIMESTAMP_OFFSET      = 256u
+  GPU_COMPUTE_TIMESTAMP_QUERY_COUNT    = 4u,
+  GPU_COMPUTE_TIMESTAMP_BINDING_OFFSET = 256u,
+  GPU_COMPUTE_TIMESTAMP_RESOLVE_OFFSET =
+    GPU_COMPUTE_TIMESTAMP_BINDING_OFFSET + sizeof(uint64_t)
 };
 #endif
 
@@ -270,7 +272,10 @@ create_resources(WebGPUCompute *state) {
 
 #if GPU_COMPUTE_USE_TIMESTAMPS
   {
-    static const uint64_t timestampSentinel[GPU_COMPUTE_TIMESTAMP_QUERY_COUNT] = {
+    static const uint64_t timestampSentinel[
+      GPU_COMPUTE_TIMESTAMP_QUERY_COUNT + 1u
+    ] = {
+      UINT64_MAX,
       UINT64_MAX,
       UINT64_MAX,
       UINT64_MAX,
@@ -284,7 +289,7 @@ create_resources(WebGPUCompute *state) {
     queryInfo.type             = GPU_QUERY_TIMESTAMP;
     queryInfo.count            = GPU_COMPUTE_TIMESTAMP_QUERY_COUNT;
     bufferInfo.label           = "compute-webgpu-timestamp-results";
-    bufferInfo.sizeBytes       = GPU_COMPUTE_TIMESTAMP_OFFSET +
+    bufferInfo.sizeBytes       = GPU_COMPUTE_TIMESTAMP_RESOLVE_OFFSET +
                                  GPU_COMPUTE_TIMESTAMP_QUERY_COUNT *
                                    sizeof(uint64_t);
     bufferInfo.usage           = GPU_BUFFER_USAGE_COPY_DST |
@@ -298,7 +303,7 @@ create_resources(WebGPUCompute *state) {
         GPUGetTimestampPeriod(state->queue, &timestampPeriod) != GPU_OK ||
         GPUQueueWriteBuffer(state->queue,
                             state->timestampBuffer,
-                            GPU_COMPUTE_TIMESTAMP_OFFSET,
+                            GPU_COMPUTE_TIMESTAMP_BINDING_OFFSET,
                             timestampSentinel,
                             sizeof(timestampSentinel)) != GPU_OK ||
         timestampPeriod != 1.0) {
@@ -317,9 +322,10 @@ create_resources(WebGPUCompute *state) {
   groupEntries[1].binding       = 1u;
   groupEntries[1].bindingType   = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
   groupEntries[1].buffer.buffer = state->timestampBuffer;
-  groupEntries[1].buffer.offset = GPU_COMPUTE_TIMESTAMP_OFFSET;
-  groupEntries[1].buffer.size   = GPU_COMPUTE_TIMESTAMP_QUERY_COUNT *
-                                  sizeof(uint64_t);
+  groupEntries[1].buffer.offset = GPU_COMPUTE_TIMESTAMP_BINDING_OFFSET;
+  groupEntries[1].buffer.size   = sizeof(uint64_t) +
+                                  GPU_COMPUTE_TIMESTAMP_QUERY_COUNT *
+                                    sizeof(uint64_t);
 #endif
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
@@ -468,7 +474,7 @@ render_frame(void *userData) {
                        0u,
                        GPU_COMPUTE_TIMESTAMP_QUERY_COUNT,
                        state->timestampBuffer,
-                       GPU_COMPUTE_TIMESTAMP_OFFSET);
+                       GPU_COMPUTE_TIMESTAMP_RESOLVE_OFFSET);
   }
 #endif
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {

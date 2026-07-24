@@ -949,7 +949,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   set(GPU_WEBGPU_SAMPLE_TITLE "Pass timestamps")
   set(GPU_WEBGPU_SAMPLE_KIND "Compute + render / timestamps")
   set(GPU_WEBGPU_SAMPLE_DESCRIPTION
-      "Compute and render passes record portable boundary timestamps, then consume both resolved pairs on the next frame.")
+      "Compute and render passes record boundary timestamps, then verify an 8-byte-aligned resolve through WebGPU.")
   set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/timestamp-query.c")
   set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/timestamp-query.usl")
   set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/timestamp-query.wgsl")

@@ -25,15 +25,18 @@ kern(1, 1, 1) fill_timestamp_vertices(
 ) {
   let lane                = gid.x
   let sentinel            = 0xffffffffu
-  let computeBeginWritten = timestamps[0] != sentinel ||
-                            timestamps[1] != sentinel
-  let computeEndWritten   = timestamps[2] != sentinel ||
+  let prefixIntact        = timestamps[0] == sentinel &&
+                            timestamps[1] == sentinel
+  let computeBeginWritten = timestamps[2] != sentinel ||
                             timestamps[3] != sentinel
-  let renderBeginWritten  = timestamps[4] != sentinel ||
+  let computeEndWritten   = timestamps[4] != sentinel ||
                             timestamps[5] != sentinel
-  let renderEndWritten    = timestamps[6] != sentinel ||
+  let renderBeginWritten  = timestamps[6] != sentinel ||
                             timestamps[7] != sentinel
-  let resolved            = computeBeginWritten && computeEndWritten &&
+  let renderEndWritten    = timestamps[8] != sentinel ||
+                            timestamps[9] != sentinel
+  let resolved            = prefixIntact &&
+                            computeBeginWritten && computeEndWritten &&
                             renderBeginWritten && renderEndWritten
   let x                   = lane == 0u ? -0.68 : (lane == 1u ? 0.68 : 0.0)
   let y                   = lane == 2u ? 0.70 : -0.62
