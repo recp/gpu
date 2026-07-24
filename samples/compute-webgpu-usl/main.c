@@ -74,6 +74,7 @@ typedef struct WebGPUCompute {
   GPUShaderLibrary   *library;
   GPUShaderLayout    *shaderLayout;
   GPUPipelineLayout  *renderLayout;
+  GPUPipelineCache   *pipelineCache;
   GPUComputePipeline *computePipeline;
   GPURenderPipeline  *renderPipeline;
   GPUBuffer          *vertexBuffer;
@@ -103,6 +104,7 @@ resize_canvas(WebGPUCompute *state) {
 static int
 create_resources(WebGPUCompute *state) {
   GPUComputePipelineCreateInfo computeInfo = {0};
+  GPUPipelineCacheCreateInfo   cacheInfo = {0};
   GPURenderPipelineCreateInfo  renderInfo = {0};
   GPUShaderReflection          reflection = {0};
   GPUVertexAttribute           attributes[2] = {0};
@@ -116,6 +118,8 @@ create_resources(WebGPUCompute *state) {
   GPUBindGroupEntry             groupEntries[2] = {0};
   GPUBindGroupCreateInfo        groupInfo = {0};
   const GPUBindGroupLayoutEntry *layoutEntries;
+  GPUComputePipeline            *cachedPipeline;
+  GPUCacheStats                  stats;
   void                         *artifact;
   uint64_t                      artifactSize;
   uint32_t                      layoutEntryCount;
@@ -173,18 +177,46 @@ create_resources(WebGPUCompute *state) {
   }
 #endif
 
+  cacheInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+  cacheInfo.chain.structSize = sizeof(cacheInfo);
+  cacheInfo.label            = "compute-webgpu-usl-cache";
+  if (GPUCreatePipelineCache(state->device,
+                             &cacheInfo,
+                             &state->pipelineCache) != GPU_OK ||
+      !state->pipelineCache) {
+    set_status("GPU: failed to create WebGPU pipeline cache", 1);
+    return 0;
+  }
+
   computeInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
   computeInfo.chain.structSize = sizeof(computeInfo);
   computeInfo.label            = "compute-webgpu-usl-fill";
   computeInfo.layout           = state->shaderLayout->pipelineLayout;
+  computeInfo.cache            = state->pipelineCache;
   computeInfo.library          = state->library;
   computeInfo.entryPoint       = GPU_COMPUTE_ENTRY_POINT;
+  GPUResetStats(state->device);
   if (GPUCreateComputePipeline(state->device,
                                &computeInfo,
                                &state->computePipeline) != GPU_OK) {
     set_status("GPU: failed to create WebGPU compute pipeline", 1);
     return 0;
   }
+
+  cachedPipeline = NULL;
+  if (GPUCreateComputePipeline(state->device,
+                               &computeInfo,
+                               &cachedPipeline) != GPU_OK ||
+      !cachedPipeline ||
+      GPUGetCacheStats(state->device, &stats) != GPU_OK ||
+      stats.pipelineCompiles != 1u ||
+      stats.pipelineMisses != 1u ||
+      stats.pipelineHits != 1u) {
+    GPUDestroyComputePipeline(cachedPipeline);
+    set_status("GPU: WebGPU compute pipeline cache check failed", 1);
+    return 0;
+  }
+  GPUDestroyComputePipeline(cachedPipeline);
 
   renderLayoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   renderLayoutInfo.chain.structSize = sizeof(renderLayoutInfo);
