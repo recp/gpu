@@ -93,6 +93,29 @@ gpuIsSampleCountValid(uint32_t sampleCount) {
          sampleCount == 4u || sampleCount == 8u;
 }
 
+static uint32_t
+gpuMaxMipLevelCount(const GPUTextureCreateInfo *info) {
+  uint32_t extent;
+  uint32_t count;
+
+  extent = info->width;
+  if (info->dimension != GPU_TEXTURE_DIMENSION_1D &&
+      info->height > extent) {
+    extent = info->height;
+  }
+  if (info->dimension == GPU_TEXTURE_DIMENSION_3D &&
+      info->depthOrLayers > extent) {
+    extent = info->depthOrLayers;
+  }
+
+  count = 0u;
+  do {
+    count++;
+    extent >>= 1u;
+  } while (extent != 0u);
+  return count;
+}
+
 static GPUResult
 gpuValidateTextureFormatUsage(const GPUDevice       *device,
                               GPUFormat              format,
@@ -122,6 +145,15 @@ GPU_HIDE
 GPUResult
 gpuValidateTextureCreateInfo(const GPUDevice            *device,
                              const GPUTextureCreateInfo *info) {
+  const GPUTextureUsageFlags known =
+    GPU_TEXTURE_USAGE_SAMPLED |
+    GPU_TEXTURE_USAGE_STORAGE |
+    GPU_TEXTURE_USAGE_COLOR_TARGET |
+    GPU_TEXTURE_USAGE_DEPTH_STENCIL |
+    GPU_TEXTURE_USAGE_COPY_SRC |
+    GPU_TEXTURE_USAGE_COPY_DST |
+    GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT;
+
   if (!device || !info ||
       info->format <= GPU_FORMAT_UNDEFINED ||
       info->format >= GPU_FORMAT_COUNT ||
@@ -141,7 +173,14 @@ gpuValidateTextureCreateInfo(const GPUDevice            *device,
   if (!gpuIsTextureDimensionValid(info->dimension) || info->usage == 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  if ((info->usage & ~known) != 0u) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
   if (info->dimension == GPU_TEXTURE_DIMENSION_1D && info->height != 1u) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if ((info->mipLevelCount ? info->mipLevelCount : 1u) >
+      gpuMaxMipLevelCount(info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (!gpuIsSampleCountValid(info->sampleCount) ||

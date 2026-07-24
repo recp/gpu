@@ -44,6 +44,9 @@ webgpu_createBuffer(GPUDevice                 * __restrict device,
        GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT)) {
     return GPU_ERROR_UNSUPPORTED;
   }
+  if (info->sizeBytes > native->limits.maxBufferSize) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
 
   usage = webgpu_bufferUsage(info->usage);
   if (usage == WGPUBufferUsage_None) {

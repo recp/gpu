@@ -217,6 +217,11 @@ webgpu_createPipeline(GPUDevice                         *device,
       !info->layout->_native) {
     return GPU_ERROR_UNSUPPORTED;
   }
+  if (info->multisample.sampleCount != 0u &&
+      info->multisample.sampleCount != 1u &&
+      info->multisample.sampleCount != 4u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
 
   attributeCount = 0u;
   for (uint32_t i = 0u; i < info->vertex.bufferLayoutCount; i++) {

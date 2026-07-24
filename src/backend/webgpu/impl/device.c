@@ -720,6 +720,7 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   }
   request->callback = callback;
   request->userData = userData;
+  request->native->limits = requiredLimits;
 
   descriptor.label = gpu_webgpuString("gpu-webgpu-device");
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_TIMESTAMPS)) != 0u) {

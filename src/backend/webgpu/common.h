@@ -104,6 +104,7 @@ typedef struct GPUDeviceWebGPU {
   WGPUQueue           queue;
   WGPUBindGroupLayout pushConstantLayout;
   void               *errorContext;
+  WGPULimits          limits;
   GPUQueue            queueHandle;
   GPUCommandWebGPU    commands[GPU_WEBGPU_COMMAND_SLOT_COUNT];
 } GPUDeviceWebGPU;

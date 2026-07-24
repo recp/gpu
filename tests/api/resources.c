@@ -802,7 +802,26 @@ check_resource_validation(GPUDevice *device) {
     return 0;
   }
 
+  textureInfo.usage = 1u << 31;
+  texture = (GPUTexture *)(uintptr_t)1u;
+  if (GPUCreateTexture(device, &textureInfo, &texture) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      texture != NULL) {
+    fprintf(stderr, "texture create accepted unknown usage\n");
+    return 0;
+  }
+
   textureInfo.usage = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
+  textureInfo.mipLevelCount = 4u;
+  texture = (GPUTexture *)(uintptr_t)1u;
+  if (GPUCreateTexture(device, &textureInfo, &texture) !=
+        GPU_ERROR_INVALID_ARGUMENT ||
+      texture != NULL) {
+    fprintf(stderr, "texture create accepted excessive mip levels\n");
+    return 0;
+  }
+
+  textureInfo.mipLevelCount = 1u;
   texture = NULL;
   textureNoCopyDst = NULL;
   if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {

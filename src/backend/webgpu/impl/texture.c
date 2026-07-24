@@ -70,13 +70,45 @@ webgpu_textureUsage(GPUTextureUsageFlags usage) {
   return result;
 }
 
+static bool
+webgpu_isDepthStencilFormat(GPUFormat format) {
+  return format >= GPU_FORMAT_DEPTH16_UNORM &&
+         format <= GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+}
+
+static bool
+webgpu_textureWithinLimits(const GPUDeviceWebGPU     *native,
+                           const GPUTextureCreateInfo *info,
+                           WGPUTextureDimension        dimension) {
+  const WGPULimits *limits;
+
+  limits = &native->limits;
+  switch (dimension) {
+    case WGPUTextureDimension_1D:
+      return info->width <= limits->maxTextureDimension1D;
+    case WGPUTextureDimension_2D:
+      return info->width <= limits->maxTextureDimension2D &&
+             info->height <= limits->maxTextureDimension2D &&
+             info->depthOrLayers <= limits->maxTextureArrayLayers;
+    case WGPUTextureDimension_3D:
+      return info->width <= limits->maxTextureDimension3D &&
+             info->height <= limits->maxTextureDimension3D &&
+             info->depthOrLayers <= limits->maxTextureDimension3D;
+    default:
+      return false;
+  }
+}
+
 static GPUResult
 webgpu_createTexture(GPUDevice                  * __restrict device,
                      const GPUTextureCreateInfo * __restrict info,
                      GPUTexture                ** __restrict outTexture) {
-  WGPUTextureDescriptor descriptor = WGPU_TEXTURE_DESCRIPTOR_INIT;
   GPUDeviceWebGPU      *native;
   GPUTexture           *texture;
+  WGPUTextureDescriptor descriptor = WGPU_TEXTURE_DESCRIPTOR_INIT;
+  GPUFormatLayout        layout;
+  uint32_t              mipLevelCount;
+  uint32_t              sampleCount;
 
   native = gpu_webgpuDevice(device);
   if (!native || !native->device || !info || !outTexture) {
@@ -86,6 +118,8 @@ webgpu_createTexture(GPUDevice                  * __restrict device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
+  mipLevelCount = info->mipLevelCount ? info->mipLevelCount : 1u;
+  sampleCount   = info->sampleCount ? info->sampleCount : 1u;
   descriptor.dimension = info->dimension == GPU_TEXTURE_DIMENSION_1D &&
                          info->depthOrLayers > 1u
                            ? WGPUTextureDimension_2D
@@ -95,6 +129,21 @@ webgpu_createTexture(GPUDevice                  * __restrict device,
   if (descriptor.dimension == WGPUTextureDimension_Undefined ||
       descriptor.format == WGPUTextureFormat_Undefined ||
       descriptor.usage == WGPUTextureUsage_None) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  if ((sampleCount != 1u && sampleCount != 4u) ||
+      !webgpu_textureWithinLimits(native, info, descriptor.dimension) ||
+      !gpuFormatLayout(info->format, &layout) ||
+      info->width % layout.blockWidth != 0u ||
+      info->height % layout.blockHeight != 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  if (descriptor.dimension == WGPUTextureDimension_1D &&
+      (mipLevelCount != 1u ||
+       webgpu_isDepthStencilFormat(info->format) ||
+       layout.blockWidth != 1u || layout.blockHeight != 1u ||
+       (info->usage & (GPU_TEXTURE_USAGE_COLOR_TARGET |
+                       GPU_TEXTURE_USAGE_DEPTH_STENCIL)))) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -110,12 +159,8 @@ webgpu_createTexture(GPUDevice                  * __restrict device,
                                          ? 1u
                                          : info->height;
   descriptor.size.depthOrArrayLayers = info->depthOrLayers;
-  descriptor.mipLevelCount           = info->mipLevelCount
-                                         ? info->mipLevelCount
-                                         : 1u;
-  descriptor.sampleCount             = info->sampleCount
-                                         ? info->sampleCount
-                                         : 1u;
+  descriptor.mipLevelCount           = mipLevelCount;
+  descriptor.sampleCount             = sampleCount;
   texture->_priv = wgpuDeviceCreateTexture(native->device, &descriptor);
   if (!texture->_priv) {
     free(texture);
