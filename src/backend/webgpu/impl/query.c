@@ -33,7 +33,8 @@ webgpu_createQuerySet(GPUDevice                   *device,
   }
 
   descriptor.type = webgpu_queryType(info->type);
-  if (descriptor.type == WGPUQueryType_Force32) {
+  if (descriptor.type == WGPUQueryType_Force32 ||
+      info->count > GPU_WEBGPU_MAX_QUERY_COUNT) {
     return GPU_ERROR_UNSUPPORTED;
   }
   descriptor.label = gpu_webgpuString(info->label);
@@ -86,7 +87,6 @@ webgpu_queryScratch(GPUCommandWebGPU *command, uint64_t sizeBytes) {
   WGPUBufferDescriptor descriptor = WGPU_BUFFER_DESCRIPTOR_INIT;
   GPUDeviceWebGPU     *device;
 
-  /* WebGPU query sets contain at most 8192 64-bit results. */
   if (sizeBytes > GPU_WEBGPU_QUERY_RESOLVE_CAPACITY) {
     return NULL;
   }
