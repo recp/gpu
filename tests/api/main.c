@@ -220,7 +220,9 @@ static int
 run_vrs(void *ctx) {
   GPUApiTestContext *testCtx = ctx;
 
-  return gpu_test_vrs(testCtx->adapter, testCtx->device);
+  return gpu_test_vrs(testCtx->adapter,
+                      testCtx->device,
+                      testCtx->coordinateBytecodePath);
 }
 
 static int

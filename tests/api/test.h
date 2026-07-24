@@ -112,7 +112,9 @@ int gpu_test_subgroup(GPUAdapter *adapter, const char *bytecodePath);
 int gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath);
 int gpu_test_shader_f16(GPUAdapter *adapter, const char *bytecodePath);
 int gpu_test_atomic64(GPUAdapter *adapter, const char *bytecodePath);
-int gpu_test_vrs(GPUAdapter *adapter, GPUDevice *defaultDevice);
+int gpu_test_vrs(GPUAdapter *adapter,
+                 GPUDevice  *defaultDevice,
+                 const char *bytecodePath);
 int gpu_test_sampler_feedback(GPUAdapter *adapter, GPUDevice *defaultDevice);
 int gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath);
 int gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
