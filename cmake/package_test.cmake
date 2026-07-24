@@ -71,14 +71,6 @@ set(executable_suffix)
 if(WIN32)
   set(executable_suffix ".exe")
 endif()
-set(consumer "${consumer_build}/gpu-package-consumer${executable_suffix}")
-if(GPU_PACKAGE_CONFIG AND NOT EXISTS "${consumer}")
-  set(consumer
-      "${consumer_build}/${GPU_PACKAGE_CONFIG}/gpu-package-consumer${executable_suffix}")
-endif()
-if(NOT EXISTS "${consumer}")
-  message(FATAL_ERROR "GPU package consumer executable was not created")
-endif()
 
 if(WIN32)
   set(ENV{PATH}
@@ -97,10 +89,21 @@ endif()
 if(GPU_PACKAGE_VULKAN_ICD AND EXISTS "${GPU_PACKAGE_VULKAN_ICD}")
   set(ENV{VK_ICD_FILENAMES} "${GPU_PACKAGE_VULKAN_ICD}")
 endif()
-execute_process(
-  COMMAND "${consumer}"
-  RESULT_VARIABLE result
-)
-if(result)
-  message(FATAL_ERROR "GPU package consumer execution failed: ${result}")
-endif()
+
+foreach(consumer_name gpu-package-consumer gpu-package-consumer-cxx)
+  set(consumer "${consumer_build}/${consumer_name}${executable_suffix}")
+  if(GPU_PACKAGE_CONFIG AND NOT EXISTS "${consumer}")
+    set(consumer
+        "${consumer_build}/${GPU_PACKAGE_CONFIG}/${consumer_name}${executable_suffix}")
+  endif()
+  if(NOT EXISTS "${consumer}")
+    message(FATAL_ERROR "${consumer_name} executable was not created")
+  endif()
+  execute_process(
+    COMMAND "${consumer}"
+    RESULT_VARIABLE result
+  )
+  if(result)
+    message(FATAL_ERROR "${consumer_name} execution failed: ${result}")
+  endif()
+endforeach()
