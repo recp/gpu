@@ -17,11 +17,13 @@
 #include "../common.h"
 #include "buffer_internal.h"
 #include "cmdqueue_internal.h"
+#include "compute_internal.h"
 #include "descr/descriptor_internal.h"
 #include "device_internal.h"
 #include "library_internal.h"
 #include "pipeline_cache_internal.h"
 #include "ray_internal.h"
+#include "render/pipeline_internal.h"
 
 enum {
   GPU_ACCELERATION_STRUCTURE_BUILD_FLAGS_EXT =
@@ -397,6 +399,329 @@ GPUEndAccelerationStructurePassEXT(
   if (pass->cmdb) {
     pass->cmdb->_activeEncoder = false;
   }
+}
+
+static bool
+gpu_intersectionFunctionStageValid(GPUShaderStageFlags stage,
+                                   GPUShaderStageFlags allowed) {
+  return stage != 0u &&
+         (stage & (stage - 1u)) == 0u &&
+         (stage & allowed) != 0u;
+}
+
+static bool
+gpu_intersectionFunctionListValid(
+  const GPUShaderLibrary                    *library,
+  const GPUIntersectionFunctionPipelineEXT *info,
+  GPUShaderStageFlags                        allowedStages) {
+  GPUShaderStageFlags reflectedStage;
+
+  if (!library || !info || !info->pFunctions || info->functionCount == 0u ||
+      (info->chain.structSize != 0u &&
+       info->chain.structSize < sizeof(*info))) {
+    return false;
+  }
+
+  for (uint32_t i = 0u; i < info->functionCount; i++) {
+    const GPUIntersectionFunctionEXT *function;
+
+    function = &info->pFunctions[i];
+    if (!function->entryPoint || function->entryPoint[0] == '\0' ||
+        !gpu_intersectionFunctionStageValid(function->stage, allowedStages)) {
+      return false;
+    }
+    if (!gpuGetShaderLibraryEntryStage(library,
+                                       function->entryPoint,
+                                       &reflectedStage) ||
+        reflectedStage != GPU_SHADER_STAGE_INTERSECTION_BIT) {
+      return false;
+    }
+    for (uint32_t j = 0u; j < i; j++) {
+      const GPUIntersectionFunctionEXT *previous;
+
+      previous = &info->pFunctions[j];
+      if (previous->stage == function->stage &&
+          strcmp(previous->entryPoint, function->entryPoint) == 0) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+GPU_HIDE
+GPUResult
+gpuAttachComputeIntersectionFunctions(
+  GPUDevice                                *device,
+  GPUShaderLibrary                         *library,
+  const GPUIntersectionFunctionPipelineEXT *info,
+  GPUComputePipeline                       *pipeline) {
+  GPUShaderFunction **functions;
+  GPUApi            *api;
+  GPUResult           result;
+  uint32_t            created;
+
+  if (!device || !library || !pipeline ||
+      !gpu_intersectionFunctionListValid(library,
+                                         info,
+                                         GPU_SHADER_STAGE_COMPUTE_BIT)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!GPUIsFeatureEnabled(device,
+                           GPU_FEATURE_INTERSECTION_FUNCTION_TABLE) ||
+      !(api = gpuDeviceApi(device)) ||
+      !api->compute.setIntersectionFunctions) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  functions = calloc(info->functionCount, sizeof(*functions));
+  if (!functions) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  created = 0u;
+  for (; created < info->functionCount; created++) {
+    functions[created] = gpuShaderFunction(
+      library,
+      info->pFunctions[created].entryPoint
+    );
+    if (!functions[created]) {
+      result = GPU_ERROR_INVALID_ARGUMENT;
+      goto cleanup;
+    }
+  }
+
+  result = api->compute.setIntersectionFunctions(pipeline,
+                                                  functions,
+                                                  info->functionCount);
+
+cleanup:
+  for (uint32_t i = 0u; i < created; i++) {
+    gpuDestroyShaderFunction(library, functions[i]);
+  }
+  free(functions);
+  return result;
+}
+
+GPU_HIDE
+GPUResult
+gpuAttachRenderIntersectionFunctions(
+  GPUDevice                                *device,
+  GPUShaderLibrary                         *library,
+  const GPUIntersectionFunctionPipelineEXT *info,
+  GPURenderPipeline                        *pipeline) {
+  GPUShaderFunction   **functions;
+  GPUShaderStageFlags  *stages;
+  GPUApi              *api;
+  GPUResult             result;
+  uint32_t              created;
+
+  if (!device || !library || !pipeline ||
+      !gpu_intersectionFunctionListValid(
+        library,
+        info,
+        GPU_SHADER_STAGE_VERTEX_BIT | GPU_SHADER_STAGE_FRAGMENT_BIT
+      )) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!GPUIsFeatureEnabled(device,
+                           GPU_FEATURE_INTERSECTION_FUNCTION_TABLE) ||
+      !(api = gpuDeviceApi(device)) ||
+      !api->render.setIntersectionFunctions) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  functions = calloc(info->functionCount, sizeof(*functions));
+  stages    = malloc((size_t)info->functionCount * sizeof(*stages));
+  if (!functions || !stages) {
+    free(stages);
+    free(functions);
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  created = 0u;
+  for (; created < info->functionCount; created++) {
+    functions[created] = gpuShaderFunction(
+      library,
+      info->pFunctions[created].entryPoint
+    );
+    stages[created] = info->pFunctions[created].stage;
+    if (!functions[created]) {
+      result = GPU_ERROR_INVALID_ARGUMENT;
+      goto cleanup;
+    }
+  }
+
+  result = api->render.setIntersectionFunctions(pipeline,
+                                                 functions,
+                                                 stages,
+                                                 info->functionCount);
+
+cleanup:
+  for (uint32_t i = 0u; i < created; i++) {
+    gpuDestroyShaderFunction(library, functions[i]);
+  }
+  free(stages);
+  free(functions);
+  return result;
+}
+
+GPU_EXPORT
+GPUResult
+GPUCreateIntersectionFunctionTableEXT(
+  GPUDevice                                       *device,
+  const GPUIntersectionFunctionTableCreateInfoEXT *info,
+  GPUIntersectionFunctionTableEXT                **outTable) {
+  GPUIntersectionFunctionTableEXT *table;
+  GPUDevice                       *pipelineDevice;
+  GPUApi                          *api;
+  GPUResult                        result;
+  bool                             compute;
+
+  if (!outTable) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outTable = NULL;
+  if (!device || !info ||
+      !gpu_rayChainValid(
+        &info->chain,
+        GPU_STRUCTURE_TYPE_INTERSECTION_FUNCTION_TABLE_CREATE_INFO_EXT,
+        sizeof(*info)) ||
+      (info->computePipeline == NULL) == (info->renderPipeline == NULL)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  compute = info->computePipeline != NULL;
+  if (compute) {
+    pipelineDevice = info->computePipeline->_device;
+    if (info->stage != GPU_SHADER_STAGE_COMPUTE_BIT) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+  } else {
+    pipelineDevice = info->renderPipeline->_layout
+                       ? info->renderPipeline->_layout->_device
+                       : NULL;
+    if (!gpu_intersectionFunctionStageValid(
+          info->stage,
+          GPU_SHADER_STAGE_VERTEX_BIT | GPU_SHADER_STAGE_FRAGMENT_BIT
+        ) ||
+        (info->stage == GPU_SHADER_STAGE_VERTEX_BIT &&
+         info->renderPipeline->_mesh)) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+  }
+  if (pipelineDevice != device) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!GPUIsFeatureEnabled(device,
+                           GPU_FEATURE_INTERSECTION_FUNCTION_TABLE) ||
+      !(api = gpuDeviceApi(device)) ||
+      !api->rayQuery.createIntersectionFunctionTable) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  table = calloc(1, sizeof(*table));
+  if (!table) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  table->_api            = api;
+  table->device          = device;
+  table->computePipeline = info->computePipeline;
+  table->renderPipeline  = info->renderPipeline;
+  table->stage           = info->stage;
+  result = api->rayQuery.createIntersectionFunctionTable(device, info, table);
+  if (result != GPU_OK) {
+    free(table);
+    return result;
+  }
+
+  if (compute) {
+    gpuRetainComputePipeline(info->computePipeline);
+  } else {
+    gpuRetainRenderPipeline(info->renderPipeline);
+  }
+  *outTable = table;
+  return GPU_OK;
+}
+
+GPU_EXPORT
+void
+GPUDestroyIntersectionFunctionTableEXT(
+  GPUIntersectionFunctionTableEXT *table) {
+  if (!table) {
+    return;
+  }
+  if (table->_api && table->_api->rayQuery.destroyIntersectionFunctionTable) {
+    table->_api->rayQuery.destroyIntersectionFunctionTable(table);
+  }
+  GPUDestroyComputePipeline(table->computePipeline);
+  GPUDestroyRenderPipeline(table->renderPipeline);
+  free(table);
+}
+
+GPU_EXPORT
+GPUResult
+GPUSetIntersectionFunctionTableBufferEXT(
+  GPUIntersectionFunctionTableEXT *table,
+  uint32_t                         index,
+  GPUBuffer                       *buffer,
+  uint64_t                         offset) {
+  if (!table || (buffer && (buffer->device != table->device ||
+                            !gpuBufferOffsetValid(buffer, offset))) ||
+      (!buffer && offset != 0u)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!table->_api ||
+      !table->_api->rayQuery.setIntersectionFunctionTableBuffer) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  return table->_api->rayQuery.setIntersectionFunctionTableBuffer(table,
+                                                                  index,
+                                                                  buffer,
+                                                                  offset);
+}
+
+GPU_EXPORT
+void
+GPUBindComputeIntersectionFunctionTableEXT(
+  GPUComputePassEncoder           *pass,
+  uint32_t                         index,
+  GPUIntersectionFunctionTableEXT *table) {
+  if (!pass || pass->_ended || !table ||
+      pass->_device != table->device ||
+      pass->_pipeline != table->computePipeline ||
+      table->stage != GPU_SHADER_STAGE_COMPUTE_BIT ||
+      pass->_api != table->_api ||
+      !table->_api->rayQuery.bindComputeIntersectionFunctionTable) {
+    return;
+  }
+
+  table->_api->rayQuery.bindComputeIntersectionFunctionTable(pass,
+                                                             index,
+                                                             table);
+}
+
+GPU_EXPORT
+void
+GPUBindRenderIntersectionFunctionTableEXT(
+  GPURenderPassEncoder            *pass,
+  uint32_t                         index,
+  GPUIntersectionFunctionTableEXT *table) {
+  if (!pass || pass->_ended || !table ||
+      pass->_device != table->device ||
+      pass->_pipeline != table->renderPipeline ||
+      (table->stage != GPU_SHADER_STAGE_VERTEX_BIT &&
+       table->stage != GPU_SHADER_STAGE_FRAGMENT_BIT) ||
+      pass->_api != table->_api ||
+      !table->_api->rayQuery.bindRenderIntersectionFunctionTable) {
+    return;
+  }
+
+  table->_api->rayQuery.bindRenderIntersectionFunctionTable(pass,
+                                                            index,
+                                                            table);
 }
 
 static bool

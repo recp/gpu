@@ -67,6 +67,12 @@ typedef struct GPUApiCompute {
   void
   (*setFunction)(GPUComputePipeline *pipeline, GPUShaderFunction *func);
 
+  GPUResult
+  (*setIntersectionFunctions)(
+    GPUComputePipeline            *pipeline,
+    GPUShaderFunction *const      *functions,
+    uint32_t                       functionCount);
+
   GPUComputePipelineState*
   (*newComputeState)(GPUDevice *device, GPUComputePipeline *pipeline);
 

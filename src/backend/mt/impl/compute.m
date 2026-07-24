@@ -18,11 +18,6 @@
 #include "../../../api/compute_internal.h"
 #include "pipeline_cache.h"
 
-typedef struct MTComputePipelineDesc {
-  id<MTLFunction> function;
-  id              function4;
-} MTComputePipelineDesc;
-
 static MTComputeEncoder *
 mt_computeEncoder(GPUComputePassEncoder *enc) {
   return enc ? enc->_priv : NULL;
@@ -78,6 +73,61 @@ mt_setComputeFunction(GPUComputePipeline *pipeline, GPUShaderFunction *func) {
 #endif
 }
 
+static GPUResult
+mt_setComputeIntersectionFunctions(
+  GPUComputePipeline       *pipeline,
+  GPUShaderFunction *const *functions,
+  uint32_t                  functionCount) {
+  MTComputePipelineDesc *desc;
+  NSMutableArray        *nativeFunctions;
+  NSMutableArray        *nativeFunctions4;
+
+  if (!pipeline || !(desc = pipeline->_priv) || !functions ||
+      functionCount == 0u) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  nativeFunctions = [[NSMutableArray alloc] initWithCapacity:functionCount];
+  nativeFunctions4 = nil;
+#if MT_HAS_METAL4
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    nativeFunctions4 = [[NSMutableArray alloc] initWithCapacity:functionCount];
+  }
+#endif
+  for (uint32_t i = 0u; i < functionCount; i++) {
+    MTShaderFunction *function;
+
+    function = functions[i] ? functions[i]->_priv : NULL;
+    if (!function || !function->function) {
+      [nativeFunctions4 release];
+      [nativeFunctions release];
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    [nativeFunctions addObject:function->function];
+#if MT_HAS_METAL4
+    if (nativeFunctions4) {
+      if (@available(macOS 26.0, iOS 26.0, *)) {
+        MTL4LibraryFunctionDescriptor *function4;
+
+        function4         = [MTL4LibraryFunctionDescriptor new];
+        function4.library = function->library;
+        function4.name    = function->name;
+        [nativeFunctions4 addObject:function4];
+        [function4 release];
+      }
+    }
+#endif
+  }
+
+  [desc->intersectionFunctions4 release];
+  [desc->intersectionFunctions release];
+  desc->intersectionFunctions  = [nativeFunctions copy];
+  desc->intersectionFunctions4 = [nativeFunctions4 copy];
+  [nativeFunctions4 release];
+  [nativeFunctions release];
+  return GPU_OK;
+}
+
 GPU_HIDE
 GPUComputePipelineState*
 mt_newComputeState(GPUDevice *device, GPUComputePipeline *pipeline) {
@@ -111,6 +161,14 @@ mt_newComputeState(GPUDevice *device, GPUComputePipeline *pipeline) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       pipelineDesc4                           = [MTL4ComputePipelineDescriptor new];
       pipelineDesc4.computeFunctionDescriptor = desc->function4;
+      if (desc->intersectionFunctions4.count > 0u) {
+        MTL4StaticLinkingDescriptor *linking;
+
+        linking = [MTL4StaticLinkingDescriptor new];
+        linking.functionDescriptors = desc->intersectionFunctions4;
+        pipelineDesc4.staticLinkingDescriptor = linking;
+        [linking release];
+      }
       mtState = mt_compileComputePipeline4(pipeline->_cache,
                                             deviceMT,
                                             pipelineDesc4,
@@ -121,6 +179,14 @@ mt_newComputeState(GPUDevice *device, GPUComputePipeline *pipeline) {
   } else {
     pipelineDesc                 = [MTLComputePipelineDescriptor new];
     pipelineDesc.computeFunction = desc->function;
+    if (desc->intersectionFunctions.count > 0u) {
+      MTLLinkedFunctions *linkedFunctions;
+
+      linkedFunctions           = [MTLLinkedFunctions new];
+      linkedFunctions.functions = desc->intersectionFunctions;
+      pipelineDesc.linkedFunctions = linkedFunctions;
+      [linkedFunctions release];
+    }
     usesArchive = mt_useComputeCache(pipeline->_cache, pipelineDesc);
     if (usesArchive) {
       mtState = [deviceMT->device
@@ -179,6 +245,8 @@ mt_destroyComputePipeline(GPUComputePipeline *pipeline) {
     }
     free(state);
   }
+  [desc->intersectionFunctions4 release];
+  [desc->intersectionFunctions release];
   [desc->function4 release];
   [desc->function release];
   free(desc);
@@ -507,6 +575,7 @@ void
 mt_initCompute(GPUApiCompute *api) {
   api->newComputePipeline = mt_newComputePipeline;
   api->setFunction = mt_setComputeFunction;
+  api->setIntersectionFunctions = mt_setComputeIntersectionFunctions;
   api->newComputeState = mt_newComputeState;
   api->destroyComputePipeline = mt_destroyComputePipeline;
   api->computeCommandEncoder = mt_computeCommandEncoder;

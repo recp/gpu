@@ -124,7 +124,15 @@ bool
 gpuReleaseRenderPipeline(GPURenderPipeline *pipeline);
 
 GPU_HIDE
+void
+gpuRetainRenderPipeline(GPURenderPipeline *pipeline);
+
+GPU_HIDE
 bool
 gpuReleaseComputePipeline(GPUComputePipeline *pipeline);
+
+GPU_HIDE
+void
+gpuRetainComputePipeline(GPUComputePipeline *pipeline);
 
 #endif /* gpu_pipeline_cache_internal_h */

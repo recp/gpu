@@ -125,17 +125,53 @@ gpuCompileComputePipelineState(GPUDevice *device, GPUComputePipeline *pipeline) 
   return api->compute.newComputeState(device, pipeline);
 }
 
+static GPUResult
+gpu_computePipelineExtensions(
+  GPUDevice                                 *device,
+  const GPUComputePipelineCreateInfo        *info,
+  const GPUIntersectionFunctionPipelineEXT **outIntersection) {
+  const GPUChainedStruct                    *chain;
+  const GPUIntersectionFunctionPipelineEXT *intersection;
+
+  if (!device || !info || !outIntersection) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  intersection = NULL;
+  for (chain = info->chain.pNext; chain; chain = chain->pNext) {
+    if (chain->sType !=
+          GPU_STRUCTURE_TYPE_INTERSECTION_FUNCTION_PIPELINE_EXT ||
+        intersection ||
+        (chain->structSize != 0u &&
+         chain->structSize <
+           sizeof(GPUIntersectionFunctionPipelineEXT))) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    intersection = (const GPUIntersectionFunctionPipelineEXT *)chain;
+  }
+
+  if (intersection &&
+      !GPUIsFeatureEnabled(device,
+                           GPU_FEATURE_INTERSECTION_FUNCTION_TABLE)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  *outIntersection = intersection;
+  return GPU_OK;
+}
+
 GPU_EXPORT
 GPUResult
 GPUCreateComputePipeline(GPUDevice                          * __restrict device,
                          const GPUComputePipelineCreateInfo * __restrict info,
                          GPUComputePipeline                ** __restrict outPipeline) {
-  GPUComputePipelineState *state;
-  GPUComputePipeline      *pipeline;
-  GPUShaderFunction       *function;
-  GPUApi                  *api;
-  GPUPipelineCacheKey      cacheKey;
-  uint32_t                 requiredBindGroupMask;
+  GPUComputePipelineState                 *state;
+  GPUComputePipeline                      *pipeline;
+  GPUShaderFunction                       *function;
+  GPUApi                                  *api;
+  const GPUIntersectionFunctionPipelineEXT *intersection;
+  GPUPipelineCacheKey                      cacheKey;
+  GPUResult                                result;
+  uint32_t                                 requiredBindGroupMask;
 
   if (!outPipeline) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -157,9 +193,11 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
   if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  if (info->cache && !info->chain.pNext) {
-    GPUResult result;
-
+  result = gpu_computePipelineExtensions(device, info, &intersection);
+  if (result != GPU_OK) {
+    return result;
+  }
+  if (info->cache && !intersection) {
     result = gpuPipelineCacheFindCompute(info->cache,
                                          info,
                                          &cacheKey,
@@ -207,9 +245,11 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
     gpuPipelineCacheReleaseKey(&cacheKey);
     return GPU_ERROR_BACKEND_FAILURE;
   }
+  if (intersection && api->compute.createPipeline) {
+    gpuPipelineCacheReleaseKey(&cacheKey);
+    return GPU_ERROR_UNSUPPORTED;
+  }
   if (api->compute.createPipeline) {
-    GPUResult result;
-
     pipeline = calloc(1, sizeof(*pipeline));
     if (!pipeline) {
       gpuPipelineCacheReleaseKey(&cacheKey);
@@ -255,6 +295,17 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
     pipeline->_refCount = 1u;
     api->compute.setFunction(pipeline, function);
     gpuDestroyShaderFunction(info->library, function);
+    if (intersection) {
+      result = gpuAttachComputeIntersectionFunctions(device,
+                                                     info->library,
+                                                     intersection,
+                                                     pipeline);
+      if (result != GPU_OK) {
+        GPUDestroyComputePipeline(pipeline);
+        gpuPipelineCacheReleaseKey(&cacheKey);
+        return result;
+      }
+    }
     pipeline->_cache = info->cache;
     state            = gpuCompileComputePipelineState(device, pipeline);
     pipeline->_cache = NULL;
@@ -277,7 +328,7 @@ GPUCreateComputePipeline(GPUDevice                          * __restrict device,
   gpuGetPipelineLayoutPushConstants(info->layout,
                                     &pipeline->_pushConstantSizeBytes,
                                     &pipeline->_pushConstantStages);
-  if (info->cache && !info->chain.pNext) {
+  if (info->cache && !intersection) {
     pipeline = gpuPipelineCacheStoreCompute(info->cache, &cacheKey, pipeline);
   } else {
     gpuRecordPipelineCompile(device, info->cache);

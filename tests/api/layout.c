@@ -42,6 +42,8 @@ GPU_ASSERT_CHAIN_FIRST(GPURasterizationRateMapCreateInfoEXT);
 GPU_ASSERT_CHAIN_FIRST(GPURasterizationRateMapRenderPassEXT);
 GPU_ASSERT_CHAIN_FIRST(GPUAccelerationStructureBuildInfoEXT);
 GPU_ASSERT_CHAIN_FIRST(GPUAccelerationStructureCreateInfoEXT);
+GPU_ASSERT_CHAIN_FIRST(GPUIntersectionFunctionPipelineEXT);
+GPU_ASSERT_CHAIN_FIRST(GPUIntersectionFunctionTableCreateInfoEXT);
 GPU_ASSERT_CHAIN_FIRST(GPUExecutionGraphCreateInfoEXT);
 GPU_ASSERT_CHAIN_FIRST(GPUExecutionGraphInstanceCreateInfoEXT);
 
@@ -71,6 +73,9 @@ GPU_ASSERT_64BIT_SIZE(GPUShaderReflection, 24u);
 GPU_ASSERT_64BIT_SIZE(GPUShaderLibraryCreateInfo, 72u);
 GPU_ASSERT_64BIT_SIZE(GPURenderPipelineCreateInfo, 128u);
 GPU_ASSERT_64BIT_SIZE(GPUSubgroupMatrixPropertiesEXT, 40u);
+GPU_ASSERT_64BIT_SIZE(GPUIntersectionFunctionEXT, 16u);
+GPU_ASSERT_64BIT_SIZE(GPUIntersectionFunctionPipelineEXT, 32u);
+GPU_ASSERT_64BIT_SIZE(GPUIntersectionFunctionTableCreateInfoEXT, 48u);
 GPU_ASSERT_64BIT_SIZE(GPUIndirectMemoryCopyCommandEXT, 24u);
 GPU_ASSERT_64BIT_SIZE(GPUIndirectTextureSubresourceEXT, 16u);
 GPU_ASSERT_64BIT_SIZE(GPUIndirectMemoryToTextureCommandEXT, 56u);

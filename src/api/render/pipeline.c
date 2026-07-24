@@ -20,6 +20,7 @@
 #include "../descr/descriptor_internal.h"
 #include "../library_internal.h"
 #include "../pipeline_cache_internal.h"
+#include "../ray_internal.h"
 #include "../vertex_internal.h"
 
 #include <us/compiler.h>
@@ -551,26 +552,43 @@ gpu_setMeshPipelineInfo(GPURenderPipeline         *pipeline,
 }
 
 static GPUResult
-gpu_meshPipelineInfo(GPUDevice                          *device,
-                     const GPURenderPipelineCreateInfo *info,
-                     const GPUMeshPipelineEXT         **outMesh) {
-  const GPUChainedStruct *chain;
-  const GPUMeshPipelineEXT *mesh;
+gpu_renderPipelineExtensions(
+  GPUDevice                                 *device,
+  const GPURenderPipelineCreateInfo         *info,
+  const GPUMeshPipelineEXT                 **outMesh,
+  const GPUIntersectionFunctionPipelineEXT **outIntersection) {
+  const GPUChainedStruct                    *chain;
+  const GPUMeshPipelineEXT                 *mesh;
+  const GPUIntersectionFunctionPipelineEXT *intersection;
 
-  if (!device || !info || !outMesh) {
+  if (!device || !info || !outMesh || !outIntersection) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  chain = info->chain.pNext;
-  mesh  = NULL;
-  while (chain) {
-    if (chain->sType != GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT || mesh ||
-        (chain->structSize != 0u &&
-         chain->structSize < sizeof(GPUMeshPipelineEXT))) {
-      return GPU_ERROR_INVALID_ARGUMENT;
+  mesh         = NULL;
+  intersection = NULL;
+  for (chain = info->chain.pNext; chain; chain = chain->pNext) {
+    switch (chain->sType) {
+      case GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT:
+        if (mesh ||
+            (chain->structSize != 0u &&
+             chain->structSize < sizeof(GPUMeshPipelineEXT))) {
+          return GPU_ERROR_INVALID_ARGUMENT;
+        }
+        mesh = (const GPUMeshPipelineEXT *)chain;
+        break;
+      case GPU_STRUCTURE_TYPE_INTERSECTION_FUNCTION_PIPELINE_EXT:
+        if (intersection ||
+            (chain->structSize != 0u &&
+             chain->structSize <
+               sizeof(GPUIntersectionFunctionPipelineEXT))) {
+          return GPU_ERROR_INVALID_ARGUMENT;
+        }
+        intersection = (const GPUIntersectionFunctionPipelineEXT *)chain;
+        break;
+      default:
+        return GPU_ERROR_INVALID_ARGUMENT;
     }
-    mesh  = (const GPUMeshPipelineEXT *)chain;
-    chain = chain->pNext;
   }
 
   if (mesh) {
@@ -584,8 +602,24 @@ gpu_meshPipelineInfo(GPUDevice                          *device,
   } else if (!info->vertexEntry) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  if (intersection) {
+    if (!GPUIsFeatureEnabled(device,
+                             GPU_FEATURE_INTERSECTION_FUNCTION_TABLE)) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+    if (mesh) {
+      for (uint32_t i = 0u; i < intersection->functionCount; i++) {
+        if (intersection->pFunctions &&
+            intersection->pFunctions[i].stage ==
+              GPU_SHADER_STAGE_VERTEX_BIT) {
+          return GPU_ERROR_INVALID_ARGUMENT;
+        }
+      }
+    }
+  }
 
-  *outMesh = mesh;
+  *outMesh         = mesh;
+  *outIntersection = intersection;
   return GPU_OK;
 }
 
@@ -647,6 +681,7 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   GPURenderPipelineState  *state;
   GPURenderPipeline       *pipeline;
   const GPUMeshPipelineEXT *mesh;
+  const GPUIntersectionFunctionPipelineEXT *intersection;
   GPUVertexDescriptor     *vertexDesc;
   GPUShaderFunction       *vertexFunc;
   GPUShaderFunction       *fragmentFunc;
@@ -672,7 +707,10 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   if (info->cache && info->cache->device != device)
     return GPU_ERROR_INVALID_ARGUMENT;
-  result = gpu_meshPipelineInfo(device, info, &mesh);
+  result = gpu_renderPipelineExtensions(device,
+                                        info,
+                                        &mesh,
+                                        &intersection);
   if (result != GPU_OK)
     return result;
   if (!gpu_pipelineInfoIsSupported(info, mesh != NULL))
@@ -688,7 +726,7 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
     if (result != GPU_OK)
       return result;
   }
-  if (info->cache) {
+  if (info->cache && !intersection) {
     result = gpuPipelineCacheFindRender(info->cache,
                                         info,
                                         &cacheKey,
@@ -757,6 +795,10 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
 
   sampleCount = info->multisample.sampleCount > 0 ?
     info->multisample.sampleCount : 1u;
+  if (intersection && api->render.createPipeline) {
+    gpuPipelineCacheReleaseKey(&cacheKey);
+    return GPU_ERROR_UNSUPPORTED;
+  }
   if (api->render.createPipeline) {
     pipeline = calloc(1, sizeof(*pipeline));
     if (!pipeline) {
@@ -830,6 +872,17 @@ GPUCreateRenderPipeline(GPUDevice                         * __restrict device,
   gpuDestroyShaderFunction(info->library, fragmentFunc);
   gpuDestroyShaderFunction(info->library, taskFunc);
   gpuDestroyShaderFunction(info->library, meshFunc);
+  if (intersection) {
+    result = gpuAttachRenderIntersectionFunctions(device,
+                                                  info->library,
+                                                  intersection,
+                                                  pipeline);
+    if (result != GPU_OK) {
+      GPUDestroyRenderPipeline(pipeline);
+      gpuPipelineCacheReleaseKey(&cacheKey);
+      return result;
+    }
+  }
 
   if (!mesh) {
     vertexDesc = gpu_createVertexDescriptorFromState(api, &info->vertex);
@@ -897,7 +950,7 @@ ready:
   gpuGetPipelineLayoutPushConstants(info->layout,
                                     &pipeline->_pushConstantSizeBytes,
                                     &pipeline->_pushConstantStages);
-  if (info->cache) {
+  if (info->cache && !intersection) {
     pipeline = gpuPipelineCacheStoreRender(info->cache, &cacheKey, pipeline);
   } else {
     gpuRecordPipelineCompile(device, info->cache);

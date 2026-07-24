@@ -1,0 +1,31 @@
+struct HitAttributes {
+  marker: float
+}
+
+struct RenderOut {
+  position: float4 #position
+}
+
+kern(1, 1, 1) intersection_table_cs() {
+}
+
+vert intersection_table_vs(vertexId: uint #vertex_id) -> RenderOut {
+  var out: RenderOut
+  if (vertexId == 0) {
+    out.position = float4(-1.0, -1.0, 0.0, 1.0)
+  } else if (vertexId == 1) {
+    out.position = float4(3.0, -1.0, 0.0, 1.0)
+  } else {
+    out.position = float4(-1.0, 3.0, 0.0, 1.0)
+  }
+  return out
+}
+
+frag intersection_table_fs() -> float4 {
+  return float4(1.0, 0.0, 0.0, 1.0)
+}
+
+intersection constant_hit() {
+  var attributes = HitAttributes { 0.0 }
+  report_hit(1.25, uint(0), attributes)
+}

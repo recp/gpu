@@ -2414,6 +2414,22 @@ if(GPU_BUILD_TESTS)
     )
   endif()
 
+  if(GPU_BUILD_METAL)
+    set(GPU_USL_FIXTURE_TARGET_CAPS
+        ray_query,intersection_function_table)
+    gpu_add_usl_fixtures(
+      GPU_API_INTERSECTION_FUNCTION_USL_FIXTURE
+      metal
+      api-intersection-function
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/intersection_function.usl"
+    )
+    unset(GPU_USL_FIXTURE_TARGET_CAPS)
+    add_custom_target(
+      gpu-api-intersection-function-fixture
+      DEPENDS ${GPU_API_INTERSECTION_FUNCTION_USL_FIXTURE}
+    )
+  endif()
+
   if(GPU_BUILD_DX12)
     set(GPU_USL_FIXTURE_TARGET_CAPS sm_6_3,ray_tracing_pipeline)
     gpu_add_usl_fixtures(
@@ -3016,6 +3032,9 @@ if(GPU_BUILD_TESTS)
   if(TARGET gpu-api-ray-query-fixture)
     add_dependencies(gpu-api-test gpu-api-ray-query-fixture)
   endif()
+  if(TARGET gpu-api-intersection-function-fixture)
+    add_dependencies(gpu-api-test gpu-api-intersection-function-fixture)
+  endif()
   if(TARGET gpu-api-vulkan-fixtures)
     add_dependencies(gpu-api-test gpu-api-vulkan-fixtures)
   endif()
@@ -3078,6 +3097,11 @@ if(GPU_BUILD_TESTS)
   if(GPU_API_RAY_QUERY_USL_FIXTURE)
     set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
       "GPU_RAY_QUERY_USL_PATH=${GPU_API_RAY_QUERY_USL_FIXTURE}"
+    )
+  endif()
+  if(GPU_API_INTERSECTION_FUNCTION_USL_FIXTURE)
+    set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
+      "GPU_INTERSECTION_FUNCTION_USL_PATH=${GPU_API_INTERSECTION_FUNCTION_USL_FIXTURE}"
     )
   endif()
   if(GPU_API_DEFAULT_BACKEND STREQUAL "dx12" AND

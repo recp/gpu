@@ -647,6 +647,370 @@ cleanup:
 }
 
 int
+gpu_test_intersection_function_table(GPUAdapter *adapter,
+                                     const char *bytecodePath) {
+  static const char * const entries[] = {
+    "GPUCreateIntersectionFunctionTableEXT",
+    "GPUDestroyIntersectionFunctionTableEXT",
+    "GPUSetIntersectionFunctionTableBufferEXT",
+    "GPUBindComputeIntersectionFunctionTableEXT",
+    "GPUBindRenderIntersectionFunctionTableEXT"
+  };
+  GPUDeviceCreateInfo                         deviceInfo          = {0};
+  GPUIntersectionFunctionEXT                 computeFunction     = {0};
+  GPUIntersectionFunctionEXT                 renderFunction      = {0};
+  GPUIntersectionFunctionPipelineEXT         computeFunctionInfo = {0};
+  GPUIntersectionFunctionPipelineEXT         renderFunctionInfo  = {0};
+  GPUComputePipelineCreateInfo                computePipelineInfo = {0};
+  GPURenderPipelineCreateInfo                 renderPipelineInfo  = {0};
+  GPUIntersectionFunctionTableCreateInfoEXT  computeTableInfo    = {0};
+  GPUIntersectionFunctionTableCreateInfoEXT  renderTableInfo     = {0};
+  GPUColorTargetState                         colorTarget         = {0};
+  GPUBufferCreateInfo                         bufferInfo          = {0};
+  GPUTextureCreateInfo                        textureInfo         = {0};
+  GPUTextureViewCreateInfo                    viewInfo            = {0};
+  GPURenderPassColorAttachment                colorAttachment     = {0};
+  GPURenderPassCreateInfo                     renderPassInfo      = {0};
+  GPUViewport                                 viewport            = {0};
+  GPUScissorRect                              scissor             = {0};
+  GPUQueueSubmitInfo                          submitInfo          = {0};
+  GPUFeature                                  feature;
+  GPUDevice                                  *device;
+  GPUQueue                                   *computeQueue;
+  GPUQueue                                   *graphicsQueue;
+  GPUShaderLibrary                           *library;
+  GPUShaderLayout                            *shaderLayout;
+  GPUComputePipeline                         *computePipeline;
+  GPURenderPipeline                          *renderPipeline;
+  GPUIntersectionFunctionTableEXT            *computeTable;
+  GPUIntersectionFunctionTableEXT            *renderTable;
+  GPUBuffer                                  *buffer;
+  GPUTexture                                 *target;
+  GPUTextureView                             *targetView;
+  GPUCommandBuffer                           *computeCmdb;
+  GPUCommandBuffer                           *renderCmdb;
+  GPUComputePassEncoder                      *computePass;
+  GPURenderPassEncoder                       *renderPass;
+  GPUFence                                   *computeFence;
+  GPUFence                                   *renderFence;
+  void                                       *bytecode;
+  uint64_t                                    bytecodeSize;
+  bool                                        computeSubmitted;
+  bool                                        renderSubmitted;
+  int                                         ok;
+
+  if (!adapter) {
+    return 0;
+  }
+  if (!GPUIsFeatureSupported(
+        adapter,
+        GPU_FEATURE_INTERSECTION_FUNCTION_TABLE
+      )) {
+    puts("intersection-function-table execution skipped: unsupported adapter");
+    return 1;
+  }
+  if (!bytecodePath) {
+    puts("intersection-function-table execution skipped: fixture unavailable");
+    return 1;
+  }
+
+  feature          = GPU_FEATURE_INTERSECTION_FUNCTION_TABLE;
+  device           = NULL;
+  computeQueue     = NULL;
+  graphicsQueue    = NULL;
+  library          = NULL;
+  shaderLayout     = NULL;
+  computePipeline  = NULL;
+  renderPipeline   = NULL;
+  computeTable     = NULL;
+  renderTable      = NULL;
+  buffer           = NULL;
+  target           = NULL;
+  targetView       = NULL;
+  computeCmdb      = NULL;
+  renderCmdb       = NULL;
+  computePass      = NULL;
+  renderPass       = NULL;
+  computeFence     = NULL;
+  renderFence      = NULL;
+  bytecode         = NULL;
+  bytecodeSize     = 0u;
+  computeSubmitted = false;
+  renderSubmitted  = false;
+  ok               = 0;
+
+  deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  deviceInfo.chain.structSize      = sizeof(deviceInfo);
+  deviceInfo.required.pFeatures    = &feature;
+  deviceInfo.required.featureCount = 1u;
+  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+      !GPUIsFeatureEnabled(device, feature) ||
+      !GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_QUERY)) {
+    fprintf(stderr, "intersection-function-table feature enablement failed\n");
+    goto cleanup;
+  }
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(entries); i++) {
+    if (!GPUGetProcAddr(device, entries[i])) {
+      fprintf(stderr,
+              "intersection-function-table entry unavailable: %s\n",
+              entries[i]);
+      goto cleanup;
+    }
+  }
+  computeQueue  = GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0u);
+  graphicsQueue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  if (!computeQueue || !graphicsQueue) {
+    fprintf(stderr, "intersection-function-table queues unavailable\n");
+    goto cleanup;
+  }
+
+  bytecode = gpu_test_read_file(bytecodePath, &bytecodeSize);
+  if (!bytecode ||
+      GPUCreateShaderLibraryFromUSL(device,
+                                    bytecode,
+                                    bytecodeSize,
+                                    &library) != GPU_OK ||
+      !library ||
+      GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
+      !shaderLayout || !shaderLayout->pipelineLayout) {
+    fprintf(stderr, "intersection-function-table shader setup failed\n");
+    goto cleanup;
+  }
+
+  computeFunction.entryPoint      = "constant_hit";
+  computeFunction.stage           = GPU_SHADER_STAGE_COMPUTE_BIT;
+  computeFunctionInfo.chain.sType =
+    GPU_STRUCTURE_TYPE_INTERSECTION_FUNCTION_PIPELINE_EXT;
+  computeFunctionInfo.chain.structSize = sizeof(computeFunctionInfo);
+  computeFunctionInfo.pFunctions       = &computeFunction;
+  computeFunctionInfo.functionCount    = 1u;
+  computePipelineInfo.chain.sType      =
+    GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  computePipelineInfo.chain.structSize = sizeof(computePipelineInfo);
+  computePipelineInfo.chain.pNext      = &computeFunctionInfo;
+  computePipelineInfo.label            = "intersection-function-table-compute";
+  computePipelineInfo.layout           = shaderLayout->pipelineLayout;
+  computePipelineInfo.library          = library;
+  computePipelineInfo.entryPoint       = "intersection_table_cs";
+  if (GPUCreateComputePipeline(device,
+                               &computePipelineInfo,
+                               &computePipeline) != GPU_OK ||
+      !computePipeline) {
+    fprintf(stderr, "intersection-function-table compute pipeline failed\n");
+    goto cleanup;
+  }
+
+  renderFunction.entryPoint      = "constant_hit";
+  renderFunction.stage           = GPU_SHADER_STAGE_FRAGMENT_BIT;
+  renderFunctionInfo.chain.sType =
+    GPU_STRUCTURE_TYPE_INTERSECTION_FUNCTION_PIPELINE_EXT;
+  renderFunctionInfo.chain.structSize = sizeof(renderFunctionInfo);
+  renderFunctionInfo.pFunctions       = &renderFunction;
+  renderFunctionInfo.functionCount    = 1u;
+  colorTarget.format                  = GPU_FORMAT_RGBA8_UNORM;
+  colorTarget.blend.writeMask         = GPU_COLOR_WRITE_ALL;
+  renderPipelineInfo.chain.sType      =
+    GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  renderPipelineInfo.chain.structSize = sizeof(renderPipelineInfo);
+  renderPipelineInfo.chain.pNext      = &renderFunctionInfo;
+  renderPipelineInfo.label            = "intersection-function-table-render";
+  renderPipelineInfo.layout           = shaderLayout->pipelineLayout;
+  renderPipelineInfo.library          = library;
+  renderPipelineInfo.vertexEntry      = "intersection_table_vs";
+  renderPipelineInfo.fragmentEntry    = "intersection_table_fs";
+  renderPipelineInfo.pColorTargets    = &colorTarget;
+  renderPipelineInfo.colorTargetCount = 1u;
+  renderPipelineInfo.primitiveTopology =
+    GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  renderPipelineInfo.cullMode                = GPU_CULL_MODE_NONE;
+  renderPipelineInfo.frontFace               = GPU_FRONT_FACE_CCW;
+  renderPipelineInfo.multisample.sampleCount = 1u;
+  renderPipelineInfo.multisample.sampleMask  = UINT32_MAX;
+  if (GPUCreateRenderPipeline(device,
+                              &renderPipelineInfo,
+                              &renderPipeline) != GPU_OK ||
+      !renderPipeline) {
+    fprintf(stderr, "intersection-function-table render pipeline failed\n");
+    goto cleanup;
+  }
+
+  computeTableInfo.chain.sType =
+    GPU_STRUCTURE_TYPE_INTERSECTION_FUNCTION_TABLE_CREATE_INFO_EXT;
+  computeTableInfo.chain.structSize = sizeof(computeTableInfo);
+  computeTableInfo.label            = "intersection-function-table-compute";
+  computeTableInfo.computePipeline  = computePipeline;
+  computeTableInfo.stage            = GPU_SHADER_STAGE_COMPUTE_BIT;
+  if (GPUCreateIntersectionFunctionTableEXT(device,
+                                            &computeTableInfo,
+                                            &computeTable) !=
+        GPU_OK ||
+      !computeTable) {
+    fprintf(stderr, "intersection-function-table compute table failed\n");
+    goto cleanup;
+  }
+
+  renderTableInfo.chain.sType =
+    GPU_STRUCTURE_TYPE_INTERSECTION_FUNCTION_TABLE_CREATE_INFO_EXT;
+  renderTableInfo.chain.structSize = sizeof(renderTableInfo);
+  renderTableInfo.label            = "intersection-function-table-render";
+  renderTableInfo.renderPipeline   = renderPipeline;
+  renderTableInfo.stage            = GPU_SHADER_STAGE_FRAGMENT_BIT;
+  if (GPUCreateIntersectionFunctionTableEXT(device,
+                                            &renderTableInfo,
+                                            &renderTable) != GPU_OK ||
+      !renderTable) {
+    fprintf(stderr, "intersection-function-table render table failed\n");
+    goto cleanup;
+  }
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "intersection-function-table-buffer";
+  bufferInfo.sizeBytes        = 256u;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE;
+  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer ||
+      GPUSetIntersectionFunctionTableBufferEXT(computeTable,
+                                               1u,
+                                               buffer,
+                                               0u) != GPU_OK ||
+      GPUSetIntersectionFunctionTableBufferEXT(renderTable,
+                                               2u,
+                                               buffer,
+                                               0u) != GPU_OK) {
+    fprintf(stderr, "intersection-function-table buffer setup failed\n");
+    goto cleanup;
+  }
+
+  if (GPUAcquireCommandBuffer(computeQueue,
+                              "intersection-function-table",
+                              &computeCmdb) != GPU_OK ||
+      !computeCmdb ||
+      !(computePass = GPUBeginComputePass(computeCmdb,
+                                          "intersection-function-table"))) {
+    fprintf(stderr, "intersection-function-table compute pass failed\n");
+    goto cleanup;
+  }
+  GPUBindComputePipeline(computePass, computePipeline);
+  GPUBindComputeIntersectionFunctionTableEXT(computePass, 1u, computeTable);
+  GPUDispatch(computePass, 1u, 1u, 1u);
+  GPUEndComputePass(computePass);
+  computePass = NULL;
+
+  if (GPUCreateFence(device, NULL, &computeFence) != GPU_OK || !computeFence) {
+    fprintf(stderr, "intersection-function-table compute fence failed\n");
+    goto cleanup;
+  }
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
+  submitInfo.ppCommandBuffers   = &computeCmdb;
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.fence              = computeFence;
+  computeSubmitted = true;
+  if (GPUQueueSubmit(computeQueue, &submitInfo) != GPU_OK ||
+      GPUWaitFence(computeFence, UINT64_MAX) != GPU_OK) {
+    computeCmdb = NULL;
+    fprintf(stderr, "intersection-function-table compute submit failed\n");
+    goto cleanup;
+  }
+  computeCmdb = NULL;
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "intersection-function-table-target";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = 1u;
+  textureInfo.height           = 1u;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET;
+  if (GPUCreateTexture(device, &textureInfo, &target) != GPU_OK || !target) {
+    fprintf(stderr, "intersection-function-table render target failed\n");
+    goto cleanup;
+  }
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.label            = "intersection-function-table-target-view";
+  viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  viewInfo.mipLevelCount    = 1u;
+  viewInfo.arrayLayerCount  = 1u;
+  if (GPUCreateTextureView(target, &viewInfo, &targetView) != GPU_OK ||
+      !targetView) {
+    fprintf(stderr, "intersection-function-table target view failed\n");
+    goto cleanup;
+  }
+
+  colorAttachment.view          = targetView;
+  colorAttachment.loadOp        = GPU_LOAD_OP_CLEAR;
+  colorAttachment.storeOp       = GPU_STORE_OP_STORE;
+  colorAttachment.clearColor.float32[3] = 1.0f;
+  renderPassInfo.chain.sType      =
+    GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  renderPassInfo.chain.structSize = sizeof(renderPassInfo);
+  renderPassInfo.label            = "intersection-function-table-render";
+  renderPassInfo.pColorAttachments = &colorAttachment;
+  renderPassInfo.colorAttachmentCount = 1u;
+  viewport.width    = 1.0f;
+  viewport.height   = 1.0f;
+  viewport.maxDepth = 1.0f;
+  scissor.width     = 1u;
+  scissor.height    = 1u;
+  if (GPUAcquireCommandBuffer(graphicsQueue,
+                              "intersection-function-table-render",
+                              &renderCmdb) != GPU_OK ||
+      !renderCmdb ||
+      !(renderPass = GPUBeginRenderPass(renderCmdb, &renderPassInfo))) {
+    fprintf(stderr, "intersection-function-table render pass failed\n");
+    goto cleanup;
+  }
+  GPUBindRenderPipeline(renderPass, renderPipeline);
+  GPUBindRenderIntersectionFunctionTableEXT(renderPass, 2u, renderTable);
+  GPUSetViewport(renderPass, &viewport);
+  GPUSetScissor(renderPass, &scissor);
+  GPUDraw(renderPass, 3u, 1u, 0u, 0u);
+  GPUEndRenderPass(renderPass);
+  renderPass = NULL;
+
+  if (GPUCreateFence(device, NULL, &renderFence) != GPU_OK || !renderFence) {
+    fprintf(stderr, "intersection-function-table render fence failed\n");
+    goto cleanup;
+  }
+  submitInfo.ppCommandBuffers = &renderCmdb;
+  submitInfo.fence            = renderFence;
+  renderSubmitted = true;
+  if (GPUQueueSubmit(graphicsQueue, &submitInfo) != GPU_OK ||
+      GPUWaitFence(renderFence, UINT64_MAX) != GPU_OK) {
+    renderCmdb = NULL;
+    fprintf(stderr, "intersection-function-table render submit failed\n");
+    goto cleanup;
+  }
+  renderCmdb = NULL;
+  ok         = 1;
+
+cleanup:
+  if (renderPass) GPUEndRenderPass(renderPass);
+  if (computePass) GPUEndComputePass(computePass);
+  if (renderCmdb && !renderSubmitted) GPUDiscardCommandBuffer(renderCmdb);
+  if (computeCmdb && !computeSubmitted) GPUDiscardCommandBuffer(computeCmdb);
+  GPUDestroyFence(renderFence);
+  GPUDestroyFence(computeFence);
+  GPUDestroyTextureView(targetView);
+  GPUDestroyTexture(target);
+  GPUDestroyBuffer(buffer);
+  GPUDestroyIntersectionFunctionTableEXT(renderTable);
+  GPUDestroyIntersectionFunctionTableEXT(computeTable);
+  GPUDestroyRenderPipeline(renderPipeline);
+  GPUDestroyComputePipeline(computePipeline);
+  GPUDestroyShaderLayout(shaderLayout);
+  GPUDestroyShaderLibrary(library);
+  free(bytecode);
+  GPUDestroyDevice(device);
+  return ok;
+}
+
+int
 gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   static const float aabbs[] = {
     -0.5f, -0.5f, -0.1f,

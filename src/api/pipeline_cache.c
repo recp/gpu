@@ -136,8 +136,9 @@ gpu_pipelineCacheSignal(GPUPipelineCache *cache) {
 #endif
 }
 
-static void
-gpu_retainRenderPipeline(GPURenderPipeline *pipeline) {
+GPU_HIDE
+void
+gpuRetainRenderPipeline(GPURenderPipeline *pipeline) {
 #if defined(_WIN32) || defined(WIN32)
   InterlockedIncrement((volatile LONG *)&pipeline->_refCount);
 #else
@@ -155,8 +156,9 @@ gpuReleaseRenderPipeline(GPURenderPipeline *pipeline) {
 #endif
 }
 
-static void
-gpu_retainComputePipeline(GPUComputePipeline *pipeline) {
+GPU_HIDE
+void
+gpuRetainComputePipeline(GPUComputePipeline *pipeline) {
 #if defined(_WIN32) || defined(WIN32)
   InterlockedIncrement((volatile LONG *)&pipeline->_refCount);
 #else
@@ -178,10 +180,10 @@ static void
 gpu_retainPipeline(GPUPipelineCacheEntryType type, void *pipeline) {
   switch (type) {
     case GPU_PIPELINE_CACHE_RENDER:
-      gpu_retainRenderPipeline(pipeline);
+      gpuRetainRenderPipeline(pipeline);
       break;
     case GPU_PIPELINE_CACHE_COMPUTE:
-      gpu_retainComputePipeline(pipeline);
+      gpuRetainComputePipeline(pipeline);
       break;
     case GPU_PIPELINE_CACHE_RAY:
       gpuRetainRayTracingPipeline(pipeline);

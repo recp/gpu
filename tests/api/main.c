@@ -241,6 +241,16 @@ run_ray_query(void *ctx) {
 }
 
 static int
+run_intersection_function(void *ctx) {
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_intersection_function_table(
+    testCtx->adapter,
+    testCtx->intersectionFunctionBytecodePath
+  );
+}
+
+static int
 run_ray_pipeline(void *ctx) {
   GPUApiTestContext *testCtx = ctx;
 
@@ -309,7 +319,7 @@ main(int argc, char **argv) {
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUApiTestContext      ctx;
-  GPUApiTest             tests[35];
+  GPUApiTest             tests[36];
   int                    ok;
 
   if (argc != 14 && argc != 15) {
@@ -388,6 +398,8 @@ main(int argc, char **argv) {
   ctx.shaderF16BytecodePath          = argv[13];
   ctx.atomic64BytecodePath           = getenv("GPU_ATOMIC64_USL_PATH");
   ctx.rayQueryBytecodePath           = getenv("GPU_RAY_QUERY_USL_PATH");
+  ctx.intersectionFunctionBytecodePath =
+    getenv("GPU_INTERSECTION_FUNCTION_USL_PATH");
   ctx.rayPipelineBytecodePath        = getenv("GPU_RAY_PIPELINE_USL_PATH");
   ctx.executionGraphBytecodePath     = getenv("GPU_EXECUTION_GRAPH_USL_PATH");
   ctx.shaderSubgroupClockBytecodePath =
@@ -448,6 +460,9 @@ main(int argc, char **argv) {
     "buffer-descriptor-array", run_buffer_descriptor_array, &ctx
   };
   tests[34] = (GPUApiTest){ "msaa", run_msaa, &ctx };
+  tests[35] = (GPUApiTest){
+    "intersection-function-table", run_intersection_function, &ctx
+  };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 

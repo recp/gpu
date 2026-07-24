@@ -48,6 +48,35 @@ typedef struct GPUApiRayQuery {
 
   void
   (*endPass)(GPUAccelerationStructurePassEncoderEXT *pass);
+
+  GPUResult
+  (*createIntersectionFunctionTable)(
+    GPUDevice                                       *device,
+    const GPUIntersectionFunctionTableCreateInfoEXT *info,
+    GPUIntersectionFunctionTableEXT                 *table);
+
+  void
+  (*destroyIntersectionFunctionTable)(
+    GPUIntersectionFunctionTableEXT *table);
+
+  GPUResult
+  (*setIntersectionFunctionTableBuffer)(
+    GPUIntersectionFunctionTableEXT *table,
+    uint32_t                         index,
+    GPUBuffer                       *buffer,
+    uint64_t                         offset);
+
+  void
+  (*bindComputeIntersectionFunctionTable)(
+    GPUComputePassEncoder           *pass,
+    uint32_t                         index,
+    GPUIntersectionFunctionTableEXT *table);
+
+  void
+  (*bindRenderIntersectionFunctionTable)(
+    GPURenderPassEncoder            *pass,
+    uint32_t                         index,
+    GPUIntersectionFunctionTableEXT *table);
 } GPUApiRayQuery;
 
 typedef struct GPUApiRayTracing {

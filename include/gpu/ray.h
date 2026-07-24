@@ -31,9 +31,17 @@ extern "C" {
 
 typedef struct GPUAccelerationStructureEXT            GPUAccelerationStructureEXT;
 typedef struct GPUAccelerationStructurePassEncoderEXT GPUAccelerationStructurePassEncoderEXT;
+typedef struct GPUIntersectionFunctionTableEXT         GPUIntersectionFunctionTableEXT;
 typedef struct GPURayTracingPipelineEXT                GPURayTracingPipelineEXT;
 typedef struct GPUShaderTableEXT                       GPUShaderTableEXT;
 typedef struct GPURayTracingPassEncoderEXT             GPURayTracingPassEncoderEXT;
+typedef struct GPUComputePipeline                      GPUComputePipeline;
+typedef struct GPUComputePassEncoder                   GPUComputePassEncoder;
+
+#ifndef GPU_RENDER_ENCODER_TYPES_DEFINED
+#define GPU_RENDER_ENCODER_TYPES_DEFINED
+typedef struct GPURenderPassEncoder GPURenderPassEncoder;
+#endif
 
 typedef enum GPUAccelerationStructureTypeEXT {
   GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT = 0,
@@ -173,6 +181,54 @@ GPUBuildAccelerationStructureEXT(
 GPU_EXPORT
 void
 GPUEndAccelerationStructurePassEXT(GPUAccelerationStructurePassEncoderEXT *pass);
+
+typedef struct GPUIntersectionFunctionEXT {
+  const char          *entryPoint;
+  GPUShaderStageFlags  stage;
+} GPUIntersectionFunctionEXT;
+
+typedef struct GPUIntersectionFunctionPipelineEXT {
+  GPUChainedStruct                  chain;
+  const GPUIntersectionFunctionEXT *pFunctions;
+  uint32_t                          functionCount;
+} GPUIntersectionFunctionPipelineEXT;
+
+typedef struct GPUIntersectionFunctionTableCreateInfoEXT {
+  GPUChainedStruct    chain;
+  const char         *label;
+  GPUComputePipeline *computePipeline;
+  GPURenderPipeline  *renderPipeline;
+  GPUShaderStageFlags stage;
+} GPUIntersectionFunctionTableCreateInfoEXT;
+
+GPU_EXPORT
+GPUResult
+GPUCreateIntersectionFunctionTableEXT(GPUDevice                                       *device,
+                                      const GPUIntersectionFunctionTableCreateInfoEXT *info,
+                                      GPUIntersectionFunctionTableEXT                **outTable);
+
+GPU_EXPORT
+void
+GPUDestroyIntersectionFunctionTableEXT(GPUIntersectionFunctionTableEXT *table);
+
+GPU_EXPORT
+GPUResult
+GPUSetIntersectionFunctionTableBufferEXT(GPUIntersectionFunctionTableEXT *table,
+                                         uint32_t                         index,
+                                         GPUBuffer                       *buffer,
+                                         uint64_t                         offset);
+
+GPU_EXPORT
+void
+GPUBindComputeIntersectionFunctionTableEXT(GPUComputePassEncoder           *pass,
+                                           uint32_t                         index,
+                                           GPUIntersectionFunctionTableEXT *table);
+
+GPU_EXPORT
+void
+GPUBindRenderIntersectionFunctionTableEXT(GPURenderPassEncoder            *pass,
+                                          uint32_t                         index,
+                                          GPUIntersectionFunctionTableEXT *table);
 
 typedef enum GPURayTracingShaderGroupTypeEXT {
   GPU_RAY_TRACING_SHADER_GROUP_GENERAL_EXT          = 0,

@@ -125,12 +125,23 @@ typedef struct MTShaderFunction {
   NSString       *name;
 } MTShaderFunction;
 
+typedef struct MTComputePipelineDesc {
+  id<MTLFunction> function;
+  id              function4;
+  NSArray        *intersectionFunctions;
+  NSArray        *intersectionFunctions4;
+} MTComputePipelineDesc;
+
 typedef struct MTRenderPipelineDesc {
-  id classic;
-  id vertexFunction;
-  id fragmentFunction;
-  id taskFunction;
-  id meshFunction;
+  id       classic;
+  id       vertexFunction;
+  id       fragmentFunction;
+  id       taskFunction;
+  id       meshFunction;
+  NSArray *vertexIntersectionFunctions;
+  NSArray *fragmentIntersectionFunctions;
+  NSArray *vertexIntersectionFunctions4;
+  NSArray *fragmentIntersectionFunctions4;
 } MTRenderPipelineDesc;
 
 typedef struct GPUTextureMT {
@@ -157,6 +168,11 @@ typedef struct GPUAccelerationStructureMT {
   id                            modernDescriptor;
   uint64_t                      instanceCapacity;
 } GPUAccelerationStructureMT;
+
+typedef struct MTIntersectionFunctionTable {
+  id<MTLIntersectionFunctionTable> table;
+  GPUShaderStageFlags              stage;
+} MTIntersectionFunctionTable;
 
 typedef struct MTArgumentState {
   id       table;
@@ -197,8 +213,12 @@ typedef struct MTRenderEncoder {
   MTArgumentState            *fragmentArguments;
   MTArgumentState            *taskArguments;
   MTArgumentState            *meshArguments;
+  id                          vertexIntersectionTables[MT_BIND_GROUP_BUFFER_COUNT];
+  id                          fragmentIntersectionTables[MT_BIND_GROUP_BUFFER_COUNT];
   uint32_t                    width;
   uint32_t                    height;
+  uint32_t                    vertexIntersectionTableMask;
+  uint32_t                    fragmentIntersectionTableMask;
 } MTRenderEncoder;
 
 typedef struct MTRenderPipelineState {
@@ -212,6 +232,8 @@ typedef struct MTComputeEncoder {
   id<MTLComputeCommandEncoder> classic;
   id                           modern;
   MTArgumentState             *arguments;
+  id                           intersectionTables[MT_BIND_GROUP_BUFFER_COUNT];
+  uint32_t                     intersectionTableMask;
 } MTComputeEncoder;
 
 typedef struct MTCopyEncoder {

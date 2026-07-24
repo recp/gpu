@@ -537,6 +537,16 @@ mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
                device.supportsRaytracingFromRender;
       }
       return false;
+    case GPU_FEATURE_INTERSECTION_FUNCTION_TABLE:
+      device = adapterMT->device;
+      if (!mt_supportsFeature(adapter, GPU_FEATURE_RAY_QUERY)) {
+        return false;
+      }
+      if (@available(macOS 12.0, iOS 15.0, *)) {
+        return device.supportsFunctionPointers &&
+               device.supportsFunctionPointersFromRender;
+      }
+      return false;
     case GPU_FEATURE_SUBGROUPS:
       mt_probeSubgroups(adapterMT);
       return adapterMT->subgroups;

@@ -1897,7 +1897,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   USCompileOutput           compileOutput = {0};
   USLCompileOptions         compileOptions;
   USLTargetSpec             target;
-  USLCapabilityAtomDesc     targetAtoms[14];
+  USLCapabilityAtomDesc     targetAtoms[USL_RUNTIME_TARGET_MAX_ATOMS];
   USCompileInput            compileInput;
   const char               *payloadSource;
   GPUResult                 rc;
@@ -2107,6 +2107,19 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
           &targetAtoms[targetAtomCount++],
           USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
           USL_SEMANTIC_FEATURE_ID_RAY_TRACING_PIPELINE,
+          0u,
+          0u) != USLOk) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+  if (GPUIsFeatureEnabled(
+        device,
+        GPU_FEATURE_INTERSECTION_FUNCTION_TABLE
+      )) {
+    if (us_cap_atom_init(
+          &targetAtoms[targetAtomCount++],
+          USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+          USL_SEMANTIC_FEATURE_ID_INTERSECTION_FUNCTION_TABLE,
           0u,
           0u) != USLOk) {
       return GPU_ERROR_BACKEND_FAILURE;

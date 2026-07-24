@@ -54,6 +54,13 @@ typedef struct GPUApiRender {
   (*setFunction)(GPURenderPipeline * __restrict pipline,
                  GPUShaderFunction * __restrict func,
                  GPUFunctionType                functype);
+
+  GPUResult
+  (*setIntersectionFunctions)(
+    GPURenderPipeline             *pipeline,
+    GPUShaderFunction *const      *functions,
+    const GPUShaderStageFlags     *stages,
+    uint32_t                       functionCount);
   
   void
   (*colorFormat)(GPURenderPipeline * __restrict pipline,

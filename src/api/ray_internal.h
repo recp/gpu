@@ -34,6 +34,15 @@ struct GPUAccelerationStructurePassEncoderEXT {
   bool               ended;
 };
 
+struct GPUIntersectionFunctionTableEXT {
+  void               *_priv;
+  GPUApi             *_api;
+  GPUDevice          *device;
+  GPUComputePipeline *computePipeline;
+  GPURenderPipeline  *renderPipeline;
+  GPUShaderStageFlags stage;
+};
+
 struct GPURayTracingPipelineEXT {
   void                            *_priv;
   GPUApi                          *_api;
@@ -75,6 +84,22 @@ struct GPURayTracingPassEncoderEXT {
 GPU_HIDE
 void
 gpuRetainRayTracingPipeline(GPURayTracingPipelineEXT *pipeline);
+
+GPU_HIDE
+GPUResult
+gpuAttachComputeIntersectionFunctions(
+  GPUDevice                                *device,
+  GPUShaderLibrary                         *library,
+  const GPUIntersectionFunctionPipelineEXT *info,
+  GPUComputePipeline                       *pipeline);
+
+GPU_HIDE
+GPUResult
+gpuAttachRenderIntersectionFunctions(
+  GPUDevice                                *device,
+  GPUShaderLibrary                         *library,
+  const GPUIntersectionFunctionPipelineEXT *info,
+  GPURenderPipeline                        *pipeline);
 
 static inline bool
 gpuRayDispatchFits(uint32_t        width,

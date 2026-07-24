@@ -85,7 +85,7 @@ struct GPUDevice {
   bool                         transientFrameBegun;
   bool                         uslUntypedPointers;
   GPUFeature                   enabledFeatureStorage[
-    GPU_FEATURE_SAMPLER_FEEDBACK + 1u
+    GPU_FEATURE_INTERSECTION_FUNCTION_TABLE + 1u
   ];
 };
 

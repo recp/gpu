@@ -175,6 +175,15 @@ mt_renderDescriptor4(const GPURenderPipeline    *pipeline,
       descriptor.objectFunctionDescriptor   = native->taskFunction;
       descriptor.meshFunctionDescriptor     = native->meshFunction;
       descriptor.fragmentFunctionDescriptor = native->fragmentFunction;
+      if (native->fragmentIntersectionFunctions4.count > 0u) {
+        MTL4StaticLinkingDescriptor *linking;
+
+        linking = [MTL4StaticLinkingDescriptor new];
+        linking.functionDescriptors =
+          native->fragmentIntersectionFunctions4;
+        descriptor.fragmentStaticLinkingDescriptor = linking;
+        [linking release];
+      }
       descriptor.rasterSampleCount          = pipeline->_sampleCount;
       descriptor.alphaToCoverageState       =
         pipeline->_alphaToCoverageEnable
@@ -208,6 +217,23 @@ mt_renderDescriptor4(const GPURenderPipeline    *pipeline,
       descriptor                            = [MTL4RenderPipelineDescriptor new];
       descriptor.vertexFunctionDescriptor   = native->vertexFunction;
       descriptor.fragmentFunctionDescriptor = native->fragmentFunction;
+      if (native->vertexIntersectionFunctions4.count > 0u) {
+        MTL4StaticLinkingDescriptor *linking;
+
+        linking = [MTL4StaticLinkingDescriptor new];
+        linking.functionDescriptors = native->vertexIntersectionFunctions4;
+        descriptor.vertexStaticLinkingDescriptor = linking;
+        [linking release];
+      }
+      if (native->fragmentIntersectionFunctions4.count > 0u) {
+        MTL4StaticLinkingDescriptor *linking;
+
+        linking = [MTL4StaticLinkingDescriptor new];
+        linking.functionDescriptors =
+          native->fragmentIntersectionFunctions4;
+        descriptor.fragmentStaticLinkingDescriptor = linking;
+        [linking release];
+      }
       descriptor.vertexDescriptor           = classic.vertexDescriptor;
       descriptor.rasterSampleCount          = pipeline->_sampleCount;
       descriptor.inputPrimitiveTopology     =
@@ -448,6 +474,10 @@ mt_destroyRenderPipeline(GPURenderPipeline *pipeline) {
     MTRenderPipelineDesc *native;
 
     native = pipeline->_priv;
+    [native->fragmentIntersectionFunctions4 release];
+    [native->vertexIntersectionFunctions4 release];
+    [native->fragmentIntersectionFunctions release];
+    [native->vertexIntersectionFunctions release];
     [native->meshFunction release];
     [native->taskFunction release];
     [native->fragmentFunction release];
@@ -456,6 +486,128 @@ mt_destroyRenderPipeline(GPURenderPipeline *pipeline) {
     free(native);
   }
   free(pipeline);
+}
+
+static GPUResult
+mt_setIntersectionFunctions(
+  GPURenderPipeline         *pipeline,
+  GPUShaderFunction *const  *functions,
+  const GPUShaderStageFlags *stages,
+  uint32_t                   functionCount) {
+  MTRenderPipelineDesc *native;
+  NSMutableArray       *vertexFunctions;
+  NSMutableArray       *fragmentFunctions;
+  NSMutableArray       *vertexFunctions4;
+  NSMutableArray       *fragmentFunctions4;
+
+  if (!pipeline || !(native = pipeline->_priv) || !functions || !stages ||
+      functionCount == 0u) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  vertexFunctions    = [[NSMutableArray alloc] initWithCapacity:functionCount];
+  fragmentFunctions  = [[NSMutableArray alloc] initWithCapacity:functionCount];
+  vertexFunctions4   = nil;
+  fragmentFunctions4 = nil;
+#if MT_HAS_METAL4
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    vertexFunctions4 =
+      [[NSMutableArray alloc] initWithCapacity:functionCount];
+    fragmentFunctions4 =
+      [[NSMutableArray alloc] initWithCapacity:functionCount];
+  }
+#endif
+
+  for (uint32_t i = 0u; i < functionCount; i++) {
+    MTShaderFunction *function;
+    NSMutableArray   *target;
+    NSMutableArray   *target4;
+
+    function = functions[i] ? functions[i]->_priv : NULL;
+    if (!function || !function->function ||
+        (stages[i] != GPU_SHADER_STAGE_VERTEX_BIT &&
+         stages[i] != GPU_SHADER_STAGE_FRAGMENT_BIT) ||
+        (pipeline->_mesh && stages[i] == GPU_SHADER_STAGE_VERTEX_BIT)) {
+      [fragmentFunctions4 release];
+      [vertexFunctions4 release];
+      [fragmentFunctions release];
+      [vertexFunctions release];
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+
+    target  = stages[i] == GPU_SHADER_STAGE_VERTEX_BIT
+                ? vertexFunctions
+                : fragmentFunctions;
+    target4 = stages[i] == GPU_SHADER_STAGE_VERTEX_BIT
+                ? vertexFunctions4
+                : fragmentFunctions4;
+    [target addObject:function->function];
+#if MT_HAS_METAL4
+    if (target4) {
+      if (@available(macOS 26.0, iOS 26.0, *)) {
+        MTL4LibraryFunctionDescriptor *function4;
+
+        function4         = [MTL4LibraryFunctionDescriptor new];
+        function4.library = function->library;
+        function4.name    = function->name;
+        [target4 addObject:function4];
+        [function4 release];
+      }
+    }
+#endif
+  }
+
+  if (pipeline->_mesh && fragmentFunctions.count > 0u) {
+    if (@available(macOS 14.0, iOS 17.0, *)) {
+      MTLLinkedFunctions *linkedFunctions;
+
+      linkedFunctions           = [MTLLinkedFunctions new];
+      linkedFunctions.functions = fragmentFunctions;
+      ((MTLMeshRenderPipelineDescriptor *)native->classic)
+        .fragmentLinkedFunctions = linkedFunctions;
+      [linkedFunctions release];
+    } else {
+      [fragmentFunctions4 release];
+      [vertexFunctions4 release];
+      [fragmentFunctions release];
+      [vertexFunctions release];
+      return GPU_ERROR_UNSUPPORTED;
+    }
+  } else if (!pipeline->_mesh) {
+    MTLRenderPipelineDescriptor *descriptor;
+
+    descriptor = native->classic;
+    if (vertexFunctions.count > 0u) {
+      MTLLinkedFunctions *linkedFunctions;
+
+      linkedFunctions           = [MTLLinkedFunctions new];
+      linkedFunctions.functions = vertexFunctions;
+      descriptor.vertexLinkedFunctions = linkedFunctions;
+      [linkedFunctions release];
+    }
+    if (fragmentFunctions.count > 0u) {
+      MTLLinkedFunctions *linkedFunctions;
+
+      linkedFunctions           = [MTLLinkedFunctions new];
+      linkedFunctions.functions = fragmentFunctions;
+      descriptor.fragmentLinkedFunctions = linkedFunctions;
+      [linkedFunctions release];
+    }
+  }
+
+  [native->fragmentIntersectionFunctions4 release];
+  [native->vertexIntersectionFunctions4 release];
+  [native->fragmentIntersectionFunctions release];
+  [native->vertexIntersectionFunctions release];
+  native->vertexIntersectionFunctions    = [vertexFunctions copy];
+  native->fragmentIntersectionFunctions  = [fragmentFunctions copy];
+  native->vertexIntersectionFunctions4   = [vertexFunctions4 copy];
+  native->fragmentIntersectionFunctions4 = [fragmentFunctions4 copy];
+  [fragmentFunctions4 release];
+  [vertexFunctions4 release];
+  [fragmentFunctions release];
+  [vertexFunctions release];
+  return GPU_OK;
 }
 
 GPU_HIDE
@@ -580,6 +732,7 @@ mt_initRenderPipeline(GPUApiRender *api) {
   api->newRenderState        = mt_newRenderState;
   api->destroyRenderPipeline = mt_destroyRenderPipeline;
   api->setFunction           = mt_setFunction;
+  api->setIntersectionFunctions = mt_setIntersectionFunctions;
   api->colorFormat           = mt_colorFormat;
   api->depthFormat           = mt_depthFormat;
   api->stencilFormat         = mt_stencilFormat;

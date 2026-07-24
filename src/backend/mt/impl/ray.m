@@ -15,6 +15,8 @@
  */
 
 #include "../common.h"
+#include "../../../api/compute_internal.h"
+#include "../../../api/render/pipeline_internal.h"
 
 static GPUAccelerationStructureMT *
 mt_rayStructure(GPUAccelerationStructureEXT *structure) {
@@ -800,6 +802,238 @@ mt_endAccelerationStructurePass(
   native->modern  = nil;
 }
 
+static GPUResult
+mt_createIntersectionFunctionTable(
+  GPUDevice                                       *device,
+  const GPUIntersectionFunctionTableCreateInfoEXT *info,
+  GPUIntersectionFunctionTableEXT                 *table) {
+  MTLIntersectionFunctionTableDescriptor *descriptor;
+  MTIntersectionFunctionTable            *native;
+  NSArray                                *functions;
+
+  GPU__UNUSED(device);
+  native = calloc(1, sizeof(*native));
+  if (!native) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  functions = nil;
+  if (info->computePipeline) {
+    MTComputePipelineDesc   *pipelineDesc;
+    GPUComputePipelineState *pipelineState;
+
+    pipelineDesc  = info->computePipeline->_priv;
+    pipelineState = info->computePipeline->_state;
+    if (!pipelineDesc || !pipelineState || !pipelineState->_priv) {
+      free(native);
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    functions = pipelineDesc->intersectionFunctions;
+    if (@available(macOS 11.0, iOS 14.0, *)) {
+      descriptor               = [MTLIntersectionFunctionTableDescriptor new];
+      descriptor.functionCount = functions.count;
+      native->table = [(id<MTLComputePipelineState>)pipelineState->_priv
+        newIntersectionFunctionTableWithDescriptor:descriptor];
+      [descriptor release];
+      if (native->table) {
+        for (NSUInteger i = 0u; i < functions.count; i++) {
+          id<MTLFunctionHandle> handle;
+
+          handle = [(id<MTLComputePipelineState>)pipelineState->_priv
+            functionHandleWithFunction:functions[i]];
+          if (!handle) {
+            [native->table release];
+            free(native);
+            return GPU_ERROR_BACKEND_FAILURE;
+          }
+          [native->table setFunction:handle atIndex:i];
+        }
+      }
+    }
+  } else {
+    MTRenderPipelineDesc  *pipelineDesc;
+    MTRenderPipelineState *pipelineState;
+    MTLRenderStages        stage;
+
+    pipelineDesc  = info->renderPipeline->_priv;
+    pipelineState = info->renderPipeline->_state;
+    stage = info->stage == GPU_SHADER_STAGE_VERTEX_BIT
+              ? MTLRenderStageVertex
+              : MTLRenderStageFragment;
+    if (!pipelineDesc || !pipelineState || !pipelineState->render) {
+      free(native);
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+    functions = info->stage == GPU_SHADER_STAGE_VERTEX_BIT
+                  ? pipelineDesc->vertexIntersectionFunctions
+                  : pipelineDesc->fragmentIntersectionFunctions;
+    if (@available(macOS 12.0, iOS 15.0, *)) {
+      descriptor               = [MTLIntersectionFunctionTableDescriptor new];
+      descriptor.functionCount = functions.count;
+      native->table = [pipelineState->render
+        newIntersectionFunctionTableWithDescriptor:descriptor
+                                             stage:stage];
+      [descriptor release];
+      if (native->table) {
+        for (NSUInteger i = 0u; i < functions.count; i++) {
+          id<MTLFunctionHandle> handle;
+
+          handle = [pipelineState->render
+            functionHandleWithFunction:functions[i]
+                                 stage:stage];
+          if (!handle) {
+            [native->table release];
+            free(native);
+            return GPU_ERROR_BACKEND_FAILURE;
+          }
+          [native->table setFunction:handle atIndex:i];
+        }
+      }
+    }
+  }
+  if (!native->table || functions.count == 0u) {
+    [native->table release];
+    free(native);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  if (gpuDeviceDebugMarkersEnabled(device) &&
+      info->label && info->label[0] != '\0') {
+    native->table.label = [NSString stringWithUTF8String:info->label];
+  }
+#endif
+  native->stage = info->stage;
+  table->_priv  = native;
+  return GPU_OK;
+}
+
+static void
+mt_destroyIntersectionFunctionTable(GPUIntersectionFunctionTableEXT *table) {
+  MTIntersectionFunctionTable *native;
+
+  native = table ? table->_priv : NULL;
+  if (!native) {
+    return;
+  }
+  [native->table release];
+  free(native);
+  table->_priv = NULL;
+}
+
+static GPUResult
+mt_setIntersectionFunctionTableBuffer(
+  GPUIntersectionFunctionTableEXT *table,
+  uint32_t                         index,
+  GPUBuffer                       *buffer,
+  uint64_t                         offset) {
+  MTIntersectionFunctionTable *native;
+
+  native = table ? table->_priv : NULL;
+  if (!native || !native->table || index >= MT_BIND_GROUP_BUFFER_COUNT) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  [native->table setBuffer:mt_rayBuffer(buffer)
+                    offset:(NSUInteger)offset
+                   atIndex:index];
+  return GPU_OK;
+}
+
+static void
+mt_bindComputeIntersectionFunctionTable(
+  GPUComputePassEncoder           *pass,
+  uint32_t                         index,
+  GPUIntersectionFunctionTableEXT *table) {
+  MTIntersectionFunctionTable *nativeTable;
+  MTComputeEncoder            *native;
+  uint32_t                      slotBit;
+
+  nativeTable = table ? table->_priv : NULL;
+  native      = pass ? pass->_priv : NULL;
+  if (!nativeTable || !nativeTable->table || !native ||
+      index >= MT_BIND_GROUP_BUFFER_COUNT) {
+    return;
+  }
+  slotBit = 1u << index;
+  if ((native->intersectionTableMask & slotBit) != 0u &&
+      native->intersectionTables[index] == nativeTable->table) {
+    return;
+  }
+
+#if MT_HAS_METAL4
+  if (native->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      [(id<MTL4ArgumentTable>)native->arguments->table
+        setResource:nativeTable->table.gpuResourceID
+      atBufferIndex:index];
+      native->arguments->resourceMask |= slotBit;
+      mt_useAllocation(pass->_cmdb, nativeTable->table);
+    }
+  } else
+#endif
+  {
+    [native->classic setIntersectionFunctionTable:nativeTable->table
+                                     atBufferIndex:index];
+  }
+  native->intersectionTables[index] = nativeTable->table;
+  native->intersectionTableMask    |= slotBit;
+}
+
+static void
+mt_bindRenderIntersectionFunctionTable(
+  GPURenderPassEncoder            *pass,
+  uint32_t                         index,
+  GPUIntersectionFunctionTableEXT *table) {
+  MTIntersectionFunctionTable *nativeTable;
+  MTRenderEncoder             *native;
+  MTArgumentState             *arguments;
+  id                          *tables;
+  uint32_t                    *mask;
+  uint32_t                     slotBit;
+
+  nativeTable = table ? table->_priv : NULL;
+  native      = pass ? pass->_priv : NULL;
+  if (!nativeTable || !nativeTable->table || !native ||
+      index >= MT_BIND_GROUP_BUFFER_COUNT) {
+    return;
+  }
+
+  if (nativeTable->stage == GPU_SHADER_STAGE_VERTEX_BIT) {
+    arguments = native->vertexArguments;
+    tables    = native->vertexIntersectionTables;
+    mask      = &native->vertexIntersectionTableMask;
+  } else {
+    arguments = native->fragmentArguments;
+    tables    = native->fragmentIntersectionTables;
+    mask      = &native->fragmentIntersectionTableMask;
+  }
+  slotBit = 1u << index;
+  if ((*mask & slotBit) != 0u && tables[index] == nativeTable->table) {
+    return;
+  }
+
+#if MT_HAS_METAL4
+  if (native->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      [(id<MTL4ArgumentTable>)arguments->table
+        setResource:nativeTable->table.gpuResourceID
+      atBufferIndex:index];
+      arguments->resourceMask |= slotBit;
+      mt_useAllocation(pass->_cmdb, nativeTable->table);
+    }
+  } else
+#endif
+  if (nativeTable->stage == GPU_SHADER_STAGE_VERTEX_BIT) {
+    [native->classic setVertexIntersectionFunctionTable:nativeTable->table
+                                          atBufferIndex:index];
+  } else {
+    [native->classic setFragmentIntersectionFunctionTable:nativeTable->table
+                                            atBufferIndex:index];
+  }
+  tables[index] = nativeTable->table;
+  *mask        |= slotBit;
+}
+
 GPU_HIDE
 void
 mt_initRayQuery(GPUApiRayQuery *api) {
@@ -809,4 +1043,14 @@ mt_initRayQuery(GPUApiRayQuery *api) {
   api->beginPass = mt_beginAccelerationStructurePass;
   api->build     = mt_buildAccelerationStructure;
   api->endPass   = mt_endAccelerationStructurePass;
+  api->createIntersectionFunctionTable =
+    mt_createIntersectionFunctionTable;
+  api->destroyIntersectionFunctionTable =
+    mt_destroyIntersectionFunctionTable;
+  api->setIntersectionFunctionTableBuffer =
+    mt_setIntersectionFunctionTableBuffer;
+  api->bindComputeIntersectionFunctionTable =
+    mt_bindComputeIntersectionFunctionTable;
+  api->bindRenderIntersectionFunctionTable =
+    mt_bindRenderIntersectionFunctionTable;
 }

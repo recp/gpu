@@ -96,7 +96,7 @@ gpu_reportDeviceLostOnce(GPUDevice *device) {
 static bool
 gpu_knownFeature(GPUFeature feature) {
   return feature >= GPU_FEATURE_COMPUTE &&
-         feature <= GPU_FEATURE_SAMPLER_FEEDBACK;
+         feature <= GPU_FEATURE_INTERSECTION_FUNCTION_TABLE;
 }
 
 static uint64_t
@@ -213,6 +213,10 @@ gpu_enabledFeatureMaskForCreateInfo(const GPUAdapter *adapter,
   if ((mask & gpu_featureBit(GPU_FEATURE_RAY_TRACING_PIPELINE)) != 0u) {
     mask |= gpu_featureBit(GPU_FEATURE_RAY_QUERY);
   }
+  if ((mask &
+       gpu_featureBit(GPU_FEATURE_INTERSECTION_FUNCTION_TABLE)) != 0u) {
+    mask |= gpu_featureBit(GPU_FEATURE_RAY_QUERY);
+  }
   if ((mask & (gpu_featureBit(GPU_FEATURE_INDIRECT_MEMORY_COPY) |
                gpu_featureBit(
                  GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY
@@ -241,7 +245,7 @@ gpu_supportedFeatureMask(const GPUAdapter *adapter) {
 
   mask = 0;
   for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_SAMPLER_FEEDBACK;
+       feature <= GPU_FEATURE_INTERSECTION_FUNCTION_TABLE;
        feature = (GPUFeature)(feature + 1)) {
     if (gpu_adapterSupportsFeature(adapter, feature)) {
       mask |= gpu_featureBit(feature);
@@ -260,7 +264,7 @@ gpu_fillFeatureSet(uint64_t       mask,
 
   count = 0u;
   for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_SAMPLER_FEEDBACK &&
+       feature <= GPU_FEATURE_INTERSECTION_FUNCTION_TABLE &&
          count < capacity;
        feature = (GPUFeature)(feature + 1)) {
     if (mask & gpu_featureBit(feature)) {
@@ -1440,6 +1444,26 @@ GPUGetProcAddr(GPUDevice *device, const char *name) {
     }
     if (strcmp(name, "GPUEndAccelerationStructurePassEXT") == 0) {
       return (GPUProc)GPUEndAccelerationStructurePassEXT;
+    }
+  }
+  if (GPUIsFeatureEnabled(
+        device,
+        GPU_FEATURE_INTERSECTION_FUNCTION_TABLE
+      )) {
+    if (strcmp(name, "GPUCreateIntersectionFunctionTableEXT") == 0) {
+      return (GPUProc)GPUCreateIntersectionFunctionTableEXT;
+    }
+    if (strcmp(name, "GPUDestroyIntersectionFunctionTableEXT") == 0) {
+      return (GPUProc)GPUDestroyIntersectionFunctionTableEXT;
+    }
+    if (strcmp(name, "GPUSetIntersectionFunctionTableBufferEXT") == 0) {
+      return (GPUProc)GPUSetIntersectionFunctionTableBufferEXT;
+    }
+    if (strcmp(name, "GPUBindComputeIntersectionFunctionTableEXT") == 0) {
+      return (GPUProc)GPUBindComputeIntersectionFunctionTableEXT;
+    }
+    if (strcmp(name, "GPUBindRenderIntersectionFunctionTableEXT") == 0) {
+      return (GPUProc)GPUBindRenderIntersectionFunctionTableEXT;
     }
   }
   if (GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_TRACING_PIPELINE)) {
