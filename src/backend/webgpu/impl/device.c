@@ -461,12 +461,9 @@ webgpu_supportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
       return wgpuAdapterHasFeature(native->adapter,
                                    WGPUFeatureName_Subgroups);
     case GPU_FEATURE_INDIRECT_DRAW:
-      return wgpuAdapterHasFeature(native->adapter,
-                                   WGPUFeatureName_IndirectFirstInstance);
+      return true;
     case GPU_FEATURE_MULTI_DRAW:
       return wgpuAdapterHasFeature(native->adapter,
-                                   WGPUFeatureName_IndirectFirstInstance) &&
-             wgpuAdapterHasFeature(native->adapter,
                                    WGPUFeatureName_MultiDrawIndirect);
     default:
       return false;
@@ -614,14 +611,15 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
     WGPUFeatureName_Float32Blendable,
     WGPUFeatureName_TextureFormatsTier1,
     WGPUFeatureName_TextureFormatsTier2,
-    WGPUFeatureName_Unorm16TextureFormats
+    WGPUFeatureName_Unorm16TextureFormats,
+    WGPUFeatureName_IndirectFirstInstance
   };
   WGPUFeatureName       requiredFeatures[20];
   GPUAdapterWebGPU    *native;
   WebGPUDeviceRequest *request;
   uint64_t             supportedMask;
 
-  _Static_assert(GPU_ARRAY_LEN(optionalFeatures) + 5u <=
+  _Static_assert(GPU_ARRAY_LEN(optionalFeatures) + 4u <=
                    GPU_ARRAY_LEN(requiredFeatures),
                  "WebGPU device feature storage is too small");
 
@@ -636,7 +634,8 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  supportedMask = 1ull << GPU_FEATURE_COMPUTE;
+  supportedMask = (1ull << GPU_FEATURE_COMPUTE) |
+                  (1ull << GPU_FEATURE_INDIRECT_DRAW);
   if (webgpu_supportsFeature(adapter, GPU_FEATURE_TIMESTAMPS)) {
     supportedMask |= 1ull << GPU_FEATURE_TIMESTAMPS;
   }
@@ -647,12 +646,8 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
     supportedMask |= 1ull << GPU_FEATURE_SUBGROUPS;
   }
   if (wgpuAdapterHasFeature(native->adapter,
-                            WGPUFeatureName_IndirectFirstInstance)) {
-    supportedMask |= 1ull << GPU_FEATURE_INDIRECT_DRAW;
-    if (wgpuAdapterHasFeature(native->adapter,
-                              WGPUFeatureName_MultiDrawIndirect)) {
-      supportedMask |= 1ull << GPU_FEATURE_MULTI_DRAW;
-    }
+                            WGPUFeatureName_MultiDrawIndirect)) {
+    supportedMask |= 1ull << GPU_FEATURE_MULTI_DRAW;
   }
   if ((enabledFeatureMask & ~supportedMask) != 0u) {
     return GPU_ERROR_UNSUPPORTED;
@@ -682,12 +677,6 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_SUBGROUPS)) != 0u) {
     requiredFeatures[descriptor.requiredFeatureCount++] =
       WGPUFeatureName_Subgroups;
-  }
-  if ((enabledFeatureMask &
-       ((1ull << GPU_FEATURE_INDIRECT_DRAW) |
-        (1ull << GPU_FEATURE_MULTI_DRAW))) != 0u) {
-    requiredFeatures[descriptor.requiredFeatureCount++] =
-      WGPUFeatureName_IndirectFirstInstance;
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_MULTI_DRAW)) != 0u) {
     requiredFeatures[descriptor.requiredFeatureCount++] =
