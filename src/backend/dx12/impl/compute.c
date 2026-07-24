@@ -169,6 +169,7 @@ dx12_setComputePipelineState(GPUComputePassEncoder   *encoder,
                              GPUComputePipelineState *pipelineState) {
   GPUComputeEncoderDX12  *native;
   GPUComputePipelineDX12 *pipeline;
+  bool                    rootChanged;
 
   native   = dx12__computeEncoder(encoder);
   pipeline = pipelineState ? pipelineState->_priv : NULL;
@@ -177,11 +178,19 @@ dx12_setComputePipelineState(GPUComputePassEncoder   *encoder,
     return;
   }
 
-  native->commandList->lpVtbl->SetComputeRootSignature(native->commandList,
-                                                       pipeline->rootSignature);
+  rootChanged = native->rootSignature != pipeline->rootSignature;
+  if (rootChanged) {
+    native->commandList->lpVtbl->SetComputeRootSignature(
+      native->commandList,
+      pipeline->rootSignature
+    );
+  }
   native->commandList->lpVtbl->SetPipelineState(native->commandList,
                                                 pipeline->pipelineState);
-  native->rootSignature      = pipeline->rootSignature;
+  native->rootSignature = pipeline->rootSignature;
+  if (rootChanged) {
+    dx12_rebindComputeGroups(encoder);
+  }
   encoder->_workgroupSize[0] = pipelineState->workgroupSize[0];
   encoder->_workgroupSize[1] = pipelineState->workgroupSize[1];
   encoder->_workgroupSize[2] = pipelineState->workgroupSize[2];

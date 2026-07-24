@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../impl.h"
 
 static uint32_t
 dx12__firstSetBit(uint32_t mask) {
@@ -390,6 +391,7 @@ dx12_setRenderPipelineState(GPURenderPassEncoder *encoder,
                             GPURenderPipelineState  *pipelineState) {
   GPURenderEncoderDX12  *native;
   GPURenderPipelineDX12 *pipeline;
+  bool                    rootChanged;
 
   native   = encoder ? encoder->_priv : NULL;
   pipeline = pipelineState ? pipelineState->_priv : NULL;
@@ -398,8 +400,13 @@ dx12_setRenderPipelineState(GPURenderPassEncoder *encoder,
     return;
   }
 
-  native->commandList->lpVtbl->SetGraphicsRootSignature(native->commandList,
-                                                         pipeline->rootSignature);
+  rootChanged = native->rootSignature != pipeline->rootSignature;
+  if (rootChanged) {
+    native->commandList->lpVtbl->SetGraphicsRootSignature(
+      native->commandList,
+      pipeline->rootSignature
+    );
+  }
   native->commandList->lpVtbl->SetPipelineState(native->commandList,
                                                  pipeline->pipelineState);
   if (!pipeline->mesh) {
@@ -408,6 +415,9 @@ dx12_setRenderPipelineState(GPURenderPassEncoder *encoder,
   }
   native->rootSignature = pipeline->rootSignature;
   native->pipeline      = pipeline;
+  if (rootChanged) {
+    dx12_rebindRenderGroups(encoder);
+  }
 
   for (uint32_t mask = native->vertexBufferMask;
        mask != 0u;

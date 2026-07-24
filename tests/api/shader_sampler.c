@@ -91,6 +91,7 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   GPUShaderLibrary                 *library;
   GPUShaderLayout                  *shaderLayout;
   GPURenderPipeline                *pipeline;
+  GPURenderPipeline                *pipelineSwitch;
   GPUBindGroup                     *group;
   GPUTexture                       *sampledTexture;
   GPUTexture                       *targetTexture;
@@ -113,6 +114,8 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   GPUBufferCreateInfo               bufferInfo = {0};
   GPURenderPassColorAttachment      color = {0};
   GPURenderPassCreateInfo           passInfo = {0};
+  GPUScissorRect                    leftScissor = {0};
+  GPUScissorRect                    rightScissor = {0};
   GPUTextureBarrier                 textureBarrier = {0};
   GPUBarrierBatch                   barrierBatch = {0};
   GPUBufferTextureCopyRegion        copyRegion = {0};
@@ -124,7 +127,8 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   uint8_t pixels[GPU_SOURCE_SAMPLER_READBACK_BYTES] = {0};
   uint64_t                          bytecodeSize;
   uint32_t                          layoutEntryCount;
-  size_t                            centerOffset;
+  size_t                            leftOffset;
+  size_t                            rightOffset;
   bool                              savedStatsEnabled;
   int                               ok;
 
@@ -138,6 +142,7 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   library        = NULL;
   shaderLayout   = NULL;
   pipeline       = NULL;
+  pipelineSwitch = NULL;
   group          = NULL;
   sampledTexture = NULL;
   targetTexture  = NULL;
@@ -317,6 +322,15 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
     ok = 0;
     goto cleanup;
   }
+  pipelineInfo.label = "api-source-sampler-pipeline-switch";
+  if (GPUCreateRenderPipeline(device,
+                              &pipelineInfo,
+                              &pipelineSwitch) != GPU_OK ||
+      !pipelineSwitch) {
+    fprintf(stderr, "source sampler switch pipeline creation failed\n");
+    ok = 0;
+    goto cleanup;
+  }
 
   textureInfo.label         = "api-source-sampler-target";
   textureInfo.width         = width;
@@ -383,6 +397,15 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
 
   GPUBindRenderPipeline(renderPass, pipeline);
   GPUBindRenderGroup(renderPass, 0u, group, 0u, NULL);
+  leftScissor.width  = width / 2u;
+  leftScissor.height = height;
+  GPUSetScissor(renderPass, &leftScissor);
+  GPUDraw(renderPass, 6u, 1u, 0u, 0u);
+  GPUBindRenderPipeline(renderPass, pipelineSwitch);
+  rightScissor.x      = (int32_t)(width / 2u);
+  rightScissor.width  = width - width / 2u;
+  rightScissor.height = height;
+  GPUSetScissor(renderPass, &rightScissor);
   GPUDraw(renderPass, 6u, 1u, 0u, 0u);
   GPUEndRenderPass(renderPass);
   renderPass = NULL;
@@ -448,18 +471,28 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
     goto cleanup;
   }
 
-  centerOffset = (size_t)2u * rowPitch + 2u * 4u;
-  ok = pixels[centerOffset + 0u] >= 250u &&
-       pixels[centerOffset + 1u] <= 2u &&
-       pixels[centerOffset + 2u] <= 2u &&
-       pixels[centerOffset + 3u] >= 250u;
+  leftOffset  = (size_t)2u * rowPitch + 1u * 4u;
+  rightOffset = (size_t)2u * rowPitch + 2u * 4u;
+  ok = pixels[leftOffset + 0u] >= 250u &&
+       pixels[leftOffset + 1u] <= 2u &&
+       pixels[leftOffset + 2u] <= 2u &&
+       pixels[leftOffset + 3u] >= 250u &&
+       pixels[rightOffset + 0u] >= 250u &&
+       pixels[rightOffset + 1u] <= 2u &&
+       pixels[rightOffset + 2u] <= 2u &&
+       pixels[rightOffset + 3u] >= 250u;
   if (!ok) {
     fprintf(stderr,
-            "source sampler draw pixel mismatch: %u %u %u %u\n",
-            (unsigned)pixels[centerOffset + 0u],
-            (unsigned)pixels[centerOffset + 1u],
-            (unsigned)pixels[centerOffset + 2u],
-            (unsigned)pixels[centerOffset + 3u]);
+            "source sampler pipeline switch mismatch: "
+            "left %u %u %u %u; right %u %u %u %u\n",
+            (unsigned)pixels[leftOffset + 0u],
+            (unsigned)pixels[leftOffset + 1u],
+            (unsigned)pixels[leftOffset + 2u],
+            (unsigned)pixels[leftOffset + 3u],
+            (unsigned)pixels[rightOffset + 0u],
+            (unsigned)pixels[rightOffset + 1u],
+            (unsigned)pixels[rightOffset + 2u],
+            (unsigned)pixels[rightOffset + 3u]);
     goto cleanup;
   }
 
@@ -515,6 +548,7 @@ cleanup:
   GPUDestroyBuffer(readbackBuffer);
   GPUDestroyTextureView(targetView);
   GPUDestroyTexture(targetTexture);
+  GPUDestroyRenderPipeline(pipelineSwitch);
   GPUDestroyRenderPipeline(pipeline);
   GPUDestroyBindGroup(group);
   GPUDestroyTextureView(sampledView);

@@ -1183,6 +1183,7 @@ dx12_bindRayTracingPipeline(GPURayTracingPassEncoderEXT *pass,
                             GPURayTracingPipelineEXT    *pipeline) {
   GPURayTracingEncoderDX12  *native;
   GPURayTracingPipelineDX12 *pipelineDX12;
+  bool                        rootChanged;
 
   native       = pass ? pass->_priv : NULL;
   pipelineDX12 = pipeline ? pipeline->_priv : NULL;
@@ -1192,13 +1193,19 @@ dx12_bindRayTracingPipeline(GPURayTracingPassEncoderEXT *pass,
     return;
   }
 
+  rootChanged = native->rootSignature != pipelineDX12->rootSignature;
   native->commandList5->lpVtbl->SetPipelineState1(native->commandList5,
                                                    pipelineDX12->stateObject);
-  native->commandList->lpVtbl->SetComputeRootSignature(
-    native->commandList,
-    pipelineDX12->rootSignature
-  );
+  if (rootChanged) {
+    native->commandList->lpVtbl->SetComputeRootSignature(
+      native->commandList,
+      pipelineDX12->rootSignature
+    );
+  }
   native->rootSignature = pipelineDX12->rootSignature;
+  if (rootChanged) {
+    dx12_rebindRayGroups(pass);
+  }
 }
 
 static void

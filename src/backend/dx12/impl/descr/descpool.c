@@ -2139,6 +2139,96 @@ dx12_bindRayTracingGroup(GPURayTracingPassEncoderEXT *pass,
 
 GPU_HIDE
 void
+dx12_rebindRenderGroups(GPURenderPassEncoder *pass) {
+  if (!pass || !pass->_pipelineLayout) {
+    return;
+  }
+
+  for (uint32_t i = 0u; i < GPU_ENCODER_MAX_BIND_GROUPS; i++) {
+    GPUBindGroup *group;
+
+    group = pass->_boundGroups[i];
+    if (!group) {
+      continue;
+    }
+    if (dx12_bindRenderGroup(pass,
+                             pass->_pipelineLayout,
+                             i,
+                             group,
+                             pass->_boundDynamicOffsetCounts[i],
+                             pass->_boundDynamicOffsets[i])) {
+      gpuFrameStatsRecordBindEmission(pass->_stats);
+      continue;
+    }
+
+    pass->_boundGroups[i]              = NULL;
+    pass->_boundGroupLayouts[i]        = NULL;
+    pass->_boundDynamicOffsetCounts[i] = 0u;
+  }
+}
+
+GPU_HIDE
+void
+dx12_rebindComputeGroups(GPUComputePassEncoder *pass) {
+  if (!pass || !pass->_pipelineLayout) {
+    return;
+  }
+
+  for (uint32_t i = 0u; i < GPU_ENCODER_MAX_BIND_GROUPS; i++) {
+    GPUBindGroup *group;
+
+    group = pass->_boundGroups[i];
+    if (!group) {
+      continue;
+    }
+    if (dx12_bindComputeGroup(pass,
+                              pass->_pipelineLayout,
+                              i,
+                              group,
+                              pass->_boundDynamicOffsetCounts[i],
+                              pass->_boundDynamicOffsets[i])) {
+      gpuFrameStatsRecordBindEmission(pass->_stats);
+      continue;
+    }
+
+    pass->_boundGroups[i]              = NULL;
+    pass->_boundGroupLayouts[i]        = NULL;
+    pass->_boundDynamicOffsetCounts[i] = 0u;
+  }
+}
+
+GPU_HIDE
+void
+dx12_rebindRayGroups(GPURayTracingPassEncoderEXT *pass) {
+  if (!pass || !pass->pipelineLayout) {
+    return;
+  }
+
+  for (uint32_t i = 0u; i < GPU_ENCODER_MAX_BIND_GROUPS; i++) {
+    GPUBindGroup *group;
+
+    group = pass->boundGroups[i];
+    if (!group) {
+      continue;
+    }
+    if (dx12_bindRayTracingGroup(pass,
+                                 pass->pipelineLayout,
+                                 i,
+                                 group,
+                                 pass->boundDynamicOffsetCounts[i],
+                                 pass->boundDynamicOffsets[i])) {
+      gpuFrameStatsRecordBindEmission(pass->stats);
+      continue;
+    }
+
+    pass->boundGroups[i]              = NULL;
+    pass->boundGroupLayouts[i]        = NULL;
+    pass->boundDynamicOffsetCounts[i] = 0u;
+  }
+}
+
+GPU_HIDE
+void
 dx12_destroyPipelineLayout(GPUPipelineLayout *layout) {
   GPUPipelineLayoutDX12 *native;
 

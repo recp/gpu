@@ -501,6 +501,7 @@ dx12_bindExecutionGraph(GPUComputePassEncoder *pass,
                         GPUExecutionGraphEXT  *graph) {
   GPUComputeEncoderDX12 *encoder;
   GPUExecutionGraphDX12 *native;
+  bool                    rootChanged;
 
   encoder = pass ? pass->_priv : NULL;
   native  = graph ? graph->_priv : NULL;
@@ -508,13 +509,20 @@ dx12_bindExecutionGraph(GPUComputePassEncoder *pass,
       !native || !native->rootSignature) {
     return;
   }
-  encoder->commandList->lpVtbl->SetComputeRootSignature(
-    encoder->commandList,
-    native->rootSignature
-  );
+
+  rootChanged = encoder->rootSignature != native->rootSignature;
+  if (rootChanged) {
+    encoder->commandList->lpVtbl->SetComputeRootSignature(
+      encoder->commandList,
+      native->rootSignature
+    );
+  }
   encoder->rootSignature         = native->rootSignature;
   encoder->executionGraph        = graph;
   encoder->executionGraphInstance = NULL;
+  if (rootChanged) {
+    dx12_rebindComputeGroups(pass);
+  }
 }
 
 static bool
