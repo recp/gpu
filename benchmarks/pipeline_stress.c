@@ -59,6 +59,7 @@ typedef struct PipelineMetrics {
   double *samples;
   double *cold;
   double *warm;
+  double *noCache;
   double *prewarm;
   double *prewarmLookup;
   double *asyncEnqueue;
@@ -398,14 +399,15 @@ pipeline_metricsInit(PipelineMetrics *metrics, uint32_t repeats) {
   size_t count;
 
   memset(metrics, 0, sizeof(*metrics));
-  count            = (size_t)repeats * 12u;
+  count            = (size_t)repeats * 13u;
   metrics->samples = calloc(count, sizeof(*metrics->samples));
   if (!metrics->samples) {
     return false;
   }
   metrics->cold           = metrics->samples;
   metrics->warm           = metrics->cold + repeats;
-  metrics->prewarm        = metrics->warm + repeats;
+  metrics->noCache        = metrics->warm + repeats;
+  metrics->prewarm        = metrics->noCache + repeats;
   metrics->prewarmLookup  = metrics->prewarm + repeats;
   metrics->asyncEnqueue   = metrics->prewarmLookup + repeats;
   metrics->asyncReady     = metrics->asyncEnqueue + repeats;
@@ -457,6 +459,15 @@ pipeline_run(PipelineStress             *stress,
       return false;
     }
     GPUDestroyPipelineCache(cache);
+
+    GPUResetStats(stress->bench.device);
+    if (!pipeline_createAll(stress,
+                            NULL,
+                            config->pipelineCount,
+                            &metrics->noCache[repeat]) ||
+        !pipeline_statsMatch(stress, 0u, 0u, count)) {
+      return false;
+    }
 
     cache = NULL;
     if (!pipeline_createCache(stress,
@@ -572,6 +583,7 @@ pipeline_print(const PipelineStressConfig *config,
   double cold;
   double firstMiss;
   double warm;
+  double noCache;
   double prewarm;
   double prewarmLookup;
   double asyncEnqueue;
@@ -587,6 +599,9 @@ pipeline_print(const PipelineStressConfig *config,
   firstMiss     = metrics->cold[0];
   cold          = bench_percentile(metrics->cold, config->repeats, 0.5);
   warm          = bench_percentile(metrics->warm, config->repeats, 0.5);
+  noCache       = bench_percentile(metrics->noCache,
+                                   config->repeats,
+                                   0.5);
   prewarm       = bench_percentile(metrics->prewarm, config->repeats, 0.5);
   prewarmLookup = bench_percentile(metrics->prewarmLookup,
                                    config->repeats,
@@ -633,6 +648,9 @@ pipeline_print(const PipelineStressConfig *config,
   printf("cache-miss median    : %.3f ms total, %.3f us/pipeline\n",
          cold / 1e6,
          cold / count / 1e3);
+  printf("no-cache median      : %.3f ms total, %.3f us/pipeline\n",
+         noCache / 1e6,
+         noCache / count / 1e3);
   printf("cache-hit lookup     : %.3f us total, %.3f us/pipeline, "
          "%.2fx faster\n",
          warm / 1e3,
