@@ -220,13 +220,23 @@ gpu_testBufferDescriptorArray(GPUDevice *device,
     ok = 0;
     goto cleanup;
   }
-  if (bindless &&
-      GPUUpdateBindGroupEXT(group,
-                            (uint32_t)GPU_ARRAY_LEN(entries),
-                            entries) != GPU_OK) {
-    fprintf(stderr, "buffer descriptor array bindless update failed\n");
-    ok = 0;
-    goto cleanup;
+  if (bindless) {
+    entries[1].buffer.buffer = inputs[0];
+    if (GPUUpdateBindGroupEXT(group, 2u, entries) != GPU_OK ||
+        GPUUpdateBindGroupEXT(group, 2u, &entries[2]) != GPU_OK) {
+      fprintf(stderr,
+              "buffer descriptor array bindless partial update failed\n");
+      ok = 0;
+      goto cleanup;
+    }
+
+    entries[1].buffer.buffer = inputs[1];
+    if (GPUUpdateBindGroupEXT(group, 1u, &entries[1]) != GPU_OK) {
+      fprintf(stderr,
+              "buffer descriptor array bindless replacement failed\n");
+      ok = 0;
+      goto cleanup;
+    }
   }
 
   if (GPUAcquireCommandBuffer(queue,

@@ -658,13 +658,24 @@ gpu_testDescriptorArray(GPUDevice *device,
     ok = 0;
     goto cleanup;
   }
-  if (bindless &&
-      GPUUpdateBindGroupEXT(group,
-                            (uint32_t)GPU_ARRAY_LEN(groupEntries),
-                            groupEntries) != GPU_OK) {
-    fprintf(stderr, "bindless descriptor array update failed\n");
-    ok = 0;
-    goto cleanup;
+  if (bindless) {
+    groupEntries[1].textureView = views[0];
+    if (GPUUpdateBindGroupEXT(group, 4u, groupEntries) != GPU_OK ||
+        GPUUpdateBindGroupEXT(
+          group,
+          (uint32_t)GPU_ARRAY_LEN(groupEntries) - 4u,
+          &groupEntries[4]) != GPU_OK) {
+      fprintf(stderr, "bindless descriptor array partial update failed\n");
+      ok = 0;
+      goto cleanup;
+    }
+
+    groupEntries[1].textureView = views[1];
+    if (GPUUpdateBindGroupEXT(group, 1u, &groupEntries[1]) != GPU_OK) {
+      fprintf(stderr, "bindless descriptor array replacement failed\n");
+      ok = 0;
+      goto cleanup;
+    }
   }
 
   if (GPUAcquireCommandBuffer(queue, "api-descriptor-array", &cmdb) != GPU_OK ||
