@@ -307,15 +307,51 @@ webgpu_hasCoreStorage(GPUFormat format) {
     case GPU_FORMAT_RGBA8_SNORM:
     case GPU_FORMAT_RGBA8_UINT:
     case GPU_FORMAT_RGBA8_SINT:
-    case GPU_FORMAT_RG32_UINT:
-    case GPU_FORMAT_RG32_SINT:
-    case GPU_FORMAT_RG32_FLOAT:
     case GPU_FORMAT_RGBA16_UINT:
     case GPU_FORMAT_RGBA16_SINT:
     case GPU_FORMAT_RGBA16_FLOAT:
     case GPU_FORMAT_RGBA32_UINT:
     case GPU_FORMAT_RGBA32_SINT:
     case GPU_FORMAT_RGBA32_FLOAT:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool
+webgpu_hasCoreFeaturesStorage(GPUFormat format) {
+  return format == GPU_FORMAT_RG32_UINT ||
+         format == GPU_FORMAT_RG32_SINT ||
+         format == GPU_FORMAT_RG32_FLOAT;
+}
+
+static bool
+webgpu_hasTier1Storage(GPUFormat format) {
+  switch (format) {
+    case GPU_FORMAT_R8_UNORM:
+    case GPU_FORMAT_R8_SNORM:
+    case GPU_FORMAT_R8_UINT:
+    case GPU_FORMAT_R8_SINT:
+    case GPU_FORMAT_RG8_UNORM:
+    case GPU_FORMAT_RG8_SNORM:
+    case GPU_FORMAT_RG8_UINT:
+    case GPU_FORMAT_RG8_SINT:
+    case GPU_FORMAT_R16_UNORM:
+    case GPU_FORMAT_R16_SNORM:
+    case GPU_FORMAT_R16_UINT:
+    case GPU_FORMAT_R16_SINT:
+    case GPU_FORMAT_R16_FLOAT:
+    case GPU_FORMAT_RG16_UNORM:
+    case GPU_FORMAT_RG16_SNORM:
+    case GPU_FORMAT_RG16_UINT:
+    case GPU_FORMAT_RG16_SINT:
+    case GPU_FORMAT_RG16_FLOAT:
+    case GPU_FORMAT_RGBA16_UNORM:
+    case GPU_FORMAT_RGBA16_SNORM:
+    case GPU_FORMAT_RGB10A2_UNORM:
+    case GPU_FORMAT_RGB10A2_UINT:
+    case GPU_FORMAT_RG11B10_UFLOAT:
       return true;
     default:
       return false;
@@ -338,6 +374,7 @@ webgpu_getFormatCapabilities(
   GPUFormatCapabilities * __restrict outCaps) {
   bool float32Blendable;
   bool float32Filterable;
+  bool coreFeatures;
   bool legacyUnorm16;
   bool tier1;
   bool wideNorm;
@@ -397,6 +434,10 @@ webgpu_getFormatCapabilities(
       break;
   }
 
+  coreFeatures = webgpu_hasAdapterFeature(
+    adapter,
+    WGPUFeatureName_CoreFeaturesAndLimits
+  );
   tier1 = webgpu_hasAdapterFeature(adapter,
                                    WGPUFeatureName_TextureFormatsTier1);
   wideNorm = webgpu_isWideNormFormat(format);
@@ -441,8 +482,11 @@ webgpu_getFormatCapabilities(
                        (!wideNorm || tier1) &&
                        (!webgpu_isFloat32Format(format) ||
                         float32Blendable);
-  outCaps->storage = !webgpu_isSRGBFormat(format) &&
-                     (webgpu_hasCoreStorage(format) || tier1);
+  outCaps->storage =
+    !webgpu_isSRGBFormat(format) &&
+    (webgpu_hasCoreStorage(format) ||
+     (coreFeatures && webgpu_hasCoreFeaturesStorage(format)) ||
+     (tier1 && webgpu_hasTier1Storage(format)));
   if (format == GPU_FORMAT_BGRA8_UNORM) {
     outCaps->storage = webgpu_hasAdapterFeature(
       adapter,
