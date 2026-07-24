@@ -64,7 +64,7 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
     "GPUEndRayTracingPassEXT"
   };
   GPUDeviceCreateInfo                          deviceInfo      = {0};
-  GPUAccelerationStructureTriangleGeometryEXT geometry        = {0};
+  GPUAccelerationStructureGeometryEXT         geometry        = {0};
   GPUAccelerationStructureBuildInfoEXT         blasBuild       = {0};
   GPUAccelerationStructureBuildInfoEXT         tlasBuild       = {0};
   GPUAccelerationStructureSizesEXT             blasSizes       = {0};
@@ -281,11 +281,13 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
     goto cleanup;
   }
 
-  geometry.vertexBuffer = vertexBuffer;
-  geometry.vertexCount  = 3u;
-  geometry.vertexStride = sizeof(float) * 3u;
-  geometry.vertexFormat = GPU_VERTEX_FORMAT_FLOAT32X3;
-  geometry.flags        =
+  geometry.type                   =
+    GPU_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_EXT;
+  geometry.triangles.vertexBuffer = vertexBuffer;
+  geometry.triangles.vertexCount  = 3u;
+  geometry.triangles.vertexStride = sizeof(float) * 3u;
+  geometry.triangles.vertexFormat = GPU_VERTEX_FORMAT_FLOAT32X3;
+  geometry.triangles.flags        =
     GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT;
   blasBuild.chain.sType      =
     GPU_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_INFO_EXT;
@@ -646,6 +648,10 @@ cleanup:
 
 int
 gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
+  static const float aabbs[] = {
+    -0.5f, -0.5f, -0.1f,
+     0.5f,  0.5f,  0.1f
+  };
   static const float vertices[] = {
     -0.5f, -0.5f, 0.0f,
      0.5f, -0.5f, 0.0f,
@@ -660,10 +666,13 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   };
   GPUDeviceCreateInfo                          deviceInfo       = {0};
   GPUComputePipelineCreateInfo                 pipelineInfo     = {0};
-  GPUAccelerationStructureTriangleGeometryEXT geometry         = {0};
+  GPUAccelerationStructureGeometryEXT         geometry         = {0};
+  GPUAccelerationStructureGeometryEXT         aabbGeometry     = {0};
   GPUAccelerationStructureBuildInfoEXT         blasBuild        = {0};
+  GPUAccelerationStructureBuildInfoEXT         aabbBuild        = {0};
   GPUAccelerationStructureBuildInfoEXT         tlasBuild        = {0};
   GPUAccelerationStructureSizesEXT             blasSizes        = {0};
+  GPUAccelerationStructureSizesEXT             aabbSizes        = {0};
   GPUAccelerationStructureSizesEXT             tlasSizes        = {0};
   GPUAccelerationStructureCreateInfoEXT        structureInfo    = {0};
   GPUAccelerationStructureInstanceEXT          instance         = {0};
@@ -685,10 +694,12 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   GPUComputePipeline                          *manualPipeline;
   GPUBuffer                                   *vertexBuffer;
   GPUBuffer                                   *indexBuffer;
+  GPUBuffer                                   *aabbBuffer;
   GPUBuffer                                   *scratchBuffer;
   GPUBuffer                                   *inputBuffer;
   GPUBuffer                                   *outputBuffer;
   GPUAccelerationStructureEXT                 *blas;
+  GPUAccelerationStructureEXT                 *aabbBlas;
   GPUAccelerationStructureEXT                 *tlas;
   GPUBindGroup                                *group;
   GPUCommandBuffer                            *cmdb;
@@ -733,10 +744,12 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   manualPipeline       = NULL;
   vertexBuffer         = NULL;
   indexBuffer          = NULL;
+  aabbBuffer           = NULL;
   scratchBuffer        = NULL;
   inputBuffer          = NULL;
   outputBuffer         = NULL;
   blas                 = NULL;
+  aabbBlas             = NULL;
   tlas                 = NULL;
   group                = NULL;
   cmdb                 = NULL;
@@ -793,18 +806,32 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
                           indexBuffer,
                           0u,
                           indices,
-                          sizeof(indices)) != GPU_OK) {
+                          sizeof(indices)) != GPU_OK ||
+      !ray_create_buffer(
+        device,
+        "ray-query-aabbs",
+        sizeof(aabbs),
+        GPU_BUFFER_USAGE_COPY_DST |
+          GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT,
+        &aabbBuffer) ||
+      GPUQueueWriteBuffer(queue,
+                          aabbBuffer,
+                          0u,
+                          aabbs,
+                          sizeof(aabbs)) != GPU_OK) {
     fprintf(stderr, "ray-query geometry buffer setup failed\n");
     goto cleanup;
   }
 
-  geometry.vertexBuffer = vertexBuffer;
-  geometry.indexBuffer  = indexBuffer;
-  geometry.vertexCount  = 4u;
-  geometry.vertexStride = sizeof(float) * 3u;
-  geometry.vertexFormat = GPU_VERTEX_FORMAT_FLOAT32X3;
-  geometry.indexCount   = GPU_ARRAY_LEN(indices);
-  geometry.indexType    = GPU_INDEX_TYPE_UINT16;
+  geometry.type                   =
+    GPU_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_EXT;
+  geometry.triangles.vertexBuffer = vertexBuffer;
+  geometry.triangles.indexBuffer  = indexBuffer;
+  geometry.triangles.vertexCount  = 4u;
+  geometry.triangles.vertexStride = sizeof(float) * 3u;
+  geometry.triangles.vertexFormat = GPU_VERTEX_FORMAT_FLOAT32X3;
+  geometry.triangles.indexCount   = GPU_ARRAY_LEN(indices);
+  geometry.triangles.indexType    = GPU_INDEX_TYPE_UINT16;
   blasBuild.chain.sType      =
     GPU_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_INFO_EXT;
   blasBuild.chain.structSize            = sizeof(blasBuild);
@@ -814,8 +841,8 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   blasBuild.mode                        = GPU_ACCELERATION_STRUCTURE_BUILD_EXT;
   blasBuild.bottomLevel.pGeometries     = &geometry;
   blasBuild.bottomLevel.geometryCount   = 1u;
-  geometry.indexBuffer = NULL;
-  geometry.indexCount  = 0u;
+  geometry.triangles.indexBuffer = NULL;
+  geometry.triangles.indexCount  = 0u;
   if (GPUGetAccelerationStructureSizesEXT(device,
                                           &blasBuild,
                                           &blasSizes) !=
@@ -823,8 +850,8 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
     fprintf(stderr, "ray-query accepted incomplete non-indexed geometry\n");
     goto cleanup;
   }
-  geometry.indexBuffer = indexBuffer;
-  geometry.indexCount  = GPU_ARRAY_LEN(indices);
+  geometry.triangles.indexBuffer = indexBuffer;
+  geometry.triangles.indexCount  = GPU_ARRAY_LEN(indices);
   if (GPUGetAccelerationStructureSizesEXT(device,
                                           &blasBuild,
                                           &blasSizes) != GPU_OK) {
@@ -845,6 +872,44 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
     goto cleanup;
   }
 
+  aabbGeometry.type         = GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT;
+  aabbGeometry.aabbs.buffer = aabbBuffer;
+  aabbGeometry.aabbs.count  = 1u;
+  aabbGeometry.aabbs.stride = sizeof(aabbs);
+  aabbBuild.chain.sType      =
+    GPU_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_INFO_EXT;
+  aabbBuild.chain.structSize          = sizeof(aabbBuild);
+  aabbBuild.label                     = "ray-query-aabb-blas";
+  aabbBuild.type                      =
+    GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT;
+  aabbBuild.mode                      = GPU_ACCELERATION_STRUCTURE_BUILD_EXT;
+  aabbBuild.bottomLevel.pGeometries   = &aabbGeometry;
+  aabbBuild.bottomLevel.geometryCount = 1u;
+  aabbGeometry.aabbs.stride           = sizeof(aabbs) + sizeof(float);
+  if (GPUGetAccelerationStructureSizesEXT(device,
+                                          &aabbBuild,
+                                          &aabbSizes) !=
+      GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "ray-query accepted undersized AABB stride\n");
+    goto cleanup;
+  }
+  aabbGeometry.aabbs.stride = sizeof(aabbs);
+  if (GPUGetAccelerationStructureSizesEXT(device,
+                                          &aabbBuild,
+                                          &aabbSizes) != GPU_OK) {
+    fprintf(stderr, "ray-query AABB BLAS size query failed\n");
+    goto cleanup;
+  }
+  structureInfo.label     = "ray-query-aabb-blas";
+  structureInfo.sizeBytes = aabbSizes.accelerationStructureSize;
+  if (GPUCreateAccelerationStructureEXT(device,
+                                        &structureInfo,
+                                        &aabbBlas) != GPU_OK ||
+      !aabbBlas) {
+    fprintf(stderr, "ray-query AABB BLAS create failed\n");
+    goto cleanup;
+  }
+
   instance.structure = blas;
   memcpy(instance.transform, identity, sizeof(identity));
   instance.flags = GPU_ACCELERATION_STRUCTURE_INSTANCE_DISABLE_CULL_BIT_EXT;
@@ -856,6 +921,15 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   tlasBuild.mode                      = GPU_ACCELERATION_STRUCTURE_BUILD_EXT;
   tlasBuild.topLevel.pInstances       = &instance;
   tlasBuild.topLevel.instanceCount    = 1u;
+  instance.hitGroupOffset             = 0x01000000u;
+  if (GPUGetAccelerationStructureSizesEXT(device,
+                                          &tlasBuild,
+                                          &tlasSizes) !=
+      GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "ray-query accepted oversized hit-group offset\n");
+    goto cleanup;
+  }
+  instance.hitGroupOffset = 0u;
   if (GPUGetAccelerationStructureSizesEXT(device,
                                           &tlasBuild,
                                           &tlasSizes) != GPU_OK) {
@@ -873,8 +947,9 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
     goto cleanup;
   }
 
-  scratchSize = ray_max_u64(blasSizes.buildScratchSize,
-                            tlasSizes.buildScratchSize);
+  scratchSize = ray_max_u64(
+    ray_max_u64(blasSizes.buildScratchSize, aabbSizes.buildScratchSize),
+    tlasSizes.buildScratchSize);
   if (!ray_create_buffer(
         device,
         "ray-query-scratch",
@@ -1049,6 +1124,11 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
                                        scratchBuffer,
                                        0u) != GPU_OK ||
       GPUBuildAccelerationStructureEXT(buildPass,
+                                       aabbBlas,
+                                       &aabbBuild,
+                                       scratchBuffer,
+                                       0u) != GPU_OK ||
+      GPUBuildAccelerationStructureEXT(buildPass,
                                        tlas,
                                        &tlasBuild,
                                        scratchBuffer,
@@ -1114,10 +1194,12 @@ cleanup:
   GPUFreeShaderReflection(&reflection);
   GPUDestroyShaderLibrary(library);
   GPUDestroyAccelerationStructureEXT(tlas);
+  GPUDestroyAccelerationStructureEXT(aabbBlas);
   GPUDestroyAccelerationStructureEXT(blas);
   GPUDestroyBuffer(outputBuffer);
   GPUDestroyBuffer(inputBuffer);
   GPUDestroyBuffer(scratchBuffer);
+  GPUDestroyBuffer(aabbBuffer);
   GPUDestroyBuffer(indexBuffer);
   GPUDestroyBuffer(vertexBuffer);
   GPUDestroyDevice(device);

@@ -87,31 +87,71 @@ mt_rayTransform(MTLPackedFloat4x3 *dst, const float src[3][4]) {
   }
 }
 
-static MTLAccelerationStructureTriangleGeometryDescriptor *
-mt_rayClassicTriangle(
-  const GPUAccelerationStructureTriangleGeometryEXT *geometry) {
-  MTLAccelerationStructureTriangleGeometryDescriptor *descriptor;
+static id
+mt_rayNewClassicGeometry(GPUAccelerationStructureGeometryTypeEXT type) {
+  return type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT
+           ? [MTLAccelerationStructureBoundingBoxGeometryDescriptor descriptor]
+           : [MTLAccelerationStructureTriangleGeometryDescriptor descriptor];
+}
 
-  descriptor = [MTLAccelerationStructureTriangleGeometryDescriptor descriptor];
-  descriptor.vertexBuffer       = mt_rayBuffer(geometry->vertexBuffer);
-  descriptor.vertexBufferOffset = (NSUInteger)geometry->vertexOffset;
-  descriptor.vertexStride       = geometry->vertexStride;
-  descriptor.vertexFormat       = MTLAttributeFormatFloat3;
-  descriptor.opaque =
-    (geometry->flags &
-     GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT) == 0u;
-  if (geometry->indexBuffer) {
-    descriptor.indexBuffer       = mt_rayBuffer(geometry->indexBuffer);
-    descriptor.indexBufferOffset = (NSUInteger)geometry->indexOffset;
-    descriptor.indexType         = geometry->indexType == GPU_INDEX_TYPE_UINT32
-                                     ? MTLIndexTypeUInt32
-                                     : MTLIndexTypeUInt16;
-    descriptor.triangleCount     = geometry->indexCount / 3u;
-  } else {
-    descriptor.indexBuffer   = nil;
-    descriptor.triangleCount = geometry->vertexCount / 3u;
+static bool
+mt_rayClassicGeometryMatches(id                                      descriptor,
+                             GPUAccelerationStructureGeometryTypeEXT type) {
+  return type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT
+           ? [descriptor isKindOfClass:
+               [MTLAccelerationStructureBoundingBoxGeometryDescriptor class]]
+           : [descriptor isKindOfClass:
+               [MTLAccelerationStructureTriangleGeometryDescriptor class]];
+}
+
+static void
+mt_rayFillClassicGeometry(id                                    descriptor,
+                          const GPUAccelerationStructureGeometryEXT *source,
+                          uint32_t                              geometryIndex) {
+  MTLAccelerationStructureGeometryDescriptor *base;
+
+  base                                 = descriptor;
+  base.intersectionFunctionTableOffset = geometryIndex;
+  if (source->type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT) {
+    MTLAccelerationStructureBoundingBoxGeometryDescriptor *geometry;
+
+    geometry                         = descriptor;
+    geometry.boundingBoxBuffer       = mt_rayBuffer(source->aabbs.buffer);
+    geometry.boundingBoxBufferOffset = (NSUInteger)source->aabbs.offset;
+    geometry.boundingBoxStride       = source->aabbs.stride;
+    geometry.boundingBoxCount        = source->aabbs.count;
+    geometry.opaque =
+      (source->aabbs.flags &
+       GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT) == 0u;
+    return;
   }
-  return descriptor;
+
+  {
+    MTLAccelerationStructureTriangleGeometryDescriptor *geometry;
+
+    geometry                    = descriptor;
+    geometry.vertexBuffer       = mt_rayBuffer(source->triangles.vertexBuffer);
+    geometry.vertexBufferOffset = (NSUInteger)source->triangles.vertexOffset;
+    geometry.vertexStride       = source->triangles.vertexStride;
+    geometry.vertexFormat       = MTLAttributeFormatFloat3;
+    geometry.opaque =
+      (source->triangles.flags &
+       GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT) == 0u;
+    if (source->triangles.indexBuffer) {
+      geometry.indexBuffer = mt_rayBuffer(source->triangles.indexBuffer);
+      geometry.indexBufferOffset =
+        (NSUInteger)source->triangles.indexOffset;
+      geometry.indexType =
+        source->triangles.indexType == GPU_INDEX_TYPE_UINT32
+          ? MTLIndexTypeUInt32
+          : MTLIndexTypeUInt16;
+      geometry.triangleCount = source->triangles.indexCount / 3u;
+    } else {
+      geometry.indexBuffer       = nil;
+      geometry.indexBufferOffset = 0u;
+      geometry.triangleCount     = source->triangles.vertexCount / 3u;
+    }
+  }
 }
 
 static MTLAccelerationStructureDescriptor *
@@ -123,8 +163,14 @@ mt_rayClassicDescriptor(const GPUAccelerationStructureBuildInfoEXT *info) {
     geometries = [NSMutableArray
       arrayWithCapacity:info->bottomLevel.geometryCount];
     for (uint32_t i = 0u; i < info->bottomLevel.geometryCount; i++) {
-      [geometries addObject:
-        mt_rayClassicTriangle(&info->bottomLevel.pGeometries[i])];
+      id geometry;
+
+      geometry =
+        mt_rayNewClassicGeometry(info->bottomLevel.pGeometries[i].type);
+      mt_rayFillClassicGeometry(geometry,
+                                &info->bottomLevel.pGeometries[i],
+                                i);
+      [geometries addObject:geometry];
     }
     descriptor = [MTLPrimitiveAccelerationStructureDescriptor descriptor];
     descriptor.geometryDescriptors = geometries;
@@ -204,37 +250,26 @@ mt_rayPrepareClassicBLAS(
       initWithCapacity:info->bottomLevel.geometryCount];
   }
   while (native->classicGeometry.count < info->bottomLevel.geometryCount) {
+    uint32_t index;
+
+    index = (uint32_t)native->classicGeometry.count;
     [native->classicGeometry addObject:
-      [MTLAccelerationStructureTriangleGeometryDescriptor descriptor]];
+      mt_rayNewClassicGeometry(info->bottomLevel.pGeometries[index].type)];
   }
   while (native->classicGeometry.count > info->bottomLevel.geometryCount) {
     [native->classicGeometry removeLastObject];
   }
   for (uint32_t i = 0u; i < info->bottomLevel.geometryCount; i++) {
-    MTLAccelerationStructureTriangleGeometryDescriptor *geometry;
-    const GPUAccelerationStructureTriangleGeometryEXT  *source;
+    const GPUAccelerationStructureGeometryEXT *source;
+    id                                         geometry;
 
     source   = &info->bottomLevel.pGeometries[i];
     geometry = native->classicGeometry[i];
-    geometry.vertexBuffer       = mt_rayBuffer(source->vertexBuffer);
-    geometry.vertexBufferOffset = (NSUInteger)source->vertexOffset;
-    geometry.vertexStride       = source->vertexStride;
-    geometry.vertexFormat       = MTLAttributeFormatFloat3;
-    geometry.opaque =
-      (source->flags &
-       GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT) == 0u;
-    if (source->indexBuffer) {
-      geometry.indexBuffer       = mt_rayBuffer(source->indexBuffer);
-      geometry.indexBufferOffset = (NSUInteger)source->indexOffset;
-      geometry.indexType         = source->indexType == GPU_INDEX_TYPE_UINT32
-                                     ? MTLIndexTypeUInt32
-                                     : MTLIndexTypeUInt16;
-      geometry.triangleCount     = source->indexCount / 3u;
-    } else {
-      geometry.indexBuffer       = nil;
-      geometry.indexBufferOffset = 0u;
-      geometry.triangleCount     = source->vertexCount / 3u;
+    if (!mt_rayClassicGeometryMatches(geometry, source->type)) {
+      geometry = mt_rayNewClassicGeometry(source->type);
+      [native->classicGeometry replaceObjectAtIndex:i withObject:geometry];
     }
+    mt_rayFillClassicGeometry(geometry, source, i);
   }
 
   if (!native->classicDescriptor) {
@@ -284,7 +319,7 @@ mt_rayPrepareClassicTLAS(
     mt_rayTransform(&instances[i].transformationMatrix, source->transform);
     instances[i].options = mt_rayInstanceOptions(source->flags);
     instances[i].mask = source->mask ? source->mask : 0xffu;
-    instances[i].intersectionFunctionTableOffset = 0u;
+    instances[i].intersectionFunctionTableOffset = source->hitGroupOffset;
     instances[i].accelerationStructureIndex       = i;
     native->classicInstances[i] = mt_rayNativeStructure(source->structure);
   }
@@ -318,6 +353,71 @@ mt_rayRange(GPUBuffer *buffer, uint64_t offset) {
   return range;
 }
 
+static id
+mt_rayNewModernGeometry(GPUAccelerationStructureGeometryTypeEXT type) {
+  return type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT
+           ? [MTL4AccelerationStructureBoundingBoxGeometryDescriptor new]
+           : [MTL4AccelerationStructureTriangleGeometryDescriptor new];
+}
+
+static bool
+mt_rayModernGeometryMatches(id                                      descriptor,
+                            GPUAccelerationStructureGeometryTypeEXT type) {
+  return type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT
+           ? [descriptor isKindOfClass:
+               [MTL4AccelerationStructureBoundingBoxGeometryDescriptor class]]
+           : [descriptor isKindOfClass:
+               [MTL4AccelerationStructureTriangleGeometryDescriptor class]];
+}
+
+static void
+mt_rayFillModernGeometry(id                                    descriptor,
+                         const GPUAccelerationStructureGeometryEXT *source,
+                         uint32_t                              geometryIndex) {
+  MTL4AccelerationStructureGeometryDescriptor *base;
+
+  base                                 = descriptor;
+  base.intersectionFunctionTableOffset = geometryIndex;
+  if (source->type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT) {
+    MTL4AccelerationStructureBoundingBoxGeometryDescriptor *geometry;
+
+    geometry                   = descriptor;
+    geometry.boundingBoxBuffer = mt_rayRange(source->aabbs.buffer,
+                                             source->aabbs.offset);
+    geometry.boundingBoxStride = source->aabbs.stride;
+    geometry.boundingBoxCount  = source->aabbs.count;
+    geometry.opaque =
+      (source->aabbs.flags &
+       GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT) == 0u;
+    return;
+  }
+
+  {
+    MTL4AccelerationStructureTriangleGeometryDescriptor *geometry;
+
+    geometry              = descriptor;
+    geometry.vertexBuffer = mt_rayRange(source->triangles.vertexBuffer,
+                                        source->triangles.vertexOffset);
+    geometry.vertexStride = source->triangles.vertexStride;
+    geometry.vertexFormat = MTLAttributeFormatFloat3;
+    geometry.opaque =
+      (source->triangles.flags &
+       GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT) == 0u;
+    if (source->triangles.indexBuffer) {
+      geometry.indexBuffer = mt_rayRange(source->triangles.indexBuffer,
+                                         source->triangles.indexOffset);
+      geometry.indexType =
+        source->triangles.indexType == GPU_INDEX_TYPE_UINT32
+          ? MTLIndexTypeUInt32
+          : MTLIndexTypeUInt16;
+      geometry.triangleCount = source->triangles.indexCount / 3u;
+    } else {
+      geometry.indexBuffer   = (MTL4BufferRange){0};
+      geometry.triangleCount = source->triangles.vertexCount / 3u;
+    }
+  }
+}
+
 static bool
 mt_rayPrepareModernBLAS(
   GPUAccelerationStructureMT                 *native,
@@ -329,9 +429,12 @@ mt_rayPrepareModernBLAS(
       initWithCapacity:info->bottomLevel.geometryCount];
   }
   while (native->modernGeometry.count < info->bottomLevel.geometryCount) {
-    MTL4AccelerationStructureTriangleGeometryDescriptor *geometry;
+    uint32_t index;
+    id       geometry;
 
-    geometry = [MTL4AccelerationStructureTriangleGeometryDescriptor new];
+    index    = (uint32_t)native->modernGeometry.count;
+    geometry =
+      mt_rayNewModernGeometry(info->bottomLevel.pGeometries[index].type);
     [native->modernGeometry addObject:geometry];
     [geometry release];
   }
@@ -339,29 +442,17 @@ mt_rayPrepareModernBLAS(
     [native->modernGeometry removeLastObject];
   }
   for (uint32_t i = 0u; i < info->bottomLevel.geometryCount; i++) {
-    MTL4AccelerationStructureTriangleGeometryDescriptor *geometry;
-    const GPUAccelerationStructureTriangleGeometryEXT   *source;
+    const GPUAccelerationStructureGeometryEXT *source;
+    id                                         geometry;
 
     source   = &info->bottomLevel.pGeometries[i];
     geometry = native->modernGeometry[i];
-    geometry.vertexBuffer = mt_rayRange(source->vertexBuffer,
-                                        source->vertexOffset);
-    geometry.vertexStride = source->vertexStride;
-    geometry.vertexFormat = MTLAttributeFormatFloat3;
-    geometry.opaque =
-      (source->flags &
-       GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT) == 0u;
-    if (source->indexBuffer) {
-      geometry.indexBuffer = mt_rayRange(source->indexBuffer,
-                                         source->indexOffset);
-      geometry.indexType = source->indexType == GPU_INDEX_TYPE_UINT32
-                             ? MTLIndexTypeUInt32
-                             : MTLIndexTypeUInt16;
-      geometry.triangleCount = source->indexCount / 3u;
-    } else {
-      geometry.indexBuffer   = (MTL4BufferRange){0};
-      geometry.triangleCount = source->vertexCount / 3u;
+    if (!mt_rayModernGeometryMatches(geometry, source->type)) {
+      geometry = mt_rayNewModernGeometry(source->type);
+      [native->modernGeometry replaceObjectAtIndex:i withObject:geometry];
+      [geometry release];
     }
+    mt_rayFillModernGeometry(geometry, source, i);
   }
   if (!native->modernDescriptor) {
     native->modernDescriptor =
@@ -400,7 +491,7 @@ mt_rayPrepareModernTLAS(
     mt_rayTransform(&instances[i].transformationMatrix, source->transform);
     instances[i].options = mt_rayInstanceOptions(source->flags);
     instances[i].mask = source->mask ? source->mask : 0xffu;
-    instances[i].intersectionFunctionTableOffset = 0u;
+    instances[i].intersectionFunctionTableOffset = source->hitGroupOffset;
     instances[i].userID = i;
     instances[i].accelerationStructureID = structure.gpuResourceID;
   }
@@ -566,10 +657,17 @@ mt_rayUseBuildResources(
   }
   if (info->type == GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT) {
     for (uint32_t i = 0u; i < info->bottomLevel.geometryCount; i++) {
-      mt_useAllocation(pass->cmdb,
-                       mt_rayBuffer(info->bottomLevel.pGeometries[i].vertexBuffer));
-      mt_useAllocation(pass->cmdb,
-                       mt_rayBuffer(info->bottomLevel.pGeometries[i].indexBuffer));
+      const GPUAccelerationStructureGeometryEXT *geometry;
+
+      geometry = &info->bottomLevel.pGeometries[i];
+      if (geometry->type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT) {
+        mt_useAllocation(pass->cmdb, mt_rayBuffer(geometry->aabbs.buffer));
+      } else {
+        mt_useAllocation(pass->cmdb,
+                         mt_rayBuffer(geometry->triangles.vertexBuffer));
+        mt_useAllocation(pass->cmdb,
+                         mt_rayBuffer(geometry->triangles.indexBuffer));
+      }
     }
   } else {
     GPUAccelerationStructureMT *native;

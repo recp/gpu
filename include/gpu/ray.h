@@ -64,6 +64,11 @@ enum {
   GPU_ACCELERATION_STRUCTURE_INSTANCE_FORCE_NON_OPAQUE_BIT_EXT = 1u << 2
 };
 
+typedef enum GPUAccelerationStructureGeometryTypeEXT {
+  GPU_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_EXT = 0,
+  GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT     = 1
+} GPUAccelerationStructureGeometryTypeEXT;
+
 typedef struct GPUAccelerationStructureTriangleGeometryEXT {
   GPUBuffer                                   *vertexBuffer;
   GPUBuffer                                   *indexBuffer;
@@ -77,9 +82,26 @@ typedef struct GPUAccelerationStructureTriangleGeometryEXT {
   GPUAccelerationStructureGeometryFlagsEXT     flags;
 } GPUAccelerationStructureTriangleGeometryEXT;
 
+typedef struct GPUAccelerationStructureAABBGeometryEXT {
+  GPUBuffer                               *buffer;
+  uint64_t                                 offset;
+  uint32_t                                 count;
+  uint32_t                                 stride;
+  GPUAccelerationStructureGeometryFlagsEXT flags;
+} GPUAccelerationStructureAABBGeometryEXT;
+
+typedef struct GPUAccelerationStructureGeometryEXT {
+  union {
+    GPUAccelerationStructureTriangleGeometryEXT triangles;
+    GPUAccelerationStructureAABBGeometryEXT     aabbs;
+  };
+  GPUAccelerationStructureGeometryTypeEXT type;
+} GPUAccelerationStructureGeometryEXT;
+
 typedef struct GPUAccelerationStructureInstanceEXT {
   GPUAccelerationStructureEXT              *structure;
   float                                     transform[3][4];
+  uint32_t                                  hitGroupOffset;
   GPUAccelerationStructureInstanceFlagsEXT  flags;
   uint8_t                                   mask;
 } GPUAccelerationStructureInstanceEXT;
@@ -93,8 +115,8 @@ typedef struct GPUAccelerationStructureBuildInfoEXT {
   GPUAccelerationStructureBuildModeEXT   mode;
   union {
     struct {
-      const GPUAccelerationStructureTriangleGeometryEXT *pGeometries;
-      uint32_t                                           geometryCount;
+      const GPUAccelerationStructureGeometryEXT *pGeometries;
+      uint32_t                                   geometryCount;
     } bottomLevel;
     struct {
       const GPUAccelerationStructureInstanceEXT *pInstances;

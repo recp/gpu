@@ -128,12 +128,47 @@ gpu_rayTriangleValid(GPUDevice *device,
 }
 
 static bool
+gpu_rayAABBValid(GPUDevice *device,
+                 const GPUAccelerationStructureAABBGeometryEXT *geometry) {
+  return geometry && geometry->buffer &&
+         geometry->buffer->device == device &&
+         gpuBufferHasUsage(
+           geometry->buffer,
+           GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT) &&
+         geometry->stride >= 24u && geometry->stride % 8u == 0u &&
+         (geometry->flags & ~GPU_ACCELERATION_STRUCTURE_GEOMETRY_FLAGS_EXT) ==
+           0u &&
+         gpu_rayRangeValid(geometry->buffer,
+                           geometry->offset,
+                           geometry->count,
+                           geometry->stride,
+                           24u);
+}
+
+static bool
+gpu_rayGeometryValid(GPUDevice *device,
+                     const GPUAccelerationStructureGeometryEXT *geometry) {
+  if (!geometry) {
+    return false;
+  }
+  switch (geometry->type) {
+    case GPU_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_EXT:
+      return gpu_rayTriangleValid(device, &geometry->triangles);
+    case GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT:
+      return gpu_rayAABBValid(device, &geometry->aabbs);
+    default:
+      return false;
+  }
+}
+
+static bool
 gpu_rayInstanceValid(GPUDevice *device,
                      const GPUAccelerationStructureInstanceEXT *instance) {
   if (!instance || !instance->structure ||
       instance->structure->device != device ||
       instance->structure->type !=
         GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT ||
+      instance->hitGroupOffset > 0x00ffffffu ||
       (instance->flags & ~GPU_ACCELERATION_STRUCTURE_INSTANCE_FLAGS_EXT) != 0u) {
     return false;
   }
@@ -175,7 +210,7 @@ gpu_validateRayBuildInfo(GPUDevice *device,
       return GPU_ERROR_INVALID_ARGUMENT;
     }
     for (uint32_t i = 0u; i < info->bottomLevel.geometryCount; i++) {
-      if (!gpu_rayTriangleValid(device, &info->bottomLevel.pGeometries[i])) {
+      if (!gpu_rayGeometryValid(device, &info->bottomLevel.pGeometries[i])) {
         return GPU_ERROR_INVALID_ARGUMENT;
       }
     }

@@ -87,7 +87,7 @@ vk_rayBufferAddress(const GPUBuffer *buffer, uint64_t offset) {
 }
 
 static uint32_t
-vk_rayPrimitiveCount(
+vk_rayTrianglePrimitiveCount(
   const GPUAccelerationStructureTriangleGeometryEXT *geometry) {
   return geometry->indexBuffer ? geometry->indexCount / 3u
                                : geometry->vertexCount / 3u;
@@ -124,6 +124,44 @@ vk_rayFillTriangle(
   } else {
     triangles->indexType = VK_INDEX_TYPE_NONE_KHR;
   }
+}
+
+static void
+vk_rayFillAABB(
+  VkAccelerationStructureGeometryKHR           *dst,
+  const GPUAccelerationStructureAABBGeometryEXT *src) {
+  VkAccelerationStructureGeometryAabbsDataKHR *aabbs;
+
+  memset(dst, 0, sizeof(*dst));
+  dst->sType        = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+  dst->geometryType = VK_GEOMETRY_TYPE_AABBS_KHR;
+  dst->flags =
+    (src->flags & GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT) == 0u
+      ? VK_GEOMETRY_OPAQUE_BIT_KHR
+      : 0u;
+
+  aabbs                     = &dst->geometry.aabbs;
+  aabbs->sType              =
+    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;
+  aabbs->data.deviceAddress = vk_rayBufferAddress(src->buffer, src->offset);
+  aabbs->stride             = src->stride;
+}
+
+static void
+vk_rayFillGeometry(VkAccelerationStructureGeometryKHR       *dst,
+                   const GPUAccelerationStructureGeometryEXT *src) {
+  if (src->type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT) {
+    vk_rayFillAABB(dst, &src->aabbs);
+  } else {
+    vk_rayFillTriangle(dst, &src->triangles);
+  }
+}
+
+static uint32_t
+vk_rayPrimitiveCount(const GPUAccelerationStructureGeometryEXT *geometry) {
+  return geometry->type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT
+           ? geometry->aabbs.count
+           : vk_rayTrianglePrimitiveCount(&geometry->triangles);
 }
 
 static void
@@ -222,7 +260,7 @@ vk_rayPrepareBLAS(GPUAccelerationStructureVk                 *native,
     return false;
   }
   for (uint32_t i = 0u; i < count; i++) {
-    vk_rayFillTriangle(&native->geometries[i],
+    vk_rayFillGeometry(&native->geometries[i],
                        &info->bottomLevel.pGeometries[i]);
     memset(&native->ranges[i], 0, sizeof(native->ranges[i]));
     native->ranges[i].primitiveCount =
@@ -269,7 +307,7 @@ vk_rayPrepareTLAS(GPUDevice                                  *device,
     instances[i].mask                                   = src->mask
                                                             ? src->mask
                                                             : 0xffu;
-    instances[i].instanceShaderBindingTableRecordOffset = 0u;
+    instances[i].instanceShaderBindingTableRecordOffset = src->hitGroupOffset;
     instances[i].flags = vk_rayInstanceFlags(src->flags);
     instances[i].accelerationStructureReference = structure->address;
   }
@@ -329,7 +367,7 @@ vk_getAccelerationStructureSizes(
 
   if (info->type == GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT) {
     for (uint32_t i = 0u; i < geometryCount; i++) {
-      vk_rayFillTriangle(&geometries[i],
+      vk_rayFillGeometry(&geometries[i],
                          &info->bottomLevel.pGeometries[i]);
       counts[i] = vk_rayPrimitiveCount(&info->bottomLevel.pGeometries[i]);
     }

@@ -122,6 +122,35 @@ dx12_rayFillTriangle(
 }
 
 static void
+dx12_rayFillAABB(
+  D3D12_RAYTRACING_GEOMETRY_DESC               *dst,
+  const GPUAccelerationStructureAABBGeometryEXT *src) {
+  GPUBufferDX12 *buffer;
+
+  buffer = src->buffer->_priv;
+  memset(dst, 0, sizeof(*dst));
+  dst->Type = D3D12_RAYTRACING_GEOMETRY_TYPE_PROCEDURAL_PRIMITIVE_AABBS;
+  dst->Flags =
+    (src->flags & GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT) == 0u
+      ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE
+      : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
+  dst->AABBs.AABBCount             = src->count;
+  dst->AABBs.AABBs.StartAddress    = buffer->gpuAddress + src->offset;
+  dst->AABBs.AABBs.StrideInBytes   = src->stride;
+}
+
+static void
+dx12_rayFillGeometry(
+  D3D12_RAYTRACING_GEOMETRY_DESC             *dst,
+  const GPUAccelerationStructureGeometryEXT  *src) {
+  if (src->type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT) {
+    dx12_rayFillAABB(dst, &src->aabbs);
+  } else {
+    dx12_rayFillTriangle(dst, &src->triangles);
+  }
+}
+
+static void
 dx12_rayFillInputs(
   const GPUAccelerationStructureBuildInfoEXT       *info,
   D3D12_RAYTRACING_GEOMETRY_DESC                   *geometries,
@@ -171,7 +200,7 @@ dx12_getAccelerationStructureSizes(
     return GPU_ERROR_OUT_OF_MEMORY;
   }
   for (uint32_t i = 0u; i < geometryCount; i++) {
-    dx12_rayFillTriangle(&geometries[i],
+    dx12_rayFillGeometry(&geometries[i],
                          &info->bottomLevel.pGeometries[i]);
   }
 
@@ -424,26 +453,43 @@ dx12_rayPrepareBLAS(
   }
 
   for (uint32_t i = 0u; i < info->bottomLevel.geometryCount; i++) {
-    const GPUAccelerationStructureTriangleGeometryEXT *source;
-    GPUBufferDX12                                     *vertex;
-    GPUBufferDX12                                     *index;
+    const GPUAccelerationStructureGeometryEXT *source;
 
     source = &info->bottomLevel.pGeometries[i];
-    vertex = source->vertexBuffer->_priv;
-    index  = source->indexBuffer ? source->indexBuffer->_priv : NULL;
-    if (!vertex || !vertex->gpuAddress ||
-        !dx12_transitionBuffer(commandList,
-                               vertex,
-                               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE) ||
-        (index &&
-         (!index->gpuAddress ||
+    if (source->type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT) {
+      GPUBufferDX12 *buffer;
+
+      buffer = source->aabbs.buffer->_priv;
+      if (!buffer || !buffer->gpuAddress ||
           !dx12_transitionBuffer(
             commandList,
-            index,
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)))) {
-      return false;
+            buffer,
+            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)) {
+        return false;
+      }
+    } else {
+      GPUBufferDX12 *vertex;
+      GPUBufferDX12 *index;
+
+      vertex = source->triangles.vertexBuffer->_priv;
+      index  = source->triangles.indexBuffer
+                 ? source->triangles.indexBuffer->_priv
+                 : NULL;
+      if (!vertex || !vertex->gpuAddress ||
+          !dx12_transitionBuffer(
+            commandList,
+            vertex,
+            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE) ||
+          (index &&
+           (!index->gpuAddress ||
+            !dx12_transitionBuffer(
+              commandList,
+              index,
+              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)))) {
+        return false;
+      }
     }
-    dx12_rayFillTriangle(&native->geometries[i], source);
+    dx12_rayFillGeometry(&native->geometries[i], source);
   }
   return true;
 }
@@ -480,7 +526,8 @@ dx12_rayPrepareTLAS(
     instances[i].InstanceMask                        = source->mask
                                                         ? source->mask
                                                         : 0xffu;
-    instances[i].InstanceContributionToHitGroupIndex = 0u;
+    instances[i].InstanceContributionToHitGroupIndex =
+      source->hitGroupOffset;
     instances[i].Flags = dx12_rayInstanceFlags(source->flags);
     instances[i].AccelerationStructure = structure->address;
   }
