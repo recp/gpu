@@ -1894,7 +1894,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
                                    GPUShaderLibrary **outLibrary) {
   GPUShaderLibraryCreateInfo info = {0};
   GPUApi                   *api;
-  USCompileOutput          *compileOutput;
+  USCompileOutput           compileOutput = {0};
   USLCompileOptions         compileOptions;
   USLTargetSpec             target;
   USLCapabilityAtomDesc     targetAtoms[14];
@@ -2165,10 +2165,6 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   encoding   = target.backend == USL_BACKEND_SPIRV
                  ? USL_RUNTIME_EMBEDDED_BLOB_ENCODING_BINARY
                  : USL_RUNTIME_EMBEDDED_BLOB_ENCODING_TEXT;
-  compileOutput = malloc(sizeof(*compileOutput));
-  if (!compileOutput) {
-    return GPU_ERROR_OUT_OF_MEMORY;
-  }
 
   memset(&compileInput, 0, sizeof(compileInput));
   compileInput.abi_version   = US_COMPILE_INPUT_VERSION;
@@ -2179,33 +2175,33 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   if (disableDiskCache) {
     compileInput.flags |= US_COMPILE_INPUT_FLAG_DISABLE_DISK_CACHE;
   }
-  if (us_compile(&compileInput, compileOutput) != USLOk ||
-      compileOutput->backend != target.backend ||
-      compileOutput->encoding != encoding ||
-      !compileOutput->backend_data ||
-      compileOutput->backend_size == 0) {
+  if (us_compile(&compileInput, &compileOutput) != USLOk ||
+      compileOutput.backend != target.backend ||
+      compileOutput.encoding != encoding ||
+      !compileOutput.backend_data ||
+      compileOutput.backend_size == 0) {
     rc = GPU_ERROR_BACKEND_FAILURE;
     goto cleanup;
   }
   if (getenv("GPU_USL_LOG")) {
     payloadSource =
-      (compileOutput->flags & US_COMPILE_OUTPUT_FLAG_EMBEDDED_BLOB) != 0u
+      (compileOutput.flags & US_COMPILE_OUTPUT_FLAG_EMBEDDED_BLOB) != 0u
         ? "embedded"
-        : (compileOutput->flags & US_COMPILE_OUTPUT_FLAG_DISK_CACHE) != 0u
+        : (compileOutput.flags & US_COMPILE_OUTPUT_FLAG_DISK_CACHE) != 0u
             ? "disk-cache"
             : "generated";
     fprintf(stderr,
             "GPU: USL %s payload (%zu bytes, %016llx)\n",
             payloadSource,
-            compileOutput->backend_size,
-            (unsigned long long)compileOutput->backend_hash);
+            compileOutput.backend_size,
+            (unsigned long long)compileOutput.backend_hash);
   }
-  if (!compileOutput->reflection.target_info_valid) {
+  if (!compileOutput.reflection.target_info_valid) {
     rc = GPU_ERROR_BACKEND_FAILURE;
     goto cleanup;
   }
   if (!gpu_shaderRequirementsEnabled(device,
-                                     &compileOutput->reflection.runtime)) {
+                                     &compileOutput.reflection.runtime)) {
     rc = GPU_ERROR_UNSUPPORTED;
     goto cleanup;
   }
@@ -2214,15 +2210,15 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
     info.chain.sType      = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
     info.chain.structSize = sizeof(info);
     info.sourceKind       = GPU_SHADER_SOURCE_SPIRV_BINARY;
-    info.sourceData       = compileOutput->backend_data;
-    info.sourceSize       = compileOutput->backend_size;
+    info.sourceData       = compileOutput.backend_data;
+    info.sourceSize       = compileOutput.backend_size;
     rc = gpu_createShaderLibraryFromBinary(device, &info, outLibrary);
   } else if (target.backend == USL_BACKEND_METAL ||
              target.backend == USL_BACKEND_HLSL ||
              target.backend == USL_BACKEND_WGSL) {
     rc = gpu_createShaderLibraryFromBackendText(device,
-                                                compileOutput->backend_data,
-                                                compileOutput->backend_size,
+                                                compileOutput.backend_data,
+                                                compileOutput.backend_size,
                                                 0u,
                                                 outLibrary);
   } else {
@@ -2230,7 +2226,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   }
   if (rc == GPU_OK && outLibrary && *outLibrary) {
     if (!gpu_setShaderLibraryMetadata(*outLibrary,
-                                      &compileOutput->reflection)) {
+                                      &compileOutput.reflection)) {
       GPUDestroyShaderLibrary(*outLibrary);
       *outLibrary = NULL;
       rc = GPU_ERROR_BACKEND_FAILURE;
@@ -2238,8 +2234,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   }
 
 cleanup:
-  us_free_compile_output(compileOutput);
-  free(compileOutput);
+  us_free_compile_output(&compileOutput);
   return rc;
 }
 
