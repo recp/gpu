@@ -36,6 +36,7 @@ capture_device_error(GPUDevice                *device,
 static int
 check_device_error_callback(GPUDevice *device) {
   GPUDeviceErrorCapture capture = {0};
+  uint32_t              callbackCount;
 #if GPU_BUILD_WITH_VALIDATION
   GPUQueue              queue = {0};
   GPUCommandBuffer      cmdb = {0};
@@ -51,6 +52,23 @@ check_device_error_callback(GPUDevice *device) {
     fprintf(stderr, "device error callback registration failed\n");
     return 0;
   }
+
+#if defined(GPU_STATIC)
+  gpuDeviceReportError(device,
+                       GPU_DEVICE_ERROR_BACKEND,
+                       GPU_DEVICE_LOST_REASON_UNKNOWN,
+                       GPU_ERROR_BACKEND_FAILURE,
+                       "backend failure");
+  if (capture.count != 1u || capture.device != device ||
+      capture.type != GPU_DEVICE_ERROR_BACKEND ||
+      capture.result != GPU_ERROR_BACKEND_FAILURE ||
+      capture.lostReason != GPU_DEVICE_LOST_REASON_UNKNOWN ||
+      strcmp(capture.message, "backend failure") != 0) {
+    fprintf(stderr, "device backend callback mismatch\n");
+    goto fail;
+  }
+  memset(&capture, 0, sizeof(capture));
+#endif
 
 #if GPU_BUILD_WITH_VALIDATION
   queue._device = device;
@@ -68,17 +86,24 @@ check_device_error_callback(GPUDevice *device) {
   }
 #endif
 
+  callbackCount = capture.count;
   if (GPUSetDeviceErrorCallback(device, NULL, &capture) != GPU_OK) {
     fprintf(stderr, "device error callback clear failed\n");
     goto fail;
   }
-#if GPU_BUILD_WITH_VALIDATION
+#if defined(GPU_STATIC)
+  gpuDeviceReportError(device,
+                       GPU_DEVICE_ERROR_BACKEND,
+                       GPU_DEVICE_LOST_REASON_UNKNOWN,
+                       GPU_ERROR_BACKEND_FAILURE,
+                       "cleared callback");
+#elif GPU_BUILD_WITH_VALIDATION
   GPUDraw(&pass, 3u, 1u, 0u, 0u);
-  if (capture.count != 1u) {
+#endif
+  if (capture.count != callbackCount) {
     fprintf(stderr, "cleared device callback was invoked\n");
     goto fail;
   }
-#endif
 
   return 1;
 

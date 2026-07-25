@@ -1301,6 +1301,8 @@ gpuDeviceReportError(GPUDevice           *device,
     callback(device, &info, device->errorUserData);
     return;
   }
+
+#if GPU_BUILD_WITH_VALIDATION
   if (!device->runtimeConfig.enableVerboseLogs) {
     return;
   }
@@ -1310,6 +1312,7 @@ gpuDeviceReportError(GPUDevice           *device,
             ? "GPU validation: %s\n"
             : "GPU device error: %s\n",
           message ? message : "unknown error");
+#endif
 }
 
 #if GPU_BUILD_WITH_VALIDATION
