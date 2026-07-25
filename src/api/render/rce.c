@@ -362,6 +362,24 @@ GPUBindVertexBuffers(GPURenderPassEncoder   *pass,
   if (!api->rce.vertexInputBuffer)
     return;
 
+  if (count == 1u) {
+    if (!bindings->buffer) {
+      return;
+    }
+#if GPU_BUILD_WITH_VALIDATION
+    if (!gpuBufferHasUsage(bindings->buffer, GPU_BUFFER_USAGE_VERTEX) ||
+        !gpuBufferOffsetValid(bindings->buffer, bindings->offset)) {
+      return;
+    }
+#endif
+    gpu_bindRenderVertexBuffer(pass,
+                               api,
+                               bindings->buffer,
+                               bindings->offset,
+                               firstSlot);
+    return;
+  }
+
   for (i = 0; i < count; i++) {
     if (!bindings[i].buffer) {
       continue;
