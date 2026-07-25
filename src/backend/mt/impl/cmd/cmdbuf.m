@@ -157,10 +157,14 @@ mt_useAllocation(GPUCommandBuffer *cmdb, id allocation) {
       !native->residency || !allocation) {
     return;
   }
+  if (native->lastResidencyAllocation == allocation) {
+    return;
+  }
 
   count = native->residencyAllocationCount;
   for (uint32_t i = count; i > 0u; i--) {
     if (native->residencyAllocations[i - 1u] == allocation) {
+      native->lastResidencyAllocation = allocation;
       return;
     }
   }
@@ -173,6 +177,7 @@ mt_useAllocation(GPUCommandBuffer *cmdb, id allocation) {
     } else if (![native->residency containsAllocation:allocation]) {
       [native->residency addAllocation:allocation];
     }
+    native->lastResidencyAllocation = allocation;
   }
 #else
   GPU__UNUSED(cmdb);
@@ -188,17 +193,24 @@ mt_setArgumentBuffer(GPUCommandBuffer *cmdb,
                      uint64_t           offset,
                      uint32_t           index) {
 #if MT_HAS_METAL4
+  MTCommandBuffer *native;
+  id<MTLBuffer>    allocation;
+
   if (!state || !state->table || !buffer ||
       index >= MT_ARGUMENT_BUFFER_COUNT || offset > buffer->sizeBytes) {
     return;
   }
 
   if (@available(macOS 26.0, iOS 26.0, *)) {
+    allocation = buffer->_priv;
+    native     = mt_commandBuffer(cmdb);
     [(id<MTL4ArgumentTable>)state->table
       setAddress:buffer->_gpuAddress + offset
          atIndex:index];
     state->bufferMask |= 1u << index;
-    mt_useAllocation(cmdb, (id<MTLBuffer>)buffer->_priv);
+    if (!native || native->lastResidencyAllocation != allocation) {
+      mt_useAllocation(cmdb, allocation);
+    }
   }
 #else
   GPU__UNUSED(cmdb);
@@ -555,6 +567,7 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
       [native->allocator reset];
       [native->residency removeAllAllocations];
       native->residencyAllocationCount = 0u;
+      native->lastResidencyAllocation  = nil;
     }
   }
 #endif

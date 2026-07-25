@@ -288,6 +288,7 @@ struct MTCommandBuffer {
   id                     modern;
   id                     allocator;
   id                     residency;
+  id                     lastResidencyAllocation;
   id<CAMetalDrawable>    drawable;
   MTCommandQueue        *owner;
   MTCommandBuffer       *next;
