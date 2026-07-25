@@ -200,11 +200,23 @@ typedef struct MTTransferSlot {
   bool                      pending;
 } MTTransferSlot;
 
+typedef struct MTRenderPassColorState {
+  id                 texture;
+  id                 resolveTexture;
+  MTLLoadAction      loadAction;
+  MTLStoreAction     storeAction;
+  GPUClearColorValue clearColor;
+  GPUFormat          format;
+  bool               valid;
+} MTRenderPassColorState;
+
 typedef struct MTRenderPass {
   MTLRenderPassDescriptor *classic;
   id                       modern;
   id                       visibilityResultBuffer;
   id                       rasterizationRateMap;
+  MTRenderPassColorState   colorAttachments[
+    GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   uint32_t                 width;
   uint32_t                 height;
   uint32_t                 colorAttachmentCount;

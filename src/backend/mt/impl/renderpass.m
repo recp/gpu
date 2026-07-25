@@ -108,10 +108,13 @@ mt_prepareRenderPass(MTRenderPass *pass, uint32_t colorAttachmentCount) {
   for (uint32_t i = colorAttachmentCount;
        i < previousColorAttachmentCount;
        i++) {
+    MTRenderPassColorState *state = &pass->colorAttachments[i];
+
     classic.colorAttachments[i].texture = nil;
     classic.colorAttachments[i].resolveTexture = nil;
     classic.colorAttachments[i].loadAction = MTLLoadActionDontCare;
     classic.colorAttachments[i].storeAction = MTLStoreActionDontCare;
+    memset(state, 0, sizeof(*state));
   }
 
 #if MT_HAS_METAL4
@@ -157,6 +160,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
   bool                                       visibilityResultBufferChanged;
 
   if (!cmdb || !info ||
+      info->colorAttachmentCount > GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS ||
       (info->colorAttachmentCount > 0 && !info->pColorAttachments))
     return NULL;
   if (!gpuRenderPassVRSExtensions(info, &shadingRate, &rateMap) ||
@@ -239,38 +243,97 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
   nativePass->rasterizationRateMap   = rasterizationRateMap;
 
   for (i = 0; i < info->colorAttachmentCount; i++) {
+    MTRenderPassColorState *state;
+    id<MTLTexture>          texture;
+    id<MTLTexture>          resolveTexture;
+    MTLLoadAction           loadAction;
+    MTLStoreAction          storeAction;
+    bool                    clearColorChanged;
+    bool                    loadActionChanged;
+    bool                    resolveTextureChanged;
+    bool                    storeActionChanged;
+    bool                    textureChanged;
+
     color = &info->pColorAttachments[i];
     if (!color->view)
       return NULL;
 
-    rpd.colorAttachments[i].texture        = (id<MTLTexture>)color->view->_priv;
-    rpd.colorAttachments[i].resolveTexture = color->resolveView ?
-      (id<MTLTexture>)color->resolveView->_priv : nil;
-    rpd.colorAttachments[i].loadAction = mt_loadAction(color->loadOp);
-    rpd.colorAttachments[i].storeAction = color->resolveView
-                                            ? mt_resolveStoreAction(color->storeOp)
-                                            : mt_storeAction(color->storeOp);
-    rpd.colorAttachments[i].clearColor =
-      mt_clearColor(&color->clearColor, color->view->format);
+    state          = &nativePass->colorAttachments[i];
+    texture        = (id<MTLTexture>)color->view->_priv;
+    resolveTexture = color->resolveView
+                       ? (id<MTLTexture>)color->resolveView->_priv
+                       : nil;
+    loadAction     = mt_loadAction(color->loadOp);
+    storeAction    = color->resolveView
+                       ? mt_resolveStoreAction(color->storeOp)
+                       : mt_storeAction(color->storeOp);
+    textureChanged        = !state->valid || state->texture != texture;
+    resolveTextureChanged = !state->valid ||
+                            state->resolveTexture != resolveTexture;
+    loadActionChanged     = !state->valid ||
+                            state->loadAction != loadAction;
+    storeActionChanged    = !state->valid ||
+                            state->storeAction != storeAction;
+    clearColorChanged     = loadAction == MTLLoadActionClear &&
+                            (!state->valid ||
+                             loadActionChanged ||
+                             state->format != color->view->format ||
+                             memcmp(&state->clearColor,
+                                    &color->clearColor,
+                                    sizeof(state->clearColor)) != 0);
+    if (textureChanged) {
+      rpd.colorAttachments[i].texture = texture;
+    }
+    if (resolveTextureChanged) {
+      rpd.colorAttachments[i].resolveTexture = resolveTexture;
+    }
+    if (loadActionChanged) {
+      rpd.colorAttachments[i].loadAction = loadAction;
+    }
+    if (storeActionChanged) {
+      rpd.colorAttachments[i].storeAction = storeAction;
+    }
+    if (clearColorChanged) {
+      rpd.colorAttachments[i].clearColor =
+        mt_clearColor(&color->clearColor, color->view->format);
+    }
     if (nativePass->width == 0u) {
-      nativePass->width  = (uint32_t)rpd.colorAttachments[i].texture.width;
-      nativePass->height = (uint32_t)rpd.colorAttachments[i].texture.height;
+      nativePass->width  = (uint32_t)texture.width;
+      nativePass->height = (uint32_t)texture.height;
     }
 #if MT_HAS_METAL4
     if (rpd4) {
       if (@available(macOS 26.0, iOS 26.0, *)) {
         MTL4RenderPassDescriptor *modern = rpd4;
 
-        modern.colorAttachments[i].texture = rpd.colorAttachments[i].texture;
-        modern.colorAttachments[i].resolveTexture = rpd.colorAttachments[i].resolveTexture;
-        modern.colorAttachments[i].loadAction = rpd.colorAttachments[i].loadAction;
-        modern.colorAttachments[i].storeAction = rpd.colorAttachments[i].storeAction;
-        modern.colorAttachments[i].clearColor = rpd.colorAttachments[i].clearColor;
-        mt_useAllocation(cmdb, modern.colorAttachments[i].texture);
-        mt_useAllocation(cmdb, modern.colorAttachments[i].resolveTexture);
+        if (textureChanged) {
+          modern.colorAttachments[i].texture = texture;
+        }
+        if (resolveTextureChanged) {
+          modern.colorAttachments[i].resolveTexture = resolveTexture;
+        }
+        if (loadActionChanged) {
+          modern.colorAttachments[i].loadAction = loadAction;
+        }
+        if (storeActionChanged) {
+          modern.colorAttachments[i].storeAction = storeAction;
+        }
+        if (clearColorChanged) {
+          modern.colorAttachments[i].clearColor =
+            rpd.colorAttachments[i].clearColor;
+        }
+        mt_useAllocation(cmdb, texture);
+        mt_useAllocation(cmdb, resolveTexture);
       }
     }
 #endif
+    state->texture        = texture;
+    state->resolveTexture = resolveTexture;
+    state->loadAction     = loadAction;
+    state->storeAction    = storeAction;
+    state->clearColor     = color->clearColor;
+    state->format         = color->view->format;
+    state->valid          = true;
   }
 
   depthStencil = info->pDepthStencilAttachment;
