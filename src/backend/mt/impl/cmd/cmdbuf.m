@@ -160,11 +160,17 @@ mt_useAllocation(GPUCommandBuffer *cmdb, id allocation) {
   if (native->lastResidencyAllocation == allocation) {
     return;
   }
+  if (native->previousResidencyAllocation == allocation) {
+    native->previousResidencyAllocation = native->lastResidencyAllocation;
+    native->lastResidencyAllocation     = allocation;
+    return;
+  }
 
   count = native->residencyAllocationCount;
   for (uint32_t i = count; i > 0u; i--) {
     if (native->residencyAllocations[i - 1u] == allocation) {
-      native->lastResidencyAllocation = allocation;
+      native->previousResidencyAllocation = native->lastResidencyAllocation;
+      native->lastResidencyAllocation     = allocation;
       return;
     }
   }
@@ -177,7 +183,8 @@ mt_useAllocation(GPUCommandBuffer *cmdb, id allocation) {
     } else if (![native->residency containsAllocation:allocation]) {
       [native->residency addAllocation:allocation];
     }
-    native->lastResidencyAllocation = allocation;
+    native->previousResidencyAllocation = native->lastResidencyAllocation;
+    native->lastResidencyAllocation     = allocation;
   }
 #else
   GPU__UNUSED(cmdb);
@@ -566,8 +573,9 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->allocator reset];
       [native->residency removeAllAllocations];
-      native->residencyAllocationCount = 0u;
-      native->lastResidencyAllocation  = nil;
+      native->residencyAllocationCount    = 0u;
+      native->lastResidencyAllocation     = nil;
+      native->previousResidencyAllocation = nil;
     }
   }
 #endif
