@@ -196,10 +196,14 @@ vk_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
 GPU_HIDE
 void
 vk_setRenderPipelineState(GPURenderPassEncoder *encoder,
-                          GPURenderPipelineState  *pipelineState) {
+                          GPURenderPipelineState *pipelineState,
+                          GPUCullMode             cullMode,
+                          GPUFrontFace            frontFace) {
   GPURenderEncoderVk  *native;
   GPURenderPipelineVk *pipeline;
 
+  GPU__UNUSED(cullMode);
+  GPU__UNUSED(frontFace);
   native   = vk__renderEncoder(encoder);
   pipeline = pipelineState ? pipelineState->_priv : NULL;
   if (!native || !pipeline) {

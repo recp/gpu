@@ -276,7 +276,10 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
   }
 
   state._priv = pipeline->_state;
-  api->rce.setRenderPipelineState(pass, &state);
+  api->rce.setRenderPipelineState(pass,
+                                  &state,
+                                  pipeline->_cullMode,
+                                  pipeline->_frontFace);
   gpuFrameStatsRecordBindEmission(pass->_stats);
   pass->_hasPipeline           = true;
   pass->_pipeline              = pipeline;
@@ -294,10 +297,6 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
   if (pass->_pushConstantSizeBytes > 0u) {
     memset(pass->_pushConstants, 0, pass->_pushConstantSizeBytes);
   }
-  if (api->rce.cullMode)
-    api->rce.cullMode(pass, pipeline->_cullMode);
-  if (api->rce.frontFace)
-    api->rce.frontFace(pass, pipeline->_frontFace);
 }
 
 static void

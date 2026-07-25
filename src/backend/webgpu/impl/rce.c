@@ -65,10 +65,14 @@ webgpu_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
 
 static void
 webgpu_setPipeline(GPURenderPassEncoder *encoder,
-                   GPURenderPipelineState *pipeline) {
+                   GPURenderPipelineState *pipeline,
+                   GPUCullMode             cullMode,
+                   GPUFrontFace            frontFace) {
   GPURenderPipelineWebGPU *state;
   GPUCommandWebGPU        *command;
 
+  GPU__UNUSED(cullMode);
+  GPU__UNUSED(frontFace);
   command = webgpu_renderCommand(encoder);
   state   = pipeline ? pipeline->_priv : NULL;
   if (command && command->renderEncoder && state && state->pipeline) {

@@ -156,53 +156,13 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
 
 GPU_HIDE
 void
-mt_frontFace(GPURenderPassEncoder *rce, GPUFrontFace frontFace) {
-  MTRenderEncoder *native;
-  MTLWinding       mtWinding;
-
-  native = mt_renderEncoder(rce);
-  if (!native) {
-    return;
-  }
-  mtWinding = frontFace == GPU_FRONT_FACE_CW ?
-    MTLWindingClockwise : MTLWindingCounterClockwise;
-#if MT_HAS_METAL4
-  if (native->modern) {
-    if (@available(macOS 26.0, iOS 26.0, *)) {
-      [native->modern setFrontFacingWinding:mtWinding];
-    }
-    return;
-  }
-#endif
-  [native->classic setFrontFacingWinding:mtWinding];
-}
-
-GPU_HIDE
-void
-mt_cullMode(GPURenderPassEncoder *rce, GPUCullMode mode) {
-  MTRenderEncoder *native;
-
-  native = mt_renderEncoder(rce);
-  if (!native) {
-    return;
-  }
-#if MT_HAS_METAL4
-  if (native->modern) {
-    if (@available(macOS 26.0, iOS 26.0, *)) {
-      [native->modern setCullMode:(MTLCullMode)mode];
-    }
-    return;
-  }
-#endif
-  [native->classic setCullMode:(MTLCullMode)mode];
-}
-
-GPU_HIDE
-void
 mt_setRenderPipelineState(GPURenderPassEncoder *rce,
-                          GPURenderPipelineState  *pipelineState) {
+                          GPURenderPipelineState *pipelineState,
+                          GPUCullMode             cullMode,
+                          GPUFrontFace            frontFace) {
   MTRenderEncoder       *native;
   MTRenderPipelineState *state;
+  MTLWinding             winding;
 
   native = mt_renderEncoder(rce);
   if (!native) {
@@ -212,6 +172,9 @@ mt_setRenderPipelineState(GPURenderPassEncoder *rce,
   if (!state || !state->render || !state->depthStencil) {
     return;
   }
+  winding = frontFace == GPU_FRONT_FACE_CW
+              ? MTLWindingClockwise
+              : MTLWindingCounterClockwise;
 #if MT_HAS_METAL4
   if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
@@ -245,12 +208,16 @@ mt_setRenderPipelineState(GPURenderPassEncoder *rce,
       }
       [native->modern setRenderPipelineState:state->render];
       [native->modern setDepthStencilState:state->depthStencil];
+      [native->modern setCullMode:(MTLCullMode)cullMode];
+      [native->modern setFrontFacingWinding:winding];
     }
     return;
   }
 #endif
   [native->classic setRenderPipelineState:state->render];
   [native->classic setDepthStencilState:state->depthStencil];
+  [native->classic setCullMode:(MTLCullMode)cullMode];
+  [native->classic setFrontFacingWinding:winding];
 }
 
 GPU_HIDE
@@ -1257,8 +1224,6 @@ GPU_HIDE
 void
 mt_initRCE(GPUApiRCE *api) {
   api->renderCommandEncoder     = mt_renderCommandEncoder;
-  api->frontFace                = mt_frontFace;
-  api->cullMode                 = mt_cullMode;
   api->setRenderPipelineState   = mt_setRenderPipelineState;
   api->viewport                 = mt_viewport;
   api->scissor                  = mt_scissor;

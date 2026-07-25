@@ -388,11 +388,15 @@ dx12_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
 GPU_HIDE
 void
 dx12_setRenderPipelineState(GPURenderPassEncoder *encoder,
-                            GPURenderPipelineState  *pipelineState) {
+                            GPURenderPipelineState *pipelineState,
+                            GPUCullMode             cullMode,
+                            GPUFrontFace            frontFace) {
   GPURenderEncoderDX12  *native;
   GPURenderPipelineDX12 *pipeline;
   bool                    rootChanged;
 
+  GPU__UNUSED(cullMode);
+  GPU__UNUSED(frontFace);
   native   = encoder ? encoder->_priv : NULL;
   pipeline = pipelineState ? pipelineState->_priv : NULL;
   if (!native || !native->commandList || !pipeline ||

@@ -111,14 +111,10 @@ typedef struct GPUApiRCE {
   (*renderCommandEncoder)(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass);
   
   void
-  (*frontFace)(GPURenderPassEncoder *rce, GPUFrontFace frontFace);
-  
-  void
-  (*cullMode)(GPURenderPassEncoder *rce, GPUCullMode mode);
-  
-  void
   (*setRenderPipelineState)(GPURenderPassEncoder *rce,
-                            GPURenderPipelineState  *piplineState);
+                            GPURenderPipelineState *pipelineState,
+                            GPUCullMode             cullMode,
+                            GPUFrontFace            frontFace);
   
   void
   (*viewport)(GPURenderPassEncoder *enc, const GPUViewport *viewport);
