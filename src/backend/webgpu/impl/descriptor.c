@@ -9,10 +9,16 @@
 #include "../impl.h"
 
 typedef struct WebGPUBindGroupWrite {
-  WGPUBindGroupEntry *entries;
-  uint32_t            capacity;
-  uint32_t            count;
-  bool                valid;
+  WGPUBindGroupEntry            *entries;
+  WGPUTextureView               *ownedViews;
+  const GPUBindGroupLayoutEntry *layoutEntries;
+  uint32_t                       ownedViewCount;
+  uint32_t                       ownedViewCapacity;
+  uint32_t                       layoutEntryCount;
+  uint32_t                       capacity;
+  uint32_t                       count;
+  GPUResult                      result;
+  bool                           valid;
 } WebGPUBindGroupWrite;
 
 static WGPUShaderStage
@@ -192,6 +198,22 @@ webgpu_textureSampleType(GPUTextureSampleType type) {
            : WGPUTextureSampleType_Undefined;
 }
 
+static bool
+webgpu_integerCubeBinding(const GPUBindGroupLayoutEntry *entry) {
+  GPUTextureSampleType sampleType;
+  GPUTextureViewType   viewType;
+
+  if (!entry || entry->bindingType != GPU_BINDING_SAMPLED_TEXTURE) {
+    return false;
+  }
+  sampleType = entry->sampledTexture.sampleType;
+  viewType   = entry->sampledTexture.viewType;
+  return (sampleType == GPU_TEXTURE_SAMPLE_TYPE_SINT ||
+          sampleType == GPU_TEXTURE_SAMPLE_TYPE_UINT) &&
+         (viewType == GPU_TEXTURE_VIEW_CUBE ||
+          viewType == GPU_TEXTURE_VIEW_CUBE_ARRAY);
+}
+
 static WGPUStorageTextureAccess
 webgpu_storageTextureAccess(GPUStorageTextureAccess access) {
   static const WGPUStorageTextureAccess values[] = {
@@ -262,8 +284,11 @@ webgpu_initLayoutEntry(WGPUBindGroupLayoutEntry      *entry,
                          WGPU_TEXTURE_BINDING_LAYOUT_INIT;
       entry->texture.sampleType =
         webgpu_textureSampleType(source->sampledTexture.sampleType);
-      entry->texture.viewDimension =
-        webgpu_bindingViewDimension(source->sampledTexture.viewType);
+      entry->texture.viewDimension = webgpu_integerCubeBinding(source)
+                                       ? WGPUTextureViewDimension_2DArray
+                                       : webgpu_bindingViewDimension(
+                                           source->sampledTexture.viewType
+                                         );
       entry->texture.multisampled = source->sampledTexture.multisampled;
       return entry->texture.sampleType != WGPUTextureSampleType_Undefined &&
              entry->texture.viewDimension !=
@@ -735,8 +760,10 @@ gpu_webgpuBindComputeAutomaticGroups(GPUComputePassEncoder         *pass,
 static void
 webgpu_writeBindGroupEntry(void *context,
                            const GPUBindGroupBindingView *binding) {
-  WebGPUBindGroupWrite *write;
-  WGPUBindGroupEntry   *entry;
+  WGPUTextureView                textureView;
+  WebGPUBindGroupWrite          *write;
+  WGPUBindGroupEntry            *entry;
+  const GPUBindGroupLayoutEntry *layoutEntry;
 
   write = context;
   if (!write || !binding || !write->valid ||
@@ -766,7 +793,38 @@ webgpu_writeBindGroupEntry(void *context,
         write->valid = false;
         return;
       }
-      entry->textureView = binding->textureView->_priv;
+      textureView = binding->textureView->_priv;
+      layoutEntry = binding->layoutEntryIndex < write->layoutEntryCount
+                      ? &write->layoutEntries[binding->layoutEntryIndex]
+                      : NULL;
+      if (webgpu_integerCubeBinding(layoutEntry)) {
+        WGPUTextureViewDescriptor descriptor =
+          WGPU_TEXTURE_VIEW_DESCRIPTOR_INIT;
+        GPUTextureView *view    = binding->textureView;
+        GPUTexture     *texture = view->_texture;
+
+        if (!write->ownedViews ||
+            write->ownedViewCount >= write->ownedViewCapacity ||
+            !texture || !texture->_priv) {
+          write->valid = false;
+          return;
+        }
+        descriptor.format          = gpu_webgpuFormat(view->format);
+        descriptor.dimension       = WGPUTextureViewDimension_2DArray;
+        descriptor.baseMipLevel    = view->baseMipLevel;
+        descriptor.mipLevelCount   = view->mipLevelCount;
+        descriptor.baseArrayLayer  = view->baseArrayLayer;
+        descriptor.arrayLayerCount = view->arrayLayerCount;
+        descriptor.aspect          = WGPUTextureAspect_All;
+        textureView = wgpuTextureCreateView(texture->_priv, &descriptor);
+        if (!textureView) {
+          write->result = GPU_ERROR_BACKEND_FAILURE;
+          write->valid = false;
+          return;
+        }
+        write->ownedViews[write->ownedViewCount++] = textureView;
+      }
+      entry->textureView = textureView;
       break;
     case GPUBindKindSampler:
       if (!binding->sampler || !binding->sampler->_priv) {
@@ -786,6 +844,7 @@ webgpu_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
   WGPUBindGroupDescriptor        descriptor = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
   WebGPUBindGroupWrite           write;
   WGPUBindGroupEntry            *entries;
+  WGPUTextureView               *ownedViews;
   GPUBindGroupLayout            *layout;
   GPUBindGroupLayoutWebGPU      *layoutState;
   const GPUBindGroupLayoutEntry *layoutEntries;
@@ -795,6 +854,7 @@ webgpu_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
   uint32_t                       backendBindingCount;
   uint32_t                       nativeCount;
   uint32_t                       immutableCursor;
+  size_t                         scratchSize;
 
   native          = gpu_webgpuDevice(device);
   layout          = gpuBindGroupGetLayout(group);
@@ -811,15 +871,28 @@ webgpu_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
   }
 
   nativeCount = layoutState->nativeEntryCount;
-  entries = nativeCount ? calloc(nativeCount, sizeof(*entries)) : NULL;
+  if ((size_t)nativeCount >
+      SIZE_MAX / (sizeof(*entries) + sizeof(*ownedViews))) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  scratchSize = (size_t)nativeCount *
+                (sizeof(*entries) + sizeof(*ownedViews));
+  entries     = nativeCount ? calloc(1, scratchSize) : NULL;
+  ownedViews  = entries ? (WGPUTextureView *)(entries + nativeCount) : NULL;
   if (nativeCount > 0u && !entries) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  write.entries  = entries;
-  write.capacity = nativeCount;
-  write.count    = 0u;
-  write.valid    = true;
+  write.entries           = entries;
+  write.ownedViews        = ownedViews;
+  write.layoutEntries     = layoutEntries;
+  write.ownedViewCount    = 0u;
+  write.ownedViewCapacity = nativeCount;
+  write.layoutEntryCount  = count;
+  write.capacity          = nativeCount;
+  write.count             = 0u;
+  write.result            = GPU_OK;
+  write.valid             = true;
   immutableCursor = 0u;
   for (uint32_t i = 0u; i < count; i++) {
     if (!layoutEntries[i].immutableSampler) {
@@ -846,14 +919,20 @@ webgpu_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
                                   &write) ||
       !write.valid || write.count != nativeCount ||
       immutableCursor != layoutState->immutableSamplerCount) {
+    for (uint32_t i = 0u; i < write.ownedViewCount; i++) {
+      wgpuTextureViewRelease(ownedViews[i]);
+    }
     free(entries);
-    return GPU_ERROR_UNSUPPORTED;
+    return write.result != GPU_OK ? write.result : GPU_ERROR_UNSUPPORTED;
   }
 
   descriptor.layout     = layoutState->layout;
   descriptor.entryCount = write.count;
   descriptor.entries    = entries;
   group->_native = wgpuDeviceCreateBindGroup(native->device, &descriptor);
+  for (uint32_t i = 0u; i < write.ownedViewCount; i++) {
+    wgpuTextureViewRelease(ownedViews[i]);
+  }
   free(entries);
   return group->_native ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
 }
