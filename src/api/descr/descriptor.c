@@ -3134,6 +3134,21 @@ GPUCreateBindGroup(GPUDevice *device,
   if (scratchWordCount > 0u) {
     priv->updateScratch = (uint64_t *)&storage->bindings[runtimeCount];
   }
+  if (!priv->bindless &&
+      priv->count == 1u && priv->dynamicOffsetCount == 1u &&
+      priv->bindings[0].kind == GPUBindKindBuffer &&
+      priv->bindings[0].dynamicOffsetIndex == 0u &&
+      priv->bindings[0].layoutEntryIndex < layoutPriv->count) {
+    GPUShaderStageFlags stages;
+
+    stages =
+      layoutPriv->entries[priv->bindings[0].layoutEntryIndex].visibility;
+    if (stages == GPU_SHADER_STAGE_VERTEX_BIT ||
+        stages == GPU_SHADER_STAGE_FRAGMENT_BIT) {
+      priv->singleDynamicBuffer = priv->bindings;
+      priv->singleDynamicStages = stages;
+    }
+  }
   if (heapCandidate) {
     free(candidateBindings);
   }

@@ -640,6 +640,46 @@ mt_bindRenderBinding(void *ctx, const GPUBindGroupBindingView *binding) {
 }
 
 static MTBindDynamicStatus
+mt_bindRenderSingleDynamicBuffer(GPURenderPassEncoder *pass,
+                                 GPUPipelineLayout    *pipelineLayout,
+                                 uint32_t              groupIndex,
+                                 GPUBindGroupPriv     *priv,
+                                 const uint32_t       *dynamicOffsets) {
+  GPUBindGroupBindingPriv *binding;
+  GPUPipelineLayoutPriv   *pipeline;
+  uint64_t                 offset;
+  uint32_t                 index;
+
+  binding  = priv->singleDynamicBuffer;
+  pipeline = pipelineLayout ? pipelineLayout->_priv : NULL;
+  if (!pass || !binding || !pipeline || !dynamicOffsets ||
+      groupIndex >= pipeline->bindGroupLayoutCount ||
+      pipeline->bindGroupLayouts[groupIndex] != priv->layout ||
+      !pipeline->backendBindings || !pipeline->backendBindings[groupIndex] ||
+      !binding->buffer) {
+    return MT_BIND_DYNAMIC_FAILED;
+  }
+
+  offset = binding->offset + dynamicOffsets[0];
+  if (offset < binding->offset ||
+      !gpuBufferRangeValid(binding->buffer, offset, binding->size)) {
+    return MT_BIND_DYNAMIC_FAILED;
+  }
+
+  index = pipeline->backendBindings[groupIndex][binding->layoutEntryIndex] +
+          binding->arrayIndex;
+  if (priv->singleDynamicStages == GPU_SHADER_STAGE_FRAGMENT_BIT) {
+    mt_fragmentBuffer(pass, binding->buffer, offset, index);
+    return MT_BIND_DYNAMIC_DONE;
+  }
+  if (priv->singleDynamicStages == GPU_SHADER_STAGE_VERTEX_BIT) {
+    mt_vertexBuffer(pass, binding->buffer, offset, index);
+    return MT_BIND_DYNAMIC_DONE;
+  }
+  return MT_BIND_DYNAMIC_FALLBACK;
+}
+
+static MTBindDynamicStatus
 mt_bindRenderDynamicBuffers(GPURenderPassEncoder *pass,
                             GPUPipelineLayout    *pipelineLayout,
                             uint32_t              groupIndex,
@@ -654,6 +694,13 @@ mt_bindRenderDynamicBuffers(GPURenderPassEncoder *pass,
 
   priv   = group ? group->_priv : NULL;
   native = group ? group->_native : NULL;
+  if (priv && dynamicOffsetCount == 1u && priv->singleDynamicBuffer) {
+    return mt_bindRenderSingleDynamicBuffer(pass,
+                                            pipelineLayout,
+                                            groupIndex,
+                                            priv,
+                                            dynamicOffsets);
+  }
   if (!priv || dynamicOffsetCount == 0u ||
       dynamicOffsetCount != priv->dynamicOffsetCount ||
       priv->dynamicOffsetCount != priv->count || priv->bindless ||
