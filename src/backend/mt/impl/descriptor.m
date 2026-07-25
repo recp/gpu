@@ -56,6 +56,12 @@ typedef struct MTBindContext {
   bool                     valid;
 } MTBindContext;
 
+typedef enum MTBindDynamicStatus {
+  MT_BIND_DYNAMIC_FALLBACK = -1,
+  MT_BIND_DYNAMIC_FAILED,
+  MT_BIND_DYNAMIC_DONE
+} MTBindDynamicStatus;
+
 static uint32_t *
 mt_bindGroupRecordMap(MTBindGroup *native) {
   return native
@@ -633,6 +639,80 @@ mt_bindRenderBinding(void *ctx, const GPUBindGroupBindingView *binding) {
   }
 }
 
+static MTBindDynamicStatus
+mt_bindRenderDynamicBuffers(GPURenderPassEncoder *pass,
+                            GPUPipelineLayout    *pipelineLayout,
+                            uint32_t              groupIndex,
+                            GPUBindGroup         *group,
+                            uint32_t              dynamicOffsetCount,
+                            const uint32_t       *dynamicOffsets) {
+  GPUBindGroupLayoutPriv *layout;
+  GPUBindGroupPriv       *priv;
+  GPUPipelineLayoutPriv  *pipeline;
+  GPUApiRCE              *api;
+  MTBindGroup            *native;
+
+  priv   = group ? group->_priv : NULL;
+  native = group ? group->_native : NULL;
+  if (!priv || dynamicOffsetCount == 0u ||
+      dynamicOffsetCount != priv->dynamicOffsetCount ||
+      priv->dynamicOffsetCount != priv->count || priv->bindless ||
+      (native && native->arrayCount != 0u)) {
+    return MT_BIND_DYNAMIC_FALLBACK;
+  }
+
+  layout   = priv->layout ? priv->layout->_priv : NULL;
+  pipeline = pipelineLayout ? pipelineLayout->_priv : NULL;
+  if (!pass || !pass->_api || !layout || !pipeline || !dynamicOffsets ||
+      groupIndex >= pipeline->bindGroupLayoutCount ||
+      pipeline->bindGroupLayouts[groupIndex] != priv->layout ||
+      !pipeline->backendBindings || !pipeline->backendBindings[groupIndex]) {
+    return MT_BIND_DYNAMIC_FAILED;
+  }
+
+  api = &pass->_api->rce;
+  for (uint32_t i = 0u; i < priv->count; i++) {
+    const GPUBindGroupLayoutEntry *entry;
+    const GPUBindGroupBindingPriv *binding;
+    uint64_t                       offset;
+    uint32_t                       index;
+
+    binding = &priv->bindings[i];
+    if (binding->kind != GPUBindKindBuffer || !binding->buffer ||
+        binding->layoutEntryIndex >= layout->count ||
+        binding->dynamicOffsetIndex >= dynamicOffsetCount) {
+      return MT_BIND_DYNAMIC_FAILED;
+    }
+    offset = binding->offset +
+             dynamicOffsets[binding->dynamicOffsetIndex];
+    if (offset < binding->offset ||
+        !gpuBufferRangeValid(binding->buffer, offset, binding->size)) {
+      return MT_BIND_DYNAMIC_FAILED;
+    }
+
+    entry = &layout->entries[binding->layoutEntryIndex];
+    index = pipeline->backendBindings[groupIndex][binding->layoutEntryIndex] +
+            binding->arrayIndex;
+    if ((entry->visibility & GPU_SHADER_STAGE_VERTEX_BIT) != 0u &&
+        api->vertexBuffer) {
+      api->vertexBuffer(pass, binding->buffer, offset, index);
+    }
+    if ((entry->visibility & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0u &&
+        api->fragmentBuffer) {
+      api->fragmentBuffer(pass, binding->buffer, offset, index);
+    }
+    if ((entry->visibility & GPU_SHADER_STAGE_TASK_BIT) != 0u &&
+        api->taskBuffer) {
+      api->taskBuffer(pass, binding->buffer, offset, index);
+    }
+    if ((entry->visibility & GPU_SHADER_STAGE_MESH_BIT) != 0u &&
+        api->meshBuffer) {
+      api->meshBuffer(pass, binding->buffer, offset, index);
+    }
+  }
+  return MT_BIND_DYNAMIC_DONE;
+}
+
 static bool
 mt_bindRenderGroupStatic(GPURenderPassEncoder *pass,
                          GPUPipelineLayout    *pipelineLayout,
@@ -781,14 +861,24 @@ mt_bindRenderGroup(GPURenderPassEncoder *pass,
                    GPUBindGroup         *group,
                    uint32_t              dynamicOffsetCount,
                    const uint32_t       *dynamicOffsets) {
-  GPUBindGroupPriv *priv;
-  MTBindContext ctx;
+  GPUBindGroupPriv    *priv;
+  MTBindContext        ctx;
+  MTBindDynamicStatus  result;
 
   priv = group ? group->_priv : NULL;
   if (dynamicOffsetCount == 0u && priv && priv->dynamicOffsetCount == 0u &&
       !priv->bindless &&
       (!group->_native || ((MTBindGroup *)group->_native)->arrayCount == 0u)) {
     return mt_bindRenderGroupStatic(pass, pipelineLayout, groupIndex, group);
+  }
+  result = mt_bindRenderDynamicBuffers(pass,
+                                       pipelineLayout,
+                                       groupIndex,
+                                       group,
+                                       dynamicOffsetCount,
+                                       dynamicOffsets);
+  if (result != MT_BIND_DYNAMIC_FALLBACK) {
+    return result == MT_BIND_DYNAMIC_DONE;
   }
 
   memset(&ctx, 0, sizeof(ctx));
