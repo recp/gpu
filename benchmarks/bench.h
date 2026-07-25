@@ -49,4 +49,11 @@ bench_processMemory(BenchProcessMemory *outMemory);
 void *
 bench_read(const char *path, uint64_t *outSize);
 
+GPUAdapter *
+bench_createAdapter(GPUInstance *instance);
+
+GPUDevice *
+bench_createDevice(GPUAdapter                *adapter,
+                   const GPUDeviceCreateInfo *info);
+
 #endif /* gpu_bench_h */

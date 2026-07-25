@@ -68,7 +68,7 @@ bindless_config(int argc, char *argv[], BindlessUpdateConfig *config) {
   if (!config || argc > 5) {
     if (argv && argv[0]) {
       fprintf(stderr,
-              "usage: %s [default|metal|vulkan|dx12] "
+              "usage: %s [default|metal|vulkan|dx12|webgpu] "
               "[capacity 2..256] [iterations 1..10000] "
               "[repeats 1..31]\n",
               argv[0]);
@@ -92,22 +92,6 @@ bindless_config(int argc, char *argv[], BindlessUpdateConfig *config) {
     return false;
   }
   return true;
-}
-
-static GPUAdapter *
-bindless_selectAdapter(GPUInstance *instance) {
-  GPUAdapter *adapter;
-  GPUResult   result;
-  uint32_t    count;
-
-  adapter = NULL;
-  count   = 1u;
-  result  = GPUEnumerateAdapters(instance, &count, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter) {
-    return NULL;
-  }
-  return adapter;
 }
 
 static bool
@@ -169,7 +153,7 @@ bindless_init(BindlessUpdateBench        *bench,
     return BINDLESS_INIT_FAILED;
   }
 
-  bench->adapter = bindless_selectAdapter(bench->instance);
+  bench->adapter = bench_createAdapter(bench->instance);
   if (!bench->adapter) {
     return BINDLESS_INIT_FAILED;
   }
@@ -181,8 +165,8 @@ bindless_init(BindlessUpdateBench        *bench,
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.required.featureCount = 1u;
   deviceInfo.required.pFeatures    = &feature;
-  if (GPUCreateDevice(bench->adapter, &deviceInfo, &bench->device) != GPU_OK ||
-      !bench->device ||
+  bench->device = bench_createDevice(bench->adapter, &deviceInfo);
+  if (!bench->device ||
       !GPUIsFeatureEnabled(bench->device, GPU_FEATURE_BINDLESS) ||
       !GPUGetProcAddr(bench->device, "GPUUpdateBindGroupEXT")) {
     return BINDLESS_INIT_FAILED;

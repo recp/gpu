@@ -47,7 +47,8 @@ queue_uploadConfig(int argc, char *argv[], QueueUploadConfig *config) {
   if (!config || argc > 4) {
     if (argv && argv[0]) {
       fprintf(stderr,
-              "usage: %s [default|metal|vulkan|dx12] [writes] [bytes]\n",
+              "usage: %s [default|metal|vulkan|dx12|webgpu] [writes] "
+              "[bytes]\n",
               argv[0]);
     }
     return false;
@@ -64,22 +65,6 @@ queue_uploadConfig(int argc, char *argv[], QueueUploadConfig *config) {
     return false;
   }
   return true;
-}
-
-static GPUAdapter *
-queue_selectAdapter(GPUInstance *instance) {
-  GPUAdapter *adapter;
-  GPUResult   result;
-  uint32_t    count;
-
-  adapter = NULL;
-  count   = 1u;
-  result  = GPUEnumerateAdapters(instance, &count, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter) {
-    return NULL;
-  }
-  return adapter;
 }
 
 static bool
@@ -129,11 +114,11 @@ queue_uploadInit(QueueUpload             *upload,
     return false;
   }
 
-  upload->adapter = queue_selectAdapter(upload->instance);
+  upload->adapter = bench_createAdapter(upload->instance);
   if (!upload->adapter) {
     return false;
   }
-  upload->device  = GPUCreateDeviceWithDefaultQueues(upload->adapter);
+  upload->device  = bench_createDevice(upload->adapter, NULL);
   if (!upload->device) {
     return false;
   }

@@ -28,11 +28,17 @@ enum {
   TEXTURE_UPLOAD_ROW_ALIGNMENT  = 256
 };
 
+typedef enum TextureUploadMode {
+  TEXTURE_UPLOAD_COLOR = 0,
+  TEXTURE_UPLOAD_DEPTH
+} TextureUploadMode;
+
 typedef struct TextureUploadConfig {
-  GPUBackend backend;
-  uint32_t   writeCount;
-  uint32_t   width;
-  uint32_t   height;
+  GPUBackend        backend;
+  uint32_t          writeCount;
+  uint32_t          width;
+  uint32_t          height;
+  TextureUploadMode mode;
 } TextureUploadConfig;
 
 typedef struct TextureUpload {
@@ -49,11 +55,11 @@ typedef struct TextureUpload {
 
 static bool
 texture_uploadConfig(int argc, char *argv[], TextureUploadConfig *config) {
-  if (!config || argc > 5) {
+  if (!config || argc > 6) {
     if (argv && argv[0]) {
       fprintf(stderr,
-              "usage: %s [default|metal|vulkan|dx12] [writes] "
-              "[width] [height]\n",
+              "usage: %s [default|metal|vulkan|dx12|webgpu] [writes] "
+              "[width] [height] [color|depth]\n",
               argv[0]);
     }
     return false;
@@ -64,30 +70,20 @@ texture_uploadConfig(int argc, char *argv[], TextureUploadConfig *config) {
   config->writeCount = TEXTURE_UPLOAD_DEFAULT_WRITES;
   config->width      = TEXTURE_UPLOAD_DEFAULT_WIDTH;
   config->height     = TEXTURE_UPLOAD_DEFAULT_HEIGHT;
+  config->mode       = TEXTURE_UPLOAD_DEPTH;
   if ((argc > 1 && !bench_parseBackend(argv[1], &config->backend)) ||
       (argc > 2 && !bench_parseU32(argv[2], 1u, &config->writeCount)) ||
       (argc > 3 && !bench_parseU32(argv[3], 1u, &config->width)) ||
-      (argc > 4 && !bench_parseU32(argv[4], 1u, &config->height))) {
+      (argc > 4 && !bench_parseU32(argv[4], 1u, &config->height)) ||
+      (argc > 5 && strcmp(argv[5], "color") != 0 &&
+       strcmp(argv[5], "depth") != 0)) {
     fprintf(stderr, "invalid texture-upload benchmark arguments\n");
     return false;
   }
-  return true;
-}
-
-static GPUAdapter *
-texture_selectAdapter(GPUInstance *instance) {
-  GPUAdapter *adapter;
-  GPUResult   result;
-  uint32_t    count;
-
-  adapter = NULL;
-  count   = 1u;
-  result  = GPUEnumerateAdapters(instance, &count, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter) {
-    return NULL;
+  if (argc > 5 && strcmp(argv[5], "color") == 0) {
+    config->mode = TEXTURE_UPLOAD_COLOR;
   }
-  return adapter;
+  return true;
 }
 
 static bool
@@ -154,11 +150,11 @@ texture_uploadInit(TextureUpload             *upload,
     return false;
   }
 
-  upload->adapter = texture_selectAdapter(upload->instance);
+  upload->adapter = bench_createAdapter(upload->instance);
   if (!upload->adapter) {
     return false;
   }
-  upload->device = GPUCreateDeviceWithDefaultQueues(upload->adapter);
+  upload->device = bench_createDevice(upload->adapter, NULL);
   if (!upload->device) {
     return false;
   }
@@ -175,7 +171,9 @@ texture_uploadInit(TextureUpload             *upload,
   textureInfo.chain.structSize = sizeof(textureInfo);
   textureInfo.label            = "texture-upload-target";
   textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
-  textureInfo.format           = GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+  textureInfo.format           = config->mode == TEXTURE_UPLOAD_COLOR
+                                   ? GPU_FORMAT_RGBA8_UNORM
+                                   : GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
   textureInfo.width            = config->width;
   textureInfo.height           = config->height;
   textureInfo.depthOrLayers    = 1u;
@@ -223,7 +221,9 @@ texture_write(TextureUpload *upload, const TextureUploadConfig *config) {
   region.layerCount   = 1u;
   region.bytesPerRow  = upload->bytesPerRow;
   region.rowsPerImage = config->height;
-  region.aspect       = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
+  region.aspect       = config->mode == TEXTURE_UPLOAD_COLOR
+                          ? GPU_TEXTURE_ASPECT_ALL
+                          : GPU_TEXTURE_ASPECT_DEPTH_ONLY;
   return GPUQueueWriteTexture(upload->queue,
                               upload->texture,
                               &region,
@@ -270,8 +270,9 @@ main(int argc, char *argv[]) {
     printf("adapter: %s, backend: %s\n",
            properties.name ? properties.name : "unknown",
            bench_backendName(properties.backend));
-    printf("writes: %u, extent: %ux%u, bytes/write: %.2f KiB, "
+    printf("mode: %s, writes: %u, extent: %ux%u, bytes/write: %.2f KiB, "
            "total: %.2f MiB\n",
+           config.mode == TEXTURE_UPLOAD_COLOR ? "color" : "depth",
            config.writeCount,
            config.width,
            config.height,

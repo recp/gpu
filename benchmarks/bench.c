@@ -56,6 +56,8 @@ bench_backendName(GPUBackend backend) {
       return "vulkan";
     case GPU_BACKEND_DX12:
       return "dx12";
+    case GPU_BACKEND_WEBGPU:
+      return "webgpu";
     default:
       return "default";
   }
@@ -74,6 +76,8 @@ bench_parseBackend(const char *value, GPUBackend *outBackend) {
     *outBackend = GPU_BACKEND_VULKAN;
   } else if (strcmp(value, "dx12") == 0) {
     *outBackend = GPU_BACKEND_DX12;
+  } else if (strcmp(value, "webgpu") == 0) {
+    *outBackend = GPU_BACKEND_WEBGPU;
   } else {
     return false;
   }

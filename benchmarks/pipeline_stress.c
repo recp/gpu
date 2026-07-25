@@ -77,7 +77,7 @@ pipeline_config(int argc, char *argv[], PipelineStressConfig *config) {
   if (!config || argc < 2 || argc > 5) {
     if (argv && argv[0]) {
       fprintf(stderr,
-              "usage: %s <shader.us> [default|metal|vulkan|dx12] "
+              "usage: %s <shader.us> [default|metal|vulkan|dx12|webgpu] "
               "[pipelines] [repeats]\n",
               argv[0]);
     }

@@ -2936,6 +2936,17 @@ if(GPU_BUILD_BENCHMARKS)
       ${GPU_BENCHMARK_DX12_USL_FIXTURES}
     )
   endif()
+  if(GPU_BUILD_WEBGPU AND NOT EMSCRIPTEN)
+    gpu_add_usl_fixtures(
+      GPU_BENCHMARK_WEBGPU_USL_FIXTURES
+      webgpu
+      benchmarks
+      ${GPU_BENCHMARK_USL_SOURCES}
+    )
+    list(APPEND GPU_BENCHMARK_USL_FIXTURES
+      ${GPU_BENCHMARK_WEBGPU_USL_FIXTURES}
+    )
+  endif()
 
   if(GPU_BUILD_METAL)
     set(GPU_BENCHMARK_BACKEND metal)
@@ -2952,6 +2963,11 @@ if(GPU_BUILD_BENCHMARKS)
     set(GPU_BENCHMARK_SELECTED_USL_FIXTURES
       ${GPU_BENCHMARK_VULKAN_USL_FIXTURES}
     )
+  elseif(GPU_BUILD_WEBGPU AND NOT EMSCRIPTEN)
+    set(GPU_BENCHMARK_BACKEND webgpu)
+    set(GPU_BENCHMARK_SELECTED_USL_FIXTURES
+      ${GPU_BENCHMARK_WEBGPU_USL_FIXTURES}
+    )
   endif()
   if(GPU_BENCHMARK_SELECTED_USL_FIXTURES)
     list(GET GPU_BENCHMARK_SELECTED_USL_FIXTURES
@@ -2963,9 +2979,13 @@ if(GPU_BUILD_BENCHMARKS)
     list(GET GPU_BENCHMARK_SELECTED_USL_FIXTURES
          2
          GPU_BENCHMARK_BINDING_US)
-    list(GET GPU_BENCHMARK_SELECTED_USL_FIXTURES
-         3
-         GPU_BENCHMARK_BINDLESS_DISPATCH_US)
+    list(LENGTH GPU_BENCHMARK_SELECTED_USL_FIXTURES
+         GPU_BENCHMARK_SELECTED_USL_FIXTURE_COUNT)
+    if(GPU_BENCHMARK_SELECTED_USL_FIXTURE_COUNT GREATER 3)
+      list(GET GPU_BENCHMARK_SELECTED_USL_FIXTURES
+           3
+           GPU_BENCHMARK_BINDLESS_DISPATCH_US)
+    endif()
   endif()
 
   add_custom_target(gpu-benchmark-fixtures
@@ -4985,6 +5005,25 @@ if(GPU_BUILD_BENCHMARKS)
     target_compile_options(gpu-marker-bench PRIVATE -Wall -Wextra)
   endif()
 
+  foreach(gpu_benchmark_target
+          gpu-dispatch-bench
+          gpu-ray-dispatch-bench
+          gpu-queue-upload-bench
+          gpu-queue-submit-bench
+          gpu-texture-upload-bench
+          gpu-static-scene-bench
+          gpu-state-churn-bench
+          gpu-binding-churn-bench
+          gpu-bindless-update-bench
+          gpu-bindless-dispatch-bench
+          gpu-bindless-render-bench
+          gpu-upload-heavy-bench
+          gpu-pipeline-stress-bench
+          gpu-validation-bench
+          gpu-marker-bench)
+    target_sources(${gpu_benchmark_target} PRIVATE benchmarks/bench_gpu.c)
+  endforeach()
+
   if(APPLE AND GPU_BUILD_METAL)
     add_executable(gpu-native-metal-render-bench
       benchmarks/bench.c
@@ -5054,6 +5093,11 @@ if(GPU_BUILD_BENCHMARKS)
   endif()
 
   if(DEFINED GPU_BENCHMARK_BACKEND)
+    set(GPU_BENCHMARK_TEXTURE_UPLOAD_MODE depth)
+    if(GPU_BENCHMARK_BACKEND STREQUAL "webgpu")
+      set(GPU_BENCHMARK_TEXTURE_UPLOAD_MODE color)
+    endif()
+
     function(gpu_add_perf_smoke name target)
       add_test(NAME ${name} COMMAND ${target} ${ARGN})
       set_tests_properties(${name} PROPERTIES
@@ -5082,6 +5126,7 @@ if(GPU_BUILD_BENCHMARKS)
       perf-smoke-texture-upload
       gpu-texture-upload-bench
       ${GPU_BENCHMARK_BACKEND} 8 16 16
+      ${GPU_BENCHMARK_TEXTURE_UPLOAD_MODE}
     )
     gpu_add_perf_smoke(
       perf-smoke-static-scene
@@ -5106,18 +5151,20 @@ if(GPU_BUILD_BENCHMARKS)
       gpu-bindless-update-bench
       ${GPU_BENCHMARK_BACKEND} 16 32 3
     )
-    gpu_add_perf_smoke(
-      perf-smoke-bindless-dispatch
-      gpu-bindless-dispatch-bench
-      "${GPU_BENCHMARK_BINDLESS_DISPATCH_US}"
-      ${GPU_BENCHMARK_BACKEND} 32 3
-    )
-    gpu_add_perf_smoke(
-      perf-smoke-bindless-render
-      gpu-bindless-render-bench
-      "${GPU_BENCHMARK_BINDLESS_DISPATCH_US}"
-      ${GPU_BENCHMARK_BACKEND} 32 4 12 1
-    )
+    if(GPU_BENCHMARK_BINDLESS_DISPATCH_US)
+      gpu_add_perf_smoke(
+        perf-smoke-bindless-dispatch
+        gpu-bindless-dispatch-bench
+        "${GPU_BENCHMARK_BINDLESS_DISPATCH_US}"
+        ${GPU_BENCHMARK_BACKEND} 32 3
+      )
+      gpu_add_perf_smoke(
+        perf-smoke-bindless-render
+        gpu-bindless-render-bench
+        "${GPU_BENCHMARK_BINDLESS_DISPATCH_US}"
+        ${GPU_BENCHMARK_BACKEND} 32 4 12 1
+      )
+    endif()
     gpu_add_perf_smoke(
       perf-smoke-upload-heavy
       gpu-upload-heavy-bench

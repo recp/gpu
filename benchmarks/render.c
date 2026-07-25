@@ -44,7 +44,7 @@ bench_renderConfig(int argc, char *argv[], BenchRenderConfig *config) {
   if (!config || argc < 2 || argc > 8) {
     if (argv && argv[0]) {
       fprintf(stderr,
-              "usage: %s <shader.us> [default|metal|vulkan|dx12] "
+              "usage: %s <shader.us> [default|metal|vulkan|dx12|webgpu] "
               "[draws] [warmup] [frames] [repeats] [stats=0|1]\n",
               argv[0]);
     }
@@ -72,22 +72,6 @@ bench_renderConfig(int argc, char *argv[], BenchRenderConfig *config) {
   }
   config->enableStats = enableStats != 0u;
   return true;
-}
-
-static GPUAdapter *
-bench_selectAdapter(GPUInstance *instance) {
-  GPUAdapter *adapter;
-  GPUResult   result;
-  uint32_t    count;
-
-  adapter = NULL;
-  count   = 1u;
-  result  = GPUEnumerateAdapters(instance, &count, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter) {
-    return NULL;
-  }
-  return adapter;
 }
 
 static bool
@@ -216,7 +200,7 @@ bench_renderInit(BenchRender             *bench,
     return false;
   }
 
-  bench->adapter = bench_selectAdapter(bench->instance);
+  bench->adapter = bench_createAdapter(bench->instance);
   if (!bench->adapter) {
     fprintf(stderr, "failed to select GPU adapter\n");
     return false;
@@ -236,13 +220,9 @@ bench_renderInit(BenchRender             *bench,
     deviceInfo.chain.sType      = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     deviceInfo.chain.structSize = sizeof(deviceInfo);
     deviceInfo.required         = config->required;
-    if (GPUCreateDevice(bench->adapter,
-                        &deviceInfo,
-                        &bench->device) != GPU_OK) {
-      bench->device = NULL;
-    }
+    bench->device = bench_createDevice(bench->adapter, &deviceInfo);
   } else {
-    bench->device = GPUCreateDeviceWithDefaultQueues(bench->adapter);
+    bench->device = bench_createDevice(bench->adapter, NULL);
   }
   if (!bench->device) {
     fprintf(stderr, "failed to create GPU device\n");

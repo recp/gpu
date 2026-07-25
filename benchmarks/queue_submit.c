@@ -58,7 +58,7 @@ queue_submitConfig(int argc, char *argv[], QueueSubmitConfig *config) {
   if (!config || argc > 5) {
     if (argv && argv[0]) {
       fprintf(stderr,
-              "usage: %s [default|metal|vulkan|dx12] "
+              "usage: %s [default|metal|vulkan|dx12|webgpu] "
               "[batch 2..64] [iterations 1..10000] [repeats 1..31]\n",
               argv[0]);
     }
@@ -83,22 +83,6 @@ queue_submitConfig(int argc, char *argv[], QueueSubmitConfig *config) {
   return true;
 }
 
-static GPUAdapter *
-queue_selectAdapter(GPUInstance *instance) {
-  GPUAdapter *adapter;
-  GPUResult   result;
-  uint32_t    count;
-
-  adapter = NULL;
-  count   = 1u;
-  result  = GPUEnumerateAdapters(instance, &count, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter) {
-    return NULL;
-  }
-  return adapter;
-}
-
 static bool
 queue_submitInit(QueueSubmitBench        *bench,
                  const QueueSubmitConfig *config,
@@ -116,11 +100,11 @@ queue_submitInit(QueueSubmitBench        *bench,
     return false;
   }
 
-  bench->adapter = queue_selectAdapter(bench->instance);
+  bench->adapter = bench_createAdapter(bench->instance);
   if (!bench->adapter) {
     return false;
   }
-  bench->device = GPUCreateDeviceWithDefaultQueues(bench->adapter);
+  bench->device = bench_createDevice(bench->adapter, NULL);
   if (!bench->device) {
     return false;
   }
