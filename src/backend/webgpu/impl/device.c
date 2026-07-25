@@ -444,7 +444,7 @@ webgpu_getFormatCapabilities(
   wideNorm = webgpu_isWideNormFormat(format);
   norm16Filterable = webgpu_hasAdapterFeature(
     adapter,
-    WGPUFeatureName_Unorm16TextureFormats);
+    GPU_WEBGPU_FEATURE_NORM16);
   legacyUnorm16 =
     !tier1 &&
     webgpu_isUnorm16Format(format) &&
@@ -523,7 +523,7 @@ webgpu_supportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
       return true;
     case GPU_FEATURE_MULTI_DRAW:
       return wgpuAdapterHasFeature(native->adapter,
-                                   WGPUFeatureName_MultiDrawIndirect);
+                                   GPU_WEBGPU_FEATURE_MULTI_DRAW);
     default:
       return false;
   }
@@ -670,7 +670,7 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
     WGPUFeatureName_Float32Blendable,
     WGPUFeatureName_TextureFormatsTier1,
     WGPUFeatureName_TextureFormatsTier2,
-    WGPUFeatureName_Unorm16TextureFormats,
+    GPU_WEBGPU_FEATURE_NORM16,
     WGPUFeatureName_IndirectFirstInstance
   };
   WGPUFeatureName       requiredFeatures[20];
@@ -705,7 +705,7 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
     supportedMask |= 1ull << GPU_FEATURE_SUBGROUPS;
   }
   if (wgpuAdapterHasFeature(native->adapter,
-                            WGPUFeatureName_MultiDrawIndirect)) {
+                            GPU_WEBGPU_FEATURE_MULTI_DRAW)) {
     supportedMask |= 1ull << GPU_FEATURE_MULTI_DRAW;
   }
   if ((enabledFeatureMask & ~supportedMask) != 0u) {
@@ -740,7 +740,7 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_MULTI_DRAW)) != 0u) {
     requiredFeatures[descriptor.requiredFeatureCount++] =
-      WGPUFeatureName_MultiDrawIndirect;
+      GPU_WEBGPU_FEATURE_MULTI_DRAW;
   }
   for (uint32_t i = 0u; i < GPU_ARRAY_LEN(optionalFeatures); i++) {
     if (wgpuAdapterHasFeature(native->adapter, optionalFeatures[i])) {

@@ -34,9 +34,23 @@
 #include "../../api/swapchain_internal.h"
 #include "../../api/texture_internal.h"
 
-#include <webgpu/webgpu.h>
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+#  include <webgpu/wgpu.h>
+#else
+#  include <webgpu/webgpu.h>
+#endif
 
 #include <stdatomic.h>
+
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+#  define GPU_WEBGPU_FEATURE_NORM16 \
+    ((WGPUFeatureName)WGPUNativeFeature_TextureFormat16bitNorm)
+#  define GPU_WEBGPU_FEATURE_MULTI_DRAW \
+    ((WGPUFeatureName)WGPUNativeFeature_MultiDrawIndirectCount)
+#else
+#  define GPU_WEBGPU_FEATURE_NORM16 WGPUFeatureName_Unorm16TextureFormats
+#  define GPU_WEBGPU_FEATURE_MULTI_DRAW WGPUFeatureName_MultiDrawIndirect
+#endif
 
 enum {
   GPU_WEBGPU_COMMAND_SLOT_COUNT      = 8u,
@@ -195,6 +209,43 @@ gpu_webgpuSwapchain(const GPUSwapchain *swapchain) {
 static GPU_INLINE GPUCommandWebGPU *
 gpu_webgpuCommand(const GPUCommandBuffer *cmdb) {
   return cmdb ? cmdb->_priv : NULL;
+}
+
+static GPU_INLINE void
+gpu_webgpuMultiDrawIndirect(WGPURenderPassEncoder encoder,
+                            WGPUBuffer            buffer,
+                            uint64_t              offset,
+                            uint32_t              count) {
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  wgpuRenderPassEncoderMultiDrawIndirect(encoder, buffer, offset, count);
+#else
+  wgpuRenderPassEncoderMultiDrawIndirect(encoder,
+                                         buffer,
+                                         offset,
+                                         count,
+                                         NULL,
+                                         0u);
+#endif
+}
+
+static GPU_INLINE void
+gpu_webgpuMultiDrawIndexedIndirect(WGPURenderPassEncoder encoder,
+                                   WGPUBuffer            buffer,
+                                   uint64_t              offset,
+                                   uint32_t              count) {
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  wgpuRenderPassEncoderMultiDrawIndexedIndirect(encoder,
+                                                buffer,
+                                                offset,
+                                                count);
+#else
+  wgpuRenderPassEncoderMultiDrawIndexedIndirect(encoder,
+                                                buffer,
+                                                offset,
+                                                count,
+                                                NULL,
+                                                0u);
+#endif
 }
 
 WGPUTextureFormat gpu_webgpuFormat(GPUFormat format);

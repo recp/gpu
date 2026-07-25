@@ -398,9 +398,17 @@ if(GPU_BUILD_WEBGPU)
   )
 
   if(EMSCRIPTEN)
+    target_compile_definitions(gpu PRIVATE
+      GPU_WEBGPU_PROVIDER_DAWN=1
+      GPU_WEBGPU_PROVIDER_WGPU_NATIVE=0
+    )
     target_compile_options(gpu PRIVATE --use-port=emdawnwebgpu)
     target_link_options(gpu PRIVATE --use-port=emdawnwebgpu)
   else()
+    set(GPU_WEBGPU_PROVIDER "AUTO" CACHE STRING
+        "Native WebGPU provider: AUTO, DAWN, or WGPU_NATIVE")
+    set_property(CACHE GPU_WEBGPU_PROVIDER PROPERTY STRINGS
+                 AUTO DAWN WGPU_NATIVE)
     set(GPU_WEBGPU_INCLUDE_DIR "" CACHE PATH
         "Directory containing webgpu/webgpu.h")
     set(GPU_WEBGPU_LIBRARY "" CACHE FILEPATH
@@ -416,6 +424,33 @@ if(GPU_BUILD_WEBGPU)
         "GPU_ENABLE_WEBGPU requires webgpu/webgpu.h and a native WebGPU "
         "provider. Set GPU_WEBGPU_INCLUDE_DIR and GPU_WEBGPU_LIBRARY.")
     endif()
+    string(TOUPPER "${GPU_WEBGPU_PROVIDER}" _gpu_webgpu_provider)
+    if(_gpu_webgpu_provider STREQUAL "AUTO")
+      if(EXISTS "${GPU_WEBGPU_INCLUDE_DIR}/webgpu/wgpu.h")
+        set(_gpu_webgpu_provider "WGPU_NATIVE")
+      else()
+        set(_gpu_webgpu_provider "DAWN")
+      endif()
+    endif()
+    if(_gpu_webgpu_provider STREQUAL "DAWN")
+      target_compile_definitions(gpu PRIVATE
+        GPU_WEBGPU_PROVIDER_DAWN=1
+        GPU_WEBGPU_PROVIDER_WGPU_NATIVE=0
+      )
+    elseif(_gpu_webgpu_provider STREQUAL "WGPU_NATIVE")
+      if(NOT EXISTS "${GPU_WEBGPU_INCLUDE_DIR}/webgpu/wgpu.h")
+        message(FATAL_ERROR
+          "GPU_WEBGPU_PROVIDER=WGPU_NATIVE requires webgpu/wgpu.h.")
+      endif()
+      target_compile_definitions(gpu PRIVATE
+        GPU_WEBGPU_PROVIDER_DAWN=0
+        GPU_WEBGPU_PROVIDER_WGPU_NATIVE=1
+      )
+    else()
+      message(FATAL_ERROR
+        "GPU_WEBGPU_PROVIDER must be AUTO, DAWN, or WGPU_NATIVE.")
+    endif()
+    message(STATUS "GPU native WebGPU provider: ${_gpu_webgpu_provider}")
     target_include_directories(gpu PRIVATE "${GPU_WEBGPU_INCLUDE_DIR}")
     target_link_libraries(gpu PRIVATE "${GPU_WEBGPU_LIBRARY}")
   endif()

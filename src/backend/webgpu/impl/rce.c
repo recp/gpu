@@ -306,12 +306,10 @@ webgpu_multiDrawIndirect(GPURenderPassEncoder *encoder,
       !argsBuffer || !argsBuffer->_priv) {
     return false;
   }
-  wgpuRenderPassEncoderMultiDrawIndirect(command->renderEncoder,
-                                         argsBuffer->_priv,
-                                         argsOffset,
-                                         drawCount,
-                                         NULL,
-                                         0u);
+  gpu_webgpuMultiDrawIndirect(command->renderEncoder,
+                              argsBuffer->_priv,
+                              argsOffset,
+                              drawCount);
   return true;
 }
 
@@ -333,12 +331,10 @@ webgpu_multiDrawIndexedIndirect(GPURenderPassEncoder *encoder,
       !webgpu_bindIndexBuffer(encoder, command)) {
     return false;
   }
-  wgpuRenderPassEncoderMultiDrawIndexedIndirect(command->renderEncoder,
-                                                argsBuffer->_priv,
-                                                argsOffset,
-                                                drawCount,
-                                                NULL,
-                                                0u);
+  gpu_webgpuMultiDrawIndexedIndirect(command->renderEncoder,
+                                     argsBuffer->_priv,
+                                     argsOffset,
+                                     drawCount);
   return true;
 }
 
