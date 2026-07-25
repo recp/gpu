@@ -27,6 +27,9 @@ typedef struct WebGPURequest {
 void
 set_status(const char *message, int failed);
 
+void
+set_status_notice(const char *message);
+
 int
 read_file(const char *path, void **outData, uint64_t *outSize);
 

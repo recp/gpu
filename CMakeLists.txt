@@ -681,7 +681,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
-  set(GPU_WEBGPU_GALLERY_VERSION "26")
+  set(GPU_WEBGPU_GALLERY_VERSION "30")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
   file(GLOB GPU_WEBGPU_GALLERY_PREVIEWS CONFIGURE_DEPENDS
@@ -707,6 +707,93 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   )
   file(COPY ${GPU_WEBGPU_GALLERY_PREVIEWS}
        DESTINATION "${GPU_WEBGPU_GALLERY_DIR}/previews")
+
+  function(gpu_add_webgpu_gallery_sample id stem title kind description)
+    set(options)
+    set(oneValueArgs)
+    set(multiValueArgs ASSETS)
+    cmake_parse_arguments(GPU_WEBGPU_SAMPLE
+      "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    set(sampleTarget "gpu-${id}-webgpu-usl")
+    set(artifactTarget "gpu-webgpu-${id}-artifact")
+    set(sampleDir
+        "${CMAKE_CURRENT_SOURCE_DIR}/samples/${id}-webgpu-usl")
+    set(artifactDir
+        "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
+    set(artifactSource "${artifactDir}/${stem}.usl")
+    set(artifact "${artifactDir}/${stem}.us")
+    set(shell
+        "${GPU_WEBGPU_GALLERY_DIR}/${sampleTarget}-shell.html")
+    set(GPU_WEBGPU_SAMPLE_TITLE "${title}")
+    set(GPU_WEBGPU_SAMPLE_KIND "${kind}")
+    set(GPU_WEBGPU_SAMPLE_DESCRIPTION "${description}")
+    set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/${id}.c")
+    set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/${id}.usl")
+    set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/${id}.wgsl")
+
+    configure_file(
+      "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+      "${shell}"
+      @ONLY
+    )
+    add_custom_command(
+      OUTPUT "${artifact}"
+      BYPRODUCTS "${artifactSource}.wgsl"
+      COMMAND ${CMAKE_COMMAND} -E make_directory "${artifactDir}"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${sampleDir}/${stem}.usl"
+              "${artifactSource}"
+      COMMAND ${CMAKE_COMMAND} -E env
+              USL_EMIT_BYTECODE=1
+              "${GPU_USL_HOST_FIXTURE}"
+              webgpu
+              "${artifactSource}"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${sampleDir}/main.c"
+              "${GPU_WEBGPU_GALLERY_DIR}/sources/${id}.c"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${artifactSource}"
+              "${GPU_WEBGPU_GALLERY_DIR}/sources/${id}.usl"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${artifactSource}.wgsl"
+              "${GPU_WEBGPU_GALLERY_DIR}/sources/${id}.wgsl"
+      DEPENDS
+        "${GPU_USL_HOST_FIXTURE}"
+        "${sampleDir}/${stem}.usl"
+        "${sampleDir}/main.c"
+      VERBATIM
+    )
+    add_custom_target(${artifactTarget} DEPENDS "${artifact}")
+
+    set(assetOptions)
+    foreach(asset IN LISTS GPU_WEBGPU_SAMPLE_ASSETS)
+      list(APPEND assetOptions
+        "--preload-file=${sampleDir}/${asset}@/${asset}")
+    endforeach()
+
+    add_executable(${sampleTarget}
+      "${sampleDir}/main.c"
+      ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
+    )
+    target_link_libraries(${sampleTarget} PRIVATE gpu)
+    target_link_options(${sampleTarget} PRIVATE
+      --use-port=emdawnwebgpu
+      "--preload-file=${artifact}@/${stem}.us"
+      "--shell-file=${shell}"
+      -sALLOW_MEMORY_GROWTH=1
+      ${assetOptions}
+    )
+    add_dependencies(${sampleTarget} ${artifactTarget})
+    set_target_properties(${sampleTarget} PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+      LINK_DEPENDS "${shell};${artifact}"
+      SUFFIX ".html"
+      RUNTIME_OUTPUT_DIRECTORY "${GPU_WEBGPU_GALLERY_DIR}"
+    )
+  endfunction()
 
   set(GPU_WEBGPU_TRIANGLE_DIR
       "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
@@ -1107,6 +1194,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${GPU_WEBGPU_SUBGROUP_DIR}/subgroup.usl")
   set(GPU_WEBGPU_SUBGROUP_US
       "${GPU_WEBGPU_SUBGROUP_DIR}/subgroup.us")
+  set(GPU_WEBGPU_SUBGROUP_FALLBACK_SOURCE
+      "${GPU_WEBGPU_SUBGROUP_DIR}/subgroup_fallback.usl")
+  set(GPU_WEBGPU_SUBGROUP_FALLBACK_US
+      "${GPU_WEBGPU_SUBGROUP_DIR}/subgroup_fallback.us")
   set(GPU_WEBGPU_SUBGROUP_MAIN
       "${GPU_WEBGPU_SUBGROUP_DIR}/subgroup.c")
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
@@ -1123,6 +1214,12 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     "#define GPU_COMPUTE_DISPATCH_X 1u\n"
     "#define GPU_COMPUTE_VERTEX_CAPACITY 32u\n"
     "#define GPU_COMPUTE_REQUIRED_FEATURE GPU_FEATURE_SUBGROUPS\n"
+    "#define GPU_COMPUTE_FALLBACK_ARTIFACT_PATH "
+    "\"/subgroup_fallback.us\"\n"
+    "#define GPU_COMPUTE_FALLBACK_ENTRY_POINT "
+    "\"fill_subgroup_vertices_emulated\"\n"
+    "#define GPU_COMPUTE_FALLBACK_READY_STATUS "
+    "\"GPU: WebGPU subgroup shuffle emulated with workgroup memory\"\n"
     "#define GPU_COMPUTE_UNSUPPORTED_STATUS "
     "\"GPU: WebGPU subgroups unsupported by this adapter\"\n"
     "#define GPU_COMPUTE_READY_STATUS "
@@ -1143,18 +1240,30 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     @ONLY
   )
   add_custom_command(
-    OUTPUT "${GPU_WEBGPU_SUBGROUP_US}"
-    BYPRODUCTS "${GPU_WEBGPU_SUBGROUP_SOURCE}.wgsl"
+    OUTPUT
+      "${GPU_WEBGPU_SUBGROUP_US}"
+      "${GPU_WEBGPU_SUBGROUP_FALLBACK_US}"
+    BYPRODUCTS
+      "${GPU_WEBGPU_SUBGROUP_SOURCE}.wgsl"
+      "${GPU_WEBGPU_SUBGROUP_FALLBACK_SOURCE}.wgsl"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${GPU_WEBGPU_SUBGROUP_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/subgroup-webgpu-usl/subgroup.usl"
             "${GPU_WEBGPU_SUBGROUP_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/subgroup-webgpu-usl/subgroup_fallback.usl"
+            "${GPU_WEBGPU_SUBGROUP_FALLBACK_SOURCE}"
     COMMAND ${CMAKE_COMMAND} -E env
             USL_EMIT_BYTECODE=1
             USL_TARGET_CAPS=subgroup
             "${GPU_USL_HOST_FIXTURE}"
-            webgpu
-            "${GPU_WEBGPU_SUBGROUP_SOURCE}"
+              webgpu
+              "${GPU_WEBGPU_SUBGROUP_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+              USL_EMIT_BYTECODE=1
+              "${GPU_USL_HOST_FIXTURE}"
+              webgpu
+              "${GPU_WEBGPU_SUBGROUP_FALLBACK_SOURCE}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${GPU_WEBGPU_SUBGROUP_MAIN}"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/subgroup.c"
@@ -1167,11 +1276,14 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/subgroup-webgpu-usl/subgroup.usl"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/subgroup-webgpu-usl/subgroup_fallback.usl"
       "${GPU_WEBGPU_SUBGROUP_MAIN}"
     VERBATIM
   )
   add_custom_target(gpu-webgpu-subgroup-artifact
-    DEPENDS "${GPU_WEBGPU_SUBGROUP_US}"
+    DEPENDS
+      "${GPU_WEBGPU_SUBGROUP_US}"
+      "${GPU_WEBGPU_SUBGROUP_FALLBACK_US}"
   )
 
   add_executable(gpu-subgroup-webgpu-usl
@@ -1185,6 +1297,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   target_link_options(gpu-subgroup-webgpu-usl PRIVATE
     --use-port=emdawnwebgpu
     "--preload-file=${GPU_WEBGPU_SUBGROUP_US}@/subgroup.us"
+    "--preload-file=${GPU_WEBGPU_SUBGROUP_FALLBACK_US}@/subgroup_fallback.us"
     "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-subgroup-webgpu-usl-shell.html"
     -sALLOW_MEMORY_GROWTH=1
   )
@@ -1194,7 +1307,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
     LINK_DEPENDS
-      "${GPU_WEBGPU_GALLERY_DIR}/gpu-subgroup-webgpu-usl-shell.html;${GPU_WEBGPU_SUBGROUP_US}"
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-subgroup-webgpu-usl-shell.html;${GPU_WEBGPU_SUBGROUP_US};${GPU_WEBGPU_SUBGROUP_FALLBACK_US}"
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"
@@ -2346,6 +2459,35 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"
+  )
+
+  gpu_add_webgpu_gallery_sample(
+    compute-particles
+    particles
+    "Compute particles"
+    "Compute / storage + indirect"
+    "Compute updates a persistent particle field that render consumes through an indirect instanced draw."
+  )
+  gpu_add_webgpu_gallery_sample(
+    mip-lod
+    mip_lod
+    "Mip chain + LOD"
+    "Binding / explicit mip selection"
+    "Five instanced panels sample distinct mip levels from one texture and one reflected sampler."
+  )
+  gpu_add_webgpu_gallery_sample(
+    stencil-outline
+    stencil_outline
+    "Stencil outline"
+    "Render / stencil mask"
+    "A fill pass writes stencil, then a larger draw keeps only the visible outline."
+  )
+  gpu_add_webgpu_gallery_sample(
+    bloom
+    bloom
+    "Separable bloom"
+    "Compute / post-processing"
+    "Two compute passes blur a bright source before render composites the glow."
   )
 endif()
 

@@ -65,6 +65,9 @@ typedef struct ComputeConstants {
 } ComputeConstants;
 
 typedef struct WebGPUCompute {
+  const char         *artifactPath;
+  const char         *computeEntryPoint;
+  const char         *readyStatus;
   GPUInstance        *instance;
   GPUAdapter         *adapter;
   GPUDevice          *device;
@@ -90,6 +93,7 @@ typedef struct WebGPUCompute {
 #if GPU_COMPUTE_USE_TIMESTAMPS
   bool                timestampRecorded;
 #endif
+  bool                noticeStatus;
 } WebGPUCompute;
 
 static WebGPUCompute app;
@@ -127,7 +131,7 @@ create_resources(WebGPUCompute *state) {
 
   artifact     = NULL;
   artifactSize = 0u;
-  if (!read_file(GPU_COMPUTE_ARTIFACT_PATH, &artifact, &artifactSize)) {
+  if (!read_file(state->artifactPath, &artifact, &artifactSize)) {
     set_status("GPU: failed to read compute artifact", 1);
     return 0;
   }
@@ -194,7 +198,7 @@ create_resources(WebGPUCompute *state) {
   computeInfo.layout           = state->shaderLayout->pipelineLayout;
   computeInfo.cache            = state->pipelineCache;
   computeInfo.library          = state->library;
-  computeInfo.entryPoint       = GPU_COMPUTE_ENTRY_POINT;
+  computeInfo.entryPoint       = state->computeEntryPoint;
   GPUResetStats(state->device);
   if (GPUCreateComputePipeline(state->device,
                                &computeInfo,
@@ -539,8 +543,18 @@ webgpu_ready(GPUResult  result,
   state->adapter = adapter;
   state->device  = device;
   if (!GPUIsFeatureEnabled(device, GPU_COMPUTE_REQUIRED_FEATURE)) {
-    set_status(GPU_COMPUTE_UNSUPPORTED_STATUS, 1);
+#if defined(GPU_COMPUTE_FALLBACK_ARTIFACT_PATH) && \
+    defined(GPU_COMPUTE_FALLBACK_ENTRY_POINT)
+    state->artifactPath      = GPU_COMPUTE_FALLBACK_ARTIFACT_PATH;
+    state->computeEntryPoint = GPU_COMPUTE_FALLBACK_ENTRY_POINT;
+    state->noticeStatus      = true;
+#ifdef GPU_COMPUTE_FALLBACK_READY_STATUS
+    state->readyStatus       = GPU_COMPUTE_FALLBACK_READY_STATUS;
+#endif
+#else
+    set_status_notice(GPU_COMPUTE_UNSUPPORTED_STATUS);
     return;
+#endif
   }
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   state->surface = GPUCreateSurfaceFromNative(state->instance,
@@ -561,7 +575,11 @@ webgpu_ready(GPUResult  result,
     return;
   }
 
-  set_status(GPU_COMPUTE_READY_STATUS, 0);
+  if (state->noticeStatus) {
+    set_status_notice(state->readyStatus);
+  } else {
+    set_status(state->readyStatus, 0);
+  }
   emscripten_set_main_loop_arg(render_frame, state, 0, true);
 }
 
@@ -570,6 +588,9 @@ main(void) {
   GPUInstanceCreateInfo info = {0};
   GPUResult             result;
 
+  app.artifactPath      = GPU_COMPUTE_ARTIFACT_PATH;
+  app.computeEntryPoint = GPU_COMPUTE_ENTRY_POINT;
+  app.readyStatus       = GPU_COMPUTE_READY_STATUS;
   info.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   info.chain.structSize = sizeof(info);
   info.label            = "compute-webgpu-usl";

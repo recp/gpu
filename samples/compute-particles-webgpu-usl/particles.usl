@@ -1,0 +1,66 @@
+struct Particle {
+  position: float2
+  velocity: float2
+  color:    float4
+}
+
+struct Simulation {
+  deltaTime: float
+  time:      float
+  aspect:    float
+  count:     uint
+}
+
+struct ParticleOut {
+  position: float4 #position
+  color:    float4
+  local:    float2
+}
+
+fn particle_corner(vertexId: uint) -> float2 {
+  if (vertexId == 0) { return float2(-1.0, -1.0) }
+  if (vertexId == 1) { return float2( 1.0, -1.0) }
+  if (vertexId == 2) { return float2(-1.0,  1.0) }
+  if (vertexId == 3) { return float2(-1.0,  1.0) }
+  if (vertexId == 4) { return float2( 1.0, -1.0) }
+  return float2(1.0, 1.0)
+}
+
+kern(64, 1, 1) simulate_particles(
+  inout particles: [Particle] #buffer(0) #group(0),
+  simulation: Simulation #push_constant,
+  gid: uint3 #global_id
+) {
+  var position = particles[gid.x].position
+  var velocity = particles[gid.x].velocity
+  position += velocity * simulation.deltaTime
+
+  let flipX = position.x < -0.96 || position.x > 0.96
+  let flipY = position.y < -0.92 || position.y > 0.92
+  velocity.x = flipX ? -velocity.x : velocity.x
+  velocity.y = flipY ? -velocity.y : velocity.y
+  position    = clamp(position, float2(-0.96, -0.92), float2(0.96, 0.92))
+
+  particles[gid.x].position = position
+  particles[gid.x].velocity = velocity
+}
+
+vert particle_vs(particles: [Particle] #buffer(0) #group(1),
+                 simulation: Simulation #push_constant,
+                 vertexId: uint #vertex_id,
+                 instanceId: uint #instance_id) -> ParticleOut {
+  let corner   = particle_corner(vertexId)
+  let particle = particles[instanceId]
+  let size     = 0.012 + 0.009 * particle.color.a
+  let offset   = float2(corner.x * size / simulation.aspect, corner.y * size)
+  return ParticleOut {
+    float4(particle.position + offset, 0.0, 1.0),
+    float4(particle.color.rgb, 1.0),
+    corner
+  }
+}
+
+frag particle_fs(input: ParticleOut #stage_in) -> float4 {
+  let alpha = saturate(1.0 - length(input.local))
+  return float4(input.color.rgb * (0.45 + 0.55 * alpha), alpha)
+}

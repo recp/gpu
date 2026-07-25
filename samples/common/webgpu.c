@@ -12,6 +12,12 @@ EM_JS(void, set_status_js, (const char *message, int failed), {
   status.dataset.failed = failed ? "true" : "false";
 });
 
+EM_JS(void, set_status_notice_js, (const char *message), {
+  const status = document.getElementById("status");
+  status.textContent = UTF8ToString(message);
+  status.dataset.failed = "notice";
+});
+
 EM_JS(int, prepare_canvas_layout_js, (), {
   const canvas = document.getElementById("canvas");
   const root = document.documentElement;
@@ -44,6 +50,12 @@ set_status(const char *message, int failed) {
   } else {
     puts(message);
   }
+}
+
+void
+set_status_notice(const char *message) {
+  set_status_notice_js(message);
+  puts(message);
 }
 
 int
