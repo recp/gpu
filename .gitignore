@@ -75,3 +75,4 @@ tests/**/*.us
 tests/**/vulkan-queue
 tests/**/vulkan-shader
 build-sampler-feedback-tests/
+build-tests/
