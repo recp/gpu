@@ -155,7 +155,6 @@ upload_encode(GPURenderPassEncoder *pass,
     GPUTransientBufferSlice slice;
     GPUBufferBinding        vertexBinding;
     UploadUniforms          uniforms;
-    uint64_t                frameOffset;
     uint64_t                vertexOffset;
     uint32_t                dynamicOffset;
 
@@ -186,10 +185,10 @@ upload_encode(GPURenderPassEncoder *pass,
     GPUBindVertexBuffers(pass, 0u, 1u, &vertexBinding);
     GPUBindRenderGroup(pass, 0u, upload->group, 1u, &dynamicOffset);
     GPUDraw(pass, 3u, 1u, 0u, 0u);
-
-    frameOffset = slice.offset % upload->ringBytesPerFrame;
-    upload->expectedUsedBytes = frameOffset + slice.sizeBytes;
   }
+  upload->expectedUsedBytes =
+    ((uint64_t)drawCount - 1u) * UPLOAD_ALIGNMENT +
+    sizeof(UploadUniforms) + sizeof(uploadVertices);
   return true;
 }
 
