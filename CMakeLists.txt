@@ -2926,6 +2926,33 @@ if(GPU_BUILD_TESTS OR GPU_BUILD_BENCHMARKS)
 endif()
 
 if(GPU_BUILD_TESTS)
+  if(GPU_BUILD_WEBGPU AND NOT EMSCRIPTEN AND
+     _gpu_webgpu_provider STREQUAL "WGPU_NATIVE")
+    add_executable(gpu-webgpu-native-queue-test
+      tests/webgpu/queue.c
+    )
+    target_link_libraries(gpu-webgpu-native-queue-test PRIVATE gpu)
+    set_target_properties(gpu-webgpu-native-queue-test PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+    )
+    if(NOT MSVC)
+      target_compile_options(gpu-webgpu-native-queue-test PRIVATE
+        -Wall
+        -Wextra
+        -Werror
+      )
+    endif()
+    if(NOT WIN32)
+      target_compile_definitions(gpu-webgpu-native-queue-test PRIVATE
+        _POSIX_C_SOURCE=200809L
+      )
+    endif()
+    add_test(NAME webgpu-native-queue
+             COMMAND gpu-webgpu-native-queue-test)
+  endif()
+
   add_executable(gpu-public-layout-test
     tests/api/layout.c
   )

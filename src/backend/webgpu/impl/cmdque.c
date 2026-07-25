@@ -18,7 +18,6 @@ webgpu_recycleCommand(GPUCommandBuffer *cmdb) {
   }
   memset(&command->command, 0, sizeof(command->command));
   command->command._priv = command;
-  command->present       = NULL;
   atomic_store_explicit(&command->inUse, false, memory_order_release);
 }
 
@@ -134,6 +133,7 @@ webgpu_discard(GPUCommandBuffer *cmdb) {
     wgpuCommandEncoderRelease(command->encoder);
     command->encoder = NULL;
   }
+  command->present = NULL;
   gpuDiscardCommandBufferState(cmdb, webgpu_recycleCommand);
   return GPU_OK;
 }
@@ -159,6 +159,7 @@ webgpu_commit(GPUCommandBuffer *cmdb) {
   wgpuCommandEncoderRelease(command->encoder);
   command->encoder = NULL;
   if (!command->submitted) {
+    command->present = NULL;
     gpuFinishCommandBuffer(cmdb, webgpu_recycleCommand);
     return GPU_ERROR_BACKEND_FAILURE;
   }
