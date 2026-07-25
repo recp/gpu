@@ -1,18 +1,18 @@
 // Generated WGSL
 
 struct VSIn {
-    @location(0) position: vec4<f32>,
-    @location(1) color: vec4<f32>,
+    @location(0) position: vec4f,
+    @location(1) color: vec4f,
 }
 
 struct VSOut {
-    @builtin(position) position: vec4<f32>,
-    @location(0) color: vec4<f32>,
+    @builtin(position) position: vec4f,
+    @location(0) color: vec4f,
 }
 
 struct PreviewOut {
-    @builtin(position) position: vec4<f32>,
-    @location(0) uv: vec2<f32>,
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
 }
 
 @group(0) @binding(0) var usl_g0_b0: texture_depth_2d;
@@ -28,7 +28,7 @@ fn cube_vs(v: VSIn) -> VSOut {
 }
 
 @fragment
-fn cube_fs(i: VSOut) -> @location(0) vec4<f32> {
+fn cube_fs(i: VSOut) -> @location(0) vec4f {
     return i.color;
 }
 
@@ -36,21 +36,21 @@ fn cube_fs(i: VSOut) -> @location(0) vec4<f32> {
 fn depth_preview_vs(@builtin(vertex_index) vertexId: u32) -> PreviewOut {
     switch (vertexId) {
         case 0u: {
-            return PreviewOut(vec4<f32>(-1.0, -1.0, 0.0, 1.0), vec2<f32>(0.0, 1.0));
+            return PreviewOut(vec4f(-1.0, -1.0, 0.0, 1.0), vec2f(0.0, 1.0));
         }
         case 1u: {
-            return PreviewOut(vec4<f32>(3.0, -1.0, 0.0, 1.0), vec2<f32>(2.0, 1.0));
+            return PreviewOut(vec4f(3.0, -1.0, 0.0, 1.0), vec2f(2.0, 1.0));
         }
         default: {
-            return PreviewOut(vec4<f32>(-1.0, 3.0, 0.0, 1.0), vec2<f32>(0.0, -1.0));
+            return PreviewOut(vec4f(-1.0, 3.0, 0.0, 1.0), vec2f(0.0, -1.0));
         }
     }
 }
 
 @fragment
-fn depth_preview_fs(input: PreviewOut) -> @location(0) vec4<f32> {
+fn depth_preview_fs(input: PreviewOut) -> @location(0) vec4f {
     let usl_dims_r27 = textureDimensions(usl_g0_b0, 0u);
-    let r36: vec2<f32> = (vec2<f32>(usl_dims_r27) - vec2<f32>(1.0));
-    let r50: vec3<f32> = select(vec3<f32>(1.0, 0.05, 0.02), vec3<f32>(0.18, 1.0, 0.38), ((usl_g0_b1.values[2] != 0u) || (usl_g0_b1.values[3] != 0u)));
-    return vec4<f32>((vec3<f32>(textureLoad(usl_g0_b0, vec2<i32>((input.uv * r36)), 0)) * r50), 1.0);
+    let r36: vec2f = (vec2f(usl_dims_r27) - vec2f(1.0));
+    let r50: vec3f = select(vec3f(1.0, 0.05, 0.02), vec3f(0.18, 1.0, 0.38), ((usl_g0_b1.values[2] != 0u) || (usl_g0_b1.values[3] != 0u)));
+    return vec4f((vec3f(textureLoad(usl_g0_b0, vec2i((input.uv * r36)), 0)) * r50), 1.0);
 }

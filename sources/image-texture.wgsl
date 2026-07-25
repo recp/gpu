@@ -1,17 +1,17 @@
 // Generated WGSL
 
 struct ImageVertex {
-    @location(0) position: vec2<f32>,
-    @location(1) uv: vec2<f32>,
+    @location(0) position: vec2f,
+    @location(1) uv: vec2f,
 }
 
 struct ImageOut {
-    @builtin(position) position: vec4<f32>,
-    @location(0) uv: vec2<f32>,
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
 }
 
 struct ImageUniforms {
-    scale: vec2<f32>,
+    scale: vec2f,
 }
 
 struct usl_buffer_g0_b0 {
@@ -25,10 +25,10 @@ struct usl_buffer_g0_b0 {
 
 @vertex
 fn image_vs(v: ImageVertex) -> ImageOut {
-    return ImageOut(vec4<f32>((v.position * usl_g0_b0.value.scale), 0.0, 1.0), v.uv);
+    return ImageOut(vec4f((v.position * usl_g0_b0.value.scale), 0.0, 1.0), v.uv);
 }
 
 @fragment
-fn image_fs(input: ImageOut) -> @location(0) vec4<f32> {
+fn image_fs(input: ImageOut) -> @location(0) vec4f {
     return textureSample(usl_g0_b1, usl_g0_b2, input.uv);
 }

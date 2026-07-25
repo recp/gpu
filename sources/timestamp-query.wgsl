@@ -1,22 +1,22 @@
 // Generated WGSL
 
 struct GeneratedVertex {
-    position: vec4<f32>,
-    color: vec4<f32>,
+    position: vec4f,
+    color: vec4f,
 }
 
 struct ComputeConstants {
-    tint: vec4<f32>,
+    tint: vec4f,
 }
 
 struct VSIn {
-    @location(0) position: vec4<f32>,
-    @location(1) color: vec4<f32>,
+    @location(0) position: vec4f,
+    @location(1) color: vec4f,
 }
 
 struct VSOut {
-    @builtin(position) position: vec4<f32>,
-    @location(0) color: vec4<f32>,
+    @builtin(position) position: vec4f,
+    @location(0) color: vec4f,
 }
 
 struct usl_buffer_g0_b0 {
@@ -35,7 +35,7 @@ struct usl_buffer_g3_b0 {
 @group(3) @binding(0) var<uniform> usl_g3_b0: usl_buffer_g3_b0;
 
 @compute @workgroup_size(1, 1, 1)
-fn fill_timestamp_vertices(@builtin(global_invocation_id) gid: vec3<u32>) {
+fn fill_timestamp_vertices(@builtin(global_invocation_id) gid: vec3u) {
     let r22: bool = ((usl_g0_b1.values[2] != 4294967295u) || (usl_g0_b1.values[3] != 4294967295u));
     let r30: bool = ((usl_g0_b1.values[4] != 4294967295u) || (usl_g0_b1.values[5] != 4294967295u));
     let r46: bool = ((usl_g0_b1.values[8] != 4294967295u) || (usl_g0_b1.values[9] != 4294967295u));
@@ -43,9 +43,9 @@ fn fill_timestamp_vertices(@builtin(global_invocation_id) gid: vec3<u32>) {
     let r56: bool = ((r52 && ((usl_g0_b1.values[6] != 4294967295u) || (usl_g0_b1.values[7] != 4294967295u))) && r46);
     let r59: bool = (gid.x == 0u);
     let r62: bool = (gid.x == 1u);
-    let r80: vec4<f32> = select(vec4<f32>(0.74, 1.0, 0.1, 1.0), vec4<f32>(0.1, 0.72, 1.0, 1.0), r62);
-    usl_g0_b0.values[gid.x].position = vec4<f32>(select(select(0.0, 0.68, r62), -0.68, r59), select(-0.62, 0.7, (gid.x == 2u)), 0.0, 1.0);
-    let r97: vec4<f32> = (select(vec4<f32>(1.0, 0.06, 0.02, 1.0), select(r80, vec4<f32>(0.06, 1.0, 0.42, 1.0), r59), r56) * usl_g3_b0.value.tint);
+    let r80: vec4f = select(vec4f(0.74, 1.0, 0.1, 1.0), vec4f(0.1, 0.72, 1.0, 1.0), r62);
+    usl_g0_b0.values[gid.x].position = vec4f(select(select(0.0, 0.68, r62), -0.68, r59), select(-0.62, 0.7, (gid.x == 2u)), 0.0, 1.0);
+    let r97: vec4f = (select(vec4f(1.0, 0.06, 0.02, 1.0), select(r80, vec4f(0.06, 1.0, 0.42, 1.0), r59), r56) * usl_g3_b0.value.tint);
     usl_g0_b0.values[gid.x].color = r97;
 }
 
@@ -55,6 +55,6 @@ fn tri_vs(v: VSIn) -> VSOut {
 }
 
 @fragment
-fn tri_fs(i: VSOut) -> @location(0) vec4<f32> {
+fn tri_fs(i: VSOut) -> @location(0) vec4f {
     return i.color;
 }

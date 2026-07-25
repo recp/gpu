@@ -1,17 +1,17 @@
 // Generated WGSL
 
 struct VSIn {
-    @location(0) position: vec4<f32>,
-    @location(1) uv: vec2<f32>,
+    @location(0) position: vec4f,
+    @location(1) uv: vec2f,
 }
 
 struct VSOut {
-    @builtin(position) position: vec4<f32>,
-    @location(0) uv: vec2<f32>,
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
 }
 
 struct FragmentUniforms {
-    tint: vec4<f32>,
+    tint: vec4f,
 }
 
 @group(1) @binding(0) var usl_g1_b0: texture_2d<f32>;
@@ -29,6 +29,6 @@ fn quad_vs(v: VSIn) -> VSOut {
 }
 
 @fragment
-fn quad_fs(input: VSOut) -> @location(0) vec4<f32> {
+fn quad_fs(input: VSOut) -> @location(0) vec4f {
     return (textureSample(usl_g1_b0, usl_static_sampler_b0, input.uv) * usl_g1_b1.value.tint);
 }
