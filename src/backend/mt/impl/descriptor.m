@@ -671,6 +671,40 @@ mt_bindRenderDynamicBuffers(GPURenderPassEncoder *pass,
   }
 
   api = &pass->_api->rce;
+  if (priv->count == 1u) {
+    const GPUBindGroupLayoutEntry *entry;
+    const GPUBindGroupBindingPriv *binding;
+    uint64_t                       offset;
+    uint32_t                       index;
+
+    binding = priv->bindings;
+    if (binding->kind != GPUBindKindBuffer || !binding->buffer ||
+        binding->layoutEntryIndex >= layout->count ||
+        binding->dynamicOffsetIndex >= dynamicOffsetCount) {
+      return MT_BIND_DYNAMIC_FAILED;
+    }
+    offset = binding->offset +
+             dynamicOffsets[binding->dynamicOffsetIndex];
+    if (offset < binding->offset ||
+        !gpuBufferRangeValid(binding->buffer, offset, binding->size)) {
+      return MT_BIND_DYNAMIC_FAILED;
+    }
+
+    entry = &layout->entries[binding->layoutEntryIndex];
+    index = pipeline->backendBindings[groupIndex][binding->layoutEntryIndex] +
+            binding->arrayIndex;
+    if (entry->visibility == GPU_SHADER_STAGE_FRAGMENT_BIT &&
+        api->fragmentBuffer) {
+      api->fragmentBuffer(pass, binding->buffer, offset, index);
+      return MT_BIND_DYNAMIC_DONE;
+    }
+    if (entry->visibility == GPU_SHADER_STAGE_VERTEX_BIT &&
+        api->vertexBuffer) {
+      api->vertexBuffer(pass, binding->buffer, offset, index);
+      return MT_BIND_DYNAMIC_DONE;
+    }
+  }
+
   for (uint32_t i = 0u; i < priv->count; i++) {
     const GPUBindGroupLayoutEntry *entry;
     const GPUBindGroupBindingPriv *binding;
