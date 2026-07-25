@@ -241,7 +241,6 @@ endif()
 if(GPU_BUILD_METAL)
   target_sources(gpu PRIVATE
     src/backend/mt/init.c
-    src/backend/mt/impl/impl.c
     src/backend/mt/impl/instance.c
     src/backend/mt/impl/surface.c
     src/backend/mt/impl/buffer.m
@@ -344,7 +343,6 @@ if(GPU_BUILD_VULKAN)
     src/backend/vk/impl/descriptor.c
     src/backend/vk/impl/device.c
     src/backend/vk/impl/execution_graph.c
-    src/backend/vk/impl/display.c
     src/backend/vk/impl/format.c
     src/backend/vk/impl/frame.c
     src/backend/vk/impl/instance.c

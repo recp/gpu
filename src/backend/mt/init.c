@@ -16,7 +16,6 @@
 
 #include "common.h"
 #include "impl.h"
-#include "impl/impl.c"
 
 GPUApi mt = {
   .initialized = false,
