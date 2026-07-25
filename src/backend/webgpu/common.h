@@ -72,6 +72,9 @@ enum {
 
 typedef struct GPUInstanceWebGPU {
   WGPUInstance instance;
+#if GPU_WEBGPU_PROVIDER_DAWN && !defined(__EMSCRIPTEN__)
+  bool         timedWaitAny;
+#endif
 } GPUInstanceWebGPU;
 
 typedef struct GPUAdapterWebGPU {

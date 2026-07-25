@@ -12,6 +12,11 @@ static GPUInstance *
 webgpu_createInstance(GPUApi                     *api,
                       const GPUInstanceCreateInfo *info) {
   WGPUInstanceDescriptor descriptor = WGPU_INSTANCE_DESCRIPTOR_INIT;
+#if GPU_WEBGPU_PROVIDER_DAWN && !defined(__EMSCRIPTEN__)
+  WGPUInstanceFeatureName requiredFeature =
+    WGPUInstanceFeatureName_TimedWaitAny;
+  WGPUInstanceLimits      requiredLimits = WGPU_INSTANCE_LIMITS_INIT;
+#endif
   GPUInstanceWebGPU     *native;
   GPUInstance           *instance;
 
@@ -26,7 +31,19 @@ webgpu_createInstance(GPUApi                     *api,
     return NULL;
   }
 
+#if GPU_WEBGPU_PROVIDER_DAWN && !defined(__EMSCRIPTEN__)
+  native->timedWaitAny =
+    wgpuHasInstanceFeature(WGPUInstanceFeatureName_TimedWaitAny);
+  if (native->timedWaitAny) {
+    requiredLimits.timedWaitAnyMaxCount = 1u;
+    descriptor.requiredFeatureCount    = 1u;
+    descriptor.requiredFeatures        = &requiredFeature;
+    descriptor.requiredLimits          = &requiredLimits;
+  }
   native->instance = wgpuCreateInstance(&descriptor);
+#else
+  native->instance = wgpuCreateInstance(&descriptor);
+#endif
   if (!native->instance) {
     free(native);
     free(instance);
