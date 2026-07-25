@@ -2595,8 +2595,10 @@ gpu_pipelineLayoutMatchesShaderResources(GPUPipelineLayout *pipelineLayout,
     int                               found;
 
     groupIndex = sampler->wgslGroup;
-    if (groupIndex >= GPU_ENCODER_MAX_BIND_GROUPS ||
-        sampler->wgslBinding == UINT32_MAX) {
+    if (groupIndex == UINT32_MAX || sampler->wgslBinding == UINT32_MAX) {
+      continue;
+    }
+    if (groupIndex >= GPU_ENCODER_MAX_BIND_GROUPS) {
       return 0;
     }
     logicalBinding = gpu_reflectionSyntheticBindingBase(fullReflection,

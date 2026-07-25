@@ -486,6 +486,10 @@ gpuShaderWGSLStaticGroups(const GPUShaderLibrary *library,
     if ((samplers[i].entryMask & entryMask) == 0u) {
       continue;
     }
+    if (samplers[i].wgslGroup == UINT32_MAX ||
+        samplers[i].wgslBinding == UINT32_MAX) {
+      continue;
+    }
     if (samplers[i].wgslGroup >= GPU_ENCODER_MAX_BIND_GROUPS) {
       return UINT32_MAX;
     }

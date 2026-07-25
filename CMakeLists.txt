@@ -681,7 +681,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
-  set(GPU_WEBGPU_GALLERY_VERSION "32")
+  set(GPU_WEBGPU_GALLERY_VERSION "34")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
   file(GLOB GPU_WEBGPU_GALLERY_PREVIEWS CONFIGURE_DEPENDS
@@ -2497,6 +2497,13 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     "The browser decodes a real PNG; GPU uploads and samples the sRGB pixels."
     ASSETS
       texture-coordinate.png
+  )
+  gpu_add_webgpu_gallery_sample(
+    integer-cube
+    integer_cube
+    "Integer cubemap"
+    "Binding / typed cubemap fallback"
+    "Nearest, explicit LOD, gradient, and bias sampling share one reflected unsigned cubemap."
   )
   target_link_options(gpu-image-texture-webgpu-usl PRIVATE
     --use-preload-plugins
