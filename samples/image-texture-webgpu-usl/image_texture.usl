@@ -1,0 +1,24 @@
+vertex ImageVertex {
+  position: float2
+  uv:       float2
+}
+
+struct ImageOut {
+  position: float4 #position
+  uv:       float2
+}
+
+struct ImageUniforms {
+  scale: float2
+}
+
+vert image_vs(v:        ImageVertex #stage_in,
+              uniforms: ImageUniforms #buffer(0)) -> ImageOut {
+  return ImageOut { float4(v.position * uniforms.scale, 0.0, 1.0), v.uv }
+}
+
+frag image_fs(input:        ImageOut #stage_in,
+              colorTexture: texture2d<float> #texture(1),
+              colorSampler: sampler #sampler(2)) -> float4 {
+  return colorTexture.sample(colorSampler, input.uv)
+}

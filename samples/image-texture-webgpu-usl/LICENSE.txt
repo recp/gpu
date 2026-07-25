@@ -1,0 +1,5 @@
+TextureCoordinateTemplate.png is from KhronosGroup/glTF-Sample-Assets,
+Models/TextureCoordinateTest.
+
+The image is licensed under CC0 1.0 Universal.
+SPDX-License-Identifier: CC0-1.0

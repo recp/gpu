@@ -681,7 +681,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
-  set(GPU_WEBGPU_GALLERY_VERSION "30")
+  set(GPU_WEBGPU_GALLERY_VERSION "31")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
   file(GLOB GPU_WEBGPU_GALLERY_PREVIEWS CONFIGURE_DEPENDS
@@ -2488,6 +2488,22 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     "Separable bloom"
     "Compute / post-processing"
     "Two compute passes blur a bright source before render composites the glow."
+  )
+  gpu_add_webgpu_gallery_sample(
+    image-texture
+    image_texture
+    "Image texture"
+    "Binding / decoded image"
+    "The browser decodes a real PNG; GPU uploads and samples the sRGB pixels."
+    ASSETS
+      texture-coordinate.png
+  )
+  target_link_options(gpu-image-texture-webgpu-usl PRIVATE
+    --use-preload-plugins
+  )
+  set_property(TARGET gpu-image-texture-webgpu-usl APPEND PROPERTY
+    LINK_DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/image-texture-webgpu-usl/texture-coordinate.png"
   )
 endif()
 
