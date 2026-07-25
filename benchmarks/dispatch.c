@@ -154,6 +154,7 @@ main(int argc, char *argv[]) {
   pass._api              = &api;
   pass._device           = &device;
   pass._cmdb             = &cmdb;
+  pass._drawPrimitives   = bench_draw;
   pass._primitiveType    = GPUPrimitiveTypeTriangle;
   pass._hasPipeline      = true;
   benchApi               = &api;
