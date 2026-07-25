@@ -1152,7 +1152,7 @@ gpuStaticSamplerToSamplerDesc(const GPUStaticSamplerDesc *source,
 
   if (!source || !outDesc || !gpuStaticSamplerDescIsValid(source) ||
       source->coordSpace != USL_RUNTIME_COORD_NORMALIZED ||
-      source->maxAnisotropy > 1u) {
+      source->maxAnisotropy > 16u) {
     return 0;
   }
   switch (source->addressMode) {
@@ -1183,6 +1183,7 @@ gpuStaticSamplerToSamplerDesc(const GPUStaticSamplerDesc *source,
   outDesc->addressV      = addressMode;
   outDesc->addressW      = addressMode;
   outDesc->compare       = (GPUCompareOp)source->compareFunc;
+  outDesc->maxAnisotropy = (uint8_t)source->maxAnisotropy;
   outDesc->compareEnable = source->hasCompare != 0u;
   return 1;
 }

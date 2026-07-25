@@ -66,6 +66,7 @@ GPU_ASSERT_64BIT_SIZE(GPUSparseTextureMapping, 64u);
 GPU_ASSERT_64BIT_SIZE(GPUQueueSparseSubmitInfo, 72u);
 GPU_ASSERT_64BIT_SIZE(GPUAliasingBarrier, 32u);
 GPU_ASSERT_64BIT_SIZE(GPUBarrierBatch, 48u);
+GPU_ASSERT_64BIT_SIZE(GPUSamplerDesc, 32u);
 GPU_ASSERT_64BIT_SIZE(GPUQueueSubmitExInfo, 64u);
 GPU_ASSERT_64BIT_SIZE(GPUDepthStencilState, 48u);
 GPU_ASSERT_64BIT_SIZE(GPUTransientAllocatorConfig, 40u);

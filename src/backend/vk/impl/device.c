@@ -2132,6 +2132,10 @@ vk_getLimits(const GPUAdapter * __restrict adapter,
   outLimits->maxComputeWorkgroupSizeY = native->maxComputeWorkGroupSize[1];
   outLimits->maxComputeWorkgroupSizeZ = native->maxComputeWorkGroupSize[2];
   outLimits->maxPushConstantSizeBytes  = native->maxPushConstantsSize;
+  outLimits->maxSamplerAnisotropy      =
+    adapterVk->features.samplerAnisotropy
+      ? vk_limitU32(16u, (uint32_t)native->maxSamplerAnisotropy)
+      : 1u;
   if (vk_hasSubgroupCapability(adapterVk)) {
     outLimits->minSubgroupSize = adapterVk->minSubgroupSize;
     outLimits->maxSubgroupSize = adapterVk->maxSubgroupSize;
@@ -2695,6 +2699,7 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   }
   coreFeatures.independentBlend   = adapterVk->features.independentBlend;
   coreFeatures.imageCubeArray     = adapterVk->features.imageCubeArray;
+  coreFeatures.samplerAnisotropy  = adapterVk->features.samplerAnisotropy;
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u ||
       vk_featureEnabled(enabledFeatureMask,
                         GPU_FEATURE_SHADER_SUBGROUP_CLOCK) ||

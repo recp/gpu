@@ -75,6 +75,10 @@ vk_fillSamplerInfo(const GPUSamplerDesc *desc, VkSamplerCreateInfo *outInfo) {
   outInfo->addressModeW = vk__addressMode(desc->addressW);
   outInfo->compareEnable = desc->compareEnable ? VK_TRUE : VK_FALSE;
   outInfo->compareOp     = vk__gpuCompareOp(desc->compare);
+  outInfo->anisotropyEnable = desc->maxAnisotropy > 1u ? VK_TRUE : VK_FALSE;
+  outInfo->maxAnisotropy    = desc->maxAnisotropy > 1u
+                                ? (float)desc->maxAnisotropy
+                                : 1.0f;
   outInfo->maxLod       = VK_LOD_CLAMP_NONE;
 }
 
@@ -147,6 +151,11 @@ vk_fillStaticSamplerInfo(const GPUStaticSamplerDesc *desc,
   outInfo->addressModeW            = addressMode;
   outInfo->compareEnable           = desc->hasCompare ? VK_TRUE : VK_FALSE;
   outInfo->compareOp               = vk__compareOp(desc->compareFunc);
+  outInfo->anisotropyEnable        =
+    desc->maxAnisotropy > 1u ? VK_TRUE : VK_FALSE;
+  outInfo->maxAnisotropy           = desc->maxAnisotropy > 1u
+                                       ? (float)desc->maxAnisotropy
+                                       : 1.0f;
   outInfo->unnormalizedCoordinates =
     desc->coordSpace == USL_RUNTIME_COORD_PIXEL ? VK_TRUE : VK_FALSE;
   outInfo->borderColor             =

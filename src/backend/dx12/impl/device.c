@@ -1170,6 +1170,7 @@ dx12_getLimits(const GPUAdapter * __restrict adapter,
   outLimits->maxComputeWorkgroupSizeY = D3D12_CS_THREAD_GROUP_MAX_Y;
   outLimits->maxComputeWorkgroupSizeZ = D3D12_CS_THREAD_GROUP_MAX_Z;
   outLimits->maxPushConstantSizeBytes  = 256u;
+  outLimits->maxSamplerAnisotropy      = 16u;
   outLimits->minSubgroupSize           = adapterDX12->minSubgroupSize;
   outLimits->maxSubgroupSize           = adapterDX12->maxSubgroupSize;
 }

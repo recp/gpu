@@ -214,7 +214,8 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
     if (layoutEntries[i].binding == 1u &&
         layoutEntries[i].bindingType == GPU_BINDING_SAMPLER &&
         layoutEntries[i].visibility == GPU_SHADER_STAGE_FRAGMENT_BIT &&
-        layoutEntries[i].immutableSampler) {
+        layoutEntries[i].immutableSampler &&
+        layoutEntries[i].immutableSamplerDesc.maxAnisotropy == 8u) {
       foundImmutableSampler = true;
     }
   }

@@ -219,14 +219,16 @@ dx12_fillStaticSamplerDesc(const GPUSamplerDesc       *desc,
                                ? USL_RUNTIME_FILTER_LINEAR
                                : USL_RUNTIME_FILTER_NEAREST;
   staticDesc.hasCompare    = desc->compareEnable;
-  staticDesc.maxAnisotropy = 1u;
+  staticDesc.maxAnisotropy = desc->maxAnisotropy;
 
   memset(outDesc, 0, sizeof(*outDesc));
   outDesc->Filter           = dx12_staticSamplerFilter(&staticDesc);
   outDesc->AddressU         = dx12__addressMode(desc->addressU);
   outDesc->AddressV         = dx12__addressMode(desc->addressV);
   outDesc->AddressW         = dx12__addressMode(desc->addressW);
-  outDesc->MaxAnisotropy    = 1u;
+  outDesc->MaxAnisotropy    = desc->maxAnisotropy > 1u
+                                ? desc->maxAnisotropy
+                                : 1u;
   outDesc->ComparisonFunc   = desc->compareEnable
                                 ? dx12__compareFunction(desc->compare)
                                 : D3D12_COMPARISON_FUNC_NEVER;
@@ -265,13 +267,15 @@ dx12_createSampler(GPUApi                    * __restrict api,
                                ? USL_RUNTIME_FILTER_LINEAR
                                : USL_RUNTIME_FILTER_NEAREST;
   staticDesc.hasCompare    = info->desc.compareEnable;
-  staticDesc.maxAnisotropy = 1u;
+  staticDesc.maxAnisotropy = info->desc.maxAnisotropy;
 
   desc.Filter         = dx12_staticSamplerFilter(&staticDesc);
   desc.AddressU       = dx12__addressMode(info->desc.addressU);
   desc.AddressV       = dx12__addressMode(info->desc.addressV);
   desc.AddressW       = dx12__addressMode(info->desc.addressW);
-  desc.MaxAnisotropy  = 1u;
+  desc.MaxAnisotropy  = info->desc.maxAnisotropy > 1u
+                          ? info->desc.maxAnisotropy
+                          : 1u;
   desc.ComparisonFunc = info->desc.compareEnable
                           ? dx12__compareFunction(info->desc.compare)
                           : D3D12_COMPARISON_FUNC_NEVER;

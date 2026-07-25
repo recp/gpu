@@ -66,14 +66,17 @@ check_sampler_device_dispatch(GPUDevice *activeDevice) {
   info.chain.structSize   = sizeof(info);
   info.desc               = valid_sampler_desc();
   info.desc.compare       = GPU_COMPARE_LESS_EQUAL;
+  info.desc.maxAnisotropy = 8u;
   info.desc.compareEnable = true;
   sampler = NULL;
   if (GPUCreateSampler(&device, &info, false, &sampler) != GPU_OK ||
       sampler != &gScopedSampler || sampler->device != &device ||
       !sampler->desc.compareEnable ||
       sampler->desc.compare != GPU_COMPARE_LESS_EQUAL ||
+      sampler->desc.maxAnisotropy != 8u ||
       !gScopedSamplerDesc.compareEnable ||
-      gScopedSamplerDesc.compare != GPU_COMPARE_LESS_EQUAL) {
+      gScopedSamplerDesc.compare != GPU_COMPARE_LESS_EQUAL ||
+      gScopedSamplerDesc.maxAnisotropy != 8u) {
     fprintf(stderr, "sampler device dispatch failed\n");
     return 0;
   }
@@ -160,13 +163,36 @@ check_sampler_validation(GPUDevice *device) {
     return 0;
   }
 
+  info.desc = valid_sampler_desc();
+  info.desc.maxAnisotropy = 17u;
+  sampler = (GPUSampler *)(uintptr_t)1u;
+  if (GPUCreateSampler(device, &info, false, &sampler) != GPU_ERROR_INVALID_ARGUMENT ||
+      sampler != NULL) {
+    fprintf(stderr, "sampler create accepted invalid anisotropy\n");
+    GPUDestroySampler(sampler);
+    return 0;
+  }
+
+  info.desc = valid_sampler_desc();
+  info.desc.maxAnisotropy = 8u;
+  info.desc.minFilter = GPU_FILTER_NEAREST;
+  sampler = (GPUSampler *)(uintptr_t)1u;
+  if (GPUCreateSampler(device, &info, false, &sampler) != GPU_ERROR_INVALID_ARGUMENT ||
+      sampler != NULL) {
+    fprintf(stderr, "sampler create accepted anisotropy without linear filtering\n");
+    GPUDestroySampler(sampler);
+    return 0;
+  }
+
   info.desc               = valid_sampler_desc();
   info.desc.compare       = GPU_COMPARE_LESS_EQUAL;
+  info.desc.maxAnisotropy = 8u;
   info.desc.compareEnable = true;
   sampler = NULL;
   if (GPUCreateSampler(device, &info, false, &sampler) != GPU_OK || !sampler ||
       !sampler->desc.compareEnable ||
-      sampler->desc.compare != GPU_COMPARE_LESS_EQUAL) {
+      sampler->desc.compare != GPU_COMPARE_LESS_EQUAL ||
+      sampler->desc.maxAnisotropy != 8u) {
     fprintf(stderr, "sampler create rejected valid comparison sampler\n");
     GPUDestroySampler(sampler);
     return 0;

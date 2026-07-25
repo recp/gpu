@@ -313,6 +313,7 @@ gpu_fillDefaultLimits(GPULimits *limits) {
   limits->maxComputeWorkgroupSizeY          = 1024u;
   limits->maxComputeWorkgroupSizeZ          = 64u;
   limits->maxPushConstantSizeBytes           = 256u;
+  limits->maxSamplerAnisotropy               = 1u;
 }
 
 static void

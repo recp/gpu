@@ -575,6 +575,7 @@ webgpu_getLimits(const GPUAdapter *adapter, GPULimits *limits) {
     limits->maxComputeWorkgroupSizeY = webLimits.maxComputeWorkgroupSizeY;
     limits->maxComputeWorkgroupSizeZ = webLimits.maxComputeWorkgroupSizeZ;
     limits->maxPushConstantSizeBytes = 256u;
+    limits->maxSamplerAnisotropy     = 16u;
   }
   if (wgpuAdapterGetInfo(native->adapter, &info) == WGPUStatus_Success) {
     limits->minSubgroupSize = info.subgroupMinSize;

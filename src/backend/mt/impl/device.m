@@ -581,6 +581,7 @@ mt_getLimits(const GPUAdapter * __restrict adapter,
   outLimits->maxComputeWorkgroupSizeY = (uint32_t)threads.height;
   outLimits->maxComputeWorkgroupSizeZ = (uint32_t)threads.depth;
   outLimits->maxPushConstantSizeBytes  = 4096u;
+  outLimits->maxSamplerAnisotropy      = 16u;
   outLimits->minSubgroupSize           = adapterMT->subgroupSize;
   outLimits->maxSubgroupSize           = adapterMT->subgroupSize;
 }

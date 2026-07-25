@@ -51,6 +51,7 @@ typedef struct GPUSamplerDesc {
   GPUAddressMode addressV;
   GPUAddressMode addressW;
   GPUCompareOp   compare;
+  uint8_t        maxAnisotropy;
   bool           compareEnable;
 } GPUSamplerDesc;
 

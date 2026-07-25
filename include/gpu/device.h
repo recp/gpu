@@ -150,6 +150,7 @@ typedef struct GPULimits {
   uint32_t maxComputeWorkgroupSizeY;
   uint32_t maxComputeWorkgroupSizeZ;
   uint32_t maxPushConstantSizeBytes;
+  uint32_t maxSamplerAnisotropy;
   uint32_t minSubgroupSize;
   uint32_t maxSubgroupSize;
 } GPULimits;

@@ -39,7 +39,12 @@ gpu_samplerDescIsValid(const GPUSamplerDesc *desc) {
          (desc->addressW == GPU_ADDRESS_MODE_REPEAT ||
           desc->addressW == GPU_ADDRESS_MODE_MIRRORED_REPEAT ||
           desc->addressW == GPU_ADDRESS_MODE_CLAMP_TO_EDGE) &&
-         (uint32_t)desc->compare <= GPU_COMPARE_ALWAYS;
+         (uint32_t)desc->compare <= GPU_COMPARE_ALWAYS &&
+         desc->maxAnisotropy <= 16u &&
+         (desc->maxAnisotropy <= 1u ||
+          (desc->minFilter == GPU_FILTER_LINEAR &&
+           desc->magFilter == GPU_FILTER_LINEAR &&
+           desc->mipFilter == GPU_MIP_FILTER_LINEAR));
 }
 
 GPU_EXPORT

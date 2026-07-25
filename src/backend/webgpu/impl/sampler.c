@@ -72,6 +72,9 @@ gpu_webgpuCreateSampler(GPUDevice           *device,
   descriptor.minFilter    = webgpu_filter(desc->minFilter);
   descriptor.magFilter    = webgpu_filter(desc->magFilter);
   descriptor.mipmapFilter = webgpu_mipFilter(desc->mipFilter);
+  descriptor.maxAnisotropy = desc->maxAnisotropy > 1u
+                               ? desc->maxAnisotropy
+                               : 1u;
   descriptor.compare      = desc->compareEnable
                               ? webgpu_compareFunction(desc->compare)
                               : WGPUCompareFunction_Undefined;

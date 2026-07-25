@@ -281,12 +281,13 @@ create_resources(WebGPUImageTexture *state) {
   samplerInfo.chain.sType      = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
   samplerInfo.chain.structSize = sizeof(samplerInfo);
   samplerInfo.label            = "image-texture-linear-sampler";
-  samplerInfo.desc.minFilter   = GPU_FILTER_LINEAR;
-  samplerInfo.desc.magFilter   = GPU_FILTER_LINEAR;
-  samplerInfo.desc.mipFilter   = GPU_MIP_FILTER_LINEAR;
-  samplerInfo.desc.addressU    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  samplerInfo.desc.addressV    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  samplerInfo.desc.addressW    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
+  samplerInfo.desc.minFilter     = GPU_FILTER_LINEAR;
+  samplerInfo.desc.magFilter     = GPU_FILTER_LINEAR;
+  samplerInfo.desc.mipFilter     = GPU_MIP_FILTER_LINEAR;
+  samplerInfo.desc.addressU      = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
+  samplerInfo.desc.addressV      = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
+  samplerInfo.desc.addressW      = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
+  samplerInfo.desc.maxAnisotropy = 8u;
   if (GPUCreateSampler(state->device,
                        &samplerInfo,
                        false,

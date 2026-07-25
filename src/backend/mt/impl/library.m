@@ -213,6 +213,9 @@ mt_createSampler(GPUApi * __restrict api,
   desc.sAddressMode = mt_samplerAddressMode(info->desc.addressU);
   desc.tAddressMode = mt_samplerAddressMode(info->desc.addressV);
   desc.rAddressMode = mt_samplerAddressMode(info->desc.addressW);
+  desc.maxAnisotropy = info->desc.maxAnisotropy > 1u
+                         ? info->desc.maxAnisotropy
+                         : 1u;
   desc.compareFunction = info->desc.compareEnable
                            ? mt_samplerCompareFunction(info->desc.compare)
                            : MTLCompareFunctionNever;
