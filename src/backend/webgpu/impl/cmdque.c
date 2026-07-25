@@ -25,14 +25,17 @@ webgpu_commandDone(WGPUQueueWorkDoneStatus status,
                    void                   *userData,
                    void                   *unused) {
   GPUCommandWebGPU *command;
+  WGPUCommandBuffer submitted;
 
   GPU__UNUSED(status);
   GPU__UNUSED(message);
   GPU__UNUSED(unused);
-  command = userData;
-  if (command->submitted) {
-    wgpuCommandBufferRelease(command->submitted);
-    command->submitted = NULL;
+  command   = userData;
+  submitted = atomic_exchange_explicit(&command->submitted,
+                                       NULL,
+                                       memory_order_acq_rel);
+  if (submitted) {
+    wgpuCommandBufferRelease(submitted);
   }
   gpuFinishCommandBuffer(&command->command, webgpu_recycleCommand);
 }
@@ -143,6 +146,7 @@ webgpu_commit(GPUCommandBuffer *cmdb) {
     WGPU_QUEUE_WORK_DONE_CALLBACK_INFO_INIT;
   GPUCommandWebGPU *command;
   GPUDeviceWebGPU  *device;
+  WGPUCommandBuffer submitted;
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
   WGPUSubmissionIndex submission;
 #endif
@@ -153,21 +157,24 @@ webgpu_commit(GPUCommandBuffer *cmdb) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  command->submitted = wgpuCommandEncoderFinish(command->encoder, &finishInfo);
+  submitted = wgpuCommandEncoderFinish(command->encoder, &finishInfo);
   wgpuCommandEncoderRelease(command->encoder);
   command->encoder = NULL;
-  if (!command->submitted) {
+  if (!submitted) {
     command->present = NULL;
     gpuFinishCommandBuffer(cmdb, webgpu_recycleCommand);
     return GPU_ERROR_BACKEND_FAILURE;
   }
+  atomic_store_explicit(&command->submitted,
+                        submitted,
+                        memory_order_release);
 
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
   submission = wgpuQueueSubmitForIndex(device->queue,
                                        1u,
-                                       &command->submitted);
+                                       &submitted);
 #else
-  wgpuQueueSubmit(device->queue, 1u, &command->submitted);
+  wgpuQueueSubmit(device->queue, 1u, &submitted);
 #endif
   if (command->present) {
 #if !defined(__EMSCRIPTEN__)

@@ -95,7 +95,6 @@ typedef struct GPUSwapchainWebGPU GPUSwapchainWebGPU;
 
 typedef struct GPUCommandWebGPU {
   WGPUCommandEncoder                   encoder;
-  WGPUCommandBuffer                    submitted;
   WGPURenderPassEncoder                renderEncoder;
   WGPUComputePassEncoder               computeEncoder;
   WGPUBuffer                           boundIndexBuffer;
@@ -115,6 +114,7 @@ typedef struct GPUCommandWebGPU {
   uint32_t                             renderWidth;
   uint32_t                             renderHeight;
   uint32_t                             pushConstantCursor;
+  _Atomic(WGPUCommandBuffer)           submitted;
   atomic_bool                          inUse;
   bool                                 copyDebugGroup;
   WGPURenderPassColorAttachment        colorAttachments[
