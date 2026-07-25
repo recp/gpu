@@ -813,6 +813,29 @@ mt_bindRenderGroupStatic(GPURenderPassEncoder *pass,
     return false;
   }
 
+  if (priv->count == 1u) {
+    const GPUBindGroupLayoutEntry *entry;
+    const GPUBindGroupBindingPriv *binding;
+    uint32_t                       index;
+
+    binding = priv->bindings;
+    if (binding->kind == GPUBindKindBuffer && binding->buffer &&
+        binding->layoutEntryIndex < layout->count) {
+      entry = &layout->entries[binding->layoutEntryIndex];
+      index = pipeline->backendBindings[groupIndex]
+                                       [binding->layoutEntryIndex] +
+              binding->arrayIndex;
+      if (entry->visibility == GPU_SHADER_STAGE_FRAGMENT_BIT) {
+        mt_fragmentBuffer(pass, binding->buffer, binding->offset, index);
+        return true;
+      }
+      if (entry->visibility == GPU_SHADER_STAGE_VERTEX_BIT) {
+        mt_vertexBuffer(pass, binding->buffer, binding->offset, index);
+        return true;
+      }
+    }
+  }
+
   api = &pass->_api->rce;
   for (uint32_t i = 0u; i < priv->count; i++) {
     const GPUBindGroupLayoutEntry *entry;
