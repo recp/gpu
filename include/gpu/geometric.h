@@ -27,38 +27,10 @@ typedef struct GPUExtent2D {
   uint32_t height;
 } GPUExtent2D;
 
-typedef struct GPUExtent3D {
-  uint32_t width;
-  uint32_t height;
-  uint32_t depth;
-} GPUExtent3D;
-
 typedef struct GPUCoordinate2D {
   float x;
   float y;
 } GPUCoordinate2D;
-
-typedef struct GPUOffset2D {
-  int32_t x;
-  int32_t y;
-} GPUOffset2D;
-
-typedef struct GPUOffset3D {
-  int32_t x;
-  int32_t y;
-  int32_t z;
-} GPUOffset3D;
-
-typedef struct GPURect2D {
-  GPUOffset2D offset;
-  GPUExtent2D extent;
-} GPURect2D;
-
-#ifdef __APPLE__
-#  define GPUExtent2DFromCGSize(size)    (GPUExtent2D){size.width, size.height}
-#  define GPUExtent2DFromCGRect(rect)    (GPUExtent2D){rect.size.width, rect.size.height}
-#  define GPUExtent2DFromCocoaView(view) (GPUExtent2D){view.frame.size.width, view.frame.size.height}
-#endif
 
 #ifdef __cplusplus
 }

@@ -30,6 +30,10 @@ struct GPUDevice;
 struct GPUPipelineLayout;
 struct GPURenderPassEncoder;
 
+enum {
+  GPU_ENCODER_MAX_BIND_GROUPS = 4u
+};
+
 typedef bool (*GPUBindRenderGroupFn)(
   struct GPURenderPassEncoder *pass,
   struct GPUPipelineLayout    *pipelineLayout,

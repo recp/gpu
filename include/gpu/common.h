@@ -18,7 +18,6 @@
 #define gpu_common_h
 #ifdef __cplusplus
 extern "C" {
-#define GPU_EXTERN extern "C"
 #endif
 
 #include <stdbool.h>
@@ -36,28 +35,13 @@ extern "C" {
 #  endif
 #  define GPU_HIDE
 #  define GPU_INLINE __forceinline
-#  define likely(x)   x
-#  define unlikely(x) x
-#  define GPU_NONNULL
 #else
 #  define GPU_EXPORT   __attribute__((visibility("default")))
 #  define GPU_INLINE   inline __attribute((always_inline))
 #  define GPU_HIDE     __attribute__((visibility("hidden")))
-#  define likely(x)    __builtin_expect(!!(x), 1)
-#  define unlikely(x)  __builtin_expect(!!(x), 0)
-#  define GPU_NONNULL  __attribute__((nonnull))
 #endif
 
 #define GPU_ARRAY_LEN(ARR) (sizeof(ARR) / sizeof(ARR[0]))
-
-enum {
-  GPU_ENCODER_MAX_BIND_GROUPS = 4u
-};
-
-#define GPU_STRINGIFY(...)  #__VA_ARGS__
-#define GPU_STRINGIFY2(x)   GPU_STRINGIFY(x)
-
-#define GPU_FLG(FLAGS, FLAG) ((FLAGS & FLAG) == FLAG)
 
 typedef enum GPUBackend {
   GPU_BACKEND_DEFAULT = 0,
@@ -164,15 +148,6 @@ typedef enum GPUBindingType {
   GPU_BINDING_ACCELERATION_STRUCTURE   = 6,
   GPU_BINDING_SAMPLER_FEEDBACK_EXT     = 7
 } GPUBindingType;
-
-#if defined(__APPLE__) && defined(__OBJC__)
-#  include <TargetConditionals.h>
-#  if TARGET_OS_IOS || TARGET_OS_TV
-#    define GPUScreenScale(view) [UIScreen mainScreen].scale
-#  elif TARGET_OS_MAC
-#    define GPUScreenScale(view) view.window ? view.window.backingScaleFactor : [NSScreen mainScreen].backingScaleFactor
-#  endif
-#endif
 
 #ifdef __cplusplus
 }
