@@ -130,18 +130,18 @@ gpu_webgpuFormat(GPUFormat format) {
 
 GPUFormat
 gpu_webgpuGPUFormat(WGPUTextureFormat format) {
-  switch (format) {
-    case WGPUTextureFormat_RGBA8Unorm:
-      return GPU_FORMAT_RGBA8_UNORM;
-    case WGPUTextureFormat_RGBA8UnormSrgb:
-      return GPU_FORMAT_RGBA8_UNORM_SRGB;
-    case WGPUTextureFormat_BGRA8Unorm:
-      return GPU_FORMAT_BGRA8_UNORM;
-    case WGPUTextureFormat_BGRA8UnormSrgb:
-      return GPU_FORMAT_BGRA8_UNORM_SRGB;
-    default:
-      return GPU_FORMAT_UNDEFINED;
+  if (format == WGPUTextureFormat_Undefined) {
+    return GPU_FORMAT_UNDEFINED;
   }
+
+  for (GPUFormat candidate = GPU_FORMAT_R8_UNORM;
+       candidate < GPU_FORMAT_COUNT;
+       candidate++) {
+    if (gpu_webgpuFormat(candidate) == format) {
+      return candidate;
+    }
+  }
+  return GPU_FORMAT_UNDEFINED;
 }
 
 WGPUPresentMode
