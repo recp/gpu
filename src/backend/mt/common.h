@@ -203,9 +203,13 @@ typedef struct MTTransferSlot {
 typedef struct MTRenderPass {
   MTLRenderPassDescriptor *classic;
   id                       modern;
+  id                       visibilityResultBuffer;
+  id                       rasterizationRateMap;
   uint32_t                 width;
   uint32_t                 height;
   uint32_t                 colorAttachmentCount;
+  bool                     depthAttachmentActive;
+  bool                     stencilAttachmentActive;
 } MTRenderPass;
 
 typedef struct MTRenderEncoder {

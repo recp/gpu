@@ -92,45 +92,41 @@ mt_stageMask(GPUPipelineStageMask stages) {
 #endif
 
 static void
-mt_resetRenderPass(MTRenderPass *pass) {
+mt_prepareRenderPass(MTRenderPass *pass, uint32_t colorAttachmentCount) {
   MTLRenderPassDescriptor *classic;
-  uint32_t                 colorAttachmentCount;
+  uint32_t                 previousColorAttachmentCount;
 
   if (!pass || !pass->classic) {
     return;
   }
 
-  classic                    = pass->classic;
-  colorAttachmentCount       = pass->colorAttachmentCount;
-  pass->width                = 0u;
-  pass->height               = 0u;
-  pass->colorAttachmentCount = 0u;
-  classic.visibilityResultBuffer = nil;
-  classic.rasterizationRateMap   = nil;
-  for (uint32_t i = 0u; i < colorAttachmentCount; i++) {
+  classic                      = pass->classic;
+  previousColorAttachmentCount = pass->colorAttachmentCount;
+  pass->width                  = 0u;
+  pass->height                 = 0u;
+  pass->colorAttachmentCount   = colorAttachmentCount;
+  for (uint32_t i = colorAttachmentCount;
+       i < previousColorAttachmentCount;
+       i++) {
     classic.colorAttachments[i].texture = nil;
     classic.colorAttachments[i].resolveTexture = nil;
     classic.colorAttachments[i].loadAction = MTLLoadActionDontCare;
     classic.colorAttachments[i].storeAction = MTLStoreActionDontCare;
   }
 
-  classic.depthAttachment.texture = nil;
-  classic.stencilAttachment.texture = nil;
 #if MT_HAS_METAL4
   if (pass->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       MTL4RenderPassDescriptor *modern = pass->modern;
 
-      for (uint32_t i = 0u; i < colorAttachmentCount; i++) {
+      for (uint32_t i = colorAttachmentCount;
+           i < previousColorAttachmentCount;
+           i++) {
         modern.colorAttachments[i].texture = nil;
         modern.colorAttachments[i].resolveTexture = nil;
         modern.colorAttachments[i].loadAction = MTLLoadActionDontCare;
         modern.colorAttachments[i].storeAction = MTLStoreActionDontCare;
       }
-      modern.depthAttachment.texture = nil;
-      modern.stencilAttachment.texture = nil;
-      modern.visibilityResultBuffer = nil;
-      modern.rasterizationRateMap = nil;
     }
   }
 #endif
@@ -149,10 +145,16 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
   MTRenderPass                              *nativePass;
   MTLRenderPassDescriptor                   *rpd;
   MTQuerySet                                *occlusion;
+  id                                         visibilityResultBuffer;
+  id                                         rasterizationRateMap;
 #if MT_HAS_METAL4
   id                                         rpd4;
 #endif
   uint32_t                                   i;
+  bool                                       depthAttachmentActive;
+  bool                                       rasterizationRateMapChanged;
+  bool                                       stencilAttachmentActive;
+  bool                                       visibilityResultBufferChanged;
 
   if (!cmdb || !info ||
       (info->colorAttachmentCount > 0 && !info->pColorAttachments))
@@ -198,28 +200,43 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
 #if MT_HAS_METAL4
   rpd4 = nativePass->modern;
 #endif
-  mt_resetRenderPass(nativePass);
-  nativePass->colorAttachmentCount = info->colorAttachmentCount;
-  rpd.rasterizationRateMap = rateMap
-                               ? (id<MTLRasterizationRateMap>)rateMap->map->_priv
-                               : nil;
+  mt_prepareRenderPass(nativePass, info->colorAttachmentCount);
   occlusion = info->occlusionQuerySet ? info->occlusionQuerySet->_priv : NULL;
   if (info->occlusionQuerySet && (!occlusion || !occlusion->visibility)) {
     return NULL;
   }
-  rpd.visibilityResultBuffer = occlusion ? occlusion->visibility : nil;
+  visibilityResultBuffer = occlusion ? occlusion->visibility : nil;
+  rasterizationRateMap   = rateMap
+                             ? (id<MTLRasterizationRateMap>)rateMap->map->_priv
+                             : nil;
+  visibilityResultBufferChanged =
+    nativePass->visibilityResultBuffer != visibilityResultBuffer;
+  rasterizationRateMapChanged =
+    nativePass->rasterizationRateMap != rasterizationRateMap;
+  if (visibilityResultBufferChanged) {
+    rpd.visibilityResultBuffer = visibilityResultBuffer;
+  }
+  if (rasterizationRateMapChanged) {
+    rpd.rasterizationRateMap = rasterizationRateMap;
+  }
 #if MT_HAS_METAL4
   if (rpd4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       MTL4RenderPassDescriptor *modern = rpd4;
 
-      modern.visibilityResultBuffer = rpd.visibilityResultBuffer;
-      modern.visibilityResultType   = MTLVisibilityResultTypeReset;
-      modern.rasterizationRateMap   = rpd.rasterizationRateMap;
-      mt_useAllocation(cmdb, modern.visibilityResultBuffer);
+      if (visibilityResultBufferChanged) {
+        modern.visibilityResultBuffer = visibilityResultBuffer;
+        modern.visibilityResultType   = MTLVisibilityResultTypeReset;
+      }
+      if (rasterizationRateMapChanged) {
+        modern.rasterizationRateMap = rasterizationRateMap;
+      }
+      mt_useAllocation(cmdb, visibilityResultBuffer);
     }
   }
 #endif
+  nativePass->visibilityResultBuffer = visibilityResultBuffer;
+  nativePass->rasterizationRateMap   = rasterizationRateMap;
 
   for (i = 0; i < info->colorAttachmentCount; i++) {
     color = &info->pColorAttachments[i];
@@ -257,6 +274,34 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
   }
 
   depthStencil = info->pDepthStencilAttachment;
+  depthAttachmentActive   = depthStencil && depthStencil->view &&
+                            depthStencil->view->format != GPU_FORMAT_STENCIL8;
+  stencilAttachmentActive = depthStencil && depthStencil->view &&
+                            (depthStencil->view->format == GPU_FORMAT_STENCIL8 ||
+                             depthStencil->view->format ==
+                               GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+                             depthStencil->view->format ==
+                               GPU_FORMAT_DEPTH32_FLOAT_STENCIL8);
+  if (!depthAttachmentActive && nativePass->depthAttachmentActive) {
+    rpd.depthAttachment.texture = nil;
+  }
+  if (!stencilAttachmentActive && nativePass->stencilAttachmentActive) {
+    rpd.stencilAttachment.texture = nil;
+  }
+#if MT_HAS_METAL4
+  if (rpd4) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      MTL4RenderPassDescriptor *modern = rpd4;
+
+      if (!depthAttachmentActive && nativePass->depthAttachmentActive) {
+        modern.depthAttachment.texture = nil;
+      }
+      if (!stencilAttachmentActive && nativePass->stencilAttachmentActive) {
+        modern.stencilAttachment.texture = nil;
+      }
+    }
+  }
+#endif
   if (depthStencil && depthStencil->view) {
     GPUFormat format;
 
@@ -292,13 +337,19 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
       if (@available(macOS 26.0, iOS 26.0, *)) {
         MTL4RenderPassDescriptor *modern = rpd4;
 
-        modern.depthAttachment = rpd.depthAttachment;
-        modern.stencilAttachment = rpd.stencilAttachment;
+        if (depthAttachmentActive) {
+          modern.depthAttachment = rpd.depthAttachment;
+        }
+        if (stencilAttachmentActive) {
+          modern.stencilAttachment = rpd.stencilAttachment;
+        }
         mt_useAllocation(cmdb, depthStencil->view->_priv);
       }
     }
 #endif
   }
+  nativePass->depthAttachmentActive   = depthAttachmentActive;
+  nativePass->stencilAttachmentActive = stencilAttachmentActive;
 
   memset(renderPass, 0, sizeof(*renderPass));
   renderPass->_priv = nativePass;
