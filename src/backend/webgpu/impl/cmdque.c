@@ -139,48 +139,96 @@ webgpu_discard(GPUCommandBuffer *cmdb) {
   return GPU_OK;
 }
 
+static void
+webgpu_abortCommandBuffers(uint32_t                  count,
+                           GPUCommandBuffer * const *buffers) {
+  if (!buffers) {
+    return;
+  }
+  for (uint32_t i = 0u; i < count; i++) {
+    GPUCommandWebGPU *command;
+
+    command = gpu_webgpuCommand(buffers[i]);
+    if (command) {
+      if (command->encoder) {
+        wgpuCommandEncoderRelease(command->encoder);
+        command->encoder = NULL;
+      }
+      command->present = NULL;
+    }
+    gpuFinishCommandBuffer(buffers[i], webgpu_recycleCommand);
+  }
+}
+
 static GPUResult
-webgpu_commit(GPUCommandBuffer *cmdb) {
+webgpu_submitCommandBuffers(GPUQueue                  * __restrict queue,
+                            uint32_t                               count,
+                            GPUCommandBuffer * const * __restrict buffers) {
   WGPUCommandBufferDescriptor finishInfo = WGPU_COMMAND_BUFFER_DESCRIPTOR_INIT;
   WGPUQueueWorkDoneCallbackInfo callbackInfo =
     WGPU_QUEUE_WORK_DONE_CALLBACK_INFO_INIT;
-  GPUCommandWebGPU *command;
+  GPUCommandWebGPU *commands[GPU_WEBGPU_COMMAND_SLOT_COUNT];
+  WGPUCommandBuffer submitted[GPU_WEBGPU_COMMAND_SLOT_COUNT];
   GPUDeviceWebGPU  *device;
-  WGPUCommandBuffer submitted;
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
   WGPUSubmissionIndex submission;
 #endif
 
-  command = gpu_webgpuCommand(cmdb);
-  device  = gpu_webgpuDevice(gpuCommandBufferDevice(cmdb));
-  if (!command || !device || !command->encoder) {
+  device = gpu_webgpuDevice(queue ? queue->_device : NULL);
+  if (!device || !buffers || count == 0u ||
+      count > GPU_WEBGPU_COMMAND_SLOT_COUNT) {
+    webgpu_abortCommandBuffers(count, buffers);
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  submitted = wgpuCommandEncoderFinish(command->encoder, &finishInfo);
-  wgpuCommandEncoderRelease(command->encoder);
-  command->encoder = NULL;
-  if (!submitted) {
-    command->present = NULL;
-    gpuFinishCommandBuffer(cmdb, webgpu_recycleCommand);
-    return GPU_ERROR_BACKEND_FAILURE;
+  memset(submitted, 0, sizeof(submitted));
+  for (uint32_t i = 0u; i < count; i++) {
+    commands[i] = gpu_webgpuCommand(buffers[i]);
+    if (!commands[i] || !commands[i]->encoder ||
+        gpuCommandBufferDevice(buffers[i]) != queue->_device) {
+      webgpu_abortCommandBuffers(count, buffers);
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
   }
-  atomic_store_explicit(&command->submitted,
-                        submitted,
-                        memory_order_release);
+
+  for (uint32_t i = 0u; i < count; i++) {
+    submitted[i] = wgpuCommandEncoderFinish(commands[i]->encoder,
+                                             &finishInfo);
+    wgpuCommandEncoderRelease(commands[i]->encoder);
+    commands[i]->encoder = NULL;
+    if (!submitted[i]) {
+      for (uint32_t j = 0u; j < count; j++) {
+        if (submitted[j]) {
+          wgpuCommandBufferRelease(submitted[j]);
+        }
+      }
+      webgpu_abortCommandBuffers(count, buffers);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+
+  for (uint32_t i = 0u; i < count; i++) {
+    atomic_store_explicit(&commands[i]->submitted,
+                          submitted[i],
+                          memory_order_release);
+  }
 
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
   submission = wgpuQueueSubmitForIndex(device->queue,
-                                       1u,
-                                       &submitted);
+                                       count,
+                                       submitted);
 #else
-  wgpuQueueSubmit(device->queue, 1u, &submitted);
+  wgpuQueueSubmit(device->queue, count, submitted);
 #endif
-  if (command->present) {
+
+  for (uint32_t i = 0u; i < count; i++) {
+    if (!commands[i]->present) {
+      continue;
+    }
 #if !defined(__EMSCRIPTEN__)
-    wgpuSurfacePresent(command->present->surface);
+    wgpuSurfacePresent(commands[i]->present->surface);
 #endif
-    command->present = NULL;
+    commands[i]->present = NULL;
   }
 
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
@@ -189,12 +237,25 @@ webgpu_commit(GPUCommandBuffer *cmdb) {
   callbackInfo.mode      = WGPUCallbackMode_AllowSpontaneous;
 #endif
   callbackInfo.callback  = webgpu_commandDone;
-  callbackInfo.userdata1 = command;
-  wgpuQueueOnSubmittedWorkDone(device->queue, callbackInfo);
+  for (uint32_t i = 0u; i < count; i++) {
+    callbackInfo.userdata1 = commands[i];
+    wgpuQueueOnSubmittedWorkDone(device->queue, callbackInfo);
+  }
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
   gpu_webgpuQueueCompletion(device, submission);
 #endif
   return GPU_OK;
+}
+
+static GPUResult
+webgpu_commit(GPUCommandBuffer *cmdb) {
+  GPUCommandBuffer *buffers[1];
+
+  if (!cmdb || !cmdb->_queue) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  buffers[0] = cmdb;
+  return webgpu_submitCommandBuffers(cmdb->_queue, 1u, buffers);
 }
 
 static bool
@@ -219,6 +280,7 @@ webgpu_initCommandQueue(GPUApiCommandQueue *api) {
   api->commandBufferOnComplete = webgpu_commandBufferOnComplete;
   api->discard                 = webgpu_discard;
   api->commit                  = webgpu_commit;
+  api->submit                  = webgpu_submitCommandBuffers;
 }
 
 void
