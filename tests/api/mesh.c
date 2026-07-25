@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "test.h"
+
 enum {
   MESH_TARGET_WIDTH  = 8u,
   MESH_TARGET_HEIGHT = 8u,

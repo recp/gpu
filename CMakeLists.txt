@@ -3302,7 +3302,10 @@ if(GPU_BUILD_TESTS)
   )
 
   if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
-    add_executable(gpu-metal-mesh-test tests/api/mesh.c)
+    add_executable(gpu-metal-mesh-test
+      tests/api/mesh.c
+      tests/api/runner.c
+    )
     target_link_libraries(gpu-metal-mesh-test PRIVATE gpu)
     add_dependencies(gpu-metal-mesh-test gpu-metal-mesh-test-fixture)
     set_target_properties(gpu-metal-mesh-test PROPERTIES
@@ -3430,6 +3433,7 @@ if(GPU_BUILD_TESTS)
 
     add_executable(gpu-vulkan-mesh-test
       tests/api/mesh.c
+      tests/api/runner.c
     )
     target_link_libraries(gpu-vulkan-mesh-test PRIVATE gpu Vulkan::Vulkan)
     add_dependencies(gpu-vulkan-mesh-test gpu-vulkan-fixtures)
@@ -3601,7 +3605,10 @@ if(GPU_BUILD_TESTS)
               "${GPU_DX12_TEXTURED_QUAD_US}"
     )
 
-    add_executable(gpu-dx12-mesh-test tests/api/mesh.c)
+    add_executable(gpu-dx12-mesh-test
+      tests/api/mesh.c
+      tests/api/runner.c
+    )
     target_link_libraries(gpu-dx12-mesh-test PRIVATE gpu)
     add_dependencies(gpu-dx12-mesh-test gpu-dx12-fixtures)
     set_target_properties(gpu-dx12-mesh-test PROPERTIES
