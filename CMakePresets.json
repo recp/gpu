@@ -44,6 +44,7 @@
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
         "BUILD_SHARED_LIBS": "OFF",
         "GPU_BACKEND_METAL_ONLY": "ON",
         "GPU_BUILD_TESTS": "ON",
