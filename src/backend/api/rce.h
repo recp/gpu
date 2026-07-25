@@ -104,12 +104,12 @@ struct GPURenderPassEncoder {
   uint32_t                _stencilReference;
   float                   _blendConstant[4];
   bool                    _colorAttachmentHasResolve[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
-  bool                    _hasIndexBuffer;
-  bool                    _hasPipeline;
-  bool                    _pushConstantsEmitted;
-  bool                    _occlusionQueryActive;
-  bool                    _meshPipeline;
-  bool                    _ended;
+  bool                    _hasIndexBuffer       : 1;
+  bool                    _hasPipeline          : 1;
+  bool                    _pushConstantsEmitted : 1;
+  bool                    _occlusionQueryActive : 1;
+  bool                    _meshPipeline         : 1;
+  bool                    _ended                : 1;
   uint8_t                 _pushConstants[4096];
 };
 
