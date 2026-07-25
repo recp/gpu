@@ -329,6 +329,20 @@ typedef struct MTQuerySet {
 GPU_HIDE MTLPixelFormat mt_format(GPUFormat format);
 
 GPU_HIDE
+void
+mt_vertexBuffer(GPURenderPassEncoder *rce,
+                GPUBuffer           *buffer,
+                uint64_t             offset,
+                uint32_t             index);
+
+GPU_HIDE
+void
+mt_fragmentBuffer(GPURenderPassEncoder *rce,
+                  GPUBuffer           *buffer,
+                  uint64_t             offset,
+                  uint32_t             index);
+
+GPU_HIDE
 GPUResult
 mt_wrapBuffer(GPUDevice                 *device,
               const GPUBufferCreateInfo *info,
