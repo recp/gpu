@@ -3511,6 +3511,7 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
                    uint32_t dynamicOffsetCount,
                    const uint32_t *pDynamicOffsets) {
   GPUBindRenderContext ctx;
+  GPUBindRenderGroupFn bindRenderGroup;
   GPUApi              *api;
   bool                 bound;
 
@@ -3538,11 +3539,16 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
 
   gpuFrameStatsRecordBindRequest(pass->_stats);
 
-  api = pass->_api;
-  if (!api) {
-    api = gpuDeviceApi(gpuBindGroupGetDevice(group));
+  bindRenderGroup = pass->_bindRenderGroup;
+  api             = NULL;
+  if (!bindRenderGroup) {
+    api = pass->_api;
+    if (!api) {
+      api = gpuDeviceApi(gpuBindGroupGetDevice(group));
+    }
+    bindRenderGroup = api ? api->descriptor.bindRenderGroup : NULL;
   }
-  if (!api || !api->descriptor.bindRenderGroup) {
+  if (!bindRenderGroup) {
     if (!api) {
       return;
     }
@@ -3566,12 +3572,12 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
       return;
     }
 #endif
-    bound = api->descriptor.bindRenderGroup(pass,
-                                            pass->_pipelineLayout,
-                                            groupIndex,
-                                            group,
-                                            dynamicOffsetCount,
-                                            pDynamicOffsets);
+    bound = bindRenderGroup(pass,
+                            pass->_pipelineLayout,
+                            groupIndex,
+                            group,
+                            dynamicOffsetCount,
+                            pDynamicOffsets);
   }
   if (bound) {
     if (pass->_boundGroups[groupIndex] != group) {

@@ -30,6 +30,15 @@ struct GPUDevice;
 struct GPUPipelineLayout;
 struct GPURenderPassEncoder;
 
+typedef bool (*GPUBindRenderGroupFn)(
+  struct GPURenderPassEncoder *pass,
+  struct GPUPipelineLayout    *pipelineLayout,
+  uint32_t                     groupIndex,
+  struct GPUBindGroup         *group,
+  uint32_t                     dynamicOffsetCount,
+  const uint32_t              *dynamicOffsets
+);
+
 /* Covers the portable v1 dynamic-buffer limits without heap storage. */
 enum {
   GPU_ENCODER_DYNAMIC_OFFSET_SHADOW_CAPACITY = 12u
@@ -66,13 +75,7 @@ typedef struct GPUApiDescriptor {
   void
   (*destroyBindGroup)(struct GPUBindGroup *group);
 
-  bool
-  (*bindRenderGroup)(struct GPURenderPassEncoder *pass,
-                     struct GPUPipelineLayout       *pipelineLayout,
-                     uint32_t                        groupIndex,
-                     struct GPUBindGroup            *group,
-                     uint32_t                        dynamicOffsetCount,
-                     const uint32_t                 *dynamicOffsets);
+  GPUBindRenderGroupFn bindRenderGroup;
 
   bool
   (*bindComputeGroup)(struct GPUComputePassEncoder *pass,

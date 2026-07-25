@@ -556,6 +556,8 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
     encoder->_drawIndexedPrims = encoder->_drawIndexedPrims
                                    ? encoder->_drawIndexedPrims
                                    : api->rce.drawIndexedPrims;
+    encoder->_vertexInputBuffer = api->rce.vertexInputBuffer;
+    encoder->_bindRenderGroup   = api->descriptor.bindRenderGroup;
     encoder->_stats            = device->runtimeConfig.enableStats
                                    ? &device->currentFrameStats
                                    : NULL;

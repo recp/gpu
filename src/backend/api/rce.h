@@ -52,6 +52,11 @@ typedef void (*GPUDrawIndexedPrimsFn)(GPURenderPassEncoder *rce,
                                       int32_t               vertexOffset,
                                       uint32_t              firstInstance);
 
+typedef void (*GPUVertexInputBufferFn)(GPURenderPassEncoder *rce,
+                                       GPUBuffer            *buffer,
+                                       uint64_t              offset,
+                                       uint32_t              index);
+
 #define GPU__RENDER_VERTEX_SHADOW_SLOT_COUNT 32u
 
 enum {
@@ -71,6 +76,8 @@ struct GPURenderPassEncoder {
   GPUPipelineLayout      *_pipelineLayout;
   GPUDrawPrimitivesFn     _drawPrimitives;
   GPUDrawIndexedPrimsFn   _drawIndexedPrims;
+  GPUVertexInputBufferFn  _vertexInputBuffer;
+  GPUBindRenderGroupFn    _bindRenderGroup;
   GPUBindGroup           *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUBindGroupLayout     *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUBuffer              *_vertexBuffers[GPU__RENDER_VERTEX_SHADOW_SLOT_COUNT];
@@ -151,11 +158,7 @@ typedef struct GPUApiRCE {
                   uint64_t                 off,
                   uint32_t                 index);
 
-  void
-  (*vertexInputBuffer)(GPURenderPassEncoder *rce,
-                       GPUBuffer               *buf,
-                       uint64_t                 off,
-                       uint32_t                 index);
+  GPUVertexInputBufferFn vertexInputBuffer;
 
   void
   (*setVertexTexture)(GPURenderPassEncoder *rce,

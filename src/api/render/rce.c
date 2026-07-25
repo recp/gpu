@@ -301,7 +301,7 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
 
 static void
 gpu_bindRenderVertexBuffer(GPURenderPassEncoder *pass,
-                           GPUApi               *api,
+                           GPUVertexInputBufferFn bind,
                            GPUBuffer            *buf,
                            uint64_t              off,
                            uint32_t              index) {
@@ -319,7 +319,7 @@ gpu_bindRenderVertexBuffer(GPURenderPassEncoder *pass,
     slotBit = 0u;
   }
 
-  api->rce.vertexInputBuffer(pass, buf, off, index);
+  bind(pass, buf, off, index);
   gpuFrameStatsRecordBindEmission(pass->_stats);
   if (slotBit != 0u) {
     pass->_vertexBuffers[index]       = buf;
@@ -350,17 +350,20 @@ GPUBindVertexBuffers(GPURenderPassEncoder   *pass,
                      uint32_t                firstSlot,
                      uint32_t                count,
                      const GPUBufferBinding *bindings) {
-  GPUApi *api;
-  uint32_t i;
+  GPUApi                 *api;
+  GPUVertexInputBufferFn  bind;
+  uint32_t                i;
 
   if (!pass || pass->_ended || !bindings)
     return;
   if (count == 0 || firstSlot > UINT32_MAX - (count - 1u))
     return;
-  if (!(api = gpu_renderPassApi(pass)))
-    return;
-  if (!api->rce.vertexInputBuffer)
-    return;
+  bind = pass->_vertexInputBuffer;
+  if (!bind) {
+    if (!(api = gpu_renderPassApi(pass)) ||
+        !(bind = api->rce.vertexInputBuffer))
+      return;
+  }
 
   if (count == 1u) {
     if (!bindings->buffer) {
@@ -373,7 +376,7 @@ GPUBindVertexBuffers(GPURenderPassEncoder   *pass,
     }
 #endif
     gpu_bindRenderVertexBuffer(pass,
-                               api,
+                               bind,
                                bindings->buffer,
                                bindings->offset,
                                firstSlot);
@@ -391,7 +394,7 @@ GPUBindVertexBuffers(GPURenderPassEncoder   *pass,
     }
 #endif
     gpu_bindRenderVertexBuffer(pass,
-                               api,
+                               bind,
                                bindings[i].buffer,
                                bindings[i].offset,
                                firstSlot + i);
