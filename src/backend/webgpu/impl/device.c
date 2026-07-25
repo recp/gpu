@@ -376,6 +376,7 @@ webgpu_getFormatCapabilities(
   bool float32Filterable;
   bool coreFeatures;
   bool legacyUnorm16;
+  bool norm16Filterable;
   bool tier1;
   bool wideNorm;
 
@@ -441,11 +442,13 @@ webgpu_getFormatCapabilities(
   tier1 = webgpu_hasAdapterFeature(adapter,
                                    WGPUFeatureName_TextureFormatsTier1);
   wideNorm = webgpu_isWideNormFormat(format);
+  norm16Filterable = webgpu_hasAdapterFeature(
+    adapter,
+    WGPUFeatureName_Unorm16TextureFormats);
   legacyUnorm16 =
     !tier1 &&
     webgpu_isUnorm16Format(format) &&
-    webgpu_hasAdapterFeature(adapter,
-                             WGPUFeatureName_Unorm16TextureFormats);
+    norm16Filterable;
   if (wideNorm && !tier1 && !legacyUnorm16) {
     return;
   }
@@ -461,7 +464,7 @@ webgpu_getFormatCapabilities(
   outCaps->sampled = true;
   outCaps->filterable =
     gpuFormatNumericType(format) == GPU_FORMAT_NUMERIC_FLOAT &&
-    !wideNorm &&
+    (!wideNorm || norm16Filterable) &&
     (!webgpu_isFloat32Format(format) || float32Filterable);
 
   outCaps->colorAttachment = !wideNorm || tier1 || legacyUnorm16;
