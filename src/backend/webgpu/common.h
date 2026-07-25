@@ -43,6 +43,11 @@
 #include <stdatomic.h>
 
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+#  if defined(_WIN32) || defined(WIN32)
+#    include <windows.h>
+#  else
+#    include <pthread.h>
+#  endif
 #  define GPU_WEBGPU_FEATURE_NORM16 \
     ((WGPUFeatureName)WGPUNativeFeature_TextureFormat16bitNorm)
 #  define GPU_WEBGPU_FEATURE_MULTI_DRAW \
@@ -118,9 +123,28 @@ typedef struct GPUDeviceWebGPU {
   WGPUQueue           queue;
   WGPUBindGroupLayout pushConstantLayout;
   void               *errorContext;
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+#  if defined(_WIN32) || defined(WIN32)
+  HANDLE              completionWorker;
+  CRITICAL_SECTION    completionLock;
+  CONDITION_VARIABLE  completionCondition;
+#  else
+  pthread_t           completionWorker;
+  pthread_mutex_t     completionLock;
+  pthread_cond_t      completionCondition;
+#  endif
+#endif
   WGPULimits          limits;
   GPUQueue            queueHandle;
   GPUCommandWebGPU    commands[GPU_WEBGPU_COMMAND_SLOT_COUNT];
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  WGPUSubmissionIndex completionSubmissions[GPU_WEBGPU_COMMAND_SLOT_COUNT];
+  uint32_t            completionHead;
+  uint32_t            completionTail;
+  uint32_t            completionCount;
+  bool                completionWorkerStarted;
+  bool                stoppingCompletionWorker;
+#endif
 } GPUDeviceWebGPU;
 
 typedef struct GPUPipelineLayoutWebGPU {
@@ -269,6 +293,18 @@ gpu_webgpuInitPushConstants(GPUDeviceWebGPU *device);
 
 void
 gpu_webgpuDestroyPushConstants(GPUDeviceWebGPU *device);
+
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+bool
+gpu_webgpuStartCompletionWorker(GPUDeviceWebGPU *device);
+
+void
+gpu_webgpuQueueCompletion(GPUDeviceWebGPU    *device,
+                          WGPUSubmissionIndex submission);
+
+void
+gpu_webgpuStopCompletionWorker(GPUDeviceWebGPU *device);
+#endif
 
 bool
 gpu_webgpuUploadPushConstants(GPUCommandWebGPU *command,

@@ -591,6 +591,7 @@ webgpu_deviceReady(WGPURequestDeviceStatus status,
   WebGPUDeviceRequest *request;
   GPUDeviceWebGPU     *native;
   GPUDevice           *device;
+  bool                 usable;
 
   GPU__UNUSED(message);
   GPU__UNUSED(unused);
@@ -602,8 +603,14 @@ webgpu_deviceReady(WGPURequestDeviceStatus status,
     if (device && native) {
       native->device = nativeDevice;
       native->queue  = wgpuDeviceGetQueue(nativeDevice);
-      if (native->queue &&
-          gpu_webgpuInitPushConstants(native) == GPU_OK) {
+      usable = native->queue &&
+               gpu_webgpuInitPushConstants(native) == GPU_OK;
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+      if (usable) {
+        usable = gpu_webgpuStartCompletionWorker(native);
+      }
+#endif
+      if (usable) {
         native->queueHandle._priv   = native->queue;
         native->queueHandle._device = device;
         native->queueHandle.bits    = GPU_QUEUE_GRAPHICS_BIT |
@@ -778,6 +785,9 @@ webgpu_destroyDevice(GPUDevice *device) {
       request->ready  = false;
     }
     if (native->queue) {
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+      gpu_webgpuStopCompletionWorker(native);
+#endif
       wgpuQueueRelease(native->queue);
     }
     gpu_webgpuDestroyPushConstants(native);

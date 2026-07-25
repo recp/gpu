@@ -385,6 +385,7 @@ if(GPU_BUILD_WEBGPU)
     src/backend/webgpu/impl/swapchain.c
     src/backend/webgpu/impl/frame.c
     src/backend/webgpu/impl/cmdque.c
+    src/backend/webgpu/impl/completion.c
     src/backend/webgpu/impl/buffer.c
     src/backend/webgpu/impl/texture.c
     src/backend/webgpu/impl/sampler.c

@@ -145,6 +145,9 @@ webgpu_commit(GPUCommandBuffer *cmdb) {
     WGPU_QUEUE_WORK_DONE_CALLBACK_INFO_INIT;
   GPUCommandWebGPU *command;
   GPUDeviceWebGPU  *device;
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  WGPUSubmissionIndex submission;
+#endif
 
   command = gpu_webgpuCommand(cmdb);
   device  = gpu_webgpuDevice(gpuCommandBufferDevice(cmdb));
@@ -160,7 +163,13 @@ webgpu_commit(GPUCommandBuffer *cmdb) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  submission = wgpuQueueSubmitForIndex(device->queue,
+                                       1u,
+                                       &command->submitted);
+#else
   wgpuQueueSubmit(device->queue, 1u, &command->submitted);
+#endif
   if (command->present) {
 #if !defined(__EMSCRIPTEN__)
     wgpuSurfacePresent(command->present->surface);
@@ -168,10 +177,17 @@ webgpu_commit(GPUCommandBuffer *cmdb) {
     command->present = NULL;
   }
 
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  callbackInfo.mode      = WGPUCallbackMode_AllowProcessEvents;
+#else
   callbackInfo.mode      = WGPUCallbackMode_AllowSpontaneous;
+#endif
   callbackInfo.callback  = webgpu_commandDone;
   callbackInfo.userdata1 = command;
   wgpuQueueOnSubmittedWorkDone(device->queue, callbackInfo);
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  gpu_webgpuQueueCompletion(device, submission);
+#endif
   return GPU_OK;
 }
 
