@@ -48,13 +48,19 @@ typedef enum NativeMetalMode {
   NativeMetalModeUpload
 } NativeMetalMode;
 
+typedef enum NativeMetalApi {
+  NativeMetalApiAuto,
+  NativeMetalApiClassic,
+  NativeMetalApi4
+} NativeMetalApi;
+
 typedef struct NativeMetalConfig {
   NativeMetalMode mode;
+  NativeMetalApi  api;
   uint32_t        drawCount;
   uint32_t        warmupFrames;
   uint32_t        measuredFrames;
   uint32_t        repeats;
-  bool            modern;
 } NativeMetalConfig;
 
 typedef struct NativeMetalBench {
@@ -178,13 +184,20 @@ native_parseConfig(int argc, char *argv[], NativeMetalConfig *config) {
   config->warmupFrames   = NATIVE_DEFAULT_WARMUP;
   config->measuredFrames = NATIVE_DEFAULT_FRAMES;
   config->repeats        = NATIVE_DEFAULT_REPEATS;
+  config->api            = NativeMetalApiAuto;
   api                    = getenv("GPU_NATIVE_METAL_MODE");
-  if (api && strcmp(api, "classic") != 0 && strcmp(api, "metal4") != 0) {
+  if (api && strcmp(api, "auto") != 0 &&
+      strcmp(api, "classic") != 0 &&
+      strcmp(api, "metal4") != 0) {
     fprintf(stderr,
-            "GPU_NATIVE_METAL_MODE must be classic or metal4\n");
+            "GPU_NATIVE_METAL_MODE must be auto, classic, or metal4\n");
     return false;
   }
-  config->modern = api && strcmp(api, "metal4") == 0;
+  if (api && strcmp(api, "classic") == 0) {
+    config->api = NativeMetalApiClassic;
+  } else if (api && strcmp(api, "metal4") == 0) {
+    config->api = NativeMetalApi4;
+  }
   return native_parseMode(argv[1], &config->mode) &&
          (argc <= 2 || bench_parseU32(argv[2], 1u, &config->drawCount)) &&
          (argc <= 3 || bench_parseU32(argv[3], 0u, &config->warmupFrames)) &&
@@ -316,6 +329,17 @@ native_createModeResources(NativeMetalBench        *bench,
 }
 
 #if NATIVE_HAS_METAL4
+static bool
+native_supportsMetal4(id<MTLDevice> device) API_AVAILABLE(macos(26.0)) {
+  return device &&
+         [device respondsToSelector:@selector(newMTL4CommandQueue)] &&
+         [device respondsToSelector:@selector(newCommandAllocator)] &&
+         [device respondsToSelector:
+           @selector(newArgumentTableWithDescriptor:error:)] &&
+         [device respondsToSelector:
+           @selector(newCompilerWithDescriptor:error:)];
+}
+
 static id<MTL4ArgumentTable>
 native_createArgumentTable(id<MTLDevice> device) API_AVAILABLE(macos(26.0)) {
   MTL4ArgumentTableDescriptor *desc;
@@ -341,10 +365,7 @@ native_initModern(NativeMetalBench *bench) API_AVAILABLE(macos(26.0)) {
   MTLResidencySetDescriptor *residencyDesc;
   NSError                   *error;
 
-  if (![bench->device respondsToSelector:@selector(newMTL4CommandQueue)] ||
-      ![bench->device respondsToSelector:@selector(newCommandAllocator)] ||
-      ![bench->device respondsToSelector:
-        @selector(newArgumentTableWithDescriptor:error:)]) {
+  if (!native_supportsMetal4(bench->device)) {
     return false;
   }
 
@@ -395,6 +416,34 @@ native_initModern(NativeMetalBench *bench) API_AVAILABLE(macos(26.0)) {
 #endif
 
 static bool
+native_selectApi(id<MTLDevice> device, NativeMetalApi api, bool *outModern) {
+  bool supportsMetal4;
+
+  if (!device || !outModern) {
+    return false;
+  }
+
+  supportsMetal4 = false;
+#if NATIVE_HAS_METAL4
+  if (@available(macOS 26.0, *)) {
+    supportsMetal4 = native_supportsMetal4(device);
+  }
+#endif
+  if (api == NativeMetalApiClassic) {
+    *outModern = false;
+    return true;
+  }
+  if (api == NativeMetalApi4 && !supportsMetal4) {
+    fprintf(stderr,
+            "GPU_NATIVE_METAL_MODE=metal4 is unsupported on this device or OS\n");
+    return false;
+  }
+
+  *outModern = supportsMetal4;
+  return true;
+}
+
+static bool
 native_init(NativeMetalBench        *bench,
             const NativeMetalConfig *config) {
   MTLTextureDescriptor *textureDesc;
@@ -403,17 +452,19 @@ native_init(NativeMetalBench        *bench,
   memset(bench, 0, sizeof(*bench));
   (void)bench_processMemory(&bench->baselineMemory);
   bench->mode       = config->mode;
-  bench->modern     = config->modern;
   bench->targetSize = config->mode == NativeMetalModeState
                         ? NATIVE_STATE_TARGET
                         : 1u;
   error             = nil;
   bench->device      = MTLCreateSystemDefaultDevice();
-  bench->queue       = config->modern ? nil : [bench->device newCommandQueue];
+  if (!native_selectApi(bench->device, config->api, &bench->modern)) {
+    return false;
+  }
+  bench->queue       = bench->modern ? nil : [bench->device newCommandQueue];
   bench->library     = [bench->device newLibraryWithSource:nativeShaderSource
                                                    options:nil
                                                      error:&error];
-  if (!bench->device || (!config->modern && !bench->queue) || !bench->library) {
+  if (!bench->device || (!bench->modern && !bench->queue) || !bench->library) {
     if (error) {
       fprintf(stderr, "native Metal shader error: %s\n",
               error.localizedDescription.UTF8String);
@@ -444,7 +495,7 @@ native_init(NativeMetalBench        *bench,
   if (!bench->vertexBuffer || !bench->target || !bench->renderPass) {
     return false;
   }
-  if (config->modern) {
+  if (bench->modern) {
 #if NATIVE_HAS_METAL4
     if (@available(macOS 26.0, *)) {
       return native_initModern(bench);
