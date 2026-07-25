@@ -386,6 +386,78 @@ mt_stencilReference(GPURenderPassEncoder *rce, uint32_t reference) {
 
 GPU_HIDE
 void
+mt_applyDynamicState(GPURenderPassEncoder          *rce,
+                     GPUDynamicStateMask             mask,
+                     const GPUDynamicStateApplyInfo *info) {
+  MTRenderEncoder *native;
+  MTLScissorRect   rect;
+  MTLViewport      viewport;
+
+  native = mt_renderEncoder(rce);
+  if (!native || !info) {
+    return;
+  }
+  if ((mask & GPU_DYNAMIC_STATE_VIEWPORT_BIT) != 0u) {
+    viewport.originX = info->viewport.x;
+    viewport.originY = info->viewport.y;
+    viewport.width   = info->viewport.width;
+    viewport.height  = info->viewport.height;
+    viewport.znear   = info->viewport.minDepth;
+    viewport.zfar    = info->viewport.maxDepth;
+  }
+  if ((mask & GPU_DYNAMIC_STATE_SCISSOR_BIT) != 0u) {
+    mt_scissorAxis(info->scissor.x,
+                   info->scissor.width,
+                   native->width,
+                   &rect.x,
+                   &rect.width);
+    mt_scissorAxis(info->scissor.y,
+                   info->scissor.height,
+                   native->height,
+                   &rect.y,
+                   &rect.height);
+  }
+#if MT_HAS_METAL4
+  if (native->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      if ((mask & GPU_DYNAMIC_STATE_VIEWPORT_BIT) != 0u) {
+        [native->modern setViewport:viewport];
+      }
+      if ((mask & GPU_DYNAMIC_STATE_SCISSOR_BIT) != 0u) {
+        [native->modern setScissorRect:rect];
+      }
+      if ((mask & GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT) != 0u) {
+        [native->modern setBlendColorRed:info->blendConstant[0]
+                                   green:info->blendConstant[1]
+                                    blue:info->blendConstant[2]
+                                   alpha:info->blendConstant[3]];
+      }
+      if ((mask & GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT) != 0u) {
+        [native->modern setStencilReferenceValue:info->stencilReference];
+      }
+    }
+    return;
+  }
+#endif
+  if ((mask & GPU_DYNAMIC_STATE_VIEWPORT_BIT) != 0u) {
+    [native->classic setViewport:viewport];
+  }
+  if ((mask & GPU_DYNAMIC_STATE_SCISSOR_BIT) != 0u) {
+    [native->classic setScissorRect:rect];
+  }
+  if ((mask & GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT) != 0u) {
+    [native->classic setBlendColorRed:info->blendConstant[0]
+                                green:info->blendConstant[1]
+                                 blue:info->blendConstant[2]
+                                alpha:info->blendConstant[3]];
+  }
+  if ((mask & GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT) != 0u) {
+    [native->classic setStencilReferenceValue:info->stencilReference];
+  }
+}
+
+GPU_HIDE
+void
 mt_renderPushConstants(GPURenderPassEncoder *rce,
                        GPUShaderStageFlags       stages,
                        const void               *data,
@@ -1192,6 +1264,7 @@ mt_initRCE(GPUApiRCE *api) {
   api->scissor                  = mt_scissor;
   api->blendConstant            = mt_blendConstant;
   api->stencilReference         = mt_stencilReference;
+  api->applyDynamicState        = mt_applyDynamicState;
   api->pushConstants            = mt_renderPushConstants;
   api->vertexBytes              = mt_vertexBytes;
   api->vertexBuffer             = mt_vertexBuffer;

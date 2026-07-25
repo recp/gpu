@@ -133,6 +133,11 @@ typedef struct GPUApiRCE {
   (*stencilReference)(GPURenderPassEncoder *enc, uint32_t reference);
 
   void
+  (*applyDynamicState)(GPURenderPassEncoder          *enc,
+                       GPUDynamicStateMask             mask,
+                       const GPUDynamicStateApplyInfo *info);
+
+  void
   (*pushConstants)(GPURenderPassEncoder *enc,
                    GPUShaderStageFlags     stages,
                    const void             *data,

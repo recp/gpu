@@ -357,6 +357,24 @@ count_stencil_reference(GPURenderPassEncoder *rce, uint32_t reference) {
   gRenderStencilCalls++;
 }
 
+static void
+count_dynamic_state(GPURenderPassEncoder          *rce,
+                    GPUDynamicStateMask             mask,
+                    const GPUDynamicStateApplyInfo *info) {
+  if ((mask & GPU_DYNAMIC_STATE_VIEWPORT_BIT) != 0u) {
+    count_viewport(rce, &info->viewport);
+  }
+  if ((mask & GPU_DYNAMIC_STATE_SCISSOR_BIT) != 0u) {
+    count_scissor(rce, &info->scissor);
+  }
+  if ((mask & GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT) != 0u) {
+    count_blend_constant(rce, info->blendConstant);
+  }
+  if ((mask & GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT) != 0u) {
+    count_stencil_reference(rce, info->stencilReference);
+  }
+}
+
 static int
 check_wide_pipeline_cache_key(GPUDevice                   *device,
                               GPURenderPipelineCreateInfo *info) {
@@ -2474,6 +2492,7 @@ check_dynamic_state_validation_calls(GPUDevice *activeDevice) {
   scopedApi.rce.scissor          = count_scissor;
   scopedApi.rce.blendConstant    = count_blend_constant;
   scopedApi.rce.stencilReference = count_stencil_reference;
+  scopedApi.rce.applyDynamicState = count_dynamic_state;
 
   device._api                      = &scopedApi;
   device.runtimeConfig.enableStats = true;

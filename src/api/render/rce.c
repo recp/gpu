@@ -1106,18 +1106,89 @@ GPU_EXPORT
 void
 GPUApplyDynamicState(GPURenderPassEncoder *pass,
                      const GPUDynamicStateApplyInfo *info) {
-  GPUApi *api;
+  GPUApi              *api;
+  GPUDynamicStateMask  dirtyMask;
 
   if (!pass || pass->_ended || !gpu_validDynamicStateApplyInfo(info))
     return;
   api = gpu_renderPassApi(pass);
+  if (!api || !api->rce.applyDynamicState) {
+    if (info->mask & GPU_DYNAMIC_STATE_VIEWPORT_BIT)
+      gpu_setViewport(pass, api, &info->viewport);
+    if (info->mask & GPU_DYNAMIC_STATE_SCISSOR_BIT)
+      gpu_setScissor(pass, api, &info->scissor);
+    if (info->mask & GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT)
+      gpu_setBlendConstant(pass, api, info->blendConstant);
+    if (info->mask & GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT)
+      gpu_setStencilReference(pass, api, info->stencilReference);
+    return;
+  }
 
-  if (info->mask & GPU_DYNAMIC_STATE_VIEWPORT_BIT)
-    gpu_setViewport(pass, api, &info->viewport);
-  if (info->mask & GPU_DYNAMIC_STATE_SCISSOR_BIT)
-    gpu_setScissor(pass, api, &info->scissor);
-  if (info->mask & GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT)
-    gpu_setBlendConstant(pass, api, info->blendConstant);
-  if (info->mask & GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT)
-    gpu_setStencilReference(pass, api, info->stencilReference);
+  dirtyMask = 0u;
+  if ((info->mask & GPU_DYNAMIC_STATE_VIEWPORT_BIT) != 0u) {
+    gpuFrameStatsRecordStateRequest(pass->_stats);
+#if GPU_BUILD_WITH_VALIDATION
+    if (!gpu_validViewport(&info->viewport)) {
+      gpu_renderValidationError(pass,
+                                "GPUSetViewport ignored invalid viewport");
+    } else
+#endif
+    if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_VIEWPORT_BIT) == 0u ||
+        memcmp(&pass->_viewport,
+               &info->viewport,
+               sizeof(info->viewport)) != 0) {
+      dirtyMask |= GPU_DYNAMIC_STATE_VIEWPORT_BIT;
+    }
+  }
+  if ((info->mask & GPU_DYNAMIC_STATE_SCISSOR_BIT) != 0u) {
+    gpuFrameStatsRecordStateRequest(pass->_stats);
+    if ((pass->_dynamicStateMask & GPU_DYNAMIC_STATE_SCISSOR_BIT) == 0u ||
+        memcmp(&pass->_scissor,
+               &info->scissor,
+               sizeof(info->scissor)) != 0) {
+      dirtyMask |= GPU_DYNAMIC_STATE_SCISSOR_BIT;
+    }
+  }
+  if ((info->mask & GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT) != 0u) {
+    gpuFrameStatsRecordStateRequest(pass->_stats);
+    if ((pass->_dynamicStateMask &
+         GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT) == 0u ||
+        memcmp(pass->_blendConstant,
+               info->blendConstant,
+               sizeof(info->blendConstant)) != 0) {
+      dirtyMask |= GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT;
+    }
+  }
+  if ((info->mask & GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT) != 0u) {
+    gpuFrameStatsRecordStateRequest(pass->_stats);
+    if ((pass->_dynamicStateMask &
+         GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT) == 0u ||
+        pass->_stencilReference != info->stencilReference) {
+      dirtyMask |= GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
+    }
+  }
+  if (dirtyMask == 0u) {
+    return;
+  }
+
+  api->rce.applyDynamicState(pass, dirtyMask, info);
+  if ((dirtyMask & GPU_DYNAMIC_STATE_VIEWPORT_BIT) != 0u) {
+    pass->_viewport = info->viewport;
+    gpuFrameStatsRecordStateEmission(pass->_stats);
+  }
+  if ((dirtyMask & GPU_DYNAMIC_STATE_SCISSOR_BIT) != 0u) {
+    pass->_scissor = info->scissor;
+    gpuFrameStatsRecordStateEmission(pass->_stats);
+  }
+  if ((dirtyMask & GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT) != 0u) {
+    memcpy(pass->_blendConstant,
+           info->blendConstant,
+           sizeof(pass->_blendConstant));
+    gpuFrameStatsRecordStateEmission(pass->_stats);
+  }
+  if ((dirtyMask & GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT) != 0u) {
+    pass->_stencilReference = info->stencilReference;
+    gpuFrameStatsRecordStateEmission(pass->_stats);
+  }
+  pass->_dynamicStateMask |= dirtyMask;
 }
