@@ -186,11 +186,14 @@ native_parseConfig(int argc, char *argv[], NativeMetalConfig *config) {
   config->repeats        = NATIVE_DEFAULT_REPEATS;
   config->api            = NativeMetalApiAuto;
   api                    = getenv("GPU_NATIVE_METAL_MODE");
+  if (!api) {
+    api = getenv("GPU_METAL_MODE");
+  }
   if (api && strcmp(api, "auto") != 0 &&
       strcmp(api, "classic") != 0 &&
       strcmp(api, "metal4") != 0) {
     fprintf(stderr,
-            "GPU_NATIVE_METAL_MODE must be auto, classic, or metal4\n");
+            "Metal benchmark mode must be auto, classic, or metal4\n");
     return false;
   }
   if (api && strcmp(api, "classic") == 0) {
