@@ -176,7 +176,7 @@ gpu_test_execution_graph(GPUAdapter *adapter, const char *bytecodePath) {
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, feature) ||
       !GPUIsFeatureEnabled(device, GPU_FEATURE_BUFFER_DEVICE_ADDRESS)) {
     fprintf(stderr, "execution-graph device setup failed\n");

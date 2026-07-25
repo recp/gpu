@@ -1,5 +1,117 @@
 #include "test.h"
 
+#include <stdatomic.h>
+
+#if defined(_WIN32)
+#  define WIN32_LEAN_AND_MEAN
+#  include <windows.h>
+#else
+#  include <time.h>
+#endif
+
+enum {
+  GPU_API_WAIT_STEP_MS    = 10,
+  GPU_API_WAIT_STEP_COUNT = 1000
+};
+
+typedef struct GPUApiAdapterRequest {
+  GPUAdapter  *adapter;
+  GPUResult    result;
+  atomic_bool  done;
+} GPUApiAdapterRequest;
+
+typedef struct GPUApiDeviceRequest {
+  GPUDevice   *device;
+  GPUResult    result;
+  atomic_bool  done;
+} GPUApiDeviceRequest;
+
+static void
+sleep_millis(uint32_t milliseconds) {
+#if defined(_WIN32)
+  Sleep(milliseconds);
+#else
+  struct timespec duration;
+
+  duration.tv_sec  = (time_t)(milliseconds / 1000u);
+  duration.tv_nsec = (long)(milliseconds % 1000u) * 1000000l;
+  nanosleep(&duration, NULL);
+#endif
+}
+
+static bool
+wait_bool(atomic_bool *value) {
+  for (uint32_t i = 0u; i < GPU_API_WAIT_STEP_COUNT; i++) {
+    if (atomic_load_explicit(value, memory_order_acquire)) {
+      return true;
+    }
+    sleep_millis(GPU_API_WAIT_STEP_MS);
+  }
+  return false;
+}
+
+static void
+adapter_ready(GPUResult result, GPUAdapter *adapter, void *userData) {
+  GPUApiAdapterRequest *request;
+
+  request          = userData;
+  request->adapter = adapter;
+  request->result  = result;
+  atomic_store_explicit(&request->done, true, memory_order_release);
+}
+
+static void
+device_ready(GPUResult result, GPUDevice *device, void *userData) {
+  GPUApiDeviceRequest *request;
+
+  request         = userData;
+  request->device = device;
+  request->result = result;
+  atomic_store_explicit(&request->done, true, memory_order_release);
+}
+
+GPUResult
+gpu_test_request_adapter(GPUInstance *instance, GPUAdapter **outAdapter) {
+  GPUApiAdapterRequest request = {0};
+  GPUResult             result;
+
+  if (!outAdapter) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outAdapter = NULL;
+  result = GPURequestAdapter(instance, adapter_ready, &request);
+  if (result != GPU_OK) {
+    return result;
+  }
+  if (!wait_bool(&request.done)) {
+    return GPU_ERROR_TIMEOUT;
+  }
+  *outAdapter = request.adapter;
+  return request.result;
+}
+
+GPUResult
+gpu_test_create_device(GPUAdapter                *adapter,
+                       const GPUDeviceCreateInfo *info,
+                       GPUDevice                **outDevice) {
+  GPUApiDeviceRequest request = {0};
+  GPUResult            result;
+
+  if (!outDevice) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outDevice = NULL;
+  result = GPURequestDevice(adapter, info, device_ready, &request);
+  if (result != GPU_OK) {
+    return result;
+  }
+  if (!wait_bool(&request.done)) {
+    return GPU_ERROR_TIMEOUT;
+  }
+  *outDevice = request.device;
+  return request.result;
+}
+
 void *
 gpu_test_read_file(const char *path, uint64_t *outSize) {
   unsigned char *bytes;

@@ -104,7 +104,7 @@ gpu_test_subgroup(GPUAdapter *adapter, const char *bytecodePath) {
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.required.featureCount = 1u;
   deviceInfo.required.pFeatures    = &feature;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, feature) ||
       GPUGetDeviceCapabilities(device, &deviceCaps) != GPU_OK ||
       deviceCaps.limits.minSubgroupSize != adapterCaps.limits.minSubgroupSize) {

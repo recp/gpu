@@ -105,6 +105,75 @@ layout_has_array_entry(const GPUBindGroupLayoutEntry *entries,
 }
 
 static int
+layout_has_immutable_sampler(const GPUBindGroupLayoutEntry *entries,
+                             uint32_t count,
+                             GPUShaderStageFlags visibility,
+                             uint32_t binding) {
+  for (uint32_t i = 0u; entries && i < count; i++) {
+    if (entries[i].binding == binding &&
+        entries[i].bindingType == GPU_BINDING_SAMPLER &&
+        entries[i].visibility == visibility &&
+        entries[i].arrayCount == 1u &&
+        entries[i].immutableSampler) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static int
+reflection_group0_layout_is_canonical(GPUDevice          *device,
+                                      GPUBindGroupLayout *layout) {
+  const GPUBindGroupLayoutEntry *entries;
+  GPUApi                       *api;
+  uint32_t                      count;
+  int                           webgpu;
+
+  api     = gpuDeviceApi(device);
+  webgpu  = api && api->backend == GPU_BACKEND_WEBGPU;
+  entries = GPUGetBindGroupLayoutEntries(layout, &count);
+  return count == 2u + (uint32_t)webgpu &&
+         layout_has_typed_entry(entries,
+                                count,
+                                GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                GPU_BINDING_UNIFORM_BUFFER,
+                                0u,
+                                0) &&
+         layout_has_typed_entry(entries,
+                                count,
+                                GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                GPU_BINDING_SAMPLED_TEXTURE,
+                                1u,
+                                0) &&
+         (!webgpu ||
+          layout_has_immutable_sampler(entries,
+                                       count,
+                                       GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                       2u));
+}
+
+static int
+reflection_group1_layout_is_canonical(GPUBindGroupLayout *layout) {
+  const GPUBindGroupLayoutEntry *entries;
+  uint32_t                       count;
+
+  entries = GPUGetBindGroupLayoutEntries(layout, &count);
+  return count == 2u &&
+         layout_has_typed_entry(entries,
+                                count,
+                                GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                GPU_BINDING_UNIFORM_BUFFER,
+                                0u,
+                                1) &&
+         layout_has_typed_entry(entries,
+                                count,
+                                GPU_SHADER_STAGE_COMPUTE_BIT,
+                                GPU_BINDING_STORAGE_TEXTURE,
+                                1u,
+                                0);
+}
+
+static int
 check_compute_pipeline_workgroup_size(GPUDevice *device,
                                       GPUShaderLibrary *library,
                                       GPUPipelineLayout *layout) {
@@ -533,7 +602,6 @@ cleanup:
 static int
 check_shader_layout_after_library_destroy(GPUDevice *device,
                                           GPUShaderLayout *shaderLayout) {
-  const GPUBindGroupLayoutEntry *entries;
   GPUBuffer fakeBufferStorage;
   GPUTexture fakeFragmentTextureStorage;
   GPUTexture fakeComputeTextureStorage;
@@ -546,7 +614,6 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
   GPUBindGroup *group1Group;
   GPUApiDescriptor savedDescriptor;
   GPUApi *api;
-  uint32_t count;
   int ok;
 
   if (!shaderLayout ||
@@ -558,36 +625,13 @@ check_shader_layout_after_library_destroy(GPUDevice *device,
     return 0;
   }
 
-  entries = GPUGetBindGroupLayoutEntries(shaderLayout->bindGroupLayouts[0], &count);
-  ok = count == 2u &&
-       layout_has_typed_entry(entries,
-                              count,
-                              GPU_SHADER_STAGE_FRAGMENT_BIT,
-                              GPU_BINDING_UNIFORM_BUFFER,
-                              0u,
-                              0) &&
-       layout_has_typed_entry(entries,
-                              count,
-                              GPU_SHADER_STAGE_FRAGMENT_BIT,
-                              GPU_BINDING_SAMPLED_TEXTURE,
-                              1u,
-                              0);
-  if (ok) {
-    entries = GPUGetBindGroupLayoutEntries(shaderLayout->bindGroupLayouts[1], &count);
-    ok = count == 2u &&
-       layout_has_typed_entry(entries,
-                              count,
-                              GPU_SHADER_STAGE_FRAGMENT_BIT,
-                              GPU_BINDING_UNIFORM_BUFFER,
-                              0u,
-                              1) &&
-       layout_has_typed_entry(entries,
-                              count,
-                              GPU_SHADER_STAGE_COMPUTE_BIT,
-                              GPU_BINDING_STORAGE_TEXTURE,
-                              1u,
-                              0);
-  }
+  ok = reflection_group0_layout_is_canonical(
+         device,
+         shaderLayout->bindGroupLayouts[0]
+       ) &&
+       reflection_group1_layout_is_canonical(
+         shaderLayout->bindGroupLayouts[1]
+       );
   if (!ok) {
     fprintf(stderr, "unexpected canonical shader layout entries\n");
     return 0;
@@ -679,7 +723,6 @@ static int
 check_reflection_objects_after_library_destroy(GPUDevice *device,
                                                GPUBindGroupLayout **layouts,
                                                uint32_t layoutCount) {
-  const GPUBindGroupLayoutEntry *entries;
   GPUBuffer fakeBufferStorage;
   GPUTexture fakeFragmentTextureStorage;
   GPUTexture fakeComputeTextureStorage;
@@ -695,7 +738,6 @@ check_reflection_objects_after_library_destroy(GPUDevice *device,
   GPUApiDescriptor savedDescriptor;
   GPUApi *api;
   int descriptorHookDisabled = 0;
-  uint32_t count;
   int ok = 0;
 
   if (!layouts ||
@@ -706,38 +748,12 @@ check_reflection_objects_after_library_destroy(GPUDevice *device,
     return 0;
   }
 
-  entries = GPUGetBindGroupLayoutEntries(layouts[0], &count);
-  if (count != 2u ||
-      !layout_has_typed_entry(entries,
-                              count,
-                              GPU_SHADER_STAGE_FRAGMENT_BIT,
-                              GPU_BINDING_UNIFORM_BUFFER,
-                              0u,
-                              0) ||
-      !layout_has_typed_entry(entries,
-                              count,
-                              GPU_SHADER_STAGE_FRAGMENT_BIT,
-                              GPU_BINDING_SAMPLED_TEXTURE,
-                              1u,
-                              0)) {
+  if (!reflection_group0_layout_is_canonical(device, layouts[0])) {
     fprintf(stderr, "reflection group 0 layout changed after library destroy\n");
     return 0;
   }
 
-  entries = GPUGetBindGroupLayoutEntries(layouts[1], &count);
-  if (count != 2u ||
-      !layout_has_typed_entry(entries,
-                              count,
-                              GPU_SHADER_STAGE_FRAGMENT_BIT,
-                              GPU_BINDING_UNIFORM_BUFFER,
-                              0u,
-                              1) ||
-      !layout_has_typed_entry(entries,
-                              count,
-                              GPU_SHADER_STAGE_COMPUTE_BIT,
-                              GPU_BINDING_STORAGE_TEXTURE,
-                              1u,
-                              0)) {
+  if (!reflection_group1_layout_is_canonical(layouts[1])) {
     fprintf(stderr, "reflection group 1 layout changed after library destroy\n");
     return 0;
   }
@@ -834,7 +850,6 @@ cleanup:
 
 static int
 check_reflection_layout_api(GPUDevice *device, GPUShaderLibrary *library) {
-  const GPUBindGroupLayoutEntry *entries;
   GPUBindGroupLayout            *layouts[2]         = {0};
   GPUBindGroupLayout            *smallLayouts[1]    = {0};
   GPUBindGroupLayout            *reversedLayouts[2] = {0};
@@ -919,36 +934,8 @@ check_reflection_layout_api(GPUDevice *device, GPUShaderLibrary *library) {
     goto cleanup;
   }
 
-  entries = GPUGetBindGroupLayoutEntries(layouts[0], &count);
-  ok = count == 2u &&
-       layout_has_typed_entry(entries,
-                              count,
-                              GPU_SHADER_STAGE_FRAGMENT_BIT,
-                              GPU_BINDING_UNIFORM_BUFFER,
-                              0u,
-                              0) &&
-       layout_has_typed_entry(entries,
-                              count,
-                              GPU_SHADER_STAGE_FRAGMENT_BIT,
-                              GPU_BINDING_SAMPLED_TEXTURE,
-                              1u,
-                              0);
-  if (ok) {
-    entries = GPUGetBindGroupLayoutEntries(layouts[1], &count);
-    ok = count == 2u &&
-         layout_has_typed_entry(entries,
-                                count,
-                                GPU_SHADER_STAGE_FRAGMENT_BIT,
-                                GPU_BINDING_UNIFORM_BUFFER,
-                                0u,
-                                1) &&
-         layout_has_typed_entry(entries,
-                                count,
-                                GPU_SHADER_STAGE_COMPUTE_BIT,
-                                GPU_BINDING_STORAGE_TEXTURE,
-                                1u,
-                                0);
-  }
+  ok = reflection_group0_layout_is_canonical(device, layouts[0]) &&
+       reflection_group1_layout_is_canonical(layouts[1]);
   if (!ok) {
     fprintf(stderr, "reflection layouts are not ordered by group index\n");
     goto cleanup;

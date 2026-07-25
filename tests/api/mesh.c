@@ -503,7 +503,7 @@ main(int argc, char **argv) {
   deviceInfo.required.featureCount = 1u;
   deviceInfo.required.pFeatures    = &requiredFeature;
   device = NULL;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device) {
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device) {
     fprintf(stderr, "mesh device failed\n");
     GPUDestroyInstance(instance);
     free(artifact);

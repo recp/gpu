@@ -106,16 +106,56 @@ webgpu_viewport(GPURenderPassEncoder *encoder, const GPUViewport *viewport) {
 }
 
 static void
+webgpu_scissorAxis(int32_t   origin,
+                   uint32_t  extent,
+                   uint32_t  limit,
+                   uint32_t *outOrigin,
+                   uint32_t *outExtent) {
+  uint64_t clipped;
+
+  if (origin < 0) {
+    clipped = (uint64_t)-(int64_t)origin;
+    extent  = clipped >= extent ? 0u : extent - (uint32_t)clipped;
+    origin  = 0;
+  }
+
+  *outOrigin = (uint32_t)origin;
+  if ((uint32_t)origin >= limit) {
+    *outOrigin = limit;
+    *outExtent = 0u;
+    return;
+  }
+
+  *outExtent = extent > limit - (uint32_t)origin
+                 ? limit - (uint32_t)origin
+                 : extent;
+}
+
+static void
 webgpu_scissor(GPURenderPassEncoder *encoder, const GPUScissorRect *scissor) {
   GPUCommandWebGPU *command;
+  uint32_t          x;
+  uint32_t          y;
+  uint32_t          width;
+  uint32_t          height;
 
   command = webgpu_renderCommand(encoder);
   if (command && command->renderEncoder && scissor) {
+    webgpu_scissorAxis(scissor->x,
+                       scissor->width,
+                       command->renderWidth,
+                       &x,
+                       &width);
+    webgpu_scissorAxis(scissor->y,
+                       scissor->height,
+                       command->renderHeight,
+                       &y,
+                       &height);
     wgpuRenderPassEncoderSetScissorRect(command->renderEncoder,
-                                        scissor->x,
-                                        scissor->y,
-                                        scissor->width,
-                                        scissor->height);
+                                        x,
+                                        y,
+                                        width,
+                                        height);
   }
 }
 

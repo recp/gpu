@@ -60,7 +60,7 @@ gpu_test_shader_f16(GPUAdapter *adapter, const char *bytecodePath) {
 
   deviceInfo.chain.sType      = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize = sizeof(deviceInfo);
-  if (GPUCreateDevice(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
       !disabledDevice || GPUIsFeatureEnabled(disabledDevice, feature) ||
       GPUCreateShaderLibraryFromUSL(disabledDevice,
                                     bytecode,
@@ -75,7 +75,7 @@ gpu_test_shader_f16(GPUAdapter *adapter, const char *bytecodePath) {
 
   deviceInfo.required.featureCount = 1u;
   deviceInfo.required.pFeatures    = &feature;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, feature)) {
     fprintf(stderr, "shader f16 device feature enablement failed\n");
     goto cleanup;

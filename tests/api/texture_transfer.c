@@ -831,6 +831,13 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
            (uint32_t)format);
     return 1;
   }
+  if (device->inst->createInfo.preferredBackend == GPU_BACKEND_WEBGPU &&
+      (format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+       format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8)) {
+    printf("depth-stencil plane copy skipped: WebGPU format=%u\n",
+           (uint32_t)format);
+    return 1;
+  }
 
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   if (!queue) {

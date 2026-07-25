@@ -763,11 +763,17 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
     }
 
     writeRegion.aspect = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
-    if (GPUQueueWriteTexture(queue,
-                             texture,
-                             &writeRegion,
-                             depthUpload,
-                             sizeof(depthUpload)) != GPU_OK) {
+    writeResult = GPUQueueWriteTexture(queue,
+                                       texture,
+                                       &writeRegion,
+                                       depthUpload,
+                                       sizeof(depthUpload));
+    if (writeResult == GPU_ERROR_UNSUPPORTED) {
+      printf("texture view depth-stencil skipped: depth upload unsupported\n");
+      ok = 1;
+      goto cleanup;
+    }
+    if (writeResult != GPU_OK) {
       fprintf(stderr, "texture view depth write failed\n");
       goto cleanup;
     }

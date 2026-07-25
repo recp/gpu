@@ -21,14 +21,14 @@ gpu_test_buffer_device_address(GPUAdapter *adapter) {
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
   if (!GPUIsFeatureSupported(adapter, feature)) {
-    result = GPUCreateDevice(adapter, &deviceInfo, &device);
+    result = gpu_test_create_device(adapter, &deviceInfo, &device);
     GPUDestroyDevice(device);
     return result == GPU_ERROR_UNSUPPORTED && !device;
   }
 
   deviceInfo.required.pFeatures    = NULL;
   deviceInfo.required.featureCount = 0u;
-  if (GPUCreateDevice(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
       !disabledDevice) {
     fprintf(stderr, "device-address disabled-device setup failed\n");
     goto cleanup;
@@ -50,7 +50,7 @@ gpu_test_buffer_device_address(GPUAdapter *adapter) {
 
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, feature)) {
     fprintf(stderr, "device-address feature enablement failed\n");
     goto cleanup;
@@ -120,14 +120,14 @@ gpu_test_placed_memory(GPUAdapter *adapter) {
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
   if (!GPUIsFeatureSupported(adapter, feature)) {
-    result = GPUCreateDevice(adapter, &deviceInfo, &device);
+    result = gpu_test_create_device(adapter, &deviceInfo, &device);
     GPUDestroyDevice(device);
     return result == GPU_ERROR_UNSUPPORTED && !device;
   }
 
   deviceInfo.required.pFeatures    = NULL;
   deviceInfo.required.featureCount = 0u;
-  if (GPUCreateDevice(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
       !disabledDevice) {
     fprintf(stderr, "placed memory disabled-device setup failed\n");
     goto cleanup;
@@ -151,7 +151,7 @@ gpu_test_placed_memory(GPUAdapter *adapter) {
 
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, feature)) {
     fprintf(stderr, "placed memory feature enablement failed\n");
     goto cleanup;
@@ -359,14 +359,14 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
   if (!GPUIsFeatureSupported(adapter, feature)) {
-    result = GPUCreateDevice(adapter, &deviceInfo, &device);
+    result = gpu_test_create_device(adapter, &deviceInfo, &device);
     GPUDestroyDevice(device);
     return result == GPU_ERROR_UNSUPPORTED && !device;
   }
 
   deviceInfo.required.pFeatures    = NULL;
   deviceInfo.required.featureCount = 0u;
-  if (GPUCreateDevice(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
       !disabledDevice) {
     fprintf(stderr, "sparse disabled-device setup failed\n");
     goto cleanup;
@@ -399,7 +399,7 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   deviceInfo.required.featureCount = 1u;
   deviceInfo.optional.pFeatures    = &bufferFeature;
   deviceInfo.optional.featureCount = 1u;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, feature)) {
     fprintf(stderr, "sparse feature enablement failed\n");
     goto cleanup;
@@ -736,14 +736,14 @@ gpu_test_sparse_buffer_memory(GPUAdapter *adapter) {
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
   if (!GPUIsFeatureSupported(adapter, feature)) {
-    result = GPUCreateDevice(adapter, &deviceInfo, &device);
+    result = gpu_test_create_device(adapter, &deviceInfo, &device);
     GPUDestroyDevice(device);
     return result == GPU_ERROR_UNSUPPORTED && !device;
   }
 
   deviceInfo.required.pFeatures    = NULL;
   deviceInfo.required.featureCount = 0u;
-  if (GPUCreateDevice(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
       !disabledDevice) {
     fprintf(stderr, "sparse buffer disabled-device setup failed\n");
     goto cleanup;
@@ -767,7 +767,7 @@ gpu_test_sparse_buffer_memory(GPUAdapter *adapter) {
 
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, feature) ||
       !GPUIsFeatureEnabled(device,
                            GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT)) {

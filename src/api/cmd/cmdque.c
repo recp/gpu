@@ -272,6 +272,7 @@ gpu_prepareQueueSubmit(GPUQueue                  *cmdq,
   GPUDevice        *device;
   GPUFence         *transientFence;
   GPUCommandBuffer *lastCmdb;
+  GPUResult         result;
   uint32_t          transientFrameIndex;
   bool              transientFrameTagged;
 
@@ -312,6 +313,16 @@ gpu_prepareQueueSubmit(GPUQueue                  *cmdq,
       }
       transientFrameIndex  = cmdb->_transientFrameIndex;
       transientFrameTagged = true;
+    }
+  }
+
+  if (device && device->transientConfigured) {
+    if (!transientFrameTagged) {
+      transientFrameIndex = device->transientFrameIndex;
+    }
+    result = gpuDeviceFlushTransientUploads(cmdq, transientFrameIndex);
+    if (result != GPU_OK) {
+      return result;
     }
   }
 

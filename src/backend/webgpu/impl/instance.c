@@ -34,6 +34,7 @@ webgpu_createInstance(GPUApi                     *api,
   }
 
   instance->_priv = native;
+  instance->createInfo = *info;
   return instance;
 }
 

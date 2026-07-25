@@ -366,7 +366,7 @@ gpu_test_buffer_descriptor_array(GPUAdapter *adapter,
   deviceInfo.required.featureCount = bindless ? 2u : 1u;
   deviceInfo.required.pFeatures    = features;
   device                            = NULL;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device) {
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device) {
     fprintf(stderr, "buffer descriptor array device creation failed\n");
     return 0;
   }

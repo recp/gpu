@@ -40,7 +40,7 @@ gpu_test_atomic64(GPUAdapter *adapter, const char *bytecodePath) {
   deviceInfo.required.featureCount = 1u;
   supported = GPUIsFeatureSupported(adapter, feature);
   if (!supported) {
-    result = GPUCreateDevice(adapter, &deviceInfo, &device);
+    result = gpu_test_create_device(adapter, &deviceInfo, &device);
     GPUDestroyDevice(device);
     return result == GPU_ERROR_UNSUPPORTED && !device;
   }
@@ -53,7 +53,7 @@ gpu_test_atomic64(GPUAdapter *adapter, const char *bytecodePath) {
 
   deviceInfo.required.pFeatures    = NULL;
   deviceInfo.required.featureCount = 0u;
-  if (GPUCreateDevice(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
       !disabledDevice || GPUIsFeatureEnabled(disabledDevice, feature) ||
       GPUCreateShaderLibraryFromUSL(disabledDevice,
                                     bytecode,
@@ -68,7 +68,7 @@ gpu_test_atomic64(GPUAdapter *adapter, const char *bytecodePath) {
 
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, feature)) {
     fprintf(stderr, "atomic64 device feature enablement failed\n");
     goto cleanup;

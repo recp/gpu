@@ -58,7 +58,7 @@ gpu_test_clockDerivativeCase(GPUAdapter                       *adapter,
 
   deviceInfo.chain.sType      = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize = sizeof(deviceInfo);
-  if (GPUCreateDevice(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
       !disabledDevice) {
     fprintf(stderr, "%s disabled-device setup failed\n", test->label);
     goto cleanup;
@@ -77,7 +77,7 @@ gpu_test_clockDerivativeCase(GPUAdapter                       *adapter,
 
   deviceInfo.required.pFeatures    = &test->feature;
   deviceInfo.required.featureCount = 1u;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, test->feature)) {
     fprintf(stderr, "%s device feature enablement failed\n", test->label);
     goto cleanup;

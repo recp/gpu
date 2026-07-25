@@ -28,6 +28,34 @@ webgpu_storeOp(GPUStoreOp op) {
            : WGPUStoreOp_Store;
 }
 
+static WGPUColor
+webgpu_clearColor(const GPURenderPassColorAttachment *attachment) {
+  WGPUColor color;
+
+  switch (gpuFormatNumericType(attachment->view->format)) {
+    case GPU_FORMAT_NUMERIC_UINT:
+      color.r = attachment->clearColor.uint32[0];
+      color.g = attachment->clearColor.uint32[1];
+      color.b = attachment->clearColor.uint32[2];
+      color.a = attachment->clearColor.uint32[3];
+      break;
+    case GPU_FORMAT_NUMERIC_SINT:
+      color.r = attachment->clearColor.sint32[0];
+      color.g = attachment->clearColor.sint32[1];
+      color.b = attachment->clearColor.sint32[2];
+      color.a = attachment->clearColor.sint32[3];
+      break;
+    case GPU_FORMAT_NUMERIC_FLOAT:
+    default:
+      color.r = attachment->clearColor.float32[0];
+      color.g = attachment->clearColor.float32[1];
+      color.b = attachment->clearColor.float32[2];
+      color.a = attachment->clearColor.float32[3];
+      break;
+  }
+  return color;
+}
+
 static bool
 webgpu_formatHasDepth(GPUFormat format) {
   return format == GPU_FORMAT_DEPTH16_UNORM ||
@@ -54,6 +82,23 @@ webgpu_copyAspect(GPUTextureAspect aspect) {
   return (uint32_t)aspect < GPU_ARRAY_LEN(aspects)
            ? aspects[aspect]
            : WGPUTextureAspect_Undefined;
+}
+
+static void
+webgpu_setRenderExtent(GPUCommandWebGPU *command, GPUTextureView *view) {
+  GPUTexture *texture;
+  uint32_t    width;
+  uint32_t    height;
+
+  if (!command || command->renderWidth != 0u || !view ||
+      !(texture = view->_texture)) {
+    return;
+  }
+
+  width  = texture->width >> view->baseMipLevel;
+  height = texture->height >> view->baseMipLevel;
+  command->renderWidth  = width  ? width  : 1u;
+  command->renderHeight = height ? height : 1u;
 }
 
 static GPUCommandWebGPU *
@@ -192,6 +237,8 @@ webgpu_beginRenderPass(GPUCommandBuffer              *cmdb,
 
   command->renderPassDesc =
     (WGPURenderPassDescriptor)WGPU_RENDER_PASS_DESCRIPTOR_INIT;
+  command->renderWidth  = 0u;
+  command->renderHeight = 0u;
   memset(command->colorAttachments, 0, sizeof(command->colorAttachments));
   for (uint32_t i = 0u; i < info->colorAttachmentCount; i++) {
     const GPURenderPassColorAttachment *source;
@@ -207,10 +254,8 @@ webgpu_beginRenderPass(GPUCommandBuffer              *cmdb,
                               : NULL;
     target->loadOp        = webgpu_loadOp(source->loadOp);
     target->storeOp       = webgpu_storeOp(source->storeOp);
-    target->clearValue.r  = source->clearColor.float32[0];
-    target->clearValue.g  = source->clearColor.float32[1];
-    target->clearValue.b  = source->clearColor.float32[2];
-    target->clearValue.a  = source->clearColor.float32[3];
+    target->clearValue    = webgpu_clearColor(source);
+    webgpu_setRenderExtent(command, source->view);
   }
 
   command->renderPassDesc.label = gpu_webgpuString(info->label);
@@ -252,6 +297,7 @@ webgpu_beginRenderPass(GPUCommandBuffer              *cmdb,
       target->stencilClearValue = source->clearStencil;
     }
     command->renderPassDesc.depthStencilAttachment = target;
+    webgpu_setRenderExtent(command, source->view);
   }
   command->renderPass._priv = command;
   command->renderPass.label = info->label;
@@ -337,6 +383,11 @@ webgpu_copyTextureToTexture(
   command = webgpu_copyCommand(pass);
   if (!command || !command->encoder || !src || !src->_priv ||
       !dst || !dst->_priv || !region) {
+    return;
+  }
+  if (webgpu_formatHasDepth(src->format) &&
+      webgpu_formatHasStencil(src->format) &&
+      region->src.aspect != GPU_TEXTURE_ASPECT_ALL) {
     return;
   }
 

@@ -1434,7 +1434,8 @@ check_execution_graph_feature_contract(GPUAdapter *adapter) {
   createInfo.queues.pRequests          = &request;
 
   device = NULL;
-  if (GPUCreateDevice(adapter, &createInfo, &device) != GPU_OK || !device ||
+  if (gpu_test_create_device(adapter, &createInfo, &device) != GPU_OK ||
+      !device ||
       !GPUIsFeatureEnabled(device, feature) ||
       !GPUIsFeatureEnabled(device, GPU_FEATURE_BUFFER_DEVICE_ADDRESS) ||
       !GPUGetProcAddr(device, "GPUCreateExecutionGraphEXT")) {
@@ -1526,7 +1527,8 @@ check_device_queue_create_validation(GPUAdapter *adapter) {
 
   requiredFeature = GPU_FEATURE_COMPUTE;
   device = NULL;
-  if (GPUCreateDevice(adapter, &createInfo, &device) != GPU_OK || !device) {
+  if (gpu_test_create_device(adapter, &createInfo, &device) != GPU_OK ||
+      !device) {
     fprintf(stderr, "device create rejected required compute feature\n");
     return 0;
   }
@@ -1539,7 +1541,8 @@ check_device_queue_create_validation(GPUAdapter *adapter) {
 
   requiredFeature = GPU_FEATURE_INDIRECT_DRAW;
   device = NULL;
-  if (GPUCreateDevice(adapter, &createInfo, &device) != GPU_OK || !device) {
+  if (gpu_test_create_device(adapter, &createInfo, &device) != GPU_OK ||
+      !device) {
     fprintf(stderr, "device create rejected required indirect draw feature\n");
     return 0;
   }
@@ -1591,7 +1594,8 @@ check_device_queue_create_validation(GPUAdapter *adapter) {
   request.type = GPU_QUEUE_GRAPHICS;
   request.count = 1;
   device = NULL;
-  if (GPUCreateDevice(adapter, &createInfo, &device) != GPU_OK || !device) {
+  if (gpu_test_create_device(adapter, &createInfo, &device) != GPU_OK ||
+      !device) {
     fprintf(stderr, "device create rejected explicit queue count\n");
     return 0;
   }
@@ -1810,8 +1814,8 @@ check_device_destroy_waits_for_submission(GPUAdapter *adapter) {
   GPUDevice            *device;
   GPUQueueSubmitInfo    submitInfo = {0};
 
-  device = GPUCreateDeviceWithDefaultQueues(adapter);
-  if (!device) {
+  device = NULL;
+  if (gpu_test_create_device(adapter, NULL, &device) != GPU_OK || !device) {
     fprintf(stderr, "failed to create device for destroy wait test\n");
     return 0;
   }
@@ -1879,6 +1883,7 @@ check_device_destroy_waits_for_submission(GPUAdapter *adapter) {
 
 static int
 check_queue_submit_ex_semaphore(GPUDevice *device) {
+  GPUApi          *api;
   GPUQueue        *queue;
   GPUCommandBuffer *cmdb;
   GPUCommandBuffer *buffers[1];
@@ -1892,6 +1897,11 @@ check_queue_submit_ex_semaphore(GPUDevice *device) {
   GPUCommandBuffer *duplicateBuffers[2];
   GPUQueueSubmitExInfo submitInfo = {0};
   int ok;
+
+  api = gpuDeviceApi(device);
+  if (!api || !api->cmdque.createSemaphore || !api->cmdque.submitEx) {
+    return 1;
+  }
 
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0);
   if (!queue) {

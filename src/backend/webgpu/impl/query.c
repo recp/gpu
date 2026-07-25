@@ -49,7 +49,6 @@ webgpu_destroyQuerySet(GPUQuerySet *set) {
 
   native = set ? set->_priv : NULL;
   if (native) {
-    wgpuQuerySetDestroy(native);
     wgpuQuerySetRelease(native);
     set->_priv = NULL;
   }

@@ -58,7 +58,7 @@
 #endif
 
 enum {
-  GPU_WEBGPU_COMMAND_SLOT_COUNT      = 8u,
+  GPU_WEBGPU_COMMAND_SLOT_COUNT      = 16u,
   GPU_WEBGPU_MAX_SURFACE_FORMATS     = 16u,
   GPU_WEBGPU_MAX_PRESENT_MODES       = 4u,
   GPU_WEBGPU_MAX_QUERY_COUNT         = 4096u,
@@ -109,6 +109,8 @@ typedef struct GPUCommandWebGPU {
   WGPUPassTimestampWrites              timestampWrites;
   uint64_t                             boundIndexOffset;
   WGPUIndexFormat                      boundIndexFormat;
+  uint32_t                             renderWidth;
+  uint32_t                             renderHeight;
   uint32_t                             pushConstantCursor;
   atomic_bool                          inUse;
   bool                                 copyDebugGroup;

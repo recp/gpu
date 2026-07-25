@@ -533,7 +533,7 @@ gpu_test_vrs(GPUAdapter *adapter,
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.required.featureCount = 1u;
   deviceInfo.required.pFeatures    = &feature;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, feature) ||
       !GPUGetProcAddr(device, "GPUSetFragmentShadingRateEXT") ||
       !GPUGetProcAddr(device,

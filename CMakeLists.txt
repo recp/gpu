@@ -163,6 +163,11 @@ set_target_properties(gpu PROPERTIES
 if(APPLE)
   set_target_properties(gpu PROPERTIES
     OBJC_VISIBILITY_PRESET hidden
+    INSTALL_RPATH "@loader_path"
+  )
+elseif(UNIX)
+  set_target_properties(gpu PROPERTIES
+    INSTALL_RPATH "\$ORIGIN"
   )
 endif()
 
@@ -414,6 +419,8 @@ if(GPU_BUILD_WEBGPU)
         "Directory containing webgpu/webgpu.h")
     set(GPU_WEBGPU_LIBRARY "" CACHE FILEPATH
         "Native Dawn or wgpu-native WebGPU library")
+    set(GPU_WEBGPU_RUNTIME_LIBRARY "" CACHE FILEPATH
+        "Native WebGPU provider runtime library installed with gpu")
     if(NOT GPU_WEBGPU_INCLUDE_DIR)
       find_path(GPU_WEBGPU_INCLUDE_DIR webgpu/webgpu.h)
     endif()
@@ -454,6 +461,15 @@ if(GPU_BUILD_WEBGPU)
     message(STATUS "GPU native WebGPU provider: ${_gpu_webgpu_provider}")
     target_include_directories(gpu PRIVATE "${GPU_WEBGPU_INCLUDE_DIR}")
     target_link_libraries(gpu PRIVATE "${GPU_WEBGPU_LIBRARY}")
+
+    set(_gpu_webgpu_runtime_library "${GPU_WEBGPU_RUNTIME_LIBRARY}")
+    if(NOT _gpu_webgpu_runtime_library)
+      if((APPLE AND GPU_WEBGPU_LIBRARY MATCHES "\\.dylib$") OR
+         (UNIX AND NOT APPLE AND
+          GPU_WEBGPU_LIBRARY MATCHES "\\.so(\\.[0-9.]+)?$"))
+        set(_gpu_webgpu_runtime_library "${GPU_WEBGPU_LIBRARY}")
+      endif()
+    endif()
   endif()
 endif()
 
@@ -2327,6 +2343,8 @@ if(GPU_BUILD_TESTS)
     set(GPU_API_DEFAULT_BACKEND metal)
   elseif(GPU_BUILD_DX12)
     set(GPU_API_DEFAULT_BACKEND dx12)
+  elseif(GPU_BUILD_WEBGPU)
+    set(GPU_API_DEFAULT_BACKEND webgpu)
   else()
     set(GPU_API_DEFAULT_BACKEND vulkan)
   endif()
@@ -2346,10 +2364,15 @@ if(GPU_BUILD_TESTS)
     gpu-api-msaa-fixture
     DEPENDS ${GPU_API_MSAA_USL_FIXTURE}
   )
+  set(GPU_API_DESCRIPTOR_INDEXING_BACKEND
+      "${GPU_API_DEFAULT_BACKEND}")
+  if(GPU_API_DEFAULT_BACKEND STREQUAL "webgpu")
+    set(GPU_API_DESCRIPTOR_INDEXING_BACKEND vulkan)
+  endif()
   set(GPU_USL_FIXTURE_TARGET_CAPS descriptor_indexing)
   gpu_add_usl_fixtures(
     GPU_API_DESCRIPTOR_INDEXING_USL_FIXTURE
-    "${GPU_API_DEFAULT_BACKEND}"
+    "${GPU_API_DESCRIPTOR_INDEXING_BACKEND}"
     api
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/descriptor_indexing.usl"
   )
@@ -2360,7 +2383,7 @@ if(GPU_BUILD_TESTS)
   set(GPU_USL_FIXTURE_TARGET_CAPS descriptor_indexing)
   gpu_add_usl_fixtures(
     GPU_API_BUFFER_DESCRIPTOR_ARRAY_USL_FIXTURE
-    "${GPU_API_DEFAULT_BACKEND}"
+    "${GPU_API_DESCRIPTOR_INDEXING_BACKEND}"
     api-buffer-descriptor-array
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/buffer_descriptor_array.usl"
   )
@@ -2372,7 +2395,7 @@ if(GPU_BUILD_TESTS)
   set(GPU_USL_FIXTURE_TARGET_CAPS descriptor_indexing)
   gpu_add_usl_fixtures(
     GPU_API_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_USL_FIXTURE
-    "${GPU_API_DEFAULT_BACKEND}"
+    "${GPU_API_DESCRIPTOR_INDEXING_BACKEND}"
     api-buffer-descriptor-array-dynamic
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/buffer_descriptor_array_dynamic.usl"
   )
@@ -2393,8 +2416,11 @@ if(GPU_BUILD_TESTS)
   set(GPU_API_SUBGROUP_MATRIX_USL_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/subgroup_matrix.usl")
   set(GPU_API_SUBGROUP_MATRIX_PROFILE "8x8x8")
+  set(GPU_API_SUBGROUP_MATRIX_BACKEND "${GPU_API_DEFAULT_BACKEND}")
   set(GPU_USL_FIXTURE_TARGET_CAPS subgroup_matrix)
-  if(GPU_API_DEFAULT_BACKEND STREQUAL "vulkan")
+  if(GPU_API_DEFAULT_BACKEND STREQUAL "vulkan" OR
+     GPU_API_DEFAULT_BACKEND STREQUAL "webgpu")
+    set(GPU_API_SUBGROUP_MATRIX_BACKEND vulkan)
     set(GPU_API_SUBGROUP_MATRIX_USL_SOURCE
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/api/subgroup_matrix_vulkan.usl")
     set(GPU_API_SUBGROUP_MATRIX_PROFILE "16x8x8")
@@ -2403,7 +2429,7 @@ if(GPU_BUILD_TESTS)
   endif()
   gpu_add_usl_fixtures(
     GPU_API_SUBGROUP_MATRIX_USL_FIXTURE
-    "${GPU_API_DEFAULT_BACKEND}"
+    "${GPU_API_SUBGROUP_MATRIX_BACKEND}"
     api-subgroup-matrix
     "${GPU_API_SUBGROUP_MATRIX_USL_SOURCE}"
   )
@@ -3160,6 +3186,11 @@ if(GPU_BUILD_TESTS)
   if(NOT MSVC)
     target_compile_options(gpu-api-test PRIVATE -Wall -Wextra -Werror)
   endif()
+  if(NOT WIN32)
+    target_compile_definitions(gpu-api-test PRIVATE
+      _POSIX_C_SOURCE=200809L
+    )
+  endif()
 
   foreach(runtime_target us ds)
     if(TARGET ${runtime_target})
@@ -3174,6 +3205,7 @@ if(GPU_BUILD_TESTS)
   add_test(NAME api-validation
     COMMAND gpu-api-test
             ${GPU_API_USL_FIXTURES}
+            ${GPU_API_DEFAULT_BACKEND}
   )
   set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
     "GPU_MSAA_USL_PATH=${GPU_API_MSAA_USL_FIXTURE}"
@@ -5157,6 +5189,22 @@ install(TARGETS gpu
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+if(GPU_BUILD_WEBGPU AND _gpu_webgpu_runtime_library)
+  if(NOT EXISTS "${_gpu_webgpu_runtime_library}")
+    message(FATAL_ERROR
+      "GPU_WEBGPU_RUNTIME_LIBRARY does not exist: "
+      "${_gpu_webgpu_runtime_library}")
+  endif()
+  if(WIN32)
+    install(FILES "${_gpu_webgpu_runtime_library}"
+      DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+  else()
+    install(FILES "${_gpu_webgpu_runtime_library}"
+      DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    )
+  endif()
+endif()
 install(FILES ${GPU_PUBLIC_HEADERS}
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/gpu
 )

@@ -204,7 +204,7 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
   deviceInfo.chain.structSize       = sizeof(deviceInfo);
   deviceInfo.required.featureCount = 1;
   deviceInfo.required.pFeatures    = &timestampFeature;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device) {
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device) {
     fprintf(stderr, "timestamp feature device create failed\n");
     return 0;
   }
@@ -461,7 +461,7 @@ check_pipeline_statistics_roundtrip(GPUAdapter *adapter,
   deviceInfo.chain.structSize       = sizeof(deviceInfo);
   deviceInfo.required.featureCount  = 1u;
   deviceInfo.required.pFeatures     = &feature;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device) {
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device) {
     fprintf(stderr, "pipeline statistics feature device create failed\n");
     goto cleanup;
   }

@@ -16,8 +16,6 @@ webgpu_recycleCommand(GPUCommandBuffer *cmdb) {
   if (!command) {
     return;
   }
-  memset(&command->command, 0, sizeof(command->command));
-  command->command._priv = command;
   atomic_store_explicit(&command->inUse, false, memory_order_release);
 }
 

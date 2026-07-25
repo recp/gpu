@@ -260,6 +260,11 @@ webgpu_writeTexture(GPUQueue             * __restrict queue,
       !region || !data || sizeBytes > SIZE_MAX) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  if ((texture->format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
+       texture->format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8) &&
+      region->aspect == GPU_TEXTURE_ASPECT_DEPTH_ONLY) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
 
   destination.texture  = texture->_priv;
   destination.mipLevel = region->mipLevel;

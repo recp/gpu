@@ -170,7 +170,7 @@ gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath) {
   bytecode     = NULL;
   bytecodeSize = 0u;
   ok           = 0;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUP_MATRIX) ||
       !GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16) ||
       !GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUPS) ||

@@ -670,7 +670,7 @@ gpu_test_sampler_feedback(GPUAdapter *adapter,
     device = NULL;
     if (result != GPU_ERROR_UNSUPPORTED ||
         properties.tier != GPU_SAMPLER_FEEDBACK_TIER_NONE_EXT ||
-        GPUCreateDevice(adapter, &deviceInfo, &device) !=
+        gpu_test_create_device(adapter, &deviceInfo, &device) !=
           GPU_ERROR_UNSUPPORTED ||
         device) {
       fprintf(stderr, "unsupported sampler feedback was exposed\n");
@@ -700,7 +700,7 @@ gpu_test_sampler_feedback(GPUAdapter *adapter,
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
   device = NULL;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, feature)) {
     fprintf(stderr, "sampler feedback feature enablement failed\n");
     GPUDestroyDevice(device);

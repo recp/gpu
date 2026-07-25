@@ -13,8 +13,8 @@ frag descriptor_array_bindless_fs(
   samplers: [sampler; 2] #sampler(3) #group(1),
   selection: uint #buffer(4) #group(1)
 ) -> float4 {
-  return textures[selection].sample(
-    samplers[selection], float2(0.5), level(0.0))
+  return textures[1].sample(
+    samplers[1], float2(0.5), level(0.0)) * float(selection)
 }
 
 frag descriptor_array_fs(input: DescriptorArrayInput #stage_in,
@@ -33,8 +33,8 @@ kern(1, 1, 1) descriptor_array_cs(
   storageImages: [image2d<rgba8unorm, write>; 2] #texture(6) #group(1),
   gid: uint3 #global_id
 ) {
-  let color = textures[selection].sample(
-    samplers[selection], float2(0.5), level(0.0))
+  let color = textures[1].sample(
+    samplers[1], float2(0.5), level(0.0)) * float(selection)
   output[0] = color
-  storageImages[selection].write(color, gid.xy)
+  storageImages[1].write(color, gid.xy)
 }

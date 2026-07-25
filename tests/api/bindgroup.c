@@ -1586,7 +1586,7 @@ gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath) {
 
   deviceInfo.chain.sType      = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize = sizeof(deviceInfo);
-  if (GPUCreateDevice(adapter, &deviceInfo, &disabled) != GPU_OK ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &disabled) != GPU_OK ||
       !disabled || GPUGetProcAddr(disabled, "GPUUpdateBindGroupEXT")) {
     fprintf(stderr, "bindless extension was enabled by default\n");
     goto cleanup;
@@ -1617,7 +1617,7 @@ gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath) {
 
   deviceInfo.required.featureCount = 1u;
   deviceInfo.required.pFeatures    = &feature;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, GPU_FEATURE_BINDLESS) ||
       !GPUIsFeatureEnabled(device, GPU_FEATURE_DESCRIPTOR_INDEXING) ||
       !GPUGetProcAddr(device, "GPUUpdateBindGroupEXT")) {

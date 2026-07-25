@@ -19,6 +19,7 @@ typedef struct WebGPUDeviceRequest {
   GPUDevice                       *device;
   GPUDeviceWebGPU                 *native;
   void                            *userData;
+  GPUQueueFlagBits                 queueBits;
   bool                             ready;
 } WebGPUDeviceRequest;
 
@@ -613,9 +614,7 @@ webgpu_deviceReady(WGPURequestDeviceStatus status,
       if (usable) {
         native->queueHandle._priv   = native->queue;
         native->queueHandle._device = device;
-        native->queueHandle.bits    = GPU_QUEUE_GRAPHICS_BIT |
-                                      GPU_QUEUE_COMPUTE_BIT |
-                                      GPU_QUEUE_TRANSFER_BIT;
+        native->queueHandle.bits    = request->queueBits;
         for (uint32_t i = 0u; i < GPU_WEBGPU_COMMAND_SLOT_COUNT; i++) {
           native->commands[i].command._priv = &native->commands[i];
         }
@@ -684,16 +683,47 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   GPUAdapterWebGPU    *native;
   WebGPUDeviceRequest *request;
   uint64_t             supportedMask;
+  GPUQueueFlagBits      queueBits;
+  uint32_t              graphicsCount;
+  uint32_t              computeCount;
+  uint32_t              transferCount;
 
   _Static_assert(GPU_ARRAY_LEN(optionalFeatures) + 4u <=
                    GPU_ARRAY_LEN(requiredFeatures),
                  "WebGPU device feature storage is too small");
 
-  GPU__UNUSED(queueInfos);
-  GPU__UNUSED(queueInfoCount);
   native = gpu_webgpuAdapter(adapter);
   if (!native || !native->adapter || !callback) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if ((!queueInfos && queueInfoCount != 0u) ||
+      (queueInfos && queueInfoCount == 0u)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  queueBits      = GPU_QUEUE_GRAPHICS_BIT | GPU_QUEUE_COMPUTE_BIT;
+  graphicsCount = 1u;
+  computeCount  = 1u;
+  transferCount = 0u;
+  if (queueInfos) {
+    queueBits      = 0u;
+    graphicsCount = 0u;
+    computeCount  = 0u;
+    for (uint32_t i = 0u; i < queueInfoCount; i++) {
+      queueBits |= queueInfos[i].flags;
+      if ((queueInfos[i].flags & GPU_QUEUE_GRAPHICS_BIT) != 0u) {
+        graphicsCount += queueInfos[i].count;
+      }
+      if ((queueInfos[i].flags & GPU_QUEUE_COMPUTE_BIT) != 0u) {
+        computeCount += queueInfos[i].count;
+      }
+      if ((queueInfos[i].flags & GPU_QUEUE_TRANSFER_BIT) != 0u) {
+        transferCount += queueInfos[i].count;
+      }
+    }
+  }
+  if (graphicsCount > 1u || computeCount > 1u || transferCount > 1u) {
+    return GPU_ERROR_UNSUPPORTED;
   }
   if (wgpuAdapterGetLimits(native->adapter, &requiredLimits) !=
       WGPUStatus_Success) {
@@ -730,6 +760,7 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   }
   request->callback = callback;
   request->userData = userData;
+  request->queueBits = queueBits;
   request->native->limits = requiredLimits;
 
   descriptor.label = gpu_webgpuString("gpu-webgpu-device");

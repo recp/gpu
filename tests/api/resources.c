@@ -127,8 +127,8 @@ check_format_texture_create(GPUDevice            *device,
   info.chain.structSize = sizeof(info);
   info.dimension        = GPU_TEXTURE_DIMENSION_2D;
   info.format           = format;
-  info.width            = 16u;
-  info.height           = 16u;
+  info.width            = 120u;
+  info.height           = 120u;
   info.depthOrLayers    = 1u;
   info.mipLevelCount    = 1u;
   info.sampleCount      = 1u;

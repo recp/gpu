@@ -1,4 +1,5 @@
 #include "test.h"
+#include "../../src/api/device_internal.h"
 
 enum {
   GPU_VOLUME_BASE_SIZE      = 8u,
@@ -50,10 +51,11 @@ fill_volume_slice(uint8_t *pixels,
 }
 
 static int
-check_volume_layout(GPUShaderLayout *shaderLayout) {
+check_volume_layout(GPUShaderLayout *shaderLayout, bool webgpu) {
   const GPUBindGroupLayoutEntry *entries;
   uint32_t                       count;
   uint32_t                       seen;
+  bool                           foundImmutableSampler;
 
   if (!shaderLayout || shaderLayout->bindGroupLayoutCount != 1u ||
       !shaderLayout->bindGroupLayouts ||
@@ -64,14 +66,15 @@ check_volume_layout(GPUShaderLayout *shaderLayout) {
 
   entries = GPUGetBindGroupLayoutEntries(shaderLayout->bindGroupLayouts[0],
                                           &count);
-  if (!entries || count != 2u) {
+  if (!entries || count != (webgpu ? 3u : 2u)) {
     return 0;
   }
 
-  seen = 0u;
+  seen                  = 0u;
+  foundImmutableSampler = false;
   for (uint32_t i = 0u; i < count; i++) {
     if (entries[i].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
-        entries[i].binding > 1u ||
+        entries[i].binding > (webgpu ? 2u : 1u) ||
         (entries[i].binding == 0u &&
          (entries[i].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
           entries[i].sampledTexture.viewType != GPU_TEXTURE_VIEW_3D ||
@@ -84,9 +87,19 @@ check_volume_layout(GPUShaderLayout *shaderLayout) {
             GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY))) {
       return 0;
     }
+    if (entries[i].binding == 2u) {
+      if (!webgpu ||
+          entries[i].bindingType != GPU_BINDING_SAMPLER ||
+          !entries[i].immutableSampler ||
+          entries[i].arrayCount != 1u) {
+        return 0;
+      }
+      foundImmutableSampler = true;
+    }
     seen |= 1u << entries[i].binding;
   }
-  return seen == 0x3u;
+  return seen == (webgpu ? 0x7u : 0x3u) &&
+         foundImmutableSampler == webgpu;
 }
 
 static int
@@ -160,6 +173,7 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
   uint8_t                        outputMip1[GPU_VOLUME_MIP1_BYTES];
   uint8_t                        pixels[GPU_VOLUME_READBACK_BYTES];
   uint64_t                       bytecodeSize;
+  bool                           webgpu;
   int                            ok;
 
   if (!device || !bytecodePath) {
@@ -182,6 +196,7 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
   fence         = NULL;
   bytecodeSize  = 0u;
   bytecode      = gpu_test_read_file(bytecodePath, &bytecodeSize);
+  webgpu        = device->_api && device->_api->backend == GPU_BACKEND_WEBGPU;
   ok            = queue && bytecode;
   if (!ok) {
     fprintf(stderr, "volume texture fixture setup failed\n");
@@ -211,7 +226,7 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
                                     &library) != GPU_OK ||
       !library ||
       GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
-      !check_volume_layout(shaderLayout)) {
+      !check_volume_layout(shaderLayout, webgpu)) {
     fprintf(stderr, "volume texture shader layout creation failed\n");
     ok = 0;
     goto cleanup;

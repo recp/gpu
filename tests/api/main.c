@@ -281,20 +281,6 @@ run_untyped_pointer(void *ctx) {
                                   testCtx->untypedPointerBytecodePath);
 }
 
-static GPUAdapter *
-select_adapter(GPUInstance *instance) {
-  GPUAdapter *adapter = NULL;
-  uint32_t adapterCount = 1;
-  GPUResult result;
-
-  result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter) {
-    return NULL;
-  }
-  return adapter;
-}
-
 static bool
 parse_backend(const char *name, GPUBackend *outBackend) {
   if (!name || !outBackend) {
@@ -307,6 +293,8 @@ parse_backend(const char *name, GPUBackend *outBackend) {
     *outBackend = GPU_BACKEND_VULKAN;
   } else if (strcmp(name, "dx12") == 0) {
     *outBackend = GPU_BACKEND_DX12;
+  } else if (strcmp(name, "webgpu") == 0) {
+    *outBackend = GPU_BACKEND_WEBGPU;
   } else {
     return false;
   }
@@ -331,7 +319,7 @@ main(int argc, char **argv) {
             "<line_texture.us> <volume_texture.us> <descriptor_arrays.us> "
             "<coordinate.us> <descriptor_indexing.us> <subgroup.us> "
             "<shader_f16.us> "
-            "[metal|vulkan|dx12]\n",
+            "[metal|vulkan|dx12|webgpu]\n",
             argv[0]);
     return 2;
   }
@@ -351,15 +339,13 @@ main(int argc, char **argv) {
     return 1;
   }
 
-  adapter = select_adapter(instance);
-  if (!adapter) {
+  if (gpu_test_request_adapter(instance, &adapter) != GPU_OK || !adapter) {
     fprintf(stderr, "failed to get adapter\n");
     GPUDestroyInstance(instance);
     return 1;
   }
 
-  device = GPUCreateDeviceWithDefaultQueues(adapter);
-  if (!device) {
+  if (gpu_test_create_device(adapter, NULL, &device) != GPU_OK || !device) {
     fprintf(stderr, "failed to create device\n");
     GPUDestroyInstance(instance);
     return 1;

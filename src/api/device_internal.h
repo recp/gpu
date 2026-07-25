@@ -28,6 +28,7 @@ typedef struct GPUTransientChunk {
   uint64_t                  offset;
   GPUBufferUsageFlags       usage;
   uint32_t                  frameIndex;
+  bool                      cpuPtrOwned;
 } GPUTransientChunk;
 
 typedef struct GPUPipelineCache GPUPipelineCache;
@@ -75,6 +76,7 @@ struct GPUDevice {
   GPUTransientAllocatorConfig transientConfig;
   uint64_t                     enabledFeatureMask;
   uint64_t                     transientFrameOffset;
+  uint64_t                     transientFrameStride;
   uint64_t                     _nextPipelineCompileId;
   uint64_t                     _completedGPUFrameTimeBits;
   GPUQueueFlagBits             queueFamilies;
@@ -83,6 +85,7 @@ struct GPUDevice {
   uint32_t                     deviceLostReported;
   bool                         transientConfigured;
   bool                         transientFrameBegun;
+  bool                         transientCpuPtrOwned;
   bool                         uslUntypedPointers;
   GPUFeature                   enabledFeatureStorage[
     GPU_FEATURE_INTERSECTION_FUNCTION_TABLE + 1u
@@ -297,6 +300,10 @@ gpuDeviceRecordHotPathFree(GPUDevice *device, uint64_t sizeBytes);
 GPU_HIDE
 void
 gpuDeviceRecordGPUFrameTime(GPUDevice *device, double milliseconds);
+
+GPU_HIDE
+GPUResult
+gpuDeviceFlushTransientUploads(GPUQueue *queue, uint32_t frameIndex);
 
 GPU_HIDE
 void

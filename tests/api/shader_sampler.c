@@ -129,7 +129,10 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   uint32_t                          layoutEntryCount;
   size_t                            leftOffset;
   size_t                            rightOffset;
+  bool                              foundImmutableSampler;
+  bool                              foundTexture;
   bool                              savedStatsEnabled;
+  bool                              webgpu;
   int                               ok;
 
   if (!device || !bytecodePath) {
@@ -138,6 +141,7 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
 
   savedStatsEnabled                 = device->runtimeConfig.enableStats;
   device->runtimeConfig.enableStats = true;
+  webgpu = device->_api && device->_api->backend == GPU_BACKEND_WEBGPU;
   queue          = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   library        = NULL;
   shaderLayout   = NULL;
@@ -199,11 +203,25 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
     shaderLayout->bindGroupLayouts[0],
     &layoutEntryCount
   );
-  if (!layoutEntries || layoutEntryCount != 1u ||
-      layoutEntries[0].binding != 0u ||
-      layoutEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-      layoutEntries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
-    fprintf(stderr, "source sampler leaked into public shader layout\n");
+  foundTexture          = false;
+  foundImmutableSampler = false;
+  for (uint32_t i = 0u; layoutEntries && i < layoutEntryCount; i++) {
+    if (layoutEntries[i].binding == 0u &&
+        layoutEntries[i].bindingType == GPU_BINDING_SAMPLED_TEXTURE &&
+        layoutEntries[i].visibility == GPU_SHADER_STAGE_FRAGMENT_BIT) {
+      foundTexture = true;
+    }
+    if (layoutEntries[i].binding == 1u &&
+        layoutEntries[i].bindingType == GPU_BINDING_SAMPLER &&
+        layoutEntries[i].visibility == GPU_SHADER_STAGE_FRAGMENT_BIT &&
+        layoutEntries[i].immutableSampler) {
+      foundImmutableSampler = true;
+    }
+  }
+  if (layoutEntryCount != 1u + (uint32_t)webgpu ||
+      !foundTexture ||
+      foundImmutableSampler != webgpu) {
+    fprintf(stderr, "source sampler shader layout mismatch\n");
     ok = 0;
     goto cleanup;
   }

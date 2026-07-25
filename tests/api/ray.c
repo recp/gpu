@@ -155,7 +155,7 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
   if (!GPUIsFeatureSupported(adapter, feature)) {
     deviceInfo.required.featureCount = 1u;
     deviceInfo.required.pFeatures    = &feature;
-    result = GPUCreateDevice(adapter, &deviceInfo, &enabled);
+    result = gpu_test_create_device(adapter, &deviceInfo, &enabled);
     if (result != GPU_ERROR_UNSUPPORTED || enabled) {
       fprintf(stderr, "unsupported ray pipeline feature was enabled\n");
       GPUDestroyDevice(enabled);
@@ -165,7 +165,7 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
     return 1;
   }
 
-  if (GPUCreateDevice(adapter, &deviceInfo, &disabled) != GPU_OK ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &disabled) != GPU_OK ||
       !disabled) {
     fprintf(stderr, "ray pipeline disabled-device creation failed\n");
     return 0;
@@ -183,7 +183,7 @@ gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
 
   deviceInfo.required.featureCount = 1u;
   deviceInfo.required.pFeatures    = &feature;
-  if (GPUCreateDevice(adapter, &deviceInfo, &enabled) != GPU_OK || !enabled ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &enabled) != GPU_OK || !enabled ||
       !GPUIsFeatureEnabled(enabled, feature) ||
       !GPUIsFeatureEnabled(enabled, GPU_FEATURE_RAY_QUERY)) {
     fprintf(stderr, "ray pipeline feature enablement failed\n");
@@ -824,7 +824,7 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, feature) ||
       !GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_QUERY)) {
     fprintf(stderr, "intersection-function-table feature enablement failed\n");
@@ -1445,7 +1445,7 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.required.featureCount = 1u;
   deviceInfo.required.pFeatures    = &feature;
-  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device ||
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, feature) ||
       !GPUGetProcAddr(device, "GPUBuildAccelerationStructureEXT")) {
     fprintf(stderr, "ray-query feature enablement failed\n");
