@@ -197,35 +197,13 @@ void
 mt_setArgumentBuffer(GPUCommandBuffer *cmdb,
                      MTArgumentState  *state,
                      GPUBuffer        *buffer,
-                     uint64_t           offset,
-                     uint32_t           index) {
-#if MT_HAS_METAL4
-  MTCommandBuffer *native;
-  id<MTLBuffer>    allocation;
-
+                     uint64_t          offset,
+                     uint32_t          index) {
   if (!state || !state->table || !buffer ||
       index >= MT_ARGUMENT_BUFFER_COUNT || offset > buffer->sizeBytes) {
     return;
   }
-
-  if (@available(macOS 26.0, iOS 26.0, *)) {
-    allocation = buffer->_priv;
-    native     = mt_commandBuffer(cmdb);
-    [(id<MTL4ArgumentTable>)state->table
-      setAddress:buffer->_gpuAddress + offset
-         atIndex:index];
-    state->bufferMask |= 1u << index;
-    if (!native || native->lastResidencyAllocation != allocation) {
-      mt_useAllocation(cmdb, allocation);
-    }
-  }
-#else
-  GPU__UNUSED(cmdb);
-  GPU__UNUSED(state);
-  GPU__UNUSED(buffer);
-  GPU__UNUSED(offset);
-  GPU__UNUSED(index);
-#endif
+  mt_setArgumentBufferFast(cmdb, state, buffer, offset, index);
 }
 
 GPU_HIDE

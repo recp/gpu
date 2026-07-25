@@ -821,11 +821,11 @@ mt_bindStaticBuffer(GPURenderPassEncoder *pass,
     arguments = priv->singleBufferStages == GPU_SHADER_STAGE_FRAGMENT_BIT
                   ? native->fragmentArguments
                   : native->vertexArguments;
-    mt_setArgumentBuffer(pass->_cmdb,
-                         arguments,
-                         binding->buffer,
-                         binding->offset,
-                         index);
+    mt_setArgumentBufferFast(pass->_cmdb,
+                             arguments,
+                             binding->buffer,
+                             binding->offset,
+                             index);
     return true;
   }
 #endif

@@ -414,11 +414,45 @@ mt_prepareArgumentState(GPUCommandBuffer *cmdb,
 
 GPU_HIDE
 void
+mt_useAllocation(GPUCommandBuffer *cmdb, id allocation);
+
+static GPU_INLINE void
+mt_setArgumentBufferFast(GPUCommandBuffer *cmdb,
+                         MTArgumentState  *state,
+                         GPUBuffer        *buffer,
+                         uint64_t          offset,
+                         uint32_t          index) {
+#if MT_HAS_METAL4
+  MTCommandBuffer *native;
+  id<MTLBuffer>    allocation;
+
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    allocation = buffer->_priv;
+    native     = mt_commandBuffer(cmdb);
+    [(id<MTL4ArgumentTable>)state->table
+      setAddress:buffer->_gpuAddress + offset
+         atIndex:index];
+    state->bufferMask |= 1u << index;
+    if (!native || native->lastResidencyAllocation != allocation) {
+      mt_useAllocation(cmdb, allocation);
+    }
+  }
+#else
+  GPU__UNUSED(cmdb);
+  GPU__UNUSED(state);
+  GPU__UNUSED(buffer);
+  GPU__UNUSED(offset);
+  GPU__UNUSED(index);
+#endif
+}
+
+GPU_HIDE
+void
 mt_setArgumentBuffer(GPUCommandBuffer *cmdb,
                      MTArgumentState  *state,
                      GPUBuffer        *buffer,
-                     uint64_t           offset,
-                     uint32_t           index);
+                     uint64_t          offset,
+                     uint32_t          index);
 
 GPU_HIDE
 void
@@ -440,10 +474,6 @@ mt_setArgumentAccelerationStructure(
   MTArgumentState            *state,
   GPUAccelerationStructureEXT *structure,
   uint32_t                     index);
-
-GPU_HIDE
-void
-mt_useAllocation(GPUCommandBuffer *cmdb, id allocation);
 
 GPU_HIDE
 void
