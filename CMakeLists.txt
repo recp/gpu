@@ -91,6 +91,9 @@ set(GPU_CONFIG_NEEDS_VULKAN OFF)
 if(NOT BUILD_SHARED_LIBS AND GPU_BUILD_VULKAN)
   set(GPU_CONFIG_NEEDS_VULKAN ON)
 endif()
+set(GPU_CONFIG_HAS_WEBGPU_STATIC_PROVIDER OFF)
+set(GPU_CONFIG_WEBGPU_STATIC_PROVIDER_FILENAME "")
+set(GPU_INSTALL_TARGETS gpu)
 
 set(GPU_USL_ROOT "" CACHE PATH "UniversalShading/us checkout")
 set(GPU_USL_INCLUDE_DIR "" CACHE PATH "USL public include directory")
@@ -251,6 +254,11 @@ if(APPLE)
   endfunction()
 endif()
 
+if(GPU_BUILD_METAL OR (APPLE AND GPU_BUILD_WEBGPU))
+  find_library(GPU_FRAMEWORK_METAL Metal REQUIRED)
+  gpu_link_apple_framework(gpu Metal "${GPU_FRAMEWORK_METAL}")
+endif()
+
 if(GPU_BUILD_METAL)
   target_sources(gpu PRIVATE
     src/backend/mt/init.c
@@ -278,9 +286,7 @@ if(GPU_BUILD_METAL)
     src/backend/mt/impl/vrs.m
   )
 
-  find_library(GPU_FRAMEWORK_METAL Metal REQUIRED)
   find_library(GPU_FRAMEWORK_METALKIT MetalKit REQUIRED)
-  gpu_link_apple_framework(gpu Metal "${GPU_FRAMEWORK_METAL}")
   gpu_link_apple_framework(gpu MetalKit "${GPU_FRAMEWORK_METALKIT}")
 endif()
 
@@ -460,7 +466,27 @@ if(GPU_BUILD_WEBGPU)
     endif()
     message(STATUS "GPU native WebGPU provider: ${_gpu_webgpu_provider}")
     target_include_directories(gpu PRIVATE "${GPU_WEBGPU_INCLUDE_DIR}")
-    target_link_libraries(gpu PRIVATE "${GPU_WEBGPU_LIBRARY}")
+    if(BUILD_SHARED_LIBS)
+      target_link_libraries(gpu PRIVATE "${GPU_WEBGPU_LIBRARY}")
+    else()
+      add_library(gpu_webgpu_provider INTERFACE)
+      set_target_properties(gpu_webgpu_provider PROPERTIES
+        EXPORT_NAME webgpu_provider
+      )
+      target_link_libraries(gpu_webgpu_provider INTERFACE
+        "$<BUILD_INTERFACE:${GPU_WEBGPU_LIBRARY}>"
+      )
+      target_link_libraries(gpu PRIVATE gpu_webgpu_provider)
+      list(APPEND GPU_INSTALL_TARGETS gpu_webgpu_provider)
+
+      get_filename_component(
+        GPU_CONFIG_WEBGPU_STATIC_PROVIDER_FILENAME
+        "${GPU_WEBGPU_LIBRARY}"
+        NAME
+      )
+      set(GPU_CONFIG_HAS_WEBGPU_STATIC_PROVIDER ON)
+      set(_gpu_webgpu_static_provider_library "${GPU_WEBGPU_LIBRARY}")
+    endif()
 
     set(_gpu_webgpu_runtime_library "${GPU_WEBGPU_RUNTIME_LIBRARY}")
     if(NOT _gpu_webgpu_runtime_library)
@@ -5183,12 +5209,17 @@ if(GPU_BUILD_BENCHMARKS)
   endif()
 endif()
 
-install(TARGETS gpu
+install(TARGETS ${GPU_INSTALL_TARGETS}
   EXPORT gpuTargets
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+if(GPU_BUILD_WEBGPU AND _gpu_webgpu_static_provider_library)
+  install(FILES "${_gpu_webgpu_static_provider_library}"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  )
+endif()
 if(GPU_BUILD_WEBGPU AND _gpu_webgpu_runtime_library)
   if(NOT EXISTS "${_gpu_webgpu_runtime_library}")
     message(FATAL_ERROR
