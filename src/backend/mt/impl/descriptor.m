@@ -650,7 +650,7 @@ mt_bindRenderSingleDynamicBuffer(GPURenderPassEncoder *pass,
   uint64_t                 offset;
   uint32_t                 index;
 
-  binding  = priv->singleDynamicBuffer;
+  binding  = priv->singleBuffer;
   pipeline = pipelineLayout ? pipelineLayout->_priv : NULL;
   if (!pass || !binding || !pipeline || !dynamicOffsets ||
       groupIndex >= pipeline->bindGroupLayoutCount ||
@@ -668,11 +668,11 @@ mt_bindRenderSingleDynamicBuffer(GPURenderPassEncoder *pass,
 
   index = pipeline->backendBindings[groupIndex][binding->layoutEntryIndex] +
           binding->arrayIndex;
-  if (priv->singleDynamicStages == GPU_SHADER_STAGE_FRAGMENT_BIT) {
+  if (priv->singleBufferStages == GPU_SHADER_STAGE_FRAGMENT_BIT) {
     mt_fragmentBuffer(pass, binding->buffer, offset, index);
     return MT_BIND_DYNAMIC_DONE;
   }
-  if (priv->singleDynamicStages == GPU_SHADER_STAGE_VERTEX_BIT) {
+  if (priv->singleBufferStages == GPU_SHADER_STAGE_VERTEX_BIT) {
     mt_vertexBuffer(pass, binding->buffer, offset, index);
     return MT_BIND_DYNAMIC_DONE;
   }
@@ -694,7 +694,8 @@ mt_bindRenderDynamicBuffers(GPURenderPassEncoder *pass,
 
   priv   = group ? group->_priv : NULL;
   native = group ? group->_native : NULL;
-  if (priv && dynamicOffsetCount == 1u && priv->singleDynamicBuffer) {
+  if (priv && dynamicOffsetCount == 1u && priv->singleBuffer &&
+      priv->singleBuffer->dynamicOffsetIndex == 0u) {
     return mt_bindRenderSingleDynamicBuffer(pass,
                                             pipelineLayout,
                                             groupIndex,
@@ -793,6 +794,54 @@ mt_bindRenderDynamicBuffers(GPURenderPassEncoder *pass,
 }
 
 static bool
+mt_bindStaticBuffer(GPURenderPassEncoder *pass,
+                    GPUPipelineLayoutPriv *pipeline,
+                    uint32_t               groupIndex,
+                    GPUBindGroupPriv      *priv) {
+  GPUBindGroupBindingPriv *binding;
+  MTRenderEncoder         *native;
+  uint32_t                 index;
+
+  binding = priv ? priv->singleBuffer : NULL;
+  native  = pass ? pass->_priv : NULL;
+  if (!binding || !binding->buffer ||
+      binding->dynamicOffsetIndex != UINT32_MAX || !pipeline || !native ||
+      groupIndex >= pipeline->bindGroupLayoutCount ||
+      !pipeline->backendBindings ||
+      !pipeline->backendBindings[groupIndex]) {
+    return false;
+  }
+
+  index = pipeline->backendBindings[groupIndex][binding->layoutEntryIndex] +
+          binding->arrayIndex;
+#if MT_HAS_METAL4
+  if (native->modern) {
+    MTArgumentState *arguments;
+
+    arguments = priv->singleBufferStages == GPU_SHADER_STAGE_FRAGMENT_BIT
+                  ? native->fragmentArguments
+                  : native->vertexArguments;
+    mt_setArgumentBuffer(pass->_cmdb,
+                         arguments,
+                         binding->buffer,
+                         binding->offset,
+                         index);
+    return true;
+  }
+#endif
+
+  if (priv->singleBufferStages == GPU_SHADER_STAGE_FRAGMENT_BIT) {
+    mt_fragmentBuffer(pass, binding->buffer, binding->offset, index);
+    return true;
+  }
+  if (priv->singleBufferStages == GPU_SHADER_STAGE_VERTEX_BIT) {
+    mt_vertexBuffer(pass, binding->buffer, binding->offset, index);
+    return true;
+  }
+  return false;
+}
+
+static bool
 mt_bindRenderGroupStatic(GPURenderPassEncoder *pass,
                          GPUPipelineLayout    *pipelineLayout,
                          uint32_t              groupIndex,
@@ -811,6 +860,11 @@ mt_bindRenderGroupStatic(GPURenderPassEncoder *pass,
       (layout->count > 0u &&
        (!pipeline->backendBindings || !pipeline->backendBindings[groupIndex]))) {
     return false;
+  }
+
+  if (priv->singleBuffer &&
+      priv->singleBuffer->dynamicOffsetIndex == UINT32_MAX) {
+    return mt_bindStaticBuffer(pass, pipeline, groupIndex, priv);
   }
 
   if (priv->count == 1u) {

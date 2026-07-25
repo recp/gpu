@@ -79,12 +79,12 @@ typedef struct GPUBindGroupBindingPriv {
 typedef struct GPUBindGroupPriv {
   GPUBindGroupLayout      *layout;
   GPUBindGroupBindingPriv *bindings;
-  GPUBindGroupBindingPriv *singleDynamicBuffer;
+  GPUBindGroupBindingPriv *singleBuffer;
   uint64_t                *updateScratch;
   uint64_t                 hash;
   uint32_t                 count;
   uint32_t                 dynamicOffsetCount;
-  GPUShaderStageFlags      singleDynamicStages;
+  GPUShaderStageFlags      singleBufferStages;
   bool                     bindless;
 } GPUBindGroupPriv;
 
