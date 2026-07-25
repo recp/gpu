@@ -3366,7 +3366,7 @@ GPUDestroyBindGroup(GPUBindGroup *group) {
   free((GPUBindGroupStorage *)group);
 }
 
-static GPU_INLINE void
+static void
 gpuBindRenderBinding(void *ctx, const GPUBindGroupBindingView *binding) {
   GPUBindRenderContext *bindCtx;
   GPUApiRCE            *api;
@@ -3503,15 +3503,6 @@ gpu_bindGroupEachStatic(GPUPipelineLayoutPriv  *pipeline,
   return 1;
 }
 
-static GPU_INLINE int
-gpu_bindGroupEachDynamic(GPUPipelineLayout      *pipelineLayout,
-                         uint32_t                groupIndex,
-                         GPUBindGroup           *group,
-                         uint32_t                dynamicOffsetCount,
-                         const uint32_t         *pDynamicOffsets,
-                         GPUBindGroupBindingFn   fn,
-                         void                   *ctx);
-
 GPU_EXPORT
 void
 GPUBindRenderGroup(GPURenderPassEncoder *pass,
@@ -3521,6 +3512,7 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
                    const uint32_t *pDynamicOffsets) {
   GPUBindRenderContext ctx;
   GPUApi              *api;
+  bool                 bound;
 
   if (!pass || pass->_ended || !group ||
       groupIndex >= GPU_ENCODER_MAX_BIND_GROUPS) {
@@ -3550,7 +3542,21 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
   if (!api) {
     api = gpuDeviceApi(gpuBindGroupGetDevice(group));
   }
-  if (api && api->descriptor.bindRenderGroup) {
+  if (!api || !api->descriptor.bindRenderGroup) {
+    if (!api) {
+      return;
+    }
+    ctx.pass = pass;
+    ctx.api  = &api->rce;
+    bound = gpuForEachBindGroupBindingWithDynamicOffsets(
+      pass->_pipelineLayout,
+      groupIndex,
+      group,
+      dynamicOffsetCount,
+      pDynamicOffsets,
+      gpuBindRenderBinding,
+      &ctx);
+  } else {
 #if GPU_BUILD_WITH_VALIDATION
     if (!gpuValidateBindGroupDynamicOffsets(pass->_pipelineLayout,
                                             groupIndex,
@@ -3560,35 +3566,14 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
       return;
     }
 #endif
-    if (api->descriptor.bindRenderGroup(pass,
-                                        pass->_pipelineLayout,
-                                        groupIndex,
-                                        group,
-                                        dynamicOffsetCount,
-                                        pDynamicOffsets)) {
-      if (pass->_boundGroups[groupIndex] != group) {
-        pass->_boundGroupLayouts[groupIndex] = gpuBindGroupGetLayout(group);
-      }
-      pass->_boundGroups[groupIndex] = group;
-      gpuStoreBindGroupShadow(
-        &pass->_boundDynamicOffsetCounts[groupIndex],
-        pass->_boundDynamicOffsets[groupIndex],
-        dynamicOffsetCount,
-        pDynamicOffsets);
-      gpuFrameStatsRecordBindEmission(pass->_stats);
-    }
-    return;
+    bound = api->descriptor.bindRenderGroup(pass,
+                                            pass->_pipelineLayout,
+                                            groupIndex,
+                                            group,
+                                            dynamicOffsetCount,
+                                            pDynamicOffsets);
   }
-
-  ctx.pass = pass;
-  ctx.api  = &api->rce;
-  if (gpu_bindGroupEachDynamic(pass->_pipelineLayout,
-                               groupIndex,
-                               group,
-                               dynamicOffsetCount,
-                               pDynamicOffsets,
-                               gpuBindRenderBinding,
-                               &ctx)) {
+  if (bound) {
     if (pass->_boundGroups[groupIndex] != group) {
       pass->_boundGroupLayouts[groupIndex] = gpuBindGroupGetLayout(group);
     }
