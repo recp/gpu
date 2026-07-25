@@ -1,0 +1,50 @@
+struct BloomVertexOut {
+  position: float4 #position
+  uv:       float2
+}
+
+fn blur_sample(inputImage: texture2d<float>,
+               coord:      int2,
+               direction:  int2) -> float4 {
+  let maxCoord = int2(int(inputImage.get_width(0)) - 1,
+                      int(inputImage.get_height(0)) - 1)
+  let lo       = int2(0)
+  var color    = inputImage.read(clamp(coord, lo, maxCoord)) * 0.227027
+
+  color += inputImage.read(clamp(coord + direction, lo, maxCoord)) * 0.1945946
+  color += inputImage.read(clamp(coord - direction, lo, maxCoord)) * 0.1945946
+  color += inputImage.read(clamp(coord + direction * 2, lo, maxCoord)) * 0.1216216
+  color += inputImage.read(clamp(coord - direction * 2, lo, maxCoord)) * 0.1216216
+  color += inputImage.read(clamp(coord + direction * 3, lo, maxCoord)) * 0.054054
+  color += inputImage.read(clamp(coord - direction * 3, lo, maxCoord)) * 0.054054
+  color += inputImage.read(clamp(coord + direction * 4, lo, maxCoord)) * 0.016216
+  color += inputImage.read(clamp(coord - direction * 4, lo, maxCoord)) * 0.016216
+  return color
+}
+
+kern(8, 8, 1) blur_horizontal(inputImage: texture2d<float> #texture(0),
+                              outputImage: image2d<rgba8unorm, write> #texture(1),
+                              gid: uint2 #global_id) {
+  outputImage.write(blur_sample(inputImage, int2(gid), int2(1, 0)), gid)
+}
+
+kern(8, 8, 1) blur_vertical(inputImage: texture2d<float> #texture(0),
+                            outputImage: image2d<rgba8unorm, write> #texture(1),
+                            gid: uint2 #global_id) {
+  outputImage.write(blur_sample(inputImage, int2(gid), int2(0, 1)), gid)
+}
+
+vert bloom_vs(vertexId: uint #vertex_id) -> BloomVertexOut {
+  if (vertexId == 0) { return BloomVertexOut { float4(-1.0, -1.0, 0.0, 1.0), float2(0.0, 1.0) } }
+  if (vertexId == 1) { return BloomVertexOut { float4( 3.0, -1.0, 0.0, 1.0), float2(2.0, 1.0) } }
+  return BloomVertexOut { float4(-1.0, 3.0, 0.0, 1.0), float2(0.0, -1.0) }
+}
+
+frag bloom_fs(input: BloomVertexOut #stage_in,
+              sourceImage: texture2d<float> #texture(0) #group(1),
+              bloomImage: texture2d<float> #texture(1) #group(1),
+              linearSampler: sampler #sampler(2) #group(1)) -> float4 {
+  let source = sourceImage.sample(linearSampler, input.uv, level(0.0))
+  let glow   = bloomImage.sample(linearSampler, input.uv, level(0.0))
+  return float4(saturate(source.rgb + glow.rgb * 1.65), 1.0)
+}

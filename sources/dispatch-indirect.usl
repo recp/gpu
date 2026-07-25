@@ -1,0 +1,41 @@
+struct GeneratedVertex {
+  position: float4
+  color:    float4
+}
+
+struct ComputeConstants {
+  tint: float4
+}
+
+vertex VSIn {
+  position: float4
+  color:    float4
+}
+
+struct VSOut {
+  position: float4 #position
+  color:    float4
+}
+
+kern(1, 1, 1) fill_indirect_vertices(inout vertices: [GeneratedVertex] #buffer(0),
+                                     draw: ComputeConstants #push_constant,
+                                     gid: uint3 #global_id) {
+  if (gid.x == 0u) {
+    vertices[gid.x].position = float4(-0.68, -0.62, 0.0, 1.0)
+    vertices[gid.x].color    = float4(1.0, 0.40, 0.04, 1.0) * draw.tint
+  } else if (gid.x == 1u) {
+    vertices[gid.x].position = float4(0.68, -0.62, 0.0, 1.0)
+    vertices[gid.x].color    = float4(0.04, 0.88, 0.58, 1.0) * draw.tint
+  } else {
+    vertices[gid.x].position = float4(0.0, 0.70, 0.0, 1.0)
+    vertices[gid.x].color    = float4(0.12, 0.46, 1.0, 1.0) * draw.tint
+  }
+}
+
+vert tri_vs(v: VSIn #stage_in) -> VSOut {
+  v.position, v.color
+}
+
+frag tri_fs(i: VSOut #stage_in) -> float4 {
+  return i.color
+}

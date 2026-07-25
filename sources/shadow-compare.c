@@ -15,9 +15,9 @@ typedef struct WebGPUShadowCompare {
   GPUShaderLayout   *shaderLayout;
   GPURenderPipeline *depthPipeline;
   GPURenderPipeline *previewPipeline;
+  GPURenderPipeline *previewCoolPipeline;
   GPUTexture        *depthTexture;
   GPUTextureView    *depthView;
-  GPUSampler        *shadowSampler;
   GPUBindGroup      *shadowGroup;
   WebGPURequest      request;
   uint32_t           width;
@@ -31,29 +31,25 @@ static int
 create_shadow_group(WebGPUShadowCompare *state,
                     GPUTextureView      *view,
                     GPUBindGroup       **outGroup) {
-  GPUBindGroupEntry      entries[2] = {0};
+  GPUBindGroupEntry      entry = {0};
   GPUBindGroupCreateInfo info       = {0};
 
-  if (!state || !view || !outGroup || !state->shadowSampler ||
-      !state->shaderLayout ||
+  if (!state || !view || !outGroup || !state->shaderLayout ||
       state->shaderLayout->bindGroupLayoutCount != 1u ||
       !state->shaderLayout->bindGroupLayouts ||
       !state->shaderLayout->bindGroupLayouts[0]) {
     return 0;
   }
 
-  entries[0].textureView = view;
-  entries[0].binding     = 0u;
-  entries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
-  entries[1].sampler     = state->shadowSampler;
-  entries[1].binding     = 1u;
-  entries[1].bindingType = GPU_BINDING_SAMPLER;
+  entry.textureView      = view;
+  entry.binding          = 0u;
+  entry.bindingType      = GPU_BINDING_SAMPLED_TEXTURE;
   info.chain.sType       = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   info.chain.structSize  = sizeof(info);
   info.label             = "shadow-compare-webgpu-group";
   info.layout            = state->shaderLayout->bindGroupLayouts[0];
-  info.pEntries          = entries;
-  info.entryCount        = GPU_ARRAY_LEN(entries);
+  info.pEntries          = &entry;
+  info.entryCount        = 1u;
   return GPUCreateBindGroup(state->device, &info, outGroup) == GPU_OK &&
          *outGroup;
 }
@@ -184,7 +180,9 @@ create_shader(WebGPUShadowCompare *state) {
     }
     if (entries[i].binding == 1u &&
         entries[i].bindingType == GPU_BINDING_SAMPLER &&
-        entries[i].sampler.type == GPU_SAMPLER_BINDING_COMPARISON) {
+        entries[i].sampler.type == GPU_SAMPLER_BINDING_COMPARISON &&
+        entries[i].immutableSampler &&
+        entries[i].immutableSamplerDesc.compareEnable) {
       foundComparison = true;
     }
   }
@@ -244,30 +242,22 @@ create_pipelines(WebGPUShadowCompare *state) {
     set_status("GPU: failed to create shadow comparison pipeline", 1);
     return 0;
   }
+
+  info.label         = "shadow-compare-webgpu-preview-cool-pipeline";
+  info.fragmentEntry = "shadow_preview_cool_fs";
+  result = GPUCreateRenderPipeline(state->device,
+                                   &info,
+                                   &state->previewCoolPipeline);
+  if (result != GPU_OK || !state->previewCoolPipeline) {
+    set_status("GPU: failed to create second shadow comparison pipeline", 1);
+    return 0;
+  }
   return 1;
 }
 
 static int
 create_resources(WebGPUShadowCompare *state) {
-  GPUSamplerCreateInfo info = {0};
-
-  info.chain.sType        = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-  info.chain.structSize   = sizeof(info);
-  info.label              = "shadow-compare-webgpu-sampler";
-  info.desc.minFilter     = GPU_FILTER_LINEAR;
-  info.desc.magFilter     = GPU_FILTER_LINEAR;
-  info.desc.mipFilter     = GPU_MIP_FILTER_NEAREST;
-  info.desc.addressU      = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  info.desc.addressV      = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  info.desc.addressW      = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  info.desc.compare       = GPU_COMPARE_LESS_EQUAL;
-  info.desc.compareEnable = true;
-  if (GPUCreateSampler(state->device,
-                       &info,
-                       false,
-                       &state->shadowSampler) != GPU_OK ||
-      !state->shadowSampler ||
-      !create_depth_target(state, state->width, state->height)) {
+  if (!create_depth_target(state, state->width, state->height)) {
     set_status("GPU: failed to create shadow comparison resources", 1);
     return 0;
   }
@@ -285,6 +275,10 @@ render_frame(void *userData) {
   GPURenderPassCreateInfo             passInfo     = {0};
   GPUTextureBarrier                   depthBarrier = {0};
   GPUBarrierBatch                     barriers     = {0};
+  GPUViewport                         viewport     = {0};
+  GPUScissorRect                      scissor      = {0};
+  uint32_t                            leftWidth;
+  uint32_t                            rightWidth;
 
   state = userData;
   if (!resize_canvas(state)) {
@@ -354,8 +348,27 @@ render_frame(void *userData) {
     return;
   }
 
+  leftWidth         = state->width / 2u;
+  rightWidth        = state->width - leftWidth;
+  viewport.width    = (float)leftWidth;
+  viewport.height   = (float)state->height;
+  viewport.minDepth = 0.0f;
+  viewport.maxDepth = 1.0f;
+  scissor.width     = leftWidth;
+  scissor.height    = state->height;
+  GPUSetViewport(pass, &viewport);
+  GPUSetScissor(pass, &scissor);
   GPUBindRenderPipeline(pass, state->previewPipeline);
   GPUBindRenderGroup(pass, 0u, state->shadowGroup, 0u, NULL);
+  GPUDraw(pass, 3u, 1u, 0u, 0u);
+
+  viewport.x     = (float)leftWidth;
+  viewport.width = (float)rightWidth;
+  scissor.x      = (int32_t)leftWidth;
+  scissor.width  = rightWidth;
+  GPUSetViewport(pass, &viewport);
+  GPUSetScissor(pass, &scissor);
+  GPUBindRenderPipeline(pass, state->previewCoolPipeline);
   GPUDraw(pass, 3u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
 
@@ -367,10 +380,10 @@ render_frame(void *userData) {
     state->frameCount++;
     if (state->frameCount > WARM_FRAME_COUNT &&
         GPUGetLastFrameStats(state->device, &stats) == GPU_OK &&
-        (stats.drawCalls != 2u || stats.hotPathAllocCount != 0u ||
+        (stats.drawCalls != 3u || stats.hotPathAllocCount != 0u ||
          stats.hotPathFreeCount != 0u)) {
-      set_status(stats.drawCalls != 2u
-                   ? "GPU: shadow comparison did not encode both draws"
+      set_status(stats.drawCalls != 3u
+                   ? "GPU: shadow comparison did not encode all draws"
                    : "GPU: warm shadow frame allocated wrapper memory",
                  1);
       emscripten_cancel_main_loop();
@@ -428,7 +441,7 @@ webgpu_ready(GPUResult  result,
     return;
   }
 
-  set_status("GPU: WebGPU USL comparison shadow ready", 0);
+  set_status("GPU: WebGPU USL multi-entry comparison shadow ready", 0);
   emscripten_set_main_loop_arg(render_frame, state, 0, true);
 }
 

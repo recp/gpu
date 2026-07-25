@@ -23,6 +23,7 @@ typedef struct WebGPUDescriptorArray {
   GPUTexture         *textures[DESCRIPTOR_COUNT];
   GPUTextureView     *textureViews[DESCRIPTOR_COUNT];
   GPUSampler         *samplers[DESCRIPTOR_COUNT];
+  GPUBuffer          *tintBuffers[DESCRIPTOR_COUNT];
   GPUBindGroup       *bindGroup;
   WebGPURequest       request;
   uint32_t            width;
@@ -116,13 +117,16 @@ create_shader(WebGPUDescriptorArray *state) {
     state->shaderLayout->bindGroupLayouts[0],
     &entryCount
   );
-  if (!entries || entryCount != 2u ||
+  if (!entries || entryCount != 3u ||
       entries[0].binding != 0u ||
       entries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
       entries[0].arrayCount != DESCRIPTOR_COUNT ||
       entries[1].binding != 1u ||
       entries[1].bindingType != GPU_BINDING_SAMPLER ||
-      entries[1].arrayCount != DESCRIPTOR_COUNT) {
+      entries[1].arrayCount != DESCRIPTOR_COUNT ||
+      entries[2].binding != 2u ||
+      entries[2].bindingType != GPU_BINDING_READ_ONLY_STORAGE_BUFFER ||
+      entries[2].arrayCount != DESCRIPTOR_COUNT) {
     set_status("GPU: descriptor-array reflection lost its array shape", 1);
     return 0;
   }
@@ -160,12 +164,19 @@ create_resources(WebGPUDescriptorArray *state) {
     "descriptor-array-pink",
     "descriptor-array-green"
   };
+  static const float tints[DESCRIPTOR_COUNT][4] = {
+    {1.00f, 0.72f, 0.55f, 1.0f},
+    {0.55f, 0.82f, 1.00f, 1.0f},
+    {1.00f, 0.58f, 0.86f, 1.0f},
+    {0.68f, 1.00f, 0.62f, 1.0f}
+  };
   uint8_t                  pixels[TEXTURE_DATA_SIZE];
+  GPUBufferCreateInfo      bufferInfo  = {0};
   GPUTextureCreateInfo     textureInfo = {0};
   GPUTextureWriteRegion    writeRegion = {0};
   GPUTextureViewCreateInfo viewInfo    = {0};
   GPUSamplerCreateInfo     samplerInfo = {0};
-  GPUBindGroupEntry        entries[DESCRIPTOR_COUNT * 2u] = {0};
+  GPUBindGroupEntry        entries[DESCRIPTOR_COUNT * 3u] = {0};
   GPUBindGroupCreateInfo   groupInfo = {0};
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
@@ -204,6 +215,12 @@ create_resources(WebGPUDescriptorArray *state) {
   samplerInfo.desc.addressV    = GPU_ADDRESS_MODE_REPEAT;
   samplerInfo.desc.addressW    = GPU_ADDRESS_MODE_REPEAT;
 
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.sizeBytes        = sizeof(tints[0]);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE |
+                                GPU_BUFFER_USAGE_COPY_DST;
+
   for (uint32_t i = 0u; i < DESCRIPTOR_COUNT; i++) {
     fill_texture(pixels, i);
     textureInfo.label = textureLabels[i];
@@ -230,6 +247,18 @@ create_resources(WebGPUDescriptorArray *state) {
       set_status("GPU: failed to create a descriptor-array sampler", 1);
       return 0;
     }
+    bufferInfo.label = textureLabels[i];
+    if (GPUCreateBuffer(state->device,
+                        &bufferInfo,
+                        &state->tintBuffers[i]) != GPU_OK ||
+        GPUQueueWriteBuffer(state->queue,
+                            state->tintBuffers[i],
+                            0u,
+                            tints[i],
+                            sizeof(tints[i])) != GPU_OK) {
+      set_status("GPU: failed to create a descriptor-array buffer", 1);
+      return 0;
+    }
 
     entries[i].textureView = state->textureViews[i];
     entries[i].binding     = 0u;
@@ -239,6 +268,13 @@ create_resources(WebGPUDescriptorArray *state) {
     entries[DESCRIPTOR_COUNT + i].binding     = 1u;
     entries[DESCRIPTOR_COUNT + i].arrayIndex  = i;
     entries[DESCRIPTOR_COUNT + i].bindingType = GPU_BINDING_SAMPLER;
+    entries[DESCRIPTOR_COUNT * 2u + i].buffer.buffer =
+      state->tintBuffers[i];
+    entries[DESCRIPTOR_COUNT * 2u + i].buffer.size = sizeof(tints[i]);
+    entries[DESCRIPTOR_COUNT * 2u + i].binding     = 2u;
+    entries[DESCRIPTOR_COUNT * 2u + i].arrayIndex  = i;
+    entries[DESCRIPTOR_COUNT * 2u + i].bindingType =
+      GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
   }
 
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;

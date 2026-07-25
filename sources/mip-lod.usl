@@ -1,0 +1,32 @@
+struct MipOut {
+  position: float4 #position
+  uv:       float2
+  lod:      float
+}
+
+fn quad_corner(vertexId: uint) -> float2 {
+  if (vertexId == 0) { return float2(-1.0, -1.0) }
+  if (vertexId == 1) { return float2( 1.0, -1.0) }
+  if (vertexId == 2) { return float2(-1.0,  1.0) }
+  if (vertexId == 3) { return float2(-1.0,  1.0) }
+  if (vertexId == 4) { return float2( 1.0, -1.0) }
+  return float2(1.0, 1.0)
+}
+
+vert mip_vs(vertexId: uint #vertex_id,
+            instanceId: uint #instance_id) -> MipOut {
+  let corner = quad_corner(vertexId)
+  let column = float(instanceId) - 2.0
+  let center = float2(column * 0.39, 0.0)
+  return MipOut {
+    float4(center + corner * float2(0.17, 0.72), 0.0, 1.0),
+    corner * float2(1.5, 4.0) + float2(0.5),
+    float(instanceId)
+  }
+}
+
+frag mip_fs(input: MipOut #stage_in,
+            colorTex: texture2d<float> #texture(0),
+            colorSampler: sampler #sampler(1)) -> float4 {
+  return colorTex.sample(colorSampler, input.uv, level(input.lod))
+}

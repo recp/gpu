@@ -34,7 +34,7 @@ const keywords = {
   ]),
   usl: new Set([
     "break", "case", "const", "continue", "discard", "else", "false", "for",
-    "frag", "if", "in", "inout", "kern", "let", "out", "pub", "return",
+    "fn", "frag", "if", "in", "inout", "kern", "let", "out", "pub", "return",
     "struct", "switch", "true", "var", "vert", "vertex", "while"
   ]),
   wgsl: new Set([

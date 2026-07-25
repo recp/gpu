@@ -140,6 +140,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--copper-bright);
 .stage-meta p .project-link { color: var(--link-blue); }
 #status { color: var(--stone-dark); font: 10px/1.4 var(--mono); }
 #status[data-failed="true"] { color: #ff765f; }
+#status[data-failed="notice"] { color: var(--copper-bright); }
 
 .source-panel { margin-top: 80px; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
 .source-toolbar { min-height: 48px; display: flex; align-items: stretch; justify-content: space-between; border-bottom: 1px solid var(--line); }

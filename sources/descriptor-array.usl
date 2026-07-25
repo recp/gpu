@@ -14,12 +14,13 @@ vert descriptor_array_vs(vertexId: uint #vertex_id) -> VSOut {
 
 frag descriptor_array_fs(input: VSOut #stage_in,
                          textures: texture2d<float>[4] #texture(0),
-                         samplers: sampler[4] #sampler(1)) -> float4 {
+                         samplers: sampler[4] #sampler(1),
+                         tints: [buffer_view<float4>; 4] #buffer(2)) -> float4 {
   let uv = float2(input.uv.x * 2.0, input.uv.y * 2.0)
-  let c0 = textures[0].sample(samplers[0], uv)
-  let c1 = textures[1].sample(samplers[1], uv)
-  let c2 = textures[2].sample(samplers[2], uv)
-  let c3 = textures[3].sample(samplers[3], uv)
+  let c0 = textures[0].sample(samplers[0], uv) * tints[0][0]
+  let c1 = textures[1].sample(samplers[1], uv) * tints[1][0]
+  let c2 = textures[2].sample(samplers[2], uv) * tints[2][0]
+  let c3 = textures[3].sample(samplers[3], uv) * tints[3][0]
   if (input.uv.x < 0.5) {
     if (input.uv.y < 0.5) { return c0 }
     return c2

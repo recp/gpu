@@ -15,6 +15,14 @@ struct VSOut {
 @group(0) @binding(6) var usl_g0_b6: sampler;
 @group(0) @binding(7) var usl_g0_b7: sampler;
 
+struct usl_buffer_g0_b2 {
+    values: array<vec4<f32>>,
+}
+@group(0) @binding(8) var<storage, read> usl_g0_b8: usl_buffer_g0_b2;
+@group(0) @binding(9) var<storage, read> usl_g0_b9: usl_buffer_g0_b2;
+@group(0) @binding(10) var<storage, read> usl_g0_b10: usl_buffer_g0_b2;
+@group(0) @binding(11) var<storage, read> usl_g0_b11: usl_buffer_g0_b2;
+
 @vertex
 fn descriptor_array_vs(@builtin(vertex_index) vertexId: u32) -> VSOut {
     switch (vertexId) {
@@ -42,14 +50,14 @@ fn descriptor_array_vs(@builtin(vertex_index) vertexId: u32) -> VSOut {
 @fragment
 fn descriptor_array_fs(input: VSOut) -> @location(0) vec4<f32> {
     let r41: vec2<f32> = (vec2<f32>(2.0) * input.uv);
-    let r46 = textureSample(usl_g0_b0, usl_g0_b4, r41);
-    let r51 = textureSample(usl_g0_b1, usl_g0_b5, r41);
-    let r56 = textureSample(usl_g0_b2, usl_g0_b6, r41);
-    let r61 = textureSample(usl_g0_b3, usl_g0_b7, r41);
-    let r77: bool = (input.uv.y < 0.5);
+    let r49: vec4<f32> = (textureSample(usl_g0_b0, usl_g0_b4, r41) * usl_g0_b8.values[0]);
+    let r57: vec4<f32> = (textureSample(usl_g0_b1, usl_g0_b5, r41) * usl_g0_b9.values[0]);
+    let r65: vec4<f32> = (textureSample(usl_g0_b2, usl_g0_b6, r41) * usl_g0_b10.values[0]);
+    let r73: vec4<f32> = (textureSample(usl_g0_b3, usl_g0_b7, r41) * usl_g0_b11.values[0]);
+    let r90: bool = (input.uv.y < 0.5);
     if ((input.uv.x < 0.5)) {
-        return select(r56, r46, r77);
+        return select(r65, r49, r90);
     } else {
-        return select(r61, r51, r77);
+        return select(r73, r57, r90);
     }
 }

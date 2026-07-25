@@ -11,6 +11,7 @@ typedef struct WebGPUTriangle {
   GPUSwapchain      *swapchain;
   GPUShaderLibrary  *library;
   GPUShaderLayout   *shaderLayout;
+  GPUPipelineCache  *pipelineCache;
   GPURenderPipeline *pipeline;
   WebGPURequest      request;
   uint32_t           width;
@@ -29,7 +30,10 @@ resize_canvas(WebGPUTriangle *state) {
 static int
 create_pipeline(WebGPUTriangle *state) {
   GPUColorTargetState         color = {0};
+  GPUCacheStats               stats;
+  GPUPipelineCacheCreateInfo  cacheInfo = {0};
   GPURenderPipelineCreateInfo info = {0};
+  GPURenderPipeline          *cachedPipeline;
   void                       *artifact;
   uint64_t                    artifactSize;
   GPUResult                   result;
@@ -62,10 +66,22 @@ create_pipeline(WebGPUTriangle *state) {
   color.format          = GPUGetSwapchainFormat(state->swapchain);
   color.blend.writeMask = GPU_COLOR_WRITE_ALL;
 
+  cacheInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+  cacheInfo.chain.structSize = sizeof(cacheInfo);
+  cacheInfo.label            = "triangle-webgpu-usl-cache";
+  if (GPUCreatePipelineCache(state->device,
+                             &cacheInfo,
+                             &state->pipelineCache) != GPU_OK ||
+      !state->pipelineCache) {
+    set_status("GPU: failed to create WebGPU pipeline cache", 1);
+    return 0;
+  }
+
   info.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
   info.chain.structSize     = sizeof(info);
   info.label                = "triangle-webgpu-usl-pipeline";
   info.layout               = state->shaderLayout->pipelineLayout;
+  info.cache                = state->pipelineCache;
   info.library              = state->library;
   info.vertexEntry          = "tri_vs";
   info.fragmentEntry        = "tri_fs";
@@ -76,11 +92,27 @@ create_pipeline(WebGPUTriangle *state) {
   info.frontFace            = GPU_FRONT_FACE_CCW;
   info.multisample.sampleCount = 1u;
   info.multisample.sampleMask  = UINT32_MAX;
+  GPUResetStats(state->device);
   result = GPUCreateRenderPipeline(state->device, &info, &state->pipeline);
   if (result != GPU_OK || !state->pipeline) {
     set_status("GPU: failed to create WebGPU pipeline", 1);
     return 0;
   }
+
+  cachedPipeline = NULL;
+  if (GPUCreateRenderPipeline(state->device,
+                              &info,
+                              &cachedPipeline) != GPU_OK ||
+      !cachedPipeline ||
+      GPUGetCacheStats(state->device, &stats) != GPU_OK ||
+      stats.pipelineCompiles != 1u ||
+      stats.pipelineMisses != 1u ||
+      stats.pipelineHits != 1u) {
+    GPUDestroyRenderPipeline(cachedPipeline);
+    set_status("GPU: WebGPU pipeline cache miss/hit check failed", 1);
+    return 0;
+  }
+  GPUDestroyRenderPipeline(cachedPipeline);
   return 1;
 }
 

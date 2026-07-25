@@ -32,9 +32,14 @@ vert depth_preview_vs(vertexId: uint #vertex_id) -> PreviewOut {
 }
 
 frag depth_preview_fs(input: PreviewOut #stage_in,
-                      depthTex: depth2d<float> #texture(0)) -> float4 {
-  let size  = float2(float(depthTex.get_width(0)),
-                     float(depthTex.get_height(0)))
-  let depth = depthTex.read(int2(input.uv * (size - float2(1.0))))
-  return float4(depth, depth, depth, 1.0)
+                      depthTex: depth2d<float> #texture(0),
+                      visibility: [uint] #buffer(1)) -> float4 {
+  let size    = float2(float(depthTex.get_width(0)),
+                       float(depthTex.get_height(0)))
+  let depth   = depthTex.read(int2(input.uv * (size - float2(1.0))))
+  let visible = visibility[2] != 0u || visibility[3] != 0u
+  let tint    = visible
+    ? float3(0.18, 1.0, 0.38)
+    : float3(1.0, 0.05, 0.02)
+  return float4(float3(depth) * tint, 1.0)
 }

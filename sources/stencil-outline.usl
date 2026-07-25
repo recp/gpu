@@ -1,0 +1,24 @@
+struct VSOut {
+  position: float4 #position
+  color:    float4
+}
+
+vert fill_vs(vertexId: uint #vertex_id) -> VSOut {
+  float4((vertexId & 1u) == 0u ? -0.48 : 0.48,
+         (vertexId & 2u) == 0u ? -0.48 : 0.48,
+         0.0,
+         1.0),
+  float4(0.05, 0.68, 0.92, 1.0)
+}
+
+vert outline_vs(vertexId: uint #vertex_id) -> VSOut {
+  float4((vertexId & 1u) == 0u ? -0.57 : 0.57,
+         (vertexId & 2u) == 0u ? -0.57 : 0.57,
+         0.0,
+         1.0),
+  float4(1.0, 0.34, 0.06, 1.0)
+}
+
+frag solid_fs(input: VSOut #stage_in) -> float4 {
+  return input.color
+}

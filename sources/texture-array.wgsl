@@ -7,7 +7,18 @@ struct VSOut {
 
 @group(0) @binding(0) var usl_g0_b0: texture_2d_array<f32>;
 
-@group(0) @binding(1) var usl_g0_b1: sampler;
+@group(0) @binding(1) var usl_g0_b1: texture_storage_2d_array<rgba8unorm, write>;
+
+@group(1) @binding(0) var usl_g1_b0: texture_2d_array<f32>;
+
+@group(1) @binding(1) var usl_g1_b1: texture_2d_array<f32>;
+
+@group(1) @binding(2) var usl_g1_b2: sampler;
+
+@compute @workgroup_size(4, 1, 1)
+fn line_copy_cs(@builtin(global_invocation_id) gid: vec3<u32>) {
+    textureStore(usl_g0_b1, vec2<i32>(i32(gid.x), 0), i32(gid.y), (textureLoad(usl_g0_b0, vec2<i32>(i32(gid.x), 0), i32(gid.y), 0) * vec4<f32>(1.0, (0.125 * f32(textureDimensions(usl_g0_b0, 0u).x)), (0.5 * f32(textureNumLayers(usl_g0_b0))), 1.0)));
+}
 
 @vertex
 fn array_vs(@builtin(vertex_index) vertexId: u32) -> VSOut {
@@ -35,6 +46,11 @@ fn array_vs(@builtin(vertex_index) vertexId: u32) -> VSOut {
 
 @fragment
 fn array_fs(input: VSOut) -> @location(0) vec4<f32> {
-    let r37 = step(0.5, input.uv.x);
-    return textureSample(usl_g0_b0, usl_g0_b1, vec2<f32>(((2.0 * input.uv.x) - r37), input.uv.y), i32(r37));
+    let r63 = step(0.5, input.uv.x);
+    let r69: f32 = ((2.0 * input.uv.x) - r63);
+    if ((input.uv.y < 0.5)) {
+        return textureSampleLevel(usl_g1_b0, usl_g1_b2, vec2<f32>(r69, fract((input.uv.y * 2.0))), i32(r63), 0.0);
+    } else {
+        return textureLoad(usl_g1_b1, vec2<i32>(i32((r69 * f32(textureDimensions(usl_g1_b1, 0u).x))), 0), i32(r63), 0);
+    }
 }

@@ -37,9 +37,13 @@ fn shapes_vs(@builtin(vertex_index) vertexId: u32) -> VSOut {
 
 @fragment
 fn shapes_fs(input: VSOut) -> @location(0) vec4<f32> {
-    let r39 = fract((2.0 * input.uv.x));
-    let r44: f32 = fma(6.2831855, r39, -3.1415927);
-    let r49: f32 = fma(-3.1415927, input.uv.y, 1.5707964);
-    let r52: f32 = cos(r49);
-    return mix(textureSample(usl_g0_b0, usl_g0_b2, vec3<f32>((sin(r44) * r52), sin(r49), (cos(r44) * r52))), textureSample(usl_g0_b1, usl_g0_b2, vec3<f32>(r39, input.uv.y, r39)), step(0.5, input.uv.x));
+    let r38 = fract((2.0 * input.uv.x));
+    let r43: f32 = fma(6.2831855, r38, -3.1415927);
+    let r48: f32 = fma(-3.1415927, input.uv.y, 1.5707964);
+    let r51: f32 = cos(r48);
+    let r58: f32 = sin(r48);
+    let r62: f32 = (cos(r43) * r51);
+    let r63: vec3<f32> = vec3<f32>((sin(r43) * r51), r58, r62);
+    let r73 = textureSample(usl_g0_b1, usl_g0_b2, vec3<f32>(r38, input.uv.y, r38));
+    return mix(textureSample(usl_g0_b0, usl_g0_b2, r63), r73, step(0.5, input.uv.x));
 }

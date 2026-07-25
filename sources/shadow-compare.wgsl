@@ -7,7 +7,7 @@ struct ShadowOut {
 
 @group(0) @binding(0) var usl_g0_b0: texture_depth_2d;
 
-@group(0) @binding(1) var usl_g0_b1: sampler_comparison;
+@group(0) @binding(1) var usl_static_sampler_b1: sampler_comparison;
 
 @vertex
 fn shadow_depth_vs(@builtin(vertex_index) vertexId: u32) -> @builtin(position) vec4<f32> {
@@ -46,5 +46,10 @@ fn shadow_preview_vs(@builtin(vertex_index) vertexId: u32) -> ShadowOut {
 
 @fragment
 fn shadow_preview_fs(input: ShadowOut) -> @location(0) vec4<f32> {
-    return fma(vec4<f32>(0.96, 0.45, 0.06, 0.0), vec4<f32>(textureSampleCompare(usl_g0_b0, usl_g0_b1, input.uv, 0.52)), vec4<f32>(0.04, 0.07, 0.12, 1.0));
+    return fma(vec4<f32>(0.96, 0.45, 0.06, 0.0), vec4<f32>(textureSampleCompare(usl_g0_b0, usl_static_sampler_b1, input.uv, 0.52)), vec4<f32>(0.04, 0.07, 0.12, 1.0));
+}
+
+@fragment
+fn shadow_preview_cool_fs(input: ShadowOut) -> @location(0) vec4<f32> {
+    return fma(vec4<f32>(0.08, 0.72, 0.9, 0.0), vec4<f32>(textureSampleCompare(usl_g0_b0, usl_static_sampler_b1, input.uv, 0.52)), vec4<f32>(0.04, 0.07, 0.12, 1.0));
 }

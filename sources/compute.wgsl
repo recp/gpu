@@ -45,7 +45,6 @@ fn fill_vertices(@builtin(global_invocation_id) gid: vec3<u32>) {
             usl_g0_b0.values[gid.x].color = (vec4<f32>(0.12, 0.38, 1.0, 1.0) * usl_g3_b0.value.tint);
         }
     }
-    return;
 }
 
 @vertex

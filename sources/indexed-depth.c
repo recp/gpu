@@ -71,25 +71,30 @@ static int
 create_depth_group(WebGPUIndexedDepth *state,
                    GPUTextureView     *view,
                    GPUBindGroup      **outGroup) {
-  GPUBindGroupEntry      entry = {0};
+  GPUBindGroupEntry      entries[2] = {0};
   GPUBindGroupCreateInfo info  = {0};
 
-  if (!state || !view || !outGroup || !state->shaderLayout ||
+  if (!state || !view || !outGroup || !state->occlusionBuffer ||
+      !state->shaderLayout ||
       state->shaderLayout->bindGroupLayoutCount != 1u ||
       !state->shaderLayout->bindGroupLayouts ||
       !state->shaderLayout->bindGroupLayouts[0]) {
     return 0;
   }
 
-  entry.textureView      = view;
-  entry.binding          = 0u;
-  entry.bindingType      = GPU_BINDING_SAMPLED_TEXTURE;
+  entries[0].textureView      = view;
+  entries[0].binding          = 0u;
+  entries[0].bindingType      = GPU_BINDING_SAMPLED_TEXTURE;
+  entries[1].buffer.buffer    = state->occlusionBuffer;
+  entries[1].buffer.size      = 16u;
+  entries[1].binding          = 1u;
+  entries[1].bindingType      = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
   info.chain.sType       = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   info.chain.structSize  = sizeof(info);
   info.label             = "indexed-depth-webgpu-preview-group";
   info.layout            = state->shaderLayout->bindGroupLayouts[0];
-  info.pEntries          = &entry;
-  info.entryCount        = 1u;
+  info.pEntries          = entries;
+  info.entryCount        = 2u;
   return GPUCreateBindGroup(state->device, &info, outGroup) == GPU_OK &&
          *outGroup;
 }
@@ -306,7 +311,8 @@ create_geometry(WebGPUIndexedDepth *state) {
   queryInfo.count            = 1u;
   info.label                 = "indexed-depth-webgpu-occlusion-result";
   info.sizeBytes             = 16u;
-  info.usage                 = GPU_BUFFER_USAGE_COPY_DST;
+  info.usage                 = GPU_BUFFER_USAGE_COPY_DST |
+                               GPU_BUFFER_USAGE_STORAGE;
   if (GPUCreateQuerySet(state->device,
                         &queryInfo,
                         &state->occlusionQuery) != GPU_OK ||
@@ -535,8 +541,8 @@ webgpu_ready(GPUResult  result,
                                                 state->height);
   if (!state->swapchain ||
       !create_depth_target(state, state->width, state->height) ||
-      !create_pipeline(state) ||
-      !create_geometry(state)) {
+      !create_geometry(state) ||
+      !create_pipeline(state)) {
     set_status("GPU: failed to initialize indexed-depth resources", 1);
     return;
   }

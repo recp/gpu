@@ -3,6 +3,58 @@
 #include <math.h>
 #include <stdio.h>
 
+#ifndef GPU_COMPUTE_ARTIFACT_PATH
+#define GPU_COMPUTE_ARTIFACT_PATH "/compute.us"
+#endif
+
+#ifndef GPU_COMPUTE_ENTRY_POINT
+#define GPU_COMPUTE_ENTRY_POINT "fill_vertices"
+#endif
+
+#ifndef GPU_COMPUTE_DISPATCH_X
+#define GPU_COMPUTE_DISPATCH_X 3u
+#endif
+
+#ifndef GPU_COMPUTE_VERTEX_CAPACITY
+#define GPU_COMPUTE_VERTEX_CAPACITY 3u
+#endif
+
+#ifndef GPU_COMPUTE_USE_INDIRECT
+#define GPU_COMPUTE_USE_INDIRECT 0
+#endif
+
+#ifndef GPU_COMPUTE_USE_TIMESTAMPS
+#define GPU_COMPUTE_USE_TIMESTAMPS 0
+#endif
+
+#ifndef GPU_COMPUTE_REQUIRED_FEATURE
+#define GPU_COMPUTE_REQUIRED_FEATURE GPU_FEATURE_COMPUTE
+#endif
+
+#ifndef GPU_COMPUTE_UNSUPPORTED_STATUS
+#define GPU_COMPUTE_UNSUPPORTED_STATUS \
+  "GPU: required WebGPU compute feature unsupported by this adapter"
+#endif
+
+#ifndef GPU_COMPUTE_READY_STATUS
+#define GPU_COMPUTE_READY_STATUS \
+  "GPU: WebGPU USL compute push constants ready"
+#endif
+
+#ifndef GPU_COMPUTE_TIMESTAMP_RESOLVED_STATUS
+#define GPU_COMPUTE_TIMESTAMP_RESOLVED_STATUS \
+  "GPU: WebGPU USL timestamp query resolved"
+#endif
+
+#if GPU_COMPUTE_USE_TIMESTAMPS
+enum {
+  GPU_COMPUTE_TIMESTAMP_QUERY_COUNT    = 4u,
+  GPU_COMPUTE_TIMESTAMP_BINDING_OFFSET = 256u,
+  GPU_COMPUTE_TIMESTAMP_RESOLVE_OFFSET =
+    GPU_COMPUTE_TIMESTAMP_BINDING_OFFSET + sizeof(uint64_t)
+};
+#endif
+
 typedef struct GeneratedVertex {
   float position[4];
   float color[4];
@@ -13,6 +65,9 @@ typedef struct ComputeConstants {
 } ComputeConstants;
 
 typedef struct WebGPUCompute {
+  const char         *artifactPath;
+  const char         *computeEntryPoint;
+  const char         *readyStatus;
   GPUInstance        *instance;
   GPUAdapter         *adapter;
   GPUDevice          *device;
@@ -22,16 +77,23 @@ typedef struct WebGPUCompute {
   GPUShaderLibrary   *library;
   GPUShaderLayout    *shaderLayout;
   GPUPipelineLayout  *renderLayout;
+  GPUPipelineCache   *pipelineCache;
   GPUComputePipeline *computePipeline;
   GPURenderPipeline  *renderPipeline;
   GPUBuffer          *vertexBuffer;
+  GPUBuffer          *dispatchBuffer;
+#if GPU_COMPUTE_USE_TIMESTAMPS
   GPUBuffer          *timestampBuffer;
   GPUQuerySet        *timestampQuery;
+#endif
   GPUBindGroup       *computeGroup;
   WebGPURequest       request;
   uint32_t            width;
   uint32_t            height;
+#if GPU_COMPUTE_USE_TIMESTAMPS
   bool                timestampRecorded;
+#endif
+  bool                noticeStatus;
 } WebGPUCompute;
 
 static WebGPUCompute app;
@@ -46,6 +108,7 @@ resize_canvas(WebGPUCompute *state) {
 static int
 create_resources(WebGPUCompute *state) {
   GPUComputePipelineCreateInfo computeInfo = {0};
+  GPUPipelineCacheCreateInfo   cacheInfo = {0};
   GPURenderPipelineCreateInfo  renderInfo = {0};
   GPUShaderReflection          reflection = {0};
   GPUVertexAttribute           attributes[2] = {0};
@@ -53,10 +116,14 @@ create_resources(WebGPUCompute *state) {
   GPUColorTargetState          color = {0};
   GPUPipelineLayoutCreateInfo  renderLayoutInfo = {0};
   GPUBufferCreateInfo           bufferInfo = {0};
+#if GPU_COMPUTE_USE_TIMESTAMPS
   GPUQuerySetCreateInfo         queryInfo = {0};
-  GPUBindGroupEntry             groupEntry = {0};
+#endif
+  GPUBindGroupEntry             groupEntries[2] = {0};
   GPUBindGroupCreateInfo        groupInfo = {0};
   const GPUBindGroupLayoutEntry *layoutEntries;
+  GPUComputePipeline            *cachedPipeline;
+  GPUCacheStats                  stats;
   void                         *artifact;
   uint64_t                      artifactSize;
   uint32_t                      layoutEntryCount;
@@ -64,8 +131,8 @@ create_resources(WebGPUCompute *state) {
 
   artifact     = NULL;
   artifactSize = 0u;
-  if (!read_file("/compute.us", &artifact, &artifactSize)) {
-    set_status("GPU: failed to read /compute.us", 1);
+  if (!read_file(state->artifactPath, &artifact, &artifactSize)) {
+    set_status("GPU: failed to read compute artifact", 1);
     return 0;
   }
 
@@ -97,11 +164,31 @@ create_resources(WebGPUCompute *state) {
     state->shaderLayout->bindGroupLayouts[0],
     &layoutEntryCount
   );
-  if (!layoutEntries || layoutEntryCount != 1u ||
+  if (!layoutEntries ||
+      layoutEntryCount != 1u + GPU_COMPUTE_USE_TIMESTAMPS ||
       layoutEntries[0].binding != 0u ||
       layoutEntries[0].bindingType != GPU_BINDING_STORAGE_BUFFER ||
       layoutEntries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT) {
     set_status("GPU: unexpected compute storage reflection", 1);
+    return 0;
+  }
+#if GPU_COMPUTE_USE_TIMESTAMPS
+  if (layoutEntries[1].binding != 1u ||
+      layoutEntries[1].bindingType != GPU_BINDING_READ_ONLY_STORAGE_BUFFER ||
+      layoutEntries[1].visibility != GPU_SHADER_STAGE_COMPUTE_BIT) {
+    set_status("GPU: unexpected timestamp storage reflection", 1);
+    return 0;
+  }
+#endif
+
+  cacheInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+  cacheInfo.chain.structSize = sizeof(cacheInfo);
+  cacheInfo.label            = "compute-webgpu-usl-cache";
+  if (GPUCreatePipelineCache(state->device,
+                             &cacheInfo,
+                             &state->pipelineCache) != GPU_OK ||
+      !state->pipelineCache) {
+    set_status("GPU: failed to create WebGPU pipeline cache", 1);
     return 0;
   }
 
@@ -109,14 +196,31 @@ create_resources(WebGPUCompute *state) {
   computeInfo.chain.structSize = sizeof(computeInfo);
   computeInfo.label            = "compute-webgpu-usl-fill";
   computeInfo.layout           = state->shaderLayout->pipelineLayout;
+  computeInfo.cache            = state->pipelineCache;
   computeInfo.library          = state->library;
-  computeInfo.entryPoint       = "fill_vertices";
+  computeInfo.entryPoint       = state->computeEntryPoint;
+  GPUResetStats(state->device);
   if (GPUCreateComputePipeline(state->device,
                                &computeInfo,
                                &state->computePipeline) != GPU_OK) {
     set_status("GPU: failed to create WebGPU compute pipeline", 1);
     return 0;
   }
+
+  cachedPipeline = NULL;
+  if (GPUCreateComputePipeline(state->device,
+                               &computeInfo,
+                               &cachedPipeline) != GPU_OK ||
+      !cachedPipeline ||
+      GPUGetCacheStats(state->device, &stats) != GPU_OK ||
+      stats.pipelineCompiles != 1u ||
+      stats.pipelineMisses != 1u ||
+      stats.pipelineHits != 1u) {
+    GPUDestroyComputePipeline(cachedPipeline);
+    set_status("GPU: WebGPU compute pipeline cache check failed", 1);
+    return 0;
+  }
+  GPUDestroyComputePipeline(cachedPipeline);
 
   renderLayoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   renderLayoutInfo.chain.structSize = sizeof(renderLayoutInfo);
@@ -167,7 +271,8 @@ create_resources(WebGPUCompute *state) {
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.label            = "compute-webgpu-usl-vertices";
-  bufferInfo.sizeBytes        = sizeof(GeneratedVertex) * 3u;
+  bufferInfo.sizeBytes        = sizeof(GeneratedVertex) *
+                                GPU_COMPUTE_VERTEX_CAPACITY;
   bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE |
                                 GPU_BUFFER_USAGE_VERTEX;
   if (GPUCreateBuffer(state->device,
@@ -177,34 +282,54 @@ create_resources(WebGPUCompute *state) {
     return 0;
   }
 
-  groupEntry.binding       = 0u;
-  groupEntry.bindingType   = GPU_BINDING_STORAGE_BUFFER;
-  groupEntry.buffer.buffer = state->vertexBuffer;
-  groupEntry.buffer.size   = bufferInfo.sizeBytes;
-  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
-  groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label             = "compute-webgpu-usl-group0";
-  groupInfo.layout            = state->shaderLayout->bindGroupLayouts[0];
-  groupInfo.pEntries          = &groupEntry;
-  groupInfo.entryCount        = 1u;
-  if (GPUCreateBindGroup(state->device,
-                         &groupInfo,
-                         &state->computeGroup) != GPU_OK) {
-    set_status("GPU: failed to create WebGPU compute group", 1);
-    return 0;
-  }
+#if GPU_COMPUTE_USE_INDIRECT
+  {
+    static const uint32_t dispatchArgs[] = {
+      GPU_COMPUTE_DISPATCH_X, 1u, 1u
+    };
 
-  if (GPUIsFeatureEnabled(state->device, GPU_FEATURE_TIMESTAMPS)) {
-    double timestampPeriod;
+    bufferInfo.label     = "compute-webgpu-indirect-args";
+    bufferInfo.sizeBytes = sizeof(dispatchArgs);
+    bufferInfo.usage     = GPU_BUFFER_USAGE_INDIRECT |
+                           GPU_BUFFER_USAGE_COPY_DST;
+    if (GPUCreateBuffer(state->device,
+                        &bufferInfo,
+                        &state->dispatchBuffer) != GPU_OK ||
+        GPUQueueWriteBuffer(state->queue,
+                            state->dispatchBuffer,
+                            0u,
+                            dispatchArgs,
+                            sizeof(dispatchArgs)) != GPU_OK) {
+      set_status("GPU: failed to create WebGPU indirect dispatch buffer", 1);
+      return 0;
+    }
+  }
+#endif
+
+#if GPU_COMPUTE_USE_TIMESTAMPS
+  {
+    static const uint64_t timestampSentinel[
+      GPU_COMPUTE_TIMESTAMP_QUERY_COUNT + 1u
+    ] = {
+      UINT64_MAX,
+      UINT64_MAX,
+      UINT64_MAX,
+      UINT64_MAX,
+      UINT64_MAX
+    };
+    double                timestampPeriod;
 
     queryInfo.chain.sType      = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
     queryInfo.chain.structSize = sizeof(queryInfo);
     queryInfo.label            = "compute-webgpu-timestamps";
     queryInfo.type             = GPU_QUERY_TIMESTAMP;
-    queryInfo.count            = 2u;
+    queryInfo.count            = GPU_COMPUTE_TIMESTAMP_QUERY_COUNT;
     bufferInfo.label           = "compute-webgpu-timestamp-results";
-    bufferInfo.sizeBytes       = 272u;
-    bufferInfo.usage           = GPU_BUFFER_USAGE_COPY_DST;
+    bufferInfo.sizeBytes       = GPU_COMPUTE_TIMESTAMP_RESOLVE_OFFSET +
+                                 GPU_COMPUTE_TIMESTAMP_QUERY_COUNT *
+                                   sizeof(uint64_t);
+    bufferInfo.usage           = GPU_BUFFER_USAGE_COPY_DST |
+                                 GPU_BUFFER_USAGE_STORAGE;
     if (GPUCreateQuerySet(state->device,
                           &queryInfo,
                           &state->timestampQuery) != GPU_OK ||
@@ -212,10 +337,43 @@ create_resources(WebGPUCompute *state) {
                         &bufferInfo,
                         &state->timestampBuffer) != GPU_OK ||
         GPUGetTimestampPeriod(state->queue, &timestampPeriod) != GPU_OK ||
+        GPUQueueWriteBuffer(state->queue,
+                            state->timestampBuffer,
+                            GPU_COMPUTE_TIMESTAMP_BINDING_OFFSET,
+                            timestampSentinel,
+                            sizeof(timestampSentinel)) != GPU_OK ||
         timestampPeriod != 1.0) {
       set_status("GPU: failed to initialize WebGPU timestamps", 1);
       return 0;
     }
+  }
+#endif
+
+  groupEntries[0].binding       = 0u;
+  groupEntries[0].bindingType   = GPU_BINDING_STORAGE_BUFFER;
+  groupEntries[0].buffer.buffer = state->vertexBuffer;
+  groupEntries[0].buffer.size   = sizeof(GeneratedVertex) *
+                                  GPU_COMPUTE_VERTEX_CAPACITY;
+#if GPU_COMPUTE_USE_TIMESTAMPS
+  groupEntries[1].binding       = 1u;
+  groupEntries[1].bindingType   = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
+  groupEntries[1].buffer.buffer = state->timestampBuffer;
+  groupEntries[1].buffer.offset = GPU_COMPUTE_TIMESTAMP_BINDING_OFFSET;
+  groupEntries[1].buffer.size   = sizeof(uint64_t) +
+                                  GPU_COMPUTE_TIMESTAMP_QUERY_COUNT *
+                                    sizeof(uint64_t);
+#endif
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.label             = "compute-webgpu-usl-group0";
+  groupInfo.layout            = state->shaderLayout->bindGroupLayouts[0];
+  groupInfo.pEntries          = groupEntries;
+  groupInfo.entryCount        = 1u + GPU_COMPUTE_USE_TIMESTAMPS;
+  if (GPUCreateBindGroup(state->device,
+                         &groupInfo,
+                         &state->computeGroup) != GPU_OK) {
+    set_status("GPU: failed to create WebGPU compute group", 1);
+    return 0;
   }
   return 1;
 }
@@ -227,13 +385,20 @@ render_frame(void *userData) {
   GPUCommandBuffer            *cmdb;
   GPUComputePassEncoder       *compute;
   GPURenderPassEncoder        *render;
+#if GPU_COMPUTE_USE_TIMESTAMPS
+  GPUComputePassCreateInfo     computeInfo = {0};
+  GPUPassTimestampWrites       computeTimestamps = {0};
+  GPUPassTimestampWrites       renderTimestamps = {0};
+#endif
   GPURenderPassColorAttachment color = {0};
   GPURenderPassCreateInfo      passInfo = {0};
   GPUBufferBinding             vertex = {0};
   GPUBufferBarrier             barrier = {0};
   GPUBarrierBatch              barriers = {0};
   ComputeConstants             constants;
+#if !GPU_COMPUTE_USE_TIMESTAMPS
   float                        phase;
+#endif
 
   state = userData;
   if (!resize_canvas(state)) {
@@ -252,11 +417,22 @@ render_frame(void *userData) {
     return;
   }
 
-  if (state->timestampQuery && !state->timestampRecorded) {
-    GPUWriteTimestamp(cmdb, state->timestampQuery, 0u);
+#if GPU_COMPUTE_USE_TIMESTAMPS
+  if (!state->timestampRecorded) {
+    computeTimestamps.querySet   = state->timestampQuery;
+    computeTimestamps.beginIndex = 0u;
+    computeTimestamps.endIndex   = 1u;
+    computeInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PASS_CREATE_INFO;
+    computeInfo.chain.structSize = sizeof(computeInfo);
+    computeInfo.label            = "compute-webgpu-fill";
+    computeInfo.timestampWrites  = &computeTimestamps;
+    compute = GPUBeginComputePassWithInfo(cmdb, &computeInfo);
+  } else {
+    compute = GPUBeginComputePass(cmdb, "compute-webgpu-fill");
   }
-
+#else
   compute = GPUBeginComputePass(cmdb, "compute-webgpu-fill");
+#endif
   if (!compute) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
@@ -264,22 +440,33 @@ render_frame(void *userData) {
   }
   GPUBindComputePipeline(compute, state->computePipeline);
   GPUBindComputeGroup(compute, 0u, state->computeGroup, 0u, NULL);
+#if GPU_COMPUTE_USE_TIMESTAMPS
+  constants.tint[0] = 1.0f;
+  constants.tint[1] = 1.0f;
+  constants.tint[2] = 1.0f;
+#else
   phase             = (float)(emscripten_get_now() * 0.001);
   constants.tint[0] = 0.60f + 0.40f * sinf(phase);
   constants.tint[1] = 0.60f + 0.40f * sinf(phase + 2.0943951f);
   constants.tint[2] = 0.60f + 0.40f * sinf(phase + 4.1887902f);
+#endif
   constants.tint[3] = 1.0f;
   GPUSetComputePushConstants(compute,
                              0u,
                              (uint32_t)sizeof(constants),
                              &constants);
-  GPUDispatch(compute, 3u, 1u, 1u);
+#if GPU_COMPUTE_USE_INDIRECT
+  GPUDispatchIndirect(compute, state->dispatchBuffer, 0u);
+#else
+  GPUDispatch(compute, GPU_COMPUTE_DISPATCH_X, 1u, 1u);
+#endif
   GPUEndComputePass(compute);
 
   barrier.buffer    = state->vertexBuffer;
   barrier.srcAccess = GPU_ACCESS_SHADER_WRITE;
   barrier.dstAccess = GPU_ACCESS_SHADER_READ;
-  barrier.sizeBytes = sizeof(GeneratedVertex) * 3u;
+  barrier.sizeBytes = sizeof(GeneratedVertex) *
+                      GPU_COMPUTE_VERTEX_CAPACITY;
   barriers.srcStages          = GPU_STAGE_COMPUTE;
   barriers.dstStages          = GPU_STAGE_VERTEX;
   barriers.pBufferBarriers    = &barrier;
@@ -296,6 +483,14 @@ render_frame(void *userData) {
   passInfo.label                = "compute-webgpu-render";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
+#if GPU_COMPUTE_USE_TIMESTAMPS
+  if (!state->timestampRecorded) {
+    renderTimestamps.querySet   = state->timestampQuery;
+    renderTimestamps.beginIndex = 2u;
+    renderTimestamps.endIndex   = 3u;
+    passInfo.timestampWrites    = &renderTimestamps;
+  }
+#endif
   render = GPUBeginRenderPass(cmdb, &passInfo);
   if (!render) {
     (void)GPUDiscardCommandBuffer(cmdb);
@@ -308,19 +503,26 @@ render_frame(void *userData) {
   GPUBindVertexBuffers(render, 0u, 1u, &vertex);
   GPUDraw(render, 3u, 1u, 0u, 0u);
   GPUEndRenderPass(render);
-  if (state->timestampQuery && !state->timestampRecorded) {
-    GPUWriteTimestamp(cmdb, state->timestampQuery, 1u);
+#if GPU_COMPUTE_USE_TIMESTAMPS
+  if (!state->timestampRecorded) {
     GPUResolveQuerySet(cmdb,
                        state->timestampQuery,
                        0u,
-                       2u,
+                       GPU_COMPUTE_TIMESTAMP_QUERY_COUNT,
                        state->timestampBuffer,
-                       256u);
-    state->timestampRecorded = true;
+                       GPU_COMPUTE_TIMESTAMP_RESOLVE_OFFSET);
   }
+#endif
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
     fprintf(stderr, "GPU: failed to finish WebGPU compute frame\n");
+    return;
   }
+#if GPU_COMPUTE_USE_TIMESTAMPS
+  if (!state->timestampRecorded) {
+    state->timestampRecorded = true;
+    set_status(GPU_COMPUTE_TIMESTAMP_RESOLVED_STATUS, 0);
+  }
+#endif
 }
 
 static void
@@ -340,6 +542,20 @@ webgpu_ready(GPUResult  result,
 
   state->adapter = adapter;
   state->device  = device;
+  if (!GPUIsFeatureEnabled(device, GPU_COMPUTE_REQUIRED_FEATURE)) {
+#if defined(GPU_COMPUTE_FALLBACK_ARTIFACT_PATH) && \
+    defined(GPU_COMPUTE_FALLBACK_ENTRY_POINT)
+    state->artifactPath      = GPU_COMPUTE_FALLBACK_ARTIFACT_PATH;
+    state->computeEntryPoint = GPU_COMPUTE_FALLBACK_ENTRY_POINT;
+    state->noticeStatus      = true;
+#ifdef GPU_COMPUTE_FALLBACK_READY_STATUS
+    state->readyStatus       = GPU_COMPUTE_FALLBACK_READY_STATUS;
+#endif
+#else
+    set_status_notice(GPU_COMPUTE_UNSUPPORTED_STATUS);
+    return;
+#endif
+  }
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   state->surface = GPUCreateSurfaceFromNative(state->instance,
                                                state->adapter,
@@ -359,7 +575,11 @@ webgpu_ready(GPUResult  result,
     return;
   }
 
-  set_status("GPU: WebGPU USL compute push constants ready", 0);
+  if (state->noticeStatus) {
+    set_status_notice(state->readyStatus);
+  } else {
+    set_status(state->readyStatus, 0);
+  }
   emscripten_set_main_loop_arg(render_frame, state, 0, true);
 }
 
@@ -368,6 +588,9 @@ main(void) {
   GPUInstanceCreateInfo info = {0};
   GPUResult             result;
 
+  app.artifactPath      = GPU_COMPUTE_ARTIFACT_PATH;
+  app.computeEntryPoint = GPU_COMPUTE_ENTRY_POINT;
+  app.readyStatus       = GPU_COMPUTE_READY_STATUS;
   info.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   info.chain.structSize = sizeof(info);
   info.label            = "compute-webgpu-usl";

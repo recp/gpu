@@ -33,5 +33,7 @@ fn cube_vs(v: CubeIn) -> CubeOut {
 
 @fragment
 fn cube_fs(input: CubeOut) -> @location(0) vec4<f32> {
-    return (textureSample(usl_g0_b1, usl_g1_b0, input.uv) * vec4<f32>(vec3<f32>(fma(0.72, max(dot(normalize(input.normal), vec3<f32>(0.43554053, 0.7259009, 0.5323273)), 0.0), 0.28)), 1.0));
+    let r24 = dot(normalize(input.normal), vec3<f32>(0.43554053, 0.7259009, 0.5323273));
+    let r27: f32 = fma(0.72, max(r24, 0.0), 0.28);
+    return (textureSample(usl_g0_b1, usl_g1_b0, input.uv) * vec4<f32>(r27, r27, r27, 1.0));
 }
