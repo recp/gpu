@@ -754,7 +754,8 @@ GPUDraw(GPURenderPassEncoder *pass,
         uint32_t              instanceCount,
         uint32_t              firstVertex,
         uint32_t              firstInstance) {
-  GPUApi *api;
+  GPUApi              *api;
+  GPUDrawPrimitivesFn draw;
 
   if (!pass || pass->_ended)
     return;
@@ -774,15 +775,18 @@ GPUDraw(GPURenderPassEncoder *pass,
     gpu_renderValidationError(pass, "GPUDraw skipped: zero draw count");
     return;
   }
-  if (!(api = gpu_renderPassApi(pass)) || !api->rce.drawPrimitives)
-    return;
+  draw = pass->_drawPrimitives;
+  if (!draw) {
+    if (!(api = gpu_renderPassApi(pass)) || !(draw = api->rce.drawPrimitives))
+      return;
+  }
 
-  api->rce.drawPrimitives(pass,
-                          pass->_primitiveType,
-                          firstVertex,
-                          vertexCount,
-                          instanceCount,
-                          firstInstance);
+  draw(pass,
+       pass->_primitiveType,
+       firstVertex,
+       vertexCount,
+       instanceCount,
+       firstInstance);
   gpuFrameStatsRecordDraws(pass->_stats, 1u);
 }
 
@@ -794,7 +798,8 @@ GPUDrawIndexed(GPURenderPassEncoder *pass,
                uint32_t              firstIndex,
                int32_t               vertexOffset,
                uint32_t              firstInstance) {
-  GPUApi *api;
+  GPUApi                *api;
+  GPUDrawIndexedPrimsFn draw;
 
   if (!pass || pass->_ended)
     return;
@@ -824,15 +829,18 @@ GPUDrawIndexed(GPURenderPassEncoder *pass,
     gpu_renderValidationError(pass, "GPUDrawIndexed skipped: invalid index buffer");
     return;
   }
-  if (!(api = gpu_renderPassApi(pass)) || !api->rce.drawIndexedPrims)
-    return;
-  
-  api->rce.drawIndexedPrims(pass,
-                            indexCount,
-                            instanceCount,
-                            firstIndex,
-                            vertexOffset,
-                            firstInstance);
+  draw = pass->_drawIndexedPrims;
+  if (!draw) {
+    if (!(api = gpu_renderPassApi(pass)) || !(draw = api->rce.drawIndexedPrims))
+      return;
+  }
+
+  draw(pass,
+       indexCount,
+       instanceCount,
+       firstIndex,
+       vertexOffset,
+       firstInstance);
   gpuFrameStatsRecordDraws(pass->_stats, 1u);
 }
 

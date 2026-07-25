@@ -547,12 +547,18 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
   encoder = api->rce.renderCommandEncoder(cmdb, desc);
   gpu_destroyRenderPass(api, desc);
   if (encoder) {
-    encoder->_api    = api;
-    encoder->_device = device;
-    encoder->_cmdb   = cmdb;
-    encoder->_stats  = device->runtimeConfig.enableStats
-                         ? &device->currentFrameStats
-                         : NULL;
+    encoder->_api              = api;
+    encoder->_device           = device;
+    encoder->_cmdb             = cmdb;
+    encoder->_drawPrimitives   = encoder->_drawPrimitives
+                                   ? encoder->_drawPrimitives
+                                   : api->rce.drawPrimitives;
+    encoder->_drawIndexedPrims = encoder->_drawIndexedPrims
+                                   ? encoder->_drawIndexedPrims
+                                   : api->rce.drawIndexedPrims;
+    encoder->_stats            = device->runtimeConfig.enableStats
+                                   ? &device->currentFrameStats
+                                   : NULL;
     gpu_setRenderPassEncoderInfo(encoder, info);
     cmdb->_activeEncoder = true;
   } else if (wroteBeginTimestamp) {

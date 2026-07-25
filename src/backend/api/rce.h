@@ -38,6 +38,20 @@ typedef enum GPUPrimitiveType {
   GPUPrimitiveTypeTriangleStrip = 4
 } GPUPrimitiveType;
 
+typedef void (*GPUDrawPrimitivesFn)(GPURenderPassEncoder *rce,
+                                    GPUPrimitiveType      type,
+                                    size_t                start,
+                                    size_t                count,
+                                    uint32_t              instanceCount,
+                                    uint32_t              firstInstance);
+
+typedef void (*GPUDrawIndexedPrimsFn)(GPURenderPassEncoder *rce,
+                                      uint32_t              indexCount,
+                                      uint32_t              instanceCount,
+                                      uint32_t              firstIndex,
+                                      int32_t               vertexOffset,
+                                      uint32_t              firstInstance);
+
 #define GPU__RENDER_VERTEX_SHADOW_SLOT_COUNT 32u
 
 enum {
@@ -55,6 +69,8 @@ struct GPURenderPassEncoder {
   GPUQuerySet            *_timestampQuerySet;
   GPUBuffer              *_indexBuffer;
   GPUPipelineLayout      *_pipelineLayout;
+  GPUDrawPrimitivesFn     _drawPrimitives;
+  GPUDrawIndexedPrimsFn   _drawIndexedPrims;
   GPUBindGroup           *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUBindGroupLayout     *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUBuffer              *_vertexBuffers[GPU__RENDER_VERTEX_SHADOW_SLOT_COUNT];

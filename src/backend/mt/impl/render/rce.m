@@ -27,6 +27,40 @@ mt_nativeBuffer(GPUBuffer *buffer) {
   return buffer ? (id<MTLBuffer>)buffer->_priv : nil;
 }
 
+static void
+mt_drawPrimitivesClassic(GPURenderPassEncoder *rce,
+                         GPUPrimitiveType      type,
+                         size_t                start,
+                         size_t                count,
+                         uint32_t              instanceCount,
+                         uint32_t              firstInstance);
+
+static void
+mt_drawIndexedPrimsClassic(GPURenderPassEncoder *rce,
+                           uint32_t              indexCount,
+                           uint32_t              instanceCount,
+                           uint32_t              firstIndex,
+                           int32_t               vertexOffset,
+                           uint32_t              firstInstance);
+
+#if MT_HAS_METAL4
+static void
+mt_drawPrimitives4(GPURenderPassEncoder *rce,
+                   GPUPrimitiveType      type,
+                   size_t                start,
+                   size_t                count,
+                   uint32_t              instanceCount,
+                   uint32_t              firstInstance);
+
+static void
+mt_drawIndexedPrims4(GPURenderPassEncoder *rce,
+                     uint32_t              indexCount,
+                     uint32_t              instanceCount,
+                     uint32_t              firstIndex,
+                     int32_t               vertexOffset,
+                     uint32_t              firstInstance);
+#endif
+
 GPU_HIDE
 GPURenderPassEncoder *
 mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
@@ -107,6 +141,16 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
 
   enc->_priv = nativeState;
   enc->_primitiveType = GPUPrimitiveTypeTriangle;
+#if MT_HAS_METAL4
+  if (nativeState->modern) {
+    enc->_drawPrimitives   = mt_drawPrimitives4;
+    enc->_drawIndexedPrims = mt_drawIndexedPrims4;
+  } else
+#endif
+  {
+    enc->_drawPrimitives   = mt_drawPrimitivesClassic;
+    enc->_drawIndexedPrims = mt_drawIndexedPrimsClassic;
+  }
   return enc;
 }
 
@@ -831,32 +875,19 @@ mt_rceSetFragmentAccelerationStructure(
   }
 }
 
-GPU_HIDE
-void
-mt_drawPrimitives(GPURenderPassEncoder *rce,
-                  GPUPrimitiveType         type,
-                  size_t                   start,
-                  size_t                   count,
-                  uint32_t                 instanceCount,
-                  uint32_t                 firstInstance) {
+static void
+mt_drawPrimitivesClassic(GPURenderPassEncoder *rce,
+                         GPUPrimitiveType      type,
+                         size_t                start,
+                         size_t                count,
+                         uint32_t              instanceCount,
+                         uint32_t              firstInstance) {
   MTRenderEncoder *native;
 
   native = mt_renderEncoder(rce);
-  if (!native) {
+  if (!native || !native->classic) {
     return;
   }
-#if MT_HAS_METAL4
-  if (native->modern) {
-    if (@available(macOS 26.0, iOS 26.0, *)) {
-      [native->modern drawPrimitives:(MTLPrimitiveType)type
-                         vertexStart:start
-                         vertexCount:count
-                       instanceCount:instanceCount
-                        baseInstance:firstInstance];
-    }
-    return;
-  }
-#endif
   [native->classic drawPrimitives:(MTLPrimitiveType)type
                       vertexStart:start
                       vertexCount:count
@@ -864,21 +895,74 @@ mt_drawPrimitives(GPURenderPassEncoder *rce,
                      baseInstance:firstInstance];
 }
 
+#if MT_HAS_METAL4
+static void
+mt_drawPrimitives4(GPURenderPassEncoder *rce,
+                   GPUPrimitiveType      type,
+                   size_t                start,
+                   size_t                count,
+                   uint32_t              instanceCount,
+                   uint32_t              firstInstance) {
+  MTRenderEncoder *native;
+
+  native = mt_renderEncoder(rce);
+  if (!native || !native->modern) {
+    return;
+  }
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    [native->modern drawPrimitives:(MTLPrimitiveType)type
+                       vertexStart:start
+                       vertexCount:count
+                     instanceCount:instanceCount
+                      baseInstance:firstInstance];
+  }
+}
+#endif
+
 GPU_HIDE
 void
-mt_drawIndexedPrims(GPURenderPassEncoder *rce,
-                    uint32_t                 indexCount,
-                    uint32_t                 instanceCount,
-                    uint32_t                 firstIndex,
-                    int32_t                  vertexOffset,
-                    uint32_t                 firstInstance) {
+mt_drawPrimitives(GPURenderPassEncoder *rce,
+                  GPUPrimitiveType      type,
+                  size_t                start,
+                  size_t                count,
+                  uint32_t              instanceCount,
+                  uint32_t              firstInstance) {
+#if MT_HAS_METAL4
+  MTRenderEncoder *native;
+
+  native = mt_renderEncoder(rce);
+  if (native && native->modern) {
+    mt_drawPrimitives4(rce,
+                       type,
+                       start,
+                       count,
+                       instanceCount,
+                       firstInstance);
+    return;
+  }
+#endif
+  mt_drawPrimitivesClassic(rce,
+                           type,
+                           start,
+                           count,
+                           instanceCount,
+                           firstInstance);
+}
+
+static void
+mt_drawIndexedPrimsClassic(GPURenderPassEncoder *rce,
+                           uint32_t              indexCount,
+                           uint32_t              instanceCount,
+                           uint32_t              firstIndex,
+                           int32_t               vertexOffset,
+                           uint32_t              firstInstance) {
   MTRenderEncoder *native;
   id<MTLBuffer>    indexBuffer;
   uint64_t         indexSize;
   uint64_t         indexOffset;
 
   native = mt_renderEncoder(rce);
-  if (!native) {
+  if (!native || !native->classic) {
     return;
   }
   indexBuffer = mt_nativeBuffer(rce->_indexBuffer);
@@ -886,22 +970,6 @@ mt_drawIndexedPrims(GPURenderPassEncoder *rce,
                 ? 4u
                 : 2u;
   indexOffset = rce->_indexBufferOffset + (uint64_t)firstIndex * indexSize;
-#if MT_HAS_METAL4
-  if (native->modern) {
-    if (@available(macOS 26.0, iOS 26.0, *)) {
-      mt_useAllocation(rce->_cmdb, indexBuffer);
-      [native->modern drawIndexedPrimitives:(MTLPrimitiveType)rce->_primitiveType
-                                 indexCount:indexCount
-                                  indexType:(MTLIndexType)rce->_indexType
-                                indexBuffer:indexBuffer.gpuAddress + indexOffset
-                          indexBufferLength:indexBuffer.length - (NSUInteger)indexOffset
-                              instanceCount:instanceCount
-                                 baseVertex:vertexOffset
-                               baseInstance:firstInstance];
-    }
-    return;
-  }
-#endif
   [native->classic drawIndexedPrimitives:(MTLPrimitiveType)rce->_primitiveType
                               indexCount:indexCount
                                indexType:(MTLIndexType)rce->_indexType
@@ -910,6 +978,72 @@ mt_drawIndexedPrims(GPURenderPassEncoder *rce,
                            instanceCount:instanceCount
                               baseVertex:vertexOffset
                             baseInstance:firstInstance];
+}
+
+#if MT_HAS_METAL4
+static void
+mt_drawIndexedPrims4(GPURenderPassEncoder *rce,
+                     uint32_t              indexCount,
+                     uint32_t              instanceCount,
+                     uint32_t              firstIndex,
+                     int32_t               vertexOffset,
+                     uint32_t              firstInstance) {
+  MTRenderEncoder *native;
+  id<MTLBuffer>    indexBuffer;
+  uint64_t         indexSize;
+  uint64_t         indexOffset;
+
+  native = mt_renderEncoder(rce);
+  if (!native || !native->modern) {
+    return;
+  }
+  indexBuffer = mt_nativeBuffer(rce->_indexBuffer);
+  indexSize = rce->_indexType == GPU_INDEX_TYPE_UINT32
+                ? 4u
+                : 2u;
+  indexOffset = rce->_indexBufferOffset + (uint64_t)firstIndex * indexSize;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    mt_useAllocation(rce->_cmdb, indexBuffer);
+    [native->modern drawIndexedPrimitives:(MTLPrimitiveType)rce->_primitiveType
+                               indexCount:indexCount
+                                indexType:(MTLIndexType)rce->_indexType
+                              indexBuffer:indexBuffer.gpuAddress + indexOffset
+                        indexBufferLength:indexBuffer.length - (NSUInteger)indexOffset
+                            instanceCount:instanceCount
+                               baseVertex:vertexOffset
+                             baseInstance:firstInstance];
+  }
+}
+#endif
+
+GPU_HIDE
+void
+mt_drawIndexedPrims(GPURenderPassEncoder *rce,
+                    uint32_t              indexCount,
+                    uint32_t              instanceCount,
+                    uint32_t              firstIndex,
+                    int32_t               vertexOffset,
+                    uint32_t              firstInstance) {
+#if MT_HAS_METAL4
+  MTRenderEncoder *native;
+
+  native = mt_renderEncoder(rce);
+  if (native && native->modern) {
+    mt_drawIndexedPrims4(rce,
+                         indexCount,
+                         instanceCount,
+                         firstIndex,
+                         vertexOffset,
+                         firstInstance);
+    return;
+  }
+#endif
+  mt_drawIndexedPrimsClassic(rce,
+                             indexCount,
+                             instanceCount,
+                             firstIndex,
+                             vertexOffset,
+                             firstInstance);
 }
 
 GPU_HIDE
