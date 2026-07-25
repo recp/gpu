@@ -793,7 +793,7 @@ mt_bindRenderDynamicBuffers(GPURenderPassEncoder *pass,
   return MT_BIND_DYNAMIC_DONE;
 }
 
-static bool
+static GPU_INLINE bool
 mt_bindStaticBuffer(GPURenderPassEncoder *pass,
                     GPUPipelineLayoutPriv *pipeline,
                     uint32_t               groupIndex,
