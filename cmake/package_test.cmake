@@ -1,7 +1,8 @@
 if(NOT GPU_PACKAGE_BUILD_DIR OR
    NOT GPU_PACKAGE_SOURCE_DIR OR
-   NOT GPU_PACKAGE_TEST_DIR)
-  message(FATAL_ERROR "GPU package test paths are required")
+   NOT GPU_PACKAGE_TEST_DIR OR
+   NOT GPU_PACKAGE_VERSION)
+  message(FATAL_ERROR "GPU package test paths and version are required")
 endif()
 
 set(package_prefix "${GPU_PACKAGE_TEST_DIR}/prefix")
@@ -52,6 +53,7 @@ execute_process(
           -B "${consumer_build}"
           ${generator_args}
           "-DCMAKE_PREFIX_PATH=${package_prefix}"
+          "-DGPU_EXPECTED_PACKAGE_VERSION=${GPU_PACKAGE_VERSION}"
           ${build_type_arg}
   RESULT_VARIABLE result
 )

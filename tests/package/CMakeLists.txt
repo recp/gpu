@@ -1,7 +1,16 @@
 cmake_minimum_required(VERSION 3.20)
 project(gpu_package_consumer LANGUAGES C CXX)
 
-find_package(gpu 0.1 CONFIG REQUIRED)
+if(NOT GPU_EXPECTED_PACKAGE_VERSION)
+  message(FATAL_ERROR "GPU_EXPECTED_PACKAGE_VERSION is required")
+endif()
+
+find_package(gpu ${GPU_EXPECTED_PACKAGE_VERSION} EXACT CONFIG REQUIRED)
+if(NOT "${gpu_VERSION}" STREQUAL "${GPU_EXPECTED_PACKAGE_VERSION}")
+  message(FATAL_ERROR
+    "found gpu ${gpu_VERSION}, expected ${GPU_EXPECTED_PACKAGE_VERSION}"
+  )
+endif()
 
 get_target_property(gpu_target_type gpu::gpu TYPE)
 if(gpu_target_type STREQUAL "STATIC_LIBRARY")
