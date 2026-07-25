@@ -47,6 +47,53 @@ typedef enum GPUBindKind {
   GPUBindKindCount
 } GPUBindKind;
 
+typedef struct GPUBindGroupLayoutPriv {
+  GPUBindGroupLayoutEntry *entries;
+  uint32_t                *backendBindings;
+  uint32_t                 count;
+  bool                     hasBackendBindings;
+  bool                     bindless;
+} GPUBindGroupLayoutPriv;
+
+typedef struct GPUBindGroupBindingPriv {
+  union {
+    struct {
+      GPUBuffer *buffer;
+      uint64_t   offset;
+      uint64_t   size;
+    };
+
+    GPUTextureView              *textureView;
+    GPUSampler                  *sampler;
+    GPUSamplerFeedbackMapEXT    *samplerFeedback;
+    GPUAccelerationStructureEXT *accelerationStructure;
+  };
+  uint32_t    binding;
+  uint32_t    arrayIndex;
+  uint32_t    layoutEntryIndex;
+  uint32_t    dynamicOffsetIndex;
+  uint32_t    kindIndex;
+  GPUBindKind kind;
+} GPUBindGroupBindingPriv;
+
+typedef struct GPUBindGroupPriv {
+  GPUBindGroupLayout      *layout;
+  GPUBindGroupBindingPriv *bindings;
+  uint64_t                *updateScratch;
+  uint64_t                 hash;
+  uint32_t                 count;
+  uint32_t                 dynamicOffsetCount;
+  bool                     bindless;
+} GPUBindGroupPriv;
+
+typedef struct GPUPipelineLayoutPriv {
+  GPUBindGroupLayout **bindGroupLayouts;
+  uint32_t           **backendBindings;
+  uint32_t             bindGroupLayoutCount;
+  uint32_t             pushConstantSizeBytes;
+  GPUShaderStageFlags  pushConstantStages;
+} GPUPipelineLayoutPriv;
+
 typedef struct GPUBindGroupBindingView {
   union {
     GPUBuffer                       *buffer;

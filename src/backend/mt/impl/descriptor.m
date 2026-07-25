@@ -633,6 +633,107 @@ mt_bindRenderBinding(void *ctx, const GPUBindGroupBindingView *binding) {
   }
 }
 
+static bool
+mt_bindRenderGroupStatic(GPURenderPassEncoder *pass,
+                         GPUPipelineLayout    *pipelineLayout,
+                         uint32_t              groupIndex,
+                         GPUBindGroup         *group) {
+  GPUBindGroupLayoutPriv *layout;
+  GPUBindGroupPriv       *priv;
+  GPUPipelineLayoutPriv  *pipeline;
+  GPUApiRCE              *api;
+
+  priv     = group ? group->_priv : NULL;
+  layout   = priv && priv->layout ? priv->layout->_priv : NULL;
+  pipeline = pipelineLayout ? pipelineLayout->_priv : NULL;
+  if (!pass || !pass->_api || !priv || !layout || !pipeline ||
+      groupIndex >= pipeline->bindGroupLayoutCount ||
+      pipeline->bindGroupLayouts[groupIndex] != priv->layout ||
+      (layout->count > 0u &&
+       (!pipeline->backendBindings || !pipeline->backendBindings[groupIndex]))) {
+    return false;
+  }
+
+  api = &pass->_api->rce;
+  for (uint32_t i = 0u; i < priv->count; i++) {
+    const GPUBindGroupLayoutEntry *entry;
+    const GPUBindGroupBindingPriv *binding;
+    uint32_t                       index;
+
+    binding = &priv->bindings[i];
+    if (binding->layoutEntryIndex >= layout->count) {
+      return false;
+    }
+    entry = &layout->entries[binding->layoutEntryIndex];
+    index = pipeline->backendBindings[groupIndex][binding->layoutEntryIndex] +
+            binding->arrayIndex;
+
+    if ((entry->visibility & GPU_SHADER_STAGE_VERTEX_BIT) != 0u) {
+      if (binding->kind == GPUBindKindBuffer && binding->buffer &&
+          api->vertexBuffer) {
+        api->vertexBuffer(pass, binding->buffer, binding->offset, index);
+      } else if (binding->kind == GPUBindKindTexture && binding->textureView &&
+                 api->setVertexTexture) {
+        api->setVertexTexture(pass, binding->textureView, index);
+      } else if (binding->kind == GPUBindKindSampler && binding->sampler &&
+                 api->setVertexSampler) {
+        api->setVertexSampler(pass, binding->sampler, index);
+      } else if (binding->kind == GPUBindKindAccelerationStructure &&
+                 binding->accelerationStructure &&
+                 api->setVertexAccelerationStructure) {
+        api->setVertexAccelerationStructure(
+          pass,
+          binding->accelerationStructure,
+          index);
+      }
+    }
+    if ((entry->visibility & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0u) {
+      if (binding->kind == GPUBindKindBuffer && binding->buffer &&
+          api->fragmentBuffer) {
+        api->fragmentBuffer(pass, binding->buffer, binding->offset, index);
+      } else if (binding->kind == GPUBindKindTexture && binding->textureView &&
+                 api->setFragmentTexture) {
+        api->setFragmentTexture(pass, binding->textureView, index);
+      } else if (binding->kind == GPUBindKindSampler && binding->sampler &&
+                 api->setFragmentSampler) {
+        api->setFragmentSampler(pass, binding->sampler, index);
+      } else if (binding->kind == GPUBindKindAccelerationStructure &&
+                 binding->accelerationStructure &&
+                 api->setFragmentAccelerationStructure) {
+        api->setFragmentAccelerationStructure(
+          pass,
+          binding->accelerationStructure,
+          index);
+      }
+    }
+    if ((entry->visibility & GPU_SHADER_STAGE_TASK_BIT) != 0u) {
+      if (binding->kind == GPUBindKindBuffer && binding->buffer &&
+          api->taskBuffer) {
+        api->taskBuffer(pass, binding->buffer, binding->offset, index);
+      } else if (binding->kind == GPUBindKindTexture && binding->textureView &&
+                 api->setTaskTexture) {
+        api->setTaskTexture(pass, binding->textureView, index);
+      } else if (binding->kind == GPUBindKindSampler && binding->sampler &&
+                 api->setTaskSampler) {
+        api->setTaskSampler(pass, binding->sampler, index);
+      }
+    }
+    if ((entry->visibility & GPU_SHADER_STAGE_MESH_BIT) != 0u) {
+      if (binding->kind == GPUBindKindBuffer && binding->buffer &&
+          api->meshBuffer) {
+        api->meshBuffer(pass, binding->buffer, binding->offset, index);
+      } else if (binding->kind == GPUBindKindTexture && binding->textureView &&
+                 api->setMeshTexture) {
+        api->setMeshTexture(pass, binding->textureView, index);
+      } else if (binding->kind == GPUBindKindSampler && binding->sampler &&
+                 api->setMeshSampler) {
+        api->setMeshSampler(pass, binding->sampler, index);
+      }
+    }
+  }
+  return true;
+}
+
 static void
 mt_bindComputeBinding(void *ctx, const GPUBindGroupBindingView *binding) {
   MTBufferDescriptorArray *record;
@@ -680,7 +781,15 @@ mt_bindRenderGroup(GPURenderPassEncoder *pass,
                    GPUBindGroup         *group,
                    uint32_t              dynamicOffsetCount,
                    const uint32_t       *dynamicOffsets) {
+  GPUBindGroupPriv *priv;
   MTBindContext ctx;
+
+  priv = group ? group->_priv : NULL;
+  if (dynamicOffsetCount == 0u && priv && priv->dynamicOffsetCount == 0u &&
+      !priv->bindless &&
+      (!group->_native || ((MTBindGroup *)group->_native)->arrayCount == 0u)) {
+    return mt_bindRenderGroupStatic(pass, pipelineLayout, groupIndex, group);
+  }
 
   memset(&ctx, 0, sizeof(ctx));
   ctx.render = pass;
