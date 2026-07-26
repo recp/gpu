@@ -43,8 +43,10 @@ frag pbr_fs(input: PBROut #stage_in,
             albedoTex: texture2d<float> #texture(0) #group(1),
             normalTex: texture2d<float> #texture(1) #group(1),
             materialTex: texture2d<float> #texture(2) #group(1),
-            environment: texturecube<float> #texture(3) #group(1),
-            materialSampler: sampler #sampler(4) #group(1)) -> float4 {
+            diffuseEnvironment: texturecube<float> #texture(3) #group(1),
+            specularEnvironment: texturecube<float> #texture(4) #group(1),
+            ggxLUT: texture2d<float> #texture(5) #group(1),
+            materialSampler: sampler #sampler(6) #group(1)) -> float4 {
   let albedoSample   = albedoTex.sample(materialSampler, input.uv)
   let normalSample   = normalTex.sample(materialSampler, input.uv)
   let materialSample = materialTex.sample(materialSampler, input.uv)
@@ -55,9 +57,19 @@ frag pbr_fs(input: PBROut #stage_in,
                                                  normalize(input.bitangent))
   let v              = normalize(frame.cameraPosition.xyz - input.worldPosition)
   let l              = normalize(frame.lightDirection.xyz)
-  let reflected      = reflect(-v, n)
-  let diffuseEnv     = environment.sample(materialSampler, n).rgb * 0.22
-  let specularEnv    = environment.sample(materialSampler, reflected).rgb * 0.55
+  let noV            = clamp(dot(n, v), 0.0, 1.0)
+  let reflected      = normalize(reflect(-v, n))
+  let diffuseEnv     = diffuseEnvironment.sample(materialSampler,
+                                                  n,
+                                                  level(0.0)).rgb
+  let specularEnv    = specularEnvironment.sample(
+                         materialSampler,
+                         reflected,
+                         level(specular_ibl_lod(factors.y, 7))
+                       ).rgb
+  let fAB            = ggxLUT.sample(materialSampler,
+                                     float2(noV, factors.y),
+                                     level(0.0)).rg
   let color          = shade_metallic_roughness(albedoSample.rgb,
                                                 factors.x,
                                                 factors.y,
@@ -67,6 +79,7 @@ frag pbr_fs(input: PBROut #stage_in,
                                                 float3(4.6, 4.1, 3.7),
                                                 diffuseEnv,
                                                 specularEnv,
+                                                fAB,
                                                 materialSample.r,
                                                 float3(0.0))
   return float4(tonemap_output(color), 1.0)

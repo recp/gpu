@@ -38,8 +38,12 @@ typedef struct WebGPUPBR {
   GPUTextureView    *normalView;
   GPUTexture        *materialTexture;
   GPUTextureView    *materialView;
-  GPUTexture        *environmentTexture;
-  GPUTextureView    *environmentView;
+  GPUTexture        *diffuseEnvironmentTexture;
+  GPUTextureView    *diffuseEnvironmentView;
+  GPUTexture        *specularEnvironmentTexture;
+  GPUTextureView    *specularEnvironmentView;
+  GPUTexture        *ggxLUTTexture;
+  GPUTextureView    *ggxLUTView;
   GPUTexture        *depthTexture;
   GPUTextureView    *depthView;
   GPUSampler        *sampler;
@@ -53,8 +57,8 @@ typedef struct WebGPUPBR {
 } WebGPUPBR;
 
 enum {
-  PBR_LATITUDE_SEGMENTS  = 24u,
-  PBR_LONGITUDE_SEGMENTS = 32u,
+  PBR_LATITUDE_SEGMENTS  = 64u,
+  PBR_LONGITUDE_SEGMENTS = 96u,
   PBR_VERTEX_COUNT       = (PBR_LATITUDE_SEGMENTS + 1u) *
                            (PBR_LONGITUDE_SEGMENTS + 1u),
   PBR_INDEX_COUNT        = PBR_LATITUDE_SEGMENTS *
@@ -62,9 +66,10 @@ enum {
   PBR_TEXTURE_SIZE       = 64u,
   PBR_TEXTURE_ROW_BYTES  = PBR_TEXTURE_SIZE * 4u,
   PBR_TEXTURE_BYTES      = PBR_TEXTURE_ROW_BYTES * PBR_TEXTURE_SIZE,
-  PBR_ENVIRONMENT_SIZE   = 16u,
-  PBR_ENVIRONMENT_ROW    = PBR_ENVIRONMENT_SIZE * 4u,
-  PBR_ENVIRONMENT_BYTES  = PBR_ENVIRONMENT_ROW * PBR_ENVIRONMENT_SIZE,
+  PBR_DIFFUSE_ENV_SIZE   = 32u,
+  PBR_SPECULAR_ENV_SIZE  = 64u,
+  PBR_SPECULAR_ENV_MIPS  = 7u,
+  PBR_RGBA16_FLOAT_BYTES = 8u,
   PBR_CUBE_FACE_COUNT    = 6u,
   WARM_FRAME_COUNT       = 8u
 };
@@ -206,41 +211,6 @@ fill_material(uint8_t pixels[PBR_TEXTURE_BYTES]) {
       pixels[offset + 0u] = (uint8_t)(ao * 255.0f);
       pixels[offset + 1u] = (uint8_t)(roughness * 255.0f);
       pixels[offset + 2u] = (uint8_t)(metallic * 255.0f);
-      pixels[offset + 3u] = 255u;
-    }
-  }
-}
-
-static void
-fill_environment_face(uint8_t pixels[PBR_ENVIRONMENT_BYTES],
-                      uint32_t face) {
-  static const uint8_t colors[PBR_CUBE_FACE_COUNT][3] = {
-    {232u,  90u,  38u},
-    { 22u, 104u, 164u},
-    { 68u, 144u, 220u},
-    {236u, 150u,  48u},
-    {126u,  64u, 174u},
-    { 22u, 154u, 140u}
-  };
-
-  for (uint32_t y = 0u; y < PBR_ENVIRONMENT_SIZE; y++) {
-    for (uint32_t x = 0u; x < PBR_ENVIRONMENT_SIZE; x++) {
-      float    horizon, edge;
-      uint32_t offset;
-
-      horizon = 0.48f + 0.52f *
-                (1.0f - fabsf((float)y /
-                              (float)(PBR_ENVIRONMENT_SIZE - 1u) *
-                              2.0f - 1.0f));
-      edge    = 0.78f + 0.22f *
-                ((float)x / (float)(PBR_ENVIRONMENT_SIZE - 1u));
-      offset  = (y * PBR_ENVIRONMENT_SIZE + x) * 4u;
-      pixels[offset + 0u] = (uint8_t)((float)colors[face][0] *
-                                      horizon * edge);
-      pixels[offset + 1u] = (uint8_t)((float)colors[face][1] *
-                                      horizon * edge);
-      pixels[offset + 2u] = (uint8_t)((float)colors[face][2] *
-                                      horizon * edge);
       pixels[offset + 3u] = 255u;
     }
   }
@@ -397,7 +367,7 @@ create_pipeline(WebGPUPBR *state) {
   if (!frameEntries || frameEntryCount != 1u ||
       frameEntries[0].binding != 0u ||
       frameEntries[0].bindingType != GPU_BINDING_UNIFORM_BUFFER ||
-      !materialEntries || materialEntryCount != 5u ||
+      !materialEntries || materialEntryCount != 7u ||
       materialEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
       materialEntries[0].sampledTexture.viewType != GPU_TEXTURE_VIEW_2D ||
       materialEntries[1].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
@@ -406,7 +376,11 @@ create_pipeline(WebGPUPBR *state) {
       materialEntries[2].sampledTexture.viewType != GPU_TEXTURE_VIEW_2D ||
       materialEntries[3].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
       materialEntries[3].sampledTexture.viewType != GPU_TEXTURE_VIEW_CUBE ||
-      materialEntries[4].bindingType != GPU_BINDING_SAMPLER) {
+      materialEntries[4].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
+      materialEntries[4].sampledTexture.viewType != GPU_TEXTURE_VIEW_CUBE ||
+      materialEntries[5].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
+      materialEntries[5].sampledTexture.viewType != GPU_TEXTURE_VIEW_2D ||
+      materialEntries[6].bindingType != GPU_BINDING_SAMPLER) {
     set_status("GPU: PBR reflection lost its material layout", 1);
     return 0;
   }
@@ -515,78 +489,196 @@ create_texture_2d(WebGPUPBR      *state,
 }
 
 static int
-create_environment(WebGPUPBR *state) {
-  uint8_t                  pixels[PBR_CUBE_FACE_COUNT][PBR_ENVIRONMENT_BYTES];
+create_environment_cube(WebGPUPBR      *state,
+                        const char     *label,
+                        const char     *path,
+                        uint32_t        baseSize,
+                        uint32_t        mipCount,
+                        GPUTexture    **outTexture,
+                        GPUTextureView **outView) {
+  uint8_t                 *pixels;
+  void                    *asset;
+  uint64_t                 assetSize;
+  uint64_t                 expectedSize;
+  uint64_t                 offset;
   GPUTextureCreateInfo     textureInfo = {0};
   GPUTextureWriteRegion    writeRegion = {0};
   GPUTextureViewCreateInfo viewInfo    = {0};
 
-  for (uint32_t face = 0u; face < PBR_CUBE_FACE_COUNT; face++) {
-    fill_environment_face(pixels[face], face);
+  asset        = NULL;
+  assetSize    = 0u;
+  expectedSize = 0u;
+  offset       = 0u;
+  for (uint32_t mip = 0u; mip < mipCount; mip++) {
+    uint32_t size;
+
+    size = baseSize >> mip;
+    if (size == 0u) {
+      size = 1u;
+    }
+    expectedSize += (uint64_t)size * size *
+                    PBR_RGBA16_FLOAT_BYTES * PBR_CUBE_FACE_COUNT;
+  }
+  if (!read_file(path, &asset, &assetSize) ||
+      !asset || assetSize != expectedSize) {
+    free(asset);
+    return 0;
+  }
+  pixels = asset;
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = label;
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA16_FLOAT;
+  textureInfo.width            = baseSize;
+  textureInfo.height           = baseSize;
+  textureInfo.depthOrLayers    = PBR_CUBE_FACE_COUNT;
+  textureInfo.mipLevelCount    = mipCount;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
+                                 GPU_TEXTURE_USAGE_COPY_DST;
+  if (GPUCreateTexture(state->device,
+                       &textureInfo,
+                       outTexture) != GPU_OK) {
+    free(asset);
+    return 0;
+  }
+
+  writeRegion.aspect       = GPU_TEXTURE_ASPECT_ALL;
+  writeRegion.depth        = 1u;
+  writeRegion.layerCount   = 1u;
+  for (uint32_t mip = 0u; mip < mipCount; mip++) {
+    uint32_t size;
+    uint64_t faceBytes;
+
+    size                     = baseSize >> mip;
+    if (size == 0u) size = 1u;
+    faceBytes                = (uint64_t)size * size *
+                               PBR_RGBA16_FLOAT_BYTES;
+    writeRegion.width        = size;
+    writeRegion.height       = size;
+    writeRegion.mipLevel     = mip;
+    writeRegion.bytesPerRow  = size * PBR_RGBA16_FLOAT_BYTES;
+    writeRegion.rowsPerImage = size;
+    for (uint32_t face = 0u; face < PBR_CUBE_FACE_COUNT; face++) {
+      writeRegion.baseArrayLayer = face;
+      if (GPUQueueWriteTexture(state->queue,
+                               *outTexture,
+                               &writeRegion,
+                               pixels + offset,
+                               faceBytes) != GPU_OK) {
+        free(asset);
+        return 0;
+      }
+      offset += faceBytes;
+    }
+  }
+  free(asset);
+
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.label            = label;
+  viewInfo.viewType         = GPU_TEXTURE_VIEW_CUBE;
+  viewInfo.format           = GPU_FORMAT_RGBA16_FLOAT;
+  viewInfo.mipLevelCount    = mipCount;
+  viewInfo.arrayLayerCount  = PBR_CUBE_FACE_COUNT;
+  return GPUCreateTextureView(*outTexture, &viewInfo, outView) == GPU_OK;
+}
+
+static int
+create_ggx_lut(WebGPUPBR *state) {
+  GPUTextureCreateInfo     textureInfo = {0};
+  GPUTextureWriteRegion    writeRegion = {0};
+  GPUTextureViewCreateInfo viewInfo    = {0};
+  unsigned char           *pixels;
+  int                      width, height;
+
+  width  = 0;
+  height = 0;
+  pixels = (unsigned char *)
+           emscripten_get_preloaded_image_data("/lut_ggx.png",
+                                               &width,
+                                               &height);
+  if (!pixels || width <= 0 || height <= 0) {
+    free(pixels);
+    return 0;
   }
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
-  textureInfo.label            = "pbr-material-environment";
+  textureInfo.label            = "pbr-material-ggx-lut";
   textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
-  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM_SRGB;
-  textureInfo.width            = PBR_ENVIRONMENT_SIZE;
-  textureInfo.height           = PBR_ENVIRONMENT_SIZE;
-  textureInfo.depthOrLayers    = PBR_CUBE_FACE_COUNT;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = (uint32_t)width;
+  textureInfo.height           = (uint32_t)height;
+  textureInfo.depthOrLayers    = 1u;
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
                                  GPU_TEXTURE_USAGE_COPY_DST;
   if (GPUCreateTexture(state->device,
                        &textureInfo,
-                       &state->environmentTexture) != GPU_OK) {
+                       &state->ggxLUTTexture) != GPU_OK) {
+    free(pixels);
     return 0;
   }
 
   writeRegion.aspect       = GPU_TEXTURE_ASPECT_ALL;
-  writeRegion.width        = PBR_ENVIRONMENT_SIZE;
-  writeRegion.height       = PBR_ENVIRONMENT_SIZE;
+  writeRegion.width        = (uint32_t)width;
+  writeRegion.height       = (uint32_t)height;
   writeRegion.depth        = 1u;
   writeRegion.layerCount   = 1u;
-  writeRegion.bytesPerRow  = PBR_ENVIRONMENT_ROW;
-  writeRegion.rowsPerImage = PBR_ENVIRONMENT_SIZE;
-  for (uint32_t face = 0u; face < PBR_CUBE_FACE_COUNT; face++) {
-    writeRegion.baseArrayLayer = face;
-    if (GPUQueueWriteTexture(state->queue,
-                             state->environmentTexture,
-                             &writeRegion,
-                             pixels[face],
-                             PBR_ENVIRONMENT_BYTES) != GPU_OK) {
-      return 0;
-    }
+  writeRegion.bytesPerRow  = (uint32_t)width * 4u;
+  writeRegion.rowsPerImage = (uint32_t)height;
+  if (GPUQueueWriteTexture(state->queue,
+                           state->ggxLUTTexture,
+                           &writeRegion,
+                           pixels,
+                           (uint64_t)width * (uint64_t)height * 4u) != GPU_OK) {
+    free(pixels);
+    return 0;
   }
+  free(pixels);
 
   viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
   viewInfo.chain.structSize = sizeof(viewInfo);
-  viewInfo.label            = "pbr-material-environment-view";
-  viewInfo.viewType         = GPU_TEXTURE_VIEW_CUBE;
-  viewInfo.format           = GPU_FORMAT_RGBA8_UNORM_SRGB;
+  viewInfo.label            = "pbr-material-ggx-lut-view";
+  viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
-  viewInfo.arrayLayerCount  = PBR_CUBE_FACE_COUNT;
-  return GPUCreateTextureView(state->environmentTexture,
+  viewInfo.arrayLayerCount  = 1u;
+  return GPUCreateTextureView(state->ggxLUTTexture,
                               &viewInfo,
-                              &state->environmentView) == GPU_OK;
+                              &state->ggxLUTView) == GPU_OK;
 }
 
 static int
 create_geometry(WebGPUPBR *state) {
-  PBRVertex           vertices[PBR_VERTEX_COUNT];
-  uint16_t            indices[PBR_INDEX_COUNT];
+  PBRVertex          *vertices;
+  uint16_t           *indices;
+  void               *geometry;
   PBRUniforms         uniforms;
   GPUBufferCreateInfo info = {0};
+  size_t              vertexBytes, indexBytes;
+  int                 result;
 
+  vertexBytes = sizeof(PBRVertex) * PBR_VERTEX_COUNT;
+  indexBytes  = sizeof(uint16_t) * PBR_INDEX_COUNT;
+  geometry    = malloc(vertexBytes + indexBytes);
+  if (!geometry) {
+    return 0;
+  }
+  vertices = geometry;
+  indices  = (uint16_t *)((uint8_t *)geometry + vertexBytes);
   build_sphere(vertices, indices);
   build_uniforms(state, 0.0f, &uniforms);
+  result = 0;
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   info.chain.structSize = sizeof(info);
   info.label            = "pbr-material-vertices";
-  info.sizeBytes        = sizeof(vertices);
+  info.sizeBytes        = vertexBytes;
   info.usage            = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST;
   if (GPUCreateBuffer(state->device,
                       &info,
@@ -595,12 +687,12 @@ create_geometry(WebGPUPBR *state) {
                           state->vertexBuffer,
                           0u,
                           vertices,
-                          sizeof(vertices)) != GPU_OK) {
-    return 0;
+                          vertexBytes) != GPU_OK) {
+    goto cleanup;
   }
 
   info.label     = "pbr-material-indices";
-  info.sizeBytes = sizeof(indices);
+  info.sizeBytes = indexBytes;
   info.usage     = GPU_BUFFER_USAGE_INDEX | GPU_BUFFER_USAGE_COPY_DST;
   if (GPUCreateBuffer(state->device,
                       &info,
@@ -609,8 +701,8 @@ create_geometry(WebGPUPBR *state) {
                           state->indexBuffer,
                           0u,
                           indices,
-                          sizeof(indices)) != GPU_OK) {
-    return 0;
+                          indexBytes) != GPU_OK) {
+    goto cleanup;
   }
 
   info.label     = "pbr-material-uniforms";
@@ -624,9 +716,13 @@ create_geometry(WebGPUPBR *state) {
                           0u,
                           &uniforms,
                           sizeof(uniforms)) != GPU_OK) {
-    return 0;
+    goto cleanup;
   }
-  return 1;
+  result = 1;
+
+cleanup:
+  free(geometry);
+  return result;
 }
 
 static int
@@ -634,11 +730,11 @@ create_material(WebGPUPBR *state) {
   uint8_t                albedoPixels[PBR_TEXTURE_BYTES];
   uint8_t                normalPixels[PBR_TEXTURE_BYTES];
   uint8_t                materialPixels[PBR_TEXTURE_BYTES];
-  GPUSamplerCreateInfo    samplerInfo       = {0};
-  GPUBindGroupEntry       frameEntry        = {0};
-  GPUBindGroupEntry       materialEntries[5] = {0};
-  GPUBindGroupCreateInfo  frameInfo         = {0};
-  GPUBindGroupCreateInfo  materialInfo      = {0};
+  GPUSamplerCreateInfo   samplerInfo        = {0};
+  GPUBindGroupEntry      frameEntry         = {0};
+  GPUBindGroupEntry      materialEntries[7] = {0};
+  GPUBindGroupCreateInfo frameInfo          = {0};
+  GPUBindGroupCreateInfo materialInfo       = {0};
 
   fill_albedo(albedoPixels);
   fill_normal(normalPixels);
@@ -661,7 +757,21 @@ create_material(WebGPUPBR *state) {
                          materialPixels,
                          &state->materialTexture,
                          &state->materialView) ||
-      !create_environment(state)) {
+      !create_environment_cube(state,
+                               "pbr-material-diffuse-environment",
+                               "/studio_diffuse.rgba16f",
+                               PBR_DIFFUSE_ENV_SIZE,
+                               1u,
+                               &state->diffuseEnvironmentTexture,
+                               &state->diffuseEnvironmentView) ||
+      !create_environment_cube(state,
+                               "pbr-material-specular-environment",
+                               "/studio_specular.rgba16f",
+                               PBR_SPECULAR_ENV_SIZE,
+                               PBR_SPECULAR_ENV_MIPS,
+                               &state->specularEnvironmentTexture,
+                               &state->specularEnvironmentView) ||
+      !create_ggx_lut(state)) {
     return 0;
   }
 
@@ -706,12 +816,18 @@ create_material(WebGPUPBR *state) {
   materialEntries[2].textureView = state->materialView;
   materialEntries[2].binding     = 2u;
   materialEntries[2].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
-  materialEntries[3].textureView = state->environmentView;
+  materialEntries[3].textureView = state->diffuseEnvironmentView;
   materialEntries[3].binding     = 3u;
   materialEntries[3].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
-  materialEntries[4].sampler     = state->sampler;
+  materialEntries[4].textureView = state->specularEnvironmentView;
   materialEntries[4].binding     = 4u;
-  materialEntries[4].bindingType = GPU_BINDING_SAMPLER;
+  materialEntries[4].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+  materialEntries[5].textureView = state->ggxLUTView;
+  materialEntries[5].binding     = 5u;
+  materialEntries[5].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+  materialEntries[6].sampler     = state->sampler;
+  materialEntries[6].binding     = 6u;
+  materialEntries[6].bindingType = GPU_BINDING_SAMPLER;
   materialInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   materialInfo.chain.structSize = sizeof(materialInfo);
   materialInfo.label             = "pbr-material-group1";

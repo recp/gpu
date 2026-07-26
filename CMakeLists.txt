@@ -713,7 +713,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
-  set(GPU_WEBGPU_GALLERY_VERSION "38")
+  set(GPU_WEBGPU_GALLERY_VERSION "40")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
   set(GPU_WEBGPU_PACK_SCRIPT
@@ -2751,11 +2751,24 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     pbr_material
     "PBR material"
     "Render / physically based material"
-    "Albedo, tangent normals, metallic-roughness, and cubemap lighting share one reflected material layout."
+    "glTF metallic-roughness, tangent normals, split-sum IBL, and Khronos tone mapping share one reflected layout."
     USES_STDLIB
+    ASSETS
+      lut_ggx.png
+      studio_diffuse.rgba16f
+      studio_specular.rgba16f
   )
   target_include_directories(gpu-pbr-material-webgpu-usl PRIVATE
     "${GPU_CGLM_INCLUDE_DIR}"
+  )
+  target_link_options(gpu-pbr-material-webgpu-usl PRIVATE
+    --use-preload-plugins
+  )
+  set_property(TARGET gpu-pbr-material-webgpu-usl APPEND PROPERTY
+    LINK_DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/pbr-material-webgpu-usl/lut_ggx.png"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/pbr-material-webgpu-usl/studio_diffuse.rgba16f"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/pbr-material-webgpu-usl/studio_specular.rgba16f"
   )
   target_link_options(gpu-image-texture-webgpu-usl PRIVATE
     --use-preload-plugins
