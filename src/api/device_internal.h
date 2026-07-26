@@ -86,6 +86,8 @@ struct GPUDevice {
   bool                         transientConfigured;
   bool                         transientFrameBegun;
   bool                         transientCpuPtrOwned;
+  bool                         uslStorageExtAccess;
+  bool                         uslStorageExtFormats;
   bool                         uslUntypedPointers;
   GPUFeature                   enabledFeatureStorage[
     GPU_FEATURE_INTERSECTION_FUNCTION_TABLE + 1u

@@ -368,6 +368,19 @@ webgpu_hasAdapterFeature(const GPUAdapter *adapter, WGPUFeatureName feature) {
          wgpuAdapterHasFeature(native->adapter, feature);
 }
 
+#if defined(WGPU_SUPPORTED_WGSL_LANGUAGE_FEATURES_INIT)
+static bool
+webgpu_hasWGSLLanguageFeature(
+  const GPUAdapter            *adapter,
+  WGPUWGSLLanguageFeatureName  feature) {
+  GPUInstanceWebGPU *native;
+
+  native = adapter ? gpu_webgpuInstance(adapter->inst) : NULL;
+  return native && native->instance &&
+         wgpuInstanceHasWGSLLanguageFeature(native->instance, feature);
+}
+#endif
+
 static void
 webgpu_getFormatCapabilities(
   const GPUAdapter      * __restrict adapter,
@@ -763,6 +776,20 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   request->userData = userData;
   request->queueBits = queueBits;
   request->native->limits = requiredLimits;
+#if defined(WGPU_SUPPORTED_WGSL_LANGUAGE_FEATURES_INIT)
+  request->device->uslStorageExtAccess =
+    webgpu_hasWGSLLanguageFeature(
+      adapter,
+      WGPUWGSLLanguageFeatureName_ReadonlyAndReadwriteStorageTextures
+    );
+  request->device->uslStorageExtFormats =
+    wgpuAdapterHasFeature(native->adapter,
+                          WGPUFeatureName_TextureFormatsTier1) &&
+    webgpu_hasWGSLLanguageFeature(
+      adapter,
+      WGPUWGSLLanguageFeatureName_TextureFormatsTier1
+    );
+#endif
 
   descriptor.label = gpu_webgpuString("gpu-webgpu-device");
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_TIMESTAMPS)) != 0u) {

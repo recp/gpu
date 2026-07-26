@@ -829,8 +829,53 @@ gpuGetShaderLibraryStaticSamplers(const GPUShaderLibrary *library,
 }
 
 static int
-gpu_bindingTypeFromUSLResource(const USLRuntimeResource *resource,
-                               GPUBindingType *outType) {
+gpu_webgpuStorageTier1(uint32_t format) {
+  switch (format) {
+    case USL_RUNTIME_TEXEL_FORMAT_RGBA8_UNORM:
+    case USL_RUNTIME_TEXEL_FORMAT_RGBA8_SNORM:
+    case USL_RUNTIME_TEXEL_FORMAT_RGBA8_UINT:
+    case USL_RUNTIME_TEXEL_FORMAT_RGBA8_SINT:
+    case USL_RUNTIME_TEXEL_FORMAT_RGBA16_UINT:
+    case USL_RUNTIME_TEXEL_FORMAT_RGBA16_SINT:
+    case USL_RUNTIME_TEXEL_FORMAT_RGBA16_FLOAT:
+    case USL_RUNTIME_TEXEL_FORMAT_R32_UINT:
+    case USL_RUNTIME_TEXEL_FORMAT_R32_SINT:
+    case USL_RUNTIME_TEXEL_FORMAT_R32_FLOAT:
+    case USL_RUNTIME_TEXEL_FORMAT_RG32_UINT:
+    case USL_RUNTIME_TEXEL_FORMAT_RG32_SINT:
+    case USL_RUNTIME_TEXEL_FORMAT_RG32_FLOAT:
+    case USL_RUNTIME_TEXEL_FORMAT_RGBA32_UINT:
+    case USL_RUNTIME_TEXEL_FORMAT_RGBA32_SINT:
+    case USL_RUNTIME_TEXEL_FORMAT_RGBA32_FLOAT:
+    case USL_RUNTIME_TEXEL_FORMAT_BGRA8_UNORM:
+      return 0;
+    default:
+      return format > USL_RUNTIME_TEXEL_FORMAT_UNKNOWN &&
+             format < USL_RUNTIME_TEXEL_FORMAT_COUNT;
+  }
+}
+
+static int
+gpu_webgpuSampledReadImage(const GPUShaderLibrary   *library,
+                           const USLRuntimeResource *resource) {
+  const GPUDevice *device;
+
+  if (!library || !library->_api ||
+      library->_api->backend != GPU_BACKEND_WEBGPU ||
+      !(device = library->_device) || !resource ||
+      resource->access != USL_RUNTIME_IMAGE_ACCESS_READ) {
+    return 0;
+  }
+
+  return !device->uslStorageExtAccess ||
+         (gpu_webgpuStorageTier1(resource->type.texel_format) &&
+          !device->uslStorageExtFormats);
+}
+
+static int
+gpu_bindingTypeFromUSLResource(const GPUShaderLibrary     *library,
+                               const USLRuntimeResource   *resource,
+                               GPUBindingType             *outType) {
   uint32_t typeKind;
 
   if (!resource || !outType) {
@@ -856,7 +901,8 @@ gpu_bindingTypeFromUSLResource(const USLRuntimeResource *resource,
       return 1;
     case USL_RUNTIME_RESOURCE_IMAGE:
       *outType = resource->access == USL_RUNTIME_IMAGE_ACCESS_READ &&
-                 typeKind == USL_RUNTIME_TYPE_TEXTURE
+                 (typeKind == USL_RUNTIME_TYPE_TEXTURE ||
+                  gpu_webgpuSampledReadImage(library, resource))
                    ? GPU_BINDING_SAMPLED_TEXTURE
                    : GPU_BINDING_STORAGE_TEXTURE;
       return 1;
@@ -1526,7 +1572,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
     if (arrayCount == 0u ||
         !gpu_shaderVisibilityFromUSLStage(src->stage, &visibility) ||
         visibility != shaderEntry->stage ||
-        !gpu_bindingTypeFromUSLResource(src, &bindingType) ||
+        !gpu_bindingTypeFromUSLResource(library, src, &bindingType) ||
         !gpu_shaderPublicBindingFromUSLResource(src,
                                                 &groupIndex,
                                                 &binding) ||
@@ -2138,6 +2184,26 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
             &targetAtoms[targetAtomCount++],
             USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
             USL_SEMANTIC_FEATURE_ID_SUBGROUP,
+            0u,
+            0u) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+    if (device->uslStorageExtAccess) {
+      if (us_cap_atom_init(
+            &targetAtoms[targetAtomCount++],
+            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+            USL_SEMANTIC_FEATURE_ID_STORAGE_TEXTURE_EXTENDED_ACCESS,
+            0u,
+            0u) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+    if (device->uslStorageExtFormats) {
+      if (us_cap_atom_init(
+            &targetAtoms[targetAtomCount++],
+            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+            USL_SEMANTIC_FEATURE_ID_STORAGE_TEXTURE_EXTENDED_FORMATS,
             0u,
             0u) != USLOk) {
         return GPU_ERROR_BACKEND_FAILURE;
