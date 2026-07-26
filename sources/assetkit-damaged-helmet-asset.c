@@ -36,24 +36,47 @@ EM_JS(void,
   const blob    = new Blob([encoded]);
 
   createImageBitmap(blob, {colorSpaceConversion: "none", premultiplyAlpha: "none"}).then((bitmap) => {
-    const canvas  = document.createElement("canvas");
-    const context = canvas.getContext("2d", {
-      alpha: true,
-      colorSpace: "srgb",
-      willReadFrequently: true
-    });
+    let pixels, width, height;
 
-    canvas.width  = bitmap.width;
-    canvas.height = bitmap.height;
-    context.drawImage(bitmap, 0, 0);
-    const image  = context.getImageData(0, 0, bitmap.width, bitmap.height);
-    const pixels = _malloc(image.data.byteLength);
+    try {
+      const canvas = document.createElement("canvas");
 
-    HEAPU8.set(image.data, pixels);
-    bitmap.close();
+      canvas.width  = bitmap.width;
+      canvas.height = bitmap.height;
 
-    _asset_image_ready(slot, pixels, canvas.width, canvas.height);
-  }).catch(() => {
+      const context = canvas.getContext("2d", {
+        alpha: true,
+        colorSpace: "srgb",
+        willReadFrequently: true
+      });
+      if (!context) {
+        throw new Error("2D canvas context unavailable");
+      }
+
+      context.drawImage(bitmap, 0, 0);
+      const image = context.getImageData(0, 0, bitmap.width, bitmap.height);
+
+      pixels = _malloc(image.data.byteLength);
+      if (!pixels) {
+        throw new Error("Wasm image allocation failed");
+      }
+
+      HEAPU8.set(image.data, pixels);
+      width  = canvas.width;
+      height = canvas.height;
+    } catch (_) {
+      if (pixels) {
+        _free(pixels);
+      }
+      pixels = 0;
+      width  = 0;
+      height = 0;
+    } finally {
+      bitmap.close();
+    }
+
+    _asset_image_ready(slot, pixels, width, height);
+  }, () => {
     _asset_image_ready(slot, 0, 0, 0);
   });
 });
@@ -185,6 +208,38 @@ asset_read_index(const AkAccessor *acc,
   }
 }
 
+static int
+asset_index_accessor_valid(const AkAccessor *acc) {
+  size_t componentSize, last, stride;
+
+  if (!acc || !acc->buffer || !acc->buffer->data || acc->count == 0u)
+    return 0;
+
+  switch (acc->componentType) {
+    case AKT_UBYTE:  componentSize = sizeof(uint8_t);  break;
+    case AKT_USHORT: componentSize = sizeof(uint16_t); break;
+    case AKT_UINT:   componentSize = sizeof(uint32_t); break;
+    default:
+      return 0;
+  }
+
+  stride = acc->byteStride ? acc->byteStride : acc->bytesPerComponent;
+  if (acc->bytesPerComponent != componentSize ||
+      stride < componentSize ||
+      acc->byteOffset > acc->buffer->length ||
+      acc->byteOffset > SIZE_MAX - componentSize) {
+    return 0;
+  }
+
+  if ((size_t)(acc->count - 1u) >
+      (SIZE_MAX - acc->byteOffset - componentSize) / stride) {
+    return 0;
+  }
+
+  last = acc->byteOffset + (size_t)(acc->count - 1u) * stride + componentSize;
+  return last <= acc->buffer->length;
+}
+
 static AkNode *
 asset_geometry_node(AkNode *node) {
   AkNode *found;
@@ -279,8 +334,7 @@ asset_extract_geometry(AkDoc            *doc,
   free(attributes);
 
   idxAcc = ak_meshPrimitiveIndexAccessor(prim);
-  if (!idxAcc || !idxAcc->buffer ||
-      idxAcc->count == 0u) {
+  if (!asset_index_accessor_valid(idxAcc)) {
     free(vertices);
     return 0;
   }
@@ -290,7 +344,7 @@ asset_extract_geometry(AkDoc            *doc,
     uint32_t value;
 
     value = asset_read_index(idxAcc, i);
-    if (value == UINT32_MAX) {
+    if (value == UINT32_MAX || value >= posAcc->count) {
       free(vertices);
       return 0;
     }

@@ -820,7 +820,7 @@ asset_ready(Asset      *asset,
   }
   asset_release_uploads(&state->asset);
   set_status("GPU: AssetKit DamagedHelmet ready", 0);
-  emscripten_set_main_loop_arg(render_frame, state, 0, true);
+  emscripten_set_main_loop_arg(render_frame, state, 0, false);
 }
 
 static void
