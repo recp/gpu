@@ -997,6 +997,34 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${GPU_WEBGPU_GALLERY_DIR}"
   )
 
+  if(GPU_BUILD_BENCHMARKS)
+    set(GPU_WEBGPU_BENCHMARK_DIR
+        "${CMAKE_CURRENT_BINARY_DIR}/benchmarks/webgpu")
+    file(MAKE_DIRECTORY "${GPU_WEBGPU_BENCHMARK_DIR}")
+    add_executable(gpu-webgpu-render-bench
+      benchmarks/webgpu_render.c
+      ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
+    )
+    target_link_libraries(gpu-webgpu-render-bench PRIVATE gpu)
+    target_link_options(gpu-webgpu-render-bench PRIVATE
+      --use-port=emdawnwebgpu
+      "--preload-file=${GPU_WEBGPU_TRIANGLE_US}@/triangle.us"
+      "--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/webgpu_render_shell.html"
+      -sALLOW_MEMORY_GROWTH=1
+    )
+    add_dependencies(gpu-webgpu-render-bench
+                     gpu-webgpu-triangle-artifact)
+    set_target_properties(gpu-webgpu-render-bench PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+      LINK_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/webgpu_render_shell.html;${GPU_WEBGPU_TRIANGLE_US}"
+      SUFFIX ".html"
+      RUNTIME_OUTPUT_DIRECTORY "${GPU_WEBGPU_BENCHMARK_DIR}"
+    )
+  endif()
+
   set(GPU_WEBGPU_PUSH_CONSTANTS_DIR
       "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
   set(GPU_WEBGPU_PUSH_CONSTANTS_SOURCE
