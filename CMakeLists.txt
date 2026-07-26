@@ -698,7 +698,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
-  set(GPU_WEBGPU_GALLERY_VERSION "34")
+  set(GPU_WEBGPU_GALLERY_VERSION "35")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
   set(GPU_WEBGPU_PACK_SCRIPT
@@ -2691,6 +2691,13 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     "Integer cubemap"
     "Binding / typed cubemap fallback"
     "Nearest, explicit LOD, gradient, and bias sampling share one reflected unsigned cubemap."
+  )
+  gpu_add_webgpu_gallery_sample(
+    color-pipeline
+    color_pipeline
+    "Color pipeline"
+    "Render / HDR + tone mapping"
+    "The left panel decodes sRGB; the right treats the same bytes as linear before HDR tone mapping."
   )
   target_link_options(gpu-image-texture-webgpu-usl PRIVATE
     --use-preload-plugins
