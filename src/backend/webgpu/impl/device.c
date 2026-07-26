@@ -538,6 +538,8 @@ webgpu_supportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
     case GPU_FEATURE_MULTI_DRAW:
       return wgpuAdapterHasFeature(native->adapter,
                                    GPU_WEBGPU_FEATURE_MULTI_DRAW);
+    case GPU_FEATURE_DESCRIPTOR_INDEXING:
+      return true;
     default:
       return false;
   }
@@ -745,7 +747,8 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   }
 
   supportedMask = (1ull << GPU_FEATURE_COMPUTE) |
-                  (1ull << GPU_FEATURE_INDIRECT_DRAW);
+                  (1ull << GPU_FEATURE_INDIRECT_DRAW) |
+                  (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING);
   if (webgpu_supportsFeature(adapter, GPU_FEATURE_TIMESTAMPS)) {
     supportedMask |= 1ull << GPU_FEATURE_TIMESTAMPS;
   }
