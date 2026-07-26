@@ -1385,6 +1385,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${GPU_WEBGPU_SHADER_F16_DIR}/shader_f16.usl")
   set(GPU_WEBGPU_SHADER_F16_US
       "${GPU_WEBGPU_SHADER_F16_DIR}/shader_f16.us")
+  set(GPU_WEBGPU_SHADER_F16_FALLBACK_SOURCE
+      "${GPU_WEBGPU_SHADER_F16_DIR}/shader_f16_fallback.usl")
+  set(GPU_WEBGPU_SHADER_F16_FALLBACK_US
+      "${GPU_WEBGPU_SHADER_F16_DIR}/shader_f16_fallback.us")
   set(GPU_WEBGPU_SHADER_F16_MAIN
       "${GPU_WEBGPU_SHADER_F16_DIR}/shader_f16.c")
   file(MAKE_DIRECTORY "${GPU_WEBGPU_SHADER_F16_DIR}")
@@ -1396,6 +1400,12 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     "#define GPU_COMPUTE_ARTIFACT_PATH \"/shader_f16.us\"\n"
     "#define GPU_COMPUTE_ENTRY_POINT \"fill_f16_vertices\"\n"
     "#define GPU_COMPUTE_REQUIRED_FEATURE GPU_FEATURE_SHADER_F16\n"
+    "#define GPU_COMPUTE_FALLBACK_ARTIFACT_PATH "
+    "\"/shader_f16_fallback.us\"\n"
+    "#define GPU_COMPUTE_FALLBACK_ENTRY_POINT "
+    "\"fill_f16_vertices_emulated\"\n"
+    "#define GPU_COMPUTE_FALLBACK_READY_STATUS "
+    "\"GPU: WebGPU shader-f16 emulated with f32 arithmetic\"\n"
     "#define GPU_COMPUTE_UNSUPPORTED_STATUS "
     "\"GPU: WebGPU shader-f16 unsupported by this adapter\"\n"
     "#define GPU_COMPUTE_READY_STATUS "
@@ -1406,7 +1416,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   set(GPU_WEBGPU_SAMPLE_TITLE "Half precision")
   set(GPU_WEBGPU_SAMPLE_KIND "Compute / shader f16")
   set(GPU_WEBGPU_SAMPLE_DESCRIPTION
-      "Native half-precision arithmetic colors a compute-generated vertex stream.")
+      "Native half-precision arithmetic colors a compute-generated vertex stream, with a bounded f32 fallback.")
   set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/shader-f16.c")
   set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/shader-f16.usl")
   set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/shader-f16.wgsl")
@@ -1416,12 +1426,19 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     @ONLY
   )
   add_custom_command(
-    OUTPUT "${GPU_WEBGPU_SHADER_F16_US}"
-    BYPRODUCTS "${GPU_WEBGPU_SHADER_F16_SOURCE}.wgsl"
+    OUTPUT
+      "${GPU_WEBGPU_SHADER_F16_US}"
+      "${GPU_WEBGPU_SHADER_F16_FALLBACK_US}"
+    BYPRODUCTS
+      "${GPU_WEBGPU_SHADER_F16_SOURCE}.wgsl"
+      "${GPU_WEBGPU_SHADER_F16_FALLBACK_SOURCE}.wgsl"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${GPU_WEBGPU_SHADER_F16_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/shader-f16-webgpu-usl/shader_f16.usl"
             "${GPU_WEBGPU_SHADER_F16_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/samples/shader-f16-webgpu-usl/shader_f16_fallback.usl"
+            "${GPU_WEBGPU_SHADER_F16_FALLBACK_SOURCE}"
     COMMAND ${CMAKE_COMMAND} -E env
             USL_EMIT_BYTECODE=1
             USL_TARGET_CAPS=shader_f16
@@ -1432,6 +1449,15 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
             "-DGPU_USL_SOURCE=${GPU_WEBGPU_SHADER_F16_SOURCE}"
             "-DGPU_USL_CAPS=shader_f16"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_SHADER_F16_FALLBACK_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_SHADER_F16_FALLBACK_SOURCE}"
             -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${GPU_WEBGPU_SHADER_F16_MAIN}"
@@ -1447,11 +1473,14 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${GPU_USL_HOST_PACKER}"
       "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/shader-f16-webgpu-usl/shader_f16.usl"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/shader-f16-webgpu-usl/shader_f16_fallback.usl"
       "${GPU_WEBGPU_SHADER_F16_MAIN}"
     VERBATIM
   )
   add_custom_target(gpu-webgpu-shader-f16-artifact
-    DEPENDS "${GPU_WEBGPU_SHADER_F16_US}"
+    DEPENDS
+      "${GPU_WEBGPU_SHADER_F16_US}"
+      "${GPU_WEBGPU_SHADER_F16_FALLBACK_US}"
   )
 
   add_executable(gpu-shader-f16-webgpu-usl
@@ -1465,6 +1494,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   target_link_options(gpu-shader-f16-webgpu-usl PRIVATE
     --use-port=emdawnwebgpu
     "--preload-file=${GPU_WEBGPU_SHADER_F16_US}@/shader_f16.us"
+    "--preload-file=${GPU_WEBGPU_SHADER_F16_FALLBACK_US}@/shader_f16_fallback.us"
     "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-shader-f16-webgpu-usl-shell.html"
     -sALLOW_MEMORY_GROWTH=1
   )
@@ -1475,7 +1505,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
     LINK_DEPENDS
-      "${GPU_WEBGPU_GALLERY_DIR}/gpu-shader-f16-webgpu-usl-shell.html;${GPU_WEBGPU_SHADER_F16_US}"
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-shader-f16-webgpu-usl-shell.html;${GPU_WEBGPU_SHADER_F16_US};${GPU_WEBGPU_SHADER_F16_FALLBACK_US}"
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"
