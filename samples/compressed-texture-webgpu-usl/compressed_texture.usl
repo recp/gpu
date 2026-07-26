@@ -1,0 +1,23 @@
+struct CompressedOut {
+  position: float4 #position
+  uv:       float2
+}
+
+struct CompressedUniforms {
+  scale: float2
+}
+
+vert compressed_vs(uniforms: CompressedUniforms #buffer(0),
+                   vertexId: uint #vertex_id) -> CompressedOut {
+  let corner = float2(float(vertexId & 1u), float(vertexId >> 1u))
+  return CompressedOut {
+    float4((corner * 2.0 - float2(1.0)) * uniforms.scale, 0.0, 1.0),
+    float2(corner.x, 1.0 - corner.y)
+  }
+}
+
+frag compressed_fs(input: CompressedOut #stage_in,
+                   colorTexture: texture2d<float> #texture(1),
+                   colorSampler: sampler #sampler(2)) -> float4 {
+  return colorTexture.sample(colorSampler, input.uv)
+}

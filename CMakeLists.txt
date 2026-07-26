@@ -698,7 +698,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
-  set(GPU_WEBGPU_GALLERY_VERSION "35")
+  set(GPU_WEBGPU_GALLERY_VERSION "36")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
   set(GPU_WEBGPU_PACK_SCRIPT
@@ -2698,6 +2698,18 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     "Color pipeline"
     "Render / HDR + tone mapping"
     "The left panel decodes sRGB; the right treats the same bytes as linear before HDR tone mapping."
+  )
+  gpu_add_webgpu_gallery_sample(
+    compressed-texture
+    compressed_texture
+    "Compressed texture"
+    "Binding / portable compression"
+    "The adapter selects ASTC, BC, or ETC2 once; RGBA8 remains the portable fallback."
+    ASSETS
+      texture.astc
+      texture.bc1
+      texture.etc2
+      texture.rgba
   )
   target_link_options(gpu-image-texture-webgpu-usl PRIVATE
     --use-preload-plugins
