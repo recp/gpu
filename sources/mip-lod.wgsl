@@ -35,8 +35,8 @@ fn quad_corner(vertexId: u32) -> vec2f {
 
 @vertex
 fn mip_vs(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) instanceId: u32) -> MipOut {
-    let r21: vec2f = quad_corner(vertexId);
-    let r23: f32 = f32(instanceId);
+    let r21 = quad_corner(vertexId);
+    let r23 = f32(instanceId);
     return MipOut(vec4f(fma(r21, vec2f(0.17, 0.72), vec2f(fma(0.39, r23, -0.78), 0.0)), 0.0, 1.0), fma(r21, vec2f(1.5, 4.0), vec2f(0.5)), r23);
 }
 

@@ -70,12 +70,12 @@ fn sample_preview_fs(input: PreviewOut) -> @location(0) vec4f {
     let r74 = textureNumSamples(usl_g0_b0);
     let r80: f32 = (input.uv.x * f32(r74));
     let r86 = min(u32(r80), (r74 - 1u));
-    let r99: vec2f = (vec2f(usl_dims_r68) - vec2f(1.0));
-    let r101: vec2i = vec2i((vec2f((r80 - f32(r86)), input.uv.y) * r99));
-    let r109: f32 = f32((r86 & 1u));
-    let r114: f32 = f32(((r86 >> 1u) & 1u));
+    let r99 = (vec2f(usl_dims_r68) - vec2f(1.0));
+    let r101 = vec2i((vec2f((r80 - f32(r86)), input.uv.y) * r99));
+    let r109 = f32((r86 & 1u));
+    let r114 = f32(((r86 >> 1u) & 1u));
     let r126: f32 = (1.0 - ((0.6 * r109) * r114));
-    let r127: vec3f = vec3f(fma(0.75, r109, 0.25), fma(0.75, r114, 0.25), r126);
-    let r135: vec4f = vec4f((vec3f(0.035) * r127), 0.0);
+    let r127 = vec3f(fma(0.75, r109, 0.25), fma(0.75, r114, 0.25), r126);
+    let r135 = vec4f((vec3f(0.035) * r127), 0.0);
     return fma(textureLoad(usl_g0_b0, r101, i32(r86)), vec4f(r127, 1.0), r135);
 }

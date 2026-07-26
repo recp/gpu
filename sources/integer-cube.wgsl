@@ -82,7 +82,7 @@ fn integer_cube_nearest_fs(input: VSOut) -> @location(0) vec4f {
     let r96: f32 = cos(r95);
     let r99: f32 = sin(r95);
     let r101: f32 = (cos(r92) * r96);
-    let r102: vec3f = vec3f((sin(r92) * r96), r99, r101);
+    let r102 = vec3f((sin(r92) * r96), r99, r101);
     let usl_cube_r59 = usl_cube_map(r102);
     let usl_idim_r59 = textureDimensions(usl_g0_b0);
     let usl_ic_r59 = clamp(vec2i(floor(usl_cube_r59.uv * vec2f(usl_idim_r59))), vec2i(0), vec2i(usl_idim_r59) - vec2i(1));
@@ -97,7 +97,7 @@ fn integer_cube_level_fs(input: VSOut) -> @location(0) vec4f {
     let r110: f32 = cos(r109);
     let r113: f32 = sin(r109);
     let r115: f32 = (cos(r106) * r110);
-    let r116: vec3f = vec3f((sin(r106) * r110), r113, r115);
+    let r116 = vec3f((sin(r106) * r110), r113, r115);
     let usl_cube_r66 = usl_cube_map(r116);
     let usl_ilevels_r66 = max(textureNumLevels(usl_g0_b0), 1u);
     let usl_imip_r66 = min(u32(floor(max(1.0, 0.0) + 0.5)), usl_ilevels_r66 - 1u);
@@ -114,9 +114,9 @@ fn integer_cube_gradient_fs(input: VSOut) -> @location(0) vec4f {
     let r124: f32 = cos(r123);
     let r127: f32 = sin(r123);
     let r129: f32 = (cos(r120) * r124);
-    let r130: vec3f = vec3f((sin(r120) * r124), r127, r129);
-    let r76: vec3f = dpdx(r130);
-    let r78: vec3f = dpdy(r130);
+    let r130 = vec3f((sin(r120) * r124), r127, r129);
+    let r76 = dpdx(r130);
+    let r78 = dpdy(r130);
     let usl_cd_r79 = r130;
     let usl_cube_r79 = usl_cube_map(usl_cd_r79);
     let usl_cdx_r79 = usl_cube_project(usl_cd_r79 + r76, usl_cube_r79.face);
@@ -138,7 +138,7 @@ fn integer_cube_bias_fs(input: VSOut) -> @location(0) vec4f {
     let r138: f32 = cos(r137);
     let r141: f32 = sin(r137);
     let r143: f32 = (cos(r134) * r138);
-    let r144: vec3f = vec3f((sin(r134) * r138), r141, r143);
+    let r144 = vec3f((sin(r134) * r138), r141, r143);
     let usl_cd_r86 = r144;
     let usl_cube_r86 = usl_cube_map(usl_cd_r86);
     let usl_cdx_r86 = usl_cube_project(usl_cd_r86 + dpdx(r144), usl_cube_r86.face);

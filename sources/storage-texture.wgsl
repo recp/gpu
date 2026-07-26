@@ -38,9 +38,9 @@ fn paint_cs(@builtin(global_invocation_id) gid: vec3u) {
 fn filter_cs(@builtin(global_invocation_id) gid: vec3u) {
     let r26 = textureLoad(usl_g1_b0, vec2i(gid.xy));
     let r30 = textureLoad(usl_g1_b1, vec2i(gid.xy));
-    let r41: vec4f = vec4f(r26[2], r26[0], r26[1], r26[3]);
+    let r41 = vec4f(r26[2], r26[0], r26[1], r26[3]);
     textureStore(usl_g2_b0, vec2i(gid.xy), r41);
-    let r52: vec4f = vec4f(r30[1], r30[2], r30[0], r30[3]);
+    let r52 = vec4f(r30[1], r30[2], r30[0], r30[3]);
     textureStore(usl_g2_b1, vec2i(gid.xy), r52);
 }
 
@@ -52,7 +52,7 @@ fn storage_vs(input: StorageVertexIn) -> StorageVertexOut {
 @fragment
 fn storage_fs(input: StorageVertexOut) -> @location(0) vec4f {
     let r63: f32 = (2.0 * input.uv.x);
-    let r66: vec2f = vec2f(r63, input.uv.y);
+    let r66 = vec2f(r63, input.uv.y);
     if ((input.uv.x < 0.5)) {
         return textureSampleLevel(usl_g3_b0, usl_g3_b2, r66, 0.0);
     } else {

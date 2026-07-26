@@ -369,6 +369,10 @@ webgpu_ready(GPUResult  result,
 
   state->adapter = adapter;
   state->device  = device;
+  if (!GPUIsFeatureEnabled(device, GPU_FEATURE_DESCRIPTOR_INDEXING)) {
+    set_status_notice("GPU: WebGPU descriptor indexing fallback unavailable");
+    return;
+  }
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
@@ -404,8 +408,9 @@ webgpu_ready(GPUResult  result,
 
 int
 main(void) {
-  GPUInstanceCreateInfo info = {0};
-  GPUResult             result;
+  const GPUFeature       feature = GPU_FEATURE_DESCRIPTOR_INDEXING;
+  GPUInstanceCreateInfo  info    = {0};
+  GPUResult              result;
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   info.chain.structSize = sizeof(info);
@@ -419,9 +424,11 @@ main(void) {
   }
 
   set_status("GPU: requesting WebGPU device", 0);
-  result = request_webgpu_device(app.instance,
-                                 &app.request,
-                                 webgpu_ready,
-                                 &app);
+  result = request_webgpu_device_features(app.instance,
+                                          &app.request,
+                                          webgpu_ready,
+                                          &app,
+                                          &feature,
+                                          1u);
   return result == GPU_OK ? 0 : 1;
 }

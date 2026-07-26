@@ -23,6 +23,16 @@ struct usl_buffer_g0_b2 {
 @group(0) @binding(10) var<storage, read> usl_g0_b10: usl_buffer_g0_b2;
 @group(0) @binding(11) var<storage, read> usl_g0_b11: usl_buffer_g0_b2;
 
+fn usl_br_g0_b2(di: u32, ei: u32) -> vec4f {
+    switch (di) {
+        case 0u: { return usl_g0_b8.values[ei]; }
+        case 1u: { return usl_g0_b9.values[ei]; }
+        case 2u: { return usl_g0_b10.values[ei]; }
+        case 3u: { return usl_g0_b11.values[ei]; }
+        default: { return vec4f(); }
+    }
+}
+
 @vertex
 fn descriptor_array_vs(@builtin(vertex_index) vertexId: u32) -> VSOut {
     switch (vertexId) {
@@ -49,15 +59,23 @@ fn descriptor_array_vs(@builtin(vertex_index) vertexId: u32) -> VSOut {
 
 @fragment
 fn descriptor_array_fs(input: VSOut) -> @location(0) vec4f {
-    let r41: vec2f = (vec2f(2.0) * input.uv);
-    let r49: vec4f = (textureSample(usl_g0_b0, usl_g0_b4, r41) * usl_g0_b8.values[0]);
-    let r57: vec4f = (textureSample(usl_g0_b1, usl_g0_b5, r41) * usl_g0_b9.values[0]);
-    let r65: vec4f = (textureSample(usl_g0_b2, usl_g0_b6, r41) * usl_g0_b10.values[0]);
-    let r73: vec4f = (textureSample(usl_g0_b3, usl_g0_b7, r41) * usl_g0_b11.values[0]);
-    let r90: bool = (input.uv.y < 0.5);
-    if ((input.uv.x < 0.5)) {
-        return select(r65, r49, r90);
-    } else {
-        return select(r73, r57, r90);
+    let r48: u32 = (min(u32((2.0 * input.uv.y)), 1u) * 2u);
+    let r50: u32 = (min(u32((2.0 * input.uv.x)), 1u) + r48);
+    var r62: vec4f;
+    switch (r50) {
+        case 0u: {
+            r62 = textureSampleLevel(usl_g0_b0, usl_g0_b4, fract((vec2f(2.0) * input.uv)), 0.0);
+        }
+        case 1u: {
+            r62 = textureSampleLevel(usl_g0_b1, usl_g0_b5, fract((vec2f(2.0) * input.uv)), 0.0);
+        }
+        case 2u: {
+            r62 = textureSampleLevel(usl_g0_b2, usl_g0_b6, fract((vec2f(2.0) * input.uv)), 0.0);
+        }
+        case 3u: {
+            r62 = textureSampleLevel(usl_g0_b3, usl_g0_b7, fract((vec2f(2.0) * input.uv)), 0.0);
+        }
+        default: {}
     }
+    return (r62 * usl_br_g0_b2(r50, 0u));
 }

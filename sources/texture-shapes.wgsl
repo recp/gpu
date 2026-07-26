@@ -43,7 +43,7 @@ fn shapes_fs(input: VSOut) -> @location(0) vec4f {
     let r51: f32 = cos(r48);
     let r58: f32 = sin(r48);
     let r62: f32 = (cos(r43) * r51);
-    let r63: vec3f = vec3f((sin(r43) * r51), r58, r62);
+    let r63 = vec3f((sin(r43) * r51), r58, r62);
     let r73 = textureSample(usl_g0_b1, usl_g0_b2, vec3f(r38, input.uv.y, r38));
     return mix(textureSample(usl_g0_b0, usl_g0_b2, r63), r73, step(0.5, input.uv.x));
 }

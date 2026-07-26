@@ -18,8 +18,8 @@ fn line_transform_cs(@builtin(global_invocation_id) usl_builtin_2: vec3u) {
     let gid: u32 = usl_builtin_2.x;
     let r12: f32 = (((0.5 * f32((1u + gid))) / f32(textureDimensions(usl_g0_b0, 0u))) + 0.5);
     let r14 = textureLoad(usl_g0_b0, i32(gid), 0);
-    let r26: vec4f = vec4f(r12, r12, r12, 1.0);
-    let r27: vec4f = (vec4f(r14[2], r14[0], r14[1], 1.0) * r26);
+    let r26 = vec4f(r12, r12, r12, 1.0);
+    let r27 = (vec4f(r14[2], r14[0], r14[1], 1.0) * r26);
     textureStore(usl_g0_b1, i32(gid), r27);
 }
 
