@@ -3524,6 +3524,24 @@ gpu_bindGroupEachStatic(GPUPipelineLayoutPriv  *pipeline,
   return 1;
 }
 
+static GPU_INLINE void
+gpuCommitRenderGroup(GPURenderPassEncoder *pass,
+                     uint32_t              groupIndex,
+                     GPUBindGroup         *group,
+                     uint32_t              dynamicOffsetCount,
+                     const uint32_t       *pDynamicOffsets) {
+  if (pass->_boundGroups[groupIndex] != group) {
+    pass->_boundGroupLayouts[groupIndex] = gpuBindGroupGetLayout(group);
+  }
+  pass->_boundGroups[groupIndex] = group;
+  gpuStoreBindGroupShadow(
+    &pass->_boundDynamicOffsetCounts[groupIndex],
+    pass->_boundDynamicOffsets[groupIndex],
+    dynamicOffsetCount,
+    pDynamicOffsets);
+  gpuFrameStatsRecordBindEmission(pass->_stats);
+}
+
 static GPU_NOINLINE void
 gpuBindRenderGroupSlow(GPURenderPassEncoder *pass,
                        uint32_t              groupIndex,
@@ -3535,17 +3553,6 @@ gpuBindRenderGroupSlow(GPURenderPassEncoder *pass,
   GPUApi              *api;
   bool                 bound;
 
-  if (dynamicOffsetCount > 0u &&
-      gpuBindGroupShadowMatches(
-        pass->_boundGroups[groupIndex],
-        pass->_boundDynamicOffsetCounts[groupIndex],
-        pass->_boundDynamicOffsets[groupIndex],
-        group,
-        dynamicOffsetCount,
-        pDynamicOffsets)) {
-    gpuFrameStatsRecordBindRequest(pass->_stats);
-    return;
-  }
 #if GPU_BUILD_WITH_VALIDATION
   if (!gpu_pipelineLayoutAcceptsBindGroup(pass->_pipelineLayout,
                                           groupIndex,
@@ -3597,37 +3604,24 @@ gpuBindRenderGroupSlow(GPURenderPassEncoder *pass,
                             pDynamicOffsets);
   }
   if (bound) {
-    if (pass->_boundGroups[groupIndex] != group) {
-      pass->_boundGroupLayouts[groupIndex] = gpuBindGroupGetLayout(group);
-    }
-    pass->_boundGroups[groupIndex] = group;
-    gpuStoreBindGroupShadow(
-      &pass->_boundDynamicOffsetCounts[groupIndex],
-      pass->_boundDynamicOffsets[groupIndex],
-      dynamicOffsetCount,
-      pDynamicOffsets);
-    gpuFrameStatsRecordBindEmission(pass->_stats);
+    gpuCommitRenderGroup(pass,
+                         groupIndex,
+                         group,
+                         dynamicOffsetCount,
+                         pDynamicOffsets);
   }
 }
 
-GPU_EXPORT
-void
-GPUBindRenderGroup(GPURenderPassEncoder *pass,
-                   uint32_t              groupIndex,
-                   GPUBindGroup         *group,
-                   uint32_t              dynamicOffsetCount,
-                   const uint32_t       *pDynamicOffsets) {
+static GPU_NOINLINE void
+gpuBindRenderGroupStatic(GPURenderPassEncoder *pass,
+                         uint32_t              groupIndex,
+                         GPUBindGroup         *group) {
 #if !GPU_BUILD_WITH_VALIDATION
   GPUBindRenderGroupFn bindRenderGroup;
   bool                 bound;
 #endif
 
-  if (!pass || pass->_ended || !group ||
-      groupIndex >= GPU_ENCODER_MAX_BIND_GROUPS) {
-    return;
-  }
-  if (dynamicOffsetCount == 0u &&
-      pass->_boundGroups[groupIndex] == group &&
+  if (pass->_boundGroups[groupIndex] == group &&
       pass->_boundDynamicOffsetCounts[groupIndex] == 0u) {
     gpuFrameStatsRecordBindRequest(pass->_stats);
     return;
@@ -3635,7 +3629,7 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
 
 #if !GPU_BUILD_WITH_VALIDATION
   bindRenderGroup = pass->_bindRenderGroup;
-  if (dynamicOffsetCount == 0u && bindRenderGroup) {
+  if (bindRenderGroup) {
     gpuFrameStatsRecordBindRequest(pass->_stats);
     bound = bindRenderGroup(pass,
                             pass->_pipelineLayout,
@@ -3644,12 +3638,55 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
                             0u,
                             NULL);
     if (bound) {
-      if (pass->_boundGroups[groupIndex] != group) {
-        pass->_boundGroupLayouts[groupIndex] = gpuBindGroupGetLayout(group);
-      }
-      pass->_boundGroups[groupIndex]              = group;
-      pass->_boundDynamicOffsetCounts[groupIndex] = 0u;
-      gpuFrameStatsRecordBindEmission(pass->_stats);
+      gpuCommitRenderGroup(pass, groupIndex, group, 0u, NULL);
+    }
+    return;
+  }
+#endif
+
+  gpuBindRenderGroupSlow(pass, groupIndex, group, 0u, NULL);
+}
+
+static GPU_NOINLINE void
+gpuBindRenderGroupDynamic(GPURenderPassEncoder *pass,
+                          uint32_t              groupIndex,
+                          GPUBindGroup         *group,
+                          uint32_t              dynamicOffsetCount,
+                          const uint32_t       *pDynamicOffsets) {
+#if !GPU_BUILD_WITH_VALIDATION
+  GPUBindRenderGroupFn bindRenderGroup;
+  bool                 bound;
+#endif
+
+  if (gpuBindGroupShadowMatches(
+        pass->_boundGroups[groupIndex],
+        pass->_boundDynamicOffsetCounts[groupIndex],
+        pass->_boundDynamicOffsets[groupIndex],
+        group,
+        dynamicOffsetCount,
+        pDynamicOffsets)) {
+    gpuFrameStatsRecordBindRequest(pass->_stats);
+    return;
+  }
+
+#if !GPU_BUILD_WITH_VALIDATION
+  bindRenderGroup = pass->_bindRenderGroup;
+  if (bindRenderGroup &&
+      dynamicOffsetCount <= GPU_ENCODER_DYNAMIC_OFFSET_SHADOW_CAPACITY &&
+      pDynamicOffsets) {
+    gpuFrameStatsRecordBindRequest(pass->_stats);
+    bound = bindRenderGroup(pass,
+                            pass->_pipelineLayout,
+                            groupIndex,
+                            group,
+                            dynamicOffsetCount,
+                            pDynamicOffsets);
+    if (bound) {
+      gpuCommitRenderGroup(pass,
+                           groupIndex,
+                           group,
+                           dynamicOffsetCount,
+                           pDynamicOffsets);
     }
     return;
   }
@@ -3660,6 +3697,29 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
                          group,
                          dynamicOffsetCount,
                          pDynamicOffsets);
+}
+
+GPU_EXPORT
+void
+GPUBindRenderGroup(GPURenderPassEncoder *pass,
+                   uint32_t              groupIndex,
+                   GPUBindGroup         *group,
+                   uint32_t              dynamicOffsetCount,
+                   const uint32_t       *pDynamicOffsets) {
+  if (!pass || pass->_ended || !group ||
+      groupIndex >= GPU_ENCODER_MAX_BIND_GROUPS) {
+    return;
+  }
+
+  if (dynamicOffsetCount == 0u) {
+    gpuBindRenderGroupStatic(pass, groupIndex, group);
+  } else {
+    gpuBindRenderGroupDynamic(pass,
+                              groupIndex,
+                              group,
+                              dynamicOffsetCount,
+                              pDynamicOffsets);
+  }
 }
 
 GPU_HIDE

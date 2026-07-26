@@ -47,6 +47,8 @@ typedef enum BenchBindPath {
   BENCH_BIND_VTABLE,
   BENCH_BIND_PUBLIC_EMIT,
   BENCH_BIND_PUBLIC_SHADOW,
+  BENCH_BIND_PUBLIC_DYNAMIC_EMIT,
+  BENCH_BIND_PUBLIC_DYNAMIC_SHADOW,
   BENCH_BIND_COUNT
 } BenchBindPath;
 
@@ -137,6 +139,7 @@ bench_runBind(BenchBindPath         path,
               GPURenderPassEncoder *pass,
               GPUBindGroup          *groups[2],
               uint64_t               iterations) {
+  uint32_t offsets[2] = {0u, 256u};
   double begin;
   double end;
 
@@ -173,6 +176,20 @@ bench_runBind(BenchBindPath         path,
       pass->_boundGroups[0] = groups[0];
       for (uint64_t i = 0u; i < iterations; i++) {
         GPUBindRenderGroup(pass, 0u, groups[0], 0u, NULL);
+      }
+      break;
+    case BENCH_BIND_PUBLIC_DYNAMIC_EMIT:
+      pass->_boundGroups[0] = groups[0];
+      for (uint64_t i = 0u; i < iterations; i++) {
+        GPUBindRenderGroup(pass, 0u, groups[0], 1u, &offsets[i & 1u]);
+      }
+      break;
+    case BENCH_BIND_PUBLIC_DYNAMIC_SHADOW:
+      pass->_boundGroups[0]              = groups[0];
+      pass->_boundDynamicOffsetCounts[0] = 1u;
+      pass->_boundDynamicOffsets[0][0]   = offsets[0];
+      for (uint64_t i = 0u; i < iterations; i++) {
+        GPUBindRenderGroup(pass, 0u, groups[0], 1u, &offsets[0]);
       }
       break;
     default:
@@ -340,6 +357,10 @@ main(int argc, char *argv[]) {
            bindMedian[BENCH_BIND_VTABLE]);
   printf("public bind shadow   : %8.3f ns/call\n",
          bindMedian[BENCH_BIND_PUBLIC_SHADOW]);
+  printf("dynamic bind emission: %8.3f ns/call\n",
+         bindMedian[BENCH_BIND_PUBLIC_DYNAMIC_EMIT]);
+  printf("dynamic bind shadow  : %8.3f ns/call\n",
+         bindMedian[BENCH_BIND_PUBLIC_DYNAMIC_SHADOW]);
   printf("sink: %" PRIu64 "\n", benchSink);
   return EXIT_SUCCESS;
 }
