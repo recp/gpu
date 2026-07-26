@@ -61,6 +61,14 @@ typedef enum BenchVertexPath {
   BENCH_VERTEX_COUNT
 } BenchVertexPath;
 
+typedef enum BenchStatePath {
+  BENCH_STATE_DIRECT = 0,
+  BENCH_STATE_VTABLE,
+  BENCH_STATE_PUBLIC_EMIT,
+  BENCH_STATE_PUBLIC_SHADOW,
+  BENCH_STATE_COUNT
+} BenchStatePath;
+
 typedef enum BenchAllocPath {
   BENCH_ALLOC_DIRECT = 0,
   BENCH_ALLOC_PUBLIC,
@@ -120,6 +128,15 @@ bench_vertex(GPURenderPassEncoder *pass,
                (uint64_t)(buffer != NULL) +
                offset +
                index;
+}
+
+static BENCH_NOINLINE void
+bench_state(GPURenderPassEncoder          *pass,
+            GPUDynamicStateMask             mask,
+            const GPUDynamicStateApplyInfo *info) {
+  benchSink += (uint64_t)(pass != NULL) +
+               mask +
+               info->stencilReference;
 }
 
 static BENCH_NOINLINE void
@@ -283,6 +300,53 @@ bench_runVertex(BenchVertexPath      path,
 }
 
 static double
+bench_runState(BenchStatePath                 path,
+               GPURenderPassEncoder          *pass,
+               const GPUDynamicStateApplyInfo states[2],
+               uint64_t                       iterations) {
+  GPUDynamicStateMask mask;
+  double              begin;
+  double              end;
+
+  mask                    = states[0].mask;
+  pass->_dynamicStateMask = 0u;
+  begin = bench_now();
+  switch (path) {
+    case BENCH_STATE_DIRECT:
+      for (uint64_t i = 0u; i < iterations; i++) {
+        bench_state(pass, mask, &states[i & 1u]);
+      }
+      break;
+    case BENCH_STATE_VTABLE:
+      for (uint64_t i = 0u; i < iterations; i++) {
+        benchApi->rce.applyDynamicState(pass, mask, &states[i & 1u]);
+      }
+      break;
+    case BENCH_STATE_PUBLIC_EMIT:
+      for (uint64_t i = 0u; i < iterations; i++) {
+        GPUApplyDynamicState(pass, &states[i & 1u]);
+      }
+      break;
+    case BENCH_STATE_PUBLIC_SHADOW:
+      pass->_dynamicStateMask  = mask;
+      pass->_viewport          = states[0].viewport;
+      pass->_scissor           = states[0].scissor;
+      pass->_stencilReference  = states[0].stencilReference;
+      memcpy(pass->_blendConstant,
+             states[0].blendConstant,
+             sizeof(pass->_blendConstant));
+      for (uint64_t i = 0u; i < iterations; i++) {
+        GPUApplyDynamicState(pass, &states[0]);
+      }
+      break;
+    default:
+      return 0.0;
+  }
+  end = bench_now();
+  return (end - begin) * 1e9 / (double)iterations;
+}
+
+static double
 bench_runAlloc(BenchAllocPath path,
                GPUDevice     *device,
                uint64_t       iterations) {
@@ -344,6 +408,7 @@ main(int argc, char *argv[]) {
   GPUBindGroupLayout      bindGroupLayout;
   GPUPipelineLayout       pipelineLayout;
   GPUBindGroup            bindGroup[2];
+  GPUDynamicStateApplyInfo states[2];
   GPUBuffer               buffer;
   void                   *transientBytes;
   GPURenderPassEncoder   pass;
@@ -354,10 +419,12 @@ main(int argc, char *argv[]) {
   double                 drawSamples[BENCH_DRAW_COUNT][BENCH_REPEATS];
   double                 bindSamples[BENCH_BIND_COUNT][BENCH_REPEATS];
   double                 vertexSamples[BENCH_VERTEX_COUNT][BENCH_REPEATS];
+  double                 stateSamples[BENCH_STATE_COUNT][BENCH_REPEATS];
   double                 allocSamples[BENCH_ALLOC_COUNT][BENCH_REPEATS];
   double                 drawMedian[BENCH_DRAW_COUNT];
   double                 bindMedian[BENCH_BIND_COUNT];
   double                 vertexMedian[BENCH_VERTEX_COUNT];
+  double                 stateMedian[BENCH_STATE_COUNT];
   double                 allocMedian[BENCH_ALLOC_COUNT];
   uint64_t               iterations;
 
@@ -379,6 +446,7 @@ main(int argc, char *argv[]) {
   memset(&bindGroupLayout, 0, sizeof(bindGroupLayout));
   memset(&pipelineLayout, 0, sizeof(pipelineLayout));
   memset(&bindGroup, 0, sizeof(bindGroup));
+  memset(&states, 0, sizeof(states));
   memset(&buffer, 0, sizeof(buffer));
   transientBytes = NULL;
 
@@ -407,6 +475,7 @@ main(int argc, char *argv[]) {
 
   api.rce.drawPrimitives             = bench_draw;
   api.rce.vertexInputBuffer          = bench_vertex;
+  api.rce.applyDynamicState          = bench_state;
   api.descriptor.bindRenderGroup     = bench_bind;
   device._api                        = &api;
   device.transientBuffer             = &buffer;
@@ -429,6 +498,22 @@ main(int argc, char *argv[]) {
   pass._boundGroupLayouts[0]         = &bindGroupLayout;
   benchApi                           = &api;
 
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(states); i++) {
+    states[i].chain.sType      = GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO;
+    states[i].chain.structSize = sizeof(states[i]);
+    states[i].mask             = GPU_DYNAMIC_STATE_VIEWPORT_BIT |
+                                 GPU_DYNAMIC_STATE_SCISSOR_BIT |
+                                 GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT |
+                                 GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
+    states[i].viewport.width    = 64.0f - (float)i;
+    states[i].viewport.height   = 64.0f - (float)i;
+    states[i].viewport.maxDepth = 1.0f;
+    states[i].scissor.width     = 64u - i;
+    states[i].scissor.height    = 64u - i;
+    states[i].blendConstant[0]  = (float)i;
+    states[i].stencilReference  = i;
+  }
+
   for (uint32_t path = 0u; path < BENCH_DRAW_COUNT; path++) {
     bench_runDraw((BenchDrawPath)path, &pass, BENCH_WARMUP_ITERATIONS);
   }
@@ -443,6 +528,12 @@ main(int argc, char *argv[]) {
                     &pass,
                     &buffer,
                     BENCH_WARMUP_ITERATIONS);
+  }
+  for (uint32_t path = 0u; path < BENCH_STATE_COUNT; path++) {
+    bench_runState((BenchStatePath)path,
+                   &pass,
+                   states,
+                   BENCH_WARMUP_ITERATIONS);
   }
   for (uint32_t path = 0u; path < BENCH_ALLOC_COUNT; path++) {
     bench_runAlloc((BenchAllocPath)path, &device, BENCH_WARMUP_ITERATIONS);
@@ -462,6 +553,10 @@ main(int argc, char *argv[]) {
         vertexSamples[path][repeat] =
           bench_runVertex((BenchVertexPath)path, &pass, &buffer, iterations);
       }
+      for (uint32_t path = 0u; path < BENCH_STATE_COUNT; path++) {
+        stateSamples[path][repeat] =
+          bench_runState((BenchStatePath)path, &pass, states, iterations);
+      }
       for (uint32_t path = 0u; path < BENCH_ALLOC_COUNT; path++) {
         allocSamples[path][repeat] =
           bench_runAlloc((BenchAllocPath)path, &device, iterations);
@@ -470,6 +565,10 @@ main(int argc, char *argv[]) {
       for (uint32_t path = BENCH_ALLOC_COUNT; path-- > 0u;) {
         allocSamples[path][repeat] =
           bench_runAlloc((BenchAllocPath)path, &device, iterations);
+      }
+      for (uint32_t path = BENCH_STATE_COUNT; path-- > 0u;) {
+        stateSamples[path][repeat] =
+          bench_runState((BenchStatePath)path, &pass, states, iterations);
       }
       for (uint32_t path = BENCH_VERTEX_COUNT; path-- > 0u;) {
         vertexSamples[path][repeat] =
@@ -497,6 +596,10 @@ main(int argc, char *argv[]) {
   for (uint32_t path = 0u; path < BENCH_VERTEX_COUNT; path++) {
     vertexMedian[path] =
       bench_percentile(vertexSamples[path], BENCH_REPEATS, 0.5);
+  }
+  for (uint32_t path = 0u; path < BENCH_STATE_COUNT; path++) {
+    stateMedian[path] =
+      bench_percentile(stateSamples[path], BENCH_REPEATS, 0.5);
   }
   for (uint32_t path = 0u; path < BENCH_ALLOC_COUNT; path++) {
     allocMedian[path] =
@@ -544,6 +647,17 @@ main(int argc, char *argv[]) {
            vertexMedian[BENCH_VERTEX_VTABLE]);
   printf("public vertex shadow  : %8.3f ns/call\n",
          vertexMedian[BENCH_VERTEX_PUBLIC_SHADOW]);
+  printf("direct state callback : %8.3f ns/call\n",
+         stateMedian[BENCH_STATE_DIRECT]);
+  printf("vtable state callback : %8.3f ns/call  delta %+7.3f ns\n",
+         stateMedian[BENCH_STATE_VTABLE],
+         stateMedian[BENCH_STATE_VTABLE] - stateMedian[BENCH_STATE_DIRECT]);
+  printf("public state emission : %8.3f ns/call  delta %+7.3f ns vs vtable\n",
+         stateMedian[BENCH_STATE_PUBLIC_EMIT],
+         stateMedian[BENCH_STATE_PUBLIC_EMIT] -
+           stateMedian[BENCH_STATE_VTABLE]);
+  printf("public state shadow   : %8.3f ns/call\n",
+         stateMedian[BENCH_STATE_PUBLIC_SHADOW]);
   printf("direct transient alloc: %8.3f ns/call\n",
          allocMedian[BENCH_ALLOC_DIRECT]);
   printf("public transient alloc: %8.3f ns/call  delta %+7.3f ns\n",
