@@ -3648,6 +3648,49 @@ gpuBindRenderGroupStatic(GPURenderPassEncoder *pass,
 }
 
 static GPU_NOINLINE void
+gpuBindRenderGroupDynamicOne(GPURenderPassEncoder *pass,
+                             uint32_t              groupIndex,
+                             GPUBindGroup         *group,
+                             const uint32_t       *pDynamicOffset) {
+#if !GPU_BUILD_WITH_VALIDATION
+  GPUBindRenderGroupFn bindRenderGroup;
+  bool                 bound;
+#endif
+
+  if (pass->_boundGroups[groupIndex] == group &&
+      pass->_boundDynamicOffsetCounts[groupIndex] == 1u &&
+      pass->_boundDynamicOffsets[groupIndex][0] == *pDynamicOffset) {
+    gpuFrameStatsRecordBindRequest(pass->_stats);
+    return;
+  }
+
+#if !GPU_BUILD_WITH_VALIDATION
+  bindRenderGroup = pass->_bindRenderGroup;
+  if (bindRenderGroup) {
+    gpuFrameStatsRecordBindRequest(pass->_stats);
+    bound = bindRenderGroup(pass,
+                            pass->_pipelineLayout,
+                            groupIndex,
+                            group,
+                            1u,
+                            pDynamicOffset);
+    if (bound) {
+      if (pass->_boundGroups[groupIndex] != group) {
+        pass->_boundGroupLayouts[groupIndex] = gpuBindGroupGetLayout(group);
+      }
+      pass->_boundGroups[groupIndex]              = group;
+      pass->_boundDynamicOffsetCounts[groupIndex] = 1u;
+      pass->_boundDynamicOffsets[groupIndex][0]   = *pDynamicOffset;
+      gpuFrameStatsRecordBindEmission(pass->_stats);
+    }
+    return;
+  }
+#endif
+
+  gpuBindRenderGroupSlow(pass, groupIndex, group, 1u, pDynamicOffset);
+}
+
+static GPU_NOINLINE void
 gpuBindRenderGroupDynamic(GPURenderPassEncoder *pass,
                           uint32_t              groupIndex,
                           GPUBindGroup         *group,
@@ -3713,6 +3756,11 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
 
   if (dynamicOffsetCount == 0u) {
     gpuBindRenderGroupStatic(pass, groupIndex, group);
+  } else if (dynamicOffsetCount == 1u && pDynamicOffsets) {
+    gpuBindRenderGroupDynamicOne(pass,
+                                 groupIndex,
+                                 group,
+                                 pDynamicOffsets);
   } else {
     gpuBindRenderGroupDynamic(pass,
                               groupIndex,
