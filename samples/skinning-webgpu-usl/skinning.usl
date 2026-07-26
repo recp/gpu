@@ -1,0 +1,27 @@
+struct SkinUniforms {
+  bones: [float4x4; 4]
+}
+
+vertex SkinVertex {
+  position: float2
+  weights:  float2
+  color:    float4
+  joints:   uint2
+}
+
+struct SkinOut {
+  position: float4 #position
+  color:    float4
+}
+
+vert skin_vs(v:    SkinVertex #stage_in,
+             skin: SkinUniforms #buffer(0) #dynamic_offset) -> SkinOut {
+  let p       = float4(v.position, 0.0, 1.0)
+  let skinned = (skin.bones[v.joints.x] * p) * v.weights.x
+              + (skin.bones[v.joints.y] * p) * v.weights.y
+  return SkinOut { skinned, v.color }
+}
+
+frag skin_fs(input: SkinOut #stage_in) -> float4 {
+  return input.color
+}

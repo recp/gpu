@@ -659,7 +659,7 @@ if(GPU_BUILD_SAMPLES AND
   )
   if(NOT GPU_CGLM_INCLUDE_DIR)
     message(FATAL_ERROR
-      "The textured cube samples require cglm headers. Set "
+      "The cglm-based samples require cglm headers. Set "
       "GPU_CGLM_INCLUDE_DIR.")
   endif()
 endif()
@@ -698,7 +698,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
-  set(GPU_WEBGPU_GALLERY_VERSION "36")
+  set(GPU_WEBGPU_GALLERY_VERSION "37")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
   set(GPU_WEBGPU_PACK_SCRIPT
@@ -2710,6 +2710,16 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       texture.bc1
       texture.etc2
       texture.rgba
+  )
+  gpu_add_webgpu_gallery_sample(
+    skinning
+    skinning
+    "GPU skinning"
+    "Render / skeletal animation"
+    "Four bone matrices deform an indexed mesh through one reflected dynamic uniform ring."
+  )
+  target_include_directories(gpu-skinning-webgpu-usl PRIVATE
+    "${GPU_CGLM_INCLUDE_DIR}"
   )
   target_link_options(gpu-image-texture-webgpu-usl PRIVATE
     --use-preload-plugins
