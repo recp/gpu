@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "api/buffer_internal.h"
 #include "api/cmdqueue_internal.h"
 #include "api/descr/descriptor_internal.h"
 #include "backend/api/gpudef.h"
@@ -51,6 +52,20 @@ typedef enum BenchBindPath {
   BENCH_BIND_PUBLIC_DYNAMIC_SHADOW,
   BENCH_BIND_COUNT
 } BenchBindPath;
+
+typedef enum BenchVertexPath {
+  BENCH_VERTEX_DIRECT = 0,
+  BENCH_VERTEX_VTABLE,
+  BENCH_VERTEX_PUBLIC_EMIT,
+  BENCH_VERTEX_PUBLIC_SHADOW,
+  BENCH_VERTEX_COUNT
+} BenchVertexPath;
+
+typedef enum BenchAllocPath {
+  BENCH_ALLOC_DIRECT = 0,
+  BENCH_ALLOC_PUBLIC,
+  BENCH_ALLOC_COUNT
+} BenchAllocPath;
 
 static GPUApi * volatile benchApi;
 static volatile uint64_t benchSink;
@@ -94,6 +109,29 @@ bench_bind(GPURenderPassEncoder *pass,
                dynamicOffsetCount +
                (uint64_t)(dynamicOffsets != NULL);
   return true;
+}
+
+static BENCH_NOINLINE void
+bench_vertex(GPURenderPassEncoder *pass,
+             GPUBuffer            *buffer,
+             uint64_t              offset,
+             uint32_t              index) {
+  benchSink += (uint64_t)(pass != NULL) +
+               (uint64_t)(buffer != NULL) +
+               offset +
+               index;
+}
+
+static BENCH_NOINLINE void
+bench_alloc(GPUDevice                *device,
+            GPUTransientBufferSlice *slice) {
+  uint64_t offset;
+
+  offset                       = device->transientFrameOffset++;
+  slice->buffer                = device->transientBuffer;
+  slice->cpuPtr                = (uint8_t *)device->transientCpuPtr + offset;
+  slice->offset                = offset;
+  slice->sizeBytes             = 1u;
 }
 
 static double
@@ -199,6 +237,85 @@ bench_runBind(BenchBindPath         path,
   return (end - begin) * 1e9 / (double)iterations;
 }
 
+static double
+bench_runVertex(BenchVertexPath      path,
+                GPURenderPassEncoder *pass,
+                GPUBuffer            *buffer,
+                uint64_t              iterations) {
+  GPUBufferBinding binding;
+  double           begin;
+  double           end;
+
+  memset(&binding, 0, sizeof(binding));
+  binding.buffer = buffer;
+  pass->_vertexBufferMask = 0u;
+  begin = bench_now();
+  switch (path) {
+    case BENCH_VERTEX_DIRECT:
+      for (uint64_t i = 0u; i < iterations; i++) {
+        bench_vertex(pass, buffer, i & 1u, 0u);
+      }
+      break;
+    case BENCH_VERTEX_VTABLE:
+      for (uint64_t i = 0u; i < iterations; i++) {
+        benchApi->rce.vertexInputBuffer(pass, buffer, i & 1u, 0u);
+      }
+      break;
+    case BENCH_VERTEX_PUBLIC_EMIT:
+      for (uint64_t i = 0u; i < iterations; i++) {
+        binding.offset = i & 1u;
+        GPUBindVertexBuffers(pass, 0u, 1u, &binding);
+      }
+      break;
+    case BENCH_VERTEX_PUBLIC_SHADOW:
+      pass->_vertexBuffers[0]       = buffer;
+      pass->_vertexBufferOffsets[0] = 0u;
+      pass->_vertexBufferMask       = 1u;
+      for (uint64_t i = 0u; i < iterations; i++) {
+        GPUBindVertexBuffers(pass, 0u, 1u, &binding);
+      }
+      break;
+    default:
+      return 0.0;
+  }
+  end = bench_now();
+  return (end - begin) * 1e9 / (double)iterations;
+}
+
+static double
+bench_runAlloc(BenchAllocPath path,
+               GPUDevice     *device,
+               uint64_t       iterations) {
+  GPUTransientBufferSlice slice;
+  double                  begin;
+  double                  end;
+
+  memset(&slice, 0, sizeof(slice));
+  device->transientFrameOffset = 0u;
+  begin = bench_now();
+  switch (path) {
+    case BENCH_ALLOC_DIRECT:
+      for (uint64_t i = 0u; i < iterations; i++) {
+        bench_alloc(device, &slice);
+      }
+      break;
+    case BENCH_ALLOC_PUBLIC:
+      for (uint64_t i = 0u; i < iterations; i++) {
+        GPUAllocateTransientBuffer(device,
+                                   GPU_BUFFER_USAGE_UNIFORM,
+                                   1u,
+                                   1u,
+                                   &slice);
+      }
+      break;
+    default:
+      return 0.0;
+  }
+  end = bench_now();
+  benchSink += slice.offset;
+  return (end - begin) * 1e9 / (double)iterations;
+}
+
 static int
 bench_parseIterations(const char *value, uint64_t *outIterations) {
   unsigned long long parsed;
@@ -227,6 +344,8 @@ main(int argc, char *argv[]) {
   GPUBindGroupLayout      bindGroupLayout;
   GPUPipelineLayout       pipelineLayout;
   GPUBindGroup            bindGroup[2];
+  GPUBuffer               buffer;
+  void                   *transientBytes;
   GPURenderPassEncoder   pass;
   GPUCommandBuffer       cmdb;
   GPUQueue               queue;
@@ -234,8 +353,12 @@ main(int argc, char *argv[]) {
   GPUApi                 api;
   double                 drawSamples[BENCH_DRAW_COUNT][BENCH_REPEATS];
   double                 bindSamples[BENCH_BIND_COUNT][BENCH_REPEATS];
+  double                 vertexSamples[BENCH_VERTEX_COUNT][BENCH_REPEATS];
+  double                 allocSamples[BENCH_ALLOC_COUNT][BENCH_REPEATS];
   double                 drawMedian[BENCH_DRAW_COUNT];
   double                 bindMedian[BENCH_BIND_COUNT];
+  double                 vertexMedian[BENCH_VERTEX_COUNT];
+  double                 allocMedian[BENCH_ALLOC_COUNT];
   uint64_t               iterations;
 
   iterations = 20000000u;
@@ -256,6 +379,14 @@ main(int argc, char *argv[]) {
   memset(&bindGroupLayout, 0, sizeof(bindGroupLayout));
   memset(&pipelineLayout, 0, sizeof(pipelineLayout));
   memset(&bindGroup, 0, sizeof(bindGroup));
+  memset(&buffer, 0, sizeof(buffer));
+  transientBytes = NULL;
+
+  if (iterations == UINT64_MAX || iterations > SIZE_MAX ||
+      !(transientBytes = malloc((size_t)iterations + 1u))) {
+    fprintf(stderr, "failed to allocate transient benchmark storage\n");
+    return EXIT_FAILURE;
+  }
 
   layoutEntry.binding                       = 0u;
   layoutEntry.bindingType                   = GPU_BINDING_UNIFORM_BUFFER;
@@ -275,8 +406,15 @@ main(int argc, char *argv[]) {
   }
 
   api.rce.drawPrimitives             = bench_draw;
+  api.rce.vertexInputBuffer          = bench_vertex;
   api.descriptor.bindRenderGroup     = bench_bind;
   device._api                        = &api;
+  device.transientBuffer             = &buffer;
+  device.transientCpuPtr             = transientBytes;
+  device.transientBufferUsage        = GPU_BUFFER_USAGE_UNIFORM;
+  device.transientConfig.ringBytesPerFrame = iterations + 1u;
+  device.transientFrameStride             = iterations + 1u;
+  device.transientConfigured              = true;
   queue._device                      = &device;
   cmdb._queue                        = &queue;
   pass._api                          = &api;
@@ -284,6 +422,7 @@ main(int argc, char *argv[]) {
   pass._cmdb                         = &cmdb;
   pass._pipelineLayout               = &pipelineLayout;
   pass._drawPrimitives               = bench_draw;
+  pass._vertexInputBuffer            = bench_vertex;
   pass._bindRenderGroup              = bench_bind;
   pass._primitiveType                = GPUPrimitiveTypeTriangle;
   pass._hasPipeline                  = true;
@@ -299,6 +438,15 @@ main(int argc, char *argv[]) {
                   bindGroups,
                   BENCH_WARMUP_ITERATIONS);
   }
+  for (uint32_t path = 0u; path < BENCH_VERTEX_COUNT; path++) {
+    bench_runVertex((BenchVertexPath)path,
+                    &pass,
+                    &buffer,
+                    BENCH_WARMUP_ITERATIONS);
+  }
+  for (uint32_t path = 0u; path < BENCH_ALLOC_COUNT; path++) {
+    bench_runAlloc((BenchAllocPath)path, &device, BENCH_WARMUP_ITERATIONS);
+  }
 
   for (uint32_t repeat = 0u; repeat < BENCH_REPEATS; repeat++) {
     if ((repeat & 1u) == 0u) {
@@ -310,7 +458,23 @@ main(int argc, char *argv[]) {
         bindSamples[path][repeat] =
           bench_runBind((BenchBindPath)path, &pass, bindGroups, iterations);
       }
+      for (uint32_t path = 0u; path < BENCH_VERTEX_COUNT; path++) {
+        vertexSamples[path][repeat] =
+          bench_runVertex((BenchVertexPath)path, &pass, &buffer, iterations);
+      }
+      for (uint32_t path = 0u; path < BENCH_ALLOC_COUNT; path++) {
+        allocSamples[path][repeat] =
+          bench_runAlloc((BenchAllocPath)path, &device, iterations);
+      }
     } else {
+      for (uint32_t path = BENCH_ALLOC_COUNT; path-- > 0u;) {
+        allocSamples[path][repeat] =
+          bench_runAlloc((BenchAllocPath)path, &device, iterations);
+      }
+      for (uint32_t path = BENCH_VERTEX_COUNT; path-- > 0u;) {
+        vertexSamples[path][repeat] =
+          bench_runVertex((BenchVertexPath)path, &pass, &buffer, iterations);
+      }
       for (uint32_t path = BENCH_BIND_COUNT; path-- > 0u;) {
         bindSamples[path][repeat] =
           bench_runBind((BenchBindPath)path, &pass, bindGroups, iterations);
@@ -329,6 +493,14 @@ main(int argc, char *argv[]) {
   for (uint32_t path = 0u; path < BENCH_BIND_COUNT; path++) {
     bindMedian[path] =
       bench_percentile(bindSamples[path], BENCH_REPEATS, 0.5);
+  }
+  for (uint32_t path = 0u; path < BENCH_VERTEX_COUNT; path++) {
+    vertexMedian[path] =
+      bench_percentile(vertexSamples[path], BENCH_REPEATS, 0.5);
+  }
+  for (uint32_t path = 0u; path < BENCH_ALLOC_COUNT; path++) {
+    allocMedian[path] =
+      bench_percentile(allocSamples[path], BENCH_REPEATS, 0.5);
   }
 
   printf("GPU dispatch microbenchmark\n");
@@ -361,6 +533,23 @@ main(int argc, char *argv[]) {
          bindMedian[BENCH_BIND_PUBLIC_DYNAMIC_EMIT]);
   printf("dynamic bind shadow  : %8.3f ns/call\n",
          bindMedian[BENCH_BIND_PUBLIC_DYNAMIC_SHADOW]);
+  printf("direct vertex callback: %8.3f ns/call\n",
+         vertexMedian[BENCH_VERTEX_DIRECT]);
+  printf("vtable vertex callback: %8.3f ns/call  delta %+7.3f ns\n",
+         vertexMedian[BENCH_VERTEX_VTABLE],
+         vertexMedian[BENCH_VERTEX_VTABLE] - vertexMedian[BENCH_VERTEX_DIRECT]);
+  printf("public vertex emission: %8.3f ns/call  delta %+7.3f ns vs vtable\n",
+         vertexMedian[BENCH_VERTEX_PUBLIC_EMIT],
+         vertexMedian[BENCH_VERTEX_PUBLIC_EMIT] -
+           vertexMedian[BENCH_VERTEX_VTABLE]);
+  printf("public vertex shadow  : %8.3f ns/call\n",
+         vertexMedian[BENCH_VERTEX_PUBLIC_SHADOW]);
+  printf("direct transient alloc: %8.3f ns/call\n",
+         allocMedian[BENCH_ALLOC_DIRECT]);
+  printf("public transient alloc: %8.3f ns/call  delta %+7.3f ns\n",
+         allocMedian[BENCH_ALLOC_PUBLIC],
+         allocMedian[BENCH_ALLOC_PUBLIC] - allocMedian[BENCH_ALLOC_DIRECT]);
   printf("sink: %" PRIu64 "\n", benchSink);
+  free(transientBytes);
   return EXIT_SUCCESS;
 }
