@@ -20,9 +20,15 @@
 #ifdef __GNUC__
 #  define GPU_DESTRUCTOR  __attribute__((destructor))
 #  define GPU_CONSTRUCTOR __attribute__((constructor))
+#  define GPU_NOINLINE    __attribute__((noinline))
+#elif defined(_MSC_VER)
+#  define GPU_DESTRUCTOR
+#  define GPU_CONSTRUCTOR
+#  define GPU_NOINLINE    __declspec(noinline)
 #else
 #  define GPU_DESTRUCTOR
 #  define GPU_CONSTRUCTOR
+#  define GPU_NOINLINE
 #endif
 
 #define GPU__UNUSED(X) (void)X
