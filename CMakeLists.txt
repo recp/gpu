@@ -693,12 +693,27 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "WebGPU samples require a host uslpack executable. Set "
       "GPU_USL_HOST_PACKER to a native build of that target.")
   endif()
+  set(GPU_USL_STDLIB_PATH "${GPU_USL_ROOT}/stdlib" CACHE PATH
+      "USL standard library root used for WebGPU samples")
+  if(NOT EXISTS "${GPU_USL_STDLIB_PATH}/STDLIB_VERSION")
+    message(FATAL_ERROR
+      "WebGPU samples require the USL standard library. Set "
+      "GPU_USL_STDLIB_PATH to its stdlib directory.")
+  endif()
+  file(STRINGS "${GPU_USL_STDLIB_PATH}/STDLIB_VERSION"
+       GPU_USL_STDLIB_VERSION LIMIT_COUNT 1)
+  if(NOT GPU_USL_STDLIB_VERSION)
+    message(FATAL_ERROR
+      "WebGPU samples require a non-empty USL STDLIB_VERSION.")
+  endif()
+  file(GLOB_RECURSE GPU_USL_STDLIB_SOURCES CONFIGURE_DEPENDS
+       "${GPU_USL_STDLIB_PATH}/*.usl")
 
   set(GPU_WEBGPU_GALLERY_DIR
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
-  set(GPU_WEBGPU_GALLERY_VERSION "37")
+  set(GPU_WEBGPU_GALLERY_VERSION "38")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
   set(GPU_WEBGPU_PACK_SCRIPT
@@ -728,7 +743,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
        DESTINATION "${GPU_WEBGPU_GALLERY_DIR}/previews")
 
   function(gpu_add_webgpu_gallery_sample id stem title kind description)
-    set(options)
+    set(options USES_STDLIB)
     set(oneValueArgs)
     set(multiValueArgs ASSETS)
     cmake_parse_arguments(GPU_WEBGPU_SAMPLE
@@ -750,6 +765,13 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/${id}.c")
     set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/${id}.usl")
     set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/${id}.wgsl")
+    set(artifactDependencies)
+    if(GPU_WEBGPU_SAMPLE_USES_STDLIB)
+      list(APPEND artifactDependencies
+        "${GPU_USL_STDLIB_PATH}/STDLIB_VERSION"
+        ${GPU_USL_STDLIB_SOURCES}
+      )
+    endif()
 
     configure_file(
       "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
@@ -765,6 +787,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
               "${artifactSource}"
       COMMAND ${CMAKE_COMMAND} -E env
               USL_EMIT_BYTECODE=1
+              "USL_STDLIB_PATH=${GPU_USL_STDLIB_PATH}"
+              "USL_STDLIB_VERSION=${GPU_USL_STDLIB_VERSION}"
               "${GPU_USL_HOST_FIXTURE}"
               webgpu
               "${artifactSource}"
@@ -787,6 +811,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
         "${GPU_WEBGPU_PACK_SCRIPT}"
         "${sampleDir}/${stem}.usl"
         "${sampleDir}/main.c"
+        ${artifactDependencies}
       VERBATIM
     )
     add_custom_target(${artifactTarget} DEPENDS "${artifact}")
@@ -2719,6 +2744,17 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     "Four bone matrices deform an indexed mesh through one reflected dynamic uniform ring."
   )
   target_include_directories(gpu-skinning-webgpu-usl PRIVATE
+    "${GPU_CGLM_INCLUDE_DIR}"
+  )
+  gpu_add_webgpu_gallery_sample(
+    pbr-material
+    pbr_material
+    "PBR material"
+    "Render / physically based material"
+    "Albedo, tangent normals, metallic-roughness, and cubemap lighting share one reflected material layout."
+    USES_STDLIB
+  )
+  target_include_directories(gpu-pbr-material-webgpu-usl PRIVATE
     "${GPU_CGLM_INCLUDE_DIR}"
   )
   target_link_options(gpu-image-texture-webgpu-usl PRIVATE
