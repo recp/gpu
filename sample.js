@@ -15,8 +15,12 @@ const debugValues = Object.fromEntries(
 const tabs = [...document.querySelectorAll("[data-source]")];
 const sources = {
   c: document.body.dataset.cSource,
+  asset: document.body.dataset.assetSource,
   usl: document.body.dataset.uslSource,
   wgsl: document.body.dataset.wgslSource
+};
+const sourceKinds = {
+  asset: "c"
 };
 const cache = new Map();
 let debugExpanded = !params.has("embed") && params.get("debug") !== "0";
@@ -216,6 +220,8 @@ function setDebugExpanded(expanded) {
 }
 
 async function showSource(kind) {
+  const sourceKind = sourceKinds[kind] || kind;
+
   tabs.forEach((tab) => {
     const active = tab.dataset.source === kind;
     tab.setAttribute("aria-selected", String(active));
@@ -234,8 +240,8 @@ async function showSource(kind) {
       cache.set(kind, await response.text());
     }
     const source = cache.get(kind);
-    code.className = `language-${kind}`;
-    code.innerHTML = highlightSource(source, kind);
+    code.className = `language-${sourceKind}`;
+    code.innerHTML = highlightSource(source, sourceKind);
     lineNumbers.textContent = Array.from(
       { length: source.split("\n").length },
       (_, index) => index + 1

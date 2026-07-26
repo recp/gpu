@@ -1,0 +1,100 @@
+import <std/gltf_pbr>
+
+struct PBRUniforms {
+  mvp:             float4x4
+  model:           float4x4
+  cameraPosition:  float4
+  lightDirection:  float4
+  baseColorFactor: float4
+  emissiveFactor:  float4
+  materialFactors: float4
+}
+
+vertex AssetVertex {
+  position: float3
+  normal:   float3
+  uv:       float2
+}
+
+struct AssetOut {
+  position:      float4 #position
+  worldPosition: float3
+  normal:        float3
+  uv:            float2
+}
+
+vert asset_vs(v:     AssetVertex #stage_in,
+              frame: PBRUniforms #buffer(0)) -> AssetOut {
+  let worldPosition = frame.model * float4(v.position, 1.0)
+  return AssetOut {
+    frame.mvp * float4(v.position, 1.0),
+    worldPosition.xyz,
+    normalize((frame.model * float4(v.normal, 0.0)).xyz),
+    v.uv
+  }
+}
+
+frag asset_fs(input:                 AssetOut #stage_in,
+              frame:                 PBRUniforms #buffer(0),
+               baseColorTex:         texture2d<float>   #texture(0) #group(1),
+               normalTex:            texture2d<float>   #texture(1) #group(1),
+               metallicRoughnessTex: texture2d<float>   #texture(2) #group(1),
+               occlusionTex:         texture2d<float>   #texture(3) #group(1),
+               emissiveTex:          texture2d<float>   #texture(4) #group(1),
+               diffuseEnvironment:   texturecube<float> #texture(5) #group(1),
+               specularEnvironment:  texturecube<float> #texture(6) #group(1),
+               ggxLUT:               texture2d<float>   #texture(7) #group(1),
+               materialSampler:      sampler            #sampler(8) #group(1)) -> float4 {
+  let baseSample     = baseColorTex.sample(materialSampler, input.uv)
+  let normalSample   = normalTex.sample(materialSampler, input.uv)
+  let materialSample = metallicRoughnessTex.sample(materialSampler, input.uv)
+  let aoSample       = occlusionTex.sample(materialSampler, input.uv).r
+  let emissiveSample = emissiveTex.sample(materialSampler, input.uv).rgb
+
+  let geometricN     = normalize(input.normal)
+  let uvDx           = dfdx(input.uv)
+  let uvDy           = dfdy(input.uv)
+  let positionDx     = dfdx(input.worldPosition)
+  let positionDy     = dfdy(input.worldPosition)
+
+  let tangentRaw     = (uvDy.y * positionDx - uvDx.y * positionDy) / (uvDx.x * uvDy.y - uvDy.x * uvDx.y)
+  let tangent        = normalize(tangentRaw - geometricN * dot(geometricN, tangentRaw))
+  let bitangent      = cross(geometricN, tangent)
+  let n              = normal_world_from_tangent(normalSample.xyz,
+                                                 frame.materialFactors.z,
+                                                 geometricN,
+                                                 tangent,
+                                                 bitangent)
+
+  let factors        = metallic_roughness_factors(frame.materialFactors.x,
+                                                  frame.materialFactors.y,
+                                                  materialSample)
+
+  let baseColor      = base_color(frame.baseColorFactor, baseSample, float4(1.0))
+  let emissive       = emissive_color(emissiveSample, frame.emissiveFactor.xyz, frame.emissiveFactor.w )
+  let ao             = occlusion(aoSample, frame.materialFactors.w)
+  let v              = normalize(frame.cameraPosition.xyz - input.worldPosition)
+  let l              = normalize(frame.lightDirection.xyz)
+  let noV            = clamp(dot(n, v), 0.0, 1.0)
+  let reflected      = normalize(reflect(-v, n))
+
+  let diffuseEnv     = diffuseEnvironment.sample(materialSampler, n, level(0.0)).rgb
+  let specularEnv    = specularEnvironment.sample(materialSampler,
+                                                  reflected,
+                                                  level(specular_ibl_lod(factors.y, 7))).rgb
+
+  let fAB            = ggxLUT.sample(materialSampler, float2(noV, factors.y), level(0.0)).rg
+  let color          = shade_metallic_roughness(baseColor.rgb,
+                                                factors.x,
+                                                factors.y,
+                                                n,
+                                                v,
+                                                l,
+                                                float3(4.6, 4.1, 3.7),
+                                                diffuseEnv,
+                                                specularEnv,
+                                                fAB,
+                                                ao,
+                                                emissive)
+  return float4(tonemap_output(color), baseColor.a)
+}
