@@ -2851,7 +2851,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       damaged_helmet
       "AssetKit DamagedHelmet"
       "Render / glTF asset pipeline"
-      "AssetKit downloads Khronos DamagedHelmet, resolves its glTF material, and uploads the real indexed mesh and textures."
+      "<a class=\"project-link\" href=\"https://github.com/recp/assetkit\" target=\"_blank\" rel=\"noreferrer\">AssetKit</a> downloads Khronos DamagedHelmet, resolves its glTF material, and uploads the real indexed mesh and textures."
       USES_STDLIB
       ASSET_SOURCE asset.c
     )
