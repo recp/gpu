@@ -34,11 +34,19 @@ enum {
   PIPELINE_MAX_PERMUTATIONS = 180
 };
 
+typedef enum PipelineDiskMode {
+  PIPELINE_DISK_DEFAULT = 0,
+  PIPELINE_DISK_PRODUCE,
+  PIPELINE_DISK_REOPEN
+} PipelineDiskMode;
+
 typedef struct PipelineStressConfig {
-  const char *artifactPath;
-  GPUBackend  backend;
-  uint32_t    pipelineCount;
-  uint32_t    repeats;
+  const char      *artifactPath;
+  const char      *cachePath;
+  GPUBackend       backend;
+  uint32_t         pipelineCount;
+  uint32_t         repeats;
+  PipelineDiskMode diskMode;
 } PipelineStressConfig;
 
 typedef struct PipelineStress {
@@ -52,6 +60,7 @@ typedef struct PipelineStress {
   GPUVertexBufferLayout        vertexLayout;
   uint32_t                     pipelineCount;
   bool                         diskCacheSupported;
+  bool                         preserveDiskCache;
   char                         cachePath[192];
 } PipelineStress;
 
@@ -73,12 +82,29 @@ typedef struct PipelineMetrics {
 } PipelineMetrics;
 
 static bool
+pipeline_parseDiskMode(const char *text, PipelineDiskMode *outMode) {
+  if (!text || !outMode) {
+    return false;
+  }
+  if (strcmp(text, "disk-produce") == 0) {
+    *outMode = PIPELINE_DISK_PRODUCE;
+    return true;
+  }
+  if (strcmp(text, "disk-reopen") == 0) {
+    *outMode = PIPELINE_DISK_REOPEN;
+    return true;
+  }
+  return false;
+}
+
+static bool
 pipeline_config(int argc, char *argv[], PipelineStressConfig *config) {
-  if (!config || argc < 2 || argc > 5) {
+  if (!config || argc < 2 || argc > 7) {
     if (argv && argv[0]) {
       fprintf(stderr,
               "usage: %s <shader.us> [default|metal|vulkan|dx12|webgpu] "
-              "[pipelines] [repeats]\n",
+              "[pipelines] [repeats] "
+              "[disk-produce|disk-reopen cache-path]\n",
               argv[0]);
     }
     return false;
@@ -89,14 +115,20 @@ pipeline_config(int argc, char *argv[], PipelineStressConfig *config) {
   config->backend       = GPU_BACKEND_DEFAULT;
   config->pipelineCount = PIPELINE_DEFAULT_COUNT;
   config->repeats       = PIPELINE_DEFAULT_REPEATS;
+  config->diskMode      = PIPELINE_DISK_DEFAULT;
   if ((argc > 2 && !bench_parseBackend(argv[2], &config->backend)) ||
       (argc > 3 && !bench_parseU32(argv[3], 1u, &config->pipelineCount)) ||
       (argc > 4 && !bench_parseU32(argv[4], 1u, &config->repeats)) ||
+      (argc > 5 && !pipeline_parseDiskMode(argv[5], &config->diskMode)) ||
+      (argc > 5 && argc != 7) ||
       config->pipelineCount > PIPELINE_MAX_PERMUTATIONS) {
     fprintf(stderr,
             "invalid pipeline benchmark arguments; maximum pipelines: %u\n",
             PIPELINE_MAX_PERMUTATIONS);
     return false;
+  }
+  if (argc == 7) {
+    config->cachePath = argv[6];
   }
   return true;
 }
@@ -164,11 +196,22 @@ pipeline_init(PipelineStress             *stress,
     stress->bench.adapterProperties.backend == GPU_BACKEND_METAL ||
     stress->bench.adapterProperties.backend == GPU_BACKEND_VULKAN ||
     stress->bench.adapterProperties.backend == GPU_BACKEND_DX12;
-  snprintf(stress->cachePath,
-           sizeof(stress->cachePath),
-           ".gpu-pipeline-stress-%u-%p.bin",
-           (uint32_t)stress->bench.adapterProperties.backend,
-           (void *)stress->bench.device);
+  stress->preserveDiskCache = config->diskMode != PIPELINE_DISK_DEFAULT;
+  if (config->cachePath) {
+    if (snprintf(stress->cachePath,
+                 sizeof(stress->cachePath),
+                 "%s",
+                 config->cachePath) >= (int)sizeof(stress->cachePath)) {
+      fprintf(stderr, "pipeline cache path is too long\n");
+      return false;
+    }
+  } else {
+    snprintf(stress->cachePath,
+             sizeof(stress->cachePath),
+             ".gpu-pipeline-stress-%u-%p.bin",
+             (uint32_t)stress->bench.adapterProperties.backend,
+             (void *)stress->bench.device);
+  }
 
   count                 = config->pipelineCount;
   stress->pipelineCount = config->pipelineCount;
@@ -210,6 +253,23 @@ pipeline_removeDiskCache(const PipelineStress *stress) {
   remove(stress->cachePath);
 }
 
+static long
+pipeline_diskCacheSize(const PipelineStress *stress) {
+  FILE *file;
+  long  size;
+
+  if (!stress || !stress->cachePath[0]) {
+    return -1;
+  }
+  file = fopen(stress->cachePath, "rb");
+  if (!file) {
+    return -1;
+  }
+  size = fseek(file, 0, SEEK_END) == 0 ? ftell(file) : -1;
+  fclose(file);
+  return size;
+}
+
 static void
 pipeline_cleanup(PipelineStress *stress) {
   if (!stress) {
@@ -225,7 +285,9 @@ pipeline_cleanup(PipelineStress *stress) {
   free(stress->pipelines);
   free(stress->targets);
   free(stress->infos);
-  pipeline_removeDiskCache(stress);
+  if (!stress->preserveDiskCache) {
+    pipeline_removeDiskCache(stress);
+  }
   bench_renderCleanup(&stress->bench);
 }
 
@@ -425,10 +487,89 @@ pipeline_metricsInit(PipelineMetrics *metrics, uint32_t repeats) {
 }
 
 static bool
+pipeline_runDiskPhase(PipelineStress             *stress,
+                      const PipelineStressConfig *config) {
+  GPUPipelineCache *cache;
+  GPUCacheStats     stats;
+  double            createNs;
+  double            openNs;
+  double            start;
+  double            storeNs;
+  bool              produce;
+
+  if (!stress->diskCacheSupported) {
+    fprintf(stderr, "disk pipeline cache is unsupported by this backend\n");
+    return false;
+  }
+
+  produce = config->diskMode == PIPELINE_DISK_PRODUCE;
+  if (produce) {
+    pipeline_removeDiskCache(stress);
+  } else if (pipeline_diskCacheSize(stress) <= 0) {
+    fprintf(stderr, "pipeline cache is missing or empty: %s\n",
+            stress->cachePath);
+    return false;
+  }
+
+  cache = NULL;
+  start = bench_now();
+  if (!pipeline_createCache(stress,
+                            config->pipelineCount,
+                            true,
+                            &cache)) {
+    return false;
+  }
+  openNs = (bench_now() - start) * 1e9;
+
+  GPUResetStats(stress->bench.device);
+  if (!pipeline_createAll(stress,
+                          cache,
+                          config->pipelineCount,
+                          &createNs) ||
+      GPUGetCacheStats(stress->bench.device, &stats) != GPU_OK ||
+      stats.pipelineMisses != config->pipelineCount ||
+      stats.pipelineCompiles != config->pipelineCount) {
+    GPUDestroyPipelineCache(cache);
+    return false;
+  }
+
+  start = bench_now();
+  GPUDestroyPipelineCache(cache);
+  storeNs = (bench_now() - start) * 1e9;
+  if (pipeline_diskCacheSize(stress) <= 0) {
+    fprintf(stderr, "pipeline cache was not written: %s\n",
+            stress->cachePath);
+    return false;
+  }
+
+  printf("GPU pipeline disk %s benchmark\n",
+         produce ? "produce" : "reopen");
+  printf("adapter: %s, backend: %s, validation: %s\n",
+         stress->bench.adapterProperties.name
+           ? stress->bench.adapterProperties.name
+           : "unknown",
+         bench_backendName(stress->bench.adapterProperties.backend),
+         GPU_BUILD_WITH_VALIDATION ? "compiled" : "removed");
+  printf("pipelines: %u, cache: %s\n",
+         config->pipelineCount,
+         stress->cachePath);
+  printf("open  : %.3f ms\n", openNs / 1e6);
+  printf("create: %.3f ms total, %.3f us/pipeline\n",
+         createNs / 1e6,
+         createNs / (double)config->pipelineCount / 1e3);
+  printf("store : %.3f ms\n", storeNs / 1e6);
+  return true;
+}
+
+static bool
 pipeline_run(PipelineStress             *stress,
              const PipelineStressConfig *config,
              PipelineMetrics            *metrics) {
   uint64_t count;
+
+  if (config->diskMode != PIPELINE_DISK_DEFAULT) {
+    return pipeline_runDiskPhase(stress, config);
+  }
 
   count = config->pipelineCount;
   for (uint32_t repeat = 0u; repeat < config->repeats; repeat++) {
@@ -679,7 +820,8 @@ pipeline_print(const PipelineStressConfig *config,
            diskColdCreate / count / 1e3,
            diskColdStore / 1e6,
            (diskColdOpen + diskColdCreate + diskColdStore) / 1e6);
-    printf("disk reopen  : open %.3f ms, create %.3f ms, %.3f us/pipeline, "
+    printf("disk same-process reopen: open %.3f ms, create %.3f ms, "
+           "%.3f us/pipeline, "
            "total %.3f ms, cold/reopen create %.2fx\n",
            diskWarmOpen / 1e6,
            diskWarmCreate / 1e6,
@@ -704,14 +846,15 @@ main(int argc, char *argv[]) {
   memset(&metrics, 0, sizeof(metrics));
   if (!pipeline_config(argc, argv, &config) ||
       !pipeline_init(&stress, &config) ||
-      !pipeline_metricsInit(&metrics, config.repeats)) {
+      (config.diskMode == PIPELINE_DISK_DEFAULT &&
+       !pipeline_metricsInit(&metrics, config.repeats))) {
     free(metrics.samples);
     pipeline_cleanup(&stress);
     return EXIT_FAILURE;
   }
 
   ok = pipeline_run(&stress, &config, &metrics);
-  if (ok) {
+  if (ok && config.diskMode == PIPELINE_DISK_DEFAULT) {
     pipeline_print(&config, &stress, &metrics);
   }
   free(metrics.samples);
