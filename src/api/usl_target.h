@@ -145,6 +145,27 @@ gpu_uslDefaultVulkanTarget(USLTargetSpec *outTarget) {
                         USL_TARGET_PROFILE_VULKAN_1_0) == USLOk;
 }
 
+static USLTargetProfile
+gpu_uslVulkanProfile(uint64_t featureMask, bool untypedPointers) {
+  if (untypedPointers) {
+    return USL_TARGET_PROFILE_VULKAN_1_4;
+  }
+  if (featureMask & (UINT64_C(1) << GPU_FEATURE_EXECUTION_GRAPH)) {
+    return USL_TARGET_PROFILE_VULKAN_1_3;
+  }
+  if (featureMask &
+      ((UINT64_C(1) << GPU_FEATURE_ATOMIC64) |
+       (UINT64_C(1) << GPU_FEATURE_SHADER_F16) |
+       (UINT64_C(1) << GPU_FEATURE_RAY_QUERY) |
+       (UINT64_C(1) << GPU_FEATURE_RAY_TRACING_PIPELINE))) {
+    return USL_TARGET_PROFILE_VULKAN_1_2;
+  }
+  if (featureMask & (UINT64_C(1) << GPU_FEATURE_SUBGROUPS)) {
+    return USL_TARGET_PROFILE_VULKAN_1_1;
+  }
+  return USL_TARGET_PROFILE_VULKAN_1_0;
+}
+
 static int
 gpu_uslDefaultDX12Target(USLTargetSpec *outTarget) {
   return outTarget &&

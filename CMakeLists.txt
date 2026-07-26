@@ -3347,6 +3347,31 @@ if(GPU_BUILD_TESTS)
              COMMAND gpu-webgpu-native-queue-test)
   endif()
 
+  add_executable(gpu-usl-target-test
+    tests/api/usl_target.c
+  )
+  target_include_directories(gpu-usl-target-test PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  )
+  if(TARGET us)
+    target_link_libraries(gpu-usl-target-test PRIVATE us)
+  elseif(TARGET gpu_usl)
+    target_link_libraries(gpu-usl-target-test PRIVATE gpu_usl)
+  endif()
+  set_target_properties(gpu-usl-target-test PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(NOT MSVC)
+    target_compile_options(gpu-usl-target-test PRIVATE
+      -Wall
+      -Wextra
+      -Werror
+    )
+  endif()
+  add_test(NAME api-usl-target COMMAND gpu-usl-target-test)
+
   add_executable(gpu-public-layout-test
     tests/api/layout.c
   )
