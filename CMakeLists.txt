@@ -1822,6 +1822,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     COMMAND "${CMAKE_COMMAND}"
             "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
             "-DGPU_USL_SOURCE=${GPU_WEBGPU_STORAGE_TEXTURE_SOURCE}"
+            "-DGPU_USL_CAPS=storage_texture_extended_access"
             -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/storage-texture-webgpu-usl/main.c"
