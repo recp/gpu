@@ -665,6 +665,9 @@ if(GPU_BUILD_SAMPLES AND
 endif()
 
 if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
+  set(GPU_ASSETKIT_ROOT
+      "${CMAKE_CURRENT_SOURCE_DIR}/../assetio"
+      CACHE PATH "AssetKit checkout used by WebGPU asset samples")
   set(GPU_USL_HOST_FIXTURE "" CACHE FILEPATH
       "Host gpu-usl-fixture executable used for WebGPU samples")
   set(GPU_USL_HOST_PACKER "" CACHE FILEPATH
@@ -709,11 +712,49 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   file(GLOB_RECURSE GPU_USL_STDLIB_SOURCES CONFIGURE_DEPENDS
        "${GPU_USL_STDLIB_PATH}/*.usl")
 
+  if(EXISTS "${GPU_ASSETKIT_ROOT}/CMakeLists.txt")
+    include(ExternalProject)
+
+    set(GPU_ASSETKIT_WEBGPU_BINARY_DIR
+        "${CMAKE_CURRENT_BINARY_DIR}/assetkit-webgpu")
+    set(GPU_ASSETKIT_WEBGPU_LIBRARY
+        "${GPU_ASSETKIT_WEBGPU_BINARY_DIR}/libassetkit.a")
+    set(GPU_ASSETKIT_WEBGPU_DS_LIBRARY
+        "${GPU_ASSETKIT_WEBGPU_BINARY_DIR}/deps/ds/libds.a")
+    set(GPU_ASSETKIT_WEBGPU_DEFLATE_LIBRARY
+        "${GPU_ASSETKIT_WEBGPU_BINARY_DIR}/libdeflate.a")
+    ExternalProject_Add(gpu-assetkit-webgpu
+      SOURCE_DIR "${GPU_ASSETKIT_ROOT}"
+      BINARY_DIR "${GPU_ASSETKIT_WEBGPU_BINARY_DIR}"
+      CMAKE_GENERATOR "${CMAKE_GENERATOR}"
+      CMAKE_ARGS
+        "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
+        -DCMAKE_BUILD_TYPE=Release
+        -DAK_SHARED=OFF
+        -DAK_STATIC=ON
+        -DAK_BUILD_EXPORTERS=OFF
+        -DAK_BUILD_DECODER_SHIMS=OFF
+        -DAK_FETCH_DEPS=OFF
+        -DAK_BUILD_CLI=OFF
+        -DAK_BUILD_TOOLS=OFF
+        -DAK_BUILD_SAMPLES=OFF
+        -DAK_USE_TEST=OFF
+        -DAK_ENABLE_LTO=OFF
+        -DGIT_SUBMODULE=OFF
+      BUILD_BYPRODUCTS
+        "${GPU_ASSETKIT_WEBGPU_LIBRARY}"
+        "${GPU_ASSETKIT_WEBGPU_DS_LIBRARY}"
+        "${GPU_ASSETKIT_WEBGPU_DEFLATE_LIBRARY}"
+      INSTALL_COMMAND ""
+    )
+  endif()
+
   set(GPU_WEBGPU_GALLERY_DIR
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
-  set(GPU_WEBGPU_GALLERY_VERSION "40")
+  set(GPU_WEBGPU_GALLERY_VERSION "41")
+  set(GPU_WEBGPU_SAMPLE_WGSL_LABEL "Generated WGSL")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
   set(GPU_WEBGPU_PACK_SCRIPT
@@ -739,12 +780,18 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     "${GPU_WEBGPU_GALLERY_DIR}/sample.js"
     COPYONLY
   )
-  file(COPY ${GPU_WEBGPU_GALLERY_PREVIEWS}
-       DESTINATION "${GPU_WEBGPU_GALLERY_DIR}/previews")
+  foreach(preview ${GPU_WEBGPU_GALLERY_PREVIEWS})
+    get_filename_component(previewName "${preview}" NAME)
+    configure_file(
+      "${preview}"
+      "${GPU_WEBGPU_GALLERY_DIR}/previews/${previewName}"
+      COPYONLY
+    )
+  endforeach()
 
   function(gpu_add_webgpu_gallery_sample id stem title kind description)
     set(options USES_STDLIB)
-    set(oneValueArgs)
+    set(oneValueArgs ASSET_SOURCE)
     set(multiValueArgs ASSETS)
     cmake_parse_arguments(GPU_WEBGPU_SAMPLE
       "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -762,9 +809,26 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     set(GPU_WEBGPU_SAMPLE_TITLE "${title}")
     set(GPU_WEBGPU_SAMPLE_KIND "${kind}")
     set(GPU_WEBGPU_SAMPLE_DESCRIPTION "${description}")
+    set(assetSource "${GPU_WEBGPU_SAMPLE_ASSET_SOURCE}")
     set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/${id}.c")
+    set(GPU_WEBGPU_SAMPLE_ASSET_SOURCE "")
+    set(GPU_WEBGPU_SAMPLE_ASSET_TAB "")
+    set(GPU_WEBGPU_SAMPLE_WGSL_LABEL "Generated WGSL")
     set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/${id}.usl")
     set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/${id}.wgsl")
+    set(sampleSources "${sampleDir}/main.c")
+    set(assetSourceDependencies)
+    if(assetSource)
+      set(GPU_WEBGPU_SAMPLE_ASSET_SOURCE
+          "sources/${id}-asset.c")
+      set(GPU_WEBGPU_SAMPLE_ASSET_TAB
+          "<button id=\"tab-asset\" role=\"tab\" aria-selected=\"false\" aria-controls=\"source-code\" data-source=\"asset\">Asset Load via AssetKit</button>")
+      set(GPU_WEBGPU_SAMPLE_WGSL_LABEL "WGSL")
+      list(APPEND sampleSources
+        "${sampleDir}/${assetSource}")
+      list(APPEND assetSourceDependencies
+        "${sampleDir}/${assetSource}")
+    endif()
     set(artifactDependencies)
     if(GPU_WEBGPU_SAMPLE_USES_STDLIB)
       list(APPEND artifactDependencies
@@ -811,9 +875,19 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
         "${GPU_WEBGPU_PACK_SCRIPT}"
         "${sampleDir}/${stem}.usl"
         "${sampleDir}/main.c"
+        ${assetSourceDependencies}
         ${artifactDependencies}
       VERBATIM
     )
+    if(assetSource)
+      add_custom_command(
+        OUTPUT "${artifact}"
+        APPEND
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${sampleDir}/${assetSource}"
+                "${GPU_WEBGPU_GALLERY_DIR}/${GPU_WEBGPU_SAMPLE_ASSET_SOURCE}"
+      )
+    endif()
     add_custom_target(${artifactTarget} DEPENDS "${artifact}")
 
     set(assetOptions)
@@ -823,7 +897,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     endforeach()
 
     add_executable(${sampleTarget}
-      "${sampleDir}/main.c"
+      ${sampleSources}
       ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
     )
     target_link_libraries(${sampleTarget} PRIVATE gpu)
@@ -2770,6 +2844,52 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/pbr-material-webgpu-usl/studio_diffuse.rgba16f"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/pbr-material-webgpu-usl/studio_specular.rgba16f"
   )
+  if(TARGET gpu-assetkit-webgpu)
+    gpu_add_webgpu_gallery_sample(
+      assetkit-damaged-helmet
+      damaged_helmet
+      "AssetKit DamagedHelmet"
+      "Render / glTF asset pipeline"
+      "AssetKit downloads Khronos DamagedHelmet, resolves its glTF material, and uploads the real indexed mesh and textures."
+      USES_STDLIB
+      ASSET_SOURCE asset.c
+    )
+    target_compile_definitions(
+      gpu-assetkit-damaged-helmet-webgpu-usl PRIVATE AK_STATIC
+    )
+    target_include_directories(
+      gpu-assetkit-damaged-helmet-webgpu-usl PRIVATE
+        "${GPU_ASSETKIT_ROOT}/include"
+        "${GPU_CGLM_INCLUDE_DIR}"
+    )
+    target_link_libraries(
+      gpu-assetkit-damaged-helmet-webgpu-usl PRIVATE
+        "${GPU_ASSETKIT_WEBGPU_LIBRARY}"
+        "${GPU_ASSETKIT_WEBGPU_DS_LIBRARY}"
+        "${GPU_ASSETKIT_WEBGPU_DEFLATE_LIBRARY}"
+    )
+    target_link_options(
+      gpu-assetkit-damaged-helmet-webgpu-usl PRIVATE
+        --use-preload-plugins
+        -sFETCH=1
+        "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/samples/pbr-material-webgpu-usl/lut_ggx.png@/lut_ggx.png"
+        "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/samples/pbr-material-webgpu-usl/studio_diffuse.rgba16f@/studio_diffuse.rgba16f"
+        "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/samples/pbr-material-webgpu-usl/studio_specular.rgba16f@/studio_specular.rgba16f"
+    )
+    set_property(
+      TARGET gpu-assetkit-damaged-helmet-webgpu-usl APPEND PROPERTY
+      LINK_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/samples/pbr-material-webgpu-usl/lut_ggx.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/samples/pbr-material-webgpu-usl/studio_diffuse.rgba16f"
+        "${CMAKE_CURRENT_SOURCE_DIR}/samples/pbr-material-webgpu-usl/studio_specular.rgba16f"
+    )
+    add_dependencies(
+      gpu-assetkit-damaged-helmet-webgpu-usl gpu-assetkit-webgpu
+    )
+  else()
+    message(STATUS
+      "AssetKit WebGPU sample disabled: GPU_ASSETKIT_ROOT is unavailable")
+  endif()
   target_link_options(gpu-image-texture-webgpu-usl PRIVATE
     --use-preload-plugins
   )

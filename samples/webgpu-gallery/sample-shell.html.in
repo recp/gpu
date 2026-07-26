@@ -9,6 +9,7 @@
 </head>
 <body class="sample-page"
       data-c-source="@GPU_WEBGPU_SAMPLE_C_SOURCE@"
+      data-asset-source="@GPU_WEBGPU_SAMPLE_ASSET_SOURCE@"
       data-usl-source="@GPU_WEBGPU_SAMPLE_USL_SOURCE@"
       data-wgsl-source="@GPU_WEBGPU_SAMPLE_WGSL_SOURCE@">
   <header class="sample-head">
@@ -47,10 +48,11 @@
         <div class="source-tabs" role="tablist" aria-label="Source language">
           <button id="tab-c" role="tab" aria-selected="true"
                   aria-controls="source-code" data-source="c">GPU C</button>
+          @GPU_WEBGPU_SAMPLE_ASSET_TAB@
           <button id="tab-usl" role="tab" aria-selected="false"
                   aria-controls="source-code" data-source="usl">USL</button>
           <button id="tab-wgsl" role="tab" aria-selected="false"
-                  aria-controls="source-code" data-source="wgsl">Generated WGSL</button>
+                  aria-controls="source-code" data-source="wgsl">@GPU_WEBGPU_SAMPLE_WGSL_LABEL@</button>
         </div>
         <button class="copy-button" type="button">Copy</button>
       </div>
