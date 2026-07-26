@@ -448,6 +448,7 @@ asset_extract_material(AkMeshPrimitive *prim) {
   };
 
   AkResolvedMaterial resolved = {0};
+  AssetMaterial     *mat;
   AkMaterialSurface *surface;
 
   if (!ak_materialResolveForPrimitive(prim, UINT32_MAX, &resolved) ||
@@ -455,16 +456,17 @@ asset_extract_material(AkMeshPrimitive *prim) {
     return 0;
   }
 
+  mat     = &loadJob.asset.material;
   surface = resolved.surface;
 
-  asset_copy_factor(loadJob.asset.material.baseColorFactor, 4u, surface->baseColor, 1.0f);
-  asset_copy_factor(loadJob.asset.material.emissiveFactor,  3u, surface->emissive,  0.0f);
+  asset_copy_factor(mat->baseColorFactor, 4u, surface->baseColor, 1.0f);
+  asset_copy_factor(mat->emissiveFactor,  3u, surface->emissive,  0.0f);
 
-  loadJob.asset.material.metallicFactor    = ak_materialInputScalar(surface->metallic, 1.0f);
-  loadJob.asset.material.roughnessFactor   = ak_materialInputScalar(surface->roughness, 1.0f);
-  loadJob.asset.material.normalScale       = ak_materialNormalScale(surface);
-  loadJob.asset.material.occlusionStrength = ak_materialOcclusionStrength(surface);
-  loadJob.asset.material.emissiveStrength  = ak_materialEmissiveStrength(surface);
+  mat->metallicFactor    = ak_materialInputScalar(surface->metallic, 1.0f);
+  mat->roughnessFactor   = ak_materialInputScalar(surface->roughness, 1.0f);
+  mat->normalScale       = ak_materialNormalScale(surface);
+  mat->occlusionStrength = ak_materialOcclusionStrength(surface);
+  mat->emissiveStrength  = ak_materialEmissiveStrength(surface);
 
   for (uint32_t i = 0u; i < ASSET_TEXTURE_COUNT; i++) {
     const AkMaterialInput *input;
