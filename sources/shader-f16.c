@@ -1,6 +1,9 @@
 #define GPU_COMPUTE_ARTIFACT_PATH "/shader_f16.us"
 #define GPU_COMPUTE_ENTRY_POINT "fill_f16_vertices"
 #define GPU_COMPUTE_REQUIRED_FEATURE GPU_FEATURE_SHADER_F16
+#define GPU_COMPUTE_FALLBACK_ARTIFACT_PATH "/shader_f16_fallback.us"
+#define GPU_COMPUTE_FALLBACK_ENTRY_POINT "fill_f16_vertices_emulated"
+#define GPU_COMPUTE_FALLBACK_READY_STATUS "GPU: WebGPU shader-f16 emulated with f32 arithmetic"
 #define GPU_COMPUTE_UNSUPPORTED_STATUS "GPU: WebGPU shader-f16 unsupported by this adapter"
 #define GPU_COMPUTE_READY_STATUS "GPU: WebGPU USL shader-f16 ready"
 
@@ -147,12 +150,30 @@ create_resources(WebGPUCompute *state) {
                                          artifactSize,
                                          &state->library);
   free(artifact);
-  if (result != GPU_OK || !state->library ||
-      GPUGetShaderReflection(state->library, &reflection) != GPU_OK ||
+  if (result != GPU_OK || !state->library) {
+    char message[96];
+
+    snprintf(message,
+             sizeof(message),
+             "GPU: failed to create compute shader library (%d)",
+             result);
+    set_status(message, 1);
+    return 0;
+  }
+  result = GPUGetShaderReflection(state->library, &reflection);
+  if (result != GPU_OK ||
       reflection.pushConstantSizeBytes != sizeof(ComputeConstants) ||
       reflection.pushConstantStages != GPU_SHADER_STAGE_COMPUTE_BIT) {
+    char message[160];
+
+    snprintf(message,
+             sizeof(message),
+             "GPU: compute reflection mismatch (%d, %u bytes, 0x%x stages)",
+             result,
+             reflection.pushConstantSizeBytes,
+             reflection.pushConstantStages);
     GPUFreeShaderReflection(&reflection);
-    set_status("GPU: unexpected compute push-constant reflection", 1);
+    set_status(message, 1);
     return 0;
   }
   GPUFreeShaderReflection(&reflection);
@@ -591,6 +612,9 @@ webgpu_ready(GPUResult  result,
 
 int
 main(void) {
+  static const GPUFeature optionalFeatures[] = {
+    GPU_COMPUTE_REQUIRED_FEATURE
+  };
   GPUInstanceCreateInfo info = {0};
   GPUResult             result;
 
@@ -609,10 +633,14 @@ main(void) {
   }
 
   set_status("GPU: requesting WebGPU device", 0);
-  result = request_webgpu_device(app.instance,
-                                 &app.request,
-                                 webgpu_ready,
-                                 &app);
+  result = request_webgpu_device_features(
+    app.instance,
+    &app.request,
+    webgpu_ready,
+    &app,
+    optionalFeatures,
+    GPU_ARRAY_LEN(optionalFeatures)
+  );
   if (result != GPU_OK) {
     return 1;
   }

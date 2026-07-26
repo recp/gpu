@@ -16,13 +16,22 @@ kern(8, 8, 1) paint_cs(outputImages: image2d<rgba8unorm, write>[2] #texture(0),
   outputImages[1].write(float4(0.08, x, y, 1.0), gid.xy)
 }
 
+kern(8, 8, 1) filter_cs(inputImages: image2d<rgba8unorm, read>[2] #texture(0) #group(1),
+                        outputImages: image2d<rgba8unorm, write>[2] #texture(0) #group(2),
+                        gid: uint3 #global_id) {
+  let left  = inputImages[0].read(gid.xy)
+  let right = inputImages[1].read(gid.xy)
+  outputImages[0].write(float4(left.b, left.r, left.g, left.a), gid.xy)
+  outputImages[1].write(float4(right.g, right.b, right.r, right.a), gid.xy)
+}
+
 vert storage_vs(input: StorageVertexIn #stage_in) -> StorageVertexOut {
   input.position, input.uv
 }
 
 frag storage_fs(input: StorageVertexOut #stage_in,
-                colorTex: texture2d<float>[2] #texture(0) #group(1),
-                colorSampler: sampler #sampler(1) #group(1)) -> float4 {
+                colorTex: texture2d<float>[2] #texture(0) #group(3),
+                colorSampler: sampler #sampler(1) #group(3)) -> float4 {
   let uv = float2(input.uv.x * 2.0, input.uv.y)
   if (input.uv.x < 0.5) {
     return colorTex[0].sample(colorSampler, uv, level(0.0))

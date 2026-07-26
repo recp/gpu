@@ -1,0 +1,57 @@
+struct ColorVertexOut {
+  position: float4 #position
+  uv:       float2
+}
+
+vert color_vs(vertexId: uint #vertex_id) -> ColorVertexOut {
+  if (vertexId == 0) {
+    return ColorVertexOut { float4(-1.0, -1.0, 0.0, 1.0), float2(0.0, 1.0) }
+  }
+  if (vertexId == 1) {
+    return ColorVertexOut { float4(3.0, -1.0, 0.0, 1.0), float2(2.0, 1.0) }
+  }
+  return ColorVertexOut { float4(-1.0, 3.0, 0.0, 1.0), float2(0.0, -1.0) }
+}
+
+frag hdr_fs(input: ColorVertexOut #stage_in,
+            srgbImage: texture2d<float> #texture(0),
+            linearImage: texture2d<float> #texture(1),
+            linearSampler: sampler #sampler(2)) -> float4 {
+  let panelUV = float2(fract(input.uv.x * 2.0), input.uv.y)
+  var source: float4
+
+  if (input.uv.x < 0.5) {
+    source = srgbImage.sample(linearSampler, panelUV, level(0.0))
+  } else {
+    source = linearImage.sample(linearSampler, panelUV, level(0.0))
+  }
+  if (abs(input.uv.x - 0.5) < 0.003) {
+    return float4(0.0, 0.0, 0.0, 1.0)
+  }
+  return float4(source.rgb * 3.2, 1.0)
+}
+
+fn tonemap_reinhard(color: float3) -> float3 {
+  return color / (float3(1.0) + color)
+}
+
+fn linear_to_srgb_channel(value: float) -> float {
+  if (value <= 0.0031308) {
+    return value * 12.92
+  }
+  return 1.055 * pow(value, 1.0 / 2.4) - 0.055
+}
+
+fn linear_to_srgb(color: float3) -> float3 {
+  return float3(linear_to_srgb_channel(color.r),
+                linear_to_srgb_channel(color.g),
+                linear_to_srgb_channel(color.b))
+}
+
+frag tonemap_fs(input: ColorVertexOut #stage_in,
+                hdrImage: texture2d<float> #texture(0) #group(1),
+                linearSampler: sampler #sampler(1) #group(1)) -> float4 {
+  let hdr    = hdrImage.sample(linearSampler, input.uv, level(0.0)).rgb
+  let mapped = tonemap_reinhard(hdr)
+  return float4(linear_to_srgb(mapped), 1.0)
+}
