@@ -223,6 +223,9 @@ if(TARGET us)
   target_link_libraries(gpu PRIVATE us)
 elseif(GPU_USL_ROOT AND EXISTS "${GPU_USL_ROOT}/us/CMakeLists.txt")
   set(US_USE_TEST OFF CACHE BOOL "" FORCE)
+  if(EMSCRIPTEN)
+    set(US_RUNTIME_ONLY ON CACHE BOOL "" FORCE)
+  endif()
   if(NOT BUILD_SHARED_LIBS OR
      CMAKE_SYSTEM_NAME STREQUAL "iOS" OR
      EMSCRIPTEN)
@@ -664,6 +667,8 @@ endif()
 if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   set(GPU_USL_HOST_FIXTURE "" CACHE FILEPATH
       "Host gpu-usl-fixture executable used for WebGPU samples")
+  set(GPU_USL_HOST_PACKER "" CACHE FILEPATH
+      "Host uslpack executable used for WebGPU samples")
   if(NOT GPU_USL_HOST_FIXTURE)
     set(_gpu_usl_host_fixture
         "${CMAKE_CURRENT_SOURCE_DIR}/out/build/release-check/gpu-usl-fixture")
@@ -671,10 +676,22 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       set(GPU_USL_HOST_FIXTURE "${_gpu_usl_host_fixture}")
     endif()
   endif()
+  if(NOT GPU_USL_HOST_PACKER)
+    set(_gpu_usl_host_packer
+        "${CMAKE_CURRENT_SOURCE_DIR}/out/build/release-check/uslpack")
+    if(EXISTS "${_gpu_usl_host_packer}")
+      set(GPU_USL_HOST_PACKER "${_gpu_usl_host_packer}")
+    endif()
+  endif()
   if(NOT EXISTS "${GPU_USL_HOST_FIXTURE}")
     message(FATAL_ERROR
       "WebGPU samples require a host gpu-usl-fixture executable. Set "
       "GPU_USL_HOST_FIXTURE to a native build of that target.")
+  endif()
+  if(NOT EXISTS "${GPU_USL_HOST_PACKER}")
+    message(FATAL_ERROR
+      "WebGPU samples require a host uslpack executable. Set "
+      "GPU_USL_HOST_PACKER to a native build of that target.")
   endif()
 
   set(GPU_WEBGPU_GALLERY_DIR
@@ -684,6 +701,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   set(GPU_WEBGPU_GALLERY_VERSION "34")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
+  set(GPU_WEBGPU_PACK_SCRIPT
+      "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PackUSLArtifact.cmake")
   file(GLOB GPU_WEBGPU_GALLERY_PREVIEWS CONFIGURE_DEPENDS
        "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/previews/*")
   file(MAKE_DIRECTORY
@@ -749,6 +768,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
               "${GPU_USL_HOST_FIXTURE}"
               webgpu
               "${artifactSource}"
+      COMMAND "${CMAKE_COMMAND}"
+              "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+              "-DGPU_USL_SOURCE=${artifactSource}"
+              -P "${GPU_WEBGPU_PACK_SCRIPT}"
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
               "${sampleDir}/main.c"
               "${GPU_WEBGPU_GALLERY_DIR}/sources/${id}.c"
@@ -760,6 +783,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
               "${GPU_WEBGPU_GALLERY_DIR}/sources/${id}.wgsl"
       DEPENDS
         "${GPU_USL_HOST_FIXTURE}"
+        "${GPU_USL_HOST_PACKER}"
+        "${GPU_WEBGPU_PACK_SCRIPT}"
         "${sampleDir}/${stem}.usl"
         "${sampleDir}/main.c"
       VERBATIM
@@ -825,6 +850,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_TRIANGLE_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_TRIANGLE_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-webgpu-usl/main.c"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/triangle.c"
@@ -836,6 +865,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/triangle.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-webgpu-usl/triangle.usl"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-webgpu-usl/main.c"
     VERBATIM
@@ -898,6 +929,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_PUSH_CONSTANTS_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_PUSH_CONSTANTS_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/push-constants-webgpu-usl/main.c"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/push-constants.c"
@@ -909,6 +944,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/push-constants.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/push-constants-webgpu-usl/push_constants.usl"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/push-constants-webgpu-usl/main.c"
     VERBATIM
@@ -972,6 +1009,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_TEXTURED_QUAD_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_TEXTURED_QUAD_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-webgpu-usl/main.c"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/textured-quad.c"
@@ -983,6 +1024,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/textured-quad.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-webgpu-usl/textured_quad.usl"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-quad-webgpu-usl/main.c"
     VERBATIM
@@ -1045,6 +1088,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_COMPUTE_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_COMPUTE_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-webgpu-usl/main.c"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/compute.c"
@@ -1056,6 +1103,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/compute.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-webgpu-usl/compute.usl"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/compute-webgpu-usl/main.c"
     VERBATIM
@@ -1142,6 +1191,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_TIMESTAMP_QUERY_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_TIMESTAMP_QUERY_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${GPU_WEBGPU_TIMESTAMP_QUERY_MAIN}"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/timestamp-query.c"
@@ -1153,6 +1206,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/timestamp-query.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/timestamp-query-webgpu-usl/timestamp_query.usl"
       "${GPU_WEBGPU_TIMESTAMP_QUERY_MAIN}"
     VERBATIM
@@ -1259,11 +1314,20 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
               webgpu
               "${GPU_WEBGPU_SUBGROUP_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_SUBGROUP_SOURCE}"
+            "-DGPU_USL_CAPS=subgroup"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E env
               USL_EMIT_BYTECODE=1
               "${GPU_USL_HOST_FIXTURE}"
               webgpu
               "${GPU_WEBGPU_SUBGROUP_FALLBACK_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_SUBGROUP_FALLBACK_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${GPU_WEBGPU_SUBGROUP_MAIN}"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/subgroup.c"
@@ -1275,6 +1339,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/subgroup.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/subgroup-webgpu-usl/subgroup.usl"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/subgroup-webgpu-usl/subgroup_fallback.usl"
       "${GPU_WEBGPU_SUBGROUP_MAIN}"
@@ -1362,6 +1428,11 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_SHADER_F16_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_SHADER_F16_SOURCE}"
+            "-DGPU_USL_CAPS=shader_f16"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${GPU_WEBGPU_SHADER_F16_MAIN}"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/shader-f16.c"
@@ -1373,6 +1444,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/shader-f16.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/shader-f16-webgpu-usl/shader_f16.usl"
       "${GPU_WEBGPU_SHADER_F16_MAIN}"
     VERBATIM
@@ -1455,6 +1528,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_DISPATCH_INDIRECT_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_DISPATCH_INDIRECT_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${GPU_WEBGPU_DISPATCH_INDIRECT_MAIN}"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/dispatch-indirect.c"
@@ -1466,6 +1543,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/dispatch-indirect.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/dispatch-indirect-webgpu-usl/dispatch_indirect.usl"
       "${GPU_WEBGPU_DISPATCH_INDIRECT_MAIN}"
     VERBATIM
@@ -1531,6 +1610,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_MULTI_DRAW_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_MULTI_DRAW_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/multi-draw-webgpu-usl/main.c"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/multi-draw.c"
@@ -1542,6 +1625,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/multi-draw.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/multi-draw-webgpu-usl/main.c"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/multi-draw-webgpu-usl/multi_draw.usl"
     VERBATIM
@@ -1605,6 +1690,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_STORAGE_TEXTURE_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_STORAGE_TEXTURE_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/storage-texture-webgpu-usl/main.c"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/storage-texture.c"
@@ -1616,6 +1705,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/storage-texture.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/storage-texture-webgpu-usl/storage_texture.usl"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/storage-texture-webgpu-usl/main.c"
     VERBATIM
@@ -1679,6 +1770,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_INDEXED_DEPTH_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_INDEXED_DEPTH_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/indexed-depth-webgpu-usl/main.c"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/indexed-depth.c"
@@ -1690,6 +1785,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/indexed-depth.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/indexed-depth-webgpu-usl/indexed_depth.usl"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/indexed-depth-webgpu-usl/main.c"
     VERBATIM
@@ -1753,6 +1850,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_SHADOW_COMPARE_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_SHADOW_COMPARE_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/shadow-compare-webgpu-usl/main.c"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/shadow-compare.c"
@@ -1764,6 +1865,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/shadow-compare.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/shadow-compare-usl/shadow_compare.usl"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/shadow-compare-webgpu-usl/main.c"
     VERBATIM
@@ -1827,6 +1930,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_INSTANCING_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_INSTANCING_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/instancing-webgpu-usl/main.c"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/instancing.c"
@@ -1838,6 +1945,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/instancing.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/instancing-webgpu-usl/instancing.usl"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/instancing-webgpu-usl/main.c"
     VERBATIM
@@ -1900,6 +2009,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_TEXTURED_CUBE_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_TEXTURED_CUBE_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-cube-webgpu-usl/main.c"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/textured-cube.c"
@@ -1911,6 +2024,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/textured-cube.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-cube-usl/textured_cube.usl"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/textured-cube-webgpu-usl/main.c"
     VERBATIM
@@ -1976,6 +2091,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_MSAA_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_MSAA_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/msaa-webgpu-usl/main.c"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/msaa.c"
@@ -1987,6 +2106,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/msaa.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/msaa-webgpu-usl/msaa.usl"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/msaa-webgpu-usl/main.c"
     VERBATIM
@@ -2048,6 +2169,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_MRT_BLEND_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_MRT_BLEND_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/mrt-blend-webgpu-usl/main.c"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/mrt-blend.c"
@@ -2059,6 +2184,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/mrt-blend.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/mrt-blend-usl/mrt_blend.usl"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/mrt-blend-webgpu-usl/main.c"
     VERBATIM
@@ -2122,6 +2249,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_TEXTURE_ARRAY_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_TEXTURE_ARRAY_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/texture-array-webgpu-usl/main.c"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/texture-array.c"
@@ -2133,6 +2264,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/texture-array.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/texture-array-webgpu-usl/texture_array.usl"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/texture-array-webgpu-usl/main.c"
     VERBATIM
@@ -2196,6 +2329,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_TEXTURE_LINE_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_TEXTURE_LINE_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/texture-line-webgpu-usl/main.c"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/texture-line.c"
@@ -2207,6 +2344,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/texture-line.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/texture-line-webgpu-usl/texture_line.usl"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/texture-line-webgpu-usl/main.c"
     VERBATIM
@@ -2270,6 +2409,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_MSAA_SAMPLES_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_MSAA_SAMPLES_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/msaa-samples-webgpu-usl/main.c"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/msaa-samples.c"
@@ -2281,6 +2424,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/msaa-samples.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/msaa-samples-webgpu-usl/msaa_samples.usl"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/msaa-samples-webgpu-usl/main.c"
     VERBATIM
@@ -2344,6 +2489,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_DESCRIPTOR_ARRAY_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_DESCRIPTOR_ARRAY_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/descriptor-array-webgpu-usl/main.c"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/descriptor-array.c"
@@ -2355,6 +2504,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/descriptor-array.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/descriptor-array-webgpu-usl/descriptor_array.usl"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/descriptor-array-webgpu-usl/main.c"
     VERBATIM
@@ -2418,6 +2569,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_USL_HOST_FIXTURE}"
             webgpu
             "${GPU_WEBGPU_TEXTURE_SHAPES_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_TEXTURE_SHAPES_SOURCE}"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/samples/texture-shapes-webgpu-usl/main.c"
             "${GPU_WEBGPU_GALLERY_DIR}/sources/texture-shapes.c"
@@ -2429,6 +2584,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
             "${GPU_WEBGPU_GALLERY_DIR}/sources/texture-shapes.wgsl"
     DEPENDS
       "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/texture-shapes-webgpu-usl/texture_shapes.usl"
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/texture-shapes-webgpu-usl/main.c"
     VERBATIM

@@ -585,6 +585,9 @@ webgpu_ready(GPUResult  result,
 
 int
 main(void) {
+  static const GPUFeature optionalFeatures[] = {
+    GPU_COMPUTE_REQUIRED_FEATURE
+  };
   GPUInstanceCreateInfo info = {0};
   GPUResult             result;
 
@@ -603,10 +606,14 @@ main(void) {
   }
 
   set_status("GPU: requesting WebGPU device", 0);
-  result = request_webgpu_device(app.instance,
-                                 &app.request,
-                                 webgpu_ready,
-                                 &app);
+  result = request_webgpu_device_features(
+    app.instance,
+    &app.request,
+    webgpu_ready,
+    &app,
+    optionalFeatures,
+    GPU_ARRAY_LEN(optionalFeatures)
+  );
   if (result != GPU_OK) {
     return 1;
   }

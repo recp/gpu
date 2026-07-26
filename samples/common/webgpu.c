@@ -115,14 +115,6 @@ webgpu_device_ready(GPUResult result, GPUDevice *device, void *userData) {
 
 static void
 webgpu_adapter_ready(GPUResult result, GPUAdapter *adapter, void *userData) {
-  static const GPUFeature optionalFeatures[] = {
-    GPU_FEATURE_COMPUTE,
-    GPU_FEATURE_SHADER_F16,
-    GPU_FEATURE_SUBGROUPS,
-    GPU_FEATURE_TIMESTAMPS,
-    GPU_FEATURE_INDIRECT_DRAW,
-    GPU_FEATURE_MULTI_DRAW
-  };
   GPUDeviceCreateInfo info = {0};
   WebGPURequest *request;
 
@@ -136,11 +128,16 @@ webgpu_adapter_ready(GPUResult result, GPUAdapter *adapter, void *userData) {
   }
 
   request->adapter = adapter;
-  info.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  info.chain.structSize      = sizeof(info);
-  info.optional.pFeatures    = optionalFeatures;
-  info.optional.featureCount = GPU_ARRAY_LEN(optionalFeatures);
-  result = GPURequestDevice(adapter, &info, webgpu_device_ready, request);
+  if (request->optionalFeatureCount > 0u) {
+    info.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    info.chain.structSize      = sizeof(info);
+    info.optional.pFeatures    = request->optionalFeatures;
+    info.optional.featureCount = request->optionalFeatureCount;
+  }
+  result = GPURequestDevice(adapter,
+                            request->optionalFeatureCount > 0u ? &info : NULL,
+                            webgpu_device_ready,
+                            request);
   if (result != GPU_OK && !request->completed) {
     finish_webgpu_request(request, result, adapter, NULL);
   }
@@ -151,18 +148,64 @@ request_webgpu_device(GPUInstance        *instance,
                       WebGPURequest      *request,
                       WebGPUReadyCallback callback,
                       void               *userData) {
+  return request_webgpu_device_features(instance,
+                                        request,
+                                        callback,
+                                        userData,
+                                        NULL,
+                                        0u);
+}
+
+GPUResult
+request_webgpu_device_features(GPUInstance        *instance,
+                               WebGPURequest      *request,
+                               WebGPUReadyCallback callback,
+                               void               *userData,
+                               const GPUFeature   *optionalFeatures,
+                               uint32_t            optionalFeatureCount) {
+  static const GPUFeature defaultFeatures[] = {
+    GPU_FEATURE_COMPUTE,
+    GPU_FEATURE_INDIRECT_DRAW,
+    GPU_FEATURE_MULTI_DRAW
+  };
   GPUResult result;
 
-  if (!instance || !request || !callback) {
+  if (!instance || !request || !callback ||
+      (optionalFeatureCount > 0u && !optionalFeatures)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  request->callback  = callback;
-  request->adapter   = NULL;
-  request->userData  = userData;
-  request->result    = GPU_OK;
-  request->completed = false;
+  request->callback             = callback;
+  request->adapter              = NULL;
+  request->userData             = userData;
+  request->result               = GPU_OK;
+  request->optionalFeatureCount = 0u;
+  request->completed            = false;
+  if (optionalFeatureCount > 0u) {
+    for (uint32_t i = 0u; i < GPU_ARRAY_LEN(defaultFeatures); i++) {
+      request->optionalFeatures[request->optionalFeatureCount++] =
+        defaultFeatures[i];
+    }
+    for (uint32_t i = 0u; i < optionalFeatureCount; i++) {
+      bool duplicate;
 
+      duplicate = false;
+      for (uint32_t j = 0u; j < request->optionalFeatureCount; j++) {
+        if (request->optionalFeatures[j] == optionalFeatures[i]) {
+          duplicate = true;
+          break;
+        }
+      }
+      if (!duplicate) {
+        if (request->optionalFeatureCount >=
+            GPU_ARRAY_LEN(request->optionalFeatures)) {
+          return GPU_ERROR_INVALID_ARGUMENT;
+        }
+        request->optionalFeatures[request->optionalFeatureCount++] =
+          optionalFeatures[i];
+      }
+    }
+  }
   result = GPURequestAdapter(instance, webgpu_adapter_ready, request);
   if (result != GPU_OK && !request->completed) {
     finish_webgpu_request(request, result, NULL, NULL);

@@ -21,7 +21,9 @@ typedef struct WebGPURequest {
   GPUAdapter         *adapter;
   void               *userData;
   GPUResult           result;
+  uint32_t            optionalFeatureCount;
   bool                completed;
+  GPUFeature          optionalFeatures[8];
 } WebGPURequest;
 
 void
@@ -38,6 +40,14 @@ request_webgpu_device(GPUInstance        *instance,
                       WebGPURequest      *request,
                       WebGPUReadyCallback callback,
                       void               *userData);
+
+GPUResult
+request_webgpu_device_features(GPUInstance        *instance,
+                               WebGPURequest      *request,
+                               WebGPUReadyCallback callback,
+                               void               *userData,
+                               const GPUFeature   *optionalFeatures,
+                               uint32_t            optionalFeatureCount);
 
 int
 resize_webgpu_canvas(GPUSwapchain *swapchain,
