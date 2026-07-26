@@ -114,6 +114,7 @@ gpu_validIndexType(GPUIndexType indexType) {
          indexType == GPU_INDEX_TYPE_UINT32;
 }
 
+#if GPU_BUILD_WITH_VALIDATION
 static bool
 gpu_validDynamicStateApplyInfo(const GPUDynamicStateApplyInfo *info) {
   const GPUDynamicStateMask validMask =
@@ -135,6 +136,7 @@ gpu_validDynamicStateApplyInfo(const GPUDynamicStateApplyInfo *info) {
 
   return (info->mask & ~validMask) == 0u;
 }
+#endif
 
 static bool
 gpu_validPushConstantRange(uint32_t limit,
@@ -1129,8 +1131,12 @@ GPUApplyDynamicState(GPURenderPassEncoder *pass,
   GPUApi              *api;
   GPUDynamicStateMask  dirtyMask;
 
-  if (!pass || pass->_ended || !gpu_validDynamicStateApplyInfo(info))
+  if (!pass || pass->_ended || !info)
     return;
+#if GPU_BUILD_WITH_VALIDATION
+  if (!gpu_validDynamicStateApplyInfo(info))
+    return;
+#endif
   api = gpu_renderPassApi(pass);
   if (!api || !api->rce.applyDynamicState) {
     if (info->mask & GPU_DYNAMIC_STATE_VIEWPORT_BIT)
