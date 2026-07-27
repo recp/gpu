@@ -69,51 +69,55 @@ static void
 build_view_projection(AssetSample *state) {
   vec3 eye = {0.0f, 0.0f, 3.35f}, center = {0.0f, 0.0f, 0.0f}, up = {0.0f, 1.0f, 0.0f};
   mat4 view, projection;
-  float aspect;
 
-  aspect = state->height > 0u
-         ? (float)state->width / (float)state->height
-         : 1.0f;
   glm_lookat(eye, center, up, view);
-  glm_perspective(glm_rad(44.0f), aspect, 0.1f, 100.0f, projection);
+  glm_perspective(glm_rad(44.0f), 
+                  state->height > 0u ? (float)state->width/(float)state->height : 1.0f, 
+                  0.1f, 
+                  100.0f, 
+                  projection);
+
   glm_mat4_mul(projection, view, state->viewProjection);
 }
 
 static void
-build_uniforms(AssetSample *state,
-               float        seconds,
-               PBRUniforms *uniforms) {
-  vec3 axisY = {0.0f, 1.0f, 0.0f};
-  vec3 center, extent;
-  vec4 camera = {0.0f, 0.0f, 3.35f, 1.0f}, light = {0.44f, 0.78f, 0.54f, 0.0f};
-  mat4 authored, centered;
+build_uniforms(AssetSample *state, float seconds, PBRUniforms *uniforms) {
+  mat4  authored, centered;
+  vec4  camera = {0.0f, 0.0f, 3.35f, 1.0f}, light = {0.44f, 0.78f, 0.54f, 0.0f};
+  vec3  axisY  = {0.0f, 1.0f, 0.0f};
+  vec3  center, extent;
   float radius, scale;
 
   glm_mat4_make(state->asset.modelMatrix, authored);
+
   for (uint32_t i = 0u; i < 3u; i++) {
     center[i] = (state->asset.boundsMin[i] + state->asset.boundsMax[i]) * 0.5f;
-    extent[i] = state->asset.boundsMax[i] - state->asset.boundsMin[i];
+    extent[i] = state->asset.boundsMax[i]  - state->asset.boundsMin[i];
   }
+
   radius = glm_vec3_norm(extent) * 0.5f;
   scale  = radius > 0.0f ? 1.45f / radius : 1.0f;
+
   glm_mat4_identity(uniforms->model);
   glm_rotate(uniforms->model, seconds * 0.32f, axisY);
   glm_scale_uni(uniforms->model, scale);
   glm_mat4_mul(uniforms->model, authored, centered);
+
   center[0] = -center[0];
   center[1] = -center[1];
   center[2] = -center[2];
+
   glm_translate(centered, center);
   glm_mat4_copy(centered, uniforms->model);
   glm_mat4_mul(state->viewProjection, uniforms->model, uniforms->mvp);
   glm_vec4_copy(camera, uniforms->cameraPosition);
   glm_vec4_normalize_to(light, uniforms->lightDirection);
-  glm_vec4_copy(state->asset.material.baseColorFactor,
-                uniforms->baseColorFactor);
-  uniforms->emissiveFactor[0] = state->asset.material.emissiveFactor[0];
-  uniforms->emissiveFactor[1] = state->asset.material.emissiveFactor[1];
-  uniforms->emissiveFactor[2] = state->asset.material.emissiveFactor[2];
-  uniforms->emissiveFactor[3] = state->asset.material.emissiveStrength;
+  glm_vec4_copy(state->asset.material.baseColorFactor, uniforms->baseColorFactor);
+
+  uniforms->emissiveFactor[0]  = state->asset.material.emissiveFactor[0];
+  uniforms->emissiveFactor[1]  = state->asset.material.emissiveFactor[1];
+  uniforms->emissiveFactor[2]  = state->asset.material.emissiveFactor[2];
+  uniforms->emissiveFactor[3]  = state->asset.material.emissiveStrength;
   uniforms->materialFactors[0] = state->asset.material.metallicFactor;
   uniforms->materialFactors[1] = state->asset.material.roughnessFactor;
   uniforms->materialFactors[2] = state->asset.material.normalScale;
@@ -122,15 +126,15 @@ build_uniforms(AssetSample *state,
 
 static int
 create_depth_target(AssetSample *state,
-                    uint32_t      width,
-                    uint32_t      height) {
+                    uint32_t     width,
+                    uint32_t     height) {
   GPUTextureCreateInfo     textureInfo = {0};
   GPUTextureViewCreateInfo viewInfo    = {0};
   GPUTexture              *texture;
   GPUTextureView          *view;
 
-  texture = NULL;
-  view    = NULL;
+  texture                      = NULL;
+  view                         = NULL;
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
   textureInfo.label            = "assetkit-damaged-helmet-depth";
@@ -142,6 +146,7 @@ create_depth_target(AssetSample *state,
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_DEPTH_STENCIL;
+
   if (GPUCreateTexture(state->device, &textureInfo, &texture) != GPU_OK) {
     return 0;
   }
@@ -153,6 +158,7 @@ create_depth_target(AssetSample *state,
   viewInfo.format           = GPU_FORMAT_DEPTH32_FLOAT;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK) {
     GPUDestroyTexture(texture);
     return 0;
@@ -229,14 +235,11 @@ create_pipeline(AssetSample *state) {
     return 0;
   }
 
-  frameEntries = GPUGetBindGroupLayoutEntries(
-    state->shaderLayout->bindGroupLayouts[0],
-    &frameEntryCount
-  );
-  materialEntries = GPUGetBindGroupLayoutEntries(
-    state->shaderLayout->bindGroupLayouts[1],
-    &materialEntryCount
-  );
+  frameEntries    = GPUGetBindGroupLayoutEntries(state->shaderLayout->bindGroupLayouts[0],
+                                                 &frameEntryCount);
+  materialEntries = GPUGetBindGroupLayoutEntries(state->shaderLayout->bindGroupLayouts[1],
+                                                 &materialEntryCount);
+
   if (!frameEntries || frameEntryCount != 1u ||
       frameEntries[0].binding != 0u ||
       frameEntries[0].bindingType != GPU_BINDING_UNIFORM_BUFFER ||
@@ -264,20 +267,20 @@ create_pipeline(AssetSample *state) {
 
   attributes[0].format          = GPU_VERTEX_FORMAT_FLOAT32X3;
   attributes[0].offset          = offsetof(AssetVertex, position);
-  attributes[0].shaderLocation = 0u;
+  attributes[0].shaderLocation  = 0u;
   attributes[1].format          = GPU_VERTEX_FORMAT_FLOAT32X3;
   attributes[1].offset          = offsetof(AssetVertex, normal);
-  attributes[1].shaderLocation = 1u;
+  attributes[1].shaderLocation  = 1u;
   attributes[2].format          = GPU_VERTEX_FORMAT_FLOAT32X2;
   attributes[2].offset          = offsetof(AssetVertex, uv);
-  attributes[2].shaderLocation = 2u;
+  attributes[2].shaderLocation  = 2u;
   vertexLayout.pAttributes      = attributes;
   vertexLayout.strideBytes      = sizeof(AssetVertex);
   vertexLayout.attributeCount   = GPU_ARRAY_LEN(attributes);
   vertexLayout.stepMode         = GPU_VERTEX_STEP_MODE_VERTEX;
 
-  color.format          = GPUGetSwapchainFormat(state->swapchain);
-  color.blend.writeMask = GPU_COLOR_WRITE_ALL;
+  color.format           = GPUGetSwapchainFormat(state->swapchain);
+  color.blend.writeMask  = GPU_COLOR_WRITE_ALL;
   depth.depthCompare     = GPU_COMPARE_LESS;
   depth.depthTestEnable  = true;
   depth.depthWriteEnable = true;
@@ -383,6 +386,7 @@ create_environment_cube(AssetSample      *state,
   assetSize    = 0u;
   expectedSize = 0u;
   offset       = 0u;
+
   for (uint32_t mip = 0u; mip < mipCount; mip++) {
     uint32_t size;
 
@@ -393,6 +397,7 @@ create_environment_cube(AssetSample      *state,
     expectedSize += (uint64_t)size * size *
                     PBR_RGBA16_FLOAT_BYTES * PBR_CUBE_FACE_COUNT;
   }
+
   if (!read_file(path, &asset, &assetSize) ||
       !asset || assetSize != expectedSize) {
     free(asset);
@@ -422,6 +427,7 @@ create_environment_cube(AssetSample      *state,
   writeRegion.aspect       = GPU_TEXTURE_ASPECT_ALL;
   writeRegion.depth        = 1u;
   writeRegion.layerCount   = 1u;
+
   for (uint32_t mip = 0u; mip < mipCount; mip++) {
     uint32_t size;
     uint64_t faceBytes;
@@ -505,6 +511,7 @@ create_ggx_lut(AssetSample *state) {
   writeRegion.layerCount   = 1u;
   writeRegion.bytesPerRow  = (uint32_t)width * 4u;
   writeRegion.rowsPerImage = (uint32_t)height;
+
   if (GPUQueueWriteTexture(state->queue,
                            state->ggxLUTTexture,
                            &writeRegion,
@@ -522,6 +529,7 @@ create_ggx_lut(AssetSample *state) {
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   return GPUCreateTextureView(state->ggxLUTTexture,
                               &viewInfo,
                               &state->ggxLUTView) == GPU_OK;
@@ -688,8 +696,8 @@ create_material(AssetSample *state) {
   materialEntries[8].sampler     = state->sampler;
   materialEntries[8].binding     = 8u;
   materialEntries[8].bindingType = GPU_BINDING_SAMPLER;
-  materialInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
-  materialInfo.chain.structSize = sizeof(materialInfo);
+  materialInfo.chain.sType       = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  materialInfo.chain.structSize  = sizeof(materialInfo);
   materialInfo.label             = "assetkit-damaged-helmet-group1";
   materialInfo.layout            = state->shaderLayout->bindGroupLayouts[1];
   materialInfo.pEntries          = materialEntries;
@@ -756,6 +764,7 @@ render_frame(void *userData) {
   depth.stencilLoadOp         = GPU_LOAD_OP_DONT_CARE;
   depth.stencilStoreOp        = GPU_STORE_OP_DONT_CARE;
   depth.clearDepth            = 1.0f;
+
   passInfo.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   passInfo.chain.structSize        = sizeof(passInfo);
   passInfo.label                   = "assetkit-damaged-helmet-webgpu-pass";
