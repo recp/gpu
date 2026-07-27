@@ -6,18 +6,48 @@
  */
 
 #include "../samples/common/webgpu.h"
+#include "../src/api/cmdqueue_internal.h"
 #include "../src/api/device_internal.h"
 
 #include <emscripten/emscripten.h>
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 enum {
   WEBGPU_RENDER_BATCH_SIZE    = 8u,
   WEBGPU_RENDER_WARMUP_FRAMES = 60u,
-  WEBGPU_RENDER_SAMPLE_COUNT  = 300u
+  WEBGPU_RENDER_SAMPLE_COUNT  = 300u,
+  WEBGPU_RENDER_MODE_COUNT    = 2u
 };
+
+typedef enum WebGPURenderMode {
+  WEBGPU_RENDER_SERIAL_SUBMIT,
+  WEBGPU_RENDER_BATCH_SUBMIT
+} WebGPURenderMode;
+
+typedef struct WebGPURenderSamples {
+  uint64_t maxAllocCount;
+  uint64_t maxAllocBytes;
+  uint64_t maxFreeCount;
+  uint64_t maxFreeBytes;
+  uint32_t frameCount;
+  uint32_t sampleCount;
+  uint32_t droppedBatches;
+  double   total[WEBGPU_RENDER_SAMPLE_COUNT];
+  double   acquire[WEBGPU_RENDER_SAMPLE_COUNT];
+  double   encode[WEBGPU_RENDER_SAMPLE_COUNT];
+  double   submit[WEBGPU_RENDER_SAMPLE_COUNT];
+} WebGPURenderSamples;
+
+typedef struct WebGPURenderTimes {
+  double total;
+  double acquire;
+  double encode;
+  double submit;
+} WebGPURenderTimes;
 
 typedef struct WebGPURenderBench {
   GPUInstance       *instance;
@@ -30,39 +60,16 @@ typedef struct WebGPURenderBench {
   GPUTexture        *target;
   GPUTextureView    *targetView;
   WebGPURequest      request;
-  uint64_t           maxAllocCount;
-  uint64_t           maxAllocBytes;
-  uint64_t           maxFreeCount;
-  uint64_t           maxFreeBytes;
-  uint32_t           frameCount;
-  uint32_t           sampleCount;
-  uint32_t           droppedBatches;
+  WebGPURenderSamples modes[WEBGPU_RENDER_MODE_COUNT];
+  WebGPURenderMode    mode;
   bool               draining;
-  double             samples[WEBGPU_RENDER_SAMPLE_COUNT];
 } WebGPURenderBench;
 
 static WebGPURenderBench bench;
 
-EM_JS(void,
-      publish_results,
-      (double median,
-       double p95,
-       double p99,
-       uint64_t allocCount,
-       uint64_t allocBytes,
-       uint64_t freeCount,
-       uint64_t freeBytes,
-       uint32_t droppedBatches), {
+EM_JS(void, publish_results, (const char *result), {
   const output = document.getElementById("results");
-  const text = [
-    "WebGPU warm offscreen render",
-    `median: ${median.toFixed(3)} us`,
-    `p95:    ${p95.toFixed(3)} us`,
-    `p99:    ${p99.toFixed(3)} us`,
-    `alloc:  ${allocCount} calls, ${allocBytes} bytes`,
-    `free:   ${freeCount} calls, ${freeBytes} bytes`,
-    `dropped batches: ${droppedBatches}`
-  ].join("\n");
+  const text = UTF8ToString(result);
 
   output.textContent = text;
   console.log(text);
@@ -172,21 +179,23 @@ create_pipeline(WebGPURenderBench *state) {
 }
 
 static int
-encode_command(WebGPURenderBench *state) {
-  GPUCommandBuffer              *buffers[1];
-  GPUCommandBuffer              *cmdb;
-  GPURenderPassEncoder          *pass;
-  GPURenderPassColorAttachment   color = {0};
-  GPURenderPassCreateInfo        passInfo = {0};
-  GPUQueueSubmitInfo             submitInfo = {0};
-
-  cmdb = NULL;
-  if (GPUAcquireCommandBuffer(state->queue,
-                              "webgpu-render-bench",
-                              &cmdb) != GPU_OK ||
-      !cmdb) {
-    return 0;
+acquire_commands(WebGPURenderBench *state, GPUCommandBuffer **buffers) {
+  for (uint32_t i = 0u; i < WEBGPU_RENDER_BATCH_SIZE; i++) {
+    buffers[i] = NULL;
+    if (GPUAcquireCommandBuffer(state->queue,
+                                "webgpu-render-bench",
+                                &buffers[i]) != GPU_OK ||
+        !buffers[i]) {
+      return 0;
+    }
   }
+  return 1;
+}
+
+static int
+encode_commands(WebGPURenderBench *state, GPUCommandBuffer **buffers) {
+  GPURenderPassColorAttachment color    = {0};
+  GPURenderPassCreateInfo      passInfo = {0};
 
   color.view                  = state->targetView;
   color.loadOp                = GPU_LOAD_OP_CLEAR;
@@ -198,104 +207,245 @@ encode_command(WebGPURenderBench *state) {
   passInfo.label              = "webgpu-render-bench-pass";
   passInfo.pColorAttachments  = &color;
   passInfo.colorAttachmentCount = 1u;
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
-    (void)GPUDiscardCommandBuffer(cmdb);
-    return 0;
+  for (uint32_t i = 0u; i < WEBGPU_RENDER_BATCH_SIZE; i++) {
+    GPURenderPassEncoder *pass;
+
+    pass = GPUBeginRenderPass(buffers[i], &passInfo);
+    if (!pass) {
+      return 0;
+    }
+    GPUBindRenderPipeline(pass, state->pipeline);
+    GPUDraw(pass, 3u, 1u, 0u, 0u);
+    GPUEndRenderPass(pass);
+  }
+  return 1;
+}
+
+static int
+submit_commands(WebGPURenderBench *state,
+                GPUCommandBuffer **buffers,
+                WebGPURenderMode   mode) {
+  GPUQueueSubmitInfo info = {0};
+
+  info.chain.sType      = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  info.chain.structSize = sizeof(info);
+  if (mode == WEBGPU_RENDER_BATCH_SUBMIT) {
+    info.ppCommandBuffers   = buffers;
+    info.commandBufferCount = WEBGPU_RENDER_BATCH_SIZE;
+    return GPUQueueSubmit(state->queue, &info) == GPU_OK;
   }
 
-  GPUBindRenderPipeline(pass, state->pipeline);
-  GPUDraw(pass, 3u, 1u, 0u, 0u);
-  GPUEndRenderPass(pass);
-
-  buffers[0]                    = cmdb;
-  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
-  submitInfo.chain.structSize   = sizeof(submitInfo);
-  submitInfo.ppCommandBuffers   = buffers;
-  submitInfo.commandBufferCount = 1u;
-  return GPUQueueSubmit(state->queue, &submitInfo) == GPU_OK;
+  info.commandBufferCount = 1u;
+  for (uint32_t i = 0u; i < WEBGPU_RENDER_BATCH_SIZE; i++) {
+    info.ppCommandBuffers = &buffers[i];
+    if (GPUQueueSubmit(state->queue, &info) != GPU_OK) {
+      return 0;
+    }
+  }
+  return 1;
 }
 
 static void
-record_stats(WebGPURenderBench *state) {
+discard_commands(GPUCommandBuffer **buffers) {
+  for (uint32_t i = 0u; i < WEBGPU_RENDER_BATCH_SIZE; i++) {
+    if (buffers[i] && !buffers[i]->_submitted) {
+      (void)GPUDiscardCommandBuffer(buffers[i]);
+    }
+  }
+}
+
+static int
+run_commands(WebGPURenderBench *state, WebGPURenderTimes *times) {
+  GPUCommandBuffer *buffers[WEBGPU_RENDER_BATCH_SIZE];
+  double            acquireBegin;
+  double            acquireEnd;
+  double            encodeEnd;
+  double            submitEnd;
+
+  memset(buffers, 0, sizeof(buffers));
+  acquireBegin = emscripten_get_now();
+  if (!acquire_commands(state, buffers)) {
+    discard_commands(buffers);
+    return 0;
+  }
+  acquireEnd = emscripten_get_now();
+  if (!encode_commands(state, buffers)) {
+    discard_commands(buffers);
+    return 0;
+  }
+  encodeEnd = emscripten_get_now();
+  if (!submit_commands(state, buffers, state->mode)) {
+    discard_commands(buffers);
+    return 0;
+  }
+  submitEnd = emscripten_get_now();
+
+  times->total   = submitEnd - acquireBegin;
+  times->acquire = acquireEnd - acquireBegin;
+  times->encode  = encodeEnd - acquireEnd;
+  times->submit  = submitEnd - encodeEnd;
+  return 1;
+}
+
+static void
+record_stats(WebGPURenderBench   *state,
+             WebGPURenderSamples *samples) {
   GPUFrameStats stats;
 
   if (GPUGetLastFrameStats(state->device, &stats) != GPU_OK) {
     return;
   }
-  if (stats.hotPathAllocCount > state->maxAllocCount) {
-    state->maxAllocCount = stats.hotPathAllocCount;
+  if (stats.hotPathAllocCount > samples->maxAllocCount) {
+    samples->maxAllocCount = stats.hotPathAllocCount;
   }
-  if (stats.hotPathAllocBytes > state->maxAllocBytes) {
-    state->maxAllocBytes = stats.hotPathAllocBytes;
+  if (stats.hotPathAllocBytes > samples->maxAllocBytes) {
+    samples->maxAllocBytes = stats.hotPathAllocBytes;
   }
-  if (stats.hotPathFreeCount > state->maxFreeCount) {
-    state->maxFreeCount = stats.hotPathFreeCount;
+  if (stats.hotPathFreeCount > samples->maxFreeCount) {
+    samples->maxFreeCount = stats.hotPathFreeCount;
   }
-  if (stats.hotPathFreeBytes > state->maxFreeBytes) {
-    state->maxFreeBytes = stats.hotPathFreeBytes;
+  if (stats.hotPathFreeBytes > samples->maxFreeBytes) {
+    samples->maxFreeBytes = stats.hotPathFreeBytes;
   }
 }
 
 static void
-snapshot_stats(WebGPURenderBench *state) {
+snapshot_stats(WebGPURenderBench   *state,
+               WebGPURenderSamples *samples) {
   /* Offscreen work has no frame end to publish current runtime counters. */
   gpuDeviceEndFrame(state->device);
-  record_stats(state);
+  record_stats(state, samples);
+}
+
+static void
+sort_samples(WebGPURenderSamples *samples) {
+  qsort(samples->total,
+        samples->sampleCount,
+        sizeof(*samples->total),
+        compare_samples);
+  qsort(samples->acquire,
+        samples->sampleCount,
+        sizeof(*samples->acquire),
+        compare_samples);
+  qsort(samples->encode,
+        samples->sampleCount,
+        sizeof(*samples->encode),
+        compare_samples);
+  qsort(samples->submit,
+        samples->sampleCount,
+        sizeof(*samples->submit),
+        compare_samples);
+}
+
+static size_t
+format_samples(char                      *output,
+               size_t                     capacity,
+               const char                *label,
+               const WebGPURenderSamples *samples) {
+  int count;
+
+  count = snprintf(
+    output,
+    capacity,
+    "%s\n"
+    "  total:   %6.3f / %6.3f / %6.3f us\n"
+    "  acquire: %6.3f / %6.3f / %6.3f us\n"
+    "  encode:  %6.3f / %6.3f / %6.3f us\n"
+    "  submit:  %6.3f / %6.3f / %6.3f us\n"
+    "  alloc:   %" PRIu64 " calls, %" PRIu64 " bytes\n"
+    "  free:    %" PRIu64 " calls, %" PRIu64 " bytes\n"
+    "  dropped: %u batches\n",
+    label,
+    percentile(samples->total, samples->sampleCount, 0.50),
+    percentile(samples->total, samples->sampleCount, 0.95),
+    percentile(samples->total, samples->sampleCount, 0.99),
+    percentile(samples->acquire, samples->sampleCount, 0.50),
+    percentile(samples->acquire, samples->sampleCount, 0.95),
+    percentile(samples->acquire, samples->sampleCount, 0.99),
+    percentile(samples->encode, samples->sampleCount, 0.50),
+    percentile(samples->encode, samples->sampleCount, 0.95),
+    percentile(samples->encode, samples->sampleCount, 0.99),
+    percentile(samples->submit, samples->sampleCount, 0.50),
+    percentile(samples->submit, samples->sampleCount, 0.95),
+    percentile(samples->submit, samples->sampleCount, 0.99),
+    samples->maxAllocCount,
+    samples->maxAllocBytes,
+    samples->maxFreeCount,
+    samples->maxFreeBytes,
+    samples->droppedBatches
+  );
+  return count > 0 && (size_t)count < capacity ? (size_t)count : 0u;
+}
+
+static void
+publish_report(WebGPURenderBench *state) {
+  char   output[2048];
+  size_t used;
+
+  sort_samples(&state->modes[WEBGPU_RENDER_SERIAL_SUBMIT]);
+  sort_samples(&state->modes[WEBGPU_RENDER_BATCH_SUBMIT]);
+  used = (size_t)snprintf(output,
+                          sizeof(output),
+                          "WebGPU warm offscreen render\n"
+                          "median / p95 / p99 per command\n\n");
+  used += format_samples(output + used,
+                         sizeof(output) - used,
+                         "serial queue submits",
+                         &state->modes[WEBGPU_RENDER_SERIAL_SUBMIT]);
+  output[used++] = '\n';
+  used += format_samples(output + used,
+                         sizeof(output) - used,
+                         "one batched queue submit",
+                         &state->modes[WEBGPU_RENDER_BATCH_SUBMIT]);
+  output[used] = '\0';
+  publish_results(output);
 }
 
 static void
 run_frame(void *userData) {
-  WebGPURenderBench *state;
-  double             begin, end;
+  WebGPURenderBench   *state;
+  WebGPURenderSamples *samples;
+  WebGPURenderTimes    times;
+  double               scale;
 
-  state = userData;
+  state   = userData;
+  samples = &state->modes[state->mode];
   if (state->draining) {
-    snapshot_stats(state);
-    qsort(state->samples,
-          state->sampleCount,
-          sizeof(*state->samples),
-          compare_samples);
-    publish_results(percentile(state->samples,
-                               state->sampleCount,
-                               0.50),
-                    percentile(state->samples,
-                               state->sampleCount,
-                               0.95),
-                    percentile(state->samples,
-                               state->sampleCount,
-                               0.99),
-                    state->maxAllocCount,
-                    state->maxAllocBytes,
-                    state->maxFreeCount,
-                    state->maxFreeBytes,
-                    state->droppedBatches);
-    emscripten_cancel_main_loop();
+    snapshot_stats(state, samples);
+    if ((uint32_t)state->mode + 1u < WEBGPU_RENDER_MODE_COUNT) {
+      state->mode     = (WebGPURenderMode)((uint32_t)state->mode + 1u);
+      state->draining = false;
+      GPUResetStats(state->device);
+      set_status("GPU: warming batched WebGPU submit", 0);
+    } else {
+      publish_report(state);
+      emscripten_cancel_main_loop();
+    }
     return;
   }
 
-  if (state->frameCount > WEBGPU_RENDER_WARMUP_FRAMES) {
-    snapshot_stats(state);
+  if (samples->frameCount > WEBGPU_RENDER_WARMUP_FRAMES) {
+    snapshot_stats(state, samples);
   }
   GPUResetStats(state->device);
-  begin = emscripten_get_now();
-  for (uint32_t i = 0u; i < WEBGPU_RENDER_BATCH_SIZE; i++) {
-    if (!encode_command(state)) {
-      state->droppedBatches++;
-      return;
-    }
-  }
-  end = emscripten_get_now();
-
-  state->frameCount++;
-  if (state->frameCount <= WEBGPU_RENDER_WARMUP_FRAMES) {
+  if (!run_commands(state, &times)) {
+    samples->droppedBatches++;
     return;
   }
 
-  snapshot_stats(state);
-  state->samples[state->sampleCount++] =
-    (end - begin) * 1000.0 / WEBGPU_RENDER_BATCH_SIZE;
-  if (state->sampleCount == WEBGPU_RENDER_SAMPLE_COUNT) {
+  samples->frameCount++;
+  if (samples->frameCount <= WEBGPU_RENDER_WARMUP_FRAMES) {
+    return;
+  }
+
+  snapshot_stats(state, samples);
+  scale = 1000.0 / WEBGPU_RENDER_BATCH_SIZE;
+  samples->total[samples->sampleCount]   = times.total * scale;
+  samples->acquire[samples->sampleCount] = times.acquire * scale;
+  samples->encode[samples->sampleCount]  = times.encode * scale;
+  samples->submit[samples->sampleCount]  = times.submit * scale;
+  samples->sampleCount++;
+  if (samples->sampleCount == WEBGPU_RENDER_SAMPLE_COUNT) {
     state->draining = true;
   }
 }
