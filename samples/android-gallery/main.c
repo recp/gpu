@@ -1,22 +1,8 @@
 #include "../common/android_samples.h"
 
-#include <string.h>
-
 static const GPUAndroidSampleDefinition*
 sample_definition(const char *id) {
-  const GPUAndroidSampleDefinition *definitions[] = {
-    GPUSampleAndroidTriangle(),
-    GPUSampleAndroidTexturedCube()
-  };
-
-  for (uint32_t i = 0u;
-       i < sizeof(definitions) / sizeof(definitions[0]);
-       i++) {
-    if (id && strcmp(id, definitions[i]->id) == 0) {
-      return definitions[i];
-    }
-  }
-  return definitions[0];
+  return GPUSampleAndroidWebDefinition(id);
 }
 
 void
@@ -28,5 +14,10 @@ android_main(struct android_app *app) {
                                     "sample",
                                     id,
                                     sizeof(id));
-  GPUSampleAndroidRunDefinition(app, sample_definition(id));
+  const GPUAndroidSampleDefinition *definition;
+
+  definition = sample_definition(id);
+  if (definition) {
+    GPUSampleAndroidRunDefinition(app, definition);
+  }
 }

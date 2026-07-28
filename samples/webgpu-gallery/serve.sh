@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEV_DIR="$SCRIPT_DIR/.dev"
-DEFAULT_ROOT="$SCRIPT_DIR/../../out/build/webgpu-sample-check/samples/webgpu"
+DEFAULT_ROOT="$SCRIPT_DIR/../../out/build/webgpu-sample-check/samples/gallery/samples/webgpu"
 ROOT="${1:-${GPU_WEBGPU_ROOT:-$DEFAULT_ROOT}}"
 PORT="${GPU_WEBGPU_PORT:-8765}"
 IP="$(ipconfig getifaddr en0 2>/dev/null ||

@@ -7,11 +7,13 @@
   <uses-feature android:name="android.hardware.vulkan.version"
                 android:version="0x400003"
                 android:required="true"/>
+  <uses-permission android:name="android.permission.INTERNET"/>
   <application android:label="GPU + USL Samples"
                android:hasCode="true"
                android:debuggable="true"
                android:theme="@android:style/Theme.Material.NoActionBar">
     <activity android:name=".SampleActivity"
+              android:process=":sample"
               android:configChanges="orientation|screenSize|keyboardHidden"
               android:screenOrientation="unspecified"
               android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen"

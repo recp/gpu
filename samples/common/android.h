@@ -9,6 +9,11 @@
 #include <stdint.h>
 
 typedef struct GPUAndroidSample GPUAndroidSample;
+typedef int (*GPUAndroidSampleStart)(void);
+
+typedef struct GPUAndroidWebConfig {
+  GPUAndroidSampleStart start;
+} GPUAndroidWebConfig;
 
 typedef struct GPUAndroidSampleCallbacks {
   bool (*create)(GPUAndroidSample *sample, void *userData);
@@ -22,9 +27,12 @@ typedef struct GPUAndroidSampleCallbacks {
 
 typedef struct GPUAndroidSampleDefinition {
   const GPUAndroidSampleCallbacks *callbacks;
+  const void                      *config;
+  const GPUFeature                *optionalFeatures;
   const char                      *id;
   const char                      *name;
   size_t                           userDataSize;
+  uint32_t                         optionalFeatureCount;
 } GPUAndroidSampleDefinition;
 
 struct GPUAndroidSample {
@@ -36,6 +44,7 @@ struct GPUAndroidSample {
   GPUSurface                      *surface;
   GPUSwapchain                    *swapchain;
   const GPUAndroidSampleCallbacks *callbacks;
+  const GPUAndroidSampleDefinition *definition;
   void                            *userData;
   const char                      *name;
   uint32_t                         width;
@@ -59,7 +68,8 @@ void
 GPUSampleAndroidRun(struct android_app              *app,
                     const char                      *name,
                     const GPUAndroidSampleCallbacks *callbacks,
-                    void                            *userData);
+                    void                            *userData,
+                    const GPUAndroidSampleDefinition *definition);
 
 void
 GPUSampleAndroidRunDefinition(struct android_app               *app,
@@ -70,5 +80,8 @@ GPUSampleAndroidIntentExtra(struct android_app *app,
                             const char         *key,
                             char               *value,
                             size_t              capacity);
+
+const GPUAndroidSampleCallbacks*
+GPUSampleAndroidWebCallbacks(void);
 
 #endif

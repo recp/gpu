@@ -8,7 +8,7 @@
 #import "../common/SampleApp.h"
 #import "../common/SampleStats.h"
 #import "../common/SampleUSL.h"
-#import "CubeData.h"
+#import "../gallery/textured-cube/CubeData.h"
 
 #ifndef GPU_SAMPLE_BACKEND
 #  define GPU_SAMPLE_BACKEND GPU_BACKEND_METAL

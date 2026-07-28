@@ -4,9 +4,6 @@
 #include "android.h"
 
 const GPUAndroidSampleDefinition*
-GPUSampleAndroidTriangle(void);
-
-const GPUAndroidSampleDefinition*
-GPUSampleAndroidTexturedCube(void);
+GPUSampleAndroidWebDefinition(const char *id);
 
 #endif

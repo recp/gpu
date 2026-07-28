@@ -6,7 +6,7 @@
 #include <windows.h>
 
 #include "../common/Win32Sample.h"
-#include "../textured-cube-usl/CubeData.h"
+#include "../gallery/textured-cube/CubeData.h"
 
 #include <stddef.h>
 #include <stdint.h>

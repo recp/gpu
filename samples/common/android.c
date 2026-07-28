@@ -81,9 +81,11 @@ static bool
 gpu_android_create(GPUAndroidSample *sample) {
   GPUInstanceCreateInfo instanceInfo      = {0};
   GPUAdapterProperties  adapterProperties = {0};
+  GPUDeviceCreateInfo   deviceInfo        = {0};
   GPURuntimeConfig      runtime           = {0};
+  GPUFeature            features[16];
   GPUResult             result;
-  uint32_t              adapterCount;
+  uint32_t              adapterCount, featureCount;
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
@@ -104,8 +106,38 @@ gpu_android_create(GPUAndroidSample *sample) {
     return GPUSampleAndroidFail(sample, "adapter");
   }
 
-  sample->device = GPUCreateDeviceWithDefaultQueues(sample->adapter);
-  if (!sample->device) {
+  features[0] = GPU_FEATURE_COMPUTE;
+  features[1] = GPU_FEATURE_INDIRECT_DRAW;
+  features[2] = GPU_FEATURE_MULTI_DRAW;
+  featureCount = 3u;
+  if (sample->definition) {
+    for (uint32_t i = 0u;
+         i < sample->definition->optionalFeatureCount &&
+         featureCount < sizeof(features) / sizeof(features[0]);
+         i++) {
+      GPUFeature feature;
+      bool       duplicate;
+
+      feature   = sample->definition->optionalFeatures[i];
+      duplicate = false;
+      for (uint32_t j = 0u; j < featureCount; j++) {
+        duplicate |= features[j] == feature;
+      }
+      if (!duplicate) {
+        features[featureCount++] = feature;
+      }
+    }
+  }
+  deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  deviceInfo.chain.structSize      = sizeof(deviceInfo);
+  deviceInfo.optional.pFeatures    = features;
+  deviceInfo.optional.featureCount = featureCount;
+  if (GPUCreateDevice(
+        sample->adapter,
+        &deviceInfo,
+        &sample->device
+      ) != GPU_OK ||
+      !sample->device) {
     return GPUSampleAndroidFail(sample, "device");
   }
   sample->queue = GPUGetQueue(sample->device, GPU_QUEUE_GRAPHICS, 0u);
@@ -250,7 +282,8 @@ void
 GPUSampleAndroidRun(struct android_app              *app,
                     const char                      *name,
                     const GPUAndroidSampleCallbacks *callbacks,
-                    void                            *userData) {
+                    void                            *userData,
+                    const GPUAndroidSampleDefinition *definition) {
   GPUAndroidSample sample = {0};
 
   if (!app || !name || !callbacks || !callbacks->create ||
@@ -260,6 +293,7 @@ GPUSampleAndroidRun(struct android_app              *app,
 
   sample.app       = app;
   sample.callbacks = callbacks;
+  sample.definition = definition;
   sample.userData  = userData;
   sample.name      = name;
   app->userData    = &sample;
@@ -313,7 +347,8 @@ GPUSampleAndroidRunDefinition(struct android_app               *app,
   GPUSampleAndroidRun(app,
                       definition->name,
                       definition->callbacks,
-                      userData);
+                      userData,
+                      definition);
   free(userData);
 }
 
