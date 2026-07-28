@@ -186,6 +186,9 @@ target_include_directories(gpu
 file(GLOB GPU_PUBLIC_HEADERS CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/include/gpu/*.h"
 )
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  ${GPU_PUBLIC_HEADERS}
+)
 
 if(BUILD_SHARED_LIBS)
   target_compile_definitions(gpu PRIVATE GPU_EXPORTS)
