@@ -303,16 +303,19 @@ webgpu_createPipeline(GPUDevice                         *device,
     free(vertexAttributes);
     return GPU_ERROR_OUT_OF_MEMORY;
   }
-  vertexEntryMask   = gpuShaderEntryBit(info->library, info->vertexEntry);
-  fragmentEntryMask = gpuShaderEntryBit(info->library, info->fragmentEntry);
-  entryMask          = vertexEntryMask | fragmentEntryMask;
-  automaticGroupMask = gpuShaderWGSLStaticGroups(info->library, entryMask);
-  if (vertexEntryMask == 0u || fragmentEntryMask == 0u ||
-      automaticGroupMask == UINT32_MAX) {
-    free(state);
-    free(vertexBuffers);
-    free(vertexAttributes);
-    return GPU_ERROR_INVALID_ARGUMENT;
+  automaticGroupMask = 0u;
+  if (gpuShaderLibraryHasEntryResourceInfo(info->library)) {
+    vertexEntryMask   = gpuShaderEntryBit(info->library, info->vertexEntry);
+    fragmentEntryMask = gpuShaderEntryBit(info->library, info->fragmentEntry);
+    entryMask          = vertexEntryMask | fragmentEntryMask;
+    automaticGroupMask = gpuShaderWGSLStaticGroups(info->library, entryMask);
+    if (vertexEntryMask == 0u || fragmentEntryMask == 0u ||
+        automaticGroupMask == UINT32_MAX) {
+      free(state);
+      free(vertexBuffers);
+      free(vertexAttributes);
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
   }
   automaticGroupMask &= ~requiredBindGroupMask;
   if (gpu_webgpuCreatePipelineLayout(device,

@@ -2653,6 +2653,7 @@ gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout *pipelineLayout,
                                       uint32_t entryPointCount,
                                       GPUShaderStageFlags fallbackStages,
                                       uint32_t *outRequiredGroupMask) {
+  GPUPipelineLayoutPriv      *pipelinePriv;
   const GPUShaderReflection *reflection;
   uint32_t combinedGroupMask;
   int ok;
@@ -2666,6 +2667,27 @@ gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout *pipelineLayout,
   }
 
   combinedGroupMask = 0u;
+  if (!library->_metadata) {
+    /* Raw backend shaders use the caller-provided layout as their contract. */
+    pipelinePriv = gpu_pipelineLayoutPriv(pipelineLayout);
+    if (!pipelinePriv ||
+        pipelinePriv->bindGroupLayoutCount >= 32u) {
+      return 0;
+    }
+    for (uint32_t i = 0u; i < entryPointCount; i++) {
+      if (!entryPoints[i] || !entryPoints[i][0]) {
+        return 0;
+      }
+    }
+    combinedGroupMask = pipelinePriv->bindGroupLayoutCount > 0u
+                          ? (1u << pipelinePriv->bindGroupLayoutCount) - 1u
+                          : 0u;
+    if (outRequiredGroupMask) {
+      *outRequiredGroupMask = combinedGroupMask;
+    }
+    return 1;
+  }
+
   if (gpuShaderLibraryHasEntryResourceInfo(library)) {
     for (uint32_t i = 0u; i < entryPointCount; i++) {
       GPUShaderReflection entryReflection;

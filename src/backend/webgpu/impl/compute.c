@@ -36,11 +36,15 @@ webgpu_createComputePipeline(GPUDevice                          *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  entryMask = gpuShaderEntryBit(info->library, info->entryPoint);
-  automaticGroupMask = gpuShaderWGSLStaticGroups(info->library, entryMask);
-  if (entryMask == 0u || automaticGroupMask == UINT32_MAX) {
-    free(state);
-    return GPU_ERROR_INVALID_ARGUMENT;
+  automaticGroupMask = 0u;
+  if (gpuShaderLibraryHasEntryResourceInfo(info->library)) {
+    entryMask = gpuShaderEntryBit(info->library, info->entryPoint);
+    automaticGroupMask =
+      gpuShaderWGSLStaticGroups(info->library, entryMask);
+    if (entryMask == 0u || automaticGroupMask == UINT32_MAX) {
+      free(state);
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
   }
   automaticGroupMask &= ~pipeline->_requiredBindGroupMask;
   if (gpu_webgpuCreatePipelineLayout(device,

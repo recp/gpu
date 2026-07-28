@@ -758,7 +758,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
-  set(GPU_WEBGPU_GALLERY_VERSION "42")
+  set(GPU_WEBGPU_GALLERY_VERSION "43")
   set(GPU_WEBGPU_SAMPLE_WGSL_LABEL "Generated WGSL")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
@@ -1116,10 +1116,10 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${GPU_WEBGPU_TEXTURED_QUAD_DIR}/textured_quad.usl")
   set(GPU_WEBGPU_TEXTURED_QUAD_US
       "${GPU_WEBGPU_TEXTURED_QUAD_DIR}/textured_quad.us")
-  set(GPU_WEBGPU_SAMPLE_TITLE "Texture path")
-  set(GPU_WEBGPU_SAMPLE_KIND "Render / texture + sampler")
+  set(GPU_WEBGPU_SAMPLE_TITLE "Transfer chain")
+  set(GPU_WEBGPU_SAMPLE_KIND "Transfer + binding / buffer + texture")
   set(GPU_WEBGPU_SAMPLE_DESCRIPTION
-      "A copied checkerboard validating transfer, USL reflection, typed texture layouts, and bind groups.")
+      "All four copy directions execute; the texture-to-texture result is then bound and sampled.")
   set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/textured-quad.c")
   set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/textured-quad.usl")
   set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/textured-quad.wgsl")
@@ -2781,6 +2781,13 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${GPU_WEBGPU_GALLERY_DIR}"
   )
 
+  gpu_add_webgpu_gallery_sample(
+    blit
+    blit
+    "Texture blit"
+    "Blit / nearest + linear"
+    "A 32x32 color test pattern scales to 256x256 renderable targets through nearest and linear texture blits."
+  )
   gpu_add_webgpu_gallery_sample(
     compute-particles
     particles

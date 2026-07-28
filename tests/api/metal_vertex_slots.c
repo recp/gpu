@@ -1,5 +1,6 @@
 #include "test.h"
 #include "../../src/api/device_internal.h"
+#include "../../src/api/render/pipeline_internal.h"
 #include "../../src/backend/mt/binding_limits.h"
 
 static void
@@ -124,8 +125,10 @@ check_direct_msl_slots(GPUDevice *device) {
   pipelineInfo.vertex.bufferLayoutCount = 1u;
   pipelineInfo.vertex.pBufferLayouts    = &vertexLayout;
   if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
-      !pipeline) {
-    fprintf(stderr, "Metal vertex input collided with resource slot 0\n");
+      !pipeline ||
+      pipeline->_requiredBindGroupMask != 1u) {
+    fprintf(stderr,
+            "raw Metal shader did not retain its explicit resource group\n");
     goto cleanup;
   }
   GPUDestroyRenderPipeline(pipeline);

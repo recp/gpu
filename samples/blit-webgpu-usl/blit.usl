@@ -1,0 +1,19 @@
+vertex BlitVertex {
+  position: float2
+  uv:       float2
+}
+
+struct BlitOut {
+  position: float4 #position
+  uv:       float2
+}
+
+vert blit_panel_vs(v: BlitVertex #stage_in) -> BlitOut {
+  float4(v.position, 0.0, 1.0), v.uv
+}
+
+frag blit_panel_fs(input: BlitOut #stage_in,
+                   colorTexture: texture2d<float> #texture(0),
+                   colorSampler: sampler #sampler(1)) -> float4 {
+  return colorTexture.sample(colorSampler, input.uv)
+}
