@@ -351,6 +351,7 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
                                GPU_FORMAT_RGBA8_UNORM,
                                &formatCaps) != GPU_OK ||
       !formatCaps.sampled || formatCaps.filterable ||
+      formatCaps.supportedSampleCounts != GPU_SAMPLE_COUNT_1_BIT ||
       gOwnershipFormatCalls != 1u ||
       GPUCreateDevice(adapter, NULL, &device) != GPU_OK ||
       device != &gOwnershipDevice || device->_api != &scopedApi ||
@@ -932,7 +933,14 @@ check_adapter_enumeration(GPUInstance *activeInstance) {
   for (GPUFormat format = GPU_FORMAT_R8_UNORM;
        format < GPU_FORMAT_COUNT;
        format = (GPUFormat)(format + 1)) {
-    if (GPUGetFormatCapabilities(adapters[0], format, &formatCaps) != GPU_OK) {
+    if (GPUGetFormatCapabilities(adapters[0], format, &formatCaps) != GPU_OK ||
+        (formatCaps.supportedSampleCounts &
+         ~(GPU_SAMPLE_COUNT_1_BIT |
+           GPU_SAMPLE_COUNT_2_BIT |
+           GPU_SAMPLE_COUNT_4_BIT |
+           GPU_SAMPLE_COUNT_8_BIT)) != 0u ||
+        ((formatCaps.colorAttachment || formatCaps.depthStencil) !=
+         ((formatCaps.supportedSampleCounts & GPU_SAMPLE_COUNT_1_BIT) != 0u))) {
       fprintf(stderr,
               "format capabilities query failed for %u\n",
               (uint32_t)format);
@@ -962,6 +970,7 @@ check_adapter_enumeration(GPUInstance *activeInstance) {
       !formatCaps.filterable ||
       !formatCaps.colorAttachment ||
       !formatCaps.blendable ||
+      !(formatCaps.supportedSampleCounts & GPU_SAMPLE_COUNT_1_BIT) ||
       formatCaps.depthStencil) {
     fprintf(stderr, "RGBA8 format capabilities query failed\n");
     return 0;
@@ -971,6 +980,7 @@ check_adapter_enumeration(GPUInstance *activeInstance) {
                                GPU_FORMAT_DEPTH32_FLOAT,
                                &formatCaps) != GPU_OK ||
       !formatCaps.depthStencil ||
+      !(formatCaps.supportedSampleCounts & GPU_SAMPLE_COUNT_1_BIT) ||
       formatCaps.colorAttachment) {
     fprintf(stderr, "depth format capabilities query failed\n");
     return 0;

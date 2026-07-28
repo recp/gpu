@@ -2147,10 +2147,12 @@ vk_getFormatCapabilities(
   const GPUAdapter      * __restrict adapter,
   GPUFormat              format,
   GPUFormatCapabilities * __restrict outCaps) {
-  GPUAdapterVk        *adapterVk;
-  VkFormatProperties   properties;
-  VkFormat             nativeFormat;
-  VkFormatFeatureFlags features;
+  GPUAdapterVk            *adapterVk;
+  VkImageFormatProperties imageProperties;
+  VkFormatProperties       properties;
+  VkFormat                 nativeFormat;
+  VkFormatFeatureFlags     features;
+  VkImageUsageFlags        imageUsage;
 
   adapterVk = adapter ? adapter->_priv : NULL;
   if (!adapterVk || !outCaps ||
@@ -2178,6 +2180,26 @@ vk_getFormatCapabilities(
     (features & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0u;
   outCaps->depthStencil =
     (features & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0u;
+  if (outCaps->colorAttachment || outCaps->depthStencil) {
+    imageUsage = outCaps->depthStencil
+                   ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+                   : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    if (vkGetPhysicalDeviceImageFormatProperties(
+          adapterVk->physicalDevice,
+          nativeFormat,
+          VK_IMAGE_TYPE_2D,
+          VK_IMAGE_TILING_OPTIMAL,
+          imageUsage,
+          0u,
+          &imageProperties) == VK_SUCCESS) {
+      outCaps->supportedSampleCounts =
+        imageProperties.sampleCounts &
+        (GPU_SAMPLE_COUNT_1_BIT |
+         GPU_SAMPLE_COUNT_2_BIT |
+         GPU_SAMPLE_COUNT_4_BIT |
+         GPU_SAMPLE_COUNT_8_BIT);
+    }
+  }
 }
 
 GPU_HIDE

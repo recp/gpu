@@ -40,6 +40,18 @@ mt_initFormatSupport(GPUAdapterMT *adapterMT) {
   }
 
   adapterMT->storageTier = MTLReadWriteTextureTierNone;
+  if ([device supportsTextureSampleCount:1u]) {
+    adapterMT->sampleCounts |= GPU_SAMPLE_COUNT_1_BIT;
+  }
+  if ([device supportsTextureSampleCount:2u]) {
+    adapterMT->sampleCounts |= GPU_SAMPLE_COUNT_2_BIT;
+  }
+  if ([device supportsTextureSampleCount:4u]) {
+    adapterMT->sampleCounts |= GPU_SAMPLE_COUNT_4_BIT;
+  }
+  if ([device supportsTextureSampleCount:8u]) {
+    adapterMT->sampleCounts |= GPU_SAMPLE_COUNT_8_BIT;
+  }
 #if TARGET_OS_IOS
   adapterMT->depth24Supported = false;
 #else
@@ -679,8 +691,9 @@ mt_getFormatCapabilities(
       memset(outCaps, 0, sizeof(*outCaps));
       return;
     }
-    outCaps->sampled    = true;
-    outCaps->filterable = false;
+    outCaps->supportedSampleCounts = adapterMT->sampleCounts;
+    outCaps->sampled               = true;
+    outCaps->filterable            = false;
     return;
   }
 
@@ -692,6 +705,9 @@ mt_getFormatCapabilities(
   if (mt_isFloat32Format(format)) {
     outCaps->filterable = adapterMT->float32Filterable;
     outCaps->blendable  = false;
+  }
+  if (outCaps->colorAttachment) {
+    outCaps->supportedSampleCounts = adapterMT->sampleCounts;
   }
 }
 

@@ -299,6 +299,39 @@ webgpu_isFloat32Format(GPUFormat format) {
 }
 
 static bool
+webgpu_supportsMultisampling(GPUFormat format, bool coreFeatures) {
+  switch (format) {
+    case GPU_FORMAT_R8_UINT:
+    case GPU_FORMAT_R8_SINT:
+    case GPU_FORMAT_R16_UINT:
+    case GPU_FORMAT_R16_SINT:
+    case GPU_FORMAT_RG8_UINT:
+    case GPU_FORMAT_RG8_SINT:
+    case GPU_FORMAT_R32_FLOAT:
+    case GPU_FORMAT_RG16_UINT:
+    case GPU_FORMAT_RG16_SINT:
+    case GPU_FORMAT_RGBA8_UINT:
+    case GPU_FORMAT_RGBA8_SINT:
+    case GPU_FORMAT_RGB10A2_UINT:
+    case GPU_FORMAT_RGBA16_UINT:
+    case GPU_FORMAT_RGBA16_SINT:
+    case GPU_FORMAT_RGBA16_FLOAT:
+      return coreFeatures;
+    case GPU_FORMAT_R32_UINT:
+    case GPU_FORMAT_R32_SINT:
+    case GPU_FORMAT_RG32_UINT:
+    case GPU_FORMAT_RG32_SINT:
+    case GPU_FORMAT_RG32_FLOAT:
+    case GPU_FORMAT_RGBA32_UINT:
+    case GPU_FORMAT_RGBA32_SINT:
+    case GPU_FORMAT_RGBA32_FLOAT:
+      return false;
+    default:
+      return true;
+  }
+}
+
+static bool
 webgpu_hasCoreStorage(GPUFormat format) {
   switch (format) {
     case GPU_FORMAT_R32_UINT:
@@ -432,6 +465,8 @@ webgpu_getFormatCapabilities(
     case GPU_FORMAT_STENCIL8:
     case GPU_FORMAT_DEPTH24_UNORM_STENCIL8:
     case GPU_FORMAT_DEPTH32_FLOAT:
+      outCaps->supportedSampleCounts =
+        GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT;
       outCaps->sampled      = true;
       outCaps->depthStencil = true;
       return;
@@ -440,6 +475,10 @@ webgpu_getFormatCapabilities(
         adapter,
         WGPUFeatureName_Depth32FloatStencil8
       );
+      if (outCaps->depthStencil) {
+        outCaps->supportedSampleCounts =
+          GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT;
+      }
       return;
     case GPU_FORMAT_RGB9E5_UFLOAT:
       outCaps->sampled    = true;
@@ -509,6 +548,12 @@ webgpu_getFormatCapabilities(
       adapter,
       WGPUFeatureName_BGRA8UnormStorage
     );
+  }
+  if (outCaps->colorAttachment) {
+    outCaps->supportedSampleCounts = GPU_SAMPLE_COUNT_1_BIT;
+    if (webgpu_supportsMultisampling(format, coreFeatures)) {
+      outCaps->supportedSampleCounts |= GPU_SAMPLE_COUNT_4_BIT;
+    }
   }
 }
 

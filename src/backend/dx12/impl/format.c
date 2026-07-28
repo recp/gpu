@@ -100,6 +100,7 @@ dx12_sampledFormat(GPUFormat format) {
 
 static void
 dx12_queryFormatCapabilities(GPUAdapterDX12 *adapter) {
+  static const uint32_t sampleCounts[] = {2u, 4u, 8u};
   ID3D12Device *device;
   HRESULT       result;
 
@@ -167,6 +168,23 @@ dx12_queryFormatCapabilities(GPUAdapterDX12 *adapter) {
       (attachmentSupport.Support1 & D3D12_FORMAT_SUPPORT1_BLENDABLE) != 0u;
     caps->depthStencil =
       (attachmentSupport.Support1 & D3D12_FORMAT_SUPPORT1_DEPTH_STENCIL) != 0u;
+    if (caps->colorAttachment || caps->depthStencil) {
+      caps->supportedSampleCounts = GPU_SAMPLE_COUNT_1_BIT;
+      for (uint32_t j = 0u; j < GPU_ARRAY_LEN(sampleCounts); j++) {
+        D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS levels = {0};
+
+        levels.Format      = attachmentFormat;
+        levels.SampleCount = sampleCounts[j];
+        if (SUCCEEDED(device->lpVtbl->CheckFeatureSupport(
+              device,
+              D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,
+              &levels,
+              sizeof(levels))) &&
+            levels.NumQualityLevels > 0u) {
+          caps->supportedSampleCounts |= sampleCounts[j];
+        }
+      }
+    }
   }
 
   device->lpVtbl->Release(device);

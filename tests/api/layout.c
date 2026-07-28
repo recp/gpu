@@ -73,6 +73,7 @@ GPU_ASSERT_64BIT_SIZE(GPUTransientAllocatorConfig, 40u);
 GPU_ASSERT_64BIT_SIZE(GPUShaderReflection, 24u);
 GPU_ASSERT_64BIT_SIZE(GPUShaderLibraryCreateInfo, 72u);
 GPU_ASSERT_64BIT_SIZE(GPURenderPipelineCreateInfo, 128u);
+GPU_ASSERT_64BIT_SIZE(GPUFormatCapabilities, 12u);
 GPU_ASSERT_64BIT_SIZE(GPUSubgroupMatrixPropertiesEXT, 40u);
 GPU_ASSERT_64BIT_SIZE(GPUIntersectionFunctionEXT, 16u);
 GPU_ASSERT_64BIT_SIZE(GPUIntersectionFunctionPipelineEXT, 32u);

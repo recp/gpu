@@ -999,6 +999,11 @@ GPUResult
 GPUGetFormatCapabilities(const GPUAdapter      *adapter,
                          GPUFormat              format,
                          GPUFormatCapabilities *outCaps) {
+  const GPUSampleCountFlags knownSampleCounts =
+    GPU_SAMPLE_COUNT_1_BIT |
+    GPU_SAMPLE_COUNT_2_BIT |
+    GPU_SAMPLE_COUNT_4_BIT |
+    GPU_SAMPLE_COUNT_8_BIT;
   GPUApi *api;
   bool color;
   bool integerFormat;
@@ -1010,22 +1015,30 @@ GPUGetFormatCapabilities(const GPUAdapter      *adapter,
 
   memset(outCaps, 0, sizeof(*outCaps));
   if (gpu_formatIsDepthStencil(format)) {
-    outCaps->depthStencil = true;
+    outCaps->supportedSampleCounts = GPU_SAMPLE_COUNT_1_BIT;
+    outCaps->depthStencil          = true;
   } else {
     color = gpu_formatIsKnownColor(format);
     if (color) {
       integerFormat = gpu_formatIsInteger(format);
-      outCaps->sampled         = true;
-      outCaps->filterable      = !integerFormat;
-      outCaps->storage         = !integerFormat;
-      outCaps->colorAttachment = true;
-      outCaps->blendable       = !integerFormat;
+      outCaps->supportedSampleCounts = GPU_SAMPLE_COUNT_1_BIT;
+      outCaps->sampled               = true;
+      outCaps->filterable            = !integerFormat;
+      outCaps->storage               = !integerFormat;
+      outCaps->colorAttachment       = true;
+      outCaps->blendable             = !integerFormat;
     }
   }
 
   api = gpuAdapterApi(adapter);
   if (api && api->device.getFormatCapabilities) {
     api->device.getFormatCapabilities(adapter, format, outCaps);
+  }
+  if (outCaps->colorAttachment || outCaps->depthStencil) {
+    outCaps->supportedSampleCounts &= knownSampleCounts;
+    outCaps->supportedSampleCounts |= GPU_SAMPLE_COUNT_1_BIT;
+  } else {
+    outCaps->supportedSampleCounts = 0u;
   }
 
   return GPU_OK;

@@ -82,6 +82,7 @@ typedef struct GPUAdapterMT {
   id<MTLDevice>           device;
   MTLReadWriteTextureTier storageTier;
   os_unfair_lock          subgroupLock;
+  GPUSampleCountFlags     sampleCounts;
   uint32_t                subgroupMatrixProfiles;
   uint32_t                subgroupSize;
   bool                    float32Filterable;

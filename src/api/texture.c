@@ -120,7 +120,8 @@ gpuMaxMipLevelCount(const GPUTextureCreateInfo *info) {
 static GPUResult
 gpuValidateTextureFormatUsage(const GPUDevice       *device,
                               GPUFormat              format,
-                              GPUTextureUsageFlags   usage) {
+                              GPUTextureUsageFlags   usage,
+                              uint32_t               sampleCount) {
   GPUFormatCapabilities caps;
   GPUResult             result;
 
@@ -135,7 +136,9 @@ gpuValidateTextureFormatUsage(const GPUDevice       *device,
   if (((usage & GPU_TEXTURE_USAGE_SAMPLED) && !caps.sampled) ||
       ((usage & GPU_TEXTURE_USAGE_STORAGE) && !caps.storage) ||
       ((usage & GPU_TEXTURE_USAGE_COLOR_TARGET) && !caps.colorAttachment) ||
-      ((usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) && !caps.depthStencil)) {
+      ((usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) && !caps.depthStencil) ||
+      (sampleCount > 1u &&
+       (caps.supportedSampleCounts & sampleCount) == 0u)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -196,7 +199,12 @@ gpuValidateTextureCreateInfo(const GPUDevice            *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  return gpuValidateTextureFormatUsage(device, info->format, info->usage);
+  return gpuValidateTextureFormatUsage(device,
+                                       info->format,
+                                       info->usage,
+                                       info->sampleCount
+                                         ? info->sampleCount
+                                         : 1u);
 }
 
 static uint32_t

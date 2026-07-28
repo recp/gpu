@@ -91,6 +91,11 @@ gpu_validatePipelineFormats(const GPUDevice                   *device,
                             const GPURenderPipelineCreateInfo *info) {
   GPUFormatCapabilities caps;
   GPUResult             result;
+  uint32_t              sampleCount;
+
+  sampleCount = info->multisample.sampleCount
+                  ? info->multisample.sampleCount
+                  : 1u;
 
   for (uint32_t i = 0; i < info->colorTargetCount; i++) {
     result = GPUGetFormatCapabilities(device->adapter,
@@ -100,6 +105,7 @@ gpu_validatePipelineFormats(const GPUDevice                   *device,
       return result;
     }
     if (!caps.colorAttachment ||
+        (caps.supportedSampleCounts & sampleCount) == 0u ||
         (info->pColorTargets[i].blend.enabled && !caps.blendable)) {
       return GPU_ERROR_UNSUPPORTED;
     }
@@ -112,7 +118,8 @@ gpu_validatePipelineFormats(const GPUDevice                   *device,
     if (result != GPU_OK) {
       return result;
     }
-    if (!caps.depthStencil) {
+    if (!caps.depthStencil ||
+        (caps.supportedSampleCounts & sampleCount) == 0u) {
       return GPU_ERROR_UNSUPPORTED;
     }
   }

@@ -165,13 +165,22 @@ typedef struct GPUDeviceCapabilities {
   GPULimits     limits;
 } GPUDeviceCapabilities;
 
+typedef uint32_t GPUSampleCountFlags;
+enum {
+  GPU_SAMPLE_COUNT_1_BIT = 1u << 0,
+  GPU_SAMPLE_COUNT_2_BIT = 1u << 1,
+  GPU_SAMPLE_COUNT_4_BIT = 1u << 2,
+  GPU_SAMPLE_COUNT_8_BIT = 1u << 3
+};
+
 typedef struct GPUFormatCapabilities {
-  bool sampled;
-  bool filterable;
-  bool storage;
-  bool colorAttachment;
-  bool blendable;
-  bool depthStencil;
+  GPUSampleCountFlags supportedSampleCounts;
+  bool                sampled;
+  bool                filterable;
+  bool                storage;
+  bool                colorAttachment;
+  bool                blendable;
+  bool                depthStencil;
 } GPUFormatCapabilities;
 
 typedef struct GPUCacheStats {
