@@ -8,9 +8,12 @@ typedef struct BlitVertex {
 } BlitVertex;
 
 enum {
-  BLIT_SOURCE_SIZE = 32u,
-  BLIT_TARGET_SIZE = 256u,
-  WARM_FRAME_COUNT = 8u
+  BLIT_SOURCE_SIZE        = 32u,
+  BLIT_TARGET_SIZE        = 256u,
+  BLIT_PANEL_COUNT        = 3u,
+  BLIT_VERTICES_PER_PANEL = 6u,
+  BLIT_VERTEX_COUNT       = BLIT_PANEL_COUNT * BLIT_VERTICES_PER_PANEL,
+  WARM_FRAME_COUNT        = 8u
 };
 
 typedef struct WebGPUBlit {
@@ -26,38 +29,117 @@ typedef struct WebGPUBlit {
   GPUBuffer         *vertexBuffer;
   GPUTexture        *source;
   GPUTexture        *targets[2];
-  GPUTextureView    *targetViews[2];
+  GPUTextureView    *views[BLIT_PANEL_COUNT];
   GPUSampler        *sampler;
-  GPUBindGroup      *groups[2];
+  GPUBindGroup      *groups[BLIT_PANEL_COUNT];
   WebGPURequest      request;
   uint32_t           width;
   uint32_t           height;
+  uint32_t           layoutWidth;
+  uint32_t           layoutHeight;
   uint32_t           frameCount;
+  BlitVertex         vertices[BLIT_VERTEX_COUNT];
 } WebGPUBlit;
-
-static const BlitVertex kVertices[] = {
-  { { -0.92f, -0.68f }, { 0.0f, 1.0f } },
-  { { -0.08f, -0.68f }, { 1.0f, 1.0f } },
-  { { -0.92f,  0.68f }, { 0.0f, 0.0f } },
-  { { -0.92f,  0.68f }, { 0.0f, 0.0f } },
-  { { -0.08f, -0.68f }, { 1.0f, 1.0f } },
-  { { -0.08f,  0.68f }, { 1.0f, 0.0f } },
-  { {  0.08f, -0.68f }, { 0.0f, 1.0f } },
-  { {  0.92f, -0.68f }, { 1.0f, 1.0f } },
-  { {  0.08f,  0.68f }, { 0.0f, 0.0f } },
-  { {  0.08f,  0.68f }, { 0.0f, 0.0f } },
-  { {  0.92f, -0.68f }, { 1.0f, 1.0f } },
-  { {  0.92f,  0.68f }, { 1.0f, 0.0f } }
-};
 
 static WebGPUBlit app;
 static uint8_t sourcePixels[BLIT_SOURCE_SIZE * BLIT_SOURCE_SIZE * 4u];
 
+static void
+fill_panel_vertices(BlitVertex *vertices,
+                    float       left,
+                    float       right,
+                    float       bottom,
+                    float       top) {
+  vertices[0] = (BlitVertex){{left,  bottom}, {0.0f, 1.0f}};
+  vertices[1] = (BlitVertex){{right, bottom}, {1.0f, 1.0f}};
+  vertices[2] = (BlitVertex){{left,  top},    {0.0f, 0.0f}};
+  vertices[3] = (BlitVertex){{left,  top},    {0.0f, 0.0f}};
+  vertices[4] = (BlitVertex){{right, bottom}, {1.0f, 1.0f}};
+  vertices[5] = (BlitVertex){{right, top},    {1.0f, 0.0f}};
+}
+
+static void
+fill_panel_from_pixels(WebGPUBlit *state,
+                       uint32_t    panelIndex,
+                       float       left,
+                       float       top,
+                       float       size) {
+  float width;
+  float height;
+  float right;
+  float bottom;
+
+  width  = (float)state->width;
+  height = (float)state->height;
+  right  = left + size;
+  bottom = top + size;
+  fill_panel_vertices(
+    &state->vertices[panelIndex * BLIT_VERTICES_PER_PANEL],
+    left / width * 2.0f - 1.0f,
+    right / width * 2.0f - 1.0f,
+    1.0f - bottom / height * 2.0f,
+    1.0f - top / height * 2.0f
+  );
+}
+
+static int
+update_panel_vertices(WebGPUBlit *state) {
+  float outputSize;
+  float maximumOutputSize;
+  float sourceSize;
+  float gap;
+  float totalWidth;
+  float left;
+  float top;
+
+  if (!state || !state->queue || !state->vertexBuffer ||
+      state->width == 0u || state->height == 0u) {
+    return 0;
+  }
+  if (state->layoutWidth == state->width &&
+      state->layoutHeight == state->height) {
+    return 1;
+  }
+
+  outputSize        = (float)state->height * 0.60f;
+  maximumOutputSize = (float)state->width / 2.82f;
+  if (outputSize > maximumOutputSize) {
+    outputSize = maximumOutputSize;
+  }
+  sourceSize        = outputSize * 0.46f;
+  gap               = outputSize * 0.12f;
+  totalWidth        = sourceSize + outputSize * 2.0f + gap * 2.0f;
+  left              = ((float)state->width - totalWidth) * 0.5f;
+
+  top = ((float)state->height - sourceSize) * 0.5f;
+  fill_panel_from_pixels(state, 0u, left, top, sourceSize);
+  left += sourceSize + gap;
+
+  top = ((float)state->height - outputSize) * 0.5f;
+  fill_panel_from_pixels(state, 1u, left, top, outputSize);
+  left += outputSize + gap;
+  fill_panel_from_pixels(state, 2u, left, top, outputSize);
+
+  if (GPUQueueWriteBuffer(state->queue,
+                          state->vertexBuffer,
+                          0u,
+                          state->vertices,
+                          sizeof(state->vertices)) != GPU_OK) {
+    return 0;
+  }
+  state->layoutWidth  = state->width;
+  state->layoutHeight = state->height;
+  return 1;
+}
+
 static int
 resize_canvas(WebGPUBlit *state) {
-  return resize_webgpu_canvas(state->swapchain,
-                              &state->width,
-                              &state->height);
+  if (!resize_webgpu_canvas(state->swapchain,
+                            &state->width,
+                            &state->height)) {
+    return 0;
+  }
+  return !state->vertexBuffer || update_panel_vertices(state);
 }
 
 static void
@@ -175,6 +257,11 @@ create_pipeline(WebGPUBlit *state) {
 
 static int
 create_blit_textures(WebGPUBlit *state) {
+  GPUCommandBuffer        *cmdb;
+  GPUCommandBuffer        *submitBuffers[1];
+  GPUTexture              *panelTextures[BLIT_PANEL_COUNT];
+  const char              *viewLabels[BLIT_PANEL_COUNT];
+  const char              *groupLabels[BLIT_PANEL_COUNT];
   GPUBufferCreateInfo      bufferInfo = {0};
   GPUTextureCreateInfo     textureInfo = {0};
   GPUTextureWriteRegion    write = {0};
@@ -183,24 +270,18 @@ create_blit_textures(WebGPUBlit *state) {
   GPUSamplerCreateInfo     samplerInfo = {0};
   GPUBindGroupEntry        entries[2] = {0};
   GPUBindGroupCreateInfo   groupInfo = {0};
-  GPUCommandBuffer        *cmdb;
-  GPUCommandBuffer        *submitBuffers[1];
   GPUQueueSubmitInfo       submit = {0};
 
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.label            = "blit-webgpu-panel-vertices";
-  bufferInfo.sizeBytes        = sizeof(kVertices);
+  bufferInfo.sizeBytes        = sizeof(state->vertices);
   bufferInfo.usage            = GPU_BUFFER_USAGE_VERTEX |
                                 GPU_BUFFER_USAGE_COPY_DST;
   if (GPUCreateBuffer(state->device,
                       &bufferInfo,
                       &state->vertexBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(state->queue,
-                          state->vertexBuffer,
-                          0u,
-                          kVertices,
-                          sizeof(kVertices)) != GPU_OK) {
+      !update_panel_vertices(state)) {
     set_status("GPU: failed to upload blit panel vertices", 1);
     return 0;
   }
@@ -334,25 +415,31 @@ create_blit_textures(WebGPUBlit *state) {
   entries[1].binding         = 1u;
   entries[1].bindingType     = GPU_BINDING_SAMPLER;
   entries[1].sampler         = state->sampler;
-  for (uint32_t i = 0u; i < 2u; i++) {
-    viewInfo.label = i == 0u
-                       ? "blit-webgpu-nearest-view"
-                       : "blit-webgpu-linear-view";
-    if (GPUCreateTextureView(state->targets[i],
+
+  panelTextures[0] = state->source;
+  panelTextures[1] = state->targets[0];
+  panelTextures[2] = state->targets[1];
+  viewLabels[0]    = "blit-webgpu-source-view";
+  viewLabels[1]    = "blit-webgpu-nearest-view";
+  viewLabels[2]    = "blit-webgpu-linear-view";
+  groupLabels[0]   = "blit-webgpu-source-group";
+  groupLabels[1]   = "blit-webgpu-nearest-group";
+  groupLabels[2]   = "blit-webgpu-linear-group";
+  for (uint32_t i = 0u; i < BLIT_PANEL_COUNT; i++) {
+    viewInfo.label = viewLabels[i];
+    if (GPUCreateTextureView(panelTextures[i],
                              &viewInfo,
-                             &state->targetViews[i]) != GPU_OK) {
-      set_status("GPU: failed to create blit target view", 1);
+                             &state->views[i]) != GPU_OK) {
+      set_status("GPU: failed to create blit panel view", 1);
       return 0;
     }
 
-    entries[0].textureView = state->targetViews[i];
-    groupInfo.label = i == 0u
-                        ? "blit-webgpu-nearest-group"
-                        : "blit-webgpu-linear-group";
+    entries[0].textureView = state->views[i];
+    groupInfo.label        = groupLabels[i];
     if (GPUCreateBindGroup(state->device,
                            &groupInfo,
                            &state->groups[i]) != GPU_OK) {
-      set_status("GPU: failed to create blit target group", 1);
+      set_status("GPU: failed to create blit panel group", 1);
       return 0;
     }
   }
@@ -405,10 +492,14 @@ render_frame(void *userData) {
   vertexBuffer.buffer = state->vertexBuffer;
   GPUBindRenderPipeline(pass, state->pipeline);
   GPUBindVertexBuffers(pass, 0u, 1u, &vertexBuffer);
-  GPUBindRenderGroup(pass, 0u, state->groups[0], 0u, NULL);
-  GPUDraw(pass, 6u, 1u, 0u, 0u);
-  GPUBindRenderGroup(pass, 0u, state->groups[1], 0u, NULL);
-  GPUDraw(pass, 6u, 1u, 6u, 0u);
+  for (uint32_t i = 0u; i < BLIT_PANEL_COUNT; i++) {
+    GPUBindRenderGroup(pass, 0u, state->groups[i], 0u, NULL);
+    GPUDraw(pass,
+            BLIT_VERTICES_PER_PANEL,
+            1u,
+            i * BLIT_VERTICES_PER_PANEL,
+            0u);
+  }
   GPUEndRenderPass(pass);
 
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
@@ -421,7 +512,7 @@ render_frame(void *userData) {
     GPUFrameStats stats;
 
     if (GPUGetLastFrameStats(state->device, &stats) == GPU_OK &&
-        (stats.drawCalls != 2u ||
+        (stats.drawCalls != BLIT_PANEL_COUNT ||
          stats.hotPathAllocCount != 0u ||
          stats.hotPathFreeCount != 0u)) {
       set_status("GPU: blit sample warm path regression", 1);
@@ -477,7 +568,7 @@ webgpu_ready(GPUResult  result,
   }
 
   GPUResetStats(device);
-  set_status("GPU: nearest blit left, linear blit right", 0);
+  set_status("GPU: source left, nearest blit center, linear blit right", 0);
   emscripten_set_main_loop_arg(render_frame, state, 0, true);
 }
 

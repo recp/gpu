@@ -758,7 +758,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery")
-  set(GPU_WEBGPU_GALLERY_VERSION "43")
+  set(GPU_WEBGPU_GALLERY_VERSION "44")
   set(GPU_WEBGPU_SAMPLE_WGSL_LABEL "Generated WGSL")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/common/webgpu.c")
@@ -2785,8 +2785,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     blit
     blit
     "Texture blit"
-    "Blit / nearest + linear"
-    "A 32x32 color test pattern scales to 256x256 renderable targets through nearest and linear texture blits."
+    "Blit / source + nearest + linear"
+    "The 32x32 source is magnified at left; nearest and linear 256x256 blit targets are shown at center and right."
   )
   gpu_add_webgpu_gallery_sample(
     compute-particles
