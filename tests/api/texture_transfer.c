@@ -145,20 +145,27 @@ check_tight_texture_copies(GPUDevice *device) {
     DESTINATION_OFFSET = 12u
   };
 
-  GPUQueue                  *queue;
-  GPUCommandBuffer          *cmdb;
-  GPUTransferPassEncoder        *copyPass;
-  GPUBuffer                 *source;
-  GPUBuffer                 *destination;
-  GPUTexture                *texture;
-  GPUBufferCreateInfo        bufferInfo = {0};
-  GPUTextureCreateInfo       textureInfo = {0};
-  GPUBufferTextureCopyRegion region = {0};
-  uint8_t                    sourceBytes[SOURCE_OFFSET +
-                                         TRANSFER_IMAGE_BYTES] = {0};
-  uint8_t                    destinationBytes[DESTINATION_OFFSET +
-                                              TRANSFER_IMAGE_BYTES] = {0};
-  int                        ok;
+  GPUQueue                     *queue;
+  GPUCommandBuffer             *cmdb;
+  GPUTransferPassEncoder       *copyPass;
+  GPUBuffer                    *source;
+  GPUBuffer                    *staging;
+  GPUBuffer                    *destination;
+  GPUTexture                   *textureA;
+  GPUTexture                   *textureB;
+  GPUBufferCreateInfo           bufferInfo = {0};
+  GPUTextureCreateInfo          textureInfo = {0};
+  GPUBufferCopyRegion           bufferCopy = {0};
+  GPUBufferTextureCopyRegion    region = {0};
+  GPUTextureToTextureCopyRegion textureCopy = {0};
+  GPUBufferBarrier              bufferBarrier = {0};
+  GPUTextureBarrier             textureBarrier = {0};
+  GPUBarrierBatch               barrier = {0};
+  uint8_t                       sourceBytes[SOURCE_OFFSET +
+                                            TRANSFER_IMAGE_BYTES] = {0};
+  uint8_t                       destinationBytes[DESTINATION_OFFSET +
+                                                 TRANSFER_IMAGE_BYTES] = {0};
+  int                           ok;
 
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   if (!queue) {
@@ -173,8 +180,10 @@ check_tight_texture_copies(GPUDevice *device) {
   cmdb        = NULL;
   copyPass    = NULL;
   source      = NULL;
+  staging     = NULL;
   destination = NULL;
-  texture     = NULL;
+  textureA    = NULL;
+  textureB    = NULL;
   ok          = 0;
 
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -193,8 +202,13 @@ check_tight_texture_copies(GPUDevice *device) {
     goto cleanup;
   }
 
-  bufferInfo.label     = "tight-copy-destination";
+  bufferInfo.label     = "tight-copy-staging";
   bufferInfo.sizeBytes = sizeof(destinationBytes);
+  if (GPUCreateBuffer(device, &bufferInfo, &staging) != GPU_OK || !staging) {
+    fprintf(stderr, "tight texture staging setup failed\n");
+    goto cleanup;
+  }
+  bufferInfo.label = "tight-copy-destination";
   if (GPUCreateBuffer(device, &bufferInfo, &destination) != GPU_OK ||
       !destination) {
     fprintf(stderr, "tight texture destination setup failed\n");
@@ -213,7 +227,8 @@ check_tight_texture_copies(GPUDevice *device) {
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_COPY_SRC |
                                  GPU_TEXTURE_USAGE_COPY_DST;
-  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
+  if (GPUCreateTexture(device, &textureInfo, &textureA) != GPU_OK || !textureA ||
+      GPUCreateTexture(device, &textureInfo, &textureB) != GPU_OK || !textureB) {
     fprintf(stderr, "tight texture setup failed\n");
     goto cleanup;
   }
@@ -227,6 +242,11 @@ check_tight_texture_copies(GPUDevice *device) {
   region.texture.height     = TRANSFER_HEIGHT;
   region.texture.depth      = 1u;
   region.texture.layerCount = 1u;
+  bufferCopy.sizeBytes      = sizeof(sourceBytes);
+  textureCopy.width         = TRANSFER_WIDTH;
+  textureCopy.height        = TRANSFER_HEIGHT;
+  textureCopy.depth         = 1u;
+  textureCopy.layerCount    = 1u;
   for (uint32_t iteration = 0u; iteration < 8u; iteration++) {
     if (GPUAcquireCommandBuffer(queue,
                                 "tight-texture-copy",
@@ -236,10 +256,68 @@ check_tight_texture_copies(GPUDevice *device) {
       goto cleanup;
     }
 
+    GPUCopyBufferToBuffer(copyPass, source, staging, &bufferCopy);
+    GPUEndTransferPass(copyPass);
+    copyPass = NULL;
+
+    bufferBarrier.buffer    = staging;
+    bufferBarrier.srcAccess = GPU_ACCESS_TRANSFER_WRITE;
+    bufferBarrier.dstAccess = GPU_ACCESS_TRANSFER_READ;
+    bufferBarrier.sizeBytes = sizeof(sourceBytes);
+    barrier.pBufferBarriers    = &bufferBarrier;
+    barrier.srcStages          = GPU_STAGE_TRANSFER;
+    barrier.dstStages          = GPU_STAGE_TRANSFER;
+    barrier.bufferBarrierCount = 1u;
+    GPUEncodeBarriers(cmdb, &barrier);
+
     region.bufferOffset = SOURCE_OFFSET;
-    GPUCopyBufferToTexture(copyPass, source, texture, &region);
+    copyPass = GPUBeginTransferPass(cmdb, "tight-buffer-to-texture");
+    if (!copyPass) {
+      fprintf(stderr, "tight buffer-to-texture pass failed\n");
+      goto cleanup;
+    }
+    GPUCopyBufferToTexture(copyPass, staging, textureA, &region);
+    GPUEndTransferPass(copyPass);
+    copyPass = NULL;
+
+    barrier = (GPUBarrierBatch){0};
+    textureBarrier.texture    = textureA;
+    textureBarrier.srcAccess  = GPU_ACCESS_TRANSFER_WRITE;
+    textureBarrier.dstAccess  = GPU_ACCESS_TRANSFER_READ;
+    textureBarrier.mipCount   = 1u;
+    textureBarrier.layerCount = 1u;
+    barrier.pTextureBarriers     = &textureBarrier;
+    barrier.srcStages            = GPU_STAGE_TRANSFER;
+    barrier.dstStages            = GPU_STAGE_TRANSFER;
+    barrier.textureBarrierCount  = 1u;
+    GPUEncodeBarriers(cmdb, &barrier);
+
+    copyPass = GPUBeginTransferPass(cmdb, "tight-texture-copy");
+    if (!copyPass) {
+      fprintf(stderr, "tight texture-to-texture pass failed\n");
+      goto cleanup;
+    }
+    GPUCopyTextureToTexture(copyPass, textureA, textureB, &textureCopy);
+    GPUEndTransferPass(copyPass);
+    copyPass = NULL;
+
+    barrier = (GPUBarrierBatch){0};
+    textureBarrier.texture   = textureB;
+    textureBarrier.srcAccess = GPU_ACCESS_TRANSFER_WRITE;
+    textureBarrier.dstAccess = GPU_ACCESS_TRANSFER_READ;
+    barrier.pTextureBarriers     = &textureBarrier;
+    barrier.srcStages            = GPU_STAGE_TRANSFER;
+    barrier.dstStages            = GPU_STAGE_TRANSFER;
+    barrier.textureBarrierCount  = 1u;
+    GPUEncodeBarriers(cmdb, &barrier);
+
     region.bufferOffset = DESTINATION_OFFSET;
-    GPUCopyTextureToBuffer(copyPass, texture, destination, &region);
+    copyPass = GPUBeginTransferPass(cmdb, "tight-texture-readback");
+    if (!copyPass) {
+      fprintf(stderr, "tight texture readback pass failed\n");
+      goto cleanup;
+    }
+    GPUCopyTextureToBuffer(copyPass, textureB, destination, &region);
     GPUEndTransferPass(copyPass);
     copyPass = NULL;
 
@@ -274,8 +352,13 @@ cleanup:
   if (copyPass) {
     GPUEndTransferPass(copyPass);
   }
-  GPUDestroyTexture(texture);
+  if (cmdb) {
+    (void)GPUDiscardCommandBuffer(cmdb);
+  }
+  GPUDestroyTexture(textureB);
+  GPUDestroyTexture(textureA);
   GPUDestroyBuffer(destination);
+  GPUDestroyBuffer(staging);
   GPUDestroyBuffer(source);
   return ok;
 }

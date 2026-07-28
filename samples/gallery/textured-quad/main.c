@@ -74,7 +74,6 @@ create_shader(WebGPUTexturedQuad *state) {
   uint64_t                       artifactSize;
   uint32_t                       entryCount;
   GPUResult                      result;
-  int                            hasImmutableSampler;
 
   artifact     = NULL;
   artifactSize = 0u;
@@ -106,20 +105,6 @@ create_shader(WebGPUTexturedQuad *state) {
   }
 
   entries = GPUGetBindGroupLayoutEntries(
-    state->shaderLayout->bindGroupLayouts[0], &entryCount);
-  hasImmutableSampler = 0;
-  for (uint32_t i = 0u; entries && i < entryCount; i++) {
-    if (entries[i].bindingType == GPU_BINDING_SAMPLER &&
-        entries[i].immutableSampler) {
-      hasImmutableSampler = 1;
-      break;
-    }
-  }
-  if (entryCount != 1u || !hasImmutableSampler) {
-    set_status("GPU: source-owned sampler reflection is incomplete", 1);
-    return 0;
-  }
-  entries = GPUGetBindGroupLayoutEntries(
     state->shaderLayout->bindGroupLayouts[1], &entryCount);
   if (!entries || entryCount != 2u) {
     set_status("GPU: reflected texture group is incomplete", 1);
@@ -135,9 +120,9 @@ create_pipeline(WebGPUTexturedQuad *state) {
     { GPU_VERTEX_FORMAT_FLOAT32X2, 1u, offsetof(QuadVertex, uv) }
   };
   GPUVertexBufferLayout vertexBuffer = {
-    .pAttributes   = vertexAttributes,
-    .strideBytes   = sizeof(QuadVertex),
-    .stepMode      = GPU_VERTEX_STEP_MODE_VERTEX,
+    .pAttributes    = vertexAttributes,
+    .strideBytes    = sizeof(QuadVertex),
+    .stepMode       = GPU_VERTEX_STEP_MODE_VERTEX,
     .attributeCount = 2u
   };
   GPUColorTargetState color = {0};
@@ -184,6 +169,9 @@ create_transfer_texture(WebGPUTexturedQuad *state) {
   GPUBufferCopyRegion            bufferCopy = {0};
   GPUBufferTextureCopyRegion     bufferTextureCopy = {0};
   GPUTextureToTextureCopyRegion  textureCopy = {0};
+  GPUBufferBarrier               bufferBarrier = {0};
+  GPUTextureBarrier              textureBarrier = {0};
+  GPUBarrierBatch                barrier = {0};
   GPUQueueSubmitInfo             submit = {0};
 
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -259,35 +247,95 @@ create_transfer_texture(WebGPUTexturedQuad *state) {
                         state->copySourceBuffer,
                         state->copyStagingBuffer,
                         &bufferCopy);
+  GPUEndTransferPass(copy);
 
-  bufferTextureCopy.texture.texture.aspect = GPU_TEXTURE_ASPECT_ALL;
+  bufferBarrier.buffer    = state->copyStagingBuffer;
+  bufferBarrier.srcAccess = GPU_ACCESS_TRANSFER_WRITE;
+  bufferBarrier.dstAccess = GPU_ACCESS_TRANSFER_READ;
+  bufferBarrier.sizeBytes = TRANSFER_SIZE;
+  barrier.pBufferBarriers    = &bufferBarrier;
+  barrier.srcStages          = GPU_STAGE_TRANSFER;
+  barrier.dstStages          = GPU_STAGE_TRANSFER;
+  barrier.bufferBarrierCount = 1u;
+  GPUEncodeBarriers(cmdb, &barrier);
+
+  bufferTextureCopy.texture.texture.aspect  = GPU_TEXTURE_ASPECT_ALL;
   bufferTextureCopy.texture.width           = 2u;
   bufferTextureCopy.texture.height          = 2u;
   bufferTextureCopy.texture.depth           = 1u;
   bufferTextureCopy.texture.layerCount      = 1u;
   bufferTextureCopy.bytesPerRow             = TRANSFER_ROW_PITCH;
   bufferTextureCopy.rowsPerImage            = 2u;
+  copy = GPUBeginTransferPass(cmdb, "checker-buffer-to-texture");
+  if (!copy) {
+    (void)GPUDiscardCommandBuffer(cmdb);
+    return 0;
+  }
   GPUCopyBufferToTexture(copy,
                          state->copyStagingBuffer,
                          state->copySourceTexture,
                          &bufferTextureCopy);
+  GPUEndTransferPass(copy);
 
-  textureCopy.src.aspect = GPU_TEXTURE_ASPECT_ALL;
-  textureCopy.dst.aspect = GPU_TEXTURE_ASPECT_ALL;
+  barrier = (GPUBarrierBatch){0};
+  textureBarrier.texture    = state->copySourceTexture;
+  textureBarrier.srcAccess  = GPU_ACCESS_TRANSFER_WRITE;
+  textureBarrier.dstAccess  = GPU_ACCESS_TRANSFER_READ;
+  textureBarrier.mipCount   = 1u;
+  textureBarrier.layerCount = 1u;
+  barrier.pTextureBarriers     = &textureBarrier;
+  barrier.srcStages            = GPU_STAGE_TRANSFER;
+  barrier.dstStages            = GPU_STAGE_TRANSFER;
+  barrier.textureBarrierCount  = 1u;
+  GPUEncodeBarriers(cmdb, &barrier);
+
+  textureCopy.src.aspect  = GPU_TEXTURE_ASPECT_ALL;
+  textureCopy.dst.aspect  = GPU_TEXTURE_ASPECT_ALL;
   textureCopy.width       = 2u;
   textureCopy.height      = 2u;
   textureCopy.depth       = 1u;
   textureCopy.layerCount  = 1u;
+  copy = GPUBeginTransferPass(cmdb, "checker-texture-copy");
+  if (!copy) {
+    (void)GPUDiscardCommandBuffer(cmdb);
+    return 0;
+  }
   GPUCopyTextureToTexture(copy,
                           state->copySourceTexture,
                           state->texture,
                           &textureCopy);
+  GPUEndTransferPass(copy);
+
+  barrier = (GPUBarrierBatch){0};
+  textureBarrier.texture   = state->texture;
+  textureBarrier.srcAccess = GPU_ACCESS_TRANSFER_WRITE;
+  textureBarrier.dstAccess = GPU_ACCESS_TRANSFER_READ;
+  barrier.pTextureBarriers     = &textureBarrier;
+  barrier.srcStages            = GPU_STAGE_TRANSFER;
+  barrier.dstStages            = GPU_STAGE_TRANSFER;
+  barrier.textureBarrierCount  = 1u;
+  GPUEncodeBarriers(cmdb, &barrier);
+
   bufferTextureCopy.bytesPerRow = READBACK_ROW_PITCH;
+  copy = GPUBeginTransferPass(cmdb, "checker-readback");
+  if (!copy) {
+    (void)GPUDiscardCommandBuffer(cmdb);
+    return 0;
+  }
   GPUCopyTextureToBuffer(copy,
                          state->texture,
                          state->copyReadbackBuffer,
                          &bufferTextureCopy);
   GPUEndTransferPass(copy);
+
+  barrier = (GPUBarrierBatch){0};
+  textureBarrier.srcAccess  = GPU_ACCESS_TRANSFER_READ;
+  textureBarrier.dstAccess  = GPU_ACCESS_SHADER_READ;
+  barrier.pTextureBarriers     = &textureBarrier;
+  barrier.srcStages            = GPU_STAGE_TRANSFER;
+  barrier.dstStages            = GPU_STAGE_FRAGMENT;
+  barrier.textureBarrierCount  = 1u;
+  GPUEncodeBarriers(cmdb, &barrier);
 
   submitBuffers[0]          = cmdb;
   submit.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
