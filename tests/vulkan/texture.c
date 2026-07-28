@@ -70,7 +70,7 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   GPUCommandBuffer                *cmdb           = NULL;
   GPUCommandBuffer                *buffers[1];
   GPURenderPassEncoder            *renderPass     = NULL;
-  GPUCopyPassEncoder              *copyPass       = NULL;
+  GPUTransferPassEncoder              *copyPass       = NULL;
   GPUFence                        *fence          = NULL;
   GPUVertexAttribute               attributes[2]  = {{0}};
   GPUVertexBufferLayout            vertexLayout   = {0};
@@ -331,7 +331,7 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   barrierBatch.pTextureBarriers    = &textureBarrier;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, "vulkan-usl-texture-readback");
+  copyPass = GPUBeginTransferPass(cmdb, "vulkan-usl-texture-readback");
   if (!copyPass) {
     fprintf(stderr, "failed to begin Vulkan texture copy pass\n");
     goto cleanup;
@@ -343,7 +343,7 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   copyRegion.texture.depth      = 1u;
   copyRegion.texture.layerCount = 1u;
   GPUCopyTextureToBuffer(copyPass, target, readbackBuffer, &copyRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
@@ -403,7 +403,7 @@ gpu_test_vulkan_texture(GPUDevice  *device,
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   if (renderPass) {
     GPUEndRenderPass(renderPass);

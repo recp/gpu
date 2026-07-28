@@ -102,7 +102,7 @@ webgpu_setRenderExtent(GPUCommandWebGPU *command, GPUTextureView *view) {
 }
 
 static GPUCommandWebGPU *
-webgpu_copyCommand(GPUCopyPassEncoder *pass) {
+webgpu_copyCommand(GPUTransferPassEncoder *pass) {
   return pass ? pass->_priv : NULL;
 }
 
@@ -122,9 +122,9 @@ webgpu_fillTextureCopy(WGPUTexelCopyTextureInfo *copy,
 }
 
 static void
-webgpu_copyBufferTexture(GPUCopyPassEncoder               *pass,
-                         GPUBuffer                        *buffer,
-                         GPUTexture                       *texture,
+webgpu_copyBufferTexture(GPUTransferPassEncoder          *pass,
+                         GPUBuffer                       *buffer,
+                         GPUTexture                      *texture,
                          const GPUBufferTextureCopyRegion *region,
                          bool                              bufferToTexture) {
   WGPUTexelCopyBufferInfo  bufferCopy = WGPU_TEXEL_COPY_BUFFER_INFO_INIT;
@@ -309,8 +309,8 @@ webgpu_destroyRenderPass(GPURenderPassDesc *pass) {
   GPU__UNUSED(pass);
 }
 
-static GPUCopyPassEncoder *
-webgpu_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
+static GPUTransferPassEncoder *
+webgpu_beginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
   GPUCommandWebGPU *command;
 
   command = gpu_webgpuCommand(cmdb);
@@ -334,9 +334,9 @@ webgpu_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
 }
 
 static void
-webgpu_copyBufferToBuffer(GPUCopyPassEncoder        *pass,
-                          GPUBuffer                 *src,
-                          GPUBuffer                 *dst,
+webgpu_copyBufferToBuffer(GPUTransferPassEncoder   *pass,
+                          GPUBuffer                *src,
+                          GPUBuffer                *dst,
                           const GPUBufferCopyRegion *region) {
   GPUCommandWebGPU *command;
 
@@ -354,24 +354,24 @@ webgpu_copyBufferToBuffer(GPUCopyPassEncoder        *pass,
 }
 
 static void
-webgpu_copyBufferToTexture(GPUCopyPassEncoder               *pass,
-                           GPUBuffer                        *src,
-                           GPUTexture                       *dst,
+webgpu_copyBufferToTexture(GPUTransferPassEncoder          *pass,
+                           GPUBuffer                       *src,
+                           GPUTexture                      *dst,
                            const GPUBufferTextureCopyRegion *region) {
   webgpu_copyBufferTexture(pass, src, dst, region, true);
 }
 
 static void
-webgpu_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
-                           GPUTexture                       *src,
-                           GPUBuffer                        *dst,
+webgpu_copyTextureToBuffer(GPUTransferPassEncoder          *pass,
+                           GPUTexture                      *src,
+                           GPUBuffer                       *dst,
                            const GPUBufferTextureCopyRegion *region) {
   webgpu_copyBufferTexture(pass, dst, src, region, false);
 }
 
 static void
 webgpu_copyTextureToTexture(
-  GPUCopyPassEncoder                  *pass,
+  GPUTransferPassEncoder             *pass,
   GPUTexture                          *src,
   GPUTexture                          *dst,
   const GPUTextureToTextureCopyRegion *region) {
@@ -405,7 +405,7 @@ webgpu_copyTextureToTexture(
 }
 
 static void
-webgpu_endCopyPass(GPUCopyPassEncoder *pass) {
+webgpu_endTransferPass(GPUTransferPassEncoder *pass) {
   GPUCommandWebGPU *command;
 
   command = webgpu_copyCommand(pass);
@@ -423,10 +423,11 @@ void
 webgpu_initRenderPass(GPUApiRenderPass *api) {
   api->beginRenderPass      = webgpu_beginRenderPass;
   api->destroyRenderPass    = webgpu_destroyRenderPass;
-  api->beginCopyPass        = webgpu_beginCopyPass;
+  api->beginTransferPass    = webgpu_beginTransferPass;
   api->copyBufferToBuffer   = webgpu_copyBufferToBuffer;
   api->copyBufferToTexture  = webgpu_copyBufferToTexture;
   api->copyTextureToBuffer  = webgpu_copyTextureToBuffer;
   api->copyTextureToTexture = webgpu_copyTextureToTexture;
-  api->endCopyPass          = webgpu_endCopyPass;
+  api->endTransferPass      = webgpu_endTransferPass;
+  api->blitTexture          = webgpu_blitTexture;
 }

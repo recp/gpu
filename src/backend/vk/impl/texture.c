@@ -808,6 +808,24 @@ vk__finishTexture(GPUDevice                  *device,
   uint32_t      subresourceCount;
 
   deviceVk         = device->_priv;
+  if (device->adapter && device->adapter->_priv) {
+    GPUAdapterVk      *adapterVk;
+    VkFormatProperties properties;
+
+    adapterVk = device->adapter->_priv;
+    vkGetPhysicalDeviceFormatProperties(adapterVk->physicalDevice,
+                                         imageInfo->format,
+                                         &properties);
+    state->blitSrc =
+      (properties.optimalTilingFeatures &
+       VK_FORMAT_FEATURE_BLIT_SRC_BIT) != 0u;
+    state->blitDst =
+      (properties.optimalTilingFeatures &
+       VK_FORMAT_FEATURE_BLIT_DST_BIT) != 0u;
+    state->linearBlit =
+      (properties.optimalTilingFeatures &
+       VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0u;
+  }
 #ifdef VK_KHR_copy_memory_indirect
   if (deviceVk->indirectMemoryToTextureCopy && device->adapter &&
       device->adapter->_priv) {

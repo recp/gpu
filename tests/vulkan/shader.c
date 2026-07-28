@@ -213,7 +213,7 @@ test_mrt_render(GPUDevice  *device,
   GPUCommandBuffer                *cmdb           = NULL;
   GPUCommandBuffer                *buffers[1];
   GPURenderPassEncoder            *renderPass     = NULL;
-  GPUCopyPassEncoder              *copyPass       = NULL;
+  GPUTransferPassEncoder              *copyPass       = NULL;
   GPUFence                        *fence          = NULL;
   GPUColorTargetState              colorTargets[2] = {{0}};
   GPUVertexAttribute               attribute       = {0};
@@ -393,7 +393,7 @@ test_mrt_render(GPUDevice  *device,
   barrierBatch.pTextureBarriers    = textureBarriers;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, "vulkan-usl-mrt-readback");
+  copyPass = GPUBeginTransferPass(cmdb, "vulkan-usl-mrt-readback");
   if (!copyPass) {
     fprintf(stderr, "failed to begin Vulkan MRT copy pass\n");
     goto cleanup;
@@ -411,7 +411,7 @@ test_mrt_render(GPUDevice  *device,
                            readbackBuffer,
                            &copyRegion);
   }
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
@@ -461,7 +461,7 @@ test_mrt_render(GPUDevice  *device,
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   if (renderPass) {
     GPUEndRenderPass(renderPass);

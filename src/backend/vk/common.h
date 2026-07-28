@@ -489,6 +489,9 @@ typedef struct GPUTextureVk {
   bool               layoutUniform;
   bool               ownsMemory;
   bool               sparse;
+  bool               blitSrc;
+  bool               blitDst;
+  bool               linearBlit;
 #ifdef VK_KHR_copy_memory_indirect
   bool               indirectCopyDst;
   bool               indirectCopyPending;
@@ -693,7 +696,7 @@ struct GPUCommandBufferVk {
   GPURenderEncoderVk        renderState;
   GPUComputePassEncoder     computeEncoder;
   GPUComputeEncoderVk       computeState;
-  GPUCopyPassEncoder        copyEncoder;
+  GPUTransferPassEncoder        copyEncoder;
 #if defined(VK_KHR_acceleration_structure) && \
     defined(VK_KHR_ray_tracing_pipeline)
   GPURayTracingPassEncoderEXT rayTracingEncoder;

@@ -99,7 +99,7 @@ gpu_test_msaa_resolve_sample(GPUDevice *device, const char *bytecodePath) {
   GPUTextureView                 *resolvedView       = NULL;
   GPUCommandBuffer               *cmdb               = NULL;
   GPURenderPassEncoder           *renderPass         = NULL;
-  GPUCopyPassEncoder             *copyPass           = NULL;
+  GPUTransferPassEncoder             *copyPass           = NULL;
   GPUFence                       *fence              = NULL;
   void                           *bytecode;
   uint64_t                        bytecodeSize;
@@ -356,7 +356,7 @@ gpu_test_msaa_resolve_sample(GPUDevice *device, const char *bytecodePath) {
   barrierBatch.dstStages        = GPU_STAGE_TRANSFER;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, "api-msaa-readback");
+  copyPass = GPUBeginTransferPass(cmdb, "api-msaa-readback");
   if (!copyPass) {
     fprintf(stderr, "failed to begin MSAA readback pass\n");
     goto cleanup;
@@ -376,7 +376,7 @@ gpu_test_msaa_resolve_sample(GPUDevice *device, const char *bytecodePath) {
                          resolvedTexture,
                          readbackBuffer,
                          &copyRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
@@ -425,7 +425,7 @@ gpu_test_msaa_resolve_sample(GPUDevice *device, const char *bytecodePath) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   if (renderPass) {
     GPUEndRenderPass(renderPass);

@@ -19,6 +19,7 @@
 #include "cmdqueue_internal.h"
 #include "descr/descriptor_internal.h"
 #include "device_internal.h"
+#include "pass/blit_internal.h"
 #include "pipeline_cache_internal.h"
 
 static const char*
@@ -1704,6 +1705,13 @@ gpu_finalizeDevice(GPUAdapter *adapter,
     api->device.destroyDevice(device);
     return result;
   }
+  result = gpuInitBlitDevice(device);
+  if (result != GPU_OK) {
+    gpuDestroyBindGroupCacheDevice(device);
+    gpuDestroyPipelineCacheDevice(device);
+    api->device.destroyDevice(device);
+    return result;
+  }
 
   device->enabledFeatureMask = enabledFeatureMask;
   gpu_fillFeatureSet(device->enabledFeatureMask,
@@ -1949,6 +1957,7 @@ GPUDestroyDevice(GPUDevice * __restrict device) {
     (void)api->device.waitIdle(device);
   }
   gpu_destroyTransientAllocator(device);
+  gpuDestroyBlitDevice(device);
   gpuDestroyBindGroupCacheDevice(device);
   gpuDestroyPipelineCacheDevice(device);
   if (api->device.destroyDevice) {

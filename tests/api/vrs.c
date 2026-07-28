@@ -124,7 +124,7 @@ gpu_vrsExecutionSmoke(GPUDevice                      *device,
   GPUTextureView               *rateView;
   GPUCommandBuffer             *cmdb;
   GPURenderPassEncoder         *renderPass;
-  GPUCopyPassEncoder           *copyPass;
+  GPUTransferPassEncoder           *copyPass;
   GPUFence                     *fence;
   GPUColorTargetState           colorTarget    = {0};
   GPUVertexAttribute            attribute      = {0};
@@ -398,7 +398,7 @@ gpu_vrsExecutionSmoke(GPUDevice                      *device,
   barrierBatch.pTextureBarriers    = &textureBarrier;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, "api-vrs-readback");
+  copyPass = GPUBeginTransferPass(cmdb, "api-vrs-readback");
   if (!copyPass) {
     ok = 0;
     goto cleanup;
@@ -410,7 +410,7 @@ gpu_vrsExecutionSmoke(GPUDevice                      *device,
   copyRegion.texture.depth      = 1u;
   copyRegion.texture.layerCount = 1u;
   GPUCopyTextureToBuffer(copyPass, target, readbackBuffer, &copyRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
@@ -436,7 +436,7 @@ gpu_vrsExecutionSmoke(GPUDevice                      *device,
                           targetBytesPerRow);
 
 cleanup:
-  if (copyPass) GPUEndCopyPass(copyPass);
+  if (copyPass) GPUEndTransferPass(copyPass);
   if (renderPass) GPUEndRenderPass(renderPass);
   free(bytecode);
   GPUDestroyFence(fence);

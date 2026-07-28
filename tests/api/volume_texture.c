@@ -153,7 +153,7 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
   GPUBindGroup                  *group;
   GPUCommandBuffer              *cmdb;
   GPUComputePassEncoder         *computePass;
-  GPUCopyPassEncoder            *copyPass;
+  GPUTransferPassEncoder            *copyPass;
   GPUFence                      *fence;
   void                          *bytecode;
   GPUCommandBuffer              *submitBuffers[1];
@@ -393,7 +393,7 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
   barrierBatch.pTextureBarriers    = &textureBarrier;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, "api-volume-readback");
+  copyPass = GPUBeginTransferPass(cmdb, "api-volume-readback");
   if (!copyPass) {
     fprintf(stderr, "volume copy pass creation failed\n");
     ok = 0;
@@ -408,7 +408,7 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
   copyRegion.texture.depth           = GPU_VOLUME_VIEW_SIZE;
   copyRegion.texture.layerCount      = 1u;
   GPUCopyTextureToBuffer(copyPass, outputTexture, readback, &copyRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
@@ -447,7 +447,7 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   if (computePass) {
     GPUEndComputePass(computePass);

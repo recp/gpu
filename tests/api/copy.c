@@ -12,13 +12,14 @@ enum {
   COPY_TEST_WARM_RUNS  = 16u
 };
 
-static GPUCopyPassEncoder gScopedCopyPass;
+static GPUTransferPassEncoder gScopedCopyPass;
 static uint32_t           gScopedCopyBeginCalls;
 static uint32_t           gScopedCopyEndCalls;
 static uint32_t           gScopedIndirectCopyCalls;
 static uint32_t           gScopedIndirectTextureCopyCalls;
+static uint32_t           gScopedBlitCalls;
 
-static GPUCopyPassEncoder *
+static GPUTransferPassEncoder *
 begin_scoped_copy_pass(GPUCommandBuffer *cmdb, const char *label) {
   (void)cmdb;
   (void)label;
@@ -28,13 +29,13 @@ begin_scoped_copy_pass(GPUCommandBuffer *cmdb, const char *label) {
 }
 
 static void
-end_scoped_copy_pass(GPUCopyPassEncoder *pass) {
+end_scoped_copy_pass(GPUTransferPassEncoder *pass) {
   (void)pass;
   gScopedCopyEndCalls++;
 }
 
 static void
-copy_scoped_memory_indirect(GPUCopyPassEncoder                  *pass,
+copy_scoped_memory_indirect(GPUTransferPassEncoder                  *pass,
                             const GPUIndirectMemoryCopyInfoEXT *info) {
   (void)pass;
   (void)info;
@@ -43,23 +44,34 @@ copy_scoped_memory_indirect(GPUCopyPassEncoder                  *pass,
 
 static void
 copy_scoped_memory_to_texture_indirect(
-  GPUCopyPassEncoder                           *pass,
+  GPUTransferPassEncoder                           *pass,
   const GPUIndirectMemoryToTextureCopyInfoEXT *info) {
   (void)pass;
   (void)info;
   gScopedIndirectTextureCopyCalls++;
 }
 
+static void
+blit_scoped_texture(GPUCommandBuffer         *cmdb,
+                    const GPUTextureBlitInfo *info) {
+  (void)cmdb;
+  (void)info;
+  gScopedBlitCalls++;
+}
+
 static int
 check_copy_pass_device_dispatch(GPUDevice *activeDevice) {
   GPUApi             *api;
-  GPUCopyPassEncoder *pass;
+  GPUTransferPassEncoder *pass;
   GPUApi              scopedApi;
   GPUDevice           device = {0};
   GPUQueue            queue  = {0};
   GPUCommandBuffer    cmdb   = {0};
   GPUBuffer           commandBuffer = {0};
   GPUTexture          texture = {0};
+  GPUTexture          blitSource = {0};
+  GPUTexture          blitDestination = {0};
+  GPUTextureBlitInfo  blitInfo = {0};
   GPUIndirectTextureSubresourceEXT subresource = {0};
   GPUIndirectMemoryCopyInfoEXT indirectInfo = {0};
   GPUIndirectMemoryToTextureCopyInfoEXT indirectTextureInfo = {0};
@@ -71,24 +83,28 @@ check_copy_pass_device_dispatch(GPUDevice *activeDevice) {
   }
 
   scopedApi                          = *api;
-  scopedApi.renderPass.beginCopyPass = begin_scoped_copy_pass;
-  scopedApi.renderPass.endCopyPass   = end_scoped_copy_pass;
+  scopedApi.renderPass.beginTransferPass = begin_scoped_copy_pass;
+  scopedApi.renderPass.endTransferPass   = end_scoped_copy_pass;
   scopedApi.renderPass.copyMemoryIndirect = copy_scoped_memory_indirect;
   scopedApi.renderPass.copyMemoryToTextureIndirect =
     copy_scoped_memory_to_texture_indirect;
+  scopedApi.renderPass.blitTexture = blit_scoped_texture;
   device._api                        = &scopedApi;
+  device.adapter                     = activeDevice->adapter;
   device.enabledFeatureMask          =
     (1ull << GPU_FEATURE_BUFFER_DEVICE_ADDRESS) |
     (1ull << GPU_FEATURE_INDIRECT_MEMORY_COPY) |
     (1ull << GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY);
   queue._device                      = &device;
+  queue.bits                         = GPU_QUEUE_GRAPHICS_BIT;
   cmdb._queue                        = &queue;
   gScopedCopyBeginCalls              = 0u;
   gScopedCopyEndCalls                = 0u;
   gScopedIndirectCopyCalls           = 0u;
   gScopedIndirectTextureCopyCalls    = 0u;
+  gScopedBlitCalls                   = 0u;
 
-  pass = GPUBeginCopyPass(&cmdb, "device-scoped-copy");
+  pass = GPUBeginTransferPass(&cmdb, "device-scoped-copy");
   if (pass != &gScopedCopyPass ||
       gScopedCopyBeginCalls != 1u ||
       !cmdb._activeEncoder) {
@@ -139,9 +155,43 @@ check_copy_pass_device_dispatch(GPUDevice *activeDevice) {
     return 0;
   }
 
-  GPUEndCopyPass(pass);
+  GPUEndTransferPass(pass);
   if (gScopedCopyEndCalls != 1u || cmdb._activeEncoder) {
     fprintf(stderr, "copy pass end did not use device dispatch\n");
+    return 0;
+  }
+
+  blitSource.device        = &device;
+  blitSource.format        = GPU_FORMAT_RGBA8_UNORM;
+  blitSource.dimension     = GPU_TEXTURE_DIMENSION_2D;
+  blitSource.width         = 2u;
+  blitSource.height        = 2u;
+  blitSource.depthOrLayers = 1u;
+  blitSource.mipLevelCount = 1u;
+  blitSource.sampleCount   = 1u;
+  blitSource.usage         = GPU_TEXTURE_USAGE_SAMPLED |
+                             GPU_TEXTURE_USAGE_COPY_SRC;
+  blitDestination          = blitSource;
+  blitDestination.width    = 4u;
+  blitDestination.height   = 4u;
+  blitDestination.usage    = GPU_TEXTURE_USAGE_COLOR_TARGET |
+                             GPU_TEXTURE_USAGE_COPY_DST;
+  blitInfo.src             = &blitSource;
+  blitInfo.dst             = &blitDestination;
+  blitInfo.srcRegion.width = 2u;
+  blitInfo.srcRegion.height = 2u;
+  blitInfo.srcRegion.depth = 1u;
+  blitInfo.srcRegion.layerCount = 1u;
+  blitInfo.dstRegion.width = 4u;
+  blitInfo.dstRegion.height = 4u;
+  blitInfo.dstRegion.depth = 1u;
+  blitInfo.dstRegion.layerCount = 1u;
+  blitInfo.filter = GPU_FILTER_NEAREST;
+  GPUBlitTexture(&cmdb, &blitInfo);
+  blitSource.usage = GPU_TEXTURE_USAGE_COPY_SRC;
+  GPUBlitTexture(&cmdb, &blitInfo);
+  if (gScopedBlitCalls != 1u) {
+    fprintf(stderr, "texture blit validation or device dispatch failed\n");
     return 0;
   }
 
@@ -166,12 +216,12 @@ static int
 check_copy_pass_validation(GPUDevice *device) {
   GPUQueue        *queue;
   GPUCommandBuffer fakeCmdb = {0};
-  GPUCopyPassEncoder endedPass = {0};
+  GPUTransferPassEncoder endedPass = {0};
   GPUCommandBuffer *cmdb;
   GPUCommandBuffer *buffers[1];
   GPUQueueSubmitInfo submitInfo = {0};
   GPUFence *fence;
-  GPUCopyPassEncoder *copyPass;
+  GPUTransferPassEncoder *copyPass;
   GPUBufferCreateInfo bufferInfo = {0};
   GPUTextureCreateInfo textureInfo = {0};
   GPUBufferCopyRegion bufferRegion = {0};
@@ -195,19 +245,19 @@ check_copy_pass_validation(GPUDevice *device) {
     return 0;
   }
 
-  if (GPUBeginCopyPass(NULL, "null")) {
+  if (GPUBeginTransferPass(NULL, "null")) {
     fprintf(stderr, "copy pass accepted null command buffer\n");
     return 0;
   }
   fakeCmdb._submitted = true;
-  if (GPUBeginCopyPass(&fakeCmdb, "submitted")) {
+  if (GPUBeginTransferPass(&fakeCmdb, "submitted")) {
     fprintf(stderr, "copy pass accepted submitted command buffer\n");
     return 0;
   }
 
   fakeCmdb._submitted = false;
   fakeCmdb._activeEncoder = true;
-  if (GPUBeginCopyPass(&fakeCmdb, "active")) {
+  if (GPUBeginTransferPass(&fakeCmdb, "active")) {
     fprintf(stderr, "copy pass accepted command buffer with active encoder\n");
     return 0;
   }
@@ -280,7 +330,7 @@ check_copy_pass_validation(GPUDevice *device) {
   GPUCopyBufferToTexture(&endedPass, sourceBuffer, textureA, &bufferTextureRegion);
   GPUCopyTextureToBuffer(&endedPass, textureB, textureReadback, &bufferTextureRegion);
   GPUCopyTextureToTexture(&endedPass, textureA, textureB, &textureRegion);
-  GPUEndCopyPass(&endedPass);
+  GPUEndTransferPass(&endedPass);
 
   ok = GPUAcquireCommandBuffer(queue, "reflection-copy-pass", &cmdb) == GPU_OK && cmdb;
   if (!ok) {
@@ -288,13 +338,13 @@ check_copy_pass_validation(GPUDevice *device) {
     goto cleanup;
   }
 
-  copyPass = GPUBeginCopyPass(cmdb, "reflection-copy");
+  copyPass = GPUBeginTransferPass(cmdb, "reflection-copy");
   if (!copyPass) {
     fprintf(stderr, "failed to begin copy pass\n");
     ok = 0;
     goto cleanup;
   }
-  if (GPUBeginCopyPass(cmdb, "nested-copy")) {
+  if (GPUBeginTransferPass(cmdb, "nested-copy")) {
     fprintf(stderr, "copy pass accepted nested encoder\n");
     ok = 0;
     goto cleanup;
@@ -322,7 +372,7 @@ check_copy_pass_validation(GPUDevice *device) {
   GPUCopyBufferToTexture(copyPass, NULL, textureA, &bufferTextureRegion);
   GPUCopyTextureToBuffer(copyPass, textureB, NULL, &bufferTextureRegion);
   GPUCopyTextureToTexture(copyPass, textureA, textureB, NULL);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   ok = GPUCreateFence(device, NULL, &fence) == GPU_OK && fence;
@@ -371,7 +421,7 @@ check_copy_pass_validation(GPUDevice *device) {
       goto cleanup;
     }
 
-    copyPass = GPUBeginCopyPass(cmdb, "warm-copy-pass");
+    copyPass = GPUBeginTransferPass(cmdb, "warm-copy-pass");
     if (!copyPass) {
       fprintf(stderr, "failed to begin warm copy pass\n");
       ok = 0;
@@ -388,7 +438,7 @@ check_copy_pass_validation(GPUDevice *device) {
                            textureB,
                            textureReadback,
                            &bufferTextureRegion);
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
     copyPass = NULL;
 
     buffers[0]                  = cmdb;
@@ -422,7 +472,7 @@ check_copy_pass_validation(GPUDevice *device) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   GPUDestroyFence(fence);
   GPUDestroyTexture(textureB);
@@ -441,7 +491,7 @@ check_copy_pass_invalid_copy_noops(GPUDevice *device) {
   GPUCommandBuffer *buffers[1];
   GPUQueueSubmitInfo submitInfo = {0};
   GPUFence *fence;
-  GPUCopyPassEncoder *copyPass;
+  GPUTransferPassEncoder *copyPass;
   GPUBufferCreateInfo bufferInfo = {0};
   GPUTextureCreateInfo textureInfo = {0};
   GPUTextureWriteRegion writeRegion = {0};
@@ -579,7 +629,7 @@ check_copy_pass_invalid_copy_noops(GPUDevice *device) {
     goto cleanup;
   }
 
-  copyPass = GPUBeginCopyPass(cmdb, "invalid-copy-noops");
+  copyPass = GPUBeginTransferPass(cmdb, "invalid-copy-noops");
   if (!copyPass) {
     fprintf(stderr, "failed to begin invalid copy pass\n");
     ok = 0;
@@ -632,7 +682,7 @@ check_copy_pass_invalid_copy_noops(GPUDevice *device) {
   GPUCopyTextureToTexture(copyPass, noCopySrcTexture, protectedTexture, &fullTextureCopy);
 
   GPUCopyTextureToBuffer(copyPass, protectedTexture, textureReadback, &fullTextureRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   ok = GPUCreateFence(device, NULL, &fence) == GPU_OK && fence;
@@ -673,7 +723,7 @@ check_copy_pass_invalid_copy_noops(GPUDevice *device) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   GPUDestroyFence(fence);
   GPUDestroyTexture(noCopySrcTexture);
@@ -698,7 +748,7 @@ check_compressed_texture_copies(GPUDevice *device) {
   GPUCommandBuffer             *cmdb;
   GPUCommandBuffer             *buffers[1];
   GPUFence                     *fence;
-  GPUCopyPassEncoder           *copyPass;
+  GPUTransferPassEncoder           *copyPass;
   GPUBuffer                    *upload;
   GPUBuffer                    *readback;
   GPUTexture                   *textureA;
@@ -834,7 +884,7 @@ check_compressed_texture_copies(GPUDevice *device) {
     fprintf(stderr, "compressed copy command buffer failed\n");
     goto cleanup;
   }
-  copyPass = GPUBeginCopyPass(cmdb, "compressed-copy");
+  copyPass = GPUBeginTransferPass(cmdb, "compressed-copy");
   if (!copyPass) {
     fprintf(stderr, "compressed copy pass failed\n");
     ok = 0;
@@ -857,7 +907,7 @@ check_compressed_texture_copies(GPUDevice *device) {
   GPUCopyBufferToTexture(copyPass, upload, textureA, &bufferRegion);
   bufferRegion.bufferOffset = 512u;
   GPUCopyTextureToBuffer(copyPass, textureA, readback, &bufferRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   ok = GPUCreateFence(device, NULL, &fence) == GPU_OK && fence;
@@ -893,7 +943,7 @@ check_compressed_texture_copies(GPUDevice *device) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   GPUDestroyFence(fence);
   GPUDestroyTexture(textureB);
@@ -903,11 +953,418 @@ cleanup:
   return ok;
 }
 
+static int
+blit_result_matches(const uint8_t *result,
+                    const uint8_t *sourcePixels,
+                    const char    *path) {
+  for (uint32_t y = 0u; y < 4u; y++) {
+    for (uint32_t x = 0u; x < 4u; x++) {
+      const uint8_t *expected =
+        sourcePixels + (((y / 2u) * 2u + x / 2u) * 4u);
+      const uint8_t *actual =
+        result + y * COPY_TEST_ROW_PITCH + x * 4u;
+
+      if (memcmp(actual, expected, 4u) != 0) {
+        fprintf(stderr,
+                "%s blit mismatch at (%u, %u): "
+                "got %u %u %u %u, expected %u %u %u %u\n",
+                path,
+                x,
+                y,
+                actual[0],
+                actual[1],
+                actual[2],
+                actual[3],
+                expected[0],
+                expected[1],
+                expected[2],
+                expected[3]);
+        return 0;
+      }
+    }
+  }
+  return 1;
+}
+
+static int
+blit_linear_result_matches(const uint8_t *result,
+                           const uint8_t *sourcePixels,
+                           const char    *path) {
+  static const uint32_t weights[4] = {0u, 1u, 3u, 4u};
+
+  for (uint32_t y = 0u; y < 4u; y++) {
+    for (uint32_t x = 0u; x < 4u; x++) {
+      const uint8_t *actual =
+        result + y * COPY_TEST_ROW_PITCH + x * 4u;
+      uint32_t wx = weights[x];
+      uint32_t wy = weights[y];
+
+      for (uint32_t channel = 0u; channel < 4u; channel++) {
+        uint32_t expected =
+          ((4u - wx) * (4u - wy) * sourcePixels[channel] +
+           wx * (4u - wy) * sourcePixels[4u + channel] +
+           (4u - wx) * wy * sourcePixels[8u + channel] +
+           wx * wy * sourcePixels[12u + channel] +
+           8u) /
+          16u;
+        uint32_t delta = actual[channel] > expected
+                           ? actual[channel] - expected
+                           : expected - actual[channel];
+
+        if (delta > 1u) {
+          fprintf(stderr,
+                  "%s linear blit mismatch at (%u, %u), channel %u: "
+                  "got %u, expected %u\n",
+                  path,
+                  x,
+                  y,
+                  channel,
+                  actual[channel],
+                  expected);
+          return 0;
+        }
+      }
+    }
+  }
+  return 1;
+}
+
+static int
+blit_partial_result_matches(const uint8_t *result,
+                            const uint8_t *sourcePixels,
+                            const uint8_t *clearPixel,
+                            const char    *path) {
+  for (uint32_t y = 0u; y < 4u; y++) {
+    for (uint32_t x = 0u; x < 4u; x++) {
+      const uint8_t *actual =
+        result + y * COPY_TEST_ROW_PITCH + x * 4u;
+      const uint8_t *expected =
+        x >= 1u && x < 3u && y >= 1u && y < 3u
+          ? sourcePixels
+          : clearPixel;
+
+      if (memcmp(actual, expected, 4u) != 0) {
+        fprintf(stderr,
+                "%s partial blit mismatch at (%u, %u): "
+                "got %u %u %u %u, expected %u %u %u %u\n",
+                path,
+                x,
+                y,
+                actual[0],
+                actual[1],
+                actual[2],
+                actual[3],
+                expected[0],
+                expected[1],
+                expected[2],
+                expected[3]);
+        return 0;
+      }
+    }
+  }
+  return 1;
+}
+
+static int
+run_texture_blit(GPUQueue                  *queue,
+                 const GPUTextureBlitInfo *blitInfo,
+                 GPUTexture               *destination,
+                 GPUBuffer                *readback,
+                 GPUFence                 *fence,
+                 const char               *label,
+                 uint8_t                  *result) {
+  GPUBufferTextureCopyRegion readRegion = {0};
+  GPUQueueSubmitInfo         submitInfo = {0};
+  GPUCommandBuffer          *commandBuffers[1];
+  GPUCommandBuffer          *cmdb;
+  GPUTransferPassEncoder    *transferPass;
+  int                        ok;
+
+  cmdb         = NULL;
+  transferPass = NULL;
+  ok = GPUAcquireCommandBuffer(queue, label, &cmdb) == GPU_OK && cmdb;
+  if (!ok) {
+    fprintf(stderr, "%s command buffer creation failed\n", label);
+    goto cleanup;
+  }
+
+  GPUBlitTexture(cmdb, blitInfo);
+  transferPass = GPUBeginTransferPass(cmdb, "api-blit-readback");
+  if (!transferPass) {
+    fprintf(stderr, "%s readback transfer pass failed\n", label);
+    ok = 0;
+    goto cleanup;
+  }
+
+  readRegion.bytesPerRow        = COPY_TEST_ROW_PITCH;
+  readRegion.rowsPerImage       = 4u;
+  readRegion.texture.width      = 4u;
+  readRegion.texture.height     = 4u;
+  readRegion.texture.depth      = 1u;
+  readRegion.texture.layerCount = 1u;
+  GPUCopyTextureToBuffer(transferPass,
+                         destination,
+                         readback,
+                         &readRegion);
+  GPUEndTransferPass(transferPass);
+  transferPass = NULL;
+
+  commandBuffers[0]                = cmdb;
+  submitInfo.chain.sType           = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize      = sizeof(submitInfo);
+  submitInfo.ppCommandBuffers      = commandBuffers;
+  submitInfo.commandBufferCount    = 1u;
+  submitInfo.fence                 = fence;
+  ok = GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
+       GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+  cmdb = NULL;
+  if (!ok ||
+      GPUQueueReadBuffer(queue,
+                         readback,
+                         0u,
+                         result,
+                         COPY_TEST_ROW_PITCH * 4u) != GPU_OK) {
+    fprintf(stderr, "%s submit or readback failed\n", label);
+    ok = 0;
+  }
+
+cleanup:
+  if (transferPass) {
+    GPUEndTransferPass(transferPass);
+  }
+  return ok;
+}
+
+static int
+check_texture_blit(GPUDevice *device) {
+  static const uint8_t sourcePixels[2u * 2u * 4u] = {
+    255u,   0u,   0u, 255u,   0u, 255u,   0u, 255u,
+      0u,   0u, 255u, 255u, 255u, 255u, 255u, 255u
+  };
+  static const uint8_t clearPixel[4u] = {17u, 34u, 51u, 255u};
+  uint8_t                    clearPixels[4u * 4u * 4u];
+  GPUTextureCreateInfo       textureInfo = {0};
+  GPUTextureWriteRegion      writeRegion = {0};
+  GPUTextureBlitInfo         blitInfo = {0};
+  GPUBufferCreateInfo        bufferInfo = {0};
+  GPUQueueSubmitInfo         submitInfo = {0};
+  GPUCommandBuffer          *commandBuffers[1];
+  GPUQueue                  *queue;
+  GPUCommandBuffer          *cmdb;
+  GPUTexture                *source;
+  GPUTexture                *destination;
+  GPUBuffer                 *readback;
+  GPUFence                  *fence;
+  uint8_t                    result[COPY_TEST_ROW_PITCH * 4u] = {0};
+  int                        ok;
+
+  queue        = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  cmdb         = NULL;
+  source       = NULL;
+  destination  = NULL;
+  readback     = NULL;
+  fence        = NULL;
+  ok           = queue != NULL;
+  if (!ok) {
+    fprintf(stderr, "failed to get graphics queue for blit test\n");
+    goto cleanup;
+  }
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "api-blit-source";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = 2u;
+  textureInfo.height           = 2u;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
+                                 GPU_TEXTURE_USAGE_COPY_SRC |
+                                 GPU_TEXTURE_USAGE_COPY_DST;
+  ok = GPUCreateTexture(device, &textureInfo, &source) == GPU_OK;
+
+  textureInfo.label  = "api-blit-destination";
+  textureInfo.width  = 4u;
+  textureInfo.height = 4u;
+  textureInfo.usage  = GPU_TEXTURE_USAGE_COLOR_TARGET |
+                       GPU_TEXTURE_USAGE_COPY_SRC |
+                       GPU_TEXTURE_USAGE_COPY_DST;
+  ok = ok &&
+       GPUCreateTexture(device, &textureInfo, &destination) == GPU_OK;
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "api-blit-readback";
+  bufferInfo.sizeBytes        = sizeof(result);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
+                                GPU_BUFFER_USAGE_COPY_DST;
+  ok = ok && GPUCreateBuffer(device, &bufferInfo, &readback) == GPU_OK;
+  if (!ok) {
+    fprintf(stderr, "blit resource creation failed\n");
+    goto cleanup;
+  }
+
+  for (uint32_t i = 0u; i < 4u * 4u; i++) {
+    memcpy(clearPixels + i * 4u, clearPixel, sizeof(clearPixel));
+  }
+
+  writeRegion.width        = 2u;
+  writeRegion.height       = 2u;
+  writeRegion.depth        = 1u;
+  writeRegion.layerCount   = 1u;
+  writeRegion.bytesPerRow  = 2u * 4u;
+  writeRegion.rowsPerImage = 2u;
+  if (GPUQueueWriteTexture(queue,
+                           source,
+                           &writeRegion,
+                           sourcePixels,
+                           sizeof(sourcePixels)) != GPU_OK) {
+    fprintf(stderr, "blit source upload failed\n");
+    ok = 0;
+    goto cleanup;
+  }
+
+  blitInfo.src                         = source;
+  blitInfo.dst                         = destination;
+  blitInfo.srcRegion.texture.aspect    = GPU_TEXTURE_ASPECT_ALL;
+  blitInfo.srcRegion.width             = 2u;
+  blitInfo.srcRegion.height            = 2u;
+  blitInfo.srcRegion.depth             = 1u;
+  blitInfo.srcRegion.layerCount        = 1u;
+  blitInfo.dstRegion.texture.aspect    = GPU_TEXTURE_ASPECT_ALL;
+  blitInfo.dstRegion.width             = 4u;
+  blitInfo.dstRegion.height            = 4u;
+  blitInfo.dstRegion.depth             = 1u;
+  blitInfo.dstRegion.layerCount        = 1u;
+  blitInfo.filter                      = GPU_FILTER_NEAREST;
+
+  if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
+    fprintf(stderr, "blit fence creation failed\n");
+    ok = 0;
+    goto cleanup;
+  }
+  submitInfo.chain.sType           = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize      = sizeof(submitInfo);
+  submitInfo.ppCommandBuffers      = commandBuffers;
+  submitInfo.commandBufferCount    = 1u;
+  submitInfo.fence                 = fence;
+  ok = run_texture_blit(queue,
+                        &blitInfo,
+                        destination,
+                        readback,
+                        fence,
+                        "api-texture-blit-nearest",
+                        result) &&
+       blit_result_matches(result, sourcePixels, "public nearest");
+  if (!ok) {
+    goto cleanup;
+  }
+
+  memset(result, 0, sizeof(result));
+  blitInfo.filter = GPU_FILTER_LINEAR;
+  ok = run_texture_blit(queue,
+                        &blitInfo,
+                        destination,
+                        readback,
+                        fence,
+                        "api-texture-blit-linear",
+                        result) &&
+       blit_linear_result_matches(result, sourcePixels, "public");
+  if (!ok) {
+    goto cleanup;
+  }
+
+  writeRegion.width        = 4u;
+  writeRegion.height       = 4u;
+  writeRegion.bytesPerRow  = 4u * 4u;
+  writeRegion.rowsPerImage = 4u;
+  if (GPUQueueWriteTexture(queue,
+                           destination,
+                           &writeRegion,
+                           clearPixels,
+                           sizeof(clearPixels)) != GPU_OK) {
+    fprintf(stderr, "partial blit destination upload failed\n");
+    ok = 0;
+    goto cleanup;
+  }
+
+  memset(result, 0, sizeof(result));
+  blitInfo.srcRegion.width          = 1u;
+  blitInfo.srcRegion.height         = 1u;
+  blitInfo.dstRegion.texture.x      = 1u;
+  blitInfo.dstRegion.texture.y      = 1u;
+  blitInfo.dstRegion.width          = 2u;
+  blitInfo.dstRegion.height         = 2u;
+  blitInfo.filter                   = GPU_FILTER_NEAREST;
+  ok = run_texture_blit(queue,
+                        &blitInfo,
+                        destination,
+                        readback,
+                        fence,
+                        "api-texture-blit-partial",
+                        result) &&
+       blit_partial_result_matches(result,
+                                   sourcePixels,
+                                   clearPixel,
+                                   "public");
+  if (!ok) {
+    goto cleanup;
+  }
+
+  GPUResetStats(device);
+  for (uint32_t i = 0u; i < COPY_TEST_WARM_RUNS; i++) {
+    ok = GPUAcquireCommandBuffer(queue, "warm-texture-blit", &cmdb) == GPU_OK &&
+         cmdb;
+    if (!ok) {
+      fprintf(stderr, "failed to acquire warm blit command buffer\n");
+      goto cleanup;
+    }
+
+    GPUBlitTexture(cmdb, &blitInfo);
+    commandBuffers[0] = cmdb;
+    ok = GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
+         GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+    cmdb = NULL;
+    if (!ok) {
+      fprintf(stderr, "warm blit submit failed\n");
+      goto cleanup;
+    }
+  }
+
+  if (device->currentFrameStats.hotPathAllocCount != 0u ||
+      device->currentFrameStats.hotPathAllocBytes != 0u ||
+      device->currentFrameStats.hotPathFreeCount != 0u ||
+      device->currentFrameStats.hotPathFreeBytes != 0u) {
+    fprintf(stderr,
+            "warm blit path allocated %llu bytes in %llu calls and freed "
+            "%llu bytes in %llu calls\n",
+            (unsigned long long)
+              device->currentFrameStats.hotPathAllocBytes,
+            (unsigned long long)
+              device->currentFrameStats.hotPathAllocCount,
+            (unsigned long long)
+              device->currentFrameStats.hotPathFreeBytes,
+            (unsigned long long)
+              device->currentFrameStats.hotPathFreeCount);
+    ok = 0;
+  }
+
+cleanup:
+  GPUDestroyFence(fence);
+  GPUDestroyBuffer(readback);
+  GPUDestroyTexture(destination);
+  GPUDestroyTexture(source);
+  return ok;
+}
+
 int
 gpu_test_copy(GPUDevice *device) {
   return check_copy_pass_device_dispatch(device) &&
          check_copy_pass_validation(device) &&
          check_copy_pass_invalid_copy_noops(device) &&
          check_compressed_texture_copies(device) &&
+         check_texture_blit(device) &&
          gpu_test_texture_transfer(device);
 }

@@ -515,7 +515,7 @@ typedef struct GPUCommandBufferDX12 {
   GPURenderEncoderDX12          renderState;
   GPUComputePassEncoder         computeEncoder;
   GPUComputeEncoderDX12         computeState;
-  GPUCopyPassEncoder            copyEncoder;
+  GPUTransferPassEncoder            copyEncoder;
   GPUAccelerationStructurePassEncoderEXT rayQueryEncoder;
   GPUAccelerationStructureEncoderDX12     rayQueryState;
   GPURayTracingPassEncoderEXT              rayTracingEncoder;

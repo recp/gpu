@@ -25,7 +25,7 @@
 #define GPU_RENDER_PASS_MAX_COLOR_ATTACHMENTS 8u
 
 static GPUApi *
-gpu_copyPassApi(const GPUCopyPassEncoder *pass) {
+gpu_transferPassApi(const GPUTransferPassEncoder *pass) {
   return pass ? gpuCommandBufferApi(pass->_cmdb) : NULL;
 }
 
@@ -612,8 +612,8 @@ GPUEndRenderPass(GPURenderPassEncoder *pass) {
 }
 
 GPU_EXPORT
-GPUCopyPassEncoder*
-GPUBeginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
+GPUTransferPassEncoder*
+GPUBeginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
   GPUDevice *device;
   GPUApi *api;
 
@@ -621,15 +621,15 @@ GPUBeginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
     return NULL;
   }
   device = gpuCommandBufferDevice(cmdb);
-  if (!(api = gpuDeviceApi(device)) || !api->renderPass.beginCopyPass) {
+  if (!(api = gpuDeviceApi(device)) || !api->renderPass.beginTransferPass) {
     return NULL;
   }
 
   {
-    GPUCopyPassEncoder *pass;
+    GPUTransferPassEncoder *pass;
 
     label = gpuDeviceDebugLabel(device, label);
-    pass = api->renderPass.beginCopyPass(cmdb, label);
+    pass = api->renderPass.beginTransferPass(cmdb, label);
     if (pass) {
       pass->_cmdb = cmdb;
       cmdb->_activeEncoder = true;
@@ -640,9 +640,9 @@ GPUBeginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
 
 GPU_EXPORT
 void
-GPUCopyBufferToBuffer(GPUCopyPassEncoder        *pass,
-                      GPUBuffer                 *src,
-                      GPUBuffer                 *dst,
+GPUCopyBufferToBuffer(GPUTransferPassEncoder   *pass,
+                      GPUBuffer                *src,
+                      GPUBuffer                *dst,
                       const GPUBufferCopyRegion *region) {
   GPUApi *api;
 
@@ -654,7 +654,7 @@ GPUCopyBufferToBuffer(GPUCopyPassEncoder        *pass,
       !gpuBufferRangeValid(dst, region->dstOffset, region->sizeBytes)) {
     return;
   }
-  if (!(api = gpu_copyPassApi(pass)) || !api->renderPass.copyBufferToBuffer) {
+  if (!(api = gpu_transferPassApi(pass)) || !api->renderPass.copyBufferToBuffer) {
     return;
   }
 
@@ -663,9 +663,9 @@ GPUCopyBufferToBuffer(GPUCopyPassEncoder        *pass,
 
 GPU_EXPORT
 void
-GPUCopyBufferToTexture(GPUCopyPassEncoder               *pass,
-                       GPUBuffer                        *src,
-                       GPUTexture                       *dst,
+GPUCopyBufferToTexture(GPUTransferPassEncoder          *pass,
+                       GPUBuffer                       *src,
+                       GPUTexture                      *dst,
                        const GPUBufferTextureCopyRegion *region) {
   GPUApi *api;
   uint64_t copyBytes;
@@ -677,7 +677,7 @@ GPUCopyBufferToTexture(GPUCopyPassEncoder               *pass,
       !gpuBufferRangeValid(src, region->bufferOffset, copyBytes)) {
     return;
   }
-  if (!(api = gpu_copyPassApi(pass)) || !api->renderPass.copyBufferToTexture) {
+  if (!(api = gpu_transferPassApi(pass)) || !api->renderPass.copyBufferToTexture) {
     return;
   }
 
@@ -686,9 +686,9 @@ GPUCopyBufferToTexture(GPUCopyPassEncoder               *pass,
 
 GPU_EXPORT
 void
-GPUCopyTextureToBuffer(GPUCopyPassEncoder               *pass,
-                       GPUTexture                       *src,
-                       GPUBuffer                        *dst,
+GPUCopyTextureToBuffer(GPUTransferPassEncoder          *pass,
+                       GPUTexture                      *src,
+                       GPUBuffer                       *dst,
                        const GPUBufferTextureCopyRegion *region) {
   GPUApi *api;
   uint64_t copyBytes;
@@ -700,7 +700,7 @@ GPUCopyTextureToBuffer(GPUCopyPassEncoder               *pass,
       !gpuBufferRangeValid(dst, region->bufferOffset, copyBytes)) {
     return;
   }
-  if (!(api = gpu_copyPassApi(pass)) || !api->renderPass.copyTextureToBuffer) {
+  if (!(api = gpu_transferPassApi(pass)) || !api->renderPass.copyTextureToBuffer) {
     return;
   }
 
@@ -709,9 +709,9 @@ GPUCopyTextureToBuffer(GPUCopyPassEncoder               *pass,
 
 GPU_EXPORT
 void
-GPUCopyTextureToTexture(GPUCopyPassEncoder                  *pass,
-                        GPUTexture                          *src,
-                        GPUTexture                          *dst,
+GPUCopyTextureToTexture(GPUTransferPassEncoder             *pass,
+                        GPUTexture                         *src,
+                        GPUTexture                         *dst,
                         const GPUTextureToTextureCopyRegion *region) {
   GPUTextureSubresourceRegion srcRegion;
   GPUTextureSubresourceRegion dstRegion;
@@ -756,7 +756,7 @@ GPUCopyTextureToTexture(GPUCopyPassEncoder                  *pass,
       (src == dst && gpu_textureCopySubresourcesOverlap(src, region))) {
     return;
   }
-  if (!(api = gpu_copyPassApi(pass)) || !api->renderPass.copyTextureToTexture) {
+  if (!(api = gpu_transferPassApi(pass)) || !api->renderPass.copyTextureToTexture) {
     return;
   }
 
@@ -765,7 +765,7 @@ GPUCopyTextureToTexture(GPUCopyPassEncoder                  *pass,
 
 GPU_EXPORT
 void
-GPUCopyMemoryIndirectEXT(GPUCopyPassEncoder                  *pass,
+GPUCopyMemoryIndirectEXT(GPUTransferPassEncoder             *pass,
                          const GPUIndirectMemoryCopyInfoEXT *info) {
   GPUDevice *device;
   GPUApi    *api;
@@ -783,7 +783,7 @@ GPUCopyMemoryIndirectEXT(GPUCopyPassEncoder                  *pass,
       !gpu_validAddressCopyFlags(info->dstFlags)) {
     return;
   }
-  if (!(api = gpu_copyPassApi(pass)) ||
+  if (!(api = gpu_transferPassApi(pass)) ||
       !api->renderPass.copyMemoryIndirect) {
     return;
   }
@@ -793,7 +793,7 @@ GPUCopyMemoryIndirectEXT(GPUCopyPassEncoder                  *pass,
 
 GPU_EXPORT
 void
-GPUCopyMemoryToTextureIndirectEXT(GPUCopyPassEncoder                          *pass,
+GPUCopyMemoryToTextureIndirectEXT(GPUTransferPassEncoder                     *pass,
                                   const GPUIndirectMemoryToTextureCopyInfoEXT *info) {
   GPUDevice *device;
   GPUApi    *api;
@@ -825,7 +825,7 @@ GPUCopyMemoryToTextureIndirectEXT(GPUCopyPassEncoder                          *p
       return;
     }
   }
-  if (!(api = gpu_copyPassApi(pass)) ||
+  if (!(api = gpu_transferPassApi(pass)) ||
       !api->renderPass.copyMemoryToTextureIndirect) {
     return;
   }
@@ -835,7 +835,7 @@ GPUCopyMemoryToTextureIndirectEXT(GPUCopyPassEncoder                          *p
 
 GPU_EXPORT
 void
-GPUEndCopyPass(GPUCopyPassEncoder *pass) {
+GPUEndTransferPass(GPUTransferPassEncoder *pass) {
   GPUApi *api;
 
   if (!pass || pass->_ended) {
@@ -845,9 +845,9 @@ GPUEndCopyPass(GPUCopyPassEncoder *pass) {
   if (pass->_cmdb) {
     pass->_cmdb->_activeEncoder = false;
   }
-  if (!(api = gpu_copyPassApi(pass)) || !api->renderPass.endCopyPass) {
+  if (!(api = gpu_transferPassApi(pass)) || !api->renderPass.endTransferPass) {
     return;
   }
 
-  api->renderPass.endCopyPass(pass);
+  api->renderPass.endTransferPass(pass);
 }

@@ -307,7 +307,7 @@ struct MTCommandBuffer {
   MTRenderEncoder         renderState;
   GPUComputePassEncoder   computeEncoder;
   MTComputeEncoder        computeState;
-  GPUCopyPassEncoder      copyEncoder;
+  GPUTransferPassEncoder      copyEncoder;
   MTCopyEncoder           copyState;
   GPUAccelerationStructurePassEncoderEXT rayQueryEncoder;
   MTRayQueryEncoder       rayQueryState;

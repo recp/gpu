@@ -1231,7 +1231,7 @@ check_render_readback_case(GPUDevice *device,
   GPUCommandBuffer *cmdb = NULL;
   GPUCommandBuffer *buffers[1];
   GPURenderPassEncoder *renderPass = NULL;
-  GPUCopyPassEncoder *copyPass = NULL;
+  GPUTransferPassEncoder *copyPass = NULL;
   GPUFence *fence = NULL;
   GPUColorTargetState colorTargets[2] = {{0}};
   GPUVertexAttribute attr = {0};
@@ -1580,7 +1580,7 @@ check_render_readback_case(GPUDevice *device,
   barrierBatch.pTextureBarriers = textureBarriers;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, label);
+  copyPass = GPUBeginTransferPass(cmdb, label);
   if (!copyPass) {
     fprintf(stderr, "failed to begin %s copy pass\n", label);
     goto cleanup;
@@ -1602,7 +1602,7 @@ check_render_readback_case(GPUDevice *device,
                            readbackBuffer,
                            &copyRegion);
   }
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
@@ -1722,7 +1722,7 @@ check_render_readback_case(GPUDevice *device,
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   if (renderPass) {
     GPUEndOcclusionQuery(renderPass);

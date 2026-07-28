@@ -109,7 +109,7 @@ render_descriptor_array(GPUDevice          *device,
   GPUBuffer                   *readback;
   GPUCommandBuffer            *cmdb;
   GPUCommandBuffer            *submitBuffers[1];
-  GPUCopyPassEncoder          *copyPass;
+  GPUTransferPassEncoder          *copyPass;
   GPUFence                    *fence;
   GPURenderPipelineCreateInfo  pipelineInfo = {0};
   GPUColorTargetState          colorTarget  = {0};
@@ -238,7 +238,7 @@ render_descriptor_array(GPUDevice          *device,
   barrierBatch.pTextureBarriers    = &barrier;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, "api-descriptor-array-render-readback");
+  copyPass = GPUBeginTransferPass(cmdb, "api-descriptor-array-render-readback");
   if (!copyPass) {
     fprintf(stderr, "descriptor array render copy pass failed\n");
     goto cleanup;
@@ -250,7 +250,7 @@ render_descriptor_array(GPUDevice          *device,
   copyRegion.texture.depth      = 1u;
   copyRegion.texture.layerCount = 1u;
   GPUCopyTextureToBuffer(copyPass, target, readback, &copyRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
@@ -342,7 +342,7 @@ render_descriptor_array(GPUDevice          *device,
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   GPUDestroyFence(fence);
   GPUDestroyBuffer(readback);
@@ -383,7 +383,7 @@ gpu_testDescriptorArray(GPUDevice *device,
   GPUCommandBuffer                 *cmdb;
   GPUCommandBuffer                 *submitBuffers[1];
   GPUComputePassEncoder            *computePass;
-  GPUCopyPassEncoder               *copyPass;
+  GPUTransferPassEncoder               *copyPass;
   GPUFence                         *fence;
   void                             *bytecode;
   const GPUBindGroupLayoutEntry    *layoutEntries;
@@ -710,7 +710,7 @@ gpu_testDescriptorArray(GPUDevice *device,
   barrierBatch.pTextureBarriers    = &textureBarrier;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, "api-descriptor-array-readback");
+  copyPass = GPUBeginTransferPass(cmdb, "api-descriptor-array-readback");
   if (!copyPass) {
     fprintf(stderr, "descriptor array copy pass creation failed\n");
     ok = 0;
@@ -726,7 +726,7 @@ gpu_testDescriptorArray(GPUDevice *device,
                          storageTextures[1],
                          textureReadback,
                          &copyRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
@@ -789,7 +789,7 @@ gpu_testDescriptorArray(GPUDevice *device,
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   if (computePass) {
     GPUEndComputePass(computePass);

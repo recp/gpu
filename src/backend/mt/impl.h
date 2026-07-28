@@ -39,5 +39,7 @@ GPU_HIDE void mt_initPipelineCache(GPUApiPipelineCache *api);
 GPU_HIDE void mt_initVRS(GPUApiVRS *api);
 GPU_HIDE void mt_initRayQuery(GPUApiRayQuery *api);
 GPU_HIDE void mt_initDescriptor(GPUApiDescriptor *api);
+GPU_HIDE void mt_blitTexture(GPUCommandBuffer         *cmdb,
+                             const GPUTextureBlitInfo *info);
 
 #endif /* mt_apis_h */

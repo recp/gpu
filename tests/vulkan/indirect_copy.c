@@ -86,7 +86,7 @@ run_indirect_copies(GPUDevice *device, GPUQueue *queue) {
   GPUBuffer                               *textureRecords;
   GPUTexture                              *texture;
   GPUCommandBuffer                        *cmdb;
-  GPUCopyPassEncoder                      *copyPass;
+  GPUTransferPassEncoder                      *copyPass;
   GPUFence                                *fence;
   uint8_t                                  bufferInput[TEST_DATA_BYTES];
   uint8_t                                  textureInput[TEST_DATA_BYTES];
@@ -204,7 +204,7 @@ run_indirect_copies(GPUDevice *device, GPUQueue *queue) {
     fprintf(stderr, "indirect copy command buffer failed\n");
     goto cleanup;
   }
-  copyPass = GPUBeginCopyPass(cmdb, "upload-indirect-records");
+  copyPass = GPUBeginTransferPass(cmdb, "upload-indirect-records");
   if (!copyPass) {
     fprintf(stderr, "indirect record upload pass failed\n");
     goto cleanup;
@@ -219,7 +219,7 @@ run_indirect_copies(GPUDevice *device, GPUQueue *queue) {
                         textureRecordUpload,
                         textureRecords,
                         &recordCopies[1]);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   commandBarriers[0].buffer    = bufferRecords;
@@ -236,7 +236,7 @@ run_indirect_copies(GPUDevice *device, GPUQueue *queue) {
   barrierBatch.bufferBarrierCount = 2u;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, "execute-indirect-copies");
+  copyPass = GPUBeginTransferPass(cmdb, "execute-indirect-copies");
   if (!copyPass) {
     fprintf(stderr, "indirect execution pass failed\n");
     goto cleanup;
@@ -272,7 +272,7 @@ run_indirect_copies(GPUDevice *device, GPUQueue *queue) {
                          texture,
                          textureReadback,
                          &readbackRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
@@ -318,7 +318,7 @@ run_indirect_copies(GPUDevice *device, GPUQueue *queue) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   GPUDestroyFence(fence);
   GPUDestroyTexture(texture);

@@ -61,6 +61,7 @@ struct GPUDevice {
   GPUPipelineCache            *_pipelineCaches;
   void                        *_pipelineCacheLock;
   void                        *_bindGroupCache;
+  void                        *_blitContext;
   void                        *transientCpuPtr;
   GPUDeviceErrorCallback       errorCallback;
   void                        *errorUserData;

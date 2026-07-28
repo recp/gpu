@@ -155,7 +155,7 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
   GPUCommandBuffer     *cmdb            = NULL;
   GPUCommandBuffer     *buffers[1];
   GPURenderPassEncoder *renderPass      = NULL;
-  GPUCopyPassEncoder   *copyPass        = NULL;
+  GPUTransferPassEncoder   *copyPass        = NULL;
   GPUFence             *fence           = NULL;
   GPUVertexAttribute    textureAttributes[2] = {{0}};
   GPUVertexAttribute    positionAttribute    = {0};
@@ -476,7 +476,7 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
   barrierBatch.pTextureBarriers    = textureBarriers;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, "coordinate-readback");
+  copyPass = GPUBeginTransferPass(cmdb, "coordinate-readback");
   if (!copyPass) {
     fprintf(stderr, "coordinate copy pass failed\n");
     goto cleanup;
@@ -496,7 +496,7 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
                          depthTarget,
                          readbackBuffer,
                          &copyRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
@@ -549,7 +549,7 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   if (renderPass) {
     GPUEndRenderPass(renderPass);

@@ -177,7 +177,7 @@ create_pipeline(WebGPUTexturedQuad *state) {
 static int
 create_transfer_texture(WebGPUTexturedQuad *state) {
   GPUCommandBuffer              *cmdb;
-  GPUCopyPassEncoder            *copy;
+  GPUTransferPassEncoder            *copy;
   GPUCommandBuffer              *submitBuffers[1];
   GPUBufferCreateInfo            bufferInfo = {0};
   GPUTextureCreateInfo           textureInfo = {0};
@@ -247,7 +247,7 @@ create_transfer_texture(WebGPUTexturedQuad *state) {
   if (GPUAcquireCommandBuffer(state->queue,
                               "textured-quad-webgpu-transfer",
                               &cmdb) != GPU_OK ||
-      !cmdb || !(copy = GPUBeginCopyPass(cmdb, "checker-transfer"))) {
+      !cmdb || !(copy = GPUBeginTransferPass(cmdb, "checker-transfer"))) {
     if (cmdb) {
       (void)GPUDiscardCommandBuffer(cmdb);
     }
@@ -287,7 +287,7 @@ create_transfer_texture(WebGPUTexturedQuad *state) {
                          state->texture,
                          state->copyReadbackBuffer,
                          &bufferTextureCopy);
-  GPUEndCopyPass(copy);
+  GPUEndTransferPass(copy);
 
   submitBuffers[0]          = cmdb;
   submit.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;

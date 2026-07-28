@@ -26,6 +26,8 @@ void webgpu_initPipeline(GPUApiRender *api);
 void webgpu_initCompute(GPUApiCompute *api);
 void webgpu_initQuery(GPUApiCommandBuffer *api);
 void webgpu_initRenderPass(GPUApiRenderPass *api);
+void webgpu_blitTexture(GPUCommandBuffer         *cmdb,
+                        const GPUTextureBlitInfo *info);
 void webgpu_initRenderEncoder(GPUApiRCE *api);
 
 #endif /* gpu_webgpu_impl_h */

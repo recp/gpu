@@ -209,7 +209,7 @@ gpu_test_texture_view_render(GPUDevice *device) {
   GPUQueue                      *queue;
   GPUCommandBuffer              *cmdb;
   GPURenderPassEncoder          *renderPass;
-  GPUCopyPassEncoder            *copyPass;
+  GPUTransferPassEncoder            *copyPass;
   GPUTexture                    *texture;
   GPUTextureView                *firstView;
   GPUTextureView                *secondView;
@@ -332,7 +332,7 @@ gpu_test_texture_view_render(GPUDevice *device) {
   barrierBatch.pTextureBarriers    = textureBarriers;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, "texture-view-render-readback");
+  copyPass = GPUBeginTransferPass(cmdb, "texture-view-render-readback");
   if (!copyPass) {
     fprintf(stderr, "texture view render copy pass failed\n");
     goto cleanup;
@@ -354,7 +354,7 @@ gpu_test_texture_view_render(GPUDevice *device) {
   copyRegion.texture.width                  = VIEW_SECOND_WIDTH;
   copyRegion.texture.height                 = VIEW_SECOND_HEIGHT;
   GPUCopyTextureToBuffer(copyPass, texture, readback, &copyRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   ok   = view_render_submit(device, queue, cmdb);
@@ -402,7 +402,7 @@ gpu_test_texture_view_render(GPUDevice *device) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   if (renderPass) {
     GPUEndRenderPass(renderPass);
@@ -419,7 +419,7 @@ gpu_test_texture_view_depth(GPUDevice *device) {
   GPUQueue                      *queue;
   GPUCommandBuffer              *cmdb;
   GPURenderPassEncoder          *renderPass;
-  GPUCopyPassEncoder            *copyPass;
+  GPUTransferPassEncoder            *copyPass;
   GPUTexture                    *texture;
   GPUTextureView                *firstView;
   GPUTextureView                *secondView;
@@ -542,7 +542,7 @@ gpu_test_texture_view_depth(GPUDevice *device) {
   barrierBatch.pTextureBarriers    = textureBarriers;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, "texture-view-depth-readback");
+  copyPass = GPUBeginTransferPass(cmdb, "texture-view-depth-readback");
   if (!copyPass) {
     fprintf(stderr, "texture view depth copy pass failed\n");
     goto cleanup;
@@ -564,7 +564,7 @@ gpu_test_texture_view_depth(GPUDevice *device) {
   copyRegion.texture.width                  = VIEW_SECOND_WIDTH;
   copyRegion.texture.height                 = VIEW_SECOND_HEIGHT;
   GPUCopyTextureToBuffer(copyPass, texture, readback, &copyRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   ok   = view_render_submit(device, queue, cmdb);
@@ -608,7 +608,7 @@ gpu_test_texture_view_depth(GPUDevice *device) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   if (renderPass) {
     GPUEndRenderPass(renderPass);
@@ -630,7 +630,7 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
   GPUQueue                  *queue;
   GPUCommandBuffer          *cmdb;
   GPURenderPassEncoder      *renderPass;
-  GPUCopyPassEncoder        *copyPass;
+  GPUTransferPassEncoder        *copyPass;
   GPUTexture                *texture;
   GPUTextureView            *view;
   GPUBuffer                 *readback;
@@ -813,7 +813,7 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
     barrierBatch.pTextureBarriers    = &textureBarrier;
     GPUEncodeBarriers(cmdb, &barrierBatch);
 
-    copyPass = GPUBeginCopyPass(cmdb,
+    copyPass = GPUBeginTransferPass(cmdb,
                                 "texture-view-depth-stencil-readback");
     if (!copyPass) {
       fprintf(stderr, "texture view depth-stencil copy pass failed\n");
@@ -849,7 +849,7 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
     copyRegion.bufferOffset           = VIEW_DS_SECOND_STENCIL_OFFSET;
     copyRegion.texture.texture.aspect = GPU_TEXTURE_ASPECT_STENCIL_ONLY;
     GPUCopyTextureToBuffer(copyPass, texture, readback, &copyRegion);
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
     copyPass = NULL;
   }
 
@@ -915,7 +915,7 @@ gpu_test_texture_view_depth_stencil(GPUDevice *device) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   if (renderPass) {
     GPUEndRenderPass(renderPass);

@@ -101,7 +101,7 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   GPUCommandBuffer                 *cmdb;
   GPUCommandBuffer                 *submitBuffers[1];
   GPURenderPassEncoder             *renderPass;
-  GPUCopyPassEncoder               *copyPass;
+  GPUTransferPassEncoder               *copyPass;
   GPUFence                         *fence;
   void                             *bytecode;
   GPUColorTargetState               colorTarget = {0};
@@ -440,7 +440,7 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   barrierBatch.pTextureBarriers    = &textureBarrier;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, "api-source-sampler-readback");
+  copyPass = GPUBeginTransferPass(cmdb, "api-source-sampler-readback");
   if (!copyPass) {
     fprintf(stderr, "source sampler copy pass creation failed\n");
     ok = 0;
@@ -456,7 +456,7 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
                          targetTexture,
                          readbackBuffer,
                          &copyRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
@@ -558,7 +558,7 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   if (renderPass) {
     GPUEndRenderPass(renderPass);

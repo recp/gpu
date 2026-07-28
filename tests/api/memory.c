@@ -323,7 +323,7 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   GPUFence                     *fence           = NULL;
   GPUSemaphore                 *semaphore       = NULL;
   GPUCommandBuffer             *cmdb            = NULL;
-  GPUCopyPassEncoder           *copyPass        = NULL;
+  GPUTransferPassEncoder           *copyPass        = NULL;
   uint8_t                      *pixels          = NULL;
   GPUCommandBuffer             *submitList[1]   = {0};
   uint32_t                      bufferInput[4]     = {1u, 3u, 5u, 7u};
@@ -631,7 +631,7 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   if (GPUCreateBuffer(device, &bufferInfo, &readback) != GPU_OK ||
       !readback ||
       GPUAcquireCommandBuffer(queue, "api-sparse-readback", &cmdb) != GPU_OK ||
-      !cmdb || !(copyPass = GPUBeginCopyPass(cmdb, "api-sparse-readback"))) {
+      !cmdb || !(copyPass = GPUBeginTransferPass(cmdb, "api-sparse-readback"))) {
     fprintf(stderr, "sparse texture readback setup failed\n");
     goto cleanup;
   }
@@ -644,7 +644,7 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   copyRegion.bytesPerRow                    = textureInfo.width * 4u;
   copyRegion.rowsPerImage                   = textureInfo.height;
   GPUCopyTextureToBuffer(copyPass, texture, readback, &copyRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   GPUResetFence(fence);

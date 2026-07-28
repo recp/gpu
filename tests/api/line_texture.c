@@ -206,7 +206,7 @@ gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath) {
   GPUBindGroup                  *group;
   GPUCommandBuffer              *cmdb;
   GPUComputePassEncoder         *computePass;
-  GPUCopyPassEncoder            *copyPass;
+  GPUTransferPassEncoder            *copyPass;
   GPUFence                      *fence;
   void                          *bytecode;
   GPUCommandBuffer              *submitBuffers[1];
@@ -454,7 +454,7 @@ gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath) {
   barrierBatch.pTextureBarriers    = textureBarriers;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, "api-line-readback");
+  copyPass = GPUBeginTransferPass(cmdb, "api-line-readback");
   if (!copyPass) {
     fprintf(stderr, "line texture copy pass creation failed\n");
     ok = 0;
@@ -477,7 +477,7 @@ gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath) {
 
   copyRegion.bufferOffset = GPU_LINE_INPUT_OFFSET;
   GPUCopyTextureToBuffer(copyPass, inputLines, readback, &copyRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
@@ -516,7 +516,7 @@ gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   if (computePass) {
     GPUEndComputePass(computePass);

@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../impl.h"
 #include "../../../api/vrs_internal.h"
 
 static MTLLoadAction
@@ -430,12 +431,12 @@ mt_destroyRenderPass(GPURenderPassDesc *pass) {
 }
 
 static MTCopyEncoder *
-mt_copyEncoder(GPUCopyPassEncoder *pass) {
+mt_copyEncoder(GPUTransferPassEncoder *pass) {
   return pass ? pass->_priv : NULL;
 }
 
 static id<MTLBlitCommandEncoder>
-mt_nativeCopyEncoder(GPUCopyPassEncoder *pass) {
+mt_nativeCopyEncoder(GPUTransferPassEncoder *pass) {
   MTCopyEncoder *native;
 
   native = mt_copyEncoder(pass);
@@ -499,11 +500,11 @@ mt_textureCopySize(const GPUTextureSubresourceRegion *region, bool texture3D) {
 }
 
 GPU_HIDE
-GPUCopyPassEncoder*
-mt_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
-  MTCommandBuffer    *commandState;
-  MTCopyEncoder      *native;
-  GPUCopyPassEncoder *pass;
+GPUTransferPassEncoder *
+mt_beginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
+  MTCommandBuffer         *commandState;
+  MTCopyEncoder           *native;
+  GPUTransferPassEncoder  *pass;
 
   if (!cmdb) {
     return NULL;
@@ -557,9 +558,9 @@ mt_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
 
 GPU_HIDE
 void
-mt_copyBufferToBuffer(GPUCopyPassEncoder        *pass,
-                      GPUBuffer                 *src,
-                      GPUBuffer                 *dst,
+mt_copyBufferToBuffer(GPUTransferPassEncoder   *pass,
+                      GPUBuffer                *src,
+                      GPUBuffer                *dst,
                       const GPUBufferCopyRegion *region) {
   id<MTLBuffer> srcBuffer;
   id<MTLBuffer> dstBuffer;
@@ -596,9 +597,9 @@ mt_copyBufferToBuffer(GPUCopyPassEncoder        *pass,
 
 GPU_HIDE
 void
-mt_copyBufferToTexture(GPUCopyPassEncoder               *pass,
-                       GPUBuffer                        *src,
-                       GPUTexture                       *dst,
+mt_copyBufferToTexture(GPUTransferPassEncoder          *pass,
+                       GPUBuffer                       *src,
+                       GPUTexture                      *dst,
                        const GPUBufferTextureCopyRegion *region) {
   const GPUTextureSubresourceRegion *texRegion;
   id<MTLBuffer>  srcBuffer;
@@ -693,9 +694,9 @@ mt_copyBufferToTexture(GPUCopyPassEncoder               *pass,
 
 GPU_HIDE
 void
-mt_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
-                       GPUTexture                       *src,
-                       GPUBuffer                        *dst,
+mt_copyTextureToBuffer(GPUTransferPassEncoder          *pass,
+                       GPUTexture                      *src,
+                       GPUBuffer                       *dst,
                        const GPUBufferTextureCopyRegion *region) {
   const GPUTextureSubresourceRegion *texRegion;
   id<MTLTexture> srcTexture;
@@ -789,9 +790,9 @@ mt_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
 }
 
 static void
-mt_copyDepthStencilPlane(GPUCopyPassEncoder                  *pass,
-                         GPUTexture                          *src,
-                         GPUTexture                          *dst,
+mt_copyDepthStencilPlane(GPUTransferPassEncoder             *pass,
+                         GPUTexture                         *src,
+                         GPUTexture                         *dst,
                          const GPUTextureToTextureCopyRegion *region) {
   id<MTLTexture>            srcTexture;
   id<MTLTexture>            dstTexture;
@@ -909,9 +910,9 @@ mt_copyDepthStencilPlane(GPUCopyPassEncoder                  *pass,
 
 GPU_HIDE
 void
-mt_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
-                        GPUTexture                          *src,
-                        GPUTexture                          *dst,
+mt_copyTextureToTexture(GPUTransferPassEncoder             *pass,
+                        GPUTexture                         *src,
+                        GPUTexture                         *dst,
                         const GPUTextureToTextureCopyRegion *region) {
   id<MTLTexture> srcTexture;
   id<MTLTexture> dstTexture;
@@ -996,7 +997,7 @@ mt_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
 
 GPU_HIDE
 void
-mt_endCopyPass(GPUCopyPassEncoder *pass) {
+mt_endTransferPass(GPUTransferPassEncoder *pass) {
   MTCopyEncoder *native;
 
   if (!pass) {
@@ -1082,13 +1083,14 @@ mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
 GPU_HIDE
 void
 mt_initRenderPass(GPUApiRenderPass *api) {
-  api->beginRenderPass   = mt_beginRenderPass;
-  api->destroyRenderPass = mt_destroyRenderPass;
-  api->beginCopyPass = mt_beginCopyPass;
-  api->copyBufferToBuffer = mt_copyBufferToBuffer;
-  api->copyBufferToTexture = mt_copyBufferToTexture;
-  api->copyTextureToBuffer = mt_copyTextureToBuffer;
+  api->beginRenderPass      = mt_beginRenderPass;
+  api->destroyRenderPass    = mt_destroyRenderPass;
+  api->beginTransferPass    = mt_beginTransferPass;
+  api->copyBufferToBuffer   = mt_copyBufferToBuffer;
+  api->copyBufferToTexture  = mt_copyBufferToTexture;
+  api->copyTextureToBuffer  = mt_copyTextureToBuffer;
   api->copyTextureToTexture = mt_copyTextureToTexture;
-  api->endCopyPass = mt_endCopyPass;
-  api->encodeBarriers = mt_encodeBarriers;
+  api->endTransferPass      = mt_endTransferPass;
+  api->blitTexture          = mt_blitTexture;
+  api->encodeBarriers       = mt_encodeBarriers;
 }

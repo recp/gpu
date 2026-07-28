@@ -92,9 +92,9 @@ marker_beginCompute(GPUCommandBuffer               *cmdb,
   return &pass;
 }
 
-static GPUCopyPassEncoder *
-marker_beginCopy(GPUCommandBuffer *cmdb, const char *label) {
-  static GPUCopyPassEncoder pass;
+static GPUTransferPassEncoder *
+marker_beginTransfer(GPUCommandBuffer *cmdb, const char *label) {
+  static GPUTransferPassEncoder pass;
 
   markerCopyLabel = label;
   markerSink += (uint64_t)(cmdb != NULL) + (uint64_t)(label != NULL);
@@ -141,7 +141,7 @@ marker_init(MarkerFixture *fixture) {
   memset(fixture, 0, sizeof(*fixture));
   fixture->api.cmdque.newCommandBuffer         = marker_newCommandBuffer;
   fixture->api.compute.computeCommandEncoder   = marker_beginCompute;
-  fixture->api.renderPass.beginCopyPass         = marker_beginCopy;
+  fixture->api.renderPass.beginTransferPass     = marker_beginTransfer;
   fixture->device._api                         = &fixture->api;
   fixture->queue._device                       = &fixture->device;
   fixture->cmdb._queue                         = &fixture->queue;
@@ -165,7 +165,7 @@ marker_checkMode(MarkerFixture *fixture, bool enabled, bool expectLabel) {
   fixture->cmdb._activeEncoder = false;
   GPUBeginComputePass(&fixture->cmdb, "marker-benchmark");
   fixture->cmdb._activeEncoder = false;
-  GPUBeginCopyPass(&fixture->cmdb, "marker-benchmark");
+  GPUBeginTransferPass(&fixture->cmdb, "marker-benchmark");
 
   if ((markerCommandLabel != NULL) != expectLabel ||
       (markerComputeLabel != NULL) != expectLabel ||

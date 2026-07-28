@@ -410,7 +410,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUFrame *frame = NULL;
   GPUCommandBuffer *cmdb = NULL;
   GPUComputePassEncoder *compute = NULL;
-  GPUCopyPassEncoder *copy = NULL;
+  GPUTransferPassEncoder *copy = NULL;
   GPURenderPassEncoder *render = NULL;
   GPUResult submitResult = GPU_OK;
   GPUTextureBarrier textureBarrier = {0};
@@ -473,7 +473,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     barriers.pTextureBarriers = &textureBarrier;
     GPUEncodeBarriers(cmdb, &barriers);
 
-    copy = GPUBeginCopyPass(cmdb, "compute-usl-readback");
+    copy = GPUBeginTransferPass(cmdb, "compute-usl-readback");
     if (!copy) {
       goto cleanup;
     }
@@ -486,7 +486,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     readbackRegion.texture.depth = 1u;
     readbackRegion.texture.layerCount = 1u;
     GPUCopyTextureToBuffer(copy, _texture, _readbackBuffer, &readbackRegion);
-    GPUEndCopyPass(copy);
+    GPUEndTransferPass(copy);
     copy = NULL;
 
     memset(&textureBarrier, 0, sizeof(textureBarrier));
@@ -569,7 +569,7 @@ cleanup:
     GPUEndComputePass(compute);
   }
   if (copy) {
-    GPUEndCopyPass(copy);
+    GPUEndTransferPass(copy);
   }
   if (render) {
     GPUEndRenderPass(render);

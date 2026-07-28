@@ -147,7 +147,7 @@ check_tight_texture_copies(GPUDevice *device) {
 
   GPUQueue                  *queue;
   GPUCommandBuffer          *cmdb;
-  GPUCopyPassEncoder        *copyPass;
+  GPUTransferPassEncoder        *copyPass;
   GPUBuffer                 *source;
   GPUBuffer                 *destination;
   GPUTexture                *texture;
@@ -231,7 +231,7 @@ check_tight_texture_copies(GPUDevice *device) {
     if (GPUAcquireCommandBuffer(queue,
                                 "tight-texture-copy",
                                 &cmdb) != GPU_OK ||
-        !cmdb || !(copyPass = GPUBeginCopyPass(cmdb, "tight-texture-copy"))) {
+        !cmdb || !(copyPass = GPUBeginTransferPass(cmdb, "tight-texture-copy"))) {
       fprintf(stderr, "tight texture command setup failed\n");
       goto cleanup;
     }
@@ -240,7 +240,7 @@ check_tight_texture_copies(GPUDevice *device) {
     GPUCopyBufferToTexture(copyPass, source, texture, &region);
     region.bufferOffset = DESTINATION_OFFSET;
     GPUCopyTextureToBuffer(copyPass, texture, destination, &region);
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
     copyPass = NULL;
 
     ok   = transfer_submit(device, queue, cmdb);
@@ -272,7 +272,7 @@ check_tight_texture_copies(GPUDevice *device) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   GPUDestroyTexture(texture);
   GPUDestroyBuffer(destination);
@@ -284,7 +284,7 @@ static int
 check_array_mip_transfers(GPUDevice *device) {
   GPUQueue                     *queue;
   GPUCommandBuffer             *cmdb;
-  GPUCopyPassEncoder           *copyPass;
+  GPUTransferPassEncoder           *copyPass;
   GPUBuffer                    *upload;
   GPUBuffer                    *readback;
   GPUTexture                   *textureA;
@@ -379,7 +379,7 @@ check_array_mip_transfers(GPUDevice *device) {
     ok = 0;
     goto cleanup;
   }
-  copyPass = GPUBeginCopyPass(cmdb, "array-mip-transfer");
+  copyPass = GPUBeginTransferPass(cmdb, "array-mip-transfer");
   if (!copyPass) {
     fprintf(stderr, "array mip transfer copy pass failed\n");
     ok = 0;
@@ -408,7 +408,7 @@ check_array_mip_transfers(GPUDevice *device) {
   GPUCopyBufferToTexture(copyPass, upload, textureA, &bufferRegion);
   bufferRegion.bufferOffset = TRANSFER_SECOND_COPY;
   GPUCopyTextureToBuffer(copyPass, textureA, readback, &bufferRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   ok = transfer_submit(device, queue, cmdb);
@@ -429,7 +429,7 @@ check_array_mip_transfers(GPUDevice *device) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   GPUDestroyTexture(textureB);
   GPUDestroyTexture(textureA);
@@ -442,7 +442,7 @@ static int
 check_3d_texture_transfers(GPUDevice *device) {
   GPUQueue                     *queue;
   GPUCommandBuffer             *cmdb;
-  GPUCopyPassEncoder           *copyPass;
+  GPUTransferPassEncoder           *copyPass;
   GPUBuffer                    *upload;
   GPUBuffer                    *readback;
   GPUTexture                   *textureA;
@@ -539,7 +539,7 @@ check_3d_texture_transfers(GPUDevice *device) {
     ok = 0;
     goto cleanup;
   }
-  copyPass = GPUBeginCopyPass(cmdb, "3d-texture-transfer");
+  copyPass = GPUBeginTransferPass(cmdb, "3d-texture-transfer");
   if (!copyPass) {
     fprintf(stderr, "3D transfer copy pass failed\n");
     ok = 0;
@@ -567,7 +567,7 @@ check_3d_texture_transfers(GPUDevice *device) {
   bufferRegion.bufferOffset       = TRANSFER_SECOND_COPY;
   bufferRegion.texture.texture.z = 0u;
   GPUCopyTextureToBuffer(copyPass, textureB, readback, &bufferRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   ok = transfer_submit(device, queue, cmdb);
@@ -599,7 +599,7 @@ check_3d_texture_transfers(GPUDevice *device) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   GPUDestroyTexture(textureB);
   GPUDestroyTexture(textureA);
@@ -618,7 +618,7 @@ check_same_texture_copies(GPUDevice *device) {
 
   GPUQueue                     *queue;
   GPUCommandBuffer             *cmdb;
-  GPUCopyPassEncoder           *copyPass;
+  GPUTransferPassEncoder           *copyPass;
   GPUBuffer                    *readback;
   GPUTexture                   *texture;
   GPUBufferCreateInfo           bufferInfo = {0};
@@ -698,7 +698,7 @@ check_same_texture_copies(GPUDevice *device) {
     fprintf(stderr, "same-texture copy command buffer failed\n");
     goto cleanup;
   }
-  copyPass = GPUBeginCopyPass(cmdb, "same-texture-copy");
+  copyPass = GPUBeginTransferPass(cmdb, "same-texture-copy");
   if (!copyPass) {
     fprintf(stderr, "same-texture copy pass failed\n");
     goto cleanup;
@@ -743,7 +743,7 @@ check_same_texture_copies(GPUDevice *device) {
   bufferRegion.texture.texture.baseArrayLayer = 0u;
   bufferRegion.bufferOffset                   = MIP_COPY_OFFSET;
   GPUCopyTextureToBuffer(copyPass, texture, readback, &bufferRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   ok   = transfer_submit(device, queue, cmdb);
@@ -775,7 +775,7 @@ check_same_texture_copies(GPUDevice *device) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   GPUDestroyTexture(texture);
   GPUDestroyBuffer(readback);
@@ -794,7 +794,7 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
 
   GPUQueue                     *queue;
   GPUCommandBuffer             *cmdb;
-  GPUCopyPassEncoder           *copyPass;
+  GPUTransferPassEncoder           *copyPass;
   GPUBuffer                    *readback;
   GPUTexture                   *source;
   GPUTexture                   *destination;
@@ -975,7 +975,7 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
     fprintf(stderr, "depth-stencil plane command buffer failed\n");
     goto cleanup;
   }
-  copyPass = GPUBeginCopyPass(cmdb, "depth-stencil-plane-copy");
+  copyPass = GPUBeginTransferPass(cmdb, "depth-stencil-plane-copy");
   if (!copyPass) {
     fprintf(stderr, "depth-stencil plane copy pass failed\n");
     goto cleanup;
@@ -1022,7 +1022,7 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
   bufferRegion.texture.texture.aspect = GPU_TEXTURE_ASPECT_STENCIL_ONLY;
   bufferRegion.bufferOffset           = STENCIL_AFTER_STENCIL_OFFSET;
   GPUCopyTextureToBuffer(copyPass, destination, readback, &bufferRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   ok   = transfer_submit(device, queue, cmdb);
@@ -1076,7 +1076,7 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
     copyPass = NULL;
   }
   if (uploadsPending) {

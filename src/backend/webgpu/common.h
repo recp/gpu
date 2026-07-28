@@ -106,7 +106,7 @@ typedef struct GPUCommandWebGPU {
   GPURenderPassDesc                    renderPass;
   GPURenderPassEncoder                 render;
   GPUComputePassEncoder                compute;
-  GPUCopyPassEncoder                   copy;
+  GPUTransferPassEncoder                   copy;
   WGPURenderPassDescriptor             renderPassDesc;
   WGPUPassTimestampWrites              timestampWrites;
   uint64_t                             boundIndexOffset;

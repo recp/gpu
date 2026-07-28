@@ -99,7 +99,7 @@ gpu_test_sampler_feedback_write(GPUDevice *device, const char *bytecodePath) {
   GPUBuffer                        *readback;
   GPUCommandBuffer                 *cmdb;
   GPURenderPassEncoder             *renderPass;
-  GPUCopyPassEncoder               *copyPass;
+  GPUTransferPassEncoder               *copyPass;
   GPUFence                         *fence;
   const GPUBindGroupLayoutEntry    *layoutEntries;
   void                             *bytecode;
@@ -395,7 +395,7 @@ gpu_test_sampler_feedback_write(GPUDevice *device, const char *bytecodePath) {
   renderPass = NULL;
 
   if (GPUDecodeSamplerFeedbackEXT(cmdb, map, decodedTexture) != GPU_OK ||
-      !(copyPass = GPUBeginCopyPass(cmdb, "sampler-feedback-write-readback"))) {
+      !(copyPass = GPUBeginTransferPass(cmdb, "sampler-feedback-write-readback"))) {
     fprintf(stderr, "sampler feedback write decode failed\n");
     ok = 0;
     goto cleanup;
@@ -407,7 +407,7 @@ gpu_test_sampler_feedback_write(GPUDevice *device, const char *bytecodePath) {
   copyRegion.texture.depth      = 1u;
   copyRegion.texture.layerCount = 1u;
   GPUCopyTextureToBuffer(copyPass, decodedTexture, readback, &copyRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
@@ -437,7 +437,7 @@ gpu_test_sampler_feedback_write(GPUDevice *device, const char *bytecodePath) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   if (renderPass) {
     GPUEndRenderPass(renderPass);
@@ -477,7 +477,7 @@ gpu_test_sampler_feedback_mode(GPUDevice                  *device,
   GPUBuffer                           *readback;
   GPUSamplerFeedbackMapEXT            *map;
   GPUCommandBuffer                    *cmdb;
-  GPUCopyPassEncoder                  *copyPass;
+  GPUTransferPassEncoder                  *copyPass;
   GPUFence                            *fence;
   uint8_t                              readbackBytes[
     SAMPLER_FEEDBACK_READBACK_BYTES] = {0};
@@ -569,7 +569,7 @@ gpu_test_sampler_feedback_mode(GPUDevice                  *device,
     goto cleanup;
   }
 
-  copyPass = GPUBeginCopyPass(cmdb, "sampler-feedback-readback");
+  copyPass = GPUBeginTransferPass(cmdb, "sampler-feedback-readback");
   if (!copyPass) {
     ok = 0;
     goto cleanup;
@@ -591,7 +591,7 @@ gpu_test_sampler_feedback_mode(GPUDevice                  *device,
     copyRegion.bufferOffset +=
       (uint64_t)SAMPLER_FEEDBACK_ROW_PITCH * height;
   }
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   if (GPUEncodeSamplerFeedbackEXT(cmdb, decoded, map) != GPU_OK ||
@@ -622,7 +622,7 @@ gpu_test_sampler_feedback_mode(GPUDevice                  *device,
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   if (cmdb) {
     GPUDiscardCommandBuffer(cmdb);

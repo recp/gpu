@@ -115,6 +115,7 @@ set(GPU_CORE_SOURCES
   src/api/instance.c
   src/api/library.c
   src/api/memory.c
+  src/api/pass/blit.c
   src/api/pass/renderpass.c
   src/api/pipeline_cache.c
   src/api/query.c
@@ -265,6 +266,7 @@ endif()
 if(GPU_BUILD_METAL)
   target_sources(gpu PRIVATE
     src/backend/mt/init.c
+    src/backend/mt/impl/blit.m
     src/backend/mt/impl/instance.c
     src/backend/mt/impl/surface.c
     src/backend/mt/impl/buffer.m
@@ -318,6 +320,7 @@ endif()
 if(GPU_BUILD_DX12)
   target_sources(gpu PRIVATE
     src/backend/dx12/init.c
+    src/backend/dx12/impl/blit.c
     src/backend/dx12/impl/buffer.c
     src/backend/dx12/impl/cmdque.c
     src/backend/dx12/impl/compute.c
@@ -359,6 +362,7 @@ if(GPU_BUILD_VULKAN)
   target_compile_definitions(gpu PRIVATE GPU_ENABLE_VULKAN=1)
   target_sources(gpu PRIVATE
     src/backend/vk/init.c
+    src/backend/vk/impl/blit.c
     src/backend/vk/impl/buffer.c
     src/backend/vk/impl/cmdque.c
     src/backend/vk/impl/compute.c
@@ -393,6 +397,7 @@ if(GPU_BUILD_WEBGPU)
   target_compile_definitions(gpu PRIVATE GPU_ENABLE_WEBGPU=1)
   target_sources(gpu PRIVATE
     src/backend/webgpu/init.c
+    src/backend/webgpu/impl/blit.c
     src/backend/webgpu/impl/device.c
     src/backend/webgpu/impl/instance.c
     src/backend/webgpu/impl/surface.c

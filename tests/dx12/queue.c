@@ -115,7 +115,7 @@ frame_time_roundtrip(GPUDevice *device,
                      GPUQueue  *queue,
                      GPUFence  *fence) {
   GPUCommandBufferDX12 *cmdbDX12;
-  GPUCopyPassEncoder   *copyPass;
+  GPUTransferPassEncoder   *copyPass;
   GPUDeviceDX12        *deviceDX12;
   GPUQueueDX12         *queueDX12;
   GPUCommandBuffer     *cmdb;
@@ -179,14 +179,14 @@ frame_time_roundtrip(GPUDevice *device,
     ok = false;
     goto cleanup;
   }
-  copyPass = GPUBeginCopyPass(cmdb, "dx12-frame-time-copy");
+  copyPass = GPUBeginTransferPass(cmdb, "dx12-frame-time-copy");
   if (!copyPass) {
     ok = false;
     goto cleanup;
   }
   copyRegion.sizeBytes = DX12_FRAME_TIME_COPY_BYTES;
   GPUCopyBufferToBuffer(copyPass, src, dst, &copyRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
 
   cmdb->_recordsGPUFrameTime = true;
   memset(&submitInfo, 0, sizeof(submitInfo));

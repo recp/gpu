@@ -60,7 +60,7 @@ main(int argc, char **argv) {
   GPUCommandBuffer     *cmdb           = NULL;
   GPUCommandBuffer     *buffers[1];
   GPURenderPassEncoder *renderPass     = NULL;
-  GPUCopyPassEncoder   *copyPass       = NULL;
+  GPUTransferPassEncoder   *copyPass       = NULL;
   GPUFence             *fence          = NULL;
   void                 *artifact       = NULL;
   GPUInstanceCreateInfo       instanceInfo = {0};
@@ -337,7 +337,7 @@ main(int argc, char **argv) {
     goto cleanup;
   }
 
-  copyPass = GPUBeginCopyPass(cmdb, "dx12-usl-copy-chain");
+  copyPass = GPUBeginTransferPass(cmdb, "dx12-usl-copy-chain");
   if (!copyPass) {
     fprintf(stderr, "DX12 initial copy pass creation failed\n");
     goto cleanup;
@@ -365,7 +365,7 @@ main(int argc, char **argv) {
                           copyTexture,
                           sampleTexture,
                           &textureCopy);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   textureBarrier.texture    = sampleTexture;
@@ -411,7 +411,7 @@ main(int argc, char **argv) {
   barrierBatch.pTextureBarriers    = &textureBarrier;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, "dx12-usl-texture-readback");
+  copyPass = GPUBeginTransferPass(cmdb, "dx12-usl-texture-readback");
   if (!copyPass) {
     fprintf(stderr, "DX12 texture copy pass creation failed\n");
     goto cleanup;
@@ -426,7 +426,7 @@ main(int argc, char **argv) {
                          targetTexture,
                          readbackBuffer,
                          &copyRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
@@ -486,14 +486,14 @@ main(int argc, char **argv) {
   GPUResetStats(device);
   for (uint32_t i = 0u; i < 16u; i++) {
     if (GPUAcquireCommandBuffer(queue, "dx12-copy-warm", &cmdb) != GPU_OK ||
-        !cmdb || !(copyPass = GPUBeginCopyPass(cmdb, "dx12-copy-warm"))) {
+        !cmdb || !(copyPass = GPUBeginTransferPass(cmdb, "dx12-copy-warm"))) {
       goto cleanup;
     }
     GPUCopyBufferToBuffer(copyPass,
                           uploadBuffer,
                           copiedBuffer,
                           &bufferCopy);
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
     copyPass = NULL;
 
     buffers[0]                  = cmdb;
@@ -514,7 +514,7 @@ main(int argc, char **argv) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   if (renderPass) {
     GPUEndRenderPass(renderPass);

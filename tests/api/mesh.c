@@ -120,7 +120,7 @@ test_mesh_draw(GPUDevice  *device,
   GPUTextureView               *targetView;
   GPUCommandBuffer             *cmdb;
   GPURenderPassEncoder         *renderPass;
-  GPUCopyPassEncoder           *copyPass;
+  GPUTransferPassEncoder           *copyPass;
   GPUFence                     *fence;
   GPUMeshPipelineEXT            meshInfo      = {0};
   GPUPipelineCacheCreateInfo    cacheInfo     = {0};
@@ -371,7 +371,7 @@ test_mesh_draw(GPUDevice  *device,
   barrierBatch.pTextureBarriers    = &textureBarrier;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, "mesh-readback");
+  copyPass = GPUBeginTransferPass(cmdb, "mesh-readback");
   if (!copyPass) {
     fprintf(stderr, "failed to begin mesh copy pass\n");
     goto cleanup;
@@ -383,7 +383,7 @@ test_mesh_draw(GPUDevice  *device,
   copyRegion.texture.depth      = 1u;
   copyRegion.texture.layerCount = 1u;
   GPUCopyTextureToBuffer(copyPass, target, readbackBuffer, &copyRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
@@ -415,7 +415,7 @@ test_mesh_draw(GPUDevice  *device,
   ok = 1;
 
 cleanup:
-  if (copyPass) GPUEndCopyPass(copyPass);
+  if (copyPass) GPUEndTransferPass(copyPass);
   if (renderPass) GPUEndRenderPass(renderPass);
   GPUDestroyFence(fence);
   GPUDestroyTextureView(targetView);

@@ -17,6 +17,7 @@
 #include "../common.h"
 #include "cmdqueue_internal.h"
 #include "device_internal.h"
+#include "pass/blit_internal.h"
 #include "texture_internal.h"
 
 static bool
@@ -343,6 +344,7 @@ GPUDestroyTexture(GPUTexture * __restrict texture) {
     return;
   }
 
+  gpuDestroyTextureBlitViews(texture);
   api->texture.destroy(texture);
 }
 

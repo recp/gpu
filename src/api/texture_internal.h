@@ -23,6 +23,7 @@ struct GPUTexture {
   void                         *_priv;
   GPUDevice                    *device;
   GPUHeap                      *_heap;
+  void                         *_blitViews;
   uint64_t                      _heapOffset;
   uint64_t                      _allocationSize;
   GPUSparseTextureRequirements _sparseRequirements;

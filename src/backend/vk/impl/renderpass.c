@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../impl.h"
 #include "../../../api/buffer_internal.h"
 #include "../../../api/texture_internal.h"
 #include "../../../api/vrs_internal.h"
@@ -875,14 +876,14 @@ vk_destroyRenderPass(GPURenderPassDesc *pass) {
 }
 
 static GPUCommandBufferVk*
-vk__copyCommand(GPUCopyPassEncoder *pass) {
+vk__copyCommand(GPUTransferPassEncoder *pass) {
   return pass ? pass->_priv : NULL;
 }
 
-static GPUCopyPassEncoder*
-vk_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
-  GPUCommandBufferVk *command;
-  GPUCopyPassEncoder *pass;
+static GPUTransferPassEncoder *
+vk_beginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
+  GPUCommandBufferVk      *command;
+  GPUTransferPassEncoder *pass;
 
   command = cmdb ? cmdb->_priv : NULL;
   if (!command || !command->command) {
@@ -901,9 +902,9 @@ vk_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
 }
 
 static void
-vk_copyBufferToBuffer(GPUCopyPassEncoder        *pass,
-                      GPUBuffer                 *src,
-                      GPUBuffer                 *dst,
+vk_copyBufferToBuffer(GPUTransferPassEncoder   *pass,
+                      GPUBuffer                *src,
+                      GPUBuffer                *dst,
                       const GPUBufferCopyRegion *region) {
   GPUCommandBufferVk *command;
   GPUBufferVk        *srcVk;
@@ -1005,9 +1006,9 @@ vk__bufferImageCopy(GPUTexture                       *texture,
 }
 
 static void
-vk_copyBufferToTexture(GPUCopyPassEncoder               *pass,
-                       GPUBuffer                        *src,
-                       GPUTexture                       *dst,
+vk_copyBufferToTexture(GPUTransferPassEncoder          *pass,
+                       GPUBuffer                       *src,
+                       GPUTexture                      *dst,
                        const GPUBufferTextureCopyRegion *region) {
   GPUCommandBufferVk *command;
   GPUBufferVk        *buffer;
@@ -1042,9 +1043,9 @@ vk_copyBufferToTexture(GPUCopyPassEncoder               *pass,
 }
 
 static void
-vk_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
-                       GPUTexture                       *src,
-                       GPUBuffer                        *dst,
+vk_copyTextureToBuffer(GPUTransferPassEncoder          *pass,
+                       GPUTexture                      *src,
+                       GPUBuffer                       *dst,
                        const GPUBufferTextureCopyRegion *region) {
   GPUCommandBufferVk *command;
   GPUTextureVk       *texture;
@@ -1080,7 +1081,7 @@ vk_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
 
 #ifdef __APPLE__
 static bool
-vk__reserveScratch(GPUCopyPassEncoder *pass,
+vk__reserveScratch(GPUTransferPassEncoder *pass,
                    uint64_t            sizeBytes,
                    uint64_t            alignment,
                    VkBuffer           *outBuffer,
@@ -1168,9 +1169,9 @@ vk__reserveScratch(GPUCopyPassEncoder *pass,
 }
 
 static bool
-vk__copyDepthStencilPlane(GPUCopyPassEncoder                  *pass,
-                          GPUTexture                          *src,
-                          GPUTexture                          *dst,
+vk__copyDepthStencilPlane(GPUTransferPassEncoder             *pass,
+                          GPUTexture                         *src,
+                          GPUTexture                         *dst,
                           const GPUTextureToTextureCopyRegion *region,
                           VkImageAspectFlags                   aspect) {
   GPUCommandBufferVk   *command;
@@ -1296,9 +1297,9 @@ vk__copyDepthStencilPlane(GPUCopyPassEncoder                  *pass,
 #endif
 
 static void
-vk_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
-                        GPUTexture                          *src,
-                        GPUTexture                          *dst,
+vk_copyTextureToTexture(GPUTransferPassEncoder             *pass,
+                        GPUTexture                         *src,
+                        GPUTexture                         *dst,
                         const GPUTextureToTextureCopyRegion *region) {
   GPUCommandBufferVk *command;
   GPUTextureVk       *srcVk;
@@ -1375,6 +1376,86 @@ vk_copyTextureToTexture(GPUCopyPassEncoder                  *pass,
                  &copy);
 }
 
+static void
+vk_blitTexture(GPUCommandBuffer         *cmdb,
+               const GPUTextureBlitInfo *info) {
+  GPUCommandBufferVk *command;
+  GPUTextureVk       *src;
+  GPUTextureVk       *dst;
+  VkImageBlit         blit = {0};
+
+  command = cmdb ? cmdb->_priv : NULL;
+  src     = info && info->src ? info->src->_priv : NULL;
+  dst     = info && info->dst ? info->dst->_priv : NULL;
+  if (!command || !command->command || !src || !dst) {
+    return;
+  }
+
+  if (!src->blitSrc || !dst->blitDst ||
+      (info->filter == GPU_FILTER_LINEAR && !src->linearBlit)) {
+    vk_blitTextureRenderFallback(cmdb, info);
+    return;
+  }
+
+  if (!vk_transitionTexture(
+        command->command,
+        src,
+        info->srcRegion.texture.mipLevel,
+        1u,
+        info->srcRegion.texture.baseArrayLayer,
+        info->srcRegion.layerCount,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+      ) ||
+      !vk_transitionTexture(
+        command->command,
+        dst,
+        info->dstRegion.texture.mipLevel,
+        1u,
+        info->dstRegion.texture.baseArrayLayer,
+        info->dstRegion.layerCount,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+      )) {
+    return;
+  }
+
+  blit.srcSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+  blit.srcSubresource.mipLevel       = info->srcRegion.texture.mipLevel;
+  blit.srcSubresource.baseArrayLayer =
+    info->srcRegion.texture.baseArrayLayer;
+  blit.srcSubresource.layerCount     = info->srcRegion.layerCount;
+  blit.srcOffsets[0].x               = (int32_t)info->srcRegion.texture.x;
+  blit.srcOffsets[0].y               = (int32_t)info->srcRegion.texture.y;
+  blit.srcOffsets[0].z               = 0;
+  blit.srcOffsets[1].x               =
+    (int32_t)(info->srcRegion.texture.x + info->srcRegion.width);
+  blit.srcOffsets[1].y               =
+    (int32_t)(info->srcRegion.texture.y + info->srcRegion.height);
+  blit.srcOffsets[1].z               = 1;
+  blit.dstSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+  blit.dstSubresource.mipLevel       = info->dstRegion.texture.mipLevel;
+  blit.dstSubresource.baseArrayLayer =
+    info->dstRegion.texture.baseArrayLayer;
+  blit.dstSubresource.layerCount     = info->dstRegion.layerCount;
+  blit.dstOffsets[0].x               = (int32_t)info->dstRegion.texture.x;
+  blit.dstOffsets[0].y               = (int32_t)info->dstRegion.texture.y;
+  blit.dstOffsets[0].z               = 0;
+  blit.dstOffsets[1].x               =
+    (int32_t)(info->dstRegion.texture.x + info->dstRegion.width);
+  blit.dstOffsets[1].y               =
+    (int32_t)(info->dstRegion.texture.y + info->dstRegion.height);
+  blit.dstOffsets[1].z               = 1;
+  vkCmdBlitImage(command->command,
+                 src->image,
+                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                 dst->image,
+                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                 1u,
+                 &blit,
+                 info->filter == GPU_FILTER_LINEAR
+                   ? VK_FILTER_LINEAR
+                   : VK_FILTER_NEAREST);
+}
+
 #ifdef VK_KHR_copy_memory_indirect
 _Static_assert(
   sizeof(GPUIndirectMemoryCopyCommandEXT) ==
@@ -1441,7 +1522,7 @@ _Static_assert(
 );
 
 static bool
-vk__indirectCopyState(GPUCopyPassEncoder *pass,
+vk__indirectCopyState(GPUTransferPassEncoder *pass,
                       GPUCommandBufferVk **outCommand,
                       GPUDeviceVk        **outDevice,
                       VkQueueFlags        *outQueueFlags) {
@@ -1471,7 +1552,7 @@ vk__indirectCopyState(GPUCopyPassEncoder *pass,
 }
 
 static void
-vk_copyMemoryIndirect(GPUCopyPassEncoder                  *pass,
+vk_copyMemoryIndirect(GPUTransferPassEncoder             *pass,
                       const GPUIndirectMemoryCopyInfoEXT *info) {
   GPUCommandBufferVk       *command;
   GPUDeviceVk              *device;
@@ -1495,7 +1576,7 @@ vk_copyMemoryIndirect(GPUCopyPassEncoder                  *pass,
 }
 
 static void
-vk_copyMemoryToTextureIndirect(GPUCopyPassEncoder                          *pass,
+vk_copyMemoryToTextureIndirect(GPUTransferPassEncoder                     *pass,
                                const GPUIndirectMemoryToTextureCopyInfoEXT *info) {
   GPUCommandBufferVk                 *command;
   GPUDeviceVk                        *device;
@@ -1553,7 +1634,7 @@ vk_copyMemoryToTextureIndirect(GPUCopyPassEncoder                          *pass
 #endif
 
 static void
-vk_endCopyPass(GPUCopyPassEncoder *pass) {
+vk_endTransferPass(GPUTransferPassEncoder *pass) {
   GPUCommandBufferVk *command;
 
   command = vk__copyCommand(pass);
@@ -1568,7 +1649,7 @@ void
 vk_initRenderPass(GPUApiRenderPass *api) {
   api->beginRenderPass      = vk_beginRenderPass;
   api->destroyRenderPass    = vk_destroyRenderPass;
-  api->beginCopyPass        = vk_beginCopyPass;
+  api->beginTransferPass    = vk_beginTransferPass;
   api->copyBufferToBuffer   = vk_copyBufferToBuffer;
   api->copyBufferToTexture  = vk_copyBufferToTexture;
   api->copyTextureToBuffer  = vk_copyTextureToBuffer;
@@ -1577,6 +1658,7 @@ vk_initRenderPass(GPUApiRenderPass *api) {
   api->copyMemoryIndirect          = vk_copyMemoryIndirect;
   api->copyMemoryToTextureIndirect = vk_copyMemoryToTextureIndirect;
 #endif
-  api->endCopyPass          = vk_endCopyPass;
+  api->endTransferPass      = vk_endTransferPass;
+  api->blitTexture          = vk_blitTexture;
   api->encodeBarriers       = vk_encodeBarriers;
 }

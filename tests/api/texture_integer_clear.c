@@ -62,7 +62,7 @@ integer_clear_case(GPUDevice                *device,
   GPUQueue                     *queue;
   GPUCommandBuffer             *cmdb;
   GPURenderPassEncoder         *renderPass;
-  GPUCopyPassEncoder           *copyPass;
+  GPUTransferPassEncoder           *copyPass;
   GPUTexture                   *texture;
   GPUTextureView               *view;
   GPUBuffer                    *readback;
@@ -153,7 +153,7 @@ integer_clear_case(GPUDevice                *device,
   barrierBatch.pTextureBarriers    = &textureBarrier;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, label);
+  copyPass = GPUBeginTransferPass(cmdb, label);
   if (!copyPass) {
     fprintf(stderr, "%s copy pass failed\n", label);
     ok = 0;
@@ -166,7 +166,7 @@ integer_clear_case(GPUDevice                *device,
   copyRegion.texture.depth      = 1u;
   copyRegion.texture.layerCount = 1u;
   GPUCopyTextureToBuffer(copyPass, texture, readback, &copyRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   ok   = integer_clear_submit(device, queue, cmdb);
@@ -193,7 +193,7 @@ integer_clear_case(GPUDevice                *device,
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   if (renderPass) {
     GPUEndRenderPass(renderPass);

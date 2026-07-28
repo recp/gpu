@@ -79,7 +79,7 @@ gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath) {
   GPUBuffer                     *readback;
   GPUCommandBuffer              *cmdb;
   GPUComputePassEncoder         *computePass;
-  GPUCopyPassEncoder            *copyPass;
+  GPUTransferPassEncoder            *copyPass;
   GPUFence                      *fence;
   void                          *bytecode;
   GPUCommandBuffer              *submitBuffers[1];
@@ -321,7 +321,7 @@ gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath) {
   barrierBatch.pTextureBarriers    = &textureBarrier;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginCopyPass(cmdb, "api-storage-texture-readback");
+  copyPass = GPUBeginTransferPass(cmdb, "api-storage-texture-readback");
   if (!copyPass) {
     fprintf(stderr, "storage texture copy pass creation failed\n");
     ok = 0;
@@ -349,7 +349,7 @@ gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath) {
   copyRegion.texture.width                  = GPU_STORAGE_BASE_WIDTH;
   copyRegion.texture.height                 = GPU_STORAGE_BASE_HEIGHT;
   GPUCopyTextureToBuffer(copyPass, texture, readback, &copyRegion);
-  GPUEndCopyPass(copyPass);
+  GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
@@ -408,7 +408,7 @@ gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath) {
 
 cleanup:
   if (copyPass) {
-    GPUEndCopyPass(copyPass);
+    GPUEndTransferPass(copyPass);
   }
   if (computePass) {
     GPUEndComputePass(computePass);

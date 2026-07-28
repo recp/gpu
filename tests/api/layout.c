@@ -83,6 +83,7 @@ GPU_ASSERT_64BIT_SIZE(GPUIndirectMemoryToTextureCommandEXT, 56u);
 GPU_ASSERT_64BIT_SIZE(GPUIndirectCommandRangeEXT, 32u);
 GPU_ASSERT_64BIT_SIZE(GPUIndirectMemoryCopyInfoEXT, 48u);
 GPU_ASSERT_64BIT_SIZE(GPUIndirectMemoryToTextureCopyInfoEXT, 56u);
+GPU_ASSERT_64BIT_SIZE(GPUTextureBlitInfo, 104u);
 GPU_ASSERT_64BIT_SIZE(GPUExecutionGraphCreateInfoEXT, 56u);
 GPU_ASSERT_64BIT_SIZE(GPUExecutionGraphMemoryRequirementsEXT, 24u);
 GPU_ASSERT_64BIT_SIZE(GPUExecutionGraphInstanceCreateInfoEXT, 40u);

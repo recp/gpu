@@ -416,12 +416,12 @@ dx12_destroyRenderPass(GPURenderPassDesc *pass) {
 }
 
 static GPUCommandBufferDX12*
-dx12__copyCommand(GPUCopyPassEncoder *pass) {
+dx12__copyCommand(GPUTransferPassEncoder *pass) {
   return pass ? pass->_priv : NULL;
 }
 
 static void
-dx12__copyError(GPUCopyPassEncoder *pass, const char *message) {
+dx12__copyError(GPUTransferPassEncoder *pass, const char *message) {
   GPUDevice *device;
 
   device = pass && pass->_cmdb && pass->_cmdb->_queue
@@ -1020,10 +1020,10 @@ dx12__copyTextureToBufferScratch(
   return true;
 }
 
-static GPUCopyPassEncoder*
-dx12_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
-  GPUCommandBufferDX12 *command;
-  GPUCopyPassEncoder   *pass;
+static GPUTransferPassEncoder *
+dx12_beginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
+  GPUCommandBufferDX12   *command;
+  GPUTransferPassEncoder *pass;
 
   command = cmdb ? cmdb->_priv : NULL;
   if (!command || !command->commandList) {
@@ -1042,9 +1042,9 @@ dx12_beginCopyPass(GPUCommandBuffer *cmdb, const char *label) {
 }
 
 static void
-dx12_copyBufferToBuffer(GPUCopyPassEncoder        *pass,
-                        GPUBuffer                 *src,
-                        GPUBuffer                 *dst,
+dx12_copyBufferToBuffer(GPUTransferPassEncoder   *pass,
+                        GPUBuffer                *src,
+                        GPUBuffer                *dst,
                         const GPUBufferCopyRegion *region) {
   GPUCommandBufferDX12 *command;
   GPUBufferDX12        *srcBuffer;
@@ -1073,9 +1073,9 @@ dx12_copyBufferToBuffer(GPUCopyPassEncoder        *pass,
 }
 
 static void
-dx12_copyBufferToTexture(GPUCopyPassEncoder               *pass,
-                         GPUBuffer                        *src,
-                         GPUTexture                       *dst,
+dx12_copyBufferToTexture(GPUTransferPassEncoder          *pass,
+                         GPUBuffer                       *src,
+                         GPUTexture                      *dst,
                          const GPUBufferTextureCopyRegion *region) {
   GPUCommandBufferDX12 *command;
   GPUBufferDX12        *srcBuffer;
@@ -1177,9 +1177,9 @@ dx12_copyBufferToTexture(GPUCopyPassEncoder               *pass,
 }
 
 static void
-dx12_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
-                         GPUTexture                       *src,
-                         GPUBuffer                        *dst,
+dx12_copyTextureToBuffer(GPUTransferPassEncoder          *pass,
+                         GPUTexture                      *src,
+                         GPUBuffer                       *dst,
                          const GPUBufferTextureCopyRegion *region) {
   GPUCommandBufferDX12 *command;
   GPUTextureDX12       *srcTexture;
@@ -1289,7 +1289,7 @@ dx12_copyTextureToBuffer(GPUCopyPassEncoder               *pass,
 
 static void
 dx12_copyTextureToTexture(
-  GPUCopyPassEncoder                  *pass,
+  GPUTransferPassEncoder             *pass,
   GPUTexture                          *src,
   GPUTexture                          *dst,
   const GPUTextureToTextureCopyRegion *region) {
@@ -1380,7 +1380,7 @@ dx12_copyTextureToTexture(
 }
 
 static void
-dx12_endCopyPass(GPUCopyPassEncoder *pass) {
+dx12_endTransferPass(GPUTransferPassEncoder *pass) {
   GPUCommandBufferDX12 *command;
 
   command = dx12__copyCommand(pass);
@@ -1396,11 +1396,12 @@ void
 dx12_initRenderPass(GPUApiRenderPass *api) {
   api->beginRenderPass      = dx12_beginRenderPass;
   api->destroyRenderPass    = dx12_destroyRenderPass;
-  api->beginCopyPass        = dx12_beginCopyPass;
+  api->beginTransferPass    = dx12_beginTransferPass;
   api->copyBufferToBuffer   = dx12_copyBufferToBuffer;
   api->copyBufferToTexture  = dx12_copyBufferToTexture;
   api->copyTextureToBuffer  = dx12_copyTextureToBuffer;
   api->copyTextureToTexture = dx12_copyTextureToTexture;
-  api->endCopyPass          = dx12_endCopyPass;
+  api->endTransferPass      = dx12_endTransferPass;
+  api->blitTexture          = dx12_blitTexture;
   api->encodeBarriers       = dx12_encodeBarriers;
 }
