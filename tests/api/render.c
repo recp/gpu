@@ -2542,6 +2542,14 @@ check_dynamic_state_validation_calls(GPUDevice *activeDevice) {
   (void)invalidViewport;
 #endif
 
+  endedPass._ended = true;
+  GPUApplyDynamicState(&endedPass, &info);
+  GPUSetViewport(&endedPass, &info.viewport);
+  GPUSetScissor(&endedPass, &info.scissor);
+  GPUSetBlendConstant(&endedPass, info.blendConstant);
+  GPUSetStencilReference(&endedPass, 0u);
+
+#if GPU_BUILD_WITH_VALIDATION
   info.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   info.chain.structSize = sizeof(info);
   info.mask = GPU_DYNAMIC_STATE_VIEWPORT_BIT |
@@ -2554,14 +2562,7 @@ check_dynamic_state_validation_calls(GPUDevice *activeDevice) {
   info.chain.structSize = (uint32_t)(sizeof(info) - 1u);
   GPUApplyDynamicState(&pass, &info);
 
-  endedPass._ended = true;
   info.chain.structSize = sizeof(info);
-  GPUApplyDynamicState(&endedPass, &info);
-  GPUSetViewport(&endedPass, &info.viewport);
-  GPUSetScissor(&endedPass, &info.scissor);
-  GPUSetBlendConstant(&endedPass, info.blendConstant);
-  GPUSetStencilReference(&endedPass, 0u);
-
   info.chain.sType      = GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO;
   info.mask            |= 1ull << 63;
   GPUApplyDynamicState(&pass, &info);
@@ -2573,6 +2574,7 @@ check_dynamic_state_validation_calls(GPUDevice *activeDevice) {
     fprintf(stderr, "dynamic state validation called backend for invalid input\n");
     goto cleanup;
   }
+#endif
 
   info.chain.sType = GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO;
   info.chain.structSize = sizeof(info);

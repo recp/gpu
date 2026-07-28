@@ -543,10 +543,7 @@ mt_createTextureView(GPUTexture                      * __restrict texture,
   slot = (MTTextureViewSlot *)(view + 1);
 
 #if MT_HAS_METAL4
-  if (!fullView &&
-      (texture->usage & (GPU_TEXTURE_USAGE_COLOR_TARGET |
-                         GPU_TEXTURE_USAGE_DEPTH_STENCIL |
-                         GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT)) == 0u) {
+  if (!fullView) {
     GPUDeviceMT             *deviceMT;
     MTLTextureViewDescriptor *descriptor;
     GPUResult                result;
@@ -571,7 +568,12 @@ mt_createTextureView(GPUTexture                      * __restrict texture,
           free(view);
           return result;
         }
-        nativeView = [nativeTexture retain];
+        if ((texture->usage &
+             (GPU_TEXTURE_USAGE_COLOR_TARGET |
+              GPU_TEXTURE_USAGE_DEPTH_STENCIL |
+              GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT)) == 0u) {
+          nativeView = [nativeTexture retain];
+        }
       }
     }
   }

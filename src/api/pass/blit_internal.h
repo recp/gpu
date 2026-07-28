@@ -51,4 +51,12 @@ gpuBlitTextureRenderFallback(GPUCommandBuffer         *cmdb,
                              const GPUTextureBlitInfo *info,
                              const GPUBlitShaderSet   *shaders);
 
+GPU_HIDE
+void
+gpuGenerateMipmapsFallback(
+  GPUCommandBuffer *cmdb,
+  GPUTexture       *texture,
+  void (*blitTexture)(GPUCommandBuffer         *cmdb,
+                      const GPUTextureBlitInfo *info));
+
 #endif /* gpu_blit_internal_h */

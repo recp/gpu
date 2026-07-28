@@ -226,7 +226,7 @@ mt_setArgumentTexture(GPUCommandBuffer *cmdb,
       setTexture:resourceID
          atIndex:index];
     state->textureMask[index / 64u] |= 1ull << (index % 64u);
-    mt_useAllocation(cmdb, (id<MTLTexture>)view->_priv);
+    mt_useAllocation(cmdb, mt_nativeTexture(view->_texture));
   }
 #else
   GPU__UNUSED(cmdb);

@@ -58,10 +58,13 @@ vk_createComputePipeline(GPUDevice                          *device,
 
   native           = (GPUComputePipelineVk *)(state + 1);
   native->device   = deviceVk->device;
-  entryMask        = gpuShaderEntryBit(info->library, info->entryPoint);
-  if (entryMask == 0u) {
-    free(state);
-    return GPU_ERROR_INVALID_ARGUMENT;
+  entryMask = UINT64_MAX;
+  if (gpuShaderLibraryHasEntryResourceInfo(info->library)) {
+    entryMask = gpuShaderEntryBit(info->library, info->entryPoint);
+    if (entryMask == 0u) {
+      free(state);
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
   }
   if (vk_createShaderLayout(device,
                             info->layout,

@@ -17,6 +17,7 @@
 #include "../common.h"
 #include "../impl.h"
 #include "../../../api/vrs_internal.h"
+#include "../../../api/pass/blit_internal.h"
 
 static MTLLoadAction
 mt_loadAction(GPULoadOp op) {
@@ -323,8 +324,11 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
           modern.colorAttachments[i].clearColor =
             rpd.colorAttachments[i].clearColor;
         }
-        mt_useAllocation(cmdb, texture);
-        mt_useAllocation(cmdb, resolveTexture);
+        mt_useAllocation(cmdb, mt_nativeTexture(color->view->_texture));
+        if (color->resolveView) {
+          mt_useAllocation(cmdb,
+                           mt_nativeTexture(color->resolveView->_texture));
+        }
       }
     }
 #endif
@@ -407,7 +411,8 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
         if (stencilAttachmentActive) {
           modern.stencilAttachment = rpd.stencilAttachment;
         }
-        mt_useAllocation(cmdb, depthStencil->view->_priv);
+        mt_useAllocation(cmdb,
+                         mt_nativeTexture(depthStencil->view->_texture));
       }
     }
 #endif
@@ -1026,6 +1031,16 @@ mt_generateMipmaps(GPUCommandBuffer *cmdb, GPUTexture *texture) {
   MTCopyEncoder          *native;
   id<MTLTexture>          nativeTexture;
 
+#if MT_HAS_METAL4
+  MTCommandBuffer *command;
+
+  command = mt_commandBuffer(cmdb);
+  if (command && command->mode == MTCommandMode4) {
+    gpuGenerateMipmapsFallback(cmdb, texture, mt_blitTexture);
+    return;
+  }
+#endif
+
   pass = GPUBeginTransferPass(cmdb, "gpu-generate-mipmaps");
   if (!pass) {
     return;
@@ -1068,13 +1083,18 @@ mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
     return;
   }
   if (@available(macOS 26.0, iOS 26.0, *)) {
-    native->pendingAfterStages  |= mt_stageMask(barriers->srcStages);
-    native->pendingBeforeStages |= mt_stageMask(barriers->dstStages);
 #if MT_HAS_METAL4
     if (native->mode == MTCommandMode4) {
-      native->pendingVisibility |= MTL4VisibilityOptionDevice;
+      id<MTL4ComputeCommandEncoder> encoder;
+      uint64_t                      afterStages;
+      uint64_t                      beforeStages;
+      uint64_t                      visibility;
+
+      afterStages  = mt_stageMask(barriers->srcStages);
+      beforeStages = mt_stageMask(barriers->dstStages);
+      visibility   = MTL4VisibilityOptionDevice;
       if (barriers->aliasingBarrierCount > 0u) {
-        native->pendingVisibility |= MTL4VisibilityOptionResourceAlias;
+        visibility |= MTL4VisibilityOptionResourceAlias;
       }
 
       for (uint32_t i = 0; i < barriers->bufferBarrierCount; i++) {
@@ -1083,9 +1103,15 @@ mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
           (id<MTLBuffer>)barriers->pBufferBarriers[i].buffer->_priv);
       }
       for (uint32_t i = 0; i < barriers->textureBarrierCount; i++) {
+        const GPUTextureBarrier *barrier;
+
+        barrier = &barriers->pTextureBarriers[i];
+        if ((barrier->srcAccess &
+             (GPU_ACCESS_COLOR_WRITE | GPU_ACCESS_DEPTH_WRITE)) != 0u) {
+          afterStages |= MTLStageAll;
+        }
         mt_useAllocation(cmdb,
-                         mt_nativeTexture(
-                           barriers->pTextureBarriers[i].texture));
+                         mt_nativeTexture(barrier->texture));
       }
       for (uint32_t i = 0; i < barriers->aliasingBarrierCount; i++) {
         const GPUAliasingBarrier *barrier;
@@ -1104,8 +1130,22 @@ mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
           mt_useAllocation(cmdb, mt_nativeTexture(barrier->afterTexture));
         }
       }
+
+      encoder = [(id<MTL4CommandBuffer>)native->modern
+        computeCommandEncoder];
+      if (!encoder) {
+        return;
+      }
+      mt_applyPendingBarrier(cmdb, encoder);
+      [encoder barrierAfterStages:afterStages
+               beforeQueueStages:beforeStages
+               visibilityOptions:visibility];
+      [encoder endEncoding];
+      return;
     }
 #endif
+    native->pendingAfterStages  |= mt_stageMask(barriers->srcStages);
+    native->pendingBeforeStages |= mt_stageMask(barriers->dstStages);
   }
 #else
   GPU__UNUSED(cmdb);

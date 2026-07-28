@@ -757,25 +757,18 @@ gpu_generateMipmapsValid(GPUCommandBuffer *cmdb, GPUTexture *texture) {
          caps.sampled && caps.filterable && caps.colorAttachment;
 }
 
-GPU_EXPORT
+GPU_HIDE
 void
-GPUGenerateMipmaps(GPUCommandBuffer *cmdb, GPUTexture *texture) {
-  GPUTextureBlitInfo info = {0};
-  GPUApi            *api;
+gpuGenerateMipmapsFallback(
+  GPUCommandBuffer *cmdb,
+  GPUTexture       *texture,
+  void (*blitTexture)(GPUCommandBuffer         *cmdb,
+                      const GPUTextureBlitInfo *info)) {
+  GPUTextureBlitInfo info           = {0};
+  GPUTextureBarrier  textureBarrier = {0};
+  GPUBarrierBatch    barrierBatch   = {0};
 
-  if (!gpu_generateMipmapsValid(cmdb, texture)) {
-    return;
-  }
-
-  api = gpuCommandBufferApi(cmdb);
-  if (!api) {
-    return;
-  }
-  if (api->renderPass.generateMipmaps) {
-    api->renderPass.generateMipmaps(cmdb, texture);
-    return;
-  }
-  if (!api->renderPass.blitTexture) {
+  if (!cmdb || !texture || !blitTexture) {
     return;
   }
 
@@ -802,6 +795,41 @@ GPUGenerateMipmaps(GPUCommandBuffer *cmdb, GPUTexture *texture) {
       gpu_blitMipExtent(texture->width, mipLevel);
     info.dstRegion.height =
       gpu_blitMipExtent(texture->height, mipLevel);
-    api->renderPass.blitTexture(cmdb, &info);
+    blitTexture(cmdb, &info);
+    if (mipLevel + 1u < texture->mipLevelCount) {
+      textureBarrier.texture    = texture;
+      textureBarrier.srcAccess  = GPU_ACCESS_COLOR_WRITE;
+      textureBarrier.dstAccess  = GPU_ACCESS_SHADER_READ;
+      textureBarrier.baseMip    = mipLevel;
+      textureBarrier.mipCount   = 1u;
+      textureBarrier.layerCount = texture->depthOrLayers;
+      barrierBatch.pTextureBarriers    = &textureBarrier;
+      barrierBatch.srcStages           = GPU_STAGE_FRAGMENT;
+      barrierBatch.dstStages           = GPU_STAGE_FRAGMENT;
+      barrierBatch.textureBarrierCount = 1u;
+      GPUEncodeBarriers(cmdb, &barrierBatch);
+    }
+  }
+}
+
+GPU_EXPORT
+void
+GPUGenerateMipmaps(GPUCommandBuffer *cmdb, GPUTexture *texture) {
+  GPUApi *api;
+
+  if (!gpu_generateMipmapsValid(cmdb, texture)) {
+    return;
+  }
+
+  api = gpuCommandBufferApi(cmdb);
+  if (!api) {
+    return;
+  }
+  if (api->renderPass.generateMipmaps) {
+    api->renderPass.generateMipmaps(cmdb, texture);
+  } else if (api->renderPass.blitTexture) {
+    gpuGenerateMipmapsFallback(cmdb,
+                               texture,
+                               api->renderPass.blitTexture);
   }
 }

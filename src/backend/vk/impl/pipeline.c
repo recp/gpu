@@ -462,18 +462,21 @@ vk_createRenderPipeline(GPUDevice                         *device,
 
   GPU__UNUSED(requiredBindGroupMask);
   native->device = deviceVk->device;
-  entryMask = gpuShaderEntryBit(info->library, info->fragmentEntry);
-  if (mesh) {
-    entryMask |= gpuShaderEntryBit(info->library, mesh->taskEntry);
-    entryMask |= gpuShaderEntryBit(info->library, mesh->meshEntry);
-  } else {
-    entryMask |= gpuShaderEntryBit(info->library, info->vertexEntry);
-  }
-  if (entryMask == 0u) {
-    free(vertexAttributes);
-    free(vertexBindings);
-    free(native);
-    return GPU_ERROR_INVALID_ARGUMENT;
+  entryMask = UINT64_MAX;
+  if (gpuShaderLibraryHasEntryResourceInfo(info->library)) {
+    entryMask = gpuShaderEntryBit(info->library, info->fragmentEntry);
+    if (mesh) {
+      entryMask |= gpuShaderEntryBit(info->library, mesh->taskEntry);
+      entryMask |= gpuShaderEntryBit(info->library, mesh->meshEntry);
+    } else {
+      entryMask |= gpuShaderEntryBit(info->library, info->vertexEntry);
+    }
+    if (entryMask == 0u) {
+      free(vertexAttributes);
+      free(vertexBindings);
+      free(native);
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
   }
   if (vk_createShaderLayout(device,
                             info->layout,
