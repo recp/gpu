@@ -22,7 +22,15 @@
 
 #define DX12_PIPELINE_KEY_VERSION   1u
 #define DX12_PIPELINE_CACHE_MAGIC   0x43584447u
-#define DX12_PIPELINE_CACHE_VERSION 1u
+#define DX12_PIPELINE_CACHE_VERSION 2u
+#define DX12_PIPELINE_NAME_SIZE     34u
+
+#if defined(__ID3D12Device1_INTERFACE_DEFINED__) && \
+    defined(__ID3D12PipelineLibrary_INTERFACE_DEFINED__)
+#  define DX12_HAS_PIPELINE_LIBRARY 1
+#else
+#  define DX12_HAS_PIPELINE_LIBRARY 0
+#endif
 
 typedef struct DX12PipelineCacheEntry {
   struct DX12PipelineCacheEntry *next;
@@ -33,6 +41,7 @@ typedef struct DX12PipelineCacheEntry {
 
 typedef struct DX12PipelineCacheHeader {
   uint64_t entryCount;
+  uint64_t librarySize;
   uint32_t magic;
   uint32_t version;
 } DX12PipelineCacheHeader;
@@ -45,6 +54,13 @@ typedef struct DX12PipelineCacheRecord {
 typedef struct DX12PipelineCache {
   DX12PipelineCacheEntry *entries;
   char                   *path;
+#if DX12_HAS_PIPELINE_LIBRARY
+  void                   *libraryBacking;
+  ID3D12PipelineLibrary  *library;
+#  if defined(__ID3D12PipelineLibrary1_INTERFACE_DEFINED__)
+  ID3D12PipelineLibrary1 *library1;
+#  endif
+#endif
   size_t                  entryCount;
   SRWLOCK                 lock;
   bool                    dirty;
@@ -136,12 +152,20 @@ dx12__freeEntries(DX12PipelineCache *native) {
 static bool
 dx12__loadCache(DX12PipelineCache *native,
                 const void        *data,
-                size_t             dataSize) {
+                size_t             dataSize,
+                const void       **outLibraryData,
+                size_t            *outLibrarySize) {
   DX12PipelineCacheEntry **tail;
   const uint8_t           *bytes;
   DX12PipelineCacheHeader  header;
   size_t                   cursor;
 
+  if (outLibraryData) {
+    *outLibraryData = NULL;
+  }
+  if (outLibrarySize) {
+    *outLibrarySize = 0u;
+  }
   if (!native || !data || dataSize < sizeof(header)) {
     return false;
   }
@@ -150,13 +174,26 @@ dx12__loadCache(DX12PipelineCache *native,
   memcpy(&header, bytes, sizeof(header));
   if (header.magic != DX12_PIPELINE_CACHE_MAGIC ||
       header.version != DX12_PIPELINE_CACHE_VERSION ||
-      header.entryCount > (uint64_t)SIZE_MAX ||
-      (size_t)header.entryCount >
-        (dataSize - sizeof(header)) / sizeof(DX12PipelineCacheRecord)) {
+      header.entryCount > (uint64_t)SIZE_MAX) {
     return false;
   }
 
   cursor = sizeof(header);
+  if (header.librarySize > (uint64_t)SIZE_MAX ||
+      (size_t)header.librarySize > dataSize - cursor) {
+    goto invalid;
+  }
+  if (outLibraryData && header.librarySize > 0u) {
+    *outLibraryData = bytes + cursor;
+  }
+  if (outLibrarySize) {
+    *outLibrarySize = (size_t)header.librarySize;
+  }
+  cursor += (size_t)header.librarySize;
+  if ((size_t)header.entryCount >
+      (dataSize - cursor) / sizeof(DX12PipelineCacheRecord)) {
+    goto invalid;
+  }
   tail   = &native->entries;
   for (uint64_t i = 0u; i < header.entryCount; i++) {
     DX12PipelineCacheEntry *entry;
@@ -193,9 +230,198 @@ dx12__loadCache(DX12PipelineCache *native,
   return true;
 
 invalid:
+  if (outLibraryData) {
+    *outLibraryData = NULL;
+  }
+  if (outLibrarySize) {
+    *outLibrarySize = 0u;
+  }
   dx12__freeEntries(native);
   return false;
 }
+
+#if DX12_HAS_PIPELINE_LIBRARY
+static void
+dx12__createPipelineLibrary(DX12PipelineCache *native,
+                            ID3D12Device       *device,
+                            void               *data,
+                            size_t              dataSize) {
+  D3D12_FEATURE_DATA_SHADER_CACHE support = {0};
+  ID3D12Device1                  *device1;
+  HRESULT                         result;
+
+  device1 = NULL;
+  if (!native || !device ||
+      FAILED(device->lpVtbl->CheckFeatureSupport(device,
+                                                 D3D12_FEATURE_SHADER_CACHE,
+                                                 &support,
+                                                 sizeof(support))) ||
+      !(support.SupportFlags & D3D12_SHADER_CACHE_SUPPORT_LIBRARY) ||
+      FAILED(device->lpVtbl->QueryInterface(device,
+                                            &IID_ID3D12Device1,
+                                            (void **)&device1)) ||
+      !device1) {
+    free(data);
+    return;
+  }
+
+  result = device1->lpVtbl->CreatePipelineLibrary(
+    device1,
+    data,
+    dataSize,
+    &IID_ID3D12PipelineLibrary,
+    (void **)&native->library
+  );
+  if (SUCCEEDED(result) && native->library) {
+    native->libraryBacking = data;
+  }
+  if ((FAILED(result) || !native->library) && dataSize > 0u) {
+    if (native->library) {
+      native->library->lpVtbl->Release(native->library);
+    }
+    native->library = NULL;
+    free(data);
+    result = device1->lpVtbl->CreatePipelineLibrary(
+      device1,
+      NULL,
+      0u,
+      &IID_ID3D12PipelineLibrary,
+      (void **)&native->library
+    );
+    if (SUCCEEDED(result) && native->library) {
+      native->dirty = true;
+    }
+  } else if (FAILED(result) || !native->library) {
+    free(data);
+  }
+  if (FAILED(result) && native->library) {
+    native->library->lpVtbl->Release(native->library);
+    native->library = NULL;
+  }
+  device1->lpVtbl->Release(device1);
+
+#  if defined(__ID3D12PipelineLibrary1_INTERFACE_DEFINED__)
+  if (SUCCEEDED(result) && native->library) {
+    (void)native->library->lpVtbl->QueryInterface(
+      native->library,
+      &IID_ID3D12PipelineLibrary1,
+      (void **)&native->library1
+    );
+  }
+#  endif
+}
+
+static void
+dx12__pipelineName(const DX12PipelineKey *key,
+                   WCHAR                  name[DX12_PIPELINE_NAME_SIZE]) {
+  static const WCHAR hex[] = L"0123456789abcdef";
+  uint32_t           cursor;
+
+  name[0] = L'g';
+  cursor  = 1u;
+  for (uint32_t word = 0u; word < 2u; word++) {
+    for (uint32_t shift = 64u; shift > 0u; shift -= 4u) {
+      name[cursor++] = hex[(key->value[word] >> (shift - 4u)) & 0xfu];
+    }
+  }
+  name[cursor] = L'\0';
+}
+
+static HRESULT
+dx12__loadGraphicsLibrary(DX12PipelineCache                         *native,
+                          const DX12PipelineKey                     *key,
+                          const D3D12_GRAPHICS_PIPELINE_STATE_DESC *desc,
+                          ID3D12PipelineState                      **outState) {
+  WCHAR   name[DX12_PIPELINE_NAME_SIZE];
+  HRESULT result;
+
+  if (!native || !native->library) {
+    return E_NOINTERFACE;
+  }
+  dx12__pipelineName(key, name);
+  AcquireSRWLockExclusive(&native->lock);
+  result = native->library->lpVtbl->LoadGraphicsPipeline(
+    native->library,
+    name,
+    desc,
+    &IID_ID3D12PipelineState,
+    (void **)outState
+  );
+  ReleaseSRWLockExclusive(&native->lock);
+  return result;
+}
+
+static HRESULT
+dx12__loadComputeLibrary(DX12PipelineCache                        *native,
+                         const DX12PipelineKey                    *key,
+                         const D3D12_COMPUTE_PIPELINE_STATE_DESC *desc,
+                         ID3D12PipelineState                     **outState) {
+  WCHAR   name[DX12_PIPELINE_NAME_SIZE];
+  HRESULT result;
+
+  if (!native || !native->library) {
+    return E_NOINTERFACE;
+  }
+  dx12__pipelineName(key, name);
+  AcquireSRWLockExclusive(&native->lock);
+  result = native->library->lpVtbl->LoadComputePipeline(
+    native->library,
+    name,
+    desc,
+    &IID_ID3D12PipelineState,
+    (void **)outState
+  );
+  ReleaseSRWLockExclusive(&native->lock);
+  return result;
+}
+
+#  if defined(__ID3D12PipelineLibrary1_INTERFACE_DEFINED__)
+static HRESULT
+dx12__loadMeshLibrary(DX12PipelineCache                       *native,
+                      const DX12PipelineKey                   *key,
+                      const D3D12_PIPELINE_STATE_STREAM_DESC *desc,
+                      ID3D12PipelineState                    **outState) {
+  WCHAR   name[DX12_PIPELINE_NAME_SIZE];
+  HRESULT result;
+
+  if (!native || !native->library1) {
+    return E_NOINTERFACE;
+  }
+  dx12__pipelineName(key, name);
+  AcquireSRWLockExclusive(&native->lock);
+  result = native->library1->lpVtbl->LoadPipeline(
+    native->library1,
+    name,
+    desc,
+    &IID_ID3D12PipelineState,
+    (void **)outState
+  );
+  ReleaseSRWLockExclusive(&native->lock);
+  return result;
+}
+#  endif
+
+static void
+dx12__storeLibrary(DX12PipelineCache     *native,
+                   const DX12PipelineKey *key,
+                   ID3D12PipelineState    *state) {
+  WCHAR   name[DX12_PIPELINE_NAME_SIZE];
+  HRESULT result;
+
+  if (!native || !native->library || !state) {
+    return;
+  }
+  dx12__pipelineName(key, name);
+  AcquireSRWLockExclusive(&native->lock);
+  result = native->library->lpVtbl->StorePipeline(native->library,
+                                                   name,
+                                                   state);
+  if (SUCCEEDED(result)) {
+    native->dirty = true;
+  }
+  ReleaseSRWLockExclusive(&native->lock);
+}
+#endif
 
 static char *
 dx12__copyPath(const char *path) {
@@ -216,7 +442,12 @@ dx12_createCache(GPUDevice                        *device,
                  GPUPipelineCache                 *cache) {
   DX12PipelineCache *native;
   GPUDeviceDX12     *deviceDX12;
+  const void        *libraryData;
+#if DX12_HAS_PIPELINE_LIBRARY
+  void              *libraryBacking;
+#endif
   void              *initialData;
+  size_t             librarySize;
   size_t             initialSize;
 
   deviceDX12 = device ? device->_priv : NULL;
@@ -237,7 +468,31 @@ dx12_createCache(GPUDevice                        *device,
   InitializeSRWLock(&native->lock);
 
   initialData = dx12__readCache(native->path, &initialSize);
-  (void)dx12__loadCache(native, initialData, initialSize);
+  libraryData = NULL;
+  librarySize = 0u;
+  (void)dx12__loadCache(native,
+                        initialData,
+                        initialSize,
+                        &libraryData,
+                        &librarySize);
+#if DX12_HAS_PIPELINE_LIBRARY
+  libraryBacking = NULL;
+  if (librarySize > 0u) {
+    libraryBacking = malloc(librarySize);
+    if (libraryBacking) {
+      memcpy(libraryBacking, libraryData, librarySize);
+    } else {
+      librarySize = 0u;
+    }
+  }
+  dx12__createPipelineLibrary(native,
+                              deviceDX12->d3dDevice,
+                              libraryBacking,
+                              librarySize);
+#else
+  GPU__UNUSED(libraryData);
+  GPU__UNUSED(librarySize);
+#endif
   free(initialData);
 
   cache->_priv = native;
@@ -249,9 +504,11 @@ dx12__storeCache(DX12PipelineCache *native) {
   GPUCacheFileGuard        guard;
   DX12PipelineCacheEntry *entry;
   uint8_t                *data;
+  uint8_t                *libraryData;
   char                   *temporaryPath;
   FILE                   *file;
   size_t                  dataSize;
+  size_t                  librarySize;
   size_t                  cursor;
   uint64_t                entryCount;
   bool                    valid;
@@ -266,9 +523,32 @@ dx12__storeCache(DX12PipelineCache *native) {
   dx12__mergeStoredCache(native);
 
   AcquireSRWLockExclusive(&native->lock);
-  dataSize   = sizeof(DX12PipelineCacheHeader);
+  libraryData = NULL;
+  librarySize = 0u;
+#if DX12_HAS_PIPELINE_LIBRARY
+  if (native->library) {
+    SIZE_T serializedSize;
+
+    serializedSize = native->library->lpVtbl->GetSerializedSize(native->library);
+    if (serializedSize > 0u) {
+      libraryData = malloc((size_t)serializedSize);
+      if (libraryData &&
+          SUCCEEDED(native->library->lpVtbl->Serialize(native->library,
+                                                       libraryData,
+                                                       serializedSize))) {
+        librarySize = (size_t)serializedSize;
+      } else {
+        free(libraryData);
+        libraryData = NULL;
+      }
+    }
+  }
+#endif
+  valid      = librarySize <= SIZE_MAX - sizeof(DX12PipelineCacheHeader);
+  dataSize   = valid
+             ? sizeof(DX12PipelineCacheHeader) + librarySize
+             : 0u;
   entryCount = 0u;
-  valid      = true;
   for (entry = native->entries; valid && entry; entry = entry->next) {
     if (entry->dataSize > SIZE_MAX - sizeof(DX12PipelineCacheRecord) ||
         sizeof(DX12PipelineCacheRecord) + entry->dataSize >
@@ -286,11 +566,16 @@ dx12__storeCache(DX12PipelineCache *native) {
   if (valid) {
     DX12PipelineCacheHeader header;
 
-    header.entryCount = entryCount;
-    header.magic      = DX12_PIPELINE_CACHE_MAGIC;
-    header.version    = DX12_PIPELINE_CACHE_VERSION;
+    header.entryCount  = entryCount;
+    header.librarySize = librarySize;
+    header.magic       = DX12_PIPELINE_CACHE_MAGIC;
+    header.version     = DX12_PIPELINE_CACHE_VERSION;
     memcpy(data, &header, sizeof(header));
     cursor = sizeof(header);
+    if (librarySize > 0u) {
+      memcpy(data + cursor, libraryData, librarySize);
+      cursor += librarySize;
+    }
     for (entry = native->entries; entry; entry = entry->next) {
       DX12PipelineCacheRecord record;
 
@@ -305,6 +590,7 @@ dx12__storeCache(DX12PipelineCache *native) {
     valid = cursor == dataSize;
   }
   ReleaseSRWLockExclusive(&native->lock);
+  free(libraryData);
   if (!valid) {
     free(data);
     gpuCacheFileEnd(&guard);
@@ -343,6 +629,17 @@ dx12_destroyCache(GPUPipelineCache *cache) {
     return;
   }
   dx12__storeCache(native);
+#if DX12_HAS_PIPELINE_LIBRARY
+#  if defined(__ID3D12PipelineLibrary1_INTERFACE_DEFINED__)
+  if (native->library1) {
+    native->library1->lpVtbl->Release(native->library1);
+  }
+#  endif
+  if (native->library) {
+    native->library->lpVtbl->Release(native->library);
+  }
+  free(native->libraryBacking);
+#endif
   dx12__freeEntries(native);
   free(native->path);
   free(native);
@@ -472,7 +769,7 @@ dx12__mergeStoredCache(DX12PipelineCache *native) {
   size_t                  dataSize;
 
   data = dx12__readCache(native->path, &dataSize);
-  if (!dx12__loadCache(&stored, data, dataSize)) {
+  if (!dx12__loadCache(&stored, data, dataSize, NULL, NULL)) {
     free(data);
     return;
   }
@@ -607,6 +904,16 @@ dx12_createGraphicsPSO(GPUPipelineCache                          *cache,
                       rootKey,
                       DX12_PIPELINE_KIND_RENDER,
                       &key);
+#if DX12_HAS_PIPELINE_LIBRARY
+    result = dx12__loadGraphicsLibrary(native, &key, desc, outState);
+    if (SUCCEEDED(result) && *outState) {
+      return GPU_OK;
+    }
+    if (*outState) {
+      (*outState)->lpVtbl->Release(*outState);
+      *outState = NULL;
+    }
+#endif
     AcquireSRWLockShared(&native->lock);
     entry = *dx12__findEntry(native, &key);
     if (entry) {
@@ -621,6 +928,9 @@ dx12_createGraphicsPSO(GPUPipelineCache                          *cache,
       );
       ReleaseSRWLockShared(&native->lock);
       if (SUCCEEDED(result) && *outState) {
+#if DX12_HAS_PIPELINE_LIBRARY
+        dx12__storeLibrary(native, &key, *outState);
+#endif
         return GPU_OK;
       }
       if (*outState) {
@@ -648,6 +958,9 @@ dx12_createGraphicsPSO(GPUPipelineCache                          *cache,
     return GPU_ERROR_BACKEND_FAILURE;
   }
   if (native) {
+#if DX12_HAS_PIPELINE_LIBRARY
+    dx12__storeLibrary(native, &key, *outState);
+#endif
     dx12__storeBlob(native, &key, *outState);
   }
   return GPU_OK;
@@ -670,6 +983,16 @@ dx12_createComputePSO(GPUPipelineCache                         *cache,
   native    = dx12__nativeCache(cache);
   if (native) {
     dx12__computeKey(desc, rootKey, &key);
+#if DX12_HAS_PIPELINE_LIBRARY
+    result = dx12__loadComputeLibrary(native, &key, desc, outState);
+    if (SUCCEEDED(result) && *outState) {
+      return GPU_OK;
+    }
+    if (*outState) {
+      (*outState)->lpVtbl->Release(*outState);
+      *outState = NULL;
+    }
+#endif
     AcquireSRWLockShared(&native->lock);
     entry = *dx12__findEntry(native, &key);
     if (entry) {
@@ -684,6 +1007,9 @@ dx12_createComputePSO(GPUPipelineCache                         *cache,
       );
       ReleaseSRWLockShared(&native->lock);
       if (SUCCEEDED(result) && *outState) {
+#if DX12_HAS_PIPELINE_LIBRARY
+        dx12__storeLibrary(native, &key, *outState);
+#endif
         return GPU_OK;
       }
       if (*outState) {
@@ -716,6 +1042,9 @@ dx12_createComputePSO(GPUPipelineCache                         *cache,
     return GPU_ERROR_BACKEND_FAILURE;
   }
   if (native) {
+#if DX12_HAS_PIPELINE_LIBRARY
+    dx12__storeLibrary(native, &key, *outState);
+#endif
     dx12__storeBlob(native, &key, *outState);
   }
   return GPU_OK;
@@ -752,6 +1081,17 @@ dx12_createMeshPSO(GPUPipelineCache                        *cache,
                   meshCode,
                   fragmentCode,
                   &key);
+#if DX12_HAS_PIPELINE_LIBRARY && \
+    defined(__ID3D12PipelineLibrary1_INTERFACE_DEFINED__)
+    result = dx12__loadMeshLibrary(native, &key, desc, outState);
+    if (SUCCEEDED(result) && *outState) {
+      return GPU_OK;
+    }
+    if (*outState) {
+      (*outState)->lpVtbl->Release(*outState);
+      *outState = NULL;
+    }
+#endif
     AcquireSRWLockShared(&native->lock);
     entry = *dx12__findEntry(native, &key);
     if (entry) {
@@ -767,6 +1107,9 @@ dx12_createMeshPSO(GPUPipelineCache                        *cache,
       cachedPSO->CachedBlobSizeInBytes = 0u;
       ReleaseSRWLockShared(&native->lock);
       if (SUCCEEDED(result) && *outState) {
+#if DX12_HAS_PIPELINE_LIBRARY
+        dx12__storeLibrary(native, &key, *outState);
+#endif
         return GPU_OK;
       }
       if (*outState) {
@@ -794,6 +1137,9 @@ dx12_createMeshPSO(GPUPipelineCache                        *cache,
     return GPU_ERROR_BACKEND_FAILURE;
   }
   if (native) {
+#if DX12_HAS_PIPELINE_LIBRARY
+    dx12__storeLibrary(native, &key, *outState);
+#endif
     dx12__storeBlob(native, &key, *outState);
   }
   return GPU_OK;
