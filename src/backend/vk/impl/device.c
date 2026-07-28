@@ -2466,6 +2466,15 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   if (!device || !deviceVk || !plans || !queues) {
     goto err;
   }
+#if defined(_WIN32) || defined(WIN32)
+  InitializeCriticalSection(&deviceVk->classicRenderLock);
+  deviceVk->classicRenderLockInitialized = true;
+#else
+  if (pthread_mutex_init(&deviceVk->classicRenderLock, NULL) != 0) {
+    goto err;
+  }
+  deviceVk->classicRenderLockInitialized = true;
+#endif
 
   adapterVk = adapter->_priv;
   if (!adapterVk->negativeViewport) {
@@ -3317,7 +3326,15 @@ err:
     }
     free(deviceVk->createdQueues);
     if (deviceVk->device) {
+      vk_destroyClassicRenderTargets(deviceVk);
       vkDestroyDevice(deviceVk->device, NULL);
+    }
+    if (deviceVk->classicRenderLockInitialized) {
+#if defined(_WIN32) || defined(WIN32)
+      DeleteCriticalSection(&deviceVk->classicRenderLock);
+#else
+      pthread_mutex_destroy(&deviceVk->classicRenderLock);
+#endif
     }
     free(deviceVk);
   }
@@ -3347,7 +3364,15 @@ vk_destroyDevice(GPUDevice * __restrict device) {
     }
     free(deviceVk->createdQueues);
     if (deviceVk->device) {
+      vk_destroyClassicRenderTargets(deviceVk);
       vkDestroyDevice(deviceVk->device, NULL);
+    }
+    if (deviceVk->classicRenderLockInitialized) {
+#if defined(_WIN32) || defined(WIN32)
+      DeleteCriticalSection(&deviceVk->classicRenderLock);
+#else
+      pthread_mutex_destroy(&deviceVk->classicRenderLock);
+#endif
     }
     free(deviceVk);
   }

@@ -93,13 +93,18 @@ vk__createRenderPass(GPUSwapchainVk *swapchain,
 
 static void
 vk__destroyResources(GPUSwapchainVk *swapchain) {
+  GPUDeviceVk *device;
   uint32_t i;
 
   if (!swapchain || !swapchain->device) {
     return;
   }
+  device = swapchain->gpuDevice ? swapchain->gpuDevice->_priv : NULL;
 
   for (i = 0u; i < swapchain->imageCount; i++) {
+    if (device && swapchain->imageViews && swapchain->imageViews[i]) {
+      vk_invalidateClassicFramebuffers(device, swapchain->imageViews[i]);
+    }
     if (swapchain->framebuffers && swapchain->framebuffers[i]) {
       vkDestroyFramebuffer(swapchain->device,
                            swapchain->framebuffers[i],
@@ -248,6 +253,15 @@ vk__compositeAlpha(VkCompositeAlphaFlagsKHR supported) {
     }
   }
   return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+}
+
+static VkSurfaceTransformFlagBitsKHR
+vk__preTransform(const VkSurfaceCapabilitiesKHR *caps) {
+  if ((caps->supportedTransforms &
+       VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) != 0u) {
+    return VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+  }
+  return caps->currentTransform;
 }
 
 static bool
@@ -593,7 +607,7 @@ vk__createResources(GPUSwapchain  *swapchainObj,
   info.imageArrayLayers = 1u;
   info.imageUsage       = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
   info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-  info.preTransform     = caps.currentTransform;
+  info.preTransform     = vk__preTransform(&caps);
   info.compositeAlpha   = vk__compositeAlpha(caps.supportedCompositeAlpha);
   info.presentMode      = presentMode;
   info.clipped          = VK_TRUE;

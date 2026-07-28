@@ -829,20 +829,37 @@ vk__finishTexture(GPUDevice                  *device,
 #ifdef VK_KHR_copy_memory_indirect
   if (deviceVk->indirectMemoryToTextureCopy && device->adapter &&
       device->adapter->_priv) {
-    GPUAdapterVk        *adapterVk;
-    VkFormatProperties2  properties2 = {0};
-    VkFormatProperties3  properties3 = {0};
+    GPUInstanceVk                      *instanceVk;
+    GPUAdapterVk                       *adapterVk;
+    PFN_vkGetPhysicalDeviceFormatProperties2 getFormatProperties2;
+    VkFormatProperties2                properties2 = {0};
+    VkFormatProperties3                properties3 = {0};
 
-    adapterVk         = device->adapter->_priv;
+    instanceVk = device->adapter->inst
+                   ? device->adapter->inst->_priv
+                   : NULL;
+    adapterVk  = device->adapter->_priv;
+    getFormatProperties2 = instanceVk
+      ? (PFN_vkGetPhysicalDeviceFormatProperties2)
+          vkGetInstanceProcAddr(instanceVk->inst,
+                                "vkGetPhysicalDeviceFormatProperties2")
+      : NULL;
+    if (!getFormatProperties2 && instanceVk) {
+      getFormatProperties2 = (PFN_vkGetPhysicalDeviceFormatProperties2)
+        vkGetInstanceProcAddr(instanceVk->inst,
+                              "vkGetPhysicalDeviceFormatProperties2KHR");
+    }
     properties2.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
     properties2.pNext = &properties3;
     properties3.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3;
-    vkGetPhysicalDeviceFormatProperties2(adapterVk->physicalDevice,
-                                          imageInfo->format,
-                                          &properties2);
-    state->indirectCopyDst =
-      (properties3.optimalTilingFeatures &
-       VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR) != 0u;
+    if (getFormatProperties2) {
+      getFormatProperties2(adapterVk->physicalDevice,
+                           imageInfo->format,
+                           &properties2);
+      state->indirectCopyDst =
+        (properties3.optimalTilingFeatures &
+         VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR) != 0u;
+    }
   }
 #endif
   subresourceCount = state->subresourceCount;
@@ -1407,6 +1424,10 @@ vk_destroyTextureView(GPUTextureView * __restrict view) {
 
   native = view->_priv;
   if (native && native->device) {
+    if (native->texture && native->texture->gpuDevice) {
+      vk_invalidateClassicFramebuffers(native->texture->gpuDevice,
+                                       native->view);
+    }
     if (native->framebuffer) {
       vkDestroyFramebuffer(native->device, native->framebuffer, NULL);
     }

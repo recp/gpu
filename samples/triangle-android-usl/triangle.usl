@@ -1,0 +1,21 @@
+struct VertexOut {
+  position: float4 #position
+  color:    float4
+}
+
+vert tri_vs(vertexId: uint #vertex_id) -> VertexOut {
+  if (vertexId == 0) {
+    return VertexOut { float4( 0.0,  0.68, 0.0, 1.0),
+                       float4(0.15, 0.55, 1.0, 1.0) }
+  }
+  if (vertexId == 1) {
+    return VertexOut { float4(-0.72, -0.62, 0.0, 1.0),
+                       float4(1.0, 0.22, 0.08, 1.0) }
+  }
+  return VertexOut { float4(0.72, -0.62, 0.0, 1.0),
+                     float4(0.15, 1.0, 0.35, 1.0) }
+}
+
+frag tri_fs(input: VertexOut #stage_in) -> float4 {
+  return input.color
+}

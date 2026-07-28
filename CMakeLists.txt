@@ -22,6 +22,7 @@ option(GPU_BUILD_TESTS "Build GPU validation tests" OFF)
 option(GPU_BUILD_SAMPLES "Build GPU samples" OFF)
 option(GPU_BUILD_BENCHMARKS "Build GPU microbenchmarks" OFF)
 option(GPU_BUILD_ANDROID_TESTS "Build Android device validation" OFF)
+option(GPU_BUILD_ANDROID_SAMPLES "Build Android NativeActivity samples" OFF)
 option(GPU_BUILD_WITH_VALIDATION "Build validation and verbose diagnostics" ON)
 option(GPU_BUILD_WITH_DEBUG_MARKERS "Build debug marker support" ON)
 option(GPU_BACKEND_METAL_ONLY "Build only the Metal backend" OFF)
@@ -57,9 +58,11 @@ endif()
 if(GPU_BACKEND_VULKAN_ONLY)
   set(GPU_ENABLE_VULKAN ON)
 endif()
-if(GPU_BUILD_ANDROID_TESTS)
+if(GPU_BUILD_ANDROID_TESTS OR GPU_BUILD_ANDROID_SAMPLES)
   if(NOT ANDROID)
-    message(FATAL_ERROR "GPU_BUILD_ANDROID_TESTS requires the Android NDK")
+    message(FATAL_ERROR
+      "GPU_BUILD_ANDROID_TESTS and GPU_BUILD_ANDROID_SAMPLES require the "
+      "Android NDK")
   endif()
   set(GPU_ENABLE_VULKAN ON)
 endif()
@@ -429,6 +432,382 @@ if(GPU_BUILD_ANDROID_TESTS)
     -Wall
     -Wextra
     -Werror
+  )
+endif()
+
+if(GPU_BUILD_ANDROID_SAMPLES)
+  if(BUILD_SHARED_LIBS)
+    message(FATAL_ERROR
+      "GPU_BUILD_ANDROID_SAMPLES requires BUILD_SHARED_LIBS=OFF so each APK "
+      "contains one self-contained native library")
+  endif()
+
+  set(GPU_USL_HOST_FIXTURE "" CACHE FILEPATH
+      "Host gpu-usl-fixture executable used for Android samples")
+  set(GPU_USL_HOST_PACKER "" CACHE FILEPATH
+      "Host uslpack executable used for Android samples")
+  set(GPU_ANDROID_SDK_ROOT "$ENV{ANDROID_SDK_ROOT}" CACHE PATH
+      "Android SDK root used to package NativeActivity samples")
+  set(GPU_ANDROID_DEBUG_KEYSTORE
+      "$ENV{HOME}/.android/debug.keystore"
+      CACHE FILEPATH "Android debug keystore used to sign sample APKs")
+
+  if(NOT GPU_USL_HOST_FIXTURE)
+    set(_gpu_usl_host_fixture
+        "${CMAKE_CURRENT_SOURCE_DIR}/out/build/release-check/gpu-usl-fixture")
+    if(EXISTS "${_gpu_usl_host_fixture}")
+      set(GPU_USL_HOST_FIXTURE "${_gpu_usl_host_fixture}")
+    endif()
+  endif()
+  if(NOT GPU_USL_HOST_PACKER)
+    set(_gpu_usl_host_packer
+        "${CMAKE_CURRENT_SOURCE_DIR}/out/build/release-check/uslpack")
+    if(EXISTS "${_gpu_usl_host_packer}")
+      set(GPU_USL_HOST_PACKER "${_gpu_usl_host_packer}")
+    endif()
+  endif()
+  if(NOT EXISTS "${GPU_USL_HOST_FIXTURE}")
+    message(FATAL_ERROR
+      "Android samples require a host gpu-usl-fixture. Set "
+      "GPU_USL_HOST_FIXTURE.")
+  endif()
+  if(NOT EXISTS "${GPU_USL_HOST_PACKER}")
+    message(FATAL_ERROR
+      "Android samples require a host uslpack. Set GPU_USL_HOST_PACKER.")
+  endif()
+  if(NOT GPU_ANDROID_SDK_ROOT)
+    set(GPU_ANDROID_SDK_ROOT "$ENV{ANDROID_HOME}")
+  endif()
+  if(NOT GPU_ANDROID_SDK_ROOT)
+    foreach(_gpu_android_sdk_candidate
+            "$ENV{HOME}/Library/Developer/Android/sdk"
+            "$ENV{HOME}/Android/Sdk")
+      if(EXISTS "${_gpu_android_sdk_candidate}")
+        set(GPU_ANDROID_SDK_ROOT "${_gpu_android_sdk_candidate}")
+        break()
+      endif()
+    endforeach()
+  endif()
+  if(NOT EXISTS "${GPU_ANDROID_SDK_ROOT}")
+    message(FATAL_ERROR
+      "Android samples require ANDROID_SDK_ROOT or GPU_ANDROID_SDK_ROOT.")
+  endif()
+  if(NOT EXISTS "${GPU_ANDROID_DEBUG_KEYSTORE}")
+    message(FATAL_ERROR
+      "Android debug keystore not found. Set GPU_ANDROID_DEBUG_KEYSTORE.")
+  endif()
+
+  file(GLOB _gpu_android_build_tools LIST_DIRECTORIES true
+       "${GPU_ANDROID_SDK_ROOT}/build-tools/*")
+  if(NOT _gpu_android_build_tools)
+    message(FATAL_ERROR
+      "Android SDK build-tools are not installed under "
+      "${GPU_ANDROID_SDK_ROOT}.")
+  endif()
+  list(SORT _gpu_android_build_tools COMPARE NATURAL ORDER DESCENDING)
+  list(GET _gpu_android_build_tools 0 _gpu_android_build_tools_dir)
+  file(GLOB _gpu_android_platform_jars
+       "${GPU_ANDROID_SDK_ROOT}/platforms/android-*/android.jar")
+  if(NOT _gpu_android_platform_jars)
+    message(FATAL_ERROR
+      "No Android SDK platform is installed under ${GPU_ANDROID_SDK_ROOT}.")
+  endif()
+  list(SORT _gpu_android_platform_jars COMPARE NATURAL ORDER DESCENDING)
+  list(GET _gpu_android_platform_jars 0 GPU_ANDROID_PLATFORM_JAR)
+
+  set(GPU_ANDROID_AAPT2
+      "${_gpu_android_build_tools_dir}/aapt2")
+  set(GPU_ANDROID_ZIPALIGN
+      "${_gpu_android_build_tools_dir}/zipalign")
+  set(GPU_ANDROID_APKSIGNER
+      "${_gpu_android_build_tools_dir}/apksigner")
+  set(GPU_ANDROID_D8
+      "${_gpu_android_build_tools_dir}/d8")
+  foreach(_gpu_android_tool
+          GPU_ANDROID_AAPT2
+          GPU_ANDROID_ZIPALIGN
+          GPU_ANDROID_APKSIGNER
+          GPU_ANDROID_D8
+          GPU_ANDROID_PLATFORM_JAR)
+    if(NOT EXISTS "${${_gpu_android_tool}}")
+      message(FATAL_ERROR
+        "Android packaging tool not found: ${_gpu_android_tool}")
+    endif()
+  endforeach()
+  find_program(GPU_ANDROID_ZIP NAMES zip REQUIRED)
+  find_program(GPU_ANDROID_JAVAC NAMES javac REQUIRED)
+  find_program(GPU_ANDROID_JAR NAMES jar REQUIRED)
+
+  set(GPU_ANDROID_GLUE_DIR
+      "${CMAKE_ANDROID_NDK}/sources/android/native_app_glue")
+  add_library(gpu-android-native-app-glue STATIC
+    "${GPU_ANDROID_GLUE_DIR}/android_native_app_glue.c"
+  )
+  target_include_directories(gpu-android-native-app-glue PUBLIC
+    "${GPU_ANDROID_GLUE_DIR}"
+  )
+  target_link_libraries(gpu-android-native-app-glue PUBLIC android log)
+
+  find_path(GPU_CGLM_INCLUDE_DIR
+    NAMES cglm/cglm.h
+    HINTS
+      "${CMAKE_CURRENT_SOURCE_DIR}/../glm/include"
+      /opt/homebrew/include
+    NO_CMAKE_FIND_ROOT_PATH
+  )
+  if(NOT GPU_CGLM_INCLUDE_DIR)
+    message(FATAL_ERROR
+      "Android samples require cglm headers. Set GPU_CGLM_INCLUDE_DIR.")
+  endif()
+
+  add_library(gpu-android-sample-common STATIC
+    samples/common/android.c
+  )
+  target_include_directories(gpu-android-sample-common PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/samples/common"
+    "${GPU_ANDROID_GLUE_DIR}"
+  )
+  target_link_libraries(gpu-android-sample-common PUBLIC
+    gpu
+    gpu-android-native-app-glue
+    android
+    log
+  )
+  target_compile_options(gpu-android-sample-common PRIVATE
+    -Wall
+    -Wextra
+    -Werror
+  )
+  set_target_properties(gpu-android-sample-common PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+
+  function(gpu_add_android_usl_sample target sample_dir shader_source)
+    get_filename_component(_gpu_android_shader_name
+                           "${shader_source}" NAME_WE)
+    string(REPLACE "-" "_" _gpu_android_library_name "${target}")
+
+    set(_gpu_android_dir
+        "${CMAKE_CURRENT_BINARY_DIR}/android/${target}")
+    set(_gpu_android_usl
+        "${_gpu_android_dir}/${_gpu_android_shader_name}.usl")
+    set(_gpu_android_us
+        "${_gpu_android_dir}/${_gpu_android_shader_name}.us")
+    set(_gpu_android_manifest
+        "${CMAKE_CURRENT_SOURCE_DIR}/samples/${sample_dir}/AndroidManifest.xml")
+    set(_gpu_android_apk
+        "${_gpu_android_dir}/${target}.apk")
+
+    add_custom_command(
+      OUTPUT "${_gpu_android_us}"
+      BYPRODUCTS "${_gpu_android_usl}.spvasm"
+      COMMAND ${CMAKE_COMMAND} -E make_directory "${_gpu_android_dir}"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${CMAKE_CURRENT_SOURCE_DIR}/${shader_source}"
+              "${_gpu_android_usl}"
+      COMMAND ${CMAKE_COMMAND} -E env
+              USL_EMIT_BYTECODE=1
+              USL_NO_BACKEND_SIDECAR=1
+              "${GPU_USL_HOST_FIXTURE}"
+              vulkan
+              "${_gpu_android_usl}"
+      COMMAND "${CMAKE_COMMAND}"
+              "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+              "-DGPU_USL_SOURCE=${_gpu_android_usl}"
+              -DGPU_USL_TARGET=spirv
+              -DGPU_USL_TARGET_PROFILE=vulkan1.0
+              -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PackUSLArtifact.cmake"
+      DEPENDS
+        "${GPU_USL_HOST_FIXTURE}"
+        "${GPU_USL_HOST_PACKER}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PackUSLArtifact.cmake"
+        "${CMAKE_CURRENT_SOURCE_DIR}/${shader_source}"
+      VERBATIM
+    )
+    add_custom_target(${target}-artifact DEPENDS "${_gpu_android_us}")
+
+    add_library(${target} SHARED "samples/${sample_dir}/main.c" ${ARGN})
+    target_include_directories(${target} PRIVATE
+      "${GPU_ANDROID_GLUE_DIR}"
+      "${GPU_CGLM_INCLUDE_DIR}"
+    )
+    target_link_libraries(${target} PRIVATE gpu-android-sample-common)
+    target_compile_definitions(${target} PRIVATE
+      GPU_ANDROID_SAMPLE_STANDALONE=1
+    )
+    target_link_options(${target} PRIVATE
+      "LINKER:-u,ANativeActivity_onCreate"
+    )
+    target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
+    set_target_properties(${target} PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+      OUTPUT_NAME "${_gpu_android_library_name}"
+      LIBRARY_OUTPUT_DIRECTORY "${_gpu_android_dir}"
+    )
+    add_dependencies(${target} ${target}-artifact)
+
+    add_custom_command(
+      OUTPUT "${_gpu_android_apk}"
+      COMMAND "${CMAKE_COMMAND}"
+              "-DGPU_ANDROID_AAPT2=${GPU_ANDROID_AAPT2}"
+              "-DGPU_ANDROID_ZIP=${GPU_ANDROID_ZIP}"
+              "-DGPU_ANDROID_ZIPALIGN=${GPU_ANDROID_ZIPALIGN}"
+              "-DGPU_ANDROID_APKSIGNER=${GPU_ANDROID_APKSIGNER}"
+              "-DGPU_ANDROID_PLATFORM_JAR=${GPU_ANDROID_PLATFORM_JAR}"
+              "-DGPU_ANDROID_MANIFEST=${_gpu_android_manifest}"
+              "-DGPU_ANDROID_LIBRARY=$<TARGET_FILE:${target}>"
+              "-DGPU_ANDROID_LIBRARY_NAME=${_gpu_android_library_name}"
+              "-DGPU_ANDROID_ABI=${ANDROID_ABI}"
+              "-DGPU_ANDROID_ASSET=${_gpu_android_us}"
+              "-DGPU_ANDROID_ASSET_NAME=${_gpu_android_shader_name}.us"
+              "-DGPU_ANDROID_KEYSTORE=${GPU_ANDROID_DEBUG_KEYSTORE}"
+              "-DGPU_ANDROID_OUTPUT=${_gpu_android_apk}"
+              "-DGPU_ANDROID_STAGE=${_gpu_android_dir}/apk"
+              -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PackageAndroidSample.cmake"
+      DEPENDS
+        ${target}
+        "${_gpu_android_us}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PackageAndroidSample.cmake"
+        "${_gpu_android_manifest}"
+      VERBATIM
+    )
+    add_custom_target(${target}-apk ALL DEPENDS "${_gpu_android_apk}")
+  endfunction()
+
+  gpu_add_android_usl_sample(
+    gpu-triangle-android-usl
+    triangle-android-usl
+    samples/triangle-android-usl/triangle.usl
+  )
+  gpu_add_android_usl_sample(
+    gpu-textured-cube-android-usl
+    textured-cube-android-usl
+    samples/textured-cube-usl/textured_cube.usl
+  )
+
+  set(_gpu_android_gallery_dir
+      "${CMAKE_CURRENT_BINARY_DIR}/android/gpu-android-gallery")
+  set(_gpu_android_gallery_classes
+      "${_gpu_android_gallery_dir}/classes")
+  set(_gpu_android_gallery_dex_dir
+      "${_gpu_android_gallery_dir}/dex")
+  set(_gpu_android_gallery_dex
+      "${_gpu_android_gallery_dex_dir}/classes.dex")
+  set(_gpu_android_gallery_jar
+      "${_gpu_android_gallery_dir}/gallery.jar")
+  set(_gpu_android_gallery_java_root
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/android-gallery/java")
+  set(_gpu_android_gallery_java
+      "${_gpu_android_gallery_java_root}/com/recp/gpu/samples/GalleryActivity.java"
+      "${_gpu_android_gallery_java_root}/com/recp/gpu/samples/SampleActivity.java")
+  add_custom_command(
+    OUTPUT "${_gpu_android_gallery_dex}"
+    BYPRODUCTS "${_gpu_android_gallery_jar}"
+    COMMAND ${CMAKE_COMMAND} -E rm -rf
+            "${_gpu_android_gallery_classes}"
+            "${_gpu_android_gallery_dex_dir}"
+            "${_gpu_android_gallery_jar}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${_gpu_android_gallery_classes}"
+            "${_gpu_android_gallery_dex_dir}"
+    COMMAND "${GPU_ANDROID_JAVAC}"
+            -source 8
+            -target 8
+            -bootclasspath "${GPU_ANDROID_PLATFORM_JAR}"
+            -d "${_gpu_android_gallery_classes}"
+            ${_gpu_android_gallery_java}
+    COMMAND "${GPU_ANDROID_JAR}"
+            --create
+            --file "${_gpu_android_gallery_jar}"
+            -C "${_gpu_android_gallery_classes}" .
+    COMMAND "${GPU_ANDROID_D8}"
+            --min-api 26
+            --lib "${GPU_ANDROID_PLATFORM_JAR}"
+            --output "${_gpu_android_gallery_dex_dir}"
+            "${_gpu_android_gallery_jar}"
+    DEPENDS ${_gpu_android_gallery_java}
+    VERBATIM
+  )
+  add_custom_target(gpu-android-gallery-dex
+    DEPENDS "${_gpu_android_gallery_dex}"
+  )
+
+  add_library(gpu-android-gallery SHARED
+    samples/android-gallery/main.c
+    samples/triangle-android-usl/main.c
+    samples/textured-cube-android-usl/main.c
+  )
+  target_include_directories(gpu-android-gallery PRIVATE
+    "${GPU_ANDROID_GLUE_DIR}"
+    "${GPU_CGLM_INCLUDE_DIR}"
+  )
+  target_link_libraries(gpu-android-gallery PRIVATE
+    gpu-android-sample-common
+  )
+  target_link_options(gpu-android-gallery PRIVATE
+    "LINKER:-u,ANativeActivity_onCreate"
+  )
+  target_compile_options(gpu-android-gallery PRIVATE
+    -Wall
+    -Wextra
+    -Werror
+  )
+  set_target_properties(gpu-android-gallery PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    OUTPUT_NAME "gpu_samples"
+    LIBRARY_OUTPUT_DIRECTORY "${_gpu_android_gallery_dir}"
+  )
+  add_dependencies(gpu-android-gallery
+    gpu-triangle-android-usl-artifact
+    gpu-textured-cube-android-usl-artifact
+  )
+
+  set(_gpu_android_triangle_us
+      "${CMAKE_CURRENT_BINARY_DIR}/android/gpu-triangle-android-usl/triangle.us")
+  set(_gpu_android_cube_us
+      "${CMAKE_CURRENT_BINARY_DIR}/android/gpu-textured-cube-android-usl/textured_cube.us")
+  set(_gpu_android_gallery_apk
+      "${_gpu_android_gallery_dir}/gpu-android-gallery.apk")
+  add_custom_command(
+    OUTPUT "${_gpu_android_gallery_apk}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_ANDROID_AAPT2=${GPU_ANDROID_AAPT2}"
+            "-DGPU_ANDROID_ZIP=${GPU_ANDROID_ZIP}"
+            "-DGPU_ANDROID_ZIPALIGN=${GPU_ANDROID_ZIPALIGN}"
+            "-DGPU_ANDROID_APKSIGNER=${GPU_ANDROID_APKSIGNER}"
+            "-DGPU_ANDROID_PLATFORM_JAR=${GPU_ANDROID_PLATFORM_JAR}"
+            "-DGPU_ANDROID_MANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/samples/android-gallery/AndroidManifest.xml"
+            "-DGPU_ANDROID_LIBRARY=$<TARGET_FILE:gpu-android-gallery>"
+            -DGPU_ANDROID_LIBRARY_NAME=gpu_samples
+            "-DGPU_ANDROID_ABI=${ANDROID_ABI}"
+            "-DGPU_ANDROID_DEX=${_gpu_android_gallery_dex}"
+            "-DGPU_ANDROID_TRIANGLE_ASSET=${_gpu_android_triangle_us}"
+            "-DGPU_ANDROID_CUBE_ASSET=${_gpu_android_cube_us}"
+            "-DGPU_ANDROID_TRIANGLE_PREVIEW=${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery/previews/triangle.png"
+            "-DGPU_ANDROID_CUBE_PREVIEW=${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery/previews/textured-cube.png"
+            "-DGPU_ANDROID_KEYSTORE=${GPU_ANDROID_DEBUG_KEYSTORE}"
+            "-DGPU_ANDROID_OUTPUT=${_gpu_android_gallery_apk}"
+            "-DGPU_ANDROID_STAGE=${_gpu_android_gallery_dir}/apk"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PackageAndroidGallery.cmake"
+    DEPENDS
+      gpu-android-gallery
+      gpu-android-gallery-dex
+      "${_gpu_android_triangle_us}"
+      "${_gpu_android_cube_us}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PackageAndroidGallery.cmake"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/android-gallery/AndroidManifest.xml"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery/previews/triangle.png"
+      "${CMAKE_CURRENT_SOURCE_DIR}/samples/webgpu-gallery/previews/textured-cube.png"
+    VERBATIM
+  )
+  add_custom_target(gpu-android-gallery-apk ALL
+    DEPENDS "${_gpu_android_gallery_apk}"
   )
 endif()
 

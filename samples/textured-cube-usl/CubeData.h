@@ -81,7 +81,7 @@ _Static_assert(sizeof(kCubeIndices) / sizeof(kCubeIndices[0]) ==
 
 static inline void
 CubeBuildViewProjection(uint32_t width, uint32_t height, mat4 dest) {
-  vec3  eye    = {0.0f, 0.0f, 4.5f};
+  vec3  eye;
   vec3  center = {0.0f, 0.0f, 0.0f};
   vec3  up     = {0.0f, 1.0f, 0.0f};
   mat4  view;
@@ -89,6 +89,9 @@ CubeBuildViewProjection(uint32_t width, uint32_t height, mat4 dest) {
   float aspect;
 
   aspect = height > 0u ? (float)width / (float)height : 1.0f;
+  eye[0] = 0.0f;
+  eye[1] = 0.0f;
+  eye[2] = aspect < 1.0f ? 4.5f / aspect : 4.5f;
   glm_lookat(eye, center, up, view);
   glm_perspective(glm_rad(48.0f), aspect, 0.1f, 100.0f, projection);
   glm_mat4_mul(projection, view, dest);

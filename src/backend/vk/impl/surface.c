@@ -76,6 +76,13 @@ vk_createSurface(GPUApi            * __restrict api,
   err = vkCreateWin32SurfaceKHR(instVk->inst, &createInfo, NULL, &surface->surface);
 #elif defined(VK_USE_PLATFORM_ANDROID_KHR)
   VkAndroidSurfaceCreateInfoKHR createInfo = {0};
+
+  if (type != GPU_SURFACE_ANDROID_NATIVE_WINDOW) {
+    free(surface);
+    free(gpuSurface);
+    return NULL;
+  }
+
   createInfo.sType  = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
   createInfo.pNext  = NULL;
   createInfo.flags  = 0;

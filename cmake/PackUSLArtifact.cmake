@@ -14,7 +14,15 @@ if(NOT EXISTS "${GPU_USL_ARTIFACT}")
   message(FATAL_ERROR "USL artifact not found: ${GPU_USL_ARTIFACT}")
 endif()
 
-set(GPU_USL_PACK_ARGS --target wgsl none)
+if(NOT GPU_USL_TARGET)
+  set(GPU_USL_TARGET wgsl)
+endif()
+if(NOT GPU_USL_TARGET_PROFILE)
+  set(GPU_USL_TARGET_PROFILE none)
+endif()
+
+set(GPU_USL_PACK_ARGS
+    --target "${GPU_USL_TARGET}" "${GPU_USL_TARGET_PROFILE}")
 if(GPU_USL_CAPS)
   string(REPLACE "," ";" GPU_USL_CAP_LIST "${GPU_USL_CAPS}")
   foreach(GPU_USL_CAP IN LISTS GPU_USL_CAP_LIST)
@@ -28,5 +36,6 @@ execute_process(
   RESULT_VARIABLE GPU_USL_PACK_RESULT
 )
 if(NOT GPU_USL_PACK_RESULT EQUAL 0)
-  message(FATAL_ERROR "Failed to pack WGSL payload: ${GPU_USL_ARTIFACT}")
+  message(FATAL_ERROR
+    "Failed to pack ${GPU_USL_TARGET} payload: ${GPU_USL_ARTIFACT}")
 endif()

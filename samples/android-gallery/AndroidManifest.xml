@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          package="com.recp.gpu.samples"
+          android:versionCode="1"
+          android:versionName="1.0">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36"/>
+  <uses-feature android:name="android.hardware.vulkan.version"
+                android:version="0x400003"
+                android:required="true"/>
+  <application android:label="GPU + USL Samples"
+               android:hasCode="true"
+               android:debuggable="true"
+               android:theme="@android:style/Theme.Material.NoActionBar">
+    <activity android:name=".SampleActivity"
+              android:configChanges="orientation|screenSize|keyboardHidden"
+              android:screenOrientation="unspecified"
+              android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen"
+              android:exported="false">
+      <meta-data android:name="android.app.lib_name"
+                 android:value="gpu_samples"/>
+    </activity>
+    <activity android:name=".GalleryActivity"
+              android:configChanges="orientation|screenSize|keyboardHidden"
+              android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>

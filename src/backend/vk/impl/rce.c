@@ -153,8 +153,8 @@ vk_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
     beginInfo.renderPass        = renderPass->renderPass;
     beginInfo.framebuffer       = renderPass->framebuffer;
     beginInfo.renderArea.extent = renderPass->extent;
-    beginInfo.clearValueCount   = 1u;
-    beginInfo.pClearValues      = &renderPass->clearValue;
+    beginInfo.clearValueCount   = renderPass->clearValueCount;
+    beginInfo.pClearValues      = renderPass->clearValues;
     vkCmdBeginRenderPass(native->command,
                          &beginInfo,
                          VK_SUBPASS_CONTENTS_INLINE);

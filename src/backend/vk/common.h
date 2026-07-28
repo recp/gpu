@@ -193,6 +193,8 @@ typedef struct GPUAdapterVk {
 } GPUAdapterVk;
 
 typedef struct GPUDeviceVk {
+  struct GPUClassicRenderPassVk  *classicRenderPasses;
+  struct GPUClassicFramebufferVk *classicFramebuffers;
   GPUQueue                  **createdQueues;
   PFN_vkCmdBeginRenderingKHR  beginRendering;
   PFN_vkCmdEndRenderingKHR    endRendering;
@@ -287,6 +289,12 @@ typedef struct GPUDeviceVk {
   bool                       pipelineBinaryInternalCache;
   bool                       pipelineBinaryPrefersInternalCache;
 #endif
+#if defined(_WIN32) || defined(WIN32)
+  CRITICAL_SECTION           classicRenderLock;
+#else
+  pthread_mutex_t            classicRenderLock;
+#endif
+  bool                       classicRenderLockInitialized;
 } GPUDeviceVk;
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
@@ -556,8 +564,9 @@ typedef struct GPURenderPassVk {
 #endif
   VkRenderingInfoKHR           renderingInfo;
   VkExtent2D                    extent;
-  VkClearValue                 clearValue;
+  VkClearValue                 clearValues[2];
   uint32_t                     colorCount;
+  uint32_t                     clearValueCount;
   bool                         dynamic;
 } GPURenderPassVk;
 
@@ -777,6 +786,32 @@ vk_createShaderLayout(GPUDevice             *device,
 GPU_HIDE
 void
 vk_destroyShaderLayout(GPUShaderLayoutVk *layout);
+
+GPU_HIDE
+GPUResult
+vk_getClassicRenderTarget(GPUDeviceVk          *device,
+                          VkFormat              colorFormat,
+                          VkFormat              depthStencilFormat,
+                          VkImageView           colorView,
+                          VkImageView           depthStencilView,
+                          VkExtent2D             extent,
+                          uint32_t               colorLoadOp,
+                          uint32_t               colorStoreOp,
+                          uint32_t               depthLoadOp,
+                          uint32_t               depthStoreOp,
+                          uint32_t               stencilLoadOp,
+                          uint32_t               stencilStoreOp,
+                          bool                   present,
+                          VkRenderPass          *outRenderPass,
+                          VkFramebuffer         *outFramebuffer);
+
+GPU_HIDE
+void
+vk_invalidateClassicFramebuffers(GPUDeviceVk *device, VkImageView view);
+
+GPU_HIDE
+void
+vk_destroyClassicRenderTargets(GPUDeviceVk *device);
 
 GPU_HIDE
 void

@@ -45,6 +45,348 @@ vk__storeOp(GPUStoreOp op) {
            : VK_ATTACHMENT_STORE_OP_DONT_CARE;
 }
 
+typedef struct GPUClassicRenderPassVk {
+  struct GPUClassicRenderPassVk *next;
+  VkRenderPass                   renderPass;
+  VkFormat                       colorFormat;
+  VkFormat                       depthStencilFormat;
+  VkAttachmentLoadOp             colorLoadOp;
+  VkAttachmentStoreOp            colorStoreOp;
+  VkAttachmentLoadOp             depthLoadOp;
+  VkAttachmentStoreOp            depthStoreOp;
+  VkAttachmentLoadOp             stencilLoadOp;
+  VkAttachmentStoreOp            stencilStoreOp;
+  bool                           present;
+} GPUClassicRenderPassVk;
+
+typedef struct GPUClassicFramebufferVk {
+  struct GPUClassicFramebufferVk *next;
+  VkFramebuffer                   framebuffer;
+  VkRenderPass                    renderPass;
+  VkImageView                     colorView;
+  VkImageView                     depthStencilView;
+  VkExtent2D                      extent;
+} GPUClassicFramebufferVk;
+
+static void
+vk__lockClassicRenderTargets(GPUDeviceVk *device) {
+#if defined(_WIN32) || defined(WIN32)
+  EnterCriticalSection(&device->classicRenderLock);
+#else
+  pthread_mutex_lock(&device->classicRenderLock);
+#endif
+}
+
+static void
+vk__unlockClassicRenderTargets(GPUDeviceVk *device) {
+#if defined(_WIN32) || defined(WIN32)
+  LeaveCriticalSection(&device->classicRenderLock);
+#else
+  pthread_mutex_unlock(&device->classicRenderLock);
+#endif
+}
+
+static GPUClassicRenderPassVk*
+vk__findClassicRenderPass(GPUDeviceVk        *device,
+                          VkFormat            colorFormat,
+                          VkFormat            depthStencilFormat,
+                          VkAttachmentLoadOp   colorLoadOp,
+                          VkAttachmentStoreOp  colorStoreOp,
+                          VkAttachmentLoadOp   depthLoadOp,
+                          VkAttachmentStoreOp  depthStoreOp,
+                          VkAttachmentLoadOp   stencilLoadOp,
+                          VkAttachmentStoreOp  stencilStoreOp,
+                          bool                 present) {
+  GPUClassicRenderPassVk *entry;
+
+  for (entry = device->classicRenderPasses; entry; entry = entry->next) {
+    if (entry->colorFormat == colorFormat &&
+        entry->depthStencilFormat == depthStencilFormat &&
+        entry->colorLoadOp == colorLoadOp &&
+        entry->colorStoreOp == colorStoreOp &&
+        entry->depthLoadOp == depthLoadOp &&
+        entry->depthStoreOp == depthStoreOp &&
+        entry->stencilLoadOp == stencilLoadOp &&
+        entry->stencilStoreOp == stencilStoreOp &&
+        entry->present == present) {
+      return entry;
+    }
+  }
+  return NULL;
+}
+
+static GPUClassicRenderPassVk*
+vk__createClassicRenderPass(GPUDeviceVk        *device,
+                            VkFormat            colorFormat,
+                            VkFormat            depthStencilFormat,
+                            VkAttachmentLoadOp   colorLoadOp,
+                            VkAttachmentStoreOp  colorStoreOp,
+                            VkAttachmentLoadOp   depthLoadOp,
+                            VkAttachmentStoreOp  depthStoreOp,
+                            VkAttachmentLoadOp   stencilLoadOp,
+                            VkAttachmentStoreOp  stencilStoreOp,
+                            bool                 present) {
+  GPUClassicRenderPassVk *entry;
+  VkAttachmentDescription attachments[2] = {{0}};
+  VkAttachmentReference   color           = {0};
+  VkAttachmentReference   depthStencil    = {0};
+  VkSubpassDescription    subpass         = {0};
+  VkSubpassDependency     dependency      = {0};
+  VkRenderPassCreateInfo  info            = {0};
+
+  entry = calloc(1, sizeof(*entry));
+  if (!entry) {
+    return NULL;
+  }
+
+  attachments[0].format         = colorFormat;
+  attachments[0].samples        = VK_SAMPLE_COUNT_1_BIT;
+  attachments[0].loadOp         = colorLoadOp;
+  attachments[0].storeOp        = colorStoreOp;
+  attachments[0].stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  attachments[0].initialLayout  =
+    colorLoadOp == VK_ATTACHMENT_LOAD_OP_LOAD
+      ? (present
+           ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+           : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+      : VK_IMAGE_LAYOUT_UNDEFINED;
+  attachments[0].finalLayout    = present
+                                    ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+                                    : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+  attachments[1].format         = depthStencilFormat;
+  attachments[1].samples        = VK_SAMPLE_COUNT_1_BIT;
+  attachments[1].loadOp         = depthLoadOp;
+  attachments[1].storeOp        = depthStoreOp;
+  attachments[1].stencilLoadOp  = stencilLoadOp;
+  attachments[1].stencilStoreOp = stencilStoreOp;
+  attachments[1].initialLayout  =
+    depthLoadOp == VK_ATTACHMENT_LOAD_OP_LOAD ||
+    stencilLoadOp == VK_ATTACHMENT_LOAD_OP_LOAD
+      ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+      : VK_IMAGE_LAYOUT_UNDEFINED;
+  attachments[1].finalLayout =
+    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+  color.attachment        = 0u;
+  color.layout            = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  depthStencil.attachment = 1u;
+  depthStencil.layout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+  subpass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
+  subpass.colorAttachmentCount    = 1u;
+  subpass.pColorAttachments       = &color;
+  subpass.pDepthStencilAttachment = &depthStencil;
+
+  dependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
+  dependency.dstSubpass    = 0u;
+  dependency.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                             VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                             VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+  dependency.dstStageMask  = dependency.srcStageMask;
+  dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+  info.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  info.attachmentCount = 2u;
+  info.pAttachments    = attachments;
+  info.subpassCount    = 1u;
+  info.pSubpasses      = &subpass;
+  info.dependencyCount = 1u;
+  info.pDependencies   = &dependency;
+  if (vkCreateRenderPass(device->device,
+                         &info,
+                         NULL,
+                         &entry->renderPass) != VK_SUCCESS) {
+    free(entry);
+    return NULL;
+  }
+
+  entry->colorFormat        = colorFormat;
+  entry->depthStencilFormat = depthStencilFormat;
+  entry->colorLoadOp        = colorLoadOp;
+  entry->colorStoreOp       = colorStoreOp;
+  entry->depthLoadOp        = depthLoadOp;
+  entry->depthStoreOp       = depthStoreOp;
+  entry->stencilLoadOp      = stencilLoadOp;
+  entry->stencilStoreOp     = stencilStoreOp;
+  entry->present            = present;
+  entry->next               = device->classicRenderPasses;
+  device->classicRenderPasses = entry;
+  return entry;
+}
+
+GPU_HIDE
+GPUResult
+vk_getClassicRenderTarget(GPUDeviceVk          *device,
+                          VkFormat              colorFormat,
+                          VkFormat              depthStencilFormat,
+                          VkImageView           colorView,
+                          VkImageView           depthStencilView,
+                          VkExtent2D             extent,
+                          uint32_t               colorLoadOp,
+                          uint32_t               colorStoreOp,
+                          uint32_t               depthLoadOp,
+                          uint32_t               depthStoreOp,
+                          uint32_t               stencilLoadOp,
+                          uint32_t               stencilStoreOp,
+                          bool                   present,
+                          VkRenderPass          *outRenderPass,
+                          VkFramebuffer         *outFramebuffer) {
+  GPUClassicRenderPassVk  *pass;
+  GPUClassicFramebufferVk *framebuffer;
+  VkImageView              attachments[2];
+  VkFramebufferCreateInfo  info = {0};
+  VkAttachmentLoadOp       nativeColorLoad;
+  VkAttachmentStoreOp      nativeColorStore;
+  VkAttachmentLoadOp       nativeDepthLoad;
+  VkAttachmentStoreOp      nativeDepthStore;
+  VkAttachmentLoadOp       nativeStencilLoad;
+  VkAttachmentStoreOp      nativeStencilStore;
+
+  if (!device || !device->classicRenderLockInitialized ||
+      !colorView || !depthStencilView ||
+      colorFormat == VK_FORMAT_UNDEFINED ||
+      depthStencilFormat == VK_FORMAT_UNDEFINED ||
+      extent.width == 0u || extent.height == 0u ||
+      !outRenderPass || !outFramebuffer) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  nativeColorLoad   = vk__loadOp((GPULoadOp)colorLoadOp);
+  nativeColorStore  = vk__storeOp((GPUStoreOp)colorStoreOp);
+  nativeDepthLoad   = vk__loadOp((GPULoadOp)depthLoadOp);
+  nativeDepthStore  = vk__storeOp((GPUStoreOp)depthStoreOp);
+  nativeStencilLoad = vk__loadOp((GPULoadOp)stencilLoadOp);
+  nativeStencilStore = vk__storeOp((GPUStoreOp)stencilStoreOp);
+
+  vk__lockClassicRenderTargets(device);
+  pass = vk__findClassicRenderPass(device,
+                                   colorFormat,
+                                   depthStencilFormat,
+                                   nativeColorLoad,
+                                   nativeColorStore,
+                                   nativeDepthLoad,
+                                   nativeDepthStore,
+                                   nativeStencilLoad,
+                                   nativeStencilStore,
+                                   present);
+  if (!pass) {
+    pass = vk__createClassicRenderPass(device,
+                                       colorFormat,
+                                       depthStencilFormat,
+                                       nativeColorLoad,
+                                       nativeColorStore,
+                                       nativeDepthLoad,
+                                       nativeDepthStore,
+                                       nativeStencilLoad,
+                                       nativeStencilStore,
+                                       present);
+  }
+  if (!pass) {
+    vk__unlockClassicRenderTargets(device);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  for (framebuffer = device->classicFramebuffers;
+       framebuffer;
+       framebuffer = framebuffer->next) {
+    if (framebuffer->renderPass == pass->renderPass &&
+        framebuffer->colorView == colorView &&
+        framebuffer->depthStencilView == depthStencilView &&
+        framebuffer->extent.width == extent.width &&
+        framebuffer->extent.height == extent.height) {
+      *outRenderPass = pass->renderPass;
+      *outFramebuffer = framebuffer->framebuffer;
+      vk__unlockClassicRenderTargets(device);
+      return GPU_OK;
+    }
+  }
+
+  framebuffer = calloc(1, sizeof(*framebuffer));
+  if (!framebuffer) {
+    vk__unlockClassicRenderTargets(device);
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  attachments[0]       = colorView;
+  attachments[1]       = depthStencilView;
+  info.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+  info.renderPass      = pass->renderPass;
+  info.attachmentCount = 2u;
+  info.pAttachments    = attachments;
+  info.width           = extent.width;
+  info.height          = extent.height;
+  info.layers          = 1u;
+  if (vkCreateFramebuffer(device->device,
+                          &info,
+                          NULL,
+                          &framebuffer->framebuffer) != VK_SUCCESS) {
+    free(framebuffer);
+    vk__unlockClassicRenderTargets(device);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  framebuffer->renderPass       = pass->renderPass;
+  framebuffer->colorView        = colorView;
+  framebuffer->depthStencilView = depthStencilView;
+  framebuffer->extent           = extent;
+  framebuffer->next             = device->classicFramebuffers;
+  device->classicFramebuffers   = framebuffer;
+  *outRenderPass                = pass->renderPass;
+  *outFramebuffer               = framebuffer->framebuffer;
+  vk__unlockClassicRenderTargets(device);
+  return GPU_OK;
+}
+
+GPU_HIDE
+void
+vk_invalidateClassicFramebuffers(GPUDeviceVk *device, VkImageView view) {
+  GPUClassicFramebufferVk **link;
+  GPUClassicFramebufferVk  *entry;
+
+  if (!device || !device->classicRenderLockInitialized || !view) {
+    return;
+  }
+
+  vk__lockClassicRenderTargets(device);
+  link = &device->classicFramebuffers;
+  while ((entry = *link)) {
+    if (entry->colorView == view || entry->depthStencilView == view) {
+      *link = entry->next;
+      vkDestroyFramebuffer(device->device, entry->framebuffer, NULL);
+      free(entry);
+      continue;
+    }
+    link = &entry->next;
+  }
+  vk__unlockClassicRenderTargets(device);
+}
+
+GPU_HIDE
+void
+vk_destroyClassicRenderTargets(GPUDeviceVk *device) {
+  GPUClassicFramebufferVk *framebuffer;
+  GPUClassicRenderPassVk  *pass;
+
+  if (!device) {
+    return;
+  }
+
+  while ((framebuffer = device->classicFramebuffers)) {
+    device->classicFramebuffers = framebuffer->next;
+    vkDestroyFramebuffer(device->device, framebuffer->framebuffer, NULL);
+    free(framebuffer);
+  }
+  while ((pass = device->classicRenderPasses)) {
+    device->classicRenderPasses = pass->next;
+    vkDestroyRenderPass(device->device, pass->renderPass, NULL);
+    free(pass);
+  }
+}
+
 static VkClearColorValue
 vk__clearColor(const GPUClearColorValue *color, GPUFormat format) {
   VkClearColorValue result;
@@ -791,12 +1133,16 @@ GPURenderPassDesc*
 vk_beginRenderPass(GPUCommandBuffer              *cmdb,
                    const GPURenderPassCreateInfo *info) {
   const GPURenderPassColorAttachment *color;
+  const GPURenderPassDepthStencilAttachment *depthStencil;
   GPUCommandBufferVk                  *command;
   GPUTextureViewVk                    *view;
+  GPUTextureViewVk                    *depthStencilView;
   GPUSwapchainVk                      *swapchain;
   GPURenderPassDesc                   *pass;
   GPURenderPassVk                     *native;
   GPUDeviceVk                         *device;
+  VkFormat                             colorFormat;
+  VkFormat                             depthStencilFormat;
   const GPUShadingRateAttachmentEXT          *shadingRate;
   const GPURasterizationRateMapRenderPassEXT *rateMap;
 
@@ -813,15 +1159,20 @@ vk_beginRenderPass(GPUCommandBuffer              *cmdb,
   }
 
   if (!cmdb || !info || info->colorAttachmentCount != 1u ||
-      !info->pColorAttachments || info->pDepthStencilAttachment) {
+      !info->pColorAttachments) {
     return NULL;
   }
 
-  color     = &info->pColorAttachments[0];
-  command   = cmdb->_priv;
-  view      = color->view ? color->view->_priv : NULL;
-  swapchain = view ? view->swapchain : NULL;
-  if (!command || !view || color->resolveView) {
+  color            = &info->pColorAttachments[0];
+  depthStencil     = info->pDepthStencilAttachment;
+  command          = cmdb->_priv;
+  view             = color->view ? color->view->_priv : NULL;
+  depthStencilView = depthStencil && depthStencil->view
+                       ? depthStencil->view->_priv
+                       : NULL;
+  swapchain        = view ? view->swapchain : NULL;
+  if (!device || !command || !view || color->resolveView ||
+      (depthStencil && !depthStencilView)) {
     return NULL;
   }
   pass   = &command->renderPass;
@@ -829,24 +1180,19 @@ vk_beginRenderPass(GPUCommandBuffer              *cmdb,
   memset(pass, 0, sizeof(*pass));
   memset(native, 0, sizeof(*native));
 
-  native->swapchain = swapchain;
+  native->swapchain        = swapchain;
+  native->depthStencilView = depthStencilView;
   if (swapchain) {
     if (!swapchain->frameActive ||
         view->imageIndex != swapchain->acquiredImageIndex) {
       return NULL;
     }
-    native->renderPass  = swapchain->renderPasses[color->loadOp]
-                                                  [color->storeOp];
-    native->framebuffer = swapchain->framebuffers[view->imageIndex];
-    native->extent      = swapchain->extent;
+    native->extent = swapchain->extent;
   } else {
     if (!view->texture || !view->framebuffer) {
       return NULL;
     }
-    native->renderPass  = view->texture->renderPasses[color->loadOp]
-                                                   [color->storeOp];
-    native->framebuffer = view->framebuffer;
-    native->extent      = view->extent;
+    native->extent = view->extent;
     vk_setTextureLayout(view->texture,
                         view->baseMip,
                         view->mipCount,
@@ -854,6 +1200,43 @@ vk_beginRenderPass(GPUCommandBuffer              *cmdb,
                         view->layerCount,
                         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
   }
+
+  if (depthStencilView) {
+    if (depthStencilView->extent.width != native->extent.width ||
+        depthStencilView->extent.height != native->extent.height ||
+        !vk_formatFromGPU(color->view->format, &colorFormat) ||
+        !vk_formatFromGPU(depthStencil->view->format,
+                          &depthStencilFormat) ||
+        vk_getClassicRenderTarget(device,
+                                  colorFormat,
+                                  depthStencilFormat,
+                                  view->view,
+                                  depthStencilView->view,
+                                  native->extent,
+                                  color->loadOp,
+                                  color->storeOp,
+                                  depthStencil->depthLoadOp,
+                                  depthStencil->depthStoreOp,
+                                  depthStencil->stencilLoadOp,
+                                  depthStencil->stencilStoreOp,
+                                  swapchain != NULL,
+                                  &native->renderPass,
+                                  &native->framebuffer) != GPU_OK) {
+      return NULL;
+    }
+    vk_transitionView(command->command,
+                      depthStencilView,
+                      VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+  } else if (swapchain) {
+    native->renderPass  = swapchain->renderPasses[color->loadOp]
+                                                  [color->storeOp];
+    native->framebuffer = swapchain->framebuffers[view->imageIndex];
+  } else {
+    native->renderPass  = view->texture->renderPasses[color->loadOp]
+                                                   [color->storeOp];
+    native->framebuffer = view->framebuffer;
+  }
+
   if (!native->renderPass || !native->framebuffer ||
       native->extent.width == 0u || native->extent.height == 0u) {
     return NULL;
@@ -861,8 +1244,16 @@ vk_beginRenderPass(GPUCommandBuffer              *cmdb,
   if (info->occlusionQuerySet) {
     vk_resetQuerySet(cmdb, info->occlusionQuerySet);
   }
-  native->clearValue.color =
+  native->clearValues[0].color =
     vk__clearColor(&color->clearColor, color->view->format);
+  native->clearValueCount = 1u;
+  if (depthStencil) {
+    native->clearValues[1].depthStencil.depth =
+      depthStencil->clearDepth;
+    native->clearValues[1].depthStencil.stencil =
+      depthStencil->clearStencil;
+    native->clearValueCount = 2u;
+  }
 
   pass->_priv = native;
   pass->label = info->label;

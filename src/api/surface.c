@@ -24,6 +24,7 @@ gpuIsSurfaceTypeValid(GPUSurfaceType type) {
          type == GPU_SURFACE_WINDOWS_COREWINDOW ||
          type == GPU_SURFACE_APPLE_NSVIEW ||
          type == GPU_SURFACE_APPLE_UIVIEW ||
+         type == GPU_SURFACE_ANDROID_NATIVE_WINDOW ||
          type == GPU_SURFACE_WEB_CANVAS;
 }
 
@@ -111,16 +112,16 @@ GPUCreateSurfaceFromNative(GPUInstance       * __restrict inst,
   GPUSurfaceCreateInfo       info = {0};
   GPUSurface                *surface;
 
-  nativeInfo.chain.sType = GPU_STRUCTURE_TYPE_NATIVE_SURFACE_CREATE_INFO;
+  nativeInfo.chain.sType      = GPU_STRUCTURE_TYPE_NATIVE_SURFACE_CREATE_INFO;
   nativeInfo.chain.structSize = sizeof(nativeInfo);
-  nativeInfo.adapter = adapter;
-  nativeInfo.nativeHandle = nativeHandle;
-  nativeInfo.type = type;
-  nativeInfo.scale = scale;
+  nativeInfo.adapter          = adapter;
+  nativeInfo.nativeHandle     = nativeHandle;
+  nativeInfo.type             = type;
+  nativeInfo.scale            = scale;
 
-  info.chain.sType = GPU_STRUCTURE_TYPE_SURFACE_CREATE_INFO;
+  info.chain.sType      = GPU_STRUCTURE_TYPE_SURFACE_CREATE_INFO;
   info.chain.structSize = sizeof(info);
-  info.chain.pNext = &nativeInfo;
+  info.chain.pNext      = &nativeInfo;
 
   surface = NULL;
   if (GPUCreateSurface(inst, &info, &surface) != GPU_OK) {
