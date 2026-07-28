@@ -19,7 +19,6 @@
 
 enum {
   DX12_ROOT_SIGNATURE_DWORD_LIMIT       = 64u,
-  DX12_PUSH_CONSTANT_REGISTER_SPACE     = GPU_ENCODER_MAX_BIND_GROUPS,
   DX12_RESOURCE_DESCRIPTOR_CAPACITY     = 1024u,
   DX12_SAMPLER_DESCRIPTOR_CAPACITY      = 256u
 };
@@ -921,7 +920,7 @@ dx12__createPipelineLayout(GPUDevice                        *device,
         D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
       parameters[pushRootParameter].Constants.ShaderRegister = 0u;
       parameters[pushRootParameter].Constants.RegisterSpace =
-        DX12_PUSH_CONSTANT_REGISTER_SPACE;
+        GPU_DX12_PUSH_CONSTANT_REGISTER_SPACE;
       parameters[pushRootParameter].Constants.Num32BitValues =
         pushDwordCount;
       parameters[pushRootParameter].ShaderVisibility =
@@ -981,7 +980,7 @@ dx12__createPipelineLayout(GPUDevice                        *device,
         D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
       parameters[pushRootParameter].Constants.ShaderRegister = 0u;
       parameters[pushRootParameter].Constants.RegisterSpace =
-        DX12_PUSH_CONSTANT_REGISTER_SPACE;
+        GPU_DX12_PUSH_CONSTANT_REGISTER_SPACE;
       parameters[pushRootParameter].Constants.Num32BitValues =
         pushDwordCount;
       parameters[pushRootParameter].ShaderVisibility =
@@ -1077,8 +1076,7 @@ dx12_createShaderRootSignature(GPUDevice             *device,
   uint32_t                          sourceSamplerCount;
   GPUResult                         result;
 
-  if (!device || !layout || !library || entryMask == 0u ||
-      !outRootSignature || !outKey) {
+  if (!device || !layout || !library || !outRootSignature || !outKey) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   *outRootSignature = NULL;
@@ -1092,6 +1090,9 @@ dx12_createShaderRootSignature(GPUDevice             *device,
 
   sourceSamplers = gpuGetShaderLibraryStaticSamplers(library,
                                                       &sourceSamplerCount);
+  if (entryMask == 0u && sourceSamplerCount > 0u) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
   {
     uint32_t selectedSamplerCount;
 

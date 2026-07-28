@@ -53,6 +53,15 @@
 #  define GPU_DX12_HAS_SAMPLER_FEEDBACK 0
 #endif
 
+#define GPU_DX12_PUSH_CONSTANT_REGISTER_SPACE_HLSL "space4"
+
+enum {
+  GPU_DX12_PUSH_CONSTANT_REGISTER_SPACE = GPU_ENCODER_MAX_BIND_GROUPS
+};
+
+_Static_assert(GPU_DX12_PUSH_CONSTANT_REGISTER_SPACE == 4u,
+               "update the HLSL push-constant register space literal");
+
 #define DXCHECK(D) hr = D; if (FAILED(hr)) { goto err; }
 
 typedef struct GPUAdapterDX12 {
@@ -146,6 +155,7 @@ typedef struct GPUDeviceDX12 {
   bool                               subgroupMatrixEnabled;
   bool                               queryResultsReliable;
   bool                               stencilPlaneCopies;
+  bool                               manualBlitFiltering;
 } GPUDeviceDX12;
 
 static inline bool

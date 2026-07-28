@@ -57,10 +57,6 @@ dx12_createComputePipeline(GPUDevice                          *device,
   native = (GPUComputePipelineDX12 *)(state + 1);
   rootSignature = NULL;
   entryMask = gpuShaderEntryBit(info->library, info->entryPoint);
-  if (entryMask == 0u) {
-    free(state);
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
   if (dx12_createShaderRootSignature(device,
                                      info->layout,
                                      info->library,

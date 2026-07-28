@@ -667,6 +667,7 @@ gpuBlitTextureRenderFallback(GPUCommandBuffer         *cmdb,
     params.dstRect[3]    = 1.0f / (float)info->dstRegion.height;
     params.invSrcSize[0] = 1.0f / (float)srcMipWidth;
     params.invSrcSize[1] = 1.0f / (float)srcMipHeight;
+    params.invSrcSize[2] = info->filter == GPU_FILTER_LINEAR ? 1.0f : 0.0f;
 
     viewport.x        = (float)info->dstRegion.texture.x;
     viewport.y        = (float)info->dstRegion.texture.y;

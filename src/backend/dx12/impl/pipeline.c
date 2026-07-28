@@ -1189,11 +1189,6 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   } else {
     entryMask |= gpuShaderEntryBit(info->library, info->vertexEntry);
   }
-  if (entryMask == 0u) {
-    free(elements);
-    free(native);
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
   if (dx12_createShaderRootSignature(device,
                                      info->layout,
                                      info->library,

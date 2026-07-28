@@ -972,7 +972,7 @@ dx12_selectAdapter(GPUInstance * __restrict inst,
       adaptersByType[2] = adapter; /* Other software adapter */
     } else if (desc->DedicatedVideoMemory > 1 * 1024 * 1024 * 1024) {
       adaptersByType[0] = adapter; /* Discrete GPU */
-    } else if (desc->DedicatedVideoMemory > 0) {
+    } else {
       adaptersByType[1] = adapter; /* Integrated GPU */
     }
 
@@ -1217,6 +1217,8 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
   deviceDX12->stencilPlaneCopies = !dx12_isParallels(adapterDX12);
   /* Parallels accepts query commands but never writes resolved data. */
   deviceDX12->queryResultsReliable = dx12_queryResultsReliable(adapterDX12);
+  /* Parallels advertises linear sampling but executes it as point sampling. */
+  deviceDX12->manualBlitFiltering = dx12_isParallels(adapterDX12);
   dx12_queryDeviceCapabilities(deviceDX12);
   deviceDX12->subgroupMatrix =
     adapterDX12->subgroupMatrixPropertyCount > 0u &&
