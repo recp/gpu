@@ -27,6 +27,7 @@
 
 enum {
   GPU_BLIT_VARIANT_FLOAT_FILTERING = 0u,
+  GPU_BLIT_VARIANT_FLOAT_FILTERING_ARRAY,
   GPU_BLIT_VARIANT_FLOAT_UNFILTERABLE,
   GPU_BLIT_VARIANT_UINT,
   GPU_BLIT_VARIANT_SINT,
@@ -196,6 +197,8 @@ gpu_blitShaderData(const GPUBlitShaderSet *shaders, uint32_t variant) {
   switch (variant) {
     case GPU_BLIT_VARIANT_FLOAT_FILTERING:
       return &shaders->filteringFloat;
+    case GPU_BLIT_VARIANT_FLOAT_FILTERING_ARRAY:
+      return &shaders->filteringFloatArray;
     case GPU_BLIT_VARIANT_FLOAT_UNFILTERABLE:
       return &shaders->unfilterableFloat;
     case GPU_BLIT_VARIANT_UINT:
@@ -303,7 +306,10 @@ gpu_blitEnsureVariant(GPUDevice             *device,
   entries[0].arrayCount                    = 1u;
   entries[0].bindingType                   = GPU_BINDING_SAMPLED_TEXTURE;
   entries[0].visibility                    = GPU_SHADER_STAGE_FRAGMENT_BIT;
-  entries[0].sampledTexture.viewType       = GPU_TEXTURE_VIEW_2D;
+  entries[0].sampledTexture.viewType       =
+    variantIndex == GPU_BLIT_VARIANT_FLOAT_FILTERING_ARRAY
+      ? GPU_TEXTURE_VIEW_2D_ARRAY
+      : GPU_TEXTURE_VIEW_2D;
   entries[0].sampledTexture.sampleType     =
     gpu_blitSampleType(variantIndex);
   entries[0].sampledTexture.multisampled   = false;
@@ -312,7 +318,8 @@ gpu_blitEnsureVariant(GPUDevice             *device,
   entries[1].bindingType                   = GPU_BINDING_SAMPLER;
   entries[1].visibility                    = GPU_SHADER_STAGE_FRAGMENT_BIT;
   entries[1].sampler.type =
-    variantIndex == GPU_BLIT_VARIANT_FLOAT_FILTERING
+    variantIndex == GPU_BLIT_VARIANT_FLOAT_FILTERING ||
+    variantIndex == GPU_BLIT_VARIANT_FLOAT_FILTERING_ARRAY
       ? GPU_SAMPLER_BINDING_FILTERING
       : GPU_SAMPLER_BINDING_NON_FILTERING;
 
@@ -394,7 +401,9 @@ gpu_blitEnsureView(GPUTexture *texture,
   }
 
   info.label           = "gpu-blit-view";
-  info.viewType        = GPU_TEXTURE_VIEW_2D;
+  info.viewType        = texture->depthOrLayers > 1u
+                           ? GPU_TEXTURE_VIEW_2D_ARRAY
+                           : GPU_TEXTURE_VIEW_2D;
   info.format          = texture->format;
   info.baseMipLevel    = mipLevel;
   info.mipLevelCount   = 1u;
@@ -451,6 +460,10 @@ gpu_blitEnsureGroup(GPUDevice       *device,
 static uint32_t
 gpu_blitVariantIndex(const GPUTextureBlitInfo *info,
                      const GPUFormatCapabilities *srcCaps) {
+  if (info->src->depthOrLayers > 1u) {
+    return GPU_BLIT_VARIANT_FLOAT_FILTERING_ARRAY;
+  }
+
   switch (gpuFormatNumericType(info->src->format)) {
     case GPU_FORMAT_NUMERIC_UINT:
       return GPU_BLIT_VARIANT_UINT;
@@ -718,5 +731,77 @@ GPUBlit(GPUCommandBuffer         *cmdb,
   api = gpuCommandBufferApi(cmdb);
   if (api && api->renderPass.blitTexture) {
     api->renderPass.blitTexture(cmdb, info);
+  }
+}
+
+static bool
+gpu_generateMipmapsValid(GPUCommandBuffer *cmdb, GPUTexture *texture) {
+  GPUFormatCapabilities caps;
+  GPUDevice            *device;
+
+  device = gpuCommandBufferDevice(cmdb);
+  return cmdb && device && !cmdb->_submitted && !cmdb->_activeEncoder &&
+         cmdb->_queue &&
+         (cmdb->_queue->bits & GPU_QUEUE_GRAPHICS_BIT) != 0u &&
+         texture && texture->device == device &&
+         texture->dimension == GPU_TEXTURE_DIMENSION_2D &&
+         texture->mipLevelCount > 1u &&
+         texture->sampleCount == 1u &&
+         (texture->usage &
+          (GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COLOR_TARGET)) ==
+           (GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COLOR_TARGET) &&
+         gpuFormatNumericType(texture->format) == GPU_FORMAT_NUMERIC_FLOAT &&
+         GPUGetFormatCapabilities(device->adapter,
+                                  texture->format,
+                                  &caps) == GPU_OK &&
+         caps.sampled && caps.filterable && caps.colorAttachment;
+}
+
+GPU_EXPORT
+void
+GPUGenerateMipmaps(GPUCommandBuffer *cmdb, GPUTexture *texture) {
+  GPUTextureBlitInfo info = {0};
+  GPUApi            *api;
+
+  if (!gpu_generateMipmapsValid(cmdb, texture)) {
+    return;
+  }
+
+  api = gpuCommandBufferApi(cmdb);
+  if (!api) {
+    return;
+  }
+  if (api->renderPass.generateMipmaps) {
+    api->renderPass.generateMipmaps(cmdb, texture);
+    return;
+  }
+  if (!api->renderPass.blitTexture) {
+    return;
+  }
+
+  info.src                         = texture;
+  info.dst                         = texture;
+  info.srcRegion.texture.aspect    = GPU_TEXTURE_ASPECT_ALL;
+  info.srcRegion.depth             = 1u;
+  info.srcRegion.layerCount        = texture->depthOrLayers;
+  info.dstRegion.texture.aspect    = GPU_TEXTURE_ASPECT_ALL;
+  info.dstRegion.depth             = 1u;
+  info.dstRegion.layerCount        = texture->depthOrLayers;
+  info.filter                      = GPU_FILTER_LINEAR;
+
+  for (uint32_t mipLevel = 1u;
+       mipLevel < texture->mipLevelCount;
+       mipLevel++) {
+    info.srcRegion.texture.mipLevel = mipLevel - 1u;
+    info.srcRegion.width =
+      gpu_blitMipExtent(texture->width, mipLevel - 1u);
+    info.srcRegion.height =
+      gpu_blitMipExtent(texture->height, mipLevel - 1u);
+    info.dstRegion.texture.mipLevel = mipLevel;
+    info.dstRegion.width =
+      gpu_blitMipExtent(texture->width, mipLevel);
+    info.dstRegion.height =
+      gpu_blitMipExtent(texture->height, mipLevel);
+    api->renderPass.blitTexture(cmdb, &info);
   }
 }

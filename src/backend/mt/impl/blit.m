@@ -42,6 +42,31 @@ static const char gpu_blitFloatMSL[] =
   "  return source.sample(sourceSampler, uv, level(0.0));\n"
   "}\n";
 
+static const char gpu_blitFloatArrayMSL[] =
+  "#include <metal_stdlib>\n"
+  "using namespace metal;\n"
+  "struct GPUBlitParams {\n"
+  "  float4 srcRect;\n"
+  "  float4 dstRect;\n"
+  "  float4 invSrcSize;\n"
+  "};\n"
+  "vertex float4 gpu_blit_vs(uint id [[vertex_id]]) {\n"
+  "  const float2 p[3] = {float2(-1.0, -1.0), float2(3.0, -1.0),\n"
+  "                       float2(-1.0, 3.0)};\n"
+  "  return float4(p[id], 0.0, 1.0);\n"
+  "}\n"
+  "fragment float4 gpu_blit_fs(\n"
+  "  float4 position [[position]],\n"
+  "  texture2d_array<float> source [[texture(0)]],\n"
+  "  sampler sourceSampler [[sampler(0)]],\n"
+  "  constant GPUBlitParams& params [[buffer(30)]]) {\n"
+  "  float2 relative = (position.xy - params.dstRect.xy) *\n"
+  "                    params.dstRect.zw;\n"
+  "  float2 uv = (params.srcRect.xy + relative * params.srcRect.zw) *\n"
+  "              params.invSrcSize.xy;\n"
+  "  return source.sample(sourceSampler, uv, 0u, level(0.0));\n"
+  "}\n";
+
 static const char gpu_blitFloatUnfilterableMSL[] =
   "#include <metal_stdlib>\n"
   "using namespace metal;\n"
@@ -115,6 +140,10 @@ static const GPUBlitShaderSet mt_blitTextureShaders = {
   .filteringFloat = {
     .data = gpu_blitFloatMSL,
     .size = sizeof(gpu_blitFloatMSL) - 1u
+  },
+  .filteringFloatArray = {
+    .data = gpu_blitFloatArrayMSL,
+    .size = sizeof(gpu_blitFloatArrayMSL) - 1u
   },
   .unfilterableFloat = {
     .data = gpu_blitFloatUnfilterableMSL,

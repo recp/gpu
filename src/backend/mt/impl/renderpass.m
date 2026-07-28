@@ -1020,6 +1020,39 @@ mt_endTransferPass(GPUTransferPassEncoder *pass) {
   native->modern = nil;
 }
 
+static void
+mt_generateMipmaps(GPUCommandBuffer *cmdb, GPUTexture *texture) {
+  GPUTransferPassEncoder *pass;
+  MTCopyEncoder          *native;
+  id<MTLTexture>          nativeTexture;
+
+  pass = GPUBeginTransferPass(cmdb, "gpu-generate-mipmaps");
+  if (!pass) {
+    return;
+  }
+
+  native        = mt_copyEncoder(pass);
+  nativeTexture = mt_nativeTexture(texture);
+  if (!native || !nativeTexture) {
+    GPUEndTransferPass(pass);
+    return;
+  }
+
+#if MT_HAS_METAL4
+  if (native->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      mt_useAllocation(cmdb, nativeTexture);
+      [(id<MTL4ComputeCommandEncoder>)native->modern
+        generateMipmapsForTexture:nativeTexture];
+    }
+  } else
+#endif
+  {
+    [native->classic generateMipmapsForTexture:nativeTexture];
+  }
+  GPUEndTransferPass(pass);
+}
+
 GPU_HIDE
 void
 mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
@@ -1092,5 +1125,6 @@ mt_initRenderPass(GPUApiRenderPass *api) {
   api->copyTextureToTexture = mt_copyTextureToTexture;
   api->endTransferPass      = mt_endTransferPass;
   api->blitTexture          = mt_blitTexture;
+  api->generateMipmaps      = mt_generateMipmaps;
   api->encodeBarriers       = mt_encodeBarriers;
 }

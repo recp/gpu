@@ -27,6 +27,7 @@ typedef struct GPUBlitShaderData {
 
 typedef struct GPUBlitShaderSet {
   GPUBlitShaderData filteringFloat;
+  GPUBlitShaderData filteringFloatArray;
   GPUBlitShaderData unfilterableFloat;
   GPUBlitShaderData unsignedInteger;
   GPUBlitShaderData signedInteger;

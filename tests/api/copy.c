@@ -18,6 +18,9 @@ static uint32_t           gScopedCopyEndCalls;
 static uint32_t           gScopedIndirectCopyCalls;
 static uint32_t           gScopedIndirectTextureCopyCalls;
 static uint32_t           gScopedBlitCalls;
+static uint32_t           gScopedGenerateMipmapsCalls;
+static uint32_t           gScopedExpectedMipLevel;
+static bool               gScopedMipmapChainValid;
 
 static GPUTransferPassEncoder *
 begin_scoped_copy_pass(GPUCommandBuffer *cmdb, const char *label) {
@@ -55,8 +58,24 @@ static void
 blit_scoped_texture(GPUCommandBuffer         *cmdb,
                     const GPUTextureBlitInfo *info) {
   (void)cmdb;
-  (void)info;
   gScopedBlitCalls++;
+  if (info && info->src == info->dst) {
+    gScopedMipmapChainValid =
+      gScopedMipmapChainValid &&
+      info->filter == GPU_FILTER_LINEAR &&
+      info->srcRegion.texture.mipLevel + 1u == gScopedExpectedMipLevel &&
+      info->dstRegion.texture.mipLevel == gScopedExpectedMipLevel &&
+      info->srcRegion.layerCount == info->src->depthOrLayers &&
+      info->dstRegion.layerCount == info->dst->depthOrLayers;
+    gScopedExpectedMipLevel++;
+  }
+}
+
+static void
+generate_scoped_mipmaps(GPUCommandBuffer *cmdb, GPUTexture *texture) {
+  (void)cmdb;
+  (void)texture;
+  gScopedGenerateMipmapsCalls++;
 }
 
 static int
@@ -88,10 +107,11 @@ check_copy_pass_device_dispatch(GPUDevice *activeDevice) {
   scopedApi.renderPass.copyMemoryIndirect = copy_scoped_memory_indirect;
   scopedApi.renderPass.copyMemoryToTextureIndirect =
     copy_scoped_memory_to_texture_indirect;
-  scopedApi.renderPass.blitTexture = blit_scoped_texture;
-  device._api                        = &scopedApi;
-  device.adapter                     = activeDevice->adapter;
-  device.enabledFeatureMask          =
+  scopedApi.renderPass.blitTexture     = blit_scoped_texture;
+  scopedApi.renderPass.generateMipmaps = generate_scoped_mipmaps;
+  device._api               = &scopedApi;
+  device.adapter            = activeDevice->adapter;
+  device.enabledFeatureMask =
     (1ull << GPU_FEATURE_BUFFER_DEVICE_ADDRESS) |
     (1ull << GPU_FEATURE_INDIRECT_MEMORY_COPY) |
     (1ull << GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY);
@@ -103,6 +123,9 @@ check_copy_pass_device_dispatch(GPUDevice *activeDevice) {
   gScopedIndirectCopyCalls           = 0u;
   gScopedIndirectTextureCopyCalls    = 0u;
   gScopedBlitCalls                   = 0u;
+  gScopedGenerateMipmapsCalls        = 0u;
+  gScopedExpectedMipLevel            = 1u;
+  gScopedMipmapChainValid            = true;
 
   pass = GPUBeginTransferPass(&cmdb, "device-scoped-copy");
   if (pass != &gScopedCopyPass ||
@@ -192,6 +215,30 @@ check_copy_pass_device_dispatch(GPUDevice *activeDevice) {
   GPUBlit(&cmdb, &blitInfo);
   if (gScopedBlitCalls != 1u) {
     fprintf(stderr, "texture blit validation or device dispatch failed\n");
+    return 0;
+  }
+
+  texture.usage         = GPU_TEXTURE_USAGE_SAMPLED |
+                          GPU_TEXTURE_USAGE_COLOR_TARGET;
+  texture.depthOrLayers = 2u;
+  texture.mipLevelCount = 3u;
+  GPUGenerateMipmaps(&cmdb, &texture);
+  texture.usage = GPU_TEXTURE_USAGE_SAMPLED;
+  GPUGenerateMipmaps(&cmdb, &texture);
+  if (gScopedGenerateMipmapsCalls != 1u) {
+    fprintf(stderr, "mipmap generation validation or dispatch failed\n");
+    return 0;
+  }
+
+  scopedApi.renderPass.generateMipmaps = NULL;
+  texture.usage = GPU_TEXTURE_USAGE_SAMPLED |
+                  GPU_TEXTURE_USAGE_COLOR_TARGET;
+  gScopedBlitCalls = 0u;
+  GPUGenerateMipmaps(&cmdb, &texture);
+  if (gScopedBlitCalls != 2u ||
+      gScopedExpectedMipLevel != 3u ||
+      !gScopedMipmapChainValid) {
+    fprintf(stderr, "mipmap fallback did not encode the expected chain\n");
     return 0;
   }
 
@@ -1403,6 +1450,205 @@ check_texture_blit_variants(GPUDevice *device) {
 }
 
 static int
+check_texture_generate_mipmaps(GPUDevice *device) {
+  static const uint8_t layerColors[2][4] = {
+    {17u, 34u, 51u, 255u},
+    {201u, 151u, 101u, 255u}
+  };
+  GPUTextureCreateInfo       textureInfo = {0};
+  GPUTextureWriteRegion      writeRegion = {0};
+  GPUBufferCreateInfo        bufferInfo = {0};
+  GPUTextureBarrier          textureBarrier = {0};
+  GPUBarrierBatch            barrierBatch = {0};
+  GPUBufferTextureCopyRegion readRegion = {0};
+  GPUQueueSubmitInfo         submitInfo = {0};
+  GPUCommandBuffer          *commandBuffers[1];
+  GPUQueue                  *queue;
+  GPUCommandBuffer          *cmdb;
+  GPUTransferPassEncoder    *transferPass;
+  GPUTexture                *texture;
+  GPUBuffer                 *readback;
+  GPUFence                  *fence;
+  uint8_t                    sourcePixels[4u * 4u * 4u * 2u];
+  uint8_t                    result[COPY_TEST_ROW_PITCH * 2u] = {0};
+  int                        ok;
+
+  queue        = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  cmdb         = NULL;
+  transferPass = NULL;
+  texture      = NULL;
+  readback     = NULL;
+  fence        = NULL;
+  ok           = queue != NULL;
+
+  for (uint32_t layer = 0u; layer < 2u; layer++) {
+    for (uint32_t pixel = 0u; pixel < 4u * 4u; pixel++) {
+      memcpy(sourcePixels + layer * 4u * 4u * 4u + pixel * 4u,
+             layerColors[layer],
+             4u);
+    }
+  }
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "api-generate-mipmaps";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = 4u;
+  textureInfo.height           = 4u;
+  textureInfo.depthOrLayers    = 2u;
+  textureInfo.mipLevelCount    = 3u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
+                                 GPU_TEXTURE_USAGE_COLOR_TARGET |
+                                 GPU_TEXTURE_USAGE_COPY_SRC |
+                                 GPU_TEXTURE_USAGE_COPY_DST;
+  ok = ok && GPUCreateTexture(device, &textureInfo, &texture) == GPU_OK;
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "api-generate-mipmaps-readback";
+  bufferInfo.sizeBytes        = sizeof(result);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
+                                GPU_BUFFER_USAGE_COPY_DST;
+  ok = ok && GPUCreateBuffer(device, &bufferInfo, &readback) == GPU_OK;
+  ok = ok && GPUCreateFence(device, NULL, &fence) == GPU_OK && fence;
+  if (!ok) {
+    fprintf(stderr, "mipmap generation resource creation failed\n");
+    goto cleanup;
+  }
+
+  writeRegion.aspect         = GPU_TEXTURE_ASPECT_ALL;
+  writeRegion.width          = 4u;
+  writeRegion.height         = 4u;
+  writeRegion.depth          = 1u;
+  writeRegion.layerCount     = 2u;
+  writeRegion.bytesPerRow    = 4u * 4u;
+  writeRegion.rowsPerImage   = 4u;
+  if (GPUQueueWriteTexture(queue,
+                           texture,
+                           &writeRegion,
+                           sourcePixels,
+                           sizeof(sourcePixels)) != GPU_OK) {
+    fprintf(stderr, "mipmap generation source upload failed\n");
+    ok = 0;
+    goto cleanup;
+  }
+
+  ok = GPUAcquireCommandBuffer(queue, "api-generate-mipmaps", &cmdb) ==
+         GPU_OK &&
+       cmdb;
+  if (!ok) {
+    fprintf(stderr, "mipmap generation command buffer creation failed\n");
+    goto cleanup;
+  }
+
+  GPUGenerateMipmaps(cmdb, texture);
+  textureBarrier.texture    = texture;
+  textureBarrier.srcAccess  = GPU_ACCESS_COLOR_WRITE |
+                              GPU_ACCESS_TRANSFER_WRITE;
+  textureBarrier.dstAccess  = GPU_ACCESS_TRANSFER_READ;
+  textureBarrier.baseMip    = 2u;
+  textureBarrier.mipCount   = 1u;
+  textureBarrier.layerCount = 2u;
+  barrierBatch.pTextureBarriers    = &textureBarrier;
+  barrierBatch.srcStages           = GPU_STAGE_FRAGMENT | GPU_STAGE_TRANSFER;
+  barrierBatch.dstStages           = GPU_STAGE_TRANSFER;
+  barrierBatch.textureBarrierCount = 1u;
+  GPUEncodeBarriers(cmdb, &barrierBatch);
+
+  transferPass = GPUBeginTransferPass(cmdb, "api-generate-mipmaps-readback");
+  if (!transferPass) {
+    fprintf(stderr, "mipmap generation readback pass failed\n");
+    ok = 0;
+    goto cleanup;
+  }
+
+  readRegion.texture.texture.aspect   = GPU_TEXTURE_ASPECT_ALL;
+  readRegion.texture.texture.mipLevel = 2u;
+  readRegion.texture.width            = 1u;
+  readRegion.texture.height           = 1u;
+  readRegion.texture.depth            = 1u;
+  readRegion.texture.layerCount       = 2u;
+  readRegion.bytesPerRow              = COPY_TEST_ROW_PITCH;
+  readRegion.rowsPerImage             = 1u;
+  GPUCopyTextureToBuffer(transferPass, texture, readback, &readRegion);
+  GPUEndTransferPass(transferPass);
+  transferPass = NULL;
+
+  commandBuffers[0]                = cmdb;
+  submitInfo.chain.sType           = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize      = sizeof(submitInfo);
+  submitInfo.ppCommandBuffers      = commandBuffers;
+  submitInfo.commandBufferCount    = 1u;
+  submitInfo.fence                 = fence;
+  ok = GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
+       GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+  cmdb = NULL;
+  ok = ok &&
+       GPUQueueReadBuffer(queue,
+                          readback,
+                          0u,
+                          result,
+                          sizeof(result)) == GPU_OK;
+  if (!ok ||
+      memcmp(result, layerColors[0], 4u) != 0 ||
+      memcmp(result + COPY_TEST_ROW_PITCH, layerColors[1], 4u) != 0) {
+    fprintf(stderr, "generated array mip chain readback mismatch\n");
+    ok = 0;
+    goto cleanup;
+  }
+
+  GPUResetStats(device);
+  for (uint32_t i = 0u; i < COPY_TEST_WARM_RUNS; i++) {
+    ok = GPUAcquireCommandBuffer(queue, "warm-generate-mipmaps", &cmdb) ==
+           GPU_OK &&
+         cmdb;
+    if (!ok) {
+      fprintf(stderr, "warm mipmap command buffer creation failed\n");
+      goto cleanup;
+    }
+
+    GPUGenerateMipmaps(cmdb, texture);
+    commandBuffers[0] = cmdb;
+    ok = GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
+         GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+    cmdb = NULL;
+    if (!ok) {
+      fprintf(stderr, "warm mipmap submit failed\n");
+      goto cleanup;
+    }
+  }
+
+  if (device->currentFrameStats.hotPathAllocCount != 0u ||
+      device->currentFrameStats.hotPathAllocBytes != 0u ||
+      device->currentFrameStats.hotPathFreeCount != 0u ||
+      device->currentFrameStats.hotPathFreeBytes != 0u) {
+    fprintf(stderr,
+            "warm mipmap path allocated %llu bytes in %llu calls and freed "
+            "%llu bytes in %llu calls\n",
+            (unsigned long long)
+              device->currentFrameStats.hotPathAllocBytes,
+            (unsigned long long)
+              device->currentFrameStats.hotPathAllocCount,
+            (unsigned long long)
+              device->currentFrameStats.hotPathFreeBytes,
+            (unsigned long long)
+              device->currentFrameStats.hotPathFreeCount);
+    ok = 0;
+  }
+
+cleanup:
+  if (transferPass) {
+    GPUEndTransferPass(transferPass);
+  }
+  GPUDestroyFence(fence);
+  GPUDestroyBuffer(readback);
+  GPUDestroyTexture(texture);
+  return ok;
+}
+
+static int
 check_texture_blit(GPUDevice *device) {
   static const uint8_t sourcePixels[2u * 2u * 4u] = {
     255u,   0u,   0u, 255u,   0u, 255u,   0u, 255u,
@@ -1667,5 +1913,6 @@ gpu_test_copy(GPUDevice *device) {
          check_compressed_texture_copies(device) &&
          check_texture_blit(device) &&
          check_texture_blit_variants(device) &&
+         check_texture_generate_mipmaps(device) &&
          gpu_test_texture_transfer(device);
 }

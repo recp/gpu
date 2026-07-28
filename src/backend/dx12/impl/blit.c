@@ -41,6 +41,31 @@ static const char gpu_blitFloatHLSL[] =
   "  return gpu_blit_source.SampleLevel(gpu_blit_sampler, uv, 0.0);\n"
   "}\n";
 
+static const char gpu_blitFloatArrayHLSL[] =
+  "struct GPUBlitVSOut { float4 position : SV_Position; };\n"
+  "cbuffer GPUBlitPush : register(b0, space8) {\n"
+  "  float4 gpu_blit_src_rect;\n"
+  "  float4 gpu_blit_dst_rect;\n"
+  "  float4 gpu_blit_inv_src_size;\n"
+  "};\n"
+  "Texture2DArray<float4> gpu_blit_source : register(t0, space0);\n"
+  "SamplerState gpu_blit_sampler : register(s0, space0);\n"
+  "GPUBlitVSOut gpu_blit_vs(uint id : SV_VertexID) {\n"
+  "  float2 p[3] = {float2(-1.0, -1.0), float2(3.0, -1.0),\n"
+  "                 float2(-1.0, 3.0)};\n"
+  "  GPUBlitVSOut result;\n"
+  "  result.position = float4(p[id], 0.0, 1.0);\n"
+  "  return result;\n"
+  "}\n"
+  "float4 gpu_blit_fs(GPUBlitVSOut input) : SV_Target0 {\n"
+  "  float2 relative = (input.position.xy - gpu_blit_dst_rect.xy) *\n"
+  "                    gpu_blit_dst_rect.zw;\n"
+  "  float2 uv = (gpu_blit_src_rect.xy + relative * gpu_blit_src_rect.zw) *\n"
+  "              gpu_blit_inv_src_size.xy;\n"
+  "  return gpu_blit_source.SampleLevel(gpu_blit_sampler,\n"
+  "                                     float3(uv, 0.0), 0.0);\n"
+  "}\n";
+
 static const char gpu_blitFloatUnfilterableHLSL[] =
   "struct GPUBlitVSOut { float4 position : SV_Position; };\n"
   "cbuffer GPUBlitPush : register(b0, space8) {\n"
@@ -114,6 +139,10 @@ static const GPUBlitShaderSet dx12_blitTextureShaders = {
   .filteringFloat = {
     .data = gpu_blitFloatHLSL,
     .size = sizeof(gpu_blitFloatHLSL) - 1u
+  },
+  .filteringFloatArray = {
+    .data = gpu_blitFloatArrayHLSL,
+    .size = sizeof(gpu_blitFloatArrayHLSL) - 1u
   },
   .unfilterableFloat = {
     .data = gpu_blitFloatUnfilterableHLSL,

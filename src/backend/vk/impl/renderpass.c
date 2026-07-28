@@ -1391,7 +1391,9 @@ vk_blitTexture(GPUCommandBuffer         *cmdb,
     return;
   }
 
-  if (!src->blitSrc || !dst->blitDst ||
+  if ((info->src->usage & GPU_TEXTURE_USAGE_COPY_SRC) == 0u ||
+      (info->dst->usage & GPU_TEXTURE_USAGE_COPY_DST) == 0u ||
+      !src->blitSrc || !dst->blitDst ||
       (info->filter == GPU_FILTER_LINEAR && !src->linearBlit)) {
     vk_blitTextureRenderFallback(cmdb, info);
     return;

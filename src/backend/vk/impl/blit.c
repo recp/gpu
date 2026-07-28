@@ -17,6 +17,7 @@
 #include "../common.h"
 #include "../../../api/pass/blit_internal.h"
 
+#include "shaders/blit_float_array_spirv.inc"
 #include "shaders/blit_float_spirv.inc"
 #include "shaders/blit_sint_spirv.inc"
 #include "shaders/blit_uint_spirv.inc"
@@ -25,6 +26,11 @@ static const GPUBlitShaderSet vk_blitTextureShaders = {
   .filteringFloat = {
     .data   = gpu_blitFloatSPIRV,
     .size   = gpu_blitFloatSPIRV_len,
+    .binary = true
+  },
+  .filteringFloatArray = {
+    .data   = gpu_blitFloatArraySPIRV,
+    .size   = gpu_blitFloatArraySPIRV_len,
     .binary = true
   },
   .unfilterableFloat = {

@@ -251,6 +251,10 @@ void
 GPUBlit(GPUCommandBuffer         *cmdb,
         const GPUTextureBlitInfo *info);
 
+GPU_EXPORT
+void
+GPUGenerateMipmaps(GPUCommandBuffer *cmdb, GPUTexture *texture);
+
 #ifdef __cplusplus
 }
 #endif

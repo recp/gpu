@@ -66,6 +66,7 @@ typedef struct GPUApiRenderPass {
   void (*endTransferPass)(GPUTransferPassEncoder *pass);
   void (*blitTexture)(GPUCommandBuffer         *cmdb,
                       const GPUTextureBlitInfo *info);
+  void (*generateMipmaps)(GPUCommandBuffer *cmdb, GPUTexture *texture);
   void (*encodeBarriers)(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers);
 } GPUApiRenderPass;
 

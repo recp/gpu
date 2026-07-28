@@ -45,6 +45,35 @@ static const char gpu_blitFloatWGSL[] =
   "  return textureSampleLevel(gpuBlitSource, gpuBlitSampler, uv, 0.0);\n"
   "}\n";
 
+static const char gpu_blitFloatArrayWGSL[] =
+  "struct GPUBlitParams {\n"
+  "  srcRect: vec4<f32>,\n"
+  "  dstRect: vec4<f32>,\n"
+  "  invSrcSize: vec4<f32>,\n"
+  "}\n"
+  "@group(0) @binding(0) var gpuBlitSource: texture_2d_array<f32>;\n"
+  "@group(0) @binding(1) var gpuBlitSampler: sampler;\n"
+  "@group(3) @binding(0) var<uniform> gpuBlitParams: GPUBlitParams;\n"
+  "@vertex\n"
+  "fn gpu_blit_vs(@builtin(vertex_index) id: u32) ->\n"
+  "  @builtin(position) vec4<f32> {\n"
+  "  var p = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0),\n"
+  "                                vec2<f32>(3.0, -1.0),\n"
+  "                                vec2<f32>(-1.0, 3.0));\n"
+  "  return vec4<f32>(p[id], 0.0, 1.0);\n"
+  "}\n"
+  "@fragment\n"
+  "fn gpu_blit_fs(@builtin(position) position: vec4<f32>) ->\n"
+  "  @location(0) vec4<f32> {\n"
+  "  let relative = (position.xy - gpuBlitParams.dstRect.xy) *\n"
+  "                 gpuBlitParams.dstRect.zw;\n"
+  "  let uv = (gpuBlitParams.srcRect.xy +\n"
+  "            relative * gpuBlitParams.srcRect.zw) *\n"
+  "           gpuBlitParams.invSrcSize.xy;\n"
+  "  return textureSampleLevel(gpuBlitSource, gpuBlitSampler,\n"
+  "                            uv, 0, 0.0);\n"
+  "}\n";
+
 static const char gpu_blitFloatUnfilterableWGSL[] =
   "struct GPUBlitParams {\n"
   "  srcRect: vec4<f32>,\n"
@@ -130,6 +159,10 @@ static const GPUBlitShaderSet webgpu_blitTextureShaders = {
   .filteringFloat = {
     .data = gpu_blitFloatWGSL,
     .size = sizeof(gpu_blitFloatWGSL) - 1u
+  },
+  .filteringFloatArray = {
+    .data = gpu_blitFloatArrayWGSL,
+    .size = sizeof(gpu_blitFloatArrayWGSL) - 1u
   },
   .unfilterableFloat = {
     .data = gpu_blitFloatUnfilterableWGSL,
