@@ -366,10 +366,10 @@ create_blit_textures(WebGPUBlit *state) {
 
   blit.dst    = state->targets[0];
   blit.filter = GPU_FILTER_NEAREST;
-  GPUBlitTexture(cmdb, &blit);
+  GPUBlit(cmdb, &blit);
   blit.dst    = state->targets[1];
   blit.filter = GPU_FILTER_LINEAR;
-  GPUBlitTexture(cmdb, &blit);
+  GPUBlit(cmdb, &blit);
 
   submitBuffers[0]          = cmdb;
   submit.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;

@@ -187,9 +187,9 @@ check_copy_pass_device_dispatch(GPUDevice *activeDevice) {
   blitInfo.dstRegion.depth = 1u;
   blitInfo.dstRegion.layerCount = 1u;
   blitInfo.filter = GPU_FILTER_NEAREST;
-  GPUBlitTexture(&cmdb, &blitInfo);
+  GPUBlit(&cmdb, &blitInfo);
   blitSource.usage = GPU_TEXTURE_USAGE_COPY_SRC;
-  GPUBlitTexture(&cmdb, &blitInfo);
+  GPUBlit(&cmdb, &blitInfo);
   if (gScopedBlitCalls != 1u) {
     fprintf(stderr, "texture blit validation or device dispatch failed\n");
     return 0;
@@ -1088,7 +1088,7 @@ run_texture_blit(GPUQueue                  *queue,
     goto cleanup;
   }
 
-  GPUBlitTexture(cmdb, blitInfo);
+  GPUBlit(cmdb, blitInfo);
   transferPass = GPUBeginTransferPass(cmdb, "api-blit-readback");
   if (!transferPass) {
     fprintf(stderr, "%s readback transfer pass failed\n", label);
@@ -1322,7 +1322,7 @@ check_texture_blit(GPUDevice *device) {
       goto cleanup;
     }
 
-    GPUBlitTexture(cmdb, &blitInfo);
+    GPUBlit(cmdb, &blitInfo);
     commandBuffers[0] = cmdb;
     ok = GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
          GPUWaitFence(fence, UINT64_MAX) == GPU_OK;

@@ -248,8 +248,8 @@ GPUEndTransferPass(GPUTransferPassEncoder *pass);
 
 GPU_EXPORT
 void
-GPUBlitTexture(GPUCommandBuffer         *cmdb,
-               const GPUTextureBlitInfo *info);
+GPUBlit(GPUCommandBuffer         *cmdb,
+        const GPUTextureBlitInfo *info);
 
 #ifdef __cplusplus
 }

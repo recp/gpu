@@ -177,7 +177,7 @@ create_pipeline(WebGPUTexturedQuad *state) {
 static int
 create_transfer_texture(WebGPUTexturedQuad *state) {
   GPUCommandBuffer              *cmdb;
-  GPUTransferPassEncoder            *copy;
+  GPUTransferPassEncoder        *copy;
   GPUCommandBuffer              *submitBuffers[1];
   GPUBufferCreateInfo            bufferInfo = {0};
   GPUTextureCreateInfo           textureInfo = {0};

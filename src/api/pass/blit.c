@@ -685,8 +685,8 @@ gpuBlitTextureRenderFallback(GPUCommandBuffer         *cmdb,
 
 GPU_EXPORT
 void
-GPUBlitTexture(GPUCommandBuffer         *cmdb,
-               const GPUTextureBlitInfo *info) {
+GPUBlit(GPUCommandBuffer         *cmdb,
+        const GPUTextureBlitInfo *info) {
   GPUFormatCapabilities srcCaps;
   GPUApi               *api;
 
