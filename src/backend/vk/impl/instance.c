@@ -52,6 +52,44 @@ vk__checkLayers(uint32_t           check_count,
 }
 #endif
 
+static bool
+vk__hasExtension(const VkExtensionProperties *extensions,
+                 uint32_t                     extensionCount,
+                 const char                  *name) {
+  for (uint32_t i = 0u; i < extensionCount; i++) {
+    if (strcmp(extensions[i].extensionName, name) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static GPUInstance *
+vk__instanceFail(GPUInstance   *gpuInst,
+                 GPUInstanceVk *gpuInstVk,
+                 VkResult       result,
+                 const char    *message) {
+  if (message) {
+    fprintf(stderr, "%s (VkResult %d)\n", message, result);
+  }
+  if (gpuInstVk) {
+#if GPU_BUILD_WITH_VALIDATION
+    if (gpuInstVk->DestroyDebugUtilsMessengerEXT &&
+        gpuInstVk->dbg_messenger) {
+      gpuInstVk->DestroyDebugUtilsMessengerEXT(gpuInstVk->inst,
+                                               gpuInstVk->dbg_messenger,
+                                               NULL);
+    }
+#endif
+    if (gpuInstVk->inst) {
+      vkDestroyInstance(gpuInstVk->inst, NULL);
+    }
+  }
+  free(gpuInstVk);
+  free(gpuInst);
+  return NULL;
+}
+
 static uint32_t
 vk__apiVersion(void) {
   PFN_vkEnumerateInstanceVersion enumerateVersion;
@@ -72,6 +110,7 @@ vk_createInstance(GPUApi * __restrict api,
                   const GPUInstanceCreateInfo * __restrict info) {
   GPUInstance           *gpuInst;
   GPUInstanceVk         *gpuInstVk;
+  const char            *enabledExtensions[16] = {0};
 #if GPU_BUILD_WITH_VALIDATION
   char                  *validationLayers[] = {"VK_LAYER_KHRONOS_validation"};
 #endif
@@ -81,7 +120,7 @@ vk_createInstance(GPUApi * __restrict api,
 #endif
   VkInstance             inst;
   VkResult               err;
-  uint32_t               i, nEnabledExtensions, nEnabledLayers;
+  uint32_t               nEnabledExtensions, nEnabledLayers;
 #if GPU_BUILD_WITH_VALIDATION
   uint32_t               nInstanceExtensions, nInstanceLayers;
 #else
@@ -126,107 +165,132 @@ vk_createInstance(GPUApi * __restrict api,
   /* Look for validation layers */
   if (validate) {
     err = vkEnumerateInstanceLayerProperties(&nInstanceLayers, NULL);
-    assert(!err);
+    if (err != VK_SUCCESS) {
+      return vk__instanceFail(gpuInst,
+                              gpuInstVk,
+                              err,
+                              "Vulkan validation-layer enumeration failed");
+    }
 
     if (nInstanceLayers > 0) {
       instanceLayers  = malloc(sizeof(*instanceLayers) * nInstanceLayers);
+      if (!instanceLayers) {
+        return vk__instanceFail(gpuInst,
+                                gpuInstVk,
+                                VK_ERROR_OUT_OF_HOST_MEMORY,
+                                "Vulkan validation-layer allocation failed");
+      }
       err             = vkEnumerateInstanceLayerProperties(&nInstanceLayers, instanceLayers);
-      assert(!err);
+      if (err != VK_SUCCESS && err != VK_INCOMPLETE) {
+        free(instanceLayers);
+        return vk__instanceFail(gpuInst,
+                                gpuInstVk,
+                                err,
+                                "Vulkan validation-layer enumeration failed");
+      }
 
       validationFound = vk__checkLayers(GPU_ARRAY_LEN(validationLayers), 
                                         validationLayers,
                                         nInstanceLayers, 
                                         instanceLayers);
       if (validationFound) {
-        nEnabledLayers              = GPU_ARRAY_LEN(validationLayers);
-        gpuInstVk->enabledLayers[0] = "VK_LAYER_KHRONOS_validation";
+        nEnabledLayers = GPU_ARRAY_LEN(validationLayers);
       }
       free(instanceLayers);
     }
 
     if (!validationFound) {
-      ERR_EXIT("vkEnumerateInstanceLayerProperties failed to find required validation layer.\n\n"
-               "Please look at the Getting Started guide for additional information.\n",
-               "vkCreateInstance Failure");
+      return vk__instanceFail(gpuInst,
+                              gpuInstVk,
+                              VK_ERROR_LAYER_NOT_PRESENT,
+                              "Vulkan validation layer is unavailable");
     }
   }
 #endif
 
-  /* Look for instance extensions */
-  memset(gpuInstVk->extensionNames, 0, sizeof(gpuInstVk->extensionNames));
-
   err = vkEnumerateInstanceExtensionProperties(NULL, &nInstanceExtensions, NULL);
-  assert(!err);
+  if (err != VK_SUCCESS) {
+    return vk__instanceFail(gpuInst,
+                            gpuInstVk,
+                            err,
+                            "Vulkan instance-extension enumeration failed");
+  }
 
   if (nInstanceExtensions > 0) {
     instanceExtensions = malloc(sizeof(*instanceExtensions) * nInstanceExtensions);
+    if (!instanceExtensions) {
+      return vk__instanceFail(gpuInst,
+                              gpuInstVk,
+                              VK_ERROR_OUT_OF_HOST_MEMORY,
+                              "Vulkan extension allocation failed");
+    }
     err                = vkEnumerateInstanceExtensionProperties(NULL, 
                                                                 &nInstanceExtensions,
                                                                 instanceExtensions);
-    assert(!err);
+    if (err != VK_SUCCESS && err != VK_INCOMPLETE) {
+      free(instanceExtensions);
+      return vk__instanceFail(gpuInst,
+                              gpuInstVk,
+                              err,
+                              "Vulkan instance-extension enumeration failed");
+    }
 
-    for (i = 0; i < nInstanceExtensions; i++) {
-      if (!strcmp(VK_KHR_SURFACE_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        gpuInstVk->extensionNames[nEnabledExtensions++] = VK_KHR_SURFACE_EXTENSION_NAME;
-      }
+    if (vk__hasExtension(instanceExtensions,
+                         nInstanceExtensions,
+                         VK_KHR_SURFACE_EXTENSION_NAME)) {
+      enabledExtensions[nEnabledExtensions++] = VK_KHR_SURFACE_EXTENSION_NAME;
+    }
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
-      if (!strcmp(VK_KHR_WIN32_SURFACE_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        gpuInstVk->extensionNames[nEnabledExtensions++] = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
-      }
-#elif defined(VK_USE_PLATFORM_XLIB_KHR)
-      if (!strcmp(VK_KHR_XLIB_SURFACE_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        gpuInstVk->extensionNames[nEnabledExtensions++] = VK_KHR_XLIB_SURFACE_EXTENSION_NAME;
-      }
-#elif defined(VK_USE_PLATFORM_XCB_KHR)
-      if (!strcmp(VK_KHR_XCB_SURFACE_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        gpuInstVk->extensionNames[nEnabledExtensions++] = VK_KHR_XCB_SURFACE_EXTENSION_NAME;
-      }
-#elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
-      if (!strcmp(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        gpuInstVk->extensionNames[nEnabledExtensions++] = VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME;
-      }
-#elif defined(VK_USE_PLATFORM_DIRECTFB_EXT)
-      if (!strcmp(VK_EXT_DIRECTFB_SURFACE_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        gpuInstVk->extensionNames[nEnabledExtensions++] = VK_EXT_DIRECTFB_SURFACE_EXTENSION_NAME;
-      }
-#elif defined(VK_USE_PLATFORM_DISPLAY_KHR)
-      if (!strcmp(VK_KHR_DISPLAY_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        gpuInstVk->extensionNames[nEnabledExtensions++] = VK_KHR_DISPLAY_EXTENSION_NAME;
-      }
+    if (vk__hasExtension(instanceExtensions,
+                         nInstanceExtensions,
+                         VK_KHR_WIN32_SURFACE_EXTENSION_NAME)) {
+      enabledExtensions[nEnabledExtensions++] =
+        VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
+    }
 #elif defined(VK_USE_PLATFORM_ANDROID_KHR)
-      if (!strcmp(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        gpuInstVk->extensionNames[nEnabledExtensions++] = VK_KHR_ANDROID_SURFACE_EXTENSION_NAME;
-      }
+    if (vk__hasExtension(instanceExtensions,
+                         nInstanceExtensions,
+                         VK_KHR_ANDROID_SURFACE_EXTENSION_NAME)) {
+      enabledExtensions[nEnabledExtensions++] =
+        VK_KHR_ANDROID_SURFACE_EXTENSION_NAME;
+    }
 #elif defined(VK_USE_PLATFORM_METAL_EXT)
-      if (!strcmp(VK_EXT_METAL_SURFACE_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        gpuInstVk->extensionNames[nEnabledExtensions++] = VK_EXT_METAL_SURFACE_EXTENSION_NAME;
-      }
+    if (vk__hasExtension(instanceExtensions,
+                         nInstanceExtensions,
+                         VK_EXT_METAL_SURFACE_EXTENSION_NAME)) {
+      enabledExtensions[nEnabledExtensions++] =
+        VK_EXT_METAL_SURFACE_EXTENSION_NAME;
+    }
 #endif
 
-      if (!strcmp(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        gpuInstVk->extensionNames[nEnabledExtensions++] = VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME;
-      }
+    if (vk__hasExtension(instanceExtensions,
+                         nInstanceExtensions,
+                         VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+      enabledExtensions[nEnabledExtensions++] =
+        VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME;
+    }
 
-      if (!strcmp(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
+    if (vk__hasExtension(instanceExtensions,
+                         nInstanceExtensions,
+                         VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-        gpuInstVk->extensionNames[nEnabledExtensions++] =
+      enabledExtensions[nEnabledExtensions++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+      gpuInstVk->debugUtilsEnabled = true;
+#elif GPU_BUILD_WITH_VALIDATION
+      if (validate) {
+        enabledExtensions[nEnabledExtensions++] =
           VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
         gpuInstVk->debugUtilsEnabled = true;
-#elif GPU_BUILD_WITH_VALIDATION
-        if (validate) {
-          gpuInstVk->extensionNames[nEnabledExtensions++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
-          gpuInstVk->debugUtilsEnabled = true;
-        }
+      }
 #endif
-      }
+    }
 
-      // We want cube to be able to enumerate drivers that support the portability_subset extension, so we have to enable the
-      // portability enumeration extension.
-      if (!strcmp(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME, instanceExtensions[i].extensionName)) {
-        portabilityEnum = true;
-        gpuInstVk->extensionNames[nEnabledExtensions++] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
-      }
-      assert(nEnabledExtensions < 64);
+    if (vk__hasExtension(instanceExtensions,
+                         nInstanceExtensions,
+                         VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)) {
+      portabilityEnum = true;
+      enabledExtensions[nEnabledExtensions++] =
+        VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
     }
 
     free(instanceExtensions);
@@ -253,9 +317,9 @@ vk_createInstance(GPUApi * __restrict api,
     .pApplicationInfo        = &(VkApplicationInfo){
       .sType                 = VK_STRUCTURE_TYPE_APPLICATION_INFO,
       .pNext                 = NULL,
-      .pApplicationName      = APP_SHORT_NAME,
+      .pApplicationName      = GPU_VK_APP_NAME,
       .applicationVersion    = 0,
-      .pEngineName           = APP_SHORT_NAME,
+      .pEngineName           = GPU_VK_APP_NAME,
       .engineVersion         = 0,
       .apiVersion            = apiVersion,
     },
@@ -266,7 +330,7 @@ vk_createInstance(GPUApi * __restrict api,
     .ppEnabledLayerNames     = NULL,
 #endif
     .enabledExtensionCount   = nEnabledExtensions,
-    .ppEnabledExtensionNames = (const char *const *)gpuInstVk->extensionNames,
+    .ppEnabledExtensionNames = enabledExtensions,
   };
 
 #if GPU_BUILD_WITH_VALIDATION
@@ -282,18 +346,20 @@ vk_createInstance(GPUApi * __restrict api,
 
   err = vkCreateInstance(&instCI, NULL, &inst);
   if (err == VK_ERROR_INCOMPATIBLE_DRIVER) {
-    ERR_EXIT("Cannot find a compatible Vulkan installable client driver (ICD).\n\n"
-             "Please look at the Getting Started guide for additional information.\n",
-             "vkCreateInstance Failure");
+    return vk__instanceFail(gpuInst,
+                            gpuInstVk,
+                            err,
+                            "No compatible Vulkan driver was found");
   } else if (err == VK_ERROR_EXTENSION_NOT_PRESENT) {
-    ERR_EXIT("Cannot find a specified extension library.\n"
-             "Make sure your layers path is set appropriately.\n",
-             "vkCreateInstance Failure");
+    return vk__instanceFail(gpuInst,
+                            gpuInstVk,
+                            err,
+                            "A required Vulkan instance extension is unavailable");
   } else if (err) {
-    ERR_EXIT("vkCreateInstance failed.\n\n"
-             "Do you have a compatible Vulkan installable client driver (ICD) installed?\n"
-             "Please look at the Getting Started guide for additional information.\n",
-             "vkCreateInstance Failure");
+    return vk__instanceFail(gpuInst,
+                            gpuInstVk,
+                            err,
+                            "Vulkan instance creation failed");
   }
 
   gpuInstVk->inst       = inst;
@@ -312,7 +378,10 @@ vk_createInstance(GPUApi * __restrict api,
     if (gpuInstVk->CreateDebugUtilsMessengerEXT == NULL
         || gpuInstVk->DestroyDebugUtilsMessengerEXT == NULL
         || gpuInstVk->SubmitDebugUtilsMessageEXT == NULL) {
-      ERR_EXIT("GetProcAddr: Failed to init VK_EXT_debug_utils\n", "GetProcAddr: Failure");
+      return vk__instanceFail(gpuInst,
+                              gpuInstVk,
+                              VK_ERROR_EXTENSION_NOT_PRESENT,
+                              "Vulkan debug-utils entry points are unavailable");
     }
 
     err = gpuInstVk->CreateDebugUtilsMessengerEXT(gpuInstVk->inst, 
@@ -323,13 +392,15 @@ vk_createInstance(GPUApi * __restrict api,
       case VK_SUCCESS:
         break;
       case VK_ERROR_OUT_OF_HOST_MEMORY:
-        ERR_EXIT("CreateDebugUtilsMessengerEXT: out of host memory\n", 
-                 "CreateDebugUtilsMessengerEXT Failure");
-        break;
+        return vk__instanceFail(gpuInst,
+                                gpuInstVk,
+                                err,
+                                "Vulkan debug-messenger allocation failed");
       default:
-        ERR_EXIT("CreateDebugUtilsMessengerEXT: unknown failure\n", 
-                 "CreateDebugUtilsMessengerEXT Failure");
-        break;
+        return vk__instanceFail(gpuInst,
+                                gpuInstVk,
+                                err,
+                                "Vulkan debug-messenger creation failed");
     }
   }
 #endif
@@ -352,9 +423,6 @@ vk_createInstance(GPUApi * __restrict api,
   GET_INSTANCE_PROC_ADDR(gpuInstVk, GetPhysicalDeviceSurfaceFormatsKHR);
   GET_INSTANCE_PROC_ADDR(gpuInstVk, GetPhysicalDeviceSurfacePresentModesKHR);
   GET_INSTANCE_PROC_ADDR(gpuInstVk, GetSwapchainImagesKHR);
-
-  gpuInstVk->nEnabledLayers     = nEnabledLayers;
-  gpuInstVk->nEnabledExtensions = nEnabledExtensions;
 
   return gpuInst;
 }

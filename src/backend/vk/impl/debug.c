@@ -16,6 +16,10 @@
 
 #include "debug.h"
 
+#if defined(__ANDROID__)
+#  include <android/log.h>
+#endif
+
 static const char *
 vk_debugSeverityName(VkDebugUtilsMessageSeverityFlagBitsEXT severity) {
   if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
@@ -64,7 +68,7 @@ vk_debugLog(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
   } else {
     priority = ANDROID_LOG_VERBOSE;
   }
-  __android_log_vprint(priority, APP_SHORT_NAME, format, args);
+  __android_log_vprint(priority, GPU_VK_APP_NAME, format, args);
 #else
   vfprintf(stderr, format, args);
   fflush(stderr);

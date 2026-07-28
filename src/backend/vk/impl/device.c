@@ -38,42 +38,6 @@ vk__devicetype_string(const VkPhysicalDeviceType type) {
 }
 #endif
 
-#if defined(VK_USE_PLATFORM_DISPLAY_KHR)
-GPU_HIDE
-static int
-vk__find_display_gpu(int               gpu_number,
-                     uint32_t          gpu_count,
-                     VkPhysicalDevice *physical_devices) {
-  uint32_t               i, display_count;
-  VkResult U_ASSERT_ONLY result;
-  int                    gpu_return;
-
-  display_count = 0;
-  gpu_return    = gpu_number;
-
-  if (gpu_number >= 0) {
-    result = vkGetPhysicalDeviceDisplayPropertiesKHR(physical_devices[gpu_number],
-                                                     &display_count,
-                                                     NULL);
-    assert(!result);
-  } else {
-    for (i = 0; i < gpu_count; i++) {
-      result = vkGetPhysicalDeviceDisplayPropertiesKHR(physical_devices[i], 
-                                                       &display_count,
-                                                       NULL);
-      assert(!result);
-
-      if (display_count) {
-        gpu_return = i;
-        break;
-      }
-    }
-  }
-
-  return display_count > 0 ? gpu_return : -1;
-}
-#endif
-
 static GPUAdapterType
 vk_adapterType(VkPhysicalDeviceType type) {
   switch (type) {
@@ -946,15 +910,6 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   if (err != VK_SUCCESS) {
     goto fail;
   }
-
-#if defined(VK_USE_PLATFORM_DISPLAY_KHR)
-  err = vkGetPhysicalDeviceDisplayPropertiesKHR(adapterVk->physicalDevice,
-                                                &adapterVk->nDisplayProperties,
-                                                NULL);
-  if (err != VK_SUCCESS) {
-    adapterVk->nDisplayProperties = 0u;
-  }
-#endif
 
 #define VK__ADD_EXT_IF(X, R)                                                  \
     if (!strcmp(X, extensions[i].extensionName)) {                            \
@@ -2258,9 +2213,7 @@ vk_selectAdapter(GPUInstance * __restrict inst,
   GPUAdapter   *adapter;
   GPUAdapterVk *adapterVk;
   GPUAdapter   *adaptersByType[VK_PHYSICAL_DEVICE_TYPE_CPU + 1] = {0};
-#ifndef VK_USE_PLATFORM_DISPLAY_KHR
   GPUAdapter   *priorityList[VK_PHYSICAL_DEVICE_TYPE_CPU + 1];
-#endif
   uint32_t      i;
 
   GPU__UNUSED(inst);
@@ -2269,17 +2222,12 @@ vk_selectAdapter(GPUInstance * __restrict inst,
 
   while (adapter) {
     adapterVk = adapter->_priv;
-#if defined(VK_USE_PLATFORM_DISPLAY_KHR)
-    if (adapterVk->nDisplayProperties) { goto ok; }
-#else
     if (!adaptersByType[adapterVk->props.deviceType]) {
       adaptersByType[adapterVk->props.deviceType] = adapter;
     }
-#endif
     adapter = adapter->next;
   }
 
-#ifndef VK_USE_PLATFORM_DISPLAY_KHR
   priorityList[0] = adaptersByType[VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU];
   priorityList[1] = adaptersByType[VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU];
   priorityList[2] = adaptersByType[VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU];
@@ -2289,11 +2237,6 @@ vk_selectAdapter(GPUInstance * __restrict inst,
   for (i = 0;
        i < GPU_ARRAY_LEN(priorityList) && !(adapter = priorityList[i]);
        i++);
-#endif
-
-#if defined(VK_USE_PLATFORM_DISPLAY_KHR)
-ok:
-#endif
   if (!adapter) { goto err; }
   adapterVk = adapter->_priv;
 

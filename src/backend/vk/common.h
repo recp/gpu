@@ -53,13 +53,11 @@
 #  endif
 #elif defined(_WIN32) || defined(WIN32)
 #  define VK_USE_PLATFORM_WIN32_KHR        1
+#elif defined(__ANDROID__)
+#  define VK_USE_PLATFORM_ANDROID_KHR      1
 #endif
 
-#ifdef ANDROID
-#  include "vulkan_wrapper.h"
-#else
-#  include <vulkan/vulkan.h>
-#endif
+#include <vulkan/vulkan.h>
 
 #if defined(_WIN32) || defined(WIN32)
 #  include <windows.h>
@@ -69,8 +67,7 @@
 
 #include "object_type_string_helper.h"
 
-#define APP_SHORT_NAME "libgpu"
-#define APP_LONG_NAME  "libgpu"
+#define GPU_VK_APP_NAME "libgpu"
 
 enum {
   GPU_VK_MAX_DYNAMIC_OFFSETS          = 64u,
@@ -84,76 +81,13 @@ enum {
 #  define U_ASSERT_ONLY
 #endif
 
-#if defined(__GNUC__)
-#  define UNUSED __attribute__((unused))
-#else
-#  define UNUSED
-#endif
-
-#ifdef _WIN32
-bool in_callback = false;
-#define ERR_EXIT(err_msg, err_class)                                             \
-    do {                                                                         \
-        if (!demo->suppress_popups) MessageBox(NULL, err_msg, err_class, MB_OK); \
-        exit(1);                                                                 \
-    } while (0)
-void DbgMsg(char *fmt, ...) {
-    va_list va;
-    va_start(va, fmt);
-    vprintf(fmt, va);
-    va_end(va);
-    fflush(stdout);
-}
-
-#elif defined __ANDROID__
-#include <android/log.h>
-#define ERR_EXIT(err_msg, err_class)                                           \
-    do {                                                                       \
-        ((void)__android_log_print(ANDROID_LOG_INFO, "Vulkan Cube", err_msg)); \
-        exit(1);                                                               \
-    } while (0)
-#ifdef VARARGS_WORKS_ON_ANDROID
-void DbgMsg(const char *fmt, ...) {
-    va_list va;
-    va_start(va, fmt);
-    __android_log_print(ANDROID_LOG_INFO, "Vulkan Cube", fmt, va);
-    va_end(va);
-}
-#else  // VARARGS_WORKS_ON_ANDROID
-#define DbgMsg(fmt, ...)                                                                  \
-    do {                                                                                  \
-        ((void)__android_log_print(ANDROID_LOG_INFO, "Vulkan Cube", fmt, ##__VA_ARGS__)); \
-    } while (0)
-#endif  // VARARGS_WORKS_ON_ANDROID
-#else
-#define ERR_EXIT(err_msg, err_class) \
-    do {                             \
-        printf("%s\n", err_msg);     \
-        fflush(stdout);              \
-        exit(1);                     \
-    } while (0)
-GPU_INLINE void DbgMsg(char *fmt, ...) {
-    va_list va;
-    va_start(va, fmt);
-    vprintf(fmt, va);
-    va_end(va);
-    fflush(stdout);
-}
-#endif
-
 #define GET_INSTANCE_PROC_ADDR(gpuInstVk, entrypoint)                         \
   gpuInstVk->fp##entrypoint = (PFN_vk##entrypoint)                            \
       vkGetInstanceProcAddr(gpuInstVk->inst, "vk" #entrypoint);               \
 
 typedef struct GPUInstanceVk {
-  char       *extensionNames[64];
-  char       *enabledLayers[64];
   VkInstance  inst;
   uint32_t    apiVersion;
-  uint32_t    nEnabledExtensions;
-  uint32_t    nEnabledLayers;
-  int32_t     gpu_number;
-  bool        invalid_gpu_selection;
 #if GPU_BUILD_WITH_VALIDATION || GPU_BUILD_WITH_DEBUG_MARKERS
   bool        debugUtilsEnabled;
 #endif
@@ -199,7 +133,6 @@ typedef struct GPUAdapterVk {
 #endif
   VkPhysicalDeviceProperties    props;
   VkPhysicalDeviceFeatures      features;
-  VkDisplayPropertiesKHR        displayProps;
   GPUMeshLimits                 meshLimits;
   GPUShadingRateFlagsEXT         vrsRates;
   GPUShadingRateCombinerFlagsEXT vrsCombiners;
@@ -210,7 +143,6 @@ typedef struct GPUAdapterVk {
   uint32_t                      subgroupSize;
   uint32_t                      minSubgroupSize;
   uint32_t                      maxSubgroupSize;
-  uint32_t                      nDisplayProperties;
   uint32_t                      maxVRSTexelAspectRatio;
   uint32_t                      accelerationStructureScratchAlignment;
   uint32_t                      rayTracingShaderGroupHandleSize;

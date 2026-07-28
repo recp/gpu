@@ -21,6 +21,7 @@ option(GPU_ENABLE_WEBGPU "Build the WebGPU backend" OFF)
 option(GPU_BUILD_TESTS "Build GPU validation tests" OFF)
 option(GPU_BUILD_SAMPLES "Build GPU samples" OFF)
 option(GPU_BUILD_BENCHMARKS "Build GPU microbenchmarks" OFF)
+option(GPU_BUILD_ANDROID_TESTS "Build Android device validation" OFF)
 option(GPU_BUILD_WITH_VALIDATION "Build validation and verbose diagnostics" ON)
 option(GPU_BUILD_WITH_DEBUG_MARKERS "Build debug marker support" ON)
 option(GPU_BACKEND_METAL_ONLY "Build only the Metal backend" OFF)
@@ -54,6 +55,12 @@ if(GPU_BACKEND_DX12_ONLY AND NOT WIN32)
   message(FATAL_ERROR "GPU_BACKEND_DX12_ONLY requires Windows")
 endif()
 if(GPU_BACKEND_VULKAN_ONLY)
+  set(GPU_ENABLE_VULKAN ON)
+endif()
+if(GPU_BUILD_ANDROID_TESTS)
+  if(NOT ANDROID)
+    message(FATAL_ERROR "GPU_BUILD_ANDROID_TESTS requires the Android NDK")
+  endif()
   set(GPU_ENABLE_VULKAN ON)
 endif()
 if(GPU_BACKEND_WEBGPU_ONLY)
@@ -227,7 +234,7 @@ if(TARGET us)
   target_link_libraries(gpu PRIVATE us)
 elseif(GPU_USL_ROOT AND EXISTS "${GPU_USL_ROOT}/us/CMakeLists.txt")
   set(US_USE_TEST OFF CACHE BOOL "" FORCE)
-  if(EMSCRIPTEN)
+  if(EMSCRIPTEN OR ANDROID)
     set(US_RUNTIME_ONLY ON CACHE BOOL "" FORCE)
   endif()
   if(NOT BUILD_SHARED_LIBS OR
@@ -394,6 +401,35 @@ if(GPU_BUILD_VULKAN)
     target_sources(gpu PRIVATE src/backend/vk/impl/debug.c)
   endif()
   target_link_libraries(gpu PRIVATE Vulkan::Vulkan)
+  if(ANDROID)
+    target_link_libraries(gpu PRIVATE log)
+  endif()
+endif()
+
+if(GPU_BUILD_ANDROID_TESTS)
+  add_executable(gpu-android-vulkan-test
+    tests/android/vulkan.c
+    tests/api/copy.c
+    tests/api/texture_transfer.c
+  )
+  target_include_directories(gpu-android-vulkan-test PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+  )
+  target_link_libraries(gpu-android-vulkan-test PRIVATE
+    gpu
+    Vulkan::Vulkan
+    log
+  )
+  set_target_properties(gpu-android-vulkan-test PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  target_compile_options(gpu-android-vulkan-test PRIVATE
+    -Wall
+    -Wextra
+    -Werror
+  )
 endif()
 
 if(GPU_BUILD_WEBGPU)
