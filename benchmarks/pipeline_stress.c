@@ -34,10 +34,16 @@ enum {
   PIPELINE_MAX_PERMUTATIONS = 180
 };
 
+static const uint8_t pipelineCorruptMarker[] = {
+  0x47u, 0x50u, 0x55u, 0x2du, 0x43u, 0x4fu, 0x52u, 0x52u,
+  0x55u, 0x50u, 0x54u
+};
+
 typedef enum PipelineDiskMode {
   PIPELINE_DISK_DEFAULT = 0,
   PIPELINE_DISK_PRODUCE,
-  PIPELINE_DISK_REOPEN
+  PIPELINE_DISK_REOPEN,
+  PIPELINE_DISK_CORRUPT
 } PipelineDiskMode;
 
 typedef struct PipelineStressConfig {
@@ -94,6 +100,10 @@ pipeline_parseDiskMode(const char *text, PipelineDiskMode *outMode) {
     *outMode = PIPELINE_DISK_REOPEN;
     return true;
   }
+  if (strcmp(text, "disk-corrupt") == 0) {
+    *outMode = PIPELINE_DISK_CORRUPT;
+    return true;
+  }
   return false;
 }
 
@@ -104,7 +114,7 @@ pipeline_config(int argc, char *argv[], PipelineStressConfig *config) {
       fprintf(stderr,
               "usage: %s <shader.us> [default|metal|vulkan|dx12|webgpu] "
               "[pipelines] [repeats] "
-              "[disk-produce|disk-reopen cache-path]\n",
+              "[disk-produce|disk-reopen|disk-corrupt cache-path]\n",
               argv[0]);
     }
     return false;
@@ -268,6 +278,46 @@ pipeline_diskCacheSize(const PipelineStress *stress) {
   size = fseek(file, 0, SEEK_END) == 0 ? ftell(file) : -1;
   fclose(file);
   return size;
+}
+
+static bool
+pipeline_corruptDiskCache(const PipelineStress *stress) {
+  FILE *file;
+  bool  written;
+
+  if (!stress || !stress->cachePath[0]) {
+    return false;
+  }
+  file    = fopen(stress->cachePath, "wb");
+  written = file &&
+            fwrite(pipelineCorruptMarker,
+                   1u,
+                   sizeof(pipelineCorruptMarker),
+                   file) == sizeof(pipelineCorruptMarker);
+  if (file && fclose(file) != 0) {
+    written = false;
+  }
+  return written;
+}
+
+static bool
+pipeline_diskCacheStillCorrupt(const PipelineStress *stress) {
+  uint8_t bytes[sizeof(pipelineCorruptMarker)];
+  FILE   *file;
+  bool    corrupt;
+
+  file = stress && stress->cachePath[0]
+           ? fopen(stress->cachePath, "rb")
+           : NULL;
+  if (!file) {
+    return false;
+  }
+  corrupt = fread(bytes, 1u, sizeof(bytes), file) == sizeof(bytes) &&
+            memcmp(bytes,
+                   pipelineCorruptMarker,
+                   sizeof(pipelineCorruptMarker)) == 0;
+  fclose(file);
+  return corrupt;
 }
 
 static void
@@ -495,6 +545,8 @@ pipeline_runDiskPhase(PipelineStress             *stress,
   double            openNs;
   double            start;
   double            storeNs;
+  const char       *mode;
+  bool              corrupt;
   bool              produce;
 
   if (!stress->diskCacheSupported) {
@@ -503,10 +555,16 @@ pipeline_runDiskPhase(PipelineStress             *stress,
   }
 
   produce = config->diskMode == PIPELINE_DISK_PRODUCE;
+  corrupt = config->diskMode == PIPELINE_DISK_CORRUPT;
   if (produce) {
     pipeline_removeDiskCache(stress);
   } else if (pipeline_diskCacheSize(stress) <= 0) {
     fprintf(stderr, "pipeline cache is missing or empty: %s\n",
+            stress->cachePath);
+    return false;
+  }
+  if (corrupt && !pipeline_corruptDiskCache(stress)) {
+    fprintf(stderr, "pipeline cache corruption setup failed: %s\n",
             stress->cachePath);
     return false;
   }
@@ -536,14 +594,15 @@ pipeline_runDiskPhase(PipelineStress             *stress,
   start = bench_now();
   GPUDestroyPipelineCache(cache);
   storeNs = (bench_now() - start) * 1e9;
-  if (pipeline_diskCacheSize(stress) <= 0) {
-    fprintf(stderr, "pipeline cache was not written: %s\n",
+  if (pipeline_diskCacheSize(stress) <= 0 ||
+      pipeline_diskCacheStillCorrupt(stress)) {
+    fprintf(stderr, "pipeline cache was not recovered: %s\n",
             stress->cachePath);
     return false;
   }
 
-  printf("GPU pipeline disk %s benchmark\n",
-         produce ? "produce" : "reopen");
+  mode = produce ? "produce" : corrupt ? "corrupt recovery" : "reopen";
+  printf("GPU pipeline disk %s benchmark\n", mode);
   printf("adapter: %s, backend: %s, validation: %s\n",
          stress->bench.adapterProperties.name
            ? stress->bench.adapterProperties.name
