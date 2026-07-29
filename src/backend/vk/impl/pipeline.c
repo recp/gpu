@@ -253,47 +253,82 @@ vk__fillBlendState(VkPipelineColorBlendAttachmentState *native,
 }
 
 static VkResult
-vk__createPipelineRenderPass(VkDevice      device,
-                             VkFormat      colorFormat,
-                             VkFormat      depthStencilFormat,
-                             VkRenderPass *outRenderPass) {
-  VkAttachmentDescription attachments[2] = {{0}};
-  VkAttachmentReference   colorRef        = {0};
-  VkAttachmentReference   depthStencilRef = {0};
-  VkSubpassDescription    subpass         = {0};
-  VkSubpassDependency     dependency      = {0};
-  VkRenderPassCreateInfo  info            = {0};
+vk__createPipelineRenderPass(VkDevice              device,
+                             const VkFormat       *colorFormats,
+                             uint32_t              colorCount,
+                             VkFormat              depthStencilFormat,
+                             VkSampleCountFlagBits sampleCount,
+                             VkRenderPass         *outRenderPass) {
+  VkAttachmentDescription attachments[GPU_VK_MAX_RENDER_ATTACHMENTS] = {{0}};
+  VkAttachmentReference colorRefs[
+    GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS
+  ] = {{0}};
+  VkAttachmentReference resolveRefs[
+    GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS
+  ] = {{0}};
+  VkAttachmentReference  depthStencilRef = {0};
+  VkSubpassDescription   subpass         = {0};
+  VkSubpassDependency    dependency      = {0};
+  VkRenderPassCreateInfo info            = {0};
+  uint32_t               attachmentCount;
+  uint32_t               depthIndex;
 
-  attachments[0].format         = colorFormat;
-  attachments[0].samples        = VK_SAMPLE_COUNT_1_BIT;
-  attachments[0].loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
-  attachments[0].storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
-  attachments[0].stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-  attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  attachments[0].initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
-  attachments[0].finalLayout    = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  attachmentCount = 0u;
+  for (uint32_t i = 0u; i < colorCount; i++) {
+    VkAttachmentDescription *attachment;
 
-  colorRef.attachment = 0u;
-  colorRef.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    attachment                 = &attachments[attachmentCount];
+    attachment->format         = colorFormats[i];
+    attachment->samples        = sampleCount;
+    attachment->loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachment->storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+    attachment->stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment->stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment->initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment->finalLayout    = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    colorRefs[i].attachment    = attachmentCount++;
+    colorRefs[i].layout        = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    resolveRefs[i].attachment  = VK_ATTACHMENT_UNUSED;
+    resolveRefs[i].layout      = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  }
+  if (sampleCount > VK_SAMPLE_COUNT_1_BIT) {
+    for (uint32_t i = 0u; i < colorCount; i++) {
+      VkAttachmentDescription *attachment;
 
-  subpass.pipelineBindPoint    = VK_PIPELINE_BIND_POINT_GRAPHICS;
-  subpass.colorAttachmentCount = 1u;
-  subpass.pColorAttachments    = &colorRef;
+      attachment                 = &attachments[attachmentCount];
+      attachment->format         = colorFormats[i];
+      attachment->samples        = VK_SAMPLE_COUNT_1_BIT;
+      attachment->loadOp         = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+      attachment->storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+      attachment->stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+      attachment->stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+      attachment->initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+      attachment->finalLayout    = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+      resolveRefs[i].attachment  = attachmentCount++;
+    }
+  }
   if (depthStencilFormat != VK_FORMAT_UNDEFINED) {
-    attachments[1].format         = depthStencilFormat;
-    attachments[1].samples        = VK_SAMPLE_COUNT_1_BIT;
-    attachments[1].loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachments[1].storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[1].stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[1].initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[1].finalLayout =
+    depthIndex = attachmentCount++;
+    attachments[depthIndex].format         = depthStencilFormat;
+    attachments[depthIndex].samples        = sampleCount;
+    attachments[depthIndex].loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[depthIndex].storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[depthIndex].stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[depthIndex].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[depthIndex].initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachments[depthIndex].finalLayout =
       VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    depthStencilRef.attachment = 1u;
+    depthStencilRef.attachment = depthIndex;
     depthStencilRef.layout =
       VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     subpass.pDepthStencilAttachment = &depthStencilRef;
   }
+
+  subpass.pipelineBindPoint    = VK_PIPELINE_BIND_POINT_GRAPHICS;
+  subpass.colorAttachmentCount = colorCount;
+  subpass.pColorAttachments    = colorCount ? colorRefs : NULL;
+  subpass.pResolveAttachments  =
+    sampleCount > VK_SAMPLE_COUNT_1_BIT && colorCount ? resolveRefs : NULL;
 
   dependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
   dependency.dstSubpass    = 0u;
@@ -307,7 +342,7 @@ vk__createPipelineRenderPass(VkDevice      device,
                              VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
   info.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  info.attachmentCount = depthStencilFormat == VK_FORMAT_UNDEFINED ? 1u : 2u;
+  info.attachmentCount = attachmentCount;
   info.pAttachments    = attachments;
   info.subpassCount    = 1u;
   info.pSubpasses      = &subpass;
@@ -367,14 +402,10 @@ vk_createRenderPipeline(GPUDevice                         *device,
                (mesh->taskEntry && !deviceVk->taskShader))) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  if (!deviceVk->dynamicRendering && info->colorTargetCount != 1u) {
-    return GPU_ERROR_UNSUPPORTED;
-  }
   sampleCount = vk__sampleCount(info->multisample.sampleCount
                                   ? info->multisample.sampleCount
                                   : 1u);
   if (!sampleCount ||
-      (sampleCount > VK_SAMPLE_COUNT_1_BIT && !deviceVk->dynamicRendering) ||
       (info->colorTargetCount > 0u &&
        (deviceVk->colorSampleCounts & sampleCount) == 0u) ||
       (info->depthStencilFormat != GPU_FORMAT_UNDEFINED &&
@@ -510,8 +541,10 @@ vk_createRenderPipeline(GPUDevice                         *device,
   }
   if (!deviceVk->dynamicRendering &&
       vk__createPipelineRenderPass(native->device,
-                                   colorFormats[0],
+                                   colorFormats,
+                                   info->colorTargetCount,
                                    depthStencilFormat,
+                                   sampleCount,
                                    &native->renderPass) != VK_SUCCESS) {
     free(vertexAttributes);
     free(vertexBindings);

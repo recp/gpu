@@ -72,7 +72,9 @@
 enum {
   GPU_VK_MAX_DYNAMIC_OFFSETS          = 64u,
   GPU_VK_DESCRIPTOR_POOL_TYPE_COUNT   = 8u,
-  GPU_VK_DESCRIPTOR_BUFFER_SLOT_COUNT = 64u
+  GPU_VK_DESCRIPTOR_BUFFER_SLOT_COUNT = 64u,
+  GPU_VK_MAX_RENDER_ATTACHMENTS       =
+    GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS * 2u + 1u
 };
 
 #if defined(NDEBUG) && defined(__GNUC__)
@@ -565,7 +567,7 @@ typedef struct GPURenderPassVk {
 #endif
   VkRenderingInfoKHR           renderingInfo;
   VkExtent2D                    extent;
-  VkClearValue                 clearValues[2];
+  VkClearValue                 clearValues[GPU_VK_MAX_RENDER_ATTACHMENTS];
   uint32_t                     colorCount;
   uint32_t                     clearValueCount;
   bool                         dynamic;
@@ -787,24 +789,6 @@ vk_createShaderLayout(GPUDevice             *device,
 GPU_HIDE
 void
 vk_destroyShaderLayout(GPUShaderLayoutVk *layout);
-
-GPU_HIDE
-GPUResult
-vk_getClassicRenderTarget(GPUDeviceVk          *device,
-                          VkFormat              colorFormat,
-                          VkFormat              depthStencilFormat,
-                          VkImageView           colorView,
-                          VkImageView           depthStencilView,
-                          VkExtent2D             extent,
-                          uint32_t               colorLoadOp,
-                          uint32_t               colorStoreOp,
-                          uint32_t               depthLoadOp,
-                          uint32_t               depthStoreOp,
-                          uint32_t               stencilLoadOp,
-                          uint32_t               stencilStoreOp,
-                          bool                   present,
-                          VkRenderPass          *outRenderPass,
-                          VkFramebuffer         *outFramebuffer);
 
 GPU_HIDE
 void

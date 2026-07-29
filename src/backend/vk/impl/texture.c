@@ -750,7 +750,6 @@ vk__textureCreateInfo(GPUDevice                  *device,
 
   sampleCount = vk__sampleCount(info->sampleCount ? info->sampleCount : 1u);
   if (!sampleCount ||
-      (sampleCount > VK_SAMPLE_COUNT_1_BIT && !deviceVk->dynamicRendering) ||
       (((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u) &&
        (deviceVk->colorSampleCounts & sampleCount) == 0u) ||
       (((info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u) &&
@@ -864,7 +863,8 @@ vk__finishTexture(GPUDevice                  *device,
 #endif
   subresourceCount = state->subresourceCount;
   if ((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u &&
-      !deviceVk->dynamicRendering) {
+      !deviceVk->dynamicRendering &&
+      imageInfo->samples == VK_SAMPLE_COUNT_1_BIT) {
     for (uint32_t load = 0u; load < 3u; load++) {
       for (uint32_t store = 0u; store < 2u; store++) {
         if (vk__createColorRenderPass(
@@ -1385,7 +1385,8 @@ vk_createTextureView(GPUTexture                     * __restrict texture,
     }
 
     if ((texture->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u &&
-        !textureVk->gpuDevice->dynamicRendering) {
+        !textureVk->gpuDevice->dynamicRendering &&
+        texture->sampleCount == 1u) {
       framebufferInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
       framebufferInfo.renderPass      =
         textureVk->renderPasses[GPU_LOAD_OP_CLEAR][GPU_STORE_OP_STORE];
