@@ -4,14 +4,21 @@
 #include "../../src/api/device_internal.h"
 
 static GPUCommandBuffer       *gLastBarrierCmdb;
-static const GPUBarrierBatch *gLastBarrierBatch;
-static uint32_t               gBarrierForwardCount;
+static const GPUBarrierBatch  *gLastBarrierBatch;
+static GPUBarrierBatch         gCapturedBarrierBatch;
+static GPUTextureBarrier       gCapturedTextureBarrier;
+static uint32_t                gBarrierForwardCount;
 
 static void
 count_barriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
   gBarrierForwardCount++;
-  gLastBarrierCmdb = cmdb;
-  gLastBarrierBatch = barriers;
+  gLastBarrierCmdb       = cmdb;
+  gLastBarrierBatch      = barriers;
+  gCapturedBarrierBatch  = *barriers;
+  if (barriers->textureBarrierCount == 1u &&
+      barriers->pTextureBarriers) {
+    gCapturedTextureBarrier = barriers->pTextureBarriers[0];
+  }
 }
 
 static int
@@ -39,10 +46,12 @@ check_barrier_forwarding(GPUDevice *device) {
   savedEncodeBarriers = api->renderPass.encodeBarriers;
   api->renderPass.encodeBarriers = count_barriers;
   gBarrierForwardCount = 0u;
-  gLastBarrierCmdb = NULL;
-  gLastBarrierBatch = NULL;
-  fakeQueue._device = device;
-  fakeCmdb._queue   = &fakeQueue;
+  gLastBarrierCmdb        = NULL;
+  gLastBarrierBatch       = NULL;
+  gCapturedBarrierBatch   = (GPUBarrierBatch){0};
+  gCapturedTextureBarrier = (GPUTextureBarrier){0};
+  fakeQueue._device       = device;
+  fakeCmdb._queue         = &fakeQueue;
 
   bufferInfo.chain.sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
@@ -136,9 +145,50 @@ check_barrier_forwarding(GPUDevice *device) {
     goto done;
   }
 
+  GPUTransitionTexture(&fakeCmdb,
+                       texture,
+                       GPU_ACCESS_TRANSFER_WRITE,
+                       GPU_ACCESS_SHADER_READ);
+  if (gBarrierForwardCount != 2u ||
+      gCapturedBarrierBatch.srcStages != GPU_STAGE_TRANSFER ||
+      gCapturedBarrierBatch.dstStages != (GPU_STAGE_VERTEX |
+                                          GPU_STAGE_FRAGMENT |
+                                          GPU_STAGE_COMPUTE) ||
+      gCapturedBarrierBatch.textureBarrierCount != 1u ||
+      gCapturedTextureBarrier.texture != texture ||
+      gCapturedTextureBarrier.srcAccess != GPU_ACCESS_TRANSFER_WRITE ||
+      gCapturedTextureBarrier.dstAccess != GPU_ACCESS_SHADER_READ ||
+      gCapturedTextureBarrier.baseMip != 0u ||
+      gCapturedTextureBarrier.mipCount != 1u ||
+      gCapturedTextureBarrier.baseLayer != 0u ||
+      gCapturedTextureBarrier.layerCount != 1u) {
+    fprintf(stderr, "texture transition inference mismatch\n");
+    goto done;
+  }
+
+  GPUTransitionTexture(&fakeCmdb,
+                       texture,
+                       GPU_ACCESS_NONE,
+                       GPU_ACCESS_TRANSFER_WRITE);
+  if (gBarrierForwardCount != 3u ||
+      gCapturedBarrierBatch.srcStages != GPU_STAGE_TOP ||
+      gCapturedBarrierBatch.dstStages != GPU_STAGE_TRANSFER) {
+    fprintf(stderr, "texture transition initial state mismatch\n");
+    goto done;
+  }
+
+  GPUTransitionTexture(&fakeCmdb,
+                       texture,
+                       GPU_ACCESS_TRANSFER_WRITE,
+                       GPU_ACCESS_INDIRECT_READ);
+  if (gBarrierForwardCount != 3u) {
+    fprintf(stderr, "invalid texture transition should not forward\n");
+    goto done;
+  }
+
   api->renderPass.encodeBarriers = NULL;
   GPUEncodeBarriers(&fakeCmdb, &batch);
-  if (gBarrierForwardCount != 1u) {
+  if (gBarrierForwardCount != 3u) {
     fprintf(stderr, "barrier test null backend callback should not forward\n");
     goto done;
   }

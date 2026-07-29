@@ -87,6 +87,32 @@ gpu_validTextureAccess(const GPUTexture *texture, GPUAccessMask access) {
   return true;
 }
 
+static GPUPipelineStageMask
+gpu_textureAccessStages(GPUAccessMask access, bool source) {
+  GPUPipelineStageMask stages;
+
+  if (access == GPU_ACCESS_NONE) {
+    return source ? GPU_STAGE_TOP : GPU_STAGE_BOTTOM;
+  }
+
+  stages = 0u;
+  if ((access & (GPU_ACCESS_SHADER_READ | GPU_ACCESS_SHADER_WRITE)) != 0u) {
+    stages |= GPU_STAGE_VERTEX | GPU_STAGE_FRAGMENT | GPU_STAGE_COMPUTE;
+  }
+  if ((access & (GPU_ACCESS_COLOR_READ |
+                 GPU_ACCESS_COLOR_WRITE |
+                 GPU_ACCESS_DEPTH_READ |
+                 GPU_ACCESS_DEPTH_WRITE)) != 0u) {
+    stages |= GPU_STAGE_FRAGMENT;
+  }
+  if ((access & (GPU_ACCESS_TRANSFER_READ |
+                 GPU_ACCESS_TRANSFER_WRITE)) != 0u) {
+    stages |= GPU_STAGE_TRANSFER;
+  }
+
+  return stages;
+}
+
 static bool
 gpu_validAliasingBarrier(GPUDevice               *device,
                          const GPUAliasingBarrier *barrier) {
@@ -198,9 +224,8 @@ gpu_validBarrierBatch(GPUDevice *device, const GPUBarrierBatch *barriers) {
          barriers->aliasingBarrierCount > 0u;
 }
 
-GPU_EXPORT
-void
-GPUEncodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
+static void
+gpu_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
   GPUDevice *device;
   GPUApi    *api;
 
@@ -216,4 +241,36 @@ GPUEncodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
   }
 
   api->renderPass.encodeBarriers(cmdb, barriers);
+}
+
+GPU_EXPORT
+void
+GPUEncodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
+  gpu_encodeBarriers(cmdb, barriers);
+}
+
+GPU_EXPORT
+void
+GPUTransitionTexture(GPUCommandBuffer *cmdb,
+                     GPUTexture       *texture,
+                     GPUAccessMask     srcAccess,
+                     GPUAccessMask     dstAccess) {
+  GPUTextureBarrier textureBarrier = {0};
+  GPUBarrierBatch   barrierBatch = {0};
+
+  if (!texture) {
+    return;
+  }
+
+  textureBarrier.texture    = texture;
+  textureBarrier.srcAccess  = srcAccess;
+  textureBarrier.dstAccess  = dstAccess;
+  textureBarrier.mipCount   = texture->mipLevelCount;
+  textureBarrier.layerCount = gpuTextureArrayLayerCount(texture);
+
+  barrierBatch.pTextureBarriers    = &textureBarrier;
+  barrierBatch.srcStages           = gpu_textureAccessStages(srcAccess, true);
+  barrierBatch.dstStages           = gpu_textureAccessStages(dstAccess, false);
+  barrierBatch.textureBarrierCount = 1u;
+  gpu_encodeBarriers(cmdb, &barrierBatch);
 }

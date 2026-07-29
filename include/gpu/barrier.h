@@ -79,6 +79,14 @@ GPU_EXPORT
 void
 GPUEncodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers);
 
+/* Transitions every mip and layer of a texture. */
+GPU_EXPORT
+void
+GPUTransitionTexture(GPUCommandBuffer *cmdb,
+                     GPUTexture       *texture,
+                     GPUAccessMask     srcAccess,
+                     GPUAccessMask     dstAccess);
+
 #ifdef __cplusplus
 }
 #endif

@@ -170,7 +170,6 @@ create_transfer_texture(WebGPUTexturedQuad *state) {
   GPUBufferTextureCopyRegion     bufferTextureCopy = {0};
   GPUTextureToTextureCopyRegion  textureCopy = {0};
   GPUBufferBarrier               bufferBarrier = {0};
-  GPUTextureBarrier              textureBarrier = {0};
   GPUBarrierBatch                barrier = {0};
   GPUQueueSubmitInfo             submit = {0};
 
@@ -277,17 +276,10 @@ create_transfer_texture(WebGPUTexturedQuad *state) {
                          &bufferTextureCopy);
   GPUEndTransferPass(copy);
 
-  barrier = (GPUBarrierBatch){0};
-  textureBarrier.texture    = state->copySourceTexture;
-  textureBarrier.srcAccess  = GPU_ACCESS_TRANSFER_WRITE;
-  textureBarrier.dstAccess  = GPU_ACCESS_TRANSFER_READ;
-  textureBarrier.mipCount   = 1u;
-  textureBarrier.layerCount = 1u;
-  barrier.pTextureBarriers     = &textureBarrier;
-  barrier.srcStages            = GPU_STAGE_TRANSFER;
-  barrier.dstStages            = GPU_STAGE_TRANSFER;
-  barrier.textureBarrierCount  = 1u;
-  GPUEncodeBarriers(cmdb, &barrier);
+  GPUTransitionTexture(cmdb,
+                       state->copySourceTexture,
+                       GPU_ACCESS_TRANSFER_WRITE,
+                       GPU_ACCESS_TRANSFER_READ);
 
   textureCopy.src.aspect  = GPU_TEXTURE_ASPECT_ALL;
   textureCopy.dst.aspect  = GPU_TEXTURE_ASPECT_ALL;
@@ -306,15 +298,10 @@ create_transfer_texture(WebGPUTexturedQuad *state) {
                           &textureCopy);
   GPUEndTransferPass(copy);
 
-  barrier = (GPUBarrierBatch){0};
-  textureBarrier.texture   = state->texture;
-  textureBarrier.srcAccess = GPU_ACCESS_TRANSFER_WRITE;
-  textureBarrier.dstAccess = GPU_ACCESS_TRANSFER_READ;
-  barrier.pTextureBarriers     = &textureBarrier;
-  barrier.srcStages            = GPU_STAGE_TRANSFER;
-  barrier.dstStages            = GPU_STAGE_TRANSFER;
-  barrier.textureBarrierCount  = 1u;
-  GPUEncodeBarriers(cmdb, &barrier);
+  GPUTransitionTexture(cmdb,
+                       state->texture,
+                       GPU_ACCESS_TRANSFER_WRITE,
+                       GPU_ACCESS_TRANSFER_READ);
 
   bufferTextureCopy.bytesPerRow = READBACK_ROW_PITCH;
   copy = GPUBeginTransferPass(cmdb, "checker-readback");
@@ -328,14 +315,10 @@ create_transfer_texture(WebGPUTexturedQuad *state) {
                          &bufferTextureCopy);
   GPUEndTransferPass(copy);
 
-  barrier = (GPUBarrierBatch){0};
-  textureBarrier.srcAccess  = GPU_ACCESS_TRANSFER_READ;
-  textureBarrier.dstAccess  = GPU_ACCESS_SHADER_READ;
-  barrier.pTextureBarriers     = &textureBarrier;
-  barrier.srcStages            = GPU_STAGE_TRANSFER;
-  barrier.dstStages            = GPU_STAGE_FRAGMENT;
-  barrier.textureBarrierCount  = 1u;
-  GPUEncodeBarriers(cmdb, &barrier);
+  GPUTransitionTexture(cmdb,
+                       state->texture,
+                       GPU_ACCESS_TRANSFER_READ,
+                       GPU_ACCESS_SHADER_READ);
 
   submitBuffers[0]          = cmdb;
   submit.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
