@@ -2544,7 +2544,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
     MACOSX_BUNDLE_INFO_PLIST
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-ios-usl/Info.plist"
     XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER
-      "com.recp.gpu.triangle-ios-usl"
+      "gpu.samples.triangle-ios-usl"
     XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
   )
 
@@ -2591,7 +2591,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
     MACOSX_BUNDLE_INFO_PLIST
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-ios-usl/Info.plist"
     XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER
-      "com.recp.gpu.mesh-triangle-ios-usl"
+      "gpu.samples.mesh-triangle-ios-usl"
     XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
   )
 
@@ -2661,7 +2661,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
     MACOSX_BUNDLE_INFO_PLIST
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-ios-usl/Info.plist"
     XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER
-      "com.recp.gpu.ray-query-ios-usl"
+      "gpu.samples.ray-query-ios-usl"
     XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
   )
 
@@ -2707,7 +2707,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
     MACOSX_BUNDLE_INFO_PLIST
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle-ios-usl/Info.plist"
     XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER
-      "com.recp.gpu.vrs-ios-usl"
+      "gpu.samples.vrs-ios-usl"
     XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
   )
 
@@ -2755,7 +2755,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
     MACOSX_BUNDLE_INFO_PLIST
       "${CMAKE_CURRENT_SOURCE_DIR}/samples/metal4-bindless-ios-usl/Info.plist"
     XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER
-      "com.recp.gpu.metal4-bindless-ios-usl"
+      "gpu.samples.metal4-bindless-ios-usl"
     XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
   )
 endif()

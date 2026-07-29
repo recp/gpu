@@ -88,7 +88,7 @@ CubeBuildViewProjection(uint32_t width, uint32_t height, mat4 dest) {
   mat4  projection;
   float aspect;
 
-  aspect = height > 0u ? (float)width / (float)height : 1.0f;
+  aspect = gpu_sample_aspect_ratio(width, height);
   eye[0] = 0.0f;
   eye[1] = 0.0f;
   eye[2] = aspect < 1.0f ? 4.5f / aspect : 4.5f;
@@ -98,15 +98,16 @@ CubeBuildViewProjection(uint32_t width, uint32_t height, mat4 dest) {
 }
 
 static inline void
-CubeBuildUniforms(float seconds,
-                  mat4 viewProjection,
+CubeBuildUniforms(float         yaw,
+                  float         pitch,
+                  mat4          viewProjection,
                   CubeUniforms *uniforms) {
   vec3 axisX = {1.0f, 0.0f, 0.0f};
   vec3 axisY = {0.0f, 1.0f, 0.0f};
 
   glm_mat4_identity(uniforms->model);
-  glm_rotate(uniforms->model, seconds * 0.72f, axisY);
-  glm_rotate(uniforms->model, seconds * 0.43f, axisX);
+  glm_rotate(uniforms->model, yaw, axisY);
+  glm_rotate(uniforms->model, pitch, axisX);
   glm_mat4_mul(viewProjection, uniforms->model, uniforms->mvp);
 }
 

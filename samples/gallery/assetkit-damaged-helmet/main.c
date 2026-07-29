@@ -1,10 +1,10 @@
 #include "../../common/sample_platform.h"
+#include "../../common/sample_orbit.h"
 #include "asset.h"
 
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <cglm/cglm.h>
 
-#include <math.h>
 #include <string.h>
 
 typedef struct PBRUniforms {
@@ -45,6 +45,7 @@ typedef struct AssetSample {
   GPUBindGroup      *materialGroup;
   WebGPURequest      request;
   Asset              asset;
+  SampleOrbit        orbit;
   mat4               viewProjection;
   uint32_t           width;
   uint32_t           height;
@@ -71,20 +72,20 @@ build_view_projection(AssetSample *state) {
   mat4 view, projection;
 
   glm_lookat(eye, center, up, view);
-  glm_perspective(glm_rad(44.0f), 
-                  state->height > 0u ? (float)state->width/(float)state->height : 1.0f, 
-                  0.1f, 
-                  100.0f, 
+  glm_perspective(glm_rad(44.0f),
+                  gpu_sample_aspect_ratio(state->width, state->height),
+                  0.1f,
+                  100.0f,
                   projection);
 
   glm_mat4_mul(projection, view, state->viewProjection);
 }
 
 static void
-build_uniforms(AssetSample *state, float seconds, PBRUniforms *uniforms) {
+build_uniforms(AssetSample *state, PBRUniforms *uniforms) {
   mat4  authored, centered;
   vec4  camera = {0.0f, 0.0f, 3.35f, 1.0f}, light = {0.44f, 0.78f, 0.54f, 0.0f};
-  vec3  axisY  = {0.0f, 1.0f, 0.0f};
+  vec3  axisX  = {1.0f, 0.0f, 0.0f}, axisY = {0.0f, 1.0f, 0.0f};
   vec3  center, extent;
   float radius, scale;
 
@@ -96,10 +97,11 @@ build_uniforms(AssetSample *state, float seconds, PBRUniforms *uniforms) {
   }
 
   radius = glm_vec3_norm(extent) * 0.5f;
-  scale  = radius > 0.0f ? 1.45f / radius : 1.0f;
+  scale  = radius > 0.0f ? 2.05f / radius : 1.0f;
 
   glm_mat4_identity(uniforms->model);
-  glm_rotate(uniforms->model, seconds * 0.32f, axisY);
+  glm_rotate(uniforms->model, state->orbit.yaw, axisY);
+  glm_rotate(uniforms->model, state->orbit.pitch, axisX);
   glm_scale_uni(uniforms->model, scale);
   glm_mat4_mul(uniforms->model, authored, centered);
 
@@ -550,7 +552,7 @@ create_geometry(AssetSample *state) {
                    : sizeof(uint32_t);
   vertexBytes = sizeof(AssetVertex) * state->asset.vertexCount;
   indexBytes  = indexElementSize * state->asset.indexCount;
-  build_uniforms(state, 0.0f, &uniforms);
+  build_uniforms(state, &uniforms);
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   info.chain.structSize = sizeof(info);
@@ -710,10 +712,9 @@ create_material(AssetSample *state) {
 static int
 update_uniforms(AssetSample *state) {
   PBRUniforms uniforms;
-  float          seconds;
 
-  seconds = (float)(emscripten_get_now() * 0.001);
-  build_uniforms(state, seconds, &uniforms);
+  sample_orbit_update(&state->orbit, emscripten_get_now() * 0.001);
+  build_uniforms(state, &uniforms);
   return GPUQueueWriteBuffer(state->queue,
                              state->uniformBuffer,
                              0u,
@@ -822,12 +823,14 @@ asset_ready(Asset      *asset,
   }
   state->asset = *asset;
   memset(asset, 0, sizeof(*asset));
+  sample_orbit_init(&state->orbit, 0.0f, 0.0f, 0.32f, 0.0f);
   if (!create_geometry(state) || !create_material(state)) {
     asset_release(&state->asset);
     set_status("GPU: failed to upload DamagedHelmet resources", 1);
     return;
   }
   asset_release_uploads(&state->asset);
+  sample_orbit_activate(&state->orbit);
   set_status("GPU: AssetKit DamagedHelmet ready", 0);
   emscripten_set_main_loop_arg(render_frame, state, 0, false);
 }
@@ -881,7 +884,7 @@ webgpu_ready(GPUResult  result,
     return;
   }
 
-  set_status("AssetKit: downloading DamagedHelmet from Khronos", 0);
+  set_status("AssetKit: loading DamagedHelmet", 0);
   asset_load(asset_ready, state);
 }
 

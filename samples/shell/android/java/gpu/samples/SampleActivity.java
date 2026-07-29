@@ -1,4 +1,4 @@
-package com.recp.gpu.samples;
+package gpu.samples;
 
 import android.app.NativeActivity;
 import android.app.Dialog;
@@ -12,9 +12,9 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.Button;
-import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -35,7 +35,12 @@ public final class SampleActivity extends NativeActivity {
   private static final int ACCENT             = Color.rgb(255, 112, 20);
   private static final int MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024;
 
-  private String sampleId;
+  private String       sampleId;
+  private Dialog       codeDialog;
+  private Dialog       statusDialog;
+  private LinearLayout statusPanel;
+  private ProgressBar  statusSpinner;
+  private TextView     statusText;
 
   private static native void nativeFetchComplete(long request,
                                                  byte[] data,
@@ -45,11 +50,19 @@ public final class SampleActivity extends NativeActivity {
   protected void onCreate(Bundle state) {
     super.onCreate(state);
     sampleId = getIntent().getStringExtra("sample");
+    getWindow().getDecorView().setBackgroundColor(BACKGROUND);
+    addStatusOverlay();
     addCodeButton();
   }
 
   @Override
   protected void onDestroy() {
+    if (codeDialog != null && codeDialog.isShowing()) {
+      codeDialog.dismiss();
+    }
+    if (statusDialog != null && statusDialog.isShowing()) {
+      statusDialog.dismiss();
+    }
     super.onDestroy();
     if (isFinishing()) {
       android.os.Process.killProcess(android.os.Process.myPid());
@@ -59,6 +72,7 @@ public final class SampleActivity extends NativeActivity {
   private void addCodeButton() {
     Button button = new Button(this);
 
+    codeDialog = new Dialog(this);
     button.setText("Code");
     button.setTextColor(PRIMARY);
     button.setTextSize(12);
@@ -72,14 +86,119 @@ public final class SampleActivity extends NativeActivity {
       }
     });
 
-    FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-      dp(76),
-      dp(42),
-      Gravity.TOP | Gravity.END
+    codeDialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+    codeDialog.setCancelable(false);
+    codeDialog.setContentView(button);
+    codeDialog.show();
+
+    Window window = codeDialog.getWindow();
+    if (window != null) {
+      android.view.WindowManager.LayoutParams params = window.getAttributes();
+
+      window.setBackgroundDrawableResource(android.R.color.transparent);
+      window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+      window.addFlags(
+        android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
+        android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+      );
+      window.setGravity(Gravity.TOP | Gravity.END);
+      window.setLayout(dp(76), dp(42));
+      params.x = dp(14);
+      params.y = dp(14);
+      window.setAttributes(params);
+    }
+  }
+
+  private void addStatusOverlay() {
+    statusDialog  = new Dialog(this);
+    statusPanel   = new LinearLayout(this);
+    statusSpinner = new ProgressBar(this);
+    statusText    = new TextView(this);
+
+    statusPanel.setOrientation(LinearLayout.HORIZONTAL);
+    statusPanel.setGravity(Gravity.CENTER_VERTICAL);
+    statusPanel.setPadding(dp(18), dp(14), dp(20), dp(14));
+    statusPanel.setBackground(panel(12, PANEL, LINE));
+
+    statusText.setText("Starting GPU sample");
+    statusText.setTextColor(PRIMARY);
+    statusText.setTextSize(13);
+    statusText.setTypeface(Typeface.MONOSPACE);
+    statusPanel.addView(statusSpinner, new LinearLayout.LayoutParams(
+      dp(28),
+      dp(28)
+    ));
+    LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(
+      ViewGroup.LayoutParams.WRAP_CONTENT,
+      ViewGroup.LayoutParams.WRAP_CONTENT
     );
 
-    params.setMargins(0, dp(14), dp(14), 0);
-    addContentView(button, params);
+    textParams.setMargins(dp(14), 0, 0, 0);
+    statusPanel.addView(statusText, textParams);
+
+    statusDialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+    statusDialog.setCancelable(false);
+    statusDialog.setContentView(statusPanel);
+    statusDialog.show();
+
+    Window window = statusDialog.getWindow();
+    if (window != null) {
+      window.setBackgroundDrawableResource(android.R.color.transparent);
+      window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+      window.addFlags(
+        android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+      );
+    }
+  }
+
+  private void setSampleStatus(final String message, final boolean failed) {
+    runOnUiThread(new Runnable() {
+      @Override
+      public void run() {
+        if (statusPanel == null || statusSpinner == null ||
+            statusText == null) {
+          return;
+        }
+
+        if (!statusDialog.isShowing()) {
+          statusDialog.show();
+        }
+        statusPanel.setVisibility(View.VISIBLE);
+        statusSpinner.setVisibility(failed ? View.GONE : View.VISIBLE);
+        statusText.setText(message == null ? "GPU sample status" : message);
+        statusText.setTextColor(failed ? ACCENT : PRIMARY);
+      }
+    });
+  }
+
+  private void setSampleReady() {
+    runOnUiThread(new Runnable() {
+      @Override
+      public void run() {
+        if (statusDialog != null && statusDialog.isShowing()) {
+          statusDialog.dismiss();
+        }
+      }
+    });
+  }
+
+  private void setSampleNotice(final String message) {
+    runOnUiThread(new Runnable() {
+      @Override
+      public void run() {
+        if (statusPanel == null || statusSpinner == null ||
+            statusText == null) {
+          return;
+        }
+        if (!statusDialog.isShowing()) {
+          statusDialog.show();
+        }
+        statusPanel.setVisibility(View.VISIBLE);
+        statusSpinner.setVisibility(View.GONE);
+        statusText.setText(message == null ? "GPU sample notice" : message);
+        statusText.setTextColor(PRIMARY);
+      }
+    });
   }
 
   private void fetchUrl(final String source, final long request) {

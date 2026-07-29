@@ -1,4 +1,5 @@
 #include "../../common/sample_platform.h"
+#include "../../common/sample_orbit.h"
 #include "CubeData.h"
 
 typedef struct WebGPUTexturedCube {
@@ -22,10 +23,11 @@ typedef struct WebGPUTexturedCube {
   GPUBindGroup      *materialGroup;
   GPUBindGroup      *samplerGroup;
   WebGPURequest      request;
+  SampleOrbit        orbit;
+  mat4               viewProjection;
   uint32_t           width;
   uint32_t           height;
   uint32_t           frameCount;
-  mat4               viewProjection;
 } WebGPUTexturedCube;
 
 enum {
@@ -195,7 +197,10 @@ create_geometry(WebGPUTexturedCube *state) {
   CubeUniforms        uniforms;
   GPUBufferCreateInfo info = {0};
 
-  CubeBuildUniforms(0.0f, state->viewProjection, &uniforms);
+  CubeBuildUniforms(state->orbit.yaw,
+                    state->orbit.pitch,
+                    state->viewProjection,
+                    &uniforms);
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   info.chain.structSize = sizeof(info);
@@ -352,10 +357,12 @@ create_material(WebGPUTexturedCube *state) {
 static int
 update_uniforms(WebGPUTexturedCube *state) {
   CubeUniforms uniforms;
-  float        seconds;
 
-  seconds = (float)(emscripten_get_now() * 0.001);
-  CubeBuildUniforms(seconds, state->viewProjection, &uniforms);
+  sample_orbit_update(&state->orbit, emscripten_get_now() * 0.001);
+  CubeBuildUniforms(state->orbit.yaw,
+                    state->orbit.pitch,
+                    state->viewProjection,
+                    &uniforms);
   return GPUQueueWriteBuffer(state->queue,
                              state->uniformBuffer,
                              0u,
@@ -482,6 +489,7 @@ webgpu_ready(GPUResult  result,
                                                 state->surface,
                                                 state->width,
                                                 state->height);
+  sample_orbit_init(&state->orbit, 0.0f, 0.0f, 0.72f, 0.43f);
   if (!state->swapchain ||
       !create_depth_target(state, state->width, state->height) ||
       !create_pipeline(state) ||
@@ -491,6 +499,7 @@ webgpu_ready(GPUResult  result,
     return;
   }
 
+  sample_orbit_activate(&state->orbit);
   set_status("GPU: WebGPU USL textured cube ready", 0);
   emscripten_set_main_loop_arg(render_frame, state, 0, true);
 }

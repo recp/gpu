@@ -1,0 +1,7 @@
+import Foundation
+
+enum NativeSamples {
+  static let paths: [String: String] = [
+@GPU_APPLE_GALLERY_NATIVE_ENTRIES@
+  ]
+}

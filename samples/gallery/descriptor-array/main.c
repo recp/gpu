@@ -10,7 +10,7 @@ enum {
   WARM_FRAME_COUNT  = 8u
 };
 
-typedef struct WebGPUDescriptorArray {
+typedef struct DescriptorArray {
   GPUInstance        *instance;
   GPUAdapter         *adapter;
   GPUDevice          *device;
@@ -29,12 +29,12 @@ typedef struct WebGPUDescriptorArray {
   uint32_t            width;
   uint32_t            height;
   uint32_t            frameCount;
-} WebGPUDescriptorArray;
+} DescriptorArray;
 
-static WebGPUDescriptorArray app;
+static DescriptorArray app;
 
 static int
-resize_canvas(WebGPUDescriptorArray *state) {
+resize_canvas(DescriptorArray *state) {
   return resize_webgpu_canvas(state->swapchain,
                               &state->width,
                               &state->height);
@@ -77,7 +77,7 @@ fill_texture(uint8_t *pixels, uint32_t textureIndex) {
 }
 
 static int
-create_shader(WebGPUDescriptorArray *state) {
+create_shader(DescriptorArray *state) {
   const GPUBindGroupLayoutEntry *entries;
   GPUColorTargetState            color = {0};
   GPURenderPipelineCreateInfo    info  = {0};
@@ -136,7 +136,7 @@ create_shader(WebGPUDescriptorArray *state) {
 
   info.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
   info.chain.structSize        = sizeof(info);
-  info.label                   = "descriptor-array-webgpu-usl-pipeline";
+  info.label                   = "descriptor-array-usl-pipeline";
   info.layout                  = state->shaderLayout->pipelineLayout;
   info.library                 = state->library;
   info.vertexEntry             = "descriptor_array_vs";
@@ -157,7 +157,7 @@ create_shader(WebGPUDescriptorArray *state) {
 }
 
 static int
-create_resources(WebGPUDescriptorArray *state) {
+create_resources(DescriptorArray *state) {
   static const char * const textureLabels[DESCRIPTOR_COUNT] = {
     "descriptor-array-orange",
     "descriptor-array-blue",
@@ -279,7 +279,7 @@ create_resources(WebGPUDescriptorArray *state) {
 
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label            = "descriptor-array-webgpu-usl-group0";
+  groupInfo.label            = "descriptor-array-usl-group0";
   groupInfo.layout           = state->shaderLayout->bindGroupLayouts[0];
   groupInfo.pEntries         = entries;
   groupInfo.entryCount       = GPU_ARRAY_LEN(entries);
@@ -294,7 +294,7 @@ create_resources(WebGPUDescriptorArray *state) {
 
 static void
 render_frame(void *userData) {
-  WebGPUDescriptorArray          *state;
+  DescriptorArray                *state;
   GPUFrame                      *frame;
   GPUCommandBuffer              *cmdb;
   GPURenderPassEncoder          *pass;
@@ -309,7 +309,7 @@ render_frame(void *userData) {
 
   cmdb = NULL;
   if (GPUAcquireCommandBuffer(state->queue,
-                              "descriptor-array-webgpu-frame",
+                              "descriptor-array-frame",
                               &cmdb) != GPU_OK || !cmdb) {
     GPUEndFrame(frame);
     return;
@@ -322,7 +322,7 @@ render_frame(void *userData) {
   color.clearColor.float32[1] = 0.025f;
   color.clearColor.float32[2] = 0.065f;
   color.clearColor.float32[3] = 1.0f;
-  passInfo.label                = "descriptor-array-webgpu-pass";
+  passInfo.label                = "descriptor-array-pass";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
   pass = GPUBeginRenderPass(cmdb, &passInfo);
@@ -337,7 +337,7 @@ render_frame(void *userData) {
   GPUDraw(pass, 6u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
-    fprintf(stderr, "GPU: failed to finish WebGPU descriptor-array frame\n");
+    fprintf(stderr, "GPU: failed to finish descriptor-array frame\n");
   } else {
     GPUFrameStats stats;
 
@@ -345,24 +345,25 @@ render_frame(void *userData) {
     if (state->frameCount > WARM_FRAME_COUNT &&
         GPUGetLastFrameStats(state->device, &stats) == GPU_OK &&
         (stats.hotPathAllocCount != 0u || stats.hotPathFreeCount != 0u)) {
-      set_status("GPU: warm WebGPU frame allocated wrapper memory", 1);
+      set_status("GPU: warm descriptor-array frame allocated wrapper memory",
+                 1);
       emscripten_cancel_main_loop();
     }
   }
 }
 
 static void
-webgpu_ready(GPUResult  result,
-             GPUAdapter *adapter,
-             GPUDevice  *device,
-             void       *userData) {
-  WebGPUDescriptorArray *state;
-  GPURuntimeConfig       runtime = {0};
+gpu_ready(GPUResult  result,
+          GPUAdapter *adapter,
+          GPUDevice  *device,
+          void       *userData) {
+  DescriptorArray   *state;
+  GPURuntimeConfig   runtime = {0};
 
   state = userData;
   if (result != GPU_OK || !adapter || !device) {
-    set_status(!adapter ? "GPU: failed to request WebGPU adapter"
-                        : "GPU: failed to request WebGPU device",
+    set_status(!adapter ? "GPU: failed to request adapter"
+                        : "GPU: failed to request device",
                1);
     return;
   }
@@ -370,7 +371,7 @@ webgpu_ready(GPUResult  result,
   state->adapter = adapter;
   state->device  = device;
   if (!GPUIsFeatureEnabled(device, GPU_FEATURE_DESCRIPTOR_INDEXING)) {
-    set_status_notice("GPU: WebGPU descriptor indexing fallback unavailable");
+    set_status_notice("GPU: descriptor indexing unavailable");
     return;
   }
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
@@ -379,7 +380,7 @@ webgpu_ready(GPUResult  result,
   runtime.validationMode   = GPU_VALIDATION_FULL;
   runtime.enableStats      = true;
   if (GPUConfigureRuntime(device, &runtime) != GPU_OK) {
-    set_status("GPU: failed to configure WebGPU runtime stats", 1);
+    set_status("GPU: failed to configure runtime stats", 1);
     return;
   }
 
@@ -389,7 +390,7 @@ webgpu_ready(GPUResult  result,
                                                GPU_SURFACE_WEB_CANVAS,
                                                1.0f);
   if (!state->queue || !state->surface || !resize_canvas(state)) {
-    set_status("GPU: failed to create WebGPU queue or canvas surface", 1);
+    set_status("GPU: failed to create queue or surface", 1);
     return;
   }
 
@@ -402,7 +403,7 @@ webgpu_ready(GPUResult  result,
     return;
   }
 
-  set_status("GPU: WebGPU USL descriptor array ready", 0);
+  set_status("GPU: USL descriptor array ready", 0);
   emscripten_set_main_loop_arg(render_frame, state, 0, true);
 }
 
@@ -414,19 +415,19 @@ main(void) {
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   info.chain.structSize = sizeof(info);
-  info.label            = "descriptor-array-webgpu-usl";
+  info.label            = "descriptor-array-usl";
   info.preferredBackend = GPU_BACKEND_WEBGPU;
   info.enableValidation = true;
   result = GPUCreateInstance(&info, &app.instance);
   if (result != GPU_OK || !app.instance) {
-    set_status("GPU: failed to create WebGPU instance", 1);
+    set_status("GPU: failed to create instance", 1);
     return 1;
   }
 
-  set_status("GPU: requesting WebGPU device", 0);
+  set_status("GPU: requesting device", 0);
   result = request_webgpu_device_features(app.instance,
                                           &app.request,
-                                          webgpu_ready,
+                                          gpu_ready,
                                           &app,
                                           &feature,
                                           1u);

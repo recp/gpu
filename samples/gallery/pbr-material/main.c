@@ -1,4 +1,5 @@
 #include "../../common/sample_platform.h"
+#include "../../common/sample_orbit.h"
 
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <cglm/cglm.h>
@@ -50,6 +51,7 @@ typedef struct WebGPUPBR {
   GPUBindGroup      *frameGroup;
   GPUBindGroup      *materialGroup;
   WebGPURequest      request;
+  SampleOrbit        orbit;
   mat4               viewProjection;
   uint32_t           width;
   uint32_t           height;
@@ -222,9 +224,7 @@ build_view_projection(WebGPUPBR *state) {
   mat4 view, projection;
   float aspect;
 
-  aspect = state->height > 0u
-         ? (float)state->width / (float)state->height
-         : 1.0f;
+  aspect = gpu_sample_aspect_ratio(state->width, state->height);
   glm_lookat(eye, center, up, view);
   glm_perspective(glm_rad(44.0f), aspect, 0.1f, 100.0f, projection);
   glm_mat4_mul(projection, view, state->viewProjection);
@@ -232,16 +232,13 @@ build_view_projection(WebGPUPBR *state) {
 
 static void
 build_uniforms(WebGPUPBR   *state,
-               float        seconds,
                PBRUniforms *uniforms) {
   vec3 axisX = {1.0f, 0.0f, 0.0f}, axisY = {0.0f, 1.0f, 0.0f};
   vec4 camera = {0.0f, 0.0f, 3.35f, 1.0f}, light = {0.44f, 0.78f, 0.54f, 0.0f};
 
   glm_mat4_identity(uniforms->model);
-  glm_rotate(uniforms->model, seconds * 0.32f, axisY);
-  glm_rotate(uniforms->model,
-             -0.12f + sinf(seconds * 0.27f) * 0.10f,
-             axisX);
+  glm_rotate(uniforms->model, state->orbit.yaw, axisY);
+  glm_rotate(uniforms->model, state->orbit.pitch, axisX);
   glm_mat4_mul(state->viewProjection, uniforms->model, uniforms->mvp);
   glm_vec4_copy(camera, uniforms->cameraPosition);
   glm_vec4_normalize_to(light, uniforms->lightDirection);
@@ -672,7 +669,7 @@ create_geometry(WebGPUPBR *state) {
   vertices = geometry;
   indices  = (uint16_t *)((uint8_t *)geometry + vertexBytes);
   build_sphere(vertices, indices);
-  build_uniforms(state, 0.0f, &uniforms);
+  build_uniforms(state, &uniforms);
   result = 0;
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -842,10 +839,9 @@ create_material(WebGPUPBR *state) {
 static int
 update_uniforms(WebGPUPBR *state) {
   PBRUniforms uniforms;
-  float       seconds;
 
-  seconds = (float)(emscripten_get_now() * 0.001);
-  build_uniforms(state, seconds, &uniforms);
+  sample_orbit_update(&state->orbit, emscripten_get_now() * 0.001);
+  build_uniforms(state, &uniforms);
   return GPUQueueWriteBuffer(state->queue,
                              state->uniformBuffer,
                              0u,
@@ -975,6 +971,7 @@ webgpu_ready(GPUResult  result,
                                                 state->surface,
                                                 state->width,
                                                 state->height);
+  sample_orbit_init(&state->orbit, 0.0f, -0.12f, 0.32f, 0.0f);
   if (!state->swapchain ||
       !create_depth_target(state, state->width, state->height) ||
       !create_pipeline(state) ||
@@ -984,6 +981,7 @@ webgpu_ready(GPUResult  result,
     return;
   }
 
+  sample_orbit_activate(&state->orbit);
   set_status("GPU: WebGPU USL PBR material ready", 0);
   emscripten_set_main_loop_arg(render_frame, state, 0, true);
 }

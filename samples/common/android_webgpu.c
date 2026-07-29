@@ -1,3 +1,4 @@
+#define GPU_SAMPLE_PLATFORM_IMPLEMENTATION
 #include "sample_platform.h"
 #include "asset_io.h"
 
@@ -13,11 +14,14 @@
 #define GPU_ANDROID_WEB_TAG "gpu-web-sample"
 
 typedef struct GPUAndroidWebRuntime {
-  GPUAndroidSample *sample;
+  GPUAndroidSample     *sample;
+  GPUTextureView       *frameTargetView;
+  GPURenderPassEncoder *fittedPass;
   void (*render)(void *);
-  void             *renderData;
-  bool              canceled;
-  bool              failed;
+  void                 *renderData;
+  bool                  ready;
+  bool                  canceled;
+  bool                  failed;
 } GPUAndroidWebRuntime;
 
 typedef struct GPUAndroidFetchRequest {
@@ -35,12 +39,56 @@ static GPUAndroidFetchRequest *fetchTail;
 static GPUAndroidWebRuntime     runtime;
 static pthread_mutex_t          fetchMutex = PTHREAD_MUTEX_INITIALIZER;
 static uint64_t                 fetchGeneration = 1u;
+static bool                     fetchNativeRegistered;
 
 static void*
 decode_image_bytes(const void *data,
                    uint64_t    size,
                    uint32_t   *width,
                    uint32_t   *height);
+
+static void JNICALL
+android_fetch_complete(JNIEnv    *env,
+                       jclass     type,
+                       jlong      requestValue,
+                       jbyteArray data,
+                       jstring    message);
+
+static void
+android_set_ready(void);
+
+static bool
+android_jni_attach(ANativeActivity *activity,
+                   JNIEnv         **env,
+                   bool            *attached) {
+  JavaVM *vm;
+  jint    status;
+
+  if (!activity || !env || !attached) {
+    return false;
+  }
+
+  vm        = activity->vm;
+  *env      = NULL;
+  *attached = false;
+  status    = (*vm)->GetEnv(vm, (void **)env, JNI_VERSION_1_6);
+  if (status == JNI_EDETACHED) {
+    if ((*vm)->AttachCurrentThread(vm, env, NULL) != JNI_OK) {
+      return false;
+    }
+    *attached = true;
+  } else if (status != JNI_OK || !*env) {
+    return false;
+  }
+  return true;
+}
+
+static void
+android_jni_detach(ANativeActivity *activity, bool attached) {
+  if (activity && attached) {
+    (*activity->vm)->DetachCurrentThread(activity->vm);
+  }
+}
 
 static const char*
 asset_name(const char *path) {
@@ -99,7 +147,13 @@ bridge_render(GPUAndroidSample *sample, void *userData) {
     return false;
   }
   if (runtime.render) {
+    runtime.frameTargetView = NULL;
+    runtime.fittedPass      = NULL;
     runtime.render(runtime.renderData);
+    if (!runtime.ready && !runtime.failed && !runtime.canceled) {
+      android_set_ready();
+      runtime.ready = true;
+    }
   }
   return !runtime.failed && !runtime.canceled;
 }
@@ -145,12 +199,142 @@ GPUSampleAndroidWebCallbacks(void) {
   return &bridgeCallbacks;
 }
 
+static void
+android_set_status(const char *message, bool failed) {
+  ANativeActivity *activity;
+  JNIEnv          *env;
+  jclass           activityClass;
+  jmethodID        setSampleStatus;
+  jstring          nativeMessage;
+  bool             attached;
+
+  if (!runtime.sample) {
+    return;
+  }
+
+  activity = runtime.sample->app->activity;
+  if (!android_jni_attach(activity, &env, &attached)) {
+    return;
+  }
+
+  activityClass = (*env)->GetObjectClass(env, activity->clazz);
+  setSampleStatus = activityClass
+                      ? (*env)->GetMethodID(env,
+                                            activityClass,
+                                            "setSampleStatus",
+                                            "(Ljava/lang/String;Z)V")
+                      : NULL;
+  nativeMessage = setSampleStatus && message
+                    ? (*env)->NewStringUTF(env, message)
+                    : NULL;
+  if (setSampleStatus) {
+    (*env)->CallVoidMethod(env,
+                           activity->clazz,
+                           setSampleStatus,
+                           nativeMessage,
+                           failed ? JNI_TRUE : JNI_FALSE);
+  }
+  if ((*env)->ExceptionCheck(env)) {
+    (*env)->ExceptionClear(env);
+  }
+  if (nativeMessage) {
+    (*env)->DeleteLocalRef(env, nativeMessage);
+  }
+  if (activityClass) {
+    (*env)->DeleteLocalRef(env, activityClass);
+  }
+  android_jni_detach(activity, attached);
+}
+
+static void
+android_set_notice(const char *message) {
+  ANativeActivity *activity;
+  JNIEnv          *env;
+  jclass           activityClass;
+  jmethodID        setSampleNotice;
+  jstring          nativeMessage;
+  bool             attached;
+
+  if (!runtime.sample) {
+    return;
+  }
+
+  activity = runtime.sample->app->activity;
+  if (!android_jni_attach(activity, &env, &attached)) {
+    return;
+  }
+
+  activityClass = (*env)->GetObjectClass(env, activity->clazz);
+  setSampleNotice = activityClass
+                      ? (*env)->GetMethodID(env,
+                                            activityClass,
+                                            "setSampleNotice",
+                                            "(Ljava/lang/String;)V")
+                      : NULL;
+  nativeMessage = setSampleNotice && message
+                    ? (*env)->NewStringUTF(env, message)
+                    : NULL;
+  if (setSampleNotice) {
+    (*env)->CallVoidMethod(env,
+                           activity->clazz,
+                           setSampleNotice,
+                           nativeMessage);
+  }
+  if ((*env)->ExceptionCheck(env)) {
+    (*env)->ExceptionClear(env);
+  }
+  if (nativeMessage) {
+    (*env)->DeleteLocalRef(env, nativeMessage);
+  }
+  if (activityClass) {
+    (*env)->DeleteLocalRef(env, activityClass);
+  }
+  android_jni_detach(activity, attached);
+}
+
+static void
+android_set_ready(void) {
+  ANativeActivity *activity;
+  JNIEnv          *env;
+  jclass           activityClass;
+  jmethodID        setSampleReady;
+  bool             attached;
+
+  if (!runtime.sample) {
+    return;
+  }
+
+  activity = runtime.sample->app->activity;
+  if (!android_jni_attach(activity, &env, &attached)) {
+    return;
+  }
+
+  activityClass = (*env)->GetObjectClass(env, activity->clazz);
+  setSampleReady = activityClass
+                     ? (*env)->GetMethodID(env,
+                                           activityClass,
+                                           "setSampleReady",
+                                           "()V")
+                     : NULL;
+  if (setSampleReady) {
+    (*env)->CallVoidMethod(env, activity->clazz, setSampleReady);
+  }
+  if ((*env)->ExceptionCheck(env)) {
+    (*env)->ExceptionClear(env);
+  }
+  if (activityClass) {
+    (*env)->DeleteLocalRef(env, activityClass);
+  }
+  android_jni_detach(activity, attached);
+}
+
 void
 set_status(const char *message, int failed) {
   __android_log_print(failed ? ANDROID_LOG_ERROR : ANDROID_LOG_INFO,
                       GPU_ANDROID_WEB_TAG,
                       "%s",
                       message ? message : "GPU sample status");
+  android_set_status(message, failed != 0);
   if (failed) {
     runtime.failed = true;
   }
@@ -162,6 +346,7 @@ set_status_notice(const char *message) {
                       GPU_ANDROID_WEB_TAG,
                       "%s",
                       message ? message : "GPU sample notice");
+  android_set_notice(message);
 }
 
 int
@@ -312,6 +497,130 @@ gpu_android_sample_create_swapchain(GPUDevice  *device,
   return runtime.sample ? runtime.sample->swapchain : NULL;
 }
 
+static void
+content_rect(float *x, float *y, float *width, float *height) {
+  float surfaceWidth, surfaceHeight;
+  float targetWidth, targetHeight;
+
+  surfaceWidth  = runtime.sample ? (float)runtime.sample->width : 0.0f;
+  surfaceHeight = runtime.sample ? (float)runtime.sample->height : 0.0f;
+  targetWidth   = surfaceWidth;
+  targetHeight  = targetWidth * 10.0f / 16.0f;
+  if (targetHeight > surfaceHeight) {
+    targetHeight = surfaceHeight;
+    targetWidth  = targetHeight * 16.0f / 10.0f;
+  }
+
+  *x      = (surfaceWidth - targetWidth) * 0.5f;
+  *y      = (surfaceHeight - targetHeight) * 0.5f;
+  *width  = targetWidth;
+  *height = targetHeight;
+}
+
+GPUTextureView*
+gpu_android_frame_target_view(GPUFrame *frame) {
+  runtime.frameTargetView = GPUFrameGetTargetView(frame);
+  return runtime.frameTargetView;
+}
+
+GPURenderPassEncoder*
+gpu_android_begin_render_pass(GPUCommandBuffer             *cmdb,
+                              const GPURenderPassCreateInfo *info) {
+  GPURenderPassEncoder *pass;
+  GPUViewport           viewport = {0};
+  GPUScissorRect        scissor  = {0};
+  float                 x, y, width, height;
+  bool                  targetsFrame;
+
+  pass = GPUBeginRenderPass(cmdb, info);
+  if (!pass || !info || !runtime.frameTargetView) {
+    return pass;
+  }
+
+  targetsFrame = false;
+  for (uint32_t i = 0u; i < info->colorAttachmentCount; i++) {
+    const GPURenderPassColorAttachment *color;
+
+    color = &info->pColorAttachments[i];
+    targetsFrame |= color->view == runtime.frameTargetView ||
+                    color->resolveView == runtime.frameTargetView;
+  }
+  if (!targetsFrame) {
+    return pass;
+  }
+
+  content_rect(&x, &y, &width, &height);
+  viewport.x        = x;
+  viewport.y        = y;
+  viewport.width    = width;
+  viewport.height   = height;
+  viewport.minDepth = 0.0f;
+  viewport.maxDepth = 1.0f;
+  scissor.x         = (int32_t)x;
+  scissor.y         = (int32_t)y;
+  scissor.width     = (uint32_t)width;
+  scissor.height    = (uint32_t)height;
+  GPUSetViewport(pass, &viewport);
+  GPUSetScissor(pass, &scissor);
+  runtime.fittedPass = pass;
+  return pass;
+}
+
+void
+gpu_android_end_render_pass(GPURenderPassEncoder *pass) {
+  if (runtime.fittedPass == pass) {
+    runtime.fittedPass = NULL;
+  }
+  GPUEndRenderPass(pass);
+}
+
+void
+gpu_android_set_viewport(GPURenderPassEncoder *pass,
+                         const GPUViewport     *viewport) {
+  GPUViewport mapped;
+  float       x, y, width, height;
+  float       scaleX, scaleY;
+
+  if (!viewport || pass != runtime.fittedPass || !runtime.sample ||
+      runtime.sample->width == 0u || runtime.sample->height == 0u) {
+    GPUSetViewport(pass, viewport);
+    return;
+  }
+
+  content_rect(&x, &y, &width, &height);
+  scaleX         = width / (float)runtime.sample->width;
+  scaleY         = height / (float)runtime.sample->height;
+  mapped         = *viewport;
+  mapped.x       = x + viewport->x * scaleX;
+  mapped.y       = y + viewport->y * scaleY;
+  mapped.width  *= scaleX;
+  mapped.height *= scaleY;
+  GPUSetViewport(pass, &mapped);
+}
+
+void
+gpu_android_set_scissor(GPURenderPassEncoder *pass,
+                        const GPUScissorRect  *scissor) {
+  GPUScissorRect mapped;
+  float          x, y, width, height;
+  float          scaleX, scaleY;
+
+  if (!scissor || pass != runtime.fittedPass || !runtime.sample ||
+      runtime.sample->width == 0u || runtime.sample->height == 0u) {
+    GPUSetScissor(pass, scissor);
+    return;
+  }
+
+  content_rect(&x, &y, &width, &height);
+  scaleX        = width / (float)runtime.sample->width;
+  scaleY        = height / (float)runtime.sample->height;
+  mapped.x      = (int32_t)(x + (float)scissor->x * scaleX);
+  mapped.y      = (int32_t)(y + (float)scissor->y * scaleY);
+  mapped.width  = (uint32_t)((float)scissor->width * scaleX);
+  mapped.height = (uint32_t)((float)scissor->height * scaleY);
+  GPUSetScissor(pass, &mapped);
+}
+
 void*
 gpu_android_load_image(const char *path, int *width, int *height) {
   void     *data;
@@ -341,7 +650,6 @@ decode_image_bytes(const void *data,
                    uint32_t   *width,
                    uint32_t   *height) {
   ANativeActivity  *activity;
-  JavaVM           *vm;
   JNIEnv           *env;
   jclass            bitmapFactoryClass;
   jmethodID         decodeByteArray;
@@ -350,7 +658,6 @@ decode_image_bytes(const void *data,
   AndroidBitmapInfo info;
   void             *bitmapPixels;
   void             *pixels;
-  jint              envStatus;
   bool              attached;
 
   if (!runtime.sample || !data || size == 0u || size > INT32_MAX ||
@@ -359,16 +666,7 @@ decode_image_bytes(const void *data,
   }
 
   activity = runtime.sample->app->activity;
-  vm       = activity->vm;
-  env      = NULL;
-  attached = false;
-  envStatus = (*vm)->GetEnv(vm, (void **)&env, JNI_VERSION_1_6);
-  if (envStatus == JNI_EDETACHED) {
-    if ((*vm)->AttachCurrentThread(vm, &env, NULL) != JNI_OK) {
-      return NULL;
-    }
-    attached = true;
-  } else if (envStatus != JNI_OK || !env) {
+  if (!android_jni_attach(activity, &env, &attached)) {
     return NULL;
   }
 
@@ -432,9 +730,7 @@ decode_image_bytes(const void *data,
   if (bitmapFactoryClass) {
     (*env)->DeleteLocalRef(env, bitmapFactoryClass);
   }
-  if (attached) {
-    (*vm)->DetachCurrentThread(vm);
-  }
+  android_jni_detach(activity, attached);
   return pixels;
 }
 
@@ -446,8 +742,10 @@ sample_fetch_url(const char         *url,
   ANativeActivity        *activity;
   JNIEnv                 *env;
   jclass                  activityClass;
+  JNINativeMethod         fetchCompleteMethod;
   jmethodID               fetchUrl;
   jstring                 nativeUrl;
+  bool                    attached;
 
   if (!runtime.sample || !url || !callback) {
     return 0;
@@ -464,14 +762,31 @@ sample_fetch_url(const char         *url,
   request->userData = userData;
 
   activity      = runtime.sample->app->activity;
-  env           = activity->env;
+  if (!android_jni_attach(activity, &env, &attached)) {
+    free(request);
+    return 0;
+  }
   activityClass = (*env)->GetObjectClass(env, activity->clazz);
+  fetchCompleteMethod.name      = "nativeFetchComplete";
+  fetchCompleteMethod.signature = "(J[BLjava/lang/String;)V";
+  fetchCompleteMethod.fnPtr     = (void *)android_fetch_complete;
+  if (!fetchNativeRegistered && activityClass) {
+    if ((*env)->RegisterNatives(env,
+                                activityClass,
+                                &fetchCompleteMethod,
+                                1) == JNI_OK) {
+      fetchNativeRegistered = true;
+    } else if ((*env)->ExceptionCheck(env)) {
+      (*env)->ExceptionClear(env);
+    }
+  }
   fetchUrl = activityClass
-               ? (*env)->GetMethodID(env,
-                                     activityClass,
-                                     "fetchUrl",
-                                     "(Ljava/lang/String;J)V")
-               : NULL;
+               && fetchNativeRegistered
+                 ? (*env)->GetMethodID(env,
+                                       activityClass,
+                                       "fetchUrl",
+                                       "(Ljava/lang/String;J)V")
+                 : NULL;
   nativeUrl = fetchUrl ? (*env)->NewStringUTF(env, url) : NULL;
   if (nativeUrl) {
     (*env)->CallVoidMethod(env,
@@ -491,6 +806,7 @@ sample_fetch_url(const char         *url,
   if (activityClass) {
     (*env)->DeleteLocalRef(env, activityClass);
   }
+  android_jni_detach(activity, attached);
   if (!fetchUrl) {
     free(request);
     return 0;
@@ -498,8 +814,8 @@ sample_fetch_url(const char         *url,
   return 1;
 }
 
-JNIEXPORT void JNICALL
-Java_com_recp_gpu_samples_SampleActivity_nativeFetchComplete(
+static void JNICALL
+android_fetch_complete(
   JNIEnv    *env,
   jclass     type,
   jlong      requestValue,
@@ -600,13 +916,16 @@ sample_temporary_path(const char *name, char *path, size_t capacity) {
   jstring          absolutePath;
   const char      *directory;
   int              length;
+  bool             attached;
 
   if (!runtime.sample || !name || !path || capacity == 0u) {
     return 0;
   }
 
   activity       = runtime.sample->app->activity;
-  env            = activity->env;
+  if (!android_jni_attach(activity, &env, &attached)) {
+    return 0;
+  }
   activityClass  = (*env)->GetObjectClass(env, activity->clazz);
   getCacheDir    = activityClass
                      ? (*env)->GetMethodID(env,
@@ -650,5 +969,6 @@ sample_temporary_path(const char *name, char *path, size_t capacity) {
   if (activityClass) {
     (*env)->DeleteLocalRef(env, activityClass);
   }
+  android_jni_detach(activity, attached);
   return length > 0 && (size_t)length < capacity;
 }

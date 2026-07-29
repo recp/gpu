@@ -360,7 +360,8 @@ create_resources(WebGPUCompute *state) {
                             GPU_COMPUTE_TIMESTAMP_BINDING_OFFSET,
                             timestampSentinel,
                             sizeof(timestampSentinel)) != GPU_OK ||
-        timestampPeriod != 1.0) {
+        !isfinite(timestampPeriod) ||
+        timestampPeriod <= 0.0) {
       set_status("GPU: failed to initialize WebGPU timestamps", 1);
       return 0;
     }
@@ -538,7 +539,7 @@ render_frame(void *userData) {
 #if GPU_COMPUTE_USE_TIMESTAMPS
   if (!state->timestampRecorded) {
     state->timestampRecorded = true;
-    set_status(GPU_COMPUTE_TIMESTAMP_RESOLVED_STATUS, 0);
+    puts(GPU_COMPUTE_TIMESTAMP_RESOLVED_STATUS);
   }
 #endif
 }

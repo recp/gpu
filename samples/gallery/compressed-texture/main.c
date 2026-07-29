@@ -106,7 +106,8 @@ resize_canvas(WebGPUCompressedTexture *state) {
       (oldWidth == state->width && oldHeight == state->height)) {
     return 1;
   }
-  uniforms.scale[0] = 0.78f * (float)state->height / (float)state->width;
+  uniforms.scale[0] = 0.78f /
+                      gpu_sample_aspect_ratio(state->width, state->height);
   uniforms.scale[1] = 0.78f;
   return GPUQueueWriteBuffer(state->queue,
                              state->uniformBuffer,
@@ -221,7 +222,8 @@ create_resources(WebGPUCompressedTexture *state) {
     return 0;
   }
 
-  uniforms.scale[0] = 0.78f * (float)state->height / (float)state->width;
+  uniforms.scale[0] = 0.78f /
+                      gpu_sample_aspect_ratio(state->width, state->height);
   uniforms.scale[1] = 0.78f;
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);

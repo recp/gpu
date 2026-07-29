@@ -41,9 +41,10 @@ add_custom_target(gpu-android-gallery-dex
 )
 
 add_library(gpu-android-gallery SHARED
-  "${PROJECT_SOURCE_DIR}/samples/android-gallery/main.c"
-  "${PROJECT_SOURCE_DIR}/samples/android-gallery/web_samples.c"
+  "${PROJECT_SOURCE_DIR}/samples/shell/android/main.c"
+  "${PROJECT_SOURCE_DIR}/samples/shell/android/web_samples.c"
   "${PROJECT_SOURCE_DIR}/samples/common/android_webgpu.c"
+  "${PROJECT_SOURCE_DIR}/samples/common/sample_orbit.c"
   ${gallerySources}
 )
 target_include_directories(gpu-android-gallery PRIVATE
@@ -101,14 +102,14 @@ add_custom_command(
           "-DGPU_ANDROID_ZIPALIGN=${GPU_ANDROID_ZIPALIGN}"
           "-DGPU_ANDROID_APKSIGNER=${GPU_ANDROID_APKSIGNER}"
           "-DGPU_ANDROID_PLATFORM_JAR=${GPU_ANDROID_PLATFORM_JAR}"
-          "-DGPU_ANDROID_MANIFEST=${PROJECT_SOURCE_DIR}/samples/android-gallery/AndroidManifest.xml"
+          "-DGPU_ANDROID_MANIFEST=${PROJECT_SOURCE_DIR}/samples/shell/android/AndroidManifest.xml"
           "-DGPU_ANDROID_LIBRARY=$<TARGET_FILE:gpu-android-gallery>"
           -DGPU_ANDROID_LIBRARY_NAME=gpu_samples
           "-DGPU_ANDROID_ABI=${ANDROID_ABI}"
           "-DGPU_ANDROID_DEX=${GPU_ANDROID_GALLERY_DEX}"
           "-DGPU_ANDROID_GENERATED_ASSET_DIR=${GPU_ANDROID_GALLERY_ASSET_DIR}"
           "-DGPU_ANDROID_SAMPLE_SOURCE_DIR=${PROJECT_SOURCE_DIR}/samples/gallery"
-          "-DGPU_ANDROID_PREVIEW_DIR=${PROJECT_SOURCE_DIR}/samples/webgpu-gallery/previews"
+          "-DGPU_ANDROID_PREVIEW_DIR=${PROJECT_SOURCE_DIR}/samples/shell/web/previews"
           "-DGPU_ANDROID_KEYSTORE=${GPU_ANDROID_DEBUG_KEYSTORE}"
           "-DGPU_ANDROID_OUTPUT=${galleryApk}"
           "-DGPU_ANDROID_STAGE=${GPU_ANDROID_GALLERY_DIR}/apk"
@@ -117,10 +118,11 @@ add_custom_command(
     gpu-android-gallery
     gpu-android-gallery-assets
     gpu-android-gallery-dex
+    "${GPU_ANDROID_GALLERY_DEX}"
     ${gallerySourceFiles}
     "${PROJECT_SOURCE_DIR}/cmake/PackageAndroidGallery.cmake"
-    "${PROJECT_SOURCE_DIR}/samples/android-gallery/AndroidManifest.xml"
-    "${PROJECT_SOURCE_DIR}/samples/webgpu-gallery/previews"
+    "${PROJECT_SOURCE_DIR}/samples/shell/android/AndroidManifest.xml"
+    "${PROJECT_SOURCE_DIR}/samples/shell/web/previews"
   VERBATIM
 )
 add_custom_target(gpu-android-gallery-apk ALL

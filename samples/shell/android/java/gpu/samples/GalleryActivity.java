@@ -1,4 +1,4 @@
-package com.recp.gpu.samples;
+package gpu.samples;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -138,6 +138,37 @@ public final class GalleryActivity extends Activity {
     getWindow().setNavigationBarColor(BACKGROUND);
     setTitle("GPU + USL Samples");
     setContentView(createContent());
+    if (state == null) {
+      openRequestedSample();
+    }
+  }
+
+  private void openRequestedSample() {
+    String requested = getIntent().getStringExtra("sample");
+
+    if (requested == null) {
+      return;
+    }
+    for (Sample sample : SAMPLES) {
+      if (requested.equals(sample.id)) {
+        open(sample);
+        return;
+      }
+    }
+  }
+
+  private void open(Sample sample) {
+    if (!sample.available) {
+      Toast.makeText(this,
+                     "Native Android port pending",
+                     Toast.LENGTH_SHORT).show();
+      return;
+    }
+
+    Intent intent = new Intent(this, SampleActivity.class);
+
+    intent.putExtra("sample", sample.id);
+    startActivity(intent);
   }
 
   private View createContent() {
@@ -176,16 +207,7 @@ public final class GalleryActivity extends Activity {
     card.setOnClickListener(new View.OnClickListener() {
       @Override
       public void onClick(View view) {
-        if (!sample.available) {
-          Toast.makeText(GalleryActivity.this,
-                         "Native Android port pending",
-                         Toast.LENGTH_SHORT).show();
-          return;
-        }
-        Intent intent = new Intent(GalleryActivity.this,
-                                   SampleActivity.class);
-        intent.putExtra("sample", sample.id);
-        startActivity(intent);
+        open(sample);
       }
     });
 

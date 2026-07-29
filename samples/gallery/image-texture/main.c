@@ -50,7 +50,7 @@ static void
 build_uniforms(const WebGPUImageTexture *state, ImageUniforms *uniforms) {
   float aspect;
 
-  aspect = (float)state->width / (float)state->height;
+  aspect = gpu_sample_aspect_ratio(state->width, state->height);
   if (aspect >= 1.0f) {
     uniforms->scale[0] = 0.82f / aspect;
     uniforms->scale[1] = 0.82f;

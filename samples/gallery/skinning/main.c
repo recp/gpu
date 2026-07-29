@@ -1,4 +1,5 @@
 #include "../../common/sample_platform.h"
+#include "../../common/SampleStats.h"
 
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <cglm/cglm.h>
@@ -35,6 +36,7 @@ typedef struct WebGPUSkinning {
   uint32_t           height;
   uint32_t           uniformStride;
   uint32_t           frameCount;
+  bool               verifyZeroAlloc;
 } WebGPUSkinning;
 
 enum {
@@ -42,8 +44,7 @@ enum {
   SKIN_RING_COUNT   = 17u,
   SKIN_VERTEX_COUNT = SKIN_RING_COUNT * 2u,
   SKIN_INDEX_COUNT  = (SKIN_RING_COUNT - 1u) * 6u,
-  FRAME_SLOT_COUNT  = 3u,
-  WARM_FRAME_COUNT  = 8u
+  FRAME_SLOT_COUNT  = 3u
 };
 
 _Static_assert(sizeof(SkinUniformBlock) == 256u,
@@ -120,9 +121,7 @@ build_skin_uniforms(const WebGPUSkinning *state,
   const float rootY = -0.72f, boneLength = 0.48f;
   float aspectScale;
 
-  aspectScale = state->width > 0u
-              ? (float)state->height / (float)state->width
-              : 1.0f;
+  aspectScale = 1.0f / gpu_sample_aspect_ratio(state->width, state->height);
   transform[0] = aspectScale * 0.88f;
   transform[1] = 0.88f;
   transform[2] = 1.0f;
@@ -431,12 +430,11 @@ render_frame(void *userData) {
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
     set_status("GPU: failed to finish the skinning frame", 1);
   } else {
-    GPUFrameStats stats;
-
     state->frameCount++;
-    if (state->frameCount > WARM_FRAME_COUNT &&
-        GPUGetLastFrameStats(state->device, &stats) == GPU_OK &&
-        (stats.hotPathAllocCount != 0u || stats.hotPathFreeCount != 0u)) {
+    if (!GPUSampleCheckZeroAlloc(state->device,
+                                 state->frameCount,
+                                 state->verifyZeroAlloc,
+                                 "skinning")) {
       set_status("GPU: warm skinning frame allocated wrapper memory", 1);
       emscripten_cancel_main_loop();
     }
@@ -462,6 +460,7 @@ webgpu_ready(GPUResult  result,
   state->adapter = adapter;
   state->device  = device;
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  state->verifyZeroAlloc = GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;

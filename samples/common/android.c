@@ -1,6 +1,8 @@
 #include "android.h"
+#include "sample_orbit.h"
 
 #include <android/asset_manager.h>
+#include <android/input.h>
 #include <android/log.h>
 #include <android/native_window.h>
 
@@ -237,6 +239,36 @@ gpu_android_command(struct android_app *app, int32_t command) {
   }
 }
 
+static int32_t
+gpu_android_input(struct android_app *app, AInputEvent *event) {
+  int32_t action;
+
+  (void)app;
+  if (!event || !sample_orbit_active() ||
+      AInputEvent_getType(event) != AINPUT_EVENT_TYPE_MOTION) {
+    return 0;
+  }
+
+  action = AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK;
+  switch (action) {
+    case AMOTION_EVENT_ACTION_DOWN:
+      sample_orbit_pointer_begin(AMotionEvent_getX(event, 0u),
+                                 AMotionEvent_getY(event, 0u));
+      break;
+    case AMOTION_EVENT_ACTION_MOVE:
+      sample_orbit_pointer_move(AMotionEvent_getX(event, 0u),
+                                AMotionEvent_getY(event, 0u));
+      break;
+    case AMOTION_EVENT_ACTION_UP:
+    case AMOTION_EVENT_ACTION_CANCEL:
+      sample_orbit_pointer_end();
+      break;
+    default:
+      return 0;
+  }
+  return 1;
+}
+
 bool
 GPUSampleAndroidLoadUSL(GPUAndroidSample  *sample,
                         const char        *assetName,
@@ -291,13 +323,14 @@ GPUSampleAndroidRun(struct android_app              *app,
     return;
   }
 
-  sample.app       = app;
-  sample.callbacks = callbacks;
+  sample.app        = app;
+  sample.callbacks  = callbacks;
   sample.definition = definition;
-  sample.userData  = userData;
-  sample.name      = name;
-  app->userData    = &sample;
-  app->onAppCmd    = gpu_android_command;
+  sample.userData   = userData;
+  sample.name       = name;
+  app->userData     = &sample;
+  app->onAppCmd     = gpu_android_command;
+  app->onInputEvent = gpu_android_input;
 
   while (!app->destroyRequested) {
     struct android_poll_source *source;

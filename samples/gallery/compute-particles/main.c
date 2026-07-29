@@ -265,7 +265,7 @@ render_frame(void *userData) {
                            : 1.0f / 60.0f;
   simulation.deltaTime = fminf(simulation.deltaTime, 1.0f / 30.0f);
   simulation.time      = (float)now;
-  simulation.aspect    = (float)state->width / (float)state->height;
+  simulation.aspect    = gpu_sample_aspect_ratio(state->width, state->height);
   simulation.count     = PARTICLE_COUNT;
   state->previousTime  = now;
 

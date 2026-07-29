@@ -13,10 +13,10 @@ set(GPU_ANDROID_GALLERY_DEX
 set(GPU_ANDROID_GALLERY_JAR
     "${GPU_ANDROID_GALLERY_DIR}/gallery.jar")
 set(GPU_ANDROID_GALLERY_JAVA_ROOT
-    "${PROJECT_SOURCE_DIR}/samples/android-gallery/java")
+    "${PROJECT_SOURCE_DIR}/samples/shell/android/java")
 set(GPU_ANDROID_GALLERY_JAVA
-    "${GPU_ANDROID_GALLERY_JAVA_ROOT}/com/recp/gpu/samples/GalleryActivity.java"
-    "${GPU_ANDROID_GALLERY_JAVA_ROOT}/com/recp/gpu/samples/SampleActivity.java")
+    "${GPU_ANDROID_GALLERY_JAVA_ROOT}/gpu/samples/GalleryActivity.java"
+    "${GPU_ANDROID_GALLERY_JAVA_ROOT}/gpu/samples/SampleActivity.java")
 
 file(MAKE_DIRECTORY "${GPU_ANDROID_GALLERY_GENERATED_DIR}")
 
@@ -76,7 +76,7 @@ endfunction()
 
 function(gpu_android_gallery_shader id source)
   set(options USES_STDLIB)
-  set(oneValueArgs CAPS)
+  set(oneValueArgs CAPS FALLBACK_CAPS)
   cmake_parse_arguments(GPU_ANDROID_SHADER
     "${options}" "${oneValueArgs}" "" ${ARGN})
 
@@ -86,6 +86,10 @@ function(gpu_android_gallery_shader id source)
   endif()
   if(GPU_ANDROID_SHADER_CAPS)
     list(APPEND artifactArgs CAPS "${GPU_ANDROID_SHADER_CAPS}")
+  endif()
+  if(GPU_ANDROID_SHADER_FALLBACK_CAPS)
+    list(APPEND artifactArgs
+      FALLBACK_CAPS "${GPU_ANDROID_SHADER_FALLBACK_CAPS}")
   endif()
 
   set(target "gpu-android-gallery-${id}")

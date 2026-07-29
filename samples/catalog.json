@@ -1,0 +1,233 @@
+[
+  {
+    "id": "triangle",
+    "category": "Render / 01",
+    "title": "First pixel",
+    "detail": "A bufferless triangle through the portable render path.",
+    "preview": "triangle.png"
+  },
+  {
+    "id": "textured-quad",
+    "category": "Transfer + Binding / 02",
+    "title": "Transfer chain",
+    "detail": "All four copy directions execute; the result is bound and sampled.",
+    "preview": "textured-quad.png"
+  },
+  {
+    "id": "compute",
+    "category": "Compute / 03",
+    "title": "Compute handoff",
+    "detail": "Per-dispatch constants animate a compute-generated vertex stream.",
+    "preview": "compute.png"
+  },
+  {
+    "id": "indexed-depth",
+    "category": "Render / 04",
+    "title": "Indexed depth",
+    "detail": "Indexed depth, occlusion, barriers, and depth preview.",
+    "preview": "indexed-depth.png"
+  },
+  {
+    "id": "instancing",
+    "category": "Render / 05",
+    "title": "Instancing",
+    "detail": "Instance-rate vertices and dynamic uniform offsets.",
+    "preview": "instancing.png"
+  },
+  {
+    "id": "textured-cube",
+    "category": "Render / 06",
+    "title": "Rotating cube",
+    "detail": "Texture sampling, indexed draw, and depth.",
+    "preview": "textured-cube.png"
+  },
+  {
+    "id": "storage-texture",
+    "category": "Compute / 07",
+    "title": "Storage texture",
+    "detail": "Compute writes typed RGBA8 pixels; render samples them.",
+    "preview": "storage-texture.png"
+  },
+  {
+    "id": "push-constants",
+    "category": "Render / 08",
+    "title": "Push constants",
+    "detail": "Per-draw constants through native and portable lowering.",
+    "preview": "push-constants.png"
+  },
+  {
+    "id": "msaa",
+    "category": "Render / 09",
+    "title": "MSAA resolve",
+    "detail": "Four-sample rasterization resolved into the swapchain.",
+    "preview": "msaa.png"
+  },
+  {
+    "id": "mrt-blend",
+    "category": "Render / 10",
+    "title": "MRT blend",
+    "detail": "Two color targets use independent alpha and additive blending.",
+    "preview": "mrt-blend.png"
+  },
+  {
+    "id": "shadow-compare",
+    "category": "Binding / 11",
+    "title": "Comparison shadow",
+    "detail": "Depth comparison sampling and filtered shadow visibility.",
+    "preview": "shadow-compare.png"
+  },
+  {
+    "id": "texture-array",
+    "category": "Binding / 12",
+    "title": "Texture array",
+    "detail": "Compute transforms layered textures before render samples them.",
+    "preview": "texture-array.png"
+  },
+  {
+    "id": "texture-line",
+    "category": "Binding / 13",
+    "title": "Texture line",
+    "detail": "Compute transforms a logical 1D texture before render.",
+    "preview": "texture-line.png"
+  },
+  {
+    "id": "texture-shapes",
+    "category": "Binding / 14",
+    "title": "Texture shapes",
+    "detail": "Cubemap faces and a 3D volume share one bind group.",
+    "preview": "texture-shapes.png"
+  },
+  {
+    "id": "descriptor-array",
+    "category": "Binding / 15",
+    "title": "Descriptor arrays",
+    "detail": "Dynamic texture, sampler, and buffer indices.",
+    "preview": "descriptor-array.png"
+  },
+  {
+    "id": "msaa-samples",
+    "category": "Render / 16",
+    "title": "MSAA resolve + samples",
+    "detail": "Hardware resolve and four explicit sample reads.",
+    "preview": "msaa-samples.png"
+  },
+  {
+    "id": "subgroup",
+    "category": "Compute / 17",
+    "title": "Subgroup exchange",
+    "detail": "A subgroup shuffle colors a compute-generated vertex stream.",
+    "preview": "subgroup.png"
+  },
+  {
+    "id": "shader-f16",
+    "category": "Compute / 18",
+    "title": "Half precision",
+    "detail": "Native f16 arithmetic with a bounded f32 fallback.",
+    "preview": "shader-f16.png"
+  },
+  {
+    "id": "multi-draw",
+    "category": "Render / 19",
+    "title": "Multi-draw batch",
+    "detail": "One API call consumes two packed indirect draw records.",
+    "preview": "multi-draw.png"
+  },
+  {
+    "id": "dispatch-indirect",
+    "category": "Compute / 20",
+    "title": "Indirect dispatch",
+    "detail": "A packed record launches the compute-to-render path.",
+    "preview": "dispatch-indirect.png"
+  },
+  {
+    "id": "timestamp-query",
+    "category": "Compute / 21",
+    "title": "Pass timestamps",
+    "detail": "Pass timestamps validate portable resolve alignment.",
+    "preview": "timestamp-query.png"
+  },
+  {
+    "id": "compute-particles",
+    "category": "Compute / 22",
+    "title": "Compute particles",
+    "detail": "Compute updates particles consumed directly by render.",
+    "preview": "compute-particles.png"
+  },
+  {
+    "id": "mip-lod",
+    "category": "Binding / 23",
+    "title": "Mip chain + LOD",
+    "detail": "One uploaded mip chain is sampled at five explicit levels.",
+    "preview": "mip-lod.png"
+  },
+  {
+    "id": "stencil-outline",
+    "category": "Render / 24",
+    "title": "Stencil outline",
+    "detail": "A fill pass writes stencil before the outline draw.",
+    "preview": "stencil-outline.png"
+  },
+  {
+    "id": "bloom",
+    "category": "Compute / 25",
+    "title": "Separable bloom",
+    "detail": "Horizontal and vertical compute feed a sampled composite.",
+    "preview": "bloom.png"
+  },
+  {
+    "id": "image-texture",
+    "category": "Binding / 26",
+    "title": "Image texture",
+    "detail": "Decoded sRGB pixels are uploaded and sampled once.",
+    "preview": "image-texture.png"
+  },
+  {
+    "id": "integer-cube",
+    "category": "Binding / 27",
+    "title": "Integer cubemap",
+    "detail": "Typed integer cube sampling through portable bindings.",
+    "preview": "integer-cube.png"
+  },
+  {
+    "id": "color-pipeline",
+    "category": "Render / 28",
+    "title": "Color pipeline",
+    "detail": "sRGB and linear input flow through HDR tone mapping.",
+    "preview": "color-pipeline.png"
+  },
+  {
+    "id": "compressed-texture",
+    "category": "Binding / 29",
+    "title": "Compressed texture",
+    "detail": "Native compression with a portable RGBA8 fallback.",
+    "preview": "compressed-texture.png"
+  },
+  {
+    "id": "skinning",
+    "category": "Render / 30",
+    "title": "GPU skinning",
+    "detail": "Four bone matrices animate an indexed mesh.",
+    "preview": "skinning.png"
+  },
+  {
+    "id": "pbr-material",
+    "category": "Render / 31",
+    "title": "PBR material",
+    "detail": "Metallic-roughness, normal maps, and environment lighting.",
+    "preview": "pbr-material.png"
+  },
+  {
+    "id": "assetkit-damaged-helmet",
+    "category": "Render / 32",
+    "title": "AssetKit DamagedHelmet",
+    "detail": "Khronos glTF, AssetKit materials, and indexed PBR rendering.",
+    "preview": "assetkit-damaged-helmet.png"
+  },
+  {
+    "id": "blit",
+    "category": "Blit / 33",
+    "title": "Texture blit",
+    "detail": "Nearest and linear magnification from one source texture.",
+    "preview": "blit.png"
+  }
+]

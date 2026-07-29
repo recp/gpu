@@ -81,13 +81,14 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   endif()
 
   set(GPU_WEBGPU_GALLERY_DIR
-      "${CMAKE_CURRENT_BINARY_DIR}/samples/webgpu")
+      "${CMAKE_CURRENT_BINARY_DIR}/webgpu")
   set(GPU_WEBGPU_GALLERY_SOURCE_DIR
-      "${PROJECT_SOURCE_DIR}/samples/webgpu-gallery")
+      "${PROJECT_SOURCE_DIR}/samples/shell/web")
   set(GPU_WEBGPU_GALLERY_VERSION "44")
   set(GPU_WEBGPU_SAMPLE_WGSL_LABEL "Generated WGSL")
   set(GPU_WEBGPU_SAMPLE_COMMON_SOURCE
-      "${PROJECT_SOURCE_DIR}/samples/common/webgpu.c")
+      "${PROJECT_SOURCE_DIR}/samples/common/webgpu.c"
+      "${PROJECT_SOURCE_DIR}/samples/common/sample_orbit.c")
   set(GPU_WEBGPU_PACK_SCRIPT
       "${PROJECT_SOURCE_DIR}/cmake/PackUSLArtifact.cmake")
   file(GLOB GPU_WEBGPU_GALLERY_PREVIEWS CONFIGURE_DEPENDS

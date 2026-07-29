@@ -77,13 +77,15 @@ asset_release(Asset *asset) {
 }
 
 static void
-asset_job_cleanup(void) {
+asset_job_cleanup(bool removeCachedFile) {
   if (loadJob.doc) {
     ak_free(loadJob.doc);
     loadJob.doc = NULL;
   }
   if (loadJob.path[0] != '\0') {
-    remove(loadJob.path);
+    if (removeCachedFile) {
+      remove(loadJob.path);
+    }
     loadJob.path[0] = '\0';
   }
 }
@@ -101,7 +103,7 @@ asset_fail(const char *message) {
   userData         = loadJob.userData;
   loadJob.active   = false;
 
-  asset_job_cleanup();
+  asset_job_cleanup(true);
   asset_release(&loadJob.asset);
 
   callback(NULL, message, userData);
@@ -406,7 +408,7 @@ asset_finish_if_ready(void) {
   userData         = loadJob.userData;
   loadJob.active   = false;
 
-  asset_job_cleanup();
+  asset_job_cleanup(false);
   callback(&loadJob.asset, NULL, userData);
 }
 
@@ -524,14 +526,36 @@ asset_write_file(const void *bytes, size_t byteCount) {
   return written == byteCount;
 }
 
+static int
+asset_parse_file(void) {
+  AkGeometry      *geom;
+  AkMeshPrimitive *prim;
+
+  if (ak_load(&loadJob.doc, loadJob.path, AK_FILE_TYPE_GLB) != AK_OK ||
+      !loadJob.doc) {
+    return 0;
+  }
+
+  geom = loadJob.doc->lib.geometries.first;
+  prim = NULL;
+
+  if (!asset_extract_geometry(loadJob.doc, geom, &prim)) {
+    return 0;
+  }
+
+  if (!asset_extract_material(prim)) {
+    return 0;
+  }
+
+  asset_finish_if_ready();
+  return 1;
+}
+
 static void
 asset_fetch_ready(void       *bytes,
                   uint64_t    byteCount,
                   const char *error,
                   void       *userData) {
-  AkGeometry      *geom;
-  AkMeshPrimitive *prim;
-
   (void)userData;
   if (!loadJob.active) {
     free(bytes);
@@ -545,36 +569,21 @@ asset_fetch_ready(void       *bytes,
   }
   if (!asset_write_file(bytes, (size_t)byteCount)) {
     free(bytes);
-    asset_fail("AssetKit: failed to stage the downloaded GLB");
+    asset_fail("AssetKit: failed to cache the downloaded GLB");
     return;
   }
   free(bytes);
 
-  if (ak_load(&loadJob.doc, loadJob.path, AK_FILE_TYPE_GLB) != AK_OK ||
-      !loadJob.doc) {
+  if (!asset_parse_file() && loadJob.active) {
     asset_fail("AssetKit: failed to parse DamagedHelmet.glb");
-    return;
   }
-
-  geom = loadJob.doc->lib.geometries.first;
-  prim = NULL;
-
-  if (!asset_extract_geometry(loadJob.doc, geom, &prim)) {
-    asset_fail("AssetKit: DamagedHelmet geometry is incomplete");
-    return;
-  }
-
-  if (!asset_extract_material(prim)) {
-    asset_fail("AssetKit: DamagedHelmet PBR material is incomplete");
-    return;
-  }
-
-  asset_finish_if_ready();
 }
 
 void
 asset_load(AssetCallback callback,
            void         *userData) {
+  FILE *cachedFile;
+
   if (!callback || loadJob.active) {
     if (callback) {
       callback(NULL, "AssetKit: an asset load is already active", userData);
@@ -588,10 +597,33 @@ asset_load(AssetCallback callback,
   loadJob.userData = userData;
   loadJob.active   = true;
 
-  if (!sample_temporary_path("DamagedHelmet.glb",
+  if (!sample_temporary_path("DamagedHelmet-v1.glb",
                              loadJob.path,
-                             sizeof(loadJob.path)) ||
-      !sample_fetch_url(ASSET_URL, asset_fetch_ready, NULL)) {
+                             sizeof(loadJob.path))) {
+    asset_fail("AssetKit: failed to resolve the DamagedHelmet cache path");
+    return;
+  }
+
+  cachedFile = fopen(loadJob.path, "rb");
+  if (cachedFile) {
+    fclose(cachedFile);
+    if (asset_parse_file()) {
+      return;
+    }
+    if (!loadJob.active) {
+      return;
+    }
+    if (loadJob.doc) {
+      ak_free(loadJob.doc);
+      loadJob.doc = NULL;
+    }
+    remove(loadJob.path);
+    asset_release(&loadJob.asset);
+    asset_reset(&loadJob.asset);
+    loadJob.pendingImages = 0u;
+  }
+
+  if (!sample_fetch_url(ASSET_URL, asset_fetch_ready, NULL)) {
     asset_fail("AssetKit: failed to start the DamagedHelmet download");
   }
 }
