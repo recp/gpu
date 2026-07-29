@@ -66,8 +66,13 @@ samples/**/*.usl.metal
 samples/**/*.usl.logs
 samples/**/.build.lock/
 samples/shell/web/.dev/
-samples/usl-reflection-check/usl-reflection-check
-!samples/triangle-manual/triangle.usl.metal
+tests/validation/**/hello-*
+tests/validation/**/*.us
+tests/validation/**/*.usl.metal
+tests/validation/**/*.usl.logs
+tests/validation/**/.build.lock/
+tests/validation/usl-reflection-check/usl-reflection-check
+!tests/validation/triangle-manual/triangle.usl.metal
 
 # Test build outputs
 tests/api/api-tests
