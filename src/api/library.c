@@ -2203,12 +2203,21 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
     }
   }
   if (GPUIsFeatureEnabled(device, GPU_FEATURE_DESCRIPTOR_INDEXING)) {
-    if (us_cap_atom_init(
-          &targetAtoms[targetAtomCount++],
-          USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
-          USL_SEMANTIC_FEATURE_ID_DESCRIPTOR_INDEXING,
-          0u,
-          0u) != USLOk) {
+    USResult atomResult;
+
+    atomResult = device->uslBoundedDescriptorIndexing
+                   ? us_cap_atom_text(
+                       &targetAtoms[targetAtomCount++],
+                       "bounded_descriptor_indexing"
+                     )
+                   : us_cap_atom_init(
+                       &targetAtoms[targetAtomCount++],
+                       USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+                       USL_SEMANTIC_FEATURE_ID_DESCRIPTOR_INDEXING,
+                       0u,
+                       0u
+                     );
+    if (atomResult != USLOk) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }

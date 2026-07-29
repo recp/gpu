@@ -586,7 +586,7 @@ if(GPU_BUILD_ANDROID_SAMPLES)
 
   function(gpu_add_android_usl_artifact target shader_source out_dir out_us)
     set(options USES_STDLIB)
-    set(oneValueArgs CAPS)
+    set(oneValueArgs CAPS FALLBACK_CAPS)
     cmake_parse_arguments(GPU_ANDROID_SHADER
       "${options}" "${oneValueArgs}" "" ${ARGN})
 
@@ -612,6 +612,18 @@ if(GPU_BUILD_ANDROID_SAMPLES)
       list(APPEND _gpu_android_environment
         "USL_TARGET_CAPS=${GPU_ANDROID_SHADER_CAPS}")
     endif()
+    set(_gpu_android_fallback_pack_command)
+    if(GPU_ANDROID_SHADER_FALLBACK_CAPS)
+      list(APPEND _gpu_android_fallback_pack_command
+        COMMAND "${CMAKE_COMMAND}"
+                "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+                "-DGPU_USL_SOURCE=${_gpu_android_usl}"
+                -DGPU_USL_TARGET=spirv
+                -DGPU_USL_TARGET_PROFILE=vulkan1.1
+                "-DGPU_USL_CAPS=${GPU_ANDROID_SHADER_FALLBACK_CAPS}"
+                -P "${PROJECT_SOURCE_DIR}/cmake/PackUSLArtifact.cmake"
+      )
+    endif()
 
     add_custom_command(
       OUTPUT "${_gpu_android_us}"
@@ -632,6 +644,7 @@ if(GPU_BUILD_ANDROID_SAMPLES)
               -DGPU_USL_TARGET_PROFILE=vulkan1.1
               "-DGPU_USL_CAPS=${GPU_ANDROID_SHADER_CAPS}"
               -P "${PROJECT_SOURCE_DIR}/cmake/PackUSLArtifact.cmake"
+      ${_gpu_android_fallback_pack_command}
       DEPENDS
         "${GPU_USL_HOST_FIXTURE}"
         "${GPU_USL_HOST_PACKER}"

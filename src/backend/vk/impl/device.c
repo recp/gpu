@@ -378,8 +378,10 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
   bool executionGraph;
 
   descriptorIndexing =
-    vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_DESCRIPTOR_INDEXING) ||
-    vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_BINDLESS);
+    adapter && adapter->descriptorIndexing &&
+    (vk_featureEnabled(enabledFeatureMask,
+                       GPU_FEATURE_DESCRIPTOR_INDEXING) ||
+     vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_BINDLESS));
   meshShader = vk_featureEnabled(enabledFeatureMask,
                                  GPU_FEATURE_MESH_SHADER);
   rayQuery = vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_RAY_QUERY);
@@ -1500,6 +1502,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     }
   }
 #endif
+  adapterVk->boundedDescriptorIndexing = true;
   if (getFeatures2 && (descriptorCore || descriptorExtension)) {
     descriptorFeatures.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
@@ -1986,7 +1989,8 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
     case GPU_FEATURE_SHADER_F16:
       return adapterVk->shaderFloat16;
     case GPU_FEATURE_DESCRIPTOR_INDEXING:
-      return adapterVk->descriptorIndexing;
+      return adapterVk->descriptorIndexing ||
+             adapterVk->boundedDescriptorIndexing;
     case GPU_FEATURE_BINDLESS:
       return adapterVk->bindless;
     case GPU_FEATURE_MESH_SHADER:
@@ -2525,7 +2529,8 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     goto err;
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u &&
-      !adapterVk->descriptorIndexing) {
+      !adapterVk->descriptorIndexing &&
+      !adapterVk->boundedDescriptorIndexing) {
     goto err;
   }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_BINDLESS)) != 0u &&
@@ -2648,14 +2653,16 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   if (vk_featureEnabled(enabledFeatureMask,
                         GPU_FEATURE_DESCRIPTOR_INDEXING) ||
       vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_BINDLESS)) {
-    coreFeatures.shaderUniformBufferArrayDynamicIndexing =
-      adapterVk->features.shaderUniformBufferArrayDynamicIndexing;
-    coreFeatures.shaderSampledImageArrayDynamicIndexing =
-      adapterVk->features.shaderSampledImageArrayDynamicIndexing;
-    coreFeatures.shaderStorageBufferArrayDynamicIndexing =
-      adapterVk->features.shaderStorageBufferArrayDynamicIndexing;
-    coreFeatures.shaderStorageImageArrayDynamicIndexing =
-      adapterVk->features.shaderStorageImageArrayDynamicIndexing;
+    if (adapterVk->descriptorIndexing) {
+      coreFeatures.shaderUniformBufferArrayDynamicIndexing =
+        adapterVk->features.shaderUniformBufferArrayDynamicIndexing;
+      coreFeatures.shaderSampledImageArrayDynamicIndexing =
+        adapterVk->features.shaderSampledImageArrayDynamicIndexing;
+      coreFeatures.shaderStorageBufferArrayDynamicIndexing =
+        adapterVk->features.shaderStorageBufferArrayDynamicIndexing;
+      coreFeatures.shaderStorageImageArrayDynamicIndexing =
+        adapterVk->features.shaderStorageImageArrayDynamicIndexing;
+    }
   }
   if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_MULTI_DRAW)) {
     coreFeatures.multiDrawIndirect = adapterVk->features.multiDrawIndirect;
@@ -2779,8 +2786,10 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     deviceCI.pNext = &indirectCopyFeatures;
   }
 #endif
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u ||
-      (enabledFeatureMask & (1ull << GPU_FEATURE_BINDLESS)) != 0u) {
+  if (adapterVk->descriptorIndexing &&
+      ((enabledFeatureMask &
+        (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u ||
+       (enabledFeatureMask & (1ull << GPU_FEATURE_BINDLESS)) != 0u)) {
     descriptorFeatures.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
     descriptorFeatures.pNext = (void *)deviceCI.pNext;
@@ -3283,6 +3292,9 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   device->_priv            = deviceVk;
   device->inst             = adapter->inst;
   device->adapter          = adapter;
+  device->uslBoundedDescriptorIndexing =
+    vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_DESCRIPTOR_INDEXING) &&
+    !adapterVk->descriptorIndexing;
 
   deviceVk->createdQueues = calloc(totalQueueCount,
                                    sizeof(*deviceVk->createdQueues));

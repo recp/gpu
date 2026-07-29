@@ -161,6 +161,7 @@ typedef struct GPUAdapterVk {
   bool                          storageBuffer16BitAccess;
   bool                          vulkanMemoryModel;
   bool                          descriptorIndexing;
+  bool                          boundedDescriptorIndexing;
   bool                          bufferDeviceAddress;
   bool                          descriptorBuffer;
   bool                          bindless;
