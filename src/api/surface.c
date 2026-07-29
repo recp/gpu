@@ -19,7 +19,7 @@
 #include "surface_internal.h"
 
 static bool
-gpuIsSurfaceTypeValid(GPUSurfaceType type) {
+gpuIsSingleHandleSurfaceType(GPUSurfaceType type) {
   return type == GPU_SURFACE_WINDOWS_HWND ||
          type == GPU_SURFACE_WINDOWS_COREWINDOW ||
          type == GPU_SURFACE_APPLE_NSVIEW ||
@@ -28,19 +28,85 @@ gpuIsSurfaceTypeValid(GPUSurfaceType type) {
          type == GPU_SURFACE_WEB_CANVAS;
 }
 
-static const GPUNativeSurfaceCreateInfo*
-gpuFindNativeSurfaceCreateInfo(const GPUSurfaceCreateInfo *info) {
+static bool
+gpuParseSurfaceCreateInfo(GPUInstance                *inst,
+                          const GPUSurfaceCreateInfo *info,
+                          GPUSurfaceNativeInfo       *out) {
   const GPUChainedStruct *chain;
+  bool                    found;
 
+  memset(out, 0, sizeof(*out));
+  found = false;
   chain = info ? (const GPUChainedStruct *)info->chain.pNext : NULL;
   while (chain) {
-    if (chain->sType == GPU_STRUCTURE_TYPE_NATIVE_SURFACE_CREATE_INFO) {
-      return (const GPUNativeSurfaceCreateInfo *)chain;
+    switch (chain->sType) {
+      case GPU_STRUCTURE_TYPE_NATIVE_SURFACE_CREATE_INFO: {
+        const GPUNativeSurfaceCreateInfo *nativeInfo;
+
+        nativeInfo = (const GPUNativeSurfaceCreateInfo *)chain;
+        if (found ||
+            (chain->structSize != 0u &&
+             chain->structSize < sizeof(*nativeInfo)) ||
+            !nativeInfo->adapter || nativeInfo->adapter->inst != inst ||
+            !nativeInfo->nativeHandle ||
+            !gpuIsSingleHandleSurfaceType(nativeInfo->type) ||
+            !(nativeInfo->scale > 0.0f)) {
+          return false;
+        }
+        out->adapter      = nativeInfo->adapter;
+        out->nativeHandle = nativeInfo->nativeHandle;
+        out->type         = nativeInfo->type;
+        out->scale        = nativeInfo->scale;
+        found             = true;
+        break;
+      }
+      case GPU_STRUCTURE_TYPE_SURFACE_XLIB_CREATE_INFO: {
+        const GPUSurfaceXlibCreateInfo *xlibInfo;
+
+        xlibInfo = (const GPUSurfaceXlibCreateInfo *)chain;
+        if (found ||
+            (chain->structSize != 0u &&
+             chain->structSize < sizeof(*xlibInfo)) ||
+            !xlibInfo->adapter || xlibInfo->adapter->inst != inst ||
+            !xlibInfo->display || xlibInfo->window == 0u ||
+            !(xlibInfo->scale > 0.0f)) {
+          return false;
+        }
+        out->adapter      = xlibInfo->adapter;
+        out->display      = xlibInfo->display;
+        out->nativeWindow = xlibInfo->window;
+        out->type         = GPU_SURFACE_XLIB_WINDOW;
+        out->scale        = xlibInfo->scale;
+        found             = true;
+        break;
+      }
+      case GPU_STRUCTURE_TYPE_SURFACE_WAYLAND_CREATE_INFO: {
+        const GPUSurfaceWaylandCreateInfo *waylandInfo;
+
+        waylandInfo = (const GPUSurfaceWaylandCreateInfo *)chain;
+        if (found ||
+            (chain->structSize != 0u &&
+             chain->structSize < sizeof(*waylandInfo)) ||
+            !waylandInfo->adapter || waylandInfo->adapter->inst != inst ||
+            !waylandInfo->display || !waylandInfo->surface ||
+            !(waylandInfo->scale > 0.0f)) {
+          return false;
+        }
+        out->adapter      = waylandInfo->adapter;
+        out->display      = waylandInfo->display;
+        out->nativeHandle = waylandInfo->surface;
+        out->type         = GPU_SURFACE_WAYLAND_SURFACE;
+        out->scale        = waylandInfo->scale;
+        found             = true;
+        break;
+      }
+      default:
+        break;
     }
     chain = (const GPUChainedStruct *)chain->pNext;
   }
 
-  return NULL;
+  return found;
 }
 
 GPU_EXPORT
@@ -48,8 +114,8 @@ GPUResult
 GPUCreateSurface(GPUInstance       * __restrict inst,
                  const GPUSurfaceCreateInfo * __restrict info,
                  GPUSurface ** __restrict outSurface) {
-  const GPUNativeSurfaceCreateInfo *nativeInfo;
-  GPUApi                           *api;
+  GPUSurfaceNativeInfo nativeInfo;
+  GPUApi               *api;
 
   if (!outSurface) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -67,15 +133,7 @@ GPUCreateSurface(GPUInstance       * __restrict inst,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  nativeInfo = gpuFindNativeSurfaceCreateInfo(info);
-  if (!nativeInfo ||
-      (nativeInfo->chain.structSize != 0 &&
-       nativeInfo->chain.structSize < sizeof(*nativeInfo)) ||
-      !nativeInfo->adapter ||
-      nativeInfo->adapter->inst != inst ||
-      !nativeInfo->nativeHandle ||
-      !gpuIsSurfaceTypeValid(nativeInfo->type) ||
-      !(nativeInfo->scale > 0.0f)) {
+  if (!gpuParseSurfaceCreateInfo(inst, info, &nativeInfo)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -89,10 +147,7 @@ GPUCreateSurface(GPUInstance       * __restrict inst,
 
   *outSurface = api->surface.createSurface(api,
                                            inst,
-                                           nativeInfo->adapter,
-                                           nativeInfo->nativeHandle,
-                                           nativeInfo->type,
-                                           nativeInfo->scale);
+                                           &nativeInfo);
   if (!*outSurface) {
     return GPU_ERROR_BACKEND_FAILURE;
   }

@@ -25,13 +25,19 @@ extern "C" {
 
 struct GPUApi;
 
+typedef struct GPUSurfaceNativeInfo {
+  GPUAdapter     *adapter;
+  void           *display;
+  void           *nativeHandle;
+  uintptr_t       nativeWindow;
+  GPUSurfaceType  type;
+  float           scale;
+} GPUSurfaceNativeInfo;
+
 typedef struct GPUApiSurface {
-  GPUSurface *(*createSurface)(struct GPUApi            * __restrict api,
-                               struct GPUInstance       * __restrict inst,
-                               GPUAdapter               * __restrict adapter,
-                               void                     * __restrict nativeHandle,
-                               GPUSurfaceType                        type,
-                               float                                 scale);
+  GPUSurface *(*createSurface)(struct GPUApi                   * __restrict api,
+                               struct GPUInstance              * __restrict inst,
+                               const GPUSurfaceNativeInfo      * __restrict info);
 
   GPUResult (*getCapabilities)(const GPUAdapter      * __restrict adapter,
                                GPUSurface            * __restrict surface,

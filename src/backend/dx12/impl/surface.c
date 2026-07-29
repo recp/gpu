@@ -33,22 +33,28 @@ static const uint32_t dx12_tearingPresentModes[] = {
 };
 
 GPUSurface *
-dx12_createSurface(GPUApi            * __restrict api,
-                   GPUInstance       * __restrict inst,
-                   GPUAdapter        * __restrict adapter,
-                   void              * __restrict nativeHandle,
-                   GPUSurfaceType                 type,
-                   float                          scale) {
+dx12_createSurface(GPUApi                    * __restrict api,
+                   GPUInstance               * __restrict inst,
+                   const GPUSurfaceNativeInfo * __restrict info) {
   GPUSurface *surface;
+
+  GPU__UNUSED(api);
+  GPU__UNUSED(inst);
+
+  if (!info || !info->nativeHandle ||
+      (info->type != GPU_SURFACE_WINDOWS_HWND &&
+       info->type != GPU_SURFACE_WINDOWS_COREWINDOW)) {
+    return NULL;
+  }
 
   surface        = calloc(1, sizeof(*surface));
   if (!surface) {
     return NULL;
   }
 
-  surface->_priv = nativeHandle;
-  surface->type  = type;
-  surface->scale = scale;
+  surface->_priv = info->nativeHandle;
+  surface->type  = info->type;
+  surface->scale = info->scale;
 
   return surface;
 }

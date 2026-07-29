@@ -18,23 +18,22 @@
 
 GPU_HIDE
 GPUSurface*
-vk_createSurface(GPUApi            * __restrict api,
-                 GPUInstance       * __restrict inst,
-                 GPUAdapter        * __restrict adapter,
-                 void              * __restrict nativeHandle,
-                 GPUSurfaceType                 type,
-                 float                          scale) {
+vk_createSurface(GPUApi                    * __restrict api,
+                 GPUInstance               * __restrict inst,
+                 const GPUSurfaceNativeInfo * __restrict info) {
   GPUInstanceVk *instVk;
+  GPUAdapter    *adapter;
   GPUSurface    *gpuSurface;
   GPUSurfaceVk  *surface;
   VkResult       err;
 
   GPU__UNUSED(api);
 
-  if (!adapter || !nativeHandle) {
+  if (!info || !info->adapter) {
     return NULL;
   }
 
+  adapter = info->adapter;
   if (!inst) {
     inst = adapter->inst;
   }
@@ -48,8 +47,8 @@ vk_createSurface(GPUApi            * __restrict api,
     return NULL;
   }
 
-  gpuSurface->type  = type;
-  gpuSurface->scale = scale;
+  gpuSurface->type  = info->type;
+  gpuSurface->scale = info->scale;
   surface           = calloc(1, sizeof(*surface));
   if (!surface) {
     free(gpuSurface);
@@ -59,52 +58,100 @@ vk_createSurface(GPUApi            * __restrict api,
   surface->inst     = instVk->inst;
   err               = VK_ERROR_EXTENSION_NOT_PRESENT;
 
+  switch (info->type) {
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
-  VkWin32SurfaceCreateInfoKHR createInfo = {0};
-  if (type != GPU_SURFACE_WINDOWS_HWND) {
-    free(surface);
-    free(gpuSurface);
-    return NULL;
-  }
+    case GPU_SURFACE_WINDOWS_HWND: {
+      VkWin32SurfaceCreateInfoKHR createInfo = {0};
 
-  createInfo.sType     = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-  createInfo.pNext     = NULL;
-  createInfo.flags     = 0;
-  createInfo.hinstance = GetModuleHandleW(NULL);
-  createInfo.hwnd      = nativeHandle;
-
-  err = vkCreateWin32SurfaceKHR(instVk->inst, &createInfo, NULL, &surface->surface);
-#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
-  VkAndroidSurfaceCreateInfoKHR createInfo = {0};
-
-  if (type != GPU_SURFACE_ANDROID_NATIVE_WINDOW) {
-    free(surface);
-    free(gpuSurface);
-    return NULL;
-  }
-
-  createInfo.sType  = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
-  createInfo.pNext  = NULL;
-  createInfo.flags  = 0;
-  createInfo.window = (struct ANativeWindow *)nativeHandle;
-
-  err = vkCreateAndroidSurfaceKHR(instVk->inst, &createInfo, NULL, &surface->surface);
-#elif defined(VK_USE_PLATFORM_METAL_EXT)
-  VkMetalSurfaceCreateInfoEXT createInfo = {0};
-  surface->metalLayer = gpuCreateMetalLayer(nativeHandle, type, scale);
-  if (!surface->metalLayer) {
-    free(surface);
-    free(gpuSurface);
-    return NULL;
-  }
-
-  createInfo.sType  = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;
-  createInfo.pNext  = NULL;
-  createInfo.flags  = 0;
-  createInfo.pLayer = surface->metalLayer;
-
-  err = vkCreateMetalSurfaceEXT(instVk->inst, &createInfo, NULL, &surface->surface);
+      if (!info->nativeHandle) {
+        break;
+      }
+      createInfo.sType     = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+      createInfo.hinstance = GetModuleHandleW(NULL);
+      createInfo.hwnd      = info->nativeHandle;
+      err = vkCreateWin32SurfaceKHR(instVk->inst,
+                                    &createInfo,
+                                    NULL,
+                                    &surface->surface);
+      break;
+    }
 #endif
+#if defined(VK_USE_PLATFORM_ANDROID_KHR)
+    case GPU_SURFACE_ANDROID_NATIVE_WINDOW: {
+      VkAndroidSurfaceCreateInfoKHR createInfo = {0};
+
+      if (!info->nativeHandle) {
+        break;
+      }
+      createInfo.sType  = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
+      createInfo.window = (struct ANativeWindow *)info->nativeHandle;
+      err = vkCreateAndroidSurfaceKHR(instVk->inst,
+                                      &createInfo,
+                                      NULL,
+                                      &surface->surface);
+      break;
+    }
+#endif
+#if defined(VK_USE_PLATFORM_METAL_EXT)
+    case GPU_SURFACE_APPLE_NSVIEW:
+    case GPU_SURFACE_APPLE_UIVIEW: {
+      VkMetalSurfaceCreateInfoEXT createInfo = {0};
+
+      if (!info->nativeHandle) {
+        break;
+      }
+      surface->metalLayer = gpuCreateMetalLayer(info->nativeHandle,
+                                                info->type,
+                                                info->scale);
+      if (!surface->metalLayer) {
+        break;
+      }
+      createInfo.sType  = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;
+      createInfo.pLayer = surface->metalLayer;
+      err = vkCreateMetalSurfaceEXT(instVk->inst,
+                                    &createInfo,
+                                    NULL,
+                                    &surface->surface);
+      break;
+    }
+#endif
+#if defined(VK_USE_PLATFORM_XLIB_KHR)
+    case GPU_SURFACE_XLIB_WINDOW: {
+      VkXlibSurfaceCreateInfoKHR createInfo = {0};
+
+      if (!info->display || info->nativeWindow == 0u) {
+        break;
+      }
+      createInfo.sType  = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
+      createInfo.dpy    = (Display *)info->display;
+      createInfo.window = (Window)info->nativeWindow;
+      err = vkCreateXlibSurfaceKHR(instVk->inst,
+                                   &createInfo,
+                                   NULL,
+                                   &surface->surface);
+      break;
+    }
+#endif
+#if defined(VK_USE_PLATFORM_WAYLAND_KHR)
+    case GPU_SURFACE_WAYLAND_SURFACE: {
+      VkWaylandSurfaceCreateInfoKHR createInfo = {0};
+
+      if (!info->display || !info->nativeHandle) {
+        break;
+      }
+      createInfo.sType   = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
+      createInfo.display = (struct wl_display *)info->display;
+      createInfo.surface = (struct wl_surface *)info->nativeHandle;
+      err = vkCreateWaylandSurfaceKHR(instVk->inst,
+                                      &createInfo,
+                                      NULL,
+                                      &surface->surface);
+      break;
+    }
+#endif
+    default:
+      break;
+  }
 
   if (err != VK_SUCCESS) {
 #if defined(__APPLE__)

@@ -247,19 +247,37 @@ vk_createInstance(GPUApi * __restrict api,
       enabledExtensions[nEnabledExtensions++] =
         VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
     }
-#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+#endif
+#if defined(VK_USE_PLATFORM_ANDROID_KHR)
     if (vk__hasExtension(instanceExtensions,
                          nInstanceExtensions,
                          VK_KHR_ANDROID_SURFACE_EXTENSION_NAME)) {
       enabledExtensions[nEnabledExtensions++] =
         VK_KHR_ANDROID_SURFACE_EXTENSION_NAME;
     }
-#elif defined(VK_USE_PLATFORM_METAL_EXT)
+#endif
+#if defined(VK_USE_PLATFORM_METAL_EXT)
     if (vk__hasExtension(instanceExtensions,
                          nInstanceExtensions,
                          VK_EXT_METAL_SURFACE_EXTENSION_NAME)) {
       enabledExtensions[nEnabledExtensions++] =
         VK_EXT_METAL_SURFACE_EXTENSION_NAME;
+    }
+#endif
+#if defined(VK_USE_PLATFORM_XLIB_KHR)
+    if (vk__hasExtension(instanceExtensions,
+                         nInstanceExtensions,
+                         VK_KHR_XLIB_SURFACE_EXTENSION_NAME)) {
+      enabledExtensions[nEnabledExtensions++] =
+        VK_KHR_XLIB_SURFACE_EXTENSION_NAME;
+    }
+#endif
+#if defined(VK_USE_PLATFORM_WAYLAND_KHR)
+    if (vk__hasExtension(instanceExtensions,
+                         nInstanceExtensions,
+                         VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME)) {
+      enabledExtensions[nEnabledExtensions++] =
+        VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME;
     }
 #endif
 

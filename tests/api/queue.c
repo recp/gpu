@@ -36,6 +36,7 @@ static bool             gScopedPresentSucceeds;
 static GPUAdapter gOwnershipAdapter;
 static GPUDevice  gOwnershipDevice;
 static GPUSurface gOwnershipSurface;
+static GPUSurfaceNativeInfo gOwnershipSurfaceInfo;
 static uint32_t   gOwnershipAdapterCalls;
 static uint32_t   gOwnershipAdapterDestroyCalls;
 static uint32_t   gOwnershipAdapterSelectCalls;
@@ -215,19 +216,16 @@ wait_ownership_device(GPUDevice * __restrict device) {
 }
 
 static GPUSurface *
-create_ownership_surface(GPUApi      * __restrict api,
-                         GPUInstance * __restrict instance,
-                         GPUAdapter  * __restrict adapter,
-                         void        * __restrict nativeHandle,
-                         GPUSurfaceType           type,
-                         float                    scale) {
+create_ownership_surface(GPUApi                    * __restrict api,
+                         GPUInstance               * __restrict instance,
+                         const GPUSurfaceNativeInfo * __restrict info) {
   (void)api;
   (void)instance;
-  (void)adapter;
-  (void)nativeHandle;
-  (void)type;
-  (void)scale;
+  if (!info) {
+    return NULL;
+  }
   memset(&gOwnershipSurface, 0, sizeof(gOwnershipSurface));
+  gOwnershipSurfaceInfo = *info;
   gOwnershipSurfaceCreateCalls++;
   return &gOwnershipSurface;
 }
@@ -268,6 +266,8 @@ destroy_ownership_instance(GPUApi      * __restrict api,
 static int
 check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   GPUNativeSurfaceCreateInfo nativeInfo = {0};
+  GPUSurfaceWaylandCreateInfo waylandInfo = {0};
+  GPUSurfaceXlibCreateInfo    xlibInfo = {0};
   GPUSurfaceCreateInfo       surfaceInfo = {0};
   GPUAdapterProperties       properties;
   GPUAdapterCapabilities     adapterCaps;
@@ -378,6 +378,9 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
       surface ||
       GPUCreateSurface(&instance, &surfaceInfo, &surface) != GPU_OK ||
       surface != &gOwnershipSurface || surface->inst != &instance ||
+      gOwnershipSurfaceInfo.adapter != adapter ||
+      gOwnershipSurfaceInfo.nativeHandle != &instance ||
+      gOwnershipSurfaceInfo.type != GPU_SURFACE_APPLE_NSVIEW ||
       GPUGetSurfaceCapabilities(adapter, surface, &surfaceCaps) != GPU_OK ||
       surfaceCaps.minImageCount != 2u ||
       surfaceCaps.maxImageCount != 3u ||
@@ -390,6 +393,47 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   }
 
   GPUDestroySurface(surface);
+
+  xlibInfo.chain.sType      = GPU_STRUCTURE_TYPE_SURFACE_XLIB_CREATE_INFO;
+  xlibInfo.chain.structSize = sizeof(xlibInfo);
+  xlibInfo.adapter          = adapter;
+  xlibInfo.display          = &instance;
+  xlibInfo.window           = 42u;
+  xlibInfo.scale            = 1.0f;
+  surfaceInfo.chain.pNext   = &xlibInfo;
+  surface                   = NULL;
+  if (GPUCreateSurface(&instance, &surfaceInfo, &surface) != GPU_OK ||
+      surface != &gOwnershipSurface ||
+      gOwnershipSurfaceInfo.adapter != adapter ||
+      gOwnershipSurfaceInfo.display != &instance ||
+      gOwnershipSurfaceInfo.nativeWindow != 42u ||
+      gOwnershipSurfaceInfo.type != GPU_SURFACE_XLIB_WINDOW) {
+    fprintf(stderr, "Xlib surface descriptor lowering failed\n");
+    return 0;
+  }
+  GPUDestroySurface(surface);
+
+  waylandInfo.chain.sType      =
+    GPU_STRUCTURE_TYPE_SURFACE_WAYLAND_CREATE_INFO;
+  waylandInfo.chain.structSize = sizeof(waylandInfo);
+  waylandInfo.adapter          = adapter;
+  waylandInfo.display          = &instance;
+  waylandInfo.surface          = &surfaceInfo;
+  waylandInfo.scale            = 2.0f;
+  surfaceInfo.chain.pNext      = &waylandInfo;
+  surface                     = NULL;
+  if (GPUCreateSurface(&instance, &surfaceInfo, &surface) != GPU_OK ||
+      surface != &gOwnershipSurface ||
+      gOwnershipSurfaceInfo.adapter != adapter ||
+      gOwnershipSurfaceInfo.display != &instance ||
+      gOwnershipSurfaceInfo.nativeHandle != &surfaceInfo ||
+      gOwnershipSurfaceInfo.type != GPU_SURFACE_WAYLAND_SURFACE ||
+      gOwnershipSurfaceInfo.scale != 2.0f) {
+    fprintf(stderr, "Wayland surface descriptor lowering failed\n");
+    return 0;
+  }
+  GPUDestroySurface(surface);
+
   GPUDestroyDevice(device);
   adapter = GPUGetAutoSelectedAdapter(&instance);
   device  = GPUCreateDeviceWithDefaultQueues(adapter);
@@ -409,9 +453,9 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
       gOwnershipDeviceWaitCalls != 2u ||
       gOwnershipDeviceDestroyCalls != 2u ||
       !gOwnershipDeviceDestroyOrderValid ||
-      gOwnershipSurfaceCreateCalls != 1u ||
+      gOwnershipSurfaceCreateCalls != 3u ||
       gOwnershipSurfaceCapabilityCalls != 1u ||
-      gOwnershipSurfaceDestroyCalls != 1u ||
+      gOwnershipSurfaceDestroyCalls != 3u ||
       gOwnershipInstanceDestroyCalls != 1u) {
     fprintf(stderr, "instance ownership called wrong backend\n");
     return 0;

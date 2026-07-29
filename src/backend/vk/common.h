@@ -55,6 +55,13 @@
 #  define VK_USE_PLATFORM_WIN32_KHR        1
 #elif defined(__ANDROID__)
 #  define VK_USE_PLATFORM_ANDROID_KHR      1
+#elif defined(__linux__)
+#  if GPU_VULKAN_HAS_XLIB
+#    define VK_USE_PLATFORM_XLIB_KHR       1
+#  endif
+#  if GPU_VULKAN_HAS_WAYLAND
+#    define VK_USE_PLATFORM_WAYLAND_KHR    1
+#  endif
 #endif
 
 #include <vulkan/vulkan.h>

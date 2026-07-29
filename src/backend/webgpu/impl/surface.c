@@ -232,12 +232,9 @@ webgpu_getCapabilities(const GPUAdapter      *adapter,
 }
 
 static GPUSurface *
-webgpu_createSurface(GPUApi        *api,
-                     GPUInstance   *instance,
-                     GPUAdapter    *adapter,
-                     void          *nativeHandle,
-                     GPUSurfaceType type,
-                     float          scale) {
+webgpu_createSurface(GPUApi                    *api,
+                     GPUInstance               *instance,
+                     const GPUSurfaceNativeInfo *info) {
   WGPUSurfaceDescriptor descriptor = WGPU_SURFACE_DESCRIPTOR_INIT;
   GPUInstanceWebGPU    *instanceNative;
   GPUSurfaceWebGPU     *native;
@@ -251,9 +248,9 @@ webgpu_createSurface(GPUApi        *api,
 #endif
 
   GPU__UNUSED(api);
-  GPU__UNUSED(adapter);
   instanceNative = gpu_webgpuInstance(instance);
-  if (!instanceNative || !instanceNative->instance || !nativeHandle) {
+  if (!instanceNative || !instanceNative->instance || !info ||
+      !info->nativeHandle) {
     return NULL;
   }
 
@@ -261,27 +258,29 @@ webgpu_createSurface(GPUApi        *api,
   WGPUEmscriptenSurfaceSourceCanvasHTMLSelector canvas =
     WGPU_EMSCRIPTEN_SURFACE_SOURCE_CANVAS_HTML_SELECTOR_INIT;
 
-  if (type != GPU_SURFACE_WEB_CANVAS) {
+  if (info->type != GPU_SURFACE_WEB_CANVAS) {
     return NULL;
   }
-  canvas.selector          = gpu_webgpuString(nativeHandle);
+  canvas.selector          = gpu_webgpuString(info->nativeHandle);
   descriptor.nextInChain   = &canvas.chain;
 #elif defined(__APPLE__)
-  if (type != GPU_SURFACE_APPLE_NSVIEW &&
-      type != GPU_SURFACE_APPLE_UIVIEW) {
+  if (info->type != GPU_SURFACE_APPLE_NSVIEW &&
+      info->type != GPU_SURFACE_APPLE_UIVIEW) {
     return NULL;
   }
-  metalLayer.layer = gpuCreateMetalLayer(nativeHandle, type, scale);
+  metalLayer.layer = gpuCreateMetalLayer(info->nativeHandle,
+                                         info->type,
+                                         info->scale);
   if (!metalLayer.layer) {
     return NULL;
   }
   descriptor.nextInChain = &metalLayer.chain;
 #elif defined(_WIN32) || defined(WIN32)
-  if (type != GPU_SURFACE_WINDOWS_HWND) {
+  if (info->type != GPU_SURFACE_WINDOWS_HWND) {
     return NULL;
   }
   window.hinstance       = GetModuleHandleW(NULL);
-  window.hwnd            = nativeHandle;
+  window.hwnd            = info->nativeHandle;
   descriptor.nextInChain = &window.chain;
 #else
   return NULL;
@@ -313,8 +312,8 @@ webgpu_createSurface(GPUApi        *api,
 #endif
 
   surface->_priv = native;
-  surface->type  = type;
-  surface->scale = scale;
+  surface->type  = info->type;
+  surface->scale = info->scale;
   return surface;
 }
 

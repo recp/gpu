@@ -30,6 +30,8 @@ typedef enum GPUSurfaceType {
   GPU_SURFACE_APPLE_UIVIEW,
   GPU_SURFACE_ANDROID_NATIVE_WINDOW,
   GPU_SURFACE_WEB_CANVAS,
+  GPU_SURFACE_XLIB_WINDOW,
+  GPU_SURFACE_WAYLAND_SURFACE,
 } GPUSurfaceType;
 
 typedef struct GPUSurface GPUSurface;
@@ -46,6 +48,22 @@ typedef struct GPUNativeSurfaceCreateInfo {
   GPUSurfaceType   type;
   float            scale;
 } GPUNativeSurfaceCreateInfo;
+
+typedef struct GPUSurfaceXlibCreateInfo {
+  GPUChainedStruct chain;
+  GPUAdapter      *adapter;
+  void            *display;
+  uintptr_t        window;
+  float            scale;
+} GPUSurfaceXlibCreateInfo;
+
+typedef struct GPUSurfaceWaylandCreateInfo {
+  GPUChainedStruct chain;
+  GPUAdapter      *adapter;
+  void            *display;
+  void            *surface;
+  float            scale;
+} GPUSurfaceWaylandCreateInfo;
 
 typedef struct GPUSurfaceCapabilities {
   const uint32_t *pFormats;
