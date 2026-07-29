@@ -17,6 +17,8 @@
 #include "../common.h"
 #include "../impl.h"
 
+#include "../../../api/usl_target.h"
+
 #ifdef DEBUG
 GPU_HIDE
 static char const *
@@ -73,6 +75,25 @@ vk_hasQueueCapability(const GPUAdapterVk *adapter,
 static bool
 vk_hasTimestampCapability(const GPUAdapterVk *adapter) {
   return adapter && adapter->props.limits.timestampComputeAndGraphics;
+}
+
+static uint32_t
+vk_uslTargetProfile(const GPUAdapter *adapter) {
+  const GPUInstanceVk *instanceVk;
+  const GPUAdapterVk  *adapterVk;
+  uint32_t             version;
+
+  if (!adapter || !adapter->inst || !adapter->inst->_priv || !adapter->_priv) {
+    return 0u;
+  }
+
+  instanceVk = adapter->inst->_priv;
+  adapterVk  = adapter->_priv;
+  version    = instanceVk->apiVersion < adapterVk->props.apiVersion
+                 ? instanceVk->apiVersion
+                 : adapterVk->props.apiVersion;
+  return gpu_uslVulkanProfile(VK_API_VERSION_MAJOR(version),
+                              VK_API_VERSION_MINOR(version));
 }
 
 static bool
@@ -3292,9 +3313,13 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   device->_priv            = deviceVk;
   device->inst             = adapter->inst;
   device->adapter          = adapter;
+  device->uslTargetProfile = vk_uslTargetProfile(adapter);
   device->uslBoundedDescriptorIndexing =
     vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_DESCRIPTOR_INDEXING) &&
     !adapterVk->descriptorIndexing;
+  if (device->uslTargetProfile == 0u) {
+    goto err;
+  }
 
   deviceVk->createdQueues = calloc(totalQueueCount,
                                    sizeof(*deviceVk->createdQueues));

@@ -82,6 +82,7 @@ struct GPUDevice {
   uint64_t                     _completedGPUFrameTimeBits;
   GPUQueueFlagBits             queueFamilies;
   GPUBufferUsageFlags          transientBufferUsage;
+  uint32_t                     uslTargetProfile;
   uint32_t                     transientFrameIndex;
   uint32_t                     deviceLostReported;
   bool                         transientConfigured;

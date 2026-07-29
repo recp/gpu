@@ -2026,8 +2026,10 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   }
   targetAtomCount = 0u;
   if (api->backend == GPU_BACKEND_VULKAN) {
-    target.profile = gpu_uslVulkanProfile(device->enabledFeatureMask,
-                                          device->uslUntypedPointers);
+    if (device->uslTargetProfile == 0u) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    target.profile = (USLTargetProfile)device->uslTargetProfile;
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
       if (us_cap_atom_init(
             &targetAtoms[targetAtomCount++],

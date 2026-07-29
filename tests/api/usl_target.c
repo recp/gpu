@@ -18,16 +18,14 @@
 
 #include <stdio.h>
 
-#define FEATURE_BIT(feature) (UINT64_C(1) << (feature))
-
 static int
 expect_profile(const char       *name,
-               uint64_t          featureMask,
-               bool              untypedPointers,
+               uint32_t          major,
+               uint32_t          minor,
                USLTargetProfile  expected) {
   USLTargetProfile actual;
 
-  actual = gpu_uslVulkanProfile(featureMask, untypedPointers);
+  actual = gpu_uslVulkanProfile(major, minor);
   if (actual == expected) {
     return 1;
   }
@@ -47,39 +45,26 @@ main(void) {
 
   ok = gpu_uslDefaultTarget(GPU_BACKEND_VULKAN, &target);
   ok &= target.profile == USL_TARGET_PROFILE_VULKAN_1_0;
-  ok &= expect_profile("baseline",
-                       0u,
-                       false,
+  ok &= expect_profile("invalid",
+                       0u, 0u,
+                       USL_TARGET_PROFILE_NONE);
+  ok &= expect_profile("Vulkan 1.0",
+                       1u, 0u,
                        USL_TARGET_PROFILE_VULKAN_1_0);
-  ok &= expect_profile("subgroups",
-                       FEATURE_BIT(GPU_FEATURE_SUBGROUPS),
-                       false,
+  ok &= expect_profile("Vulkan 1.1",
+                       1u, 1u,
                        USL_TARGET_PROFILE_VULKAN_1_1);
-  ok &= expect_profile("shader f16",
-                       FEATURE_BIT(GPU_FEATURE_SHADER_F16),
-                       false,
+  ok &= expect_profile("Vulkan 1.2",
+                       1u, 2u,
                        USL_TARGET_PROFILE_VULKAN_1_2);
-  ok &= expect_profile("atomic64",
-                       FEATURE_BIT(GPU_FEATURE_ATOMIC64),
-                       false,
-                       USL_TARGET_PROFILE_VULKAN_1_2);
-  ok &= expect_profile("ray query",
-                       FEATURE_BIT(GPU_FEATURE_RAY_QUERY),
-                       false,
-                       USL_TARGET_PROFILE_VULKAN_1_2);
-  ok &= expect_profile("ray pipeline",
-                       FEATURE_BIT(GPU_FEATURE_RAY_TRACING_PIPELINE),
-                       false,
-                       USL_TARGET_PROFILE_VULKAN_1_2);
-  ok &= expect_profile("execution graph",
-                       FEATURE_BIT(GPU_FEATURE_EXECUTION_GRAPH) |
-                         FEATURE_BIT(GPU_FEATURE_SUBGROUPS),
-                       false,
+  ok &= expect_profile("Vulkan 1.3",
+                       1u, 3u,
                        USL_TARGET_PROFILE_VULKAN_1_3);
-  ok &= expect_profile("untyped pointers",
-                       FEATURE_BIT(GPU_FEATURE_EXECUTION_GRAPH) |
-                         FEATURE_BIT(GPU_FEATURE_SUBGROUPS),
-                       true,
+  ok &= expect_profile("Vulkan 1.4",
+                       1u, 4u,
+                       USL_TARGET_PROFILE_VULKAN_1_4);
+  ok &= expect_profile("future Vulkan",
+                       2u, 0u,
                        USL_TARGET_PROFILE_VULKAN_1_4);
 
   return ok ? 0 : 1;

@@ -27,7 +27,7 @@
 #endif
 
 #if defined(__APPLE__)
-static uint32_t
+static inline uint32_t
 gpu_uslParseLeadingU32(const char *text) {
   uint32_t value = 0;
 
@@ -43,7 +43,7 @@ gpu_uslParseLeadingU32(const char *text) {
   return value;
 }
 
-static uint32_t
+static inline uint32_t
 gpu_uslAppleRuntimePlatformMajor(void) {
   char version[64];
   size_t versionSize = sizeof(version);
@@ -71,7 +71,7 @@ gpu_uslAppleRuntimePlatformMajor(void) {
 #  endif
 }
 
-static USLTargetPlatform
+static inline USLTargetPlatform
 gpu_uslAppleTargetPlatform(void) {
 #  if TARGET_OS_TV
   return USL_TARGET_PLATFORM_TVOS;
@@ -86,7 +86,7 @@ gpu_uslAppleTargetPlatform(void) {
 #  endif
 }
 
-static USLTargetProfile
+static inline USLTargetProfile
 gpu_uslAppleMetalProfile(USLTargetPlatform platform, uint32_t platformMajor) {
   if (platform == USL_TARGET_PLATFORM_MACOS) {
     if (platformMajor >= 26u) return USL_TARGET_PROFILE_MSL_4_0;
@@ -110,7 +110,7 @@ gpu_uslAppleMetalProfile(USLTargetPlatform platform, uint32_t platformMajor) {
 }
 #endif
 
-static int
+static inline int
 gpu_uslDefaultMetalTarget(USLTargetSpec *outTarget) {
   if (!outTarget) {
     return 0;
@@ -137,7 +137,7 @@ gpu_uslDefaultMetalTarget(USLTargetSpec *outTarget) {
                         USL_TARGET_PROFILE_MSL_2_0) == USLOk;
 }
 
-static int
+static inline int
 gpu_uslDefaultVulkanTarget(USLTargetSpec *outTarget) {
   return outTarget &&
          us_target_init(outTarget,
@@ -145,28 +145,27 @@ gpu_uslDefaultVulkanTarget(USLTargetSpec *outTarget) {
                         USL_TARGET_PROFILE_VULKAN_1_0) == USLOk;
 }
 
-static USLTargetProfile
-gpu_uslVulkanProfile(uint64_t featureMask, bool untypedPointers) {
-  if (untypedPointers) {
+static inline USLTargetProfile
+gpu_uslVulkanProfile(uint32_t major, uint32_t minor) {
+  if (major == 0u) {
+    return USL_TARGET_PROFILE_NONE;
+  }
+  if (major > 1u || minor >= 4u) {
     return USL_TARGET_PROFILE_VULKAN_1_4;
   }
-  if (featureMask & (UINT64_C(1) << GPU_FEATURE_EXECUTION_GRAPH)) {
+  if (minor >= 3u) {
     return USL_TARGET_PROFILE_VULKAN_1_3;
   }
-  if (featureMask &
-      ((UINT64_C(1) << GPU_FEATURE_ATOMIC64) |
-       (UINT64_C(1) << GPU_FEATURE_SHADER_F16) |
-       (UINT64_C(1) << GPU_FEATURE_RAY_QUERY) |
-       (UINT64_C(1) << GPU_FEATURE_RAY_TRACING_PIPELINE))) {
+  if (minor >= 2u) {
     return USL_TARGET_PROFILE_VULKAN_1_2;
   }
-  if (featureMask & (UINT64_C(1) << GPU_FEATURE_SUBGROUPS)) {
+  if (minor >= 1u) {
     return USL_TARGET_PROFILE_VULKAN_1_1;
   }
   return USL_TARGET_PROFILE_VULKAN_1_0;
 }
 
-static int
+static inline int
 gpu_uslDefaultDX12Target(USLTargetSpec *outTarget) {
   return outTarget &&
          us_target_init(outTarget,
@@ -174,7 +173,7 @@ gpu_uslDefaultDX12Target(USLTargetSpec *outTarget) {
                         USL_TARGET_PROFILE_HLSL_SM_6_0) == USLOk;
 }
 
-static int
+static inline int
 gpu_uslDefaultWebGPUTarget(USLTargetSpec *outTarget) {
   return outTarget &&
          us_target_init(outTarget,
@@ -182,7 +181,7 @@ gpu_uslDefaultWebGPUTarget(USLTargetSpec *outTarget) {
                         USL_TARGET_PROFILE_NONE) == USLOk;
 }
 
-static int
+static inline int
 gpu_uslDefaultTarget(GPUBackend backend, USLTargetSpec *outTarget) {
   switch (backend) {
     case GPU_BACKEND_METAL:
