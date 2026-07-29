@@ -80,15 +80,16 @@ _Static_assert(sizeof(kCubeIndices) / sizeof(kCubeIndices[0]) ==
                "cube index count must match the draw call");
 
 static inline void
-CubeBuildViewProjection(uint32_t width, uint32_t height, mat4 dest) {
+CubeBuildViewProjection(float aspect, mat4 dest) {
   vec3  eye;
   vec3  center = {0.0f, 0.0f, 0.0f};
   vec3  up     = {0.0f, 1.0f, 0.0f};
   mat4  view;
   mat4  projection;
-  float aspect;
 
-  aspect = gpu_sample_aspect_ratio(width, height);
+  if (aspect <= 0.0f) {
+    aspect = 1.0f;
+  }
   eye[0] = 0.0f;
   eye[1] = 0.0f;
   eye[2] = aspect < 1.0f ? 4.5f / aspect : 4.5f;

@@ -102,8 +102,7 @@ resize_canvas(WebGPUTexturedCube *state) {
     state->height = 0u;
     return 0;
   }
-  CubeBuildViewProjection(state->width,
-                          state->height,
+  CubeBuildViewProjection(gpu_sample_aspect_ratio(state->width, state->height),
                           state->viewProjection);
   return 1;
 }

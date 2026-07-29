@@ -200,7 +200,7 @@ textured_cube_createGeometry(TexturedCubeApp *app) {
   CubeUniforms        uniforms;
   GPUBufferCreateInfo info = {0};
 
-  CubeBuildUniforms(0.0f, app->viewProjection, &uniforms);
+  CubeBuildUniforms(0.0f, 0.0f, app->viewProjection, &uniforms);
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   info.chain.structSize = sizeof(info);
@@ -443,8 +443,9 @@ textured_cube_createGPU(TexturedCubeApp *app) {
     return false;
   }
 
-  CubeBuildViewProjection(app->width,
-                          app->height,
+  CubeBuildViewProjection(app->height > 0u
+                            ? (float)app->width / (float)app->height
+                            : 1.0f,
                           app->viewProjection);
   if (!textured_cube_createDepthTarget(app, app->width, app->height) ||
       !textured_cube_createPipeline(app) ||
@@ -465,7 +466,7 @@ textured_cube_updateUniforms(TexturedCubeApp *app) {
   QueryPerformanceCounter(&now);
   seconds = (float)((double)(now.QuadPart - app->animationStart.QuadPart) *
                     app->secondsPerTick);
-  CubeBuildUniforms(seconds, app->viewProjection, &uniforms);
+  CubeBuildUniforms(seconds, 0.0f, app->viewProjection, &uniforms);
   return GPUQueueWriteBuffer(app->queue,
                              app->uniformBuffer,
                              0u,
@@ -626,7 +627,10 @@ textured_cube_resize(TexturedCubeApp *app,
 
   app->width  = width;
   app->height = height;
-  CubeBuildViewProjection(width, height, app->viewProjection);
+  CubeBuildViewProjection(height > 0u
+                            ? (float)width / (float)height
+                            : 1.0f,
+                          app->viewProjection);
   return true;
 }
 
