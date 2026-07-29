@@ -94,7 +94,7 @@ build_sphere(PBRVertex vertices[PBR_VERTEX_COUNT],
     float v, theta, ringRadius, y;
 
     v          = (float)latitude / (float)PBR_LATITUDE_SEGMENTS;
-    theta      = v * GLM_PI;
+    theta      = v * (float)GLM_PI;
     ringRadius = sinf(theta);
     y          = cosf(theta);
 
@@ -105,7 +105,7 @@ build_sphere(PBRVertex vertices[PBR_VERTEX_COUNT],
       float      u, phi, x, z;
 
       u      = (float)longitude / (float)PBR_LONGITUDE_SEGMENTS;
-      phi    = u * GLM_PI * 2.0f;
+      phi    = u * (float)GLM_PI * 2.0f;
       x      = ringRadius * cosf(phi);
       z      = ringRadius * sinf(phi);
       vertex = &vertices[latitude * (PBR_LONGITUDE_SEGMENTS + 1u) +
@@ -184,8 +184,8 @@ fill_normal(uint8_t pixels[PBR_TEXTURE_BYTES]) {
 
       u         = ((float)x + 0.5f) / (float)PBR_TEXTURE_SIZE;
       v         = ((float)y + 0.5f) / (float)PBR_TEXTURE_SIZE;
-      normal[0] = sinf(u * GLM_PI * 8.0f) * 0.20f;
-      normal[1] = cosf(v * GLM_PI * 8.0f) * 0.20f;
+      normal[0] = sinf(u * (float)GLM_PI * 8.0f) * 0.20f;
+      normal[1] = cosf(v * (float)GLM_PI * 8.0f) * 0.20f;
       normal[2] = 1.0f;
       glm_vec3_normalize(normal);
       offset = (y * PBR_TEXTURE_SIZE + x) * 4u;
@@ -206,7 +206,7 @@ fill_material(uint8_t pixels[PBR_TEXTURE_BYTES]) {
 
       u         = ((float)x + 0.5f) / (float)PBR_TEXTURE_SIZE;
       v         = ((float)y + 0.5f) / (float)PBR_TEXTURE_SIZE;
-      ao        = 0.84f + 0.16f * sinf((u + v) * GLM_PI_2);
+      ao        = 0.84f + 0.16f * sinf((u + v) * (float)GLM_PI_2);
       roughness = 0.14f + v * 0.74f;
       metallic  = 0.06f + u * 0.90f;
       offset    = (y * PBR_TEXTURE_SIZE + x) * 4u;
