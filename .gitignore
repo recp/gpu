@@ -76,3 +76,4 @@ tests/**/vulkan-queue
 tests/**/vulkan-shader
 build-sampler-feedback-tests/
 build-tests/
+samples copy/
