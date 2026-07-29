@@ -24,7 +24,8 @@ kern(1, 1, 1) fill_f16_vertices_emulated(
 ) {
   let lane  = gid.x
   let value = 0.28 + float(lane) * 0.18
-  let shade = value * 1.5
+  let quantized = uint(value * 24.0)
+  let shade = float(quantized) * 0.0625
   let x     = lane == 0u ? -0.68 : (lane == 1u ? 0.68 : 0.0)
   let y     = lane == 2u ? 0.70 : -0.62
   let color = lane == 0u

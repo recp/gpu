@@ -22,7 +22,8 @@ if(NOT GPU_USL_TARGET_PROFILE)
 endif()
 
 set(GPU_USL_PACK_ARGS
-    --target "${GPU_USL_TARGET}" "${GPU_USL_TARGET_PROFILE}")
+    --target "${GPU_USL_TARGET}" "${GPU_USL_TARGET_PROFILE}"
+    --force)
 if(GPU_USL_CAPS)
   string(REPLACE "," ";" GPU_USL_CAP_LIST "${GPU_USL_CAPS}")
   foreach(GPU_USL_CAP IN LISTS GPU_USL_CAP_LIST)

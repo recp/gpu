@@ -23,7 +23,8 @@ kern(1, 1, 1) fill_f16_vertices(inout vertices: [GeneratedVertex] #buffer(0),
                                  gid: uint3 #global_id) {
   let lane = gid.x
   let value: half = half(0.28) + half(lane) * half(0.18)
-  let shade = float(value * half(1.5))
+  let quantized = uint(value * half(24.0))
+  let shade = float(quantized) * 0.0625
   let x = lane == 0u ? -0.68 : (lane == 1u ? 0.68 : 0.0)
   let y = lane == 2u ? 0.70 : -0.62
   let color = lane == 0u
