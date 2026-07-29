@@ -26,6 +26,12 @@ host_fixture=${GPU_USL_HOST_FIXTURE:-"$root_dir/out/build/release-check/gpu-usl-
 host_packer=${GPU_USL_HOST_PACKER:-"$root_dir/out/build/release-check/uslpack"}
 
 require_host_tools() {
+  host_build="$root_dir/out/build/release-check"
+  if [ "$host_fixture" = "$host_build/gpu-usl-fixture" ] &&
+     [ "$host_packer" = "$host_build/uslpack" ] &&
+     [ -f "$host_build/CMakeCache.txt" ]; then
+    cmake --build "$host_build" --target gpu-usl-fixture uslpack
+  fi
   if [ ! -x "$host_fixture" ] || [ ! -x "$host_packer" ]; then
     echo "samples: build the host shader tools first:" >&2
     echo "  cmake --build $root_dir/out/build/release-check --target gpu-usl-fixture uslpack" >&2

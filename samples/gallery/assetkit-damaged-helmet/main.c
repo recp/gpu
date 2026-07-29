@@ -1,4 +1,5 @@
 #include "../../common/sample_platform.h"
+#include "../../common/SampleStats.h"
 #include "../../common/sample_orbit.h"
 #include "asset.h"
 
@@ -50,6 +51,7 @@ typedef struct AssetSample {
   uint32_t           width;
   uint32_t           height;
   uint32_t           frameCount;
+  bool               verifyZeroAlloc;
 } AssetSample;
 
 enum {
@@ -57,8 +59,7 @@ enum {
   PBR_SPECULAR_ENV_SIZE  = 64u,
   PBR_SPECULAR_ENV_MIPS  = 7u,
   PBR_RGBA16_FLOAT_BYTES = 8u,
-  PBR_CUBE_FACE_COUNT    = 6u,
-  WARM_FRAME_COUNT       = 8u
+  PBR_CUBE_FACE_COUNT    = 6u
 };
 
 _Static_assert(sizeof(PBRUniforms) == 208u,
@@ -798,12 +799,11 @@ render_frame(void *userData) {
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
     set_status("GPU: failed to finish the DamagedHelmet frame", 1);
   } else {
-    GPUFrameStats stats;
-
     state->frameCount++;
-    if (state->frameCount > WARM_FRAME_COUNT &&
-        GPUGetLastFrameStats(state->device, &stats) == GPU_OK &&
-        (stats.hotPathAllocCount != 0u || stats.hotPathFreeCount != 0u)) {
+    if (!GPUSampleCheckZeroAlloc(state->device,
+                                 state->frameCount,
+                                 state->verifyZeroAlloc,
+                                 "assetkit-damaged-helmet")) {
       set_status("GPU: warm DamagedHelmet frame allocated wrapper memory", 1);
       emscripten_cancel_main_loop();
     }
@@ -854,6 +854,8 @@ webgpu_ready(GPUResult  result,
   state->adapter = adapter;
   state->device  = device;
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  state->verifyZeroAlloc =
+    GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;

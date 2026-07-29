@@ -1,4 +1,5 @@
 #include "../../common/sample_platform.h"
+#include "../../common/SampleStats.h"
 
 #include <stdio.h>
 
@@ -21,6 +22,7 @@ typedef struct WebGPUMRTBlend {
   uint32_t            width;
   uint32_t            height;
   uint32_t            frameCount;
+  bool                verifyZeroAlloc;
   bool                failed;
 } WebGPUMRTBlend;
 
@@ -422,11 +424,14 @@ render_frame(void *userData) {
       if (stats.drawCalls != 3u) {
         set_status("GPU: MRT frame did not encode all draws", 1);
         emscripten_cancel_main_loop();
-      } else if (stats.hotPathAllocCount != 0u ||
-                 stats.hotPathFreeCount != 0u) {
-        set_status("GPU: warm MRT frame allocated wrapper memory", 1);
-        emscripten_cancel_main_loop();
       }
+    }
+    if (!GPUSampleCheckZeroAlloc(state->device,
+                                 state->frameCount,
+                                 state->verifyZeroAlloc,
+                                 "mrt-blend")) {
+      set_status("GPU: warm MRT frame allocated wrapper memory", 1);
+      emscripten_cancel_main_loop();
     }
   }
 }
@@ -448,6 +453,8 @@ webgpu_ready(GPUResult  result,
   }
 
   state->adapter = adapter;
+  state->verifyZeroAlloc =
+    GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
   state->device  = device;
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;

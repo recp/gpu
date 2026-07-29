@@ -51,8 +51,8 @@ case "$platform" in
       echo "samples: adb not found" >&2
       exit 1
     }
-    "$adb" install -r "$apk"
     "$adb" shell am force-stop gpu.samples
+    "$adb" install --no-incremental --no-streaming -r "$apk"
     "$adb" shell am start -n gpu.samples/.GalleryActivity
     ;;
   xlib|wayland)
