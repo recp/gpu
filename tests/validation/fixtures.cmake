@@ -1,26 +1,26 @@
 # Validation fixture generation stays local to the validation suite.
 
 set(GPU_VALIDATION_REFLECTION_USL_SOURCE
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/usl-reflection-check/reflection.usl")
+    "${PROJECT_SOURCE_DIR}/tests/validation/usl-reflection-check/reflection.usl")
 set(GPU_VALIDATION_MESH_USL_SOURCE
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/mesh-triangle-usl/mesh_triangle.usl")
+    "${PROJECT_SOURCE_DIR}/tests/validation/mesh-triangle-usl/mesh_triangle.usl")
 set(GPU_VALIDATION_TRIANGLE_USL_SOURCE
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/triangle-usl/triangle.usl")
+    "${PROJECT_SOURCE_DIR}/tests/validation/triangle-usl/triangle.usl")
 
 if(GPU_BUILD_DX12 AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
   gpu_add_usl_fixtures(
     GPU_DX12_USL_FIXTURES
     dx12
     validation
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/triangle-dx12-usl/triangle.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/textured-quad-dx12-usl/textured_quad.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/compute-buffer-dx12-usl/compute_buffer.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/mesh-triangle-usl/mesh_triangle.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/compute-atomics-usl/compute_atomics.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/samples/gallery/textured-cube/textured_cube.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/samples/gallery/mrt-blend/mrt_blend.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/samples/gallery/shadow-compare/shadow_compare.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/vrs-compare-usl/vrs_compare.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/triangle-dx12-usl/triangle.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/textured-quad-dx12-usl/textured_quad.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/compute-buffer-dx12-usl/compute_buffer.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/mesh-triangle-usl/mesh_triangle.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/compute-atomics-usl/compute_atomics.usl"
+    "${PROJECT_SOURCE_DIR}/samples/gallery/textured-cube/textured_cube.usl"
+    "${PROJECT_SOURCE_DIR}/samples/gallery/mrt-blend/mrt_blend.usl"
+    "${PROJECT_SOURCE_DIR}/samples/gallery/shadow-compare/shadow_compare.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/vrs-compare-usl/vrs_compare.usl"
   )
   list(GET GPU_DX12_USL_FIXTURES 0 GPU_DX12_TRIANGLE_US)
   list(GET GPU_DX12_USL_FIXTURES 1 GPU_DX12_TEXTURED_QUAD_US)
@@ -36,7 +36,7 @@ if(GPU_BUILD_DX12 AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     GPU_DX12_BINDLESS_USL_FIXTURE
     dx12
     validation
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/bindless-usl/bindless.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/bindless-usl/bindless.usl"
   )
   unset(GPU_USL_FIXTURE_TARGET_CAPS)
   list(GET GPU_DX12_BINDLESS_USL_FIXTURE 0 GPU_DX12_BINDLESS_US)
@@ -49,15 +49,15 @@ if(GPU_BUILD_VULKAN AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     GPU_VULKAN_USL_FIXTURES
     vulkan
     validation
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/triangle-vulkan-usl/triangle.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/textured-quad-vulkan-usl/textured_quad.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/compute-buffer-vulkan-usl/compute_buffer.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/mesh-triangle-usl/mesh_triangle.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/compute-atomics-usl/compute_atomics.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/samples/gallery/textured-cube/textured_cube.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/samples/gallery/mrt-blend/mrt_blend.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/samples/gallery/shadow-compare/shadow_compare.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/vrs-compare-usl/vrs_compare.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/triangle-vulkan-usl/triangle.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/textured-quad-vulkan-usl/textured_quad.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/compute-buffer-vulkan-usl/compute_buffer.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/mesh-triangle-usl/mesh_triangle.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/compute-atomics-usl/compute_atomics.usl"
+    "${PROJECT_SOURCE_DIR}/samples/gallery/textured-cube/textured_cube.usl"
+    "${PROJECT_SOURCE_DIR}/samples/gallery/mrt-blend/mrt_blend.usl"
+    "${PROJECT_SOURCE_DIR}/samples/gallery/shadow-compare/shadow_compare.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/vrs-compare-usl/vrs_compare.usl"
   )
   list(GET GPU_VULKAN_USL_FIXTURES 0 GPU_VULKAN_TRIANGLE_US)
   list(GET GPU_VULKAN_USL_FIXTURES 1 GPU_VULKAN_TEXTURED_QUAD_US)
@@ -73,7 +73,7 @@ if(GPU_BUILD_VULKAN AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     GPU_VULKAN_BINDLESS_USL_FIXTURE
     vulkan
     validation
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/bindless-usl/bindless.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/bindless-usl/bindless.usl"
   )
   unset(GPU_USL_FIXTURE_TARGET_CAPS)
   list(GET GPU_VULKAN_BINDLESS_USL_FIXTURE 0 GPU_VULKAN_BINDLESS_US)
@@ -83,7 +83,7 @@ if(GPU_BUILD_VULKAN AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
       GPU_VULKAN_TEST_USL_FIXTURES
       vulkan
       tests
-      "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/triangle-usl/triangle.usl"
+      "${PROJECT_SOURCE_DIR}/tests/validation/triangle-usl/triangle.usl"
     )
     list(GET GPU_VULKAN_TEST_USL_FIXTURES 0 GPU_VULKAN_DYNAMIC_TRIANGLE_US)
     list(APPEND GPU_VULKAN_USL_FIXTURES ${GPU_VULKAN_TEST_USL_FIXTURES})
@@ -97,17 +97,17 @@ if(GPU_BUILD_METAL AND GPU_BUILD_SAMPLES AND
     GPU_METAL_USL_FIXTURES
     metal
     validation
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/triangle-usl/triangle.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/textured-quad-usl/textured_quad.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/compute-usl/compute_visible.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/compute-buffer-usl/compute_buffer.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/usl-reflection-check/reflection.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/usl-reflection-check/reflection_storage.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/mesh-triangle-usl/mesh_triangle.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/compute-atomics-usl/compute_atomics.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/samples/gallery/textured-cube/textured_cube.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/samples/gallery/mrt-blend/mrt_blend.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/samples/gallery/shadow-compare/shadow_compare.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/triangle-usl/triangle.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/textured-quad-usl/textured_quad.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/compute-usl/compute_visible.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/compute-buffer-usl/compute_buffer.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/usl-reflection-check/reflection.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/usl-reflection-check/reflection_storage.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/mesh-triangle-usl/mesh_triangle.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/compute-atomics-usl/compute_atomics.usl"
+    "${PROJECT_SOURCE_DIR}/samples/gallery/textured-cube/textured_cube.usl"
+    "${PROJECT_SOURCE_DIR}/samples/gallery/mrt-blend/mrt_blend.usl"
+    "${PROJECT_SOURCE_DIR}/samples/gallery/shadow-compare/shadow_compare.usl"
   )
   list(GET GPU_METAL_USL_FIXTURES 0 GPU_METAL_TRIANGLE_US)
   list(GET GPU_METAL_USL_FIXTURES 1 GPU_METAL_TEXTURED_QUAD_US)
@@ -125,7 +125,7 @@ if(GPU_BUILD_METAL AND GPU_BUILD_SAMPLES AND
     GPU_METAL_BINDLESS_USL_FIXTURE
     metal
     validation
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/validation/bindless-usl/bindless.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/bindless-usl/bindless.usl"
   )
   unset(GPU_USL_FIXTURE_TARGET_CAPS)
   list(GET GPU_METAL_BINDLESS_USL_FIXTURE 0 GPU_METAL_BINDLESS_US)

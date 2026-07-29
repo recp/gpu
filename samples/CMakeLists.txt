@@ -1,3 +1,25 @@
+if(GPU_BUILD_SAMPLES AND
+   ((GPU_BUILD_WEBGPU AND EMSCRIPTEN) OR
+    (WIN32 AND GPU_BUILD_DX12) OR
+    (APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" AND
+     (GPU_BUILD_METAL OR GPU_BUILD_VULKAN))))
+  find_path(GPU_CGLM_INCLUDE_DIR
+    NAMES cglm/cglm.h
+    HINTS
+      "${PROJECT_SOURCE_DIR}/../glm/include"
+      /opt/homebrew/include
+  )
+  if(NOT GPU_CGLM_INCLUDE_DIR)
+    message(FATAL_ERROR
+      "The cglm-based samples require cglm headers. Set "
+      "GPU_CGLM_INCLUDE_DIR.")
+  endif()
+endif()
+
+if(GPU_BUILD_ANDROID_SAMPLES)
+  include(cmake/android_setup.cmake)
+endif()
+
 set(GPU_ASSETKIT_ROOT
     "${PROJECT_SOURCE_DIR}/../assetio"
     CACHE PATH "AssetKit checkout used by gallery asset samples")
