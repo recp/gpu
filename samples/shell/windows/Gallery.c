@@ -27,15 +27,30 @@ typedef struct GPUGallery {
   HWND               window;
   HANDLE             child;
   HANDLE             job;
+  HDC                backContext;
+  HBITMAP            backBitmap;
+  HBITMAP            backDefaultBitmap;
   HFONT              titleFont;
   HFONT              bodyFont;
   GPUGalleryPreview *previews;
   const char        *status;
+  int                backWidth;
+  int                backHeight;
   int                scroll;
   int                scrollMax;
   int                hovered;
   float              scale;
 } GPUGallery;
+
+typedef struct GPUGalleryLayout {
+  int columns;
+  int margin;
+  int gap;
+  int cardWidth;
+  int cardHeight;
+  int previewHeight;
+  int offset;
+} GPUGalleryLayout;
 
 static COLORREF
 rgb(uint8_t red, uint8_t green, uint8_t blue) {
@@ -136,37 +151,167 @@ scaled(const GPUGallery *gallery, int value) {
   return (int)((float)value * gallery->scale + 0.5f);
 }
 
+static bool
+monitor_work_area(HWND window, RECT *work) {
+  MONITORINFO monitorInfo = {0};
+  HMONITOR    monitor;
+  POINT       origin = {0};
+
+  if (!work) {
+    return false;
+  }
+  monitor = window
+              ? MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST)
+              : MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
+  if (!monitor) {
+    return false;
+  }
+  monitorInfo.cbSize = sizeof(monitorInfo);
+  if (!GetMonitorInfoW(monitor, &monitorInfo)) {
+    return false;
+  }
+  *work = monitorInfo.rcWork;
+  return true;
+}
+
+static float
+display_scale(HWND window, UINT dpi) {
+  RECT  work;
+  float dpiScale, resolutionScaleX, resolutionScaleY, resolutionScale;
+
+  dpiScale = (float)dpi / 96.0f;
+  if (!monitor_work_area(window, &work)) {
+    return dpiScale;
+  }
+  resolutionScaleX = (float)(work.right - work.left) / 1920.0f;
+  resolutionScaleY = (float)(work.bottom - work.top) / 1080.0f;
+  resolutionScale  = resolutionScaleX < resolutionScaleY
+                       ? resolutionScaleX
+                       : resolutionScaleY;
+  if (resolutionScale > dpiScale) {
+    dpiScale = resolutionScale;
+  }
+  if (dpiScale < 1.0f) {
+    dpiScale = 1.0f;
+  } else if (dpiScale > 2.0f) {
+    dpiScale = 2.0f;
+  }
+  return dpiScale;
+}
+
+static bool
+create_fonts(GPUGallery *gallery) {
+  HFONT titleFont, bodyFont;
+
+  if (!gallery) {
+    return false;
+  }
+  titleFont = CreateFontW(-scaled(gallery, 28),
+                          0,
+                          0,
+                          0,
+                          FW_EXTRABOLD,
+                          FALSE,
+                          FALSE,
+                          FALSE,
+                          DEFAULT_CHARSET,
+                          OUT_DEFAULT_PRECIS,
+                          CLIP_DEFAULT_PRECIS,
+                          CLEARTYPE_QUALITY,
+                          DEFAULT_PITCH,
+                          L"Segoe UI");
+  bodyFont = CreateFontW(-scaled(gallery, 18),
+                         0,
+                         0,
+                         0,
+                         FW_SEMIBOLD,
+                         FALSE,
+                         FALSE,
+                         FALSE,
+                         DEFAULT_CHARSET,
+                         OUT_DEFAULT_PRECIS,
+                         CLIP_DEFAULT_PRECIS,
+                         CLEARTYPE_QUALITY,
+                         DEFAULT_PITCH,
+                         L"Segoe UI");
+  if (!titleFont || !bodyFont) {
+    DeleteObject(bodyFont);
+    DeleteObject(titleFont);
+    return false;
+  }
+  DeleteObject(gallery->bodyFont);
+  DeleteObject(gallery->titleFont);
+  gallery->titleFont = titleFont;
+  gallery->bodyFont  = bodyFont;
+  return true;
+}
+
+static void
+gallery_layout(const GPUGallery *gallery,
+               const RECT       *client,
+               GPUGalleryLayout *layout) {
+  int available;
+  int minimumWidth;
+
+  layout->margin = scaled(gallery, 28);
+  layout->gap    = scaled(gallery, 18);
+  available     = client->right - client->left - layout->margin * 2;
+  minimumWidth  = scaled(gallery, 280);
+  layout->columns = 3;
+  while (layout->columns > 1) {
+    layout->cardWidth =
+      (available - layout->gap * (layout->columns - 1)) / layout->columns;
+    if (layout->cardWidth >= minimumWidth) {
+      break;
+    }
+    layout->columns--;
+  }
+  layout->cardWidth =
+    (available - layout->gap * (layout->columns - 1)) / layout->columns;
+  if (layout->cardWidth < 1) {
+    layout->cardWidth = 1;
+  }
+  layout->previewHeight =
+    (layout->cardWidth - scaled(gallery, 24)) * 9 / 16;
+  if (layout->previewHeight < scaled(gallery, 96)) {
+    layout->previewHeight = scaled(gallery, 96);
+  }
+  layout->cardHeight =
+    layout->previewHeight + scaled(gallery, 66);
+  layout->offset = scaled(gallery, 92) - gallery->scroll;
+}
+
 static void
 card_rect(const GPUGallery *gallery,
           const RECT       *client,
           size_t            index,
           RECT             *outRect) {
-  int margin, gap, cardWidth, cardHeight;
-  int column, row, available, offset;
+  GPUGalleryLayout layout;
+  int              column, row;
 
-  margin     = scaled(gallery, 28);
-  gap        = scaled(gallery, 18);
-  cardHeight = scaled(gallery, 278);
-  available  = client->right - client->left - margin * 2 - gap * 2;
-  cardWidth  = available / 3;
-  column     = (int)(index % 3u);
-  row        = (int)(index / 3u);
-  offset     = scaled(gallery, 92) - gallery->scroll;
+  gallery_layout(gallery, client, &layout);
+  column = (int)(index % (size_t)layout.columns);
+  row    = (int)(index / (size_t)layout.columns);
 
-  outRect->left   = margin + column * (cardWidth + gap);
-  outRect->top    = offset + row * (cardHeight + gap);
-  outRect->right  = outRect->left + cardWidth;
-  outRect->bottom = outRect->top + cardHeight;
+  outRect->left = layout.margin +
+                  column * (layout.cardWidth + layout.gap);
+  outRect->top    = layout.offset +
+                    row * (layout.cardHeight + layout.gap);
+  outRect->right  = outRect->left + layout.cardWidth;
+  outRect->bottom = outRect->top + layout.cardHeight;
 }
 
 static int
-content_height(const GPUGallery *gallery) {
-  size_t rows;
+content_height(const GPUGallery *gallery, const RECT *client) {
+  GPUGalleryLayout layout;
+  size_t           rows;
 
-  rows = (gpuNativeSampleCount + 2u) / 3u;
+  gallery_layout(gallery, client, &layout);
+  rows = (gpuNativeSampleCount + (size_t)layout.columns - 1u) /
+         (size_t)layout.columns;
   return scaled(gallery, 92 + 28) +
-         (int)rows * scaled(gallery, 278) +
-         (rows > 0u ? (int)(rows - 1u) * scaled(gallery, 18) : 0);
+         (int)rows * layout.cardHeight +
+         (rows > 0u ? (int)(rows - 1u) * layout.gap : 0);
 }
 
 static void
@@ -178,7 +323,7 @@ update_scroll(GPUGallery *gallery) {
       !GetClientRect(gallery->window, &client)) {
     return;
   }
-  gallery->scrollMax = content_height(gallery) - client.bottom;
+  gallery->scrollMax = content_height(gallery, &client) - client.bottom;
   if (gallery->scrollMax < 0) {
     gallery->scrollMax = 0;
   }
@@ -189,7 +334,7 @@ update_scroll(GPUGallery *gallery) {
   info.cbSize = sizeof(info);
   info.fMask  = SIF_PAGE | SIF_POS | SIF_RANGE;
   info.nMin   = 0;
-  info.nMax   = content_height(gallery);
+  info.nMax   = content_height(gallery, &client);
   info.nPage  = (UINT)client.bottom;
   info.nPos   = gallery->scroll;
   SetScrollInfo(gallery->window, SB_VERT, &info, TRUE);
@@ -349,7 +494,8 @@ paint_gallery(GPUGallery *gallery, HDC context) {
 
     preview = card;
     InflateRect(&preview, -scaled(gallery, 12), -scaled(gallery, 12));
-    preview.bottom = preview.top + scaled(gallery, 212);
+    preview.bottom = preview.top +
+                     (preview.right - preview.left) * 9 / 16;
     FillRect(context, &preview, previewBrush);
     if (gallery->previews) {
       draw_preview(context, &gallery->previews[i], &preview);
@@ -375,6 +521,58 @@ paint_gallery(GPUGallery *gallery, HDC context) {
   DeleteObject(previewBrush);
   DeleteObject(cardBrush);
   DeleteObject(background);
+}
+
+static bool
+ensure_backbuffer(GPUGallery *gallery,
+                  HDC         reference,
+                  int         width,
+                  int         height) {
+  HBITMAP bitmap, replaced;
+
+  if (!gallery || !reference || width <= 0 || height <= 0) {
+    return false;
+  }
+  if (gallery->backContext && gallery->backBitmap &&
+      gallery->backWidth == width && gallery->backHeight == height) {
+    return true;
+  }
+  if (!gallery->backContext) {
+    gallery->backContext = CreateCompatibleDC(reference);
+    if (!gallery->backContext) {
+      return false;
+    }
+  }
+  bitmap = CreateCompatibleBitmap(reference, width, height);
+  if (!bitmap) {
+    return false;
+  }
+  replaced = SelectObject(gallery->backContext, bitmap);
+  if (!gallery->backDefaultBitmap) {
+    gallery->backDefaultBitmap = replaced;
+  }
+  DeleteObject(gallery->backBitmap);
+  gallery->backBitmap = bitmap;
+  gallery->backWidth  = width;
+  gallery->backHeight = height;
+  return true;
+}
+
+static void
+free_backbuffer(GPUGallery *gallery) {
+  if (!gallery || !gallery->backContext) {
+    return;
+  }
+  if (gallery->backDefaultBitmap) {
+    SelectObject(gallery->backContext, gallery->backDefaultBitmap);
+  }
+  DeleteObject(gallery->backBitmap);
+  DeleteDC(gallery->backContext);
+  gallery->backDefaultBitmap = NULL;
+  gallery->backBitmap        = NULL;
+  gallery->backContext       = NULL;
+  gallery->backWidth         = 0;
+  gallery->backHeight        = 0;
 }
 
 static int
@@ -524,8 +722,7 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
     case WM_DPICHANGED: {
       const RECT *suggested;
 
-      gallery->scale = (float)HIWORD(wParam) / 96.0f;
-      suggested      = (const RECT *)lParam;
+      suggested = (const RECT *)lParam;
       SetWindowPos(window,
                    NULL,
                    suggested->left,
@@ -533,7 +730,10 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
                    suggested->right - suggested->left,
                    suggested->bottom - suggested->top,
                    SWP_NOACTIVATE | SWP_NOZORDER);
+      gallery->scale = display_scale(window, HIWORD(wParam));
+      create_fonts(gallery);
       update_scroll(gallery);
+      InvalidateRect(window, NULL, FALSE);
       return 0;
     }
     case WM_VSCROLL: {
@@ -614,9 +814,27 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
     case WM_PAINT: {
       PAINTSTRUCT paint;
       HDC         context;
+      RECT        client;
 
       context = BeginPaint(window, &paint);
-      paint_gallery(gallery, context);
+      GetClientRect(window, &client);
+      if (ensure_backbuffer(gallery,
+                            context,
+                            client.right,
+                            client.bottom)) {
+        paint_gallery(gallery, gallery->backContext);
+        BitBlt(context,
+               0,
+               0,
+               client.right,
+               client.bottom,
+               gallery->backContext,
+               0,
+               0,
+               SRCCOPY);
+      } else {
+        paint_gallery(gallery, context);
+      }
       EndPaint(window, &paint);
       return 0;
     }
@@ -659,6 +877,37 @@ create_child_job(void) {
   return job;
 }
 
+static void
+initial_window_bounds(DWORD style, RECT *bounds) {
+  RECT work;
+  UINT dpi;
+  int  width, height;
+
+  if (!bounds) {
+    return;
+  }
+  if (!monitor_work_area(NULL, &work)) {
+    work.left   = 0;
+    work.top    = 0;
+    work.right  = GetSystemMetrics(SM_CXSCREEN);
+    work.bottom = GetSystemMetrics(SM_CYSCREEN);
+  }
+  dpi            = GetDpiForSystem();
+  bounds->left   = 0;
+  bounds->top    = 0;
+  bounds->right  = (work.right - work.left) * 84 / 100;
+  bounds->bottom = (work.bottom - work.top) * 86 / 100;
+  if (!AdjustWindowRectExForDpi(bounds, style, FALSE, 0u, dpi)) {
+    AdjustWindowRectEx(bounds, style, FALSE, 0u);
+  }
+  width          = bounds->right - bounds->left;
+  height         = bounds->bottom - bounds->top;
+  bounds->left   = work.left + ((work.right - work.left) - width) / 2;
+  bounds->top    = work.top + ((work.bottom - work.top) - height) / 2;
+  bounds->right  = bounds->left + width;
+  bounds->bottom = bounds->top + height;
+}
+
 int WINAPI
 wWinMain(HINSTANCE instance,
          HINSTANCE previousInstance,
@@ -670,42 +919,23 @@ wWinMain(HINSTANCE instance,
   RECT                 bounds;
   HWND                 window;
   MSG                  message;
+  DWORD                style;
+  UINT                 dpi;
 
   (void)previousInstance;
   (void)commandLine;
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-  gallery.scale   = 1.0f;
+  dpi             = GetDpiForSystem();
+  gallery.scale   = display_scale(NULL, dpi);
   gallery.hovered = -1;
   gallery.status  = "Direct3D 12";
   gallery.job     = create_child_job();
-  gallery.titleFont = CreateFontW(-28,
-                                  0,
-                                  0,
-                                  0,
-                                  FW_EXTRABOLD,
-                                  FALSE,
-                                  FALSE,
-                                  FALSE,
-                                  DEFAULT_CHARSET,
-                                  OUT_DEFAULT_PRECIS,
-                                  CLIP_DEFAULT_PRECIS,
-                                  CLEARTYPE_QUALITY,
-                                  DEFAULT_PITCH,
-                                  L"Segoe UI");
-  gallery.bodyFont = CreateFontW(-18,
-                                 0,
-                                 0,
-                                 0,
-                                 FW_SEMIBOLD,
-                                 FALSE,
-                                 FALSE,
-                                 FALSE,
-                                 DEFAULT_CHARSET,
-                                 OUT_DEFAULT_PRECIS,
-                                 CLIP_DEFAULT_PRECIS,
-                                 CLEARTYPE_QUALITY,
-                                 DEFAULT_PITCH,
-                                 L"Segoe UI");
+  if (!create_fonts(&gallery)) {
+    if (gallery.job) {
+      CloseHandle(gallery.job);
+    }
+    return 1;
+  }
 
   windowClass.cbSize        = sizeof(windowClass);
   windowClass.style         = CS_HREDRAW | CS_VREDRAW;
@@ -713,27 +943,26 @@ wWinMain(HINSTANCE instance,
   windowClass.hInstance     = instance;
   windowClass.hCursor       = LoadCursorW(NULL,
                                          MAKEINTRESOURCEW(32512));
-  windowClass.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+  windowClass.hbrBackground = NULL;
   windowClass.lpszClassName = className;
   if (!RegisterClassExW(&windowClass) &&
       GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+    if (gallery.job) {
+      CloseHandle(gallery.job);
+    }
+    DeleteObject(gallery.bodyFont);
+    DeleteObject(gallery.titleFont);
     return 1;
   }
 
-  bounds.left   = 0;
-  bounds.top    = 0;
-  bounds.right  = 1240;
-  bounds.bottom = 840;
-  AdjustWindowRectEx(&bounds,
-                     WS_OVERLAPPEDWINDOW | WS_VSCROLL,
-                     FALSE,
-                     0u);
+  style = WS_OVERLAPPEDWINDOW | WS_VSCROLL;
+  initial_window_bounds(style, &bounds);
   window = CreateWindowExW(0u,
                            className,
                            L"GPU + USL Samples",
-                           WS_OVERLAPPEDWINDOW | WS_VSCROLL,
-                           CW_USEDEFAULT,
-                           CW_USEDEFAULT,
+                           style,
+                           bounds.left,
+                           bounds.top,
                            bounds.right - bounds.left,
                            bounds.bottom - bounds.top,
                            NULL,
@@ -741,9 +970,15 @@ wWinMain(HINSTANCE instance,
                            instance,
                            &gallery);
   if (!window) {
+    if (gallery.job) {
+      CloseHandle(gallery.job);
+    }
+    DeleteObject(gallery.bodyFont);
+    DeleteObject(gallery.titleFont);
     return 1;
   }
-  gallery.scale = (float)GetDpiForWindow(window) / 96.0f;
+  gallery.scale = display_scale(window, GetDpiForWindow(window));
+  create_fonts(&gallery);
   update_scroll(&gallery);
   ShowWindow(window, showCommand);
   UpdateWindow(window);
@@ -759,6 +994,7 @@ wWinMain(HINSTANCE instance,
   if (gallery.job) {
     CloseHandle(gallery.job);
   }
+  free_backbuffer(&gallery);
   free_previews(&gallery);
   DeleteObject(gallery.bodyFont);
   DeleteObject(gallery.titleFont);

@@ -22,6 +22,94 @@ typedef struct GPUWin32Host {
   bool            running;
 } GPUWin32Host;
 
+static bool
+monitor_work_area(HWND window, RECT *work) {
+  MONITORINFO monitorInfo = {0};
+  HMONITOR    monitor;
+  POINT       origin = {0};
+
+  if (!work) {
+    return false;
+  }
+  monitor = window
+              ? MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST)
+              : MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
+  if (!monitor) {
+    return false;
+  }
+  monitorInfo.cbSize = sizeof(monitorInfo);
+  if (!GetMonitorInfoW(monitor, &monitorInfo)) {
+    return false;
+  }
+  *work = monitorInfo.rcWork;
+  return true;
+}
+
+static float
+display_scale(HWND window, UINT dpi) {
+  RECT  work;
+  float dpiScale, resolutionScaleX, resolutionScaleY, resolutionScale;
+
+  dpiScale = (float)dpi / 96.0f;
+  if (!monitor_work_area(window, &work)) {
+    return dpiScale;
+  }
+  resolutionScaleX = (float)(work.right - work.left) / 1920.0f;
+  resolutionScaleY = (float)(work.bottom - work.top) / 1080.0f;
+  resolutionScale  = resolutionScaleX < resolutionScaleY
+                       ? resolutionScaleX
+                       : resolutionScaleY;
+  if (resolutionScale > dpiScale) {
+    dpiScale = resolutionScale;
+  }
+  if (dpiScale < 1.0f) {
+    dpiScale = 1.0f;
+  } else if (dpiScale > 2.0f) {
+    dpiScale = 2.0f;
+  }
+  return dpiScale;
+}
+
+static void
+initial_window_bounds(DWORD style, RECT *bounds) {
+  RECT work;
+  UINT dpi;
+  int  clientWidth, clientHeight, maxHeight;
+  int  width, height;
+
+  if (!bounds) {
+    return;
+  }
+  if (!monitor_work_area(NULL, &work)) {
+    work.left   = 0;
+    work.top    = 0;
+    work.right  = GetSystemMetrics(SM_CXSCREEN);
+    work.bottom = GetSystemMetrics(SM_CYSCREEN);
+  }
+  clientWidth  = (work.right - work.left) * 72 / 100;
+  clientHeight = clientWidth * 10 / 16;
+  maxHeight    = (work.bottom - work.top) * 78 / 100;
+  if (clientHeight > maxHeight) {
+    clientHeight = maxHeight;
+    clientWidth  = clientHeight * 16 / 10;
+  }
+
+  dpi            = GetDpiForSystem();
+  bounds->left   = 0;
+  bounds->top    = 0;
+  bounds->right  = clientWidth;
+  bounds->bottom = clientHeight;
+  if (!AdjustWindowRectExForDpi(bounds, style, FALSE, 0u, dpi)) {
+    AdjustWindowRectEx(bounds, style, FALSE, 0u);
+  }
+  width          = bounds->right - bounds->left;
+  height         = bounds->bottom - bounds->top;
+  bounds->left   = work.left + ((work.right - work.left) - width) / 2;
+  bounds->top    = work.top + ((work.bottom - work.top) - height) / 2;
+  bounds->right  = bounds->left + width;
+  bounds->bottom = bounds->top + height;
+}
+
 static LRESULT CALLBACK
 window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
   GPUWin32Host *host;
@@ -45,6 +133,20 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
         host->window.height = HIWORD(lParam);
       }
       return 0;
+    case WM_DPICHANGED: {
+      const RECT *suggested;
+
+      suggested = (const RECT *)lParam;
+      SetWindowPos(window,
+                   NULL,
+                   suggested->left,
+                   suggested->top,
+                   suggested->right - suggested->left,
+                   suggested->bottom - suggested->top,
+                   SWP_NOACTIVATE | SWP_NOZORDER);
+      host->window.scale = display_scale(window, HIWORD(wParam));
+      return 0;
+    }
     case WM_LBUTTONDOWN:
       SetCapture(window);
       sample_orbit_pointer_begin((float)GET_X_LPARAM(lParam),
@@ -90,9 +192,11 @@ wWinMain(HINSTANCE instance,
   WNDCLASSEXW          windowClass = {0};
   GPUWin32Host         host = {0};
   RECT                 bounds;
+  RECT                 client;
   HWND                 window;
   MSG                  message;
   int                  result;
+  DWORD                style;
 
   (void)previousInstance;
   (void)commandLine;
@@ -111,17 +215,14 @@ wWinMain(HINSTANCE instance,
     return 1;
   }
 
-  bounds.left   = 0;
-  bounds.top    = 0;
-  bounds.right  = 1120;
-  bounds.bottom = 720;
-  AdjustWindowRectEx(&bounds, WS_OVERLAPPEDWINDOW, FALSE, 0u);
+  style = WS_OVERLAPPEDWINDOW;
+  initial_window_bounds(style, &bounds);
   window = CreateWindowExW(0u,
                            className,
                            L"GPU + USL Sample",
-                           WS_OVERLAPPEDWINDOW,
-                           CW_USEDEFAULT,
-                           CW_USEDEFAULT,
+                           style,
+                           bounds.left,
+                           bounds.top,
                            bounds.right - bounds.left,
                            bounds.bottom - bounds.top,
                            NULL,
@@ -133,9 +234,10 @@ wWinMain(HINSTANCE instance,
   }
 
   host.window.handle = window;
-  host.window.width  = 1120u;
-  host.window.height = 720u;
-  host.window.scale  = (float)GetDpiForWindow(window) / 96.0f;
+  GetClientRect(window, &client);
+  host.window.width  = (uint32_t)client.right;
+  host.window.height = (uint32_t)client.bottom;
+  host.window.scale  = display_scale(window, GetDpiForWindow(window));
   host.running       = true;
 
   {
