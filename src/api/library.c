@@ -1070,6 +1070,9 @@ gpu_bindingLayoutFromUSLResource(const USLRuntimeResource     *resource,
       }
       out->storageTexture.format =
         gpu_storageTextureFormatFromUSL(resource->type.texel_format);
+      if (out->storageTexture.format == GPU_FORMAT_UNDEFINED) {
+        return 0;
+      }
       out->storageTexture.access =
         gpu_storageTextureAccessFromUSL(resource->type.image_access);
       return 1;

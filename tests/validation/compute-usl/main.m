@@ -147,6 +147,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
 - (BOOL)setupGPU {
   GPUBindGroupEntry groupEntries[3] = {0};
+  GPUResult         bindGroupResult;
 
   if (!GPUSampleCreateDefaultSurfaceGPU(_window,
                                         _view,
@@ -176,8 +177,9 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
   {
     const GPUBindGroupLayoutEntry *entries;
-    uint32_t entryCount = 0u;
-    BOOL sawDynamicUniform = NO;
+    uint32_t                       entryCount = 0u;
+    BOOL                           sawDynamicUniform = NO;
+    BOOL                           sawStorageTexture = NO;
 
     entries = GPUGetBindGroupLayoutEntries(_shaderLayout->bindGroupLayouts[0],
                                            &entryCount);
@@ -187,11 +189,23 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
           entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER &&
           entries[i].hasDynamicOffset) {
         sawDynamicUniform = YES;
-        break;
+      }
+      if ((entries[i].visibility & GPU_SHADER_STAGE_COMPUTE_BIT) != 0u &&
+          entries[i].binding == 0u &&
+          entries[i].bindingType == GPU_BINDING_STORAGE_TEXTURE &&
+          entries[i].storageTexture.viewType == GPU_TEXTURE_VIEW_2D &&
+          entries[i].storageTexture.format == GPU_FORMAT_RGBA8_UNORM &&
+          entries[i].storageTexture.access ==
+            GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY) {
+        sawStorageTexture = YES;
       }
     }
     if (!sawDynamicUniform) {
       NSLog(@"GPU: compute uniform reflection is not dynamic-offset capable");
+      return NO;
+    }
+    if (!sawStorageTexture) {
+      NSLog(@"GPU: compute storage texture reflection is not rgba8unorm write-only");
       return NO;
     }
   }
@@ -346,8 +360,9 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .entryCount = 3,
     .pEntries = groupEntries
   };
-  if (GPUCreateBindGroup(_device, &group0Info, &_bindGroup) != GPU_OK) {
-    NSLog(@"GPU: failed to create bind group");
+  bindGroupResult = GPUCreateBindGroup(_device, &group0Info, &_bindGroup);
+  if (bindGroupResult != GPU_OK) {
+    NSLog(@"GPU: failed to create bind group (%d)", bindGroupResult);
     return NO;
   }
 
@@ -712,11 +727,15 @@ cleanup:
   _assertZeroAlloc = GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
 
   if (![self setupWindow]) {
+    _validationFailed = YES;
+    gComputeUSLValidationFailed = 1;
     [NSApp terminate:nil];
     return;
   }
 
   if (![self setupGPU]) {
+    _validationFailed = YES;
+    gComputeUSLValidationFailed = 1;
     [NSApp terminate:nil];
     return;
   }
