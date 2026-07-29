@@ -1,6 +1,7 @@
 if(GPU_BUILD_SAMPLES AND
    ((GPU_BUILD_WEBGPU AND EMSCRIPTEN) OR
     (WIN32 AND GPU_BUILD_DX12) OR
+    (UNIX AND NOT APPLE AND GPU_BUILD_VULKAN) OR
     (APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" AND
      (GPU_BUILD_METAL OR GPU_BUILD_VULKAN))))
   find_path(GPU_CGLM_INCLUDE_DIR
@@ -31,6 +32,10 @@ endif()
 
 if(GPU_BUILD_ANDROID_SAMPLES)
   include(cmake/android.cmake)
+endif()
+
+if(GPU_BUILD_SAMPLES AND UNIX AND NOT APPLE AND GPU_BUILD_VULKAN)
+  include(cmake/linux.cmake)
 endif()
 
 function(gpu_gallery_sample sampleDir)
@@ -118,6 +123,10 @@ function(gpu_gallery_sample sampleDir)
     endif()
     gpu_apple_gallery_sample("${sampleDir}" ${appleOptions})
   endif()
+
+  if(GPU_BUILD_SAMPLES AND UNIX AND NOT APPLE AND GPU_BUILD_VULKAN)
+    gpu_linux_gallery_sample("${sampleDir}" ${ARGN})
+  endif()
 endfunction()
 
 set(galleryOptions_assetkit_damaged_helmet
@@ -138,12 +147,36 @@ set(galleryOptions_subgroup
   CAPS subgroup=subgroup
 )
 
-file(GLOB galleryMainSources
+set(galleryCatalog "${CMAKE_CURRENT_SOURCE_DIR}/catalog.json")
+set_property(DIRECTORY APPEND PROPERTY
+  CMAKE_CONFIGURE_DEPENDS "${galleryCatalog}")
+file(READ "${galleryCatalog}" galleryCatalogJson)
+string(JSON gallerySampleCount LENGTH "${galleryCatalogJson}")
+
+file(GLOB galleryDiscoveredSources
   CONFIGURE_DEPENDS
   RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/gallery/*/main.c"
 )
-list(SORT galleryMainSources)
+list(LENGTH galleryDiscoveredSources galleryDiscoveredCount)
+if(NOT galleryDiscoveredCount EQUAL gallerySampleCount)
+  message(FATAL_ERROR
+    "samples/catalog.json and samples/gallery are inconsistent")
+endif()
+
+set(galleryMainSources)
+if(gallerySampleCount GREATER 0)
+  math(EXPR galleryLastSample "${gallerySampleCount} - 1")
+  foreach(galleryIndex RANGE ${galleryLastSample})
+    string(JSON sampleId GET "${galleryCatalogJson}" ${galleryIndex} id)
+    set(mainSource "gallery/${sampleId}/main.c")
+    if(NOT mainSource IN_LIST galleryDiscoveredSources)
+      message(FATAL_ERROR
+        "samples/catalog.json references missing sample ${sampleId}")
+    endif()
+    list(APPEND galleryMainSources "${mainSource}")
+  endforeach()
+endif()
 
 foreach(mainSource IN LISTS galleryMainSources)
   get_filename_component(entry "${mainSource}" DIRECTORY)
@@ -161,6 +194,10 @@ endif()
 
 if(GPU_BUILD_ANDROID_SAMPLES)
   include(cmake/android_finalize.cmake)
+endif()
+
+if(GPU_BUILD_SAMPLES AND UNIX AND NOT APPLE AND GPU_BUILD_VULKAN)
+  include(cmake/linux_finalize.cmake)
 endif()
 
 if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
