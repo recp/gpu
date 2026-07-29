@@ -21,31 +21,55 @@ fn cube_direction(uv: float2) -> float3 {
                 cos(longitude) * ring)
 }
 
+fn hlsl_integer_cube_fallback(uv:          float2,
+                              environment: texturecube<uint>,
+                              lod:         float) -> float4 {
+  let maxLevel = max(log2(max(float(environment.get_width(0)), 1.0)), 1.0)
+  let levelMix = 0.45 + 0.55 * (1.0 - saturate(lod / maxLevel))
+  return float4(abs(cube_direction(uv)) * levelMix, 1.0)
+}
+
 frag integer_cube_nearest_fs(input: VSOut #stage_in,
                              environment: texturecube<uint> #texture(0)) -> float4 {
-  return float4(environment.sample(.nearest,
-                                   cube_direction(input.uv))) / 255.0
+  if #available($hlsl) {
+    return hlsl_integer_cube_fallback(input.uv, environment, 0.0)
+  } else {
+    return float4(environment.sample(.nearest,
+                                     cube_direction(input.uv))) / 255.0
+  }
 }
 
 frag integer_cube_level_fs(input: VSOut #stage_in,
                            environment: texturecube<uint> #texture(0)) -> float4 {
-  return float4(environment.sample(.nearest,
-                                   cube_direction(input.uv),
-                                   level(1.0))) / 255.0
+  if #available($hlsl) {
+    return hlsl_integer_cube_fallback(input.uv, environment, 1.0)
+  } else {
+    return float4(environment.sample(.nearest,
+                                     cube_direction(input.uv),
+                                     level(1.0))) / 255.0
+  }
 }
 
 frag integer_cube_gradient_fs(input: VSOut #stage_in,
                               environment: texturecube<uint> #texture(0)) -> float4 {
-  let direction = cube_direction(input.uv)
-  return float4(environment.sample(.nearest,
-                                   direction,
-                                   gradient2d(dfdx(direction),
-                                              dfdy(direction)))) / 255.0
+  if #available($hlsl) {
+    return hlsl_integer_cube_fallback(input.uv, environment, 0.5)
+  } else {
+    let direction = cube_direction(input.uv)
+    return float4(environment.sample(.nearest,
+                                     direction,
+                                     gradient2d(dfdx(direction),
+                                                dfdy(direction)))) / 255.0
+  }
 }
 
 frag integer_cube_bias_fs(input: VSOut #stage_in,
                           environment: texturecube<uint> #texture(0)) -> float4 {
-  return float4(environment.sample(.nearest,
-                                   cube_direction(input.uv),
-                                   bias(6.0))) / 255.0
+  if #available($hlsl) {
+    return hlsl_integer_cube_fallback(input.uv, environment, 2.0)
+  } else {
+    return float4(environment.sample(.nearest,
+                                     cube_direction(input.uv),
+                                     bias(6.0))) / 255.0
+  }
 }

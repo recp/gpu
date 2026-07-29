@@ -161,6 +161,26 @@ gpu_android_set_scissor(GPURenderPassEncoder *pass,
 #define GPUCreateSurfaceFromNative gpu_linux_sample_create_surface
 #define GPUCreateSwapchainDefault gpu_linux_sample_create_swapchain
 
+#elif defined(GPU_SAMPLE_GALLERY_WINDOWS)
+
+#include "win32.h"
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+
+#define emscripten_set_main_loop_arg(callback, userData, fps, simulate) \
+  gpu_win32_set_main_loop((callback), (userData), (fps), (simulate))
+#define emscripten_cancel_main_loop() gpu_win32_cancel_main_loop()
+#define emscripten_get_now() gpu_win32_get_now()
+#define emscripten_get_preloaded_image_data(path, width, height) \
+  gpu_win32_load_image((path), (width), (height))
+
+#define GPUCreateInstance gpu_win32_sample_create_instance
+#define GPUCreateSurfaceFromNative gpu_win32_sample_create_surface
+#define GPUCreateSwapchainDefault gpu_win32_sample_create_swapchain
+
 #else
 
 #include "webgpu.h"

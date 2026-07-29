@@ -38,6 +38,10 @@ if(GPU_BUILD_SAMPLES AND UNIX AND NOT APPLE AND GPU_BUILD_VULKAN)
   include(cmake/linux.cmake)
 endif()
 
+if(GPU_BUILD_SAMPLES AND WIN32 AND GPU_BUILD_DX12)
+  include(cmake/windows.cmake)
+endif()
+
 function(gpu_gallery_sample sampleDir)
   set(options ASSETKIT USES_STDLIB)
   set(multiValueArgs CAPS FALLBACK_CAPS)
@@ -127,6 +131,10 @@ function(gpu_gallery_sample sampleDir)
   if(GPU_BUILD_SAMPLES AND UNIX AND NOT APPLE AND GPU_BUILD_VULKAN)
     gpu_linux_gallery_sample("${sampleDir}" ${ARGN})
   endif()
+
+  if(GPU_BUILD_SAMPLES AND WIN32 AND GPU_BUILD_DX12)
+    gpu_windows_gallery_sample("${sampleDir}" ${ARGN})
+  endif()
 endfunction()
 
 set(galleryOptions_assetkit_damaged_helmet
@@ -198,6 +206,10 @@ endif()
 
 if(GPU_BUILD_SAMPLES AND UNIX AND NOT APPLE AND GPU_BUILD_VULKAN)
   include(cmake/linux_finalize.cmake)
+endif()
+
+if(GPU_BUILD_SAMPLES AND WIN32 AND GPU_BUILD_DX12)
+  include(cmake/windows_finalize.cmake)
 endif()
 
 if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)

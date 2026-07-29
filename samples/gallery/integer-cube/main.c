@@ -59,8 +59,8 @@ resize_canvas(WebGPUIntegerCube *state) {
 }
 
 static uint8_t
-darken_channel(uint8_t value, uint8_t amount) {
-  return value > amount ? value - amount : value / 2u;
+darken_channel(uint8_t value, uint32_t amount) {
+  return (uint8_t)(value > amount ? value - amount : value / 2u);
 }
 
 static void
@@ -402,7 +402,11 @@ webgpu_ready(GPUResult  result,
     return;
   }
 
+#if defined(GPU_SAMPLE_GALLERY_WINDOWS)
+  set_status("GPU: DX12 integer cube visual fallback ready", 0);
+#else
   set_status("GPU: WebGPU USL integer cube ready", 0);
+#endif
   emscripten_set_main_loop_arg(render_frame, state, 0, true);
 }
 
