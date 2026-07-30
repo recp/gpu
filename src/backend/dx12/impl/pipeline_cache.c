@@ -20,6 +20,8 @@
 #include "../../../api/pipeline_cache_internal.h"
 #include "pipeline_cache.h"
 
+#include <d3d12sdklayers.h>
+
 #define DX12_PIPELINE_KEY_VERSION   1u
 #define DX12_PIPELINE_CACHE_MAGIC   0x43584447u
 #define DX12_PIPELINE_CACHE_VERSION 2u
@@ -73,6 +75,52 @@ dx12__nativeCache(GPUPipelineCache *cache) {
 
 static void
 dx12__mergeStoredCache(DX12PipelineCache *native);
+
+#if GPU_BUILD_WITH_VALIDATION
+static void
+dx12__logPipelineMessages(GPUDeviceDX12 *device) {
+  ID3D12InfoQueue *infoQueue;
+  D3D12_MESSAGE   *message;
+  UINT64           messageCount;
+  UINT64           firstMessage;
+
+  infoQueue = NULL;
+  if (!device || !device->d3dDevice ||
+      FAILED(device->d3dDevice->lpVtbl->QueryInterface(
+        device->d3dDevice,
+        &IID_ID3D12InfoQueue,
+        (void **)&infoQueue
+      ))) {
+    return;
+  }
+
+  messageCount = infoQueue->lpVtbl->GetNumStoredMessages(infoQueue);
+  firstMessage = messageCount > 16u ? messageCount - 16u : 0u;
+  for (UINT64 i = firstMessage; i < messageCount; i++) {
+    SIZE_T messageBytes;
+
+    messageBytes = 0u;
+    if (FAILED(infoQueue->lpVtbl->GetMessage(infoQueue,
+                                             i,
+                                             NULL,
+                                             &messageBytes)) ||
+        messageBytes == 0u || !(message = malloc(messageBytes))) {
+      continue;
+    }
+    if (SUCCEEDED(infoQueue->lpVtbl->GetMessage(infoQueue,
+                                                i,
+                                                message,
+                                                &messageBytes))) {
+      fprintf(stderr, "GPU Direct3D 12: %s\n", message->pDescription);
+    }
+    free(message);
+  }
+  infoQueue->lpVtbl->ClearStoredMessages(infoQueue);
+  infoQueue->lpVtbl->Release(infoQueue);
+}
+#else
+#  define dx12__logPipelineMessages(device) ((void)0)
+#endif
 
 GPU_HIDE
 void
@@ -955,6 +1003,12 @@ dx12_createGraphicsPSO(GPUPipelineCache                          *cache,
     (void **)outState
   );
   if (FAILED(result) || !*outState) {
+#if GPU_BUILD_WITH_VALIDATION
+    fprintf(stderr,
+            "GPU Direct3D 12 render pipeline create failed: 0x%08lx\n",
+            (unsigned long)result);
+#endif
+    dx12__logPipelineMessages(device);
     return GPU_ERROR_BACKEND_FAILURE;
   }
   if (native) {
@@ -1039,6 +1093,7 @@ dx12_createComputePSO(GPUPipelineCache                         *cache,
             "GPU Direct3D 12 compute pipeline create failed: 0x%08lx\n",
             (unsigned long)result);
 #endif
+    dx12__logPipelineMessages(device);
     return GPU_ERROR_BACKEND_FAILURE;
   }
   if (native) {
@@ -1134,6 +1189,7 @@ dx12_createMeshPSO(GPUPipelineCache                        *cache,
     (void **)outState
   );
   if (FAILED(result) || !*outState) {
+    dx12__logPipelineMessages(device);
     return GPU_ERROR_BACKEND_FAILURE;
   }
   if (native) {

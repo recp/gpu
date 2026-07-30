@@ -461,6 +461,7 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
            0,
            sizeof(pass->_boundDynamicOffsetCounts));
   }
+  pass->_pipelineLayout = pipeline->_layout;
 
   state = pipeline->_state;
   api->compute.setComputePipelineState(pass, state);
@@ -468,7 +469,6 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
   pass->_hasPipeline             = true;
   pass->_executionGraph          = false;
   pass->_pipeline                = pipeline;
-  pass->_pipelineLayout          = pipeline->_layout;
   pass->_requiredBindGroupMask   = pipeline->_requiredBindGroupMask;
   pass->_pushConstantSizeBytes   = pipeline->_pushConstantSizeBytes;
   pass->_pushConstantStages      = pipeline->_pushConstantStages &

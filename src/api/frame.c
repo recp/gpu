@@ -97,6 +97,9 @@ GPUBeginFrame(GPUSwapchain* swapchain) {
     if (frame->target) {
       frame->target->device = frame->device;
     }
+    if (frame->targetView && frame->target) {
+      frame->targetView->_texture = frame->target;
+    }
     frame->transientFrameIndex  = device->transientFrameIndex;
     frame->transientFrameActive = device->transientConfigured;
     if (!device->runtimeConfig.enableStats ||

@@ -669,6 +669,8 @@ if(GPU_BUILD_TESTS)
   )
   if(NOT MSVC)
     target_compile_options(gpu-api-test PRIVATE -Wall -Wextra -Werror)
+  else()
+    target_compile_options(gpu-api-test PRIVATE /experimental:c11atomics)
   endif()
   if(NOT WIN32)
     target_compile_definitions(gpu-api-test PRIVATE

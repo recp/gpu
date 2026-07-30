@@ -775,11 +775,11 @@ dx12__compileLegacy(const char     *source,
 
 GPU_HIDE
 bool
-dx12_compileShader(GPUDeviceDX12        *device,
-                   GPUShaderLibraryDX12 *library,
-                   const char           *entry,
-                   GPUShaderStageFlags   stage,
-                   DX12ShaderCode       *outCode) {
+dx12_compileShader(GPUDeviceDX12      *device,
+                   GPUShaderLibrary   *library,
+                   const char         *entry,
+                   GPUShaderStageFlags stage,
+                   DX12ShaderCode     *outCode) {
   static const wchar_t *dxcPrefixes[GPU_SHADER_STAGE_MESH_BIT + 1u] = {
     [GPU_SHADER_STAGE_VERTEX_BIT]   = L"vs",
     [GPU_SHADER_STAGE_FRAGMENT_BIT] = L"ps",
@@ -792,19 +792,39 @@ dx12_compileShader(GPUDeviceDX12        *device,
     [GPU_SHADER_STAGE_FRAGMENT_BIT] = "ps_5_1",
     [GPU_SHADER_STAGE_COMPUTE_BIT]  = "cs_5_1"
   };
-  wchar_t        dxcProfile[16];
-  DX12ShaderCode compiled;
-  uint32_t       minimumMinor;
-  bool           success;
+  GPUShaderLibraryDX12 *native;
+  GPUShaderSourceBlob   selectedSource;
+  DX12ShaderCode        compiled;
+  const char           *source;
+  uint64_t              sourceSize;
+  wchar_t               dxcProfile[16];
+  uint32_t              minimumMinor;
+  GPUResult             sourceResult;
+  bool                  success;
 
-  if (!device || !library || !entry || !outCode ||
+  native = library ? library->_priv : NULL;
+  if (!device || !native || !native->source || native->sourceSize == 0u ||
+      !entry || !outCode || stage == 0u || (stage & (stage - 1u)) != 0u ||
       stage >= GPU_ARRAY_LEN(dxcPrefixes) || !dxcPrefixes[stage] ||
       (!device->dxcAvailable && !legacyProfiles[stage])) {
     return false;
   }
   memset(outCode, 0, sizeof(*outCode));
-  if (dx12__getCachedShader(library, entry, stage, outCode)) {
+  if (dx12__getCachedShader(native, entry, stage, outCode)) {
     return true;
+  }
+
+  memset(&selectedSource, 0, sizeof(selectedSource));
+  source       = native->source;
+  sourceSize   = native->sourceSize;
+  sourceResult = gpuCompileShaderLibraryEntry(library,
+                                              entry,
+                                              &selectedSource);
+  if (sourceResult == GPU_OK) {
+    source     = selectedSource.data;
+    sourceSize = selectedSource.size;
+  } else if (sourceResult != GPU_ERROR_UNSUPPORTED) {
+    return false;
   }
 
   memset(&compiled, 0, sizeof(compiled));
@@ -815,24 +835,26 @@ dx12_compileShader(GPUDeviceDX12        *device,
                               dxcPrefixes[stage],
                               minimumMinor,
                               dxcProfile)) {
+      gpuFreeShaderSourceBlob(&selectedSource);
       return false;
     }
     success = dx12__compileDXC(device,
-                              library->source,
-                              library->sourceSize,
+                              source,
+                              sourceSize,
                               entry,
                               dxcProfile,
                               device->shaderF16Enabled ||
                                 device->subgroupMatrixEnabled,
                               &compiled);
   } else {
-    success = dx12__compileLegacy(library->source,
-                                  library->sourceSize,
+    success = dx12__compileLegacy(source,
+                                  sourceSize,
                                   entry,
                                   legacyProfiles[stage],
                                   &compiled);
   }
-  return success && dx12__cacheShader(library,
+  gpuFreeShaderSourceBlob(&selectedSource);
+  return success && dx12__cacheShader(native,
                                       entry,
                                       stage,
                                       &compiled,
@@ -841,20 +863,32 @@ dx12_compileShader(GPUDeviceDX12        *device,
 
 GPU_HIDE
 bool
-dx12_compileRayLibrary(GPUDeviceDX12        *device,
-                       GPUShaderLibraryDX12 *library,
-                       DX12ShaderCode       *outCode) {
-  static const char cacheEntry[] = "$ray-library";
-  DX12ShaderCode    compiled;
-  wchar_t           profile[16];
-  bool              success;
+dx12_compileRayLibrary(GPUDeviceDX12    *device,
+                       GPUShaderLibrary *library,
+                       uint64_t          entryMask,
+                       DX12ShaderCode   *outCode) {
+  GPUShaderLibraryDX12 *native;
+  GPUShaderSourceBlob   selectedSource;
+  DX12ShaderCode        compiled;
+  char                  cacheEntry[64];
+  const char           *source;
+  uint64_t              sourceSize;
+  wchar_t               profile[16];
+  GPUResult             sourceResult;
+  bool                  success;
 
+  native = library ? library->_priv : NULL;
   if (!device || !device->rayTracingPipeline || !device->dxcAvailable ||
-      !library || !outCode) {
+      !native || !native->source || native->sourceSize == 0u ||
+      entryMask == 0u || !outCode ||
+      snprintf(cacheEntry,
+               sizeof(cacheEntry),
+               "$ray-library-%016llx",
+               (unsigned long long)entryMask) <= 0) {
     return false;
   }
   memset(outCode, 0, sizeof(*outCode));
-  if (dx12__getCachedShader(library,
+  if (dx12__getCachedShader(native,
                             cacheEntry,
                             GPU_SHADER_STAGE_RAY_GENERATION_BIT,
                             outCode)) {
@@ -867,16 +901,29 @@ dx12_compileRayLibrary(GPUDeviceDX12        *device,
                             profile)) {
     return false;
   }
+  memset(&selectedSource, 0, sizeof(selectedSource));
+  source       = native->source;
+  sourceSize   = native->sourceSize;
+  sourceResult = gpuCompileShaderLibraryEntryMask(library,
+                                                  entryMask,
+                                                  &selectedSource);
+  if (sourceResult == GPU_OK) {
+    source     = selectedSource.data;
+    sourceSize = selectedSource.size;
+  } else if (sourceResult != GPU_ERROR_UNSUPPORTED) {
+    return false;
+  }
   memset(&compiled, 0, sizeof(compiled));
   success = dx12__compileDXC(device,
-                            library->source,
-                            library->sourceSize,
+                            source,
+                            sourceSize,
                             NULL,
                             profile,
                             device->shaderF16Enabled ||
                               device->subgroupMatrixEnabled,
                             &compiled);
-  return success && dx12__cacheShader(library,
+  gpuFreeShaderSourceBlob(&selectedSource);
+  return success && dx12__cacheShader(native,
                                       cacheEntry,
                                       GPU_SHADER_STAGE_RAY_GENERATION_BIT,
                                       &compiled,
@@ -885,20 +932,33 @@ dx12_compileRayLibrary(GPUDeviceDX12        *device,
 
 GPU_HIDE
 bool
-dx12_compileExecutionGraphLibrary(GPUDeviceDX12        *device,
-                                   GPUShaderLibraryDX12 *library,
-                                   DX12ShaderCode       *outCode) {
-  static const char cacheEntry[] = "$execution-graph-library";
-  DX12ShaderCode    compiled;
-  wchar_t           profile[16];
-  bool              success;
+dx12_compileExecutionGraphLibrary(GPUDeviceDX12    *device,
+                                   GPUShaderLibrary *library,
+                                   uint64_t          entryMask,
+                                   DX12ShaderCode   *outCode) {
+  GPUShaderLibraryDX12 *native;
+  GPUShaderSourceBlob   selectedSource;
+  DX12ShaderCode        compiled;
+  char                  cacheEntry[64];
+  const char           *source;
+  uint64_t              sourceSize;
+  wchar_t               profile[16];
+  GPUResult             sourceResult;
+  bool                  success;
 
+  native = library ? library->_priv : NULL;
   if (!device || !device->executionGraph || !device->dxcAvailable ||
-      device->shaderModel < (D3D_SHADER_MODEL)0x68 || !library || !outCode) {
+      device->shaderModel < (D3D_SHADER_MODEL)0x68 || !native ||
+      !native->source || native->sourceSize == 0u ||
+      entryMask == 0u || !outCode ||
+      snprintf(cacheEntry,
+               sizeof(cacheEntry),
+               "$execution-graph-%016llx",
+               (unsigned long long)entryMask) <= 0) {
     return false;
   }
   memset(outCode, 0, sizeof(*outCode));
-  if (dx12__getCachedShader(library,
+  if (dx12__getCachedShader(native,
                             cacheEntry,
                             GPU_SHADER_STAGE_COMPUTE_BIT,
                             outCode)) {
@@ -911,16 +971,29 @@ dx12_compileExecutionGraphLibrary(GPUDeviceDX12        *device,
                             profile)) {
     return false;
   }
+  memset(&selectedSource, 0, sizeof(selectedSource));
+  source       = native->source;
+  sourceSize   = native->sourceSize;
+  sourceResult = gpuCompileShaderLibraryEntryMask(library,
+                                                  entryMask,
+                                                  &selectedSource);
+  if (sourceResult == GPU_OK) {
+    source     = selectedSource.data;
+    sourceSize = selectedSource.size;
+  } else if (sourceResult != GPU_ERROR_UNSUPPORTED) {
+    return false;
+  }
   memset(&compiled, 0, sizeof(compiled));
   success = dx12__compileDXC(device,
-                            library->source,
-                            library->sourceSize,
+                            source,
+                            sourceSize,
                             NULL,
                             profile,
                             device->shaderF16Enabled ||
                               device->subgroupMatrixEnabled,
                             &compiled);
-  return success && dx12__cacheShader(library,
+  gpuFreeShaderSourceBlob(&selectedSource);
+  return success && dx12__cacheShader(native,
                                       cacheEntry,
                                       GPU_SHADER_STAGE_COMPUTE_BIT,
                                       &compiled,
@@ -1281,7 +1354,7 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
     goto shader_failed;
   }
   if (!dx12_compileShader(deviceDX12,
-                          library,
+                          info->library,
                           info->fragmentEntry,
                           GPU_SHADER_STAGE_FRAGMENT_BIT,
                           &fragmentCode)) {
@@ -1291,7 +1364,7 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
     goto shader_failed;
   }
   if (!mesh && !dx12_compileShader(deviceDX12,
-                                   library,
+                                   info->library,
                                    info->vertexEntry,
                                    GPU_SHADER_STAGE_VERTEX_BIT,
                                    &vertexCode)) {
@@ -1302,7 +1375,7 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   }
   if (mesh && mesh->taskEntry &&
       !dx12_compileShader(deviceDX12,
-                          library,
+                          info->library,
                           mesh->taskEntry,
                           GPU_SHADER_STAGE_TASK_BIT,
                           &taskCode)) {
@@ -1312,7 +1385,7 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
     goto shader_failed;
   }
   if (mesh && !dx12_compileShader(deviceDX12,
-                                  library,
+                                  info->library,
                                   mesh->meshEntry,
                                   GPU_SHADER_STAGE_MESH_BIT,
                                   &meshCode)) {

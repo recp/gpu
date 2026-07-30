@@ -114,18 +114,21 @@ GPU_HIDE bool dx12_bindRayTracingGroup(GPURayTracingPassEncoderEXT *pass,
                                        GPUBindGroup                *group,
                                        uint32_t                     dynamicOffsetCount,
                                        const uint32_t              *dynamicOffsets);
-GPU_HIDE bool dx12_compileShader(GPUDeviceDX12        *device,
-                                 GPUShaderLibraryDX12 *library,
-                                 const char           *entry,
-                                 GPUShaderStageFlags   stage,
-                                 DX12ShaderCode       *outCode);
-GPU_HIDE bool dx12_compileRayLibrary(GPUDeviceDX12        *device,
-                                     GPUShaderLibraryDX12 *library,
-                                     DX12ShaderCode       *outCode);
+GPU_HIDE bool dx12_compileShader(GPUDeviceDX12      *device,
+                                 GPUShaderLibrary   *library,
+                                 const char         *entry,
+                                 GPUShaderStageFlags stage,
+                                 DX12ShaderCode     *outCode);
+GPU_HIDE bool dx12_compileRayLibrary(GPUDeviceDX12    *device,
+                                     GPUShaderLibrary *library,
+                                     uint64_t          entryMask,
+                                     DX12ShaderCode   *outCode);
 GPU_HIDE bool dx12_compileExecutionGraphLibrary(
-  GPUDeviceDX12        *device,
-  GPUShaderLibraryDX12 *library,
-  DX12ShaderCode       *outCode);
+  GPUDeviceDX12      *device,
+  GPUShaderLibrary   *library,
+  uint64_t            entryMask,
+  DX12ShaderCode     *outCode);
+GPU_HIDE uint32_t dx12_queryDXCTargetProfile(HMODULE module);
 GPU_HIDE void dx12_freeShaderCode(DX12ShaderCode *code);
 
 #endif /* dx12_apis_h */

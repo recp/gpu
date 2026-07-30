@@ -12,6 +12,7 @@ gpu_testBufferDescriptorArray(GPUDevice *device,
   GPUPipelineLayout            *bindlessPipelineLayout;
   GPUBindGroupLayout           *activeGroupLayout;
   GPUPipelineLayout            *activePipelineLayout;
+  const GPUBindGroupLayoutEntry *layoutEntries;
   GPUComputePipeline           *pipeline;
   GPUBindGroup                 *group;
   GPUBuffer                    *inputs[2];
@@ -40,6 +41,7 @@ gpu_testBufferDescriptorArray(GPUDevice *device,
   uint32_t                      selection[64] = {1u};
   uint32_t                      dynamicOffsets[2] = {256u, 256u};
   uint64_t                      bytecodeSize;
+  uint32_t                      layoutEntryCount;
   int                           ok;
 
   queue           = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
@@ -83,6 +85,20 @@ gpu_testBufferDescriptorArray(GPUDevice *device,
 
   activeGroupLayout    = shaderLayout->bindGroupLayouts[1];
   activePipelineLayout = shaderLayout->pipelineLayout;
+  layoutEntries        = GPUGetBindGroupLayoutEntries(activeGroupLayout,
+                                                       &layoutEntryCount);
+  if (!layoutEntries || layoutEntryCount != 3u ||
+      layoutEntries[0].binding != 0u ||
+      layoutEntries[0].bindingType !=
+        (dynamic ? GPU_BINDING_STORAGE_BUFFER
+                 : GPU_BINDING_READ_ONLY_STORAGE_BUFFER) ||
+      layoutEntries[0].arrayCount != 2u ||
+      layoutEntries[0].buffer.strideBytes != sizeof(values[0]) ||
+      layoutEntries[0].buffer.minBindingSize != sizeof(values[0])) {
+    fprintf(stderr, "buffer descriptor array layout metadata mismatch\n");
+    ok = 0;
+    goto cleanup;
+  }
   if (bindless) {
     bindlessInfo.chain.sType      = GPU_STRUCTURE_TYPE_BINDLESS_LAYOUT_EXT;
     bindlessInfo.chain.structSize = sizeof(bindlessInfo);

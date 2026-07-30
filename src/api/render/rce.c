@@ -276,6 +276,7 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
            0,
            sizeof(pass->_boundDynamicOffsetCounts));
   }
+  pass->_pipelineLayout = pipeline->_layout;
 
   state._priv = pipeline->_state;
   api->rce.setRenderPipelineState(pass,
@@ -285,7 +286,6 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
   gpuFrameStatsRecordBindEmission(pass->_stats);
   pass->_hasPipeline           = true;
   pass->_pipeline              = pipeline;
-  pass->_pipelineLayout        = pipeline->_layout;
   pass->_requiredBindGroupMask = pipeline->_requiredBindGroupMask;
   pass->_primitiveType = gpu_primitiveTypeFromTopology(pipeline->_primitiveTopology);
   pass->_pushConstantSizeBytes = pipeline->_pushConstantSizeBytes;

@@ -454,11 +454,11 @@ GPUBindExecutionGraphEXT(GPUComputePassEncoder *pass,
            0,
            sizeof(pass->_boundDynamicOffsetCounts));
   }
+  pass->_pipelineLayout = graph->layout;
 
   api->executionGraph.bind(pass, graph);
   gpuFrameStatsRecordBindEmission(pass->_stats);
   pass->_pipeline                = graph;
-  pass->_pipelineLayout          = graph->layout;
   pass->_requiredBindGroupMask   = graph->requiredBindGroupMask;
   pass->_pushConstantSizeBytes   = graph->pushConstantSizeBytes;
   pass->_pushConstantStages      = graph->pushConstantStages &

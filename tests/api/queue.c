@@ -654,6 +654,7 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   if (queue != &gScopedQueue || !frame ||
       GPUFrameGetTarget(frame) != gScopedFrame.target ||
       GPUFrameGetTargetView(frame) != gScopedFrame.targetView ||
+      gScopedFrame.targetView->_texture != gScopedFrame.target ||
       GPUAcquireCommandBuffer(queue, "device-scoped", &cmdb) != GPU_OK ||
       cmdb != &gScopedCmdb || frame->cpuEncodeFrequency < 1000u ||
       frame->cpuEncodeStartTicks < frame->cpuEncodeFrequency / 1000u) {

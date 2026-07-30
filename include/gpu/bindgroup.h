@@ -77,9 +77,15 @@ typedef struct GPUSamplerBindingLayout {
   GPUSamplerBindingType type;
 } GPUSamplerBindingLayout;
 
+typedef struct GPUBufferBindingLayout {
+  uint64_t minBindingSize;
+  uint32_t strideBytes;
+} GPUBufferBindingLayout;
+
 typedef struct GPUBindGroupLayoutEntry {
   GPUSamplerDesc      immutableSamplerDesc;
   union {
+    GPUBufferBindingLayout         buffer;
     GPUTextureBindingLayout        sampledTexture;
     GPUStorageTextureBindingLayout storageTexture;
     GPUSamplerBindingLayout        sampler;

@@ -1391,10 +1391,11 @@ GPUBindRayTracingPipelineEXT(GPURayTracingPassEncoderEXT *pass,
            0,
            sizeof(pass->boundDynamicOffsetCounts));
   }
+  pass->pipelineLayout = pipeline->layout;
+
   api->rayTracing.bindPipeline(pass, pipeline);
   gpuFrameStatsRecordBindEmission(pass->stats);
   pass->_pipeline             = pipeline;
-  pass->pipelineLayout        = pipeline->layout;
   pass->requiredBindGroupMask = pipeline->requiredBindGroupMask;
   pass->hasPipeline           = true;
 }

@@ -88,13 +88,14 @@ dx12__createBackBuffers(GPUDevice          *device,
 
     frame->swapchain           = swapchain;
     frame->state               = D3D12_RESOURCE_STATE_PRESENT;
-    frame->nativeView.resource = frame->renderTarget;
-    frame->nativeView.state    = &frame->state;
-    frame->nativeView.rtv       = rtv;
-    frame->nativeView.width     = width;
-    frame->nativeView.height    = height;
-    frame->nativeView.hasRtv    = true;
-    frame->nativeView.swapchain = true;
+    frame->nativeView.resource    = frame->renderTarget;
+    frame->nativeView.state       = &frame->state;
+    frame->nativeView.rtv         = rtv;
+    frame->nativeView.width       = width;
+    frame->nativeView.height      = height;
+    frame->nativeView.subresource = 0u;
+    frame->nativeView.hasRtv      = true;
+    frame->nativeView.swapchain   = true;
 
     frame->target._priv          = &frame->nativeView;
     frame->target.device         = device;

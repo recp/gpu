@@ -104,17 +104,19 @@ typedef struct GPUBindGroupBindingView {
     GPUSamplerFeedbackMapEXT        *samplerFeedback;
     GPUAccelerationStructureEXT     *accelerationStructure;
   };
-  uint64_t        offset;
-  uint64_t        size;
-  GPUShaderStageFlags visibility;
-  GPUBindingType  bindingType;
-  uint32_t        binding;
-  uint32_t        arrayIndex;
-  uint32_t        arrayCount;
-  uint32_t        layoutEntryIndex;
-  uint32_t        kindIndex;
-  GPUBindKind     kind;
-  bool            hasDynamicOffset;
+  uint64_t                offset;
+  uint64_t                size;
+  GPUBufferBindingLayout  bufferLayout;
+  GPUShaderStageFlags     visibility;
+  GPUBindingType          bindingType;
+  GPUStorageTextureAccess storageTextureAccess;
+  uint32_t                binding;
+  uint32_t                arrayIndex;
+  uint32_t                arrayCount;
+  uint32_t                layoutEntryIndex;
+  uint32_t                kindIndex;
+  GPUBindKind             kind;
+  bool                    hasDynamicOffset;
 } GPUBindGroupBindingView;
 
 typedef void (*GPUBindGroupBindingFn)(void *ctx,

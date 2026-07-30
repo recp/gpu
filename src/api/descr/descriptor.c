@@ -697,6 +697,19 @@ gpu_normalizeLayoutEntry(const GPUBindGroupLayoutEntry *src,
     dst->arrayCount = 1;
   }
   switch (src->bindingType) {
+    case GPU_BINDING_UNIFORM_BUFFER:
+      if (src->buffer.strideBytes != 0u) {
+        return 0;
+      }
+      break;
+    case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
+    case GPU_BINDING_STORAGE_BUFFER:
+      if (src->buffer.strideBytes != 0u &&
+          src->buffer.minBindingSize != 0u &&
+          src->buffer.minBindingSize < src->buffer.strideBytes) {
+        return 0;
+      }
+      break;
     case GPU_BINDING_SAMPLED_TEXTURE:
       if ((uint32_t)src->sampledTexture.viewType > GPU_TEXTURE_VIEW_3D ||
           (uint32_t)src->sampledTexture.sampleType >
@@ -955,10 +968,19 @@ gpu_bindGroupBufferRangeValid(const GPUBindGroupLayoutEntry *layoutEntry,
     return 0;
   }
 
-  return gpuBufferHasUsage(entry->buffer.buffer, usage) &&
-         gpuBufferRangeValid(entry->buffer.buffer,
-                             entry->buffer.offset,
-                             entry->buffer.size);
+  if (!gpuBufferHasUsage(entry->buffer.buffer, usage) ||
+      !gpuBufferRangeValid(entry->buffer.buffer,
+                           entry->buffer.offset,
+                           entry->buffer.size) ||
+      entry->buffer.size < layoutEntry->buffer.minBindingSize) {
+    return 0;
+  }
+  if (layoutEntry->buffer.strideBytes != 0u &&
+      (entry->buffer.offset % layoutEntry->buffer.strideBytes != 0u ||
+       entry->buffer.size % layoutEntry->buffer.strideBytes != 0u)) {
+    return 0;
+  }
+  return 1;
 }
 
 static int
@@ -1755,9 +1777,15 @@ gpu_compileDX12PipelineBindings(GPUPipelineLayoutPriv *priv) {
               entryClass = GPU_DX12_REGISTER_SRV;
               break;
             case GPU_BINDING_STORAGE_BUFFER:
-            case GPU_BINDING_STORAGE_TEXTURE:
             case GPU_BINDING_SAMPLER_FEEDBACK_EXT:
               entryClass = GPU_DX12_REGISTER_UAV;
+              break;
+            case GPU_BINDING_STORAGE_TEXTURE:
+              entryClass =
+                entry->storageTexture.access ==
+                  GPU_STORAGE_TEXTURE_ACCESS_READ_ONLY
+                  ? GPU_DX12_REGISTER_SRV
+                  : GPU_DX12_REGISTER_UAV;
               break;
             case GPU_BINDING_SAMPLER:
               entryClass = GPU_DX12_REGISTER_SAMPLER;
@@ -2249,6 +2277,11 @@ gpu_createLayoutForReflectionGroup(GPUDevice *device,
     entries[cursor].binding = resource->binding;
     entries[cursor].bindingType = resource->bindingType;
     switch (resource->bindingType) {
+      case GPU_BINDING_UNIFORM_BUFFER:
+      case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
+      case GPU_BINDING_STORAGE_BUFFER:
+        entries[cursor].buffer = resource->buffer;
+        break;
       case GPU_BINDING_SAMPLED_TEXTURE:
         entries[cursor].sampledTexture = resource->sampledTexture;
         break;
@@ -2320,6 +2353,12 @@ gpu_layoutResourceTypeMatches(const GPUBindGroupLayoutEntry     *entry,
   }
 
   switch (entry->bindingType) {
+    case GPU_BINDING_UNIFORM_BUFFER:
+    case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
+    case GPU_BINDING_STORAGE_BUFFER:
+      return entry->buffer.minBindingSize ==
+               resource->buffer.minBindingSize &&
+             entry->buffer.strideBytes == resource->buffer.strideBytes;
     case GPU_BINDING_SAMPLED_TEXTURE:
       return entry->sampledTexture.viewType ==
                resource->sampledTexture.viewType &&
@@ -3530,8 +3569,13 @@ gpu_bindGroupEachStatic(GPUPipelineLayoutPriv  *pipeline,
       default:
         return 0;
     }
+    view.bufferLayout      = layoutEntry->buffer;
     view.visibility       = layoutEntry->visibility;
     view.bindingType      = layoutEntry->bindingType;
+    view.storageTextureAccess =
+      layoutEntry->bindingType == GPU_BINDING_STORAGE_TEXTURE
+        ? layoutEntry->storageTexture.access
+        : GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY;
     view.binding          = pipeline->backendBindings[groupIndex]
                                                      [binding->layoutEntryIndex];
     view.arrayIndex       = binding->arrayIndex;
@@ -3844,8 +3888,13 @@ gpuForEachBindGroupBinding(GPUBindGroup *group,
       default:
         return 0;
     }
+    view.bufferLayout      = layoutEntry->buffer;
     view.visibility       = layoutEntry->visibility;
     view.bindingType      = layoutEntry->bindingType;
+    view.storageTextureAccess =
+      layoutEntry->bindingType == GPU_BINDING_STORAGE_TEXTURE
+        ? layoutEntry->storageTexture.access
+        : GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY;
     view.binding          = layout->backendBindings[binding->layoutEntryIndex];
     view.arrayIndex       = binding->arrayIndex;
     view.arrayCount       = layoutEntry->arrayCount;
@@ -3907,8 +3956,13 @@ gpuForEachBindGroupEntry(GPUBindGroup            *group,
       default:
         return 0;
     }
+    view.bufferLayout      = layout->entries[layoutEntryIndex].buffer;
     view.visibility       = layout->entries[layoutEntryIndex].visibility;
     view.bindingType      = layout->entries[layoutEntryIndex].bindingType;
+    view.storageTextureAccess =
+      view.bindingType == GPU_BINDING_STORAGE_TEXTURE
+        ? layout->entries[layoutEntryIndex].storageTexture.access
+        : GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY;
     view.binding          = layout->backendBindings[layoutEntryIndex];
     view.arrayIndex       = binding->arrayIndex;
     view.arrayCount       = layout->entries[layoutEntryIndex].arrayCount;
@@ -4074,8 +4128,13 @@ gpu_bindGroupEachDynamic(GPUPipelineLayout      *pipelineLayout,
       default:
         return 0;
     }
+    view.bufferLayout      = layoutEntry->buffer;
     view.visibility       = layoutEntry->visibility;
     view.bindingType      = layoutEntry->bindingType;
+    view.storageTextureAccess =
+      layoutEntry->bindingType == GPU_BINDING_STORAGE_TEXTURE
+        ? layoutEntry->storageTexture.access
+        : GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY;
     view.binding          = pipeline->backendBindings[groupIndex]
                                                      [binding->layoutEntryIndex];
     view.arrayIndex       = binding->arrayIndex;

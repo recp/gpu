@@ -56,11 +56,17 @@ typedef struct GPUShaderExecutionGraphEntryInfo {
   bool        programEntry;
 } GPUShaderExecutionGraphEntryInfo;
 
+typedef struct GPUShaderSourceBlob {
+  void    *data;
+  uint64_t size;
+} GPUShaderSourceBlob;
+
 struct GPUShaderLibrary {
   GPUApi                         *_api;
   GPUDevice                      *_device;
   void                           *_priv;
   void                           *_metadata;
+  void                           *_uslSource;
   GPUShaderStaticSamplerInfoList *_staticSamplers;
   void                           *_entryInfo;
   void                           *_entryResources;
@@ -179,6 +185,22 @@ GPU_HIDE
 uint32_t
 gpuShaderWGSLStaticGroups(const GPUShaderLibrary *library,
                           uint64_t                entryMask);
+
+GPU_HIDE
+GPUResult
+gpuCompileShaderLibraryEntry(const GPUShaderLibrary *library,
+                             const char             *entryPoint,
+                             GPUShaderSourceBlob     *outSource);
+
+GPU_HIDE
+GPUResult
+gpuCompileShaderLibraryEntryMask(const GPUShaderLibrary *library,
+                                 uint64_t                entryMask,
+                                 GPUShaderSourceBlob     *outSource);
+
+GPU_HIDE
+void
+gpuFreeShaderSourceBlob(GPUShaderSourceBlob *source);
 
 GPU_HIDE
 int

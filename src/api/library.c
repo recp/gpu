@@ -60,6 +60,25 @@ typedef struct GPUShaderResourceBindingInfoList {
   GPUShaderResourceBindingInfo entries[];
 } GPUShaderResourceBindingInfoList;
 
+typedef struct GPUShaderUSLSource {
+  void                  *artifact;
+  USLTargetSpec          target;
+  USLCompileOptions      options;
+  size_t                 artifactSize;
+  bool                   disableDiskCache;
+  USLCapabilityAtomDesc  atoms[];
+} GPUShaderUSLSource;
+
+static void
+gpu_clearShaderUSLSource(GPUShaderLibrary *library) {
+  if (!library) {
+    return;
+  }
+
+  free(library->_uslSource);
+  library->_uslSource = NULL;
+}
+
 static void
 gpu_clearShaderMetadata(GPUShaderLibrary *library) {
   if (!library) {
@@ -73,6 +92,156 @@ gpu_clearShaderMetadata(GPUShaderLibrary *library) {
   library->_resourceBindings = NULL;
   library->_staticSamplers   = NULL;
   memset(&library->_reflection, 0, sizeof(library->_reflection));
+}
+
+static int
+gpu_setShaderUSLSource(GPUShaderLibrary        *library,
+                       const void              *artifact,
+                       uint64_t                 artifactSize,
+                       const USLTargetSpec     *target,
+                       const USLCompileOptions *options,
+                       bool                     disableDiskCache) {
+  GPUShaderUSLSource *source;
+  size_t              atomBytes;
+  size_t              totalSize;
+
+  if (!library || !artifact || artifactSize == 0u ||
+      artifactSize > (uint64_t)SIZE_MAX || !target || !options ||
+      target->extra_atom_count > USL_RUNTIME_TARGET_MAX_ATOMS ||
+      (target->extra_atom_count > 0u && !target->extra_atoms)) {
+    return 0;
+  }
+
+  atomBytes = (size_t)target->extra_atom_count * sizeof(source->atoms[0]);
+  if (atomBytes > SIZE_MAX - sizeof(*source) ||
+      (size_t)artifactSize > SIZE_MAX - sizeof(*source) - atomBytes) {
+    return 0;
+  }
+  totalSize = sizeof(*source) + atomBytes + (size_t)artifactSize;
+  source    = malloc(totalSize);
+  if (!source) {
+    return 0;
+  }
+
+  source->artifact         = (uint8_t *)source->atoms + atomBytes;
+  source->target           = *target;
+  source->options          = *options;
+  source->artifactSize     = (size_t)artifactSize;
+  source->disableDiskCache = disableDiskCache;
+  if (atomBytes > 0u) {
+    memcpy(source->atoms, target->extra_atoms, atomBytes);
+    source->target.extra_atoms = source->atoms;
+  } else {
+    source->target.extra_atoms = NULL;
+  }
+  memcpy(source->artifact, artifact, source->artifactSize);
+
+  gpu_clearShaderUSLSource(library);
+  library->_uslSource = source;
+  return 1;
+}
+
+static GPUResult
+gpu_compileShaderLibraryEntries(const GPUShaderLibrary *library,
+                                const char * const      *entryPoints,
+                                uint32_t                 entryPointCount,
+                                GPUShaderSourceBlob     *outSource) {
+  const GPUShaderUSLSource *source;
+  USCompileOutput           output = {0};
+  USCompileInput            input = {0};
+  USResult                  result;
+
+  if (!library || !entryPoints || entryPointCount == 0u || !outSource) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  memset(outSource, 0, sizeof(*outSource));
+  source = library->_uslSource;
+  if (!source) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  input.abi_version       = US_COMPILE_INPUT_VERSION;
+  input.artifact          = source->artifact;
+  input.artifact_size     = source->artifactSize;
+  input.target            = &source->target;
+  input.entry_point_names = entryPoints;
+  input.entry_point_count = entryPointCount;
+  input.options           = &source->options;
+  if (source->disableDiskCache) {
+    input.flags |= US_COMPILE_INPUT_FLAG_DISABLE_DISK_CACHE;
+  }
+
+  result = us_compile(&input, &output);
+  if (result != USLOk ||
+      output.backend != source->target.backend ||
+      output.encoding != USL_RUNTIME_EMBEDDED_BLOB_ENCODING_TEXT ||
+      !output.backend_data || output.backend_size == 0u) {
+    us_free_compile_output(&output);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  outSource->data = output.backend_data;
+  outSource->size = (uint64_t)output.backend_size;
+  output.backend_data = NULL;
+  us_free_compile_output(&output);
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
+gpuCompileShaderLibraryEntry(const GPUShaderLibrary *library,
+                             const char             *entryPoint,
+                             GPUShaderSourceBlob     *outSource) {
+  if (!entryPoint || entryPoint[0] == '\0') {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  return gpu_compileShaderLibraryEntries(library,
+                                         &entryPoint,
+                                         1u,
+                                         outSource);
+}
+
+GPU_HIDE
+GPUResult
+gpuCompileShaderLibraryEntryMask(const GPUShaderLibrary *library,
+                                 uint64_t                entryMask,
+                                 GPUShaderSourceBlob     *outSource) {
+  const GPUShaderEntryInfoList *entries;
+  const char                   *entryPoints[USL_RUNTIME_MAX_ENTRY_POINTS];
+  uint32_t                      entryPointCount;
+
+  if (!library || entryMask == 0u || !outSource) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  entries = library->_entryInfo;
+  if (!entries || entries->count == 0u ||
+      entries->count > USL_RUNTIME_MAX_ENTRY_POINTS) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  entryPointCount = 0u;
+  for (uint32_t i = 0u; i < entries->count; i++) {
+    if ((entryMask & (UINT64_C(1) << i)) != 0u) {
+      entryPoints[entryPointCount++] = entries->entries[i].name;
+    }
+  }
+  if (entryPointCount == 0u) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  return gpu_compileShaderLibraryEntries(library,
+                                         entryPoints,
+                                         entryPointCount,
+                                         outSource);
+}
+
+GPU_HIDE
+void
+gpuFreeShaderSourceBlob(GPUShaderSourceBlob *source) {
+  if (!source) {
+    return;
+  }
+  free(source->data);
+  memset(source, 0, sizeof(*source));
 }
 
 static void
@@ -1054,6 +1223,12 @@ gpu_bindingLayoutFromUSLResource(const USLRuntimeResource     *resource,
   }
 
   switch (bindingType) {
+    case GPU_BINDING_UNIFORM_BUFFER:
+    case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
+    case GPU_BINDING_STORAGE_BUFFER:
+      out->buffer.minBindingSize = resource->buffer_min_binding_size;
+      out->buffer.strideBytes    = resource->buffer_stride_bytes;
+      return 1;
     case GPU_BINDING_SAMPLED_TEXTURE:
       if (!gpu_textureViewTypeFromUSL(resource->type.texture_dim,
                                       &out->sampledTexture.viewType)) {
@@ -1095,6 +1270,11 @@ gpu_shaderResourceLayoutEqual(const GPUShaderResourceReflection *a,
   }
 
   switch (a->bindingType) {
+    case GPU_BINDING_UNIFORM_BUFFER:
+    case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
+    case GPU_BINDING_STORAGE_BUFFER:
+      return a->buffer.minBindingSize == b->buffer.minBindingSize &&
+             a->buffer.strideBytes == b->buffer.strideBytes;
     case GPU_BINDING_SAMPLED_TEXTURE:
       return a->sampledTexture.viewType == b->sampledTexture.viewType &&
              a->sampledTexture.sampleType == b->sampledTexture.sampleType &&
@@ -2010,6 +2190,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   USLTargetSpec             target;
   USLCapabilityAtomDesc     targetAtoms[USL_RUNTIME_TARGET_MAX_ATOMS];
   USCompileInput            compileInput;
+  USResult                  compileResult;
   const char               *payloadSource;
   GPUResult                 rc;
   uint32_t                  targetAtomCount;
@@ -2106,24 +2287,10 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
       }
     }
   } else if (api->backend == GPU_BACKEND_DX12) {
-    if (GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUP_MATRIX)) {
-      target.profile = USL_TARGET_PROFILE_HLSL_SM_6_10;
-    } else if (GPUIsFeatureEnabled(device, GPU_FEATURE_EXECUTION_GRAPH)) {
-      target.profile = USL_TARGET_PROFILE_HLSL_SM_6_8;
-    } else if (GPUIsFeatureEnabled(device, GPU_FEATURE_ATOMIC64)) {
-      target.profile = USL_TARGET_PROFILE_HLSL_SM_6_6;
-    } else if (GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_QUERY) ||
-               GPUIsFeatureEnabled(device, GPU_FEATURE_SAMPLER_FEEDBACK)) {
-      target.profile = USL_TARGET_PROFILE_HLSL_SM_6_5;
-    } else if (GPUIsFeatureEnabled(device,
-                                   GPU_FEATURE_RAY_TRACING_PIPELINE)) {
-      target.profile = USL_TARGET_PROFILE_HLSL_SM_6_3;
-    } else if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
-      target.profile = USL_TARGET_PROFILE_HLSL_SM_6_2;
-    } else if (GPUIsFeatureEnabled(device,
-                                   GPU_FEATURE_DESCRIPTOR_INDEXING)) {
-      target.profile = USL_TARGET_PROFILE_HLSL_SM_6_0;
+    if (device->uslTargetProfile == 0u) {
+      return GPU_ERROR_BACKEND_FAILURE;
     }
+    target.profile = (USLTargetProfile)device->uslTargetProfile;
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
       if (us_cap_atom_init(
             &targetAtoms[targetAtomCount++],
@@ -2308,7 +2475,6 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   if (us_compile_options_from_env(&compileOptions) != USLOk) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
-
   encoding   = target.backend == USL_BACKEND_SPIRV
                  ? USL_RUNTIME_EMBEDDED_BLOB_ENCODING_BINARY
                  : USL_RUNTIME_EMBEDDED_BLOB_ENCODING_TEXT;
@@ -2322,11 +2488,28 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   if (disableDiskCache) {
     compileInput.flags |= US_COMPILE_INPUT_FLAG_DISABLE_DISK_CACHE;
   }
-  if (us_compile(&compileInput, &compileOutput) != USLOk ||
+  compileResult = us_compile(&compileInput, &compileOutput);
+  if (compileResult != USLOk ||
       compileOutput.backend != target.backend ||
       compileOutput.encoding != encoding ||
       !compileOutput.backend_data ||
       compileOutput.backend_size == 0) {
+    if (getenv("GPU_USL_LOG")) {
+      char targetCaps[1024];
+
+      if (us_target_caps(&target,
+                         targetCaps,
+                         sizeof(targetCaps)) != USLOk) {
+        targetCaps[0] = '\0';
+      }
+      fprintf(stderr,
+              "GPU: USL compile failed "
+              "(result=%d, backend=%u, profile=%06x, caps=%s)\n",
+              (int)compileResult,
+              (unsigned)target.backend,
+              (unsigned)target.profile,
+              targetCaps);
+    }
     rc = GPU_ERROR_BACKEND_FAILURE;
     goto cleanup;
   }
@@ -2377,6 +2560,16 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
       GPUDestroyShaderLibrary(*outLibrary);
       *outLibrary = NULL;
       rc = GPU_ERROR_BACKEND_FAILURE;
+    } else if (target.backend == USL_BACKEND_HLSL &&
+               !gpu_setShaderUSLSource(*outLibrary,
+                                       bytecodeData,
+                                       bytecodeSize,
+                                       &target,
+                                       &compileOptions,
+                                       disableDiskCache)) {
+      GPUDestroyShaderLibrary(*outLibrary);
+      *outLibrary = NULL;
+      rc = GPU_ERROR_OUT_OF_MEMORY;
     }
   }
 
@@ -2432,6 +2625,7 @@ GPUDestroyShaderLibrary(GPUShaderLibrary *library) {
   if (!library)
     return;
 
+  gpu_clearShaderUSLSource(library);
   gpu_clearShaderMetadata(library);
   if (!(api = library->_api)) {
     free(library);

@@ -29,12 +29,13 @@ GPUResult
 dx12_createComputePipeline(GPUDevice                          *device,
                            const GPUComputePipelineCreateInfo *info,
                            GPUComputePipeline                 *pipeline) {
-  GPUDeviceDX12           *deviceDX12;
-  GPUShaderLibraryDX12          *library;
-  GPUPipelineLayoutDX12   *layout;
-  GPUComputePipelineState *state;
-  GPUComputePipelineDX12  *native;
-  ID3D12RootSignature     *rootSignature;
+  GPUDeviceDX12                    *deviceDX12;
+  GPUShaderLibrary                 *library;
+  GPUShaderLibraryDX12             *libraryDX12;
+  GPUPipelineLayoutDX12            *layout;
+  GPUComputePipelineState          *state;
+  GPUComputePipelineDX12           *native;
+  ID3D12RootSignature              *rootSignature;
   D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {0};
   DX12ShaderCode           shaderCode = {0};
   DX12PipelineKey          rootKey;
@@ -42,10 +43,11 @@ dx12_createComputePipeline(GPUDevice                          *device,
   HRESULT                  result;
 
   deviceDX12 = device ? device->_priv : NULL;
-  library    = info && info->library ? info->library->_priv : NULL;
+  library     = info ? info->library : NULL;
+  libraryDX12 = library ? library->_priv : NULL;
   layout     = info && info->layout ? info->layout->_native : NULL;
-  if (!deviceDX12 || !deviceDX12->d3dDevice || !library ||
-      !library->source || !layout || !layout->rootSignature ||
+  if (!deviceDX12 || !deviceDX12->d3dDevice || !libraryDX12 ||
+      !libraryDX12->source || !layout || !layout->rootSignature ||
       !info->entryPoint || !info->entryPoint[0] || !pipeline) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }

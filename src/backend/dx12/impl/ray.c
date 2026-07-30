@@ -785,8 +785,24 @@ dx12_createRayTracingPipeline(GPUDevice                                *device,
   if (!deviceDX12 || !deviceDX12->rayTracingPipeline ||
       !deviceDX12->d3dDevice5 || !library || !info || !pipeline ||
       info->groupCount > UINT32_MAX - 4u ||
-      info->groupCount > SIZE_MAX / sizeof(*native->groupExports) ||
-      !dx12_compileRayLibrary(deviceDX12, library, &libraryCode)) {
+      info->groupCount > SIZE_MAX / sizeof(*native->groupExports)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  entryMask = 0u;
+  for (uint32_t i = 0u; i < info->groupCount; i++) {
+    const GPURayTracingShaderGroupEXT *group = &info->pGroups[i];
+
+    entryMask |= gpuShaderEntryBit(info->library, group->generalEntry);
+    entryMask |= gpuShaderEntryBit(info->library, group->closestHitEntry);
+    entryMask |= gpuShaderEntryBit(info->library, group->anyHitEntry);
+    entryMask |= gpuShaderEntryBit(info->library, group->intersectionEntry);
+  }
+  if (entryMask == 0u ||
+      !dx12_compileRayLibrary(deviceDX12,
+                              info->library,
+                              entryMask,
+                              &libraryCode)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -815,17 +831,12 @@ dx12_createRayTracingPipeline(GPUDevice                                *device,
   }
   native->groupCount = info->groupCount;
 
-  entryMask = 0u;
   cursor    = 0u;
   for (uint32_t i = 0u; i < info->groupCount; i++) {
     const GPURayTracingShaderGroupEXT *src;
     D3D12_HIT_GROUP_DESC              *dst;
 
     src = &info->pGroups[i];
-    entryMask |= gpuShaderEntryBit(info->library, src->generalEntry);
-    entryMask |= gpuShaderEntryBit(info->library, src->closestHitEntry);
-    entryMask |= gpuShaderEntryBit(info->library, src->anyHitEntry);
-    entryMask |= gpuShaderEntryBit(info->library, src->intersectionEntry);
     if (src->type == GPU_RAY_TRACING_SHADER_GROUP_GENERAL_EXT) {
       native->groupExports[i] = dx12_rayWide(src->generalEntry);
       if (!native->groupExports[i]) {
@@ -855,9 +866,6 @@ dx12_createRayTracingPipeline(GPUDevice                                *device,
     cursor++;
   }
 
-  if (entryMask == 0u) {
-    goto backend_failure;
-  }
   if (dx12_createShaderRootSignature(device,
                                      info->layout,
                                      info->library,

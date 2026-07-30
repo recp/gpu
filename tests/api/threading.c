@@ -37,6 +37,7 @@ typedef struct GPUThreadContext {
   GPUBuffer          *sharedBuffer;
   GPUDevice          *device;
   uint64_t            artifactSize;
+  GPUResult           failureResult;
   bool                ok;
 } GPUThreadContext;
 
@@ -195,6 +196,7 @@ static void
 gpu_runThreadingTest(GPUThreadContext *ctx) {
   GPUShaderReflection reflection = {0};
   GPUShaderLibrary   *library;
+  GPUResult           result;
 
   while (!gpu_threadStarted(ctx->start)) {
 #if defined(_WIN32) || defined(WIN32)
@@ -205,13 +207,22 @@ gpu_runThreadingTest(GPUThreadContext *ctx) {
   }
 
   library = NULL;
-  if (GPUCreateShaderLibraryFromUSL(ctx->device,
-                                    ctx->artifactData,
-                                    ctx->artifactSize,
-                                    &library) != GPU_OK ||
-      !library ||
-      GPUGetShaderReflection(library, &reflection) != GPU_OK) {
-    ctx->failure = "shader library/reflection";
+  result = GPUCreateShaderLibraryFromUSL(ctx->device,
+                                         ctx->artifactData,
+                                         ctx->artifactSize,
+                                         &library);
+  if (result != GPU_OK || !library) {
+    ctx->failure       = "shader library";
+    ctx->failureResult = result;
+    GPUFreeShaderReflection(&reflection);
+    GPUDestroyShaderLibrary(library);
+    ctx->ok = false;
+    return;
+  }
+  result = GPUGetShaderReflection(library, &reflection);
+  if (result != GPU_OK) {
+    ctx->failure       = "shader reflection";
+    ctx->failureResult = result;
     GPUFreeShaderReflection(&reflection);
     GPUDestroyShaderLibrary(library);
     ctx->ok = false;
@@ -344,6 +355,7 @@ gpu_test_threading(GPUDevice *device, const char *artifactPath) {
     contexts[i].sharedBuffer = sharedBuffer;
     contexts[i].start        = &start;
     contexts[i].artifactSize = artifactSize;
+    contexts[i].failureResult = GPU_OK;
     contexts[i].ok           = false;
     if (!gpu_startThread(&threads[i], &contexts[i])) {
       break;
@@ -361,9 +373,10 @@ gpu_test_threading(GPUDevice *device, const char *artifactPath) {
     ok = contexts[i].ok && ok;
     if (!contexts[i].ok && contexts[i].failure) {
       fprintf(stderr,
-              "thread %u failed at %s\n",
+              "thread %u failed at %s (%d)\n",
               i,
-              contexts[i].failure);
+              contexts[i].failure,
+              (int)contexts[i].failureResult);
     }
   }
   if (GPUGetCacheStats(device, &stats) != GPU_OK ||

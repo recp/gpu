@@ -988,6 +988,7 @@ dx12_destroyTexture(GPUTexture * __restrict texture) {
 
 static bool
 dx12__fillTextureSrv(const GPUTextureViewCreateInfo *info,
+                     bool                            integerFormat,
                      bool                            multisampled,
                      D3D12_SHADER_RESOURCE_VIEW_DESC *srv) {
   switch (info->viewType) {
@@ -1037,6 +1038,17 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo *info,
       if (info->arrayLayerCount != 6u) {
         return false;
       }
+      if (integerFormat) {
+        srv->ViewDimension                      =
+          D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+        srv->Texture2DArray.MostDetailedMip     = info->baseMipLevel;
+        srv->Texture2DArray.MipLevels           = info->mipLevelCount;
+        srv->Texture2DArray.FirstArraySlice     = info->baseArrayLayer;
+        srv->Texture2DArray.ArraySize           = info->arrayLayerCount;
+        srv->Texture2DArray.PlaneSlice          = 0u;
+        srv->Texture2DArray.ResourceMinLODClamp = 0.0f;
+        return true;
+      }
       srv->ViewDimension                   = D3D12_SRV_DIMENSION_TEXTURECUBE;
       srv->TextureCube.MostDetailedMip     = info->baseMipLevel;
       srv->TextureCube.MipLevels           = info->mipLevelCount;
@@ -1046,6 +1058,17 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo *info,
       if (info->baseArrayLayer % 6u != 0u ||
           info->arrayLayerCount % 6u != 0u) {
         return false;
+      }
+      if (integerFormat) {
+        srv->ViewDimension                      =
+          D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+        srv->Texture2DArray.MostDetailedMip     = info->baseMipLevel;
+        srv->Texture2DArray.MipLevels           = info->mipLevelCount;
+        srv->Texture2DArray.FirstArraySlice     = info->baseArrayLayer;
+        srv->Texture2DArray.ArraySize           = info->arrayLayerCount;
+        srv->Texture2DArray.PlaneSlice          = 0u;
+        srv->Texture2DArray.ResourceMinLODClamp = 0.0f;
+        return true;
       }
       srv->ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBEARRAY;
       srv->TextureCubeArray.MostDetailedMip = info->baseMipLevel;
@@ -1197,6 +1220,7 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
   bool                             colorTarget;
   bool                             depthTarget;
   bool                             shadingRate;
+  bool                             hasSrv;
   bool                             hasRtv;
   bool                             hasDsv;
   bool                             hasUav;
@@ -1239,10 +1263,16 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
   depthTarget = (texture->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u;
   shadingRate =
     (texture->usage & GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT) != 0u;
-  if (sampled) {
+  if (sampled || storage) {
     srv.Format                  = dx12__textureSrvFormat(info->format);
     srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
   }
+  hasSrv = (sampled || storage) &&
+           dx12__fillTextureSrv(info,
+                                gpuFormatNumericType(info->format) !=
+                                  GPU_FORMAT_NUMERIC_FLOAT,
+                                texture->sampleCount > 1u,
+                                &srv);
   hasRtv = colorTarget && dx12__fillTextureRtv(info,
                                                format,
                                                texture->sampleCount > 1u,
@@ -1253,10 +1283,8 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
                                                &dsv);
   hasUav = storage && texture->sampleCount == 1u &&
            dx12__fillTextureUav(info, format, &uav);
-  if ((!sampled && !hasRtv && !hasDsv && !hasUav && !shadingRate) ||
-      (sampled &&
-       !dx12__fillTextureSrv(info, texture->sampleCount > 1u, &srv)) ||
-      (storage && !hasUav)) {
+  if ((!hasSrv && !hasRtv && !hasDsv && !hasUav && !shadingRate) ||
+      ((sampled || storage) && !hasSrv) || (storage && !hasUav)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -1272,7 +1300,7 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
   }
   native = (GPUTextureViewDX12 *)(view + 1);
   native->device = device;
-  if (sampled) {
+  if (hasSrv) {
     native->srv    = srv;
     native->hasSrv = true;
   }
@@ -1356,13 +1384,15 @@ dx12_createTextureView(GPUTexture                     * __restrict texture,
   if (native->height == 0u) {
     native->height = 1u;
   }
-  native->baseMip    = info->baseMipLevel;
-  native->mipCount   = info->mipLevelCount;
-  native->baseLayer  = info->baseArrayLayer;
-  native->layerCount = info->arrayLayerCount;
-  view->_priv        = native;
-  view->_ownsNative  = true;
-  *outView           = view;
+  native->baseMip     = info->baseMipLevel;
+  native->mipCount    = info->mipLevelCount;
+  native->baseLayer   = info->baseArrayLayer;
+  native->layerCount  = info->arrayLayerCount;
+  native->subresource = info->baseMipLevel +
+                        info->baseArrayLayer * texture->mipLevelCount;
+  view->_priv         = native;
+  view->_ownsNative   = true;
+  *outView            = view;
   return GPU_OK;
 }
 

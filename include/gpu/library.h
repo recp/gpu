@@ -32,6 +32,7 @@ typedef struct GPUShaderLibrary GPUShaderLibrary;
 typedef struct GPUShaderResourceReflection {
   const char         *name;
   union {
+    GPUBufferBindingLayout         buffer;
     GPUTextureBindingLayout        sampledTexture;
     GPUStorageTextureBindingLayout storageTexture;
     GPUSamplerBindingLayout        sampler;

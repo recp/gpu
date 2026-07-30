@@ -703,6 +703,7 @@ check_compute_readback_case(GPUDevice          *device,
                                         : "api-compute-direct");
   GPUQueue        *queue;
   GPUShaderLibrary *library = NULL;
+  GPUShaderReflection reflection = {0};
   GPUBindGroupLayout *bindGroupLayout = NULL;
   GPUPipelineLayout *pipelineLayout = NULL;
   GPUComputePipeline *pipeline = NULL;
@@ -724,6 +725,7 @@ check_compute_readback_case(GPUDevice          *device,
   GPUBufferBarrier bufferBarrier = {0};
   GPUBarrierBatch barrierBatch = {0};
   GPUQueueSubmitInfo submitInfo = {0};
+  GPUResult pipelineResult;
   uint32_t readWords[4] = {0u, 0u, 0u, 0u};
   int ok = 0;
 
@@ -737,11 +739,22 @@ check_compute_readback_case(GPUDevice          *device,
     fprintf(stderr, "failed to create %s library\n", label);
     goto cleanup;
   }
+  if (GPUGetShaderReflection(library, &reflection) != GPU_OK ||
+      reflection.resourceCount != 1u ||
+      !reflection.pResources ||
+      reflection.pResources[0].groupIndex != 0u ||
+      reflection.pResources[0].binding != 0u ||
+      reflection.pResources[0].bindingType != GPU_BINDING_STORAGE_BUFFER ||
+      reflection.pResources[0].buffer.strideBytes != sizeof(uint32_t)) {
+    fprintf(stderr, "unexpected %s storage-buffer reflection\n", label);
+    goto cleanup;
+  }
 
   layoutEntry.binding = 0u;
   layoutEntry.bindingType = GPU_BINDING_STORAGE_BUFFER;
   layoutEntry.visibility = GPU_SHADER_STAGE_COMPUTE_BIT;
   layoutEntry.arrayCount = 1u;
+  layoutEntry.buffer = reflection.pResources[0].buffer;
   layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
   layoutInfo.chain.structSize = sizeof(layoutInfo);
   layoutInfo.label = label;
@@ -775,9 +788,12 @@ check_compute_readback_case(GPUDevice          *device,
   pipelineInfo.layout = pipelineLayout;
   pipelineInfo.library = library;
   pipelineInfo.entryPoint = "api_indirect_cs";
-  if (GPUCreateComputePipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
-      !pipeline) {
-    fprintf(stderr, "failed to create %s pipeline\n", label);
+  pipelineResult = GPUCreateComputePipeline(device, &pipelineInfo, &pipeline);
+  if (pipelineResult != GPU_OK || !pipeline) {
+    fprintf(stderr,
+            "failed to create %s pipeline (%d)\n",
+            label,
+            pipelineResult);
     goto cleanup;
   }
 
@@ -933,6 +949,7 @@ cleanup:
   GPUDestroyComputePipeline(pipeline);
   GPUDestroyPipelineLayout(pipelineLayout);
   GPUDestroyBindGroupLayout(bindGroupLayout);
+  GPUFreeShaderReflection(&reflection);
   GPUDestroyShaderLibrary(library);
   return ok;
 }

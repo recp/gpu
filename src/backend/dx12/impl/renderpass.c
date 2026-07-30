@@ -338,7 +338,16 @@ dx12_beginRenderPass(GPUCommandBuffer             *cmdb,
     if (resolveView &&
         (!resolveView->resource || !resolveView->state ||
          resolveView->width != view->width ||
-         resolveView->height != view->height)) {
+         resolveView->height != view->height ||
+         attachment->resolveView->format != attachment->view->format ||
+         !attachment->view->_texture ||
+         attachment->view->_texture->sampleCount <= 1u ||
+         attachment->view->mipLevelCount != 1u ||
+         attachment->view->arrayLayerCount != 1u ||
+         !attachment->resolveView->_texture ||
+         attachment->resolveView->_texture->sampleCount != 1u ||
+         attachment->resolveView->mipLevelCount != 1u ||
+         attachment->resolveView->arrayLayerCount != 1u)) {
       return NULL;
     }
 

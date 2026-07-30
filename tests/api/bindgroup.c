@@ -16,6 +16,35 @@ typedef struct GPUDescriptorHookCounts {
 
 static GPUDescriptorHookCounts descriptorHookCounts;
 
+static bool
+bindgroup_test_selected(const char *name) {
+  const char *filter;
+  size_t      nameLength;
+
+  filter = getenv("GPU_BINDGROUP_TEST");
+  if (!filter || !filter[0]) {
+    return true;
+  }
+
+  nameLength = strlen(name);
+  while (*filter) {
+    const char *end;
+    size_t      length;
+
+    end    = strchr(filter, ',');
+    length = end ? (size_t)(end - filter) : strlen(filter);
+    if (length == nameLength && memcmp(filter, name, length) == 0) {
+      return true;
+    }
+    if (!end) {
+      break;
+    }
+    filter = end + 1;
+  }
+
+  return false;
+}
+
 static GPUResult
 test_createBindGroupLayout(GPUDevice *device, GPUBindGroupLayout *layout) {
   if (!device || !layout) {
@@ -1538,12 +1567,18 @@ check_metal_pipeline_binding_limits(GPUDevice *device) {
 
 int
 gpu_test_bindgroup(GPUDevice *device) {
-  return check_backend_descriptor_hooks(device) &&
-         check_bind_group_layout_validation(device) &&
-         check_dynamic_offset_bind_validation(device) &&
-         check_binding_arrays(device) &&
-         check_bind_group_cache(device) &&
-         check_metal_pipeline_binding_limits(device);
+  return (!bindgroup_test_selected("hooks") ||
+          check_backend_descriptor_hooks(device)) &&
+         (!bindgroup_test_selected("layout") ||
+          check_bind_group_layout_validation(device)) &&
+         (!bindgroup_test_selected("dynamic") ||
+          check_dynamic_offset_bind_validation(device)) &&
+         (!bindgroup_test_selected("arrays") ||
+          check_binding_arrays(device)) &&
+         (!bindgroup_test_selected("cache") ||
+          check_bind_group_cache(device)) &&
+         (!bindgroup_test_selected("metal-limits") ||
+          check_metal_pipeline_binding_limits(device));
 }
 
 int

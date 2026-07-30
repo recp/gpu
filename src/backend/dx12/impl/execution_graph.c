@@ -118,18 +118,10 @@ dx12_createExecutionGraph(GPUDevice                            *device,
   library    = info && info->library ? info->library->_priv : NULL;
   if (!deviceDX12 || !deviceDX12->executionGraph ||
       !deviceDX12->d3dDevice5 || !library || !graph ||
-      !dx12_graphWideName(info->graphName, graphName) ||
-      !dx12_compileExecutionGraphLibrary(deviceDX12,
-                                         library,
-                                         &libraryCode)) {
+      !dx12_graphWideName(info->graphName, graphName)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  native = calloc(1, sizeof(*native));
-  if (!native) {
-    dx12_freeShaderCode(&libraryCode);
-    return GPU_ERROR_OUT_OF_MEMORY;
-  }
   entryMask  = 0u;
   entryCount = gpuGetShaderLibraryExecutionGraphEntryCount(info->library);
   for (uint32_t i = 0u; i < entryCount; i++) {
@@ -140,9 +132,18 @@ dx12_createExecutionGraph(GPUDevice                            *device,
     entryMask |= gpuShaderEntryBit(info->library, entry.entryPoint);
   }
   if (entryMask == 0u) {
-    dx12_destroyExecutionGraphState(native);
-    dx12_freeShaderCode(&libraryCode);
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if (!dx12_compileExecutionGraphLibrary(deviceDX12,
+                                         info->library,
+                                         entryMask,
+                                         &libraryCode)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  native = calloc(1, sizeof(*native));
+  if (!native) {
+    dx12_freeShaderCode(&libraryCode);
+    return GPU_ERROR_OUT_OF_MEMORY;
   }
   if (dx12_createShaderRootSignature(device,
                                      info->layout,

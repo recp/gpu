@@ -1180,12 +1180,643 @@ cleanup:
   return ok;
 }
 
+static int
+check_large_texture_write(GPUDevice *device) {
+  enum {
+    LARGE_WIDTH       = 2048u,
+    LARGE_HEIGHT      = 2048u,
+    LARGE_PIXEL_BYTES = 4u,
+    LARGE_ROW_BYTES   = LARGE_WIDTH * LARGE_PIXEL_BYTES,
+    LARGE_IMAGE_BYTES = LARGE_ROW_BYTES * LARGE_HEIGHT
+  };
+  GPUQueue                  *queue;
+  GPUCommandBuffer          *cmdb;
+  GPUTransferPassEncoder    *copyPass;
+  GPUBuffer                 *readback;
+  GPUTexture                *texture;
+  GPUBufferCreateInfo        bufferInfo = {0};
+  GPUTextureCreateInfo       textureInfo = {0};
+  GPUTextureWriteRegion      writeRegion = {0};
+  GPUBufferTextureCopyRegion copyRegion = {0};
+  uint8_t                   *pixels;
+  int                        ok;
+
+  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  if (!queue) {
+    fprintf(stderr, "large texture write has no graphics queue\n");
+    return 0;
+  }
+
+  pixels = malloc(LARGE_IMAGE_BYTES);
+  if (!pixels) {
+    return 0;
+  }
+  for (uint32_t y = 0u; y < LARGE_HEIGHT; y++) {
+    for (uint32_t x = 0u; x < LARGE_ROW_BYTES; x++) {
+      pixels[(uint64_t)y * LARGE_ROW_BYTES + x] =
+        (uint8_t)(0x2bu + y * 17u + x * 11u);
+    }
+  }
+
+  cmdb     = NULL;
+  copyPass = NULL;
+  readback = NULL;
+  texture  = NULL;
+  ok       = 0;
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "large-texture-write";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = LARGE_WIDTH;
+  textureInfo.height           = LARGE_HEIGHT;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
+                                 GPU_TEXTURE_USAGE_COPY_SRC |
+                                 GPU_TEXTURE_USAGE_COPY_DST;
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
+    fprintf(stderr, "large texture setup failed\n");
+    goto cleanup;
+  }
+
+  writeRegion.aspect       = GPU_TEXTURE_ASPECT_ALL;
+  writeRegion.width        = LARGE_WIDTH;
+  writeRegion.height       = LARGE_HEIGHT;
+  writeRegion.depth        = 1u;
+  writeRegion.layerCount   = 1u;
+  writeRegion.bytesPerRow  = LARGE_ROW_BYTES;
+  writeRegion.rowsPerImage = LARGE_HEIGHT;
+  if (GPUQueueWriteTexture(queue,
+                           texture,
+                           &writeRegion,
+                           pixels,
+                           LARGE_IMAGE_BYTES) != GPU_OK) {
+    fprintf(stderr, "large texture upload failed\n");
+    goto cleanup;
+  }
+  free(pixels);
+  pixels = NULL;
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "large-texture-readback";
+  bufferInfo.sizeBytes        = LARGE_IMAGE_BYTES;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
+                                GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(device, &bufferInfo, &readback) != GPU_OK || !readback ||
+      GPUAcquireCommandBuffer(queue,
+                              "large-texture-readback",
+                              &cmdb) != GPU_OK ||
+      !cmdb ||
+      !(copyPass = GPUBeginTransferPass(cmdb,
+                                        "large-texture-readback"))) {
+    fprintf(stderr, "large texture readback setup failed\n");
+    goto cleanup;
+  }
+
+  copyRegion.bytesPerRow        = LARGE_ROW_BYTES;
+  copyRegion.rowsPerImage       = LARGE_HEIGHT;
+  copyRegion.texture.width      = LARGE_WIDTH;
+  copyRegion.texture.height     = LARGE_HEIGHT;
+  copyRegion.texture.depth      = 1u;
+  copyRegion.texture.layerCount = 1u;
+  GPUCopyTextureToBuffer(copyPass, texture, readback, &copyRegion);
+  GPUEndTransferPass(copyPass);
+  copyPass = NULL;
+
+  ok   = transfer_submit(device, queue, cmdb);
+  cmdb = NULL;
+  pixels = malloc(LARGE_IMAGE_BYTES);
+  if (!ok || !pixels ||
+      GPUQueueReadBuffer(queue,
+                         readback,
+                         0u,
+                         pixels,
+                         LARGE_IMAGE_BYTES) != GPU_OK) {
+    fprintf(stderr, "large texture readback failed\n");
+    ok = 0;
+    goto cleanup;
+  }
+
+  for (uint32_t y = 0u; y < LARGE_HEIGHT; y++) {
+    for (uint32_t x = 0u; x < LARGE_ROW_BYTES; x++) {
+      uint8_t expected;
+
+      expected = (uint8_t)(0x2bu + y * 17u + x * 11u);
+      if (pixels[(uint64_t)y * LARGE_ROW_BYTES + x] != expected) {
+        fprintf(stderr,
+                "large texture mismatch at row=%u byte=%u\n",
+                y,
+                x);
+        ok = 0;
+        goto cleanup;
+      }
+    }
+  }
+
+cleanup:
+  if (copyPass) {
+    GPUEndTransferPass(copyPass);
+  }
+  if (cmdb) {
+    (void)GPUDiscardCommandBuffer(cmdb);
+  }
+  GPUDestroyBuffer(readback);
+  GPUDestroyTexture(texture);
+  free(pixels);
+  return ok;
+}
+
+static int
+check_sequential_large_texture_writes(GPUDevice *device) {
+  enum {
+    TEXTURE_COUNT       = 5u,
+    TEXTURE_WIDTH       = 2048u,
+    TEXTURE_HEIGHT      = 2048u,
+    TEXTURE_PIXEL_BYTES = 4u,
+    TEXTURE_ROW_BYTES   = TEXTURE_WIDTH * TEXTURE_PIXEL_BYTES,
+    TEXTURE_IMAGE_BYTES = TEXTURE_ROW_BYTES * TEXTURE_HEIGHT,
+    DIFFUSE_CUBE_SIZE   = 32u,
+    SPECULAR_CUBE_SIZE  = 64u,
+    SPECULAR_MIP_COUNT  = 7u,
+    CUBE_FACE_COUNT     = 6u,
+    CUBE_PIXEL_BYTES    = 8u
+  };
+  GPUTexture                *textures[TEXTURE_COUNT] = {0};
+  GPUTexture                *diffuseCube;
+  GPUTexture                *specularCube;
+  GPUQueue                  *queue;
+  GPUCommandBuffer          *cmdb;
+  GPUTransferPassEncoder    *copyPass;
+  GPUBuffer                 *readback;
+  GPUBufferCreateInfo        bufferInfo = {0};
+  GPUTextureCreateInfo       textureInfo = {0};
+  GPUTextureWriteRegion      writeRegion = {0};
+  GPUBufferTextureCopyRegion copyRegion = {0};
+  uint8_t                   *pixels;
+  int                        ok;
+
+  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  if (!queue) {
+    fprintf(stderr, "sequential large texture writes have no graphics queue\n");
+    return 0;
+  }
+
+  pixels = malloc(TEXTURE_IMAGE_BYTES);
+  if (!pixels) {
+    return 0;
+  }
+
+  cmdb         = NULL;
+  copyPass     = NULL;
+  readback     = NULL;
+  diffuseCube  = NULL;
+  specularCube = NULL;
+  ok           = 0;
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "sequential-large-texture-write";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.width            = TEXTURE_WIDTH;
+  textureInfo.height           = TEXTURE_HEIGHT;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
+                                 GPU_TEXTURE_USAGE_COPY_SRC |
+                                 GPU_TEXTURE_USAGE_COPY_DST;
+
+  writeRegion.aspect       = GPU_TEXTURE_ASPECT_ALL;
+  writeRegion.width        = TEXTURE_WIDTH;
+  writeRegion.height       = TEXTURE_HEIGHT;
+  writeRegion.depth        = 1u;
+  writeRegion.layerCount   = 1u;
+  writeRegion.bytesPerRow  = TEXTURE_ROW_BYTES;
+  writeRegion.rowsPerImage = TEXTURE_HEIGHT;
+
+  for (uint32_t textureIndex = 0u;
+       textureIndex < TEXTURE_COUNT;
+       textureIndex++) {
+    textureInfo.format = textureIndex == 0u
+                           ? GPU_FORMAT_RGBA8_UNORM_SRGB
+                           : GPU_FORMAT_RGBA8_UNORM;
+    for (uint32_t y = 0u; y < TEXTURE_HEIGHT; y++) {
+      for (uint32_t x = 0u; x < TEXTURE_ROW_BYTES; x++) {
+        pixels[(uint64_t)y * TEXTURE_ROW_BYTES + x] =
+          (uint8_t)(0x35u + textureIndex * 41u + y * 17u + x * 11u);
+      }
+    }
+    if (GPUCreateTexture(device,
+                         &textureInfo,
+                         &textures[textureIndex]) != GPU_OK ||
+        !textures[textureIndex] ||
+        GPUQueueWriteTexture(queue,
+                             textures[textureIndex],
+                             &writeRegion,
+                             pixels,
+                             TEXTURE_IMAGE_BYTES) != GPU_OK) {
+      fprintf(stderr,
+              "sequential large texture write failed at texture=%u\n",
+              textureIndex);
+      goto cleanup;
+    }
+  }
+
+  textureInfo.label         = "sequential-diffuse-cube-write";
+  textureInfo.format        = GPU_FORMAT_RGBA16_FLOAT;
+  textureInfo.width         = DIFFUSE_CUBE_SIZE;
+  textureInfo.height        = DIFFUSE_CUBE_SIZE;
+  textureInfo.depthOrLayers = CUBE_FACE_COUNT;
+  if (GPUCreateTexture(device, &textureInfo, &diffuseCube) != GPU_OK ||
+      !diffuseCube) {
+    fprintf(stderr, "sequential diffuse cube setup failed\n");
+    goto cleanup;
+  }
+
+  writeRegion.width        = DIFFUSE_CUBE_SIZE;
+  writeRegion.height       = DIFFUSE_CUBE_SIZE;
+  writeRegion.bytesPerRow  = DIFFUSE_CUBE_SIZE * CUBE_PIXEL_BYTES;
+  writeRegion.rowsPerImage = DIFFUSE_CUBE_SIZE;
+  for (uint32_t face = 0u; face < CUBE_FACE_COUNT; face++) {
+    uint64_t faceBytes;
+
+    faceBytes = (uint64_t)writeRegion.bytesPerRow * writeRegion.height;
+    for (uint64_t i = 0u; i < faceBytes; i++) {
+      pixels[i] = (uint8_t)(0x19u + face * 43u + i * 7u);
+    }
+    writeRegion.baseArrayLayer = face;
+    if (GPUQueueWriteTexture(queue,
+                             diffuseCube,
+                             &writeRegion,
+                             pixels,
+                             faceBytes) != GPU_OK) {
+      fprintf(stderr,
+              "sequential diffuse cube write failed at face=%u\n",
+              face);
+      goto cleanup;
+    }
+  }
+
+  textureInfo.label         = "sequential-specular-cube-write";
+  textureInfo.width         = SPECULAR_CUBE_SIZE;
+  textureInfo.height        = SPECULAR_CUBE_SIZE;
+  textureInfo.mipLevelCount = SPECULAR_MIP_COUNT;
+  if (GPUCreateTexture(device, &textureInfo, &specularCube) != GPU_OK ||
+      !specularCube) {
+    fprintf(stderr, "sequential specular cube setup failed\n");
+    goto cleanup;
+  }
+
+  for (uint32_t mip = 0u; mip < SPECULAR_MIP_COUNT; mip++) {
+    uint32_t size;
+    uint64_t faceBytes;
+
+    size                     = SPECULAR_CUBE_SIZE >> mip;
+    writeRegion.width        = size;
+    writeRegion.height       = size;
+    writeRegion.mipLevel     = mip;
+    writeRegion.bytesPerRow  = size * CUBE_PIXEL_BYTES;
+    writeRegion.rowsPerImage = size;
+    faceBytes                = (uint64_t)writeRegion.bytesPerRow * size;
+    for (uint32_t face = 0u; face < CUBE_FACE_COUNT; face++) {
+      for (uint64_t i = 0u; i < faceBytes; i++) {
+        pixels[i] = (uint8_t)(0x2du + mip * 29u + face * 47u + i * 11u);
+      }
+      writeRegion.baseArrayLayer = face;
+      if (GPUQueueWriteTexture(queue,
+                               specularCube,
+                               &writeRegion,
+                               pixels,
+                               faceBytes) != GPU_OK) {
+        fprintf(stderr,
+                "sequential specular cube write failed at mip=%u face=%u\n",
+                mip,
+                face);
+        goto cleanup;
+      }
+    }
+  }
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "sequential-large-texture-readback";
+  bufferInfo.sizeBytes        = TEXTURE_IMAGE_BYTES;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
+                                GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(device, &bufferInfo, &readback) != GPU_OK || !readback ||
+      GPUAcquireCommandBuffer(queue,
+                              "sequential-large-texture-readback",
+                              &cmdb) != GPU_OK ||
+      !cmdb ||
+      !(copyPass = GPUBeginTransferPass(
+          cmdb,
+          "sequential-large-texture-readback"))) {
+    fprintf(stderr, "sequential large texture readback setup failed\n");
+    goto cleanup;
+  }
+
+  copyRegion.bytesPerRow        = TEXTURE_ROW_BYTES;
+  copyRegion.rowsPerImage       = TEXTURE_HEIGHT;
+  copyRegion.texture.width      = TEXTURE_WIDTH;
+  copyRegion.texture.height     = TEXTURE_HEIGHT;
+  copyRegion.texture.depth      = 1u;
+  copyRegion.texture.layerCount = 1u;
+  GPUCopyTextureToBuffer(copyPass, textures[0], readback, &copyRegion);
+  GPUEndTransferPass(copyPass);
+  copyPass = NULL;
+
+  ok   = transfer_submit(device, queue, cmdb);
+  cmdb = NULL;
+  if (!ok ||
+      GPUQueueReadBuffer(queue,
+                         readback,
+                         0u,
+                         pixels,
+                         TEXTURE_IMAGE_BYTES) != GPU_OK) {
+    fprintf(stderr, "sequential large texture readback failed\n");
+    ok = 0;
+    goto cleanup;
+  }
+
+  for (uint32_t y = 0u; y < TEXTURE_HEIGHT; y++) {
+    for (uint32_t x = 0u; x < TEXTURE_ROW_BYTES; x++) {
+      uint8_t expected;
+
+      expected = (uint8_t)(0x35u + y * 17u + x * 11u);
+      if (pixels[(uint64_t)y * TEXTURE_ROW_BYTES + x] != expected) {
+        fprintf(stderr,
+                "sequential large texture mismatch at row=%u byte=%u\n",
+                y,
+                x);
+        ok = 0;
+        goto cleanup;
+      }
+    }
+  }
+
+cleanup:
+  if (copyPass) {
+    GPUEndTransferPass(copyPass);
+  }
+  if (cmdb) {
+    (void)GPUDiscardCommandBuffer(cmdb);
+  }
+  GPUDestroyBuffer(readback);
+  GPUDestroyTexture(specularCube);
+  GPUDestroyTexture(diffuseCube);
+  for (uint32_t i = 0u; i < TEXTURE_COUNT; i++) {
+    GPUDestroyTexture(textures[i]);
+  }
+  free(pixels);
+  return ok;
+}
+
+static int
+check_sequential_cubemap_writes(GPUDevice *device) {
+  enum {
+    CUBE_BASE_SIZE   = 37u,
+    CUBE_FACE_COUNT  = 6u,
+    CUBE_MIP_COUNT   = 4u,
+    CUBE_PIXEL_BYTES = 8u,
+    CUBE_COPY_COUNT  = CUBE_FACE_COUNT * CUBE_MIP_COUNT
+  };
+  typedef struct CubeCopy {
+    uint64_t tightOffset;
+    uint64_t readbackOffset;
+    uint32_t rowPitch;
+    uint32_t width;
+    uint32_t height;
+    uint32_t mip;
+    uint32_t face;
+  } CubeCopy;
+
+  GPUQueue                  *queue;
+  GPUCommandBuffer          *cmdb;
+  GPUTransferPassEncoder    *copyPass;
+  GPUBuffer                 *readback;
+  GPUTexture                *texture;
+  GPUBufferCreateInfo        bufferInfo = {0};
+  GPUTextureCreateInfo       textureInfo = {0};
+  GPUTextureWriteRegion      writeRegion = {0};
+  GPUBufferTextureCopyRegion copyRegion = {0};
+  CubeCopy                   copies[CUBE_COPY_COUNT];
+  uint8_t                   *expected;
+  uint8_t                   *actual;
+  uint64_t                   tightBytes;
+  uint64_t                   readbackBytes;
+  uint32_t                   copyIndex;
+  int                        ok;
+
+  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  if (!queue) {
+    fprintf(stderr, "sequential cubemap write has no graphics queue\n");
+    return 0;
+  }
+
+  tightBytes    = 0u;
+  readbackBytes = 0u;
+  copyIndex     = 0u;
+  for (uint32_t mip = 0u; mip < CUBE_MIP_COUNT; mip++) {
+    uint32_t size;
+    uint32_t rowBytes;
+    uint32_t rowPitch;
+
+    size     = CUBE_BASE_SIZE >> mip;
+    rowBytes = size * CUBE_PIXEL_BYTES;
+    rowPitch = (rowBytes + 255u) & ~255u;
+    for (uint32_t face = 0u; face < CUBE_FACE_COUNT; face++) {
+      CubeCopy *copy;
+
+      readbackBytes = (readbackBytes + 511u) & ~511u;
+      copy                 = &copies[copyIndex++];
+      copy->tightOffset    = tightBytes;
+      copy->readbackOffset = readbackBytes;
+      copy->rowPitch       = rowPitch;
+      copy->width          = size;
+      copy->height         = size;
+      copy->mip            = mip;
+      copy->face           = face;
+      tightBytes    += (uint64_t)rowBytes * size;
+      readbackBytes += (uint64_t)rowPitch * size;
+    }
+  }
+
+  expected = malloc((size_t)tightBytes);
+  actual   = calloc(1u, (size_t)readbackBytes);
+  if (!expected || !actual) {
+    free(actual);
+    free(expected);
+    return 0;
+  }
+
+  for (uint32_t i = 0u; i < CUBE_COPY_COUNT; i++) {
+    const CubeCopy *copy;
+    uint32_t        rowBytes;
+
+    copy     = &copies[i];
+    rowBytes = copy->width * CUBE_PIXEL_BYTES;
+    for (uint32_t y = 0u; y < copy->height; y++) {
+      uint8_t *row;
+
+      row = expected + copy->tightOffset + (uint64_t)y * rowBytes;
+      for (uint32_t x = 0u; x < rowBytes; x++) {
+        row[x] = (uint8_t)(0x17u + copy->mip * 31u +
+                           copy->face * 47u + y * 13u + x * 7u);
+      }
+    }
+  }
+
+  cmdb     = NULL;
+  copyPass = NULL;
+  readback = NULL;
+  texture  = NULL;
+  ok       = 0;
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "sequential-cubemap-write";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA16_FLOAT;
+  textureInfo.width            = CUBE_BASE_SIZE;
+  textureInfo.height           = CUBE_BASE_SIZE;
+  textureInfo.depthOrLayers    = CUBE_FACE_COUNT;
+  textureInfo.mipLevelCount    = CUBE_MIP_COUNT;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
+                                 GPU_TEXTURE_USAGE_COPY_SRC |
+                                 GPU_TEXTURE_USAGE_COPY_DST;
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
+    fprintf(stderr, "sequential cubemap texture setup failed\n");
+    goto cleanup;
+  }
+
+  writeRegion.aspect     = GPU_TEXTURE_ASPECT_ALL;
+  writeRegion.depth      = 1u;
+  writeRegion.layerCount = 1u;
+  for (uint32_t i = 0u; i < CUBE_COPY_COUNT; i++) {
+    const CubeCopy *copy;
+    uint32_t        rowBytes;
+    uint64_t        imageBytes;
+
+    copy                     = &copies[i];
+    rowBytes                 = copy->width * CUBE_PIXEL_BYTES;
+    imageBytes               = (uint64_t)rowBytes * copy->height;
+    writeRegion.width        = copy->width;
+    writeRegion.height       = copy->height;
+    writeRegion.mipLevel     = copy->mip;
+    writeRegion.baseArrayLayer = copy->face;
+    writeRegion.bytesPerRow  = rowBytes;
+    writeRegion.rowsPerImage = copy->height;
+    if (GPUQueueWriteTexture(queue,
+                             texture,
+                             &writeRegion,
+                             expected + copy->tightOffset,
+                             imageBytes) != GPU_OK) {
+      fprintf(stderr,
+              "sequential cubemap write failed at mip=%u face=%u\n",
+              copy->mip,
+              copy->face);
+      goto cleanup;
+    }
+  }
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "sequential-cubemap-readback";
+  bufferInfo.sizeBytes        = readbackBytes;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
+                                GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(device, &bufferInfo, &readback) != GPU_OK || !readback ||
+      GPUAcquireCommandBuffer(queue,
+                              "sequential-cubemap-readback",
+                              &cmdb) != GPU_OK ||
+      !cmdb ||
+      !(copyPass = GPUBeginTransferPass(cmdb,
+                                        "sequential-cubemap-readback"))) {
+    fprintf(stderr, "sequential cubemap readback setup failed\n");
+    goto cleanup;
+  }
+
+  copyRegion.texture.depth      = 1u;
+  copyRegion.texture.layerCount = 1u;
+  for (uint32_t i = 0u; i < CUBE_COPY_COUNT; i++) {
+    const CubeCopy *copy;
+
+    copy                                      = &copies[i];
+    copyRegion.bufferOffset                   = copy->readbackOffset;
+    copyRegion.bytesPerRow                    = copy->rowPitch;
+    copyRegion.rowsPerImage                   = copy->height;
+    copyRegion.texture.texture.mipLevel        = copy->mip;
+    copyRegion.texture.texture.baseArrayLayer = copy->face;
+    copyRegion.texture.width                   = copy->width;
+    copyRegion.texture.height                  = copy->height;
+    GPUCopyTextureToBuffer(copyPass, texture, readback, &copyRegion);
+  }
+  GPUEndTransferPass(copyPass);
+  copyPass = NULL;
+
+  ok   = transfer_submit(device, queue, cmdb);
+  cmdb = NULL;
+  if (!ok ||
+      GPUQueueReadBuffer(queue,
+                         readback,
+                         0u,
+                         actual,
+                         readbackBytes) != GPU_OK) {
+    fprintf(stderr, "sequential cubemap readback failed\n");
+    ok = 0;
+    goto cleanup;
+  }
+
+  for (uint32_t i = 0u; i < CUBE_COPY_COUNT; i++) {
+    const CubeCopy *copy;
+    uint32_t        rowBytes;
+
+    copy     = &copies[i];
+    rowBytes = copy->width * CUBE_PIXEL_BYTES;
+    for (uint32_t y = 0u; y < copy->height; y++) {
+      if (memcmp(expected + copy->tightOffset + (uint64_t)y * rowBytes,
+                 actual + copy->readbackOffset +
+                   (uint64_t)y * copy->rowPitch,
+                 rowBytes) != 0) {
+        fprintf(stderr,
+                "sequential cubemap mismatch at mip=%u face=%u row=%u\n",
+                copy->mip,
+                copy->face,
+                y);
+        ok = 0;
+        goto cleanup;
+      }
+    }
+  }
+
+cleanup:
+  if (copyPass) {
+    GPUEndTransferPass(copyPass);
+  }
+  if (cmdb) {
+    (void)GPUDiscardCommandBuffer(cmdb);
+  }
+  GPUDestroyBuffer(readback);
+  GPUDestroyTexture(texture);
+  free(actual);
+  free(expected);
+  return ok;
+}
+
 int
 gpu_test_texture_transfer(GPUDevice *device) {
   return check_tight_texture_copies(device) &&
          check_array_mip_transfers(device) &&
          check_3d_texture_transfers(device) &&
          check_same_texture_copies(device) &&
+         check_large_texture_write(device) &&
+         check_sequential_large_texture_writes(device) &&
+         check_sequential_cubemap_writes(device) &&
          check_depth_stencil_plane_copies(
            device,
            GPU_FORMAT_DEPTH32_FLOAT_STENCIL8

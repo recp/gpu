@@ -150,6 +150,34 @@ gpu_test_read_file(const char *path, uint64_t *outSize) {
   return bytes;
 }
 
+static bool
+test_selected(const char *filter, const char *name) {
+  const char *cursor;
+  size_t      nameLength;
+
+  if (!filter || filter[0] == '\0') {
+    return true;
+  }
+
+  nameLength = strlen(name);
+  cursor     = filter;
+  while (*cursor != '\0') {
+    const char *end;
+
+    end = strchr(cursor, ',');
+    if (!end) {
+      end = cursor + strlen(cursor);
+    }
+    if ((size_t)(end - cursor) == nameLength &&
+        memcmp(cursor, name, nameLength) == 0) {
+      return true;
+    }
+    cursor = *end == ',' ? end + 1 : end;
+  }
+
+  return false;
+}
+
 int
 gpu_run_api_tests(const GPUApiTest *tests, uint32_t count) {
   const char *filter = getenv("GPU_API_TEST");
@@ -165,7 +193,7 @@ gpu_run_api_tests(const GPUApiTest *tests, uint32_t count) {
       fprintf(stderr, "api test runner has invalid test at index %u\n", i);
       return 0;
     }
-    if (filter && strcmp(tests[i].name, filter) != 0) {
+    if (!test_selected(filter, tests[i].name)) {
       continue;
     }
 
