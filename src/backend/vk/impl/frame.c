@@ -121,6 +121,10 @@ vk_beginFrame(GPUApi *api, GPUSwapchain *swapchainObj) {
     vk_setSwapchainStatus(swapchain, result);
     return NULL;
   }
+  if (!vk_waitFrameCompletion(sync)) {
+    vk_setSwapchainStatus(swapchain, VK_ERROR_UNKNOWN);
+    return NULL;
+  }
 
   imageIndex = 0u;
   result = vkAcquireNextImageKHR(swapchain->device,

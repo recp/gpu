@@ -351,6 +351,7 @@ vk__createImageState(GPUSwapchainVk *swapchain) {
     GPUTextureView   *view;
     GPUTextureViewVk *nativeView;
 
+    swapchain->frameSync[i].swapchain = swapchain;
     viewInfo.image = swapchain->images[i];
     if (vkCreateImageView(swapchain->device,
                           &viewInfo,
@@ -621,6 +622,8 @@ vk__createResources(GPUSwapchain  *swapchainObj,
                               &swapchain->imageCount,
                               NULL) != VK_SUCCESS ||
       swapchain->imageCount == 0u ||
+      !vk_reserveCommandBuffers(swapchain->queue->queue,
+                                swapchain->imageCount) ||
       !vk__createImageState(swapchain)) {
     vk__destroyResources(swapchain);
     return false;
@@ -746,6 +749,7 @@ vk_resizeSwapchain(GPUSwapchain *swapchainObj, GPUExtent2D size) {
   vk__destroyResources(swapchain);
   *swapchain = replacement;
   for (uint32_t i = 0u; i < swapchain->imageCount; i++) {
+    swapchain->frameSync[i].swapchain    = swapchain;
     swapchain->nativeViews[i].swapchain = swapchain;
   }
   return GPU_OK;

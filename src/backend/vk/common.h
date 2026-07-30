@@ -550,6 +550,7 @@ typedef struct GPUSemaphoreVk {
 typedef struct GPUQueueVk         GPUQueueVk;
 typedef struct GPUCommandBufferVk GPUCommandBufferVk;
 typedef struct GPUSwapchainVk     GPUSwapchainVk;
+typedef struct GPUFrameSyncVk     GPUFrameSyncVk;
 typedef struct GPUTextureViewVk   GPUTextureViewVk;
 
 enum {
@@ -630,6 +631,7 @@ struct GPUCommandBufferVk {
   GPUCommandBufferVk             *poolNext;
   GPUCommandBufferVk             *pendingNext;
   GPUSwapchainVk                 *presentSwapchain;
+  GPUFrameSyncVk                 *completionSync;
   GPUExecutionGraphInputChunkVk  *graphInputChunks;
   GPUExecutionGraphInstanceEXT   *graphInitializations[
     GPU_VK_GRAPH_INIT_TRACK_COUNT
@@ -702,6 +704,7 @@ struct GPUQueueVk {
   uint32_t            familyIndex;
   uint32_t            queueIndex;
   uint32_t            timestampValidBits;
+  uint32_t            commandCount;
   uint32_t            inFlightCount;
   uint32_t            activeTransferSlot;
   uint32_t            nextTransferSlot;
@@ -721,10 +724,12 @@ typedef struct GPUSurfaceVk {
   uint32_t     presentModes[GPU_PRESENT_MODE_IMMEDIATE + 1u];
 } GPUSurfaceVk;
 
-typedef struct GPUFrameSyncVk {
-  VkSemaphore imageAvailable;
-  VkFence     fence;
-} GPUFrameSyncVk;
+struct GPUFrameSyncVk {
+  GPUSwapchainVk *swapchain;
+  VkSemaphore     imageAvailable;
+  VkFence         fence;
+  uint32_t        pendingCommandCount;
+};
 
 struct GPUTextureViewVk {
   GPUSwapchainVk    *swapchain;
@@ -974,6 +979,10 @@ bool
 vk_restoreFrameFence(GPUSwapchainVk *swapchain, GPUFrameSyncVk *sync);
 
 GPU_HIDE
+bool
+vk_waitFrameCompletion(GPUFrameSyncVk *sync);
+
+GPU_HIDE
 VkResult
 vk_presentSwapchain(GPUSwapchainVk *swapchain,
                     VkQueue         queue,
@@ -1001,6 +1010,10 @@ vk_abortTransfer(GPUQueue *queue);
 GPU_HIDE
 void
 vk_waitSwapchainIdle(GPUSwapchainVk *swapchain);
+
+GPU_HIDE
+bool
+vk_reserveCommandBuffers(GPUQueue *queue, uint32_t minimumCount);
 
 GPU_HIDE
 void
