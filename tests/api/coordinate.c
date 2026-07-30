@@ -133,6 +133,7 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
   GPUShaderLibrary     *library         = NULL;
   GPUShaderLayout      *shaderLayout    = NULL;
   GPURenderPipeline    *texturePipeline = NULL;
+  GPURenderPipeline    *repeatPipeline  = NULL;
   GPURenderPipeline    *redPipeline     = NULL;
   GPURenderPipeline    *greenPipeline   = NULL;
   GPURenderPipeline    *bluePipeline    = NULL;
@@ -143,15 +144,20 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
   GPUBuffer            *readbackBuffer  = NULL;
   GPUTexture           *sampleTexture   = NULL;
   GPUTexture           *textureTarget   = NULL;
+  GPUTexture           *repeatTarget    = NULL;
   GPUTexture           *depthTarget     = NULL;
   GPUTexture           *depthTexture    = NULL;
   GPUTextureView       *sampleView      = NULL;
   GPUTextureView       *textureView     = NULL;
+  GPUTextureView       *repeatView      = NULL;
   GPUTextureView       *depthTargetView = NULL;
   GPUTextureView       *depthView       = NULL;
   GPUSampler           *sampler         = NULL;
-  GPUBindGroup         *textureGroup    = NULL;
-  GPUBindGroup         *samplerGroup    = NULL;
+  GPUSampler           *repeatSampler   = NULL;
+  GPUBindGroup         *textureGroup     = NULL;
+  GPUBindGroup         *samplerGroup     = NULL;
+  GPUBindGroup         *repeatGroup      = NULL;
+  GPUBindGroup         *repeatClampGroup = NULL;
   GPUCommandBuffer     *cmdb            = NULL;
   GPUCommandBuffer     *buffers[1];
   GPURenderPassEncoder *renderPass      = NULL;
@@ -173,17 +179,20 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
   GPUBufferBinding       vertexBinding        = {0};
   GPUViewport            viewport             = {0};
   GPUScissorRect         scissor              = {0};
-  GPUTextureBarrier      textureBarriers[2]   = {{0}};
+  GPUTextureBarrier      textureBarriers[4]   = {{0}};
   GPUBarrierBatch        barrierBatch         = {0};
   GPUBufferTextureCopyRegion copyRegion       = {0};
   GPUQueueSubmitInfo     submitInfo           = {0};
-  uint8_t                pixels[2u * 256u * 4u] = {0};
+  GPUCacheStats          cacheStats           = {0};
+  uint8_t                pixels[4u * 256u * 4u] = {0};
   uint64_t               bytecodeSize = 0u;
   void                  *bytecode;
   size_t                 topRight;
   size_t                 bottomLeft;
   size_t                 bottomRight;
+  size_t                 repeatOffset;
   size_t                 depthCenter;
+  size_t                 sampleOffset;
   int                    ok = 0;
 
   bytecode = gpu_test_read_file(bytecodePath, &bytecodeSize);
@@ -195,10 +204,11 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
                                     &library) != GPU_OK ||
       !library ||
       GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
-      !shaderLayout || shaderLayout->bindGroupLayoutCount != 2u ||
+      !shaderLayout || shaderLayout->bindGroupLayoutCount != 3u ||
       !shaderLayout->bindGroupLayouts ||
       !shaderLayout->bindGroupLayouts[0] ||
-      !shaderLayout->bindGroupLayouts[1]) {
+      !shaderLayout->bindGroupLayouts[1] ||
+      !shaderLayout->bindGroupLayouts[2]) {
     fprintf(stderr, "coordinate shader setup failed\n");
     goto cleanup;
   }
@@ -230,6 +240,13 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
                                   &textureLayout,
                                   NULL,
                                   &texturePipeline) ||
+      !coordinate_create_pipeline(device,
+                                  library,
+                                  shaderLayout->pipelineLayout,
+                                  "coordinate_texture_repeat_fs",
+                                  &textureLayout,
+                                  NULL,
+                                  &repeatPipeline) ||
       !coordinate_create_pipeline(device,
                                   library,
                                   shaderLayout->pipelineLayout,
@@ -291,7 +308,7 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
 #undef CREATE_BUFFER
 
   bufferInfo.label     = "coordinate-readback";
-  bufferInfo.sizeBytes = 2u * imageBytes;
+  bufferInfo.sizeBytes = 4u * imageBytes;
   bufferInfo.usage     = GPU_BUFFER_USAGE_COPY_DST | GPU_BUFFER_USAGE_COPY_SRC;
   if (GPUCreateBuffer(device, &bufferInfo, &readbackBuffer) != GPU_OK ||
       !readbackBuffer) {
@@ -303,6 +320,7 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
                                  "coordinate-sample",
                                  GPU_FORMAT_RGBA8_UNORM,
                                  GPU_TEXTURE_USAGE_SAMPLED |
+                                   GPU_TEXTURE_USAGE_COPY_SRC |
                                    GPU_TEXTURE_USAGE_COPY_DST,
                                  2u,
                                  2u,
@@ -317,6 +335,15 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
                                  height,
                                  &textureTarget,
                                  &textureView) ||
+      !coordinate_create_texture(device,
+                                 "coordinate-repeat-target",
+                                 GPU_FORMAT_RGBA8_UNORM,
+                                 GPU_TEXTURE_USAGE_COLOR_TARGET |
+                                   GPU_TEXTURE_USAGE_COPY_SRC,
+                                 width,
+                                 height,
+                                 &repeatTarget,
+                                 &repeatView) ||
       !coordinate_create_texture(device,
                                  "coordinate-depth-target",
                                  GPU_FORMAT_RGBA8_UNORM,
@@ -367,6 +394,18 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
     fprintf(stderr, "coordinate sampler setup failed\n");
     goto cleanup;
   }
+  samplerInfo.label         = "coordinate-repeat-sampler";
+  samplerInfo.desc.addressU = GPU_ADDRESS_MODE_REPEAT;
+  samplerInfo.desc.addressV = GPU_ADDRESS_MODE_REPEAT;
+  samplerInfo.desc.addressW = GPU_ADDRESS_MODE_REPEAT;
+  if (GPUCreateSampler(device,
+                       &samplerInfo,
+                       false,
+                       &repeatSampler) != GPU_OK ||
+      !repeatSampler) {
+    fprintf(stderr, "coordinate repeat sampler setup failed\n");
+    goto cleanup;
+  }
 
   groupEntry.binding     = 0u;
   groupEntry.bindingType = GPU_BINDING_SAMPLED_TEXTURE;
@@ -387,9 +426,34 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
   groupEntry.sampler     = sampler;
   groupInfo.label        = "coordinate-sampler-group";
   groupInfo.layout       = shaderLayout->bindGroupLayouts[1];
+  GPUResetStats(device);
   if (GPUCreateBindGroup(device, &groupInfo, &samplerGroup) != GPU_OK ||
       !samplerGroup) {
     fprintf(stderr, "coordinate sampler group setup failed\n");
+    goto cleanup;
+  }
+  if (GPUGetCacheStats(device, &cacheStats) != GPU_OK ||
+      cacheStats.bindGroupHits != 0u ||
+      cacheStats.bindGroupMisses != 1u) {
+    fprintf(stderr,
+            "coordinate sampler group cache mismatch: hits=%llu misses=%llu\n",
+            (unsigned long long)cacheStats.bindGroupHits,
+            (unsigned long long)cacheStats.bindGroupMisses);
+    goto cleanup;
+  }
+  groupEntry.sampler = repeatSampler;
+  groupInfo.label    = "coordinate-repeat-sampler-group";
+  groupInfo.layout   = shaderLayout->bindGroupLayouts[2];
+  if (GPUCreateBindGroup(device, &groupInfo, &repeatGroup) != GPU_OK ||
+      !repeatGroup) {
+    fprintf(stderr, "coordinate repeat sampler group setup failed\n");
+    goto cleanup;
+  }
+  groupEntry.sampler = sampler;
+  groupInfo.label    = "coordinate-repeat-clamp-group";
+  if (GPUCreateBindGroup(device, &groupInfo, &repeatClampGroup) != GPU_OK ||
+      !repeatClampGroup) {
+    fprintf(stderr, "coordinate repeat clamp group setup failed\n");
     goto cleanup;
   }
 
@@ -431,6 +495,31 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
   GPUEndRenderPass(renderPass);
   renderPass = NULL;
 
+  color.view       = repeatView;
+  passInfo.label   = "coordinate-repeat-pass";
+  renderPass = GPUBeginRenderPass(cmdb, &passInfo);
+  if (!renderPass) {
+    fprintf(stderr, "coordinate repeat pass failed\n");
+    goto cleanup;
+  }
+  GPUBindRenderPipeline(renderPass, repeatPipeline);
+  GPUBindVertexBuffers(renderPass, 0u, 1u, &vertexBinding);
+  GPUBindRenderGroup(renderPass, 0u, textureGroup, 0u, NULL);
+  GPUBindRenderGroup(renderPass, 1u, samplerGroup, 0u, NULL);
+  GPUBindRenderGroup(renderPass, 2u, repeatGroup, 0u, NULL);
+  GPUSetViewport(renderPass, &viewport);
+  GPUSetScissor(renderPass, &scissor);
+  GPUDraw(renderPass, 6u, 1u, 0u, 0u);
+  scissor.x      = (int32_t)(width / 2u);
+  scissor.y      = 0;
+  scissor.width  = width - width / 2u;
+  scissor.height = height;
+  GPUBindRenderGroup(renderPass, 2u, repeatClampGroup, 0u, NULL);
+  GPUSetScissor(renderPass, &scissor);
+  GPUDraw(renderPass, 6u, 1u, 0u, 0u);
+  GPUEndRenderPass(renderPass);
+  renderPass = NULL;
+
   color.view                       = depthTargetView;
   depth.view                       = depthView;
   depth.depthLoadOp                = GPU_LOAD_OP_CLEAR;
@@ -445,6 +534,10 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
     fprintf(stderr, "coordinate depth pass failed\n");
     goto cleanup;
   }
+  scissor.x      = -2;
+  scissor.y      = -3;
+  scissor.width  = width + 2u;
+  scissor.height = height + 3u;
   GPUSetViewport(renderPass, &viewport);
   GPUSetScissor(renderPass, &scissor);
   vertexBinding.buffer = nearVertices;
@@ -463,16 +556,22 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
   renderPass = NULL;
 
   textureBarriers[0].texture   = textureTarget;
-  textureBarriers[1].texture   = depthTarget;
-  for (uint32_t i = 0u; i < 2u; i++) {
+  textureBarriers[1].texture   = repeatTarget;
+  textureBarriers[2].texture   = depthTarget;
+  for (uint32_t i = 0u; i < 3u; i++) {
     textureBarriers[i].srcAccess  = GPU_ACCESS_COLOR_WRITE;
     textureBarriers[i].dstAccess  = GPU_ACCESS_TRANSFER_READ;
     textureBarriers[i].mipCount   = 1u;
     textureBarriers[i].layerCount = 1u;
   }
+  textureBarriers[3].texture    = sampleTexture;
+  textureBarriers[3].srcAccess  = GPU_ACCESS_SHADER_READ;
+  textureBarriers[3].dstAccess  = GPU_ACCESS_TRANSFER_READ;
+  textureBarriers[3].mipCount   = 1u;
+  textureBarriers[3].layerCount = 1u;
   barrierBatch.srcStages           = GPU_STAGE_FRAGMENT;
   barrierBatch.dstStages           = GPU_STAGE_TRANSFER;
-  barrierBatch.textureBarrierCount = 2u;
+  barrierBatch.textureBarrierCount = 4u;
   barrierBatch.pTextureBarriers    = textureBarriers;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
@@ -493,7 +592,21 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
                          &copyRegion);
   copyRegion.bufferOffset = imageBytes;
   GPUCopyTextureToBuffer(copyPass,
+                         repeatTarget,
+                         readbackBuffer,
+                         &copyRegion);
+  copyRegion.bufferOffset       = 2u * imageBytes;
+  GPUCopyTextureToBuffer(copyPass,
                          depthTarget,
+                         readbackBuffer,
+                         &copyRegion);
+  copyRegion.bufferOffset       = 3u * imageBytes;
+  copyRegion.bytesPerRow        = rowPitch;
+  copyRegion.rowsPerImage       = 2u;
+  copyRegion.texture.width      = 2u;
+  copyRegion.texture.height     = 2u;
+  GPUCopyTextureToBuffer(copyPass,
+                         sampleTexture,
                          readbackBuffer,
                          &copyRegion);
   GPUEndTransferPass(copyPass);
@@ -528,12 +641,78 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
   topRight    = (width - 1u) * 4u;
   bottomLeft  = (size_t)(height - 1u) * rowPitch;
   bottomRight = bottomLeft + (width - 1u) * 4u;
-  depthCenter = (size_t)imageBytes + 2u * rowPitch + 2u * 4u;
+  repeatOffset = (size_t)imageBytes;
+  depthCenter  = (size_t)(2u * imageBytes) + 2u * rowPitch + 2u * 4u;
+  sampleOffset = (size_t)(3u * imageBytes);
+  if (memcmp(&pixels[sampleOffset],
+             &kTexturePixels[0],
+             2u * 4u) != 0 ||
+      memcmp(&pixels[sampleOffset + rowPitch],
+             &kTexturePixels[2u * 4u],
+             2u * 4u) != 0) {
+    fprintf(stderr,
+            "coordinate source texture mismatch: "
+            "TL=%u,%u,%u,%u TR=%u,%u,%u,%u "
+            "BL=%u,%u,%u,%u BR=%u,%u,%u,%u\n",
+            pixels[sampleOffset + 0u], pixels[sampleOffset + 1u],
+            pixels[sampleOffset + 2u], pixels[sampleOffset + 3u],
+            pixels[sampleOffset + 4u], pixels[sampleOffset + 5u],
+            pixels[sampleOffset + 6u], pixels[sampleOffset + 7u],
+            pixels[sampleOffset + rowPitch + 0u],
+            pixels[sampleOffset + rowPitch + 1u],
+            pixels[sampleOffset + rowPitch + 2u],
+            pixels[sampleOffset + rowPitch + 3u],
+            pixels[sampleOffset + rowPitch + 4u],
+            pixels[sampleOffset + rowPitch + 5u],
+            pixels[sampleOffset + rowPitch + 6u],
+            pixels[sampleOffset + rowPitch + 7u]);
+    goto cleanup;
+  }
   if (!coordinate_pixel(&pixels[0], 255u, 0u, 0u) ||
       !coordinate_pixel(&pixels[topRight], 0u, 255u, 0u) ||
       !coordinate_pixel(&pixels[bottomLeft], 0u, 0u, 255u) ||
       !coordinate_pixel(&pixels[bottomRight], 255u, 255u, 255u)) {
-    fprintf(stderr, "coordinate texture orientation mismatch\n");
+    fprintf(stderr,
+            "coordinate texture orientation mismatch: "
+            "TL=%u,%u,%u,%u TR=%u,%u,%u,%u "
+            "BL=%u,%u,%u,%u BR=%u,%u,%u,%u\n",
+            pixels[0], pixels[1], pixels[2], pixels[3],
+            pixels[topRight], pixels[topRight + 1u],
+            pixels[topRight + 2u], pixels[topRight + 3u],
+            pixels[bottomLeft], pixels[bottomLeft + 1u],
+            pixels[bottomLeft + 2u], pixels[bottomLeft + 3u],
+            pixels[bottomRight], pixels[bottomRight + 1u],
+            pixels[bottomRight + 2u], pixels[bottomRight + 3u]);
+    goto cleanup;
+  }
+  if (!coordinate_pixel(&pixels[repeatOffset], 255u, 64u, 64u) ||
+      !coordinate_pixel(&pixels[repeatOffset + topRight],
+                        255u,
+                        255u,
+                        255u) ||
+      !coordinate_pixel(&pixels[repeatOffset + bottomLeft], 64u, 64u, 255u) ||
+      !coordinate_pixel(&pixels[repeatOffset + bottomRight],
+                        255u,
+                        255u,
+                        255u)) {
+    fprintf(stderr,
+            "coordinate repeat sampling mismatch: "
+            "TL=%u,%u,%u,%u TR=%u,%u,%u,%u "
+            "BL=%u,%u,%u,%u BR=%u,%u,%u,%u\n",
+            pixels[repeatOffset + 0u], pixels[repeatOffset + 1u],
+            pixels[repeatOffset + 2u], pixels[repeatOffset + 3u],
+            pixels[repeatOffset + topRight + 0u],
+            pixels[repeatOffset + topRight + 1u],
+            pixels[repeatOffset + topRight + 2u],
+            pixels[repeatOffset + topRight + 3u],
+            pixels[repeatOffset + bottomLeft + 0u],
+            pixels[repeatOffset + bottomLeft + 1u],
+            pixels[repeatOffset + bottomLeft + 2u],
+            pixels[repeatOffset + bottomLeft + 3u],
+            pixels[repeatOffset + bottomRight + 0u],
+            pixels[repeatOffset + bottomRight + 1u],
+            pixels[repeatOffset + bottomRight + 2u],
+            pixels[repeatOffset + bottomRight + 3u]);
     goto cleanup;
   }
   if (!coordinate_pixel(&pixels[depthCenter], 255u, 0u, 0u)) {
@@ -555,13 +734,18 @@ cleanup:
     GPUEndRenderPass(renderPass);
   }
   GPUDestroyFence(fence);
+  GPUDestroyBindGroup(repeatClampGroup);
+  GPUDestroyBindGroup(repeatGroup);
   GPUDestroyBindGroup(samplerGroup);
   GPUDestroyBindGroup(textureGroup);
+  GPUDestroySampler(repeatSampler);
   GPUDestroySampler(sampler);
   GPUDestroyTextureView(depthView);
   GPUDestroyTexture(depthTexture);
   GPUDestroyTextureView(depthTargetView);
   GPUDestroyTexture(depthTarget);
+  GPUDestroyTextureView(repeatView);
+  GPUDestroyTexture(repeatTarget);
   GPUDestroyTextureView(textureView);
   GPUDestroyTexture(textureTarget);
   GPUDestroyTextureView(sampleView);
@@ -574,6 +758,7 @@ cleanup:
   GPUDestroyRenderPipeline(bluePipeline);
   GPUDestroyRenderPipeline(greenPipeline);
   GPUDestroyRenderPipeline(redPipeline);
+  GPUDestroyRenderPipeline(repeatPipeline);
   GPUDestroyRenderPipeline(texturePipeline);
   GPUDestroyShaderLayout(shaderLayout);
   GPUDestroyShaderLibrary(library);

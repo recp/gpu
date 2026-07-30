@@ -1111,6 +1111,8 @@ dx12_destroyCommandQueue(GPUQueue *queue) {
         );
       }
       dx12_destroyCopyScratch(command);
+      dx12_destroyCommandDescriptors(command);
+      dx12_destroyCommandSamplerHeaps(command);
 #if GPU_DX12_HAS_SAMPLER_FEEDBACK
       if (command->commandList1) {
         command->commandList1->lpVtbl->Release(command->commandList1);
@@ -1462,6 +1464,8 @@ dx12_newCommandBuffer(GPUQueue  * __restrict queue,
   }
 
   dx12_resetGraphInitializations(native);
+  dx12_resetCommandDescriptors(native);
+  dx12_resetCommandSamplerHeaps(native);
   result = native->allocator->lpVtbl->Reset(native->allocator);
   if (SUCCEEDED(result)) {
     result = native->commandList->lpVtbl->Reset(native->commandList,
@@ -1616,6 +1620,7 @@ dx12_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   if (swapchain && swapchain->frameIndex < swapchain->imageCount) {
     swapchain->frames[swapchain->frameIndex].fenceValue = fenceValue;
   }
+  dx12__logDebugMessages(queue);
   dx12__queueLock(queue);
   queue->inFlightCount++;
   if (queue->pendingTail) {
@@ -1718,6 +1723,7 @@ dx12_submitCommandBuffers(GPUQueue                  * __restrict queueHandle,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
+  dx12__logDebugMessages(queue);
   dx12__queueLock(queue);
   for (uint32_t i = 0u; i < count; i++) {
     natives[i]->fenceValue  = fenceValue;
@@ -1942,6 +1948,7 @@ dx12_submitEx(GPUQueue                   *queueHandle,
   if (swapchain && swapchain->frameIndex < swapchain->imageCount) {
     swapchain->frames[swapchain->frameIndex].fenceValue = fenceValue;
   }
+  dx12__logDebugMessages(queue);
   dx12__queueLock(queue);
   for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
     natives[i]->fenceValue  = fenceValue;

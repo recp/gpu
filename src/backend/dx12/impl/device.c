@@ -17,6 +17,36 @@
 #include "../common.h"
 #include "../impl.h"
 
+#include <us/compiler.h>
+
+static USLTargetProfile
+dx12_uslTargetProfile(D3D_SHADER_MODEL shaderModel,
+                      uint32_t         dxcTargetProfile) {
+  USLTargetProfile hardwareProfile;
+
+  switch ((uint32_t)shaderModel) {
+    case 0x6a: hardwareProfile = USL_TARGET_PROFILE_HLSL_SM_6_10; break;
+    case 0x69: hardwareProfile = USL_TARGET_PROFILE_HLSL_SM_6_9;  break;
+    case 0x68: hardwareProfile = USL_TARGET_PROFILE_HLSL_SM_6_8;  break;
+    case 0x67: hardwareProfile = USL_TARGET_PROFILE_HLSL_SM_6_7;  break;
+    case 0x66: hardwareProfile = USL_TARGET_PROFILE_HLSL_SM_6_6;  break;
+    case 0x65: hardwareProfile = USL_TARGET_PROFILE_HLSL_SM_6_5;  break;
+    case 0x64: hardwareProfile = USL_TARGET_PROFILE_HLSL_SM_6_4;  break;
+    case 0x63: hardwareProfile = USL_TARGET_PROFILE_HLSL_SM_6_3;  break;
+    case 0x62: hardwareProfile = USL_TARGET_PROFILE_HLSL_SM_6_2;  break;
+    case 0x61: hardwareProfile = USL_TARGET_PROFILE_HLSL_SM_6_1;  break;
+    case 0x60: hardwareProfile = USL_TARGET_PROFILE_HLSL_SM_6_0;  break;
+    default:   return USL_TARGET_PROFILE_HLSL_SM_5_1;
+  }
+
+  if (dxcTargetProfile < USL_TARGET_PROFILE_HLSL_SM_6_0) {
+    return USL_TARGET_PROFILE_HLSL_SM_5_1;
+  }
+  return hardwareProfile < (USLTargetProfile)dxcTargetProfile
+           ? hardwareProfile
+           : (USLTargetProfile)dxcTargetProfile;
+}
+
 static void
 dx12_fillAdapterName(GPUAdapterDX12 *adapterDX12) {
   if (!adapterDX12) {
@@ -569,6 +599,7 @@ dx12_probeAdapter(GPUAdapterDX12 *adapter, bool linearAlgebra) {
   ID3D12Device    *device;
   D3D12_FEATURE_DATA_D3D12_OPTIONS options = {0};
   D3D_SHADER_MODEL shaderModel;
+  uint32_t         dxcTargetProfile;
   HMODULE          dxcModule;
   HRESULT          result;
   bool             additionalRates;
@@ -588,31 +619,43 @@ dx12_probeAdapter(GPUAdapterDX12 *adapter, bool linearAlgebra) {
 
   shaderModel        = dx12_queryShaderModel(device);
   dxcModule          = dx12_loadDXCompiler();
-  adapter->subgroups = dxcModule && shaderModel >= D3D_SHADER_MODEL_6_0 &&
+  dxcTargetProfile   = dx12_queryDXCTargetProfile(dxcModule);
+  adapter->subgroups =
+    dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_0 &&
+                       shaderModel >= D3D_SHADER_MODEL_6_0 &&
                        dx12_querySubgroups(device,
                                            &adapter->minSubgroupSize,
                                            &adapter->maxSubgroupSize);
-  adapter->shaderF16 = dxcModule &&
+  adapter->shaderF16 =
+                       dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_2 &&
                        dx12_supportsShaderF16(device, shaderModel);
-  adapter->atomic64 = dxcModule &&
+  adapter->atomic64 =
+                      dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_6 &&
                       dx12_supportsAtomic64(device, shaderModel);
   adapter->descriptorIndexing =
-    dxcModule && shaderModel >= D3D_SHADER_MODEL_6_0;
-  adapter->bindless = adapter->descriptorIndexing &&
+    shaderModel >= D3D_SHADER_MODEL_5_1;
+  adapter->bindless =
+                      dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_0 &&
+                      shaderModel >= D3D_SHADER_MODEL_6_0 &&
                       dx12_supportsBindless(device);
-  adapter->meshShader = dxcModule &&
+  adapter->meshShader =
+                        dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_5 &&
                         dx12_queryMeshShader(device, shaderModel, NULL);
-  adapter->rayQuery = dxcModule &&
+  adapter->rayQuery =
+                      dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_5 &&
                       dx12_queryRayQuery(device, shaderModel, NULL);
   adapter->rayTracingPipeline = adapter->rayQuery;
-  adapter->executionGraph = dxcModule &&
+  adapter->executionGraph =
+    dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_8 &&
                             dx12_queryExecutionGraphs(device,
                                                       shaderModel,
                                                       NULL);
-  adapter->samplerFeedbackTier = dxcModule
+  adapter->samplerFeedbackTier =
+    dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_5
     ? dx12_querySamplerFeedback(device, shaderModel, NULL)
     : 0u;
-  if (linearAlgebra && dxcModule &&
+  if (linearAlgebra &&
+      dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_10 &&
       dx12_hasLinearAlgebraCompiler(dxcModule) &&
       shaderModel >= (D3D_SHADER_MODEL)0x6a) {
     dx12_querySubgroupMatrices(adapter, device);
@@ -717,9 +760,15 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
     device->enhancedBarriers = options12.EnhancedBarriersSupported != FALSE;
   }
 
-  device->dxcModule    = dx12_loadDXCompiler();
-  device->dxcAvailable = device->dxcModule != NULL &&
-                         device->shaderModel >= D3D_SHADER_MODEL_6_0;
+  device->dxcModule         = dx12_loadDXCompiler();
+  device->dxcTargetProfile  =
+    dx12_queryDXCTargetProfile(device->dxcModule);
+  device->uslTargetProfile  =
+    (uint32_t)dx12_uslTargetProfile(device->shaderModel,
+                                    device->dxcTargetProfile);
+  device->dxcAvailable      =
+    device->dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_0 &&
+    device->shaderModel >= D3D_SHADER_MODEL_6_0;
   device->subgroups    = device->dxcAvailable &&
                          dx12_querySubgroups(device->d3dDevice,
                                              &minSubgroupSize,
@@ -730,9 +779,9 @@ dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
   device->atomic64     = device->dxcAvailable &&
                          dx12_supportsAtomic64(device->d3dDevice,
                                               device->shaderModel);
-  device->descriptorIndexing = device->dxcAvailable &&
-                               device->shaderModel >= D3D_SHADER_MODEL_6_0;
-  device->bindless = device->descriptorIndexing &&
+  device->descriptorIndexing =
+    device->shaderModel >= D3D_SHADER_MODEL_5_1;
+  device->bindless = device->dxcAvailable &&
                      dx12_supportsBindless(device->d3dDevice);
   device->meshShader = device->dxcAvailable &&
                        dx12_queryMeshShader(device->d3dDevice,
@@ -859,15 +908,18 @@ dx12_getAvailableAdapters(GPUInstance * __restrict inst,
   UINT                   adapterIndex, i;
   HRESULT                hr;
   HRESULT              (*EnumAdapters1)(IDXGIFactory4*, UINT, IDXGIAdapter1**);
+  bool                   forceWarp;
 
   firstAdapter  = lastAdapter = NULL;
   adapterIndex  = i = 0;
   instDX12      = inst->_priv;
   dxgiFactory   = instDX12->dxgiFactory;
   EnumAdapters1 = dxgiFactory->lpVtbl->EnumAdapters1;
+  forceWarp     = getenv("GPU_DX12_FORCE_WARP") != NULL;
 
-  /* loop until we either enumerate all devices or hit the maximum count. */ 
-  while (i < maxNumberOfItems
+  /* loop until we either enumerate all devices or hit the maximum count. */
+  while (!forceWarp
+         && i < maxNumberOfItems
          && SUCCEEDED(EnumAdapters1(dxgiFactory, adapterIndex, &dxgiAdapter))) {
     if (dxgiAdapter) {
       adapterDX12              = calloc(1, sizeof(*adapterDX12));
@@ -912,8 +964,8 @@ dx12_getAvailableAdapters(GPUInstance * __restrict inst,
     adapterIndex++;
   }
 
-  /* Use WARP when no hardware adapter is available. */
-  if (!firstAdapter) {
+  /* Use WARP when requested or no hardware adapter is available. */
+  if (forceWarp || !firstAdapter) {
     DXCHECK(dxgiFactory->lpVtbl->EnumWarpAdapter(dxgiFactory, 
                                                  &IID_IDXGIAdapter, 
                                                  (void **)&warpAdapter));
@@ -1219,6 +1271,8 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
   deviceDX12->queryResultsReliable = dx12_queryResultsReliable(adapterDX12);
   /* Parallels advertises linear sampling but executes it as point sampling. */
   deviceDX12->manualBlitFiltering = dx12_isParallels(adapterDX12);
+  /* Parallels ignores non-zero GPU sampler-table handles. */
+  deviceDX12->samplerTableOffsetsReliable = !dx12_isParallels(adapterDX12);
   dx12_queryDeviceCapabilities(deviceDX12);
   deviceDX12->subgroupMatrix =
     adapterDX12->subgroupMatrixPropertyCount > 0u &&
@@ -1330,6 +1384,25 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
   device->inst      = inst;
   device->_priv     = deviceDX12;
   device->adapter   = adapter;
+  device->uslTargetProfile = deviceDX12->uslTargetProfile;
+  if (getenv("GPU_USL_LOG")) {
+    uint32_t shaderModel;
+    uint32_t targetProfile;
+    uint32_t dxcProfile;
+
+    shaderModel   = (uint32_t)deviceDX12->shaderModel;
+    targetProfile = deviceDX12->uslTargetProfile;
+    dxcProfile    = deviceDX12->dxcTargetProfile;
+    fprintf(stderr,
+            "GPU: Direct3D 12 \"%s\", SM %u.%u, DXC %u.%u, USL HLSL %u.%u\n",
+            adapterDX12->name,
+            shaderModel >> 4u,
+            shaderModel & 0x0fu,
+            (dxcProfile >> 8u) & 0xffu,
+            dxcProfile & 0xffu,
+            (targetProfile >> 8u) & 0xffu,
+            targetProfile & 0xffu);
+  }
   if (deviceDX12->meshShader) {
     device->meshLimits.taskWorkgroupSize[0] = 128u;
     device->meshLimits.taskWorkgroupSize[1] = 128u;

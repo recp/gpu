@@ -25,6 +25,16 @@ frag coordinate_texture_fs(input: CoordinateTextureOut #stage_in,
   return float4(image.sample(imageSampler, input.uv))
 }
 
+frag coordinate_texture_repeat_fs(input: CoordinateTextureOut #stage_in,
+                                  image: texture2d<half> #texture(0),
+                                  clampSampler: sampler #sampler(0) #group(1),
+                                  repeatSampler: sampler #sampler(0) #group(2)) -> float4 {
+  let uv       = input.uv + float2(1.0)
+  let clamped  = image.sample(clampSampler, uv)
+  let repeated = image.sample(repeatSampler, uv)
+  return float4(repeated * half(0.75) + clamped * half(0.25))
+}
+
 vert coordinate_position_vs(input: CoordinatePositionIn #stage_in) -> float4 {
   return input.position
 }

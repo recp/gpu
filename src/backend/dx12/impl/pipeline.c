@@ -20,6 +20,7 @@
 
 #include <d3dcompiler.h>
 #include <limits.h>
+#include <us/compiler.h>
 
 typedef struct DXCBuffer {
   const void *ptr;
@@ -199,6 +200,90 @@ static const IID dx12_iidDxcVersionInfo = {
   {0xa8, 0xff, 0xa1, 0xe0, 0xcd, 0xe1, 0xcc, 0x7e}
 };
 
+static bool
+dx12__queryDXCVersion(HMODULE module, UINT32 *outMajor, UINT32 *outMinor) {
+  DXCCreateInstanceFn createInstance;
+  DXCCompiler3       *compiler;
+  DXCVersionInfo     *versionInfo;
+  UINT32              major;
+  UINT32              minor;
+  bool                available;
+
+  if (outMajor) {
+    *outMajor = 0u;
+  }
+  if (outMinor) {
+    *outMinor = 0u;
+  }
+  if (!module ||
+      !(createInstance = (DXCCreateInstanceFn)GetProcAddress(
+          module,
+          "DxcCreateInstance"
+        ))) {
+    return false;
+  }
+
+  compiler    = NULL;
+  versionInfo = NULL;
+  major       = 0u;
+  minor       = 0u;
+  available   = SUCCEEDED(createInstance(&dx12_clsidDxcCompiler,
+                                          &dx12_iidDxcCompiler3,
+                                          (void **)&compiler)) &&
+                compiler &&
+                SUCCEEDED(compiler->lpVtbl->QueryInterface(
+                  compiler,
+                  &dx12_iidDxcVersionInfo,
+                  (void **)&versionInfo
+                )) &&
+                versionInfo &&
+                SUCCEEDED(versionInfo->lpVtbl->GetVersion(versionInfo,
+                                                           &major,
+                                                           &minor));
+  if (versionInfo) {
+    versionInfo->lpVtbl->Release(versionInfo);
+  }
+  if (compiler) {
+    compiler->lpVtbl->Release(compiler);
+  }
+  if (!available) {
+    return false;
+  }
+  if (outMajor) {
+    *outMajor = major;
+  }
+  if (outMinor) {
+    *outMinor = minor;
+  }
+  return true;
+}
+
+GPU_HIDE
+uint32_t
+dx12_queryDXCTargetProfile(HMODULE module) {
+  UINT32 major;
+  UINT32 minor;
+
+  if (!dx12__queryDXCVersion(module, &major, &minor) || major == 0u) {
+    return USL_TARGET_PROFILE_NONE;
+  }
+  if (major > 1u || minor >= 10u) {
+    return USL_TARGET_PROFILE_HLSL_SM_6_10;
+  }
+  switch (minor) {
+    case 9u: return USL_TARGET_PROFILE_HLSL_SM_6_9;
+    case 8u: return USL_TARGET_PROFILE_HLSL_SM_6_8;
+    case 7u: return USL_TARGET_PROFILE_HLSL_SM_6_7;
+    case 6u: return USL_TARGET_PROFILE_HLSL_SM_6_6;
+    case 5u: return USL_TARGET_PROFILE_HLSL_SM_6_5;
+    case 4u: return USL_TARGET_PROFILE_HLSL_SM_6_4;
+    case 3u: return USL_TARGET_PROFILE_HLSL_SM_6_3;
+    case 2u: return USL_TARGET_PROFILE_HLSL_SM_6_2;
+    case 1u: return USL_TARGET_PROFILE_HLSL_SM_6_1;
+    default: return USL_TARGET_PROFILE_HLSL_SM_6_0;
+  }
+}
+
 static const DXGI_FORMAT dx12_vertexFormats[GPU_VERTEX_FORMAT_COUNT] = {
   [GPU_VERTEX_FORMAT_UINT8]           = DXGI_FORMAT_R8_UINT,
   [GPU_VERTEX_FORMAT_UINT8X2]         = DXGI_FORMAT_R8G8_UINT,
@@ -359,14 +444,18 @@ dx12__cacheShader(GPUShaderLibraryDX12 *library,
 }
 
 static void
-dx12__logShaderError(const char *entry, const void *data, SIZE_T size) {
+dx12__logShaderDiagnostics(const char *entry,
+                           const void *data,
+                           SIZE_T      size,
+                           bool        failed) {
   if (!data || size == 0u) {
     return;
   }
 
   fprintf(stderr,
-          "GPU Direct3D 12 shader '%s' failed:\n%.*s\n",
+          "GPU Direct3D 12 shader '%s' %s:\n%.*s\n",
           entry ? entry : "",
+          failed ? "failed" : "diagnostics",
           (int)(size > INT_MAX ? INT_MAX : size),
           (const char *)data);
 }
@@ -474,12 +563,8 @@ GPU_HIDE
 bool
 dx12_hasLinearAlgebraCompiler(HMODULE module) {
   DXCCreateInstanceFn createInstance;
-  DXCCompiler3       *compiler;
-  DXCVersionInfo     *versionInfo;
   IUnknown           *includeHandler;
   wchar_t             includePath[4096];
-  UINT32              major;
-  UINT32              minor;
   bool                available;
 
   if (!module ||
@@ -490,37 +575,34 @@ dx12_hasLinearAlgebraCompiler(HMODULE module) {
     return false;
   }
 
-  compiler       = NULL;
-  versionInfo    = NULL;
   includeHandler = dx12__newIncludeHandler(createInstance);
-  major          = 0u;
-  minor          = 0u;
-  available      = SUCCEEDED(createInstance(&dx12_clsidDxcCompiler,
-                                             &dx12_iidDxcCompiler3,
-                                             (void **)&compiler)) &&
-                   compiler &&
-                   SUCCEEDED(compiler->lpVtbl->QueryInterface(
-                     compiler,
-                     &dx12_iidDxcVersionInfo,
-                     (void **)&versionInfo
-                   )) &&
-                   versionInfo &&
-                   SUCCEEDED(versionInfo->lpVtbl->GetVersion(versionInfo,
-                                                              &major,
-                                                              &minor)) &&
-                   (major > 1u || (major == 1u && minor >= 10u)) &&
+  available      =
+                   dx12_queryDXCTargetProfile(module) >=
+                     USL_TARGET_PROFILE_HLSL_SM_6_10 &&
                    includeHandler != NULL &&
                    dx12__findDXCIncludePath(module, includePath);
-  if (versionInfo) {
-    versionInfo->lpVtbl->Release(versionInfo);
-  }
-  if (compiler) {
-    compiler->lpVtbl->Release(compiler);
-  }
   if (includeHandler) {
     includeHandler->lpVtbl->Release(includeHandler);
   }
   return available;
+}
+
+static bool
+dx12__dxcProfileName(uint32_t         targetProfile,
+                     const wchar_t   *prefix,
+                     uint32_t         minimumMinor,
+                     wchar_t          outProfile[16]) {
+  uint32_t major;
+  uint32_t minor;
+  int      length;
+
+  major = (targetProfile >> 8u) & 0xffu;
+  minor = targetProfile & 0xffu;
+  if (!prefix || !outProfile || major != 6u || minor < minimumMinor) {
+    return false;
+  }
+  length = swprintf(outProfile, 16u, L"%ls_%u_%u", prefix, major, minor);
+  return length > 0 && length < 16;
 }
 
 static bool
@@ -614,9 +696,10 @@ dx12__compileDXC(GPUDeviceDX12   *device,
   (void)result->lpVtbl->GetStatus(result, &compileStatus);
   (void)result->lpVtbl->GetErrorBuffer(result, &errors);
   if (errors && errors->lpVtbl->GetBufferSize(errors) > 1u) {
-    dx12__logShaderError(entry,
-                         errors->lpVtbl->GetBufferPointer(errors),
-                         errors->lpVtbl->GetBufferSize(errors));
+    dx12__logShaderDiagnostics(entry,
+                               errors->lpVtbl->GetBufferPointer(errors),
+                               errors->lpVtbl->GetBufferSize(errors),
+                               FAILED(compileStatus));
   }
 
   if (SUCCEEDED(compileStatus) &&
@@ -670,9 +753,10 @@ dx12__compileLegacy(const char     *source,
                       &blob,
                       &errors);
   if (errors && errors->lpVtbl->GetBufferSize(errors) > 1u) {
-    dx12__logShaderError(entry,
-                         errors->lpVtbl->GetBufferPointer(errors),
-                         errors->lpVtbl->GetBufferSize(errors));
+    dx12__logShaderDiagnostics(entry,
+                               errors->lpVtbl->GetBufferPointer(errors),
+                               errors->lpVtbl->GetBufferSize(errors),
+                               FAILED(result));
   }
   if (SUCCEEDED(result) && blob) {
     result = dx12__copyShaderBlob(blob->lpVtbl->GetBufferPointer(blob),
@@ -696,48 +780,25 @@ dx12_compileShader(GPUDeviceDX12        *device,
                    const char           *entry,
                    GPUShaderStageFlags   stage,
                    DX12ShaderCode       *outCode) {
-  static const wchar_t *dxcProfiles60[GPU_SHADER_STAGE_MESH_BIT + 1u] = {
-    [GPU_SHADER_STAGE_VERTEX_BIT]   = L"vs_6_0",
-    [GPU_SHADER_STAGE_FRAGMENT_BIT] = L"ps_6_0",
-    [GPU_SHADER_STAGE_COMPUTE_BIT]  = L"cs_6_0",
-    [GPU_SHADER_STAGE_TASK_BIT]     = L"as_6_5",
-    [GPU_SHADER_STAGE_MESH_BIT]     = L"ms_6_5"
-  };
-  static const wchar_t *dxcProfiles62[GPU_SHADER_STAGE_MESH_BIT + 1u] = {
-    [GPU_SHADER_STAGE_VERTEX_BIT]   = L"vs_6_2",
-    [GPU_SHADER_STAGE_FRAGMENT_BIT] = L"ps_6_2",
-    [GPU_SHADER_STAGE_COMPUTE_BIT]  = L"cs_6_2",
-    [GPU_SHADER_STAGE_TASK_BIT]     = L"as_6_5",
-    [GPU_SHADER_STAGE_MESH_BIT]     = L"ms_6_5"
-  };
-  static const wchar_t *dxcProfiles66[GPU_SHADER_STAGE_MESH_BIT + 1u] = {
-    [GPU_SHADER_STAGE_VERTEX_BIT]   = L"vs_6_6",
-    [GPU_SHADER_STAGE_FRAGMENT_BIT] = L"ps_6_6",
-    [GPU_SHADER_STAGE_COMPUTE_BIT]  = L"cs_6_6",
-    [GPU_SHADER_STAGE_TASK_BIT]     = L"as_6_6",
-    [GPU_SHADER_STAGE_MESH_BIT]     = L"ms_6_6"
-  };
-  static const wchar_t *dxcProfiles610[GPU_SHADER_STAGE_MESH_BIT + 1u] = {
-    [GPU_SHADER_STAGE_VERTEX_BIT]   = L"vs_6_10",
-    [GPU_SHADER_STAGE_FRAGMENT_BIT] = L"ps_6_10",
-    [GPU_SHADER_STAGE_COMPUTE_BIT]  = L"cs_6_10",
-    [GPU_SHADER_STAGE_TASK_BIT]     = L"as_6_10",
-    [GPU_SHADER_STAGE_MESH_BIT]     = L"ms_6_10"
+  static const wchar_t *dxcPrefixes[GPU_SHADER_STAGE_MESH_BIT + 1u] = {
+    [GPU_SHADER_STAGE_VERTEX_BIT]   = L"vs",
+    [GPU_SHADER_STAGE_FRAGMENT_BIT] = L"ps",
+    [GPU_SHADER_STAGE_COMPUTE_BIT]  = L"cs",
+    [GPU_SHADER_STAGE_TASK_BIT]     = L"as",
+    [GPU_SHADER_STAGE_MESH_BIT]     = L"ms"
   };
   static const char *legacyProfiles[GPU_SHADER_STAGE_MESH_BIT + 1u] = {
     [GPU_SHADER_STAGE_VERTEX_BIT]   = "vs_5_1",
     [GPU_SHADER_STAGE_FRAGMENT_BIT] = "ps_5_1",
     [GPU_SHADER_STAGE_COMPUTE_BIT]  = "cs_5_1"
   };
-  const wchar_t *dxcProfile;
+  wchar_t        dxcProfile[16];
   DX12ShaderCode compiled;
+  uint32_t       minimumMinor;
   bool           success;
 
   if (!device || !library || !entry || !outCode ||
-      stage >= GPU_ARRAY_LEN(dxcProfiles60) || !dxcProfiles60[stage] ||
-      !dxcProfiles62[stage] ||
-      !dxcProfiles66[stage] ||
-      !dxcProfiles610[stage] ||
+      stage >= GPU_ARRAY_LEN(dxcPrefixes) || !dxcPrefixes[stage] ||
       (!device->dxcAvailable && !legacyProfiles[stage])) {
     return false;
   }
@@ -748,16 +809,13 @@ dx12_compileShader(GPUDeviceDX12        *device,
 
   memset(&compiled, 0, sizeof(compiled));
   if (device->dxcAvailable) {
-    if (device->subgroupMatrixEnabled) {
-      dxcProfile = dxcProfiles610[stage];
-    } else if (device->atomic64Enabled) {
-      dxcProfile = dxcProfiles66[stage];
-    } else if (device->rayQuery && stage == GPU_SHADER_STAGE_COMPUTE_BIT) {
-      dxcProfile = L"cs_6_5";
-    } else {
-      dxcProfile = device->shaderF16Enabled
-                     ? dxcProfiles62[stage]
-                     : dxcProfiles60[stage];
+    minimumMinor = stage == GPU_SHADER_STAGE_TASK_BIT ||
+                   stage == GPU_SHADER_STAGE_MESH_BIT ? 5u : 0u;
+    if (!dx12__dxcProfileName(device->uslTargetProfile,
+                              dxcPrefixes[stage],
+                              minimumMinor,
+                              dxcProfile)) {
+      return false;
     }
     success = dx12__compileDXC(device,
                               library->source,
@@ -788,7 +846,7 @@ dx12_compileRayLibrary(GPUDeviceDX12        *device,
                        DX12ShaderCode       *outCode) {
   static const char cacheEntry[] = "$ray-library";
   DX12ShaderCode    compiled;
-  const wchar_t    *profile;
+  wchar_t           profile[16];
   bool              success;
 
   if (!device || !device->rayTracingPipeline || !device->dxcAvailable ||
@@ -803,11 +861,11 @@ dx12_compileRayLibrary(GPUDeviceDX12        *device,
     return true;
   }
 
-  if (device->subgroupMatrixEnabled) {
-    profile = L"lib_6_10";
-  } else {
-    profile = device->shaderModel >= D3D_SHADER_MODEL_6_6 ? L"lib_6_6"
-                                                           : L"lib_6_5";
+  if (!dx12__dxcProfileName(device->uslTargetProfile,
+                            L"lib",
+                            5u,
+                            profile)) {
+    return false;
   }
   memset(&compiled, 0, sizeof(compiled));
   success = dx12__compileDXC(device,
@@ -832,7 +890,7 @@ dx12_compileExecutionGraphLibrary(GPUDeviceDX12        *device,
                                    DX12ShaderCode       *outCode) {
   static const char cacheEntry[] = "$execution-graph-library";
   DX12ShaderCode    compiled;
-  const wchar_t    *profile;
+  wchar_t           profile[16];
   bool              success;
 
   if (!device || !device->executionGraph || !device->dxcAvailable ||
@@ -847,7 +905,12 @@ dx12_compileExecutionGraphLibrary(GPUDeviceDX12        *device,
     return true;
   }
 
-  profile = device->subgroupMatrixEnabled ? L"lib_6_10" : L"lib_6_8";
+  if (!dx12__dxcProfileName(device->uslTargetProfile,
+                            L"lib",
+                            8u,
+                            profile)) {
+    return false;
+  }
   memset(&compiled, 0, sizeof(compiled));
   success = dx12__compileDXC(device,
                             library->source,
@@ -1147,6 +1210,7 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   DX12PipelineKey                    rootKey;
   uint64_t                           entryMask;
   uint32_t                           elementCount;
+  GPUResult                          rootResult;
   HRESULT                            result;
 
   if (!device || !device->_priv || !info || !info->library ||
@@ -1189,12 +1253,16 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   } else {
     entryMask |= gpuShaderEntryBit(info->library, info->vertexEntry);
   }
-  if (dx12_createShaderRootSignature(device,
-                                     info->layout,
-                                     info->library,
-                                     entryMask,
-                                     &rootSignature,
-                                     rootKey.value) != GPU_OK) {
+  rootResult = dx12_createShaderRootSignature(device,
+                                              info->layout,
+                                              info->library,
+                                              entryMask,
+                                              &rootSignature,
+                                              rootKey.value);
+  if (rootResult != GPU_OK) {
+    fprintf(stderr,
+            "GPU Direct3D 12 shader root signature failed (%d)\n",
+            rootResult);
     free(elements);
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
@@ -1208,28 +1276,54 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   }
   if (!dx12__topology(info->primitiveTopology,
                       &desc.PrimitiveTopologyType,
-                      &native->topology) ||
-      !dx12_compileShader(deviceDX12,
+                      &native->topology)) {
+    fprintf(stderr, "GPU Direct3D 12 pipeline topology is unsupported\n");
+    goto shader_failed;
+  }
+  if (!dx12_compileShader(deviceDX12,
                           library,
                           info->fragmentEntry,
                           GPU_SHADER_STAGE_FRAGMENT_BIT,
-                          &fragmentCode) ||
-      (!mesh && !dx12_compileShader(deviceDX12,
-                                    library,
-                                    info->vertexEntry,
-                                    GPU_SHADER_STAGE_VERTEX_BIT,
-                                    &vertexCode)) ||
-      (mesh && mesh->taskEntry &&
-       !dx12_compileShader(deviceDX12,
-                           library,
-                           mesh->taskEntry,
-                           GPU_SHADER_STAGE_TASK_BIT,
-                           &taskCode)) ||
-      (mesh && !dx12_compileShader(deviceDX12,
+                          &fragmentCode)) {
+    fprintf(stderr,
+            "GPU Direct3D 12 fragment shader '%s' failed to compile\n",
+            info->fragmentEntry ? info->fragmentEntry : "");
+    goto shader_failed;
+  }
+  if (!mesh && !dx12_compileShader(deviceDX12,
                                    library,
-                                   mesh->meshEntry,
-                                   GPU_SHADER_STAGE_MESH_BIT,
-                                   &meshCode))) {
+                                   info->vertexEntry,
+                                   GPU_SHADER_STAGE_VERTEX_BIT,
+                                   &vertexCode)) {
+    fprintf(stderr,
+            "GPU Direct3D 12 vertex shader '%s' failed to compile\n",
+            info->vertexEntry ? info->vertexEntry : "");
+    goto shader_failed;
+  }
+  if (mesh && mesh->taskEntry &&
+      !dx12_compileShader(deviceDX12,
+                          library,
+                          mesh->taskEntry,
+                          GPU_SHADER_STAGE_TASK_BIT,
+                          &taskCode)) {
+    fprintf(stderr,
+            "GPU Direct3D 12 task shader '%s' failed to compile\n",
+            mesh->taskEntry);
+    goto shader_failed;
+  }
+  if (mesh && !dx12_compileShader(deviceDX12,
+                                  library,
+                                  mesh->meshEntry,
+                                  GPU_SHADER_STAGE_MESH_BIT,
+                                  &meshCode)) {
+    fprintf(stderr,
+            "GPU Direct3D 12 mesh shader '%s' failed to compile\n",
+            mesh->meshEntry ? mesh->meshEntry : "");
+    goto shader_failed;
+  }
+  goto shaders_ready;
+
+shader_failed:
     dx12_freeShaderCode(&vertexCode);
     dx12_freeShaderCode(&taskCode);
     dx12_freeShaderCode(&meshCode);
@@ -1238,8 +1332,8 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
     free(elements);
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
-  }
 
+shaders_ready:
   desc.pRootSignature        = rootSignature;
   if (!mesh) {
     desc.VS.pShaderBytecode = vertexCode.data;

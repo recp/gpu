@@ -99,6 +99,7 @@ typedef struct GPUDescriptorHeapDX12 {
   uint64_t             *used;
   uint32_t              descriptorSize;
   uint32_t              capacity;
+  uint32_t              searchOffset;
 } GPUDescriptorHeapDX12;
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
@@ -135,6 +136,8 @@ typedef struct GPUDeviceDX12 {
   D3D12_RESOURCE_HEAP_TIER           resourceHeapTier;
   D3D12_TILED_RESOURCES_TIER         tiledResourcesTier;
   uint32_t                           samplerFeedbackTier;
+  uint32_t                           dxcTargetProfile;
+  uint32_t                           uslTargetProfile;
   D3D12_VARIABLE_SHADING_RATE_TIER   vrsTier;
   uint32_t                           nCreatedQueues;
   uint32_t                           vrsTileSize;
@@ -156,6 +159,7 @@ typedef struct GPUDeviceDX12 {
   bool                               queryResultsReliable;
   bool                               stencilPlaneCopies;
   bool                               manualBlitFiltering;
+  bool                               samplerTableOffsetsReliable;
 } GPUDeviceDX12;
 
 static inline bool
@@ -261,10 +265,10 @@ typedef struct GPURootBindingDX12 {
 typedef struct GPUDescriptorTableDX12 {
   uint32_t            rootParameter;
   uint32_t            descriptorCount;
+  uint32_t            descriptorOffset;
   uint32_t            rangeCount;
   uint32_t            rangeOffset;
-  uint32_t            feedbackOffset;
-  uint32_t            accelerationOffset;
+  uint32_t            nullOffset;
   GPUShaderStageFlags visibility;
 } GPUDescriptorTableDX12;
 
@@ -278,19 +282,21 @@ typedef struct GPUPipelineLayoutDX12 {
   uint32_t             groupCount;
   uint32_t             pushConstantRootParameter;
   uint32_t             pushConstantDwordCount;
+  uint32_t             samplerDescriptorCount;
   uint32_t             groupOffsets[GPU_ENCODER_MAX_BIND_GROUPS + 1u];
   GPUDescriptorTableDX12 resourceTables[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUDescriptorTableDX12 samplerTables[GPU_ENCODER_MAX_BIND_GROUPS];
+  bool                 samplerTableBaseOnly;
 } GPUPipelineLayoutDX12;
 
 typedef struct GPUBindGroupDX12 {
   GPUDeviceDX12 *device;
   uint32_t       resourceOffset;
   uint32_t       resourceCount;
-  uint32_t       feedbackOffset;
-  uint32_t       accelerationOffset;
   uint32_t       samplerOffset;
   uint32_t       samplerCount;
+  uint32_t       entryCount;
+  uint32_t       descriptorOffsets[];
 } GPUBindGroupDX12;
 
 typedef struct GPUSamplerFeedbackMapDX12 {
@@ -361,6 +367,10 @@ typedef struct GPURayTracingEncoderDX12 {
   ID3D12RootSignature       *rootSignature;
   ID3D12DescriptorHeap      *resourceHeap;
   ID3D12DescriptorHeap      *samplerHeap;
+  uint32_t                   resourceOffsets[
+    GPU_ENCODER_MAX_BIND_GROUPS
+  ];
+  uint32_t                   resourceOffsetMask;
   bool                       debugEventActive;
 } GPURayTracingEncoderDX12;
 
@@ -409,6 +419,7 @@ typedef struct GPUTextureViewDX12 {
   uint32_t                    mipCount;
   uint32_t                    baseLayer;
   uint32_t                    layerCount;
+  uint32_t                    subresource;
   uint32_t                    rtvOffset;
   uint32_t                    dsvOffset;
   bool                        hasSrv;
@@ -460,6 +471,8 @@ typedef struct GPURenderEncoderDX12 {
   ];
   GPUIndexType                indexType;
   uint32_t                    vertexBufferMask;
+  uint32_t                    resourceOffsets[GPU_ENCODER_MAX_BIND_GROUPS];
+  uint32_t                    resourceOffsetMask;
   bool                        indexBound;
   bool                        debugEventActive;
 } GPURenderEncoderDX12;
@@ -475,6 +488,10 @@ typedef struct GPUComputeEncoderDX12 {
   ID3D12DescriptorHeap             *samplerHeap;
   GPUExecutionGraphEXT             *executionGraph;
   GPUExecutionGraphInstanceEXT     *executionGraphInstance;
+  uint32_t                          resourceOffsets[
+    GPU_ENCODER_MAX_BIND_GROUPS
+  ];
+  uint32_t                          resourceOffsetMask;
   bool                              debugEventActive;
 } GPUComputeEncoderDX12;
 
@@ -485,6 +502,30 @@ typedef struct GPUCopyScratchDX12 {
   uint64_t                     offset;
   D3D12_RESOURCE_STATES        state;
 } GPUCopyScratchDX12;
+
+typedef struct GPUDescriptorAllocationDX12 {
+  uint32_t offset;
+  uint32_t count;
+} GPUDescriptorAllocationDX12;
+
+enum {
+  GPU_DX12_INLINE_DESCRIPTOR_ALLOCATION_COUNT = 16u,
+  GPU_DX12_DESCRIPTOR_ALLOCATION_CHUNK_COUNT  = 64u
+};
+
+typedef struct GPUDescriptorAllocationChunkDX12 {
+  struct GPUDescriptorAllocationChunkDX12 *next;
+  uint32_t                                 count;
+  GPUDescriptorAllocationDX12              allocations[
+    GPU_DX12_DESCRIPTOR_ALLOCATION_CHUNK_COUNT
+  ];
+} GPUDescriptorAllocationChunkDX12;
+
+typedef struct GPUCommandSamplerHeapDX12 {
+  struct GPUCommandSamplerHeapDX12 *next;
+  ID3D12DescriptorHeap             *heap;
+  uint32_t                          capacity;
+} GPUCommandSamplerHeapDX12;
 
 typedef struct GPUExecutionGraphInputChunkDX12 GPUExecutionGraphInputChunkDX12;
 
@@ -510,6 +551,8 @@ typedef struct GPUCommandBufferDX12 {
   UINT64                       *frameTimeMapped;
   GPUSwapchainDX12             *presentSwapchain;
   GPUCopyScratchDX12           *copyScratch;
+  GPUDescriptorAllocationChunkDX12 *descriptorAllocationChunks;
+  GPUCommandSamplerHeapDX12    *samplerHeaps;
   GPUExecutionGraphInputChunkDX12 *graphInputChunks;
   GPUExecutionGraphInstanceEXT    *graphInitializations[
     GPU_DX12_GRAPH_INIT_TRACK_COUNT
@@ -530,6 +573,11 @@ typedef struct GPUCommandBufferDX12 {
   GPUAccelerationStructureEncoderDX12     rayQueryState;
   GPURayTracingPassEncoderEXT              rayTracingEncoder;
   GPURayTracingEncoderDX12                 rayTracingState;
+  GPUDescriptorAllocationDX12 descriptorAllocations[
+    GPU_DX12_INLINE_DESCRIPTOR_ALLOCATION_COUNT
+  ];
+  uint32_t                      descriptorAllocationCount;
+  uint32_t                      samplerHeapUseCount;
   uint32_t                      graphInitializationCount;
   bool                          frameTimeActive;
   bool                          copyDebugEventActive;
@@ -747,6 +795,28 @@ dx12_freeDescriptors(GPUDeviceDX12             *device,
                      D3D12_DESCRIPTOR_HEAP_TYPE type,
                      uint32_t                    offset,
                      uint32_t                    count);
+
+GPU_HIDE
+GPUResult
+dx12_allocateCommandDescriptors(GPUCommandBufferDX12 *command,
+                                uint32_t                count,
+                                uint32_t               *outOffset);
+
+GPU_HIDE
+void
+dx12_resetCommandDescriptors(GPUCommandBufferDX12 *command);
+
+GPU_HIDE
+void
+dx12_destroyCommandDescriptors(GPUCommandBufferDX12 *command);
+
+GPU_HIDE
+void
+dx12_resetCommandSamplerHeaps(GPUCommandBufferDX12 *command);
+
+GPU_HIDE
+void
+dx12_destroyCommandSamplerHeaps(GPUCommandBufferDX12 *command);
 
 GPU_HIDE
 D3D12_CPU_DESCRIPTOR_HANDLE
