@@ -32,6 +32,7 @@ typedef struct WebGPUSkinning {
   GPUBuffer         *indexBuffer;
   GPUBuffer         *uniformBuffer;
   WebGPURequest      request;
+  double             startTime;
   uint32_t           width;
   uint32_t           height;
   uint32_t           uniformStride;
@@ -353,7 +354,7 @@ update_skin(WebGPUSkinning *state, uint32_t *outDynamicOffset) {
 
   frameSlot = state->frameCount % FRAME_SLOT_COUNT;
   offset    = frameSlot * state->uniformStride;
-  seconds   = (float)(emscripten_get_now() * 0.001);
+  seconds   = (float)gpu_sample_elapsed_seconds(&state->startTime);
   build_skin_uniforms(state, seconds, &uniforms);
   if (GPUQueueWriteBuffer(state->queue,
                           state->uniformBuffer,

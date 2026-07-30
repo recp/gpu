@@ -20,12 +20,31 @@ typedef struct WebGPUStencilOutline {
   GPUTexture        *depthStencilTexture;
   GPUTextureView    *depthStencilView;
   WebGPURequest      request;
+  GPUFormat          depthStencilFormat;
   uint32_t           width;
   uint32_t           height;
   uint32_t           frameCount;
 } WebGPUStencilOutline;
 
 static WebGPUStencilOutline app;
+
+static GPUFormat
+select_depth_stencil_format(GPUAdapter *adapter) {
+  static const GPUFormat formats[] = {
+    GPU_FORMAT_DEPTH24_UNORM_STENCIL8,
+    GPU_FORMAT_DEPTH32_FLOAT_STENCIL8
+  };
+
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(formats); i++) {
+    GPUFormatCapabilities caps;
+
+    if (GPUGetFormatCapabilities(adapter, formats[i], &caps) == GPU_OK &&
+        caps.depthStencil) {
+      return formats[i];
+    }
+  }
+  return GPU_FORMAT_UNDEFINED;
+}
 
 static int
 create_depth_stencil_target(WebGPUStencilOutline *state,
@@ -42,7 +61,7 @@ create_depth_stencil_target(WebGPUStencilOutline *state,
   textureInfo.chain.structSize = sizeof(textureInfo);
   textureInfo.label            = "webgpu-stencil-outline-target";
   textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
-  textureInfo.format           = GPU_FORMAT_DEPTH24_UNORM_STENCIL8;
+  textureInfo.format           = state->depthStencilFormat;
   textureInfo.width            = width;
   textureInfo.height           = height;
   textureInfo.depthOrLayers    = 1u;
@@ -57,7 +76,7 @@ create_depth_stencil_target(WebGPUStencilOutline *state,
   viewInfo.chain.structSize = sizeof(viewInfo);
   viewInfo.label            = "webgpu-stencil-outline-view";
   viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
-  viewInfo.format           = GPU_FORMAT_DEPTH24_UNORM_STENCIL8;
+  viewInfo.format           = state->depthStencilFormat;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
   if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK) {
@@ -152,7 +171,7 @@ create_pipelines(WebGPUStencilOutline *state) {
   info.pColorTargets      = &color;
   info.pDepthStencilState = &stencil;
   info.colorTargetCount   = 1u;
-  info.depthStencilFormat = GPU_FORMAT_DEPTH24_UNORM_STENCIL8;
+  info.depthStencilFormat = state->depthStencilFormat;
 
   info.primitiveTopology       = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
   info.cullMode                = GPU_CULL_MODE_NONE;
@@ -275,11 +294,14 @@ webgpu_ready(GPUResult  result,
   state->adapter = adapter;
   state->device  = device;
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  state->depthStencilFormat = select_depth_stencil_format(adapter);
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;
   runtime.enableStats      = true;
-  if (!state->queue || GPUConfigureRuntime(device, &runtime) != GPU_OK) {
+  if (!state->queue ||
+      state->depthStencilFormat == GPU_FORMAT_UNDEFINED ||
+      GPUConfigureRuntime(device, &runtime) != GPU_OK) {
     set_status("GPU: failed to configure stencil runtime", 1);
     return;
   }

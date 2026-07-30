@@ -88,6 +88,7 @@ typedef struct WebGPUCompute {
 #endif
   GPUBindGroup       *computeGroup;
   WebGPURequest       request;
+  double              startTime;
   uint32_t            width;
   uint32_t            height;
 #if GPU_COMPUTE_USE_TIMESTAMPS
@@ -470,7 +471,7 @@ render_frame(void *userData) {
   constants.tint[1] = 1.0f;
   constants.tint[2] = 1.0f;
 #else
-  phase             = (float)(emscripten_get_now() * 0.001);
+  phase             = (float)gpu_sample_elapsed_seconds(&state->startTime);
   constants.tint[0] = 0.60f + 0.40f * sinf(phase);
   constants.tint[1] = 0.60f + 0.40f * sinf(phase + 2.0943951f);
   constants.tint[2] = 0.60f + 0.40f * sinf(phase + 4.1887902f);

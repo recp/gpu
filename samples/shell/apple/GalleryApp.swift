@@ -173,10 +173,13 @@ struct GalleryCard: View {
   var body: some View {
     Button(action: action) {
       VStack(alignment: .leading, spacing: 0) {
-        preview
-          .aspectRatio(1.6, contentMode: .fit)
+        Color(red: 0.01, green: 0.03, blue: 0.09)
           .frame(maxWidth: .infinity)
-          .background(Color(red: 0.01, green: 0.03, blue: 0.09))
+          .aspectRatio(1.6, contentMode: .fit)
+          .overlay {
+            preview
+          }
+          .clipped()
           .clipShape(RoundedRectangle(cornerRadius: 14,
                                       style: .continuous))
           .overlay {

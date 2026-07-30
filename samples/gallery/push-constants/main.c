@@ -18,6 +18,7 @@ typedef struct WebGPUPushConstants {
   GPUShaderLayout   *shaderLayout;
   GPURenderPipeline *pipeline;
   WebGPURequest      request;
+  double             startTime;
   uint32_t           width;
   uint32_t           height;
 } WebGPUPushConstants;
@@ -141,7 +142,7 @@ render_frame(void *userData) {
     return;
   }
 
-  phase        = (float)(emscripten_get_now() * 0.001);
+  phase        = (float)gpu_sample_elapsed_seconds(&state->startTime);
   draw.tint[0] = 0.55f + 0.45f * sinf(phase);
   draw.tint[1] = 0.55f + 0.45f * sinf(phase + 2.0943951f);
   draw.tint[2] = 0.55f + 0.45f * sinf(phase + 4.1887902f);

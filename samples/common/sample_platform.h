@@ -198,4 +198,15 @@ gpu_sample_aspect_ratio(uint32_t width, uint32_t height) {
 #endif
 }
 
+static inline double
+gpu_sample_elapsed_seconds(double *origin) {
+  double now;
+
+  now = emscripten_get_now() * 0.001;
+  if (*origin <= 0.0) {
+    *origin = now;
+  }
+  return now - *origin;
+}
+
 #endif

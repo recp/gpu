@@ -38,10 +38,11 @@ typedef struct WebGPUParticles {
   GPUBindGroup       *computeGroup;
   GPUBindGroup       *renderGroup;
   WebGPURequest       request;
+  double              startTime;
+  double              previousTime;
   uint32_t            width;
   uint32_t            height;
   uint32_t            frameCount;
-  double              previousTime;
 } WebGPUParticles;
 
 static WebGPUParticles app;
@@ -259,7 +260,7 @@ render_frame(void *userData) {
     return;
   }
 
-  now = emscripten_get_now() * 0.001;
+  now = gpu_sample_elapsed_seconds(&state->startTime);
   simulation.deltaTime = state->previousTime > 0.0
                            ? (float)(now - state->previousTime)
                            : 1.0f / 60.0f;
