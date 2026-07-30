@@ -200,7 +200,7 @@ textured_cube_createGeometry(TexturedCubeApp *app) {
   CubeUniforms        uniforms;
   GPUBufferCreateInfo info = {0};
 
-  CubeBuildUniforms(0.0f, 0.0f, app->viewProjection, &uniforms);
+  CubeBuildUniforms(0.0f, 0.0f, 1.0f, app->viewProjection, &uniforms);
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   info.chain.structSize = sizeof(info);
@@ -466,7 +466,7 @@ textured_cube_updateUniforms(TexturedCubeApp *app) {
   QueryPerformanceCounter(&now);
   seconds = (float)((double)(now.QuadPart - app->animationStart.QuadPart) *
                     app->secondsPerTick);
-  CubeBuildUniforms(seconds, 0.0f, app->viewProjection, &uniforms);
+  CubeBuildUniforms(seconds, 0.0f, 1.0f, app->viewProjection, &uniforms);
   return GPUQueueWriteBuffer(app->queue,
                              app->uniformBuffer,
                              0u,

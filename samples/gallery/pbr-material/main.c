@@ -239,6 +239,7 @@ build_uniforms(WebGPUPBR   *state,
   glm_mat4_identity(uniforms->model);
   glm_rotate(uniforms->model, state->orbit.yaw, axisY);
   glm_rotate(uniforms->model, state->orbit.pitch, axisX);
+  glm_scale_uni(uniforms->model, state->orbit.zoom);
   glm_mat4_mul(state->viewProjection, uniforms->model, uniforms->mvp);
   glm_vec4_copy(camera, uniforms->cameraPosition);
   glm_vec4_normalize_to(light, uniforms->lightDirection);

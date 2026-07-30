@@ -65,6 +65,8 @@ static const uint32_t kIndexedDraw[] = {
   0u
 };
 
+static const uint32_t kVisibleFallback[] = {0u, 0u, 1u, 0u};
+
 static WebGPUIndexedDepth app;
 
 static int
@@ -277,6 +279,7 @@ static int
 create_geometry(WebGPUIndexedDepth *state) {
   GPUBufferCreateInfo   info = {0};
   GPUQuerySetCreateInfo queryInfo = {0};
+  GPUResult             queryResult;
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   info.chain.structSize = sizeof(info);
@@ -310,16 +313,24 @@ create_geometry(WebGPUIndexedDepth *state) {
   queryInfo.type             = GPU_QUERY_OCCLUSION;
   queryInfo.count            = 1u;
   info.label                 = "indexed-depth-webgpu-occlusion-result";
-  info.sizeBytes             = 16u;
+  info.sizeBytes             = sizeof(kVisibleFallback);
   info.usage                 = GPU_BUFFER_USAGE_COPY_DST |
                                GPU_BUFFER_USAGE_STORAGE;
-  if (GPUCreateQuerySet(state->device,
-                        &queryInfo,
-                        &state->occlusionQuery) != GPU_OK ||
-      GPUCreateBuffer(state->device,
+  if (GPUCreateBuffer(state->device,
                       &info,
-                      &state->occlusionBuffer) != GPU_OK) {
+                      &state->occlusionBuffer) != GPU_OK ||
+      GPUQueueWriteBuffer(state->queue,
+                          state->occlusionBuffer,
+                          0u,
+                          kVisibleFallback,
+                          sizeof(kVisibleFallback)) != GPU_OK) {
     return 0;
+  }
+  queryResult = GPUCreateQuerySet(state->device,
+                                  &queryInfo,
+                                  &state->occlusionQuery);
+  if (queryResult != GPU_OK) {
+    state->occlusionQuery = NULL;
   }
   if (GPUIsFeatureEnabled(state->device, GPU_FEATURE_INDIRECT_DRAW)) {
     info.label     = "indexed-depth-webgpu-indirect";
@@ -406,7 +417,7 @@ render_frame(void *userData) {
   GPUBindRenderPipeline(pass, state->pipeline);
   GPUBindVertexBuffers(pass, 0u, 1u, &vertexBuffer);
   GPUBindIndexBuffer(pass, state->indexBuffer, 0u, GPU_INDEX_TYPE_UINT16);
-  if (!state->occlusionRecorded) {
+  if (state->occlusionQuery && !state->occlusionRecorded) {
     GPUBeginOcclusionQuery(pass, state->occlusionQuery, 0u);
   }
   if (state->indirectBuffer) {
@@ -419,11 +430,11 @@ render_frame(void *userData) {
                    0,
                    0u);
   }
-  if (!state->occlusionRecorded) {
+  if (state->occlusionQuery && !state->occlusionRecorded) {
     GPUEndOcclusionQuery(pass);
   }
   GPUEndRenderPass(pass);
-  if (!state->occlusionRecorded) {
+  if (state->occlusionQuery && !state->occlusionRecorded) {
     GPUResolveQuerySet(cmdb,
                        state->occlusionQuery,
                        0u,
@@ -539,11 +550,19 @@ webgpu_ready(GPUResult  result,
                                                 state->surface,
                                                 state->width,
                                                 state->height);
-  if (!state->swapchain ||
-      !create_depth_target(state, state->width, state->height) ||
-      !create_geometry(state) ||
-      !create_pipeline(state)) {
-    set_status("GPU: failed to initialize indexed-depth resources", 1);
+  if (!state->swapchain) {
+    set_status("GPU: failed to create indexed-depth swapchain", 1);
+    return;
+  }
+  if (!create_depth_target(state, state->width, state->height)) {
+    set_status("GPU: failed to create sampled depth target", 1);
+    return;
+  }
+  if (!create_geometry(state)) {
+    set_status("GPU: failed to create indexed-depth geometry", 1);
+    return;
+  }
+  if (!create_pipeline(state)) {
     return;
   }
 

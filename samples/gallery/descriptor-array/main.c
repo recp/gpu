@@ -298,8 +298,8 @@ render_frame(void *userData) {
   GPUFrame                      *frame;
   GPUCommandBuffer              *cmdb;
   GPURenderPassEncoder          *pass;
-  GPURenderPassColorAttachment   color    = {0};
-  GPURenderPassCreateInfo        passInfo = {0};
+  GPURenderPassColorAttachment  color    = {0};
+  GPURenderPassCreateInfo       passInfo = {0};
 
   state = userData;
   if (!resize_canvas(state)) return;
@@ -374,7 +374,7 @@ gpu_ready(GPUResult  result,
     set_status_notice("GPU: descriptor indexing unavailable");
     return;
   }
-  state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  state->queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;

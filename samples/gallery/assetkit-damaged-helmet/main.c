@@ -98,7 +98,7 @@ build_uniforms(AssetSample *state, PBRUniforms *uniforms) {
   }
 
   radius = glm_vec3_norm(extent) * 0.5f;
-  scale  = radius > 0.0f ? 2.05f / radius : 1.0f;
+  scale  = (radius > 0.0f ? 2.05f / radius : 1.0f) * state->orbit.zoom;
 
   glm_mat4_identity(uniforms->model);
   glm_rotate(uniforms->model, state->orbit.yaw, axisY);

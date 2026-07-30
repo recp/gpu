@@ -66,9 +66,24 @@ mouse_up(int eventType,
 }
 
 static bool
+mouse_wheel(int eventType,
+            const EmscriptenWheelEvent *event,
+            void                       *userData) {
+  (void)eventType;
+  (void)userData;
+  if (!event || !activeOrbit) {
+    return false;
+  }
+  sample_orbit_zoom((float)-event->deltaY * 0.01f);
+  return true;
+}
+
+static bool
 touch_event(int eventType,
             const EmscriptenTouchEvent *event,
             void                       *userData) {
+  static float pinchSpan;
+
   (void)userData;
   if (!event || !activeOrbit) {
     return false;
@@ -76,19 +91,41 @@ touch_event(int eventType,
 
   switch (eventType) {
     case EMSCRIPTEN_EVENT_TOUCHSTART:
-      if (event->numTouches > 0) {
+      if (event->numTouches >= 2) {
+        float deltaX, deltaY;
+
+        deltaX = (float)(event->touches[1].clientX -
+                         event->touches[0].clientX);
+        deltaY = (float)(event->touches[1].clientY -
+                         event->touches[0].clientY);
+        pinchSpan = deltaX * deltaX + deltaY * deltaY;
+        sample_orbit_pointer_end();
+      } else if (event->numTouches > 0) {
         sample_orbit_pointer_begin((float)event->touches[0].clientX,
                                    (float)event->touches[0].clientY);
       }
       break;
     case EMSCRIPTEN_EVENT_TOUCHMOVE:
-      if (event->numTouches > 0 && activeOrbit->dragging) {
+      if (event->numTouches >= 2) {
+        float deltaX, deltaY, nextSpan;
+
+        deltaX   = (float)(event->touches[1].clientX -
+                           event->touches[0].clientX);
+        deltaY   = (float)(event->touches[1].clientY -
+                           event->touches[0].clientY);
+        nextSpan = deltaX * deltaX + deltaY * deltaY;
+        if (pinchSpan > 1.0f) {
+          sample_orbit_zoom((nextSpan - pinchSpan) / pinchSpan * 2.0f);
+        }
+        pinchSpan = nextSpan;
+      } else if (event->numTouches > 0 && activeOrbit->dragging) {
         sample_orbit_pointer_move((float)event->touches[0].clientX,
                                   (float)event->touches[0].clientY);
       }
       break;
     case EMSCRIPTEN_EVENT_TOUCHEND:
     case EMSCRIPTEN_EVENT_TOUCHCANCEL:
+      pinchSpan = 0.0f;
       sample_orbit_pointer_end();
       break;
     default:
@@ -114,6 +151,7 @@ install_web_callbacks(void) {
                                   NULL,
                                   false,
                                   mouse_up);
+  emscripten_set_wheel_callback("#canvas", NULL, false, mouse_wheel);
   emscripten_set_touchstart_callback("#canvas", NULL, false, touch_event);
   emscripten_set_touchmove_callback("#canvas", NULL, false, touch_event);
   emscripten_set_touchend_callback("#canvas", NULL, false, touch_event);
@@ -138,6 +176,7 @@ sample_orbit_init(SampleOrbit *orbit,
   orbit->yawSpeed    = yawSpeed;
   orbit->pitchSpeed  = pitchSpeed;
   orbit->sensitivity = 0.006f;
+  orbit->zoom        = 1.0f;
 }
 
 void
@@ -223,5 +262,26 @@ void
 sample_orbit_pointer_end(void) {
   if (activeOrbit) {
     activeOrbit->dragging = false;
+  }
+}
+
+void
+sample_orbit_zoom(float amount) {
+  float factor;
+
+  if (!activeOrbit || amount == 0.0f) {
+    return;
+  }
+  if (amount < -4.0f) {
+    amount = -4.0f;
+  } else if (amount > 4.0f) {
+    amount = 4.0f;
+  }
+  factor            = 1.0f + amount * 0.08f;
+  activeOrbit->zoom = activeOrbit->zoom * factor;
+  if (activeOrbit->zoom < 0.45f) {
+    activeOrbit->zoom = 0.45f;
+  } else if (activeOrbit->zoom > 2.2f) {
+    activeOrbit->zoom = 2.2f;
   }
 }

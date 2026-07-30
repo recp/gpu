@@ -241,7 +241,9 @@ gpu_android_command(struct android_app *app, int32_t command) {
 
 static int32_t
 gpu_android_input(struct android_app *app, AInputEvent *event) {
+  static float pinchSpan;
   int32_t action;
+  size_t  pointerCount;
 
   (void)app;
   if (!event || !sample_orbit_active() ||
@@ -250,17 +252,48 @@ gpu_android_input(struct android_app *app, AInputEvent *event) {
   }
 
   action = AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK;
+  pointerCount = AMotionEvent_getPointerCount(event);
   switch (action) {
     case AMOTION_EVENT_ACTION_DOWN:
       sample_orbit_pointer_begin(AMotionEvent_getX(event, 0u),
                                  AMotionEvent_getY(event, 0u));
       break;
+    case AMOTION_EVENT_ACTION_POINTER_DOWN:
+      if (pointerCount >= 2u) {
+        float deltaX, deltaY;
+
+        deltaX = AMotionEvent_getX(event, 1u) -
+                 AMotionEvent_getX(event, 0u);
+        deltaY = AMotionEvent_getY(event, 1u) -
+                 AMotionEvent_getY(event, 0u);
+        pinchSpan = deltaX * deltaX + deltaY * deltaY;
+        sample_orbit_pointer_end();
+      }
+      break;
     case AMOTION_EVENT_ACTION_MOVE:
-      sample_orbit_pointer_move(AMotionEvent_getX(event, 0u),
-                                AMotionEvent_getY(event, 0u));
+      if (pointerCount >= 2u) {
+        float deltaX, deltaY, nextSpan;
+
+        deltaX   = AMotionEvent_getX(event, 1u) -
+                   AMotionEvent_getX(event, 0u);
+        deltaY   = AMotionEvent_getY(event, 1u) -
+                   AMotionEvent_getY(event, 0u);
+        nextSpan = deltaX * deltaX + deltaY * deltaY;
+        if (pinchSpan > 1.0f) {
+          sample_orbit_zoom((nextSpan - pinchSpan) / pinchSpan * 2.0f);
+        }
+        pinchSpan = nextSpan;
+      } else {
+        sample_orbit_pointer_move(AMotionEvent_getX(event, 0u),
+                                  AMotionEvent_getY(event, 0u));
+      }
+      break;
+    case AMOTION_EVENT_ACTION_POINTER_UP:
+      pinchSpan = 0.0f;
       break;
     case AMOTION_EVENT_ACTION_UP:
     case AMOTION_EVENT_ACTION_CANCEL:
+      pinchSpan = 0.0f;
       sample_orbit_pointer_end();
       break;
     default:

@@ -4,6 +4,7 @@
 #include "../../common/Win32Image.h"
 
 #include <dwmapi.h>
+#include <uxtheme.h>
 #include <windows.h>
 #include <windowsx.h>
 
@@ -678,7 +679,7 @@ poll_child(GPUGallery *gallery) {
   GetExitCodeProcess(gallery->child, &exitCode);
   CloseHandle(gallery->child);
   gallery->child  = NULL;
-  gallery->status = exitCode == 0u ? "Sample closed" : "Sample failed";
+  gallery->status = exitCode == 0u ? "Direct3D 12" : "Sample failed";
   KillTimer(gallery->window, GPU_GALLERY_TIMER_CHILD);
   EnableWindow(gallery->window, TRUE);
   SetForegroundWindow(gallery->window);
@@ -711,6 +712,7 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
                             DWMWA_USE_IMMERSIVE_DARK_MODE,
                             &darkMode,
                             sizeof(darkMode));
+      SetWindowTheme(window, L"DarkMode_Explorer", NULL);
       load_previews(gallery);
       update_scroll(gallery);
       return 0;

@@ -35,12 +35,13 @@ struct GallerySample: Codable, Identifiable {
 final class GalleryStore: ObservableObject {
   @Published private(set) var samples: [GallerySample] = []
   @Published private(set) var launchingSampleID: String?
+  @Published private(set) var activeSampleID: String?
   @Published var errorMessage: String?
   @Published var metalMode: MetalMode = .auto
 
 #if os(macOS)
   private var activeApplication: NSRunningApplication?
-  private var activeSampleID: String?
+  private var terminationObserver: NSObjectProtocol?
 #endif
 
   init() {
@@ -56,7 +57,41 @@ final class GalleryStore: ObservableObject {
     } catch {
       errorMessage = "Gallery catalog could not be loaded."
     }
+
+#if os(macOS)
+    terminationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.didTerminateApplicationNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] notification in
+      guard let application = notification.userInfo?[
+        NSWorkspace.applicationUserInfoKey
+      ] as? NSRunningApplication else {
+        return
+      }
+
+      Task { @MainActor [weak self] in
+        guard let self,
+              application.processIdentifier ==
+                self.activeApplication?.processIdentifier else {
+          return
+        }
+        self.activeApplication = nil
+        self.activeSampleID = nil
+        NSApp.unhide(nil)
+        NSApp.activate(ignoringOtherApps: true)
+      }
+    }
+#endif
   }
+
+#if os(macOS)
+  deinit {
+    if let terminationObserver {
+      NSWorkspace.shared.notificationCenter.removeObserver(terminationObserver)
+    }
+  }
+#endif
 
   func isAvailable(_ sample: GallerySample) -> Bool {
     guard let path = NativeSamples.paths[sample.id] else {
@@ -67,9 +102,6 @@ final class GalleryStore: ObservableObject {
 
   func launch(_ sample: GallerySample) {
 #if os(macOS)
-    guard launchingSampleID == nil else {
-      return
-    }
     guard let path = NativeSamples.paths[sample.id],
           FileManager.default.isExecutableFile(atPath: path) else {
       errorMessage = "\(sample.title) is not native on Metal yet."
@@ -89,11 +121,11 @@ final class GalleryStore: ObservableObject {
       application.activate(options: [.activateAllWindows])
       return
     }
+    guard launchingSampleID == nil, activeSampleID == nil else {
+      return
+    }
 
     errorMessage = nil
-    activeApplication?.terminate()
-    activeApplication = nil
-    activeSampleID = nil
     launchingSampleID = sample.id
 
     environment["GPU_METAL_MODE"] = metalMode.rawValue
@@ -114,10 +146,15 @@ final class GalleryStore: ObservableObject {
           self.errorMessage = "\(sample.title) could not be launched."
           return
         }
+        guard !application.isTerminated else {
+          self.errorMessage = "\(sample.title) closed during launch."
+          return
+        }
 
         self.activeApplication = application
         self.activeSampleID = sample.id
         application.activate(options: [.activateAllWindows])
+        NSApp.hide(nil)
       }
     }
 #else
@@ -130,6 +167,7 @@ struct GalleryCard: View {
   let sample: GallerySample
   let available: Bool
   let launching: Bool
+  let disabled: Bool
   let action: () -> Void
 
   var body: some View {
@@ -193,7 +231,7 @@ struct GalleryCard: View {
                                      style: .continuous))
     }
     .buttonStyle(.plain)
-    .disabled(launching)
+    .disabled(disabled)
   }
 
   @ViewBuilder
@@ -239,7 +277,9 @@ struct GalleryView: View {
           ForEach(store.samples) { sample in
             GalleryCard(sample: sample,
                         available: store.isAvailable(sample),
-                        launching: store.launchingSampleID == sample.id) {
+                        launching: store.launchingSampleID == sample.id,
+                        disabled: store.launchingSampleID != nil ||
+                                  store.activeSampleID != nil) {
               store.launch(sample)
             }
           }

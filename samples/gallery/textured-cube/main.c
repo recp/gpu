@@ -198,6 +198,7 @@ create_geometry(WebGPUTexturedCube *state) {
 
   CubeBuildUniforms(state->orbit.yaw,
                     state->orbit.pitch,
+                    state->orbit.zoom,
                     state->viewProjection,
                     &uniforms);
 
@@ -360,6 +361,7 @@ update_uniforms(WebGPUTexturedCube *state) {
   sample_orbit_update(&state->orbit, emscripten_get_now() * 0.001);
   CubeBuildUniforms(state->orbit.yaw,
                     state->orbit.pitch,
+                    state->orbit.zoom,
                     state->viewProjection,
                     &uniforms);
   return GPUQueueWriteBuffer(state->queue,

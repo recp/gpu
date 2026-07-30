@@ -479,10 +479,12 @@ fail:
     activeSample = NULL;
   }
   sample->failed = true;
-  snprintf(sample->status,
-           sizeof(sample->status),
-           "GPU: failed to start %s",
-           name);
+  if (strncmp(sample->status, "GPU: starting ", 14u) == 0) {
+    snprintf(sample->status,
+             sizeof(sample->status),
+             "GPU: failed to start %s",
+             name);
+  }
   return sample;
 }
 

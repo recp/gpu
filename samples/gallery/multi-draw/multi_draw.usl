@@ -3,18 +3,20 @@ struct VSOut {
   color:    float4
 }
 
-vert multi_vs(vertexId: uint #vertex_id) -> VSOut {
-  let localId = vertexId % 3u
-  let center  = vertexId < 3u ? -0.44 : 0.44
-  let x       = localId == 0u
-    ? center
-    : (localId == 1u ? center - 0.34 : center + 0.34)
-  let y       = localId == 0u ? 0.62 : -0.50
-  let color   = vertexId < 3u
-    ? float4(1.0, 0.30, 0.06, 1.0)
-    : float4(0.08, 0.72, 1.0, 1.0)
+vertex VSIn {
+  offset: float2
+  color:  float4
+}
 
-  return { {x, y, 0.0, 1.0}, color }
+vert multi_vs(input: VSIn #stage_in,
+              vertexId: uint #vertex_id) -> VSOut {
+  let localId = vertexId % 3u
+  let x = localId == 0u
+    ? input.offset.x
+    : (localId == 1u ? input.offset.x - 0.34 : input.offset.x + 0.34)
+  let y = localId == 0u ? 0.62 : -0.50
+
+  return { {x, y, 0.0, 1.0}, input.color }
 }
 
 frag multi_fs(input: VSOut #stage_in) -> float4 {

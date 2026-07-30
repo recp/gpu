@@ -332,6 +332,7 @@ int
 main(void) {
   GPUWaylandHost host;
   GPULinuxSample *sample;
+  int             result;
 
   memset(&host, 0, sizeof(host));
   host.display = wl_display_connect(NULL);
@@ -389,13 +390,23 @@ main(void) {
     return 1;
   }
 
-  while (host.running && GPUSampleLinuxRender(sample)) {
+  result = 0;
+  while (host.running) {
+    if (!GPUSampleLinuxRender(sample)) {
+      if (GPUSampleLinuxFailed(sample)) {
+        fprintf(stderr, "%s\n", GPUSampleLinuxStatus(sample));
+        result = 1;
+      }
+      break;
+    }
     if (libdecor_dispatch(host.decor, 0) < 0) {
+      fprintf(stderr, "GPU: Wayland event dispatch failed\n");
+      result = 1;
       break;
     }
   }
 
   GPUSampleLinuxStop(sample);
   destroy_host(&host);
-  return 0;
+  return result;
 }

@@ -101,6 +101,7 @@ CubeBuildViewProjection(float aspect, mat4 dest) {
 static inline void
 CubeBuildUniforms(float         yaw,
                   float         pitch,
+                  float         zoom,
                   mat4          viewProjection,
                   CubeUniforms *uniforms) {
   vec3 axisX = {1.0f, 0.0f, 0.0f};
@@ -109,6 +110,7 @@ CubeBuildUniforms(float         yaw,
   glm_mat4_identity(uniforms->model);
   glm_rotate(uniforms->model, yaw, axisY);
   glm_rotate(uniforms->model, pitch, axisX);
+  glm_scale_uni(uniforms->model, zoom);
   glm_mat4_mul(viewProjection, uniforms->model, uniforms->mvp);
 }
 

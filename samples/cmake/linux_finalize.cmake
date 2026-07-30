@@ -2,8 +2,10 @@ function(gpu_linux_gallery_shell windowSystem)
   string(TOLOWER "${windowSystem}" windowSystemLower)
   if(windowSystem STREQUAL "XLIB")
     set(gdkBackend "x11")
+    set(galleryDefinitions GPU_LINUX_GALLERY_XLIB=1)
   else()
     set(gdkBackend "${windowSystemLower}")
+    set(galleryDefinitions)
   endif()
   get_property(sampleIds GLOBAL PROPERTY
     "GPU_LINUX_${windowSystem}_SAMPLE_IDS")
@@ -52,6 +54,7 @@ function(gpu_linux_gallery_shell windowSystem)
     "GPU_LINUX_GDK_BACKEND=\"${gdkBackend}\""
     "GPU_LINUX_GALLERY_TITLE=\"GPU + USL ${windowSystem} Samples\""
     "GPU_LINUX_APPLICATION_ID=\"gpu.samples.${windowSystemLower}\""
+    ${galleryDefinitions}
   )
   target_include_directories(${target} PRIVATE
     "${PROJECT_SOURCE_DIR}/samples/shell/linux"

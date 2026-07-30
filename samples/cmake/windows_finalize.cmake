@@ -61,6 +61,7 @@ target_link_libraries(gpu-gallery-windows PRIVATE
   dwmapi
   gdi32
   ole32
+  uxtheme
   user32
   windowscodecs
 )
@@ -70,8 +71,9 @@ set_target_properties(gpu-gallery-windows PROPERTIES
   C_EXTENSIONS NO
   OUTPUT_NAME "GPU + USL Samples"
   RUNTIME_OUTPUT_DIRECTORY
-    "${GPU_WINDOWS_GALLERY_OUTPUT_DIR}"
+    "${GPU_WINDOWS_GALLERY_RUNTIME_DIR}/$<CONFIG>"
 )
+add_dependencies(gpu-gallery-windows gpu-gallery-windows-runtime)
 
 file(GLOB GPU_WINDOWS_GALLERY_PREVIEWS CONFIGURE_DEPENDS
   "${PROJECT_SOURCE_DIR}/samples/shell/web/previews/*.png"

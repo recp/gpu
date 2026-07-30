@@ -196,7 +196,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   CubeUniforms        uniforms;
   GPUBufferCreateInfo info = {0};
 
-  CubeBuildUniforms(0.0f, 0.0f, _viewProjection, &uniforms);
+  CubeBuildUniforms(0.0f, 0.0f, 1.0f, _viewProjection, &uniforms);
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   info.chain.structSize = sizeof(info);
@@ -414,7 +414,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   float        seconds;
 
   seconds = (float)(CACurrentMediaTime() - _animationStart);
-  CubeBuildUniforms(seconds, 0.0f, _viewProjection, &uniforms);
+  CubeBuildUniforms(seconds, 0.0f, 1.0f, _viewProjection, &uniforms);
   return GPUQueueWriteBuffer(_queue,
                              _uniformBuffer,
                              0u,

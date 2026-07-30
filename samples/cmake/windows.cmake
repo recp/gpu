@@ -4,7 +4,40 @@ set(GPU_WINDOWS_GALLERY_GENERATED_DIR
     "${CMAKE_CURRENT_BINARY_DIR}/windows/generated")
 set(GPU_WINDOWS_GALLERY_OUTPUT_DIR
     "${CMAKE_CURRENT_BINARY_DIR}/windows")
+set(GPU_WINDOWS_GALLERY_RUNTIME_DIR
+    "${GPU_WINDOWS_GALLERY_OUTPUT_DIR}/bin")
 file(MAKE_DIRECTORY "${GPU_WINDOWS_GALLERY_GENERATED_DIR}")
+
+set(gpuWindowsRuntimeCommands
+  COMMAND ${CMAKE_COMMAND} -E make_directory
+          "${GPU_WINDOWS_GALLERY_RUNTIME_DIR}/$<CONFIG>"
+)
+set(gpuWindowsRuntimeTargets)
+foreach(runtimeTarget gpu us ds)
+  if(NOT TARGET ${runtimeTarget})
+    continue()
+  endif()
+
+  get_target_property(runtimeType ${runtimeTarget} TYPE)
+  if(runtimeType STREQUAL "SHARED_LIBRARY" OR
+     runtimeType STREQUAL "MODULE_LIBRARY")
+    list(APPEND gpuWindowsRuntimeCommands
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              $<TARGET_FILE:${runtimeTarget}>
+              "${GPU_WINDOWS_GALLERY_RUNTIME_DIR}/$<CONFIG>"
+    )
+    list(APPEND gpuWindowsRuntimeTargets ${runtimeTarget})
+  endif()
+endforeach()
+add_custom_target(gpu-gallery-windows-runtime
+  ${gpuWindowsRuntimeCommands}
+  VERBATIM
+)
+if(gpuWindowsRuntimeTargets)
+  add_dependencies(gpu-gallery-windows-runtime
+    ${gpuWindowsRuntimeTargets}
+  )
+endif()
 
 if(EXISTS "${GPU_ASSETKIT_ROOT}/CMakeLists.txt")
   set(GPU_ASSETKIT_WINDOWS_BINARY_DIR
@@ -15,8 +48,13 @@ if(EXISTS "${GPU_ASSETKIT_ROOT}/CMakeLists.txt")
       "${GPU_ASSETKIT_WINDOWS_INSTALL_DIR}/lib/assetkit.lib")
   set(GPU_ASSETKIT_WINDOWS_DS_LIBRARY
       "${GPU_ASSETKIT_WINDOWS_INSTALL_DIR}/lib/ds.lib")
-  set(GPU_ASSETKIT_WINDOWS_DEFLATE_LIBRARY
-      "${GPU_ASSETKIT_WINDOWS_BINARY_DIR}/build/$<CONFIG>/deflatestatic.lib")
+  if(CMAKE_CONFIGURATION_TYPES)
+    set(GPU_ASSETKIT_WINDOWS_DEFLATE_LIBRARY
+        "${GPU_ASSETKIT_WINDOWS_BINARY_DIR}/build/$<CONFIG>/deflatestatic.lib")
+  else()
+    set(GPU_ASSETKIT_WINDOWS_DEFLATE_LIBRARY
+        "${GPU_ASSETKIT_WINDOWS_BINARY_DIR}/build/deflatestatic.lib")
+  endif()
   ExternalProject_Add(gpu-assetkit-windows
     SOURCE_DIR "${GPU_ASSETKIT_ROOT}"
     BINARY_DIR "${GPU_ASSETKIT_WINDOWS_BINARY_DIR}/build"
@@ -24,6 +62,8 @@ if(EXISTS "${GPU_ASSETKIT_ROOT}/CMakeLists.txt")
     CMAKE_GENERATOR_PLATFORM "${CMAKE_GENERATOR_PLATFORM}"
     CMAKE_ARGS
       "-DCMAKE_INSTALL_PREFIX=${GPU_ASSETKIT_WINDOWS_INSTALL_DIR}"
+      "-DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
+      "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}"
       -DAK_SHARED=OFF
       -DAK_STATIC=ON
       -DAK_BUILD_EXPORTERS=OFF
@@ -42,6 +82,7 @@ if(EXISTS "${GPU_ASSETKIT_ROOT}/CMakeLists.txt")
     BUILD_BYPRODUCTS
       "${GPU_ASSETKIT_WINDOWS_LIBRARY}"
       "${GPU_ASSETKIT_WINDOWS_DS_LIBRARY}"
+      "${GPU_ASSETKIT_WINDOWS_DEFLATE_LIBRARY}"
   )
 endif()
 
@@ -57,6 +98,8 @@ function(gpu_windows_gallery_artifact sampleId
   set(fixtureSource "${shaderDir}/${shaderStem}.usl")
   set(artifact "${shaderDir}/${shaderStem}.us")
   set(shaderEnvironment USL_EMIT_BYTECODE=1 USL_NO_BACKEND_SIDECAR=1)
+  set(runtimeCommands)
+  set(runtimeDependencies)
 
   if(usesStdlib)
     list(APPEND shaderEnvironment
@@ -65,6 +108,16 @@ function(gpu_windows_gallery_artifact sampleId
   if(shaderCaps)
     list(APPEND shaderEnvironment "USL_TARGET_CAPS=${shaderCaps}")
   endif()
+  foreach(runtimeTarget us ds)
+    if(TARGET ${runtimeTarget})
+      list(APPEND runtimeCommands
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:${runtimeTarget}>
+                $<TARGET_FILE_DIR:gpu-usl-fixture>
+      )
+      list(APPEND runtimeDependencies $<TARGET_FILE:${runtimeTarget}>)
+    endif()
+  endforeach()
 
   add_custom_command(
     OUTPUT "${artifact}"
@@ -72,12 +125,13 @@ function(gpu_windows_gallery_artifact sampleId
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${shaderSource}"
             "${fixtureSource}"
+    ${runtimeCommands}
     COMMAND ${CMAKE_COMMAND} -E env
             ${shaderEnvironment}
             $<TARGET_FILE:gpu-usl-fixture>
             dx12
             "${fixtureSource}"
-    DEPENDS gpu-usl-fixture "${shaderSource}"
+    DEPENDS gpu-usl-fixture "${shaderSource}" ${runtimeDependencies}
     VERBATIM
   )
   set(${outArtifact} "${artifact}" PARENT_SCOPE)
@@ -148,6 +202,9 @@ function(gpu_windows_gallery_sample sampleDir)
     "#define main gpu_win32_sample_start\n"
     "#include \"${sampleDir}/main.c\"\n"
   )
+  set_property(SOURCE "${wrapper}" APPEND PROPERTY
+    OBJECT_DEPENDS "${sampleDir}/main.c"
+  )
 
   add_executable(${target} WIN32
     "${PROJECT_SOURCE_DIR}/samples/shell/windows/NativeHost.c"
@@ -180,8 +237,9 @@ function(gpu_windows_gallery_sample sampleDir)
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
     RUNTIME_OUTPUT_DIRECTORY
-      "${GPU_WINDOWS_GALLERY_OUTPUT_DIR}/samples/${sampleId}"
+      "${GPU_WINDOWS_GALLERY_RUNTIME_DIR}/$<CONFIG>"
   )
+  add_dependencies(${target} gpu-gallery-windows-runtime)
 
   if(GPU_SAMPLE_ASSETKIT)
     if(NOT TARGET gpu-assetkit-windows)
@@ -202,7 +260,7 @@ function(gpu_windows_gallery_sample sampleDir)
 
   set(stageTarget "${target}-artifacts")
   set(stageStamp
-      "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${stageTarget}.stamp")
+      "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${stageTarget}-bin.stamp")
   set(stageCommands
     COMMAND ${CMAKE_COMMAND} -E make_directory
             $<TARGET_FILE_DIR:${target}>

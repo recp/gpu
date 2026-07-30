@@ -38,6 +38,14 @@ gpu_apple_sample_start(void);
   sample_orbit_pointer_end();
 }
 
+- (void)scrollWheel:(NSEvent *)event {
+  sample_orbit_zoom((float)event.scrollingDeltaY * 0.08f);
+}
+
+- (void)magnifyWithEvent:(NSEvent *)event {
+  sample_orbit_zoom((float)event.magnification * 4.0f);
+}
+
 @end
 
 @interface GPUSampleHost: NSObject <NSApplicationDelegate, NSWindowDelegate> {
@@ -66,6 +74,8 @@ gpu_apple_sample_start(void);
   quitItem        = [[NSMenuItem alloc] initWithTitle:quitTitle
                                                action:@selector(terminate:)
                                         keyEquivalent:@"q"];
+  quitItem.target = NSApp;
+  quitItem.keyEquivalentModifierMask = NSEventModifierFlagCommand;
   [applicationMenu addItem:quitItem];
   applicationItem.submenu = applicationMenu;
   [mainMenu addItem:applicationItem];

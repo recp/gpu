@@ -7,6 +7,7 @@
 
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 extern int
 gpu_linux_sample_start(void);
@@ -21,9 +22,13 @@ main(void) {
   GPULinuxSample *sample;
   Display        *display;
   Window          window;
+  Window          parent;
   Atom            deleteWindow;
   XEvent          event;
+  const char      *parentText;
+  char            *parentEnd;
   bool            running;
+  int             result;
 
   display = XOpenDisplay(NULL);
   if (!display) {
@@ -46,6 +51,18 @@ main(void) {
   }
 
   XStoreName(display, window, GPU_LINUX_SAMPLE_NAME);
+  parent     = None;
+  parentText = getenv("GPU_SAMPLE_PARENT_XID");
+  if (parentText && parentText[0] != '\0') {
+    parentEnd = NULL;
+    parent    = (Window)strtoul(parentText, &parentEnd, 10);
+    if (!parentEnd || parentEnd[0] != '\0') {
+      parent = None;
+    }
+  }
+  if (parent != None) {
+    XSetTransientForHint(display, window, parent);
+  }
   XSelectInput(display,
                window,
                StructureNotifyMask |
@@ -56,6 +73,9 @@ main(void) {
   deleteWindow = XInternAtom(display, "WM_DELETE_WINDOW", False);
   XSetWMProtocols(display, window, &deleteWindow, 1);
   XMapWindow(display, window);
+  if (parent != None) {
+    XRaiseWindow(display, window);
+  }
   XFlush(display);
 
   windowInfo.display = display;
@@ -76,7 +96,15 @@ main(void) {
   }
 
   running = true;
-  while (running && GPUSampleLinuxRender(sample)) {
+  result  = 0;
+  while (running) {
+    if (!GPUSampleLinuxRender(sample)) {
+      if (GPUSampleLinuxFailed(sample)) {
+        fprintf(stderr, "%s\n", GPUSampleLinuxStatus(sample));
+        result = 1;
+      }
+      break;
+    }
     while (XPending(display) > 0) {
       XNextEvent(display, &event);
       switch (event.type) {
@@ -122,5 +150,5 @@ main(void) {
   GPUSampleLinuxStop(sample);
   XDestroyWindow(display, window);
   XCloseDisplay(display);
-  return 0;
+  return result;
 }

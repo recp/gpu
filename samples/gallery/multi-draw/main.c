@@ -2,6 +2,11 @@
 
 #include <stdio.h>
 
+typedef struct MultiDrawInstance {
+  float offset[2];
+  float color[4];
+} MultiDrawInstance;
+
 typedef struct WebGPUMultiDraw {
   GPUInstance       *instance;
   GPUAdapter        *adapter;
@@ -13,6 +18,7 @@ typedef struct WebGPUMultiDraw {
   GPUShaderLayout   *shaderLayout;
   GPURenderPipeline *pipeline;
   GPUBuffer         *indirectBuffer;
+  GPUBuffer         *instanceBuffer;
   WebGPURequest      request;
   uint32_t           width;
   uint32_t           height;
@@ -21,7 +27,12 @@ typedef struct WebGPUMultiDraw {
 
 static const uint32_t kDraws[] = {
   3u, 1u, 0u, 0u,
-  3u, 1u, 3u, 0u
+  3u, 1u, 0u, 1u
+};
+
+static const MultiDrawInstance kInstances[] = {
+  {{-0.44f, 0.0f}, {1.00f, 0.30f, 0.06f, 1.0f}},
+  {{ 0.44f, 0.0f}, {0.08f, 0.72f, 1.00f, 1.0f}}
 };
 
 static WebGPUMultiDraw app;
@@ -35,6 +46,8 @@ resize_canvas(WebGPUMultiDraw *state) {
 
 static int
 create_resources(WebGPUMultiDraw *state) {
+  GPUVertexAttribute           attributes[2] = {0};
+  GPUVertexBufferLayout        vertexLayout = {0};
   GPUColorTargetState          color        = {0};
   GPURenderPipelineCreateInfo  pipelineInfo = {0};
   GPUBufferCreateInfo          bufferInfo   = {0};
@@ -70,6 +83,17 @@ create_resources(WebGPUMultiDraw *state) {
   color.format          = GPUGetSwapchainFormat(state->swapchain);
   color.blend.writeMask = GPU_COLOR_WRITE_ALL;
 
+  attributes[0].format          = GPU_VERTEX_FORMAT_FLOAT32X2;
+  attributes[0].offset          = offsetof(MultiDrawInstance, offset);
+  attributes[0].shaderLocation  = 0u;
+  attributes[1].format          = GPU_VERTEX_FORMAT_FLOAT32X4;
+  attributes[1].offset          = offsetof(MultiDrawInstance, color);
+  attributes[1].shaderLocation  = 1u;
+  vertexLayout.pAttributes      = attributes;
+  vertexLayout.strideBytes      = sizeof(MultiDrawInstance);
+  vertexLayout.stepMode         = GPU_VERTEX_STEP_MODE_INSTANCE;
+  vertexLayout.attributeCount   = 2u;
+
   pipelineInfo.chain.sType             =
     GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
   pipelineInfo.chain.structSize        = sizeof(pipelineInfo);
@@ -79,6 +103,8 @@ create_resources(WebGPUMultiDraw *state) {
   pipelineInfo.vertexEntry             = "multi_vs";
   pipelineInfo.fragmentEntry           = "multi_fs";
   pipelineInfo.pColorTargets           = &color;
+  pipelineInfo.vertex.pBufferLayouts    = &vertexLayout;
+  pipelineInfo.vertex.bufferLayoutCount = 1u;
   pipelineInfo.colorTargetCount        = 1u;
   pipelineInfo.primitiveTopology       = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
   pipelineInfo.cullMode                = GPU_CULL_MODE_NONE;
@@ -110,6 +136,21 @@ create_resources(WebGPUMultiDraw *state) {
     set_status("GPU: failed to upload multi-draw commands", 1);
     return 0;
   }
+
+  bufferInfo.label     = "multi-draw-webgpu-instances";
+  bufferInfo.sizeBytes = sizeof(kInstances);
+  bufferInfo.usage     = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(state->device,
+                      &bufferInfo,
+                      &state->instanceBuffer) != GPU_OK ||
+      GPUQueueWriteBuffer(state->queue,
+                          state->instanceBuffer,
+                          0u,
+                          kInstances,
+                          sizeof(kInstances)) != GPU_OK) {
+    set_status("GPU: failed to upload multi-draw instances", 1);
+    return 0;
+  }
   return 1;
 }
 
@@ -119,6 +160,7 @@ render_frame(void *userData) {
   GPUFrame                     *frame;
   GPUCommandBuffer             *cmdb;
   GPURenderPassEncoder         *pass;
+  GPUBufferBinding              vertexBuffer = {0};
   GPURenderPassColorAttachment  color = {0};
   GPURenderPassCreateInfo       passInfo = {0};
 
@@ -158,6 +200,8 @@ render_frame(void *userData) {
   }
 
   GPUBindRenderPipeline(pass, state->pipeline);
+  vertexBuffer.buffer = state->instanceBuffer;
+  GPUBindVertexBuffers(pass, 0u, 1u, &vertexBuffer);
   GPUMultiDrawIndirect(pass, state->indirectBuffer, 0u, 2u, 16u);
   GPUEndRenderPass(pass);
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {

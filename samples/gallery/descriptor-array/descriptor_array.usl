@@ -1,5 +1,3 @@
-@require(descriptor_indexing)
-
 struct VSOut {
   position: float4 #position
   uv:       float2
@@ -14,6 +12,7 @@ vert descriptor_array_vs(vertexId: uint #vertex_id) -> VSOut {
   return VSOut { float4(0.88, 0.76, 0.0, 1.0), float2(1.0, 0.0) }
 }
 
+@require(descriptor_indexing)
 frag descriptor_array_fs(input: VSOut #stage_in,
                          textures: texture2d<float>[4] #texture(0),
                          samplers: sampler[4] #sampler(1),

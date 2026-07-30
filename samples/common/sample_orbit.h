@@ -10,6 +10,7 @@ typedef struct SampleOrbit {
   float  yawSpeed;
   float  pitchSpeed;
   float  sensitivity;
+  float  zoom;
   float  pointerX;
   float  pointerY;
   bool   dragging;
@@ -43,5 +44,8 @@ sample_orbit_pointer_move(float x, float y);
 
 void
 sample_orbit_pointer_end(void);
+
+void
+sample_orbit_zoom(float amount);
 
 #endif

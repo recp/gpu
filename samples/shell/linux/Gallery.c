@@ -1,8 +1,12 @@
 #include "NativeSamples.h"
 
 #include <gtk/gtk.h>
+#ifdef GPU_LINUX_GALLERY_XLIB
+#  include <gdk/gdkx.h>
+#endif
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -111,6 +115,7 @@ sample_clicked(GtkButton *button, gpointer userData) {
   const GPUNativeSample *sample;
   GPUGallery            *gallery;
   GError                *error;
+  gchar                **environment;
   gchar                 *arguments[2];
 
   gallery = userData;
@@ -122,9 +127,27 @@ sample_clicked(GtkButton *button, gpointer userData) {
   arguments[0] = (gchar *)sample->executable;
   arguments[1] = NULL;
   error        = NULL;
+  environment  = g_get_environ();
+#ifdef GPU_LINUX_GALLERY_XLIB
+  {
+    GdkWindow     *nativeWindow;
+    char           parentId[32];
+    unsigned long  xid;
+
+    nativeWindow = gtk_widget_get_window(gallery->window);
+    xid          = nativeWindow ? GDK_WINDOW_XID(nativeWindow) : 0ul;
+    if (xid != 0ul) {
+      snprintf(parentId, sizeof(parentId), "%lu", xid);
+      environment = g_environ_setenv(environment,
+                                     "GPU_SAMPLE_PARENT_XID",
+                                     parentId,
+                                     TRUE);
+    }
+  }
+#endif
   if (!g_spawn_async(NULL,
                      arguments,
-                     NULL,
+                     environment,
                      G_SPAWN_DO_NOT_REAP_CHILD,
                      NULL,
                      NULL,
@@ -134,8 +157,10 @@ sample_clicked(GtkButton *button, gpointer userData) {
                        error ? error->message : "Sample launch failed");
     g_clear_error(&error);
     gallery->child = 0;
+    g_strfreev(environment);
     return;
   }
+  g_strfreev(environment);
 
   gtk_label_set_text(GTK_LABEL(gallery->status), sample->id);
   gtk_widget_set_sensitive(gallery->window, FALSE);

@@ -92,6 +92,7 @@ typedef struct WebGPUCompute {
   uint32_t            height;
 #if GPU_COMPUTE_USE_TIMESTAMPS
   bool                timestampRecorded;
+  bool                timestampsEnabled;
 #endif
   bool                noticeStatus;
 } WebGPUCompute;
@@ -337,33 +338,38 @@ create_resources(WebGPUCompute *state) {
     };
     double                timestampPeriod;
 
-    queryInfo.chain.sType      = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
-    queryInfo.chain.structSize = sizeof(queryInfo);
-    queryInfo.label            = "compute-webgpu-timestamps";
-    queryInfo.type             = GPU_QUERY_TIMESTAMP;
-    queryInfo.count            = GPU_COMPUTE_TIMESTAMP_QUERY_COUNT;
     bufferInfo.label           = "compute-webgpu-timestamp-results";
     bufferInfo.sizeBytes       = GPU_COMPUTE_TIMESTAMP_RESOLVE_OFFSET +
                                  GPU_COMPUTE_TIMESTAMP_QUERY_COUNT *
                                    sizeof(uint64_t);
     bufferInfo.usage           = GPU_BUFFER_USAGE_COPY_DST |
                                  GPU_BUFFER_USAGE_STORAGE;
-    if (GPUCreateQuerySet(state->device,
-                          &queryInfo,
-                          &state->timestampQuery) != GPU_OK ||
-        GPUCreateBuffer(state->device,
+    if (GPUCreateBuffer(state->device,
                         &bufferInfo,
                         &state->timestampBuffer) != GPU_OK ||
-        GPUGetTimestampPeriod(state->queue, &timestampPeriod) != GPU_OK ||
         GPUQueueWriteBuffer(state->queue,
                             state->timestampBuffer,
                             GPU_COMPUTE_TIMESTAMP_BINDING_OFFSET,
                             timestampSentinel,
-                            sizeof(timestampSentinel)) != GPU_OK ||
-        !isfinite(timestampPeriod) ||
-        timestampPeriod <= 0.0) {
+                            sizeof(timestampSentinel)) != GPU_OK) {
       set_status("GPU: failed to initialize WebGPU timestamps", 1);
       return 0;
+    }
+    if (state->timestampsEnabled) {
+      queryInfo.chain.sType      = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
+      queryInfo.chain.structSize = sizeof(queryInfo);
+      queryInfo.label            = "compute-webgpu-timestamps";
+      queryInfo.type             = GPU_QUERY_TIMESTAMP;
+      queryInfo.count            = GPU_COMPUTE_TIMESTAMP_QUERY_COUNT;
+      if (GPUCreateQuerySet(state->device,
+                            &queryInfo,
+                            &state->timestampQuery) != GPU_OK ||
+          GPUGetTimestampPeriod(state->queue, &timestampPeriod) != GPU_OK ||
+          !isfinite(timestampPeriod) ||
+          timestampPeriod <= 0.0) {
+        set_status("GPU: failed to initialize WebGPU timestamps", 1);
+        return 0;
+      }
     }
   }
 #endif
@@ -437,7 +443,7 @@ render_frame(void *userData) {
   }
 
 #if GPU_COMPUTE_USE_TIMESTAMPS
-  if (!state->timestampRecorded) {
+  if (state->timestampsEnabled && !state->timestampRecorded) {
     computeTimestamps.querySet   = state->timestampQuery;
     computeTimestamps.beginIndex = 0u;
     computeTimestamps.endIndex   = 1u;
@@ -503,7 +509,7 @@ render_frame(void *userData) {
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
 #if GPU_COMPUTE_USE_TIMESTAMPS
-  if (!state->timestampRecorded) {
+  if (state->timestampsEnabled && !state->timestampRecorded) {
     renderTimestamps.querySet   = state->timestampQuery;
     renderTimestamps.beginIndex = 2u;
     renderTimestamps.endIndex   = 3u;
@@ -523,7 +529,7 @@ render_frame(void *userData) {
   GPUDraw(render, 3u, 1u, 0u, 0u);
   GPUEndRenderPass(render);
 #if GPU_COMPUTE_USE_TIMESTAMPS
-  if (!state->timestampRecorded) {
+  if (state->timestampsEnabled && !state->timestampRecorded) {
     GPUResolveQuerySet(cmdb,
                        state->timestampQuery,
                        0u,
@@ -537,7 +543,7 @@ render_frame(void *userData) {
     return;
   }
 #if GPU_COMPUTE_USE_TIMESTAMPS
-  if (!state->timestampRecorded) {
+  if (state->timestampsEnabled && !state->timestampRecorded) {
     state->timestampRecorded = true;
     puts(GPU_COMPUTE_TIMESTAMP_RESOLVED_STATUS);
   }
@@ -561,6 +567,10 @@ webgpu_ready(GPUResult  result,
 
   state->adapter = adapter;
   state->device  = device;
+#if GPU_COMPUTE_USE_TIMESTAMPS
+  state->timestampsEnabled =
+    GPUIsFeatureEnabled(device, GPU_FEATURE_TIMESTAMPS);
+#endif
   if (!GPUIsFeatureEnabled(device, GPU_COMPUTE_REQUIRED_FEATURE)) {
 #if defined(GPU_COMPUTE_FALLBACK_ARTIFACT_PATH) && \
     defined(GPU_COMPUTE_FALLBACK_ENTRY_POINT)
