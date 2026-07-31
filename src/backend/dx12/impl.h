@@ -69,6 +69,13 @@ GPU_HIDE GPUResult dx12_getBufferMemoryRequirements(
   GPUDevice                 *device,
   const GPUBufferCreateInfo *info,
   GPUMemoryRequirements     *outRequirements);
+GPU_HIDE GPUResult dx12_bufferDesc(const GPUBufferCreateInfo *info,
+                                   D3D12_RESOURCE_DESC       *outDesc);
+GPU_HIDE GPUResult dx12_wrapBuffer(GPUDevice                 *device,
+                                   const GPUBufferCreateInfo *info,
+                                   ID3D12Resource            *resource,
+                                   D3D12_RESOURCE_STATES      initialState,
+                                   GPUBuffer                **outBuffer);
 GPU_HIDE GPUResult dx12_getSparseBufferRequirements(
   GPUDevice                   *device,
   const GPUBufferCreateInfo   *info,
@@ -86,6 +93,26 @@ GPU_HIDE GPUResult dx12_getTextureMemoryRequirements(
   GPUDevice                  *device,
   const GPUTextureCreateInfo *info,
   GPUMemoryRequirements      *outRequirements);
+GPU_HIDE GPUResult dx12_textureDesc(
+  GPUDevice                  *device,
+  const GPUTextureCreateInfo *info,
+  D3D12_RESOURCE_DESC        *outDesc,
+  D3D12_CLEAR_VALUE          *outClearValue,
+  D3D12_RESOURCE_STATES      *outInitialState,
+  uint32_t                   *outMipLevelCount,
+  uint32_t                   *outArrayLayerCount,
+  uint32_t                   *outPlaneCount,
+  uint32_t                   *outSubresourceCount);
+GPU_HIDE GPUResult dx12_wrapTexture(
+  GPUDevice                  *device,
+  const GPUTextureCreateInfo *info,
+  ID3D12Resource             *resource,
+  D3D12_RESOURCE_STATES       initialState,
+  uint32_t                    mipLevelCount,
+  uint32_t                    arrayLayerCount,
+  uint32_t                    planeCount,
+  uint32_t                    subresourceCount,
+  GPUTexture                **outTexture);
 GPU_HIDE GPUResult dx12_createPlacedTexture(GPUDevice                  *device,
                                             const GPUTextureCreateInfo *info,
                                             GPUHeap                    *heap,
@@ -117,6 +144,7 @@ GPU_HIDE void dx12_initRayQuery(GPUApiRayQuery *api);
 GPU_HIDE void dx12_initRayTracing(GPUApiRayTracing *api);
 GPU_HIDE void dx12_initExecutionGraph(GPUApiExecutionGraph *api);
 GPU_HIDE void dx12_initSamplerFeedback(GPUApiSamplerFeedback *api);
+GPU_HIDE void dx12_initMultiGPU(GPUApiMultiGPU *api);
 GPU_HIDE void dx12_resetGraphInitializations(GPUCommandBufferDX12 *command);
 GPU_HIDE void dx12_submitGraphInitializations(GPUCommandBufferDX12 *command);
 GPU_HIDE void dx12_destroyGraphInputScratch(GPUCommandBufferDX12 *command);

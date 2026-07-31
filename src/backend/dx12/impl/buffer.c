@@ -67,9 +67,10 @@ dx12__bufferInitialState(GPUBufferUsageFlags usage, bool defaultHeap) {
   return D3D12_RESOURCE_STATE_COMMON;
 }
 
-static GPUResult
-dx12__bufferDesc(const GPUBufferCreateInfo *info,
-                 D3D12_RESOURCE_DESC       *outDesc) {
+GPU_HIDE
+GPUResult
+dx12_bufferDesc(const GPUBufferCreateInfo *info,
+                D3D12_RESOURCE_DESC       *outDesc) {
   uint64_t allocationSize;
   bool     unorderedAccess;
 
@@ -101,6 +102,43 @@ dx12__bufferDesc(const GPUBufferCreateInfo *info,
 
 GPU_HIDE
 GPUResult
+dx12_wrapBuffer(GPUDevice                 *device,
+                const GPUBufferCreateInfo *info,
+                ID3D12Resource            *resource,
+                D3D12_RESOURCE_STATES      initialState,
+                GPUBuffer                **outBuffer) {
+  GPUBuffer     *buffer;
+  GPUBufferDX12 *native;
+
+  if (!device || !info || !resource || !outBuffer) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outBuffer = NULL;
+
+  buffer = calloc(1, sizeof(*buffer) + sizeof(*native));
+  if (!buffer) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  dx12__setBufferName(resource, gpuDeviceDebugLabel(device, info->label));
+#endif
+  native                = (GPUBufferDX12 *)(buffer + 1);
+  native->resource      = resource;
+  native->gpuAddress    = resource->lpVtbl->GetGPUVirtualAddress(resource);
+  native->state         = initialState;
+  native->defaultHeap   = true;
+  buffer->_priv         = native;
+  buffer->device        = device;
+  buffer->_gpuAddress   = native->gpuAddress;
+  buffer->sizeBytes     = info->sizeBytes;
+  buffer->usage         = info->usage;
+  *outBuffer            = buffer;
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
 dx12_getBufferMemoryRequirements(GPUDevice                 *device,
                                  const GPUBufferCreateInfo *info,
                                  GPUMemoryRequirements     *outRequirements) {
@@ -112,7 +150,7 @@ dx12_getBufferMemoryRequirements(GPUDevice                 *device,
   if (!device || !(deviceDX12 = device->_priv) || !info || !outRequirements) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  result = dx12__bufferDesc(info, &desc);
+  result = dx12_bufferDesc(info, &desc);
   if (result != GPU_OK) {
     return result;
   }
@@ -156,7 +194,7 @@ dx12_getSparseBufferRequirements(
       deviceDX12->tiledResourcesTier < D3D12_TILED_RESOURCES_TIER_1) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  result = dx12__bufferDesc(info, &desc);
+  result = dx12_bufferDesc(info, &desc);
   if (result != GPU_OK) {
     return result;
   }
@@ -214,7 +252,7 @@ dx12_createSparseBuffer(GPUDevice                 *device,
       !outBuffer) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  result = dx12__bufferDesc(info, &desc);
+  result = dx12_bufferDesc(info, &desc);
   if (result != GPU_OK) {
     return result;
   }
@@ -276,7 +314,7 @@ dx12_createPlacedBuffer(GPUDevice                 *device,
       !(heapDX12 = heap->_priv) || !heapDX12->heap || !outBuffer) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  usageResult = dx12__bufferDesc(info, &desc);
+  usageResult = dx12_bufferDesc(info, &desc);
   if (usageResult != GPU_OK) {
     return usageResult;
   }

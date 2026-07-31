@@ -54,6 +54,7 @@ backend_dx12(void) {
     dx12_initRayTracing(&dx12.rayTracing);
     dx12_initExecutionGraph(&dx12.executionGraph);
     dx12_initSamplerFeedback(&dx12.samplerFeedback);
+    dx12_initMultiGPU(&dx12.multigpu);
 
     dx12.initialized = true;
   }

@@ -130,6 +130,7 @@ gpu_test_multigpu(GPUAdapter *adapter, GPUDevice *firstDevice) {
   if (interopResult != GPU_OK || !interop) {
     GPUDestroyDevice(secondDevice);
     return properties.backend != GPU_BACKEND_METAL &&
+           properties.backend != GPU_BACKEND_DX12 &&
            interopResult == GPU_ERROR_UNSUPPORTED && !interop;
   }
   for (size_t i = 0u; i < GPU_ARRAY_LEN(entryPoints); i++) {
@@ -169,6 +170,7 @@ gpu_test_multigpu(GPUAdapter *adapter, GPUDevice *firstDevice) {
                            0u,
                            source,
                            sizeof(source)) == GPU_OK &&
+       gpu_test_shared_semaphore(interop, firstDevice, secondDevice) &&
        GPUQueueReadBuffer(secondQueue,
                           secondBuffer,
                           0u,
@@ -203,8 +205,7 @@ gpu_test_multigpu(GPUAdapter *adapter, GPUDevice *firstDevice) {
                                  &secondTextureInfo,
                                  &firstTexture,
                                  &secondTexture) == GPU_OK &&
-       firstTexture && secondTexture &&
-       gpu_test_shared_semaphore(interop, firstDevice, secondDevice);
+       firstTexture && secondTexture;
 
   GPUDestroyTexture(secondTexture);
   GPUDestroyTexture(firstTexture);

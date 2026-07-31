@@ -383,16 +383,17 @@ dx12_transitionTexturePlane(ID3D12GraphicsCommandList *commandList,
                                  state);
 }
 
-static GPUResult
-dx12__textureDesc(GPUDevice                  *device,
-                  const GPUTextureCreateInfo *info,
-                  D3D12_RESOURCE_DESC        *outDesc,
-                  D3D12_CLEAR_VALUE          *outClearValue,
-                  D3D12_RESOURCE_STATES      *outInitialState,
-                  uint32_t                   *outMipLevelCount,
-                  uint32_t                   *outArrayLayerCount,
-                  uint32_t                   *outPlaneCount,
-                  uint32_t                   *outSubresourceCount) {
+GPU_HIDE
+GPUResult
+dx12_textureDesc(GPUDevice                  *device,
+                 const GPUTextureCreateInfo *info,
+                 D3D12_RESOURCE_DESC        *outDesc,
+                 D3D12_CLEAR_VALUE          *outClearValue,
+                 D3D12_RESOURCE_STATES      *outInitialState,
+                 uint32_t                   *outMipLevelCount,
+                 uint32_t                   *outArrayLayerCount,
+                 uint32_t                   *outPlaneCount,
+                 uint32_t                   *outSubresourceCount) {
   GPUDeviceDX12          *deviceDX12;
   D3D12_RESOURCE_DIMENSION dimension;
   DXGI_FORMAT             format;
@@ -508,16 +509,17 @@ dx12__textureDesc(GPUDevice                  *device,
   return GPU_OK;
 }
 
-static GPUResult
-dx12__wrapTexture(GPUDevice                  *device,
-                  const GPUTextureCreateInfo *info,
-                  ID3D12Resource             *resource,
-                  D3D12_RESOURCE_STATES       initialState,
-                  uint32_t                    mipLevelCount,
-                  uint32_t                    arrayLayerCount,
-                  uint32_t                    planeCount,
-                  uint32_t                    subresourceCount,
-                  GPUTexture                **outTexture) {
+GPU_HIDE
+GPUResult
+dx12_wrapTexture(GPUDevice                  *device,
+                 const GPUTextureCreateInfo *info,
+                 ID3D12Resource             *resource,
+                 D3D12_RESOURCE_STATES       initialState,
+                 uint32_t                    mipLevelCount,
+                 uint32_t                    arrayLayerCount,
+                 uint32_t                    planeCount,
+                 uint32_t                    subresourceCount,
+                 GPUTexture                **outTexture) {
   GPUTexture     *texture;
   GPUTextureDX12 *native;
   size_t          allocationSize;
@@ -580,7 +582,7 @@ dx12_getTextureMemoryRequirements(GPUDevice                  *device,
   if (!device || !(deviceDX12 = device->_priv) || !info || !outRequirements) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  result = dx12__textureDesc(device,
+  result = dx12_textureDesc(device,
                             info,
                             &desc,
                             &clearValue,
@@ -715,7 +717,7 @@ dx12_getSparseTextureRequirements(
       (info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  result = dx12__textureDesc(device,
+  result = dx12_textureDesc(device,
                             info,
                             &desc,
                             &clearValue,
@@ -782,7 +784,7 @@ dx12_createSparseTexture(GPUDevice                  *device,
       !outTexture) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  result = dx12__textureDesc(device,
+  result = dx12_textureDesc(device,
                             info,
                             &desc,
                             &clearValue,
@@ -816,7 +818,7 @@ dx12_createSparseTexture(GPUDevice                  *device,
                                             &packedMipInfo,
                                             &tileShape);
   if (result == GPU_OK) {
-    result = dx12__wrapTexture(device,
+    result = dx12_wrapTexture(device,
                                info,
                                resource,
                                D3D12_RESOURCE_STATE_COMMON,
@@ -861,7 +863,7 @@ dx12_createPlacedTexture(GPUDevice                  *device,
       !(heapDX12 = heap->_priv) || !heapDX12->heap || !outTexture) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  result = dx12__textureDesc(device,
+  result = dx12_textureDesc(device,
                             info,
                             &desc,
                             &clearValue,
@@ -888,7 +890,7 @@ dx12_createPlacedTexture(GPUDevice                  *device,
   if (FAILED(nativeResult) || !resource) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  result = dx12__wrapTexture(device,
+  result = dx12_wrapTexture(device,
                              info,
                              resource,
                              initialState,
@@ -925,7 +927,7 @@ dx12_createTexture(GPUDevice                  * __restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   *outTexture = NULL;
-  result = dx12__textureDesc(device,
+  result = dx12_textureDesc(device,
                             info,
                             &desc,
                             &clearValue,
@@ -955,7 +957,7 @@ dx12_createTexture(GPUDevice                  * __restrict device,
   if (FAILED(nativeResult) || !resource) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  result = dx12__wrapTexture(device,
+  result = dx12_wrapTexture(device,
                              info,
                              resource,
                              initialState,
