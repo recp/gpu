@@ -12,6 +12,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <process.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,7 +24,8 @@ enum {
   GPU_GALLERY_ADAPTER_AUTO        = 0u,
   GPU_GALLERY_ADAPTER_LOW_POWER   = 1u,
   GPU_GALLERY_ADAPTER_HIGH_POWER  = 2u,
-  GPU_GALLERY_ADAPTER_FIRST       = 3u
+  GPU_GALLERY_ADAPTER_FIRST       = 3u,
+  GPU_GALLERY_ADAPTERS_READY      = WM_APP + 1u
 };
 
 typedef struct GPUGalleryPreview {
@@ -62,6 +64,12 @@ typedef struct GPUGalleryLayout {
   int previewHeight;
   int offset;
 } GPUGalleryLayout;
+
+typedef struct GPUGalleryAdapters {
+  wchar_t  (*labels)[256];
+  uint32_t  *indices;
+  uint32_t   count;
+} GPUGalleryAdapters;
 
 static COLORREF
 rgb(uint8_t red, uint8_t green, uint8_t blue) {
@@ -339,60 +347,79 @@ add_adapter_option(HWND selector, const wchar_t *label, uint32_t value) {
   }
 }
 
-static void
-populate_adapter_selector(GPUGallery *gallery) {
+static unsigned __stdcall
+discover_adapters(void *userData) {
   GPUInstanceCreateInfo instanceInfo = {0};
-  GPUAdapterProperties  properties = {0};
+  GPUGalleryAdapters   *result;
   GPUInstance          *instance;
   GPUAdapter          **adapters;
+  HWND                  window;
   uint32_t              adapterCount;
 
-  if (!gallery || !gallery->adapterSelector) {
-    return;
-  }
-  add_adapter_option(gallery->adapterSelector,
-                     L"Auto",
-                     GPU_GALLERY_ADAPTER_AUTO);
-  add_adapter_option(gallery->adapterSelector,
-                     L"Low power",
-                     GPU_GALLERY_ADAPTER_LOW_POWER);
-  add_adapter_option(gallery->adapterSelector,
-                     L"High performance",
-                     GPU_GALLERY_ADAPTER_HIGH_POWER);
-
+  window                         = userData;
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.label            = "windows-gallery-adapters";
   instanceInfo.preferredBackend = GPU_BACKEND_DX12;
-  instance = NULL;
+  result                         = NULL;
+  instance                       = NULL;
   if (GPUCreateInstance(&instanceInfo, &instance) != GPU_OK || !instance) {
-    SendMessageW(gallery->adapterSelector, CB_SETCURSEL, 0u, 0u);
-    return;
+    return 0u;
   }
 
   adapterCount = 0u;
   adapters     = NULL;
   if (GPUEnumerateAdapters(instance, &adapterCount, NULL) == GPU_OK &&
       adapterCount > 0u &&
+      (result = calloc(1u, sizeof(*result))) &&
+      (result->labels = calloc(adapterCount, sizeof(*result->labels))) &&
+      (result->indices = calloc(adapterCount, sizeof(*result->indices))) &&
       (adapters = calloc(adapterCount, sizeof(*adapters))) &&
       GPUEnumerateAdapters(instance, &adapterCount, adapters) == GPU_OK) {
     for (uint32_t i = 0u; i < adapterCount; i++) {
-      wchar_t label[256];
+      GPUAdapterProperties properties = {0};
 
       if (GPUGetAdapterProperties(adapters[i], &properties) != GPU_OK) {
         continue;
       }
-      if (!adapter_label(&properties, label)) {
-        swprintf(label, 256u, L"Adapter %u", i + 1u);
+      if (!adapter_label(&properties, result->labels[result->count])) {
+        swprintf(result->labels[result->count],
+                 256u,
+                 L"Adapter %u",
+                 i + 1u);
       }
-      add_adapter_option(gallery->adapterSelector,
-                         label,
-                         GPU_GALLERY_ADAPTER_FIRST + i);
+      result->indices[result->count] = i;
+      result->count++;
     }
   }
   free(adapters);
   GPUDestroyInstance(instance);
-  SendMessageW(gallery->adapterSelector, CB_SETCURSEL, 0u, 0u);
+  if (!result || !PostMessageW(window,
+                               GPU_GALLERY_ADAPTERS_READY,
+                               0u,
+                               (LPARAM)result)) {
+    if (result) {
+      free(result->labels);
+      free(result->indices);
+      free(result);
+    }
+  }
+  return 0u;
+}
+
+static void
+start_adapter_discovery(HWND window) {
+  uintptr_t thread;
+
+  thread = _beginthreadex(NULL,
+                          0u,
+                          discover_adapters,
+                          window,
+                          0u,
+                          NULL);
+  if (thread) {
+    CloseHandle((HANDLE)thread);
+  }
 }
 
 static bool
@@ -422,7 +449,16 @@ create_adapter_selector(GPUGallery *gallery) {
                WM_SETFONT,
                (WPARAM)gallery->bodyFont,
                TRUE);
-  populate_adapter_selector(gallery);
+  add_adapter_option(gallery->adapterSelector,
+                     L"Auto",
+                     GPU_GALLERY_ADAPTER_AUTO);
+  add_adapter_option(gallery->adapterSelector,
+                     L"Low power",
+                     GPU_GALLERY_ADAPTER_LOW_POWER);
+  add_adapter_option(gallery->adapterSelector,
+                     L"High performance",
+                     GPU_GALLERY_ADAPTER_HIGH_POWER);
+  SendMessageW(gallery->adapterSelector, CB_SETCURSEL, 0u, 0u);
   position_adapter_selector(gallery);
   return true;
 }
@@ -999,6 +1035,23 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
         return 0;
       }
       return DefWindowProcW(window, message, wParam, lParam);
+    case GPU_GALLERY_ADAPTERS_READY: {
+      GPUGalleryAdapters *adapters;
+
+      adapters = (GPUGalleryAdapters *)lParam;
+      if (adapters) {
+        for (uint32_t i = 0u; i < adapters->count; i++) {
+          add_adapter_option(gallery->adapterSelector,
+                             adapters->labels[i],
+                             GPU_GALLERY_ADAPTER_FIRST +
+                               adapters->indices[i]);
+        }
+        free(adapters->labels);
+        free(adapters->indices);
+        free(adapters);
+      }
+      return 0;
+    }
     case WM_VSCROLL: {
       SCROLLINFO info = {0};
       int        value;
@@ -1246,6 +1299,7 @@ wWinMain(HINSTANCE instance,
   update_scroll(&gallery);
   ShowWindow(window, showCommand);
   UpdateWindow(window);
+  start_adapter_discovery(window);
 
   while (GetMessageW(&message, NULL, 0u, 0u) > 0) {
     TranslateMessage(&message);
