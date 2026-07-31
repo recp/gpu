@@ -902,6 +902,11 @@ if(GPU_BUILD_TESTS)
       C_STANDARD_REQUIRED YES
       C_EXTENSIONS NO
     )
+    if(MSVC)
+      target_compile_options(gpu-vulkan-mesh-test PRIVATE
+        /experimental:c11atomics
+      )
+    endif()
 
     add_executable(gpu-vulkan-indirect-copy-test
       ${PROJECT_SOURCE_DIR}/tests/vulkan/indirect_copy.c
@@ -1076,6 +1081,11 @@ if(GPU_BUILD_TESTS)
       C_STANDARD_REQUIRED YES
       C_EXTENSIONS NO
     )
+    if(MSVC)
+      target_compile_options(gpu-dx12-mesh-test PRIVATE
+        /experimental:c11atomics
+      )
+    endif()
 
     foreach(runtime_target us ds)
       if(TARGET ${runtime_target})
@@ -1129,5 +1139,14 @@ if((GPU_BUILD_TESTS OR GPU_BUILD_BENCHMARKS) AND
         )
       endif()
     endforeach()
+  endif()
+endif()
+
+if(WIN32)
+  get_property(gpu_tests DIRECTORY PROPERTY TESTS)
+  if(gpu_tests)
+    set_tests_properties(${gpu_tests} PROPERTIES
+      WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
+    )
   endif()
 endif()
