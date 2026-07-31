@@ -33,14 +33,18 @@ static uint32_t         gScopedFrameEndCalls;
 static bool             gScopedFrameSucceeds;
 static bool             gScopedPresentSucceeds;
 
-static GPUAdapter gOwnershipAdapter;
-static GPUDevice  gOwnershipDevice;
-static GPUSurface gOwnershipSurface;
+static GPUAdapter         gOwnershipAdapter;
+static GPUAdapter         gOwnershipPeerAdapter;
+static GPUAdapterIdentity gOwnershipIdentity;
+static GPUAdapterIdentity gOwnershipPeerIdentity;
+static GPUDevice          gOwnershipDevice;
+static GPUSurface         gOwnershipSurface;
 static GPUSurfaceNativeInfo gOwnershipSurfaceInfo;
 static uint32_t   gOwnershipAdapterCalls;
 static uint32_t   gOwnershipAdapterDestroyCalls;
 static uint32_t   gOwnershipAdapterSelectCalls;
 static uint32_t   gOwnershipPropertiesCalls;
+static uint32_t   gOwnershipIdentityCalls;
 static uint32_t   gOwnershipFeatureCalls;
 static uint32_t   gOwnershipLimitsCalls;
 static uint32_t   gOwnershipFormatCalls;
@@ -157,6 +161,20 @@ get_ownership_properties(const GPUAdapter     * __restrict adapter,
                              GPU_EXECUTION_COMPUTE_BIT;
   gOwnershipPropertiesCalls++;
   return GPU_OK;
+}
+
+static GPUResult
+get_ownership_identity(const GPUAdapter   * __restrict adapter,
+                       GPUAdapterIdentity * __restrict outIdentity) {
+  if (!adapter || !outIdentity) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outIdentity = adapter == &gOwnershipPeerAdapter
+                   ? gOwnershipPeerIdentity
+                   : gOwnershipIdentity;
+  gOwnershipIdentityCalls++;
+  return outIdentity->validFlags != 0u ? GPU_OK : GPU_ERROR_UNSUPPORTED;
 }
 
 static bool
@@ -277,6 +295,7 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   GPUAdapterCapabilities     adapterCaps;
   GPUDeviceCapabilities      deviceCaps;
   GPUFormatCapabilities      formatCaps;
+  GPUAdapterIdentity         identity;
   GPUSurfaceCapabilities     surfaceCaps;
   GPUApi                    *activeApi;
   GPUAdapter                *adapter;
@@ -286,6 +305,7 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   GPUInstance                instance = {0};
   GPUInstance                otherInstance = {0};
   uint32_t                   adapterCount;
+  bool                       sameDevice;
 
   activeApi = gpuInstanceApi(activeInstance);
   if (!activeApi) {
@@ -298,6 +318,7 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   scopedApi.device.selectAdapter        = select_ownership_adapter;
   scopedApi.device.destroyAdapter       = destroy_ownership_adapter;
   scopedApi.device.getAdapterProperties = get_ownership_properties;
+  scopedApi.device.getAdapterIdentity   = get_ownership_identity;
   scopedApi.device.supportsFeature      = supports_ownership_feature;
   scopedApi.device.getLimits            = get_ownership_limits;
   scopedApi.device.getFormatCapabilities =
@@ -315,6 +336,7 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   gOwnershipAdapterDestroyCalls         = 0u;
   gOwnershipAdapterSelectCalls          = 0u;
   gOwnershipPropertiesCalls             = 0u;
+  gOwnershipIdentityCalls               = 0u;
   gOwnershipFeatureCalls                = 0u;
   gOwnershipLimitsCalls                 = 0u;
   gOwnershipFormatCalls                 = 0u;
@@ -326,6 +348,15 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   gOwnershipSurfaceCapabilityCalls      = 0u;
   gOwnershipSurfaceDestroyCalls         = 0u;
   gOwnershipInstanceDestroyCalls        = 0u;
+  memset(&gOwnershipIdentity, 0, sizeof(gOwnershipIdentity));
+  gOwnershipIdentity.luid         = 0x0123456789abcdefull;
+  gOwnershipIdentity.validFlags   = GPU_ADAPTER_IDENTITY_UUID_BIT |
+                                    GPU_ADAPTER_IDENTITY_LUID_BIT;
+  gOwnershipIdentity.luidNodeMask = 1u;
+  for (uint32_t i = 0u; i < sizeof(gOwnershipIdentity.deviceUUID); i++) {
+    gOwnershipIdentity.deviceUUID[i] = (uint8_t)(i + 1u);
+  }
+  gOwnershipPeerIdentity = gOwnershipIdentity;
 
   adapter      = NULL;
   adapterCount = 0u;
@@ -338,6 +369,60 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   if (GPUEnumerateAdapters(&instance, &adapterCount, &adapter) != GPU_OK ||
       adapterCount != 1u || adapter != &gOwnershipAdapter) {
     fprintf(stderr, "instance-scoped adapter enumeration failed\n");
+    return 0;
+  }
+
+  memset(&gOwnershipPeerAdapter, 0, sizeof(gOwnershipPeerAdapter));
+  gOwnershipPeerAdapter.inst = &instance;
+  memset(&identity, 0, sizeof(identity));
+  sameDevice = false;
+  if (GPUGetAdapterIdentity(adapter, &identity) != GPU_OK ||
+      identity.luid != gOwnershipIdentity.luid ||
+      identity.validFlags != gOwnershipIdentity.validFlags ||
+      memcmp(identity.deviceUUID,
+             gOwnershipIdentity.deviceUUID,
+             sizeof(identity.deviceUUID)) != 0 ||
+      GPUAdaptersSharePhysicalDevice(adapter, adapter, &sameDevice) != GPU_OK ||
+      !sameDevice ||
+      GPUAdaptersSharePhysicalDevice(adapter,
+                                     &gOwnershipPeerAdapter,
+                                     &sameDevice) != GPU_OK ||
+      !sameDevice) {
+    fprintf(stderr, "adapter identity dispatch failed\n");
+    return 0;
+  }
+
+  gOwnershipPeerIdentity.luidNodeMask = 2u;
+  sameDevice = true;
+  if (GPUAdaptersSharePhysicalDevice(adapter,
+                                     &gOwnershipPeerAdapter,
+                                     &sameDevice) != GPU_OK ||
+      sameDevice) {
+    fprintf(stderr, "adapter node identity mismatch failed\n");
+    return 0;
+  }
+
+  gOwnershipIdentity.validFlags = GPU_ADAPTER_IDENTITY_UUID_BIT;
+  gOwnershipPeerIdentity.validFlags =
+    GPU_ADAPTER_IDENTITY_REGISTRY_ID_BIT;
+  gOwnershipPeerIdentity.registryID = 42u;
+  sameDevice = true;
+  if (GPUAdaptersSharePhysicalDevice(adapter,
+                                     &gOwnershipPeerAdapter,
+                                     &sameDevice) != GPU_ERROR_UNSUPPORTED ||
+      sameDevice ||
+      GPUGetAdapterIdentity(NULL, &identity) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUGetAdapterIdentity(adapter, NULL) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUAdaptersSharePhysicalDevice(NULL,
+                                     adapter,
+                                     &sameDevice) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUAdaptersSharePhysicalDevice(adapter,
+                                     NULL,
+                                     &sameDevice) != GPU_ERROR_INVALID_ARGUMENT ||
+      GPUAdaptersSharePhysicalDevice(adapter,
+                                     adapter,
+                                     NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+    fprintf(stderr, "adapter identity validation failed\n");
     return 0;
   }
 
@@ -452,6 +537,7 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
       gOwnershipAdapterDestroyCalls != 1u ||
       gOwnershipAdapterSelectCalls != 1u ||
       gOwnershipPropertiesCalls != 1u ||
+      gOwnershipIdentityCalls != 7u ||
       gOwnershipFeatureCalls == 0u ||
       gOwnershipDeviceCreateCalls != 2u ||
       gOwnershipDeviceWaitCalls != 2u ||
@@ -875,6 +961,7 @@ feature_set_matches_device(const GPUDevice     *device,
 static int
 check_adapter_enumeration(GPUInstance *activeInstance) {
   GPUAdapter *adapters[8] = {0};
+  GPUAdapterIdentity identity;
   GPUAdapterCapabilities caps;
   GPUFormatCapabilities formatCaps;
   GPUNativeSurfaceCreateInfo nativeSurfaceInfo;
@@ -888,6 +975,8 @@ check_adapter_enumeration(GPUInstance *activeInstance) {
   GPUSurface querySurface = {0};
   GPUSurfaceCapabilities surfaceCaps;
   uint32_t adapterCount;
+  GPUResult identityResult;
+  bool sameDevice;
 
   if (GPUCreateInstance(NULL, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "instance create accepted null out pointer\n");
@@ -968,6 +1057,20 @@ check_adapter_enumeration(GPUInstance *activeInstance) {
       props.backend == GPU_BACKEND_DEFAULT ||
       !props.name) {
     fprintf(stderr, "adapter properties query failed\n");
+    return 0;
+  }
+  memset(&identity, 0, sizeof(identity));
+  identityResult = GPUGetAdapterIdentity(adapters[0], &identity);
+  sameDevice     = false;
+  if ((props.backend == GPU_BACKEND_WEBGPU &&
+       identityResult != GPU_ERROR_UNSUPPORTED) ||
+      (props.backend != GPU_BACKEND_WEBGPU &&
+       (identityResult != GPU_OK || identity.validFlags == 0u)) ||
+      GPUAdaptersSharePhysicalDevice(adapters[0],
+                                     adapters[0],
+                                     &sameDevice) != GPU_OK ||
+      !sameDevice) {
+    fprintf(stderr, "native adapter identity query failed\n");
     return 0;
   }
   if (GPUGetFormatCapabilities(adapters[0],

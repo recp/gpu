@@ -71,6 +71,10 @@ typedef struct GPUApiDevice {
   (*getAdapterProperties)(const GPUAdapter     * __restrict adapter,
                           GPUAdapterProperties * __restrict outProps);
 
+  GPUResult
+  (*getAdapterIdentity)(const GPUAdapter   * __restrict adapter,
+                        GPUAdapterIdentity * __restrict outIdentity);
+
   bool
   (*supportsFeature)(const GPUAdapter * __restrict adapter,
                      GPUFeature feature);

@@ -48,6 +48,21 @@ typedef struct GPUAdapterProperties {
   GPUExecutionFlags  executionFlags;
 } GPUAdapterProperties;
 
+typedef uint32_t GPUAdapterIdentityFlags;
+enum {
+  GPU_ADAPTER_IDENTITY_UUID_BIT        = 1u << 0,
+  GPU_ADAPTER_IDENTITY_LUID_BIT        = 1u << 1,
+  GPU_ADAPTER_IDENTITY_REGISTRY_ID_BIT = 1u << 2
+};
+
+typedef struct GPUAdapterIdentity {
+  uint64_t                luid;
+  uint64_t                registryID;
+  GPUAdapterIdentityFlags validFlags;
+  uint32_t                luidNodeMask;
+  uint8_t                 deviceUUID[16];
+} GPUAdapterIdentity;
+
 typedef enum GPUPowerPreference {
   GPU_POWER_PREFERENCE_DEFAULT          = 0,
   GPU_POWER_PREFERENCE_LOW_POWER        = 1,
@@ -288,6 +303,17 @@ GPU_EXPORT
 GPUResult
 GPUGetAdapterProperties(const GPUAdapter     *adapter,
                         GPUAdapterProperties *outProps);
+
+GPU_EXPORT
+GPUResult
+GPUGetAdapterIdentity(const GPUAdapter   *adapter,
+                      GPUAdapterIdentity *outIdentity);
+
+GPU_EXPORT
+GPUResult
+GPUAdaptersSharePhysicalDevice(const GPUAdapter *first,
+                               const GPUAdapter *second,
+                               bool             *outSameDevice);
 
 GPU_EXPORT
 GPUResult

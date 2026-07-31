@@ -204,6 +204,26 @@ mt_getAdapterProperties(const GPUAdapter     * __restrict adapter,
   return GPU_OK;
 }
 
+GPU_HIDE
+GPUResult
+mt_getAdapterIdentity(const GPUAdapter   * __restrict adapter,
+                      GPUAdapterIdentity * __restrict outIdentity) {
+  id<MTLDevice> device;
+
+  if (!adapter || !outIdentity || !adapter->_priv) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  device = mt_adapterDevice(adapter);
+  memset(outIdentity, 0, sizeof(*outIdentity));
+  outIdentity->registryID = device.registryID;
+  if (outIdentity->registryID == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  outIdentity->validFlags = GPU_ADAPTER_IDENTITY_REGISTRY_ID_BIT;
+  return GPU_OK;
+}
+
 static bool
 mt_hasCounterSet(id<MTLDevice> device, MTLCommonCounterSet name) {
   if (!device || !name) {
@@ -973,6 +993,7 @@ mt_initDevice(GPUApiDevice *apiDevice) {
   apiDevice->selectAdapter               = mt_selectAdapter;
   apiDevice->destroyAdapter              = mt_destroyAdapter;
   apiDevice->getAdapterProperties        = mt_getAdapterProperties;
+  apiDevice->getAdapterIdentity          = mt_getAdapterIdentity;
   apiDevice->supportsFeature             = mt_supportsFeature;
   apiDevice->supportsSubgroupOperations  = mt_supportsSubgroupOperations;
   apiDevice->getLimits                   = mt_getLimits;

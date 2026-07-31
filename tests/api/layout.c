@@ -60,6 +60,7 @@ _Static_assert(
 );
 GPU_ASSERT_64BIT_SIZE(GPUMemoryRequirements, 24u);
 GPU_ASSERT_64BIT_SIZE(GPUAdapterProperties, 24u);
+GPU_ASSERT_64BIT_SIZE(GPUAdapterIdentity, 40u);
 GPU_ASSERT_64BIT_SIZE(GPUAdapterRequestOptions, 40u);
 GPU_ASSERT_64BIT_SIZE(GPUHeapCreateInfo, 56u);
 GPU_ASSERT_64BIT_SIZE(GPUSparseTextureRequirements, 48u);

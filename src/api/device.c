@@ -1227,6 +1227,98 @@ GPUGetAdapterProperties(const GPUAdapter     *adapter,
 
 GPU_EXPORT
 GPUResult
+GPUGetAdapterIdentity(const GPUAdapter   *adapter,
+                      GPUAdapterIdentity *outIdentity) {
+  GPUAdapterIdentityFlags knownFlags;
+  GPUApi                 *api;
+  GPUResult               result;
+
+  if (!adapter || !outIdentity) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  memset(outIdentity, 0, sizeof(*outIdentity));
+  api = gpuAdapterApi(adapter);
+  if (!api || !api->device.getAdapterIdentity) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  result = api->device.getAdapterIdentity(adapter, outIdentity);
+  if (result != GPU_OK) {
+    memset(outIdentity, 0, sizeof(*outIdentity));
+    return result;
+  }
+
+  knownFlags = GPU_ADAPTER_IDENTITY_UUID_BIT |
+               GPU_ADAPTER_IDENTITY_LUID_BIT |
+               GPU_ADAPTER_IDENTITY_REGISTRY_ID_BIT;
+  outIdentity->validFlags &= knownFlags;
+  if (outIdentity->validFlags == 0u) {
+    memset(outIdentity, 0, sizeof(*outIdentity));
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUAdaptersSharePhysicalDevice(const GPUAdapter *first,
+                               const GPUAdapter *second,
+                               bool             *outSameDevice) {
+  GPUAdapterIdentity firstIdentity, secondIdentity;
+  GPUAdapterIdentityFlags commonFlags;
+  GPUResult result;
+
+  if (!first || !second || !outSameDevice) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outSameDevice = false;
+  if (first == second) {
+    *outSameDevice = true;
+    return GPU_OK;
+  }
+
+  result = GPUGetAdapterIdentity(first, &firstIdentity);
+  if (result != GPU_OK) {
+    return result;
+  }
+  result = GPUGetAdapterIdentity(second, &secondIdentity);
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  commonFlags = firstIdentity.validFlags & secondIdentity.validFlags;
+  if (commonFlags == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  if ((commonFlags & GPU_ADAPTER_IDENTITY_UUID_BIT) != 0u &&
+      memcmp(firstIdentity.deviceUUID,
+             secondIdentity.deviceUUID,
+             sizeof(firstIdentity.deviceUUID)) != 0) {
+    return GPU_OK;
+  }
+  if ((commonFlags & GPU_ADAPTER_IDENTITY_REGISTRY_ID_BIT) != 0u &&
+      firstIdentity.registryID != secondIdentity.registryID) {
+    return GPU_OK;
+  }
+  if ((commonFlags & GPU_ADAPTER_IDENTITY_LUID_BIT) != 0u) {
+    if (firstIdentity.luid != secondIdentity.luid) {
+      return GPU_OK;
+    }
+    if (firstIdentity.luidNodeMask != 0u &&
+        secondIdentity.luidNodeMask != 0u &&
+        (firstIdentity.luidNodeMask & secondIdentity.luidNodeMask) == 0u) {
+      return GPU_OK;
+    }
+  }
+
+  *outSameDevice = true;
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
 GPUGetAdapterCapabilities(const GPUAdapter       *adapter,
                           GPUAdapterCapabilities *outCaps) {
   if (!adapter || !outCaps) {

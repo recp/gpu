@@ -1989,6 +1989,63 @@ vk_getAdapterProperties(const GPUAdapter     * __restrict adapter,
 }
 
 GPU_HIDE
+GPUResult
+vk_getAdapterIdentity(const GPUAdapter   * __restrict adapter,
+                      GPUAdapterIdentity * __restrict outIdentity) {
+  PFN_vkGetPhysicalDeviceProperties2 getProperties2;
+  VkPhysicalDeviceProperties2        properties;
+  VkPhysicalDeviceIDProperties       identity;
+  GPUInstanceVk                     *instanceVk;
+  GPUAdapterVk                      *adapterVk;
+  uint8_t                            zeroUUID[VK_UUID_SIZE] = {0};
+
+  if (!adapter || !outIdentity || !adapter->inst ||
+      !adapter->inst->_priv || !adapter->_priv) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  instanceVk = adapter->inst->_priv;
+  adapterVk  = adapter->_priv;
+  getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+    vkGetInstanceProcAddr(instanceVk->inst,
+                          "vkGetPhysicalDeviceProperties2");
+  if (!getProperties2) {
+    getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+      vkGetInstanceProcAddr(instanceVk->inst,
+                            "vkGetPhysicalDeviceProperties2KHR");
+  }
+  if (!getProperties2) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  memset(&identity, 0, sizeof(identity));
+  memset(&properties, 0, sizeof(properties));
+  memset(outIdentity, 0, sizeof(*outIdentity));
+  identity.sType   = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+  properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+  properties.pNext = &identity;
+  getProperties2(adapterVk->physicalDevice, &properties);
+
+  if (memcmp(identity.deviceUUID, zeroUUID, sizeof(zeroUUID)) != 0) {
+    memcpy(outIdentity->deviceUUID,
+           identity.deviceUUID,
+           sizeof(outIdentity->deviceUUID));
+    outIdentity->validFlags |= GPU_ADAPTER_IDENTITY_UUID_BIT;
+  }
+  if (identity.deviceLUIDValid) {
+    _Static_assert(VK_LUID_SIZE == sizeof(outIdentity->luid),
+                   "Vulkan LUID size changed");
+    memcpy(&outIdentity->luid,
+           identity.deviceLUID,
+           sizeof(outIdentity->luid));
+    outIdentity->luidNodeMask = identity.deviceNodeMask;
+    outIdentity->validFlags  |= GPU_ADAPTER_IDENTITY_LUID_BIT;
+  }
+
+  return outIdentity->validFlags != 0u ? GPU_OK : GPU_ERROR_UNSUPPORTED;
+}
+
+GPU_HIDE
 bool
 vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
   GPUAdapterVk *adapterVk;
@@ -3438,6 +3495,7 @@ vk_initDevice(GPUApiDevice *apiDevice) {
   apiDevice->selectAdapter               = vk_selectAdapter;
   apiDevice->destroyAdapter              = vk_destroyAdapter;
   apiDevice->getAdapterProperties        = vk_getAdapterProperties;
+  apiDevice->getAdapterIdentity          = vk_getAdapterIdentity;
   apiDevice->supportsFeature             = vk_supportsFeature;
   apiDevice->supportsSubgroupOperations  = vk_supportsSubgroupOperations;
   apiDevice->getLimits                   = vk_getLimits;

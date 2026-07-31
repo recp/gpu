@@ -1202,6 +1202,25 @@ dx12_getAdapterProperties(const GPUAdapter     * __restrict adapter,
 }
 
 GPU_HIDE
+GPUResult
+dx12_getAdapterIdentity(const GPUAdapter   * __restrict adapter,
+                        GPUAdapterIdentity * __restrict outIdentity) {
+  GPUAdapterDX12 *adapterDX12;
+
+  if (!adapter || !outIdentity || !adapter->_priv) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  adapterDX12 = adapter->_priv;
+  memset(outIdentity, 0, sizeof(*outIdentity));
+  memcpy(&outIdentity->luid,
+         &adapterDX12->desc1.AdapterLuid,
+         sizeof(adapterDX12->desc1.AdapterLuid));
+  outIdentity->validFlags = GPU_ADAPTER_IDENTITY_LUID_BIT;
+  return GPU_OK;
+}
+
+GPU_HIDE
 bool
 dx12_supportsFeature(const GPUAdapter * __restrict adapter,
                      GPUFeature feature) {
@@ -1673,6 +1692,7 @@ dx12_initDevice(GPUApiDevice* apiDevice) {
   apiDevice->selectAdapter              = dx12_selectAdapter;
   apiDevice->destroyAdapter             = dx12_destroyAdapter;
   apiDevice->getAdapterProperties       = dx12_getAdapterProperties;
+  apiDevice->getAdapterIdentity         = dx12_getAdapterIdentity;
   apiDevice->supportsFeature            = dx12_supportsFeature;
   apiDevice->supportsSubgroupOperations = dx12_supportsSubgroupOperations;
   apiDevice->getLimits                  = dx12_getLimits;
