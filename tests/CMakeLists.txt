@@ -589,6 +589,7 @@ if(GPU_BUILD_TESTS)
     ${PROJECT_SOURCE_DIR}/tests/api/memory.c
     ${PROJECT_SOURCE_DIR}/tests/api/metal_vertex_slots.c
     ${PROJECT_SOURCE_DIR}/tests/api/msaa.c
+    ${PROJECT_SOURCE_DIR}/tests/api/multigpu.c
     ${PROJECT_SOURCE_DIR}/tests/api/query.c
     ${PROJECT_SOURCE_DIR}/tests/api/queue.c
     ${PROJECT_SOURCE_DIR}/tests/api/ray.c

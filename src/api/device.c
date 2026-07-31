@@ -1841,8 +1841,40 @@ GPUIsFeatureEnabled(const GPUDevice *device, GPUFeature feature) {
 GPU_EXPORT
 GPUProc
 GPUGetProcAddr(GPUDevice *device, const char *name) {
-  if (!gpuDeviceApi(device) || !name || name[0] == '\0') {
+  GPUApi *api;
+
+  api = gpuDeviceApi(device);
+  if (!api || !name || name[0] == '\0') {
     return NULL;
+  }
+
+  if (api->multigpu.createInterop && api->multigpu.destroyInterop) {
+    if (strcmp(name, "GPUCreateDeviceInteropEXT") == 0) {
+      return (GPUProc)GPUCreateDeviceInteropEXT;
+    }
+    if (strcmp(name, "GPUDestroyDeviceInteropEXT") == 0) {
+      return (GPUProc)GPUDestroyDeviceInteropEXT;
+    }
+  }
+  if (api->multigpu.getBufferRequirements &&
+      strcmp(name, "GPUGetSharedBufferMemoryRequirementsEXT") == 0) {
+    return (GPUProc)GPUGetSharedBufferMemoryRequirementsEXT;
+  }
+  if (api->multigpu.createBuffer &&
+      strcmp(name, "GPUCreateSharedBufferEXT") == 0) {
+    return (GPUProc)GPUCreateSharedBufferEXT;
+  }
+  if (api->multigpu.getTextureRequirements &&
+      strcmp(name, "GPUGetSharedTextureMemoryRequirementsEXT") == 0) {
+    return (GPUProc)GPUGetSharedTextureMemoryRequirementsEXT;
+  }
+  if (api->multigpu.createTexture &&
+      strcmp(name, "GPUCreateSharedTextureEXT") == 0) {
+    return (GPUProc)GPUCreateSharedTextureEXT;
+  }
+  if (api->multigpu.createSemaphore &&
+      strcmp(name, "GPUCreateSharedSemaphoreEXT") == 0) {
+    return (GPUProc)GPUCreateSharedSemaphoreEXT;
   }
 
   if (GPUIsFeatureEnabled(device, GPU_FEATURE_BINDLESS) &&

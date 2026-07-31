@@ -351,6 +351,8 @@ mt_wrapBuffer(GPUDevice                 *device,
               id<MTLBuffer>              nativeBuffer,
               GPUBuffer                **outBuffer);
 
+GPU_HIDE void mt_destroyBuffer(GPUBuffer *buff);
+
 GPU_HIDE
 GPUResult
 mt_createTextureDescriptor(GPUDevice                  *device,
@@ -366,6 +368,10 @@ mt_wrapTexture(GPUDevice                  *device,
                id<MTLTexture>              nativeTexture,
                MTLPixelFormat              stencilCopyFormat,
                GPUTexture                **outTexture);
+GPU_HIDE GPUResult mt_createTexture(GPUDevice                  *device,
+                                    const GPUTextureCreateInfo *info,
+                                    GPUTexture                **outTexture);
+GPU_HIDE void mt_destroyTexture(GPUTexture *texture);
 GPU_HIDE GPUFormat mt_formatFromNative(MTLPixelFormat format);
 GPU_HIDE id<MTLTexture> mt_nativeTexture(GPUTexture *texture);
 GPU_HIDE id<MTLTexture> mt_copyTexture(GPUTexture *texture,

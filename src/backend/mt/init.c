@@ -34,6 +34,7 @@ backend_metal(void) {
     mt_initCmdQue(&mt.cmdque);
     mt_initBuff(&mt.buf);
     mt_initMemory(&mt.memory);
+    mt_initMultiGPU(&mt.multigpu);
     mt_initTexture(&mt.texture);
     mt_initDepthStencil(&mt.depthStencil);
     mt_initVertex(&mt.vertex);

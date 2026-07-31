@@ -13,6 +13,7 @@ target_sources(gpu PRIVATE
   instance.c
   library.c
   memory.c
+  multigpu.c
   pass/blit.c
   pass/renderpass.c
   pipeline_cache.c

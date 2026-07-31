@@ -104,6 +104,7 @@ int gpu_test_query(GPUAdapter *adapter,
                    const char *computeBytecodePath);
 int gpu_test_barrier(GPUDevice *device);
 int gpu_test_memory(GPUAdapter *adapter);
+int gpu_test_multigpu(GPUAdapter *adapter, GPUDevice *firstDevice);
 int gpu_test_runtime(GPUDevice *device);
 int gpu_test_threading(GPUDevice *device, const char *artifactPath);
 int gpu_test_shader(GPUDevice *device,

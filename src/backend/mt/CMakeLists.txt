@@ -14,6 +14,7 @@ target_sources(gpu PRIVATE
   impl/format.m
   impl/library.m
   impl/memory.m
+  impl/multigpu.m
   impl/pipeline_cache.m
   impl/ray.m
   impl/render/pipeline.m

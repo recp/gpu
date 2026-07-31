@@ -103,6 +103,13 @@ run_memory(void *ctx) {
 }
 
 static int
+run_multigpu(void *ctx) {
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_multigpu(testCtx->adapter, testCtx->device);
+}
+
+static int
 run_runtime(void *ctx) {
   return gpu_test_runtime(((GPUApiTestContext *)ctx)->device);
 }
@@ -316,7 +323,7 @@ main(int argc, char **argv) {
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUApiTestContext      ctx;
-  GPUApiTest             tests[37];
+  GPUApiTest             tests[38];
   int                    ok;
 
   if (argc != 14 && argc != 15) {
@@ -422,43 +429,44 @@ main(int argc, char **argv) {
   tests[9]  = (GPUApiTest){ "query", run_query, &ctx };
   tests[10] = (GPUApiTest){ "barrier", run_barrier, &ctx };
   tests[11] = (GPUApiTest){ "memory", run_memory, &ctx };
-  tests[12] = (GPUApiTest){ "runtime", run_runtime, &ctx };
-  tests[13] = (GPUApiTest){ "shader", run_shader, &ctx };
-  tests[14] = (GPUApiTest){ "source-sampler", run_source_sampler, &ctx };
-  tests[15] = (GPUApiTest){ "storage-texture", run_storage_texture, &ctx };
-  tests[16] = (GPUApiTest){ "cube-texture", run_cube_texture, &ctx };
-  tests[17] = (GPUApiTest){ "line-texture", run_line_texture, &ctx };
-  tests[18] = (GPUApiTest){ "volume-texture", run_volume_texture, &ctx };
-  tests[19] = (GPUApiTest){ "descriptor-array", run_descriptor_array, &ctx };
-  tests[20] = (GPUApiTest){
+  tests[12] = (GPUApiTest){ "multigpu", run_multigpu, &ctx };
+  tests[13] = (GPUApiTest){ "runtime", run_runtime, &ctx };
+  tests[14] = (GPUApiTest){ "shader", run_shader, &ctx };
+  tests[15] = (GPUApiTest){ "source-sampler", run_source_sampler, &ctx };
+  tests[16] = (GPUApiTest){ "storage-texture", run_storage_texture, &ctx };
+  tests[17] = (GPUApiTest){ "cube-texture", run_cube_texture, &ctx };
+  tests[18] = (GPUApiTest){ "line-texture", run_line_texture, &ctx };
+  tests[19] = (GPUApiTest){ "volume-texture", run_volume_texture, &ctx };
+  tests[20] = (GPUApiTest){ "descriptor-array", run_descriptor_array, &ctx };
+  tests[21] = (GPUApiTest){
     "descriptor-indexing", run_descriptor_indexing, &ctx
   };
-  tests[21] = (GPUApiTest){ "subgroup", run_subgroup, &ctx };
-  tests[22] = (GPUApiTest){
+  tests[22] = (GPUApiTest){ "subgroup", run_subgroup, &ctx };
+  tests[23] = (GPUApiTest){
     "subgroup-matrix", run_subgroup_matrix, &ctx
   };
-  tests[23] = (GPUApiTest){ "shader-f16", run_shader_f16, &ctx };
-  tests[24] = (GPUApiTest){ "bindless", run_bindless, &ctx };
-  tests[25] = (GPUApiTest){ "coordinate", run_coordinate, &ctx };
-  tests[26] = (GPUApiTest){ "vrs", run_vrs, &ctx };
-  tests[27] = (GPUApiTest){ "ray-query", run_ray_query, &ctx };
-  tests[28] = (GPUApiTest){ "atomic64", run_atomic64, &ctx };
-  tests[29] = (GPUApiTest){ "ray-pipeline", run_ray_pipeline, &ctx };
-  tests[30] = (GPUApiTest){ "execution-graph", run_execution_graph, &ctx };
-  tests[31] = (GPUApiTest){
+  tests[24] = (GPUApiTest){ "shader-f16", run_shader_f16, &ctx };
+  tests[25] = (GPUApiTest){ "bindless", run_bindless, &ctx };
+  tests[26] = (GPUApiTest){ "coordinate", run_coordinate, &ctx };
+  tests[27] = (GPUApiTest){ "vrs", run_vrs, &ctx };
+  tests[28] = (GPUApiTest){ "ray-query", run_ray_query, &ctx };
+  tests[29] = (GPUApiTest){ "atomic64", run_atomic64, &ctx };
+  tests[30] = (GPUApiTest){ "ray-pipeline", run_ray_pipeline, &ctx };
+  tests[31] = (GPUApiTest){ "execution-graph", run_execution_graph, &ctx };
+  tests[32] = (GPUApiTest){
     "sampler-feedback", run_sampler_feedback, &ctx
   };
-  tests[32] = (GPUApiTest){
+  tests[33] = (GPUApiTest){
     "clock-derivatives", run_clock_derivatives, &ctx
   };
-  tests[33] = (GPUApiTest){
+  tests[34] = (GPUApiTest){
     "untyped-pointer", run_untyped_pointer, &ctx
   };
-  tests[34] = (GPUApiTest){
+  tests[35] = (GPUApiTest){
     "buffer-descriptor-array", run_buffer_descriptor_array, &ctx
   };
-  tests[35] = (GPUApiTest){ "msaa", run_msaa, &ctx };
-  tests[36] = (GPUApiTest){
+  tests[36] = (GPUApiTest){ "msaa", run_msaa, &ctx };
+  tests[37] = (GPUApiTest){
     "intersection-function-table", run_intersection_function, &ctx
   };
 

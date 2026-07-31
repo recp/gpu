@@ -28,6 +28,7 @@ extern "C" {
 #include "compute.h"
 #include "buffer.h"
 #include "memory.h"
+#include "multigpu.h"
 #include "texture.h"
 #include "commandbuffer.h"
 #include "commandqueue.h"
@@ -56,6 +57,7 @@ typedef struct GPUApi {
   GPUApiCompute         compute;
   GPUApiBuffer          buf;
   GPUApiMemory          memory;
+  GPUApiMultiGPU        multigpu;
   GPUApiTexture         texture;
   GPUApiCommandBuffer   cmdbuf;
   GPUApiCommandQueue    cmdque;
