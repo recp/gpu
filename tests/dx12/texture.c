@@ -51,9 +51,7 @@ main(int argc, char **argv) {
   GPUTexture           *targetTexture  = NULL;
   GPUTextureView       *sampleView     = NULL;
   GPUTextureView       *targetView     = NULL;
-  GPUSampler           *sampler        = NULL;
   GPUBindGroup         *textureGroup   = NULL;
-  GPUBindGroup         *samplerGroup   = NULL;
   GPUBuffer            *uploadBuffer   = NULL;
   GPUBuffer            *copiedBuffer   = NULL;
   GPUBuffer            *readbackBuffer = NULL;
@@ -69,7 +67,6 @@ main(int argc, char **argv) {
   GPUTextureCreateInfo        textureInfo = {0};
   GPUTextureViewCreateInfo    viewInfo = {0};
   GPUTextureWriteRegion       writeRegion = {0};
-  GPUSamplerCreateInfo        samplerInfo = {0};
   GPUBindGroupEntry           groupEntry = {0};
   GPUBindGroupCreateInfo      groupInfo = {0};
   GPUBufferCreateInfo         bufferInfo = {0};
@@ -128,9 +125,8 @@ main(int argc, char **argv) {
                                     &library) != GPU_OK ||
       !library ||
       GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
-      !shaderLayout || shaderLayout->bindGroupLayoutCount != 2u ||
+      !shaderLayout || shaderLayout->bindGroupLayoutCount != 1u ||
       !shaderLayout->bindGroupLayouts[0] ||
-      !shaderLayout->bindGroupLayouts[1] ||
       !shaderLayout->pipelineLayout) {
     fprintf(stderr, "DX12 texture shader layout creation failed\n");
     goto cleanup;
@@ -145,17 +141,6 @@ main(int argc, char **argv) {
       layoutEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
       layoutEntries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
     fprintf(stderr, "DX12 texture reflection layout mismatch\n");
-    goto cleanup;
-  }
-  layoutEntries = GPUGetBindGroupLayoutEntries(
-    shaderLayout->bindGroupLayouts[1],
-    &layoutEntryCount
-  );
-  if (!layoutEntries || layoutEntryCount != 1u ||
-      layoutEntries[0].binding != 0u ||
-      layoutEntries[0].bindingType != GPU_BINDING_SAMPLER ||
-      layoutEntries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
-    fprintf(stderr, "DX12 sampler reflection layout mismatch\n");
     goto cleanup;
   }
 
@@ -214,21 +199,6 @@ main(int argc, char **argv) {
     goto cleanup;
   }
 
-  samplerInfo.chain.sType      = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-  samplerInfo.chain.structSize = sizeof(samplerInfo);
-  samplerInfo.label            = "dx12-usl-texture-sampler";
-  samplerInfo.desc.minFilter   = GPU_FILTER_NEAREST;
-  samplerInfo.desc.magFilter   = GPU_FILTER_NEAREST;
-  samplerInfo.desc.mipFilter   = GPU_MIP_FILTER_NEAREST;
-  samplerInfo.desc.addressU    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  samplerInfo.desc.addressV    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  samplerInfo.desc.addressW    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  if (GPUCreateSampler(device, &samplerInfo, false, &sampler) != GPU_OK ||
-      !sampler) {
-    fprintf(stderr, "DX12 sampler creation failed\n");
-    goto cleanup;
-  }
-
   groupEntry.binding     = 0u;
   groupEntry.bindingType = GPU_BINDING_SAMPLED_TEXTURE;
   groupEntry.textureView = sampleView;
@@ -241,17 +211,6 @@ main(int argc, char **argv) {
   if (GPUCreateBindGroup(device, &groupInfo, &textureGroup) != GPU_OK ||
       !textureGroup) {
     fprintf(stderr, "DX12 texture bind group creation failed\n");
-    goto cleanup;
-  }
-
-  groupEntry.bindingType = GPU_BINDING_SAMPLER;
-  groupEntry.textureView = NULL;
-  groupEntry.sampler     = sampler;
-  groupInfo.label        = "dx12-usl-sampler-group";
-  groupInfo.layout       = shaderLayout->bindGroupLayouts[1];
-  if (GPUCreateBindGroup(device, &groupInfo, &samplerGroup) != GPU_OK ||
-      !samplerGroup) {
-    fprintf(stderr, "DX12 sampler bind group creation failed\n");
     goto cleanup;
   }
 
@@ -395,7 +354,6 @@ main(int argc, char **argv) {
   }
   GPUBindRenderPipeline(renderPass, pipeline);
   GPUBindRenderGroup(renderPass, 0u, textureGroup, 0u, NULL);
-  GPUBindRenderGroup(renderPass, 1u, samplerGroup, 0u, NULL);
   GPUDraw(renderPass, 6u, 1u, 0u, 0u);
   GPUEndRenderPass(renderPass);
   renderPass = NULL;
@@ -526,9 +484,7 @@ cleanup:
   GPUDestroyTextureView(targetView);
   GPUDestroyTexture(targetTexture);
   GPUDestroyRenderPipeline(pipeline);
-  GPUDestroyBindGroup(samplerGroup);
   GPUDestroyBindGroup(textureGroup);
-  GPUDestroySampler(sampler);
   GPUDestroyTextureView(sampleView);
   GPUDestroyTexture(copyTexture);
   GPUDestroyTexture(sampleTexture);
