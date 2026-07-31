@@ -22,6 +22,13 @@ objects.
 
 ## Build
 
+The Direct3D 12 backend uses the current DirectX 12 Agility SDK preview. CMake
+fetches the pinned NuGet package and stages `D3D12Core.dll` app-locally; no
+system install is required. Set `GPU_DX12_AGILITY_SDK_ROOT` to an extracted
+package for offline builds. Update the package version, SDK number, and SHA-256
+together when adopting a newer Agility release. Preview runtimes require
+Windows Developer Mode on machines that run Direct3D 12 binaries.
+
 Metal debug build on macOS:
 
 ```sh

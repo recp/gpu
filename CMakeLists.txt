@@ -229,6 +229,11 @@ else()
   )
 endif()
 
+if(GPU_BUILD_DX12)
+  include(cmake/DX12Agility.cmake)
+  gpu_enable_dx12_agility(gpu)
+endif()
+
 add_subdirectory(src/api)
 add_subdirectory(src/backend)
 
@@ -286,6 +291,20 @@ install(FILES ${GPU_PUBLIC_HEADERS}
 install(FILES LICENSE
   DESTINATION ${CMAKE_INSTALL_DATADIR}/gpu
 )
+if(GPU_BUILD_DX12 AND GPU_DX12_AGILITY_CORE)
+  install(FILES "${GPU_DX12_AGILITY_CORE}"
+    DESTINATION ${CMAKE_INSTALL_BINDIR}/D3D12
+  )
+  if(GPU_BUILD_WITH_VALIDATION)
+    install(FILES "${GPU_DX12_AGILITY_LAYERS}"
+      DESTINATION ${CMAKE_INSTALL_BINDIR}/D3D12
+    )
+  endif()
+  install(FILES "${GPU_DX12_AGILITY_LICENSE}"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/gpu/licenses
+    RENAME DirectX12Agility-LICENSE.txt
+  )
+endif()
 install(EXPORT gpuTargets
   NAMESPACE gpu::
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/gpu

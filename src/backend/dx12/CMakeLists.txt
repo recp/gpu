@@ -1,4 +1,5 @@
 target_sources(gpu PRIVATE
+  agility.c
   init.c
   impl/blit.c
   impl/buffer.c

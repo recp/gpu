@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../impl.h"
 
 static const DXGI_FORMAT dx12_formats[GPU_FORMAT_COUNT] = {
   [GPU_FORMAT_R8_UNORM]               = DXGI_FORMAT_R8_UNORM,
@@ -99,17 +100,24 @@ dx12_sampledFormat(GPUFormat format) {
 }
 
 static void
-dx12_queryFormatCapabilities(GPUAdapterDX12 *adapter) {
+dx12_queryFormatCapabilities(const GPUAdapter *adapter) {
   static const uint32_t sampleCounts[] = {2u, 4u, 8u};
-  ID3D12Device *device;
-  HRESULT       result;
+  GPUAdapterDX12  *adapterDX12;
+  GPUInstanceDX12 *instanceDX12;
+  ID3D12Device    *device;
+  HRESULT          result;
 
-  memset(adapter->formatCaps, 0, sizeof(adapter->formatCaps));
+  adapterDX12  = adapter ? adapter->_priv : NULL;
+  instanceDX12 = adapter && adapter->inst ? adapter->inst->_priv : NULL;
+  if (!adapterDX12 || !instanceDX12) {
+    return;
+  }
+  memset(adapterDX12->formatCaps, 0, sizeof(adapterDX12->formatCaps));
   device = NULL;
-  result = D3D12CreateDevice(adapter->dxgiAdapter,
-                             D3D_FEATURE_LEVEL_11_0,
-                             &IID_ID3D12Device,
-                             (void **)&device);
+  result = dx12_createNativeDevice(instanceDX12,
+                                   adapterDX12->dxgiAdapter,
+                                   &IID_ID3D12Device,
+                                   (void **)&device);
   if (FAILED(result) || !device) {
     return;
   }
@@ -147,7 +155,7 @@ dx12_queryFormatCapabilities(GPUAdapterDX12 *adapter) {
       memset(&sampledSupport, 0, sizeof(sampledSupport));
     }
 
-    caps = &adapter->formatCaps[i];
+    caps = &adapterDX12->formatCaps[i];
     caps->sampled =
       (sampledSupport.Support1 &
        (D3D12_FORMAT_SUPPORT1_SHADER_LOAD |
@@ -188,7 +196,7 @@ dx12_queryFormatCapabilities(GPUAdapterDX12 *adapter) {
   }
 
   device->lpVtbl->Release(device);
-  adapter->formatCapsReady = true;
+  adapterDX12->formatCapsReady = true;
 }
 
 GPU_HIDE
@@ -220,7 +228,7 @@ dx12_getFormatCapabilities(
   }
   AcquireSRWLockExclusive(&adapterDX12->formatCapsLock);
   if (!adapterDX12->formatCapsReady) {
-    dx12_queryFormatCapabilities(adapterDX12);
+    dx12_queryFormatCapabilities(adapter);
   }
 
   *outCaps = adapterDX12->formatCaps[format];

@@ -595,7 +595,9 @@ dx12_loadDXCompiler(void) {
 }
 
 static bool
-dx12_probeAdapter(GPUAdapterDX12 *adapter, bool linearAlgebra) {
+dx12_probeAdapter(const GPUInstanceDX12 *instance,
+                  GPUAdapterDX12        *adapter,
+                  bool                   linearAlgebra) {
   ID3D12Device    *device;
   D3D12_FEATURE_DATA_D3D12_OPTIONS options = {0};
   D3D_SHADER_MODEL shaderModel;
@@ -609,10 +611,10 @@ dx12_probeAdapter(GPUAdapterDX12 *adapter, bool linearAlgebra) {
   }
 
   device = NULL;
-  result = D3D12CreateDevice(adapter->dxgiAdapter,
-                             D3D_FEATURE_LEVEL_11_0,
-                             &IID_ID3D12Device,
-                             (void **)&device);
+  result = dx12_createNativeDevice(instance,
+                                   adapter->dxgiAdapter,
+                                   &IID_ID3D12Device,
+                                   (void **)&device);
   if (FAILED(result) || !device) {
     return false;
   }
@@ -937,7 +939,9 @@ dx12_getAvailableAdapters(GPUInstance * __restrict inst,
         goto nxt;
       }
 
-      if (!dx12_probeAdapter(adapterDX12, instDX12->linearAlgebra)) {
+      if (!dx12_probeAdapter(instDX12,
+                             adapterDX12,
+                             instDX12->linearAlgebra)) {
         dxgiAdapter->lpVtbl->Release(dxgiAdapter);
         free(adapterDX12);
         goto nxt;
@@ -976,7 +980,9 @@ dx12_getAvailableAdapters(GPUInstance * __restrict inst,
     adapterDX12->isWarp            = true;
     InitializeSRWLock(&adapterDX12->formatCapsLock);
     snprintf(adapterDX12->name, sizeof(adapterDX12->name), "WARP");
-    if (!dx12_probeAdapter(adapterDX12, instDX12->linearAlgebra)) {
+    if (!dx12_probeAdapter(instDX12,
+                           adapterDX12,
+                           instDX12->linearAlgebra)) {
       warpAdapter->lpVtbl->Release(warpAdapter);
       free(adapterDX12);
       free(adapter);
@@ -1234,6 +1240,7 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
                   uint32_t                 nQueCI,
                   uint64_t                 enabledFeatureMask) {
   GPUInstance           *inst;
+  GPUInstanceDX12       *instDX12;
   GPUAdapterDX12        *adapterDX12;
   GPUDevice             *device;
   GPUDeviceDX12         *deviceDX12;
@@ -1246,6 +1253,7 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
   deviceDX12 = NULL;
   if (!adapter ||
       !(inst = adapter->inst) ||
+      !(instDX12 = inst->_priv) ||
       !(adapterDX12 = adapter->_priv)) {
     goto err;
   }
@@ -1258,10 +1266,10 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
     goto err;
   }
 
-  hr = D3D12CreateDevice(adapterDX12->dxgiAdapter,
-                         D3D_FEATURE_LEVEL_11_0,
-                         &IID_ID3D12Device,
-                         (void **)&deviceDX12->d3dDevice);
+  hr = dx12_createNativeDevice(instDX12,
+                               adapterDX12->dxgiAdapter,
+                               &IID_ID3D12Device,
+                               (void **)&deviceDX12->d3dDevice);
   if (FAILED(hr)) {
     goto err;
   }

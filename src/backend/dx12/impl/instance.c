@@ -15,37 +15,21 @@
  */
 
 #include "../common.h"
+#include "../impl.h"
 
 #if defined(DIRECT3D_LINEAR_ALGEBRA)
-static INIT_ONCE dx12_linearAlgebraOnce = INIT_ONCE_STATIC_INIT;
-static HRESULT   dx12_linearAlgebraResult = E_FAIL;
-
-static BOOL CALLBACK
-dx12_enableLinearAlgebraOnce(PINIT_ONCE once, PVOID parameter, PVOID *context) {
-  GPU__UNUSED(once);
-  GPU__UNUSED(parameter);
-  GPU__UNUSED(context);
-
-  dx12_linearAlgebraResult = D3D12EnableExperimentalFeatures(
-    1u,
-    &D3D12ExperimentalShaderModels,
-    NULL,
-    NULL
-  );
-  return TRUE;
-}
-
 static bool
-dx12_enableLinearAlgebra(void) {
-  return InitOnceExecuteOnce(&dx12_linearAlgebraOnce,
-                             dx12_enableLinearAlgebraOnce,
-                             NULL,
-                             NULL) &&
-         SUCCEEDED(dx12_linearAlgebraResult);
+dx12_enableLinearAlgebra(const GPUInstanceDX12 *instance) {
+  return SUCCEEDED(dx12_enableExperimentalFeatures(
+    instance,
+    1u,
+    &D3D12ExperimentalShaderModels
+  ));
 }
 #else
 static bool
-dx12_enableLinearAlgebra(void) {
+dx12_enableLinearAlgebra(const GPUInstanceDX12 *instance) {
+  GPU__UNUSED(instance);
   return false;
 }
 #endif
@@ -70,7 +54,10 @@ dx12_createInstance(struct GPUApi * __restrict api,
     return NULL;
   }
 
-  instDX12->linearAlgebra = dx12_enableLinearAlgebra();
+  if (!dx12_createAgilityFactory(&instDX12->deviceFactory)) {
+    goto err;
+  }
+  instDX12->linearAlgebra = dx12_enableLinearAlgebra(instDX12);
 
 #if GPU_BUILD_WITH_VALIDATION && defined(_DEBUG)
   /* Enable the debug layer (requires the Graphics Tools "optional feature").
@@ -78,7 +65,10 @@ dx12_createInstance(struct GPUApi * __restrict api,
    */
   if (info && info->enableValidation) {
     ID3D12Debug *debugController;
-    if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug, (void **)&debugController))) {
+    if (SUCCEEDED(dx12_getConfigurationInterface(instDX12,
+                                                 &CLSID_D3D12Debug,
+                                                 &IID_ID3D12Debug,
+                                                 (void **)&debugController))) {
       debugController->lpVtbl->EnableDebugLayer(debugController);
       debugController->lpVtbl->Release(debugController);
 
@@ -120,7 +110,12 @@ dx12_createInstance(struct GPUApi * __restrict api,
   return inst;
 
 err:
-
+  if (instDX12 && instDX12->dxgiFactory) {
+    instDX12->dxgiFactory->lpVtbl->Release(instDX12->dxgiFactory);
+  }
+  if (instDX12 && instDX12->deviceFactory) {
+    instDX12->deviceFactory->lpVtbl->Release(instDX12->deviceFactory);
+  }
   if (inst)     { free(inst);     }
   if (instDX12) { free(instDX12); }
 
@@ -143,6 +138,9 @@ dx12_destroyInstance(struct GPUApi * __restrict api,
   if (instDX12) {
     if (instDX12->dxgiFactory) {
       instDX12->dxgiFactory->lpVtbl->Release(instDX12->dxgiFactory);
+    }
+    if (instDX12->deviceFactory) {
+      instDX12->deviceFactory->lpVtbl->Release(instDX12->deviceFactory);
     }
     free(instDX12);
   }

@@ -633,10 +633,11 @@ struct GPUQueueDX12 {
 };
 
 typedef struct GPUInstanceDX12 {
-  IDXGIFactory4 *dxgiFactory;
-  UINT           dxgiFactoryFlags;
-  bool           allowTearing;
-  bool           linearAlgebra;
+  ID3D12DeviceFactory *deviceFactory;
+  IDXGIFactory4       *dxgiFactory;
+  UINT                 dxgiFactoryFlags;
+  bool                 allowTearing;
+  bool                 linearAlgebra;
 } GPUInstanceDX12;
 
 typedef struct GPUSamplerDX12 {

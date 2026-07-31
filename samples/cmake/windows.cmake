@@ -29,6 +29,22 @@ foreach(runtimeTarget gpu us ds)
     list(APPEND gpuWindowsRuntimeTargets ${runtimeTarget})
   endif()
 endforeach()
+if(GPU_DX12_AGILITY_CORE)
+  list(APPEND gpuWindowsRuntimeCommands
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${GPU_WINDOWS_GALLERY_RUNTIME_DIR}/$<CONFIG>/D3D12"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_DX12_AGILITY_CORE}"
+            "${GPU_WINDOWS_GALLERY_RUNTIME_DIR}/$<CONFIG>/D3D12/D3D12Core.dll"
+  )
+  if(GPU_BUILD_WITH_VALIDATION)
+    list(APPEND gpuWindowsRuntimeCommands
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${GPU_DX12_AGILITY_LAYERS}"
+              "${GPU_WINDOWS_GALLERY_RUNTIME_DIR}/$<CONFIG>/D3D12/d3d12SDKLayers.dll"
+    )
+  endif()
+endif()
 add_custom_target(gpu-gallery-windows-runtime
   ${gpuWindowsRuntimeCommands}
   VERBATIM

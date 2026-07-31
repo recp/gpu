@@ -112,6 +112,9 @@ if((GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS) AND
           )
         endif()
       endforeach()
+      if(GPU_BUILD_DX12 AND COMMAND gpu_stage_dx12_agility)
+        gpu_stage_dx12_agility(${target})
+      endif()
     endif()
     foreach(artifact IN ITEMS ${ARGN})
       list(APPEND artifactCommands

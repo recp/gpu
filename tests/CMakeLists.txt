@@ -687,6 +687,9 @@ if(GPU_BUILD_TESTS)
       )
     endif()
   endforeach()
+  if(GPU_BUILD_DX12 AND COMMAND gpu_stage_dx12_agility)
+    gpu_stage_dx12_agility(gpu-api-test)
+  endif()
 
   add_test(NAME api-validation
     COMMAND gpu-api-test
@@ -1105,6 +1108,15 @@ if(GPU_BUILD_TESTS)
     set_tests_properties(dx12-mesh PROPERTIES
       SKIP_RETURN_CODE 77
     )
+
+    foreach(dx12Target IN ITEMS
+            gpu-dx12-queue-test
+            gpu-dx12-barrier-test
+            gpu-dx12-depth-test
+            gpu-dx12-texture-test
+            gpu-dx12-mesh-test)
+      gpu_stage_dx12_agility(${dx12Target})
+    endforeach()
   endif()
 endif()
 

@@ -17,6 +17,21 @@
 #ifndef dx12_apis_h
 #define dx12_apis_h
 
+GPU_HIDE bool dx12_createAgilityFactory(ID3D12DeviceFactory **outFactory);
+GPU_HIDE HRESULT dx12_createNativeDevice(const GPUInstanceDX12 *instance,
+                                         IUnknown               *adapter,
+                                         REFIID                  iid,
+                                         void                  **outDevice);
+GPU_HIDE HRESULT dx12_getConfigurationInterface(
+  const GPUInstanceDX12 *instance,
+  REFCLSID                classId,
+  REFIID                  interfaceId,
+  void                  **outInterface);
+GPU_HIDE HRESULT dx12_enableExperimentalFeatures(
+  const GPUInstanceDX12 *instance,
+  uint32_t                featureCount,
+  const IID              *features);
+
 GPU_HIDE void dx12_initDevice(GPUApiDevice* apiDevice);
 // GPU_HIDE void dx12_initRenderPipeline(GPUApiRender* api);
 // GPU_HIDE void dx12_initRCE(GPUApiRCE* api);
