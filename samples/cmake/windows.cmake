@@ -240,6 +240,7 @@ function(gpu_windows_gallery_sample sampleDir)
     "${GPU_CGLM_INCLUDE_DIR}"
   )
   target_link_libraries(${target} PRIVATE
+    dwmapi
     gpu
     gdi32
     ole32

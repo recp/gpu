@@ -42,6 +42,8 @@ typedef struct GPUGallery {
   HDC                backContext;
   HBITMAP            backBitmap;
   HBITMAP            backDefaultBitmap;
+  HBRUSH             adapterBrush;
+  HBRUSH             adapterSelectedBrush;
   HFONT              titleFont;
   HFONT              bodyFont;
   GPUGalleryPreview *previews;
@@ -347,6 +349,46 @@ add_adapter_option(HWND selector, const wchar_t *label, uint32_t value) {
   }
 }
 
+static void
+draw_adapter_option(const GPUGallery    *gallery,
+                    const DRAWITEMSTRUCT *item) {
+  HFONT oldFont;
+  RECT  text;
+  wchar_t label[256];
+  bool selected;
+
+  if (!gallery || !item || item->itemID == (UINT)-1) {
+    return;
+  }
+  selected  = (item->itemState & ODS_SELECTED) != 0u;
+  FillRect(item->hDC,
+           &item->rcItem,
+           selected ? gallery->adapterSelectedBrush
+                    : gallery->adapterBrush);
+
+  if (SendMessageW(item->hwndItem,
+                   CB_GETLBTEXT,
+                   item->itemID,
+                   (LPARAM)label) == CB_ERR) {
+    return;
+  }
+  text       = item->rcItem;
+  text.left += scaled(gallery, 10);
+  SetBkMode(item->hDC, TRANSPARENT);
+  SetTextColor(item->hDC,
+               (item->itemState & ODS_DISABLED)
+                 ? rgb(105u, 105u, 102u)
+                 : rgb(243u, 241u, 235u));
+  oldFont = SelectObject(item->hDC, gallery->bodyFont);
+  DrawTextW(item->hDC,
+            label,
+            -1,
+            &text,
+            DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS |
+              DT_NOPREFIX);
+  SelectObject(item->hDC, oldFont);
+}
+
 static unsigned __stdcall
 discover_adapters(void *userData) {
   GPUInstanceCreateInfo instanceInfo = {0};
@@ -432,7 +474,8 @@ create_adapter_selector(GPUGallery *gallery) {
                     L"COMBOBOX",
                     NULL,
                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL |
-                      CBS_DROPDOWNLIST | CBS_HASSTRINGS,
+                      CBS_DROPDOWNLIST | CBS_HASSTRINGS |
+                      CBS_OWNERDRAWFIXED,
                     0,
                     0,
                     0,
@@ -1035,6 +1078,25 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
         return 0;
       }
       return DefWindowProcW(window, message, wParam, lParam);
+    case WM_DRAWITEM:
+      if (wParam == GPU_GALLERY_ADAPTER_SELECTOR_ID) {
+        draw_adapter_option(gallery, (const DRAWITEMSTRUCT *)lParam);
+        return TRUE;
+      }
+      return DefWindowProcW(window, message, wParam, lParam);
+    case WM_MEASUREITEM:
+      if (wParam == GPU_GALLERY_ADAPTER_SELECTOR_ID) {
+        MEASUREITEMSTRUCT *item;
+
+        item             = (MEASUREITEMSTRUCT *)lParam;
+        item->itemHeight = (UINT)scaled(gallery, 32);
+        return TRUE;
+      }
+      return DefWindowProcW(window, message, wParam, lParam);
+    case WM_CTLCOLORLISTBOX:
+      SetBkColor((HDC)wParam, rgb(14u, 18u, 26u));
+      SetTextColor((HDC)wParam, rgb(243u, 241u, 235u));
+      return (LRESULT)gallery->adapterBrush;
     case GPU_GALLERY_ADAPTERS_READY: {
       GPUGalleryAdapters *adapters;
 
@@ -1246,8 +1308,13 @@ wWinMain(HINSTANCE instance,
   gallery.hovered = -1;
   gallery.status  = "Direct3D 12";
   gallery.adapterSelection = GPU_GALLERY_ADAPTER_AUTO;
-  gallery.job     = create_child_job();
-  if (!create_fonts(&gallery)) {
+  gallery.adapterBrush         = CreateSolidBrush(rgb(14u, 18u, 26u));
+  gallery.adapterSelectedBrush = CreateSolidBrush(rgb(38u, 43u, 53u));
+  gallery.job                  = create_child_job();
+  if (!gallery.adapterBrush || !gallery.adapterSelectedBrush ||
+      !create_fonts(&gallery)) {
+    DeleteObject(gallery.adapterSelectedBrush);
+    DeleteObject(gallery.adapterBrush);
     if (gallery.job) {
       CloseHandle(gallery.job);
     }
@@ -1314,6 +1381,8 @@ wWinMain(HINSTANCE instance,
   }
   free_backbuffer(&gallery);
   free_previews(&gallery);
+  DeleteObject(gallery.adapterSelectedBrush);
+  DeleteObject(gallery.adapterBrush);
   DeleteObject(gallery.bodyFont);
   DeleteObject(gallery.titleFont);
   return 0;

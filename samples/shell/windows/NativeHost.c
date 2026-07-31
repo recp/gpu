@@ -3,6 +3,7 @@
 #include "../../common/win32.h"
 #include "../../common/sample_orbit.h"
 
+#include <dwmapi.h>
 #include <windows.h>
 #include <windowsx.h>
 
@@ -234,6 +235,15 @@ wWinMain(HINSTANCE instance,
   }
 
   host.window.handle = window;
+  {
+    BOOL darkMode;
+
+    darkMode = TRUE;
+    DwmSetWindowAttribute(window,
+                          DWMWA_USE_IMMERSIVE_DARK_MODE,
+                          &darkMode,
+                          sizeof(darkMode));
+  }
   GetClientRect(window, &client);
   host.window.width  = (uint32_t)client.right;
   host.window.height = (uint32_t)client.bottom;
