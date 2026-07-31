@@ -1975,9 +1975,15 @@ vk_getAdapterProperties(const GPUAdapter     * __restrict adapter,
 
   adapterVk = adapter->_priv;
   memset(outProps, 0, sizeof(*outProps));
-  outProps->backend = GPU_BACKEND_VULKAN;
-  outProps->name = adapterVk->props.deviceName;
-  outProps->type = vk_adapterType(adapterVk->props.deviceType);
+  outProps->backend        = GPU_BACKEND_VULKAN;
+  outProps->name           = adapterVk->props.deviceName;
+  outProps->type           = vk_adapterType(adapterVk->props.deviceType);
+  if (vk_hasQueueCapability(adapterVk, VK_QUEUE_GRAPHICS_BIT)) {
+    outProps->executionFlags |= GPU_EXECUTION_GRAPHICS_BIT;
+  }
+  if (vk_hasQueueCapability(adapterVk, VK_QUEUE_COMPUTE_BIT)) {
+    outProps->executionFlags |= GPU_EXECUTION_COMPUTE_BIT;
+  }
 
   return GPU_OK;
 }

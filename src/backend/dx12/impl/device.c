@@ -1190,11 +1190,13 @@ dx12_getAdapterProperties(const GPUAdapter     * __restrict adapter,
 
   adapterDX12 = adapter->_priv;
   memset(outProps, 0, sizeof(*outProps));
-  outProps->backend = GPU_BACKEND_DX12;
-  outProps->name = adapterDX12->name[0] ?
+  outProps->backend        = GPU_BACKEND_DX12;
+  outProps->name           = adapterDX12->name[0] ?
     adapterDX12->name :
     "Direct3D 12";
-  outProps->type = dx12_adapterType(adapterDX12);
+  outProps->type           = dx12_adapterType(adapterDX12);
+  outProps->executionFlags = GPU_EXECUTION_GRAPHICS_BIT |
+                             GPU_EXECUTION_COMPUTE_BIT;
 
   return GPU_OK;
 }

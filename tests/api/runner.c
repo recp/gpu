@@ -134,7 +134,9 @@ gpu_test_adapter_request_options(GPUInstance *instance) {
   hasIntegrated = false;
   for (uint32_t i = 0u; i < adapterCount; i++) {
     if (!GPUIsFeatureSupported(adapters[i], GPU_FEATURE_COMPUTE) ||
-        GPUGetAdapterProperties(adapters[i], &properties) != GPU_OK) {
+        GPUGetAdapterProperties(adapters[i], &properties) != GPU_OK ||
+        (properties.executionFlags & GPU_EXECUTION_GRAPHICS_BIT) == 0u ||
+        (properties.executionFlags & GPU_EXECUTION_COMPUTE_BIT) == 0u) {
       continue;
     }
     hasDiscrete   |= properties.type == GPU_ADAPTER_TYPE_DISCRETE;
@@ -147,12 +149,52 @@ gpu_test_adapter_request_options(GPUInstance *instance) {
   options.requiredFeatureCount = (uint32_t)GPU_ARRAY_LEN(features);
 
   options.powerPreference = GPU_POWER_PREFERENCE_DEFAULT;
+  options.workload        = GPU_WORKLOAD_DEFAULT;
   result = gpu_test_request_adapter_options(instance, &options, &adapter);
   if (result != GPU_OK || adapter != adapters[0]) {
     free(adapters);
     return 0;
   }
 
+  options.workload = GPU_WORKLOAD_GRAPHICS;
+  result = gpu_test_request_adapter_options(instance, &options, &adapter);
+  if (result != GPU_OK || !adapter ||
+      GPUGetAdapterProperties(adapter, &properties) != GPU_OK ||
+      (properties.executionFlags & GPU_EXECUTION_GRAPHICS_BIT) == 0u) {
+    free(adapters);
+    return 0;
+  }
+
+  options.workload = GPU_WORKLOAD_COMPUTE;
+  result = gpu_test_request_adapter_options(instance, &options, &adapter);
+  if (result != GPU_OK || !adapter ||
+      GPUGetAdapterProperties(adapter, &properties) != GPU_OK ||
+      (properties.executionFlags & GPU_EXECUTION_COMPUTE_BIT) == 0u) {
+    free(adapters);
+    return 0;
+  }
+
+  options.workload = GPU_WORKLOAD_HYBRID;
+  result = gpu_test_request_adapter_options(instance, &options, &adapter);
+  if (result != GPU_OK || !adapter ||
+      GPUGetAdapterProperties(adapter, &properties) != GPU_OK ||
+      (properties.executionFlags &
+       (GPU_EXECUTION_GRAPHICS_BIT | GPU_EXECUTION_COMPUTE_BIT)) !=
+        (GPU_EXECUTION_GRAPHICS_BIT | GPU_EXECUTION_COMPUTE_BIT)) {
+    free(adapters);
+    return 0;
+  }
+
+  options.workload = (GPUWorkload)UINT32_MAX;
+  atomic_init(&request.done, false);
+  result = GPURequestAdapter(instance, &options, adapter_ready, &request);
+  if (result != GPU_ERROR_INVALID_ARGUMENT ||
+      atomic_load_explicit(&request.done, memory_order_acquire)) {
+    free(adapters);
+    return 0;
+  }
+
+  options.workload        = GPU_WORKLOAD_DEFAULT;
   options.powerPreference = GPU_POWER_PREFERENCE_LOW_POWER;
   result = gpu_test_request_adapter_options(instance, &options, &adapter);
   if (result != GPU_OK || !adapter ||

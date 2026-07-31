@@ -153,6 +153,8 @@ get_ownership_properties(const GPUAdapter     * __restrict adapter,
   outProps->name    = "scoped-adapter";
   outProps->backend = gpuAdapterApi(adapter)->backend;
   outProps->type    = GPU_ADAPTER_TYPE_INTEGRATED;
+  outProps->executionFlags = GPU_EXECUTION_GRAPHICS_BIT |
+                             GPU_EXECUTION_COMPUTE_BIT;
   gOwnershipPropertiesCalls++;
   return GPU_OK;
 }

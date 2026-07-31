@@ -35,10 +35,17 @@ typedef enum GPUAdapterType {
   GPU_ADAPTER_TYPE_SOFTWARE   = 3
 } GPUAdapterType;
 
+typedef uint32_t GPUExecutionFlags;
+enum {
+  GPU_EXECUTION_GRAPHICS_BIT = 1u << 0,
+  GPU_EXECUTION_COMPUTE_BIT  = 1u << 1
+};
+
 typedef struct GPUAdapterProperties {
-  const char    *name;
-  GPUBackend     backend;
-  GPUAdapterType type;
+  const char        *name;
+  GPUBackend         backend;
+  GPUAdapterType     type;
+  GPUExecutionFlags  executionFlags;
 } GPUAdapterProperties;
 
 typedef enum GPUPowerPreference {
@@ -46,6 +53,13 @@ typedef enum GPUPowerPreference {
   GPU_POWER_PREFERENCE_LOW_POWER        = 1,
   GPU_POWER_PREFERENCE_HIGH_PERFORMANCE = 2
 } GPUPowerPreference;
+
+typedef enum GPUWorkload {
+  GPU_WORKLOAD_DEFAULT  = 0,
+  GPU_WORKLOAD_GRAPHICS = 1,
+  GPU_WORKLOAD_COMPUTE  = 2,
+  GPU_WORKLOAD_HYBRID   = 3
+} GPUWorkload;
 
 typedef struct GPUDevice GPUDevice;
 
@@ -130,6 +144,7 @@ typedef struct GPUAdapterRequestOptions {
   const GPUFeature  *pRequiredFeatures;
   uint32_t           requiredFeatureCount;
   GPUPowerPreference powerPreference;
+  GPUWorkload        workload;
 } GPUAdapterRequestOptions;
 
 typedef struct GPUQueueRequest {

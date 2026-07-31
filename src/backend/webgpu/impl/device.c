@@ -250,6 +250,8 @@ webgpu_getAdapterProperties(const GPUAdapter     *adapter,
   memset(properties, 0, sizeof(*properties));
   properties->backend = GPU_BACKEND_WEBGPU;
   properties->name    = native->name[0] ? native->name : "WebGPU adapter";
+  properties->executionFlags = GPU_EXECUTION_GRAPHICS_BIT |
+                               GPU_EXECUTION_COMPUTE_BIT;
   if (wgpuAdapterGetInfo(native->adapter, &info) == WGPUStatus_Success) {
     properties->type = webgpu_adapterType(info.adapterType);
     wgpuAdapterInfoFreeMembers(info);

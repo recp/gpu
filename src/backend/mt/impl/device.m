@@ -193,11 +193,13 @@ mt_getAdapterProperties(const GPUAdapter     * __restrict adapter,
 
   device = mt_adapterDevice(adapter);
   memset(outProps, 0, sizeof(*outProps));
-  outProps->backend = GPU_BACKEND_METAL;
-  outProps->name = device.name.UTF8String;
-  outProps->type = device.isLowPower ?
+  outProps->backend        = GPU_BACKEND_METAL;
+  outProps->name           = device.name.UTF8String;
+  outProps->type           = device.isLowPower ?
     GPU_ADAPTER_TYPE_INTEGRATED :
     GPU_ADAPTER_TYPE_DISCRETE;
+  outProps->executionFlags = GPU_EXECUTION_GRAPHICS_BIT |
+                             GPU_EXECUTION_COMPUTE_BIT;
 
   return GPU_OK;
 }

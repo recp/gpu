@@ -9,6 +9,7 @@
                  #TYPE " 64-bit ABI size changed")
 
 GPU_ASSERT_CHAIN_FIRST(GPUInstanceCreateInfo);
+GPU_ASSERT_CHAIN_FIRST(GPUAdapterRequestOptions);
 GPU_ASSERT_CHAIN_FIRST(GPUSurfaceCreateInfo);
 GPU_ASSERT_CHAIN_FIRST(GPUNativeSurfaceCreateInfo);
 GPU_ASSERT_CHAIN_FIRST(GPUDeviceQueueCreateInfo);
@@ -58,6 +59,8 @@ _Static_assert(
   "transient allocator 64-bit fields must stay packed"
 );
 GPU_ASSERT_64BIT_SIZE(GPUMemoryRequirements, 24u);
+GPU_ASSERT_64BIT_SIZE(GPUAdapterProperties, 24u);
+GPU_ASSERT_64BIT_SIZE(GPUAdapterRequestOptions, 40u);
 GPU_ASSERT_64BIT_SIZE(GPUHeapCreateInfo, 56u);
 GPU_ASSERT_64BIT_SIZE(GPUSparseTextureRequirements, 48u);
 GPU_ASSERT_64BIT_SIZE(GPUSparseBufferRequirements, 24u);
