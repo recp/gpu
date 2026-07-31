@@ -25,6 +25,12 @@ typedef struct GPUWin32Fetch {
   wchar_t              *url;
 } GPUWin32Fetch;
 
+typedef struct GPUWin32AdapterRequest {
+  HANDLE      completed;
+  GPUAdapter *adapter;
+  GPUResult   result;
+} GPUWin32AdapterRequest;
+
 struct GPUWin32Sample {
   GPUWin32Window         *window;
   GPUInstance            *instance;
@@ -46,6 +52,92 @@ struct GPUWin32Sample {
 static GPUWin32Sample *activeSample;
 static GPUWin32Fetch  *completedFetches;
 static SRWLOCK         fetchLock = SRWLOCK_INIT;
+
+static void
+adapter_ready(GPUResult result, GPUAdapter *adapter, void *userData) {
+  GPUWin32AdapterRequest *request;
+
+  request          = userData;
+  request->adapter = adapter;
+  request->result  = result;
+  SetEvent(request->completed);
+}
+
+static GPUAdapter*
+request_adapter(GPUInstance *instance, GPUPowerPreference preference) {
+  GPUAdapterRequestOptions options = {0};
+  GPUWin32AdapterRequest   request = {0};
+  GPUResult                result;
+
+  request.completed = CreateEventW(NULL, TRUE, FALSE, NULL);
+  if (!request.completed) {
+    return NULL;
+  }
+  options.chain.sType      = GPU_STRUCTURE_TYPE_ADAPTER_REQUEST_OPTIONS;
+  options.chain.structSize = sizeof(options);
+  options.powerPreference  = preference;
+  result = GPURequestAdapter(instance, &options, adapter_ready, &request);
+  if (result == GPU_OK &&
+      WaitForSingleObject(request.completed, INFINITE) == WAIT_OBJECT_0 &&
+      request.result == GPU_OK) {
+    CloseHandle(request.completed);
+    return request.adapter;
+  }
+  CloseHandle(request.completed);
+  return NULL;
+}
+
+static GPUAdapter*
+adapter_at_index(GPUInstance *instance, uint32_t index) {
+  GPUAdapter **adapters;
+  GPUAdapter  *adapter;
+  uint32_t     adapterCount;
+
+  adapterCount = 0u;
+  adapters     = NULL;
+  if (GPUEnumerateAdapters(instance, &adapterCount, NULL) != GPU_OK ||
+      index >= adapterCount ||
+      !(adapters = calloc(adapterCount, sizeof(*adapters))) ||
+      GPUEnumerateAdapters(instance, &adapterCount, adapters) != GPU_OK) {
+    free(adapters);
+    return NULL;
+  }
+  adapter = adapters[index];
+  free(adapters);
+  return adapter;
+}
+
+static GPUAdapter*
+select_adapter(GPUInstance *instance) {
+  char          selection[64];
+  char         *end;
+  unsigned long index;
+  DWORD         length;
+
+  length = GetEnvironmentVariableA("GPU_SAMPLE_ADAPTER",
+                                   selection,
+                                   sizeof(selection));
+  if (length == 0u || length >= sizeof(selection) ||
+      strcmp(selection, "auto") == 0) {
+    return request_adapter(instance, GPU_POWER_PREFERENCE_DEFAULT);
+  }
+  if (strcmp(selection, "low") == 0) {
+    return request_adapter(instance, GPU_POWER_PREFERENCE_LOW_POWER);
+  }
+  if (strcmp(selection, "high") == 0) {
+    return request_adapter(instance,
+                           GPU_POWER_PREFERENCE_HIGH_PERFORMANCE);
+  }
+  if (strncmp(selection, "index:", 6u) != 0 || selection[6] == '\0') {
+    return request_adapter(instance, GPU_POWER_PREFERENCE_DEFAULT);
+  }
+
+  index = strtoul(selection + 6u, &end, 10);
+  if (*end != '\0' || index > UINT32_MAX) {
+    return NULL;
+  }
+  return adapter_at_index(instance, (uint32_t)index);
+}
 
 static const char*
 asset_name(const char *path) {
@@ -395,7 +487,7 @@ GPUSampleWin32Create(GPUWin32Window      *window,
   GPUDeviceCreateInfo   deviceInfo = {0};
   GPURuntimeConfig      runtimeInfo = {0};
   GPUWin32Sample       *sample;
-  uint32_t              adapterCount;
+  const char           *failure;
 
   if (!window || !window->handle || !name || !start || activeSample ||
       window->width == 0u || window->height == 0u ||
@@ -406,6 +498,7 @@ GPUSampleWin32Create(GPUWin32Window      *window,
   if (!sample) {
     return NULL;
   }
+  failure        = "initialize sample";
   sample->window = window;
   sample->name   = name;
   snprintf(sample->status, sizeof(sample->status), "GPU: starting %s", name);
@@ -415,16 +508,15 @@ GPUSampleWin32Create(GPUWin32Window      *window,
   instanceInfo.label            = name;
   instanceInfo.preferredBackend = GPU_BACKEND_DX12;
   instanceInfo.enableValidation = true;
+  failure = "create the Direct3D 12 instance";
   if (GPUCreateInstance(&instanceInfo, &sample->instance) != GPU_OK ||
       !sample->instance) {
     goto fail;
   }
 
-  adapterCount = 1u;
-  if (GPUEnumerateAdapters(sample->instance,
-                           &adapterCount,
-                           &sample->adapter) != GPU_OK ||
-      !sample->adapter) {
+  failure         = "select the requested Direct3D 12 adapter";
+  sample->adapter = select_adapter(sample->instance);
+  if (!sample->adapter) {
     goto fail;
   }
 
@@ -432,12 +524,14 @@ GPUSampleWin32Create(GPUWin32Window      *window,
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.optional.pFeatures    = optionalFeatures;
   deviceInfo.optional.featureCount = GPU_ARRAY_LEN(optionalFeatures);
+  failure = "create the Direct3D 12 device";
   if (GPUCreateDevice(sample->adapter,
                       &deviceInfo,
                       &sample->device) != GPU_OK ||
       !sample->device) {
     goto fail;
   }
+  failure       = "get the graphics queue";
   sample->queue = GPUGetQueue(sample->device, GPU_QUEUE_GRAPHICS, 0u);
   if (!sample->queue) {
     goto fail;
@@ -447,10 +541,12 @@ GPUSampleWin32Create(GPUWin32Window      *window,
   runtimeInfo.chain.structSize = sizeof(runtimeInfo);
   runtimeInfo.validationMode   = GPU_VALIDATION_FULL;
   runtimeInfo.enableStats      = true;
+  failure = "configure the GPU runtime";
   if (GPUConfigureRuntime(sample->device, &runtimeInfo) != GPU_OK) {
     goto fail;
   }
 
+  failure = "create the window surface";
   sample->surface = GPUCreateSurfaceFromNative(sample->instance,
                                                sample->adapter,
                                                window->handle,
@@ -460,6 +556,7 @@ GPUSampleWin32Create(GPUWin32Window      *window,
       !resize_surface(sample, NULL, &sample->width, &sample->height)) {
     goto fail;
   }
+  failure = "create the swapchain";
   sample->swapchain = GPUCreateSwapchainDefault(sample->device,
                                                 sample->surface,
                                                 sample->width,
@@ -469,6 +566,7 @@ GPUSampleWin32Create(GPUWin32Window      *window,
   }
 
   activeSample = sample;
+  failure      = "initialize sample resources";
   if (start() != 0 || sample->failed) {
     goto fail;
   }
@@ -482,9 +580,10 @@ fail:
   if (strncmp(sample->status, "GPU: starting ", 14u) == 0) {
     snprintf(sample->status,
              sizeof(sample->status),
-             "GPU: failed to start %s",
-             name);
+             "GPU: failed to %s",
+             failure);
   }
+  fprintf(stderr, "%s\n", sample->status);
   return sample;
 }
 

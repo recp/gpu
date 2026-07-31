@@ -60,6 +60,7 @@ target_include_directories(gpu-gallery-windows PRIVATE
 target_link_libraries(gpu-gallery-windows PRIVATE
   dwmapi
   gdi32
+  gpu
   ole32
   uxtheme
   user32

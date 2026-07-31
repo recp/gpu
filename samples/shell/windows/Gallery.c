@@ -3,6 +3,8 @@
 #include "NativeSamples.h"
 #include "../../common/Win32Image.h"
 
+#include <gpu/gpu.h>
+
 #include <dwmapi.h>
 #include <uxtheme.h>
 #include <windows.h>
@@ -13,9 +15,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 
 enum {
-  GPU_GALLERY_TIMER_CHILD = 1u
+  GPU_GALLERY_TIMER_CHILD         = 1u,
+  GPU_GALLERY_ADAPTER_SELECTOR_ID = 100u,
+  GPU_GALLERY_ADAPTER_AUTO        = 0u,
+  GPU_GALLERY_ADAPTER_LOW_POWER   = 1u,
+  GPU_GALLERY_ADAPTER_HIGH_POWER  = 2u,
+  GPU_GALLERY_ADAPTER_FIRST       = 3u
 };
 
 typedef struct GPUGalleryPreview {
@@ -26,6 +34,7 @@ typedef struct GPUGalleryPreview {
 
 typedef struct GPUGallery {
   HWND               window;
+  HWND               adapterSelector;
   HANDLE             child;
   HANDLE             job;
   HDC                backContext;
@@ -40,6 +49,7 @@ typedef struct GPUGallery {
   int                scroll;
   int                scrollMax;
   int                hovered;
+  uint32_t           adapterSelection;
   float              scale;
 } GPUGallery;
 
@@ -244,6 +254,176 @@ create_fonts(GPUGallery *gallery) {
   DeleteObject(gallery->titleFont);
   gallery->titleFont = titleFont;
   gallery->bodyFont  = bodyFont;
+  if (gallery->adapterSelector) {
+    SendMessageW(gallery->adapterSelector,
+                 WM_SETFONT,
+                 (WPARAM)gallery->bodyFont,
+                 TRUE);
+  }
+  return true;
+}
+
+static void
+adapter_selector_rect(const GPUGallery *gallery,
+                      const RECT       *client,
+                      RECT             *selector) {
+  int available, margin, width;
+
+  margin    = scaled(gallery, 28);
+  available = client->right - margin * 2;
+  width     = scaled(gallery, 292);
+  if (width > client->right - scaled(gallery, 360)) {
+    width = client->right - scaled(gallery, 360);
+  }
+  if (width < scaled(gallery, 180)) {
+    width = scaled(gallery, 180);
+  }
+  if (width > available) {
+    width = available;
+  }
+  if (width < 1) {
+    width = 1;
+  }
+  selector->right  = client->right - margin;
+  selector->left   = selector->right - width;
+  selector->top    = scaled(gallery, 28);
+  selector->bottom = selector->top + scaled(gallery, 260);
+}
+
+static void
+position_adapter_selector(GPUGallery *gallery) {
+  RECT client, selector;
+
+  if (!gallery || !gallery->adapterSelector ||
+      !GetClientRect(gallery->window, &client)) {
+    return;
+  }
+  adapter_selector_rect(gallery, &client, &selector);
+  MoveWindow(gallery->adapterSelector,
+             selector.left,
+             selector.top,
+             selector.right - selector.left,
+             selector.bottom - selector.top,
+             TRUE);
+}
+
+static bool
+adapter_label(const GPUAdapterProperties *properties,
+              wchar_t                     label[256]) {
+  if (!properties || !properties->name || !label) {
+    return false;
+  }
+  if (MultiByteToWideChar(CP_UTF8,
+                          MB_ERR_INVALID_CHARS,
+                          properties->name,
+                          -1,
+                          label,
+                          256) > 0) {
+    return true;
+  }
+  return MultiByteToWideChar(CP_ACP,
+                             0u,
+                             properties->name,
+                             -1,
+                             label,
+                             256) > 0;
+}
+
+static void
+add_adapter_option(HWND selector, const wchar_t *label, uint32_t value) {
+  LRESULT item;
+
+  item = SendMessageW(selector, CB_ADDSTRING, 0u, (LPARAM)label);
+  if (item != CB_ERR && item != CB_ERRSPACE) {
+    SendMessageW(selector, CB_SETITEMDATA, (WPARAM)item, (LPARAM)value);
+  }
+}
+
+static void
+populate_adapter_selector(GPUGallery *gallery) {
+  GPUInstanceCreateInfo instanceInfo = {0};
+  GPUAdapterProperties  properties = {0};
+  GPUInstance          *instance;
+  GPUAdapter          **adapters;
+  uint32_t              adapterCount;
+
+  if (!gallery || !gallery->adapterSelector) {
+    return;
+  }
+  add_adapter_option(gallery->adapterSelector,
+                     L"Auto",
+                     GPU_GALLERY_ADAPTER_AUTO);
+  add_adapter_option(gallery->adapterSelector,
+                     L"Low power",
+                     GPU_GALLERY_ADAPTER_LOW_POWER);
+  add_adapter_option(gallery->adapterSelector,
+                     L"High performance",
+                     GPU_GALLERY_ADAPTER_HIGH_POWER);
+
+  instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  instanceInfo.chain.structSize = sizeof(instanceInfo);
+  instanceInfo.label            = "windows-gallery-adapters";
+  instanceInfo.preferredBackend = GPU_BACKEND_DX12;
+  instance = NULL;
+  if (GPUCreateInstance(&instanceInfo, &instance) != GPU_OK || !instance) {
+    SendMessageW(gallery->adapterSelector, CB_SETCURSEL, 0u, 0u);
+    return;
+  }
+
+  adapterCount = 0u;
+  adapters     = NULL;
+  if (GPUEnumerateAdapters(instance, &adapterCount, NULL) == GPU_OK &&
+      adapterCount > 0u &&
+      (adapters = calloc(adapterCount, sizeof(*adapters))) &&
+      GPUEnumerateAdapters(instance, &adapterCount, adapters) == GPU_OK) {
+    for (uint32_t i = 0u; i < adapterCount; i++) {
+      wchar_t label[256];
+
+      if (GPUGetAdapterProperties(adapters[i], &properties) != GPU_OK) {
+        continue;
+      }
+      if (!adapter_label(&properties, label)) {
+        swprintf(label, 256u, L"Adapter %u", i + 1u);
+      }
+      add_adapter_option(gallery->adapterSelector,
+                         label,
+                         GPU_GALLERY_ADAPTER_FIRST + i);
+    }
+  }
+  free(adapters);
+  GPUDestroyInstance(instance);
+  SendMessageW(gallery->adapterSelector, CB_SETCURSEL, 0u, 0u);
+}
+
+static bool
+create_adapter_selector(GPUGallery *gallery) {
+  if (!gallery || !gallery->window) {
+    return false;
+  }
+  gallery->adapterSelector =
+    CreateWindowExW(0u,
+                    L"COMBOBOX",
+                    NULL,
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL |
+                      CBS_DROPDOWNLIST | CBS_HASSTRINGS,
+                    0,
+                    0,
+                    0,
+                    0,
+                    gallery->window,
+                    (HMENU)(UINT_PTR)GPU_GALLERY_ADAPTER_SELECTOR_ID,
+                    GetModuleHandleW(NULL),
+                    NULL);
+  if (!gallery->adapterSelector) {
+    return false;
+  }
+  SetWindowTheme(gallery->adapterSelector, L"DarkMode_Explorer", NULL);
+  SendMessageW(gallery->adapterSelector,
+               WM_SETFONT,
+               (WPARAM)gallery->bodyFont,
+               TRUE);
+  populate_adapter_selector(gallery);
+  position_adapter_selector(gallery);
   return true;
 }
 
@@ -440,7 +620,7 @@ paint_gallery(GPUGallery *gallery, HDC context) {
   HBRUSH background, cardBrush, previewBrush;
   HPEN   borderPen, hoverPen, oldPen;
   HFONT  oldFont;
-  RECT   client, header, card, preview, titleRect;
+  RECT   client, header, selector, card, preview, titleRect;
 
   GetClientRect(gallery->window, &client);
   background   = CreateSolidBrush(rgb(7u, 9u, 13u));
@@ -468,6 +648,8 @@ paint_gallery(GPUGallery *gallery, HDC context) {
 
   SelectObject(context, gallery->bodyFont);
   SetTextColor(context, rgb(145u, 143u, 138u));
+  adapter_selector_rect(gallery, &client, &selector);
+  header.right = selector.left - scaled(gallery, 14);
   DrawTextA(context,
             gallery->status ? gallery->status : "Direct3D 12",
             -1,
@@ -620,12 +802,56 @@ working_directory(const char *executable,
 }
 
 static void
+adapter_environment_value(const GPUGallery *gallery,
+                          char              value[32]) {
+  uint32_t selection;
+
+  selection = gallery ? gallery->adapterSelection : 0u;
+  switch (selection) {
+    case GPU_GALLERY_ADAPTER_LOW_POWER:
+      snprintf(value, 32u, "low");
+      break;
+    case GPU_GALLERY_ADAPTER_HIGH_POWER:
+      snprintf(value, 32u, "high");
+      break;
+    case GPU_GALLERY_ADAPTER_AUTO:
+      snprintf(value, 32u, "auto");
+      break;
+    default:
+      snprintf(value,
+               32u,
+               "index:%u",
+               selection - GPU_GALLERY_ADAPTER_FIRST);
+      break;
+  }
+}
+
+static char*
+save_environment_value(const char *name) {
+  char  *value;
+  DWORD  length;
+
+  length = GetEnvironmentVariableA(name, NULL, 0u);
+  if (length == 0u || !(value = malloc(length))) {
+    return NULL;
+  }
+  if (GetEnvironmentVariableA(name, value, length) == 0u) {
+    free(value);
+    return NULL;
+  }
+  return value;
+}
+
+static void
 start_sample(GPUGallery *gallery, size_t index) {
   STARTUPINFOA        startup = {0};
   PROCESS_INFORMATION process = {0};
   char                command[MAX_PATH * 2u];
   char                directory[MAX_PATH];
+  char                adapterValue[32];
+  char               *previousAdapterValue;
   int                 length;
+  BOOL                created;
 
   if (!gallery || gallery->child || index >= gpuNativeSampleCount ||
       !working_directory(gpuNativeSamples[index].executable, directory)) {
@@ -642,16 +868,27 @@ start_sample(GPUGallery *gallery, size_t index) {
   }
 
   startup.cb = sizeof(startup);
-  if (!CreateProcessA(gpuNativeSamples[index].executable,
-                      command,
-                      NULL,
-                      NULL,
-                      FALSE,
-                      0u,
-                      NULL,
-                      directory,
-                      &startup,
-                      &process)) {
+  adapter_environment_value(gallery, adapterValue);
+  previousAdapterValue = save_environment_value("GPU_SAMPLE_ADAPTER");
+  if (!SetEnvironmentVariableA("GPU_SAMPLE_ADAPTER", adapterValue)) {
+    free(previousAdapterValue);
+    gallery->status = "Adapter selection failed";
+    InvalidateRect(gallery->window, NULL, FALSE);
+    return;
+  }
+  created = CreateProcessA(gpuNativeSamples[index].executable,
+                           command,
+                           NULL,
+                           NULL,
+                           FALSE,
+                           0u,
+                           NULL,
+                           directory,
+                           &startup,
+                           &process);
+  SetEnvironmentVariableA("GPU_SAMPLE_ADAPTER", previousAdapterValue);
+  free(previousAdapterValue);
+  if (!created) {
     gallery->status = "Sample launch failed";
     InvalidateRect(gallery->window, NULL, FALSE);
     return;
@@ -713,11 +950,13 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
                             &darkMode,
                             sizeof(darkMode));
       SetWindowTheme(window, L"DarkMode_Explorer", NULL);
+      create_adapter_selector(gallery);
       load_previews(gallery);
       update_scroll(gallery);
       return 0;
     }
     case WM_SIZE:
+      position_adapter_selector(gallery);
       update_scroll(gallery);
       InvalidateRect(window, NULL, FALSE);
       return 0;
@@ -734,10 +973,32 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
                    SWP_NOACTIVATE | SWP_NOZORDER);
       gallery->scale = display_scale(window, HIWORD(wParam));
       create_fonts(gallery);
+      position_adapter_selector(gallery);
       update_scroll(gallery);
       InvalidateRect(window, NULL, FALSE);
       return 0;
     }
+    case WM_COMMAND:
+      if (LOWORD(wParam) == GPU_GALLERY_ADAPTER_SELECTOR_ID &&
+          HIWORD(wParam) == CBN_SELCHANGE) {
+        LRESULT item, selection;
+
+        item = SendMessageW(gallery->adapterSelector,
+                            CB_GETCURSEL,
+                            0u,
+                            0u);
+        selection = item == CB_ERR
+                      ? CB_ERR
+                      : SendMessageW(gallery->adapterSelector,
+                                     CB_GETITEMDATA,
+                                     (WPARAM)item,
+                                     0u);
+        if (selection != CB_ERR) {
+          gallery->adapterSelection = (uint32_t)selection;
+        }
+        return 0;
+      }
+      return DefWindowProcW(window, message, wParam, lParam);
     case WM_VSCROLL: {
       SCROLLINFO info = {0};
       int        value;
@@ -931,6 +1192,7 @@ wWinMain(HINSTANCE instance,
   gallery.scale   = display_scale(NULL, dpi);
   gallery.hovered = -1;
   gallery.status  = "Direct3D 12";
+  gallery.adapterSelection = GPU_GALLERY_ADAPTER_AUTO;
   gallery.job     = create_child_job();
   if (!create_fonts(&gallery)) {
     if (gallery.job) {
