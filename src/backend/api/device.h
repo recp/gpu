@@ -51,6 +51,7 @@ typedef uint32_t GPUBackendSubgroupOperationFlags;
 typedef struct GPUApiDevice {
   GPUResult
   (*requestAdapter)(GPUInstance                      *inst,
+                    GPUPowerPreference                powerPreference,
                     GPUBackendAdapterRequestCallback  callback,
                     void                             *userData);
 
@@ -59,8 +60,9 @@ typedef struct GPUApiDevice {
                           uint32_t maxNumberOfItems);
 
   GPUAdapter*
-  (*selectAdapter)(GPUInstance * __restrict inst,
-                   GPUAdapter  * __restrict adapters);
+  (*selectAdapter)(GPUInstance        * __restrict inst,
+                   GPUAdapter         * __restrict adapters,
+                   GPUPowerPreference              powerPreference);
 
   void
   (*destroyAdapter)(GPUAdapter * __restrict adapter);

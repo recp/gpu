@@ -206,7 +206,7 @@ request_webgpu_device_features(GPUInstance        *instance,
       }
     }
   }
-  result = GPURequestAdapter(instance, webgpu_adapter_ready, request);
+  result = GPURequestAdapter(instance, NULL, webgpu_adapter_ready, request);
   if (result != GPU_OK && !request->completed) {
     finish_webgpu_request(request, result, NULL, NULL);
   }

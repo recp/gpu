@@ -75,7 +75,9 @@ device_ready(GPUResult result, GPUDevice *device, void *userData) {
 }
 
 GPUResult
-gpu_test_request_adapter(GPUInstance *instance, GPUAdapter **outAdapter) {
+gpu_test_request_adapter_options(GPUInstance                    *instance,
+                                 const GPUAdapterRequestOptions *options,
+                                 GPUAdapter                    **outAdapter) {
   GPUApiAdapterRequest request = {0};
   GPUResult             result;
 
@@ -83,7 +85,8 @@ gpu_test_request_adapter(GPUInstance *instance, GPUAdapter **outAdapter) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   *outAdapter = NULL;
-  result = GPURequestAdapter(instance, adapter_ready, &request);
+  atomic_init(&request.done, false);
+  result = GPURequestAdapter(instance, options, adapter_ready, &request);
   if (result != GPU_OK) {
     return result;
   }
@@ -92,6 +95,98 @@ gpu_test_request_adapter(GPUInstance *instance, GPUAdapter **outAdapter) {
   }
   *outAdapter = request.adapter;
   return request.result;
+}
+
+GPUResult
+gpu_test_request_adapter(GPUInstance *instance, GPUAdapter **outAdapter) {
+  return gpu_test_request_adapter_options(instance, NULL, outAdapter);
+}
+
+int
+gpu_test_adapter_request_options(GPUInstance *instance) {
+  GPUAdapterRequestOptions options = {0};
+  GPUApiAdapterRequest     request = {0};
+  GPUFeature               features[] = { GPU_FEATURE_COMPUTE };
+  GPUAdapterProperties     properties;
+  GPUAdapter             **adapters;
+  GPUAdapter              *adapter;
+  GPUResult                result;
+  uint32_t                 adapterCount;
+  bool                     hasDiscrete;
+  bool                     hasIntegrated;
+
+  adapterCount = 0u;
+  result = GPUEnumerateAdapters(instance, &adapterCount, NULL);
+  if (result != GPU_OK || adapterCount == 0u) {
+    return 0;
+  }
+  adapters = calloc(adapterCount, sizeof(*adapters));
+  if (!adapters) {
+    return 0;
+  }
+  result = GPUEnumerateAdapters(instance, &adapterCount, adapters);
+  if (result != GPU_OK) {
+    free(adapters);
+    return 0;
+  }
+
+  hasDiscrete   = false;
+  hasIntegrated = false;
+  for (uint32_t i = 0u; i < adapterCount; i++) {
+    if (!GPUIsFeatureSupported(adapters[i], GPU_FEATURE_COMPUTE) ||
+        GPUGetAdapterProperties(adapters[i], &properties) != GPU_OK) {
+      continue;
+    }
+    hasDiscrete   |= properties.type == GPU_ADAPTER_TYPE_DISCRETE;
+    hasIntegrated |= properties.type == GPU_ADAPTER_TYPE_INTEGRATED;
+  }
+
+  options.chain.sType          = GPU_STRUCTURE_TYPE_ADAPTER_REQUEST_OPTIONS;
+  options.chain.structSize     = sizeof(options);
+  options.pRequiredFeatures    = features;
+  options.requiredFeatureCount = (uint32_t)GPU_ARRAY_LEN(features);
+
+  options.powerPreference = GPU_POWER_PREFERENCE_DEFAULT;
+  result = gpu_test_request_adapter_options(instance, &options, &adapter);
+  if (result != GPU_OK || adapter != adapters[0]) {
+    free(adapters);
+    return 0;
+  }
+
+  options.powerPreference = GPU_POWER_PREFERENCE_LOW_POWER;
+  result = gpu_test_request_adapter_options(instance, &options, &adapter);
+  if (result != GPU_OK || !adapter ||
+      GPUGetAdapterProperties(adapter, &properties) != GPU_OK ||
+      (hasIntegrated && properties.type != GPU_ADAPTER_TYPE_INTEGRATED)) {
+    free(adapters);
+    return 0;
+  }
+
+  options.powerPreference = GPU_POWER_PREFERENCE_HIGH_PERFORMANCE;
+  result = gpu_test_request_adapter_options(instance, &options, &adapter);
+  if (result != GPU_OK || !adapter ||
+      GPUGetAdapterProperties(adapter, &properties) != GPU_OK ||
+      (hasDiscrete && properties.type != GPU_ADAPTER_TYPE_DISCRETE)) {
+    free(adapters);
+    return 0;
+  }
+
+  options.powerPreference = (GPUPowerPreference)UINT32_MAX;
+  atomic_init(&request.done, false);
+  result = GPURequestAdapter(instance, &options, adapter_ready, &request);
+  if (result != GPU_ERROR_INVALID_ARGUMENT ||
+      atomic_load_explicit(&request.done, memory_order_acquire)) {
+    free(adapters);
+    return 0;
+  }
+
+  options.powerPreference      = GPU_POWER_PREFERENCE_DEFAULT;
+  options.pRequiredFeatures    = NULL;
+  options.requiredFeatureCount = 1u;
+  result = GPURequestAdapter(instance, &options, adapter_ready, &request);
+  free(adapters);
+  return result == GPU_ERROR_INVALID_ARGUMENT &&
+         !atomic_load_explicit(&request.done, memory_order_acquire);
 }
 
 GPUResult

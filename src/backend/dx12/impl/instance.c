@@ -19,18 +19,39 @@
 
 #if defined(DIRECT3D_LINEAR_ALGEBRA)
 static bool
-dx12_enableLinearAlgebra(const GPUInstanceDX12 *instance) {
-  return SUCCEEDED(dx12_enableExperimentalFeatures(
-    instance,
+dx12_createLinearAlgebraFactory(ID3D12DeviceFactory **outFactory) {
+  return dx12_createExperimentalFactory(
     1u,
-    &D3D12ExperimentalShaderModels
-  ));
+    &D3D12ExperimentalShaderModels,
+    outFactory
+  );
 }
 #else
 static bool
-dx12_enableLinearAlgebra(const GPUInstanceDX12 *instance) {
-  GPU__UNUSED(instance);
+dx12_createLinearAlgebraFactory(ID3D12DeviceFactory **outFactory) {
+  if (outFactory) {
+    *outFactory = NULL;
+  }
   return false;
+}
+#endif
+
+#if GPU_BUILD_WITH_VALIDATION && defined(_DEBUG)
+static bool
+dx12_enableDebugLayer(ID3D12DeviceFactory *factory) {
+  ID3D12Debug *debugController;
+
+  debugController = NULL;
+  if (FAILED(dx12_getConfigurationInterface(factory,
+                                            &CLSID_D3D12Debug,
+                                            &IID_ID3D12Debug,
+                                            (void **)&debugController)) ||
+      !debugController) {
+    return false;
+  }
+  debugController->lpVtbl->EnableDebugLayer(debugController);
+  debugController->lpVtbl->Release(debugController);
+  return true;
 }
 #endif
 
@@ -57,23 +78,21 @@ dx12_createInstance(struct GPUApi * __restrict api,
   if (!dx12_createAgilityFactory(&instDX12->deviceFactory)) {
     goto err;
   }
-  instDX12->linearAlgebra = dx12_enableLinearAlgebra(instDX12);
+  (void)dx12_createLinearAlgebraFactory(
+    &instDX12->linearAlgebraFactory
+  );
 
 #if GPU_BUILD_WITH_VALIDATION && defined(_DEBUG)
   /* Enable the debug layer (requires the Graphics Tools "optional feature").
      NOTE: Enabling the debug layer after device creation will invalidate the active device.
    */
   if (info && info->enableValidation) {
-    ID3D12Debug *debugController;
-    if (SUCCEEDED(dx12_getConfigurationInterface(instDX12,
-                                                 &CLSID_D3D12Debug,
-                                                 &IID_ID3D12Debug,
-                                                 (void **)&debugController))) {
-      debugController->lpVtbl->EnableDebugLayer(debugController);
-      debugController->lpVtbl->Release(debugController);
-
+    if (dx12_enableDebugLayer(instDX12->deviceFactory)) {
       /* Enable additional debug layers. */
       instDX12->dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
+    }
+    if (instDX12->linearAlgebraFactory) {
+      (void)dx12_enableDebugLayer(instDX12->linearAlgebraFactory);
     }
   }
 #endif
@@ -116,6 +135,11 @@ err:
   if (instDX12 && instDX12->deviceFactory) {
     instDX12->deviceFactory->lpVtbl->Release(instDX12->deviceFactory);
   }
+  if (instDX12 && instDX12->linearAlgebraFactory) {
+    instDX12->linearAlgebraFactory->lpVtbl->Release(
+      instDX12->linearAlgebraFactory
+    );
+  }
   if (inst)     { free(inst);     }
   if (instDX12) { free(instDX12); }
 
@@ -141,6 +165,11 @@ dx12_destroyInstance(struct GPUApi * __restrict api,
     }
     if (instDX12->deviceFactory) {
       instDX12->deviceFactory->lpVtbl->Release(instDX12->deviceFactory);
+    }
+    if (instDX12->linearAlgebraFactory) {
+      instDX12->linearAlgebraFactory->lpVtbl->Release(
+        instDX12->linearAlgebraFactory
+      );
     }
     free(instDX12);
   }

@@ -372,7 +372,6 @@ GPUSampleLinuxCreate(GPULinuxWindow      *window,
   GPUDeviceCreateInfo   deviceInfo = {0};
   GPURuntimeConfig      runtimeInfo = {0};
   GPULinuxSample       *sample;
-  uint32_t              adapterCount;
 
   if (!window || !name || !start || activeSample ||
       !window->display || window->width == 0u || window->height == 0u ||
@@ -398,11 +397,8 @@ GPUSampleLinuxCreate(GPULinuxWindow      *window,
     goto fail;
   }
 
-  adapterCount = 1u;
-  if (GPUEnumerateAdapters(sample->instance,
-                           &adapterCount,
-                           &sample->adapter) != GPU_OK ||
-      !sample->adapter) {
+  sample->adapter = GPUGetAutoSelectedAdapter(sample->instance);
+  if (!sample->adapter) {
     goto fail;
   }
 

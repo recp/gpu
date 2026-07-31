@@ -110,7 +110,7 @@ bench_createAdapter(GPUInstance *instance) {
   request.adapter = NULL;
   request.result  = GPU_ERROR_BACKEND_FAILURE;
   atomic_init(&request.done, false);
-  result          = GPURequestAdapter(instance, bench_adapterReady, &request);
+  result          = GPURequestAdapter(instance, NULL, bench_adapterReady, &request);
   if (result != GPU_OK) {
     return NULL;
   }

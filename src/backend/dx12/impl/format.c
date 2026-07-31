@@ -114,7 +114,7 @@ dx12_queryFormatCapabilities(const GPUAdapter *adapter) {
   }
   memset(adapterDX12->formatCaps, 0, sizeof(adapterDX12->formatCaps));
   device = NULL;
-  result = dx12_createNativeDevice(instanceDX12,
+  result = dx12_createNativeDevice(instanceDX12->deviceFactory,
                                    adapterDX12->dxgiAdapter,
                                    &IID_ID3D12Device,
                                    (void **)&device);

@@ -117,16 +117,18 @@ dx12_agilityPath(void) {
   return path;
 }
 
-GPU_HIDE
-bool
-dx12_createAgilityFactory(ID3D12DeviceFactory **outFactory) {
+static bool
+dx12_newAgilityFactory(uint32_t                featureCount,
+                       const IID              *features,
+                       bool                    reportFailure,
+                       ID3D12DeviceFactory   **outFactory) {
   ID3D12SDKConfiguration1 *configuration;
   ID3D12DeviceFactory     *factory;
   const char              *operation;
   char                    *path;
   HRESULT                  result;
 
-  if (!outFactory) {
+  if (!outFactory || (featureCount > 0u && !features)) {
     return false;
   }
   *outFactory   = NULL;
@@ -159,6 +161,14 @@ dx12_createAgilityFactory(ID3D12DeviceFactory **outFactory) {
       D3D12_DEVICE_FACTORY_FLAG_ALLOW_RETURNING_EXISTING_DEVICE
     );
   }
+  if (SUCCEEDED(result) && featureCount > 0u) {
+    operation = "enable experimental features";
+    result = factory->lpVtbl->EnableExperimentalFeatures(factory,
+                                                         featureCount,
+                                                         features,
+                                                         NULL,
+                                                         NULL);
+  }
   if (configuration) {
     configuration->lpVtbl->Release(configuration);
   }
@@ -166,6 +176,9 @@ dx12_createAgilityFactory(ID3D12DeviceFactory **outFactory) {
   if (FAILED(result) || !factory) {
     if (factory) {
       factory->lpVtbl->Release(factory);
+    }
+    if (!reportFailure) {
+      return false;
     }
     fprintf(stderr,
             "GPU: failed to %s for DirectX 12 Agility SDK %u (0x%08lx)\n",
@@ -184,16 +197,33 @@ dx12_createAgilityFactory(ID3D12DeviceFactory **outFactory) {
 }
 
 GPU_HIDE
+bool
+dx12_createAgilityFactory(ID3D12DeviceFactory **outFactory) {
+  return dx12_newAgilityFactory(0u, NULL, true, outFactory);
+}
+
+GPU_HIDE
+bool
+dx12_createExperimentalFactory(uint32_t              featureCount,
+                               const IID            *features,
+                               ID3D12DeviceFactory **outFactory) {
+  return dx12_newAgilityFactory(featureCount,
+                                features,
+                                false,
+                                outFactory);
+}
+
+GPU_HIDE
 HRESULT
-dx12_createNativeDevice(const GPUInstanceDX12 *instance,
-                        IUnknown               *adapter,
-                        REFIID                  iid,
-                        void                  **outDevice) {
-  if (!instance || !instance->deviceFactory || !outDevice) {
+dx12_createNativeDevice(ID3D12DeviceFactory *factory,
+                        IUnknown             *adapter,
+                        REFIID                iid,
+                        void                **outDevice) {
+  if (!factory || !outDevice) {
     return E_INVALIDARG;
   }
-  return instance->deviceFactory->lpVtbl->CreateDevice(
-    instance->deviceFactory,
+  return factory->lpVtbl->CreateDevice(
+    factory,
     adapter,
     D3D_FEATURE_LEVEL_11_0,
     iid,
@@ -203,35 +233,17 @@ dx12_createNativeDevice(const GPUInstanceDX12 *instance,
 
 GPU_HIDE
 HRESULT
-dx12_getConfigurationInterface(const GPUInstanceDX12 *instance,
-                               REFCLSID                classId,
-                               REFIID                  interfaceId,
-                               void                  **outInterface) {
-  if (!instance || !instance->deviceFactory || !outInterface) {
+dx12_getConfigurationInterface(ID3D12DeviceFactory *factory,
+                               REFCLSID              classId,
+                               REFIID                interfaceId,
+                               void                **outInterface) {
+  if (!factory || !outInterface) {
     return E_INVALIDARG;
   }
-  return instance->deviceFactory->lpVtbl->GetConfigurationInterface(
-    instance->deviceFactory,
+  return factory->lpVtbl->GetConfigurationInterface(
+    factory,
     classId,
     interfaceId,
     outInterface
-  );
-}
-
-GPU_HIDE
-HRESULT
-dx12_enableExperimentalFeatures(const GPUInstanceDX12 *instance,
-                                uint32_t                featureCount,
-                                const IID              *features) {
-  if (!instance || !instance->deviceFactory ||
-      featureCount == 0u || !features) {
-    return E_INVALIDARG;
-  }
-  return instance->deviceFactory->lpVtbl->EnableExperimentalFeatures(
-    instance->deviceFactory,
-    featureCount,
-    features,
-    NULL,
-    NULL
   );
 }

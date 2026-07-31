@@ -167,7 +167,6 @@ GPUSampleAppleCreate(void                *nativeView,
   GPUDeviceCreateInfo   deviceInfo   = {0};
   GPURuntimeConfig      runtimeInfo  = {0};
   GPUAppleSample       *sample;
-  uint32_t              adapterCount;
 
   if (!nativeView || !name || contentScale <= 0.0f || !start ||
       activeSample) {
@@ -194,11 +193,8 @@ GPUSampleAppleCreate(void                *nativeView,
     goto fail;
   }
 
-  adapterCount = 1u;
-  if (GPUEnumerateAdapters(sample->instance,
-                           &adapterCount,
-                           &sample->adapter) != GPU_OK ||
-      !sample->adapter) {
+  sample->adapter = GPUGetAutoSelectedAdapter(sample->instance);
+  if (!sample->adapter) {
     goto fail;
   }
 

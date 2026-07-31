@@ -114,15 +114,17 @@ discard_commands(GPUCommandBuffer **commands, uint32_t count) {
 
 int
 main(void) {
-  GPUInstanceCreateInfo instanceInfo = {0};
-  GPUQueueSubmitInfo    submitInfo = {0};
-  GPUCommandBuffer     *commands[COMMANDS_PER_BATCH] = {0};
-  AdapterRequest        adapterRequest = {0};
-  DeviceRequest         deviceRequest = {0};
-  CompletionProbe       completion = {0};
-  GPUInstance          *instance;
-  GPUQueue             *queue;
-  GPUResult             result;
+  GPUInstanceCreateInfo     instanceInfo = {0};
+  GPUAdapterRequestOptions  adapterOptions = {0};
+  GPUQueueSubmitInfo        submitInfo = {0};
+  GPUCommandBuffer         *commands[COMMANDS_PER_BATCH] = {0};
+  AdapterRequest            adapterRequest = {0};
+  DeviceRequest             deviceRequest = {0};
+  CompletionProbe           completion = {0};
+  GPUInstance              *instance;
+  GPUQueue                 *queue;
+  GPUFeature                requiredFeature;
+  GPUResult                 result;
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
@@ -137,7 +139,16 @@ main(void) {
     return 1;
   }
 
-  result = GPURequestAdapter(instance, adapter_ready, &adapterRequest);
+  requiredFeature                       = GPU_FEATURE_COMPUTE;
+  adapterOptions.chain.sType            =
+    GPU_STRUCTURE_TYPE_ADAPTER_REQUEST_OPTIONS;
+  adapterOptions.chain.structSize       = sizeof(adapterOptions);
+  adapterOptions.pRequiredFeatures       = &requiredFeature;
+  adapterOptions.requiredFeatureCount    = 1u;
+  result = GPURequestAdapter(instance,
+                             &adapterOptions,
+                             adapter_ready,
+                             &adapterRequest);
   if (result != GPU_OK || !wait_bool(&adapterRequest.done) ||
       adapterRequest.result != GPU_OK || !adapterRequest.adapter) {
     fprintf(stderr, "failed to request WebGPU adapter: %d\n",

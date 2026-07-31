@@ -180,6 +180,7 @@ webgpu_adapterReady(WGPURequestAdapterStatus status,
 
 static GPUResult
 webgpu_requestAdapter(GPUInstance                      *instance,
+                      GPUPowerPreference                powerPreference,
                       GPUBackendAdapterRequestCallback  callback,
                       void                             *userData) {
   WGPURequestAdapterCallbackInfo callbackInfo =
@@ -201,8 +202,19 @@ webgpu_requestAdapter(GPUInstance                      *instance,
   request->callback = callback;
   request->userData = userData;
 
-  options.featureLevel    = WGPUFeatureLevel_Core;
-  options.powerPreference = WGPUPowerPreference_HighPerformance;
+  options.featureLevel = WGPUFeatureLevel_Core;
+  switch (powerPreference) {
+    case GPU_POWER_PREFERENCE_LOW_POWER:
+      options.powerPreference = WGPUPowerPreference_LowPower;
+      break;
+    case GPU_POWER_PREFERENCE_HIGH_PERFORMANCE:
+      options.powerPreference = WGPUPowerPreference_HighPerformance;
+      break;
+    case GPU_POWER_PREFERENCE_DEFAULT:
+    default:
+      options.powerPreference = WGPUPowerPreference_Undefined;
+      break;
+  }
   callbackInfo.mode       = WGPUCallbackMode_AllowSpontaneous;
   callbackInfo.callback   = webgpu_adapterReady;
   callbackInfo.userdata1  = request;

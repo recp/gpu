@@ -86,8 +86,7 @@ gpu_android_create(GPUAndroidSample *sample) {
   GPUDeviceCreateInfo   deviceInfo        = {0};
   GPURuntimeConfig      runtime           = {0};
   GPUFeature            features[16];
-  GPUResult             result;
-  uint32_t              adapterCount, featureCount;
+  uint32_t              featureCount;
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
@@ -99,12 +98,8 @@ gpu_android_create(GPUAndroidSample *sample) {
     return GPUSampleAndroidFail(sample, "instance");
   }
 
-  adapterCount = 1u;
-  result = GPUEnumerateAdapters(sample->instance,
-                                &adapterCount,
-                                &sample->adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !sample->adapter) {
+  sample->adapter = GPUGetAutoSelectedAdapter(sample->instance);
+  if (!sample->adapter) {
     return GPUSampleAndroidFail(sample, "adapter");
   }
 

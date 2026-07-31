@@ -1,6 +1,13 @@
 #include "test.h"
 
 static int
+run_adapter_request(void *ctx) {
+  return gpu_test_adapter_request_options(
+    ((GPUApiTestContext *)ctx)->instance
+  );
+}
+
+static int
 run_queue(void *ctx) {
   GPUApiTestContext *testCtx = ctx;
 
@@ -309,7 +316,7 @@ main(int argc, char **argv) {
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUApiTestContext      ctx;
-  GPUApiTest             tests[36];
+  GPUApiTest             tests[37];
   int                    ok;
 
   if (argc != 14 && argc != 15) {
@@ -403,54 +410,55 @@ main(int argc, char **argv) {
   ctx.untypedPointerBytecodePath =
     getenv("GPU_UNTYPED_POINTER_USL_PATH");
 
-  tests[0]  = (GPUApiTest){ "queue", run_queue, &ctx };
-  tests[1]  = (GPUApiTest){ "sampler", run_sampler, &ctx };
-  tests[2]  = (GPUApiTest){ "bindgroup", run_bindgroup, &ctx };
-  tests[3]  = (GPUApiTest){ "resources", run_resources, &ctx };
-  tests[4]  = (GPUApiTest){ "threading", run_threading, &ctx };
-  tests[5]  = (GPUApiTest){ "copy", run_copy, &ctx };
-  tests[6]  = (GPUApiTest){ "render", run_render, &ctx };
-  tests[7]  = (GPUApiTest){ "compute", run_compute, &ctx };
-  tests[8]  = (GPUApiTest){ "query", run_query, &ctx };
-  tests[9]  = (GPUApiTest){ "barrier", run_barrier, &ctx };
-  tests[10] = (GPUApiTest){ "memory", run_memory, &ctx };
-  tests[11] = (GPUApiTest){ "runtime", run_runtime, &ctx };
-  tests[12] = (GPUApiTest){ "shader", run_shader, &ctx };
-  tests[13] = (GPUApiTest){ "source-sampler", run_source_sampler, &ctx };
-  tests[14] = (GPUApiTest){ "storage-texture", run_storage_texture, &ctx };
-  tests[15] = (GPUApiTest){ "cube-texture", run_cube_texture, &ctx };
-  tests[16] = (GPUApiTest){ "line-texture", run_line_texture, &ctx };
-  tests[17] = (GPUApiTest){ "volume-texture", run_volume_texture, &ctx };
-  tests[18] = (GPUApiTest){ "descriptor-array", run_descriptor_array, &ctx };
-  tests[19] = (GPUApiTest){
+  tests[0]  = (GPUApiTest){ "adapter-request", run_adapter_request, &ctx };
+  tests[1]  = (GPUApiTest){ "queue", run_queue, &ctx };
+  tests[2]  = (GPUApiTest){ "sampler", run_sampler, &ctx };
+  tests[3]  = (GPUApiTest){ "bindgroup", run_bindgroup, &ctx };
+  tests[4]  = (GPUApiTest){ "resources", run_resources, &ctx };
+  tests[5]  = (GPUApiTest){ "threading", run_threading, &ctx };
+  tests[6]  = (GPUApiTest){ "copy", run_copy, &ctx };
+  tests[7]  = (GPUApiTest){ "render", run_render, &ctx };
+  tests[8]  = (GPUApiTest){ "compute", run_compute, &ctx };
+  tests[9]  = (GPUApiTest){ "query", run_query, &ctx };
+  tests[10] = (GPUApiTest){ "barrier", run_barrier, &ctx };
+  tests[11] = (GPUApiTest){ "memory", run_memory, &ctx };
+  tests[12] = (GPUApiTest){ "runtime", run_runtime, &ctx };
+  tests[13] = (GPUApiTest){ "shader", run_shader, &ctx };
+  tests[14] = (GPUApiTest){ "source-sampler", run_source_sampler, &ctx };
+  tests[15] = (GPUApiTest){ "storage-texture", run_storage_texture, &ctx };
+  tests[16] = (GPUApiTest){ "cube-texture", run_cube_texture, &ctx };
+  tests[17] = (GPUApiTest){ "line-texture", run_line_texture, &ctx };
+  tests[18] = (GPUApiTest){ "volume-texture", run_volume_texture, &ctx };
+  tests[19] = (GPUApiTest){ "descriptor-array", run_descriptor_array, &ctx };
+  tests[20] = (GPUApiTest){
     "descriptor-indexing", run_descriptor_indexing, &ctx
   };
-  tests[20] = (GPUApiTest){ "subgroup", run_subgroup, &ctx };
-  tests[21] = (GPUApiTest){
+  tests[21] = (GPUApiTest){ "subgroup", run_subgroup, &ctx };
+  tests[22] = (GPUApiTest){
     "subgroup-matrix", run_subgroup_matrix, &ctx
   };
-  tests[22] = (GPUApiTest){ "shader-f16", run_shader_f16, &ctx };
-  tests[23] = (GPUApiTest){ "bindless", run_bindless, &ctx };
-  tests[24] = (GPUApiTest){ "coordinate", run_coordinate, &ctx };
-  tests[25] = (GPUApiTest){ "vrs", run_vrs, &ctx };
-  tests[26] = (GPUApiTest){ "ray-query", run_ray_query, &ctx };
-  tests[27] = (GPUApiTest){ "atomic64", run_atomic64, &ctx };
-  tests[28] = (GPUApiTest){ "ray-pipeline", run_ray_pipeline, &ctx };
-  tests[29] = (GPUApiTest){ "execution-graph", run_execution_graph, &ctx };
-  tests[30] = (GPUApiTest){
+  tests[23] = (GPUApiTest){ "shader-f16", run_shader_f16, &ctx };
+  tests[24] = (GPUApiTest){ "bindless", run_bindless, &ctx };
+  tests[25] = (GPUApiTest){ "coordinate", run_coordinate, &ctx };
+  tests[26] = (GPUApiTest){ "vrs", run_vrs, &ctx };
+  tests[27] = (GPUApiTest){ "ray-query", run_ray_query, &ctx };
+  tests[28] = (GPUApiTest){ "atomic64", run_atomic64, &ctx };
+  tests[29] = (GPUApiTest){ "ray-pipeline", run_ray_pipeline, &ctx };
+  tests[30] = (GPUApiTest){ "execution-graph", run_execution_graph, &ctx };
+  tests[31] = (GPUApiTest){
     "sampler-feedback", run_sampler_feedback, &ctx
   };
-  tests[31] = (GPUApiTest){
+  tests[32] = (GPUApiTest){
     "clock-derivatives", run_clock_derivatives, &ctx
   };
-  tests[32] = (GPUApiTest){
+  tests[33] = (GPUApiTest){
     "untyped-pointer", run_untyped_pointer, &ctx
   };
-  tests[33] = (GPUApiTest){
+  tests[34] = (GPUApiTest){
     "buffer-descriptor-array", run_buffer_descriptor_array, &ctx
   };
-  tests[34] = (GPUApiTest){ "msaa", run_msaa, &ctx };
-  tests[35] = (GPUApiTest){
+  tests[35] = (GPUApiTest){ "msaa", run_msaa, &ctx };
+  tests[36] = (GPUApiTest){
     "intersection-function-table", run_intersection_function, &ctx
   };
 

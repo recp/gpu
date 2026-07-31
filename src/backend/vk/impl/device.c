@@ -2233,8 +2233,9 @@ vk_getAvailableAdapters(GPUInstance * __restrict inst,
 
 GPU_HIDE
 GPUAdapter *
-vk_selectAdapter(GPUInstance * __restrict inst,
-                 GPUAdapter  * __restrict adapters) {
+vk_selectAdapter(GPUInstance        * __restrict inst,
+                 GPUAdapter         * __restrict adapters,
+                 GPUPowerPreference              powerPreference) {
   GPUAdapter   *adapter;
   GPUAdapterVk *adapterVk;
   GPUAdapter   *adaptersByType[VK_PHYSICAL_DEVICE_TYPE_CPU + 1] = {0};
@@ -2242,6 +2243,9 @@ vk_selectAdapter(GPUInstance * __restrict inst,
   uint32_t      i;
 
   GPU__UNUSED(inst);
+  if (powerPreference == GPU_POWER_PREFERENCE_DEFAULT) {
+    return adapters;
+  }
   adapter   = adapters;
   adapterVk = NULL;
 
@@ -2253,8 +2257,13 @@ vk_selectAdapter(GPUInstance * __restrict inst,
     adapter = adapter->next;
   }
 
-  priorityList[0] = adaptersByType[VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU];
-  priorityList[1] = adaptersByType[VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU];
+  if (powerPreference == GPU_POWER_PREFERENCE_LOW_POWER) {
+    priorityList[0] = adaptersByType[VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU];
+    priorityList[1] = adaptersByType[VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU];
+  } else {
+    priorityList[0] = adaptersByType[VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU];
+    priorityList[1] = adaptersByType[VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU];
+  }
   priorityList[2] = adaptersByType[VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU];
   priorityList[3] = adaptersByType[VK_PHYSICAL_DEVICE_TYPE_CPU];
   priorityList[4] = adaptersByType[VK_PHYSICAL_DEVICE_TYPE_OTHER];

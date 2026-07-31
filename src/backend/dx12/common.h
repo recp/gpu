@@ -36,7 +36,7 @@
 #include "../../api/swapchain_internal.h"
 #include "../../api/texture_internal.h"
 
-#include <dxgi1_5.h>
+#include <dxgi1_6.h>
 #include <d3d12.h>
 
 #if defined(__ID3D12GraphicsCommandList10_INTERFACE_DEFINED__) && \
@@ -69,11 +69,17 @@ typedef struct GPUAdapterDX12 {
   IUnknown                          *dxgiAdapter;
   GPUSubgroupMatrixPropertiesEXT   *subgroupMatrixProperties;
   DXGI_ADAPTER_DESC1                 desc1;
+  SRWLOCK                            capabilityLock;
   SRWLOCK                            formatCapsLock;
+  SRWLOCK                            subgroupMatrixLock;
   GPUShadingRateFlagsEXT             vrsRates;
   GPUShadingRateCombinerFlagsEXT     vrsCombiners;
   D3D12_VARIABLE_SHADING_RATE_TIER   vrsTier;
   D3D12_TILED_RESOURCES_TIER         tiledResourcesTier;
+  D3D_SHADER_MODEL                   shaderModel;
+  LONG                               capabilityState;
+  LONG                               subgroupMatrixState;
+  uint32_t                           dxcTargetProfile;
   uint32_t                           samplerFeedbackTier;
   uint32_t                           minSubgroupSize;
   uint32_t                           maxSubgroupSize;
@@ -634,10 +640,10 @@ struct GPUQueueDX12 {
 
 typedef struct GPUInstanceDX12 {
   ID3D12DeviceFactory *deviceFactory;
+  ID3D12DeviceFactory *linearAlgebraFactory;
   IDXGIFactory4       *dxgiFactory;
   UINT                 dxgiFactoryFlags;
   bool                 allowTearing;
-  bool                 linearAlgebra;
 } GPUInstanceDX12;
 
 typedef struct GPUSamplerDX12 {

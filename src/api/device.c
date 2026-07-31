@@ -22,6 +22,10 @@
 #include "pass/blit_internal.h"
 #include "pipeline_cache_internal.h"
 
+#if !defined(_WIN32) && !defined(WIN32)
+#  include <sched.h>
+#endif
+
 static const char*
 gpu_backendName(GPUBackend backend) {
   switch (backend) {
@@ -101,9 +105,57 @@ gpu_knownFeature(GPUFeature feature) {
          feature <= GPU_FEATURE_INTERSECTION_FUNCTION_TABLE;
 }
 
+static bool
+gpu_validPowerPreference(GPUPowerPreference preference) {
+  return preference == GPU_POWER_PREFERENCE_DEFAULT ||
+         preference == GPU_POWER_PREFERENCE_LOW_POWER ||
+         preference == GPU_POWER_PREFERENCE_HIGH_PERFORMANCE;
+}
+
 static uint64_t
 gpu_featureBit(GPUFeature feature) {
   return 1ull << (uint32_t)feature;
+}
+
+static GPUResult
+gpu_adapterRequestMask(const GPUAdapterRequestOptions *options,
+                       GPUPowerPreference              *outPreference,
+                       uint64_t                        *outRequiredMask) {
+  GPUPowerPreference preference;
+  uint64_t           mask;
+
+  if (!outPreference || !outRequiredMask) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  preference = GPU_POWER_PREFERENCE_DEFAULT;
+  mask       = 0u;
+  if (options) {
+    if ((options->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
+         options->chain.sType != GPU_STRUCTURE_TYPE_ADAPTER_REQUEST_OPTIONS) ||
+        (options->chain.structSize != 0u &&
+         options->chain.structSize < sizeof(*options)) ||
+        !gpu_validPowerPreference(options->powerPreference) ||
+        (options->requiredFeatureCount > 0u &&
+         !options->pRequiredFeatures)) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+
+    preference = options->powerPreference;
+    for (uint32_t i = 0u; i < options->requiredFeatureCount; i++) {
+      GPUFeature feature;
+
+      feature = options->pRequiredFeatures[i];
+      if (!gpu_knownFeature(feature)) {
+        return GPU_ERROR_INVALID_ARGUMENT;
+      }
+      mask |= gpu_featureBit(feature);
+    }
+  }
+
+  *outPreference = preference;
+  *outRequiredMask = mask;
+  return GPU_OK;
 }
 
 static bool
@@ -148,6 +200,22 @@ gpu_adapterSupportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
   }
 
   return gpu_builtinSupportedFeature(api, feature);
+}
+
+static bool
+gpu_adapterSupportsMask(const GPUAdapter *adapter, uint64_t requiredMask) {
+  for (GPUFeature feature = GPU_FEATURE_COMPUTE;
+       feature <= GPU_FEATURE_INTERSECTION_FUNCTION_TABLE;
+       feature = (GPUFeature)(feature + 1)) {
+    uint64_t bit;
+
+    bit = gpu_featureBit(feature);
+    if ((requiredMask & bit) != 0u &&
+        !gpu_adapterSupportsFeature(adapter, feature)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 static uint64_t
@@ -276,6 +344,35 @@ gpu_fillFeatureSet(uint64_t       mask,
 
   outSet->featureCount = count;
   outSet->pFeatures    = count ? storage : NULL;
+}
+
+static void
+gpu_ensureAdapterFeatureSet(GPUAdapter *adapter) {
+  if (!adapter || gpuAdapterFeatureStateLoad(adapter) == 2u) {
+    return;
+  }
+
+  if (gpuAdapterFeatureStateBegin(adapter)) {
+    uint64_t mask;
+
+    mask = gpu_supportedFeatureMask(adapter);
+    gpu_fillFeatureSet(mask,
+                       adapter->supportedFeatureStorage,
+                       (uint32_t)GPU_ARRAY_LEN(
+                         adapter->supportedFeatureStorage
+                       ),
+                       &adapter->supportedFeatures);
+    gpuAdapterFeatureStateComplete(adapter);
+    return;
+  }
+
+  while (gpuAdapterFeatureStateLoad(adapter) != 2u) {
+#if defined(_WIN32) || defined(WIN32)
+    SwitchToThread();
+#else
+    sched_yield();
+#endif
+  }
 }
 
 static GPUResult
@@ -814,10 +911,6 @@ gpu_getInstanceAdapters(GPUInstance *inst) {
   count = 0u;
   for (item = inst->_adapters; item; item = item->next) {
     item->inst = inst;
-    gpu_fillFeatureSet(gpu_supportedFeatureMask(item),
-                       item->supportedFeatureStorage,
-                       (uint32_t)GPU_ARRAY_LEN(item->supportedFeatureStorage),
-                       &item->supportedFeatures);
     count++;
   }
   inst->_adapterCount = count;
@@ -825,10 +918,92 @@ gpu_getInstanceAdapters(GPUInstance *inst) {
   return inst->_adapters;
 }
 
+static uint32_t
+gpu_adapterPreferenceRank(const GPUAdapter *adapter,
+                          GPUPowerPreference preference) {
+  GPUAdapterProperties properties;
+
+  if (GPUGetAdapterProperties(adapter, &properties) != GPU_OK) {
+    return 3u;
+  }
+
+  if (preference == GPU_POWER_PREFERENCE_LOW_POWER) {
+    switch (properties.type) {
+      case GPU_ADAPTER_TYPE_INTEGRATED:
+        return 0u;
+      case GPU_ADAPTER_TYPE_DISCRETE:
+        return 1u;
+      case GPU_ADAPTER_TYPE_UNKNOWN:
+        return 2u;
+      case GPU_ADAPTER_TYPE_SOFTWARE:
+        return 3u;
+    }
+  }
+
+  switch (properties.type) {
+    case GPU_ADAPTER_TYPE_DISCRETE:
+      return 0u;
+    case GPU_ADAPTER_TYPE_INTEGRATED:
+      return 1u;
+    case GPU_ADAPTER_TYPE_UNKNOWN:
+      return 2u;
+    case GPU_ADAPTER_TYPE_SOFTWARE:
+      return 3u;
+  }
+  return 3u;
+}
+
+static GPUAdapter *
+gpu_selectRequestedAdapter(GPUInstance       *inst,
+                           GPUPowerPreference preference,
+                           uint64_t           requiredFeatureMask) {
+  GPUAdapter *adapters;
+  GPUAdapter *preferred;
+  GPUAdapter *best;
+  GPUApi     *api;
+  uint32_t    bestRank;
+
+  if (!(api = gpuInstanceApi(inst)) ||
+      !(adapters = gpu_getInstanceAdapters(inst))) {
+    return NULL;
+  }
+
+  preferred = adapters;
+  if (api->device.selectAdapter) {
+    preferred = api->device.selectAdapter(inst, adapters, preference);
+  }
+  if (preferred &&
+      gpu_adapterSupportsMask(preferred, requiredFeatureMask)) {
+    return preferred;
+  }
+
+  best     = NULL;
+  bestRank = UINT32_MAX;
+  for (GPUAdapter *adapter = adapters; adapter; adapter = adapter->next) {
+    uint32_t rank;
+
+    if (adapter == preferred ||
+        !gpu_adapterSupportsMask(adapter, requiredFeatureMask)) {
+      continue;
+    }
+    if (preference == GPU_POWER_PREFERENCE_DEFAULT) {
+      return adapter;
+    }
+
+    rank = gpu_adapterPreferenceRank(adapter, preference);
+    if (rank < bestRank) {
+      best     = adapter;
+      bestRank = rank;
+    }
+  }
+  return best;
+}
+
 typedef struct GPUAdapterRequestContext {
   GPUInstance               *instance;
   GPUAdapterRequestCallback  callback;
   void                      *userData;
+  uint64_t                   requiredFeatureMask;
 } GPUAdapterRequestContext;
 
 static void
@@ -842,10 +1017,19 @@ gpu_completeAdapterRequest(GPUResult  result,
   instance = request->instance;
   if (result == GPU_OK && adapter) {
     adapter->inst = instance;
-    gpu_fillFeatureSet(gpu_supportedFeatureMask(adapter),
-                       adapter->supportedFeatureStorage,
-                       (uint32_t)GPU_ARRAY_LEN(adapter->supportedFeatureStorage),
-                       &adapter->supportedFeatures);
+  }
+  if (result == GPU_OK && adapter &&
+      !gpu_adapterSupportsMask(adapter, request->requiredFeatureMask)) {
+    GPUApi *api;
+
+    api = gpuInstanceApi(instance);
+    if (api && api->device.destroyAdapter) {
+      api->device.destroyAdapter(adapter);
+    }
+    adapter = NULL;
+    result  = GPU_ERROR_UNSUPPORTED;
+  }
+  if (result == GPU_OK && adapter) {
     adapter->next                  = instance->_adapters;
     instance->_adapters            = adapter;
     instance->_adapterCount++;
@@ -897,26 +1081,41 @@ GPUEnumerateAdapters(GPUInstance *inst,
 
 GPU_EXPORT
 GPUResult
-GPURequestAdapter(GPUInstance               *inst,
-                  GPUAdapterRequestCallback  callback,
-                  void                      *userData) {
+GPURequestAdapter(GPUInstance                    *inst,
+                  const GPUAdapterRequestOptions *options,
+                  GPUAdapterRequestCallback       callback,
+                  void                           *userData) {
   GPUAdapterRequestContext *request;
   GPUAdapter               *adapter;
   GPUApi                   *api;
   GPUResult                 result;
+  GPUPowerPreference        preference;
+  uint64_t                  requiredFeatureMask;
 
   if (!inst || !callback || !(api = gpuInstanceApi(inst))) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  result = gpu_adapterRequestMask(options,
+                                  &preference,
+                                  &requiredFeatureMask);
+  if (result != GPU_OK) {
+    return result;
+  }
 
   if (inst->_adapters) {
-    callback(GPU_OK, inst->_adapters, userData);
-    return GPU_OK;
+    adapter = gpu_selectRequestedAdapter(inst,
+                                         preference,
+                                         requiredFeatureMask);
+    result = adapter ? GPU_OK : GPU_ERROR_UNSUPPORTED;
+    callback(result, adapter, userData);
+    return result;
   }
 
   if (!api->device.requestAdapter) {
-    adapter = GPUGetAutoSelectedAdapter(inst);
-    result  = adapter ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+    adapter = gpu_selectRequestedAdapter(inst,
+                                         preference,
+                                         requiredFeatureMask);
+    result  = adapter ? GPU_OK : GPU_ERROR_UNSUPPORTED;
     callback(result, adapter, userData);
     return result;
   }
@@ -928,8 +1127,10 @@ GPURequestAdapter(GPUInstance               *inst,
   request->instance = inst;
   request->callback = callback;
   request->userData = userData;
+  request->requiredFeatureMask = requiredFeatureMask;
 
   result = api->device.requestAdapter(inst,
+                                      preference,
                                       gpu_completeAdapterRequest,
                                       request);
   if (result != GPU_OK) {
@@ -973,6 +1174,7 @@ GPUGetAdapterCapabilities(const GPUAdapter       *adapter,
   }
 
   memset(outCaps, 0, sizeof(*outCaps));
+  gpu_ensureAdapterFeatureSet((GPUAdapter *)adapter);
   outCaps->supported = adapter->supportedFeatures;
   gpu_fillAdapterLimits(adapter, &outCaps->limits);
 
@@ -1672,18 +1874,9 @@ GPUGetProcAddr(GPUDevice *device, const char *name) {
 GPU_EXPORT
 GPUAdapter *
 GPUGetAutoSelectedAdapter(GPUInstance *inst) {
-  GPUAdapter *adapter;
-  GPUApi     *api;
-
-  if (!(api = gpuInstanceApi(inst))) {
-    return NULL;
-  }
-
-  adapter = gpu_getInstanceAdapters(inst);
-  if (api->device.selectAdapter) {
-    adapter = api->device.selectAdapter(inst, adapter);
-  }
-  return adapter;
+  return gpu_selectRequestedAdapter(inst,
+                                    GPU_POWER_PREFERENCE_DEFAULT,
+                                    0u);
 }
 
 static GPUResult

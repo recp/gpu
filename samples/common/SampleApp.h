@@ -49,18 +49,7 @@ GPUSampleCreateWindow(NSString *title,
 
 static inline GPUAdapter *
 GPUSampleSelectAdapter(GPUInstance *instance) {
-  GPUAdapter *adapter;
-  uint32_t    adapterCount;
-  GPUResult   result;
-
-  adapter      = NULL;
-  adapterCount = 1;
-  result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter) {
-    return NULL;
-  }
-  return adapter;
+  return GPUGetAutoSelectedAdapter(instance);
 }
 
 static inline BOOL

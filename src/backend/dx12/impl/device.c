@@ -595,9 +595,8 @@ dx12_loadDXCompiler(void) {
 }
 
 static bool
-dx12_probeAdapter(const GPUInstanceDX12 *instance,
-                  GPUAdapterDX12        *adapter,
-                  bool                   linearAlgebra) {
+dx12_queryAdapterCapabilities(const GPUInstanceDX12 *instance,
+                              GPUAdapterDX12        *adapter) {
   ID3D12Device    *device;
   D3D12_FEATURE_DATA_D3D12_OPTIONS options = {0};
   D3D_SHADER_MODEL shaderModel;
@@ -611,17 +610,23 @@ dx12_probeAdapter(const GPUInstanceDX12 *instance,
   }
 
   device = NULL;
-  result = dx12_createNativeDevice(instance,
+  result = dx12_createNativeDevice(instance->deviceFactory,
                                    adapter->dxgiAdapter,
                                    &IID_ID3D12Device,
                                    (void **)&device);
   if (FAILED(result) || !device) {
+    fprintf(stderr,
+            "GPU: Direct3D 12 adapter probe failed for %s (0x%08lx)\n",
+            adapter->name[0] ? adapter->name : "unknown adapter",
+            (unsigned long)result);
     return false;
   }
 
   shaderModel        = dx12_queryShaderModel(device);
   dxcModule          = dx12_loadDXCompiler();
   dxcTargetProfile   = dx12_queryDXCTargetProfile(dxcModule);
+  adapter->shaderModel      = shaderModel;
+  adapter->dxcTargetProfile = dxcTargetProfile;
   adapter->subgroups =
     dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_0 &&
                        shaderModel >= D3D_SHADER_MODEL_6_0 &&
@@ -656,12 +661,6 @@ dx12_probeAdapter(const GPUInstanceDX12 *instance,
     dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_5
     ? dx12_querySamplerFeedback(device, shaderModel, NULL)
     : 0u;
-  if (linearAlgebra &&
-      dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_10 &&
-      dx12_hasLinearAlgebraCompiler(dxcModule) &&
-      shaderModel >= (D3D_SHADER_MODEL)0x6a) {
-    dx12_querySubgroupMatrices(adapter, device);
-  }
   adapter->tiledResourcesTier = D3D12_TILED_RESOURCES_TIER_NOT_SUPPORTED;
   if (SUCCEEDED(device->lpVtbl->CheckFeatureSupport(
         device,
@@ -696,6 +695,84 @@ dx12_probeAdapter(const GPUInstanceDX12 *instance,
   }
   device->lpVtbl->Release(device);
   return true;
+}
+
+static bool
+dx12_ensureAdapterCapabilities(const GPUAdapter *adapter) {
+  GPUAdapterDX12  *adapterDX12;
+  GPUInstanceDX12 *instanceDX12;
+  LONG             state;
+  bool             ready;
+
+  adapterDX12  = adapter ? adapter->_priv : NULL;
+  instanceDX12 = adapter && adapter->inst ? adapter->inst->_priv : NULL;
+  if (!adapterDX12 || !instanceDX12) {
+    return false;
+  }
+
+  state = InterlockedCompareExchange(&adapterDX12->capabilityState, 0, 0);
+  if (state != 0) {
+    return state > 0;
+  }
+
+  AcquireSRWLockExclusive(&adapterDX12->capabilityLock);
+  state = InterlockedCompareExchange(&adapterDX12->capabilityState, 0, 0);
+  if (state == 0) {
+    ready = dx12_queryAdapterCapabilities(instanceDX12, adapterDX12);
+    InterlockedExchange(&adapterDX12->capabilityState, ready ? 1 : -1);
+  }
+  state = InterlockedCompareExchange(&adapterDX12->capabilityState, 0, 0);
+  ReleaseSRWLockExclusive(&adapterDX12->capabilityLock);
+  return state > 0;
+}
+
+static bool
+dx12_ensureSubgroupMatrices(const GPUAdapter *adapter) {
+  GPUAdapterDX12  *adapterDX12;
+  GPUInstanceDX12 *instanceDX12;
+  ID3D12Device    *device;
+  HMODULE          dxcModule;
+  LONG             state;
+
+  adapterDX12  = adapter ? adapter->_priv : NULL;
+  instanceDX12 = adapter && adapter->inst ? adapter->inst->_priv : NULL;
+  if (!adapterDX12 || !instanceDX12 ||
+      !dx12_ensureAdapterCapabilities(adapter)) {
+    return false;
+  }
+
+  state = InterlockedCompareExchange(&adapterDX12->subgroupMatrixState, 0, 0);
+  if (state != 0) {
+    return adapterDX12->subgroupMatrixPropertyCount > 0u;
+  }
+
+  AcquireSRWLockExclusive(&adapterDX12->subgroupMatrixLock);
+  state = InterlockedCompareExchange(&adapterDX12->subgroupMatrixState, 0, 0);
+  if (state == 0) {
+    device    = NULL;
+    dxcModule = dx12_loadDXCompiler();
+    if (instanceDX12->linearAlgebraFactory &&
+        adapterDX12->dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_10 &&
+        dx12_hasLinearAlgebraCompiler(dxcModule) &&
+        SUCCEEDED(dx12_createNativeDevice(
+          instanceDX12->linearAlgebraFactory,
+          adapterDX12->dxgiAdapter,
+          &IID_ID3D12Device,
+          (void **)&device
+        )) &&
+        device) {
+      if (dx12_queryShaderModel(device) >= (D3D_SHADER_MODEL)0x6a) {
+        dx12_querySubgroupMatrices(adapterDX12, device);
+      }
+      device->lpVtbl->Release(device);
+    }
+    if (dxcModule) {
+      FreeLibrary(dxcModule);
+    }
+    InterlockedExchange(&adapterDX12->subgroupMatrixState, 1);
+  }
+  ReleaseSRWLockExclusive(&adapterDX12->subgroupMatrixLock);
+  return adapterDX12->subgroupMatrixPropertyCount > 0u;
 }
 
 static GPUAdapterType
@@ -908,6 +985,7 @@ dx12_getAvailableAdapters(GPUInstance * __restrict inst,
   IDXGIAdapter1         *dxgiAdapter;
   IDXGIAdapter          *warpAdapter;
   UINT                   adapterIndex, i;
+  HRESULT                enumResult;
   HRESULT                hr;
   HRESULT              (*EnumAdapters1)(IDXGIFactory4*, UINT, IDXGIAdapter1**);
   bool                   forceWarp;
@@ -920,13 +998,19 @@ dx12_getAvailableAdapters(GPUInstance * __restrict inst,
   forceWarp     = getenv("GPU_DX12_FORCE_WARP") != NULL;
 
   /* loop until we either enumerate all devices or hit the maximum count. */
-  while (!forceWarp
-         && i < maxNumberOfItems
-         && SUCCEEDED(EnumAdapters1(dxgiFactory, adapterIndex, &dxgiAdapter))) {
+  enumResult = S_OK;
+  while (!forceWarp && i < maxNumberOfItems) {
+    dxgiAdapter = NULL;
+    enumResult  = EnumAdapters1(dxgiFactory, adapterIndex, &dxgiAdapter);
+    if (FAILED(enumResult)) {
+      break;
+    }
     if (dxgiAdapter) {
       adapterDX12              = calloc(1, sizeof(*adapterDX12));
       adapterDX12->dxgiAdapter = (IUnknown *)dxgiAdapter;
+      InitializeSRWLock(&adapterDX12->capabilityLock);
       InitializeSRWLock(&adapterDX12->formatCapsLock);
+      InitializeSRWLock(&adapterDX12->subgroupMatrixLock);
 
       dxgiAdapter->lpVtbl->GetDesc1(dxgiAdapter, &adapterDX12->desc1);
       dx12_fillAdapterName(adapterDX12);
@@ -934,14 +1018,6 @@ dx12_getAvailableAdapters(GPUInstance * __restrict inst,
       if (adapterDX12->desc1.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
         /* Don't select the Basic Render Driver adapter.*/
         /* Release the current adapter before moving to next */
-        dxgiAdapter->lpVtbl->Release(dxgiAdapter);
-        free(adapterDX12);
-        goto nxt;
-      }
-
-      if (!dx12_probeAdapter(instDX12,
-                             adapterDX12,
-                             instDX12->linearAlgebra)) {
         dxgiAdapter->lpVtbl->Release(dxgiAdapter);
         free(adapterDX12);
         goto nxt;
@@ -970,25 +1046,25 @@ dx12_getAvailableAdapters(GPUInstance * __restrict inst,
 
   /* Use WARP when requested or no hardware adapter is available. */
   if (forceWarp || !firstAdapter) {
-    DXCHECK(dxgiFactory->lpVtbl->EnumWarpAdapter(dxgiFactory, 
-                                                 &IID_IDXGIAdapter, 
-                                                 (void **)&warpAdapter));
+    hr = dxgiFactory->lpVtbl->EnumWarpAdapter(dxgiFactory,
+                                              &IID_IDXGIAdapter,
+                                              (void **)&warpAdapter);
+    if (FAILED(hr)) {
+      fprintf(stderr,
+              "GPU: failed to enumerate the Direct3D 12 WARP adapter "
+              "(0x%08lx)\n",
+              (unsigned long)hr);
+      goto err;
+    }
     adapter       = calloc(1, sizeof(*adapter));
     adapterDX12   = calloc(1, sizeof(*adapterDX12));
 
     adapterDX12->dxgiAdapter       = (IUnknown *)warpAdapter;
     adapterDX12->isWarp            = true;
+    InitializeSRWLock(&adapterDX12->capabilityLock);
     InitializeSRWLock(&adapterDX12->formatCapsLock);
+    InitializeSRWLock(&adapterDX12->subgroupMatrixLock);
     snprintf(adapterDX12->name, sizeof(adapterDX12->name), "WARP");
-    if (!dx12_probeAdapter(instDX12,
-                           adapterDX12,
-                           instDX12->linearAlgebra)) {
-      warpAdapter->lpVtbl->Release(warpAdapter);
-      free(adapterDX12);
-      free(adapter);
-      hr = E_FAIL;
-      goto err;
-    }
     adapter->_priv                      = adapterDX12;
     adapter->inst                       = inst;
     adapter->separatePresentQueue       = 1; /* builtin */
@@ -999,6 +1075,13 @@ dx12_getAvailableAdapters(GPUInstance * __restrict inst,
     firstAdapter = adapter;
   }
 
+  if (!firstAdapter && !forceWarp) {
+    fprintf(stderr,
+            "GPU: no usable Direct3D 12 adapter was found "
+            "(last DXGI result 0x%08lx)\n",
+            (unsigned long)enumResult);
+  }
+
   return firstAdapter;
 err:
   dxThrowIfFailed(hr);
@@ -1007,58 +1090,72 @@ err:
 
 GPU_HIDE
 GPUAdapter *
-dx12_selectAdapter(GPUInstance * __restrict inst,
-                   GPUAdapter  * __restrict adapters) {
-  GPUAdapter         *adapter;
-  GPUAdapterDX12     *adapterDX12;
-  GPUAdapter         *adaptersByType[4] = {0};
-  GPUAdapter         *priorityList[4];
-  DXGI_ADAPTER_DESC1 *desc;
-  uint32_t            i;
+dx12_selectAdapter(GPUInstance        * __restrict inst,
+                   GPUAdapter         * __restrict adapters,
+                   GPUPowerPreference              powerPreference) {
+  GPUInstanceDX12  *instDX12;
+  IDXGIFactory6    *factory6;
+  IDXGIAdapter1    *preferred;
+  DXGI_ADAPTER_DESC1 desc;
+  DXGI_GPU_PREFERENCE nativePreference;
+  GPUAdapter       *adapter;
+  HRESULT           hr;
 
-  GPU__UNUSED(inst);
-  adapter = adapters;
-
-  /* Classify devices into different categories based on criteria */
-  while (adapter) {
-    adapterDX12 = adapter->_priv;
-    desc        = &adapterDX12->desc1;
-
-    if (adapterDX12->isWarp) {
-      adaptersByType[3] = adapter; /* WARP */
-    } else if (desc->Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
-      adaptersByType[2] = adapter; /* Other software adapter */
-    } else if (desc->DedicatedVideoMemory > 1 * 1024 * 1024 * 1024) {
-      adaptersByType[0] = adapter; /* Discrete GPU */
-    } else {
-      adaptersByType[1] = adapter; /* Integrated GPU */
-    }
-
-    adapter = adapter->next;
+  if (powerPreference == GPU_POWER_PREFERENCE_DEFAULT) {
+    return adapters;
+  }
+  instDX12 = inst ? inst->_priv : NULL;
+  if (!instDX12 || !instDX12->dxgiFactory) {
+    return NULL;
   }
 
-  priorityList[0] = adaptersByType[0]; /* Discrete GPU   */
-  priorityList[1] = adaptersByType[1]; /* Integrated GPU */
-  priorityList[2] = adaptersByType[2]; /* Other          */
-  priorityList[3] = adaptersByType[3]; /* WARP           */
+  factory6 = NULL;
+  hr = instDX12->dxgiFactory->lpVtbl->QueryInterface(
+    instDX12->dxgiFactory,
+    &IID_IDXGIFactory6,
+    (void **)&factory6
+  );
+  if (FAILED(hr) || !factory6) {
+    return NULL;
+  }
 
-  for (i = 0u; i < GPU_ARRAY_LEN(priorityList) &&
-                  !(adapter = priorityList[i]); i++);
+  nativePreference = powerPreference == GPU_POWER_PREFERENCE_LOW_POWER
+    ? DXGI_GPU_PREFERENCE_MINIMUM_POWER
+    : DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE;
+  adapter = NULL;
+  for (UINT index = 0u; ; index++) {
+    preferred = NULL;
+    hr = factory6->lpVtbl->EnumAdapterByGpuPreference(
+      factory6,
+      index,
+      nativePreference,
+      &IID_IDXGIAdapter1,
+      (void **)&preferred
+    );
+    if (FAILED(hr) || !preferred) {
+      break;
+    }
 
-  if (!adapter) { goto err; }
+    memset(&desc, 0, sizeof(desc));
+    preferred->lpVtbl->GetDesc1(preferred, &desc);
+    preferred->lpVtbl->Release(preferred);
+    for (GPUAdapter *item = adapters; item; item = item->next) {
+      GPUAdapterDX12 *itemDX12;
 
-#ifdef DEBUG
-  desc = &((GPUAdapterDX12 *)adapter->_priv)->desc1;
-  fprintf(stderr,
-          "Selected GPU: %S, type: %d\n",
-          desc->Description,
-          desc->VendorId);
-#endif
-
+      itemDX12 = item->_priv;
+      if (itemDX12 &&
+          itemDX12->desc1.AdapterLuid.HighPart == desc.AdapterLuid.HighPart &&
+          itemDX12->desc1.AdapterLuid.LowPart == desc.AdapterLuid.LowPart) {
+        adapter = item;
+        break;
+      }
+    }
+    if (adapter) {
+      break;
+    }
+  }
+  factory6->lpVtbl->Release(factory6);
   return adapter;
-
-err:
-  return NULL;
 }
 
 GPU_HIDE
@@ -1120,6 +1217,18 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
     case GPU_FEATURE_PLACED_RESOURCES:
     case GPU_FEATURE_BUFFER_DEVICE_ADDRESS:
       return true;
+    case GPU_FEATURE_TIMESTAMPS:
+    case GPU_FEATURE_PIPELINE_STATISTICS:
+      return dx12_queryResultsReliable(adapterDX12);
+    default:
+      break;
+  }
+
+  if (!dx12_ensureAdapterCapabilities(adapter)) {
+    return false;
+  }
+
+  switch (feature) {
     case GPU_FEATURE_SPARSE_TEXTURES:
     case GPU_FEATURE_SPARSE_BUFFERS:
     case GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT:
@@ -1149,10 +1258,7 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
     case GPU_FEATURE_SUBGROUPS:
       return adapterDX12->subgroups;
     case GPU_FEATURE_SUBGROUP_MATRIX:
-      return adapterDX12->subgroupMatrixPropertyCount > 0u;
-    case GPU_FEATURE_TIMESTAMPS:
-    case GPU_FEATURE_PIPELINE_STATISTICS:
-      return dx12_queryResultsReliable(adapterDX12);
+      return dx12_ensureSubgroupMatrices(adapter);
     default:
       return false;
   }
@@ -1176,7 +1282,8 @@ dx12_supportsSubgroupOperations(
   GPUAdapterDX12 *adapterDX12;
 
   adapterDX12 = adapter ? adapter->_priv : NULL;
-  return adapterDX12 && adapterDX12->subgroups &&
+  return adapterDX12 && dx12_ensureAdapterCapabilities(adapter) &&
+         adapterDX12->subgroups &&
          (supportedStages & stage) == stage &&
          (supportedOperations & operations) == operations;
 }
@@ -1194,6 +1301,8 @@ dx12_getSubgroupMatrixProperties(
   if (!adapterDX12 || !inoutPropertyCount) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
+  (void)dx12_ensureSubgroupMatrices(adapter);
 
   capacity = *inoutPropertyCount;
   count    = adapterDX12->subgroupMatrixPropertyCount;
@@ -1223,6 +1332,8 @@ dx12_getLimits(const GPUAdapter * __restrict adapter,
     return;
   }
 
+  (void)dx12_ensureAdapterCapabilities(adapter);
+
   outLimits->maxColorAttachments      = D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT;
   outLimits->maxComputeWorkgroupSizeX = D3D12_CS_THREAD_GROUP_MAX_X;
   outLimits->maxComputeWorkgroupSizeY = D3D12_CS_THREAD_GROUP_MAX_Y;
@@ -1244,6 +1355,7 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
   GPUAdapterDX12        *adapterDX12;
   GPUDevice             *device;
   GPUDeviceDX12         *deviceDX12;
+  ID3D12DeviceFactory   *deviceFactory;
   HRESULT                hr;
   uint32_t               queueCount;
   uint32_t               queueIndex;
@@ -1266,7 +1378,11 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
     goto err;
   }
 
-  hr = dx12_createNativeDevice(instDX12,
+  deviceFactory = instDX12->deviceFactory;
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_SUBGROUP_MATRIX)) != 0u) {
+    deviceFactory = instDX12->linearAlgebraFactory;
+  }
+  hr = dx12_createNativeDevice(deviceFactory,
                                adapterDX12->dxgiAdapter,
                                &IID_ID3D12Device,
                                (void **)&deviceDX12->d3dDevice);

@@ -138,9 +138,11 @@ destroy_ownership_adapter(GPUAdapter * __restrict adapter) {
 }
 
 static GPUAdapter *
-select_ownership_adapter(GPUInstance * __restrict instance,
-                         GPUAdapter  * __restrict adapters) {
+select_ownership_adapter(GPUInstance        * __restrict instance,
+                         GPUAdapter         * __restrict adapters,
+                         GPUPowerPreference              powerPreference) {
   (void)instance;
+  (void)powerPreference;
   gOwnershipAdapterSelectCalls++;
   return adapters;
 }

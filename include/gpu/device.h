@@ -41,6 +41,12 @@ typedef struct GPUAdapterProperties {
   GPUAdapterType type;
 } GPUAdapterProperties;
 
+typedef enum GPUPowerPreference {
+  GPU_POWER_PREFERENCE_DEFAULT          = 0,
+  GPU_POWER_PREFERENCE_LOW_POWER        = 1,
+  GPU_POWER_PREFERENCE_HIGH_PERFORMANCE = 2
+} GPUPowerPreference;
+
 typedef struct GPUDevice GPUDevice;
 
 typedef void (*GPUAdapterRequestCallback)(GPUResult  result,
@@ -118,6 +124,13 @@ typedef struct GPUFeatureSet {
   const GPUFeature *pFeatures;
   uint32_t          featureCount;
 } GPUFeatureSet;
+
+typedef struct GPUAdapterRequestOptions {
+  GPUChainedStruct   chain;
+  const GPUFeature  *pRequiredFeatures;
+  uint32_t           requiredFeatureCount;
+  GPUPowerPreference powerPreference;
+} GPUAdapterRequestOptions;
 
 typedef struct GPUQueueRequest {
   GPUQueueFlagBits type;
@@ -251,9 +264,10 @@ GPUEnumerateAdapters(GPUInstance *inst,
 
 GPU_EXPORT
 GPUResult
-GPURequestAdapter(GPUInstance               *inst,
-                  GPUAdapterRequestCallback  callback,
-                  void                      *userData);
+GPURequestAdapter(GPUInstance                    *inst,
+                  const GPUAdapterRequestOptions *options,
+                  GPUAdapterRequestCallback       callback,
+                  void                           *userData);
 
 GPU_EXPORT
 GPUResult

@@ -128,22 +128,39 @@ mt_getAvailableAdapters(GPUInstance * __restrict inst,
 
 GPU_HIDE
 GPUAdapter *
-mt_selectAdapter(GPUInstance * __restrict inst,
-                 GPUAdapter  * __restrict adapters) {
+mt_selectAdapter(GPUInstance        * __restrict inst,
+                 GPUAdapter         * __restrict adapters,
+                 GPUPowerPreference              powerPreference) {
   id<MTLDevice> preferred;
   GPUAdapter   *adapter;
 
   GPU__UNUSED(inst);
-  preferred = MTLCreateSystemDefaultDevice();
-  adapter   = adapters;
-  while (preferred && adapter) {
-    if (mt_adapterDevice(adapter).registryID == preferred.registryID) {
-      [preferred release];
+  if (powerPreference == GPU_POWER_PREFERENCE_DEFAULT) {
+    preferred = MTLCreateSystemDefaultDevice();
+    adapter   = adapters;
+    while (preferred && adapter) {
+      if (mt_adapterDevice(adapter).registryID == preferred.registryID) {
+        [preferred release];
+        return adapter;
+      }
+      adapter = adapter->next;
+    }
+    [preferred release];
+    return adapters;
+  }
+
+  adapter = adapters;
+  while (adapter) {
+    bool lowPower;
+
+    lowPower = mt_adapterDevice(adapter).isLowPower;
+    if ((powerPreference == GPU_POWER_PREFERENCE_LOW_POWER && lowPower) ||
+        (powerPreference == GPU_POWER_PREFERENCE_HIGH_PERFORMANCE &&
+         !lowPower)) {
       return adapter;
     }
     adapter = adapter->next;
   }
-  [preferred release];
   return adapters;
 }
 

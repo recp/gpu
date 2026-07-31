@@ -68,6 +68,12 @@ int gpu_run_api_tests(const GPUApiTest *tests, uint32_t count);
 void *gpu_test_read_file(const char *path, uint64_t *outSize);
 GPUResult gpu_test_request_adapter(GPUInstance *instance,
                                    GPUAdapter **outAdapter);
+GPUResult gpu_test_request_adapter_options(
+  GPUInstance                    *instance,
+  const GPUAdapterRequestOptions *options,
+  GPUAdapter                    **outAdapter
+);
+int gpu_test_adapter_request_options(GPUInstance *instance);
 GPUResult gpu_test_create_device(GPUAdapter                *adapter,
                                  const GPUDeviceCreateInfo *info,
                                  GPUDevice                **outDevice);
