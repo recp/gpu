@@ -54,6 +54,7 @@ typedef struct GPUApiTestContext {
   const char  *computeDerivativeQuadsBytecodePath;
   const char  *computeDerivativeLinearBytecodePath;
   const char  *untypedPointerBytecodePath;
+  const char  *dx12BindingPlanBytecodePath;
 } GPUApiTestContext;
 
 typedef int (*GPUApiTestRunFn)(void *ctx);
@@ -143,5 +144,6 @@ int gpu_test_clock_derivatives(GPUAdapter *adapter,
                                const char *derivativeQuadsPath,
                                const char *derivativeLinearPath);
 int gpu_test_untyped_pointer(GPUDevice *device, const char *bytecodePath);
+int gpu_test_dx12_binding_plan(GPUDevice *device, const char *bytecodePath);
 
 #endif /* gpu_tests_api_test_h */

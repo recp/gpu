@@ -94,7 +94,15 @@ mesh_pixels_match(const uint8_t pixels[MESH_PIXEL_BYTES]) {
       }
     }
   }
-  return coloredPixels >= 2u && leftPixels > 0u && rightPixels == 0u;
+  if (coloredPixels >= 2u && leftPixels > 0u && rightPixels == 0u) {
+    return 1;
+  }
+  fprintf(stderr,
+          "mesh pixels colored=%u left=%u right=%u\n",
+          coloredPixels,
+          leftPixels,
+          rightPixels);
+  return 0;
 }
 
 static int
@@ -444,7 +452,6 @@ main(int argc, char **argv) {
   GPUResult             result;
   void                 *artifact;
   uint64_t              artifactSize;
-  uint32_t              adapterCount;
   int                   ok;
 
   if (argc != 3) {
@@ -481,11 +488,9 @@ main(int argc, char **argv) {
     return 1;
   }
 
-  adapter      = NULL;
-  adapterCount = 1u;
-  result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter) {
+  adapter = NULL;
+  result  = gpu_test_request_adapter(instance, &adapter);
+  if (result != GPU_OK || !adapter) {
     fprintf(stderr, "mesh adapter failed\n");
     GPUDestroyInstance(instance);
     free(artifact);

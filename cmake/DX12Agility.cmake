@@ -83,25 +83,43 @@ function(gpu_enable_dx12_agility target)
   gpu_stage_dx12_agility(${target})
 endfunction()
 
-function(gpu_stage_dx12_agility target)
+function(gpu_dx12_agility_stage_commands outVar directory)
   if(NOT WIN32 OR NOT GPU_DX12_AGILITY_CORE)
+    set(${outVar} "" PARENT_SCOPE)
     return()
   endif()
 
-  add_custom_command(TARGET ${target} POST_BUILD
+  set(commands
     COMMAND ${CMAKE_COMMAND} -E make_directory
-            "$<TARGET_FILE_DIR:${target}>/D3D12"
+            "${directory}/D3D12"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${GPU_DX12_AGILITY_CORE}"
-            "$<TARGET_FILE_DIR:${target}>/D3D12/D3D12Core.dll"
-    VERBATIM
+            "${directory}/D3D12/D3D12Core.dll"
   )
   if(GPU_BUILD_WITH_VALIDATION)
-    add_custom_command(TARGET ${target} POST_BUILD
+    list(APPEND commands
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
               "${GPU_DX12_AGILITY_LAYERS}"
-              "$<TARGET_FILE_DIR:${target}>/D3D12/d3d12SDKLayers.dll"
-      VERBATIM
+              "${directory}/D3D12/d3d12SDKLayers.dll"
     )
   endif()
+  set(${outVar} ${commands} PARENT_SCOPE)
+endfunction()
+
+function(gpu_stage_dx12_agility_to_directory target directory)
+  gpu_dx12_agility_stage_commands(commands "${directory}")
+  if(NOT commands)
+    return()
+  endif()
+  add_custom_command(TARGET ${target} POST_BUILD
+    ${commands}
+    VERBATIM
+  )
+endfunction()
+
+function(gpu_stage_dx12_agility target)
+  gpu_stage_dx12_agility_to_directory(
+    ${target}
+    "$<TARGET_FILE_DIR:${target}>"
+  )
 endfunction()

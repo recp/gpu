@@ -183,6 +183,7 @@ target_include_directories(gpu
 file(GLOB GPU_PUBLIC_HEADERS CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/include/gpu/*.h"
 )
+list(FILTER GPU_PUBLIC_HEADERS EXCLUDE REGEX "/\\._[^/]+$")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
   ${GPU_PUBLIC_HEADERS}
 )
@@ -253,6 +254,8 @@ endif()
 if(GPU_BUILD_DX12)
   include(cmake/DX12Agility.cmake)
   gpu_enable_dx12_agility(gpu)
+  include(cmake/DX12DXC.cmake)
+  gpu_enable_dx12_dxc(gpu)
 endif()
 
 add_subdirectory(src/api)
@@ -324,6 +327,19 @@ if(GPU_BUILD_DX12 AND GPU_DX12_AGILITY_CORE)
   install(FILES "${GPU_DX12_AGILITY_LICENSE}"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/gpu/licenses
     RENAME DirectX12Agility-LICENSE.txt
+  )
+endif()
+if(GPU_BUILD_DX12 AND GPU_DX12_DXC_COMPILER)
+  install(FILES
+    "${GPU_DX12_DXC_COMPILER}"
+    "${GPU_DX12_DXC_VALIDATOR}"
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+  )
+  install(DIRECTORY "${GPU_DX12_DXC_HLSL_INCLUDE}/"
+    DESTINATION ${CMAKE_INSTALL_BINDIR}/include/hlsl
+  )
+  install(FILES ${GPU_DX12_DXC_LICENSES}
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/gpu/licenses/dxc
   )
 endif()
 install(EXPORT gpuTargets

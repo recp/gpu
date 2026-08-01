@@ -99,7 +99,25 @@ gpu_test_request_adapter_options(GPUInstance                    *instance,
 
 GPUResult
 gpu_test_request_adapter(GPUInstance *instance, GPUAdapter **outAdapter) {
-  return gpu_test_request_adapter_options(instance, NULL, outAdapter);
+  GPUAdapterRequestOptions options = {0};
+  const char              *selection;
+
+  selection = getenv("GPU_TEST_ADAPTER");
+  if (!selection || strcmp(selection, "auto") == 0) {
+    return gpu_test_request_adapter_options(instance, NULL, outAdapter);
+  }
+
+  options.chain.sType      = GPU_STRUCTURE_TYPE_ADAPTER_REQUEST_OPTIONS;
+  options.chain.structSize = sizeof(options);
+  if (strcmp(selection, "low") == 0) {
+    options.powerPreference = GPU_POWER_PREFERENCE_LOW_POWER;
+  } else if (strcmp(selection, "high") == 0) {
+    options.powerPreference = GPU_POWER_PREFERENCE_HIGH_PERFORMANCE;
+  } else {
+    fprintf(stderr, "unknown GPU_TEST_ADAPTER value: %s\n", selection);
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  return gpu_test_request_adapter_options(instance, &options, outAdapter);
 }
 
 int

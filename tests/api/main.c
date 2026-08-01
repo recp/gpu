@@ -295,6 +295,14 @@ run_untyped_pointer(void *ctx) {
                                   testCtx->untypedPointerBytecodePath);
 }
 
+static int
+run_dx12_binding_plan(void *ctx) {
+  GPUApiTestContext *testCtx = ctx;
+
+  return gpu_test_dx12_binding_plan(testCtx->device,
+                                    testCtx->dx12BindingPlanBytecodePath);
+}
+
 static bool
 parse_backend(const char *name, GPUBackend *outBackend) {
   if (!name || !outBackend) {
@@ -323,7 +331,7 @@ main(int argc, char **argv) {
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUApiTestContext      ctx;
-  GPUApiTest             tests[38];
+  GPUApiTest             tests[39];
   int                    ok;
 
   if (argc != 14 && argc != 15) {
@@ -357,6 +365,15 @@ main(int argc, char **argv) {
     fprintf(stderr, "failed to get adapter\n");
     GPUDestroyInstance(instance);
     return 1;
+  }
+  if (getenv("GPU_TEST_ADAPTER") || getenv("GPU_API_VERBOSE")) {
+    GPUAdapterProperties properties;
+
+    if (GPUGetAdapterProperties(adapter, &properties) == GPU_OK) {
+      printf("api:adapter=%s type=%u\n",
+             properties.name ? properties.name : "unknown",
+             (unsigned)properties.type);
+    }
   }
 
   if (gpu_test_create_device(adapter, NULL, &device) != GPU_OK || !device) {
@@ -416,6 +433,8 @@ main(int argc, char **argv) {
     getenv("GPU_COMPUTE_DERIVATIVE_LINEAR_USL_PATH");
   ctx.untypedPointerBytecodePath =
     getenv("GPU_UNTYPED_POINTER_USL_PATH");
+  ctx.dx12BindingPlanBytecodePath =
+    getenv("GPU_DX12_BINDING_PLAN_USL_PATH");
 
   tests[0]  = (GPUApiTest){ "adapter-request", run_adapter_request, &ctx };
   tests[1]  = (GPUApiTest){ "queue", run_queue, &ctx };
@@ -468,6 +487,9 @@ main(int argc, char **argv) {
   tests[36] = (GPUApiTest){ "msaa", run_msaa, &ctx };
   tests[37] = (GPUApiTest){
     "intersection-function-table", run_intersection_function, &ctx
+  };
+  tests[38] = (GPUApiTest){
+    "dx12-binding-plan", run_dx12_binding_plan, &ctx
   };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));

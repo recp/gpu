@@ -30,6 +30,38 @@ if(GPU_BUILD_TESTS)
   get_property(GPU_GENERATOR_IS_MULTI_CONFIG GLOBAL
                PROPERTY GENERATOR_IS_MULTI_CONFIG)
 
+  if(WIN32)
+    set(runtimeStageCommands)
+    set(runtimeStageDependencies)
+    foreach(runtimeTarget gpu us ds)
+      if(TARGET ${runtimeTarget})
+        list(APPEND runtimeStageCommands
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                  $<TARGET_FILE:${runtimeTarget}>
+                  "${CMAKE_CURRENT_BINARY_DIR}"
+        )
+        list(APPEND runtimeStageDependencies ${runtimeTarget})
+      endif()
+    endforeach()
+    if(GPU_BUILD_DX12 AND COMMAND gpu_dx12_agility_stage_commands)
+      gpu_dx12_agility_stage_commands(
+        agilityStageCommands "${CMAKE_CURRENT_BINARY_DIR}"
+      )
+      list(APPEND runtimeStageCommands ${agilityStageCommands})
+    endif()
+    if(GPU_BUILD_DX12 AND COMMAND gpu_dx12_dxc_stage_commands)
+      gpu_dx12_dxc_stage_commands(
+        dxcStageCommands "${CMAKE_CURRENT_BINARY_DIR}"
+      )
+      list(APPEND runtimeStageCommands ${dxcStageCommands})
+    endif()
+    add_custom_target(gpu-test-runtime-stage ALL
+      ${runtimeStageCommands}
+      DEPENDS ${runtimeStageDependencies}
+      VERBATIM
+    )
+  endif()
+
   set(GPU_API_USL_SOURCES
     "${GPU_VALIDATION_REFLECTION_USL_SOURCE}"
     "${PROJECT_SOURCE_DIR}/tests/api/render_mrt.usl"
@@ -56,6 +88,16 @@ if(GPU_BUILD_TESTS)
     "${GPU_API_DEFAULT_BACKEND}"
     api
     ${GPU_API_USL_SOURCES}
+  )
+  gpu_add_usl_fixtures(
+    GPU_API_DX12_BINDING_PLAN_USL_FIXTURE
+    "${GPU_API_DEFAULT_BACKEND}"
+    api-dx12-binding-plan
+    "${PROJECT_SOURCE_DIR}/tests/api/dx12_binding_plan.usl"
+  )
+  add_custom_target(
+    gpu-api-dx12-binding-plan-fixture
+    DEPENDS ${GPU_API_DX12_BINDING_PLAN_USL_FIXTURE}
   )
   gpu_add_usl_fixtures(
     GPU_API_MSAA_USL_FIXTURE
@@ -583,6 +625,7 @@ if(GPU_BUILD_TESTS)
     ${PROJECT_SOURCE_DIR}/tests/api/copy.c
     ${PROJECT_SOURCE_DIR}/tests/api/cube_texture.c
     ${PROJECT_SOURCE_DIR}/tests/api/descriptor_array.c
+    ${PROJECT_SOURCE_DIR}/tests/api/dx12_binding_plan.c
     ${PROJECT_SOURCE_DIR}/tests/api/execution_graph.c
     ${PROJECT_SOURCE_DIR}/tests/api/line_texture.c
     ${PROJECT_SOURCE_DIR}/tests/api/main.c
@@ -615,6 +658,7 @@ if(GPU_BUILD_TESTS)
   )
   target_link_libraries(gpu-api-test PRIVATE gpu)
   add_dependencies(gpu-api-test gpu-api-fixtures)
+  add_dependencies(gpu-api-test gpu-api-dx12-binding-plan-fixture)
   add_dependencies(gpu-api-test gpu-api-msaa-fixture)
   add_dependencies(gpu-api-test gpu-api-atomic64-fixture)
   add_dependencies(gpu-api-test gpu-api-buffer-descriptor-array-fixture)
@@ -659,6 +703,9 @@ if(GPU_BUILD_TESTS)
   if(TARGET gpu-api-vulkan-untyped-pointer-fixture)
     add_dependencies(gpu-api-test gpu-api-vulkan-untyped-pointer-fixture)
   endif()
+  if(TARGET gpu-test-runtime-stage)
+    add_dependencies(gpu-api-test gpu-test-runtime-stage)
+  endif()
   target_compile_definitions(gpu-api-test PRIVATE
     GPU_BUILD_WITH_VALIDATION=$<BOOL:${GPU_BUILD_WITH_VALIDATION}>
     GPU_BUILD_WITH_DEBUG_MARKERS=$<BOOL:${GPU_BUILD_WITH_DEBUG_MARKERS}>
@@ -679,19 +726,6 @@ if(GPU_BUILD_TESTS)
     )
   endif()
 
-  foreach(runtime_target us ds)
-    if(TARGET ${runtime_target})
-      add_custom_command(TARGET gpu-api-test POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:${runtime_target}>
-                $<TARGET_FILE_DIR:gpu-api-test>
-      )
-    endif()
-  endforeach()
-  if(GPU_BUILD_DX12 AND COMMAND gpu_stage_dx12_agility)
-    gpu_stage_dx12_agility(gpu-api-test)
-  endif()
-
   add_test(NAME api-validation
     COMMAND gpu-api-test
             ${GPU_API_USL_FIXTURES}
@@ -701,6 +735,7 @@ if(GPU_BUILD_TESTS)
     "GPU_MSAA_USL_PATH=${GPU_API_MSAA_USL_FIXTURE}"
     "GPU_BUFFER_DESCRIPTOR_ARRAY_USL_PATH=${GPU_API_BUFFER_DESCRIPTOR_ARRAY_USL_FIXTURE}"
     "GPU_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_USL_PATH=${GPU_API_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_USL_FIXTURE}"
+    "GPU_DX12_BINDING_PLAN_USL_PATH=${GPU_API_DX12_BINDING_PLAN_USL_FIXTURE}"
   )
   if(GPU_API_RAY_QUERY_USL_FIXTURE)
     set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
@@ -982,21 +1017,6 @@ if(GPU_BUILD_TESTS)
       C_EXTENSIONS NO
     )
 
-    if(TARGET us)
-      add_custom_command(TARGET gpu-dx12-queue-test POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:us>
-                $<TARGET_FILE_DIR:gpu-dx12-queue-test>
-      )
-    endif()
-    if(TARGET ds)
-      add_custom_command(TARGET gpu-dx12-queue-test POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:ds>
-                $<TARGET_FILE_DIR:gpu-dx12-queue-test>
-      )
-    endif()
-
     add_test(NAME dx12-queue COMMAND gpu-dx12-queue-test)
 
     add_executable(gpu-dx12-barrier-test ${PROJECT_SOURCE_DIR}/tests/dx12/barrier.c)
@@ -1014,16 +1034,6 @@ if(GPU_BUILD_TESTS)
       C_EXTENSIONS NO
     )
 
-    foreach(runtime_target us ds)
-      if(TARGET ${runtime_target})
-        add_custom_command(TARGET gpu-dx12-barrier-test POST_BUILD
-          COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                  $<TARGET_FILE:${runtime_target}>
-                  $<TARGET_FILE_DIR:gpu-dx12-barrier-test>
-        )
-      endif()
-    endforeach()
-
     add_test(NAME dx12-barrier COMMAND gpu-dx12-barrier-test)
 
     add_executable(gpu-dx12-depth-test ${PROJECT_SOURCE_DIR}/tests/dx12/depth.c)
@@ -1034,16 +1044,6 @@ if(GPU_BUILD_TESTS)
       C_STANDARD_REQUIRED YES
       C_EXTENSIONS NO
     )
-
-    foreach(runtime_target us ds)
-      if(TARGET ${runtime_target})
-        add_custom_command(TARGET gpu-dx12-depth-test POST_BUILD
-          COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                  $<TARGET_FILE:${runtime_target}>
-                  $<TARGET_FILE_DIR:gpu-dx12-depth-test>
-        )
-      endif()
-    endforeach()
 
     add_test(NAME dx12-depth-pipeline
       COMMAND gpu-dx12-depth-test
@@ -1058,16 +1058,6 @@ if(GPU_BUILD_TESTS)
       C_STANDARD_REQUIRED YES
       C_EXTENSIONS NO
     )
-
-    foreach(runtime_target us ds)
-      if(TARGET ${runtime_target})
-        add_custom_command(TARGET gpu-dx12-texture-test POST_BUILD
-          COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                  $<TARGET_FILE:${runtime_target}>
-                  $<TARGET_FILE_DIR:gpu-dx12-texture-test>
-        )
-      endif()
-    endforeach()
 
     add_test(NAME dx12-texture
       COMMAND gpu-dx12-texture-test
@@ -1091,16 +1081,6 @@ if(GPU_BUILD_TESTS)
       )
     endif()
 
-    foreach(runtime_target us ds)
-      if(TARGET ${runtime_target})
-        add_custom_command(TARGET gpu-dx12-mesh-test POST_BUILD
-          COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                  $<TARGET_FILE:${runtime_target}>
-                  $<TARGET_FILE_DIR:gpu-dx12-mesh-test>
-        )
-      endif()
-    endforeach()
-
     add_test(NAME dx12-mesh
       COMMAND gpu-dx12-mesh-test
               dx12
@@ -1116,7 +1096,7 @@ if(GPU_BUILD_TESTS)
             gpu-dx12-depth-test
             gpu-dx12-texture-test
             gpu-dx12-mesh-test)
-      gpu_stage_dx12_agility(${dx12Target})
+      add_dependencies(${dx12Target} gpu-test-runtime-stage)
     endforeach()
   endif()
 endif()

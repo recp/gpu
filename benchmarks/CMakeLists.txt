@@ -1,3 +1,7 @@
+if(MSVC)
+  add_compile_options(/experimental:c11atomics)
+endif()
+
 if(GPU_BUILD_BENCHMARKS)
   set(GPU_BENCHMARK_USL_SOURCES
     "${PROJECT_SOURCE_DIR}/tests/api/render_mrt.usl"
@@ -690,8 +694,39 @@ if(GPU_BUILD_BENCHMARKS)
   endif()
 
   if(WIN32)
+    set(runtimeStageCommands)
+    set(runtimeStageDependencies)
+    foreach(runtimeTarget gpu us ds)
+      if(TARGET ${runtimeTarget})
+        list(APPEND runtimeStageCommands
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                  $<TARGET_FILE:${runtimeTarget}>
+                  "${CMAKE_CURRENT_BINARY_DIR}"
+        )
+        list(APPEND runtimeStageDependencies ${runtimeTarget})
+      endif()
+    endforeach()
+    if(GPU_BUILD_DX12 AND COMMAND gpu_dx12_agility_stage_commands)
+      gpu_dx12_agility_stage_commands(
+        agilityStageCommands "${CMAKE_CURRENT_BINARY_DIR}"
+      )
+      list(APPEND runtimeStageCommands ${agilityStageCommands})
+    endif()
+    if(GPU_BUILD_DX12 AND COMMAND gpu_dx12_dxc_stage_commands)
+      gpu_dx12_dxc_stage_commands(
+        dxcStageCommands "${CMAKE_CURRENT_BINARY_DIR}"
+      )
+      list(APPEND runtimeStageCommands ${dxcStageCommands})
+    endif()
+    add_custom_target(gpu-benchmark-runtime-stage
+      ${runtimeStageCommands}
+      DEPENDS ${runtimeStageDependencies}
+      VERBATIM
+    )
+
     foreach(benchmark_target
             gpu-dispatch-bench
+            gpu-ray-dispatch-bench
             gpu-queue-upload-bench
             gpu-queue-submit-bench
             gpu-texture-upload-bench
@@ -705,15 +740,7 @@ if(GPU_BUILD_BENCHMARKS)
             gpu-pipeline-stress-bench
             gpu-validation-bench
             gpu-marker-bench)
-      foreach(runtime_target us ds)
-        if(TARGET ${runtime_target})
-          add_custom_command(TARGET ${benchmark_target} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    $<TARGET_FILE:${runtime_target}>
-                    $<TARGET_FILE_DIR:${benchmark_target}>
-          )
-        endif()
-      endforeach()
+      add_dependencies(${benchmark_target} gpu-benchmark-runtime-stage)
     endforeach()
   endif()
 endif()

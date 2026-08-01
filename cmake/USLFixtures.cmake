@@ -29,36 +29,30 @@ if((GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS) AND
     )
   endif()
 
-  foreach(runtime_target us ds)
-    if(TARGET ${runtime_target})
-      add_custom_command(TARGET gpu-usl-fixture POST_BUILD
+  set(runtimeStageCommands)
+  set(runtimeStageDependencies gpu-usl-fixture)
+  foreach(runtimeTarget us ds)
+    if(TARGET ${runtimeTarget})
+      list(APPEND runtimeStageCommands
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:${runtime_target}>
+                $<TARGET_FILE:${runtimeTarget}>
                 $<TARGET_FILE_DIR:gpu-usl-fixture>
       )
+      list(APPEND runtimeStageDependencies ${runtimeTarget})
     endif()
   endforeach()
+  add_custom_target(gpu-usl-runtime-stage
+    ${runtimeStageCommands}
+    DEPENDS ${runtimeStageDependencies}
+  )
 
   function(gpu_add_usl_fixtures outVar backend group)
-    set(runtimeCommands)
-    set(runtimeDependencies)
     set(targetCapsEnvironment)
     if(DEFINED GPU_USL_FIXTURE_TARGET_CAPS)
       list(APPEND targetCapsEnvironment
         "USL_TARGET_CAPS=${GPU_USL_FIXTURE_TARGET_CAPS}"
       )
     endif()
-    foreach(runtimeTarget us ds)
-      if(TARGET ${runtimeTarget})
-        list(APPEND runtimeCommands
-          COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                  $<TARGET_FILE:${runtimeTarget}>
-                  $<TARGET_FILE_DIR:gpu-usl-fixture>
-        )
-        list(APPEND runtimeDependencies $<TARGET_FILE:${runtimeTarget}>)
-      endif()
-    endforeach()
-
     set(outputs)
     foreach(source IN ITEMS ${ARGN})
       get_filename_component(name "${source}" NAME_WE)
@@ -71,7 +65,6 @@ if((GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS) AND
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${source}"
                 "${fixtureSource}"
-        ${runtimeCommands}
         COMMAND ${CMAKE_COMMAND} -E env
                 USL_EMIT_BYTECODE=1
                 USL_NO_BACKEND_SIDECAR=1
@@ -79,7 +72,7 @@ if((GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS) AND
                 $<TARGET_FILE:gpu-usl-fixture>
                 "${backend}"
                 "${fixtureSource}"
-        DEPENDS gpu-usl-fixture "${source}" ${runtimeDependencies}
+        DEPENDS gpu-usl-runtime-stage "${source}"
         VERBATIM
       )
       list(APPEND outputs "${fixtureOutput}")
@@ -114,6 +107,9 @@ if((GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS) AND
       endforeach()
       if(GPU_BUILD_DX12 AND COMMAND gpu_stage_dx12_agility)
         gpu_stage_dx12_agility(${target})
+      endif()
+      if(GPU_BUILD_DX12 AND COMMAND gpu_stage_dx12_dxc)
+        gpu_stage_dx12_dxc(${target})
       endif()
     endif()
     foreach(artifact IN ITEMS ${ARGN})
