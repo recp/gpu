@@ -208,6 +208,97 @@ dx12_getSharedBufferRequirements(
 }
 
 static GPUResult
+dx12_getExternalBufferRequirements(GPUDevice                 *device,
+                                    const GPUBufferCreateInfo *info,
+                                    GPUMemoryRequirements     *outRequirements) {
+  return dx12_getBufferMemoryRequirements(device, info, outRequirements);
+}
+
+static GPUResult
+dx12_createExternalBuffer(GPUDevice                  *device,
+                           const GPUBufferCreateInfo  *info,
+                           GPUBuffer                 **outBuffer,
+                           GPUExternalMemoryExport    *outExport) {
+  GPUDeviceDX12                 *native;
+  ID3D12Resource                *resource;
+  D3D12_HEAP_PROPERTIES          heap = {0};
+  D3D12_RESOURCE_DESC            desc = {0};
+  D3D12_RESOURCE_ALLOCATION_INFO allocationInfo;
+  HANDLE                         handle;
+  GPUResult                      result;
+  HRESULT                        nativeResult;
+
+  native = device ? device->_priv : NULL;
+  if (!native || !native->d3dDevice || !info || !outBuffer || !outExport) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outBuffer = NULL;
+  memset(outExport, 0, sizeof(*outExport));
+  result = dx12_bufferDesc(info, &desc);
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  native->d3dDevice->lpVtbl->GetResourceAllocationInfo(native->d3dDevice,
+                                                        &allocationInfo,
+                                                        0u,
+                                                        1u,
+                                                        &desc);
+  if (allocationInfo.SizeInBytes == UINT64_MAX ||
+      allocationInfo.Alignment == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  resource              = NULL;
+  handle                = NULL;
+  heap.Type             = D3D12_HEAP_TYPE_DEFAULT;
+  heap.CreationNodeMask = 1u;
+  heap.VisibleNodeMask  = 1u;
+  nativeResult = native->d3dDevice->lpVtbl->CreateCommittedResource(
+    native->d3dDevice,
+    &heap,
+    D3D12_HEAP_FLAG_SHARED,
+    &desc,
+    D3D12_RESOURCE_STATE_COMMON,
+    NULL,
+    &IID_ID3D12Resource,
+    (void **)&resource
+  );
+  if (FAILED(nativeResult) || !resource) {
+    return dx12_nativeResult(nativeResult);
+  }
+  nativeResult = native->d3dDevice->lpVtbl->CreateSharedHandle(
+    native->d3dDevice,
+    (ID3D12DeviceChild *)resource,
+    NULL,
+    GENERIC_ALL,
+    NULL,
+    &handle
+  );
+  if (FAILED(nativeResult) || !handle) {
+    resource->lpVtbl->Release(resource);
+    return dx12_nativeResult(nativeResult);
+  }
+
+  result = dx12_wrapBuffer(device,
+                           info,
+                           resource,
+                           D3D12_RESOURCE_STATE_COMMON,
+                           outBuffer);
+  if (result != GPU_OK) {
+    CloseHandle(handle);
+    resource->lpVtbl->Release(resource);
+    return result;
+  }
+
+  outExport->handle.win32 = handle;
+  outExport->sizeBytes    = allocationInfo.SizeInBytes;
+  outExport->type         = GPU_EXTERNAL_MEMORY_D3D12_RESOURCE;
+  outExport->dedicated    = true;
+  return GPU_OK;
+}
+
+static GPUResult
 dx12_createSharedBuffer(GPUDeviceInteropEXT       *interop,
                         const GPUBufferCreateInfo *firstInfo,
                         const GPUBufferCreateInfo *secondInfo,
@@ -560,6 +651,58 @@ dx12_createSharedSemaphore(GPUDeviceInteropEXT          *interop,
 }
 
 static GPUResult
+dx12_createExternalSemaphore(GPUDevice                     *device,
+                              const GPUSemaphoreCreateInfo  *info,
+                              GPUSemaphore                  *semaphore,
+                              GPUExternalSemaphoreExport    *outExport) {
+  GPUDeviceDX12 *native;
+  ID3D12Fence   *fence;
+  HANDLE         handle;
+  HRESULT        result;
+
+  native = device ? device->_priv : NULL;
+  if (!native || !native->d3dDevice || !semaphore || !outExport) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  memset(outExport, 0, sizeof(*outExport));
+  fence  = NULL;
+  handle = NULL;
+  result = native->d3dDevice->lpVtbl->CreateFence(
+    native->d3dDevice,
+    info ? info->initialValue : 0u,
+    D3D12_FENCE_FLAG_SHARED,
+    &IID_ID3D12Fence,
+    (void **)&fence
+  );
+  if (FAILED(result) || !fence) {
+    return dx12_nativeResult(result);
+  }
+  result = native->d3dDevice->lpVtbl->CreateSharedHandle(
+    native->d3dDevice,
+    (ID3D12DeviceChild *)fence,
+    NULL,
+    GENERIC_ALL,
+    NULL,
+    &handle
+  );
+  if (FAILED(result) || !handle) {
+    fence->lpVtbl->Release(fence);
+    return dx12_nativeResult(result);
+  }
+
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  if (info) {
+    dx12_setSharedFenceName(fence,
+                            gpuDeviceDebugLabel(device, info->label));
+  }
+#endif
+  semaphore->_priv         = fence;
+  outExport->handle.win32  = handle;
+  outExport->type          = GPU_EXTERNAL_SEMAPHORE_D3D12_FENCE;
+  return GPU_OK;
+}
+
+static GPUResult
 dx12_encodeSharedBarriers(GPUDeviceInteropEXT           *interop,
                           GPUCommandBuffer               *cmdb,
                           const GPUSharedBarrierBatchEXT *barriers,
@@ -664,4 +807,8 @@ dx12_initMultiGPU(GPUApiMultiGPU *api) {
   api->createSemaphore        = dx12_createSharedSemaphore;
   api->encodeRelease          = dx12_encodeSharedRelease;
   api->encodeAcquire          = dx12_encodeSharedAcquire;
+  api->getExternalBufferRequirements =
+    dx12_getExternalBufferRequirements;
+  api->createExternalBuffer    = dx12_createExternalBuffer;
+  api->createExternalSemaphore = dx12_createExternalSemaphore;
 }

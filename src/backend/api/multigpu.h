@@ -19,6 +19,39 @@
 
 #include <gpu/gpu.h>
 
+typedef enum GPUExternalMemoryType {
+  GPU_EXTERNAL_MEMORY_NONE,
+  GPU_EXTERNAL_MEMORY_OPAQUE_FD,
+  GPU_EXTERNAL_MEMORY_OPAQUE_WIN32,
+  GPU_EXTERNAL_MEMORY_D3D12_RESOURCE
+} GPUExternalMemoryType;
+
+typedef enum GPUExternalSemaphoreType {
+  GPU_EXTERNAL_SEMAPHORE_NONE,
+  GPU_EXTERNAL_SEMAPHORE_OPAQUE_FD,
+  GPU_EXTERNAL_SEMAPHORE_OPAQUE_WIN32,
+  GPU_EXTERNAL_SEMAPHORE_D3D12_FENCE,
+  GPU_EXTERNAL_SEMAPHORE_TIMELINE_FD,
+  GPU_EXTERNAL_SEMAPHORE_TIMELINE_WIN32
+} GPUExternalSemaphoreType;
+
+typedef union GPUExternalHandle {
+  void *win32;
+  int   fd;
+} GPUExternalHandle;
+
+typedef struct GPUExternalMemoryExport {
+  GPUExternalHandle     handle;
+  uint64_t              sizeBytes;
+  GPUExternalMemoryType type;
+  bool                  dedicated;
+} GPUExternalMemoryExport;
+
+typedef struct GPUExternalSemaphoreExport {
+  GPUExternalHandle        handle;
+  GPUExternalSemaphoreType type;
+} GPUExternalSemaphoreExport;
+
 typedef struct GPUApiMultiGPU {
   GPUResult
   (*createInterop)(GPUDevice           *firstDevice,
@@ -69,6 +102,23 @@ typedef struct GPUApiMultiGPU {
   (*encodeAcquire)(GPUDeviceInteropEXT           *interop,
                    GPUCommandBuffer              *cmdb,
                    const GPUSharedBarrierBatchEXT *barriers);
+
+  GPUResult
+  (*getExternalBufferRequirements)(GPUDevice                 *device,
+                                   const GPUBufferCreateInfo *info,
+                                   GPUMemoryRequirements     *outRequirements);
+
+  GPUResult
+  (*createExternalBuffer)(GPUDevice                  *device,
+                          const GPUBufferCreateInfo  *info,
+                          GPUBuffer                 **outBuffer,
+                          GPUExternalMemoryExport    *outExport);
+
+  GPUResult
+  (*createExternalSemaphore)(GPUDevice                     *device,
+                             const GPUSemaphoreCreateInfo  *info,
+                             GPUSemaphore                  *semaphore,
+                             GPUExternalSemaphoreExport    *outExport);
 } GPUApiMultiGPU;
 
 #endif /* gpu_gpudef_multigpu_h */

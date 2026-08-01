@@ -36,8 +36,9 @@ typedef struct GPUAdapterCuda {
 } GPUAdapterCuda;
 
 typedef struct GPUBufferCuda {
-  GPUCUDA    *driver;
-  CUdeviceptr address;
+  GPUCUDA          *driver;
+  CUexternalMemory  externalMemory;
+  CUdeviceptr       address;
 } GPUBufferCuda;
 
 typedef struct GPUSemaphoreCuda {
@@ -154,5 +155,6 @@ void cuda_initQueue(GPUApiCommandQueue *api);
 void cuda_initBuffer(GPUApiBuffer *api);
 void cuda_initLibrary(GPUApiLibrary *api);
 void cuda_initCompute(GPUApiCompute *api);
+void cuda_initMultiGPU(GPUApiMultiGPU *api);
 
 #endif

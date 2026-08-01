@@ -126,6 +126,7 @@ enum {
   CUDA_MIN_DRIVER_VERSION                    = 11000,
   CUDA_SUCCESS                               = 0,
   CUDA_ERROR_OUT_OF_MEMORY                   = 2,
+  CUDA_EXTERNAL_MEMORY_DEDICATED             = 1u,
   CU_STREAM_NON_BLOCKING                     = 1,
   CU_EVENT_DISABLE_TIMING                    = 2,
   CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK  = 1,

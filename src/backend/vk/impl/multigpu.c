@@ -27,6 +27,9 @@ enum {
   VK_SHARED_BARRIER_CHUNK_SIZE = 16u
 };
 
+static void
+vk_destroySharedBufferState(GPUBufferVk *state);
+
 typedef struct GPUDeviceInteropVk {
   VkExternalMemoryHandleTypeFlagBits    memoryHandleType;
   VkExternalSemaphoreHandleTypeFlagBits semaphoreHandleType;
@@ -136,13 +139,10 @@ vk_destroyDeviceInterop(GPUDeviceInteropEXT *interop) {
 }
 
 static bool
-vk_externalMemoryUsable(VkExternalMemoryProperties properties,
+vk_externalMemoryUsable(VkExternalMemoryProperties       properties,
                         VkExternalMemoryHandleTypeFlagBits handleType,
+                        VkExternalMemoryFeatureFlags       required,
                         bool                              *outDedicated) {
-  const VkExternalMemoryFeatureFlags required =
-    VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT |
-    VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT;
-
   if ((properties.externalMemoryFeatures & required) != required ||
       (properties.compatibleHandleTypes & handleType) == 0u) {
     return false;
@@ -153,6 +153,255 @@ vk_externalMemoryUsable(VkExternalMemoryProperties properties,
        VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT) != 0u;
   }
   return true;
+}
+
+static GPUResult
+vk_externalBufferPlan(GPUDevice                 *device,
+                      const GPUBufferCreateInfo *info,
+                      VkBufferCreateInfo        *outCreateInfo,
+                      VkMemoryRequirements      *outRequirements,
+                      VkExternalMemoryHandleTypeFlagBits *outHandleType,
+                      bool                      *outDedicated) {
+  GPUDeviceVk  *native;
+  GPUAdapterVk *adapter;
+  VkPhysicalDeviceExternalBufferInfo    externalInfo = {0};
+  VkExternalBufferProperties            externalProperties = {0};
+  VkExternalMemoryBufferCreateInfo      externalCreate = {0};
+  VkExternalSemaphoreHandleTypeFlagBits semaphoreHandleType;
+  VkBuffer                              buffer;
+  GPUResult                             result;
+
+  native  = device ? device->_priv : NULL;
+  adapter = device && device->adapter ? device->adapter->_priv : NULL;
+  if (!native || !native->device || !native->externalInterop || !adapter ||
+      !info || !outCreateInfo || !outRequirements || !outHandleType ||
+      !outDedicated ||
+      !vk_externalHandleTypes(outHandleType, &semaphoreHandleType)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  GPU__UNUSED(semaphoreHandleType);
+
+  result = vk_bufferCreateInfo(device, info, outCreateInfo);
+  if (result != GPU_OK) {
+    return result;
+  }
+  externalInfo.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO;
+  externalInfo.flags      = outCreateInfo->flags;
+  externalInfo.usage      = outCreateInfo->usage;
+  externalInfo.handleType = *outHandleType;
+  externalProperties.sType = VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES;
+  vkGetPhysicalDeviceExternalBufferProperties(adapter->physicalDevice,
+                                               &externalInfo,
+                                               &externalProperties);
+  if (!vk_externalMemoryUsable(
+        externalProperties.externalMemoryProperties,
+        *outHandleType,
+        VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT,
+        outDedicated
+      )) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  externalCreate.sType =
+    VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO;
+  externalCreate.handleTypes = *outHandleType;
+  outCreateInfo->pNext        = &externalCreate;
+  buffer = VK_NULL_HANDLE;
+  if (vkCreateBuffer(native->device,
+                     outCreateInfo,
+                     NULL,
+                     &buffer) != VK_SUCCESS) {
+    outCreateInfo->pNext = NULL;
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  vkGetBufferMemoryRequirements(native->device, buffer, outRequirements);
+  vkDestroyBuffer(native->device, buffer, NULL);
+  outCreateInfo->pNext = NULL;
+  if (vk_filterMemoryTypes(device, outRequirements->memoryTypeBits) == 0u ||
+      outRequirements->size == 0u || outRequirements->alignment == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  return GPU_OK;
+}
+
+static GPUResult
+vk_getExternalBufferRequirements(GPUDevice                 *device,
+                                  const GPUBufferCreateInfo *info,
+                                  GPUMemoryRequirements     *outRequirements) {
+  VkBufferCreateInfo                 createInfo = {0};
+  VkMemoryRequirements               requirements;
+  VkExternalMemoryHandleTypeFlagBits handleType;
+  bool                               dedicated;
+  GPUResult                          result;
+
+  if (!outRequirements) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  result = vk_externalBufferPlan(device,
+                                 info,
+                                 &createInfo,
+                                 &requirements,
+                                 &handleType,
+                                 &dedicated);
+  GPU__UNUSED(handleType);
+  GPU__UNUSED(dedicated);
+  if (result != GPU_OK) {
+    return result;
+  }
+  outRequirements->sizeBytes         = requirements.size;
+  outRequirements->alignmentBytes    = requirements.alignment;
+  outRequirements->compatibilityMask =
+    vk_filterMemoryTypes(device, requirements.memoryTypeBits);
+  return GPU_OK;
+}
+
+static GPUResult
+vk_createExternalBuffer(GPUDevice                  *device,
+                         const GPUBufferCreateInfo  *info,
+                         GPUBuffer                 **outBuffer,
+                         GPUExternalMemoryExport    *outExport) {
+  GPUDeviceVk                        *native;
+  VkBufferCreateInfo                  createInfo = {0};
+  VkExternalMemoryBufferCreateInfo    externalCreate = {0};
+  VkExportMemoryAllocateInfo          exportInfo = {0};
+  VkMemoryDedicatedAllocateInfo       dedicatedInfo = {0};
+  VkMemoryAllocateFlagsInfo           flagsInfo = {0};
+  VkMemoryAllocateInfo                allocationInfo = {0};
+  VkMemoryRequirements                requirements;
+  VkExternalMemoryHandleTypeFlagBits  handleType;
+  VkMemoryPropertyFlags               memoryFlags;
+  GPUBufferVk                         state = {0};
+  uint32_t                            memoryTypeIndex;
+  bool                                dedicated, deviceAddress;
+  GPUResult                           result;
+
+  native = device ? device->_priv : NULL;
+  if (!native || !info || !outBuffer || !outExport) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outBuffer = NULL;
+  memset(outExport, 0, sizeof(*outExport));
+  result = vk_externalBufferPlan(device,
+                                 info,
+                                 &createInfo,
+                                 &requirements,
+                                 &handleType,
+                                 &dedicated);
+  if (result != GPU_OK ||
+      !vk_findMemoryType(device,
+                         requirements.memoryTypeBits,
+                         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                         0u,
+                         &memoryTypeIndex,
+                         &memoryFlags)) {
+    return result != GPU_OK ? result : GPU_ERROR_UNSUPPORTED;
+  }
+  GPU__UNUSED(memoryFlags);
+
+  externalCreate.sType =
+    VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO;
+  externalCreate.handleTypes = handleType;
+  createInfo.pNext            = &externalCreate;
+  state.device                = native->device;
+  if (vkCreateBuffer(native->device,
+                     &createInfo,
+                     NULL,
+                     &state.buffer) != VK_SUCCESS) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  deviceAddress = (createInfo.usage &
+                   VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0u;
+  if (dedicated) {
+    dedicatedInfo.sType  = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
+    dedicatedInfo.buffer = state.buffer;
+  }
+  if (deviceAddress) {
+    flagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+    flagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+  }
+  if (dedicated) {
+    dedicatedInfo.pNext = deviceAddress ? &flagsInfo : NULL;
+  }
+  exportInfo.sType       = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
+  exportInfo.pNext       = dedicated
+                             ? (const void *)&dedicatedInfo
+                             : (deviceAddress
+                                  ? (const void *)&flagsInfo
+                                  : NULL);
+  exportInfo.handleTypes = handleType;
+  allocationInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocationInfo.pNext           = &exportInfo;
+  allocationInfo.allocationSize  = requirements.size;
+  allocationInfo.memoryTypeIndex = memoryTypeIndex;
+  if (vkAllocateMemory(native->device,
+                       &allocationInfo,
+                       NULL,
+                       &state.memory) != VK_SUCCESS ||
+      vkBindBufferMemory(native->device,
+                         state.buffer,
+                         state.memory,
+                         0u) != VK_SUCCESS) {
+    vk_destroySharedBufferState(&state);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+#if defined(_WIN32) || defined(WIN32)
+  {
+    VkMemoryGetWin32HandleInfoKHR getInfo = {0};
+    HANDLE handle;
+
+    handle             = NULL;
+    getInfo.sType      = VK_STRUCTURE_TYPE_MEMORY_GET_WIN32_HANDLE_INFO_KHR;
+    getInfo.memory     = state.memory;
+    getInfo.handleType = handleType;
+    if (native->getMemoryHandle(native->device, &getInfo, &handle) !=
+          VK_SUCCESS ||
+        !handle) {
+      vk_destroySharedBufferState(&state);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    outExport->handle.win32 = handle;
+    outExport->type         = GPU_EXTERNAL_MEMORY_OPAQUE_WIN32;
+  }
+#elif defined(__linux__) || defined(__ANDROID__)
+  {
+    VkMemoryGetFdInfoKHR getInfo = {0};
+    int fd;
+
+    fd                 = -1;
+    getInfo.sType      = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
+    getInfo.memory     = state.memory;
+    getInfo.handleType = handleType;
+    if (native->getMemoryHandle(native->device, &getInfo, &fd) != VK_SUCCESS ||
+        fd < 0) {
+      vk_destroySharedBufferState(&state);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    outExport->handle.fd = fd;
+    outExport->type      = GPU_EXTERNAL_MEMORY_OPAQUE_FD;
+  }
+#else
+  vk_destroySharedBufferState(&state);
+  return GPU_ERROR_UNSUPPORTED;
+#endif
+
+  state.allocationSize = requirements.size;
+  state.ownsMemory     = true;
+  result = vk_wrapBuffer(device, info, &createInfo, &state, outBuffer);
+  if (result != GPU_OK) {
+#if defined(_WIN32) || defined(WIN32)
+    CloseHandle((HANDLE)outExport->handle.win32);
+#elif defined(__linux__) || defined(__ANDROID__)
+    close(outExport->handle.fd);
+#endif
+    memset(outExport, 0, sizeof(*outExport));
+    return result;
+  }
+  outExport->sizeBytes = requirements.size;
+  outExport->dedicated = dedicated;
+  return GPU_OK;
 }
 
 static GPUResult
@@ -219,6 +468,8 @@ vk_sharedBufferPlan(GPUDeviceInteropEXT       *interop,
   if (!vk_externalMemoryUsable(
         externalProperties.externalMemoryProperties,
         native->memoryHandleType,
+        VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT |
+          VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT,
         outDedicated
       )) {
     return GPU_ERROR_UNSUPPORTED;
@@ -636,6 +887,8 @@ vk_sharedTexturePlan(GPUDeviceInteropEXT        *interop,
       !vk_externalMemoryUsable(
         externalProperties.externalMemoryProperties,
         native->memoryHandleType,
+        VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT |
+          VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT,
         outDedicated
       )) {
     return GPU_ERROR_UNSUPPORTED;
@@ -1028,6 +1281,119 @@ fail:
 }
 
 static GPUResult
+vk_createExternalSemaphore(GPUDevice                     *device,
+                            const GPUSemaphoreCreateInfo  *info,
+                            GPUSemaphore                  *semaphore,
+                            GPUExternalSemaphoreExport    *outExport) {
+  GPUDeviceVk                           *native;
+  GPUAdapterVk                          *adapter;
+  GPUSemaphoreVk                        *state;
+  VkExternalMemoryHandleTypeFlagBits     memoryHandleType;
+  VkExternalSemaphoreHandleTypeFlagBits  handleType;
+  VkPhysicalDeviceExternalSemaphoreInfo  externalInfo = {0};
+  VkExternalSemaphoreProperties          externalProperties = {0};
+  VkSemaphoreTypeCreateInfo              typeInfo = {0};
+  VkExportSemaphoreCreateInfo            exportInfo = {0};
+  VkSemaphoreCreateInfo                  createInfo = {0};
+
+  native  = device ? device->_priv : NULL;
+  adapter = device && device->adapter ? device->adapter->_priv : NULL;
+  if (!native || !native->device || !native->externalInterop ||
+      !native->timelineSemaphore || !adapter || !semaphore || !outExport ||
+      !vk_externalHandleTypes(&memoryHandleType, &handleType)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  GPU__UNUSED(memoryHandleType);
+  memset(outExport, 0, sizeof(*outExport));
+
+  typeInfo.sType         = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
+  typeInfo.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+  typeInfo.initialValue  = info ? info->initialValue : 0u;
+  externalInfo.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_SEMAPHORE_INFO;
+  externalInfo.pNext      = &typeInfo;
+  externalInfo.handleType = handleType;
+  externalProperties.sType = VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES;
+  vkGetPhysicalDeviceExternalSemaphoreProperties(adapter->physicalDevice,
+                                                  &externalInfo,
+                                                  &externalProperties);
+  if ((externalProperties.externalSemaphoreFeatures &
+       VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT) == 0u ||
+      (externalProperties.compatibleHandleTypes & handleType) == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  state = calloc(1, sizeof(*state));
+  if (!state) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  exportInfo.sType       = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO;
+  exportInfo.pNext       = &typeInfo;
+  exportInfo.handleTypes = handleType;
+  createInfo.sType       = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+  createInfo.pNext       = &exportInfo;
+  if (vkCreateSemaphore(native->device,
+                        &createInfo,
+                        NULL,
+                        &state->semaphore) != VK_SUCCESS) {
+    free(state);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  state->device = native->device;
+
+#if defined(_WIN32) || defined(WIN32)
+  {
+    VkSemaphoreGetWin32HandleInfoKHR getInfo = {0};
+    HANDLE handle;
+
+    handle             = NULL;
+    getInfo.sType      = VK_STRUCTURE_TYPE_SEMAPHORE_GET_WIN32_HANDLE_INFO_KHR;
+    getInfo.semaphore  = state->semaphore;
+    getInfo.handleType = handleType;
+    if (native->getSemaphoreHandle(native->device, &getInfo, &handle) !=
+          VK_SUCCESS ||
+        !handle) {
+      vkDestroySemaphore(native->device, state->semaphore, NULL);
+      free(state);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    outExport->handle.win32 = handle;
+    outExport->type         = GPU_EXTERNAL_SEMAPHORE_TIMELINE_WIN32;
+  }
+#elif defined(__linux__) || defined(__ANDROID__)
+  {
+    VkSemaphoreGetFdInfoKHR getInfo = {0};
+    int fd;
+
+    fd                 = -1;
+    getInfo.sType      = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR;
+    getInfo.semaphore  = state->semaphore;
+    getInfo.handleType = handleType;
+    if (native->getSemaphoreHandle(native->device, &getInfo, &fd) !=
+          VK_SUCCESS ||
+        fd < 0) {
+      vkDestroySemaphore(native->device, state->semaphore, NULL);
+      free(state);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    outExport->handle.fd = fd;
+    outExport->type      = GPU_EXTERNAL_SEMAPHORE_TIMELINE_FD;
+  }
+#else
+  vkDestroySemaphore(native->device, state->semaphore, NULL);
+  free(state);
+  return GPU_ERROR_UNSUPPORTED;
+#endif
+
+  semaphore->_priv = state;
+  vk_setDebugName(device,
+                  VK_OBJECT_TYPE_SEMAPHORE,
+                  (uint64_t)(uintptr_t)state->semaphore,
+                  info ? gpuDeviceDebugLabel(device, info->label) : NULL);
+  return GPU_OK;
+}
+
+static GPUResult
 vk_encodeSharedBuffers(GPUCommandBuffer               *cmdb,
                        const GPUSharedBarrierBatchEXT *barriers,
                        bool                            acquire) {
@@ -1270,4 +1636,7 @@ vk_initMultiGPU(GPUApiMultiGPU *api) {
   api->createSemaphore        = vk_createSharedSemaphore;
   api->encodeRelease          = vk_encodeSharedRelease;
   api->encodeAcquire          = vk_encodeSharedAcquire;
+  api->getExternalBufferRequirements = vk_getExternalBufferRequirements;
+  api->createExternalBuffer    = vk_createExternalBuffer;
+  api->createExternalSemaphore = vk_createExternalSemaphore;
 }

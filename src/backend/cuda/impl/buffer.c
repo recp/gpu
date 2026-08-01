@@ -74,6 +74,9 @@ cuda_destroyBuffer(GPUBuffer *buffer) {
   if (native && device &&
       cuda_push(native->driver, device->context) == GPU_OK) {
     (void)native->driver->memFree(native->address);
+    if (native->externalMemory && native->driver->destroyExternalMemory) {
+      (void)native->driver->destroyExternalMemory(native->externalMemory);
+    }
     cuda_pop(native->driver);
   }
   free(native);

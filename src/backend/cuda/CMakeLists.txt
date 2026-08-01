@@ -8,6 +8,7 @@ target_sources(gpu PRIVATE
   impl/driver.c
   impl/instance.c
   impl/library.c
+  impl/multigpu.c
 )
 
 if(CMAKE_DL_LIBS)
