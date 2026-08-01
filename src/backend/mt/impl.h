@@ -28,6 +28,8 @@ GPU_HIDE void mt_initMemory(GPUApiMemory *api);
 GPU_HIDE void mt_initMultiGPU(GPUApiMultiGPU *api);
 GPU_HIDE void mt_initTexture(GPUApiTexture *api);
 GPU_HIDE void mt_initRenderPass(GPUApiRenderPass *api);
+GPU_HIDE void mt_encodeBarriers(GPUCommandBuffer       *cmdb,
+                                const GPUBarrierBatch *barriers);
 GPU_HIDE void mt_initDepthStencil(GPUApiDepthStencil *api);
 GPU_HIDE void mt_initVertex(GPUApiVertex *api);
 GPU_HIDE void mt_initLibrary(GPUApiLibrary *api);

@@ -18,6 +18,10 @@
 #include "../impl.h"
 #include "../../../api/multigpu_internal.h"
 
+enum {
+  DX12_SHARED_BARRIER_CHUNK_SIZE = 16u
+};
+
 static GPUResult
 dx12_interopDevices(GPUDeviceInteropEXT *interop,
                     GPUDeviceDX12      **outFirst,
@@ -555,6 +559,99 @@ dx12_createSharedSemaphore(GPUDeviceInteropEXT          *interop,
   return GPU_OK;
 }
 
+static GPUResult
+dx12_encodeSharedBarriers(GPUDeviceInteropEXT           *interop,
+                          GPUCommandBuffer               *cmdb,
+                          const GPUSharedBarrierBatchEXT *barriers,
+                          bool                            acquire) {
+  GPUDeviceDX12 *first, *second;
+  GPUResult      result;
+  uint32_t       bufferOffset, textureOffset;
+
+  result = dx12_interopDevices(interop, &first, &second);
+  if (result != GPU_OK || !cmdb || !barriers) {
+    return result != GPU_OK ? result : GPU_ERROR_INVALID_ARGUMENT;
+  }
+  GPU__UNUSED(first);
+  GPU__UNUSED(second);
+
+  bufferOffset  = 0u;
+  textureOffset = 0u;
+  while (bufferOffset < barriers->bufferBarrierCount ||
+         textureOffset < barriers->textureBarrierCount) {
+    GPUBufferBarrier  bufferBarriers[DX12_SHARED_BARRIER_CHUNK_SIZE];
+    GPUTextureBarrier textureBarriers[DX12_SHARED_BARRIER_CHUNK_SIZE];
+    GPUBarrierBatch   batch = {0};
+    uint32_t          bufferCount, textureCount;
+
+    bufferCount = barriers->bufferBarrierCount - bufferOffset;
+    if (bufferCount > DX12_SHARED_BARRIER_CHUNK_SIZE) {
+      bufferCount = DX12_SHARED_BARRIER_CHUNK_SIZE;
+    }
+    textureCount = barriers->textureBarrierCount - textureOffset;
+    if (textureCount > DX12_SHARED_BARRIER_CHUNK_SIZE) {
+      textureCount = DX12_SHARED_BARRIER_CHUNK_SIZE;
+    }
+
+    for (uint32_t i = 0u; i < bufferCount; i++) {
+      const GPUSharedBufferBarrierEXT *shared;
+      GPUBufferBarrier                *barrier;
+
+      shared              = &barriers->pBufferBarriers[bufferOffset + i];
+      barrier             = &bufferBarriers[i];
+      barrier->buffer     = acquire
+                              ? shared->destinationBuffer
+                              : shared->sourceBuffer;
+      barrier->srcAccess  = acquire ? GPU_ACCESS_NONE : shared->srcAccess;
+      barrier->dstAccess  = acquire ? shared->dstAccess : GPU_ACCESS_NONE;
+      barrier->offset     = shared->offset;
+      barrier->sizeBytes  = shared->sizeBytes;
+    }
+    for (uint32_t i = 0u; i < textureCount; i++) {
+      const GPUSharedTextureBarrierEXT *shared;
+      GPUTextureBarrier                *barrier;
+
+      shared              = &barriers->pTextureBarriers[textureOffset + i];
+      barrier             = &textureBarriers[i];
+      barrier->texture    = acquire
+                              ? shared->destinationTexture
+                              : shared->sourceTexture;
+      barrier->srcAccess  = acquire ? GPU_ACCESS_NONE : shared->srcAccess;
+      barrier->dstAccess  = acquire ? shared->dstAccess : GPU_ACCESS_NONE;
+      barrier->baseMip    = shared->baseMip;
+      barrier->mipCount   = shared->mipCount;
+      barrier->baseLayer  = shared->baseLayer;
+      barrier->layerCount = shared->layerCount;
+    }
+
+    batch.pBufferBarriers     = bufferCount > 0u ? bufferBarriers : NULL;
+    batch.pTextureBarriers    = textureCount > 0u ? textureBarriers : NULL;
+    batch.srcStages           = acquire ? GPU_STAGE_TOP : barriers->srcStages;
+    batch.dstStages           = acquire ? barriers->dstStages : GPU_STAGE_BOTTOM;
+    batch.bufferBarrierCount  = bufferCount;
+    batch.textureBarrierCount = textureCount;
+    dx12_encodeBarriers(cmdb, &batch);
+
+    bufferOffset  += bufferCount;
+    textureOffset += textureCount;
+  }
+  return GPU_OK;
+}
+
+static GPUResult
+dx12_encodeSharedRelease(GPUDeviceInteropEXT           *interop,
+                         GPUCommandBuffer               *cmdb,
+                         const GPUSharedBarrierBatchEXT *barriers) {
+  return dx12_encodeSharedBarriers(interop, cmdb, barriers, false);
+}
+
+static GPUResult
+dx12_encodeSharedAcquire(GPUDeviceInteropEXT           *interop,
+                         GPUCommandBuffer               *cmdb,
+                         const GPUSharedBarrierBatchEXT *barriers) {
+  return dx12_encodeSharedBarriers(interop, cmdb, barriers, true);
+}
+
 GPU_HIDE
 void
 dx12_initMultiGPU(GPUApiMultiGPU *api) {
@@ -565,4 +662,6 @@ dx12_initMultiGPU(GPUApiMultiGPU *api) {
   api->getTextureRequirements = dx12_getSharedTextureRequirements;
   api->createTexture          = dx12_createSharedTexture;
   api->createSemaphore        = dx12_createSharedSemaphore;
+  api->encodeRelease          = dx12_encodeSharedRelease;
+  api->encodeAcquire          = dx12_encodeSharedAcquire;
 }

@@ -109,6 +109,11 @@ GPUDestroyBuffer(GPUBuffer * __restrict buff) {
     return;
   }
 
+  if (buff->_sharedPeer && buff->_sharedPeer->_sharedPeer == buff) {
+    buff->_sharedPeer->_sharedPeer = NULL;
+  }
+  buff->_sharedPeer = NULL;
+
   if (!(api = gpuBufferApi(buff))) {
     return;
   }

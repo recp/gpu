@@ -21,6 +21,7 @@ GPU_HIDE void vk_initInstance(GPUApiInstance *api);
 GPU_HIDE void vk_initDevice(GPUApiDevice *api);
 GPU_HIDE void vk_initBuff(GPUApiBuffer *api);
 GPU_HIDE void vk_initMemory(GPUApiMemory *api);
+GPU_HIDE void vk_initMultiGPU(GPUApiMultiGPU *api);
 GPU_HIDE void vk_initTexture(GPUApiTexture *api);
 GPU_HIDE void vk_initSampler(GPUApiSampler *api);
 GPU_HIDE void vk_initCmdQue(GPUApiCommandQueue *api);
@@ -33,6 +34,8 @@ GPU_HIDE void vk_initSurface(GPUApiSurface *api);
 GPU_HIDE void vk_initLibrary(GPUApiLibrary *api);
 GPU_HIDE void vk_initRenderPipeline(GPUApiRender *api);
 GPU_HIDE void vk_initRenderPass(GPUApiRenderPass *api);
+GPU_HIDE void vk_encodeBarriers(GPUCommandBuffer       *cmdb,
+                                const GPUBarrierBatch *barriers);
 GPU_HIDE void vk_blitTextureRenderFallback(
   GPUCommandBuffer         *cmdb,
   const GPUTextureBlitInfo *info
@@ -80,6 +83,20 @@ vk_createBuffer(GPUDevice                 * __restrict device,
 
 GPU_HIDE
 GPUResult
+vk_bufferCreateInfo(GPUDevice                 *device,
+                    const GPUBufferCreateInfo *info,
+                    VkBufferCreateInfo        *outInfo);
+
+GPU_HIDE
+GPUResult
+vk_wrapBuffer(GPUDevice                 *device,
+              const GPUBufferCreateInfo *info,
+              const VkBufferCreateInfo  *bufferInfo,
+              GPUBufferVk               *state,
+              GPUBuffer                **outBuffer);
+
+GPU_HIDE
+GPUResult
 vk_createHostBuffer(GPUDevice                 * __restrict device,
                     const GPUBufferCreateInfo * __restrict info,
                     GPUBuffer                ** __restrict outBuffer);
@@ -118,6 +135,21 @@ GPUResult
 vk_getTextureMemoryRequirements(GPUDevice                  *device,
                                 const GPUTextureCreateInfo *info,
                                 GPUMemoryRequirements      *outRequirements);
+
+GPU_HIDE
+GPUResult
+vk_textureCreateInfo(GPUDevice                  *device,
+                     const GPUTextureCreateInfo *info,
+                     VkImageCreateInfo          *outInfo,
+                     VkImageAspectFlags         *outAspect);
+
+GPU_HIDE
+GPUResult
+vk_finishTexture(GPUDevice                  *device,
+                 const GPUTextureCreateInfo *info,
+                 const VkImageCreateInfo    *imageInfo,
+                 GPUTextureVk               *state,
+                 GPUTexture                **outTexture);
 
 GPU_HIDE
 GPUResult

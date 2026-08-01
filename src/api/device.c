@@ -1876,6 +1876,14 @@ GPUGetProcAddr(GPUDevice *device, const char *name) {
       strcmp(name, "GPUCreateSharedSemaphoreEXT") == 0) {
     return (GPUProc)GPUCreateSharedSemaphoreEXT;
   }
+  if (api->multigpu.encodeRelease &&
+      strcmp(name, "GPUEncodeSharedReleaseEXT") == 0) {
+    return (GPUProc)GPUEncodeSharedReleaseEXT;
+  }
+  if (api->multigpu.encodeAcquire &&
+      strcmp(name, "GPUEncodeSharedAcquireEXT") == 0) {
+    return (GPUProc)GPUEncodeSharedAcquireEXT;
+  }
 
   if (GPUIsFeatureEnabled(device, GPU_FEATURE_BINDLESS) &&
       strcmp(name, "GPUUpdateBindGroupEXT") == 0) {

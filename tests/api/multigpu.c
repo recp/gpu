@@ -1,18 +1,37 @@
 #include "test.h"
 
+enum {
+  GPU_TEST_SHARED_TEXTURE_WIDTH  = 4u,
+  GPU_TEST_SHARED_TEXTURE_HEIGHT = 4u,
+  GPU_TEST_SHARED_TEXTURE_BYTES  = 4u * 4u * 4u
+};
+
 static int
-gpu_test_shared_semaphore(GPUDeviceInteropEXT *interop,
-                          GPUDevice           *firstDevice,
-                          GPUDevice           *secondDevice) {
-  GPUQueueSemaphoreWait   wait = {0};
-  GPUQueueSemaphoreSignal signal = {0};
-  GPUQueueSubmitExInfo    submit = {0};
-  GPUSemaphoreCreateInfo  semaphoreInfo = {0};
-  GPUCommandBuffer       *firstCmdb, *secondCmdb;
-  GPUSemaphore           *firstSemaphore, *secondSemaphore;
-  GPUQueue               *firstQueue, *secondQueue;
-  GPUFence               *fence;
-  int                     firstSubmitted, secondSubmitted, ok;
+gpu_test_shared_transfer(GPUDeviceInteropEXT *interop,
+                         GPUDevice           *firstDevice,
+                         GPUDevice           *secondDevice,
+                         GPUBuffer           *firstBuffer,
+                         GPUBuffer           *secondBuffer,
+                         GPUTexture          *firstTexture,
+                         GPUTexture          *secondTexture) {
+  GPUCommandBuffer          *firstCmdb, *secondCmdb;
+  GPUSemaphore              *firstSemaphore, *secondSemaphore;
+  GPUTransferPassEncoder    *copyPass;
+  GPUQueue                  *firstQueue, *secondQueue;
+  GPUBuffer                 *imposter, *readback;
+  GPUFence                  *firstFence, *secondFence;
+  GPUSharedBufferBarrierEXT  sharedBuffer = {0};
+  GPUSharedTextureBarrierEXT sharedTexture = {0};
+  GPUSharedBarrierBatchEXT   sharedBarriers = {0};
+  GPUBufferCreateInfo        imposterInfo = {0}, readbackInfo = {0};
+  GPUTextureWriteRegion      writeRegion = {0};
+  GPUBufferTextureCopyRegion copyRegion = {0};
+  GPUQueueSemaphoreWait      wait = {0};
+  GPUQueueSemaphoreSignal    signal = {0};
+  GPUQueueSubmitExInfo       submit = {0};
+  GPUSemaphoreCreateInfo     semaphoreInfo = {0};
+  uint32_t                   sourceTexture[16], textureResult[16];
+  int                        firstSubmitted, secondSubmitted, ok;
 
   firstQueue      = GPUGetQueue(firstDevice, GPU_QUEUE_GRAPHICS, 0u);
   secondQueue     = GPUGetQueue(secondDevice, GPU_QUEUE_GRAPHICS, 0u);
@@ -20,18 +39,58 @@ gpu_test_shared_semaphore(GPUDeviceInteropEXT *interop,
   secondCmdb      = NULL;
   firstSemaphore  = NULL;
   secondSemaphore = NULL;
-  fence           = NULL;
+  copyPass        = NULL;
+  imposter        = NULL;
+  readback        = NULL;
+  firstFence      = NULL;
+  secondFence     = NULL;
+  firstSubmitted  = 0;
+  secondSubmitted = 0;
+  ok              = 0;
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(sourceTexture); i++) {
+    sourceTexture[i] = UINT32_C(0xff000000) |
+                       ((i * 37u) & 0xffu) |
+                       (((i * 59u) & 0xffu) << 8u) |
+                       (((i * 83u) & 0xffu) << 16u);
+  }
+  memset(textureResult, 0, sizeof(textureResult));
+
+  imposterInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  imposterInfo.chain.structSize = sizeof(imposterInfo);
+  imposterInfo.label            = "interop-imposter";
+  imposterInfo.sizeBytes        = sizeof(uint32_t) * 4u;
+  imposterInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
+                                  GPU_BUFFER_USAGE_COPY_SRC;
+  readbackInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  readbackInfo.chain.structSize = sizeof(readbackInfo);
+  readbackInfo.label            = "interop-texture-readback";
+  readbackInfo.sizeBytes        = sizeof(textureResult);
+  readbackInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
+                                  GPU_BUFFER_USAGE_COPY_SRC;
+  writeRegion.width        = GPU_TEST_SHARED_TEXTURE_WIDTH;
+  writeRegion.height       = GPU_TEST_SHARED_TEXTURE_HEIGHT;
+  writeRegion.depth        = 1u;
+  writeRegion.layerCount   = 1u;
+  writeRegion.bytesPerRow  = GPU_TEST_SHARED_TEXTURE_WIDTH * 4u;
+  writeRegion.rowsPerImage = GPU_TEST_SHARED_TEXTURE_HEIGHT;
   if (!firstQueue || !secondQueue ||
+      GPUCreateBuffer(secondDevice, &imposterInfo, &imposter) != GPU_OK ||
+      !imposter ||
+      GPUCreateBuffer(secondDevice, &readbackInfo, &readback) != GPU_OK ||
+      !readback ||
+      GPUQueueWriteTexture(firstQueue,
+                           firstTexture,
+                           &writeRegion,
+                           sourceTexture,
+                           sizeof(sourceTexture)) != GPU_OK ||
       GPUAcquireCommandBuffer(firstQueue, "interop-signal", &firstCmdb) !=
         GPU_OK ||
       GPUAcquireCommandBuffer(secondQueue, "interop-wait", &secondCmdb) !=
         GPU_OK ||
-      GPUCreateFence(secondDevice, NULL, &fence) != GPU_OK ||
-      !fence) {
-    GPUDiscardCommandBuffer(secondCmdb);
-    GPUDiscardCommandBuffer(firstCmdb);
-    GPUDestroyFence(fence);
-    return 0;
+      GPUCreateFence(firstDevice, NULL, &firstFence) != GPU_OK ||
+      GPUCreateFence(secondDevice, NULL, &secondFence) != GPU_OK ||
+      !firstFence || !secondFence) {
+    goto cleanup;
   }
 
   semaphoreInfo.chain.sType      = GPU_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -42,11 +101,59 @@ gpu_test_shared_semaphore(GPUDeviceInteropEXT *interop,
                                   &firstSemaphore,
                                   &secondSemaphore) != GPU_OK ||
       !firstSemaphore || !secondSemaphore) {
-    GPUDiscardCommandBuffer(secondCmdb);
-    GPUDiscardCommandBuffer(firstCmdb);
-    GPUDestroyFence(fence);
-    return 0;
+    goto cleanup;
   }
+
+  sharedBuffer.sourceBuffer      = firstBuffer;
+  sharedBuffer.destinationBuffer = secondBuffer;
+  sharedBuffer.offset            = 0u;
+  sharedBuffer.sizeBytes         = sizeof(uint32_t) * 4u;
+  sharedBuffer.srcAccess         = GPU_ACCESS_TRANSFER_WRITE;
+  sharedBuffer.dstAccess         = GPU_ACCESS_TRANSFER_READ;
+  sharedTexture.sourceTexture      = firstTexture;
+  sharedTexture.destinationTexture = secondTexture;
+  sharedTexture.srcAccess          = GPU_ACCESS_TRANSFER_WRITE;
+  sharedTexture.dstAccess          = GPU_ACCESS_TRANSFER_READ;
+  sharedTexture.mipCount           = 1u;
+  sharedTexture.layerCount         = 1u;
+  sharedBarriers.pBufferBarriers    = &sharedBuffer;
+  sharedBarriers.pTextureBarriers   = &sharedTexture;
+  sharedBarriers.srcStages          = GPU_STAGE_TRANSFER;
+  sharedBarriers.dstStages          = GPU_STAGE_TRANSFER;
+  sharedBarriers.bufferBarrierCount = 1u;
+  sharedBarriers.textureBarrierCount = 1u;
+  sharedBuffer.destinationBuffer = imposter;
+  if (GPUEncodeSharedReleaseEXT(interop,
+                                firstCmdb,
+                                &sharedBarriers) != GPU_ERROR_INVALID_ARGUMENT) {
+    goto cleanup;
+  }
+  sharedBuffer.destinationBuffer = secondBuffer;
+  if (GPUEncodeSharedReleaseEXT(interop,
+                                firstCmdb,
+                                &sharedBarriers) != GPU_OK ||
+      GPUEncodeSharedAcquireEXT(interop,
+                                secondCmdb,
+                                &sharedBarriers) != GPU_OK) {
+    goto cleanup;
+  }
+
+  copyPass = GPUBeginTransferPass(secondCmdb, "interop-texture-readback");
+  if (!copyPass) {
+    goto cleanup;
+  }
+  copyRegion.bytesPerRow        = GPU_TEST_SHARED_TEXTURE_WIDTH * 4u;
+  copyRegion.rowsPerImage       = GPU_TEST_SHARED_TEXTURE_HEIGHT;
+  copyRegion.texture.width      = GPU_TEST_SHARED_TEXTURE_WIDTH;
+  copyRegion.texture.height     = GPU_TEST_SHARED_TEXTURE_HEIGHT;
+  copyRegion.texture.depth      = 1u;
+  copyRegion.texture.layerCount = 1u;
+  GPUCopyTextureToBuffer(copyPass,
+                         secondTexture,
+                         readback,
+                         &copyRegion);
+  GPUEndTransferPass(copyPass);
+  copyPass = NULL;
 
   signal.semaphore          = firstSemaphore;
   signal.value              = 1u;
@@ -56,6 +163,7 @@ gpu_test_shared_semaphore(GPUDeviceInteropEXT *interop,
   submit.pSignals           = &signal;
   submit.commandBufferCount = 1u;
   submit.signalCount        = 1u;
+  submit.fence              = firstFence;
   firstSubmitted = GPUQueueSubmitEx(firstQueue, &submit) == GPU_OK;
 
   wait.semaphore          = secondSemaphore;
@@ -64,13 +172,24 @@ gpu_test_shared_semaphore(GPUDeviceInteropEXT *interop,
   submit.ppCommandBuffers = &secondCmdb;
   submit.pWaits           = &wait;
   submit.pSignals         = NULL;
-  submit.fence            = fence;
+  submit.fence            = secondFence;
   submit.waitCount        = 1u;
   submit.signalCount      = 0u;
   secondSubmitted = firstSubmitted &&
                     GPUQueueSubmitEx(secondQueue, &submit) == GPU_OK;
-  ok = secondSubmitted && GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+  ok = secondSubmitted &&
+       GPUWaitFence(secondFence, UINT64_MAX) == GPU_OK &&
+       GPUQueueReadBuffer(secondQueue,
+                          readback,
+                          0u,
+                          textureResult,
+                          sizeof(textureResult)) == GPU_OK &&
+       memcmp(sourceTexture, textureResult, sizeof(sourceTexture)) == 0;
 
+cleanup:
+  if (firstSubmitted && !secondSubmitted) {
+    (void)GPUWaitFence(firstFence, UINT64_MAX);
+  }
   if (!secondSubmitted) {
     GPUDiscardCommandBuffer(secondCmdb);
   }
@@ -80,7 +199,10 @@ gpu_test_shared_semaphore(GPUDeviceInteropEXT *interop,
 
   GPUDestroySemaphore(secondSemaphore);
   GPUDestroySemaphore(firstSemaphore);
-  GPUDestroyFence(fence);
+  GPUDestroyFence(secondFence);
+  GPUDestroyFence(firstFence);
+  GPUDestroyBuffer(readback);
+  GPUDestroyBuffer(imposter);
   return ok;
 }
 
@@ -93,7 +215,9 @@ gpu_test_multigpu(GPUAdapter *adapter, GPUDevice *firstDevice) {
     "GPUCreateSharedBufferEXT",
     "GPUGetSharedTextureMemoryRequirementsEXT",
     "GPUCreateSharedTextureEXT",
-    "GPUCreateSharedSemaphoreEXT"
+    "GPUCreateSharedSemaphoreEXT",
+    "GPUEncodeSharedReleaseEXT",
+    "GPUEncodeSharedAcquireEXT"
   };
   GPUBufferCreateInfo  firstBufferInfo = {0}, secondBufferInfo = {0};
   GPUTextureCreateInfo firstTextureInfo = {0}, secondTextureInfo = {0};
@@ -169,14 +293,7 @@ gpu_test_multigpu(GPUAdapter *adapter, GPUDevice *firstDevice) {
                            firstBuffer,
                            0u,
                            source,
-                           sizeof(source)) == GPU_OK &&
-       gpu_test_shared_semaphore(interop, firstDevice, secondDevice) &&
-       GPUQueueReadBuffer(secondQueue,
-                          secondBuffer,
-                          0u,
-                          result,
-                          sizeof(result)) == GPU_OK &&
-       memcmp(source, result, sizeof(source)) == 0;
+                           sizeof(source)) == GPU_OK;
 
   firstTextureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   firstTextureInfo.chain.structSize = sizeof(firstTextureInfo);
@@ -191,7 +308,8 @@ gpu_test_multigpu(GPUAdapter *adapter, GPUDevice *firstDevice) {
   firstTextureInfo.usage            = GPU_TEXTURE_USAGE_COPY_DST;
   secondTextureInfo                 = firstTextureInfo;
   secondTextureInfo.label           = "interop-second-texture";
-  secondTextureInfo.usage           = GPU_TEXTURE_USAGE_SAMPLED;
+  secondTextureInfo.usage           = GPU_TEXTURE_USAGE_SAMPLED |
+                                      GPU_TEXTURE_USAGE_COPY_SRC;
   firstTexture                      = NULL;
   secondTexture                     = NULL;
   ok = ok &&
@@ -205,7 +323,20 @@ gpu_test_multigpu(GPUAdapter *adapter, GPUDevice *firstDevice) {
                                  &secondTextureInfo,
                                  &firstTexture,
                                  &secondTexture) == GPU_OK &&
-       firstTexture && secondTexture;
+       firstTexture && secondTexture &&
+       gpu_test_shared_transfer(interop,
+                                firstDevice,
+                                secondDevice,
+                                firstBuffer,
+                                secondBuffer,
+                                firstTexture,
+                                secondTexture) &&
+       GPUQueueReadBuffer(secondQueue,
+                          secondBuffer,
+                          0u,
+                          result,
+                          sizeof(result)) == GPU_OK &&
+       memcmp(source, result, sizeof(source)) == 0;
 
   GPUDestroyTexture(secondTexture);
   GPUDestroyTexture(firstTexture);

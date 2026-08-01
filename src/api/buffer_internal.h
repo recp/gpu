@@ -24,6 +24,7 @@ struct GPUBuffer {
   void                        *_priv;
   GPUDevice                   *device;
   GPUHeap                     *_heap;
+  GPUBuffer                   *_sharedPeer;
   uint64_t                     _gpuAddress;
   uint64_t                     _heapOffset;
   uint64_t                     _allocationSize;

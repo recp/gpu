@@ -181,6 +181,7 @@ typedef struct GPUAdapterVk {
   bool                          presentWait;
   bool                          timelineSemaphore;
   bool                          synchronization2;
+  bool                          externalInterop;
   bool                          rayQuery;
   bool                          rayTracingPipeline;
 #ifdef VK_KHR_pipeline_binary
@@ -247,6 +248,15 @@ typedef struct GPUDeviceVk {
 #ifdef VK_KHR_present_wait
   PFN_vkWaitForPresentKHR         waitForPresent;
 #endif
+#if defined(_WIN32) || defined(WIN32)
+  PFN_vkGetMemoryWin32HandleKHR    getMemoryHandle;
+  PFN_vkImportSemaphoreWin32HandleKHR importSemaphoreHandle;
+  PFN_vkGetSemaphoreWin32HandleKHR getSemaphoreHandle;
+#elif defined(__linux__) || defined(__ANDROID__)
+  PFN_vkGetMemoryFdKHR             getMemoryHandle;
+  PFN_vkImportSemaphoreFdKHR       importSemaphoreHandle;
+  PFN_vkGetSemaphoreFdKHR          getSemaphoreHandle;
+#endif
 #ifdef VK_KHR_copy_memory_indirect
   PFN_vkCmdCopyMemoryIndirectKHR        copyMemoryIndirect;
   PFN_vkCmdCopyMemoryToImageIndirectKHR copyMemoryToImageIndirect;
@@ -286,6 +296,7 @@ typedef struct GPUDeviceVk {
   bool                       presentWait;
   bool                       timelineSemaphore;
   bool                       synchronization2;
+  bool                       externalInterop;
   bool                       bufferDeviceAddress;
   bool                       shaderUntypedPointers;
   bool                       indirectMemoryCopy;
@@ -923,6 +934,26 @@ vk_pipelineBarrier(GPUDeviceVk                *device,
                    const VkBufferMemoryBarrier *bufferBarriers,
                    uint32_t                    imageBarrierCount,
                    const VkImageMemoryBarrier  *imageBarriers);
+
+GPU_HIDE
+VkPipelineStageFlags
+vk_barrierStages(const GPUDeviceVk *device, GPUPipelineStageMask stages);
+
+GPU_HIDE
+VkAccessFlags
+vk_barrierAccess(GPUAccessMask access);
+
+GPU_HIDE
+VkAccessFlags
+vk_bufferBarrierAccess(const GPUBuffer      *buffer,
+                       GPUAccessMask         access,
+                       GPUPipelineStageMask  stages);
+
+GPU_HIDE
+VkImageLayout
+vk_textureBarrierLayout(const GPUTexture *texture,
+                        GPUAccessMask     access,
+                        bool              source);
 
 GPU_HIDE
 void

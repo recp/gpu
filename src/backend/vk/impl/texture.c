@@ -722,8 +722,9 @@ vk__createColorRenderPass(VkDevice      device,
   return vkCreateRenderPass(device, &info, NULL, outRenderPass);
 }
 
-static GPUResult
-vk__textureCreateInfo(GPUDevice                  *device,
+GPU_HIDE
+GPUResult
+vk_textureCreateInfo(GPUDevice                  *device,
                       const GPUTextureCreateInfo *info,
                       VkImageCreateInfo          *outInfo,
                       VkImageAspectFlags         *outAspect) {
@@ -795,8 +796,9 @@ vk__textureCreateInfo(GPUDevice                  *device,
   return GPU_OK;
 }
 
-static GPUResult
-vk__finishTexture(GPUDevice                  *device,
+GPU_HIDE
+GPUResult
+vk_finishTexture(GPUDevice                  *device,
                   const GPUTextureCreateInfo *info,
                   const VkImageCreateInfo    *imageInfo,
                   GPUTextureVk               *state,
@@ -927,7 +929,7 @@ vk_getTextureMemoryRequirements(GPUDevice                  *device,
   if (!device || !(deviceVk = device->_priv) || !info || !outRequirements) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  result = vk__textureCreateInfo(device, info, &imageInfo, &aspect);
+  result = vk_textureCreateInfo(device, info, &imageInfo, &aspect);
   if (result != GPU_OK) {
     return result;
   }
@@ -1077,7 +1079,7 @@ vk_getSparseTextureRequirements(
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  result = vk__textureCreateInfo(device, info, &imageInfo, &aspect);
+  result = vk_textureCreateInfo(device, info, &imageInfo, &aspect);
   if (result != GPU_OK) {
     return result;
   }
@@ -1117,7 +1119,7 @@ vk_createSparseTexture(GPUDevice                  *device,
       !outTexture) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  result = vk__textureCreateInfo(device, info, &imageInfo, &state.aspect);
+  result = vk_textureCreateInfo(device, info, &imageInfo, &state.aspect);
   if (result != GPU_OK) {
     return result;
   }
@@ -1156,7 +1158,7 @@ vk_createSparseTexture(GPUDevice                  *device,
     return result;
   }
   GPU__UNUSED(heap);
-  return vk__finishTexture(device, info, &imageInfo, &state, outTexture);
+  return vk_finishTexture(device, info, &imageInfo, &state, outTexture);
 }
 
 GPU_HIDE
@@ -1178,7 +1180,7 @@ vk_createPlacedTexture(GPUDevice                  *device,
       !(heapVk = heap->_priv) || !outTexture) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  result = vk__textureCreateInfo(device, info, &imageInfo, &state.aspect);
+  result = vk_textureCreateInfo(device, info, &imageInfo, &state.aspect);
   if (result != GPU_OK) {
     return result;
   }
@@ -1212,7 +1214,7 @@ vk_createPlacedTexture(GPUDevice                  *device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
   state.memory = heapVk->memory;
-  return vk__finishTexture(device, info, &imageInfo, &state, outTexture);
+  return vk_finishTexture(device, info, &imageInfo, &state, outTexture);
 }
 
 GPU_HIDE
@@ -1237,7 +1239,7 @@ vk_createTexture(GPUDevice                  * __restrict device,
 
   *outTexture             = NULL;
   deviceVk                = device->_priv;
-  createInfoResult        = vk__textureCreateInfo(device,
+  createInfoResult        = vk_textureCreateInfo(device,
                                                   info,
                                                   &imageInfo,
                                                   &state.aspect);
@@ -1292,7 +1294,7 @@ vk_createTexture(GPUDevice                  * __restrict device,
   }
   state.ownsMemory = true;
 
-  return vk__finishTexture(device, info, &imageInfo, &state, outTexture);
+  return vk_finishTexture(device, info, &imageInfo, &state, outTexture);
 }
 
 GPU_HIDE

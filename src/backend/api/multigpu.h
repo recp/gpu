@@ -59,6 +59,16 @@ typedef struct GPUApiMultiGPU {
                      const GPUSemaphoreCreateInfo *info,
                      GPUSemaphore                 *firstSemaphore,
                      GPUSemaphore                 *secondSemaphore);
+
+  GPUResult
+  (*encodeRelease)(GPUDeviceInteropEXT           *interop,
+                   GPUCommandBuffer              *cmdb,
+                   const GPUSharedBarrierBatchEXT *barriers);
+
+  GPUResult
+  (*encodeAcquire)(GPUDeviceInteropEXT           *interop,
+                   GPUCommandBuffer              *cmdb,
+                   const GPUSharedBarrierBatchEXT *barriers);
 } GPUApiMultiGPU;
 
 #endif /* gpu_gpudef_multigpu_h */

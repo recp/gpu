@@ -31,6 +31,7 @@ backend_vk(void) {
     vk_initDevice(&vk.device);
     vk_initBuff(&vk.buf);
     vk_initMemory(&vk.memory);
+    vk_initMultiGPU(&vk.multigpu);
     vk_initTexture(&vk.texture);
     vk_initSampler(&vk.sampler);
     vk_initSurface(&vk.surface);

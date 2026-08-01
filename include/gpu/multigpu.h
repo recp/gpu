@@ -21,10 +21,40 @@ extern "C" {
 #endif
 
 #include "buffer.h"
+#include "barrier.h"
 #include "memory.h"
 #include "texture.h"
 
 typedef struct GPUDeviceInteropEXT GPUDeviceInteropEXT;
+
+typedef struct GPUSharedBufferBarrierEXT {
+  GPUBuffer     *sourceBuffer;
+  GPUBuffer     *destinationBuffer;
+  uint64_t       offset;
+  uint64_t       sizeBytes;
+  GPUAccessMask  srcAccess;
+  GPUAccessMask  dstAccess;
+} GPUSharedBufferBarrierEXT;
+
+typedef struct GPUSharedTextureBarrierEXT {
+  GPUTexture    *sourceTexture;
+  GPUTexture    *destinationTexture;
+  GPUAccessMask  srcAccess;
+  GPUAccessMask  dstAccess;
+  uint32_t       baseMip;
+  uint32_t       mipCount;
+  uint32_t       baseLayer;
+  uint32_t       layerCount;
+} GPUSharedTextureBarrierEXT;
+
+typedef struct GPUSharedBarrierBatchEXT {
+  const GPUSharedBufferBarrierEXT  *pBufferBarriers;
+  const GPUSharedTextureBarrierEXT *pTextureBarriers;
+  GPUPipelineStageMask              srcStages;
+  GPUPipelineStageMask              dstStages;
+  uint32_t                          bufferBarrierCount;
+  uint32_t                          textureBarrierCount;
+} GPUSharedBarrierBatchEXT;
 
 /* Devices outlive the zero-copy bridge and every handle created from it. */
 GPU_EXPORT
@@ -74,6 +104,20 @@ GPUCreateSharedSemaphoreEXT(GPUDeviceInteropEXT          *interop,
                             const GPUSemaphoreCreateInfo *info,
                             GPUSemaphore                **outFirstSemaphore,
                             GPUSemaphore                **outSecondSemaphore);
+
+/* Record release before signaling the source device's shared semaphore. */
+GPU_EXPORT
+GPUResult
+GPUEncodeSharedReleaseEXT(GPUDeviceInteropEXT           *interop,
+                          GPUCommandBuffer               *cmdb,
+                          const GPUSharedBarrierBatchEXT *barriers);
+
+/* Record acquire after the destination waits on its shared semaphore. */
+GPU_EXPORT
+GPUResult
+GPUEncodeSharedAcquireEXT(GPUDeviceInteropEXT           *interop,
+                          GPUCommandBuffer               *cmdb,
+                          const GPUSharedBarrierBatchEXT *barriers);
 
 #ifdef __cplusplus
 }

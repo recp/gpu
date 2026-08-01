@@ -348,6 +348,11 @@ GPUDestroyTexture(GPUTexture * __restrict texture) {
     return;
   }
 
+  if (texture->_sharedPeer && texture->_sharedPeer->_sharedPeer == texture) {
+    texture->_sharedPeer->_sharedPeer = NULL;
+  }
+  texture->_sharedPeer = NULL;
+
   if (!(api = gpuDeviceApi(texture->device)) || !api->texture.destroy) {
     return;
   }

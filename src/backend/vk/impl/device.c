@@ -767,6 +767,12 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool                                      timelineCore;
   bool                                      sync2Extension;
   bool                                      sync2Core;
+#if defined(_WIN32) || defined(WIN32) || \
+    defined(__linux__) || defined(__ANDROID__)
+  bool                                      externalInteropCore;
+  bool                                      externalMemoryExtension;
+  bool                                      externalSemaphoreExtension;
+#endif
 #if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
   bool                                      presentIdExtension;
   bool                                      presentWaitExtension;
@@ -847,6 +853,12 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   timelineCore              = false;
   sync2Extension            = false;
   sync2Core                 = false;
+#if defined(_WIN32) || defined(WIN32) || \
+    defined(__linux__) || defined(__ANDROID__)
+  externalInteropCore        = false;
+  externalMemoryExtension    = false;
+  externalSemaphoreExtension = false;
+#endif
 #if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
   presentIdExtension        = false;
   presentWaitExtension      = false;
@@ -1013,6 +1025,25 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                   extensions[i].extensionName)) {
         sync2Extension = true;
       }
+#if defined(_WIN32) || defined(WIN32)
+      if (!strcmp(VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        externalMemoryExtension = true;
+      }
+      if (!strcmp(VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        externalSemaphoreExtension = true;
+      }
+#elif defined(__linux__) || defined(__ANDROID__)
+      if (!strcmp(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        externalMemoryExtension = true;
+      }
+      if (!strcmp(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        externalSemaphoreExtension = true;
+      }
+#endif
 #if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
       if (!strcmp(VK_KHR_PRESENT_ID_EXTENSION_NAME,
                   extensions[i].extensionName)) {
@@ -1140,12 +1171,35 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   maintenance1Core = instanceVk &&
                      instanceVk->apiVersion >= VK_API_VERSION_1_1 &&
                      adapterVk->props.apiVersion >= VK_API_VERSION_1_1;
+#if defined(_WIN32) || defined(WIN32) || \
+    defined(__linux__) || defined(__ANDROID__)
+  externalInteropCore = maintenance1Core;
+#endif
   if (!maintenance1Core && maintenance1Extension) {
     adapterVk->extensionNames[adapterVk->nEnabledExtensions++] =
       VK_KHR_MAINTENANCE1_EXTENSION_NAME;
     assert(adapterVk->nEnabledExtensions < 64);
   }
   adapterVk->negativeViewport = maintenance1Core || maintenance1Extension;
+#if defined(_WIN32) || defined(WIN32)
+  if (externalInteropCore && externalMemoryExtension &&
+      externalSemaphoreExtension &&
+      vk_addDeviceExtension(adapterVk,
+                            VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME) &&
+      vk_addDeviceExtension(adapterVk,
+                            VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME)) {
+    adapterVk->externalInterop = true;
+  }
+#elif defined(__linux__) || defined(__ANDROID__)
+  if (externalInteropCore && externalMemoryExtension &&
+      externalSemaphoreExtension &&
+      vk_addDeviceExtension(adapterVk,
+                            VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME) &&
+      vk_addDeviceExtension(adapterVk,
+                            VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME)) {
+    adapterVk->externalInterop = true;
+  }
+#endif
   vk_querySubgroupCapabilities(instanceVk,
                                adapterVk,
                                subgroupSizeControl);
@@ -3058,6 +3112,47 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   deviceVk->multiDrawIndirect = coreFeatures.multiDrawIndirect;
   deviceVk->independentBlend  = coreFeatures.independentBlend;
   deviceVk->timelineSemaphore = adapterVk->timelineSemaphore;
+#if defined(_WIN32) || defined(WIN32)
+  if (adapterVk->externalInterop) {
+    deviceVk->getMemoryHandle =
+      (PFN_vkGetMemoryWin32HandleKHR)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkGetMemoryWin32HandleKHR"
+      );
+    deviceVk->getSemaphoreHandle =
+      (PFN_vkGetSemaphoreWin32HandleKHR)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkGetSemaphoreWin32HandleKHR"
+      );
+    deviceVk->importSemaphoreHandle =
+      (PFN_vkImportSemaphoreWin32HandleKHR)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkImportSemaphoreWin32HandleKHR"
+      );
+    deviceVk->externalInterop = deviceVk->getMemoryHandle &&
+                                deviceVk->getSemaphoreHandle &&
+                                deviceVk->importSemaphoreHandle;
+  }
+#elif defined(__linux__) || defined(__ANDROID__)
+  if (adapterVk->externalInterop) {
+    deviceVk->getMemoryHandle =
+      (PFN_vkGetMemoryFdKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                "vkGetMemoryFdKHR");
+    deviceVk->getSemaphoreHandle =
+      (PFN_vkGetSemaphoreFdKHR)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkGetSemaphoreFdKHR"
+      );
+    deviceVk->importSemaphoreHandle =
+      (PFN_vkImportSemaphoreFdKHR)vkGetDeviceProcAddr(
+        deviceVk->device,
+        "vkImportSemaphoreFdKHR"
+      );
+    deviceVk->externalInterop = deviceVk->getMemoryHandle &&
+                                deviceVk->getSemaphoreHandle &&
+                                deviceVk->importSemaphoreHandle;
+  }
+#endif
 #ifdef VK_KHR_shader_untyped_pointers
   deviceVk->shaderUntypedPointers = adapterVk->shaderUntypedPointers;
   device->uslUntypedPointers      = deviceVk->shaderUntypedPointers;

@@ -15,7 +15,12 @@
  */
 
 #include "../common.h"
+#include "../impl.h"
 #include "../../../api/multigpu_internal.h"
+
+enum {
+  MT_SHARED_BARRIER_CHUNK_SIZE = 16u
+};
 
 static bool
 mt_interopDevices(GPUDeviceInteropEXT *interop,
@@ -300,6 +305,97 @@ mt_createSharedSemaphore(GPUDeviceInteropEXT          *interop,
   return GPU_ERROR_UNSUPPORTED;
 }
 
+static GPUResult
+mt_encodeSharedBarriers(GPUDeviceInteropEXT           *interop,
+                        GPUCommandBuffer               *cmdb,
+                        const GPUSharedBarrierBatchEXT *barriers,
+                        bool                            acquire) {
+  GPUDeviceMT *first, *second;
+  uint32_t     bufferOffset, textureOffset;
+
+  if (!mt_interopDevices(interop, &first, &second) || !cmdb || !barriers) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  GPU__UNUSED(first);
+  GPU__UNUSED(second);
+
+  bufferOffset  = 0u;
+  textureOffset = 0u;
+  while (bufferOffset < barriers->bufferBarrierCount ||
+         textureOffset < barriers->textureBarrierCount) {
+    GPUBufferBarrier  bufferBarriers[MT_SHARED_BARRIER_CHUNK_SIZE];
+    GPUTextureBarrier textureBarriers[MT_SHARED_BARRIER_CHUNK_SIZE];
+    GPUBarrierBatch   batch = {0};
+    uint32_t          bufferCount, textureCount;
+
+    bufferCount = barriers->bufferBarrierCount - bufferOffset;
+    if (bufferCount > MT_SHARED_BARRIER_CHUNK_SIZE) {
+      bufferCount = MT_SHARED_BARRIER_CHUNK_SIZE;
+    }
+    textureCount = barriers->textureBarrierCount - textureOffset;
+    if (textureCount > MT_SHARED_BARRIER_CHUNK_SIZE) {
+      textureCount = MT_SHARED_BARRIER_CHUNK_SIZE;
+    }
+
+    for (uint32_t i = 0u; i < bufferCount; i++) {
+      const GPUSharedBufferBarrierEXT *shared;
+      GPUBufferBarrier                *barrier;
+
+      shared             = &barriers->pBufferBarriers[bufferOffset + i];
+      barrier            = &bufferBarriers[i];
+      barrier->buffer    = acquire
+                             ? shared->destinationBuffer
+                             : shared->sourceBuffer;
+      barrier->srcAccess = acquire ? GPU_ACCESS_NONE : shared->srcAccess;
+      barrier->dstAccess = acquire ? shared->dstAccess : GPU_ACCESS_NONE;
+      barrier->offset    = shared->offset;
+      barrier->sizeBytes = shared->sizeBytes;
+    }
+    for (uint32_t i = 0u; i < textureCount; i++) {
+      const GPUSharedTextureBarrierEXT *shared;
+      GPUTextureBarrier                *barrier;
+
+      shared              = &barriers->pTextureBarriers[textureOffset + i];
+      barrier             = &textureBarriers[i];
+      barrier->texture    = acquire
+                              ? shared->destinationTexture
+                              : shared->sourceTexture;
+      barrier->srcAccess  = acquire ? GPU_ACCESS_NONE : shared->srcAccess;
+      barrier->dstAccess  = acquire ? shared->dstAccess : GPU_ACCESS_NONE;
+      barrier->baseMip    = shared->baseMip;
+      barrier->mipCount   = shared->mipCount;
+      barrier->baseLayer  = shared->baseLayer;
+      barrier->layerCount = shared->layerCount;
+    }
+
+    batch.pBufferBarriers     = bufferCount > 0u ? bufferBarriers : NULL;
+    batch.pTextureBarriers    = textureCount > 0u ? textureBarriers : NULL;
+    batch.srcStages           = acquire ? GPU_STAGE_TOP : barriers->srcStages;
+    batch.dstStages           = acquire ? barriers->dstStages : GPU_STAGE_BOTTOM;
+    batch.bufferBarrierCount  = bufferCount;
+    batch.textureBarrierCount = textureCount;
+    mt_encodeBarriers(cmdb, &batch);
+
+    bufferOffset  += bufferCount;
+    textureOffset += textureCount;
+  }
+  return GPU_OK;
+}
+
+static GPUResult
+mt_encodeSharedRelease(GPUDeviceInteropEXT           *interop,
+                       GPUCommandBuffer               *cmdb,
+                       const GPUSharedBarrierBatchEXT *barriers) {
+  return mt_encodeSharedBarriers(interop, cmdb, barriers, false);
+}
+
+static GPUResult
+mt_encodeSharedAcquire(GPUDeviceInteropEXT           *interop,
+                       GPUCommandBuffer               *cmdb,
+                       const GPUSharedBarrierBatchEXT *barriers) {
+  return mt_encodeSharedBarriers(interop, cmdb, barriers, true);
+}
+
 GPU_HIDE
 void
 mt_initMultiGPU(GPUApiMultiGPU *api) {
@@ -310,4 +406,6 @@ mt_initMultiGPU(GPUApiMultiGPU *api) {
   api->getTextureRequirements = mt_getSharedTextureRequirements;
   api->createTexture          = mt_createSharedTexture;
   api->createSemaphore        = mt_createSharedSemaphore;
+  api->encodeRelease          = mt_encodeSharedRelease;
+  api->encodeAcquire          = mt_encodeSharedAcquire;
 }
