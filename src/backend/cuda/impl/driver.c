@@ -102,6 +102,17 @@ cuda__load(void) {
   CUDA_LOAD_REQUIRED2(eventDestroy, "cuEventDestroy_v2", "cuEventDestroy");
   CUDA_LOAD_REQUIRED(eventRecord, "cuEventRecord");
   CUDA_LOAD_REQUIRED(eventSynchronize, "cuEventSynchronize");
+  CUDA_LOAD_OPTIONAL(importExternalMemory, "cuImportExternalMemory");
+  CUDA_LOAD_OPTIONAL(externalMemoryGetMappedBuffer,
+                     "cuExternalMemoryGetMappedBuffer");
+  CUDA_LOAD_OPTIONAL(destroyExternalMemory, "cuDestroyExternalMemory");
+  CUDA_LOAD_OPTIONAL(importExternalSemaphore, "cuImportExternalSemaphore");
+  CUDA_LOAD_OPTIONAL(signalExternalSemaphoresAsync,
+                     "cuSignalExternalSemaphoresAsync");
+  CUDA_LOAD_OPTIONAL(waitExternalSemaphoresAsync,
+                     "cuWaitExternalSemaphoresAsync");
+  CUDA_LOAD_OPTIONAL(destroyExternalSemaphore,
+                     "cuDestroyExternalSemaphore");
   CUDA_LOAD_REQUIRED2(memAlloc, "cuMemAlloc_v2", "cuMemAlloc");
   CUDA_LOAD_REQUIRED2(memFree, "cuMemFree_v2", "cuMemFree");
   CUDA_LOAD_REQUIRED2(memcpyHtoD, "cuMemcpyHtoD_v2", "cuMemcpyHtoD");

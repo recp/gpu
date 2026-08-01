@@ -40,6 +40,11 @@ typedef struct GPUBufferCuda {
   CUdeviceptr address;
 } GPUBufferCuda;
 
+typedef struct GPUSemaphoreCuda {
+  GPUCUDA             *driver;
+  CUexternalSemaphore  semaphore;
+} GPUSemaphoreCuda;
+
 typedef struct GPUShaderLibraryCuda {
   char    *source;
   uint64_t size;
