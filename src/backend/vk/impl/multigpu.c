@@ -1624,6 +1624,28 @@ vk_encodeSharedAcquire(GPUDeviceInteropEXT           *interop,
   return vk_encodeSharedBarriers(interop, cmdb, barriers, true);
 }
 
+static GPUResult
+vk_encodeExternalRelease(GPUCommandBuffer               *cmdb,
+                         const GPUSharedBarrierBatchEXT *barriers) {
+  GPUResult result;
+
+  result = vk_encodeSharedBuffers(cmdb, barriers, false);
+  return result == GPU_OK
+           ? vk_encodeSharedTextures(cmdb, barriers, false)
+           : result;
+}
+
+static GPUResult
+vk_encodeExternalAcquire(GPUCommandBuffer               *cmdb,
+                         const GPUSharedBarrierBatchEXT *barriers) {
+  GPUResult result;
+
+  result = vk_encodeSharedBuffers(cmdb, barriers, true);
+  return result == GPU_OK
+           ? vk_encodeSharedTextures(cmdb, barriers, true)
+           : result;
+}
+
 GPU_HIDE
 void
 vk_initMultiGPU(GPUApiMultiGPU *api) {
@@ -1639,4 +1661,6 @@ vk_initMultiGPU(GPUApiMultiGPU *api) {
   api->getExternalBufferRequirements = vk_getExternalBufferRequirements;
   api->createExternalBuffer    = vk_createExternalBuffer;
   api->createExternalSemaphore = vk_createExternalSemaphore;
+  api->encodeExternalRelease   = vk_encodeExternalRelease;
+  api->encodeExternalAcquire   = vk_encodeExternalAcquire;
 }

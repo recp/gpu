@@ -1011,4 +1011,30 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
       TIMEOUT 30
     )
   endif()
+
+  if(GPU_BUILD_DX12 OR GPU_BUILD_VULKAN)
+    add_executable(gpu-graphics-cuda-interop-usl
+      ${PROJECT_SOURCE_DIR}/tests/validation/graphics-cuda-interop-usl/main.c
+    )
+    target_link_libraries(gpu-graphics-cuda-interop-usl PRIVATE gpu)
+    gpu_attach_usl_validation(gpu-graphics-cuda-interop-usl
+                              gpu-cuda-fixtures
+                              "${GPU_CUDA_COMPUTE_BUFFER_US}")
+    set_target_properties(gpu-graphics-cuda-interop-usl PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+    )
+    if(GPU_BUILD_TESTS)
+      add_test(
+        NAME cuda-graphics-interop
+        COMMAND gpu-graphics-cuda-interop-usl
+                "${GPU_CUDA_COMPUTE_BUFFER_US}"
+      )
+      set_tests_properties(cuda-graphics-interop PROPERTIES
+        SKIP_RETURN_CODE 77
+        TIMEOUT 30
+      )
+    endif()
+  endif()
 endif()

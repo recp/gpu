@@ -703,20 +703,16 @@ dx12_createExternalSemaphore(GPUDevice                     *device,
 }
 
 static GPUResult
-dx12_encodeSharedBarriers(GPUDeviceInteropEXT           *interop,
-                          GPUCommandBuffer               *cmdb,
-                          const GPUSharedBarrierBatchEXT *barriers,
-                          bool                            acquire) {
-  GPUDeviceDX12 *first, *second;
-  GPUResult      result;
-  uint32_t       bufferOffset, textureOffset;
+dx12_encodeExternalBarriers(GPUCommandBuffer               *cmdb,
+                            const GPUSharedBarrierBatchEXT *barriers,
+                            bool                            acquire) {
+  GPUApi   *api;
+  uint32_t  bufferOffset, textureOffset;
 
-  result = dx12_interopDevices(interop, &first, &second);
-  if (result != GPU_OK || !cmdb || !barriers) {
-    return result != GPU_OK ? result : GPU_ERROR_INVALID_ARGUMENT;
+  api = cmdb && cmdb->_queue ? gpuCommandQueueApi(cmdb->_queue) : NULL;
+  if (!api || api->backend != GPU_BACKEND_DX12 || !barriers) {
+    return GPU_ERROR_INVALID_ARGUMENT;
   }
-  GPU__UNUSED(first);
-  GPU__UNUSED(second);
 
   bufferOffset  = 0u;
   textureOffset = 0u;
@@ -782,6 +778,34 @@ dx12_encodeSharedBarriers(GPUDeviceInteropEXT           *interop,
 }
 
 static GPUResult
+dx12_encodeSharedBarriers(GPUDeviceInteropEXT           *interop,
+                          GPUCommandBuffer               *cmdb,
+                          const GPUSharedBarrierBatchEXT *barriers,
+                          bool                            acquire) {
+  GPUDeviceDX12 *first, *second;
+  GPUResult      result;
+
+  result = dx12_interopDevices(interop, &first, &second);
+  GPU__UNUSED(first);
+  GPU__UNUSED(second);
+  return result == GPU_OK
+           ? dx12_encodeExternalBarriers(cmdb, barriers, acquire)
+           : result;
+}
+
+static GPUResult
+dx12_encodeExternalRelease(GPUCommandBuffer               *cmdb,
+                           const GPUSharedBarrierBatchEXT *barriers) {
+  return dx12_encodeExternalBarriers(cmdb, barriers, false);
+}
+
+static GPUResult
+dx12_encodeExternalAcquire(GPUCommandBuffer               *cmdb,
+                           const GPUSharedBarrierBatchEXT *barriers) {
+  return dx12_encodeExternalBarriers(cmdb, barriers, true);
+}
+
+static GPUResult
 dx12_encodeSharedRelease(GPUDeviceInteropEXT           *interop,
                          GPUCommandBuffer               *cmdb,
                          const GPUSharedBarrierBatchEXT *barriers) {
@@ -811,4 +835,6 @@ dx12_initMultiGPU(GPUApiMultiGPU *api) {
     dx12_getExternalBufferRequirements;
   api->createExternalBuffer    = dx12_createExternalBuffer;
   api->createExternalSemaphore = dx12_createExternalSemaphore;
+  api->encodeExternalRelease   = dx12_encodeExternalRelease;
+  api->encodeExternalAcquire   = dx12_encodeExternalAcquire;
 }

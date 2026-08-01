@@ -12,10 +12,6 @@
 #  include <unistd.h>
 #endif
 
-enum {
-  CUDA_SHARED_BARRIER_CHUNK_SIZE = 16u
-};
-
 typedef struct GPUDeviceInteropCuda {
   GPUDevice     *graphicsDevice;
   GPUDevice     *cudaDevice;
@@ -85,7 +81,9 @@ cuda_createDeviceInterop(GPUDevice           *firstDevice,
       !cuda->driver->signalExternalSemaphoresAsync ||
       !graphicsApi->multigpu.getExternalBufferRequirements ||
       !graphicsApi->multigpu.createExternalBuffer ||
-      !graphicsApi->multigpu.createExternalSemaphore) {
+      !graphicsApi->multigpu.createExternalSemaphore ||
+      !graphicsApi->multigpu.encodeExternalRelease ||
+      !graphicsApi->multigpu.encodeExternalAcquire) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -499,38 +497,11 @@ cuda__encodeSharedBarriers(GPUDeviceInteropEXT           *interop,
       barriers->textureBarrierCount != 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-
-  for (uint32_t offset = 0u; offset < barriers->bufferBarrierCount;) {
-    GPUBufferBarrier bufferBarriers[CUDA_SHARED_BARRIER_CHUNK_SIZE];
-    GPUBarrierBatch  batch = {0};
-    uint32_t         count;
-
-    count = barriers->bufferBarrierCount - offset;
-    if (count > CUDA_SHARED_BARRIER_CHUNK_SIZE) {
-      count = CUDA_SHARED_BARRIER_CHUNK_SIZE;
-    }
-    for (uint32_t i = 0u; i < count; i++) {
-      const GPUSharedBufferBarrierEXT *shared;
-      GPUBufferBarrier                *barrier;
-
-      shared             = &barriers->pBufferBarriers[offset + i];
-      barrier            = &bufferBarriers[i];
-      barrier->buffer    = acquire
-                             ? shared->destinationBuffer
-                             : shared->sourceBuffer;
-      barrier->srcAccess = acquire ? GPU_ACCESS_NONE : shared->srcAccess;
-      barrier->dstAccess = acquire ? shared->dstAccess : GPU_ACCESS_NONE;
-      barrier->offset    = shared->offset;
-      barrier->sizeBytes = shared->sizeBytes;
-    }
-    batch.pBufferBarriers    = bufferBarriers;
-    batch.srcStages          = barriers->srcStages;
-    batch.dstStages          = barriers->dstStages;
-    batch.bufferBarrierCount = count;
-    GPUEncodeBarriers(cmdb, &batch);
-    offset += count;
-  }
-  return GPU_OK;
+  return acquire
+           ? native->graphicsApi->multigpu.encodeExternalAcquire(cmdb,
+                                                                  barriers)
+           : native->graphicsApi->multigpu.encodeExternalRelease(cmdb,
+                                                                  barriers);
 }
 
 static GPUResult
