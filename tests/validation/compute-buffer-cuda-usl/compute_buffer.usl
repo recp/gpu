@@ -1,0 +1,4 @@
+kern(256) saxpy(inout values: [float] #buffer(0),
+                globalId: uint #global_id) {
+  values[globalId] = values[globalId] * 2.0 + 1.0
+}

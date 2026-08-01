@@ -29,6 +29,8 @@ gpu__selectDefaultBackend(void) {
   return backend_dx12();
 #elif GPU_BACKEND_WEBGPU_ONLY
   return backend_webgpu();
+#elif GPU_BACKEND_CUDA_ONLY
+  return backend_cuda();
 #elif defined(__EMSCRIPTEN__) && defined(GPU_ENABLE_WEBGPU)
   return backend_webgpu();
 #elif defined(__APPLE__)
@@ -69,6 +71,12 @@ gpuApiForBackend(GPUBackend backend) {
     return gpu__selectDefaultBackend();
   }
   return NULL;
+#elif GPU_BACKEND_CUDA_ONLY
+  if (backend == GPU_BACKEND_DEFAULT ||
+      backend == GPU_BACKEND_CUDA) {
+    return gpu__selectDefaultBackend();
+  }
+  return NULL;
 #else
   GPUApi *api;
 
@@ -96,6 +104,11 @@ gpuApiForBackend(GPUBackend backend) {
 #if defined(GPU_ENABLE_WEBGPU)
     case GPU_BACKEND_WEBGPU:
       api = backend_webgpu();
+      break;
+#endif
+#if defined(GPU_ENABLE_CUDA)
+    case GPU_BACKEND_CUDA:
+      api = backend_cuda();
       break;
 #endif
     default:

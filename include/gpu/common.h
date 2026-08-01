@@ -48,7 +48,8 @@ typedef enum GPUBackend {
   GPU_BACKEND_METAL   = 1,
   GPU_BACKEND_VULKAN  = 2,
   GPU_BACKEND_DX12    = 3,
-  GPU_BACKEND_WEBGPU  = 4
+  GPU_BACKEND_WEBGPU  = 4,
+  GPU_BACKEND_CUDA    = 5
 } GPUBackend;
 
 typedef enum GPUStructureType {

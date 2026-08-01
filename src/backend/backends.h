@@ -19,14 +19,16 @@
 
 #include "common.h"
 
-#if defined(__APPLE__) && !GPU_BACKEND_VULKAN_ONLY && !GPU_BACKEND_WEBGPU_ONLY
+#if defined(__APPLE__) && !GPU_BACKEND_VULKAN_ONLY && \
+    !GPU_BACKEND_WEBGPU_ONLY && !GPU_BACKEND_CUDA_ONLY
 GPU_HIDE
 GPUApi*
 backend_metal(void);
 #endif
 
 #if (defined(_WIN32) || defined(WIN32)) && \
-    !GPU_BACKEND_VULKAN_ONLY && !GPU_BACKEND_WEBGPU_ONLY
+    !GPU_BACKEND_VULKAN_ONLY && !GPU_BACKEND_WEBGPU_ONLY && \
+    !GPU_BACKEND_CUDA_ONLY
 GPU_HIDE
 GPUApi*
 backend_dx12(void);
@@ -35,7 +37,8 @@ backend_dx12(void);
 #if defined(GPU_ENABLE_VULKAN) && \
     !GPU_BACKEND_METAL_ONLY && \
     !GPU_BACKEND_DX12_ONLY && \
-    !GPU_BACKEND_WEBGPU_ONLY
+    !GPU_BACKEND_WEBGPU_ONLY && \
+    !GPU_BACKEND_CUDA_ONLY
 GPU_HIDE
 GPUApi*
 backend_vk(void);
@@ -45,6 +48,12 @@ backend_vk(void);
 GPU_HIDE
 GPUApi*
 backend_webgpu(void);
+#endif
+
+#if defined(GPU_ENABLE_CUDA)
+GPU_HIDE
+GPUApi*
+backend_cuda(void);
 #endif
 
 #endif /* backend_backends_h */

@@ -13,7 +13,8 @@ static const GPUUSLBackendName gpuUSLBackends[] = {
   {"metal",  USL_BACKEND_METAL},
   {"vulkan", USL_BACKEND_SPIRV},
   {"dx12",   USL_BACKEND_HLSL},
-  {"webgpu", USL_BACKEND_WGSL}
+  {"webgpu", USL_BACKEND_WGSL},
+  {"ptx",    USL_BACKEND_PTX}
 };
 
 static int
@@ -70,7 +71,7 @@ main(int argc, char **argv) {
 
   if (argc != 3 || !gpu_usl_backend(argv[1], &backend)) {
     fprintf(stderr,
-            "usage: %s <metal|vulkan|dx12|webgpu> <source.usl>\n",
+            "usage: %s <metal|vulkan|dx12|webgpu|ptx> <source.usl>\n",
             argv[0]);
     return 2;
   }

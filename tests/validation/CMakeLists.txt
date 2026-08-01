@@ -986,3 +986,29 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
     endif()
   endif()
 endif()
+
+if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
+  add_executable(gpu-compute-buffer-cuda-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/compute-buffer-cuda-usl/main.c
+  )
+  target_link_libraries(gpu-compute-buffer-cuda-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-compute-buffer-cuda-usl
+                            gpu-cuda-fixtures
+                            "${GPU_CUDA_COMPUTE_BUFFER_US}")
+  set_target_properties(gpu-compute-buffer-cuda-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(GPU_BUILD_TESTS)
+    add_test(
+      NAME cuda-compute-buffer
+      COMMAND gpu-compute-buffer-cuda-usl
+              "${GPU_CUDA_COMPUTE_BUFFER_US}"
+    )
+    set_tests_properties(cuda-compute-buffer PROPERTIES
+      SKIP_RETURN_CODE 77
+      TIMEOUT 30
+    )
+  endif()
+endif()

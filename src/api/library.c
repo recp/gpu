@@ -2209,7 +2209,21 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
   targetAtomCount = 0u;
-  if (api->backend == GPU_BACKEND_VULKAN) {
+  if (api->backend == GPU_BACKEND_CUDA) {
+    char architecture[USL_CAPABILITY_ATOM_TEXT_MAX];
+    int  architectureLength;
+
+    architectureLength = snprintf(architecture,
+                                  sizeof(architecture),
+                                  "sm_%u",
+                                  device->uslTargetArchitecture);
+    if (device->uslTargetArchitecture == 0u || architectureLength <= 0 ||
+        (size_t)architectureLength >= sizeof(architecture) ||
+        us_cap_atom_text(&targetAtoms[targetAtomCount++],
+                         architecture) != USLOk) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  } else if (api->backend == GPU_BACKEND_VULKAN) {
     if (device->uslTargetProfile == 0u) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
@@ -2545,7 +2559,8 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
     rc = gpu_createShaderLibraryFromBinary(device, &info, outLibrary);
   } else if (target.backend == USL_BACKEND_METAL ||
              target.backend == USL_BACKEND_HLSL ||
-             target.backend == USL_BACKEND_WGSL) {
+             target.backend == USL_BACKEND_WGSL ||
+             target.backend == USL_BACKEND_PTX) {
     rc = gpu_createShaderLibraryFromBackendText(device,
                                                 compileOutput.backend_data,
                                                 compileOutput.backend_size,

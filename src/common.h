@@ -57,6 +57,10 @@
 #  define GPU_BACKEND_WEBGPU_ONLY 0
 #endif
 
+#ifndef GPU_BACKEND_CUDA_ONLY
+#  define GPU_BACKEND_CUDA_ONLY 0
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>

@@ -91,6 +91,17 @@ if(GPU_BUILD_VULKAN AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
   add_custom_target(gpu-vulkan-fixtures DEPENDS ${GPU_VULKAN_USL_FIXTURES})
 endif()
 
+if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
+  gpu_add_usl_fixtures(
+    GPU_CUDA_USL_FIXTURES
+    ptx
+    validation
+    "${PROJECT_SOURCE_DIR}/tests/validation/compute-buffer-cuda-usl/compute_buffer.usl"
+  )
+  list(GET GPU_CUDA_USL_FIXTURES 0 GPU_CUDA_COMPUTE_BUFFER_US)
+  add_custom_target(gpu-cuda-fixtures DEPENDS ${GPU_CUDA_USL_FIXTURES})
+endif()
+
 if(GPU_BUILD_METAL AND GPU_BUILD_SAMPLES AND
    NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   gpu_add_usl_fixtures(

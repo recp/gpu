@@ -182,6 +182,14 @@ gpu_uslDefaultWebGPUTarget(USLTargetSpec *outTarget) {
 }
 
 static inline int
+gpu_uslDefaultCUDATarget(USLTargetSpec *outTarget) {
+  return outTarget &&
+         us_target_init(outTarget,
+                        USL_BACKEND_PTX,
+                        USL_TARGET_PROFILE_NONE) == USLOk;
+}
+
+static inline int
 gpu_uslDefaultTarget(GPUBackend backend, USLTargetSpec *outTarget) {
   switch (backend) {
     case GPU_BACKEND_METAL:
@@ -192,6 +200,8 @@ gpu_uslDefaultTarget(GPUBackend backend, USLTargetSpec *outTarget) {
       return gpu_uslDefaultDX12Target(outTarget);
     case GPU_BACKEND_WEBGPU:
       return gpu_uslDefaultWebGPUTarget(outTarget);
+    case GPU_BACKEND_CUDA:
+      return gpu_uslDefaultCUDATarget(outTarget);
     default:
       return 0;
   }

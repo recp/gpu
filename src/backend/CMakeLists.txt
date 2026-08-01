@@ -70,3 +70,7 @@ if(GPU_BUILD_WEBGPU)
       "${_gpu_webgpu_runtime_library}"
       PARENT_SCOPE)
 endif()
+
+if(GPU_BUILD_CUDA)
+  add_subdirectory(cuda)
+endif()

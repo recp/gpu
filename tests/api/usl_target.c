@@ -66,6 +66,9 @@ main(void) {
   ok &= expect_profile("future Vulkan",
                        2u, 0u,
                        USL_TARGET_PROFILE_VULKAN_1_4);
+  ok &= gpu_uslDefaultTarget(GPU_BACKEND_CUDA, &target);
+  ok &= target.backend == USL_BACKEND_PTX;
+  ok &= target.profile == USL_TARGET_PROFILE_NONE;
 
   return ok ? 0 : 1;
 }

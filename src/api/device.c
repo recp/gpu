@@ -37,6 +37,8 @@ gpu_backendName(GPUBackend backend) {
       return "Direct3D 12";
     case GPU_BACKEND_WEBGPU:
       return "WebGPU";
+    case GPU_BACKEND_CUDA:
+      return "CUDA";
     default:
       return "Unknown GPU";
   }
