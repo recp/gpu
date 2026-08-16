@@ -20,7 +20,7 @@ if (-not (Test-Path $vswhere)) {
   throw "Visual Studio Installer's vswhere.exe was not found"
 }
 
-$vsRoot = & $vswhere -latest -products * `
+$vsRoot = & $vswhere -latest -prerelease -products * `
   -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
   -property installationPath
 if (-not $vsRoot) {
