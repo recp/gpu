@@ -1,4 +1,5 @@
 include(FetchContent)
+include(${CMAKE_CURRENT_LIST_DIR}/WindowsTarget.cmake)
 
 set(GPU_DX12_DXC_VERSION "1.10.2605.24-preview" CACHE STRING
     "DirectX Shader Compiler NuGet package version")
@@ -29,17 +30,7 @@ function(gpu_enable_dx12_dxc target)
     set(dxcRoot "${gpu_dx12_dxc_SOURCE_DIR}")
   endif()
 
-  string(TOLOWER "${CMAKE_GENERATOR_PLATFORM}" dxcPlatform)
-  if(NOT dxcPlatform)
-    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" dxcPlatform)
-  endif()
-  if(dxcPlatform MATCHES "arm64|aarch64")
-    set(dxcPlatform arm64)
-  elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
-    set(dxcPlatform x86)
-  else()
-    set(dxcPlatform x64)
-  endif()
+  gpu_windows_target_arch(dxcPlatform)
 
   set(dxcInclude "${dxcRoot}/build/native/include")
   set(dxcRuntime "${dxcRoot}/build/native/bin/${dxcPlatform}")

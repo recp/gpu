@@ -1,4 +1,5 @@
 include(FetchContent)
+include(${CMAKE_CURRENT_LIST_DIR}/WindowsTarget.cmake)
 
 set(GPU_DX12_AGILITY_SDK_VERSION "1.721.3-preview" CACHE STRING
     "DirectX 12 Agility SDK NuGet package version")
@@ -38,16 +39,9 @@ function(gpu_enable_dx12_agility target)
       "Invalid Agility SDK package root: ${agilityRoot}")
   endif()
 
-  string(TOLOWER "${CMAKE_GENERATOR_PLATFORM}" agilityPlatform)
-  if(NOT agilityPlatform)
-    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" agilityPlatform)
-  endif()
-  if(agilityPlatform MATCHES "arm64|aarch64")
-    set(agilityPlatform arm64)
-  elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
+  gpu_windows_target_arch(agilityPlatform)
+  if(agilityPlatform STREQUAL "x86")
     set(agilityPlatform win32)
-  else()
-    set(agilityPlatform x64)
   endif()
 
   set(agilityRuntime "${agilityRoot}/build/native/bin/${agilityPlatform}")
@@ -63,16 +57,8 @@ function(gpu_enable_dx12_agility target)
   endif()
 
   target_include_directories(${target} BEFORE PRIVATE "${agilityInclude}")
-  if(GPU_DX12_AGILITY_SDK_VERSION MATCHES "-preview$")
-    set(agilityPreview 1)
-    message(STATUS
-      "DirectX 12 Agility SDK ${GPU_DX12_AGILITY_SDK_VERSION} requires Windows Developer Mode")
-  else()
-    set(agilityPreview 0)
-  endif()
   target_compile_definitions(${target} PRIVATE
     GPU_DX12_AGILITY_SDK_NUMBER=${GPU_DX12_AGILITY_SDK_NUMBER}
-    GPU_DX12_AGILITY_SDK_PREVIEW=${agilityPreview}
   )
 
   set(GPU_DX12_AGILITY_CORE "${agilityCore}" CACHE INTERNAL "" FORCE)

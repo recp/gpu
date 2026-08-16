@@ -185,10 +185,11 @@ dx12_newAgilityFactory(uint32_t                featureCount,
             operation,
             (unsigned int)GPU_DX12_AGILITY_SDK_NUMBER,
             (unsigned long)result);
-#if GPU_DX12_AGILITY_SDK_PREVIEW
-    fprintf(stderr,
-            "GPU: this Agility SDK preview requires Windows Developer Mode\n");
-#endif
+    if (result == D3D12_ERROR_INVALID_REDIST) {
+      fprintf(stderr,
+              "GPU: verify the app-local D3D12Core version, path, and target "
+              "architecture\n");
+    }
     return false;
   }
 
