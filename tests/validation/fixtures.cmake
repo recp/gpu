@@ -103,10 +103,12 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     "${PROJECT_SOURCE_DIR}/tests/validation/compute-buffer-cuda-usl/compute_buffer.usl"
     "${PROJECT_SOURCE_DIR}/tests/validation/storage-texture-cuda-usl/storage_texture.usl"
     "${PROJECT_SOURCE_DIR}/tests/validation/sampled-texture-cuda-usl/sampled_texture.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/sampled-format-cuda-usl/sampled_format.usl"
   )
   list(GET GPU_CUDA_USL_FIXTURES 0 GPU_CUDA_COMPUTE_BUFFER_US)
   list(GET GPU_CUDA_USL_FIXTURES 1 GPU_CUDA_STORAGE_TEXTURE_US)
   list(GET GPU_CUDA_USL_FIXTURES 2 GPU_CUDA_SAMPLED_TEXTURE_US)
+  list(GET GPU_CUDA_USL_FIXTURES 3 GPU_CUDA_SAMPLED_FORMAT_US)
 
   set(GPU_USL_FIXTURE_TARGET_CAPS ptx_7_0,sm_80)
   gpu_add_usl_fixtures(

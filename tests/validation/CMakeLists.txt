@@ -1202,6 +1202,34 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     )
   endif()
 
+  add_executable(gpu-sampled-format-cuda-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/sampled-format-cuda-usl/main.c
+    ${PROJECT_SOURCE_DIR}/tests/validation/sampled-format-cuda-usl/ptx_metadata.c
+  )
+  target_include_directories(gpu-sampled-format-cuda-usl PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+  )
+  target_link_libraries(gpu-sampled-format-cuda-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-sampled-format-cuda-usl
+                            gpu-cuda-fixtures
+                            "${GPU_CUDA_SAMPLED_FORMAT_US}")
+  set_target_properties(gpu-sampled-format-cuda-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(GPU_BUILD_TESTS)
+    add_test(
+      NAME cuda-sampled-format
+      COMMAND gpu-sampled-format-cuda-usl
+              "${GPU_CUDA_SAMPLED_FORMAT_US}"
+    )
+    set_tests_properties(cuda-sampled-format PROPERTIES
+      SKIP_RETURN_CODE 77
+      TIMEOUT 30
+    )
+  endif()
+
   add_executable(gpu-descriptor-array-cuda-usl
     ${PROJECT_SOURCE_DIR}/tests/validation/descriptor-array-cuda-usl/main.c
     ${PROJECT_SOURCE_DIR}/tests/api/buffer_descriptor_array.c

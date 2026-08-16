@@ -1,0 +1,34 @@
+kern(1, 1, 1) fetch_float(
+  color: texture2d<float> #texture(0),
+  inout output: [float4] #buffer(0) #group(1)
+) {
+  output[0] = color.read(int2(1, 0))
+}
+
+kern(1, 1, 1) fetch_unorm(
+  color: texture2d<float> #texture(1),
+  inout output: [float4] #buffer(0) #group(1)
+) {
+  output[1] = color.read(int2(1, 0))
+}
+
+kern(1, 1, 1) fetch_snorm(
+  color: texture2d<float> #texture(2),
+  inout output: [float4] #buffer(0) #group(1)
+) {
+  output[2] = color.read(int2(1, 0))
+}
+
+kern(1, 1, 1) fetch_uint(
+  color: texture2d<uint> #texture(3),
+  inout output: [uint4] #buffer(1) #group(1)
+) {
+  output[0] = color.read(int2(1, 0))
+}
+
+kern(1, 1, 1) fetch_sint(
+  color: texture2d<int> #texture(4),
+  inout output: [int4] #buffer(2) #group(1)
+) {
+  output[0] = color.read(int2(1, 0))
+}
