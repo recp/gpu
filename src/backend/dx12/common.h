@@ -166,6 +166,7 @@ typedef struct GPUDeviceDX12 {
   bool                               stencilPlaneCopies;
   bool                               manualBlitFiltering;
   bool                               samplerTableOffsetsReliable;
+  bool                               rootCbvSpacesReliable;
 } GPUDeviceDX12;
 
 static inline bool

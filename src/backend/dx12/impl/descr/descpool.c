@@ -575,17 +575,31 @@ dx12__bufferBindingType(GPUBindingType type) {
 }
 
 static bool
-dx12__resourceTableBinding(const GPUBindGroupLayoutEntry *entry) {
+dx12__resourceTableBindingType(const GPUDeviceDX12 *device,
+                               GPUBindingType       type,
+                               uint32_t             arrayCount) {
+  if (type == GPU_BINDING_UNIFORM_BUFFER &&
+      device && !device->rootCbvSpacesReliable) {
+    return true;
+  }
+  if (dx12__bufferBindingType(type)) {
+    return arrayCount > 1u;
+  }
+  return type == GPU_BINDING_SAMPLED_TEXTURE ||
+         type == GPU_BINDING_STORAGE_TEXTURE ||
+         type == GPU_BINDING_SAMPLER_FEEDBACK_EXT ||
+         type == GPU_BINDING_ACCELERATION_STRUCTURE;
+}
+
+static bool
+dx12__resourceTableBinding(const GPUDeviceDX12          *device,
+                           const GPUBindGroupLayoutEntry *entry) {
   if (!entry) {
     return false;
   }
-  if (dx12__bufferBindingType(entry->bindingType)) {
-    return entry->arrayCount > 1u;
-  }
-  return entry->bindingType == GPU_BINDING_SAMPLED_TEXTURE ||
-         entry->bindingType == GPU_BINDING_STORAGE_TEXTURE ||
-         entry->bindingType == GPU_BINDING_SAMPLER_FEEDBACK_EXT ||
-         entry->bindingType == GPU_BINDING_ACCELERATION_STRUCTURE;
+  return dx12__resourceTableBindingType(device,
+                                        entry->bindingType,
+                                        entry->arrayCount);
 }
 
 static D3D12_DESCRIPTOR_RANGE_TYPE
@@ -617,7 +631,8 @@ typedef struct DX12LayoutPlan {
 } DX12LayoutPlan;
 
 static GPUResult
-dx12__makeLayoutPlan(GPUPipelineLayout         *layout,
+dx12__makeLayoutPlan(GPUDeviceDX12             *device,
+                     GPUPipelineLayout         *layout,
                      GPUBindGroupLayout * const *groups,
                      uint32_t                    groupCount,
                      DX12LayoutPlan             *outPlan) {
@@ -681,7 +696,7 @@ dx12__makeLayoutPlan(GPUPipelineLayout         *layout,
         case GPU_BINDING_UNIFORM_BUFFER:
         case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
         case GPU_BINDING_STORAGE_BUFFER:
-          if (entries[i].arrayCount > 1u) {
+          if (dx12__resourceTableBinding(device, &entries[i])) {
             resourceCount++;
             plan.rangeCount++;
           } else {
@@ -736,7 +751,8 @@ dx12__makeLayoutPlan(GPUPipelineLayout         *layout,
 }
 
 static void
-dx12__fillLayoutPlan(GPUPipelineLayout         *layout,
+dx12__fillLayoutPlan(GPUDeviceDX12             *device,
+                     GPUPipelineLayout         *layout,
                      GPUBindGroupLayout * const *groups,
                      uint32_t                    groupCount,
                      GPUPipelineLayoutDX12      *native) {
@@ -770,14 +786,14 @@ dx12__fillLayoutPlan(GPUPipelineLayout         *layout,
 
     for (uint32_t i = 0u; i < entryCount; i++) {
       if (dx12__bufferBindingType(entries[i].bindingType) &&
-          entries[i].arrayCount == 1u) {
+          !dx12__resourceTableBinding(device, &entries[i])) {
         native->bindings[bindingCursor].groupIndex    = groupIndex;
         native->bindings[bindingCursor].binding       = backendBindings[i];
         native->bindings[bindingCursor].rootParameter = rootCursor++;
         native->bindings[bindingCursor].visibility    = entries[i].visibility;
         native->bindings[bindingCursor].bindingType   = entries[i].bindingType;
         bindingCursor++;
-      } else if (dx12__resourceTableBinding(&entries[i])) {
+      } else if (dx12__resourceTableBinding(device, &entries[i])) {
         resourceTable->descriptorCount += entries[i].arrayCount;
         resourceTable->rangeCount++;
         resourceTable->visibility |= entries[i].visibility;
@@ -1170,7 +1186,7 @@ dx12__createNullTables(GPUDevice                        *device,
     resourceCursor = 0u;
     samplerCursor  = 0u;
     for (uint32_t i = 0u; i < entryCount; i++) {
-      if (dx12__resourceTableBinding(&entries[i])) {
+      if (dx12__resourceTableBinding(deviceDX12, &entries[i])) {
         for (uint32_t j = 0u; j < entries[i].arrayCount; j++) {
           D3D12_CPU_DESCRIPTOR_HANDLE handle;
 
@@ -1297,7 +1313,8 @@ dx12__fillStaticSamplers(GPUPipelineLayout                 *layout,
 }
 
 static void
-dx12__fillRanges11(GPUPipelineLayout          *layout,
+dx12__fillRanges11(const GPUDeviceDX12        *device,
+                   GPUPipelineLayout          *layout,
                    GPUBindGroupLayout * const *groups,
                    const GPUPipelineLayoutDX12 *native,
                    D3D12_ROOT_PARAMETER1       *parameters,
@@ -1344,7 +1361,7 @@ dx12__fillRanges11(GPUPipelineLayout          *layout,
       D3D12_DESCRIPTOR_RANGE1 *range;
       uint32_t                 tableOffset;
 
-      if (dx12__resourceTableBinding(&entries[i])) {
+      if (dx12__resourceTableBinding(device, &entries[i])) {
         tableOffset = resourceOffset;
         range = &ranges[resourceTable->rangeOffset + resourceRange++];
         resourceOffset += entries[i].arrayCount;
@@ -1397,7 +1414,8 @@ dx12__fillRanges11(GPUPipelineLayout          *layout,
 }
 
 static void
-dx12__fillRanges10(GPUPipelineLayout          *layout,
+dx12__fillRanges10(const GPUDeviceDX12        *device,
+                   GPUPipelineLayout          *layout,
                    GPUBindGroupLayout * const *groups,
                    const GPUPipelineLayoutDX12 *native,
                    D3D12_ROOT_PARAMETER        *parameters,
@@ -1442,7 +1460,7 @@ dx12__fillRanges10(GPUPipelineLayout          *layout,
       D3D12_DESCRIPTOR_RANGE *range;
       uint32_t                tableOffset;
 
-      if (dx12__resourceTableBinding(&entries[i])) {
+      if (dx12__resourceTableBinding(device, &entries[i])) {
         tableOffset = resourceOffset;
         range = &ranges[resourceTable->rangeOffset + resourceRange++];
         resourceOffset += entries[i].arrayCount;
@@ -1523,7 +1541,12 @@ dx12__createPipelineLayout(GPUDevice                        *device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  planResult = dx12__makeLayoutPlan(layout, groups, groupCount, &plan);
+  deviceDX12 = device->_priv;
+  planResult = dx12__makeLayoutPlan(deviceDX12,
+                                    layout,
+                                    groups,
+                                    groupCount,
+                                    &plan);
   if (planResult != GPU_OK) {
     return planResult;
   }
@@ -1563,10 +1586,9 @@ dx12__createPipelineLayout(GPUDevice                        *device,
   native->groupCount         = groupCount;
   native->pushConstantRootParameter = pushRootParameter;
   native->pushConstantDwordCount     = pushDwordCount;
-  deviceDX12 = device->_priv;
   native->samplerTableBaseOnly =
     !deviceDX12->samplerTableOffsetsReliable;
-  dx12__fillLayoutPlan(layout, groups, groupCount, native);
+  dx12__fillLayoutPlan(deviceDX12, layout, groups, groupCount, native);
 
   serialized = NULL;
   errors     = NULL;
@@ -1610,7 +1632,12 @@ dx12__createPipelineLayout(GPUDevice                        *device,
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
-    dx12__fillRanges11(layout, groups, native, parameters, ranges);
+    dx12__fillRanges11(deviceDX12,
+                       layout,
+                       groups,
+                       native,
+                       parameters,
+                       ranges);
     if (pushDwordCount > 0u) {
       parameters[pushRootParameter].ParameterType =
         D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
@@ -1676,7 +1703,12 @@ dx12__createPipelineLayout(GPUDevice                        *device,
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
-    dx12__fillRanges10(layout, groups, native, parameters, ranges);
+    dx12__fillRanges10(deviceDX12,
+                       layout,
+                       groups,
+                       native,
+                       parameters,
+                       ranges);
     if (pushDwordCount > 0u) {
       parameters[pushRootParameter].ParameterType =
         D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
@@ -2021,7 +2053,9 @@ dx12__writeBindGroup(void *context,
         writeContext->valid = false;
         return;
       }
-      if (binding->arrayCount > 1u &&
+      if (dx12__resourceTableBindingType(writeContext->group->device,
+                                         binding->bindingType,
+                                         binding->arrayCount) &&
           (!dx12__bindGroupDescriptorOffset(writeContext->group,
                                             binding,
                                             false,
@@ -2289,7 +2323,7 @@ dx12_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
     if (entries[i].immutableSampler) {
       continue;
     }
-    if (dx12__resourceTableBinding(&entries[i])) {
+    if (dx12__resourceTableBinding(native->device, &entries[i])) {
       if (entries[i].arrayCount > UINT32_MAX - native->resourceCount) {
         free(native);
         return GPU_ERROR_UNSUPPORTED;
@@ -2452,8 +2486,8 @@ dx12__prepareResourceTable(GPUCommandBufferDX12 *command,
   }
   dynamic = false;
   for (uint32_t i = 0u; i < entryCount; i++) {
-    if (dx12__bufferBindingType(entries[i].bindingType) &&
-        entries[i].arrayCount > 1u &&
+    if (dx12__resourceTableBinding(group->device, &entries[i]) &&
+        dx12__bufferBindingType(entries[i].bindingType) &&
         entries[i].hasDynamicOffset) {
       dynamic = true;
       break;
@@ -2889,8 +2923,14 @@ dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
       const GPURootBindingDX12 *rootBinding;
       GPUBufferDX12            *buffer;
       D3D12_GPU_VIRTUAL_ADDRESS address;
+      bool                       tableBinding;
 
-      rootBinding = binding->arrayCount == 1u
+      tableBinding = dx12__resourceTableBindingType(
+        bindContext->group->device,
+        binding->bindingType,
+        binding->arrayCount
+      );
+      rootBinding = !tableBinding
                       ? dx12__findRootBinding(bindContext->layout,
                                               bindContext->groupIndex,
                                               binding->binding,
@@ -2906,7 +2946,7 @@ dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
         return;
       }
       if (binding->buffer->device != bindContext->device ||
-          (binding->arrayCount == 1u && !rootBinding) ||
+          (!tableBinding && !rootBinding) ||
           !buffer || !buffer->resource || buffer->gpuAddress == 0u ||
           !dx12_transitionBuffer(
             bindContext->commandList,
@@ -2919,7 +2959,7 @@ dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
         bindContext->valid = false;
         return;
       }
-      if (binding->arrayCount > 1u) {
+      if (tableBinding) {
         uint32_t descriptorOffset;
 
         if (binding->hasDynamicOffset &&

@@ -1418,6 +1418,8 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
   deviceDX12->manualBlitFiltering = dx12_isParallels(adapterDX12);
   /* Parallels ignores non-zero GPU sampler-table handles. */
   deviceDX12->samplerTableOffsetsReliable = !dx12_isParallels(adapterDX12);
+  /* Parallels aliases root CBVs that share a register across spaces. */
+  deviceDX12->rootCbvSpacesReliable = !dx12_isParallels(adapterDX12);
   dx12_queryDeviceCapabilities(deviceDX12);
   deviceDX12->subgroupMatrix =
     adapterDX12->subgroupMatrixPropertyCount > 0u &&
