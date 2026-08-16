@@ -987,6 +987,33 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
   endif()
 endif()
 
+if(GPU_BUILD_VULKAN AND GPU_BUILD_TESTS)
+  add_executable(gpu-async-copy-vulkan-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/async-copy-usl/main.c
+  )
+  target_compile_definitions(gpu-async-copy-vulkan-usl PRIVATE
+    GPU_ASYNC_COPY_BACKEND=GPU_BACKEND_VULKAN
+  )
+  target_link_libraries(gpu-async-copy-vulkan-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-async-copy-vulkan-usl
+                            gpu-vulkan-fixtures
+                            "${GPU_VULKAN_ASYNC_COPY_US}")
+  set_target_properties(gpu-async-copy-vulkan-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  add_test(
+    NAME vulkan-async-copy
+    COMMAND gpu-async-copy-vulkan-usl
+            "${GPU_VULKAN_ASYNC_COPY_US}"
+  )
+  set_tests_properties(vulkan-async-copy PROPERTIES
+    SKIP_RETURN_CODE 77
+    TIMEOUT 30
+  )
+endif()
+
 if(GPU_BUILD_METAL AND GPU_BUILD_TESTS AND
    NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   add_executable(gpu-async-copy-metal-usl
