@@ -521,6 +521,10 @@ GPUResult
 mt_flushTransfers(GPUQueue *queue, bool wait);
 
 GPU_HIDE
+GPUResult
+mt_waitCommandQueueIdle(GPUQueue *queue);
+
+GPU_HIDE
 void
 mt_applyPendingBarrier(GPUCommandBuffer *cmdb, id encoder);
 

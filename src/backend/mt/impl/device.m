@@ -946,16 +946,11 @@ mt_waitDeviceIdle(GPUDevice * __restrict device) {
   }
 
   for (uint32_t i = 0u; i < deviceMT->nCreatedQueues; i++) {
-    GPUQueue        *commandQueue;
-    MTCommandQueue *queue;
+    GPUQueue *commandQueue;
 
     commandQueue = deviceMT->createdQueues[i];
-    queue        = mt_commandQueue(commandQueue);
-    if (queue && mt_flushTransfers(commandQueue, true) != GPU_OK) {
+    if (mt_waitCommandQueueIdle(commandQueue) != GPU_OK) {
       return GPU_ERROR_BACKEND_FAILURE;
-    }
-    if (queue && queue->inFlightGroup) {
-      dispatch_group_wait(queue->inFlightGroup, DISPATCH_TIME_FOREVER);
     }
   }
   return GPU_OK;

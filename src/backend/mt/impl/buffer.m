@@ -181,6 +181,10 @@ mt_readBuffer(GPUQueue * __restrict queue,
   if (sizeBytes > SIZE_MAX) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  result = mt_waitCommandQueueIdle(queue);
+  if (result != GPU_OK) {
+    return result;
+  }
 
   contents = (const uint8_t *)[buffer contents];
   if (!contents) {

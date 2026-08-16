@@ -225,6 +225,25 @@ mt_flushTransfers(GPUQueue *queue, bool wait) {
   return flushResult;
 }
 
+GPU_HIDE
+GPUResult
+mt_waitCommandQueueIdle(GPUQueue *queue) {
+  MTCommandQueue *native;
+  GPUResult       result;
+
+  native = mt_commandQueue(queue);
+  if (!native || !native->inFlightGroup) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  result = mt_flushTransfers(queue, true);
+  if (result != GPU_OK) {
+    return result;
+  }
+  dispatch_group_wait(native->inFlightGroup, DISPATCH_TIME_FOREVER);
+  return GPU_OK;
+}
+
 static
 GPU_HIDE
 void
