@@ -987,6 +987,34 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
   endif()
 endif()
 
+if(GPU_BUILD_METAL AND GPU_BUILD_TESTS AND
+   NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  add_executable(gpu-async-copy-metal-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/async-copy-usl/main.c
+  )
+  target_compile_definitions(gpu-async-copy-metal-usl PRIVATE
+    GPU_ASYNC_COPY_BACKEND=GPU_BACKEND_METAL
+  )
+  target_link_libraries(gpu-async-copy-metal-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-async-copy-metal-usl
+                            gpu-metal-async-copy-fixture
+                            "${GPU_METAL_ASYNC_COPY_US}")
+  set_target_properties(gpu-async-copy-metal-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  add_test(
+    NAME metal-async-copy
+    COMMAND gpu-async-copy-metal-usl
+            "${GPU_METAL_ASYNC_COPY_US}"
+  )
+  set_tests_properties(metal-async-copy PROPERTIES
+    SKIP_RETURN_CODE 77
+    TIMEOUT 30
+  )
+endif()
+
 if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
   add_executable(gpu-compute-buffer-cuda-usl
     ${PROJECT_SOURCE_DIR}/tests/validation/compute-buffer-cuda-usl/main.c

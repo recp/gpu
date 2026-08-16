@@ -1,0 +1,11 @@
+kern(64, 1, 1) async_copy_cs(source:       [float4] #buffer(0),
+                             inout output: [float4] #buffer(1),
+                             localIndex:   uint #local_index) {
+  workgroup var tile: [float4; 64]
+
+  workgroup_async_copy(tile, localIndex, source, localIndex)
+  async_copy_commit()
+  async_copy_wait(0)
+  workgroup_barrier()
+  output[localIndex] = tile[63u - localIndex]
+}

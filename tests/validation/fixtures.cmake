@@ -102,6 +102,21 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
   add_custom_target(gpu-cuda-fixtures DEPENDS ${GPU_CUDA_USL_FIXTURES})
 endif()
 
+if(GPU_BUILD_METAL AND GPU_BUILD_TESTS AND
+   NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  gpu_add_usl_fixtures(
+    GPU_METAL_ASYNC_COPY_USL_FIXTURE
+    metal
+    validation
+    "${PROJECT_SOURCE_DIR}/tests/validation/async-copy-usl/async_copy.usl"
+  )
+  list(GET GPU_METAL_ASYNC_COPY_USL_FIXTURE 0 GPU_METAL_ASYNC_COPY_US)
+  add_custom_target(
+    gpu-metal-async-copy-fixture
+    DEPENDS ${GPU_METAL_ASYNC_COPY_USL_FIXTURE}
+  )
+endif()
+
 if(GPU_BUILD_METAL AND GPU_BUILD_SAMPLES AND
    NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   gpu_add_usl_fixtures(
