@@ -1,16 +1,76 @@
-kern(8, 8, 1) storage_write(
-  image: image2d<float, read_write> #texture(0),
-  inout output: [float4] #buffer(1),
+kern(8, 8, 1) storage_float_write(
+  image: image2d<rgba32float, read_write> #texture(0),
   gid: uint2 #global_id
 ) {
   let color = image.read(gid)
-  output[gid.y * 8u + gid.x] = color
   image.write(color * 2.0, gid)
 }
 
-kern(8, 8, 1) storage_readback(
-  image: image2d<float, read_write> #texture(0),
+kern(8, 8, 1) storage_float_readback(
+  image: image2d<rgba32float, read_write> #texture(0),
   inout output: [float4] #buffer(1),
+  gid: uint2 #global_id
+) {
+  output[gid.y * 8u + gid.x] = image.read(gid)
+}
+
+kern(8, 8, 1) storage_unorm_write(
+  image: image2d<rgba8unorm, read_write> #texture(2),
+  gid: uint2 #global_id
+) {
+  let color = image.read(gid)
+  image.write(float4(1.0) - color, gid)
+}
+
+kern(8, 8, 1) storage_unorm_readback(
+  image: image2d<rgba8unorm, read_write> #texture(2),
+  inout output: [float4] #buffer(3),
+  gid: uint2 #global_id
+) {
+  output[gid.y * 8u + gid.x] = image.read(gid)
+}
+
+kern(8, 8, 1) storage_snorm_write(
+  image: image2d<rgba8snorm, read_write> #texture(4),
+  gid: uint2 #global_id
+) {
+  image.write(-image.read(gid), gid)
+}
+
+kern(8, 8, 1) storage_snorm_readback(
+  image: image2d<rgba8snorm, read_write> #texture(4),
+  inout output: [float4] #buffer(5),
+  gid: uint2 #global_id
+) {
+  output[gid.y * 8u + gid.x] = image.read(gid)
+}
+
+kern(8, 8, 1) storage_uint_write(
+  image: image2d<rgba8uint, read_write> #texture(6),
+  gid: uint2 #global_id
+) {
+  let color = image.read(gid)
+  image.write(color + uint4(1u), gid)
+}
+
+kern(8, 8, 1) storage_uint_readback(
+  image: image2d<rgba8uint, read_write> #texture(6),
+  inout output: [uint4] #buffer(7),
+  gid: uint2 #global_id
+) {
+  output[gid.y * 8u + gid.x] = image.read(gid)
+}
+
+kern(8, 8, 1) storage_sint_write(
+  image: image2d<rgba8sint, read_write> #texture(8),
+  gid: uint2 #global_id
+) {
+  image.write(image.read(gid) + int4(7), gid)
+}
+
+kern(8, 8, 1) storage_sint_readback(
+  image: image2d<rgba8sint, read_write> #texture(8),
+  inout output: [int4] #buffer(9),
   gid: uint2 #global_id
 ) {
   output[gid.y * 8u + gid.x] = image.read(gid)

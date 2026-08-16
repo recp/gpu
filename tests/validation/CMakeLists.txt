@@ -1148,6 +1148,10 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
 
   add_executable(gpu-storage-texture-cuda-usl
     ${PROJECT_SOURCE_DIR}/tests/validation/storage-texture-cuda-usl/main.c
+    ${PROJECT_SOURCE_DIR}/tests/validation/storage-texture-cuda-usl/ptx_metadata.c
+  )
+  target_include_directories(gpu-storage-texture-cuda-usl PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
   )
   target_link_libraries(gpu-storage-texture-cuda-usl PRIVATE gpu)
   gpu_attach_usl_validation(gpu-storage-texture-cuda-usl
