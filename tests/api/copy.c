@@ -434,8 +434,7 @@ check_copy_pass_validation(GPUDevice *device) {
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers = buffers;
   submitInfo.fence = fence;
-  ok = GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
-       GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+  ok = GPUQueueSubmit(queue, &submitInfo) == GPU_OK;
   cmdb = NULL;
   if (!ok) {
     fprintf(stderr, "copy pass submit failed\n");
@@ -453,7 +452,8 @@ check_copy_pass_validation(GPUDevice *device) {
                           textureBytes,
                           sizeof(textureBytes)) == GPU_OK &&
        memcmp(pixels, bufferCopyBytes, sizeof(pixels)) == 0 &&
-       copy_test_rows_equal(pixels, textureBytes);
+       copy_test_rows_equal(pixels, textureBytes) &&
+       GPUWaitFence(fence, 0u) == GPU_OK;
   if (!ok) {
     fprintf(stderr, "copy pass readback mismatch\n");
     goto cleanup;

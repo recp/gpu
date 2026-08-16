@@ -778,6 +778,25 @@ vk_flushTransfers(GPUQueue *queue) {
 
 GPU_HIDE
 GPUResult
+vk_waitCommandQueueIdle(GPUQueue *queue) {
+  GPUQueueVk *native;
+  GPUResult   result;
+
+  native = queue ? queue->_priv : NULL;
+  if (!native) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  result = vk__flushTransfers(queue, true);
+  if (result != GPU_OK) {
+    return result;
+  }
+  vk__waitQueueIdle(native);
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
 vk_submitTransfer(GPUQueue *queue, bool wait) {
   GPUQueueVk        *native;
 

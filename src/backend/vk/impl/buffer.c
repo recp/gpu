@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../impl.h"
 #include "../../../api/buffer_internal.h"
 
 static void
@@ -765,6 +766,10 @@ vk_readBuffer(GPUQueue * __restrict queue,
   }
 
   if (native->mapped) {
+    result = vk_waitCommandQueueIdle(queue);
+    if (result != GPU_OK) {
+      return result;
+    }
     if (!native->coherent) {
       range.sType  = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
       range.memory = native->memory;
