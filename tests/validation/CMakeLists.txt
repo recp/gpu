@@ -11,6 +11,31 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL)
   endfunction()
 endif()
 
+if(GPU_BUILD_TESTS)
+  add_executable(gpu-cuda-format-contract
+    ${PROJECT_SOURCE_DIR}/src/backend/cuda/impl/format.c
+    ${PROJECT_SOURCE_DIR}/tests/validation/cuda-format/main.c
+  )
+  target_include_directories(gpu-cuda-format-contract PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+  )
+  set_target_properties(gpu-cuda-format-contract PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_options(gpu-cuda-format-contract PRIVATE /W4 /WX)
+  else()
+    target_compile_options(gpu-cuda-format-contract PRIVATE
+      -Wall
+      -Wextra
+      -Werror
+    )
+  endif()
+  add_test(NAME cuda-format-contract COMMAND gpu-cuda-format-contract)
+endif()
+
 if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
    NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   add_executable(gpu-triangle-manual

@@ -31,6 +31,7 @@ cuda__validComputeInterface(const GPUDevice                    *device,
 
   for (uint32_t i = 0u; i < reflection.resourceCount; i++) {
     const GPUShaderResourceReflection *resource;
+    GPUCudaFormatInfo                  format;
     bool                               supported;
 
     resource = &reflection.pResources[i];
@@ -41,7 +42,8 @@ cuda__validComputeInterface(const GPUDevice                    *device,
                 resource->bindingType == GPU_BINDING_SAMPLER;
     if (resource->bindingType == GPU_BINDING_STORAGE_TEXTURE) {
       supported = resource->storageTexture.viewType == GPU_TEXTURE_VIEW_2D &&
-                  resource->storageTexture.format == GPU_FORMAT_RGBA32_FLOAT;
+                  cuda_formatInfo(resource->storageTexture.format, &format) &&
+                  (format.flags & GPU_CUDA_FORMAT_STORAGE_BIT) != 0u;
     }
     if (!supported || resource->arrayCount == 0u ||
         (resource->visibility & GPU_SHADER_STAGE_COMPUTE_BIT) == 0u ||

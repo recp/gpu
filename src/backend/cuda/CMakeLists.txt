@@ -7,6 +7,7 @@ target_sources(gpu PRIVATE
   impl/compute.c
   impl/device.c
   impl/driver.c
+  impl/format.c
   impl/instance.c
   impl/library.c
   impl/module.c

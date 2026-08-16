@@ -536,13 +536,18 @@ cuda_getFormatCapabilities(
   GPUFormat                          format,
   GPUFormatCapabilities * __restrict outCapabilities
 ) {
+  GPUCudaFormatInfo info;
+
   if (outCapabilities) {
     memset(outCapabilities, 0, sizeof(*outCapabilities));
-    if (cuda_adapter(adapter) && format == GPU_FORMAT_RGBA32_FLOAT) {
+    if (cuda_adapter(adapter) && cuda_formatInfo(format, &info)) {
       outCapabilities->supportedSampleCounts = GPU_SAMPLE_COUNT_1_BIT;
-      outCapabilities->sampled               = true;
-      outCapabilities->filterable            = true;
-      outCapabilities->storage               = true;
+      outCapabilities->sampled =
+        (info.flags & GPU_CUDA_FORMAT_SAMPLED_BIT) != 0u;
+      outCapabilities->filterable =
+        (info.flags & GPU_CUDA_FORMAT_FILTERABLE_BIT) != 0u;
+      outCapabilities->storage =
+        (info.flags & GPU_CUDA_FORMAT_STORAGE_BIT) != 0u;
     }
   }
 }

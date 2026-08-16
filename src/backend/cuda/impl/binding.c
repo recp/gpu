@@ -281,22 +281,25 @@ cuda_setComputeTexture(GPUComputePassEncoder *encoder,
   GPUCommandCuda              *command;
   GPUTextureViewCuda          *native;
   GPUTexture                  *texture;
+  GPUTextureCuda              *textureNative;
   const GPUShaderPTXParamInfo *param;
   CUsurfObject                 surface;
 
-  command = encoder ? encoder->_priv : NULL;
-  native  = view ? view->_priv : NULL;
-  texture = view ? view->_texture : NULL;
-  param   = command && command->pipeline &&
-            index < command->pipeline->paramCount
-              ? &command->pipeline->params[index]
-              : NULL;
-  if (!command || !native || !native->surface || !texture || !param ||
+  command       = encoder ? encoder->_priv : NULL;
+  native        = view ? view->_priv : NULL;
+  texture       = view ? view->_texture : NULL;
+  textureNative = texture ? texture->_priv : NULL;
+  param         = command && command->pipeline &&
+                  index < command->pipeline->paramCount
+                    ? &command->pipeline->params[index]
+                    : NULL;
+  if (!command || !native || !native->surface || !texture ||
+      !textureNative || !param ||
       param->kind != GPUShaderPTXParamSurface ||
       param->bindingType != GPU_BINDING_STORAGE_TEXTURE ||
       texture->device != encoder->_device ||
       (texture->usage & GPU_TEXTURE_USAGE_STORAGE) == 0u ||
-      texture->format != GPU_FORMAT_RGBA32_FLOAT ||
+      (textureNative->format.flags & GPU_CUDA_FORMAT_STORAGE_BIT) == 0u ||
       view->viewType != GPU_TEXTURE_VIEW_2D ||
       !cuda__paramRangeValid(command->pipeline,
                              param->dataOffset,

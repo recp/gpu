@@ -13,6 +13,7 @@
 #include "../../api/sampler_internal.h"
 #include "../../api/texture_internal.h"
 #include "driver.h"
+#include "format.h"
 
 #if !defined(_WIN32) && !defined(WIN32)
 #  include <pthread.h>
@@ -50,8 +51,9 @@ typedef struct GPUBufferCuda {
 } GPUBufferCuda;
 
 typedef struct GPUTextureCuda {
-  GPUCUDA *driver;
-  CUarray  array;
+  GPUCUDA           *driver;
+  CUarray            array;
+  GPUCudaFormatInfo  format;
 } GPUTextureCuda;
 
 typedef struct GPUCudaTextureCacheEntry {
