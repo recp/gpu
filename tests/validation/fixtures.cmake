@@ -21,6 +21,7 @@ if(GPU_BUILD_DX12 AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     "${PROJECT_SOURCE_DIR}/samples/gallery/mrt-blend/mrt_blend.usl"
     "${PROJECT_SOURCE_DIR}/samples/gallery/shadow-compare/shadow_compare.usl"
     "${PROJECT_SOURCE_DIR}/tests/validation/vrs-compare-usl/vrs_compare.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/async-copy-usl/async_copy.usl"
   )
   list(GET GPU_DX12_USL_FIXTURES 0 GPU_DX12_TRIANGLE_US)
   list(GET GPU_DX12_USL_FIXTURES 1 GPU_DX12_TEXTURED_QUAD_US)

@@ -717,6 +717,33 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
   endif()
 endif()
 
+if(GPU_BUILD_DX12 AND GPU_BUILD_TESTS)
+  add_executable(gpu-async-copy-dx12-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/async-copy-usl/main.c
+  )
+  target_compile_definitions(gpu-async-copy-dx12-usl PRIVATE
+    GPU_ASYNC_COPY_BACKEND=GPU_BACKEND_DX12
+  )
+  target_link_libraries(gpu-async-copy-dx12-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-async-copy-dx12-usl
+                            gpu-dx12-fixtures
+                            "${GPU_DX12_ASYNC_COPY_US}")
+  set_target_properties(gpu-async-copy-dx12-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  add_test(
+    NAME dx12-async-copy
+    COMMAND gpu-async-copy-dx12-usl
+            "${GPU_DX12_ASYNC_COPY_US}"
+  )
+  set_tests_properties(dx12-async-copy PROPERTIES
+    SKIP_RETURN_CODE 77
+    TIMEOUT 30
+  )
+endif()
+
 if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
   add_executable(gpu-compute-buffer-vulkan-usl
     ${PROJECT_SOURCE_DIR}/tests/validation/compute-buffer-vulkan-usl/main.c
