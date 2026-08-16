@@ -1094,6 +1094,202 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     )
   endif()
 
+  add_executable(gpu-async-copy-cuda-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/async-copy-usl/main.c
+  )
+  target_compile_definitions(gpu-async-copy-cuda-usl PRIVATE
+    GPU_ASYNC_COPY_BACKEND=GPU_BACKEND_CUDA
+  )
+  target_link_libraries(gpu-async-copy-cuda-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-async-copy-cuda-usl
+                            gpu-cuda-async-copy-fixture
+                            "${GPU_CUDA_ASYNC_COPY_US}")
+  set_target_properties(gpu-async-copy-cuda-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(GPU_BUILD_TESTS)
+    add_test(
+      NAME cuda-async-copy
+      COMMAND gpu-async-copy-cuda-usl
+              "${GPU_CUDA_ASYNC_COPY_US}"
+    )
+    set_tests_properties(cuda-async-copy PROPERTIES
+      SKIP_RETURN_CODE 77
+      TIMEOUT 30
+    )
+  endif()
+
+  add_executable(gpu-storage-texture-cuda-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/storage-texture-cuda-usl/main.c
+  )
+  target_link_libraries(gpu-storage-texture-cuda-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-storage-texture-cuda-usl
+                            gpu-cuda-fixtures
+                            "${GPU_CUDA_STORAGE_TEXTURE_US}")
+  set_target_properties(gpu-storage-texture-cuda-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(GPU_BUILD_TESTS)
+    add_test(
+      NAME cuda-storage-texture
+      COMMAND gpu-storage-texture-cuda-usl
+              "${GPU_CUDA_STORAGE_TEXTURE_US}"
+    )
+    set_tests_properties(cuda-storage-texture PROPERTIES
+      SKIP_RETURN_CODE 77
+      TIMEOUT 30
+    )
+  endif()
+
+  add_executable(gpu-sampled-texture-cuda-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/sampled-texture-cuda-usl/main.c
+    ${PROJECT_SOURCE_DIR}/tests/validation/sampled-texture-cuda-usl/ptx_metadata.c
+  )
+  target_include_directories(gpu-sampled-texture-cuda-usl PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+  )
+  target_link_libraries(gpu-sampled-texture-cuda-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-sampled-texture-cuda-usl
+                            gpu-cuda-fixtures
+                            "${GPU_CUDA_SAMPLED_TEXTURE_US}")
+  set_target_properties(gpu-sampled-texture-cuda-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(GPU_BUILD_TESTS)
+    add_test(
+      NAME cuda-sampled-texture
+      COMMAND gpu-sampled-texture-cuda-usl
+              "${GPU_CUDA_SAMPLED_TEXTURE_US}"
+    )
+    set_tests_properties(cuda-sampled-texture PROPERTIES
+      SKIP_RETURN_CODE 77
+      TIMEOUT 30
+    )
+  endif()
+
+  add_executable(gpu-descriptor-array-cuda-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/descriptor-array-cuda-usl/main.c
+    ${PROJECT_SOURCE_DIR}/tests/api/buffer_descriptor_array.c
+    ${PROJECT_SOURCE_DIR}/tests/api/runner.c
+  )
+  target_include_directories(gpu-descriptor-array-cuda-usl PRIVATE
+    ${PROJECT_SOURCE_DIR}/tests/api
+  )
+  target_link_libraries(gpu-descriptor-array-cuda-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-descriptor-array-cuda-usl
+                            gpu-cuda-fixtures
+                            "${GPU_CUDA_BUFFER_DESCRIPTOR_ARRAY_US}"
+                            "${GPU_CUDA_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_US}")
+  set_target_properties(gpu-descriptor-array-cuda-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  gpu_enable_c11_atomics(gpu-descriptor-array-cuda-usl)
+  if(GPU_BUILD_TESTS)
+    add_test(
+      NAME cuda-descriptor-array
+      COMMAND gpu-descriptor-array-cuda-usl
+              "${GPU_CUDA_BUFFER_DESCRIPTOR_ARRAY_US}"
+              "${GPU_CUDA_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_US}"
+    )
+    set_tests_properties(cuda-descriptor-array PROPERTIES
+      SKIP_RETURN_CODE 77
+      TIMEOUT 30
+    )
+  endif()
+
+  add_executable(gpu-resource-descriptor-array-cuda-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/resource-descriptor-array-cuda-usl/main.c
+  )
+  target_link_libraries(gpu-resource-descriptor-array-cuda-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-resource-descriptor-array-cuda-usl
+                            gpu-cuda-fixtures
+                            "${GPU_CUDA_RESOURCE_DESCRIPTOR_ARRAY_US}")
+  set_target_properties(gpu-resource-descriptor-array-cuda-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(GPU_BUILD_TESTS)
+    add_test(
+      NAME cuda-resource-descriptor-array
+      COMMAND gpu-resource-descriptor-array-cuda-usl
+              "${GPU_CUDA_RESOURCE_DESCRIPTOR_ARRAY_US}"
+    )
+    set_tests_properties(cuda-resource-descriptor-array PROPERTIES
+      SKIP_RETURN_CODE 77
+      TIMEOUT 30
+    )
+  endif()
+
+  add_executable(gpu-subgroup-matrix-cuda-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/subgroup-matrix-cuda-usl/main.c
+    ${PROJECT_SOURCE_DIR}/tests/api/subgroup_matrix.c
+    ${PROJECT_SOURCE_DIR}/tests/api/runner.c
+  )
+  target_include_directories(gpu-subgroup-matrix-cuda-usl PRIVATE
+    ${PROJECT_SOURCE_DIR}/tests/api
+  )
+  target_link_libraries(gpu-subgroup-matrix-cuda-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-subgroup-matrix-cuda-usl
+                            gpu-cuda-subgroup-matrix-fixture
+                            "${GPU_CUDA_SUBGROUP_MATRIX_USL_FIXTURE}")
+  set_target_properties(gpu-subgroup-matrix-cuda-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  gpu_enable_c11_atomics(gpu-subgroup-matrix-cuda-usl)
+  if(GPU_BUILD_TESTS)
+    add_test(
+      NAME cuda-subgroup-matrix
+      COMMAND gpu-subgroup-matrix-cuda-usl
+              "${GPU_CUDA_SUBGROUP_MATRIX_USL_FIXTURE}"
+    )
+    set_tests_properties(cuda-subgroup-matrix PROPERTIES
+      ENVIRONMENT "GPU_SUBGROUP_MATRIX_PROFILE=16x16x16"
+      SKIP_RETURN_CODE 77
+      TIMEOUT 30
+    )
+  endif()
+
+  add_executable(gpu-atomic64-cuda-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/atomic64-cuda-usl/main.c
+    ${PROJECT_SOURCE_DIR}/tests/api/atomic64.c
+    ${PROJECT_SOURCE_DIR}/tests/api/runner.c
+  )
+  target_include_directories(gpu-atomic64-cuda-usl PRIVATE
+    ${PROJECT_SOURCE_DIR}/tests/api
+  )
+  target_link_libraries(gpu-atomic64-cuda-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-atomic64-cuda-usl
+                            gpu-cuda-atomic64-fixture
+                            "${GPU_CUDA_ATOMIC64_USL_FIXTURE}")
+  set_target_properties(gpu-atomic64-cuda-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  gpu_enable_c11_atomics(gpu-atomic64-cuda-usl)
+  if(GPU_BUILD_TESTS)
+    add_test(
+      NAME cuda-atomic64
+      COMMAND gpu-atomic64-cuda-usl
+              "${GPU_CUDA_ATOMIC64_USL_FIXTURE}"
+    )
+    set_tests_properties(cuda-atomic64 PROPERTIES
+      SKIP_RETURN_CODE 77
+      TIMEOUT 30
+    )
+  endif()
+
   if(GPU_BUILD_DX12 OR GPU_BUILD_VULKAN)
     add_executable(gpu-graphics-cuda-interop-usl
       ${PROJECT_SOURCE_DIR}/tests/validation/graphics-cuda-interop-usl/main.c

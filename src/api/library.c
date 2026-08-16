@@ -19,6 +19,16 @@
 #include "library_internal.h"
 #include "usl_target.h"
 
+_Static_assert((uint32_t)GPUShaderPTXTextureMetadataMipLevelCountBit ==
+                 (uint32_t)USL_RUNTIME_PTX_TEXTURE_METADATA_MIP_LEVEL_COUNT,
+               "USL PTX mip metadata ABI drift");
+_Static_assert((uint32_t)GPUShaderPTXTextureMetadataArrayLayerCountBit ==
+                 (uint32_t)USL_RUNTIME_PTX_TEXTURE_METADATA_ARRAY_LAYER_COUNT,
+               "USL PTX layer metadata ABI drift");
+_Static_assert((uint32_t)GPUShaderPTXTextureMetadataSampleCountBit ==
+                 (uint32_t)USL_RUNTIME_PTX_TEXTURE_METADATA_SAMPLE_COUNT,
+               "USL PTX sample metadata ABI drift");
+
 typedef struct GPUShaderEntryInfo {
   char     *name;
   char     *nodeName;
@@ -91,6 +101,7 @@ gpu_clearShaderMetadata(GPUShaderLibrary *library) {
   library->_entryResources   = NULL;
   library->_resourceBindings = NULL;
   library->_staticSamplers   = NULL;
+  library->_ptxInfo          = NULL;
   memset(&library->_reflection, 0, sizeof(library->_reflection));
 }
 
@@ -706,6 +717,45 @@ gpuGetShaderLibraryComputeWorkgroupSize(const GPUShaderLibrary *library,
                                           entryPoint,
                                           GPU_SHADER_STAGE_COMPUTE_BIT,
                                           outSize);
+}
+
+GPU_HIDE
+int
+gpuGetShaderLibraryPTXEntry(const GPUShaderLibrary *library,
+                            const char               *entryPoint,
+                            GPUShaderPTXEntryView     *outEntry) {
+  const GPUShaderEntryInfoList *entries;
+  const GPUShaderEntryInfo     *entry;
+  const GPUShaderPTXEntryInfo  *ptxEntry;
+  ptrdiff_t                     entryIndex;
+
+  if (outEntry) {
+    memset(outEntry, 0, sizeof(*outEntry));
+  }
+  entries = library ? library->_entryInfo : NULL;
+  entry   = gpu_findShaderEntry(library, entryPoint);
+  if (!entries || !entry || !outEntry || !library->_ptxInfo ||
+      library->_ptxInfo->entryCount != entries->count) {
+    return 0;
+  }
+
+  entryIndex = entry - entries->entries;
+  if (entryIndex < 0 || (uint32_t)entryIndex >= entries->count) {
+    return 0;
+  }
+  ptxEntry = &library->_ptxInfo->entries[entryIndex];
+  if (ptxEntry->paramStart > library->_ptxInfo->paramCount ||
+      ptxEntry->paramCount >
+        library->_ptxInfo->paramCount - ptxEntry->paramStart) {
+    return 0;
+  }
+
+  outEntry->params = ptxEntry->paramCount > 0u
+                       ? library->_ptxInfo->params + ptxEntry->paramStart
+                       : NULL;
+  outEntry->paramCount    = ptxEntry->paramCount;
+  outEntry->paramDataSize = ptxEntry->paramDataSize;
+  return 1;
 }
 
 GPU_HIDE
@@ -1332,6 +1382,10 @@ gpu_shaderBackendBindingFromUSLResource(GPUBackend backend,
                       ? (uint32_t)resource->wgsl_index
                       : (uint32_t)resource->binding;
       break;
+    case GPU_BACKEND_CUDA:
+      /* PTX parameter indices are entry-local, not bind-group slots. */
+      *outBinding = (uint32_t)resource->binding;
+      break;
     default:
       *outBinding = (uint32_t)resource->binding;
       break;
@@ -1351,6 +1405,102 @@ gpu_staticSamplerDescEqual(const GPUStaticSamplerDesc *a,
          a->compareFunc == b->compareFunc &&
          a->hasCompare == b->hasCompare &&
          a->maxAnisotropy == b->maxAnisotropy;
+}
+
+static void
+gpu_staticSamplerInfoFromUSL(const USLRuntimeStaticSampler *source,
+                             GPUShaderStageFlags             visibility,
+                             uint64_t                        entryMask,
+                             GPUShaderStaticSamplerInfo     *out) {
+  memset(out, 0, sizeof(*out));
+  out->desc.logicalIndex  = source->id;
+  out->desc.minFilter     = source->min_filter;
+  out->desc.magFilter     = source->mag_filter;
+  out->desc.mipFilter     = source->mip_filter;
+  out->desc.addressMode   = source->address_mode;
+  out->desc.coordSpace    = source->coord_space;
+  out->desc.compareFunc   = source->compare_func;
+  out->desc.hasCompare    = source->has_compare;
+  out->desc.maxAnisotropy = source->max_anisotropy;
+  out->entryMask          = entryMask;
+  out->visibility         = visibility;
+  out->hlslIndex          = source->hlsl_index >= 0
+                              ? (uint32_t)source->hlsl_index
+                              : UINT32_MAX;
+  out->spirvGroup         = source->spirv_set;
+  out->spirvBinding       = source->spirv_binding >= 0
+                              ? (uint32_t)source->spirv_binding
+                              : UINT32_MAX;
+  out->wgslGroup          = source->wgsl_group >= 0
+                              ? (uint32_t)source->wgsl_group
+                              : UINT32_MAX;
+  out->wgslBinding        = source->wgsl_binding >= 0
+                              ? (uint32_t)source->wgsl_binding
+                              : UINT32_MAX;
+}
+
+static int
+gpu_staticSamplerInfoEqual(const GPUShaderStaticSamplerInfo *a,
+                           const GPUShaderStaticSamplerInfo *b) {
+  return a && b &&
+         a->hlslIndex == b->hlslIndex &&
+         a->spirvGroup == b->spirvGroup &&
+         a->spirvBinding == b->spirvBinding &&
+         a->wgslGroup == b->wgslGroup &&
+         a->wgslBinding == b->wgslBinding &&
+         gpu_staticSamplerDescEqual(&a->desc, &b->desc);
+}
+
+static int
+gpu_resolvePTXStaticSamplers(const USRuntimeInfo                    *runtime,
+                             const GPUShaderStaticSamplerInfoList  *samplers,
+                             GPUShaderPTXInfo                      *ptx) {
+  if (!ptx) {
+    return 1;
+  }
+  if (!runtime || !samplers) {
+    return 0;
+  }
+
+  for (uint32_t i = 0u; i < ptx->paramCount; i++) {
+    const USLRuntimeStaticSampler *source;
+    GPUShaderStaticSamplerInfo     item;
+    GPUShaderPTXParamInfo         *param;
+    uint32_t                       samplerIndex;
+
+    param = &ptx->params[i];
+    if (param->kind != GPUShaderPTXParamSampledTexture ||
+        param->staticSamplerId == UINT32_MAX) {
+      continue;
+    }
+
+    source = NULL;
+    for (uint32_t j = 0u; j < runtime->static_sampler_count; j++) {
+      if (runtime->static_samplers[j].id == param->staticSamplerId) {
+        if (source) {
+          return 0;
+        }
+        source = &runtime->static_samplers[j];
+      }
+    }
+    if (!source) {
+      return 0;
+    }
+
+    gpu_staticSamplerInfoFromUSL(source, 0u, 0u, &item);
+    samplerIndex = UINT32_MAX;
+    for (uint32_t j = 0u; j < samplers->count; j++) {
+      if (gpu_staticSamplerInfoEqual(&samplers->items[j], &item)) {
+        samplerIndex = j;
+        break;
+      }
+    }
+    if (samplerIndex == UINT32_MAX) {
+      return 0;
+    }
+    param->staticSamplerId = samplerIndex;
+  }
+  return 1;
 }
 
 GPU_HIDE
@@ -1482,6 +1632,396 @@ gpu_storeMetadataText(char **cursor, const char *text, size_t size) {
   return stored;
 }
 
+static const USLRuntimeResource *
+gpu_findRuntimeResource(const USRuntimeInfo *runtimeInfo,
+                        uint32_t             entryIndex,
+                        uint32_t             paramIndex) {
+  if (!runtimeInfo || !runtimeInfo->resources) {
+    return NULL;
+  }
+
+  for (uint32_t i = 0u; i < runtimeInfo->resource_count; i++) {
+    const USLRuntimeResource *resource;
+
+    resource = &runtimeInfo->resources[i];
+    if (resource->entry_index == entryIndex &&
+        resource->param_index == paramIndex) {
+      return resource;
+    }
+  }
+  return NULL;
+}
+
+static int
+gpu_ptxPairShape(const USRuntimeInfo                  *runtimeInfo,
+                 const USLRuntimeSampledTexturePair  *pair,
+                 const USLRuntimeResource           **outTexture,
+                 const USLRuntimeResource           **outSampler,
+                 uint32_t                            *outTextureCount,
+                 uint32_t                            *outSamplerCount) {
+  const USLRuntimeResource *sampler;
+  const USLRuntimeResource *texture;
+  bool                      samplerArray;
+  bool                      textureArray;
+  uint32_t                  samplerCount;
+  uint32_t                  textureCount;
+
+  if (!runtimeInfo || !pair || !outTexture || !outSampler ||
+      !outTextureCount || !outSamplerCount ||
+      pair->entry_index >= runtimeInfo->entry_point_count) {
+    return 0;
+  }
+
+  texture = gpu_findRuntimeResource(runtimeInfo,
+                                    pair->entry_index,
+                                    pair->texture_param_index);
+  sampler = (pair->flags &
+             USL_RUNTIME_SAMPLED_TEXTURE_PAIR_STATIC_SAMPLER) != 0u
+              ? NULL
+              : gpu_findRuntimeResource(runtimeInfo,
+                                        pair->entry_index,
+                                        pair->sampler_param_index);
+  if (!texture || texture->kind != USL_RUNTIME_RESOURCE_TEXTURE ||
+      texture->binding < 0 || texture->descriptor_count == 0u ||
+      (!sampler &&
+       (pair->flags &
+        USL_RUNTIME_SAMPLED_TEXTURE_PAIR_STATIC_SAMPLER) == 0u) ||
+      (sampler && (sampler->kind != USL_RUNTIME_RESOURCE_SAMPLER ||
+                   sampler->binding < 0 ||
+                   sampler->descriptor_count == 0u))) {
+    return 0;
+  }
+
+  textureCount = (pair->flags &
+                  USL_RUNTIME_SAMPLED_TEXTURE_PAIR_DYNAMIC_TEXTURE_INDEX) != 0u
+                   ? texture->descriptor_count
+                   : 1u;
+  if (!sampler &&
+      (pair->flags &
+       USL_RUNTIME_SAMPLED_TEXTURE_PAIR_DYNAMIC_SAMPLER_INDEX) != 0u) {
+    return 0;
+  }
+  samplerCount = (pair->flags &
+                  USL_RUNTIME_SAMPLED_TEXTURE_PAIR_DYNAMIC_SAMPLER_INDEX) != 0u
+                   ? sampler->descriptor_count
+                   : 1u;
+  textureArray = (pair->flags &
+                  USL_RUNTIME_SAMPLED_TEXTURE_PAIR_TEXTURE_ARRAY) != 0u;
+  samplerArray = (pair->flags &
+                  USL_RUNTIME_SAMPLED_TEXTURE_PAIR_SAMPLER_ARRAY) != 0u;
+  if (textureCount == 0u || samplerCount == 0u ||
+      textureCount > UINT32_MAX / samplerCount ||
+      ((pair->flags &
+        USL_RUNTIME_SAMPLED_TEXTURE_PAIR_DYNAMIC_TEXTURE_INDEX) == 0u &&
+       textureArray &&
+       pair->texture_array_index >= texture->descriptor_count) ||
+      (sampler &&
+       (pair->flags &
+        USL_RUNTIME_SAMPLED_TEXTURE_PAIR_DYNAMIC_SAMPLER_INDEX) == 0u &&
+       samplerArray &&
+       pair->sampler_array_index >= sampler->descriptor_count)) {
+    return 0;
+  }
+
+  *outTexture      = texture;
+  *outSampler      = sampler;
+  *outTextureCount = textureCount;
+  *outSamplerCount = samplerCount;
+  return 1;
+}
+
+static int
+gpu_ptxResourceUsesPair(const USRuntimeInfo        *runtimeInfo,
+                        const USLRuntimeResource   *resource) {
+  if (!runtimeInfo || !resource || resource->ptx_index < 0 ||
+      !runtimeInfo->sampled_texture_pairs) {
+    return 0;
+  }
+
+  for (uint32_t i = 0u; i < runtimeInfo->sampled_texture_pair_count; i++) {
+    const USLRuntimeSampledTexturePair *pair;
+
+    pair = &runtimeInfo->sampled_texture_pairs[i];
+    if (pair->entry_index == resource->entry_index &&
+        pair->texture_param_index == resource->param_index &&
+        pair->ptx_index == resource->ptx_index) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static int
+gpu_ptxEntryParamCount(const USRuntimeInfo *runtimeInfo,
+                       uint32_t             entryIndex,
+                       uint32_t            *outCount) {
+  uint32_t count;
+
+  if (!runtimeInfo || !outCount ||
+      entryIndex >= runtimeInfo->entry_point_count) {
+    return 0;
+  }
+
+  count = 0u;
+  for (uint32_t i = 0u; i < runtimeInfo->sampled_texture_pair_count; i++) {
+    const USLRuntimeSampledTexturePair *pair;
+    const USLRuntimeResource           *sampler;
+    const USLRuntimeResource           *texture;
+    uint32_t                            samplerCount;
+    uint32_t                            textureCount;
+    uint32_t                            end;
+
+    pair = &runtimeInfo->sampled_texture_pairs[i];
+    if (pair->entry_index != entryIndex || pair->ptx_index < 0) {
+      continue;
+    }
+    if (!gpu_ptxPairShape(runtimeInfo,
+                          pair,
+                          &texture,
+                          &sampler,
+                          &textureCount,
+                          &samplerCount) ||
+        textureCount > UINT32_MAX / samplerCount ||
+        (uint32_t)pair->ptx_index >
+          UINT32_MAX - textureCount * samplerCount) {
+      return 0;
+    }
+    GPU__UNUSED(texture);
+    GPU__UNUSED(sampler);
+    end = (uint32_t)pair->ptx_index + textureCount * samplerCount;
+    if (end > count) {
+      count = end;
+    }
+  }
+
+  for (uint32_t i = 0u; i < runtimeInfo->resource_count; i++) {
+    const USLRuntimeResource *resource;
+    uint32_t                  end;
+    uint32_t                  span;
+
+    resource = &runtimeInfo->resources[i];
+    if (!resource->used || resource->entry_index != entryIndex) {
+      continue;
+    }
+    if (resource->ptx_index >= 0) {
+      span = (resource->kind == USL_RUNTIME_RESOURCE_TEXTURE &&
+              !gpu_ptxResourceUsesPair(runtimeInfo, resource)) ||
+             resource->kind == USL_RUNTIME_RESOURCE_BUFFER ||
+             resource->kind == USL_RUNTIME_RESOURCE_IMAGE
+               ? resource->descriptor_count
+               : 0u;
+      if (span > 0u) {
+        if ((uint32_t)resource->ptx_index > UINT32_MAX - span) {
+          return 0;
+        }
+        end = (uint32_t)resource->ptx_index + span;
+        if (end > count) {
+          count = end;
+        }
+      }
+    }
+    if (resource->ptx_texture_metadata_index >= 0) {
+      span = resource->descriptor_count;
+      if (span == 0u ||
+          (uint32_t)resource->ptx_texture_metadata_index >
+            UINT32_MAX - span) {
+        return 0;
+      }
+      end = (uint32_t)resource->ptx_texture_metadata_index + span;
+      if (end > count) {
+        count = end;
+      }
+    }
+  }
+
+  if (count > GPU_SHADER_PTX_MAX_PARAM_COUNT) {
+    return 0;
+  }
+  *outCount = count;
+  return 1;
+}
+
+static void
+gpu_initPTXParam(GPUShaderPTXParamInfo *param) {
+  memset(param, 0, sizeof(*param));
+  param->groupIndex        = UINT32_MAX;
+  param->binding           = UINT32_MAX;
+  param->arrayIndex        = UINT32_MAX;
+  param->samplerGroupIndex = UINT32_MAX;
+  param->samplerBinding    = UINT32_MAX;
+  param->samplerArrayIndex = UINT32_MAX;
+  param->staticSamplerId   = UINT32_MAX;
+}
+
+static int
+gpu_storePTXParam(GPUShaderPTXParamInfo       *params,
+                  uint32_t                     paramCount,
+                  uint32_t                     index,
+                  const GPUShaderPTXParamInfo *source) {
+  if (!params || !source || index >= paramCount ||
+      params[index].kind != GPUShaderPTXParamInvalid ||
+      source->kind == GPUShaderPTXParamInvalid) {
+    return 0;
+  }
+  params[index] = *source;
+  return 1;
+}
+
+static int
+gpu_fillShaderPTXEntry(const GPUShaderLibrary *library,
+                       const USRuntimeInfo     *runtimeInfo,
+                       uint32_t                 entryIndex,
+                       GPUShaderPTXEntryInfo   *entry,
+                       GPUShaderPTXParamInfo   *params) {
+  uint32_t dataOffset;
+
+  if (!library || !runtimeInfo || !entry ||
+      (entry->paramCount > 0u && !params)) {
+    return 0;
+  }
+  for (uint32_t i = 0u; i < entry->paramCount; i++) {
+    gpu_initPTXParam(&params[i]);
+  }
+
+  for (uint32_t i = 0u; i < runtimeInfo->sampled_texture_pair_count; i++) {
+    const USLRuntimeSampledTexturePair *pair;
+    const USLRuntimeResource           *sampler;
+    const USLRuntimeResource           *texture;
+    GPUShaderPTXParamInfo               item;
+    uint32_t                            samplerCount;
+    uint32_t                            textureCount;
+
+    pair = &runtimeInfo->sampled_texture_pairs[i];
+    if (pair->entry_index != entryIndex || pair->ptx_index < 0) {
+      continue;
+    }
+    if (!gpu_ptxPairShape(runtimeInfo,
+                          pair,
+                          &texture,
+                          &sampler,
+                          &textureCount,
+                          &samplerCount)) {
+      return 0;
+    }
+    for (uint32_t j = 0u; j < textureCount * samplerCount; j++) {
+      gpu_initPTXParam(&item);
+      item.kind       = GPUShaderPTXParamSampledTexture;
+      item.bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+      item.groupIndex = texture->group;
+      item.binding    = (uint32_t)texture->binding;
+      item.arrayIndex = (pair->flags &
+                         USL_RUNTIME_SAMPLED_TEXTURE_PAIR_DYNAMIC_TEXTURE_INDEX)
+                          ? j / samplerCount
+                          : (pair->flags &
+                             USL_RUNTIME_SAMPLED_TEXTURE_PAIR_TEXTURE_ARRAY)
+                              ? pair->texture_array_index
+                              : 0u;
+      if (sampler) {
+        item.samplerGroupIndex = sampler->group;
+        item.samplerBinding    = (uint32_t)sampler->binding;
+        item.samplerArrayIndex =
+          (pair->flags &
+           USL_RUNTIME_SAMPLED_TEXTURE_PAIR_DYNAMIC_SAMPLER_INDEX)
+            ? j % samplerCount
+            : (pair->flags &
+               USL_RUNTIME_SAMPLED_TEXTURE_PAIR_SAMPLER_ARRAY)
+                ? pair->sampler_array_index
+                : 0u;
+      } else {
+        if (pair->static_sampler_id >= runtimeInfo->static_sampler_count) {
+          return 0;
+        }
+        item.staticSamplerId =
+          runtimeInfo->static_samplers[pair->static_sampler_id].id;
+      }
+      if (!gpu_storePTXParam(params,
+                             entry->paramCount,
+                             (uint32_t)pair->ptx_index + j,
+                             &item)) {
+        return 0;
+      }
+    }
+  }
+
+  for (uint32_t i = 0u; i < runtimeInfo->resource_count; i++) {
+    const USLRuntimeResource *resource;
+    GPUShaderPTXParamInfo     item;
+    GPUBindingType            bindingType;
+    uint32_t                  count;
+
+    resource = &runtimeInfo->resources[i];
+    if (!resource->used || resource->entry_index != entryIndex ||
+        resource->binding < 0 ||
+        !gpu_bindingTypeFromUSLResource(library, resource, &bindingType)) {
+      continue;
+    }
+
+    count = 0u;
+    gpu_initPTXParam(&item);
+    item.bindingType = bindingType;
+    item.groupIndex  = resource->group;
+    item.binding     = (uint32_t)resource->binding;
+    if (resource->ptx_index >= 0) {
+      if (resource->kind == USL_RUNTIME_RESOURCE_BUFFER) {
+        item.kind = GPUShaderPTXParamBuffer;
+        count     = resource->descriptor_count;
+      } else if (resource->kind == USL_RUNTIME_RESOURCE_IMAGE) {
+        item.kind = GPUShaderPTXParamSurface;
+        count     = resource->descriptor_count;
+      } else if (resource->kind == USL_RUNTIME_RESOURCE_TEXTURE &&
+                 !gpu_ptxResourceUsesPair(runtimeInfo, resource)) {
+        item.kind = GPUShaderPTXParamTexture;
+        count     = resource->descriptor_count;
+      }
+      for (uint32_t j = 0u; j < count; j++) {
+        item.arrayIndex = j;
+        if (!gpu_storePTXParam(params,
+                               entry->paramCount,
+                               (uint32_t)resource->ptx_index + j,
+                               &item)) {
+          return 0;
+        }
+      }
+    }
+
+    if (resource->ptx_texture_metadata_index >= 0) {
+      gpu_initPTXParam(&item);
+      item.kind          = GPUShaderPTXParamTextureMetadata;
+      item.bindingType   = bindingType;
+      item.groupIndex    = resource->group;
+      item.binding       = (uint32_t)resource->binding;
+      item.metadataFlags = resource->ptx_texture_metadata_flags;
+      for (uint32_t j = 0u; j < resource->descriptor_count; j++) {
+        item.arrayIndex = j;
+        if (!gpu_storePTXParam(
+              params,
+              entry->paramCount,
+              (uint32_t)resource->ptx_texture_metadata_index + j,
+              &item)) {
+          return 0;
+        }
+      }
+    }
+  }
+
+  dataOffset = 0u;
+  for (uint32_t i = 0u; i < entry->paramCount; i++) {
+    uint32_t size;
+
+    if (params[i].kind == GPUShaderPTXParamInvalid) {
+      return 0;
+    }
+    size = params[i].kind == GPUShaderPTXParamTextureMetadata ? 16u : 8u;
+    if (dataOffset > GPU_SHADER_PTX_MAX_PARAM_BYTES - size) {
+      return 0;
+    }
+    params[i].dataOffset = dataOffset;
+    dataOffset          += size;
+  }
+  entry->paramDataSize = dataOffset;
+  return 1;
+}
+
 static int
 gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
                              const USReflection *usReflection) {
@@ -1489,6 +2029,9 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
   GPUShaderResourceReflection *entryResources;
   GPUShaderResourceBindingInfoList *resourceBindings;
   GPUShaderStaticSamplerInfoList *staticSamplers;
+  GPUShaderPTXParamInfo *ptxParams;
+  GPUShaderPTXEntryInfo *ptxEntries;
+  GPUShaderPTXInfo *ptxInfo;
   GPUShaderResourceReflection *resources;
   GPUShaderEntryInfoList *entryInfo;
   GPUBackend backend;
@@ -1498,6 +2041,9 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
   size_t entryResourceOffset;
   size_t resourceBindingOffset;
   size_t resourceOffset;
+  size_t ptxEntryOffset;
+  size_t ptxInfoOffset;
+  size_t ptxParamOffset;
   size_t staticSamplerOffset;
   size_t textOffset;
   size_t textSize;
@@ -1505,6 +2051,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
   uint32_t usedResourceCount;
   uint32_t entryResourceCount;
   uint32_t resourceCount;
+  uint32_t ptxParamCount;
   uint32_t pushConstantSizeBytes;
   GPUShaderStageFlags pushConstantStages;
   uint32_t flags;
@@ -1517,13 +2064,31 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
   runtimeInfo = &usReflection->runtime;
   flags = USL_BYTECODE_RUNTIME_INFO_FLAG_ENTRY_OVERFLOW |
           USL_BYTECODE_RUNTIME_INFO_FLAG_RESOURCE_OVERFLOW |
-          USL_BYTECODE_RUNTIME_INFO_FLAG_STATIC_SAMPLER_OVERFLOW;
+          USL_BYTECODE_RUNTIME_INFO_FLAG_STATIC_SAMPLER_OVERFLOW |
+          USL_BYTECODE_RUNTIME_INFO_FLAG_SAMPLED_TEXTURE_PAIR_OVERFLOW |
+          USL_BYTECODE_RUNTIME_INFO_FLAG_SAMPLED_TEXTURE_PAIR_INVALID;
   if (!gpu_uslRuntimeInfoIsUsable(runtimeInfo) ||
       (runtimeInfo->flags & flags) != 0u ||
       runtimeInfo->entry_point_count > USL_RUNTIME_MAX_ENTRY_POINTS ||
       runtimeInfo->resource_count > USL_RUNTIME_MAX_RESOURCES ||
-      runtimeInfo->static_sampler_count > USL_RUNTIME_MAX_STATIC_SAMPLERS) {
+      runtimeInfo->static_sampler_count > USL_RUNTIME_MAX_STATIC_SAMPLERS ||
+      runtimeInfo->sampled_texture_pair_count >
+        USL_RUNTIME_MAX_SAMPLED_TEXTURE_PAIRS) {
     return 0;
+  }
+
+  backend       = library->_api ? library->_api->backend : GPU_BACKEND_DEFAULT;
+  ptxParamCount = 0u;
+  if (backend == GPU_BACKEND_CUDA) {
+    for (uint32_t i = 0u; i < runtimeInfo->entry_point_count; i++) {
+      uint32_t count;
+
+      if (!gpu_ptxEntryParamCount(runtimeInfo, i, &count) ||
+          ptxParamCount > UINT32_MAX - count) {
+        return 0;
+      }
+      ptxParamCount += count;
+    }
   }
 
   textSize          = 0u;
@@ -1604,6 +2169,26 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
                            sizeof(staticSamplers->items[0]),
                            &staticSamplerOffset) ||
       !gpu_reserveMetadata(&totalSize,
+                           _Alignof(GPUShaderPTXInfo),
+                           0u,
+                           backend == GPU_BACKEND_CUDA ? 1u : 0u,
+                           sizeof(*ptxInfo),
+                           &ptxInfoOffset) ||
+      !gpu_reserveMetadata(&totalSize,
+                           _Alignof(GPUShaderPTXEntryInfo),
+                           0u,
+                           backend == GPU_BACKEND_CUDA
+                             ? runtimeInfo->entry_point_count
+                             : 0u,
+                           sizeof(ptxEntries[0]),
+                           &ptxEntryOffset) ||
+      !gpu_reserveMetadata(&totalSize,
+                           _Alignof(GPUShaderPTXParamInfo),
+                           0u,
+                           ptxParamCount,
+                           sizeof(ptxParams[0]),
+                           &ptxParamOffset) ||
+      !gpu_reserveMetadata(&totalSize,
                            _Alignof(char),
                            0u,
                            textSize,
@@ -1635,11 +2220,54 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
                      ? (GPUShaderStaticSamplerInfoList *)(metadata +
                                                           staticSamplerOffset)
                      : NULL;
+  ptxInfo = ptxInfoOffset != SIZE_MAX
+              ? (GPUShaderPTXInfo *)(metadata + ptxInfoOffset)
+              : NULL;
+  ptxEntries = ptxEntryOffset != SIZE_MAX
+                 ? (GPUShaderPTXEntryInfo *)(metadata + ptxEntryOffset)
+                 : NULL;
+  ptxParams = ptxParamOffset != SIZE_MAX
+                ? (GPUShaderPTXParamInfo *)(metadata + ptxParamOffset)
+                : NULL;
   textCursor = textOffset != SIZE_MAX ? (char *)(metadata + textOffset) : NULL;
   entryResourceCount = 0u;
   resourceCount      = 0u;
   pushConstantSizeBytes = 0u;
   pushConstantStages    = 0u;
+
+  if (ptxInfo) {
+    uint32_t paramStart;
+
+    ptxInfo->entries    = ptxEntries;
+    ptxInfo->params     = ptxParams;
+    ptxInfo->entryCount = runtimeInfo->entry_point_count;
+    ptxInfo->paramCount = ptxParamCount;
+    paramStart          = 0u;
+    for (uint32_t i = 0u; i < ptxInfo->entryCount; i++) {
+      GPUShaderPTXEntryInfo *entry;
+
+      entry             = &ptxInfo->entries[i];
+      entry->paramStart = paramStart;
+      if (!gpu_ptxEntryParamCount(runtimeInfo, i, &entry->paramCount) ||
+          paramStart > ptxInfo->paramCount ||
+          entry->paramCount > ptxInfo->paramCount - paramStart ||
+          !gpu_fillShaderPTXEntry(library,
+                                  runtimeInfo,
+                                  i,
+                                  entry,
+                                  entry->paramCount > 0u
+                                    ? ptxInfo->params + paramStart
+                                    : NULL)) {
+        free(metadata);
+        return 0;
+      }
+      paramStart += entry->paramCount;
+    }
+    if (paramStart != ptxInfo->paramCount) {
+      free(metadata);
+      return 0;
+    }
+  }
 
   for (uint32_t i = 0u; i < runtimeInfo->entry_point_count; i++) {
     const USLRuntimeEntryPoint *src;
@@ -1729,7 +2357,6 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
     return 0;
   }
 
-  backend = library->_api ? library->_api->backend : GPU_BACKEND_DEFAULT;
   for (uint32_t i = 0u; i < runtimeInfo->resource_count; i++) {
     const USLRuntimeResource *src;
     GPUShaderEntryInfo *shaderEntry;
@@ -1886,31 +2513,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
       return 0;
     }
 
-    memset(&item, 0, sizeof(item));
-    item.desc.logicalIndex  = src->id;
-    item.desc.minFilter     = src->min_filter;
-    item.desc.magFilter     = src->mag_filter;
-    item.desc.mipFilter     = src->mip_filter;
-    item.desc.addressMode   = src->address_mode;
-    item.desc.coordSpace    = src->coord_space;
-    item.desc.compareFunc   = src->compare_func;
-    item.desc.hasCompare    = src->has_compare;
-    item.desc.maxAnisotropy = src->max_anisotropy;
-    item.entryMask          = entryMask;
-    item.visibility         = visibility;
-    item.hlslIndex          = src->hlsl_index >= 0
-                                ? (uint32_t)src->hlsl_index
-                                : UINT32_MAX;
-    item.spirvGroup         = src->spirv_set;
-    item.spirvBinding = src->spirv_binding >= 0
-                          ? (uint32_t)src->spirv_binding
-                          : UINT32_MAX;
-    item.wgslGroup = src->wgsl_group >= 0
-                       ? (uint32_t)src->wgsl_group
-                       : UINT32_MAX;
-    item.wgslBinding = src->wgsl_binding >= 0
-                         ? (uint32_t)src->wgsl_binding
-                         : UINT32_MAX;
+    gpu_staticSamplerInfoFromUSL(src, visibility, entryMask, &item);
     if (!gpuStaticSamplerDescIsValid(&item.desc)) {
       free(metadata);
       return 0;
@@ -1918,13 +2521,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
 
     duplicate = UINT32_MAX;
     for (uint32_t j = 0u; j < staticSamplers->count; j++) {
-      if (staticSamplers->items[j].hlslIndex == item.hlslIndex &&
-          staticSamplers->items[j].spirvGroup == item.spirvGroup &&
-          staticSamplers->items[j].spirvBinding == item.spirvBinding &&
-          staticSamplers->items[j].wgslGroup == item.wgslGroup &&
-          staticSamplers->items[j].wgslBinding == item.wgslBinding &&
-          gpu_staticSamplerDescEqual(&staticSamplers->items[j].desc,
-                                     &item.desc)) {
+      if (gpu_staticSamplerInfoEqual(&staticSamplers->items[j], &item)) {
         duplicate = j;
         break;
       }
@@ -1937,12 +2534,18 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary *library,
     staticSamplers->items[staticSamplers->count++] = item;
   }
 
+  if (!gpu_resolvePTXStaticSamplers(runtimeInfo, staticSamplers, ptxInfo)) {
+    free(metadata);
+    return 0;
+  }
+
   gpu_clearShaderMetadata(library);
   library->_metadata         = metadata;
   library->_entryInfo        = entryInfo;
   library->_entryResources   = entryResources;
   library->_resourceBindings = resourceBindings;
   library->_staticSamplers   = staticSamplers;
+  library->_ptxInfo          = ptxInfo;
   library->_reflection.resourceCount = resourceCount;
   library->_reflection.pResources = resources;
   library->_reflection.pushConstantSizeBytes = pushConstantSizeBytes;
@@ -2210,18 +2813,29 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   }
   targetAtomCount = 0u;
   if (api->backend == GPU_BACKEND_CUDA) {
-    char architecture[USL_CAPABILITY_ATOM_TEXT_MAX];
-    int  architectureLength;
-
-    architectureLength = snprintf(architecture,
-                                  sizeof(architecture),
-                                  "sm_%u",
-                                  device->uslTargetArchitecture);
-    if (device->uslTargetArchitecture == 0u || architectureLength <= 0 ||
-        (size_t)architectureLength >= sizeof(architecture) ||
-        us_cap_atom_text(&targetAtoms[targetAtomCount++],
-                         architecture) != USLOk) {
+    if (!gpu_uslCUDASMAtom(&targetAtoms[targetAtomCount++],
+                           device->uslTargetArchitecture)) {
       return GPU_ERROR_BACKEND_FAILURE;
+    }
+    if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
+      if (us_cap_atom_init(
+            &targetAtoms[targetAtomCount++],
+            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+            USL_SEMANTIC_FEATURE_ID_SHADER_F16,
+            0u,
+            0u) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+    if (GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUPS)) {
+      if (us_cap_atom_init(
+            &targetAtoms[targetAtomCount++],
+            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+            USL_SEMANTIC_FEATURE_ID_SUBGROUP,
+            0u,
+            0u) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
     }
   } else if (api->backend == GPU_BACKEND_VULKAN) {
     if (device->uslTargetProfile == 0u) {

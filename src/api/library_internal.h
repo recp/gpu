@@ -61,6 +61,60 @@ typedef struct GPUShaderSourceBlob {
   uint64_t size;
 } GPUShaderSourceBlob;
 
+enum {
+  GPU_SHADER_PTX_MAX_PARAM_COUNT = 512u,
+  GPU_SHADER_PTX_MAX_PARAM_BYTES = 4096u
+};
+
+typedef enum GPUShaderPTXParamKind {
+  GPUShaderPTXParamInvalid         = 0,
+  GPUShaderPTXParamBuffer          = 1,
+  GPUShaderPTXParamSurface         = 2,
+  GPUShaderPTXParamTexture         = 3,
+  GPUShaderPTXParamSampledTexture  = 4,
+  GPUShaderPTXParamTextureMetadata = 5
+} GPUShaderPTXParamKind;
+
+typedef enum GPUShaderPTXTextureMetadataFlags {
+  GPUShaderPTXTextureMetadataNone               = 0,
+  GPUShaderPTXTextureMetadataMipLevelCountBit   = 1u << 0,
+  GPUShaderPTXTextureMetadataArrayLayerCountBit = 1u << 1,
+  GPUShaderPTXTextureMetadataSampleCountBit     = 1u << 2
+} GPUShaderPTXTextureMetadataFlags;
+
+typedef struct GPUShaderPTXParamInfo {
+  GPUBindingType        bindingType;
+  GPUShaderPTXParamKind kind;
+  uint32_t              groupIndex;
+  uint32_t              binding;
+  uint32_t              arrayIndex;
+  uint32_t              samplerGroupIndex;
+  uint32_t              samplerBinding;
+  uint32_t              samplerArrayIndex;
+  uint32_t              staticSamplerId;
+  uint32_t              dataOffset;
+  uint32_t              metadataFlags;
+} GPUShaderPTXParamInfo;
+
+typedef struct GPUShaderPTXEntryInfo {
+  uint32_t paramStart;
+  uint32_t paramCount;
+  uint32_t paramDataSize;
+} GPUShaderPTXEntryInfo;
+
+typedef struct GPUShaderPTXInfo {
+  GPUShaderPTXEntryInfo *entries;
+  GPUShaderPTXParamInfo *params;
+  uint32_t               entryCount;
+  uint32_t               paramCount;
+} GPUShaderPTXInfo;
+
+typedef struct GPUShaderPTXEntryView {
+  const GPUShaderPTXParamInfo *params;
+  uint32_t                     paramCount;
+  uint32_t                     paramDataSize;
+} GPUShaderPTXEntryView;
+
 struct GPUShaderLibrary {
   GPUApi                         *_api;
   GPUDevice                      *_device;
@@ -68,6 +122,7 @@ struct GPUShaderLibrary {
   void                           *_metadata;
   void                           *_uslSource;
   GPUShaderStaticSamplerInfoList *_staticSamplers;
+  GPUShaderPTXInfo               *_ptxInfo;
   void                           *_entryInfo;
   void                           *_entryResources;
   void                           *_resourceBindings;
@@ -99,6 +154,12 @@ int
 gpuGetShaderLibraryComputeWorkgroupSize(const GPUShaderLibrary *library,
                                         const char *entryPoint,
                                         uint32_t outSize[3]);
+
+GPU_HIDE
+int
+gpuGetShaderLibraryPTXEntry(const GPUShaderLibrary *library,
+                            const char               *entryPoint,
+                            GPUShaderPTXEntryView     *outEntry);
 
 GPU_HIDE
 int

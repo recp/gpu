@@ -190,6 +190,75 @@ gpu_uslDefaultCUDATarget(USLTargetSpec *outTarget) {
 }
 
 static inline int
+gpu_uslCUDAExactSM(uint32_t architecture) {
+  switch (architecture) {
+    case 90u:
+    case 100u:
+    case 101u:
+    case 103u:
+    case 110u:
+    case 120u:
+    case 121u:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static inline uint32_t
+gpu_uslCUDATargetSM(uint32_t architecture) {
+  switch (architecture) {
+    case 50u:
+    case 52u:
+    case 53u:
+    case 60u:
+    case 61u:
+    case 62u:
+    case 70u:
+    case 72u:
+    case 75u:
+    case 80u:
+    case 86u:
+    case 87u:
+    case 89u:
+    case 90u:
+    case 100u:
+    case 101u:
+    case 103u:
+    case 110u:
+    case 120u:
+    case 121u:
+      return architecture;
+    default:
+      return architecture > 121u ? 121u : 0u;
+  }
+}
+
+static inline int
+gpu_uslCUDASMAtom(USLCapabilityAtomDesc *outAtom,
+                  uint32_t                architecture) {
+  char architectureText[USL_CAPABILITY_ATOM_TEXT_MAX];
+  uint32_t targetArchitecture;
+  int  architectureLength;
+
+  targetArchitecture = gpu_uslCUDATargetSM(architecture);
+  if (!outAtom || targetArchitecture == 0u) {
+    return 0;
+  }
+
+  architectureLength = snprintf(architectureText,
+                                sizeof(architectureText),
+                                targetArchitecture == architecture &&
+                                  gpu_uslCUDAExactSM(architecture)
+                                  ? "sm_%ua"
+                                  : "sm_%u",
+                                targetArchitecture);
+  return architectureLength > 0 &&
+         (size_t)architectureLength < sizeof(architectureText) &&
+         us_cap_atom_text(outAtom, architectureText) == USLOk;
+}
+
+static inline int
 gpu_uslDefaultTarget(GPUBackend backend, USLTargetSpec *outTarget) {
   switch (backend) {
     case GPU_BACKEND_METAL:

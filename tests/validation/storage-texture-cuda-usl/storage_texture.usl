@@ -1,0 +1,17 @@
+kern(8, 8, 1) storage_write(
+  image: image2d<float, read_write> #texture(0),
+  inout output: [float4] #buffer(1),
+  gid: uint2 #global_id
+) {
+  let color = image.read(gid)
+  output[gid.y * 8u + gid.x] = color
+  image.write(color * 2.0, gid)
+}
+
+kern(8, 8, 1) storage_readback(
+  image: image2d<float, read_write> #texture(0),
+  inout output: [float4] #buffer(1),
+  gid: uint2 #global_id
+) {
+  output[gid.y * 8u + gid.x] = image.read(gid)
+}

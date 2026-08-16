@@ -184,6 +184,7 @@ cuda__destroyQueue(GPUQueueCuda *queue) {
       if (command->completion) {
         (void)queue->driver->eventDestroy(command->completion);
       }
+      free(command->paramData);
       free(command->dispatches);
       free(command);
     }
@@ -272,7 +273,8 @@ cuda__initQueue(GPUDevice      *device,
 }
 
 static GPUAdapter *
-cuda_getAvailableAdapters(GPUInstance *inst, uint32_t maxNumberOfItems) {
+cuda_getAvailableAdapters(GPUInstance * __restrict inst,
+                          uint32_t                  maxNumberOfItems) {
   GPUAdapter *head;
   GPUAdapter *tail;
   GPUCUDA    *driver;
@@ -318,6 +320,9 @@ cuda_getAvailableAdapters(GPUInstance *inst, uint32_t maxNumberOfItems) {
           &candidate.maxThreadsPerBlock,
           CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK,
           candidate.device) != CUDA_SUCCESS ||
+        driver->deviceGetAttribute(&candidate.warpSize,
+                                   CU_DEVICE_ATTRIBUTE_WARP_SIZE,
+                                   candidate.device) != CUDA_SUCCESS ||
         driver->deviceGetAttribute(&candidate.maxBlockDim[0],
                                    CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X,
                                    candidate.device) != CUDA_SUCCESS ||
@@ -337,7 +342,7 @@ cuda_getAvailableAdapters(GPUInstance *inst, uint32_t maxNumberOfItems) {
                                    CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Z,
                                    candidate.device) != CUDA_SUCCESS ||
         candidate.computeMajor <= 0 || candidate.computeMinor < 0 ||
-        candidate.maxThreadsPerBlock <= 0 ||
+        candidate.maxThreadsPerBlock <= 0 || candidate.warpSize <= 0 ||
         candidate.maxBlockDim[0] <= 0 || candidate.maxBlockDim[1] <= 0 ||
         candidate.maxBlockDim[2] <= 0 || candidate.maxGridDim[0] <= 0 ||
         candidate.maxGridDim[1] <= 0 || candidate.maxGridDim[2] <= 0) {
@@ -370,16 +375,16 @@ cuda_getAvailableAdapters(GPUInstance *inst, uint32_t maxNumberOfItems) {
 }
 
 static GPUAdapter *
-cuda_selectAdapter(GPUInstance       *inst,
-                   GPUAdapter        *adapters,
-                   GPUPowerPreference powerPreference) {
+cuda_selectAdapter(GPUInstance       * __restrict inst,
+                   GPUAdapter        * __restrict adapters,
+                   GPUPowerPreference             powerPreference) {
   GPU__UNUSED(inst);
   GPU__UNUSED(powerPreference);
   return adapters;
 }
 
 static void
-cuda_destroyAdapter(GPUAdapter *adapter) {
+cuda_destroyAdapter(GPUAdapter * __restrict adapter) {
   if (adapter) {
     free(adapter->_priv);
     free(adapter);
@@ -387,8 +392,8 @@ cuda_destroyAdapter(GPUAdapter *adapter) {
 }
 
 static GPUResult
-cuda_getAdapterProperties(const GPUAdapter     *adapter,
-                          GPUAdapterProperties *outProperties) {
+cuda_getAdapterProperties(const GPUAdapter     * __restrict adapter,
+                          GPUAdapterProperties * __restrict outProperties) {
   GPUAdapterCuda *native;
 
   native = cuda_adapter(adapter);
@@ -404,8 +409,8 @@ cuda_getAdapterProperties(const GPUAdapter     *adapter,
 }
 
 static GPUResult
-cuda_getAdapterIdentity(const GPUAdapter   *adapter,
-                        GPUAdapterIdentity *outIdentity) {
+cuda_getAdapterIdentity(const GPUAdapter   * __restrict adapter,
+                        GPUAdapterIdentity * __restrict outIdentity) {
   GPUAdapterCuda *native;
 
   native = cuda_adapter(adapter);
@@ -436,30 +441,75 @@ cuda_getAdapterIdentity(const GPUAdapter   *adapter,
 }
 
 static bool
-cuda_supportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
+cuda_hasSubgroups(const GPUAdapterCuda *adapter) {
+  return adapter && adapter->computeMajor >= 3 && adapter->warpSize == 32;
+}
+
+static bool
+cuda_hasShaderF16(const GPUAdapterCuda *adapter) {
+  return adapter &&
+         (adapter->computeMajor > 5 ||
+          (adapter->computeMajor == 5 && adapter->computeMinor >= 3));
+}
+
+static bool
+cuda_hasSubgroupMatrix(const GPUAdapterCuda *adapter) {
+  return cuda_hasSubgroups(adapter) && adapter->computeMajor >= 7;
+}
+
+static bool
+cuda_hasAtomic64(const GPUAdapterCuda *adapter) {
+  return adapter && adapter->computeMajor >= 5;
+}
+
+static bool
+cuda_supportsFeature(const GPUAdapter * __restrict adapter,
+                     GPUFeature                    feature) {
   GPUAdapterCuda *native;
 
   native = cuda_adapter(adapter);
   if (!native) {
     return false;
   }
-  return feature == GPU_FEATURE_COMPUTE ||
-         (feature == GPU_FEATURE_BUFFER_DEVICE_ADDRESS &&
-          native->unifiedAddressing != 0);
+  switch (feature) {
+    case GPU_FEATURE_COMPUTE:
+    case GPU_FEATURE_DESCRIPTOR_INDEXING:
+      return true;
+    case GPU_FEATURE_SUBGROUPS:
+      return cuda_hasSubgroups(native);
+    case GPU_FEATURE_SHADER_F16:
+      return cuda_hasShaderF16(native);
+    case GPU_FEATURE_SUBGROUP_MATRIX:
+      return cuda_hasSubgroupMatrix(native);
+    case GPU_FEATURE_ATOMIC64:
+      return cuda_hasAtomic64(native);
+    case GPU_FEATURE_BUFFER_DEVICE_ADDRESS:
+      return native->unifiedAddressing != 0;
+    default:
+      return false;
+  }
 }
 
 static bool
-cuda_supportsSubgroupOperations(const GPUAdapter                 *adapter,
-                                GPUShaderStageFlags               stage,
-                                GPUBackendSubgroupOperationFlags  operations) {
-  GPU__UNUSED(adapter);
-  GPU__UNUSED(stage);
-  GPU__UNUSED(operations);
-  return false;
+cuda_supportsSubgroupOperations(
+  const GPUAdapter                * __restrict adapter,
+  GPUShaderStageFlags                          stage,
+  GPUBackendSubgroupOperationFlags             operations
+) {
+  const GPUBackendSubgroupOperationFlags supported =
+    GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
+    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT |
+    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
+  GPUAdapterCuda *native;
+
+  native = cuda_adapter(adapter);
+  return cuda_hasSubgroups(native) && stage == GPU_SHADER_STAGE_COMPUTE_BIT &&
+         operations != 0u && (operations & ~supported) == 0u;
 }
 
 static void
-cuda_getLimits(const GPUAdapter *adapter, GPULimits *outLimits) {
+cuda_getLimits(const GPUAdapter * __restrict adapter,
+               GPULimits       * __restrict outLimits) {
   GPUAdapterCuda *native;
 
   native = cuda_adapter(adapter);
@@ -467,43 +517,75 @@ cuda_getLimits(const GPUAdapter *adapter, GPULimits *outLimits) {
     return;
   }
   memset(outLimits, 0, sizeof(*outLimits));
-  outLimits->maxBindGroups       = 1u;
-  outLimits->maxBindingsPerGroup = 1u;
+  outLimits->maxBindGroups       = GPU_ENCODER_MAX_BIND_GROUPS;
+  outLimits->maxBindingsPerGroup = 64u;
   outLimits->minUniformBufferOffsetAlignment = 1u;
   outLimits->minStorageBufferOffsetAlignment = 1u;
   outLimits->maxComputeWorkgroupSizeX = (uint32_t)native->maxBlockDim[0];
   outLimits->maxComputeWorkgroupSizeY = (uint32_t)native->maxBlockDim[1];
   outLimits->maxComputeWorkgroupSizeZ = (uint32_t)native->maxBlockDim[2];
+  if (cuda_hasSubgroups(native)) {
+    outLimits->minSubgroupSize = (uint32_t)native->warpSize;
+    outLimits->maxSubgroupSize = (uint32_t)native->warpSize;
+  }
 }
 
 static void
-cuda_getFormatCapabilities(const GPUAdapter      *adapter,
-                           GPUFormat              format,
-                           GPUFormatCapabilities *outCapabilities) {
-  GPU__UNUSED(adapter);
-  GPU__UNUSED(format);
+cuda_getFormatCapabilities(
+  const GPUAdapter      * __restrict adapter,
+  GPUFormat                          format,
+  GPUFormatCapabilities * __restrict outCapabilities
+) {
   if (outCapabilities) {
     memset(outCapabilities, 0, sizeof(*outCapabilities));
+    if (cuda_adapter(adapter) && format == GPU_FORMAT_RGBA32_FLOAT) {
+      outCapabilities->supportedSampleCounts = GPU_SAMPLE_COUNT_1_BIT;
+      outCapabilities->sampled               = true;
+      outCapabilities->filterable            = true;
+      outCapabilities->storage               = true;
+    }
   }
 }
 
 static GPUResult
 cuda_getSubgroupMatrixProperties(
-  const GPUAdapter               *adapter,
-  uint32_t                       *inoutPropertyCount,
-  GPUSubgroupMatrixPropertiesEXT *outProperties
+  const GPUAdapter               * __restrict adapter,
+  uint32_t                       * __restrict inoutPropertyCount,
+  GPUSubgroupMatrixPropertiesEXT * __restrict outProperties
 ) {
-  GPU__UNUSED(adapter);
-  GPU__UNUSED(outProperties);
-  if (!inoutPropertyCount) {
+  GPUAdapterCuda *native;
+  uint32_t        capacity;
+
+  native = cuda_adapter(adapter);
+  if (!native || !inoutPropertyCount) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  *inoutPropertyCount = 0u;
-  return GPU_ERROR_UNSUPPORTED;
+  if (!cuda_hasSubgroupMatrix(native)) {
+    *inoutPropertyCount = 0u;
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  capacity = *inoutPropertyCount;
+  *inoutPropertyCount = 1u;
+  if (outProperties && capacity > 0u) {
+    memset(outProperties, 0, sizeof(*outProperties));
+    outProperties->m          = 16u;
+    outProperties->n          = 16u;
+    outProperties->k          = 16u;
+    outProperties->aType      = GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT;
+    outProperties->bType      = GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT;
+    outProperties->cType      = GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT;
+    outProperties->resultType = GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT;
+    outProperties->stages     = GPU_SHADER_STAGE_COMPUTE_BIT;
+    outProperties->scope      = GPU_SUBGROUP_MATRIX_SCOPE_SUBGROUP_EXT;
+  }
+  return outProperties && capacity == 0u
+           ? GPU_ERROR_INSUFFICIENT_CAPACITY
+           : GPU_OK;
 }
 
 static GPUDevice *
-cuda_createDevice(GPUAdapter               *adapter,
+cuda_createDevice(GPUAdapter               * __restrict adapter,
                   const GPUQueueCreateInfo  queueInfos[],
                   uint32_t                  queueInfoCount,
                   uint64_t                  enabledFeatureMask) {
@@ -515,7 +597,20 @@ cuda_createDevice(GPUAdapter               *adapter,
   CUresult        result;
 
   adapterNative = cuda_adapter(adapter);
-  supportedMask = 1ull << GPU_FEATURE_COMPUTE;
+  supportedMask = (1ull << GPU_FEATURE_COMPUTE) |
+                  (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING);
+  if (cuda_hasSubgroups(adapterNative)) {
+    supportedMask |= 1ull << GPU_FEATURE_SUBGROUPS;
+  }
+  if (cuda_hasShaderF16(adapterNative)) {
+    supportedMask |= 1ull << GPU_FEATURE_SHADER_F16;
+  }
+  if (cuda_hasSubgroupMatrix(adapterNative)) {
+    supportedMask |= 1ull << GPU_FEATURE_SUBGROUP_MATRIX;
+  }
+  if (cuda_hasAtomic64(adapterNative)) {
+    supportedMask |= 1ull << GPU_FEATURE_ATOMIC64;
+  }
   if (adapterNative && adapterNative->unifiedAddressing != 0) {
     supportedMask |= 1ull << GPU_FEATURE_BUFFER_DEVICE_ADDRESS;
   }
@@ -566,6 +661,9 @@ cuda_createDevice(GPUAdapter               *adapter,
   device->uslTargetArchitecture =
     (uint32_t)(adapterNative->computeMajor * 10 +
                adapterNative->computeMinor);
+  device->uslBoundedDescriptorIndexing =
+    (enabledFeatureMask &
+     (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u;
   result = native->driver->primaryCtxRetain(&native->context,
                                              native->cudaDevice);
   if (result != CUDA_SUCCESS ||
@@ -597,7 +695,7 @@ cuda_createDevice(GPUAdapter               *adapter,
 }
 
 static GPUResult
-cuda_waitIdle(GPUDevice *device) {
+cuda_waitIdle(GPUDevice * __restrict device) {
   GPUDeviceCuda *native;
   GPUResult       result;
 
@@ -640,7 +738,7 @@ cuda_waitIdle(GPUDevice *device) {
 }
 
 static void
-cuda_destroyDevice(GPUDevice *device) {
+cuda_destroyDevice(GPUDevice * __restrict device) {
   GPUDeviceCuda *native;
 
   native = cuda_device(device);

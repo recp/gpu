@@ -1,0 +1,29 @@
+@require(descriptor_indexing)
+
+kern(1, 1, 1) descriptor_array_write(
+  textures: [texture2d<float>; 2] #texture(0),
+  samplers: [sampler; 2] #sampler(2),
+  selection: uint #buffer(4),
+  inout output: [float4] #buffer(5),
+  images: [image2d<rgba32float, read_write>; 2] #texture(6),
+  gid: uint2 #global_id
+) {
+  let index = nonuniform(selection)
+  let color = textures[index].sample(
+    samplers[index], float2(1.25, 0.5), level(0.0))
+  let textureWidth = float(textures[index].get_width(0))
+  let imageWidth   = float(images[index].get_width())
+  output[0] = color
+  output[3] = float4(textureWidth, textureWidth, textureWidth, textureWidth)
+  output[4] = float4(imageWidth, imageWidth, imageWidth, imageWidth)
+  images[index].write(color, gid)
+}
+
+kern(1, 1, 1) descriptor_array_read(
+  inout output: [float4] #buffer(5),
+  images: [image2d<rgba32float, read_write>; 2] #texture(6),
+  gid: uint2 #global_id
+) {
+  output[1] = images[0].read(gid)
+  output[2] = images[1].read(gid)
+}

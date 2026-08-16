@@ -3,12 +3,16 @@ target_sources(gpu PRIVATE
   init.c
   impl/buffer.c
   impl/cmdque.c
+  impl/binding.c
   impl/compute.c
   impl/device.c
   impl/driver.c
   impl/instance.c
   impl/library.c
+  impl/module.c
   impl/multigpu.c
+  impl/sampler.c
+  impl/texture.c
 )
 
 if(CMAKE_DL_LIBS)

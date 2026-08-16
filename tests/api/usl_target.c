@@ -40,6 +40,7 @@ expect_profile(const char       *name,
 
 int
 main(void) {
+  USLCapabilityAtomDesc atom;
   USLTargetSpec target;
   int           ok;
 
@@ -69,6 +70,16 @@ main(void) {
   ok &= gpu_uslDefaultTarget(GPU_BACKEND_CUDA, &target);
   ok &= target.backend == USL_BACKEND_PTX;
   ok &= target.profile == USL_TARGET_PROFILE_NONE;
+  ok &= gpu_uslCUDASMAtom(&atom, 89u);
+  ok &= strcmp(atom.text, "sm_89") == 0;
+  ok &= gpu_uslCUDASMAtom(&atom, 90u);
+  ok &= strcmp(atom.text, "sm_90a") == 0;
+  ok &= gpu_uslCUDASMAtom(&atom, 120u);
+  ok &= strcmp(atom.text, "sm_120a") == 0;
+  ok &= gpu_uslCUDASMAtom(&atom, 130u);
+  ok &= strcmp(atom.text, "sm_121") == 0;
+  ok &= !gpu_uslCUDASMAtom(&atom, 91u);
+  ok &= !gpu_uslCUDASMAtom(&atom, 0u);
 
   return ok ? 0 : 1;
 }

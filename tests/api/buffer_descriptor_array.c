@@ -44,7 +44,10 @@ gpu_testBufferDescriptorArray(GPUDevice *device,
   uint32_t                      layoutEntryCount;
   int                           ok;
 
-  queue           = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  queue           = GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0u);
+  if (!queue) {
+    queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  }
   library         = NULL;
   shaderLayout    = NULL;
   bindlessLayout  = NULL;

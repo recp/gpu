@@ -74,7 +74,10 @@ gpu_test_atomic64(GPUAdapter *adapter, const char *bytecodePath) {
     goto cleanup;
   }
 
-  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  queue = GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0u);
+  if (!queue) {
+    queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  }
   if (!queue ||
       GPUCreateShaderLibraryFromUSL(device,
                                     bytecode,

@@ -1,0 +1,35 @@
+kern(1, 1, 1) sample_dynamic(
+  color: texture2d<float> #texture(3) #group(0),
+  colorSampler: sampler #sampler(7) #group(1),
+  inout output: [float4] #buffer(2) #group(2)
+) {
+  output[0] = color.sample(colorSampler, float2(0.25, 0.25))
+}
+
+kern(1, 1, 1) sample_static(
+  color: texture2d<float> #texture(3) #group(0),
+  inout output: [float4] #buffer(2) #group(2)
+) {
+  output[1] = color.sample(.nearest, float2(0.75, 0.75))
+}
+
+kern(1, 1, 1) sample_static_again(
+  color: texture2d<float> #texture(3) #group(0),
+  inout output: [float4] #buffer(2) #group(2)
+) {
+  output[2] = color.sample(.nearest, float2(0.25, 0.25))
+}
+
+kern(1, 1, 1) fetch_exact(
+  color: texture2d<float> #texture(3) #group(0),
+  inout output: [float4] #buffer(2) #group(2)
+) {
+  output[3] = color.read(int2(1, 0))
+}
+
+kern(1, 1, 1) query_metadata(
+  color: texture2d<float> #texture(3) #group(0),
+  inout output: [float4] #buffer(2) #group(2)
+) {
+  output[4] = float4(float(color.get_num_mip_levels()), 0.0, 0.0, 1.0)
+}

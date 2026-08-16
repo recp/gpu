@@ -72,7 +72,9 @@ if((GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS) AND
                 $<TARGET_FILE:gpu-usl-fixture>
                 "${backend}"
                 "${fixtureSource}"
-        DEPENDS gpu-usl-runtime-stage "${source}"
+        DEPENDS gpu-usl-runtime-stage
+                $<TARGET_FILE:gpu-usl-fixture>
+                "${source}"
         VERBATIM
       )
       list(APPEND outputs "${fixtureOutput}")

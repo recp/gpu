@@ -13,19 +13,44 @@ enum {
 
 static CUresult
 cuda__launchCommand(GPUQueueCuda *queue, GPUCommandCuda *command) {
+  void    *parameters[GPU_SHADER_PTX_MAX_PARAM_COUNT];
   CUresult result;
 
   result = CUDA_SUCCESS;
   for (uint32_t i = 0u; i < command->dispatchCount; i++) {
     GPUComputePipelineCuda *pipeline;
     GPUDispatchCuda        *dispatch;
-    CUdeviceptr             buffer;
-    void                   *parameters[1];
+    uint8_t                *paramData;
 
-    dispatch      = &command->dispatches[i];
-    pipeline      = dispatch->pipeline->_state;
-    buffer        = dispatch->buffer;
-    parameters[0] = &buffer;
+    dispatch = &command->dispatches[i];
+    pipeline = dispatch->pipeline->_state;
+    if (!pipeline || pipeline->paramCount > GPU_SHADER_PTX_MAX_PARAM_COUNT ||
+        dispatch->paramDataSize != pipeline->paramDataSize) {
+      return CUDA_ERROR_INVALID_VALUE;
+    }
+    if (dispatch->paramDataSize <= sizeof(dispatch->inlineParams)) {
+      paramData = dispatch->inlineParams;
+    } else {
+      if (!command->paramData ||
+          dispatch->paramDataOffset > command->paramDataCount ||
+          dispatch->paramDataSize >
+            command->paramDataCount - dispatch->paramDataOffset) {
+        return CUDA_ERROR_INVALID_VALUE;
+      }
+      paramData = command->paramData + dispatch->paramDataOffset;
+    }
+    for (uint32_t j = 0u; j < pipeline->paramCount; j++) {
+      const GPUShaderPTXParamInfo *param;
+      uint32_t                     size;
+
+      param = &pipeline->params[j];
+      size  = cuda_ptxParamSize(param->kind);
+      if (size == 0u || dispatch->paramDataSize < size ||
+          param->dataOffset > dispatch->paramDataSize - size) {
+        return CUDA_ERROR_INVALID_VALUE;
+      }
+      parameters[j] = paramData + param->dataOffset;
+    }
     result = queue->driver->launchKernel(pipeline->function,
                                          dispatch->grid[0],
                                          dispatch->grid[1],
@@ -35,7 +60,9 @@ cuda__launchCommand(GPUQueueCuda *queue, GPUCommandCuda *command) {
                                          dispatch->block[2],
                                          0u,
                                          queue->stream,
-                                         parameters,
+                                         pipeline->paramCount > 0u
+                                           ? parameters
+                                           : NULL,
                                          NULL);
     if (result != CUDA_SUCCESS) {
       break;
@@ -168,7 +195,9 @@ cuda__signalSemaphores(GPUQueueCuda                  *queue,
 }
 
 static GPUQueue *
-cuda_getQueue(GPUDevice *device, GPUQueueFlagBits bits, uint32_t index) {
+cuda_getQueue(GPUDevice * __restrict device,
+              GPUQueueFlagBits        bits,
+              uint32_t                index) {
   GPUDeviceCuda *native;
 
   native = cuda_device(device);
@@ -179,9 +208,9 @@ cuda_getQueue(GPUDevice *device, GPUQueueFlagBits bits, uint32_t index) {
 }
 
 static GPUCommandBuffer *
-cuda_newCommandBuffer(GPUQueue                    *queue,
-                      const char                  *label,
-                      void                        *sender,
+cuda_newCommandBuffer(GPUQueue                    * __restrict queue,
+                      const char                  * __restrict label,
+                      void                        * __restrict sender,
                       GPUCommandBufferCompletionFn onComplete) {
   GPUCommandCuda *command;
   GPUQueueCuda   *native;
@@ -221,18 +250,18 @@ cuda_newCommandBuffer(GPUQueue                    *queue,
   command->command._onCompleteSender = sender;
   command->command._onComplete       = onComplete;
   command->pipeline                  = NULL;
-  command->buffer                    = NULL;
-  command->bufferOffset              = 0u;
   command->dispatchCount             = 0u;
+  command->paramDataCount            = 0u;
   command->recordResult              = GPU_OK;
   command->pending                   = false;
   command->next                      = NULL;
+  memset(command->boundParamMask, 0, sizeof(command->boundParamMask));
   return &command->command;
 }
 
 static void
-cuda_commandBufferOnComplete(GPUCommandBuffer             *cmdb,
-                             void                         *sender,
+cuda_commandBufferOnComplete(GPUCommandBuffer             * __restrict cmdb,
+                             void                         * __restrict sender,
                              GPUCommandBufferCompletionFn  onComplete) {
   if (!cmdb) {
     return;
@@ -242,7 +271,7 @@ cuda_commandBufferOnComplete(GPUCommandBuffer             *cmdb,
 }
 
 static GPUResult
-cuda_discardCommandBuffer(GPUCommandBuffer *cmdb) {
+cuda_discardCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   if (!cuda_command(cmdb)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -251,7 +280,7 @@ cuda_discardCommandBuffer(GPUCommandBuffer *cmdb) {
 }
 
 static GPUResult
-cuda_commitCommandBuffer(GPUCommandBuffer *cmdb) {
+cuda_commitCommandBuffer(GPUCommandBuffer * __restrict cmdb) {
   GPUCommandCuda *command;
   GPUQueueCuda   *queue;
   CUresult        result;

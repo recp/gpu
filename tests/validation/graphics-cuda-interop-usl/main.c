@@ -10,6 +10,11 @@ enum {
   RoundtripCount = 4u
 };
 
+typedef struct Params {
+  float scale;
+  float bias;
+} Params;
+
 typedef struct AdapterList {
   GPUAdapter **items;
   uint32_t     count;
@@ -23,12 +28,14 @@ typedef struct RoundtripState {
   GPUQueue            *cudaQueue;
   GPUBuffer           *graphicsBuffer;
   GPUBuffer           *cudaBuffer;
+  GPUBuffer           *paramsBuffer;
   GPUSemaphore        *graphicsSemaphore;
   GPUSemaphore        *cudaSemaphore;
   GPUFence            *releaseFence;
   GPUFence            *acquireFence;
   GPUComputePipeline  *pipeline;
-  GPUBindGroup        *bindGroup;
+  GPUBindGroup        *paramsGroup;
+  GPUBindGroup        *dataGroup;
 } RoundtripState;
 
 static void *
@@ -139,6 +146,7 @@ run_roundtrip(RoundtripState *state, uint32_t iteration) {
   GPUQueueSubmitExInfo       submit = {0};
   float                      values[ValueCount];
   uint64_t                   cudaValue, graphicsValue;
+  uint32_t                   dynamicOffset;
   int                        releaseSubmitted, cudaSubmitted, ok;
 
   releaseCmdb      = NULL;
@@ -207,7 +215,9 @@ run_roundtrip(RoundtripState *state, uint32_t iteration) {
     goto cleanup;
   }
   GPUBindComputePipeline(pass, state->pipeline);
-  GPUBindComputeGroup(pass, 0u, state->bindGroup, 0u, NULL);
+  dynamicOffset = 0u;
+  GPUBindComputeGroup(pass, 0u, state->paramsGroup, 1u, &dynamicOffset);
+  GPUBindComputeGroup(pass, 1u, state->dataGroup, 0u, NULL);
   GPUDispatch(pass, ValueCount / 256u, 1u, 1u);
   GPUEndComputePass(pass);
   pass = NULL;
@@ -316,14 +326,17 @@ main(int argc, char **argv) {
   GPUInstanceCreateInfo        cudaInstanceInfo = {0};
   GPUBufferCreateInfo          graphicsBufferInfo = {0};
   GPUBufferCreateInfo          cudaBufferInfo = {0};
+  GPUBufferCreateInfo          paramsBufferInfo = {0};
   GPUSemaphoreCreateInfo       semaphoreInfo = {0};
   GPUComputePipelineCreateInfo pipelineInfo = {0};
-  GPUBindGroupEntry            groupEntry = {0};
+  GPUBindGroupEntry            paramsEntry = {0};
+  GPUBindGroupEntry            dataEntries[2] = {0};
   GPUBindGroupCreateInfo       groupInfo = {0};
   GPUMemoryRequirements        memoryRequirements;
   AdapterList                  graphicsAdapters = {0}, cudaAdapters = {0};
   RoundtripState               state = {0};
   uint64_t                     artifactSize;
+  Params                       params = {2.0f, 1.0f};
   int                          status;
 
   if (argc != 2) {
@@ -438,9 +451,10 @@ main(int argc, char **argv) {
       GPUCreateShaderLayout(state.cudaDevice,
                             library,
                             &shaderLayout) != GPU_OK ||
-      !shaderLayout || shaderLayout->bindGroupLayoutCount != 1u ||
+      !shaderLayout || shaderLayout->bindGroupLayoutCount != 2u ||
       !shaderLayout->bindGroupLayouts ||
       !shaderLayout->bindGroupLayouts[0] ||
+      !shaderLayout->bindGroupLayouts[1] ||
       !shaderLayout->pipelineLayout) {
     fprintf(stderr, "CUDA USL shader layout creation failed\n");
     goto cleanup;
@@ -460,21 +474,60 @@ main(int argc, char **argv) {
     goto cleanup;
   }
 
-  groupEntry.binding       = 0u;
-  groupEntry.bindingType   = GPU_BINDING_STORAGE_BUFFER;
-  groupEntry.buffer.buffer = state.cudaBuffer;
-  groupEntry.buffer.size   = cudaBufferInfo.sizeBytes;
+  paramsBufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  paramsBufferInfo.chain.structSize = sizeof(paramsBufferInfo);
+  paramsBufferInfo.label            = "graphics-cuda-params";
+  paramsBufferInfo.sizeBytes        = sizeof(params);
+  paramsBufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM |
+                                      GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(state.cudaDevice,
+                      &paramsBufferInfo,
+                      &state.paramsBuffer) != GPU_OK ||
+      !state.paramsBuffer ||
+      GPUQueueWriteBuffer(state.cudaQueue,
+                          state.paramsBuffer,
+                          0u,
+                          &params,
+                          sizeof(params)) != GPU_OK) {
+    fprintf(stderr, "CUDA interop params buffer creation failed\n");
+    goto cleanup;
+  }
+
+  paramsEntry.binding       = 0u;
+  paramsEntry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
+  paramsEntry.buffer.buffer = state.paramsBuffer;
+  paramsEntry.buffer.size   = sizeof(params);
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label            = "graphics-cuda-group";
+  groupInfo.label            = "graphics-cuda-params-group";
   groupInfo.layout           = shaderLayout->bindGroupLayouts[0];
-  groupInfo.pEntries         = &groupEntry;
+  groupInfo.pEntries         = &paramsEntry;
   groupInfo.entryCount       = 1u;
   if (GPUCreateBindGroup(state.cudaDevice,
                          &groupInfo,
-                         &state.bindGroup) != GPU_OK ||
-      !state.bindGroup) {
-    fprintf(stderr, "CUDA interop bind group creation failed\n");
+                         &state.paramsGroup) != GPU_OK ||
+      !state.paramsGroup) {
+    fprintf(stderr, "CUDA interop params bind group creation failed\n");
+    goto cleanup;
+  }
+
+  dataEntries[0].binding       = 0u;
+  dataEntries[0].bindingType   = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
+  dataEntries[0].buffer.buffer = state.cudaBuffer;
+  dataEntries[0].buffer.size   = cudaBufferInfo.sizeBytes;
+  dataEntries[1].binding       = 1u;
+  dataEntries[1].bindingType   = GPU_BINDING_STORAGE_BUFFER;
+  dataEntries[1].buffer.buffer = state.cudaBuffer;
+  dataEntries[1].buffer.size   = cudaBufferInfo.sizeBytes;
+  groupInfo.label              = "graphics-cuda-data-group";
+  groupInfo.layout             = shaderLayout->bindGroupLayouts[1];
+  groupInfo.pEntries           = dataEntries;
+  groupInfo.entryCount         = 2u;
+  if (GPUCreateBindGroup(state.cudaDevice,
+                         &groupInfo,
+                         &state.dataGroup) != GPU_OK ||
+      !state.dataGroup) {
+    fprintf(stderr, "CUDA interop data bind group creation failed\n");
     goto cleanup;
   }
 
@@ -489,7 +542,8 @@ main(int argc, char **argv) {
   status = 0;
 
 cleanup:
-  GPUDestroyBindGroup(state.bindGroup);
+  GPUDestroyBindGroup(state.dataGroup);
+  GPUDestroyBindGroup(state.paramsGroup);
   GPUDestroyComputePipeline(state.pipeline);
   GPUDestroyShaderLayout(shaderLayout);
   GPUDestroyShaderLibrary(library);
@@ -499,6 +553,7 @@ cleanup:
   GPUDestroySemaphore(state.graphicsSemaphore);
   GPUDestroyBuffer(state.cudaBuffer);
   GPUDestroyBuffer(state.graphicsBuffer);
+  GPUDestroyBuffer(state.paramsBuffer);
   GPUDestroyDeviceInteropEXT(state.interop);
   GPUDestroyDevice(state.cudaDevice);
   GPUDestroyDevice(state.graphicsDevice);

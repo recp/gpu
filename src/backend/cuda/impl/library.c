@@ -13,8 +13,7 @@ cuda_newLibraryWithSource(GPUDevice *device,
   GPUShaderLibraryCuda *native;
   GPUShaderLibrary     *library;
 
-  if (!device || !source || sourceSize == 0u ||
-      sourceSize > (uint64_t)SIZE_MAX - 1u) {
+  if (!device || !source || sourceSize == 0u) {
     return NULL;
   }
   library = calloc(1, sizeof(*library));
@@ -25,16 +24,13 @@ cuda_newLibraryWithSource(GPUDevice *device,
     return NULL;
   }
 
-  native->source = malloc((size_t)sourceSize + 1u);
-  if (!native->source) {
+  native->module = cuda_createModule(device, source, sourceSize);
+  if (!native->module) {
     free(native);
     free(library);
     return NULL;
   }
-  memcpy(native->source, source, (size_t)sourceSize);
-  native->source[sourceSize] = '\0';
-  native->size               = sourceSize;
-  library->_priv             = native;
+  library->_priv = native;
   return library;
 }
 
@@ -44,7 +40,7 @@ cuda_destroyLibrary(GPUShaderLibrary *library) {
 
   native = library ? library->_priv : NULL;
   if (native) {
-    free(native->source);
+    cuda_releaseModule(native->module);
     free(native);
   }
   free(library);

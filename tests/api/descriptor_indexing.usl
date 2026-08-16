@@ -3,8 +3,8 @@ struct DescriptorArrayInput {
 }
 
 vert descriptor_array_vs(vertexId: uint #vertex_id) -> float4 {
-  let x = float(vertexId & 1) * 4.0 - 1.0
-  let y = float((vertexId >> 1) & 1) * 4.0 - 1.0
+  let x = float(vertexId & 1u) * 4.0 - 1.0
+  let y = float((vertexId >> 1u) & 1u) * 4.0 - 1.0
   return float4(x, y, 0.0, 1.0)
 }
 

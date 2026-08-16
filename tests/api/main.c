@@ -298,6 +298,15 @@ run_untyped_pointer(void *ctx) {
 static int
 run_dx12_binding_plan(void *ctx) {
   GPUApiTestContext *testCtx = ctx;
+  GPUAdapterProperties properties;
+
+  if (GPUGetAdapterProperties(testCtx->adapter, &properties) != GPU_OK) {
+    return 0;
+  }
+  if (properties.backend != GPU_BACKEND_DX12) {
+    printf("DX12 binding-plan execution skipped: non-DX12 backend\n");
+    return 1;
+  }
 
   return gpu_test_dx12_binding_plan(testCtx->device,
                                     testCtx->dx12BindingPlanBytecodePath);

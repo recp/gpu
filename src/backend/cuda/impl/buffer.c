@@ -7,9 +7,9 @@
 #include "../common.h"
 
 static GPUResult
-cuda_createBuffer(GPUDevice                 *device,
-                  const GPUBufferCreateInfo *info,
-                  GPUBuffer                **outBuffer) {
+cuda_createBuffer(GPUDevice                 * __restrict device,
+                  const GPUBufferCreateInfo * __restrict info,
+                  GPUBuffer                ** __restrict outBuffer) {
   GPUDeviceCuda *deviceNative;
   GPUBufferCuda *native;
   GPUBuffer     *buffer;
@@ -20,6 +20,7 @@ cuda_createBuffer(GPUDevice                 *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   allowedUsage = (GPUBufferUsageFlags)(
+    (uint32_t)GPU_BUFFER_USAGE_UNIFORM |
     (uint32_t)GPU_BUFFER_USAGE_STORAGE |
     (uint32_t)GPU_BUFFER_USAGE_COPY_SRC |
     (uint32_t)GPU_BUFFER_USAGE_COPY_DST |
@@ -65,7 +66,7 @@ cuda_createBuffer(GPUDevice                 *device,
 }
 
 static void
-cuda_destroyBuffer(GPUBuffer *buffer) {
+cuda_destroyBuffer(GPUBuffer * __restrict buffer) {
   GPUBufferCuda *native;
   GPUDeviceCuda *device;
 
@@ -84,11 +85,11 @@ cuda_destroyBuffer(GPUBuffer *buffer) {
 }
 
 static GPUResult
-cuda_writeBuffer(GPUQueue   *queue,
-                 GPUBuffer  *buffer,
-                 uint64_t    dstOffset,
-                 const void *data,
-                 uint64_t    sizeBytes) {
+cuda_writeBuffer(GPUQueue   * __restrict queue,
+                 GPUBuffer  * __restrict buffer,
+                 uint64_t                dstOffset,
+                 const void * __restrict data,
+                 uint64_t                sizeBytes) {
   GPUBufferCuda *native;
   GPUQueueCuda  *queueNative;
   CUresult       result;
@@ -120,11 +121,11 @@ cuda_writeBuffer(GPUQueue   *queue,
 }
 
 static GPUResult
-cuda_readBuffer(GPUQueue  *queue,
-                GPUBuffer *buffer,
-                uint64_t   srcOffset,
-                void      *outData,
-                uint64_t   sizeBytes) {
+cuda_readBuffer(GPUQueue  * __restrict queue,
+                GPUBuffer * __restrict buffer,
+                uint64_t               srcOffset,
+                void      * __restrict outData,
+                uint64_t               sizeBytes) {
   GPUBufferCuda *native;
   GPUQueueCuda  *queueNative;
   CUresult       result;

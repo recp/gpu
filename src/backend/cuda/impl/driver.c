@@ -117,6 +117,13 @@ cuda__load(void) {
   CUDA_LOAD_REQUIRED2(memFree, "cuMemFree_v2", "cuMemFree");
   CUDA_LOAD_REQUIRED2(memcpyHtoD, "cuMemcpyHtoD_v2", "cuMemcpyHtoD");
   CUDA_LOAD_REQUIRED2(memcpyDtoH, "cuMemcpyDtoH_v2", "cuMemcpyDtoH");
+  CUDA_LOAD_REQUIRED(array3DCreate, "cuArray3DCreate_v2");
+  CUDA_LOAD_REQUIRED(arrayDestroy, "cuArrayDestroy");
+  CUDA_LOAD_REQUIRED(memcpy3D, "cuMemcpy3D_v2");
+  CUDA_LOAD_REQUIRED(surfObjectCreate, "cuSurfObjectCreate");
+  CUDA_LOAD_REQUIRED(surfObjectDestroy, "cuSurfObjectDestroy");
+  CUDA_LOAD_REQUIRED(texObjectCreate, "cuTexObjectCreate");
+  CUDA_LOAD_REQUIRED(texObjectDestroy, "cuTexObjectDestroy");
   CUDA_LOAD_REQUIRED(moduleLoadData, "cuModuleLoadDataEx");
   CUDA_LOAD_REQUIRED(moduleUnload, "cuModuleUnload");
   CUDA_LOAD_REQUIRED(moduleGetFunction, "cuModuleGetFunction");

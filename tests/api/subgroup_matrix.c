@@ -21,9 +21,9 @@ gpu_subgroupMatrixPropertyValid(
 int
 gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath) {
   enum {
-    MATRIX_MAX_LHS_ELEMENTS    = 128u,
-    MATRIX_MAX_RHS_ELEMENTS    = 64u,
-    MATRIX_MAX_OUTPUT_ELEMENTS = 128u
+    MATRIX_MAX_LHS_ELEMENTS    = 256u,
+    MATRIX_MAX_RHS_ELEMENTS    = 256u,
+    MATRIX_MAX_OUTPUT_ELEMENTS = 256u
   };
 
   GPUSubgroupMatrixPropertiesEXT *properties;
@@ -73,6 +73,10 @@ gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath) {
   matrixProfile = getenv("GPU_SUBGROUP_MATRIX_PROFILE");
   if (matrixProfile && strcmp(matrixProfile, "16x8x8") == 0) {
     matrixM = 16u;
+  } else if (matrixProfile && strcmp(matrixProfile, "16x16x16") == 0) {
+    matrixM = 16u;
+    matrixN = 16u;
+    matrixK = 16u;
   }
   lhsElementCount    = matrixM * matrixK;
   rhsElementCount    = matrixK * matrixN;
@@ -178,7 +182,10 @@ gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath) {
     fprintf(stderr, "subgroup matrix feature enablement failed\n");
     goto cleanup;
   }
-  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  queue = GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0u);
+  if (!queue) {
+    queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  }
   if (!queue) {
     fprintf(stderr, "subgroup matrix queue unavailable\n");
     goto cleanup;

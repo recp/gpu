@@ -101,8 +101,79 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     ptx
     validation
     "${PROJECT_SOURCE_DIR}/tests/validation/compute-buffer-cuda-usl/compute_buffer.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/storage-texture-cuda-usl/storage_texture.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/sampled-texture-cuda-usl/sampled_texture.usl"
   )
   list(GET GPU_CUDA_USL_FIXTURES 0 GPU_CUDA_COMPUTE_BUFFER_US)
+  list(GET GPU_CUDA_USL_FIXTURES 1 GPU_CUDA_STORAGE_TEXTURE_US)
+  list(GET GPU_CUDA_USL_FIXTURES 2 GPU_CUDA_SAMPLED_TEXTURE_US)
+
+  set(GPU_USL_FIXTURE_TARGET_CAPS ptx_7_0,sm_80)
+  gpu_add_usl_fixtures(
+    GPU_CUDA_ASYNC_COPY_USL_FIXTURE
+    ptx
+    validation
+    "${PROJECT_SOURCE_DIR}/tests/validation/async-copy-usl/async_copy.usl"
+  )
+  unset(GPU_USL_FIXTURE_TARGET_CAPS)
+  list(GET GPU_CUDA_ASYNC_COPY_USL_FIXTURE 0 GPU_CUDA_ASYNC_COPY_US)
+  list(APPEND GPU_CUDA_USL_FIXTURES ${GPU_CUDA_ASYNC_COPY_USL_FIXTURE})
+  add_custom_target(
+    gpu-cuda-async-copy-fixture
+    DEPENDS ${GPU_CUDA_ASYNC_COPY_USL_FIXTURE}
+  )
+
+  set(GPU_USL_FIXTURE_TARGET_CAPS bounded_descriptor_indexing)
+  gpu_add_usl_fixtures(
+    GPU_CUDA_DESCRIPTOR_ARRAY_USL_FIXTURES
+    ptx
+    validation
+    "${PROJECT_SOURCE_DIR}/tests/api/buffer_descriptor_array.usl"
+    "${PROJECT_SOURCE_DIR}/tests/api/buffer_descriptor_array_dynamic.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/resource-descriptor-array-cuda-usl/resource_descriptor_array.usl"
+  )
+  unset(GPU_USL_FIXTURE_TARGET_CAPS)
+  list(GET GPU_CUDA_DESCRIPTOR_ARRAY_USL_FIXTURES
+       0
+       GPU_CUDA_BUFFER_DESCRIPTOR_ARRAY_US)
+  list(GET GPU_CUDA_DESCRIPTOR_ARRAY_USL_FIXTURES
+       1
+       GPU_CUDA_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_US)
+  list(GET GPU_CUDA_DESCRIPTOR_ARRAY_USL_FIXTURES
+       2
+       GPU_CUDA_RESOURCE_DESCRIPTOR_ARRAY_US)
+  list(APPEND GPU_CUDA_USL_FIXTURES
+       ${GPU_CUDA_DESCRIPTOR_ARRAY_USL_FIXTURES})
+
+  set(GPU_USL_FIXTURE_TARGET_CAPS
+      ptx_6_3,sm_70,subgroup,shader_f16,subgroup_matrix)
+  gpu_add_usl_fixtures(
+    GPU_CUDA_SUBGROUP_MATRIX_USL_FIXTURE
+    ptx
+    validation
+    "${PROJECT_SOURCE_DIR}/tests/validation/subgroup-matrix-cuda-usl/subgroup_matrix.usl"
+  )
+  unset(GPU_USL_FIXTURE_TARGET_CAPS)
+  list(APPEND GPU_CUDA_USL_FIXTURES
+       ${GPU_CUDA_SUBGROUP_MATRIX_USL_FIXTURE})
+  add_custom_target(
+    gpu-cuda-subgroup-matrix-fixture
+    DEPENDS ${GPU_CUDA_SUBGROUP_MATRIX_USL_FIXTURE}
+  )
+
+  set(GPU_USL_FIXTURE_TARGET_CAPS ptx_4_0,sm_50,atomic64)
+  gpu_add_usl_fixtures(
+    GPU_CUDA_ATOMIC64_USL_FIXTURE
+    ptx
+    validation
+    "${PROJECT_SOURCE_DIR}/tests/api/atomic64.usl"
+  )
+  unset(GPU_USL_FIXTURE_TARGET_CAPS)
+  list(APPEND GPU_CUDA_USL_FIXTURES ${GPU_CUDA_ATOMIC64_USL_FIXTURE})
+  add_custom_target(
+    gpu-cuda-atomic64-fixture
+    DEPENDS ${GPU_CUDA_ATOMIC64_USL_FIXTURE}
+  )
   add_custom_target(gpu-cuda-fixtures DEPENDS ${GPU_CUDA_USL_FIXTURES})
 endif()
 

@@ -9,6 +9,11 @@ enum {
   ValueCount = 512u
 };
 
+typedef struct Params {
+  float scale;
+  float bias;
+} Params;
+
 static void *
 read_file(const char *path, uint64_t *outSize) {
   FILE *file;
@@ -36,9 +41,9 @@ read_file(const char *path, uint64_t *outSize) {
 }
 
 static int
-values_match(const float values[ValueCount]) {
+values_match(const float values[ValueCount], const Params *params) {
   for (uint32_t i = 0u; i < ValueCount; i++) {
-    const float expected = (float)i * 2.0f + 1.0f;
+    const float expected = (float)i * params->scale + params->bias;
 
     if (fabsf(values[i] - expected) > 0.0001f) {
       return 0;
@@ -56,20 +61,27 @@ main(int argc, char **argv) {
   GPUShaderLibrary      *library;
   GPUShaderLayout       *shaderLayout;
   GPUComputePipeline    *pipeline;
-  GPUBuffer             *buffer;
-  GPUBindGroup          *bindGroup;
+  GPUBuffer             *inputBuffer;
+  GPUBuffer             *outputBuffer;
+  GPUBuffer             *paramsBuffer;
+  GPUBindGroup          *dataGroup;
+  GPUBindGroup          *paramsGroup;
   GPUCommandBuffer      *cmdb;
   GPUComputePassEncoder *pass;
   void                  *artifact;
   GPUInstanceCreateInfo        instanceInfo = {0};
   GPUComputePipelineCreateInfo pipelineInfo = {0};
   GPUBufferCreateInfo          bufferInfo = {0};
-  GPUBindGroupEntry            groupEntry = {0};
+  GPUBindGroupEntry            dataEntries[2] = {0};
+  GPUBindGroupEntry            paramsEntry = {0};
   GPUBindGroupCreateInfo       groupInfo = {0};
   GPUQueueSubmitInfo           submitInfo = {0};
-  float                        values[ValueCount];
+  Params                       params[2] = {{-3.0f, 7.0f}, {2.0f, 1.0f}};
+  float                        input[ValueCount];
+  float                        output[ValueCount];
   uint64_t                     artifactSize;
   uint32_t                     adapterCount;
+  uint32_t                     dynamicOffset;
   GPUResult                    result;
   int                          status;
 
@@ -85,8 +97,11 @@ main(int argc, char **argv) {
   library      = NULL;
   shaderLayout = NULL;
   pipeline     = NULL;
-  buffer       = NULL;
-  bindGroup    = NULL;
+  inputBuffer  = NULL;
+  outputBuffer = NULL;
+  paramsBuffer = NULL;
+  dataGroup    = NULL;
+  paramsGroup  = NULL;
   cmdb         = NULL;
   pass         = NULL;
   artifactSize = 0u;
@@ -129,7 +144,7 @@ main(int argc, char **argv) {
                                     &library) != GPU_OK ||
       !library ||
       GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
-      !shaderLayout || shaderLayout->bindGroupLayoutCount != 1u ||
+      !shaderLayout || shaderLayout->bindGroupLayoutCount != 2u ||
       !shaderLayout->bindGroupLayouts ||
       !shaderLayout->bindGroupLayouts[0] || !shaderLayout->pipelineLayout) {
     fprintf(stderr, "CUDA USL shader layout creation failed\n");
@@ -149,38 +164,86 @@ main(int argc, char **argv) {
   }
 
   for (uint32_t i = 0u; i < ValueCount; i++) {
-    values[i] = (float)i;
+    input[i]  = (float)i;
+    output[i] = 0.0f;
   }
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
-  bufferInfo.label            = "cuda-saxpy-values";
-  bufferInfo.sizeBytes        = sizeof(values);
+  bufferInfo.label            = "cuda-saxpy-input";
+  bufferInfo.sizeBytes        = sizeof(input);
   bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE |
                                 GPU_BUFFER_USAGE_COPY_SRC |
                                 GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer ||
+  if (GPUCreateBuffer(device, &bufferInfo, &inputBuffer) != GPU_OK ||
+      !inputBuffer ||
       GPUQueueWriteBuffer(queue,
-                          buffer,
+                          inputBuffer,
                           0u,
-                          values,
-                          sizeof(values)) != GPU_OK) {
-    fprintf(stderr, "CUDA storage buffer creation failed\n");
+                          input,
+                          sizeof(input)) != GPU_OK) {
+    fprintf(stderr, "CUDA input buffer creation failed\n");
     goto cleanup;
   }
 
-  groupEntry.binding       = 0u;
-  groupEntry.bindingType   = GPU_BINDING_STORAGE_BUFFER;
-  groupEntry.buffer.buffer = buffer;
-  groupEntry.buffer.size   = sizeof(values);
+  bufferInfo.label     = "cuda-saxpy-output";
+  bufferInfo.sizeBytes = sizeof(output);
+  if (GPUCreateBuffer(device, &bufferInfo, &outputBuffer) != GPU_OK ||
+      !outputBuffer ||
+      GPUQueueWriteBuffer(queue,
+                          outputBuffer,
+                          0u,
+                          output,
+                          sizeof(output)) != GPU_OK) {
+    fprintf(stderr, "CUDA output buffer creation failed\n");
+    goto cleanup;
+  }
+
+  bufferInfo.label     = "cuda-saxpy-params";
+  bufferInfo.sizeBytes = sizeof(params);
+  bufferInfo.usage     = GPU_BUFFER_USAGE_UNIFORM |
+                         GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(device, &bufferInfo, &paramsBuffer) != GPU_OK ||
+      !paramsBuffer ||
+      GPUQueueWriteBuffer(queue,
+                          paramsBuffer,
+                          0u,
+                          params,
+                          sizeof(params)) != GPU_OK) {
+    fprintf(stderr, "CUDA uniform buffer creation failed\n");
+    goto cleanup;
+  }
+
+  paramsEntry.binding       = 0u;
+  paramsEntry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
+  paramsEntry.buffer.buffer = paramsBuffer;
+  paramsEntry.buffer.size   = sizeof(params[0]);
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label            = "cuda-saxpy-group";
+  groupInfo.label            = "cuda-saxpy-params-group";
   groupInfo.layout           = shaderLayout->bindGroupLayouts[0];
   groupInfo.entryCount       = 1u;
-  groupInfo.pEntries         = &groupEntry;
-  if (GPUCreateBindGroup(device, &groupInfo, &bindGroup) != GPU_OK ||
-      !bindGroup) {
-    fprintf(stderr, "CUDA bind group creation failed\n");
+  groupInfo.pEntries         = &paramsEntry;
+  if (GPUCreateBindGroup(device, &groupInfo, &paramsGroup) != GPU_OK ||
+      !paramsGroup) {
+    fprintf(stderr, "CUDA params bind group creation failed\n");
+    goto cleanup;
+  }
+
+  dataEntries[0].binding       = 0u;
+  dataEntries[0].bindingType   = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
+  dataEntries[0].buffer.buffer = inputBuffer;
+  dataEntries[0].buffer.size   = sizeof(input);
+  dataEntries[1].binding       = 1u;
+  dataEntries[1].bindingType   = GPU_BINDING_STORAGE_BUFFER;
+  dataEntries[1].buffer.buffer = outputBuffer;
+  dataEntries[1].buffer.size   = sizeof(output);
+  groupInfo.label              = "cuda-saxpy-data-group";
+  groupInfo.layout             = shaderLayout->bindGroupLayouts[1];
+  groupInfo.entryCount         = 2u;
+  groupInfo.pEntries           = dataEntries;
+  if (GPUCreateBindGroup(device, &groupInfo, &dataGroup) != GPU_OK ||
+      !dataGroup) {
+    fprintf(stderr, "CUDA data bind group creation failed\n");
     goto cleanup;
   }
 
@@ -190,7 +253,9 @@ main(int argc, char **argv) {
     goto cleanup;
   }
   GPUBindComputePipeline(pass, pipeline);
-  GPUBindComputeGroup(pass, 0u, bindGroup, 0u, NULL);
+  dynamicOffset = sizeof(params[0]);
+  GPUBindComputeGroup(pass, 0u, paramsGroup, 1u, &dynamicOffset);
+  GPUBindComputeGroup(pass, 1u, dataGroup, 0u, NULL);
   GPUDispatch(pass, ValueCount / 256u, 1u, 1u);
   GPUEndComputePass(pass);
   pass = NULL;
@@ -206,11 +271,11 @@ main(int argc, char **argv) {
   cmdb = NULL;
 
   if (GPUQueueReadBuffer(queue,
-                         buffer,
+                         outputBuffer,
                          0u,
-                         values,
-                         sizeof(values)) != GPU_OK ||
-      !values_match(values)) {
+                         output,
+                         sizeof(output)) != GPU_OK ||
+      !values_match(output, &params[1])) {
     fprintf(stderr, "CUDA compute readback validation failed\n");
     goto cleanup;
   }
@@ -223,8 +288,11 @@ cleanup:
   if (cmdb) {
     (void)GPUDiscardCommandBuffer(cmdb);
   }
-  GPUDestroyBindGroup(bindGroup);
-  GPUDestroyBuffer(buffer);
+  GPUDestroyBindGroup(dataGroup);
+  GPUDestroyBindGroup(paramsGroup);
+  GPUDestroyBuffer(paramsBuffer);
+  GPUDestroyBuffer(outputBuffer);
+  GPUDestroyBuffer(inputBuffer);
   GPUDestroyComputePipeline(pipeline);
   GPUDestroyShaderLayout(shaderLayout);
   GPUDestroyShaderLibrary(library);

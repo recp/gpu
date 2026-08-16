@@ -24,6 +24,12 @@ if(GPU_BUILD_ANDROID_TESTS)
   )
 endif()
 
+function(gpu_enable_c11_atomics target)
+  if(MSVC)
+    target_compile_options(${target} PRIVATE /experimental:c11atomics)
+  endif()
+endfunction()
+
 include("${PROJECT_SOURCE_DIR}/tests/validation/fixtures.cmake")
 
 if(GPU_BUILD_TESTS)
@@ -717,9 +723,8 @@ if(GPU_BUILD_TESTS)
   )
   if(NOT MSVC)
     target_compile_options(gpu-api-test PRIVATE -Wall -Wextra -Werror)
-  else()
-    target_compile_options(gpu-api-test PRIVATE /experimental:c11atomics)
   endif()
+  gpu_enable_c11_atomics(gpu-api-test)
   if(NOT WIN32)
     target_compile_definitions(gpu-api-test PRIVATE
       _POSIX_C_SOURCE=200809L
@@ -941,11 +946,7 @@ if(GPU_BUILD_TESTS)
       C_STANDARD_REQUIRED YES
       C_EXTENSIONS NO
     )
-    if(MSVC)
-      target_compile_options(gpu-vulkan-mesh-test PRIVATE
-        /experimental:c11atomics
-      )
-    endif()
+    gpu_enable_c11_atomics(gpu-vulkan-mesh-test)
 
     add_executable(gpu-vulkan-indirect-copy-test
       ${PROJECT_SOURCE_DIR}/tests/vulkan/indirect_copy.c
@@ -1075,11 +1076,7 @@ if(GPU_BUILD_TESTS)
       C_STANDARD_REQUIRED YES
       C_EXTENSIONS NO
     )
-    if(MSVC)
-      target_compile_options(gpu-dx12-mesh-test PRIVATE
-        /experimental:c11atomics
-      )
-    endif()
+    gpu_enable_c11_atomics(gpu-dx12-mesh-test)
 
     add_test(NAME dx12-mesh
       COMMAND gpu-dx12-mesh-test
@@ -1101,7 +1098,7 @@ if(GPU_BUILD_TESTS)
   endif()
 endif()
 
-if(GPU_BUILD_SAMPLES)
+if(GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES)
   add_subdirectory(validation)
 endif()
 

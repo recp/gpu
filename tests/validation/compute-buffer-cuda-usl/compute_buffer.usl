@@ -1,4 +1,11 @@
-kern(256) saxpy(inout values: [float] #buffer(0),
+struct Params {
+  scale: float
+  bias:  float
+}
+
+kern(256) saxpy(values: [float] #buffer(0) #group(1),
+                inout output: [float] #buffer(1) #group(1),
+                params: Params #buffer(0) #group(0) #dynamic_offset,
                 globalId: uint #global_id) {
-  values[globalId] = values[globalId] * 2.0 + 1.0
+  output[globalId] = values[globalId] * params.scale + params.bias
 }

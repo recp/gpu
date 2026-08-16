@@ -20,6 +20,9 @@ backend_cuda(void) {
     cuda_initDevice(&cuda.device);
     cuda_initQueue(&cuda.cmdque);
     cuda_initBuffer(&cuda.buf);
+    cuda_initTexture(&cuda.texture);
+    cuda_initSampler(&cuda.sampler);
+    cuda_initDescriptor(&cuda.descriptor);
     cuda_initMultiGPU(&cuda.multigpu);
     cuda_initLibrary(&cuda.library);
     cuda_initCompute(&cuda.compute);

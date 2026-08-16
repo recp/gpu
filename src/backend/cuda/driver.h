@@ -13,17 +13,138 @@
 typedef int                       CUdevice;
 typedef int                       CUresult;
 typedef uint64_t                  CUdeviceptr;
-typedef struct CUctx_st          *CUcontext;
-typedef struct CUevent_st        *CUevent;
-typedef struct CUextMemory_st    *CUexternalMemory;
-typedef struct CUextSemaphore_st *CUexternalSemaphore;
-typedef struct CUfunc_st         *CUfunction;
-typedef struct CUmod_st          *CUmodule;
-typedef struct CUstream_st       *CUstream;
+typedef uint64_t                  CUsurfObject;
+typedef uint64_t                  CUtexObject;
+typedef struct CUarray_st         *CUarray;
+typedef struct CUctx_st           *CUcontext;
+typedef struct CUevent_st         *CUevent;
+typedef struct CUextMemory_st     *CUexternalMemory;
+typedef struct CUextSemaphore_st  *CUexternalSemaphore;
+typedef struct CUfunc_st          *CUfunction;
+typedef struct CUmipmappedArray_st *CUmipmappedArray;
+typedef struct CUmod_st           *CUmodule;
+typedef struct CUstream_st        *CUstream;
+
+typedef enum CUarray_format {
+  CU_AD_FORMAT_UNSIGNED_INT8  = 0x01,
+  CU_AD_FORMAT_UNSIGNED_INT16 = 0x02,
+  CU_AD_FORMAT_UNSIGNED_INT32 = 0x03,
+  CU_AD_FORMAT_SIGNED_INT8    = 0x08,
+  CU_AD_FORMAT_SIGNED_INT16   = 0x09,
+  CU_AD_FORMAT_SIGNED_INT32   = 0x0a,
+  CU_AD_FORMAT_HALF           = 0x10,
+  CU_AD_FORMAT_FLOAT          = 0x20
+} CUarray_format;
+
+typedef enum CUaddress_mode {
+  CU_TR_ADDRESS_MODE_WRAP   = 0,
+  CU_TR_ADDRESS_MODE_CLAMP  = 1,
+  CU_TR_ADDRESS_MODE_MIRROR = 2,
+  CU_TR_ADDRESS_MODE_BORDER = 3
+} CUaddress_mode;
+
+typedef enum CUfilter_mode {
+  CU_TR_FILTER_MODE_POINT  = 0,
+  CU_TR_FILTER_MODE_LINEAR = 1
+} CUfilter_mode;
+
+typedef enum CUmemorytype {
+  CU_MEMORYTYPE_HOST    = 0x01,
+  CU_MEMORYTYPE_DEVICE  = 0x02,
+  CU_MEMORYTYPE_ARRAY   = 0x03,
+  CU_MEMORYTYPE_UNIFIED = 0x04
+} CUmemorytype;
+
+typedef enum CUresourcetype {
+  CU_RESOURCE_TYPE_ARRAY            = 0x00,
+  CU_RESOURCE_TYPE_MIPMAPPED_ARRAY = 0x01,
+  CU_RESOURCE_TYPE_LINEAR           = 0x02,
+  CU_RESOURCE_TYPE_PITCH2D          = 0x03
+} CUresourcetype;
 
 typedef struct CUuuid {
   uint8_t bytes[16];
 } CUuuid;
+
+typedef struct CUDA_ARRAY3D_DESCRIPTOR {
+  size_t         Width;
+  size_t         Height;
+  size_t         Depth;
+  CUarray_format Format;
+  uint32_t       NumChannels;
+  uint32_t       Flags;
+} CUDA_ARRAY3D_DESCRIPTOR;
+
+typedef struct CUDA_MEMCPY3D {
+  size_t       srcXInBytes;
+  size_t       srcY;
+  size_t       srcZ;
+  size_t       srcLOD;
+  CUmemorytype srcMemoryType;
+  const void  *srcHost;
+  CUdeviceptr  srcDevice;
+  CUarray      srcArray;
+  void        *reserved0;
+  size_t       srcPitch;
+  size_t       srcHeight;
+  size_t       dstXInBytes;
+  size_t       dstY;
+  size_t       dstZ;
+  size_t       dstLOD;
+  CUmemorytype dstMemoryType;
+  void        *dstHost;
+  CUdeviceptr  dstDevice;
+  CUarray      dstArray;
+  void        *reserved1;
+  size_t       dstPitch;
+  size_t       dstHeight;
+  size_t       WidthInBytes;
+  size_t       Height;
+  size_t       Depth;
+} CUDA_MEMCPY3D;
+
+typedef struct CUDA_RESOURCE_DESC {
+  CUresourcetype resType;
+  union {
+    struct {
+      CUarray hArray;
+    } array;
+    struct {
+      CUmipmappedArray hMipmappedArray;
+    } mipmap;
+    struct {
+      CUdeviceptr    devPtr;
+      CUarray_format format;
+      uint32_t       numChannels;
+      size_t         sizeInBytes;
+    } linear;
+    struct {
+      CUdeviceptr    devPtr;
+      CUarray_format format;
+      uint32_t       numChannels;
+      size_t         width;
+      size_t         height;
+      size_t         pitchInBytes;
+    } pitch2D;
+    struct {
+      int reserved[32];
+    } reserved;
+  } res;
+  uint32_t flags;
+} CUDA_RESOURCE_DESC;
+
+typedef struct CUDA_TEXTURE_DESC {
+  CUaddress_mode addressMode[3];
+  CUfilter_mode  filterMode;
+  uint32_t       flags;
+  uint32_t       maxAnisotropy;
+  CUfilter_mode  mipmapFilterMode;
+  float          mipmapLevelBias;
+  float          minMipmapLevelClamp;
+  float          maxMipmapLevelClamp;
+  float          borderColor[4];
+  int32_t        reserved[12];
+} CUDA_TEXTURE_DESC;
 
 typedef enum CUexternalMemoryHandleType {
   CU_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD        = 1,
@@ -120,13 +241,26 @@ _Static_assert(sizeof(CUDAExternalSemaphoreSignalParams) == 144u,
                "CUDA external-signal ABI drift");
 _Static_assert(sizeof(CUDAExternalSemaphoreWaitParams) == 144u,
                "CUDA external-wait ABI drift");
+_Static_assert(sizeof(CUDA_ARRAY3D_DESCRIPTOR) == 40u,
+               "CUDA array descriptor ABI drift");
+_Static_assert(sizeof(CUDA_MEMCPY3D) == 200u,
+               "CUDA 3D copy ABI drift");
+_Static_assert(sizeof(CUDA_RESOURCE_DESC) == 144u,
+               "CUDA resource descriptor ABI drift");
+_Static_assert(sizeof(CUDA_TEXTURE_DESC) == 104u,
+               "CUDA texture descriptor ABI drift");
 #endif
 
 enum {
   CUDA_MIN_DRIVER_VERSION                    = 11000,
   CUDA_SUCCESS                               = 0,
+  CUDA_ERROR_INVALID_VALUE                   = 1,
   CUDA_ERROR_OUT_OF_MEMORY                   = 2,
   CUDA_EXTERNAL_MEMORY_DEDICATED             = 1u,
+  CUDA_ARRAY3D_SURFACE_LDST                  = 0x02u,
+  CU_TRSF_READ_AS_INTEGER                    = 0x01u,
+  CU_TRSF_NORMALIZED_COORDINATES             = 0x02u,
+  CU_TRSF_SRGB                               = 0x10u,
   CU_STREAM_NON_BLOCKING                     = 1,
   CU_EVENT_DISABLE_TIMING                    = 2,
   CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK  = 1,
@@ -136,6 +270,7 @@ enum {
   CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_X         = 5,
   CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Y         = 6,
   CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Z         = 7,
+  CU_DEVICE_ATTRIBUTE_WARP_SIZE              = 10,
   CU_DEVICE_ATTRIBUTE_UNIFIED_ADDRESSING     = 41,
   CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR = 75,
   CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR = 76
@@ -206,6 +341,24 @@ typedef struct GPUCUDA {
   CUresult (CUDA_CALL *memcpyDtoH)(void *dst,
                                   CUdeviceptr src,
                                   size_t sizeBytes);
+  CUresult (CUDA_CALL *array3DCreate)(
+    CUarray                       *array,
+    const CUDA_ARRAY3D_DESCRIPTOR *desc
+  );
+  CUresult (CUDA_CALL *arrayDestroy)(CUarray array);
+  CUresult (CUDA_CALL *memcpy3D)(const CUDA_MEMCPY3D *copy);
+  CUresult (CUDA_CALL *surfObjectCreate)(
+    CUsurfObject             *surface,
+    const CUDA_RESOURCE_DESC *desc
+  );
+  CUresult (CUDA_CALL *surfObjectDestroy)(CUsurfObject surface);
+  CUresult (CUDA_CALL *texObjectCreate)(
+    CUtexObject              *texture,
+    const CUDA_RESOURCE_DESC *resourceDesc,
+    const CUDA_TEXTURE_DESC  *textureDesc,
+    const void               *resourceViewDesc
+  );
+  CUresult (CUDA_CALL *texObjectDestroy)(CUtexObject texture);
   CUresult (CUDA_CALL *moduleLoadData)(CUmodule *module,
                                       const void *image,
                                       unsigned int optionCount,
