@@ -57,6 +57,7 @@ typedef struct GPUTextureCuda {
   CUmipmappedArray   mipmap;
   CUarray            array;
   GPUCudaFormatInfo  format;
+  uint32_t           arrayFlags;
 } GPUTextureCuda;
 
 typedef struct GPUCudaTextureCacheEntry {

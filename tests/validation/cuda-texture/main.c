@@ -109,6 +109,29 @@ validate_texture_plans(void) {
                             CUDA_ARRAY3D_SURFACE_LDST) &&
         plan.mipmapped);
 
+  info = texture_info(GPU_TEXTURE_DIMENSION_2D,
+                      64u,
+                      64u,
+                      6u,
+                      1u,
+                      GPU_TEXTURE_USAGE_SAMPLED);
+  CHECK(cuda_texturePlan(&info, &format, &plan));
+  CHECK(plan.desc.Depth == 6u &&
+        plan.desc.Flags == CUDA_ARRAY3D_CUBEMAP && !plan.mipmapped);
+
+  info.depthOrLayers = 12u;
+  info.mipLevelCount = 4u;
+  CHECK(cuda_texturePlan(&info, &format, &plan));
+  CHECK(plan.desc.Depth == 12u &&
+        plan.desc.Flags == (CUDA_ARRAY3D_CUBEMAP |
+                            CUDA_ARRAY3D_LAYERED) &&
+        plan.mipmapped);
+
+  info.usage = GPU_TEXTURE_USAGE_STORAGE;
+  CHECK(cuda_texturePlan(&info, &format, &plan));
+  CHECK(plan.desc.Flags == (CUDA_ARRAY3D_LAYERED |
+                            CUDA_ARRAY3D_SURFACE_LDST));
+
   info = texture_info(GPU_TEXTURE_DIMENSION_3D,
                       64u,
                       32u,
@@ -216,13 +239,30 @@ validate_view_plans(void) {
         plan.desc.depth == 0u);
 
   texture.dimension     = GPU_TEXTURE_DIMENSION_2D;
-  texture.height        = 32u;
-  texture.depthOrLayers = 8u;
+  texture.height        = 64u;
+  texture.depthOrLayers = 12u;
+  info = view_info(GPU_TEXTURE_VIEW_CUBE, 0u, 1u, 0u, 6u);
+  CHECK(cuda_textureViewPlan(&texture, &info, &plan));
+  CHECK(plan.singleLevel && plan.hasResourceView &&
+        !plan.surfaceCompatible && plan.desc.firstLayer == 0u &&
+        plan.desc.lastLayer == 5u);
+  info = view_info(GPU_TEXTURE_VIEW_CUBE_ARRAY, 0u, 4u, 0u, 12u);
+  CHECK(cuda_textureViewPlan(&texture, &info, &plan));
+  CHECK(!plan.singleLevel && !plan.hasResourceView &&
+        !plan.surfaceCompatible && plan.desc.depth == 12u);
+  info = view_info(GPU_TEXTURE_VIEW_CUBE_ARRAY, 1u, 2u, 6u, 6u);
+  CHECK(cuda_textureViewPlan(&texture, &info, &plan));
+  CHECK(!plan.singleLevel && plan.hasResourceView &&
+        !plan.surfaceCompatible && plan.desc.firstLayer == 6u &&
+        plan.desc.lastLayer == 11u);
+  info = view_info(GPU_TEXTURE_VIEW_CUBE_ARRAY, 0u, 1u, 1u, 6u);
+  CHECK(!cuda_textureViewPlan(&texture, &info, &plan));
+  texture.height = 32u;
   info = view_info(GPU_TEXTURE_VIEW_CUBE, 0u, 1u, 0u, 6u);
   CHECK(!cuda_textureViewPlan(&texture, &info, &plan));
   info = view_info(GPU_TEXTURE_VIEW_2D, 0u, 1u, 0u, 1u);
   CHECK(!cuda_textureViewPlan(&texture, &info, &plan));
-  info = view_info(GPU_TEXTURE_VIEW_2D_ARRAY, 4u, 1u, 0u, 8u);
+  info = view_info(GPU_TEXTURE_VIEW_2D_ARRAY, 4u, 1u, 0u, 12u);
   CHECK(!cuda_textureViewPlan(&texture, &info, &plan));
 
   CHECK(cuda_textureStorageViewSupported(GPU_TEXTURE_VIEW_1D));

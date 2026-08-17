@@ -39,8 +39,9 @@ cuda_createTexture(GPUDevice                  * __restrict device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native->driver   = deviceNative->driver;
-  native->format   = format;
+  native->driver     = deviceNative->driver;
+  native->format     = format;
+  native->arrayFlags = plan.desc.Flags;
   if (cuda_push(native->driver, deviceNative->context) != GPU_OK) {
     free(native);
     free(texture);
@@ -149,6 +150,11 @@ cuda_createTextureView(GPUTexture                     * __restrict texture,
   }
   if (memcmp(&textureNative->format, &format, sizeof(format)) != 0) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if ((info->viewType == GPU_TEXTURE_VIEW_CUBE ||
+       info->viewType == GPU_TEXTURE_VIEW_CUBE_ARRAY) &&
+      (textureNative->arrayFlags & CUDA_ARRAY3D_CUBEMAP) == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
   }
   if ((texture->usage & GPU_TEXTURE_USAGE_STORAGE) != 0u &&
       (texture->usage & GPU_TEXTURE_USAGE_SAMPLED) == 0u &&
@@ -297,6 +303,13 @@ cuda_getTextureObject(GPUTextureView          *view,
   }
   if (!cuda_formatTextureDesc(&textureNative->format, desc, &effective)) {
     return GPU_ERROR_UNSUPPORTED;
+  }
+  if (view->viewType == GPU_TEXTURE_VIEW_CUBE ||
+      view->viewType == GPU_TEXTURE_VIEW_CUBE_ARRAY) {
+    if ((textureNative->arrayFlags & CUDA_ARRAY3D_CUBEMAP) == 0u) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+    effective.flags |= CU_TRSF_SEAMLESS_CUBEMAP;
   }
   if (!native->array) {
     if ((effective.flags & CU_TRSF_NORMALIZED_COORDINATES) == 0u) {

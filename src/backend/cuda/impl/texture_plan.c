@@ -37,6 +37,21 @@ cuda__mipExtent(uint32_t extent, uint32_t mipLevel) {
   return value > 0u ? value : 1u;
 }
 
+static bool
+cuda__cubeCompatible(const GPUTextureCreateInfo *info) {
+  return info->dimension == GPU_TEXTURE_DIMENSION_2D &&
+         (info->usage & GPU_TEXTURE_USAGE_SAMPLED) != 0u &&
+         info->width == info->height && info->depthOrLayers >= 6u &&
+         info->depthOrLayers % 6u == 0u;
+}
+
+static bool
+cuda__textureViewSupported(GPUTextureViewType viewType) {
+  return cuda_textureStorageViewSupported(viewType) ||
+         viewType == GPU_TEXTURE_VIEW_CUBE ||
+         viewType == GPU_TEXTURE_VIEW_CUBE_ARRAY;
+}
+
 bool
 cuda_texturePlan(const GPUTextureCreateInfo *info,
                  const GPUCudaFormatInfo    *format,
@@ -85,7 +100,14 @@ cuda_texturePlan(const GPUTextureCreateInfo *info,
       plan.desc.Height = info->height;
       if (info->depthOrLayers > 1u) {
         plan.desc.Depth  = info->depthOrLayers;
-        plan.desc.Flags |= CUDA_ARRAY3D_LAYERED;
+        if (cuda__cubeCompatible(info)) {
+          plan.desc.Flags |= CUDA_ARRAY3D_CUBEMAP;
+          if (info->depthOrLayers > 6u) {
+            plan.desc.Flags |= CUDA_ARRAY3D_LAYERED;
+          }
+        } else {
+          plan.desc.Flags |= CUDA_ARRAY3D_LAYERED;
+        }
       }
       break;
     case GPU_TEXTURE_DIMENSION_3D:
@@ -129,7 +151,7 @@ cuda_textureViewPlan(const GPUTexture               *texture,
                                        info->mipLevelCount,
                                        info->baseArrayLayer,
                                        info->arrayLayerCount) ||
-      !cuda_textureStorageViewSupported(info->viewType)) {
+      !cuda__textureViewSupported(info->viewType)) {
     return false;
   }
 
@@ -149,7 +171,22 @@ cuda_textureViewPlan(const GPUTexture               *texture,
       if ((texture->depthOrLayers == 1u &&
            info->viewType != GPU_TEXTURE_VIEW_2D) ||
           (texture->depthOrLayers > 1u &&
-           info->viewType != GPU_TEXTURE_VIEW_2D_ARRAY)) {
+           info->viewType != GPU_TEXTURE_VIEW_2D_ARRAY &&
+           info->viewType != GPU_TEXTURE_VIEW_CUBE &&
+           info->viewType != GPU_TEXTURE_VIEW_CUBE_ARRAY)) {
+        return false;
+      }
+      if ((info->viewType == GPU_TEXTURE_VIEW_CUBE ||
+           info->viewType == GPU_TEXTURE_VIEW_CUBE_ARRAY) &&
+          (texture->width != texture->height ||
+           texture->depthOrLayers < 6u ||
+           texture->depthOrLayers % 6u != 0u ||
+           (info->viewType == GPU_TEXTURE_VIEW_CUBE &&
+            (info->baseArrayLayer != 0u ||
+             info->arrayLayerCount != 6u)) ||
+           (info->viewType == GPU_TEXTURE_VIEW_CUBE_ARRAY &&
+            (info->baseArrayLayer % 6u != 0u ||
+             info->arrayLayerCount % 6u != 0u)))) {
         return false;
       }
       break;
@@ -201,10 +238,12 @@ cuda_textureViewPlan(const GPUTexture               *texture,
                                     texture->mipLevelCount)) ||
                                 info->baseArrayLayer != 0u ||
                                 info->arrayLayerCount != layerCount;
-  plan.surfaceCompatible      = plan.singleLevel &&
-                                (!layered ||
-                                 (info->baseArrayLayer == 0u &&
-                                  info->arrayLayerCount == layerCount));
+  plan.surfaceCompatible =
+    cuda_textureStorageViewSupported(info->viewType) &&
+    plan.singleLevel &&
+    (!layered ||
+     (info->baseArrayLayer == 0u &&
+      info->arrayLayerCount == layerCount));
   *outPlan = plan;
   return true;
 }
