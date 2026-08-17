@@ -14,6 +14,7 @@
 #include "../../api/texture_internal.h"
 #include "driver.h"
 #include "format.h"
+#include "texture_plan.h"
 
 #if !defined(_WIN32) && !defined(WIN32)
 #  include <pthread.h>
@@ -52,6 +53,7 @@ typedef struct GPUBufferCuda {
 
 typedef struct GPUTextureCuda {
   GPUCUDA           *driver;
+  CUmipmappedArray   mipmap;
   CUarray            array;
   GPUCudaFormatInfo  format;
 } GPUTextureCuda;
@@ -69,10 +71,13 @@ typedef struct GPUTextureViewCuda {
 #else
   pthread_mutex_t lock;
 #endif
+  CUDA_RESOURCE_VIEW_DESC resourceView;
+  CUarray                 array;
   CUsurfObject             surface;
   uint32_t                 cacheCount;
   uint32_t                 cacheCapacity;
   bool                     cacheDynamic;
+  bool                     hasResourceView;
   GPUCudaTextureCacheEntry inlineCache[CUDA_INLINE_TEXTURE_CACHE_CAPACITY];
 } GPUTextureViewCuda;
 
@@ -244,8 +249,9 @@ void cuda_initMultiGPU(GPUApiMultiGPU *api);
 
 bool cuda_samplerDescSupported(const GPUSamplerDesc *desc);
 bool cuda_staticSamplerDescSupported(const GPUStaticSamplerDesc *desc);
-GPUResult cuda_getTextureObject(GPUTextureView         *view,
+GPUResult cuda_getTextureObject(GPUTextureView          *view,
                                 const CUDA_TEXTURE_DESC *desc,
+                                bool                     exactCoordinates,
                                 CUtexObject             *outTexture);
 void cuda_setComputeBuffer(GPUComputePassEncoder *encoder,
                            GPUBuffer             *buffer,

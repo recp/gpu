@@ -41,7 +41,8 @@ cuda__validComputeInterface(const GPUDevice                    *device,
                 resource->bindingType == GPU_BINDING_SAMPLED_TEXTURE ||
                 resource->bindingType == GPU_BINDING_SAMPLER;
     if (resource->bindingType == GPU_BINDING_STORAGE_TEXTURE) {
-      supported = resource->storageTexture.viewType == GPU_TEXTURE_VIEW_2D &&
+      supported = cuda_textureStorageViewSupported(
+                    resource->storageTexture.viewType) &&
                   cuda_formatInfo(resource->storageTexture.format, &format) &&
                   (format.flags & GPU_CUDA_FORMAT_STORAGE_BIT) != 0u;
     }

@@ -300,7 +300,7 @@ cuda_setComputeTexture(GPUComputePassEncoder *encoder,
       texture->device != encoder->_device ||
       (texture->usage & GPU_TEXTURE_USAGE_STORAGE) == 0u ||
       (textureNative->format.flags & GPU_CUDA_FORMAT_STORAGE_BIT) == 0u ||
-      view->viewType != GPU_TEXTURE_VIEW_2D ||
+      !cuda_textureStorageViewSupported(view->viewType) ||
       !cuda__paramRangeValid(command->pipeline,
                              param->dataOffset,
                              sizeof(surface))) {
@@ -443,6 +443,7 @@ cuda__resolveSampledTexture(GPUComputePassEncoder          *pass,
 
   result = cuda_getTextureObject(textureBinding->textureView,
                                  &desc,
+                                 false,
                                  &textureObject);
   if (result != GPU_OK ||
       !cuda__paramRangeValid(pipeline,
@@ -498,6 +499,7 @@ cuda__resolveTexture(GPUComputePassEncoder       *pass,
   cuda__exactTextureDesc(&desc);
   result = cuda_getTextureObject(binding->textureView,
                                  &desc,
+                                 true,
                                  &textureObject);
   if (result != GPU_OK ||
       !cuda__paramRangeValid(pipeline,

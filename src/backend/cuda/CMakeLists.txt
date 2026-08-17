@@ -14,6 +14,7 @@ target_sources(gpu PRIVATE
   impl/multigpu.c
   impl/sampler.c
   impl/texture.c
+  impl/texture_plan.c
 )
 
 if(CMAKE_DL_LIBS)

@@ -62,6 +62,10 @@ typedef enum CUresourcetype {
   CU_RESOURCE_TYPE_PITCH2D          = 0x03
 } CUresourcetype;
 
+typedef enum CUresourceViewFormat {
+  CU_RES_VIEW_FORMAT_NONE = 0x00
+} CUresourceViewFormat;
+
 typedef struct CUuuid {
   uint8_t bytes[16];
 } CUuuid;
@@ -145,6 +149,17 @@ typedef struct CUDA_TEXTURE_DESC {
   float          borderColor[4];
   int32_t        reserved[12];
 } CUDA_TEXTURE_DESC;
+
+typedef struct CUDA_RESOURCE_VIEW_DESC {
+  CUresourceViewFormat format;
+  size_t               width;
+  size_t               height;
+  size_t               depth;
+  uint32_t             firstMipmapLevel;
+  uint32_t             lastMipmapLevel;
+  uint32_t             firstLayer;
+  uint32_t             lastLayer;
+} CUDA_RESOURCE_VIEW_DESC;
 
 typedef enum CUexternalMemoryHandleType {
   CU_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD        = 1,
@@ -249,6 +264,8 @@ _Static_assert(sizeof(CUDA_RESOURCE_DESC) == 144u,
                "CUDA resource descriptor ABI drift");
 _Static_assert(sizeof(CUDA_TEXTURE_DESC) == 104u,
                "CUDA texture descriptor ABI drift");
+_Static_assert(sizeof(CUDA_RESOURCE_VIEW_DESC) == 48u,
+               "CUDA resource-view descriptor ABI drift");
 #endif
 
 enum {
@@ -257,6 +274,7 @@ enum {
   CUDA_ERROR_INVALID_VALUE                   = 1,
   CUDA_ERROR_OUT_OF_MEMORY                   = 2,
   CUDA_EXTERNAL_MEMORY_DEDICATED             = 1u,
+  CUDA_ARRAY3D_LAYERED                       = 0x01u,
   CUDA_ARRAY3D_SURFACE_LDST                  = 0x02u,
   CU_TRSF_READ_AS_INTEGER                    = 0x01u,
   CU_TRSF_NORMALIZED_COORDINATES             = 0x02u,
@@ -346,6 +364,15 @@ typedef struct GPUCUDA {
     const CUDA_ARRAY3D_DESCRIPTOR *desc
   );
   CUresult (CUDA_CALL *arrayDestroy)(CUarray array);
+  CUresult (CUDA_CALL *mipmappedArrayCreate)(
+    CUmipmappedArray              *array,
+    const CUDA_ARRAY3D_DESCRIPTOR *desc,
+    unsigned int                   mipLevelCount
+  );
+  CUresult (CUDA_CALL *mipmappedArrayDestroy)(CUmipmappedArray array);
+  CUresult (CUDA_CALL *mipmappedArrayGetLevel)(CUarray          *level,
+                                                CUmipmappedArray  array,
+                                                unsigned int      mipLevel);
   CUresult (CUDA_CALL *memcpy3D)(const CUDA_MEMCPY3D *copy);
   CUresult (CUDA_CALL *surfObjectCreate)(
     CUsurfObject             *surface,
@@ -353,10 +380,10 @@ typedef struct GPUCUDA {
   );
   CUresult (CUDA_CALL *surfObjectDestroy)(CUsurfObject surface);
   CUresult (CUDA_CALL *texObjectCreate)(
-    CUtexObject              *texture,
-    const CUDA_RESOURCE_DESC *resourceDesc,
-    const CUDA_TEXTURE_DESC  *textureDesc,
-    const void               *resourceViewDesc
+    CUtexObject                   *texture,
+    const CUDA_RESOURCE_DESC      *resourceDesc,
+    const CUDA_TEXTURE_DESC       *textureDesc,
+    const CUDA_RESOURCE_VIEW_DESC *resourceViewDesc
   );
   CUresult (CUDA_CALL *texObjectDestroy)(CUtexObject texture);
   CUresult (CUDA_CALL *moduleLoadData)(CUmodule *module,

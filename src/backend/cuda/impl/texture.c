@@ -13,28 +13,15 @@ cuda_createTexture(GPUDevice                  * __restrict device,
   GPUDeviceCuda          *deviceNative;
   GPUTextureCuda         *native;
   GPUTexture             *texture;
-  CUDA_ARRAY3D_DESCRIPTOR desc = {0};
+  GPUCudaTexturePlan      plan;
   GPUCudaFormatInfo       format;
-  GPUTextureUsageFlags    allowedUsage;
   CUresult                result;
 
   if (!device || !info || !outTexture) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  allowedUsage = GPU_TEXTURE_USAGE_SAMPLED |
-                 GPU_TEXTURE_USAGE_STORAGE |
-                 GPU_TEXTURE_USAGE_COPY_SRC |
-                 GPU_TEXTURE_USAGE_COPY_DST;
-  if (info->dimension != GPU_TEXTURE_DIMENSION_2D ||
-      !cuda_formatInfo(info->format, &format) ||
-      info->depthOrLayers != 1u ||
-      (info->mipLevelCount != 0u && info->mipLevelCount != 1u) ||
-      (info->sampleCount != 0u && info->sampleCount != 1u) ||
-      (info->usage & ~allowedUsage) != 0u ||
-      ((info->usage & GPU_TEXTURE_USAGE_SAMPLED) != 0u &&
-       (format.flags & GPU_CUDA_FORMAT_SAMPLED_BIT) == 0u) ||
-      ((info->usage & GPU_TEXTURE_USAGE_STORAGE) != 0u &&
-       (format.flags & GPU_CUDA_FORMAT_STORAGE_BIT) == 0u)) {
+  if (!cuda_formatInfo(info->format, &format) ||
+      !cuda_texturePlan(info, &format, &plan)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -52,14 +39,6 @@ cuda_createTexture(GPUDevice                  * __restrict device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  desc.Width       = info->width;
-  desc.Height      = info->height;
-  desc.Depth       = 0u;
-  desc.Format      = format.arrayFormat;
-  desc.NumChannels = format.channelCount;
-  desc.Flags       = (info->usage & GPU_TEXTURE_USAGE_STORAGE) != 0u
-                       ? CUDA_ARRAY3D_SURFACE_LDST
-                       : 0u;
   native->driver   = deviceNative->driver;
   native->format   = format;
   if (cuda_push(native->driver, deviceNative->context) != GPU_OK) {
@@ -67,7 +46,11 @@ cuda_createTexture(GPUDevice                  * __restrict device,
     free(texture);
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  result = native->driver->array3DCreate(&native->array, &desc);
+  result = plan.mipmapped
+             ? native->driver->mipmappedArrayCreate(&native->mipmap,
+                                                     &plan.desc,
+                                                     plan.mipLevelCount)
+             : native->driver->array3DCreate(&native->array, &plan.desc);
   cuda_pop(native->driver);
   if (result != CUDA_SUCCESS) {
     cuda_report(device, result, "texture allocation");
@@ -84,12 +67,39 @@ cuda_createTexture(GPUDevice                  * __restrict device,
   texture->width          = info->width;
   texture->height         = info->height;
   texture->depthOrLayers  = info->depthOrLayers;
-  texture->mipLevelCount  = 1u;
+  texture->mipLevelCount  = plan.mipLevelCount;
   texture->sampleCount    = 1u;
   texture->usage          = info->usage;
   texture->_ownsNative    = true;
   *outTexture             = texture;
   return GPU_OK;
+}
+
+static bool
+cuda__textureValid(const GPUTextureCuda *native) {
+  return native && (native->array || native->mipmap);
+}
+
+static CUresult
+cuda__textureLevel(GPUTextureCuda *native,
+                   uint32_t        mipLevel,
+                   CUarray        *outArray) {
+  if (outArray) {
+    *outArray = NULL;
+  }
+  if (!cuda__textureValid(native) || !outArray) {
+    return CUDA_ERROR_INVALID_VALUE;
+  }
+  if (native->array) {
+    if (mipLevel != 0u) {
+      return CUDA_ERROR_INVALID_VALUE;
+    }
+    *outArray = native->array;
+    return CUDA_SUCCESS;
+  }
+  return native->driver->mipmappedArrayGetLevel(outArray,
+                                                 native->mipmap,
+                                                 mipLevel);
 }
 
 static void
@@ -99,9 +109,13 @@ cuda_destroyTexture(GPUTexture * __restrict texture) {
 
   native = texture ? texture->_priv : NULL;
   device = texture ? cuda_device(texture->device) : NULL;
-  if (native && native->array && device &&
+  if (cuda__textureValid(native) && device &&
       cuda_push(native->driver, device->context) == GPU_OK) {
-    (void)native->driver->arrayDestroy(native->array);
+    if (native->mipmap) {
+      (void)native->driver->mipmappedArrayDestroy(native->mipmap);
+    } else {
+      (void)native->driver->arrayDestroy(native->array);
+    }
     cuda_pop(native->driver);
   }
   free(native);
@@ -112,30 +126,34 @@ static GPUResult
 cuda_createTextureView(GPUTexture                     * __restrict texture,
                        const GPUTextureViewCreateInfo * __restrict info,
                        GPUTextureView                ** __restrict outView) {
-  GPUTextureCuda      *textureNative;
-  GPUTextureViewCuda  *native;
-  GPUTextureView      *view;
-  GPUDeviceCuda       *device;
-  CUDA_RESOURCE_DESC   desc = {0};
-  GPUCudaFormatInfo    format;
-  CUresult             result;
+  GPUTextureCuda         *textureNative;
+  GPUTextureViewCuda     *native;
+  GPUTextureView         *view;
+  GPUDeviceCuda          *device;
+  GPUCudaTextureViewPlan plan;
+  CUDA_RESOURCE_DESC      desc = {0};
+  GPUCudaFormatInfo       format;
+  CUresult                result;
 
   if (!texture || !info || !outView ||
-      info->viewType != GPU_TEXTURE_VIEW_2D ||
       !cuda_formatInfo(info->format, &format) ||
-      info->baseMipLevel != 0u || info->mipLevelCount != 1u ||
-      info->baseArrayLayer != 0u || info->arrayLayerCount != 1u) {
+      !cuda_textureViewPlan(texture, info, &plan)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
   *outView      = NULL;
   textureNative = texture->_priv;
   device        = cuda_device(texture->device);
-  if (!textureNative || !textureNative->array || !device) {
+  if (!cuda__textureValid(textureNative) || !device) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (memcmp(&textureNative->format, &format, sizeof(format)) != 0) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  if ((texture->usage & GPU_TEXTURE_USAGE_STORAGE) != 0u &&
+      (texture->usage & GPU_TEXTURE_USAGE_SAMPLED) == 0u &&
+      !plan.surfaceCompatible) {
+    return GPU_ERROR_UNSUPPORTED;
   }
 
   view   = calloc(1, sizeof(*view));
@@ -146,9 +164,11 @@ cuda_createTextureView(GPUTexture                     * __restrict texture,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native->driver        = textureNative->driver;
-  native->cache         = native->inlineCache;
-  native->cacheCapacity = CUDA_INLINE_TEXTURE_CACHE_CAPACITY;
+  native->driver          = textureNative->driver;
+  native->cache           = native->inlineCache;
+  native->cacheCapacity   = CUDA_INLINE_TEXTURE_CACHE_CAPACITY;
+  native->resourceView    = plan.desc;
+  native->hasResourceView = plan.hasResourceView;
 #if defined(_WIN32) || defined(WIN32)
   InitializeCriticalSection(&native->lock);
 #else
@@ -159,9 +179,7 @@ cuda_createTextureView(GPUTexture                     * __restrict texture,
   }
 #endif
 
-  if ((texture->usage & GPU_TEXTURE_USAGE_STORAGE) != 0u) {
-    desc.resType          = CU_RESOURCE_TYPE_ARRAY;
-    desc.res.array.hArray = textureNative->array;
+  if (plan.singleLevel) {
     if (cuda_push(native->driver, device->context) != GPU_OK) {
 #if defined(_WIN32) || defined(WIN32)
       DeleteCriticalSection(&native->lock);
@@ -172,7 +190,16 @@ cuda_createTextureView(GPUTexture                     * __restrict texture,
       free(view);
       return GPU_ERROR_BACKEND_FAILURE;
     }
-    result = native->driver->surfObjectCreate(&native->surface, &desc);
+    result = cuda__textureLevel(textureNative,
+                                plan.mipLevel,
+                                &native->array);
+    if (result == CUDA_SUCCESS &&
+        (texture->usage & GPU_TEXTURE_USAGE_STORAGE) != 0u &&
+        plan.surfaceCompatible) {
+      desc.resType          = CU_RESOURCE_TYPE_ARRAY;
+      desc.res.array.hArray = native->array;
+      result = native->driver->surfObjectCreate(&native->surface, &desc);
+    }
     cuda_pop(native->driver);
     if (result != CUDA_SUCCESS) {
       cuda_report(texture->device, result, "texture view creation");
@@ -241,6 +268,7 @@ cuda_destroyTextureView(GPUTextureView * __restrict view) {
 GPUResult
 cuda_getTextureObject(GPUTextureView          *view,
                       const CUDA_TEXTURE_DESC *desc,
+                      bool                     exactCoordinates,
                       CUtexObject             *outTexture) {
   GPUCudaTextureCacheEntry *cache;
   GPUTextureViewCuda       *native;
@@ -260,13 +288,26 @@ cuda_getTextureObject(GPUTextureView          *view,
   device        = view && view->_texture
                     ? cuda_device(view->_texture->device)
                     : NULL;
-  if (!native || !textureNative || !textureNative->array || !device ||
+  if (!native || !textureNative || !device ||
+      (!native->array && !textureNative->mipmap) ||
       !desc || !outTexture ||
+      view->mipLevelCount == 0u ||
       (view->_texture->usage & GPU_TEXTURE_USAGE_SAMPLED) == 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (!cuda_formatTextureDesc(&textureNative->format, desc, &effective)) {
     return GPU_ERROR_UNSUPPORTED;
+  }
+  if (!native->array) {
+    if ((effective.flags & CU_TRSF_NORMALIZED_COORDINATES) == 0u) {
+      if (!exactCoordinates) {
+        return GPU_ERROR_UNSUPPORTED;
+      }
+      /* Mipmapped objects require this flag; PTX s32 coordinates stay exact. */
+      effective.flags |= CU_TRSF_NORMALIZED_COORDINATES;
+    }
+    effective.minMipmapLevelClamp = 0.0f;
+    effective.maxMipmapLevelClamp = (float)(view->mipLevelCount - 1u);
   }
 
 #if defined(_WIN32) || defined(WIN32)
@@ -320,8 +361,13 @@ cuda_getTextureObject(GPUTextureView          *view,
                                 (uint64_t)capacity * sizeof(*cache));
   }
 
-  resource.resType          = CU_RESOURCE_TYPE_ARRAY;
-  resource.res.array.hArray = textureNative->array;
+  if (native->array) {
+    resource.resType          = CU_RESOURCE_TYPE_ARRAY;
+    resource.res.array.hArray = native->array;
+  } else {
+    resource.resType                    = CU_RESOURCE_TYPE_MIPMAPPED_ARRAY;
+    resource.res.mipmap.hMipmappedArray = textureNative->mipmap;
+  }
   if (cuda_push(native->driver, device->context) != GPU_OK) {
 #if defined(_WIN32) || defined(WIN32)
     LeaveCriticalSection(&native->lock);
@@ -334,7 +380,9 @@ cuda_getTextureObject(GPUTextureView          *view,
   result  = native->driver->texObjectCreate(&texture,
                                              &resource,
                                              &effective,
-                                             NULL);
+                                             native->hasResourceView
+                                               ? &native->resourceView
+                                               : NULL);
   cuda_pop(native->driver);
   if (result == CUDA_SUCCESS) {
     native->cache[native->cacheCount].desc    = effective;
@@ -370,10 +418,8 @@ cuda_writeTexture(GPUQueue                    * __restrict queue,
 
   native      = texture ? texture->_priv : NULL;
   queueNative = cuda_queue(queue);
-  if (!native || !native->array || !queueNative || !region || !data ||
-      sizeBytes > SIZE_MAX || region->aspect != GPU_TEXTURE_ASPECT_ALL ||
-      region->mipLevel != 0u || region->baseArrayLayer != 0u ||
-      region->layerCount != 1u || region->depth != 1u) {
+  if (!cuda__textureValid(native) || !queueNative || !region || !data ||
+      sizeBytes > SIZE_MAX || region->aspect != GPU_TEXTURE_ASPECT_ALL) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (region->width > SIZE_MAX / native->format.bytesPerTexel) {
@@ -388,10 +434,16 @@ cuda_writeTexture(GPUQueue                    * __restrict queue,
                          ? region->rowsPerImage
                          : region->height;
   copy.dstMemoryType = CU_MEMORYTYPE_ARRAY;
-  copy.dstArray      = native->array;
+  copy.dstZ          = texture->dimension == GPU_TEXTURE_DIMENSION_3D
+                         ? 0u
+                         : region->baseArrayLayer;
   copy.WidthInBytes  = widthBytes;
-  copy.Height        = region->height;
-  copy.Depth         = 1u;
+  copy.Height        = texture->dimension == GPU_TEXTURE_DIMENSION_1D
+                         ? 1u
+                         : region->height;
+  copy.Depth         = texture->dimension == GPU_TEXTURE_DIMENSION_3D
+                         ? region->depth
+                         : region->layerCount;
 
   cuda_queueLock(queueNative);
   if (cuda_push(queueNative->driver, queueNative->context) != GPU_OK) {
@@ -399,6 +451,9 @@ cuda_writeTexture(GPUQueue                    * __restrict queue,
     return GPU_ERROR_BACKEND_FAILURE;
   }
   result = queueNative->driver->streamSynchronize(queueNative->stream);
+  if (result == CUDA_SUCCESS) {
+    result = cuda__textureLevel(native, region->mipLevel, &copy.dstArray);
+  }
   if (result == CUDA_SUCCESS) {
     result = queueNative->driver->memcpy3D(&copy);
   }

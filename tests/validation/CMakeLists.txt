@@ -34,6 +34,30 @@ if(GPU_BUILD_TESTS)
     )
   endif()
   add_test(NAME cuda-format-contract COMMAND gpu-cuda-format-contract)
+
+  add_executable(gpu-cuda-texture-contract
+    ${PROJECT_SOURCE_DIR}/src/backend/cuda/impl/texture_plan.c
+    ${PROJECT_SOURCE_DIR}/tests/validation/cuda-texture/main.c
+  )
+  target_include_directories(gpu-cuda-texture-contract PRIVATE
+    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/src
+  )
+  set_target_properties(gpu-cuda-texture-contract PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_options(gpu-cuda-texture-contract PRIVATE /W4 /WX)
+  else()
+    target_compile_options(gpu-cuda-texture-contract PRIVATE
+      -Wall
+      -Wextra
+      -Werror
+    )
+  endif()
+  add_test(NAME cuda-texture-contract COMMAND gpu-cuda-texture-contract)
 endif()
 
 if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND

@@ -119,6 +119,9 @@ cuda__load(void) {
   CUDA_LOAD_REQUIRED2(memcpyDtoH, "cuMemcpyDtoH_v2", "cuMemcpyDtoH");
   CUDA_LOAD_REQUIRED(array3DCreate, "cuArray3DCreate_v2");
   CUDA_LOAD_REQUIRED(arrayDestroy, "cuArrayDestroy");
+  CUDA_LOAD_REQUIRED(mipmappedArrayCreate, "cuMipmappedArrayCreate");
+  CUDA_LOAD_REQUIRED(mipmappedArrayDestroy, "cuMipmappedArrayDestroy");
+  CUDA_LOAD_REQUIRED(mipmappedArrayGetLevel, "cuMipmappedArrayGetLevel");
   CUDA_LOAD_REQUIRED(memcpy3D, "cuMemcpy3D_v2");
   CUDA_LOAD_REQUIRED(surfObjectCreate, "cuSurfObjectCreate");
   CUDA_LOAD_REQUIRED(surfObjectDestroy, "cuSurfObjectDestroy");
