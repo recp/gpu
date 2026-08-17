@@ -1,0 +1,18 @@
+kern(1, 1, 1) fetch_geometry(
+  line: texture1d<float> #texture(0),
+  lines: texture1d_array<float> #texture(1),
+  images: texture2d_array<float> #texture(2),
+  volume: texture3d<float> #texture(3),
+  mipped: texture2d<float> #texture(4),
+  selectedMip: texture2d<float> #texture(5),
+  selectedLayers: texture2d_array<float> #texture(6),
+  inout output: [float4] #buffer(0) #group(1)
+) {
+  output[0] = line.read(2)
+  output[1] = lines.read(int2(1, 2))
+  output[2] = images.read(int3(1, 0, 2))
+  output[3] = volume.read(int3(1, 0, 1))
+  output[4] = mipped.read(int2(1, 0), 1u)
+  output[5] = selectedMip.read(int2(1, 0))
+  output[6] = selectedLayers.read(int3(1, 0, 1))
+}

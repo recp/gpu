@@ -1254,6 +1254,34 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     )
   endif()
 
+  add_executable(gpu-texture-geometry-cuda-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/texture-geometry-cuda-usl/main.c
+    ${PROJECT_SOURCE_DIR}/tests/validation/texture-geometry-cuda-usl/ptx_metadata.c
+  )
+  target_include_directories(gpu-texture-geometry-cuda-usl PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+  )
+  target_link_libraries(gpu-texture-geometry-cuda-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-texture-geometry-cuda-usl
+                            gpu-cuda-fixtures
+                            "${GPU_CUDA_TEXTURE_GEOMETRY_US}")
+  set_target_properties(gpu-texture-geometry-cuda-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(GPU_BUILD_TESTS)
+    add_test(
+      NAME cuda-texture-geometry
+      COMMAND gpu-texture-geometry-cuda-usl
+              "${GPU_CUDA_TEXTURE_GEOMETRY_US}"
+    )
+    set_tests_properties(cuda-texture-geometry PROPERTIES
+      SKIP_RETURN_CODE 77
+      TIMEOUT 30
+    )
+  endif()
+
   add_executable(gpu-descriptor-array-cuda-usl
     ${PROJECT_SOURCE_DIR}/tests/validation/descriptor-array-cuda-usl/main.c
     ${PROJECT_SOURCE_DIR}/tests/api/buffer_descriptor_array.c
