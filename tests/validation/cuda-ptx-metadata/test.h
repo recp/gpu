@@ -71,7 +71,7 @@ ptx_init_device(GPUDevice   *device,
   device->uslTargetArchitecture     = architecture;
 }
 
-static const GPUShaderResourceReflection *
+static inline const GPUShaderResourceReflection *
 ptx_find_resource(const GPUShaderReflection *reflection,
                   uint32_t                   group,
                   uint32_t                   binding) {
@@ -90,7 +90,7 @@ ptx_find_resource(const GPUShaderReflection *reflection,
   return NULL;
 }
 
-static int
+static inline int
 ptx_validate_buffer_resource(const GPUShaderReflection *reflection,
                              const char                *name,
                              uint32_t                   group,
@@ -108,7 +108,7 @@ ptx_validate_buffer_resource(const GPUShaderReflection *reflection,
          !resource->hasDynamicOffset;
 }
 
-static int
+static inline int
 ptx_validate_buffer_param(const GPUShaderPTXParamInfo *param,
                           uint32_t                     group,
                           uint32_t                     binding,

@@ -146,6 +146,11 @@ if(GPU_BUILD_TESTS)
     "${GPU_CUDA_COMPUTE_BUFFER_US}"
   )
   gpu_add_cuda_ptx_metadata_test(
+    profile-cache
+    ${PROJECT_SOURCE_DIR}/tests/validation/cuda-ptx-metadata/profile_cache.c
+    "${GPU_CUDA_COMPUTE_BUFFER_US}"
+  )
+  gpu_add_cuda_ptx_metadata_test(
     buffer-descriptor-array
     ${PROJECT_SOURCE_DIR}/tests/validation/cuda-ptx-metadata/buffer_array.c
     "${GPU_CUDA_BUFFER_DESCRIPTOR_ARRAY_US}"
