@@ -13,6 +13,7 @@ target_sources(gpu PRIVATE
   impl/module.c
   impl/multigpu.c
   impl/sampler.c
+  impl/sampler_plan.c
   impl/texture.c
   impl/texture_plan.c
 )

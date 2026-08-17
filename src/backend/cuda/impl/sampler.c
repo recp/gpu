@@ -6,49 +6,35 @@
 
 #include "../common.h"
 
-#include <us/compiler.h>
-
-bool
-cuda_samplerDescSupported(const GPUSamplerDesc *desc) {
-  return desc &&
-         desc->minFilter == desc->magFilter &&
-         !desc->compareEnable;
-}
-
-bool
-cuda_staticSamplerDescSupported(const GPUStaticSamplerDesc *desc) {
-  if (!gpuStaticSamplerDescIsValid(desc) ||
-      desc->minFilter != desc->magFilter ||
-      desc->hasCompare || desc->maxAnisotropy > 16u) {
-    return false;
-  }
-  if (desc->coordSpace == USL_RUNTIME_COORD_PIXEL &&
-      desc->addressMode != USL_RUNTIME_ADDRESS_CLAMP_TO_EDGE) {
-    return false;
-  }
-  return true;
-}
-
 static GPUResult
 cuda_createSampler(GPUApi                    *__restrict api,
                    GPUDevice                 *__restrict device,
                    const GPUSamplerCreateInfo *info,
                    bool                       staticIfSupported,
                    GPUSampler                **outSampler) {
-  GPUSampler *sampler;
+  GPUSamplerCuda    *native;
+  GPUSampler        *sampler;
+  CUDA_TEXTURE_DESC  desc;
 
   GPU__UNUSED(api);
   GPU__UNUSED(device);
   GPU__UNUSED(staticIfSupported);
-  if (!info || !outSampler || !cuda_samplerDescSupported(&info->desc)) {
+  if (!info || !outSampler) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outSampler = NULL;
+  if (!cuda_samplerTextureDesc(&info->desc, &desc)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  sampler = calloc(1, sizeof(*sampler));
+  sampler = calloc(1, sizeof(*sampler) + sizeof(*native));
   if (!sampler) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
-  *outSampler = sampler;
+  native         = (GPUSamplerCuda *)(sampler + 1);
+  native->desc   = desc;
+  sampler->_priv = native;
+  *outSampler    = sampler;
   return GPU_OK;
 }
 

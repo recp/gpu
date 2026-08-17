@@ -58,6 +58,35 @@ if(GPU_BUILD_TESTS)
     )
   endif()
   add_test(NAME cuda-texture-contract COMMAND gpu-cuda-texture-contract)
+
+  add_executable(gpu-cuda-sampler-contract
+    ${PROJECT_SOURCE_DIR}/src/backend/cuda/impl/sampler_plan.c
+    ${PROJECT_SOURCE_DIR}/tests/validation/cuda-sampler/main.c
+  )
+  target_include_directories(gpu-cuda-sampler-contract PRIVATE
+    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/src
+  )
+  if(TARGET us)
+    target_link_libraries(gpu-cuda-sampler-contract PRIVATE us)
+  elseif(TARGET gpu_usl)
+    target_link_libraries(gpu-cuda-sampler-contract PRIVATE gpu_usl)
+  endif()
+  set_target_properties(gpu-cuda-sampler-contract PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_options(gpu-cuda-sampler-contract PRIVATE /W4 /WX)
+  else()
+    target_compile_options(gpu-cuda-sampler-contract PRIVATE
+      -Wall
+      -Wextra
+      -Werror
+    )
+  endif()
+  add_test(NAME cuda-sampler-contract COMMAND gpu-cuda-sampler-contract)
 endif()
 
 if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND

@@ -14,6 +14,7 @@
 #include "../../api/texture_internal.h"
 #include "driver.h"
 #include "format.h"
+#include "sampler_plan.h"
 #include "texture_plan.h"
 
 #if !defined(_WIN32) && !defined(WIN32)
@@ -122,11 +123,15 @@ typedef struct GPUShaderLibraryCuda {
   GPUCudaModule *module;
 } GPUShaderLibraryCuda;
 
+typedef struct GPUSamplerCuda {
+  CUDA_TEXTURE_DESC desc;
+} GPUSamplerCuda;
+
 typedef struct GPUComputePipelineCuda {
   GPUComputePipelineState base;
   GPUComputePipeline     *pipeline;
   GPUCudaModule           *module;
-  GPUStaticSamplerDesc    *staticSamplers;
+  CUDA_TEXTURE_DESC       *staticSamplers;
   CUfunction               function;
   uint32_t                 paramCount;
   uint32_t                 paramDataSize;
@@ -247,8 +252,6 @@ void cuda_initLibrary(GPUApiLibrary *api);
 void cuda_initCompute(GPUApiCompute *api);
 void cuda_initMultiGPU(GPUApiMultiGPU *api);
 
-bool cuda_samplerDescSupported(const GPUSamplerDesc *desc);
-bool cuda_staticSamplerDescSupported(const GPUStaticSamplerDesc *desc);
 GPUResult cuda_getTextureObject(GPUTextureView          *view,
                                 const CUDA_TEXTURE_DESC *desc,
                                 bool                     exactCoordinates,

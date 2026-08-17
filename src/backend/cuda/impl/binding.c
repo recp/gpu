@@ -6,8 +6,6 @@
 
 #include "../common.h"
 
-#include <us/compiler.h>
-
 typedef struct GPUCudaBindContext {
   GPUComputePassEncoder *pass;
   GPUBindGroup          *group;
@@ -21,121 +19,6 @@ cuda__paramRangeValid(const GPUComputePipelineCuda *pipeline,
                       uint32_t                      size) {
   return pipeline && size <= pipeline->paramDataSize &&
          offset <= pipeline->paramDataSize - size;
-}
-
-static bool
-cuda__addressMode(GPUAddressMode mode, CUaddress_mode *outMode) {
-  if (!outMode) {
-    return false;
-  }
-  switch (mode) {
-    case GPU_ADDRESS_MODE_REPEAT:
-      *outMode = CU_TR_ADDRESS_MODE_WRAP;
-      return true;
-    case GPU_ADDRESS_MODE_MIRRORED_REPEAT:
-      *outMode = CU_TR_ADDRESS_MODE_MIRROR;
-      return true;
-    case GPU_ADDRESS_MODE_CLAMP_TO_EDGE:
-      *outMode = CU_TR_ADDRESS_MODE_CLAMP;
-      return true;
-    default:
-      return false;
-  }
-}
-
-static bool
-cuda__staticAddressMode(uint32_t mode, CUaddress_mode *outMode) {
-  if (!outMode) {
-    return false;
-  }
-  switch (mode) {
-    case USL_RUNTIME_ADDRESS_CLAMP_TO_EDGE:
-      *outMode = CU_TR_ADDRESS_MODE_CLAMP;
-      return true;
-    case USL_RUNTIME_ADDRESS_REPEAT:
-      *outMode = CU_TR_ADDRESS_MODE_WRAP;
-      return true;
-    case USL_RUNTIME_ADDRESS_MIRRORED_REPEAT:
-      *outMode = CU_TR_ADDRESS_MODE_MIRROR;
-      return true;
-    case USL_RUNTIME_ADDRESS_CLAMP_TO_ZERO:
-    case USL_RUNTIME_ADDRESS_CLAMP_TO_BORDER:
-      *outMode = CU_TR_ADDRESS_MODE_BORDER;
-      return true;
-    default:
-      return false;
-  }
-}
-
-static bool
-cuda__samplerTextureDesc(const GPUSamplerDesc *source,
-                         CUDA_TEXTURE_DESC    *outDesc) {
-  CUaddress_mode addressU, addressV, addressW;
-
-  if (!outDesc || !cuda_samplerDescSupported(source)) {
-    return false;
-  }
-  if (!cuda__addressMode(source->addressU, &addressU) ||
-      !cuda__addressMode(source->addressV, &addressV) ||
-      !cuda__addressMode(source->addressW, &addressW)) {
-    return false;
-  }
-
-  memset(outDesc, 0, sizeof(*outDesc));
-  outDesc->addressMode[0]     = addressU;
-  outDesc->addressMode[1]     = addressV;
-  outDesc->addressMode[2]     = addressW;
-  outDesc->filterMode         = source->minFilter == GPU_FILTER_LINEAR
-                                  ? CU_TR_FILTER_MODE_LINEAR
-                                  : CU_TR_FILTER_MODE_POINT;
-  outDesc->mipmapFilterMode   = source->mipFilter == GPU_MIP_FILTER_LINEAR
-                                  ? CU_TR_FILTER_MODE_LINEAR
-                                  : CU_TR_FILTER_MODE_POINT;
-  outDesc->flags              = CU_TRSF_NORMALIZED_COORDINATES;
-  outDesc->maxAnisotropy      = source->maxAnisotropy > 1u
-                                  ? source->maxAnisotropy
-                                  : 1u;
-  return true;
-}
-
-static bool
-cuda__staticSamplerTextureDesc(const GPUStaticSamplerDesc *source,
-                               CUDA_TEXTURE_DESC          *outDesc) {
-  CUaddress_mode addressMode;
-
-  if (!outDesc || !cuda_staticSamplerDescSupported(source) ||
-      !cuda__staticAddressMode(source->addressMode, &addressMode)) {
-    return false;
-  }
-
-  memset(outDesc, 0, sizeof(*outDesc));
-  outDesc->addressMode[0]   = addressMode;
-  outDesc->addressMode[1]   = addressMode;
-  outDesc->addressMode[2]   = addressMode;
-  outDesc->filterMode       = source->minFilter == USL_RUNTIME_FILTER_LINEAR
-                                ? CU_TR_FILTER_MODE_LINEAR
-                                : CU_TR_FILTER_MODE_POINT;
-  outDesc->mipmapFilterMode = source->mipFilter == USL_RUNTIME_FILTER_LINEAR
-                                ? CU_TR_FILTER_MODE_LINEAR
-                                : CU_TR_FILTER_MODE_POINT;
-  outDesc->flags            = source->coordSpace == USL_RUNTIME_COORD_NORMALIZED
-                                ? CU_TRSF_NORMALIZED_COORDINATES
-                                : 0u;
-  outDesc->maxAnisotropy    = source->maxAnisotropy > 1u
-                                ? source->maxAnisotropy
-                                : 1u;
-  return true;
-}
-
-static void
-cuda__exactTextureDesc(CUDA_TEXTURE_DESC *desc) {
-  memset(desc, 0, sizeof(*desc));
-  desc->addressMode[0]   = CU_TR_ADDRESS_MODE_CLAMP;
-  desc->addressMode[1]   = CU_TR_ADDRESS_MODE_CLAMP;
-  desc->addressMode[2]   = CU_TR_ADDRESS_MODE_CLAMP;
-  desc->filterMode       = CU_TR_FILTER_MODE_POINT;
-  desc->mipmapFilterMode = CU_TR_FILTER_MODE_POINT;
-  desc->maxAnisotropy    = 1u;
 }
 
 static const GPUBindGroupBindingPriv *
@@ -394,7 +277,8 @@ cuda__resolveSampledTexture(GPUComputePassEncoder          *pass,
   const GPUBindGroupBindingPriv *samplerBinding;
   GPUBindGroup                 *textureGroup;
   GPUBindGroup                 *samplerGroup;
-  CUDA_TEXTURE_DESC             desc;
+  const GPUSamplerCuda         *samplerNative;
+  const CUDA_TEXTURE_DESC      *desc;
   CUtexObject                   textureObject;
   GPUResult                     result;
 
@@ -418,12 +302,10 @@ cuda__resolveSampledTexture(GPUComputePassEncoder          *pass,
   }
 
   if (param->staticSamplerId != UINT32_MAX) {
-    if (param->staticSamplerId >= pipeline->staticSamplerCount ||
-        !cuda__staticSamplerTextureDesc(
-          &pipeline->staticSamplers[param->staticSamplerId],
-          &desc)) {
+    if (param->staticSamplerId >= pipeline->staticSamplerCount) {
       return false;
     }
+    desc = &pipeline->staticSamplers[param->staticSamplerId];
   } else {
     samplerGroup = cuda__boundGroup(pass,
                                     activeGroupIndex,
@@ -436,13 +318,15 @@ cuda__resolveSampledTexture(GPUComputePassEncoder          *pass,
     if (!samplerBinding || !samplerBinding->sampler) {
       return true;
     }
-    if (!cuda__samplerTextureDesc(&samplerBinding->sampler->desc, &desc)) {
+    samplerNative = samplerBinding->sampler->_priv;
+    if (!samplerNative) {
       return false;
     }
+    desc = &samplerNative->desc;
   }
 
   result = cuda_getTextureObject(textureBinding->textureView,
-                                 &desc,
+                                 desc,
                                  false,
                                  &textureObject);
   if (result != GPU_OK ||
@@ -473,7 +357,7 @@ cuda__resolveTexture(GPUComputePassEncoder       *pass,
   GPUCommandCuda                *command;
   const GPUBindGroupBindingPriv *binding;
   GPUBindGroup                  *group;
-  CUDA_TEXTURE_DESC              desc;
+  const CUDA_TEXTURE_DESC       *desc;
   CUtexObject                    textureObject;
   GPUResult                      result;
 
@@ -496,9 +380,9 @@ cuda__resolveTexture(GPUComputePassEncoder       *pass,
     return true;
   }
 
-  cuda__exactTextureDesc(&desc);
+  desc   = cuda_exactTextureDesc();
   result = cuda_getTextureObject(binding->textureView,
-                                 &desc,
+                                 desc,
                                  true,
                                  &textureObject);
   if (result != GPU_OK ||

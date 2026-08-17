@@ -105,6 +105,7 @@ cuda_createComputePipeline(GPUDevice                          *device,
   size_t                            nativeSize;
   size_t                            paramBytes;
   size_t                            samplerBytes;
+  uint32_t                          entryStaticSamplerCount;
   uint32_t                          staticSamplerCount;
   CUresult                          result;
 
@@ -132,12 +133,20 @@ cuda_createComputePipeline(GPUDevice                          *device,
   staticSamplers = gpuGetShaderLibraryStaticSamplers(info->library,
                                                       &staticSamplerCount);
   entryBit       = gpuShaderEntryBit(info->library, info->entryPoint);
+  if (staticSamplerCount > 0u && (!staticSamplers || entryBit == 0u)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  entryStaticSamplerCount = 0u;
+  for (uint32_t i = 0u; i < staticSamplerCount; i++) {
+    entryStaticSamplerCount +=
+      (staticSamplers[i].entryMask & entryBit) != 0u;
+  }
   paramBytes     = (size_t)ptx.paramCount * sizeof(native->params[0]);
-  samplerBytes   = (size_t)staticSamplerCount * sizeof(GPUStaticSamplerDesc);
+  samplerBytes   = (size_t)entryStaticSamplerCount * sizeof(CUDA_TEXTURE_DESC);
   if ((ptx.paramCount > 0u && paramBytes / sizeof(native->params[0]) !=
                               ptx.paramCount) ||
-      (staticSamplerCount > 0u &&
-       samplerBytes / sizeof(GPUStaticSamplerDesc) != staticSamplerCount) ||
+      (entryStaticSamplerCount > 0u &&
+       samplerBytes / sizeof(CUDA_TEXTURE_DESC) != entryStaticSamplerCount) ||
       paramBytes > SIZE_MAX - sizeof(*native) ||
       samplerBytes > SIZE_MAX - sizeof(*native) - paramBytes) {
     return GPU_ERROR_OUT_OF_MEMORY;
@@ -158,29 +167,25 @@ cuda_createComputePipeline(GPUDevice                          *device,
   native->module        = module;
   native->paramCount    = ptx.paramCount;
   native->paramDataSize = ptx.paramDataSize;
-  native->staticSamplers = (GPUStaticSamplerDesc *)
+  native->staticSamplers = (CUDA_TEXTURE_DESC *)
     ((uint8_t *)native->params + paramBytes);
   if (ptx.paramCount > 0u) {
     memcpy(native->params,
            ptx.params,
            (size_t)ptx.paramCount * sizeof(native->params[0]));
   }
-  if (staticSamplerCount > 0u && (!staticSamplers || entryBit == 0u)) {
-    cuda_releaseModule(native->module);
-    free(native);
-    return GPU_ERROR_UNSUPPORTED;
-  }
   for (uint32_t i = 0u; i < staticSamplerCount; i++) {
     if ((staticSamplers[i].entryMask & entryBit) == 0u) {
       continue;
     }
-    if (!cuda_staticSamplerDescSupported(&staticSamplers[i].desc)) {
+    if (!cuda_staticSamplerTextureDesc(
+          &staticSamplers[i].desc,
+          &native->staticSamplers[native->staticSamplerCount])) {
       cuda_releaseModule(native->module);
       free(native);
       return GPU_ERROR_UNSUPPORTED;
     }
-    native->staticSamplers[native->staticSamplerCount++] =
-      staticSamplers[i].desc;
+    native->staticSamplerCount++;
   }
   for (uint32_t i = 0u; i < ptx.paramCount; i++) {
     GPUShaderPTXParamInfo *param;
