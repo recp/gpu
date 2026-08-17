@@ -60,11 +60,11 @@ validate_dynamic_sampler(void) {
   source.minFilter     = GPU_FILTER_LINEAR;
   source.magFilter     = GPU_FILTER_LINEAR;
   source.mipFilter     = GPU_MIP_FILTER_LINEAR;
-  source.maxAnisotropy = 16u;
+  source.maxAnisotropy = CUDA_MAX_SAMPLER_ANISOTROPY;
   CHECK(cuda_samplerTextureDesc(&source, &actual));
   CHECK(actual.filterMode == CU_TR_FILTER_MODE_LINEAR &&
         actual.mipmapFilterMode == CU_TR_FILTER_MODE_LINEAR &&
-        actual.maxAnisotropy == 16u);
+        actual.maxAnisotropy == CUDA_MAX_SAMPLER_ANISOTROPY);
 
   source.magFilter = GPU_FILTER_NEAREST;
   memset(&actual, 0xa5, sizeof(actual));
@@ -77,7 +77,7 @@ validate_dynamic_sampler(void) {
   source.addressV = (GPUAddressMode)99;
   CHECK(!cuda_samplerTextureDesc(&source, &actual));
   source = dynamic_sampler();
-  source.maxAnisotropy = 17u;
+  source.maxAnisotropy = CUDA_MAX_SAMPLER_ANISOTROPY + 1u;
   CHECK(!cuda_samplerTextureDesc(&source, &actual));
   source = dynamic_sampler();
   source.maxAnisotropy = 8u;
@@ -136,7 +136,7 @@ validate_static_sampler(void) {
   source.magFilter = USL_RUNTIME_FILTER_LINEAR;
   CHECK(!cuda_staticSamplerTextureDesc(&source, &actual));
   source = static_sampler();
-  source.maxAnisotropy = 17u;
+  source.maxAnisotropy = CUDA_MAX_SAMPLER_ANISOTROPY + 1u;
   CHECK(!cuda_staticSamplerTextureDesc(&source, &actual));
   source = static_sampler();
   source.maxAnisotropy = 8u;

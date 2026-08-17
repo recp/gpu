@@ -69,7 +69,8 @@ cuda_samplerTextureDesc(const GPUSamplerDesc *source,
       (source->mipFilter != GPU_MIP_FILTER_NEAREST &&
        source->mipFilter != GPU_MIP_FILTER_LINEAR) ||
       (uint32_t)source->compare > GPU_COMPARE_ALWAYS ||
-      source->compareEnable || source->maxAnisotropy > 16u ||
+      source->compareEnable ||
+      source->maxAnisotropy > CUDA_MAX_SAMPLER_ANISOTROPY ||
       (source->maxAnisotropy > 1u &&
        (source->minFilter != GPU_FILTER_LINEAR ||
         source->mipFilter != GPU_MIP_FILTER_LINEAR)) ||
@@ -110,7 +111,7 @@ cuda_staticSamplerTextureDesc(const GPUStaticSamplerDesc *source,
       source->coordSpace > USL_RUNTIME_COORD_PIXEL ||
       source->compareFunc > USL_RUNTIME_COMPARE_ALWAYS ||
       source->hasCompare > 1u || source->hasCompare ||
-      source->maxAnisotropy > 16u ||
+      source->maxAnisotropy > CUDA_MAX_SAMPLER_ANISOTROPY ||
       (source->maxAnisotropy > 1u &&
        (source->minFilter != USL_RUNTIME_FILTER_LINEAR ||
         source->mipFilter != USL_RUNTIME_FILTER_LINEAR)) ||

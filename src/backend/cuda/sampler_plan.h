@@ -5,6 +5,10 @@
 #include "../../../include/gpu/sampler.h"
 #include "driver.h"
 
+enum {
+  CUDA_MAX_SAMPLER_ANISOTROPY = 16u
+};
+
 GPU_HIDE
 bool
 cuda_samplerTextureDesc(const GPUSamplerDesc *source,

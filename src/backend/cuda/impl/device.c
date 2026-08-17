@@ -516,14 +516,16 @@ cuda_getLimits(const GPUAdapter * __restrict adapter,
   if (!native || !outLimits) {
     return;
   }
-  memset(outLimits, 0, sizeof(*outLimits));
-  outLimits->maxBindGroups       = GPU_ENCODER_MAX_BIND_GROUPS;
-  outLimits->maxBindingsPerGroup = 64u;
+  outLimits->maxBindGroups                   = GPU_ENCODER_MAX_BIND_GROUPS;
+  outLimits->maxBindingsPerGroup             = 64u;
   outLimits->minUniformBufferOffsetAlignment = 1u;
   outLimits->minStorageBufferOffsetAlignment = 1u;
-  outLimits->maxComputeWorkgroupSizeX = (uint32_t)native->maxBlockDim[0];
-  outLimits->maxComputeWorkgroupSizeY = (uint32_t)native->maxBlockDim[1];
-  outLimits->maxComputeWorkgroupSizeZ = (uint32_t)native->maxBlockDim[2];
+  outLimits->maxColorAttachments             = 0u;
+  outLimits->maxComputeWorkgroupSizeX        = (uint32_t)native->maxBlockDim[0];
+  outLimits->maxComputeWorkgroupSizeY        = (uint32_t)native->maxBlockDim[1];
+  outLimits->maxComputeWorkgroupSizeZ        = (uint32_t)native->maxBlockDim[2];
+  outLimits->maxPushConstantSizeBytes        = 0u;
+  outLimits->maxSamplerAnisotropy            = CUDA_MAX_SAMPLER_ANISOTROPY;
   if (cuda_hasSubgroups(native)) {
     outLimits->minSubgroupSize = (uint32_t)native->warpSize;
     outLimits->maxSubgroupSize = (uint32_t)native->warpSize;
