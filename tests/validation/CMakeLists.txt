@@ -167,6 +167,21 @@ if(GPU_BUILD_TESTS)
     ${PROJECT_SOURCE_DIR}/tests/validation/resource-descriptor-array-cuda-usl/ptx_metadata.c
     "${GPU_CUDA_RESOURCE_DESCRIPTOR_ARRAY_US}"
   )
+  gpu_add_cuda_ptx_metadata_test(
+    async-copy
+    ${PROJECT_SOURCE_DIR}/tests/validation/async-copy-usl/ptx_metadata.c
+    "${GPU_CUDA_ASYNC_COPY_US}"
+  )
+  gpu_add_cuda_ptx_metadata_test(
+    subgroup-matrix
+    ${PROJECT_SOURCE_DIR}/tests/validation/subgroup-matrix-cuda-usl/ptx_metadata.c
+    "${GPU_CUDA_SUBGROUP_MATRIX_US}"
+  )
+  gpu_add_cuda_ptx_metadata_test(
+    atomic64
+    ${PROJECT_SOURCE_DIR}/tests/validation/atomic64-cuda-usl/ptx_metadata.c
+    "${GPU_CUDA_ATOMIC64_US}"
+  )
 endif()
 
 if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
