@@ -87,6 +87,59 @@ if(GPU_BUILD_TESTS)
     )
   endif()
   add_test(NAME cuda-sampler-contract COMMAND gpu-cuda-sampler-contract)
+
+  function(gpu_add_cuda_ptx_metadata_test name source artifact)
+    set(target "gpu-cuda-${name}-metadata")
+    add_executable(${target}
+      ${PROJECT_SOURCE_DIR}/tests/validation/cuda-ptx-metadata/main.c
+      ${source}
+    )
+    target_include_directories(${target} PRIVATE
+      ${PROJECT_SOURCE_DIR}/src
+    )
+    target_link_libraries(${target} PRIVATE gpu)
+    gpu_attach_usl_validation(${target}
+                              gpu-cuda-metadata-fixtures
+                              "${artifact}")
+    set_target_properties(${target} PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+    )
+    if(MSVC)
+      target_compile_options(${target} PRIVATE /W4 /WX)
+    else()
+      target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME "cuda-${name}-metadata"
+             COMMAND ${target} "${artifact}")
+  endfunction()
+
+  gpu_add_cuda_ptx_metadata_test(
+    storage-texture
+    ${PROJECT_SOURCE_DIR}/tests/validation/storage-texture-cuda-usl/ptx_metadata.c
+    "${GPU_CUDA_STORAGE_TEXTURE_US}"
+  )
+  gpu_add_cuda_ptx_metadata_test(
+    sampled-texture
+    ${PROJECT_SOURCE_DIR}/tests/validation/sampled-texture-cuda-usl/ptx_metadata.c
+    "${GPU_CUDA_SAMPLED_TEXTURE_US}"
+  )
+  gpu_add_cuda_ptx_metadata_test(
+    sampled-format
+    ${PROJECT_SOURCE_DIR}/tests/validation/sampled-format-cuda-usl/ptx_metadata.c
+    "${GPU_CUDA_SAMPLED_FORMAT_US}"
+  )
+  gpu_add_cuda_ptx_metadata_test(
+    texture-geometry
+    ${PROJECT_SOURCE_DIR}/tests/validation/texture-geometry-cuda-usl/ptx_metadata.c
+    "${GPU_CUDA_TEXTURE_GEOMETRY_US}"
+  )
+  gpu_add_cuda_ptx_metadata_test(
+    storage-geometry
+    ${PROJECT_SOURCE_DIR}/tests/validation/storage-geometry-cuda-usl/ptx_metadata.c
+    "${GPU_CUDA_STORAGE_GEOMETRY_US}"
+  )
 endif()
 
 if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND

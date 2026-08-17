@@ -95,24 +95,38 @@ if(GPU_BUILD_VULKAN AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
   add_custom_target(gpu-vulkan-fixtures DEPENDS ${GPU_VULKAN_USL_FIXTURES})
 endif()
 
-if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
+if(GPU_BUILD_TESTS OR (GPU_BUILD_CUDA AND GPU_BUILD_SAMPLES))
   gpu_add_usl_fixtures(
-    GPU_CUDA_USL_FIXTURES
+    GPU_CUDA_METADATA_USL_FIXTURES
     ptx
     validation
-    "${PROJECT_SOURCE_DIR}/tests/validation/compute-buffer-cuda-usl/compute_buffer.usl"
     "${PROJECT_SOURCE_DIR}/tests/validation/storage-texture-cuda-usl/storage_texture.usl"
     "${PROJECT_SOURCE_DIR}/tests/validation/sampled-texture-cuda-usl/sampled_texture.usl"
     "${PROJECT_SOURCE_DIR}/tests/validation/sampled-format-cuda-usl/sampled_format.usl"
     "${PROJECT_SOURCE_DIR}/tests/validation/texture-geometry-cuda-usl/texture_geometry.usl"
     "${PROJECT_SOURCE_DIR}/tests/validation/storage-geometry-cuda-usl/storage_geometry.usl"
   )
-  list(GET GPU_CUDA_USL_FIXTURES 0 GPU_CUDA_COMPUTE_BUFFER_US)
-  list(GET GPU_CUDA_USL_FIXTURES 1 GPU_CUDA_STORAGE_TEXTURE_US)
-  list(GET GPU_CUDA_USL_FIXTURES 2 GPU_CUDA_SAMPLED_TEXTURE_US)
-  list(GET GPU_CUDA_USL_FIXTURES 3 GPU_CUDA_SAMPLED_FORMAT_US)
-  list(GET GPU_CUDA_USL_FIXTURES 4 GPU_CUDA_TEXTURE_GEOMETRY_US)
-  list(GET GPU_CUDA_USL_FIXTURES 5 GPU_CUDA_STORAGE_GEOMETRY_US)
+  list(GET GPU_CUDA_METADATA_USL_FIXTURES 0 GPU_CUDA_STORAGE_TEXTURE_US)
+  list(GET GPU_CUDA_METADATA_USL_FIXTURES 1 GPU_CUDA_SAMPLED_TEXTURE_US)
+  list(GET GPU_CUDA_METADATA_USL_FIXTURES 2 GPU_CUDA_SAMPLED_FORMAT_US)
+  list(GET GPU_CUDA_METADATA_USL_FIXTURES 3 GPU_CUDA_TEXTURE_GEOMETRY_US)
+  list(GET GPU_CUDA_METADATA_USL_FIXTURES 4 GPU_CUDA_STORAGE_GEOMETRY_US)
+  add_custom_target(gpu-cuda-metadata-fixtures
+    DEPENDS ${GPU_CUDA_METADATA_USL_FIXTURES}
+  )
+endif()
+
+if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
+  gpu_add_usl_fixtures(
+    GPU_CUDA_COMPUTE_BUFFER_USL_FIXTURE
+    ptx
+    validation
+    "${PROJECT_SOURCE_DIR}/tests/validation/compute-buffer-cuda-usl/compute_buffer.usl"
+  )
+  list(GET GPU_CUDA_COMPUTE_BUFFER_USL_FIXTURE 0 GPU_CUDA_COMPUTE_BUFFER_US)
+  set(GPU_CUDA_USL_FIXTURES
+      ${GPU_CUDA_COMPUTE_BUFFER_USL_FIXTURE}
+      ${GPU_CUDA_METADATA_USL_FIXTURES})
 
   set(GPU_USL_FIXTURE_TARGET_CAPS ptx_7_0,sm_80)
   gpu_add_usl_fixtures(
