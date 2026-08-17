@@ -140,6 +140,33 @@ if(GPU_BUILD_TESTS)
     ${PROJECT_SOURCE_DIR}/tests/validation/storage-geometry-cuda-usl/ptx_metadata.c
     "${GPU_CUDA_STORAGE_GEOMETRY_US}"
   )
+  gpu_add_cuda_ptx_metadata_test(
+    compute-buffer
+    ${PROJECT_SOURCE_DIR}/tests/validation/compute-buffer-cuda-usl/ptx_metadata.c
+    "${GPU_CUDA_COMPUTE_BUFFER_US}"
+  )
+  gpu_add_cuda_ptx_metadata_test(
+    buffer-descriptor-array
+    ${PROJECT_SOURCE_DIR}/tests/validation/cuda-ptx-metadata/buffer_array.c
+    "${GPU_CUDA_BUFFER_DESCRIPTOR_ARRAY_US}"
+  )
+  target_compile_definitions(gpu-cuda-buffer-descriptor-array-metadata PRIVATE
+    GPU_PTX_EXPECT_DYNAMIC=0
+  )
+  gpu_add_cuda_ptx_metadata_test(
+    buffer-descriptor-array-dynamic
+    ${PROJECT_SOURCE_DIR}/tests/validation/cuda-ptx-metadata/buffer_array.c
+    "${GPU_CUDA_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_US}"
+  )
+  target_compile_definitions(
+    gpu-cuda-buffer-descriptor-array-dynamic-metadata PRIVATE
+    GPU_PTX_EXPECT_DYNAMIC=1
+  )
+  gpu_add_cuda_ptx_metadata_test(
+    resource-descriptor-array
+    ${PROJECT_SOURCE_DIR}/tests/validation/resource-descriptor-array-cuda-usl/ptx_metadata.c
+    "${GPU_CUDA_RESOURCE_DESCRIPTOR_ARRAY_US}"
+  )
 endif()
 
 if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
