@@ -1,0 +1,31 @@
+kern(1, 1, 1) mutate_geometry(
+  line: image1d<rgba32float, read_write> #texture(0),
+  lines: image1d_array<rgba32float, read_write> #texture(1),
+  images: image2d_array<rgba32float, read_write> #texture(2),
+  volume: image3d<rgba32float, read_write> #texture(3),
+  selectedMip: image2d<rgba32float, read_write> #texture(4)
+) {
+  line.write(line.read(2u) + float4(10.0), 2u)
+  lines.write(lines.read(uint2(1u, 2u)) + float4(20.0), uint2(1u, 2u))
+  images.write(images.read(uint3(1u, 0u, 2u)) + float4(30.0),
+               uint3(1u, 0u, 2u))
+  volume.write(volume.read(uint3(1u, 0u, 1u)) + float4(40.0),
+               uint3(1u, 0u, 1u))
+  selectedMip.write(selectedMip.read(uint2(1u, 0u)) + float4(50.0),
+                    uint2(1u, 0u))
+}
+
+kern(1, 1, 1) read_geometry(
+  line: image1d<rgba32float, read_write> #texture(0),
+  lines: image1d_array<rgba32float, read_write> #texture(1),
+  images: image2d_array<rgba32float, read_write> #texture(2),
+  volume: image3d<rgba32float, read_write> #texture(3),
+  selectedMip: image2d<rgba32float, read_write> #texture(4),
+  inout output: [float4] #buffer(0) #group(1)
+) {
+  output[0] = line.read(2u)
+  output[1] = lines.read(uint2(1u, 2u))
+  output[2] = images.read(uint3(1u, 0u, 2u))
+  output[3] = volume.read(uint3(1u, 0u, 1u))
+  output[4] = selectedMip.read(uint2(1u, 0u))
+}
