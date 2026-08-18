@@ -911,6 +911,7 @@ gpu_buildQueueCreateInfos(const GPUDeviceCreateInfo  *info,
 
 static GPUAdapter*
 gpu_getInstanceAdapters(GPUInstance *inst) {
+  GPUAdapter *adapters;
   GPUAdapter *item;
   GPUApi     *api;
   uint32_t    count;
@@ -922,14 +923,19 @@ gpu_getInstanceAdapters(GPUInstance *inst) {
     return NULL;
   }
 
-  inst->_adaptersEnumerated = true;
-  inst->_adapters = api->device.getAvailableAdapters(inst, UINT32_MAX);
+  adapters = api->device.getAvailableAdapters(inst, UINT32_MAX);
+  if (!adapters) {
+    return NULL;
+  }
+
+  inst->_adapters = adapters;
   count = 0u;
   for (item = inst->_adapters; item; item = item->next) {
     item->inst = inst;
     count++;
   }
-  inst->_adapterCount = count;
+  inst->_adapterCount       = count;
+  inst->_adaptersEnumerated = true;
 
   return inst->_adapters;
 }

@@ -94,6 +94,16 @@ mt_getAvailableAdapters(GPUInstance * __restrict inst,
   [defaultDevice release];
 #else
   devices = MTLCopyAllDevices();
+  if (devices.count == 0u) {
+    id<MTLDevice> defaultDevice;
+
+    [devices release];
+    defaultDevice = MTLCreateSystemDefaultDevice();
+    devices       = defaultDevice
+                      ? [[NSArray alloc] initWithObjects:defaultDevice, nil]
+                      : nil;
+    [defaultDevice release];
+  }
 #endif
 
   for (id<MTLDevice> device in devices) {

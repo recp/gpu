@@ -12,6 +12,30 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL)
 endif()
 
 if(GPU_BUILD_TESTS)
+  add_executable(gpu-adapter-enumeration-contract
+    ${PROJECT_SOURCE_DIR}/tests/validation/adapter-enumeration/main.c
+  )
+  target_include_directories(gpu-adapter-enumeration-contract PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+  )
+  target_link_libraries(gpu-adapter-enumeration-contract PRIVATE gpu)
+  set_target_properties(gpu-adapter-enumeration-contract PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_options(gpu-adapter-enumeration-contract PRIVATE /W4 /WX)
+  else()
+    target_compile_options(gpu-adapter-enumeration-contract PRIVATE
+      -Wall
+      -Wextra
+      -Werror
+    )
+  endif()
+  add_test(NAME adapter-enumeration-contract
+           COMMAND gpu-adapter-enumeration-contract)
+
   add_executable(gpu-cuda-format-contract
     ${PROJECT_SOURCE_DIR}/src/backend/cuda/impl/format.c
     ${PROJECT_SOURCE_DIR}/tests/validation/cuda-format/main.c
