@@ -2837,6 +2837,26 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
         return GPU_ERROR_BACKEND_FAILURE;
       }
     }
+    if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_SUBGROUP_CLOCK)) {
+      if (us_cap_atom_init(
+            &targetAtoms[targetAtomCount++],
+            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+            USL_SEMANTIC_FEATURE_ID_SHADER_SUBGROUP_CLOCK,
+            0u,
+            0u) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+    if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_DEVICE_CLOCK)) {
+      if (us_cap_atom_init(
+            &targetAtoms[targetAtomCount++],
+            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+            USL_SEMANTIC_FEATURE_ID_SHADER_DEVICE_CLOCK,
+            0u,
+            0u) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
   } else if (api->backend == GPU_BACKEND_VULKAN) {
     if (device->uslTargetProfile == 0u) {
       return GPU_ERROR_BACKEND_FAILURE;

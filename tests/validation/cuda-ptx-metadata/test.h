@@ -133,4 +133,22 @@ ptx_source(const GPUShaderLibrary *library) {
   return ptx ? ptx->text : NULL;
 }
 
+static inline uint32_t
+ptx_count(const char *text, const char *needle) {
+  uint32_t count;
+  size_t   length;
+
+  if (!text || !needle || !needle[0]) {
+    return 0u;
+  }
+
+  count  = 0u;
+  length = strlen(needle);
+  while ((text = strstr(text, needle)) != NULL) {
+    count++;
+    text += length;
+  }
+  return count;
+}
+
 #endif /* gpu_tests_cuda_ptx_metadata_test_h */

@@ -463,6 +463,16 @@ cuda_hasAtomic64(const GPUAdapterCuda *adapter) {
 }
 
 static bool
+cuda_hasShaderSubgroupClock(const GPUAdapterCuda *adapter) {
+  return adapter && adapter->computeMajor >= 2;
+}
+
+static bool
+cuda_hasShaderDeviceClock(const GPUAdapterCuda *adapter) {
+  return adapter && adapter->computeMajor >= 3;
+}
+
+static bool
 cuda_supportsFeature(const GPUAdapter * __restrict adapter,
                      GPUFeature                    feature) {
   GPUAdapterCuda *native;
@@ -483,6 +493,10 @@ cuda_supportsFeature(const GPUAdapter * __restrict adapter,
       return cuda_hasSubgroupMatrix(native);
     case GPU_FEATURE_ATOMIC64:
       return cuda_hasAtomic64(native);
+    case GPU_FEATURE_SHADER_SUBGROUP_CLOCK:
+      return cuda_hasShaderSubgroupClock(native);
+    case GPU_FEATURE_SHADER_DEVICE_CLOCK:
+      return cuda_hasShaderDeviceClock(native);
     case GPU_FEATURE_BUFFER_DEVICE_ADDRESS:
       return native->unifiedAddressing != 0;
     default:
@@ -617,6 +631,12 @@ cuda_createDevice(GPUAdapter               * __restrict adapter,
   }
   if (cuda_hasAtomic64(adapterNative)) {
     supportedMask |= 1ull << GPU_FEATURE_ATOMIC64;
+  }
+  if (cuda_hasShaderSubgroupClock(adapterNative)) {
+    supportedMask |= 1ull << GPU_FEATURE_SHADER_SUBGROUP_CLOCK;
+  }
+  if (cuda_hasShaderDeviceClock(adapterNative)) {
+    supportedMask |= 1ull << GPU_FEATURE_SHADER_DEVICE_CLOCK;
   }
   if (adapterNative && adapterNative->unifiedAddressing != 0) {
     supportedMask |= 1ull << GPU_FEATURE_BUFFER_DEVICE_ADDRESS;

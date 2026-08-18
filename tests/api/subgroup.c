@@ -112,7 +112,7 @@ gpu_test_subgroup(GPUAdapter *adapter, const char *bytecodePath) {
     goto cleanup;
   }
 
-  queue    = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  queue    = GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0u);
   bytecode = gpu_test_read_file(bytecodePath, &bytecodeSize);
   if (!queue || !bytecode ||
       GPUCreateShaderLibraryFromUSL(device,

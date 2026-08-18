@@ -32,6 +32,11 @@ endfunction()
 
 include("${PROJECT_SOURCE_DIR}/tests/validation/fixtures.cmake")
 
+set(GPU_BUILD_GRAPHICS_API_TESTS OFF)
+if(GPU_BUILD_METAL OR GPU_BUILD_VULKAN OR GPU_BUILD_DX12 OR GPU_BUILD_WEBGPU)
+  set(GPU_BUILD_GRAPHICS_API_TESTS ON)
+endif()
+
 if(GPU_BUILD_TESTS)
   get_property(GPU_GENERATOR_IS_MULTI_CONFIG GLOBAL
                PROPERTY GENERATOR_IS_MULTI_CONFIG)
@@ -67,7 +72,9 @@ if(GPU_BUILD_TESTS)
       VERBATIM
     )
   endif()
+endif()
 
+if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
   set(GPU_API_USL_SOURCES
     "${GPU_VALIDATION_REFLECTION_USL_SOURCE}"
     "${PROJECT_SOURCE_DIR}/tests/api/render_mrt.usl"
@@ -619,7 +626,9 @@ if(GPU_BUILD_TESTS)
       -P ${PROJECT_SOURCE_DIR}/cmake/package_test.cmake
   )
   set_tests_properties(package-consumer PROPERTIES LABELS package)
+endif()
 
+if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
   add_executable(gpu-api-test
     ${PROJECT_SOURCE_DIR}/tests/api/atomic64.c
     ${PROJECT_SOURCE_DIR}/tests/api/barrier.c

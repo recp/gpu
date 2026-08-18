@@ -197,6 +197,36 @@ if(GPU_BUILD_TESTS)
     "${GPU_CUDA_RESOURCE_DESCRIPTOR_ARRAY_US}"
   )
   gpu_add_cuda_ptx_metadata_test(
+    subgroup
+    ${PROJECT_SOURCE_DIR}/tests/validation/subgroup-cuda-usl/ptx_metadata.c
+    "${GPU_CUDA_SUBGROUP_US}"
+  )
+  gpu_add_cuda_ptx_metadata_test(
+    atomic32
+    ${PROJECT_SOURCE_DIR}/tests/validation/compute-atomics-usl/ptx_metadata.c
+    "${GPU_CUDA_ATOMIC32_US}"
+  )
+  gpu_add_cuda_ptx_metadata_test(
+    subgroup-clock
+    ${PROJECT_SOURCE_DIR}/tests/validation/cuda-ptx-metadata/clock.c
+    "${GPU_CUDA_SUBGROUP_CLOCK_US}"
+  )
+  target_compile_definitions(gpu-cuda-subgroup-clock-metadata PRIVATE
+    GPU_PTX_CLOCK_ENTRY="shader_subgroup_clock_cs"
+    GPU_PTX_CLOCK_FEATURE=GPU_FEATURE_SHADER_SUBGROUP_CLOCK
+    GPU_PTX_CLOCK_SOURCE="%clock64"
+  )
+  gpu_add_cuda_ptx_metadata_test(
+    device-clock
+    ${PROJECT_SOURCE_DIR}/tests/validation/cuda-ptx-metadata/clock.c
+    "${GPU_CUDA_DEVICE_CLOCK_US}"
+  )
+  target_compile_definitions(gpu-cuda-device-clock-metadata PRIVATE
+    GPU_PTX_CLOCK_ENTRY="shader_device_clock_cs"
+    GPU_PTX_CLOCK_FEATURE=GPU_FEATURE_SHADER_DEVICE_CLOCK
+    GPU_PTX_CLOCK_SOURCE="%globaltimer"
+  )
+  gpu_add_cuda_ptx_metadata_test(
     async-copy
     ${PROJECT_SOURCE_DIR}/tests/validation/async-copy-usl/ptx_metadata.c
     "${GPU_CUDA_ASYNC_COPY_US}"
@@ -1296,6 +1326,62 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     )
   endif()
 
+  add_executable(gpu-compute-atomics-cuda-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/compute-atomics-usl/main.c
+  )
+  target_compile_definitions(gpu-compute-atomics-cuda-usl PRIVATE
+    GPU_SAMPLE_BACKEND=GPU_BACKEND_CUDA
+    GPU_SAMPLE_SKIP_MISSING_ADAPTER=1
+  )
+  target_link_libraries(gpu-compute-atomics-cuda-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-compute-atomics-cuda-usl
+                            gpu-cuda-fixtures
+                            "${GPU_CUDA_ATOMIC32_US}")
+  set_target_properties(gpu-compute-atomics-cuda-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(GPU_BUILD_TESTS)
+    add_test(
+      NAME cuda-compute-atomics
+      COMMAND gpu-compute-atomics-cuda-usl "${GPU_CUDA_ATOMIC32_US}"
+    )
+    set_tests_properties(cuda-compute-atomics PROPERTIES
+      SKIP_RETURN_CODE 77
+      TIMEOUT 30
+    )
+  endif()
+
+  add_executable(gpu-subgroup-cuda-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/subgroup-cuda-usl/main.c
+    ${PROJECT_SOURCE_DIR}/tests/api/subgroup.c
+    ${PROJECT_SOURCE_DIR}/tests/api/runner.c
+  )
+  target_include_directories(gpu-subgroup-cuda-usl PRIVATE
+    ${PROJECT_SOURCE_DIR}/tests/api
+  )
+  target_link_libraries(gpu-subgroup-cuda-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-subgroup-cuda-usl
+                            gpu-cuda-fixtures
+                            "${GPU_CUDA_SUBGROUP_US}")
+  set_target_properties(gpu-subgroup-cuda-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  gpu_enable_c11_atomics(gpu-subgroup-cuda-usl)
+  if(GPU_BUILD_TESTS)
+    add_test(
+      NAME cuda-subgroup
+      COMMAND gpu-subgroup-cuda-usl "${GPU_CUDA_SUBGROUP_US}"
+    )
+    set_tests_properties(cuda-subgroup PROPERTIES
+      SKIP_RETURN_CODE 77
+      TIMEOUT 30
+    )
+  endif()
+
   add_executable(gpu-async-copy-cuda-usl
     ${PROJECT_SOURCE_DIR}/tests/validation/async-copy-usl/main.c
   )
@@ -1575,6 +1661,38 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
               "${GPU_CUDA_ATOMIC64_USL_FIXTURE}"
     )
     set_tests_properties(cuda-atomic64 PROPERTIES
+      SKIP_RETURN_CODE 77
+      TIMEOUT 30
+    )
+  endif()
+
+  add_executable(gpu-clock-cuda-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/clock-cuda-usl/main.c
+    ${PROJECT_SOURCE_DIR}/tests/api/clock_derivative.c
+    ${PROJECT_SOURCE_DIR}/tests/api/runner.c
+  )
+  target_include_directories(gpu-clock-cuda-usl PRIVATE
+    ${PROJECT_SOURCE_DIR}/tests/api
+  )
+  target_link_libraries(gpu-clock-cuda-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-clock-cuda-usl
+                            gpu-cuda-fixtures
+                            "${GPU_CUDA_SUBGROUP_CLOCK_US}"
+                            "${GPU_CUDA_DEVICE_CLOCK_US}")
+  set_target_properties(gpu-clock-cuda-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  gpu_enable_c11_atomics(gpu-clock-cuda-usl)
+  if(GPU_BUILD_TESTS)
+    add_test(
+      NAME cuda-clock
+      COMMAND gpu-clock-cuda-usl
+              "${GPU_CUDA_SUBGROUP_CLOCK_US}"
+              "${GPU_CUDA_DEVICE_CLOCK_US}"
+    )
+    set_tests_properties(cuda-clock PROPERTIES
       SKIP_RETURN_CODE 77
       TIMEOUT 30
     )

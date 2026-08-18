@@ -83,7 +83,7 @@ gpu_test_clockDerivativeCase(GPUAdapter                       *adapter,
     goto cleanup;
   }
 
-  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  queue = GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0u);
   if (!queue ||
       GPUCreateShaderLibraryFromUSL(device,
                                     bytecode,

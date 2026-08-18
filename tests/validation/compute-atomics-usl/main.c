@@ -8,6 +8,10 @@
 #error GPU_SAMPLE_BACKEND must select the sample backend
 #endif
 
+#ifndef GPU_SAMPLE_SKIP_MISSING_ADAPTER
+#define GPU_SAMPLE_SKIP_MISSING_ADAPTER 0
+#endif
+
 enum {
   GPU_ATOMIC_VALUE_COUNT       = 208,
   GPU_ATOMIC_STORAGE_OLD_BASE  = 16,
@@ -150,6 +154,7 @@ main(int argc, char **argv) {
   uint32_t                       adapterCount;
   uint32_t                       layoutEntryCount;
   int                            ok;
+  int                            skip;
 
   if (argc > 2) {
     fprintf(stderr, "usage: gpu-compute-atomics-usl [artifact.us]\n");
@@ -173,6 +178,7 @@ main(int argc, char **argv) {
   artifactPath   = argc == 2 ? argv[1] : "compute_atomics.us";
   backendName    = backend_name(GPU_SAMPLE_BACKEND);
   ok             = 0;
+  skip           = 0;
 
   artifact = read_file(artifactPath, &artifactSize);
   if (!artifact) {
@@ -186,6 +192,7 @@ main(int argc, char **argv) {
   instanceInfo.enableValidation = true;
   if (GPUCreateInstance(&instanceInfo, &instance) != GPU_OK || !instance) {
     fprintf(stderr, "%s instance creation failed\n", backendName);
+    skip = GPU_SAMPLE_SKIP_MISSING_ADAPTER;
     goto cleanup;
   }
 
@@ -194,6 +201,7 @@ main(int argc, char **argv) {
   if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
       !adapter) {
     fprintf(stderr, "%s adapter enumeration failed\n", backendName);
+    skip = GPU_SAMPLE_SKIP_MISSING_ADAPTER;
     goto cleanup;
   }
 
@@ -338,6 +346,9 @@ cleanup:
   GPUDestroyInstance(instance);
   free(artifact);
 
+  if (skip) {
+    return 77;
+  }
   if (!ok) {
     return 1;
   }
