@@ -80,6 +80,17 @@ main(void) {
   ok &= strcmp(atom.text, "sm_121") == 0;
   ok &= !gpu_uslCUDASMAtom(&atom, 91u);
   ok &= !gpu_uslCUDASMAtom(&atom, 0u);
+  ok &= gpu_uslCUDAPTXVersion(10999) == 0u;
+  ok &= gpu_uslCUDAPTXVersion(11000) == 700u;
+  ok &= gpu_uslCUDAPTXVersion(11080) == 708u;
+  ok &= gpu_uslCUDAPTXVersion(12060) == 805u;
+  ok &= gpu_uslCUDAPTXVersion(12090) == 808u;
+  ok &= gpu_uslCUDAPTXVersion(13000) == 900u;
+  ok &= gpu_uslCUDAPTXVersion(13030) == 903u;
+  ok &= gpu_uslCUDAPTXVersion(14000) == 903u;
+  ok &= gpu_uslCUDAPTXAtom(&atom, 903u);
+  ok &= strcmp(atom.text, "ptx_9_3") == 0;
+  ok &= !gpu_uslCUDAPTXAtom(&atom, 0u);
 
   return ok ? 0 : 1;
 }

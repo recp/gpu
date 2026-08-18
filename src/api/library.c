@@ -2813,6 +2813,11 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   }
   targetAtomCount = 0u;
   if (api->backend == GPU_BACKEND_CUDA) {
+    if (device->uslTargetVersion != 0u &&
+        !gpu_uslCUDAPTXAtom(&targetAtoms[targetAtomCount++],
+                            device->uslTargetVersion)) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
     if (!gpu_uslCUDASMAtom(&targetAtoms[targetAtomCount++],
                            device->uslTargetArchitecture)) {
       return GPU_ERROR_BACKEND_FAILURE;

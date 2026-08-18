@@ -258,6 +258,49 @@ gpu_uslCUDASMAtom(USLCapabilityAtomDesc *outAtom,
          us_cap_atom_text(outAtom, architectureText) == USLOk;
 }
 
+static inline uint32_t
+gpu_uslCUDAPTXVersion(int driverVersion) {
+  if (driverVersion >= 13030) return 903u;
+  if (driverVersion >= 13020) return 902u;
+  if (driverVersion >= 13010) return 901u;
+  if (driverVersion >= 13000) return 900u;
+  if (driverVersion >= 12090) return 808u;
+  if (driverVersion >= 12080) return 807u;
+  if (driverVersion >= 12070) return 806u;
+  if (driverVersion >= 12050) return 805u;
+  if (driverVersion >= 12040) return 804u;
+  if (driverVersion >= 12030) return 803u;
+  if (driverVersion >= 12020) return 802u;
+  if (driverVersion >= 12010) return 801u;
+  if (driverVersion >= 12000) return 800u;
+  if (driverVersion >= 11080) return 708u;
+  if (driverVersion >= 11070) return 707u;
+  if (driverVersion >= 11060) return 706u;
+  if (driverVersion >= 11050) return 705u;
+  if (driverVersion >= 11040) return 704u;
+  if (driverVersion >= 11030) return 703u;
+  if (driverVersion >= 11020) return 702u;
+  if (driverVersion >= 11010) return 701u;
+  return driverVersion >= 11000 ? 700u : 0u;
+}
+
+static inline int
+gpu_uslCUDAPTXAtom(USLCapabilityAtomDesc *outAtom, uint32_t version) {
+  char versionText[USL_CAPABILITY_ATOM_TEXT_MAX];
+  int  versionLength;
+
+  if (!outAtom || version < 100u) {
+    return 0;
+  }
+  versionLength = snprintf(versionText,
+                           sizeof(versionText),
+                           "ptx_%u_%u",
+                           version / 100u,
+                           version % 100u);
+  return versionLength > 0 && (size_t)versionLength < sizeof(versionText) &&
+         us_cap_atom_text(outAtom, versionText) == USLOk;
+}
+
 static inline int
 gpu_uslDefaultTarget(GPUBackend backend, USLTargetSpec *outTarget) {
   switch (backend) {

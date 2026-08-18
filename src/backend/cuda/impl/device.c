@@ -5,6 +5,7 @@
  */
 
 #include "../common.h"
+#include "../../../api/usl_target.h"
 
 void
 cuda_queueLock(GPUQueueCuda *queue) {
@@ -688,6 +689,14 @@ cuda_createDevice(GPUAdapter               * __restrict adapter,
   device->uslTargetArchitecture =
     (uint32_t)(adapterNative->computeMajor * 10 +
                adapterNative->computeMinor);
+  device->uslTargetVersion =
+    gpu_uslCUDAPTXVersion(adapterNative->driver->driverVersion);
+  if (device->uslTargetVersion == 0u) {
+    free(native->queues);
+    free(native);
+    free(device);
+    return NULL;
+  }
   device->uslBoundedDescriptorIndexing =
     (enabledFeatureMask &
      (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u;

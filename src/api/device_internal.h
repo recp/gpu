@@ -84,6 +84,7 @@ struct GPUDevice {
   GPUBufferUsageFlags          transientBufferUsage;
   uint32_t                     uslTargetProfile;
   uint32_t                     uslTargetArchitecture;
+  uint32_t                     uslTargetVersion;
   uint32_t                     transientFrameIndex;
   uint32_t                     deviceLostReported;
   bool                         transientConfigured;

@@ -410,6 +410,7 @@ typedef struct GPUCUDA {
                                     void **extra);
   CUresult (CUDA_CALL *getErrorName)(CUresult result, const char **name);
   CUresult (CUDA_CALL *getErrorString)(CUresult result, const char **message);
+  int driverVersion;
 } GPUCUDA;
 
 GPUCUDA *cuda_driver(void);

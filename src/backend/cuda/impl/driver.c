@@ -144,6 +144,7 @@ cuda__load(void) {
       driverVersion < CUDA_MIN_DRIVER_VERSION) {
     goto fail;
   }
+  cuda.driverVersion = driverVersion;
   return true;
 
 fail:
