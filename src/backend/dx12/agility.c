@@ -19,6 +19,12 @@
 
 #include <wchar.h>
 
+#if GPU_DX12_AGILITY_SDK_PREVIEW
+#  define GPU_DX12_AGILITY_SDK_NUMBER D3D12_PREVIEW_SDK_VERSION
+#else
+#  define GPU_DX12_AGILITY_SDK_NUMBER D3D12_SDK_VERSION
+#endif
+
 static const uint8_t dx12_agilityModuleAnchor;
 
 static char *
