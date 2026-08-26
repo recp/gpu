@@ -2973,11 +2973,11 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
       return GPU_ERROR_BACKEND_FAILURE;
     }
     target.profile = (USLTargetProfile)device->uslTargetProfile;
-    /* SM 6.8 is the highest native profile with a passing Windows runtime
+    /* SM 6.9 is the highest native profile with a passing Windows runtime
      * pipeline gate. Higher device/DXC ceilings remain on the HLSL path. */
     if (target.backend == USL_BACKEND_DXIL &&
-        target.profile > USL_TARGET_PROFILE_HLSL_SM_6_8) {
-      target.profile = USL_TARGET_PROFILE_HLSL_SM_6_8;
+        target.profile > USL_TARGET_PROFILE_HLSL_SM_6_9) {
+      target.profile = USL_TARGET_PROFILE_HLSL_SM_6_9;
     }
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
       if (us_cap_atom_init(
