@@ -2812,6 +2812,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
                                    GPUShaderLibrary **outLibrary) {
   GPUShaderLibraryCreateInfo info = {0};
   GPUApi                   *api;
+  USReflection              bootstrapReflection = {0};
   USCompileOutput           compileOutput = {0};
   USLCompileOptions         compileOptions;
   USLTargetSpec             target;
@@ -2819,13 +2820,15 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   USCompileInput            compileInput;
   USResult                  compileResult;
   const char               *payloadBackend;
+  const char               *bootstrapEntry = NULL;
   const char               *payloadEncoding;
   const char               *payloadSource;
   GPUResult                 rc;
   uint32_t                  targetAtomCount;
   uint32_t                  encoding;
 
-  if (!device || !bytecodeData || !outLibrary) {
+  if (!device || !bytecodeData || bytecodeSize == 0u ||
+      bytecodeSize > (uint64_t)SIZE_MAX || !outLibrary) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   *outLibrary = NULL;
@@ -3171,6 +3174,36 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   compileInput.artifact_size = (size_t)bytecodeSize;
   compileInput.target        = &target;
   compileInput.options       = &compileOptions;
+  if (target.backend == USL_BACKEND_DXIL) {
+    if (us_reflect(bytecodeData,
+                   (size_t)bytecodeSize,
+                   &bootstrapReflection) != USLOk) {
+      rc = GPU_ERROR_BACKEND_FAILURE;
+      goto cleanup;
+    }
+    for (uint32_t i = 0u;
+         i < bootstrapReflection.runtime.entry_point_count;
+         i++) {
+      const USLRuntimeEntryPoint *entry =
+        &bootstrapReflection.runtime.entry_points[i];
+
+      if (entry->stage == USL_RUNTIME_STAGE_VERTEX ||
+          entry->stage == USL_RUNTIME_STAGE_FRAGMENT ||
+          entry->stage == USL_RUNTIME_STAGE_COMPUTE ||
+          (entry->stage >= USL_RUNTIME_STAGE_RAY_GENERATION &&
+           entry->stage <= USL_RUNTIME_STAGE_CALLABLE) ||
+          entry->stage == USL_RUNTIME_STAGE_NODE) {
+        bootstrapEntry = entry->name;
+        break;
+      }
+    }
+    if (!bootstrapEntry) {
+      rc = GPU_ERROR_UNSUPPORTED;
+      goto cleanup;
+    }
+    compileInput.entry_point_names = &bootstrapEntry;
+    compileInput.entry_point_count = 1u;
+  }
   if (disableDiskCache) {
     compileInput.flags |= US_COMPILE_INPUT_FLAG_DISABLE_DISK_CACHE;
   }
@@ -3229,7 +3262,9 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
             compileOutput.backend_size,
             (unsigned long long)compileOutput.backend_hash);
   }
-  if (!compileOutput.reflection.target_info_valid) {
+  if ((target.backend == USL_BACKEND_DXIL
+         ? compileOutput.reflection.entry_target_count != 1u
+         : !compileOutput.reflection.target_info_valid)) {
     rc = GPU_ERROR_BACKEND_FAILURE;
     goto cleanup;
   }
@@ -3285,6 +3320,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   }
 
 cleanup:
+  us_free_reflection(&bootstrapReflection);
   us_free_compile_output(&compileOutput);
   return rc;
 }

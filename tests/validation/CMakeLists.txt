@@ -910,6 +910,16 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
       COMMAND gpu-compute-buffer-dx12-usl
               "${GPU_DX12_COMPUTE_BUFFER_US}"
     )
+    add_test(
+      NAME dx12-native-dxil-compute-buffer
+      COMMAND gpu-compute-buffer-dx12-usl
+              "${GPU_DX12_COMPUTE_BUFFER_US}"
+    )
+    set_tests_properties(dx12-native-dxil-compute-buffer PROPERTIES
+      ENVIRONMENT
+        "GPU_DX12_NATIVE_DXIL=1;GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1"
+      PASS_REGULAR_EXPRESSION "GPU: USL generated DXIL binary payload"
+    )
     add_test(NAME dx12-triangle
              COMMAND gpu-triangle-dx12-usl)
     add_test(NAME dx12-textured-quad
