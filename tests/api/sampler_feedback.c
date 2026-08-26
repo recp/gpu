@@ -652,6 +652,8 @@ gpu_test_sampler_feedback(GPUAdapter *adapter,
   GPUDevice                      *device;
   GPUFeature                      feature;
   GPUResult                       result;
+  uint64_t                        timing;
+  bool                            timings;
   int                             supported;
   int                             ok;
 
@@ -660,6 +662,7 @@ gpu_test_sampler_feedback(GPUAdapter *adapter,
   }
 
   feature   = GPU_FEATURE_SAMPLER_FEEDBACK;
+  timings   = getenv("GPU_API_TIMINGS") != NULL;
   supported = GPUIsFeatureSupported(adapter, feature);
   result    = GPUGetSamplerFeedbackPropertiesEXT(adapter, &properties);
   if (!supported) {
@@ -700,11 +703,16 @@ gpu_test_sampler_feedback(GPUAdapter *adapter,
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
   device = NULL;
+  timing = timings ? gpu_test_now_ns() : 0u;
   if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
       !GPUIsFeatureEnabled(device, feature)) {
     fprintf(stderr, "sampler feedback feature enablement failed\n");
     GPUDestroyDevice(device);
     return 0;
+  }
+  if (timings) {
+    printf("api:timing:sampler-feedback-device=%.3fms\n",
+           (double)(gpu_test_now_ns() - timing) / 1000000.0);
   }
   for (uint32_t i = 0u; i < GPU_ARRAY_LEN(entries); i++) {
     if (!GPUGetProcAddr(device, entries[i])) {
@@ -714,14 +722,29 @@ gpu_test_sampler_feedback(GPUAdapter *adapter,
     }
   }
 
+  timing = timings ? gpu_test_now_ns() : 0u;
   ok = gpu_test_sampler_feedback_mode(device,
-                                      GPU_SAMPLER_FEEDBACK_MIN_MIP_EXT) &&
-       gpu_test_sampler_feedback_mode(
-         device,
-         GPU_SAMPLER_FEEDBACK_MIP_REGION_USED_EXT
-       ) &&
-       bytecodePath &&
+                                      GPU_SAMPLER_FEEDBACK_MIN_MIP_EXT);
+  if (timings) {
+    printf("api:timing:sampler-feedback-min-mip=%.3fms\n",
+           (double)(gpu_test_now_ns() - timing) / 1000000.0);
+  }
+  timing = timings ? gpu_test_now_ns() : 0u;
+  ok = ok && gpu_test_sampler_feedback_mode(
+               device,
+               GPU_SAMPLER_FEEDBACK_MIP_REGION_USED_EXT
+             );
+  if (timings) {
+    printf("api:timing:sampler-feedback-region=%.3fms\n",
+           (double)(gpu_test_now_ns() - timing) / 1000000.0);
+  }
+  timing = timings ? gpu_test_now_ns() : 0u;
+  ok = ok && bytecodePath &&
        gpu_test_sampler_feedback_write(device, bytecodePath);
+  if (timings) {
+    printf("api:timing:sampler-feedback-write=%.3fms\n",
+           (double)(gpu_test_now_ns() - timing) / 1000000.0);
+  }
   GPUDestroyDevice(device);
   return ok;
 }

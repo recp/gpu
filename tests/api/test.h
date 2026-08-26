@@ -66,6 +66,7 @@ typedef struct GPUApiTest {
 } GPUApiTest;
 
 int gpu_run_api_tests(const GPUApiTest *tests, uint32_t count);
+uint64_t gpu_test_now_ns(void);
 void *gpu_test_read_file(const char *path, uint64_t *outSize);
 GPUResult gpu_test_request_adapter(GPUInstance *instance,
                                    GPUAdapter **outAdapter);

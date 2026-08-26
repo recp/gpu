@@ -18,6 +18,26 @@ enum {
   GPU_API_WAIT_STEP_COUNT = 1000
 };
 
+uint64_t
+gpu_test_now_ns(void) {
+#if defined(_WIN32)
+  LARGE_INTEGER counter, frequency;
+
+  if (!QueryPerformanceCounter(&counter) ||
+      !QueryPerformanceFrequency(&frequency) || frequency.QuadPart <= 0) {
+    return 0u;
+  }
+  return (uint64_t)((double)counter.QuadPart * 1000000000.0 /
+                    (double)frequency.QuadPart);
+#else
+  struct timespec now;
+
+  if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0u;
+  return (uint64_t)now.tv_sec * UINT64_C(1000000000) +
+         (uint64_t)now.tv_nsec;
+#endif
+}
+
 typedef struct GPUApiAdapterRequest {
   GPUAdapter  *adapter;
   GPUResult    result;
@@ -336,6 +356,7 @@ test_selected(const char *filter, const char *name) {
 int
 gpu_run_api_tests(const GPUApiTest *tests, uint32_t count) {
   const char *filter = getenv("GPU_API_TEST");
+  bool        timings = getenv("GPU_API_TIMINGS") != NULL;
   uint32_t    runCount = 0u;
 
   if (!tests && count > 0u) {
@@ -344,6 +365,8 @@ gpu_run_api_tests(const GPUApiTest *tests, uint32_t count) {
   }
 
   for (uint32_t i = 0; i < count; i++) {
+    uint64_t begin;
+
     if (!tests[i].name || !tests[i].run) {
       fprintf(stderr, "api test runner has invalid test at index %u\n", i);
       return 0;
@@ -355,9 +378,16 @@ gpu_run_api_tests(const GPUApiTest *tests, uint32_t count) {
     printf("api:%s\n", tests[i].name);
     fflush(stdout);
     runCount++;
+    begin = timings ? gpu_test_now_ns() : 0u;
     if (!tests[i].run(tests[i].ctx)) {
       fprintf(stderr, "api test failed: %s\n", tests[i].name);
       return 0;
+    }
+    if (timings) {
+      uint64_t elapsed = gpu_test_now_ns() - begin;
+      printf("api:timing:%s=%.3fms\n",
+             tests[i].name,
+             (double)elapsed / 1000000.0);
     }
   }
 

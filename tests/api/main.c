@@ -341,7 +341,13 @@ main(int argc, char **argv) {
   GPUDevice            *device;
   GPUApiTestContext      ctx;
   GPUApiTest             tests[39];
+  uint64_t               timingStart, timingMark;
+  bool                   timings;
   int                    ok;
+
+  timings     = getenv("GPU_API_TIMINGS") != NULL;
+  timingStart = timings ? gpu_test_now_ns() : 0u;
+  timingMark  = timingStart;
 
   if (argc != 14 && argc != 15) {
     fprintf(stderr,
@@ -358,7 +364,7 @@ main(int argc, char **argv) {
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = GPU_BACKEND_DEFAULT;
-  instanceInfo.enableValidation = true;
+  instanceInfo.enableValidation = getenv("GPU_API_DISABLE_VALIDATION") == NULL;
   if (argc == 15 &&
       !parse_backend(argv[14], &instanceInfo.preferredBackend)) {
     fprintf(stderr, "unknown backend: %s\n", argv[14]);
@@ -369,11 +375,23 @@ main(int argc, char **argv) {
     fprintf(stderr, "failed to create instance\n");
     return 1;
   }
+  if (timings) {
+    uint64_t now = gpu_test_now_ns();
+    printf("api:timing:instance=%.3fms\n",
+           (double)(now - timingMark) / 1000000.0);
+    timingMark = now;
+  }
 
   if (gpu_test_request_adapter(instance, &adapter) != GPU_OK || !adapter) {
     fprintf(stderr, "failed to get adapter\n");
     GPUDestroyInstance(instance);
     return 1;
+  }
+  if (timings) {
+    uint64_t now = gpu_test_now_ns();
+    printf("api:timing:adapter=%.3fms\n",
+           (double)(now - timingMark) / 1000000.0);
+    timingMark = now;
   }
   if (getenv("GPU_TEST_ADAPTER") || getenv("GPU_API_VERBOSE")) {
     GPUAdapterProperties properties;
@@ -390,6 +408,12 @@ main(int argc, char **argv) {
     GPUDestroyInstance(instance);
     return 1;
   }
+  if (timings) {
+    uint64_t now = gpu_test_now_ns();
+    printf("api:timing:device=%.3fms\n",
+           (double)(now - timingMark) / 1000000.0);
+    timingMark = now;
+  }
 
   runtimeConfig.chain.sType          = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtimeConfig.chain.structSize     = sizeof(runtimeConfig);
@@ -400,6 +424,12 @@ main(int argc, char **argv) {
     GPUDestroyDevice(device);
     GPUDestroyInstance(instance);
     return 1;
+  }
+  if (timings) {
+    uint64_t now = gpu_test_now_ns();
+    printf("api:timing:runtime=%.3fms\n",
+           (double)(now - timingMark) / 1000000.0);
+    timingMark = now;
   }
 
   ctx.instance                    = instance;
@@ -502,6 +532,14 @@ main(int argc, char **argv) {
   };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
+
+  if (timings) {
+    uint64_t now = gpu_test_now_ns();
+    printf("api:timing:tests=%.3fms\n",
+           (double)(now - timingMark) / 1000000.0);
+    printf("api:timing:total=%.3fms\n",
+           (double)(now - timingStart) / 1000000.0);
+  }
 
   GPUDestroyDevice(device);
   GPUDestroyInstance(instance);
