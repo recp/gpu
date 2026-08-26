@@ -1,5 +1,7 @@
 #include <gpu/gpu.h>
 
+#include "../usl_test.h"
+
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -196,10 +198,10 @@ main(int argc, char **argv) {
     goto cleanup;
   }
 
-  if (GPUCreateShaderLibraryFromUSL(device,
-                                    artifact,
-                                    artifactSize,
-                                    &library) != GPU_OK ||
+  if (gpu_test_create_shader_library_from_usl(device,
+                                               artifact,
+                                               artifactSize,
+                                               &library) != GPU_OK ||
       !library ||
       GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
       !shaderLayout || shaderLayout->bindGroupLayoutCount != 2u ||

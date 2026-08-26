@@ -1,5 +1,7 @@
 #include <gpu/gpu.h>
 
+#include "../usl_test.h"
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -140,7 +142,6 @@ main(int argc, char **argv) {
   const char            *backendName;
   GPUInstanceCreateInfo        instanceInfo = {0};
   GPUDeviceCreateInfo          deviceInfo = {0};
-  GPUShaderLibraryCreateInfo   libraryInfo = {0};
   GPUComputePipelineCreateInfo pipelineInfo = {0};
   GPUBufferCreateInfo          bufferInfo = {0};
   GPUBindGroupEntry            groupEntry = {0};
@@ -221,14 +222,10 @@ main(int argc, char **argv) {
     goto cleanup;
   }
 
-  libraryInfo.chain.sType       = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
-  libraryInfo.chain.structSize  = sizeof(libraryInfo);
-  libraryInfo.sourceData        = artifact;
-  libraryInfo.sourceSize        = artifactSize;
-  libraryInfo.sourceKind        = GPU_SHADER_SOURCE_USL_BYTECODE;
-  libraryInfo.disableDiskCache  =
-    getenv("GPU_USL_TEST_DISABLE_DISK_CACHE") != NULL;
-  if (GPUCreateShaderLibrary(device, &libraryInfo, &library) != GPU_OK ||
+  if (gpu_test_create_shader_library_from_usl(device,
+                                               artifact,
+                                               artifactSize,
+                                               &library) != GPU_OK ||
       !library ||
       GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
       !shaderLayout || !shaderLayout->pipelineLayout ||
