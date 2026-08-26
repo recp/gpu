@@ -16,16 +16,16 @@
 
 #include "../common.h"
 
-GPU_HIDE
-GPUShaderLibrary*
-dx12_newLibraryWithSource(GPUDevice *device,
-                          const char *source,
-                          uint64_t    sourceSize) {
+static GPUShaderLibrary*
+dx12__newLibrary(GPUDevice *device,
+                 const void *source,
+                 uint64_t sourceSize,
+                 bool binary) {
   GPUShaderLibraryDX12 *native;
   GPUShaderLibrary     *library;
 
   if (!device || !source || sourceSize == 0u ||
-      sourceSize > (uint64_t)SIZE_MAX - 1u) {
+      sourceSize > (uint64_t)SIZE_MAX - (binary ? 0u : 1u)) {
     return NULL;
   }
 
@@ -37,7 +37,7 @@ dx12_newLibraryWithSource(GPUDevice *device,
     return NULL;
   }
 
-  native->source = malloc((size_t)sourceSize + 1u);
+  native->source = malloc((size_t)sourceSize + (binary ? 0u : 1u));
   if (!native->source) {
     free(native);
     free(library);
@@ -45,11 +45,30 @@ dx12_newLibraryWithSource(GPUDevice *device,
   }
 
   memcpy(native->source, source, (size_t)sourceSize);
-  native->source[sourceSize] = '\0';
+  if (!binary) {
+    native->source[sourceSize] = '\0';
+  }
   native->sourceSize         = sourceSize;
+  native->binary             = binary;
   InitializeSRWLock(&native->cacheLock);
   library->_priv             = native;
   return library;
+}
+
+GPU_HIDE
+GPUShaderLibrary*
+dx12_newLibraryWithSource(GPUDevice *device,
+                          const char *source,
+                          uint64_t sourceSize) {
+  return dx12__newLibrary(device, source, sourceSize, false);
+}
+
+GPU_HIDE
+GPUShaderLibrary*
+dx12_newLibraryWithBinary(GPUDevice *device,
+                          const void *source,
+                          uint64_t sourceSize) {
+  return dx12__newLibrary(device, source, sourceSize, true);
 }
 
 GPU_HIDE
@@ -81,5 +100,6 @@ GPU_HIDE
 void
 dx12_initLibrary(GPUApiLibrary *api) {
   api->newLibraryWithSource = dx12_newLibraryWithSource;
+  api->newLibraryWithBinary = dx12_newLibraryWithBinary;
   api->destroyLibrary       = dx12_destroyLibrary;
 }

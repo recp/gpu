@@ -166,10 +166,21 @@ gpu_uslVulkanProfile(uint32_t major, uint32_t minor) {
 }
 
 static inline int
+gpu_uslDX12NativeEnabled(void) {
+  const char *value = getenv("GPU_DX12_NATIVE_DXIL");
+
+  return value && value[0] && strcmp(value, "0") != 0;
+}
+
+static inline int
 gpu_uslDefaultDX12Target(USLTargetSpec *outTarget) {
+  /* Keep HLSL + DXC as production default until native library parity closes.
+   * The opt-in path exists for focused native-DXIL correctness gates. */
   return outTarget &&
          us_target_init(outTarget,
-                        USL_BACKEND_HLSL,
+                        gpu_uslDX12NativeEnabled()
+                          ? USL_BACKEND_DXIL
+                          : USL_BACKEND_HLSL,
                         USL_TARGET_PROFILE_HLSL_SM_6_0) == USLOk;
 }
 

@@ -161,6 +161,7 @@ gpu_compileShaderLibraryEntries(const GPUShaderLibrary *library,
   USCompileOutput           output = {0};
   USCompileInput            input = {0};
   USResult                  result;
+  uint32_t                  encoding;
 
   if (!library || !entryPoints || entryPointCount == 0u || !outSource) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -182,10 +183,14 @@ gpu_compileShaderLibraryEntries(const GPUShaderLibrary *library,
     input.flags |= US_COMPILE_INPUT_FLAG_DISABLE_DISK_CACHE;
   }
 
+  encoding = source->target.backend == USL_BACKEND_SPIRV ||
+             source->target.backend == USL_BACKEND_DXIL
+               ? USL_RUNTIME_EMBEDDED_BLOB_ENCODING_BINARY
+               : USL_RUNTIME_EMBEDDED_BLOB_ENCODING_TEXT;
   result = us_compile(&input, &output);
   if (result != USLOk ||
       output.backend != source->target.backend ||
-      output.encoding != USL_RUNTIME_EMBEDDED_BLOB_ENCODING_TEXT ||
+      output.encoding != encoding ||
       !output.backend_data || output.backend_size == 0u) {
     us_free_compile_output(&output);
     return GPU_ERROR_BACKEND_FAILURE;
@@ -2715,27 +2720,46 @@ gpu_createShaderLibraryFromWGSLText(GPUDevice *device,
 }
 
 static GPUResult
-gpu_createShaderLibraryFromBinary(GPUDevice *device,
-                                  const GPUShaderLibraryCreateInfo *info,
-                                  GPUShaderLibrary **outLibrary) {
+gpu_createShaderLibraryFromBackendBinary(GPUDevice        *device,
+                                         const void       *sourceData,
+                                         uint64_t          sourceSize,
+                                         uint32_t          defineCount,
+                                         GPUShaderLibrary **outLibrary) {
   GPUApi *api;
 
   if (!(api = gpuDeviceApi(device))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  if (!api->library.newLibraryWithBinary || info->defineCount > 0u ||
-      info->sourceSize > (uint64_t)SIZE_MAX) {
+  if (!api->library.newLibraryWithBinary || defineCount > 0u ||
+      !sourceData || sourceSize == 0u || sourceSize > (uint64_t)SIZE_MAX) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   *outLibrary = api->library.newLibraryWithBinary(device,
-                                                   info->sourceData,
-                                                   info->sourceSize);
+                                                   sourceData,
+                                                   sourceSize);
   if (*outLibrary) {
     (*outLibrary)->_api    = api;
     (*outLibrary)->_device = device;
   }
   return *outLibrary ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+}
+
+static GPUResult
+gpu_createShaderLibraryFromBinary(GPUDevice *device,
+                                  const GPUShaderLibraryCreateInfo *info,
+                                  GPUShaderLibrary **outLibrary) {
+  GPUApi *api;
+
+  api = gpuDeviceApi(device);
+  if (!api || api->backend != GPU_BACKEND_VULKAN) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  return gpu_createShaderLibraryFromBackendBinary(device,
+                                                   info->sourceData,
+                                                   info->sourceSize,
+                                                   info->defineCount,
+                                                   outLibrary);
 }
 
 GPU_EXPORT
@@ -2794,6 +2818,8 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   USLCapabilityAtomDesc     targetAtoms[USL_RUNTIME_TARGET_MAX_ATOMS];
   USCompileInput            compileInput;
   USResult                  compileResult;
+  const char               *payloadBackend;
+  const char               *payloadEncoding;
   const char               *payloadSource;
   GPUResult                 rc;
   uint32_t                  targetAtomCount;
@@ -2944,6 +2970,12 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
       return GPU_ERROR_BACKEND_FAILURE;
     }
     target.profile = (USLTargetProfile)device->uslTargetProfile;
+    /* SM 6.8 is the highest native profile with a passing Windows runtime
+     * pipeline gate. Higher device/DXC ceilings remain on the HLSL path. */
+    if (target.backend == USL_BACKEND_DXIL &&
+        target.profile > USL_TARGET_PROFILE_HLSL_SM_6_8) {
+      target.profile = USL_TARGET_PROFILE_HLSL_SM_6_8;
+    }
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
       if (us_cap_atom_init(
             &targetAtoms[targetAtomCount++],
@@ -3128,7 +3160,8 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   if (us_compile_options_from_env(&compileOptions) != USLOk) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  encoding   = target.backend == USL_BACKEND_SPIRV
+  encoding   = target.backend == USL_BACKEND_SPIRV ||
+               target.backend == USL_BACKEND_DXIL
                  ? USL_RUNTIME_EMBEDDED_BLOB_ENCODING_BINARY
                  : USL_RUNTIME_EMBEDDED_BLOB_ENCODING_TEXT;
 
@@ -3173,9 +3206,26 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
         : (compileOutput.flags & US_COMPILE_OUTPUT_FLAG_DISK_CACHE) != 0u
             ? "disk-cache"
             : "generated";
+    switch ((uint32_t)target.backend) {
+      case USL_BACKEND_METAL:  payloadBackend = "Metal";  break;
+      case USL_BACKEND_SPIRV:  payloadBackend = "SPIR-V"; break;
+      case USL_BACKEND_HLSL:   payloadBackend = "HLSL";   break;
+      case USL_BACKEND_WGSL:   payloadBackend = "WGSL";   break;
+      case USL_BACKEND_PTX:    payloadBackend = "PTX";    break;
+      case USL_BACKEND_DXIL:   payloadBackend = "DXIL";   break;
+      default:                 payloadBackend = "unknown"; break;
+    }
+    payloadEncoding = compileOutput.encoding ==
+                        USL_RUNTIME_EMBEDDED_BLOB_ENCODING_BINARY
+                          ? "binary"
+                          : "text";
     fprintf(stderr,
-            "GPU: USL %s payload (%zu bytes, %016llx)\n",
+            "GPU: USL %s %s %s payload "
+            "(profile=%06x, %zu bytes, %016llx)\n",
             payloadSource,
+            payloadBackend,
+            payloadEncoding,
+            (unsigned)target.profile,
             compileOutput.backend_size,
             (unsigned long long)compileOutput.backend_hash);
   }
@@ -3196,6 +3246,12 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
     info.sourceData       = compileOutput.backend_data;
     info.sourceSize       = compileOutput.backend_size;
     rc = gpu_createShaderLibraryFromBinary(device, &info, outLibrary);
+  } else if (target.backend == USL_BACKEND_DXIL) {
+    rc = gpu_createShaderLibraryFromBackendBinary(device,
+                                                   compileOutput.backend_data,
+                                                   compileOutput.backend_size,
+                                                   0u,
+                                                   outLibrary);
   } else if (target.backend == USL_BACKEND_METAL ||
              target.backend == USL_BACKEND_HLSL ||
              target.backend == USL_BACKEND_WGSL ||
@@ -3214,7 +3270,8 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
       GPUDestroyShaderLibrary(*outLibrary);
       *outLibrary = NULL;
       rc = GPU_ERROR_BACKEND_FAILURE;
-    } else if (target.backend == USL_BACKEND_HLSL &&
+    } else if ((target.backend == USL_BACKEND_HLSL ||
+                target.backend == USL_BACKEND_DXIL) &&
                !gpu_setShaderUSLSource(*outLibrary,
                                        bytecodeData,
                                        bytecodeSize,

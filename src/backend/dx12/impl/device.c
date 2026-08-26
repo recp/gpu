@@ -1541,7 +1541,8 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
     targetProfile = deviceDX12->uslTargetProfile;
     dxcProfile    = deviceDX12->dxcTargetProfile;
     fprintf(stderr,
-            "GPU: Direct3D 12 \"%s\", SM %u.%u, DXC %u.%u, USL HLSL %u.%u\n",
+            "GPU: Direct3D 12 \"%s\", SM %u.%u, DXC %u.%u, "
+            "USL/DXC ceiling %u.%u\n",
             adapterDX12->name,
             shaderModel >> 4u,
             shaderModel & 0x0fu,

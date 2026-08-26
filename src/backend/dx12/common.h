@@ -253,6 +253,7 @@ typedef struct GPUShaderLibraryDX12 {
   char                 *source;
   SRWLOCK               cacheLock;
   uint64_t              sourceSize;
+  bool                  binary;
 } GPUShaderLibraryDX12;
 
 typedef struct DX12ShaderCode {
