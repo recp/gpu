@@ -43,6 +43,7 @@ mt_newSparseTexture(GPUDevice                  *device,
                     id<MTLTexture>             *outTexture,
                     MTLPixelFormat             *outStencilCopyFormat) {
   GPUDeviceMT          *deviceMT;
+  GPUAdapterMT         *adapterMT;
   GPUHeapMT            *heapMT;
   MTLTextureDescriptor *textureDesc;
   MTLHeapDescriptor    *heapDesc;
@@ -57,6 +58,11 @@ mt_newSparseTexture(GPUDevice                  *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   *outTexture = nil;
+  adapterMT   = device->adapter ? device->adapter->_priv : NULL;
+  if (deviceMT->commandMode != MTCommandMode4 &&
+      (!adapterMT || !adapterMT->sparseTextures)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
   heapMT       = heap ? heap->_priv : NULL;
   pageSizeBytes = heap ? heap->pageSizeBytes : 64u * 1024u;
   if (!mt_sparsePageSize(pageSizeBytes, &pageSize)) {
@@ -286,6 +292,7 @@ mt_createHeap(GPUDevice               *device,
               const GPUHeapCreateInfo *info,
               GPUHeap                **outHeap) {
   GPUDeviceMT       *deviceMT;
+  GPUAdapterMT      *adapterMT;
   MTLHeapDescriptor *desc;
   id<MTLHeap>        nativeHeap;
   GPUHeap           *heap;
@@ -297,12 +304,18 @@ mt_createHeap(GPUDevice               *device,
       info->sizeBytes > NSUIntegerMax) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+  adapterMT     = device->adapter ? device->adapter->_priv : NULL;
   compatibility = UINT64_C(1);
   if ((info->compatibilityMask & compatibility) == 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   if (info->usage == GPU_HEAP_USAGE_SPARSE &&
       !mt_sparsePageSize(info->pageSizeBytes, &sparsePageSize)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  if (info->usage == GPU_HEAP_USAGE_SPARSE &&
+      deviceMT->commandMode != MTCommandMode4 &&
+      (!adapterMT || !adapterMT->sparseTextures)) {
     return GPU_ERROR_UNSUPPORTED;
   }
   if (@available(macOS 10.15, iOS 13.0, *)) {

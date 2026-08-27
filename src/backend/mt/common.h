@@ -89,6 +89,7 @@ typedef struct GPUAdapterMT {
   bool                    depth24Supported;
   bool                    appleFamily1;
   bool                    appleFamily2;
+  bool                    sparseTextures;
   bool                    bcSupported;
   bool                    subgroupProbed;
   bool                    subgroupMatrixProbed;

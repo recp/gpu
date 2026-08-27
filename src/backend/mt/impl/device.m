@@ -70,6 +70,14 @@ mt_initFormatSupport(GPUAdapterMT *adapterMT) {
     adapterMT->appleFamily1 = [device supportsFamily:MTLGPUFamilyApple1];
     adapterMT->appleFamily2 = [device supportsFamily:MTLGPUFamilyApple2];
   }
+#if TARGET_OS_OSX
+  if (@available(macOS 11.0, *)) {
+    adapterMT->sparseTextures =
+      [device supportsFamily:MTLGPUFamilyApple6] ||
+      ([device supportsFamily:MTLGPUFamilyMac2] &&
+       !device.hasUnifiedMemory);
+  }
+#endif
 }
 
 GPU_HIDE
@@ -544,10 +552,8 @@ mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       return false;
     case GPU_FEATURE_SPARSE_TEXTURES:
 #if TARGET_OS_OSX
-      device = adapterMT->device;
-      if (@available(macOS 11.0, *)) {
-        return [device supportsFamily:MTLGPUFamilyApple6] ||
-               [device supportsFamily:MTLGPUFamilyMac2];
+      if (adapterMT->sparseTextures) {
+        return true;
       }
 #endif
 #if MT_HAS_METAL4
