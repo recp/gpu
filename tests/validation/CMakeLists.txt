@@ -860,6 +860,19 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
     C_EXTENSIONS NO
   )
 
+  add_executable(gpu-matrix-elementwise-dx12-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/matrix-elementwise-dx12-usl/main.c
+  )
+  target_link_libraries(gpu-matrix-elementwise-dx12-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-matrix-elementwise-dx12-usl
+                        gpu-dx12-fixtures
+                        "${GPU_DX12_MATRIX_ELEMENTWISE_US}")
+  set_target_properties(gpu-matrix-elementwise-dx12-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+
   add_executable(gpu-compute-atomics-dx12-usl
     ${PROJECT_SOURCE_DIR}/tests/validation/compute-atomics-usl/main.c
   )
@@ -916,6 +929,16 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
               "${GPU_DX12_COMPUTE_BUFFER_US}"
     )
     set_tests_properties(dx12-native-dxil-compute-buffer PROPERTIES
+      ENVIRONMENT
+        "GPU_DX12_NATIVE_DXIL=1;GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1"
+      PASS_REGULAR_EXPRESSION "GPU: USL generated DXIL binary payload"
+    )
+    add_test(
+      NAME dx12-native-dxil-matrix-elementwise
+      COMMAND gpu-matrix-elementwise-dx12-usl
+              "${GPU_DX12_MATRIX_ELEMENTWISE_US}"
+    )
+    set_tests_properties(dx12-native-dxil-matrix-elementwise PROPERTIES
       ENVIRONMENT
         "GPU_DX12_NATIVE_DXIL=1;GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1"
       PASS_REGULAR_EXPRESSION "GPU: USL generated DXIL binary payload"

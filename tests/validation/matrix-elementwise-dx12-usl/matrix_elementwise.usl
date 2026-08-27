@@ -1,0 +1,13 @@
+kern(1, 1, 1) dxil_matrix_elementwise(
+    left:         [float3x3] #buffer(0) #group(0),
+    right:        [float3x3] #buffer(1) #group(0),
+    inout addOut: [float3x3] #buffer(2) #group(0),
+    inout subOut: [float3x3] #buffer(3) #group(0),
+    gid:          uint3 #global_id
+) {
+  let index = gid.x
+  let a = left[index]
+  let b = right[index]
+  addOut[index] = a + b
+  subOut[index] = a - b
+}
