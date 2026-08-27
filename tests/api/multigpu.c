@@ -231,7 +231,7 @@ gpu_test_multigpu(GPUAdapter *adapter, GPUDevice *firstDevice) {
   uint32_t              source[4] = { 3u, 5u, 8u, 13u };
   uint32_t              result[4] = {0};
   GPUResult             interopResult;
-  int                   ok;
+  int                   ok, requireInterop;
 
   if (!adapter || !firstDevice ||
       GPUGetAdapterProperties(adapter, &properties) != GPU_OK) {
@@ -239,6 +239,7 @@ gpu_test_multigpu(GPUAdapter *adapter, GPUDevice *firstDevice) {
   }
 
   interop = NULL;
+  requireInterop = getenv("GPU_REQUIRE_DEVICE_INTEROP") != NULL;
   if (GPUCreateDeviceInteropEXT(firstDevice, firstDevice, &interop) !=
         GPU_ERROR_INVALID_ARGUMENT || interop) {
     return 0;
@@ -253,7 +254,15 @@ gpu_test_multigpu(GPUAdapter *adapter, GPUDevice *firstDevice) {
                                              &interop);
   if (interopResult != GPU_OK || !interop) {
     GPUDestroyDevice(secondDevice);
-    return properties.backend != GPU_BACKEND_METAL &&
+    if (interopResult == GPU_ERROR_UNSUPPORTED && !interop) {
+      if (requireInterop) {
+        fprintf(stderr, "device interop required but unsupported\n");
+      } else {
+        puts("device interop execution skipped: unsupported adapter");
+      }
+    }
+    return !requireInterop &&
+           properties.backend != GPU_BACKEND_METAL &&
            properties.backend != GPU_BACKEND_DX12 &&
            interopResult == GPU_ERROR_UNSUPPORTED && !interop;
   }
@@ -344,5 +353,8 @@ gpu_test_multigpu(GPUAdapter *adapter, GPUDevice *firstDevice) {
   GPUDestroyBuffer(firstBuffer);
   GPUDestroyDeviceInteropEXT(interop);
   GPUDestroyDevice(secondDevice);
+  if (ok && getenv("GPU_API_VERBOSE")) {
+    puts("device interop execution passed");
+  }
   return ok;
 }
