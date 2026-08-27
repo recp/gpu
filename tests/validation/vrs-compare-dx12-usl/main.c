@@ -157,7 +157,6 @@ vrs_compare_createGPU(VRSCompareApp *app) {
   GPUResult             result;
   void                 *artifact;
   uint64_t              artifactSize;
-  uint32_t              adapterCount;
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
@@ -171,12 +170,15 @@ vrs_compare_createGPU(VRSCompareApp *app) {
     return VRS_COMPARE_SETUP_FAILED;
   }
 
-  adapterCount = 1u;
-  result = GPUEnumerateAdapters(app->instance,
-                                &adapterCount,
-                                &app->adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !app->adapter) {
+  feature = GPU_FEATURE_VARIABLE_RATE_SHADING;
+  result = GPUSampleRequestFeatureAdapter(app->instance,
+                                          feature,
+                                          &app->adapter);
+  if (result == GPU_ERROR_UNSUPPORTED) {
+    vrs_compare_log("VRS unavailable");
+    return VRS_COMPARE_SETUP_SKIPPED;
+  }
+  if (result != GPU_OK || !app->adapter) {
     return VRS_COMPARE_SETUP_FAILED;
   }
 
@@ -197,7 +199,6 @@ vrs_compare_createGPU(VRSCompareApp *app) {
   }
 #endif
 
-  feature                          = GPU_FEATURE_VARIABLE_RATE_SHADING;
   deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.required.pFeatures    = &feature;

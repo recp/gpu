@@ -136,7 +136,6 @@ mesh_triangle_createGPU(MeshTriangleApp *app) {
   GPUResult             result;
   void                 *artifact;
   uint64_t              artifactSize;
-  uint32_t              adapterCount;
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
@@ -148,20 +147,17 @@ mesh_triangle_createGPU(MeshTriangleApp *app) {
     return false;
   }
 
-  adapterCount = 1u;
-  result = GPUEnumerateAdapters(app->instance,
-                                &adapterCount,
-                                &app->adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !app->adapter) {
-    return false;
-  }
-
-  if (!GPUIsFeatureSupported(app->adapter, GPU_FEATURE_MESH_SHADER)) {
+  feature = GPU_FEATURE_MESH_SHADER;
+  result = GPUSampleRequestFeatureAdapter(app->instance,
+                                          feature,
+                                          &app->adapter);
+  if (result == GPU_ERROR_UNSUPPORTED) {
     app->unsupported = true;
     return false;
   }
-  feature                           = GPU_FEATURE_MESH_SHADER;
+  if (result != GPU_OK || !app->adapter) {
+    return false;
+  }
   deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.label                 = "mesh-triangle-dx12-device";
