@@ -11,7 +11,12 @@ read_file(const char *path, uint64_t *outSize) {
   void *data;
   long  size;
 
+#if defined(_MSC_VER)
+  file = NULL;
+  if (path && fopen_s(&file, path, "rb") != 0) file = NULL;
+#else
   file = path ? fopen(path, "rb") : NULL;
+#endif
   if (!file || fseek(file, 0, SEEK_END) != 0 ||
       (size = ftell(file)) <= 0 || fseek(file, 0, SEEK_SET) != 0) {
     if (file) fclose(file);
