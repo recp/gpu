@@ -1100,6 +1100,19 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
               "${GPU_DX12_MESH_NATIVE_US}"
               mesh-only
     )
+    add_test(NAME dx12-native-dxil-mesh
+      COMMAND gpu-dx12-mesh-test
+              dx12
+              "${GPU_DX12_MESH_TRIANGLE_US}"
+    )
+    set_tests_properties(dx12-native-dxil-mesh PROPERTIES
+      ENVIRONMENT
+        "GPU_DX12_NATIVE_DXIL=1;GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1"
+      PASS_REGULAR_EXPRESSION "entry=mesh_main, profile=010608"
+      FAIL_REGULAR_EXPRESSION "HLSL text payload;USL compile failed"
+      SKIP_RETURN_CODE 77
+      TIMEOUT 30
+    )
     set_tests_properties(dx12-native-dxil-mesh-only PROPERTIES
       ENVIRONMENT
         "GPU_DX12_NATIVE_DXIL=1;GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1"
