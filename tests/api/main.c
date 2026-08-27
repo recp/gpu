@@ -1,4 +1,5 @@
 #include "test.h"
+#include "../../src/api/instance_internal.h"
 
 static int
 run_adapter_request(void *ctx) {
@@ -553,6 +554,10 @@ main(int argc, char **argv) {
   }
 
   GPUDestroyDevice(device);
+  if (instance->validationError != 0u) {
+    fprintf(stderr, "native validation reported an error\n");
+    ok = 0;
+  }
   GPUDestroyInstance(instance);
   if (!ok) {
     return 1;

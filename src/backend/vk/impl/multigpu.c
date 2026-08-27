@@ -155,6 +155,52 @@ vk_externalMemoryUsable(VkExternalMemoryProperties       properties,
   return true;
 }
 
+static void
+vk_bufferMemoryRequirements(VkDevice              device,
+                            VkBuffer              buffer,
+                            VkMemoryRequirements *outRequirements,
+                            bool                 *outDedicated) {
+  VkBufferMemoryRequirementsInfo2 info = {0};
+  VkMemoryDedicatedRequirements  dedicated = {0};
+  VkMemoryRequirements2          requirements = {0};
+
+  info.sType         = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2;
+  info.buffer        = buffer;
+  dedicated.sType    = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS;
+  requirements.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+  requirements.pNext = &dedicated;
+  vkGetBufferMemoryRequirements2(device, &info, &requirements);
+  *outRequirements = requirements.memoryRequirements;
+  if (outDedicated &&
+      (dedicated.requiresDedicatedAllocation ||
+       dedicated.prefersDedicatedAllocation)) {
+    *outDedicated = true;
+  }
+}
+
+static void
+vk_imageMemoryRequirements(VkDevice              device,
+                           VkImage               image,
+                           VkMemoryRequirements *outRequirements,
+                           bool                 *outDedicated) {
+  VkImageMemoryRequirementsInfo2 info = {0};
+  VkMemoryDedicatedRequirements dedicated = {0};
+  VkMemoryRequirements2         requirements = {0};
+
+  info.sType         = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
+  info.image         = image;
+  dedicated.sType    = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS;
+  requirements.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+  requirements.pNext = &dedicated;
+  vkGetImageMemoryRequirements2(device, &info, &requirements);
+  *outRequirements = requirements.memoryRequirements;
+  if (outDedicated &&
+      (dedicated.requiresDedicatedAllocation ||
+       dedicated.prefersDedicatedAllocation)) {
+    *outDedicated = true;
+  }
+}
+
 static GPUResult
 vk_externalBufferPlan(GPUDevice                 *device,
                       const GPUBufferCreateInfo *info,
@@ -215,7 +261,10 @@ vk_externalBufferPlan(GPUDevice                 *device,
     outCreateInfo->pNext = NULL;
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  vkGetBufferMemoryRequirements(native->device, buffer, outRequirements);
+  vk_bufferMemoryRequirements(native->device,
+                              buffer,
+                              outRequirements,
+                              outDedicated);
   vkDestroyBuffer(native->device, buffer, NULL);
   outCreateInfo->pNext = NULL;
   if (vk_filterMemoryTypes(device, outRequirements->memoryTypeBits) == 0u ||
@@ -494,12 +543,14 @@ vk_sharedBufferPlan(GPUDeviceInteropEXT       *interop,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  vkGetBufferMemoryRequirements(first->device,
-                                firstBuffer,
-                                outFirstRequirements);
-  vkGetBufferMemoryRequirements(second->device,
-                                secondBuffer,
-                                outSecondRequirements);
+  vk_bufferMemoryRequirements(first->device,
+                              firstBuffer,
+                              outFirstRequirements,
+                              outDedicated);
+  vk_bufferMemoryRequirements(second->device,
+                              secondBuffer,
+                              outSecondRequirements,
+                              outDedicated);
   vkDestroyBuffer(second->device, secondBuffer, NULL);
   vkDestroyBuffer(first->device, firstBuffer, NULL);
 
@@ -919,12 +970,14 @@ vk_sharedTexturePlan(GPUDeviceInteropEXT        *interop,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  vkGetImageMemoryRequirements(first->device,
-                               firstImage,
-                               outFirstRequirements);
-  vkGetImageMemoryRequirements(second->device,
-                               secondImage,
-                               outSecondRequirements);
+  vk_imageMemoryRequirements(first->device,
+                             firstImage,
+                             outFirstRequirements,
+                             outDedicated);
+  vk_imageMemoryRequirements(second->device,
+                             secondImage,
+                             outSecondRequirements,
+                             outDedicated);
   vkDestroyImage(second->device, secondImage, NULL);
   vkDestroyImage(first->device, firstImage, NULL);
 
