@@ -394,12 +394,23 @@ main(int argc, char **argv) {
     timingMark = now;
   }
   if (getenv("GPU_TEST_ADAPTER") || getenv("GPU_API_VERBOSE")) {
+    GPUAdapterCapabilities capabilities;
     GPUAdapterProperties properties;
 
     if (GPUGetAdapterProperties(adapter, &properties) == GPU_OK) {
       printf("api:adapter=%s type=%u\n",
              properties.name ? properties.name : "unknown",
              (unsigned)properties.type);
+    }
+    if (getenv("GPU_API_VERBOSE") &&
+        GPUGetAdapterCapabilities(adapter, &capabilities) == GPU_OK) {
+      fputs("api:features=", stdout);
+      for (uint32_t i = 0u; i < capabilities.supported.featureCount; i++) {
+        printf("%s%u",
+               i == 0u ? "" : ",",
+               (unsigned)capabilities.supported.pFeatures[i]);
+      }
+      putchar('\n');
     }
   }
 
