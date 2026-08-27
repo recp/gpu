@@ -219,6 +219,34 @@ valid_sampler_desc(void) {
   return desc;
 }
 
+static GPUFormat
+sampled_storage_format(GPUDevice            *device,
+                       GPUTextureSampleType *outSampleType) {
+  static const GPUFormat candidates[] = {
+    GPU_FORMAT_RGBA8_UNORM,
+    GPU_FORMAT_R32_FLOAT,
+    GPU_FORMAT_RGBA16_FLOAT,
+    GPU_FORMAT_RGBA32_FLOAT
+  };
+  GPUFormatCapabilities capabilities;
+
+  if (!device || !device->adapter || !outSampleType) {
+    return GPU_FORMAT_UNDEFINED;
+  }
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(candidates); i++) {
+    if (GPUGetFormatCapabilities(device->adapter,
+                                 candidates[i],
+                                 &capabilities) == GPU_OK &&
+        capabilities.sampled && capabilities.storage) {
+      *outSampleType = capabilities.filterable
+                         ? GPU_TEXTURE_SAMPLE_TYPE_FLOAT
+                         : GPU_TEXTURE_SAMPLE_TYPE_UNFILTERABLE_FLOAT;
+      return candidates[i];
+    }
+  }
+  return GPU_FORMAT_UNDEFINED;
+}
+
 static int
 check_pipeline_layout_bind_validation(GPUDevice *device,
                                       const GPUBindGroupLayoutCreateInfo *layoutInfo,
@@ -412,6 +440,8 @@ check_bind_group_layout_validation(GPUDevice *device) {
   GPUTexture *dualUseTexture;
   GPUTextureView *sampledView;
   GPUTextureView *dualUseView;
+  GPUTextureSampleType dualUseSampleType;
+  GPUFormat dualUseFormat;
   GPUBindGroupLayoutEntry textureLayoutEntries[2];
   GPUBindGroupLayout *dualTextureLayout;
   GPUPipelineLayoutCreateInfo pipelineInfo;
@@ -703,7 +733,17 @@ check_bind_group_layout_validation(GPUDevice *device) {
     return 0;
   }
 
-  textureInfo.usage = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_STORAGE;
+  dualUseFormat = sampled_storage_format(device, &dualUseSampleType);
+  if (dualUseFormat == GPU_FORMAT_UNDEFINED) {
+    fprintf(stderr, "no sampled/storage texture format is supported\n");
+    GPUDestroyTextureView(sampledView);
+    GPUDestroyTexture(sampledTexture);
+    GPUDestroyBindGroupLayout(layout);
+    return 0;
+  }
+  textureInfo.format = dualUseFormat;
+  textureInfo.usage  = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_STORAGE;
+  viewInfo.format    = dualUseFormat;
   if (GPUCreateTexture(device, &textureInfo, &dualUseTexture) != GPU_OK ||
       !dualUseTexture ||
       GPUCreateTextureView(dualUseTexture, &viewInfo, &dualUseView) != GPU_OK ||
@@ -759,11 +799,12 @@ check_bind_group_layout_validation(GPUDevice *device) {
 
   textureLayoutEntries[0] = entry;
   textureLayoutEntries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+  textureLayoutEntries[0].sampledTexture.sampleType = dualUseSampleType;
   textureLayoutEntries[1] = entry;
   textureLayoutEntries[1].binding = 1u;
   textureLayoutEntries[1].bindingType = GPU_BINDING_STORAGE_TEXTURE;
   textureLayoutEntries[1].storageTexture.viewType = GPU_TEXTURE_VIEW_2D;
-  textureLayoutEntries[1].storageTexture.format = GPU_FORMAT_RGBA8_UNORM;
+  textureLayoutEntries[1].storageTexture.format = dualUseFormat;
   textureLayoutEntries[1].storageTexture.access =
     GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY;
   textureLayoutEntries[1].visibility = GPU_SHADER_STAGE_COMPUTE_BIT;
