@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 enum {
   ValueCount     = 512u,
@@ -321,6 +322,7 @@ main(int argc, char **argv) {
   GPUAdapter                  *graphicsAdapter, *cudaAdapter;
   GPUShaderLibrary            *library;
   GPUShaderLayout             *shaderLayout;
+  const char                  *graphicsBackend;
   void                        *artifact;
   GPUInstanceCreateInfo        graphicsInstanceInfo = {0};
   GPUInstanceCreateInfo        cudaInstanceInfo = {0};
@@ -350,6 +352,7 @@ main(int argc, char **argv) {
   cudaAdapter      = NULL;
   library          = NULL;
   shaderLayout     = NULL;
+  graphicsBackend  = getenv("GPU_GRAPHICS_BACKEND");
   artifactSize     = 0u;
   artifact         = read_file(argv[1], &artifactSize);
   status           = 1;
@@ -361,8 +364,16 @@ main(int argc, char **argv) {
   graphicsInstanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   graphicsInstanceInfo.chain.structSize = sizeof(graphicsInstanceInfo);
 #if defined(_WIN32) || defined(WIN32)
-  graphicsInstanceInfo.preferredBackend = GPU_BACKEND_DX12;
+  if (!graphicsBackend || strcmp(graphicsBackend, "dx12") == 0) {
+    graphicsInstanceInfo.preferredBackend = GPU_BACKEND_DX12;
+  } else if (strcmp(graphicsBackend, "vulkan") == 0) {
+    graphicsInstanceInfo.preferredBackend = GPU_BACKEND_VULKAN;
+  } else {
+    fprintf(stderr, "unsupported graphics backend: %s\n", graphicsBackend);
+    goto cleanup;
+  }
 #else
+  (void)graphicsBackend;
   graphicsInstanceInfo.preferredBackend = GPU_BACKEND_VULKAN;
 #endif
   graphicsInstanceInfo.enableValidation = true;

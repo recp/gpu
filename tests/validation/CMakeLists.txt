@@ -1741,6 +1741,18 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
         SKIP_RETURN_CODE 77
         TIMEOUT 30
       )
+      if(WIN32 AND GPU_BUILD_VULKAN)
+        add_test(
+          NAME cuda-vulkan-graphics-interop
+          COMMAND gpu-graphics-cuda-interop-usl
+                  "${GPU_CUDA_COMPUTE_BUFFER_US}"
+        )
+        set_tests_properties(cuda-vulkan-graphics-interop PROPERTIES
+          ENVIRONMENT "GPU_GRAPHICS_BACKEND=vulkan"
+          SKIP_RETURN_CODE 77
+          TIMEOUT 30
+        )
+      endif()
     endif()
   endif()
 endif()
