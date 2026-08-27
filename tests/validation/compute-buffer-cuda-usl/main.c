@@ -1,4 +1,6 @@
 #include <gpu/gpu.h>
+#include "../../../src/api/cmdqueue_internal.h"
+#include "../../../src/api/device_internal.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -52,6 +54,55 @@ values_match(const float values[ValueCount], const Params *params) {
   return 1;
 }
 
+static int
+dispatch_saxpy(GPUQueue           *queue,
+               GPUComputePipeline *pipeline,
+               GPUBindGroup       *paramsGroup,
+               GPUBindGroup       *dataGroup,
+               GPUFence           *fence,
+               uint32_t            dynamicOffset) {
+  GPUCommandBuffer      *cmdb;
+  GPUComputePassEncoder *pass;
+  GPUQueueSubmitInfo     submitInfo = {0};
+
+  cmdb = NULL;
+  pass = NULL;
+  if (GPUAcquireCommandBuffer(queue, "cuda-saxpy", &cmdb) != GPU_OK ||
+      !cmdb || !(pass = GPUBeginComputePass(cmdb, "saxpy"))) {
+    goto cleanup;
+  }
+  GPUBindComputePipeline(pass, pipeline);
+  GPUBindComputeGroup(pass, 0u, paramsGroup, 1u, &dynamicOffset);
+  GPUBindComputeGroup(pass, 1u, dataGroup, 0u, NULL);
+  GPUDispatch(pass, ValueCount / 256u, 1u, 1u);
+  GPUEndComputePass(pass);
+  pass = NULL;
+
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
+  submitInfo.ppCommandBuffers   = &cmdb;
+  submitInfo.fence              = fence;
+  submitInfo.commandBufferCount = 1u;
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK) {
+    goto cleanup;
+  }
+  cmdb = NULL;
+  if (GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+    return 0;
+  }
+  GPUResetFence(fence);
+  return 1;
+
+cleanup:
+  if (pass) {
+    GPUEndComputePass(pass);
+  }
+  if (cmdb && !cmdb->_submitted) {
+    (void)GPUDiscardCommandBuffer(cmdb);
+  }
+  return 0;
+}
+
 int
 main(int argc, char **argv) {
   GPUInstance           *instance;
@@ -66,8 +117,7 @@ main(int argc, char **argv) {
   GPUBuffer             *paramsBuffer;
   GPUBindGroup          *dataGroup;
   GPUBindGroup          *paramsGroup;
-  GPUCommandBuffer      *cmdb;
-  GPUComputePassEncoder *pass;
+  GPUFence              *fence;
   void                  *artifact;
   GPUInstanceCreateInfo        instanceInfo = {0};
   GPUComputePipelineCreateInfo pipelineInfo = {0};
@@ -75,7 +125,6 @@ main(int argc, char **argv) {
   GPUBindGroupEntry            dataEntries[2] = {0};
   GPUBindGroupEntry            paramsEntry = {0};
   GPUBindGroupCreateInfo       groupInfo = {0};
-  GPUQueueSubmitInfo           submitInfo = {0};
   Params                       params[2] = {{-3.0f, 7.0f}, {2.0f, 1.0f}};
   float                        input[ValueCount];
   float                        output[ValueCount];
@@ -102,8 +151,7 @@ main(int argc, char **argv) {
   paramsBuffer = NULL;
   dataGroup    = NULL;
   paramsGroup  = NULL;
-  cmdb         = NULL;
-  pass         = NULL;
+  fence        = NULL;
   artifactSize = 0u;
   artifact     = read_file(argv[1], &artifactSize);
   status       = 1;
@@ -247,29 +295,20 @@ main(int argc, char **argv) {
     goto cleanup;
   }
 
-  if (GPUAcquireCommandBuffer(queue, "cuda-saxpy", &cmdb) != GPU_OK ||
-      !cmdb || !(pass = GPUBeginComputePass(cmdb, "saxpy"))) {
-    fprintf(stderr, "CUDA command encoding failed\n");
+  if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
+    fprintf(stderr, "CUDA completion fence creation failed\n");
     goto cleanup;
   }
-  GPUBindComputePipeline(pass, pipeline);
   dynamicOffset = sizeof(params[0]);
-  GPUBindComputeGroup(pass, 0u, paramsGroup, 1u, &dynamicOffset);
-  GPUBindComputeGroup(pass, 1u, dataGroup, 0u, NULL);
-  GPUDispatch(pass, ValueCount / 256u, 1u, 1u);
-  GPUEndComputePass(pass);
-  pass = NULL;
-
-  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
-  submitInfo.chain.structSize   = sizeof(submitInfo);
-  submitInfo.commandBufferCount = 1u;
-  submitInfo.ppCommandBuffers   = &cmdb;
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK) {
-    fprintf(stderr, "CUDA command submission failed\n");
+  if (!dispatch_saxpy(queue,
+                      pipeline,
+                      paramsGroup,
+                      dataGroup,
+                      fence,
+                      dynamicOffset)) {
+    fprintf(stderr, "CUDA command dispatch failed\n");
     goto cleanup;
   }
-  cmdb = NULL;
-
   if (GPUQueueReadBuffer(queue,
                          outputBuffer,
                          0u,
@@ -279,15 +318,35 @@ main(int argc, char **argv) {
     fprintf(stderr, "CUDA compute readback validation failed\n");
     goto cleanup;
   }
+
+  GPUResetStats(device);
+  for (uint32_t i = 0u; i < 16u; i++) {
+    if (!dispatch_saxpy(queue,
+                        pipeline,
+                        paramsGroup,
+                        dataGroup,
+                        fence,
+                        dynamicOffset)) {
+      fprintf(stderr, "CUDA warm dispatch failed\n");
+      goto cleanup;
+    }
+  }
+  if (device->currentFrameStats.hotPathAllocCount != 0u ||
+      device->currentFrameStats.hotPathAllocBytes != 0u ||
+      device->currentFrameStats.hotPathFreeCount != 0u ||
+      device->currentFrameStats.hotPathFreeBytes != 0u) {
+    fprintf(stderr,
+            "CUDA warm dispatch allocated: %llu allocs, %llu frees\n",
+            (unsigned long long)
+              device->currentFrameStats.hotPathAllocCount,
+            (unsigned long long)
+              device->currentFrameStats.hotPathFreeCount);
+    goto cleanup;
+  }
   status = 0;
 
 cleanup:
-  if (pass) {
-    GPUEndComputePass(pass);
-  }
-  if (cmdb) {
-    (void)GPUDiscardCommandBuffer(cmdb);
-  }
+  GPUDestroyFence(fence);
   GPUDestroyBindGroup(dataGroup);
   GPUDestroyBindGroup(paramsGroup);
   GPUDestroyBuffer(paramsBuffer);
