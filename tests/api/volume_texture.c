@@ -245,6 +245,12 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
     goto cleanup;
   }
 
+  if (!gpu_test_storage_format_supported(device, GPU_FORMAT_RGBA8_UNORM)) {
+    puts("volume texture execution skipped: rgba8unorm storage unsupported");
+    ok = 1;
+    goto cleanup;
+  }
+
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
   textureInfo.dimension        = GPU_TEXTURE_DIMENSION_3D;

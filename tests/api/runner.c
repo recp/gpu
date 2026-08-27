@@ -3,6 +3,7 @@
 #endif
 
 #include "test.h"
+#include "../../src/api/device_internal.h"
 
 #include <stdatomic.h>
 
@@ -36,6 +37,17 @@ gpu_test_now_ns(void) {
   return (uint64_t)now.tv_sec * UINT64_C(1000000000) +
          (uint64_t)now.tv_nsec;
 #endif
+}
+
+bool
+gpu_test_storage_format_supported(GPUDevice *device, GPUFormat format) {
+  GPUFormatCapabilities capabilities;
+
+  return device && device->adapter &&
+         GPUGetFormatCapabilities(device->adapter,
+                                  format,
+                                  &capabilities) == GPU_OK &&
+         capabilities.storage;
 }
 
 typedef struct GPUApiAdapterRequest {

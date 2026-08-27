@@ -79,6 +79,7 @@ int gpu_test_adapter_request_options(GPUInstance *instance);
 GPUResult gpu_test_create_device(GPUAdapter                *adapter,
                                  const GPUDeviceCreateInfo *info,
                                  GPUDevice                **outDevice);
+bool gpu_test_storage_format_supported(GPUDevice *device, GPUFormat format);
 
 int gpu_test_queue(GPUInstance *instance,
                    GPUAdapter  *adapter,

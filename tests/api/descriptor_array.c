@@ -524,6 +524,12 @@ gpu_testDescriptorArray(GPUDevice *device,
     goto cleanup;
   }
 
+  if (!gpu_test_storage_format_supported(device, GPU_FORMAT_RGBA8_UNORM)) {
+    puts("descriptor array execution skipped: rgba8unorm storage unsupported");
+    ok = 1;
+    goto cleanup;
+  }
+
   if (!create_color_texture(device,
                             queue,
                             "api-descriptor-array-red",

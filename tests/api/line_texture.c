@@ -291,6 +291,12 @@ gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath) {
     goto cleanup;
   }
 
+  if (!gpu_test_storage_format_supported(device, GPU_FORMAT_RGBA8_UNORM)) {
+    puts("line texture execution skipped: rgba8unorm storage unsupported");
+    ok = 1;
+    goto cleanup;
+  }
+
   if (create_line_texture(device,
                           "api-line-input",
                           1u,
