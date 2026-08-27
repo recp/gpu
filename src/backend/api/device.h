@@ -41,9 +41,10 @@ typedef struct GPUQueueCreateInfo {
 } GPUQueueCreateInfo;
 
 typedef enum GPUBackendSubgroupOperationFlagBits {
-  GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT            = 1u << 0,
-  GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT          = 1u << 1,
-  GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT = 1u << 2
+  GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT                  = 1u << 0,
+  GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT                = 1u << 1,
+  GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT       = 1u << 2,
+  GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_NATIVE_BIT = 1u << 3
 } GPUBackendSubgroupOperationFlagBits;
 
 typedef uint32_t GPUBackendSubgroupOperationFlags;

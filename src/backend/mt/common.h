@@ -84,7 +84,8 @@ typedef struct GPUAdapterMT {
   os_unfair_lock          subgroupLock;
   GPUSampleCountFlags     sampleCounts;
   uint32_t                subgroupMatrixProfiles;
-  uint32_t                subgroupSize;
+  uint32_t                minSubgroupSize;
+  uint32_t                maxSubgroupSize;
   bool                    float32Filterable;
   bool                    depth24Supported;
   bool                    appleFamily1;
@@ -92,6 +93,7 @@ typedef struct GPUAdapterMT {
   bool                    sparseTextures;
   bool                    bcSupported;
   bool                    subgroupProbed;
+  bool                    subgroupReductions;
   bool                    subgroupRelative;
   bool                    subgroupMatrixProbed;
   bool                    subgroups;

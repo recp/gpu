@@ -298,9 +298,24 @@ mt_probeSubgroups(GPUAdapterMT *adapterMT) {
      "  uint y = simd_shuffle_down(tid, 1u);\n"
      "  uint z = simd_shuffle_up(tid, 1u);\n"
      "  output[tid] = x + y + z;\n"
+     "}\n"
+     "kernel void gpu_subgroup_reduction_probe(\n"
+     "    device uint *output [[buffer(0)]],\n"
+     "    uint tid [[thread_position_in_grid]]) {\n"
+     "  uint lane = simd_prefix_exclusive_sum(1u);\n"
+     "  uint width = simd_sum(1u);\n"
+     "  uint remaining = width - lane;\n"
+     "  bool valid = 1u < remaining;\n"
+     "  uint value_lane = valid ? lane + 1u : lane;\n"
+     "  uint fill_lane = valid ? lane : 1u - remaining;\n"
+     "  uint shifted = simd_shuffle(tid, value_lane);\n"
+     "  uint filled = simd_shuffle(tid + 1u, fill_lane);\n"
+     "  output[tid] = valid ? shifted : filled;\n"
      "}\n";
-  id<MTLComputePipelineState> pipeline;
-  id<MTLFunction>             function;
+  id<MTLComputePipelineState> basicPipeline;
+  id<MTLComputePipelineState> reductionPipeline;
+  id<MTLFunction>             basicFunction;
+  id<MTLFunction>             reductionFunction;
   id<MTLLibrary>              library;
 
   if (!adapterMT) {
@@ -322,18 +337,49 @@ mt_probeSubgroups(GPUAdapterMT *adapterMT) {
   library = [adapterMT->device newLibraryWithSource:source
                                              options:nil
                                                error:nil];
-  function = [library newFunctionWithName:@"gpu_subgroup_probe"];
-  pipeline = function
-    ? [adapterMT->device newComputePipelineStateWithFunction:function
+  basicFunction = [library newFunctionWithName:@"gpu_subgroup_probe"];
+  basicPipeline = basicFunction
+    ? [adapterMT->device newComputePipelineStateWithFunction:basicFunction
                                                        error:nil]
     : nil;
-  if (pipeline && pipeline.threadExecutionWidth > 0u) {
-    adapterMT->subgroupSize = (uint32_t)pipeline.threadExecutionWidth;
-    adapterMT->subgroups    = true;
+  reductionFunction =
+    [library newFunctionWithName:@"gpu_subgroup_reduction_probe"];
+  reductionPipeline = reductionFunction
+    ? [adapterMT->device newComputePipelineStateWithFunction:reductionFunction
+                                                       error:nil]
+    : nil;
+  if (basicPipeline && basicPipeline.threadExecutionWidth > 0u) {
+    adapterMT->minSubgroupSize =
+      (uint32_t)basicPipeline.threadExecutionWidth;
+    adapterMT->maxSubgroupSize = adapterMT->minSubgroupSize;
+    adapterMT->subgroups       = true;
   }
+  if (reductionPipeline && reductionPipeline.threadExecutionWidth > 0u) {
+    uint32_t width;
 
-  [pipeline release];
-  [function release];
+    width = (uint32_t)reductionPipeline.threadExecutionWidth;
+    if (adapterMT->minSubgroupSize == 0u ||
+        width < adapterMT->minSubgroupSize) {
+      adapterMT->minSubgroupSize = width;
+    }
+    if (width > adapterMT->maxSubgroupSize) {
+      adapterMT->maxSubgroupSize = width;
+    }
+    adapterMT->subgroupReductions = true;
+  }
+#if TARGET_OS_OSX
+  /* Intel Metal may execute reduction-heavy SIMD-group code at SIMD8 even
+   * when a lightweight pipeline reports a wider threadExecutionWidth. */
+  if (!adapterMT->appleFamily1 && adapterMT->device.isLowPower &&
+      adapterMT->minSubgroupSize > 8u) {
+    adapterMT->minSubgroupSize = 8u;
+  }
+#endif
+
+  [reductionPipeline release];
+  [basicPipeline release];
+  [reductionFunction release];
+  [basicFunction release];
   [library release];
   os_unfair_lock_unlock(&adapterMT->subgroupLock);
 }
@@ -356,9 +402,13 @@ mt_supportsSubgroupOperations(
 
   adapterMT = mt_adapter(adapter);
   mt_probeSubgroups(adapterMT);
-  if (adapterMT && adapterMT->subgroupRelative) {
+  if (adapterMT && adapterMT->subgroupReductions) {
     supportedOperations |=
       GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
+  }
+  if (adapterMT && adapterMT->subgroupRelative) {
+    supportedOperations |=
+      GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_NATIVE_BIT;
   }
   return adapterMT && adapterMT->subgroups &&
          (supportedStages & stage) == stage &&
@@ -656,8 +706,8 @@ mt_getLimits(const GPUAdapter * __restrict adapter,
   outLimits->maxComputeWorkgroupSizeZ = (uint32_t)threads.depth;
   outLimits->maxPushConstantSizeBytes  = 4096u;
   outLimits->maxSamplerAnisotropy      = 16u;
-  outLimits->minSubgroupSize           = adapterMT->subgroupSize;
-  outLimits->maxSubgroupSize           = adapterMT->subgroupSize;
+  outLimits->minSubgroupSize           = adapterMT->minSubgroupSize;
+  outLimits->maxSubgroupSize           = adapterMT->maxSubgroupSize;
 }
 
 static bool

@@ -3038,6 +3038,16 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
             0u) != USLOk) {
         return GPU_ERROR_BACKEND_FAILURE;
       }
+      if (api->device.supportsSubgroupOperations &&
+          api->device.supportsSubgroupOperations(
+            device->adapter,
+            GPU_SHADER_STAGE_COMPUTE_BIT,
+            GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_NATIVE_BIT
+          ) &&
+          us_cap_atom_text(&targetAtoms[targetAtomCount++],
+                           "metal_simd_shift_fill") != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
     }
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
       if (us_cap_atom_init(
