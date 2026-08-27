@@ -20,6 +20,7 @@
 
 #include <d3dcompiler.h>
 #include <limits.h>
+#include <stddef.h>
 #include <us/compiler.h>
 
 typedef struct DXCBuffer {
@@ -143,7 +144,6 @@ DX12_STREAM_SUBOBJECT(DX12StreamFlags, D3D12_PIPELINE_STATE_FLAGS);
 
 typedef struct DX12MeshPipelineStream {
   DX12StreamRootSignature rootSignature;
-  DX12StreamShader        taskShader;
   DX12StreamShader        meshShader;
   DX12StreamShader        fragmentShader;
   DX12StreamBlend         blend;
@@ -156,6 +156,7 @@ typedef struct DX12MeshPipelineStream {
   DX12StreamSampleDesc    sampleDesc;
   DX12StreamCachedPSO     cachedPSO;
   DX12StreamFlags         flags;
+  DX12StreamShader        taskShader;
 } DX12MeshPipelineStream;
 
 static const CLSID dx12_clsidDxcCompiler = {
@@ -1367,7 +1368,8 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   }
   entryMask = gpuShaderEntryBit(info->library, info->fragmentEntry);
   if (mesh) {
-    entryMask |= gpuShaderEntryBit(info->library, mesh->taskEntry);
+    if (mesh->taskEntry)
+      entryMask |= gpuShaderEntryBit(info->library, mesh->taskEntry);
     entryMask |= gpuShaderEntryBit(info->library, mesh->meshEntry);
   } else {
     entryMask |= gpuShaderEntryBit(info->library, info->vertexEntry);
@@ -1563,7 +1565,9 @@ shaders_ready:
                              mesh->taskEntry ? &taskCode : NULL,
                              &meshCode,
                              &fragmentCode);
-    streamDesc.SizeInBytes                   = sizeof(meshStream);
+    streamDesc.SizeInBytes = mesh->taskEntry
+                               ? sizeof(meshStream)
+                               : offsetof(DX12MeshPipelineStream, taskShader);
     streamDesc.pPipelineStateSubobjectStream = &meshStream;
     result = dx12_createMeshPSO(info->cache,
                                 deviceDX12,

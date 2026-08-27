@@ -45,15 +45,16 @@ read_file(const char *path, uint64_t *outSize) {
 }
 
 static int
-mesh_layout_matches(GPUShaderLayout *layout) {
+mesh_layout_matches(GPUShaderLayout *layout, int meshOnly) {
   const GPUBindGroupLayoutEntry *entries;
   uint32_t                       entryCount;
 
-  if (!layout || layout->bindGroupLayoutCount != 1u ||
-      !layout->bindGroupLayouts || !layout->bindGroupLayouts[0] ||
-      !layout->pipelineLayout) {
+  if (!layout || !layout->pipelineLayout) {
     return 0;
   }
+  if (meshOnly) return layout->bindGroupLayoutCount == 0u;
+  if (layout->bindGroupLayoutCount != 1u || !layout->bindGroupLayouts ||
+      !layout->bindGroupLayouts[0]) return 0;
 
   entryCount = 0u;
   entries = GPUGetBindGroupLayoutEntries(layout->bindGroupLayouts[0],
@@ -69,7 +70,7 @@ mesh_layout_matches(GPUShaderLayout *layout) {
 }
 
 static int
-mesh_pixels_match(const uint8_t pixels[MESH_PIXEL_BYTES]) {
+mesh_pixels_match(const uint8_t pixels[MESH_PIXEL_BYTES], int meshOnly) {
   uint32_t coloredPixels;
   uint32_t leftPixels;
   uint32_t rightPixels;
@@ -94,7 +95,8 @@ mesh_pixels_match(const uint8_t pixels[MESH_PIXEL_BYTES]) {
       }
     }
   }
-  if (coloredPixels >= 2u && leftPixels > 0u && rightPixels == 0u) {
+  if (coloredPixels >= 2u && leftPixels > 0u &&
+      (meshOnly ? rightPixels > 0u : rightPixels == 0u)) {
     return 1;
   }
   fprintf(stderr,
@@ -108,7 +110,8 @@ mesh_pixels_match(const uint8_t pixels[MESH_PIXEL_BYTES]) {
 static int
 test_mesh_draw(GPUDevice  *device,
                const void *artifact,
-               uint64_t    artifactSize) {
+               uint64_t    artifactSize,
+               int         meshOnly) {
   const TaskParams taskParams = {
     .meshGroups = {1u, 1u, 1u, 0u},
     .offset     = {0.0f, 0.0f, 0.0f, 0.0f},
@@ -178,14 +181,14 @@ test_mesh_draw(GPUDevice  *device,
                                     &library) != GPU_OK ||
       !library ||
       GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
-      !mesh_layout_matches(shaderLayout)) {
+      !mesh_layout_matches(shaderLayout, meshOnly)) {
     fprintf(stderr, "failed to create mesh shader layout\n");
     goto cleanup;
   }
 
   meshInfo.chain.sType      = GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT;
   meshInfo.chain.structSize = sizeof(meshInfo);
-  meshInfo.taskEntry        = "task_main";
+  meshInfo.taskEntry        = meshOnly ? NULL : "task_main";
   meshInfo.meshEntry        = "mesh_main";
   colorTarget.format        = GPU_FORMAT_RGBA8_UNORM;
   colorTarget.blend.writeMask = GPU_COLOR_WRITE_ALL;
@@ -267,13 +270,14 @@ test_mesh_draw(GPUDevice  *device,
   bufferInfo.sizeBytes        = sizeof(taskParams);
   bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM |
                                 GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(device, &bufferInfo, &taskBuffer) != GPU_OK ||
+  if (!meshOnly &&
+      (GPUCreateBuffer(device, &bufferInfo, &taskBuffer) != GPU_OK ||
       !taskBuffer ||
       GPUQueueWriteBuffer(queue,
                           taskBuffer,
                           0u,
                           &taskParams,
-                          sizeof(taskParams)) != GPU_OK) {
+                          sizeof(taskParams)) != GPU_OK)) {
     fprintf(stderr, "failed to create mesh task buffer\n");
     goto cleanup;
   }
@@ -288,20 +292,22 @@ test_mesh_draw(GPUDevice  *device,
     goto cleanup;
   }
 
-  taskEntry.binding       = 0u;
-  taskEntry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
-  taskEntry.buffer.buffer = taskBuffer;
-  taskEntry.buffer.size   = sizeof(taskParams);
-  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
-  groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label            = "mesh-task-group";
-  groupInfo.layout           = shaderLayout->bindGroupLayouts[0];
-  groupInfo.entryCount       = 1u;
-  groupInfo.pEntries         = &taskEntry;
-  if (GPUCreateBindGroup(device, &groupInfo, &taskGroup) != GPU_OK ||
-      !taskGroup) {
-    fprintf(stderr, "failed to create mesh task group\n");
-    goto cleanup;
+  if (!meshOnly) {
+    taskEntry.binding       = 0u;
+    taskEntry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
+    taskEntry.buffer.buffer = taskBuffer;
+    taskEntry.buffer.size   = sizeof(taskParams);
+    groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+    groupInfo.chain.structSize = sizeof(groupInfo);
+    groupInfo.label            = "mesh-task-group";
+    groupInfo.layout           = shaderLayout->bindGroupLayouts[0];
+    groupInfo.entryCount       = 1u;
+    groupInfo.pEntries         = &taskEntry;
+    if (GPUCreateBindGroup(device, &groupInfo, &taskGroup) != GPU_OK ||
+        !taskGroup) {
+      fprintf(stderr, "failed to create mesh task group\n");
+      goto cleanup;
+    }
   }
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
@@ -361,7 +367,7 @@ test_mesh_draw(GPUDevice  *device,
   scissor.width     = MESH_TARGET_WIDTH;
   scissor.height    = MESH_TARGET_HEIGHT;
   GPUBindRenderPipeline(renderPass, pipeline);
-  GPUBindRenderGroup(renderPass, 0u, taskGroup, 0u, NULL);
+  if (!meshOnly) GPUBindRenderGroup(renderPass, 0u, taskGroup, 0u, NULL);
   GPUSetViewport(renderPass, &viewport);
   GPUSetScissor(renderPass, &scissor);
   GPUDrawMeshEXT(renderPass, 1u, 1u, 1u);
@@ -416,7 +422,7 @@ test_mesh_draw(GPUDevice  *device,
                          0u,
                          pixels,
                          sizeof(pixels)) != GPU_OK ||
-      !mesh_pixels_match(pixels)) {
+      !mesh_pixels_match(pixels, meshOnly)) {
     fprintf(stderr, "mesh readback mismatch\n");
     goto cleanup;
   }
@@ -452,12 +458,15 @@ main(int argc, char **argv) {
   GPUResult             result;
   void                 *artifact;
   uint64_t              artifactSize;
-  int                   ok;
+  int                   meshOnly, ok;
 
-  if (argc != 3) {
-    fprintf(stderr, "usage: mesh <metal|vulkan|dx12> mesh_triangle.us\n");
+  if (argc != 3 && argc != 4) {
+    fprintf(stderr,
+            "usage: mesh <metal|vulkan|dx12> mesh_triangle.us [mesh-only]\n");
     return 1;
   }
+  meshOnly = argc == 4 && strcmp(argv[3], "mesh-only") == 0;
+  if (argc == 4 && !meshOnly) return 1;
 
   if (strcmp(argv[1], "metal") == 0) {
     backend = GPU_BACKEND_METAL;
@@ -524,7 +533,7 @@ main(int argc, char **argv) {
     return 1;
   }
 
-  ok = test_mesh_draw(device, artifact, artifactSize);
+  ok = test_mesh_draw(device, artifact, artifactSize, meshOnly);
   GPUDestroyDevice(device);
   GPUDestroyInstance(instance);
   free(artifact);

@@ -623,6 +623,8 @@ if(GPU_BUILD_TESTS)
       -DGPU_PACKAGE_MULTI_CONFIG=${GPU_GENERATOR_IS_MULTI_CONFIG}
       -DGPU_PACKAGE_RUNTIME_DIR=${GPU_VULKAN_LIBRARY_DIR}
       -DGPU_PACKAGE_VULKAN_ICD=${GPU_VULKAN_ICD}
+      -DGPU_PACKAGE_VULKAN_INCLUDE_DIR=${Vulkan_INCLUDE_DIR}
+      -DGPU_PACKAGE_VULKAN_LIBRARY=${Vulkan_LIBRARY}
       -P ${PROJECT_SOURCE_DIR}/cmake/package_test.cmake
   )
   set_tests_properties(package-consumer PROPERTIES LABELS package)
@@ -1091,6 +1093,19 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
       COMMAND gpu-dx12-mesh-test
               dx12
               "${GPU_DX12_MESH_TRIANGLE_US}"
+    )
+    add_test(NAME dx12-native-dxil-mesh-only
+      COMMAND gpu-dx12-mesh-test
+              dx12
+              "${GPU_DX12_MESH_NATIVE_US}"
+              mesh-only
+    )
+    set_tests_properties(dx12-native-dxil-mesh-only PROPERTIES
+      ENVIRONMENT
+        "GPU_DX12_NATIVE_DXIL=1;GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1"
+      PASS_REGULAR_EXPRESSION "entry=mesh_main, profile=010608"
+      SKIP_RETURN_CODE 77
+      TIMEOUT 30
     )
     set_tests_properties(dx12-mesh PROPERTIES
       SKIP_RETURN_CODE 77

@@ -1,0 +1,18 @@
+struct MeshVertex {
+  position: float4 #position
+}
+
+@mesh_output(triangle, MeshVertex, 3, 1)
+mesh(1, 1, 1) mesh_main() {
+  mesh_set_primitive_count(1)
+  mesh_set_vertex(0, MeshVertex(float4(-0.5, -0.5, 0.0, 1.0)))
+  mesh_set_vertex(1, MeshVertex(float4( 0.0,  0.5, 0.0, 1.0)))
+  mesh_set_vertex(2, MeshVertex(float4( 0.5, -0.5, 0.0, 1.0)))
+  mesh_set_index(0, 0)
+  mesh_set_index(1, 1)
+  mesh_set_index(2, 2)
+}
+
+frag fragment_main() -> float4 {
+  return float4(1.0, 0.5, 0.25, 1.0)
+}

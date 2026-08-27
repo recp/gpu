@@ -160,6 +160,7 @@ gpu_compileShaderLibraryEntries(const GPUShaderLibrary *library,
   const GPUShaderUSLSource *source;
   USCompileOutput           output = {0};
   USCompileInput            input = {0};
+  USLTargetSpec             target;
   USResult                  result;
   uint32_t                  encoding;
 
@@ -171,11 +172,25 @@ gpu_compileShaderLibraryEntries(const GPUShaderLibrary *library,
   if (!source) {
     return GPU_ERROR_UNSUPPORTED;
   }
+  target = source->target;
+  if (target.backend == USL_BACKEND_DXIL &&
+      target.profile > USL_TARGET_PROFILE_HLSL_SM_6_8) {
+    for (uint32_t i = 0u; i < entryPointCount; i++) {
+      GPUShaderStageFlags stage;
+
+      if (gpuGetShaderLibraryEntryStage(library, entryPoints[i], &stage) &&
+          (stage == GPU_SHADER_STAGE_TASK_BIT ||
+           stage == GPU_SHADER_STAGE_MESH_BIT)) {
+        target.profile = USL_TARGET_PROFILE_HLSL_SM_6_8;
+        break;
+      }
+    }
+  }
 
   input.abi_version       = US_COMPILE_INPUT_VERSION;
   input.artifact          = source->artifact;
   input.artifact_size     = source->artifactSize;
-  input.target            = &source->target;
+  input.target            = &target;
   input.entry_point_names = entryPoints;
   input.entry_point_count = entryPointCount;
   input.options           = &source->options;
@@ -183,11 +198,25 @@ gpu_compileShaderLibraryEntries(const GPUShaderLibrary *library,
     input.flags |= US_COMPILE_INPUT_FLAG_DISABLE_DISK_CACHE;
   }
 
-  encoding = source->target.backend == USL_BACKEND_SPIRV ||
-             source->target.backend == USL_BACKEND_DXIL
+  if (getenv("GPU_USL_LOG")) {
+    fprintf(stderr,
+            "GPU: USL entry compile begin (entry=%s, profile=%06x)\n",
+            entryPointCount == 1u ? entryPoints[0] : "<multiple>",
+            (unsigned)target.profile);
+  }
+
+  encoding = target.backend == USL_BACKEND_SPIRV ||
+             target.backend == USL_BACKEND_DXIL
                ? USL_RUNTIME_EMBEDDED_BLOB_ENCODING_BINARY
                : USL_RUNTIME_EMBEDDED_BLOB_ENCODING_TEXT;
   result = us_compile(&input, &output);
+  if (getenv("GPU_USL_LOG")) {
+    fprintf(stderr,
+            "GPU: USL entry compile end (entry=%s, result=%d, size=%zu)\n",
+            entryPointCount == 1u ? entryPoints[0] : "<multiple>",
+            (int)result,
+            output.backend_size);
+  }
   if (result != USLOk ||
       output.backend != source->target.backend ||
       output.encoding != encoding ||
