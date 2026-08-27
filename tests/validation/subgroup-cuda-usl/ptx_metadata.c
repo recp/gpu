@@ -3,9 +3,9 @@
 #include <stdio.h>
 
 static bool
-supports_subgroups(const GPUAdapter                 *adapter,
-                   GPUShaderStageFlags               stage,
-                   GPUBackendSubgroupOperationFlags  operations) {
+supports_subgroups(const GPUAdapter * __restrict    adapter,
+                   GPUShaderStageFlags              stage,
+                   GPUBackendSubgroupOperationFlags operations) {
   (void)adapter;
   (void)operations;
   return (stage & GPU_SHADER_STAGE_COMPUTE_BIT) != 0u;

@@ -3,9 +3,11 @@
 #include <stdio.h>
 
 static GPUResult
-get_matrix_properties(const GPUAdapter               *adapter,
-                      uint32_t                       *inoutPropertyCount,
-                      GPUSubgroupMatrixPropertiesEXT *outProperties) {
+get_matrix_properties(
+  const GPUAdapter               * __restrict adapter,
+  uint32_t                       * __restrict inoutPropertyCount,
+  GPUSubgroupMatrixPropertiesEXT * __restrict outProperties
+) {
   uint32_t capacity;
 
   (void)adapter;
@@ -36,9 +38,9 @@ get_matrix_properties(const GPUAdapter               *adapter,
 }
 
 static bool
-supports_subgroups(const GPUAdapter                 *adapter,
-                   GPUShaderStageFlags               stage,
-                   GPUBackendSubgroupOperationFlags  operations) {
+supports_subgroups(const GPUAdapter * __restrict    adapter,
+                   GPUShaderStageFlags              stage,
+                   GPUBackendSubgroupOperationFlags operations) {
   (void)adapter;
   (void)operations;
   return (stage & GPU_SHADER_STAGE_COMPUTE_BIT) != 0u;

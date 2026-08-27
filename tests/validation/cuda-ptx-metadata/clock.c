@@ -39,7 +39,7 @@ validate_contract(const GPUShaderLibrary *library) {
   }
 
   snprintf(entry, sizeof(entry), ".visible .entry %s(", GPU_PTX_CLOCK_ENTRY);
-  snprintf(clock, sizeof(clock), ", %s;", GPU_PTX_CLOCK_SOURCE);
+  snprintf(clock, sizeof(clock), ", %%%s;", GPU_PTX_CLOCK_SOURCE);
   ptx = ptx_source(library);
   return ptx && strstr(ptx, ".version 6.0") &&
          strstr(ptx, ".target sm_70") && strstr(ptx, entry) &&

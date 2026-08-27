@@ -214,7 +214,7 @@ if(GPU_BUILD_TESTS)
   target_compile_definitions(gpu-cuda-subgroup-clock-metadata PRIVATE
     GPU_PTX_CLOCK_ENTRY="shader_subgroup_clock_cs"
     GPU_PTX_CLOCK_FEATURE=GPU_FEATURE_SHADER_SUBGROUP_CLOCK
-    GPU_PTX_CLOCK_SOURCE="%clock64"
+    GPU_PTX_CLOCK_SOURCE="clock64"
   )
   gpu_add_cuda_ptx_metadata_test(
     device-clock
@@ -224,7 +224,7 @@ if(GPU_BUILD_TESTS)
   target_compile_definitions(gpu-cuda-device-clock-metadata PRIVATE
     GPU_PTX_CLOCK_ENTRY="shader_device_clock_cs"
     GPU_PTX_CLOCK_FEATURE=GPU_FEATURE_SHADER_DEVICE_CLOCK
-    GPU_PTX_CLOCK_SOURCE="%globaltimer"
+    GPU_PTX_CLOCK_SOURCE="globaltimer"
   )
   gpu_add_cuda_ptx_metadata_test(
     async-copy
