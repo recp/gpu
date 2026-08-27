@@ -63,7 +63,31 @@ typedef enum CUresourcetype {
 } CUresourcetype;
 
 typedef enum CUresourceViewFormat {
-  CU_RES_VIEW_FORMAT_NONE = 0x00
+  CU_RES_VIEW_FORMAT_NONE       = 0x00,
+  CU_RES_VIEW_FORMAT_UINT_1X8   = 0x01,
+  CU_RES_VIEW_FORMAT_UINT_2X8   = 0x02,
+  CU_RES_VIEW_FORMAT_UINT_4X8   = 0x03,
+  CU_RES_VIEW_FORMAT_SINT_1X8   = 0x04,
+  CU_RES_VIEW_FORMAT_SINT_2X8   = 0x05,
+  CU_RES_VIEW_FORMAT_SINT_4X8   = 0x06,
+  CU_RES_VIEW_FORMAT_UINT_1X16  = 0x07,
+  CU_RES_VIEW_FORMAT_UINT_2X16  = 0x08,
+  CU_RES_VIEW_FORMAT_UINT_4X16  = 0x09,
+  CU_RES_VIEW_FORMAT_SINT_1X16  = 0x0a,
+  CU_RES_VIEW_FORMAT_SINT_2X16  = 0x0b,
+  CU_RES_VIEW_FORMAT_SINT_4X16  = 0x0c,
+  CU_RES_VIEW_FORMAT_UINT_1X32  = 0x0d,
+  CU_RES_VIEW_FORMAT_UINT_2X32  = 0x0e,
+  CU_RES_VIEW_FORMAT_UINT_4X32  = 0x0f,
+  CU_RES_VIEW_FORMAT_SINT_1X32  = 0x10,
+  CU_RES_VIEW_FORMAT_SINT_2X32  = 0x11,
+  CU_RES_VIEW_FORMAT_SINT_4X32  = 0x12,
+  CU_RES_VIEW_FORMAT_FLOAT_1X16 = 0x13,
+  CU_RES_VIEW_FORMAT_FLOAT_2X16 = 0x14,
+  CU_RES_VIEW_FORMAT_FLOAT_4X16 = 0x15,
+  CU_RES_VIEW_FORMAT_FLOAT_1X32 = 0x16,
+  CU_RES_VIEW_FORMAT_FLOAT_2X32 = 0x17,
+  CU_RES_VIEW_FORMAT_FLOAT_4X32 = 0x18
 } CUresourceViewFormat;
 
 typedef struct CUuuid {
@@ -159,6 +183,7 @@ typedef struct CUDA_RESOURCE_VIEW_DESC {
   uint32_t             lastMipmapLevel;
   uint32_t             firstLayer;
   uint32_t             lastLayer;
+  uint32_t             reserved[16];
 } CUDA_RESOURCE_VIEW_DESC;
 
 typedef enum CUexternalMemoryHandleType {
@@ -264,7 +289,7 @@ _Static_assert(sizeof(CUDA_RESOURCE_DESC) == 144u,
                "CUDA resource descriptor ABI drift");
 _Static_assert(sizeof(CUDA_TEXTURE_DESC) == 104u,
                "CUDA texture descriptor ABI drift");
-_Static_assert(sizeof(CUDA_RESOURCE_VIEW_DESC) == 48u,
+_Static_assert(sizeof(CUDA_RESOURCE_VIEW_DESC) == 112u,
                "CUDA resource-view descriptor ABI drift");
 #endif
 

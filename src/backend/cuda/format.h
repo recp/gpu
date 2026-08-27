@@ -31,6 +31,11 @@ cuda_formatInfo(GPUFormat format, GPUCudaFormatInfo *outInfo);
 
 GPU_HIDE
 bool
+cuda_formatResourceView(const GPUCudaFormatInfo *format,
+                        CUresourceViewFormat    *outFormat);
+
+GPU_HIDE
+bool
 cuda_formatTextureDesc(const GPUCudaFormatInfo *format,
                        const CUDA_TEXTURE_DESC *source,
                        CUDA_TEXTURE_DESC       *outDesc);

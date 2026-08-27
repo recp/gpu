@@ -175,6 +175,42 @@ validate_texture_desc(void) {
   return 1;
 }
 
+static int
+validate_resource_view_formats(void) {
+  static const struct {
+    GPUFormat            format;
+    CUresourceViewFormat viewFormat;
+  } viewFormats[] = {
+    {GPU_FORMAT_R8_UNORM,     CU_RES_VIEW_FORMAT_UINT_1X8},
+    {GPU_FORMAT_RG8_SINT,     CU_RES_VIEW_FORMAT_SINT_2X8},
+    {GPU_FORMAT_RGBA8_UINT,   CU_RES_VIEW_FORMAT_UINT_4X8},
+    {GPU_FORMAT_R16_FLOAT,    CU_RES_VIEW_FORMAT_FLOAT_1X16},
+    {GPU_FORMAT_RG16_SINT,    CU_RES_VIEW_FORMAT_SINT_2X16},
+    {GPU_FORMAT_RGBA16_FLOAT, CU_RES_VIEW_FORMAT_FLOAT_4X16},
+    {GPU_FORMAT_RG32_UINT,    CU_RES_VIEW_FORMAT_UINT_2X32},
+    {GPU_FORMAT_RGBA32_FLOAT, CU_RES_VIEW_FORMAT_FLOAT_4X32}
+  };
+  GPUCudaFormatInfo    info;
+  CUresourceViewFormat viewFormat;
+
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(viewFormats); i++) {
+    if (!cuda_formatInfo(viewFormats[i].format, &info) ||
+        !cuda_formatResourceView(&info, &viewFormat) ||
+        viewFormat != viewFormats[i].viewFormat) {
+      return 0;
+    }
+  }
+  memset(&info, 0, sizeof(info));
+  viewFormat = CU_RES_VIEW_FORMAT_FLOAT_4X32;
+  if (cuda_formatResourceView(&info, &viewFormat) ||
+      viewFormat != CU_RES_VIEW_FORMAT_NONE ||
+      cuda_formatResourceView(NULL, &viewFormat) ||
+      cuda_formatResourceView(&info, NULL)) {
+    return 0;
+  }
+  return 1;
+}
+
 int
 main(void) {
   GPUCudaFormatInfo info;
@@ -215,6 +251,7 @@ main(void) {
   if (supported != GPU_ARRAY_LEN(expected) ||
       cuda_formatInfo(GPU_FORMAT_COUNT, &info) ||
       cuda_formatInfo(GPU_FORMAT_RGBA32_FLOAT, NULL) ||
+      !validate_resource_view_formats() ||
       !validate_texture_desc()) {
     fprintf(stderr, "CUDA format contract boundary mismatch\n");
     return 1;

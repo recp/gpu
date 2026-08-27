@@ -141,6 +141,10 @@ cuda_createTextureView(GPUTexture                     * __restrict texture,
       !cuda_textureViewPlan(texture, info, &plan)) {
     return GPU_ERROR_UNSUPPORTED;
   }
+  if (plan.hasResourceView &&
+      !cuda_formatResourceView(&format, &plan.desc.format)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
 
   *outView      = NULL;
   textureNative = texture->_priv;

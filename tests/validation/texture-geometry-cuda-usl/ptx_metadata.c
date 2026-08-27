@@ -142,7 +142,8 @@ validate_source(const GPUShaderLibrary *library) {
 
   ptx = library ? library->_priv : NULL;
   return ptx && ptx->text &&
-         strstr(ptx->text, "tex.base.1d.v4.f32.s32") &&
+         strstr(ptx->text, "cvt.rn.f32.s32") &&
+         strstr(ptx->text, "tex.1d.v4.f32.f32") &&
          strstr(ptx->text, "tex.base.a1d.v4.f32.s32") &&
          strstr(ptx->text, "tex.base.a2d.v4.f32.s32") &&
          strstr(ptx->text, "tex.base.3d.v4.f32.s32") &&

@@ -132,6 +132,7 @@ values_match(const float output[OutputCount * ChannelCount]) {
   static const uint32_t Offsets[OutputCount] = {
     8u, 36u, 36u, 20u, 4u, 4u, 36u
   };
+  int valid = 1;
 
   for (uint32_t value = 0u; value < OutputCount; value++) {
     for (uint32_t channel = 0u; channel < ChannelCount; channel++) {
@@ -147,11 +148,11 @@ values_match(const float output[OutputCount * ChannelCount]) {
                 channel,
                 actual,
                 expected);
-        return 0;
+        valid = 0;
       }
     }
   }
-  return 1;
+  return valid;
 }
 
 static void

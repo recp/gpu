@@ -137,6 +137,40 @@ cuda_formatInfo(GPUFormat format, GPUCudaFormatInfo *outInfo) {
 
 GPU_HIDE
 bool
+cuda_formatResourceView(const GPUCudaFormatInfo *format,
+                        CUresourceViewFormat    *outFormat) {
+  CUresourceViewFormat base;
+  uint32_t             channelOffset;
+
+  if (outFormat) {
+    *outFormat = CU_RES_VIEW_FORMAT_NONE;
+  }
+  if (!format || !outFormat) {
+    return false;
+  }
+  switch (format->channelCount) {
+    case 1u: channelOffset = 0u; break;
+    case 2u: channelOffset = 1u; break;
+    case 4u: channelOffset = 2u; break;
+    default: return false;
+  }
+  switch (format->arrayFormat) {
+    case CU_AD_FORMAT_UNSIGNED_INT8:  base = CU_RES_VIEW_FORMAT_UINT_1X8; break;
+    case CU_AD_FORMAT_SIGNED_INT8:    base = CU_RES_VIEW_FORMAT_SINT_1X8; break;
+    case CU_AD_FORMAT_UNSIGNED_INT16: base = CU_RES_VIEW_FORMAT_UINT_1X16; break;
+    case CU_AD_FORMAT_SIGNED_INT16:   base = CU_RES_VIEW_FORMAT_SINT_1X16; break;
+    case CU_AD_FORMAT_UNSIGNED_INT32: base = CU_RES_VIEW_FORMAT_UINT_1X32; break;
+    case CU_AD_FORMAT_SIGNED_INT32:   base = CU_RES_VIEW_FORMAT_SINT_1X32; break;
+    case CU_AD_FORMAT_HALF:           base = CU_RES_VIEW_FORMAT_FLOAT_1X16; break;
+    case CU_AD_FORMAT_FLOAT:          base = CU_RES_VIEW_FORMAT_FLOAT_1X32; break;
+    default: return false;
+  }
+  *outFormat = (CUresourceViewFormat)((uint32_t)base + channelOffset);
+  return true;
+}
+
+GPU_HIDE
+bool
 cuda_formatTextureDesc(const GPUCudaFormatInfo *format,
                        const CUDA_TEXTURE_DESC *source,
                        CUDA_TEXTURE_DESC       *outDesc) {
