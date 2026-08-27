@@ -169,8 +169,18 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     api
     "${PROJECT_SOURCE_DIR}/tests/api/subgroup.usl"
   )
+  gpu_add_usl_fixtures(
+    GPU_API_SUBGROUP_RELATIVE_USL_FIXTURE
+    vulkan
+    api-subgroup-relative
+    "${PROJECT_SOURCE_DIR}/tests/api/subgroup_relative.usl"
+  )
   unset(GPU_USL_FIXTURE_TARGET_CAPS)
   list(APPEND GPU_API_USL_FIXTURES ${GPU_API_SUBGROUP_USL_FIXTURE})
+  add_custom_target(
+    gpu-api-subgroup-relative-fixture
+    DEPENDS ${GPU_API_SUBGROUP_RELATIVE_USL_FIXTURE}
+  )
   set(GPU_API_SUBGROUP_MATRIX_USL_SOURCE
       "${PROJECT_SOURCE_DIR}/tests/api/subgroup_matrix.usl")
   set(GPU_API_SUBGROUP_MATRIX_PROFILE "8x8x8")
@@ -678,6 +688,7 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
   add_dependencies(gpu-api-test gpu-api-dx12-binding-plan-fixture)
   add_dependencies(gpu-api-test gpu-api-msaa-fixture)
   add_dependencies(gpu-api-test gpu-api-atomic64-fixture)
+  add_dependencies(gpu-api-test gpu-api-subgroup-relative-fixture)
   add_dependencies(gpu-api-test gpu-api-buffer-descriptor-array-fixture)
   add_dependencies(gpu-api-test
                    gpu-api-buffer-descriptor-array-dynamic-fixture)
@@ -749,6 +760,7 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
   )
   set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
     "GPU_MSAA_USL_PATH=${GPU_API_MSAA_USL_FIXTURE}"
+    "GPU_SUBGROUP_RELATIVE_USL_PATH=${GPU_API_SUBGROUP_RELATIVE_USL_FIXTURE}"
     "GPU_BUFFER_DESCRIPTOR_ARRAY_USL_PATH=${GPU_API_BUFFER_DESCRIPTOR_ARRAY_USL_FIXTURE}"
     "GPU_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_USL_PATH=${GPU_API_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_USL_FIXTURE}"
     "GPU_DX12_BINDING_PLAN_USL_PATH=${GPU_API_DX12_BINDING_PLAN_USL_FIXTURE}"
@@ -855,6 +867,7 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     )
     set_property(TEST api-validation-vulkan APPEND PROPERTY ENVIRONMENT
       "GPU_MSAA_USL_PATH=${GPU_API_VULKAN_MSAA_USL_FIXTURE}"
+      "GPU_SUBGROUP_RELATIVE_USL_PATH=${GPU_API_SUBGROUP_RELATIVE_USL_FIXTURE}"
       "GPU_BUFFER_DESCRIPTOR_ARRAY_USL_PATH=${GPU_API_VULKAN_BUFFER_DESCRIPTOR_ARRAY_USL_FIXTURE}"
       "GPU_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_USL_PATH=${GPU_API_VULKAN_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_USL_FIXTURE}"
     )

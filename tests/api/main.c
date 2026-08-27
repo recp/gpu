@@ -204,7 +204,9 @@ static int
 run_subgroup(void *ctx) {
   GPUApiTestContext *testCtx = ctx;
 
-  return gpu_test_subgroup(testCtx->adapter, testCtx->subgroupBytecodePath);
+  return gpu_test_subgroup(testCtx->adapter,
+                           testCtx->subgroupBytecodePath,
+                           testCtx->subgroupRelativeBytecodePath);
 }
 
 static int
@@ -464,6 +466,8 @@ main(int argc, char **argv) {
   ctx.bufferDescriptorArrayDynamicBytecodePath =
     getenv("GPU_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_USL_PATH");
   ctx.subgroupBytecodePath           = argv[12];
+  ctx.subgroupRelativeBytecodePath   =
+    getenv("GPU_SUBGROUP_RELATIVE_USL_PATH");
   ctx.subgroupMatrixBytecodePath     = getenv("GPU_SUBGROUP_MATRIX_USL_PATH");
   ctx.shaderF16BytecodePath          = argv[13];
   ctx.atomic64BytecodePath           = getenv("GPU_ATOMIC64_USL_PATH");

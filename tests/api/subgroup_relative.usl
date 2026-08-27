@@ -1,0 +1,8 @@
+kern(64, 1, 1) subgroup_relative_cs(
+    values: &[uint] #buffer(0) #group(0),
+    relative: &mut [uint] #buffer(1) #group(0),
+    gid: uint #global_id) {
+  relative[gid as usize] = simd_shuffle_and_fill_down(values[gid as usize],
+                                                      0u,
+                                                      1u)
+}

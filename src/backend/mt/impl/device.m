@@ -70,6 +70,10 @@ mt_initFormatSupport(GPUAdapterMT *adapterMT) {
     adapterMT->appleFamily1 = [device supportsFamily:MTLGPUFamilyApple1];
     adapterMT->appleFamily2 = [device supportsFamily:MTLGPUFamilyApple2];
   }
+  if (@available(macOS 13.0, iOS 16.0, *)) {
+    adapterMT->subgroupRelative =
+      [device supportsFamily:MTLGPUFamilyApple8];
+  }
 #if TARGET_OS_OSX
   if (@available(macOS 11.0, *)) {
     adapterMT->sparseTextures =
@@ -345,14 +349,17 @@ mt_supportsSubgroupOperations(
     GPU_SHADER_STAGE_COMPUTE_BIT |
     GPU_SHADER_STAGE_TASK_BIT |
     GPU_SHADER_STAGE_MESH_BIT;
-  const GPUBackendSubgroupOperationFlags supportedOperations =
+  GPUBackendSubgroupOperationFlags supportedOperations =
     GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
-    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT |
-    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
+    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT;
   GPUAdapterMT *adapterMT;
 
   adapterMT = mt_adapter(adapter);
   mt_probeSubgroups(adapterMT);
+  if (adapterMT && adapterMT->subgroupRelative) {
+    supportedOperations |=
+      GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
+  }
   return adapterMT && adapterMT->subgroups &&
          (supportedStages & stage) == stage &&
          (supportedOperations & operations) == operations;
