@@ -25,27 +25,27 @@
 static const GPUBlitShaderSet vk_blitTextureShaders = {
   .filteringFloat = {
     .data   = gpu_blitFloatSPIRV,
-    .size   = gpu_blitFloatSPIRV_len,
+    .size   = sizeof(gpu_blitFloatSPIRV),
     .binary = true
   },
   .filteringFloatArray = {
     .data   = gpu_blitFloatArraySPIRV,
-    .size   = gpu_blitFloatArraySPIRV_len,
+    .size   = sizeof(gpu_blitFloatArraySPIRV),
     .binary = true
   },
   .unfilterableFloat = {
     .data   = gpu_blitFloatSPIRV,
-    .size   = gpu_blitFloatSPIRV_len,
+    .size   = sizeof(gpu_blitFloatSPIRV),
     .binary = true
   },
   .unsignedInteger = {
     .data   = gpu_blitUintSPIRV,
-    .size   = gpu_blitUintSPIRV_len,
+    .size   = sizeof(gpu_blitUintSPIRV),
     .binary = true
   },
   .signedInteger = {
     .data   = gpu_blitSintSPIRV,
-    .size   = gpu_blitSintSPIRV_len,
+    .size   = sizeof(gpu_blitSintSPIRV),
     .binary = true
   }
 };
