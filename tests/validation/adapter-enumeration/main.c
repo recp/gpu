@@ -7,7 +7,7 @@ static GPUAdapter adapter;
 static uint32_t   enumerationCalls;
 
 static GPUAdapter *
-enumerate_adapters(GPUInstance *instance, uint32_t maxCount) {
+enumerate_adapters(GPUInstance * __restrict instance, uint32_t maxCount) {
   enumerationCalls++;
   if (enumerationCalls == 1u || maxCount == 0u) {
     return NULL;
