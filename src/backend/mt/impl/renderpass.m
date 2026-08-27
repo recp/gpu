@@ -1029,6 +1029,7 @@ static void
 mt_generateMipmaps(GPUCommandBuffer *cmdb, GPUTexture *texture) {
   GPUTransferPassEncoder *pass;
   MTCopyEncoder          *native;
+  GPUAdapterMT           *adapter;
   id<MTLTexture>          nativeTexture;
 
 #if MT_HAS_METAL4
@@ -1040,6 +1041,15 @@ mt_generateMipmaps(GPUCommandBuffer *cmdb, GPUTexture *texture) {
     return;
   }
 #endif
+
+  adapter = texture && texture->device && texture->device->adapter
+              ? texture->device->adapter->_priv
+              : NULL;
+  if (texture && texture->depthOrLayers > 1u && adapter &&
+      !adapter->appleFamily1) {
+    gpuGenerateMipmapsFallback(cmdb, texture, mt_blitTexture);
+    return;
+  }
 
   pass = GPUBeginTransferPass(cmdb, "gpu-generate-mipmaps");
   if (!pass) {

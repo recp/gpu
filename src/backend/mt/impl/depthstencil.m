@@ -36,6 +36,12 @@ mt_textureUsage(GPUTextureUsageFlags usage) {
   return mtUsage;
 }
 
+static bool
+mt_formatIsDepthStencil(GPUFormat format) {
+  return format >= GPU_FORMAT_DEPTH16_UNORM &&
+         format <= GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+}
+
 static MTLPixelFormat
 mt_stencilCopyFormat(GPUFormat format) {
   switch (format) {
@@ -284,7 +290,8 @@ mt_createTexture(GPUDevice                  * __restrict device,
 
   deviceMT    = device->_priv;
   storageMode = MTLStorageModePrivate;
-  if ((info->usage & GPU_TEXTURE_USAGE_COPY_DST) != 0) {
+  if ((info->usage & GPU_TEXTURE_USAGE_COPY_DST) != 0 &&
+      !mt_formatIsDepthStencil(info->format)) {
 #if TARGET_OS_OSX
     storageMode = MTLStorageModeManaged;
 #else
