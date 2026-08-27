@@ -8,7 +8,7 @@ pub struct FragmentUniforms {
 }
 
 vert reflect_vs(v: VSIn #stage_in) -> float4 {
-  return float4(v.position, 0.0, 1.0)
+  return float4(v.position + v.uv, 0.0, 1.0)
 }
 
 @require(explicit_gradient_sampling)

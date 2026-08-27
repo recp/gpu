@@ -4,7 +4,6 @@ struct MeshVertex {
 }
 
 struct MeshPrimitive {
-  shade:  float
   culled: bool #primitive_culled
 }
 
@@ -35,7 +34,7 @@ mesh(6, 1, 1) mesh_main(payload: MeshPayload #payload,
                          tid: uint #local_index) {
   mesh_set_primitive_count(2)
   if (tid < 2) {
-    mesh_set_primitive(tid, MeshPrimitive(1.0, tid == 1))
+    mesh_set_primitive(tid, MeshPrimitive(tid == 1))
   }
   if (tid < 6) {
     let primitive = tid / 3
