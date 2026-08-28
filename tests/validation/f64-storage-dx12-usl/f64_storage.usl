@@ -3,10 +3,15 @@ kern(1, 1, 1) f64_storage(
   matrices:          [double3x3] #buffer(1),
   inout valuesOut:   [double3] #buffer(2),
   inout matricesOut: [double3x3] #buffer(3),
-  inout determinantOut: [double] #buffer(4),
+  inout determinantOut: [double4] #buffer(4),
+  matrices2:          [double2x2] #buffer(5),
+  matrices4:          [double4x4] #buffer(6),
   gid:               uint #global_id
 ) {
   valuesOut[gid] = values[gid + 1u]
   matricesOut[gid] = matrices[gid]
-  determinantOut[gid] = determinant(matrices[gid])
+  determinantOut[gid] = double4(determinant(matrices2[gid]),
+                                 determinant(matrices[gid]),
+                                 determinant(matrices4[gid]),
+                                 1.0)
 }
