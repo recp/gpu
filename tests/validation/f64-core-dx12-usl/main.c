@@ -142,6 +142,39 @@ sqrt4_matches(const Double4 *actual,
 }
 
 static int
+rsqrt4_matches(const Double4 *actual,
+               const Double4 *input,
+               uint32_t       element) {
+  for (uint32_t lane = 0u; lane < 4u; lane++) {
+    double expected = 1.0 / sqrt(input->lane[lane]);
+    uint64_t actualBits;
+    uint64_t expectedBits;
+    uint64_t distance;
+
+    if (isnan(expected)) {
+      if (isnan(actual->lane[lane])) continue;
+    } else {
+      actualBits   = double_bits(actual->lane[lane]);
+      expectedBits = double_bits(expected);
+      distance     = actualBits > expectedBits
+                       ? actualBits - expectedBits
+                       : expectedBits - actualBits;
+      if (distance <= 2u) continue;
+    }
+    fprintf(stderr,
+            "F64 rsqrt mismatch at element %u lane %u: "
+            "input %.17g, expected %.17g, got %.17g\n",
+            element,
+            lane,
+            input->lane[lane],
+            expected,
+            actual->lane[lane]);
+    return 0;
+  }
+  return 1;
+}
+
+static int
 sqrt_geometric_matches(const Double4 *actual) {
   const double length2 = sqrt(13.0);
   const double length3 = sqrt(29.0);
@@ -195,10 +228,10 @@ main(int argc, char **argv) {
   GPUBindGroupEntry            groupEntries[5] = {0};
   GPUBindGroupCreateInfo       groupInfo = {0};
   GPUQueueSubmitInfo           submitInfo = {0};
-  Double4                      output[23] = {0};
+  Double4                      output[26] = {0};
   Float2                       packed = {0};
   Int2                         integer = {0};
-  const Double4                zeroOutput[23] = {0};
+  const Double4                zeroOutput[26] = {0};
   const void                  *initialValues[5] = {
     &kInput, zeroOutput, &kPacked, &kInteger, kSqrtInput
   };
@@ -406,6 +439,14 @@ main(int argc, char **argv) {
                          &kExpectedRefract[element],
                          21u + element)) {
       fprintf(stderr, "Direct3D 12 F64 refract validation failed\n");
+      goto cleanup;
+    }
+  }
+  for (uint32_t element = 0u; element < 3u; element++) {
+    if (!rsqrt4_matches(&output[23u + element],
+                        &kSqrtInput[element],
+                        element)) {
+      fprintf(stderr, "Direct3D 12 F64 rsqrt validation failed\n");
       goto cleanup;
     }
   }

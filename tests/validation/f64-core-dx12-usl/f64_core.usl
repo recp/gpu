@@ -51,6 +51,9 @@ kern(1, 1, 1) f64_core(input: [double4] #buffer(0),
   output[22u] = refract(double4(1.0, 0.0, 0.0, 0.0),
                         double4(0.0, 1.0, 0.0, 0.0),
                         2.0)
+  output[23u] = rsqrt(sqrtInput[0u])
+  output[24u] = rsqrt(sqrtInput[1u])
+  output[25u] = rsqrt(sqrtInput[2u])
   packed[index]            = float2(float(value.z), float(value.w))
   integer[index]           = int2(int(value.x), int(value.y))
 }
