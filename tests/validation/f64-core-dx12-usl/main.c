@@ -20,9 +20,15 @@ typedef struct Int2 {
 } Int2;
 
 static const Double4 kInput = {{-2.0, 3.0, 4.0, -5.0}};
-static const Double4 kExpectedOutput[2] = {
+static const Double4 kExpectedOutput[8] = {
   {{-1.5, 4.0, 5.5, -3.0}},
-  {{-2.75, 3.0, -5.0, 8.5}}
+  {{-2.75, 3.0, -5.0, 8.5}},
+  {{-2.0, 0.5, 0.5, -5.0}},
+  {{-0.5, 3.0, 4.0, -0.5}},
+  {{-1.0, 1.0, 1.0, -1.0}},
+  {{0.0, 1.0, 1.0, 0.0}},
+  {{-1.0, 1.0, 1.0, -1.0}},
+  {{2.0, 3.0, 4.0, 5.0}}
 };
 static const Float2 kPacked = {{1.5f, -2.25f}};
 static const Float2 kExpectedPacked = {{4.0f, -5.0f}};
@@ -94,10 +100,10 @@ main(int argc, char **argv) {
   GPUBindGroupEntry            groupEntries[4] = {0};
   GPUBindGroupCreateInfo       groupInfo = {0};
   GPUQueueSubmitInfo           submitInfo = {0};
-  Double4                      output[2] = {0};
+  Double4                      output[8] = {0};
   Float2                       packed = {0};
   Int2                         integer = {0};
-  const Double4                zeroOutput[2] = {0};
+  const Double4                zeroOutput[8] = {0};
   const void                  *initialValues[4] = {
     &kInput, zeroOutput, &kPacked, &kInteger
   };
@@ -272,14 +278,20 @@ main(int argc, char **argv) {
                          0u,
                          &integer,
                          sizeof(integer)) != GPU_OK ||
-      !double4_matches(&output[0], &kExpectedOutput[0], 0u) ||
-      !double4_matches(&output[1], &kExpectedOutput[1], 1u) ||
       fabsf(packed.lane[0] - kExpectedPacked.lane[0]) > 1e-6f ||
       fabsf(packed.lane[1] - kExpectedPacked.lane[1]) > 1e-6f ||
       integer.lane[0] != kExpectedInteger.lane[0] ||
       integer.lane[1] != kExpectedInteger.lane[1]) {
     fprintf(stderr, "Direct3D 12 F64 readback validation failed\n");
     goto cleanup;
+  }
+  for (uint32_t element = 0u; element < 8u; element++) {
+    if (!double4_matches(&output[element],
+                         &kExpectedOutput[element],
+                         element)) {
+      fprintf(stderr, "Direct3D 12 F64 output validation failed\n");
+      goto cleanup;
+    }
   }
   ok = 1;
 
