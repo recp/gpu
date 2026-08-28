@@ -12,23 +12,26 @@ kern(1, 1, 1) f64_core(input: [double4] #buffer(0),
   let converted  = double(integer[index].x)
   let normal     = double4(0.5, -1.0, 2.0, 0.25)
 
-  output[index * 11u]      = shifted
-  output[index * 11u + 1u] = double4(value.x * double(2.0) + double(1.25),
+  output[index * 14u]      = shifted
+  output[index * 14u + 1u] = double4(value.x * double(2.0) + double(1.25),
                                      min(value.y, value.z),
                                      selected,
                                      extended + converted)
-  output[index * 11u + 2u] = min(value, double4(0.5))
-  output[index * 11u + 3u] = max(value, double4(-0.5))
-  output[index * 11u + 4u] = clamp(value, double4(-1.0), double4(1.0))
-  output[index * 11u + 5u] = saturate(value)
-  output[index * 11u + 6u] = sign(value)
-  output[index * 11u + 7u] = abs(value)
-  output[index * 11u + 8u] = double4(dot(value.xy, normal.xy),
+  output[index * 14u + 2u] = min(value, double4(0.5))
+  output[index * 14u + 3u] = max(value, double4(-0.5))
+  output[index * 14u + 4u] = clamp(value, double4(-1.0), double4(1.0))
+  output[index * 14u + 5u] = saturate(value)
+  output[index * 14u + 6u] = sign(value)
+  output[index * 14u + 7u] = abs(value)
+  output[index * 14u + 8u] = double4(dot(value.xy, normal.xy),
                                      dot(value.xyz, normal.xyz),
                                      dot(value, normal),
                                      1.0)
-  output[index * 11u + 9u] = double4(cross(value.xyz, normal.xyz), 1.0)
-  output[index * 11u + 10u] = reflect(value, normal)
+  output[index * 14u + 9u] = double4(cross(value.xyz, normal.xyz), 1.0)
+  output[index * 14u + 10u] = reflect(value, normal)
+  output[index * 14u + 11u] = faceforward(value, normal, value)
+  output[index * 14u + 12u] = project(value, normal)
+  output[index * 14u + 13u] = reject(value, normal)
   packed[index]            = float2(float(value.z), float(value.w))
   integer[index]           = int2(int(value.x), int(value.y))
 }

@@ -20,7 +20,7 @@ typedef struct Int2 {
 } Int2;
 
 static const Double4 kInput = {{-2.0, 3.0, 4.0, -5.0}};
-static const Double4 kExpectedOutput[11] = {
+static const Double4 kExpectedOutput[14] = {
   {{-1.5, 4.0, 5.5, -3.0}},
   {{-2.75, 3.0, -5.0, 8.5}},
   {{-2.0, 0.5, 0.5, -5.0}},
@@ -31,7 +31,16 @@ static const Double4 kExpectedOutput[11] = {
   {{2.0, 3.0, 4.0, 5.0}},
   {{-4.0, 4.0, 2.75, 1.0}},
   {{10.0, 6.0, 0.5, 1.0}},
-  {{-4.75, 8.5, -7.0, -6.375}}
+  {{-4.75, 8.5, -7.0, -6.375}},
+  {{2.0, -3.0, -4.0, 5.0}},
+  {{0.25882352941176473,
+    -0.51764705882352946,
+    1.0352941176470589,
+    0.12941176470588237}},
+  {{-2.2588235294117647,
+    3.5176470588235293,
+    2.9647058823529413,
+    -5.1294117647058828}}
 };
 static const Float2 kPacked = {{1.5f, -2.25f}};
 static const Float2 kExpectedPacked = {{4.0f, -5.0f}};
@@ -103,10 +112,10 @@ main(int argc, char **argv) {
   GPUBindGroupEntry            groupEntries[4] = {0};
   GPUBindGroupCreateInfo       groupInfo = {0};
   GPUQueueSubmitInfo           submitInfo = {0};
-  Double4                      output[11] = {0};
+  Double4                      output[14] = {0};
   Float2                       packed = {0};
   Int2                         integer = {0};
-  const Double4                zeroOutput[11] = {0};
+  const Double4                zeroOutput[14] = {0};
   const void                  *initialValues[4] = {
     &kInput, zeroOutput, &kPacked, &kInteger
   };
@@ -288,7 +297,7 @@ main(int argc, char **argv) {
     fprintf(stderr, "Direct3D 12 F64 readback validation failed\n");
     goto cleanup;
   }
-  for (uint32_t element = 0u; element < 11u; element++) {
+  for (uint32_t element = 0u; element < 14u; element++) {
     if (!double4_matches(&output[element],
                          &kExpectedOutput[element],
                          element)) {
