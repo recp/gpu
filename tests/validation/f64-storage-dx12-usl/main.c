@@ -34,6 +34,12 @@ static const Double3x3Storage kMatrix = {{
   {3.0, 4.0, 0.0, 0.0}
 }};
 
+static const Double3x3Storage kMatrixTranspose = {{
+  {1.0, 2.0, 3.0, 0.0},
+  {0.0, 1.0, 4.0, 0.0},
+  {5.0, 6.0, 0.0, 0.0}
+}};
+
 static const Double2x2Storage kMatrix2 = {{
   {1.0, 3.0},
   {2.0, 4.0}
@@ -315,7 +321,7 @@ main(int argc, char **argv) {
                          &determinantResult,
                          sizeof(determinantResult)) != GPU_OK ||
       !values_match(&valueResult, &kValues[1]) ||
-      !matrix_matches(&matrixResult, &kMatrix)) {
+      !matrix_matches(&matrixResult, &kMatrixTranspose)) {
     fprintf(stderr, "Direct3D 12 F64 storage readback validation failed\n");
     goto cleanup;
   }

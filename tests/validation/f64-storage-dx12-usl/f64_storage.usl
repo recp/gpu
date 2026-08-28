@@ -9,7 +9,7 @@ kern(1, 1, 1) f64_storage(
   gid:               uint #global_id
 ) {
   valuesOut[gid] = values[gid + 1u]
-  matricesOut[gid] = matrices[gid]
+  matricesOut[gid] = transpose(matrices[gid])
   determinantOut[gid] = double4(determinant(matrices2[gid]),
                                  determinant(matrices[gid]),
                                  determinant(matrices4[gid]),
