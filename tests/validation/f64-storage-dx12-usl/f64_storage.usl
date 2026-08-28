@@ -28,6 +28,7 @@ kern(1, 1, 1) f64_storage(
   inout remapOut:     [double4] #buffer(26),
   inout stepOut:      [double4] #buffer(27),
   inout smoothstepOut: [double4] #buffer(28),
+  inout copysignOut:  [double4] #buffer(29),
   gid:               uint #global_id
 ) {
   let matrix = matrices[gid]
@@ -64,4 +65,6 @@ kern(1, 1, 1) f64_storage(
   smoothstepOut[gid] = smoothstep(lerpValues[0],
                                   lerpValues[1],
                                   lerpValues[2])
+  copysignOut[gid] = copysign(lerpValues[0],
+                              double4(-0.0, 1.0, -1.0, 0.0))
 }
