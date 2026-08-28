@@ -2,6 +2,7 @@ kern(1, 1, 1) f64_core(input: [double4] #buffer(0),
                         inout output: [double4] #buffer(1),
                         inout packed: [float2] #buffer(2),
                         inout integer: [int2] #buffer(3),
+                        sqrtInput: [double4] #buffer(4),
                         gid: uint3 #global_id) {
   let index      = gid.x
   let value      = input[index]
@@ -32,6 +33,9 @@ kern(1, 1, 1) f64_core(input: [double4] #buffer(0),
   output[index * 14u + 11u] = faceforward(value, normal, value)
   output[index * 14u + 12u] = project(value, normal)
   output[index * 14u + 13u] = reject(value, normal)
+  output[14u] = sqrt(sqrtInput[0u])
+  output[15u] = sqrt(sqrtInput[1u])
+  output[16u] = sqrt(sqrtInput[2u])
   packed[index]            = float2(float(value.z), float(value.w))
   integer[index]           = int2(int(value.x), int(value.y))
 }
