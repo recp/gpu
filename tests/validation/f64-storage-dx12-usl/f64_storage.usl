@@ -30,6 +30,12 @@ kern(1, 1, 1) f64_storage(
   inout smoothstepOut: [double4] #buffer(28),
   inout copysignOut:  [double4] #buffer(29),
   inout modOut:       [double4] #buffer(30),
+  roundingValues:     [double4] #buffer(31),
+  inout floorOut:     [double4] #buffer(32),
+  inout ceilOut:      [double4] #buffer(33),
+  inout truncOut:     [double4] #buffer(34),
+  inout roundOut:     [double4] #buffer(35),
+  inout fractOut:     [double4] #buffer(36),
   gid:               uint #global_id
 ) {
   let matrix = matrices[gid]
@@ -76,4 +82,19 @@ kern(1, 1, 1) f64_storage(
                             lerpValues[1].w,
                             lerpValues[1].z,
                             lerpValues[1].z))
+  floorOut[0] = floor(roundingValues[0])
+  floorOut[1] = floor(roundingValues[1])
+  floorOut[2] = floor(roundingValues[2])
+  ceilOut[0] = ceil(roundingValues[0])
+  ceilOut[1] = ceil(roundingValues[1])
+  ceilOut[2] = ceil(roundingValues[2])
+  truncOut[0] = trunc(roundingValues[0])
+  truncOut[1] = trunc(roundingValues[1])
+  truncOut[2] = trunc(roundingValues[2])
+  roundOut[0] = round(roundingValues[0])
+  roundOut[1] = round(roundingValues[1])
+  roundOut[2] = round(roundingValues[2])
+  fractOut[0] = fract(roundingValues[0])
+  fractOut[1] = fract(roundingValues[1])
+  fractOut[2] = fract(roundingValues[2])
 }
