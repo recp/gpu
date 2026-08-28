@@ -1,0 +1,21 @@
+kern(1, 1, 1) f64_core(input: [double4] #buffer(0),
+                        inout output: [double4] #buffer(1),
+                        inout packed: [float2] #buffer(2),
+                        inout integer: [int2] #buffer(3),
+                        gid: uint3 #global_id) {
+  let index      = gid.x
+  let value      = input[index]
+  let shifted    = value + double4(0.5, 1.0, 1.5, 2.0)
+  let comparison = value.y < value.z
+  let selected   = comparison ? value.w : value.x
+  let extended   = double(packed[index].x)
+  let converted  = double(integer[index].x)
+
+  output[index * 2u]      = shifted
+  output[index * 2u + 1u] = double4(value.x * double(2.0) + double(1.25),
+                                     min(value.y, value.z),
+                                     selected,
+                                     extended + converted)
+  packed[index]            = float2(float(value.z), float(value.w))
+  integer[index]           = int2(int(value.x), int(value.y))
+}

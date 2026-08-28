@@ -1001,6 +1001,39 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
 endif()
 
 if(GPU_BUILD_DX12 AND GPU_BUILD_TESTS)
+  add_executable(gpu-f64-core-dx12-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/f64-core-dx12-usl/main.c
+  )
+  target_compile_definitions(gpu-f64-core-dx12-usl PRIVATE
+    _CRT_SECURE_NO_WARNINGS
+  )
+  target_link_libraries(gpu-f64-core-dx12-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-f64-core-dx12-usl
+                            gpu-dx12-fixtures
+                            "${GPU_DX12_F64_CORE_US}")
+  set_target_properties(gpu-f64-core-dx12-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_options(gpu-f64-core-dx12-usl PRIVATE /W4 /WX)
+  else()
+    target_compile_options(gpu-f64-core-dx12-usl PRIVATE
+      -Wall -Wextra -Werror
+    )
+  endif()
+  add_test(
+    NAME dx12-native-dxil-f64-core
+    COMMAND gpu-f64-core-dx12-usl
+            "${GPU_DX12_F64_CORE_US}"
+  )
+  set_tests_properties(dx12-native-dxil-f64-core PROPERTIES
+    ENVIRONMENT
+      "GPU_DX12_NATIVE_DXIL=1;GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1"
+    PASS_REGULAR_EXPRESSION "GPU: USL generated DXIL binary payload"
+  )
+
   add_executable(gpu-async-copy-dx12-usl
     ${PROJECT_SOURCE_DIR}/tests/validation/async-copy-usl/main.c
   )
