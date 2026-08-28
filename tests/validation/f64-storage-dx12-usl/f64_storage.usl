@@ -19,6 +19,9 @@ kern(1, 1, 1) f64_storage(
   mixedLeft:          [double2x3] #buffer(17),
   mixedRight:         [double3x2] #buffer(18),
   inout mixedOut:     [double2x2] #buffer(19),
+  inout inverse2Out:  [double2x2] #buffer(20),
+  inout inverse3Out:  [double3x3] #buffer(21),
+  inout inverse4Out:  [double4x4] #buffer(22),
   gid:               uint #global_id
 ) {
   let matrix = matrices[gid]
@@ -39,4 +42,7 @@ kern(1, 1, 1) f64_storage(
   matrixVectorOut[gid] = matrix * vector
   vectorMatrixOut[gid] = vector * matrix
   mixedOut[gid] = mixedLeft[gid] * mixedRight[gid]
+  inverse2Out[gid] = inverse(matrices2[gid])
+  inverse3Out[gid] = inverse(matrix)
+  inverse4Out[gid] = inverse(matrices4[gid])
 }
