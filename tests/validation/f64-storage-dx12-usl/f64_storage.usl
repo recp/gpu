@@ -22,6 +22,8 @@ kern(1, 1, 1) f64_storage(
   inout inverse2Out:  [double2x2] #buffer(20),
   inout inverse3Out:  [double3x3] #buffer(21),
   inout inverse4Out:  [double4x4] #buffer(22),
+  lerpValues:         [double4] #buffer(23),
+  inout lerpOut:      [double4] #buffer(24),
   gid:               uint #global_id
 ) {
   let matrix = matrices[gid]
@@ -45,4 +47,5 @@ kern(1, 1, 1) f64_storage(
   inverse2Out[gid] = inverse(matrices2[gid])
   inverse3Out[gid] = inverse(matrix)
   inverse4Out[gid] = inverse(matrices4[gid])
+  lerpOut[gid] = lerp(lerpValues[0], lerpValues[1], lerpValues[2])
 }

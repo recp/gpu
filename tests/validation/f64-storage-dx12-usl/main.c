@@ -56,6 +56,12 @@ static const Double3x3Storage kMatrixRight = {{
 
 static const double kMatrixScale = 2.0;
 
+static const double kLerpValues[3][4] = {
+  {1.0, -2.0, 10.0, 0.0},
+  {5.0, 6.0, -2.0, 100.0},
+  {0.25, 0.5, 1.5, -0.5}
+};
+
 static const Double3Storage kProductVector = {{2.0, -1.0, 0.5, 0.0}};
 
 static const Double2x3Storage kMixedLeft = {{
@@ -209,7 +215,7 @@ main(int argc, char **argv) {
   GPUShaderLibrary      *library = NULL;
   GPUShaderLayout       *shaderLayout = NULL;
   GPUComputePipeline    *pipeline = NULL;
-  GPUBuffer             *buffers[23] = {0};
+  GPUBuffer             *buffers[25] = {0};
   GPUBindGroup          *bindGroup = NULL;
   GPUCommandBuffer      *cmdb = NULL;
   GPUComputePassEncoder *pass = NULL;
@@ -220,7 +226,7 @@ main(int argc, char **argv) {
   GPURuntimeConfig             runtimeConfig = {0};
   GPUComputePipelineCreateInfo pipelineInfo = {0};
   GPUBufferCreateInfo          bufferInfo = {0};
-  GPUBindGroupEntry            groupEntries[23] = {0};
+  GPUBindGroupEntry            groupEntries[25] = {0};
   GPUBindGroupCreateInfo       groupInfo = {0};
   GPUQueueSubmitInfo           submitInfo = {0};
   Double3Storage               valueResult = {0};
@@ -238,21 +244,24 @@ main(int argc, char **argv) {
   Double2x2Storage             inverse2Result = {0};
   Double3x3Storage             inverse3Result = {0};
   Double4x4Storage             inverse4Result = {0};
+  double                       lerpResult[4] = {0};
   double                       determinantResult[4] = {0};
   const Double3Storage         zeroValue = {0};
   const Double3x3Storage       zeroMatrix = {0};
   const Double2x2Storage       zeroMatrix2 = {0};
   const Double4x4Storage       zeroMatrix4 = {0};
+  const double                 zeroDouble4[4] = {0};
   const double                 zeroDeterminant[4] = {0};
-  const void                  *initialValues[23] = {
+  const void                  *initialValues[25] = {
     kValues, &kMatrix, &zeroValue, &zeroMatrix, zeroDeterminant,
     &kMatrix2, &kMatrix4, &kMatrixRight, &kMatrixScale,
     &zeroMatrix, &zeroMatrix, &zeroMatrix, &zeroMatrix,
     &kProductVector, &zeroMatrix, &zeroValue, &zeroValue,
     &kMixedLeft, &kMixedRight, &zeroMatrix2,
-    &zeroMatrix2, &zeroMatrix, &zeroMatrix4
+    &zeroMatrix2, &zeroMatrix, &zeroMatrix4,
+    kLerpValues, zeroDouble4
   };
-  const uint64_t bufferSizes[23] = {
+  const uint64_t bufferSizes[25] = {
     sizeof(kValues), sizeof(kMatrix), sizeof(zeroValue), sizeof(zeroMatrix),
     sizeof(zeroDeterminant), sizeof(kMatrix2), sizeof(kMatrix4),
     sizeof(kMatrixRight), sizeof(kMatrixScale), sizeof(zeroMatrix),
@@ -260,7 +269,7 @@ main(int argc, char **argv) {
     sizeof(kProductVector), sizeof(zeroMatrix), sizeof(zeroValue),
     sizeof(zeroValue), sizeof(kMixedLeft), sizeof(kMixedRight),
     sizeof(zeroMatrix2), sizeof(zeroMatrix2), sizeof(zeroMatrix),
-    sizeof(zeroMatrix4)
+    sizeof(zeroMatrix4), sizeof(kLerpValues), sizeof(zeroDouble4)
   };
   const GPUBindGroupLayoutEntry *layoutEntries;
   GPUResult                      result;
@@ -357,15 +366,16 @@ main(int argc, char **argv) {
     shaderLayout->bindGroupLayouts[0],
     &layoutEntryCount
   );
-  if (!layoutEntries || layoutEntryCount != 23u) {
+  if (!layoutEntries || layoutEntryCount != 25u) {
     fprintf(stderr, "Unexpected F64 storage reflection layout\n");
     goto cleanup;
   }
-  for (uint32_t binding = 0u; binding < 23u; binding++) {
+  for (uint32_t binding = 0u; binding < 25u; binding++) {
     GPUBindingType expectedType = binding < 2u ||
                                   (binding >= 5u && binding <= 8u) ||
                                   binding == 13u ||
-                                  (binding >= 17u && binding <= 18u)
+                                  (binding >= 17u && binding <= 18u) ||
+                                  binding == 23u
                                     ? GPU_BINDING_READ_ONLY_STORAGE_BUFFER
                                     : GPU_BINDING_STORAGE_BUFFER;
 
@@ -396,7 +406,7 @@ main(int argc, char **argv) {
   bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE |
                                 GPU_BUFFER_USAGE_COPY_SRC |
                                 GPU_BUFFER_USAGE_COPY_DST;
-  for (uint32_t binding = 0u; binding < 23u; binding++) {
+  for (uint32_t binding = 0u; binding < 25u; binding++) {
     bufferInfo.sizeBytes = bufferSizes[binding];
     if (GPUCreateBuffer(device, &bufferInfo, &buffers[binding]) != GPU_OK ||
         !buffers[binding] ||
@@ -414,7 +424,8 @@ main(int argc, char **argv) {
     groupEntries[binding].bindingType   = binding < 2u ||
                                           (binding >= 5u && binding <= 8u) ||
                                           binding == 13u ||
-                                          (binding >= 17u && binding <= 18u)
+                                          (binding >= 17u && binding <= 18u) ||
+                                          binding == 23u
                                             ? GPU_BINDING_READ_ONLY_STORAGE_BUFFER
                                             : GPU_BINDING_STORAGE_BUFFER;
     groupEntries[binding].buffer.buffer = buffers[binding];
@@ -425,7 +436,7 @@ main(int argc, char **argv) {
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "dx12-native-f64-storage-group";
   groupInfo.layout           = shaderLayout->bindGroupLayouts[0];
-  groupInfo.entryCount       = 23u;
+  groupInfo.entryCount       = 25u;
   groupInfo.pEntries         = groupEntries;
   if (GPUCreateBindGroup(device, &groupInfo, &bindGroup) != GPU_OK ||
       !bindGroup ||
@@ -529,6 +540,11 @@ main(int argc, char **argv) {
                          0u,
                          &inverse4Result,
                          sizeof(inverse4Result)) != GPU_OK ||
+      GPUQueueReadBuffer(queue,
+                         buffers[24],
+                         0u,
+                         lerpResult,
+                         sizeof(lerpResult)) != GPU_OK ||
       !values_match(&valueResult, &kValues[1]) ||
       !matrix_matches(&matrixResult, &kMatrixTranspose) ||
       !matrix_matches(&elementwiseResult[0], &elementwiseExpected[0]) ||
@@ -547,15 +563,25 @@ main(int argc, char **argv) {
   }
   {
     static const double expected[] = {-2.0, 1.0, 1.0, 1.0};
+    static const double lerpExpected[] = {2.0, 2.0, -8.0, -50.0};
 
     for (uint32_t lane = 0u; lane < 4u; lane++) {
-      if (fabs(determinantResult[lane] - expected[lane]) <= 1e-12) continue;
-      fprintf(stderr,
-              "F64 determinant mismatch at lane %u: expected %.17g, got %.17g\n",
-              lane,
-              expected[lane],
-              determinantResult[lane]);
-      goto cleanup;
+      if (fabs(determinantResult[lane] - expected[lane]) > 1e-12) {
+        fprintf(stderr,
+                "F64 determinant mismatch at lane %u: expected %.17g, got %.17g\n",
+                lane,
+                expected[lane],
+                determinantResult[lane]);
+        goto cleanup;
+      }
+      if (fabs(lerpResult[lane] - lerpExpected[lane]) > 1e-12) {
+        fprintf(stderr,
+                "F64 lerp mismatch at lane %u: expected %.17g, got %.17g\n",
+                lane,
+                lerpExpected[lane],
+                lerpResult[lane]);
+        goto cleanup;
+      }
     }
   }
   ok = 1;
@@ -564,7 +590,7 @@ cleanup:
   if (pass) GPUEndComputePass(pass);
   GPUDestroyFence(fence);
   GPUDestroyBindGroup(bindGroup);
-  for (uint32_t i = 0u; i < 23u; i++) GPUDestroyBuffer(buffers[i]);
+  for (uint32_t i = 0u; i < 25u; i++) GPUDestroyBuffer(buffers[i]);
   GPUDestroyComputePipeline(pipeline);
   GPUDestroyShaderLayout(shaderLayout);
   GPUDestroyShaderLibrary(library);
