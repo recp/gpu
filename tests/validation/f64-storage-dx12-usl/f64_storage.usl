@@ -6,12 +6,25 @@ kern(1, 1, 1) f64_storage(
   inout determinantOut: [double4] #buffer(4),
   matrices2:          [double2x2] #buffer(5),
   matrices4:          [double4x4] #buffer(6),
+  rightMatrices:      [double3x3] #buffer(7),
+  scales:             [double] #buffer(8),
+  inout addOut:       [double3x3] #buffer(9),
+  inout subOut:       [double3x3] #buffer(10),
+  inout mulOut:       [double3x3] #buffer(11),
+  inout divOut:       [double3x3] #buffer(12),
   gid:               uint #global_id
 ) {
+  let matrix = matrices[gid]
+  let right = rightMatrices[gid]
+  let scale = scales[gid]
   valuesOut[gid] = values[gid + 1u]
-  matricesOut[gid] = transpose(matrices[gid])
+  matricesOut[gid] = transpose(matrix)
   determinantOut[gid] = double4(determinant(matrices2[gid]),
-                                 determinant(matrices[gid]),
+                                 determinant(matrix),
                                  determinant(matrices4[gid]),
                                  1.0)
+  addOut[gid] = matrix + right
+  subOut[gid] = matrix - right
+  mulOut[gid] = scale * matrix
+  divOut[gid] = matrix / scale
 }
