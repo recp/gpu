@@ -49,6 +49,10 @@ static const Double4 kSqrtInput[3] = {
   {{1.0, 2.0, 4.0, 9.0}},
   {{DBL_MAX, INFINITY, -1.0, NAN}}
 };
+static const Double4 kExpectedRefract[2] = {
+  {{0.0, -1.0, 0.0, 0.0}},
+  {{0.0, 0.0, 0.0, 0.0}}
+};
 static const Float2 kPacked = {{1.5f, -2.25f}};
 static const Float2 kExpectedPacked = {{4.0f, -5.0f}};
 static const Int2   kInteger = {{7, -8}};
@@ -191,10 +195,10 @@ main(int argc, char **argv) {
   GPUBindGroupEntry            groupEntries[5] = {0};
   GPUBindGroupCreateInfo       groupInfo = {0};
   GPUQueueSubmitInfo           submitInfo = {0};
-  Double4                      output[21] = {0};
+  Double4                      output[23] = {0};
   Float2                       packed = {0};
   Int2                         integer = {0};
-  const Double4                zeroOutput[21] = {0};
+  const Double4                zeroOutput[23] = {0};
   const void                  *initialValues[5] = {
     &kInput, zeroOutput, &kPacked, &kInteger, kSqrtInput
   };
@@ -396,6 +400,14 @@ main(int argc, char **argv) {
   if (!sqrt_geometric_matches(&output[17])) {
     fprintf(stderr, "Direct3D 12 F64 sqrt-geometric validation failed\n");
     goto cleanup;
+  }
+  for (uint32_t element = 0u; element < 2u; element++) {
+    if (!double4_matches(&output[21u + element],
+                         &kExpectedRefract[element],
+                         21u + element)) {
+      fprintf(stderr, "Direct3D 12 F64 refract validation failed\n");
+      goto cleanup;
+    }
   }
   ok = 1;
 
