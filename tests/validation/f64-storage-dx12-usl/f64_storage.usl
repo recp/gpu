@@ -12,11 +12,19 @@ kern(1, 1, 1) f64_storage(
   inout subOut:       [double3x3] #buffer(10),
   inout mulOut:       [double3x3] #buffer(11),
   inout divOut:       [double3x3] #buffer(12),
+  vectors:            [double3] #buffer(13),
+  inout productOut:   [double3x3] #buffer(14),
+  inout matrixVectorOut: [double3] #buffer(15),
+  inout vectorMatrixOut: [double3] #buffer(16),
+  mixedLeft:          [double2x3] #buffer(17),
+  mixedRight:         [double3x2] #buffer(18),
+  inout mixedOut:     [double2x2] #buffer(19),
   gid:               uint #global_id
 ) {
   let matrix = matrices[gid]
   let right = rightMatrices[gid]
   let scale = scales[gid]
+  let vector = vectors[gid]
   valuesOut[gid] = values[gid + 1u]
   matricesOut[gid] = transpose(matrix)
   determinantOut[gid] = double4(determinant(matrices2[gid]),
@@ -27,4 +35,8 @@ kern(1, 1, 1) f64_storage(
   subOut[gid] = matrix - right
   mulOut[gid] = scale * matrix
   divOut[gid] = matrix / scale
+  productOut[gid] = matrix * right
+  matrixVectorOut[gid] = matrix * vector
+  vectorMatrixOut[gid] = vector * matrix
+  mixedOut[gid] = mixedLeft[gid] * mixedRight[gid]
 }
