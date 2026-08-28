@@ -202,6 +202,14 @@ if(GPU_BUILD_TESTS)
     "${GPU_CUDA_SUBGROUP_US}"
   )
   gpu_add_cuda_ptx_metadata_test(
+    subgroup-relative
+    ${PROJECT_SOURCE_DIR}/tests/validation/subgroup-cuda-usl/ptx_metadata.c
+    "${GPU_CUDA_SUBGROUP_RELATIVE_US}"
+  )
+  target_compile_definitions(gpu-cuda-subgroup-relative-metadata PRIVATE
+    GPU_PTX_SUBGROUP_RELATIVE=1
+  )
+  gpu_add_cuda_ptx_metadata_test(
     atomic32
     ${PROJECT_SOURCE_DIR}/tests/validation/compute-atomics-usl/ptx_metadata.c
     "${GPU_CUDA_ATOMIC32_US}"
@@ -1417,7 +1425,9 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
   if(GPU_BUILD_TESTS)
     add_test(
       NAME cuda-subgroup
-      COMMAND gpu-subgroup-cuda-usl "${GPU_CUDA_SUBGROUP_US}"
+      COMMAND gpu-subgroup-cuda-usl
+              "${GPU_CUDA_SUBGROUP_US}"
+              "${GPU_CUDA_SUBGROUP_RELATIVE_US}"
     )
     set_tests_properties(cuda-subgroup PROPERTIES
       SKIP_RETURN_CODE 77

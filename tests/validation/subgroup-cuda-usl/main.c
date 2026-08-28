@@ -9,8 +9,9 @@ main(int argc, char **argv) {
   uint32_t               adapterCount;
   int                    status;
 
-  if (argc != 2) {
-    fprintf(stderr, "usage: gpu-subgroup-cuda-usl artifact.us\n");
+  if (argc != 3) {
+    fprintf(stderr,
+            "usage: gpu-subgroup-cuda-usl artifact.us relative-artifact.us\n");
     return 1;
   }
 
@@ -41,7 +42,7 @@ main(int argc, char **argv) {
     fprintf(stderr, "CUDA subgroups unavailable on a supported adapter\n");
     goto cleanup;
   }
-  if (!gpu_test_subgroup(adapter, argv[1])) {
+  if (!gpu_test_subgroup(adapter, argv[1], argv[2])) {
     fprintf(stderr, "CUDA subgroup validation failed\n");
     goto cleanup;
   }

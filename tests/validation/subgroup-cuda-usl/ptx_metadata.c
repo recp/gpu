@@ -2,6 +2,10 @@
 
 #include <stdio.h>
 
+#ifndef GPU_PTX_SUBGROUP_RELATIVE
+#  define GPU_PTX_SUBGROUP_RELATIVE 0
+#endif
+
 static bool
 supports_subgroups(const GPUAdapter * __restrict    adapter,
                    GPUShaderStageFlags              stage,
@@ -14,9 +18,15 @@ supports_subgroups(const GPUAdapter * __restrict    adapter,
 static int
 validate_contract(const GPUShaderLibrary *library) {
   const GPUShaderPTXInfo *info;
+  const char             *entryDecl;
+  const char             *outputName;
   const char             *ptx;
 
-  if (!library || library->_reflection.resourceCount != 3u ||
+  outputName = GPU_PTX_SUBGROUP_RELATIVE ? "relative" : "shuffled";
+  entryDecl = GPU_PTX_SUBGROUP_RELATIVE
+                ? ".visible .entry subgroup_relative_cs("
+                : ".visible .entry subgroup_cs(";
+  if (!library || library->_reflection.resourceCount != 2u ||
       !ptx_validate_buffer_resource(&library->_reflection,
                                     "values",
                                     0u,
@@ -25,16 +35,9 @@ validate_contract(const GPUShaderLibrary *library) {
                                     4u,
                                     4u) ||
       !ptx_validate_buffer_resource(&library->_reflection,
-                                    "shuffled",
+                                    outputName,
                                     0u,
                                     1u,
-                                    GPU_BINDING_STORAGE_BUFFER,
-                                    4u,
-                                    4u) ||
-      !ptx_validate_buffer_resource(&library->_reflection,
-                                    "relative",
-                                    0u,
-                                    2u,
                                     GPU_BINDING_STORAGE_BUFFER,
                                     4u,
                                     4u)) {
@@ -42,10 +45,10 @@ validate_contract(const GPUShaderLibrary *library) {
   }
 
   info = library->_ptxInfo;
-  if (!info || info->entryCount != 1u || info->paramCount != 3u ||
+  if (!info || info->entryCount != 1u || info->paramCount != 2u ||
       info->entries[0].paramStart != 0u ||
-      info->entries[0].paramCount != 3u ||
-      info->entries[0].paramDataSize != 24u ||
+      info->entries[0].paramCount != 2u ||
+      info->entries[0].paramDataSize != 16u ||
       !ptx_validate_buffer_param(&info->params[0],
                                  0u,
                                  0u,
@@ -55,27 +58,24 @@ validate_contract(const GPUShaderLibrary *library) {
                                  0u,
                                  1u,
                                  GPU_BINDING_STORAGE_BUFFER,
-                                 8u) ||
-      !ptx_validate_buffer_param(&info->params[2],
-                                 0u,
-                                 2u,
-                                 GPU_BINDING_STORAGE_BUFFER,
-                                 16u)) {
+                                 8u)) {
     return 0;
   }
 
   ptx = ptx_source(library);
-  /* Output buffers may alias values, so the intervening store requires a reload. */
   return ptx && strstr(ptx, ".version 6.2") &&
          strstr(ptx, ".target sm_70") &&
-         strstr(ptx, ".visible .entry subgroup_cs(") &&
+         strstr(ptx, entryDecl) &&
          strstr(ptx, ".reqntid 64, 1, 1") &&
          ptx_count(ptx, "activemask.b32") == 1u &&
-         ptx_count(ptx, "shfl.sync.bfly.b32") == 1u &&
-         ptx_count(ptx, "shfl.sync.down.b32") == 1u &&
-         ptx_count(ptx, "selp.u32") == 1u &&
-         ptx_count(ptx, "ld.global.u32") == 2u &&
-         ptx_count(ptx, "st.global.u32") == 2u;
+         ptx_count(ptx, "shfl.sync.bfly.b32") ==
+           (GPU_PTX_SUBGROUP_RELATIVE ? 0u : 1u) &&
+         ptx_count(ptx, "shfl.sync.down.b32") ==
+           (GPU_PTX_SUBGROUP_RELATIVE ? 1u : 0u) &&
+         ptx_count(ptx, "selp.u32") ==
+           (GPU_PTX_SUBGROUP_RELATIVE ? 1u : 0u) &&
+         ptx_count(ptx, "ld.global.u32") == 1u &&
+         ptx_count(ptx, "st.global.u32") == 1u;
 }
 
 int
