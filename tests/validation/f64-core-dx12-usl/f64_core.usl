@@ -36,6 +36,15 @@ kern(1, 1, 1) f64_core(input: [double4] #buffer(0),
   output[14u] = sqrt(sqrtInput[0u])
   output[15u] = sqrt(sqrtInput[1u])
   output[16u] = sqrt(sqrtInput[2u])
+  output[17u] = double4(length(value.xy),
+                        length(value.xyz),
+                        length(value),
+                        distance(value, normal))
+  output[18u] = double4(distance(value.xy, normal.xy),
+                        distance(value.xyz, normal.xyz),
+                        normalize(value.xy))
+  output[19u] = double4(normalize(value.xyz), 1.0)
+  output[20u] = normalize(value)
   packed[index]            = float2(float(value.z), float(value.w))
   integer[index]           = int2(int(value.x), int(value.y))
 }

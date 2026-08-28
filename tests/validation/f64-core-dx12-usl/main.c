@@ -137,6 +137,37 @@ sqrt4_matches(const Double4 *actual,
   return 1;
 }
 
+static int
+sqrt_geometric_matches(const Double4 *actual) {
+  const double length2 = sqrt(13.0);
+  const double length3 = sqrt(29.0);
+  const double length4 = sqrt(54.0);
+  const double distance2 = sqrt(22.25);
+  const double distance3 = sqrt(26.25);
+  const double distance4 = sqrt(53.8125);
+  const Double4 expected[4] = {
+    {{length2, length3, length4, distance4}},
+    {{distance2,
+      distance3,
+      kInput.lane[0] / length2,
+      kInput.lane[1] / length2}},
+    {{kInput.lane[0] / length3,
+      kInput.lane[1] / length3,
+      kInput.lane[2] / length3,
+      1.0}},
+    {{kInput.lane[0] / length4,
+      kInput.lane[1] / length4,
+      kInput.lane[2] / length4,
+      kInput.lane[3] / length4}}
+  };
+
+  for (uint32_t element = 0u; element < 4u; element++) {
+    if (!double4_matches(&actual[element], &expected[element], 17u + element))
+      return 0;
+  }
+  return 1;
+}
+
 int
 main(int argc, char **argv) {
   GPUInstance           *instance = NULL;
@@ -160,10 +191,10 @@ main(int argc, char **argv) {
   GPUBindGroupEntry            groupEntries[5] = {0};
   GPUBindGroupCreateInfo       groupInfo = {0};
   GPUQueueSubmitInfo           submitInfo = {0};
-  Double4                      output[17] = {0};
+  Double4                      output[21] = {0};
   Float2                       packed = {0};
   Int2                         integer = {0};
-  const Double4                zeroOutput[17] = {0};
+  const Double4                zeroOutput[21] = {0};
   const void                  *initialValues[5] = {
     &kInput, zeroOutput, &kPacked, &kInteger, kSqrtInput
   };
@@ -361,6 +392,10 @@ main(int argc, char **argv) {
       fprintf(stderr, "Direct3D 12 F64 sqrt validation failed\n");
       goto cleanup;
     }
+  }
+  if (!sqrt_geometric_matches(&output[17])) {
+    fprintf(stderr, "Direct3D 12 F64 sqrt-geometric validation failed\n");
+    goto cleanup;
   }
   ok = 1;
 
