@@ -29,6 +29,7 @@ kern(1, 1, 1) f64_storage(
   inout stepOut:      [double4] #buffer(27),
   inout smoothstepOut: [double4] #buffer(28),
   inout copysignOut:  [double4] #buffer(29),
+  inout modOut:       [double4] #buffer(30),
   gid:               uint #global_id
 ) {
   let matrix = matrices[gid]
@@ -67,4 +68,12 @@ kern(1, 1, 1) f64_storage(
                                   lerpValues[2])
   copysignOut[gid] = copysign(lerpValues[0],
                               double4(-0.0, 1.0, -1.0, 0.0))
+  modOut[gid] = mod(double4(lerpValues[2].x,
+                            lerpValues[2].w,
+                            lerpValues[2].z,
+                            lerpValues[0].z),
+                    double4(lerpValues[1].x,
+                            lerpValues[1].w,
+                            lerpValues[1].z,
+                            lerpValues[1].z))
 }
