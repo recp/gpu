@@ -1,0 +1,10 @@
+kern(1, 1, 1) f64_storage(
+  values:            [double3] #buffer(0),
+  matrices:          [double3x3] #buffer(1),
+  inout valuesOut:   [double3] #buffer(2),
+  inout matricesOut: [double3x3] #buffer(3),
+  gid:               uint #global_id
+) {
+  valuesOut[gid] = values[gid + 1u]
+  matricesOut[gid] = matrices[gid]
+}

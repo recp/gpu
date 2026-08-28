@@ -25,6 +25,7 @@ if(GPU_BUILD_DX12 AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     "${PROJECT_SOURCE_DIR}/tests/validation/mesh-native-usl/mesh_native.usl"
     "${PROJECT_SOURCE_DIR}/tests/validation/matrix-elementwise-dx12-usl/matrix_elementwise.usl"
     "${PROJECT_SOURCE_DIR}/tests/validation/f64-core-dx12-usl/f64_core.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/f64-storage-dx12-usl/f64_storage.usl"
   )
   list(GET GPU_DX12_USL_FIXTURES 0 GPU_DX12_TRIANGLE_US)
   list(GET GPU_DX12_USL_FIXTURES 1 GPU_DX12_TEXTURED_QUAD_US)
@@ -39,6 +40,7 @@ if(GPU_BUILD_DX12 AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
   list(GET GPU_DX12_USL_FIXTURES 10 GPU_DX12_MESH_NATIVE_US)
   list(GET GPU_DX12_USL_FIXTURES 11 GPU_DX12_MATRIX_ELEMENTWISE_US)
   list(GET GPU_DX12_USL_FIXTURES 12 GPU_DX12_F64_CORE_US)
+  list(GET GPU_DX12_USL_FIXTURES 13 GPU_DX12_F64_STORAGE_US)
   set(GPU_USL_FIXTURE_TARGET_CAPS descriptor_indexing)
   gpu_add_usl_fixtures(
     GPU_DX12_BINDLESS_USL_FIXTURE
