@@ -483,6 +483,12 @@ GPUSampleWin32Create(GPUWin32Window      *window,
     GPU_FEATURE_SHADER_F16,
     GPU_FEATURE_TIMESTAMPS
   };
+  static const GPUQueueRequest queueRequests[] = {
+    {
+      .type  = GPU_QUEUE_GRAPHICS,
+      .count = 1u
+    }
+  };
   GPUInstanceCreateInfo instanceInfo = {0};
   GPUDeviceCreateInfo   deviceInfo = {0};
   GPURuntimeConfig      runtimeInfo = {0};
@@ -524,6 +530,11 @@ GPUSampleWin32Create(GPUWin32Window      *window,
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.optional.pFeatures    = optionalFeatures;
   deviceInfo.optional.featureCount = GPU_ARRAY_LEN(optionalFeatures);
+  deviceInfo.queues.chain.sType      =
+    GPU_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  deviceInfo.queues.chain.structSize = sizeof(deviceInfo.queues);
+  deviceInfo.queues.pRequests        = queueRequests;
+  deviceInfo.queues.requestCount     = GPU_ARRAY_LEN(queueRequests);
   failure = "create the Direct3D 12 device";
   if (GPUCreateDevice(sample->adapter,
                       &deviceInfo,
