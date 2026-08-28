@@ -1,7 +1,8 @@
 #include "test.h"
 
 enum {
-  GPU_SUBGROUP_TEST_VALUE_COUNT = 64
+  GPU_SUBGROUP_TEST_VALUE_COUNT = 64,
+  GPU_SUBGROUP_TEST_FILL_BIAS   = 1000
 };
 
 typedef enum GPUSubgroupRunResult {
@@ -31,7 +32,7 @@ gpu_subgroupValidateRelative(const GPULimits *limits,
 
   subgroupSize = 0u;
   for (uint32_t i = 0u; i < GPU_SUBGROUP_TEST_VALUE_COUNT; i++) {
-    if (output[i] == 0u) {
+    if (output[i] >= input[0] + GPU_SUBGROUP_TEST_FILL_BIAS) {
       uint32_t candidate = i + 1u;
 
       if (subgroupSize == 0u) {
@@ -42,6 +43,14 @@ gpu_subgroupValidateRelative(const GPULimits *limits,
                 "subgroup relative boundary mismatch at %u, width %u\n",
                 i,
                 subgroupSize);
+        return 0;
+      }
+      if (output[i] !=
+          input[i + 1u - subgroupSize] + GPU_SUBGROUP_TEST_FILL_BIAS) {
+        fprintf(stderr,
+                "subgroup relative fill mismatch at %u: %u\n",
+                i,
+                output[i]);
         return 0;
       }
     } else if (i + 1u >= GPU_SUBGROUP_TEST_VALUE_COUNT ||
