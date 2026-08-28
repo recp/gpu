@@ -693,7 +693,7 @@ dx12_queryAdapterCapabilities(const GPUInstanceDX12 *instance,
   if (dxcModule) {
     FreeLibrary(dxcModule);
   }
-  device->lpVtbl->Release(device);
+  adapter->capabilityDevice = device;
   return true;
 }
 
@@ -1169,6 +1169,11 @@ dx12_destroyAdapter(GPUAdapter * __restrict adapter) {
 
   adapterDX12 = adapter->_priv;
   if (adapterDX12) {
+    if (adapterDX12->capabilityDevice) {
+      adapterDX12->capabilityDevice->lpVtbl->Release(
+        adapterDX12->capabilityDevice
+      );
+    }
     if (adapterDX12->dxgiAdapter) {
       adapterDX12->dxgiAdapter->lpVtbl->Release(adapterDX12->dxgiAdapter);
     }
@@ -1403,12 +1408,20 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_SUBGROUP_MATRIX)) != 0u) {
     deviceFactory = instDX12->linearAlgebraFactory;
   }
-  hr = dx12_createNativeDevice(deviceFactory,
-                               adapterDX12->dxgiAdapter,
-                               &IID_ID3D12Device,
-                               (void **)&deviceDX12->d3dDevice);
-  if (FAILED(hr)) {
-    goto err;
+  if (deviceFactory == instDX12->deviceFactory) {
+    AcquireSRWLockExclusive(&adapterDX12->capabilityLock);
+    deviceDX12->d3dDevice         = adapterDX12->capabilityDevice;
+    adapterDX12->capabilityDevice = NULL;
+    ReleaseSRWLockExclusive(&adapterDX12->capabilityLock);
+  }
+  if (!deviceDX12->d3dDevice) {
+    hr = dx12_createNativeDevice(deviceFactory,
+                                 adapterDX12->dxgiAdapter,
+                                 &IID_ID3D12Device,
+                                 (void **)&deviceDX12->d3dDevice);
+    if (FAILED(hr)) {
+      goto err;
+    }
   }
   /* Parallels removes or corrupts devices on combined stencil-plane copies. */
   deviceDX12->stencilPlaneCopies = !dx12_isParallels(adapterDX12);

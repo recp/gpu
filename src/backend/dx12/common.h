@@ -67,6 +67,7 @@ _Static_assert(GPU_DX12_PUSH_CONSTANT_REGISTER_SPACE == 4u,
 typedef struct GPUAdapterDX12 {
   /* IDXGIAdapter1*dxgiAdapter; */
   IUnknown                          *dxgiAdapter;
+  ID3D12Device                      *capabilityDevice;
   GPUSubgroupMatrixPropertiesEXT   *subgroupMatrixProperties;
   DXGI_ADAPTER_DESC1                 desc1;
   SRWLOCK                            capabilityLock;
