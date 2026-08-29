@@ -1,0 +1,17 @@
+kern(1, 1, 1) f64_exponential(
+  values:       [double4] #buffer(0),
+  inout output: [double4] #buffer(1)
+) {
+  output[0] = exp2(values[0])
+  output[1] = exp(values[0])
+  output[2] = log(values[1])
+  output[3] = log2(values[1])
+  output[4] = log(values[2])
+  output[5] = log2(values[2])
+  output[6] = pow(values[3], values[4])
+  output[7] = pow(values[5], values[6])
+  output[8] = exp2(values[7])
+  output[9] = exp(values[7])
+  output[10] = exp2(values[8])
+  output[11] = exp(values[9])
+}
