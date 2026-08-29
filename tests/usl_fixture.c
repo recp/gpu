@@ -10,6 +10,7 @@ typedef struct GPUUSLBackendName {
 } GPUUSLBackendName;
 
 static const GPUUSLBackendName gpuUSLBackends[] = {
+  {"dxil",   USL_BACKEND_DXIL},
   {"metal",  USL_BACKEND_METAL},
   {"vulkan", USL_BACKEND_SPIRV},
   {"dx12",   USL_BACKEND_HLSL},
@@ -71,7 +72,7 @@ main(int argc, char **argv) {
 
   if (argc != 3 || !gpu_usl_backend(argv[1], &backend)) {
     fprintf(stderr,
-            "usage: %s <metal|vulkan|dx12|webgpu|ptx> <source.usl>\n",
+            "usage: %s <dxil|metal|vulkan|dx12|webgpu|ptx> <source.usl>\n",
             argv[0]);
     return 2;
   }

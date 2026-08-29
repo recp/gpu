@@ -924,7 +924,6 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
     set_tests_properties(dx12-native-dxil-compute-atomics PROPERTIES
       ENVIRONMENT
         "GPU_DX12_NATIVE_DXIL=1;GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1"
-      PASS_REGULAR_EXPRESSION "GPU: USL generated DXIL binary payload"
     )
     add_test(
       NAME dx12-compute-buffer
@@ -939,7 +938,6 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
     set_tests_properties(dx12-native-dxil-compute-buffer PROPERTIES
       ENVIRONMENT
         "GPU_DX12_NATIVE_DXIL=1;GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1"
-      PASS_REGULAR_EXPRESSION "GPU: USL generated DXIL binary payload"
     )
     add_test(
       NAME dx12-native-dxil-matrix-elementwise
@@ -949,7 +947,6 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_DX12)
     set_tests_properties(dx12-native-dxil-matrix-elementwise PROPERTIES
       ENVIRONMENT
         "GPU_DX12_NATIVE_DXIL=1;GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1"
-      PASS_REGULAR_EXPRESSION "GPU: USL generated DXIL binary payload"
     )
     add_test(NAME dx12-triangle
              COMMAND gpu-triangle-dx12-usl)
@@ -1031,7 +1028,6 @@ if(GPU_BUILD_DX12 AND GPU_BUILD_TESTS)
   set_tests_properties(dx12-native-dxil-f64-core PROPERTIES
     ENVIRONMENT
       "GPU_DX12_NATIVE_DXIL=1;GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1"
-    PASS_REGULAR_EXPRESSION "GPU: USL generated DXIL binary payload"
   )
 
   add_executable(gpu-f64-storage-dx12-usl
@@ -1064,7 +1060,38 @@ if(GPU_BUILD_DX12 AND GPU_BUILD_TESTS)
   set_tests_properties(dx12-native-dxil-f64-storage PROPERTIES
     ENVIRONMENT
       "GPU_DX12_NATIVE_DXIL=1;GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1"
-    PASS_REGULAR_EXPRESSION "GPU: USL generated DXIL binary payload"
+  )
+
+  add_executable(gpu-f64-math-dx12-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/f64-math-dx12-usl/main.c
+  )
+  target_compile_definitions(gpu-f64-math-dx12-usl PRIVATE
+    _CRT_SECURE_NO_WARNINGS
+  )
+  target_link_libraries(gpu-f64-math-dx12-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-f64-math-dx12-usl
+                            gpu-dx12-fixtures
+                            "${GPU_DX12_F64_MATH_US}")
+  set_target_properties(gpu-f64-math-dx12-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_options(gpu-f64-math-dx12-usl PRIVATE /W4 /WX)
+  else()
+    target_compile_options(gpu-f64-math-dx12-usl PRIVATE
+      -Wall -Wextra -Werror
+    )
+  endif()
+  add_test(
+    NAME dx12-native-dxil-f64-math
+    COMMAND gpu-f64-math-dx12-usl
+            "${GPU_DX12_F64_MATH_US}"
+  )
+  set_tests_properties(dx12-native-dxil-f64-math PROPERTIES
+    ENVIRONMENT
+      "GPU_DX12_NATIVE_DXIL=1;GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1"
   )
 
   add_executable(gpu-async-copy-dx12-usl

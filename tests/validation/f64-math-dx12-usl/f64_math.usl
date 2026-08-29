@@ -1,0 +1,56 @@
+kern(1, 1, 1) f64_math(
+  values:       [double4] #buffer(0),
+  inout output: [double4] #buffer(1)
+) {
+  let trigSin = sin(values[7].w)
+  let trigCos = cos(values[7].w)
+
+  output[0] = floor(values[0])
+  output[1] = floor(values[1])
+  output[2] = floor(values[2])
+  output[3] = ceil(values[0])
+  output[4] = ceil(values[1])
+  output[5] = ceil(values[2])
+  output[6] = trunc(values[0])
+  output[7] = trunc(values[1])
+  output[8] = trunc(values[2])
+  output[9] = round(values[0])
+  output[10] = round(values[1])
+  output[11] = round(values[2])
+  output[12] = fract(values[0])
+  output[13] = fract(values[1])
+  output[14] = fract(values[2])
+  output[15] = exp2(values[0])
+  output[16] = exp(values[0])
+  output[17] = log(values[1])
+  output[18] = log2(values[1])
+  output[19] = sinh(values[0])
+  output[20] = cosh(values[0])
+  output[21] = tanh(values[0])
+  output[22] = pow(values[3], values[4])
+  output[23] = pow(values[5], values[6])
+  output[24] = double4(sin(values[7].x),
+                       cos(values[7].y),
+                       sin(values[7].z),
+                       cos(values[7].w))
+  output[25] = double4(tan(values[7].x),
+                       tan(values[7].z),
+                       trigSin,
+                       trigCos)
+  output[26] = double4(sin(values[7].xy), 0.0, 0.0)
+  output[27] = double4(cos(values[7].xyz), 0.0)
+  output[28] = tan(values[7])
+  output[29] = asin(values[8])
+  output[30] = acos(values[8])
+  output[31] = asin(values[9])
+  output[32] = acos(values[9])
+  output[33] = atan(values[10])
+  output[34] = atan2(values[11], values[12])
+  output[35] = atan2(values[13], values[14])
+  output[36] = asinh(values[15])
+  output[37] = asinh(values[18])
+  output[38] = acosh(values[16])
+  output[39] = acosh(values[19])
+  output[40] = atanh(values[17])
+  output[41] = atanh(values[20])
+}

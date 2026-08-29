@@ -67,6 +67,7 @@ if((GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS) AND
                 "${fixtureSource}"
         COMMAND ${CMAKE_COMMAND} -E env
                 USL_EMIT_BYTECODE=1
+                USL_ARTIFACT_ONLY=1
                 USL_NO_BACKEND_SIDECAR=1
                 ${targetCapsEnvironment}
                 $<TARGET_FILE:gpu-usl-fixture>
