@@ -827,6 +827,21 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
   set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
     "GPU_ATOMIC64_USL_PATH=${GPU_API_ATOMIC64_USL_FIXTURE}"
   )
+  if(GPU_API_DEFAULT_BACKEND STREQUAL "dx12")
+    get_property(apiValidationEnvironment TEST api-validation
+                 PROPERTY ENVIRONMENT)
+    add_test(NAME api-validation-native-dxil
+      COMMAND gpu-api-test
+              ${GPU_API_USL_FIXTURES}
+              ${GPU_API_DEFAULT_BACKEND}
+    )
+    set_tests_properties(api-validation-native-dxil PROPERTIES
+      ENVIRONMENT
+        "${apiValidationEnvironment};GPU_DX12_NATIVE_DXIL=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1"
+      LABELS "api;dx12;native-dxil"
+      TIMEOUT 60
+    )
+  endif()
 
   if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
     add_executable(gpu-metal-mesh-test
