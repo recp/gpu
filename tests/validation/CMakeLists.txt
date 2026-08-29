@@ -1071,7 +1071,8 @@ if(GPU_BUILD_DX12 AND GPU_BUILD_TESTS)
   target_link_libraries(gpu-f64-math-dx12-usl PRIVATE gpu)
   gpu_attach_usl_validation(gpu-f64-math-dx12-usl
                             gpu-dx12-fixtures
-                            "${GPU_DX12_F64_MATH_US}")
+                            "${GPU_DX12_F64_MATH_US}"
+                            "${GPU_DX12_F64_MATH_HLSL_US}")
   set_target_properties(gpu-f64-math-dx12-usl PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED YES
@@ -1092,6 +1093,15 @@ if(GPU_BUILD_DX12 AND GPU_BUILD_TESTS)
   set_tests_properties(dx12-native-dxil-f64-math PROPERTIES
     ENVIRONMENT
       "GPU_DX12_NATIVE_DXIL=1;GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1"
+  )
+  add_test(
+    NAME dx12-hlsl-f64-math
+    COMMAND gpu-f64-math-dx12-usl
+            "${GPU_DX12_F64_MATH_HLSL_US}"
+  )
+  set_tests_properties(dx12-hlsl-f64-math PROPERTIES
+    ENVIRONMENT
+      "GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1"
   )
 
   add_executable(gpu-f64-exponential-dx12-usl

@@ -563,6 +563,6 @@ cleanup:
   GPUDestroyInstance(instance);
   free(artifact);
   if (!ok) return 1;
-  puts("Direct3D 12 native DXIL F64 math validation passed");
+  puts("Direct3D 12 F64 math validation passed");
   return 0;
 }
