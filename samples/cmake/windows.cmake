@@ -45,6 +45,13 @@ if(GPU_DX12_AGILITY_CORE)
     )
   endif()
 endif()
+if(COMMAND gpu_dx12_dxc_stage_commands)
+  gpu_dx12_dxc_stage_commands(
+    gpuWindowsDXCCommands
+    "${GPU_WINDOWS_GALLERY_RUNTIME_DIR}/$<CONFIG>"
+  )
+  list(APPEND gpuWindowsRuntimeCommands ${gpuWindowsDXCCommands})
+endif()
 add_custom_target(gpu-gallery-windows-runtime
   ${gpuWindowsRuntimeCommands}
   VERBATIM
