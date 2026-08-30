@@ -7,9 +7,11 @@
 #include <windows.h>
 #include <windowsx.h>
 
+#include <process.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <process.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 extern int
 gpu_win32_sample_start(void);
@@ -27,12 +29,26 @@ typedef struct GPUWin32Host {
   GPUWin32Sample *sample;
   GPUWin32Sample *startupSample;
   HANDLE          startupThread;
+  double          startupStart;
   uint32_t        pendingWidth;
   uint32_t        pendingHeight;
   float           pendingScale;
   int             result;
+  bool            startupLog;
+  bool            firstFrame;
   bool            running;
 } GPUWin32Host;
+
+static void
+startup_mark(const GPUWin32Host *host, const char *phase) {
+  if (!host || !host->startupLog || !phase) {
+    return;
+  }
+  fprintf(stderr,
+          "GPU sample host: %-12s %8.3f ms\n",
+          phase,
+          gpu_win32_get_now() - host->startupStart);
+}
 
 static unsigned __stdcall
 start_sample(void *userData) {
@@ -237,6 +253,7 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
       host->window.width  = host->pendingWidth;
       host->window.height = host->pendingHeight;
       host->window.scale  = host->pendingScale;
+      startup_mark(host, "gpu-ready");
       if (!host->sample || GPUSampleWin32Failed(host->sample)) {
         host->result = 1;
         MessageBoxA(window,
@@ -280,6 +297,8 @@ wWinMain(HINSTANCE instance,
 
   (void)previousInstance;
   (void)commandLine;
+  host.startupLog   = getenv("GPU_SAMPLE_STARTUP_LOG") != NULL;
+  host.startupStart = host.startupLog ? gpu_win32_get_now() : 0.0;
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
   windowClass.cbSize        = sizeof(windowClass);
@@ -346,6 +365,7 @@ wWinMain(HINSTANCE instance,
   }
   ShowWindow(window, showCommand);
   UpdateWindow(window);
+  startup_mark(&host, "window-shown");
 
   startupThread = _beginthreadex(NULL,
                                  0u,
@@ -388,6 +408,9 @@ wWinMain(HINSTANCE instance,
                     MB_ICONERROR | MB_OK);
       }
       DestroyWindow(window);
+    } else if (host.startupLog && !host.firstFrame) {
+      host.firstFrame = true;
+      startup_mark(&host, "first-frame");
     }
   }
 
