@@ -18,6 +18,7 @@ kern(8, 8, 1) interop_texture_cs(
   inout output: [float4] #buffer(1),
   sampled: texture2d_array<float> #texture(2),
   cube: texturecube<float> #texture(3),
+  cubeArray: texturecube_array<float> #texture(4),
   gid: uint3 #global_id
 ) {
   let texelCount = 8u * 8u * 2u
@@ -29,10 +30,19 @@ kern(8, 8, 1) interop_texture_cs(
     output[index] = original
     output[texelCount + index] = color
   }
-  if gid.x == 0u && gid.y == 0u {
+  if gid.x == 0u && gid.y == 0u && gid.z < 6u {
     output[texelCount * 2u + gid.z] = cube.sample(
       .nearest,
       cube_direction(gid.z),
+      level(0.0)
+    )
+  }
+  if gid.x == 0u && gid.y == 0u {
+    let face = gid.z % 6u
+    let cubeIndex = gid.z / 6u
+    output[texelCount * 2u + 6u + gid.z] = cubeArray.sample(
+      .nearest,
+      float4(cube_direction(face), float(cubeIndex)),
       level(0.0)
     )
   }
