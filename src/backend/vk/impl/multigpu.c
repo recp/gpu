@@ -81,6 +81,8 @@ vk_interopDevices(GPUDeviceInteropEXT *interop,
   GPUDeviceInteropVk *native;
 
   if (!interop || !interop->firstDevice || !interop->secondDevice ||
+      gpuDeviceApi(interop->firstDevice) !=
+        gpuDeviceApi(interop->secondDevice) ||
       !outFirst || !outSecond || !outNative ||
       !vk_samePhysicalDevice(interop->firstDevice,
                              interop->secondDevice)) {
@@ -109,9 +111,13 @@ vk_createDeviceInterop(GPUDevice            *firstDevice,
   GPUDeviceVk        *first, *second;
   GPUDeviceInteropVk *native;
 
-  first  = firstDevice ? firstDevice->_priv : NULL;
-  second = secondDevice ? secondDevice->_priv : NULL;
-  if (!first || !second || !interop ||
+  if (!firstDevice || !secondDevice || !interop ||
+      gpuDeviceApi(firstDevice) != gpuDeviceApi(secondDevice)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  first  = firstDevice->_priv;
+  second = secondDevice->_priv;
+  if (!first || !second ||
       !vk_samePhysicalDevice(firstDevice, secondDevice) ||
       !first->externalInterop || !second->externalInterop ||
       !first->timelineSemaphore || !second->timelineSemaphore) {
