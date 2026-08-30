@@ -71,16 +71,31 @@ kern(8, 8, 1) interop_texture_sample_cs(
       (float2(float(gid.x), float(gid.y)) + float2(0.5)) / float2(8.0),
       float(gid.z)
     )
+    let depthLinearCoord = float3(
+      (float2(float(gid.x), float(gid.y)) + float2(1.0, 0.5)) /
+        float2(8.0),
+      float(gid.z)
+    )
     let depth32Read = depth32Sampled.read(int3(gid))
     let depth32Sample = depth32Sampled.sample(
       .nearest,
       depthCoord,
       level(0.0)
     )
+    let depth32Linear = depth32Sampled.sample(
+      .linear,
+      depthLinearCoord,
+      level(0.0)
+    )
     let depth16Read = depth16Sampled.read(int3(gid))
     let depth16Sample = depth16Sampled.sample(
       .nearest,
       depthCoord,
+      level(0.0)
+    )
+    let depth16Linear = depth16Sampled.sample(
+      .linear,
+      depthLinearCoord,
       level(0.0)
     )
     output[index] = original
@@ -97,9 +112,9 @@ kern(8, 8, 1) interop_texture_sample_cs(
     output[sint32Base + index] = float4(sint32Original)
     output[srgbBase + index] = srgbOriginal
     output[depth32Base + index] =
-      float4(depth32Read, depth32Sample, 0.0, 0.0)
+      float4(depth32Read, depth32Sample, depth32Linear, 0.0)
     output[depth16Base + index] =
-      float4(depth16Read, depth16Sample, 0.0, 0.0)
+      float4(depth16Read, depth16Sample, depth16Linear, 0.0)
   }
   if gid.x == 0u && gid.y == 0u && gid.z < 6u {
     output[texelCount * 2u + gid.z] = cube.sample(

@@ -1926,23 +1926,31 @@ run_texture_roundtrip(RoundtripState *state) {
     }
   }
   for (uint32_t texel = 0u; texel < TextureTexelCount; texel++) {
-    uint32_t pattern, depth32Index, depth16Index;
-    float    depth16Expected;
+    uint32_t pattern, nextPattern, depth32Index, depth16Index;
+    float    depth32Linear, depth16Expected, depth16Linear;
 
     pattern         = texel % 8u;
+    nextPattern     = pattern < 7u ? pattern + 1u : pattern;
     depth32Index    = depth32Base + texel * 4u;
     depth16Index    = depth16Base + texel * 4u;
+    depth32Linear   = (depth32InputValues[pattern] +
+                       depth32InputValues[nextPattern]) * 0.5f;
     depth16Expected = (float)depth16InputValues[pattern] / 65535.0f;
+    depth16Linear   = ((float)depth16InputValues[pattern] +
+                       (float)depth16InputValues[nextPattern]) /
+                      (2.0f * 65535.0f);
     if (fabsf(cudaOutput[depth32Index] - depth32InputValues[pattern]) >
           0.00001f ||
         fabsf(cudaOutput[depth32Index + 1u] - depth32InputValues[pattern]) >
           0.00001f ||
+        fabsf(cudaOutput[depth32Index + 2u] - depth32Linear) > 0.00001f ||
         depth32Output[texel] != depth32InputValues[pattern]) {
       fprintf(stderr,
-              "CUDA depth32 mismatch at %u: %.9g/%.9g/%.9g\n",
+              "CUDA depth32 mismatch at %u: %.9g/%.9g/%.9g/%.9g\n",
               texel,
               cudaOutput[depth32Index],
               cudaOutput[depth32Index + 1u],
+              cudaOutput[depth32Index + 2u],
               depth32Output[texel]);
       goto cleanup;
     }
@@ -1951,17 +1959,22 @@ run_texture_roundtrip(RoundtripState *state) {
             0.5f / 65535.0f + 0.000001f ||
           fabsf(cudaOutput[depth16Index + 1u] - depth16Expected) >
             0.5f / 65535.0f + 0.000001f ||
+          fabsf(cudaOutput[depth16Index + 2u] - depth16Linear) >
+            0.00002f ||
           depth16Output[texel] != depth16InputValues[pattern])) ||
         (!state->depth16Shared &&
          (fabsf(cudaOutput[depth16Index] - depth32InputValues[pattern]) >
             0.00001f ||
           fabsf(cudaOutput[depth16Index + 1u] -
-                 depth32InputValues[pattern]) > 0.00001f))) {
+                 depth32InputValues[pattern]) > 0.00001f ||
+          fabsf(cudaOutput[depth16Index + 2u] - depth32Linear) >
+            0.00001f))) {
       fprintf(stderr,
-              "CUDA depth16 mismatch at %u: %.9g/%.9g/%u\n",
+              "CUDA depth16 mismatch at %u: %.9g/%.9g/%.9g/%u\n",
               texel,
               cudaOutput[depth16Index],
               cudaOutput[depth16Index + 1u],
+              cudaOutput[depth16Index + 2u],
               (unsigned)depth16Output[texel]);
       goto cleanup;
     }
