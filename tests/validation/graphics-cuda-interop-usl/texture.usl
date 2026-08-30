@@ -137,3 +137,213 @@ kern(8, 8, 1) interop_texture_store_cs(
   output[uint16Base + texelCount + index] = float4(uint16Color)
   output[sint16Base + texelCount + index] = float4(sint16Color)
 }
+
+kern(8, 8, 1) interop_narrow_sample_cs(
+  inout output: [float4] #buffer(1),
+  r8UnormSampled: texture2d_array<float> #texture(1) #group(1),
+  r8SnormSampled: texture2d_array<float> #texture(3) #group(1),
+  r8UintSampled: texture2d_array<uint> #texture(5) #group(1),
+  r8SintSampled: texture2d_array<int> #texture(7) #group(1),
+  r16UnormSampled: texture2d_array<float> #texture(9) #group(1),
+  r16SnormSampled: texture2d_array<float> #texture(11) #group(1),
+  r16UintSampled: texture2d_array<uint> #texture(13) #group(1),
+  r16SintSampled: texture2d_array<int> #texture(15) #group(1),
+  r16FloatSampled: texture2d_array<half> #texture(17) #group(1),
+  r32UintSampled: texture2d_array<uint> #texture(19) #group(1),
+  r32SintSampled: texture2d_array<int> #texture(21) #group(1),
+  r32FloatSampled: texture2d_array<float> #texture(23) #group(1),
+  rg8UnormSampled: texture2d_array<float> #texture(25) #group(1),
+  rg8SnormSampled: texture2d_array<float> #texture(27) #group(1),
+  rg8UintSampled: texture2d_array<uint> #texture(29) #group(1),
+  rg8SintSampled: texture2d_array<int> #texture(31) #group(1),
+  rg16UnormSampled: texture2d_array<float> #texture(33) #group(1),
+  rg16SnormSampled: texture2d_array<float> #texture(35) #group(1),
+  rg16UintSampled: texture2d_array<uint> #texture(37) #group(1),
+  rg16SintSampled: texture2d_array<int> #texture(39) #group(1),
+  rg16FloatSampled: texture2d_array<half> #texture(41) #group(1),
+  rg32UintSampled: texture2d_array<uint> #texture(43) #group(1),
+  rg32SintSampled: texture2d_array<int> #texture(45) #group(1),
+  rg32FloatSampled: texture2d_array<float> #texture(47) #group(1),
+  gid: uint3 #global_id
+) {
+  let texelCount = 8u * 8u * 2u
+  let halfBase = texelCount * 2u + 6u + 12u
+  let r8UnormBase = halfBase + texelCount * 2u * 9u
+  let r8SnormBase = r8UnormBase + texelCount * 2u
+  let r8UintBase = r8SnormBase + texelCount * 2u
+  let r8SintBase = r8UintBase + texelCount * 2u
+  let r16UnormBase = r8SintBase + texelCount * 2u
+  let r16SnormBase = r16UnormBase + texelCount * 2u
+  let r16UintBase = r16SnormBase + texelCount * 2u
+  let r16SintBase = r16UintBase + texelCount * 2u
+  let r16FloatBase = r16SintBase + texelCount * 2u
+  let r32UintBase = r16FloatBase + texelCount * 2u
+  let r32SintBase = r32UintBase + texelCount * 2u
+  let r32FloatBase = r32SintBase + texelCount * 2u
+  let rg8UnormBase = r32FloatBase + texelCount * 2u
+  let rg8SnormBase = rg8UnormBase + texelCount * 2u
+  let rg8UintBase = rg8SnormBase + texelCount * 2u
+  let rg8SintBase = rg8UintBase + texelCount * 2u
+  let rg16UnormBase = rg8SintBase + texelCount * 2u
+  let rg16SnormBase = rg16UnormBase + texelCount * 2u
+  let rg16UintBase = rg16SnormBase + texelCount * 2u
+  let rg16SintBase = rg16UintBase + texelCount * 2u
+  let rg16FloatBase = rg16SintBase + texelCount * 2u
+  let rg32UintBase = rg16FloatBase + texelCount * 2u
+  let rg32SintBase = rg32UintBase + texelCount * 2u
+  let rg32FloatBase = rg32SintBase + texelCount * 2u
+  let index = (gid.z * 8u + gid.y) * 8u + gid.x
+  output[r8UnormBase + index] = r8UnormSampled.read(int3(gid))
+  output[r8SnormBase + index] = r8SnormSampled.read(int3(gid))
+  output[r8UintBase + index] = float4(r8UintSampled.read(int3(gid)))
+  output[r8SintBase + index] = float4(r8SintSampled.read(int3(gid)))
+  output[r16UnormBase + index] = r16UnormSampled.read(int3(gid))
+  output[r16SnormBase + index] = r16SnormSampled.read(int3(gid))
+  output[r16UintBase + index] = float4(r16UintSampled.read(int3(gid)))
+  output[r16SintBase + index] = float4(r16SintSampled.read(int3(gid)))
+  output[r16FloatBase + index] = float4(r16FloatSampled.read(int3(gid)))
+  output[r32UintBase + index] = float4(r32UintSampled.read(int3(gid)))
+  output[r32SintBase + index] = float4(r32SintSampled.read(int3(gid)))
+  output[r32FloatBase + index] = r32FloatSampled.read(int3(gid))
+  output[rg8UnormBase + index] = rg8UnormSampled.read(int3(gid))
+  output[rg8SnormBase + index] = rg8SnormSampled.read(int3(gid))
+  output[rg8UintBase + index] = float4(rg8UintSampled.read(int3(gid)))
+  output[rg8SintBase + index] = float4(rg8SintSampled.read(int3(gid)))
+  output[rg16UnormBase + index] = rg16UnormSampled.read(int3(gid))
+  output[rg16SnormBase + index] = rg16SnormSampled.read(int3(gid))
+  output[rg16UintBase + index] = float4(rg16UintSampled.read(int3(gid)))
+  output[rg16SintBase + index] = float4(rg16SintSampled.read(int3(gid)))
+  output[rg16FloatBase + index] = float4(rg16FloatSampled.read(int3(gid)))
+  output[rg32UintBase + index] = float4(rg32UintSampled.read(int3(gid)))
+  output[rg32SintBase + index] = float4(rg32SintSampled.read(int3(gid)))
+  output[rg32FloatBase + index] = rg32FloatSampled.read(int3(gid))
+}
+
+kern(8, 8, 1) interop_narrow_store_cs(
+  inout output: [float4] #buffer(1),
+  r8UnormImage: image2d_array<r8unorm, read_write> #texture(0) #group(1),
+  r8SnormImage: image2d_array<r8snorm, read_write> #texture(2) #group(1),
+  r8UintImage: image2d_array<r8uint, read_write> #texture(4) #group(1),
+  r8SintImage: image2d_array<r8sint, read_write> #texture(6) #group(1),
+  r16UnormImage: image2d_array<r16unorm, read_write> #texture(8) #group(1),
+  r16SnormImage: image2d_array<r16snorm, read_write> #texture(10) #group(1),
+  r16UintImage: image2d_array<r16uint, read_write> #texture(12) #group(1),
+  r16SintImage: image2d_array<r16sint, read_write> #texture(14) #group(1),
+  r16FloatImage: image2d_array<r16float, read_write> #texture(16) #group(1),
+  r32UintImage: image2d_array<r32uint, read_write> #texture(18) #group(1),
+  r32SintImage: image2d_array<r32sint, read_write> #texture(20) #group(1),
+  r32FloatImage: image2d_array<r32float, read_write> #texture(22) #group(1),
+  rg8UnormImage: image2d_array<rg8unorm, read_write> #texture(24) #group(1),
+  rg8SnormImage: image2d_array<rg8snorm, read_write> #texture(26) #group(1),
+  rg8UintImage: image2d_array<rg8uint, read_write> #texture(28) #group(1),
+  rg8SintImage: image2d_array<rg8sint, read_write> #texture(30) #group(1),
+  rg16UnormImage: image2d_array<rg16unorm, read_write> #texture(32) #group(1),
+  rg16SnormImage: image2d_array<rg16snorm, read_write> #texture(34) #group(1),
+  rg16UintImage: image2d_array<rg16uint, read_write> #texture(36) #group(1),
+  rg16SintImage: image2d_array<rg16sint, read_write> #texture(38) #group(1),
+  rg16FloatImage: image2d_array<rg16float, read_write> #texture(40) #group(1),
+  rg32UintImage: image2d_array<rg32uint, read_write> #texture(42) #group(1),
+  rg32SintImage: image2d_array<rg32sint, read_write> #texture(44) #group(1),
+  rg32FloatImage: image2d_array<rg32float, read_write> #texture(46) #group(1),
+  gid: uint3 #global_id
+) {
+  let texelCount = 8u * 8u * 2u
+  let halfBase = texelCount * 2u + 6u + 12u
+  let r8UnormBase = halfBase + texelCount * 2u * 9u
+  let r8SnormBase = r8UnormBase + texelCount * 2u
+  let r8UintBase = r8SnormBase + texelCount * 2u
+  let r8SintBase = r8UintBase + texelCount * 2u
+  let r16UnormBase = r8SintBase + texelCount * 2u
+  let r16SnormBase = r16UnormBase + texelCount * 2u
+  let r16UintBase = r16SnormBase + texelCount * 2u
+  let r16SintBase = r16UintBase + texelCount * 2u
+  let r16FloatBase = r16SintBase + texelCount * 2u
+  let r32UintBase = r16FloatBase + texelCount * 2u
+  let r32SintBase = r32UintBase + texelCount * 2u
+  let r32FloatBase = r32SintBase + texelCount * 2u
+  let rg8UnormBase = r32FloatBase + texelCount * 2u
+  let rg8SnormBase = rg8UnormBase + texelCount * 2u
+  let rg8UintBase = rg8SnormBase + texelCount * 2u
+  let rg8SintBase = rg8UintBase + texelCount * 2u
+  let rg16UnormBase = rg8SintBase + texelCount * 2u
+  let rg16SnormBase = rg16UnormBase + texelCount * 2u
+  let rg16UintBase = rg16SnormBase + texelCount * 2u
+  let rg16SintBase = rg16UintBase + texelCount * 2u
+  let rg16FloatBase = rg16SintBase + texelCount * 2u
+  let rg32UintBase = rg16FloatBase + texelCount * 2u
+  let rg32SintBase = rg32UintBase + texelCount * 2u
+  let rg32FloatBase = rg32SintBase + texelCount * 2u
+  let index = (gid.z * 8u + gid.y) * 8u + gid.x
+  let r8UnormColor = float4(1.0) - r8UnormImage.read(gid)
+  r8UnormImage.write(r8UnormColor, gid)
+  output[r8UnormBase + texelCount + index] = r8UnormColor
+  let r8SnormColor = -r8SnormImage.read(gid)
+  r8SnormImage.write(r8SnormColor, gid)
+  output[r8SnormBase + texelCount + index] = r8SnormColor
+  let r8UintColor = r8UintImage.read(gid) + uint4(1u)
+  r8UintImage.write(r8UintColor, gid)
+  output[r8UintBase + texelCount + index] = float4(r8UintColor)
+  let r8SintColor = r8SintImage.read(gid) + int4(7)
+  r8SintImage.write(r8SintColor, gid)
+  output[r8SintBase + texelCount + index] = float4(r8SintColor)
+  let r16UnormColor = float4(1.0) - r16UnormImage.read(gid)
+  r16UnormImage.write(r16UnormColor, gid)
+  output[r16UnormBase + texelCount + index] = r16UnormColor
+  let r16SnormColor = -r16SnormImage.read(gid)
+  r16SnormImage.write(r16SnormColor, gid)
+  output[r16SnormBase + texelCount + index] = r16SnormColor
+  let r16UintColor = r16UintImage.read(gid) + uint4(1u)
+  r16UintImage.write(r16UintColor, gid)
+  output[r16UintBase + texelCount + index] = float4(r16UintColor)
+  let r16SintColor = r16SintImage.read(gid) + int4(7)
+  r16SintImage.write(r16SintColor, gid)
+  output[r16SintBase + texelCount + index] = float4(r16SintColor)
+  let r16FloatColor = r16FloatImage.read(gid) * 2.0 + float4(1.0)
+  r16FloatImage.write(r16FloatColor, gid)
+  output[r16FloatBase + texelCount + index] = r16FloatColor
+  let r32UintColor = r32UintImage.read(gid) + uint4(1u)
+  r32UintImage.write(r32UintColor, gid)
+  output[r32UintBase + texelCount + index] = float4(r32UintColor)
+  let r32SintColor = r32SintImage.read(gid) + int4(7)
+  r32SintImage.write(r32SintColor, gid)
+  output[r32SintBase + texelCount + index] = float4(r32SintColor)
+  let r32FloatColor = r32FloatImage.read(gid) * 2.0 + float4(1.0)
+  r32FloatImage.write(r32FloatColor, gid)
+  output[r32FloatBase + texelCount + index] = r32FloatColor
+  let rg8UnormColor = float4(1.0) - rg8UnormImage.read(gid)
+  rg8UnormImage.write(rg8UnormColor, gid)
+  output[rg8UnormBase + texelCount + index] = rg8UnormColor
+  let rg8SnormColor = -rg8SnormImage.read(gid)
+  rg8SnormImage.write(rg8SnormColor, gid)
+  output[rg8SnormBase + texelCount + index] = rg8SnormColor
+  let rg8UintColor = rg8UintImage.read(gid) + uint4(1u)
+  rg8UintImage.write(rg8UintColor, gid)
+  output[rg8UintBase + texelCount + index] = float4(rg8UintColor)
+  let rg8SintColor = rg8SintImage.read(gid) + int4(7)
+  rg8SintImage.write(rg8SintColor, gid)
+  output[rg8SintBase + texelCount + index] = float4(rg8SintColor)
+  let rg16UnormColor = float4(1.0) - rg16UnormImage.read(gid)
+  rg16UnormImage.write(rg16UnormColor, gid)
+  output[rg16UnormBase + texelCount + index] = rg16UnormColor
+  let rg16SnormColor = -rg16SnormImage.read(gid)
+  rg16SnormImage.write(rg16SnormColor, gid)
+  output[rg16SnormBase + texelCount + index] = rg16SnormColor
+  let rg16UintColor = rg16UintImage.read(gid) + uint4(1u)
+  rg16UintImage.write(rg16UintColor, gid)
+  output[rg16UintBase + texelCount + index] = float4(rg16UintColor)
+  let rg16SintColor = rg16SintImage.read(gid) + int4(7)
+  rg16SintImage.write(rg16SintColor, gid)
+  output[rg16SintBase + texelCount + index] = float4(rg16SintColor)
+  let rg16FloatColor = rg16FloatImage.read(gid) * 2.0 + float4(1.0)
+  rg16FloatImage.write(rg16FloatColor, gid)
+  output[rg16FloatBase + texelCount + index] = rg16FloatColor
+  let rg32UintColor = rg32UintImage.read(gid) + uint4(1u)
+  rg32UintImage.write(rg32UintColor, gid)
+  output[rg32UintBase + texelCount + index] = float4(rg32UintColor)
+  let rg32SintColor = rg32SintImage.read(gid) + int4(7)
+  rg32SintImage.write(rg32SintColor, gid)
+  output[rg32SintBase + texelCount + index] = float4(rg32SintColor)
+  let rg32FloatColor = rg32FloatImage.read(gid) * 2.0 + float4(1.0)
+  rg32FloatImage.write(rg32FloatColor, gid)
+  output[rg32FloatBase + texelCount + index] = rg32FloatColor
+}

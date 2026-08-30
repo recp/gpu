@@ -31,9 +31,15 @@ enum {
   ByteFloatOutputValueCount     = ByteTextureValueCount * 2u,
   WordTextureValueCount         = TextureValueCount,
   WordFloatOutputValueCount     = WordTextureValueCount * 2u,
-  FormatFloatOutputValueCount   = HalfFloatOutputValueCount +
-                                  ByteFloatOutputValueCount * 4u +
-                                  WordFloatOutputValueCount * 4u,
+  RgbaFormatCount               = 9u,
+  NarrowFormatCount             = 24u,
+  FormatCaseCount               = RgbaFormatCount + NarrowFormatCount,
+  FormatFloatOutputValueCount   = TextureValueCount * 2u * FormatCaseCount,
+  NarrowRBytesPerTexel          = 4u * 1u + 5u * 2u + 3u * 4u,
+  NarrowRgBytesPerTexel         = NarrowRBytesPerTexel * 2u,
+  NarrowRawByteCount            = TextureTexelCount *
+                                  (NarrowRBytesPerTexel +
+                                   NarrowRgBytesPerTexel),
   TextureOutputValueCount       = TextureValueCount * 2u +
                                   CubeOutputValueCount +
                                   CubeArrayOutputValueCount +
@@ -50,8 +56,40 @@ typedef enum InteropFormatCase {
   InteropFormatSnorm16,
   InteropFormatUint16,
   InteropFormatSint16,
+  InteropFormatR8Unorm,
+  InteropFormatR8Snorm,
+  InteropFormatR8Uint,
+  InteropFormatR8Sint,
+  InteropFormatR16Unorm,
+  InteropFormatR16Snorm,
+  InteropFormatR16Uint,
+  InteropFormatR16Sint,
+  InteropFormatR16Float,
+  InteropFormatR32Uint,
+  InteropFormatR32Sint,
+  InteropFormatR32Float,
+  InteropFormatRg8Unorm,
+  InteropFormatRg8Snorm,
+  InteropFormatRg8Uint,
+  InteropFormatRg8Sint,
+  InteropFormatRg16Unorm,
+  InteropFormatRg16Snorm,
+  InteropFormatRg16Uint,
+  InteropFormatRg16Sint,
+  InteropFormatRg16Float,
+  InteropFormatRg32Uint,
+  InteropFormatRg32Sint,
+  InteropFormatRg32Float,
   InteropFormatCount
 } InteropFormatCase;
+
+typedef enum InteropValueKind {
+  InteropValueUnorm,
+  InteropValueSnorm,
+  InteropValueUint,
+  InteropValueSint,
+  InteropValueFloat
+} InteropValueKind;
 
 typedef struct Params {
   float scale;
@@ -77,6 +115,71 @@ typedef struct InteropFormatTransfer {
   uint64_t    size;
   uint32_t    bytesPerRow;
 } InteropFormatTransfer;
+
+typedef struct InteropNarrowFormat {
+  const char        *label;
+  GPUFormat          format;
+  InteropFormatCase  formatCase;
+  InteropValueKind   valueKind;
+  uint8_t            channelCount;
+  uint8_t            componentBytes;
+} InteropNarrowFormat;
+
+static const InteropNarrowFormat narrowFormats[NarrowFormatCount] = {
+  {"r8-unorm-interop", GPU_FORMAT_R8_UNORM,
+   InteropFormatR8Unorm, InteropValueUnorm, 1u, 1u},
+  {"r8-snorm-interop", GPU_FORMAT_R8_SNORM,
+   InteropFormatR8Snorm, InteropValueSnorm, 1u, 1u},
+  {"r8-uint-interop", GPU_FORMAT_R8_UINT,
+   InteropFormatR8Uint, InteropValueUint, 1u, 1u},
+  {"r8-sint-interop", GPU_FORMAT_R8_SINT,
+   InteropFormatR8Sint, InteropValueSint, 1u, 1u},
+  {"r16-unorm-interop", GPU_FORMAT_R16_UNORM,
+   InteropFormatR16Unorm, InteropValueUnorm, 1u, 2u},
+  {"r16-snorm-interop", GPU_FORMAT_R16_SNORM,
+   InteropFormatR16Snorm, InteropValueSnorm, 1u, 2u},
+  {"r16-uint-interop", GPU_FORMAT_R16_UINT,
+   InteropFormatR16Uint, InteropValueUint, 1u, 2u},
+  {"r16-sint-interop", GPU_FORMAT_R16_SINT,
+   InteropFormatR16Sint, InteropValueSint, 1u, 2u},
+  {"r16f-interop", GPU_FORMAT_R16_FLOAT,
+   InteropFormatR16Float, InteropValueFloat, 1u, 2u},
+  {"r32-uint-interop", GPU_FORMAT_R32_UINT,
+   InteropFormatR32Uint, InteropValueUint, 1u, 4u},
+  {"r32-sint-interop", GPU_FORMAT_R32_SINT,
+   InteropFormatR32Sint, InteropValueSint, 1u, 4u},
+  {"r32f-interop", GPU_FORMAT_R32_FLOAT,
+   InteropFormatR32Float, InteropValueFloat, 1u, 4u},
+  {"rg8-unorm-interop", GPU_FORMAT_RG8_UNORM,
+   InteropFormatRg8Unorm, InteropValueUnorm, 2u, 1u},
+  {"rg8-snorm-interop", GPU_FORMAT_RG8_SNORM,
+   InteropFormatRg8Snorm, InteropValueSnorm, 2u, 1u},
+  {"rg8-uint-interop", GPU_FORMAT_RG8_UINT,
+   InteropFormatRg8Uint, InteropValueUint, 2u, 1u},
+  {"rg8-sint-interop", GPU_FORMAT_RG8_SINT,
+   InteropFormatRg8Sint, InteropValueSint, 2u, 1u},
+  {"rg16-unorm-interop", GPU_FORMAT_RG16_UNORM,
+   InteropFormatRg16Unorm, InteropValueUnorm, 2u, 2u},
+  {"rg16-snorm-interop", GPU_FORMAT_RG16_SNORM,
+   InteropFormatRg16Snorm, InteropValueSnorm, 2u, 2u},
+  {"rg16-uint-interop", GPU_FORMAT_RG16_UINT,
+   InteropFormatRg16Uint, InteropValueUint, 2u, 2u},
+  {"rg16-sint-interop", GPU_FORMAT_RG16_SINT,
+   InteropFormatRg16Sint, InteropValueSint, 2u, 2u},
+  {"rg16f-interop", GPU_FORMAT_RG16_FLOAT,
+   InteropFormatRg16Float, InteropValueFloat, 2u, 2u},
+  {"rg32-uint-interop", GPU_FORMAT_RG32_UINT,
+   InteropFormatRg32Uint, InteropValueUint, 2u, 4u},
+  {"rg32-sint-interop", GPU_FORMAT_RG32_SINT,
+   InteropFormatRg32Sint, InteropValueSint, 2u, 4u},
+  {"rg32f-interop", GPU_FORMAT_RG32_FLOAT,
+   InteropFormatRg32Float, InteropValueFloat, 2u, 4u}
+};
+
+_Static_assert((uint32_t)InteropFormatCount == FormatCaseCount,
+               "interop format count must match output layout");
+_Static_assert((uint32_t)InteropFormatR8Unorm == RgbaFormatCount,
+               "narrow interop formats must follow RGBA formats");
 
 typedef struct RoundtripState {
   GPUDeviceInteropEXT *interop;
@@ -106,9 +209,12 @@ typedef struct RoundtripState {
   GPUComputePipeline  *pipeline;
   GPUComputePipeline  *textureSamplePipeline;
   GPUComputePipeline  *textureStorePipeline;
+  GPUComputePipeline  *narrowSamplePipeline;
+  GPUComputePipeline  *narrowStorePipeline;
   GPUBindGroup        *paramsGroup;
   GPUBindGroup        *dataGroup;
   GPUBindGroup        *textureGroup;
+  GPUBindGroup        *narrowGroup;
   uint32_t             textureMipLevel;
   InteropFormatTexture formatTextures[InteropFormatCount];
 } RoundtripState;
@@ -302,6 +408,119 @@ create_interop_format_texture(RoundtripState            *state,
     return 0;
   }
   return 1;
+}
+
+static void
+narrow_reference(const InteropNarrowFormat *format,
+                 uint32_t                   pattern,
+                 uint32_t                  *outInputBits,
+                 uint32_t                  *outOutputBits,
+                 float                     *outInputValue,
+                 float                     *outOutputValue) {
+  static const uint8_t  unorm8[8] = {
+    0u, 16u, 32u, 64u, 128u, 192u, 240u, 255u
+  };
+  static const uint16_t unorm16[8] = {
+    0u, 4096u, 8192u, 16384u, 32768u, 49152u, 61440u, 65535u
+  };
+  static const int8_t   snorm8[8] = {
+    -120, -64, -32, -1, 0, 1, 64, 120
+  };
+  static const int16_t  snorm16[8] = {
+    -30000, -16384, -8192, -1, 0, 1, 16384, 30000
+  };
+  static const uint8_t  uint8Values[8] = {
+    0u, 1u, 2u, 3u, 120u, 200u, 250u, 253u
+  };
+  static const uint16_t uint16Values[8] = {
+    0u, 1u, 2u, 3u, 1000u, 60000u, 65000u, 65530u
+  };
+  static const uint32_t uint32Values[8] = {
+    0u, 1u, 2u, 3u, 1000u, 65535u, 1048576u, 16777214u
+  };
+  static const int32_t  sintValues[8] = {
+    -1000000, -1000, -10, -1, 0, 1, 1000, 1000000
+  };
+  static const uint16_t float16Bits[8] = {
+    0x0000u, 0x3c00u, 0xc000u, 0x3800u,
+    0x4200u, 0xbc00u, 0x4400u, 0x3400u
+  };
+  static const uint16_t float16OutputBits[8] = {
+    0x3c00u, 0x4200u, 0xc200u, 0x4000u,
+    0x4700u, 0xbc00u, 0x4880u, 0x3e00u
+  };
+  static const float    floatValues[8] = {
+    0.0f, 1.0f, -2.0f, 0.5f, 3.0f, -1.0f, 4.0f, 0.25f
+  };
+  uint32_t inputBits, outputBits, maxValue;
+  int32_t  signedInput, signedOutput;
+  float    inputValue, outputValue;
+
+  pattern %= 8u;
+  inputBits   = 0u;
+  outputBits  = 0u;
+  inputValue  = 0.0f;
+  outputValue = 0.0f;
+  switch (format->valueKind) {
+    case InteropValueUnorm:
+      maxValue = format->componentBytes == 1u ? 255u : 65535u;
+      inputBits = format->componentBytes == 1u
+        ? (uint32_t)unorm8[pattern]
+        : (uint32_t)unorm16[pattern];
+      outputBits  = maxValue - inputBits;
+      inputValue  = (float)inputBits / (float)maxValue;
+      outputValue = (float)outputBits / (float)maxValue;
+      break;
+    case InteropValueSnorm:
+      signedInput = format->componentBytes == 1u
+        ? (int32_t)snorm8[pattern]
+        : (int32_t)snorm16[pattern];
+      signedOutput = -signedInput;
+      inputBits    = (uint32_t)signedInput;
+      outputBits   = (uint32_t)signedOutput;
+      maxValue     = format->componentBytes == 1u ? 127u : 32767u;
+      inputValue   = (float)signedInput / (float)maxValue;
+      outputValue  = (float)signedOutput / (float)maxValue;
+      break;
+    case InteropValueUint:
+      inputBits = format->componentBytes == 1u
+        ? (uint32_t)uint8Values[pattern]
+        : format->componentBytes == 2u
+          ? (uint32_t)uint16Values[pattern]
+          : uint32Values[pattern];
+      outputBits  = inputBits + 1u;
+      inputValue  = (float)inputBits;
+      outputValue = (float)outputBits;
+      break;
+    case InteropValueSint:
+      signedInput = sintValues[pattern];
+      if (format->componentBytes == 1u) {
+        signedInput = snorm8[pattern];
+      } else if (format->componentBytes == 2u) {
+        signedInput = snorm16[pattern];
+      }
+      signedOutput = signedInput + 7;
+      inputBits    = (uint32_t)signedInput;
+      outputBits   = (uint32_t)signedOutput;
+      inputValue   = (float)signedInput;
+      outputValue  = (float)signedOutput;
+      break;
+    case InteropValueFloat:
+      inputValue  = floatValues[pattern];
+      outputValue = inputValue * 2.0f + 1.0f;
+      if (format->componentBytes == 2u) {
+        inputBits  = float16Bits[pattern];
+        outputBits = float16OutputBits[pattern];
+      } else {
+        memcpy(&inputBits, &inputValue, sizeof(inputBits));
+        memcpy(&outputBits, &outputValue, sizeof(outputBits));
+      }
+      break;
+  }
+  *outInputBits   = inputBits;
+  *outOutputBits  = outputBits;
+  *outInputValue  = inputValue;
+  *outOutputValue = outputValue;
 }
 
 static int
@@ -531,6 +750,8 @@ run_texture_roundtrip(RoundtripState *state) {
   uint16_t                    uint16Output[WordTextureValueCount];
   int16_t                     sint16Input[WordTextureValueCount];
   int16_t                     sint16Output[WordTextureValueCount];
+  uint8_t                     narrowInput[NarrowRawByteCount];
+  uint8_t                     narrowOutput[NarrowRawByteCount];
   InteropFormatTransfer       formatTransfers[InteropFormatCount];
   float                       output[TextureValueCount];
   float                       cudaOutput[TextureOutputValueCount];
@@ -538,6 +759,7 @@ run_texture_roundtrip(RoundtripState *state) {
   uint32_t                    halfBase, unorm8Base, snorm8Base;
   uint32_t                    uint8Base, sint8Base, unorm16Base;
   uint32_t                    snorm16Base, uint16Base, sint16Base;
+  uint32_t                    narrowOffset;
   int                         releaseSubmitted, cudaSubmitted;
   int                         acquireSubmitted, ok;
   static const uint16_t       halfInputBits[8] = {
@@ -700,6 +922,45 @@ run_texture_roundtrip(RoundtripState *state) {
     sizeof(sint16Input),
     TextureWidth * 4u * sizeof(int16_t)
   };
+  narrowOffset = 0u;
+  for (uint32_t i = 0u; i < NarrowFormatCount; i++) {
+    const InteropNarrowFormat *format;
+    InteropFormatTransfer     *transfer;
+    uint32_t                   componentCount, size;
+
+    format         = &narrowFormats[i];
+    transfer       = &formatTransfers[format->formatCase];
+    componentCount = TextureTexelCount * format->channelCount;
+    size           = componentCount * format->componentBytes;
+    transfer->input       = narrowInput + narrowOffset;
+    transfer->output      = narrowOutput + narrowOffset;
+    transfer->size        = size;
+    transfer->bytesPerRow = TextureWidth * format->channelCount *
+                            format->componentBytes;
+    for (uint32_t component = 0u; component < componentCount; component++) {
+      uint32_t inputBits, outputBits;
+      float    inputValue, outputValue;
+
+      narrow_reference(format,
+                       component,
+                       &inputBits,
+                       &outputBits,
+                       &inputValue,
+                       &outputValue);
+      memcpy(narrowInput + narrowOffset +
+               component * format->componentBytes,
+             &inputBits,
+             format->componentBytes);
+      memset(narrowOutput + narrowOffset +
+               component * format->componentBytes,
+             0,
+             format->componentBytes);
+    }
+    narrowOffset += size;
+  }
+  if (narrowOffset != NarrowRawByteCount) {
+    goto cleanup;
+  }
 
   writeRegion.aspect       = GPU_TEXTURE_ASPECT_ALL;
   writeRegion.width        = TextureWidth;
@@ -814,8 +1075,22 @@ run_texture_roundtrip(RoundtripState *state) {
               TextureWidth / 8u,
               TextureHeight / 8u,
               CubeArrayLayers);
+  GPUBindComputePipeline(computePass, state->narrowSamplePipeline);
+  GPUBindComputeGroup(computePass, 0u, state->textureGroup, 0u, NULL);
+  GPUBindComputeGroup(computePass, 1u, state->narrowGroup, 0u, NULL);
+  GPUDispatch(computePass,
+              TextureWidth / 8u,
+              TextureHeight / 8u,
+              TextureLayers);
   GPUBindComputePipeline(computePass, state->textureStorePipeline);
   GPUBindComputeGroup(computePass, 0u, state->textureGroup, 0u, NULL);
+  GPUDispatch(computePass,
+              TextureWidth / 8u,
+              TextureHeight / 8u,
+              TextureLayers);
+  GPUBindComputePipeline(computePass, state->narrowStorePipeline);
+  GPUBindComputeGroup(computePass, 0u, state->textureGroup, 0u, NULL);
+  GPUBindComputeGroup(computePass, 1u, state->narrowGroup, 0u, NULL);
   GPUDispatch(computePass,
               TextureWidth / 8u,
               TextureHeight / 8u,
@@ -1153,6 +1428,63 @@ run_texture_roundtrip(RoundtripState *state) {
       goto cleanup;
     }
   }
+  narrowOffset = 0u;
+  for (uint32_t i = 0u; i < NarrowFormatCount; i++) {
+    const InteropNarrowFormat *format;
+    uint32_t                   base, componentCount, size, rawMask;
+    float                      tolerance;
+
+    format         = &narrowFormats[i];
+    base           = halfBase +
+                     (uint32_t)format->formatCase *
+                       ByteFloatOutputValueCount;
+    componentCount = TextureTexelCount * format->channelCount;
+    size           = componentCount * format->componentBytes;
+    rawMask        = format->componentBytes == 1u
+      ? UINT8_MAX
+      : format->componentBytes == 2u ? UINT16_MAX : UINT32_MAX;
+    tolerance = format->valueKind == InteropValueUnorm
+      ? 0.5f / (format->componentBytes == 1u ? 255.0f : 65535.0f) +
+        0.000001f
+      : format->valueKind == InteropValueSnorm
+        ? 0.5f / (format->componentBytes == 1u ? 127.0f : 32767.0f) +
+          0.000001f
+        : 0.0001f;
+    for (uint32_t component = 0u; component < componentCount; component++) {
+      uint32_t inputBits, outputBits, actualBits;
+      uint32_t texel, channel, cudaIndex;
+      float    inputValue, outputValue;
+
+      narrow_reference(format,
+                       component,
+                       &inputBits,
+                       &outputBits,
+                       &inputValue,
+                       &outputValue);
+      texel      = component / format->channelCount;
+      channel    = component % format->channelCount;
+      cudaIndex  = base + texel * 4u + channel;
+      actualBits = 0u;
+      memcpy(&actualBits,
+             narrowOutput + narrowOffset +
+               component * format->componentBytes,
+             format->componentBytes);
+      if (fabsf(cudaOutput[cudaIndex] - inputValue) > tolerance ||
+          fabsf(cudaOutput[cudaIndex + TextureValueCount] - outputValue) >
+            tolerance ||
+          actualBits != (outputBits & rawMask)) {
+        fprintf(stderr,
+                "CUDA %s mismatch at %u: %.9g/%.9g/%08x\n",
+                format->label,
+                component,
+                cudaOutput[cudaIndex],
+                cudaOutput[cudaIndex + TextureValueCount],
+                actualBits);
+        goto cleanup;
+      }
+    }
+    narrowOffset += size;
+  }
   ok = 1;
 
 cleanup:
@@ -1217,7 +1549,8 @@ main(int argc, char **argv) {
   GPUComputePipelineCreateInfo pipelineInfo = {0};
   GPUBindGroupEntry            paramsEntry = {0};
   GPUBindGroupEntry            dataEntries[2] = {0};
-  GPUBindGroupEntry            textureEntries[5 + InteropFormatCount * 2] = {0};
+  GPUBindGroupEntry            textureEntries[5 + RgbaFormatCount * 2] = {0};
+  GPUBindGroupEntry            narrowEntries[NarrowFormatCount * 2] = {0};
   GPUBindGroupCreateInfo       groupInfo = {0};
   GPUMemoryRequirements        memoryRequirements;
   GPUResult                    textureRequirementsResult;
@@ -1613,6 +1946,23 @@ main(int argc, char **argv) {
       )) {
     goto cleanup;
   }
+  for (uint32_t i = 0u; i < NarrowFormatCount; i++) {
+    const InteropNarrowFormat *format;
+    uint64_t                   readbackSize;
+
+    format       = &narrowFormats[i];
+    readbackSize = (uint64_t)TextureTexelCount * format->channelCount *
+                   format->componentBytes;
+    if (!create_interop_format_texture(&state,
+                                       format->formatCase,
+                                       &graphicsTextureInfo,
+                                       format->format,
+                                       format->label,
+                                       readbackSize,
+                                       cudaFirst)) {
+      goto cleanup;
+    }
+  }
 
   textureViewInfo.chain.sType      =
     GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
@@ -1714,9 +2064,10 @@ main(int argc, char **argv) {
       GPUCreateShaderLayout(state.cudaDevice,
                             textureLibrary,
                             &textureLayout) != GPU_OK ||
-      !textureLayout || textureLayout->bindGroupLayoutCount != 1u ||
+      !textureLayout || textureLayout->bindGroupLayoutCount != 2u ||
       !textureLayout->bindGroupLayouts ||
       !textureLayout->bindGroupLayouts[0] ||
+      !textureLayout->bindGroupLayouts[1] ||
       !textureLayout->pipelineLayout) {
     fprintf(stderr, "CUDA interop texture shader layout creation failed\n");
     goto cleanup;
@@ -1754,6 +2105,24 @@ main(int argc, char **argv) {
                                &state.textureStorePipeline) != GPU_OK ||
       !state.textureStorePipeline) {
     fprintf(stderr, "CUDA interop texture store pipeline failed\n");
+    goto cleanup;
+  }
+  pipelineInfo.label      = "graphics-cuda-narrow-sample";
+  pipelineInfo.entryPoint = "interop_narrow_sample_cs";
+  if (GPUCreateComputePipeline(state.cudaDevice,
+                               &pipelineInfo,
+                               &state.narrowSamplePipeline) != GPU_OK ||
+      !state.narrowSamplePipeline) {
+    fprintf(stderr, "CUDA interop narrow sample pipeline failed\n");
+    goto cleanup;
+  }
+  pipelineInfo.label      = "graphics-cuda-narrow-store";
+  pipelineInfo.entryPoint = "interop_narrow_store_cs";
+  if (GPUCreateComputePipeline(state.cudaDevice,
+                               &pipelineInfo,
+                               &state.narrowStorePipeline) != GPU_OK ||
+      !state.narrowStorePipeline) {
+    fprintf(stderr, "CUDA interop narrow store pipeline failed\n");
     goto cleanup;
   }
 
@@ -1810,7 +2179,7 @@ main(int argc, char **argv) {
   textureEntries[4].binding       = 4u;
   textureEntries[4].bindingType   = GPU_BINDING_SAMPLED_TEXTURE;
   textureEntries[4].textureView   = state.cudaCubeArrayTextureView;
-  for (uint32_t i = 0u; i < InteropFormatCount; i++) {
+  for (uint32_t i = 0u; i < RgbaFormatCount; i++) {
     uint32_t storageBinding, sampledBinding;
 
     storageBinding = 5u + i * 2u;
@@ -1827,12 +2196,38 @@ main(int argc, char **argv) {
   groupInfo.label      = "graphics-cuda-texture-group";
   groupInfo.layout     = textureLayout->bindGroupLayouts[0];
   groupInfo.pEntries   = textureEntries;
-  groupInfo.entryCount = 5u + InteropFormatCount * 2u;
+  groupInfo.entryCount = 5u + RgbaFormatCount * 2u;
   if (GPUCreateBindGroup(state.cudaDevice,
                          &groupInfo,
                          &state.textureGroup) != GPU_OK ||
       !state.textureGroup) {
     fprintf(stderr, "CUDA interop texture bind group creation failed\n");
+    goto cleanup;
+  }
+  for (uint32_t i = 0u; i < NarrowFormatCount; i++) {
+    uint32_t formatCase, storageBinding, sampledBinding;
+
+    formatCase     = RgbaFormatCount + i;
+    storageBinding = i * 2u;
+    sampledBinding = storageBinding + 1u;
+    narrowEntries[storageBinding].binding     = storageBinding;
+    narrowEntries[storageBinding].bindingType = GPU_BINDING_STORAGE_TEXTURE;
+    narrowEntries[storageBinding].textureView =
+      state.formatTextures[formatCase].storageView;
+    narrowEntries[sampledBinding].binding     = sampledBinding;
+    narrowEntries[sampledBinding].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+    narrowEntries[sampledBinding].textureView =
+      state.formatTextures[formatCase].sampledView;
+  }
+  groupInfo.label      = "graphics-cuda-narrow-group";
+  groupInfo.layout     = textureLayout->bindGroupLayouts[1];
+  groupInfo.pEntries   = narrowEntries;
+  groupInfo.entryCount = NarrowFormatCount * 2u;
+  if (GPUCreateBindGroup(state.cudaDevice,
+                         &groupInfo,
+                         &state.narrowGroup) != GPU_OK ||
+      !state.narrowGroup) {
+    fprintf(stderr, "CUDA interop narrow bind group creation failed\n");
     goto cleanup;
   }
 
@@ -1871,11 +2266,14 @@ main(int argc, char **argv) {
   status = 0;
 
 cleanup:
+  GPUDestroyBindGroup(state.narrowGroup);
   GPUDestroyBindGroup(state.textureGroup);
   GPUDestroyBindGroup(state.dataGroup);
   GPUDestroyBindGroup(state.paramsGroup);
   GPUDestroyComputePipeline(state.textureStorePipeline);
   GPUDestroyComputePipeline(state.textureSamplePipeline);
+  GPUDestroyComputePipeline(state.narrowStorePipeline);
+  GPUDestroyComputePipeline(state.narrowSamplePipeline);
   GPUDestroyComputePipeline(state.pipeline);
   GPUDestroyShaderLayout(textureLayout);
   GPUDestroyShaderLibrary(textureLibrary);
