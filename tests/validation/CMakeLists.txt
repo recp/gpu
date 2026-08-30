@@ -1866,7 +1866,9 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
   gpu_attach_usl_validation(gpu-clock-cuda-usl
                             gpu-cuda-fixtures
                             "${GPU_CUDA_SUBGROUP_CLOCK_US}"
-                            "${GPU_CUDA_DEVICE_CLOCK_US}")
+                            "${GPU_CUDA_DEVICE_CLOCK_US}"
+                            "${GPU_CUDA_DERIVATIVE_QUADS_US}"
+                            "${GPU_CUDA_DERIVATIVE_LINEAR_US}")
   set_target_properties(gpu-clock-cuda-usl PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED YES
@@ -1879,6 +1881,8 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
       COMMAND gpu-clock-cuda-usl
               "${GPU_CUDA_SUBGROUP_CLOCK_US}"
               "${GPU_CUDA_DEVICE_CLOCK_US}"
+              "${GPU_CUDA_DERIVATIVE_QUADS_US}"
+              "${GPU_CUDA_DERIVATIVE_LINEAR_US}"
     )
     set_tests_properties(cuda-clock PROPERTIES
       SKIP_RETURN_CODE 77

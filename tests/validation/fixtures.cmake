@@ -203,6 +203,31 @@ if(GPU_BUILD_TESTS OR (GPU_BUILD_CUDA AND GPU_BUILD_SAMPLES))
   list(GET GPU_CUDA_CLOCK_USL_FIXTURES 0 GPU_CUDA_SUBGROUP_CLOCK_US)
   list(GET GPU_CUDA_CLOCK_USL_FIXTURES 1 GPU_CUDA_DEVICE_CLOCK_US)
 
+  set(GPU_USL_FIXTURE_TARGET_CAPS
+      ptx_6_2,sm_70,compute_derivatives_quads)
+  gpu_add_usl_fixtures(
+    GPU_CUDA_DERIVATIVE_QUADS_USL_FIXTURE
+    ptx
+    validation
+    "${PROJECT_SOURCE_DIR}/tests/api/compute_derivatives_quads.usl"
+  )
+  set(GPU_USL_FIXTURE_TARGET_CAPS
+      ptx_6_2,sm_70,compute_derivatives_linear)
+  gpu_add_usl_fixtures(
+    GPU_CUDA_DERIVATIVE_LINEAR_USL_FIXTURE
+    ptx
+    validation
+    "${PROJECT_SOURCE_DIR}/tests/api/compute_derivatives_linear.usl"
+  )
+  unset(GPU_USL_FIXTURE_TARGET_CAPS)
+  list(GET GPU_CUDA_DERIVATIVE_QUADS_USL_FIXTURE
+       0 GPU_CUDA_DERIVATIVE_QUADS_US)
+  list(GET GPU_CUDA_DERIVATIVE_LINEAR_USL_FIXTURE
+       0 GPU_CUDA_DERIVATIVE_LINEAR_US)
+  list(APPEND GPU_CUDA_CLOCK_USL_FIXTURES
+       ${GPU_CUDA_DERIVATIVE_QUADS_USL_FIXTURE}
+       ${GPU_CUDA_DERIVATIVE_LINEAR_USL_FIXTURE})
+
   set(GPU_USL_FIXTURE_TARGET_CAPS ptx_7_0,sm_80)
   gpu_add_usl_fixtures(
     GPU_CUDA_ASYNC_COPY_USL_FIXTURE

@@ -474,6 +474,11 @@ cuda_hasShaderDeviceClock(const GPUAdapterCuda *adapter) {
 }
 
 static bool
+cuda_hasComputeDerivatives(const GPUAdapterCuda *adapter) {
+  return cuda_hasSubgroups(adapter) && adapter->computeMajor >= 7;
+}
+
+static bool
 cuda_supportsFeature(const GPUAdapter * __restrict adapter,
                      GPUFeature                    feature) {
   GPUAdapterCuda *native;
@@ -498,6 +503,9 @@ cuda_supportsFeature(const GPUAdapter * __restrict adapter,
       return cuda_hasShaderSubgroupClock(native);
     case GPU_FEATURE_SHADER_DEVICE_CLOCK:
       return cuda_hasShaderDeviceClock(native);
+    case GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS:
+    case GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR:
+      return cuda_hasComputeDerivatives(native);
     case GPU_FEATURE_BUFFER_DEVICE_ADDRESS:
       return native->unifiedAddressing != 0;
     default:
@@ -638,6 +646,10 @@ cuda_createDevice(GPUAdapter               * __restrict adapter,
   }
   if (cuda_hasShaderDeviceClock(adapterNative)) {
     supportedMask |= 1ull << GPU_FEATURE_SHADER_DEVICE_CLOCK;
+  }
+  if (cuda_hasComputeDerivatives(adapterNative)) {
+    supportedMask |= 1ull << GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS;
+    supportedMask |= 1ull << GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR;
   }
   if (adapterNative && adapterNative->unifiedAddressing != 0) {
     supportedMask |= 1ull << GPU_FEATURE_BUFFER_DEVICE_ADDRESS;

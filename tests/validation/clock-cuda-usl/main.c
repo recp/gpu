@@ -9,9 +9,10 @@ main(int argc, char **argv) {
   uint32_t               adapterCount;
   int                    status;
 
-  if (argc != 3) {
+  if (argc != 5) {
     fprintf(stderr,
-            "usage: gpu-clock-cuda-usl subgroup.us device.us\n");
+            "usage: gpu-clock-cuda-usl subgroup.us device.us "
+            "derivative-quads.us derivative-linear.us\n");
     return 1;
   }
 
@@ -39,16 +40,26 @@ main(int argc, char **argv) {
   }
 
   if (!GPUIsFeatureSupported(adapter, GPU_FEATURE_SHADER_SUBGROUP_CLOCK) ||
-      !GPUIsFeatureSupported(adapter, GPU_FEATURE_SHADER_DEVICE_CLOCK)) {
-    fprintf(stderr, "CUDA shader clocks unavailable on a supported adapter\n");
+      !GPUIsFeatureSupported(adapter, GPU_FEATURE_SHADER_DEVICE_CLOCK) ||
+      !GPUIsFeatureSupported(adapter,
+                             GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS) ||
+      !GPUIsFeatureSupported(adapter,
+                             GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR)) {
+    fprintf(stderr,
+            "CUDA shader clock/derivative features unavailable on a "
+            "supported adapter\n");
     goto cleanup;
   }
-  if (!gpu_test_clock_derivatives(adapter, argv[1], argv[2], NULL, NULL)) {
-    fprintf(stderr, "CUDA shader clock validation failed\n");
+  if (!gpu_test_clock_derivatives(adapter,
+                                  argv[1],
+                                  argv[2],
+                                  argv[3],
+                                  argv[4])) {
+    fprintf(stderr, "CUDA shader clock/derivative validation failed\n");
     goto cleanup;
   }
 
-  puts("CUDA USL shader clock validation passed");
+  puts("CUDA USL shader clock/derivative validation passed");
   status = 0;
 
 cleanup:
