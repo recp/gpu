@@ -106,6 +106,7 @@ kern(8, 8, 1) interop_texture_store_cs(
   sint16Image: image2d_array<rgba16sint, read_write> #texture(21),
   uint32Image: image2d_array<rgba32uint, read_write> #texture(23),
   sint32Image: image2d_array<rgba32sint, read_write> #texture(25),
+  packedImage: image2d_array<rg11b10ufloat, read_write> #texture(28),
   gid: uint3 #global_id
 ) {
   let texelCount = 8u * 8u * 2u
@@ -120,6 +121,9 @@ kern(8, 8, 1) interop_texture_store_cs(
   let sint16Base = uint16Base + texelCount * 2u
   let uint32Base = sint16Base + texelCount * 2u
   let sint32Base = uint32Base + texelCount * 2u
+  let packedReadBase = halfBase + texelCount * 2u * (11u + 24u) +
+                       texelCount
+  let packedInputBase = packedReadBase + texelCount
   let index = (gid.z * 8u + gid.y) * 8u + gid.x
   let color = image.read(gid) * 2.0 + float4(1.0)
   let halfColor = halfImage.read(gid) * half4(half(2.0)) +
@@ -134,6 +138,7 @@ kern(8, 8, 1) interop_texture_store_cs(
   let sint16Color = sint16Image.read(gid) + int4(7)
   let uint32Color = uint32Image.read(gid) + uint4(1u)
   let sint32Color = sint32Image.read(gid) + int4(7)
+  let packedOriginal = packedImage.read(gid)
   image.write(color, gid)
   halfImage.write(halfColor, gid)
   unorm8Image.write(unorm8Color, gid)
@@ -146,6 +151,7 @@ kern(8, 8, 1) interop_texture_store_cs(
   sint16Image.write(sint16Color, gid)
   uint32Image.write(uint32Color, gid)
   sint32Image.write(sint32Color, gid)
+  packedImage.write(output[packedInputBase + index], gid)
   output[texelCount + index] = color
   output[halfBase + texelCount + index] = float4(halfColor)
   output[unorm8Base + texelCount + index] = unorm8Color
@@ -158,6 +164,7 @@ kern(8, 8, 1) interop_texture_store_cs(
   output[sint16Base + texelCount + index] = float4(sint16Color)
   output[uint32Base + texelCount + index] = float4(uint32Color)
   output[sint32Base + texelCount + index] = float4(sint32Color)
+  output[packedReadBase + index] = packedOriginal
 }
 
 kern(8, 8, 1) interop_narrow_sample_cs(

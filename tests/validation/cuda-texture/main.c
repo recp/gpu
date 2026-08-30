@@ -171,6 +171,20 @@ validate_texture_plans(void) {
   limitedFormat.flags = GPU_CUDA_FORMAT_SAMPLED_BIT;
   info.usage          = GPU_TEXTURE_USAGE_STORAGE;
   CHECK(!cuda_texturePlan(&info, &limitedFormat, &plan));
+
+  limitedFormat = (GPUCudaFormatInfo){
+    CU_AD_FORMAT_UNSIGNED_INT32,
+    GPU_CUDA_FORMAT_STORAGE_BIT,
+    4u,
+    1u
+  };
+  info.format = GPU_FORMAT_RG11B10_UFLOAT;
+  CHECK(cuda_texturePlan(&info, &limitedFormat, &plan));
+  CHECK(plan.desc.Format == CU_AD_FORMAT_UNSIGNED_INT32 &&
+        plan.desc.NumChannels == 1u &&
+        plan.desc.Flags == CUDA_ARRAY3D_SURFACE_LDST);
+  info.usage = GPU_TEXTURE_USAGE_SAMPLED;
+  CHECK(!cuda_texturePlan(&info, &limitedFormat, &plan));
   return 1;
 }
 
