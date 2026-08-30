@@ -27,6 +27,9 @@ kern(8, 8, 1) interop_texture_sample_cs(
   snorm16Sampled: texture2d_array<float> #texture(18),
   uint16Sampled: texture2d_array<uint> #texture(20),
   sint16Sampled: texture2d_array<int> #texture(22),
+  uint32Sampled: texture2d_array<uint> #texture(24),
+  sint32Sampled: texture2d_array<int> #texture(26),
+  srgbSampled: texture2d_array<float> #texture(27),
   gid: uint3 #global_id
 ) {
   let texelCount = 8u * 8u * 2u
@@ -39,6 +42,9 @@ kern(8, 8, 1) interop_texture_sample_cs(
   let snorm16Base = unorm16Base + texelCount * 2u
   let uint16Base = snorm16Base + texelCount * 2u
   let sint16Base = uint16Base + texelCount * 2u
+  let uint32Base = sint16Base + texelCount * 2u
+  let sint32Base = uint32Base + texelCount * 2u
+  let srgbBase = halfBase + texelCount * 2u * (11u + 24u)
   if gid.z < 2u {
     let index = (gid.z * 8u + gid.y) * 8u + gid.x
     let original = sampled.read(int3(gid))
@@ -51,6 +57,9 @@ kern(8, 8, 1) interop_texture_sample_cs(
     let snorm16Original = snorm16Sampled.read(int3(gid))
     let uint16Original = uint16Sampled.read(int3(gid))
     let sint16Original = sint16Sampled.read(int3(gid))
+    let uint32Original = uint32Sampled.read(int3(gid))
+    let sint32Original = sint32Sampled.read(int3(gid))
+    let srgbOriginal = srgbSampled.read(int3(gid))
     output[index] = original
     output[halfBase + index] = float4(halfOriginal)
     output[unorm8Base + index] = unorm8Original
@@ -61,6 +70,9 @@ kern(8, 8, 1) interop_texture_sample_cs(
     output[snorm16Base + index] = snorm16Original
     output[uint16Base + index] = float4(uint16Original)
     output[sint16Base + index] = float4(sint16Original)
+    output[uint32Base + index] = float4(uint32Original)
+    output[sint32Base + index] = float4(sint32Original)
+    output[srgbBase + index] = srgbOriginal
   }
   if gid.x == 0u && gid.y == 0u && gid.z < 6u {
     output[texelCount * 2u + gid.z] = cube.sample(
@@ -92,6 +104,8 @@ kern(8, 8, 1) interop_texture_store_cs(
   snorm16Image: image2d_array<rgba16snorm, read_write> #texture(17),
   uint16Image: image2d_array<rgba16uint, read_write> #texture(19),
   sint16Image: image2d_array<rgba16sint, read_write> #texture(21),
+  uint32Image: image2d_array<rgba32uint, read_write> #texture(23),
+  sint32Image: image2d_array<rgba32sint, read_write> #texture(25),
   gid: uint3 #global_id
 ) {
   let texelCount = 8u * 8u * 2u
@@ -104,6 +118,8 @@ kern(8, 8, 1) interop_texture_store_cs(
   let snorm16Base = unorm16Base + texelCount * 2u
   let uint16Base = snorm16Base + texelCount * 2u
   let sint16Base = uint16Base + texelCount * 2u
+  let uint32Base = sint16Base + texelCount * 2u
+  let sint32Base = uint32Base + texelCount * 2u
   let index = (gid.z * 8u + gid.y) * 8u + gid.x
   let color = image.read(gid) * 2.0 + float4(1.0)
   let halfColor = halfImage.read(gid) * half4(half(2.0)) +
@@ -116,6 +132,8 @@ kern(8, 8, 1) interop_texture_store_cs(
   let snorm16Color = -snorm16Image.read(gid)
   let uint16Color = uint16Image.read(gid) + uint4(1u)
   let sint16Color = sint16Image.read(gid) + int4(7)
+  let uint32Color = uint32Image.read(gid) + uint4(1u)
+  let sint32Color = sint32Image.read(gid) + int4(7)
   image.write(color, gid)
   halfImage.write(halfColor, gid)
   unorm8Image.write(unorm8Color, gid)
@@ -126,6 +144,8 @@ kern(8, 8, 1) interop_texture_store_cs(
   snorm16Image.write(snorm16Color, gid)
   uint16Image.write(uint16Color, gid)
   sint16Image.write(sint16Color, gid)
+  uint32Image.write(uint32Color, gid)
+  sint32Image.write(sint32Color, gid)
   output[texelCount + index] = color
   output[halfBase + texelCount + index] = float4(halfColor)
   output[unorm8Base + texelCount + index] = unorm8Color
@@ -136,6 +156,8 @@ kern(8, 8, 1) interop_texture_store_cs(
   output[snorm16Base + texelCount + index] = snorm16Color
   output[uint16Base + texelCount + index] = float4(uint16Color)
   output[sint16Base + texelCount + index] = float4(sint16Color)
+  output[uint32Base + texelCount + index] = float4(uint32Color)
+  output[sint32Base + texelCount + index] = float4(sint32Color)
 }
 
 kern(8, 8, 1) interop_narrow_sample_cs(
@@ -168,7 +190,7 @@ kern(8, 8, 1) interop_narrow_sample_cs(
 ) {
   let texelCount = 8u * 8u * 2u
   let halfBase = texelCount * 2u + 6u + 12u
-  let r8UnormBase = halfBase + texelCount * 2u * 9u
+  let r8UnormBase = halfBase + texelCount * 2u * 11u
   let r8SnormBase = r8UnormBase + texelCount * 2u
   let r8UintBase = r8SnormBase + texelCount * 2u
   let r8SintBase = r8UintBase + texelCount * 2u
@@ -249,7 +271,7 @@ kern(8, 8, 1) interop_narrow_store_cs(
 ) {
   let texelCount = 8u * 8u * 2u
   let halfBase = texelCount * 2u + 6u + 12u
-  let r8UnormBase = halfBase + texelCount * 2u * 9u
+  let r8UnormBase = halfBase + texelCount * 2u * 11u
   let r8SnormBase = r8UnormBase + texelCount * 2u
   let r8UintBase = r8SnormBase + texelCount * 2u
   let r8SintBase = r8UintBase + texelCount * 2u
