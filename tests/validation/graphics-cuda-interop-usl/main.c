@@ -18,8 +18,12 @@ enum {
   CubeArrayLayers               = 12u,
   TextureMipLevel               = 1u,
   TextureMipCount               = 4u,
+  FilterMipWidth                = TextureWidth / 2u,
+  FilterMipHeight               = TextureHeight / 2u,
   TextureTexelCount             = TextureWidth * TextureHeight * TextureLayers,
   TextureValueCount             = TextureTexelCount * 4u,
+  FilterMipValueCount           = FilterMipWidth * FilterMipHeight *
+                                  TextureLayers * 4u,
   CubeFaceValueCount            = TextureWidth * TextureHeight * 4u,
   CubeValueCount                = CubeFaceValueCount * CubeLayers,
   CubeOutputValueCount          = CubeLayers * 4u,
@@ -39,6 +43,13 @@ enum {
   PackedFloatOutputValueCount   = TextureValueCount * 2u,
   BgraFloatOutputValueCount     = TextureValueCount * 2u,
   DepthFloatOutputValueCount    = TextureValueCount * 2u,
+  RgbaColorFilterCount          = 7u,
+  NarrowColorFilterCount        = 12u,
+  ColorFilterCaseCount          = RgbaColorFilterCount +
+                                  NarrowColorFilterCount,
+  ColorFilterOutputValueCount   = TextureValueCount * ColorFilterCaseCount,
+  SamplerModeCount              = 5u,
+  SamplerOutputValueCount       = TextureValueCount * SamplerModeCount,
   NarrowRBytesPerTexel          = 4u * 1u + 5u * 2u + 3u * 4u,
   NarrowRgBytesPerTexel         = NarrowRBytesPerTexel * 2u,
   NarrowRawByteCount            = TextureTexelCount *
@@ -51,7 +62,9 @@ enum {
                                   SrgbFloatOutputValueCount +
                                   PackedFloatOutputValueCount +
                                   BgraFloatOutputValueCount +
-                                  DepthFloatOutputValueCount
+                                  DepthFloatOutputValueCount +
+                                  ColorFilterOutputValueCount +
+                                  SamplerOutputValueCount
 };
 
 typedef enum InteropFormatCase {
@@ -186,6 +199,21 @@ static const InteropNarrowFormat narrowFormats[NarrowFormatCount] = {
    InteropFormatRg32Float, InteropValueFloat, 2u, 4u}
 };
 
+static const InteropFormatCase narrowFilterFormats[NarrowColorFilterCount] = {
+  InteropFormatR8Unorm,
+  InteropFormatR8Snorm,
+  InteropFormatR16Unorm,
+  InteropFormatR16Snorm,
+  InteropFormatR16Float,
+  InteropFormatR32Float,
+  InteropFormatRg8Unorm,
+  InteropFormatRg8Snorm,
+  InteropFormatRg16Unorm,
+  InteropFormatRg16Snorm,
+  InteropFormatRg16Float,
+  InteropFormatRg32Float
+};
+
 _Static_assert((uint32_t)InteropFormatCount == FormatCaseCount,
                "interop format count must match output layout");
 _Static_assert((uint32_t)InteropFormatR8Unorm == RgbaFormatCount,
@@ -241,12 +269,15 @@ typedef struct RoundtripState {
   GPUComputePipeline  *textureStorePipeline;
   GPUComputePipeline  *narrowSamplePipeline;
   GPUComputePipeline  *narrowStorePipeline;
+  GPUComputePipeline  *colorFilterPipeline;
+  GPUComputePipeline  *narrowFilterPipeline;
   GPUBindGroup        *paramsGroup;
   GPUBindGroup        *dataGroup;
   GPUBindGroup        *textureGroup;
   GPUBindGroup        *narrowGroup;
   uint32_t             textureMipLevel;
   bool                 depth16Shared;
+  bool                 mipFilterShared;
   InteropFormatTexture formatTextures[InteropFormatCount];
 } RoundtripState;
 
@@ -564,6 +595,11 @@ srgb_to_linear(uint8_t value) {
     : powf((encoded + 0.055f) / 1.055f, 2.4f);
 }
 
+static uint32_t
+format_value_pattern(uint32_t valueIndex) {
+  return (valueIndex / 4u + valueIndex % 4u) % 8u;
+}
+
 static int
 values_match(const float values[ValueCount]) {
   for (uint32_t i = 0u; i < ValueCount; i++) {
@@ -771,6 +807,7 @@ run_texture_roundtrip(RoundtripState *state) {
   GPUQueueSubmitExInfo        submit = {0};
   GPUFence                   *cudaFence;
   float                       input[TextureValueCount];
+  float                       filterMipInput[FilterMipValueCount];
   float                       cubeInput[CubeValueCount];
   float                       cubeArrayInput[CubeArrayValueCount];
   uint16_t                    halfInput[HalfTextureValueCount];
@@ -819,6 +856,7 @@ run_texture_roundtrip(RoundtripState *state) {
   uint32_t                    packedReadBase, packedInputBase;
   uint32_t                    bgraBase;
   uint32_t                    depth32Base, depth16Base;
+  uint32_t                    filterBase, samplerBase;
   uint32_t                    narrowOffset;
   uint32_t                    fixedTextureCount;
   int                         releaseSubmitted, cudaSubmitted;
@@ -914,6 +952,13 @@ run_texture_roundtrip(RoundtripState *state) {
     input[i]  = (float)i * 0.125f;
     output[i] = 0.0f;
   }
+  for (uint32_t i = 0u; i < FilterMipValueCount; i++) {
+    uint32_t layer, channel;
+
+    layer             = i / (FilterMipWidth * FilterMipHeight * 4u);
+    channel           = i % 4u;
+    filterMipInput[i] = 1000.0f + (float)(layer * 16u + channel);
+  }
   for (uint32_t i = 0u; i < CubeValueCount; i++) {
     uint32_t face, channel;
 
@@ -931,14 +976,14 @@ run_texture_roundtrip(RoundtripState *state) {
   for (uint32_t i = 0u; i < HalfTextureValueCount; i++) {
     uint32_t pattern;
 
-    pattern       = (i / CubeFaceValueCount) * 4u + i % 4u;
+    pattern       = format_value_pattern(i);
     halfInput[i]  = halfInputBits[pattern];
     halfOutput[i] = 0u;
   }
   for (uint32_t i = 0u; i < ByteTextureValueCount; i++) {
     uint32_t pattern;
 
-    pattern         = (i / CubeFaceValueCount) * 4u + i % 4u;
+    pattern         = format_value_pattern(i);
     unorm8Input[i]  = unorm8InputValues[pattern];
     unorm8Output[i] = 0u;
     snorm8Input[i]  = snorm8InputValues[pattern];
@@ -951,7 +996,7 @@ run_texture_roundtrip(RoundtripState *state) {
   for (uint32_t i = 0u; i < WordTextureValueCount; i++) {
     uint32_t pattern;
 
-    pattern          = (i / CubeFaceValueCount) * 4u + i % 4u;
+    pattern          = format_value_pattern(i);
     unorm16Input[i]  = unorm16InputValues[pattern];
     unorm16Output[i] = 0u;
     snorm16Input[i]  = snorm16InputValues[pattern];
@@ -964,7 +1009,7 @@ run_texture_roundtrip(RoundtripState *state) {
   for (uint32_t i = 0u; i < TextureValueCount; i++) {
     uint32_t pattern;
 
-    pattern         = (i / CubeFaceValueCount) * 4u + i % 4u;
+    pattern         = format_value_pattern(i);
     uint32Input[i]  = uint32InputValues[pattern];
     uint32Output[i] = 0u;
     sint32Input[i]  = sint32InputValues[pattern];
@@ -1106,6 +1151,8 @@ run_texture_roundtrip(RoundtripState *state) {
   bgraBase        = packedInputBase + TextureValueCount;
   depth32Base     = bgraBase + BgraFloatOutputValueCount;
   depth16Base     = depth32Base + TextureValueCount;
+  filterBase      = depth16Base + TextureValueCount;
+  samplerBase     = filterBase + ColorFilterOutputValueCount;
   if (GPUQueueWriteBuffer(state->cudaQueue,
                           state->textureCudaReadback,
                           (uint64_t)packedInputBase * sizeof(float),
@@ -1128,6 +1175,25 @@ run_texture_roundtrip(RoundtripState *state) {
                            input,
                            sizeof(input)) != GPU_OK) {
     goto cleanup;
+  }
+  if (state->mipFilterShared) {
+    writeRegion.width        = FilterMipWidth;
+    writeRegion.height       = FilterMipHeight;
+    writeRegion.mipLevel     = state->textureMipLevel + 1u;
+    writeRegion.bytesPerRow  = FilterMipWidth * 4u * sizeof(float);
+    writeRegion.rowsPerImage = FilterMipHeight;
+    if (GPUQueueWriteTexture(state->graphicsQueue,
+                             state->graphicsTexture,
+                             &writeRegion,
+                             filterMipInput,
+                             sizeof(filterMipInput)) != GPU_OK) {
+      goto cleanup;
+    }
+    writeRegion.width        = TextureWidth;
+    writeRegion.height       = TextureHeight;
+    writeRegion.mipLevel     = state->textureMipLevel;
+    writeRegion.bytesPerRow  = TextureWidth * 4u * sizeof(float);
+    writeRegion.rowsPerImage = TextureHeight;
   }
   for (uint32_t i = 0u; i < InteropFormatCount; i++) {
     writeRegion.bytesPerRow = formatTransfers[i].bytesPerRow;
@@ -1216,7 +1282,7 @@ run_texture_roundtrip(RoundtripState *state) {
   toCuda[0].dstAccess          = GPU_ACCESS_SHADER_READ |
                                  GPU_ACCESS_SHADER_WRITE;
   toCuda[0].baseMip            = state->textureMipLevel;
-  toCuda[0].mipCount           = 1u;
+  toCuda[0].mipCount           = state->mipFilterShared ? 2u : 1u;
   toCuda[0].layerCount         = TextureLayers;
   toCuda[1].sourceTexture      = state->graphicsCubeTexture;
   toCuda[1].destinationTexture = state->cudaCubeTexture;
@@ -1310,6 +1376,19 @@ run_texture_roundtrip(RoundtripState *state) {
               TextureWidth / 8u,
               TextureHeight / 8u,
               TextureLayers);
+  GPUBindComputePipeline(computePass, state->colorFilterPipeline);
+  GPUBindComputeGroup(computePass, 0u, state->textureGroup, 0u, NULL);
+  GPUDispatch(computePass,
+              TextureWidth / 8u,
+              TextureHeight / 8u,
+              TextureLayers);
+  GPUBindComputePipeline(computePass, state->narrowFilterPipeline);
+  GPUBindComputeGroup(computePass, 0u, state->textureGroup, 0u, NULL);
+  GPUBindComputeGroup(computePass, 1u, state->narrowGroup, 0u, NULL);
+  GPUDispatch(computePass,
+              TextureWidth / 8u,
+              TextureHeight / 8u,
+              TextureLayers);
   GPUBindComputePipeline(computePass, state->textureStorePipeline);
   GPUBindComputeGroup(computePass, 0u, state->textureGroup, 0u, NULL);
   GPUDispatch(computePass,
@@ -1331,7 +1410,7 @@ run_texture_roundtrip(RoundtripState *state) {
   toGraphics[0].srcAccess          = GPU_ACCESS_SHADER_WRITE;
   toGraphics[0].dstAccess          = GPU_ACCESS_TRANSFER_READ;
   toGraphics[0].baseMip            = state->textureMipLevel;
-  toGraphics[0].mipCount           = 1u;
+  toGraphics[0].mipCount           = state->mipFilterShared ? 2u : 1u;
   toGraphics[0].layerCount         = TextureLayers;
   toGraphics[1].sourceTexture      = state->cudaCubeTexture;
   toGraphics[1].destinationTexture = state->graphicsCubeTexture;
@@ -1646,7 +1725,7 @@ run_texture_roundtrip(RoundtripState *state) {
   for (uint32_t i = 0u; i < HalfTextureValueCount; i++) {
     uint32_t pattern;
 
-    pattern = (i / CubeFaceValueCount) * 4u + i % 4u;
+    pattern = format_value_pattern(i);
     if (fabsf(cudaOutput[halfBase + i] - halfInputValues[pattern]) >
           0.0001f ||
         fabsf(cudaOutput[halfBase + HalfTextureValueCount + i] -
@@ -1665,7 +1744,7 @@ run_texture_roundtrip(RoundtripState *state) {
     uint32_t pattern;
     float    original, expected;
 
-    pattern  = (i / CubeFaceValueCount) * 4u + i % 4u;
+    pattern  = format_value_pattern(i);
     original = (float)unorm8InputValues[pattern] / 255.0f;
     expected = (float)(255u - unorm8InputValues[pattern]) / 255.0f;
     if (fabsf(cudaOutput[unorm8Base + i] - original) >
@@ -1717,7 +1796,7 @@ run_texture_roundtrip(RoundtripState *state) {
     uint32_t pattern;
     float    original, expected;
 
-    pattern  = (i / CubeFaceValueCount) * 4u + i % 4u;
+    pattern  = format_value_pattern(i);
     original = (float)unorm16InputValues[pattern] / 65535.0f;
     expected = (float)(65535u - unorm16InputValues[pattern]) / 65535.0f;
     if (fabsf(cudaOutput[unorm16Base + i] - original) >
@@ -1756,7 +1835,7 @@ run_texture_roundtrip(RoundtripState *state) {
   for (uint32_t i = 0u; i < TextureValueCount; i++) {
     uint32_t pattern;
 
-    pattern = (i / CubeFaceValueCount) * 4u + i % 4u;
+    pattern = format_value_pattern(i);
     if (cudaOutput[uint32Base + i] !=
           (float)uint32InputValues[pattern] ||
         cudaOutput[uint32Base + TextureValueCount + i] !=
@@ -1835,7 +1914,7 @@ run_texture_roundtrip(RoundtripState *state) {
     uint32_t pattern, channel;
     float    expected;
 
-    pattern = (i / CubeFaceValueCount) * 4u + i % 4u;
+    pattern = format_value_pattern(i);
     channel = i % 4u;
     expected = channel == 3u
       ? (float)srgbInputValues[pattern] / 255.0f
@@ -1977,6 +2056,146 @@ run_texture_roundtrip(RoundtripState *state) {
               cudaOutput[depth16Index + 2u],
               (unsigned)depth16Output[texel]);
       goto cleanup;
+    }
+  }
+  for (uint32_t texel = 0u; texel < TextureTexelCount; texel++) {
+    static const float tolerance[RgbaColorFilterCount] = {
+      0.00001f, 0.002f, 0.005f, 0.005f, 0.00005f, 0.00005f, 0.0025f
+    };
+    uint32_t x, nextTexel;
+
+    x         = texel % TextureWidth;
+    nextTexel = x + 1u < TextureWidth ? texel + 1u : texel;
+    for (uint32_t channel = 0u; channel < 4u; channel++) {
+      float    current[RgbaColorFilterCount];
+      float    next[RgbaColorFilterCount];
+      uint32_t valueIndex, nextValueIndex, pattern, nextPattern;
+
+      valueIndex     = texel * 4u + channel;
+      nextValueIndex = nextTexel * 4u + channel;
+      pattern        = format_value_pattern(valueIndex);
+      nextPattern    = format_value_pattern(nextValueIndex);
+      current[0]     = input[valueIndex];
+      next[0]        = input[nextValueIndex];
+      current[1]     = halfInputValues[pattern];
+      next[1]        = halfInputValues[nextPattern];
+      current[2]     = (float)unorm8InputValues[pattern] / 255.0f;
+      next[2]        = (float)unorm8InputValues[nextPattern] / 255.0f;
+      current[3]     = (float)snorm8InputValues[pattern] / 127.0f;
+      next[3]        = (float)snorm8InputValues[nextPattern] / 127.0f;
+      current[4]     = (float)unorm16InputValues[pattern] / 65535.0f;
+      next[4]        = (float)unorm16InputValues[nextPattern] / 65535.0f;
+      current[5]     = (float)snorm16InputValues[pattern] / 32767.0f;
+      next[5]        = (float)snorm16InputValues[nextPattern] / 32767.0f;
+      current[6]     = channel == 3u
+        ? (float)srgbInputValues[pattern] / 255.0f
+        : srgb_to_linear(srgbInputValues[pattern]);
+      next[6]        = channel == 3u
+        ? (float)srgbInputValues[nextPattern] / 255.0f
+        : srgb_to_linear(srgbInputValues[nextPattern]);
+      for (uint32_t filter = 0u; filter < RgbaColorFilterCount; filter++) {
+        uint32_t outputIndex;
+        float    expected;
+
+        outputIndex = filterBase + filter * TextureValueCount + valueIndex;
+        expected    = (current[filter] + next[filter]) * 0.5f;
+        if (fabsf(cudaOutput[outputIndex] - expected) > tolerance[filter]) {
+          fprintf(stderr,
+                  "CUDA color filter mismatch at %u/%u/%u: %.9g != %.9g\n",
+                  filter,
+                  texel,
+                  channel,
+                  cudaOutput[outputIndex],
+                  expected);
+          goto cleanup;
+        }
+      }
+    }
+  }
+  for (uint32_t filter = 0u; filter < NarrowColorFilterCount; filter++) {
+    InteropFormatCase          formatCase;
+    const InteropNarrowFormat *format;
+    float                      tolerance;
+
+    formatCase = narrowFilterFormats[filter];
+    format     = &narrowFormats[(uint32_t)formatCase - RgbaFormatCount];
+    tolerance = format->componentBytes == 1u
+      ? 0.005f
+      : format->valueKind == InteropValueFloat &&
+          format->componentBytes == 2u
+        ? 0.002f
+        : format->componentBytes == 2u ? 0.00005f : 0.00001f;
+    for (uint32_t texel = 0u; texel < TextureTexelCount; texel++) {
+      uint32_t x, nextTexel;
+
+      x         = texel % TextureWidth;
+      nextTexel = x + 1u < TextureWidth ? texel + 1u : texel;
+      for (uint32_t channel = 0u; channel < format->channelCount; channel++) {
+        uint32_t component, nextComponent;
+        uint32_t inputBits, outputBits;
+        float    current, next, ignored;
+        uint32_t outputIndex;
+
+        component     = texel * format->channelCount + channel;
+        nextComponent = nextTexel * format->channelCount + channel;
+        narrow_reference(format,
+                         component,
+                         &inputBits,
+                         &outputBits,
+                         &current,
+                         &ignored);
+        narrow_reference(format,
+                         nextComponent,
+                         &inputBits,
+                         &outputBits,
+                         &next,
+                         &ignored);
+        outputIndex = filterBase +
+                      (RgbaColorFilterCount + filter) * TextureValueCount +
+                      texel * 4u + channel;
+        if (fabsf(cudaOutput[outputIndex] - (current + next) * 0.5f) >
+            tolerance) {
+          fprintf(stderr,
+                  "CUDA narrow filter mismatch at %u/%u/%u\n",
+                  filter,
+                  texel,
+                  channel);
+          goto cleanup;
+        }
+      }
+    }
+  }
+  for (uint32_t texel = 0u; texel < TextureTexelCount; texel++) {
+    uint32_t layer, rowStart;
+
+    layer    = texel / (TextureWidth * TextureHeight);
+    rowStart = (texel / TextureWidth) * TextureWidth;
+    for (uint32_t channel = 0u; channel < 4u; channel++) {
+      uint32_t valueIndex, outputIndex;
+      float    expected[SamplerModeCount];
+
+      valueIndex  = texel * 4u + channel;
+      expected[0] = input[(rowStart + 1u) * 4u + channel];
+      expected[1] = input[(rowStart + 6u) * 4u + channel];
+      expected[2] = input[(rowStart + 7u) * 4u + channel];
+      expected[3] = state->mipFilterShared
+        ? (input[valueIndex] +
+           1000.0f + (float)(layer * 16u + channel)) * 0.5f
+        : input[valueIndex];
+      expected[4] = input[valueIndex];
+      for (uint32_t mode = 0u; mode < SamplerModeCount; mode++) {
+        outputIndex = samplerBase + mode * TextureValueCount + valueIndex;
+        if (fabsf(cudaOutput[outputIndex] - expected[mode]) > 0.0001f) {
+          fprintf(stderr,
+                  "CUDA sampler mode mismatch at %u/%u/%u: %.9g != %.9g\n",
+                  mode,
+                  texel,
+                  channel,
+                  cudaOutput[outputIndex],
+                  expected[mode]);
+          goto cleanup;
+        }
+      }
     }
   }
   ok = 1;
@@ -2289,6 +2508,7 @@ main(int argc, char **argv) {
 #endif
   state.textureMipLevel = vulkanGraphics ? 0u : TextureMipLevel;
   state.depth16Shared   = !vulkanGraphics;
+  state.mipFilterShared = !vulkanGraphics;
   textureRequirementsResult = GPUGetSharedTextureMemoryRequirementsEXT(
     state.interop,
     cudaFirst ? &cudaTextureInfo : &graphicsTextureInfo,
@@ -2992,6 +3212,24 @@ main(int argc, char **argv) {
     fprintf(stderr, "CUDA interop narrow store pipeline failed\n");
     goto cleanup;
   }
+  pipelineInfo.label      = "graphics-cuda-color-filter";
+  pipelineInfo.entryPoint = "interop_color_filter_cs";
+  if (GPUCreateComputePipeline(state.cudaDevice,
+                               &pipelineInfo,
+                               &state.colorFilterPipeline) != GPU_OK ||
+      !state.colorFilterPipeline) {
+    fprintf(stderr, "CUDA interop color filter pipeline failed\n");
+    goto cleanup;
+  }
+  pipelineInfo.label      = "graphics-cuda-narrow-filter";
+  pipelineInfo.entryPoint = "interop_narrow_filter_cs";
+  if (GPUCreateComputePipeline(state.cudaDevice,
+                               &pipelineInfo,
+                               &state.narrowFilterPipeline) != GPU_OK ||
+      !state.narrowFilterPipeline) {
+    fprintf(stderr, "CUDA interop narrow filter pipeline failed\n");
+    goto cleanup;
+  }
 
   paramsBufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   paramsBufferInfo.chain.structSize = sizeof(paramsBufferInfo);
@@ -3173,6 +3411,8 @@ cleanup:
   GPUDestroyComputePipeline(state.textureSamplePipeline);
   GPUDestroyComputePipeline(state.narrowStorePipeline);
   GPUDestroyComputePipeline(state.narrowSamplePipeline);
+  GPUDestroyComputePipeline(state.colorFilterPipeline);
+  GPUDestroyComputePipeline(state.narrowFilterPipeline);
   GPUDestroyComputePipeline(state.pipeline);
   GPUDestroyShaderLayout(textureLayout);
   GPUDestroyShaderLibrary(textureLibrary);

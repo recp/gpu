@@ -134,6 +134,137 @@ kern(8, 8, 1) interop_texture_sample_cs(
   }
 }
 
+kern(8, 8, 1) interop_color_filter_cs(
+  inout output: [float4] #buffer(1),
+  sampled: texture2d_array<float> #texture(2),
+  halfSampled: texture2d_array<half> #texture(6),
+  unorm8Sampled: texture2d_array<float> #texture(8),
+  snorm8Sampled: texture2d_array<float> #texture(10),
+  unorm16Sampled: texture2d_array<float> #texture(16),
+  snorm16Sampled: texture2d_array<float> #texture(18),
+  srgbSampled: texture2d_array<float> #texture(27),
+  gid: uint3 #global_id
+) {
+  let texelCount = 8u * 8u * 2u
+  let halfBase = texelCount * 2u + 6u + 12u
+  let srgbBase = halfBase + texelCount * 2u * (11u + 24u)
+  let packedReadBase = srgbBase + texelCount
+  let packedInputBase = packedReadBase + texelCount
+  let bgraBase = packedInputBase + texelCount
+  let depth32Base = bgraBase + texelCount * 2u
+  let depth16Base = depth32Base + texelCount
+  let filterBase = depth16Base + texelCount
+  let samplerBase = filterBase + texelCount * 19u
+  let index = (gid.z * 8u + gid.y) * 8u + gid.x
+  let centerCoord = float3(
+    (float2(float(gid.x), float(gid.y)) + float2(0.5)) / float2(8.0),
+    float(gid.z)
+  )
+  let linearCoord = float3(
+    (float2(float(gid.x), float(gid.y)) + float2(1.0, 0.5)) /
+      float2(8.0),
+    float(gid.z)
+  )
+  let boundaryCoord = float3(
+    1.1875,
+    (float(gid.y) + 0.5) / 8.0,
+    float(gid.z)
+  )
+  let linearClamp = sampler(.linear, .linear, .linear, .clampToEdge)
+  let nearestRepeat = sampler(.nearest, .nearest, .nearest, .repeat)
+  let nearestMirror = sampler(.nearest, .nearest, .nearest, .mirroredRepeat)
+  let nearestClamp = sampler(.nearest, .nearest, .nearest, .clampToEdge)
+  output[filterBase + index] =
+    sampled.sample(linearClamp, linearCoord, level(0.0))
+  output[filterBase + texelCount + index] = float4(
+    halfSampled.sample(linearClamp, linearCoord, level(0.0))
+  )
+  output[filterBase + texelCount * 2u + index] =
+    unorm8Sampled.sample(linearClamp, linearCoord, level(0.0))
+  output[filterBase + texelCount * 3u + index] =
+    snorm8Sampled.sample(linearClamp, linearCoord, level(0.0))
+  output[filterBase + texelCount * 4u + index] =
+    unorm16Sampled.sample(linearClamp, linearCoord, level(0.0))
+  output[filterBase + texelCount * 5u + index] =
+    snorm16Sampled.sample(linearClamp, linearCoord, level(0.0))
+  output[filterBase + texelCount * 6u + index] =
+    srgbSampled.sample(linearClamp, linearCoord, level(0.0))
+  output[samplerBase + index] =
+    sampled.sample(nearestRepeat, boundaryCoord, level(0.0))
+  output[samplerBase + texelCount + index] =
+    sampled.sample(nearestMirror, boundaryCoord, level(0.0))
+  output[samplerBase + texelCount * 2u + index] =
+    sampled.sample(nearestClamp, boundaryCoord, level(0.0))
+  output[samplerBase + texelCount * 3u + index] =
+    sampled.sample(linearClamp, centerCoord, level(0.5))
+  output[samplerBase + texelCount * 4u + index] = sampled.sample(
+    .linear,
+    centerCoord,
+    max_anisotropy(16)
+  )
+}
+
+kern(8, 8, 1) interop_narrow_filter_cs(
+  inout output: [float4] #buffer(1),
+  r8UnormSampled: texture2d_array<float> #texture(1) #group(1),
+  r8SnormSampled: texture2d_array<float> #texture(3) #group(1),
+  r16UnormSampled: texture2d_array<float> #texture(9) #group(1),
+  r16SnormSampled: texture2d_array<float> #texture(11) #group(1),
+  r16FloatSampled: texture2d_array<half> #texture(17) #group(1),
+  r32FloatSampled: texture2d_array<float> #texture(23) #group(1),
+  rg8UnormSampled: texture2d_array<float> #texture(25) #group(1),
+  rg8SnormSampled: texture2d_array<float> #texture(27) #group(1),
+  rg16UnormSampled: texture2d_array<float> #texture(33) #group(1),
+  rg16SnormSampled: texture2d_array<float> #texture(35) #group(1),
+  rg16FloatSampled: texture2d_array<half> #texture(41) #group(1),
+  rg32FloatSampled: texture2d_array<float> #texture(47) #group(1),
+  gid: uint3 #global_id
+) {
+  let texelCount = 8u * 8u * 2u
+  let halfBase = texelCount * 2u + 6u + 12u
+  let srgbBase = halfBase + texelCount * 2u * (11u + 24u)
+  let packedReadBase = srgbBase + texelCount
+  let packedInputBase = packedReadBase + texelCount
+  let bgraBase = packedInputBase + texelCount
+  let depth32Base = bgraBase + texelCount * 2u
+  let depth16Base = depth32Base + texelCount
+  let filterBase = depth16Base + texelCount
+  let narrowFilterBase = filterBase + texelCount * 7u
+  let index = (gid.z * 8u + gid.y) * 8u + gid.x
+  let linearCoord = float3(
+    (float2(float(gid.x), float(gid.y)) + float2(1.0, 0.5)) /
+      float2(8.0),
+    float(gid.z)
+  )
+  let linearClamp = sampler(.linear, .linear, .linear, .clampToEdge)
+  output[narrowFilterBase + index] =
+    r8UnormSampled.sample(linearClamp, linearCoord, level(0.0))
+  output[narrowFilterBase + texelCount + index] =
+    r8SnormSampled.sample(linearClamp, linearCoord, level(0.0))
+  output[narrowFilterBase + texelCount * 2u + index] =
+    r16UnormSampled.sample(linearClamp, linearCoord, level(0.0))
+  output[narrowFilterBase + texelCount * 3u + index] =
+    r16SnormSampled.sample(linearClamp, linearCoord, level(0.0))
+  output[narrowFilterBase + texelCount * 4u + index] = float4(
+    r16FloatSampled.sample(linearClamp, linearCoord, level(0.0))
+  )
+  output[narrowFilterBase + texelCount * 5u + index] =
+    r32FloatSampled.sample(linearClamp, linearCoord, level(0.0))
+  output[narrowFilterBase + texelCount * 6u + index] =
+    rg8UnormSampled.sample(linearClamp, linearCoord, level(0.0))
+  output[narrowFilterBase + texelCount * 7u + index] =
+    rg8SnormSampled.sample(linearClamp, linearCoord, level(0.0))
+  output[narrowFilterBase + texelCount * 8u + index] =
+    rg16UnormSampled.sample(linearClamp, linearCoord, level(0.0))
+  output[narrowFilterBase + texelCount * 9u + index] =
+    rg16SnormSampled.sample(linearClamp, linearCoord, level(0.0))
+  output[narrowFilterBase + texelCount * 10u + index] = float4(
+    rg16FloatSampled.sample(linearClamp, linearCoord, level(0.0))
+  )
+  output[narrowFilterBase + texelCount * 11u + index] =
+    rg32FloatSampled.sample(linearClamp, linearCoord, level(0.0))
+}
+
 kern(8, 8, 1) interop_texture_store_cs(
   image: image2d_array<rgba32float, read_write> #texture(0),
   inout output: [float4] #buffer(1),

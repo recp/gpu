@@ -193,6 +193,22 @@ validate_texture_desc(void) {
       memcmp(&actual, &(CUDA_TEXTURE_DESC){0}, sizeof(actual)) != 0) {
     return 0;
   }
+  source.filterMode       = CU_TR_FILTER_MODE_LINEAR;
+  source.mipmapFilterMode = CU_TR_FILTER_MODE_LINEAR;
+  source.maxAnisotropy    = 16u;
+  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(expected); i++) {
+    bool shouldFilter;
+
+    shouldFilter = (expected[i].flags &
+                    (GPU_CUDA_FORMAT_SAMPLED_BIT |
+                     GPU_CUDA_FORMAT_FILTERABLE_BIT)) ==
+                   (GPU_CUDA_FORMAT_SAMPLED_BIT |
+                    GPU_CUDA_FORMAT_FILTERABLE_BIT);
+    if (!cuda_formatInfo(expected[i].format, &info) ||
+        cuda_formatTextureDesc(&info, &source, &actual) != shouldFilter) {
+      return 0;
+    }
+  }
   return 1;
 }
 
