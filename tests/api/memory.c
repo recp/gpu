@@ -581,6 +581,7 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
     fprintf(stderr, "fenceless sparse map submit failed\n");
     goto cleanup;
   }
+  signal.value      = 2u;
   submitInfo.fence = fence;
   if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK ||
       GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
@@ -687,7 +688,7 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
     bufferMapping.mode = GPU_SPARSE_MAPPING_UNMAP;
   }
   wait.semaphore         = semaphore;
-  wait.value             = 1u;
+  wait.value             = 2u;
   wait.waitStages        = GPU_STAGE_TRANSFER;
   submitInfo.pWaits      = &wait;
   submitInfo.pSignals    = NULL;
