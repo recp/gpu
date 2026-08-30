@@ -840,6 +840,8 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   request->native->limits = requiredLimits;
 #if defined(WGPU_SUPPORTED_WGSL_LANGUAGE_FEATURES_INIT)
   request->device->uslStorageExtAccess =
+    wgpuAdapterHasFeature(native->adapter,
+                          WGPUFeatureName_TextureFormatsTier2) &&
     webgpu_hasWGSLLanguageFeature(
       adapter,
       WGPUWGSLLanguageFeatureName_ReadonlyAndReadwriteStorageTextures

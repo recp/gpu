@@ -119,19 +119,25 @@ validate_reflection(WebGPUStorageTexture *state) {
       paintEntries[0].storageTexture.format != GPU_FORMAT_RGBA8_UNORM ||
       paintEntries[0].storageTexture.access !=
         GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY) {
+    set_status("GPU: storage texture paint reflection mismatch", 1);
     return 0;
   }
   if (!readEntries || readCount != 1u ||
       readEntries[0].binding != 0u ||
       readEntries[0].arrayCount != STORAGE_TEXTURE_COUNT ||
       readEntries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT) {
+    set_status("GPU: storage texture read reflection mismatch", 1);
     return 0;
   }
   state->readBindingType = readEntries[0].bindingType;
   if (state->readBindingType == GPU_BINDING_SAMPLED_TEXTURE) {
+    GPUTextureSampleType sampleType;
+
+    sampleType = readEntries[0].sampledTexture.sampleType;
     if (readEntries[0].sampledTexture.viewType != GPU_TEXTURE_VIEW_2D ||
-        readEntries[0].sampledTexture.sampleType !=
-          GPU_TEXTURE_SAMPLE_TYPE_FLOAT) {
+        (sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT &&
+         sampleType != GPU_TEXTURE_SAMPLE_TYPE_UNFILTERABLE_FLOAT)) {
+      set_status("GPU: storage texture sampled-read reflection mismatch", 1);
       return 0;
     }
   } else if (state->readBindingType == GPU_BINDING_STORAGE_TEXTURE) {
@@ -139,9 +145,11 @@ validate_reflection(WebGPUStorageTexture *state) {
         readEntries[0].storageTexture.format != GPU_FORMAT_RGBA8_UNORM ||
         readEntries[0].storageTexture.access !=
           GPU_STORAGE_TEXTURE_ACCESS_READ_ONLY) {
+      set_status("GPU: storage texture native-read reflection mismatch", 1);
       return 0;
     }
   } else {
+    set_status("GPU: storage texture read binding class mismatch", 1);
     return 0;
   }
   if (!filterEntries || filterCount != 1u ||
@@ -153,6 +161,7 @@ validate_reflection(WebGPUStorageTexture *state) {
       filterEntries[0].storageTexture.format != GPU_FORMAT_RGBA8_UNORM ||
       filterEntries[0].storageTexture.access !=
         GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY) {
+    set_status("GPU: storage texture filter reflection mismatch", 1);
     return 0;
   }
   if (!renderEntries || renderCount != 2u ||
@@ -167,6 +176,7 @@ validate_reflection(WebGPUStorageTexture *state) {
       renderEntries[1].bindingType != GPU_BINDING_SAMPLER ||
       renderEntries[1].arrayCount != 1u ||
       renderEntries[1].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
+    set_status("GPU: storage texture render reflection mismatch", 1);
     return 0;
   }
   return 1;
@@ -190,22 +200,30 @@ create_shader(WebGPUStorageTexture *state) {
                                          artifactSize,
                                          &state->library);
   free(artifact);
-  if (result != GPU_OK || !state->library ||
-      GPUCreateShaderLayout(state->device,
-                            state->library,
-                            &state->shaderLayout) != GPU_OK ||
-      !state->shaderLayout ||
-      state->shaderLayout->bindGroupLayoutCount != 4u ||
+  if (result != GPU_OK || !state->library) {
+    set_status(result == GPU_ERROR_UNSUPPORTED
+                 ? "GPU: storage-texture shader target unsupported"
+                 : "GPU: failed to create storage-texture shader library",
+               1);
+    return 0;
+  }
+  result = GPUCreateShaderLayout(state->device,
+                                 state->library,
+                                 &state->shaderLayout);
+  if (result != GPU_OK || !state->shaderLayout) {
+    set_status("GPU: failed to create storage-texture shader layout", 1);
+    return 0;
+  }
+  if (state->shaderLayout->bindGroupLayoutCount != 4u ||
       !state->shaderLayout->bindGroupLayouts ||
       !state->shaderLayout->bindGroupLayouts[0] ||
       !state->shaderLayout->bindGroupLayouts[1] ||
       !state->shaderLayout->bindGroupLayouts[2] ||
-      !state->shaderLayout->bindGroupLayouts[3] ||
-      !validate_reflection(state)) {
-    set_status("GPU: unexpected storage-texture reflection", 1);
+      !state->shaderLayout->bindGroupLayouts[3]) {
+    set_status("GPU: unexpected storage-texture layout shape", 1);
     return 0;
   }
-  return 1;
+  return validate_reflection(state);
 }
 
 static int

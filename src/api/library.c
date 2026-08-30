@@ -2855,6 +2855,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   GPUResult                 rc;
   uint32_t                  targetAtomCount;
   uint32_t                  encoding;
+  bool                      targetSupported;
 
   if (!device || !bytecodeData || bytecodeSize == 0u ||
       bytecodeSize > (uint64_t)SIZE_MAX || !outLibrary) {
@@ -3199,7 +3200,10 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
                             targetAtomCount) != USLOk) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  if (!us_supports_target(bytecodeData, (size_t)bytecodeSize, &target)) {
+  targetSupported = us_supports_target(bytecodeData,
+                                       (size_t)bytecodeSize,
+                                       &target);
+  if (target.backend == USL_BACKEND_DXIL && !targetSupported) {
     return GPU_ERROR_UNSUPPORTED;
   }
   if (us_compile_options_from_env(&compileOptions) != USLOk) {
@@ -3271,7 +3275,9 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
               (unsigned)target.profile,
               targetCaps);
     }
-    rc = GPU_ERROR_BACKEND_FAILURE;
+    rc = targetSupported
+           ? GPU_ERROR_BACKEND_FAILURE
+           : GPU_ERROR_UNSUPPORTED;
     goto cleanup;
   }
   if (getenv("GPU_USL_LOG")) {
