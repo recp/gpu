@@ -7,16 +7,17 @@
 #include <string.h>
 
 enum {
-  ValueCount        = 512u,
-  RoundtripCount    = 4u,
-  TextureBaseWidth  = 16u,
-  TextureBaseHeight = 16u,
-  TextureWidth      = 8u,
-  TextureHeight     = 8u,
-  TextureLayers     = 2u,
-  TextureMipLevel   = 1u,
-  TextureMipCount   = 4u,
-  TextureValueCount = TextureWidth * TextureHeight * TextureLayers * 4u
+  ValueCount              = 512u,
+  RoundtripCount          = 4u,
+  TextureBaseWidth        = 16u,
+  TextureBaseHeight       = 16u,
+  TextureWidth            = 8u,
+  TextureHeight           = 8u,
+  TextureLayers           = 2u,
+  TextureMipLevel         = 1u,
+  TextureMipCount         = 4u,
+  TextureValueCount       = TextureWidth * TextureHeight * TextureLayers * 4u,
+  TextureOutputValueCount = TextureValueCount * 2u
 };
 
 typedef struct Params {
@@ -43,6 +44,7 @@ typedef struct RoundtripState {
   GPUTexture          *graphicsTexture;
   GPUTexture          *cudaTexture;
   GPUTextureView      *cudaTextureView;
+  GPUTextureView      *cudaSampledTextureView;
   GPUSemaphore        *graphicsSemaphore;
   GPUSemaphore        *cudaSemaphore;
   GPUFence            *releaseFence;
@@ -358,7 +360,7 @@ run_texture_roundtrip(RoundtripState *state) {
   GPUFence                   *cudaFence;
   float                       input[TextureValueCount];
   float                       output[TextureValueCount];
-  float                       cudaOutput[TextureValueCount];
+  float                       cudaOutput[TextureOutputValueCount];
   const char                 *failure;
   int                         releaseSubmitted, cudaSubmitted;
   int                         acquireSubmitted, ok;
@@ -374,10 +376,12 @@ run_texture_roundtrip(RoundtripState *state) {
   acquireSubmitted  = 0;
   ok                = 0;
   failure           = "setup";
+  for (uint32_t i = 0u; i < TextureOutputValueCount; i++) {
+    cudaOutput[i] = 0.0f;
+  }
   for (uint32_t i = 0u; i < TextureValueCount; i++) {
     input[i]  = (float)i * 0.125f;
     output[i] = 0.0f;
-    cudaOutput[i] = 0.0f;
   }
 
   writeRegion.aspect       = GPU_TEXTURE_ASPECT_ALL;
@@ -546,11 +550,19 @@ run_texture_roundtrip(RoundtripState *state) {
     float expected;
 
     expected = input[i] * 2.0f + 1.0f;
-    if (fabsf(cudaOutput[i] - expected) > 0.0001f) {
+    if (fabsf(cudaOutput[i] - input[i]) > 0.0001f) {
       fprintf(stderr,
-              "CUDA texture result mismatch at %u: %.9g != %.9g\n",
+              "CUDA sampled texture mismatch at %u: %.9g != %.9g\n",
               i,
               cudaOutput[i],
+              input[i]);
+      goto cleanup;
+    }
+    if (fabsf(cudaOutput[TextureValueCount + i] - expected) > 0.0001f) {
+      fprintf(stderr,
+              "CUDA storage texture mismatch at %u: %.9g != %.9g\n",
+              i,
+              cudaOutput[TextureValueCount + i],
               expected);
       goto cleanup;
     }
@@ -623,7 +635,7 @@ main(int argc, char **argv) {
   GPUComputePipelineCreateInfo pipelineInfo = {0};
   GPUBindGroupEntry            paramsEntry = {0};
   GPUBindGroupEntry            dataEntries[2] = {0};
-  GPUBindGroupEntry            textureEntries[2] = {0};
+  GPUBindGroupEntry            textureEntries[3] = {0};
   GPUBindGroupCreateInfo       groupInfo = {0};
   GPUMemoryRequirements        memoryRequirements;
   GPUResult                    textureRequirementsResult;
@@ -807,7 +819,8 @@ main(int argc, char **argv) {
                                          GPU_TEXTURE_USAGE_COPY_DST;
   cudaTextureInfo                      = graphicsTextureInfo;
   cudaTextureInfo.label                = "cuda-graphics-texture";
-  cudaTextureInfo.usage                = GPU_TEXTURE_USAGE_STORAGE;
+  cudaTextureInfo.usage                = GPU_TEXTURE_USAGE_SAMPLED |
+                                         GPU_TEXTURE_USAGE_STORAGE;
 #if defined(_WIN32) || defined(WIN32)
   if (vulkanGraphics) {
     layeredMipGraphicsInfo               = graphicsTextureInfo;
@@ -883,12 +896,24 @@ main(int argc, char **argv) {
                                          GPU_BUFFER_USAGE_COPY_SRC;
   textureCudaReadbackInfo              = textureReadbackInfo;
   textureCudaReadbackInfo.label        = "cuda-texture-readback";
+  textureCudaReadbackInfo.sizeBytes    =
+    TextureOutputValueCount * sizeof(float);
   textureCudaReadbackInfo.usage        = GPU_BUFFER_USAGE_STORAGE |
                                          GPU_BUFFER_USAGE_COPY_SRC;
   if (GPUCreateTextureView(state.cudaTexture,
                            &textureViewInfo,
                            &state.cudaTextureView) != GPU_OK ||
-      !state.cudaTextureView ||
+      !state.cudaTextureView) {
+    fprintf(stderr, "shared graphics/CUDA storage view setup failed\n");
+    goto cleanup;
+  }
+  textureViewInfo.label = "cuda-graphics-sampled-texture-view";
+  textureViewInfo.mipLevelCount =
+    graphicsTextureInfo.mipLevelCount - state.textureMipLevel;
+  if (GPUCreateTextureView(state.cudaTexture,
+                           &textureViewInfo,
+                           &state.cudaSampledTextureView) != GPU_OK ||
+      !state.cudaSampledTextureView ||
       GPUCreateBuffer(state.graphicsDevice,
                       &textureReadbackInfo,
                       &state.textureReadback) != GPU_OK ||
@@ -1004,10 +1029,13 @@ main(int argc, char **argv) {
   textureEntries[1].bindingType   = GPU_BINDING_STORAGE_BUFFER;
   textureEntries[1].buffer.buffer = state.textureCudaReadback;
   textureEntries[1].buffer.size   = textureCudaReadbackInfo.sizeBytes;
-  groupInfo.label          = "graphics-cuda-texture-group";
-  groupInfo.layout         = textureLayout->bindGroupLayouts[0];
-  groupInfo.pEntries       = textureEntries;
-  groupInfo.entryCount     = 2u;
+  textureEntries[2].binding       = 2u;
+  textureEntries[2].bindingType   = GPU_BINDING_SAMPLED_TEXTURE;
+  textureEntries[2].textureView   = state.cudaSampledTextureView;
+  groupInfo.label      = "graphics-cuda-texture-group";
+  groupInfo.layout     = textureLayout->bindGroupLayouts[0];
+  groupInfo.pEntries   = textureEntries;
+  groupInfo.entryCount = 3u;
   if (GPUCreateBindGroup(state.cudaDevice,
                          &groupInfo,
                          &state.textureGroup) != GPU_OK ||
@@ -1069,6 +1097,7 @@ cleanup:
   GPUDestroyBuffer(state.paramsBuffer);
   GPUDestroyBuffer(state.textureReadback);
   GPUDestroyBuffer(state.textureCudaReadback);
+  GPUDestroyTextureView(state.cudaSampledTextureView);
   GPUDestroyTextureView(state.cudaTextureView);
   GPUDestroyTexture(state.cudaTexture);
   GPUDestroyTexture(state.graphicsTexture);

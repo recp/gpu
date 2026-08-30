@@ -1,9 +1,13 @@
 kern(8, 8, 1) interop_texture_cs(
   image: image2d_array<rgba32float, read_write> #texture(0),
   inout output: [float4] #buffer(1),
+  sampled: texture2d_array<float> #texture(2),
   gid: uint3 #global_id
 ) {
+  let index = (gid.z * 8u + gid.y) * 8u + gid.x
+  let original = sampled.read(int3(gid))
   let color = image.read(gid) * 2.0 + float4(1.0)
   image.write(color, gid)
-  output[(gid.z * 8u + gid.y) * 8u + gid.x] = color
+  output[index] = original
+  output[128u + index] = color
 }
