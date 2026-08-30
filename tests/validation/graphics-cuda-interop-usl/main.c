@@ -1,4 +1,5 @@
 #include <gpu/gpu.h>
+#include "../../../src/api/device_internal.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -9,6 +10,7 @@
 enum {
   ValueCount                    = 512u,
   RoundtripCount                = 4u,
+  WarmTextureRoundtripCount     = 4u,
   TextureBaseWidth              = 16u,
   TextureBaseHeight             = 16u,
   TextureWidth                  = 8u,
@@ -793,7 +795,7 @@ cleanup:
 }
 
 static int
-run_texture_roundtrip(RoundtripState *state) {
+run_texture_roundtrip(RoundtripState *state, uint32_t sequence) {
   GPUCommandBuffer           *releaseCmdb, *cudaCmdb, *acquireCmdb;
   GPUComputePassEncoder      *computePass;
   GPUTransferPassEncoder     *transferPass;
@@ -1537,7 +1539,8 @@ run_texture_roundtrip(RoundtripState *state) {
   transferPass = NULL;
 
   signal.semaphore          = state->graphicsSemaphore;
-  signal.value              = RoundtripCount * 2u + 1u;
+  signal.value              = RoundtripCount * 2u +
+                              (uint64_t)sequence * 2u + 1u;
   submit.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_EX_INFO;
   submit.chain.structSize   = sizeof(submit);
   submit.ppCommandBuffers   = &releaseCmdb;
@@ -3396,8 +3399,27 @@ main(int argc, char **argv) {
       goto cleanup;
     }
   }
-  if (!run_texture_roundtrip(&state)) {
+  if (!run_texture_roundtrip(&state, 0u)) {
     fprintf(stderr, "graphics/CUDA texture roundtrip failed\n");
+    goto cleanup;
+  }
+  GPUResetStats(state.cudaDevice);
+  for (uint32_t i = 0u; i < WarmTextureRoundtripCount; i++) {
+    if (!run_texture_roundtrip(&state, i + 1u)) {
+      fprintf(stderr, "graphics/CUDA warm texture roundtrip failed\n");
+      goto cleanup;
+    }
+  }
+  if (state.cudaDevice->currentFrameStats.hotPathAllocCount != 0u ||
+      state.cudaDevice->currentFrameStats.hotPathAllocBytes != 0u ||
+      state.cudaDevice->currentFrameStats.hotPathFreeCount != 0u ||
+      state.cudaDevice->currentFrameStats.hotPathFreeBytes != 0u) {
+    fprintf(stderr,
+            "CUDA warm texture path allocated: %llu allocs, %llu frees\n",
+            (unsigned long long)
+              state.cudaDevice->currentFrameStats.hotPathAllocCount,
+            (unsigned long long)
+              state.cudaDevice->currentFrameStats.hotPathFreeCount);
     goto cleanup;
   }
   status = 0;
