@@ -1,13 +1,39 @@
+fn cube_direction(face: uint) -> float3 {
+  if face == 0u {
+    return float3(1.0, 0.0, 0.0)
+  } else if face == 1u {
+    return float3(-1.0, 0.0, 0.0)
+  } else if face == 2u {
+    return float3(0.0, 1.0, 0.0)
+  } else if face == 3u {
+    return float3(0.0, -1.0, 0.0)
+  } else if face == 4u {
+    return float3(0.0, 0.0, 1.0)
+  }
+  return float3(0.0, 0.0, -1.0)
+}
+
 kern(8, 8, 1) interop_texture_cs(
   image: image2d_array<rgba32float, read_write> #texture(0),
   inout output: [float4] #buffer(1),
   sampled: texture2d_array<float> #texture(2),
+  cube: texturecube<float> #texture(3),
   gid: uint3 #global_id
 ) {
-  let index = (gid.z * 8u + gid.y) * 8u + gid.x
-  let original = sampled.read(int3(gid))
-  let color = image.read(gid) * 2.0 + float4(1.0)
-  image.write(color, gid)
-  output[index] = original
-  output[128u + index] = color
+  let texelCount = 8u * 8u * 2u
+  if gid.z < 2u {
+    let index = (gid.z * 8u + gid.y) * 8u + gid.x
+    let original = sampled.read(int3(gid))
+    let color = image.read(gid) * 2.0 + float4(1.0)
+    image.write(color, gid)
+    output[index] = original
+    output[texelCount + index] = color
+  }
+  if gid.x == 0u && gid.y == 0u {
+    output[texelCount * 2u + gid.z] = cube.sample(
+      .nearest,
+      cube_direction(gid.z),
+      level(0.0)
+    )
+  }
 }

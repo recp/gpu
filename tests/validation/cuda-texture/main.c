@@ -257,6 +257,15 @@ validate_view_plans(void) {
         plan.desc.lastLayer == 11u);
   info = view_info(GPU_TEXTURE_VIEW_CUBE_ARRAY, 0u, 1u, 1u, 6u);
   CHECK(!cuda_textureViewPlan(&texture, &info, &plan));
+
+  texture.depthOrLayers = 6u;
+  info = view_info(GPU_TEXTURE_VIEW_CUBE, 1u, 2u, 0u, 6u);
+  CHECK(cuda_textureViewPlan(&texture, &info, &plan));
+  CHECK(!plan.singleLevel && plan.hasResourceView &&
+        !plan.surfaceCompatible && plan.desc.depth == 6u &&
+        plan.desc.firstMipmapLevel == 1u &&
+        plan.desc.lastMipmapLevel == 2u &&
+        plan.desc.firstLayer == 0u && plan.desc.lastLayer == 0u);
   texture.height = 32u;
   info = view_info(GPU_TEXTURE_VIEW_CUBE, 0u, 1u, 0u, 6u);
   CHECK(!cuda_textureViewPlan(&texture, &info, &plan));

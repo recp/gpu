@@ -140,7 +140,7 @@ cuda_textureViewPlan(const GPUTexture               *texture,
                      GPUCudaTextureViewPlan         *outPlan) {
   GPUCudaTextureViewPlan plan;
   uint32_t               layerCount;
-  bool                   layered;
+  bool                   cubemap, layered;
 
   if (outPlan) {
     memset(outPlan, 0, sizeof(*outPlan));
@@ -155,8 +155,13 @@ cuda_textureViewPlan(const GPUTexture               *texture,
     return false;
   }
 
+  cubemap    = texture->dimension == GPU_TEXTURE_DIMENSION_2D &&
+               texture->width == texture->height &&
+               texture->depthOrLayers >= 6u &&
+               texture->depthOrLayers % 6u == 0u;
   layered    = texture->dimension != GPU_TEXTURE_DIMENSION_3D &&
-               texture->depthOrLayers > 1u;
+               texture->depthOrLayers > 1u &&
+               (!cubemap || texture->depthOrLayers > 6u);
   layerCount = gpuTextureArrayLayerCount(texture);
   switch (texture->dimension) {
     case GPU_TEXTURE_DIMENSION_1D:
@@ -218,7 +223,7 @@ cuda_textureViewPlan(const GPUTexture               *texture,
                                       ? cuda__mipExtent(texture->depthOrLayers,
                                                         info->baseMipLevel)
                                       : texture->depthOrLayers
-                                  : layered
+                                  : layered || cubemap
                                       ? texture->depthOrLayers
                                       : 0u;
   plan.desc.firstMipmapLevel  = plan.singleLevel ? 0u : info->baseMipLevel;
