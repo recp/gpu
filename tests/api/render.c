@@ -46,6 +46,44 @@ expect_render_pipeline_error(GPUDevice *device,
   return 1;
 }
 
+static int
+write_pipeline_cache_corruption(const char *path) {
+  static const char marker[] = "invalid-cache";
+  FILE             *file;
+  int               ok;
+
+  file = path ? fopen(path, "wb") : NULL;
+  if (!file) {
+    return 0;
+  }
+  ok = fwrite(marker, 1u, sizeof(marker) - 1u, file) ==
+       sizeof(marker) - 1u;
+  if (fclose(file) != 0) {
+    ok = 0;
+  }
+  return ok;
+}
+
+static int
+pipeline_cache_file_recovered(const char *path) {
+  static const char marker[] = "invalid-cache";
+  char              bytes[sizeof(marker) - 1u];
+  FILE             *file;
+  long              size;
+  size_t            readSize;
+
+  file = path ? fopen(path, "rb") : NULL;
+  if (!file) {
+    return 0;
+  }
+  readSize = fread(bytes, 1u, sizeof(bytes), file);
+  size = fseek(file, 0, SEEK_END) == 0 ? ftell(file) : -1;
+  fclose(file);
+  return size > (long)sizeof(bytes) &&
+         (readSize != sizeof(bytes) ||
+          memcmp(bytes, marker, sizeof(bytes)) != 0);
+}
+
 static uint32_t gRenderDrawCalls;
 static uint32_t gRenderDrawIndexedCalls;
 static uint32_t gRenderDrawIndirectCalls;
@@ -176,17 +214,7 @@ check_pipeline_disk_cache(GPUDevice                  *device,
   cache       = NULL;
   info->cache = NULL;
 
-  file = fopen(path, "wb");
-  if (!file) {
-    fprintf(stderr, "native pipeline cache corruption setup failed\n");
-    goto cleanup;
-  }
-  if (fwrite("invalid-cache", 1u, 13u, file) != 13u) {
-    fclose(file);
-    fprintf(stderr, "native pipeline cache corruption setup failed\n");
-    goto cleanup;
-  }
-  if (fclose(file) != 0) {
+  if (!write_pipeline_cache_corruption(path)) {
     fprintf(stderr, "native pipeline cache corruption setup failed\n");
     goto cleanup;
   }
@@ -198,6 +226,41 @@ check_pipeline_disk_cache(GPUDevice                  *device,
   if (GPUCreateRenderPipeline(device, info, &pipeline) != GPU_OK || !pipeline) {
     fprintf(stderr, "native pipeline create after cache recovery failed\n");
     goto cleanup;
+  }
+  GPUDestroyRenderPipeline(pipeline);
+  pipeline = NULL;
+  GPUDestroyPipelineCache(cache);
+  cache       = NULL;
+  info->cache = NULL;
+  if (!pipeline_cache_file_recovered(path)) {
+    fprintf(stderr, "native pipeline cache corruption was not rewritten\n");
+    goto cleanup;
+  }
+
+  if (api->backend == GPU_BACKEND_METAL) {
+    if (!write_pipeline_cache_corruption(metadataPath)) {
+      fprintf(stderr, "Metal pipeline cache metadata corruption setup failed\n");
+      goto cleanup;
+    }
+    if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {
+      fprintf(stderr, "Metal pipeline cache metadata recovery failed\n");
+      goto cleanup;
+    }
+    info->cache = cache;
+    if (GPUCreateRenderPipeline(device, info, &pipeline) != GPU_OK || !pipeline) {
+      fprintf(stderr,
+              "Metal pipeline create after metadata recovery failed\n");
+      goto cleanup;
+    }
+    GPUDestroyRenderPipeline(pipeline);
+    pipeline = NULL;
+    GPUDestroyPipelineCache(cache);
+    cache       = NULL;
+    info->cache = NULL;
+    if (!pipeline_cache_file_recovered(metadataPath)) {
+      fprintf(stderr, "Metal pipeline cache metadata was not rewritten\n");
+      goto cleanup;
+    }
   }
   ok = 1;
 
