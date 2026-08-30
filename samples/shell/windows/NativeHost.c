@@ -9,6 +9,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <process.h>
 
 extern int
 gpu_win32_sample_start(void);
@@ -17,11 +18,33 @@ gpu_win32_sample_start(void);
 #  define GPU_WINDOWS_SAMPLE_NAME "GPU + USL Sample"
 #endif
 
+enum {
+  GPU_WIN32_SAMPLE_READY = WM_APP + 1u
+};
+
 typedef struct GPUWin32Host {
-  GPUWin32Window window;
+  GPUWin32Window  window;
   GPUWin32Sample *sample;
+  GPUWin32Sample *startupSample;
+  HANDLE          startupThread;
+  uint32_t        pendingWidth;
+  uint32_t        pendingHeight;
+  float           pendingScale;
+  int             result;
   bool            running;
 } GPUWin32Host;
+
+static unsigned __stdcall
+start_sample(void *userData) {
+  GPUWin32Host *host;
+
+  host = userData;
+  host->startupSample = GPUSampleWin32Create(&host->window,
+                                             GPU_WINDOWS_SAMPLE_NAME,
+                                             gpu_win32_sample_start);
+  PostMessageW(host->window.handle, GPU_WIN32_SAMPLE_READY, 0u, 0);
+  return 0u;
+}
 
 static bool
 monitor_work_area(HWND window, RECT *work) {
@@ -130,8 +153,12 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
   switch (message) {
     case WM_SIZE:
       if (wParam != SIZE_MINIMIZED) {
-        host->window.width  = LOWORD(lParam);
-        host->window.height = HIWORD(lParam);
+        host->pendingWidth  = LOWORD(lParam);
+        host->pendingHeight = HIWORD(lParam);
+        if (host->sample) {
+          host->window.width  = host->pendingWidth;
+          host->window.height = host->pendingHeight;
+        }
       }
       return 0;
     case WM_DPICHANGED: {
@@ -145,27 +172,79 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
                    suggested->right - suggested->left,
                    suggested->bottom - suggested->top,
                    SWP_NOACTIVATE | SWP_NOZORDER);
-      host->window.scale = display_scale(window, HIWORD(wParam));
+      host->pendingScale = display_scale(window, HIWORD(wParam));
+      if (host->sample) {
+        host->window.scale = host->pendingScale;
+      }
       return 0;
     }
     case WM_LBUTTONDOWN:
+      if (!host->sample) {
+        return 0;
+      }
       SetCapture(window);
       sample_orbit_pointer_begin((float)GET_X_LPARAM(lParam),
                                  (float)GET_Y_LPARAM(lParam));
       return 0;
     case WM_LBUTTONUP:
+      if (!host->sample) {
+        return 0;
+      }
       sample_orbit_pointer_end();
       ReleaseCapture();
       return 0;
     case WM_MOUSEMOVE:
-      if ((wParam & MK_LBUTTON) != 0u) {
+      if (host->sample && (wParam & MK_LBUTTON) != 0u) {
         sample_orbit_pointer_move((float)GET_X_LPARAM(lParam),
                                   (float)GET_Y_LPARAM(lParam));
       }
       return 0;
     case WM_MOUSEWHEEL:
+      if (!host->sample) {
+        return 0;
+      }
       sample_orbit_zoom((float)GET_WHEEL_DELTA_WPARAM(wParam) /
                         (float)WHEEL_DELTA);
+      return 0;
+    case WM_PAINT:
+      if (!host->sample) {
+        PAINTSTRUCT paint;
+        HDC         context;
+        RECT        client;
+
+        context = BeginPaint(window, &paint);
+        GetClientRect(window, &client);
+        FillRect(context, &client, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        SetBkMode(context, TRANSPARENT);
+        SetTextColor(context, RGB(210u, 210u, 210u));
+        SelectObject(context, GetStockObject(DEFAULT_GUI_FONT));
+        DrawTextW(context,
+                  L"Starting Direct3D 12...",
+                  -1,
+                  &client,
+                  DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+        EndPaint(window, &paint);
+        return 0;
+      }
+      return DefWindowProcW(window, message, wParam, lParam);
+    case GPU_WIN32_SAMPLE_READY:
+      if (host->startupThread) {
+        WaitForSingleObject(host->startupThread, INFINITE);
+        CloseHandle(host->startupThread);
+        host->startupThread = NULL;
+      }
+      host->sample        = host->startupSample;
+      host->window.width  = host->pendingWidth;
+      host->window.height = host->pendingHeight;
+      host->window.scale  = host->pendingScale;
+      if (!host->sample || GPUSampleWin32Failed(host->sample)) {
+        host->result = 1;
+        MessageBoxA(window,
+                    GPUSampleWin32Status(host->sample),
+                    GPU_WINDOWS_SAMPLE_NAME,
+                    MB_ICONERROR | MB_OK);
+        DestroyWindow(window);
+      }
       return 0;
     case WM_KEYDOWN:
       if (wParam == VK_ESCAPE) {
@@ -196,7 +275,7 @@ wWinMain(HINSTANCE instance,
   RECT                 client;
   HWND                 window;
   MSG                  message;
-  int                  result;
+  uintptr_t            startupThread;
   DWORD                style;
 
   (void)previousInstance;
@@ -248,6 +327,9 @@ wWinMain(HINSTANCE instance,
   host.window.width  = (uint32_t)client.right;
   host.window.height = (uint32_t)client.bottom;
   host.window.scale  = display_scale(window, GetDpiForWindow(window));
+  host.pendingWidth  = host.window.width;
+  host.pendingHeight = host.window.height;
+  host.pendingScale  = host.window.scale;
   host.running       = true;
 
   {
@@ -265,19 +347,22 @@ wWinMain(HINSTANCE instance,
   ShowWindow(window, showCommand);
   UpdateWindow(window);
 
-  host.sample = GPUSampleWin32Create(&host.window,
-                                     GPU_WINDOWS_SAMPLE_NAME,
-                                     gpu_win32_sample_start);
-  if (!host.sample || GPUSampleWin32Failed(host.sample)) {
+  startupThread = _beginthreadex(NULL,
+                                 0u,
+                                 start_sample,
+                                 &host,
+                                 0u,
+                                 NULL);
+  if (!startupThread) {
     MessageBoxA(window,
-                GPUSampleWin32Status(host.sample),
+                "GPU: failed to start Direct3D 12 initialization",
                 GPU_WINDOWS_SAMPLE_NAME,
                 MB_ICONERROR | MB_OK);
     DestroyWindow(window);
     return 1;
   }
+  host.startupThread = (HANDLE)startupThread;
 
-  result = 0;
   while (host.running) {
     while (PeekMessageW(&message, NULL, 0u, 0u, PM_REMOVE)) {
       if (message.message == WM_QUIT) {
@@ -290,9 +375,13 @@ wWinMain(HINSTANCE instance,
     if (!host.running) {
       break;
     }
+    if (!host.sample) {
+      WaitMessage();
+      continue;
+    }
     if (!GPUSampleWin32Render(host.sample)) {
-      result = GPUSampleWin32Failed(host.sample) ? 1 : 0;
-      if (result != 0) {
+      host.result = GPUSampleWin32Failed(host.sample) ? 1 : 0;
+      if (host.result != 0) {
         MessageBoxA(window,
                     GPUSampleWin32Status(host.sample),
                     GPU_WINDOWS_SAMPLE_NAME,
@@ -302,6 +391,10 @@ wWinMain(HINSTANCE instance,
     }
   }
 
-  GPUSampleWin32Stop(host.sample);
-  return result;
+  if (host.startupThread) {
+    WaitForSingleObject(host.startupThread, INFINITE);
+    CloseHandle(host.startupThread);
+  }
+  GPUSampleWin32Stop(host.sample ? host.sample : host.startupSample);
+  return host.result;
 }
