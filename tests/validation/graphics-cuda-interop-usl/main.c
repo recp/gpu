@@ -37,6 +37,7 @@ enum {
   FormatFloatOutputValueCount   = TextureValueCount * 2u * FormatCaseCount,
   SrgbFloatOutputValueCount     = TextureValueCount,
   PackedFloatOutputValueCount   = TextureValueCount * 2u,
+  BgraFloatOutputValueCount     = TextureValueCount * 2u,
   NarrowRBytesPerTexel          = 4u * 1u + 5u * 2u + 3u * 4u,
   NarrowRgBytesPerTexel         = NarrowRBytesPerTexel * 2u,
   NarrowRawByteCount            = TextureTexelCount *
@@ -47,7 +48,8 @@ enum {
                                   CubeArrayOutputValueCount +
                                   FormatFloatOutputValueCount +
                                   SrgbFloatOutputValueCount +
-                                  PackedFloatOutputValueCount
+                                  PackedFloatOutputValueCount +
+                                  BgraFloatOutputValueCount
 };
 
 typedef enum InteropFormatCase {
@@ -200,6 +202,7 @@ typedef struct RoundtripState {
   GPUBuffer           *textureCudaReadback;
   GPUBuffer           *srgbReadback;
   GPUBuffer           *packedReadback;
+  GPUBuffer           *bgraReadback;
   GPUTexture          *graphicsTexture;
   GPUTexture          *cudaTexture;
   GPUTexture          *graphicsCubeTexture;
@@ -210,12 +213,15 @@ typedef struct RoundtripState {
   GPUTexture          *cudaSrgbTexture;
   GPUTexture          *graphicsPackedTexture;
   GPUTexture          *cudaPackedTexture;
+  GPUTexture          *graphicsBgraTexture;
+  GPUTexture          *cudaBgraTexture;
   GPUTextureView      *cudaTextureView;
   GPUTextureView      *cudaSampledTextureView;
   GPUTextureView      *cudaCubeTextureView;
   GPUTextureView      *cudaCubeArrayTextureView;
   GPUTextureView      *cudaSrgbTextureView;
   GPUTextureView      *cudaPackedTextureView;
+  GPUTextureView      *cudaBgraTextureView;
   GPUSemaphore        *graphicsSemaphore;
   GPUSemaphore        *cudaSemaphore;
   GPUFence            *releaseFence;
@@ -744,8 +750,8 @@ run_texture_roundtrip(RoundtripState *state) {
   GPUCommandBuffer           *releaseCmdb, *cudaCmdb, *acquireCmdb;
   GPUComputePassEncoder      *computePass;
   GPUTransferPassEncoder     *transferPass;
-  GPUSharedTextureBarrierEXT  toCuda[5 + InteropFormatCount] = {0};
-  GPUSharedTextureBarrierEXT  toGraphics[5 + InteropFormatCount] = {0};
+  GPUSharedTextureBarrierEXT  toCuda[6 + InteropFormatCount] = {0};
+  GPUSharedTextureBarrierEXT  toGraphics[6 + InteropFormatCount] = {0};
   GPUSharedBarrierBatchEXT    acquireCuda = {0}, acquireGraphics = {0};
   GPUBufferTextureCopyRegion  copyRegion = {0};
   GPUTextureWriteRegion       writeRegion = {0};
@@ -783,6 +789,8 @@ run_texture_roundtrip(RoundtripState *state) {
   uint32_t                    packedRawInput[TextureTexelCount];
   uint32_t                    packedRawOutput[TextureTexelCount];
   float                       packedWriteInput[TextureValueCount];
+  uint8_t                     bgraInput[ByteTextureValueCount];
+  uint8_t                     bgraOutput[ByteTextureValueCount];
   uint8_t                     narrowInput[NarrowRawByteCount];
   uint8_t                     narrowOutput[NarrowRawByteCount];
   InteropFormatTransfer       formatTransfers[InteropFormatCount];
@@ -794,6 +802,7 @@ run_texture_roundtrip(RoundtripState *state) {
   uint32_t                    snorm16Base, uint16Base, sint16Base;
   uint32_t                    uint32Base, sint32Base, srgbBase;
   uint32_t                    packedReadBase, packedInputBase;
+  uint32_t                    bgraBase;
   uint32_t                    narrowOffset;
   int                         releaseSubmitted, cudaSubmitted;
   int                         acquireSubmitted, ok;
@@ -859,6 +868,9 @@ run_texture_roundtrip(RoundtripState *state) {
     UINT32_C(0x477c0000), UINT32_C(0x3f800000),
     UINT32_C(0x35800000), UINT32_C(0x35800000),
     UINT32_C(0x36000000), UINT32_C(0x3f800000)
+  };
+  static const uint8_t        bgraInputValues[8] = {
+    0u, 16u, 64u, 128u, 192u, 224u, 240u, 255u
   };
 
   releaseCmdb       = NULL;
@@ -936,6 +948,8 @@ run_texture_roundtrip(RoundtripState *state) {
     sint32Output[i] = 0;
     srgbInput[i]    = srgbInputValues[pattern];
     srgbOutput[i]   = 0u;
+    bgraInput[i]    = bgraInputValues[pattern];
+    bgraOutput[i]   = 0u;
   }
   for (uint32_t texel = 0u; texel < TextureTexelCount; texel++) {
     uint32_t pattern;
@@ -1061,6 +1075,7 @@ run_texture_roundtrip(RoundtripState *state) {
                    CubeArrayOutputValueCount + FormatFloatOutputValueCount +
                    SrgbFloatOutputValueCount;
   packedInputBase = packedReadBase + TextureValueCount;
+  bgraBase        = packedInputBase + TextureValueCount;
   if (GPUQueueWriteBuffer(state->cudaQueue,
                           state->textureCudaReadback,
                           (uint64_t)packedInputBase * sizeof(float),
@@ -1107,6 +1122,13 @@ run_texture_roundtrip(RoundtripState *state) {
                            &writeRegion,
                            packedRawInput,
                            sizeof(packedRawInput)) != GPU_OK) {
+    goto cleanup;
+  }
+  if (GPUQueueWriteTexture(state->graphicsQueue,
+                           state->graphicsBgraTexture,
+                           &writeRegion,
+                           bgraInput,
+                           sizeof(bgraInput)) != GPU_OK) {
     goto cleanup;
   }
   writeRegion.bytesPerRow = TextureWidth * 4u * sizeof(float);
@@ -1178,10 +1200,18 @@ run_texture_roundtrip(RoundtripState *state) {
   toCuda[4].baseMip            = state->textureMipLevel;
   toCuda[4].mipCount           = 1u;
   toCuda[4].layerCount         = TextureLayers;
+  toCuda[5].sourceTexture      = state->graphicsBgraTexture;
+  toCuda[5].destinationTexture = state->cudaBgraTexture;
+  toCuda[5].srcAccess          = GPU_ACCESS_TRANSFER_WRITE;
+  toCuda[5].dstAccess          = GPU_ACCESS_SHADER_READ |
+                                 GPU_ACCESS_SHADER_WRITE;
+  toCuda[5].baseMip            = state->textureMipLevel;
+  toCuda[5].mipCount           = 1u;
+  toCuda[5].layerCount         = TextureLayers;
   for (uint32_t i = 0u; i < InteropFormatCount; i++) {
     GPUSharedTextureBarrierEXT *barrier;
 
-    barrier                     = &toCuda[5u + i];
+    barrier                     = &toCuda[6u + i];
     barrier->sourceTexture      = state->formatTextures[i].graphicsTexture;
     barrier->destinationTexture = state->formatTextures[i].cudaTexture;
     barrier->srcAccess          = GPU_ACCESS_TRANSFER_WRITE;
@@ -1194,7 +1224,7 @@ run_texture_roundtrip(RoundtripState *state) {
   acquireCuda.pTextureBarriers    = toCuda;
   acquireCuda.srcStages           = GPU_STAGE_TRANSFER;
   acquireCuda.dstStages           = GPU_STAGE_COMPUTE;
-  acquireCuda.textureBarrierCount = 5u + InteropFormatCount;
+  acquireCuda.textureBarrierCount = 6u + InteropFormatCount;
   failure = "release/acquire encoding";
   if (GPUEncodeSharedReleaseEXT(state->interop,
                                 releaseCmdb,
@@ -1270,10 +1300,17 @@ run_texture_roundtrip(RoundtripState *state) {
   toGraphics[4].baseMip            = state->textureMipLevel;
   toGraphics[4].mipCount           = 1u;
   toGraphics[4].layerCount         = TextureLayers;
+  toGraphics[5].sourceTexture      = state->cudaBgraTexture;
+  toGraphics[5].destinationTexture = state->graphicsBgraTexture;
+  toGraphics[5].srcAccess          = GPU_ACCESS_SHADER_WRITE;
+  toGraphics[5].dstAccess          = GPU_ACCESS_TRANSFER_READ;
+  toGraphics[5].baseMip            = state->textureMipLevel;
+  toGraphics[5].mipCount           = 1u;
+  toGraphics[5].layerCount         = TextureLayers;
   for (uint32_t i = 0u; i < InteropFormatCount; i++) {
     GPUSharedTextureBarrierEXT *barrier;
 
-    barrier                     = &toGraphics[5u + i];
+    barrier                     = &toGraphics[6u + i];
     barrier->sourceTexture      = state->formatTextures[i].cudaTexture;
     barrier->destinationTexture = state->formatTextures[i].graphicsTexture;
     barrier->srcAccess          = GPU_ACCESS_SHADER_WRITE;
@@ -1285,7 +1322,7 @@ run_texture_roundtrip(RoundtripState *state) {
   acquireGraphics.pTextureBarriers    = toGraphics;
   acquireGraphics.srcStages           = GPU_STAGE_COMPUTE;
   acquireGraphics.dstStages           = GPU_STAGE_TRANSFER;
-  acquireGraphics.textureBarrierCount = 5u + InteropFormatCount;
+  acquireGraphics.textureBarrierCount = 6u + InteropFormatCount;
   failure = "return/copy encoding";
   if (GPUEncodeSharedReleaseEXT(state->interop,
                                 cudaCmdb,
@@ -1325,6 +1362,10 @@ run_texture_roundtrip(RoundtripState *state) {
   GPUCopyTextureToBuffer(transferPass,
                          state->graphicsPackedTexture,
                          state->packedReadback,
+                         &copyRegion);
+  GPUCopyTextureToBuffer(transferPass,
+                         state->graphicsBgraTexture,
+                         state->bgraReadback,
                          &copyRegion);
   GPUEndTransferPass(transferPass);
   transferPass = NULL;
@@ -1411,6 +1452,13 @@ run_texture_roundtrip(RoundtripState *state) {
                          0u,
                          packedRawOutput,
                          sizeof(packedRawOutput)) != GPU_OK) {
+    goto cleanup;
+  }
+  if (GPUQueueReadBuffer(state->graphicsQueue,
+                         state->bgraReadback,
+                         0u,
+                         bgraOutput,
+                         sizeof(bgraOutput)) != GPU_OK) {
     goto cleanup;
   }
   failure = "result validation";
@@ -1750,6 +1798,33 @@ run_texture_roundtrip(RoundtripState *state) {
       goto cleanup;
     }
   }
+  for (uint32_t texel = 0u; texel < TextureTexelCount; texel++) {
+    static const uint8_t memoryChannel[4] = {2u, 1u, 0u, 3u};
+
+    for (uint32_t channel = 0u; channel < 4u; channel++) {
+      uint32_t logicalIndex, memoryIndex;
+      float    original, expected;
+
+      logicalIndex = texel * 4u + channel;
+      memoryIndex  = texel * 4u + memoryChannel[channel];
+      original     = (float)bgraInput[memoryIndex] / 255.0f;
+      expected     = 1.0f - original;
+      if (fabsf(cudaOutput[bgraBase + logicalIndex] - original) >
+            0.5f / 255.0f + 0.000001f ||
+          fabsf(cudaOutput[bgraBase + TextureValueCount + logicalIndex] -
+                 expected) > 0.5f / 255.0f + 0.000001f ||
+          bgraOutput[memoryIndex] != 255u - bgraInput[memoryIndex]) {
+        fprintf(stderr,
+                "CUDA bgra8-unorm mismatch at %u/%u: %.9g/%.9g/%u\n",
+                texel,
+                channel,
+                cudaOutput[bgraBase + logicalIndex],
+                cudaOutput[bgraBase + TextureValueCount + logicalIndex],
+                (unsigned)bgraOutput[memoryIndex]);
+        goto cleanup;
+      }
+    }
+  }
   ok = 1;
 
 cleanup:
@@ -1803,6 +1878,7 @@ main(int argc, char **argv) {
   GPUBufferCreateInfo          textureCudaReadbackInfo = {0};
   GPUBufferCreateInfo          srgbReadbackInfo = {0};
   GPUBufferCreateInfo          packedReadbackInfo = {0};
+  GPUBufferCreateInfo          bgraReadbackInfo = {0};
   GPUTextureCreateInfo         graphicsTextureInfo = {0};
   GPUTextureCreateInfo         cudaTextureInfo = {0};
   GPUTextureCreateInfo         graphicsCubeTextureInfo = {0};
@@ -1815,6 +1891,9 @@ main(int argc, char **argv) {
   GPUTextureCreateInfo         graphicsPackedTextureInfo = {0};
   GPUTextureCreateInfo         cudaPackedTextureInfo = {0};
   GPUTextureCreateInfo         sampledPackedCudaInfo = {0};
+  GPUTextureCreateInfo         graphicsBgraTextureInfo = {0};
+  GPUTextureCreateInfo         cudaBgraTextureInfo = {0};
+  GPUTextureCreateInfo         sampledBgraCudaInfo = {0};
   GPUTextureCreateInfo         layeredMipGraphicsInfo = {0};
   GPUTextureCreateInfo         layeredMipCudaInfo = {0};
   GPUTextureViewCreateInfo     textureViewInfo = {0};
@@ -1822,7 +1901,7 @@ main(int argc, char **argv) {
   GPUComputePipelineCreateInfo pipelineInfo = {0};
   GPUBindGroupEntry            paramsEntry = {0};
   GPUBindGroupEntry            dataEntries[2] = {0};
-  GPUBindGroupEntry            textureEntries[7 + RgbaFormatCount * 2] = {0};
+  GPUBindGroupEntry            textureEntries[8 + RgbaFormatCount * 2] = {0};
   GPUBindGroupEntry            narrowEntries[NarrowFormatCount * 2] = {0};
   GPUBindGroupCreateInfo       groupInfo = {0};
   GPUMemoryRequirements        memoryRequirements;
@@ -1836,6 +1915,8 @@ main(int argc, char **argv) {
   GPUResult                    srgbCreateResult;
   GPUResult                    packedRequirementsResult;
   GPUResult                    packedCreateResult;
+  GPUResult                    bgraRequirementsResult;
+  GPUResult                    bgraCreateResult;
   AdapterList                  graphicsAdapters = {0}, cudaAdapters = {0};
   RoundtripState               state = {0};
   uint64_t                     artifactSize;
@@ -2236,6 +2317,49 @@ main(int argc, char **argv) {
     goto cleanup;
   }
 
+  graphicsBgraTextureInfo        = graphicsTextureInfo;
+  graphicsBgraTextureInfo.label  = "graphics-cuda-bgra8-texture";
+  graphicsBgraTextureInfo.format = GPU_FORMAT_BGRA8_UNORM;
+  cudaBgraTextureInfo            = graphicsBgraTextureInfo;
+  cudaBgraTextureInfo.label      = "cuda-graphics-bgra8-texture";
+  cudaBgraTextureInfo.usage      = GPU_TEXTURE_USAGE_STORAGE;
+  sampledBgraCudaInfo            = cudaBgraTextureInfo;
+  sampledBgraCudaInfo.usage      = GPU_TEXTURE_USAGE_SAMPLED;
+  if (GPUGetSharedTextureMemoryRequirementsEXT(
+        state.interop,
+        cudaFirst ? &sampledBgraCudaInfo : &graphicsBgraTextureInfo,
+        cudaFirst ? &graphicsBgraTextureInfo : &sampledBgraCudaInfo,
+        &memoryRequirements
+      ) != GPU_ERROR_UNSUPPORTED) {
+    fprintf(stderr, "shared graphics/CUDA BGRA8 sampled guard failed\n");
+    goto cleanup;
+  }
+  bgraRequirementsResult = GPUGetSharedTextureMemoryRequirementsEXT(
+    state.interop,
+    cudaFirst ? &cudaBgraTextureInfo : &graphicsBgraTextureInfo,
+    cudaFirst ? &graphicsBgraTextureInfo : &cudaBgraTextureInfo,
+    &memoryRequirements
+  );
+  bgraCreateResult = bgraRequirementsResult == GPU_OK
+    ? GPUCreateSharedTextureEXT(
+        state.interop,
+        cudaFirst ? &cudaBgraTextureInfo : &graphicsBgraTextureInfo,
+        cudaFirst ? &graphicsBgraTextureInfo : &cudaBgraTextureInfo,
+        cudaFirst ? &state.cudaBgraTexture : &state.graphicsBgraTexture,
+        cudaFirst ? &state.graphicsBgraTexture : &state.cudaBgraTexture
+      )
+    : bgraRequirementsResult;
+  if (bgraRequirementsResult != GPU_OK ||
+      memoryRequirements.sizeBytes == 0u ||
+      bgraCreateResult != GPU_OK ||
+      !state.graphicsBgraTexture || !state.cudaBgraTexture) {
+    fprintf(stderr,
+            "shared graphics/CUDA BGRA8 creation failed (%d, %d)\n",
+            bgraRequirementsResult,
+            bgraCreateResult);
+    goto cleanup;
+  }
+
   if (!create_interop_format_texture(&state,
                                      InteropFormatHalf,
                                      &graphicsTextureInfo,
@@ -2375,6 +2499,9 @@ main(int argc, char **argv) {
   packedReadbackInfo.label             = "graphics-cuda-rg11b10-readback";
   packedReadbackInfo.sizeBytes         =
     TextureTexelCount * sizeof(uint32_t);
+  bgraReadbackInfo                     = textureReadbackInfo;
+  bgraReadbackInfo.label               = "graphics-cuda-bgra8-readback";
+  bgraReadbackInfo.sizeBytes           = ByteTextureValueCount;
   if (GPUCreateTextureView(state.cudaTexture,
                            &textureViewInfo,
                            &state.cudaTextureView) != GPU_OK ||
@@ -2439,6 +2566,15 @@ main(int argc, char **argv) {
     fprintf(stderr, "shared graphics/CUDA rg11b10 view setup failed\n");
     goto cleanup;
   }
+  textureViewInfo.label  = "cuda-graphics-bgra8-view";
+  textureViewInfo.format = GPU_FORMAT_BGRA8_UNORM;
+  if (GPUCreateTextureView(state.cudaBgraTexture,
+                           &textureViewInfo,
+                           &state.cudaBgraTextureView) != GPU_OK ||
+      !state.cudaBgraTextureView) {
+    fprintf(stderr, "shared graphics/CUDA BGRA8 view setup failed\n");
+    goto cleanup;
+  }
   if (GPUCreateBuffer(state.graphicsDevice,
                       &textureReadbackInfo,
                       &state.textureReadback) != GPU_OK ||
@@ -2454,7 +2590,11 @@ main(int argc, char **argv) {
       GPUCreateBuffer(state.graphicsDevice,
                       &packedReadbackInfo,
                       &state.packedReadback) != GPU_OK ||
-      !state.packedReadback) {
+      !state.packedReadback ||
+      GPUCreateBuffer(state.graphicsDevice,
+                      &bgraReadbackInfo,
+                      &state.bgraReadback) != GPU_OK ||
+      !state.bgraReadback) {
     fprintf(stderr, "shared graphics/CUDA output setup failed\n");
     goto cleanup;
   }
@@ -2625,10 +2765,16 @@ main(int argc, char **argv) {
     GPU_BINDING_STORAGE_TEXTURE;
   textureEntries[6u + RgbaFormatCount * 2u].textureView =
     state.cudaPackedTextureView;
+  textureEntries[7u + RgbaFormatCount * 2u].binding =
+    7u + RgbaFormatCount * 2u;
+  textureEntries[7u + RgbaFormatCount * 2u].bindingType =
+    GPU_BINDING_STORAGE_TEXTURE;
+  textureEntries[7u + RgbaFormatCount * 2u].textureView =
+    state.cudaBgraTextureView;
   groupInfo.label      = "graphics-cuda-texture-group";
   groupInfo.layout     = textureLayout->bindGroupLayouts[0];
   groupInfo.pEntries   = textureEntries;
-  groupInfo.entryCount = 7u + RgbaFormatCount * 2u;
+  groupInfo.entryCount = 8u + RgbaFormatCount * 2u;
   if (GPUCreateBindGroup(state.cudaDevice,
                          &groupInfo,
                          &state.textureGroup) != GPU_OK ||
@@ -2718,6 +2864,7 @@ cleanup:
   GPUDestroyBuffer(state.textureCudaReadback);
   GPUDestroyBuffer(state.srgbReadback);
   GPUDestroyBuffer(state.packedReadback);
+  GPUDestroyBuffer(state.bgraReadback);
   for (uint32_t i = 0u; i < InteropFormatCount; i++) {
     GPUDestroyBuffer(state.formatTextures[i].readback);
     GPUDestroyTextureView(state.formatTextures[i].sampledView);
@@ -2725,6 +2872,7 @@ cleanup:
   }
   GPUDestroyTextureView(state.cudaSrgbTextureView);
   GPUDestroyTextureView(state.cudaPackedTextureView);
+  GPUDestroyTextureView(state.cudaBgraTextureView);
   GPUDestroyTextureView(state.cudaCubeArrayTextureView);
   GPUDestroyTextureView(state.cudaCubeTextureView);
   GPUDestroyTextureView(state.cudaSampledTextureView);
@@ -2739,6 +2887,7 @@ cleanup:
     }
     GPUDestroyTexture(state.cudaSrgbTexture);
     GPUDestroyTexture(state.cudaPackedTexture);
+    GPUDestroyTexture(state.cudaBgraTexture);
     GPUDestroyTexture(state.cudaCubeArrayTexture);
     GPUDestroyTexture(state.cudaCubeTexture);
     GPUDestroyTexture(state.cudaTexture);
@@ -2747,6 +2896,7 @@ cleanup:
     }
     GPUDestroyTexture(state.graphicsSrgbTexture);
     GPUDestroyTexture(state.graphicsPackedTexture);
+    GPUDestroyTexture(state.graphicsBgraTexture);
     GPUDestroyTexture(state.graphicsCubeArrayTexture);
     GPUDestroyTexture(state.graphicsCubeTexture);
     GPUDestroyTexture(state.graphicsTexture);
@@ -2760,6 +2910,7 @@ cleanup:
     }
     GPUDestroyTexture(state.graphicsSrgbTexture);
     GPUDestroyTexture(state.graphicsPackedTexture);
+    GPUDestroyTexture(state.graphicsBgraTexture);
     GPUDestroyTexture(state.graphicsCubeArrayTexture);
     GPUDestroyTexture(state.graphicsCubeTexture);
     GPUDestroyTexture(state.graphicsTexture);
@@ -2768,6 +2919,7 @@ cleanup:
     }
     GPUDestroyTexture(state.cudaSrgbTexture);
     GPUDestroyTexture(state.cudaPackedTexture);
+    GPUDestroyTexture(state.cudaBgraTexture);
     GPUDestroyTexture(state.cudaCubeArrayTexture);
     GPUDestroyTexture(state.cudaCubeTexture);
     GPUDestroyTexture(state.cudaTexture);

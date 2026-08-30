@@ -81,6 +81,8 @@ static const ExpectedFormat expected[] = {
          INTEGER_FLAGS, 4u, 4u),
   EXPECT(GPU_FORMAT_RGBA8_SINT, CU_AD_FORMAT_SIGNED_INT8,
          INTEGER_FLAGS, 4u, 4u),
+  EXPECT(GPU_FORMAT_BGRA8_UNORM, CU_AD_FORMAT_UNSIGNED_INT8,
+         STORAGE_FLAGS, 4u, 4u),
   EXPECT(GPU_FORMAT_RG32_UINT, CU_AD_FORMAT_UNSIGNED_INT32,
          INTEGER_FLAGS, 8u, 2u),
   EXPECT(GPU_FORMAT_RG32_SINT, CU_AD_FORMAT_SIGNED_INT32,
@@ -174,6 +176,14 @@ validate_texture_desc(void) {
   if (cuda_formatTextureDesc(&unsupported, &source, &actual) ||
       memcmp(&actual, &(CUDA_TEXTURE_DESC){0}, sizeof(actual)) != 0 ||
       cuda_formatTextureDesc(&info, &source, NULL)) {
+    return 0;
+  }
+  if (!cuda_formatInfo(GPU_FORMAT_BGRA8_UNORM, &info)) {
+    return 0;
+  }
+  memset(&actual, 0xa5, sizeof(actual));
+  if (cuda_formatTextureDesc(&info, &source, &actual) ||
+      memcmp(&actual, &(CUDA_TEXTURE_DESC){0}, sizeof(actual)) != 0) {
     return 0;
   }
   return 1;
