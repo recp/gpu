@@ -21,20 +21,23 @@ kern(1, 1, 1) fill_vertices(inout vertices: [GeneratedVertex] #buffer(0) #group(
                             inout drawArgs: [uint] #buffer(1) #group(1),
                             draw: ComputeConstants #push_constant,
                             gid: uint3 #global_id) {
-  if (gid.x == 0) {
-    vertices[gid.x].position = float4(-0.6, -0.6, 0.0, 1.0)
-    vertices[gid.x].color    = float4( 1.0,  0.2, 0.1, 1.0) * draw.tint
+  let signedGid   = int3(gid)
+  let vertexIndex = uint(clamp(signedGid.x, 0, 2))
+
+  if (vertexIndex == 0) {
+    vertices[vertexIndex].position = float4(-0.6, -0.6, 0.0, 1.0)
+    vertices[vertexIndex].color    = float4( 1.0,  0.2, 0.1, 1.0) * draw.tint
     drawArgs[0] = 3
     drawArgs[1] = 1
     drawArgs[2] = 0
     drawArgs[3] = 0
     drawArgs[4] = 0
-  } else if (gid.x == 1) {
-    vertices[gid.x].position = float4( 0.6, -0.6, 0.0, 1.0)
-    vertices[gid.x].color    = float4( 0.1,  1.0, 0.3, 1.0) * draw.tint
+  } else if (vertexIndex == 1) {
+    vertices[vertexIndex].position = float4( 0.6, -0.6, 0.0, 1.0)
+    vertices[vertexIndex].color    = float4( 0.1,  1.0, 0.3, 1.0) * draw.tint
   } else {
-    vertices[gid.x].position = float4( 0.0,  0.6, 0.0, 1.0)
-    vertices[gid.x].color    = float4( 0.2,  0.4, 1.0, 1.0) * draw.tint
+    vertices[vertexIndex].position = float4( 0.0,  0.6, 0.0, 1.0)
+    vertices[vertexIndex].color    = float4( 0.2,  0.4, 1.0, 1.0) * draw.tint
   }
 }
 
