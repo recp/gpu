@@ -1264,6 +1264,8 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
       return adapterDX12->shaderF16;
     case GPU_FEATURE_ATOMIC64:
       return adapterDX12->atomic64;
+    case GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS:
+      return adapterDX12->shaderModel >= D3D_SHADER_MODEL_6_6;
     case GPU_FEATURE_DESCRIPTOR_INDEXING:
       return adapterDX12->descriptorIndexing;
     case GPU_FEATURE_BINDLESS:

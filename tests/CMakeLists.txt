@@ -305,6 +305,20 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
       gpu-api-dx12-sampler-feedback-fixture
       DEPENDS ${GPU_API_DX12_SAMPLER_FEEDBACK_USL_FIXTURE}
     )
+
+    set(GPU_USL_FIXTURE_TARGET_CAPS
+        sm_6_6,compute_derivatives_quads)
+    gpu_add_usl_fixtures(
+      GPU_API_DX12_DERIVATIVE_QUADS_USL_FIXTURE
+      dx12
+      api-clock-derivatives
+      "${PROJECT_SOURCE_DIR}/tests/api/compute_derivatives_quads.usl"
+    )
+    unset(GPU_USL_FIXTURE_TARGET_CAPS)
+    add_custom_target(
+      gpu-api-dx12-derivative-quads-fixture
+      DEPENDS ${GPU_API_DX12_DERIVATIVE_QUADS_USL_FIXTURE}
+    )
   endif()
 
   if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
@@ -722,6 +736,9 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
   if(TARGET gpu-api-dx12-sampler-feedback-fixture)
     add_dependencies(gpu-api-test gpu-api-dx12-sampler-feedback-fixture)
   endif()
+  if(TARGET gpu-api-dx12-derivative-quads-fixture)
+    add_dependencies(gpu-api-test gpu-api-dx12-derivative-quads-fixture)
+  endif()
   if(TARGET gpu-api-vulkan-execution-graph-fixture)
     add_dependencies(gpu-api-test gpu-api-vulkan-execution-graph-fixture)
   endif()
@@ -801,6 +818,12 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
      GPU_API_DX12_SAMPLER_FEEDBACK_USL_FIXTURE)
     set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
       "GPU_SAMPLER_FEEDBACK_USL_PATH=${GPU_API_DX12_SAMPLER_FEEDBACK_USL_FIXTURE}"
+    )
+  endif()
+  if(GPU_API_DEFAULT_BACKEND STREQUAL "dx12" AND
+     GPU_API_DX12_DERIVATIVE_QUADS_USL_FIXTURE)
+    set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
+      "GPU_COMPUTE_DERIVATIVE_QUADS_USL_PATH=${GPU_API_DX12_DERIVATIVE_QUADS_USL_FIXTURE}"
     )
   endif()
   if(GPU_API_DEFAULT_BACKEND STREQUAL "vulkan" AND
