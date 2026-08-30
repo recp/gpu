@@ -3199,8 +3199,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
                             targetAtomCount) != USLOk) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  if (target.backend == USL_BACKEND_DXIL &&
-      !us_supports_target(bytecodeData, (size_t)bytecodeSize, &target)) {
+  if (!us_supports_target(bytecodeData, (size_t)bytecodeSize, &target)) {
     return GPU_ERROR_UNSUPPORTED;
   }
   if (us_compile_options_from_env(&compileOptions) != USLOk) {

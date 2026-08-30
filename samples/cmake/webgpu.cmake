@@ -1069,10 +1069,14 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${GPU_WEBGPU_STORAGE_TEXTURE_DIR}/storage_texture.usl")
   set(GPU_WEBGPU_STORAGE_TEXTURE_US
       "${GPU_WEBGPU_STORAGE_TEXTURE_DIR}/storage_texture.us")
+  set(GPU_WEBGPU_STORAGE_TEXTURE_READ_WRITE_SOURCE
+      "${GPU_WEBGPU_STORAGE_TEXTURE_DIR}/storage_texture_read_write.usl")
+  set(GPU_WEBGPU_STORAGE_TEXTURE_READ_WRITE_US
+      "${GPU_WEBGPU_STORAGE_TEXTURE_DIR}/storage_texture_read_write.us")
   set(GPU_WEBGPU_SAMPLE_TITLE "Storage texture")
   set(GPU_WEBGPU_SAMPLE_KIND "Compute / typed storage texture")
   set(GPU_WEBGPU_SAMPLE_DESCRIPTION
-      "Compute writes two typed RGBA8 textures; render samples their reflected fixed arrays in the same command buffer.")
+      "Compute writes two typed RGBA8 textures, applies native read-write storage when available, and renders their reflected fixed arrays in the same command buffer.")
   set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/storage-texture.c")
   set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/storage-texture.usl")
   set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/storage-texture.wgsl")
@@ -1120,6 +1124,42 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     DEPENDS "${GPU_WEBGPU_STORAGE_TEXTURE_US}"
   )
 
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_STORAGE_TEXTURE_READ_WRITE_US}"
+    BYPRODUCTS "${GPU_WEBGPU_STORAGE_TEXTURE_READ_WRITE_SOURCE}.wgsl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${GPU_WEBGPU_STORAGE_TEXTURE_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${PROJECT_SOURCE_DIR}/samples/gallery/storage-texture/storage_texture_read_write.usl"
+            "${GPU_WEBGPU_STORAGE_TEXTURE_READ_WRITE_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            USL_TARGET_CAPS=storage_texture_extended_access
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_STORAGE_TEXTURE_READ_WRITE_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DGPU_USL_PACKER=${GPU_USL_HOST_PACKER}"
+            "-DGPU_USL_SOURCE=${GPU_WEBGPU_STORAGE_TEXTURE_READ_WRITE_SOURCE}"
+            "-DGPU_USL_CAPS=storage_texture_extended_access"
+            -P "${GPU_WEBGPU_PACK_SCRIPT}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_STORAGE_TEXTURE_READ_WRITE_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/storage-texture-read-write.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_STORAGE_TEXTURE_READ_WRITE_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/storage-texture-read-write.wgsl"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_PACK_SCRIPT}"
+      "${PROJECT_SOURCE_DIR}/samples/gallery/storage-texture/storage_texture_read_write.usl"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-storage-texture-read-write-artifact
+    DEPENDS "${GPU_WEBGPU_STORAGE_TEXTURE_READ_WRITE_US}"
+  )
+
   add_executable(gpu-storage-texture-webgpu-usl
     ${PROJECT_SOURCE_DIR}/samples/gallery/storage-texture/main.c
     ${GPU_WEBGPU_SAMPLE_COMMON_SOURCE}
@@ -1128,17 +1168,19 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   target_link_options(gpu-storage-texture-webgpu-usl PRIVATE
     --use-port=emdawnwebgpu
     "--preload-file=${GPU_WEBGPU_STORAGE_TEXTURE_US}@/storage_texture.us"
+    "--preload-file=${GPU_WEBGPU_STORAGE_TEXTURE_READ_WRITE_US}@/storage_texture_read_write.us"
     "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-storage-texture-webgpu-usl-shell.html"
     -sALLOW_MEMORY_GROWTH=1
   )
   add_dependencies(gpu-storage-texture-webgpu-usl
-                   gpu-webgpu-storage-texture-artifact)
+                   gpu-webgpu-storage-texture-artifact
+                   gpu-webgpu-storage-texture-read-write-artifact)
   set_target_properties(gpu-storage-texture-webgpu-usl PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
     LINK_DEPENDS
-      "${GPU_WEBGPU_GALLERY_DIR}/gpu-storage-texture-webgpu-usl-shell.html;${GPU_WEBGPU_STORAGE_TEXTURE_US}"
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-storage-texture-webgpu-usl-shell.html;${GPU_WEBGPU_STORAGE_TEXTURE_US};${GPU_WEBGPU_STORAGE_TEXTURE_READ_WRITE_US}"
     SUFFIX ".html"
     RUNTIME_OUTPUT_DIRECTORY
       "${GPU_WEBGPU_GALLERY_DIR}"

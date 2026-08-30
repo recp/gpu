@@ -1,0 +1,9 @@
+kern(8, 8, 1) mutate_cs(
+    images: image2d<rgba8unorm, read_write>[2] #texture(0),
+    gid: uint3 #global_id
+) {
+  let left = images[0].read(gid.xy)
+  let right = images[1].read(gid.xy)
+  images[0].write(float4(left.r, left.g + 0.16, left.b, left.a), gid.xy)
+  images[1].write(float4(right.r + 0.16, right.g, right.b, right.a), gid.xy)
+}

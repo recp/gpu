@@ -43,6 +43,7 @@ gpu_test_shader_f16(GPUAdapter *adapter, const char *bytecodePath) {
   GPUFence                     *fence        = NULL;
   void                         *bytecode      = NULL;
   uint64_t                      bytecodeSize  = 0u;
+  GPUResult                     disabledResult;
   int                           ok            = 0;
 
   if (!GPUIsFeatureSupported(adapter, feature)) {
@@ -60,14 +61,23 @@ gpu_test_shader_f16(GPUAdapter *adapter, const char *bytecodePath) {
 
   deviceInfo.chain.sType      = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize = sizeof(deviceInfo);
-  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
-      !disabledDevice || GPUIsFeatureEnabled(disabledDevice, feature) ||
-      GPUCreateShaderLibraryFromUSL(disabledDevice,
-                                    bytecode,
-                                    bytecodeSize,
-                                    &disabledLibrary) == GPU_OK ||
+  disabledResult = gpu_test_create_device(adapter,
+                                          &deviceInfo,
+                                          &disabledDevice);
+  if (disabledResult != GPU_OK || !disabledDevice ||
+      GPUIsFeatureEnabled(disabledDevice, feature)) {
+    fprintf(stderr, "shader f16 disabled device setup failed\n");
+    goto cleanup;
+  }
+  disabledResult = GPUCreateShaderLibraryFromUSL(disabledDevice,
+                                                 bytecode,
+                                                 bytecodeSize,
+                                                 &disabledLibrary);
+  if (disabledResult != GPU_ERROR_UNSUPPORTED ||
       disabledLibrary) {
-    fprintf(stderr, "shader f16 was accepted without feature enablement\n");
+    fprintf(stderr,
+            "shader f16 returned %d without feature enablement\n",
+            (int)disabledResult);
     goto cleanup;
   }
   GPUDestroyDevice(disabledDevice);

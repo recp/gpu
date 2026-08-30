@@ -22,8 +22,11 @@ typedef struct WebGPUStorageTexture {
   GPUSurface         *surface;
   GPUSwapchain       *swapchain;
   GPUShaderLibrary   *library;
+  GPUShaderLibrary   *readWriteLibrary;
   GPUShaderLayout    *shaderLayout;
+  GPUShaderLayout    *readWriteLayout;
   GPUComputePipeline *paintPipeline;
+  GPUComputePipeline *readWritePipeline;
   GPUComputePipeline *filterPipeline;
   GPURenderPipeline  *renderPipeline;
   GPUBuffer          *vertexBuffer;
@@ -33,6 +36,7 @@ typedef struct WebGPUStorageTexture {
   GPUTextureView     *filteredViews[STORAGE_TEXTURE_COUNT];
   GPUSampler         *sampler;
   GPUBindGroup       *paintGroup;
+  GPUBindGroup       *readWriteGroup;
   GPUBindGroup       *readGroup;
   GPUBindGroup       *filterGroup;
   GPUBindGroup       *sampleGroup;
@@ -41,6 +45,7 @@ typedef struct WebGPUStorageTexture {
   uint32_t            width;
   uint32_t            height;
   uint32_t            frameCount;
+  bool                nativeReadWrite;
   bool                failed;
 } WebGPUStorageTexture;
 
@@ -204,6 +209,67 @@ create_shader(WebGPUStorageTexture *state) {
 }
 
 static int
+create_read_write_shader(WebGPUStorageTexture *state) {
+  const GPUBindGroupLayoutEntry *entries;
+  void                          *artifact;
+  uint64_t                       artifactSize;
+  uint32_t                       entryCount;
+  GPUResult                      result;
+
+  artifact     = NULL;
+  artifactSize = 0u;
+  if (!read_file("/storage_texture_read_write.us",
+                 &artifact,
+                 &artifactSize)) {
+    set_status("GPU: failed to read /storage_texture_read_write.us", 1);
+    return 0;
+  }
+
+  result = GPUCreateShaderLibraryFromUSL(state->device,
+                                         artifact,
+                                         artifactSize,
+                                         &state->readWriteLibrary);
+  free(artifact);
+  if (result == GPU_ERROR_UNSUPPORTED) {
+    state->nativeReadWrite = false;
+    return 1;
+  }
+  if (result != GPU_OK || !state->readWriteLibrary ||
+      GPUCreateShaderLayout(state->device,
+                            state->readWriteLibrary,
+                            &state->readWriteLayout) != GPU_OK ||
+      !state->readWriteLayout ||
+      state->readWriteLayout->bindGroupLayoutCount != 1u ||
+      !state->readWriteLayout->bindGroupLayouts ||
+      !state->readWriteLayout->bindGroupLayouts[0] ||
+      !state->readWriteLayout->pipelineLayout) {
+    set_status("GPU: failed to create native read-write storage shader", 1);
+    return 0;
+  }
+
+  entryCount = 0u;
+  entries = GPUGetBindGroupLayoutEntries(
+    state->readWriteLayout->bindGroupLayouts[0],
+    &entryCount
+  );
+  if (!entries || entryCount != 1u ||
+      entries[0].binding != 0u ||
+      entries[0].bindingType != GPU_BINDING_STORAGE_TEXTURE ||
+      entries[0].arrayCount != STORAGE_TEXTURE_COUNT ||
+      entries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
+      entries[0].storageTexture.viewType != GPU_TEXTURE_VIEW_2D ||
+      entries[0].storageTexture.format != GPU_FORMAT_RGBA8_UNORM ||
+      entries[0].storageTexture.access !=
+        GPU_STORAGE_TEXTURE_ACCESS_READ_WRITE) {
+    set_status("GPU: unexpected read-write storage reflection", 1);
+    return 0;
+  }
+
+  state->nativeReadWrite = true;
+  return 1;
+}
+
+static int
 create_pipelines(WebGPUStorageTexture *state) {
   GPUComputePipelineCreateInfo computeInfo = {0};
   GPURenderPipelineCreateInfo  renderInfo = {0};
@@ -225,7 +291,23 @@ create_pipelines(WebGPUStorageTexture *state) {
     return 0;
   }
 
+  if (state->nativeReadWrite) {
+    computeInfo.label      = "storage-texture-webgpu-read-write";
+    computeInfo.layout     = state->readWriteLayout->pipelineLayout;
+    computeInfo.library    = state->readWriteLibrary;
+    computeInfo.entryPoint = "mutate_cs";
+    if (GPUCreateComputePipeline(state->device,
+                                 &computeInfo,
+                                 &state->readWritePipeline) != GPU_OK ||
+        !state->readWritePipeline) {
+      set_status("GPU: failed to create read-write storage pipeline", 1);
+      return 0;
+    }
+  }
+
   computeInfo.label      = "storage-texture-webgpu-filter";
+  computeInfo.layout     = state->shaderLayout->pipelineLayout;
+  computeInfo.library    = state->library;
   computeInfo.entryPoint = "filter_cs";
   if (GPUCreateComputePipeline(state->device,
                                &computeInfo,
@@ -300,6 +382,7 @@ create_resources(WebGPUStorageTexture *state) {
   GPUTextureViewCreateInfo     viewInfo = {0};
   GPUSamplerCreateInfo         samplerInfo = {0};
   GPUBindGroupEntry            paintEntries[STORAGE_TEXTURE_COUNT] = {0};
+  GPUBindGroupEntry            readWriteEntries[STORAGE_TEXTURE_COUNT] = {0};
   GPUBindGroupEntry            readEntries[STORAGE_TEXTURE_COUNT] = {0};
   GPUBindGroupEntry            filterEntries[STORAGE_TEXTURE_COUNT] = {0};
   GPUBindGroupEntry            sampleEntries[STORAGE_TEXTURE_COUNT + 1u] = {0};
@@ -402,6 +485,11 @@ create_resources(WebGPUStorageTexture *state) {
     paintEntries[i].arrayIndex  = i;
     paintEntries[i].bindingType = GPU_BINDING_STORAGE_TEXTURE;
 
+    readWriteEntries[i].textureView = state->sourceViews[i];
+    readWriteEntries[i].binding     = 0u;
+    readWriteEntries[i].arrayIndex  = i;
+    readWriteEntries[i].bindingType = GPU_BINDING_STORAGE_TEXTURE;
+
     readEntries[i].textureView = state->sourceViews[i];
     readEntries[i].binding     = 0u;
     readEntries[i].arrayIndex  = i;
@@ -429,6 +517,19 @@ create_resources(WebGPUStorageTexture *state) {
       !state->paintGroup) {
     set_status("GPU: failed to create the reflected paint group", 1);
     return 0;
+  }
+
+  if (state->nativeReadWrite) {
+    groupInfo.label    = "storage-texture-webgpu-read-write-group";
+    groupInfo.layout   = state->readWriteLayout->bindGroupLayouts[0];
+    groupInfo.pEntries = readWriteEntries;
+    if (GPUCreateBindGroup(state->device,
+                           &groupInfo,
+                           &state->readWriteGroup) != GPU_OK ||
+        !state->readWriteGroup) {
+      set_status("GPU: failed to create the read-write storage group", 1);
+      return 0;
+    }
   }
 
   groupInfo.label    = "storage-texture-webgpu-read-group";
@@ -520,7 +621,10 @@ render_frame(void *userData) {
   for (uint32_t i = 0u; i < STORAGE_TEXTURE_COUNT; i++) {
     textureBarriers[i].texture    = state->sourceTextures[i];
     textureBarriers[i].srcAccess  = GPU_ACCESS_SHADER_WRITE;
-    textureBarriers[i].dstAccess  = GPU_ACCESS_SHADER_READ;
+    textureBarriers[i].dstAccess  = GPU_ACCESS_SHADER_READ |
+                                    (state->nativeReadWrite
+                                       ? GPU_ACCESS_SHADER_WRITE
+                                       : 0u);
     textureBarriers[i].mipCount   = 1u;
     textureBarriers[i].layerCount = 1u;
   }
@@ -529,6 +633,28 @@ render_frame(void *userData) {
   barriers.dstStages           = GPU_STAGE_COMPUTE;
   barriers.textureBarrierCount = STORAGE_TEXTURE_COUNT;
   GPUEncodeBarriers(cmdb, &barriers);
+
+  if (state->nativeReadWrite) {
+    compute = GPUBeginComputePass(cmdb,
+                                  "storage-texture-webgpu-read-write");
+    if (!compute) {
+      (void)GPUDiscardCommandBuffer(cmdb);
+      GPUEndFrame(frame);
+      return;
+    }
+    GPUBindComputePipeline(compute, state->readWritePipeline);
+    GPUBindComputeGroup(compute, 0u, state->readWriteGroup, 0u, NULL);
+    GPUDispatch(compute,
+                STORAGE_TEXTURE_SIZE / STORAGE_WORKGROUP_SIZE,
+                STORAGE_TEXTURE_SIZE / STORAGE_WORKGROUP_SIZE,
+                1u);
+    GPUEndComputePass(compute);
+    for (uint32_t i = 0u; i < STORAGE_TEXTURE_COUNT; i++) {
+      textureBarriers[i].srcAccess = GPU_ACCESS_SHADER_WRITE;
+      textureBarriers[i].dstAccess = GPU_ACCESS_SHADER_READ;
+    }
+    GPUEncodeBarriers(cmdb, &barriers);
+  }
 
   compute = GPUBeginComputePass(cmdb, "storage-texture-webgpu-filter");
   if (!compute) {
@@ -644,12 +770,16 @@ webgpu_ready(GPUResult  result,
                                                 state->height);
   if (!state->swapchain ||
       !create_shader(state) ||
+      !create_read_write_shader(state) ||
       !create_pipelines(state) ||
       !create_resources(state)) {
     return;
   }
 
-  set_status("GPU: WebGPU typed storage texture ready", 0);
+  set_status(state->nativeReadWrite
+               ? "GPU: WebGPU native read-write storage texture ready"
+               : "GPU: WebGPU read-only storage fallback ready",
+             0);
   emscripten_set_main_loop_arg(render_frame, state, 0, true);
 }
 
