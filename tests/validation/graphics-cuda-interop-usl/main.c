@@ -1090,24 +1090,43 @@ cleanup:
   GPUDestroyShaderLibrary(library);
   GPUDestroyFence(state.acquireFence);
   GPUDestroyFence(state.releaseFence);
-  GPUDestroySemaphore(state.cudaSemaphore);
-  GPUDestroySemaphore(state.graphicsSemaphore);
-  GPUDestroyBuffer(state.cudaBuffer);
-  GPUDestroyBuffer(state.graphicsBuffer);
   GPUDestroyBuffer(state.paramsBuffer);
   GPUDestroyBuffer(state.textureReadback);
   GPUDestroyBuffer(state.textureCudaReadback);
   GPUDestroyTextureView(state.cudaSampledTextureView);
   GPUDestroyTextureView(state.cudaTextureView);
-  GPUDestroyTexture(state.cudaTexture);
-  GPUDestroyTexture(state.graphicsTexture);
+  if (cudaFirst) {
+    GPUDestroySemaphore(state.cudaSemaphore);
+    GPUDestroySemaphore(state.graphicsSemaphore);
+    GPUDestroyBuffer(state.cudaBuffer);
+    GPUDestroyBuffer(state.graphicsBuffer);
+    GPUDestroyTexture(state.cudaTexture);
+    GPUDestroyTexture(state.graphicsTexture);
+  } else {
+    GPUDestroySemaphore(state.graphicsSemaphore);
+    GPUDestroySemaphore(state.cudaSemaphore);
+    GPUDestroyBuffer(state.graphicsBuffer);
+    GPUDestroyBuffer(state.cudaBuffer);
+    GPUDestroyTexture(state.graphicsTexture);
+    GPUDestroyTexture(state.cudaTexture);
+  }
   GPUDestroyDeviceInteropEXT(state.interop);
-  GPUDestroyDevice(state.cudaDevice);
-  GPUDestroyDevice(state.graphicsDevice);
+  if (cudaFirst) {
+    GPUDestroyDevice(state.cudaDevice);
+    GPUDestroyDevice(state.graphicsDevice);
+  } else {
+    GPUDestroyDevice(state.graphicsDevice);
+    GPUDestroyDevice(state.cudaDevice);
+  }
   free(cudaAdapters.items);
   free(graphicsAdapters.items);
-  GPUDestroyInstance(cudaInstance);
-  GPUDestroyInstance(graphicsInstance);
+  if (cudaFirst) {
+    GPUDestroyInstance(cudaInstance);
+    GPUDestroyInstance(graphicsInstance);
+  } else {
+    GPUDestroyInstance(graphicsInstance);
+    GPUDestroyInstance(cudaInstance);
+  }
   free(artifact);
   free(textureArtifact);
 
