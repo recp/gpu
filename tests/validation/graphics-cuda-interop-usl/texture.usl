@@ -21,10 +21,19 @@ kern(8, 8, 1) interop_texture_cs(
   cubeArray: texturecube_array<float> #texture(4),
   halfImage: image2d_array<rgba16float, read_write> #texture(5),
   halfSampled: texture2d_array<half> #texture(6),
+  unormImage: image2d_array<rgba8unorm, read_write> #texture(7),
+  unormSampled: texture2d_array<float> #texture(8),
+  uintImage: image2d_array<rgba8uint, read_write> #texture(9),
+  uintSampled: texture2d_array<uint> #texture(10),
+  sintImage: image2d_array<rgba8sint, read_write> #texture(11),
+  sintSampled: texture2d_array<int> #texture(12),
   gid: uint3 #global_id
 ) {
   let texelCount = 8u * 8u * 2u
   let halfBase = texelCount * 2u + 6u + 12u
+  let unormBase = halfBase + texelCount * 2u
+  let uintBase = unormBase + texelCount * 2u
+  let sintBase = uintBase + texelCount * 2u
   if gid.z < 2u {
     let index = (gid.z * 8u + gid.y) * 8u + gid.x
     let original = sampled.read(int3(gid))
@@ -32,12 +41,27 @@ kern(8, 8, 1) interop_texture_cs(
     let halfOriginal = halfSampled.read(int3(gid))
     let halfColor = halfImage.read(gid) * half4(half(2.0)) +
                     half4(half(1.0))
+    let unormOriginal = unormSampled.read(int3(gid))
+    let unormColor = float4(1.0) - unormImage.read(gid)
+    let uintOriginal = uintSampled.read(int3(gid))
+    let uintColor = uintImage.read(gid) + uint4(1u)
+    let sintOriginal = sintSampled.read(int3(gid))
+    let sintColor = sintImage.read(gid) + int4(7)
     image.write(color, gid)
     halfImage.write(halfColor, gid)
+    unormImage.write(unormColor, gid)
+    uintImage.write(uintColor, gid)
+    sintImage.write(sintColor, gid)
     output[index] = original
     output[texelCount + index] = color
     output[halfBase + index] = float4(halfOriginal)
     output[halfBase + texelCount + index] = float4(halfColor)
+    output[unormBase + index] = unormOriginal
+    output[unormBase + texelCount + index] = unormColor
+    output[uintBase + index] = float4(uintOriginal)
+    output[uintBase + texelCount + index] = float4(uintColor)
+    output[sintBase + index] = float4(sintOriginal)
+    output[sintBase + texelCount + index] = float4(sintColor)
   }
   if gid.x == 0u && gid.y == 0u && gid.z < 6u {
     output[texelCount * 2u + gid.z] = cube.sample(
