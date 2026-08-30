@@ -19,16 +19,25 @@ kern(8, 8, 1) interop_texture_cs(
   sampled: texture2d_array<float> #texture(2),
   cube: texturecube<float> #texture(3),
   cubeArray: texturecube_array<float> #texture(4),
+  halfImage: image2d_array<rgba16float, read_write> #texture(5),
+  halfSampled: texture2d_array<half> #texture(6),
   gid: uint3 #global_id
 ) {
   let texelCount = 8u * 8u * 2u
+  let halfBase = texelCount * 2u + 6u + 12u
   if gid.z < 2u {
     let index = (gid.z * 8u + gid.y) * 8u + gid.x
     let original = sampled.read(int3(gid))
     let color = image.read(gid) * 2.0 + float4(1.0)
+    let halfOriginal = halfSampled.read(int3(gid))
+    let halfColor = halfImage.read(gid) * half4(half(2.0)) +
+                    half4(half(1.0))
     image.write(color, gid)
+    halfImage.write(halfColor, gid)
     output[index] = original
     output[texelCount + index] = color
+    output[halfBase + index] = float4(halfOriginal)
+    output[halfBase + texelCount + index] = float4(halfColor)
   }
   if gid.x == 0u && gid.y == 0u && gid.z < 6u {
     output[texelCount * 2u + gid.z] = cube.sample(

@@ -25,9 +25,12 @@ enum {
   CubeOutputValueCount          = CubeLayers * 4u,
   CubeArrayValueCount           = CubeFaceValueCount * CubeArrayLayers,
   CubeArrayOutputValueCount     = CubeArrayLayers * 4u,
+  HalfTextureValueCount         = TextureValueCount,
+  HalfFloatOutputValueCount     = HalfTextureValueCount * 2u,
   TextureOutputValueCount       = TextureValueCount * 2u +
                                   CubeOutputValueCount +
-                                  CubeArrayOutputValueCount
+                                  CubeArrayOutputValueCount +
+                                  HalfFloatOutputValueCount
 };
 
 typedef struct Params {
@@ -50,6 +53,7 @@ typedef struct RoundtripState {
   GPUBuffer           *cudaBuffer;
   GPUBuffer           *paramsBuffer;
   GPUBuffer           *textureReadback;
+  GPUBuffer           *halfTextureReadback;
   GPUBuffer           *textureCudaReadback;
   GPUTexture          *graphicsTexture;
   GPUTexture          *cudaTexture;
@@ -57,10 +61,14 @@ typedef struct RoundtripState {
   GPUTexture          *cudaCubeTexture;
   GPUTexture          *graphicsCubeArrayTexture;
   GPUTexture          *cudaCubeArrayTexture;
+  GPUTexture          *graphicsHalfTexture;
+  GPUTexture          *cudaHalfTexture;
   GPUTextureView      *cudaTextureView;
   GPUTextureView      *cudaSampledTextureView;
   GPUTextureView      *cudaCubeTextureView;
   GPUTextureView      *cudaCubeArrayTextureView;
+  GPUTextureView      *cudaHalfTextureView;
+  GPUTextureView      *cudaHalfSampledTextureView;
   GPUSemaphore        *graphicsSemaphore;
   GPUSemaphore        *cudaSemaphore;
   GPUFence            *releaseFence;
@@ -366,7 +374,7 @@ run_texture_roundtrip(RoundtripState *state) {
   GPUCommandBuffer           *releaseCmdb, *cudaCmdb, *acquireCmdb;
   GPUComputePassEncoder      *computePass;
   GPUTransferPassEncoder     *transferPass;
-  GPUSharedTextureBarrierEXT  toCuda[3] = {0}, toGraphics[3] = {0};
+  GPUSharedTextureBarrierEXT  toCuda[4] = {0}, toGraphics[4] = {0};
   GPUSharedBarrierBatchEXT    acquireCuda = {0}, acquireGraphics = {0};
   GPUBufferTextureCopyRegion  copyRegion = {0};
   GPUTextureWriteRegion       writeRegion = {0};
@@ -377,11 +385,30 @@ run_texture_roundtrip(RoundtripState *state) {
   float                       input[TextureValueCount];
   float                       cubeInput[CubeValueCount];
   float                       cubeArrayInput[CubeArrayValueCount];
+  uint16_t                    halfInput[HalfTextureValueCount];
+  uint16_t                    halfOutput[HalfTextureValueCount];
   float                       output[TextureValueCount];
   float                       cudaOutput[TextureOutputValueCount];
   const char                 *failure;
+  uint32_t                    halfBase;
   int                         releaseSubmitted, cudaSubmitted;
   int                         acquireSubmitted, ok;
+  static const uint16_t       halfInputBits[8] = {
+    0x0000u, 0x3800u, 0x3c00u, 0xb800u,
+    0x4000u, 0xbc00u, 0x3400u, 0xb400u
+  };
+  static const uint16_t       halfOutputBits[8] = {
+    0x3c00u, 0x4000u, 0x4200u, 0x0000u,
+    0x4500u, 0xbc00u, 0x3e00u, 0x3800u
+  };
+  static const float          halfInputValues[8] = {
+    0.0f, 0.5f, 1.0f, -0.5f,
+    2.0f, -1.0f, 0.25f, -0.25f
+  };
+  static const float          halfOutputValues[8] = {
+    1.0f, 2.0f, 3.0f, 0.0f,
+    5.0f, -1.0f, 1.5f, 0.5f
+  };
 
   releaseCmdb       = NULL;
   cudaCmdb          = NULL;
@@ -415,6 +442,13 @@ run_texture_roundtrip(RoundtripState *state) {
     channel           = i % 4u;
     cubeArrayInput[i] = (float)(layer * 8u + channel) + 0.5f;
   }
+  for (uint32_t i = 0u; i < HalfTextureValueCount; i++) {
+    uint32_t pattern;
+
+    pattern       = (i / CubeFaceValueCount) * 4u + i % 4u;
+    halfInput[i]  = halfInputBits[pattern];
+    halfOutput[i] = 0u;
+  }
 
   writeRegion.aspect       = GPU_TEXTURE_ASPECT_ALL;
   writeRegion.width        = TextureWidth;
@@ -431,6 +465,15 @@ run_texture_roundtrip(RoundtripState *state) {
                            sizeof(input)) != GPU_OK) {
     goto cleanup;
   }
+  writeRegion.bytesPerRow = TextureWidth * 4u * sizeof(uint16_t);
+  if (GPUQueueWriteTexture(state->graphicsQueue,
+                           state->graphicsHalfTexture,
+                           &writeRegion,
+                           halfInput,
+                           sizeof(halfInput)) != GPU_OK) {
+    goto cleanup;
+  }
+  writeRegion.bytesPerRow = TextureWidth * 4u * sizeof(float);
   writeRegion.layerCount = CubeLayers;
   if (GPUQueueWriteTexture(state->graphicsQueue,
                            state->graphicsCubeTexture,
@@ -484,10 +527,18 @@ run_texture_roundtrip(RoundtripState *state) {
   toCuda[2].baseMip            = state->textureMipLevel;
   toCuda[2].mipCount           = 1u;
   toCuda[2].layerCount         = CubeArrayLayers;
+  toCuda[3].sourceTexture      = state->graphicsHalfTexture;
+  toCuda[3].destinationTexture = state->cudaHalfTexture;
+  toCuda[3].srcAccess          = GPU_ACCESS_TRANSFER_WRITE;
+  toCuda[3].dstAccess          = GPU_ACCESS_SHADER_READ |
+                                 GPU_ACCESS_SHADER_WRITE;
+  toCuda[3].baseMip            = state->textureMipLevel;
+  toCuda[3].mipCount           = 1u;
+  toCuda[3].layerCount         = TextureLayers;
   acquireCuda.pTextureBarriers    = toCuda;
   acquireCuda.srcStages           = GPU_STAGE_TRANSFER;
   acquireCuda.dstStages           = GPU_STAGE_COMPUTE;
-  acquireCuda.textureBarrierCount = 3u;
+  acquireCuda.textureBarrierCount = 4u;
   failure = "release/acquire encoding";
   if (GPUEncodeSharedReleaseEXT(state->interop,
                                 releaseCmdb,
@@ -529,10 +580,17 @@ run_texture_roundtrip(RoundtripState *state) {
   toGraphics[2].baseMip            = state->textureMipLevel;
   toGraphics[2].mipCount           = 1u;
   toGraphics[2].layerCount         = CubeArrayLayers;
+  toGraphics[3].sourceTexture      = state->cudaHalfTexture;
+  toGraphics[3].destinationTexture = state->graphicsHalfTexture;
+  toGraphics[3].srcAccess          = GPU_ACCESS_SHADER_WRITE;
+  toGraphics[3].dstAccess          = GPU_ACCESS_TRANSFER_READ;
+  toGraphics[3].baseMip            = state->textureMipLevel;
+  toGraphics[3].mipCount           = 1u;
+  toGraphics[3].layerCount         = TextureLayers;
   acquireGraphics.pTextureBarriers    = toGraphics;
   acquireGraphics.srcStages           = GPU_STAGE_COMPUTE;
   acquireGraphics.dstStages           = GPU_STAGE_TRANSFER;
-  acquireGraphics.textureBarrierCount = 3u;
+  acquireGraphics.textureBarrierCount = 4u;
   failure = "return/copy encoding";
   if (GPUEncodeSharedReleaseEXT(state->interop,
                                 cudaCmdb,
@@ -556,6 +614,11 @@ run_texture_roundtrip(RoundtripState *state) {
   GPUCopyTextureToBuffer(transferPass,
                          state->graphicsTexture,
                          state->textureReadback,
+                         &copyRegion);
+  copyRegion.bytesPerRow = TextureWidth * 4u * sizeof(uint16_t);
+  GPUCopyTextureToBuffer(transferPass,
+                         state->graphicsHalfTexture,
+                         state->halfTextureReadback,
                          &copyRegion);
   GPUEndTransferPass(transferPass);
   transferPass = NULL;
@@ -614,6 +677,11 @@ run_texture_roundtrip(RoundtripState *state) {
                          0u,
                          output,
                          sizeof(output)) != GPU_OK ||
+      GPUQueueReadBuffer(state->graphicsQueue,
+                         state->halfTextureReadback,
+                         0u,
+                         halfOutput,
+                         sizeof(halfOutput)) != GPU_OK ||
       GPUQueueReadBuffer(state->cudaQueue,
                          state->textureCudaReadback,
                          0u,
@@ -690,6 +758,26 @@ run_texture_roundtrip(RoundtripState *state) {
       }
     }
   }
+  halfBase = TextureValueCount * 2u + CubeOutputValueCount +
+             CubeArrayOutputValueCount;
+  for (uint32_t i = 0u; i < HalfTextureValueCount; i++) {
+    uint32_t pattern;
+
+    pattern = (i / CubeFaceValueCount) * 4u + i % 4u;
+    if (fabsf(cudaOutput[halfBase + i] - halfInputValues[pattern]) >
+          0.0001f ||
+        fabsf(cudaOutput[halfBase + HalfTextureValueCount + i] -
+               halfOutputValues[pattern]) > 0.0001f ||
+        halfOutput[i] != halfOutputBits[pattern]) {
+      fprintf(stderr,
+              "CUDA half texture mismatch at %u: %.9g/%.9g/%04x\n",
+              i,
+              cudaOutput[halfBase + i],
+              cudaOutput[halfBase + HalfTextureValueCount + i],
+              (unsigned)halfOutput[i]);
+      goto cleanup;
+    }
+  }
   ok = 1;
 
 cleanup:
@@ -740,6 +828,7 @@ main(int argc, char **argv) {
   GPUBufferCreateInfo          cudaBufferInfo = {0};
   GPUBufferCreateInfo          paramsBufferInfo = {0};
   GPUBufferCreateInfo          textureReadbackInfo = {0};
+  GPUBufferCreateInfo          halfTextureReadbackInfo = {0};
   GPUBufferCreateInfo          textureCudaReadbackInfo = {0};
   GPUTextureCreateInfo         graphicsTextureInfo = {0};
   GPUTextureCreateInfo         cudaTextureInfo = {0};
@@ -747,6 +836,8 @@ main(int argc, char **argv) {
   GPUTextureCreateInfo         cudaCubeTextureInfo = {0};
   GPUTextureCreateInfo         graphicsCubeArrayTextureInfo = {0};
   GPUTextureCreateInfo         cudaCubeArrayTextureInfo = {0};
+  GPUTextureCreateInfo         graphicsHalfTextureInfo = {0};
+  GPUTextureCreateInfo         cudaHalfTextureInfo = {0};
   GPUTextureCreateInfo         layeredMipGraphicsInfo = {0};
   GPUTextureCreateInfo         layeredMipCudaInfo = {0};
   GPUTextureViewCreateInfo     textureViewInfo = {0};
@@ -754,7 +845,7 @@ main(int argc, char **argv) {
   GPUComputePipelineCreateInfo pipelineInfo = {0};
   GPUBindGroupEntry            paramsEntry = {0};
   GPUBindGroupEntry            dataEntries[2] = {0};
-  GPUBindGroupEntry            textureEntries[5] = {0};
+  GPUBindGroupEntry            textureEntries[7] = {0};
   GPUBindGroupCreateInfo       groupInfo = {0};
   GPUMemoryRequirements        memoryRequirements;
   GPUResult                    textureRequirementsResult;
@@ -763,6 +854,8 @@ main(int argc, char **argv) {
   GPUResult                    cubeCreateResult;
   GPUResult                    cubeArrayRequirementsResult;
   GPUResult                    cubeArrayCreateResult;
+  GPUResult                    halfRequirementsResult;
+  GPUResult                    halfCreateResult;
   AdapterList                  graphicsAdapters = {0}, cudaAdapters = {0};
   RoundtripState               state = {0};
   uint64_t                     artifactSize;
@@ -1077,6 +1170,45 @@ main(int argc, char **argv) {
     goto cleanup;
   }
 
+  graphicsHalfTextureInfo        = graphicsTextureInfo;
+  graphicsHalfTextureInfo.label  = "graphics-cuda-half-texture";
+  graphicsHalfTextureInfo.format = GPU_FORMAT_RGBA16_FLOAT;
+  cudaHalfTextureInfo            = graphicsHalfTextureInfo;
+  cudaHalfTextureInfo.label      = "cuda-graphics-half-texture";
+  cudaHalfTextureInfo.usage      = GPU_TEXTURE_USAGE_SAMPLED |
+                                   GPU_TEXTURE_USAGE_STORAGE;
+  halfRequirementsResult = GPUGetSharedTextureMemoryRequirementsEXT(
+    state.interop,
+    cudaFirst ? &cudaHalfTextureInfo : &graphicsHalfTextureInfo,
+    cudaFirst ? &graphicsHalfTextureInfo : &cudaHalfTextureInfo,
+    &memoryRequirements
+  );
+  halfCreateResult = halfRequirementsResult == GPU_OK
+    ? GPUCreateSharedTextureEXT(state.interop,
+                                cudaFirst
+                                  ? &cudaHalfTextureInfo
+                                  : &graphicsHalfTextureInfo,
+                                cudaFirst
+                                  ? &graphicsHalfTextureInfo
+                                  : &cudaHalfTextureInfo,
+                                cudaFirst
+                                  ? &state.cudaHalfTexture
+                                  : &state.graphicsHalfTexture,
+                                cudaFirst
+                                  ? &state.graphicsHalfTexture
+                                  : &state.cudaHalfTexture)
+    : halfRequirementsResult;
+  if (halfRequirementsResult != GPU_OK ||
+      memoryRequirements.sizeBytes == 0u ||
+      halfCreateResult != GPU_OK ||
+      !state.graphicsHalfTexture || !state.cudaHalfTexture) {
+    fprintf(stderr,
+            "shared graphics/CUDA half texture creation failed (%d, %d)\n",
+            halfRequirementsResult,
+            halfCreateResult);
+    goto cleanup;
+  }
+
   textureViewInfo.chain.sType      =
     GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
   textureViewInfo.chain.structSize = sizeof(textureViewInfo);
@@ -1093,6 +1225,10 @@ main(int argc, char **argv) {
     TextureValueCount * sizeof(float);
   textureReadbackInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
                                          GPU_BUFFER_USAGE_COPY_SRC;
+  halfTextureReadbackInfo              = textureReadbackInfo;
+  halfTextureReadbackInfo.label        = "graphics-cuda-half-readback";
+  halfTextureReadbackInfo.sizeBytes    =
+    HalfTextureValueCount * sizeof(uint16_t);
   textureCudaReadbackInfo              = textureReadbackInfo;
   textureCudaReadbackInfo.label        = "cuda-texture-readback";
   textureCudaReadbackInfo.sizeBytes    =
@@ -1136,16 +1272,42 @@ main(int argc, char **argv) {
   if (GPUCreateTextureView(state.cudaCubeArrayTexture,
                            &textureViewInfo,
                            &state.cudaCubeArrayTextureView) != GPU_OK ||
-      !state.cudaCubeArrayTextureView ||
+      !state.cudaCubeArrayTextureView) {
+    fprintf(stderr, "shared graphics/CUDA cube-array view setup failed\n");
+    goto cleanup;
+  }
+  textureViewInfo.label           = "cuda-graphics-half-texture-view";
+  textureViewInfo.viewType        = GPU_TEXTURE_VIEW_2D_ARRAY;
+  textureViewInfo.format          = GPU_FORMAT_RGBA16_FLOAT;
+  textureViewInfo.mipLevelCount   = 1u;
+  textureViewInfo.arrayLayerCount = TextureLayers;
+  if (GPUCreateTextureView(state.cudaHalfTexture,
+                           &textureViewInfo,
+                           &state.cudaHalfTextureView) != GPU_OK ||
+      !state.cudaHalfTextureView) {
+    fprintf(stderr, "shared graphics/CUDA half storage view setup failed\n");
+    goto cleanup;
+  }
+  textureViewInfo.label = "cuda-graphics-half-sampled-view";
+  textureViewInfo.mipLevelCount =
+    graphicsHalfTextureInfo.mipLevelCount - state.textureMipLevel;
+  if (GPUCreateTextureView(state.cudaHalfTexture,
+                           &textureViewInfo,
+                           &state.cudaHalfSampledTextureView) != GPU_OK ||
+      !state.cudaHalfSampledTextureView ||
       GPUCreateBuffer(state.graphicsDevice,
                       &textureReadbackInfo,
                       &state.textureReadback) != GPU_OK ||
       !state.textureReadback ||
+      GPUCreateBuffer(state.graphicsDevice,
+                      &halfTextureReadbackInfo,
+                      &state.halfTextureReadback) != GPU_OK ||
+      !state.halfTextureReadback ||
       GPUCreateBuffer(state.cudaDevice,
                       &textureCudaReadbackInfo,
                       &state.textureCudaReadback) != GPU_OK ||
       !state.textureCudaReadback) {
-    fprintf(stderr, "shared graphics/CUDA cube-array/output setup failed\n");
+    fprintf(stderr, "shared graphics/CUDA half/output setup failed\n");
     goto cleanup;
   }
 
@@ -1261,10 +1423,16 @@ main(int argc, char **argv) {
   textureEntries[4].binding       = 4u;
   textureEntries[4].bindingType   = GPU_BINDING_SAMPLED_TEXTURE;
   textureEntries[4].textureView   = state.cudaCubeArrayTextureView;
+  textureEntries[5].binding       = 5u;
+  textureEntries[5].bindingType   = GPU_BINDING_STORAGE_TEXTURE;
+  textureEntries[5].textureView   = state.cudaHalfTextureView;
+  textureEntries[6].binding       = 6u;
+  textureEntries[6].bindingType   = GPU_BINDING_SAMPLED_TEXTURE;
+  textureEntries[6].textureView   = state.cudaHalfSampledTextureView;
   groupInfo.label      = "graphics-cuda-texture-group";
   groupInfo.layout     = textureLayout->bindGroupLayouts[0];
   groupInfo.pEntries   = textureEntries;
-  groupInfo.entryCount = 5u;
+  groupInfo.entryCount = 7u;
   if (GPUCreateBindGroup(state.cudaDevice,
                          &groupInfo,
                          &state.textureGroup) != GPU_OK ||
@@ -1321,7 +1489,10 @@ cleanup:
   GPUDestroyFence(state.releaseFence);
   GPUDestroyBuffer(state.paramsBuffer);
   GPUDestroyBuffer(state.textureReadback);
+  GPUDestroyBuffer(state.halfTextureReadback);
   GPUDestroyBuffer(state.textureCudaReadback);
+  GPUDestroyTextureView(state.cudaHalfSampledTextureView);
+  GPUDestroyTextureView(state.cudaHalfTextureView);
   GPUDestroyTextureView(state.cudaCubeArrayTextureView);
   GPUDestroyTextureView(state.cudaCubeTextureView);
   GPUDestroyTextureView(state.cudaSampledTextureView);
@@ -1331,9 +1502,11 @@ cleanup:
     GPUDestroySemaphore(state.graphicsSemaphore);
     GPUDestroyBuffer(state.cudaBuffer);
     GPUDestroyBuffer(state.graphicsBuffer);
+    GPUDestroyTexture(state.cudaHalfTexture);
     GPUDestroyTexture(state.cudaCubeArrayTexture);
     GPUDestroyTexture(state.cudaCubeTexture);
     GPUDestroyTexture(state.cudaTexture);
+    GPUDestroyTexture(state.graphicsHalfTexture);
     GPUDestroyTexture(state.graphicsCubeArrayTexture);
     GPUDestroyTexture(state.graphicsCubeTexture);
     GPUDestroyTexture(state.graphicsTexture);
@@ -1342,9 +1515,11 @@ cleanup:
     GPUDestroySemaphore(state.cudaSemaphore);
     GPUDestroyBuffer(state.graphicsBuffer);
     GPUDestroyBuffer(state.cudaBuffer);
+    GPUDestroyTexture(state.graphicsHalfTexture);
     GPUDestroyTexture(state.graphicsCubeArrayTexture);
     GPUDestroyTexture(state.graphicsCubeTexture);
     GPUDestroyTexture(state.graphicsTexture);
+    GPUDestroyTexture(state.cudaHalfTexture);
     GPUDestroyTexture(state.cudaCubeArrayTexture);
     GPUDestroyTexture(state.cudaCubeTexture);
     GPUDestroyTexture(state.cudaTexture);
