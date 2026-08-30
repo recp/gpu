@@ -44,6 +44,97 @@ if(GPU_BUILD_TESTS)
     TIMEOUT 30
   )
 
+  if(GPU_BUILD_GRAPHICS_API_TESTS AND GPU_API_USL_FIXTURES)
+    add_executable(gpu-pipeline-cache-process-contract
+      ${PROJECT_SOURCE_DIR}/benchmarks/bench.c
+      ${PROJECT_SOURCE_DIR}/benchmarks/bench_gpu.c
+      ${PROJECT_SOURCE_DIR}/benchmarks/render.c
+      ${PROJECT_SOURCE_DIR}/benchmarks/pipeline_stress.c
+    )
+    target_include_directories(gpu-pipeline-cache-process-contract PRIVATE
+      ${PROJECT_SOURCE_DIR}/benchmarks
+      ${PROJECT_SOURCE_DIR}/include
+      ${PROJECT_SOURCE_DIR}/src
+    )
+    target_link_libraries(gpu-pipeline-cache-process-contract PRIVATE gpu)
+    target_compile_definitions(gpu-pipeline-cache-process-contract PRIVATE
+      GPU_BUILD_WITH_VALIDATION=$<BOOL:${GPU_BUILD_WITH_VALIDATION}>
+    )
+    set_target_properties(gpu-pipeline-cache-process-contract PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+      RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/tests"
+    )
+    if(MSVC)
+      target_compile_definitions(gpu-pipeline-cache-process-contract PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+      )
+      target_compile_options(gpu-pipeline-cache-process-contract PRIVATE
+        /W4
+        /WX
+      )
+    else()
+      target_compile_options(gpu-pipeline-cache-process-contract PRIVATE
+        -Wall
+        -Wextra
+        -Werror
+      )
+    endif()
+    gpu_enable_c11_atomics(gpu-pipeline-cache-process-contract)
+    add_dependencies(gpu-pipeline-cache-process-contract
+                     gpu-cache-file-concurrency-contract)
+    add_dependencies(gpu-pipeline-cache-process-contract gpu-api-fixtures)
+    if(TARGET gpu-test-runtime-stage)
+      add_dependencies(gpu-pipeline-cache-process-contract
+                       gpu-test-runtime-stage)
+    endif()
+
+    list(GET GPU_API_USL_FIXTURES 1 GPU_PIPELINE_CACHE_PROCESS_US)
+    set(GPU_PIPELINE_CACHE_PROCESS_PATH
+      "$<TARGET_FILE_DIR:gpu-pipeline-cache-process-contract>/.gpu-pipeline-cache-process-${GPU_API_DEFAULT_BACKEND}.bin"
+    )
+    add_test(
+      NAME pipeline-cache-process-${GPU_API_DEFAULT_BACKEND}
+      COMMAND ${CMAKE_COMMAND}
+              -DPIPELINE_EXE=$<TARGET_FILE:gpu-pipeline-cache-process-contract>
+              -DPAIR_EXE=$<TARGET_FILE:gpu-cache-file-concurrency-contract>
+              -DARTIFACT=${GPU_PIPELINE_CACHE_PROCESS_US}
+              -DBACKEND=${GPU_API_DEFAULT_BACKEND}
+              -DCACHE_PATH=${GPU_PIPELINE_CACHE_PROCESS_PATH}
+              -P ${PROJECT_SOURCE_DIR}/tests/validation/pipeline-cache-process/run.cmake
+    )
+    set_tests_properties(
+      pipeline-cache-process-${GPU_API_DEFAULT_BACKEND} PROPERTIES
+      RUN_SERIAL TRUE
+      TIMEOUT 120
+    )
+
+    if(GPU_BUILD_VULKAN AND
+       NOT GPU_API_DEFAULT_BACKEND STREQUAL "vulkan" AND
+       GPU_API_VULKAN_USL_FIXTURES)
+      list(GET GPU_API_VULKAN_USL_FIXTURES 1
+           GPU_PIPELINE_CACHE_PROCESS_VULKAN_US)
+      set(GPU_PIPELINE_CACHE_PROCESS_VULKAN_PATH
+        "$<TARGET_FILE_DIR:gpu-pipeline-cache-process-contract>/.gpu-pipeline-cache-process-vulkan.bin"
+      )
+      add_test(
+        NAME pipeline-cache-process-vulkan
+        COMMAND ${CMAKE_COMMAND}
+                -DPIPELINE_EXE=$<TARGET_FILE:gpu-pipeline-cache-process-contract>
+                -DPAIR_EXE=$<TARGET_FILE:gpu-cache-file-concurrency-contract>
+                -DARTIFACT=${GPU_PIPELINE_CACHE_PROCESS_VULKAN_US}
+                -DBACKEND=vulkan
+                -DCACHE_PATH=${GPU_PIPELINE_CACHE_PROCESS_VULKAN_PATH}
+                -P ${PROJECT_SOURCE_DIR}/tests/validation/pipeline-cache-process/run.cmake
+      )
+      set_tests_properties(pipeline-cache-process-vulkan PROPERTIES
+        RUN_SERIAL TRUE
+        TIMEOUT 120
+      )
+    endif()
+  endif()
+
   add_executable(gpu-adapter-enumeration-contract
     ${PROJECT_SOURCE_DIR}/tests/validation/adapter-enumeration/main.c
   )

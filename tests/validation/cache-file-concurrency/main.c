@@ -177,31 +177,47 @@ cache_child(const char *path, uint32_t writer) {
 }
 
 static bool
-cache_spawnChild(const char   *executable,
-                 const char   *path,
-                 uint32_t      writer,
-                 ChildProcess *child) {
+cache_spawn(const char         *executable,
+            const char * const *arguments,
+            ChildProcess       *child) {
 #if defined(_WIN32) || defined(WIN32)
   PROCESS_INFORMATION process = {0};
   STARTUPINFOA        startup = {0};
   char               *command;
   size_t              commandSize;
+  size_t              cursor;
   bool                started;
 
-  if (!executable || !path || !child) {
+  if (!executable || !arguments || !arguments[0] || !child) {
     return false;
   }
-  commandSize = strlen(executable) + strlen(path) + 64u;
+  commandSize = 1u;
+  for (uint32_t i = 0u; arguments[i]; i++) {
+    if (strchr(arguments[i], '"') ||
+        strlen(arguments[i]) > SIZE_MAX - commandSize - 4u) {
+      return false;
+    }
+    commandSize += strlen(arguments[i]) + 3u;
+  }
   command     = malloc(commandSize);
   if (!command) {
     return false;
   }
-  snprintf(command,
-           commandSize,
-           "\"%s\" --child \"%s\" %u",
-           executable,
-           path,
-           writer);
+  cursor = 0u;
+  for (uint32_t i = 0u; arguments[i]; i++) {
+    int written;
+
+    written = snprintf(command + cursor,
+                       commandSize - cursor,
+                       "%s\"%s\"",
+                       i == 0u ? "" : " ",
+                       arguments[i]);
+    if (written < 0 || (size_t)written >= commandSize - cursor) {
+      free(command);
+      return false;
+    }
+    cursor += (size_t)written;
+  }
   startup.cb = sizeof(startup);
   started = CreateProcessA(NULL,
                            command,
@@ -223,7 +239,7 @@ cache_spawnChild(const char   *executable,
 #else
   pid_t pid;
 
-  if (!executable || !path || !child) {
+  if (!executable || !arguments || !arguments[0] || !child) {
     return false;
   }
   pid = fork();
@@ -231,20 +247,29 @@ cache_spawnChild(const char   *executable,
     return false;
   }
   if (pid == 0) {
-    char writerText[16];
-
-    snprintf(writerText, sizeof(writerText), "%u", writer);
-    execl(executable,
-          executable,
-          "--child",
-          path,
-          writerText,
-          (char *)NULL);
+    execv(executable, (char * const *)arguments);
     _exit(127);
   }
   child->pid = pid;
   return true;
 #endif
+}
+
+static bool
+cache_spawnChild(const char   *executable,
+                 const char   *path,
+                 uint32_t      writer,
+                 ChildProcess *child) {
+  const char *arguments[5];
+  char        writerText[16];
+
+  snprintf(writerText, sizeof(writerText), "%u", writer);
+  arguments[0] = executable;
+  arguments[1] = "--child";
+  arguments[2] = path;
+  arguments[3] = writerText;
+  arguments[4] = NULL;
+  return cache_spawn(executable, arguments, child);
 }
 
 static bool
@@ -274,6 +299,21 @@ cache_waitChild(ChildProcess *child) {
   child->pid = 0;
   return WIFEXITED(status) && WEXITSTATUS(status) == EXIT_SUCCESS;
 #endif
+}
+
+static int
+cache_runPair(const char *executable, const char * const *arguments) {
+  ChildProcess children[2] = {0};
+  bool         firstStarted;
+  bool         secondStarted;
+  bool         firstPassed;
+  bool         secondPassed;
+
+  firstStarted  = cache_spawn(executable, arguments, &children[0]);
+  secondStarted = cache_spawn(executable, arguments, &children[1]);
+  firstPassed   = firstStarted && cache_waitChild(&children[0]);
+  secondPassed  = secondStarted && cache_waitChild(&children[1]);
+  return firstPassed && secondPassed ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 static int
@@ -328,6 +368,9 @@ cache_parent(const char *executable) {
 
 int
 main(int argc, char **argv) {
+  if (argc >= 3 && strcmp(argv[1], "--pair") == 0) {
+    return cache_runPair(argv[2], (const char * const *)&argv[2]);
+  }
   if (argc == 4 && strcmp(argv[1], "--child") == 0) {
     char         *end;
     unsigned long writer;
