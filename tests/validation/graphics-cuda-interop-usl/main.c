@@ -1,5 +1,6 @@
 #include <gpu/gpu.h>
 #include "../../../src/api/device_internal.h"
+#include "../../../src/backend/cuda/common.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -282,6 +283,109 @@ typedef struct RoundtripState {
   bool                 mipFilterShared;
   InteropFormatTexture formatTextures[InteropFormatCount];
 } RoundtripState;
+
+static int
+validate_cuda_texture_cache_capacity(GPUTextureView *view) {
+  static const CUaddress_mode addressModes[] = {
+    CU_TR_ADDRESS_MODE_WRAP,
+    CU_TR_ADDRESS_MODE_CLAMP,
+    CU_TR_ADDRESS_MODE_MIRROR,
+    CU_TR_ADDRESS_MODE_BORDER
+  };
+  GPUTextureViewCuda *native;
+  CUDA_TEXTURE_DESC   desc = {0}, cachedDesc = {0};
+  CUtexObject         texture, cachedTexture, repeatedTexture;
+  GPUResult           result;
+  bool                rejected;
+
+  native = view ? view->_priv : NULL;
+  if (!native) {
+    return 0;
+  }
+
+  desc.flags            = CU_TRSF_NORMALIZED_COORDINATES;
+  desc.maxAnisotropy    = 1u;
+  desc.filterMode       = CU_TR_FILTER_MODE_POINT;
+  desc.mipmapFilterMode = CU_TR_FILTER_MODE_POINT;
+  cachedTexture         = 0u;
+  rejected              = false;
+  for (uint32_t z = 0u; z < 4u && !rejected; z++) {
+    desc.addressMode[2] = addressModes[z];
+    for (uint32_t y = 0u; y < 4u && !rejected; y++) {
+      desc.addressMode[1] = addressModes[y];
+      for (uint32_t x = 0u; x < 4u; x++) {
+        desc.addressMode[0] = addressModes[x];
+        texture             = 0u;
+        result = cuda_getTextureObject(view, &desc, false, &texture);
+        if (result == GPU_OK && texture != 0u) {
+          if (cachedTexture == 0u) {
+            cachedDesc    = desc;
+            cachedTexture = texture;
+          }
+          continue;
+        }
+        if (result == GPU_ERROR_UNSUPPORTED && texture == 0u &&
+            native->cacheCount == CUDA_TEXTURE_CACHE_CAPACITY) {
+          rejected = true;
+          break;
+        }
+        fprintf(stderr,
+                "CUDA texture cache fill failed at %u objects (%d)\n",
+                native->cacheCount,
+                result);
+        return 0;
+      }
+    }
+  }
+  if (!rejected) {
+    desc.addressMode[0] = CU_TR_ADDRESS_MODE_WRAP;
+    desc.addressMode[1] = CU_TR_ADDRESS_MODE_WRAP;
+    desc.addressMode[2] = CU_TR_ADDRESS_MODE_WRAP;
+    desc.filterMode     = CU_TR_FILTER_MODE_LINEAR;
+    desc.maxAnisotropy  = 2u;
+    texture             = 0u;
+    result = cuda_getTextureObject(view, &desc, false, &texture);
+    rejected = result == GPU_ERROR_UNSUPPORTED && texture == 0u &&
+               native->cacheCount == CUDA_TEXTURE_CACHE_CAPACITY;
+  }
+  if (!rejected || cachedTexture == 0u ||
+      native->cacheCount != CUDA_TEXTURE_CACHE_CAPACITY ||
+      native->cacheCapacity != CUDA_TEXTURE_CACHE_CAPACITY ||
+      !native->cacheDynamic || native->cache == native->inlineCache) {
+    fprintf(stderr,
+            "CUDA texture cache capacity contract failed (%u/%u)\n",
+            native->cacheCount,
+            native->cacheCapacity);
+    return 0;
+  }
+
+  repeatedTexture = 0u;
+  result = cuda_getTextureObject(view,
+                                 &cachedDesc,
+                                 false,
+                                 &repeatedTexture);
+  if (result != GPU_OK || repeatedTexture != cachedTexture ||
+      native->cacheCount != CUDA_TEXTURE_CACHE_CAPACITY) {
+    fprintf(stderr, "CUDA full texture cache lookup failed (%d)\n", result);
+    return 0;
+  }
+  return 1;
+}
+
+static int
+validate_cuda_texture_cache_empty(GPUTextureView *view) {
+  GPUTextureViewCuda *native;
+
+  native = view ? view->_priv : NULL;
+  if (!native || native->cache != native->inlineCache ||
+      native->cacheCount != 0u ||
+      native->cacheCapacity != CUDA_INLINE_TEXTURE_CACHE_CAPACITY ||
+      native->cacheDynamic) {
+    fprintf(stderr, "recreated CUDA texture view retained stale cache state\n");
+    return 0;
+  }
+  return 1;
+}
 
 static void
 device_error(GPUDevice                *device,
@@ -3416,6 +3520,74 @@ main(int argc, char **argv) {
       state.cudaDevice->currentFrameStats.hotPathFreeBytes != 0u) {
     fprintf(stderr,
             "CUDA warm texture path allocated: %llu allocs, %llu frees\n",
+            (unsigned long long)
+              state.cudaDevice->currentFrameStats.hotPathAllocCount,
+            (unsigned long long)
+              state.cudaDevice->currentFrameStats.hotPathFreeCount);
+    goto cleanup;
+  }
+  if (!validate_cuda_texture_cache_capacity(
+        state.cudaSampledTextureView
+      )) {
+    goto cleanup;
+  }
+
+  GPUDestroyBindGroup(state.textureGroup);
+  state.textureGroup = NULL;
+  GPUDestroyTextureView(state.cudaSampledTextureView);
+  state.cudaSampledTextureView = NULL;
+
+  memset(&textureViewInfo, 0, sizeof(textureViewInfo));
+  textureViewInfo.chain.sType      =
+    GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  textureViewInfo.chain.structSize = sizeof(textureViewInfo);
+  textureViewInfo.label            = "cuda-graphics-recreated-sampled-view";
+  textureViewInfo.viewType         = GPU_TEXTURE_VIEW_2D_ARRAY;
+  textureViewInfo.format           = GPU_FORMAT_RGBA32_FLOAT;
+  textureViewInfo.baseMipLevel     = state.textureMipLevel;
+  textureViewInfo.mipLevelCount    =
+    graphicsTextureInfo.mipLevelCount - state.textureMipLevel;
+  textureViewInfo.arrayLayerCount  = TextureLayers;
+  if (GPUCreateTextureView(state.cudaTexture,
+                           &textureViewInfo,
+                           &state.cudaSampledTextureView) != GPU_OK ||
+      !state.cudaSampledTextureView ||
+      !validate_cuda_texture_cache_empty(state.cudaSampledTextureView)) {
+    fprintf(stderr, "CUDA sampled texture view recreation failed\n");
+    goto cleanup;
+  }
+
+  textureEntries[2].textureView = state.cudaSampledTextureView;
+  groupInfo.chain.sType         = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize    = sizeof(groupInfo);
+  groupInfo.label               = "graphics-cuda-recreated-texture-group";
+  groupInfo.layout              = textureLayout->bindGroupLayouts[0];
+  groupInfo.pEntries            = textureEntries;
+  groupInfo.entryCount          = 10u + RgbaFormatCount * 2u;
+  if (GPUCreateBindGroup(state.cudaDevice,
+                         &groupInfo,
+                         &state.textureGroup) != GPU_OK ||
+      !state.textureGroup) {
+    fprintf(stderr, "CUDA texture bind group recreation failed\n");
+    goto cleanup;
+  }
+  if (!run_texture_roundtrip(&state, WarmTextureRoundtripCount + 1u)) {
+    fprintf(stderr, "graphics/CUDA recreated texture roundtrip failed\n");
+    goto cleanup;
+  }
+  GPUResetStats(state.cudaDevice);
+  if (!run_texture_roundtrip(&state, WarmTextureRoundtripCount + 2u)) {
+    fprintf(stderr,
+            "graphics/CUDA recreated warm texture roundtrip failed\n");
+    goto cleanup;
+  }
+  if (state.cudaDevice->currentFrameStats.hotPathAllocCount != 0u ||
+      state.cudaDevice->currentFrameStats.hotPathAllocBytes != 0u ||
+      state.cudaDevice->currentFrameStats.hotPathFreeCount != 0u ||
+      state.cudaDevice->currentFrameStats.hotPathFreeBytes != 0u) {
+    fprintf(stderr,
+            "CUDA recreated warm texture path allocated: %llu allocs, "
+            "%llu frees\n",
             (unsigned long long)
               state.cudaDevice->currentFrameStats.hotPathAllocCount,
             (unsigned long long)
