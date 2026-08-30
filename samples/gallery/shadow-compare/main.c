@@ -135,11 +135,13 @@ create_shader(WebGPUShadowCompare *state) {
   uint64_t                       artifactSize;
   uint32_t                       entryCount;
   bool                           foundDepth;
+  bool                           foundSampler;
   GPUResult                      result;
 
   artifact     = NULL;
   artifactSize = 0u;
   foundDepth   = false;
+  foundSampler = false;
   if (!read_file("/shadow_compare.us", &artifact, &artifactSize)) {
     set_status("GPU: failed to read /shadow_compare.us", 1);
     return 0;
@@ -166,7 +168,7 @@ create_shader(WebGPUShadowCompare *state) {
     state->shaderLayout->bindGroupLayouts[0],
     &entryCount
   );
-  if (!entries || entryCount != 1u) {
+  if (!entries || entryCount != 2u) {
     set_status("GPU: unexpected shadow resource count", 1);
     return 0;
   }
@@ -175,10 +177,16 @@ create_shader(WebGPUShadowCompare *state) {
         entries[i].bindingType == GPU_BINDING_SAMPLED_TEXTURE &&
         entries[i].sampledTexture.sampleType == GPU_TEXTURE_SAMPLE_TYPE_DEPTH) {
       foundDepth = true;
+    } else if (entries[i].binding == 1u &&
+               entries[i].bindingType == GPU_BINDING_SAMPLER &&
+               entries[i].sampler.type == GPU_SAMPLER_BINDING_COMPARISON &&
+               entries[i].visibility == GPU_SHADER_STAGE_FRAGMENT_BIT &&
+               entries[i].immutableSampler) {
+      foundSampler = true;
     }
   }
-  if (!foundDepth) {
-    set_status("GPU: USL reflection lost the depth texture type", 1);
+  if (!foundDepth || !foundSampler) {
+    set_status("GPU: USL reflection lost the depth comparison pair", 1);
     return 0;
   }
   return 1;
