@@ -101,6 +101,19 @@ foreach(consumer_name gpu-package-consumer gpu-package-consumer-cxx)
   if(NOT EXISTS "${consumer}")
     message(FATAL_ERROR "${consumer_name} executable was not created")
   endif()
+  if(WIN32 AND EXISTS "${package_prefix}/bin/D3D12/D3D12Core.dll")
+    set(staged_consumer
+        "${package_prefix}/bin/${consumer_name}${executable_suffix}")
+    execute_process(
+      COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+              "${consumer}" "${staged_consumer}"
+      RESULT_VARIABLE result
+    )
+    if(result)
+      message(FATAL_ERROR "${consumer_name} staging failed: ${result}")
+    endif()
+    set(consumer "${staged_consumer}")
+  endif()
   execute_process(
     COMMAND "${consumer}"
     RESULT_VARIABLE result
