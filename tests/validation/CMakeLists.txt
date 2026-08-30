@@ -1854,6 +1854,29 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     )
   endif()
 
+  add_executable(gpu-memory-cuda
+    ${PROJECT_SOURCE_DIR}/tests/validation/memory-cuda/main.c
+    ${PROJECT_SOURCE_DIR}/tests/api/memory.c
+    ${PROJECT_SOURCE_DIR}/tests/api/runner.c
+  )
+  target_include_directories(gpu-memory-cuda PRIVATE
+    ${PROJECT_SOURCE_DIR}/tests/api
+  )
+  target_link_libraries(gpu-memory-cuda PRIVATE gpu)
+  set_target_properties(gpu-memory-cuda PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  gpu_enable_c11_atomics(gpu-memory-cuda)
+  if(GPU_BUILD_TESTS)
+    add_test(NAME cuda-memory COMMAND gpu-memory-cuda)
+    set_tests_properties(cuda-memory PROPERTIES
+      SKIP_RETURN_CODE 77
+      TIMEOUT 30
+    )
+  endif()
+
   add_executable(gpu-clock-cuda-usl
     ${PROJECT_SOURCE_DIR}/tests/validation/clock-cuda-usl/main.c
     ${PROJECT_SOURCE_DIR}/tests/api/clock_derivative.c
