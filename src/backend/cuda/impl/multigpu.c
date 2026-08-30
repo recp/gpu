@@ -42,6 +42,23 @@ cuda__textureUsageSupported(GPUTextureUsageFlags usage) {
   return usage != 0u && (usage & ~allowed) == 0u;
 }
 
+static bool
+cuda__sharedTextureSupported(const GPUDeviceInteropCuda *native,
+                             const GPUTextureCreateInfo *info) {
+  if (!native || !info || !cuda__textureUsageSupported(info->usage)) {
+    return false;
+  }
+#if defined(_WIN32) || defined(WIN32)
+  if (native->graphicsApi->backend == GPU_BACKEND_VULKAN &&
+      info->dimension == GPU_TEXTURE_DIMENSION_2D &&
+      info->depthOrLayers > 1u &&
+      (info->mipLevelCount ? info->mipLevelCount : 1u) > 1u) {
+    return false;
+  }
+#endif
+  return true;
+}
+
 static GPUResult
 cuda__interopDevices(GPUDeviceInteropEXT   *interop,
                      GPUDeviceInteropCuda **outNative) {
@@ -400,7 +417,7 @@ cuda_getSharedTextureRequirements(
                      &cudaInfo,
                      &sharedInfo);
   GPU__UNUSED(graphicsInfo);
-  if (!cuda__textureUsageSupported(cudaInfo->usage) ||
+  if (!cuda__sharedTextureSupported(native, cudaInfo) ||
       !native->cuda->driver->externalMemoryGetMappedMipmappedArray ||
       !cuda_formatInfo(cudaInfo->format, &format) ||
       !cuda_texturePlan(cudaInfo, &format, &plan) ||
@@ -539,7 +556,7 @@ cuda_createSharedTexture(GPUDeviceInteropEXT        *interop,
                      &graphicsInfo,
                      &cudaInfo,
                      &sharedInfo);
-  if (!cuda__textureUsageSupported(cudaInfo->usage) ||
+  if (!cuda__sharedTextureSupported(native, cudaInfo) ||
       !native->cuda->driver->externalMemoryGetMappedMipmappedArray ||
       !native->graphicsApi->multigpu.createExternalTexture) {
     return GPU_ERROR_UNSUPPORTED;

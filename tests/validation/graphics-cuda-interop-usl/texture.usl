@@ -1,6 +1,9 @@
 kern(8, 8, 1) interop_texture_cs(
-  image: image2d<rgba32float, read_write> #texture(0),
-  gid: uint2 #global_id
+  image: image2d_array<rgba32float, read_write> #texture(0),
+  inout output: [float4] #buffer(1),
+  gid: uint3 #global_id
 ) {
-  image.write(image.read(gid) * 2.0 + float4(1.0), gid)
+  let color = image.read(gid) * 2.0 + float4(1.0)
+  image.write(color, gid)
+  output[(gid.z * 8u + gid.y) * 8u + gid.x] = color
 }

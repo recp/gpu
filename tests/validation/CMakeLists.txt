@@ -1938,6 +1938,17 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
         SKIP_RETURN_CODE 77
         TIMEOUT 30
       )
+      add_test(
+        NAME cuda-graphics-interop-cuda-first
+        COMMAND gpu-graphics-cuda-interop-usl
+                "${GPU_CUDA_COMPUTE_BUFFER_US}"
+                "${GPU_CUDA_INTEROP_TEXTURE_US}"
+      )
+      set_tests_properties(cuda-graphics-interop-cuda-first PROPERTIES
+        ENVIRONMENT "GPU_CUDA_FIRST=1"
+        SKIP_RETURN_CODE 77
+        TIMEOUT 30
+      )
       if(WIN32 AND GPU_BUILD_VULKAN)
         add_test(
           NAME cuda-vulkan-graphics-interop
@@ -1947,6 +1958,18 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
         )
         set_tests_properties(cuda-vulkan-graphics-interop PROPERTIES
           ENVIRONMENT "GPU_GRAPHICS_BACKEND=vulkan"
+          SKIP_RETURN_CODE 77
+          TIMEOUT 30
+        )
+        add_test(
+          NAME cuda-vulkan-graphics-interop-cuda-first
+          COMMAND gpu-graphics-cuda-interop-usl
+                  "${GPU_CUDA_COMPUTE_BUFFER_US}"
+                  "${GPU_CUDA_INTEROP_TEXTURE_US}"
+        )
+        set_tests_properties(
+          cuda-vulkan-graphics-interop-cuda-first PROPERTIES
+          ENVIRONMENT "GPU_GRAPHICS_BACKEND=vulkan;GPU_CUDA_FIRST=1"
           SKIP_RETURN_CODE 77
           TIMEOUT 30
         )
