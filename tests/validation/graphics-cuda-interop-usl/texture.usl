@@ -13,55 +13,54 @@ fn cube_direction(face: uint) -> float3 {
   return float3(0.0, 0.0, -1.0)
 }
 
-kern(8, 8, 1) interop_texture_cs(
-  image: image2d_array<rgba32float, read_write> #texture(0),
+kern(8, 8, 1) interop_texture_sample_cs(
   inout output: [float4] #buffer(1),
   sampled: texture2d_array<float> #texture(2),
   cube: texturecube<float> #texture(3),
   cubeArray: texturecube_array<float> #texture(4),
-  halfImage: image2d_array<rgba16float, read_write> #texture(5),
   halfSampled: texture2d_array<half> #texture(6),
-  unormImage: image2d_array<rgba8unorm, read_write> #texture(7),
-  unormSampled: texture2d_array<float> #texture(8),
-  uintImage: image2d_array<rgba8uint, read_write> #texture(9),
-  uintSampled: texture2d_array<uint> #texture(10),
-  sintImage: image2d_array<rgba8sint, read_write> #texture(11),
-  sintSampled: texture2d_array<int> #texture(12),
+  unorm8Sampled: texture2d_array<float> #texture(8),
+  snorm8Sampled: texture2d_array<float> #texture(10),
+  uint8Sampled: texture2d_array<uint> #texture(12),
+  sint8Sampled: texture2d_array<int> #texture(14),
+  unorm16Sampled: texture2d_array<float> #texture(16),
+  snorm16Sampled: texture2d_array<float> #texture(18),
+  uint16Sampled: texture2d_array<uint> #texture(20),
+  sint16Sampled: texture2d_array<int> #texture(22),
   gid: uint3 #global_id
 ) {
   let texelCount = 8u * 8u * 2u
   let halfBase = texelCount * 2u + 6u + 12u
-  let unormBase = halfBase + texelCount * 2u
-  let uintBase = unormBase + texelCount * 2u
-  let sintBase = uintBase + texelCount * 2u
+  let unorm8Base = halfBase + texelCount * 2u
+  let snorm8Base = unorm8Base + texelCount * 2u
+  let uint8Base = snorm8Base + texelCount * 2u
+  let sint8Base = uint8Base + texelCount * 2u
+  let unorm16Base = sint8Base + texelCount * 2u
+  let snorm16Base = unorm16Base + texelCount * 2u
+  let uint16Base = snorm16Base + texelCount * 2u
+  let sint16Base = uint16Base + texelCount * 2u
   if gid.z < 2u {
     let index = (gid.z * 8u + gid.y) * 8u + gid.x
     let original = sampled.read(int3(gid))
-    let color = image.read(gid) * 2.0 + float4(1.0)
     let halfOriginal = halfSampled.read(int3(gid))
-    let halfColor = halfImage.read(gid) * half4(half(2.0)) +
-                    half4(half(1.0))
-    let unormOriginal = unormSampled.read(int3(gid))
-    let unormColor = float4(1.0) - unormImage.read(gid)
-    let uintOriginal = uintSampled.read(int3(gid))
-    let uintColor = uintImage.read(gid) + uint4(1u)
-    let sintOriginal = sintSampled.read(int3(gid))
-    let sintColor = sintImage.read(gid) + int4(7)
-    image.write(color, gid)
-    halfImage.write(halfColor, gid)
-    unormImage.write(unormColor, gid)
-    uintImage.write(uintColor, gid)
-    sintImage.write(sintColor, gid)
+    let unorm8Original = unorm8Sampled.read(int3(gid))
+    let snorm8Original = snorm8Sampled.read(int3(gid))
+    let uint8Original = uint8Sampled.read(int3(gid))
+    let sint8Original = sint8Sampled.read(int3(gid))
+    let unorm16Original = unorm16Sampled.read(int3(gid))
+    let snorm16Original = snorm16Sampled.read(int3(gid))
+    let uint16Original = uint16Sampled.read(int3(gid))
+    let sint16Original = sint16Sampled.read(int3(gid))
     output[index] = original
-    output[texelCount + index] = color
     output[halfBase + index] = float4(halfOriginal)
-    output[halfBase + texelCount + index] = float4(halfColor)
-    output[unormBase + index] = unormOriginal
-    output[unormBase + texelCount + index] = unormColor
-    output[uintBase + index] = float4(uintOriginal)
-    output[uintBase + texelCount + index] = float4(uintColor)
-    output[sintBase + index] = float4(sintOriginal)
-    output[sintBase + texelCount + index] = float4(sintColor)
+    output[unorm8Base + index] = unorm8Original
+    output[snorm8Base + index] = snorm8Original
+    output[uint8Base + index] = float4(uint8Original)
+    output[sint8Base + index] = float4(sint8Original)
+    output[unorm16Base + index] = unorm16Original
+    output[snorm16Base + index] = snorm16Original
+    output[uint16Base + index] = float4(uint16Original)
+    output[sint16Base + index] = float4(sint16Original)
   }
   if gid.x == 0u && gid.y == 0u && gid.z < 6u {
     output[texelCount * 2u + gid.z] = cube.sample(
@@ -79,4 +78,62 @@ kern(8, 8, 1) interop_texture_cs(
       level(0.0)
     )
   }
+}
+
+kern(8, 8, 1) interop_texture_store_cs(
+  image: image2d_array<rgba32float, read_write> #texture(0),
+  inout output: [float4] #buffer(1),
+  halfImage: image2d_array<rgba16float, read_write> #texture(5),
+  unorm8Image: image2d_array<rgba8unorm, read_write> #texture(7),
+  snorm8Image: image2d_array<rgba8snorm, read_write> #texture(9),
+  uint8Image: image2d_array<rgba8uint, read_write> #texture(11),
+  sint8Image: image2d_array<rgba8sint, read_write> #texture(13),
+  unorm16Image: image2d_array<rgba16unorm, read_write> #texture(15),
+  snorm16Image: image2d_array<rgba16snorm, read_write> #texture(17),
+  uint16Image: image2d_array<rgba16uint, read_write> #texture(19),
+  sint16Image: image2d_array<rgba16sint, read_write> #texture(21),
+  gid: uint3 #global_id
+) {
+  let texelCount = 8u * 8u * 2u
+  let halfBase = texelCount * 2u + 6u + 12u
+  let unorm8Base = halfBase + texelCount * 2u
+  let snorm8Base = unorm8Base + texelCount * 2u
+  let uint8Base = snorm8Base + texelCount * 2u
+  let sint8Base = uint8Base + texelCount * 2u
+  let unorm16Base = sint8Base + texelCount * 2u
+  let snorm16Base = unorm16Base + texelCount * 2u
+  let uint16Base = snorm16Base + texelCount * 2u
+  let sint16Base = uint16Base + texelCount * 2u
+  let index = (gid.z * 8u + gid.y) * 8u + gid.x
+  let color = image.read(gid) * 2.0 + float4(1.0)
+  let halfColor = halfImage.read(gid) * half4(half(2.0)) +
+                  half4(half(1.0))
+  let unorm8Color = float4(1.0) - unorm8Image.read(gid)
+  let snorm8Color = -snorm8Image.read(gid)
+  let uint8Color = uint8Image.read(gid) + uint4(1u)
+  let sint8Color = sint8Image.read(gid) + int4(7)
+  let unorm16Color = float4(1.0) - unorm16Image.read(gid)
+  let snorm16Color = -snorm16Image.read(gid)
+  let uint16Color = uint16Image.read(gid) + uint4(1u)
+  let sint16Color = sint16Image.read(gid) + int4(7)
+  image.write(color, gid)
+  halfImage.write(halfColor, gid)
+  unorm8Image.write(unorm8Color, gid)
+  snorm8Image.write(snorm8Color, gid)
+  uint8Image.write(uint8Color, gid)
+  sint8Image.write(sint8Color, gid)
+  unorm16Image.write(unorm16Color, gid)
+  snorm16Image.write(snorm16Color, gid)
+  uint16Image.write(uint16Color, gid)
+  sint16Image.write(sint16Color, gid)
+  output[texelCount + index] = color
+  output[halfBase + texelCount + index] = float4(halfColor)
+  output[unorm8Base + texelCount + index] = unorm8Color
+  output[snorm8Base + texelCount + index] = snorm8Color
+  output[uint8Base + texelCount + index] = float4(uint8Color)
+  output[sint8Base + texelCount + index] = float4(sint8Color)
+  output[unorm16Base + texelCount + index] = unorm16Color
+  output[snorm16Base + texelCount + index] = snorm16Color
+  output[uint16Base + texelCount + index] = float4(uint16Color)
+  output[sint16Base + texelCount + index] = float4(sint16Color)
 }

@@ -29,8 +29,11 @@ enum {
   HalfFloatOutputValueCount     = HalfTextureValueCount * 2u,
   ByteTextureValueCount         = TextureValueCount,
   ByteFloatOutputValueCount     = ByteTextureValueCount * 2u,
+  WordTextureValueCount         = TextureValueCount,
+  WordFloatOutputValueCount     = WordTextureValueCount * 2u,
   FormatFloatOutputValueCount   = HalfFloatOutputValueCount +
-                                  ByteFloatOutputValueCount * 3u,
+                                  ByteFloatOutputValueCount * 4u +
+                                  WordFloatOutputValueCount * 4u,
   TextureOutputValueCount       = TextureValueCount * 2u +
                                   CubeOutputValueCount +
                                   CubeArrayOutputValueCount +
@@ -39,9 +42,14 @@ enum {
 
 typedef enum InteropFormatCase {
   InteropFormatHalf,
-  InteropFormatUnorm,
-  InteropFormatUint,
-  InteropFormatSint,
+  InteropFormatUnorm8,
+  InteropFormatSnorm8,
+  InteropFormatUint8,
+  InteropFormatSint8,
+  InteropFormatUnorm16,
+  InteropFormatSnorm16,
+  InteropFormatUint16,
+  InteropFormatSint16,
   InteropFormatCount
 } InteropFormatCase;
 
@@ -96,7 +104,8 @@ typedef struct RoundtripState {
   GPUFence            *releaseFence;
   GPUFence            *acquireFence;
   GPUComputePipeline  *pipeline;
-  GPUComputePipeline  *texturePipeline;
+  GPUComputePipeline  *textureSamplePipeline;
+  GPUComputePipeline  *textureStorePipeline;
   GPUBindGroup        *paramsGroup;
   GPUBindGroup        *dataGroup;
   GPUBindGroup        *textureGroup;
@@ -506,17 +515,29 @@ run_texture_roundtrip(RoundtripState *state) {
   float                       cubeArrayInput[CubeArrayValueCount];
   uint16_t                    halfInput[HalfTextureValueCount];
   uint16_t                    halfOutput[HalfTextureValueCount];
-  uint8_t                     unormInput[ByteTextureValueCount];
-  uint8_t                     unormOutput[ByteTextureValueCount];
-  uint8_t                     uintInput[ByteTextureValueCount];
-  uint8_t                     uintOutput[ByteTextureValueCount];
-  int8_t                      sintInput[ByteTextureValueCount];
-  int8_t                      sintOutput[ByteTextureValueCount];
+  uint8_t                     unorm8Input[ByteTextureValueCount];
+  uint8_t                     unorm8Output[ByteTextureValueCount];
+  int8_t                      snorm8Input[ByteTextureValueCount];
+  int8_t                      snorm8Output[ByteTextureValueCount];
+  uint8_t                     uint8Input[ByteTextureValueCount];
+  uint8_t                     uint8Output[ByteTextureValueCount];
+  int8_t                      sint8Input[ByteTextureValueCount];
+  int8_t                      sint8Output[ByteTextureValueCount];
+  uint16_t                    unorm16Input[WordTextureValueCount];
+  uint16_t                    unorm16Output[WordTextureValueCount];
+  int16_t                     snorm16Input[WordTextureValueCount];
+  int16_t                     snorm16Output[WordTextureValueCount];
+  uint16_t                    uint16Input[WordTextureValueCount];
+  uint16_t                    uint16Output[WordTextureValueCount];
+  int16_t                     sint16Input[WordTextureValueCount];
+  int16_t                     sint16Output[WordTextureValueCount];
   InteropFormatTransfer       formatTransfers[InteropFormatCount];
   float                       output[TextureValueCount];
   float                       cudaOutput[TextureOutputValueCount];
   const char                 *failure;
-  uint32_t                    halfBase, unormBase, uintBase, sintBase;
+  uint32_t                    halfBase, unorm8Base, snorm8Base;
+  uint32_t                    uint8Base, sint8Base, unorm16Base;
+  uint32_t                    snorm16Base, uint16Base, sint16Base;
   int                         releaseSubmitted, cudaSubmitted;
   int                         acquireSubmitted, ok;
   static const uint16_t       halfInputBits[8] = {
@@ -535,14 +556,29 @@ run_texture_roundtrip(RoundtripState *state) {
     1.0f, 2.0f, 3.0f, 0.0f,
     5.0f, -1.0f, 1.5f, 0.5f
   };
-  static const uint8_t        unormInputValues[8] = {
+  static const uint8_t        unorm8InputValues[8] = {
     0u, 64u, 128u, 255u, 16u, 32u, 192u, 240u
   };
-  static const uint8_t        uintInputValues[8] = {
+  static const int8_t         snorm8InputValues[8] = {
+    -120, -64, -1, 0, 1, 32, 64, 120
+  };
+  static const uint8_t        uint8InputValues[8] = {
     0u, 1u, 2u, 3u, 250u, 251u, 252u, 253u
   };
-  static const int8_t         sintInputValues[8] = {
+  static const int8_t         sint8InputValues[8] = {
     -10, -1, 0, 1, 10, 20, 30, 100
+  };
+  static const uint16_t       unorm16InputValues[8] = {
+    0u, 16384u, 32768u, 65535u, 4096u, 8192u, 49152u, 61440u
+  };
+  static const int16_t        snorm16InputValues[8] = {
+    -30000, -16384, -1, 0, 1, 8192, 16384, 30000
+  };
+  static const uint16_t       uint16InputValues[8] = {
+    0u, 1u, 2u, 3u, 65000u, 65001u, 65002u, 65003u
+  };
+  static const int16_t        sint16InputValues[8] = {
+    -30000, -1, 0, 1, 100, 1000, 20000, 30000
   };
 
   releaseCmdb       = NULL;
@@ -587,13 +623,28 @@ run_texture_roundtrip(RoundtripState *state) {
   for (uint32_t i = 0u; i < ByteTextureValueCount; i++) {
     uint32_t pattern;
 
-    pattern        = (i / CubeFaceValueCount) * 4u + i % 4u;
-    unormInput[i]  = unormInputValues[pattern];
-    unormOutput[i] = 0u;
-    uintInput[i]   = uintInputValues[pattern];
-    uintOutput[i]  = 0u;
-    sintInput[i]   = sintInputValues[pattern];
-    sintOutput[i]  = 0;
+    pattern         = (i / CubeFaceValueCount) * 4u + i % 4u;
+    unorm8Input[i]  = unorm8InputValues[pattern];
+    unorm8Output[i] = 0u;
+    snorm8Input[i]  = snorm8InputValues[pattern];
+    snorm8Output[i] = 0;
+    uint8Input[i]   = uint8InputValues[pattern];
+    uint8Output[i]  = 0u;
+    sint8Input[i]   = sint8InputValues[pattern];
+    sint8Output[i]  = 0;
+  }
+  for (uint32_t i = 0u; i < WordTextureValueCount; i++) {
+    uint32_t pattern;
+
+    pattern          = (i / CubeFaceValueCount) * 4u + i % 4u;
+    unorm16Input[i]  = unorm16InputValues[pattern];
+    unorm16Output[i] = 0u;
+    snorm16Input[i]  = snorm16InputValues[pattern];
+    snorm16Output[i] = 0;
+    uint16Input[i]   = uint16InputValues[pattern];
+    uint16Output[i]  = 0u;
+    sint16Input[i]   = sint16InputValues[pattern];
+    sint16Output[i]  = 0;
   }
   formatTransfers[InteropFormatHalf] = (InteropFormatTransfer){
     halfInput,
@@ -601,23 +652,53 @@ run_texture_roundtrip(RoundtripState *state) {
     sizeof(halfInput),
     TextureWidth * 4u * sizeof(uint16_t)
   };
-  formatTransfers[InteropFormatUnorm] = (InteropFormatTransfer){
-    unormInput,
-    unormOutput,
-    sizeof(unormInput),
+  formatTransfers[InteropFormatUnorm8] = (InteropFormatTransfer){
+    unorm8Input,
+    unorm8Output,
+    sizeof(unorm8Input),
     TextureWidth * 4u
   };
-  formatTransfers[InteropFormatUint] = (InteropFormatTransfer){
-    uintInput,
-    uintOutput,
-    sizeof(uintInput),
+  formatTransfers[InteropFormatSnorm8] = (InteropFormatTransfer){
+    snorm8Input,
+    snorm8Output,
+    sizeof(snorm8Input),
     TextureWidth * 4u
   };
-  formatTransfers[InteropFormatSint] = (InteropFormatTransfer){
-    sintInput,
-    sintOutput,
-    sizeof(sintInput),
+  formatTransfers[InteropFormatUint8] = (InteropFormatTransfer){
+    uint8Input,
+    uint8Output,
+    sizeof(uint8Input),
     TextureWidth * 4u
+  };
+  formatTransfers[InteropFormatSint8] = (InteropFormatTransfer){
+    sint8Input,
+    sint8Output,
+    sizeof(sint8Input),
+    TextureWidth * 4u
+  };
+  formatTransfers[InteropFormatUnorm16] = (InteropFormatTransfer){
+    unorm16Input,
+    unorm16Output,
+    sizeof(unorm16Input),
+    TextureWidth * 4u * sizeof(uint16_t)
+  };
+  formatTransfers[InteropFormatSnorm16] = (InteropFormatTransfer){
+    snorm16Input,
+    snorm16Output,
+    sizeof(snorm16Input),
+    TextureWidth * 4u * sizeof(int16_t)
+  };
+  formatTransfers[InteropFormatUint16] = (InteropFormatTransfer){
+    uint16Input,
+    uint16Output,
+    sizeof(uint16Input),
+    TextureWidth * 4u * sizeof(uint16_t)
+  };
+  formatTransfers[InteropFormatSint16] = (InteropFormatTransfer){
+    sint16Input,
+    sint16Output,
+    sizeof(sint16Input),
+    TextureWidth * 4u * sizeof(int16_t)
   };
 
   writeRegion.aspect       = GPU_TEXTURE_ASPECT_ALL;
@@ -727,12 +808,18 @@ run_texture_roundtrip(RoundtripState *state) {
                                           "cuda-texture-update"))) {
     goto cleanup;
   }
-  GPUBindComputePipeline(computePass, state->texturePipeline);
+  GPUBindComputePipeline(computePass, state->textureSamplePipeline);
   GPUBindComputeGroup(computePass, 0u, state->textureGroup, 0u, NULL);
   GPUDispatch(computePass,
               TextureWidth / 8u,
               TextureHeight / 8u,
               CubeArrayLayers);
+  GPUBindComputePipeline(computePass, state->textureStorePipeline);
+  GPUBindComputeGroup(computePass, 0u, state->textureGroup, 0u, NULL);
+  GPUDispatch(computePass,
+              TextureWidth / 8u,
+              TextureHeight / 8u,
+              TextureLayers);
   GPUEndComputePass(computePass);
   computePass = NULL;
 
@@ -948,9 +1035,14 @@ run_texture_roundtrip(RoundtripState *state) {
   }
   halfBase = TextureValueCount * 2u + CubeOutputValueCount +
              CubeArrayOutputValueCount;
-  unormBase = halfBase + HalfFloatOutputValueCount;
-  uintBase  = unormBase + ByteFloatOutputValueCount;
-  sintBase  = uintBase + ByteFloatOutputValueCount;
+  unorm8Base  = halfBase + HalfFloatOutputValueCount;
+  snorm8Base  = unorm8Base + ByteFloatOutputValueCount;
+  uint8Base   = snorm8Base + ByteFloatOutputValueCount;
+  sint8Base   = uint8Base + ByteFloatOutputValueCount;
+  unorm16Base = sint8Base + ByteFloatOutputValueCount;
+  snorm16Base = unorm16Base + WordFloatOutputValueCount;
+  uint16Base  = snorm16Base + WordFloatOutputValueCount;
+  sint16Base  = uint16Base + WordFloatOutputValueCount;
   for (uint32_t i = 0u; i < HalfTextureValueCount; i++) {
     uint32_t pattern;
 
@@ -971,31 +1063,93 @@ run_texture_roundtrip(RoundtripState *state) {
   }
   for (uint32_t i = 0u; i < ByteTextureValueCount; i++) {
     uint32_t pattern;
-    float    unormOriginal, unormExpected;
+    float    original, expected;
 
-    pattern       = (i / CubeFaceValueCount) * 4u + i % 4u;
-    unormOriginal = (float)unormInputValues[pattern] / 255.0f;
-    unormExpected = (float)(255u - unormInputValues[pattern]) / 255.0f;
-    if (fabsf(cudaOutput[unormBase + i] - unormOriginal) >
+    pattern  = (i / CubeFaceValueCount) * 4u + i % 4u;
+    original = (float)unorm8InputValues[pattern] / 255.0f;
+    expected = (float)(255u - unorm8InputValues[pattern]) / 255.0f;
+    if (fabsf(cudaOutput[unorm8Base + i] - original) >
           0.5f / 255.0f + 0.000001f ||
-        fabsf(cudaOutput[unormBase + ByteTextureValueCount + i] -
-               unormExpected) > 0.5f / 255.0f + 0.000001f ||
-        unormOutput[i] != 255u - unormInputValues[pattern] ||
-        cudaOutput[uintBase + i] != (float)uintInputValues[pattern] ||
-        cudaOutput[uintBase + ByteTextureValueCount + i] !=
-          (float)(uintInputValues[pattern] + 1u) ||
-        uintOutput[i] != (uint8_t)(uintInputValues[pattern] + 1u) ||
-        cudaOutput[sintBase + i] != (float)sintInputValues[pattern] ||
-        cudaOutput[sintBase + ByteTextureValueCount + i] !=
-          (float)(sintInputValues[pattern] + 7) ||
-        sintOutput[i] != (int8_t)(sintInputValues[pattern] + 7)) {
+        fabsf(cudaOutput[unorm8Base + ByteTextureValueCount + i] -
+               expected) > 0.5f / 255.0f + 0.000001f ||
+        unorm8Output[i] != 255u - unorm8InputValues[pattern]) {
       fprintf(stderr,
-              "CUDA byte texture mismatch at %u: %.9g/%.9g/%u/%d\n",
+              "CUDA rgba8-unorm mismatch at %u: %.9g/%.9g/%u\n",
               i,
-              cudaOutput[unormBase + i],
-              cudaOutput[unormBase + ByteTextureValueCount + i],
-              (unsigned)uintOutput[i],
-              (int)sintOutput[i]);
+              cudaOutput[unorm8Base + i],
+              cudaOutput[unorm8Base + ByteTextureValueCount + i],
+              (unsigned)unorm8Output[i]);
+      goto cleanup;
+    }
+    original = (float)snorm8InputValues[pattern] / 127.0f;
+    expected = -original;
+    if (fabsf(cudaOutput[snorm8Base + i] - original) >
+          0.5f / 127.0f + 0.000001f ||
+        fabsf(cudaOutput[snorm8Base + ByteTextureValueCount + i] -
+               expected) > 0.5f / 127.0f + 0.000001f ||
+        snorm8Output[i] != (int8_t)-snorm8InputValues[pattern]) {
+      fprintf(stderr, "CUDA rgba8-snorm mismatch at %u\n", i);
+      goto cleanup;
+    }
+    if (cudaOutput[uint8Base + i] != (float)uint8InputValues[pattern] ||
+        cudaOutput[uint8Base + ByteTextureValueCount + i] !=
+          (float)(uint8InputValues[pattern] + 1u) ||
+        uint8Output[i] != (uint8_t)(uint8InputValues[pattern] + 1u)) {
+      fprintf(stderr,
+              "CUDA rgba8-uint mismatch at %u: %.9g/%.9g/%u != %u/%u\n",
+              i,
+              cudaOutput[uint8Base + i],
+              cudaOutput[uint8Base + ByteTextureValueCount + i],
+              (unsigned)uint8Output[i],
+              (unsigned)uint8InputValues[pattern],
+              (unsigned)uint8InputValues[pattern] + 1u);
+      goto cleanup;
+    }
+    if (cudaOutput[sint8Base + i] != (float)sint8InputValues[pattern] ||
+        cudaOutput[sint8Base + ByteTextureValueCount + i] !=
+          (float)(sint8InputValues[pattern] + 7) ||
+        sint8Output[i] != (int8_t)(sint8InputValues[pattern] + 7)) {
+      fprintf(stderr, "CUDA rgba8-sint mismatch at %u\n", i);
+      goto cleanup;
+    }
+  }
+  for (uint32_t i = 0u; i < WordTextureValueCount; i++) {
+    uint32_t pattern;
+    float    original, expected;
+
+    pattern  = (i / CubeFaceValueCount) * 4u + i % 4u;
+    original = (float)unorm16InputValues[pattern] / 65535.0f;
+    expected = (float)(65535u - unorm16InputValues[pattern]) / 65535.0f;
+    if (fabsf(cudaOutput[unorm16Base + i] - original) >
+          0.5f / 65535.0f + 0.000001f ||
+        fabsf(cudaOutput[unorm16Base + WordTextureValueCount + i] -
+               expected) > 0.5f / 65535.0f + 0.000001f ||
+        unorm16Output[i] != 65535u - unorm16InputValues[pattern]) {
+      fprintf(stderr, "CUDA rgba16-unorm mismatch at %u\n", i);
+      goto cleanup;
+    }
+    original = (float)snorm16InputValues[pattern] / 32767.0f;
+    expected = -original;
+    if (fabsf(cudaOutput[snorm16Base + i] - original) >
+          0.5f / 32767.0f + 0.000001f ||
+        fabsf(cudaOutput[snorm16Base + WordTextureValueCount + i] -
+               expected) > 0.5f / 32767.0f + 0.000001f ||
+        snorm16Output[i] != (int16_t)-snorm16InputValues[pattern]) {
+      fprintf(stderr, "CUDA rgba16-snorm mismatch at %u\n", i);
+      goto cleanup;
+    }
+    if (cudaOutput[uint16Base + i] != (float)uint16InputValues[pattern] ||
+        cudaOutput[uint16Base + WordTextureValueCount + i] !=
+          (float)(uint16InputValues[pattern] + 1u) ||
+        uint16Output[i] != (uint16_t)(uint16InputValues[pattern] + 1u)) {
+      fprintf(stderr, "CUDA rgba16-uint mismatch at %u\n", i);
+      goto cleanup;
+    }
+    if (cudaOutput[sint16Base + i] != (float)sint16InputValues[pattern] ||
+        cudaOutput[sint16Base + WordTextureValueCount + i] !=
+          (float)(sint16InputValues[pattern] + 7) ||
+        sint16Output[i] != (int16_t)(sint16InputValues[pattern] + 7)) {
+      fprintf(stderr, "CUDA rgba16-sint mismatch at %u\n", i);
       goto cleanup;
     }
   }
@@ -1063,7 +1217,7 @@ main(int argc, char **argv) {
   GPUComputePipelineCreateInfo pipelineInfo = {0};
   GPUBindGroupEntry            paramsEntry = {0};
   GPUBindGroupEntry            dataEntries[2] = {0};
-  GPUBindGroupEntry            textureEntries[13] = {0};
+  GPUBindGroupEntry            textureEntries[5 + InteropFormatCount * 2] = {0};
   GPUBindGroupCreateInfo       groupInfo = {0};
   GPUMemoryRequirements        memoryRequirements;
   GPUResult                    textureRequirementsResult;
@@ -1394,26 +1548,69 @@ main(int argc, char **argv) {
                                      sizeof(uint16_t) * HalfTextureValueCount,
                                      cudaFirst) ||
       !create_interop_format_texture(&state,
-                                     InteropFormatUnorm,
+                                     InteropFormatUnorm8,
                                      &graphicsTextureInfo,
                                      GPU_FORMAT_RGBA8_UNORM,
                                      "rgba8-unorm-interop",
                                      ByteTextureValueCount,
                                      cudaFirst) ||
       !create_interop_format_texture(&state,
-                                     InteropFormatUint,
+                                     InteropFormatSnorm8,
+                                     &graphicsTextureInfo,
+                                     GPU_FORMAT_RGBA8_SNORM,
+                                     "rgba8-snorm-interop",
+                                     ByteTextureValueCount,
+                                     cudaFirst) ||
+      !create_interop_format_texture(&state,
+                                     InteropFormatUint8,
                                      &graphicsTextureInfo,
                                      GPU_FORMAT_RGBA8_UINT,
                                      "rgba8-uint-interop",
                                      ByteTextureValueCount,
                                      cudaFirst) ||
       !create_interop_format_texture(&state,
-                                     InteropFormatSint,
+                                     InteropFormatSint8,
                                      &graphicsTextureInfo,
                                      GPU_FORMAT_RGBA8_SINT,
                                      "rgba8-sint-interop",
                                      ByteTextureValueCount,
-                                     cudaFirst)) {
+                                     cudaFirst) ||
+      !create_interop_format_texture(
+        &state,
+        InteropFormatUnorm16,
+        &graphicsTextureInfo,
+        GPU_FORMAT_RGBA16_UNORM,
+        "rgba16-unorm-interop",
+        sizeof(uint16_t) * WordTextureValueCount,
+        cudaFirst
+      ) ||
+      !create_interop_format_texture(
+        &state,
+        InteropFormatSnorm16,
+        &graphicsTextureInfo,
+        GPU_FORMAT_RGBA16_SNORM,
+        "rgba16-snorm-interop",
+        sizeof(int16_t) * WordTextureValueCount,
+        cudaFirst
+      ) ||
+      !create_interop_format_texture(
+        &state,
+        InteropFormatUint16,
+        &graphicsTextureInfo,
+        GPU_FORMAT_RGBA16_UINT,
+        "rgba16-uint-interop",
+        sizeof(uint16_t) * WordTextureValueCount,
+        cudaFirst
+      ) ||
+      !create_interop_format_texture(
+        &state,
+        InteropFormatSint16,
+        &graphicsTextureInfo,
+        GPU_FORMAT_RGBA16_SINT,
+        "rgba16-sint-interop",
+        sizeof(int16_t) * WordTextureValueCount,
+        cudaFirst
+      )) {
     goto cleanup;
   }
 
@@ -1539,15 +1736,24 @@ main(int argc, char **argv) {
     goto cleanup;
   }
 
-  pipelineInfo.label      = "graphics-cuda-texture-update";
+  pipelineInfo.label      = "graphics-cuda-texture-sample";
   pipelineInfo.layout     = textureLayout->pipelineLayout;
   pipelineInfo.library    = textureLibrary;
-  pipelineInfo.entryPoint = "interop_texture_cs";
+  pipelineInfo.entryPoint = "interop_texture_sample_cs";
   if (GPUCreateComputePipeline(state.cudaDevice,
                                &pipelineInfo,
-                               &state.texturePipeline) != GPU_OK ||
-      !state.texturePipeline) {
-    fprintf(stderr, "CUDA interop texture pipeline creation failed\n");
+                               &state.textureSamplePipeline) != GPU_OK ||
+      !state.textureSamplePipeline) {
+    fprintf(stderr, "CUDA interop texture sample pipeline failed\n");
+    goto cleanup;
+  }
+  pipelineInfo.label      = "graphics-cuda-texture-store";
+  pipelineInfo.entryPoint = "interop_texture_store_cs";
+  if (GPUCreateComputePipeline(state.cudaDevice,
+                               &pipelineInfo,
+                               &state.textureStorePipeline) != GPU_OK ||
+      !state.textureStorePipeline) {
+    fprintf(stderr, "CUDA interop texture store pipeline failed\n");
     goto cleanup;
   }
 
@@ -1668,7 +1874,8 @@ cleanup:
   GPUDestroyBindGroup(state.textureGroup);
   GPUDestroyBindGroup(state.dataGroup);
   GPUDestroyBindGroup(state.paramsGroup);
-  GPUDestroyComputePipeline(state.texturePipeline);
+  GPUDestroyComputePipeline(state.textureStorePipeline);
+  GPUDestroyComputePipeline(state.textureSamplePipeline);
   GPUDestroyComputePipeline(state.pipeline);
   GPUDestroyShaderLayout(textureLayout);
   GPUDestroyShaderLibrary(textureLibrary);
