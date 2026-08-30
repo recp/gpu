@@ -12,6 +12,38 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL)
 endif()
 
 if(GPU_BUILD_TESTS)
+  add_executable(gpu-cache-file-concurrency-contract
+    ${PROJECT_SOURCE_DIR}/src/backend/cache_file.c
+    ${PROJECT_SOURCE_DIR}/tests/validation/cache-file-concurrency/main.c
+  )
+  target_include_directories(gpu-cache-file-concurrency-contract PRIVATE
+    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/src
+  )
+  set_target_properties(gpu-cache-file-concurrency-contract PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_definitions(gpu-cache-file-concurrency-contract PRIVATE
+      _CRT_SECURE_NO_WARNINGS
+    )
+    target_compile_options(gpu-cache-file-concurrency-contract PRIVATE /W4 /WX)
+  else()
+    target_compile_options(gpu-cache-file-concurrency-contract PRIVATE
+      -Wall
+      -Wextra
+      -Werror
+    )
+  endif()
+  add_test(NAME cache-file-concurrency-contract
+           COMMAND gpu-cache-file-concurrency-contract)
+  set_tests_properties(cache-file-concurrency-contract PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 30
+  )
+
   add_executable(gpu-adapter-enumeration-contract
     ${PROJECT_SOURCE_DIR}/tests/validation/adapter-enumeration/main.c
   )
