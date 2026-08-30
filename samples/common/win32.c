@@ -53,6 +53,25 @@ static GPUWin32Sample *activeSample;
 static GPUWin32Fetch  *completedFetches;
 static SRWLOCK         fetchLock = SRWLOCK_INIT;
 
+static double
+startup_mark(bool          enabled,
+             const char   *phase,
+             double        started,
+             double        previous) {
+  double now;
+
+  if (!enabled) {
+    return previous;
+  }
+  now = gpu_win32_get_now();
+  fprintf(stderr,
+          "GPU sample startup: %-12s %8.3f ms (%8.3f ms total)\n",
+          phase,
+          now - previous,
+          now - started);
+  return now;
+}
+
 static void
 adapter_ready(GPUResult result, GPUAdapter *adapter, void *userData) {
   GPUWin32AdapterRequest *request;
@@ -494,12 +513,18 @@ GPUSampleWin32Create(GPUWin32Window      *window,
   GPURuntimeConfig      runtimeInfo = {0};
   GPUWin32Sample       *sample;
   const char           *failure;
+  double                startupLast;
+  double                startupStart;
+  bool                  startupLog;
 
   if (!window || !window->handle || !name || !start || activeSample ||
       window->width == 0u || window->height == 0u ||
       !(window->scale > 0.0f)) {
     return NULL;
   }
+  startupLog   = getenv("GPU_SAMPLE_STARTUP_LOG") != NULL;
+  startupStart = startupLog ? gpu_win32_get_now() : 0.0;
+  startupLast  = startupStart;
   sample = calloc(1, sizeof(*sample));
   if (!sample) {
     return NULL;
@@ -519,12 +544,20 @@ GPUSampleWin32Create(GPUWin32Window      *window,
       !sample->instance) {
     goto fail;
   }
+  startupLast = startup_mark(startupLog,
+                             "instance",
+                             startupStart,
+                             startupLast);
 
   failure         = "select the requested Direct3D 12 adapter";
   sample->adapter = select_adapter(sample->instance);
   if (!sample->adapter) {
     goto fail;
   }
+  startupLast = startup_mark(startupLog,
+                             "adapter",
+                             startupStart,
+                             startupLast);
 
   deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
@@ -547,6 +580,10 @@ GPUSampleWin32Create(GPUWin32Window      *window,
   if (!sample->queue) {
     goto fail;
   }
+  startupLast = startup_mark(startupLog,
+                             "device+queue",
+                             startupStart,
+                             startupLast);
 
   runtimeInfo.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtimeInfo.chain.structSize = sizeof(runtimeInfo);
@@ -556,6 +593,10 @@ GPUSampleWin32Create(GPUWin32Window      *window,
   if (GPUConfigureRuntime(sample->device, &runtimeInfo) != GPU_OK) {
     goto fail;
   }
+  startupLast = startup_mark(startupLog,
+                             "runtime",
+                             startupStart,
+                             startupLast);
 
   failure = "create the window surface";
   sample->surface = GPUCreateSurfaceFromNative(sample->instance,
@@ -567,6 +608,10 @@ GPUSampleWin32Create(GPUWin32Window      *window,
       !resize_surface(sample, NULL, &sample->width, &sample->height)) {
     goto fail;
   }
+  startupLast = startup_mark(startupLog,
+                             "surface",
+                             startupStart,
+                             startupLast);
   failure = "create the swapchain";
   sample->swapchain = GPUCreateSwapchainDefault(sample->device,
                                                 sample->surface,
@@ -575,12 +620,20 @@ GPUSampleWin32Create(GPUWin32Window      *window,
   if (!sample->swapchain) {
     goto fail;
   }
+  startupLast = startup_mark(startupLog,
+                             "swapchain",
+                             startupStart,
+                             startupLast);
 
   activeSample = sample;
   failure      = "initialize sample resources";
   if (start() != 0 || sample->failed) {
     goto fail;
   }
+  startup_mark(startupLog,
+               "resources",
+               startupStart,
+               startupLast);
   return sample;
 
 fail:
