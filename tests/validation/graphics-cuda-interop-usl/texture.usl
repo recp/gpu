@@ -30,6 +30,8 @@ kern(8, 8, 1) interop_texture_sample_cs(
   uint32Sampled: texture2d_array<uint> #texture(24),
   sint32Sampled: texture2d_array<int> #texture(26),
   srgbSampled: texture2d_array<float> #texture(27),
+  depth32Sampled: depth2d_array<float> #texture(30),
+  depth16Sampled: depth2d_array<float> #texture(31),
   gid: uint3 #global_id
 ) {
   let texelCount = 8u * 8u * 2u
@@ -45,6 +47,11 @@ kern(8, 8, 1) interop_texture_sample_cs(
   let uint32Base = sint16Base + texelCount * 2u
   let sint32Base = uint32Base + texelCount * 2u
   let srgbBase = halfBase + texelCount * 2u * (11u + 24u)
+  let packedReadBase = srgbBase + texelCount
+  let packedInputBase = packedReadBase + texelCount
+  let bgraBase = packedInputBase + texelCount
+  let depth32Base = bgraBase + texelCount * 2u
+  let depth16Base = depth32Base + texelCount
   if gid.z < 2u {
     let index = (gid.z * 8u + gid.y) * 8u + gid.x
     let original = sampled.read(int3(gid))
@@ -60,6 +67,22 @@ kern(8, 8, 1) interop_texture_sample_cs(
     let uint32Original = uint32Sampled.read(int3(gid))
     let sint32Original = sint32Sampled.read(int3(gid))
     let srgbOriginal = srgbSampled.read(int3(gid))
+    let depthCoord = float3(
+      (float2(float(gid.x), float(gid.y)) + float2(0.5)) / float2(8.0),
+      float(gid.z)
+    )
+    let depth32Read = depth32Sampled.read(int3(gid))
+    let depth32Sample = depth32Sampled.sample(
+      .nearest,
+      depthCoord,
+      level(0.0)
+    )
+    let depth16Read = depth16Sampled.read(int3(gid))
+    let depth16Sample = depth16Sampled.sample(
+      .nearest,
+      depthCoord,
+      level(0.0)
+    )
     output[index] = original
     output[halfBase + index] = float4(halfOriginal)
     output[unorm8Base + index] = unorm8Original
@@ -73,6 +96,10 @@ kern(8, 8, 1) interop_texture_sample_cs(
     output[uint32Base + index] = float4(uint32Original)
     output[sint32Base + index] = float4(sint32Original)
     output[srgbBase + index] = srgbOriginal
+    output[depth32Base + index] =
+      float4(depth32Read, depth32Sample, 0.0, 0.0)
+    output[depth16Base + index] =
+      float4(depth16Read, depth16Sample, 0.0, 0.0)
   }
   if gid.x == 0u && gid.y == 0u && gid.z < 6u {
     output[texelCount * 2u + gid.z] = cube.sample(

@@ -50,6 +50,10 @@ cuda__sharedTextureSupported(const GPUDeviceInteropCuda *native,
   }
 #if defined(_WIN32) || defined(WIN32)
   if (native->graphicsApi->backend == GPU_BACKEND_VULKAN &&
+      info->format == GPU_FORMAT_DEPTH16_UNORM) {
+    return false;
+  }
+  if (native->graphicsApi->backend == GPU_BACKEND_VULKAN &&
       info->dimension == GPU_TEXTURE_DIMENSION_2D &&
       info->depthOrLayers > 1u &&
       (info->mipLevelCount ? info->mipLevelCount : 1u) > 1u) {

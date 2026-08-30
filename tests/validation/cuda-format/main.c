@@ -17,6 +17,9 @@
 
 #define STORAGE_FLAGS GPU_CUDA_FORMAT_STORAGE_BIT
 
+#define SAMPLED_FLAGS \
+  (GPU_CUDA_FORMAT_SAMPLED_BIT | GPU_CUDA_FORMAT_FILTERABLE_BIT)
+
 typedef struct ExpectedFormat {
   GPUFormat          format;
   CUarray_format     arrayFormat;
@@ -106,7 +109,11 @@ static const ExpectedFormat expected[] = {
   EXPECT(GPU_FORMAT_RGBA32_FLOAT, CU_AD_FORMAT_FLOAT,
          FLOAT_FLAGS, 16u, 4u),
   EXPECT(GPU_FORMAT_RG11B10_UFLOAT, CU_AD_FORMAT_UNSIGNED_INT32,
-         STORAGE_FLAGS, 4u, 1u)
+         STORAGE_FLAGS, 4u, 1u),
+  EXPECT(GPU_FORMAT_DEPTH16_UNORM, CU_AD_FORMAT_UNSIGNED_INT16,
+         SAMPLED_FLAGS, 2u, 1u),
+  EXPECT(GPU_FORMAT_DEPTH32_FLOAT, CU_AD_FORMAT_FLOAT,
+         SAMPLED_FLAGS, 4u, 1u)
 };
 
 static int
