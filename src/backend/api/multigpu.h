@@ -115,6 +115,19 @@ typedef struct GPUApiMultiGPU {
                           GPUExternalMemoryExport    *outExport);
 
   GPUResult
+  (*getExternalTextureRequirements)(
+    GPUDevice                  *device,
+    const GPUTextureCreateInfo *info,
+    GPUMemoryRequirements      *outRequirements
+  );
+
+  GPUResult
+  (*createExternalTexture)(GPUDevice                   *device,
+                           const GPUTextureCreateInfo  *info,
+                           GPUTexture                 **outTexture,
+                           GPUExternalMemoryExport     *outExport);
+
+  GPUResult
   (*createExternalSemaphore)(GPUDevice                     *device,
                              const GPUSemaphoreCreateInfo  *info,
                              GPUSemaphore                  *semaphore,

@@ -105,6 +105,8 @@ cuda__load(void) {
   CUDA_LOAD_OPTIONAL(importExternalMemory, "cuImportExternalMemory");
   CUDA_LOAD_OPTIONAL(externalMemoryGetMappedBuffer,
                      "cuExternalMemoryGetMappedBuffer");
+  CUDA_LOAD_OPTIONAL(externalMemoryGetMappedMipmappedArray,
+                     "cuExternalMemoryGetMappedMipmappedArray");
   CUDA_LOAD_OPTIONAL(destroyExternalMemory, "cuDestroyExternalMemory");
   CUDA_LOAD_OPTIONAL(importExternalSemaphore, "cuImportExternalSemaphore");
   CUDA_LOAD_OPTIONAL(signalExternalSemaphoresAsync,

@@ -1,0 +1,6 @@
+kern(8, 8, 1) interop_texture_cs(
+  image: image2d<rgba32float, read_write> #texture(0),
+  gid: uint2 #global_id
+) {
+  image.write(image.read(gid) * 2.0 + float4(1.0), gid)
+}

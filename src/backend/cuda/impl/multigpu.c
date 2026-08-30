@@ -31,6 +31,17 @@ cuda__bufferUsageSupported(GPUBufferUsageFlags usage) {
   return usage != 0u && (usage & ~allowed) == 0u;
 }
 
+static bool
+cuda__textureUsageSupported(GPUTextureUsageFlags usage) {
+  const GPUTextureUsageFlags allowed =
+    GPU_TEXTURE_USAGE_SAMPLED |
+    GPU_TEXTURE_USAGE_STORAGE |
+    GPU_TEXTURE_USAGE_COPY_SRC |
+    GPU_TEXTURE_USAGE_COPY_DST;
+
+  return usage != 0u && (usage & ~allowed) == 0u;
+}
+
 static GPUResult
 cuda__interopDevices(GPUDeviceInteropEXT   *interop,
                      GPUDeviceInteropCuda **outNative) {
@@ -351,6 +362,220 @@ cuda_createSharedBuffer(GPUDeviceInteropEXT       *interop,
   return GPU_OK;
 }
 
+static void
+cuda__textureInfos(GPUDeviceInteropCuda        *native,
+                   const GPUTextureCreateInfo  *firstInfo,
+                   const GPUTextureCreateInfo  *secondInfo,
+                   const GPUTextureCreateInfo **outGraphicsInfo,
+                   const GPUTextureCreateInfo **outCudaInfo,
+                   GPUTextureCreateInfo         *outSharedInfo) {
+  *outGraphicsInfo = native->cudaFirst ? secondInfo : firstInfo;
+  *outCudaInfo     = native->cudaFirst ? firstInfo : secondInfo;
+  *outSharedInfo   = **outGraphicsInfo;
+  outSharedInfo->usage = firstInfo->usage | secondInfo->usage;
+}
+
+static GPUResult
+cuda_getSharedTextureRequirements(
+  GPUDeviceInteropEXT        *interop,
+  const GPUTextureCreateInfo *firstInfo,
+  const GPUTextureCreateInfo *secondInfo,
+  GPUMemoryRequirements      *outRequirements
+) {
+  GPUDeviceInteropCuda       *native;
+  const GPUTextureCreateInfo *graphicsInfo, *cudaInfo;
+  GPUTextureCreateInfo        sharedInfo;
+  GPUCudaTexturePlan          plan;
+  GPUCudaFormatInfo           format;
+  GPUResult                   result;
+
+  result = cuda__interopDevices(interop, &native);
+  if (result != GPU_OK || !firstInfo || !secondInfo || !outRequirements) {
+    return result != GPU_OK ? result : GPU_ERROR_INVALID_ARGUMENT;
+  }
+  cuda__textureInfos(native,
+                     firstInfo,
+                     secondInfo,
+                     &graphicsInfo,
+                     &cudaInfo,
+                     &sharedInfo);
+  GPU__UNUSED(graphicsInfo);
+  if (!cuda__textureUsageSupported(cudaInfo->usage) ||
+      !native->cuda->driver->externalMemoryGetMappedMipmappedArray ||
+      !cuda_formatInfo(cudaInfo->format, &format) ||
+      !cuda_texturePlan(cudaInfo, &format, &plan) ||
+      !native->graphicsApi->multigpu.getExternalTextureRequirements) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  GPU__UNUSED(plan);
+  return native->graphicsApi->multigpu.getExternalTextureRequirements(
+    native->graphicsDevice,
+    &sharedInfo,
+    outRequirements
+  );
+}
+
+static GPUResult
+cuda__importTexture(GPUDevice                     *device,
+                    const GPUTextureCreateInfo     *info,
+                    GPUTextureUsageFlags            graphicsUsage,
+                    const GPUExternalMemoryExport  *memory,
+                    GPUTexture                    **outTexture) {
+  GPUDeviceCuda                         *deviceNative;
+  GPUTextureCuda                        *native;
+  GPUTexture                            *texture;
+  GPUCudaTexturePlan                     plan;
+  GPUCudaFormatInfo                      format;
+  CUDAExternalMemoryHandleDesc           handleDesc;
+  CUDAExternalMemoryMipmappedArrayDesc   mipmapDesc = {0};
+  CUresult                               result;
+  GPUResult                              pushResult;
+  const char                            *operation;
+  bool                                   imported;
+
+  deviceNative = cuda_device(device);
+  if (!deviceNative || !info || !memory || !outTexture ||
+      !deviceNative->driver->externalMemoryGetMappedMipmappedArray ||
+      !cuda_formatInfo(info->format, &format) ||
+      !cuda_texturePlan(info, &format, &plan) ||
+      !cuda__memoryDesc(memory, &handleDesc)) {
+    cuda__closeMemoryExport(memory, false);
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outTexture = NULL;
+  texture = calloc(1, sizeof(*texture));
+  native  = calloc(1, sizeof(*native));
+  if (!texture || !native) {
+    free(native);
+    free(texture);
+    cuda__closeMemoryExport(memory, false);
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  if ((graphicsUsage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u) {
+    plan.desc.Flags |= CUDA_ARRAY3D_COLOR_ATTACHMENT;
+  }
+  mipmapDesc.arrayDesc = plan.desc;
+  mipmapDesc.numLevels = plan.mipLevelCount;
+  pushResult = cuda_push(deviceNative->driver, deviceNative->context);
+  if (pushResult != GPU_OK) {
+    cuda__closeMemoryExport(memory, false);
+    free(native);
+    free(texture);
+    return pushResult;
+  }
+  operation = "external texture memory import";
+  result = deviceNative->driver->importExternalMemory(
+    &native->externalMemory,
+    &handleDesc
+  );
+  imported = result == CUDA_SUCCESS;
+  if (result == CUDA_SUCCESS) {
+    operation = "external texture mapping";
+    result = deviceNative->driver->externalMemoryGetMappedMipmappedArray(
+      &native->mipmap,
+      native->externalMemory,
+      &mipmapDesc
+    );
+  }
+  if (result != CUDA_SUCCESS && native->mipmap) {
+    (void)deviceNative->driver->mipmappedArrayDestroy(native->mipmap);
+    native->mipmap = NULL;
+  }
+  if (result != CUDA_SUCCESS && native->externalMemory) {
+    (void)deviceNative->driver->destroyExternalMemory(native->externalMemory);
+    native->externalMemory = NULL;
+  }
+  cuda_pop(deviceNative->driver);
+  cuda__closeMemoryExport(memory, imported);
+  if (result != CUDA_SUCCESS) {
+    cuda_report(device, result, operation);
+    free(native);
+    free(texture);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  native->driver           = deviceNative->driver;
+  native->format           = format;
+  native->arrayFlags       = plan.desc.Flags;
+  texture->_priv           = native;
+  texture->device          = device;
+  texture->format          = info->format;
+  texture->dimension       = info->dimension;
+  texture->width           = info->width;
+  texture->height          = info->height;
+  texture->depthOrLayers   = info->depthOrLayers;
+  texture->mipLevelCount   = plan.mipLevelCount;
+  texture->sampleCount     = 1u;
+  texture->usage           = info->usage;
+  texture->_ownsNative     = true;
+  *outTexture              = texture;
+  return GPU_OK;
+}
+
+static GPUResult
+cuda_createSharedTexture(GPUDeviceInteropEXT        *interop,
+                         const GPUTextureCreateInfo *firstInfo,
+                         const GPUTextureCreateInfo *secondInfo,
+                         GPUTexture                **outFirstTexture,
+                         GPUTexture                **outSecondTexture) {
+  GPUDeviceInteropCuda       *native;
+  const GPUTextureCreateInfo *graphicsInfo, *cudaInfo;
+  GPUTextureCreateInfo        sharedInfo;
+  GPUExternalMemoryExport     memory = {0};
+  GPUTexture                 *graphicsTexture, *cudaTexture;
+  GPUResult                   result;
+
+  result = cuda__interopDevices(interop, &native);
+  if (result != GPU_OK || !firstInfo || !secondInfo ||
+      !outFirstTexture || !outSecondTexture) {
+    return result != GPU_OK ? result : GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outFirstTexture  = NULL;
+  *outSecondTexture = NULL;
+  cuda__textureInfos(native,
+                     firstInfo,
+                     secondInfo,
+                     &graphicsInfo,
+                     &cudaInfo,
+                     &sharedInfo);
+  if (!cuda__textureUsageSupported(cudaInfo->usage) ||
+      !native->cuda->driver->externalMemoryGetMappedMipmappedArray ||
+      !native->graphicsApi->multigpu.createExternalTexture) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  graphicsTexture = NULL;
+  cudaTexture     = NULL;
+  result = native->graphicsApi->multigpu.createExternalTexture(
+    native->graphicsDevice,
+    &sharedInfo,
+    &graphicsTexture,
+    &memory
+  );
+  if (result != GPU_OK) {
+    return result;
+  }
+  result = cuda__importTexture(native->cudaDevice,
+                               cudaInfo,
+                               graphicsInfo->usage,
+                               &memory,
+                               &cudaTexture);
+  if (result != GPU_OK) {
+    GPUDestroyTexture(graphicsTexture);
+    return result;
+  }
+  graphicsTexture->usage = graphicsInfo->usage;
+  if (native->cudaFirst) {
+    *outFirstTexture  = cudaTexture;
+    *outSecondTexture = graphicsTexture;
+  } else {
+    *outFirstTexture  = graphicsTexture;
+    *outSecondTexture = cudaTexture;
+  }
+  return GPU_OK;
+}
+
 static bool
 cuda__semaphoreDesc(const GPUExternalSemaphoreExport *semaphore,
                     CUDAExternalSemaphoreHandleDesc  *outDesc) {
@@ -489,12 +714,9 @@ cuda__encodeSharedBarriers(GPUDeviceInteropEXT           *interop,
   }
   commandDevice = gpuCommandBufferDevice(cmdb);
   if (commandDevice == native->cudaDevice) {
-    return barriers->textureBarrierCount == 0u
-             ? GPU_OK
-             : GPU_ERROR_UNSUPPORTED;
+    return GPU_OK;
   }
-  if (commandDevice != native->graphicsDevice ||
-      barriers->textureBarrierCount != 0u) {
+  if (commandDevice != native->graphicsDevice) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   return acquire
@@ -524,6 +746,8 @@ cuda_initMultiGPU(GPUApiMultiGPU *api) {
   api->destroyInterop        = cuda_destroyDeviceInterop;
   api->getBufferRequirements = cuda_getSharedBufferRequirements;
   api->createBuffer          = cuda_createSharedBuffer;
+  api->getTextureRequirements = cuda_getSharedTextureRequirements;
+  api->createTexture          = cuda_createSharedTexture;
   api->createSemaphore       = cuda_createSharedSemaphore;
   api->encodeRelease         = cuda_encodeSharedRelease;
   api->encodeAcquire         = cuda_encodeSharedAcquire;

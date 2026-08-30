@@ -299,6 +299,118 @@ dx12_createExternalBuffer(GPUDevice                  *device,
 }
 
 static GPUResult
+dx12_getExternalTextureRequirements(
+  GPUDevice                  *device,
+  const GPUTextureCreateInfo *info,
+  GPUMemoryRequirements      *outRequirements
+) {
+  return dx12_getTextureMemoryRequirements(device, info, outRequirements);
+}
+
+static GPUResult
+dx12_createExternalTexture(GPUDevice                   *device,
+                            const GPUTextureCreateInfo  *info,
+                            GPUTexture                 **outTexture,
+                            GPUExternalMemoryExport     *outExport) {
+  GPUDeviceDX12                 *native;
+  ID3D12Resource                *resource;
+  D3D12_HEAP_PROPERTIES          heap = {0};
+  D3D12_RESOURCE_DESC            desc = {0};
+  D3D12_CLEAR_VALUE              clearValue = {0};
+  D3D12_RESOURCE_ALLOCATION_INFO allocationInfo;
+  D3D12_RESOURCE_STATES          initialState;
+  HANDLE                         handle;
+  GPUResult                      result;
+  HRESULT                        nativeResult;
+  uint32_t                       mipLevelCount, arrayLayerCount;
+  uint32_t                       planeCount, subresourceCount;
+
+  native = device ? device->_priv : NULL;
+  if (!native || !native->d3dDevice || !info || !outTexture || !outExport) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outTexture = NULL;
+  memset(outExport, 0, sizeof(*outExport));
+  result = dx12_textureDesc(device,
+                            info,
+                            &desc,
+                            &clearValue,
+                            &initialState,
+                            &mipLevelCount,
+                            &arrayLayerCount,
+                            &planeCount,
+                            &subresourceCount);
+  if (result != GPU_OK) {
+    return result;
+  }
+  GPU__UNUSED(initialState);
+
+  native->d3dDevice->lpVtbl->GetResourceAllocationInfo(native->d3dDevice,
+                                                        &allocationInfo,
+                                                        0u,
+                                                        1u,
+                                                        &desc);
+  if (allocationInfo.SizeInBytes == UINT64_MAX ||
+      allocationInfo.Alignment == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  resource              = NULL;
+  handle                = NULL;
+  heap.Type             = D3D12_HEAP_TYPE_DEFAULT;
+  heap.CreationNodeMask = 1u;
+  heap.VisibleNodeMask  = 1u;
+  nativeResult = native->d3dDevice->lpVtbl->CreateCommittedResource(
+    native->d3dDevice,
+    &heap,
+    D3D12_HEAP_FLAG_SHARED,
+    &desc,
+    D3D12_RESOURCE_STATE_COMMON,
+    (info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u
+      ? &clearValue
+      : NULL,
+    &IID_ID3D12Resource,
+    (void **)&resource
+  );
+  if (FAILED(nativeResult) || !resource) {
+    return dx12_nativeResult(nativeResult);
+  }
+  nativeResult = native->d3dDevice->lpVtbl->CreateSharedHandle(
+    native->d3dDevice,
+    (ID3D12DeviceChild *)resource,
+    NULL,
+    GENERIC_ALL,
+    NULL,
+    &handle
+  );
+  if (FAILED(nativeResult) || !handle) {
+    resource->lpVtbl->Release(resource);
+    return dx12_nativeResult(nativeResult);
+  }
+
+  result = dx12_wrapTexture(device,
+                            info,
+                            resource,
+                            D3D12_RESOURCE_STATE_COMMON,
+                            mipLevelCount,
+                            arrayLayerCount,
+                            planeCount,
+                            subresourceCount,
+                            outTexture);
+  if (result != GPU_OK) {
+    CloseHandle(handle);
+    resource->lpVtbl->Release(resource);
+    return result;
+  }
+
+  outExport->handle.win32 = handle;
+  outExport->sizeBytes    = allocationInfo.SizeInBytes;
+  outExport->type         = GPU_EXTERNAL_MEMORY_D3D12_RESOURCE;
+  outExport->dedicated    = true;
+  return GPU_OK;
+}
+
+static GPUResult
 dx12_createSharedBuffer(GPUDeviceInteropEXT       *interop,
                         const GPUBufferCreateInfo *firstInfo,
                         const GPUBufferCreateInfo *secondInfo,
@@ -834,6 +946,9 @@ dx12_initMultiGPU(GPUApiMultiGPU *api) {
   api->getExternalBufferRequirements =
     dx12_getExternalBufferRequirements;
   api->createExternalBuffer    = dx12_createExternalBuffer;
+  api->getExternalTextureRequirements =
+    dx12_getExternalTextureRequirements;
+  api->createExternalTexture   = dx12_createExternalTexture;
   api->createExternalSemaphore = dx12_createExternalSemaphore;
   api->encodeExternalRelease   = dx12_encodeExternalRelease;
   api->encodeExternalAcquire   = dx12_encodeExternalAcquire;

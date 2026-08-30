@@ -227,6 +227,13 @@ typedef struct CUDAExternalMemoryBufferDesc {
   uint32_t reserved[16];
 } CUDAExternalMemoryBufferDesc;
 
+typedef struct CUDAExternalMemoryMipmappedArrayDesc {
+  uint64_t                offset;
+  CUDA_ARRAY3D_DESCRIPTOR arrayDesc;
+  uint32_t                numLevels;
+  uint32_t                reserved[16];
+} CUDAExternalMemoryMipmappedArrayDesc;
+
 typedef struct CUDAExternalSemaphoreHandleDesc {
   CUexternalSemaphoreHandleType type;
   CUDAExternalHandle            handle;
@@ -275,6 +282,8 @@ _Static_assert(sizeof(CUDAExternalMemoryHandleDesc) == 104u,
                "CUDA external-memory ABI drift");
 _Static_assert(sizeof(CUDAExternalMemoryBufferDesc) == 88u,
                "CUDA external-buffer ABI drift");
+_Static_assert(sizeof(CUDAExternalMemoryMipmappedArrayDesc) == 120u,
+               "CUDA external-mipmapped-array ABI drift");
 _Static_assert(sizeof(CUDAExternalSemaphoreHandleDesc) == 96u,
                "CUDA external-semaphore ABI drift");
 _Static_assert(sizeof(CUDAExternalSemaphoreSignalParams) == 144u,
@@ -302,6 +311,7 @@ enum {
   CUDA_ARRAY3D_LAYERED                       = 0x01u,
   CUDA_ARRAY3D_SURFACE_LDST                  = 0x02u,
   CUDA_ARRAY3D_CUBEMAP                       = 0x04u,
+  CUDA_ARRAY3D_COLOR_ATTACHMENT              = 0x20u,
   CU_TRSF_READ_AS_INTEGER                    = 0x01u,
   CU_TRSF_NORMALIZED_COORDINATES             = 0x02u,
   CU_TRSF_SRGB                               = 0x10u,
@@ -355,6 +365,11 @@ typedef struct GPUCUDA {
     CUdeviceptr                        *address,
     CUexternalMemory                    externalMemory,
     const CUDAExternalMemoryBufferDesc *desc
+  );
+  CUresult (CUDA_CALL *externalMemoryGetMappedMipmappedArray)(
+    CUmipmappedArray                           *mipmap,
+    CUexternalMemory                            externalMemory,
+    const CUDAExternalMemoryMipmappedArrayDesc *desc
   );
   CUresult (CUDA_CALL *destroyExternalMemory)(
     CUexternalMemory externalMemory

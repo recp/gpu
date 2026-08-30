@@ -30,6 +30,9 @@ enum {
 static void
 vk_destroySharedBufferState(GPUBufferVk *state);
 
+static void
+vk_destroySharedTextureState(GPUTextureVk *state);
+
 typedef struct GPUDeviceInteropVk {
   VkExternalMemoryHandleTypeFlagBits    memoryHandleType;
   VkExternalSemaphoreHandleTypeFlagBits semaphoreHandleType;
@@ -436,9 +439,279 @@ vk_createExternalBuffer(GPUDevice                  *device,
   return GPU_ERROR_UNSUPPORTED;
 #endif
 
-  state.allocationSize = requirements.size;
-  state.ownsMemory     = true;
+  state.ownsMemory = true;
   result = vk_wrapBuffer(device, info, &createInfo, &state, outBuffer);
+  if (result != GPU_OK) {
+#if defined(_WIN32) || defined(WIN32)
+    CloseHandle((HANDLE)outExport->handle.win32);
+#elif defined(__linux__) || defined(__ANDROID__)
+    close(outExport->handle.fd);
+#endif
+    memset(outExport, 0, sizeof(*outExport));
+    return result;
+  }
+  outExport->sizeBytes = requirements.size;
+  outExport->dedicated = dedicated;
+  return GPU_OK;
+}
+
+static GPUResult
+vk_externalTexturePlan(
+  GPUDevice                  *device,
+  const GPUTextureCreateInfo *info,
+  VkImageCreateInfo          *outCreateInfo,
+  VkImageAspectFlags         *outAspect,
+  VkMemoryRequirements       *outRequirements,
+  VkExternalMemoryHandleTypeFlagBits *outHandleType,
+  bool                       *outDedicated
+) {
+  GPUDeviceVk                       *native;
+  GPUAdapterVk                      *adapter;
+  VkPhysicalDeviceExternalImageFormatInfo externalInfo = {0};
+  VkPhysicalDeviceImageFormatInfo2  formatInfo = {0};
+  VkExternalImageFormatProperties   externalProperties = {0};
+  VkImageFormatProperties2          properties = {0};
+  VkExternalMemoryImageCreateInfo   externalCreate = {0};
+  VkExternalSemaphoreHandleTypeFlagBits semaphoreHandleType;
+  VkImage                            image;
+  GPUResult                         result;
+
+  native  = device ? device->_priv : NULL;
+  adapter = device && device->adapter ? device->adapter->_priv : NULL;
+  if (!native || !native->device || !native->externalInterop || !adapter ||
+      !info || !outCreateInfo || !outAspect || !outRequirements ||
+      !outHandleType || !outDedicated ||
+      !vk_externalHandleTypes(outHandleType, &semaphoreHandleType)) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  GPU__UNUSED(semaphoreHandleType);
+
+  result = vk_textureCreateInfo(device, info, outCreateInfo, outAspect);
+  if (result != GPU_OK) {
+    return result;
+  }
+  externalInfo.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO;
+  externalInfo.handleType = *outHandleType;
+  formatInfo.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2;
+  formatInfo.pNext  = &externalInfo;
+  formatInfo.format = outCreateInfo->format;
+  formatInfo.type   = outCreateInfo->imageType;
+  formatInfo.tiling = outCreateInfo->tiling;
+  formatInfo.usage  = outCreateInfo->usage;
+  formatInfo.flags  = outCreateInfo->flags;
+  externalProperties.sType =
+    VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES;
+  properties.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2;
+  properties.pNext = &externalProperties;
+  if (vkGetPhysicalDeviceImageFormatProperties2(adapter->physicalDevice,
+                                                 &formatInfo,
+                                                 &properties) != VK_SUCCESS ||
+      !vk_externalMemoryUsable(
+        externalProperties.externalMemoryProperties,
+        *outHandleType,
+        VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT,
+        outDedicated
+      )) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  externalCreate.sType =
+    VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
+  externalCreate.handleTypes = *outHandleType;
+  outCreateInfo->pNext        = &externalCreate;
+  image = VK_NULL_HANDLE;
+  if (vkCreateImage(native->device,
+                    outCreateInfo,
+                    NULL,
+                    &image) != VK_SUCCESS) {
+    outCreateInfo->pNext = NULL;
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+  vk_imageMemoryRequirements(native->device,
+                             image,
+                             outRequirements,
+                             outDedicated);
+  vkDestroyImage(native->device, image, NULL);
+  outCreateInfo->pNext = NULL;
+  if (vk_filterMemoryTypes(device, outRequirements->memoryTypeBits) == 0u ||
+      outRequirements->size == 0u || outRequirements->alignment == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+  return GPU_OK;
+}
+
+static GPUResult
+vk_getExternalTextureRequirements(
+  GPUDevice                  *device,
+  const GPUTextureCreateInfo *info,
+  GPUMemoryRequirements      *outRequirements
+) {
+  VkImageCreateInfo                 createInfo = {0};
+  VkImageAspectFlags                aspect;
+  VkMemoryRequirements              requirements;
+  VkExternalMemoryHandleTypeFlagBits handleType;
+  bool                              dedicated;
+  GPUResult                         result;
+
+  if (!outRequirements) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  result = vk_externalTexturePlan(device,
+                                  info,
+                                  &createInfo,
+                                  &aspect,
+                                  &requirements,
+                                  &handleType,
+                                  &dedicated);
+  GPU__UNUSED(aspect);
+  GPU__UNUSED(handleType);
+  GPU__UNUSED(dedicated);
+  if (result != GPU_OK) {
+    return result;
+  }
+  outRequirements->sizeBytes         = requirements.size;
+  outRequirements->alignmentBytes    = requirements.alignment;
+  outRequirements->compatibilityMask =
+    vk_filterMemoryTypes(device, requirements.memoryTypeBits);
+  return GPU_OK;
+}
+
+static GPUResult
+vk_createExternalTexture(GPUDevice                   *device,
+                         const GPUTextureCreateInfo  *info,
+                         GPUTexture                 **outTexture,
+                         GPUExternalMemoryExport     *outExport) {
+  GPUDeviceVk                       *native;
+  VkImageCreateInfo                  createInfo = {0};
+  VkExternalMemoryImageCreateInfo    externalCreate = {0};
+  VkExportMemoryAllocateInfo         exportInfo = {0};
+  VkMemoryDedicatedAllocateInfo      dedicatedInfo = {0};
+  VkMemoryAllocateInfo               allocationInfo = {0};
+  VkMemoryRequirements               requirements;
+  VkExternalMemoryHandleTypeFlagBits handleType;
+  VkMemoryPropertyFlags              memoryFlags;
+  GPUTextureVk                       state = {0};
+  uint32_t                           memoryTypeIndex;
+  bool                               dedicated;
+  GPUResult                          result;
+
+  native = device ? device->_priv : NULL;
+  if (!native || !native->device || !info || !outTexture || !outExport) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+  *outTexture = NULL;
+  memset(outExport, 0, sizeof(*outExport));
+  result = vk_externalTexturePlan(device,
+                                  info,
+                                  &createInfo,
+                                  &state.aspect,
+                                  &requirements,
+                                  &handleType,
+                                  &dedicated);
+  if (result != GPU_OK ||
+      !vk_findMemoryType(device,
+                         requirements.memoryTypeBits,
+                         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                         0u,
+                         &memoryTypeIndex,
+                         &memoryFlags)) {
+    return result != GPU_OK ? result : GPU_ERROR_UNSUPPORTED;
+  }
+  GPU__UNUSED(memoryFlags);
+  if (createInfo.arrayLayers == 0u ||
+      createInfo.mipLevels > UINT32_MAX / createInfo.arrayLayers) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  externalCreate.sType =
+    VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
+  externalCreate.handleTypes = handleType;
+  createInfo.pNext            = &externalCreate;
+  state.gpuDevice             = native;
+  state.device                = native->device;
+  state.layout                = VK_IMAGE_LAYOUT_UNDEFINED;
+  state.layoutUniform         = true;
+  state.mipLevelCount         = createInfo.mipLevels;
+  state.arrayLayerCount       = createInfo.arrayLayers;
+  state.subresourceCount      = createInfo.mipLevels * createInfo.arrayLayers;
+  if (vkCreateImage(native->device,
+                    &createInfo,
+                    NULL,
+                    &state.image) != VK_SUCCESS) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  if (dedicated) {
+    dedicatedInfo.sType =
+      VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
+    dedicatedInfo.image = state.image;
+  }
+  exportInfo.sType       = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
+  exportInfo.pNext       = dedicated ? &dedicatedInfo : NULL;
+  exportInfo.handleTypes = handleType;
+  allocationInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocationInfo.pNext           = &exportInfo;
+  allocationInfo.allocationSize  = requirements.size;
+  allocationInfo.memoryTypeIndex = memoryTypeIndex;
+  if (vkAllocateMemory(native->device,
+                       &allocationInfo,
+                       NULL,
+                       &state.memory) != VK_SUCCESS ||
+      vkBindImageMemory(native->device,
+                        state.image,
+                        state.memory,
+                        0u) != VK_SUCCESS) {
+    vk_destroySharedTextureState(&state);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+#if defined(_WIN32) || defined(WIN32)
+  {
+    VkMemoryGetWin32HandleInfoKHR getInfo = {0};
+    HANDLE handle;
+
+    handle             = NULL;
+    getInfo.sType      = VK_STRUCTURE_TYPE_MEMORY_GET_WIN32_HANDLE_INFO_KHR;
+    getInfo.memory     = state.memory;
+    getInfo.handleType = handleType;
+    if (native->getMemoryHandle(native->device, &getInfo, &handle) !=
+          VK_SUCCESS ||
+        !handle) {
+      vk_destroySharedTextureState(&state);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    outExport->handle.win32 = handle;
+    outExport->type         = GPU_EXTERNAL_MEMORY_OPAQUE_WIN32;
+  }
+#elif defined(__linux__) || defined(__ANDROID__)
+  {
+    VkMemoryGetFdInfoKHR getInfo = {0};
+    int fd;
+
+    fd                 = -1;
+    getInfo.sType      = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
+    getInfo.memory     = state.memory;
+    getInfo.handleType = handleType;
+    if (native->getMemoryHandle(native->device, &getInfo, &fd) != VK_SUCCESS ||
+        fd < 0) {
+      vk_destroySharedTextureState(&state);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+    outExport->handle.fd = fd;
+    outExport->type      = GPU_EXTERNAL_MEMORY_OPAQUE_FD;
+  }
+#else
+  vk_destroySharedTextureState(&state);
+  return GPU_ERROR_UNSUPPORTED;
+#endif
+
+  state.ownsMemory = true;
+  result = vk_finishTexture(device,
+                            info,
+                            &createInfo,
+                            &state,
+                            outTexture);
   if (result != GPU_OK) {
 #if defined(_WIN32) || defined(WIN32)
     CloseHandle((HANDLE)outExport->handle.win32);
@@ -1713,6 +1986,8 @@ vk_initMultiGPU(GPUApiMultiGPU *api) {
   api->encodeAcquire          = vk_encodeSharedAcquire;
   api->getExternalBufferRequirements = vk_getExternalBufferRequirements;
   api->createExternalBuffer    = vk_createExternalBuffer;
+  api->getExternalTextureRequirements = vk_getExternalTextureRequirements;
+  api->createExternalTexture   = vk_createExternalTexture;
   api->createExternalSemaphore = vk_createExternalSemaphore;
   api->encodeExternalRelease   = vk_encodeExternalRelease;
   api->encodeExternalAcquire   = vk_encodeExternalAcquire;

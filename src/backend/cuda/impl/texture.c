@@ -117,6 +117,9 @@ cuda_destroyTexture(GPUTexture * __restrict texture) {
     } else {
       (void)native->driver->arrayDestroy(native->array);
     }
+    if (native->externalMemory && native->driver->destroyExternalMemory) {
+      (void)native->driver->destroyExternalMemory(native->externalMemory);
+    }
     cuda_pop(native->driver);
   }
   free(native);

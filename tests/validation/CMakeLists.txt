@@ -1920,7 +1920,8 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     target_link_libraries(gpu-graphics-cuda-interop-usl PRIVATE gpu)
     gpu_attach_usl_validation(gpu-graphics-cuda-interop-usl
                               gpu-cuda-fixtures
-                              "${GPU_CUDA_COMPUTE_BUFFER_US}")
+                              "${GPU_CUDA_COMPUTE_BUFFER_US}"
+                              "${GPU_CUDA_INTEROP_TEXTURE_US}")
     set_target_properties(gpu-graphics-cuda-interop-usl PROPERTIES
       C_STANDARD 11
       C_STANDARD_REQUIRED YES
@@ -1931,6 +1932,7 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
         NAME cuda-graphics-interop
         COMMAND gpu-graphics-cuda-interop-usl
                 "${GPU_CUDA_COMPUTE_BUFFER_US}"
+                "${GPU_CUDA_INTEROP_TEXTURE_US}"
       )
       set_tests_properties(cuda-graphics-interop PROPERTIES
         SKIP_RETURN_CODE 77
@@ -1941,6 +1943,7 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
           NAME cuda-vulkan-graphics-interop
           COMMAND gpu-graphics-cuda-interop-usl
                   "${GPU_CUDA_COMPUTE_BUFFER_US}"
+                  "${GPU_CUDA_INTEROP_TEXTURE_US}"
         )
         set_tests_properties(cuda-vulkan-graphics-interop PROPERTIES
           ENVIRONMENT "GPU_GRAPHICS_BACKEND=vulkan"

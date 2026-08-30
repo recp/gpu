@@ -54,6 +54,7 @@ typedef struct GPUBufferCuda {
 
 typedef struct GPUTextureCuda {
   GPUCUDA           *driver;
+  CUexternalMemory   externalMemory;
   CUmipmappedArray   mipmap;
   CUarray            array;
   GPUCudaFormatInfo  format;

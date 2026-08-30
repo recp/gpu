@@ -140,6 +140,7 @@ if(GPU_BUILD_TESTS OR (GPU_BUILD_CUDA AND GPU_BUILD_SAMPLES))
     "${PROJECT_SOURCE_DIR}/tests/validation/texture-geometry-cuda-usl/texture_geometry.usl"
     "${PROJECT_SOURCE_DIR}/tests/validation/storage-geometry-cuda-usl/storage_geometry.usl"
     "${PROJECT_SOURCE_DIR}/tests/validation/compute-buffer-cuda-usl/compute_buffer.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/graphics-cuda-interop-usl/texture.usl"
   )
   list(GET GPU_CUDA_METADATA_USL_FIXTURES 0 GPU_CUDA_STORAGE_TEXTURE_US)
   list(GET GPU_CUDA_METADATA_USL_FIXTURES 1 GPU_CUDA_SAMPLED_TEXTURE_US)
@@ -147,6 +148,7 @@ if(GPU_BUILD_TESTS OR (GPU_BUILD_CUDA AND GPU_BUILD_SAMPLES))
   list(GET GPU_CUDA_METADATA_USL_FIXTURES 3 GPU_CUDA_TEXTURE_GEOMETRY_US)
   list(GET GPU_CUDA_METADATA_USL_FIXTURES 4 GPU_CUDA_STORAGE_GEOMETRY_US)
   list(GET GPU_CUDA_METADATA_USL_FIXTURES 5 GPU_CUDA_COMPUTE_BUFFER_US)
+  list(GET GPU_CUDA_METADATA_USL_FIXTURES 6 GPU_CUDA_INTEROP_TEXTURE_US)
 
   set(GPU_USL_FIXTURE_TARGET_CAPS bounded_descriptor_indexing)
   gpu_add_usl_fixtures(
