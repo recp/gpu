@@ -576,6 +576,12 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   mappings[0].heapTileOffset = explicitPlacement
                                  ? 0u
                                  : GPU_SPARSE_HEAP_TILE_AUTO;
+  submitInfo.fence = NULL;
+  if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK) {
+    fprintf(stderr, "fenceless sparse map submit failed\n");
+    goto cleanup;
+  }
+  submitInfo.fence = fence;
   if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK ||
       GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     fprintf(stderr, "sparse map submit failed\n");

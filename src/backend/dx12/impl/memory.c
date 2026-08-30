@@ -247,6 +247,7 @@ dx12_submitSparse(GPUQueue                       *queueHandle,
       region.Depth     = (UINT16)mapping->tileDepth;
       tileCount64      = (uint64_t)mapping->tileWidth *
                          mapping->tileHeight * mapping->tileDepth;
+      region.NumTiles  = (UINT)tileCount64;
     }
     if (tileCount64 == 0u || tileCount64 > UINT_MAX) {
       return GPU_ERROR_INVALID_ARGUMENT;

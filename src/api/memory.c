@@ -768,7 +768,7 @@ GPUQueueSubmitSparse(GPUQueue                       * __restrict queue,
   backendInfo       = *info;
   backendInfo.fence = NULL;
   result = api->memory.submitSparse(queue, &backendInfo);
-  return result == GPU_OK
+  return result == GPU_OK && info->fence
            ? gpuSubmitSparseFenceMarker(queue, info->fence)
            : result;
 }
