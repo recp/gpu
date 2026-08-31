@@ -375,13 +375,19 @@ pipeline_createAll(PipelineStress   *stress,
   begin = bench_now();
   for (uint32_t i = 0u; i < pipelineCount; i++) {
     GPURenderPipelineCreateInfo info;
+    GPUResult                   result;
 
     info       = stress->infos[i];
     info.cache = cache;
-    if (GPUCreateRenderPipeline(stress->bench.device,
-                                &info,
-                                &stress->pipelines[i]) != GPU_OK ||
+    result = GPUCreateRenderPipeline(stress->bench.device,
+                                     &info,
+                                     &stress->pipelines[i]);
+    if (result != GPU_OK ||
         !stress->pipelines[i]) {
+      fprintf(stderr,
+              "pipeline %u creation failed: %d\n",
+              i,
+              result);
       return false;
     }
   }
