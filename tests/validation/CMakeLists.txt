@@ -1259,6 +1259,38 @@ if(GPU_BUILD_DX12 AND GPU_BUILD_TESTS)
       "GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1"
   )
 
+  add_executable(gpu-f16-trigonometric-dx12-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/f16-trigonometric-dx12-usl/main.c
+  )
+  target_compile_definitions(gpu-f16-trigonometric-dx12-usl PRIVATE
+    _CRT_SECURE_NO_WARNINGS
+  )
+  target_link_libraries(gpu-f16-trigonometric-dx12-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-f16-trigonometric-dx12-usl
+                            gpu-dx12-fixtures
+                            "${GPU_DX12_F16_TRIGONOMETRIC_US}")
+  set_target_properties(gpu-f16-trigonometric-dx12-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_options(gpu-f16-trigonometric-dx12-usl PRIVATE /W4 /WX)
+  else()
+    target_compile_options(gpu-f16-trigonometric-dx12-usl PRIVATE
+      -Wall -Wextra -Werror
+    )
+  endif()
+  add_test(
+    NAME dx12-native-dxil-f16-trigonometric
+    COMMAND gpu-f16-trigonometric-dx12-usl
+            "${GPU_DX12_F16_TRIGONOMETRIC_US}"
+  )
+  set_tests_properties(dx12-native-dxil-f16-trigonometric PROPERTIES
+    ENVIRONMENT
+      "GPU_DX12_NATIVE_DXIL=1;GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1"
+  )
+
   add_executable(gpu-async-copy-dx12-usl
     ${PROJECT_SOURCE_DIR}/tests/validation/async-copy-usl/main.c
   )

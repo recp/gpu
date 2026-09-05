@@ -1,0 +1,24 @@
+@require(shader_f16)
+kern(1, 1, 1) f16_trigonometric(
+  values:       [float4] #buffer(0),
+  inout output: [float4] #buffer(1),
+  gid:           uint3 #global_id
+) {
+  let inputBase = gid.x * 2u
+  let out       = gid.x * 12u
+  let a         = half4(values[inputBase])
+  let b         = half4(values[inputBase + 1u])
+
+  output[out]       = float4(sin(a))
+  output[out + 1u]  = float4(cos(a))
+  output[out + 2u]  = float4(tan(a))
+  output[out + 3u]  = float4(asin(a))
+  output[out + 4u]  = float4(acos(a))
+  output[out + 5u]  = float4(atan(a))
+  output[out + 6u]  = float4(atan2(a, b))
+  output[out + 7u]  = float4(sinh(a))
+  output[out + 8u]  = float4(cosh(a))
+  output[out + 9u]  = float4(tanh(a))
+  output[out + 10u] = float4(asinh(a) + acosh(a))
+  output[out + 11u] = float4(atanh(a))
+}
