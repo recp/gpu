@@ -251,6 +251,44 @@ else()
   )
 endif()
 
+if(WIN32)
+  get_property(_gpu_generator_multi_config GLOBAL
+               PROPERTY GENERATOR_IS_MULTI_CONFIG)
+  if(_gpu_generator_multi_config)
+    set(_gpu_link_runtime_dir "${CMAKE_BINARY_DIR}/$<CONFIG>")
+  else()
+    set(_gpu_link_runtime_dir "${CMAKE_BINARY_DIR}")
+  endif()
+  set(_gpu_link_runtime_commands
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${_gpu_link_runtime_dir}"
+  )
+  set(_gpu_link_runtime_dependencies)
+  foreach(_gpu_link_runtime_target us ds)
+    if(TARGET ${_gpu_link_runtime_target})
+      get_target_property(_gpu_link_runtime_type
+                          ${_gpu_link_runtime_target} TYPE)
+      if(_gpu_link_runtime_type STREQUAL "SHARED_LIBRARY" OR
+         _gpu_link_runtime_type STREQUAL "MODULE_LIBRARY")
+        list(APPEND _gpu_link_runtime_commands
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                  $<TARGET_FILE:${_gpu_link_runtime_target}>
+                  "${_gpu_link_runtime_dir}"
+        )
+        list(APPEND _gpu_link_runtime_dependencies
+                    ${_gpu_link_runtime_target})
+      endif()
+    endif()
+  endforeach()
+  if(_gpu_link_runtime_dependencies)
+    add_custom_target(gpu-link-runtime-stage
+      ${_gpu_link_runtime_commands}
+      DEPENDS ${_gpu_link_runtime_dependencies}
+      VERBATIM
+    )
+    add_dependencies(gpu gpu-link-runtime-stage)
+  endif()
+endif()
+
 if(GPU_BUILD_DX12)
   include(cmake/DX12Agility.cmake)
   gpu_enable_dx12_agility(gpu)
