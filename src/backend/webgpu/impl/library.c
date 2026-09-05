@@ -11,12 +11,14 @@
 static GPUShaderLibrary *
 webgpu_newLibraryWithSource(GPUDevice *device,
                             const char *source,
-                            uint64_t    sourceSize) {
+                            uint64_t    sourceSize,
+                            uint32_t    compileFlags) {
   WGPUShaderSourceWGSL sourceInfo = WGPU_SHADER_SOURCE_WGSL_INIT;
   WGPUShaderModuleDescriptor descriptor = WGPU_SHADER_MODULE_DESCRIPTOR_INIT;
   GPUDeviceWebGPU    *native;
   GPUShaderLibrary   *library;
 
+  (void)compileFlags;
   native = gpu_webgpuDevice(device);
   if (!native || !native->device || !source || sourceSize == 0u ||
       sourceSize > (uint64_t)SIZE_MAX) {

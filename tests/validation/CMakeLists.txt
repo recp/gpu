@@ -1260,10 +1260,12 @@ if(GPU_BUILD_DX12 AND GPU_BUILD_TESTS)
   )
 
   add_executable(gpu-f16-builtins-dx12-usl
-    ${PROJECT_SOURCE_DIR}/tests/validation/f16-builtins-dx12-usl/main.c
+    ${PROJECT_SOURCE_DIR}/tests/validation/f16-builtins-usl/main.c
   )
   target_compile_definitions(gpu-f16-builtins-dx12-usl PRIVATE
     _CRT_SECURE_NO_WARNINGS
+    GPU_F16_BUILTINS_BACKEND=GPU_BACKEND_DX12
+    GPU_F16_BUILTINS_BACKEND_NAME="Direct3D 12"
   )
   target_link_libraries(gpu-f16-builtins-dx12-usl PRIVATE gpu)
   gpu_attach_usl_validation(gpu-f16-builtins-dx12-usl
@@ -1616,6 +1618,36 @@ endif()
 
 if(GPU_BUILD_METAL AND GPU_BUILD_TESTS AND
    NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  add_executable(gpu-f16-builtins-metal-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/f16-builtins-usl/main.c
+  )
+  target_compile_definitions(gpu-f16-builtins-metal-usl PRIVATE
+    GPU_F16_BUILTINS_BACKEND=GPU_BACKEND_METAL
+    GPU_F16_BUILTINS_BACKEND_NAME="Metal"
+  )
+  target_link_libraries(gpu-f16-builtins-metal-usl PRIVATE gpu)
+  gpu_attach_usl_validation(gpu-f16-builtins-metal-usl
+                            gpu-metal-f16-builtins-fixture
+                            "${GPU_METAL_F16_BUILTINS_US}")
+  set_target_properties(gpu-f16-builtins-metal-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  target_compile_options(gpu-f16-builtins-metal-usl PRIVATE
+    -Wall -Wextra -Werror
+  )
+  add_test(
+    NAME metal-f16-builtins
+    COMMAND gpu-f16-builtins-metal-usl
+            "${GPU_METAL_F16_BUILTINS_US}"
+  )
+  set_tests_properties(metal-f16-builtins PROPERTIES
+    ENVIRONMENT
+      "GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1;USL_STRICT_IEEE=1"
+    TIMEOUT 30
+  )
+
   add_executable(gpu-async-copy-metal-usl
     ${PROJECT_SOURCE_DIR}/tests/validation/async-copy-usl/main.c
   )

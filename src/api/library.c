@@ -2685,6 +2685,7 @@ gpu_createShaderLibraryFromBackendText(GPUDevice        *device,
                                        const void       *sourceData,
                                        uint64_t          sourceSize,
                                        uint32_t          defineCount,
+                                       uint32_t          compileFlags,
                                        GPUShaderLibrary **outLibrary) {
   GPUApi *api;
 
@@ -2702,7 +2703,8 @@ gpu_createShaderLibraryFromBackendText(GPUDevice        *device,
 
   *outLibrary = api->library.newLibraryWithSource(device,
                                                    sourceData,
-                                                   sourceSize);
+                                                   sourceSize,
+                                                   compileFlags);
 
   if (*outLibrary) {
     (*outLibrary)->_api    = api;
@@ -2727,6 +2729,7 @@ gpu_createShaderLibraryFromMSLText(GPUDevice *device,
                                                 info->sourceData,
                                                 info->sourceSize,
                                                 info->defineCount,
+                                                GPU_SHADER_SOURCE_COMPILE_NONE,
                                                 outLibrary);
 }
 
@@ -2745,6 +2748,7 @@ gpu_createShaderLibraryFromWGSLText(GPUDevice *device,
                                                 info->sourceData,
                                                 info->sourceSize,
                                                 info->defineCount,
+                                                GPU_SHADER_SOURCE_COMPILE_NONE,
                                                 outLibrary);
 }
 
@@ -2854,6 +2858,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   const char               *payloadSource;
   GPUResult                 rc;
   uint32_t                  targetAtomCount;
+  uint32_t                  sourceCompileFlags;
   uint32_t                  encoding;
   bool                      targetSupported;
 
@@ -3242,6 +3247,14 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
   if (us_compile_options_from_env(&compileOptions) != USLOk) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
+  sourceCompileFlags = GPU_SHADER_SOURCE_COMPILE_NONE;
+  if ((compileOptions.flags & USL_COMPILE_OPTION_FLAG_STRICT_IEEE) != 0u ||
+      (compileOptions.flags & USL_COMPILE_OPTION_FLAG_METAL_STRICT_IEEE) != 0u) {
+    sourceCompileFlags |= GPU_SHADER_SOURCE_COMPILE_STRICT_IEEE;
+  } else if ((compileOptions.flags &
+              USL_COMPILE_OPTION_FLAG_RELAXED_FP) != 0u) {
+    sourceCompileFlags |= GPU_SHADER_SOURCE_COMPILE_RELAXED_FP;
+  }
   encoding   = target.backend == USL_BACKEND_SPIRV ||
                target.backend == USL_BACKEND_DXIL
                  ? USL_RUNTIME_EMBEDDED_BLOB_ENCODING_BINARY
@@ -3376,6 +3389,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
                                                 compileOutput.backend_data,
                                                 compileOutput.backend_size,
                                                 0u,
+                                                sourceCompileFlags,
                                                 outLibrary);
   } else {
     rc = GPU_ERROR_UNSUPPORTED;

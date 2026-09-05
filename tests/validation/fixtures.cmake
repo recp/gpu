@@ -72,7 +72,7 @@ if(GPU_BUILD_DX12 AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
     GPU_DX12_F16_BUILTINS_FIXTURE
     dxil
     validation
-    "${PROJECT_SOURCE_DIR}/tests/validation/f16-builtins-dx12-usl/f16_builtins.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/f16-builtins-usl/f16_builtins.usl"
   )
   unset(GPU_USL_FIXTURE_TARGET_CAPS)
   list(GET GPU_DX12_F16_BUILTINS_FIXTURE 0 GPU_DX12_F16_BUILTINS_US)
@@ -326,6 +326,20 @@ if(GPU_BUILD_METAL AND GPU_BUILD_TESTS AND
   add_custom_target(
     gpu-metal-async-copy-fixture
     DEPENDS ${GPU_METAL_ASYNC_COPY_USL_FIXTURE}
+  )
+
+  set(GPU_USL_FIXTURE_TARGET_CAPS shader_f16)
+  gpu_add_usl_fixtures(
+    GPU_METAL_F16_BUILTINS_FIXTURE
+    metal
+    validation
+    "${PROJECT_SOURCE_DIR}/tests/validation/f16-builtins-usl/f16_builtins.usl"
+  )
+  unset(GPU_USL_FIXTURE_TARGET_CAPS)
+  list(GET GPU_METAL_F16_BUILTINS_FIXTURE 0 GPU_METAL_F16_BUILTINS_US)
+  add_custom_target(
+    gpu-metal-f16-builtins-fixture
+    DEPENDS ${GPU_METAL_F16_BUILTINS_FIXTURE}
   )
 endif()
 

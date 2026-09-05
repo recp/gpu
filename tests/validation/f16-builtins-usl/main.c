@@ -8,6 +8,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef GPU_F16_BUILTINS_BACKEND
+#  error "GPU_F16_BUILTINS_BACKEND must select the validation backend"
+#endif
+
+#ifndef GPU_F16_BUILTINS_BACKEND_NAME
+#  error "GPU_F16_BUILTINS_BACKEND_NAME must name the validation backend"
+#endif
+
 enum {
   F16_BUILTIN_CASES            = 4u,
   F16_BUILTIN_INPUT_ROWS       = F16_BUILTIN_CASES * 2u,
@@ -215,8 +223,9 @@ value_matches(const char *name,
                    ? UINT16_MAX
                    : half_ulp_distance(actual, expected);
   fprintf(stderr,
-          "Direct DXIL F16 %s mismatch at case %u lane %u: expected %.9g "
+          "%s F16 %s mismatch at case %u lane %u: expected %.9g "
           "(0x%04x), got %.9g (0x%04x), %u ULP (limit %u)\n",
+          GPU_F16_BUILTINS_BACKEND_NAME,
           name,
           testCase,
           lane,
@@ -230,7 +239,7 @@ value_matches(const char *name,
 }
 
 static int
-validate_results(const float output[F16_BUILTIN_OUTPUT_ROWS][4]);
+validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]);
 
 static float
 half_abs(float value) {
@@ -239,17 +248,27 @@ half_abs(float value) {
 
 static float
 half_min(float left, float right) {
-  return half_round(fminf(left, right));
+  if (isnan(left)) return half_round(right);
+  if (isnan(right)) return half_round(left);
+  if (right < left) return half_round(right);
+  if (left == 0.0f && right == 0.0f)
+    return signbit(left) || signbit(right) ? -0.0f : 0.0f;
+  return half_round(left);
 }
 
 static float
 half_max(float left, float right) {
-  return half_round(fmaxf(left, right));
+  if (isnan(left)) return half_round(right);
+  if (isnan(right)) return half_round(left);
+  if (right > left) return half_round(right);
+  if (left == 0.0f && right == 0.0f)
+    return !signbit(left) || !signbit(right) ? 0.0f : -0.0f;
+  return half_round(left);
 }
 
 static float
 half_clamp(float value, float low, float high) {
-  return half_round(fminf(fmaxf(value, low), high));
+  return half_min(half_max(value, low), high);
 }
 
 static float
@@ -419,7 +438,7 @@ half_trig_expected(uint32_t row, float a, float b) {
 }
 
 static int
-validate_results(const float output[F16_BUILTIN_OUTPUT_ROWS][4]) {
+validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]) {
   static const char *mathNames[F16_BUILTIN_MATH_ROWS] = {
     "floor", "ceil", "round", "trunc", "fract", "sqrt", "rsqrt",
     "inversesqrt", "rcp", "exp", "exp2", "log", "log2", "degrees",
@@ -448,16 +467,16 @@ validate_results(const float output[F16_BUILTIN_OUTPUT_ROWS][4]) {
       b[lane] = half_round(kInputs[testCase * 2u + 1u][lane]);
       for (uint32_t row = 0u; row < F16_BUILTIN_MATH_ROWS; row++) {
         float expected = half_math_expected(row, a[lane], b[lane]);
+        float actual   = half_bits_to_float(output[base + row][lane]);
         uint16_t limit = row >= 18u ? 16u : 8u;
 
-        if (row == 17u && output[base + row][lane] == 0.0f &&
-            expected == 0.0f) {
+        if (row == 17u && actual == 0.0f && expected == 0.0f) {
           continue;
         }
         if (!value_matches(mathNames[row],
                            testCase,
                            lane,
-                           output[base + row][lane],
+                           actual,
                            expected,
                            limit)) {
           ok = 0;
@@ -470,7 +489,9 @@ validate_results(const float output[F16_BUILTIN_OUTPUT_ROWS][4]) {
         if (!value_matches(geometricNames[row],
                            testCase,
                            lane,
-                           output[base + F16_BUILTIN_MATH_ROWS + row][lane],
+                           half_bits_to_float(
+                             output[base + F16_BUILTIN_MATH_ROWS + row][lane]
+                           ),
                            geometric[row][lane],
                            8u)) {
           ok = 0;
@@ -488,8 +509,10 @@ validate_results(const float output[F16_BUILTIN_OUTPUT_ROWS][4]) {
               trigNames[row],
               testCase,
               lane,
-              output[base + F16_BUILTIN_MATH_ROWS +
-                     F16_BUILTIN_GEOMETRIC_ROWS + row][lane],
+              half_bits_to_float(
+                output[base + F16_BUILTIN_MATH_ROWS +
+                       F16_BUILTIN_GEOMETRIC_ROWS + row][lane]
+              ),
               half_trig_expected(row, a[lane], b[lane]),
               limit)) {
           ok = 0;
@@ -524,7 +547,7 @@ main(int argc, char **argv) {
   GPUBindGroupEntry             groupEntries[2] = {0};
   GPUBindGroupCreateInfo        groupInfo = {0};
   GPUQueueSubmitInfo            submitInfo = {0};
-  float output[F16_BUILTIN_OUTPUT_ROWS][4] = {0};
+  uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4] = {0};
   const GPUBindGroupLayoutEntry *layoutEntries;
   const char                    *artifactPath;
   GPUResult                      result;
@@ -535,24 +558,25 @@ main(int argc, char **argv) {
   int                            ok = 0;
 
   if (argc > 2) {
-    fprintf(stderr,
-            "usage: gpu-f16-builtins-dx12-usl [f16_builtins.us]\n");
+    fprintf(stderr, "usage: %s [f16_builtins.us]\n", argv[0]);
     return 1;
   }
   artifactPath = argc == 2 ? argv[1] : "f16_builtins.us";
   artifact = read_file(artifactPath, &artifactSize);
   if (!artifact) {
-    fprintf(stderr, "Direct3D 12 F16 builtin artifact read failed\n");
+    fprintf(stderr, "%s F16 builtin artifact read failed\n",
+            GPU_F16_BUILTINS_BACKEND_NAME);
     goto cleanup;
   }
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
-  instanceInfo.preferredBackend = GPU_BACKEND_DX12;
+  instanceInfo.preferredBackend = GPU_F16_BUILTINS_BACKEND;
   instanceInfo.enableValidation = true;
   result = GPUCreateInstance(&instanceInfo, &instance);
   if (result != GPU_OK || !instance) {
-    fprintf(stderr, "Direct3D 12 F16 instance creation failed (%d)\n",
+    fprintf(stderr, "%s F16 instance creation failed (%d)\n",
+            GPU_F16_BUILTINS_BACKEND_NAME,
             (int)result);
     goto cleanup;
   }
@@ -560,7 +584,8 @@ main(int argc, char **argv) {
   result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
   if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
       !adapter || !GPUIsFeatureSupported(adapter, feature)) {
-    fprintf(stderr, "Direct3D 12 F16 adapter is unavailable\n");
+    fprintf(stderr, "%s F16 adapter is unavailable\n",
+            GPU_F16_BUILTINS_BACKEND_NAME);
     goto cleanup;
   }
 
@@ -572,7 +597,8 @@ main(int argc, char **argv) {
   queue  = GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0u);
   if (result != GPU_OK || !device || !queue ||
       !GPUIsFeatureEnabled(device, feature)) {
-    fprintf(stderr, "Direct3D 12 F16 device creation failed (%d)\n",
+    fprintf(stderr, "%s F16 device creation failed (%d)\n",
+            GPU_F16_BUILTINS_BACKEND_NAME,
             (int)result);
     goto cleanup;
   }
@@ -582,7 +608,8 @@ main(int argc, char **argv) {
   runtimeConfig.validationMode    = GPU_VALIDATION_FULL;
   runtimeConfig.enableVerboseLogs = true;
   if (GPUConfigureRuntime(device, &runtimeConfig) != GPU_OK) {
-    fprintf(stderr, "Direct3D 12 F16 runtime configuration failed\n");
+    fprintf(stderr, "%s F16 runtime configuration failed\n",
+            GPU_F16_BUILTINS_BACKEND_NAME);
     goto cleanup;
   }
   result = gpu_test_create_shader_library_from_usl(device,
@@ -593,7 +620,8 @@ main(int argc, char **argv) {
       GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
       !shaderLayout || shaderLayout->bindGroupLayoutCount != 1u ||
       !shaderLayout->bindGroupLayouts[0] || !shaderLayout->pipelineLayout) {
-    fprintf(stderr, "Direct3D 12 F16 shader setup failed (%d)\n",
+    fprintf(stderr, "%s F16 shader setup failed (%d)\n",
+            GPU_F16_BUILTINS_BACKEND_NAME,
             (int)result);
     goto cleanup;
   }
@@ -607,19 +635,21 @@ main(int argc, char **argv) {
       layoutEntries[0].bindingType != GPU_BINDING_READ_ONLY_STORAGE_BUFFER ||
       layoutEntries[1].binding != 1u ||
       layoutEntries[1].bindingType != GPU_BINDING_STORAGE_BUFFER) {
-    fprintf(stderr, "Unexpected Direct3D 12 F16 reflection layout\n");
+    fprintf(stderr, "Unexpected %s F16 reflection layout\n",
+            GPU_F16_BUILTINS_BACKEND_NAME);
     goto cleanup;
   }
 
   pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
   pipelineInfo.chain.structSize = sizeof(pipelineInfo);
-  pipelineInfo.label            = "dx12-native-f16-builtins";
+  pipelineInfo.label            = "f16-builtins";
   pipelineInfo.layout           = shaderLayout->pipelineLayout;
   pipelineInfo.library          = library;
   pipelineInfo.entryPoint       = "f16_builtins";
   result = GPUCreateComputePipeline(device, &pipelineInfo, &pipeline);
   if (result != GPU_OK || !pipeline) {
-    fprintf(stderr, "Direct3D 12 F16 pipeline creation failed (%d)\n",
+    fprintf(stderr, "%s F16 pipeline creation failed (%d)\n",
+            GPU_F16_BUILTINS_BACKEND_NAME,
             (int)result);
     goto cleanup;
   }
@@ -641,7 +671,8 @@ main(int argc, char **argv) {
                             binding == 0u ? (const void *)kInputs
                                           : (const void *)output,
                             bufferSizes[binding]) != GPU_OK) {
-      fprintf(stderr, "Direct3D 12 F16 buffer %u failed (%d)\n",
+      fprintf(stderr, "%s F16 buffer %u failed (%d)\n",
+              GPU_F16_BUILTINS_BACKEND_NAME,
               binding,
               (int)result);
       goto cleanup;
@@ -656,24 +687,26 @@ main(int argc, char **argv) {
 
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label            = "dx12-native-f16-builtins-group";
+  groupInfo.label            = "f16-builtins-group";
   groupInfo.layout           = shaderLayout->bindGroupLayouts[0];
   groupInfo.entryCount       = 2u;
   groupInfo.pEntries         = groupEntries;
   result = GPUCreateBindGroup(device, &groupInfo, &bindGroup);
   if (result != GPU_OK || !bindGroup ||
       GPUAcquireCommandBuffer(queue,
-                              "dx12-native-f16-builtins",
+                              "f16-builtins",
                               &cmdb) != GPU_OK ||
       !cmdb) {
-    fprintf(stderr, "Direct3D 12 F16 bind/command failed (%d)\n",
+    fprintf(stderr, "%s F16 bind/command failed (%d)\n",
+            GPU_F16_BUILTINS_BACKEND_NAME,
             (int)result);
     goto cleanup;
   }
 
   pass = GPUBeginComputePass(cmdb, "f16-builtins");
   if (!pass) {
-    fprintf(stderr, "Direct3D 12 F16 compute pass failed\n");
+    fprintf(stderr, "%s F16 compute pass failed\n",
+            GPU_F16_BUILTINS_BACKEND_NAME);
     goto cleanup;
   }
   GPUBindComputePipeline(pass, pipeline);
@@ -684,7 +717,8 @@ main(int argc, char **argv) {
 
   result = GPUCreateFence(device, NULL, &fence);
   if (result != GPU_OK || !fence) {
-    fprintf(stderr, "Direct3D 12 F16 fence creation failed (%d)\n",
+    fprintf(stderr, "%s F16 fence creation failed (%d)\n",
+            GPU_F16_BUILTINS_BACKEND_NAME,
             (int)result);
     goto cleanup;
   }
@@ -701,7 +735,8 @@ main(int argc, char **argv) {
                          output,
                          sizeof(output)) != GPU_OK ||
       !validate_results(output)) {
-    fprintf(stderr, "Direct3D 12 F16 readback validation failed\n");
+    fprintf(stderr, "%s F16 readback validation failed\n",
+            GPU_F16_BUILTINS_BACKEND_NAME);
     goto cleanup;
   }
   ok = 1;
@@ -719,6 +754,7 @@ cleanup:
   GPUDestroyInstance(instance);
   free(artifact);
   if (!ok) return 1;
-  puts("Direct3D 12 native F16 builtin validation passed");
+  printf("%s F16 builtin validation passed\n",
+         GPU_F16_BUILTINS_BACKEND_NAME);
   return 0;
 }

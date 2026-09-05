@@ -9,10 +9,12 @@
 static GPUShaderLibrary *
 cuda_newLibraryWithSource(GPUDevice *device,
                           const char *source,
-                          uint64_t    sourceSize) {
+                          uint64_t    sourceSize,
+                          uint32_t    compileFlags) {
   GPUShaderLibraryCuda *native;
   GPUShaderLibrary     *library;
 
+  (void)compileFlags;
   if (!device || !source || sourceSize == 0u) {
     return NULL;
   }

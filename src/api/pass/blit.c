@@ -295,7 +295,8 @@ gpu_blitEnsureVariant(GPUDevice             *device,
                                                   shader->size)
               : api->library.newLibraryWithSource(device,
                                                   shader->data,
-                                                  shader->size);
+                                                  shader->size,
+                                                  GPU_SHADER_SOURCE_COMPILE_NONE);
   if (!library) {
     return false;
   }

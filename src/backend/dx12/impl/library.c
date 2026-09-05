@@ -59,7 +59,9 @@ GPU_HIDE
 GPUShaderLibrary*
 dx12_newLibraryWithSource(GPUDevice *device,
                           const char *source,
-                          uint64_t sourceSize) {
+                          uint64_t sourceSize,
+                          uint32_t compileFlags) {
+  (void)compileFlags;
   return dx12__newLibrary(device, source, sourceSize, false);
 }
 

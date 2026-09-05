@@ -25,11 +25,18 @@ extern "C" {
 
 typedef struct GPUShaderFunction GPUShaderFunction;
 
+typedef enum GPUShaderSourceCompileFlags {
+  GPU_SHADER_SOURCE_COMPILE_NONE        = 0u,
+  GPU_SHADER_SOURCE_COMPILE_STRICT_IEEE = 1u << 0u,
+  GPU_SHADER_SOURCE_COMPILE_RELAXED_FP  = 1u << 1u
+} GPUShaderSourceCompileFlags;
+
 typedef struct GPUApiLibrary {
   GPUShaderLibrary*
   (*newLibraryWithSource)(GPUDevice *device,
                           const char *source,
-                          uint64_t sourceSize);
+                          uint64_t sourceSize,
+                          uint32_t compileFlags);
 
   GPUShaderLibrary*
   (*newLibraryWithBinary)(GPUDevice *device,

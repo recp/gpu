@@ -16,11 +16,20 @@
 
 #include "../common.h"
 
+static void
+mt_setSafeMathFallback(MTLCompileOptions *options) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  options.fastMathEnabled = NO;
+#pragma clang diagnostic pop
+}
+
 GPU_HIDE
 GPUShaderLibrary*
 mt_newLibraryWithSource(GPUDevice *device,
                         const char *source,
-                        uint64_t sourceSize) {
+                        uint64_t sourceSize,
+                        uint32_t compileFlags) {
   GPUDeviceMT          *deviceMT;
   GPUShaderLibrary     *library;
   id<MTLLibrary>        mtLibrary;
@@ -42,6 +51,22 @@ mt_newLibraryWithSource(GPUDevice *device,
     [options release];
     [nsSource release];
     return NULL;
+  }
+
+  if ((compileFlags & GPU_SHADER_SOURCE_COMPILE_STRICT_IEEE) != 0u) {
+    if (@available(macOS 15.0, iOS 18.0, *)) {
+      options.mathMode                    = MTLMathModeSafe;
+      options.mathFloatingPointFunctions =
+        MTLMathFloatingPointFunctionsPrecise;
+    } else {
+      mt_setSafeMathFallback(options);
+    }
+  } else if ((compileFlags & GPU_SHADER_SOURCE_COMPILE_RELAXED_FP) != 0u) {
+    if (@available(macOS 15.0, iOS 18.0, *)) {
+      options.mathMode = MTLMathModeRelaxed;
+    } else {
+      mt_setSafeMathFallback(options);
+    }
   }
 
 #if MT_HAS_METAL4
