@@ -1,5 +1,6 @@
 #include <gpu/gpu.h>
 
+#include "f16_builtins.h"
 #include "../usl_test.h"
 
 #include <math.h>
@@ -16,20 +17,7 @@
 #  error "GPU_F16_BUILTINS_BACKEND_NAME must name the validation backend"
 #endif
 
-enum {
-  F16_BUILTIN_CASES            = 4u,
-  F16_BUILTIN_INPUT_ROWS       = F16_BUILTIN_CASES * 2u,
-  F16_BUILTIN_MATH_ROWS        = 32u,
-  F16_BUILTIN_GEOMETRIC_ROWS   = 8u,
-  F16_BUILTIN_TRIG_ROWS        = 16u,
-  F16_BUILTIN_OUTPUTS_PER_CASE = F16_BUILTIN_MATH_ROWS +
-                                 F16_BUILTIN_GEOMETRIC_ROWS +
-                                 F16_BUILTIN_TRIG_ROWS,
-  F16_BUILTIN_OUTPUT_ROWS      = F16_BUILTIN_CASES *
-                                 F16_BUILTIN_OUTPUTS_PER_CASE
-};
-
-static const float kInputs[F16_BUILTIN_INPUT_ROWS][4] = {
+const float gpu_f16_builtin_inputs[F16_BUILTIN_INPUT_ROWS][4] = {
   {0.0f, -0.0f, 0.0f, -0.0f},
   {0.0f, 0.0f, -0.0f, -0.0f},
   {0.5f, -0.5f, 1.0f, 1.5f},
@@ -41,6 +29,7 @@ static const float kInputs[F16_BUILTIN_INPUT_ROWS][4] = {
   {1.0f, 1.0f, 1.0f, NAN}
 };
 
+#if !defined(GPU_F16_BUILTINS_ORACLE_ONLY)
 static void *
 read_file(const char *path, uint64_t *outSize) {
   FILE *file;
@@ -63,6 +52,7 @@ read_file(const char *path, uint64_t *outSize) {
   *outSize = (uint64_t)size;
   return data;
 }
+#endif
 
 static uint32_t
 float_bits(float value) {
@@ -463,8 +453,10 @@ validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]) {
     uint32_t base = testCase * F16_BUILTIN_OUTPUTS_PER_CASE;
 
     for (uint32_t lane = 0u; lane < 4u; lane++) {
-      a[lane] = half_round(kInputs[testCase * 2u][lane]);
-      b[lane] = half_round(kInputs[testCase * 2u + 1u][lane]);
+      a[lane] = half_round(gpu_f16_builtin_inputs[testCase * 2u][lane]);
+      b[lane] = half_round(
+        gpu_f16_builtin_inputs[testCase * 2u + 1u][lane]
+      );
       for (uint32_t row = 0u; row < F16_BUILTIN_MATH_ROWS; row++) {
         float expected = half_math_expected(row, a[lane], b[lane]);
         float actual   = half_bits_to_float(output[base + row][lane]);
@@ -523,6 +515,14 @@ validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]) {
   return ok;
 }
 
+int
+gpu_f16_builtin_validate(
+  const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]
+) {
+  return validate_results(output);
+}
+
+#if !defined(GPU_F16_BUILTINS_ORACLE_ONLY)
 int
 main(int argc, char **argv) {
   GPUFeature                    feature = GPU_FEATURE_SHADER_F16;
@@ -654,7 +654,7 @@ main(int argc, char **argv) {
     goto cleanup;
   }
 
-  bufferSizes[0] = sizeof(kInputs);
+  bufferSizes[0] = sizeof(gpu_f16_builtin_inputs);
   bufferSizes[1] = sizeof(output);
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
@@ -668,8 +668,9 @@ main(int argc, char **argv) {
         GPUQueueWriteBuffer(queue,
                             buffers[binding],
                             0u,
-                            binding == 0u ? (const void *)kInputs
-                                          : (const void *)output,
+                            binding == 0u
+                              ? (const void *)gpu_f16_builtin_inputs
+                              : (const void *)output,
                             bufferSizes[binding]) != GPU_OK) {
       fprintf(stderr, "%s F16 buffer %u failed (%d)\n",
               GPU_F16_BUILTINS_BACKEND_NAME,
@@ -758,3 +759,4 @@ cleanup:
          GPU_F16_BUILTINS_BACKEND_NAME);
   return 0;
 }
+#endif

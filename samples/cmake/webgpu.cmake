@@ -901,6 +901,114 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
       "${GPU_WEBGPU_GALLERY_DIR}"
   )
 
+  set(GPU_WEBGPU_F16_BUILTINS_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/validation")
+  set(GPU_WEBGPU_F16_BUILTINS_SOURCE
+      "${GPU_WEBGPU_F16_BUILTINS_DIR}/f16_builtins.usl")
+  set(GPU_WEBGPU_F16_BUILTINS_US
+      "${GPU_WEBGPU_F16_BUILTINS_DIR}/f16_builtins.us")
+  set(GPU_WEBGPU_F16_BUILTINS_MAIN
+      "${PROJECT_SOURCE_DIR}/tests/validation/f16-builtins-webgpu-usl/main.c")
+  set(GPU_WEBGPU_F16_BUILTINS_ORACLE
+      "${PROJECT_SOURCE_DIR}/tests/validation/f16-builtins-usl/main.c")
+  set(GPU_WEBGPU_SAMPLE_TITLE "F16 builtin validation")
+  set(GPU_WEBGPU_SAMPLE_KIND "Validation / compute")
+  set(GPU_WEBGPU_SAMPLE_DESCRIPTION
+      "A strict 896-result half-precision boundary matrix with asynchronous WebGPU readback.")
+  set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/f16-builtins-validation.c")
+  set(GPU_WEBGPU_SAMPLE_ASSET_SOURCE "")
+  set(GPU_WEBGPU_SAMPLE_ASSET_TAB "")
+  set(GPU_WEBGPU_SAMPLE_USL_SOURCE "sources/f16-builtins-validation.usl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_SOURCE "sources/f16-builtins-validation.wgsl")
+  set(GPU_WEBGPU_SAMPLE_WGSL_LABEL "Strict WGSL")
+  configure_file(
+    "${GPU_WEBGPU_GALLERY_SOURCE_DIR}/sample-shell.html.in"
+    "${GPU_WEBGPU_GALLERY_DIR}/gpu-f16-builtins-webgpu-usl-shell.html"
+    @ONLY
+  )
+  add_custom_command(
+    OUTPUT "${GPU_WEBGPU_F16_BUILTINS_US}"
+    BYPRODUCTS "${GPU_WEBGPU_F16_BUILTINS_SOURCE}.wgsl"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${GPU_WEBGPU_F16_BUILTINS_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${PROJECT_SOURCE_DIR}/tests/validation/f16-builtins-usl/f16_builtins.usl"
+            "${GPU_WEBGPU_F16_BUILTINS_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_EMIT_BYTECODE=1
+            USL_STRICT_IEEE=1
+            USL_TARGET_CAPS=shader_f16
+            "${GPU_USL_HOST_FIXTURE}"
+            webgpu
+            "${GPU_WEBGPU_F16_BUILTINS_SOURCE}"
+    COMMAND ${CMAKE_COMMAND} -E env
+            USL_STRICT_IEEE=1
+            "${GPU_USL_HOST_PACKER}"
+            --target wgsl none
+            --cap shader_f16
+            --force
+            "${GPU_WEBGPU_F16_BUILTINS_US}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_F16_BUILTINS_MAIN}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/f16-builtins-validation.c"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_F16_BUILTINS_SOURCE}"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/f16-builtins-validation.usl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GPU_WEBGPU_F16_BUILTINS_SOURCE}.wgsl"
+            "${GPU_WEBGPU_GALLERY_DIR}/sources/f16-builtins-validation.wgsl"
+    DEPENDS
+      "${GPU_USL_HOST_FIXTURE}"
+      "${GPU_USL_HOST_PACKER}"
+      "${GPU_WEBGPU_F16_BUILTINS_MAIN}"
+      "${GPU_WEBGPU_F16_BUILTINS_ORACLE}"
+      "${PROJECT_SOURCE_DIR}/tests/validation/f16-builtins-usl/f16_builtins.h"
+      "${PROJECT_SOURCE_DIR}/tests/validation/f16-builtins-usl/f16_builtins.usl"
+    VERBATIM
+  )
+  add_custom_target(gpu-webgpu-f16-builtins-artifact
+    DEPENDS "${GPU_WEBGPU_F16_BUILTINS_US}"
+  )
+
+  add_executable(gpu-f16-builtins-webgpu-usl
+    "${GPU_WEBGPU_F16_BUILTINS_MAIN}"
+    "${GPU_WEBGPU_F16_BUILTINS_ORACLE}"
+    "${PROJECT_SOURCE_DIR}/samples/common/webgpu.c"
+  )
+  target_include_directories(gpu-f16-builtins-webgpu-usl PRIVATE
+    "${PROJECT_SOURCE_DIR}"
+  )
+  target_compile_definitions(gpu-f16-builtins-webgpu-usl PRIVATE
+    _POSIX_C_SOURCE=200809L
+    GPU_F16_BUILTINS_ORACLE_ONLY=1
+    GPU_F16_BUILTINS_BACKEND=GPU_BACKEND_WEBGPU
+    GPU_F16_BUILTINS_BACKEND_NAME="WebGPU"
+    GPU_WEBGPU_PROVIDER_DAWN=1
+    GPU_WEBGPU_PROVIDER_WGPU_NATIVE=0
+  )
+  target_compile_options(gpu-f16-builtins-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    -Wall -Wextra -Werror
+  )
+  target_link_libraries(gpu-f16-builtins-webgpu-usl PRIVATE gpu)
+  target_link_options(gpu-f16-builtins-webgpu-usl PRIVATE
+    --use-port=emdawnwebgpu
+    "--preload-file=${GPU_WEBGPU_F16_BUILTINS_US}@/f16_builtins.us"
+    "--shell-file=${GPU_WEBGPU_GALLERY_DIR}/gpu-f16-builtins-webgpu-usl-shell.html"
+    -sALLOW_MEMORY_GROWTH=1
+  )
+  add_dependencies(gpu-f16-builtins-webgpu-usl
+                   gpu-webgpu-f16-builtins-artifact)
+  set_target_properties(gpu-f16-builtins-webgpu-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+    LINK_DEPENDS
+      "${GPU_WEBGPU_GALLERY_DIR}/gpu-f16-builtins-webgpu-usl-shell.html;${GPU_WEBGPU_F16_BUILTINS_US}"
+    SUFFIX ".html"
+    RUNTIME_OUTPUT_DIRECTORY "${GPU_WEBGPU_GALLERY_DIR}"
+  )
+
   set(GPU_WEBGPU_DISPATCH_INDIRECT_DIR
       "${CMAKE_CURRENT_BINARY_DIR}/usl/webgpu/samples")
   set(GPU_WEBGPU_DISPATCH_INDIRECT_SOURCE
